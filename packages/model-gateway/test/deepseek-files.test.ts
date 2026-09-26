@@ -266,7 +266,8 @@ describe('WP143 file id 过期 / 不认了：重传', () => {
 
   it('别的 4xx（不是 file id 的事）不重试', async () => {
     const { store } = setup()
-    const messages = fakeMessages(() => 'insufficient balance')
+    // WP151 起"insufficient balance"照官方算余额不足（单独说），这里换一句与 file id、余额都无关的
+    const messages = fakeMessages(() => 'model not found')
     const p = deepseekAccountProvider({
       resolveToken: signedIn,
       fetch: messages.fetch,

@@ -93,6 +93,16 @@ export {
   MESSAGES_FILES_BETA,
   memoryUploadIndex,
 } from './providers/deepseek-files.js'
+// WP151：DeepSeek 余额不足（判定照官方 0.1.7-rc.2：402 / 余额不足措辞；账号路与 API key 路各说各的）
+export type { DeepSeekBalanceListener, DeepSeekQuotaKind } from './providers/deepseek-quota.js'
+export {
+  DEEPSEEK_ACCOUNT_QUOTA_MESSAGE,
+  DEEPSEEK_API_QUOTA_MESSAGE,
+  DEEPSEEK_PLATFORM_TOP_UP_URL,
+  deepseekQuotaKindOf,
+  isDeepSeekQuotaFailure,
+  isQuotaExceededError,
+} from './providers/deepseek-quota.js'
 export type { FetchLike, OpenAiCompatibleOptions } from './providers/openai-compatible.js'
 export {
   extensionFor,

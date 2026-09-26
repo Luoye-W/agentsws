@@ -2556,7 +2556,12 @@ const zh: Table = {
   'dsa.ok': '通了：文字能回，图也看得懂。',
   'dsa.retest': '再测一次',
   'dsa.err.key': 'DeepSeek 账号的登录失效了，点一下重新登录。',
-  'dsa.err.balance': 'DeepSeek 账号余额不足，去开放平台充值后再测。',
+  // WP151：与运行失败原因同一句（账号路引到账号的充值页，不说"开放平台"——免得 API key 用户充错地方）
+  'dsa.err.balance': 'DeepSeek 账号余额不足，充值后再让它接着做。',
+  'dsa.quota': 'DeepSeek 账号余额不足，充值后再让它接着做。',
+  'models.quota.api': 'DeepSeek API 余额不足，去开放平台充值后再试。',
+  'models.quota.top_up': '去充值',
+  'models.quota.chip': 'DeepSeek 余额不足',
   // WP150：登录失效自动登出并提示；登出前确认并停掉正在用账号跑的事
   'dsa.expired': 'DeepSeek 账号的登录过期了，点一下重新登录。',
   'dsa.relogin': '重新登录',
@@ -5314,8 +5319,12 @@ const en: Table = {
     'Nothing is lost: switch models or sign in again, then ask for them to be redone.',
   'dsa.sign_out.stop_and_leave': 'Stop them and sign out',
   'dsa.sign_out.keep': 'Not now',
-  'dsa.err.balance':
-    'The DeepSeek account is out of balance. Top up on the platform, then test again.',
+  'dsa.err.balance': 'Your DeepSeek account is out of balance. Top up, then let it carry on.',
+  'dsa.quota': 'Your DeepSeek account is out of balance. Top up, then let it carry on.',
+  'models.quota.api':
+    'Your DeepSeek API balance has run out. Top up on the DeepSeek Platform, then try again.',
+  'models.quota.top_up': 'Top up',
+  'models.quota.chip': 'DeepSeek out of balance',
   // WP136 (docs/79): switching dsh scenes
   'scenes.entry': 'Scenes',
   'scenes.title': 'Switch scene',

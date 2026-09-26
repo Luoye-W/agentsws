@@ -28,6 +28,7 @@ import { useEffect, useRef, useState } from 'react'
 import { BrandIcon } from '@/components/brand-icons'
 import { openExternal } from '@/components/connections/bridge'
 import { ModelCheckSteps } from '@/components/models/model-check-steps'
+import { QuotaNotice } from '@/components/models/quota-notice'
 import { Button } from '@/components/ui/button'
 import {
   ApiClientError,
@@ -48,6 +49,9 @@ import { useApp } from '@/lib/app-context'
 
 /** 登录途中多久问一次状态。 */
 const POLL_MS = 1500
+
+/** WP151：余额不足时多久刷一次余额（等用户充值回来）。 */
+const QUOTA_POLL_MS = 30_000
 
 /** 这几步是"还在走"，要接着问。 */
 const IN_FLIGHT = new Set(['initializing', 'waiting-browser', 'exchanging', 'committing'])
@@ -117,7 +121,10 @@ export function DeepSeekAccountLogin({
     refetchInterval: (q) =>
       q.state.data?.attempt !== undefined && IN_FLIGHT.has(q.state.data.attempt.phase)
         ? POLL_MS
-        : false,
+        : // WP151：余额不足时隔一会儿刷一次余额（去充值的浏览器回来时，窗口聚焦也会刷），充上了提示自己收
+          q.state.data?.quota_exceeded !== undefined
+          ? QUOTA_POLL_MS
+          : false,
   })
   const providers = useQuery({
     queryKey: ['model-providers', assignment],
@@ -205,6 +212,19 @@ export function DeepSeekAccountLogin({
    * 登出确认那一块也收起来。
    */
   const signedIn = data?.signed_in === true
+
+  /*
+   * WP151：余额刷新回来提示收了——模型卡与顶栏胶囊读的是模型来源那一份，跟着刷一下。
+   */
+  const quota = data?.quota_exceeded !== undefined
+  const hadQuota = useRef(quota)
+  useEffect(() => {
+    if (hadQuota.current && !quota) {
+      void client.invalidateQueries({ queryKey: ['model-providers'] })
+    }
+    hadQuota.current = quota
+  }, [quota, client])
+
   useEffect(() => {
     if (signedIn) return
     connecting.current = false
@@ -299,6 +319,10 @@ export function DeepSeekAccountLogin({
           {data.account_error === undefined ? null : (
             <p className="text-xs text-ws-muted-fg">{data.account_error}</p>
           )}
+          {/* WP151：余额不足——一行醒目提示 +「去充值」（官方 links.topUpUrl：充到这个账号上） */}
+          {data.quota_exceeded === undefined ? null : (
+            <QuotaNotice account topUpUrl={data.top_up_url} />
+          )}
           {connect.isPending ? (
             <p className="flex items-center gap-1.5 text-ws-muted-fg" data-testid="dsa-testing">
               <Loader2 aria-hidden className="size-3.5 animate-spin" />
@@ -334,7 +358,8 @@ export function DeepSeekAccountLogin({
                 {t('dsa.retest')}
               </Button>
             ) : null}
-            {data.top_up_url === undefined ? null : (
+            {/* 余额不足时「去充值」在上面那一行里，这里不再重复一个 */}
+            {data.top_up_url === undefined || data.quota_exceeded !== undefined ? null : (
               <Button
                 size="xs"
                 variant="ghost"

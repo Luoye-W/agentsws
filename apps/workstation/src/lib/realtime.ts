@@ -24,8 +24,15 @@ const INVALIDATIONS: { prefix: string; keys: string[][] }[] = [
   { prefix: 'change.', keys: [['records'], ['home'], ['matter']] },
   { prefix: 'guardrail.', keys: [['records'], ['home']] },
   // 17 运行：跑完了才有产出，跑的过程中不刷（否则一次运行刷几十遍）
-  { prefix: 'run.completed', keys: [['deck'], ['home'], ['matter'], ['todos']] },
-  { prefix: 'run.failed', keys: [['deck'], ['home'], ['matter']] },
+  // WP151：跑成 / 没跑成都可能改了"DeepSeek 余额不足"那一行（模型卡与顶栏胶囊读 model-providers）
+  {
+    prefix: 'run.completed',
+    keys: [['deck'], ['home'], ['matter'], ['todos'], ['model-providers']],
+  },
+  {
+    prefix: 'run.failed',
+    keys: [['deck'], ['home'], ['matter'], ['model-providers'], ['deepseek-account']],
+  },
   // 37 工作模型（契约里还没有这两类事件，先接上：一旦服务端开始发就自动生效）
   { prefix: 'todo.', keys: [['todos'], ['home'], ['calendar'], ['matter']] },
   { prefix: 'matter.', keys: [['matter'], ['home'], ['todos']] },

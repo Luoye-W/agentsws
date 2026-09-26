@@ -25,6 +25,7 @@ import { DeepSeekAccountLogin } from '@/components/models/deepseek-account-login
 import { ImageModelSection } from '@/components/models/image-model-section'
 import { ModelCheckSteps } from '@/components/models/model-check-steps'
 import { ModelForm, type ModelFormValues, suggestProviderId } from '@/components/models/model-form'
+import { QuotaNotice } from '@/components/models/quota-notice'
 import { SubscriptionPlan } from '@/components/models/subscription-plan'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -614,6 +615,13 @@ function ProviderRow({
       )}
       {/* WP127：三步小清单（与向导第 ① 步同一个件） */}
       {result === undefined ? null : <ModelCheckSteps steps={result.steps} />}
+      {/* WP151：DeepSeek 余额不足——一行醒目提示 +「去充值」（账号 / API key 各去各的充值页） */}
+      {provider.quota_exceeded === undefined ? null : (
+        <QuotaNotice
+          account={isDeepSeekAccountKind(provider.kind)}
+          topUpUrl={provider.quota_exceeded.top_up_url}
+        />
+      )}
     </div>
   )
 }

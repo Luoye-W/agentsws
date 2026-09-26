@@ -30,6 +30,7 @@ import {
   type AccountFetch,
   createModelGateway,
   DEEPSEEK_ACCOUNT_EXPIRED_MESSAGE,
+  DEEPSEEK_ACCOUNT_QUOTA_MESSAGE,
   deepseekAccountProvider,
   type ModelGatewayApi,
 } from '@agentsws/model-gateway'
@@ -423,5 +424,73 @@ describe('WP150 (d) 登出前停任务', () => {
       version: 1,
       enabled: false,
     })
+  })
+})
+
+// ── WP151：余额不足（那一次运行的失败原因；不是失效） ─────────────────────
+
+describe('WP151 推理 402：那一次运行说"账号余额不足"，登录不动', () => {
+  it('摘要与 run.failed 就是那句人话；不报 rejectToken；账号那一块记下"余额不足"、登录状态不变', async () => {
+    const a = assembly(tempDir())
+    await a.login()
+    const rejected: string[] = []
+    const fetch: AccountFetch = async () => ({
+      ok: false,
+      status: 402,
+      json: async () => ({}),
+      text: async () => JSON.stringify({ error: { message: 'Insufficient Balance' } }),
+    })
+    const provider = deepseekAccountProvider({
+      resolveToken: (url) => a.acct.resolveToken(url),
+      rejectToken: async (t) => {
+        rejected.push(t)
+      },
+      onBalance: (b) => a.acct.reportBalance(b),
+      fetch,
+      provider: ACCOUNT.provider,
+    })
+    const gateway = createModelGateway({
+      providers: [provider],
+      policy: {
+        default: ACCOUNT,
+        data_residency: 'cn',
+        prices: { 'deepseek-account/deepseek-flash': { in: 0, out: 0, cached: 0 } },
+      },
+      clock,
+      env: {},
+      eventSink: () => {},
+    })
+    const r = runtimeWith(gateway as unknown as ModelGatewayApi)
+    const { run_id } = await r.start()
+    expect(r.completed).toEqual([{ run_id, summary: DEEPSEEK_ACCOUNT_QUOTA_MESSAGE }])
+    expect(r.runEvents().find((e) => e.type === 'run.failed')).toMatchObject({
+      error: { code: 'provider_error', message: DEEPSEEK_ACCOUNT_QUOTA_MESSAGE },
+    })
+    expect(rejected).toEqual([])
+    // 不是失效：还登录着，没有"登录过期了"，也没走失效收尾
+    expect(a.acct.signedIn()).toBe(true)
+    expect(a.onExpired).not.toHaveBeenCalled()
+    expect(a.acct.quota()).toEqual({
+      at: '2026-09-25T10:00:00.000Z',
+      message: DEEPSEEK_ACCOUNT_QUOTA_MESSAGE,
+      top_up_url: 'https://platform.deepseek.com/top_up',
+    })
+    // 替身钱包有钱（¥42.50）：余额一刷新，那一行就收了
+    const v = await a.acct.view()
+    expect(v.session_expired).toBeUndefined()
+    expect(v.quota_exceeded).toBeUndefined()
+    expect(a.acct.quota()).toBeUndefined()
+    await a.acct.close()
+  })
+
+  it('钱包是 0：刷新余额也不收；登出清掉', async () => {
+    const a = assembly(tempDir())
+    await a.login()
+    a.stand.setBalance('empty')
+    a.acct.reportBalance(true)
+    const v = await a.acct.view()
+    expect(v.quota_exceeded?.message).toBe(DEEPSEEK_ACCOUNT_QUOTA_MESSAGE)
+    await a.acct.signOut()
+    expect(a.acct.quota()).toBeUndefined()
   })
 })

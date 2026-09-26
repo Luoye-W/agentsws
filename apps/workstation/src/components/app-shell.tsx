@@ -48,6 +48,7 @@ import { BrandSwitcher } from '@/components/brand-switcher'
 import { CommandPalette } from '@/components/command-palette'
 import { BrandMark } from '@/components/design'
 import { NoModelBanner } from '@/components/models/no-model-banner'
+import { QuotaChip } from '@/components/models/quota-notice'
 import { RailStateProvider } from '@/components/rail/rail-state'
 import { RightRail } from '@/components/rail/right-rail'
 // WP60（48 L6）：值守中的角标。自带数据，顶栏这里只有一行
@@ -434,6 +435,8 @@ export function AppShell({
               （包括走了演示旁路那条路）之后它照常出现——那时它才是一条新消息。
             */}
             {onboarding ? null : <NoModelBanner variant="chip" />}
+            {/* WP151：DeepSeek 余额不足（同一类：整个工作区的状态），点了去「设置 → 模型」充值 */}
+            {onboarding ? null : <QuotaChip />}
             <ModelChip />
             <CreditsChip />
           </header>

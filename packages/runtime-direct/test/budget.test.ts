@@ -1,4 +1,8 @@
-import { createModelGateway, GatewayError } from '@agentsws/model-gateway'
+import {
+  createModelGateway,
+  DEEPSEEK_ACCOUNT_QUOTA_MESSAGE,
+  GatewayError,
+} from '@agentsws/model-gateway'
 import { describe, expect, it } from 'vitest'
 import { CLOSED_TOOL_RESULT } from '../src/index.js'
 import { clock, downGateway, eventsOf, harness, MODEL, makeRequest, types } from './helpers.js'
@@ -135,6 +139,39 @@ describe('预算是硬的（17 §5.3 §5.6）', () => {
     expect(failed?.error.code).toBe('unauthenticated')
     expect(failed?.error.message).toBe(said)
     expect(failed?.error.retryable).toBe(false)
+  })
+
+  it('WP151：DeepSeek 余额不足 → 摘要就是"余额不足，充值后再让它接着做"那句，不是泛泛的码', async () => {
+    const c = clock()
+    const gateway = createModelGateway({
+      providers: [
+        {
+          ref: MODEL,
+          async complete() {
+            throw new GatewayError('provider_error', DEEPSEEK_ACCOUNT_QUOTA_MESSAGE, {
+              source: 'deepseek_account',
+              reason: 'account_quota',
+              status: 402,
+            })
+          },
+        },
+      ],
+      policy: {
+        default: MODEL,
+        data_residency: 'cn',
+        prices: { 'stub/scripted-v1': { in: 1, out: 2, cached: 0.1 } },
+      },
+      clock: c,
+      env: {},
+      eventSink: () => {},
+    })
+    const h = harness({ script: LOOP, clock: c, gateway })
+    const result = await h.run()
+    expect(result.status).toBe('failed')
+    expect(result.summary).toBe(DEEPSEEK_ACCOUNT_QUOTA_MESSAGE)
+    const failed = eventsOf(h.events, 'run.failed')[0]
+    expect(failed?.error.code).toBe('provider_error')
+    expect(failed?.error.message).toBe(DEEPSEEK_ACCOUNT_QUOTA_MESSAGE)
   })
 
   it('turn 上限：到顶就收尾，未闭合调用补齐', async () => {

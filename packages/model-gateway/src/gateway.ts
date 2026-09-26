@@ -34,6 +34,7 @@ import {
   priceFor,
   priceKey,
 } from './pricing.js'
+import { deepseekQuotaKindOf } from './providers/deepseek-quota.js'
 import type {
   BlockedResidencyPayload,
   BudgetExhaustedPayload,
@@ -363,7 +364,7 @@ class Gateway implements ModelGatewayApi {
     /*
      * WP150：provider 明说"要重新登录"（`unauthenticated`，例如 DeepSeek 账号登录失效）不是上游宕了——
      * 降级换一家救不回来，泛泛的 `all providers failed` 也说不清。记进 attempts 之后**原样**往上抛，
-     * 运行的失败原因就是 provider 那句人话。
+     * 运行的失败原因就是 provider 那句人话。WP151 的"DeepSeek 余额不足"同样走这条。
      */
     let signIn: GatewayError | undefined
     try {
@@ -426,7 +427,11 @@ class Gateway implements ModelGatewayApi {
             ...(e instanceof ProviderError && e.status !== undefined ? { status: e.status } : {}),
             message: messageOf(e),
           })
-          if (e instanceof GatewayError && e.code === 'unauthenticated') {
+          // WP151：DeepSeek 余额不足同理——换一家救不回来，也不该悄悄换模型；原样往上抛
+          if (
+            e instanceof GatewayError &&
+            (e.code === 'unauthenticated' || deepseekQuotaKindOf(e) !== undefined)
+          ) {
             signIn = e
             break
           }

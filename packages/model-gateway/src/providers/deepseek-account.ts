@@ -28,6 +28,9 @@
  * `@deepseek-ai/dsh-llm-deepseek-account@0.1.7-rc.2` `lib/index.js`（`resolveAuth` 里的
  * `ACCOUNT_SIGN_IN_REQUIRED` 与 `onRequestError` 的 401 → `ACCOUNT_TOKEN_INVALID` + `rejectToken`）。
  *
+ * **余额不足（WP151，跟官方 0.1.7-rc.2）**：402（或官方认作余额不足的措辞）→ 账号路说"账号余额不足，充值后
+ * 再让它接着做"、API key 路说"API 余额不足，去开放平台充值"，见 `./deepseek-quota.ts`。不是登录失效。
+ *
  * 不带的东西（与官方适配器相比）：`x-deepseek-harness-*` 那几个归因头（harness 自己的遥测）、
  * 会话日志上报扩展（`session-log-deepseek`，profile 里关死的那条）、流式（网关按整段收）、
  * 图片前那段"附件 id + 请求尺寸"的说明文字（我们没有官方的附件服务）。
@@ -54,6 +57,11 @@ import {
   providerRejectedFileId,
   staleMappings,
 } from './deepseek-files.js'
+import {
+  type DeepSeekBalanceListener,
+  deepseekQuotaError,
+  isDeepSeekQuotaFailure,
+} from './deepseek-quota.js'
 import { wireToolName } from './openai-compatible.js'
 
 /** 官方 `dsh-llm-deepseek` 的 `PUBLIC_BASE_URL`：账号令牌能用的 Messages 口的根。 */
@@ -136,6 +144,11 @@ export interface DeepSeekAccountProviderOptions {
   files?: DeepSeekFileStore | false
   /** 一次 Files 解析最多等多久（官方默认 60 秒）。超时 = 整份退内联。 */
   filesTimeoutMs?: number
+  /**
+   * WP151：余额够不够的回调（上游说余额不足 → `true`；一次调用成功 → `false`）。
+   * 装配方据此在模型卡 / 顶栏上出、收"余额不足，去充值"那一行。
+   */
+  onBalance?: DeepSeekBalanceListener
 }
 
 /**
@@ -524,6 +537,14 @@ export function deepseekMessagesProvider(options: DeepSeekMessagesProviderOption
             status: 401,
           })
         }
+        /*
+         * WP151：余额不足（402，或官方认作余额不足的错误措辞；401 / 403 不算）。**不是**登录失效：
+         * 不报 rejectToken、不碰登录；不降级换模型。账号路与 API key 路各说各的（充值去处不同）。
+         */
+        if (isDeepSeekQuotaFailure(res.status, detailText)) {
+          options.onBalance?.(true)
+          throw deepseekQuotaError(account ? 'account' : 'api_key', res.status)
+        }
         if (fileIds !== undefined && files !== undefined) {
           let raw: unknown
           try {
@@ -545,6 +566,8 @@ export function deepseekMessagesProvider(options: DeepSeekMessagesProviderOption
         })
       }
       const json = (await res.json()) as WireResponse
+      // WP151：这一次成了——余额够用（之前那句"余额不足"可以收了）
+      options.onBalance?.(false)
       let text = ''
       let reasoning = ''
       const thinking: ReasoningReplay['blocks'] = []
