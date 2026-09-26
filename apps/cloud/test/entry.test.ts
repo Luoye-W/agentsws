@@ -79,3 +79,38 @@ describe('49 M3：入口挂进云侧进程', () => {
     expect(ok.status).toBe(200)
   })
 })
+
+describe('WP155：搜索数据挂进同一个入口（Compose 形态）', () => {
+  it('没配 key：状态如实说没开通；配了（环境变量）：开通、单价常显、不写服务商名', async () => {
+    const s = setup()
+    const off = await s.h.call('/v1/data/search/status', { token: s.token })
+    expect(off.status).toBe(200)
+    expect(off.body).toMatchObject({ configured: false, route: 'none' })
+
+    const h2 = harness()
+    h = h2
+    mountEntry(h2.server, {
+      clock: h2.clock,
+      walletStore: new MemoryWalletStore(),
+      env: { AGENTSWS_SEARCH_DATA_KEY: 'svc-login:not-a-real-password' },
+      fetch: async () => {
+        throw new Error('测试里不该打任何上游')
+      },
+    })
+    const { account, org } = h2.server.store.ensureAccount('luoye@example.com')
+    const token = h2.server.store.createLink({
+      workspace_id: 'ws_a',
+      cloud_org_id: org.id,
+      created_by: account.id,
+      scopes: [...DEFAULT_CLOUD_SCOPES],
+    }).token
+    const on = await h2.call('/v1/data/search/status', { token })
+    expect(on.body).toMatchObject({
+      configured: true,
+      route: 'official',
+      prices: { serp: 0.2, ai_answer: 0.4 },
+    })
+    expect(JSON.stringify(on.body)).not.toMatch(/dataforseo/i)
+    await s.h.close()
+  })
+})

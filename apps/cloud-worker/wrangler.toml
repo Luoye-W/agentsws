@@ -156,6 +156,9 @@ AGENTSWS_VERSION = "0.1.0"
 AGENTSWS_CHAT_MONTHLY_CONVERSATIONS = "200"
 # WP128：托管实例的容器规格（与上面 [[containers]].instance_type 保持一致；估算费用用）
 AGENTSWS_HOSTED_INSTANCE_TYPE = "basic"
+# WP155：官方数据接口的搜索数据用哪一家（docs/81 首选 dataforseo）。key 不在这里：
+# `wrangler secret put AGENTSWS_SEARCH_DATA_KEY`（DataForSEO 填 login:password），没配 = 没开通
+AGENTSWS_SEARCH_DATA_PROVIDER = "dataforseo"
 
 # ── 打包 ───────────────────────────────────────────────────────────────
 # better-sqlite3 是原生模块，Workers 上装不进去。云侧几个包的主入口里有它那一档

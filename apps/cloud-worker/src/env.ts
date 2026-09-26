@@ -88,10 +88,18 @@ export interface WorkerEnv {
   /** 付完跳回哪儿。 */
   AGENTSWS_CLOUD_PUBLIC_URL?: string
   AGENTSWS_VERSION?: string
+  /** WP155：搜索数据用哪一家（非敏感，`[vars]`；不填 = `dataforseo`，docs/81 的首选）。 */
+  AGENTSWS_SEARCH_DATA_PROVIDER?: string
 
   // ── secrets：`wrangler secret put`，仓库里只有名字 ──────────────────
   /** 打模型上游的那把 key。 */
   AGENTSWS_NEWAPI_KEY?: string
+  /**
+   * WP155（docs/81）：官方数据接口的搜索数据服务商 key（DataForSEO 是 `login:password`）。
+   * **Luoye 用 `wrangler secret put AGENTSWS_SEARCH_DATA_KEY` 自己敲，不经 AI。**
+   * 没配 = 搜索数据没开通：状态口如实说，查询口 501、一分不扣。
+   */
+  AGENTSWS_SEARCH_DATA_KEY?: string
   /** 管理员手动发积分那条路由的钥匙；没配这条路由**根本不挂**。 */
   AGENTSWS_CLOUD_ADMIN_TOKEN?: string
   STRIPE_SECRET_KEY?: string
