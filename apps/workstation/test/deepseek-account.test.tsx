@@ -21,6 +21,7 @@ import {
   DeepSeekAccountLogin,
   formatWallet,
 } from '@/components/models/deepseek-account-login'
+import { ModelsPanel } from '@/components/models/models-panel'
 import { NoModelBanner } from '@/components/models/no-model-banner'
 import { QuotaChip } from '@/components/models/quota-notice'
 import { AiStep } from '@/components/onboarding/ai-step'
