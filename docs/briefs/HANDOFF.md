@@ -59,6 +59,7 @@
 | 34 | WP150 DeepSeek 账号登录跟上官方 rc.2：失效自动登出并提示、退出前确认并停掉账号任务 | `WP150-deepseek-account-lifecycle.md` | `wp150-ds-account` · `wp/150-ds-account` | — | 已合并（09-25，Fable 终审：241 文件 3605 条过，六组模拟门禁过；合并时顺带修了「启动后才接模型一直跑替身」） |
 | 35 | WP151 DeepSeek 余额不足：说人话 + 去充值（账号路 / key 路分开引导） | `WP151-deepseek-balance-insufficient.md` | `wp151-ds-balance` · `wp/151-ds-balance` | — | 已合并（09-26，Fable 终审：237 文件 3573 条过，六组模拟门禁过） |
 | 36 | WP152 DeepSeek 两种连接合成一张卡（官方 API 接口连接 / 官方账户登录，用户自选） | `WP152-deepseek-one-card.md` | `wp152-ds-card` · `wp/152-ds-card` | — | 已合并（09-26，Fable 终审：工作台 824 条 + server / model-gateway 1558 条过，六组模拟门禁过；合并时补了默认方案两条规则） |
+| 37 | WP153 真账号冒烟三个小问题：回答露工具名与 markdown、事项摘要跑题、店主查不到岗位与连接 | `WP153-reply-quality-three-fixes.md` | `wp153-reply-fixes` · `wp/153-reply-fixes` | — | 进行中（Claude） |
 
 WP117b 的补充要求（派工单里没有，写在这）：demo 服务的是 `apps/workstation/dist`，测界面前先 `pnpm -F @agentsws/workstation exec vite build`；交付一个真实点击的 playwright 脚本 `scripts/e2e-kol-sandbox.mjs`（playwright 库在 `node_modules/.pnpm/playwright@1.63.0/node_modules/playwright`），走完「选合成红人 → 起草开发信 → 批准发送 → 已发 ≥ 1 → 跳到 N 天后 → 回信 ≥ 1 → 分类 → 议价卡 → 阶段推进 → 交付物 → 追踪链接」，每步截图到 `docs/assets/workstation/kol-e2e-NN.png`，脚本里断言计数确实变了；演练数据从真实漏斗 / 归因里排除，单独显示「演练漏斗」。
 
