@@ -61,9 +61,9 @@
         "work_item_id": "mat_1"
       },
       "payload": {
-        "hash": "f9f8e0e076e611ad2cb9d190bbda26d3db5f2b381a3e8df8f9caa1bb829a2617",
-        "static_prefix_hash": "97ccff3329cb87a83f66fd78bcc055d037a6b1ed84bb5985f4316eb3596ad795",
-        "total_tokens": 254
+        "hash": "acb12ccfa8a2d9d40704a035167b141f23c6f56f76ff2cda7e65e6a79226bba9",
+        "static_prefix_hash": "a7fbcd5d17303f05222c76f4e416a54aaf06a8b09163fc971f81eae68c79d5ae",
+        "total_tokens": 273
       }
     },
     {
@@ -155,7 +155,7 @@
             "text": "看过了。"
           }
         ],
-        "summary": "这次什么也没做：没查到东西，也没出草稿。"
+        "summary": "看过了。"
       }
     }
   ],
@@ -221,9 +221,9 @@
         "work_item_id": "mat_1"
       },
       "payload": {
-        "hash": "f9f8e0e076e611ad2cb9d190bbda26d3db5f2b381a3e8df8f9caa1bb829a2617",
-        "static_prefix_hash": "97ccff3329cb87a83f66fd78bcc055d037a6b1ed84bb5985f4316eb3596ad795",
-        "total_tokens": 254
+        "hash": "acb12ccfa8a2d9d40704a035167b141f23c6f56f76ff2cda7e65e6a79226bba9",
+        "static_prefix_hash": "a7fbcd5d17303f05222c76f4e416a54aaf06a8b09163fc971f81eae68c79d5ae",
+        "total_tokens": 273
       }
     },
     {
@@ -315,7 +315,7 @@
             "text": "看过了。"
           }
         ],
-        "summary": "这次什么也没做：没查到东西，也没出草稿。"
+        "summary": "看过了。"
       }
     }
   ]

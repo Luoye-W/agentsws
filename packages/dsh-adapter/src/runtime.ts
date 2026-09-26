@@ -438,16 +438,19 @@ export function createInProcessDshRuntime(options: DshRuntimeOptions): RuntimeAd
         const wantsChange = looksLikeChangeRequest(scratch.threadText)
         const noStage =
           req.expectations.must_stage_if_change_requested && wantsChange && !harness.gate.staged
-        // 17 §3：摘要是一句人话（与 stub / direct-llm 同一份拼法）
+        // 17 §3：摘要是一句人话（与 stub / direct-llm 同一份拼法）。
+        // WP153：给人的回复在的话，摘要就是它的第一句
+        const answered = turn.text.length > 0 && req.expectations.outputs.includes('answer')
         const summary = describeRun({
           readTools: harness.gate.readTools,
           drafted: harness.gate.drafted,
           askedBoundaries,
+          ...(answered ? { reply: turn.text, tools: req.tools.allow } : {}),
           ...(scratch.order === undefined ? {} : { orderName: scratch.order.name }),
           ...(harness.gate.stagedMoney === undefined ? {} : { staged: harness.gate.stagedMoney }),
           ...(exhausted === undefined ? {} : { exhausted: exhausted.which }),
         })
-        if (turn.text.length > 0 && req.expectations.outputs.includes('answer')) {
+        if (answered) {
           outputs.push({ kind: 'answer', text: turn.text })
         }
         emit({
