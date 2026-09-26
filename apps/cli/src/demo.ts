@@ -33,6 +33,7 @@ import type { DataSourceStatus, DeckCard, InventoryRow, OrderRow, PostRow } from
 import { PLANNED_SOURCE_NOTES } from '@agentsws/deck'
 import { contentHashOf } from '@agentsws/knowledge'
 import { parseRole } from '@agentsws/roles'
+import { DEMO_GSC_ROWS, DEMO_PAGES, standInSearchConsole } from '@agentsws/seo-core'
 import type {
   MatterRecordSource,
   MountedWorld,
@@ -196,7 +197,9 @@ function dataSourceOf(world: World, pack: Pack): WorkstationDataSource {
     { id: 'shop', label: '店铺后台', connected: true },
     { id: 'approvals', label: '工作队列', connected: true },
     { id: 'ga4', label: 'GA4', connected: false },
-    { id: 'gsc', label: 'Search Console', connected: false },
+    // WP154：demo 里的 Search Console 是**替身**（`@agentsws/seo-core` 合成的一周数据），
+    // 「今天值得动的 5 件事」那一块才演得出来；不连任何真 Google
+    { id: 'gsc', label: 'Search Console', connected: true },
     { id: 'ads', label: '广告后台', connected: false },
     { id: 'csat', label: '满意度调查', connected: false },
     // WP64：邮件营销后台与物流追踪的连接器还是骨架 —— demo 里也照实说没连
@@ -263,6 +266,8 @@ async function seedStoreWork(world: World, pack: Pack): Promise<void> {
   })
   // ④ 日报卡：L3 自动出、看完归档
   await world.shop.dailyReport({ who: ops })
+  // ⑤ WP154：「今天值得动的 5 件事」（替身 Search Console；搜索数据接口按"还没接"）
+  await world.shop.seoDaily({ who: ops })
 }
 
 /**
@@ -1234,6 +1239,8 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
     mount,
     staticDir,
     brandData: (ws) => extraBrandData.get(ws),
+    // WP154：「现在读一遍 Search Console」在 demo 里读的是替身那一周（不连真 Google）
+    searchConsoleFor: () => standInSearchConsole({ rows: DEMO_GSC_ROWS, pages: DEMO_PAGES }),
     brandIntakeFetch: async (url: string) => {
       // WP140（docs/78 §2 向导 ②）：手输不带结尾斜杠的 `https://nordvolt.example` 也认
       const body = siteFixtures.get(siteFixtureKey(url))

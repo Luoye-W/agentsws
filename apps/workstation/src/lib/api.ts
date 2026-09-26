@@ -1228,6 +1228,8 @@ export interface PositionConnectionItem {
   kind: string
   name: { zh: string; en: string }
   required: boolean
+  /** WP154：推荐连（没连有一块看不到）。 */
+  recommended?: boolean
   connected: boolean
   needed_by: string[]
   status: 'available' | 'planned'

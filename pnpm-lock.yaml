@@ -46,6 +46,9 @@ importers:
       '@agentsws/roles':
         specifier: workspace:*
         version: link:../../packages/roles
+      '@agentsws/seo-core':
+        specifier: workspace:*
+        version: link:../../packages/seo-core
       '@agentsws/server':
         specifier: workspace:*
         version: link:../server

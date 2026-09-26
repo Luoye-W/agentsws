@@ -22,6 +22,9 @@
       "path": "../../packages/simulation"
     },
     {
+      "path": "../../packages/seo-core"
+    },
+    {
       "path": "../../packages/stand-ins"
     },
     {

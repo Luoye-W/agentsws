@@ -50,6 +50,14 @@ const STATUS_VALUES: Record<string, Bi> = {
   unfulfilled: { zh: '未发货', en: 'Unfulfilled' },
 }
 
+/** WP154：连接状态那几格的值。 */
+const LINK_VALUES: Record<string, Bi> = {
+  connected: { zh: '已连', en: 'Connected' },
+  not_connected: { zh: '没连', en: 'Not connected' },
+  configured: { zh: '已接', en: 'Connected' },
+  not_configured: { zh: '还没接', en: 'Not connected' },
+}
+
 /** 字段名 → 人话。按「会出现在卡面 / 报表上」的频率收，不求全。 */
 const FIELDS: Record<string, FieldDef> = {
   // 客服的业务边界（docs/78 §2 首页 / 客服第 38 步）
@@ -65,6 +73,21 @@ const FIELDS: Record<string, FieldDef> = {
   orders: { label: { zh: '订单', en: 'Orders' } },
   low_stock: { label: { zh: '库存告急', en: 'Low stock' } },
   pending: { label: { zh: '待审', en: 'Pending' } },
+  // WP154 搜索报告卡上那几格（连没连、接没接）
+  gsc: { label: { zh: 'Search Console', en: 'Search Console' }, values: LINK_VALUES },
+  ga4: { label: { zh: 'GA4', en: 'GA4' }, values: LINK_VALUES },
+  search_data: { label: { zh: '搜索数据接口', en: 'Search data' }, values: LINK_VALUES },
+  week_of: { label: { zh: '那一周', en: 'Week of' } },
+  variant: {
+    label: { zh: '哪一份', en: 'Report' },
+    values: {
+      daily: { zh: '每日 5 件事', en: 'Daily 5 things' },
+      weekly_revenue: { zh: '每周收入', en: 'Weekly revenue' },
+      weekly_geo: { zh: '每周 AI 可见度', en: 'Weekly AI visibility' },
+    },
+  },
+  questions: { label: { zh: '问题数', en: 'Questions' } },
+  unmatched_orders: { label: { zh: '归不上的订单', en: 'Unmatched orders' } },
   // 商品与内容
   price: { label: { zh: '价格', en: 'Price' } },
   title: { label: { zh: '标题', en: 'Title' } },
