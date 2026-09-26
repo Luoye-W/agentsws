@@ -62,10 +62,14 @@ function RoutedLine({
   const { t } = useApp()
   const client = useQueryClient()
   const [picking, setPicking] = useState(false)
+  /*
+   * WP153：一进来就取岗位（不等点「换」）——「路由到 …」要写职责的**名字**。以前只在点「换」
+   * 之后才取，于是那一行先显示的是职责 id（`common.owner`），内部值上了屏。
+   */
   const position = useQuery({
     queryKey: ['position-instance', positionId],
     queryFn: () => getPosition(positionId),
-    enabled: positionId !== '' && picking,
+    enabled: positionId !== '',
   })
   const reroute = useMutation({
     mutationFn: (next: string) => rerouteMatter(matterId, next),
@@ -81,7 +85,9 @@ function RoutedLine({
         <span>
           {roleId === undefined
             ? t('matter.routed.none')
-            : t('matter.routed', { role: current?.role_name ?? roleId })}
+            : current === undefined
+              ? null
+              : t('matter.routed', { role: current.role_name })}
         </span>
         <Button
           size="xs"

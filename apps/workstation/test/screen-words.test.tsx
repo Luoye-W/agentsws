@@ -124,6 +124,8 @@ const matterWithReply = {
     kind: 'task',
     title: '帮我看看有哪些岗位和连接',
     status: 'open',
+    position_id: 'owner',
+    role_id: 'common.owner',
     context: {
       summary: '这个工作区现在有 10 个岗位，2 条连接已接上，还差 1 条必需的连接。',
       pinned: [],
@@ -156,6 +158,12 @@ vi.mock('@/lib/api', async () => {
   return {
     ...actual,
     getMatter: async () => matterWithReply,
+    getPosition: async () => ({
+      position_id: 'owner',
+      roles: [
+        { role_id: 'common.owner', role_name: '工作区所有者', assignment_ids: ['asg_owner'] },
+      ],
+    }),
     getHome: async () => home,
     getPositions: async () => ({ positions: [], instances: [], tile_library: [], max_tiles: 4 }),
     listMembers: async () => [],
@@ -193,6 +201,9 @@ describe('WP141 守卫：屏幕上没有内部值', () => {
     expect(text).not.toContain('`')
     expect(text).not.toContain('](')
     expect(text).toContain('最该先处理的三件事')
+    // 「路由到 …」写的是职责名字，不是职责 id
+    await screen.findByText('路由到 工作区所有者')
+    expect(screenText(container)).not.toContain('common.owner')
   })
 
   it('首页：页头、报表块、牌堆里每一张卡、卡型下拉、紧凑列表', async () => {
