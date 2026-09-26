@@ -137,6 +137,8 @@ export interface SeoPick {
   lane: SeoLane
   /** `fix_page` 那条车道的具体改法。 */
   fix?: SeoFixKind
+  /** `internal_link_edit`：从哪一页链过来（这批数据里点击最多的那一页；改的是它）。 */
+  link_from?: string
   /** 建议动作（一句人话，模板生成，不经模型）。 */
   suggestion: string
   /** `new_page` 车道：SERP 看过的结论（没接搜索数据接口就没有，`serp_skipped` 说为什么）。 */

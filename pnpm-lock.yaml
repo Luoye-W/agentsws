@@ -1299,6 +1299,15 @@ importers:
         specifier: ^7.6.13
         version: 7.6.13
 
+  packages/seo-core:
+    dependencies:
+      '@agentsws/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@agentsws/core':
+        specifier: workspace:*
+        version: link:../core
+
   packages/simulation:
     dependencies:
       '@agentsws/ads-core':

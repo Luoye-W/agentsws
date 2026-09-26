@@ -119,6 +119,9 @@
       "path": "packages/roles"
     },
     {
+      "path": "packages/seo-core"
+    },
+    {
       "path": "packages/runtime-direct"
     },
     {

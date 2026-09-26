@@ -35,7 +35,10 @@ const facts = (target: { type: string; id: string }, windowCount = 0) => ({
 })
 const mandate: Mandate = { caps: { max_page_edits_per_day: 3, max_links_per_change: 5 } }
 
-const change = (kind: 'page_seo_edit' | 'page_section_add' | 'internal_link_edit', after: object) => ({
+const change = (
+  kind: 'page_seo_edit' | 'page_section_add' | 'internal_link_edit',
+  after: object,
+) => ({
   kind,
   target: page,
   before: { title: '快充头怎么挑' },
@@ -142,7 +145,12 @@ describe('page_section_add 与 internal_link_edit', () => {
 
   it('一次改太多条链接 → 转人审', () => {
     const links = Array.from({ length: 6 }, (_, i) => ({ to: `pg_${i}`, anchor: `a${i}` }))
-    const r = evaluateGuardrail(change('internal_link_edit', { links }), mandate, facts(page), 'stage')
+    const r = evaluateGuardrail(
+      change('internal_link_edit', { links }),
+      mandate,
+      facts(page),
+      'stage',
+    )
     expect(r.verdict).toBe('require_review')
   })
 })
