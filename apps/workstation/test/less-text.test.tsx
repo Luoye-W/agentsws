@@ -98,7 +98,7 @@ const TEMPLATES: ModelProviderTemplate[] = [
     plan_order: 1,
     auth: 'account',
     default_base_url: 'https://api.deepseek.com/anthropic',
-  } as Partial<ModelProviderTemplate> & Pick<ModelProviderTemplate, 'kind' | 'label'>),
+  } as unknown as Parameters<typeof tpl>[0]),
   tpl({
     kind: 'deepseek',
     label: 'DeepSeek 官方 · 官方 API 接口连接',
@@ -170,7 +170,7 @@ const TEMPLATES: ModelProviderTemplate[] = [
     auth: 'subscription',
     subscription_provider: 'openai-codex',
     default_base_url: 'https://chatgpt.com',
-  } as Partial<ModelProviderTemplate> & Pick<ModelProviderTemplate, 'kind' | 'label'>),
+  } as unknown as Parameters<typeof tpl>[0]),
   tpl({
     kind: 'openai_compatible',
     label: 'OpenAI（API key，按量计费）',
@@ -191,7 +191,7 @@ const TEMPLATES: ModelProviderTemplate[] = [
     auth: 'subscription',
     subscription_provider: 'anthropic',
     default_base_url: 'https://claude.ai',
-  } as Partial<ModelProviderTemplate> & Pick<ModelProviderTemplate, 'kind' | 'label'>),
+  } as unknown as Parameters<typeof tpl>[0]),
   tpl({
     kind: 'agentsws_cloud',
     label: 'agentsws 云（用积分）',
