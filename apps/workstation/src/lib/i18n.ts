@@ -2559,7 +2559,8 @@ const zh: Table = {
   // WP151：与运行失败原因同一句（账号路引到账号的充值页，不说"开放平台"——免得 API key 用户充错地方）
   'dsa.err.balance': 'DeepSeek 账号余额不足，充值后再让它接着做。',
   'dsa.quota': 'DeepSeek 账号余额不足，充值后再让它接着做。',
-  'models.quota.api': 'DeepSeek API 余额不足。用建这把 key 的那个 DeepSeek 账号登录开放平台，充值后再试。',
+  'models.quota.api':
+    'DeepSeek API 余额不足。用建这把 key 的那个 DeepSeek 账号登录开放平台，充值后再试。',
   'models.quota.top_up': '去充值',
   'models.quota.chip': 'DeepSeek 余额不足',
   // WP150：登录失效自动登出并提示；登出前确认并停掉正在用账号跑的事
