@@ -1644,6 +1644,15 @@ async function execute(
         })
         return
       }
+      case 'content.seo_daily': {
+        const out = await world.shop.seoDaily({ who: event.seo_daily.who })
+        world.appendEvent('simulation.seo_daily', {
+          who: event.seo_daily.who,
+          item: out.approval_item_id,
+          picks: out.picks,
+        })
+        return
+      }
       case 'store.daily_report': {
         const out = await world.shop.dailyReport({ who: event.daily_report.who })
         world.appendEvent('simulation.store_daily_report', {

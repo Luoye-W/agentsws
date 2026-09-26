@@ -92,6 +92,8 @@ export function harness(
     start?: string
     /** 44 G2：目标在不在岗位范围里（不装就是不判） */
     targetInRange?: TxnOptions['targetInRange']
+    /** WP154：stage 之前的改写口（不装就是原样） */
+    beforeStage?: TxnOptions['beforeStage']
   } = {},
 ): Harness {
   const clock = makeClock(opts.start ?? T0)
@@ -113,6 +115,7 @@ export function harness(
     ...(opts.directory ? { directory: opts.directory } : {}),
     ...(opts.mandateFor ? { mandateFor: opts.mandateFor } : {}),
     ...(opts.targetInRange ? { targetInRange: opts.targetInRange } : {}),
+    ...(opts.beforeStage ? { beforeStage: opts.beforeStage } : {}),
     ...(opts.readRecordEnabled === false
       ? {}
       : { readRecord: (t: ObjectRef) => records[`${t.type}:${t.id}`] ?? {} }),

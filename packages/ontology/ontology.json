@@ -39,6 +39,7 @@
     "packages/contracts/src/run.ts",
     "packages/contracts/src/schedule.ts",
     "packages/contracts/src/search-data.ts",
+    "packages/contracts/src/seo.ts",
     "packages/contracts/src/site.ts",
     "packages/contracts/src/skills.ts",
     "packages/contracts/src/social.ts",
@@ -89,7 +90,7 @@
     "packages/roles/roles/social/x.yml",
     "packages/roles/roles/social/youtube.yml"
   ],
-  "source_digest": "d124cd94f3ad7157663415e0f59d6138",
+  "source_digest": "eb3f0242c22642242dacdc8f6f687239",
   "objects": [
     {
       "id": "ad",
@@ -9083,6 +9084,18 @@
       "what": "stage flow edit"
     },
     {
+      "id": "stage_internal_link_edit",
+      "object": "theme",
+      "source": "role",
+      "access": "write",
+      "change_kind": "internal_link_edit",
+      "risk_class": "low",
+      "requires_approval": true,
+      "route_to": "scope_manager",
+      "roles": ["dtc.content"],
+      "what": "stage internal link edit"
+    },
+    {
       "id": "stage_inventory_adjust",
       "object": "inventory_item",
       "source": "role",
@@ -9128,6 +9141,30 @@
       "route_to": "scope_manager",
       "roles": ["site.shopify-theme"],
       "what": "改一个页面"
+    },
+    {
+      "id": "stage_page_section_add",
+      "object": "theme",
+      "source": "role",
+      "access": "write",
+      "change_kind": "page_section_add",
+      "risk_class": "low",
+      "requires_approval": true,
+      "route_to": "scope_manager",
+      "roles": ["dtc.content"],
+      "what": "stage page section add"
+    },
+    {
+      "id": "stage_page_seo_edit",
+      "object": "theme",
+      "source": "role",
+      "access": "write",
+      "change_kind": "page_seo_edit",
+      "risk_class": "low",
+      "requires_approval": true,
+      "route_to": "scope_manager",
+      "roles": ["dtc.content"],
+      "what": "stage page seo edit"
     },
     {
       "id": "stage_post",

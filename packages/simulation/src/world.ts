@@ -6,11 +6,6 @@
  * 时钟（合成时钟）、投递（收件箱）、入站（内存管线）是替身。
  */
 
-/*
- * WP75（57 §2）：总闸 / delta / 止损 / 归因四件事的判据**只有 `ads-core` 那一份**。
- * 世界里不写第二份——两份判据必然有一天对不上，而对不上的那一天没人会发现
- * （模拟绿着，真环境按另一份走）。
- */
 import {
   attributeAds,
   attributionGapPct,
@@ -172,6 +167,19 @@ import {
   withToolChoice,
 } from '@agentsws/runtime-direct'
 import { wallClock } from '@agentsws/schedule'
+/*
+ * WP75（57 §2）：总闸 / delta / 止损 / 归因四件事的判据**只有 `ads-core` 那一份**。
+ * 世界里不写第二份——两份判据必然有一天对不上，而对不上的那一天没人会发现
+ * （模拟绿着，真环境按另一份走）。
+ */
+import {
+  buildDaily as buildSeoDaily,
+  DEMO_BRAND_TERMS as SEO_DEMO_BRAND,
+  DEMO_OUR_DOMAINS as SEO_DEMO_DOMAINS,
+  DEMO_PAGES as SEO_DEMO_PAGES,
+  DEMO_GSC_ROWS as SEO_DEMO_ROWS,
+  unconfiguredSearchData,
+} from '@agentsws/seo-core'
 // WP77（59 §2）：上线检查单与两条 `after` 的组装——判断在纯函数里，世界只递事实
 import {
   appInstallAfter,
@@ -1638,6 +1646,13 @@ export interface ShopOps {
     /** 卡面上那几个数（全部从结构化行算出来，一个字不经模型手）。 */
     figures: { sales: number; orders: number; low_stock: number; pending: number }
   }>
+  /**
+   * WP154「内容与搜索」：早上那一轮「今天值得动的 5 件事」。
+   *
+   * 数据是替身 Search Console 的一周（`@agentsws/seo-core` 的合成数据），搜索数据接口
+   * 按"还没接"（SERP 跳过、其余照跑）。同日报：L3 自动出、不进队列，数不经模型手。
+   */
+  seoDaily(input: { who: PersonId }): Promise<{ approval_item_id: string; picks: number }>
   /** 提一条"把这份副本发布上线"的变更（`publish_theme`，15 §2 永远 L1）。 */
   themePublish(input: {
     who: PersonId
@@ -4698,6 +4713,74 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
       })
       await flushCards()
       return { approval_item_id: item.id, figures }
+    },
+
+    /**
+     * WP154：每日 5 件事。判断全在 `@agentsws/seo-core`（与服务端同一份代码）；这里只出那张
+     * 报告卡并记一条 `digest.seo_daily`（卡上几件、各走哪条车道、读进几行、卡上几行）。
+     */
+    async seoDaily({ who }) {
+      const asg = assignmentFor(who, 'dtc.content')
+      const at = now(clock)
+      const date = at.slice(0, 10)
+      const payload = await buildSeoDaily({
+        rows: SEO_DEMO_ROWS,
+        pages: SEO_DEMO_PAGES,
+        signals: { brand_terms: SEO_DEMO_BRAND },
+        search: unconfiguredSearchData(),
+        country: 'de',
+        language: 'en',
+        our_domains: SEO_DEMO_DOMAINS,
+        date,
+      })
+      const item = await txn.approvals.create({
+        workspace_id,
+        schema_version: 1,
+        kind: 'seo_report',
+        role_id: asg.role_id,
+        subject: { object: { type: 'workspace', id: workspace_id } },
+        dedupe_key: `dk_${workspace_id}|seo_report|daily|${date}`,
+        title: `今天值得动的 ${payload.picks.length} 件事（${date}）`,
+        summary: payload.picks.map((p) => `${p.rank}. ${p.query}：${p.suggestion}`).join('\n'),
+        payload,
+        evidence: {
+          run_id: `run_seo_${date}`,
+          source_events: [],
+          provenance: { seen: [] },
+          precheck: {},
+        },
+        proposer: { kind: 'agent', id: `agent_${asg.role_id}`, assignment_id: asg.id },
+        automation: {
+          level_at_creation: 'L3',
+          auto_approved: true,
+          mandate_check: { within: true, caps_hit: [] },
+          sampling: { selected: false },
+        },
+        routing: {
+          recipients: [recipientOf('role_holder')],
+          rule: 'role_holder',
+          escalation: { after_hours: 24, business_hours: true, chain: ['owner'], escalated_at: [] },
+          separation_of_duties: false,
+        },
+        priority: 'digest',
+      })
+      appendEnvelope({
+        schema_version: 1,
+        workspace_id,
+        type: 'digest.seo_daily',
+        actor: { kind: 'agent', id: asg.id },
+        correlation: { trace_id: traceId() },
+        payload: {
+          date,
+          lanes: payload.picks.map((p) => p.lane),
+          signals: payload.picks.map((p) => p.signal),
+          rows_in: SEO_DEMO_ROWS.length,
+          card_rows: payload.picks.length,
+          search_data: payload.search_data,
+        },
+      })
+      await flushCards()
+      return { approval_item_id: item.id, picks: payload.picks.length }
     },
 
     themePush({ who, name }) {

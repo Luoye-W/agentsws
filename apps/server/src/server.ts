@@ -37,6 +37,7 @@ import {
   type RolesPort,
   readCookie,
   SESSION_COOKIE,
+  type SeoPort,
   type SkillsPort,
   SqliteExtensionStore,
   SqliteIdempotencyStore,
@@ -60,6 +61,7 @@ import type {
   Person,
   PersonId,
   PromptSection,
+  SearchDataPort,
   SkillTier,
   StartRun,
   StorefrontPlatform,
@@ -105,6 +107,12 @@ import {
   type RoleStore,
   rangeTargetOfProduct,
 } from '@agentsws/roles'
+import {
+  disconnectedSearchConsole,
+  pendingSearchConsole,
+  ruleFromFact,
+  type SearchConsolePort,
+} from '@agentsws/seo-core'
 import { siteDesignPrompt, themeDesignVariables } from '@agentsws/site-core'
 import { createSkills, type Skills } from '@agentsws/skills'
 // WP74（37 §2.5）：统一日历里社媒那一层的撞车说明，判据只有 social-core 这一份
@@ -309,6 +317,7 @@ import {
   registerRawPrune,
   registerReconcileDeliveries,
   registerReview,
+  registerSeo,
   registerSkillsWeekly,
   registerSocialBroadcast,
   registerSocialPublish,
@@ -329,6 +338,7 @@ import {
   SecretStoreError,
 } from './secret-store.js'
 import { createSecretaryAssembly, type SecretaryAssembly } from './secretary.js'
+import { createSeoService } from './seo-service.js'
 import type { BrokerFetch } from './shopify-broker.js'
 import { createShopifyDevMcp } from './shopify-devmcp.js'
 // WP77（59 §1 / §2）：建站库（三张表）+ `/v1/site/*` 的实现
@@ -568,6 +578,18 @@ export interface ServerOptions {
    * （真实连接器）——生产路径从不传它，一个字节不变。
    */
   brandData?: (workspace_id: WorkspaceId) => WorkstationDataSource | undefined
+  /**
+   * WP154「内容与搜索」：给某个品牌接一个 Search Console 口（demo 与测试用替身）。
+   *
+   * 不给 = 按连接状态：没连就是「没连」，连了就是「已连上、读数那一步还没接」
+   * （连接目录里那张卡能授权，查询词与页面的读口是下一版——本单不接真 GSC）。
+   */
+  searchConsoleFor?: (workspace_id: WorkspaceId) => SearchConsolePort | undefined
+  /**
+   * WP154：换掉搜索数据接口（测试与 demo 用替身）。不给 = 这个品牌自己那一份 WP155
+   * 路由口（官方 / 自带 key / 不接）；没接时 SERP 检查与 GEO 探测跳过，其余照跑。
+   */
+  searchDataFor?: (workspace_id: WorkspaceId) => SearchDataPort | undefined
   /**
    * WP25 的三个测试注入点。生产路径一个都不传，各自走真实现：Shopify 换令牌用
    * `globalThis.fetch`、MX 用 `node:dns/promises`、模型试跑用网关自己的 fetch。
@@ -1320,6 +1342,16 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       appendEvent(e)
     },
     readRecord: (target) => backend.read(target),
+    /*
+     * WP154 发布前质检：`publish_post` 要发出去时，按卡片所属品牌的知识库跑一遍
+     * （事实对得上、数字有出处、没有违规宣称）；没过就改回草稿、拉回 L1、卡上逐句说明。
+     * 别的变更一个字节不动。改写后的入参照常过 guardrail——这一跳只能收紧。
+     */
+    beforeStage: async (input) => {
+      if (input.kind !== 'publish_post') return input
+      const brand = await brands?.forWorkspace(input.workspace_id)
+      return brand === undefined ? input : brand.seoService.gatePublish(input)
+    },
     // 44 G2 前置检查：改价 / 改 Listing 的目标商品必须落在这个岗位的范围里
     targetInRange: ({ assignment_id, target, before }) => {
       const scoped = rangeTargetOfProduct(target, before)
@@ -1472,7 +1504,12 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
 
   // 两层包装：学习回路先落 overlay / 知识卡，目录再看是不是一张晋升卡
   // WP144：最外一层——`computer_use` 授权卡批了就记一次授权、带着它重跑这件事
-  const approvals = computerUse.wrap(catalog.wrap(learning.wrap(rawApprovals)))
+  // WP154：选题卡批了 → 按卡片所属品牌开事项（钩子在品牌模块建好之后才挂上）
+  const seoDecidedHook: SeoDecidedHook = {}
+  const approvals = seoDecided(
+    computerUse.wrap(catalog.wrap(learning.wrap(rawApprovals))),
+    seoDecidedHook,
+  )
   // ── WP66（52 O1「每个品牌的所有东西都单独设置」）：一个进程装多套品牌模块 ──
   //
   // 从这里开始，连接、活数据源、记录源、工作模型、运行时、渠道、聊天车道与聊天窗、
@@ -2392,6 +2429,111 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       emit: appendEvent,
     })
     runtime?.bind(work)
+    /**
+     * WP154「内容与搜索」：这个品牌的 SEO / GEO 那一层。
+     *
+     * 两个口都是注入的：Search Console（demo / 测试给替身；不给就按连接状态说"没连"或
+     * "读数还没接"）与搜索数据接口（WP155；不给就是"还没接"，SERP 与 GEO 跳过）。
+     * 定时那一轮用真持有「内容与搜索」的那条分配去提，没人持有就不跑。
+     */
+    const holderOf = (role_id: string) => {
+      const a = roles.assignments
+        .listByRole(role_id)
+        .find((x) => x.workspace_id === ws && x.revoked_at === undefined)
+      return a === undefined
+        ? undefined
+        : { workspace_id: ws, person_id: a.person_id, assignment_id: a.id, role_id: a.role_id }
+    }
+    const seoService = createSeoService({
+      workspace_id: ws,
+      clock,
+      random,
+      approvals,
+      ledger: txn.ledger,
+      actionOf: (assignment_id, action) => {
+        try {
+          const config = roles.effectiveConfig(assignment_id)
+          return {
+            mandate: config.actions.find((a) => a.id === action)?.mandate ?? { caps: {} },
+            level: config.automation[action]?.level ?? 'L1',
+          }
+        } catch {
+          return { mandate: { caps: {} }, level: 'L1' }
+        }
+      },
+      holderOf,
+      thresholds: () => roles.roles.get('dtc.content')?.thresholds ?? {},
+      work: {
+        createMatter: (input) => work.createMatter(input),
+      },
+      searchConsole: (): SearchConsolePort =>
+        options.searchConsoleFor?.(ws) ??
+        (workData.sources().some((s) => s.id === 'gsc' && s.connected)
+          ? pendingSearchConsole()
+          : disconnectedSearchConsole()),
+      // WP155：这个品牌的搜索数据接口（官方 / 自带 key / 不接）；测试与 demo 可以换替身
+      searchData: () => options.searchDataFor?.(ws) ?? searchData,
+      orders: () => {
+        const since = Date.parse(clock.now()) - 7 * 86_400_000
+        return workData
+          .orders()
+          .filter((o) => Date.parse(o.created_at) >= since)
+          .map((o) => ({
+            id: o.id,
+            ...(o.landing_site === undefined ? {} : { landing_site: o.landing_site }),
+            total: o.full_total_price ?? o.total_price,
+            currency: o.currency,
+          }))
+      },
+      brand: async () => {
+        const w = await identity.getWorkspace(ws)
+        const domain = w?.profile?.domain?.trim()
+        return {
+          name: w?.brand?.name ?? w?.name ?? ws,
+          language: 'en' as const,
+          domains: domain === undefined || domain === '' ? [] : [domain],
+          shop_host: domain === undefined || domain === '' ? 'shop.invalid' : domain,
+          currency: w?.base_currency ?? workData.base_currency,
+          country: 'us',
+        }
+      },
+      knowledge: async (actor) => {
+        const config = roles.effectiveConfig(actor.assignment_id)
+        const cards = await knowledge.store.list(
+          { workspace_id: ws, status: 'active' },
+          {
+            person_id: actor.person_id,
+            workspace_id: ws,
+            assignment_id: actor.assignment_id,
+            role_id: actor.role_id,
+            grants: config.scopes,
+            ranges: config.ranges,
+          },
+        )
+        const rules = cards.flatMap((c) => {
+          const r = ruleFromFact(c)
+          return r === undefined ? [] : [r]
+        })
+        const facts = cards
+          .filter((c) => c.subject.type !== 'content_rule')
+          .map((c) => {
+            const extra = c.structured?.terms
+            return {
+              id: c.id,
+              statement: c.statement,
+              terms: [
+                ...c.subject.key.split(/[._\-\s]+/).filter((t) => t.length > 3),
+                ...(Array.isArray(extra)
+                  ? extra.filter((t): t is string => typeof t === 'string')
+                  : []),
+              ],
+            }
+          })
+        return { facts, rules }
+      },
+      appendEvent,
+      ...(dir === undefined ? {} : { dir }),
+    })
     /*
      * WP69（54 §1 / §3）岗位面：与这个品牌的 `Work` 绑在一起建（事项与 Run 都落在它里面）。
      *
@@ -2906,6 +3048,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       searchData,
       pr,
       prService,
+      seoService,
       social,
       socialService,
       socialChannels,
@@ -2950,6 +3093,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     return org === undefined ? [workspace.id] : identity.brandsOf(org.id).map((w) => w.id)
   }
 
+  // WP154：选题卡批了 → 按卡片所属品牌开事项（品牌模块到这里才建得出来）
+  seoDecidedHook.current = async (item) => {
+    const brand = await brands?.forWorkspace(item.workspace_id)
+    await brand?.seoService.onDecided(item)
+  }
   brands = createBrandModules({
     bootstrap: workspace.id,
     create: (ws) => assembleBrand(ws),
@@ -3336,6 +3484,34 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
    * 一个品牌的提及只能进那个品牌的库——媒体名单与舆情记录串了品牌，
    * 等于把一家公司攒了很多年的东西端给另一家。
    */
+  /*
+   * WP154：内容与搜索，每天早上一轮、每周一一轮，**按品牌各跑一轮**。
+   * 一个品牌的 Search Console、订单与问题清单只能进那个品牌自己的卡。
+   */
+  registerSeo(schedule.scheduler, {
+    daily: async () => {
+      const out = { brands: 0, picks: 0, skipped: [] as unknown[] }
+      for (const brand of await brandModules.all()) {
+        const one = await brand.seoService.daily()
+        out.brands += 1
+        out.picks += one.picks
+        if (one.skipped !== undefined)
+          out.skipped.push({ workspace_id: brand.workspace_id, reason: one.skipped })
+      }
+      return out
+    },
+    weekly: async () => {
+      const out = { brands: 0, skipped: [] as unknown[] }
+      for (const brand of await brandModules.all()) {
+        const revenue = await brand.seoService.weeklyRevenue()
+        const geo = await brand.seoService.weeklyGeo()
+        out.brands += 1
+        for (const s of [revenue.skipped, geo.skipped])
+          if (s !== undefined) out.skipped.push({ workspace_id: brand.workspace_id, reason: s })
+      }
+      return out
+    },
+  })
   registerPrMonitor(schedule.scheduler, {
     sweep: async () => {
       const out = { pulled: 0, created: 0, carded: 0, routed: 0, skipped: [] as unknown[] }
@@ -3528,6 +3704,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       social: SOCIAL_ROLE_IDS.some((role_id) => roles.assignments.listByRole(role_id).length > 0),
       // WP78（60 §5）：有人持有公关那四条职责之一才建品牌监控那条定时
       pr: PR_ROLE_IDS.some((role_id) => roles.assignments.listByRole(role_id).length > 0),
+      // WP154：有人持有「内容与搜索」才建每日读 Search Console 与每周小结那两条
+      seo: roles.assignments.listByRole('dtc.content').length > 0,
     },
   })
 
@@ -4896,6 +5074,49 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     brandModules,
     async (ws) => (await brandModules.forWorkspace(ws)).prService.port,
   )
+  /**
+   * WP154「内容与搜索」`/v1/seo/*`：问题清单落在请求人所在品牌的目录下；"现在跑一轮"
+   * 跑的也是那个品牌（与定时任务同一条路，只是不用等到早上 8 点）。
+   */
+  const seoPort: SeoPort = {
+    geoQuestions: async (actor) =>
+      (await brandModules.forWorkspace(actor.workspace_id)).seoService.geoView(),
+    setGeoQuestions: async (actor, input) => {
+      const svc = (await brandModules.forWorkspace(actor.workspace_id)).seoService
+      if (input.questions !== undefined)
+        svc.setGeoQuestions(
+          input.questions.map((q, i) => ({
+            id: q.id ?? `gq_h${i}_${Date.parse(clock.now()).toString(36)}`,
+            text: q.text,
+            origin: 'human' as const,
+            enabled: q.enabled,
+          })),
+        )
+      if (input.settings !== undefined) svc.setGeoSettings(input.settings)
+      return svc.geoView()
+    },
+    run: async (actor, what) => {
+      const svc = (await brandModules.forWorkspace(actor.workspace_id)).seoService
+      if (what === 'daily') {
+        const out = await svc.daily()
+        return {
+          what,
+          approval_item_ids: out.approval_item_id === undefined ? [] : [out.approval_item_id],
+          picks: out.picks,
+          ...(out.skipped === undefined ? {} : { skipped: out.skipped }),
+        }
+      }
+      const revenue = await svc.weeklyRevenue()
+      const geo = await svc.weeklyGeo()
+      return {
+        what,
+        approval_item_ids: [revenue.approval_item_id, geo.approval_item_id].filter(
+          (x): x is string => x !== undefined,
+        ),
+        ...(revenue.skipped === undefined ? {} : { skipped: revenue.skipped }),
+      }
+    },
+  }
   /** WP75（57 §5）：广告库 `/v1/ads/*`（一个品牌一张库——广告账户是花钱的，串不得）。 */
   const adsPortOf = brandAdsPort(
     brandModules,
@@ -5270,6 +5491,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     ads: adsPortOf,
     // WP78（60 §5）：本地公关库 `/v1/pr/*`
     pr: prPortOf,
+    // WP154「内容与搜索」`/v1/seo/*`：按请求人所在品牌取那一份
+    seo: seoPort,
     traceScope,
     options: {
       version: env.AGENTSWS_VERSION ?? '0.1.0',
@@ -5538,4 +5761,37 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     },
   }
   return server
+}
+
+/**
+ * WP154：新页面选题卡（`seo_topic`）被批了 → 那个品牌的「内容与搜索」开一件写这一页的事项。
+ *
+ * 照 `learning.wrap` 的做法用 Proxy（总线是类实例，方法在原型上）。只看 `seo_topic`，
+ * 别的卡原样过；开事项失败不影响这一次决定本身（卡已经批了，事项可以手动开）。
+ */
+function seoDecided(bus: ApprovalBus, hook: SeoDecidedHook): ApprovalBus {
+  return new Proxy(bus, {
+    get(target, prop, receiver) {
+      if (prop !== 'decide') {
+        const value = Reflect.get(target, prop, receiver)
+        return typeof value === 'function' ? value.bind(target) : value
+      }
+      return async (...args: Parameters<ApprovalBus['decide']>): Promise<ApprovalItem> => {
+        const out = await target.decide(...args)
+        if (out.kind === 'seo_topic') {
+          try {
+            await hook.current?.(out)
+          } catch {
+            // 事项没开成：卡照样是批了的，人可以在内容与搜索下自己开
+          }
+        }
+        return out
+      }
+    },
+  })
+}
+
+/** 品牌模块装好之后才有；决定发生时现取（与 `brands` 同一个晚绑定的套路）。每个服务进程一份。 */
+interface SeoDecidedHook {
+  current?: (item: ApprovalItem) => Promise<void>
 }

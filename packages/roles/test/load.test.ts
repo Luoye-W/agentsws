@@ -248,17 +248,38 @@ describe('loadPosition (05 §2)', () => {
     expect(role.thresholds?.sales_drop_pct).toBe(30)
   })
 
-  // WP63（51 §2.2）：内容与博客
-  it('`dtc.content` 内容与博客：草稿 L2、发布 L1、每天两篇', () => {
+  // WP63（51 §2.2）：内容与博客 → WP154「内容与搜索」（id 不变）
+  it('`dtc.content` 内容与搜索：草稿 L2、发布 L1、每天两篇', () => {
     const role = loadBundledRole('dtc.content')
-    expect(role.name.zh).toBe('内容与博客')
-    expect(role.actions.map((a) => a.id)).toEqual(['stage_publish_post', 'stage_listing_edit'])
+    expect(role.name.zh).toBe('内容与搜索')
+    expect(role.description).toBe('博客与页面内容、SEO 与 AI 搜索可见度（GEO）')
+    expect(role.actions.map((a) => a.id)).toEqual([
+      'stage_publish_post',
+      'stage_listing_edit',
+      'stage_page_seo_edit',
+      'stage_page_section_add',
+      'stage_internal_link_edit',
+    ])
     expect(role.actions[0]?.mandate.caps).toMatchObject({ max_posts_per_day: 2 })
     // 上限 L2 —— 草稿够得着自动；发布那一半由 guardrail 每次拉回人审
     expect(role.automation.stage_publish_post?.ceiling).toBe('L2')
     expect(role.actions[0]?.review_cannot_be_disabled).toBe(true)
     // 19：能读知识库，但不能写（内容可以引用事实卡，不能编数字）
     expect(role.scopes.find((s) => s.domain === 'knowledge')?.ops).toEqual(['read'])
+  })
+
+  // WP154：连接（店铺必需 / Search Console 推荐 / GA4 可选）与三条新动作全部出卡
+  it('`dtc.content` 连接与三条改页面的动作', () => {
+    const role = loadBundledRole('dtc.content')
+    expect(role.connectors.map((c) => [c.kind, c.required, c.recommended ?? false])).toEqual([
+      ['shop', true, false],
+      ['search_console', false, true],
+      ['ga4', false, false],
+    ])
+    for (const id of ['stage_page_seo_edit', 'stage_page_section_add', 'stage_internal_link_edit'])
+      expect(role.automation[id]?.initial).toBe('L1')
+    expect(role.thresholds).toMatchObject({ seo_position_min: 3, seo_position_max: 20 })
+    expect(role.persona?.zh).toContain('先修再写')
   })
 
   // WP64（51 §2.3 / §2.4）：邮件营销与订单履约

@@ -1228,6 +1228,8 @@ export interface PositionConnectionItem {
   kind: string
   name: { zh: string; en: string }
   required: boolean
+  /** WP154：推荐连（没连有一块看不到）。 */
+  recommended?: boolean
   connected: boolean
   needed_by: string[]
   status: 'available' | 'planned'
@@ -5566,3 +5568,42 @@ export interface DeepSeekAccountData {
   /** WP151：这个账号余额不足（去充值用 `top_up_url`）；余额刷新回来有钱了就没了。登录状态不变。 */
   quota_exceeded?: { at: string; message: string }
 }
+
+// ── WP154「内容与搜索」：买家问题清单、每周 AI 探测的开关与花费、现在跑一轮 ──────────
+
+export interface GeoQuestionData {
+  id: string
+  text: string
+  origin: 'brand' | 'top_query' | 'human'
+  enabled: boolean
+}
+
+export interface GeoQuestionsData {
+  questions: GeoQuestionData[]
+  settings: { enabled: boolean; max_questions: number }
+  /** 每周大概花多少（官方数据接口才有积分数；自带 key 是 0；没接不写）。 */
+  estimate: {
+    questions: number
+    platforms: number
+    route: 'official' | 'byo' | 'none'
+    credits_per_week?: number
+  }
+}
+
+export const getGeoQuestions = (assignment?: string): Promise<GeoQuestionsData> =>
+  api('/v1/seo/geo-questions', withAssignment(assignment))
+
+export const setGeoQuestions = (
+  input: {
+    questions?: { id?: string; text: string; enabled: boolean }[]
+    settings?: { enabled?: boolean; max_questions?: number }
+  },
+  assignment?: string,
+): Promise<GeoQuestionsData> =>
+  api('/v1/seo/geo-questions', { method: 'PUT', body: input, ...withAssignment(assignment) })
+
+export const runSeo = (
+  what: 'daily' | 'weekly',
+  assignment?: string,
+): Promise<{ what: string; approval_item_ids: string[]; skipped?: string; picks?: number }> =>
+  api('/v1/seo/run', { method: 'POST', body: { what }, ...withAssignment(assignment) })

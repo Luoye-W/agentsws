@@ -79,6 +79,8 @@ export interface PositionConnectionItem {
   name: { zh: string; en: string }
   /** 这个岗位下有任何一条职责把它标成必需，就是必需。 */
   required: boolean
+  /** WP154：不必需、但有职责标了"推荐"（没连那一块看不到，界面写「推荐」不写「可选」）。 */
+  recommended?: boolean
   connected: boolean
   /** 哪几条职责要它（职责中文名，不出 id——36 §2）。 */
   needed_by: string[]
@@ -421,7 +423,12 @@ export function createConnectionDirectory(
     const connected = connectedSet()
     const merged = new Map<
       string,
-      { required: boolean; needed_by: string[]; entry?: ConnectionDirectoryEntry }
+      {
+        required: boolean
+        recommended: boolean
+        needed_by: string[]
+        entry?: ConnectionDirectoryEntry
+      }
     >()
     for (const role_id of role_ids) {
       const def = roles.roles.get(role_id)
@@ -442,11 +449,13 @@ export function createConnectionDirectory(
         if (existing === undefined)
           merged.set(kind, {
             required: dep.required,
+            recommended: dep.recommended === true,
             needed_by: [def.name.zh],
             ...(entry === undefined ? {} : { entry }),
           })
         else {
           existing.required = existing.required || dep.required
+          existing.recommended = existing.recommended || dep.recommended === true
           if (!existing.needed_by.includes(def.name.zh)) existing.needed_by.push(def.name.zh)
         }
       }
@@ -465,6 +474,7 @@ export function createConnectionDirectory(
         kind,
         name: entry?.name ?? { zh: kind, en: kind },
         required: row.required,
+        ...(row.recommended && !row.required ? { recommended: true } : {}),
         connected: false,
         needed_by: row.needed_by,
         status: entry?.status ?? 'planned',

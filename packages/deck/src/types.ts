@@ -538,6 +538,11 @@ export interface OrderRow {
    */
   partial?: boolean
   full_total_price?: number
+  /**
+   * WP154：顾客第一次进店落在哪一页（Shopify 的 `landing_site`，可能只有路径）。
+   * 按页面收入归因要它；上游没给就没有，**不编**。
+   */
+  landing_site?: string
 }
 
 /** 记录 Tab 的一行（29 role_view 的 timeline 积木）。 */

@@ -115,6 +115,11 @@ export const KIND_RISK: Record<ChangeKind, RiskClass> = {
   press_release: 'medium',
   community_post: 'high',
   mention_triage: 'low',
+  // WP154「内容与搜索」：改一页的元信息 / 加一个小节 / 调内链。三条都按 low——
+  // 改的是自己店里的一页，改错了改得回来（`before` 是原文），不动钱、不对外发信。
+  page_seo_edit: 'low',
+  page_section_add: 'low',
+  internal_link_edit: 'low',
 }
 export const HARD_L1: ReadonlySet<ChangeKind> = new Set([
   // WP64（51 §2.3）：一次群发出去收不回来，而且收信的是**顾客**不是同事——发送永远人审。
@@ -342,6 +347,13 @@ export const RECORD_READ_KINDS: ReadonlySet<ChangeKind> = new Set([
    * 同一道门。
    */
   'creative_swap',
+  /*
+   * WP154：改页面标题 / 描述 / H1 / 开头、加小节、调内链——`before` 都是那一页的**原文**。
+   * 没读全就改，等于拿搜索结果里那两行摘要覆盖整页。
+   */
+  'page_seo_edit',
+  'page_section_add',
+  'internal_link_edit',
 ])
 
 /**
@@ -542,6 +554,19 @@ function figureKey(value: string): string {
 export function uncitedFigures(body: string, cited: readonly string[]): string[] {
   const have = new Set(cited.map(figureKey))
   return extractFigures(body).filter((f) => !have.has(figureKey(f)))
+}
+
+/**
+ * WP154：一段话有几句。按中英文句末标点切（。！？.!?），空句不算。
+ *
+ * 只为 `page_seo_edit` 的"开头最多两句"服务——不是分句器，`e.g.` 这类缩写会多算一句，
+ * 宁可多算（把一段三句的开头拦下来让人看一眼）也不少算。
+ */
+export function sentenceCount(text: string): number {
+  return text
+    .split(/[。！？!?]+|\.(?=\s|$)/)
+    .map((x) => x.trim())
+    .filter((x) => x !== '').length
 }
 
 /**
@@ -877,9 +902,64 @@ export function evaluateGuardrail(
      */
     case 'publish_post': {
       if (after.published === true) review('publish_post_needs_review', 'L1', 'published')
+      /*
+       * WP154 发布前质检（`@agentsws/seo-core` 的 `checkContentQuality`）：服务端在 stage 之前
+       * 跑过一次、结论写在 `after.quality_gate` 上。没过还想发 → block（这一道是兜底：
+       * 服务端那一跳本来就会把它改回草稿、卡上说明哪句有问题）。没跑过不拦——老路径
+       * 与没装知识库的机器照旧，门在服务端那一跳。
+       */
+      const gate = rec(after.quality_gate)
+      if (after.published === true && gate.passed === false) {
+        const first = Array.isArray(gate.issues) ? rec(gate.issues[0]) : {}
+        block(
+          'content_quality_gate',
+          'quality_gate',
+          typeof first.sentence === 'string' ? first.sentence : 'failed',
+        )
+      }
       const cap = capNumber(mandate, 'max_posts_per_day')
       if (cap !== undefined && after.published === true && facts.windowCount + 1 > cap)
         review('max_posts_per_day', cap, facts.windowCount + 1)
+      break
+    }
+    /**
+     * WP154「内容与搜索」三条改页面的动作。都是 L2（改得回来，`before` 是原文），
+     * 额度照 `listing_edit` 的写法（窗口计数在 yml 的 `window` 里），这里只管**形状**：
+     *
+     * - `page_seo_edit`：只改那四格（标题 / 描述 / H1 / 开头），至少改一格；
+     *   开头最多两句（文章第 4 步"答案放在头两行"，写成一段就不是开头了）；
+     *   夹带正文（`body`）→ block：改正文走加小节或 `listing_edit`，不借这条的额度。
+     * - `page_section_add`：要有小标题与正文，缺一个 → block。
+     * - `internal_link_edit`：至少一条链接；链回自己 → block（不是内链，是原地打转）。
+     */
+    case 'page_seo_edit': {
+      const fields = ['title', 'meta_description', 'h1', 'opening'] as const
+      const touched = fields.filter((f) => typeof after[f] === 'string' && after[f] !== '')
+      if (touched.length === 0) block('page_seo_edit_nothing', fields.join(','), 'none')
+      if ('body' in after) block('page_seo_edit_body_untouched', 'body', 'present')
+      if (typeof after.opening === 'string' && sentenceCount(after.opening) > 2)
+        block('page_seo_opening_two_sentences', 2, sentenceCount(after.opening))
+      const cap = capNumber(mandate, 'max_page_edits_per_day')
+      if (cap !== undefined && facts.windowCount + 1 > cap)
+        review('max_page_edits_per_day', cap, facts.windowCount + 1)
+      break
+    }
+    case 'page_section_add': {
+      const heading = typeof after.heading === 'string' ? after.heading.trim() : ''
+      const body = typeof after.body === 'string' ? after.body.trim() : ''
+      if (heading === '' || body === '') block('page_section_needs_heading_and_body')
+      const cap = capNumber(mandate, 'max_page_edits_per_day')
+      if (cap !== undefined && facts.windowCount + 1 > cap)
+        review('max_page_edits_per_day', cap, facts.windowCount + 1)
+      break
+    }
+    case 'internal_link_edit': {
+      const links = Array.isArray(after.links) ? after.links.map(rec) : []
+      if (links.length === 0) block('internal_link_empty')
+      const self = links.find((l) => typeof l.to === 'string' && l.to === change.target.id)
+      if (self !== undefined) block('internal_link_self', change.target.id, String(self.to))
+      const cap = capNumber(mandate, 'max_links_per_change')
+      if (cap !== undefined && links.length > cap) review('max_links_per_change', cap, links.length)
       break
     }
     case 'price_change':

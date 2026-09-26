@@ -1,0 +1,42 @@
+# WP154「内容与搜索」：每天早上一张「今天值得动的 5 件事」。
+#
+# 替身 Search Console 读进来一周十行（`@agentsws/seo-core` 的合成数据：七件候选 +
+# 品牌词、排第 35 位的短词、稳居第 1.8 的强页三行噪声），卡上要恰好 5 件：
+#
+# 1. **恰好 5 件**：七件候选截到 5 件，不硬凑也不倒全表；
+# 2. **先修再写**：改现有页面的排前面（改标题 → 加小节 → 调内链），然后交建站（那一页在跳转），
+#    最后才是新页面（对比类查询落在一篇随笔上）；
+# 3. **不倾倒数据**：卡上只有挑出来的那几件，读进来的其余行一行都不上卡（只报每个信号命中几条）。
+#
+# 搜索数据接口按"还没接"：新页面那件留在卡上、写明没看过搜索结果，其余照跑。
+# 它是 L3 自动出、看完归档的报表块（36 §2.2b），不进人的队列。
+id: content/seo-daily-five
+version: 1
+dataset: { pack: dtc-3c-3p, seed: 42 }
+actors:
+  p_wang:
+    approve: { policy: always_approve, latency: 30m..2h }
+stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
+clock: { start: '2026-09-28T08:00:00+08:00' }
+events:
+  - at: '+0m'
+    content.seo_daily:
+      who: p_li
+  - at: '+1h'
+    clock.advance: {}
+expected:
+  seo_daily:
+    picks: 5
+    fix_before_write: true
+    no_dump: true
+  event_types:
+    - digest.seo_daily
+  metrics:
+    staged_changes: 0
+    runs_failed: 0
+    outbound_sent: 0
+invariants:
+  - no_write_without_stage
+  - apply_only_after_approved
+rubric: >-
+  人看一眼这张卡，知道今天先动哪一页、为什么（证据数字）、怎么动、归谁动吗？

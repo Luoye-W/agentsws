@@ -52,7 +52,8 @@ function connectorKindsOf(text: string): string[] {
   const rest = text.slice(start + 1)
   const end = rest.search(/\n[a-z_]+:/)
   const block = end < 0 ? rest : rest.slice(0, end)
-  return [...block.matchAll(/\bkind:\s*([a-z_]+)/g)].map((m) => m[1] as string)
+  // WP154：kind 里可以有数字（`ga4`）——之前的 `[a-z_]` 会把它截成 `ga`
+  return [...block.matchAll(/\bkind:\s*([a-z0-9_]+)/g)].map((m) => m[1] as string)
 }
 
 describe('54（将改号 55）§4 第一层：连接目录（WP83）', () => {
