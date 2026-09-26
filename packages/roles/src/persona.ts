@@ -232,6 +232,29 @@ export function renderBrandContext(
 /** persona 三节在系统提示里的次序（69 §3：品牌 → 岗位 → 职责 → 技能 → 工具）。 */
 export const PERSONA_ORDER = { brand: 5, position: 10, role: 20 } as const
 
+/**
+ * WP153（09-26 真账号冒烟）：**所有职责的提示词公共段**——紧跟在职责那一节后面（25），技能（40）前面。
+ *
+ * 冒烟里真模型回的是「我用 `search_policies` 查了三轮」：工具名是给模型看的，给人看的是做了什么。
+ * 这一句管的是模型自己别说；万一还是说了，服务端有一道兜底（`humanizeToolNames`，同一张人话表）。
+ */
+export const HOUSE_RULES_ORDER = 25
+
+export const HOUSE_RULES: Readonly<Record<PersonaLang, string>> = {
+  zh: '对用户说话时不提工具名、函数名、内部 id，用人话说做了什么（说「查了规矩与政策库」，不说 search_policies）。',
+  en: 'When talking to the user, never mention tool names, function names or internal ids — say in plain words what you did (“checked the policy library”, not search_policies).',
+}
+
+/** 公共段那一节（每条职责、每个运行时都带同一份）。 */
+export function houseRulesSection(lang: PersonaLang = 'zh'): PromptSection {
+  return {
+    id: 'house',
+    name: lang === 'zh' ? '说话规矩' : 'house rules',
+    order: HOUSE_RULES_ORDER,
+    text: HOUSE_RULES[lang],
+  }
+}
+
 export interface PersonaSectionsInput {
   lang?: PersonaLang
   /** 这次运行落在哪个岗位上（反查不出来就没有这一节，54 §3「不猜一个」）。 */

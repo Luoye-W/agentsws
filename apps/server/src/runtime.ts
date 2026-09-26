@@ -45,10 +45,15 @@ import { createDshRuntime, type DshRuntimeMode } from '@agentsws/dsh-adapter'
 import { isKolRole, KOL_TOOL_NAMES } from '@agentsws/kol-core'
 import { type SkillResolver, skillPromptSections } from '@agentsws/learning'
 import type { ModelGatewayApi } from '@agentsws/model-gateway'
-import { personaTextIn, type RoleStore } from '@agentsws/roles'
+import { houseRulesSection, personaTextIn, type RoleStore } from '@agentsws/roles'
 import { createDirectRuntime, withToolChoice } from '@agentsws/runtime-direct'
 import type { CreatePolicyQuestionFn, DraftPayload, ToolExecutor } from '@agentsws/stand-ins'
-import { createStubRuntime, isOwnerRole, OWNER_TOOL_NAMES } from '@agentsws/stand-ins'
+import {
+  createStubRuntime,
+  humanizeToolNames,
+  isOwnerRole,
+  OWNER_TOOL_NAMES,
+} from '@agentsws/stand-ins'
 
 import { cardRefOf, type Work } from '@agentsws/work'
 import type { ComputerUseAssembly } from './computer-use.js'
@@ -1016,6 +1021,11 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
                   },
                 ]),
           /*
+           * WP153（09-26 真账号冒烟）：**所有职责的公共段**——对人说话不提工具名、函数名、内部 id。
+           * 排在职责那一节后面、技能前面（order 25）。三个运行时拿到的是同一份字节。
+           */
+          houseRulesSection('zh'),
+          /*
            * 24 §1 + WP69（54 §1）：解析后的技能正文——**六层**叠加完的那一份
            * （包 → 公司 → 部门 → 岗位 → 职责 → 个人）。
            *
@@ -1205,7 +1215,12 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       if (answers.length > 0) {
         work?.appendEvent(input.matter.id, {
           kind: 'agent_message',
-          text: answers.join('\n'),
+          /*
+           * WP153（09-26 真账号冒烟）：**兜底**——提示词公共段已经叫模型别提工具名，万一还是说了
+           * （「我用 `search_policies` 查了三轮」），进时间线之前按那张统一的「工具名 → 人话」表换掉；
+           * 这次运行摆出来的、表里没有的工具名也不露（说「一个工具」）。事件日志里的原文不动。
+           */
+          text: humanizeToolNames(answers.join('\n'), request.tools.allow),
           actor: { kind: 'agent', id: input.actor.assignment_id },
           run_id,
         })
