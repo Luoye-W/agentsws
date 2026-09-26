@@ -756,7 +756,7 @@ const zh: Table = {
   'card.ask.sending': '问着…',
   'card.snoozed': '已推迟到 {at}',
   'card.done': '已处理',
-  'command.placeholder': '搜索卡片、跳转岗位，或加一个数字块…',
+  'command.placeholder': '搜卡片、岗位、教程，或加一个数字块…',
   'command.group.go': '跳转',
   'command.group.cards': '卡片',
   'command.group.tiles': '加一个数字块',
@@ -2074,6 +2074,7 @@ const zh: Table = {
   // WP66（52 O1）：连接页与设置页只管当前这个品牌
   'brand.scope': '这一页只管当前品牌「{brand}」。别的品牌各有各的一套，切过去再设。',
   'command.group.brands': '品牌',
+  'command.group.help': '教程',
   'org.tab.brands': '品牌',
   'org.brands.title': '品牌一览',
   'org.brands.hint':
@@ -3538,7 +3539,7 @@ const en: Table = {
   'card.ask.sending': 'Asking…',
   'card.snoozed': 'Snoozed until {at}',
   'card.done': 'Handled',
-  'command.placeholder': 'Search cards, jump to a position, add a tile…',
+  'command.placeholder': 'Search cards, positions, tutorials, or add a tile…',
   'command.group.go': 'Go to',
   'command.group.cards': 'Cards',
   'command.group.tiles': 'Add a tile',
@@ -4840,6 +4841,7 @@ const en: Table = {
   'brand.scope':
     'This page covers the current brand, \u201c{brand}\u201d, only. Every brand has its own set \u2014 switch over to set those up.',
   'command.group.brands': 'Brands',
+  'command.group.help': 'Tutorials',
   'org.tab.brands': 'Brands',
   'org.brands.title': 'Brands',
   'org.brands.hint':

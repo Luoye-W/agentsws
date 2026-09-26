@@ -8,7 +8,8 @@
  * 4. 没有右栏时（单张卡的单测）退回对话框，点了照样看得到。
  */
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { CommandPalette } from '@/components/command-palette'
 import { TutorialLink } from '@/components/help/tutorial-link'
 import { ensureBuiltinPanels } from '@/components/rail/builtin-panels'
 import { RailStateProvider } from '@/components/rail/rail-state'
@@ -23,6 +24,12 @@ import {
 } from '@/lib/help'
 import { translate } from '@/lib/i18n'
 import { renderWithProviders } from './helpers'
+
+vi.mock('@/lib/api', async () => ({
+  ...(await vi.importActual<typeof import('@/lib/api')>('@/lib/api')),
+  listCatalog: async () => [],
+  listOrganizations: async () => [],
+}))
 
 describe('打包', () => {
   it('每一篇中英各一份都在包里，标题两种语言都有词条', () => {
@@ -135,5 +142,43 @@ describe('没有右栏时', () => {
     expect((await within(dialog).findByTestId('help-article')).textContent).toContain(
       'Let AI operate this computer',
     )
+  })
+})
+
+describe('⌘K 里搜教程（WP157）', () => {
+  beforeEach(() => {
+    resetPanelRegistry()
+    ensureBuiltinPanels()
+  })
+
+  it('每篇教程一行；搜「百炼」只剩那一篇，回车在右栏打开', async () => {
+    let open = true
+    renderWithProviders(
+      <RailStateProvider>
+        <CommandPalette
+          open
+          onOpenChange={(next) => {
+            open = next
+          }}
+          positions={[]}
+          cards={[]}
+          tileLibrary={[]}
+          onAddTile={() => {}}
+        />
+        <RightRail />
+      </RailStateProvider>,
+    )
+    const rows = await screen.findAllByTestId('command-help')
+    expect(rows.map((r) => r.getAttribute('data-slug'))).toEqual([...HELP_SLUGS])
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: '百炼' } })
+    await waitFor(() => {
+      expect(screen.getAllByTestId('command-help').map((r) => r.getAttribute('data-slug'))).toEqual(
+        ['model-bailian'],
+      )
+    })
+    fireEvent.click(screen.getByTestId('command-help'))
+    expect(open).toBe(false)
+    const panel = await screen.findByTestId('help-panel')
+    expect(panel.getAttribute('data-slug')).toBe('model-bailian')
   })
 })

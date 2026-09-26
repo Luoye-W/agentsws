@@ -7,12 +7,17 @@
  * WP70（54 §4）：**岗位名排在前**；职责名也搜得到，但结果显示成「岗位 › 职责」——
  * 搜"邮件营销"跳的还是网站运营那一页，只是这一行告诉你它归在哪个岗位下。
  * 没装岗位面的服务进程退回按分配列（老样子）。
+ *
+ * WP157：**教程也搜得到**（「教程」一组）——搜"百炼""浏览器插件"，回车在右栏打开那一篇
+ * （与卡片上的「看教程」同一条路：`openAddress('agentsws://help/<slug>')`）。
+ * 中英两种标题都进搜索词，界面是英文也能用中文名搜到。
  */
 import type { DeckCard, TileSpec } from '@agentsws/deck'
 import { useQuery } from '@tanstack/react-query'
 import { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useBrands } from '@/components/brand-switcher'
+import { useRailState } from '@/components/rail/rail-state'
 import {
   Command,
   CommandDialog,
@@ -29,6 +34,8 @@ import {
   switchBrand,
 } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
+import { HELP_SLUGS, helpAddress } from '@/lib/help'
+import { translate } from '@/lib/i18n'
 import { myAssignments } from '@/lib/positions'
 
 export function CommandPalette({
@@ -51,6 +58,7 @@ export function CommandPalette({
 }): React.ReactNode {
   const { t, lang, position } = useApp()
   const navigate = useNavigate()
+  const rail = useRailState()
   // 岗位面装着就按岗位列（岗位在前、职责跟在后面）；没装退回按分配列
   const byPosition = (instances ?? []).filter((p) => myAssignments(p).length > 0)
   /**
@@ -225,6 +233,23 @@ export function CommandPalette({
               ))}
             </CommandGroup>
           )}
+          <CommandGroup heading={t('command.group.help')}>
+            {HELP_SLUGS.map((slug) => (
+              <CommandItem
+                key={slug}
+                value={`${translate('zh', `help.${slug}.title`)} ${translate('en', `help.${slug}.title`)} ${slug}`}
+                data-testid="command-help"
+                data-slug={slug}
+                onSelect={() => {
+                  onOpenChange(false)
+                  // 右栏不在（极少：单测里只渲染面板）就开不出来，跳去设置页也没意义——只关面板
+                  rail.openAddress(helpAddress(slug))
+                }}
+              >
+                {t(`help.${slug}.title`)}
+              </CommandItem>
+            ))}
+          </CommandGroup>
           {position === null ? null : (
             <CommandGroup heading={t('command.group.tiles')}>
               {tileLibrary.map((tile) => (
