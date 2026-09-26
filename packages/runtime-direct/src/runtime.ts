@@ -675,17 +675,20 @@ export function createDirectRuntime(options: DirectRuntimeOptions): RuntimeAdapt
         }
       }
 
-      // 17 §3：摘要是一句人话（与 stub / dsh 同一份拼法）
+      // 17 §3：摘要是一句人话（与 stub / dsh 同一份拼法）。
+      // WP153：给人的回复在的话，摘要就是它的第一句（说这件事本身，不说调了哪些工具）
+      const answered = req.expectations.outputs.includes('answer') && finalText.length > 0
       const summary = describeRun({
         readTools,
         drafted,
         askedBoundaries,
+        ...(answered ? { reply: finalText, tools: req.tools.allow } : {}),
         ...(orderName === undefined ? {} : { orderName }),
         ...(stagedMoney === undefined ? {} : { staged: stagedMoney }),
         ...(exhausted === undefined ? {} : { exhausted: exhausted.which }),
       })
       if (exhausted !== undefined) return complete(summary, 'budget_exhausted')
-      if (req.expectations.outputs.includes('answer') && finalText.length > 0) {
+      if (answered) {
         outputs.push({ kind: 'answer', text: finalText })
       }
       return complete(summary, 'completed')

@@ -19,6 +19,7 @@ import {
   isMarketplaceRelayAddress,
   returnWindowPolicy,
 } from '@agentsws/support-core'
+import { replyHeadline } from './tool-words.js'
 
 // ---------- 上下文读取（三个运行时同一份口径） ----------
 
@@ -184,6 +185,14 @@ export interface RunSummaryInput {
   cancelled?: boolean
   /** 运行失败的原因（一句话）。 */
   failed?: string
+  /**
+   * WP153：Agent 这一轮**给人的回复**（`answer`）。有的话摘要就是它的第一句（去 markdown、
+   * 工具名换人话、截到一行）——摘要说的是「这件事」，不是「这次调了哪些工具」。
+   * 没有回复（只出了草稿 / 只挂了变更）才退回下面那种「做了什么」的拼法。
+   */
+  reply?: string
+  /** 这次运行摆出来的工具（`tools.allow`）：回复里出现了也要换成人话。 */
+  tools?: readonly string[]
 }
 
 const CHANGE_LABEL: Record<string, string> = {
@@ -200,8 +209,9 @@ function toolLabel(name: string): string | undefined {
     case 'get_order':
     case 'list_orders':
       return '订单'
+    // WP153：查的是整个规矩 / 政策库，不只是退货政策（与 `TOOL_WORDS_ZH` 同一个说法）
     case 'search_policies':
-      return '退货政策'
+      return '规矩与政策库'
     case 'get_product':
       return '商品'
     case 'list_threads':
@@ -219,12 +229,19 @@ function moneyText(staged: NonNullable<RunSummaryInput['staged']>): string {
 }
 
 /**
- * 一句人话的事项摘要（17 §3）：查了什么、出了什么、有没有挂着待批的东西。
+ * 一句人话的事项摘要（17 §3）。
+ *
+ * WP153：**有给人的回复就用回复的第一句**（说的是这件事本身）；没有回复才说
+ * 查了什么、出了什么、有没有挂着待批的东西。失败 / 中断 / 预算耗尽照旧优先——那是人得先知道的。
  * 三个运行时同一份拼法，所以摘要读起来一样，不会因为换运行时变味。
  */
 export function describeRun(input: RunSummaryInput): string {
   if (input.failed !== undefined) return `这次没跑完：${input.failed}。`
   if (input.cancelled === true) return '这次被中断了，没结的工具调用已经收尾。'
+  if (input.exhausted === undefined) {
+    const headline = replyHeadline(input.reply, input.tools)
+    if (headline !== undefined) return headline
+  }
 
   const looked: string[] = []
   for (const name of input.readTools) {
