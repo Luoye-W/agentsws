@@ -81,6 +81,14 @@ export interface OwnerConnectionsData {
   missing: OwnerConnectionGap[]
 }
 
+/** 一串名字最多列 3 个，多了说「等 N 个」（回话要短：用户是非开发者，减字）。 */
+function few(list: readonly string[], unit = '条'): string {
+  if (list.length <= 3) return list.join('、')
+  const head = list.slice(0, 3).join('、')
+  // 英文名结尾（「X Ads」）后面空一格再接「等」，读起来不粘
+  return `${head}${/[\w)]$/.test(head) ? ' ' : ''}等 ${list.length} ${unit}`
+}
+
 const MENTIONS = /岗位|职责|连接|连上|接上|谁在做|谁在岗|position|connection/i
 
 /**
@@ -119,33 +127,38 @@ export function ownerPriorities(
   positions: OwnerPositionsData | undefined,
   connections: OwnerConnectionsData | undefined,
 ): string[] {
-  const out: string[] = []
-  const names = (list: readonly string[]): string => {
-    const shown = list.slice(0, 3).map((n) => `「${n}」`)
-    return list.length > 3 ? `${shown.join('')}等 ${list.length} 个` : shown.join('')
-  }
-  for (const c of connections?.connected ?? [])
-    if (c.state === 'error')
-      out.push(`把「${c.name}」重新接一次——${c.note ?? '这条连接出错了'}，用它的活现在都停着。`)
-  for (const g of connections?.missing ?? [])
-    if (g.required) out.push(`把「${g.name}」连上——${g.needed_by.join('、')}要它才能开工。`)
+  const broken = (connections?.connected ?? [])
+    .filter((c) => c.state === 'error')
+    .map((c) => `把「${c.name}」重新接一次——${c.note ?? '这条连接出错了'}，用它的活现在都停着。`)
+  const required = (connections?.missing ?? [])
+    .filter((g) => g.required)
+    .map((g) => `把「${g.name}」连上——${few(g.needed_by)}职责要它才能开工。`)
   // 同一类的并成一件事说（十个岗位没人在岗，不该占掉三件事里的三件）
-  const empty = (positions?.positions ?? []).filter((p) => !p.staffed).map((p) => p.name)
-  if (empty.length > 0)
-    out.push(`给没人在岗的岗位安排人：${names(empty)}——这些岗位的活现在没人接。`)
+  const empty = (positions?.positions ?? []).filter((p) => !p.staffed).map((p) => `「${p.name}」`)
+  const staffing =
+    empty.length === 0
+      ? []
+      : [`给没人在岗的岗位安排人：${few(empty, '个')}——这些岗位的活现在没人接。`]
   const noRange = (positions?.positions ?? []).flatMap((p) =>
     p.holders.filter((h) => !h.has_range).map((h) => `「${p.name}」的 ${h.name}`),
   )
-  if (noRange.length > 0) {
-    const who =
-      noRange.length > 3
-        ? `${noRange.slice(0, 3).join('、')}等 ${noRange.length} 人`
-        : noRange.join('、')
-    out.push(`给${who}划负责范围——现在是空的，按范围分的活派不到头上。`)
-  }
-  const optional = (connections?.missing ?? []).filter((g) => !g.required).map((g) => g.name)
-  if (optional.length > 0) out.push(`有空再连${names(optional)}——用得上，不连也能先干。`)
-  return out.slice(0, 3)
+  const ranges =
+    noRange.length === 0
+      ? []
+      : [`给${few(noRange, '人')}划负责范围——现在是空的，按范围分的活派不到头上。`]
+  const optional = (connections?.missing ?? [])
+    .filter((g) => !g.required)
+    .map((g) => `「${g.name}」`)
+  const extra = optional.length === 0 ? [] : [`有空再连${few(optional)}——用得上，不连也能先干。`]
+  // 缺的必需连接最多占两件：第三件留给「没人在岗」这类别的挡路的事，三件事不全是同一类
+  return [
+    ...broken,
+    ...required.slice(0, 2),
+    ...staffing,
+    ...ranges,
+    ...required.slice(2),
+    ...extra,
+  ].slice(0, 3)
 }
 
 /**
@@ -179,7 +192,7 @@ export function renderOwnerAnswer(input: {
       const who = p.staffed
         ? `在岗：${p.holders.map((h) => `${h.name}（${h.range}）`).join('、')}`
         : '还没人在岗'
-      lines.push(`- **${p.name}**：${p.duties.join('、') || '没有职责'}；${who}`)
+      lines.push(`- **${p.name}**：${few(p.duties) || '没有职责'}；${who}`)
     }
   } else if (failed[OWNER_POSITIONS_TOOL] !== undefined) {
     lines.push('', `岗位清单没读到：${failed[OWNER_POSITIONS_TOOL]}。`)
@@ -192,9 +205,10 @@ export function renderOwnerAnswer(input: {
     for (const c of connections.connected)
       if (c.state === 'error') lines.push(`- 出错：${c.name}（${c.note ?? '要重新接'}）`)
     for (const g of connections.missing)
-      lines.push(
-        `- 还没连：${g.name}（${g.needed_by.join('、')}要它${g.required ? '，**必需**' : '，可选'}）`,
-      )
+      if (g.required) lines.push(`- 还没连（**必需**）：${g.name}——${few(g.needed_by)}职责要它`)
+    // 可选的并成一行：二十条可选连接一条一行，要紧的就淹没了
+    const optional = connections.missing.filter((g) => !g.required).map((g) => g.name)
+    if (optional.length > 0) lines.push(`- 还可以接（可选）：${few(optional)}`)
   } else if (failed[OWNER_CONNECTIONS_TOOL] !== undefined) {
     lines.push('', `连接清单没读到：${failed[OWNER_CONNECTIONS_TOOL]}。`)
   }

@@ -87,7 +87,11 @@ export function ownerPositionsData(rows: readonly OwnerPositionSource[]): OwnerP
       const wide = p.roles.length > 0 && p.roles.every((r) => WORKSPACE_WIDE_ROLES.has(r.role_id))
       return {
         name: p.name,
-        duties: p.roles.map((r) => r.name),
+        // 「工作区成员」每个岗位都挂着，列出来只是噪音；只有它一条的岗位（普通成员）才列
+        duties: (p.roles.length > 1
+          ? p.roles.filter((r) => r.role_id !== 'common.member')
+          : p.roles
+        ).map((r) => r.name),
         holders: p.holders.map((h) => ({
           name: h.name,
           range: h.ranges.length === 0 && wide ? '整个工作区' : rangeText(h.ranges),

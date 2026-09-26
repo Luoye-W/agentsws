@@ -78,9 +78,24 @@ describe('stub 的店主剧本', () => {
   it('三件事的先后：出错的连接 → 缺的必需连接 → 没人在岗的岗位', () => {
     expect(ownerPriorities(POSITIONS, CONNECTIONS as never)).toEqual([
       '把「邮箱」重新接一次——要重新授权，用它的活现在都停着。',
-      '把「GA4」连上——网站运营要它才能开工。',
+      '把「GA4」连上——网站运营职责要它才能开工。',
       '给没人在岗的岗位安排人：「红人营销」——这些岗位的活现在没人接。',
     ])
+  })
+
+  it('缺的必需连接最多占两件，第三件留给别的挡路的事；长名单只列三个', () => {
+    const many = {
+      connected: [],
+      missing: ['店铺后台', 'Shopify 店铺', '邮箱'].map((name) => ({
+        name,
+        required: true,
+        needed_by: ['网站客服', '订单履约', '店铺管理', '邮件营销'],
+      })),
+    }
+    const out = ownerPriorities(POSITIONS, many)
+    expect(out).toHaveLength(3)
+    expect(out[0]).toBe('把「店铺后台」连上——网站客服、订单履约、店铺管理等 4 条职责要它才能开工。')
+    expect(out[2]).toContain('没人在岗')
   })
 
   it('读不到的一半照实说，不编', () => {
