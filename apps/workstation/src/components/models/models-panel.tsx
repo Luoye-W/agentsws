@@ -21,6 +21,7 @@ import { Brain, CheckCircle2, ExternalLink, Plus, RefreshCw, Trash2, XCircle } f
 import { useState } from 'react'
 import { BrandIcon } from '@/components/brand-icons'
 import { BrandScopeNote } from '@/components/brand-scope-note'
+import { DeepSeekAccountLogin } from '@/components/models/deepseek-account-login'
 import { ImageModelSection } from '@/components/models/image-model-section'
 import { ModelCheckSteps } from '@/components/models/model-check-steps'
 import { ModelForm, type ModelFormValues, suggestProviderId } from '@/components/models/model-form'
@@ -385,12 +386,16 @@ export function ModelsPanel({ assignment }: { assignment?: string }): React.Reac
         <section className="flex flex-col gap-2">
           <h4 className="text-xs font-medium text-muted-foreground">{t('models.add')}</h4>
           <div className="grid gap-2 lg:grid-cols-2">
-            {/* WP134：「用我的 DeepSeek 账号登录」是单独那一张卡（设置页下面），不进这一排 */}
-            {groupTemplates(templates.filter((tpl) => !isAccountTemplate(tpl))).map((card) => (
+            {/*
+              WP152（Luoye 09-26）：DeepSeek 的「官方账户登录」与「官方 API 接口连接」合成一张
+              「DeepSeek 官方」卡（服务端给两条模板挂同一个 vendor），卡里二选一。
+            */}
+            {groupTemplates(templates).map((card) => (
               <VendorCard
                 key={card.id}
                 card={card}
                 busy={save.isPending}
+                configured={rows}
                 takenIds={rows.map((p) => p.id)}
                 onDiscover={discover}
                 {...(assignment === undefined ? {} : { assignment })}
@@ -816,10 +821,26 @@ export function groupTemplates(templates: ModelProviderTemplate[]): VendorCardDa
   return cards
 }
 
+/**
+ * WP152：一张卡打开时默认选哪个方案。
+ *
+ * 默认第一个（`plan_order` 最小；DeepSeek 那张是「官方账户登录」）；但用户**已经配过**其中某一种的，
+ * 打开时显示他已有的那种（按接口地址认，与 {@link templateSlug} 同一条判据）。几种都配了就取排前面的。
+ */
+export function defaultPlanIndex(
+  plans: readonly ModelProviderTemplate[],
+  configured: readonly Pick<ModelProviderView, 'kind' | 'base_url'>[],
+): number {
+  const have = new Set(configured.map((p) => templateSlug(p.kind, p.base_url)))
+  const i = plans.findIndex((p) => have.has(templateSlug(p.kind, p.default_base_url)))
+  return i < 0 ? 0 : i
+}
+
 /** 一张厂商卡：图标 + 卡名 + 方案单选 + 选中那个方案的说明与动作。 */
 function VendorCard({
   card,
   busy,
+  configured,
   takenIds,
   assignment,
   pricing,
@@ -830,6 +851,8 @@ function VendorCard({
 }: {
   card: VendorCardData
   busy: boolean
+  /** WP152：已配的那几条（打开时默认显示他已有的那种方案）。 */
+  configured: readonly ModelProviderView[]
   takenIds: string[]
   assignment?: string
   pricing?: ModelPricingView
@@ -839,7 +862,7 @@ function VendorCard({
   onSubmit: (values: ModelFormValues, kind: ModelProviderKind) => void
 }): React.ReactNode {
   const { t } = useApp()
-  const [planIndex, setPlanIndex] = useState(0)
+  const [planIndex, setPlanIndex] = useState(() => defaultPlanIndex(card.plans, configured))
   const plan = card.plans[planIndex] ?? card.plans[0]
   if (plan === undefined) return null
   const slug = templateSlug(plan.kind, plan.default_base_url)
@@ -913,7 +936,12 @@ function VendorCard({
         订阅登录那种方案**没有表单**——没有 key 可填，只有一个登录按钮。
         其余方案照旧：一个"填 API key"按钮展开原生表单。
       */}
-      {plan.auth === 'subscription' && plan.subscription_provider !== undefined ? (
+      {isAccountTemplate(plan) ? (
+        /* WP152：「官方账户登录」——没有表单，就是原来那张账号卡的内容（余额 / 充值 / 登出 / 失效提示） */
+        <div className="mt-2" data-testid="model-plan-account">
+          <DeepSeekAccountLogin {...(assignment === undefined ? {} : { assignment })} />
+        </div>
+      ) : plan.auth === 'subscription' && plan.subscription_provider !== undefined ? (
         <SubscriptionPlan
           provider={plan.subscription_provider}
           {...(assignment === undefined ? {} : { assignment })}

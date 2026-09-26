@@ -306,7 +306,7 @@ async function sectionA() {
     'A',
     'ob-ai',
     '向导 ① 接上 AI：三张卡 + 演示旁路',
-    '工坊官方接口 / 自己的接口 / DeepSeek 账号登录 三张卡，外加「先逛逛演示数据」，一屏讲清',
+    '工坊官方接口 / 自己的接口 / DeepSeek 官方（账户登录或 API 接口二选一）三张卡，外加「先逛逛演示数据」，一屏讲清',
     async () => {
       await go('/onboarding')
       await T('onboarding-ai').waitFor()

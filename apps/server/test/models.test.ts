@@ -10,7 +10,7 @@
  *    不用重启进程——而且预算已花的额度不清零。
  * 3. **测试按钮不联网**：`modelFetch` 注入之后，全程没有一个字节离开这台机器。
  */
-import { mkdtempSync, readdirSync, readFileSync } from 'node:fs'
+import { mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -240,8 +240,10 @@ function pricingReplay(): { fetch: PageFetch; calls: string[] } {
   return { fetch, calls }
 }
 
-async function boot(env: Record<string, string | undefined> = {}): Promise<void> {
-  const dir = mkdtempSync(join(tmpdir(), 'agentsws-models-'))
+async function boot(
+  env: Record<string, string | undefined> = {},
+  dir: string = mkdtempSync(join(tmpdir(), 'agentsws-models-')),
+): Promise<void> {
   const upstream = fakeUpstream()
   const pricing = pricingReplay()
   const server = await createServer({
@@ -288,8 +290,11 @@ describe('WP25 §C 模板与空状态', () => {
    *
    * WP134 再加一条：「用我的 DeepSeek 账号登录」（`deepseek_account`，`auth: 'account'`）——
    * 不挂 `vendor`，自己一张卡（向导与设置页都是单独那一张，不进上面那一排）。十一条 → 七张。
+   *
+   * WP152（Luoye 09-26）：账号登录挂回 `vendor: 'deepseek'`，与 API key 那条合成一张「DeepSeek 官方」卡，
+   * 卡里二选一（官方账户登录排第一）。十一条 → 六张。kind 与顺序不变。
    */
-  it('十一条模板 → 七张卡（一家一张、点进去选方案），各带 ≤ 5 步说明', async () => {
+  it('十一条模板 → 六张卡（一家一张、点进去选方案），各带 ≤ 5 步说明', async () => {
     const { templates } = await data<{ templates: ModelProviderTemplate[] }>(
       await api('/v1/models/providers'),
     )
@@ -328,13 +333,20 @@ describe('WP25 §C 模板与空状态', () => {
       'bailian',
       'openai',
       'anthropic',
-      '用我的 DeepSeek 账号登录',
       'agentsws-cloud',
     ])
     const planOf = (vendor: string): ModelProviderTemplate[] =>
       templates
         .filter((t) => t.vendor === vendor)
         .sort((a, b) => (a.plan_order ?? 99) - (b.plan_order ?? 99))
+    // WP152：DeepSeek 一张卡两个方案，**官方账户登录排第一**（不用建 key），API 接口第二
+    expect(planOf('deepseek').map((t) => [t.kind, t.auth, t.plan_label])).toEqual([
+      ['deepseek_account', 'account', '官方账户登录'],
+      ['deepseek', 'api_key', '官方 API 接口连接'],
+    ])
+    expect(new Set(planOf('deepseek').map((t) => t.vendor_label))).toEqual(
+      new Set(['DeepSeek 官方']),
+    )
     // 百炼一张卡三个方案，**Token Plan（订阅）默认第一**（Luoye 定）
     expect(planOf('bailian').map((t) => t.plan_label)).toEqual([
       'Token Plan（订阅）',
@@ -1251,5 +1263,69 @@ describe('WP42 §2 价目表', () => {
     )
     expect(saved.price_in).toBeUndefined()
     expect(saved.price_source).toBeUndefined()
+  })
+})
+
+/*
+ * WP152（Luoye 09-26）：DeepSeek 两种连法合成一张卡。**只改展示名**——老用户的 `models.json`
+ * 一个字节不动，升级上来两条都在、都认得，显示成新叫法。
+ */
+describe('WP152 DeepSeek 一张卡：老数据两条都在，显示新叫法', () => {
+  it('老 models.json 里 API key 与账号登录两条：id / kind 原样，名字换成「DeepSeek 官方 · …」', async () => {
+    await ctx.server.close()
+    const dir = mkdtempSync(join(tmpdir(), 'agentsws-models-wp152-'))
+    const legacy = {
+      version: 1,
+      providers: [
+        {
+          id: 'deepseek',
+          kind: 'deepseek',
+          label: 'DeepSeek 官方',
+          base_url: 'https://api.deepseek.com',
+          model: 'deepseek-flash',
+          region: 'cn',
+        },
+        {
+          id: 'deepseek-account',
+          kind: 'deepseek_account',
+          label: '用我的 DeepSeek 账号登录',
+          base_url: 'https://api.deepseek.com/anthropic',
+          model: 'deepseek-flash',
+          region: 'cn',
+        },
+        {
+          id: 'my-proxy',
+          kind: 'deepseek',
+          label: '我的 DeepSeek 代理',
+          base_url: 'https://proxy.example/v1',
+          model: 'deepseek-chat',
+          region: 'cn',
+        },
+      ],
+      defaults: { default: 'deepseek/deepseek-flash' },
+      tests: {},
+    }
+    const raw = `${JSON.stringify(legacy, null, 2)}\n`
+    writeFileSync(join(dir, 'models.json'), raw, 'utf8')
+    // API key 那条靠环境变量兜底有 key（`deepseek` 这个 id 认环境变量）
+    await boot({ [DEEPSEEK_KEY_ENV]: ENV_KEY }, dir)
+
+    const { providers } = await data<{ providers: ModelProviderView[] }>(
+      await api('/v1/models/providers'),
+    )
+    expect(providers.map((p) => [p.id, p.kind, p.label])).toEqual([
+      ['deepseek', 'deepseek', 'DeepSeek 官方 · 官方 API 接口连接'],
+      ['deepseek-account', 'deepseek_account', 'DeepSeek 官方 · 官方账户登录'],
+      // 用户自己改过的名字原样
+      ['my-proxy', 'deepseek', '我的 DeepSeek 代理'],
+    ])
+    // 「哪件事用哪个模型」下拉里同一个叫法
+    const defaults = await data<ModelDefaultsView>(await api('/v1/models/defaults'))
+    expect(defaults.choices.find((c) => c.id === 'deepseek/deepseek-flash')?.label).toBe(
+      'DeepSeek 官方 · 官方 API 接口连接（deepseek-flash）',
+    )
+    expect(defaults.default).toBe('deepseek/deepseek-flash')
+    // 存储一个字节没动（只读列表不回写）
+    expect(readFileSync(join(dir, 'models.json'), 'utf8')).toBe(raw)
   })
 })

@@ -56,9 +56,30 @@ const QUOTA_POLL_MS = 30_000
 /** 这几步是"还在走"，要接着问。 */
 const IN_FLIGHT = new Set(['initializing', 'waiting-browser', 'exchanging', 'committing'])
 
-/** 一个钱包 → 「¥42.50」。平台给的是十进制串，原样显示，不转数字。 */
+/**
+ * 平台给的十进制串 → 两位小数（四舍五入）。WP152：平台回的是「28.1146885000000000」这种长串，
+ * 原样显示没法看；**只在界面格式化**，服务端返回值不动。按字符串算（不经浮点），认不出的串原样返回。
+ */
+export function formatAmount(raw: string): string {
+  const m = /^(-?)(\d*)(?:\.(\d*))?$/.exec(raw.trim())
+  if (m === null || (m[2] === '' && (m[3] ?? '') === '')) return raw
+  const sign = m[1] ?? ''
+  const frac = `${m[3] ?? ''}000`
+  let cents = BigInt(`${m[2] === '' ? '0' : m[2]}${frac.slice(0, 2)}`)
+  if (Number(frac[2]) >= 5) cents += 1n
+  const whole = cents / 100n
+  const rest = (cents % 100n).toString().padStart(2, '0')
+  return `${cents === 0n ? '' : sign}${whole}.${rest}`
+}
+
+/** 这个金额是不是 0（「0」「0.00」「0.000…」都算）。 */
+export function isZeroAmount(raw: string): boolean {
+  return formatAmount(raw) === '0.00'
+}
+
+/** 一个钱包 → 「¥42.50」（两位小数，见 {@link formatAmount}）。 */
 export function formatWallet(w: DeepSeekWallet): string {
-  return `${w.currency === 'CNY' ? '¥' : '$'}${w.balance}`
+  return `${w.currency === 'CNY' ? '¥' : '$'}${formatAmount(w.balance)}`
 }
 
 /** 验证没过那一句：账号这一路的"密钥不对"其实是登录失效，余额不足指的是 DeepSeek 账号。 */
@@ -280,9 +301,15 @@ export function DeepSeekAccountLogin({
                   balance.wallets.map(formatWallet).join(' / ') ||
                   formatWallet({ currency: 'CNY', balance: '0' }),
               })}
-              {balance.bonus.length === 0
+              {/* WP152：赠送为 0 的不列；全是 0 就不说「另有赠送」那半句 */}
+              {balance.bonus.every((w) => isZeroAmount(w.balance))
                 ? null
-                : ` · ${t('dsa.bonus', { bonus: balance.bonus.map(formatWallet).join(' / ') })}`}
+                : ` · ${t('dsa.bonus', {
+                    bonus: balance.bonus
+                      .filter((w) => !isZeroAmount(w.balance))
+                      .map(formatWallet)
+                      .join(' / '),
+                  })}`}
             </p>
           ) : (
             <p className="text-xs text-ws-muted-fg" data-testid="dsa-balance-failed">

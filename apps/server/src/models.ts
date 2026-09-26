@@ -478,16 +478,60 @@ const ANTHROPIC_VENDOR = {
     '两条路：用你已经在付的 Claude 订阅登录，或者去 console.anthropic.com 建一把 API key 按量付费。',
 } as const
 
+/**
+ * WP152（Luoye 09-26）：**DeepSeek 两种连法合成一张卡**「DeepSeek 官方」，卡里二选一：
+ * 「官方账户登录」（排第一、默认选中：不用建 key）与「官方 API 接口连接」（去开放平台建 key）。
+ *
+ * 只动展示名与分组：provider id（`deepseek` / `deepseek-account`）、kind、存储、接口、计费一律不变。
+ * 已配的那几条的显示名走 {@link providerDisplayLabel}（老数据里存的旧名字照样认）。
+ */
+export const DEEPSEEK_CARD_LABEL = 'DeepSeek 官方'
+export const DEEPSEEK_API_PLAN_LABEL = '官方 API 接口连接'
+export const DEEPSEEK_ACCOUNT_PLAN_LABEL = '官方账户登录'
+export const DEEPSEEK_API_LABEL = `${DEEPSEEK_CARD_LABEL} · ${DEEPSEEK_API_PLAN_LABEL}`
+export const DEEPSEEK_ACCOUNT_LABEL = `${DEEPSEEK_CARD_LABEL} · ${DEEPSEEK_ACCOUNT_PLAN_LABEL}`
+
+const DEEPSEEK_VENDOR = {
+  vendor: 'deepseek',
+  vendor_label: DEEPSEEK_CARD_LABEL,
+  vendor_summary:
+    '国内直连、便宜、够用，没别的偏好就选它。两种连法：用 DeepSeek 账号登录（不用建 key），或者去开放平台建一把 API key。',
+} as const
+
+/**
+ * 这些是 WP152 之前存下来的默认名字（老用户的 `models.json` 里原样留着，不改存储）。
+ * 显示时换成新叫法；用户自己改过的名字（比如「我的 DeepSeek 代理」）原样显示。
+ */
+const DEEPSEEK_API_LEGACY_LABELS: ReadonlySet<string> = new Set([
+  'DeepSeek 官方',
+  'DeepSeek 官方（环境变量）',
+  DEEPSEEK_API_LABEL,
+])
+
+/**
+ * WP152：一条已配的模型来源在界面上叫什么（「已配的」列表与「哪件事用哪个模型」的下拉同一个名字）。
+ *
+ * - 账号登录那条（`deepseek_account`）：一律「DeepSeek 官方 · 官方账户登录」（它没有名字可改）；
+ * - DeepSeek 官方 API key 那条：还是默认名字的 → 「DeepSeek 官方 · 官方 API 接口连接」；改过名的照旧；
+ * - 其余原样。
+ */
+export function providerDisplayLabel(config: { kind: string; label: string }): string {
+  if (config.kind === 'deepseek_account') return DEEPSEEK_ACCOUNT_LABEL
+  if (config.kind === 'deepseek' && DEEPSEEK_API_LEGACY_LABELS.has(config.label.trim())) {
+    return DEEPSEEK_API_LABEL
+  }
+  return config.label
+}
+
 export const MODEL_TEMPLATES: readonly ModelProviderTemplate[] = [
   {
     kind: 'deepseek',
-    label: 'DeepSeek 官方',
-    summary: '国内直连、便宜、够用。没别的偏好就选它。',
-    vendor: 'deepseek',
-    vendor_label: 'DeepSeek 官方',
-    vendor_summary: '国内直连、便宜、够用。没别的偏好就选它。',
-    plan_label: 'API key（按量计费）',
-    plan_order: 1,
+    label: DEEPSEEK_API_LABEL,
+    summary: '去 DeepSeek 开放平台建一把 API key 填进来，按量计费。',
+    ...DEEPSEEK_VENDOR,
+    // WP152：排第二（第一是「官方账户登录」——不用建 key，对非开发者最省事）
+    plan_label: DEEPSEEK_API_PLAN_LABEL,
+    plan_order: 2,
     auth: 'api_key',
     default_base_url: 'https://api.deepseek.com',
     default_model: 'deepseek-flash',
@@ -840,14 +884,17 @@ export const MODEL_TEMPLATES: readonly ModelProviderTemplate[] = [
    *
    * 没有表单、没有 key：点一下，系统浏览器里走 DeepSeek 官方的授权页（dsh 官方模块
    * `@deepseek-ai/dsh-deepseek-account-platform`），回来显示账号与余额，接着跑三步验证。
-   * 令牌只存在 dsh 自己的本机凭据库里。**不挂 `vendor`**：它在向导与设置页各是单独一张卡，
-   * 不进"DeepSeek 官方"那张 API key 卡的方案单选（那张卡是"填 key"，这一张是"登录"）。
+   * 令牌只存在 dsh 自己的本机凭据库里。
+   *
+   * WP152（Luoye 09-26）起**挂上 `vendor: 'deepseek'`**：与 API key 那条合成一张「DeepSeek 官方」卡，
+   * 卡里二选一，这一条排第一、默认选中。kind / provider id 不变。
    */
   {
     kind: 'deepseek_account',
-    label: '用我的 DeepSeek 账号登录',
+    label: DEEPSEEK_ACCOUNT_LABEL,
     summary: '不用建 key：用 DeepSeek 账号在浏览器里登录一次，按你账号里的余额扣。',
-    plan_label: '用 DeepSeek 账号登录',
+    ...DEEPSEEK_VENDOR,
+    plan_label: DEEPSEEK_ACCOUNT_PLAN_LABEL,
     plan_order: 1,
     auth: 'account',
     default_base_url: DEEPSEEK_ACCOUNT_BASE_URL,
@@ -1210,7 +1257,7 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
       .filter((c) => IMAGE_CAPABLE_KINDS.includes(c.kind))
       .map((c) => ({
         provider_id: c.id,
-        label: c.label,
+        label: providerDisplayLabel(c),
         official: c.kind === 'agentsws_cloud',
         default_model: DEFAULT_IMAGE_MODEL,
       }))
@@ -1573,7 +1620,8 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
     return {
       id: config.id,
       kind: config.kind,
-      label: config.label,
+      // WP152：显示名（存储里的 label 不动）
+      label: providerDisplayLabel(config),
       base_url: config.base_url,
       model: config.model,
       ...(config.embedding_model === undefined ? {} : { embedding_model: config.embedding_model }),
@@ -1626,7 +1674,7 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
       choices: active.flatMap((c) =>
         knownModels(c).map((model) => ({
           id: `${c.id}/${model}`,
-          label: `${c.label}（${model}）`,
+          label: `${providerDisplayLabel(c)}（${model}）`,
         })),
       ),
     }
@@ -1947,7 +1995,7 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
         if (config === undefined) throw invalid(`这一条现在用不了（没配或者没填 key）：${id}`)
         if (!IMAGE_CAPABLE_KINDS.includes(config.kind)) {
           throw invalid(
-            `${config.label} 没有生图接口。生图请选 Agents 工坊官方接口，或者一条 OpenAI 兼容口。`,
+            `${providerDisplayLabel(config)} 没有生图接口。生图请选 Agents 工坊官方接口，或者一条 OpenAI 兼容口。`,
           )
         }
         state.defaults.image = {
