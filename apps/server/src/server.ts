@@ -2184,6 +2184,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         signedIn: () => deepseekAccount.signedIn(),
         resolveToken: (url: string) => deepseekAccount.resolveToken(url),
         rejectToken: (token: string) => deepseekAccount.rejectToken(token),
+        // WP151：余额不足那一行按机器一份（账号只有一个），各品牌的模型卡读同一份
+        reportBalance: (insufficient: boolean) => deepseekAccount.reportBalance(insufficient),
+        quota: () => deepseekAccount.quota(),
         ...(options.deepseekAccount?.fetch === undefined
           ? {}
           : { fetch: options.deepseekAccount.fetch }),

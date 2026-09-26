@@ -14,6 +14,7 @@ import type {
   ToolDef,
 } from '@agentsws/contracts'
 import { canonicalJson, EXTERNAL_FENCE, Provenance, redactOutbound, sha256 } from '@agentsws/core'
+import { deepseekQuotaKindOf } from '@agentsws/model-gateway'
 import type {
   CreateDraftFn,
   CreatePolicyQuestionFn,
@@ -525,10 +526,12 @@ export function createDirectRuntime(options: DirectRuntimeOptions): RuntimeAdapt
           closeOpenToolUses(error.code)
           sink({ type: 'run.failed', error })
           // WP150：`unauthenticated` 的原文就是给人看的那句（"DeepSeek 账号的登录过期了……去重新登录"），
-          // 摘要直接用它；别的码照旧（码比上游原文稳，回放也逐字节不变）
+          // 摘要直接用它；WP151 的"DeepSeek 余额不足，去充值"同理；别的码照旧（码比上游原文稳，回放也逐字节不变）
           return finish(
             'failed',
-            error.code === 'unauthenticated' ? error.message : `模型调用失败：${error.code}`,
+            error.code === 'unauthenticated' || deepseekQuotaKindOf(err) !== undefined
+              ? error.message
+              : `模型调用失败：${error.code}`,
           )
         }
 

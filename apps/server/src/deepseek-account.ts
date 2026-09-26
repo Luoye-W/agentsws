@@ -22,6 +22,13 @@
  * 5. **登出前停任务**：`view()` 带上"现在正在用这个账号跑的事"（界面确认框里列它们）；`signOut()`
  *    先停这些运行、再登出（官方 `installAccountTaskCancellation` 的做法，只是次序按派工单"先停再登出"）。
  *
+ * WP151（跟官方 0.1.7-rc.2）：
+ *
+ * 6. **余额不足**：推理口说余额不足（402，判定在账号 provider 里、照官方）→ 记一笔"余额不足"（只在内存，
+ *    不落盘）；卡片与模型卡上出一行"DeepSeek 账号余额不足，充值后再让它接着做"+「去充值」（官方
+ *    `links.topUpUrl`）。**不是**登录失效：登录状态一个字不动。下一次调用成功、或者 `view()` 查回来的
+ *    余额有钱了，这一笔就清掉；登上 / 登出也清。
+ *
  * 只在本机档（`AGENTSWS_RUNTIME_MODE=local`）可用：官方只收回环地址的回调
  * （README「non-loopback reverse proxies are unsupported」），Docker / 托管档的浏览器回不来。
  */
@@ -31,11 +38,16 @@ import { join } from 'node:path'
 import type {
   DeepSeekAccountTaskView,
   DeepSeekAccountView,
+  DeepSeekQuotaView,
   DeepSeekWalletView,
 } from '@agentsws/api'
 import { ApiError } from '@agentsws/api'
 import type { DeepSeekAccountHost } from '@agentsws/dsh-adapter/deepseek-account'
-import { DEEPSEEK_ACCOUNT_DEFAULT_MODEL } from '@agentsws/model-gateway'
+import {
+  DEEPSEEK_ACCOUNT_DEFAULT_MODEL,
+  DEEPSEEK_ACCOUNT_QUOTA_MESSAGE,
+  DEEPSEEK_PLATFORM_TOP_UP_URL,
+} from '@agentsws/model-gateway'
 
 /** 这一条 provider 在 `models.json` 里的 id（与云那条 `agentsws` 一样写死：一台机器只有一条）。 */
 export const DEEPSEEK_ACCOUNT_PROVIDER_ID = 'deepseek-account'
@@ -135,6 +147,13 @@ export interface DeepSeekAccountAssembly {
   login(): Promise<DeepSeekAccountView>
   cancel(attempt_id: string): Promise<DeepSeekAccountView>
   signOut(): Promise<void>
+  /**
+   * WP151：账号 provider 报"余额够不够"（推理口说余额不足 → `true`；一次调用成功 → `false`）。
+   * 只动"余额不足"那一笔，不碰登录状态。
+   */
+  reportBalance(insufficient: boolean): void
+  /** WP151：现在有没有"余额不足"那一行（模型卡 / 顶栏读它；去充值用官方 `links.topUpUrl`）。 */
+  quota(): DeepSeekQuotaView | undefined
   /** 启动时：上次选过这条路就把模块挂回来（只读本机凭据库，不出网）。 */
   resume(): Promise<void>
   close(): Promise<void>
@@ -197,12 +216,18 @@ export function createDeepSeekAccount(options: DeepSeekAccountOptions): DeepSeek
   const now = options.now ?? (() => new Date().toISOString())
   let signed = false
   let graceTimer: NodeJS.Timeout | undefined
+  /** WP151：上一次推理口说余额不足是什么时候（只在内存；调用成功 / 余额有钱了 / 登上登出就清）。 */
+  let quotaAt: string | undefined
+  /** WP151：官方给的充值页（每次读官方状态时记下，`quota()` 同步要用）。 */
+  let topUpUrl: string | undefined
 
   const available = (): boolean => options.runtimeMode() === 'local'
 
   const setSigned = (next: boolean): void => {
     if (next === signed) return
     signed = next
+    // WP151：换了登录（登上 / 登出 / 失效）——上一份"余额不足"不作数了
+    quotaAt = undefined
     // WP150：重新登上了——"登录过期了"那句话就不用再说了
     if (next) {
       const st = readState()
@@ -261,6 +286,7 @@ export function createDeepSeekAccount(options: DeepSeekAccountOptions): DeepSeek
         void expired()
       })
       const first = await h.state().catch(() => undefined)
+      if (first !== undefined) topUpUrl = first.links.topUpUrl
       setSigned(first?.status === 'credential-stored')
       watch(h)
       return h
@@ -321,6 +347,7 @@ export function createDeepSeekAccount(options: DeepSeekAccountOptions): DeepSeek
       }
     }
     const signedIn = state.status === 'credential-stored'
+    topUpUrl = state.links.topUpUrl
     setSigned(signedIn)
     const a = state.attempt
     const result: DeepSeekAccountView = {
@@ -379,8 +406,13 @@ export function createDeepSeekAccount(options: DeepSeekAccountOptions): DeepSeek
         wallets: wallets(balance.value),
         bonus: wallets(balance.bonusWallets),
       }
+      // WP151：余额刷新回来有钱了——"余额不足"那一行就收了
+      if (hasMoney([...balance.value, ...balance.bonusWallets])) quotaAt = undefined
     } else if (balance?.status === 'failed') {
       result.balance = { status: 'failed', message: DEEPSEEK_BALANCE_FAILED }
+    }
+    if (quotaAt !== undefined) {
+      result.quota_exceeded = { at: quotaAt, message: DEEPSEEK_ACCOUNT_QUOTA_MESSAGE }
     }
     return result
   }
@@ -393,6 +425,24 @@ export function createDeepSeekAccount(options: DeepSeekAccountOptions): DeepSeek
     },
     handle: (req, res) => host?.handle(req, res) ?? false,
     view: () => view(),
+
+    reportBalance(insufficient) {
+      if (!insufficient) {
+        quotaAt = undefined
+        return
+      }
+      // 同一段"余额不足"只记第一次的时间（后面几次失败不把时间往后挪）
+      quotaAt ??= now()
+    },
+
+    quota() {
+      if (quotaAt === undefined) return undefined
+      return {
+        at: quotaAt,
+        message: DEEPSEEK_ACCOUNT_QUOTA_MESSAGE,
+        top_up_url: topUpUrl ?? DEEPSEEK_PLATFORM_TOP_UP_URL,
+      }
+    },
 
     async login() {
       if (!available()) throw new ApiError('forbidden', DEEPSEEK_ACCOUNT_UNAVAILABLE)
@@ -459,6 +509,14 @@ export function createDeepSeekAccount(options: DeepSeekAccountOptions): DeepSeek
       await unmount()
     },
   }
+}
+
+/** WP151：钱包里还有没有钱（任何一个钱包大于 0）。平台给的是十进制串，可能是 `0E-16` 这种写法。 */
+function hasMoney(rows: readonly { balance: string }[]): boolean {
+  return rows.some((w) => {
+    const n = Number(w.balance)
+    return Number.isFinite(n) && n > 0
+  })
 }
 
 /**

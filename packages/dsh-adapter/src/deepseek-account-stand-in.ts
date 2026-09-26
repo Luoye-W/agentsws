@@ -240,8 +240,8 @@ export function createFakeDeepSeekPlatform(
 // ── 整个宿主的替身（demo 用，不挂官方模块）──────────────────────────────
 
 export interface StandInDeepSeekAccountHostOptions {
-  /** 余额查询是不是查不到（截图"说人话"那一张用）。 */
-  balance?: 'ok' | 'fail'
+  /** 余额查询是不是查不到（截图"说人话"那一张用）；WP151：`empty` = 查得到、但钱包是 0。 */
+  balance?: 'ok' | 'fail' | 'empty'
 }
 
 /**
@@ -251,7 +251,7 @@ export interface StandInDeepSeekAccountHostOptions {
 export function createStandInDeepSeekAccountHost(
   options: StandInDeepSeekAccountHostOptions = {},
 ): DeepSeekAccountHost & {
-  setBalance(mode: 'ok' | 'fail'): void
+  setBalance(mode: 'ok' | 'fail' | 'empty'): void
   /**
    * WP150：模拟"平台那边登录失效了"——照官方 `expireCredential` 的次序：删本机登录 → 发「登录失效」
    * → 状态变化。demo 里点一下就能看到卡片那句"登录过期了"。没登录时什么都不做。
@@ -319,6 +319,10 @@ export function createStandInDeepSeekAccountHost(
     balance: async (): Promise<AccountDetails['balance'] | null> => {
       if (!signedIn) return null
       if (balance === 'fail') return { status: 'failed' }
+      // WP151：钱包是 0（"余额不足"那一行不会因为刷新就收掉）
+      if (balance === 'empty') {
+        return { status: 'ready', value: [{ currency: 'CNY', balance: '0.00' }], bonusWallets: [] }
+      }
       return {
         status: 'ready',
         value: [{ currency: 'CNY', balance: '42.50' }],

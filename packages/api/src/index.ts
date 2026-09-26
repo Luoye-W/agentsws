@@ -327,6 +327,7 @@ export type {
   DeepSeekAccountPhase,
   DeepSeekAccountTaskView,
   DeepSeekAccountView,
+  DeepSeekQuotaView,
   DeepSeekWalletView,
   DiscoverModelsInput,
   ModelDefaultsView,

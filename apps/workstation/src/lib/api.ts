@@ -5513,3 +5513,25 @@ export const getComputerUseActive = (
 /** 停止：撤销授权 + 中断那次运行。 */
 export const stopComputerUse = (assignment?: string): Promise<{ stopped: number }> =>
   api('/v1/computer-use/stop', { method: 'POST', ...withAssignment(assignment) })
+
+// ── WP151：DeepSeek 余额不足（只追加）─────────────────────────────────────
+//
+// 账号那一路引到账号的充值页（官方 `links.topUpUrl`），API key 那一路引到开放平台的充值页——
+// 官方 rc.2 的分法：账号的充值操作不出现在 API key 的失败上，免得充错地方。
+
+/** 余额不足那一行（人话 + 去哪充值；不带任何令牌）。 */
+export interface DeepSeekQuota {
+  at: string
+  message: string
+  top_up_url: string
+}
+
+export interface ModelProviderView {
+  /** WP151：DeepSeek 说余额不足了（模型卡与顶栏出一行 +「去充值」）；成功一次或余额回来就没了。 */
+  quota_exceeded?: DeepSeekQuota
+}
+
+export interface DeepSeekAccountData {
+  /** WP151：这个账号余额不足（去充值用 `top_up_url`）；余额刷新回来有钱了就没了。登录状态不变。 */
+  quota_exceeded?: { at: string; message: string }
+}

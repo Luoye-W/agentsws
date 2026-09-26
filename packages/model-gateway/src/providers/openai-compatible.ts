@@ -9,6 +9,11 @@ import type {
   ToolDef,
 } from '@agentsws/contracts'
 import { GatewayError, ProviderError } from '../types.js'
+import {
+  type DeepSeekBalanceListener,
+  deepseekQuotaError,
+  isDeepSeekQuotaFailure,
+} from './deepseek-quota.js'
 
 export type FetchLike = (
   input: string,
@@ -62,6 +67,13 @@ export interface OpenAiCompatibleOptions {
    * 不给就不声明（"不知道"不等于"不能"）。
    */
   capabilities?: ModelCapabilities
+  /**
+   * WP151：这一条是 **DeepSeek 官方 API key**（装配方只对官方地址给）。给了：上游说余额不足
+   * （402 或官方认作余额不足的措辞）就以"DeepSeek API 余额不足，去开放平台充值后再试"失败
+   * （`reason: 'quota'`，网关原样往上抛），并回调 `onBalance(true)`；一次对话成功回调 `onBalance(false)`。
+   * 不给 = 照旧（别家的 402 仍是泛泛的上游错误）。
+   */
+  deepseekBalance?: { onBalance?: DeepSeekBalanceListener }
 }
 
 interface WireToolCall {
@@ -281,6 +293,10 @@ export function openaiCompatibleProvider(options: OpenAiCompatibleOptions): Mode
     }
     if (!res.ok) {
       const detail = await res.text().catch(() => '')
+      if (options.deepseekBalance !== undefined && isDeepSeekQuotaFailure(res.status, detail)) {
+        options.deepseekBalance.onBalance?.(true)
+        throw deepseekQuotaError('api_key', res.status)
+      }
       throw new ProviderError(`provider http ${res.status}: ${detail.slice(0, 200)}`, {
         status: res.status,
       })
@@ -342,6 +358,8 @@ export function openaiCompatibleProvider(options: OpenAiCompatibleOptions): Mode
       if (message === undefined) {
         throw new ProviderError('provider response has no choices')
       }
+      // WP151：这一次成了——余额够用
+      options.deepseekBalance?.onBalance?.(false)
       const names = toolNameMap(req.tools)
       const calls = (message.tool_calls ?? []).map((c, i) => {
         const wire = c.function?.name

@@ -23,6 +23,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import type {
+  DeepSeekQuotaView,
   DiscoverModelsInput,
   ModelDefaultsView,
   ModelImageView,
@@ -73,6 +74,9 @@ import {
   DEEPSEEK_ACCOUNT_BASE_URL,
   DEEPSEEK_ACCOUNT_DEFAULT_MODEL,
   DEEPSEEK_ACCOUNT_MODELS,
+  DEEPSEEK_ACCOUNT_QUOTA_MESSAGE,
+  DEEPSEEK_API_QUOTA_MESSAGE,
+  DEEPSEEK_PLATFORM_TOP_UP_URL,
   DeepSeekFileStore,
   deepseekAccountProvider,
   deepseekMessagesProvider,
@@ -104,6 +108,16 @@ export const DEEPSEEK_KEY_ENV = 'DEEPSEEK_API_KEY'
  * 且只认官方地址（`https://api.deepseek.com`）——改过地址的（代理 / 中转）照旧走 OpenAI 兼容口。
  */
 export const DEEPSEEK_MESSAGES_ENV = 'AGENTSWS_DEEPSEEK_MESSAGES'
+
+/** WP151：这一条是不是 DeepSeek 官方地址的 API key（余额不足时引到开放平台充值）。 */
+export function isOfficialDeepSeek(config: { kind: string; base_url: string }): boolean {
+  if (config.kind !== 'deepseek') return false
+  try {
+    return new URL(config.base_url).origin === 'https://api.deepseek.com'
+  } catch {
+    return false
+  }
+}
 
 /** WP143：这一条 DeepSeek 官方配置要不要走 Messages 口（开关开了 + 官方地址）。 */
 export function deepseekUsesMessages(
@@ -280,6 +294,12 @@ export interface ModelsOptions {
     rejectToken?(token: string): Promise<void>
     /** 测试 / demo 注入的 Messages 口替身（不联网）。 */
     fetch?: AccountFetch
+    /**
+     * WP151：账号 provider 报"余额够不够"（推理口余额不足 → `true`；调用成功 → `false`），
+     * 与现在那一行"余额不足"提示（模型卡 / 顶栏读它）。按机器一份，不按品牌。
+     */
+    reportBalance?(insufficient: boolean): void
+    quota?(): DeepSeekQuotaView | undefined
   }
 }
 
@@ -953,6 +973,18 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
       : { index: jsonFileUploadIndex(join(options.dbDir, 'deepseek-files.json')) },
   )
 
+  /**
+   * WP151：DeepSeek 官方 API key 那几条最近一次说"余额不足"是什么时候（按配置 id；只在内存）。
+   * 一次调用成功就清；账号那一条不在这里（按机器一份，在账号那一块）。
+   */
+  const apiQuotaAt = new Map<string, string>()
+  const apiBalanceOf =
+    (id: string) =>
+    (insufficient: boolean): void => {
+      if (!insufficient) apiQuotaAt.delete(id)
+      else if (!apiQuotaAt.has(id)) apiQuotaAt.set(id, clock.now())
+    }
+
   let state: ModelsStateFile = { version: 1, providers: [], defaults: {}, tests: {} }
   if (stateFile !== undefined) {
     try {
@@ -1084,6 +1116,10 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
         ...(account.rejectToken === undefined
           ? {}
           : { rejectToken: (token: string) => account.rejectToken?.(token) ?? Promise.resolve() }),
+        // WP151：余额不足 / 又够了——卡片与顶栏那一行"余额不足，去充值"跟着出、收
+        ...(account.reportBalance === undefined
+          ? {}
+          : { onBalance: (b: boolean) => account.reportBalance?.(b) }),
         baseUrl: config.base_url,
         model,
         provider: config.id,
@@ -1099,6 +1135,7 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
         baseUrl: DEEPSEEK_ACCOUNT_BASE_URL,
         model,
         provider: config.id,
+        onBalance: apiBalanceOf(config.id),
         ...(options.fetch === undefined
           ? { files: deepseekFiles }
           : { fetch: options.fetch as unknown as AccountFetch }),
@@ -1118,6 +1155,10 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
       ...(config.transcription_model === undefined
         ? {}
         : { transcriptionModel: config.transcription_model }),
+      // WP151：DeepSeek 官方地址的 API key——余额不足说"去开放平台充值"（不是登录账号的充值页）
+      ...(isOfficialDeepSeek(config)
+        ? { deepseekBalance: { onBalance: apiBalanceOf(config.id) } }
+        : {}),
       /*
        * 49 M3 数据驻留：云那条带上工作区选的驻留（22 §2）。
        * 服务入口按它拦——选了"数据不出境"就只允许境内可用的模型，
@@ -1516,9 +1557,19 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
     }
   }
 
+  /** WP151：这一条现在有没有"余额不足"那一行（账号那条问账号那一块；API key 那几条看本品牌的记录）。 */
+  const quotaOf = (config: ModelProviderConfig): DeepSeekQuotaView | undefined => {
+    if (config.kind === 'deepseek_account') return options.deepseekAccount?.quota?.()
+    const at = apiQuotaAt.get(config.id)
+    return at === undefined
+      ? undefined
+      : { at, message: DEEPSEEK_API_QUOTA_MESSAGE, top_up_url: DEEPSEEK_PLATFORM_TOP_UP_URL }
+  }
+
   const viewOf = (config: ModelProviderConfig): ModelProviderView => {
     const has_key = hasKey(config.id)
     const test = state.tests[config.id]
+    const quota = quotaOf(config)
     return {
       id: config.id,
       kind: config.kind,
@@ -1558,6 +1609,7 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
       ...(config.last_listing === undefined ? {} : { last_listing: config.last_listing }),
       ...(test === undefined ? {} : { last_test: test }),
       vision_status: visionStatusOf(config),
+      ...(quota === undefined ? {} : { quota_exceeded: quota }),
       ...(fromEnvOnly(config.id) ? { from_env: true } : {}),
     }
   }
@@ -2169,6 +2221,9 @@ function lastAttempt(e: unknown): { status?: number; message: string } | undefin
 
 /** 试跑失败的中文人话。原文只在括号里当补充。 */
 export function humanizeModelError(code: string, message: string): string {
+  // WP151：DeepSeek 余额不足——provider 已经说成人话了（账号路 / API key 路各一句），原样给，与运行里同一句
+  if (message === DEEPSEEK_ACCOUNT_QUOTA_MESSAGE || message === DEEPSEEK_API_QUOTA_MESSAGE)
+    return message
   const lower = message.toLowerCase()
   if (lower.includes('401') || lower.includes('unauthorized') || lower.includes('invalid api key'))
     return `API key 不对或者已经失效，去控制台重新生成一把（${message}）`

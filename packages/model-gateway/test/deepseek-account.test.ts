@@ -19,10 +19,16 @@ import {
   DEEPSEEK_ACCOUNT_DEFAULT_MODEL,
   DEEPSEEK_ACCOUNT_EXPIRED_MESSAGE,
   DEEPSEEK_ACCOUNT_MODELS,
+  DEEPSEEK_ACCOUNT_QUOTA_MESSAGE,
   DEEPSEEK_ACCOUNT_SIGN_IN_REQUIRED_MESSAGE,
+  DEEPSEEK_API_QUOTA_MESSAGE,
   deepseekAccountProvider,
   deepseekMessagesProvider,
+  deepseekQuotaKindOf,
+  type FetchLike,
   GatewayError,
+  isDeepSeekQuotaFailure,
+  openaiCompatibleProvider,
   ProviderError,
   toMessagesRequest,
   VISION_PROBE_WORD,
@@ -139,12 +145,13 @@ describe('WP134 (a) 凭据：官方 resolveToken 现取、只进 x-dsh-auth-toke
   })
 
   it('上游报错：原样带状态码，错误信封里没有令牌', async () => {
-    const { fetch } = fakeMessages({ status: 402 })
+    // WP151 起 402 单独说"余额不足"（见文件末尾那一组），这里换成一个普通的上游错
+    const { fetch } = fakeMessages({ status: 500 })
     const p = deepseekAccountProvider({ resolveToken: signedIn, fetch })
     const err = await p.complete({ messages: [{ role: 'user', content: 'x' }] }).catch((e) => e)
     expect(err).toBeInstanceOf(ProviderError)
     expect(JSON.stringify(err)).not.toContain(TOKEN)
-    expect(String(err.message)).toContain('402')
+    expect(String(err.message)).toContain('500')
   })
 
   it('官方目录：默认那一档能看图，listModels 不发请求', async () => {
@@ -296,7 +303,8 @@ describe('WP150 登录失效（推理口 401，照官方 dsh-llm-deepseek-accoun
   })
 
   it('403 与别的错误不算失效：不去清登录，照旧是带状态码的 ProviderError', async () => {
-    for (const status of [403, 402, 500]) {
+    // 402 也不算失效，但 WP151 起它单独说"余额不足"（见文件末尾那一组）
+    for (const status of [403, 500]) {
       const { fetch } = fakeMessages({ status })
       const rejected: string[] = []
       const p = deepseekAccountProvider({
@@ -368,5 +376,133 @@ describe('WP150 登录失效（推理口 401，照官方 dsh-llm-deepseek-accoun
     expect((err as GatewayError).code).toBe('unauthenticated')
     expect((err as GatewayError).message).toBe(DEEPSEEK_ACCOUNT_SIGN_IN_REQUIRED_MESSAGE)
     expect(seen).toEqual([])
+  })
+})
+
+describe('WP151 余额不足（照官方 0.1.7-rc.2：402 / 余额不足措辞；不是登录失效）', () => {
+  /** 一个回固定错误的上游（正文是官方那种错误信封）。 */
+  const failing = (status: number, message = 'Insufficient Balance'): AccountFetch =>
+    (async () => ({
+      ok: false,
+      status,
+      json: async () => ({}),
+      text: async () => JSON.stringify({ error: { message, type: 'unknown_error' } }),
+    })) as AccountFetch
+
+  it('判定：402 就算；别的状态看错误信封的措辞；401 / 403 先算凭据；纯文本不拿措辞判', () => {
+    expect(isDeepSeekQuotaFailure(402, '')).toBe(true)
+    expect(isDeepSeekQuotaFailure(400, '{"error":{"message":"Insufficient Balance"}}')).toBe(true)
+    expect(isDeepSeekQuotaFailure(429, '{"error":{"message":"quota exceeded"}}')).toBe(true)
+    expect(isDeepSeekQuotaFailure(429, '{"error":{"message":"rate limit reached"}}')).toBe(false)
+    expect(isDeepSeekQuotaFailure(401, '{"error":{"message":"Insufficient Balance"}}')).toBe(false)
+    expect(isDeepSeekQuotaFailure(403, '{"error":{"message":"Insufficient Balance"}}')).toBe(false)
+    expect(isDeepSeekQuotaFailure(500, 'insufficient balance')).toBe(false)
+  })
+
+  it('账号路 402：人话是"账号余额不足"、reason 是 account_quota；不报 rejectToken；回调余额不足', async () => {
+    const rejected: string[] = []
+    const balance: boolean[] = []
+    const p = deepseekAccountProvider({
+      resolveToken: signedIn,
+      rejectToken: async (t) => {
+        rejected.push(t)
+      },
+      onBalance: (b) => balance.push(b),
+      fetch: failing(402),
+    })
+    const err = await p.complete({ messages: [{ role: 'user', content: 'x' }] }).catch((e) => e)
+    expect(err).toBeInstanceOf(GatewayError)
+    expect((err as GatewayError).code).toBe('provider_error')
+    expect((err as GatewayError).message).toBe(DEEPSEEK_ACCOUNT_QUOTA_MESSAGE)
+    expect(deepseekQuotaKindOf(err)).toBe('account')
+    expect(rejected).toEqual([])
+    expect(balance).toEqual([true])
+    expect(JSON.stringify(err)).not.toContain(TOKEN)
+  })
+
+  it('API key 路（Messages 口与 OpenAI 兼容口）402：人话是"API 余额不足，去开放平台充值"、reason 是 quota', async () => {
+    const messages = deepseekMessagesProvider({
+      credential: { kind: 'api_key', apiKey: () => 'sk-x' },
+      fetch: failing(402),
+    })
+    const e1 = await messages
+      .complete({ messages: [{ role: 'user', content: 'x' }] })
+      .catch((e) => e)
+    expect((e1 as GatewayError).message).toBe(DEEPSEEK_API_QUOTA_MESSAGE)
+    expect(deepseekQuotaKindOf(e1)).toBe('api_key')
+
+    const balance: boolean[] = []
+    const compatible = openaiCompatibleProvider({
+      model: 'deepseek-chat',
+      apiKey: () => 'sk-x',
+      fetch: failing(402) as unknown as FetchLike,
+      deepseekBalance: { onBalance: (b) => balance.push(b) },
+    })
+    const e2 = await compatible
+      .complete({ messages: [{ role: 'user', content: 'x' }] })
+      .catch((e) => e)
+    expect((e2 as GatewayError).message).toBe(DEEPSEEK_API_QUOTA_MESSAGE)
+    expect(deepseekQuotaKindOf(e2)).toBe('api_key')
+    expect(balance).toEqual([true])
+
+    // 没说"这是 DeepSeek 官方"的 OpenAI 兼容口：别家的 402 照旧是带状态码的上游错
+    const other = openaiCompatibleProvider({
+      model: 'm',
+      apiKey: () => 'sk-x',
+      fetch: failing(402) as unknown as FetchLike,
+    })
+    const e3 = await other.complete({ messages: [{ role: 'user', content: 'x' }] }).catch((e) => e)
+    expect(e3).toBeInstanceOf(ProviderError)
+    expect(deepseekQuotaKindOf(e3)).toBeUndefined()
+  })
+
+  it('一次成功就回调"余额够了"', async () => {
+    const balance: boolean[] = []
+    const { fetch } = fakeMessages()
+    const p = deepseekAccountProvider({
+      resolveToken: signedIn,
+      onBalance: (b) => balance.push(b),
+      fetch,
+    })
+    await p.complete({ messages: [{ role: 'user', content: 'x' }] })
+    expect(balance).toEqual([false])
+  })
+
+  it('经网关：原样抛那句人话，不降级换别的模型（备选一次都没被调）', async () => {
+    const account = deepseekAccountProvider({
+      resolveToken: signedIn,
+      fetch: failing(402),
+      provider: 'deepseek-account',
+    })
+    let backupCalls = 0
+    const backup: ModelProvider = {
+      ref: { provider: 'backup', model: 'b', region: 'cn' },
+      async complete() {
+        backupCalls += 1
+        return { text: 'x', usage: { input_tokens: 1, output_tokens: 1, cached_tokens: 0 } }
+      },
+    }
+    const events = recorder()
+    const gateway = createModelGateway({
+      providers: [account, backup],
+      policy: policy({
+        default: account.ref,
+        fallbacks: { [`${account.ref.provider}/${account.ref.model}`]: [backup.ref] },
+        prices: {
+          [`${account.ref.provider}/${account.ref.model}`]: { in: 0, out: 0, cached: 0 },
+          'backup/b': { in: 0, out: 0, cached: 0 },
+        },
+      }),
+      clock: fixedClock(),
+      eventSink: events.sink,
+      env: {},
+    })
+    const err = await gateway
+      .complete({ messages: [{ role: 'user', content: 'x' }], meta: meta() })
+      .catch((e) => e)
+    expect((err as GatewayError).message).toBe(DEEPSEEK_ACCOUNT_QUOTA_MESSAGE)
+    expect(deepseekQuotaKindOf(err)).toBe('account')
+    expect(backupCalls).toBe(0)
+    expect(events.events.map((e) => e.type)).toContain('model.provider_down')
   })
 })
