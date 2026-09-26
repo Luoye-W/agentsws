@@ -91,9 +91,15 @@ export function SearchDataSection({ assignment }: { assignment?: string }): Reac
 
   const view = settings.data
   const status = view?.status
-  // 没选过（auto）时高亮「现在实际走的那一档」
-  const active: Exclude<SearchDataRouteChoice, 'auto'> =
-    view === undefined || view.choice === 'auto' ? (status?.route ?? 'none') : view.choice
+  // 没选过（auto）时高亮「现在实际走的那一档」；实际哪档都没走就一个都不亮（用户并没有选「不接」）
+  const active: Exclude<SearchDataRouteChoice, 'auto'> | undefined =
+    view === undefined
+      ? undefined
+      : view.choice !== 'auto'
+        ? view.choice
+        : status?.configured === true
+          ? status.route
+          : undefined
   const busy = choose.isPending || save.isPending || test.isPending || remove.isPending
 
   /** key 只在这一次调用里存在：从 FormData 取出来直接发，发完 reset。 */
@@ -127,7 +133,11 @@ export function SearchDataSection({ assignment }: { assignment?: string }): Reac
         })
 
   return (
-    <section className="flex flex-col gap-2" data-testid="search-data" data-active={active}>
+    <section
+      className="flex flex-col gap-2"
+      data-testid="search-data"
+      data-active={active ?? 'none-chosen'}
+    >
       <div className="flex items-baseline gap-2">
         <h3 className="flex items-center gap-1.5 text-sm font-medium">
           <Search className="size-4" aria-hidden />

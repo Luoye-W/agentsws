@@ -73,6 +73,19 @@ describe('搜索数据一行', () => {
     expect(document.body.textContent).not.toMatch(/DataForSEO|SerpApi|Serper/)
   })
 
+  it('没选过、也什么都没接：一个按钮都不亮（用户并没有选「不接」），下面一句人话', async () => {
+    state.view = {
+      choice: 'auto',
+      status: { configured: false, route: 'none', reason: '搜索数据接口还没接' },
+    }
+    renderWithProviders(<SearchDataSection assignment="asg_owner" />, '/connections')
+    expect((await screen.findByTestId('search-data-status')).textContent).toMatch(/还没接/)
+    for (const c of ['official', 'byo', 'none'])
+      expect(screen.getByTestId(`search-data-choice-${c}`).getAttribute('aria-checked')).toBe(
+        'false',
+      )
+  })
+
   it('选「不接」就发一次 setChoice', async () => {
     const user = userEvent.setup()
     renderWithProviders(<SearchDataSection assignment="asg_owner" />, '/connections')
