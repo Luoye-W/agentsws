@@ -266,6 +266,7 @@ import {
   createOrganizations as createOrganizationsAssembly,
   type OrganizationsAssembly,
 } from './organizations.js'
+import { createOwnerToolExecutor } from './owner-tools.js'
 import {
   createFilePersonaBackend,
   createPersonas,
@@ -2262,6 +2263,39 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
               workspace_id: ws,
               port: () => kolService.port,
               now: () => clock.now(),
+            }),
+            /*
+             * WP153（09-26 真账号冒烟 §3）：店主的「列岗位 / 列连接」两个只读工具。
+             *
+             * 数据来自现成的两份装配：岗位读制度面（`org.port.positions`，与「岗位」页同一份），
+             * 连接读这个品牌的连接目录（`directoryPortFor` 懒建，与连接页同一份）。
+             * 两样都比运行时晚建——取值函数只在真调工具那一刻才碰它们。
+             */
+            ownerTools: createOwnerToolExecutor({
+              positions: async (actor) =>
+                org.port.positions({
+                  workspace_id: workspace.id,
+                  person_id: actor.person_id,
+                  assignment_id: actor.assignment_id,
+                  role_id: actor.role_id,
+                }),
+              directory: async () => {
+                await directoryPortFor(ws)
+                return directoryAssemblies.get(ws)?.directory()
+              },
+              gaps: async (role_ids) => {
+                await directoryPortFor(ws)
+                return directoryAssemblies.get(ws)?.roleGaps(role_ids)
+              },
+              activeRoleIds: () =>
+                roles.roles
+                  .list()
+                  .map((r) => r.id)
+                  .filter((id) =>
+                    roles.assignments
+                      .listByRole(id, { workspace_id: ws })
+                      .some((a) => a.revoked_at === undefined),
+                  ),
             }),
             vertical: () => brandProfileOf(ws).vertical,
             // WP82：这台机器配了浏览器才有；配没配由设置页说了算，改了不用重启

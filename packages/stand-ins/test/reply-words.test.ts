@@ -17,7 +17,9 @@ import {
 
 describe('工具名 → 人话（统一的一张表）', () => {
   it('冒烟那句：反引号包着的工具名换成人话，反引号一起去掉', () => {
-    expect(humanizeToolNames('我用 `search_policies` 查了三轮')).toBe('我用「规矩与政策库」查了三轮')
+    expect(humanizeToolNames('我用 `search_policies` 查了三轮')).toBe(
+      '我用「规矩与政策库」查了三轮',
+    )
   })
 
   it('带服务前缀、带括号的也认；更长的词不动', () => {
@@ -68,7 +70,9 @@ describe('回复第一句 → 摘要', () => {
   })
 
   it('stripMarkdown 只去记号不吞字', () => {
-    expect(stripMarkdown('- **粗体** 与 `代码` 与 [链接](https://x.example)')).toBe('粗体 与 代码 与 链接')
+    expect(stripMarkdown('- **粗体** 与 `代码` 与 [链接](https://x.example)')).toBe(
+      '粗体 与 代码 与 链接',
+    )
   })
 })
 
@@ -90,9 +94,9 @@ describe('describeRun（三个运行时同一份拼法）', () => {
   })
 
   it('失败 / 中断 / 预算耗尽仍然优先', () => {
-    expect(describeRun({ readTools: [], drafted: false, reply: '好的', failed: '模型不可用' })).toBe(
-      '这次没跑完：模型不可用。',
-    )
+    expect(
+      describeRun({ readTools: [], drafted: false, reply: '好的', failed: '模型不可用' }),
+    ).toBe('这次没跑完：模型不可用。')
     expect(
       describeRun({ readTools: [], drafted: false, reply: '好的', exhausted: 'max_tool_calls' }),
     ).toContain('预算不够')

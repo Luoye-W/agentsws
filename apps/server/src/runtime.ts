@@ -48,7 +48,7 @@ import type { ModelGatewayApi } from '@agentsws/model-gateway'
 import { personaTextIn, type RoleStore } from '@agentsws/roles'
 import { createDirectRuntime, withToolChoice } from '@agentsws/runtime-direct'
 import type { CreatePolicyQuestionFn, DraftPayload, ToolExecutor } from '@agentsws/stand-ins'
-import { createStubRuntime } from '@agentsws/stand-ins'
+import { createStubRuntime, isOwnerRole, OWNER_TOOL_NAMES } from '@agentsws/stand-ins'
 
 import { cardRefOf, type Work } from '@agentsws/work'
 import type { ComputerUseAssembly } from './computer-use.js'
@@ -165,6 +165,12 @@ export interface RuntimeOptions {
    * 那一摊」，界面上照实显示，而不是假装成功。
    */
   kolTools?: ToolExecutor
+  /**
+   * WP153（09-26 真账号冒烟 §3）：店主的两个只读工具（`list_positions` / `list_connections`，
+   * `owner-tools.ts` 建的那一份）。给了才进 `common.owner` 的工具面——别的职责一律没有；
+   * 执行器里还会再判一次职责。
+   */
+  ownerTools?: ToolExecutor
   /**
    * WP44：Shopify 官方 Dev MCP 的只读工具源（`shopify-devmcp.ts` 起的那个进程）。
    *
@@ -713,11 +719,16 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
      * 让界面显示一个空结果（66 断点 #6 的病根）。
      */
     const kol = options.kolTools
+    const owner = options.ownerTools
     const dev = options.devTools
-    if (kol === undefined && dev === undefined) return source.executeTool
+    if (kol === undefined && owner === undefined && dev === undefined) return source.executeTool
     return async (call) => {
       if (kol !== undefined && KOL_TOOL_NAMES.includes(bareOf(call.name))) {
         return kol(call)
+      }
+      // WP153：店主的两个只读工具（名字与别处不重名；职责在执行器里再判一次）
+      if (owner !== undefined && OWNER_TOOL_NAMES.includes(bareOf(call.name))) {
+        return owner(call)
       }
       if (dev !== undefined && devToolNames().includes(call.name)) {
         try {
@@ -918,6 +929,10 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
         ...DEFAULT_TOOLS,
         ...devToolNames(),
         ...(isKolRole(config.role_id) ? KOL_TOOL_NAMES : []),
+        // WP153：店主才有「列岗位 / 列连接」这两个只读工具
+        ...(isOwnerRole(config.role_id) && options.ownerTools !== undefined
+          ? OWNER_TOOL_NAMES
+          : []),
       ]),
     ].sort()
     const connect_token = (await source.readToken?.(input.assignment_id)) ?? ''
