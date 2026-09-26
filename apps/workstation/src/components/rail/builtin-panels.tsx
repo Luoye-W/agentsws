@@ -27,6 +27,7 @@ import {
   FolderOpen,
   Gauge,
   Globe,
+  GraduationCap,
   Mail,
   MessagesSquare,
   Palette,
@@ -42,6 +43,7 @@ import {
   registerPanelBody,
   registerPanelType,
 } from '@/components/rail/registry'
+import { HELP_ADDRESS_PATTERN } from '@/lib/help'
 
 /**
  * 四个"这一层的设置"面板的身体：形状都是 `{ scope }`，所以包一层就够。
@@ -140,6 +142,15 @@ const ChangesBody = lazy(async () => {
 const MailAssistantBody = lazy(async () => {
   const m = await import('@/components/rail/panels/mail-assistant-panel')
   return { default: m.MailAssistantPanel }
+})
+
+/**
+ * WP156（36 §7 第三档）：**教程**。卡片上的「看教程」为 `agentsws://help/<slug>` 开它；
+ * 人点图标轨开的是目录。身体照旧 `lazy()`，文章本身也是各自一个 chunk（`lib/help.ts`）。
+ */
+const HelpBodyPanel = lazy(async () => {
+  const m = await import('@/components/rail/panels/help-panel')
+  return { default: m.HelpPanel }
 })
 
 const OfficePreviewBody = lazy(async () => {
@@ -332,4 +343,14 @@ export function ensureBuiltinPanels(options: { showUnbuilt?: boolean } = {}): vo
     group: 'tools',
   })
   registerPanelBody('ask', AskBody)
+  // WP156：教程。归「工具」那一组，排最后——它是"不会用时"才开的东西
+  registerPanelType({
+    id: 'help',
+    label: 'rail.panel.help',
+    icon: GraduationCap,
+    priority: 'builtin',
+    group: 'tools',
+    matches: [HELP_ADDRESS_PATTERN],
+  })
+  registerPanelBody('help', HelpBodyPanel)
 }
