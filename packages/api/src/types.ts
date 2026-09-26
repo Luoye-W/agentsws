@@ -81,6 +81,7 @@ import type { PersonaPort } from './routes/personas.js'
 import type { PositionEntryPort } from './routes/positions.js'
 import type { PrPort } from './routes/pr.js'
 import type { PrivacyPort } from './routes/privacy.js'
+import type { SearchDataApiPort } from './routes/search-data.js'
 import type { SecretaryPort } from './routes/secretary.js'
 import type { SecretsPort } from './routes/secrets.js'
 import type { SitePort } from './routes/site.js'
@@ -797,6 +798,11 @@ export interface GatewayDeps {
    * 只有本机档装配；没装配时 `/v1/dsh-scenes*` 回 not_implemented。
    */
   dshScenes?: DshScenesPort
+  /**
+   * WP155（docs/81）：搜索数据接口（连接页那一行 + SERP / AI 问答探测）。按品牌取。
+   * 没装配时 `/v1/search-data*` 回 not_implemented。
+   */
+  searchData?: SearchDataApiPort
   /** WP31 本机秘密库密钥轮换；没装配时 `POST /v1/secrets/rotate` 回 not_implemented。 */
   secrets?: SecretsPort
   /**
