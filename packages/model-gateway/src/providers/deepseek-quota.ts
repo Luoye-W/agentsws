@@ -23,7 +23,7 @@ import { GatewayError } from '../types.js'
 export const DEEPSEEK_ACCOUNT_QUOTA_MESSAGE = 'DeepSeek 账号余额不足，充值后再让它接着做。'
 
 /** API key 路余额不足（钱从开放平台扣，不是从登录的账号扣）。 */
-export const DEEPSEEK_API_QUOTA_MESSAGE = 'DeepSeek API 余额不足，去开放平台充值后再试。'
+export const DEEPSEEK_API_QUOTA_MESSAGE = 'DeepSeek API 余额不足。用建这把 key 的那个 DeepSeek 账号登录开放平台，充值后再试。'
 
 /**
  * API key 路的充值页：开放平台的充值页（官方账号模块 `links.topUpUrl` 同一个平台源

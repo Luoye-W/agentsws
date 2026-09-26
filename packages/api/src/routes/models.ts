@@ -149,7 +149,7 @@ export interface ModelProviderView {
 export interface DeepSeekQuotaView {
   /** 什么时候撞上的（ISO8601）。 */
   at: string
-  /** 人话：账号路"DeepSeek 账号余额不足，充值后再让它接着做"，API key 路"DeepSeek API 余额不足，去开放平台充值后再试"。 */
+  /** 人话：账号路"DeepSeek 账号余额不足，充值后再让它接着做"，API key 路"DeepSeek API 余额不足。用建这把 key 的那个 DeepSeek 账号登录开放平台，充值后再试"。 */
   message: string
   /** 「去充值」打开的地址（不带任何令牌）。 */
   top_up_url: string

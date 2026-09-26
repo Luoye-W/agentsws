@@ -69,7 +69,7 @@ export interface OpenAiCompatibleOptions {
   capabilities?: ModelCapabilities
   /**
    * WP151：这一条是 **DeepSeek 官方 API key**（装配方只对官方地址给）。给了：上游说余额不足
-   * （402 或官方认作余额不足的措辞）就以"DeepSeek API 余额不足，去开放平台充值后再试"失败
+   * （402 或官方认作余额不足的措辞）就以"DeepSeek API 余额不足。用建这把 key 的那个 DeepSeek 账号登录开放平台，充值后再试"失败
    * （`reason: 'quota'`，网关原样往上抛），并回调 `onBalance(true)`；一次对话成功回调 `onBalance(false)`。
    * 不给 = 照旧（别家的 402 仍是泛泛的上游错误）。
    */
