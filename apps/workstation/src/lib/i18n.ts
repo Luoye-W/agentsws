@@ -1710,8 +1710,6 @@ const zh: Table = {
   'models.remove.confirm': '删掉这个模型？存在本机的 API key 也会一起删掉。',
   'models.inactive': '还不能用',
   'models.from_env': '环境变量',
-  'models.never_ai':
-    '这个表单是网页原生表单，填的 API key 直接存进本机加密库，不经过 AI，也不进日志。',
   'models.advanced': '高级',
   'models.field.id': '编号',
   'models.field.id.hint':
@@ -1725,7 +1723,7 @@ const zh: Table = {
   'models.discover': '拉取模型列表',
   'models.discover.failed': '没拉到模型列表，先手填一个模型名也行。原因：{reason}',
   'models.field.api_key': 'API key',
-  'models.field.api_key.hint': '只存在这台电脑的加密库里，不上传、不进日志、不进模型。',
+  'models.field.api_key.hint': '网页原生表单：key 只存进这台电脑的加密库，不经 AI、不上传、不进日志。',
   'models.field.api_key.keep': '已经存过一把了。留空就不动它，填了就换成新的。',
   'models.field.embedding': '向量模型（选填）',
   'models.field.embedding.hint': '知识库检索要用。不填就用不了向量检索，别的照常。',
@@ -4578,8 +4576,6 @@ const en: Table = {
   'models.remove.confirm': 'Remove this model? The API key stored on this machine goes too.',
   'models.inactive': 'Not usable yet',
   'models.from_env': 'from env',
-  'models.never_ai':
-    'A plain web form. The API key goes straight into this machine encrypted store — never through AI, never into logs.',
   'models.advanced': 'Advanced',
   'models.field.id': 'Id',
   'models.field.id.hint':
@@ -4595,7 +4591,7 @@ const en: Table = {
     'Could not fetch the model list; typing the model name still works. Reason: {reason}',
   'models.field.api_key': 'API key',
   'models.field.api_key.hint':
-    'Stored only in this machine encrypted store. Never uploaded, logged, or shown to a model.',
+    'A plain web form: the key goes only into this machine’s encrypted store — never through AI, never uploaded or logged.',
   'models.field.api_key.keep':
     'A key is already stored. Leave blank to keep it, or type a new one.',
   'models.field.embedding': 'Embedding model (optional)',

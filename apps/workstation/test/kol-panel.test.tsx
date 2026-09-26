@@ -394,7 +394,8 @@ describe('WP68 红人岗位面板', () => {
     expect(accept).toContain('.csv')
     // 挑得到却传不进去比挑不到更气人
     expect(accept).not.toContain('.xlsx')
-    expect(screen.getByTestId('kol-tools').textContent).toContain('CSV / TSV')
+    // WP157：「认什么格式」放在导入按钮旁的问号里
+    expect(screen.getByTestId('kol-import-hint').getAttribute('data-hint')).toContain('CSV / TSV')
   })
 })
 

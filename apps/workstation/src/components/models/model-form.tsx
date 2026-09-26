@@ -228,7 +228,10 @@ export function ModelForm({
       onSubmit={submit}
       autoComplete="off"
     >
-      <SafetyNote text={t('models.never_ai')} className="text-xs" />
+      {/*
+        WP157：顶上原来还有一行「这个表单是网页原生表单…」，和 key 下面那行说的是同一件事——
+        两行并成 key 下面那一行（要用的地方写着就够，36 §7 第 4 条）。
+      */}
 
       {presets.length === 0 || existing !== undefined ? null : (
         <div className="flex flex-wrap gap-1.5" data-testid="model-presets">
@@ -419,7 +422,12 @@ export function ModelForm({
         label={t('models.field.api_key')}
         note={
           existing?.has_key === true ? (
-            <p className="text-[11px] text-muted-foreground">{t('models.field.api_key.keep')}</p>
+            <>
+              <p className="text-[11px] text-muted-foreground" data-slot="status">
+                {t('models.field.api_key.keep')}
+              </p>
+              <SafetyNote text={t('models.field.api_key.hint')} />
+            </>
           ) : (
             <SafetyNote text={t('models.field.api_key.hint')} />
           )

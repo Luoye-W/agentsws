@@ -949,7 +949,7 @@ function VendorCard({
             {card.plans.map((p, i) => (
               <label
                 key={`${p.kind}:${p.plan_label ?? p.label}`}
-                className={`cursor-pointer rounded-full border px-2 py-0.5 text-[11px] ${
+                className={`inline-flex cursor-pointer items-center rounded-full border px-2 py-0.5 text-[11px] ${
                   i === planIndex
                     ? 'border-primary bg-primary/10 text-primary'
                     : 'text-muted-foreground'
@@ -969,11 +969,20 @@ function VendorCard({
                   }}
                 />
                 {p.plan_label ?? p.label}
+                {/*
+                  选中那个方案是什么、和别的有什么不同（原来铺在卡上的那段），进问号。
+                  WP157：问号挪进选中的那颗方案按钮里——卡窄时它不再单独折到下一行。
+                */}
+                {i === planIndex && plan.summary !== '' ? (
+                  <Hint
+                    text={plan.summary}
+                    testId="model-plan-summary"
+                    className="ml-1 align-[-2px]"
+                  />
+                ) : null}
               </label>
             ))}
           </fieldset>
-          {/* 选中那个方案是什么、和别的有什么不同（原来铺在卡上的那段），进问号 */}
-          {plan.summary === '' ? null : <Hint text={plan.summary} testId="model-plan-summary" />}
         </div>
       )}
 

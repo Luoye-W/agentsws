@@ -21,6 +21,7 @@ import { useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Hint } from '@/components/ui/hint'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Textarea } from '@/components/ui/textarea'
@@ -1015,7 +1016,12 @@ function ImportAndCampaign({
             <Upload className="size-4" aria-hidden />
             {t('kol.import')}
           </Button>
-          <p className="mt-1 text-[11px] text-muted-foreground">{t('kol.import.hint')}</p>
+          {/* WP157：认什么格式、按什么去重，进问号 */}
+          <Hint
+            text={t('kol.import.hint')}
+            className="ml-1.5 align-middle"
+            testId="kol-import-hint"
+          />
           {imported === undefined ? null : (
             <div className="mt-1 text-xs" data-testid="kol-import-result">
               <p>{imported.summary}</p>
