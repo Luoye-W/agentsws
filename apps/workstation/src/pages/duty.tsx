@@ -24,6 +24,7 @@ import { WsTag } from '@/components/design'
 import { PanelError } from '@/components/rail/panel-error'
 import { useRailState } from '@/components/rail/rail-state'
 // WP73（56 §6）：社媒运营九条渠道职责的内容日历（周视图）与群发向导
+import { GeoQuestions } from '@/components/seo/geo-questions'
 import { SocialBroadcast } from '@/components/social/social-broadcast'
 import { SocialCalendar, socialChannelOfRole } from '@/components/social/social-calendar'
 import { Button } from '@/components/ui/button'
@@ -309,6 +310,15 @@ export function DutyPage(): React.ReactNode {
               ) : null}
             </div>
           )}
+          {/*
+            WP154「内容与搜索」：买家会问的问题（每周拿去问各 AI 平台）+ 花多少 + 开关，
+            以及"现在跑一轮"。每日 5 件事与收入表在岗位面板上（那是数，这里是设置）。
+          */}
+          {role_id === 'dtc.content' ? (
+            <div className="mb-4">
+              <GeoQuestions assignment={assignment} />
+            </div>
+          ) : null}
           <OverviewTab role_id={role_id} />
         </TabsContent>
         <TabsContent value="records">

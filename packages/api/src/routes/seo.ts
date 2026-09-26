@@ -11,7 +11,9 @@
  */
 import type {
   AssignmentId,
+  GeoCostEstimate,
   GeoQuestion,
+  GeoSettings,
   MaybePromise,
   PersonId,
   RoleId,
@@ -48,12 +50,25 @@ export interface SeoRunView {
   picks?: number
 }
 
+/**
+ * 面板上那一块：问题清单 + 开关与问几个 + 每周大概花多少（WP155 提醒：探测按
+ * 「每个问题 × 每个平台一次」计费，要让人看得到、调得动、关得掉）。
+ */
+export interface GeoQuestionsView {
+  questions: GeoQuestion[]
+  settings: GeoSettings
+  estimate: GeoCostEstimate
+}
+
 export interface SeoPort {
-  geoQuestions(actor: SeoActor): MaybePromise<{ questions: GeoQuestion[] }>
+  geoQuestions(actor: SeoActor): MaybePromise<GeoQuestionsView>
   setGeoQuestions(
     actor: SeoActor,
-    input: { questions: { id?: string | undefined; text: string; enabled: boolean }[] },
-  ): MaybePromise<{ questions: GeoQuestion[] }>
+    input: {
+      questions?: { id?: string | undefined; text: string; enabled: boolean }[] | undefined
+      settings?: { enabled?: boolean | undefined; max_questions?: number | undefined } | undefined
+    },
+  ): MaybePromise<GeoQuestionsView>
   run(actor: SeoActor, what: 'daily' | 'weekly'): MaybePromise<SeoRunView>
 }
 
@@ -87,7 +102,14 @@ const QuestionsBody = z.object({
         enabled: z.boolean(),
       }),
     )
-    .max(30),
+    .max(30)
+    .optional(),
+  settings: z
+    .object({
+      enabled: z.boolean().optional(),
+      max_questions: z.number().int().min(1).max(10).optional(),
+    })
+    .optional(),
 })
 
 const RunBody = z.object({ what: z.enum(['daily', 'weekly']) })
@@ -104,7 +126,7 @@ export function seoRoutes(): Route[] {
         auth: 'bearer',
         assignment: true,
         authz: READ_CONTENT,
-        returns: '{ questions: GeoQuestion[] }',
+        returns: 'GeoQuestionsView',
       },
       async (c, deps) => ok(c, await portOf(deps).geoQuestions(actorOf(c))),
     ),
@@ -113,13 +135,13 @@ export function seoRoutes(): Route[] {
         method: 'put',
         path: '/v1/seo/geo-questions',
         operationId: 'setGeoQuestions',
-        summary: '改问题清单（关掉、改字、加）。空字的那一行当删掉',
+        summary: '改问题清单（关掉、改字、加；空字的那一行当删掉）与每周探测的开关、问几个',
         tag: 'seo',
         auth: 'bearer',
         assignment: true,
         authz: STAGE_CONTENT,
         body: QuestionsBody,
-        returns: '{ questions: GeoQuestion[] }',
+        returns: 'GeoQuestionsView',
       },
       async (c, deps) =>
         ok(c, await portOf(deps).setGeoQuestions(actorOf(c), await body(c, QuestionsBody))),

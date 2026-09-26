@@ -28,7 +28,9 @@ import type {
   Clock,
   ContentClaimRule,
   EventEnvelope,
+  GeoCostEstimate,
   GeoQuestion,
+  GeoSettings,
   GscRow,
   Mandate,
   ObjectRef,
@@ -36,6 +38,7 @@ import type {
   ProvenanceState,
   RoleId,
   SearchDataPort,
+  SearchDataStatus,
   SeoDailyPayload,
   SeoPick,
   SeoTopicPayload,
@@ -144,6 +147,13 @@ export interface SeoServiceAssembly {
   weeklyGeo(): Promise<{ skipped?: string; approval_item_id?: string; gaps: number }>
   geoQuestions(): Promise<GeoQuestion[]>
   setGeoQuestions(list: readonly GeoQuestion[]): GeoQuestion[]
+  /** 面板上那一块：问题清单 + 开关与问几个 + 每周大概花多少。 */
+  geoView(): Promise<{ questions: GeoQuestion[]; settings: GeoSettings; estimate: GeoCostEstimate }>
+  /** 改开关 / 问几个（1–10）。 */
+  setGeoSettings(input: {
+    enabled?: boolean | undefined
+    max_questions?: number | undefined
+  }): GeoSettings
   /** 账本 stage 之前的改写口：`publish_post` 要发出去时跑质检。 */
   gatePublish(input: StageInput): Promise<StageInput>
   /** 卡被决定之后（新页面选题批了 → 开一件写这一页的事项）。 */
@@ -155,8 +165,33 @@ const STATE_FILE = 'seo-state.json'
 /** 同一件事交出去之后多久内不再重复开（天）。 */
 const HANDOFF_QUIET_DAYS = 14
 const DAY_MS = 86_400_000
+/** 每周默认问几个（WP155：10 个 × 4 个平台一周约 16 积分；默认收一点）。 */
+const DEFAULT_GEO_QUESTIONS = Math.min(6, MAX_GEO_QUESTIONS)
+
+const geoSettingsOf = (state: SeoState): GeoSettings =>
+  state.geo_settings ?? { enabled: true, max_questions: DEFAULT_GEO_QUESTIONS }
+
+/** 每周大概花多少：官方那条路按单价算，自带 key 是 0，没接就不写数。 */
+function estimateOf(questions: number, status: SearchDataStatus): GeoCostEstimate {
+  const platforms = (status.platforms ?? GEO_PLATFORMS).length
+  const base = { questions, platforms, route: status.route }
+  if (!status.configured) return base
+  if (status.route === 'byo') return { ...base, credits_per_week: 0 }
+  const price = status.prices?.ai_answer
+  return price === undefined
+    ? base
+    : { ...base, credits_per_week: Math.round(questions * platforms * price * 10) / 10 }
+}
+
+function estimateText(e: GeoCostEstimate): string {
+  if (e.credits_per_week === undefined) return ''
+  return e.route === 'byo'
+    ? '（用你自己的 key，不扣积分）'
+    : `（${e.questions} 问 × ${e.platforms} 个平台，约 ${e.credits_per_week} 积分）`
+}
 
 interface SeoState {
+  geo_settings?: GeoSettings
   geo_questions?: GeoQuestion[]
   /** `<lane>|<query>` → 上次交出去的时刻。 */
   handed_off?: Record<string, string>
@@ -192,8 +227,7 @@ export function titleCaseQuery(q: string): string {
  */
 export function draftTitle(query: string, current: string | undefined): string | undefined {
   const q = titleCaseQuery(query)
-  if (current !== undefined && current.toLowerCase().includes(query.trim().toLowerCase()))
-    return undefined
+  if (current?.toLowerCase().includes(query.trim().toLowerCase())) return undefined
   const full = current === undefined || current.trim() === '' ? q : `${q} – ${current.trim()}`
   return full.length <= 70 ? full : `${full.slice(0, 69).trimEnd()}…`
 }
@@ -648,18 +682,23 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
       const { pages } = await readConsole()
       const brand = await brandOf(pages)
       const questions = await refreshQuestions()
-      const enabled = questions.filter((q) => q.enabled).slice(0, MAX_GEO_QUESTIONS)
+      const settings = geoSettingsOf(loadState())
+      const enabled = questions.filter((q) => q.enabled).slice(0, settings.max_questions)
       const search = options.searchData()
       const status = await search.status()
+      // WP155：这条路能探测哪几个平台（官方那一侧没有 Copilot）；不在里面的不问、不花钱
+      const platforms = status.platforms ?? [...GEO_PLATFORMS]
+      const estimate = estimateOf(enabled.length, status)
       const notes: string[] = []
       const rows: SeoWeeklyGeoPayload['rows'] = []
-      if (!status.configured) notes.push('搜索数据接口还没接，这周没有探测各 AI 平台。')
+      if (!settings.enabled) notes.push('每周 AI 探测在面板里关掉了，这周没有探测。')
+      else if (!status.configured) notes.push('搜索数据接口还没接，这周没有探测各 AI 平台。')
       else {
         for (const q of enabled) {
           try {
             const answers = await search.aiAnswers({
               question: q.text,
-              platforms: [...GEO_PLATFORMS],
+              platforms,
               country: brand.country,
               language: brand.language,
               brand: { name: brand.name, domains: brand.domains },
@@ -681,6 +720,7 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
         rows,
         gaps,
         notes,
+        ...(settings.enabled ? { estimate } : {}),
       }
       // 缺位里「交公关」的那几条合成一件交给公关的事项
       const toPr = gaps.filter((g) => g.lane === 'pr_handoff')
@@ -722,8 +762,8 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
         'weekly_geo',
         payload.week_of,
         `AI 平台可见度（${payload.week_of} 那一周）`,
-        status.configured
-          ? `${enabled.length} 个买家问题，${seen.size} 个在某个平台上提到或引用了我们；缺位 ${gaps.length} 个。`
+        status.configured && settings.enabled
+          ? `${enabled.length} 个买家问题，${seen.size} 个在某个平台上提到或引用了我们；缺位 ${gaps.length} 个。${estimateText(estimate)}`
           : (notes[0] ?? ''),
         payload,
       )
@@ -737,6 +777,27 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
     },
 
     geoQuestions: () => refreshQuestions(),
+
+    async geoView() {
+      const questions = await refreshQuestions()
+      const settings = geoSettingsOf(loadState())
+      const status = await options.searchData().status()
+      const n = Math.min(questions.filter((q) => q.enabled).length, settings.max_questions)
+      return { questions, settings, estimate: estimateOf(settings.enabled ? n : 0, status) }
+    },
+
+    setGeoSettings(input) {
+      const cur = geoSettingsOf(loadState())
+      const next: GeoSettings = {
+        enabled: input.enabled ?? cur.enabled,
+        max_questions: Math.max(
+          1,
+          Math.min(10, Math.round(input.max_questions ?? cur.max_questions)),
+        ),
+      }
+      saveState({ ...loadState(), geo_settings: next })
+      return next
+    },
 
     setGeoQuestions(list) {
       // 人在面板上改过的一律记成 `human`（下一次自动生成不会覆盖它）

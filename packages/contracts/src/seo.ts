@@ -243,6 +243,27 @@ export interface SeoWeeklyGeoPayload {
   rows: GeoProbeRow[]
   gaps: GeoGap[]
   notes: string[]
+  /** 这一轮大概花了多少（官方数据接口按积分；自带 key 不扣积分）。 */
+  estimate?: GeoCostEstimate
+}
+
+/**
+ * 每周 AI 探测的开关与问几个（面板上可改）。WP155 提醒：探测按「每个问题 × 每个平台一次」
+ * 计费，10 个问题 × 4 个平台一周约 16 积分——所以要让人看得到、调得动、关得掉。
+ */
+export interface GeoSettings {
+  enabled: boolean
+  /** 每周最多问几个（1–10）。 */
+  max_questions: number
+}
+
+/** 每周大概花多少：问几个 × 几个平台 × 单价（官方那条路才有积分数）。 */
+export interface GeoCostEstimate {
+  questions: number
+  platforms: number
+  route: 'official' | 'byo' | 'none'
+  /** 官方数据接口：积分 / 周；自带 key 是 0；没接就不写。 */
+  credits_per_week?: number
 }
 
 export type SeoReportPayload = SeoDailyPayload | SeoWeeklyRevenuePayload | SeoWeeklyGeoPayload

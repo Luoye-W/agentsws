@@ -55135,7 +55135,7 @@
         ],
         "responses": {
           "200": {
-            "description": "{ questions: GeoQuestion[] }",
+            "description": "GeoQuestionsView",
             "content": {
               "application/json": {
                 "schema": {
@@ -55216,11 +55216,11 @@
           "range": "assigned",
           "sensitivity": "internal"
         },
-        "x-returns": "{ questions: GeoQuestion[] }"
+        "x-returns": "GeoQuestionsView"
       },
       "put": {
         "operationId": "setGeoQuestions",
-        "summary": "改问题清单（关掉、改字、加）。空字的那一行当删掉",
+        "summary": "改问题清单（关掉、改字、加；空字的那一行当删掉）与每周探测的开关、问几个",
         "tags": ["seo"],
         "parameters": [
           {
@@ -55235,7 +55235,7 @@
         ],
         "responses": {
           "200": {
-            "description": "{ questions: GeoQuestion[] }",
+            "description": "GeoQuestionsView",
             "content": {
               "application/json": {
                 "schema": {
@@ -55316,7 +55316,7 @@
           "range": "assigned",
           "sensitivity": "internal"
         },
-        "x-returns": "{ questions: GeoQuestion[] }",
+        "x-returns": "GeoQuestionsView",
         "requestBody": {
           "required": true,
           "content": {
@@ -55346,9 +55346,21 @@
                       },
                       "required": ["text", "enabled"]
                     }
+                  },
+                  "settings": {
+                    "type": "object",
+                    "properties": {
+                      "enabled": {
+                        "type": "boolean"
+                      },
+                      "max_questions": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 10
+                      }
+                    }
                   }
-                },
-                "required": ["questions"]
+                }
               }
             }
           }

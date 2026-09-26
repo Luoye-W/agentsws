@@ -117,7 +117,9 @@ describe('每日：今天值得动的 5 件事落成什么', () => {
     const changes = await txn.ledger.list({ workspace_id: 'ws_1' })
     expect(changes.map((c) => c.kind).sort()).toEqual(['internal_link_edit', 'page_seo_edit'])
     const seo = changes.find((c) => c.kind === 'page_seo_edit')
-    expect((seo?.after as { title: string }).title).toBe('Usb C Laptop Charger – USB-C 65W Charger')
+    expect((seo?.after as { title: string } | undefined)?.title).toBe(
+      'Usb C Laptop Charger – USB-C 65W Charger',
+    )
     const link = changes.find((c) => c.kind === 'internal_link_edit')
     expect(link?.target.id).toBe('https://shop.example/blogs/guide/best-magsafe-car-mount')
     // 交建站的那件落在建站岗位、挂着建站那条职责
@@ -294,5 +296,55 @@ describe('draftTitle', () => {
       'Usb C Laptop Charger – USB-C 65W Charger',
     )
     expect(draftTitle('braided cable care', 'Braided cable care guide')).toBeUndefined()
+  })
+})
+
+describe('每周 AI 探测花多少（WP155 提醒：看得到、调得动、关得掉）', () => {
+  const official = () => {
+    const calls: string[] = []
+    return {
+      calls,
+      port: {
+        status: async () => ({
+          configured: true,
+          route: 'official' as const,
+          platforms: ['chatgpt', 'perplexity', 'gemini', 'google_ai_overview'] as const,
+          prices: { serp: 0.2, ai_answer: 0.4 },
+        }),
+        serp: async () => {
+          throw new Error('不该查 SERP')
+        },
+        aiAnswers: async (p: { question: string; platforms: readonly string[] }) => {
+          calls.push(`${p.question}|${p.platforms.join(',')}`)
+          return []
+        },
+      },
+    }
+  }
+
+  it('默认每周问 6 个 × 官方能探测的 4 个平台 ≈ 9.6 积分；Copilot 不问', async () => {
+    const o = official()
+    const { service } = setup({ searchData: () => o.port as never })
+    const view = await service.geoView()
+    expect(view.settings).toEqual({ enabled: true, max_questions: 6 })
+    expect(view.estimate.platforms).toBe(4)
+    expect(view.estimate.credits_per_week).toBe(
+      Math.round(view.estimate.questions * 4 * 0.4 * 10) / 10,
+    )
+    await service.weeklyGeo()
+    expect(o.calls.every((c) => !c.includes('copilot'))).toBe(true)
+    expect(o.calls.length).toBe(view.estimate.questions)
+  })
+
+  it('调成 2 个就只问 2 个；关掉就一次都不问', async () => {
+    const o = official()
+    const { service } = setup({ searchData: () => o.port as never })
+    service.setGeoSettings({ max_questions: 2 })
+    await service.weeklyGeo()
+    expect(o.calls).toHaveLength(2)
+    service.setGeoSettings({ enabled: false })
+    await service.weeklyGeo()
+    expect(o.calls).toHaveLength(2)
+    expect((await service.geoView()).estimate.questions).toBe(0)
   })
 })

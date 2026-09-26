@@ -112,7 +112,6 @@ import {
   pendingSearchConsole,
   ruleFromFact,
   type SearchConsolePort,
-  unconfiguredSearchData,
 } from '@agentsws/seo-core'
 import { siteDesignPrompt, themeDesignVariables } from '@agentsws/site-core'
 import { createSkills, type Skills } from '@agentsws/skills'
@@ -5080,20 +5079,21 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
    * 跑的也是那个品牌（与定时任务同一条路，只是不用等到早上 8 点）。
    */
   const seoPort: SeoPort = {
-    geoQuestions: async (actor) => ({
-      questions: await (
-        await brandModules.forWorkspace(actor.workspace_id)
-      ).seoService.geoQuestions(),
-    }),
+    geoQuestions: async (actor) =>
+      (await brandModules.forWorkspace(actor.workspace_id)).seoService.geoView(),
     setGeoQuestions: async (actor, input) => {
       const svc = (await brandModules.forWorkspace(actor.workspace_id)).seoService
-      const list = input.questions.map((q, i) => ({
-        id: q.id ?? `gq_h${i}_${Date.parse(clock.now()).toString(36)}`,
-        text: q.text,
-        origin: 'human' as const,
-        enabled: q.enabled,
-      }))
-      return { questions: svc.setGeoQuestions(list) }
+      if (input.questions !== undefined)
+        svc.setGeoQuestions(
+          input.questions.map((q, i) => ({
+            id: q.id ?? `gq_h${i}_${Date.parse(clock.now()).toString(36)}`,
+            text: q.text,
+            origin: 'human' as const,
+            enabled: q.enabled,
+          })),
+        )
+      if (input.settings !== undefined) svc.setGeoSettings(input.settings)
+      return svc.geoView()
     },
     run: async (actor, what) => {
       const svc = (await brandModules.forWorkspace(actor.workspace_id)).seoService

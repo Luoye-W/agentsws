@@ -5633,7 +5633,7 @@ export interface paths {
     }
     /** 买家会问的问题（从品牌档案与排名前列的查询自动生成；人改过的永远赢） */
     get: operations['listGeoQuestions']
-    /** 改问题清单（关掉、改字、加）。空字的那一行当删掉 */
+    /** 改问题清单（关掉、改字、加；空字的那一行当删掉）与每周探测的开关、问几个 */
     put: operations['setGeoQuestions']
     post?: never
     delete?: never
@@ -43128,7 +43128,7 @@ export interface operations {
     }
     requestBody?: never
     responses: {
-      /** @description { questions: GeoQuestion[] } */
+      /** @description GeoQuestionsView */
       200: {
         headers: {
           [name: string]: unknown
@@ -43206,16 +43206,20 @@ export interface operations {
     requestBody: {
       content: {
         'application/json': {
-          questions: {
+          questions?: {
             id?: string
             text: string
             enabled: boolean
           }[]
+          settings?: {
+            enabled?: boolean
+            max_questions?: number
+          }
         }
       }
     }
     responses: {
-      /** @description { questions: GeoQuestion[] } */
+      /** @description GeoQuestionsView */
       200: {
         headers: {
           [name: string]: unknown
