@@ -57,6 +57,7 @@
 | 32 | WP148 带浏览器的运行改走 dsh 运行时（服务端真能用浏览器、看截图）+ 安装包第三方许可证说明 | `WP148-browser-runs-on-dsh.md` | `wp148-browser-dsh` · `wp/148-browser-dsh` | — | 已合并（09-24，Fable 终审：172 文件 2945 条过，六组模拟零漂移；合并时补了步数上限与许可证全文） |
 | 33 | WP149 dsh 升级 0.1.7-rc.1 → 0.1.7-rc.2（照 docs/42 七步；列上游全部包；附「官方化 / 新出了什么」清单） | `WP149-dsh-0.1.7-rc.2.md` | `wp149-dsh-rc2` · `wp/149-dsh-rc2` | — | 已合并（09-25，Fable 终审：278 文件 4094 条过，六组模拟门禁过、1428 指标零漂移） |
 | 34 | WP150 DeepSeek 账号登录跟上官方 rc.2：失效自动登出并提示、退出前确认并停掉账号任务 | `WP150-deepseek-account-lifecycle.md` | `wp150-ds-account` · `wp/150-ds-account` | — | 已合并（09-25，Fable 终审：241 文件 3605 条过，六组模拟门禁过；合并时顺带修了「启动后才接模型一直跑替身」） |
+| 35 | WP151 DeepSeek 余额不足：说人话 + 去充值（账号路 / key 路分开引导） | `WP151-deepseek-balance-insufficient.md` | `wp151-ds-balance` · `wp/151-ds-balance` | — | 进行中（Claude） |
 
 WP117b 的补充要求（派工单里没有，写在这）：demo 服务的是 `apps/workstation/dist`，测界面前先 `pnpm -F @agentsws/workstation exec vite build`；交付一个真实点击的 playwright 脚本 `scripts/e2e-kol-sandbox.mjs`（playwright 库在 `node_modules/.pnpm/playwright@1.63.0/node_modules/playwright`），走完「选合成红人 → 起草开发信 → 批准发送 → 已发 ≥ 1 → 跳到 N 天后 → 回信 ≥ 1 → 分类 → 议价卡 → 阶段推进 → 交付物 → 追踪链接」，每步截图到 `docs/assets/workstation/kol-e2e-NN.png`，脚本里断言计数确实变了；演练数据从真实漏斗 / 归因里排除，单独显示「演练漏斗」。
 
