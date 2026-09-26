@@ -91,6 +91,8 @@ const SKILL_NAMES = new Set([
   'customer-care',
   'policy-review',
   'returns-policy-calc',
+  // WP154「内容与搜索」
+  'seo-judgment',
   'workspace-basics',
 ])
 

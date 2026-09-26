@@ -1,23 +1,31 @@
-# 51 §2.2 内容与博客（WP63）。
+# 51 §2.2 内容与博客（WP63）→ **内容与搜索**（WP154，Luoye 09-26 定）。
 #
-# 网站运营岗位的第二条职责：博客文章、独立页面（FAQ / 关于 / 活动页）、页面 SEO 元字段。
-# 图片素材向设计岗（待做）下需求单——所以这里没有任何图片写动作。
+# 网站运营岗位的第二条职责：博客与页面内容、SEO 与 AI 搜索可见度（GEO）。
+# SEO 与 GEO **不新建职责**，并进这一条（docs/50 §0 职责按「人」切：中小公司里写内容的人
+# 就是顺手做 SEO 的人）。职责 id 不变（`dtc.content`），岗位名「网站运营」不改。
+# 图片素材向设计岗下需求单——所以这里没有任何图片写动作。
 #
-# 三件事值得说清楚：
+# 五件事值得说清楚：
 #
 # 1. **草稿随便写，发布必须有人点头**（51 §2.2）。这不是靠 `ceiling: L1` 拦的——
 #    那样连草稿都自动不了。是 guardrail 看 `after.published`：`false` 是草稿（L2 自动），
 #    `true` 是"让它出现在店里"（转人审）。同一条 `publish_post`，两种后果。
-# 2. **内容可以引用事实卡，但不能编数字**（19）。`knowledge` 域给了读权限，
-#    grounding 里把「查事实卡」摆成写文之前的必经一步；正文里的价格、参数、政策
-#    必须指得回某一张卡，指不回的由人补。
+# 2. **内容可以引用事实卡，但不能编数字**（19）。发布前有一道质检（WP154 §6）：
+#    事实对得上知识库、数字有出处、没有违规宣称（规则表放知识库，人可改）；
+#    不过就挡在草稿，卡上说明哪句有问题。
 # 3. **每天最多发 2 篇**（51 §2.2 N5 `max_posts_per_day`）。这条额度只算**发布**，
-#    不算草稿——攒十篇草稿不伤人，一天推十篇到店里会把订阅的人推走。
+#    不算草稿——新页面选题批了也照这条分批发，一天推十篇到店里会把订阅的人推走，
+#    也会让一堆页面卡在"已发现、未收录"（文章《how we 47x'd our SEO》的教训）。
+# 4. **SEO 难的是判断，不是写字**。每天早上读一遍 Search Console，只算六个信号，
+#    其余不上卡；每天一张「今天值得动的 5 件事」，**先修再写**（能改现有页面的排前面）。
+#    判断是 `@agentsws/seo-core` 里的规则，数字一个不经模型手；模型只写那句标题、那个小节。
+# 5. **不归我改的交出去**：跳转 / 规范网址 / 没被收录 / llms.txt 与结构化数据 → 建站；
+#    需要站外被提及（Reddit / 论坛 / 新闻稿）→ 公关。开一件事项 + 说明，不越界去改。
 id: dtc.content
-version: 1.0.0
+version: 2.0.0
 domain: dtc
-name: { zh: 内容与博客, en: Content & Blog }
-description: 博客文章、独立页面、页面 SEO 元字段
+name: { zh: 内容与搜索, en: Content & Search }
+description: 博客与页面内容、SEO 与 AI 搜索可见度（GEO）
 
 scopes:
   # 文章与页面正文都在 content 域
@@ -28,16 +36,27 @@ scopes:
   - { domain: store_config, ops: [read], range: assigned, max_sensitivity: internal }
   # 19：内容可以引用事实卡，但不能编数字——所以是 read，不是 stage
   - { domain: knowledge, ops: [read], range: workspace, max_sensitivity: internal }
-  # 近 30 天发布与流量那一块（GSC / GA4 没连就照 36 §3 明说）
+  # 近 30 天发布与流量、六个信号、按页面收入（GSC / GA4 没连就照 36 §3 明说）
   - { domain: analytics, ops: [read], range: assigned, max_sensitivity: internal }
+  # WP154 §4：按页面并排点击 / 订单 / 收入——订单只读（Shopify `landing_site` 归因要它）
+  - { domain: order, ops: [read], range: assigned, max_sensitivity: internal }
   - { domain: approval, ops: [read, approve], range: own, max_sensitivity: internal }
 
 connectors:
   # 51 §1 N0：平台中立的 `shop`（文章与页面住在店铺后台里）
   - { kind: shop, required: true, grants: [read_content, write_content], ownership: workspace }
-  # Search Console：近 30 天发布与流量那一块要它。没连 = 面板上那一块明说"还没连"，
-  # 其余（草稿队列、待发布）照常——所以 `required: false`
-  - { kind: search_console, required: false, grants: [read_analytics], ownership: workspace }
+  # Search Console：**推荐**连（WP154）。没连这条职责照样写文发文，但每天那张
+  # 「今天值得动的 5 件事」与近 30 天流量要靠它——面板与每日卡上明说「接上才看得到」
+  - {
+      kind: search_console,
+      required: false,
+      recommended: true,
+      grants: [read_analytics],
+      ownership: workspace,
+    }
+  # GA4：可选。接了才在「按页面收入」旁边补落地页转化率；没接照样按 Shopify
+  # `landing_site` 算订单与收入
+  - { kind: ga4, required: false, grants: [read_analytics], ownership: workspace }
 
 actions:
   # 博客文章：草稿 L2、发布 L1（分档在 guardrail 的 `after.published`）
@@ -61,6 +80,34 @@ actions:
     requires_record_read: true
     mandate: { caps: {}, window: { max_count: 50, per: day } }
     route_to: scope_manager
+  # ── WP154「内容与搜索」：改现有页面的三种改法（先修再写的那个"修"）──────────
+  #
+  # 为什么不都塞进 `listing_edit`：那样一天改 50 页正文与一天改 50 页标题共用一个额度，
+  # 而它们的风险与节奏不一样。三条各有自己的 kind，额度照 `listing_edit` / `publish_post`
+  # 的写法（`caps` + `window`），**全部出卡**（initial L1），采纳率够了再升 L2。
+  # `before` 都是那一页的原文（改前必读），改错了改得回来。
+  #
+  # 改页面标题 / 搜索结果描述 / H1 / 开头两句：把那个查询原样放进这几处，答案放在头两行
+  - id: stage_page_seo_edit
+    target: content
+    kind: staged_change
+    requires_record_read: true
+    mandate: { caps: { max_page_edits_per_day: 10 }, window: { max_count: 20, per: day } }
+    route_to: scope_manager
+  # 加一个小节（H2 + 一段）：接住这页已经排上、但没真正回答的那组查询
+  - id: stage_page_section_add
+    target: content
+    kind: staged_change
+    requires_record_read: true
+    mandate: { caps: { max_page_edits_per_day: 10 }, window: { max_count: 20, per: day } }
+    route_to: scope_manager
+  # 调整内链：让排得好的那页链一下卡住的那页；一次最多动 5 条链接
+  - id: stage_internal_link_edit
+    target: content
+    kind: staged_change
+    requires_record_read: true
+    mandate: { caps: { max_links_per_change: 5 }, window: { max_count: 20, per: day } }
+    route_to: scope_manager
 
 automation:
   stage_publish_post:
@@ -74,8 +121,41 @@ automation:
     initial: L2
     promotion: { adoption_rate_min: 0.95, window_weeks: 4, min_samples: 20 }
     demotion_triggers: [guardrail_hit, manual]
+  # WP154：三条改页面的动作全部出卡（L1 起步），人连续采纳够多再升 L2
+  stage_page_seo_edit:
+    ceiling: L2
+    initial: L1
+    promotion: { adoption_rate_min: 0.95, window_weeks: 4, min_samples: 20 }
+    demotion_triggers: [guardrail_hit, manual]
+  stage_page_section_add:
+    ceiling: L2
+    initial: L1
+    promotion: { adoption_rate_min: 0.95, window_weeks: 4, min_samples: 20 }
+    demotion_triggers: [guardrail_hit, manual]
+  stage_internal_link_edit:
+    ceiling: L2
+    initial: L1
+    promotion: { adoption_rate_min: 0.95, window_weeks: 4, min_samples: 20 }
+    demotion_triggers: [guardrail_hit, manual]
 
-skills: []
+# WP154：写东西照品牌话术；SEO 判断的规则在 `@agentsws/seo-core`（数不经模型手），
+# 技能包 `seo-judgment` 只管"怎么把那句标题、那个小节写好"
+skills:
+  - { name: brand-voice, tier: open, load: always }
+  - { name: seo-judgment, tier: open, load: on_demand }
+
+# WP154 §2：六个信号的阈值（默认就是文章里那几个数；工作区可改）
+thresholds:
+  seo_position_min: 3
+  seo_position_max: 20
+  seo_no_clicks_impressions: 500
+  # 点击率阈值写成百分数（0.5 = 0.5%）
+  seo_no_clicks_ctr_pct: 0.5
+  seo_decay_pct: 30
+  seo_ai_mode_words: 7
+  # §4：点击至少这么多还没订单 = 漏；点击不超过这么多却出订单 = 宝
+  seo_leak_min_clicks: 100
+  seo_gem_max_clicks: 50
 home_blocks:
   # 51 §2.2 面板：草稿队列、待发布、近 30 天发布与流量
   - {
@@ -106,6 +186,36 @@ home_blocks:
       pinnable: true,
       adaptive: false,
     }
+  # WP154 §3：今天值得动的 5 件事（GSC 没连就明说「接上才看得到」）
+  - {
+      id: seo.today,
+      placement: role_view,
+      component: table,
+      query: seo.today,
+      default_order: 5,
+      pinnable: true,
+      adaptive: false,
+    }
+  # WP154 §4：按页面并排点击 / 订单 / 收入，「点击多没订单」「点击少出订单」单独标
+  - {
+      id: seo.page_revenue,
+      placement: role_view,
+      component: table,
+      query: seo.page_revenue,
+      default_order: 21,
+      pinnable: true,
+      adaptive: false,
+    }
+  # WP154 §5：AI 平台可见度（每周一次；搜索数据接口没接就明说）
+  - {
+      id: seo.geo_visibility,
+      placement: role_view,
+      component: table,
+      query: seo.geo_visibility,
+      default_order: 22,
+      pinnable: true,
+      adaptive: false,
+    }
 notifications:
   - {
       event: 'approval.created:stage_publish_post',
@@ -117,7 +227,7 @@ grounding:
   # 19：写文之前先查事实卡——正文里的价格、参数、政策必须指得回某一张卡
   - {
       name: facts_before_writing,
-      intent_terms: [写文章, 博客, 页面, FAQ, 活动页, blog, article, landing page],
+      intent_terms: [写文章, 博客, 页面, FAQ, 活动页, 小节, 标题, blog, article, landing page, section],
       cue_terms: [价格, 尺寸, 材质, 保修, 退换, 配送, warranty, shipping, return],
       tool: search_policies,
       prefetch: true,
@@ -134,48 +244,58 @@ requires: []
 # task_examples：指导抽屉顶部的"这条职责典型能接什么活"，带"你会拿到什么"。
 
 quick_prompts:
+  - id: today_five
+    label: { zh: "今天值得动的 5 件事", en: "Today's 5 things" }
+    prompt: "把今天那张「值得动的 5 件事」讲给我听：每件是什么信号、证据数字是多少、建议怎么动、归谁动"
+    kind: ask
   - id: draft_post
     label: { zh: "起草一篇博客", en: "Draft a blog post" }
     prompt: "按这个主题起草一篇博客初稿，结尾带一个自然的商品链接"
     kind: start_task
-  - id: seo_gaps
-    label: { zh: "谁缺 SEO 描述", en: "Pages missing SEO fields" }
-    prompt: "哪些页面和文章缺标题或描述，列出来"
+  - id: leaks
+    label: { zh: "哪些页点击多没订单", en: "Pages with clicks but no orders" }
+    prompt: "按页面把点击、订单、收入并排列出来，把「点击多没订单」和「点击少出订单」两类单独标出来"
+    kind: ask
+  - id: ai_visibility
+    label: { zh: "AI 搜索里有没有我们", en: "Are we in AI answers" }
+    prompt: "上周各 AI 平台回答买家问题时，有没有提到我们、引用了哪些站、提到了哪些竞品；缺位的该改哪页还是交公关"
     kind: ask
   - id: review_queue
     label: { zh: "看一遍待发的稿", en: "Review what is queued" }
     prompt: "把等着发的稿子给我看一遍，指出哪些说法没有出处"
     kind: review
-  - id: refresh_old
-    label: { zh: "翻新一篇旧文", en: "Refresh an old post" }
-    prompt: "把这篇一年前的文章按现在的商品和价格更新一遍，改动的地方标出来"
-    kind: start_task
 
 task_examples:
+  - id: fix_before_write
+    title: { zh: "先把排上的页修好", en: "Fix what already ranks" }
+    description: "Search Console 里有一堆词排在第二页，不知道先动哪个。"
+    expected_output: "每天早上一张「今天值得动的 5 件事」：每件带证据数字与建议；能改现有页面的排前面，改标题、加小节、调内链各出一张改动卡等你点。"
   - id: weekly_post
     title: { zh: "每周稳定一篇", en: "One post a week" }
     description: "想每周稳定发一篇和产品相关的文章。"
-    expected_output: "一篇结构完整的初稿，配好标题与描述；发出去永远要你点一下，Agent 自己不发。"
-  - id: seo_cleanup
-    title: { zh: "把元字段补齐", en: "Fill in the missing SEO fields" }
-    description: "店里一堆页面没写 SEO 标题和描述。"
-    expected_output: "一份缺字段清单，外加按页面内容拟好的标题与描述草稿，逐条等你批。"
+    expected_output: "一篇结构完整的初稿，配好标题与描述；发布前自动质检（数字有出处、没有违规宣称），发出去永远要你点一下。"
+  - id: revenue_by_page
+    title: { zh: "哪些文章真带来订单", en: "Which posts bring orders" }
+    description: "文章有点击，但不知道有没有人买。"
+    expected_output: "按页面并排的点击 / 订单 / 收入表，点击多没订单与点击少出订单两类单独标出，每周一张小结。"
 
 # ── WP120（69 §2）：**角色定位**。提示里的「你是谁」，六段骨架一段不许少 ──────────
 # 第三段「你不负责」是防串岗的那一条：69 §0 那条亲测记录（红人岗位回出客服的话）
 # 就是因为提示里从头到尾没有这一句。改这一段之前先读 docs/69。
+# WP154：「怎么做」一段按文章《how we 47x'd our SEO》重写——SEO 难的是判断不是写字、
+# 先修再写、不堆数据。
 persona:
   zh: |
-    你是谁：网站运营岗位里写博客与页面内容的人。
-    你负责：博客文章、独立页面、页面 SEO 元字段。
-    你不负责：改价与促销→店铺管理；群发邮件→邮件营销；网页模板与样式→建站；客户问题→客服；社媒发帖→社媒运营。
-    怎么做：写之前先查知识库里的事实卡，产品说法与政策只引查得到的那一条；查不到就把那句去掉，别编一个参数。
-    口气：像给人讲清楚一件事的人，不堆形容词，不写标题党。
-    必须出卡：发布文章与页面、改 SEO 元字段。
+    你是谁：网站运营岗位里管内容与搜索的人。
+    你负责：博客与页面、标题与开头、小节、内链；每日搜索判断、按页看收入、AI 可见度。
+    你不负责：改价与促销→店铺管理；群发邮件→邮件营销；模板、跳转收录与结构化数据→建站；站外提及→公关；客户问题→客服；社媒发帖→社媒运营。
+    怎么做：SEO 难在判断不在写字。只看六个信号，不堆数据；先修再写，新写前先看谁排在前面；点击也看订单。数字只引事实卡，查不到就删。
+    口气：讲清一件事，不堆形容词，不用绝对化词。
+    必须出卡：发布文章与页面、改标题与开头、加小节、调内链、新页面选题。
   en: |
-    Who you are: the person who writes blog posts and page content, inside the web-operations position.
-    You handle: blog articles, standalone pages, on-page SEO fields.
-    Not yours: prices and promotions → the Store duty; email sends → the Email Marketing duty; templates and styling → Site Building; customer questions → Customer Care; social posts → Social Media.
-    How you work: search the knowledge base first. Product claims and policy statements may only cite a fact card you actually found; if you cannot find one, cut the sentence — never invent a spec.
-    Tone: like someone explaining one thing clearly — no piles of adjectives, no clickbait.
-    Always ask: publishing an article or page, and editing SEO fields.
+    Who you are: the person in web operations who owns content and search.
+    You handle: posts and pages, titles and openings, sections, internal links; the daily Search Console read, revenue by page, visibility in AI answers.
+    Not yours: prices and promotions → the Store duty; email sends → the Email Marketing duty; templates, redirects, indexing and structured data → Site Building; off-site mentions → PR; customer questions → Customer Care; social posts → Social Media.
+    How you work: SEO is judgment, not writing. Watch only the six signals, never dump data; fix before you write, and check who ranks before writing a new page; look at orders, not just clicks. Numbers may only cite a fact card — if you cannot find one, cut the sentence.
+    Tone: explain one thing clearly — no piles of adjectives, no absolute claims.
+    Always ask: publishing posts or pages, editing titles and openings, adding sections, changing internal links, new-page topics.

@@ -524,11 +524,11 @@ async function seedCardGallery(world: World): Promise<void> {
     ...routed(at('dtc.store')), // 路由拿不准的那件事是店铺管理引出来的
     dedupe_key: `gallery_ai_question:${world.workspace_id}:1`,
     title: '这件事像两条职责，你定',
-    summary: '命中「改价 · 商品」的是店铺管理，命中「页面 · 文案」的是内容与博客。',
+    summary: '命中「改价 · 商品」的是店铺管理，命中「页面 · 文案」的是内容与搜索。',
     payload: {
       options: [
         { id: 'store', label: '店铺管理 · 命中 改价 · 商品' },
-        { id: 'content', label: '内容与博客 · 命中 页面 · 文案' },
+        { id: 'content', label: '内容与搜索 · 命中 页面 · 文案' },
       ],
     },
   })

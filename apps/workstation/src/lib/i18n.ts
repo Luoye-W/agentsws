@@ -2564,7 +2564,8 @@ const zh: Table = {
   // WP151：与运行失败原因同一句（账号路引到账号的充值页，不说"开放平台"——免得 API key 用户充错地方）
   'dsa.err.balance': 'DeepSeek 账号余额不足，充值后再让它接着做。',
   'dsa.quota': 'DeepSeek 账号余额不足，充值后再让它接着做。',
-  'models.quota.api': 'DeepSeek API 余额不足。用建这把 key 的那个 DeepSeek 账号登录开放平台，充值后再试。',
+  'models.quota.api':
+    'DeepSeek API 余额不足。用建这把 key 的那个 DeepSeek 账号登录开放平台，充值后再试。',
   'models.quota.top_up': '去充值',
   'models.quota.chip': 'DeepSeek 余额不足',
   // WP150：登录失效自动登出并提示；登出前确认并停掉正在用账号跑的事
@@ -2714,6 +2715,7 @@ const zh: Table = {
   'skill.name.audience-research': '受众研究',
   'skill.name.brand-system': '品牌视觉规范',
   'skill.name.brand-voice': '品牌话术',
+  'skill.name.seo-judgment': 'SEO 判断',
   'skill.name.chargeback-evidence': '拒付举证',
   'skill.name.customer-care': '客服手册',
   'skill.name.policy-review': '政策核对',
@@ -5488,6 +5490,7 @@ const en: Table = {
   'skill.name.audience-research': 'Audience research',
   'skill.name.brand-system': 'Brand visual system',
   'skill.name.brand-voice': 'Brand voice',
+  'skill.name.seo-judgment': 'SEO judgment',
   'skill.name.chargeback-evidence': 'Chargeback evidence',
   'skill.name.customer-care': 'Customer care playbook',
   'skill.name.policy-review': 'Policy check',
