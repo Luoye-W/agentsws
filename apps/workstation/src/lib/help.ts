@@ -22,6 +22,15 @@ export const HELP_SLUGS = [
   'browser',
   'computer-use',
   'search-data',
+  // WP157：连接页（每类连接一篇，能合并的合并）
+  'conn-shopify',
+  'conn-email',
+  'conn-google',
+  'conn-meta',
+  'conn-tiktok',
+  'conn-x',
+  'conn-community',
+  'conn-marketing-logistics',
 ] as const
 
 export type HelpSlug = (typeof HELP_SLUGS)[number]
@@ -58,6 +67,42 @@ export const HELP_BY_VENDOR: Readonly<Record<string, HelpSlug>> = {
   openai: 'model-openai',
   anthropic: 'model-anthropic',
   'agentsws-cloud': 'agentsws-credits',
+}
+
+/**
+ * WP157：连接页的 provider 卡（`ProviderView.service`）→ 哪一篇教程。
+ *
+ * 服务端连接目录（`apps/server/src/catalog.ts`）的 `setup_guide` 里的步骤、成段介绍与外链
+ * 全在这些文章里（服务端测试 `help-tutorials.test.ts` 盯着外链不丢，那边有同一份对照）。
+ * 没列在这里的（将来新加的、第三方的）卡：步骤与外链在「看教程」的对话框里现拼（`templateGuide`）。
+ */
+export const HELP_BY_SERVICE: Readonly<Record<string, HelpSlug>> = {
+  shopify_admin: 'conn-shopify',
+  imap_smtp: 'conn-email',
+  gmail: 'conn-google',
+  ga4: 'conn-google',
+  gsc: 'conn-google',
+  youtube_data: 'conn-google',
+  google_ads: 'conn-google',
+  google_alerts: 'conn-google',
+  meta_ads: 'conn-meta',
+  instagram_graph: 'conn-meta',
+  facebook_graph: 'conn-meta',
+  meta_graph: 'conn-meta',
+  meta_marketing: 'conn-meta',
+  whatsapp_business: 'conn-meta',
+  tiktok_research: 'conn-tiktok',
+  tiktok_content: 'conn-tiktok',
+  tiktok_ads: 'conn-tiktok',
+  x_api: 'conn-x',
+  x_ads: 'conn-x',
+  reddit: 'conn-community',
+  discord_bot: 'conn-community',
+  telegram_bot: 'conn-community',
+  klaviyo: 'conn-marketing-logistics',
+  shopify_email: 'conn-marketing-logistics',
+  aftership: 'conn-marketing-logistics',
+  track17: 'conn-marketing-logistics',
 }
 
 /**
