@@ -136,6 +136,23 @@ export interface ModelProviderView {
   vision_status?: ModelVisionStatus
   /** 这一条是环境变量给的（`DEEPSEEK_API_KEY`），界面上不给删。 */
   from_env?: boolean
+  /**
+   * WP151：DeepSeek 说**余额不足**（推理口 402，判定照官方 0.1.7-rc.2）。模型卡与顶栏据此出一行
+   * 醒目提示 +「去充值」：账号那一条引到官方账号模块的 `links.topUpUrl`，API key 那一条引到开放平台的
+   * 充值页（官方：账号路的充值不出现在 API key 的失败上，免得充错地方）。之后一次调用成功、或账号余额
+   * 刷新回来有钱了，这一格就没了。不是登录失效：`active` / 登录状态都不变。
+   */
+  quota_exceeded?: DeepSeekQuotaView
+}
+
+/** WP151：DeepSeek 余额不足那一行提示（人话 + 去哪充值）。 */
+export interface DeepSeekQuotaView {
+  /** 什么时候撞上的（ISO8601）。 */
+  at: string
+  /** 人话：账号路"DeepSeek 账号余额不足，充值后再让它接着做"，API key 路"DeepSeek API 余额不足，去开放平台充值后再试"。 */
+  message: string
+  /** 「去充值」打开的地址（不带任何令牌）。 */
+  top_up_url: string
 }
 
 /**
@@ -330,6 +347,12 @@ export interface DeepSeekAccountView {
    * 只在登录着、且确实有在跑的时候给。
    */
   running_tasks?: DeepSeekAccountTaskView[]
+  /**
+   * WP151：DeepSeek 说这个账号**余额不足**（推理口 402）。卡片上出一行醒目提示 +「去充值」
+   * （`top_up_url`，官方 `links.topUpUrl`）；余额刷新回来有钱了、或一次调用成功，就没有这一格。
+   * 不是登录失效：`signed_in` 不变。
+   */
+  quota_exceeded?: { at: string; message: string }
 }
 
 /** WP150：一件正在用 DeepSeek 账号跑的事（事项名是人话；没有模型输入、没有令牌）。 */
