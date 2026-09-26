@@ -23,6 +23,7 @@ import {
 } from '@/components/models/deepseek-account-login'
 import { ModelsPanel } from '@/components/models/models-panel'
 import { NoModelBanner } from '@/components/models/no-model-banner'
+import { QuotaChip } from '@/components/models/quota-notice'
 import { AiStep } from '@/components/onboarding/ai-step'
 import type {
   DeepSeekAccountData,
@@ -31,6 +32,7 @@ import type {
   ModelTestResult,
 } from '@/lib/api'
 import { AppProvider } from '@/lib/app-context'
+import { translate } from '@/lib/i18n'
 import { keysFor } from '@/lib/realtime'
 import { renderWithProviders } from './helpers'
 
@@ -524,5 +526,102 @@ describe('WP150 登出前确认并停任务', () => {
     })
     expect(globalThis.confirm).toHaveBeenCalledTimes(1)
     expect(screen.queryByTestId('dsa-sign-out-tasks')).toBeNull()
+  })
+})
+
+// ── WP151 ─────────────────────────────────────────────────────────────
+
+/** 替身账号模块给的充值页（故意和开放平台的不一样，才看得出去的是哪一个）。 */
+const ACCOUNT_TOP_UP = 'https://platform.deepseek.stand-in/top_up'
+const PLATFORM_TOP_UP = 'https://platform.deepseek.com/top_up'
+const ACCOUNT_QUOTA = 'DeepSeek 账号余额不足，充值后再让它接着做。'
+const API_QUOTA = 'DeepSeek API 余额不足，去开放平台充值后再试。'
+
+describe('WP151 余额不足：一行醒目提示 +「去充值」，账号与 API key 各去各的充值页', () => {
+  it('账号路：卡片与顶栏出提示，「去充值」打开账号的充值页；登录不变；余额刷新回来提示自己收', async () => {
+    const user = userEvent.setup()
+    state.view = {
+      ...SIGNED_IN,
+      top_up_url: ACCOUNT_TOP_UP,
+      balance: { status: 'ready', wallets: [{ currency: 'CNY', balance: '0.00' }], bonus: [] },
+      quota_exceeded: { at: T0, message: ACCOUNT_QUOTA },
+    }
+    state.providers = [
+      {
+        ...ACCOUNT_ROW,
+        last_test: OK_TEST,
+        quota_exceeded: { at: T0, message: ACCOUNT_QUOTA, top_up_url: ACCOUNT_TOP_UP },
+      },
+    ]
+    const { client } = renderWithClient(
+      <>
+        <QuotaChip />
+        <DeepSeekAccountLogin />
+      </>,
+    )
+    const notice = await screen.findByTestId('model-quota')
+    expect(notice.getAttribute('role')).toBe('alert')
+    expect(notice.getAttribute('data-route')).toBe('account')
+    expect(notice.textContent).toContain(ACCOUNT_QUOTA)
+    expect((await screen.findByTestId('quota-chip')).textContent).toContain('DeepSeek 余额不足')
+    // 不是失效：还是"已登录"，没有"登录过期了"；底下那个普通的「去充值」不重复出
+    expect(screen.getByTestId('dsa-signed-in')).toBeTruthy()
+    expect(screen.queryByTestId('dsa-expired')).toBeNull()
+    expect(screen.queryByTestId('dsa-top-up')).toBeNull()
+    await user.click(within(notice).getByTestId('model-quota-top-up'))
+    expect(opened).toEqual([ACCOUNT_TOP_UP])
+
+    // 充上了：余额刷新回来（服务端不再给那一格）→ 卡片提示收了 → 顶栏胶囊跟着收
+    state.view = { ...SIGNED_IN, top_up_url: ACCOUNT_TOP_UP }
+    state.providers = [{ ...ACCOUNT_ROW, last_test: OK_TEST }]
+    await client.invalidateQueries({ queryKey: ['deepseek-account'] })
+    await waitFor(() => {
+      expect(screen.queryByTestId('model-quota')).toBeNull()
+    })
+    await waitFor(() => {
+      expect(screen.queryByTestId('quota-chip')).toBeNull()
+    })
+    expect(screen.getByTestId('dsa-top-up')).toBeTruthy()
+  })
+
+  it('API key 路：模型卡那一行说"去开放平台充值"，「去充值」打开开放平台的充值页', async () => {
+    const user = userEvent.setup()
+    state.providers = [
+      {
+        id: 'deepseek',
+        kind: 'deepseek',
+        label: 'DeepSeek 官方',
+        base_url: 'https://api.deepseek.com',
+        model: 'deepseek-flash',
+        region: 'cn',
+        has_key: true,
+        active: true,
+        quota_exceeded: { at: T0, message: API_QUOTA, top_up_url: PLATFORM_TOP_UP },
+      } as ModelProviderView,
+    ]
+    renderWithProviders(<ModelsPanel />)
+    const notice = await screen.findByTestId('model-quota')
+    expect(notice.getAttribute('data-route')).toBe('api_key')
+    expect(notice.textContent).toContain(API_QUOTA)
+    await user.click(within(notice).getByTestId('model-quota-top-up'))
+    expect(opened).toEqual([PLATFORM_TOP_UP])
+  })
+
+  it('三步验证第 ② 步撞上余额不足：和运行里同一句；运行跑完 / 没跑成都刷新那一行', () => {
+    expect(
+      accountTestKey({
+        ok: false,
+        checked_at: T0,
+        reason: 'provider_error',
+        detail: ACCOUNT_QUOTA,
+      }),
+    ).toBe('dsa.err.balance')
+    expect(translate('zh', 'dsa.err.balance')).toBe(ACCOUNT_QUOTA)
+    expect(translate('zh', 'dsa.quota')).toBe(ACCOUNT_QUOTA)
+    expect(translate('zh', 'models.quota.api')).toBe(API_QUOTA)
+    expect(keysFor('run.failed')).toEqual(
+      expect.arrayContaining([['model-providers'], ['deepseek-account']]),
+    )
+    expect(keysFor('run.completed')).toEqual(expect.arrayContaining([['model-providers']]))
   })
 })
