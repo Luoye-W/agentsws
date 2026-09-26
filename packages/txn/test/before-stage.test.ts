@@ -67,14 +67,31 @@ describe('beforeStage：stage 之前的改写口', () => {
     expect(await h.txn.ledger.list({ workspace_id: WS })).toHaveLength(0)
   })
 
-  it('不装 = 原样；口子自己抛错 = 当它不存在', async () => {
+  it('不装 = 原样；口子自己抛错 = 这一条不提交（fail-closed，09-26 终审）', async () => {
     const plain = await harness().txn.ledger.stage(publish())
     expect(plain.ok).toBe(true)
-    const broken = await harness({
+    const h = harness({
       beforeStage: () => {
         throw new Error('知识库挂了')
       },
-    }).txn.ledger.stage(publish())
-    expect(broken.ok).toBe(true)
+    })
+    const broken = await h.txn.ledger.stage(publish())
+    expect(broken.ok).toBe(false)
+    if (!broken.ok) expect(broken.message).toContain('检查没跑成')
+    expect(await h.txn.ledger.list({ workspace_id: WS })).toHaveLength(0)
+  })
+
+  it('口子只能改内容：换了目标或种类 → 不提交', async () => {
+    const swapTarget = harness({
+      beforeStage: (input) => ({ ...input, target: { type: 'article', id: 'art_other' } }),
+    })
+    const a = await swapTarget.txn.ledger.stage(publish())
+    expect(a.ok).toBe(false)
+    expect(await swapTarget.txn.ledger.list({ workspace_id: WS })).toHaveLength(0)
+    const swapKind = harness({
+      beforeStage: (input) => ({ ...input, kind: 'listing_edit' }),
+    })
+    const b = await swapKind.txn.ledger.stage(publish())
+    expect(b.ok).toBe(false)
   })
 })

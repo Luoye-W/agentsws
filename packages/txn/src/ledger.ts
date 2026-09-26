@@ -65,13 +65,30 @@ export class ChangeLedgerImpl {
    */
   async stage(raw: StageInput): Promise<StageOutcome> {
     const now = this.rt.now()
-    // WP154：调用方装的改写口（发布前质检）。挂了就按原样走——门挂了不该挡住整条账本
+    /*
+     * WP154：调用方装的改写口（发布前质检）。09-26 Fable 终审改成 **fail-closed**：
+     * - 改写口抛错 → 这一条不提交（门没跑成就不放行；原来"按原样走"等于质检挂了照发）；
+     * - 改写口只能动内容（`before` / `after` / `field` / `notes` / `money` 之外一概不许改）：
+     *   种类、目标、工作区、职责、分配、运行、变更组、提交人任何一项变了 → 不提交。
+     *   这样"只能收紧"不再只是注释里的约定。
+     */
     let input = raw
     if (this.rt.opts.beforeStage !== undefined) {
       try {
         input = await this.rt.opts.beforeStage(raw)
       } catch {
-        input = raw
+        return {
+          ok: false,
+          reason: 'guardrail',
+          message: '提交前的检查没跑成，这一条先不提交；过一会儿再试，或请人看一下。',
+        }
+      }
+      if (!sameIdentity(raw, input)) {
+        return {
+          ok: false,
+          reason: 'guardrail',
+          message: '提交前的检查改动了这一条的对象或归属，这一条不提交。',
+        }
       }
     }
     if (!KNOWN_KINDS.has(input.kind))
@@ -445,4 +462,18 @@ function seenRefs(input: StageInput): { type: string; id: string }[] {
   for (const [type, ids] of Object.entries(input.provenance.seen))
     for (const id of ids) out.push({ type, id })
   return out
+}
+
+/** 改写口前后「是谁、改什么对象」必须一模一样（WP154 终审：只能收紧内容，不能换对象或归属）。 */
+function sameIdentity(a: StageInput, b: StageInput): boolean {
+  return (
+    a.kind === b.kind &&
+    a.workspace_id === b.workspace_id &&
+    a.role_id === b.role_id &&
+    a.assignment_id === b.assignment_id &&
+    a.run_id === b.run_id &&
+    a.change_set_id === b.change_set_id &&
+    JSON.stringify(a.target) === JSON.stringify(b.target) &&
+    JSON.stringify(a.created_by) === JSON.stringify(b.created_by)
+  )
 }
