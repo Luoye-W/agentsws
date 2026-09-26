@@ -66,7 +66,7 @@ const ANALYTICS_ROLE = `
 id: dtc.analytics
 version: 1.0.0
 domain: dtc
-name: { zh: 独立站运营, en: DTC Operations }
+name: { zh: 经营数据, en: Store Analytics }
 description: 店铺销售、流量与转化的日常盯盘（只读）
 scopes:
   - { domain: order, ops: [read], range: assigned, max_sensitivity: internal }
