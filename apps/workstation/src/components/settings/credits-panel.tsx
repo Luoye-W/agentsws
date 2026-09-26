@@ -30,7 +30,7 @@ import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Hint } from '@/components/ui/hint'
+import { Hint, SafetyNote } from '@/components/ui/hint'
 import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { PricingEntry, TopupTierView, UsageReportView } from '@/lib/api'
@@ -212,7 +212,11 @@ export function CreditsPanel({ assignment }: { assignment?: string }): React.Rea
             </div>
 
             {/* ② 付费三块：还没花钱，所以每块说的是「怎么收、最低多少」 */}
-            <section className="flex flex-col gap-1.5" data-testid="credits-blocks">
+            <section
+              className="flex flex-col gap-1.5"
+              data-slot="data"
+              data-testid="credits-blocks"
+            >
               <h4 className="text-xs font-medium text-muted-foreground">
                 {t('credits.blocks.price')}
               </h4>
@@ -266,14 +270,22 @@ export function CreditsPanel({ assignment }: { assignment?: string }): React.Rea
         ) : (
           <>
             {/* ① 余额：两类分开 */}
-            <section className="grid grid-cols-3 gap-2" data-testid="credits-balance">
+            <section
+              className="grid grid-cols-3 gap-2"
+              data-slot="data"
+              data-testid="credits-balance"
+            >
               <Figure label={t('credits.available')} value={num(balance.available)} strong />
               <Figure label={t('credits.purchased')} value={num(balance.purchased)} />
               <Figure label={t('credits.granted')} value={num(balance.granted)} />
             </section>
 
             {/* ② 这个月钱花在哪：付费三块各一张小卡（67 §1） */}
-            <section className="flex flex-col gap-1.5" data-testid="credits-blocks">
+            <section
+              className="flex flex-col gap-1.5"
+              data-slot="data"
+              data-testid="credits-blocks"
+            >
               <h4 className="text-xs font-medium text-muted-foreground">{t('credits.blocks')}</h4>
               <div className="grid grid-cols-3 gap-2">
                 {BLOCKS.map((b) => {
@@ -301,7 +313,7 @@ export function CreditsPanel({ assignment }: { assignment?: string }): React.Rea
               </div>
             </section>
 
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2" data-slot="status">
               <span className="text-[11px] text-muted-foreground">
                 {t('credits.month', { n: num(credits.data?.month_credits ?? 0) })}
               </span>
@@ -317,7 +329,11 @@ export function CreditsPanel({ assignment }: { assignment?: string }): React.Rea
 
             {/* ② 即将过期 */}
             {balance.expiring.length === 0 ? null : (
-              <section className="flex flex-col gap-1" data-testid="credits-expiring">
+              <section
+                className="flex flex-col gap-1"
+                data-slot="data"
+                data-testid="credits-expiring"
+              >
                 <h4 className="text-xs font-medium text-muted-foreground">
                   {t('credits.expiring')}
                 </h4>
@@ -335,7 +351,7 @@ export function CreditsPanel({ assignment }: { assignment?: string }): React.Rea
             <Separator />
 
             {/* ③ 用量明细 */}
-            <section className="flex flex-col gap-2" data-testid="credits-usage">
+            <section className="flex flex-col gap-2" data-slot="data" data-testid="credits-usage">
               <div className="flex items-center justify-between gap-2">
                 <h4 className="text-xs font-medium text-muted-foreground">{t('credits.usage')}</h4>
                 <div className="flex gap-1">
@@ -471,11 +487,13 @@ export function CreditsPanel({ assignment }: { assignment?: string }): React.Rea
           ) : null}
         </section>
 
-        <p className="text-[11px] text-muted-foreground">
-          {t('credits.scope_note')}{' '}
+        {/* WP156：「谁看得到多少」进问号；「每项能力用谁的」是一个去处，留一行链接 */}
+        <p className="flex items-center gap-1 text-[11px] text-muted-foreground">
+          {t('credits.sources')}
           <Link to="/connections" className="text-primary underline-offset-4 hover:underline">
             {t('nav.connections')}
           </Link>
+          <Hint text={t('credits.scope_note')} testId="credits-scope-hint" />
         </p>
       </CardContent>
     </Card>
@@ -506,8 +524,12 @@ function TierCards({
     <section className="flex flex-col gap-2" data-testid="credits-tiers" data-linked={linked}>
       <div className="flex items-baseline justify-between gap-2">
         <h4 className="text-xs font-medium text-muted-foreground">{t('credits.tiers')}</h4>
-        <span className="text-[11px] text-muted-foreground">{t('credits.tiers.note')}</span>
+        <span className="text-[11px] text-muted-foreground" data-slot="status">
+          {t('credits.tiers.note')}
+        </span>
       </div>
+      {/* 付款去哪、卡号谁碰：安全承诺，一行 + 盾牌（WP156） */}
+      <SafetyNote text={t('credits.tiers.safety')} />
       {pending ? (
         <Skeleton className="h-20 w-full" />
       ) : (

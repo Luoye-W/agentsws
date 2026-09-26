@@ -67,7 +67,11 @@ export function ImageModelSection({ assignment }: { assignment?: string }): Reac
         <Hint text={t('models.image.hint')} />
       </h4>
       {data.credits_per_image === undefined ? null : (
-        <p className="text-[11px] text-muted-foreground" data-testid="models-image-price">
+        <p
+          className="text-[11px] text-muted-foreground"
+          data-slot="status"
+          data-testid="models-image-price"
+        >
           {t('models.image.price', { credits: data.credits_per_image })}
         </p>
       )}
@@ -126,7 +130,9 @@ export function ImageModelSection({ assignment }: { assignment?: string }): Reac
         </div>
       )}
       {provider === '' || official ? null : (
-        <p className="text-[11px] text-muted-foreground">{t('models.image.own_price')}</p>
+        <p className="text-[11px] text-muted-foreground" data-slot="status">
+          {t('models.image.own_price')}
+        </p>
       )}
       {/* 那句人话只在"现在选的就是服务端存着的那一份"时说——正在改的时候不唠叨 */}
       {data.unavailable_reason === undefined ||

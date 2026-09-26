@@ -506,15 +506,22 @@ describe('WP25 §C 模型面板：填 key（零泄漏）', () => {
 })
 
 describe('WP25 §C 模型面板：模板与预设', () => {
-  it('一个都没配时给一句人话，每张模板卡各带 ≤ 5 步说明与外链', async () => {
+  it('一个都没配时给一句人话；每张模板卡不铺步骤与外链，点「看教程」照样看得到（WP156）', async () => {
     renderWithProviders(<ModelsPanel assignment="asg_owner" />)
     expect((await screen.findByTestId('models-empty')).textContent).toContain('还一个都没配')
     const cards = await screen.findAllByTestId('model-template')
     expect(cards).toHaveLength(state.templates.length)
     for (const card of cards) {
-      expect(within(card).getAllByRole('listitem').length).toBeLessThanOrEqual(5)
-      expect(within(card).getAllByRole('link').length).toBeGreaterThan(0)
+      expect(within(card).queryAllByRole('listitem')).toHaveLength(0)
+      expect(within(card).queryAllByRole('link')).toHaveLength(0)
+      expect(within(card).getByTestId('tutorial-link')).toBeTruthy()
     }
+    // 这几张夹具没挂 vendor（像第三方加的模板）：「看教程」在对话框里排出它自带的步骤与外链
+    fireEvent.click(within(cards[0] as HTMLElement).getByTestId('tutorial-link'))
+    const dialog = await screen.findByRole('dialog')
+    const article = await within(dialog).findByTestId('help-article')
+    expect(within(article).getAllByRole('listitem').length).toBeGreaterThanOrEqual(5)
+    expect(within(article).getByRole('link', { name: 'DeepSeek 开放平台' })).toBeTruthy()
   })
 
   it('自定义那张的预设点一下就把地址和模型名填好', async () => {

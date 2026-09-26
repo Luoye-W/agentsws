@@ -207,13 +207,17 @@ describe('WP152 设置页「加一个」：DeepSeek 一张卡，二选一', () =
     expect(screen.queryByTestId('model-deepseek-account-card')).toBeNull()
   })
 
-  it('切到「官方 API 接口连接」：原 key 卡的步骤与「填 API key」表单', async () => {
+  it('切到「官方 API 接口连接」：「填 API key」表单；步骤在教程「接 DeepSeek」里', async () => {
     const user = userEvent.setup()
     renderWithProviders(<ModelsPanel />)
     const card = await deepseekCard()
     await user.click(within(card).getByText('官方 API 接口连接'))
     expect(card.getAttribute('data-kind')).toBe('deepseek')
-    expect(card.textContent).toContain('创建 API key')
+    // WP156：卡面上不再铺步骤，一个「看教程」
+    expect(card.textContent).not.toContain('创建 API key')
+    expect(within(card).getByTestId('tutorial-link').getAttribute('data-slug')).toBe(
+      'model-deepseek',
+    )
     expect(within(card).queryByTestId('dsa')).toBeNull()
     await user.click(within(card).getByText('填 API key'))
     expect(within(card).getByTestId('model-form')).toBeTruthy()
@@ -305,7 +309,11 @@ describe('WP152 向导第 ① 步：「DeepSeek 官方」一张大卡，内部�
     const card = screen.getByTestId('ai-card-account')
     expect(within(card).queryByTestId('dsa')).toBeNull()
     expect(within(card).getByTestId('ai-ds-api-hint')).toBeTruthy()
-    expect(card.textContent).toContain('创建 API key')
+    // WP156：开放平台那几步搬进了教程「接 DeepSeek」
+    expect(card.textContent).not.toContain('创建 API key')
+    expect(within(card).getByTestId('tutorial-link').getAttribute('data-slug')).toBe(
+      'model-deepseek',
+    )
     const form = within(card).getByTestId('model-form')
     await user.type(within(form).getByLabelText('API key'), 'sk-wp152-test-only')
     await user.click(within(form).getByRole('button', { name: '保存' }))

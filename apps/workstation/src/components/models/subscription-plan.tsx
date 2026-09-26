@@ -22,6 +22,7 @@ import { CheckCircle2, ExternalLink, Loader2, LogOut, TriangleAlert } from 'luci
 import { useState } from 'react'
 import { openExternal } from '@/components/connections/bridge'
 import { Button } from '@/components/ui/button'
+import { Hint } from '@/components/ui/hint'
 import type { SubscriptionData, SubscriptionMethod, SubscriptionProviderId } from '@/lib/api'
 import {
   answerModelSubscriptionLogin,
@@ -116,13 +117,18 @@ export function SubscriptionPlan({
       data-testid="subscription-plan"
       data-provider={provider}
     >
-      {/* 风险提示：登没登录都在，文案来自服务端 */}
+      {/*
+        风险提示：登没登录都在。WP156（36 §7）：卡上压成一句（可见），服务端给的整段原话在问号里——
+        一个字没丢，也不再在卡上铺两行。
+      */}
       <p
-        className="flex items-start gap-1.5 rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-1.5 text-[11px] leading-relaxed"
+        className="flex items-center gap-1.5 rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-1.5 text-[11px] leading-relaxed"
+        data-slot="warning"
         data-testid="subscription-risk"
       >
-        <TriangleAlert className="mt-0.5 size-3.5 shrink-0 text-amber-600" aria-hidden />
-        <span>{data.risk_note}</span>
+        <TriangleAlert className="size-3.5 shrink-0 text-amber-600" aria-hidden />
+        <span>{t('models.subscription.risk')}</span>
+        <Hint text={data.risk_note} testId="subscription-risk-full" />
       </p>
 
       {error === null ? null : (
