@@ -60,6 +60,19 @@ export const HELP_BY_VENDOR: Readonly<Record<string, HelpSlug>> = {
   'agentsws-cloud': 'agentsws-credits',
 }
 
+/**
+ * 没写成教程文章的模板（第三方应用包加的），把它自带的步骤与外链拼成一小篇，
+ * 在「看教程」的对话框里排出来——卡面上不铺，信息也一条不丢。
+ */
+export function templateGuide(plan: {
+  steps: readonly string[]
+  links: readonly { label: string; url: string }[]
+}): string {
+  const steps = plan.steps.map((step, i) => `${String(i + 1)}. ${step}`)
+  const links = plan.links.map((link) => `- [${link.label}](${link.url})`)
+  return [...steps, '', ...links].join('\n')
+}
+
 /** 懒加载：键是相对这个文件的路径，值是一个回原文的函数。 */
 const ARTICLES = import.meta.glob('../../../../docs/help/*.md', {
   query: '?raw',

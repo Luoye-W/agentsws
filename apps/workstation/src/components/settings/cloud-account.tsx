@@ -14,8 +14,10 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Cloud } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
+import { TutorialLink } from '@/components/help/tutorial-link'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Hint } from '@/components/ui/hint'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
@@ -109,6 +111,7 @@ export function CloudAccountCard({ assignment }: { assignment?: string }): React
         <CardTitle className="flex items-center gap-1.5 text-sm">
           <Cloud className="size-4" />
           {t('cloud.account.title')}
+          <TutorialLink slug="agentsws-credits" className="ml-auto font-normal" />
         </CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-3 text-sm">
@@ -142,7 +145,11 @@ export function CloudAccountCard({ assignment }: { assignment?: string }): React
           </div>
         ) : (
           <div className="flex flex-col gap-3" data-testid="cloud-account-unlinked">
-            <p className="text-muted-foreground">{t('cloud.account.intro')}</p>
+            {/* WP156：一句话留着，"不关联也照常用、一分不扣"那半句进问号 */}
+            <p className="flex items-center gap-1 text-muted-foreground">
+              {t('cloud.account.intro')}
+              <Hint text={t('cloud.account.intro.hint')} />
+            </p>
             <div className="flex items-center gap-2">
               <Input
                 type="email"
@@ -168,12 +175,18 @@ export function CloudAccountCard({ assignment }: { assignment?: string }): React
               </Button>
             </div>
             {sent ? (
-              <p className="text-muted-foreground" data-testid="cloud-account-sent">
+              <p
+                className="text-muted-foreground"
+                data-slot="status"
+                data-testid="cloud-account-sent"
+              >
                 {t('cloud.account.sent')}
               </p>
             ) : null}
             {view.blocked_reason === undefined ? null : (
-              <p className="text-muted-foreground">{view.blocked_reason}</p>
+              <p className="text-muted-foreground" data-slot="status">
+                {view.blocked_reason}
+              </p>
             )}
           </div>
         )}
@@ -183,7 +196,7 @@ export function CloudAccountCard({ assignment }: { assignment?: string }): React
           </p>
         )}
         {view === undefined ? null : (
-          <p className="text-xs text-muted-foreground">
+          <p className="text-xs text-muted-foreground" data-slot="status">
             {t('cloud.account.endpoint')} <span className="font-mono">{view.cloud_base_url}</span>
           </p>
         )}

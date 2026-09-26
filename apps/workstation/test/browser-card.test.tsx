@@ -112,10 +112,13 @@ describe('设置页浏览器：两种方式并列', () => {
     // 选中之前不出向导
     expect(screen.queryByTestId('browserskill-wizard')).toBeNull()
 
+    // WP156：白话那一句进了这一项旁边的问号；「两种的区别」整段在教程「让 AI 用浏览器」里
+    expect(bsk.querySelector('[data-slot="hint"]')?.getAttribute('data-hint')).toContain(
+      '要用你已经开着的标签会先问你',
+    )
+    expect(screen.getByTestId('tutorial-link').getAttribute('data-slug')).toBe('browser')
     await userEvent.click(bsk.querySelector('input') as HTMLInputElement)
-    const wizard = await screen.findByTestId('browserskill-wizard')
-    expect(wizard.textContent).toContain('不碰你日常的登录')
-    expect(wizard.textContent).toContain('动你已开的标签会先问你')
+    expect(await screen.findByTestId('browserskill-wizard')).toBeTruthy()
   })
 
   it('三步向导：官方商店链接 → 一键装 bsk → 检查把 doctor 那几条原样列出来', async () => {

@@ -9,6 +9,9 @@
  * 2. 哪几条职责可以——默认一条都不勾；
  * 3. 每次运行第一次要动电脑时的授权卡——在牌堆里批，不在这里。
  *
+ * WP156（36 §7）：卡上只留名字、一句说明、一行安全承诺（完整的风险说明进开关旁的问号）、
+ * 开关与三步的按钮；每步的说明进问号，来龙去脉进教程「让 AI 操作这台电脑」。
+ *
  * 打开后出三步向导（照 WP92 的浏览器向导）：① 下载驱动（钉版本 + sha256）② 授权系统权限
  * （打开系统设置那一页，不替用户点）③ 自检（驱动 `check_permissions`，`prompt: false`），
  * 结果原样列出 + 怎么修。
@@ -16,9 +19,10 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Check, Loader2, Monitor, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
+import { TutorialLink } from '@/components/help/tutorial-link'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Hint } from '@/components/ui/hint'
+import { Hint, SafetyNote } from '@/components/ui/hint'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
   ApiClientError,
@@ -40,19 +44,22 @@ export function clockOf(iso: string): string {
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
 
+/** 一步：标题 + 问号（WP156：原来底下那句说明进问号）+ 这一步的按钮 / 结果。 */
 function Step({
   title,
-  note,
+  hint,
   children,
 }: {
   title: string
-  note: string
+  hint: string
   children?: React.ReactNode
 }): React.ReactNode {
   return (
     <div className="flex flex-col gap-1 rounded-md border p-2.5">
-      <span className="text-xs font-medium">{title}</span>
-      <span className="text-[11px] text-muted-foreground">{note}</span>
+      <span className="flex items-center gap-1 text-xs font-medium" data-slot="title">
+        {title}
+        <Hint text={hint} />
+      </span>
       {children}
     </div>
   )
@@ -136,6 +143,7 @@ export function ComputerUseCard({ assignment }: { assignment?: string }): React.
           <Monitor className="size-4" aria-hidden />
           {t('settings.cu')}
           <Hint text={t('settings.cu.hint')} testId="settings-computer-use-hint" />
+          <TutorialLink slug="computer-use" className="ml-auto font-normal" />
         </CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-3 text-sm">
@@ -144,6 +152,7 @@ export function ComputerUseCard({ assignment }: { assignment?: string }): React.
         {view.active === undefined ? null : (
           <div
             className="flex items-center gap-2 rounded-md border border-destructive/40 bg-destructive/5 px-2.5 py-2 text-xs"
+            data-slot="status"
             data-testid="computer-use-active"
           >
             <span className="size-2 rounded-full bg-destructive" aria-hidden />
@@ -178,10 +187,17 @@ export function ComputerUseCard({ assignment }: { assignment?: string }): React.
             }}
           />
           <span className="flex flex-col gap-0.5">
-            <span className="text-sm font-medium">{t('settings.cu.enable')}</span>
-            <span className="text-xs text-muted-foreground">
-              {allowed ? t('settings.cu.risk') : (view.blocked_reason ?? t('settings.cu.blocked'))}
+            <span className="flex items-center gap-1 text-sm font-medium">
+              {t('settings.cu.enable')}
+              <Hint text={t('settings.cu.risk')} testId="settings-computer-use-risk" />
             </span>
+            {allowed ? (
+              <SafetyNote text={t('settings.cu.safety')} />
+            ) : (
+              <span className="text-xs text-muted-foreground" data-slot="status">
+                {view.blocked_reason ?? t('settings.cu.blocked')}
+              </span>
+            )}
           </span>
         </label>
         {save.error === null || save.error === undefined ? null : (
@@ -192,7 +208,7 @@ export function ComputerUseCard({ assignment }: { assignment?: string }): React.
 
         {!on ? null : (
           <div className="flex flex-col gap-2 pl-6" data-testid="computer-use-wizard">
-            <div className="flex items-center gap-2 text-xs">
+            <label className="flex items-center gap-2 text-xs">
               <span>{t('settings.cu.minutes')}</span>
               <input
                 type="number"
@@ -211,9 +227,9 @@ export function ComputerUseCard({ assignment }: { assignment?: string }): React.
                 }}
               />
               <span className="text-muted-foreground">{t('settings.cu.minutes.suffix')}</span>
-            </div>
+            </label>
 
-            <Step title={t('settings.cu.roles')} note={t('settings.cu.roles.note')}>
+            <Step title={t('settings.cu.roles')} hint={t('settings.cu.roles.note')}>
               <div className="flex flex-col gap-1" data-testid="computer-use-roles">
                 {roles.isPending ? <Skeleton className="h-6 w-full" /> : null}
                 {(roles.data ?? []).length === 0 && !roles.isPending ? (
@@ -250,7 +266,7 @@ export function ComputerUseCard({ assignment }: { assignment?: string }): React.
               </div>
             </Step>
 
-            <Step title={t('settings.cu.step1')} note={t('settings.cu.step1.note')}>
+            <Step title={t('settings.cu.step1')} hint={t('settings.cu.step1.note')}>
               <span className="flex items-center gap-2">
                 <Button
                   size="sm"
@@ -268,6 +284,7 @@ export function ComputerUseCard({ assignment }: { assignment?: string }): React.
                 </Button>
                 <span
                   className="text-[11px] text-muted-foreground"
+                  data-slot="status"
                   data-testid="computer-use-driver"
                 >
                   {view.driver.installed
@@ -289,7 +306,7 @@ export function ComputerUseCard({ assignment }: { assignment?: string }): React.
 
             <Step
               title={t('settings.cu.step2')}
-              note={mac ? t('settings.cu.step2.note.mac') : t('settings.cu.step2.note.other')}
+              hint={mac ? t('settings.cu.step2.note.mac') : t('settings.cu.step2.note.other')}
             >
               {mac ? (
                 <span className="flex flex-wrap gap-2">
@@ -317,7 +334,7 @@ export function ComputerUseCard({ assignment }: { assignment?: string }): React.
               ) : null}
             </Step>
 
-            <Step title={t('settings.cu.step3')} note={t('settings.cu.step3.note')}>
+            <Step title={t('settings.cu.step3')} hint={t('settings.cu.step3.note')}>
               <span className="flex items-center gap-2">
                 <Button
                   size="sm"
@@ -334,6 +351,7 @@ export function ComputerUseCard({ assignment }: { assignment?: string }): React.
                 {check === undefined ? null : (
                   <span
                     className={`text-[11px] ${check.ok ? 'text-emerald-600' : 'text-destructive'}`}
+                    data-slot="status"
                     data-testid="computer-use-check-summary"
                   >
                     {check.ok ? t('settings.cu.step3.ok') : (check.detail ?? '')}
@@ -341,7 +359,11 @@ export function ComputerUseCard({ assignment }: { assignment?: string }): React.
                 )}
               </span>
               {check === undefined ? null : (
-                <ul className="flex flex-col gap-1" data-testid="computer-use-checks">
+                <ul
+                  className="flex flex-col gap-1"
+                  data-slot="status"
+                  data-testid="computer-use-checks"
+                >
                   {check.checks.map((c) => (
                     <li key={c.name} className="flex flex-col text-[11px]">
                       <span className="flex items-center gap-1">

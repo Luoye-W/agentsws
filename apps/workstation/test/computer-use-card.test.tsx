@@ -100,11 +100,11 @@ describe('设置页电脑操控', () => {
     renderWithProviders(<ComputerUseCard assignment="asg_1" />)
     const card = await screen.findByTestId('settings-computer-use')
     expect(card.getAttribute('data-enabled')).toBe('off')
-    expect(card.textContent).toContain('看你的屏幕、点、输入')
-    expect(card.textContent).toContain('密码')
-    expect(card.textContent).toContain(
-      '截图会发给你选的 AI 模型用来看界面，不会存进 Agents 工坊的记录',
-    )
+    // WP156：卡面上一行安全承诺（可见）；完整的风险说明在开关旁的问号里，一个字没丢
+    expect(card.querySelector('[data-slot="safety-note"]')?.textContent).toContain('密码')
+    const risk = screen.getByTestId('settings-computer-use-risk').getAttribute('data-hint') ?? ''
+    expect(risk).toContain('看你的屏幕、点、输入')
+    expect(risk).toContain('截图会发给你选的 AI 模型用来看界面，不会存进 Agents 工坊的记录')
     expect(screen.queryByTestId('computer-use-wizard')).toBeNull()
   })
 

@@ -27,12 +27,14 @@
  *
  * 减字：每张卡各一行说明，选中哪张才展开哪张的正文——几张同时铺开的话，
  * 第一次打开这个产品的人要先读几段字才知道自己该点哪儿。
+ * WP156（36 §7）：展开之后也不再铺步骤与外链——每张卡一个「看教程」，在右栏打开对应那一篇。
  */
 import { modelFailureKind, VISION_MODEL_EXAMPLES } from '@agentsws/contracts'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Check, Cloud, ExternalLink, KeyRound, Loader2 } from 'lucide-react'
+import { Check, Cloud, KeyRound, Loader2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { BrandIcon } from '@/components/brand-icons'
+import { InlineGuideLink, TutorialLink } from '@/components/help/tutorial-link'
 import { DeepSeekAccountLogin } from '@/components/models/deepseek-account-login'
 import { ModelCheckSteps } from '@/components/models/model-check-steps'
 import { ModelForm, type ModelFormValues } from '@/components/models/model-form'
@@ -57,6 +59,7 @@ import {
   testModelProvider,
 } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
+import { HELP_BY_VENDOR, templateGuide } from '@/lib/help'
 import { cn } from '@/lib/utils'
 
 /** 这一步是靠哪条路接上的。 */
@@ -327,6 +330,8 @@ export function AiStep({ assignment, onConnected, onDemo }: AiStepProps): React.
     g.plans.some((p) => template !== undefined && slugOf(p) === slugOf(template)),
   )
   const granted = credits.data?.balance?.granted
+  /** WP156：「自己的接口」里选中的那一家对应哪篇教程（第三方模板没有就不出）。 */
+  const ownTutorial = group === undefined ? undefined : HELP_BY_VENDOR[group.key]
 
   /**
    * 填 key 那条路存完之后的「正在试 / 三步 / 通了或为什么不通」。"自己的接口"与「DeepSeek 官方」卡的
@@ -401,6 +406,7 @@ export function AiStep({ assignment, onConnected, onDemo }: AiStepProps): React.
             </div>
           ) : (
             <div className="mt-2 flex flex-col gap-2">
+              <TutorialLink slug="agentsws-credits" className="self-start" />
               <div className="flex items-center gap-2">
                 <Input
                   type="email"
@@ -503,6 +509,15 @@ export function AiStep({ assignment, onConnected, onDemo }: AiStepProps): React.
 
         {choice === 'own' && template !== undefined ? (
           <div className="mt-2 flex flex-col gap-2">
+            {ownTutorial !== undefined ? (
+              <TutorialLink slug={ownTutorial} className="self-start" />
+            ) : template.steps.length + template.links.length === 0 ? null : (
+              <InlineGuideLink
+                title={group?.label ?? template.label}
+                markdown={templateGuide(template)}
+                className="self-start"
+              />
+            )}
             {groups.length < 2 ? null : (
               <div className="flex flex-wrap gap-1.5" data-testid="ai-own-templates">
                 {groups.map((g) => {
@@ -633,6 +648,7 @@ export function AiStep({ assignment, onConnected, onDemo }: AiStepProps): React.
                 ))}
               </fieldset>
             )}
+            <TutorialLink slug="model-deepseek" className="self-start" />
             {dsMode === 'account' || dsApiTemplate === undefined ? (
               <>
                 <p className="text-xs text-ws-muted-fg">{t('dsa.summary')}</p>
@@ -645,29 +661,13 @@ export function AiStep({ assignment, onConnected, onDemo }: AiStepProps): React.
               </>
             ) : (
               <>
+                {/*
+                  WP156：原「DeepSeek 官方」key 卡的几步与开放平台链接搬进了教程
+                  「接 DeepSeek」（上面那个「看教程」），这里只留一句
+                */}
                 <p className="text-xs text-ws-muted-fg" data-testid="ai-ds-api-hint">
                   {t('onboarding.ai.ds.api.hint')}
                 </p>
-                {/* 原「DeepSeek 官方」key 卡的几步与开放平台链接（非开发者照着做就行） */}
-                <ol className="list-decimal space-y-0.5 pl-4 text-[11px] text-ws-muted-fg">
-                  {dsApiTemplate.steps.map((step) => (
-                    <li key={step}>{step}</li>
-                  ))}
-                </ol>
-                <div className="flex flex-wrap gap-2">
-                  {dsApiTemplate.links.map((link) => (
-                    <a
-                      key={link.url}
-                      href={link.url}
-                      target="_blank"
-                      rel="noreferrer noopener"
-                      className="inline-flex items-center gap-1 text-[11px] text-primary underline-offset-4 hover:underline"
-                    >
-                      {link.label}
-                      <ExternalLink className="size-3" aria-hidden />
-                    </a>
-                  ))}
-                </div>
                 <ModelForm
                   template={dsApiTemplate}
                   busy={saveAndTest.isPending}

@@ -16,6 +16,11 @@ import { useApp } from '@/lib/app-context'
 import { type HelpSlug, helpAddress } from '@/lib/help'
 import { cn } from '@/lib/utils'
 
+const HelpArticleLazy = lazy(async () => {
+  const m = await import('@/components/help/help-article')
+  return { default: m.HelpArticle }
+})
+
 const HelpBody = lazy(async () => {
   const m = await import('@/components/help/help-body')
   return { default: m.HelpBody }
@@ -60,6 +65,55 @@ export function TutorialLink({
             </DialogHeader>
             <Suspense fallback={null}>
               <HelpBody slug={slug} />
+            </Suspense>
+          </DialogContent>
+        </Dialog>
+      ) : null}
+    </>
+  )
+}
+
+/**
+ * 没有写成教程文章的那种（第三方应用包加的模型模板）：它自带的步骤与外链照样一条不丢——
+ * 点「看教程」在对话框里按同一套渲染排出来（`markdown` 由调用方从模板拼好）。
+ */
+export function InlineGuideLink({
+  title,
+  markdown,
+  className,
+}: {
+  title: string
+  markdown: string
+  className?: string
+}): ReactNode {
+  const { t } = useApp()
+  const [open, setOpen] = useState(false)
+  return (
+    <>
+      <button
+        type="button"
+        data-slot="tutorial-link"
+        data-testid="tutorial-link"
+        data-slug=""
+        className={cn(
+          'inline-flex shrink-0 items-center gap-1 text-[11px] text-primary underline-offset-4 hover:underline',
+          className,
+        )}
+        onClick={() => {
+          setOpen(true)
+        }}
+      >
+        <BookOpenText aria-hidden className="size-3.5" />
+        {t('help.open')}
+      </button>
+      {open ? (
+        <Dialog open onOpenChange={setOpen}>
+          <DialogContent className="max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>{title}</DialogTitle>
+            </DialogHeader>
+            <Suspense fallback={null}>
+              <HelpArticleLazy markdown={markdown} />
             </Suspense>
           </DialogContent>
         </Dialog>

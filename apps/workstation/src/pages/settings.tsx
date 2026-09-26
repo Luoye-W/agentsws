@@ -103,7 +103,7 @@ export function SettingsPage({
       </TabsList>
       <TabsContent value="general" className="flex flex-col gap-4">
         <NoModelBanner />
-        <Card>
+        <Card data-testid="settings-general">
           <CardHeader>
             <CardTitle className="text-sm">{t('settings.title')}</CardTitle>
           </CardHeader>
@@ -142,7 +142,7 @@ export function SettingsPage({
           </CardContent>
         </Card>
         {onboarding.data === undefined ? null : (
-          <Card>
+          <Card data-testid="settings-company">
             <CardHeader>
               <CardTitle className="flex items-center gap-1 text-sm">
                 {t('settings.company')}

@@ -85,7 +85,14 @@ describe('49 M1 设置页账号卡', () => {
   it('没关联：一句人话 + 邮箱框 + 发登录邮件；按完只提示去邮箱点', async () => {
     renderWithProviders(<CloudAccountCard assignment="asg_1" />)
     await screen.findByTestId('cloud-account-unlinked')
-    expect(screen.getByText(/关联 Agents 工坊云账号后可以一键用/)).toBeTruthy()
+    expect(screen.getByText(/关联后能一键用 Agents 工坊的模型/)).toBeTruthy()
+    // WP156：「不关联也照常用、一分不扣」那半句进了问号
+    expect(
+      screen
+        .getByTestId('cloud-account-unlinked')
+        .querySelector('[data-slot="hint"]')
+        ?.getAttribute('data-hint'),
+    ).toContain('一分不扣')
 
     const input = screen.getByLabelText('邮箱')
     await userEvent.type(input, 'luoye@example.com')

@@ -916,8 +916,8 @@ const zh: Table = {
   'settings.tab.general': '通用',
   'settings.tab.account': '账号与积分',
   'cloud.account.title': 'Agents 工坊云账号',
-  'cloud.account.intro':
-    '关联 Agents 工坊云账号后可以一键用 Agents 工坊的模型和数据服务（按积分）。不关联也照常用——填自己的 key 走本地直连，一分不扣。',
+  'cloud.account.intro': '关联后能一键用 Agents 工坊的模型和数据服务（按积分）。',
+  'cloud.account.intro.hint': '不关联也照常用——填自己的 key 走本地直连，一分不扣。',
   'cloud.account.email': '邮箱',
   'cloud.account.email.placeholder': '你常用的邮箱',
   'cloud.account.send': '发登录邮件',
@@ -1617,7 +1617,15 @@ const zh: Table = {
   'models.chip': '还没接模型',
   'models.banner.cta': '去设置里接一个 →',
   'models.configured': '已配的',
-  'models.empty': '还一个都没配。下面挑一种开始——每种都写清楚了要准备什么。',
+  'models.empty': '还一个都没配。下面挑一种开始，不会就点「看教程」。',
+  // WP156（36 §7）：「加一个」每张厂商卡上那一句（整段介绍在问号里，步骤在教程里）
+  'models.vendor.deepseek': '国内直连、便宜、够用；账号登录或 API key 二选一。',
+  'models.vendor.openai-compatible': '任何 OpenAI 格式的服务：Kimi、通义、智谱、本机 Ollama。',
+  'models.vendor.bailian': '一把 key 调通义与 DeepSeek；先选你买的是哪个方案。',
+  'models.vendor.openai': '用 ChatGPT 订阅登录，或 API key 按量付费。',
+  'models.vendor.anthropic': '用 Claude 订阅登录，或 API key 按量付费。',
+  'models.vendor.agentsws-cloud': '不填 key、不注册，关联账号后按积分扣。',
+  'models.subscription.risk': '第三方用订阅登录可能被限流或封禁；只在你自己的电脑上登录。',
   'models.add': '加一个',
   'models.add.button': '填 API key',
   // WP90（55 §9 Q8）：一家一张卡、点进去选方案；订阅登录是其中一个方案
@@ -1722,7 +1730,8 @@ const zh: Table = {
   'credits.blocks': '这个月钱花在哪',
   'credits.blocks.none': '这一块这个月还没花积分',
   'credits.tiers': '选一档充值',
-  'credits.tiers.note': '1 美元 = 7 积分，1 积分 = ¥1。付款在 Stripe 的页面上，我们不碰你的卡号。',
+  'credits.tiers.note': '1 美元 = 7 积分，1 积分 = ¥1',
+  'credits.tiers.safety': '付款在 Stripe 的页面上，我们不碰你的卡号。',
   'credits.tiers.recommended': '常用',
   'credits.tiers.credits': '{n} 积分',
   'credits.tiers.go': '去付款',
@@ -1779,7 +1788,8 @@ const zh: Table = {
   'kol_cloud.kind.campaign': '活动',
   'kol_cloud.kind.candidate': '候选池',
   'kol_cloud.kind.note': '备注',
-  'credits.scope_note': '所有者看整个组织的用量，成员只看自己工作区的。每项能力用谁的，在',
+  'credits.scope_note': '所有者看整个组织的用量，成员只看自己工作区的。',
+  'credits.sources': '每项能力用谁的，在这里改：',
 
   // ── WP68（48 §5.1 / §5.4）红人岗位面板 ─────────────────────────────
   'kol.discovery.title': '找人',
@@ -1898,7 +1908,9 @@ const zh: Table = {
   'models.pricing': '价目表',
   'models.pricing.refresh': '去官网抓一次',
   'models.pricing.refreshing': '正在抓…',
-  'models.pricing.builtin': '现在用的是内置价（跟着版本走）。点右边去各家官网看一眼有没有调价。',
+  'models.pricing.builtin': '现在用的是内置价（跟着版本走）。',
+  'models.pricing.hint':
+    '内置价跟着版本走；点「去官网抓一次」看各家有没有调价。标了「手动」的价不会被覆盖。',
   'models.pricing.refreshed_at': '上次去官网抓是 {at}。标了「手动」的价不会被覆盖。',
   'models.pricing.vendor_ok': '{label}：抓到 {n} 条',
   'models.pricing.vendor_failed': '{label}：官网抓取失败，用的是内置价（{reason}）',
@@ -2170,8 +2182,10 @@ const zh: Table = {
   'settings.browser': '浏览器',
   'settings.browser.hint':
     '有些活只能在网页上干（YouTube 的频道页、Amazon 卖家后台）。这一节告诉工作台用哪个浏览器去干。不配 = 谁都开不了浏览器。',
-  'settings.browser.summary':
-    '每条岗位只能打开它自己那几个网站（职责里写死的），别的站一律打不开。密码永远是你自己在浏览器里输的，AI 看不到。截图会发给你选的 AI 模型用来看界面，不会存进 Agents 工坊的记录。',
+  'settings.browser.summary': '每条岗位只能打开它职责里写的那几个网站。',
+  'settings.browser.summary.hint':
+    '别的站一律打不开：红人各自的平台、Amazon 客服只开卖家后台，其余岗位一个站都开不了。',
+  'settings.browser.safety': '密码只在你自己的浏览器里输；截图只发给你选的模型，不留记录。',
   'settings.browser.off': '不开浏览器',
   'settings.browser.off.note': '默认。没有哪条岗位能打开网页。',
   'settings.browser.attach': '连接我电脑上的 Chrome',
@@ -2190,16 +2204,12 @@ const zh: Table = {
   'settings.browser.probe.fail': '没连上：{detail}',
   'settings.browser.save': '保存',
   'settings.browser.saved': '已保存',
-  'settings.browser.scope':
-    '能打开哪些站由岗位的职责说了算：红人各自的平台、Amazon 客服只开卖家后台，其余岗位一个站都开不了。',
 
   // WP92（55 §10）：设置 → 浏览器 → 「我正在用的浏览器」（腾讯 BrowserSkill）
   'settings.browser.bsk': '我正在用的浏览器',
   'settings.browser.bsk.note':
     '用你日常那个浏览器（Chrome / Edge）。你登录过的东西它直接就看得到，不用再登一次；AI 在一个单独的窗口里操作，要用你已经开着的标签会先问你。',
   'settings.browser.bsk.blocked': '这一档用不了（扩展和 bsk 都在你自己那台电脑上）。',
-  'settings.browser.bsk.compare':
-    '两种的区别：「独立的 Chrome」不碰你日常的登录，干净但什么都要重新登；「我正在用的浏览器」能看到你登录后才看得到的东西，AI 在单独窗口里操作，动你已开的标签会先问你。',
   'settings.browser.bsk.step1': '① 装浏览器扩展',
   'settings.browser.bsk.step1.note':
     '在你日常用的那个浏览器里装（Chrome 或 Edge，二选一，装完不用改任何设置）。',
@@ -2651,8 +2661,8 @@ const zh: Table = {
   'settings.cu': '电脑操控',
   'settings.cu.hint':
     '让 AI 在这台电脑上看屏幕、点、输入（比如只有桌面版的软件）。三层开关：这里的总开关 → 勾哪几条职责 → 每次要动电脑前在牌堆里批一张授权卡。',
-  'settings.cu.summary':
-    '有些活只能在电脑上的某个应用里干。默认关；打开后，你勾了的职责在需要时会先出一张授权卡问你。',
+  'settings.cu.summary': '默认关；打开后，勾了的职责要动电脑前先出一张授权卡问你。',
+  'settings.cu.safety': '遇到密码、支付、验证码它会停下请你来；随时能点「停止」。',
   'settings.cu.enable': '允许 AI 操作这台电脑',
   'settings.cu.risk':
     '打开之后：批了授权卡，它就能在那几分钟里看你的屏幕、点、输入——和坐在你电脑前的人一样。遇到登录、密码、支付、验证码它会停下请你来，不会替你输。截图会发给你选的 AI 模型用来看界面，不会存进 Agents 工坊的记录。操作时托盘会变红，随时能点「停止」。',
@@ -3650,7 +3660,9 @@ const en: Table = {
   'settings.tab.account': 'Account & credits',
   'cloud.account.title': 'Agents Workshop cloud account',
   'cloud.account.intro':
-    'Link an Agents Workshop cloud account to use Agents Workshop models and data services in one click (paid in credits). Not linking is fine too — bring your own key, connect directly, pay nothing here.',
+    "Link it to use Agents Workshop's models and data services in one click (paid in credits).",
+  'cloud.account.intro.hint':
+    'Not linking is fine too — your own keys go direct from this computer and cost nothing here.',
   'cloud.account.email': 'Email',
   'cloud.account.email.placeholder': 'the email you actually use',
   'cloud.account.send': 'Send login email',
@@ -4352,7 +4364,16 @@ const en: Table = {
   'models.chip': 'No model',
   'models.banner.cta': 'Connect one in Settings →',
   'models.configured': 'Configured',
-  'models.empty': 'Nothing configured yet. Pick one below — each says what you need to prepare.',
+  'models.empty': 'Nothing configured yet. Pick one below; stuck? Open its tutorial.',
+  // WP156 (36 §7): the one line on each provider card in "Add one"
+  'models.vendor.deepseek': 'Direct in China, cheap, good enough; account sign-in or API key.',
+  'models.vendor.openai-compatible': 'Any OpenAI-format service: Kimi, Qwen, GLM, local Ollama.',
+  'models.vendor.bailian': 'One key for Qwen and DeepSeek; pick the plan you bought.',
+  'models.vendor.openai': 'Sign in with ChatGPT, or pay per use with an API key.',
+  'models.vendor.anthropic': 'Sign in with Claude, or pay per use with an API key.',
+  'models.vendor.agentsws-cloud': 'No key, no sign-up; link your account and pay in credits.',
+  'models.subscription.risk':
+    'Subscription sign-in by third-party tools may be rate-limited or banned; only sign in on your own computer.',
   'models.add': 'Add one',
   'models.add.button': 'Enter API key',
   'models.plan': 'Plan',
@@ -4466,8 +4487,8 @@ const en: Table = {
   'credits.blocks': 'Where this month went',
   'credits.blocks.none': 'Nothing spent here this month',
   'credits.tiers': 'Pick a top-up',
-  'credits.tiers.note':
-    'US$1 = 7 credits, 1 credit = CNY 1. You pay on Stripe — we never see your card.',
+  'credits.tiers.note': 'US$1 = 7 credits, 1 credit = CNY 1',
+  'credits.tiers.safety': 'You pay on Stripe — we never see your card.',
   'credits.tiers.recommended': 'Popular',
   'credits.tiers.credits': '{n} credits',
   'credits.tiers.go': 'Pay',
@@ -4529,8 +4550,8 @@ const en: Table = {
   'kol_cloud.kind.campaign': 'Campaign',
   'kol_cloud.kind.candidate': 'Candidate',
   'kol_cloud.kind.note': 'Note',
-  'credits.scope_note':
-    'Owners see the whole organisation; members only see their own workspace. Which capability uses what is set in',
+  'credits.scope_note': 'Owners see the whole organisation; members only see their own workspace.',
+  'credits.sources': 'Which capability uses what is set here:',
 
   // ── WP68 creator-marketing panel ──────────────────────────────────
   'kol.discovery.title': 'Find creators',
@@ -4650,8 +4671,9 @@ const en: Table = {
   'models.pricing': 'Price list',
   'models.pricing.refresh': 'Fetch from vendor sites',
   'models.pricing.refreshing': 'Fetching…',
-  'models.pricing.builtin':
-    'Using the built-in prices that ship with this version. Fetch to see if anyone changed theirs.',
+  'models.pricing.builtin': 'Using the built-in prices that ship with this version.',
+  'models.pricing.hint':
+    'Built-in prices ship with this version; fetch to see if anyone changed theirs. Prices marked manual are never overwritten.',
   'models.pricing.refreshed_at': 'Last fetched {at}. Prices marked manual are never overwritten.',
   'models.pricing.vendor_ok': '{label}: {n} prices',
   'models.pricing.vendor_failed': '{label}: fetch failed, keeping the built-in price ({reason})',
@@ -4908,8 +4930,11 @@ const en: Table = {
   'settings.browser': 'Browser',
   'settings.browser.hint':
     'Some work only exists on a web page (a YouTube channel page, Amazon Seller Central). This section says which browser the workstation uses. Leave it off and no role can open a page at all.',
-  'settings.browser.summary':
-    'Each role can only open the sites its job description lists; everything else is refused. Passwords are always typed by you in the browser — the AI never sees them. Screenshots go to the AI model you chose so it can see the page; they are not kept in the Agents Workshop records.',
+  'settings.browser.summary': 'Each role can only open the sites its duties list.',
+  'settings.browser.summary.hint':
+    'Everything else is refused: each creator channel its own platform, Amazon support only Seller Central, and every other role none at all.',
+  'settings.browser.safety':
+    'You type passwords in your own browser; screenshots go only to your chosen model and are not kept.',
   'settings.browser.off': 'No browser',
   'settings.browser.off.note': 'The default. No role can open a web page.',
   'settings.browser.attach': 'Use the Chrome on my computer',
@@ -4929,8 +4954,6 @@ const en: Table = {
   'settings.browser.probe.fail': 'Not connected: {detail}',
   'settings.browser.save': 'Save',
   'settings.browser.saved': 'Saved',
-  'settings.browser.scope':
-    'Which sites can be opened is decided by the role: each creator channel its own platform, Amazon support only Seller Central, and every other role none at all.',
 
   // WP92 (55 §10): Settings → Browser → "The browser I already use" (Tencent BrowserSkill)
   'settings.browser.bsk': 'The browser I already use',
@@ -4938,8 +4961,6 @@ const en: Table = {
     'Uses your everyday browser (Chrome or Edge). Anything you are signed in to is visible right away; the AI works in a separate window and asks before touching a tab you already have open.',
   'settings.browser.bsk.blocked':
     'Not available in this setup (the extension and bsk both live on your own computer).',
-  'settings.browser.bsk.compare':
-    'The difference: a separate Chrome never touches your everyday logins — clean, but you sign in to everything again. Your own browser can see what only a signed-in you can see; the AI works in its own window and asks before using a tab you already have open.',
   'settings.browser.bsk.step1': '① Install the browser extension',
   'settings.browser.bsk.step1.note':
     'Install it in the browser you actually use (Chrome or Edge — either one; nothing else to configure).',
@@ -5430,7 +5451,8 @@ const en: Table = {
   'settings.cu.hint':
     'Let AI see the screen, click and type on this computer (for desktop-only apps). Three switches: this master switch → which duties → an approval card before each run touches the computer.',
   'settings.cu.summary':
-    'Some work only happens inside an app on this computer. Off by default; once on, the duties you tick ask you with a card first.',
+    'Off by default; once on, ticked duties ask you with an approval card before touching the computer.',
+  'settings.cu.safety': 'It stops for passwords, payments and codes; press Stop any time.',
   'settings.cu.enable': 'Allow AI to operate this computer',
   'settings.cu.risk':
     'Once on: after you approve a card, it can see your screen, click and type for those minutes — like someone sitting at your computer. It stops and hands over at logins, passwords, payments and verification codes. Screenshots go to the AI model you chose so it can see the screen; they are not kept in the Agents Workshop records. The tray icon turns red while it works; press Stop any time.',
