@@ -17,6 +17,7 @@ import { StatusPill } from '@/components/design'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { LinkedText } from '@/components/ui/linked-text'
+import { ReplyMarkdown } from '@/components/ui/reply-markdown'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Textarea } from '@/components/ui/textarea'
 import {
@@ -126,10 +127,17 @@ function TimelineEvent({ event }: { event: MatterEvent }): React.ReactNode {
     >
       <Icon className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" aria-hidden />
       <div className="min-w-0 flex-1">
-        {/* WP142：回话里的站内链接（「去候选池看全部」）画成可点的 */}
-        <p className="whitespace-pre-wrap break-words">
-          <LinkedText text={event.text} />
-        </p>
+        {/*
+          WP153：Agent 的回话按 markdown 安全地画（粗体、列表、编号、行内代码、链接；不认 HTML、
+          不加载图片）。WP142 的站内链接照旧可点。别的条目（人说的话、状态）仍是纯文字。
+        */}
+        {event.kind === 'agent_message' ? (
+          <ReplyMarkdown text={event.text} />
+        ) : (
+          <p className="whitespace-pre-wrap break-words">
+            <LinkedText text={event.text} />
+          </p>
+        )}
         <p className="text-[11px] text-muted-foreground">{formatDateTime(event.at, lang)}</p>
       </div>
     </li>
