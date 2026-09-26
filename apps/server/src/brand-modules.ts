@@ -45,6 +45,7 @@ import type { ModelsAssembly } from './models.js'
 import type { PrStore } from './pr.js'
 import type { PrServiceAssembly } from './pr-service.js'
 import type { MatterRecordSource, RuntimeAssembly } from './runtime.js'
+import type { SearchDataService } from './search-data.js'
 import type { SecretStore } from './secret-store.js'
 import type { SeoServiceAssembly } from './seo-service.js'
 import type { SiteServiceAssembly, SiteStore } from './site.js'
@@ -155,6 +156,12 @@ export interface BrandModuleSet {
    * 自动评分」的体检那一半经它走（令牌是这个品牌那一把）。可选：老装配没有它。
    */
   kolPublic?: PublicLibraryClient
+  /**
+   * WP155（docs/81）：这个品牌的搜索数据接口（`SearchDataPort` + 连接页那一行）。
+   * WP154「内容与搜索」的 SERP 检查与 GEO 探测经它走；`status().configured === false`
+   * 时跳过、卡上说一句人话。
+   */
+  searchData: SearchDataService
   /**
    * WP72（56 §2 数据面）：这个品牌的社媒库（四类对象）。
    *

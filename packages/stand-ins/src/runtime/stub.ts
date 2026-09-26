@@ -29,6 +29,17 @@ import {
   receiptOf,
   renderKolAnswer,
 } from './kol.js'
+import {
+  connectionsOf,
+  OWNER_CONNECTIONS_TOOL,
+  OWNER_POSITIONS_TOOL,
+  OWNER_TOOL_DEF_BY_NAME,
+  type OwnerConnectionsData,
+  type OwnerPositionsData,
+  ownerBranch,
+  positionsOf,
+  renderOwnerAnswer,
+} from './owner.js'
 import { noPlaybookAnswer, noPlaybookSummary, playbookOf } from './playbook.js'
 import {
   boundaryGate,
@@ -229,11 +240,16 @@ export const STAGE_REFUND_TOOL = 'stage_refund'
  * 这里只负责让三个运行时用同一份顺序——名字一个字都不改，只换先后。
  */
 function toolDefs(req: RunRequest): ToolDef[] {
-  return orderTools(req.tools.allow).map((name) => ({
-    name,
-    description: `stand-in tool ${name}`,
-    input_schema: { type: 'object' },
-  }))
+  return orderTools(req.tools.allow).map(
+    (name) =>
+      // WP153：店主那两个只读工具的描述是写给模型的人话（它挑工具时读的就是这一句）；
+      // 别的名字照旧是占位描述——这一行只对工具面里有它们的运行生效，老的 prompt 字节不变
+      OWNER_TOOL_DEF_BY_NAME.get(name) ?? {
+        name,
+        description: `stand-in tool ${name}`,
+        input_schema: { type: 'object' },
+      },
+  )
 }
 
 /**
@@ -543,6 +559,82 @@ export function createStubRuntime(options: StubRuntimeOptions): RuntimeAdapter {
           readTools,
           ...(found === undefined ? {} : { found }),
           drafted: findings.some((f) => f.tool === 'draft_outreach' && f.status === 'ok'),
+          ...(exhausted === undefined ? {} : { exhausted: exhausted.which }),
+        })
+        sink({
+          type: 'run.completed',
+          usage: {
+            ...usage,
+            tool_calls: toolCalls,
+            seconds: Math.max(0, (Date.parse(clock.now()) - startedMs) / 1000),
+            cost_base: 0,
+          },
+          outputs,
+          summary,
+        })
+        return finish(exhausted ? 'budget_exhausted' : 'completed', summary)
+      }
+
+      /*
+       * WP153（09-26 真账号冒烟 §3）：**店主问岗位 / 连接**。
+       *
+       * 店主职责、工具面里有 `list_positions` / `list_connections`、问的又是岗位或连接，
+       * 就去调这两个只读工具，把结果说成人话（粗体、列表、编号：时间线会渲染出来），
+       * 最后排出「最该先处理的三件事」。别的问法照旧往下走（一个字节不变）。
+       */
+      const ownerCalls = ownerBranch(
+        req,
+        [threadText, plainText(itemsOfKind(req, 'matter_summary')[0]?.content ?? '')].join('\n'),
+      )
+      if (ownerCalls !== undefined) {
+        let positions: OwnerPositionsData | undefined
+        let connections: OwnerConnectionsData | undefined
+        const failed: Record<string, string> = {}
+        for (const tool of ownerCalls) {
+          if (signal.aborted) {
+            sink({ type: 'run.cancelled' })
+            return finish('cancelled', '运行被中断')
+          }
+          const call_id = `call_${toolCalls + 1}`
+          sink({ type: 'tool.call', call_id, tool, input: {} })
+          if (toolCalls >= req.budget.max_tool_calls) {
+            exhausted = { which: 'max_tool_calls', used: toolCalls, cap: req.budget.max_tool_calls }
+            sink({ type: 'budget.exhausted', ...exhausted })
+            sink({ type: 'tool.result', call_id, status: 'blocked', reason: 'budget_exhausted' })
+            break
+          }
+          const res =
+            options.executeTool === undefined
+              ? { status: 'error' as const, reason: 'no_tool_executor' }
+              : await options.executeTool({ name: tool, input: {}, request: req })
+          toolCalls += 1
+          sink({
+            type: 'tool.result',
+            call_id,
+            status: res.status,
+            ...(res.reason === undefined ? {} : { reason: res.reason }),
+          })
+          if (res.status !== 'ok') {
+            failed[tool] = res.reason === 'no_tool_executor' ? '这个进程没接工具' : '这一步没走通'
+            continue
+          }
+          readTools.push(tool)
+          if (tool === OWNER_POSITIONS_TOOL) positions = positionsOf(res.data)
+          if (tool === OWNER_CONNECTIONS_TOOL) connections = connectionsOf(res.data)
+        }
+        const answer = renderOwnerAnswer({
+          ...(positions === undefined ? {} : { positions }),
+          ...(connections === undefined ? {} : { connections }),
+          failed,
+        })
+        outputs.push({ kind: 'answer', text: answer })
+        usage.output_tokens = Math.ceil(answer.length / 4) + (seed % 7)
+        // 摘要：回话的第一句（与 direct / dsh 同一份拼法，WP153 §2）
+        const summary = describeRun({
+          readTools,
+          drafted: false,
+          reply: answer,
+          tools: req.tools.allow,
           ...(exhausted === undefined ? {} : { exhausted: exhausted.which }),
         })
         sink({

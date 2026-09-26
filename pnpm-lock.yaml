@@ -333,6 +333,9 @@ importers:
       '@agentsws/chat-relay':
         specifier: workspace:*
         version: link:../../packages/chat-relay
+      '@agentsws/cloud-entry':
+        specifier: workspace:*
+        version: link:../../packages/cloud-entry
       '@agentsws/connect-adapter':
         specifier: workspace:*
         version: link:../../packages/connect-adapter

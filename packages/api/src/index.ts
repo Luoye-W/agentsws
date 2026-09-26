@@ -468,6 +468,11 @@ export {
   privacyRoutes,
 } from './routes/privacy.js'
 export { scheduleRoutes } from './routes/schedules.js'
+export {
+  type SearchDataActor,
+  type SearchDataApiPort,
+  searchDataRoutes,
+} from './routes/search-data.js'
 export type {
   AgendaCheckView,
   AskedView,

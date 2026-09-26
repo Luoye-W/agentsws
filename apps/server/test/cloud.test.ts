@@ -479,7 +479,8 @@ describe('/v1/cloud/pricing', () => {
     expect(pricing.credit_cny).toBe(1)
     // WP118 加了两条订阅（红人已上线、客服只登记），WP127 加了生图（按张），09-23 又把联系方式揭示
     // 从 lookup 里单开成 data.kol.reveal，所以是 12 条
-    expect(pricing.entries.length).toBe(12)
+    // WP155 加了搜索数据两条
+    expect(pricing.entries.length).toBe(14)
     expect(pricing.entries.map((e) => e.capability)).toContain('crawl.page')
   })
 })

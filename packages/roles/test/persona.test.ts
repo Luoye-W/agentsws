@@ -9,6 +9,8 @@ import {
   applyPersonaOverride,
   checkAllPersonas,
   checkPersona,
+  HOUSE_RULES_ORDER,
+  houseRulesSection,
   loadBundledPositions,
   loadBundledRoles,
   MAX_PERSONA_CHARS,
@@ -193,5 +195,16 @@ describe('品牌上下文：取不到就不写那一句（69 §5「别编」）'
     const text = renderBrandContext({ brand_name: '甲', tone_samples: ['我们不催单。'] })
     expect(text).toContain('别照抄')
     expect(text).toContain('- 我们不催单。')
+  })
+})
+
+describe('WP153：所有职责的提示词公共段', () => {
+  it('一句「不提工具名、函数名、内部 id」，排在职责（20）后面、技能（40）前面', () => {
+    const zh = houseRulesSection('zh')
+    expect(zh.text).toContain('不提工具名、函数名、内部 id')
+    expect(zh.order).toBe(HOUSE_RULES_ORDER)
+    expect(HOUSE_RULES_ORDER).toBeGreaterThan(PERSONA_ORDER.role)
+    expect(HOUSE_RULES_ORDER).toBeLessThan(40)
+    expect(houseRulesSection('en').text).toContain('never mention tool names')
   })
 })

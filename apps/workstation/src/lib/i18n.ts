@@ -1888,6 +1888,26 @@ const zh: Table = {
   'data.byo.remove': '拔掉',
   'data.byo.compliance': '用你自己的账号取这些平台的数据，是否合规由你与该服务的条款决定。',
   'data.byo.saved': '已保存，不扣积分。',
+  // WP155（docs/81）：连接页「搜索数据」一行
+  'search_data.title': '搜索数据',
+  'search_data.subtitle': '「内容与搜索」查搜索结果、问 AI 平台时用的数据从哪来',
+  'search_data.choice.official': '官方（用积分）',
+  'search_data.choice.byo': '自带 key',
+  'search_data.choice.none': '不接',
+  'search_data.status.ready': '能用了。',
+  'search_data.status.none': '还没接：要搜索数据的那几步会跳过，卡上会说一句。',
+  'search_data.official.note': 'Agents 工坊官方数据接口，按次扣积分；查不到、出错不扣。',
+  'search_data.official.price':
+    '查一次搜索结果 {serp} 积分；问 AI 平台每个平台 {ai} 积分。查不到、出错不扣。',
+  'search_data.byo.provider': '服务商',
+  'search_data.byo.key': 'key',
+  'search_data.byo.key.hint': '填你在这家服务商那里拿到的 key',
+  'search_data.byo.key.set': '已设置（要换再填一次）',
+  'search_data.byo.note': 'key 只存在这台电脑的加密库里。用你自己的额度，不扣积分。',
+  'search_data.byo.save': '保存',
+  'search_data.byo.test': '测试连接',
+  'search_data.byo.remove': '拔掉',
+  'search_data.byo.saved': '已保存，不扣积分。',
 
   'models.region.cn': '境内',
   'models.region.global': '境外',
@@ -4634,6 +4654,29 @@ const en: Table = {
   'data.byo.compliance':
     "You fetch this platform data with your own account; compliance is between you and that service's terms.",
   'data.byo.saved': 'Saved. No credits are used.',
+  // WP155 (docs/81): the "Search data" row on Connections
+  'search_data.title': 'Search data',
+  'search_data.subtitle': 'Where "Content & Search" gets search results and AI answers from',
+  'search_data.choice.official': 'Official (credits)',
+  'search_data.choice.byo': 'My own key',
+  'search_data.choice.none': 'Off',
+  'search_data.status.ready': 'Ready.',
+  'search_data.status.none':
+    'Not connected: steps that need search data are skipped, and the card says so.',
+  'search_data.official.note':
+    'Agents Workshop official data service, charged per call; nothing is charged when a call fails.',
+  'search_data.official.price':
+    'Search results: {serp} credits per query. AI answers: {ai} credits per platform. Failed calls are free.',
+  'search_data.byo.provider': 'Provider',
+  'search_data.byo.key': 'Key',
+  'search_data.byo.key.hint': 'The key from that provider',
+  'search_data.byo.key.set': 'Set (fill again to replace)',
+  'search_data.byo.note':
+    "The key stays in this computer's encrypted store. Uses your own quota; no credits.",
+  'search_data.byo.save': 'Save',
+  'search_data.byo.test': 'Test connection',
+  'search_data.byo.remove': 'Remove',
+  'search_data.byo.saved': 'Saved. No credits are used.',
 
   'models.region.cn': 'China',
   'models.region.global': 'Overseas',

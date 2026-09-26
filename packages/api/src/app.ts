@@ -56,6 +56,7 @@ import { prRoutes } from './routes/pr.js'
 import { seoRoutes } from './routes/seo.js'
 import { privacyRoutes } from './routes/privacy.js'
 import { scheduleRoutes } from './routes/schedules.js'
+import { searchDataRoutes } from './routes/search-data.js'
 import { secretaryRoutes } from './routes/secretary.js'
 import { secretRoutes } from './routes/secrets.js'
 import { siteRoutes } from './routes/site.js'
@@ -116,6 +117,8 @@ export function collectRoutes(): Route[] {
     ...browserRoutes(),
     // WP136（docs/79）：dsh 场景。`/v1/dsh-scenes*` 是新前缀，与别处都不撞
     ...dshScenesRoutes(),
+    // WP155（docs/81）：搜索数据接口（连接页那一行 + SERP / AI 问答探测）
+    ...searchDataRoutes(),
     // WP31 本机秘密库密钥轮换（owner）；`/v1/secrets/rotate` 与连接面不撞
     ...secretRoutes(),
     /*

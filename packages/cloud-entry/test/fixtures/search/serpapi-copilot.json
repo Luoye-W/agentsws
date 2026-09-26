@@ -1,0 +1,7 @@
+{"search_metadata":{"id":"c1","status":"Success","bing_copilot_url":"https://www.bing.com/copilotsearch?q=best+power+bank","total_time_taken":12.55},
+ "search_parameters":{"engine":"bing_copilot","q":"best power bank for iphone"},
+ "header":"Popular picks are the Anker MagGo and Belkin BoostCharge.",
+ "text_blocks":[{"type":"heading","snippet":"Top picks","level":2,"reference_indexes":[0]},
+  {"type":"paragraph","snippet":"Wirecutter rates the Anker MagGo highly for MagSafe users.","snippet_links":[{"text":"Wirecutter","link":"https://www.nytimes.com/wirecutter/reviews/best-portable-chargers/"}],"reference_indexes":[0,1]}],
+ "references":[{"index":0,"title":"The Best Portable Chargers","link":"https://www.nytimes.com/wirecutter/reviews/best-portable-chargers/","source":"Wirecutter"},
+  {"index":1,"title":"Anker MagGo","link":"https://www.anker.com/maggo","snippet":"...","source":"Anker"}]}

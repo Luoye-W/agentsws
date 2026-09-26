@@ -11,7 +11,7 @@ import { parseMcpToolName } from '@agentsws/contracts'
 import { EXTERNAL_FENCE, redactOutbound } from '@agentsws/core'
 import { orderTools } from '@agentsws/ontology'
 import type { CreateDraftResult } from '@agentsws/stand-ins'
-import { isMcpReadTool } from '@agentsws/stand-ins'
+import { isMcpReadTool, OWNER_TOOL_DEF_BY_NAME } from '@agentsws/stand-ins'
 import type { ToolDefinition } from '@deepseek-ai/dsh-tools'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import type { JsonValue } from '@deepseek-ai/dsh-util-values'
@@ -299,7 +299,8 @@ export interface StageToolHooks {
 function readTool(name: string, hooks: ReadToolHooks): ToolDefinition {
   return defineTool({
     name,
-    description: `agentsws read tool ${name}`,
+    // WP153：店主那两个只读工具有写给模型的人话描述（与 stub / direct 同一份）
+    description: OWNER_TOOL_DEF_BY_NAME.get(name)?.description ?? `agentsws read tool ${name}`,
     parameters: READ_PARAMS,
     output: {
       schema: { type: 'json' },

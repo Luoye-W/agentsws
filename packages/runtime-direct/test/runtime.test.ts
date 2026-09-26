@@ -87,6 +87,22 @@ describe('运行时适配器契约（17 §4）', () => {
     ])
   })
 
+  it('WP153：有给人的回复时，摘要是回复的第一句（去 markdown、工具名换人话），不是「查了什么」', async () => {
+    const h = harness({
+      script: [
+        { tool_calls: [{ name: 'search_policies', input: { query: 'x' } }] },
+        { text: '我用 `search_policies` 看了一遍，**有 3 个岗位**。先处理：\n1. 连 GA4' },
+      ],
+    })
+    const result = await h.run(
+      makeRequest({
+        expectations: { outputs: ['answer'], must_stage_if_change_requested: false },
+      }),
+    )
+    expect(result.summary).toBe('我用「规矩与政策库」看了一遍，有 3 个岗位。')
+    expect(result.summary).not.toContain('退货政策')
+  })
+
   it('expectations 不要 answer 就不塞产物', async () => {
     const h = harness({ script: SCRIPT })
     const result = await h.run()

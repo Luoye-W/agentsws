@@ -30,3 +30,7 @@ APIFY_TOKEN=
 # 没配 = 所有商家网站上的聊天窗一律 503（没有兜底——写死的种子等于任何人都能伪造访客令牌）。
 # 生成：node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"
 AGENTSWS_CHAT_RELAY_KEY=
+
+# WP155：官方数据接口的搜索数据服务商 key（docs/81；DataForSEO 填 login:password）。
+# 没配 = 搜索数据没开通：状态口如实说，查询口 501、一分不扣。
+AGENTSWS_SEARCH_DATA_KEY=

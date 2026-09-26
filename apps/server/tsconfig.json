@@ -22,6 +22,9 @@
       "path": "../../packages/chat-relay"
     },
     {
+      "path": "../../packages/cloud-entry"
+    },
+    {
       "path": "../../packages/brand-intake"
     },
     {
