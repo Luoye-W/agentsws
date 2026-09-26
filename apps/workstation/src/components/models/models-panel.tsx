@@ -18,7 +18,7 @@
 import { VISION_MODEL_EXAMPLES } from '@agentsws/contracts'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Brain, CheckCircle2, ExternalLink, Plus, RefreshCw, Trash2, XCircle } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { BrandIcon } from '@/components/brand-icons'
 import { BrandScopeNote } from '@/components/brand-scope-note'
 import { DeepSeekAccountLogin } from '@/components/models/deepseek-account-login'
@@ -45,6 +45,7 @@ import type {
 } from '@/lib/api'
 import {
   discoverModelProviderModels,
+  getDeepSeekAccount,
   getModelDefaults,
   getModelPricing,
   getModelUsage,
@@ -830,10 +831,24 @@ export function groupTemplates(templates: ModelProviderTemplate[]): VendorCardDa
 export function defaultPlanIndex(
   plans: readonly ModelProviderTemplate[],
   configured: readonly Pick<ModelProviderView, 'kind' | 'base_url'>[],
+  /**
+   * 09-26（WP152 报告「需要 Luoye 定」第 1、2 条，Fable 定）：账号登录那一种的现状。
+   * - 登录**过期被自动摘掉**（`session_expired` 在）：仍默认显示账户登录——「登录过期了，点一下重新登录」要一打开就看得到；
+   * - 这台部署**用不了**账号登录（公司档 / 托管档，`available: false`）：没配过别的时默认显示 API 那种，不让人先看到一句"用不了"。
+   */
+  account?: { available: boolean; session_expired?: unknown },
 ): number {
+  const accountAt = plans.findIndex((p) => isAccountTemplate(p))
+  if (accountAt >= 0 && account?.session_expired !== undefined && account.available)
+    return accountAt
   const have = new Set(configured.map((p) => templateSlug(p.kind, p.base_url)))
   const i = plans.findIndex((p) => have.has(templateSlug(p.kind, p.default_base_url)))
-  return i < 0 ? 0 : i
+  if (i >= 0) return i
+  if (accountAt === 0 && account?.available === false) {
+    const other = plans.findIndex((p) => !isAccountTemplate(p))
+    if (other >= 0) return other
+  }
+  return 0
 }
 
 /** 一张厂商卡：图标 + 卡名 + 方案单选 + 选中那个方案的说明与动作。 */
@@ -862,7 +877,20 @@ function VendorCard({
   onSubmit: (values: ModelFormValues, kind: ModelProviderKind) => void
 }): React.ReactNode {
   const { t } = useApp()
+  const hasAccountPlan = card.plans.some((p) => isAccountTemplate(p))
+  // 账号那一种的现状（同一个 queryKey，与卡里的账号组件共用缓存，不多打一次）
+  const account = useQuery({
+    queryKey: ['deepseek-account', assignment],
+    queryFn: () => getDeepSeekAccount(assignment),
+    enabled: hasAccountPlan,
+  })
   const [planIndex, setPlanIndex] = useState(() => defaultPlanIndex(card.plans, configured))
+  /** 用户自己点过方案就不再替他改。 */
+  const touched = useRef(false)
+  useEffect(() => {
+    if (touched.current || account.data === undefined) return
+    setPlanIndex(defaultPlanIndex(card.plans, configured, account.data))
+  }, [account.data, card.plans, configured])
   const plan = card.plans[planIndex] ?? card.plans[0]
   if (plan === undefined) return null
   const slug = templateSlug(plan.kind, plan.default_base_url)
@@ -902,6 +930,7 @@ function VendorCard({
                 name={`plan-${card.id}`}
                 checked={i === planIndex}
                 onChange={() => {
+                  touched.current = true
                   setPlanIndex(i)
                   onOpenPlan(null)
                 }}

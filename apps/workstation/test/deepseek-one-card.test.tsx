@@ -241,6 +241,18 @@ describe('WP152 设置页「加一个」：DeepSeek 一张卡，二选一', () =
     expect(defaultPlanIndex(plans, [API_ROW])).toBe(1)
     // 两种都配了：排前面的（官方账户登录）
     expect(defaultPlanIndex(plans, [API_ROW, ACCOUNT_ROW])).toBe(0)
+    // 09-26：账号登录过期被摘掉（只剩 API 那条）：仍默认账户登录，过期提示一打开就看得到
+    expect(defaultPlanIndex(plans, [API_ROW], { available: true, session_expired: {} })).toBe(0)
+    // 09-26：这台部署用不了账号登录、什么都没配：默认 API 那种
+    expect(defaultPlanIndex(plans, [], { available: false })).toBe(1)
+    // 用得了、没配过、没过期：照旧默认账户登录
+    expect(defaultPlanIndex(plans, [], { available: true })).toBe(0)
+    // 向导同一条规则
+    expect(
+      defaultDeepSeekMode([{ kind: 'deepseek' }], { available: true, session_expired: {} }),
+    ).toBe('account')
+    expect(defaultDeepSeekMode([], { available: false })).toBe('api')
+    expect(defaultDeepSeekMode([], { available: true })).toBe('account')
   })
 })
 

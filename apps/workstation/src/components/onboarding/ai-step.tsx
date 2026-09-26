@@ -45,6 +45,7 @@ import {
   getCapabilitySources,
   getCloudAccount,
   getCloudCredits,
+  getDeepSeekAccount,
   isAccountTemplate,
   isDeepSeekAccountKind,
   linkCloudAccount,
@@ -73,10 +74,19 @@ export function isDeepSeekTemplate(tpl: { kind: string; auth?: string; vendor?: 
  * WP152：「DeepSeek 官方」卡默认选哪种。默认「官方账户登录」（不用建 key）；已经配过 DeepSeek key、
  * 又没有账号登录那条的，显示他已有的 API 那种。
  */
-export function defaultDeepSeekMode(providers: readonly { kind: string }[]): DeepSeekMode {
+export function defaultDeepSeekMode(
+  providers: readonly { kind: string }[],
+  /** 09-26（Fable 定，同设置页 `defaultPlanIndex`）：账号登录那一种的现状。 */
+  account?: { available: boolean; session_expired?: unknown },
+): DeepSeekMode {
+  // 登录过期被自动摘掉：仍默认账户登录，「登录过期了」一打开就看得到
+  if (account?.available === true && account.session_expired !== undefined) return 'account'
   const hasApi = providers.some((p) => p.kind === 'deepseek')
   const hasAccount = providers.some((p) => isDeepSeekAccountKind(p.kind))
-  return hasApi && !hasAccount ? 'api' : 'account'
+  if (hasApi && !hasAccount) return 'api'
+  // 这台部署用不了账号登录（公司档 / 托管档）：默认 API 那种
+  if (account?.available === false && !hasAccount) return 'api'
+  return 'account'
 }
 
 /**
@@ -176,6 +186,12 @@ export function AiStep({ assignment, onConnected, onDemo }: AiStepProps): React.
   })
 
   const linked = account.data?.linked === true
+
+  /** DeepSeek 账号那一种的现状（与卡里的账号组件同一个 queryKey，共用缓存）。 */
+  const dsAccount = useQuery({
+    queryKey: ['deepseek-account', assignment],
+    queryFn: () => getDeepSeekAccount(assignment),
+  })
 
   const credits = useQuery({
     queryKey: ['cloud-credits', assignment],
@@ -304,7 +320,7 @@ export function AiStep({ assignment, onConnected, onDemo }: AiStepProps): React.
   const dsMode: DeepSeekMode =
     dsApiTemplate === undefined
       ? 'account'
-      : (dsPicked ?? defaultDeepSeekMode(providers.data?.providers ?? []))
+      : (dsPicked ?? defaultDeepSeekMode(providers.data?.providers ?? [], dsAccount.data))
   const template = templates.find((tpl) => slugOf(tpl) === picked) ?? templates[0]
   const groups = vendorGroups(templates)
   const group = groups.find((g) =>
@@ -576,7 +592,9 @@ export function AiStep({ assignment, onConnected, onDemo }: AiStepProps): React.
           onClick={() => {
             if (choice !== 'account') setTest(undefined)
             // 打开时就定下默认那种：之后存了哪条、列表变了，也不在用户眼前自己跳
-            setDsPicked((m) => m ?? defaultDeepSeekMode(providers.data?.providers ?? []))
+            setDsPicked(
+              (m) => m ?? defaultDeepSeekMode(providers.data?.providers ?? [], dsAccount.data),
+            )
             setChoice('account')
           }}
         >
