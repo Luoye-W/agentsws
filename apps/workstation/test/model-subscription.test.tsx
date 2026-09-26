@@ -232,7 +232,10 @@ describe('订阅登录：卡里的一个方案', () => {
     const card = await cardOf('openai')
     const plan = await within(card).findByTestId('subscription-plan')
     expect(within(plan).getByTestId('subscription-risk').textContent).toContain('可能被限流或封禁')
-    expect(within(plan).getByTestId('subscription-risk').textContent).toContain('账号只属于你本人')
+    // WP156：卡面上压成一句；服务端那段原话一个字不少地在问号里
+    expect(within(plan).getByTestId('subscription-risk-full').getAttribute('data-hint')).toContain(
+      '账号只属于你本人',
+    )
     const buttons = within(plan).getAllByTestId('subscription-login')
     expect(buttons.map((b) => b.getAttribute('data-method'))).toEqual(['device', 'browser'])
     // 订阅方案没有"填 API key"这条路

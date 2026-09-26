@@ -6,8 +6,9 @@
  *
  * 四段，从上到下：
  * 1. **已配的**——每条一行：地址、模型名、境内外、有没有 key、上次测试；两个动作：测试、删；
- * 2. **加一个**——两种种类各一张卡（DeepSeek 官方 / OpenAI 兼容自定义），
- *    卡上写清楚要准备什么（≤ 5 步 + 外链），表单是**不经模型的原生表单**；
+ * 2. **加一个**——一家一张卡（DeepSeek 官方 / OpenAI 兼容 / 阿里云百炼…），表单是**不经模型的原生表单**。
+ *    WP156（36 §7）：卡上只留图标 + 名字、一句话、方案切换、动作；「要准备什么」的步骤与外链
+ *    进了教程文章（卡上一个「看教程」，右栏打开），一两句的介绍进问号；
  * 3. **默认模型**——按 purpose（跑活 / 抽取 / 反思 / 向量 / 判分 / 转写）各选一个，
  *    外加数据驻留与三级预算；
  * 4. **今天花了多少**——按 purpose 汇总的一张小表（22 §3 的 usage）。
@@ -17,10 +18,11 @@
  */
 import { VISION_MODEL_EXAMPLES } from '@agentsws/contracts'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Brain, CheckCircle2, ExternalLink, Plus, RefreshCw, Trash2, XCircle } from 'lucide-react'
+import { Brain, CheckCircle2, Plus, RefreshCw, Trash2, XCircle } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { BrandIcon } from '@/components/brand-icons'
 import { BrandScopeNote } from '@/components/brand-scope-note'
+import { InlineGuideLink, TutorialLink } from '@/components/help/tutorial-link'
 import { DeepSeekAccountLogin } from '@/components/models/deepseek-account-login'
 import { ImageModelSection } from '@/components/models/image-model-section'
 import { ModelCheckSteps } from '@/components/models/model-check-steps'
@@ -60,6 +62,7 @@ import {
   testModelProvider,
 } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
+import { HELP_BY_VENDOR, templateGuide } from '@/lib/help'
 
 /**
  * 一张模板卡的稳定标识（WP88）。
@@ -417,7 +420,10 @@ export function ModelsPanel({ assignment }: { assignment?: string }): React.Reac
         {/* ②′ 价目表：内置的 + 去官网抓一次 */}
         <section className="flex flex-col gap-1.5" data-testid="model-pricing">
           <div className="flex items-center justify-between gap-2">
-            <h4 className="text-xs font-medium text-muted-foreground">{t('models.pricing')}</h4>
+            <h4 className="flex items-center gap-1 text-xs font-medium text-muted-foreground">
+              {t('models.pricing')}
+              <Hint text={t('models.pricing.hint')} />
+            </h4>
             <Button
               size="xs"
               variant="outline"
@@ -434,7 +440,7 @@ export function ModelsPanel({ assignment }: { assignment?: string }): React.Reac
                 : t('models.pricing.refresh')}
             </Button>
           </div>
-          <p className="text-[11px] text-muted-foreground">
+          <p className="text-[11px] text-muted-foreground" data-slot="status">
             {pricing.data?.refreshed_at === undefined
               ? t('models.pricing.builtin')
               : t('models.pricing.refreshed_at', {
@@ -851,7 +857,14 @@ export function defaultPlanIndex(
   return 0
 }
 
-/** 一张厂商卡：图标 + 卡名 + 方案单选 + 选中那个方案的说明与动作。 */
+/** 一段话的第一句（到第一个句号 / 冒号为止）；本来就一句的原样回。 */
+export function firstSentence(text: string): string {
+  const m = /^[^。：:！？!?]*[。！？!?]?/.exec(text.trim())
+  const head = (m?.[0] ?? '').replace(/[：:]$/, '')
+  return head === '' ? text.trim() : head
+}
+
+/** 一张厂商卡：图标 + 卡名 + 一句话 + 方案单选 + 动作（WP156：步骤与外链在教程里）。 */
 function VendorCard({
   card,
   busy,
@@ -894,6 +907,13 @@ function VendorCard({
   const plan = card.plans[planIndex] ?? card.plans[0]
   if (plan === undefined) return null
   const slug = templateSlug(plan.kind, plan.default_base_url)
+  const tutorial = HELP_BY_VENDOR[card.id]
+  /**
+   * WP156：卡面上那一句。认得的厂商用词条里压好的一句（中英都有）；
+   * 第三方加的模板没有词条，退回服务端给的介绍的第一句。
+   */
+  const lineKey = `models.vendor.${card.id}`
+  const line = t(lineKey) === lineKey ? firstSentence(card.summary) : t(lineKey)
 
   return (
     <div
@@ -907,59 +927,59 @@ function VendorCard({
         {/* WP45 / WP90：图标按**卡的 id** 认（官网抓回来的官方图，运行时不联网） */}
         <BrandIcon provider={card.id} />
         {card.label}
+        {/* WP156：服务端那段整句介绍进问号；卡面上是下面那一句 */}
+        {card.summary === '' ? null : <Hint text={card.summary} testId="model-template-summary" />}
+        {tutorial !== undefined ? (
+          <TutorialLink slug={tutorial} className="ml-auto font-normal" />
+        ) : plan.steps.length + plan.links.length === 0 ? null : (
+          <InlineGuideLink
+            title={card.label}
+            markdown={templateGuide(plan)}
+            className="ml-auto font-normal"
+          />
+        )}
       </p>
-      <p className="mt-0.5 text-xs text-muted-foreground">{card.summary}</p>
+      <p
+        className="mt-0.5 truncate text-xs text-muted-foreground"
+        data-testid="model-template-line"
+      >
+        {line}
+      </p>
 
       {card.plans.length < 2 ? null : (
-        <fieldset className="mt-2 flex flex-wrap gap-1.5" data-testid="model-plans">
-          <legend className="sr-only">{t('models.plan')}</legend>
-          {card.plans.map((p, i) => (
-            <label
-              key={`${p.kind}:${p.plan_label ?? p.label}`}
-              className={`cursor-pointer rounded-full border px-2 py-0.5 text-[11px] ${
-                i === planIndex
-                  ? 'border-primary bg-primary/10 text-primary'
-                  : 'text-muted-foreground'
-              }`}
-              data-testid="model-plan"
-              data-selected={i === planIndex}
-            >
-              <input
-                type="radio"
-                className="sr-only"
-                name={`plan-${card.id}`}
-                checked={i === planIndex}
-                onChange={() => {
-                  touched.current = true
-                  setPlanIndex(i)
-                  onOpenPlan(null)
-                }}
-              />
-              {p.plan_label ?? p.label}
-            </label>
-          ))}
-        </fieldset>
+        <div className="mt-2 flex flex-wrap items-center gap-1.5">
+          <fieldset className="flex flex-wrap gap-1.5" data-testid="model-plans">
+            <legend className="sr-only">{t('models.plan')}</legend>
+            {card.plans.map((p, i) => (
+              <label
+                key={`${p.kind}:${p.plan_label ?? p.label}`}
+                className={`cursor-pointer rounded-full border px-2 py-0.5 text-[11px] ${
+                  i === planIndex
+                    ? 'border-primary bg-primary/10 text-primary'
+                    : 'text-muted-foreground'
+                }`}
+                data-testid="model-plan"
+                data-selected={i === planIndex}
+              >
+                <input
+                  type="radio"
+                  className="sr-only"
+                  name={`plan-${card.id}`}
+                  checked={i === planIndex}
+                  onChange={() => {
+                    touched.current = true
+                    setPlanIndex(i)
+                    onOpenPlan(null)
+                  }}
+                />
+                {p.plan_label ?? p.label}
+              </label>
+            ))}
+          </fieldset>
+          {/* 选中那个方案是什么、和别的有什么不同（原来铺在卡上的那段），进问号 */}
+          {plan.summary === '' ? null : <Hint text={plan.summary} testId="model-plan-summary" />}
+        </div>
       )}
-
-      <ol className="mt-1.5 list-decimal space-y-0.5 pl-4 text-[11px] text-muted-foreground">
-        {plan.steps.map((step) => (
-          <li key={step}>{step}</li>
-        ))}
-      </ol>
-      <div className="mt-1.5 flex flex-wrap gap-2">
-        {plan.links.map((link) => (
-          <a
-            key={link.url}
-            href={link.url}
-            target="_blank"
-            rel="noreferrer noopener"
-            className="inline-flex items-center gap-1 text-[11px] text-primary underline-offset-4 hover:underline"
-          >
-            {link.label}
-            <ExternalLink className="size-3" aria-hidden />
-          </a>
-        ))}
-      </div>
 
       {/*
         订阅登录那种方案**没有表单**——没有 key 可填，只有一个登录按钮。

@@ -62,7 +62,8 @@
 | 37 | WP153 真账号冒烟三个小问题：回答露工具名与 markdown、事项摘要跑题、店主查不到岗位与连接 | `WP153-reply-quality-three-fixes.md` | `wp153-reply-fixes` · `wp/153-reply-fixes` | — | 已合并（09-26，Fable 终审：266 文件 3987 条过，六组模拟门禁过） |
 | 38 | WP154 「内容与博客」升级成「内容与搜索」：GSC 每日六信号 → 每天 5 件事卡、先修再写、订单归因、GEO 每周探测、内容质检门禁 | `WP154-content-and-search.md` | `wp154-content-search` · `wp/154-content-search` | 契约与 WP155 共用（WP155 先合） | 进行中（Claude） |
 | 39 | WP155 第三方搜索数据接口：SERP + 主流 AI 平台问答探测（选服务商、契约、官方积分 / 自带 key 路由、计费待定价） | `WP155-search-data-serp-geo.md` | `wp155-search-data` · `wp/155-search-data` | — | 已合并（09-26，Fable 终审：246 文件 2787 条过，六组模拟门禁过，wrangler dry-run 过；价格待 Luoye 定） |
-| 40 | WP156 界面减字：步骤清单进教程文章（右栏「教程」面板）、短说明进 tooltip；改写 docs/36 §7；先改设置页与向导 | `WP156-ui-less-text-tutorials.md` | `wp156-less-text` · `wp/156-less-text` | — | 进行中（Claude） |
+| 40 | WP156 界面减字：步骤清单进教程文章（右栏「教程」面板）、短说明进 tooltip；改写 docs/36 §7；先改设置页与向导 | `WP156-ui-less-text-tutorials.md` | `wp156-less-text` · `wp/156-less-text` | — | 已合并（09-26，Fable 终审：198 文件 2323 条过，六组模拟门禁过） |
+| 41 | WP157 界面减字第二轮：连接页 26 卡、消息渠道、插件卡、聊天窗、岗位与面板；两套 markdown 渲染合一；教程进 ⌘K | `WP157-less-text-round2.md` | `wp157-less-text-2` · `wp/157-less-text-2` | — | 进行中（Claude） |
 
 WP117b 的补充要求（派工单里没有，写在这）：demo 服务的是 `apps/workstation/dist`，测界面前先 `pnpm -F @agentsws/workstation exec vite build`；交付一个真实点击的 playwright 脚本 `scripts/e2e-kol-sandbox.mjs`（playwright 库在 `node_modules/.pnpm/playwright@1.63.0/node_modules/playwright`），走完「选合成红人 → 起草开发信 → 批准发送 → 已发 ≥ 1 → 跳到 N 天后 → 回信 ≥ 1 → 分类 → 议价卡 → 阶段推进 → 交付物 → 追踪链接」，每步截图到 `docs/assets/workstation/kol-e2e-NN.png`，脚本里断言计数确实变了；演练数据从真实漏斗 / 归因里排除，单独显示「演练漏斗」。
 

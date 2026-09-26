@@ -141,16 +141,23 @@ export function KolCloudCard({
     [subscribe, cancel, sync, resolve, dump, wipe].find((m) => m.isError)?.error ?? undefined
 
   return (
-    <section className="flex flex-col gap-2 rounded-lg border p-2.5" data-testid="kol-cloud-card">
+    <section
+      className="flex flex-col gap-2 rounded-lg border p-2.5"
+      data-slot="card"
+      data-testid="kol-cloud-card"
+    >
       <div className="flex items-start justify-between gap-2">
         <div>
           <h4 className="flex items-center gap-1 text-xs font-medium">
             {t('kol_cloud.title')}
             <Hint text={t('kol_cloud.hint')} />
           </h4>
-          <p className="text-[11px] text-muted-foreground">{t('kol_cloud.price')}</p>
+          <p className="text-[11px] text-muted-foreground" data-slot="status">
+            {t('kol_cloud.price')}
+          </p>
         </div>
         <span
+          data-slot="status"
           data-testid="kol-cloud-state"
           data-state={state}
           // 欠费与暂停是"要用户做点什么"，所以给颜色；生效中不用喊
@@ -167,7 +174,11 @@ export function KolCloudCard({
       {/* 还没关联账号：这一项根本谈不上，一句人话 + 一个去处 */}
       {view?.linked === false ? (
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <p className="text-xs text-muted-foreground" data-testid="kol-cloud-not-linked">
+          <p
+            className="text-xs text-muted-foreground"
+            data-slot="status"
+            data-testid="kol-cloud-not-linked"
+          >
             {view.reason ?? t('kol_cloud.not_linked')}
           </p>
           {onLinkFirst === undefined ? null : (
@@ -184,7 +195,11 @@ export function KolCloudCard({
       ) : (
         <>
           {/* 状态那一句：当期到哪天 / 宽限到哪天 / 数据一条没动 */}
-          <p className="text-xs text-muted-foreground" data-testid="kol-cloud-note">
+          <p
+            className="text-xs text-muted-foreground"
+            data-slot="status"
+            data-testid="kol-cloud-note"
+          >
             {state === 'none'
               ? t('kol_cloud.none_note')
               : state === 'grace' || state === 'suspended'
@@ -204,6 +219,7 @@ export function KolCloudCard({
           {view?.cloud_reachable === false ? (
             <p
               className="flex items-center gap-1 text-xs text-muted-foreground"
+              data-slot="status"
               data-testid="kol-cloud-unreachable"
             >
               <CloudOff className="size-3.5" aria-hidden />
@@ -212,6 +228,7 @@ export function KolCloudCard({
           ) : (
             <p
               className="text-xs tabular-nums text-muted-foreground"
+              data-slot="status"
               data-testid="kol-cloud-counts"
             >
               {t('kol_cloud.counts', {

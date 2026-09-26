@@ -14,6 +14,9 @@
  * 的前提：扩展只能用户自己在浏览器里装，`bsk` 是一个本机小程序。向导把这两步摆出来，
  * 第三步按钮跑一次上游自己的体检，把它那几条原样端出来（含"怎么修"那一句）。
  *
+ * WP156（36 §7）：卡片上只留名字、一句说明、一行安全承诺、方式切换与按钮；每种方式的注释、
+ * 每步的说明进问号，「两种浏览器的区别」、商店以外的来龙去脉进教程「让 AI 用浏览器」。
+ *
  * 三条界面纪律：
  * 1. **默认是"不开"**。不配 = 没有哪条职责开得了浏览器。这是安全的那一侧，
  *    也是诚实的那一侧：没配好就说没配好，不要半开着。
@@ -25,9 +28,10 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Check, Globe, Loader2, Search, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
+import { TutorialLink } from '@/components/help/tutorial-link'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Hint } from '@/components/ui/hint'
+import { Hint, SafetyNote } from '@/components/ui/hint'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
   ApiClientError,
@@ -55,20 +59,27 @@ const BSK_STORE = {
   edge: 'https://microsoftedge.microsoft.com/addons/detail/browserskill/emacgiaaaiojkkpkddmmdfhmokgmnikg',
 } as const
 
-/** 一步向导的外框（编号 + 标题 + 说明 + 右边那个按钮 / 状态）。 */
+/**
+ * 一步向导的外框：编号 + 标题 + 问号 + 右边那个按钮 / 状态。
+ *
+ * WP156（36 §7）：每步底下原来那句说明进问号——步骤本身挂着操作按钮（装扩展 → 装 bsk → 检查），
+ * 所以"①②③"留着；来龙去脉在教程「让 AI 用浏览器」里。
+ */
 function Step({
   title,
-  note,
+  hint,
   children,
 }: {
   title: string
-  note: string
+  hint: string
   children?: React.ReactNode
 }): React.ReactNode {
   return (
     <div className="flex flex-col gap-1 rounded-md border p-2.5">
-      <span className="text-xs font-medium">{title}</span>
-      <span className="text-[11px] text-muted-foreground">{note}</span>
+      <span className="flex items-center gap-1 text-xs font-medium" data-slot="title">
+        {title}
+        <Hint text={hint} />
+      </span>
       {children}
     </div>
   )
@@ -150,10 +161,19 @@ export function BrowserCard({ assignment }: { assignment?: string }): React.Reac
     else save.mutate({ mode: 'off' })
   }
 
-  const option = (value: BrowserSettings['mode'], label: string, note: string, off = false) => (
+  /**
+   * 一个方式：单选 + 名字 + 问号（那一句注释）。用不了的那一档把**为什么用不了**直接写在下面——
+   * 那是状态，不是说明（灰掉但不解释等于让人以为坏了）。
+   */
+  const option = (
+    value: BrowserSettings['mode'],
+    label: string,
+    note: string,
+    blocked?: string,
+  ) => (
     <label
       className={`flex items-start gap-2 rounded-md border p-2.5 ${
-        off ? 'opacity-50' : 'cursor-pointer'
+        blocked === undefined ? 'cursor-pointer' : 'opacity-50'
       } ${current === value ? 'border-primary' : ''}`}
       data-testid={`browser-mode-${value}`}
     >
@@ -162,15 +182,22 @@ export function BrowserCard({ assignment }: { assignment?: string }): React.Reac
         name="browser-mode"
         className="mt-0.5"
         checked={current === value}
-        disabled={off}
+        disabled={blocked !== undefined}
         onChange={() => {
           setMode(value)
           setProbe(undefined)
         }}
       />
       <span className="flex flex-col gap-0.5">
-        <span className="text-sm font-medium">{label}</span>
-        <span className="text-xs text-muted-foreground">{note}</span>
+        <span className="flex items-center gap-1 text-sm font-medium">
+          {label}
+          <Hint text={note} />
+        </span>
+        {blocked === undefined ? null : (
+          <span className="text-xs text-muted-foreground" data-slot="status">
+            {blocked}
+          </span>
+        )}
       </span>
     </label>
   )
@@ -182,20 +209,25 @@ export function BrowserCard({ assignment }: { assignment?: string }): React.Reac
           <Globe className="size-4" aria-hidden />
           {t('settings.browser')}
           <Hint text={t('settings.browser.hint')} testId="settings-browser-hint" />
+          <TutorialLink slug="browser" className="ml-auto font-normal" />
         </CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-3 text-sm">
-        <p className="text-xs text-muted-foreground">{t('settings.browser.summary')}</p>
+        <p className="flex items-center gap-1 text-xs text-muted-foreground">
+          {t('settings.browser.summary')}
+          <Hint text={t('settings.browser.summary.hint')} testId="settings-browser-scope" />
+        </p>
+        <SafetyNote text={t('settings.browser.safety')} />
 
         {option('off', t('settings.browser.off'), t('settings.browser.off.note'))}
 
         {option(
           'attach',
           t('settings.browser.attach'),
+          t('settings.browser.attach.note'),
           attachAllowed
-            ? t('settings.browser.attach.note')
+            ? undefined
             : (view?.attach_blocked_reason ?? t('settings.browser.attach.blocked')),
-          !attachAllowed,
         )}
         {current === 'attach' && attachAllowed ? (
           <div className="flex flex-col gap-2 pl-6">
@@ -237,16 +269,16 @@ export function BrowserCard({ assignment }: { assignment?: string }): React.Reac
               >
                 {t('settings.browser.test')}
               </Button>
+              <Hint text={t('settings.browser.how')} testId="settings-browser-how" />
             </div>
-            <p className="text-[11px] text-muted-foreground">{t('settings.browser.how')}</p>
           </div>
         ) : null}
 
         {option('launch', t('settings.browser.launch'), t('settings.browser.launch.note'))}
         {current === 'launch' ? (
-          <div className="flex flex-col gap-2 pl-6">
+          <div className="flex items-center gap-2 pl-6">
             <input
-              className="h-8 rounded-md border bg-background px-2 font-mono text-xs"
+              className="h-8 flex-1 rounded-md border bg-background px-2 font-mono text-xs"
               value={path}
               placeholder="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
               data-testid="browser-executable"
@@ -254,48 +286,53 @@ export function BrowserCard({ assignment }: { assignment?: string }): React.Reac
                 setPath(e.target.value)
               }}
             />
-            <p className="text-[11px] text-muted-foreground">{t('settings.browser.launch.hint')}</p>
+            <Hint text={t('settings.browser.launch.hint')} testId="settings-browser-launch-hint" />
           </div>
         ) : null}
 
         {option(
           'browserskill',
           t('settings.browser.bsk'),
+          t('settings.browser.bsk.note'),
           bskAllowed
-            ? t('settings.browser.bsk.note')
+            ? undefined
             : (view?.browserskill_blocked_reason ?? t('settings.browser.bsk.blocked')),
-          !bskAllowed,
         )}
         {current === 'browserskill' && bskAllowed ? (
           <div className="flex flex-col gap-2 pl-6" data-testid="browserskill-wizard">
             <Step
               title={t('settings.browser.bsk.step1')}
-              note={t('settings.browser.bsk.step1.note')}
+              hint={t('settings.browser.bsk.step1.note')}
             >
-              <span className="flex gap-3 text-[11px]">
-                <a
-                  className="underline"
-                  href={BSK_STORE.chrome}
-                  target="_blank"
-                  rel="noreferrer"
-                  data-testid="browserskill-store-chrome"
-                >
-                  {t('settings.browser.bsk.step1.chrome')}
-                </a>
-                <a
-                  className="underline"
-                  href={BSK_STORE.edge}
-                  target="_blank"
-                  rel="noreferrer"
-                  data-testid="browserskill-store-edge"
-                >
-                  {t('settings.browser.bsk.step1.edge')}
-                </a>
+              {/* 这一步的操作就是去商店装——两个商店是操作按钮，不是参考外链 */}
+              <span className="flex gap-2">
+                <Button size="sm" variant="outline" asChild>
+                  <a
+                    href={BSK_STORE.chrome}
+                    target="_blank"
+                    rel="noreferrer"
+                    data-slot="action"
+                    data-testid="browserskill-store-chrome"
+                  >
+                    {t('settings.browser.bsk.step1.chrome')}
+                  </a>
+                </Button>
+                <Button size="sm" variant="outline" asChild>
+                  <a
+                    href={BSK_STORE.edge}
+                    target="_blank"
+                    rel="noreferrer"
+                    data-slot="action"
+                    data-testid="browserskill-store-edge"
+                  >
+                    {t('settings.browser.bsk.step1.edge')}
+                  </a>
+                </Button>
               </span>
             </Step>
             <Step
               title={t('settings.browser.bsk.step2')}
-              note={t('settings.browser.bsk.step2.note')}
+              hint={t('settings.browser.bsk.step2.note')}
             >
               <span className="flex items-center gap-2">
                 <Button
@@ -314,6 +351,7 @@ export function BrowserCard({ assignment }: { assignment?: string }): React.Reac
                 </Button>
                 <span
                   className="text-[11px] text-muted-foreground"
+                  data-slot="status"
                   data-testid="browserskill-installed"
                 >
                   {bsk === undefined
@@ -339,7 +377,7 @@ export function BrowserCard({ assignment }: { assignment?: string }): React.Reac
             </Step>
             <Step
               title={t('settings.browser.bsk.step3')}
-              note={t('settings.browser.bsk.step3.note')}
+              hint={t('settings.browser.bsk.step3.note')}
             >
               <span className="flex items-center gap-2">
                 <Button
@@ -357,6 +395,7 @@ export function BrowserCard({ assignment }: { assignment?: string }): React.Reac
                 {bsk === undefined ? null : (
                   <span
                     className={`text-[11px] ${bsk.ok ? 'text-muted-foreground' : 'text-destructive'}`}
+                    data-slot="status"
                     data-testid="browserskill-result"
                     data-ok={bsk.ok}
                   >
@@ -367,7 +406,11 @@ export function BrowserCard({ assignment }: { assignment?: string }): React.Reac
                 )}
               </span>
               {bsk === undefined || bsk.checks.length === 0 ? null : (
-                <ul className="flex flex-col gap-0.5 pt-1" data-testid="browserskill-checks">
+                <ul
+                  className="flex flex-col gap-0.5 pt-1"
+                  data-slot="status"
+                  data-testid="browserskill-checks"
+                >
                   {bsk.checks.map((check) => (
                     <li key={check.name} className="flex items-start gap-1 text-[11px]">
                       {check.status === 'fail' ? (
@@ -384,13 +427,13 @@ export function BrowserCard({ assignment }: { assignment?: string }): React.Reac
                 </ul>
               )}
             </Step>
-            <p className="text-[11px] text-muted-foreground">{t('settings.browser.bsk.compare')}</p>
           </div>
         ) : null}
 
         {probe === undefined ? null : (
           <p
             className={`text-xs ${probe.ok ? 'text-muted-foreground' : 'text-destructive'}`}
+            data-slot="status"
             data-testid="browser-probe-result"
             data-ok={probe.ok}
           >
@@ -422,13 +465,15 @@ export function BrowserCard({ assignment }: { assignment?: string }): React.Reac
             {t('settings.browser.save')}
           </Button>
           {save.isSuccess && !save.isPending ? (
-            <span className="text-xs text-muted-foreground" data-testid="browser-saved">
+            <span
+              className="text-xs text-muted-foreground"
+              data-slot="status"
+              data-testid="browser-saved"
+            >
               {t('settings.browser.saved')}
             </span>
           ) : null}
         </div>
-
-        <p className="text-[11px] text-muted-foreground">{t('settings.browser.scope')}</p>
       </CardContent>
     </Card>
   )

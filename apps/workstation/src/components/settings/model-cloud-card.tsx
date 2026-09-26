@@ -15,6 +15,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Cloud, Loader2 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { BrandIcon } from '@/components/brand-icons'
+import { TutorialLink } from '@/components/help/tutorial-link'
 import { Button } from '@/components/ui/button'
 import { Hint } from '@/components/ui/hint'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -99,6 +100,7 @@ export function ModelCloudCard({ assignment }: { assignment?: string }): React.R
         <BrandIcon provider="agentsws_cloud" />
         {template?.label ?? t('models.cloud.title')}
         <Hint text={t('models.cloud.hint')} />
+        <TutorialLink slug="agentsws-credits" className="ml-auto font-normal" />
       </p>
       <p className="mt-0.5 text-xs text-muted-foreground">
         {template?.summary ?? t('models.cloud.summary')}
@@ -106,7 +108,7 @@ export function ModelCloudCard({ assignment }: { assignment?: string }): React.R
 
       {/* 数字只在"已经在用"时出——没启用的时候摆一行 0 是噪音 */}
       {existing !== undefined && balance !== undefined ? (
-        <p className="mt-1.5 text-xs" data-testid="model-cloud-numbers">
+        <p className="mt-1.5 text-xs" data-slot="status" data-testid="model-cloud-numbers">
           {t('models.cloud.numbers', {
             month: num(month ?? 0),
             balance: num(balance.available),
@@ -115,7 +117,11 @@ export function ModelCloudCard({ assignment }: { assignment?: string }): React.R
       ) : null}
 
       {credits.data?.reason === undefined || linked ? null : (
-        <p className="mt-1.5 text-[11px] text-muted-foreground" data-testid="model-cloud-reason">
+        <p
+          className="mt-1.5 text-[11px] text-muted-foreground"
+          data-slot="status"
+          data-testid="model-cloud-reason"
+        >
           {credits.data.reason}
         </p>
       )}

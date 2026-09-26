@@ -377,9 +377,11 @@ describe('启动不激活（#6）', () => {
   // WP120（69 §4）：中组多了「角色」→ 十五个
   // WP122（71）：又加了「设计规范」那一格（`layer` 组），于是十六个
   // WP140：内测期间藏起四个还没做的占位面板（数据 / 运行中 / 定时任务 / 文件），于是十二个
-  it('一个都没开的时候：十二个图标都在，但没有任何面板发请求', () => {
+  // WP156：工具组最后加了「教程」，于是十三个
+  it('一个都没开的时候：十三个图标都在，但没有任何面板发请求', () => {
     renderRail()
-    expect(screen.getAllByTestId(/^rail-icon-/)).toHaveLength(12)
+    expect(screen.getAllByTestId(/^rail-icon-/)).toHaveLength(13)
+    expect(screen.getByTestId('rail-icon-help')).toBeTruthy()
     expect(screen.queryByTestId('rail-icon-data')).toBeNull()
     expect(getLayerMemory).not.toHaveBeenCalled()
     expect(screen.queryByTestId('rail-panel-frame')).toBeNull()
