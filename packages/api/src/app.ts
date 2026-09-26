@@ -53,6 +53,7 @@ import { organizationRoutes } from './routes/organizations.js'
 import { personaRoutes } from './routes/personas.js'
 import { positionEntryRoutes } from './routes/positions.js'
 import { prRoutes } from './routes/pr.js'
+import { seoRoutes } from './routes/seo.js'
 import { privacyRoutes } from './routes/privacy.js'
 import { scheduleRoutes } from './routes/schedules.js'
 import { secretaryRoutes } from './routes/secretary.js'
@@ -206,6 +207,7 @@ export function collectRoutes(): Route[] {
     ...adsRoutes(),
     // WP78（60 §5）：公关库的最小一套（提及 / 稿子 / 外部发帖 / 媒体名单）
     ...prRoutes(),
+    ...seoRoutes(),
     /*
      * WP113（63）：消息。`/v1/messages*` 是独立前缀，与已有路径都不撞。
      * **内部次序要紧**：定值段（`accounts` / `labels` / `rules` / `drafts` /

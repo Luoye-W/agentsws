@@ -82,6 +82,13 @@ export type ApprovalKind =
    * 改动卡、新页面选题卡；交给建站 / 公关的开成事项。
    */
   | 'seo_report'
+  /**
+   * WP154：**新页面选题卡**（「今天值得动的 5 件事」里要一页新的那一件，且 SERP 看过、
+   * 排前面的是对的人群）。问的是"这个词写不写一页"：批了开一件写这一页的事项
+   * （写和发仍归内容与搜索，每天发布上限照旧 2 篇），驳回就是"这个词不写"。
+   * payload = `SeoTopicPayload`。
+   */
+  | 'seo_topic'
 
 /** 14 §13.2 抽检复核：L2 自动批被抽中后，范围管理者看完说什么（WP32） */
 export interface SamplingReview {

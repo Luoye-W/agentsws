@@ -127,6 +127,10 @@ export const HANDLERS = {
   socialBroadcast: 'social.broadcast_due',
   /** WP78 / 60 §5：品牌监控一轮（拉提及 → 判类 → 出卡），按品牌各跑一轮。 */
   prMonitor: 'pr.monitor_sweep',
+  /** WP154：每天早上读一遍 Search Console → 「今天值得动的 5 件事」（按品牌各一轮）。 */
+  seoDaily: 'seo.daily_read',
+  /** WP154：每周一：按页面收入小结 + AI 平台可见度（按品牌各一轮）。 */
+  seoWeekly: 'seo.weekly_review',
 } as const
 
 /** 审批家务的节奏：一分钟一拍（模拟回路是每个 tick 一拍，真机器按分钟）。 */
@@ -914,6 +918,32 @@ export function registerPrMonitor(scheduler: Scheduler, deps: PrMonitorDeps): vo
 }
 
 /* ------------------------------------------------------------------ */
+/* ⑲ WP154：内容与搜索——每天早上读一遍 Search Console、每周一小结         */
+/* ------------------------------------------------------------------ */
+
+/**
+ * WP154：每天早上 08:00（工作区时区）读一遍 Search Console。
+ *
+ * 为什么是早上、一天一次：Search Console 的数据本身就晚两三天，一天读几次读到的是同一份；
+ * 早上读完，人上班第一眼就能看到「今天值得动的 5 件事」（文章：flags land before we're up）。
+ */
+export const SEO_DAILY_CRON = '0 8 * * *'
+/** WP154：每周一 08:30——收入小结与 AI 可见度看的是一整周，一周一次足够（也省探测的钱）。 */
+export const SEO_WEEKLY_CRON = '30 8 * * 1'
+
+export interface SeoDeps {
+  /** 每个品牌各跑一轮每日判断。 */
+  daily(): Promise<{ brands: number; picks: number; skipped: unknown[] }>
+  /** 每个品牌各跑一轮周小结（收入 + AI 可见度）。 */
+  weekly(): Promise<{ brands: number; skipped: unknown[] }>
+}
+
+export function registerSeo(scheduler: Scheduler, deps: SeoDeps): void {
+  scheduler.register(HANDLERS.seoDaily, () => deps.daily())
+  scheduler.register(HANDLERS.seoWeekly, () => deps.weekly())
+}
+
+/* ------------------------------------------------------------------ */
 /* ⑯ WP55 / 48 §4 L3 #4：出站 outbox 对账：每分钟                          */
 /* ------------------------------------------------------------------ */
 
@@ -1086,6 +1116,8 @@ export interface SchedulePlanOptions {
      * "机器在替你定时做哪几件事"那张清单添一行看不懂的东西。
      */
     social?: boolean
+    /** WP154：有人持有「内容与搜索」（`dtc.content`）才建每日读与每周小结那两条。 */
+    seo?: boolean
   }
 }
 
@@ -1323,6 +1355,30 @@ export async function ensureSystemTasks(
    * "刚刚发生的"一次性推成几十张预警卡。下一轮照样会把还在的那些拉回来
    * （去重那一步认的是 `dedupe_key`，不是"这一轮见过没有"）。
    */
+  /*
+   * ⑲ WP154：内容与搜索。每日那一条**错过了补跑一次**（`run_once_now`）：早上开机晚了，
+   * 今天那张 5 件事照样该出；每周那一条**不补跑**（`skip`）——关机三周再开机，不该一次出三张周报。
+   */
+  if (options.has.seo === true) {
+    await add(
+      'sched_seo_daily',
+      systemTask(base, {
+        title: '每天早上读一遍 Search Console，挑出今天值得动的 5 件事',
+        handler: HANDLERS.seoDaily,
+        trigger: { kind: 'cron', expr: SEO_DAILY_CRON, tz },
+        misfire_policy: 'run_once_now',
+      }),
+    )
+    await add(
+      'sched_seo_weekly',
+      systemTask(base, {
+        title: '每周一看一眼：哪些页带来订单、AI 回答里有没有我们',
+        handler: HANDLERS.seoWeekly,
+        trigger: { kind: 'cron', expr: SEO_WEEKLY_CRON, tz },
+        misfire_policy: 'skip',
+      }),
+    )
+  }
   if (options.has.pr === true) {
     await add(
       'sched_pr_monitor',

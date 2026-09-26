@@ -225,6 +225,16 @@ const CONTENT_QUEUE_BLOCKS = (): BlockDef[] => [
   block('content.pending_publish', 'table', '待发布', 'changes.pending_publish_post'),
 ]
 
+/**
+ * WP154「内容与搜索」：今天值得动的 5 件事（`gsc` 源——没连就出「去连接」）、
+ * 按页面收入（店铺后台）、AI 平台可见度（工作队列——它是我们自己出的周报）。
+ */
+const SEO_BLOCKS = (): BlockDef[] => [
+  block('seo.today', 'table', '今天值得动的 5 件事', 'seo.today'),
+  block('seo.page_revenue', 'table', '按页面：点击 / 订单 / 收入', 'seo.page_revenue'),
+  block('seo.geo_visibility', 'table', 'AI 平台里有没有我们', 'seo.geo_visibility'),
+]
+
 const GA4_BLOCKS = (): BlockDef[] => [
   block('ga4.active_users', 'stat_tile', '活跃用户', 'analytics.active_users'),
   block('ga4.events', 'table', '事件', 'analytics.events'),
@@ -488,8 +498,13 @@ const VIEW_BY_ROLE: Record<RoleId, () => BlockDef[]> = {
     ...GA4_BLOCKS(),
     ...REVIEW_BLOCKS(),
   ],
-  // WP63（51 §2.2）：内容与博客的面板 = 草稿与发布（店铺后台）+ 待发布队列 + 流量（GSC）
-  'dtc.content': () => [...CONTENT_BLOCKS(), ...CONTENT_QUEUE_BLOCKS(), ...GSC_BLOCKS()],
+  /*
+   * WP63（51 §2.2）：内容与博客的面板 = 草稿与发布（店铺后台）+ 待发布队列 + 流量（GSC）。
+   * WP154「内容与搜索」：GSC 那一块换成「今天值得动的 5 件事」，再加按页面收入与
+   * AI 可见度。原来那两张查询词 / 落地页的原始表**不再放这条职责的面板**——
+   * 不堆数据（文章："flags only what's worth acting on"）；它们还在数据分析那条职责里。
+   */
+  'dtc.content': () => [...CONTENT_BLOCKS(), ...CONTENT_QUEUE_BLOCKS(), ...SEO_BLOCKS()],
   // WP67（48 §5.1）：五条渠道职责，面板骨架相同（找人 / 建联 / 合作 / 审核 / 归因）。
   //
   // 一块店铺后台的积木都不放：红人这条职责的 scopes 里订单是**只读**、没有

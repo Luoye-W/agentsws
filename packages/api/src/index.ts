@@ -458,6 +458,9 @@ export type {
   PrStagedView,
 } from './routes/pr.js'
 export { prRoutes } from './routes/pr.js'
+// WP154「内容与搜索」：问题清单与现在跑一轮
+export type { SeoActor as SeoRouteActor, SeoPort, SeoRunView } from './routes/seo.js'
+export { seoRoutes } from './routes/seo.js'
 export {
   type PrivacyEraseStepView,
   type PrivacyEraseView,

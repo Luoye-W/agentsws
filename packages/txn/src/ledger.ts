@@ -63,8 +63,17 @@ export class ChangeLedgerImpl {
    * 15 §3.3 stage：关系授权门禁 → guardrail(stage) → 预占 → 建审批项。
    * block 不建变更、不建审批项，返回原因（运行内告诉模型）。
    */
-  async stage(input: StageInput): Promise<StageOutcome> {
+  async stage(raw: StageInput): Promise<StageOutcome> {
     const now = this.rt.now()
+    // WP154：调用方装的改写口（发布前质检）。挂了就按原样走——门挂了不该挡住整条账本
+    let input = raw
+    if (this.rt.opts.beforeStage !== undefined) {
+      try {
+        input = await this.rt.opts.beforeStage(raw)
+      } catch {
+        input = raw
+      }
+    }
     if (!KNOWN_KINDS.has(input.kind))
       throw new TxnError(
         'invalid_input',

@@ -93,6 +93,8 @@ export const LAYOUT_BY_KIND: Record<Exclude<DeckKind, 'staged_change'>, DeckLayo
   computer_use: 'policy',
   // WP154：搜索报告（每日 5 件事 / 每周收入 / 每周 AI 可见度）同日报，不进队列（`NOT_A_CARD`）
   seo_report: 'aftermath',
+  // WP154：这个词写不写一页——一道是非题
+  seo_topic: 'choice',
   system_alert: 'aftermath',
   digest: 'aftermath',
 }

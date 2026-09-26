@@ -45,6 +45,8 @@ const BY_KIND: Partial<Record<DeckKind, DeckAction[]>> = {
   daily_report: ['open', 'snooze'],
   // WP154：搜索报告同日报——看完归档，它引出的决定各自出卡
   seo_report: ['open', 'snooze'],
+  // WP154：写 / 不写；「指导」无从谈起（要改写法等写的时候在事项里说）
+  seo_topic: ['approve', 'reject', 'snooze', 'open'],
   // 46 I3：同意 / 拒绝，没有第三条路——「指导」在这里无从谈起（对方要么进来要么不进来）。
   // 「稍后」不是第三条路，只是「现在先不决定」（WP141：每张卡都有）。
   membership: ['approve', 'reject', 'snooze', 'open'],
@@ -122,6 +124,7 @@ const RISK_BY_KIND: Partial<Record<DeckKind, RiskClass>> = {
   review: 'low',
   daily_report: 'low',
   seo_report: 'low',
+  seo_topic: 'low',
 }
 
 export function riskClassFor(kind: DeckKind): RiskClass {
@@ -155,6 +158,7 @@ const MINUTES_BY_KIND: Partial<Record<DeckKind, number>> = {
   // 看一眼就归档
   daily_report: 1,
   seo_report: 1,
+  seo_topic: 1,
 }
 
 export function minutesFor(kind: DeckKind): number {

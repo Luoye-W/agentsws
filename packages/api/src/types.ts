@@ -80,6 +80,7 @@ import type { OrganizationsPort } from './routes/organizations.js'
 import type { PersonaPort } from './routes/personas.js'
 import type { PositionEntryPort } from './routes/positions.js'
 import type { PrPort } from './routes/pr.js'
+import type { SeoPort } from './routes/seo.js'
 import type { PrivacyPort } from './routes/privacy.js'
 import type { SecretaryPort } from './routes/secretary.js'
 import type { SecretsPort } from './routes/secrets.js'
@@ -768,6 +769,10 @@ export interface GatewayDeps {
    * 公共关系那四条职责要它才动得了。
    */
   pr?: PrPort
+  /**
+   * WP154「内容与搜索」：问题清单与"现在跑一轮"。没装配时 `/v1/seo/*` 回 not_implemented。
+   */
+  seo?: SeoPort
   /** 37 工作模型（事项 / 目标 / 待办 / 日历 / 计划 / 复盘）；没装配时那几条路由回 not_implemented。 */
   work?: WorkPort
   /** 37 §4 会议内核；没装配时 `/v1/meetings/*` 回 not_implemented。 */

@@ -138,6 +138,15 @@ export interface TxnOptions {
    * 不装 = 不判（老调用方一个字不用改）。
    */
   targetInRange?: TargetInRangeCheck
+  /**
+   * WP154：stage 之前的**改写口**（只在调用方装了才有；不装 = 一个字节不变）。
+   *
+   * 给"要看本包看不到的东西才判得了"的门用——发布前内容质检要读知识库里的事实卡与
+   * 违规宣称规则表，这个包不认知识库。改写后的入参照常走下面每一道门（guardrail、
+   * 预占、审批路由），所以它只能**收紧**（把"发布"改回"草稿"、把等级拉回 L1），
+   * 放宽不了任何一道闸。抛错 = 当它不存在（门挂了不该挡住整条账本）。
+   */
+  beforeStage?: (input: StageInput) => StageInput | Promise<StageInput>
   backendApply?: BackendApply
   deliverOutbound?: DeliverOutbound
   directory?: Directory

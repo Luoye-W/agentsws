@@ -46,6 +46,7 @@ import type { PrStore } from './pr.js'
 import type { PrServiceAssembly } from './pr-service.js'
 import type { MatterRecordSource, RuntimeAssembly } from './runtime.js'
 import type { SecretStore } from './secret-store.js'
+import type { SeoServiceAssembly } from './seo-service.js'
 import type { SiteServiceAssembly, SiteStore } from './site.js'
 import type { SocialStore } from './social.js'
 import type { SocialChannelsAssembly } from './social-channels.js'
@@ -203,6 +204,12 @@ export interface BrandModuleSet {
    * 与变更账本**的那一层。60 那条"客户投诉转客服"的分界，在服务进程里的落点是它。
    */
   prService: PrServiceAssembly
+  /**
+   * WP154「内容与搜索」：这个品牌的 SEO / GEO 那一层（每日 5 件事、每周收入与 AI 可见度、
+   * 发布前质检）。按品牌一份：Search Console 与订单都是这个品牌自己的，问题清单落在
+   * 这个品牌的目录下。
+   */
+  seoService: SeoServiceAssembly
   /** WP73：这个品牌九条渠道的适配器与 transport（真 HTTP 那一跳 + 凭据取法）。 */
   socialChannels: SocialChannelsAssembly
   /**

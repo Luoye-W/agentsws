@@ -82,6 +82,9 @@
       "path": "../../packages/pr-core"
     },
     {
+      "path": "../../packages/seo-core"
+    },
+    {
       "path": "../../packages/roles"
     },
     {

@@ -159,6 +159,7 @@ export const CATEGORY_BY_KIND: Partial<Record<DeckKind, string>> = {
   computer_use: 'computer_use',
   // WP154：搜索报告（每日 5 件事 / 每周收入 / 每周 AI 可见度）
   seo_report: 'seo_report',
+  seo_topic: 'seo_topic',
   digest: 'digest',
 }
 

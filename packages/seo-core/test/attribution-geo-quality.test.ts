@@ -69,9 +69,7 @@ describe('收入归因：按页面并排点击 / 订单 / 收入（Shopify landi
     expect(out.campaign_orders).toBe(2)
     expect(out.unmatched_orders).toBe(1)
     expect(landingKey('/p?utm_medium=email', 'shop.example')).toBeUndefined()
-    expect(landingKey('https://www.shop.example/Blogs/X/', 'shop.example')).toBe(
-      'shop.example/blogs/x',
-    )
+    expect(landingKey('https://www.shop.example/Blogs/X/', 'shop.example')).toBe('/blogs/x')
   })
 
   it('接了 GA4 才有转化率那一格', () => {

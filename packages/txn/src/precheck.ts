@@ -40,6 +40,8 @@ const KNOWN_KINDS: ReadonlySet<string> = new Set<ApprovalKind>([
   'computer_use',
   // WP154：搜索报告卡（每日 5 件事 / 每周收入 / 每周 AI 可见度；L3 自动出、看完归档）
   'seo_report',
+  // WP154：新页面选题卡（批了开一件写这一页的事项）
+  'seo_topic',
 ])
 
 export function isKnownKind(kind: string): boolean {

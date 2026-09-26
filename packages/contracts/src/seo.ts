@@ -247,6 +247,19 @@ export interface SeoWeeklyGeoPayload {
 
 export type SeoReportPayload = SeoDailyPayload | SeoWeeklyRevenuePayload | SeoWeeklyGeoPayload
 
+/** `seo_topic` 卡（新页面选题）的 payload。 */
+export interface SeoTopicPayload {
+  query: string
+  /** 现在排上的那一页（写好后从它链过去）。 */
+  ranking_page?: string
+  evidence: SeoEvidence
+  /** 为什么要新写一页（模板生成的那句建议）。 */
+  why: string
+  serp: SeoSerpCheck
+  /** 批了之后开的那件事项（服务端回填）。 */
+  matter_id?: string
+}
+
 /* ------------------------------------------------------------------ */
 /* 发布前的内容质检门禁                                                   */
 /* ------------------------------------------------------------------ */

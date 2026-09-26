@@ -49,6 +49,7 @@
     "@agentsws/metering": "workspace:*",
     "@agentsws/model-gateway": "workspace:*",
     "@agentsws/pr-core": "workspace:*",
+    "@agentsws/seo-core": "workspace:*",
     "@agentsws/roles": "workspace:*",
     "@agentsws/runtime-direct": "workspace:*",
     "@agentsws/schedule": "workspace:*",

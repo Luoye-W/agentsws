@@ -39,6 +39,21 @@ export function disconnectedSearchConsole(): SearchConsolePort {
   }
 }
 
+export const SEARCH_CONSOLE_READ_PENDING =
+  'Search Console 已经连上了，读查询词与页面这一步还没接好（下一版接），今天的 5 件事先空着。'
+
+/**
+ * 连上了、但读数那一跳还没接（连接目录里那张卡能授权，查询词与落地页的读口是下一版的事）。
+ * 与"没连"分开说：没连是「去连接」，这个是「我们这边还没做完」。
+ */
+export function pendingSearchConsole(): SearchConsolePort {
+  return {
+    connected: () => true,
+    rows: () => Promise.reject(new Error(SEARCH_CONSOLE_READ_PENDING)),
+    pages: () => Promise.resolve([]),
+  }
+}
+
 /** 替身：固定几行。 */
 export function standInSearchConsole(data: {
   rows: readonly GscRow[]
