@@ -137,6 +137,11 @@ export interface ConnectionDirectoryAssembly {
   directory(): ConnectionDirectoryItem[]
   /** 岗位连接清单：并集 − 已连。 */
   positionConnections(person_id: PersonId, id: string): PositionConnectionsView
+  /**
+   * WP153：这几条职责要、但还没连上的连接（与岗位连接清单同一份算法，只是不按人、不按岗位收窄）。
+   * 店主的 `list_connections` 用它回答「哪条职责要它但还没连」。
+   */
+  roleGaps(role_ids: readonly RoleId[]): PositionConnectionItem[]
   /** 已登记的自定义 MCP 服务器（**没有请求头的值**）。 */
   listMcp(): McpServerRecord[]
   /** 登记一台：校验 → 存（请求头进加密库）→ 探测一次。 */
@@ -409,8 +414,10 @@ export function createConnectionDirectory(
     }
   }
 
-  const positionConnections = (person_id: PersonId, id: string): PositionConnectionsView => {
-    const { position_id, position_name, role_ids } = resolve(person_id, id)
+  /** 这几条职责要、但还没连上的连接（岗位连接清单与店主的 `list_connections` 共用这一份）。 */
+  const gapsOf = (
+    role_ids: readonly RoleId[],
+  ): { items: PositionConnectionItem[]; missing_required: string[] } => {
     const connected = connectedSet()
     const merged = new Map<
       string,
@@ -472,6 +479,12 @@ export function createConnectionDirectory(
         Number(b.required) - Number(a.required) ||
         (order.get(a.kind) ?? 999) - (order.get(b.kind) ?? 999),
     )
+    return { items, missing_required }
+  }
+
+  const positionConnections = (person_id: PersonId, id: string): PositionConnectionsView => {
+    const { position_id, position_name, role_ids } = resolve(person_id, id)
+    const { items, missing_required } = gapsOf(role_ids)
     return {
       position_id,
       position_name,
@@ -554,6 +567,7 @@ export function createConnectionDirectory(
   return {
     directory,
     positionConnections,
+    roleGaps: (role_ids) => gapsOf(role_ids).items,
     roleConnections,
     listMcp: () =>
       state.servers.map((s) => ({

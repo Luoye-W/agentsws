@@ -14,6 +14,7 @@
 import type { BlockData, DeckCard } from '@agentsws/deck'
 import { screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { Route, Routes } from 'react-router-dom'
 import { describe, expect, it, vi } from 'vitest'
 import { BlockBody } from '@/components/blocks/block-view'
 import { ReportBlocks } from '@/components/deck/panel-blocks'
@@ -97,10 +98,72 @@ const dailyReport: DeckCard = draftCard({
 
 const home = homeData({ queue: [policy, reply, campaign], reports: [dailyReport] })
 
+/**
+ * WP153：事项时间线里 Agent 的回话（照 09-26 真账号冒烟那一次的形状：粗体、编号、行内代码、
+ * 站内链接）。服务端进时间线前已经把工具名换成了人话——这里钉住的是屏幕上最后看到的样子：
+ * 没有内部值、没有 markdown 记号原样露出来。
+ */
+const T_REPLY = '2026-09-26T04:00:00.000Z'
+const ownerReply = [
+  '这个工作区现在有 **10 个岗位**，**2 条连接**已接上，还差 **1 条必需的连接**。',
+  '',
+  '**岗位**',
+  '- **客服**：网站客服、Amazon 客服；在岗：小林（1 个店铺）',
+  '- **红人营销**：YouTube 红人；还没人在岗',
+  '',
+  '**最该先处理的三件事**',
+  '1. 把「GA4」连上——网站运营要它才能开工。',
+  '2. 给没人在岗的岗位安排人：「红人营销」——这些岗位的活现在没人接。',
+  '3. 我用「规矩与政策库」核了一遍，`退货窗口` 没有冲突。[去连接页](/settings/connections)',
+].join('\n')
+const matterWithReply = {
+  matter: {
+    id: 'mat_owner',
+    schema_version: 1,
+    workspace_id: 'ws_1',
+    kind: 'task',
+    title: '帮我看看有哪些岗位和连接',
+    status: 'open',
+    position_id: 'owner',
+    role_id: 'common.owner',
+    context: {
+      summary: '这个工作区现在有 10 个岗位，2 条连接已接上，还差 1 条必需的连接。',
+      pinned: [],
+      participants: [],
+      last_activity: T_REPLY,
+    },
+    created_at: T_REPLY,
+    updated_at: T_REPLY,
+  },
+  timeline: [
+    {
+      id: 'mev_1',
+      matter_id: 'mat_owner',
+      at: T_REPLY,
+      kind: 'agent_message',
+      text: ownerReply,
+      actor: { kind: 'agent', id: 'asg_owner' },
+      run_id: 'run_1',
+    },
+  ],
+  has_more: false,
+  todos: [],
+  open_card_ids: [],
+  pinned_labels: [],
+  participant_labels: [],
+}
+
 vi.mock('@/lib/api', async () => {
   const actual = await vi.importActual<typeof import('@/lib/api')>('@/lib/api')
   return {
     ...actual,
+    getMatter: async () => matterWithReply,
+    getPosition: async () => ({
+      position_id: 'owner',
+      roles: [
+        { role_id: 'common.owner', role_name: '工作区所有者', assignment_ids: ['asg_owner'] },
+      ],
+    }),
     getHome: async () => home,
     getPositions: async () => ({ positions: [], instances: [], tile_library: [], max_tiles: 4 }),
     listMembers: async () => [],
@@ -110,6 +173,7 @@ vi.mock('@/lib/api', async () => {
 })
 
 const { HomePage } = await import('@/pages/home')
+const { MatterPage } = await import('@/pages/matter')
 
 describe('WP141 守卫：屏幕上没有内部值', () => {
   it('扫描器本身认得出三种毛病（反例）', () => {
@@ -117,6 +181,29 @@ describe('WP141 守卫：屏幕上没有内部值', () => {
     expect(rawTokens('期限 2026-09-27T01:00:00.000Z')).toEqual(['2026-09-27T01:00'])
     expect(rawTokens('来源 kol.contact.source.sandbox')).toEqual(['kol.contact.source.sandbox'])
     expect(rawTokens('写信到 sales@kraft-boxes.example 或 www.youtube.com')).toEqual([])
+  })
+
+  it('WP153：扫描器也认得出回话里露出来的工具名（反例）', () => {
+    expect(rawTokens('我用 search_policies 查了三轮')).toEqual(['search_policies'])
+  })
+
+  it('WP153：事项时间线里 Agent 的回话——没有内部值，markdown 记号不原样露出', async () => {
+    const { container } = renderWithProviders(
+      <Routes>
+        <Route path="/matters/:id" element={<MatterPage />} />
+      </Routes>,
+      '/matters/mat_owner',
+    )
+    await screen.findByTestId('reply-markdown')
+    const text = screenText(container)
+    expect(rawTokens(text)).toEqual([])
+    expect(text).not.toContain('**')
+    expect(text).not.toContain('`')
+    expect(text).not.toContain('](')
+    expect(text).toContain('最该先处理的三件事')
+    // 「路由到 …」写的是职责名字，不是职责 id
+    await screen.findByText('路由到 工作区所有者')
+    expect(screenText(container)).not.toContain('common.owner')
   })
 
   it('首页：页头、报表块、牌堆里每一张卡、卡型下拉、紧凑列表', async () => {
