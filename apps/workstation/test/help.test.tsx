@@ -40,14 +40,15 @@ describe('打包', () => {
     for (const slug of Object.values(HELP_BY_VENDOR)) expect(HELP_SLUGS).toContain(slug)
   })
 
-  it('按语言取；每篇都以一个一级标题开头、带编号步骤（占位那篇除外）', async () => {
+  it('按语言取；每篇都以一个一级标题开头、带编号步骤', async () => {
     for (const slug of HELP_SLUGS) {
       const zh = await loadHelpArticle(slug, 'zh')
       const en = await loadHelpArticle(slug, 'en')
       expect(zh?.startsWith('# ')).toBe(true)
       expect(en?.startsWith('# ')).toBe(true)
       expect(zh).not.toBe(en)
-      if (slug !== 'search-data') expect(zh).toMatch(/^1\. /m)
+      expect(zh).toMatch(/^1\. /m)
+      expect(en).toMatch(/^1\. /m)
     }
   })
 

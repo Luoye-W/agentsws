@@ -15,6 +15,7 @@
  */
 import { fireEvent, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
+import { SearchDataSection } from '@/components/connections/search-data'
 import { ImageModelSection } from '@/components/models/image-model-section'
 import { ModelsPanel } from '@/components/models/models-panel'
 import { AiStep } from '@/components/onboarding/ai-step'
@@ -388,6 +389,12 @@ vi.mock('@/lib/api', async () => {
       subscription: { state: 'none' },
     }),
     getCapabilitySources: async () => ({ workspace_id: 'ws_1', capability_sources: {} }),
+    // WP155 合进来的「搜索数据」一行（连接页；收尾 merge 时按新规矩减过字）
+    getSearchDataSettings: async () => ({
+      choice: 'byo',
+      byo: { provider: 'dataforseo', has_key: true, updated_at: '2026-09-26T00:00:00.000Z' },
+      status: { configured: true, route: 'byo', provider: 'dataforseo' },
+    }),
   }
 })
 
@@ -492,6 +499,16 @@ describe('设置页', () => {
     await screen.findByTestId('kol-cloud-card')
     for (const [i, card] of [...container.querySelectorAll('[data-slot="card"]')].entries())
       check(`账号与积分 · ${card.getAttribute('data-testid') ?? String(i + 1)}`, card)
+  })
+})
+
+describe('WP155 合进来的', () => {
+  it('连接页「搜索数据」一行（自带 key 那一档，表单展开）', async () => {
+    renderWithProviders(<SearchDataSection />)
+    const row = await screen.findByTestId('search-data')
+    await screen.findByTestId('search-data-byo')
+    check('搜索数据', row)
+    expect(screen.getByTestId('tutorial-link').getAttribute('data-slug')).toBe('search-data')
   })
 })
 

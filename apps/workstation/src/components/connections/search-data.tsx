@@ -17,7 +17,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Search } from 'lucide-react'
 import { type FormEvent, useId, useRef, useState } from 'react'
+import { TutorialLink } from '@/components/help/tutorial-link'
 import { Button } from '@/components/ui/button'
+import { SafetyNote } from '@/components/ui/hint'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -144,6 +146,8 @@ export function SearchDataSection({ assignment }: { assignment?: string }): Reac
           {t('search_data.title')}
         </h3>
         <span className="text-xs text-muted-foreground">{t('search_data.subtitle')}</span>
+        {/* WP156：三档怎么选、三家服务商有什么不同，在教程「搜索数据接口」里 */}
+        <TutorialLink slug="search-data" className="ml-auto" />
       </div>
 
       {settings.isLoading ? (
@@ -175,14 +179,22 @@ export function SearchDataSection({ assignment }: { assignment?: string }): Reac
             ))}
           </div>
 
-          <p className="text-xs text-muted-foreground" data-testid="search-data-status">
+          <p
+            className="text-xs text-muted-foreground"
+            data-slot="status"
+            data-testid="search-data-status"
+          >
             {status?.configured === true
               ? t('search_data.status.ready')
               : (status?.reason ?? t('search_data.status.none'))}
           </p>
 
           {active === 'official' ? (
-            <p className="text-xs text-muted-foreground" data-testid="search-data-price">
+            <p
+              className="text-xs text-muted-foreground"
+              data-slot="status"
+              data-testid="search-data-price"
+            >
               {priceNote}
             </p>
           ) : null}
@@ -231,7 +243,8 @@ export function SearchDataSection({ assignment }: { assignment?: string }): Reac
                   }
                 />
               </div>
-              <p className="text-[11px] text-muted-foreground">{t('search_data.byo.note')}</p>
+              {/* WP156：key 放哪是安全承诺，一行 + 盾牌 */}
+              <SafetyNote text={t('search_data.byo.note')} />
               <div className="flex items-center gap-2">
                 <Button type="submit" size="xs" variant="outline" disabled={busy}>
                   {t('search_data.byo.save')}
