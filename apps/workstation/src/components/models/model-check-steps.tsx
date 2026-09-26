@@ -21,6 +21,8 @@ export function ModelCheckSteps({
   return (
     <ol
       className={cn('flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px]', className)}
+      // WP156：这是结果（三个小勾叉），不是"怎么做"的步骤清单——减字守卫按状态算
+      data-slot="status"
       data-testid="model-check-steps"
     >
       {steps.map((s) => (

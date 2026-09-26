@@ -516,6 +516,23 @@ describe('初始化向导', () => {
     check('向导 ① · DeepSeek · API', screen.getByTestId('ai-card-account'))
   })
 
+  it('三步小勾叉是结果不是步骤清单：卡里出现它不算违规', async () => {
+    const { ModelCheckSteps } = await import('@/components/models/model-check-steps')
+    const { container } = renderWithProviders(
+      <section>
+        <p>已配好</p>
+        <ModelCheckSteps
+          steps={[
+            { step: 'connect', ok: true },
+            { step: 'text', ok: true },
+            { step: 'vision', ok: false },
+          ]}
+        />
+      </section>,
+    )
+    check('三步小勾叉', container)
+  })
+
   it('第 ③ 步：挑岗位', () => {
     const { container } = renderWithProviders(
       <RolePicker

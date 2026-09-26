@@ -94,7 +94,10 @@ export function reportCard(card: Element): CardReport {
   return {
     weight: weightOf(text),
     text,
-    ordered: card.querySelectorAll('ol').length,
+    // 三步小勾叉（连得上 / 文字能回 / 看得懂图）是结果，不是"怎么做"——标了状态的不算
+    ordered: [...card.querySelectorAll('ol')].filter(
+      (ol) => ol.closest('[data-slot="status"], [role="status"]') === null,
+    ).length,
     externalLinks: [...card.querySelectorAll('a[href^="http"]')]
       .filter((a) => a.getAttribute('data-slot') !== 'action')
       .map((a) => a.getAttribute('href') ?? ''),
