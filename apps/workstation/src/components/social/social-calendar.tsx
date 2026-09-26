@@ -25,6 +25,7 @@ import { useState } from 'react'
 import { UnifiedCalendar } from '@/components/calendar/unified-calendar'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { SafetyNote } from '@/components/ui/hint'
 import { Textarea } from '@/components/ui/textarea'
 import { createSocialPost, getSocialAccounts, type SocialChannelId } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
@@ -189,7 +190,7 @@ export function SocialCalendar({
               </Button>
             </div>
             {/* 发布永远人审：这句话在按钮旁边，不在提交之后才出现 */}
-            <p className="text-xs text-muted-foreground">{t('social.calendar.always_l1')}</p>
+            <SafetyNote text={t('social.calendar.always_l1')} />
           </div>
         )}
 

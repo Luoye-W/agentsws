@@ -24,6 +24,7 @@ import { useState } from 'react'
 import { PanelError } from '@/components/rail/panel-error'
 import type { RailScope } from '@/components/rail/rail-scope'
 import { Button } from '@/components/ui/button'
+import { Hint } from '@/components/ui/hint'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Textarea } from '@/components/ui/textarea'
 import {
@@ -268,8 +269,12 @@ function TierCard({ tier }: { tier: RailScope['tier'] }): React.ReactNode {
   const { t } = useApp()
   return (
     <div className="rounded-md border p-2" data-testid="memory-tier-card">
-      <p className="mb-1 text-xs font-medium">{t('memory.tiers.title')}</p>
-      <ol className="flex flex-col gap-0.5 text-xs">
+      {/* WP157：「越靠下越具体」那句进标题旁的问号；下面六层是状态（本层高亮），不是步骤 */}
+      <p className="mb-1 flex items-center gap-1 text-xs font-medium">
+        {t('memory.tiers.title')}
+        <Hint text={t('memory.tiers.hint')} testId="memory-tiers-hint" />
+      </p>
+      <ol className="flex flex-col gap-0.5 text-xs" data-slot="status">
         {TIERS.map((value, i) => (
           <li
             key={value}
@@ -287,7 +292,6 @@ function TierCard({ tier }: { tier: RailScope['tier'] }): React.ReactNode {
           </li>
         ))}
       </ol>
-      <p className="mt-1 text-[11px] text-muted-foreground">{t('memory.tiers.hint')}</p>
     </div>
   )
 }

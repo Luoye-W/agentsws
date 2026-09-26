@@ -24,6 +24,7 @@ import { dutyHref } from '@/components/app-shell'
 import { PanelError } from '@/components/rail/panel-error'
 import type { RailScope } from '@/components/rail/rail-scope'
 import { Button } from '@/components/ui/button'
+import { Hint } from '@/components/ui/hint'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
@@ -212,7 +213,7 @@ function RoleCaps({ role_id }: { role_id: string }): React.ReactNode {
       )}
       {view.editable ? (
         <div className="flex flex-col gap-1">
-          <div>
+          <div className="flex items-center gap-1.5">
             <Button
               size="xs"
               data-testid="caps-submit"
@@ -223,9 +224,9 @@ function RoleCaps({ role_id }: { role_id: string }): React.ReactNode {
             >
               {t('rail.caps.submit')}
             </Button>
+            {/* 14 §1：改额度永远是"提了一张卡"，不是"已经改好了"——WP157：这句进提交按钮旁的问号 */}
+            <Hint text={t('rail.caps.approval_hint')} testId="caps-approval-hint" />
           </div>
-          {/* 14 §1：改额度永远是"提了一张卡"，不是"已经改好了" */}
-          <p className="text-[11px] text-muted-foreground">{t('rail.caps.approval_hint')}</p>
           {propose.data === undefined ? null : (
             <p className="text-[11px] text-muted-foreground" data-testid="caps-submitted">
               {propose.data.status === 'pending_approval'

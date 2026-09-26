@@ -21,6 +21,7 @@ import { Megaphone, ShieldAlert } from 'lucide-react'
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { SafetyNote } from '@/components/ui/hint'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import {
@@ -143,7 +144,10 @@ export function SocialBroadcast({
             {/* 纪律 4：WhatsApp 的两道闸摆在明处 */}
             {channel === 'whatsapp' ? (
               <div className="flex flex-col gap-1 rounded border border-amber-500/40 bg-amber-500/5 p-2">
-                <p className="flex items-start gap-1 text-xs text-muted-foreground">
+                <p
+                  className="flex items-start gap-1 text-xs text-muted-foreground"
+                  data-slot="warning"
+                >
                   <ShieldAlert className="mt-0.5 size-3.5 shrink-0" aria-hidden />
                   {t('social.broadcast.whatsapp_note')}
                 </p>
@@ -180,9 +184,7 @@ export function SocialBroadcast({
                 {t('social.broadcast.submit')}
               </Button>
               {/* 纪律 3：这句话在按钮旁边，不在点完之后才出现 */}
-              <span className="text-xs text-muted-foreground">
-                {t('social.broadcast.always_l1')}
-              </span>
+              <SafetyNote text={t('social.broadcast.always_l1')} />
             </div>
 
             {result === undefined ? null : (

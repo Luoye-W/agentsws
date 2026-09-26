@@ -22,8 +22,10 @@ import { channelOfRole, KolPanel } from '@/components/kol/kol-panel'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { getKolCreators, getPositions } from '@/lib/api'
+import { useApp } from '@/lib/app-context'
 
 export function InfluencerPage({ setup = false }: { setup?: boolean }): React.ReactNode {
+  const { t } = useApp()
   const [search] = useSearchParams()
   const positions = useQuery({ queryKey: ['positions'], queryFn: getPositions })
 
@@ -50,12 +52,10 @@ export function InfluencerPage({ setup = false }: { setup?: boolean }): React.Re
     return (
       <Card>
         <CardHeader>
-          <CardTitle className="text-sm">红人库</CardTitle>
+          <CardTitle className="text-sm">{t('influencer.empty.title')}</CardTitle>
         </CardHeader>
-        <CardContent className="text-sm text-muted-foreground">
-          这个品牌还没有人持有红人职责（kol.youtube 这一组）。先在「组织」里把它分配给
-          自己，红人库才会在这里出现。
-        </CardContent>
+        {/* WP157：写死的中文走 i18n；空态那一句不再露职责 id */}
+        <CardContent className="text-sm text-muted-foreground">{t('influencer.empty')}</CardContent>
       </Card>
     )
   }

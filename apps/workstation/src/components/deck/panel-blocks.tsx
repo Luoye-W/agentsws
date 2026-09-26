@@ -12,6 +12,7 @@
  */
 import type { DeckCard } from '@agentsws/deck'
 import { GoButton, StatusPill, WsCard } from '@/components/design'
+import { Hint } from '@/components/ui/hint'
 import { useApp } from '@/lib/app-context'
 import { fieldLabel, fieldValue } from '@/lib/humanize'
 import type { Lang } from '@/lib/i18n'
@@ -51,7 +52,8 @@ export function ReportBlocks({
     <section data-testid="panel-reports">
       <div className="mb-2 flex items-center gap-2">
         <h2 className="text-sm font-medium">{t('panel.reports')}</h2>
-        <span className="text-xs text-ws-muted-fg">{t('panel.reports.hint')}</span>
+        {/* WP157：小节说明进问号 */}
+        <Hint text={t('panel.reports.hint')} testId="panel-reports-hint" />
       </div>
       <div className="flex flex-col gap-2">
         {reports.map((r) => (
@@ -99,7 +101,7 @@ export function AlertBlocks({
     <section data-testid="alerts">
       <div className="mb-2 flex items-center gap-2">
         <h2 className="text-sm font-medium">{t('home.alerts')}</h2>
-        <span className="text-xs text-ws-muted-fg">{t('panel.alerts.hint')}</span>
+        <Hint text={t('panel.alerts.hint')} testId="panel-alerts-hint" />
       </div>
       <ul className="flex flex-col gap-2">
         {alerts.map((a) => (

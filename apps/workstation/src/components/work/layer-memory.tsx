@@ -13,6 +13,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowUpFromLine, Sparkles } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Hint } from '@/components/ui/hint'
 import { Skeleton } from '@/components/ui/skeleton'
 import { getLayerMemory, promoteSkillTo } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
@@ -96,7 +97,7 @@ export function LayerMemory({
           {t(`memory.promote.${tier}`)}
         </Button>
         {/* 提上去不是写进去：出的是一张待审的卡（24 §3） */}
-        <span className="text-[11px] text-muted-foreground">{t('memory.promote.hint')}</span>
+        <Hint text={t('memory.promote.hint')} />
         {promote.data === undefined ? null : (
           <span className="text-[11px] text-muted-foreground" data-testid="promote-result">
             {promote.data.accepted ? t('memory.promote.ok') : promote.data.reason}

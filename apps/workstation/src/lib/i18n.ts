@@ -570,7 +570,7 @@ const zh: Table = {
   'rail.skills.promote': '提到{tier}',
   'rail.skills.this_layer': '本层',
   'rail.skills.more': '去技能页看全文与改动',
-  'rail.knowledge.hint': '这一层看得见什么：知识域 + 范围 + 敏感级（19）。',
+  'rail.knowledge.hint': '这一层看得见什么：知识域 + 范围 + 敏感级。',
   'rail.knowledge.domain': '知识域：{domain}',
   'rail.knowledge.scope': '{domain} · {range} · 最高 {sensitivity}',
   'rail.knowledge.cards': '知识库里在用的事实卡：{count} 张',
@@ -584,11 +584,11 @@ const zh: Table = {
   'rail.caps.hard': '硬顶（工作区策略也放不宽）',
   'rail.caps.bundled': '内置只读',
   'rail.caps.custom': '本工作区的副本',
-  'rail.caps.readonly': '内置模板不给改——先复制一份，再改那一份（05 §0）。',
+  'rail.caps.readonly': '内置模板不给改——先复制一份，再改那一份。',
   'rail.caps.copy': '复制一份再改',
   'rail.caps.copied': '已复制成「{name}」，去公司页把它分配给人',
   'rail.caps.submit': '提交审批',
-  'rail.caps.approval_hint': '改额度不当场生效：出一张策略变更卡，批了才算（14 §1）。',
+  'rail.caps.approval_hint': '改额度不当场生效：出一张策略变更卡，批了才算。',
   'rail.caps.submitted': '已提交审批',
   'rail.caps.position_hint': '岗位本身没有额度——权限与额度长在职责上。点一条职责去改。',
   // ── WP95（36 §11）：第三栏两个新面板 ──────────────────────────────
@@ -1428,7 +1428,7 @@ const zh: Table = {
     '把这张卡先放一放，等资料齐了 AI 再来问。反向的「问 AI」入口在 /v1 上还没开（WP19）。',
   'deck.supplement.snooze': '先放一放',
   'deck.instruct.hint': '一句话说清楚要怎么改；再选它管到哪里',
-  'deck.reject.hint': '说一句为什么不行——14 §4：驳回的原因是最强的学习信号',
+  'deck.reject.hint': '说一句为什么不行——驳回的原因是最强的学习信号',
   'deck.submit': '提交',
   'deck.submitting': '提交中…',
   'deck.back': '返回',
@@ -1467,8 +1467,7 @@ const zh: Table = {
   'messages.archive': '归档',
   // 界面上写「删除」，打出去的是"移到垃圾箱"——**绝不永久删除**（63 §7）
   'messages.delete': '删除',
-  'messages.readonly':
-    '这条线程交给 Agent 在处理，这里不给直接回复——要亲自回，先在工作线程里点「我来接手」。',
+  'messages.readonly': 'Agent 在处理这条线程；要亲自回，先在工作线程里点「我来接手」。',
   'messages.agent.working': '客服 Agent 在处理',
   'messages.agent.waiting_for_you': '等你拍板',
   'messages.agent.replied': '已回复',
@@ -1479,8 +1478,9 @@ const zh: Table = {
   'messages.images.show': '显示图片',
   'messages.backfill': '再往前取 30 天',
   'messages.backfill.since': '现在回溯到 {date}',
-  'messages.no_mailbox':
-    '这台机器上还没连邮箱。连上之后，收件箱、已发、草稿、垃圾箱与客服 / 红人那两个文件夹都会出现在这里。',
+  'messages.no_mailbox': '这台机器上还没连邮箱。',
+  'messages.no_mailbox.hint':
+    '连上之后，收件箱、已发、草稿、垃圾箱与客服 / 红人那两个文件夹都会出现在这里。',
   'messages.connect': '去连邮箱',
   'messages.compose.new': '写信',
   'messages.compose.reply': '回复',
@@ -1723,7 +1723,8 @@ const zh: Table = {
   'models.discover': '拉取模型列表',
   'models.discover.failed': '没拉到模型列表，先手填一个模型名也行。原因：{reason}',
   'models.field.api_key': 'API key',
-  'models.field.api_key.hint': '网页原生表单：key 只存进这台电脑的加密库，不经 AI、不上传、不进日志。',
+  'models.field.api_key.hint':
+    '网页原生表单：key 只存进这台电脑的加密库，不经 AI、不上传、不进日志。',
   'models.field.api_key.keep': '已经存过一把了。留空就不动它，填了就换成新的。',
   'models.field.embedding': '向量模型（选填）',
   'models.field.embedding.hint': '知识库检索要用。不填就用不了向量检索，别的照常。',
@@ -1912,6 +1913,9 @@ const zh: Table = {
   'kol.channel.x': 'X',
   'kol.tools.title': '导入与活动',
   'kol.import': '导入红人表',
+  'influencer.empty.title': '红人库',
+  'influencer.empty':
+    '这个品牌还没有人持有红人职责。先在「组织」里把它分配给自己，红人库就会出现在这里。',
   'kol.import.hint':
     '认 CSV / TSV。表头中英都认（红人 / 链接 / 粉丝 / 互动率 / 类目 / 邮箱）；去重只按 渠道 + 账号名。',
   'kol.import.rejected': '第 {row} 行没进来：{reason}',
@@ -2057,7 +2061,8 @@ const zh: Table = {
   //    只有资格让他看见这两个不一样——所以文案是「两处说法不一样」，
   //    不是「官网的是错的」。
   'design.md.title': '设计规范',
-  'design.md.subtitle': '这个品牌的颜色、字体、间距与用法。出图、出页面、出广告都照它来。',
+  'design.md.subtitle': '这个品牌的颜色、字体、间距与用法。',
+  'design.md.subtitle.hint': '出图、出页面、出广告都照它来。',
   'design.md.empty': '还没有设计规范。可以从官网抓一份，或者传一份品牌手册。',
   'design.md.extract': '从官网抓一份',
   'design.md.extracting': '正在读官网的样式…',
@@ -2540,8 +2545,7 @@ const zh: Table = {
   'social.calendar.moved': '排期改了，已经提上去等人点头——换个时间发也是一次发布。',
   'social.calendar.staged': '草稿建好了，已经提上去等人点头。',
   'social.calendar.always_l1': '发内容永远要人点一下：批了之后它会在你排的那个时刻自己出去。',
-  'social.calendar.no_account':
-    '这条渠道还没登记任何一个号，所以日历上是空的。去连接页连上之后再登记一个号。',
+  'social.calendar.no_account': '这条渠道还没登记号，所以日历是空的；先去连接页连上再登记。',
   'social.calendar.compose.placeholder': '写这条要发的正文。价格、时效、保修只写事实卡里有的。',
   'social.calendar.compose.submit': '提上去',
   'social.calendar.compose.cancel': '算了',
@@ -3506,7 +3510,7 @@ const en: Table = {
   'rail.skills.promote': 'Promote to {tier}',
   'rail.skills.this_layer': 'this layer',
   'rail.skills.more': 'Open the skills page',
-  'rail.knowledge.hint': 'What this layer can see: domain + range + sensitivity ceiling (19).',
+  'rail.knowledge.hint': 'What this layer can see: domain + range + sensitivity ceiling.',
   'rail.knowledge.domain': 'Domain: {domain}',
   'rail.knowledge.scope': '{domain} · {range} · up to {sensitivity}',
   'rail.knowledge.cards': 'Active fact cards in the library: {count}',
@@ -3520,13 +3524,12 @@ const en: Table = {
   'rail.caps.hard': 'hard ceiling (workspace policy cannot loosen it)',
   'rail.caps.bundled': 'Bundled, read-only',
   'rail.caps.custom': 'Copy in this workspace',
-  'rail.caps.readonly':
-    'Bundled templates are read-only — copy one first, then edit the copy (05 §0).',
+  'rail.caps.readonly': 'Bundled templates are read-only — copy one first, then edit the copy.',
   'rail.caps.copy': 'Copy it to edit',
   'rail.caps.copied': 'Copied as "{name}" — assign it on the company page',
   'rail.caps.submit': 'Submit for approval',
   'rail.caps.approval_hint':
-    'Limit changes do not take effect immediately: a policy-change card is raised and must be approved (14 §1).',
+    'Limit changes do not take effect immediately: a policy-change card is raised and must be approved.',
   'rail.caps.submitted': 'Submitted for approval',
   'rail.caps.position_hint':
     'A position has no limits of its own — permissions and limits live on the duty. Pick a duty to edit.',
@@ -4291,7 +4294,7 @@ const en: Table = {
     'Park this card until the material is in. The reverse Ask-AI entry is not on /v1 yet (WP19).',
   'deck.supplement.snooze': 'Park it',
   'deck.instruct.hint': 'One sentence on what to change, then how far it applies',
-  'deck.reject.hint': 'Say why — a rejection reason is the strongest learning signal (14 §4)',
+  'deck.reject.hint': 'Say why — a rejection reason is the strongest learning signal',
   'deck.submit': 'Submit',
   'deck.submitting': 'Submitting…',
   'deck.back': 'Back',
@@ -4330,7 +4333,7 @@ const en: Table = {
   'messages.archive': 'Archive',
   'messages.delete': 'Delete',
   'messages.readonly':
-    'An agent is handling this thread, so replying from here is off. To answer it yourself, take it over in the work thread first.',
+    'An agent is handling this thread; to answer yourself, take it over in the work thread first.',
   'messages.agent.working': 'Support agent is on it',
   'messages.agent.waiting_for_you': 'Waiting on you',
   'messages.agent.replied': 'Replied',
@@ -4341,8 +4344,9 @@ const en: Table = {
   'messages.images.show': 'Show images',
   'messages.backfill': 'Fetch 30 more days',
   'messages.backfill.since': 'Currently back to {date}',
-  'messages.no_mailbox':
-    'No mailbox connected on this machine yet. Once you connect one, your inbox, sent, drafts, trash and the two agent folders all show up here.',
+  'messages.no_mailbox': 'No mailbox connected on this machine yet.',
+  'messages.no_mailbox.hint':
+    'Once you connect one, your inbox, sent, drafts, trash and the two agent folders all show up here.',
   'messages.connect': 'Connect a mailbox',
   'messages.compose.new': 'Compose',
   'messages.compose.reply': 'Reply',
@@ -4791,6 +4795,9 @@ const en: Table = {
   'kol.channel.x': 'X',
   'kol.tools.title': 'Import & campaign',
   'kol.import': 'Import creators',
+  'influencer.empty.title': 'Creator library',
+  'influencer.empty':
+    'Nobody on this brand holds a creator duty yet. Assign one to yourself under “Org” and the library shows up here.',
   'kol.import.hint':
     'CSV / TSV. Headers in Chinese or English; dedupe is by channel + handle only.',
   'kol.import.rejected': 'Row {row} skipped: {reason}',
@@ -4923,8 +4930,8 @@ const en: Table = {
 
   // ── WP122 (71) the brand's DESIGN.md ─────────────────────────────
   'design.md.title': 'Design spec',
-  'design.md.subtitle':
-    "This brand's colours, type, spacing and how to use them. Images, pages and ads all follow it.",
+  'design.md.subtitle': "This brand's colours, type, spacing and how to use them.",
+  'design.md.subtitle.hint': 'Images, pages and ads all follow it.',
   'design.md.empty': 'No design spec yet. Pull one from the website, or upload a brand book.',
   'design.md.extract': 'Pull from the website',
   'design.md.extracting': 'Reading the site styles…',
@@ -5434,7 +5441,7 @@ const en: Table = {
   'social.calendar.always_l1':
     'Publishing always needs a human tap. Once approved it goes out at the time you set.',
   'social.calendar.no_account':
-    'No account is registered on this channel yet, so the calendar is empty. Connect it, then register an account.',
+    'No account registered on this channel, so the calendar is empty; connect it, then register one.',
   'social.calendar.compose.placeholder':
     'Write the post. Prices, delivery times and warranties: only what the fact cards say.',
   'social.calendar.compose.submit': 'Send for approval',

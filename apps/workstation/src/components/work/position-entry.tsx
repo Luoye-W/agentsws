@@ -13,6 +13,7 @@ import { useNavigate } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { DutyFold } from '@/components/ui/duty-fold'
+import { Hint } from '@/components/ui/hint'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Textarea } from '@/components/ui/textarea'
 import {
@@ -173,14 +174,18 @@ export function PositionEntry({ id }: { id: string }): React.ReactNode {
               <Send className="size-3.5" aria-hidden />
               {t('position.entry.submit')}
             </Button>
-            <span className="text-xs text-muted-foreground">{t('position.entry.hint')}</span>
+            {/* WP157：「岗位自己判断走哪条职责」是解释，进问号 */}
+            <Hint text={t('position.entry.hint')} testId="position-entry-hint" />
           </div>
         </div>
 
         {/* 拿不准：这件事像 A 也像 B，你定（54 §2） */}
         {choice === undefined ? null : (
           <fieldset className="rounded-md border p-3" data-testid="route-choice">
-            <p className="text-sm">{choice.reason}</p>
+            <p className="flex items-center gap-1 text-sm" data-slot="status">
+              {choice.reason}
+              <Hint text={t('position.choice.hint')} />
+            </p>
             <div className="mt-2 flex flex-wrap gap-2">
               {choice.candidates.map((c) => (
                 <Button
@@ -197,7 +202,6 @@ export function PositionEntry({ id }: { id: string }): React.ReactNode {
                 </Button>
               ))}
             </div>
-            <p className="mt-2 text-[11px] text-muted-foreground">{t('position.choice.hint')}</p>
           </fieldset>
         )}
 

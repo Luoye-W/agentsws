@@ -22,6 +22,7 @@ import { ArrowLeft, Coins, Link2, Mail, MailOpen, Package } from 'lucide-react'
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { SafetyNote } from '@/components/ui/hint'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
@@ -434,11 +435,14 @@ export function CollabThread({
             <Coins className="size-3" aria-hidden />
             议价
           </h4>
-          <p className="text-[11px] text-muted-foreground">
-            {(exchanges.data?.rows ?? []).some((x) => x.reply_class === 'wants_quote')
-              ? '他问了价钱。填一个数，出一张卡；这一步永远要你自己点头。'
-              : '要谈钱就填一个数。合作的预算永远走卡，Agent 报不了价。'}
-          </p>
+          {/* WP157：「永远要你点头 / Agent 报不了价」是安全承诺，用盾牌那一行 */}
+          <SafetyNote
+            text={
+              (exchanges.data?.rows ?? []).some((x) => x.reply_class === 'wants_quote')
+                ? '他问了价钱。填一个数，出一张卡；这一步永远要你自己点头。'
+                : '要谈钱就填一个数。合作的预算永远走卡，Agent 报不了价。'
+            }
+          />
           <div className="mt-1 flex flex-wrap items-center gap-2">
             <Input
               className="w-32"

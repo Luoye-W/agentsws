@@ -21,7 +21,7 @@ import { useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Hint } from '@/components/ui/hint'
+import { Hint, SafetyNote } from '@/components/ui/hint'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Textarea } from '@/components/ui/textarea'
@@ -513,7 +513,8 @@ function CreatorDetail({
               ))}
             </ul>
           )}
-          <p className="mt-1 text-[11px] text-muted-foreground">{t('kol.detail.contacts.note')}</p>
+          {/* WP157：这是安全承诺（真地址在哪、谁取得到），按 36 §7 用盾牌那一行 */}
+          <SafetyNote text={t('kol.detail.contacts.note')} className="mt-1" />
           <KolError error={error} testid="kol-detail-error" />
           <KolReceipt text={receipt} testid="kol-detail-receipt" />
           <div className="mt-1 flex items-center gap-2">
