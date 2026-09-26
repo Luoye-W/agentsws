@@ -22,6 +22,19 @@ export const HELP_SLUGS = [
   'browser',
   'computer-use',
   'search-data',
+  // WP157：连接页（每类连接一篇，能合并的合并）
+  'conn-shopify',
+  'conn-email',
+  'conn-google',
+  'conn-meta',
+  'conn-tiktok',
+  'conn-x',
+  'conn-community',
+  'conn-marketing-logistics',
+  'browser-extension',
+  // WP157：消息渠道与网站聊天窗
+  'im-channels',
+  'chat-window',
 ] as const
 
 export type HelpSlug = (typeof HELP_SLUGS)[number]
@@ -61,6 +74,42 @@ export const HELP_BY_VENDOR: Readonly<Record<string, HelpSlug>> = {
 }
 
 /**
+ * WP157：连接页的 provider 卡（`ProviderView.service`）→ 哪一篇教程。
+ *
+ * 服务端连接目录（`apps/server/src/catalog.ts`）的 `setup_guide` 里的步骤、成段介绍与外链
+ * 全在这些文章里（服务端测试 `help-tutorials.test.ts` 盯着外链不丢，那边有同一份对照）。
+ * 没列在这里的（将来新加的、第三方的）卡：步骤与外链在「看教程」的对话框里现拼（`templateGuide`）。
+ */
+export const HELP_BY_SERVICE: Readonly<Record<string, HelpSlug>> = {
+  shopify_admin: 'conn-shopify',
+  imap_smtp: 'conn-email',
+  gmail: 'conn-google',
+  ga4: 'conn-google',
+  gsc: 'conn-google',
+  youtube_data: 'conn-google',
+  google_ads: 'conn-google',
+  google_alerts: 'conn-google',
+  meta_ads: 'conn-meta',
+  instagram_graph: 'conn-meta',
+  facebook_graph: 'conn-meta',
+  meta_graph: 'conn-meta',
+  meta_marketing: 'conn-meta',
+  whatsapp_business: 'conn-meta',
+  tiktok_research: 'conn-tiktok',
+  tiktok_content: 'conn-tiktok',
+  tiktok_ads: 'conn-tiktok',
+  x_api: 'conn-x',
+  x_ads: 'conn-x',
+  reddit: 'conn-community',
+  discord_bot: 'conn-community',
+  telegram_bot: 'conn-community',
+  klaviyo: 'conn-marketing-logistics',
+  shopify_email: 'conn-marketing-logistics',
+  aftership: 'conn-marketing-logistics',
+  track17: 'conn-marketing-logistics',
+}
+
+/**
  * 没写成教程文章的模板（第三方应用包加的），把它自带的步骤与外链拼成一小篇，
  * 在「看教程」的对话框里排出来——卡面上不铺，信息也一条不丢。
  */
@@ -71,6 +120,23 @@ export function templateGuide(plan: {
   const steps = plan.steps.map((step, i) => `${String(i + 1)}. ${step}`)
   const links = plan.links.map((link) => `- [${link.label}](${link.url})`)
   return [...steps, '', ...links].join('\n')
+}
+
+/** 一段话的第一句（到第一个句号 / 冒号为止）；本来就一句的原样回。卡面上那一句的退路。 */
+export function firstSentence(text: string): string {
+  const m = /^[^。：:！？!?]*[。！？!?]?/.exec(text.trim())
+  const head = (m?.[0] ?? '').replace(/[：:]$/, '')
+  return head === '' ? text.trim() : head
+}
+
+/**
+ * 一句状态的短说法（「暂时不能连：____」那一格）：到第一个冒号、破折号、句号或分号为止；
+ * 整句原话放进旁边的问号。
+ */
+export function shortReason(text: string): string {
+  const m = /^(.+?)(?:：|:|——|。|；)/.exec(text.trim())
+  const head = m?.[1]?.trim() ?? ''
+  return head.length >= 2 ? head : text.trim()
 }
 
 /** 懒加载：键是相对这个文件的路径，值是一个回原文的函数。 */

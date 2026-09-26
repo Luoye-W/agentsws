@@ -42,6 +42,7 @@ import { Composer, type ComposeSeed, seedFrom } from '@/components/messages/comp
 import { MessageBody } from '@/components/messages/message-body'
 import { focusMessage, USE_SUGGESTION_EVENT } from '@/components/rail/panels/mail-assistant-panel'
 import { Button } from '@/components/ui/button'
+import { Hint } from '@/components/ui/hint'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
@@ -480,7 +481,11 @@ export function MessagesPage(): ReactNode {
             ))}
 
             {readOnly ? (
-              <p className="text-[12px] text-ws-muted-fg" data-testid="messages-readonly">
+              <p
+                className="text-[12px] text-ws-muted-fg"
+                data-testid="messages-readonly"
+                data-slot="status"
+              >
                 {t('messages.readonly')}
               </p>
             ) : compose === undefined ? (
@@ -788,7 +793,10 @@ function NoMailbox(): ReactNode {
   return (
     <div className="flex max-w-lg flex-col gap-3" data-testid="messages-no-mailbox">
       <h1 className="text-base font-semibold">{t('nav.messages')}</h1>
-      <p className="text-sm text-ws-muted-fg">{t('messages.no_mailbox')}</p>
+      <p className="flex items-center gap-1 text-sm text-ws-muted-fg">
+        {t('messages.no_mailbox')}
+        <Hint text={t('messages.no_mailbox.hint')} />
+      </p>
       <Link
         to="/connections?service=email"
         className="w-fit rounded-[10px] bg-primary px-3 py-1.5 text-[13px] text-primary-foreground"

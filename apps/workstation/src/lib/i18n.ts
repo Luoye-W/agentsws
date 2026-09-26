@@ -570,7 +570,7 @@ const zh: Table = {
   'rail.skills.promote': '提到{tier}',
   'rail.skills.this_layer': '本层',
   'rail.skills.more': '去技能页看全文与改动',
-  'rail.knowledge.hint': '这一层看得见什么：知识域 + 范围 + 敏感级（19）。',
+  'rail.knowledge.hint': '这一层看得见什么：知识域 + 范围 + 敏感级。',
   'rail.knowledge.domain': '知识域：{domain}',
   'rail.knowledge.scope': '{domain} · {range} · 最高 {sensitivity}',
   'rail.knowledge.cards': '知识库里在用的事实卡：{count} 张',
@@ -584,11 +584,11 @@ const zh: Table = {
   'rail.caps.hard': '硬顶（工作区策略也放不宽）',
   'rail.caps.bundled': '内置只读',
   'rail.caps.custom': '本工作区的副本',
-  'rail.caps.readonly': '内置模板不给改——先复制一份，再改那一份（05 §0）。',
+  'rail.caps.readonly': '内置模板不给改——先复制一份，再改那一份。',
   'rail.caps.copy': '复制一份再改',
   'rail.caps.copied': '已复制成「{name}」，去公司页把它分配给人',
   'rail.caps.submit': '提交审批',
-  'rail.caps.approval_hint': '改额度不当场生效：出一张策略变更卡，批了才算（14 §1）。',
+  'rail.caps.approval_hint': '改额度不当场生效：出一张策略变更卡，批了才算。',
   'rail.caps.submitted': '已提交审批',
   'rail.caps.position_hint': '岗位本身没有额度——权限与额度长在职责上。点一条职责去改。',
   // ── WP95（36 §11）：第三栏两个新面板 ──────────────────────────────
@@ -756,7 +756,7 @@ const zh: Table = {
   'card.ask.sending': '问着…',
   'card.snoozed': '已推迟到 {at}',
   'card.done': '已处理',
-  'command.placeholder': '搜索卡片、跳转岗位，或加一个数字块…',
+  'command.placeholder': '搜卡片、岗位、教程，或加一个数字块…',
   'command.group.go': '跳转',
   'command.group.cards': '卡片',
   'command.group.tiles': '加一个数字块',
@@ -939,8 +939,8 @@ const zh: Table = {
   'connections.requeuing': '重投中…',
   // ── WP83（54（将改号 55）§4）：连接目录与岗位连接清单 ──────────────
   'connections.directory.title': '添加连接',
-  'connections.directory.subtitle':
-    '能接的东西不止上面这几张卡。按分类翻一翻，或者直接搜名字——目录里点不动的那几条会明说"还没做"。',
+  'connections.directory.subtitle': '按分类翻一翻，或者直接搜名字。',
+  'connections.directory.hint': '能接的东西不止下面这几张卡。目录里点不动的那几条会明说"还没做"。',
   'connections.directory.open': '看全部',
   'connections.directory.close': '收起',
   'connections.directory.search': '搜名字（Shopify、邮箱、YouTube…）',
@@ -969,6 +969,30 @@ const zh: Table = {
   'connections.category.custom': '自定义',
   'connections.mcp.hint':
     '自己跑的工具服务器可以登记在这里。登记完勾一下"哪几个工具只是看、不动东西"，再在职责模板里写上 mcp:名字，那条职责的 AI 同事就能用它了。',
+  // WP157：连接页「浏览器插件」一节（原来写死在组件里）
+  'extension.title': '浏览器插件',
+  'extension.line': '「红人助手」Chrome 插件：在 YouTube / Instagram / TikTok 页面上一键收红人。',
+  'extension.scope': '插件只能看红人、收红人、读红人库；发不了信、改不了合作、碰不到订单。',
+  'extension.generate': '生成配对码',
+  'extension.generating': '正在生成…',
+  'extension.code.once': '码 5 分钟内有效，只能用一次；去插件的设置页填进去。',
+  'extension.code.left': '还剩 {time}',
+  'extension.code.left.hint':
+    '去插件设置页把这 6 位数字填进去。关掉这一页它就没了，到时候再生成一个就是。',
+  'extension.code.stale': '这个码大概过期了（超过 5 分钟），填进去不认就再生成一个。',
+  'extension.regenerate': '再生成一个',
+  'extension.collapse': '收起来',
+  'extension.empty': '还没有哪个浏览器配上来。',
+  'extension.revoke.confirm': '撤掉之后那个浏览器就再也传不进来了。确定？',
+  'extension.local_only': '插件只连这台电脑上的 127.0.0.1，不认识任何云端地址。',
+  'extension.never_used': '还没用过',
+  'extension.revoked': '已撤销',
+  'extension.token.meta': '扩展 {id} · 最近用过：{when}',
+  'extension.token.revoked_at': ' · 撤于 {when}',
+  'extension.revoke': '撤掉',
+  'extension.revoking': '正在撤…',
+  'connections.mcp.line': '自己跑的工具服务器登记在这里。',
+  'connections.mcp.read_tools.title': '哪几个工具只是看、不动东西？',
   'connections.mcp.add': '登记一台',
   'connections.mcp.empty': '还没登记过。',
   'connections.mcp.name': '名字',
@@ -1007,7 +1031,7 @@ const zh: Table = {
   'connections.subtitle': '把店铺、邮箱、数据后台接进来。',
   'connections.connected': '已连接',
   'connections.available': '可以连接',
-  'connections.empty': '还什么都没连。下面挑一个开始——每个都写清楚了要准备什么。',
+  'connections.empty': '还什么都没连。下面挑一个开始，不会就点「看教程」。',
   'connections.test': '测试',
   'connections.testing': '测试中…',
   'connections.disconnect': '断开',
@@ -1019,9 +1043,37 @@ const zh: Table = {
   'connections.cancel': '取消',
   'connections.save': '保存并测试',
   'connections.saving': '正在保存…',
-  'connections.setup': '要准备什么',
-  'connections.setup.open': '看步骤',
-  'connections.setup.close': '收起',
+  // WP157：每张连接卡上那一句（步骤与成段介绍在教程里）
+  'connections.line.shopify_admin':
+    '在 Dev Dashboard 建个应用、装到店上，填它的 Client ID 与密钥。',
+  'connections.line.imap_smtp': '最省事：填邮箱地址和一个授权码，不用向谁申请。',
+  'connections.line.gmail': '要你自己建 Google OAuth 应用；只收发信的话用「任意邮箱」。',
+  'connections.line.ga4': '用你自己的 Google OAuth 应用授权一次，不用安全评估。',
+  'connections.line.gsc': '和 GA4 同一个 Google 项目，多启用一个 API。',
+  'connections.line.meta_ads': '要在 Meta 开发者后台建应用；审核较慢，可以最后接。',
+  'connections.line.klaviyo': '只读分群、模板与活动效果；群发不走这条。',
+  'connections.line.shopify_email': 'Shopify 自带的邮件营销，排在 Klaviyo 后面。',
+  'connections.line.aftership': '只读包裹轨迹与异常，不回写单号。',
+  'connections.line.track17': '物流追踪，与 AfterShip 并列、排在它后面。',
+  'connections.line.youtube_data': '按关键词搜频道、读订阅数；全站每天 10000 单位配额。',
+  'connections.line.instagram_graph': '按名字查商业账号的粉丝与互动；不能按关键词搜人。',
+  'connections.line.facebook_graph': '搜主页、读关注数；搜主页的权限要过 Meta 审核。',
+  'connections.line.tiktok_research': '申请制：向 TikTok 说明用途，批了才有数据。',
+  'connections.line.x_api': 'X 的官方接口要付费档，免费档读不了用户资料。',
+  'connections.line.meta_graph': '一把 token 管 FB 主页 + IG：连上就能读，能发要过审核。',
+  'connections.line.tiktok_content': '发 TikTok 视频；申请制，与红人那条的 Research API 分开申请。',
+  'connections.line.reddit': '注册一个 Reddit 应用；群发只能是置顶帖，不许群发私信。',
+  'connections.line.discord_bot': '读消息与成员、发公告、删消息、禁言。',
+  'connections.line.telegram_bot': '读群消息、发公告、删与禁；机器人必须是群管理员。',
+  'connections.line.whatsapp_business': '要过商业验证；主动发消息只能用审批过的模板。',
+  'connections.line.meta_marketing': '读投放表现、改预算与出价；与社媒那张 Meta 卡是两张。',
+  'connections.line.google_ads': '读表现、改预算与出价；developer token 要单独申请过审。',
+  'connections.line.x_ads': 'X 的广告接口；申请制，要广告账户与人工审核。',
+  'connections.line.tiktok_ads': 'TikTok 的广告接口；要在 Business Center 授权广告账户。',
+  'connections.line.google_alerts': '免费、不用申请：把品牌提醒的 RSS 地址贴过来。',
+  'connections.line.press_distribution': '一次把稿子发给一批媒体的那类服务。',
+  'connections.line.judgeme': '独立站最常用的评价应用。',
+  'connections.line.loox': '带图评价，与 Judge.me 二选一，排在它后面。',
   'connections.never_ai': '这个表单是网页原生表单，填的内容直接存进本机，不经过 AI，也不进日志。',
   'connections.last_tested': '上次测试 {at}',
   // ── WP40 数据后端（41 §2.4）────────────────────────────────────────
@@ -1047,8 +1099,8 @@ const zh: Table = {
   'storage.managed.learn': '看看这一档会是什么样',
   // WP60（49 §6 / 48 L6 / L7）：在线值守与聊天窗托管
   'standby.title': '在线值守（Agents 工坊托管）',
-  'standby.note':
-    '关了电脑也有人接活：你的工作区服务进程搬到云上 7×24 跑，邮箱轮询、聊天窗、跟进都在云上。',
+  'standby.note': '关了电脑也有人接活：服务进程搬到云上 7×24 跑。',
+  'standby.note.hint': '你的工作区服务进程搬到云上跑，邮箱轮询、聊天窗、跟进都在云上。',
   'standby.more.hint':
     '同一时刻只有一个服务进程——开了值守，云上那个就是唯一那个，这台电脑变成它的一个窗口。没有"两边同步"这回事，因为只有一份。随时能接回本机，包格式两边一样。',
   'standby.not_linked': '还没关联 Agents 工坊账号。',
@@ -1132,7 +1184,9 @@ const zh: Table = {
   'connections.runtime.ready.detail': '本机的连接器已经开了鉴权与加密，可以放心连。',
   'connections.runtime.absent': '本机还没装连接器',
   'connections.runtime.absent.detail':
-    '店铺与数据后台要经本机的 OpenConnector 才能连。装好并启动后刷新这一页；邮箱不受影响，现在就能连。',
+    '店铺与数据后台要经本机的 OpenConnector 才能连；邮箱现在就能连。',
+  'connections.runtime.absent.hint':
+    '装好并启动 OpenConnector 之后刷新这一页。邮箱不经它，不受影响。',
   'connections.runtime.unhardened': '连接器没加固好，不能用',
   'connections.runtime.unhardened.detail':
     '它现在没开鉴权或没开加密，凭据可能明文存放。先按下面的原因修好再连。',
@@ -1146,6 +1200,7 @@ const zh: Table = {
   'connections.legacy.action': '断开后重接一次',
   // WP44：代理 fake-IP 模式下的出站防护
   'connections.egress.fake_ip': '你的网络在用代理的 fake-IP 模式',
+  'connections.egress.fake_ip.short': '连接器已改用公共 DNS，重启开发环境生效。',
   'connections.egress.fake_ip.detail':
     '代理把外网域名解析成了保留网段的地址，连接器的出站防护会把它当内网拦下。已经让连接器改用公共 DNS 直接解析（重启开发环境生效）；' +
     '或者把要连的域名加进信任名单（AGENTSWS_CONNECT_TRUSTED_HOSTS）。',
@@ -1395,7 +1450,7 @@ const zh: Table = {
     '把这张卡先放一放，等资料齐了 AI 再来问。反向的「问 AI」入口在 /v1 上还没开（WP19）。',
   'deck.supplement.snooze': '先放一放',
   'deck.instruct.hint': '一句话说清楚要怎么改；再选它管到哪里',
-  'deck.reject.hint': '说一句为什么不行——14 §4：驳回的原因是最强的学习信号',
+  'deck.reject.hint': '说一句为什么不行——驳回的原因是最强的学习信号',
   'deck.submit': '提交',
   'deck.submitting': '提交中…',
   'deck.back': '返回',
@@ -1434,8 +1489,7 @@ const zh: Table = {
   'messages.archive': '归档',
   // 界面上写「删除」，打出去的是"移到垃圾箱"——**绝不永久删除**（63 §7）
   'messages.delete': '删除',
-  'messages.readonly':
-    '这条线程交给 Agent 在处理，这里不给直接回复——要亲自回，先在工作线程里点「我来接手」。',
+  'messages.readonly': 'Agent 在处理这条线程；要亲自回，先在工作线程里点「我来接手」。',
   'messages.agent.working': '客服 Agent 在处理',
   'messages.agent.waiting_for_you': '等你拍板',
   'messages.agent.replied': '已回复',
@@ -1446,8 +1500,9 @@ const zh: Table = {
   'messages.images.show': '显示图片',
   'messages.backfill': '再往前取 30 天',
   'messages.backfill.since': '现在回溯到 {date}',
-  'messages.no_mailbox':
-    '这台机器上还没连邮箱。连上之后，收件箱、已发、草稿、垃圾箱与客服 / 红人那两个文件夹都会出现在这里。',
+  'messages.no_mailbox': '这台机器上还没连邮箱。',
+  'messages.no_mailbox.hint':
+    '连上之后，收件箱、已发、草稿、垃圾箱与客服 / 红人那两个文件夹都会出现在这里。',
   'messages.connect': '去连邮箱',
   'messages.compose.new': '写信',
   'messages.compose.reply': '回复',
@@ -1677,8 +1732,6 @@ const zh: Table = {
   'models.remove.confirm': '删掉这个模型？存在本机的 API key 也会一起删掉。',
   'models.inactive': '还不能用',
   'models.from_env': '环境变量',
-  'models.never_ai':
-    '这个表单是网页原生表单，填的 API key 直接存进本机加密库，不经过 AI，也不进日志。',
   'models.advanced': '高级',
   'models.field.id': '编号',
   'models.field.id.hint':
@@ -1692,7 +1745,8 @@ const zh: Table = {
   'models.discover': '拉取模型列表',
   'models.discover.failed': '没拉到模型列表，先手填一个模型名也行。原因：{reason}',
   'models.field.api_key': 'API key',
-  'models.field.api_key.hint': '只存在这台电脑的加密库里，不上传、不进日志、不进模型。',
+  'models.field.api_key.hint':
+    '网页原生表单：key 只存进这台电脑的加密库，不经 AI、不上传、不进日志。',
   'models.field.api_key.keep': '已经存过一把了。留空就不动它，填了就换成新的。',
   'models.field.embedding': '向量模型（选填）',
   'models.field.embedding.hint': '知识库检索要用。不填就用不了向量检索，别的照常。',
@@ -1881,6 +1935,9 @@ const zh: Table = {
   'kol.channel.x': 'X',
   'kol.tools.title': '导入与活动',
   'kol.import': '导入红人表',
+  'influencer.empty.title': '红人库',
+  'influencer.empty':
+    '这个品牌还没有人持有红人职责。先在「组织」里把它分配给自己，红人库就会出现在这里。',
   'kol.import.hint':
     '认 CSV / TSV。表头中英都认（红人 / 链接 / 粉丝 / 互动率 / 类目 / 邮箱）；去重只按 渠道 + 账号名。',
   'kol.import.rejected': '第 {row} 行没进来：{reason}',
@@ -2026,7 +2083,8 @@ const zh: Table = {
   //    只有资格让他看见这两个不一样——所以文案是「两处说法不一样」，
   //    不是「官网的是错的」。
   'design.md.title': '设计规范',
-  'design.md.subtitle': '这个品牌的颜色、字体、间距与用法。出图、出页面、出广告都照它来。',
+  'design.md.subtitle': '这个品牌的颜色、字体、间距与用法。',
+  'design.md.subtitle.hint': '出图、出页面、出广告都照它来。',
   'design.md.empty': '还没有设计规范。可以从官网抓一份，或者传一份品牌手册。',
   'design.md.extract': '从官网抓一份',
   'design.md.extracting': '正在读官网的样式…',
@@ -2096,6 +2154,7 @@ const zh: Table = {
   // WP66（52 O1）：连接页与设置页只管当前这个品牌
   'brand.scope': '这一页只管当前品牌「{brand}」。别的品牌各有各的一套，切过去再设。',
   'command.group.brands': '品牌',
+  'command.group.help': '教程',
   'org.tab.brands': '品牌',
   'org.brands.title': '品牌一览',
   'org.brands.hint':
@@ -2309,8 +2368,13 @@ const zh: Table = {
   // ── WP85（54 §5）：消息渠道（微信 ClawBot / 企业微信智能机器人）────
   'nav.im': '消息渠道',
   'im.title': '消息渠道',
-  'im.intro':
-    '把代理接到聊天软件上。两条通道是两件事：微信那条是「你和你自己的代理的私聊」，企业微信那条才是团队用的。',
+  'im.intro': '把代理接到聊天软件上。',
+  'im.intro.hint':
+    '两条通道是两件事：微信那条是「你和你自己的代理的私聊」，企业微信那条才是团队用的。',
+  'im.wechat.line': '扫一次码，就能在微信里问你自己的代理。',
+  'im.wechat.terms.short': '只用来问你自己的代理；拿去做客服或群发会牵连你的主微信号。',
+  'im.wechat.local': '登录凭据只存在这台机器上，不经 AI、不进日志。',
+  'im.wecom.line': '团队用：同事在群里 @ 它，它按提问人的身份作答。',
   'im.state.live': '在收信',
   'im.state.paused': '要重连',
   'im.state.unbound': '没绑',
@@ -2367,6 +2431,7 @@ const zh: Table = {
   'chat.window.relay': '转发方式',
   'chat.window.relay.official': '官方托管（免费）',
   'chat.window.relay.official.hint': '每月 200 个对话；到 80% 提醒你。订阅客服增值服务后不限。',
+  'chat.window.relay.official.quota': '每月 200 个对话，免费',
   'chat.window.relay.endpoint': '转发器地址',
   'chat.window.relay.pairing': '配对密钥（只显示一次的那把）',
   'chat.window.relay.messageKey': '留言密钥（选填；要收离线留言就填）',
@@ -2379,6 +2444,7 @@ const zh: Table = {
   'chat.window.hosted.title': '客服增值服务：云端替你值守',
   'chat.window.hosted.hint':
     '30 积分 / 月。电脑关了也有人接：云端一直开着一份你的客服，访客消息先给它；你开机后两边对齐。回复用的模型按积分计。',
+  'chat.window.hosted.price': '30 积分 / 月，回复用的模型另按积分计',
   'chat.window.hosted.off': '没开',
   'chat.window.hosted.on': '云端替你值守中',
   'chat.window.hosted.starting': '云端正在起来',
@@ -2501,8 +2567,7 @@ const zh: Table = {
   'social.calendar.moved': '排期改了，已经提上去等人点头——换个时间发也是一次发布。',
   'social.calendar.staged': '草稿建好了，已经提上去等人点头。',
   'social.calendar.always_l1': '发内容永远要人点一下：批了之后它会在你排的那个时刻自己出去。',
-  'social.calendar.no_account':
-    '这条渠道还没登记任何一个号，所以日历上是空的。去连接页连上之后再登记一个号。',
+  'social.calendar.no_account': '这条渠道还没登记号，所以日历是空的；先去连接页连上再登记。',
   'social.calendar.compose.placeholder': '写这条要发的正文。价格、时效、保修只写事实卡里有的。',
   'social.calendar.compose.submit': '提上去',
   'social.calendar.compose.cancel': '算了',
@@ -2751,6 +2816,17 @@ const zh: Table = {
   'help.browser.title': '让 AI 用浏览器（四种方式）',
   'help.computer-use.title': '让 AI 操作这台电脑',
   'help.search-data.title': '搜索数据接口',
+  'help.conn-shopify.title': '连 Shopify 店铺',
+  'help.conn-email.title': '连邮箱（任意邮箱 IMAP / SMTP）',
+  'help.conn-google.title': 'Google 家的几个连接',
+  'help.conn-meta.title': 'Meta 家的几个连接（Facebook / Instagram / WhatsApp）',
+  'help.conn-tiktok.title': 'TikTok 的三个连接',
+  'help.conn-x.title': 'X（Twitter）的两个连接',
+  'help.conn-community.title': '社群机器人：Reddit / Discord / Telegram',
+  'help.conn-marketing-logistics.title': '邮件营销与物流追踪',
+  'help.browser-extension.title': '浏览器插件「红人助手」',
+  'help.im-channels.title': '消息渠道：微信与企业微信',
+  'help.chat-window.title': '网站在线客服（聊天窗）',
   'kind.computer_use': '操作电脑',
   'category.computer_use': '操作电脑',
   'verb.policy.approve.computer_use': '允许',
@@ -3457,7 +3533,7 @@ const en: Table = {
   'rail.skills.promote': 'Promote to {tier}',
   'rail.skills.this_layer': 'this layer',
   'rail.skills.more': 'Open the skills page',
-  'rail.knowledge.hint': 'What this layer can see: domain + range + sensitivity ceiling (19).',
+  'rail.knowledge.hint': 'What this layer can see: domain + range + sensitivity ceiling.',
   'rail.knowledge.domain': 'Domain: {domain}',
   'rail.knowledge.scope': '{domain} · {range} · up to {sensitivity}',
   'rail.knowledge.cards': 'Active fact cards in the library: {count}',
@@ -3471,13 +3547,12 @@ const en: Table = {
   'rail.caps.hard': 'hard ceiling (workspace policy cannot loosen it)',
   'rail.caps.bundled': 'Bundled, read-only',
   'rail.caps.custom': 'Copy in this workspace',
-  'rail.caps.readonly':
-    'Bundled templates are read-only — copy one first, then edit the copy (05 §0).',
+  'rail.caps.readonly': 'Bundled templates are read-only — copy one first, then edit the copy.',
   'rail.caps.copy': 'Copy it to edit',
   'rail.caps.copied': 'Copied as "{name}" — assign it on the company page',
   'rail.caps.submit': 'Submit for approval',
   'rail.caps.approval_hint':
-    'Limit changes do not take effect immediately: a policy-change card is raised and must be approved (14 §1).',
+    'Limit changes do not take effect immediately: a policy-change card is raised and must be approved.',
   'rail.caps.submitted': 'Submitted for approval',
   'rail.caps.position_hint':
     'A position has no limits of its own — permissions and limits live on the duty. Pick a duty to edit.',
@@ -3561,7 +3636,7 @@ const en: Table = {
   'card.ask.sending': 'Asking…',
   'card.snoozed': 'Snoozed until {at}',
   'card.done': 'Handled',
-  'command.placeholder': 'Search cards, jump to a position, add a tile…',
+  'command.placeholder': 'Search cards, positions, tutorials, or add a tile…',
   'command.group.go': 'Go to',
   'command.group.cards': 'Cards',
   'command.group.tiles': 'Add a tile',
@@ -3728,8 +3803,9 @@ const en: Table = {
   'connections.requeuing': 'Re-queueing…',
   // ── WP83：connection directory & per-position checklist ─────────────
   'connections.directory.title': 'Add a connection',
-  'connections.directory.subtitle':
-    'There is more than the cards above. Browse by category or search by name — anything we have not built yet says so.',
+  'connections.directory.subtitle': 'Browse by category or search by name.',
+  'connections.directory.hint':
+    'There is more than the cards below. Anything we have not built yet says so.',
   'connections.directory.open': 'See all',
   'connections.directory.close': 'Collapse',
   'connections.directory.search': 'Search by name (Shopify, mailbox, YouTube…)',
@@ -3759,6 +3835,35 @@ const en: Table = {
   'connections.category.custom': 'Custom',
   'connections.mcp.hint':
     'Register a tool server you run yourself. After registering, tick which of its tools only read, then name it as mcp:<name> in a role template so that role can use it.',
+  // WP157: the browser extension section on Connections (was hard-coded)
+  'extension.title': 'Browser extension',
+  'extension.line':
+    'The “Creator helper” Chrome extension: save creators from YouTube / Instagram / TikTok in one click.',
+  'extension.scope':
+    'It can only view creators, save them and read your creator list — no emails, no deals, no orders.',
+  'extension.generate': 'Generate a pairing code',
+  'extension.generating': 'Generating…',
+  'extension.code.once': 'Valid for 5 minutes, once only; enter it in the extension settings.',
+  'extension.code.left': '{time} left',
+  'extension.code.left.hint':
+    'Type these 6 digits into the extension settings. Close this page and it is gone — just generate another.',
+  'extension.code.stale':
+    'This code has probably expired (over 5 minutes); if it is rejected, generate another.',
+  'extension.regenerate': 'Generate another',
+  'extension.collapse': 'Hide',
+  'extension.empty': 'No browser paired yet.',
+  'extension.revoke.confirm':
+    'Once revoked, that browser can never send anything in again. Continue?',
+  'extension.local_only':
+    'The extension only talks to 127.0.0.1 on this computer; it knows no cloud address.',
+  'extension.never_used': 'never used',
+  'extension.revoked': 'revoked',
+  'extension.token.meta': 'Extension {id} · last used: {when}',
+  'extension.token.revoked_at': ' · revoked {when}',
+  'extension.revoke': 'Revoke',
+  'extension.revoking': 'Revoking…',
+  'connections.mcp.line': 'Register tool servers you run yourself.',
+  'connections.mcp.read_tools.title': 'Which tools only read?',
   'connections.mcp.add': 'Register one',
   'connections.mcp.empty': 'None registered yet.',
   'connections.mcp.name': 'Name',
@@ -3797,7 +3902,7 @@ const en: Table = {
   'connections.subtitle': 'Hook up your store, mailbox and analytics.',
   'connections.connected': 'Connected',
   'connections.available': 'Available',
-  'connections.empty': 'Nothing connected yet. Pick one below — each says what to prepare.',
+  'connections.empty': 'Nothing connected yet. Pick one below; stuck? Open its tutorial.',
   'connections.test': 'Test',
   'connections.testing': 'Testing…',
   'connections.disconnect': 'Disconnect',
@@ -3809,9 +3914,53 @@ const en: Table = {
   'connections.cancel': 'Cancel',
   'connections.save': 'Save and test',
   'connections.saving': 'Saving…',
-  'connections.setup': 'What you need',
-  'connections.setup.open': 'Show steps',
-  'connections.setup.close': 'Hide',
+  // WP157: the one line on each connection card (steps and details live in the tutorials)
+  'connections.line.shopify_admin':
+    'Create an app in the Dev Dashboard, install it on your store, paste its Client ID and secret.',
+  'connections.line.imap_smtp':
+    'The easy one: your address plus an app password — nothing to apply for.',
+  'connections.line.gmail': 'Needs your own Google OAuth app; for plain email use “Any mailbox”.',
+  'connections.line.ga4': 'Authorize once with your own Google OAuth app; no security review.',
+  'connections.line.gsc': 'Same Google project as GA4, with one more API enabled.',
+  'connections.line.meta_ads': 'Needs a Meta developer app; review is slow, so this can come last.',
+  'connections.line.klaviyo':
+    'Read-only segments, templates and results; sends never go through it.',
+  'connections.line.shopify_email': 'Shopify’s own email marketing, queued after Klaviyo.',
+  'connections.line.aftership':
+    'Read-only parcel tracking and exceptions; never writes tracking numbers.',
+  'connections.line.track17': 'Shipment tracking, alongside AfterShip and queued after it.',
+  'connections.line.youtube_data':
+    'Search channels and read subscriber counts; 10,000 quota units a day site-wide.',
+  'connections.line.instagram_graph':
+    'Look up business accounts by name; there is no keyword search for people.',
+  'connections.line.facebook_graph':
+    'Search Pages and read follower counts; Page search needs Meta review.',
+  'connections.line.tiktok_research':
+    'By application: TikTok must approve your use before any data flows.',
+  'connections.line.x_api': 'X’s API is paid; the free tier cannot read profiles.',
+  'connections.line.meta_graph':
+    'One token for an FB Page + IG: reads once connected, posting needs App Review.',
+  'connections.line.tiktok_content':
+    'Post TikTok videos; by application, separate from the Research API.',
+  'connections.line.reddit':
+    'Register a Reddit app; broadcasting means a pinned post, never mass DMs.',
+  'connections.line.discord_bot':
+    'Read messages and members, post announcements, delete, time out.',
+  'connections.line.telegram_bot': 'Read, announce, delete and ban; the bot must be a group admin.',
+  'connections.line.whatsapp_business':
+    'Needs business verification; outbound messages must use approved templates.',
+  'connections.line.meta_marketing':
+    'Read ad results, change budgets and bids; separate from the social Meta card.',
+  'connections.line.google_ads':
+    'Read results, change budgets and bids; the developer token needs its own review.',
+  'connections.line.x_ads': 'X’s ads API; by application, with an ad account and manual review.',
+  'connections.line.tiktok_ads':
+    'TikTok’s ads API; ad accounts must be authorized in Business Center.',
+  'connections.line.google_alerts':
+    'Free, nothing to apply for: paste your brand alert’s RSS feed.',
+  'connections.line.press_distribution': 'Services that send one release to many outlets at once.',
+  'connections.line.judgeme': 'The most common reviews app for online stores.',
+  'connections.line.loox': 'Photo reviews, an alternative to Judge.me, queued after it.',
   'connections.never_ai':
     'This is a plain browser form. What you type goes straight to this machine — not to the AI, not to any log.',
   'connections.last_tested': 'Last tested {at}',
@@ -3839,7 +3988,9 @@ const en: Table = {
   // WP60 (49 §6 / 48 L6 / L7): online standby and hosted chat widget
   'standby.title': 'Online standby (hosted by Agents Workshop)',
   'standby.note':
-    'Someone is on duty after you shut the laptop: your workspace service moves to the cloud and runs 24/7 — mailbox polling, the chat widget, follow-ups, all of it.',
+    'Someone is on duty after you shut the laptop: the service runs 24/7 in the cloud.',
+  'standby.note.hint':
+    'Your workspace service moves to the cloud — mailbox polling, the chat widget, follow-ups, all of it.',
   'standby.more.hint':
     'There is only ever one service process. Turn standby on and the cloud one is it; this machine becomes a window onto it. Nothing to sync, because there is only one copy. You can bring it home any time — same package format both ways.',
   'standby.not_linked': 'No Agents Workshop account linked yet.',
@@ -3928,7 +4079,9 @@ const en: Table = {
   'connections.runtime.ready.detail': 'The local connector has auth and encryption on.',
   'connections.runtime.absent': 'No connector installed',
   'connections.runtime.absent.detail':
-    'Stores and analytics go through the local OpenConnector. Install and start it, then refresh. Mailboxes work without it.',
+    'Stores and analytics go through the local OpenConnector; mailboxes work now.',
+  'connections.runtime.absent.hint':
+    'Install and start OpenConnector, then refresh this page. Mailboxes do not go through it.',
   'connections.runtime.unhardened': 'Connector is not hardened — unusable',
   'connections.runtime.unhardened.detail':
     'Auth or encryption is off, so credentials could sit in plain text. Fix the reasons below first.',
@@ -3941,6 +4094,8 @@ const en: Table = {
   'connections.legacy': 'connected the old way',
   'connections.legacy.action': 'Disconnect and reconnect',
   'connections.egress.fake_ip': 'Your network is using a proxy in fake-IP mode',
+  'connections.egress.fake_ip.short':
+    'The connector now uses public DNS; restart the dev environment.',
   'connections.egress.fake_ip.detail':
     'The proxy resolves public domains to reserved-range addresses, so the connector’s egress guard treats them as internal and blocks them. The connector has been switched to public DNS (restart the dev environment to apply), or add the domain to the trusted list (AGENTSWS_CONNECT_TRUSTED_HOSTS).',
   'connections.egress.trusted': 'Trusted hosts: {hosts}',
@@ -4184,7 +4339,7 @@ const en: Table = {
     'Park this card until the material is in. The reverse Ask-AI entry is not on /v1 yet (WP19).',
   'deck.supplement.snooze': 'Park it',
   'deck.instruct.hint': 'One sentence on what to change, then how far it applies',
-  'deck.reject.hint': 'Say why — a rejection reason is the strongest learning signal (14 §4)',
+  'deck.reject.hint': 'Say why — a rejection reason is the strongest learning signal',
   'deck.submit': 'Submit',
   'deck.submitting': 'Submitting…',
   'deck.back': 'Back',
@@ -4223,7 +4378,7 @@ const en: Table = {
   'messages.archive': 'Archive',
   'messages.delete': 'Delete',
   'messages.readonly':
-    'An agent is handling this thread, so replying from here is off. To answer it yourself, take it over in the work thread first.',
+    'An agent is handling this thread; to answer yourself, take it over in the work thread first.',
   'messages.agent.working': 'Support agent is on it',
   'messages.agent.waiting_for_you': 'Waiting on you',
   'messages.agent.replied': 'Replied',
@@ -4234,8 +4389,9 @@ const en: Table = {
   'messages.images.show': 'Show images',
   'messages.backfill': 'Fetch 30 more days',
   'messages.backfill.since': 'Currently back to {date}',
-  'messages.no_mailbox':
-    'No mailbox connected on this machine yet. Once you connect one, your inbox, sent, drafts, trash and the two agent folders all show up here.',
+  'messages.no_mailbox': 'No mailbox connected on this machine yet.',
+  'messages.no_mailbox.hint':
+    'Once you connect one, your inbox, sent, drafts, trash and the two agent folders all show up here.',
   'messages.connect': 'Connect a mailbox',
   'messages.compose.new': 'Compose',
   'messages.compose.reply': 'Reply',
@@ -4469,8 +4625,6 @@ const en: Table = {
   'models.remove.confirm': 'Remove this model? The API key stored on this machine goes too.',
   'models.inactive': 'Not usable yet',
   'models.from_env': 'from env',
-  'models.never_ai':
-    'A plain web form. The API key goes straight into this machine encrypted store — never through AI, never into logs.',
   'models.advanced': 'Advanced',
   'models.field.id': 'Id',
   'models.field.id.hint':
@@ -4486,7 +4640,7 @@ const en: Table = {
     'Could not fetch the model list; typing the model name still works. Reason: {reason}',
   'models.field.api_key': 'API key',
   'models.field.api_key.hint':
-    'Stored only in this machine encrypted store. Never uploaded, logged, or shown to a model.',
+    'A plain web form: the key goes only into this machine’s encrypted store — never through AI, never uploaded or logged.',
   'models.field.api_key.keep':
     'A key is already stored. Leave blank to keep it, or type a new one.',
   'models.field.embedding': 'Embedding model (optional)',
@@ -4686,6 +4840,9 @@ const en: Table = {
   'kol.channel.x': 'X',
   'kol.tools.title': 'Import & campaign',
   'kol.import': 'Import creators',
+  'influencer.empty.title': 'Creator library',
+  'influencer.empty':
+    'Nobody on this brand holds a creator duty yet. Assign one to yourself under “Org” and the library shows up here.',
   'kol.import.hint':
     'CSV / TSV. Headers in Chinese or English; dedupe is by channel + handle only.',
   'kol.import.rejected': 'Row {row} skipped: {reason}',
@@ -4818,8 +4975,8 @@ const en: Table = {
 
   // ── WP122 (71) the brand's DESIGN.md ─────────────────────────────
   'design.md.title': 'Design spec',
-  'design.md.subtitle':
-    "This brand's colours, type, spacing and how to use them. Images, pages and ads all follow it.",
+  'design.md.subtitle': "This brand's colours, type, spacing and how to use them.",
+  'design.md.subtitle.hint': 'Images, pages and ads all follow it.',
   'design.md.empty': 'No design spec yet. Pull one from the website, or upload a brand book.',
   'design.md.extract': 'Pull from the website',
   'design.md.extracting': 'Reading the site styles…',
@@ -4885,6 +5042,7 @@ const en: Table = {
   'brand.scope':
     'This page covers the current brand, \u201c{brand}\u201d, only. Every brand has its own set \u2014 switch over to set those up.',
   'command.group.brands': 'Brands',
+  'command.group.help': 'Tutorials',
   'org.tab.brands': 'Brands',
   'org.brands.title': 'Brands',
   'org.brands.hint':
@@ -5111,8 +5269,14 @@ const en: Table = {
   // ── WP85 (54 §5): messaging channels ───────────────────────────
   'nav.im': 'Messaging',
   'im.title': 'Messaging channels',
-  'im.intro':
-    'Put your agent inside a chat app. The two are different things: WeChat is a private chat between you and your own agent; WeCom is the one your team uses.',
+  'im.intro': 'Put your agent inside a chat app.',
+  'im.intro.hint':
+    'The two are different things: WeChat is a private chat between you and your own agent; WeCom is the one your team uses.',
+  'im.wechat.line': 'Scan once and ask your own agent from WeChat.',
+  'im.wechat.terms.short':
+    'Only for asking your own agent; support or broadcasts can get your main WeChat banned.',
+  'im.wechat.local': 'The login stays on this machine — never sent to the AI, never logged.',
+  'im.wecom.line': 'For the team: @ it in a group and it answers as the asker.',
   'im.state.live': 'Receiving',
   'im.state.paused': 'Needs reconnect',
   'im.state.unbound': 'Not linked',
@@ -5175,6 +5339,7 @@ const en: Table = {
   'chat.window.relay.official': 'Official hosting (free)',
   'chat.window.relay.official.hint':
     '200 conversations per month; we nudge you at 80%. Unlimited with the support subscription.',
+  'chat.window.relay.official.quota': '200 conversations a month, free',
   'chat.window.relay.endpoint': 'Relay address',
   'chat.window.relay.pairing': 'Pairing key (the one shown only once)',
   'chat.window.relay.messageKey': 'Message key (optional; needed for offline messages)',
@@ -5187,6 +5352,7 @@ const en: Table = {
   'chat.window.hosted.title': 'Support subscription: we staff the chat in the cloud',
   'chat.window.hosted.hint':
     '30 credits / month. Someone answers even when your computer is off: a copy of your support runs in the cloud and gets visitor messages first; both sides realign when you are back. Replies use credit-billed models.',
+  'chat.window.hosted.price': '30 credits / month; replies’ model usage billed in credits',
   'chat.window.hosted.off': 'Off',
   'chat.window.hosted.on': 'The cloud is on duty',
   'chat.window.hosted.starting': 'Starting up in the cloud',
@@ -5320,7 +5486,7 @@ const en: Table = {
   'social.calendar.always_l1':
     'Publishing always needs a human tap. Once approved it goes out at the time you set.',
   'social.calendar.no_account':
-    'No account is registered on this channel yet, so the calendar is empty. Connect it, then register an account.',
+    'No account registered on this channel, so the calendar is empty; connect it, then register one.',
   'social.calendar.compose.placeholder':
     'Write the post. Prices, delivery times and warranties: only what the fact cards say.',
   'social.calendar.compose.submit': 'Send for approval',
@@ -5588,6 +5754,17 @@ const en: Table = {
   'help.browser.title': 'Let AI use a browser (four ways)',
   'help.computer-use.title': 'Let AI operate this computer',
   'help.search-data.title': 'Search data APIs',
+  'help.conn-shopify.title': 'Connect your Shopify store',
+  'help.conn-email.title': 'Connect a mailbox (any email via IMAP / SMTP)',
+  'help.conn-google.title': 'The Google connections',
+  'help.conn-meta.title': 'The Meta connections (Facebook / Instagram / WhatsApp)',
+  'help.conn-tiktok.title': 'The three TikTok connections',
+  'help.conn-x.title': 'The two X (Twitter) connections',
+  'help.conn-community.title': 'Community bots: Reddit / Discord / Telegram',
+  'help.conn-marketing-logistics.title': 'Email marketing and shipment tracking',
+  'help.browser-extension.title': 'The “Creator helper” browser extension',
+  'help.im-channels.title': 'Message channels: WeChat and WeCom',
+  'help.chat-window.title': 'Website live chat (the chat window)',
   'kind.computer_use': 'Use the computer',
   'category.computer_use': 'Use the computer',
   'verb.policy.approve.computer_use': 'Allow',

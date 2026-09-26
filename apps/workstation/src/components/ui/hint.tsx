@@ -31,6 +31,8 @@ export function Hint({
   /** 原来那段灰字上挂过 `data-testid` 的，把它挪到问号上，断言照旧找得到。 */
   testId?: string
 }): ReactNode {
+  // WP157：问号里不画 markdown——服务端 / 职责模板的原话常带 `**粗体**`，记号去掉，字一个不少
+  const plain = text.replace(/\*\*/g, '')
   return (
     <TooltipProvider>
       <Tooltip>
@@ -38,8 +40,8 @@ export function Hint({
           <button
             type="button"
             data-slot="hint"
-            data-hint={text}
-            aria-label={text}
+            data-hint={plain}
+            aria-label={plain}
             {...(testId === undefined ? {} : { 'data-testid': testId })}
             // 在 <label> 里点问号不该顺带聚焦输入框
             onClick={(e) => {
@@ -53,7 +55,7 @@ export function Hint({
             <CircleHelp aria-hidden className="size-3.5" />
           </button>
         </TooltipTrigger>
-        <TooltipContent>{text}</TooltipContent>
+        <TooltipContent>{plain}</TooltipContent>
       </Tooltip>
     </TooltipProvider>
   )
@@ -64,7 +66,19 @@ export function Hint({
  *
  * 这是 §2 例外的第一类：用户凭它决定要不要把密钥贴进来，藏了就是失职。
  */
-export function SafetyNote({ text, className }: { text: string; className?: string }): ReactNode {
+export function SafetyNote({
+  text,
+  hint,
+  className,
+}: {
+  text: string
+  /**
+   * WP157：卡上压成一句之后，原话（条款出处、完整的风险说明）放进旁边的问号——
+   * 信息一条不丢，卡面上还是一行。
+   */
+  hint?: string
+  className?: string
+}): ReactNode {
   return (
     <p
       data-slot="safety-note"
@@ -72,6 +86,7 @@ export function SafetyNote({ text, className }: { text: string; className?: stri
     >
       <ShieldCheck aria-hidden className="mt-px size-3.5 shrink-0" />
       <span>{text}</span>
+      {hint === undefined ? null : <Hint text={hint} className="mt-px" />}
     </p>
   )
 }

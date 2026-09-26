@@ -12,6 +12,7 @@ import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
+import { CATALOG, PLANNED_CONNECTORS } from '../src/catalog.js'
 import { MODEL_TEMPLATES } from '../src/models.js'
 
 const HELP = join(dirname(fileURLToPath(import.meta.url)), '../../../docs/help')
@@ -50,6 +51,90 @@ describe('模型模板的步骤与外链都搬进了教程（WP156）', () => {
       const plan = (tpl.plan_label ?? '').replace(/（.*）$/, '')
       if (plan !== '' && tpl.kind !== 'agentsws_cloud')
         expect(zh, `${slug}.md 里找不到方案「${plan}」`).toContain(plan)
+    }
+  })
+})
+
+/**
+ * WP157：连接页的 provider 卡也不再铺「要准备什么」的步骤与外链——搬进了每类连接一篇的教程
+ * （`docs/help/conn-*.md`）。对照与工作台 `lib/help.ts` 的 `HELP_BY_SERVICE` 同一份。
+ */
+const HELP_BY_SERVICE: Record<string, string> = {
+  shopify_admin: 'conn-shopify',
+  imap_smtp: 'conn-email',
+  gmail: 'conn-google',
+  ga4: 'conn-google',
+  gsc: 'conn-google',
+  youtube_data: 'conn-google',
+  google_ads: 'conn-google',
+  google_alerts: 'conn-google',
+  meta_ads: 'conn-meta',
+  instagram_graph: 'conn-meta',
+  facebook_graph: 'conn-meta',
+  meta_graph: 'conn-meta',
+  meta_marketing: 'conn-meta',
+  whatsapp_business: 'conn-meta',
+  tiktok_research: 'conn-tiktok',
+  tiktok_content: 'conn-tiktok',
+  tiktok_ads: 'conn-tiktok',
+  x_api: 'conn-x',
+  x_ads: 'conn-x',
+  reddit: 'conn-community',
+  discord_bot: 'conn-community',
+  telegram_bot: 'conn-community',
+  klaviyo: 'conn-marketing-logistics',
+  shopify_email: 'conn-marketing-logistics',
+  aftership: 'conn-marketing-logistics',
+  track17: 'conn-marketing-logistics',
+}
+
+/** 步骤正文里顺手写着的网址（Reddit 的应用页、Google Alerts）也算外链。 */
+const URL_IN_TEXT = /https?:\/\/[^\s，。）)]+/g
+
+describe('连接目录的步骤与外链都搬进了教程（WP157）', () => {
+  it('每个连接都有教程', () => {
+    for (const entry of CATALOG)
+      expect(HELP_BY_SERVICE[entry.service], `${entry.service} 没有对应的教程`).toBeDefined()
+  })
+
+  it('每个连接的每个外链（含步骤里写着的）都在中英两份教程里；名字在中文那份里', () => {
+    for (const entry of CATALOG) {
+      const slug = HELP_BY_SERVICE[entry.service]
+      const zh = readFileSync(join(HELP, `${slug}.md`), 'utf8')
+      const en = readFileSync(join(HELP, `${slug}.en.md`), 'utf8')
+      const urls = [
+        ...entry.setup_guide.links.map((l) => l.url),
+        ...entry.setup_guide.steps.flatMap((s) => s.match(URL_IN_TEXT) ?? []),
+      ]
+      for (const url of urls) {
+        expect(zh, `${slug}.md 缺 ${entry.service} 的 ${url}`).toContain(url)
+        expect(en, `${slug}.en.md 缺 ${entry.service} 的 ${url}`).toContain(url)
+      }
+      expect(zh, `${slug}.md 里找不到「${entry.label}」`).toContain(entry.label)
+      // 步骤条数对得上：每个连接那一节至少有它那么多条编号步骤（拆开写可以多，不能少）
+      const section = zh.slice(zh.indexOf(`## ${entry.label}`))
+      const next = section.indexOf('\n## ', 3)
+      const body = next === -1 ? section : section.slice(0, next)
+      const numbered = body.match(/^\d+\. /gm)?.length ?? 0
+      expect(numbered, `${slug}.md「${entry.label}」一节的步骤少了`).toBeGreaterThanOrEqual(
+        entry.setup_guide.steps.length,
+      )
+    }
+  })
+})
+
+describe('每张连接卡都有压好的一句话（WP157）', () => {
+  it('连接目录与「还没做」那几张，工作台词条里中英各有一句 connections.line.<service>', () => {
+    const i18n = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), '../../workstation/src/lib/i18n.ts'),
+      'utf8',
+    )
+    const cut = i18n.indexOf('const en: Table = {')
+    const zh = i18n.slice(0, cut)
+    const en = i18n.slice(cut)
+    for (const service of [...CATALOG, ...PLANNED_CONNECTORS].map((e) => e.service)) {
+      expect(zh, `中文缺 connections.line.${service}`).toContain(`'connections.line.${service}':`)
+      expect(en, `英文缺 connections.line.${service}`).toContain(`'connections.line.${service}':`)
     }
   })
 })

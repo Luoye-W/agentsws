@@ -48,6 +48,15 @@ describe('买家会问的问题', () => {
     expect(screen.getByDisplayValue('Is NordVolt worth it?')).toBeDefined()
   })
 
+  it('WP157 减字守卫：卡上可见说明不超上限，扣钱那句算状态', async () => {
+    const { reportCard, CARD_TEXT_LIMIT } = await import('./less-text-guard')
+    renderWithProviders(<GeoQuestions assignment="asg_content" />)
+    await screen.findByTestId('geo-cost')
+    const report = reportCard(screen.getByTestId('geo-questions'))
+    expect(report.weight, report.text).toBeLessThanOrEqual(CARD_TEXT_LIMIT)
+    expect(report.ordered).toBe(0)
+  })
+
   it('关掉：发一次 settings.enabled = false，文案换成不问不花钱', async () => {
     renderWithProviders(<GeoQuestions assignment="asg_content" />)
     const toggle = await screen.findByTestId('geo-enabled')

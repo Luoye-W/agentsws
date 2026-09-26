@@ -1,5 +1,10 @@
 /**
- * 可连接的一张卡：一句话说明 → "要准备什么"（≤ 5 步 + 外链）→ 向导。
+ * 可连接的一张卡：图标 + 名字 + 问号 +「看教程」→ 一句话 → 状态 → 向导。
+ *
+ * WP157（36 §7）：卡上不再铺「要准备什么」的步骤与外链，也不铺服务端那段成段介绍——
+ * 它们在每类连接一篇的教程里（`docs/help/conn-*.md`，`HELP_BY_SERVICE`）；成段介绍与
+ * 「连上之后会怎样」合成标题旁一个问号。没有教程的卡（将来新加的），步骤与外链在
+ * 「看教程」的对话框里现拼，一条不丢。
  *
  * 两种向导：
  * - **OAuth 类**：点"去授权"打开平台自己的授权页（Electron 里经桥接 `openExternal`，
@@ -8,14 +13,15 @@
  *   提交完立刻试连并把结果显示出来。
  */
 
-import { ChevronDown, ChevronRight, ExternalLink } from 'lucide-react'
-import { useState } from 'react'
+import { ExternalLink } from 'lucide-react'
 import { BrandIcon } from '@/components/brand-icons'
+import { InlineGuideLink, TutorialLink } from '@/components/help/tutorial-link'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Hint, SafetyNote } from '@/components/ui/hint'
 import type { ConnectTestResult, ProviderFieldSpec, ProviderView } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
+import { firstSentence, HELP_BY_SERVICE, shortReason, templateGuide } from '@/lib/help'
 import { cn } from '@/lib/utils'
 import { CapabilitySourceSwitch, capabilityOf } from './capability-source-switch'
 import { ByoSourceCard, DataSourceRouteControl } from './data-source-route'
@@ -55,13 +61,26 @@ export function ProviderCard({
   onSubmit: (values: Record<string, string>) => void
 }): React.ReactNode {
   const { t } = useApp()
-  const [guideOpen, setGuideOpen] = useState(false)
   const oauth = provider.auth === 'oauth2'
   const busy = phase === 'saving'
 
   // WP44：每个 provider 只有一条接法。Shopify 曾经有两条（Dev Dashboard 应用 /
   // 老的 shpat_ 直填令牌），老的那条已经删掉——留着只会让非技术用户在两张表单之间猜。
   const guide = provider.setup_guide
+  const tutorial = HELP_BY_SERVICE[provider.service]
+  /** 卡面上那一句：词条里压好的（中英都有）；认不得的退回服务端介绍的第一句。 */
+  const lineKey = `connections.line.${provider.service}`
+  const line = t(lineKey) === lineKey ? firstSentence(guide.summary) : t(lineKey)
+  const about = [guide.summary === line ? '' : guide.summary, provider.data_note ?? '']
+    .filter((x) => x !== '')
+    .join(' ')
+  /** 点不动的原因压成一句；原话在旁边的问号里。还没做的那几张直说「还没做」。 */
+  const reason =
+    provider.unavailable_reason === undefined
+      ? undefined
+      : provider.planned === true
+        ? t('connections.directory.planned')
+        : shortReason(provider.unavailable_reason)
 
   return (
     <Card
@@ -75,62 +94,36 @@ export function ProviderCard({
           {/* WP45：卡上戴的是这家自己的标志（品牌色原样），认不出的才落通用插头 */}
           <BrandIcon provider={provider.service} />
           {provider.label}
-          {provider.data_note === undefined ? null : (
-            <Hint text={provider.data_note} testId="provider-note" />
+          {/* WP157：成段介绍 +「连上之后会怎样」合成一个问号（原话一字不少） */}
+          {about === '' ? null : <Hint text={about} testId="provider-note" />}
+          {tutorial !== undefined ? (
+            <TutorialLink slug={tutorial} className="ml-auto font-normal" />
+          ) : guide.steps.length + guide.links.length === 0 ? null : (
+            <InlineGuideLink
+              title={provider.label}
+              markdown={templateGuide(guide)}
+              className="ml-auto font-normal"
+            />
           )}
         </CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-2 text-sm">
-        {/*
-          WP43 ③：卡面只留一句话说明。原来跟在后面那段「连上之后会怎样」
-          （`data_note`）压成标题旁一个问号，「要准备什么」照旧是下面的折叠区。
-        */}
-        <p className="text-muted-foreground">{guide.summary}</p>
-
-        <div>
-          <Button
-            size="xs"
-            variant="ghost"
-            aria-expanded={guideOpen}
-            onClick={() => {
-              setGuideOpen((v) => !v)
-            }}
-          >
-            {guideOpen ? <ChevronDown aria-hidden /> : <ChevronRight aria-hidden />}
-            {t('connections.setup')}
-          </Button>
-          {guideOpen ? (
-            <div className="mt-1 flex flex-col gap-2 rounded-md border bg-muted/30 p-2.5">
-              <ol
-                className="list-decimal space-y-1 pl-4 text-xs text-muted-foreground"
-                data-testid="setup-steps"
-              >
-                {guide.steps.map((step) => (
-                  <li key={step}>{step}</li>
-                ))}
-              </ol>
-              <div className="flex flex-wrap gap-3">
-                {guide.links.map((link) => (
-                  <a
-                    key={link.url}
-                    href={link.url}
-                    target="_blank"
-                    rel="noreferrer noopener"
-                    className="inline-flex items-center gap-1 text-xs text-primary underline-offset-4 hover:underline"
-                  >
-                    {link.label}
-                    <ExternalLink className="size-3" aria-hidden />
-                  </a>
-                ))}
-              </div>
-            </div>
-          ) : null}
-        </div>
+        <p className="text-muted-foreground" data-testid="provider-line">
+          {line}
+        </p>
 
         {provider.available ? null : (
-          <p className="text-xs text-destructive" data-testid="provider-unavailable">
+          <p
+            className="flex items-center gap-1 text-xs text-destructive"
+            data-slot="status"
+            data-testid="provider-unavailable"
+          >
             {t('connections.unavailable')}
-            {provider.unavailable_reason === undefined ? '' : `：${provider.unavailable_reason}`}
+            {reason === undefined ? '' : `：${reason}`}
+            {provider.unavailable_reason === undefined ||
+            provider.unavailable_reason === reason ? null : (
+              <Hint text={provider.unavailable_reason} testId="provider-unavailable-why" />
+            )}
           </p>
         )}
 
@@ -145,7 +138,9 @@ export function ProviderCard({
           />
         ) : phase === 'authorizing' ? (
           <div className="flex flex-col gap-1.5" data-testid="oauth-waiting">
-            <p className="text-xs text-muted-foreground">{t('connections.oauth.opened')}</p>
+            <p className="text-xs text-muted-foreground" data-slot="status">
+              {t('connections.oauth.opened')}
+            </p>
             {oauthUrl === undefined ? null : (
               <a
                 href={oauthUrl}

@@ -62,7 +62,7 @@ import {
   testModelProvider,
 } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
-import { HELP_BY_VENDOR, templateGuide } from '@/lib/help'
+import { firstSentence, HELP_BY_VENDOR, templateGuide } from '@/lib/help'
 
 /**
  * 一张模板卡的稳定标识（WP88）。
@@ -857,12 +857,8 @@ export function defaultPlanIndex(
   return 0
 }
 
-/** 一段话的第一句（到第一个句号 / 冒号为止）；本来就一句的原样回。 */
-export function firstSentence(text: string): string {
-  const m = /^[^。：:！？!?]*[。！？!?]?/.exec(text.trim())
-  const head = (m?.[0] ?? '').replace(/[：:]$/, '')
-  return head === '' ? text.trim() : head
-}
+/** WP157：挪到 `lib/help.ts`（连接卡也用），这里留一个出口不动调用方。 */
+export { firstSentence }
 
 /** 一张厂商卡：图标 + 卡名 + 一句话 + 方案单选 + 动作（WP156：步骤与外链在教程里）。 */
 function VendorCard({
@@ -953,7 +949,7 @@ function VendorCard({
             {card.plans.map((p, i) => (
               <label
                 key={`${p.kind}:${p.plan_label ?? p.label}`}
-                className={`cursor-pointer rounded-full border px-2 py-0.5 text-[11px] ${
+                className={`inline-flex cursor-pointer items-center rounded-full border px-2 py-0.5 text-[11px] ${
                   i === planIndex
                     ? 'border-primary bg-primary/10 text-primary'
                     : 'text-muted-foreground'
@@ -973,11 +969,20 @@ function VendorCard({
                   }}
                 />
                 {p.plan_label ?? p.label}
+                {/*
+                  选中那个方案是什么、和别的有什么不同（原来铺在卡上的那段），进问号。
+                  WP157：问号挪进选中的那颗方案按钮里——卡窄时它不再单独折到下一行。
+                */}
+                {i === planIndex && plan.summary !== '' ? (
+                  <Hint
+                    text={plan.summary}
+                    testId="model-plan-summary"
+                    className="ml-1 align-[-2px]"
+                  />
+                ) : null}
               </label>
             ))}
           </fieldset>
-          {/* 选中那个方案是什么、和别的有什么不同（原来铺在卡上的那段），进问号 */}
-          {plan.summary === '' ? null : <Hint text={plan.summary} testId="model-plan-summary" />}
         </div>
       )}
 

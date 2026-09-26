@@ -19,6 +19,7 @@ import { Link } from 'react-router-dom'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Hint } from '@/components/ui/hint'
 import { getPositionConnections } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 
@@ -39,6 +40,8 @@ export function PositionConnections({ id }: { id: string }): React.ReactNode {
         <CardTitle className="flex flex-wrap items-center gap-2 text-sm">
           <Link2Off className="size-4" aria-hidden />
           {t('position.connections.title', { n: String(data.items.length) })}
+          {/* WP157：「连一个少一条、连完这张卡就不见了」进问号 */}
+          <Hint text={t('position.connections.subtitle')} />
           {data.ready ? null : (
             <Badge variant="outline" className="gap-1" data-testid="position-not-ready">
               <TriangleAlert className="size-3" aria-hidden />
@@ -48,7 +51,6 @@ export function PositionConnections({ id }: { id: string }): React.ReactNode {
         </CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-2">
-        <p className="text-sm text-muted-foreground">{t('position.connections.subtitle')}</p>
         <ul className="flex flex-col gap-2">
           {data.items.map((item) => (
             <li
@@ -60,7 +62,15 @@ export function PositionConnections({ id }: { id: string }): React.ReactNode {
               <div className="min-w-0">
                 <p className="flex flex-wrap items-center gap-2 text-sm">
                   {lang === 'zh' ? item.name.zh : item.name.en}
-                  <span className="text-xs text-muted-foreground">
+                  {/* 36 §3：**没连**与**还没做**是两回事，后者那句话（为什么还没有）进问号，
+                      右边照样写着「还没做」 */}
+                  {item.status === 'planned' && item.note !== undefined ? (
+                    <Hint
+                      text={lang === 'zh' ? item.note.zh : item.note.en}
+                      testId="position-connection-note"
+                    />
+                  ) : null}
+                  <span className="text-xs text-muted-foreground" data-slot="status">
                     {item.required
                       ? t('position.connections.required')
                       : item.recommended === true
@@ -68,18 +78,9 @@ export function PositionConnections({ id }: { id: string }): React.ReactNode {
                         : t('position.connections.optional')}
                   </span>
                 </p>
-                <p className="text-xs text-muted-foreground">
+                <p className="text-xs text-muted-foreground" data-slot="data">
                   {t('position.connections.needed_by', { roles: item.needed_by.join('、') })}
                 </p>
-                {/* 36 §3：**没连**与**还没做**是两回事，后者照实说那句话 */}
-                {item.status === 'planned' && item.note !== undefined ? (
-                  <p
-                    className="text-xs text-muted-foreground"
-                    data-testid="position-connection-note"
-                  >
-                    {lang === 'zh' ? item.note.zh : item.note.en}
-                  </p>
-                ) : null}
               </div>
               {item.status === 'available' && item.connect_service !== undefined ? (
                 <Button asChild size="sm" variant="outline">
@@ -94,6 +95,7 @@ export function PositionConnections({ id }: { id: string }): React.ReactNode {
                 <span
                   className="text-xs text-muted-foreground"
                   data-testid="position-connection-planned"
+                  data-slot="status"
                 >
                   {t('position.connections.planned')}
                 </span>

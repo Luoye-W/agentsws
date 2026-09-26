@@ -19,9 +19,11 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { DutyNeeded } from '@/components/duty-needed'
+import { TutorialLink } from '@/components/help/tutorial-link'
 import { PageError } from '@/components/page-error'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Hint } from '@/components/ui/hint'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Textarea } from '@/components/ui/textarea'
@@ -232,7 +234,10 @@ export function ChatWindowPage(): React.ReactNode {
             </Button>
           ) : null}
           <div className="flex flex-col gap-1 text-[13px]">
-            <span>{t('chat.window.origins')}</span>
+            <span className="flex items-center gap-1">
+              {t('chat.window.origins')}
+              <Hint text={t('chat.window.origins.hint')} />
+            </span>
             <Input
               aria-label={t('chat.window.origins')}
               defaultValue={(cfg?.allowed_origins ?? []).join(', ')}
@@ -252,10 +257,12 @@ export function ChatWindowPage(): React.ReactNode {
                 })
               }
             />
-            <span className="text-xs text-muted-foreground">{t('chat.window.origins.hint')}</span>
           </div>
           <div className="flex flex-col gap-1 text-[13px]">
-            <span>{t('chat.window.assist_wait')}</span>
+            <span className="flex items-center gap-1">
+              {t('chat.window.assist_wait')}
+              <Hint text={t('chat.window.assist_wait.hint')} />
+            </span>
             <select
               aria-label={t('chat.window.assist_wait')}
               className="h-9 rounded-md border bg-transparent px-2 text-[13px]"
@@ -276,9 +283,6 @@ export function ChatWindowPage(): React.ReactNode {
                 </option>
               ))}
             </select>
-            <span className="text-xs text-muted-foreground">
-              {t('chat.window.assist_wait.hint')}
-            </span>
           </div>
         </CardContent>
       </Card>
@@ -286,16 +290,29 @@ export function ChatWindowPage(): React.ReactNode {
       {/* ── 转发方式三选一 + 嵌入码 + 预览 + 测试连接 + 本月数 ─────────── */}
       <Card className="lg:col-span-1">
         <CardHeader>
-          <CardTitle className="text-sm">{t('chat.window.relay')}</CardTitle>
+          <CardTitle className="flex items-center gap-2 text-sm">
+            {t('chat.window.relay')}
+            {/* WP157：三种方式怎么选、各自怎么接，在教程里 */}
+            <TutorialLink slug="chat-window" className="ml-auto font-normal" />
+          </CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-3 text-[13px]">
           <div className="rounded-md border p-2" data-testid="relay-mode">
-            <p className="font-medium">{t('chat.window.relay.official')}</p>
-            <p className="text-xs text-muted-foreground">{t('chat.window.relay.official.hint')}</p>
+            <p className="flex items-center gap-1 font-medium" data-slot="title">
+              {t('chat.window.relay.official')}
+              <Hint text={t('chat.window.relay.official.hint')} />
+            </p>
+            {/* 额度是状态：一眼可见 */}
+            <p className="text-xs text-muted-foreground" data-slot="status">
+              {t('chat.window.relay.official.quota')}
+            </p>
           </div>
           <div className="flex flex-col gap-1">
-            <p className="font-medium">{t('chat.window.relay.self')}</p>
-            <span>{t('chat.window.relay.endpoint')}</span>
+            <p className="flex items-center gap-1 font-medium" data-slot="title">
+              {t('chat.window.relay.self')}
+              <Hint text={t('chat.window.relay.hosted.hint')} />
+            </p>
+            <span data-slot="title">{t('chat.window.relay.endpoint')}</span>
             <Input
               value={relayForm.endpoint || relay.data?.endpoint || ''}
               placeholder="https://…/relay/<工作区>"
@@ -339,7 +356,6 @@ export function ChatWindowPage(): React.ReactNode {
             >
               {t('chat.window.save')}
             </Button>
-            <p className="text-xs text-muted-foreground">{t('chat.window.relay.hosted.hint')}</p>
           </div>
           {/* WP128：第三项接真——订阅后「云端替你值守中」 */}
           <HostedRelayOption assignment={cfgAsg} />
@@ -355,12 +371,13 @@ export function ChatWindowPage(): React.ReactNode {
             {testResult !== undefined ? (
               <span
                 className={testResult.ok ? 'text-xs text-green-700' : 'text-xs text-destructive'}
+                data-slot="status"
               >
                 {testResult.detail}
               </span>
             ) : null}
           </div>
-          <div data-testid="relay-usage">
+          <div data-testid="relay-usage" data-slot="status">
             {status.data !== undefined ? (
               <span className="text-xs text-muted-foreground">
                 {t('chat.window.relay.usage', {
@@ -371,10 +388,13 @@ export function ChatWindowPage(): React.ReactNode {
             ) : null}
           </div>
           <div className="flex flex-col gap-1">
-            <span className="text-xs text-muted-foreground">{t('chat.window.embed')}</span>
+            <span className="text-xs text-muted-foreground" data-slot="title">
+              {t('chat.window.embed')}
+            </span>
             <code
               className="overflow-x-auto rounded-md bg-muted p-2 text-xs"
               data-testid="chat-embed-code"
+              data-slot="data"
             >
               {code}
             </code>
@@ -483,8 +503,8 @@ export function ChatWindowPage(): React.ReactNode {
                 >
                   {t('chat.window.teach.send')}
                 </Button>
+                <Hint text={t('chat.window.teach.hint')} />
               </div>
-              <p className="text-xs text-muted-foreground">{t('chat.window.teach.hint')}</p>
             </div>
           ) : null}
         </CardContent>

@@ -11,6 +11,7 @@
  */
 
 import { AlertTriangle, CheckCircle2, FlaskConical, PackageOpen, Wifi } from 'lucide-react'
+import { Hint } from '@/components/ui/hint'
 import type { RuntimeStatusView } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 import { cn } from '@/lib/utils'
@@ -48,7 +49,10 @@ export function RuntimeBar({ status }: { status: RuntimeStatusView }): React.Rea
           <code className="text-xs font-normal opacity-70">{status.base_url}</code>
         )}
       </div>
-      <p className="text-xs opacity-90">{t(`connections.runtime.${status.state}.detail`)}</p>
+      <p className="flex items-center gap-1 text-xs opacity-90" data-slot="status">
+        {t(`connections.runtime.${status.state}.detail`)}
+        {status.state === 'absent' ? <Hint text={t('connections.runtime.absent.hint')} /> : null}
+      </p>
       {status.reasons.length === 0 ? null : (
         <ul
           className="mt-0.5 flex flex-col gap-0.5 text-xs opacity-90"
@@ -72,25 +76,33 @@ export function RuntimeBar({ status }: { status: RuntimeStatusView }): React.Rea
         <p
           className="mt-0.5 flex items-start gap-1.5 rounded-md border border-amber-500/40 bg-amber-500/5 px-2 py-1.5 text-xs text-amber-700 dark:text-amber-400"
           data-testid="egress-fake-ip"
+          data-slot="warning"
         >
           <Wifi className="mt-px size-3.5 shrink-0" aria-hidden />
           <span>
             <strong className="font-medium">{t('connections.egress.fake_ip')}</strong>
             <span aria-hidden>：</span>
-            {t('connections.egress.fake_ip.detail')}
+            {/* WP157：琥珀色警告留可见，压成一句；来龙去脉与另一条出路（信任名单）进问号 */}
+            {t('connections.egress.fake_ip.short')}
+            <Hint
+              text={
+                status.egress.detail === undefined
+                  ? t('connections.egress.fake_ip.detail')
+                  : `${t('connections.egress.fake_ip.detail')}（${status.egress.detail}）`
+              }
+              testId="egress-fake-ip-why"
+              className="ml-1 inline-flex align-[-2px]"
+            />
             {status.egress.trusted_hosts.length === 0 ? null : (
               <span className="ml-1 opacity-80">
                 {t('connections.egress.trusted', { hosts: status.egress.trusted_hosts.join('、') })}
               </span>
             )}
-            {status.egress.detail === undefined ? null : (
-              <span className="ml-1 opacity-70">（{status.egress.detail}）</span>
-            )}
           </span>
         </p>
       ) : null}
       {status.secrets_vault.available ? null : (
-        <p className="text-xs opacity-90" data-testid="vault-missing">
+        <p className="text-xs opacity-90" data-testid="vault-missing" data-slot="status">
           {t('connections.vault.missing')}
           {status.secrets_vault.reason === undefined ? null : (
             <span className="ml-1 opacity-70">（{status.secrets_vault.reason}）</span>

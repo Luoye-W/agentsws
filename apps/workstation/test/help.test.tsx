@@ -3,13 +3,13 @@
  *
  * 四组：
  * 1. 每一篇都打包进来了（中英各一份），标题都有词条；
- * 2. 渲染只认那几种写法，**不插 HTML**，`javascript:` 之类的地址不做成链接；
+ * 2. 渲染（WP157 起合进 `safe-markdown.test.tsx`，与时间线同一份）；
  * 3. 卡片上点「看教程」→ 右栏「教程」面板打开那一篇；图标轨打开是目录；
  * 4. 没有右栏时（单张卡的单测）退回对话框，点了照样看得到。
  */
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { beforeEach, describe, expect, it } from 'vitest'
-import { HelpArticle, linkKind, parseHelpBlocks } from '@/components/help/help-article'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { CommandPalette } from '@/components/command-palette'
 import { TutorialLink } from '@/components/help/tutorial-link'
 import { ensureBuiltinPanels } from '@/components/rail/builtin-panels'
 import { RailStateProvider } from '@/components/rail/rail-state'
@@ -24,6 +24,12 @@ import {
 } from '@/lib/help'
 import { translate } from '@/lib/i18n'
 import { renderWithProviders } from './helpers'
+
+vi.mock('@/lib/api', async () => ({
+  ...(await vi.importActual<typeof import('@/lib/api')>('@/lib/api')),
+  listCatalog: async () => [],
+  listOrganizations: async () => [],
+}))
 
 describe('打包', () => {
   it('每一篇中英各一份都在包里，标题两种语言都有词条', () => {
@@ -57,48 +63,6 @@ describe('打包', () => {
     expect(helpSlugOf('agentsws://help/nope')).toBeUndefined()
     expect(helpSlugOf('agentsws://file/browser')).toBeUndefined()
     expect(helpSlugOf(undefined)).toBeUndefined()
-  })
-})
-
-describe('渲染', () => {
-  it('标题 / 编号步骤 / 列表 / 表格 / 提示框各认各的；编号跨段接着数', () => {
-    const blocks = parseHelpBlocks(
-      '# 题\n\n一段\n接着\n\n1. 甲\n2. 乙\n   - 小点\n3. 丙\n\n| a | b |\n|---|---|\n| 1 | 2 |\n\n> 注意',
-    )
-    expect(blocks.map((b) => b.kind)).toEqual(['h', 'p', 'ol', 'ul', 'ol', 'table', 'quote'])
-    expect(blocks[1]).toEqual({ kind: 'p', text: '一段 接着' })
-    expect(blocks[4]).toEqual({ kind: 'ol', start: 3, items: ['丙'] })
-    expect(blocks[5]).toEqual({
-      kind: 'table',
-      rows: [
-        ['a', 'b'],
-        ['1', '2'],
-      ],
-    })
-  })
-
-  it('只有 http(s) / help: / 站内地址做成链接；javascript: 当文字；尖括号不变成标签', () => {
-    expect(linkKind('https://x.example')).toBe('external')
-    expect(linkKind('help:browser')).toBe('help')
-    expect(linkKind('help:nope')).toBeUndefined()
-    expect(linkKind('/settings')).toBe('internal')
-    expect(linkKind('//evil.example')).toBeUndefined()
-    expect(linkKind('javascript:alert(1)')).toBeUndefined()
-    const { container } = renderWithProviders(
-      <HelpArticle
-        markdown={
-          '看 [官网](https://x.example) 与 [坏的](javascript:alert(1))，<img src=x onerror=alert(1)> **粗** `码`'
-        }
-      />,
-    )
-    const links = container.querySelectorAll('a')
-    expect(links).toHaveLength(1)
-    expect(links[0]?.getAttribute('href')).toBe('https://x.example')
-    expect(links[0]?.getAttribute('rel')).toContain('noopener')
-    expect(container.querySelector('img')).toBeNull()
-    expect(container.textContent).toContain('<img src=x onerror=alert(1)>')
-    expect(container.querySelector('strong')?.textContent).toBe('粗')
-    expect(container.querySelector('code')?.textContent).toBe('码')
   })
 })
 
@@ -178,5 +142,43 @@ describe('没有右栏时', () => {
     expect((await within(dialog).findByTestId('help-article')).textContent).toContain(
       'Let AI operate this computer',
     )
+  })
+})
+
+describe('⌘K 里搜教程（WP157）', () => {
+  beforeEach(() => {
+    resetPanelRegistry()
+    ensureBuiltinPanels()
+  })
+
+  it('每篇教程一行；搜「百炼」只剩那一篇，回车在右栏打开', async () => {
+    let open = true
+    renderWithProviders(
+      <RailStateProvider>
+        <CommandPalette
+          open
+          onOpenChange={(next) => {
+            open = next
+          }}
+          positions={[]}
+          cards={[]}
+          tileLibrary={[]}
+          onAddTile={() => {}}
+        />
+        <RightRail />
+      </RailStateProvider>,
+    )
+    const rows = await screen.findAllByTestId('command-help')
+    expect(rows.map((r) => r.getAttribute('data-slug'))).toEqual([...HELP_SLUGS])
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: '百炼' } })
+    await waitFor(() => {
+      expect(screen.getAllByTestId('command-help').map((r) => r.getAttribute('data-slug'))).toEqual(
+        ['model-bailian'],
+      )
+    })
+    fireEvent.click(screen.getByTestId('command-help'))
+    expect(open).toBe(false)
+    const panel = await screen.findByTestId('help-panel')
+    expect(panel.getAttribute('data-slug')).toBe('model-bailian')
   })
 })

@@ -189,7 +189,10 @@ describe('岗位页那张「连上这 N 个就能开工」的卡', () => {
     const tracking = items[1] as HTMLElement
     expect(within(tracking).queryByTestId('position-connection-go')).toBeNull()
     expect(within(tracking).getByTestId('position-connection-planned')).toBeTruthy()
-    expect(within(tracking).getByTestId('position-connection-note').textContent).toContain('还没接')
+    // WP157：那句话进了名字旁的问号
+    expect(
+      within(tracking).getByTestId('position-connection-note').getAttribute('data-hint'),
+    ).toContain('还没接')
     // 能连的那一条一键跳到那张安全表单上
     const email = items[0] as HTMLElement
     expect(within(email).getByTestId('position-connection-go').getAttribute('href')).toBe(

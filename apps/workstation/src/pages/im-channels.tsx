@@ -23,6 +23,7 @@ import {
   useRef,
   useState,
 } from 'react'
+import { TutorialLink } from '@/components/help/tutorial-link'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -151,8 +152,15 @@ export function ImChannelsPage(): ReactNode {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-xl font-semibold">{t('im.title')}</h1>
-        <p className="mt-1 max-w-3xl text-sm text-muted-foreground">{t('im.intro')}</p>
+        <h1 className="flex items-center gap-3 text-xl font-semibold">
+          {t('im.title')}
+          <TutorialLink slug="im-channels" className="font-normal" />
+        </h1>
+        {/* WP157：页头一句；「两条通道是两件事」进问号 */}
+        <p className="mt-1 flex max-w-3xl items-center gap-1 text-sm text-muted-foreground">
+          {t('im.intro')}
+          <Hint text={t('im.intro.hint')} />
+        </p>
       </div>
 
       {/* ── 微信：我和我自己的代理 ─────────────────────────────── */}
@@ -168,13 +176,21 @@ export function ImChannelsPage(): ReactNode {
           )}
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
-          <p className="text-sm text-muted-foreground">{t('im.wechat.what')}</p>
-          <ul className="list-inside list-disc text-sm text-muted-foreground">
-            <li>{t('im.wechat.not.colleagues')}</li>
-            <li>{t('im.wechat.not.group')}</li>
-            <li>{t('im.wechat.not.approve')}</li>
-          </ul>
-          <SafetyNote text={t('im.wechat.terms')} />
+          {/* WP157：一句话 + 问号（原来那段介绍）；「它不做的三件事」与条款原话进安全承诺旁的问号 */}
+          <p className="flex items-center gap-1 text-sm text-muted-foreground">
+            {t('im.wechat.line')}
+            <Hint text={t('im.wechat.what')} testId="im-wechat-what" />
+          </p>
+          <SafetyNote
+            text={t('im.wechat.terms.short')}
+            hint={[
+              t('im.wechat.terms'),
+              t('im.wechat.not.colleagues'),
+              t('im.wechat.not.group'),
+              t('im.wechat.not.approve'),
+            ].join(' ')}
+          />
+          <SafetyNote text={t('im.wechat.local')} />
 
           {wechat?.allowed === false ? (
             <p role="alert" className="text-sm text-destructive">
@@ -283,9 +299,14 @@ export function ImChannelsPage(): ReactNode {
           )}
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
-          <p className="text-sm text-muted-foreground">{t('im.wecom.what')}</p>
+          <p className="flex items-center gap-1 text-sm text-muted-foreground">
+            {t('im.wecom.line')}
+            <Hint text={t('im.wecom.what')} testId="im-wecom-what" />
+          </p>
           {wecom?.configured === true ? (
-            <p className="text-sm">{t('im.wecom.saved', { bot: wecom.bot_id ?? '' })}</p>
+            <p className="text-sm" data-slot="status">
+              {t('im.wecom.saved', { bot: wecom.bot_id ?? '' })}
+            </p>
           ) : null}
           {/*
             13 §4.3 的原生表单：值用 FormData 收，不进 React state、不进任何全局变量，
@@ -324,7 +345,9 @@ export function ImChannelsPage(): ReactNode {
             </p>
           ) : null}
           {wecomSaved && wecomError === null ? (
-            <p className="text-sm text-muted-foreground">{t('im.wecom.done')}</p>
+            <p className="text-sm text-muted-foreground" data-slot="status">
+              {t('im.wecom.done')}
+            </p>
           ) : null}
         </CardContent>
       </Card>

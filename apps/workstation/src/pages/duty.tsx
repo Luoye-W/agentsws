@@ -29,7 +29,9 @@ import { SocialBroadcast } from '@/components/social/social-broadcast'
 import { SocialCalendar, socialChannelOfRole } from '@/components/social/social-calendar'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Hint } from '@/components/ui/hint'
 import { Input } from '@/components/ui/input'
+import { MarkdownInline } from '@/components/ui/safe-markdown'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
@@ -41,6 +43,7 @@ import {
 } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 import { formatDate } from '@/lib/format'
+import { firstSentence } from '@/lib/help'
 
 /** 头部那一行「用这条职责开一件事」：54 §2 保留的从职责开启那条路。 */
 function OpenHere({ assignment }: { assignment: string }): React.ReactNode {
@@ -103,9 +106,23 @@ function OverviewTab({ role_id }: { role_id: string }): React.ReactNode {
   if (role.isPending) return <Skeleton className="h-48 w-full" />
   if (role.error !== null || role.data === undefined) return <PanelError error={role.error} />
   const view = role.data
+  const first = firstSentence(view.description)
+  // 第一句要是把一对 ** 切成了半对，就不画粗体（免得露出星号）
+  const line = (first.match(/\*\*/g)?.length ?? 0) % 2 === 1 ? first.replace(/\*\*/g, '') : first
   return (
     <div className="flex flex-col gap-4" data-testid="duty-overview">
-      <p className="text-sm text-muted-foreground">{view.description}</p>
+      {/*
+        WP157（36 §7）：职责模板的 description 常是两三句（建站那几条 80 字上下，还带 **粗体**）。
+        顶上只留第一句（照样认粗体），整段原话进旁边的问号。
+      */}
+      <p className="flex items-center gap-1 text-sm text-muted-foreground" data-testid="duty-line">
+        <span>
+          <MarkdownInline text={line} />
+        </span>
+        {line === view.description.trim() ? null : (
+          <Hint text={view.description} testId="duty-description" />
+        )}
+      </p>
       <Card>
         <CardHeader>
           <CardTitle className="text-sm">{t('duty.scopes')}</CardTitle>

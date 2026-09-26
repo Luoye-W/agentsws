@@ -16,6 +16,7 @@ import { useState } from 'react'
 import { StatusPill } from '@/components/design'
 import type { Tone } from '@/components/design/tone'
 import { Button } from '@/components/ui/button'
+import { Hint } from '@/components/ui/hint'
 import {
   bringHomeChatRelayHosted,
   type ChatRelayHostedView,
@@ -93,12 +94,18 @@ export function HostedRelayOption({
   return (
     <div className="flex flex-col gap-2 rounded-md border p-2" data-testid="relay-hosted">
       <div className="flex items-center justify-between gap-2">
-        <p className="font-medium">{t('chat.window.hosted.title')}</p>
+        <p className="flex items-center gap-1 font-medium" data-slot="title">
+          {t('chat.window.hosted.title')}
+          <Hint text={t('chat.window.hosted.hint')} />
+        </p>
         <StatusPill tone={verdict.tone} data-testid="relay-hosted-verdict">
           {t(verdict.key)}
         </StatusPill>
       </div>
-      <p className="text-xs text-muted-foreground">{t('chat.window.hosted.hint')}</p>
+      {/* 会扣钱的提示一眼可见（36 §7）；为什么要它、怎么对齐在问号与教程里 */}
+      <p className="text-xs text-muted-foreground" data-slot="status">
+        {t('chat.window.hosted.price')}
+      </p>
       {ago !== undefined && subscribed ? (
         <p className="text-xs text-muted-foreground" data-testid="relay-hosted-heartbeat">
           {t('chat.window.hosted.heartbeat', { n: String(ago) })}

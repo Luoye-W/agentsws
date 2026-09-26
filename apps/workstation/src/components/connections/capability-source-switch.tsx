@@ -86,7 +86,7 @@ export function CapabilitySourceSwitch({
         既不合 a11y 规则，点标签文字也不会切换。开关自己带 aria-label。
       */}
       <div className="flex items-center justify-between gap-2 text-xs">
-        <span className={useOurs ? 'text-muted-foreground' : 'font-medium'}>
+        <span className={useOurs ? 'text-muted-foreground' : 'font-medium'} data-slot="option">
           {t('capability.mine')}
         </span>
         <Switch
@@ -101,7 +101,7 @@ export function CapabilitySourceSwitch({
             save.mutate(next)
           }}
         />
-        <span className={useOurs ? 'font-medium' : 'text-muted-foreground'}>
+        <span className={useOurs ? 'font-medium' : 'text-muted-foreground'} data-slot="option">
           {t('capability.ours')}
         </span>
       </div>
@@ -110,12 +110,21 @@ export function CapabilitySourceSwitch({
         连上了还劝人花钱是推销，不是帮忙。
       */}
       {!connected && !useOurs ? (
-        <p className="text-[11px] text-muted-foreground" data-testid="capability-source-nudge">
+        // 会扣钱的提示：一眼可见（36 §7）
+        <p
+          className="text-[11px] text-muted-foreground"
+          data-testid="capability-source-nudge"
+          data-slot="status"
+        >
           {t('capability.nudge')}
         </p>
       ) : null}
       {useOurs ? (
-        <p className="text-[11px] text-muted-foreground" data-testid="capability-source-billing">
+        <p
+          className="text-[11px] text-muted-foreground"
+          data-testid="capability-source-billing"
+          data-slot="status"
+        >
           {t('capability.billing')}
         </p>
       ) : null}

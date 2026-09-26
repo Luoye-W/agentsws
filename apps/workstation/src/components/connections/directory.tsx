@@ -19,6 +19,7 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Hint } from '@/components/ui/hint'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { type ConnectionDirectoryItem, getConnectionDirectory } from '@/lib/api'
@@ -89,6 +90,8 @@ function EntryRow({ entry }: { entry: ConnectionDirectoryItem }): React.ReactNod
         <div className="min-w-0">
           <p className="flex flex-wrap items-center gap-2 text-sm">
             {name}
+            {/* WP157（36 §7）：每条的说明进问号，目录一行只留名字、状态与动作 */}
+            {note === undefined ? null : <Hint text={note} testId="directory-note" />}
             {entry.status === 'planned' ? (
               <Badge variant="outline" data-testid="directory-planned">
                 {t('connections.directory.planned')}
@@ -101,11 +104,6 @@ function EntryRow({ entry }: { entry: ConnectionDirectoryItem }): React.ReactNod
               </span>
             ) : null}
           </p>
-          {note === undefined ? null : (
-            <p className="text-xs text-muted-foreground" data-testid="directory-note">
-              {note}
-            </p>
-          )}
           {entry.state_detail === undefined ? null : (
             <p className="text-xs text-destructive" data-testid="directory-state-detail">
               {entry.state_detail}
@@ -156,7 +154,10 @@ export function ConnectionDirectorySection({
   return (
     <section className="flex flex-col gap-2" data-testid="connection-directory">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 className="text-sm font-medium">{t('connections.directory.title')}</h3>
+        <h3 className="flex items-center gap-1.5 text-sm font-medium">
+          {t('connections.directory.title')}
+          <Hint text={t('connections.directory.hint')} />
+        </h3>
         <Button
           size="sm"
           variant={open ? 'ghost' : 'outline'}

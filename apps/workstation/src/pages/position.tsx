@@ -19,6 +19,7 @@ import { channelOfRole, KolPanel } from '@/components/kol/kol-panel'
 import { ScheduleList } from '@/components/schedule-list'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Hint } from '@/components/ui/hint'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { LayerMemory } from '@/components/work/layer-memory'
@@ -79,11 +80,12 @@ export function NoRangeNotice({
         <CardTitle className="flex items-center gap-1.5 text-sm">
           <ScanSearch className="size-4" aria-hidden />
           {t('view.no_range')}
+          {/* WP157：「为什么看不到店铺数据」进问号；卡上留挡了什么、没挡什么（状态） */}
+          <Hint text={t('view.no_range.detail')} testId="no-range-why" />
         </CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-2 text-sm text-muted-foreground">
-        <p>{t('view.no_range.detail')}</p>
-        <p>{t('view.no_range.stores')}</p>
+        <p data-slot="status">{t('view.no_range.stores')}</p>
         {isOwner ? (
           <div className="flex flex-col gap-1.5">
             <div className="flex flex-wrap items-center gap-2">
@@ -99,15 +101,15 @@ export function NoRangeNotice({
                   {assign.isPending ? t('view.no_range.self.pending') : t('view.no_range.self')}
                 </Button>
               )}
+              {ownerAssignment === undefined ? null : (
+                <Hint text={t('view.no_range.self.hint')} testId="no-range-self-hint" />
+              )}
               <Button size="sm" variant="outline" asChild>
                 <Link to="/org?tab=positions" data-testid="no-range-assign">
                   {t('view.no_range.action')}
                 </Link>
               </Button>
             </div>
-            {ownerAssignment === undefined ? null : (
-              <p className="text-xs">{t('view.no_range.self.hint')}</p>
-            )}
             {assign.error === null ? null : (
               <p className="text-xs text-destructive" data-testid="no-range-self-error">
                 {t('view.no_range.self.error', { message: assign.error.message })}
@@ -133,10 +135,13 @@ function ChatWindowEntry(): React.ReactNode {
   return (
     <Card data-testid="chat-window-entry">
       <CardHeader>
-        <CardTitle className="text-sm">{t('chat.window.entry.title')}</CardTitle>
+        <CardTitle className="flex items-center gap-1.5 text-sm">
+          {t('chat.window.entry.title')}
+          {/* WP157：一扇门的卡只留标题与按钮；它管什么进问号 */}
+          <Hint text={t('chat.window.entry.subtitle')} />
+        </CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-2 text-sm text-muted-foreground">
-        <p>{t('chat.window.entry.subtitle')}</p>
         <div>
           <Button size="sm" variant="outline" asChild>
             <Link to="/chat-window">{t('chat.window.entry.open')}</Link>
@@ -152,10 +157,12 @@ function ChatSandboxEntry(): React.ReactNode {
   return (
     <Card data-testid="chat-sandbox-entry">
       <CardHeader>
-        <CardTitle className="text-sm">{t('chat.title')}</CardTitle>
+        <CardTitle className="flex items-center gap-1.5 text-sm">
+          {t('chat.title')}
+          <Hint text={t('chat.subtitle')} />
+        </CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-2 text-sm text-muted-foreground">
-        <p>{t('chat.subtitle')}</p>
         <div>
           <Button size="sm" variant="outline" asChild>
             <Link to="/chat">{t('chat.entry.open')}</Link>
@@ -296,7 +303,11 @@ function StoreSections({
                     </Button>
                   </div>
                 ) : (
-                  <p className="text-sm text-muted-foreground" data-testid="source-note">
+                  <p
+                    className="text-sm text-muted-foreground"
+                    data-testid="source-note"
+                    data-slot="status"
+                  >
                     {section.note}
                   </p>
                 )}

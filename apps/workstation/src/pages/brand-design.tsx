@@ -21,6 +21,7 @@ import { MarkdownPreview } from '@/components/design-md/markdown-preview'
 import { countConflicts, designSummary, TokensView } from '@/components/design-md/tokens-view'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
+import { Hint } from '@/components/ui/hint'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
@@ -137,7 +138,10 @@ export function BrandDesignPage(): React.ReactElement {
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex flex-col gap-1">
           <h1 className="font-semibold text-lg">{t('design.md.title')}</h1>
-          <p className="max-w-xl text-sm text-ws-muted-fg">{t('design.md.subtitle')}</p>
+          <p className="flex max-w-xl items-center gap-1 text-sm text-ws-muted-fg">
+            {t('design.md.subtitle')}
+            <Hint text={t('design.md.subtitle.hint')} />
+          </p>
           <p className="text-xs text-ws-muted-fg" data-testid="design-md-summary">
             {summary === undefined ? t('design.md.summary.none') : t('design.md.summary', summary)}
           </p>

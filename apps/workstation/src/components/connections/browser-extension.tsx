@@ -15,11 +15,16 @@
  *    用户要能回答"我上周是不是撤过一个"。
  * 4. **说清楚插件能干什么**。三个动作写在卡片上：看红人、收红人、读你的红人库。
  *    它**不能**发信、不能改合作、不能动订单——这一句比一串 scope 名管用。
+ *
+ * WP157（36 §7）：写死的中文全部走 i18n；介绍压成一句 +「看教程」（`docs/help/browser-extension.md`），
+ * 「能做什么 / 不能做什么」「只连 127.0.0.1」「5 分钟、只能用一次」是安全承诺，各压成一行、照样可见。
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Puzzle } from 'lucide-react'
 import { useEffect, useState } from 'react'
+import { TutorialLink } from '@/components/help/tutorial-link'
 import { Button } from '@/components/ui/button'
+import { Hint, SafetyNote } from '@/components/ui/hint'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
   createExtensionPairing,
@@ -27,6 +32,8 @@ import {
   listExtensionTokens,
   revokeExtensionToken,
 } from '@/lib/api'
+import { useApp } from '@/lib/app-context'
+import type { Lang } from '@/lib/i18n'
 
 /** 码的有效期（与本机服务那一侧的 `PAIRING_TTL_MS` 是同一个数）。 */
 const PAIRING_TTL_MS = 5 * 60 * 1000
@@ -49,14 +56,15 @@ function mmss(total: number): string {
   return `${m}:${String(s).padStart(2, '0')}`
 }
 
-function whenText(value: string | undefined): string {
-  if (value === undefined) return '还没用过'
+function whenText(value: string | undefined, lang: Lang, never: string): string {
+  if (value === undefined) return never
   const at = Date.parse(value)
-  if (!Number.isFinite(at)) return '还没用过'
-  return new Date(at).toLocaleString('zh-CN', { hour12: false })
+  if (!Number.isFinite(at)) return never
+  return new Date(at).toLocaleString(lang === 'en' ? 'en-US' : 'zh-CN', { hour12: false })
 }
 
 export function BrowserExtensionSection(props: { assignment?: string }): React.ReactNode {
+  const { t } = useApp()
   const client = useQueryClient()
   /** 屏幕上那个码：明文只活在这个 state 里，刷新一下就没了。 */
   const [pairing, setPairing] = useState<{ code: string; shown_at: number } | undefined>(undefined)
@@ -96,13 +104,12 @@ export function BrowserExtensionSection(props: { assignment?: string }): React.R
     <section className="flex flex-col gap-2" data-testid="extension-section">
       <h3 className="flex items-center gap-2 text-sm font-medium">
         <Puzzle className="size-4" aria-hidden />
-        浏览器插件
+        {t('extension.title')}
+        <TutorialLink slug="browser-extension" className="ml-auto font-normal" />
       </h3>
-      <p className="text-sm text-muted-foreground">
-        「Agents 工坊 · 红人助手」装在 Chrome 里，在 YouTube / Instagram / TikTok
-        页面上给红人做即时体检，你点一下就把他收进这个品牌的红人库。
-        插件只能做三件事：看红人、收红人、读你的红人库——它发不了信、改不了合作、碰不到订单。
-      </p>
+      <p className="text-sm text-muted-foreground">{t('extension.line')}</p>
+      {/* 安全承诺，按 36 §7 可见：插件能做的只有三件事 */}
+      <SafetyNote text={t('extension.scope')} />
 
       <div className="rounded-2xl bg-card p-4 shadow-[var(--ws-shadow)]">
         {pairing === undefined ? (
@@ -112,7 +119,7 @@ export function BrowserExtensionSection(props: { assignment?: string }): React.R
               disabled={generate.isPending}
               data-testid="extension-generate"
             >
-              {generate.isPending ? '正在生成…' : '生成配对码'}
+              {generate.isPending ? t('extension.generating') : t('extension.generate')}
             </Button>
             {generate.isError ? (
               <p className="text-sm text-[var(--ws-bad)]" data-testid="extension-error">
@@ -120,9 +127,7 @@ export function BrowserExtensionSection(props: { assignment?: string }): React.R
               </p>
             ) : (
               // 「5 分钟、只能用一次」是安全承诺，按 36 §7 必须可见，不能藏进 tooltip。
-              <p className="text-sm text-muted-foreground">
-                生成之后去插件的设置页把那 6 位数字填进去。码 5 分钟内有效，只能用一次。
-              </p>
+              <SafetyNote text={t('extension.code.once')} />
             )}
           </div>
         ) : (
@@ -131,15 +136,22 @@ export function BrowserExtensionSection(props: { assignment?: string }): React.R
               {pairing.code}
             </div>
             {secondsLeft(pairing.shown_at, now) > 0 ? (
-              <p className="text-sm text-muted-foreground">
-                还剩 {mmss(secondsLeft(pairing.shown_at, now))}
-                。去插件设置页填进去；关掉这一页它就没了，到时候再生成一个就是。
+              <p
+                className="flex items-center gap-1 text-sm text-muted-foreground"
+                data-slot="status"
+              >
+                {t('extension.code.left', { time: mmss(secondsLeft(pairing.shown_at, now)) })}
+                <Hint text={t('extension.code.left.hint')} />
               </p>
             ) : (
               // **到点不让它自己消失**：用户可能正在另一个窗口里一位一位地敲。
               // 让码留在屏幕上、旁边说一句"大概过期了"，比它凭空不见强得多。
-              <p className="text-sm text-[var(--ws-warn)]" data-testid="extension-code-stale">
-                这个码大概已经过期了（超过 5 分钟）。填进去要是不认，按下面再生成一个。
+              <p
+                className="text-sm text-[var(--ws-warn)]"
+                data-slot="status"
+                data-testid="extension-code-stale"
+              >
+                {t('extension.code.stale')}
               </p>
             )}
             <div className="flex gap-2">
@@ -148,10 +160,10 @@ export function BrowserExtensionSection(props: { assignment?: string }): React.R
                 onClick={() => generate.mutate()}
                 disabled={generate.isPending}
               >
-                再生成一个
+                {t('extension.regenerate')}
               </Button>
               <Button variant="ghost" onClick={() => setPairing(undefined)}>
-                收起来
+                {t('extension.collapse')}
               </Button>
             </div>
           </div>
@@ -162,7 +174,7 @@ export function BrowserExtensionSection(props: { assignment?: string }): React.R
         <Skeleton className="h-20 w-full" />
       ) : rows.length === 0 ? (
         <p className="text-sm text-muted-foreground" data-testid="extension-empty">
-          还没有哪个浏览器配上来。
+          {t('extension.empty')}
         </p>
       ) : (
         <ul className="flex flex-col gap-2" data-testid="extension-tokens">
@@ -172,7 +184,7 @@ export function BrowserExtensionSection(props: { assignment?: string }): React.R
               token={row}
               busy={revoke.isPending && revoke.variables === row.id}
               onRevoke={() => {
-                if (!globalThis.confirm('撤掉之后那个浏览器就再也传不进来了。确定？')) return
+                if (!globalThis.confirm(t('extension.revoke.confirm'))) return
                 revoke.mutate(row.id)
               }}
             />
@@ -180,9 +192,7 @@ export function BrowserExtensionSection(props: { assignment?: string }): React.R
         </ul>
       )}
       {/* 安全承诺，按 36 §7 可见（不藏进 tooltip）。 */}
-      <p className="text-sm text-muted-foreground">
-        插件只连这台电脑上的 127.0.0.1，配对之后也是——它不认识任何云端地址。
-      </p>
+      <SafetyNote text={t('extension.local_only')} />
     </section>
   )
 }
@@ -192,22 +202,33 @@ function TokenRow(props: {
   busy: boolean
   onRevoke: () => void
 }): React.ReactNode {
+  const { t, lang } = useApp()
+  const never = t('extension.never_used')
   const revoked = props.token.revoked_at !== undefined
   return (
     <li className="flex items-center gap-3 rounded-2xl bg-card p-3 shadow-[var(--ws-shadow)]">
       <div className="min-w-0 flex-1">
         <div className="truncate text-sm font-medium text-[var(--ws-ink)]">
           {props.token.label}
-          {revoked ? <span className="ml-2 text-xs text-muted-foreground">已撤销</span> : null}
+          {revoked ? (
+            <span className="ml-2 text-xs text-muted-foreground">{t('extension.revoked')}</span>
+          ) : null}
         </div>
-        <div className="truncate text-xs text-muted-foreground">
-          扩展 {props.token.extension_id} · 最近用过：{whenText(props.token.last_used_at)}
-          {revoked ? ` · 撤于 ${whenText(props.token.revoked_at)}` : ''}
+        <div className="truncate text-xs text-muted-foreground" data-slot="data">
+          {t('extension.token.meta', {
+            id: props.token.extension_id,
+            when: whenText(props.token.last_used_at, lang, never),
+          })}
+          {revoked
+            ? t('extension.token.revoked_at', {
+                when: whenText(props.token.revoked_at, lang, never),
+              })
+            : ''}
         </div>
       </div>
       {revoked ? null : (
         <Button variant="ghost" onClick={props.onRevoke} disabled={props.busy}>
-          {props.busy ? '正在撤…' : '撤掉'}
+          {props.busy ? t('extension.revoking') : t('extension.revoke')}
         </Button>
       )}
     </li>

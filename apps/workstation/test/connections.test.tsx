@@ -211,16 +211,35 @@ describe('连接页：目录与状态条', () => {
     expect(screen.getByTestId('runtime-bar').getAttribute('data-state')).toBe('ready')
   })
 
-  it('「要准备什么」是折叠的，展开后是 ≤ 5 步 + 外链', async () => {
-    const user = userEvent.setup()
+  it('卡上不铺步骤与外链：一句话 + 问号 +「看教程」（WP157，步骤与外链在教程里）', async () => {
     renderWithProviders(<ConnectionsPage />, '/connections')
-    const card = (await screen.findAllByTestId('provider-card'))[0]
-    expect(card).toBeDefined()
-    expect(within(card as HTMLElement).queryByTestId('setup-steps')).toBeNull()
-    await user.click(within(card as HTMLElement).getByRole('button', { name: /要准备什么/ }))
-    const steps = within(card as HTMLElement).getByTestId('setup-steps')
-    expect(steps.querySelectorAll('li').length).toBeLessThanOrEqual(5)
-    const link = within(card as HTMLElement).getByRole('link', { name: /应用专用密码/ })
+    const card = (await screen.findAllByTestId('provider-card'))[0] as HTMLElement
+    expect(within(card).queryByTestId('setup-steps')).toBeNull()
+    expect(within(card).queryAllByRole('link')).toHaveLength(0)
+    expect(within(card).getByTestId('provider-line').textContent).toBe(
+      '最省事：填邮箱地址和一个授权码，不用向谁申请。',
+    )
+    // 服务端那段介绍原话进了标题旁的问号
+    expect(within(card).getByTestId('provider-note').getAttribute('data-hint')).toContain(
+      '开一个应用专用密码就能收发信',
+    )
+    expect(within(card).getByTestId('tutorial-link').getAttribute('data-slug')).toBe('conn-email')
+  })
+
+  it('没有教程的新连接：步骤与外链在「看教程」的对话框里现拼，一条不丢', async () => {
+    const user = userEvent.setup()
+    state.providers = [{ ...MAIL_PROVIDER, service: 'brand_new_mail', label: '新邮箱' }]
+    renderWithProviders(<ConnectionsPage />, '/connections')
+    const card = (await screen.findAllByTestId('provider-card'))[0] as HTMLElement
+    // 没有词条：卡面上是服务端介绍的第一句
+    expect(within(card).getByTestId('provider-line').textContent).toBe(
+      '开一个应用专用密码就能收发信。',
+    )
+    await user.click(within(card).getByTestId('tutorial-link'))
+    const dialog = await screen.findByRole('dialog')
+    const article = await within(dialog).findByTestId('help-article')
+    expect(article.querySelectorAll('ol > li')).toHaveLength(3)
+    const link = within(article).getByRole('link', { name: /应用专用密码/ })
     expect(link.getAttribute('target')).toBe('_blank')
     expect(link.getAttribute('rel')).toContain('noopener')
   })
@@ -446,7 +465,7 @@ describe('WP44 Shopify：只有一条接法 + 老连接提示', () => {
 })
 
 describe('WP44 状态条：代理 fake-IP 说人话', () => {
-  it('fake_ip_detected → 黄条说清楚两条修法，并念出信任名单', async () => {
+  it('fake_ip_detected → 黄条压成一句并念出信任名单；两条修法与探测原话在问号里（WP157）', async () => {
     state.runtime = {
       ...READY,
       egress: {
@@ -461,7 +480,9 @@ describe('WP44 状态条：代理 fake-IP 说人话', () => {
     expect(text).toContain('fake-IP')
     expect(text).toContain('公共 DNS')
     expect(text).toContain('admin.shopify.com')
-    expect(text).toContain('198.18.0.7')
+    const why = within(bar).getByTestId('egress-fake-ip-why').getAttribute('data-hint') ?? ''
+    expect(why).toContain('AGENTSWS_CONNECT_TRUSTED_HOSTS')
+    expect(why).toContain('198.18.0.7')
   })
 
   it('没检测到就不出这条黄条（别吓人）', async () => {
