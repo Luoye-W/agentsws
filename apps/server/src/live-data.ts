@@ -270,6 +270,13 @@ export function toOrderRow(
     ''
   const delivered = stringOf(pick(row, ['delivered_at', 'deliveredAt']))
   const lineItems = lineItemsOf(pick(row, ['line_items', 'lineItems']))
+  // WP154：落地页（REST `landing_site` / GraphQL 的首访落地页）；拉不到就没有
+  const journey = row.customerJourneySummary
+  const landing =
+    stringOf(pick(row, ['landing_site', 'landingSite', 'landing_page', 'landingPage'])) ??
+    (isRecord(journey) && isRecord(journey.firstVisit)
+      ? stringOf(journey.firstVisit.landingPage)
+      : undefined)
   return {
     id,
     name: typeof number === 'string' || typeof number === 'number' ? `${number}` : id,
@@ -289,6 +296,7 @@ export function toOrderRow(
       'unfulfilled',
     ),
     ...(lineItems === undefined ? {} : { line_items: lineItems }),
+    ...(landing === undefined ? {} : { landing_site: landing }),
   }
 }
 

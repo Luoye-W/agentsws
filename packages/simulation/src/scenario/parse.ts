@@ -227,6 +227,7 @@ const EVENT_KEYS = [
   'shop.publish_product',
   'content.blog_post',
   'store.daily_report',
+  'content.seo_daily',
   // WP47 范围模型（44）
   'org.range_group',
   'org.product_line',
@@ -331,6 +332,7 @@ const EXPECTED_KEYS = [
   // WP63（51 §2.1 数据日报）
   'daily_reports',
   'daily_report_figures',
+  'seo_daily',
   // WP96（36 §2）：只有要人决定的才是卡
   'queue_cards',
   'panel_reports',
@@ -1674,6 +1676,14 @@ function parseEvent(source: string, index: number, raw: unknown): ScenarioEvent 
         daily_report: { who: str(source, `${path}.${key}.who`, body.who) },
       }
     }
+    case 'content.seo_daily': {
+      known(source, `${path}.${key}`, body, ['who'])
+      return {
+        at,
+        type: 'content.seo_daily',
+        seo_daily: { who: str(source, `${path}.${key}.who`, body.who) },
+      }
+    }
     case 'shop.theme_push': {
       known(source, `${path}.${key}`, body, ['who', 'name'])
       return {
@@ -2142,6 +2152,29 @@ function parseExpected(source: string, raw: unknown): ScenarioExpected {
       figures[name] = numeric(source, `expected.daily_report_figures.${name}`, v)
     }
     out.daily_report_figures = figures
+  }
+  // WP154：「今天值得动的 5 件事」那张卡
+  if (raw.seo_daily !== undefined) {
+    const d = raw.seo_daily
+    if (!isRec(d)) fail(source, 'expected.seo_daily', '必须是对象')
+    known(source, 'expected.seo_daily', d, ['picks', 'fix_before_write', 'no_dump'])
+    out.seo_daily = {
+      ...(d.picks === undefined
+        ? {}
+        : { picks: numeric(source, 'expected.seo_daily.picks', d.picks) }),
+      ...(d.fix_before_write === undefined
+        ? {}
+        : {
+            fix_before_write: requireBool(
+              source,
+              'expected.seo_daily.fix_before_write',
+              d.fix_before_write,
+            ),
+          }),
+      ...(d.no_dump === undefined
+        ? {}
+        : { no_dump: requireBool(source, 'expected.seo_daily.no_dump', d.no_dump) }),
+    }
   }
   // WP96（36 §2）：队列里剩几张、面板报表块有几条
   if (raw.queue_cards !== undefined) {

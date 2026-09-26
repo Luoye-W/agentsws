@@ -236,6 +236,53 @@ export const PENDING_LANES: readonly { lane: string; label: string; kinds: reado
   { lane: 'app_install', label: '待装 / 待卸的 App', kinds: ['app_install', 'app_config'] },
 ]
 
+/** WP154：最新一张某种搜索报告卡的 payload（没有就是 `undefined`，不编）。 */
+function latestSeoReport(
+  ctx: QueryContext,
+  variant: 'daily' | 'weekly_revenue' | 'weekly_geo',
+): Record<string, unknown> | undefined {
+  const hit = ctx.approvals
+    .filter((i) => i.kind === 'seo_report' && isRecord(i.payload) && i.payload.variant === variant)
+    .sort((a, b) => createdMs(b) - createdMs(a))[0]
+  return hit !== undefined && isRecord(hit.payload) ? hit.payload : undefined
+}
+
+const SEO_SIGNAL_LABEL: Record<string, string> = {
+  almost_there: '快到了',
+  no_clicks: '没人点',
+  decaying: '在掉',
+  untargeted: '没专门页',
+  wrong_intent: '意图不对',
+  ai_mode: '长问句',
+}
+
+const SEO_LANE_LABEL: Record<string, string> = {
+  fix_page: '改这页（本职责）',
+  new_page: '写新页（本职责）',
+  site_handoff: '交建站',
+  pr_handoff: '交公关',
+}
+
+function seoEvidenceText(e: Record<string, unknown>): string {
+  const n = (k: string) => (typeof e[k] === 'number' ? (e[k] as number) : undefined)
+  const parts: string[] = []
+  if (n('impressions') !== undefined) parts.push(`曝光 ${n('impressions')}`)
+  if (n('clicks') !== undefined) parts.push(`点击 ${n('clicks')}`)
+  if (n('ctr') !== undefined) parts.push(`点击率 ${round2((n('ctr') ?? 0) * 100)}%`)
+  if (n('position') !== undefined) parts.push(`排名 ${round2(n('position') ?? 0)}`)
+  if (n('wow_pct') !== undefined) parts.push(`周环比 ${n('wow_pct')}%`)
+  return parts.join(' · ')
+}
+
+/** 面板上只摆路径（`/blogs/guide/x`），域名每行都一样，摆出来是噪声。 */
+function pathOf(url: string): string {
+  try {
+    return new URL(url).pathname
+  } catch {
+    return url
+  }
+}
+
 const kindOfItem = (i: ApprovalItem): string | undefined => {
   const p = i.payload
   return isRecord(p) && typeof p.kind === 'string' ? p.kind : undefined
@@ -1664,6 +1711,135 @@ const QUERY_LIST: QueryDef[] = [
           { item: '库存告急', value: `${low} 个 SKU` },
           { item: '待审改动', value: `${pending} 条` },
         ],
+      }
+    },
+  },
+  // ── WP154「内容与搜索」：三块都从**我们自己出的搜索报告卡**里读 ────────────────
+  //
+  // 数全是 `@agentsws/seo-core` 算好写在卡上的（29 原则 ③），这里只投影、不现算。
+  // 「今天值得动的 5 件事」挂 `gsc` 源：Search Console 没连，这一块照 36 §3 出
+  // 「去连接」——那就是派工单要的「接上才看得到」。另两块挂店铺后台与工作队列。
+  {
+    name: 'seo.today',
+    source: 'gsc',
+    returns: 'table',
+    run: (ctx) => {
+      const payload = latestSeoReport(ctx, 'daily')
+      const picks = Array.isArray(payload?.picks) ? payload.picks.filter(isRecord) : []
+      const rows = picks.map((p) => {
+        const e = isRecord(p.evidence) ? p.evidence : {}
+        return {
+          rank: typeof p.rank === 'number' ? p.rank : 0,
+          what: `${SEO_SIGNAL_LABEL[String(p.signal)] ?? String(p.signal)} · ${String(p.query ?? '')}`,
+          evidence: seoEvidenceText(e),
+          action: String(p.suggestion ?? ''),
+          lane: SEO_LANE_LABEL[String(p.lane)] ?? String(p.lane),
+        }
+      })
+      // 一件都没有时照实说为什么（没响 / 还没读过），不出一张空表
+      const notes = Array.isArray(payload?.notes) ? payload.notes.map(String) : []
+      if (rows.length === 0)
+        rows.push({
+          rank: 0,
+          what:
+            payload === undefined
+              ? '今天早上还没读过 Search Console'
+              : (notes[0] ?? '今天没有值得动的'),
+          evidence: '',
+          action: '',
+          lane: '',
+        })
+      return {
+        columns: [
+          { key: 'rank', label: '#', align: 'right' as const },
+          { key: 'what', label: '信号 · 查询' },
+          { key: 'evidence', label: '证据' },
+          { key: 'action', label: '建议' },
+          { key: 'lane', label: '谁动' },
+        ],
+        rows,
+      }
+    },
+  },
+  {
+    // 文章第 3 步：按页面并排点击 / 订单 / 收入；两类单独标
+    name: 'seo.page_revenue',
+    source: 'shop',
+    returns: 'table',
+    run: (ctx) => {
+      const payload = latestSeoReport(ctx, 'weekly_revenue')
+      const list = Array.isArray(payload?.rows) ? payload.rows.filter(isRecord) : []
+      const hasGa4 = payload?.ga4 === 'connected'
+      return {
+        columns: [
+          { key: 'page', label: '页面' },
+          { key: 'clicks', label: '自然点击', align: 'right' as const, format: 'count' as const },
+          { key: 'orders', label: '订单', align: 'right' as const, format: 'count' as const },
+          { key: 'revenue', label: '收入', align: 'right' as const, format: 'money' as const },
+          ...(hasGa4
+            ? [
+                {
+                  key: 'cr',
+                  label: '落地页转化率',
+                  align: 'right' as const,
+                  format: 'percent' as const,
+                },
+              ]
+            : []),
+          { key: 'flag', label: '' },
+        ],
+        rows: list.slice(0, 20).map((r) => ({
+          page: pathOf(String(r.page ?? '')),
+          clicks: typeof r.clicks === 'number' ? r.clicks : 0,
+          orders: typeof r.orders === 'number' ? r.orders : 0,
+          revenue: typeof r.revenue === 'number' ? r.revenue : 0,
+          ...(hasGa4
+            ? { cr: typeof r.conversion_rate === 'number' ? r.conversion_rate * 100 : '—' }
+            : {}),
+          flag: r.flag === 'leak' ? '点击多没订单' : r.flag === 'gem' ? '点击少出订单' : '',
+        })),
+      }
+    },
+  },
+  {
+    name: 'seo.geo_visibility',
+    source: 'approvals',
+    returns: 'table',
+    run: (ctx) => {
+      const payload = latestSeoReport(ctx, 'weekly_geo')
+      const gaps = Array.isArray(payload?.gaps) ? payload.gaps.filter(isRecord) : []
+      const probes = Array.isArray(payload?.rows) ? payload.rows.filter(isRecord) : []
+      const byQuestion = new Map<string, { hit: number; total: number }>()
+      for (const r of probes) {
+        const q = String(r.question ?? '')
+        const cur = byQuestion.get(q) ?? { hit: 0, total: 0 }
+        cur.total += 1
+        if (r.brand_mentioned === true || r.our_domain_cited === true) cur.hit += 1
+        byQuestion.set(q, cur)
+      }
+      const rows = [...byQuestion.entries()].map(([question, c]) => {
+        const gap = gaps.find((g) => g.question === question)
+        return {
+          question,
+          seen: `${c.hit} / ${c.total} 个平台`,
+          advice: gap === undefined ? '' : String(gap.suggestion ?? ''),
+        }
+      })
+      if (rows.length === 0) {
+        const notes = Array.isArray(payload?.notes) ? payload.notes.map(String) : []
+        rows.push({
+          question: payload === undefined ? '这周还没探测过' : (notes[0] ?? '这周没有探测结果'),
+          seen: '',
+          advice: '',
+        })
+      }
+      return {
+        columns: [
+          { key: 'question', label: '买家会问的问题' },
+          { key: 'seen', label: '提到或引用我们' },
+          { key: 'advice', label: '缺位怎么补' },
+        ],
+        rows,
       }
     },
   },

@@ -46,6 +46,9 @@ importers:
       '@agentsws/roles':
         specifier: workspace:*
         version: link:../../packages/roles
+      '@agentsws/seo-core':
+        specifier: workspace:*
+        version: link:../../packages/seo-core
       '@agentsws/server':
         specifier: workspace:*
         version: link:../server
@@ -399,6 +402,9 @@ importers:
       '@agentsws/secretary':
         specifier: workspace:*
         version: link:../../packages/secretary
+      '@agentsws/seo-core':
+        specifier: workspace:*
+        version: link:../../packages/seo-core
       '@agentsws/site-core':
         specifier: workspace:*
         version: link:../../packages/site-core
@@ -1302,6 +1308,15 @@ importers:
         specifier: ^7.6.13
         version: 7.6.13
 
+  packages/seo-core:
+    dependencies:
+      '@agentsws/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@agentsws/core':
+        specifier: workspace:*
+        version: link:../core
+
   packages/simulation:
     dependencies:
       '@agentsws/ads-core':
@@ -1370,6 +1385,9 @@ importers:
       '@agentsws/secretary':
         specifier: workspace:*
         version: link:../secretary
+      '@agentsws/seo-core':
+        specifier: workspace:*
+        version: link:../seo-core
       '@agentsws/site-core':
         specifier: workspace:*
         version: link:../site-core

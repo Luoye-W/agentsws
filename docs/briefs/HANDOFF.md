@@ -60,7 +60,7 @@
 | 35 | WP151 DeepSeek 余额不足：说人话 + 去充值（账号路 / key 路分开引导） | `WP151-deepseek-balance-insufficient.md` | `wp151-ds-balance` · `wp/151-ds-balance` | — | 已合并（09-26，Fable 终审：237 文件 3573 条过，六组模拟门禁过） |
 | 36 | WP152 DeepSeek 两种连接合成一张卡（官方 API 接口连接 / 官方账户登录，用户自选） | `WP152-deepseek-one-card.md` | `wp152-ds-card` · `wp/152-ds-card` | — | 已合并（09-26，Fable 终审：工作台 824 条 + server / model-gateway 1558 条过，六组模拟门禁过；合并时补了默认方案两条规则） |
 | 37 | WP153 真账号冒烟三个小问题：回答露工具名与 markdown、事项摘要跑题、店主查不到岗位与连接 | `WP153-reply-quality-three-fixes.md` | `wp153-reply-fixes` · `wp/153-reply-fixes` | — | 已合并（09-26，Fable 终审：266 文件 3987 条过，六组模拟门禁过） |
-| 38 | WP154 「内容与博客」升级成「内容与搜索」：GSC 每日六信号 → 每天 5 件事卡、先修再写、订单归因、GEO 每周探测、内容质检门禁 | `WP154-content-and-search.md` | `wp154-content-search` · `wp/154-content-search` | 契约与 WP155 共用（WP155 先合） | 进行中（Claude） |
+| 38 | WP154 「内容与博客」升级成「内容与搜索」：GSC 每日六信号 → 每天 5 件事卡、先修再写、订单归因、GEO 每周探测、内容质检门禁 | `WP154-content-and-search.md` | `wp154-content-search` · `wp/154-content-search` | 契约与 WP155 共用（WP155 先合） | 已合并（09-26，Fable 终审：从零构建过；9 条服务端测试在满负载下超时，单独重跑全过；六组模拟门禁过、dtc-3c-3p 63 场景；合并时把 txn 改写口改成 fail-closed） |
 | 39 | WP155 第三方搜索数据接口：SERP + 主流 AI 平台问答探测（选服务商、契约、官方积分 / 自带 key 路由、计费待定价） | `WP155-search-data-serp-geo.md` | `wp155-search-data` · `wp/155-search-data` | — | 已合并（09-26，Fable 终审：246 文件 2787 条过，六组模拟门禁过，wrangler dry-run 过；价格待 Luoye 定） |
 | 40 | WP156 界面减字：步骤清单进教程文章（右栏「教程」面板）、短说明进 tooltip；改写 docs/36 §7；先改设置页与向导 | `WP156-ui-less-text-tutorials.md` | `wp156-less-text` · `wp/156-less-text` | — | 已合并（09-26，Fable 终审：198 文件 2323 条过，六组模拟门禁过） |
 | 41 | WP157 界面减字第二轮：连接页 26 卡、消息渠道、插件卡、聊天窗、岗位与面板；两套 markdown 渲染合一；教程进 ⌘K | `WP157-less-text-round2.md` | `wp157-less-text-2` · `wp/157-less-text-2` | — | 进行中（Claude） |

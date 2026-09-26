@@ -161,6 +161,8 @@ const AUTOMATION_SPEC = Schema.object({
 const CONNECTOR = Schema.object({
   kind: str(),
   required: bool(),
+  // WP154：推荐连（没连照样能干活，但有一块要靠它；面板与卡上明说「接上才看得到」）
+  recommended: Schema.boolean(),
   grants: Schema.array(Schema.string()).required(),
   ownership: Schema.union(['workspace', 'person'] as const).required(),
 })

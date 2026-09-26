@@ -1,0 +1,24 @@
+{
+  "name": "@agentsws/seo-core",
+  "version": "0.0.0",
+  "private": true,
+  "description": "内容与搜索（WP154）：Search Console 六个信号、每日 5 件事（先修再写）、按页面收入归因、GEO 问题与探测小结、发布前内容质检。纯逻辑，搜索数据经注入的 SearchDataPort，碰不到凭据。",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@agentsws/contracts": "workspace:*",
+    "@agentsws/core": "workspace:*"
+  }
+}

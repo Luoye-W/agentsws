@@ -515,6 +515,38 @@ export function checkExpectations(
       }
     }
   }
+  // WP154：「今天值得动的 5 件事」——恰好几件、先修再写、不倾倒数据
+  if (expected.seo_daily !== undefined) {
+    const want = expected.seo_daily
+    const last = evidence.events.filter((e) => e.type === 'digest.seo_daily').pop()
+    if (last === undefined) add('seo_daily', false, '一张「今天值得动的 5 件事」都没出')
+    else {
+      const p = payloadOf(last)
+      const lanes = Array.isArray(p.lanes) ? (p.lanes as string[]) : []
+      const problems: string[] = []
+      if (want.picks !== undefined && !matchNumeric(lanes.length, want.picks))
+        problems.push(`卡上 ${lanes.length} 件（期望 ${String(want.picks)}）`)
+      if (want.fix_before_write === true) {
+        const order = ['fix_page', 'site_handoff', 'pr_handoff', 'new_page']
+        const idx = lanes.map((l) => order.indexOf(l))
+        if (idx.some((v, i) => i > 0 && v < (idx[i - 1] ?? 0)))
+          problems.push(`顺序不是先修再写：${lanes.join(' → ')}`)
+      }
+      if (want.no_dump === true) {
+        const rowsIn = typeof p.rows_in === 'number' ? p.rows_in : 0
+        const cardRows = typeof p.card_rows === 'number' ? p.card_rows : Number.POSITIVE_INFINITY
+        if (cardRows > lanes.length || rowsIn <= cardRows)
+          problems.push(`读进 ${rowsIn} 行、卡上 ${cardRows} 行——数据倒上卡了`)
+      }
+      add(
+        'seo_daily',
+        problems.length === 0,
+        problems.length === 0
+          ? `卡上 ${lanes.length} 件：${lanes.join(' → ')}`
+          : problems.join('；'),
+      )
+    }
+  }
   // WP47 / 44 G2：同一个账号的两条产品线，互相看不到对方的订单和商品
   if (expected.scope_disjoint !== undefined) {
     const seen = new Map<string, { orders: string[]; products: string[] }>()

@@ -73,7 +73,9 @@ export function PositionConnections({ id }: { id: string }): React.ReactNode {
                   <span className="text-xs text-muted-foreground" data-slot="status">
                     {item.required
                       ? t('position.connections.required')
-                      : t('position.connections.optional')}
+                      : item.recommended === true
+                        ? t('position.connections.recommended')
+                        : t('position.connections.optional')}
                   </span>
                 </p>
                 <p className="text-xs text-muted-foreground" data-slot="data">

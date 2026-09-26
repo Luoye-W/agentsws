@@ -39,6 +39,7 @@
     "@agentsws/roles": "workspace:*",
     "@agentsws/runtime-direct": "workspace:*",
     "@agentsws/schedule": "workspace:*",
+    "@agentsws/seo-core": "workspace:*",
     "@agentsws/secretary": "workspace:*",
     "@agentsws/site-core": "workspace:*",
     "@agentsws/skills": "workspace:*",
