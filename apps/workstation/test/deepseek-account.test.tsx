@@ -21,7 +21,6 @@ import {
   DeepSeekAccountLogin,
   formatWallet,
 } from '@/components/models/deepseek-account-login'
-import { ModelsPanel } from '@/components/models/models-panel'
 import { NoModelBanner } from '@/components/models/no-model-banner'
 import { AiStep } from '@/components/onboarding/ai-step'
 import type {
@@ -348,29 +347,8 @@ describe('WP134 向导第 ① 步：第三张大卡', () => {
     })
   })
 
-  it('"自己的接口"那张卡里不重复出现账号登录这一条', async () => {
-    const user = userEvent.setup()
-    renderWithProviders(<AiStep onConnected={() => undefined} onDemo={() => undefined} />)
-    await user.click(await screen.findByTestId('ai-pick-own'))
-    await screen.findByTestId('model-form')
-    expect(
-      screen.queryByTestId('ai-own-template-deepseek_account:https://api.deepseek.com/anthropic'),
-    ).toBeNull()
-  })
-})
-
-describe('WP134 设置页：不混进"加一个"那一排', () => {
-  it('加一个那一排只有填 key 的卡；账号登录那一条已配时不给"改"', async () => {
-    state.providers = [{ ...ACCOUNT_ROW, last_test: OK_TEST }]
-    renderWithProviders(<ModelsPanel />)
-    await screen.findByTestId('models-panel')
-    const kinds = screen.getAllByTestId('model-template').map((el) => el.getAttribute('data-kind'))
-    expect(kinds).not.toContain('deepseek_account')
-    expect(kinds).toContain('deepseek')
-    const row = screen.getByTestId('model-row')
-    expect(within(row).queryByText('修改')).toBeNull()
-    expect(within(row).queryByText('改')).toBeNull()
-  })
+  // WP152：「自己的接口」里不再出现 DeepSeek、设置页「加一个」合成一张「DeepSeek 官方」卡——
+  // 这两条原来的断言（账号登录单独一张卡、不进那一排）改到 `deepseek-one-card.test.tsx`。
 })
 
 // ── WP150 ─────────────────────────────────────────────────────────────

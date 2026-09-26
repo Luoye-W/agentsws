@@ -210,6 +210,21 @@ const DEEPSEEK_TEMPLATE: ModelProviderTemplate = {
   links: [{ label: 'DeepSeek 开放平台', url: 'https://platform.deepseek.com/api_keys' }],
 }
 
+/**
+ * WP152：DeepSeek 两种连法都收进第三张「DeepSeek 官方」卡，"自己的接口"里不再有 DeepSeek——
+ * 这张卡的表单改用 OpenAI 兼容那条来测（形态一样：地址 + key + 模型名）。
+ */
+const COMPAT_TEMPLATE: ModelProviderTemplate = {
+  kind: 'openai_compatible',
+  label: 'OpenAI 兼容（自定义）',
+  summary: '任何 OpenAI 格式的服务。',
+  default_base_url: 'https://api.moonshot.cn/v1',
+  default_model: 'kimi-latest',
+  region: 'cn',
+  steps: ['填地址与 key'],
+  links: [{ label: 'Moonshot', url: 'https://platform.moonshot.cn' }],
+}
+
 const CLOUD_PROVIDER: ModelProviderView = {
   id: 'agentsws',
   kind: 'agentsws_cloud',
@@ -343,7 +358,7 @@ vi.mock('@/lib/api', async () => {
     // ── 第 ① 步 ────────────────────────────────────────────────
     listModelProviders: async () => ({
       providers: state.providers,
-      templates: state.templates ?? [CLOUD_TEMPLATE, DEEPSEEK_TEMPLATE],
+      templates: state.templates ?? [CLOUD_TEMPLATE, DEEPSEEK_TEMPLATE, COMPAT_TEMPLATE],
     }),
     getCloudAccount: async () => state.account,
     getCloudCredits: async () => state.credits,
@@ -1431,6 +1446,7 @@ describe('WP142 第 ① 步：官方云那一跳有反馈；模板不重名', ()
     state.templates = [
       CLOUD_TEMPLATE,
       DEEPSEEK_TEMPLATE,
+      COMPAT_TEMPLATE,
       bailian('Token Plan（订阅）', 'https://tp.example/v1', 2),
       bailian('按量计费（标准）', 'https://payg.example/v1', 1),
       bailian('Coding Plan（订阅）', 'https://cp.example/v1', 3),
@@ -1441,7 +1457,8 @@ describe('WP142 第 ① 步：官方云那一跳有反馈；模板不重名', ()
     const labels = within(row)
       .getAllByRole('button')
       .map((b) => b.textContent)
-    expect(labels).toEqual(['DeepSeek 官方', '阿里云百炼'])
+    // WP152：DeepSeek 在第三张「DeepSeek 官方」卡里，这一排不再有它
+    expect(labels).toEqual(['OpenAI 兼容（自定义）', '阿里云百炼'])
     // 选中百炼才出第二排：三个方案，按 plan_order 排
     expect(screen.queryByTestId('ai-own-plans')).toBeNull()
     await user.click(within(row).getByText('阿里云百炼'))
