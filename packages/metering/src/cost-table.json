@@ -329,6 +329,46 @@
       "per_unit": 0.167,
       "unverified": true,
       "note": "WP131 补：官方生图默认型号（WP127）。官网价目页读到 gpt-image-1 出图 token 单价 $40 / 百万；1024×1024 一张按 OpenAI 公开的 token 数折算：低档 272 ≈ $0.011、中档 1056 ≈ $0.042、高档 4160 ≈ $0.167。我们的请求**没指定画质**（默认 auto，可能出高档），所以按高档记——估贵了只让毛利显得保守。token 数这一步未核。"
+    },
+    {
+      "key": "dataforseo:serp",
+      "provider": "dataforseo",
+      "currency": "USD",
+      "per_unit": 0.004,
+      "unverified": true,
+      "note": "WP155（docs/81 §4）：搜索数据官方接口一次 SERP。Google Organic Live Advanced $2 / 千次（前 10 条）+ 异步 AI 概览加价 $0.002（拿不到时服务商退）。Bing 同一个键、实际只有 $0.002——按贵的记，只让毛利显得保守。读自 dataforseo.com/pricing/serp/google-organic-serp-api 与 docs.dataforseo.com 的 load_async_ai_overview 说明，未对账单。"
+    },
+    {
+      "key": "dataforseo:google_ai_overview",
+      "provider": "dataforseo",
+      "currency": "USD",
+      "per_unit": 0.004,
+      "unverified": true,
+      "note": "WP155：AI 问答探测「Google AI 概览」一次 = 一次 Google SERP（同上 $0.002 + $0.002）。"
+    },
+    {
+      "key": "dataforseo:chatgpt",
+      "provider": "dataforseo",
+      "currency": "USD",
+      "per_unit": 0.004,
+      "unverified": true,
+      "note": "WP155：AI 问答探测 ChatGPT 一次，LLM Scraper Live $4 / 千次（dataforseo.com/pricing/ai-optimization/llm-scraper）。"
+    },
+    {
+      "key": "dataforseo:gemini",
+      "provider": "dataforseo",
+      "currency": "USD",
+      "per_unit": 0.004,
+      "unverified": true,
+      "note": "WP155：AI 问答探测 Gemini 一次，LLM Scraper Live $4 / 千次（同上）。"
+    },
+    {
+      "key": "dataforseo:perplexity",
+      "provider": "dataforseo",
+      "currency": "USD",
+      "per_unit": 0.01,
+      "unverified": true,
+      "note": "WP155：AI 问答探测 Perplexity 一次，LLM Responses Live 每次 $0.0006 + 模型本身的钱（sonar 联网，按 token 与请求费另计，服务商原价透传）。模型那一半没从官方页核到，按 $0.01 / 次估（偏高）——这一条最需要对账单。"
     }
   ],
   "wp131_note": "WP131：带 `unverified: true` 的是这次按公开价补的条目（WP127 的多模态默认型号与生图），与整表一样等 Luoye 核对。"

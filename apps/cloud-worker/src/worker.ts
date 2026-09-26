@@ -18,6 +18,7 @@
 import { ADMIN_TOKEN_ENV } from '@agentsws/cloud/workers-kit'
 import { authenticate, errorResponse } from '@agentsws/cloud-entry'
 import type { CloudTokenVerifier, VerifiedCloudToken } from '@agentsws/contracts'
+import { SEARCH_DATA_CLOUD_PREFIX } from '@agentsws/contracts'
 import { isKolCloudPath } from '@agentsws/kol-cloud'
 import { isKolPath, type KolCharge, type KolWalletOp, kolChargeFor } from '@agentsws/kol-public'
 import type { WalletReservation } from '@agentsws/metering'
@@ -57,10 +58,12 @@ export function normalizeClientIp(request: Request): Request {
   return new Request(request, { headers })
 }
 
-/** 钱那一层的路径前缀（去 `WalletDO`）。 */
+/** 钱那一层的路径前缀（去 `WalletDO`）：AI、钱包、WP155 的搜索数据。 */
 export function isWalletPath(pathname: string): boolean {
   return (
     pathname.startsWith('/v1/ai/') ||
+    // WP155：搜索数据（官方数据接口）也是「预扣 → 打上游 → 结算」，与 AI 同一个对象里做完
+    pathname.startsWith(`${SEARCH_DATA_CLOUD_PREFIX}/`) ||
     pathname === '/v1/wallet' ||
     pathname.startsWith('/v1/wallet/')
   )

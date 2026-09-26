@@ -108,6 +108,26 @@
       "label_en": "Transcription (per minute)"
     },
     {
+      "capability": "data.search.serp",
+      "unit": "call",
+      "credits_per_unit": 0.2,
+      "block": "data",
+      "basis": "WP155 建议价（docs/81 §4，待 Luoye 定）：我方成本一次最多 $0.004（Google 结果页 $0.002 + 异步 AI 概览 $0.002；Bing 只有 $0.002）≈ ¥0.0284，加云端摊销 ¥0.001 = ¥0.0294；毛利 ≥ 80% 的最低价 = 0.0294 ÷ 0.2 = 0.147，向上取整到 0.1 → 0.2（毛利 85.3%）。命中缓存同价、我方成本 0；失败 / 搜到 0 条不收。",
+      "reviewed_at": null,
+      "label_zh": "搜索结果页（按次）",
+      "label_en": "Search results page (per query)"
+    },
+    {
+      "capability": "data.search.ai_answer",
+      "unit": "call",
+      "credits_per_unit": 0.4,
+      "block": "data",
+      "basis": "WP155 建议价（docs/81 §4，待 Luoye 定）：AI 平台问答探测按「每个平台一次」计。最贵的一家是 Perplexity（接口费 $0.0006 + sonar 模型费，估 $0.01 / 次，未核）≈ ¥0.071，加摊销 ¥0.001 = ¥0.072；毛利 ≥ 80% 的最低价 = 0.072 ÷ 0.2 = 0.36 → 0.4（Perplexity 毛利 82%；ChatGPT / Gemini / AI 概览成本 $0.004，毛利 92.6%）。一个价通吃五个平台，界面只用说一个数。失败 / 空回答的那几个平台不收。",
+      "reviewed_at": null,
+      "label_zh": "AI 平台问答探测（每个平台一次）",
+      "label_en": "AI answer probe (per platform)"
+    },
+    {
       "capability": "standby.seat.month",
       "unit": "seat_month",
       "credits_per_unit": 99,

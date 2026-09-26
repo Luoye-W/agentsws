@@ -374,7 +374,8 @@ describe('钱包路由', () => {
       new Request('http://entry/v1/wallet/pricing', { headers: auth() }),
     )
     const { data } = (await res.json()) as { data: { entries: { capability: string }[] } }
-    expect(data.entries).toHaveLength(12)
+    // WP155 加了搜索数据两条（data.search.serp / data.search.ai_answer）
+    expect(data.entries).toHaveLength(14)
     expect(data.entries.map((e) => e.capability)).toContain('ai.image')
     expect(data.entries.map((e) => e.capability)).toContain('ai.chat')
   })

@@ -1507,6 +1507,37 @@ export const clearKolByoSource = (
 ): Promise<{ cleared: boolean }> =>
   api(`/v1/kol/byo-sources/${channel}`, { method: 'DELETE', ...withAssignment(assignment) })
 
+/* ── WP155（docs/81）：搜索数据接口（连接页「搜索数据」那一行）────────── */
+
+export type SearchDataSettingsView = import('@agentsws/contracts').SearchDataSettingsView
+export type SearchDataProvider = import('@agentsws/contracts').SearchDataProvider
+export type SearchDataRouteChoice = import('@agentsws/contracts').SearchDataRouteChoice
+
+export const getSearchDataSettings = (assignment?: string): Promise<SearchDataSettingsView> =>
+  api('/v1/search-data', withAssignment(assignment))
+
+export const setSearchDataChoice = (
+  choice: SearchDataRouteChoice,
+  assignment?: string,
+): Promise<SearchDataSettingsView> =>
+  api('/v1/search-data/choice', { method: 'PUT', body: { choice }, ...withAssignment(assignment) })
+
+/** key 只在这一次调用里出现（原生表单的 FormData 取出来直接发），不进 state、不进缓存。 */
+export const setSearchDataByo = (
+  input: { provider: SearchDataProvider; api_key?: string },
+  assignment?: string,
+): Promise<SearchDataSettingsView> =>
+  api('/v1/search-data/byo', { method: 'PUT', body: input, ...withAssignment(assignment) })
+
+export const testSearchDataByo = (
+  input: { provider?: SearchDataProvider; api_key?: string },
+  assignment?: string,
+): Promise<{ ok: boolean; message: string }> =>
+  api('/v1/search-data/byo/test', { method: 'POST', body: input, ...withAssignment(assignment) })
+
+export const clearSearchDataByo = (assignment?: string): Promise<{ cleared: boolean }> =>
+  api('/v1/search-data/byo', { method: 'DELETE', ...withAssignment(assignment) })
+
 export const getCloudCredits = (assignment?: string): Promise<CloudCreditsView> =>
   api('/v1/cloud/credits', withAssignment(assignment))
 
