@@ -91,6 +91,8 @@ export const LAYOUT_BY_KIND: Record<Exclude<DeckKind, 'staged_change'>, DeckLayo
   kol_campaign: 'person',
   // WP144：「让它在接下来 N 分钟操作这台电脑？」——一句话的是非题
   computer_use: 'policy',
+  // WP154：搜索报告（每日 5 件事 / 每周收入 / 每周 AI 可见度）同日报，不进队列（`NOT_A_CARD`）
+  seo_report: 'aftermath',
   system_alert: 'aftermath',
   digest: 'aftermath',
 }
@@ -163,6 +165,10 @@ export const LAYOUT_BY_CHANGE: Record<ChangeKind, DeckLayout> = {
   domain_config: 'change',
   design_request: 'change',
   design_brief: 'change',
+  // WP154：改一页的元信息 / 加小节 / 调内链——人要看的就是改前改后那两格
+  page_seo_edit: 'change',
+  page_section_add: 'change',
+  internal_link_edit: 'change',
 
   // ── ⑥ 变体：缩略图格，人点一张 ────────────────────────────────────
   design_variant: 'variants',
@@ -211,7 +217,7 @@ export function layoutFor(kind: DeckKind, changeKind?: string): DeckLayout {
  * 判断写在 deck 层（而不是各服务各写一遍）的理由与 `layoutFor` 一样：六端同一份。
  */
 export const NOT_A_CARD = {
-  kinds: ['daily_report', 'system_alert'] as const,
+  kinds: ['daily_report', 'system_alert', 'seo_report'] as const,
   changeKinds: ['launch_check'] as const,
 }
 

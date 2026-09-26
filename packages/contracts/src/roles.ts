@@ -157,6 +157,11 @@ export interface WriteActionSpec {
 export interface ConnectorDependency {
   kind: string
   required: boolean
+  /**
+   * WP154：**推荐**连（`required: false` 时才有意义）。没连这条职责照样能干活，
+   * 但有一块要靠它——面板与卡上会明说「接上才看得到」。向导第 ④ 步仍只列必需的。
+   */
+  recommended?: boolean
   grants: string[]
   ownership: 'workspace' | 'person'
 }

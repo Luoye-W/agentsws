@@ -70,6 +70,18 @@ export type ApprovalKind =
    * ——**批了这次运行才挂提供方**；不批就什么都不发生。payload = `ComputerUseGrantPayload`。
    */
   | 'computer_use'
+  /**
+   * WP154「内容与搜索」：**搜索报告卡**。三种 `payload.variant`：
+   *
+   * - `daily`：每天早上一张「今天值得动的 5 件事」（`SeoDailyPayload`）；
+   * - `weekly_revenue`：每周一张收入归因小结（`SeoWeeklyRevenuePayload`）；
+   * - `weekly_geo`：每周一张 AI 平台可见度小结（`SeoWeeklyGeoPayload`）。
+   *
+   * 与 `daily_report` 同一类：L3 自动出、看完归档，**不进审批队列**（36 §2 只有要人
+   * 决定的才是卡，见 deck 的 `NOT_A_CARD`）。它**引出的决定**照旧各自出卡：改页面的
+   * 改动卡、新页面选题卡；交给建站 / 公关的开成事项。
+   */
+  | 'seo_report'
 
 /** 14 §13.2 抽检复核：L2 自动批被抽中后，范围管理者看完说什么（WP32） */
 export interface SamplingReview {

@@ -157,6 +157,8 @@ export const CATEGORY_BY_KIND: Partial<Record<DeckKind, string>> = {
   membership: 'join',
   kol_campaign: 'creator_list',
   computer_use: 'computer_use',
+  // WP154：搜索报告（每日 5 件事 / 每周收入 / 每周 AI 可见度）
+  seo_report: 'seo_report',
   digest: 'digest',
 }
 
@@ -218,6 +220,10 @@ export const CATEGORY_BY_CHANGE: Partial<Record<ChangeKind, string>> = {
   domain_config: 'domain_config',
   design_request: 'design_request',
   design_brief: 'design_brief',
+  // WP154「内容与搜索」：改页面的三种改法
+  page_seo_edit: 'page_seo',
+  page_section_add: 'page_section',
+  internal_link_edit: 'internal_links',
   // 变体 / 事后 / 人 / 转交
   design_variant: 'variants',
   pause_ad: 'after_stop_loss',

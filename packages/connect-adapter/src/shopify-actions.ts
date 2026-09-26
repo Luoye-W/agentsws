@@ -312,6 +312,8 @@ export const SHOPIFY_WRITE_ACTIONS: readonly ShopifyWriteAction[] = [
   {
     action_id: 'shopify_admin.update_page',
     change_kind: 'listing_edit',
+    // WP154「内容与搜索」：改标题 / 描述 / H1 / 开头、加小节、调内链——落到店里都是一次 pageUpdate
+    also_change_kinds: ['page_seo_edit', 'page_section_add', 'internal_link_edit'],
     target: 'page',
     graphql: 'pageUpdate',
     what: '改页面正文或标题',
@@ -326,6 +328,8 @@ export const SHOPIFY_WRITE_ACTIONS: readonly ShopifyWriteAction[] = [
   {
     action_id: 'shopify_admin.update_article',
     change_kind: 'publish_post',
+    // WP154：博客文章的元信息 / 小节 / 内链同样是一次 articleUpdate
+    also_change_kinds: ['page_seo_edit', 'page_section_add', 'internal_link_edit'],
     target: 'article',
     graphql: 'articleUpdate',
     what: '改一篇博客文章（含把草稿翻成已发布——那一下就是 51 §2.2 里说的"发布 L1"）',

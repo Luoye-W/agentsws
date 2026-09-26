@@ -49,6 +49,10 @@ export * from './pr.js'
 export * from './roles.js'
 export * from './run.js'
 export * from './schedule.js'
+// WP155 搜索数据接口（SERP + AI 问答探测）的契约；WP154 先按派工单原样建，以 WP155 为准
+export * from './search-data.js'
+// WP154「内容与搜索」：六个信号、每日 5 件事、收入归因、GEO、发布前质检的形状
+export * from './seo.js'
 // 59 §1 / §2 建站那一侧的三类对象（WP77）。与 social.ts 同一条理由：
 // 面板、`/v1/site/*`、模拟世界与记录源四处要认同一个形状。
 export * from './site.js'

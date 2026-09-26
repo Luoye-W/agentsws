@@ -38,6 +38,8 @@
     "packages/contracts/src/roles.ts",
     "packages/contracts/src/run.ts",
     "packages/contracts/src/schedule.ts",
+    "packages/contracts/src/search-data.ts",
+    "packages/contracts/src/seo.ts",
     "packages/contracts/src/site.ts",
     "packages/contracts/src/skills.ts",
     "packages/contracts/src/social.ts",
@@ -88,7 +90,7 @@
     "packages/roles/roles/social/x.yml",
     "packages/roles/roles/social/youtube.yml"
   ],
-  "source_digest": "51174d051474179a1231112a7b461eb5",
+  "source_digest": "b9bc1700ec8510a4275e79a96e381b1a",
   "objects": [
     {
       "id": "ad",
