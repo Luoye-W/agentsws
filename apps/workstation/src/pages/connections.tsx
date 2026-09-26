@@ -7,6 +7,7 @@
  * 3. **可以连接**——每个 provider 一张卡，说明要准备什么（≤ 5 步 + 外链），
  *    OAuth 类走授权页，表单类走**不经模型的原生表单**。
  * 4. **数据后端**（WP40 / 41 §2.4）——本地 / 接我的云 / 托管三个按钮 + 迁移向导。
+ * 5. **搜索数据**（WP155 / docs/81）——官方（用积分）/ 自带 key / 不接。
  *
  * 凭据这条线：值从 `SecureForm` 的 FormData 出来 → `submitConnection` 发出去 → 结束。
  * 这个文件里没有一处把它放进 state、query 缓存、URL 或日志。
@@ -26,6 +27,8 @@ import { deadLettersFor } from '@/components/connections/dead-letters'
 import { ConnectionDirectorySection } from '@/components/connections/directory'
 import { ProviderCard, type WizardPhase } from '@/components/connections/provider-card'
 import { RuntimeBar } from '@/components/connections/runtime-bar'
+// WP155（docs/81）：「搜索数据」一行（官方用积分 / 自带 key / 不接）
+import { SearchDataSection } from '@/components/connections/search-data'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { ConnectTestResult, ProviderFieldSpec } from '@/lib/api'
 import {
@@ -369,6 +372,9 @@ export function ConnectionsPage(): React.ReactNode {
           ))}
         </div>
       </section>
+
+      {/* WP155（docs/81）：SEO / GEO 用的搜索数据从哪来 */}
+      <SearchDataSection {...(ownerId === undefined ? {} : { assignment: ownerId })} />
 
       {/* WP119（68）：浏览器插件——6 位配对码 + 已配上的那几个浏览器 */}
       <BrowserExtensionSection {...(ownerId === undefined ? {} : { assignment: ownerId })} />
