@@ -12,7 +12,9 @@
     "packages/contracts/src/byo-data-source.ts",
     "packages/contracts/src/changes.ts",
     "packages/contracts/src/channels.ts",
+    "packages/contracts/src/chat-relay.ts",
     "packages/contracts/src/cloud-admin.ts",
+    "packages/contracts/src/cloud-api.ts",
     "packages/contracts/src/cloud-entry.ts",
     "packages/contracts/src/cloud.ts",
     "packages/contracts/src/common.ts",
@@ -23,6 +25,7 @@
     "packages/contracts/src/design.ts",
     "packages/contracts/src/dsh-scenes.ts",
     "packages/contracts/src/events.ts",
+    "packages/contracts/src/hosted.ts",
     "packages/contracts/src/identity.ts",
     "packages/contracts/src/join.ts",
     "packages/contracts/src/kernel.ts",
@@ -90,7 +93,7 @@
     "packages/roles/roles/social/x.yml",
     "packages/roles/roles/social/youtube.yml"
   ],
-  "source_digest": "cff0abe6913adc8953234c04393480f2",
+  "source_digest": "9879e1b56fddd10cf6fd38c457ef6c83",
   "objects": [
     {
       "id": "ad",

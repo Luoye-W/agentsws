@@ -36,6 +36,13 @@ import {
   threadExternalId,
 } from './mime.js'
 import { domainOf, type Mailer, messageIdFor } from './smtp.js'
+import {
+  applySupportMailboxActions,
+  type MailboxActionReason,
+  type MailboxActionRecord,
+  type SupportMailboxSwitches,
+  supportMailboxSwitches,
+} from './support-mailbox.js'
 import { MemoryThreadStore, mergeThread, type ThreadStore } from './threads.js'
 
 /** 出站走哪条路（health / 观察面用）。 */
@@ -90,8 +97,19 @@ export interface EmailAdapterOptions {
    * 建不了 / 服务器拒绝 MOVE 只 log，不影响收信。
    */
   archive_folder?: string
-  /** 归档时是否顺手标已读（默认 true）。 */
+  /** 归档时是否顺手标已读（默认 true）。即老产品的「标已读」开关。 */
   archive_mark_read?: boolean
+  /**
+   * WP163：老产品 KefuAgent 的另两个开关（影子模式 / 挪信）。不给 = 默认值
+   * （影子模式关、挪信开）。`folder_enabled` 由 `archive_folder` 给没给决定，
+   * `mark_read` 缺省取 `archive_mark_read`。
+   */
+  support_mailbox?: Partial<Pick<SupportMailboxSwitches, 'shadow_mode' | 'move' | 'mark_read'>>
+  /**
+   * WP163：每一个邮箱动作（标已读 / 挪 / 跳过 / 失败）记一笔。
+   * 不给 = 老行为：只有失败走 `on_error`。
+   */
+  on_mailbox_action?: (r: MailboxActionRecord) => void
   /** WP55：毒消息被永久越过时出一张卡（不给就只留在隔离表里）。 */
   on_folder_fault?: (fault: FolderSyncFault & { account: string; quarantined: boolean }) => void
 }
@@ -119,6 +137,28 @@ export interface SubChannelVerdict {
   role_id?: string
   /** 钓鱼 / 退信 / 索赔这类：落库但绝不生成草稿，交人看。 */
   needs_human_review?: boolean
+}
+
+/**
+ * WP163：入站处理器对一封信的结论（`poll` 的 handler 可以回它）。
+ *
+ * 只有 `support: true` 的信才会标已读、挪进归档文件夹；其余信**原地不动、不标已读**。
+ * handler 回别的（`undefined`）= 老行为（处理成功就当客服信归档），只给还没接分拣的旧调用方留的路。
+ */
+export interface MailHandleOutcome {
+  /** 这封信判成客服了吗（进了客服路由、建了客服线程）。 */
+  support: boolean
+  /** 判成客服但这一路不该动邮箱：记一笔「跳过」并说明原因。 */
+  skip?: Extract<MailboxActionReason, 'handoff_refused' | 'owned_elsewhere'>
+}
+
+/** handler 回来的东西是不是一份 {@link MailHandleOutcome}（别的一律当没回）。 */
+function outcomeOf(value: unknown): MailHandleOutcome | undefined {
+  if (value === null || typeof value !== 'object') return undefined
+  const o = value as Record<string, unknown>
+  if (typeof o.support !== 'boolean') return undefined
+  const skip = o.skip === 'handoff_refused' || o.skip === 'owned_elsewhere' ? o.skip : undefined
+  return skip === undefined ? { support: o.support } : { support: o.support, skip }
 }
 
 const DEFAULT_INTERVAL_MS = 60_000
@@ -156,6 +196,8 @@ export class EmailChannelAdapter implements ChannelAdapter {
   private readonly scanLeaseMs: number
   private readonly archiveFolder: string | undefined
   private readonly archiveMarkRead: boolean
+  private readonly supportMailbox: EmailAdapterOptions['support_mailbox']
+  private readonly onMailboxAction: ((r: MailboxActionRecord) => void) | undefined
   /** WP161：归档文件夹在这只邮箱上认到的真名（列到过一次才有）。 */
   private archiveResolved: string | undefined
   private readonly onFolderFault:
@@ -192,6 +234,8 @@ export class EmailChannelAdapter implements ChannelAdapter {
     this.scanLeaseMs = opts.scan_lease_ms ?? DEFAULT_SCAN_LEASE_MS
     this.archiveFolder = opts.archive_folder
     this.archiveMarkRead = opts.archive_mark_read ?? true
+    this.supportMailbox = opts.support_mailbox
+    this.onMailboxAction = opts.on_mailbox_action
     this.onFolderFault = opts.on_folder_fault
   }
 
@@ -211,7 +255,7 @@ export class EmailChannelAdapter implements ChannelAdapter {
   // ---------- 收 ----------
 
   /** 起轮询循环；每封原始邮件交给 handler（由入站管线接住）。 */
-  async start(handler: (raw: unknown) => Promise<void>): Promise<void> {
+  async start(handler: (raw: unknown) => Promise<unknown>): Promise<void> {
     if (this.source === undefined) {
       throw new ChannelError('invalid_input', '未注入 MailSource，邮件适配器无法收信')
     }
@@ -242,7 +286,7 @@ export class EmailChannelAdapter implements ChannelAdapter {
    * ② 水位从持久游标读（`uid_validity` 变了就从 0 重来）；
    * ③ 一封信炸了就记一笔、跳过、继续——连续到阈值就永久越过并出卡。
    */
-  async poll(handler: (raw: unknown) => Promise<void>): Promise<number> {
+  async poll(handler: (raw: unknown) => Promise<unknown>): Promise<number> {
     const source = this.source
     if (source === undefined) {
       throw new ChannelError('invalid_input', '未注入 MailSource，邮件适配器无法收信')
@@ -278,7 +322,7 @@ export class EmailChannelAdapter implements ChannelAdapter {
 
   private async pollUnderLease(
     source: MailSource,
-    handler: (raw: unknown) => Promise<void>,
+    handler: (raw: unknown) => Promise<unknown>,
     now: Iso8601,
   ): Promise<number> {
     const state = this.mailboxState
@@ -313,7 +357,7 @@ export class EmailChannelAdapter implements ChannelAdapter {
         continue
       }
       try {
-        await handler(msg)
+        const outcome = await handler(msg)
         handled += 1
         this.lastUid = Math.max(this.lastUid, msg.uid)
         // ③ 处理成功：水位推过它（前提是前面没有卡住的那一封）；
@@ -324,7 +368,7 @@ export class EmailChannelAdapter implements ChannelAdapter {
           fault = cleared
           await state?.setFault(this.address, cleared)
         }
-        await this.archiveOne(source, msg.uid)
+        await this.archiveOne(source, msg, outcomeOf(outcome))
       } catch (e) {
         // ② 毒消息隔离：记一笔、跳过、继续。一封畸形的信不该让它后面的每一封
         //    都永远进不来，但跳过必须是**有记录的跳过**。
@@ -370,20 +414,75 @@ export class EmailChannelAdapter implements ChannelAdapter {
     return this.archiveResolved
   }
 
-  /** 处理过的信搬进归档文件夹并标已读。搬不动只 log——归档不该拖垮收信。 */
-  private async archiveOne(source: MailSource, uid: number): Promise<void> {
+  /**
+   * WP163：**判成客服的信**按开关标已读、挪进归档文件夹（老产品
+   * `moveCustomerServiceMessageToAiFolder` 的语义，见 `support-mailbox.ts`）。
+   *
+   * 没配归档文件夹 = 这一路不动邮箱（关掉了，或挪信归消息同步管），一笔都不记。
+   * 非客服信原地不动、不标已读、不记账。搬不动只记一笔——归档不该拖垮收信。
+   */
+  private async archiveOne(
+    source: MailSource,
+    msg: RawEmailMessage,
+    outcome: MailHandleOutcome | undefined,
+  ): Promise<void> {
     const configured = this.archiveFolder
-    if (configured === undefined || source.archive === undefined) return
-    const folder = await this.archiveFolderOn(source, configured)
-    try {
-      const moved = await source.archive(uid, folder, this.archiveMarkRead)
-      if (!moved) this.onError?.(new Error(`归档文件夹动不了：${folder}（uid ${uid}）`))
-    } catch (e) {
-      this.onError?.(e)
+    if (configured === undefined) return
+    // 没回结论 = 还没接分拣的旧调用方：处理成功就当客服信（WP55 的老行为）
+    if (outcome !== undefined && !outcome.support) return
+    const from_folder = msg.mailbox.length > 0 ? msg.mailbox : this.mailbox
+    const switches = supportMailboxSwitches({
+      shadow_mode: this.supportMailbox?.shadow_mode,
+      move: this.supportMailbox?.move,
+      mark_read: this.supportMailbox?.mark_read ?? this.archiveMarkRead,
+    })
+    const record = (r: MailboxActionRecord): void => {
+      if (this.onMailboxAction !== undefined) {
+        this.onMailboxAction(r)
+        return
+      }
+      // 老行为：没接动作日志的只在失败时走 on_error（挪信开着时标已读是合在挪信里的，
+      // 那一步的失败就是挪信的失败，不重复报）
+      if (r.status !== 'failed') return
+      if (r.action === 'move') {
+        this.onError?.(new Error(`归档文件夹动不了：${r.to_folder ?? ''}（uid ${r.uid}）`))
+      } else if (r.action === 'mark_read' && !switches.move) {
+        this.onError?.(new Error(`标已读没成功：${r.from_folder}（uid ${r.uid}）`))
+      }
     }
+    if (outcome?.skip !== undefined) {
+      record({
+        account: this.address,
+        uid: msg.uid,
+        from_folder,
+        action: 'move',
+        status: 'skipped',
+        reason: outcome.skip,
+      })
+      return
+    }
+    const archive = source.archive?.bind(source)
+    const markRead = source.markRead?.bind(source)
+    // 影子模式 / 挪信关了就不去列文件夹（那也是一次 IMAP 往返）
+    const to_folder =
+      !switches.shadow_mode && switches.move
+        ? await this.archiveFolderOn(source, configured)
+        : undefined
+    await applySupportMailboxActions({
+      switches,
+      account: this.address,
+      uid: msg.uid,
+      from_folder,
+      to_folder,
+      ops: {
+        ...(markRead === undefined ? {} : { markRead: () => markRead(msg.uid) }),
+        ...(archive === undefined ? {} : { move: (to, too) => archive(msg.uid, to, too) }),
+      },
+      record,
+    })
   }
 
-  private async runLoop(handler: (raw: unknown) => Promise<void>): Promise<void> {
+  private async runLoop(handler: (raw: unknown) => Promise<unknown>): Promise<void> {
     while (this.running) {
       try {
         await this.poll(handler)

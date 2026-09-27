@@ -257,7 +257,7 @@ async function handleKolPublic(
    */
   let principal: VerifiedCloudToken | undefined
   const authorization = request.headers.get('Authorization') ?? undefined
-  if (authorization?.includes('wst_')) {
+  if (isWorkspaceBearer(authorization)) {
     try {
       const verified = await authenticate({ verifier: remoteVerifier(env, origin) }, authorization)
       principal = { ...verified, scopes: verified.scopes as VerifiedCloudToken['scopes'] }
@@ -423,7 +423,15 @@ async function handleRelayOwner(
   }
   // 对象按工作区命名：配对密钥、计数、留言都在这一个对象里
   const stub = env.CHAT_RELAY.get(env.CHAT_RELAY.idFromName(principal.workspace_id))
-  return stub.fetch(withInternalHeaders(request, { principal }))
+  /*
+   * WP164 修：以前这里把公网路径（`/v1/chat/relay/pairing`）原样转进 DO，而 DO 只认
+   * `/__internal/*`——那张表里写了 `internal` 却没人用，三条 owner 路由从入口 Worker
+   * 进来一律 400「路径里缺工作区号」（WP124 的测试是直接打 DO 的，没走这一跳；
+   * 与 WP128 修过的 `/v1/support/subscription` 同一个坑）。契约一致性测试打出来的。
+   */
+  const internal = new URL(request.url)
+  internal.pathname = mapped.internal
+  return stub.fetch(withInternalHeaders(new Request(internal, request), { principal }))
 }
 
 /**
@@ -566,4 +574,12 @@ export async function route(request: Request, env: WorkerEnv): Promise<Response>
 
   // 其余全归账号那一层：health、magic link、会话、工作区关联、首页、登录落地页
   return accountsStub(env).fetch(clean)
+}
+
+/**
+ * 以 `Bearer wst_` 开头才算工作区令牌。插件令牌 `plg_…` 是随机串，原先用「包含 `wst_`」判断，
+ * 它恰好含这四个字时插件上报会被误判成工作区令牌、回 401（WP164 发现，Fable 修）。
+ */
+export function isWorkspaceBearer(authorization: string | undefined): boolean {
+  return /^Bearer\s+wst_/i.test(authorization ?? '')
 }

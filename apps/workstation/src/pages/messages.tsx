@@ -20,6 +20,7 @@
 import type { MessageFolderKind, MessageRecord, MessageThreadSummary } from '@agentsws/contracts'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
+  AlertTriangle,
   Archive,
   ArrowLeft,
   CornerUpLeft,
@@ -374,6 +375,7 @@ export function MessagesPage(): ReactNode {
         ) : null}
 
         <div className="mt-auto flex flex-col gap-1 pt-2">
+          <MailboxFailure accounts={list} />
           <button
             type="button"
             data-testid="messages-backfill"
@@ -798,6 +800,39 @@ function AccountPicker({
           {a.address}
         </button>
       ))}
+    </div>
+  )
+}
+
+/**
+ * WP163：判成客服的信没动成（没挪进客服文件夹 / 没标已读）——状态要一眼看见（36 §7），
+ * 一行短字 + 问号里说是哪只邮箱、什么时候、为什么。几只邮箱都有就说最近的那一次。
+ */
+function MailboxFailure({ accounts }: { accounts: readonly MessageAccountView[] }): ReactNode {
+  const { t, lang } = useApp()
+  const latest = accounts
+    .flatMap((a) =>
+      a.last_mailbox_failure === undefined ? [] : [{ a, f: a.last_mailbox_failure }],
+    )
+    .sort((x, y) => y.f.at.localeCompare(x.f.at))[0]
+  if (latest === undefined) return null
+  const reasonKey = `messages.mailbox_failure.reason.${latest.f.reason}`
+  const reason = t(reasonKey)
+  return (
+    <div
+      className="flex items-center gap-1 px-2.5 text-[12px] text-ws-warn"
+      data-testid="messages-mailbox-failure"
+      data-reason={latest.f.reason}
+    >
+      <AlertTriangle aria-hidden className="size-3.5 shrink-0" />
+      <span className="truncate">{t(`messages.mailbox_failure.${latest.f.action}`)}</span>
+      <Hint
+        text={t('messages.mailbox_failure.hint', {
+          account: latest.a.address,
+          time: formatDateTime(latest.f.at, lang),
+          reason: reason === reasonKey ? latest.f.reason : reason,
+        })}
+      />
     </div>
   )
 }

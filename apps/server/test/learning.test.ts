@@ -144,7 +144,9 @@ describe('装配：自带技能与 07:30 那条定时任务', () => {
   it('技能库空着也会先铺一份自带技能，段落是学习回路的落脚点', () => {
     const sections = server.skills.registry.listSections(DEFAULT_SKILL_NAME)
     expect(sections.length).toBeGreaterThanOrEqual(3)
-    expect(sections.map((s) => s.heading)).toContain('退货窗口计算')
+    // WP162 终审追加：包层是从 KefuAgent 移植来的完整版客服技能
+    expect(sections.map((s) => s.heading)).toContain('数字不由你产生')
+    expect(sections.map((s) => s.heading)).toContain('出卡与自动化级别')
   })
 
   it('八条系统任务里有一条 07:30 的学习回路提案', () => {
@@ -243,7 +245,7 @@ describe('24 §3 一条回路：驳回 → 池 → 次日提案 → 采纳 → �
     })
     const skill = pending.find((s) => s.name === DEFAULT_SKILL_NAME)
     expect(skill?.pending_proposals).toBe(1)
-    expect(skill?.version).toBe('1.0')
+    expect(skill?.version).toBe('1.1.0')
 
     const card = (await server.learning.pendingProposals())[0] as ApprovalItem
     await decide(card, { action: 'approve', selected_option_id: 'append' })

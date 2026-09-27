@@ -52,28 +52,26 @@ import {
   weeklyPromotions,
 } from '@agentsws/learning'
 import type { RoleStore } from '@agentsws/roles'
-import { type SkillScopeRef, type Skills, TIER_ORDER } from '@agentsws/skills'
+import {
+  readBundledSkill,
+  type SkillScopeRef,
+  type Skills,
+  seedBundledSkills,
+  TIER_ORDER,
+} from '@agentsws/skills'
 import type { CreateApprovalInput } from '@agentsws/txn'
 
-/** 本机自带的入门技能：技能库为空时先给一份，学习回路才有落脚的段落。 */
+/**
+ * 本机自带的入门技能：学习回路要有落脚的段落。
+ *
+ * WP162：正文在 `packages/skills/bundled/customer-care/SKILL.md`，与别的自带技能走同一条入库路
+ * （{@link seedDefaultSkill} → `seedBundledSkills`）。终审追加（Fable 09-27）：换成从 KefuAgent
+ * 移植来的完整版（原件 `packages/support-core/skills/customer-care/SKILL.md`），版本 1.1.0——
+ * 高于 WP29 起那份三段默认正文的 1.0，所以已有工作区的包层会被换掉，上面几层不动。
+ * 这两个导出留着：学习回路与测试按名字认它。
+ */
 export const DEFAULT_SKILL_NAME = 'customer-care'
-export const DEFAULT_SKILL_MD = `---
-name: customer-care
-description: 售后客服：先查记录，再按公司口径答，改动一律先提再做
----
-
-## 回答顺序
-
-先查订单与物流记录，再找公司口径，最后才动笔。记录里没有的事不猜。
-
-## 退货窗口计算
-
-退货窗口以送达日为起点计算，不是下单日。
-
-## 回信语气
-
-开头先确认收到，中间讲清依据，结尾给下一步。金额一律写清币种。
-`
+export const DEFAULT_SKILL_MD = readBundledSkill(DEFAULT_SKILL_NAME).markdown
 
 /** 卡片 payload：工作台与施行两边都认它。 */
 export interface SkillLessonPayload {
@@ -1197,16 +1195,18 @@ type RecordApply = (
   apply: ApprovalItem['apply'],
 ) => Promise<void>
 
-/** 技能库为空时铺一份自带技能：没有段落，学习回路无处落脚。 */
-export async function seedDefaultSkill(skills: Skills, workspace_id: WorkspaceId): Promise<void> {
-  if (skills.registry.listSections(DEFAULT_SKILL_NAME).length > 0) return
-  await skills.registry.putFromMarkdown({
-    markdown: DEFAULT_SKILL_MD,
-    tier: 'package',
-    owner: 'package',
-    version: '1.0',
-    workspace_id,
-  })
+/**
+ * 启动时把自带技能种进技能库（包基础层）。
+ *
+ * WP162：以前只铺 `customer-care` 一份；现在 `packages/skills/bundled/` 里的每一份都种
+ * （`seedBundledSkills`：包层没有就入库，同版本跳过，包里版本新了只换包层——
+ * 公司 / 部门 / 岗位 / 职责 / 个人那几层的覆盖一律不动）。
+ *
+ * 包层不分工作区（`resolve` 取包层时本来就不看工作区），所以种一次，这个进程里
+ * 每个工作区都读得到；`workspace_id` 参数留着是为了不改已有签名。
+ */
+export async function seedDefaultSkill(skills: Skills, _workspace_id: WorkspaceId): Promise<void> {
+  await seedBundledSkills(skills.registry)
 }
 
 function textOf(payload: unknown): string | undefined {
