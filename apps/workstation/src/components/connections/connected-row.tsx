@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button'
 import type { ConnectionView, DeadLetterView } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 import { formatDate } from '@/lib/format'
+import { MailboxSwitches } from './mailbox-switches'
 import { TestResultLine } from './test-result'
 
 export function ConnectedRow({
@@ -22,6 +23,7 @@ export function ConnectedRow({
   deadLetters = [],
   requeueing,
   onRequeue,
+  assignment,
 }: {
   connection: ConnectionView
   busy: 'test' | 'remove' | undefined
@@ -36,6 +38,8 @@ export function ConnectedRow({
   deadLetters?: readonly DeadLetterView[]
   requeueing?: string
   onRequeue?: (id: string) => void
+  /** WP167：邮箱卡上的开关要按哪条岗位去读写（连接页的 owner 岗位）。 */
+  assignment?: string | undefined
 }): React.ReactNode {
   const { t, lang } = useApp()
   return (
@@ -96,6 +100,10 @@ export function ConnectedRow({
           : t('connections.last_tested', { at: formatDate(connection.last_tested_at, lang) })}
       </p>
       {connection.last_test === undefined ? null : <TestResultLine result={connection.last_test} />}
+      {/* WP167：邮箱卡上的三个开关（影子模式 / 挪进 KefuAgents / 标已读）+ 只读的「接管」 */}
+      {connection.service === 'imap_smtp' ? (
+        <MailboxSwitches connectionId={connection.id} assignment={assignment} />
+      ) : null}
       {deadLetters.length === 0 || onRequeue === undefined ? null : (
         <div
           className="flex flex-col gap-1.5 rounded-md border border-amber-500/40 bg-amber-500/5 px-2 py-1.5"

@@ -41,6 +41,7 @@ import { Link } from 'react-router-dom'
 import { StatusPill, WsAvatar, WsTag } from '@/components/design'
 import { Composer, type ComposeSeed, seedFrom } from '@/components/messages/composer'
 import { MessageBody } from '@/components/messages/message-body'
+import { PendingActions, PendingNavItem } from '@/components/messages/pending-confirm'
 import { focusMessage, USE_SUGGESTION_EVENT } from '@/components/rail/panels/mail-assistant-panel'
 import { Button } from '@/components/ui/button'
 import { Hint } from '@/components/ui/hint'
@@ -95,6 +96,8 @@ interface Filters {
   account?: string | undefined
   label?: string | undefined
   q: string
+  /** WP167：看「待确认」那一栏（分拣拿不准的信）。 */
+  pending?: boolean | undefined
 }
 
 export function MessagesPage(): ReactNode {
@@ -110,7 +113,8 @@ export function MessagesPage(): ReactNode {
   const labels = useQuery({ queryKey: ['messages', 'labels'], queryFn: listMessageLabels })
 
   const query = messageQuery({
-    folder_kind: filters.folder_kind,
+    // WP167：「待确认」那一栏不分文件夹（拿不准的信都还在收件箱那条路上）
+    ...(filters.pending === true ? { pending_route: true } : { folder_kind: filters.folder_kind }),
     ...(filters.account === undefined ? {} : { account: filters.account }),
     ...(filters.label === undefined ? {} : { label: filters.label }),
     ...(filters.q === '' ? {} : { q: filters.q }),
@@ -301,7 +305,7 @@ export function MessagesPage(): ReactNode {
               .flatMap((a) => a.folders)
               .filter((f) => f.kind === kind)
               .reduce((n, f) => n + f.unread, 0)
-            const active = filters.folder_kind === kind
+            const active = filters.folder_kind === kind && filters.pending !== true
             return (
               <button
                 key={kind}
@@ -316,7 +320,7 @@ export function MessagesPage(): ReactNode {
                     : 'text-ws-body hover:bg-sidebar-accent/60',
                 )}
                 onClick={() => {
-                  setFilters((f) => ({ ...f, folder_kind: kind }))
+                  setFilters((f) => ({ ...f, folder_kind: kind, pending: false }))
                   setSelected(undefined)
                 }}
               >
@@ -333,6 +337,14 @@ export function MessagesPage(): ReactNode {
               </button>
             )
           })}
+          {/* WP167：分拣拿不准的信在这里等人点一下（没开事项、没挪） */}
+          <PendingNavItem
+            active={filters.pending === true}
+            onSelect={() => {
+              setFilters((f) => ({ ...f, pending: true }))
+              setSelected(undefined)
+            }}
+          />
         </nav>
 
         <div className="flex flex-col gap-1">
@@ -438,16 +450,29 @@ export function MessagesPage(): ReactNode {
           ) : rows.length === 0 ? (
             <p className="px-2 py-6 text-center text-sm text-ws-muted-fg">{t('messages.empty')}</p>
           ) : (
-            rows.map((row, i) => (
-              <ThreadRow
-                key={row.thread_id}
-                row={row}
-                selected={row.thread_id === selected}
-                onOpen={() => {
-                  openThread(row, i)
-                }}
-              />
-            ))
+            rows.map((row, i) =>
+              filters.pending === true ? (
+                <div key={row.thread_id} className="flex flex-col">
+                  <ThreadRow
+                    row={row}
+                    selected={row.thread_id === selected}
+                    onOpen={() => {
+                      openThread(row, i)
+                    }}
+                  />
+                  <PendingActions row={row} onDone={refresh} />
+                </div>
+              ) : (
+                <ThreadRow
+                  key={row.thread_id}
+                  row={row}
+                  selected={row.thread_id === selected}
+                  onOpen={() => {
+                    openThread(row, i)
+                  }}
+                />
+              ),
+            )
           )}
         </div>
       </section>

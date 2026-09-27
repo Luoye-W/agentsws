@@ -135,6 +135,17 @@ const submitted: { service: string; fields: Record<string, string> }[] = []
 const opened: string[] = []
 const removed: string[] = []
 const tested: string[] = []
+/** WP167：邮箱卡上的开关（替身存一份；`null` = 这台机器没装消息同步，接口 404）。 */
+const switches = {
+  view: null as null | {
+    connection_id: string
+    shadow_mode: boolean
+    move: boolean
+    mark_read: boolean
+    takeover: boolean
+  },
+  writes: [] as { id: string; input: Record<string, boolean>; assignment?: string }[],
+}
 
 vi.mock('@/components/connections/bridge', () => ({
   openExternal: (url: string) => {
@@ -172,6 +183,16 @@ vi.mock('@/lib/api', async () => {
       tested.push(id)
       return OK_TEST
     },
+    getMailboxSwitches: async (id: string) => {
+      if (switches.view === null) throw new Error('404')
+      return { ...switches.view, connection_id: id }
+    },
+    setMailboxSwitches: async (id: string, input: Record<string, boolean>, assignment?: string) => {
+      switches.writes.push({ id, input, ...(assignment === undefined ? {} : { assignment }) })
+      if (switches.view === null) throw new Error('404')
+      switches.view = { ...switches.view, ...input }
+      return { ...switches.view, connection_id: id }
+    },
     removeConnection: async (id: string) => {
       removed.push(id)
       state.connections = []
@@ -192,6 +213,8 @@ beforeEach(() => {
   opened.length = 0
   removed.length = 0
   tested.length = 0
+  switches.view = null
+  switches.writes.length = 0
 })
 
 describe('连接页：只有工作区所有者能管', () => {
@@ -490,5 +513,58 @@ describe('WP44 状态条：代理 fake-IP 说人话', () => {
     renderWithProviders(<ConnectionsPage />)
     await screen.findByTestId('runtime-bar')
     expect(screen.queryByTestId('egress-fake-ip')).toBeNull()
+  })
+})
+
+describe('WP167：邮箱卡上的三个开关', () => {
+  const ON = {
+    connection_id: 'conn_mail_1',
+    shadow_mode: false,
+    move: true,
+    mark_read: true,
+    takeover: true,
+  }
+
+  it('三个开关 + 只读的「接管」；解释全在问号里，卡上只有开关与一句话', async () => {
+    switches.view = { ...ON }
+    state.connections = [MAIL_CONNECTION]
+    renderWithProviders(<ConnectionsPage />, '/connections')
+    const card = await screen.findByTestId('mailbox-switches')
+    expect(
+      within(card).getByTestId('mailbox-switch-shadow_mode').getAttribute('aria-checked'),
+    ).toBe('false')
+    expect(within(card).getByTestId('mailbox-switch-move').getAttribute('aria-checked')).toBe(
+      'true',
+    )
+    expect(within(card).getByTestId('mailbox-switch-mark_read').getAttribute('aria-checked')).toBe(
+      'true',
+    )
+    expect(within(card).getByTestId('mailbox-takeover').textContent).toBe('客服接管')
+    expect(within(card).queryByTestId('mailbox-shadow-badge')).toBeNull()
+    // 解释在问号里（aria-label），不铺在卡上
+    expect(within(card).getByLabelText(/上线前拿真邮箱对照着看/)).toBeDefined()
+  })
+
+  it('打开影子模式：按连接页那条所有者岗位写一次，卡上醒目标「只看不动」', async () => {
+    const user = userEvent.setup()
+    switches.view = { ...ON }
+    state.connections = [MAIL_CONNECTION]
+    renderWithProviders(<ConnectionsPage />, '/connections')
+    const card = await screen.findByTestId('mailbox-switches')
+    await user.click(within(card).getByTestId('mailbox-switch-shadow_mode'))
+    await waitFor(() => {
+      expect(switches.writes).toEqual([
+        { id: 'conn_mail_1', input: { shadow_mode: true }, assignment: 'asg_owner' },
+      ])
+    })
+    expect((await screen.findByTestId('mailbox-shadow-badge')).textContent).toContain('只看不动')
+    expect(screen.getByTestId('mailbox-switches').getAttribute('data-shadow')).toBe('true')
+  })
+
+  it('没装消息同步（接口 404）或不是邮箱：一个开关都不画', async () => {
+    state.connections = [MAIL_CONNECTION]
+    renderWithProviders(<ConnectionsPage />, '/connections')
+    await screen.findByTestId('connection-row')
+    expect(screen.queryByTestId('mailbox-switches')).toBeNull()
   })
 })
