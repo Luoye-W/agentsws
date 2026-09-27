@@ -362,7 +362,7 @@ describe('红人营销增值服务 · 本地那一头', () => {
     // 本机推上去的是正文（云端库里存成可读 JSON 那一半在云端的一致性测试里钉）
     const row = cloud.service.rawObjects().find((o) => o.id === 'cre_1')
     expect(row?.body).toBeDefined()
-    expect((row?.body as { display_name?: string }).display_name).toBe('Gadget Jonas')
+    expect((row?.body as { display_name?: string } | undefined)?.display_name).toBe('Gadget Jonas')
   })
 
   it('联系方式只上行那个 key 名，明文一个字节都不出本地', async () => {

@@ -17,25 +17,18 @@ import { describe, expect, it } from 'vitest'
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
 /** 云端包（将来进私有仓）。 */
-export const CLOUD_PACKAGES = [
-  'metering',
-  'cloud-entry',
-  'hosted',
-  'kol-cloud',
-  'kol-public',
-  'standby',
-]
+const CLOUD_PACKAGES = ['metering', 'cloud-entry', 'hosted', 'kol-cloud', 'kol-public', 'standby']
 /** 云端应用。 */
-export const CLOUD_APPS = ['cloud', 'cloud-worker', 'cloud-admin']
+const CLOUD_APPS = ['cloud', 'cloud-worker', 'cloud-admin']
 /** 开源这一侧的应用。 */
-export const OPEN_APPS = ['server', 'workstation', 'desktop', 'cli', 'extension']
+const OPEN_APPS = ['server', 'workstation', 'desktop', 'cli', 'extension']
 
 const FORBIDDEN_NAMES = [...CLOUD_PACKAGES, ...CLOUD_APPS].map((n) => `@agentsws/${n}`)
 const CODE = /\.(?:[cm]?[jt]sx?)$/u
 const SKIP = new Set(['node_modules', 'dist', 'build', 'out', '.vite', 'coverage', 'release'])
 
 /** 开源这一侧的包目录（相对仓库根）。 */
-export function openSideDirs(root = ROOT) {
+function openSideDirs(root = ROOT) {
   const packages = readdirSync(join(root, 'packages'))
     .filter((n) => statSync(join(root, 'packages', n)).isDirectory())
     .filter((n) => !CLOUD_PACKAGES.includes(n))
@@ -58,7 +51,7 @@ const SPECIFIER =
   /(?:\bfrom\s*|\bimport\s*\(\s*|\brequire\s*\(\s*|^\s*import\s+)(['"])([^'"]+)\1/gmu
 
 /** 一个说明符算不算钻进了云端：包名在禁单里，或者相对路径落进云端目录。 */
-export function forbiddenSpecifier(spec, fromFile, root = ROOT) {
+function forbiddenSpecifier(spec, fromFile, root = ROOT) {
   if (FORBIDDEN_NAMES.some((n) => spec === n || spec.startsWith(`${n}/`))) return true
   if (!spec.startsWith('.')) return false
   const target = relative(root, resolve(dirname(fromFile), spec))
@@ -71,7 +64,7 @@ export function forbiddenSpecifier(spec, fromFile, root = ROOT) {
 }
 
 /** 扫开源这一侧，回所有越界的地方（`文件: 说明`）。 */
-export function scanOpenSide(root = ROOT) {
+function scanOpenSide(root = ROOT) {
   const hits = []
   for (const dir of openSideDirs(root)) {
     const abs = join(root, dir)
