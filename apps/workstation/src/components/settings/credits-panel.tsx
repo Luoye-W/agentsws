@@ -256,6 +256,7 @@ export function CreditsPanel({ assignment }: { assignment?: string }): React.Rea
             <Separator />
             <TierCards
               tiers={tiers.data?.tiers}
+              unavailable={tiers.data?.unavailable_reason}
               pending={tiers.isPending}
               linked={false}
               busy={false}
@@ -384,6 +385,7 @@ export function CreditsPanel({ assignment }: { assignment?: string }): React.Rea
             <Separator />
             <TierCards
               tiers={tiers.data?.tiers}
+              unavailable={tiers.data?.unavailable_reason}
               pending={tiers.isPending}
               linked
               busy={order.isPending}
@@ -434,9 +436,19 @@ export function CreditsPanel({ assignment }: { assignment?: string }): React.Rea
           {showPricing ? (
             <div className="rounded-md border bg-muted/30 p-2.5">
               <p className="text-[11px] text-muted-foreground">
-                {t('credits.pricing.note', { as_of: pricing.data?.as_of ?? '' })}
-                {/* WP142：没关联时这一份是本地内置的（与云同源），以关联后云上那一份为准 */}
-                {linked ? null : (
+                {pricing.data?.source === 'unavailable' ? (
+                  // WP165：价目只在云上，从没取到过——说一句，不编数
+                  <span data-testid="credits-pricing-unavailable">
+                    {t('credits.pricing.unavailable')}
+                  </span>
+                ) : (
+                  t('credits.pricing.note', { as_of: pricing.data?.as_of ?? '' })
+                )}
+                {pricing.data?.source === 'cache' ? (
+                  <span data-testid="credits-pricing-cached"> {t('credits.pricing.cached')}</span>
+                ) : null}
+                {/* WP142：没关联时以关联后显示为准 */}
+                {linked || pricing.data?.source === 'unavailable' ? null : (
                   <span data-testid="credits-pricing-local"> {t('credits.pricing.local')}</span>
                 )}
               </p>
@@ -506,6 +518,7 @@ export function CreditsPanel({ assignment }: { assignment?: string }): React.Rea
  */
 function TierCards({
   tiers,
+  unavailable,
   pending,
   linked,
   busy,
@@ -513,6 +526,8 @@ function TierCards({
   onPick,
 }: {
   tiers: TopupTierView[] | undefined
+  /** WP165：价目只在云上，从没取到过时的那一句（有它就不画卡）。 */
+  unavailable?: string | undefined
   pending: boolean
   linked: boolean
   busy: boolean
@@ -532,6 +547,10 @@ function TierCards({
       <SafetyNote text={t('credits.tiers.safety')} />
       {pending ? (
         <Skeleton className="h-20 w-full" />
+      ) : unavailable !== undefined && (tiers ?? []).length === 0 ? (
+        <p className="text-[11px] text-muted-foreground" data-testid="credits-tiers-unavailable">
+          {t('credits.pricing.unavailable')}
+        </p>
       ) : (
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           {(tiers ?? []).map((tier: TopupTierView) => (

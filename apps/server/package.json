@@ -45,7 +45,6 @@
     "@agentsws/kol-core": "workspace:*",
     "@agentsws/learning": "workspace:*",
     "@agentsws/meetings": "workspace:*",
-    "@agentsws/metering": "workspace:*",
     "@agentsws/model-gateway": "workspace:*",
     "@agentsws/pr-core": "workspace:*",
     "@agentsws/roles": "workspace:*",

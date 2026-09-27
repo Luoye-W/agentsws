@@ -1293,6 +1293,8 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
       AGENTSWS_SECRETS_KEY: process.env.AGENTSWS_SECRETS_KEY ?? randomBytes(32).toString('base64'),
     },
   })
+  // WP165：价目只在云上——demo 从替身那份固定样例取一次（不出网），生图 / 看邮箱的积分价就有数了
+  await server.pricingCatalog.refresh()
 
   /**
    * WP28 交付 D：合成公司的**三个人都真的是成员**。

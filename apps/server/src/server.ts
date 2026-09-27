@@ -88,7 +88,6 @@ import {
   type RecheckStatus,
   zipFiles,
 } from '@agentsws/knowledge'
-import { buildPricing, entryFor, PRICING_FILE } from '@agentsws/metering'
 import {
   type AccountFetch,
   createModelGateway,
@@ -288,6 +287,7 @@ import {
 import { createPositions, type PositionsAssembly } from './positions.js'
 import { createPrStore, prDeckData, seedDemoPr } from './pr.js'
 import { createPrService } from './pr-service.js'
+import { createPricingCatalog, type PricingCatalogSource } from './pricing-catalog.js'
 import {
   createReconcileGuard,
   type ReconcileGuard,
@@ -797,6 +797,11 @@ export interface Server {
   secrets: SecretStore
   /** WP58（49 M1）：云账号关联（令牌在上面那个加密库里，key 名 `cloud.workspace_token`）。 */
   cloudAccount: CloudAccountAssembly
+  /**
+   * WP165：本机手上的价目（云上公开的 `/v1/pricing` + 本机缓存）。生产入口 listen 之后
+   * 调一次 `refresh()`；demo 也可以。测试不调就一个字节都不出机器。
+   */
+  pricingCatalog: PricingCatalogSource
   /** 25 定时与流程：调度器 + 流程引擎 + 各个消费者的登记。 */
   schedule: ScheduleAssembly
   /**
@@ -974,6 +979,18 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
 
   // 08 / 18：OpenConnector 的地址只在这一处解析（桌面壳读同名环境变量）
   const connectUrl = connectBaseUrl(env)
+
+  /*
+   * WP165（docs/83 §2）：价目只放云上。一台机器一份（不分品牌）：云上公开的 `/v1/pricing`
+   * + 数据目录里一份缓存。同步读的那几处（生图 / 看邮箱 / 体检的积分价）只读手上这一份，
+   * 从不因为同步读打网；生产入口 listen 之后顺手刷一次（`index.ts`），界面看价目时按需刷。
+   */
+  const pricingCatalog = createPricingCatalog({
+    clock,
+    baseUrl: cloudBaseUrl(env),
+    ...(options.cloudFetch === undefined ? {} : { fetch: options.cloudFetch }),
+    ...(dbDir === undefined ? {} : { dir: dbDir }),
+  })
 
   const kernel = await createKernel({ dbPath: file('events.db'), clock, random, env })
   const traceScope = createAsyncTraceScope()
@@ -2268,9 +2285,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       kol: () => kol,
       ...(dir === undefined ? {} : { dbDir: dir }),
       ...(options.cloudFetch === undefined ? {} : { fetch: options.cloudFetch }),
+      pricingCatalog,
     })
     const ownModels = createModels({
       clock,
+      pricing: pricingCatalog,
       gateway: ownGateway,
       secrets: brandSecrets,
       env,
@@ -5090,19 +5109,12 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         serverVersion: env.AGENTSWS_VERSION ?? '0.1.0',
         // WP119c：深链的基底（hello 的 workbench_url）；没绑端口就不出这一格。
         workbenchUrl: () => (boundPort === undefined ? undefined : `http://127.0.0.1:${boundPort}`),
-        // WP119c：看一次邮箱的积分价——价目是数据不是代码，取 pricing.json 那一条。
-        revealPriceCredits: () =>
-          entryFor(buildPricing(), KOL_LOOKUP_CAPABILITY)?.credits_per_unit ??
-          PRICING_FILE.entries.find((e) => e.capability === KOL_LOOKUP_CAPABILITY)
-            ?.credits_per_unit ??
-          0,
+        // WP119c：看一次邮箱的积分价——价目是数据不是代码。WP165 起价目只在云上：
+        // 读本机手上那一份（云上取过才有）；手上没有就是 0（插件那头显示「以云上为准」）。
+        revealPriceCredits: () => pricingCatalog.creditsFor(KOL_LOOKUP_CAPABILITY) ?? 0,
         // WP131：「采集后自动评分」的体检那一半——这个品牌连公共库的客户端 + 体检的价
         auditor: brand.kolPublic,
-        auditPriceCredits: () =>
-          entryFor(buildPricing(), KOL_AUDIT_CAPABILITY)?.credits_per_unit ??
-          PRICING_FILE.entries.find((e) => e.capability === KOL_AUDIT_CAPABILITY)
-            ?.credits_per_unit ??
-          0,
+        auditPriceCredits: () => pricingCatalog.creditsFor(KOL_AUDIT_CAPABILITY) ?? 0,
       }
     },
   })
@@ -5710,6 +5722,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     offboard,
     secrets,
     cloudAccount,
+    pricingCatalog,
     schedule,
     reconcile,
     ...(boot.runtime === undefined ? {} : { runtime: boot.runtime }),

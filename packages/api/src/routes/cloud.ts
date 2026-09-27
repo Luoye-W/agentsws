@@ -21,11 +21,11 @@ import type {
   KolCloudLocalStatus,
   KolCloudSyncRun,
   KolObjectKind,
+  LocalPricing,
+  LocalTopupTiers,
   MaybePromise,
-  Pricing,
   ServiceSubscription,
   TopupOrder,
-  TopupTiers,
   UsageGroup,
   UsageReport,
 } from '@agentsws/contracts'
@@ -62,8 +62,11 @@ export interface CloudActor {
 export interface CloudPort {
   /** 余额 + 本月用了多少积分。没关联账号回 `{ linked: false, reason }`，**不是错**。 */
   credits(actor: CloudActor): MaybePromise<CloudCreditsView>
-  /** 价目表（云上那份；取不到就回本地内置的那份）。 */
-  pricing(actor: CloudActor): MaybePromise<Pricing>
+  /**
+   * 价目表（云上公开的那份；取不到用本机存的上一份；从没取到过回一份空的、带
+   * `unavailable_reason`——WP165 起价目不再内置，不编数）。
+   */
+  pricing(actor: CloudActor): MaybePromise<LocalPricing>
   /**
    * 用量明细（按能力 / 按工作区 / 按天）。
    *
@@ -75,10 +78,10 @@ export interface CloudPort {
     filter: { group: UsageGroup; from?: string | undefined; to?: string | undefined },
   ): MaybePromise<UsageReport | undefined>
   /**
-   * 充值四档（67 §2，WP118）。取不到就回本地内置那一份——四张卡不该因为断网
-   * 就变成一片空白（与价目表同一条）。
+   * 充值四档（67 §2，WP118）。与价目表同一份、同一条路（WP165）：云上公开的 `/v1/pricing`
+   * + 本机缓存；从没取到过回空的、带 `unavailable_reason`。
    */
-  topupTiers(actor: CloudActor): MaybePromise<TopupTiers>
+  topupTiers(actor: CloudActor): MaybePromise<LocalTopupTiers>
   /**
    * 按档建一笔充值单，回一个**去云上付款的链接**。
    *
@@ -204,7 +207,7 @@ export function cloudRoutes(): Route[] {
         auth: 'bearer',
         assignment: true,
         authz: READ,
-        returns: 'Pricing',
+        returns: 'LocalPricing',
       },
       async (c, deps) => ok(c, await portOf(deps).pricing(actorOf(c))),
     ),
@@ -256,7 +259,7 @@ export function cloudRoutes(): Route[] {
         auth: 'bearer',
         assignment: true,
         authz: READ,
-        returns: 'TopupTiers',
+        returns: 'LocalTopupTiers',
       },
       async (c, deps) => ok(c, await portOf(deps).topupTiers(actorOf(c))),
     ),
