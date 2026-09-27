@@ -226,7 +226,7 @@ import { createPrivacyErase, type PrivacyErase } from './erase.js'
 // WP119（68）：浏览器插件的本地一面（配对表按机器、写库按品牌、转发由本机做）
 import { createExtensionContributor } from './extension-contribute.js'
 import { brandExtensionPort } from './extension-port.js'
-import { createGoogleReads } from './google-reads.js'
+import { createGoogleReads, type GoogleReads } from './google-reads.js'
 import {
   createHostedOwnerClient,
   ensureCloudModelDefault,
@@ -586,6 +586,11 @@ export interface ServerOptions {
    * （连接目录里那张卡能授权，查询词与页面的读口是下一版——本单不接真 GSC）。
    */
   searchConsoleFor?: (workspace_id: WorkspaceId) => SearchConsolePort | undefined
+  /**
+   * WP158：换掉某个品牌的 Search Console / GA4 读数层（demo 用替身连接器，不连真 Google）。
+   * 不给 = 按这个品牌的真连接经 OpenConnector 读。生产路径从不传它。
+   */
+  googleReadsFor?: (workspace_id: WorkspaceId) => GoogleReads | undefined
   /**
    * WP154：换掉搜索数据接口（测试与 demo 用替身）。不给 = 这个品牌自己那一份 WP155
    * 路由口（官方 / 自带 key / 不接）；没接时 SERP 检查与 GEO 探测跳过，其余照跑。
@@ -1751,14 +1756,16 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
      * 经连接器的只读 Action 读、按天缓存在内存里；Google 的令牌只在 OpenConnector 里。
      * 没连这两家时它什么都不做（面板那几块照旧「去连接」）。
      */
-    const googleReads = createGoogleReads({
-      workspace_id: ws,
-      clock,
-      connections: () => connections.liveConnections(),
-      connect: connections.connect,
-      appendEvent,
-      ...(dir === undefined ? {} : { dir }),
-    })
+    const googleReads =
+      options.googleReadsFor?.(ws) ??
+      createGoogleReads({
+        workspace_id: ws,
+        clock,
+        connections: () => connections.liveConnections(),
+        connect: connections.connect,
+        appendEvent,
+        ...(dir === undefined ? {} : { dir }),
+      })
     connections.onConnectionChange(() => {
       googleReads.invalidate()
     })
