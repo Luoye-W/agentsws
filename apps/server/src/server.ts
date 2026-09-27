@@ -50,7 +50,6 @@ import { blobKey, blobUri, openBlobStore } from '@agentsws/blob'
 import { designRoleFamily } from '@agentsws/brand-design'
 import type { PageFetch as BrandIntakeFetch } from '@agentsws/brand-intake'
 import type { ResolveMx } from '@agentsws/channels'
-import type { SearchFetch } from '@agentsws/cloud-entry'
 import type {
   ApprovalBus,
   ApprovalItem,
@@ -108,6 +107,7 @@ import {
   type RoleStore,
   rangeTargetOfProduct,
 } from '@agentsws/roles'
+import type { SearchFetch } from '@agentsws/search-providers'
 import {
   disconnectedSearchConsole,
   pendingSearchConsole,

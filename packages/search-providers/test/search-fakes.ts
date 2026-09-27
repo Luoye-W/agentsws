@@ -1,10 +1,10 @@
 /**
  * WP155 测试共用：录好的替身响应 + 一个记账的假 fetch（**不联网**）。
- * 替身响应的出处见开源包 `packages/search-providers/test/fixtures/search/README.md`（WP165：这里只留官方路由测试要的那一份）。
+ * 替身响应的出处见 `fixtures/search/README.md`。
  */
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import type { SearchFetch } from '@agentsws/search-providers'
+import type { SearchFetch } from '../src/provider.js'
 
 export const fixture = (name: string): unknown =>
   JSON.parse(readFileSync(join(__dirname, 'fixtures/search', `${name}.json`), 'utf8'))

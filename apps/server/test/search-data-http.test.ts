@@ -7,7 +7,7 @@
 import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { SearchFetch } from '@agentsws/cloud-entry'
+import type { SearchFetch } from '@agentsws/search-providers'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createServer, type Server } from '../src/index.js'
 import { SECRETS_KEY_ENV } from '../src/secret-store.js'

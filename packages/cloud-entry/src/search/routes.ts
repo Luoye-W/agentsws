@@ -34,18 +34,21 @@ import {
   unitCostMicros,
   WalletError,
 } from '@agentsws/metering'
+import {
+  judgeAnswer,
+  normalizeProbe,
+  normalizeSerpQuery,
+  type ProviderAnswer,
+  type ProviderSerp,
+  SearchDataError,
+  type SearchFetch,
+  type SearchProviderAdapter,
+  searchProviderOf,
+} from '@agentsws/search-providers'
 import type { Context } from 'hono'
 import type { EntryDeps, EntryEnv, EntryRoute } from '../types.js'
 import { EntryError, secretOf } from '../types.js'
-import { judgeAnswer, normalizeProbe, normalizeSerpQuery, SearchDataError } from './analyze.js'
 import { MemorySearchCache, SEARCH_CACHE_TTL_MS, type SearchCache } from './cache.js'
-import type {
-  ProviderAnswer,
-  ProviderSerp,
-  SearchFetch,
-  SearchProviderAdapter,
-} from './provider.js'
-import { searchProviderOf } from './providers/index.js'
 
 /** 官方那一侧的一句话（不带服务商名）。 */
 const OFFICIAL = '工坊官方数据接口'

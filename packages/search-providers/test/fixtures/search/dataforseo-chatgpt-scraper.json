@@ -1,0 +1,10 @@
+{"version":"0.1.20250814","status_code":20000,"status_message":"Ok.","cost":0.004,"tasks_count":1,"tasks_error":0,
+ "tasks":[{"id":"t3","status_code":20000,"status_message":"Ok.","cost":0.004,"result_count":1,"path":["v3","ai_optimization","chat_gpt","llm_scraper","live","advanced"],
+  "result":[{"keyword":"best portable charger for iphone","location_code":2840,"language_code":"en","model":"gpt-4o","check_url":"https://chatgpt.com/?q=best%20portable%20charger&hints=search","datetime":"2026-09-26 09:26:26 +00:00",
+   "markdown":"Here are strong options:\n\n1. **Anker Nano** — compact and fast.\n2. **Belkin BoostCharge** — reliable MagSafe.\n\nReviewers at Wirecutter also like these.",
+   "search_results":[{"type":"chatgpt_search_result","url":"https://www.nytimes.com/wirecutter/reviews/best-portable-chargers/?utm_source=chatgpt.com","domain":"www.nytimes.com","title":"The Best Portable Chargers","description":"...","breadcrumb":"nytimes.com"}],
+   "sources":[{"type":"chat_gpt_source","title":"Anker Nano","snippet":null,"domain":"www.anker.com","url":"https://www.anker.com/products/nano?utm_source=chatgpt.com","thumbnail":null,"source_name":"Anker","publication_date":null,"markdown":null}],
+   "fan_out_queries":["best portable charger iphone 2026"],
+   "brand_entities":[{"type":"chat_gpt_brand_entity","title":"Anker","category":"electronics","markdown":"Anker","urls":null}],
+   "se_results_count":0,"item_types":["chat_gpt_text"],"items_count":1,
+   "items":[{"type":"chat_gpt_text","rank_group":1,"rank_absolute":1,"markdown":"Here are strong options ...","sources":[{"type":"chat_gpt_source","title":"Belkin","domain":"www.belkin.com","url":"https://www.belkin.com/boostcharge/?utm_source=chatgpt.com"}],"brand_entities":[]}]}]}]}
