@@ -157,6 +157,33 @@ describe('WP162 端到端：挂了 email-sms 的职责（direct 替身上游）'
     expect(third).toContain('这条职责没有这个技能：seo-judgment')
   })
 
+  it('终审追加：read_skill 的结果不包外部围栏、开头标明是哪一本；别的工具结果照旧包；没登记的照旧被拒', async () => {
+    const { gateway, results } = await runOnce({
+      role_id: EMAIL.id,
+      skills: EMAIL.skills,
+      calls: [
+        { name: 'read_skill', input: { name: 'email-sms' } },
+        { name: 'shopify.docs.search', input: { query: 'email' } },
+        { name: 'read_skill', input: { name: 'seo-judgment' } },
+      ],
+      // 一个真能回 ok 的普通只读工具（Dev MCP 文档查询），拿来对照围栏
+      extra: {
+        devTools: {
+          toolNames: () => ['shopify.docs.search'],
+          call: async () => ({ text: 'Shopify Email 文档一段' }),
+        },
+      },
+    })
+    expect(results.map((r) => r.status)).toEqual(['ok', 'ok', 'blocked'])
+    const toolMsgs = (gateway.seen[3]?.messages ?? []).filter((m) => m.role === 'tool').map(textOf)
+    const skillMsg = toolMsgs.find((t) => t.includes('## 你做什么')) ?? ''
+    expect(skillMsg.startsWith('技能手册：email-sms')).toBe(true)
+    expect(skillMsg).not.toContain('<external_data>')
+    const docMsg = toolMsgs.find((t) => t.includes('Shopify Email 文档一段')) ?? ''
+    expect(docMsg).toContain('<external_data>')
+    expect(toolMsgs.some((t) => t.includes('这条职责没有这个技能：seo-judgment'))).toBe(true)
+  })
+
   it('读到的是叠加后的那一份：公司层加的规矩也在', async () => {
     const skills = createSkills({ clock, random: () => 0.5 })
     await seedDefaultSkill(skills, 'ws_1')

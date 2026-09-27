@@ -8,13 +8,14 @@
  */
 import type { ObjectRef, RunRequest } from '@agentsws/contracts'
 import { parseMcpToolName } from '@agentsws/contracts'
-import { EXTERNAL_FENCE, redactOutbound } from '@agentsws/core'
+import { EXTERNAL_FENCE, redactOutbound, redactOutboundText } from '@agentsws/core'
 import { orderTools } from '@agentsws/ontology'
 import type { CreateDraftResult } from '@agentsws/stand-ins'
 import {
   isMcpReadTool,
   OWNER_TOOL_DEF_BY_NAME,
   READ_SKILL_TOOL,
+  renderTrustedToolResult,
   SKILL_TOOL_DEF_BY_NAME,
 } from '@agentsws/stand-ins'
 import type { ToolDefinition } from '@deepseek-ai/dsh-tools'
@@ -34,6 +35,21 @@ import type { ToolSideEffect } from './types.js'
  */
 function renderToolResult(value: unknown): { type: 'text'; text: string }[] {
   return [{ type: 'text', text: EXTERNAL_FENCE.fencePayload(redactOutbound('tool_result', value)) }]
+}
+
+/**
+ * WP162 终审追加：只读工具结果的 render。`read_skill`（可信白名单里唯一的名字）回的是
+ * 技能手册正文，不包围栏、开头标明是哪一本——与 direct 那一侧同一个函数
+ * （`@agentsws/stand-ins` 的 `renderTrustedToolResult`）；别的工具照旧 {@link renderToolResult}。
+ */
+function renderReadResult(
+  name: string,
+  args: Record<string, unknown>,
+  value: unknown,
+): { type: 'text'; text: string }[] {
+  const trusted = renderTrustedToolResult(name, args, value)
+  if (trusted === undefined) return renderToolResult(value)
+  return [{ type: 'text', text: redactOutboundText('tool_result', trusted) }]
 }
 
 /** WP89：官方 `dsh-tool-bash` 的工具名（分类由 `gate.ts` 那一关先给出，见下）。 */
@@ -325,7 +341,7 @@ function readTool(name: string, hooks: ReadToolHooks): ToolDefinition {
     parameters: name === READ_SKILL_TOOL ? SKILL_PARAMS : READ_PARAMS,
     output: {
       schema: { type: 'json' },
-      render: (_args, value) => renderToolResult(value),
+      render: (args, value) => renderReadResult(name, args as Record<string, unknown>, value),
     },
     async execute(args, exec) {
       const input = Object.fromEntries(

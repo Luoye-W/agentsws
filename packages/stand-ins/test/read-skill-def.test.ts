@@ -9,9 +9,13 @@ import { describe, expect, it } from 'vitest'
 import {
   assemblePrompt,
   humanizeToolNames,
+  isTrustedResultTool,
   READ_SKILL_TOOL,
   READ_SKILL_TOOL_DEF,
+  renderTrustedToolResult,
+  SKILL_MANUAL_MARK,
   TOOL_WORDS_ZH,
+  TRUSTED_RESULT_TOOLS,
 } from '../src/index.js'
 
 const req = (allow: string[]): RunRequest =>
@@ -43,5 +47,31 @@ describe('read_skill 的定义', () => {
     const without = assemblePrompt(req(['get_order'])).tools
     expect(without.map((t) => t.name)).toEqual(['get_order'])
     expect(without[0]?.description).toBe('stand-in tool get_order')
+  })
+})
+
+describe('可信工具结果（WP162 终审追加）', () => {
+  it('白名单里只有 read_skill；带服务前缀也认', () => {
+    expect([...TRUSTED_RESULT_TOOLS]).toEqual([READ_SKILL_TOOL])
+    expect(isTrustedResultTool('read_skill')).toBe(true)
+    expect(isTrustedResultTool('agentsws.read_skill')).toBe(true)
+    for (const other of ['get_order', 'search_policies', 'read_page', 'list_positions'])
+      expect(isTrustedResultTool(other)).toBe(false)
+  })
+
+  it('read_skill 的正文：开头一行「技能手册：<name>」，不包围栏', () => {
+    const text = renderTrustedToolResult(
+      READ_SKILL_TOOL,
+      { name: ' email-sms ' },
+      '## 你做什么\n\n写邮件。',
+    )
+    expect(text?.startsWith(`${SKILL_MANUAL_MARK}email-sms`)).toBe(true)
+    expect(text).toContain('## 你做什么')
+    expect(text).not.toContain('external_data')
+  })
+
+  it('别的工具、或结果不是字符串：回 undefined（调用方照旧包围栏）', () => {
+    expect(renderTrustedToolResult('get_order', {}, 'x')).toBeUndefined()
+    expect(renderTrustedToolResult(READ_SKILL_TOOL, { name: 'a' }, { body: 'x' })).toBeUndefined()
   })
 })
