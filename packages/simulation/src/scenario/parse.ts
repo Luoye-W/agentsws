@@ -293,6 +293,7 @@ const EXPECTED_KEYS = [
   'campaign_send',
   // WP113（63 §4）
   'message_triage',
+  'message_intake',
   // WP67（48 §5.1）
   'kol_outreach',
   'kol_collaboration',
@@ -2267,6 +2268,18 @@ function parseExpected(source: string, raw: unknown): ScenarioExpected {
       moved_to: 'str',
       model_calls: 'num',
       confidence: 'num',
+      intake: 'str',
+      opened_matter: 'bool',
+      started_run: 'bool',
+    },
+    // WP167（63 §D「收信一个入口」）：这一轮所有信各去了哪一路
+    message_intake: {
+      support: 'num',
+      kol: 'num',
+      pending: 'num',
+      only_messages: 'num',
+      matters_opened: 'num',
+      runs_started: 'num',
     },
     kol_outreach: {
       forbidden_hits: 'strs',

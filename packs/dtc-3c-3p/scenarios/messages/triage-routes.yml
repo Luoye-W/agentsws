@@ -44,6 +44,17 @@ expected:
   message_triage:
     route: inbox
     moved: false
+    # WP167：供应商来信只进消息页——不开事项、不起 Run
+    intake: none
+    opened_matter: false
+    started_run: false
+  # WP167：客服两封（第二封是后续来信：归并进同一条事项，照样起 Run）、红人一封、供应商一封
+  message_intake:
+    support: 2
+    kol: 1
+    only_messages: 1
+    matters_opened: 2
+    runs_started: 2
   event_types:
     - simulation.message_triaged
   metrics:

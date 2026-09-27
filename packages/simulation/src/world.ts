@@ -26,7 +26,7 @@ import {
   rewriteAliasedAssignments,
 } from '@agentsws/catalog'
 // WP113（63 §4）：分拣那条链与真服务进程里跑的是**同一个函数**
-import { type TriageModel, triageMessage } from '@agentsws/channels'
+import { intakeOf, type MailIntake, type TriageModel, triageMessage } from '@agentsws/channels'
 import type {
   AdsCaps,
   ApprovalItem,
@@ -733,6 +733,15 @@ export interface MailTriageResult {
   /** 这一封花了几次模型（规则层命中时是 0）。 */
   model_calls: number
   reasons: string[]
+  /**
+   * WP167（docs/63 §D「收信一个入口」）：分拣之后去哪一路——`support` 交客服（开事项、起 Run）、
+   * `kol` 交红人、`pending` 进「待确认」、`none` 只进消息页。算法是服务进程里同一个 `intakeOf`。
+   */
+  intake: MailIntake
+  /** 这一封开了一条新事项吗（客服 / 红人那一路的新线程才开；订阅、通知一律不开）。 */
+  opened_matter: boolean
+  /** 这一封起了 Run 吗（只有交给客服那一路的才起）。 */
+  started_run: boolean
 }
 
 export interface MailOps {
@@ -5591,6 +5600,13 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
         },
         mailTriageModel,
       )
+      // WP167：分拣之后去哪一路（服务进程里同一个函数）。只有交给客服 / 红人那一路的新线程才开事项，
+      // 只有交给客服的才起 Run——订阅、通知、供应商、判不准的一律只进消息页
+      const intake = intakeOf({ triage: verdict, folder_kind: 'inbox' })
+      const opened_matter =
+        (intake === 'support' && !mailSupportThreads.has(thread_id)) ||
+        (intake === 'kol' && !mailKolThreads.has(thread_id))
+      const started_run = intake === 'support'
       // 岗位开着才真挪；挪了才记进那一侧的线程（下一封走线程归并，不花模型）
       const moved_to =
         verdict.route === 'support'
@@ -5613,6 +5629,9 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
         ...(moved_to === undefined ? {} : { moved_to }),
         model_calls: mailModelCalls - before,
         reasons: [...verdict.reasons],
+        intake,
+        opened_matter,
+        started_run,
       }
       appendEnvelope({
         schema_version: 1,
@@ -5634,6 +5653,9 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
           ...(moved_to === undefined ? {} : { moved_to }),
           model_calls: result.model_calls,
           reasons: result.reasons,
+          intake: result.intake,
+          opened_matter: result.opened_matter,
+          started_run: result.started_run,
         },
       })
       return result

@@ -31,6 +31,10 @@ expected:
     moved: false
     # 标签照打——"其他的也要打上对应标签"
     labels: [partnership]
+    # WP167：岗位没开 → 也不开事项、不起 Run（只进消息页）
+    intake: none
+    opened_matter: false
+    started_run: false
   event_types:
     - simulation.message_position_disabled
     - simulation.message_triaged

@@ -1267,6 +1267,30 @@ export interface ScenarioExpected {
     /** 这一封花了几次模型（规则层命中 = 0）。 */
     model_calls?: NumericAssertion
     confidence?: NumericAssertion
+    /** WP167：分拣之后去哪一路（`support` / `kol` / `pending` / `none`）。 */
+    intake?: string
+    /** WP167：这一封开没开新事项。 */
+    opened_matter?: boolean
+    /** WP167：这一封起没起 Run。 */
+    started_run?: boolean
+  }
+  /**
+   * WP167（docs/63 §D「收信一个入口」）：**这一轮所有信**加起来，各去了哪一路。
+   *
+   * 心脏是 `only_messages` 与 `runs_started`：订阅、通知、供应商信只进消息页——
+   * 不开事项、不起 Run、不花那一次模型钱；起 Run 的只有交给客服的那几封。
+   */
+  message_intake?: {
+    /** 交给客服那一路的封数。 */
+    support?: NumericAssertion
+    /** 交给红人那一路的封数。 */
+    kol?: NumericAssertion
+    /** 进「待确认」的封数。 */
+    pending?: NumericAssertion
+    /** 只进消息页的封数。 */
+    only_messages?: NumericAssertion
+    matters_opened?: NumericAssertion
+    runs_started?: NumericAssertion
   }
   /**
    * WP72 / 56 §2：那一条内容提案。

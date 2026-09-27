@@ -1326,6 +1326,27 @@
             "tokens_per_item": 0,
             "tool_calls": 0
           }
+        },
+        "messages/one-intake-only-support-runs": {
+          "metrics": {
+            "adoption_rate": 1,
+            "applied_changes": 0,
+            "blocked_proposals": 0,
+            "cost_base": 0.000131,
+            "escalations": 0,
+            "expired_approvals": 0,
+            "guardrail_hits": 0,
+            "intervention_rate": 0,
+            "judge_rule_score": 1,
+            "knowledge_gaps": 0,
+            "outbound_sent": 0,
+            "queue_latency_ms": 0,
+            "runs_failed": 0,
+            "sampling_reviews": 0,
+            "staged_changes": 0,
+            "tokens_per_item": 0,
+            "tool_calls": 0
+          }
         }
       }
     },
@@ -2653,6 +2674,27 @@
             "tokens_per_item": 0,
             "tool_calls": 0
           }
+        },
+        "messages/one-intake-only-support-runs": {
+          "metrics": {
+            "adoption_rate": 1,
+            "applied_changes": 0,
+            "blocked_proposals": 0,
+            "cost_base": 0.000095,
+            "escalations": 0,
+            "expired_approvals": 0,
+            "guardrail_hits": 0,
+            "intervention_rate": 0,
+            "judge_rule_score": 1,
+            "knowledge_gaps": 0,
+            "outbound_sent": 0,
+            "queue_latency_ms": 0,
+            "runs_failed": 0,
+            "sampling_reviews": 0,
+            "staged_changes": 0,
+            "tokens_per_item": 0,
+            "tool_calls": 0
+          }
         }
       }
     },
@@ -3974,6 +4016,27 @@
             "knowledge_gaps": 0,
             "outbound_sent": 0,
             "queue_latency_ms": 2700000,
+            "runs_failed": 0,
+            "sampling_reviews": 0,
+            "staged_changes": 0,
+            "tokens_per_item": 0,
+            "tool_calls": 0
+          }
+        },
+        "messages/one-intake-only-support-runs": {
+          "metrics": {
+            "adoption_rate": 1,
+            "applied_changes": 0,
+            "blocked_proposals": 0,
+            "cost_base": 0.000095,
+            "escalations": 0,
+            "expired_approvals": 0,
+            "guardrail_hits": 0,
+            "intervention_rate": 0,
+            "judge_rule_score": 1,
+            "knowledge_gaps": 0,
+            "outbound_sent": 0,
+            "queue_latency_ms": 0,
             "runs_failed": 0,
             "sampling_reviews": 0,
             "staged_changes": 0,
