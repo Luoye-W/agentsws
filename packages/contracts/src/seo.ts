@@ -124,6 +124,8 @@ export interface SeoSerpCheck {
   top_domains: string[]
   fetched_at: Iso8601
   source: string
+  /** WP166：在哪个市场看的（ISO 国家码，大写）。只探一个市场时也写。 */
+  market?: string
 }
 
 export interface SeoPick {
@@ -144,6 +146,11 @@ export interface SeoPick {
   /** `new_page` 车道：SERP 看过的结论（没接搜索数据接口就没有，`serp_skipped` 说为什么）。 */
   serp_check?: SeoSerpCheck
   serp_skipped?: string
+  /**
+   * WP166：好几个目标市场时每个市场各看一眼的结论（`serp_check` 是其中人群对的那一个）。
+   * 只有一个市场时不写。
+   */
+  serp_markets?: SeoSerpCheck[]
   /** 这一件落成了什么：改动卡 / 选题卡 / 事项（服务端回填）。 */
   outcome?: {
     kind: 'change' | 'topic' | 'matter' | 'dropped' | 'none'
@@ -154,6 +161,11 @@ export interface SeoPick {
      * 模型没配、超出每天上限、超预算、回文不合规矩时）。不是改文字的那几件不写。
      */
     draft?: 'model' | 'rules'
+    /**
+     * WP166：模型写初稿前读到这一页正文没有——`store`（店铺连接的只读口）/ `web`（公开网址）/
+     * `none`（没读到，卡上注明）。规则版不写。
+     */
+    body?: 'store' | 'web' | 'none'
   }
 }
 
@@ -233,6 +245,8 @@ export interface GeoQuestion {
 export interface GeoProbeRow {
   question: string
   platform: AiPlatform
+  /** WP166：在哪个市场问的（ISO 国家码，大写）。 */
+  market?: string
   brand_mentioned: boolean
   our_domain_cited: boolean
   cited_domains: string[]
@@ -243,6 +257,8 @@ export interface GeoProbeRow {
 export interface GeoGap {
   question: string
   platforms: AiPlatform[]
+  /** WP166：哪个市场缺位（每个市场分开算，不混在一起）。 */
+  market?: string
   /** `fix_page` = 我们有相关页面但没被引用 → 改那页；`pr_handoff` = 引用的都是站外 → 交公关。 */
   lane: 'fix_page' | 'pr_handoff'
   page?: string
@@ -262,6 +278,20 @@ export interface SeoWeeklyGeoPayload {
   notes: string[]
   /** 这一轮大概花了多少（官方数据接口按积分；自带 key 不扣积分）。 */
   estimate?: GeoCostEstimate
+  /** WP166：每个市场各自的可见度（按市场分开算，不混在一起）。 */
+  markets?: GeoMarketSummary[]
+}
+
+/** WP166：一个市场这一周的 AI 可见度小结。 */
+export interface GeoMarketSummary {
+  /** ISO 国家码（大写）。 */
+  market: string
+  /** 这个市场问了几个问题。 */
+  questions: number
+  /** 其中几个在某个平台上提到或引用了我们。 */
+  seen: number
+  /** 这个市场缺位几个。 */
+  gaps: number
 }
 
 /**
@@ -272,6 +302,11 @@ export interface GeoSettings {
   enabled: boolean
   /** 每周最多问几个（1–10）。 */
   max_questions: number
+  /**
+   * WP166：在面板上关掉探测的市场（ISO 国家码，大写）。只关探测（SERP 与 AI 问答都不查这几个），
+   * **不改**公司档案里的目标市场。没写 = 每个目标市场都探。
+   */
+  markets_off?: string[]
 }
 
 /** 每周大概花多少：问几个 × 几个平台 × 单价（官方那条路才有积分数）。 */
@@ -281,6 +316,10 @@ export interface GeoCostEstimate {
   route: 'official' | 'byo' | 'none'
   /** 官方数据接口：积分 / 周；自带 key 是 0；没接就不写。 */
   credits_per_week?: number
+  /** WP166：探几个市场（花费 = 问题 × 平台 × 市场 × 单价）。老数据没有 = 1 个。 */
+  markets?: number
+  /** WP166：探的是哪几个市场（ISO 国家码，大写）。 */
+  market_codes?: string[]
 }
 
 export type SeoReportPayload = SeoDailyPayload | SeoWeeklyRevenuePayload | SeoWeeklyGeoPayload

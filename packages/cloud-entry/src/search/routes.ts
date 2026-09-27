@@ -143,16 +143,20 @@ function fetchOf(deps: EntryDeps): SearchFetch {
   return (deps.fetch as SearchFetch | undefined) ?? ((u, i) => globalThis.fetch(u, i))
 }
 
-/** 缓存键：服务商 + 归一过的查询（同一家同一个问法才算同一次）。 */
+/**
+ * 缓存键：服务商 + 归一过的查询（同一家同一个问法才算同一次）。
+ * WP166：键里带市场（国家码）——每个目标市场分别探，美国的结果不能拿去当英国的；国家码大小写都认，
+ * 键里统一小写（`US` 与 `us` 是同一个市场）。
+ */
 export function serpCacheKey(provider: string, q: SerpResult['query']): string {
-  return `serp|${provider}|${q.engine}|${q.country}|${q.language}|${q.device ?? 'desktop'}|${q.query.toLowerCase()}`
+  return `serp|${provider}|${q.engine}|${q.country.toLowerCase()}|${q.language}|${q.device ?? 'desktop'}|${q.query.toLowerCase()}`
 }
 export function answerCacheKey(
   provider: string,
   platform: AiPlatform,
   p: { question: string; country: string; language: string },
 ): string {
-  return `ai|${provider}|${platform}|${p.country}|${p.language}|${p.question.toLowerCase()}`
+  return `ai|${provider}|${platform}|${p.country.toLowerCase()}|${p.language}|${p.question.toLowerCase()}`
 }
 
 /** 每个 `EntryDeps` 一份默认缓存（Compose 一个进程一份；Workers 一个组织对象一份）。 */

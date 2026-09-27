@@ -12,14 +12,20 @@ import type {
   SearchDataPort,
   SeoDailyPayload,
   SeoPick,
+  SeoSerpCheck,
   SitePage,
 } from '@agentsws/contracts'
+import { marketName } from './geo.js'
 import { DAILY_PICKS, type PickDraft, rankDrafts, toPick } from './picks.js'
 import { judgeSerpCrowd } from './serp.js'
 import { countSignals, detectSignals, type SignalOptions } from './signals.js'
 
-/** 一天最多看几次 SERP（一次一个词；官方数据接口按次扣积分，不能因为候选多就一直查）。 */
+/**
+ * 一天最多看几次 SERP（一次一个词；官方数据接口按次扣积分，不能因为候选多就一直查）。
+ * WP166：**每个市场**各这么多次（每个目标市场分别探，花费跟着乘市场数）。
+ */
 export const MAX_SERP_CHECKS_PER_DAY = 5
+export const NOTE_MARKETS_OFF = '每个市场的探测都在面板上关掉了，今天没看搜索结果'
 
 export const NOTE_GSC_MISSING = 'Search Console 还没连，接上才看得到每天值得动的几件事。'
 export const NOTE_SEARCH_DATA_MISSING =
@@ -33,6 +39,11 @@ export interface DailyInput {
   search: SearchDataPort
   /** SERP 按哪个国家 / 语言查（工作区设置）。 */
   country: string
+  /**
+   * WP166：按哪几个目标市场分别查（ISO 国家码）。给了就每个市场各看一眼、盖过 `country`；
+   * 给空数组 = 每个市场的探测都关了（跳过 SERP）。不给 = 只看 `country` 那一个（老口径）。
+   */
+  countries?: readonly string[]
   language: string
   our_domains: readonly string[]
   date: string
@@ -60,15 +71,16 @@ export async function buildDaily(input: DailyInput): Promise<SeoDailyPayload> {
   const hits = detectSignals(input.rows, input.pages, input.signals)
   const drafts = rankDrafts(hits, input.rows)
   const status = await input.search.status()
-  let serpBudget = MAX_SERP_CHECKS_PER_DAY
+  const markets = input.countries ?? [input.country]
+  let serpBudget = MAX_SERP_CHECKS_PER_DAY * Math.max(1, markets.length)
   const picks: SeoPick[] = []
   let skippedNote = false
   for (const d of drafts) {
     if (picks.length >= DAILY_PICKS) break
     const pick = toPick(d, picks.length + 1)
     if (d.lane === 'new_page') {
-      const checked = await checkNewPage(d, pick, input, status.configured, serpBudget)
-      if (checked.used) serpBudget -= 1
+      const checked = await checkNewPage(d, pick, input, markets, status.configured, serpBudget)
+      serpBudget -= checked.used
       if (checked.killed !== undefined) {
         notes.push(checked.killed)
         continue
@@ -92,35 +104,62 @@ export async function buildDaily(input: DailyInput): Promise<SeoDailyPayload> {
   }
 }
 
+/**
+ * 新页面那一件看 SERP。WP166：每个目标市场各看一眼——**有一个市场人群对**就可以写（选题卡上
+ * 带着每个市场的结论）；**每个市场都不对**才划掉；有市场没查到、又没有一个对的，照实说没查到。
+ * 只有一个市场时说法与原来一字不差。
+ */
 async function checkNewPage(
   d: PickDraft,
   pick: SeoPick,
   input: DailyInput,
+  markets: readonly string[],
   configured: boolean,
   budget: number,
-): Promise<{ used: boolean; killed?: string }> {
+): Promise<{ used: number; killed?: string }> {
   if (!configured) {
     pick.serp_skipped = '搜索数据接口还没接'
-    return { used: false }
+    return { used: 0 }
   }
-  if (budget <= 0) {
+  if (markets.length === 0) {
+    pick.serp_skipped = NOTE_MARKETS_OFF
+    return { used: 0 }
+  }
+  if (budget < markets.length) {
     pick.serp_skipped = '今天看搜索结果的次数用完了，明天再看'
-    return { used: false }
+    return { used: 0 }
   }
-  try {
-    const serp = await input.search.serp({
-      query: d.row.query,
-      engine: 'google',
-      country: input.country,
-      language: input.language,
-    })
-    const check = judgeSerpCrowd(serp, input.our_domains)
-    if (!check.right_crowd) return { used: true, killed: `「${d.row.query}」：${check.reason}` }
-    pick.serp_check = check
-    return { used: true }
-  } catch (err) {
-    // 拉不到照实说，不当成"人群对"——这一件留在卡上，但不出选题卡
-    pick.serp_skipped = `这次没查到搜索结果（${(err instanceof Error ? err.message : String(err)).slice(0, 80)}）`
-    return { used: true }
+  const many = markets.length > 1
+  const checks: SeoSerpCheck[] = []
+  let error: string | undefined
+  for (const country of markets) {
+    try {
+      const serp = await input.search.serp({
+        query: d.row.query,
+        engine: 'google',
+        country,
+        language: input.language,
+      })
+      checks.push({ ...judgeSerpCrowd(serp, input.our_domains), market: country.toUpperCase() })
+    } catch (err) {
+      error ??= (err instanceof Error ? err.message : String(err)).slice(0, 80)
+    }
   }
+  const used = markets.length
+  const right = checks.find((c) => c.right_crowd)
+  if (right !== undefined) {
+    pick.serp_check = right
+    if (many) pick.serp_markets = checks
+    return { used }
+  }
+  if (error === undefined) {
+    const why = many
+      ? checks.map((c) => `${marketName(c.market ?? '')}：${c.reason}`).join('；')
+      : (checks[0]?.reason ?? '')
+    return { used, killed: `「${d.row.query}」：${why}` }
+  }
+  // 拉不到照实说，不当成"人群对"——这一件留在卡上，但不出选题卡
+  pick.serp_skipped = `这次没查到搜索结果（${error}）`
+  if (many && checks.length > 0) pick.serp_markets = checks
+  return { used }
 }

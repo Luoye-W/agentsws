@@ -55365,6 +55365,14 @@
                         "type": "integer",
                         "minimum": 1,
                         "maximum": 10
+                      },
+                      "markets_off": {
+                        "maxItems": 60,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "pattern": "^[A-Za-z]{2}$"
+                        }
                       }
                     }
                   }

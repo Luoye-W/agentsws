@@ -1828,18 +1828,30 @@ const QUERY_LIST: QueryDef[] = [
       const payload = latestSeoReport(ctx, 'weekly_geo')
       const gaps = Array.isArray(payload?.gaps) ? payload.gaps.filter(isRecord) : []
       const probes = Array.isArray(payload?.rows) ? payload.rows.filter(isRecord) : []
-      const byQuestion = new Map<string, { hit: number; total: number }>()
+      // WP166：好几个目标市场时**按市场分开**（每个市场各算各的，不混在一起算可见度）
+      const marketOf = (r: Record<string, unknown>): string =>
+        typeof r.market === 'string' ? r.market : ''
+      const many = new Set(probes.map(marketOf)).size > 1
+      const byQuestion = new Map<
+        string,
+        { market: string; question: string; hit: number; total: number }
+      >()
       for (const r of probes) {
         const q = String(r.question ?? '')
-        const cur = byQuestion.get(q) ?? { hit: 0, total: 0 }
+        const market = many ? marketOf(r) : ''
+        const key = `${market}|${q}`
+        const cur = byQuestion.get(key) ?? { market, question: q, hit: 0, total: 0 }
         cur.total += 1
         if (r.brand_mentioned === true || r.our_domain_cited === true) cur.hit += 1
-        byQuestion.set(q, cur)
+        byQuestion.set(key, cur)
       }
-      const rows = [...byQuestion.entries()].map(([question, c]) => {
-        const gap = gaps.find((g) => g.question === question)
+      const rows: Record<string, string>[] = [...byQuestion.values()].map((c) => {
+        const gap = gaps.find(
+          (g) => g.question === c.question && (!many || marketOf(g) === c.market),
+        )
         return {
-          question,
+          ...(many ? { market: regionName(c.market) } : {}),
+          question: c.question,
           seen: `${c.hit} / ${c.total} 个平台`,
           advice: gap === undefined ? '' : String(gap.suggestion ?? ''),
         }
@@ -1854,6 +1866,7 @@ const QUERY_LIST: QueryDef[] = [
       }
       return {
         columns: [
+          ...(many ? [{ key: 'market', label: '市场' }] : []),
           { key: 'question', label: '买家会问的问题' },
           { key: 'seen', label: '提到或引用我们' },
           { key: 'advice', label: '缺位怎么补' },
@@ -2150,4 +2163,13 @@ export function runQuery(name: string, ctx: QueryContext, range: RangeName): Que
   if (!sourceStatus(ctx, def.source)) return { status: 'not_connected', source: def.source }
   const windows = rangeWindows(range, ctx.now, ctx.tz_offset_minutes)
   return { status: 'ok', source: def.source, data: def.run(ctx, windows, range) }
+}
+
+/** WP166：国家码 → 中文国名（面板上「市场」那一列）。认不出来原样给。 */
+function regionName(code: string): string {
+  try {
+    return new Intl.DisplayNames(['zh-CN'], { type: 'region' }).of(code.toUpperCase()) ?? code
+  } catch {
+    return code
+  }
 }

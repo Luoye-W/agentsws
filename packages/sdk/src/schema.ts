@@ -43251,6 +43251,7 @@ export interface operations {
           settings?: {
             enabled?: boolean
             max_questions?: number
+            markets_off?: string[]
           }
         }
       }

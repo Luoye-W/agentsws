@@ -1264,6 +1264,11 @@ const zh: Table = {
   'kind.seo_topic': '新页面选题',
   'seo.geo.title': '买家会问的问题（每周拿去问各 AI 平台）',
   'seo.geo.cost': '每周问 {n} 个 × {p} 个平台，约 {c} 积分',
+  'seo.geo.cost_markets': '每周问 {n} 个 × {p} 个平台 × {m} 个市场，约 {c} 积分',
+  'seo.geo.markets': '探测哪些市场',
+  'seo.geo.markets.hint':
+    '每个目标市场分别探、分别算可见度。这里只关探测，不改公司档案；改目标市场去设置页「公司档案」。',
+  'seo.geo.markets.default': '档案里没写，按默认',
   'seo.geo.cost.byo': '用你自己的搜索数据 key，不扣积分',
   'seo.geo.cost.unknown': '搜索数据接口还没接：先不探测，也不花钱',
   'seo.geo.off': '每周探测关着：不问、不花钱',
@@ -4211,6 +4216,11 @@ const en: Table = {
   'kind.seo_topic': 'New page topic',
   'seo.geo.title': 'Questions buyers ask (asked to AI platforms weekly)',
   'seo.geo.cost': '{n} questions × {p} platforms a week, about {c} credits',
+  'seo.geo.cost_markets': '{n} questions × {p} platforms × {m} markets a week, about {c} credits',
+  'seo.geo.markets': 'Markets to check',
+  'seo.geo.markets.hint':
+    'Each target market is checked and scored on its own. Turning one off here only stops checking — your company profile stays as is.',
+  'seo.geo.markets.default': 'Not in your profile, using the default',
   'seo.geo.cost.byo': 'Using your own search-data key — no credits',
   'seo.geo.cost.unknown': 'Search data not connected yet: no probing, no cost',
   'seo.geo.off': 'Weekly probing is off: nothing asked, nothing spent',

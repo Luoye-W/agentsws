@@ -5589,14 +5589,21 @@ export interface GeoQuestionData {
 
 export interface GeoQuestionsData {
   questions: GeoQuestionData[]
-  settings: { enabled: boolean; max_questions: number }
+  /** WP166：`markets_off` = 面板上关掉探测的市场（只关探测，不改公司档案）。 */
+  settings: { enabled: boolean; max_questions: number; markets_off?: string[] }
   /** 每周大概花多少（官方数据接口才有积分数；自带 key 是 0；没接不写）。 */
   estimate: {
     questions: number
     platforms: number
     route: 'official' | 'byo' | 'none'
     credits_per_week?: number
+    /** WP166：探几个市场（花费 = 问题 × 平台 × 市场 × 单价）。 */
+    markets?: number
+    market_codes?: string[]
   }
+  /** WP166：目标市场（公司档案里的；没写就是默认那一个）与这周探不探。 */
+  markets?: { code: string; probing: boolean }[]
+  markets_from?: 'brand_profile' | 'default'
 }
 
 export const getGeoQuestions = (assignment?: string): Promise<GeoQuestionsData> =>
@@ -5605,7 +5612,7 @@ export const getGeoQuestions = (assignment?: string): Promise<GeoQuestionsData> 
 export const setGeoQuestions = (
   input: {
     questions?: { id?: string; text: string; enabled: boolean }[]
-    settings?: { enabled?: boolean; max_questions?: number }
+    settings?: { enabled?: boolean; max_questions?: number; markets_off?: string[] }
   },
   assignment?: string,
 ): Promise<GeoQuestionsData> =>
