@@ -33,6 +33,7 @@
     "packages/contracts/src/kol-cloud.ts",
     "packages/contracts/src/kol-public.ts",
     "packages/contracts/src/kol.ts",
+    "packages/contracts/src/markets.ts",
     "packages/contracts/src/meetings.ts",
     "packages/contracts/src/messages.ts",
     "packages/contracts/src/model.ts",
@@ -93,7 +94,7 @@
     "packages/roles/roles/social/x.yml",
     "packages/roles/roles/social/youtube.yml"
   ],
-  "source_digest": "9879e1b56fddd10cf6fd38c457ef6c83",
+  "source_digest": "3b39b7428e7168a08ce475e13a81a832",
   "objects": [
     {
       "id": "ad",
