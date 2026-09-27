@@ -24,6 +24,7 @@
 
 import { join } from 'node:path'
 import {
+  AMAZON_ROLE_ID,
   ARCHIVE_MARK_READ_DEFAULT,
   BlobBackedRawStore,
   ChannelInboundPipeline,
@@ -38,6 +39,7 @@ import {
   type FolderSyncFault,
   ImapMailSource,
   type Mailer,
+  type MailHandleOutcome,
   type MailSource,
   MemoryClawBotStateStore,
   MemoryDedupeStore,
@@ -57,6 +59,7 @@ import {
   SqliteRawStore,
   type SubChannelHints,
   type SubChannelVerdict,
+  type SupportMailboxSwitches,
 } from '@agentsws/channels'
 import type {
   ApprovalItem,
@@ -95,6 +98,7 @@ import {
 import type { BackendResult } from '@agentsws/txn'
 import type { Work } from '@agentsws/work'
 import type { MailAccount } from './connections.js'
+import { mailboxActionEvent } from './mailbox-actions.js'
 
 /** 出站被急停挡下时回给执行器的那一条。 */
 export const OUTBOUND_HALTED = '出站已急停（AGENTSWS_HALT=outbound 或对账未完成），这封信没有发出'
@@ -126,6 +130,23 @@ export function isArchiveFolder(folder: string, configured?: string | null): boo
   const low = folder.toLowerCase()
   const names = [configured ?? ARCHIVE_FOLDER, 'agentsws']
   return names.some((n) => n.toLowerCase() === low)
+}
+
+/**
+ * WP163：哪些路由算「客服」（渠道这一路只挪这些路由上的信）。
+ * 与 `messages.ts` 判「客服岗位开没开」的那张表同口径，外加 Amazon 那条。
+ */
+const SUPPORT_ROUTE_PREFIXES = [
+  'dtc.support',
+  'dtc.aftersales',
+  'dtc.live-chat',
+  'support.',
+  AMAZON_ROLE_ID,
+]
+
+export function isSupportRoute(role_id: string | undefined): boolean {
+  if (role_id === undefined) return false
+  return SUPPORT_ROUTE_PREFIXES.some((p) => role_id === p || role_id.startsWith(p))
 }
 
 /** 单轮对账的扫描上限；落后的下一分钟补上。 */
@@ -238,6 +259,22 @@ export interface ChannelsOptions {
   archive_folder?: string | null
   /** WP55：归档时顺手标已读（默认开）。 */
   archive_mark_read?: boolean
+  /**
+   * WP163（docs/63 §D「挪信归谁」）：这几只邮箱的挪信**由谁负责**。
+   *
+   * - `'channel'`（缺省）：只装了渠道、没装消息同步时——渠道这一路只把**判成客服**的信
+   *   （进了客服路由、建了客服线程、客服岗位开着）标已读并挪进归档文件夹；
+   * - `'message_sync'`：消息同步也在扫这只邮箱（服务进程里就是这样）——挪信归它
+   *   （它有分拣），渠道这一路**一下都不动邮箱**，免得两处都挪、互相挪来挪去。
+   */
+  mailbox_moves?: 'channel' | 'message_sync'
+  /**
+   * WP163：老产品 KefuAgent 的另两个开关（影子模式 / 挪信）。接管开关就是
+   * `archive_folder`（`null` = 关），标已读开关就是 `archive_mark_read`。
+   */
+  support_mailbox?: Partial<Pick<SupportMailboxSwitches, 'shadow_mode' | 'move'>>
+  /** WP163：客服岗位开没开（每次现查）。不给 = 当开着（老行为）。 */
+  supportEnabled?(): boolean
   /**
    * WP125（72 §P0-1）：**客服判断层**（入站那一半）。
    *
@@ -651,6 +688,29 @@ export function createChannels(options: ChannelsOptions): ChannelsAssembly {
     })
   }
 
+  /**
+   * WP163：这封信算不算「判成客服」（照老产品：非客服信原地不动、不标已读）。
+   *
+   * 渠道这一路没有分拣，所以口径是**它自己的路由结论 + 有没有建成客服线程**：
+   * 进了客服路由（`dtc.support` / `amz.support` …）、工作模型里有钉着这条线程的事项、
+   * 客服岗位开着。去重命中的（这封早处理过）一律不再动。
+   */
+  const supportOutcome = (out: { event?: InboundEvent; deduped: boolean }): MailHandleOutcome => {
+    const event = out.event
+    if (out.deduped || event === undefined) return { support: false }
+    if (!isSupportRoute(event.routing.role_id)) return { support: false }
+    const thread = event.thread?.external_id
+    const ref = thread === undefined ? undefined : threadRef(thread)
+    const hasThread =
+      ref !== undefined &&
+      (options.work
+        ?.listMatters({ kind: 'conversation' })
+        .some((m) => m.context.pinned.some((p) => p.type === ref.type && p.id === ref.id)) ??
+        false)
+    const enabled = options.supportEnabled?.() ?? true
+    return hasThread && enabled ? { support: true } : { support: true, skip: 'handoff_refused' }
+  }
+
   // ── 一个账号的装配 ─────────────────────────────────────────────────
   const build = (account: MailAccount): MailChannel => {
     const source =
@@ -692,11 +752,21 @@ export function createChannels(options: ChannelsOptions): ChannelsAssembly {
       // 卡住整只邮箱、两个进程同时扫同一只邮箱。
       mailbox_state: mailboxState,
       scan_owner: `ws_${workspace_id}`,
-      // `null` = 关掉归档（`??` 会把 null 当成"没给"，所以单独判）
-      ...(options.archive_folder === null
+      // `null` = 关掉归档（`??` 会把 null 当成"没给"，所以单独判）。
+      // WP163：挪信归消息同步时，这一路不给归档文件夹 = 一下都不动邮箱（docs/63 §D）
+      ...(options.archive_folder === null || options.mailbox_moves === 'message_sync'
         ? {}
         : { archive_folder: options.archive_folder ?? ARCHIVE_FOLDER }),
       archive_mark_read: options.archive_mark_read ?? ARCHIVE_MARK_READ_DEFAULT,
+      ...(options.support_mailbox === undefined
+        ? {}
+        : { support_mailbox: options.support_mailbox }),
+      // WP163：每个邮箱动作一条事件（原因码 + 文件夹 + uid，没有正文）
+      on_mailbox_action: (record) => {
+        options.appendEvent(
+          mailboxActionEvent({ workspace_id, actor_id: 'channel:email', at: clock.now(), record }),
+        )
+      },
       on_folder_fault: (fault) => {
         options.appendEvent({
           schema_version: 1,
@@ -798,12 +868,15 @@ export function createChannels(options: ChannelsOptions): ChannelsAssembly {
           // 放开手不管的话「拉完一轮」就只是「网络收完了」，不是「处理完了」。
           messages += await channel.adapter.poll(async (rawMail) => {
             try {
-              await channel.pipeline.ingest('email', rawMail, workspace_id)
+              const out = await channel.pipeline.ingest('email', rawMail, workspace_id)
+              // WP163：告诉适配器这封信判没判成客服（只有客服信才标已读、挪进 KefuAgents）
+              return supportOutcome(out)
             } catch (e) {
-              // 一封信解析不了不该让这一轮剩下的信都拉不进来
+              // 一封信解析不了不该让这一轮剩下的信都拉不进来；它也不算客服信，原地不动
               failed.push(
                 `${channel.account.address}: ${e instanceof Error ? e.message : String(e)}`,
               )
+              return { support: false } satisfies MailHandleOutcome
             }
           })
         } catch (e) {

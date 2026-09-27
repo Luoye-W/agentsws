@@ -39,6 +39,7 @@ import type {
   RawStore,
   SuggestModel,
   SuggestRequest,
+  SupportMailboxSwitches,
   TriageContext,
   TriageModel,
 } from '@agentsws/channels'
@@ -91,6 +92,7 @@ import { sha256 } from '@agentsws/core'
 import type { Work } from '@agentsws/work'
 import type { DirectMailInput, DirectMailResult } from './channels.js'
 import type { MailAccount } from './connections.js'
+import { MailboxActionFailures, mailboxActionEvent, maskAddress } from './mailbox-actions.js'
 
 /** 客服岗位的那几条职责（开了其中任何一条就算"启用了客服岗位"）。 */
 const SUPPORT_ROLE_PREFIXES = ['dtc.support', 'dtc.aftersales', 'dtc.live-chat', 'support.']
@@ -153,6 +155,13 @@ export interface MessagesOptions {
     subject?: string
     from?: string
   }): void | Promise<void>
+  /**
+   * WP163：判成客服的信在邮箱里怎么动——老产品 KefuAgent 的四个开关（影子模式 /
+   * 接管 / 挪信 / 标已读）。**每封现查**。不给 = 老产品的默认值（全开、影子关）。
+   *
+   * 挪信只由消息同步负责（docs/63 §D「挪信归谁」）：渠道那一路在服务进程里不再挪信。
+   */
+  supportMailbox?(): Partial<SupportMailboxSwitches>
 }
 
 /**
@@ -337,11 +346,19 @@ export function createMessages(options: MessagesOptions): MessagesAssembly {
       .some((m) => m.context.pinned.some((p) => p.type === 'thread' && ids.has(p.id)))
   }
 
-  const triageCtx = (): TriageContext => ({
+  /**
+   * WP163：分拣第 ① 层（线程归并）只认**后续来信**——带 In-Reply-To / References 的那种。
+   *
+   * 同一拍里渠道那一路（`channels.ts`）先跑，它会给 INBOX 里**每一封**新信都开一条
+   * 钉着自己线程的事项；要是一封全新的群发信也拿自己的线程 id 去对，就会"命中客服已有
+   * 线程"、被挪进 `KefuAgents`——正是 WP163 要堵的那条缝。63 §D ① 的原话本来就是
+   * "In-Reply-To / References 命中"。
+   */
+  const triageCtx = (followUp = true): TriageContext => ({
     support_enabled: supportEnabled(),
     kol_enabled: kolEnabled(),
-    isSupportThread: (id, refs) => supportEnabled() && knownThread(id, refs),
-    isKolThread: (id, refs) => kolEnabled() && knownThread(id, refs),
+    isSupportThread: (id, refs) => followUp && supportEnabled() && knownThread(id, refs),
+    isKolThread: (id, refs) => followUp && kolEnabled() && knownThread(id, refs),
     senderRules: rulesCache,
     model_halted: options.halt.isHalted('model') || options.halt.isHalted('all'),
     at: clock.now(),
@@ -349,6 +366,9 @@ export function createMessages(options: MessagesOptions): MessagesAssembly {
 
   /** 发件人规则在同步那一轮里要被读很多次，开轮时刷一次就够。 */
   let rulesCache: SenderRule[] = []
+
+  /** WP163：每只邮箱最近一次没动成的邮箱动作（「消息」页左栏那一行）。 */
+  const mailboxFailures = new MailboxActionFailures()
 
   const sync = new MailboxSync({
     clock,
@@ -370,7 +390,7 @@ export function createMessages(options: MessagesOptions): MessagesAssembly {
           headers: record.headers,
           has_attachments: record.attachments.length > 0,
         },
-        triageCtx(),
+        triageCtx(record.in_reply_to !== undefined || record.references.length > 0),
         triageModel,
       ),
     /**
@@ -410,6 +430,15 @@ export function createMessages(options: MessagesOptions): MessagesAssembly {
         })
       }
       return true
+    },
+    // WP163：老产品的四个开关每封现查；每个动作一条事件 + 记住最近一次失败
+    ...(options.supportMailbox === undefined
+      ? {}
+      : { support_mailbox: () => options.supportMailbox?.() ?? {} }),
+    on_mailbox_action: (record) => {
+      const at = clock.now()
+      mailboxFailures.note(record, at)
+      options.appendEvent(mailboxActionEvent({ workspace_id, actor_id: 'messages', at, record }))
     },
     on_error: (e) => logQuiet('message_sync_failed', '', e),
     on_folder_fault: (fault) => {
@@ -476,11 +505,13 @@ export function createMessages(options: MessagesOptions): MessagesAssembly {
       const out: MessageAccountView[] = []
       for (const address of all) {
         const folders = await store.folders(address)
+        const failure = mailboxFailures.of(address)
         out.push({
           address,
           unread: folders.reduce((n, f) => n + (f.kind === 'inbox' ? f.unread : 0), 0),
           folders,
           backfill_floor: sync.backfillFloor(address),
+          ...(failure === undefined ? {} : { last_mailbox_failure: failure }),
         })
       }
       return { accounts: out }
@@ -843,12 +874,8 @@ export function createMessages(options: MessagesOptions): MessagesAssembly {
 
 /* ── 小零件 ───────────────────────────────────────────────────────────── */
 
-/** 63 §10：日志里的地址一律遮掩（`ann@customer.example` → `a***@customer.example`）。 */
-export function maskAddress(address: string): string {
-  const at = address.indexOf('@')
-  if (at <= 0) return address === '' ? '' : '***'
-  return `${address[0] ?? ''}***${address.slice(at)}`
-}
+/** 63 §10：日志里的地址一律遮掩（WP163 起实现挪到 `mailbox-actions.ts`，两处共用）。 */
+export { maskAddress }
 
 /** 标签同步成 IMAP keyword 时的名字（前缀避开别的软件自己的 keyword）。 */
 export function keywordOf(label: string): string {
