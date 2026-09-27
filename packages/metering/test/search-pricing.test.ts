@@ -22,14 +22,14 @@ function marginOf(price: number, costKey: string): number {
 describe('WP155 搜索数据价目', () => {
   const pricing = buildPricing()
 
-  it('两条都在 data 块、按次、有来历、未核（等 Luoye 定）', () => {
+  it('两条都在 data 块、按次、有来历、已核（Luoye 09-27：不低于毛利 80% 即可）', () => {
     for (const cap of ['data.search.serp', 'data.search.ai_answer']) {
       const raw = PRICING_FILE.entries.find((e) => e.capability === cap)
       expect(raw, cap).toBeDefined()
       expect(raw?.block).toBe('data')
       expect(raw?.unit).toBe('call')
       expect(raw?.basis).toMatch(/80%/)
-      expect(raw?.reviewed_at).toBeNull()
+      expect(raw?.reviewed_at).toBe('2026-09-27')
     }
   })
 
