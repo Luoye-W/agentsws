@@ -227,3 +227,10 @@ SERP：0.0294 ÷ 0.2 = 0.147 → **0.2**。AI 问答：0.072 ÷ 0.2 = 0.36 → *
 **DataForSEO 背景**：2011 年起做内部工具、2016 年成立（爱沙尼亚），自称 3 万+ 客户、99.95% 可用率；Trustpilot 4.5（58 条）。「很多大 SEO 工具背后用它」业内流传但未找到大工具官方公开写明（未核实）。
 
 出处：Semrush [ToS](https://www.semrush.com/company/legal/terms-of-service/) · [API](https://www.semrush.com/kb/5-api) · [MCP](https://developer.semrush.com/api/introduction/semrush-mcp/)；Ahrefs [API v3](https://help.ahrefs.com/en/articles/6559232-about-api-v3) · [Connect 条款](https://docs.ahrefs.com/ahrefs-connect/docs/terms-of-service.md) · [MCP](https://docs.ahrefs.com/mcp/docs/introduction.md)；Similarweb [条款](https://www.similarweb.com/corp/legal/terms/) · [AI Search 价目](https://www.similarweb.com/packages/ai-search/)；[Bright Data Copilot](https://brightdata.com/products/web-scraper/microsoft-copilot)；Cloudflare [博客](https://blog.cloudflare.com/aeo/) · [新闻稿](https://www.cloudflare.com/press/press-releases/2026/cloudflare-adds-aeo-visibility-dashboard-to-its-aeo-suite-showing-brands-whether-ai-assistants-are-recommending-them/)；DataForSEO [关于](https://dataforseo.com/about-us)。
+
+## 补充（09-27）：AIsa 与 Apify
+
+- **AIsa 不能当官方转售数据源**：[AIsa Services Agreement](https://aisa.one/TOS)（2026-08-24 版）§2.5(a) 禁止 service bureau / pass-through，§2.5(g) 禁止转售或分发服务的任何部分；上游条款照样约束（§3.2D）。要转售得先找 developer@aisa.one 签书面协议。它转接 DataForSEO 按上游成本 ×2 计价，比直连贵一倍。
+- **AIsa 适合「自带 key」档**：一把 key、按次付费、无月费，覆盖 Semrush 19 / Similarweb 23 / Ahrefs 2 / DataForSEO 445 / Apollo 54 个接口，另有 TikHub 的 TikTok、YouTube、Instagram、LinkedIn（逐端点价格见 [openapi.yaml](https://aisa.one/openapi.yaml)）。没有 Copilot、没有海关数据；邮箱查找 / 验证全是「Coming Soon」。公司：AIPAY INC.，2026-07 种子轮 $6.5M（阿里巴巴、Tribe Capital 领投）。
+- **Apify 适合红人与 B2B 官方档**：[通用条款](https://docs.apify.com/legal/general-terms-and-conditions) §5.8 与 [Actor 条款](https://docs.apify.com/legal/actor-terms-and-conditions) §4.3 规定输出数据归用户，没有禁止商用或转售输出（平台本身不能转授 §5.2）；抓取合法性由用户自负（§11.1）。Google Search Scraper 能补 Copilot（付费档每次 $0.003–0.005）；LinkedIn 资料 $0.004–0.01；Google 地图单个地点 $0.0015–0.004。Similarweb 网页抓取类 Actor 违反 Similarweb 条款，不用。
+- **值得跟进**：AIsa 上 Oxylabs 的 AI 回答探测最便宜（Google AI 概览 / AI Mode $0.001，ChatGPT / Gemini $0.00145），Oxylabs 直签的转售条款未核实。
