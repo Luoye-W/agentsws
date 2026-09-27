@@ -2,7 +2,7 @@
  * 托管实例模式（WP128 / docs/64 §13 / docs/74 §5）：**同一份 `apps/server`**，跑在
  * Cloudflare Container 里替商家值守聊天窗。开关是环境变量 `AGENTSWS_HOSTED=1`，
  * 其余配置（工作区号、托管令牌、转发器配对、库密钥）全由 `HostedInstanceDO` 在起容器时
- * 经环境变量给一次（契约在 `@agentsws/hosted` 的 `buildHostedEnv` / `parseHostedEnv`）。
+ * 经环境变量给一次（契约在 `@agentsws/contracts` 的 `buildHostedEnv` / `parseHostedEnv`，WP165 从 `@agentsws/hosted` 搬来）。
  *
  * 与商家本机那一份只差四件事，全在这个文件里：
  *
@@ -32,13 +32,14 @@ import {
 } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { Clock, WorkspaceId } from '@agentsws/contracts'
 import {
+  type Clock,
   type HostedBootConfig,
   hostedSnapshotUrl,
   parseHostedEnv,
   SNAPSHOT_PUSH_INTERVAL_MS,
-} from '@agentsws/hosted'
+  type WorkspaceId,
+} from '@agentsws/contracts'
 import { exportWorkspace, importWorkspace } from './backup.js'
 import { CLOUD_TOKEN_SECRET_ID } from './cloud-account.js'
 import type { SecretStore } from './secret-store.js'

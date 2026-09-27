@@ -40,8 +40,8 @@ export const HOSTED_HEARTBEAT_TIMEOUT_MS = 5_000
 /** 连续几次心跳失败就判容器坏了、重起。 */
 export const HOSTED_MAX_HEARTBEAT_FAILURES = 3
 
-/** 容器里 `apps/server` 监听的端口（根 Dockerfile 的 `AGENTSWS_PORT`）。 */
-export const HOSTED_PORT = 4317
+/** 容器里 `apps/server` 监听的端口（根 Dockerfile 的 `AGENTSWS_PORT`）。WP165 起定义在契约包。 */
+export { HOSTED_PORT } from '@agentsws/contracts'
 
 /** 停容器之后快照留多久。 */
 export const SNAPSHOT_RETENTION_DAYS = 30
@@ -52,8 +52,8 @@ export const SNAPSHOT_KEEP_COUNT = 3
 /** 一份快照最大多少字节（一个客服工作区的库远小于它；超了拒收，不截断）。 */
 export const SNAPSHOT_MAX_BYTES = 512 * 1024 * 1024
 
-/** 容器里多久推一次快照回来。 */
-export const SNAPSHOT_PUSH_INTERVAL_MS = 6 * 60 * 60 * 1000
+/** 容器里多久推一次快照回来。WP165 起定义在契约包（容器里的 `apps/server` 也读它）。 */
+export { SNAPSHOT_PUSH_INTERVAL_MS } from '@agentsws/contracts'
 
 /** 重起的退避：第 n 次重起前等多久（封顶最后一档）。 */
 export const RESTART_BACKOFF_MS: readonly number[] = [0, 30_000, 120_000, 600_000]

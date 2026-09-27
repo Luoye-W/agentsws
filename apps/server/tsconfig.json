@@ -43,9 +43,6 @@
       "path": "../../packages/core"
     },
     {
-      "path": "../../packages/hosted"
-    },
-    {
       "path": "../../packages/credentials-openconnector"
     },
     {

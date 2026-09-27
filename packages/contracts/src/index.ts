@@ -29,6 +29,8 @@ export * from './design.js'
 // WP136（docs/79）：dsh 的「场景」（Profile）——Agents 工坊是其中一个，其余由 DeepSeek 官方维护
 export * from './dsh-scenes.js'
 export * from './events.js'
+// WP165（docs/83 §2）：托管实例的容器环境变量契约（云上写、容器里的 apps/server 读）
+export * from './hosted-env.js'
 export * from './identity.js'
 export * from './join.js'
 export * from './kernel.js'
