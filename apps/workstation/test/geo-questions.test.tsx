@@ -94,3 +94,47 @@ describe('WP166 每个目标市场分别探', () => {
     getGeoQuestions.mockImplementation(async () => view)
   })
 })
+
+describe('WP169 按市场的主要语言探测', () => {
+  const langs = {
+    ...view,
+    estimate: { ...view.estimate, markets: 2, market_codes: ['US', 'DE'], credits_per_week: 2.4 },
+    markets: [
+      { code: 'US', probing: true, language: 'en' },
+      { code: 'DE', probing: true, language: 'de', untranslated: true },
+    ],
+    markets_from: 'brand_profile' as const,
+  }
+
+  it('每个市场旁边写用什么语言问（界面语言说）；没配模型时注明先按原语言问；字数仍在上限内', async () => {
+    getGeoQuestions.mockImplementation(async () => langs)
+    renderWithProviders(<GeoQuestions assignment="asg_content" />)
+    await screen.findByTestId('geo-cost')
+    expect(screen.getByTestId('geo-market-lang-DE').textContent).toBe('德语')
+    expect(screen.getByTestId('geo-market-lang-US').textContent).toBe('英语')
+    expect(screen.getByTestId('geo-markets-untranslated').textContent).toBe(
+      '还没配模型：德国先按原语言问',
+    )
+    expect(screen.getByTestId('geo-markets-hint').getAttribute('data-hint')).toContain(
+      '用当地的主要语言问',
+    )
+    const { reportCard, CARD_TEXT_LIMIT } = await import('./less-text-guard')
+    const report = reportCard(screen.getByTestId('geo-questions'))
+    expect(report.weight, report.text).toBeLessThanOrEqual(CARD_TEXT_LIMIT)
+    getGeoQuestions.mockImplementation(async () => view)
+  })
+
+  it('翻译得了（或翻过）就不出那句', async () => {
+    getGeoQuestions.mockImplementation(async () => ({
+      ...langs,
+      markets: [
+        { code: 'US', probing: true, language: 'en' },
+        { code: 'DE', probing: true, language: 'de' },
+      ],
+    }))
+    renderWithProviders(<GeoQuestions assignment="asg_content" />)
+    await screen.findByTestId('geo-cost')
+    expect(screen.queryByTestId('geo-markets-untranslated')).toBeNull()
+    getGeoQuestions.mockImplementation(async () => view)
+  })
+})

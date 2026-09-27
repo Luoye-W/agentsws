@@ -68,7 +68,14 @@ export interface GeoQuestionsView {
    * WP166：目标市场（公司档案里的；没写就是默认那一个）与这个市场探不探（面板上能关某个市场的
    * 探测，只关探测、不改档案）。老装配不给。
    */
-  markets?: { code: string; probing: boolean }[]
+  markets?: {
+    code: string
+    probing: boolean
+    /** WP169：这个市场用什么语言问（ISO 639-1；问题由模型从品牌语言翻过来）。 */
+    language?: string
+    /** WP169：要翻译却没配模型——这一周按原语言问（面板注明）。 */
+    untranslated?: boolean
+  }[]
   markets_from?: 'brand_profile' | 'default'
 }
 

@@ -254,3 +254,35 @@ describe('WP166 · 设置页「公司档案」改目标市场（真服务进程�
     expect(bad.status).toBe(400)
   })
 })
+
+describe('WP169 · 档案里按市场覆盖探测语言（真服务进程）', () => {
+  it('PUT 收 market_languages（归一化）；不给就沿用；空对象清空；改别的不丢', async () => {
+    const { call } = await boot()
+    const put = await call('PUT', '/v1/workspace/profile', {
+      legal_name: 'Nordvik Supply AB',
+      markets: ['CA', 'DE'],
+      market_languages: { ca: 'FR' },
+    })
+    expect(put.status).toBe(200)
+    expect(put.json.data.market_languages).toEqual({ CA: 'fr' })
+    const keep = await call('PUT', '/v1/workspace/profile', {
+      legal_name: 'Nordvik Supply AB',
+      markets: ['CA', 'DE', 'GB'],
+    })
+    expect(keep.json.data.market_languages).toEqual({ CA: 'fr' })
+    const state = await call('GET', '/v1/onboarding/state')
+    expect((state.json.data.profile as { market_languages?: unknown }).market_languages).toEqual({
+      CA: 'fr',
+    })
+    const cleared = await call('PUT', '/v1/workspace/profile', {
+      legal_name: 'Nordvik Supply AB',
+      market_languages: {},
+    })
+    expect(cleared.json.data.market_languages).toBeUndefined()
+    const bad = await call('PUT', '/v1/workspace/profile', {
+      legal_name: 'Nordvik Supply AB',
+      market_languages: { CA: 'french' },
+    })
+    expect(bad.status).toBe(400)
+  })
+})

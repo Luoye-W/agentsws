@@ -5662,7 +5662,14 @@ export interface GeoQuestionsData {
     market_codes?: string[]
   }
   /** WP166：目标市场（公司档案里的；没写就是默认那一个）与这周探不探。 */
-  markets?: { code: string; probing: boolean }[]
+  markets?: {
+    code: string
+    probing: boolean
+    /** WP169：这个市场用什么语言问（ISO 639-1）。 */
+    language?: string
+    /** WP169：要翻译却没配模型——这一周按原语言问。 */
+    untranslated?: boolean
+  }[]
   markets_from?: 'brand_profile' | 'default'
 }
 

@@ -21,6 +21,17 @@ import { Input } from '@/components/ui/input'
 import { type GeoQuestionData, getGeoQuestions, runSeo, setGeoQuestions } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 
+/** WP169：语言码 `de` →「德语」（界面语言）。认不出来的原样给。 */
+function languageLabel(code: string, lang: 'zh' | 'en'): string {
+  try {
+    return (
+      new Intl.DisplayNames([lang === 'zh' ? 'zh-CN' : 'en'], { type: 'language' }).of(code) ?? code
+    )
+  } catch {
+    return code
+  }
+}
+
 export function GeoQuestions({ assignment }: { assignment: string }): React.ReactNode {
   const { t, lang } = useApp()
   const qc = useQueryClient()
@@ -54,6 +65,7 @@ export function GeoQuestions({ assignment }: { assignment: string }): React.Reac
   if (data === undefined) return null
   const { settings, estimate } = data
   const markets = data.markets ?? []
+  const untranslated = markets.filter((m) => m.probing && m.untranslated === true)
   // WP166：好几个市场时花费明示「N 个市场」（数是服务端乘好的，界面不自己乘）
   const cost =
     estimate.credits_per_week === undefined
@@ -137,8 +149,30 @@ export function GeoQuestions({ assignment }: { assignment: string }): React.Reac
                   }}
                 />
                 {marketLabel(m.code, lang)}
+                {/* WP169：用哪种语言问（界面语言说），细节在上面的问号里 */}
+                {m.language === undefined ? null : (
+                  <span
+                    className="text-xs text-muted-foreground"
+                    data-testid={`geo-market-lang-${m.code}`}
+                  >
+                    {languageLabel(m.language, lang)}
+                  </span>
+                )}
               </label>
             ))}
+            {untranslated.length === 0 ? null : (
+              <span
+                className="basis-full text-xs text-amber-700 dark:text-amber-300"
+                data-slot="status"
+                data-testid="geo-markets-untranslated"
+              >
+                {t('seo.geo.markets.untranslated', {
+                  names: untranslated
+                    .map((m) => marketLabel(m.code, lang))
+                    .join(lang === 'zh' ? '、' : ', '),
+                })}
+              </span>
+            )}
             {data.markets_from === 'default' ? (
               <span className="text-xs text-muted-foreground" data-slot="status">
                 {t('seo.geo.markets.default')}

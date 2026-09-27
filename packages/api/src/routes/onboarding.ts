@@ -86,6 +86,11 @@ export interface WorkspaceProfileInput {
   markets?: string[] | undefined
   /** WP166：这份市场是从哪看出来的（服务端内部用：品牌分析确认时是官网 / Amazon；HTTP 不收）。 */
   markets_source?: MarketsSource | undefined
+  /**
+   * WP169：按市场覆盖探测语言（国家码 → ISO 639-1，如 `{ CA: 'fr' }`）。不给 = 沿用上一次；
+   * 给空对象 = 清空覆盖（全按每个市场的第一语言）。
+   */
+  market_languages?: Record<string, string> | undefined
 }
 
 /** 公司档案的对外形状。**没有归一化哈希**——它是发现用的，不是给人看的。 */
@@ -103,6 +108,8 @@ export interface WorkspaceProfileView {
   markets?: string[]
   /** WP166：这份市场是从哪看出来的（界面问号里那一句）。 */
   markets_source?: MarketsSource
+  /** WP169：按市场覆盖的探测语言（没覆盖过就没有）。 */
+  market_languages?: Record<string, string>
   set_at: string
 }
 
@@ -347,6 +354,13 @@ const ProfileBody = z.object({
     .array(z.string().regex(/^[A-Za-z]{2}$/))
     .max(60)
     .optional(),
+  // WP169：按市场覆盖探测语言（国家码 → 语言码）。不给 = 不改；给空对象 = 清空。
+  market_languages: z
+    .record(
+      z.string().regex(/^[A-Za-z]{2}$/),
+      z.string().regex(/^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})?$/),
+    )
+    .optional(),
 })
 
 const PlanBody = z.object({
@@ -455,6 +469,9 @@ export function onboardingRoutes(): Route[] {
               : { storefront_platform: input.storefront_platform }),
             ...(input.brand_name === undefined ? {} : { brand_name: input.brand_name }),
             ...(input.markets === undefined ? {} : { markets: input.markets }),
+            ...(input.market_languages === undefined
+              ? {}
+              : { market_languages: input.market_languages }),
           }),
         )
       },

@@ -414,6 +414,11 @@ export interface WorkspaceProfile {
    * 之后自动推断与店铺校正都不再覆盖。没有 = 老档案（WP159 写的），按"不知道从哪来"处理。
    */
   markets_source?: MarketsSource
+  /**
+   * WP169：按市场覆盖探测用的语言（国家码 → ISO 639-1，如 `{ CA: 'fr' }`）。没写的市场按
+   * `MARKET_PRIMARY_LANGUAGE` 的第一语言；表里也没有就按品牌语言。
+   */
+  market_languages?: Record<string, string>
   set_at: Iso8601
 }
 

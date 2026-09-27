@@ -45,6 +45,11 @@ export interface DailyInput {
    */
   countries?: readonly string[]
   language: string
+  /**
+   * WP169：每个市场的 SERP 语言（键是小写国家码，值是 ISO 639-1）。给了就按市场查，
+   * 没给到的市场用上面的 `language`。
+   */
+  languages?: Readonly<Record<string, string>>
   our_domains: readonly string[]
   date: string
 }
@@ -138,7 +143,7 @@ async function checkNewPage(
         query: d.row.query,
         engine: 'google',
         country,
-        language: input.language,
+        language: input.languages?.[country.toLowerCase()] ?? input.language,
       })
       checks.push({ ...judgeSerpCrowd(serp, input.our_domains), market: country.toUpperCase() })
     } catch (err) {

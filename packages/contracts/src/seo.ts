@@ -247,6 +247,10 @@ export interface GeoProbeRow {
   platform: AiPlatform
   /** WP166：在哪个市场问的（ISO 国家码，大写）。 */
   market?: string
+  /** WP169：用什么语言问的（ISO 639-1）。 */
+  language?: string
+  /** WP169：真问出去的那句（翻成市场语言时才有；`question` 仍是品牌语言的原句）。 */
+  asked?: string
   brand_mentioned: boolean
   our_domain_cited: boolean
   cited_domains: string[]
@@ -292,6 +296,13 @@ export interface GeoMarketSummary {
   seen: number
   /** 这个市场缺位几个。 */
   gaps: number
+  /** WP169：这个市场用什么语言问的（ISO 639-1）。 */
+  language?: string
+  /**
+   * WP169：市场语言与品牌语言不同、却没能翻译（没配模型）时为 `true`——这一周按原语言问的，
+   * 面板上注明。
+   */
+  untranslated?: boolean
 }
 
 /**

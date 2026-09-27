@@ -2568,6 +2568,32 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     connections.onConnectionChange(() => {
       void storeMarkets.check()
     })
+    /*
+     * WP159 / WP169：内容与搜索用的模型口（写初稿、翻买家问题）——这个品牌的模型网关，用量照常记账。
+     * **每次现取**：模型设置改完下一轮就生效；只有 stub（没接模型）→ undefined。
+     */
+    const seoModel = (
+      actor: { assignment_id: string; role_id: string },
+      run_id: string,
+    ): ((input: { prompt: string }) => Promise<{ text: string }>) | undefined => {
+      if (!effectiveModels().configured()) return undefined
+      const ref = effectiveModels().purposeRef('run')
+      if (ref.provider === 'stub') return undefined
+      return async ({ prompt }) => {
+        const completion = await gatewayProxy.complete({
+          messages: [{ role: 'user', content: prompt }],
+          meta: {
+            workspace_id: ws,
+            assignment_id: actor.assignment_id as never,
+            role_id: actor.role_id as never,
+            run_id: run_id as never,
+            purpose: 'run',
+          },
+          model: ref,
+        })
+        return { text: completion.text }
+      }
+    }
     const seoService = createSeoService({
       workspace_id: ws,
       clock,
@@ -2631,6 +2657,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           ...(() => {
             const markets = onboardingRef?.brandProfile(ws).markets
             return markets === undefined ? {} : { markets }
+          })(),
+          // WP169：档案里按市场覆盖的探测语言（没覆盖过就按每个市场的第一语言）
+          ...(() => {
+            const market_languages = onboardingRef?.brandProfile(ws).market_languages
+            return market_languages === undefined ? {} : { market_languages }
           })(),
         }
       },
@@ -2705,25 +2736,12 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
        * WP159：改动卡初稿由模型写（这个品牌的模型网关，用量照常记账；每天上限在 seo-service）。
        * **每次现取**：模型设置改完下一轮就生效；只有 stub（没接模型）→ undefined，用规则版。
        */
-      drafter: ({ actor, run_id }) => {
-        if (!effectiveModels().configured()) return undefined
-        const ref = effectiveModels().purposeRef('run')
-        if (ref.provider === 'stub') return undefined
-        return async ({ prompt }) => {
-          const completion = await gatewayProxy.complete({
-            messages: [{ role: 'user', content: prompt }],
-            meta: {
-              workspace_id: ws,
-              assignment_id: actor.assignment_id,
-              role_id: actor.role_id,
-              run_id: run_id as never,
-              purpose: 'run',
-            },
-            model: ref,
-          })
-          return { text: completion.text }
-        }
-      },
+      drafter: ({ actor, run_id }) => seoModel(actor, run_id),
+      /*
+       * WP169：把买家问题翻成市场语言（同一个模型口；翻过的在 seo-service 里缓存，每个问题每种
+       * 语言只翻一次）。没配模型 → undefined，按原语言问、面板注明。
+       */
+      translator: ({ actor, run_id }) => seoModel(actor, run_id),
       /*
        * WP166：模型写初稿前读这一页正文——店铺连接的只读口优先，读不到再抓公开网址（品牌分析那一口
        * 抓取，只抓自家域名）。
