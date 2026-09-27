@@ -266,7 +266,12 @@ import {
 } from './learning.js'
 import { createLiveDataSource, type LiveDataSource } from './live-data.js'
 // WP77（59 §1 / §2）：建站库（三张表）+ `/v1/site/*` 的实现
-import { createStoreMarketsSync, marketsFromIntake } from './markets.js'
+import {
+  createStoreMarketsNotices,
+  createStoreMarketsSync,
+  MARKETS_SETTINGS_PATH,
+  marketsFromIntake,
+} from './markets.js'
 import { createMeetings, type MeetingsAssembly, seedDemoMeetings } from './meetings.js'
 // WP113（63）：消息——统一收件处（消息库 / 全量同步 / 分拣 / 回写）
 import { createMessages, type MessagesAssembly, type MessagesOptions } from './messages.js'
@@ -1790,8 +1795,22 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     connections.onConnectionChange(() => {
       googleReads.invalidate()
     })
+    /*
+     * WP169：店铺校正改了目标市场 → 给工作区所有者的那条通知（首页告警区一行，点开到设置页
+     * 公司档案）。照 36 §2.2b「`system_alert` → 通知 + 告警块」那条现成的路走，不是卡。
+     */
+    const storeMarketsNotices = createStoreMarketsNotices({
+      now: () => clock.now(),
+      ...(dir === undefined ? {} : { dir }),
+    })
     const workData: WorkstationDataSource = {
       ...baseWorkData,
+      systemCards: (actor) => ({
+        alerts: storeMarketsNotices.alerts(
+          actor.person_id,
+          onboardingRef?.brandProfile(ws).markets_source,
+        ),
+      }),
       // WP158：读之前先把 GSC / GA4 拉新（当天有缓存就是空操作；永不抛）
       ensureFresh: async () => {
         await baseWorkData.ensureFresh?.()
@@ -2515,6 +2534,36 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       apply: (markets, source) => onboardingRef?.setMarkets(ws, markets, source) ?? false,
       now: () => clock.now(),
       ...(dir === undefined ? {} : { dir }),
+      // WP169：真改了才推（没改不推）；只推给工作区所有者
+      onChanged: async ({ markets, source }) => {
+        if (source.note === undefined) return
+        const owner = (await identity.getWorkspace(ws))?.owner_id
+        if (owner === undefined) return
+        const position = roles.assignments
+          .listByPerson(owner, { workspace_id: ws, role_id: 'common.owner' })
+          .find((a) => a.revoked_at === undefined)
+        storeMarketsNotices.push({
+          id: `mkt_notice_${source.at.replace(/[^0-9]/g, '')}`,
+          note: source.note,
+          markets,
+          at: source.at,
+          owner,
+          position_id: position?.id ?? '',
+        })
+        appendEvent({
+          schema_version: 1,
+          workspace_id: ws,
+          type: 'notification.sent',
+          actor: { kind: 'agent', id: 'markets_store' },
+          correlation: { trace_id: `tr_markets_${source.at}` },
+          payload: {
+            reason: 'markets_store_sync',
+            recipient: owner,
+            note: source.note,
+            open_path: MARKETS_SETTINGS_PATH,
+          },
+        })
+      },
     })
     connections.onConnectionChange(() => {
       void storeMarkets.check()

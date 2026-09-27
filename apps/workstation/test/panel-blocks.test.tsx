@@ -8,6 +8,7 @@ import { screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { AlertBlocks, ReportBlocks } from '@/components/deck/panel-blocks'
+import { matterUrl } from '@/lib/work'
 import { draftCard } from './fixtures'
 import { renderWithProviders } from './helpers'
 
@@ -80,5 +81,34 @@ describe('告警块', () => {
   it('一条都没有时整块不出', () => {
     renderWithProviders(<AlertBlocks alerts={[]} onOpen={noop} />)
     expect(screen.queryByTestId('alerts')).toBeNull()
+  })
+})
+
+describe('WP169 店铺校正的通知：点开到设置页公司档案', () => {
+  const notice = draftCard({
+    id: 'mkt_notice_1',
+    kind: 'system_alert',
+    layout: 'aftermath',
+    priority_band: 'P3',
+    title: '目标市场按店铺后台改了：加上了 英国',
+    detail: {
+      ...draftCard().detail,
+      payload: { kind: 'markets_store_sync', open_path: '/settings#company' },
+    },
+  })
+
+  it('告警区一行，点「去处理」去 /settings#company', async () => {
+    const onOpen = vi.fn()
+    renderWithProviders(<AlertBlocks alerts={[notice]} onOpen={onOpen} />)
+    expect(screen.getByTestId('alert-block').textContent).toContain('加上了 英国')
+    await userEvent.click(screen.getByTestId('ws-go'))
+    expect(matterUrl(onOpen.mock.calls[0]?.[0])).toBe('/settings#company')
+  })
+
+  it('只认站内路径：外链与 // 开头的不跟，退回岗位页', () => {
+    const outside = (open_path: string) =>
+      draftCard({ ...notice, detail: { ...notice.detail, payload: { open_path } } })
+    expect(matterUrl(outside('https://evil.example/'))).toBe(`/positions/${notice.position_id}`)
+    expect(matterUrl(outside('//evil.example/'))).toBe(`/positions/${notice.position_id}`)
   })
 })

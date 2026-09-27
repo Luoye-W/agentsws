@@ -17,7 +17,14 @@ export const DAY_MS = 86_400_000
  * 契约建议已写进交付报告：`DeckCard` 加 `matter_id?` / `todo_id?`。
  */
 export function matterUrl(card: DeckCard): string {
-  const payload = card.detail.payload as { matter_id?: unknown; work_item_id?: unknown } | null
+  const payload = card.detail.payload as {
+    matter_id?: unknown
+    work_item_id?: unknown
+    open_path?: unknown
+  } | null
+  // WP169：不属于任何事项的系统通知可以指一个工作台里的页面（只认站内路径，不认外链）
+  const open = payload?.open_path
+  if (typeof open === 'string' && open.startsWith('/') && !open.startsWith('//')) return open
   const id =
     typeof payload?.matter_id === 'string'
       ? payload.matter_id
