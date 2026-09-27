@@ -1,4 +1,4 @@
-import { existsSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
@@ -138,6 +138,13 @@ describe('自带技能：考题（改写自上游 evals）', () => {
   it('seo-judgment 另带 open-seo 的出处', () => {
     if (!names.includes('seo-judgment')) return
     expect(readBundledSkill('seo-judgment').markdown).toContain(OPEN_SEO)
+  })
+
+  it('两家 MIT 许可证全文随技能一起放着', () => {
+    const notices = readFileSync(join(BUNDLED_SKILLS_DIR, 'THIRD-PARTY-NOTICES'), 'utf8')
+    expect(notices).toContain('Copyright (c) 2025 Corey Haines')
+    expect(notices).toContain('Copyright (c) 2026 Ben Senescu')
+    expect(notices.match(/Permission is hereby granted/g)?.length).toBe(2)
   })
 
   it('读不存在的技能报 not_found，非法名报 invalid_input', () => {
