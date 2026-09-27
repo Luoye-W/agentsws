@@ -281,6 +281,7 @@ import {
   type OrganizationsAssembly,
 } from './organizations.js'
 import { createOwnerToolExecutor } from './owner-tools.js'
+import { createPageBodyReader } from './page-body.js'
 import {
   createFilePersonaBackend,
   createPersonas,
@@ -2655,6 +2656,18 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           return { text: completion.text }
         }
       },
+      /*
+       * WP166：模型写初稿前读这一页正文——店铺连接的只读口优先，读不到再抓公开网址（品牌分析那一口
+       * 抓取，只抓自家域名）。
+       */
+      pageBody: createPageBodyReader({
+        connect: connections.connect as never,
+        connection: () =>
+          connections
+            .liveConnections()
+            .find((c) => c.service.startsWith('shopify') && c.status === 'active'),
+        fetch: options.brandIntakeFetch ?? (globalThis.fetch as never),
+      }),
       // WP159：品牌口吻——品牌档案那一段 + 品牌设计规范（WP122）里的「气质」一句，取不到就不写
       brandVoice: async (language) => {
         const w = await identity.getWorkspace(ws)

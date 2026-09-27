@@ -68,6 +68,7 @@ import {
   type LandingOrder,
   MAX_GEO_QUESTIONS,
   marketName,
+  pageBodyText,
   pageRevenue,
   parseSeoDraft,
   probeRows,
@@ -158,6 +159,17 @@ export interface SeoServiceOptions {
    * 每天最多调几次看职责阈值 `seo_model_drafts_per_day`（缺省 `DEFAULT_MODEL_DRAFTS_PER_DAY`）。
    */
   drafter?(meta: { actor: SeoActor; run_id: string }): SeoDraftModel | undefined
+  /**
+   * WP166：模型写初稿前读这一页的正文——优先店铺连接的只读口（Shopify 页面 / 商品 / 博客正文），
+   * 读不到再抓公开网址（只抓自家域名，沿用品牌分析那条抓取纪律）。回的可以是 HTML，这里会去标签、
+   * 截长度。读不到回 `undefined`：照原来的写法，卡上注明「没读到正文」。
+   */
+  pageBody?(input: {
+    url: string
+    page?: SitePage | undefined
+    /** 我们自己的域名（公开网址那条路只抓这些）。 */
+    domains: readonly string[]
+  }): Promise<{ text: string; from: 'store' | 'web' } | undefined>
   /**
    * WP159：品牌口吻（照 WP122 的注入口径）：品牌档案那一段（`renderBrandContext`）+
    * 品牌设计规范里的「气质」一句。取不到就不写那一句。
@@ -617,7 +629,10 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
     pick: SeoPick,
     page: SitePage | undefined,
     brand: SeoBrandInfo,
-  ): Promise<{ ok: true; after: Record<string, unknown> } | { ok: false; reason: string }> => {
+  ): Promise<
+    | { ok: true; after: Record<string, unknown>; body: 'store' | 'web' | 'none' }
+    | { ok: false; reason: string }
+  > => {
     const run_id = `run_seo_${nextId('d')}`
     const model = options.drafter?.({ actor, run_id })
     if (model === undefined) return { ok: false, reason: '没配模型' }
@@ -627,12 +642,27 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
     if (used >= cap) return { ok: false, reason: `今天模型写初稿已到上限（${cap} 份）` }
     saveState({ ...state, model_drafts: { date: date(), calls: used + 1 } })
     const voice = (await options.brandVoice?.(brand.language)) ?? {}
+    // WP166：先读这一页的正文（店铺只读口 → 公开网址）；读不到照原来的写法，卡上注明
+    let body: { text: string; from: 'store' | 'web' } | undefined
+    if (pick.page !== undefined && options.pageBody !== undefined) {
+      try {
+        const got = await options.pageBody({ url: pick.page, page, domains: brand.domains })
+        const text = got === undefined ? '' : pageBodyText(got.text)
+        body = got === undefined || text === '' ? undefined : { text, from: got.from }
+      } catch {
+        body = undefined
+      }
+    }
     const prompt = seoDraftPrompt({
       kind,
       query: pick.query,
       suggestion: pick.suggestion,
       evidence: evidenceText(pick.evidence),
-      page: { url: pick.page ?? '', ...(page?.title === undefined ? {} : { title: page.title }) },
+      page: {
+        url: pick.page ?? '',
+        ...(page?.title === undefined ? {} : { title: page.title }),
+        ...(body === undefined ? {} : { body: body.text }),
+      },
       language: brand.language,
       brand: {
         name: brand.name,
@@ -650,7 +680,11 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
     const { rules } = await knowledgeFor(actor)
     const parsed = parseSeoDraft(kind, text, rules)
     if (!parsed.ok) return { ok: false, reason: parsed.reason }
-    return { ok: true, after: { ...parsed.draft, target_query: pick.query } }
+    return {
+      ok: true,
+      after: { ...parsed.draft, target_query: pick.query },
+      body: body?.from ?? 'none',
+    }
   }
 
   /** 开一件事项（交给别的岗位，或者本职责自己要写的）。同一件事 14 天内不重复开。 */
@@ -706,11 +740,22 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
               kind === 'page_seo_edit'
                 ? `改页面标题、描述与开头：${page?.title ?? pick.page}`
                 : `给页面加一个小节：${page?.title ?? pick.page}`,
-              `${body}\n初稿由模型按品牌口吻写好了，可以在卡上改字、删掉不想改的那格，或者点「指导」让它重写。`,
+              `${body}\n初稿由模型按品牌口吻写好了${drafted.body === 'none' ? '（没读到这一页的正文，只按查询与标题写的）' : '（读过这一页的正文）'}，可以在卡上改字、删掉不想改的那格，或者点「指导」让它重写。`,
             )
             return id === undefined
-              ? { kind: 'none', note: '这条改动没提上去（额度或门禁）', draft: 'model' }
-              : { kind: 'change', id, draft: 'model' }
+              ? {
+                  kind: 'none',
+                  note: '这条改动没提上去（额度或门禁）',
+                  draft: 'model',
+                  body: drafted.body,
+                }
+              : {
+                  kind: 'change',
+                  id,
+                  draft: 'model',
+                  body: drafted.body,
+                  ...(drafted.body === 'none' ? { note: '没读到正文' } : {}),
+                }
           }
           fallback = drafted.reason
         }
