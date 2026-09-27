@@ -8,7 +8,7 @@
  *
  * - **未读用点不用粗红数字**（36 的减字与图形化）。一个 6px 的品牌色圆点说得清
  *   "这条没读"，而一个红色的 "3" 会让整屏看起来像在报警。
- * - **`kefuagents` / `kolagents` 里的信在这里只读**（63 §9）：顶上一条状态带说
+ * - **`KefuAgents` / `KOLAgents` 里的信在这里只读**（63 §9）：顶上一条状态带说
  *   "客服 Agent 在处理"，右下角一个 → 去工作线程。**不给"直接回复"**——
  *   人与 Agent 同时回同一个客户，是这套东西最难解释的一种错。
  *   真要补充口径：教 AI 一句（WP124：人工直发的路已拆，界面只留教 AI）。
@@ -66,11 +66,23 @@ import { useApp } from '@/lib/app-context'
 import { formatDateTime } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
-/** 左边那一列的文件夹（按**语义**画，真名各家不一样）。 */
-const FOLDERS: readonly { kind: MessageFolderKind; icon: typeof Inbox }[] = [
+/**
+ * 左边那一列的文件夹（按**语义**画，真名各家不一样）。
+ *
+ * WP161：岗位那三只的显示名走 i18n（客服在处理 / 红人合作 / B2B 往来），服务器上的
+ * 真名是 `KefuAgents` / `KOLAgents` / `BtoBAgents`（或用户邮箱里已有的大小写变体）。
+ * `onlyWhenPresent` = 还没有对应岗位时不画：B2B 岗位还在设计，消息库里没有 B2B 那只
+ * 文件夹的信就不显示它。
+ */
+const FOLDERS: readonly {
+  kind: MessageFolderKind
+  icon: typeof Inbox
+  onlyWhenPresent?: boolean
+}[] = [
   { kind: 'inbox', icon: Inbox },
   { kind: 'support', icon: Mail },
   { kind: 'kol', icon: Mail },
+  { kind: 'b2b', icon: Mail, onlyWhenPresent: true },
   { kind: 'sent', icon: Forward },
   { kind: 'drafts', icon: PenSquare },
   { kind: 'spam', icon: ListFilter },
@@ -280,7 +292,10 @@ export function MessagesPage(): ReactNode {
         </Button>
 
         <nav className="flex flex-col gap-0.5" aria-label={t('messages.folders')}>
-          {FOLDERS.map(({ kind, icon: Icon }) => {
+          {FOLDERS.filter(
+            ({ kind, onlyWhenPresent }) =>
+              onlyWhenPresent !== true || list.some((a) => a.folders.some((f) => f.kind === kind)),
+          ).map(({ kind, icon: Icon }) => {
             const unread = list
               .flatMap((a) => a.folders)
               .filter((f) => f.kind === kind)
@@ -709,7 +724,7 @@ function MessageCard({
   )
 }
 
-/** 63 §9：`kefuagents` / `kolagents` 里的信顶上那条状态带。 */
+/** 63 §9：`KefuAgents` / `KOLAgents` 里的信顶上那条状态带。 */
 function AgentBand({
   status,
 }: {

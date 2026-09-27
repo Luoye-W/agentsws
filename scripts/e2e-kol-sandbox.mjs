@@ -341,8 +341,8 @@ async function run(page, assignment) {
   await settle(page)
   await shoot(page, 'tracked-link')
 
-  // ⑰ 回信归并进「消息」的 kolagents（63 那条链）
-  say('去「消息」→ 红人回信应该也在 kolagents 文件夹里')
+  // ⑰ 回信归并进「消息」的 KOLAgents（63 那条链；WP161 与老产品同名）
+  say('去「消息」→ 红人回信应该也在「红人合作」（KOLAgents）文件夹里')
   await page.goto(`${BASE}/messages`, { waitUntil: 'networkidle' })
   await page.waitForTimeout(2500)
   await shoot(page, 'messages-kolagents')

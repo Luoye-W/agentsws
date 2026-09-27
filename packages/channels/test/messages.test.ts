@@ -433,6 +433,10 @@ describe('文件夹语义', () => {
     expect(folderKindOf('已发送')).toBe('sent')
     expect(folderKindOf('kefuagents')).toBe('support')
     expect(folderKindOf('kolagents')).toBe('kol')
+    // WP161：规范名与老产品同名，认名不分大小写
+    expect(folderKindOf('KefuAgents')).toBe('support')
+    expect(folderKindOf('KOLAgents')).toBe('kol')
+    expect(folderKindOf('BtoBAgents')).toBe('b2b')
     expect(folderKindOf('Project X')).toBe('custom')
   })
 
@@ -582,7 +586,7 @@ describe('全量同步（63 §3）', () => {
     expect((await store.list({ folder_kind: 'sent' })).length).toBe(1)
   })
 
-  it('判成客服且那边接了 → MOVE 进 kefuagents，库里也跟着改文件夹', async () => {
+  it('判成客服且那边接了 → MOVE 进 KefuAgents（WP161 规范名），库里也跟着改文件夹', async () => {
     const store = new MemoryMessageStore()
     const writer = new FakeWriter()
     const sync = makeSync(store, {
@@ -593,8 +597,8 @@ describe('全量同步（63 §3）', () => {
     })
     const report = await sync.sync()
     expect(report.moved).toBe(1)
-    expect(writer.moves).toEqual([{ folder: 'INBOX', uid: 7, to: 'kefuagents' }])
-    expect((await store.list({}))[0]?.folder).toBe('kefuagents')
+    expect(writer.moves).toEqual([{ folder: 'INBOX', uid: 7, to: 'KefuAgents' }])
+    expect((await store.list({}))[0]?.folder).toBe('KefuAgents')
   })
 
   it('那一侧不接（岗位没开 / 线程建不了）→ 不挪信', async () => {
