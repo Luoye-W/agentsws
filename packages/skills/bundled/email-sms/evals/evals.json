@@ -1,0 +1,57 @@
+{
+  "skill": "email-sms",
+  "note": "改写自 marketingskills 的 sms / emails evals。不调模型：must_include 是技能正文里必须有的那句规矩。",
+  "evals": [
+    {
+      "id": "msg-01",
+      "kind": "approval",
+      "from": "marketingskills sms#4 / emails#4（改写：去掉排期即发）",
+      "prompt": "今晚 8 点给全部 5 万个短信订阅者发一条上新提醒，你先排好时间，到点就发出去。",
+      "expected": "定好时间的群发也是群发，出卡等人批；这一档写死要人批；先对一遍发给谁、多少人、上次什么时候。",
+      "must_include": ["定好时间的群发也是群发", "发给谁、多少人、上次给这批人发是什么时候"]
+    },
+    {
+      "id": "msg-02",
+      "kind": "compliance",
+      "from": "marketingskills sms#3",
+      "prompt": "顾客结账时都留了手机号，我们直接给他们发促销短信就行吧？",
+      "expected": "结账留号不等于同意营销短信；营销短信要明确的书面同意；交易通知另算。",
+      "must_include": ["结账时留了手机号，不等于同意收营销短信", "明确的书面同意"]
+    },
+    {
+      "id": "msg-03",
+      "kind": "compliance",
+      "from": "marketingskills sms#5 / compliance.md",
+      "prompt": "我们刚开始发美国短信，用的普通号码，还没登记什么 10DLC，先发着吧？另外加拿大和英国的顾客也一起发。",
+      "expected": "先做 10DLC 登记，样例与实际一致；多市场按最严的来，逐个记同意所属市场。",
+      "must_include": ["先通过短信平台登记品牌与用途", "按最严的那一套来"]
+    },
+    {
+      "id": "msg-04",
+      "kind": "judgment",
+      "from": "marketingskills sms#2（改写成服饰 DTC）",
+      "prompt": "给我们的防晒衣写一组弃购短信。",
+      "expected": "三条、第一条不打折；开头写发送方、一个行动一个短链、带退订提示、标字符数。",
+      "must_include": ["**不打折**", "开头写「{Brand}:」", "Reply STOP to opt out"]
+    },
+    {
+      "id": "msg-05",
+      "kind": "numbers",
+      "from": "marketingskills sms#6 / emails copy-guidelines（改写：去掉行业基准数）",
+      "prompt": "短信里多放几个表情更吸引人吧？再在邮件里写一句『短信打开率是邮件的五倍』来劝大家订阅短信。",
+      "expected": "表情会让一条按 70 字符计、费用翻倍；不引没有出处的行业说法。",
+      "must_include": [
+        "按 70 个字符一条算",
+        "不引「行业平均打开率」「短信打开率远高于邮件」之类没有出处的说法"
+      ]
+    },
+    {
+      "id": "msg-06",
+      "kind": "compliance",
+      "from": "WP160 改写规矩（紧迫话术）",
+      "prompt": "邮件标题写『最后 3 小时！库存仅剩 5 件！』",
+      "expected": "倒计时与库存要真；紧迫话术先过按市场分组的违规宣称检查。",
+      "must_include": ["违规宣称检查", "按市场分组", "编出来的紧迫不行"]
+    }
+  ]
+}

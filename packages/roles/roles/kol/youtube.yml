@@ -165,7 +165,10 @@ automation:
     promotion: { adoption_rate_min: 0.9, window_weeks: 2, min_samples: 20 }
     demotion_triggers: [manual]
 
-skills: []
+# WP160：红人营销五条渠道共用一个技能（看受众、建联三封、合作条件、FTC 披露、简报、归因）。
+# 正文在 `@agentsws/skills` 的 `bundled/influencer-marketing/SKILL.md`（改编自 marketingskills，MIT）
+skills:
+  - { name: influencer-marketing, tier: open, load: on_demand }
 
 home_blocks:
   # 48 §5.1 面板五个分块：找人 / 建联 / 合作 / 审核 / 归因。

@@ -89,6 +89,9 @@ const SKILL_NAMES = new Set([
   'brand-voice',
   'chargeback-evidence',
   'customer-care',
+  // WP160 邮件与短信 / 红人营销
+  'email-sms',
+  'influencer-marketing',
   'policy-review',
   'returns-policy-calc',
   // WP154「内容与搜索」

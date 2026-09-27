@@ -93,7 +93,10 @@ automation:
     promotion: { adoption_rate_min: 0.95, window_weeks: 4, min_samples: 20 }
     demotion_triggers: [guardrail_hit, manual]
 
-skills: []
+# WP160：邮件与短信的做法（合规先看、每次群发出卡）。正文在 `@agentsws/skills` 的
+# `bundled/email-sms/SKILL.md`（改编自 marketingskills 的 sms / emails，MIT）
+skills:
+  - { name: email-sms, tier: open, load: on_demand }
 
 home_blocks:
   # 51 §2.3 面板三块：待审发送、自动流状态、近 30 天效果。
