@@ -122,4 +122,32 @@ actions:
       expect(e).toMatchObject({ code: 'not_found' })
     }
   })
+
+  // WP158（docs/82）：Search Console 与 GA4 只有读口标 read；写口一条都不标，
+  // 于是 role-read 令牌永远签不进去（授权时 OpenConnector 会一并申请读写 scope，这一层是兜底）
+  it('Search Console 与 GA4：读口 read，写口按默认 write', () => {
+    const reads = [
+      'google_search_console.list_sites',
+      'google_search_console.query_search_analytics',
+      'google_search_console.inspect_url',
+      'google_analytics.list_properties',
+      'google_analytics.run_report',
+      'google_analytics.get_property_quotas_snapshot',
+    ]
+    const writes = [
+      'google_search_console.add_site',
+      'google_search_console.delete_site',
+      'google_search_console.submit_sitemap',
+      'google_search_console.delete_sitemap',
+      'google_analytics.create_custom_dimension',
+      'google_analytics.archive_custom_metric',
+      'google_analytics.update_property',
+      'google_analytics.update_data_retention_settings',
+    ]
+    for (const id of reads) expect(table.resolve(id), id).toBe('read')
+    for (const id of writes) {
+      expect(table.covers(id), id).toBe(false)
+      expect(table.resolve(id), id).toBe('write')
+    }
+  })
 })

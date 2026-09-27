@@ -24,6 +24,7 @@ import type {
   PrDeckData,
   QueryContext,
   ReviewRow,
+  SearchDeckData,
   SiteDeckData,
   SocialDeckData,
 } from '@agentsws/deck'
@@ -98,6 +99,11 @@ export interface WorkstationDataSource {
    * "还没连"说的是外面那一侧那个源（`google_alerts`）。
    */
   pr?(view?: { assignment_id?: string }): PrDeckData | undefined
+  /**
+   * WP158：Search Console 与 GA4 读回来的汇总（当天缓存）。不给 = 没装读数那一层，
+   * GSC / GA4 那几块照旧空；给了但没选站点 = 块里说"先选一下"。
+   */
+  search?(): SearchDeckData | undefined
   /** 数据源连接状态（36 §3：没接的显示「去连接」而不是空图） */
   sources(): DataSourceStatus[]
   /** ObjectRef → 人话 */
@@ -205,6 +211,7 @@ export function createWorkstationPort(options: WorkstationPortOptions): Workstat
       const site = options.data.site?.(view)
       const ads = options.data.ads?.(view)
       const pr = options.data.pr?.(view)
+      const search = options.data.search?.()
       const thresholds = options.roles.roles.get(position.role_id)?.thresholds
       return {
         now: options.clock.now(),
@@ -226,6 +233,7 @@ export function createWorkstationPort(options: WorkstationPortOptions): Workstat
         ...(site === undefined ? {} : { site }),
         ...(ads === undefined ? {} : { ads }),
         ...(pr === undefined ? {} : { pr }),
+        ...(search === undefined ? {} : { search }),
         // WP63（51 §2.1）：异常卡的阈值从**职责定义**来，不硬写在积木里——
         // 什么叫"销售骤降"，卖家具的和卖快消的不是一个数
         ...(thresholds === undefined ? {} : { thresholds }),

@@ -497,6 +497,8 @@ export { secretRoutes } from './routes/secrets.js'
 export type {
   ClaimRulesPatch,
   GeoQuestionsView,
+  GoogleSourcesView,
+  GoogleSourceView,
   SeoActor as SeoRouteActor,
   SeoPort,
   SeoRunView,

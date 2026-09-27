@@ -143,6 +143,8 @@ export interface SeoServiceOptions {
   searchData(): SearchDataPort
   /** GA4 的落地页转化率；没接 = `undefined`。 */
   ga4?(): Promise<readonly LandingConversion[] | undefined>
+  /** WP158：GA4 连上了却没数的那句人话（还没选媒体资源 / 这次没读到）；没连或有数回 `undefined`。 */
+  ga4Note?(): string | undefined
   /** 近 7 天的订单（带 Shopify `landing_site`）。 */
   orders(): readonly LandingOrder[]
   /** 品牌档案（名字、域名、币种……）。域名为空时用 Search Console 页面清单里的主机名。 */
@@ -815,12 +817,17 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
     rows: GscRow[] | undefined
     pages: SitePage[]
     error?: string
+    /** WP158：给的是上一份时那句人话。 */
+    note?: string
   }> => {
     const gsc = options.searchConsole()
     if (!gsc.connected()) return { rows: undefined, pages: [] }
     try {
-      const [rows, pages] = await Promise.all([gsc.rows({ end: clock.now() }), gsc.pages()])
-      return { rows, pages }
+      // 先 rows 再 pages：真读数那一口的页面清单是读 rows 时一起拉回来的
+      const rows = await gsc.rows({ end: clock.now() })
+      const pages = await gsc.pages()
+      const note = gsc.note?.()
+      return note === undefined ? { rows, pages } : { rows, pages, note }
     } catch (err) {
       return { rows: [], pages: [], error: err instanceof Error ? err.message : String(err) }
     }
@@ -846,6 +853,7 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
         date: date(),
       })
       if (consoleRead.error !== undefined) payload.notes.unshift(consoleRead.error.slice(0, 160))
+      if (consoleRead.note !== undefined) payload.notes.unshift(consoleRead.note.slice(0, 160))
       const counts = { changes: 0, topics: 0, matters: 0 }
       const drafts = { model: 0, rules: 0 }
       for (const pick of payload.picks) {
@@ -900,7 +908,12 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
       const notes: string[] = []
       if (consoleRead.rows === undefined)
         notes.push('Search Console 还没连：点击那一列是 0，订单与收入照 Shopify 的落地页算。')
-      if (ga4 === undefined) notes.push('GA4 没接：没有落地页转化率那一列。')
+      const ga4Note = options.ga4Note?.()
+      if (ga4 === undefined) notes.push(ga4Note ?? 'GA4 没接：没有落地页转化率那一列。')
+      else
+        notes.push(
+          '订单与收入按 Shopify 的落地页记（主口径）；转化率与「GA4 口径收入」只算自然搜索来的会话、按 GA4 自己的归因记——两边对不上是常态，以 Shopify 为准。',
+        )
       if (out.unmatched_orders > 0)
         notes.push(`${out.unmatched_orders} 张订单没有落地页记录，归不上任何一页（照实报，不猜）。`)
       const payload: SeoWeeklyRevenuePayload = {

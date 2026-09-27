@@ -468,3 +468,20 @@ actions:
   # `create_tweet` 已经在上面红人那一段里了（同一张卡、同一个 service 名），
   # 这里不再写一遍——同一个 key 写两遍 YAML 直接解析失败
   x_api.reply_tweet: write
+
+  # WP158（docs/82）：Search Console 与 GA4 的**读**口（对着 OpenConnector 镜像里的
+  # provider 定义逐个核过，上游 operationType 都是 read）。写口（add_site / submit_sitemap /
+  # delete_* / create_custom_* / update_* / archive_*）一条都不写，按 default: write 走——
+  # 只读令牌永远签不进它们。GA4 的 `run_pages_report` 等「业务报表」上游标成了 write，
+  # 我们不用它们（一律走 `run_report`），也不替上游改标。
+  google_search_console.list_sites: read
+  google_search_console.get_site: read
+  google_search_console.query_search_analytics: read
+  google_search_console.inspect_url: read
+  google_search_console.list_sitemaps: read
+  google_search_console.get_sitemap: read
+  google_analytics.list_properties: read
+  google_analytics.list_account_summaries: read
+  google_analytics.run_report: read
+  google_analytics.get_property_quotas_snapshot: read
+  google_analytics.get_metadata: read

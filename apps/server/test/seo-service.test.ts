@@ -595,3 +595,59 @@ describe('WP159：改动卡初稿由模型写（规则版兜底）', () => {
     expect(seoB?.after).not.toHaveProperty('opening')
   })
 })
+
+describe('WP158：真读数接进每日与周收入', () => {
+  it('Search Console 给的是上一份：卡上第一行照实说', async () => {
+    const stale = standInSearchConsole({ rows: DEMO_GSC_ROWS, pages: DEMO_PAGES })
+    const { service, txn } = setup({
+      searchConsole: () => ({
+        ...stale,
+        note: () => 'Google 这边今天读 Search Console 的额度用完了，先用上一份。',
+      }),
+    })
+    const out = await service.daily()
+    const payload = (await txn.approvals.get(out.approval_item_id ?? ''))?.payload as {
+      notes: string[]
+      picks: unknown[]
+    }
+    expect(payload.notes[0]).toContain('先用上一份')
+    expect(payload.picks.length).toBeGreaterThan(0)
+  })
+
+  it('接了 GA4：转化率与 GA4 口径收入并排，口径写明；连了没选说一句', async () => {
+    const withGa4 = setup({
+      ga4: async () => [
+        {
+          page: 'https://shop.example/blogs/guide/best-magsafe-car-mount',
+          conversion_rate: 0.05,
+          sessions: 40,
+          purchases: 2,
+          revenue: 90,
+        },
+      ],
+    })
+    const out = await withGa4.service.weeklyRevenue()
+    const payload = (await withGa4.txn.approvals.get(out.approval_item_id ?? ''))?.payload as {
+      ga4: string
+      notes: string[]
+      rows: { page: string; orders: number; revenue: number; ga4_revenue?: number }[]
+    }
+    expect(payload.ga4).toBe('connected')
+    expect(payload.notes.some((n) => n.includes('以 Shopify 为准'))).toBe(true)
+    expect(payload.rows.find((r) => r.page.endsWith('best-magsafe-car-mount'))).toMatchObject({
+      orders: 1,
+      revenue: 45,
+      ga4_revenue: 90,
+    })
+
+    const picking = setup({
+      ga4: async () => undefined,
+      ga4Note: () => 'GA4 连上了，还没选是哪个媒体资源',
+    })
+    const p2 = await picking.service.weeklyRevenue()
+    const payload2 = (await picking.txn.approvals.get(p2.approval_item_id ?? ''))?.payload as {
+      notes: string[]
+    }
+    expect(payload2.notes).toContain('GA4 连上了，还没选是哪个媒体资源')
+  })
+})
