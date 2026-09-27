@@ -13,7 +13,14 @@ import type {
   RunUsage,
   ToolDef,
 } from '@agentsws/contracts'
-import { canonicalJson, EXTERNAL_FENCE, Provenance, redactOutbound, sha256 } from '@agentsws/core'
+import {
+  canonicalJson,
+  EXTERNAL_FENCE,
+  Provenance,
+  redactOutbound,
+  redactOutboundText,
+  sha256,
+} from '@agentsws/core'
 import { deepseekQuotaKindOf } from '@agentsws/model-gateway'
 import type {
   CreateDraftFn,
@@ -26,6 +33,7 @@ import {
   boundaryGate,
   contextItemHash,
   describeRun,
+  renderTrustedToolResult,
   rewriteForChannelGuard,
 } from '@agentsws/stand-ins'
 import { assembleDirect, DRAFT_REPLY_TOOL, STAGE_REFUND_TOOL } from './assemble.js'
@@ -639,7 +647,7 @@ export function createDirectRuntime(options: DirectRuntimeOptions): RuntimeAdapt
             tool_call_id: call_id,
             content:
               exec.status === 'ok'
-                ? EXTERNAL_FENCE.fencePayload(redactOutbound('tool_result', exec.data))
+                ? toolResultContent(call.name, input, exec.data)
                 : `[${exec.status}: ${exec.reason ?? 'no reason'}]`,
           })
 
@@ -743,4 +751,17 @@ export function refsFromEvents(events: readonly RunEvent[]): ObjectRef[] {
     if (e.type === 'tool.result' && e.status === 'ok') out.push(...(e.provenance_added ?? []))
   }
   return out
+}
+
+/**
+ * 工具结果进对话的那一段。
+ *
+ * 一律先脱敏、再包外部围栏（31 §3.3）；**唯一的例外**是 WP162 终审追加的可信白名单
+ * （`read_skill`：技能手册正文，与常驻技能同一种东西），它不包围栏，开头一行标明是哪一本。
+ * 白名单与渲染都在 `@agentsws/stand-ins`，dsh 那一侧用的是同一个函数。
+ */
+function toolResultContent(name: string, input: Record<string, unknown>, data: unknown): string {
+  const trusted = renderTrustedToolResult(name, input, data)
+  if (trusted !== undefined) return redactOutboundText('tool_result', trusted)
+  return EXTERNAL_FENCE.fencePayload(redactOutbound('tool_result', data))
 }

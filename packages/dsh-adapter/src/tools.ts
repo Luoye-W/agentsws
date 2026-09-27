@@ -8,10 +8,16 @@
  */
 import type { ObjectRef, RunRequest } from '@agentsws/contracts'
 import { parseMcpToolName } from '@agentsws/contracts'
-import { EXTERNAL_FENCE, redactOutbound } from '@agentsws/core'
+import { EXTERNAL_FENCE, redactOutbound, redactOutboundText } from '@agentsws/core'
 import { orderTools } from '@agentsws/ontology'
 import type { CreateDraftResult } from '@agentsws/stand-ins'
-import { isMcpReadTool, OWNER_TOOL_DEF_BY_NAME } from '@agentsws/stand-ins'
+import {
+  isMcpReadTool,
+  OWNER_TOOL_DEF_BY_NAME,
+  READ_SKILL_TOOL,
+  renderTrustedToolResult,
+  SKILL_TOOL_DEF_BY_NAME,
+} from '@agentsws/stand-ins'
 import type { ToolDefinition } from '@deepseek-ai/dsh-tools'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import type { JsonValue } from '@deepseek-ai/dsh-util-values'
@@ -29,6 +35,21 @@ import type { ToolSideEffect } from './types.js'
  */
 function renderToolResult(value: unknown): { type: 'text'; text: string }[] {
   return [{ type: 'text', text: EXTERNAL_FENCE.fencePayload(redactOutbound('tool_result', value)) }]
+}
+
+/**
+ * WP162 终审追加：只读工具结果的 render。`read_skill`（可信白名单里唯一的名字）回的是
+ * 技能手册正文，不包围栏、开头标明是哪一本——与 direct 那一侧同一个函数
+ * （`@agentsws/stand-ins` 的 `renderTrustedToolResult`）；别的工具照旧 {@link renderToolResult}。
+ */
+function renderReadResult(
+  name: string,
+  args: Record<string, unknown>,
+  value: unknown,
+): { type: 'text'; text: string }[] {
+  const trusted = renderTrustedToolResult(name, args, value)
+  if (trusted === undefined) return renderToolResult(value)
+  return [{ type: 'text', text: redactOutboundText('tool_result', trusted) }]
 }
 
 /** WP89：官方 `dsh-tool-bash` 的工具名（分类由 `gate.ts` 那一关先给出，见下）。 */
@@ -252,6 +273,18 @@ const READ_PARAMS = {
   thread_id: { type: 'string', description: 'Conversation thread id.' },
 } as const
 
+/**
+ * WP162：`read_skill` 只收一个参数——技能名。与 stub / direct 那份定义
+ * （`@agentsws/stand-ins` 的 `READ_SKILL_TOOL_DEF`）同一个意思，写成 dsh 的参数表。
+ */
+const SKILL_PARAMS = {
+  name: {
+    type: 'string',
+    description: '技能名，照索引里写的抄，例如 returns-policy-calc。',
+    required: true,
+  },
+} as const
+
 const STAGE_PARAMS = {
   order_id: { type: 'string', description: 'Order the refund belongs to.', required: true },
   amount: { type: 'number', description: 'Refund amount in the order currency.', required: true },
@@ -299,12 +332,16 @@ export interface StageToolHooks {
 function readTool(name: string, hooks: ReadToolHooks): ToolDefinition {
   return defineTool({
     name,
-    // WP153：店主那两个只读工具有写给模型的人话描述（与 stub / direct 同一份）
-    description: OWNER_TOOL_DEF_BY_NAME.get(name)?.description ?? `agentsws read tool ${name}`,
-    parameters: READ_PARAMS,
+    // WP153：店主那两个只读工具有写给模型的人话描述（与 stub / direct 同一份）；WP162 的 read_skill 同理
+    description:
+      OWNER_TOOL_DEF_BY_NAME.get(name)?.description ??
+      SKILL_TOOL_DEF_BY_NAME.get(name)?.description ??
+      `agentsws read tool ${name}`,
+    // WP162：读技能只要一个名字；别的只读工具照旧是那一张共用参数表
+    parameters: name === READ_SKILL_TOOL ? SKILL_PARAMS : READ_PARAMS,
     output: {
       schema: { type: 'json' },
-      render: (_args, value) => renderToolResult(value),
+      render: (args, value) => renderReadResult(name, args as Record<string, unknown>, value),
     },
     async execute(args, exec) {
       const input = Object.fromEntries(
