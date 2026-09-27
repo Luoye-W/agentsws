@@ -368,7 +368,7 @@
       "currency": "USD",
       "per_unit": 0.01,
       "unverified": true,
-      "note": "WP155：AI 问答探测 Perplexity 一次，LLM Responses Live 每次 $0.0006 + 模型本身的钱（sonar 联网，按 token 与请求费另计，服务商原价透传）。模型那一半没从官方页核到，按 $0.01 / 次估（偏高）——这一条最需要对账单。"
+      "note": "WP155：AI 问答探测 Perplexity 一次，LLM Responses Live 每次 $0.0006 + 模型本身的钱（sonar 联网，按 token 与请求费另计，服务商原价透传）。模型那一半没从官方页核到，按 $0.01 / 次估（偏高）——这一条最需要对账单。WP159（Luoye 09-27）：Perplexity 不再考虑，官方那一侧不探测它；这一条留着只是历史记录，不参与定价。"
     }
   ],
   "wp131_note": "WP131：带 `unverified: true` 的是这次按公开价补的条目（WP127 的多模态默认型号与生图），与整表一样等 Luoye 核对。"

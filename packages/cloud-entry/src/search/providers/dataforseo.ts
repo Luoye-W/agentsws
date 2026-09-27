@@ -6,7 +6,7 @@
  * | SERP（Google / Bing） | `/v3/serp/{google,bing}/organic/live/advanced`，Google 带 `load_async_ai_overview` |
  * | AI 概览 | 同 Google SERP，取 `ai_overview` 那一项 |
  * | ChatGPT / Gemini | `/v3/ai_optimization/{chat_gpt,gemini}/llm_scraper/live/advanced`（网页端真看到的回答） |
- * | Perplexity | `/v3/ai_optimization/perplexity/llm_responses/live`（sonar 模型 API + 联网搜索） |
+ * | Perplexity | `/v3/ai_optimization/perplexity/llm_responses/live`（sonar 模型 API + 联网搜索）。**WP159 起登记为不用**：代码留着，不进 `platforms` |
  * | Copilot | **没有**（docs/81 §1.1）；不列进 `platforms` |
  *
  * 鉴权：HTTP Basic，key 就是 `login:password` 这一串。形状照官方文档示例（出处见 docs/81 §3），
@@ -221,7 +221,9 @@ function serpTask(q: SerpQuery): Record<string, unknown> {
 export const dataforseo: SearchProviderAdapter = {
   id: 'dataforseo',
   engines: ['google', 'bing'],
-  platforms: ['chatgpt', 'perplexity', 'gemini', 'google_ai_overview'],
+  // WP159（Luoye 09-27）：Perplexity 不再考虑——下面 `case 'perplexity'` 的代码留着，登记为不用
+  platforms: ['chatgpt', 'gemini', 'google_ai_overview'],
+  unused_platforms: ['perplexity'],
   async serp(q, key, fetch) {
     const body = await post(
       `/serp/${q.engine}/organic/live/advanced`,

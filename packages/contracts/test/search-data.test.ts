@@ -17,6 +17,7 @@ import type {
 import {
   AI_ANSWER_MAX_PLATFORMS,
   AI_PLATFORMS,
+  GEO_DEFAULT_PLATFORMS,
   SEARCH_AI_ANSWER_CAPABILITY,
   SEARCH_DATA_CLOUD_PATHS,
   SEARCH_DATA_CLOUD_PREFIX,
@@ -25,6 +26,7 @@ import {
   SEARCH_SERP_CAPABILITY,
   SEARCH_SOURCE_OFFICIAL,
   searchSourceByo,
+  UNUSED_AI_PLATFORMS,
 } from '../src/index.js'
 
 describe('WP155 搜索数据契约', () => {
@@ -83,6 +85,13 @@ describe('WP155 搜索数据契约', () => {
     ])
     expect(AI_ANSWER_MAX_PLATFORMS).toBe(5)
     expect(SEARCH_DATA_PROVIDERS).toEqual(['dataforseo', 'serpapi', 'serper'])
+  })
+
+  it('WP159：Perplexity 登记为不用（枚举值不删）；GEO 默认三个平台', () => {
+    expect(AI_PLATFORMS).toContain('perplexity')
+    expect(UNUSED_AI_PLATFORMS).toEqual(['perplexity'])
+    expect(GEO_DEFAULT_PLATFORMS).toEqual(['chatgpt', 'gemini', 'google_ai_overview'])
+    expect(GEO_DEFAULT_PLATFORMS.some((p) => UNUSED_AI_PLATFORMS.includes(p))).toBe(false)
   })
 
   it('计费能力与云端路径', () => {

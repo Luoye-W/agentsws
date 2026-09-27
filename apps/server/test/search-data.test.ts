@@ -163,7 +163,7 @@ describe('三档路由', () => {
           ? Response.json({
               configured: true,
               route: 'official',
-              prices: { serp: 0.2, ai_answer: 0.4 },
+              prices: { serp: 0.2, ai_answer: 0.2 },
             })
           : Response.json({
               query: Q,

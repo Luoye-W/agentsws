@@ -38,9 +38,18 @@ describe('WP155 搜索数据价目', () => {
     expect(marginOf(price, 'dataforseo:serp')).toBeGreaterThanOrEqual(0.8)
   })
 
-  it('AI 问答每个平台一次：四个平台逐个算，最贵的那个也 ≥ 80%', () => {
+  it('AI 问答每个平台一次：官方在用的三个平台逐个算，最贵的那个也 ≥ 80%（WP159）', () => {
     const price = entryFor(pricing, 'data.search.ai_answer')?.credits_per_unit as number
-    for (const p of ['chatgpt', 'gemini', 'perplexity', 'google_ai_overview'])
+    for (const p of ['chatgpt', 'gemini', 'google_ai_overview'])
       expect(marginOf(price, `dataforseo:${p}`), p).toBeGreaterThanOrEqual(0.8)
+  })
+
+  it('WP159：去掉 Perplexity 后降到 0.2 / 平台·次；每周默认 6 问 × 3 平台 = 3.6 积分', () => {
+    const price = entryFor(pricing, 'data.search.ai_answer')?.credits_per_unit as number
+    expect(price).toBe(0.2)
+    expect(Math.round(6 * 3 * price * 10) / 10).toBe(3.6)
+    const raw = PRICING_FILE.entries.find((e) => e.capability === 'data.search.ai_answer')
+    expect(raw?.basis).toMatch(/Perplexity/)
+    expect(raw?.basis).toMatch(/3\.6/)
   })
 })

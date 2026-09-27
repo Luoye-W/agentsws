@@ -309,7 +309,7 @@ describe('每周 AI 探测花多少（WP155 提醒：看得到、调得动、关
           configured: true,
           route: 'official' as const,
           platforms: ['chatgpt', 'perplexity', 'gemini', 'google_ai_overview'] as const,
-          prices: { serp: 0.2, ai_answer: 0.4 },
+          prices: { serp: 0.2, ai_answer: 0.2 },
         }),
         serp: async () => {
           throw new Error('不该查 SERP')
@@ -322,17 +322,25 @@ describe('每周 AI 探测花多少（WP155 提醒：看得到、调得动、关
     }
   }
 
-  it('默认每周问 6 个 × 官方能探测的 4 个平台 ≈ 9.6 积分；Copilot 不问', async () => {
+  it('默认每周问 6 个 × 3 个平台（ChatGPT / Gemini / AI 概览）× 0.2 = 3.6 积分；Perplexity、Copilot 不问（WP159）', async () => {
     const o = official()
     const { service } = setup({ searchData: () => o.port as never })
+    service.setGeoQuestions(
+      Array.from({ length: 8 }, (_, i) => ({
+        id: `q${i}`,
+        text: `question number ${i}`,
+        origin: 'human' as const,
+        enabled: true,
+      })),
+    )
     const view = await service.geoView()
     expect(view.settings).toEqual({ enabled: true, max_questions: 6 })
-    expect(view.estimate.platforms).toBe(4)
-    expect(view.estimate.credits_per_week).toBe(
-      Math.round(view.estimate.questions * 4 * 0.4 * 10) / 10,
-    )
+    expect(view.estimate.platforms).toBe(3)
+    expect(view.estimate.questions).toBe(6)
+    expect(view.estimate.credits_per_week).toBe(3.6)
     await service.weeklyGeo()
-    expect(o.calls.every((c) => !c.includes('copilot'))).toBe(true)
+    expect(o.calls.every((c) => !c.includes('copilot') && !c.includes('perplexity'))).toBe(true)
+    expect(o.calls.every((c) => c.endsWith('|chatgpt,gemini,google_ai_overview'))).toBe(true)
     expect(o.calls.length).toBe(view.estimate.questions)
   })
 

@@ -53,9 +53,9 @@ import {
   checkContentQuality,
   evidenceText,
   type FactLike,
-  GEO_PLATFORMS,
   generateGeoQuestions,
   geoGaps,
+  geoPlatformsFor,
   type LandingConversion,
   type LandingOrder,
   MAX_GEO_QUESTIONS,
@@ -165,7 +165,7 @@ const STATE_FILE = 'seo-state.json'
 /** 同一件事交出去之后多久内不再重复开（天）。 */
 const HANDOFF_QUIET_DAYS = 14
 const DAY_MS = 86_400_000
-/** 每周默认问几个（WP155：10 个 × 4 个平台一周约 16 积分；默认收一点）。 */
+/** 每周默认问几个（WP159：6 个 × 3 个平台 × 0.2 = 一周约 3.6 积分）。 */
 const DEFAULT_GEO_QUESTIONS = Math.min(6, MAX_GEO_QUESTIONS)
 
 const geoSettingsOf = (state: SeoState): GeoSettings =>
@@ -173,7 +173,8 @@ const geoSettingsOf = (state: SeoState): GeoSettings =>
 
 /** 每周大概花多少：官方那条路按单价算，自带 key 是 0，没接就不写数。 */
 function estimateOf(questions: number, status: SearchDataStatus): GeoCostEstimate {
-  const platforms = (status.platforms ?? GEO_PLATFORMS).length
+  // WP159：默认问 ChatGPT、Gemini、Google AI 概览——再与这条路能探测的取交集
+  const platforms = geoPlatformsFor(status.platforms).length
   const base = { questions, platforms, route: status.route }
   if (!status.configured) return base
   if (status.route === 'byo') return { ...base, credits_per_week: 0 }
@@ -686,8 +687,9 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
       const enabled = questions.filter((q) => q.enabled).slice(0, settings.max_questions)
       const search = options.searchData()
       const status = await search.status()
-      // WP155：这条路能探测哪几个平台（官方那一侧没有 Copilot）；不在里面的不问、不花钱
-      const platforms = status.platforms ?? [...GEO_PLATFORMS]
+      // WP159：默认只问 ChatGPT、Gemini、Google AI 概览（Perplexity 不再考虑），
+      // 再与这条路能探测的取交集（官方那一侧没有 Copilot）；不在里面的不问、不花钱
+      const platforms = geoPlatformsFor(status.platforms)
       const estimate = estimateOf(enabled.length, status)
       const notes: string[] = []
       const rows: SeoWeeklyGeoPayload['rows'] = []

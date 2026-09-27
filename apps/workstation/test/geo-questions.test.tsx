@@ -19,7 +19,7 @@ const view = {
     },
   ],
   settings: { enabled: true, max_questions: 6 },
-  estimate: { questions: 2, platforms: 4, route: 'official' as const, credits_per_week: 3.2 },
+  estimate: { questions: 2, platforms: 3, route: 'official' as const, credits_per_week: 1.2 },
 }
 const getGeoQuestions = vi.fn(async () => view)
 const setGeoQuestions = vi.fn(async (input: { settings?: { enabled?: boolean } }) => ({
@@ -43,8 +43,8 @@ describe('买家会问的问题', () => {
     renderWithProviders(<GeoQuestions assignment="asg_content" />)
     const cost = await screen.findByTestId('geo-cost')
     expect(cost.textContent).toContain('2')
-    expect(cost.textContent).toContain('4')
-    expect(cost.textContent).toContain('3.2')
+    expect(cost.textContent).toContain('3')
+    expect(cost.textContent).toContain('1.2')
     expect(screen.getByDisplayValue('Is NordVolt worth it?')).toBeDefined()
   })
 
@@ -63,6 +63,6 @@ describe('买家会问的问题', () => {
     await userEvent.click(toggle)
     await waitFor(() => expect(setGeoQuestions).toHaveBeenCalled())
     expect(setGeoQuestions.mock.calls[0]?.[0]).toEqual({ settings: { enabled: false } })
-    await waitFor(() => expect(screen.getByTestId('geo-cost').textContent).not.toContain('3.2'))
+    await waitFor(() => expect(screen.getByTestId('geo-cost').textContent).not.toContain('1.2'))
   })
 })
