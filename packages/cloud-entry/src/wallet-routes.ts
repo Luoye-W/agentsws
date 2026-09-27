@@ -7,7 +7,8 @@
  * 权限：owner 那把令牌（scope 里有 `wallet:admin`）看整个组织；
  * 成员那把只看自己工作区那一份——同一条路由，按 scope 裁，不另开一条"成员版"。
  */
-import type { UsageGroup } from '@agentsws/contracts'
+import type { Pricing, PricingCatalog, UsageGroup } from '@agentsws/contracts'
+import { PRICING_CATALOG_MAX_AGE_S, PRICING_CATALOG_PATH } from '@agentsws/contracts'
 import { TOPUP_TIERS_FILE, topupTierById } from '@agentsws/metering'
 import type { Context } from 'hono'
 import {
@@ -41,6 +42,26 @@ export function monthStart(at: string): string {
 
 function nowOf(deps: EntryDeps): string {
   return deps.now?.() ?? new Date().toISOString()
+}
+
+/**
+ * WP165（docs/83 §2）：公开价目那一份——价目表 + 充值档位，和 `/v1/wallet/pricing`、
+ * `/v1/wallet/topup/tiers` 是同一份数据，只是**不要令牌**：价目只放云上之后，没关联账号的
+ * 本机也得看得到要花多少钱。
+ */
+export function pricingCatalogOf(pricing: Pricing): PricingCatalog {
+  return { version: 1, pricing, topup_tiers: TOPUP_TIERS_FILE }
+}
+
+/** `GET /v1/pricing` 的响应：`{ data }` 信封 + 公开缓存头（Workers 前门与 Compose 形态共用）。 */
+export function pricingCatalogResponse(pricing: Pricing): Response {
+  return new Response(JSON.stringify({ data: pricingCatalogOf(pricing) }), {
+    status: 200,
+    headers: {
+      'content-type': 'application/json',
+      'cache-control': `public, max-age=${String(PRICING_CATALOG_MAX_AGE_S)}`,
+    },
+  })
 }
 
 export function walletRoutes(deps: EntryDeps): EntryRoute[] {
@@ -86,6 +107,13 @@ export function walletRoutes(deps: EntryDeps): EntryRoute[] {
       scope: 'wallet:read',
       summary: '价目表（能力 → 单位 → 积分）。对用户只显示最终积分价',
       handler: async () => ok(deps.pricing),
+    },
+    {
+      method: 'get',
+      path: PRICING_CATALOG_PATH,
+      auth: 'public',
+      summary: '公开价目（价目表 + 充值档位）。不要令牌、可缓存；本机没关联账号也据此显示价格',
+      handler: async () => pricingCatalogResponse(deps.pricing),
     },
     {
       method: 'get',

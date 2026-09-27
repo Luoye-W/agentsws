@@ -48,6 +48,8 @@ export * from './packages.js'
 // 60 §1 / §2 公共关系的四条职责与四个对象（WP78）。与 social.ts 一条都不共用：
 // `social.reddit` 是**我们自己的** subreddit，`pr.reddit` 是**别人的**。
 export * from './pr.js'
+// WP165（docs/83 §2）：公开价目 `GET /v1/pricing`（价目只放云上，本机缓存一份离线显示）
+export * from './pricing-catalog.js'
 export * from './roles.js'
 export * from './run.js'
 export * from './schedule.js'

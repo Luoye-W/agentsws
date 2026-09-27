@@ -71,4 +71,10 @@ export type {
   TokenVerifier,
 } from './types.js'
 export { ENTRY_STATUS, EntryError, secretOf } from './types.js'
-export { monthStart, WALLET_ADMIN_SCOPE, walletRoutes } from './wallet-routes.js'
+export {
+  monthStart,
+  pricingCatalogOf,
+  pricingCatalogResponse,
+  WALLET_ADMIN_SCOPE,
+  walletRoutes,
+} from './wallet-routes.js'

@@ -33,6 +33,8 @@ import { createStubRuntime } from './runtime/stub.js'
 
 export * from './actors.js'
 export * from './clock.js'
+// WP165：云端那一侧的契约替身（价目样例、钱包、公共红人库）
+export * from './cloud/index.js'
 export * from './connect/actions.js'
 export * from './connect/dev-mcp.js'
 export * from './connect/mock-connect.js'
