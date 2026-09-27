@@ -2,8 +2,8 @@
  * WP113（63 §3）：**全量同步**。
  *
  * WP55 那一版只扫 INBOX，而且只为了"把客户来信变成事项"。这一版要把整只邮箱
- * 接进来：INBOX + 已发 + 草稿 + 垃圾箱 + `kefuagents` + `kolagents`，一个文件夹
- * 一个 UID 游标（IMAP 的 UID 只在文件夹内唯一，这一条不是可选项）。
+ * 接进来：INBOX + 已发 + 草稿 + 垃圾箱 + `KefuAgents` + `KOLAgents`（WP161：与老产品
+ * 同名，服务器上已有的大小写变体照认），一个文件夹一个 UID 游标（IMAP 的 UID 只在文件夹内唯一，这一条不是可选项）。
  *
  * **沿用 WP55 的那一套，不另起炉灶**（`cursors.ts`）：每文件夹 UID 游标、
  * `UIDVALIDITY` 作废重来、毒消息隔离、扫描租约。区别只有两处：
@@ -38,8 +38,9 @@ import {
 import type { MailSource, RawEmailMessage } from '../email/imap.js'
 import { ChannelError } from '../errors.js'
 import type { RawStore } from '../raw-store.js'
+import { agentFolderVariants, isAgentFolderKind } from './folders.js'
 import { parseMessage } from './parse.js'
-import { folderKindOf, type MessageStore } from './store.js'
+import { folderKindOf, folderPathFor, type MessageStore } from './store.js'
 import type { MailboxWriter } from './writeback.js'
 
 /** 首次回溯多少天。 */
@@ -63,11 +64,48 @@ export const DEFAULT_SYNC_FOLDER_KINDS: readonly MessageFolderKind[] = [
   'kol',
 ]
 
+/**
+ * WP161：按服务器上**真有**的文件夹排出这只邮箱的扫描清单。
+ *
+ * - `listed` 为空（列不到 / 端口不支持）→ 回 `undefined`，调用方退回缺省名单；
+ * - 普通文件夹按语义认真名（`[Gmail]/Sent Mail`），服务器上没有的那种不扫；
+ * - 岗位文件夹（客服 / 红人）的**每一个**大小写变体都扫（规范名排前）——
+ *   两只并存时信不挪、不删、不改名，在哪只里就在哪只里看得见；一只都没有就先不扫，
+ *   第一次挪信时建出来，下一轮列清单就有了。
+ * - `INBOX` 永远在（RFC 3501：每只邮箱都有，列表里漏了也照扫）。
+ */
+export function mailboxFoldersFrom(
+  listed: readonly string[] | undefined,
+  kinds: readonly MessageFolderKind[] = DEFAULT_SYNC_FOLDER_KINDS,
+): string[] | undefined {
+  if (listed === undefined || listed.length === 0) return undefined
+  const out: string[] = []
+  const add = (p: string): void => {
+    if (!out.includes(p)) out.push(p)
+  }
+  for (const kind of kinds) {
+    if (kind === 'inbox') {
+      add(listed.find((p) => folderKindOf(p) === 'inbox') ?? 'INBOX')
+    } else if (isAgentFolderKind(kind)) {
+      for (const p of agentFolderVariants(kind, listed)) add(p)
+    } else {
+      const hit = listed.find((p) => folderKindOf(p) === kind)
+      if (hit !== undefined) add(hit)
+    }
+  }
+  return out
+}
+
 /** 一只邮箱的装配（每个文件夹一个 `MailSource`）。 */
 export interface MailboxAccount {
   address: string
   /** 这只邮箱上要扫哪几个文件夹（真名）。 */
   folders: readonly string[]
+  /**
+   * WP161：服务器上列出来的**全部**文件夹（挪信时按它认岗位文件夹的真名：
+   * 已有 `kefuagents` 就沿用、不另建 `KefuAgents`）。不给 = 按 `folders` 认。
+   */
+  known_folders?: readonly string[]
   /** 按文件夹开一个收信端口。测试注入内存实现。 */
   open(folder: string): MailSource
   /** 回写端（已读 / 星标 / 挪信）。不给 = 只改本机（63 §7 的降级）。 */
@@ -282,7 +320,8 @@ export class MailboxSync {
     // 交接给客服 / 红人那一侧；那边不接就**不挪信**（信留在 INBOX 仍然看得见）
     const accepted = (await this.opts.handoff?.(parsed, triage)) ?? false
     if (!accepted) return true
-    const to = triage.route === 'support' ? 'kefuagents' : 'kolagents'
+    // WP161：挪进这只邮箱上**已有**的那只（大小写变体照认），没有才用规范名新建
+    const to = folderPathFor(triage.route, account.known_folders ?? account.folders)
     const moved = (await account.writer?.move(folder, raw.uid, to)) ?? false
     if (moved) {
       report.moved += 1

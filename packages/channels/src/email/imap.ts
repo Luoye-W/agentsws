@@ -48,6 +48,14 @@ export interface MailSource {
    * 那是**正确**的降级（人去看一眼），不是静默重发。
    */
   findMessageId?(message_id: string, folders?: readonly string[]): Promise<string | undefined>
+  /**
+   * WP161：这只邮箱上有哪些文件夹（真名）。
+   *
+   * 归档前拿它认已有的那只（`kefuagents` 与规范名 `KefuAgents` 算同一只，
+   * 不分大小写）——免得在区分大小写的服务器上另建一只相近的。**永不抛**；
+   * 列不到回空数组，调用方按配置的名字走。
+   */
+  listFolders?(): Promise<string[]>
 }
 
 /** imapflow 里我们真正用到的那几个方法（便于替身与最小 IMAP 桩）。 */
@@ -119,7 +127,7 @@ export interface ImapConfig {
   /** 每轮最多取多少封，默认 50 */
   batch?: number
   /**
-   * WP55 / 48 §4 L3 #5：处理过的信搬进哪个文件夹（缺省 `agentsws`）。
+   * WP55 / 48 §4 L3 #5：处理过的信搬进哪个文件夹（WP161 起服务进程缺省 `KefuAgents`）。
    * 建不了 / 服务器拒绝 MOVE 就只记一条日志——归档是锦上添花，不该拖垮收信。
    */
   archive_folder?: string
@@ -342,6 +350,22 @@ export class ImapMailSource implements MailSource {
     } catch {
       client.close()
       return false
+    }
+  }
+
+  /** WP161：列文件夹（每次一条连接、列完登出）。**永不抛**，列不到回 `[]`。 */
+  async listFolders(): Promise<string[]> {
+    let client: ImapClientLike | undefined
+    try {
+      client = this.connectedClient()
+      if (client.list === undefined) return []
+      await client.connect()
+      const boxes = await client.list()
+      await client.logout()
+      return boxes.map((b) => b.path)
+    } catch {
+      client?.close()
+      return []
     }
   }
 

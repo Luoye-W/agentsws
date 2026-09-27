@@ -438,13 +438,16 @@ export function createMessages(options: MessagesOptions): MessagesAssembly {
     async thread(_actor: MessageActor, thread_id: string): Promise<MessageThreadView> {
       const messages = await store.thread(thread_id)
       const last = messages[messages.length - 1]
-      const agentRoute = messages.find((m) => m.route !== 'inbox')?.route
+      // 状态带只给有 Agent 在处理的那两条路（`b2b` 是 WP161 的预留，还没有岗位）
+      const agentRoute = messages
+        .map((m) => m.route)
+        .find((r): r is 'support' | 'kol' => r === 'support' || r === 'kol')
       const linked = messages.find((m) => m.linked !== undefined)?.linked
       return {
         thread_id,
         subject: last?.subject ?? '',
         messages,
-        ...(agentRoute === undefined || agentRoute === 'inbox'
+        ...(agentRoute === undefined
           ? {}
           : {
               agent_status: {
