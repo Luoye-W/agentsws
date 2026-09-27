@@ -29,7 +29,12 @@ function fakeConnect(over: {
   fail?: (action: string, input: Record<string, unknown>) => Error | undefined
 }) {
   const calls: Call[] = []
-  const issued: { allowed_actions: string[]; allowed_connections: string[]; kind: string }[] = []
+  const issued: {
+    assignment_id?: string
+    allowed_actions: string[]
+    allowed_connections: string[]
+    kind: string
+  }[] = []
   const revoked: string[] = []
   const read = (svc: string, names: string[]) =>
     names.map((n) => ({ id: `${svc}.${n}`, side_effect: 'read' }))
@@ -51,6 +56,7 @@ function fakeConnect(over: {
           ? read(service, ['list_properties', 'run_report'])
           : [],
     issueToken: async (input: {
+      assignment_id?: string
       allowed_actions: string[]
       allowed_connections: string[]
       kind: string
@@ -388,6 +394,10 @@ describe('令牌守卫', () => {
     }
     expect(f.revoked.length).toBe(f.issued.length)
     expect(f.calls.every((c) => c.token === TOKEN)).toBe(true)
+    // 吊销按 assignment 一把全吊：每次读各用一个独有的，只吊自己签的那张（Fable 终审补）
+    const ids = f.issued.map((t) => t.assignment_id)
+    expect(new Set(ids).size).toBe(ids.length)
+    expect([...f.revoked].sort()).toEqual([...ids].sort())
   })
 
   it('令牌不进事件、不进卡上的人话、不进面板数据', async () => {

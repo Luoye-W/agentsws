@@ -16,6 +16,7 @@
  * 选哪个站点 / 媒体资源记在品牌目录的 `google-reads.json`（只有站点 URL 与媒体资源 id）；
  * 只有一个可选时自动选上，不问。
  */
+import { randomUUID } from 'node:crypto'
 import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { Clock, EventEnvelope, GscRow, SitePage, WorkspaceId } from '@agentsws/contracts'
@@ -257,7 +258,7 @@ export function createGoogleReads(options: GoogleReadsOptions): GoogleReads {
    */
   const withReadToken = async <T>(
     conn: { id: string; service: string },
-    assignment_id: string,
+    base_assignment: string,
     bare: readonly string[],
     fn: (
       run: (name: string, input: unknown) => Promise<unknown>,
@@ -274,6 +275,12 @@ export function createGoogleReads(options: GoogleReadsOptions): GoogleReads {
       throw Object.assign(new Error(`连接器目录里没有 ${upstreamOf(conn.service)} 的读口`), {
         code: 'action_unavailable',
       })
+    /*
+     * 吊销是按 assignment 一把全吊的：几个品牌同时读、或者「选一下」触发的重读撞上每日读数，
+     * 共用一个 assignment 就会把别人手里正在用的令牌也吊掉。所以每次读用一个独有的
+     * assignment（固定前缀 + 连接 + 随机尾），吊销只吊自己这一张。（Fable 终审补）
+     */
+    const assignment_id = `${base_assignment}_${conn.id}_${randomUUID().slice(0, 8)}`
     const { token } = await options.connect.issueToken({
       assignment_id,
       kind: 'role-read',
