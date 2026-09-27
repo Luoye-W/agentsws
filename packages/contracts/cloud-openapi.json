@@ -1493,6 +1493,17 @@
               }
             }
           },
+          "500": {
+            "description": "云侧没配上游密钥 / 价目表缺这一项（没扣积分）",
+            "x-error-codes": ["internal"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
           "502": {
             "description": "上游连不上（没扣积分）",
             "x-error-codes": ["provider_error"],
@@ -1597,6 +1608,17 @@
           "422": {
             "description": "数据驻留：`X-Agentsws-Region: cn` 却点了境外模型",
             "x-error-codes": ["residency_blocked"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "云侧没配上游密钥 / 价目表缺这一项（没扣积分）",
+            "x-error-codes": ["internal"],
             "content": {
               "application/json": {
                 "schema": {
@@ -1718,7 +1740,7 @@
             }
           },
           "500": {
-            "description": "internal",
+            "description": "云侧没配上游密钥 / 价目表缺这一项（没扣积分）",
             "x-error-codes": ["internal"],
             "content": {
               "application/json": {
@@ -9186,6 +9208,10 @@
           "credits_per_usd": {
             "type": "number",
             "description": "1 美元几积分。恒为 7（写出来是为了让换算口径可读，同 `credit_cny`）。"
+          },
+          "note": {
+            "type": "string",
+            "description": "这张表为什么这么定（给人看的一段话；WP164 对照实际回包补上）。"
           },
           "tiers": {
             "type": "array",

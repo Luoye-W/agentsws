@@ -346,6 +346,8 @@ export interface TopupTiers {
   as_of: Iso8601
   /** 1 美元几积分。恒为 7（写出来是为了让换算口径可读，同 `credit_cny`）。 */
   credits_per_usd: number
+  /** 这张表为什么这么定（给人看的一段话；WP164 对照实际回包补上）。 */
+  note?: string
   tiers: TopupTier[]
 }
 

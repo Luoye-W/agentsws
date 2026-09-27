@@ -657,13 +657,18 @@ export interface CloudWalletApi {
 /* 路由表：AI（OpenAI 兼容）                                            */
 /* ------------------------------------------------------------------ */
 
-/** AI 口的错误。上游拒了的那种不在这里：状态码与正文原样透传，预扣整笔释放。 */
+/**
+ * AI 口的错误。**上游拒了的那种不在这里**：状态码与正文原样透传（通常是 OpenAI 形状的
+ * `{ error: { message } }`），预扣整笔释放、一分不扣。
+ */
 interface AiErrors extends EntryAuthErrors {
   400: 'invalid_input'
   /** 余额不够这一次的预扣（只拒这一次，不冻结） */
   402: 'insufficient_credits'
   /** 数据驻留：`X-Agentsws-Region: cn` 却点了境外模型 */
   422: 'residency_blocked'
+  /** 云侧没配上游密钥 / 价目表缺这一项（没扣积分） */
+  500: 'internal'
   /** 上游连不上（没扣积分） */
   502: 'provider_error'
 }
@@ -702,7 +707,7 @@ export interface CloudAiApi {
     headers: AiRegionHeaders
     body: AiImageRequest
     ok: { status: 200; body: AiImages }
-    errors: AiErrors & { 500: 'internal' }
+    errors: AiErrors
     errorBody: CloudEntryErrorBody
   }
   /** 这把令牌能用的模型清单（不扣积分）；带 `X-Agentsws-Region: cn` 时只列境内可用的 */
