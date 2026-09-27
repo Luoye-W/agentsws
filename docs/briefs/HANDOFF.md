@@ -70,6 +70,8 @@
 | 45 | WP161 邮箱子文件夹名与老产品对齐 KefuAgents / KOLAgents（认已有不分大小写），预留 BtoBAgents | `WP161-mail-folder-names.md` | `wp161-mail-folders` · `wp/161-mail-folders` | — | 已合并（09-27，Fable 终审；遗留：客服收信把所有处理过的信都挪进归档文件夹 → WP163） |
 | 46 | WP162 技能正文真的进到模型：自带技能入库、按需技能可读（`read_skill`）、每个登记的技能都有正文 | `WP162-skills-reach-the-model.md` | `wp162-skills-load` · `wp/162-skills-load` | — | 进行中（Claude） |
 | 47 | WP163 客服收信只把判成客服的信挪进 KefuAgents（照老产品：影子模式、挪信 / 标已读两个开关、动作日志），挪信只由一处负责 | `WP163-support-archive-only-support-mail.md` | `wp163-support-archive` · `wp/163-support-archive` | — | 进行中（Claude） |
+| 48 | WP164 云端对外契约补全：一份完整 OpenAPI（除运营后台）、契约 ↔ 真云服务一致性测试、CI 核对 | `WP164-cloud-openapi-contract.md` | `wp164-cloud-contract` · `wp/164-cloud-contract` | — | 进行中（Claude） |
+| 49 | WP165 开源仓不再直接依赖云端代码：自带 key 适配器拆成开源包、价目从云上取（`/v1/pricing`）、测试与模拟换契约替身、import 守卫 | `WP165-open-repo-decouple-cloud.md` | `wp165-decouple` · `wp/165-decouple` | — | 进行中（Claude） |
 
 WP117b 的补充要求（派工单里没有，写在这）：demo 服务的是 `apps/workstation/dist`，测界面前先 `pnpm -F @agentsws/workstation exec vite build`；交付一个真实点击的 playwright 脚本 `scripts/e2e-kol-sandbox.mjs`（playwright 库在 `node_modules/.pnpm/playwright@1.63.0/node_modules/playwright`），走完「选合成红人 → 起草开发信 → 批准发送 → 已发 ≥ 1 → 跳到 N 天后 → 回信 ≥ 1 → 分类 → 议价卡 → 阶段推进 → 交付物 → 追踪链接」，每步截图到 `docs/assets/workstation/kol-e2e-NN.png`，脚本里断言计数确实变了；演练数据从真实漏斗 / 归因里排除，单独显示「演练漏斗」。
 
