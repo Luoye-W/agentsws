@@ -39,6 +39,11 @@ export interface MailSource {
    */
   archive?(uid: number, folder: string, mark_read: boolean): Promise<boolean>
   /**
+   * WP163：只标已读、不挪（老产品「标已读」与「挪信」是两个开关）。
+   * 回 `false` = 没标上；不实现 = 这个收信端只能在挪信时顺手标。
+   */
+  markRead?(uid: number): Promise<boolean>
+  /**
    * WP55 / 48 §4 L3 #4：去已发 / 归档文件夹里搜一个 Message-ID。
    *
    * 出站对账的全部内容就是这一句话：一封 `sent_unknown` 的信到底发出去没有，
@@ -357,6 +362,28 @@ export class ImapMailSource implements MailSource {
   }
 
   /** WP161：列文件夹（每次一条连接、列完登出）。**永不抛**，列不到回 `[]`。 */
+  async markRead(uid: number): Promise<boolean> {
+    const client = this.connectedClient()
+    if (client.messageFlagsAdd === undefined) return false
+    try {
+      await client.connect()
+      try {
+        const lock = await client.getMailboxLock(this.mailbox)
+        try {
+          await client.messageFlagsAdd(String(uid), ['\\Seen'], { uid: true })
+        } finally {
+          lock.release()
+        }
+      } finally {
+        await client.logout()
+      }
+      return true
+    } catch {
+      client.close()
+      return false
+    }
+  }
+
   async listFolders(): Promise<string[]> {
     let client: ImapClientLike | undefined
     try {
