@@ -249,3 +249,127 @@ describe('WP167：收信一个入口（服务进程的装配）', () => {
     expect(h.runs).toHaveLength(2)
   })
 })
+
+describe('WP167：判不准的放「待确认」，人点一下才交出去', () => {
+  it('低把握的客服判定：不开事项、不挪；进待确认；点「这是客服」→ 开事项、起 Run、挪信、写事件', async () => {
+    const box = new Mailbox()
+    box.deliver(3, mime(3, 'ann@customer.example'))
+    const h = assemble({ box, confidence: 0.4 })
+    await h.tick()
+    expect(h.matters()).toHaveLength(0)
+    expect(h.runs).toHaveLength(0)
+    expect(box.where('m-3')).toEqual({ folder: 'INBOX', read: false })
+    const port = h.messages?.port
+    const pending = (await port?.threads(ACTOR, { pending_route: true }))?.threads ?? []
+    expect(pending).toHaveLength(1)
+    expect(pending[0]?.suggested_route).toBe('support')
+    const id = pending[0]?.pending_message_id as string
+
+    const out = await port?.confirmRoute?.(ACTOR, id, { route: 'support' })
+    expect(out?.handed_off).toBe(true)
+    expect(out?.matter_id).toBe(h.matters()[0]?.id)
+    expect(h.runs).toHaveLength(1)
+    expect(h.judged).toHaveLength(1)
+    expect(box.where('m-3')).toEqual({ folder: 'KefuAgents', read: true })
+    expect(out?.message.route).toBe('support')
+    expect(out?.message.triage?.by).toBe('user')
+    // 待确认里没它了
+    expect((await port?.threads(ACTOR, { pending_route: true }))?.threads).toHaveLength(0)
+    // 人工分拣写了事件：谁点的、判成什么；没有正文、地址遮过
+    const confirmed = h.ofType('messages.route_confirmed')
+    expect(confirmed).toHaveLength(1)
+    expect(confirmed[0]?.actor).toEqual({ kind: 'person', id: 'p_owner' })
+    expect(confirmed[0]?.payload).toMatchObject({ route: 'support', handed_off: true })
+    expect(JSON.stringify(confirmed)).not.toContain('body 3')
+    expect(JSON.stringify(confirmed)).not.toContain('ann@customer.example')
+
+    // 再点一次：同一封信不再进客服管线
+    await port?.confirmRoute?.(ACTOR, id, { route: 'support' })
+    expect(h.runs).toHaveLength(1)
+  })
+
+  it('点「不是」：只记人的判断，信留在收件箱，从待确认里消失', async () => {
+    const box = new Mailbox()
+    box.deliver(3, mime(3, 'ann@customer.example'))
+    const h = assemble({ box, confidence: 0.4 })
+    await h.tick()
+    const port = h.messages?.port
+    const id = (await port?.threads(ACTOR, { pending_route: true }))?.threads[0]
+      ?.pending_message_id as string
+    const out = await port?.confirmRoute?.(ACTOR, id, { route: 'inbox' })
+    expect(out?.handed_off).toBe(false)
+    expect(h.matters()).toHaveLength(0)
+    expect(box.where('m-3')).toEqual({ folder: 'INBOX', read: false })
+    expect((await port?.threads(ACTOR, { pending_route: true }))?.threads).toHaveLength(0)
+    expect(h.ofType('messages.route_confirmed')[0]?.payload).toMatchObject({ route: 'inbox' })
+  })
+
+  it('客服岗位没开时点「这是客服」：交不出去，什么都不改，照实回', async () => {
+    const box = new Mailbox()
+    box.deliver(3, mime(3, 'ann@customer.example'))
+    const roles: RoleId[] = ['dtc.support']
+    const h = assemble({ box, confidence: 0.4, roles })
+    await h.tick()
+    roles.length = 0
+    const port = h.messages?.port
+    const id = (await port?.threads(ACTOR, { pending_route: true }))?.threads[0]
+      ?.pending_message_id as string
+    const out = await port?.confirmRoute?.(ACTOR, id, { route: 'support' })
+    expect(out?.handed_off).toBe(false)
+    expect(h.runs).toHaveLength(0)
+    expect((await port?.threads(ACTOR, { pending_route: true }))?.threads).toHaveLength(1)
+  })
+})
+
+describe('WP167：邮箱卡上的开关', () => {
+  it('默认值照老产品；改影子模式写一条事件，下一封客服信就只看不动（照样开事项）', async () => {
+    const box = new Mailbox()
+    const h = assemble({ box })
+    const sw = h.messages?.switches
+    expect(sw?.get(ME)).toEqual({ shadow_mode: false, move: true, mark_read: true, takeover: true })
+    expect(sw?.set(ME, { shadow_mode: true }, 'p_owner')).toMatchObject({ shadow_mode: true })
+    // 没变的不写事件
+    sw?.set(ME, { shadow_mode: true }, 'p_owner')
+    const changed = h.ofType('mailbox.switches_changed')
+    expect(changed).toHaveLength(1)
+    expect(changed[0]?.payload).toMatchObject({ changed: { shadow_mode: true } })
+    expect(JSON.stringify(changed)).not.toContain(ME)
+
+    box.deliver(3, mime(3, 'ann@customer.example'))
+    await h.tick()
+    expect(h.runs).toHaveLength(1)
+    expect(box.where('m-3')).toEqual({ folder: 'INBOX', read: false })
+
+    // 关掉影子模式、关掉挪信：下一封只标已读
+    sw?.set(ME, { shadow_mode: false, move: false }, 'p_owner')
+    box.deliver(4, mime(4, 'bob@customer.example'))
+    await h.tick()
+    expect(box.where('m-4')).toEqual({ folder: 'INBOX', read: true })
+  })
+
+  it('接管 = 客服岗位开着（只读）', () => {
+    const h = assemble({ box: new Mailbox(), roles: [] })
+    expect(h.messages?.switches.get(ME).takeover).toBe(false)
+  })
+})
+
+describe('WP167：开关落盘', () => {
+  it('按邮箱各存一份（地址不分大小写），重开还在；坏文件按默认值走', async () => {
+    const { mkdtempSync, rmSync, writeFileSync } = await import('node:fs')
+    const { tmpdir } = await import('node:os')
+    const { join } = await import('node:path')
+    const { MailboxSwitchStore } = await import('../src/mailbox-switches.js')
+    const dir = mkdtempSync(join(tmpdir(), 'wp167-switches-'))
+    try {
+      const a = new MailboxSwitchStore({ dir })
+      expect(a.set('Hello@Shop.example', { mark_read: false }).changed).toEqual(['mark_read'])
+      const b = new MailboxSwitchStore({ dir })
+      expect(b.get(ME)).toEqual({ shadow_mode: false, move: true, mark_read: false })
+      expect(b.get('other@shop.example').mark_read).toBe(true)
+      writeFileSync(join(dir, 'mailbox-switches.json'), '{oops')
+      expect(new MailboxSwitchStore({ dir }).get(ME).mark_read).toBe(true)
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+})
