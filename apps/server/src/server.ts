@@ -3532,9 +3532,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
          * WP113（63 §3）：同一拍里把**整只邮箱**也拉一轮（六个文件夹各一个游标）。
          *
          * 挂在同一条任务上而不是另起一条定时器：两条路看的是同一只邮箱，
-         * 分开跑只会让"现在到底收到哪儿了"有两个答案。上面那一轮扫 INBOX 把客户
-         * 来信变成事项，这一轮把每一封信落进消息库——租约 key 已经错开
-         * （`msg:<地址>`），互相不抢。
+         * 分开跑只会让"现在到底收到哪儿了"有两个答案。WP167 起上面那一轮不再扫 INBOX
+         * （`inbox_intake: 'message_sync'`，只推重试队列）；收信只有这一个入口——落消息库、
+         * 分拣，判成客服的信再经 `channels.intakeSupportMail` 递回渠道那条管线开事项、起 Run。
          *
          * 一个品牌的消息同步炸了不该拖垮别的品牌的收信，所以单独 catch。
          */
