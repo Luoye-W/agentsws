@@ -127,9 +127,8 @@ export function findAuthorizationPhrases(markdown: string): string[] {
 // ---------- WP162：自带技能入库 ----------
 
 /**
- * 自带技能的版本：frontmatter 里的 `version`。没写就是 `1.0`——`customer-care`
- * 那一份从 WP29 起一直按 `1.0` 入库，正文一个字没改，版本也不改（改了会让已有的
- * overlay 的 `base_version` 对不上）。
+ * 自带技能的版本：frontmatter 里的 `version`。没写就是 `1.0`——与 WP29 起服务端那份
+ * 三段 `customer-care`（没写版本、按 `1.0` 入库）同一个口径，新版只要写得比它高就会替换。
  */
 export const BUNDLED_DEFAULT_VERSION = '1.0'
 

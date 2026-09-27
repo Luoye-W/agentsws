@@ -31,9 +31,10 @@ describe('版本号', () => {
     expect(compareSkillVersions('0.9', '1.0.0')).toBe(-1)
   })
 
-  it('frontmatter 没写 version 的按 1.0（customer-care）', () => {
-    expect(bundledSkillVersion(readBundledSkill('customer-care').markdown)).toBe('1.0')
+  it('版本取 frontmatter；没写 version 的按 1.0', () => {
+    expect(bundledSkillVersion(readBundledSkill('customer-care').markdown)).toBe('1.1.0')
     expect(bundledSkillVersion(readBundledSkill('email-sms').markdown)).toBe('1.0.0')
+    expect(bundledSkillVersion('---\nname: x\n---\n\n## a\n\nb\n')).toBe('1.0')
   })
 })
 
@@ -111,18 +112,23 @@ describe('seedBundledSkills', () => {
     expect(r?.layers_applied).toEqual(['package', 'company', 'personal'])
   })
 
-  it('WP29 按工作区种过的 customer-care：认得，同版本不重种', async () => {
+  it('WP29 按工作区种过的三段 customer-care（1.0）：认得，换成移植来的 1.1.0，就在原来的位置上换', async () => {
     const { skills } = makeSkills()
     await skills.registry.putFromMarkdown({
-      markdown: readBundledSkill('customer-care').markdown,
+      markdown: '---\nname: customer-care\ndescription: 旧的\n---\n\n## 回答顺序\n\n先查记录。\n',
       tier: 'package',
       owner: 'package',
       version: '1.0',
       workspace_id: 'ws_1',
     })
     const out = await seedBundledSkills(skills.registry)
-    expect(out.skipped).toContain('customer-care')
+    expect(out.replaced).toContain('customer-care')
     expect(out.seeded).not.toContain('customer-care')
+    const stored = await skills.registry.get('customer-care', 'package', { workspace_id: 'ws_1' })
+    expect(stored?.version).toBe('1.1.0')
+    expect(stored?.workspace_id).toBe('ws_1')
+    const r = await skills.registry.resolve('customer-care', actor('ws_2'))
+    expect(r?.markdown).toContain('## 数字不由你产生')
   })
 
   it('被本人排除的技能照旧读不到', async () => {

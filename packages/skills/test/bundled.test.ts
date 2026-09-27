@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import {
   BUNDLED_SKILLS_DIR,
@@ -30,11 +31,15 @@ const OWN = [
   'workspace-basics',
 ]
 /**
- * WP29 起服务端自带的那一份（原来写死在 `apps/server/src/learning.ts`），WP162 原样搬进来。
- * frontmatter 与正文**一个字节不改**：它是 always 技能，改一个字，客服那几条职责的
- * 提示词字节就变，已有 overlay 的 `base_version`（`1.0`）也对不上。所以格式规矩对它放宽。
+ * WP162 终审追加：从 KefuAgent 移植来的客服技能（原件在 `packages/support-core/skills/customer-care/`）。
+ * 取代 WP29 起服务端那份三段的默认正文；版本 1.1.0（高于旧的 1.0，已有工作区的包层会被换掉）。
  */
-const LEGACY = ['customer-care']
+const PORTED = ['customer-care']
+const PORTED_FROM = join(
+  fileURLToPath(new URL('../../support-core/skills/', import.meta.url)),
+  'customer-care',
+  'SKILL.md',
+)
 
 /** 各自改编自谁（WP160）：出处那一行必须逐字在。 */
 const MARKETINGSKILLS = '改编自 coreyhaines31/marketingskills（MIT，© 2025 Corey Haines）'
@@ -42,7 +47,7 @@ const OPEN_SEO = '部分判断规矩改编自 every-app/open-seo（MIT）'
 
 describe('自带技能：格式（24 §1 Agent Skills）', () => {
   it('WP160 的五个 + WP162 的六个都在，目录名即技能名', () => {
-    expect(names).toEqual([...THIRD_PARTY, ...OWN, ...LEGACY].sort())
+    expect(names).toEqual([...THIRD_PARTY, ...OWN, ...PORTED].sort())
   })
 
   for (const name of THIRD_PARTY) {
@@ -146,15 +151,24 @@ describe('自带技能：Agents 工坊自己写的（WP162）', () => {
     })
   }
 
-  it('customer-care 原样搬进来：三段都在，没写 version（入库按 1.0，与 WP29 起的一致）', () => {
-    const { frontmatter, body } = splitFrontmatter(readBundledSkill('customer-care').markdown)
+  it('customer-care 是移植来的完整版：原件每一段逐字都在，只多了出处一行与「出卡与自动化级别」一段', () => {
+    const md = readBundledSkill('customer-care').markdown
+    const { frontmatter, body } = splitFrontmatter(md)
     expect(frontmatter.name).toBe('customer-care')
-    expect(frontmatter.extra.version).toBeUndefined()
-    expect(
-      splitSections(body)
-        .map((s) => s.heading)
-        .filter((h) => h !== ''),
-    ).toEqual(['回答顺序', '退货窗口计算', '回信语气'])
+    expect(frontmatter.extra.license).toBe('Apache-2.0')
+    expect(frontmatter.extra.version).toBe('1.1.0')
+    expect(body.trim().split('\n')[0]).toContain('移植自 KefuAgent')
+    const original = splitFrontmatter(readFileSync(PORTED_FROM, 'utf8')).body
+    const ported = splitSections(body).filter((x) => x.heading !== '')
+    const source = splitSections(original).filter((x) => x.heading !== '')
+    for (const sec of source) {
+      const hit = ported.find((x) => x.heading === sec.heading)
+      expect(hit?.body.trim(), sec.heading).toBe(sec.body.trim())
+    }
+    expect(ported.map((x) => x.heading)).toEqual([
+      ...source.map((x) => x.heading),
+      '出卡与自动化级别',
+    ])
   })
 })
 
@@ -173,8 +187,6 @@ describe('自带技能：守卫（WP160 改写规矩第一条）', () => {
     })
 
     it(`${name}：写明出卡、写明自动化级别不由技能授权`, () => {
-      // customer-care 原样搬来、一个字节不改（见 LEGACY 的注释），它用「改动一律先提再做」说同一件事
-      if (LEGACY.includes(name)) return
       const md = readBundledSkill(name).markdown
       expect(md).toContain('出卡')
       expect(md).toContain('自动化级别')

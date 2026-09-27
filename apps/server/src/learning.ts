@@ -64,8 +64,10 @@ import type { CreateApprovalInput } from '@agentsws/txn'
 /**
  * 本机自带的入门技能：学习回路要有落脚的段落。
  *
- * WP162：正文搬进 `packages/skills/bundled/customer-care/SKILL.md`（一个字节没改），
- * 与别的自带技能走同一条入库路（{@link seedDefaultSkill} → `seedBundledSkills`）。
+ * WP162：正文在 `packages/skills/bundled/customer-care/SKILL.md`，与别的自带技能走同一条入库路
+ * （{@link seedDefaultSkill} → `seedBundledSkills`）。终审追加（Fable 09-27）：换成从 KefuAgent
+ * 移植来的完整版（原件 `packages/support-core/skills/customer-care/SKILL.md`），版本 1.1.0——
+ * 高于 WP29 起那份三段默认正文的 1.0，所以已有工作区的包层会被换掉，上面几层不动。
  * 这两个导出留着：学习回路与测试按名字认它。
  */
 export const DEFAULT_SKILL_NAME = 'customer-care'
