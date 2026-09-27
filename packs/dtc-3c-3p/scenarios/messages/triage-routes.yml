@@ -5,9 +5,9 @@
 # 同一个函数，规则四层与三道收口一个字都没重写。
 #
 # 四封信各验一层：
-#   ① 客服信 → 客服岗位开着 → 判 support 并 MOVE 进 kefuagents
+#   ① 客服信 → 客服岗位开着 → 判 support 并 MOVE 进 KefuAgents
 #   ② 那封信的后续回信 → **线程归并**直接归客服，一次模型都不花
-#   ③ 红人来信 → 红人岗位也开着 → 判 kol 并 MOVE 进 kolagents
+#   ③ 红人来信 → 红人岗位也开着 → 判 kol 并 MOVE 进 KOLAgents
 #   ④ 供应商来信 → 哪个岗位都不归 → **留在收件箱**，只打标签
 #
 # 最后一封是 ④，所以 `message_triage` 断言的是它：`moved: false`。

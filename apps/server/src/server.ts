@@ -73,6 +73,7 @@ import {
   brandNameOf,
   KOL_AUDIT_CAPABILITY,
   KOL_CHANNEL_IDS,
+  KOL_FOLDER,
   KOL_LOOKUP_CAPABILITY,
   PR_ROLE_IDS,
   SOCIAL_ROLE_IDS,
@@ -2924,7 +2925,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       credentials: connections.credentialSource(),
       work,
       position: () => firstPositionOf(ws),
-      // 岗位开没开每次现查：昨天开了今天关了，信就不该再往 kefuagents 里挪
+      // 岗位开没开每次现查：昨天开了今天关了，信就不该再往 KefuAgents 里挪
       activeRoles: () =>
         roles.assignments
           .listByWorkspace(ws)
@@ -3081,7 +3082,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       /*
        * WP117b（66 复测 #19 的留尾 2 / 断点 #9 的剩余）：**回信归并进「消息」。**
        *
-       * 63 §4 那条链说的是：红人来信 → `route: 'kol'` → 挪进 `kolagents` 文件夹 →
+       * 63 §4 那条链说的是：红人来信 → `route: 'kol'` → 挪进 `KOLAgents` 文件夹 →
        * 归并到合作线程。演练的回信以前只做了最后半步（落在合作上），
        * 「消息」页里一封都看不见，于是那个文件夹与合作永远互不相干。
        *
@@ -3101,7 +3102,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           workspace_id: ws,
           source: 'email',
           account,
-          folder: 'kolagents',
+          // WP161：与老产品同名的规范名（真邮箱上已有的大小写变体在消息页里按语义并在一起）
+          folder: KOL_FOLDER,
           folder_kind: 'kol',
           thread_id: `<sbx-thread-${exchange.creator_id}@sandbox.example>`,
           message_id,

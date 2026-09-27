@@ -4912,7 +4912,7 @@ export interface MessageThreadView {
   subject: string
   messages: MessageRecord[]
   /**
-   * 63 §9：`kefuagents` / `kolagents` 里的信顶上那条状态带。
+   * 63 §9：`KefuAgents` / `KOLAgents` 里的信顶上那条状态带。
    * 不为空 = 这一页**不给"直接回复"**（避免人与 Agent 撞车）。
    */
   agent_status?: {

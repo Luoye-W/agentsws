@@ -11,6 +11,7 @@ import type {
 import { canonicalJson, redactOutboundText, sha256 } from '@agentsws/core'
 import { type AddressObject, type ParsedMail, simpleParser } from 'mailparser'
 import { ChannelError } from '../errors.js'
+import { resolveFolderName } from '../messages/folders.js'
 import type { RawStore } from '../raw-store.js'
 import { scrubSecrets } from '../secrets.js'
 import {
@@ -155,6 +156,8 @@ export class EmailChannelAdapter implements ChannelAdapter {
   private readonly scanLeaseMs: number
   private readonly archiveFolder: string | undefined
   private readonly archiveMarkRead: boolean
+  /** WP161：归档文件夹在这只邮箱上认到的真名（列到过一次才有）。 */
+  private archiveResolved: string | undefined
   private readonly onFolderFault:
     | ((fault: FolderSyncFault & { account: string; quarantined: boolean }) => void)
     | undefined
@@ -347,10 +350,31 @@ export class EmailChannelAdapter implements ChannelAdapter {
     return handled
   }
 
+  /**
+   * WP161：归档文件夹在**这只邮箱**上的真名。
+   *
+   * 服务器上已有大小写变体（老产品建的 `KefuAgents`、agentsws 早先的 `kefuagents`）
+   * 就沿用那只，不在区分大小写的服务器上另建一只相近的。列到一次就记住（一个适配器
+   * 只服务一只邮箱，所以这就是"每个账号单独缓存"）；列不到这一次按配置名走、下次再列。
+   */
+  private async archiveFolderOn(source: MailSource, configured: string): Promise<string> {
+    if (this.archiveResolved !== undefined) return this.archiveResolved
+    let known: string[] = []
+    try {
+      known = (await source.listFolders?.()) ?? []
+    } catch {
+      known = []
+    }
+    if (known.length === 0) return configured
+    this.archiveResolved = resolveFolderName(configured, known)
+    return this.archiveResolved
+  }
+
   /** 处理过的信搬进归档文件夹并标已读。搬不动只 log——归档不该拖垮收信。 */
   private async archiveOne(source: MailSource, uid: number): Promise<void> {
-    const folder = this.archiveFolder
-    if (folder === undefined || source.archive === undefined) return
+    const configured = this.archiveFolder
+    if (configured === undefined || source.archive === undefined) return
+    const folder = await this.archiveFolderOn(source, configured)
     try {
       const moved = await source.archive(uid, folder, this.archiveMarkRead)
       if (!moved) this.onError?.(new Error(`归档文件夹动不了：${folder}（uid ${uid}）`))

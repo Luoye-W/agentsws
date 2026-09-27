@@ -14,7 +14,7 @@
  *
  * 1. **岗位没开就不挪信**。`support_enabled` / `kol_enabled` 每次现查
  *    （看这个品牌里有没有人持着客服 / 红人那几条职责），不缓存——岗位是会变的，
- *    缓存了就会出现"昨天开了今天关了，信还在往 kefuagents 里挪"。
+ *    缓存了就会出现"昨天开了今天关了，信还在往 KefuAgents 里挪"。
  * 2. **日志不打正文与完整邮箱地址**（63 §10）。这个文件里每一条 `appendEvent`
  *    的 payload 都只有计数与遮掩过的地址（`a***@b.com`）。
  * 3. **回复建议按需生成**：只有 `GET /v1/messages/:id/assistant` 会触发，
@@ -50,6 +50,7 @@ import {
   MailboxSync,
   MemoryMailboxStateStore,
   MemoryMessageStore,
+  mailboxFoldersFrom,
   ReplySuggester,
   restoreRemoteImages,
   SqliteMailboxStateStore,
@@ -85,6 +86,7 @@ import type {
   Todo,
   WorkspaceId,
 } from '@agentsws/contracts'
+import { KOL_FOLDER, SUPPORT_FOLDER } from '@agentsws/contracts'
 import { sha256 } from '@agentsws/core'
 import type { Work } from '@agentsws/work'
 import type { DirectMailInput, DirectMailResult } from './channels.js'
@@ -122,7 +124,10 @@ export interface MessagesOptions {
   makeSource?(account: MailAccount, folder: string): MailSource
   /** 测试注入：回写端。缺省真 IMAP。 */
   makeWriter?(account: MailAccount): MailboxWriter
-  /** 这只邮箱上有哪些文件夹；缺省按 {@link DEFAULT_FOLDERS} 的真名试。 */
+  /**
+   * 这只邮箱上有哪些文件夹。缺省问回写端（真 IMAP `LIST`）；列不到按
+   * {@link DEFAULT_FOLDERS} 的真名试。WP161：岗位文件夹按这份清单认已有的真名。
+   */
   listFolders?(account: MailAccount): Promise<string[]>
   /** 知识库检索（回复建议引用出处时用）。不给 = 建议里没有出处。 */
   searchKnowledge?(
@@ -134,7 +139,7 @@ export interface MessagesOptions {
   /**
    * WP125（72 §P0-1）：**分拣判成 `support` 的来信交给客服判断层**。
    *
-   * 63 定的顺序是「消息 → 分拣 → 归到 kefuagents」；WP125 在它后面接上一步：
+   * 63 定的顺序是「消息 → 分拣 → 归到 KefuAgents」；WP125 在它后面接上一步：
    * 分出来的客服信下一步必须进 `support-core` 的那套判断（意图 → 边界 → 起草 →
    * 升级 → 三道自主门），而不是直接落一条事项就完事。
    *
@@ -155,6 +160,8 @@ export interface MessagesOptions {
  *
  * 真机器上先问服务器要一份清单（`listFolders`），问不到才用这一份试——
  * 各家名字不一样，硬编码一份名单只会在 Gmail 上跑得好、在 Outlook 上少扫两个。
+ *
+ * WP161：岗位那两只用与老产品相同的规范名（`KefuAgents` / `KOLAgents`）。
  */
 export const DEFAULT_FOLDERS: readonly string[] = [
   'INBOX',
@@ -162,9 +169,12 @@ export const DEFAULT_FOLDERS: readonly string[] = [
   'Drafts',
   'Trash',
   'Junk',
-  'kefuagents',
-  'kolagents',
+  SUPPORT_FOLDER,
+  KOL_FOLDER,
 ]
+
+/** WP161：每只邮箱的文件夹清单多久重列一次（第一次挪信新建的那只会随手补进去）。 */
+export const FOLDER_LIST_TTL_MS = 10 * 60_000
 
 export interface MessagesAssembly {
   store: MessageStore
@@ -182,8 +192,12 @@ export function createMessages(options: MessagesOptions): MessagesAssembly {
       ? new MemoryMessageStore()
       : new SqliteMessageStore({ dbPath: join(options.dbDir, 'messages.sqlite'), clock })
 
-  /** 每只邮箱的文件夹清单（问一次记一次；断开重连时 `refresh` 会清掉）。 */
-  const folderCache = new Map<string, string[]>()
+  /**
+   * WP161：每只邮箱**各自**的文件夹清单（按连接 id 分）。`listed` = 服务器上列出来的
+   * 全部（挪信时按它认岗位文件夹的真名）；`scan` = 要扫的那几只。列不到时只有 `scan`
+   * （缺省名单），下一轮再列。
+   */
+  const folderCache = new Map<string, { listed?: string[]; scan: string[]; at: number }>()
   const writers = new Map<string, MailboxWriter>()
 
   const writerFor = (account: MailAccount): MailboxWriter | undefined => {
@@ -222,19 +236,63 @@ export function createMessages(options: MessagesOptions): MessagesAssembly {
     })
   }
 
-  const foldersOf = (account: MailAccount): string[] => {
+  const foldersOf = (account: MailAccount): string[] =>
+    folderCache.get(account.connection_id)?.scan ?? [...DEFAULT_FOLDERS]
+  /** 挪信时认真名用的那份：列到过就用服务器的全量清单，否则用扫描清单。 */
+  const knownOf = (account: MailAccount): string[] =>
+    folderCache.get(account.connection_id)?.listed ?? foldersOf(account)
+
+  /** 每只邮箱先列服务器上的文件夹（有缓存且没过期就不列）。一只列不动不拖垮别的。 */
+  const refreshFolders = async (): Promise<void> => {
+    const now = Date.parse(clock.now())
+    for (const account of options.accounts()) {
+      const cached = folderCache.get(account.connection_id)
+      if (cached?.listed !== undefined && now - cached.at < FOLDER_LIST_TTL_MS) continue
+      let listed: string[] = []
+      try {
+        listed =
+          (await (options.listFolders?.(account) ?? writerFor(account)?.listFolders?.())) ?? []
+      } catch (e) {
+        logQuiet('imap_list_failed', account.address, e)
+      }
+      const scan = mailboxFoldersFrom(listed)
+      folderCache.set(
+        account.connection_id,
+        scan === undefined ? { scan: [...DEFAULT_FOLDERS], at: now } : { listed, scan, at: now },
+      )
+    }
+  }
+
+  /** 挪进一只新建的岗位文件夹之后顺手记上：下一轮就扫它，不用等清单过期。 */
+  const noteFolder = (account: MailAccount, path: string): void => {
     const cached = folderCache.get(account.connection_id)
-    if (cached !== undefined) return cached
-    folderCache.set(account.connection_id, [...DEFAULT_FOLDERS])
-    return [...DEFAULT_FOLDERS]
+    if (cached?.listed === undefined || cached.listed.includes(path)) return
+    const listed = [...cached.listed, path]
+    folderCache.set(account.connection_id, {
+      ...cached,
+      listed,
+      scan: mailboxFoldersFrom(listed) ?? cached.scan,
+    })
   }
 
   const mailboxAccounts = (): MailboxAccount[] =>
     options.accounts().map((account) => {
-      const writer = writerFor(account)
+      const inner = writerFor(account)
+      const writer: MailboxWriter | undefined =
+        inner === undefined
+          ? undefined
+          : {
+              setFlags: (folder, uid, add, remove) => inner.setFlags(folder, uid, add, remove),
+              move: async (folder, uid, to) => {
+                const moved = await inner.move(folder, uid, to)
+                if (moved) noteFolder(account, to)
+                return moved
+              },
+            }
       return {
         address: account.address,
         folders: foldersOf(account),
+        known_folders: knownOf(account),
         open: (folder) =>
           options.makeSource?.(account, folder) ??
           new ImapMailSource({
@@ -438,13 +496,16 @@ export function createMessages(options: MessagesOptions): MessagesAssembly {
     async thread(_actor: MessageActor, thread_id: string): Promise<MessageThreadView> {
       const messages = await store.thread(thread_id)
       const last = messages[messages.length - 1]
-      const agentRoute = messages.find((m) => m.route !== 'inbox')?.route
+      // 状态带只给有 Agent 在处理的那两条路（`b2b` 是 WP161 的预留，还没有岗位）
+      const agentRoute = messages
+        .map((m) => m.route)
+        .find((r): r is 'support' | 'kol' => r === 'support' || r === 'kol')
       const linked = messages.find((m) => m.linked !== undefined)?.linked
       return {
         thread_id,
         subject: last?.subject ?? '',
         messages,
-        ...(agentRoute === undefined || agentRoute === 'inbox'
+        ...(agentRoute === undefined
           ? {}
           : {
               agent_status: {
@@ -495,10 +556,11 @@ export function createMessages(options: MessagesOptions): MessagesAssembly {
     ): Promise<{ message: MessageRecord; rule?: SenderRule }> {
       const row = await requireMessage(id)
       const account = accountOf(row.account)
-      const known = account === undefined ? [] : foldersOf(account)
+      // WP161：按这只邮箱上已有的真名走（`kefuagents` 在就沿用，不另建 `KefuAgents`）
+      const known = account === undefined ? [] : knownOf(account)
       const to = folderPathFor(input.to, known)
       const route: MessageRoute =
-        input.to === 'support' ? 'support' : input.to === 'kol' ? 'kol' : 'inbox'
+        input.to === 'support' || input.to === 'kol' || input.to === 'b2b' ? input.to : 'inbox'
       const next =
         (await store.update(id, {
           folder: to,
@@ -508,7 +570,8 @@ export function createMessages(options: MessagesOptions): MessagesAssembly {
         })) ?? row
       suggester.invalidate(id)
       if (account !== undefined && row.uid !== undefined) {
-        await writerFor(account)?.move(row.folder, row.uid, to)
+        const moved = await writerFor(account)?.move(row.folder, row.uid, to)
+        if (moved === true) noteFolder(account, to)
       }
       if (input.remember_sender !== true) return { message: next }
       // 「以后这个发件人都这样？」——教一次，下一封直达，不再花模型（63 §4 ②）
@@ -752,6 +815,7 @@ export function createMessages(options: MessagesOptions): MessagesAssembly {
 
     async sync(): Promise<MessageSyncReport> {
       rulesCache = await store.senderRules()
+      await refreshFolders()
       return sync.sync()
     },
 
@@ -767,7 +831,8 @@ export function createMessages(options: MessagesOptions): MessagesAssembly {
     port,
     async poll(): Promise<MessageSyncReport> {
       rulesCache = await store.senderRules()
-      folderCache.clear()
+      // WP161：每只邮箱先列文件夹（各列各的、各缓存各的），再扫
+      await refreshFolders()
       return sync.sync()
     },
     close(): void {

@@ -14,7 +14,7 @@
  * - **没有硬删**：`DELETE` 一条路由都没有，删除是 `POST …/move { to: 'trash' }`；
  * - **发送不出卡**（36「只有要人拍板的才是卡」的反面）：人自己按的发送不该
  *   再问他一遍；
- * - **`kefuagents` / `kolagents` 里的信在这里只读**（63 §9）：要亲自回先走
+ * - **`KefuAgents` / `KOLAgents` 里的信在这里只读**（63 §9）：要亲自回先走
  *   现有的 takeover，这一层不给"直接回复"的口子。
  */
 import type {
@@ -68,7 +68,7 @@ export interface MessageThreadView {
   subject: string
   messages: MessageRecord[]
   /**
-   * 63 §9：`kefuagents` / `kolagents` 里的信顶上那条状态带。
+   * 63 §9：`KefuAgents` / `KOLAgents` 里的信顶上那条状态带。
    * 不为空 = 这一页**不给"直接回复"**（避免人与 Agent 撞车）。
    */
   agent_status?: {
@@ -273,7 +273,7 @@ function queryOf(c: Parameters<typeof principalOf>[0]): MessageListQuery {
 }
 
 const LIST_PARAMS = [
-  { name: 'folder', in: 'query' as const, description: '文件夹真名（`INBOX` / `kefuagents`）' },
+  { name: 'folder', in: 'query' as const, description: '文件夹真名（`INBOX` / `KefuAgents`）' },
   {
     name: 'folder_kind',
     in: 'query' as const,

@@ -45732,7 +45732,7 @@ export interface operations {
   listMessageThreads: {
     parameters: {
       query?: {
-        /** @description 文件夹真名（`INBOX` / `kefuagents`） */
+        /** @description 文件夹真名（`INBOX` / `KefuAgents`） */
         folder?: string
         /** @description 文件夹语义（收件箱 / 已发 / 垃圾箱 …） */
         folder_kind?: string

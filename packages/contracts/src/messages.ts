@@ -42,8 +42,10 @@ export type MessageSource = 'email' | 'chat'
  * - `support` / `kol` **只在对应岗位启用时**才可能出现（63 §4）：没开客服岗位的
  *   工作区里，一封客户投诉照样只是 `inbox` 里打了标签的一封信。
  * - `inbox` = 留在收件箱，**不挪**。这是绝大多数信的归宿，也是默认值。
+ * - `b2b`（WP161 预留，Luoye 09-27）：B2B 岗位接上之前**分拣器不产出它**——
+ *   `allowRoute` 会把它降回 `inbox`。先占住名字，免得那张单来时改契约。
  */
-export type MessageRoute = 'inbox' | 'support' | 'kol'
+export type MessageRoute = 'inbox' | 'support' | 'kol' | 'b2b'
 
 /** 分拣是谁做的（卡面与"为什么这么判"都要说得出来）。 */
 export type MessageTriageBy =
@@ -102,21 +104,36 @@ export type MessageFolderKind =
   | 'trash'
   | 'spam'
   | 'archive'
-  /** 客服岗位的那只（`kefuagents`）。 */
+  /** 客服岗位的那只（`KefuAgents`）。 */
   | 'support'
-  /** 红人营销岗位的那只（`kolagents`）。 */
+  /** 红人营销岗位的那只（`KOLAgents`）。 */
   | 'kol'
+  /** B2B 岗位的那只（`BtoBAgents`）。WP161 预留：没有 B2B 岗位时界面不显示它。 */
+  | 'b2b'
   | 'custom'
 
+/*
+ * WP161（Luoye 09-27）：三只岗位文件夹的**规范名**，与 Luoye 的老产品逐字相同——
+ * KefuAgent 建的是 `KefuAgents`、KOLAgents 建的是 `KOLAgents`。很多 IMAP 服务器
+ * 文件夹名区分大小写：名字不一样，用过老产品的人接进来就会看到两只相近的文件夹、
+ * 信分在两处。所以：服务器上已有任何大小写变体就**沿用那个真名**，都没有才按
+ * 规范名新建（`resolveAgentFolder`，在 `@agentsws/channels`）。
+ */
+
 /** 客服岗位的归档文件夹（48 §4 L3 #5 的 `archive_folder` 按岗位取值）。 */
-export const SUPPORT_FOLDER = 'kefuagents'
+export const SUPPORT_FOLDER = 'KefuAgents'
 /** 红人营销岗位的归档文件夹。 */
-export const KOL_FOLDER = 'kolagents'
+export const KOL_FOLDER = 'KOLAgents'
+/** B2B 岗位的归档文件夹（WP161 预留；B2B 岗位的那张单接上分拣之后才会往里挪信）。 */
+export const BTOBAGENTS_FOLDER = 'BtoBAgents'
+/** 与上面三个同值的老产品叫法（读代码的人照老产品的名字也搜得到）。 */
+export const KEFUAGENTS_FOLDER = SUPPORT_FOLDER
+export const KOLAGENTS_FOLDER = KOL_FOLDER
 /** 删除的唯一去处。**没有硬删**。 */
 export const MESSAGE_TRASH_FOLDER = 'Trash'
 
 export interface MessageFolder {
-  /** 服务器上的真名（`INBOX` / `[Gmail]/Sent Mail` / `kefuagents`）。 */
+  /** 服务器上的真名（`INBOX` / `[Gmail]/Sent Mail` / `KefuAgents`）。 */
   path: string
   kind: MessageFolderKind
   /** 这只邮箱的地址（多邮箱时按它分）。 */
