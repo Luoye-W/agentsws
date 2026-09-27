@@ -22,6 +22,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Download, FileText, Trash2, Upload, UploadCloud } from 'lucide-react'
 import { type DragEvent, useRef, useState } from 'react'
 import { WsCard, WsTag } from '@/components/design'
+import { ClaimRulesSection } from '@/components/knowledge/claim-rules'
 import { GapRow } from '@/components/knowledge/gap-row'
 import { RecheckCard } from '@/components/knowledge/recheck-card'
 import {
@@ -317,6 +318,8 @@ export function KnowledgePage(): React.ReactNode {
           )
         })
       )}
+
+      <ClaimRulesSection />
 
       <Card data-testid="knowledge-sources">
         <CardHeader className="pb-2">

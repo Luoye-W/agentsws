@@ -5,9 +5,10 @@
  *
  * 1. **每天早上读一遍 Search Console**（定时 `seo.daily_read`，工作区时区 08:00）→
  *    「今天值得动的 5 件事」报告卡（`seo_report`，同日报一样不进队列）+ 每件落成什么：
- *    - 改页面标题 / 开头（`page_seo_edit`）、调内链（`internal_link_edit`）→ 本职责出**改动卡**，
- *      `after` 是机械的第一稿（把查询原样放进标题与 H1 / 用查询做锚文本），人在卡上改或"指导"；
- *    - 加小节（`page_section_add`）要写正文 → 开一件本职责的事项，写好了走同名动作出卡；
+ *    - 改页面标题 / 描述 / H1 / 开头（`page_seo_edit`）、加小节（`page_section_add`）→ 本职责出
+ *      **改动卡**，初稿由**模型按品牌口吻写**（WP159；每天有上限、花费进用量）；模型没配 / 到上限 /
+ *      超预算 / 回文不合规矩时退回规则版：标题与 H1 把查询原样放前面，加小节开一件本职责的事项；
+ *    - 调内链（`internal_link_edit`）→ 改动卡，用查询做锚文本（机械的，不用模型）；
  *    - 新页面（SERP 看过、人群对）→ **新页面选题卡**（`seo_topic`），批了才开一件写这一页的事项；
  *    - 跳转 / 规范网址 / 没收录 → 开一件交给「建站」的事项；站外提及 → 开一件交给「公关」的事项。
  * 2. **每周**（周一 08:30）：按页面收入小结（`weekly_revenue`）+ AI 平台可见度（`weekly_geo`）；
@@ -25,9 +26,12 @@ import type {
   ApprovalBus,
   ApprovalItem,
   AssignmentId,
+  ClaimMarketGroup,
+  ClaimRulesView,
   Clock,
   ContentClaimRule,
   EventEnvelope,
+  FactCard,
   GeoCostEstimate,
   GeoQuestion,
   GeoSettings,
@@ -50,21 +54,28 @@ import type {
 import {
   type BrandProfileLike,
   buildDaily,
+  CLAIM_MARKET_GROUPS,
+  type ClaimRuleCardLike,
   checkContentQuality,
+  DEFAULT_MODEL_DRAFTS_PER_DAY,
   evidenceText,
   type FactLike,
-  GEO_PLATFORMS,
   generateGeoQuestions,
   geoGaps,
+  geoPlatformsFor,
   type LandingConversion,
   type LandingOrder,
   MAX_GEO_QUESTIONS,
   pageRevenue,
+  parseSeoDraft,
   probeRows,
   qualitySummary,
+  resolveClaimRules,
   type SearchConsolePort,
+  type SeoDraftKind,
   SITE_FACADE_NOTE,
   type SignalOptions,
+  seoDraftPrompt,
 } from '@agentsws/seo-core'
 import type { StageInput, StageOutcome } from '@agentsws/txn'
 
@@ -75,6 +86,12 @@ export interface SeoActor {
   assignment_id: AssignmentId
   role_id: RoleId
 }
+
+/**
+ * WP159：写改动卡初稿的那一口模型（服务端经这个品牌的模型网关打，用量照常进用量账）。
+ * 回的是模型原文；读 / 校验在 `@agentsws/seo-core` 的 `parseSeoDraft`。
+ */
+export type SeoDraftModel = (input: { prompt: string }) => Promise<{ text: string }>
 
 /** 开事项那一跳（`@agentsws/work` 的 `createMatter` 的最小子集）。 */
 export interface SeoMatterPort {
@@ -99,6 +116,11 @@ export interface SeoBrandInfo extends BrandProfileLike {
   currency: string
   /** SERP / AI 探测按哪个国家查。 */
   country: string
+  /**
+   * WP159：目标市场（ISO 国家码，品牌档案里的）。违规宣称规则按它开市场组；
+   * 没写 = 按 `country` 那一个算。
+   */
+  markets?: string[]
 }
 
 export interface SeoServiceOptions {
@@ -127,8 +149,36 @@ export interface SeoServiceOptions {
   orders(): readonly LandingOrder[]
   /** 品牌档案（名字、域名、币种……）。域名为空时用 Search Console 页面清单里的主机名。 */
   brand(): SeoBrandInfo | Promise<SeoBrandInfo>
+  /**
+   * WP159：写初稿的模型口，**每次现取**——没配模型（或只有 stub）回 `undefined`，用规则版。
+   * 每天最多调几次看职责阈值 `seo_model_drafts_per_day`（缺省 `DEFAULT_MODEL_DRAFTS_PER_DAY`）。
+   */
+  drafter?(meta: { actor: SeoActor; run_id: string }): SeoDraftModel | undefined
+  /**
+   * WP159：品牌口吻（照 WP122 的注入口径）：品牌档案那一段（`renderBrandContext`）+
+   * 品牌设计规范里的「气质」一句。取不到就不写那一句。
+   */
+  brandVoice?(
+    language: 'zh' | 'en',
+  ): { context?: string; voice?: string } | Promise<{ context?: string; voice?: string }>
   /** 质检要的事实卡与规则表（从知识库投影；没有知识库就是空的）。 */
-  knowledge?(actor: SeoActor): Promise<{ facts: FactLike[]; rules: ContentClaimRule[] }>
+  knowledge?(actor: SeoActor): Promise<{
+    facts: FactLike[]
+    rules: ContentClaimRule[]
+    /**
+     * WP159：知识库里全部 `content_rule` 卡（按更新时间排，后面的赢）。给了就按市场分组合成
+     * （自带的按市场开组 + 卡盖过自带的）；不给就只用上面的 `rules`（WP154 老口径）。
+     */
+    rule_cards?: ClaimRuleCardLike[]
+  }>
+  /**
+   * WP159：在知识库里改 / 关一条违规宣称规则（写一张 `content_rule` 卡，同 key 的旧卡由实现方退役）。
+   * 不给 = 这个进程没装知识库，规则表只读。
+   */
+  saveClaimRule?(
+    actor: SeoActor,
+    input: { key: string; statement: string; structured: Record<string, unknown> },
+  ): Promise<void>
   appendEvent(e: Omit<EventEnvelope, 'id' | 'at'> & { at?: string }): void
   /** 品牌落盘目录（问题清单与"交出去过哪些"记在这里；内存档没有）。 */
   dir?: string
@@ -160,6 +210,27 @@ export interface SeoServiceAssembly {
   gatePublish(input: StageInput): Promise<StageInput>
   /** 卡被决定之后（新页面选题批了 → 开一件写这一页的事项）。 */
   onDecided(item: ApprovalItem): Promise<void>
+  /** WP159：知识库里那张「违规宣称规则」表（按市场分组、带出处与开关）。 */
+  claimRules(actor: SeoActor): Promise<ClaimRulesView>
+  /**
+   * WP159：改那张表——拨一个市场组的开关；改 / 关 / 开一条（自带的改了记成知识库里的卡）；
+   * 加一条自己的。
+   */
+  setClaimRules(actor: SeoActor, input: ClaimRulesInput): Promise<ClaimRulesView>
+}
+
+/** WP159：`setClaimRules` 的入参（三件事可以一次只给一件）。 */
+export interface ClaimRulesInput {
+  group?: { id: ClaimMarketGroup; enabled: boolean } | undefined
+  rule?:
+    | {
+        id: string
+        enabled?: boolean | undefined
+        pattern?: string | undefined
+        reason?: string | undefined
+      }
+    | undefined
+  add?: { pattern: string; reason: string; market?: ClaimMarketGroup | undefined } | undefined
 }
 
 /** 状态文件（品牌目录下）。 */
@@ -167,7 +238,7 @@ const STATE_FILE = 'seo-state.json'
 /** 同一件事交出去之后多久内不再重复开（天）。 */
 const HANDOFF_QUIET_DAYS = 14
 const DAY_MS = 86_400_000
-/** 每周默认问几个（WP155：10 个 × 4 个平台一周约 16 积分；默认收一点）。 */
+/** 每周默认问几个（WP159：6 个 × 3 个平台 × 0.2 = 一周约 3.6 积分）。 */
 const DEFAULT_GEO_QUESTIONS = Math.min(6, MAX_GEO_QUESTIONS)
 
 const geoSettingsOf = (state: SeoState): GeoSettings =>
@@ -175,7 +246,8 @@ const geoSettingsOf = (state: SeoState): GeoSettings =>
 
 /** 每周大概花多少：官方那条路按单价算，自带 key 是 0，没接就不写数。 */
 function estimateOf(questions: number, status: SearchDataStatus): GeoCostEstimate {
-  const platforms = (status.platforms ?? GEO_PLATFORMS).length
+  // WP159：默认问 ChatGPT、Gemini、Google AI 概览——再与这条路能探测的取交集
+  const platforms = geoPlatformsFor(status.platforms).length
   const base = { questions, platforms, route: status.route }
   if (!status.configured) return base
   if (status.route === 'byo') return { ...base, credits_per_week: 0 }
@@ -199,6 +271,10 @@ interface SeoState {
   handed_off?: Record<string, string>
   /** 站点门面那件事项开过没有。 */
   facade_matter_id?: string
+  /** WP159：违规宣称规则的市场组，人在知识库里拨过的开关（没拨过的按目标市场自动）。 */
+  claim_groups?: Partial<Record<ClaimMarketGroup, boolean>>
+  /** WP159：今天模型写了几份初稿（按工作区日期计，跨天归零）。 */
+  model_drafts?: { date: string; calls: number }
 }
 
 const rec = (v: unknown): Record<string, unknown> =>
@@ -232,6 +308,75 @@ export function draftTitle(query: string, current: string | undefined): string |
   if (current?.toLowerCase().includes(query.trim().toLowerCase())) return undefined
   const full = current === undefined || current.trim() === '' ? q : `${q} – ${current.trim()}`
   return full.length <= 70 ? full : `${full.slice(0, 69).trimEnd()}…`
+}
+
+/**
+ * WP159（Fable 追加）：一条职责有好几个人持有时，定时那一轮用谁的分配去提。
+ *
+ * 规则（一条一条往下比）：
+ * 1. 只看这个品牌里没撤销的分配；
+ * 2. **非店主优先**——店主（持有 `common.owner`）常顺手挂着所有职责，但真正每天看这块面板的是
+ *    专门被分到这条职责的人（demo 里是李默）；只有店主一个人持有时才给店主；
+ * 3. 还有好几个 → **最早分到的那个**（`granted_at` 早的；一样早按分配 id），它就是主负责人——
+ *    后加的人多半是来帮忙的。契约里没有「主负责人」标记，等有了再改成认它。
+ */
+export function pickRoleHolder<
+  A extends {
+    id: string
+    person_id: string
+    workspace_id: string
+    granted_at: string
+    revoked_at?: string | undefined
+  },
+>(
+  assignments: readonly A[],
+  workspace_id: string,
+  isOwner: (person_id: string) => boolean,
+): A | undefined {
+  const live = assignments.filter(
+    (a) => a.workspace_id === workspace_id && a.revoked_at === undefined,
+  )
+  const pool = live.some((a) => !isOwner(a.person_id))
+    ? live.filter((a) => !isOwner(a.person_id))
+    : live
+  return [...pool].sort(
+    (a, b) => a.granted_at.localeCompare(b.granted_at) || a.id.localeCompare(b.id),
+  )[0]
+}
+
+/**
+ * WP159：知识库里一条违规宣称规则卡（`subject.type === 'content_rule'`，`subject.key` = 规则 id）。
+ * 人在知识库页上改的，出处写「人」+ 那条规则的官方出处（有就带上）。
+ */
+export function claimRuleCard(input: {
+  workspace_id: WorkspaceId
+  owner: PersonId
+  key: string
+  statement: string
+  structured: Record<string, unknown>
+  at?: string
+}): Omit<FactCard, 'id' | 'status' | 'usage' | 'created_at' | 'updated_at'> {
+  const at = input.at ?? new Date(0).toISOString()
+  const url = input.structured.source_url
+  return {
+    schema_version: 1,
+    workspace_id: input.workspace_id,
+    layer: 'phrasing',
+    domain: 'company',
+    scope: [],
+    sensitivity: 'internal',
+    subject: { type: 'content_rule', key: input.key },
+    statement: input.statement,
+    structured: input.structured,
+    provenance: [
+      { source: 'human', ref: `person:${input.owner}`, locator: '知识库 · 违规宣称规则', at },
+      ...(typeof url === 'string' ? [{ source: 'web' as const, ref: url, at }] : []),
+    ],
+    confidence: { value: 1, state: 'verified' },
+    valid: { from: at },
+    owner: input.owner,
+    created_by: { kind: 'person', id: input.owner },
+  }
 }
 
 export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly {
@@ -287,6 +432,48 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
     return { ...b, domains: [...hosts] }
   }
 
+  /** WP159：违规宣称规则按哪几个市场开（档案里没写就按探测国家那一个）。 */
+  const marketsOf = async (): Promise<{ markets: string[]; from: 'brand_profile' | 'default' }> => {
+    const b = await options.brand()
+    const listed = (b.markets ?? []).map((m) => m.trim().toUpperCase()).filter((m) => m !== '')
+    return listed.length > 0
+      ? { markets: listed, from: 'brand_profile' }
+      : { markets: [b.country.toUpperCase()], from: 'default' }
+  }
+
+  /**
+   * WP159：这一次质检 / 初稿检查真用的规则 + 事实卡。知识库给了规则卡就按市场分组合成；
+   * 没给（老装配）就用它投影好的 `rules`（空的 → 质检自己用默认表）。
+   */
+  const knowledgeFor = async (
+    actor: SeoActor,
+  ): Promise<{ facts: FactLike[]; rules: ContentClaimRule[]; view?: ClaimRulesView }> => {
+    const kb = (await options.knowledge?.(actor)) ?? { facts: [], rules: [] }
+    if (kb.rule_cards === undefined) return { facts: kb.facts, rules: kb.rules }
+    const { markets, from } = await marketsOf()
+    const state = loadState()
+    const r = resolveClaimRules({
+      markets,
+      cards: kb.rule_cards,
+      ...(state.claim_groups === undefined ? {} : { group_overrides: state.claim_groups }),
+    })
+    return {
+      facts: kb.facts,
+      rules: r.rules,
+      view: { markets, markets_from: from, groups: r.groups, rules: r.rows },
+    }
+  }
+
+  /** WP159：知识库里那张「违规宣称规则」表。 */
+  const claimRulesView = async (actor: SeoActor): Promise<ClaimRulesView> => {
+    const kb = await knowledgeFor(actor)
+    if (kb.view !== undefined) return kb.view
+    // 老装配（没给规则卡）：只读地画自带那一份
+    const { markets, from } = await marketsOf()
+    const r = resolveClaimRules({ markets, cards: [] })
+    return { markets, markets_from: from, groups: r.groups, rules: r.rows }
+  }
+
   const signalOptions = (brand: SeoBrandInfo): SignalOptions => {
     const t = options.thresholds()
     const num = (k: string): number | undefined => (typeof t[k] === 'number' ? t[k] : undefined)
@@ -324,7 +511,7 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
   /** 定时那一轮提一条改动（机械第一稿）。 */
   const stageFix = async (
     actor: SeoActor,
-    kind: 'page_seo_edit' | 'internal_link_edit',
+    kind: 'page_seo_edit' | 'page_section_add' | 'internal_link_edit',
     target: ObjectRef,
     before: Record<string, unknown>,
     after: Record<string, unknown>,
@@ -365,6 +552,58 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
     return out.ok ? out.approval.id : undefined
   }
 
+  /** 每天最多让模型写几份初稿（职责阈值可改；0 = 不用模型）。 */
+  const draftCap = (): number => {
+    const v = options.thresholds().seo_model_drafts_per_day
+    return typeof v === 'number' && v >= 0 ? Math.floor(v) : DEFAULT_MODEL_DRAFTS_PER_DAY
+  }
+
+  /**
+   * WP159：让模型按品牌口吻写一份初稿。没配模型 / 到了每天上限 / 模型报错（含超预算）/
+   * 回文不合规矩 → `{ ok: false, reason }`，调用方退回规则版。**先记数再打**：打出去就算花了。
+   */
+  const modelDraft = async (
+    actor: SeoActor,
+    kind: SeoDraftKind,
+    pick: SeoPick,
+    page: SitePage | undefined,
+    brand: SeoBrandInfo,
+  ): Promise<{ ok: true; after: Record<string, unknown> } | { ok: false; reason: string }> => {
+    const run_id = `run_seo_${nextId('d')}`
+    const model = options.drafter?.({ actor, run_id })
+    if (model === undefined) return { ok: false, reason: '没配模型' }
+    const cap = draftCap()
+    const state = loadState()
+    const used = state.model_drafts?.date === date() ? state.model_drafts.calls : 0
+    if (used >= cap) return { ok: false, reason: `今天模型写初稿已到上限（${cap} 份）` }
+    saveState({ ...state, model_drafts: { date: date(), calls: used + 1 } })
+    const voice = (await options.brandVoice?.(brand.language)) ?? {}
+    const prompt = seoDraftPrompt({
+      kind,
+      query: pick.query,
+      suggestion: pick.suggestion,
+      evidence: evidenceText(pick.evidence),
+      page: { url: pick.page ?? '', ...(page?.title === undefined ? {} : { title: page.title }) },
+      language: brand.language,
+      brand: {
+        name: brand.name,
+        ...(voice.context === undefined ? {} : { context: voice.context }),
+        ...(voice.voice === undefined ? {} : { voice: voice.voice }),
+      },
+    })
+    let text: string
+    try {
+      text = (await model({ prompt })).text
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      return { ok: false, reason: `模型这次没写成（${msg.slice(0, 60)}）` }
+    }
+    const { rules } = await knowledgeFor(actor)
+    const parsed = parseSeoDraft(kind, text, rules)
+    if (!parsed.ok) return { ok: false, reason: parsed.reason }
+    return { ok: true, after: { ...parsed.draft, target_query: pick.query } }
+  }
+
   /** 开一件事项（交给别的岗位，或者本职责自己要写的）。同一件事 14 天内不重复开。 */
   const openMatter = (
     key: string,
@@ -391,12 +630,42 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
     actor: SeoActor,
     pick: SeoPick,
     pages: readonly SitePage[],
+    brand: SeoBrandInfo,
   ): Promise<SeoPick['outcome']> => {
     const page = pages.find((p) => p.url === pick.page)
     const evidence = evidenceText(pick.evidence)
     const body = `${pick.suggestion}\n证据：${evidence}`
     switch (pick.lane) {
       case 'fix_page': {
+        // WP159：要改文字的（标题 / 描述 / H1 / 开头、加小节）先让模型按品牌口吻写初稿；
+        // 写不成就走下面的规则版（兜底）。无论哪一版都出卡等人批。
+        let fallback: string | undefined
+        if (
+          (pick.fix === 'page_seo_edit' || pick.fix === 'page_section_add') &&
+          pick.page !== undefined
+        ) {
+          const kind = pick.fix
+          const drafted = await modelDraft(actor, kind, pick, page, brand)
+          if (drafted.ok) {
+            const target = { type: targetTypeOf(page), id: pick.page }
+            const id = await stageFix(
+              actor,
+              kind,
+              target,
+              { url: pick.page, ...(page?.title === undefined ? {} : { title: page.title }) },
+              drafted.after,
+              kind === 'page_seo_edit'
+                ? `改页面标题、描述与开头：${page?.title ?? pick.page}`
+                : `给页面加一个小节：${page?.title ?? pick.page}`,
+              `${body}\n初稿由模型按品牌口吻写好了，可以在卡上改字、删掉不想改的那格，或者点「指导」让它重写。`,
+            )
+            return id === undefined
+              ? { kind: 'none', note: '这条改动没提上去（额度或门禁）', draft: 'model' }
+              : { kind: 'change', id, draft: 'model' }
+          }
+          fallback = drafted.reason
+        }
+        const why = fallback === undefined ? '' : `（模型初稿没用上：${fallback}）`
         if (pick.fix === 'page_seo_edit' && pick.page !== undefined) {
           const title = draftTitle(pick.query, page?.title)
           if (title !== undefined) {
@@ -408,11 +677,16 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
               { url: pick.page, ...(page?.title === undefined ? {} : { title: page.title }) },
               { title, h1: title, target_query: pick.query },
               `改页面标题与 H1：${page?.title ?? pick.page}`,
-              `${body}\n这是机械的第一稿（把查询原样放进标题与 H1）；描述与开头两句可以在卡上改，或者点「指导」让它重写。`,
+              `${body}\n这是规则版的第一稿（把查询原样放进标题与 H1）${why}；描述与开头两句可以在卡上改，或者点「指导」让它重写。`,
             )
             return id === undefined
-              ? { kind: 'none', note: '这条改动没提上去（额度或门禁）' }
-              : { kind: 'change', id }
+              ? { kind: 'none', note: '这条改动没提上去（额度或门禁）', draft: 'rules' }
+              : {
+                  kind: 'change',
+                  id,
+                  draft: 'rules',
+                  ...(fallback === undefined ? {} : { note: `模型初稿没用上：${fallback}` }),
+                }
           }
         }
         if (
@@ -448,7 +722,11 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
         })
         return id === undefined
           ? { kind: 'none', note: '这件两周内已经开过了' }
-          : { kind: 'matter', id }
+          : {
+              kind: 'matter',
+              id,
+              ...(fallback === undefined ? {} : { note: `模型初稿没用上：${fallback}` }),
+            }
       }
       case 'new_page': {
         if (pick.serp_check?.right_crowd !== true)
@@ -611,13 +889,17 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
       if (consoleRead.error !== undefined) payload.notes.unshift(consoleRead.error.slice(0, 160))
       if (consoleRead.note !== undefined) payload.notes.unshift(consoleRead.note.slice(0, 160))
       const counts = { changes: 0, topics: 0, matters: 0 }
+      const drafts = { model: 0, rules: 0 }
       for (const pick of payload.picks) {
-        const outcome = await land(actor, pick, consoleRead.pages)
+        const outcome = await land(actor, pick, consoleRead.pages, brand)
         if (outcome !== undefined) pick.outcome = outcome
+        if (outcome?.draft === 'model') drafts.model += 1
+        if (outcome?.draft === 'rules') drafts.rules += 1
         if (outcome?.kind === 'change') counts.changes += 1
         if (outcome?.kind === 'topic') counts.topics += 1
         if (outcome?.kind === 'matter') counts.matters += 1
       }
+      if (drafts.model + drafts.rules > 0) payload.drafts = { ...drafts, cap: draftCap() }
       const summary =
         payload.picks.length === 0
           ? (payload.notes[0] ?? '今天没有值得动的')
@@ -636,6 +918,7 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
         search_data: payload.search_data,
         picks: payload.picks.length,
         ...counts,
+        ...(payload.drafts === undefined ? {} : { drafts: payload.drafts }),
       })
       return { approval_item_id, picks: payload.picks.length, ...counts }
     },
@@ -699,8 +982,9 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
       const enabled = questions.filter((q) => q.enabled).slice(0, settings.max_questions)
       const search = options.searchData()
       const status = await search.status()
-      // WP155：这条路能探测哪几个平台（官方那一侧没有 Copilot）；不在里面的不问、不花钱
-      const platforms = status.platforms ?? [...GEO_PLATFORMS]
+      // WP159：默认只问 ChatGPT、Gemini、Google AI 概览（Perplexity 不再考虑），
+      // 再与这条路能探测的取交集（官方那一侧没有 Copilot）；不在里面的不问、不花钱
+      const platforms = geoPlatformsFor(status.platforms)
       const estimate = estimateOf(enabled.length, status)
       const notes: string[] = []
       const rows: SeoWeeklyGeoPayload['rows'] = []
@@ -834,7 +1118,7 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
         assignment_id: input.assignment_id,
         role_id: input.role_id,
       }
-      const kb = (await options.knowledge?.(actor)) ?? { facts: [], rules: [] }
+      const kb = await knowledgeFor(actor)
       const result = checkContentQuality({
         body,
         ...(title === undefined ? {} : { title }),
@@ -864,6 +1148,63 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
           summary: qualitySummary(result),
         },
       }
+    },
+
+    claimRules: (actor) => claimRulesView(actor),
+
+    async setClaimRules(actor, input) {
+      if (input.group !== undefined && input.group.id !== 'global') {
+        if (!CLAIM_MARKET_GROUPS.includes(input.group.id))
+          throw new Error(`认不出这个市场组：${input.group.id}`)
+        const state = loadState()
+        saveState({
+          ...state,
+          claim_groups: { ...(state.claim_groups ?? {}), [input.group.id]: input.group.enabled },
+        })
+      }
+      const save = options.saveClaimRule
+      if ((input.rule !== undefined || input.add !== undefined) && save === undefined)
+        throw new Error('这个进程没装知识库，规则表只能看不能改')
+      if (input.rule !== undefined && save !== undefined) {
+        const view = await claimRulesView(actor)
+        const cur = view.rules.find((r) => r.id === input.rule?.id)
+        if (cur === undefined) throw new Error('没有这条规则')
+        const pattern = input.rule.pattern?.trim() || cur.pattern
+        const reason = input.rule.reason?.trim() || cur.reason
+        const enabled = input.rule.enabled ?? cur.enabled
+        await save(actor, {
+          key: cur.id,
+          statement: reason,
+          structured: {
+            pattern,
+            // 人改了要拦的字就按字面匹配（人写的多半不是正则）；没改就沿用原来的
+            regex: pattern === cur.pattern && cur.regex === true,
+            category: cur.category,
+            reason,
+            market: cur.market,
+            enabled,
+            ...(cur.source_title === undefined ? {} : { source_title: cur.source_title }),
+            ...(cur.source_url === undefined ? {} : { source_url: cur.source_url }),
+          },
+        })
+      }
+      if (input.add !== undefined && save !== undefined) {
+        const pattern = input.add.pattern.trim()
+        if (pattern === '') throw new Error('要拦的字不能是空的')
+        const reason = input.add.reason.trim() || `「${pattern}」要有证据才能写`
+        await save(actor, {
+          key: pattern,
+          statement: reason,
+          structured: {
+            pattern,
+            category: 'other',
+            reason,
+            market: input.add.market ?? 'global',
+            enabled: true,
+          },
+        })
+      }
+      return claimRulesView(actor)
     },
 
     async onDecided(item) {

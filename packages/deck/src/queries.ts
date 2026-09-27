@@ -1727,21 +1727,23 @@ const QUERY_LIST: QueryDef[] = [
     run: (ctx) => {
       const payload = latestSeoReport(ctx, 'daily')
       const picks = Array.isArray(payload?.picks) ? payload.picks.filter(isRecord) : []
-      const rows = picks.map((p) => {
+      const rows: Record<string, string | number>[] = picks.map((p) => {
         const e = isRecord(p.evidence) ? p.evidence : {}
         return {
-          rank: typeof p.rank === 'number' ? p.rank : 0,
+          rank: typeof p.rank === 'number' ? p.rank : '',
           what: `${SEO_SIGNAL_LABEL[String(p.signal)] ?? String(p.signal)} · ${String(p.query ?? '')}`,
           evidence: seoEvidenceText(e),
           action: String(p.suggestion ?? ''),
-          lane: SEO_LANE_LABEL[String(p.lane)] ?? String(p.lane),
+          // WP159：改动卡的文字是模型按品牌口吻写的初稿时标一下（规则版兜底不标）
+          lane: `${SEO_LANE_LABEL[String(p.lane)] ?? String(p.lane)}${isRecord(p.outcome) && p.outcome.draft === 'model' ? ' · 模型初稿' : ''}`,
         }
       })
       // 一件都没有时照实说为什么（没响 / 还没读过），不出一张空表
       const notes = Array.isArray(payload?.notes) ? payload.notes.map(String) : []
       if (rows.length === 0)
         rows.push({
-          rank: 0,
+          // WP159（Fable 追加）：空表那一行 # 列留空——给 0 会被表格按金额格式画成「US$0.00」
+          rank: '',
           what:
             payload === undefined
               ? '今天早上还没读过 Search Console'
@@ -1752,7 +1754,8 @@ const QUERY_LIST: QueryDef[] = [
         })
       return {
         columns: [
-          { key: 'rank', label: '#', align: 'right' as const },
+          // 名次是件数，不是钱（不写 format 的数字列表格按金额画）
+          { key: 'rank', label: '#', align: 'right' as const, format: 'count' as const },
           { key: 'what', label: '信号 · 查询' },
           { key: 'evidence', label: '证据' },
           { key: 'action', label: '建议' },

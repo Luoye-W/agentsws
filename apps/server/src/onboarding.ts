@@ -336,6 +336,8 @@ export interface OnboardingAssembly {
   brandProfile(workspace_id: WorkspaceId): {
     vertical?: WorkspaceVertical
     storefront_platform?: StorefrontPlatform
+    /** WP159：目标市场（品牌分析确认时写的；没写过就没有这一格）。 */
+    markets?: string[]
   }
   /**
    * WP65（52 O1）：公司级那三样的当前值（读以组织为准，还没迁过就是档案里那一份）。
@@ -690,9 +692,21 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
       // WP62（51 §1 N0）：同上——不给就沿用上一次；从来没设过就是 Shopify
       const storefront_platform =
         normalizeStorefrontPlatform(input.storefront_platform) ?? previous?.storefront_platform
+      // WP159：目标市场——不给就沿用上一次（只认两位字母的国家码，统一大写、去重）
+      const markets =
+        input.markets === undefined
+          ? previous?.markets
+          : [
+              ...new Set(
+                input.markets
+                  .map((m) => m.trim().toUpperCase())
+                  .filter((m) => /^[A-Z]{2}$/.test(m)),
+              ),
+            ]
       const next: WorkspaceProfile = {
         legal_name,
         ...(domain === '' ? {} : { domain }),
+        ...(markets === undefined || markets.length === 0 ? {} : { markets }),
         discoverable: input.discoverable ?? company?.discoverable ?? previous?.discoverable ?? true,
         ...(vertical === undefined ? {} : { vertical }),
         ...(storefront_platform === undefined ? {} : { storefront_platform }),
@@ -868,6 +882,7 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
         ...(p?.storefront_platform === undefined
           ? {}
           : { storefront_platform: p.storefront_platform }),
+        ...(p?.markets === undefined ? {} : { markets: [...p.markets] }),
       }
     },
     setBrandProfile(ws, input) {
@@ -881,6 +896,8 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
         ...(input.storefront_platform === undefined
           ? {}
           : { storefront_platform: input.storefront_platform }),
+        // WP159：目标市场不归这一步管，沿用档案里的
+        ...(previous?.markets === undefined ? {} : { markets: previous.markets }),
         set_at: clock.now(),
       })
     },

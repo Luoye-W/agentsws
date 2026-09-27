@@ -20,16 +20,21 @@ import type {
   GeoQuestion,
   SitePage,
 } from '@agentsws/contracts'
+import { GEO_DEFAULT_PLATFORMS } from '@agentsws/contracts'
 import { normalizeQuery, pageTargets, wordCount } from './signals.js'
 
-/** 默认探测的平台（WP155 定的那五个）。 */
-export const GEO_PLATFORMS: readonly AiPlatform[] = [
-  'chatgpt',
-  'perplexity',
-  'gemini',
-  'google_ai_overview',
-  'copilot',
-]
+/**
+ * 默认探测的平台（WP159，Luoye 09-27 定）：ChatGPT、Gemini、Google AI 概览。
+ * Perplexity 不再考虑（用的人少、在走弱）；Copilot 官方那一侧探测不了。
+ */
+export const GEO_PLATFORMS: readonly AiPlatform[] = GEO_DEFAULT_PLATFORMS
+
+/** 这一轮真要问的平台 = 默认那几个 ∩ 这条路能探测的（不给就是默认那几个）。 */
+export function geoPlatformsFor(available: readonly AiPlatform[] | undefined): AiPlatform[] {
+  return available === undefined
+    ? [...GEO_PLATFORMS]
+    : GEO_PLATFORMS.filter((p) => available.includes(p))
+}
 
 /** 一次最多几个问题（每个问题 × 每个平台按次计费，WP155 `data.search.ai_answer`）。 */
 export const MAX_GEO_QUESTIONS = 8
