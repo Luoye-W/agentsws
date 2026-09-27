@@ -2,8 +2,8 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "rootDir": ".",
-    "outDir": "dist/types",
-    "tsBuildInfoFile": "dist/types/.tsbuildinfo",
+    "outDir": "out/types",
+    "tsBuildInfoFile": "out/types/.tsbuildinfo",
     "emitDeclarationOnly": true,
     "module": "ESNext",
     "moduleResolution": "Bundler",
