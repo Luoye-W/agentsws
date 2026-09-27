@@ -1,17 +1,15 @@
 #!/usr/bin/env node
 /**
- * WP155：连接页「搜索数据」一行的截图出处（可重跑，不联网）。
+ * WP159：知识库页「违规宣称规则」（按市场分组、每条带官方出处）的截图，可重跑。
  *
- * 起一个 demo，拍三张：
+ * 起一个 demo（不联网），拍两张到 `docs/assets/wp159/`：
  *
- * 1. `search-data-none.png`：什么都没接（demo 没有搜索数据）——三个按钮 + 一句人话；
- * 2. `search-data-official.png`：官方那一档（**替身**：浏览器侧把 `GET /v1/search-data` 改成
- *    「关联了云账号、官方已开通」——demo 的云是假的，开不了官方）；单价常显；
- * 3. `search-data-byo.png`：点「自带 key」后的原生表单（选服务商 + 填 key），什么都不填。
+ * 1. `claim-rules.png`：按市场分组的规则表（默认按美国开：通用 + 美国，其余组灰着）；
+ * 2. `claim-rules-eu-on.png`：手动打开「欧盟 / 英国」、关掉一条之后（标「手动」「改过」）。
  *
  * ```
  * pnpm -F @agentsws/workstation exec vite build   # demo 服务的是 dist，别拍旧界面
- * node scripts/e2e-search-data-shots.mjs [--port 4443]
+ * node scripts/e2e-wp159-shots.mjs [--port 4449]
  * ```
  */
 import { spawn } from 'node:child_process'
@@ -22,14 +20,14 @@ import { fileURLToPath } from 'node:url'
 
 const require = createRequire(import.meta.url)
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
-const SHOTS = join(ROOT, 'docs/assets/wp155')
+const SHOTS = join(ROOT, 'docs/assets/wp159')
 
 const args = process.argv.slice(2)
 const value = (name, fallback) => {
   const i = args.indexOf(name)
   return i >= 0 && args[i + 1] !== undefined ? args[i + 1] : fallback
 }
-const PORT = Number(value('--port', '4443'))
+const PORT = Number(value('--port', '4449'))
 const BASE = `http://127.0.0.1:${PORT}`
 const OWNER = 'wang@nordvolt.example'
 
@@ -76,12 +74,27 @@ async function login() {
   return verified.data.session_token
 }
 
-async function shot(page, name) {
-  const section = page.locator('[data-testid="search-data"]')
-  await section.scrollIntoViewIfNeeded()
-  await page.waitForTimeout(300)
-  await section.screenshot({ path: join(SHOTS, name) })
-  console.log(`  📷 ${name}`)
+async function ownerAssignment(token) {
+  const me = await (
+    await fetch(`${BASE}/v1/me`, { headers: { Authorization: `Bearer ${token}` } })
+  ).json()
+  const mine = (me.data?.assignments ?? []).filter((a) => a.revoked_at === undefined)
+  const owner = mine.find((a) => a.role_id === 'common.owner') ?? mine[0]
+  if (owner === undefined) throw new Error('owner 的分配没找到')
+  return owner.id
+}
+
+async function patch(token, assignment, input) {
+  const res = await fetch(`${BASE}/v1/knowledge/claim-rules`, {
+    method: 'PATCH',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'X-Assignment': assignment,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(input),
+  })
+  if (!res.ok) throw new Error(`改规则表没成：${res.status} ${await res.text()}`)
 }
 
 async function main() {
@@ -94,8 +107,9 @@ async function main() {
   try {
     await waitForDemo(log)
     const token = await login()
+    const assignment = await ownerAssignment(token)
     browser = await chromium.launch({ headless: true })
-    const context = await browser.newContext({ viewport: { width: 1280, height: 1000 } })
+    const context = await browser.newContext({ viewport: { width: 1280, height: 1100 } })
     await context.addInitScript((t) => {
       try {
         window.localStorage.setItem('agentsws.session_token', t)
@@ -106,44 +120,23 @@ async function main() {
     const page = await context.newPage()
     page.on('pageerror', (e) => console.error(`  ⚠️ 页面报错：${e.message}`))
 
-    // ① 什么都没接
-    await page.goto(`${BASE}/connections`, { waitUntil: 'networkidle' })
-    await page.waitForSelector('[data-testid="search-data-status"]')
-    await shot(page, 'search-data-none.png')
+    await page.goto(`${BASE}/knowledge`, { waitUntil: 'networkidle' })
+    const section = page.locator('[data-testid="knowledge-claim-rules"]')
+    await section.waitFor()
+    await section.scrollIntoViewIfNeeded()
+    await page.waitForTimeout(400)
+    await section.screenshot({ path: join(SHOTS, 'claim-rules.png') })
+    console.log('  📷 claim-rules.png')
 
-    // ② 官方那一档（替身：关联了云账号、官方已开通）
-    await page.route('**/v1/search-data', async (route) => {
-      if (route.request().method() !== 'GET') return route.continue()
-      const res = await route.fetch()
-      const json = await res.json()
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({
-          ...json,
-          data: {
-            choice: 'auto',
-            status: {
-              configured: true,
-              route: 'official',
-              engines: ['google', 'bing'],
-              platforms: ['chatgpt', 'gemini', 'google_ai_overview'],
-              prices: { serp: 0.2, ai_answer: 0.2 },
-            },
-          },
-        }),
-      })
-    })
+    await patch(token, assignment, { group: { id: 'eu_uk', enabled: true } })
+    await patch(token, assignment, { rule: { id: 'eu.misleading', enabled: false } })
     await page.reload({ waitUntil: 'networkidle' })
-    await page.waitForSelector('[data-testid="search-data-price"]')
-    await shot(page, 'search-data-official.png')
-    await page.unroute('**/v1/search-data')
-
-    // ③ 自带 key：原生表单
-    await page.reload({ waitUntil: 'networkidle' })
-    await page.click('[data-testid="search-data-choice-byo"]')
-    await page.waitForSelector('[data-testid="search-data-byo"]')
-    await shot(page, 'search-data-byo.png')
+    const eu = page.locator('[data-testid="claim-group-eu_uk"]')
+    await eu.waitFor()
+    await eu.scrollIntoViewIfNeeded()
+    await page.waitForTimeout(400)
+    await eu.screenshot({ path: join(SHOTS, 'claim-rules-eu-on.png') })
+    console.log('  📷 claim-rules-eu-on.png')
   } finally {
     if (browser !== undefined) await browser.close()
     child.kill()

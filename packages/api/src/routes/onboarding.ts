@@ -74,6 +74,11 @@ export interface WorkspaceProfileInput {
    * 公司的进组织，这一个进 `Workspace.brand`——第 ① 步问的是两件事，不是一件。
    */
   brand_name?: string | undefined
+  /**
+   * WP159：目标市场（ISO 国家码）。品牌分析确认时服务端内部写进来（HTTP 这一面不收它）；
+   * 不给 = 沿用上一次。
+   */
+  markets?: string[] | undefined
 }
 
 /** 公司档案的对外形状。**没有归一化哈希**——它是发现用的，不是给人看的。 */

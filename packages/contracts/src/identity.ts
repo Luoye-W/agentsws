@@ -403,6 +403,11 @@ export interface WorkspaceProfile {
   vertical?: WorkspaceVertical
   /** 51 §1 N0：网站是用什么搭的。缺省 = `shopify`。 */
   storefront_platform?: StorefrontPlatform
+  /**
+   * WP159：目标市场（ISO 国家码，大写）。品牌分析确认时从档案卡写进来；违规宣称规则按它启用
+   * 对应市场组。没写过 = 不知道（不猜）。
+   */
+  markets?: string[]
   set_at: Iso8601
 }
 

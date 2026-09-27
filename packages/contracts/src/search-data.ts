@@ -125,6 +125,22 @@ export const AI_PLATFORMS: readonly AiPlatform[] = [
 ]
 
 /**
+ * WP159（Luoye 09-27 定）：**不再用**的 AI 平台。Perplexity 用的人少、在走弱——GEO 默认不探测、
+ * 官方那一侧不列它（适配器代码留着，登记为不用）。枚举值 `perplexity` 不删（契约只加不删）。
+ */
+export const UNUSED_AI_PLATFORMS: readonly AiPlatform[] = ['perplexity']
+
+/**
+ * WP159：GEO 每周探测默认问的平台（ChatGPT、Gemini、Google AI 概览）。
+ * 实际问哪几个 = 这里 ∩ 这条路能探测的（`SearchDataStatus.platforms`）。
+ */
+export const GEO_DEFAULT_PLATFORMS: readonly AiPlatform[] = [
+  'chatgpt',
+  'gemini',
+  'google_ai_overview',
+]
+
+/**
  * 自带 key 能选的服务商（docs/81 调研过的三家）。官方那一侧用哪家不进契约——
  * 那是我们的运维决定，对外只叫「Agents 工坊官方数据接口」。
  */

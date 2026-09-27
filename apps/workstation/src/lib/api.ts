@@ -5638,3 +5638,50 @@ export const runSeo = (
   assignment?: string,
 ): Promise<{ what: string; approval_item_ids: string[]; skipped?: string; picks?: number }> =>
   api('/v1/seo/run', { method: 'POST', body: { what }, ...withAssignment(assignment) })
+
+/* ── WP159：知识库里那张「违规宣称规则」表（按市场分组，带官方出处） ─────────────── */
+
+export type ClaimMarketGroupId = 'global' | 'us' | 'eu_uk' | 'ca' | 'au'
+
+export interface ClaimRuleRowData {
+  id: string
+  pattern: string
+  regex?: boolean
+  category: string
+  /** 一句人话：为什么不能这么写。 */
+  reason: string
+  market: ClaimMarketGroupId
+  source_title?: string
+  source_url?: string
+  /** 正则规则给人看的写法。 */
+  label?: string
+  enabled: boolean
+  origin: 'builtin' | 'edited' | 'custom'
+}
+
+export interface ClaimRulesData {
+  markets: string[]
+  markets_from: 'brand_profile' | 'default'
+  groups: {
+    id: ClaimMarketGroupId
+    label: string
+    enabled: boolean
+    why: 'always' | 'market' | 'manual'
+  }[]
+  rules: ClaimRuleRowData[]
+}
+
+export interface ClaimRulesPatchInput {
+  group?: { id: ClaimMarketGroupId; enabled: boolean }
+  rule?: { id: string; enabled?: boolean; pattern?: string; reason?: string }
+  add?: { pattern: string; reason: string; market?: ClaimMarketGroupId }
+}
+
+export const getClaimRules = (assignment?: string): Promise<ClaimRulesData> =>
+  api('/v1/knowledge/claim-rules', withAssignment(assignment))
+
+export const setClaimRules = (
+  input: ClaimRulesPatchInput,
+  assignment?: string,
+): Promise<ClaimRulesData> =>
+  api('/v1/knowledge/claim-rules', { method: 'PATCH', body: input, ...withAssignment(assignment) })
