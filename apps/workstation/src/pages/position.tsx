@@ -17,6 +17,7 @@ import { PositionConnections } from '@/components/connections/position-connectio
 import { DeckSection } from '@/components/deck'
 import { channelOfRole, KolPanel } from '@/components/kol/kol-panel'
 import { ScheduleList } from '@/components/schedule-list'
+import { GoogleSourcePicker } from '@/components/seo/google-source-picker'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Hint } from '@/components/ui/hint'
@@ -263,6 +264,13 @@ function StoreSections({
              * 各的高，不被最高那个撑齐。
              */
             <div className="flex flex-col gap-4">
+              {/*
+                WP158：Search Console / GA4 连上了、还没选站点 / 媒体资源——先出那张「选一下」的小卡
+                （选好了它就不画；只有「内容与搜索」读得到它）
+              */}
+              {section.source === 'gsc' || section.source === 'ga4' ? (
+                <GoogleSourcePicker assignment={id} source={section.source} />
+              ) : null}
               {section.blocks.filter(isTile).length === 0 ? null : (
                 <div className="grid grid-cols-2 gap-4 lg:grid-cols-4" data-testid="view-tiles">
                   {section.blocks.filter(isTile).map((block) => (
