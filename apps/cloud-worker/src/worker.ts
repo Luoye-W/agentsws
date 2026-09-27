@@ -257,7 +257,7 @@ async function handleKolPublic(
    */
   let principal: VerifiedCloudToken | undefined
   const authorization = request.headers.get('Authorization') ?? undefined
-  if (authorization?.includes('wst_')) {
+  if (isWorkspaceBearer(authorization)) {
     try {
       const verified = await authenticate({ verifier: remoteVerifier(env, origin) }, authorization)
       principal = { ...verified, scopes: verified.scopes as VerifiedCloudToken['scopes'] }
@@ -574,4 +574,12 @@ export async function route(request: Request, env: WorkerEnv): Promise<Response>
 
   // 其余全归账号那一层：health、magic link、会话、工作区关联、首页、登录落地页
   return accountsStub(env).fetch(clean)
+}
+
+/**
+ * 以 `Bearer wst_` 开头才算工作区令牌。插件令牌 `plg_…` 是随机串，原先用「包含 `wst_`」判断，
+ * 它恰好含这四个字时插件上报会被误判成工作区令牌、回 401（WP164 发现，Fable 修）。
+ */
+export function isWorkspaceBearer(authorization: string | undefined): boolean {
+  return /^Bearer\s+wst_/i.test(authorization ?? '')
 }
