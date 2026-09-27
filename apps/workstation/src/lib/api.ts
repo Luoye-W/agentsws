@@ -14,6 +14,7 @@ import type {
   DailyPlan,
   Goal,
   GoalProgress,
+  MarketsSource,
   Matter,
   MatterEvent,
   MatterView,
@@ -3081,6 +3082,10 @@ export interface WorkspaceProfileView {
   vertical: 'goods' | 'digital'
   /** WP62（51 §1 N0）：网站是用什么搭的。缺省 = `shopify`。 */
   storefront_platform: StorefrontPlatform
+  /** WP166：目标市场（ISO 国家码，大写）。没写过就没有。 */
+  markets?: string[]
+  /** WP166：这份市场是从哪看出来的（问号里那一句）。 */
+  markets_source?: MarketsSource
   set_at: string
 }
 
@@ -3225,6 +3230,8 @@ export const setWorkspaceProfile = (
     storefront_platform?: StorefrontPlatform
     /** WP65（52 O4）：第 ① 步下半块「这个品牌」的名字。 */
     brand_name?: string
+    /** WP166：目标市场（不给 = 不改；空数组 = 清空）。 */
+    markets?: string[]
   },
   assignment?: string,
 ): Promise<WorkspaceProfileView> =>

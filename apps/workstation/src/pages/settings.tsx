@@ -81,6 +81,10 @@ export function SettingsPage({
           storefront_platform: draft.storefront_platform,
           // WP65（52 O1）：品牌名（顶栏切换器显示的那一个）也从这里改
           ...(draft.brand_name.trim() === '' ? {} : { brand_name: draft.brand_name.trim() }),
+          // WP166：目标市场——只在改过时发（原样存不该把「从官网看出来的」改成「你选的」）
+          ...(sameMarkets(draft.markets, onboarding.data?.profile?.markets ?? [])
+            ? {}
+            : { markets: draft.markets }),
         },
         ownerId,
       ),
@@ -226,4 +230,9 @@ export function SettingsPage({
       </TabsContent>
     </Tabs>
   )
+}
+
+/** 两份市场清单一样吗（顺序也算：用户挪过顺序就当改过）。 */
+function sameMarkets(a: readonly string[], b: readonly string[]): boolean {
+  return a.length === b.length && a.every((m, i) => m === b[i])
 }

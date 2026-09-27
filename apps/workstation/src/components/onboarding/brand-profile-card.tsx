@@ -20,6 +20,7 @@ import type { BrandIntakeProfile } from '@agentsws/contracts'
 import { Check, Pencil } from 'lucide-react'
 import { useState } from 'react'
 import { DesignSpecRow } from '@/components/design-md/design-spec-row'
+import { MarketsPicker, marketLabel } from '@/components/onboarding/markets-picker'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useApp } from '@/lib/app-context'
@@ -49,18 +50,7 @@ export function languageLabel(code: string, lang: 'zh' | 'en'): string {
   }
 }
 
-export function marketLabel(code: string, lang: 'zh' | 'en'): string {
-  if (!/^[A-Za-z]{2}$/.test(code)) return code
-  try {
-    return (
-      new Intl.DisplayNames([lang === 'zh' ? 'zh-CN' : 'en'], { type: 'region' }).of(
-        code.toUpperCase(),
-      ) ?? code
-    )
-  } catch {
-    return code
-  }
-}
+export { marketLabel }
 
 const SOCIAL_LABELS: Readonly<Record<string, { zh: string; en: string }>> = {
   instagram: { zh: 'Instagram', en: 'Instagram' },
@@ -100,7 +90,8 @@ export interface BrandProfileCardProps {
   profile: BrandIntakeProfile
   /** 用户改过的那几格（字段名 → 新值）。受控：父组件握着它，确认时原样发上去。 */
   edits: Record<string, unknown>
-  onEdit: (field: string, value: string) => void
+  /** 文字格给字符串；WP166 市场那一格给国家码数组。 */
+  onEdit: (field: string, value: unknown) => void
   onConfirm: () => void
   onReanalyze: () => void
   busy?: boolean
@@ -236,7 +227,12 @@ export function BrandProfileCard({
   const logo = profile.logo_url?.value
   const color = profile.primary_color?.value
   const products = profile.products?.value ?? []
-  const markets = profile.markets?.value ?? []
+  // WP166：市场可增删——改过就用改过的那一份（空数组也算：人删光了）
+  const editedMarkets = edits.markets
+  const markets = Array.isArray(editedMarkets)
+    ? editedMarkets.filter((m): m is string => typeof m === 'string')
+    : (profile.markets?.value ?? [])
+  const marketsEdited = Array.isArray(editedMarkets) || profile.markets?.edited === true
   const languages = profile.languages?.value ?? []
   const socials = profile.social_links?.value ?? []
   const policies = profile.policies?.value ?? []
@@ -274,11 +270,38 @@ export function BrandProfileCard({
         ))}
       </div>
 
-      {/* 市场 / 语言 / 社媒：画成标签 */}
-      {markets.length + languages.length + socials.length === 0 ? null : (
+      {/*
+        WP166：市场从只读标签改成可增删（国家选择器，中文国名）；出处进问号；
+        一个都没看出来就明说「没看出来，请选一下」。确认时随 edits 一起写进档案（唯一来源）。
+      */}
+      <div className="flex items-baseline gap-2 text-sm" data-testid="intake-row-markets">
+        <span className="w-24 shrink-0 text-ws-muted-fg">{t('intake.field.markets')}</span>
+        <MarketsPicker
+          value={markets}
+          disabled={busy}
+          onChange={(next) => {
+            onEdit('markets', next)
+          }}
+          origin={
+            marketsEdited
+              ? { from: 'human' }
+              : profile.markets === undefined
+                ? undefined
+                : {
+                    from: profile.markets.evidence.every((e) => e.locator === 'url:host')
+                      ? 'amazon'
+                      : 'site',
+                    evidence: profile.markets.evidence,
+                  }
+          }
+        />
+        <ConfidenceTag profile={profile} edits={edits} field="markets" />
+      </div>
+
+      {/* 语言 / 社媒：画成标签 */}
+      {languages.length + socials.length === 0 ? null : (
         <div className="flex flex-wrap gap-1" data-testid="intake-tags">
           {[
-            ...markets.map((m) => marketLabel(m, lang)),
             ...languages.map((l) => languageLabel(l, lang)),
             ...socials.map((s) => socialLabel(s.platform, lang)),
           ]

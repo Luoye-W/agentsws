@@ -2104,6 +2104,25 @@ const zh: Table = {
   'intake.field.category': '品类',
   'intake.field.support_email': '客服邮箱',
   'intake.field.currency': '币种',
+  // ── WP166 目标市场：一处定、处处用（档案卡与设置页同一个选择器）─────
+  'intake.field.markets': '市场',
+  'markets.label': '目标市场',
+  'markets.hint': '搜索结果与 AI 回答按这几个市场分别探测，违规宣称规则也按它开组。',
+  'markets.empty': '没看出来，请选一下',
+  'markets.add': '加市场',
+  'markets.common': '常用',
+  'markets.all': '全部',
+  'markets.remove': '去掉{name}',
+  'markets.from.site': '我们从官网的{what}看出来的',
+  'markets.from.amazon': '我们从 Amazon 链接的站点看出来的',
+  'markets.from.store': '按店铺后台配的市场校正过',
+  'markets.from.human': '你自己选的',
+  'markets.kind.localization': '国家切换',
+  'markets.kind.hreflang': '语言版本',
+  'markets.kind.tld': '域名',
+  'markets.kind.shipping': '配送政策',
+  'markets.kind.ships_to': '「Ships to」那一句',
+  'markets.kind.currency': '商品币种',
 
   // ── WP122（71）品牌设计规范 DESIGN.md ────────────────────────────
   //
@@ -5038,6 +5057,26 @@ const en: Table = {
   'intake.field.category': 'Category',
   'intake.field.support_email': 'Support email',
   'intake.field.currency': 'Currency',
+  // ── WP166 target markets: set once, used everywhere ─────────────────
+  'intake.field.markets': 'Markets',
+  'markets.label': 'Target markets',
+  'markets.hint':
+    'Search results and AI answers are checked per market, and the claim rules follow them too.',
+  'markets.empty': "Couldn't tell — please pick",
+  'markets.add': 'Add market',
+  'markets.common': 'Common',
+  'markets.all': 'All',
+  'markets.remove': 'Remove {name}',
+  'markets.from.site': 'We read this from your site: {what}',
+  'markets.from.amazon': 'We read this from the Amazon store you linked',
+  'markets.from.store': 'Corrected from the markets set up in your store',
+  'markets.from.human': 'You picked these',
+  'markets.kind.localization': 'country switcher',
+  'markets.kind.hreflang': 'language versions',
+  'markets.kind.tld': 'domain',
+  'markets.kind.shipping': 'shipping policy',
+  'markets.kind.ships_to': '"Ships to" line',
+  'markets.kind.currency': 'product currency',
 
   // ── WP122 (71) the brand's DESIGN.md ─────────────────────────────
   'design.md.title': 'Design spec',
