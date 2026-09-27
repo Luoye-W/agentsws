@@ -4,6 +4,7 @@
  * - `GET  /v1/seo/geo-questions`：买家会问的问题清单（自动生成 + 人改过的）；
  * - `PUT  /v1/seo/geo-questions`：在面板里改（关掉、改字、加）——人改过的永远赢；
  * - `POST /v1/seo/run`：现在跑一轮（每日判断 / 周小结），不用等到早上 8 点。
+ * - `GET / PUT /v1/seo/google-sources`（WP158）：Search Console 选哪个站点、GA4 选哪个媒体资源。
  *
  * 闸：`content` 域（`dtc.content` 的 scopes 里有 read / stage）。别的职责进不来，
  * 路由里一行 if 都不用写（同 `pr.ts` 文件头第 1 条）。判断与出卡全在服务端的
@@ -60,6 +61,27 @@ export interface GeoQuestionsView {
   estimate: GeoCostEstimate
 }
 
+/** WP158：一个 Google 源（Search Console / GA4）在选择器上的样子。 */
+export interface GoogleSourceView {
+  connected: boolean
+  /** 选中的站点（原样的 `siteUrl`）或 GA4 媒体资源 id。 */
+  selected?: string
+  selected_label?: string
+  options: { id: string; label: string }[]
+  /** 连上了、还没选（出那张「选一下」的小卡）。 */
+  needs_pick: boolean
+  /** 上一次没读到的人话。 */
+  note?: string
+  stale?: boolean
+  window?: { start: string; end: string }
+}
+
+/** WP158：`GET / PUT /v1/seo/google-sources` 的返回。 */
+export interface GoogleSourcesView {
+  gsc: GoogleSourceView
+  ga4: GoogleSourceView
+}
+
 export interface SeoPort {
   geoQuestions(actor: SeoActor): MaybePromise<GeoQuestionsView>
   setGeoQuestions(
@@ -70,6 +92,13 @@ export interface SeoPort {
     },
   ): MaybePromise<GeoQuestionsView>
   run(actor: SeoActor, what: 'daily' | 'weekly'): MaybePromise<SeoRunView>
+  /** WP158：Search Console 选哪个站点、GA4 选哪个媒体资源（可选；没装 = 501）。 */
+  googleSources?(actor: SeoActor): MaybePromise<GoogleSourcesView>
+  /** WP158：选了立刻重读，并重出今天的 5 件事。 */
+  setGoogleSources?(
+    actor: SeoActor,
+    input: { gsc_site?: string | undefined; ga4_property?: string | undefined },
+  ): MaybePromise<GoogleSourcesView>
 }
 
 function portOf(deps: GatewayDeps): SeoPort {
@@ -113,6 +142,23 @@ const QuestionsBody = z.object({
 })
 
 const RunBody = z.object({ what: z.enum(['daily', 'weekly']) })
+
+const GoogleSourcesBody = z.object({
+  gsc_site: z.string().min(1).max(300).optional(),
+  ga4_property: z.string().min(1).max(40).optional(),
+})
+
+function googlePortOf(
+  deps: GatewayDeps,
+): Required<Pick<SeoPort, 'googleSources' | 'setGoogleSources'>> {
+  const p = portOf(deps)
+  if (p.googleSources === undefined || p.setGoogleSources === undefined)
+    throw new ApiError(
+      'not_implemented',
+      '这个服务进程没有装配 Search Console / GA4 读数那一层（SeoPort.googleSources）。',
+    )
+  return { googleSources: p.googleSources, setGoogleSources: p.setGoogleSources }
+}
 
 export function seoRoutes(): Route[] {
   return [
@@ -161,6 +207,39 @@ export function seoRoutes(): Route[] {
         returns: 'SeoRunView',
       },
       async (c, deps) => ok(c, await portOf(deps).run(actorOf(c), (await body(c, RunBody)).what)),
+    ),
+    route(
+      {
+        method: 'get',
+        path: '/v1/seo/google-sources',
+        operationId: 'getGoogleSources',
+        summary: 'Search Console 选了哪个站点、GA4 选了哪个媒体资源（连上没选时出「选一下」）',
+        tag: 'seo',
+        auth: 'bearer',
+        assignment: true,
+        authz: READ_CONTENT,
+        returns: 'GoogleSourcesView',
+      },
+      async (c, deps) => ok(c, await googlePortOf(deps).googleSources(actorOf(c))),
+    ),
+    route(
+      {
+        method: 'put',
+        path: '/v1/seo/google-sources',
+        operationId: 'setGoogleSources',
+        summary: '选站点 / 媒体资源：选了立刻重读，并重出今天的 5 件事',
+        tag: 'seo',
+        auth: 'bearer',
+        assignment: true,
+        authz: STAGE_CONTENT,
+        body: GoogleSourcesBody,
+        returns: 'GoogleSourcesView',
+      },
+      async (c, deps) =>
+        ok(
+          c,
+          await googlePortOf(deps).setGoogleSources(actorOf(c), await body(c, GoogleSourcesBody)),
+        ),
     ),
   ]
 }

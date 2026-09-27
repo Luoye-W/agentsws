@@ -242,8 +242,10 @@ describe('WP20 §A 连接清单与目录', () => {
     expect(shop?.auth_options).toBeUndefined()
     expect(shop?.fields.map((f) => f.name)).toEqual(['shop_domain', 'client_id', 'client_secret'])
     expect(JSON.stringify(shop)).not.toContain('shpat')
-    // GA4 / GSC / Meta：连上了也先说清楚数据下一版接
-    expect(providers.find((p) => p.service === 'ga4')?.data_note).toContain('下一版')
+    // Meta：连上了也先说清楚数据下一版接；GA4 / GSC（WP158）已是真读数，说的是"选一下"
+    expect(providers.find((p) => p.service === 'meta_ads')?.data_note).toContain('下一版')
+    expect(providers.find((p) => p.service === 'ga4')?.data_note).toContain('选一下')
+    expect(providers.find((p) => p.service === 'gsc')?.data_note).toContain('选一下')
   })
 
   // WP63（51 §2.1 评价管理 / §3 N2）

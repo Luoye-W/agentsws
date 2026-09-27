@@ -35,6 +35,7 @@ import { contentHashOf } from '@agentsws/knowledge'
 import { parseRole } from '@agentsws/roles'
 import { DEMO_GSC_ROWS, DEMO_PAGES, standInSearchConsole } from '@agentsws/seo-core'
 import type {
+  GoogleReads,
   MatterRecordSource,
   MountedWorld,
   Server,
@@ -52,6 +53,7 @@ import type { Pack, RunContext, World } from '@agentsws/simulation'
 import { buildRunRequest, createWorld, loadPack, parseScenario } from '@agentsws/simulation'
 import { connectToolExecutor } from '@agentsws/stand-ins'
 import { cardRefOf, DAY_MS, planSummary, planTitle, type Work } from '@agentsws/work'
+import { demoGoogleReads } from './demo-google.js'
 
 export const DEMO_PACK = 'packs/dtc-3c-3p'
 export const DEMO_SCENARIO = 'scenarios/aftersales/return-within-window.yml'
@@ -1207,6 +1209,7 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
    * 查不到就走活数据源。生产路径一个字节不变（生产从不传 `brandData`）。
    */
   const extraBrandData = new Map<string, WorkstationDataSource>()
+  const demoGoogle = new Map<string, GoogleReads>()
   /**
    * WP121b（70 §3）：向导第 ② 步那一轮网址分析，在 demo 里 **replay pack 里的
    * `fixtures/site/*`**。
@@ -1241,6 +1244,12 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
     brandData: (ws) => extraBrandData.get(ws),
     // WP154：「现在读一遍 Search Console」在 demo 里读的是替身那一周（不连真 Google）
     searchConsoleFor: () => standInSearchConsole({ rows: DEMO_GSC_ROWS, pages: DEMO_PAGES }),
+    // WP158：Search Console 读数层配替身连接器（两个站点 → 先出「选一下」那张小卡）
+    googleReadsFor: (ws) => {
+      const hit = demoGoogle.get(ws) ?? demoGoogleReads({ workspace_id: ws, clock: world.clock })
+      demoGoogle.set(ws, hit)
+      return hit
+    },
     brandIntakeFetch: async (url: string) => {
       // WP140（docs/78 §2 向导 ②）：手输不带结尾斜杠的 `https://nordvolt.example` 也认
       const body = siteFixtures.get(siteFixtureKey(url))

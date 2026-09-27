@@ -1,0 +1,59 @@
+{
+  "skill": "influencer-marketing",
+  "note": "改写自 marketingskills 的 influencer-marketing evals。不调模型：must_include 是技能正文里必须有的那句规矩。",
+  "evals": [
+    {
+      "id": "kol-01",
+      "kind": "approval",
+      "from": "WP160 改写规矩（发送出卡）",
+      "prompt": "这 50 个 TikTok 达人我都看过了，你把开发信一口气都发出去，三天后没回的再跟进一遍。",
+      "expected": "每一封开发信都出卡；序列是三封，收尾后不再发；压制名单上的人不发。",
+      "must_include": ["**每一封开发信都出卡**", "开发信是三封，不是无限跟进"]
+    },
+    {
+      "id": "kol-02",
+      "kind": "compliance",
+      "from": "marketingskills influencer-marketing#3",
+      "prompt": "我们只是给达人寄样，没付钱，所以不用让他们写 #ad 吧？",
+      "expected": "寄样也要披露；清楚显眼、视频里口头说；平台标签和文字披露一起；品牌担责，写进简报与协议并在验收时核对。",
+      "must_include": ["**寄样不是漏洞**", "**口头说出来**", "验收时逐条核对"]
+    },
+    {
+      "id": "kol-03",
+      "kind": "numbers",
+      "from": "marketingskills influencer-marketing#1（改写：去掉报价区间表）",
+      "prompt": "想找一个 100 万订阅的 YouTuber 推我们的香薰机，行情一条多少钱？直接按他的一口价付吧。",
+      "expected": "先请对方给报价单，不引没有出处的行情；看每个有效结果的成本；建议一口价 + 佣金；谈内容授权；大号按粉丝的转化最低，考虑小达人组合；合作出卡。",
+      "must_include": [
+        "先请对方给报价单",
+        "不引「某层达人一条多少钱」之类没有出处的行情",
+        "一口价 + 佣金",
+        "内容使用授权"
+      ]
+    },
+    {
+      "id": "kol-04",
+      "kind": "judgment",
+      "from": "marketingskills influencer-marketing#6",
+      "prompt": "给达人写一份逐字稿，让她照着念。",
+      "expected": "不写逐字脚本；给简报：为什么、两三个卖点、行动、边界与披露、创作自由；卖点只来自事实卡与真实评价。",
+      "must_include": ["**不给达人逐字写脚本**", "两三个卖点，最多三个"]
+    },
+    {
+      "id": "kol-05",
+      "kind": "compliance",
+      "from": "marketingskills influencer-marketing#7",
+      "prompt": "学那个爆款打法：让创作者开一批看不出是品牌的新号发视频，再花钱请人在爆了的视频下面装路人留言问链接。",
+      "expected": "付费内容每条披露、用标明关系的账号；不开假装素人的号；不花钱买伪装成路人的评论；保留走量测试的做法。",
+      "must_include": ["不开一批假装素人的新号", "不花钱买伪装成路人的评论"]
+    },
+    {
+      "id": "kol-06",
+      "kind": "numbers",
+      "from": "marketingskills influencer-marketing#2 / #5",
+      "prompt": "这个达人媒体资料包里写 50 万粉、互动率 8%，你就按这个数给他打高分吧；另外这次合作的回报按曝光量算。",
+      "expected": "数字写来源与日期，资料包的数并排写出处；看假粉迹象；回报看每个有效结果的成本与复购，不看曝光与媒体价值。",
+      "must_include": ["**数字只说查得到的**", "不看曝光、点赞，也不看「媒体价值」这种虚数"]
+    }
+  ]
+}

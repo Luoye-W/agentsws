@@ -4,6 +4,7 @@ import { type LessonPoolOptions, MemoryLessonPool } from './lessons.js'
 import { MemorySkillRegistry } from './registry.js'
 import { createFileSidecarStore, createMemorySidecarStore, type SidecarStore } from './sidecar.js'
 
+export * from './bundled.js'
 export * from './errors.js'
 export * from './frontmatter.js'
 export * from './ids.js'

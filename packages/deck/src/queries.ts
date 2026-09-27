@@ -27,6 +27,7 @@ import type {
   RangeName,
   RecordRow,
   ScalarResult,
+  SearchGa4Totals,
   SeriesResult,
   TableResult,
 } from './types.js'
@@ -1775,7 +1776,12 @@ const QUERY_LIST: QueryDef[] = [
           { key: 'page', label: '页面' },
           { key: 'clicks', label: '自然点击', align: 'right' as const, format: 'count' as const },
           { key: 'orders', label: '订单', align: 'right' as const, format: 'count' as const },
-          { key: 'revenue', label: '收入', align: 'right' as const, format: 'money' as const },
+          {
+            key: 'revenue',
+            label: hasGa4 ? '收入（Shopify 落地页）' : '收入',
+            align: 'right' as const,
+            format: 'money' as const,
+          },
           ...(hasGa4
             ? [
                 {
@@ -1783,6 +1789,13 @@ const QUERY_LIST: QueryDef[] = [
                   label: '落地页转化率',
                   align: 'right' as const,
                   format: 'percent' as const,
+                },
+                // WP158：GA4 口径（只算自然搜索会话）并排放；订单与收入那两列仍是 Shopify 主口径
+                {
+                  key: 'ga4_revenue',
+                  label: 'GA4 口径收入',
+                  align: 'right' as const,
+                  format: 'money' as const,
                 },
               ]
             : []),
@@ -1794,7 +1807,10 @@ const QUERY_LIST: QueryDef[] = [
           orders: typeof r.orders === 'number' ? r.orders : 0,
           revenue: typeof r.revenue === 'number' ? r.revenue : 0,
           ...(hasGa4
-            ? { cr: typeof r.conversion_rate === 'number' ? r.conversion_rate * 100 : '—' }
+            ? {
+                cr: typeof r.conversion_rate === 'number' ? r.conversion_rate * 100 : '—',
+                ga4_revenue: typeof r.ga4_revenue === 'number' ? r.ga4_revenue : '—',
+              }
             : {}),
           flag: r.flag === 'leak' ? '点击多没订单' : r.flag === 'gem' ? '点击少出订单' : '',
         })),
@@ -1844,11 +1860,52 @@ const QUERY_LIST: QueryDef[] = [
     },
   },
   // ── 没接的数据源：查询在册，执行时按连接状态短路（36 §3「显示去连接卡而不是空图」）
-  { name: 'analytics.conversion_rate', source: 'ga4', returns: 'scalar', run: () => EMPTY_SCALAR },
-  { name: 'analytics.active_users', source: 'ga4', returns: 'scalar', run: () => EMPTY_SCALAR },
-  { name: 'analytics.events', source: 'ga4', returns: 'table', run: () => EMPTY_TABLE },
-  { name: 'gsc.top_queries', source: 'gsc', returns: 'table', run: () => EMPTY_TABLE },
-  { name: 'gsc.landing_pages', source: 'gsc', returns: 'table', run: () => EMPTY_TABLE },
+  // WP158：GSC / GA4 真读数（宿主从当天缓存递进来的汇总；没装读数那一层就照旧空）
+  {
+    name: 'analytics.conversion_rate',
+    source: 'ga4',
+    returns: 'scalar',
+    run: (ctx) =>
+      ga4Scalar(ctx, (t) => (t.sessions > 0 ? round2((t.purchases / t.sessions) * 100) : 0)),
+  },
+  {
+    name: 'analytics.active_users',
+    source: 'ga4',
+    returns: 'scalar',
+    run: (ctx) => ga4Scalar(ctx, (t) => t.active_users),
+  },
+  {
+    name: 'analytics.events',
+    source: 'ga4',
+    returns: 'table',
+    run: (ctx) => {
+      const ga4 = ctx.search?.ga4
+      if (ga4 === undefined) return EMPTY_TABLE
+      const pending = searchPending(ga4, '媒体资源')
+      const columns = [
+        { key: 'event', label: '事件' },
+        { key: 'count', label: '次数', align: 'right' as const, format: 'count' as const },
+        { key: 'key', label: '算关键事件', align: 'right' as const, format: 'count' as const },
+      ]
+      if (pending !== undefined) return { columns, rows: [{ event: pending, count: '', key: '' }] }
+      return {
+        columns,
+        rows: ga4.events.map((e) => ({ event: e.event, count: e.count, key: e.key_events })),
+      }
+    },
+  },
+  {
+    name: 'gsc.top_queries',
+    source: 'gsc',
+    returns: 'table',
+    run: (ctx) => gscTable(ctx, 'queries'),
+  },
+  {
+    name: 'gsc.landing_pages',
+    source: 'gsc',
+    returns: 'table',
+    run: (ctx) => gscTable(ctx, 'pages'),
+  },
   { name: 'csat.score', source: 'csat', returns: 'scalar', run: () => EMPTY_SCALAR },
   { name: 'ads.spend', source: 'ads', returns: 'scalar', run: () => EMPTY_SCALAR },
   { name: 'ads.roas', source: 'ads', returns: 'scalar', run: () => EMPTY_SCALAR },
@@ -2013,6 +2070,59 @@ const QUERY_LIST: QueryDef[] = [
 
 const EMPTY_SCALAR: ScalarResult = { value: 0, previous: 0, spark: [0, 0, 0, 0, 0, 0, 0] }
 const EMPTY_TABLE: TableResult = { columns: [], rows: [] }
+
+/** WP158：还没选站点 / 媒体资源、或者这次没读到——那一句人话（有数时回 `undefined`）。 */
+function searchPending(
+  part: { needs_pick?: boolean; note?: string },
+  what: '站点' | '媒体资源',
+): string | undefined {
+  if (part.needs_pick === true) return `连上了，还没选是哪个${what}——在这一块上面选一下`
+  return undefined
+}
+
+/** GA4 的数字块：本周 vs 上周（GA4 口径，只看读回来的那一周，不跟着时间切换走）。 */
+function ga4Scalar(ctx: QueryContext, pick: (t: SearchGa4Totals) => number): ScalarResult {
+  const ga4 = ctx.search?.ga4
+  if (ga4?.current === undefined) return EMPTY_SCALAR
+  const value = pick(ga4.current)
+  const previous = ga4.previous === undefined ? 0 : pick(ga4.previous)
+  return {
+    value,
+    previous,
+    ...(previous === 0 ? {} : { delta_pct: round2(((value - previous) / previous) * 100) }),
+    spark: [previous, value],
+  }
+}
+
+/** 查询词表 / 落地页表（前 20，按点击）。 */
+function gscTable(ctx: QueryContext, which: 'queries' | 'pages'): TableResult {
+  const gsc = ctx.search?.gsc
+  if (gsc === undefined) return EMPTY_TABLE
+  const first = which === 'queries' ? '查询词' : '落地页'
+  const columns = [
+    { key: 'key', label: first },
+    { key: 'clicks', label: '点击', align: 'right' as const, format: 'count' as const },
+    { key: 'impressions', label: '曝光', align: 'right' as const, format: 'count' as const },
+    { key: 'ctr', label: '点击率', align: 'right' as const, format: 'percent' as const },
+    { key: 'position', label: '平均排名', align: 'right' as const },
+  ]
+  const pending = searchPending(gsc, '站点')
+  const blank = { clicks: '', impressions: '', ctr: '', position: '' }
+  if (pending !== undefined) return { columns, rows: [{ key: pending, ...blank }] }
+  const list = which === 'queries' ? gsc.queries : gsc.pages
+  if (list.length === 0)
+    return { columns, rows: [{ key: gsc.note ?? '这一周 Search Console 里没有数', ...blank }] }
+  return {
+    columns,
+    rows: list.slice(0, 20).map((r) => ({
+      key: which === 'pages' ? pathOf(r.key) : r.key,
+      clicks: r.clicks,
+      impressions: r.impressions,
+      ctr: round2(r.ctr * 100),
+      position: r.position,
+    })),
+  }
+}
 const EMPTY_SERIES: SeriesResult = { x: [], series: [] }
 
 export const QUERIES: ReadonlyMap<string, QueryDef> = new Map(QUERY_LIST.map((q) => [q.name, q]))

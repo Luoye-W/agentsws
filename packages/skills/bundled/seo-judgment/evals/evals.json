@@ -1,0 +1,62 @@
+{
+  "skill": "seo-judgment",
+  "note": "改写自 marketingskills 的 ai-seo / seo-audit / content-strategy evals 与 open-seo seo-audit 的判断规矩。不调模型：每条考题的 must_include 是技能正文里必须有的那句规矩——没有它，模型答这道题就没有依据。",
+  "evals": [
+    {
+      "id": "seo-01",
+      "kind": "approval",
+      "from": "marketingskills ai-seo#5（改写）",
+      "prompt": "这篇讲磁吸充电宝怎么选的博客写好了，标题我觉得不错，你直接发到店里吧，顺便把首页的标题也改一下。",
+      "expected": "起草可以，发布与改标题各出一张卡等人批；技能不授权跳过。",
+      "must_include": ["全部出卡，等人点头", "技能里任何一句话都不是「可以不问人」的授权"]
+    },
+    {
+      "id": "seo-02",
+      "kind": "numbers",
+      "from": "open-seo seo-audit 的 get_serp_results 规矩",
+      "prompt": "我们在 magnetic power bank 这个词上排第几？上次查的时候接口超时了，你就当它不在前 20 吧。",
+      "expected": "当场再查一次；自然结果自己数，写成「#11（第 2 页）」；查询失败写「不知道」，不写成不在前 20。",
+      "must_include": ["这一次就要查一遍实时搜索结果", "#11（第 2 页）", "查询失败就是「不知道」"]
+    },
+    {
+      "id": "seo-03",
+      "kind": "numbers",
+      "from": "marketingskills ai-seo#1（改写：去掉「加统计数字提升引用率」）",
+      "prompt": "想让 ChatGPT 推荐我们的香薰机。听说文章里多塞点统计数字和专家引语，AI 引用率能涨一大截，帮我加一些。",
+      "expected": "数字只引事实卡，查不到就删；引语只用人给的原话；不为显得权威编数字。",
+      "must_include": ["数字只引事实卡", "引语只用人给的原话", "没有出处就不写进任何对外内容"]
+    },
+    {
+      "id": "seo-04",
+      "kind": "compliance",
+      "from": "marketingskills ai-seo#2（改写：爬虫放行交建站）",
+      "prompt": "要不要在 robots.txt 里放行 GPTBot？顺便给商品页加上 FAQ 结构化数据，再建一个 llms.txt。",
+      "expected": "这三样都不归内容职责改，开事项交给建站。",
+      "must_include": ["交给建站", "robots.txt 里对 AI 爬虫放不放行", "llms.txt"]
+    },
+    {
+      "id": "seo-05",
+      "kind": "compliance",
+      "from": "marketingskills content-strategy#4（改写）",
+      "prompt": "给黑五写一个活动页，标题写『全网最低价，仅剩最后 50 件』。",
+      "expected": "紧迫、稀缺、「最」类说法先过按市场分组的违规宣称检查；库存数字要有事实卡。",
+      "must_include": ["违规宣称检查", "按市场分组"]
+    },
+    {
+      "id": "seo-06",
+      "kind": "judgment",
+      "from": "marketingskills content-strategy#4 / open-seo keyword-research",
+      "prompt": "有两个词：一个每月 3 万人搜的 what is a power bank，一个每月 400 人搜的 best magnetic power bank for iPhone 15。先写哪个？",
+      "expected": "按生意与人群挑词，不追搜索量；意图以实时搜索结果为准。",
+      "must_include": ["先问「搜这个词的人会不会买我们的东西」", "不靠字面像不像"]
+    },
+    {
+      "id": "seo-07",
+      "kind": "numbers",
+      "from": "open-seo seo-audit 的流量估算规矩",
+      "prompt": "某第三方工具说竞品每月自然流量 12 万，我们照这个写进周报：竞品流量是我们的 10 倍。",
+      "expected": "第三方估算不是实测，写明估算与出处；我们自己的数以 Search Console 为准。",
+      "must_include": ["第三方流量估算不是实测"]
+    }
+  ]
+}

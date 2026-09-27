@@ -121,6 +121,14 @@ export {
   type PrivacyErase,
   type PrivacyEraseOptions,
 } from './erase.js'
+// WP158：Search Console 与 GA4 的真读数（demo 用它配一个替身连接器）
+export {
+  createGoogleReads,
+  type GoogleConnectLike,
+  type GoogleReads,
+  type GoogleReadsOptions,
+  type GoogleSourcesView,
+} from './google-reads.js'
 export {
   type ApprovalDirectoryOptions,
   createApprovalDirectory,

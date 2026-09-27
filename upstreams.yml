@@ -413,6 +413,54 @@ upstreams:
       - packages/support-core/src/prompts/customer-care.ts
       - packages/support-core/src/verticals/goods/rules.ts
 
+  # WP160（Luoye 09-27）：五个营销技能的正文翻译改写自这两家（都是 MIT，出处写在每个 SKILL.md 第一行、
+  # 许可证全文在 packages/skills/bundled/THIRD-PARTY-NOTICES）。改写过：冲突条款一律按我们的规矩
+  # （出卡、数字只引事实卡、结构化数据交建站……），所以上游改了只**对照**，不自动同步。
+  - id: marketingskills
+    kind: ported
+    why: 五个营销技能（seo-judgment / ad-copywriting / audience-research / email-sms / influencer-marketing）的正文翻译改写自它的十个技能（MIT）；上游改了判断规矩要对照回来
+    repo: coreyhaines31/marketingskills
+    pinned_commit: 5b2c0007766c6a1cf1d53fd8fc73e979e0821022
+    watch: [releases, readme, wishlist]
+    watch_paths:
+      - skills/ai-seo
+      - skills/seo-audit
+      - skills/content-strategy
+      - skills/copy-editing
+      - skills/ad-creative
+      - skills/ads
+      - skills/customer-research
+      - skills/sms
+      - skills/emails
+      - skills/influencer-marketing
+    we_depend_on:
+      - 'skills/{ai-seo,seo-audit,content-strategy,copy-editing} → packages/skills/bundled/seo-judgment/SKILL.md'
+      - 'skills/{ad-creative,ads} → packages/skills/bundled/ad-copywriting/SKILL.md'
+      - 'skills/customer-research → packages/skills/bundled/audience-research/SKILL.md'
+      - 'skills/{sms,emails} → packages/skills/bundled/email-sms/SKILL.md'
+      - 'skills/influencer-marketing（含 UGC 附录） → packages/skills/bundled/influencer-marketing/SKILL.md'
+      - '各技能的 evals/evals.json 改写成我们的考题（packages/skills/bundled/*/evals/evals.json）'
+    wishlist:
+      - 合规条款（TCPA / 10DLC / GDPR / CASL / FTC 披露）有更新
+      - evals 新增考题
+    covered_by:
+      - packages/skills/test/bundled.test.ts
+      - packages/skills/bundled/THIRD-PARTY-NOTICES
+
+  - id: open-seo
+    kind: ported
+    why: seo-judgment 里「排名结论当场查、自然名次自己数、查询失败算未知、估算不是实测、拿不到写不知道、按生意挑词」这几条判断规矩改编自它的 SEO 技能（MIT）
+    repo: every-app/open-seo
+    pinned_commit: 0ffff93101043aad7600a3b6a499a0cd2887ef49
+    watch: [releases, readme]
+    watch_paths:
+      - plugins/openseo/skills
+    we_depend_on:
+      - 'plugins/openseo/skills/{seo-audit,keyword-research,competitive-landscape,seo-report} 的判断规矩 → packages/skills/bundled/seo-judgment/SKILL.md「排名结论要当场查」「拿不到的数写「不知道」」「按生意挑词，不追搜索量」三段'
+    covered_by:
+      - packages/skills/test/bundled.test.ts
+      - packages/skills/bundled/THIRD-PARTY-NOTICES
+
   # WP146（Luoye 09-24）：工作台里复制进来的界面源码也登记。两条都是"源码已复制并改成 --ws-* 令牌"，
   # 上游更新只作参考、不自动同步；周报只看 release 与 wishlist 里的破坏性改动。
   - id: tremor-raw
