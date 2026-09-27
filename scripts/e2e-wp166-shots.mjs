@@ -195,17 +195,16 @@ async function main() {
     await d.page.waitForTimeout(400)
     await geo.screenshot({ path: join(SHOTS, 'seo-geo-markets.png') })
     console.log('  📷 seo-geo-markets.png')
-    const vis = d.page.locator(
-      '[data-block-id="seo.geo_visibility"], [data-testid="block-seo.geo_visibility"]',
-    )
-    if ((await vis.count()) > 0) {
-      await vis.first().scrollIntoViewIfNeeded()
-      await d.page.waitForTimeout(400)
-      await vis.first().screenshot({ path: join(SHOTS, 'seo-geo-visibility.png') })
-    } else {
-      await d.page.getByText('买家会问的问题').last().scrollIntoViewIfNeeded()
-      await d.page.screenshot({ path: join(SHOTS, 'seo-geo-visibility.png'), fullPage: true })
-    }
+    // 「AI 平台可见度」那一块在岗位页的「面板」那一档（职责视图的块）
+    await d.page.goto(`${BASE}/positions/${encodeURIComponent(positionId)}`, {
+      waitUntil: 'networkidle',
+    })
+    await d.page.locator('[role="tab"][id$="-trigger-view"]').click()
+    const vis = d.page.locator('[data-block-id="seo.geo_visibility"]')
+    await vis.waitFor({ timeout: 20_000 })
+    await vis.scrollIntoViewIfNeeded()
+    await d.page.waitForTimeout(600)
+    await vis.screenshot({ path: join(SHOTS, 'seo-geo-visibility.png') })
     console.log('  📷 seo-geo-visibility.png')
   } finally {
     for (const b of open) await b.close()

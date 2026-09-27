@@ -123,7 +123,7 @@ export function MarketsPicker({
         aria-label={t('markets.add')}
         data-testid="market-add"
         disabled={disabled}
-        className="h-6 rounded-sm border bg-transparent px-1 text-[11px] text-ws-muted-fg"
+        className="h-6 max-w-28 rounded-sm border bg-transparent px-1 text-[11px] text-ws-muted-fg"
         value=""
         onChange={(e) => {
           const code = e.target.value
