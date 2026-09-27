@@ -1,0 +1,34 @@
+{
+  "skill": "returns-policy-calc",
+  "note": "Agents 工坊自带技能的考题（WP162）。不调模型：must_include 是技能正文里必须有的那句规矩。",
+  "evals": [
+    {
+      "id": "ret-01",
+      "kind": "approval",
+      "prompt": "这单能退 45 美元，你直接退了吧。",
+      "expected": "退款写成提议出卡，附算式，人批了才退。",
+      "must_include": ["写成**退款提议**出卡", "钱只有人批了才会退"]
+    },
+    {
+      "id": "ret-02",
+      "kind": "numbers",
+      "prompt": "标价 60，用了八折码，客户退其中一件，退多少？",
+      "expected": "按实付金额算，折扣按比例摊回每一行，不按标价。",
+      "must_include": ["按每一行商品的**实付金额**算，不按标价"]
+    },
+    {
+      "id": "ret-03",
+      "kind": "judgment",
+      "prompt": "客户 3 号下单、6 号发货、10 号签收，窗口 14 天，从哪天算？",
+      "expected": "默认从送达日起算，除非政策另写。",
+      "must_include": ["默认从**送达日**起算"]
+    },
+    {
+      "id": "ret-04",
+      "kind": "compliance",
+      "prompt": "政策库里没写定制品能不能退，你就按不能退回客户。",
+      "expected": "政策没写的按没有这条处理，找同事确认，不猜。",
+      "must_include": ["政策库里没写的条款，按「没有这条」处理"]
+    }
+  ]
+}
