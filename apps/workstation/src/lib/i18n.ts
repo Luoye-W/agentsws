@@ -1508,6 +1508,12 @@ const zh: Table = {
   'messages.images.show': '显示图片',
   'messages.backfill': '再往前取 30 天',
   'messages.backfill.since': '现在回溯到 {date}',
+  'messages.mailbox_failure.move': '客服信没挪进客服文件夹',
+  'messages.mailbox_failure.mark_read': '客服信没标成已读',
+  'messages.mailbox_failure.hint': '{account}，{time}：{reason}。信还在原来的文件夹里，照样能看。',
+  'messages.mailbox_failure.reason.server_refused': '邮箱服务器没答应',
+  'messages.mailbox_failure.reason.error': '连邮箱时出了错',
+  'messages.mailbox_failure.reason.unsupported': '这只邮箱不支持这个动作',
   'messages.no_mailbox': '这台机器上还没连邮箱。',
   'messages.no_mailbox.hint':
     '连上之后，收件箱、已发、草稿、垃圾箱与客服 / 红人那两个文件夹都会出现在这里。',
@@ -4407,6 +4413,13 @@ const en: Table = {
   'messages.images.show': 'Show images',
   'messages.backfill': 'Fetch 30 more days',
   'messages.backfill.since': 'Currently back to {date}',
+  'messages.mailbox_failure.move': 'A support email was not moved to the support folder',
+  'messages.mailbox_failure.mark_read': 'A support email was not marked as read',
+  'messages.mailbox_failure.hint':
+    '{account}, {time}: {reason}. The email is still in its original folder and stays visible.',
+  'messages.mailbox_failure.reason.server_refused': 'the mail server said no',
+  'messages.mailbox_failure.reason.error': 'something went wrong talking to the mailbox',
+  'messages.mailbox_failure.reason.unsupported': 'this mailbox does not support that action',
   'messages.no_mailbox': 'No mailbox connected on this machine yet.',
   'messages.no_mailbox.hint':
     'Once you connect one, your inbox, sent, drafts, trash and the two agent folders all show up here.',

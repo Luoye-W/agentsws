@@ -268,6 +268,34 @@ describe('消息页（63 §8）', () => {
     expect(screen.getByTestId('messages-connect').getAttribute('href')).toContain('/connections')
   })
 
+  it('WP163：没邮箱动作失败时不出那一行；有就一眼看见，问号里说是哪只邮箱、为什么', async () => {
+    const { unmount } = renderWithProviders(<MessagesPage />)
+    await screen.findByTestId('messages-thread')
+    expect(screen.queryByTestId('messages-mailbox-failure')).toBeNull()
+    unmount()
+    listMessageAccounts.mockResolvedValueOnce({
+      accounts: [
+        {
+          ...account,
+          last_mailbox_failure: {
+            at: T0,
+            action: 'move',
+            reason: 'server_refused',
+            folder: 'INBOX',
+            to_folder: 'KefuAgents',
+          },
+        },
+      ],
+    })
+    renderWithProviders(<MessagesPage />)
+    const line = await screen.findByTestId('messages-mailbox-failure')
+    expect(line.textContent).toContain('客服信没挪进客服文件夹')
+    expect(line.getAttribute('data-reason')).toBe('server_refused')
+    const hint = line.querySelector('[data-hint]')?.getAttribute('data-hint') ?? ''
+    expect(hint).toContain(ME)
+    expect(hint).toContain('邮箱服务器没答应')
+  })
+
   it('搜索与文件夹切换都打到同一条列表接口上', async () => {
     const user = userEvent.setup()
     renderWithProviders(<MessagesPage />)
