@@ -198,11 +198,29 @@ export function findPage(pages: readonly SitePage[], url: string): SitePage | un
 export function pageTargets(page: SitePage, query: string): boolean {
   const q = normalizeQuery(query)
   if ((page.target_queries ?? []).some((t) => normalizeQuery(t) === q)) return true
-  if (page.title === undefined) return false
-  const title = normalizeQuery(page.title)
+  // WP158：真读数里页面标题 Search Console 不给——按网址最后一段的 handle 比
+  // （Shopify 的 handle 就是标题转出来的：`best-usb-c-charger` ≈ "Best USB-C Charger"）
+  const title = normalizeQuery(page.title ?? handleWords(page.url))
+  if (title === '') return false
   if (CJK.test(q)) return title.includes(q.replace(/\s+/g, ''))
   const words = q.split(' ').filter((w) => w.length > 2)
   return words.length > 0 && words.every((w) => title.includes(w))
+}
+
+/** 网址最后一段（handle）拆成词：`/blogs/news/best-usb-c-charger` → `best usb c charger`。 */
+export function handleWords(url: string): string {
+  let path = url
+  try {
+    path = new URL(url).pathname
+  } catch {
+    // 不是完整地址就按路径认
+  }
+  const last = path.replace(/\/+$/, '').split('/').pop() ?? ''
+  try {
+    return decodeURIComponent(last).replace(/[-_]+/g, ' ').trim()
+  } catch {
+    return last.replace(/[-_]+/g, ' ').trim()
+  }
 }
 
 /** 周环比（%）；没有上周数或上周是 0 就没有（不编一个无穷大）。 */

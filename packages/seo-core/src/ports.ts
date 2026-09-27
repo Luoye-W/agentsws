@@ -28,6 +28,11 @@ export interface SearchConsolePort {
   rows(input: { end: string }): Promise<GscRow[]>
   /** 店里的页与收录状况（拉不到给空数组）。 */
   pages(): Promise<SitePage[]>
+  /**
+   * WP158：这次给的是**上一份**（上游今天没读到）时的那句人话；卡上照实写一行。
+   * 不给 / 回 `undefined` = 数是新的（替身与"没连"都不给）。
+   */
+  note?(): string | undefined
 }
 
 /** 没连 Search Console。 */

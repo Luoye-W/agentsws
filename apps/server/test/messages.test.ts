@@ -210,22 +210,22 @@ describe('消息：全量同步与分拣（63 §3 / §4）', () => {
     expect(rows[0]?.labels).toContain('orders')
   })
 
-  it('开了客服岗位：判成客服的信 MOVE 进 kefuagents，并归到那条事项', async () => {
+  it('开了客服岗位：判成客服的信 MOVE 进 KefuAgents（WP161 规范名），并归到那条事项', async () => {
     const h = harness({
       folders: { INBOX: letters([{ uid: 1, mime: mime({ uid: 1 }) }]) },
       roles: ['dtc.support'],
     })
     const report = await h.messages.poll()
     expect(report.moved).toBe(1)
-    expect(h.writer.moves).toEqual([{ folder: 'INBOX', uid: 1, to: 'kefuagents' }])
+    expect(h.writer.moves).toEqual([{ folder: 'INBOX', uid: 1, to: 'KefuAgents' }])
     const rows = await h.messages.store.list({})
-    expect(rows[0]?.folder).toBe('kefuagents')
+    expect(rows[0]?.folder).toBe('KefuAgents')
     expect(rows[0]?.linked?.type).toBe('matter')
     // 客服现有流程 = 37 的事项
     expect(h.work.listMatters({ kind: 'conversation' })).toHaveLength(1)
   })
 
-  it('开了红人岗位：红人回信 MOVE 进 kolagents', async () => {
+  it('开了红人岗位：红人回信 MOVE 进 KOLAgents', async () => {
     const h = harness({
       folders: {
         INBOX: letters([
@@ -243,7 +243,7 @@ describe('消息：全量同步与分拣（63 §3 / §4）', () => {
       },
     })
     await h.messages.poll()
-    expect(h.writer.moves).toEqual([{ folder: 'INBOX', uid: 1, to: 'kolagents' }])
+    expect(h.writer.moves).toEqual([{ folder: 'INBOX', uid: 1, to: 'KOLAgents' }])
   })
 
   it('订阅信走规则，一次模型都不花', async () => {
@@ -331,7 +331,7 @@ describe('消息：纠错与回写（63 §4 / §7）', () => {
     expect(moved.message.route).toBe('support')
     expect(moved.rule?.sender).toBe('ann@customer.example')
     // 回写 IMAP
-    expect(h.writer.moves.at(-1)).toEqual({ folder: 'INBOX', uid: 1, to: 'kefuagents' })
+    expect(h.writer.moves.at(-1)).toEqual({ folder: 'INBOX', uid: 1, to: 'KefuAgents' })
     // 人挪过的那一封，分拣结论记的是"人"
     expect(moved.message.triage?.by).toBe('user')
 

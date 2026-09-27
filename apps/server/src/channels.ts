@@ -76,6 +76,7 @@ import type {
   StartRun,
   WorkspaceId,
 } from '@agentsws/contracts'
+import { SUPPORT_FOLDER } from '@agentsws/contracts'
 import type { RawBlobPort, RawCipher } from '@agentsws/core'
 import { redactOutboundText } from '@agentsws/core'
 import {
@@ -110,8 +111,22 @@ export const AMAZON_OUTBOUND_BLOCKED = 'Amazon 站内信出站守卫拦下了这
 export const OUTBOX_PAYLOAD_DRIFT =
   '同一个幂等键上换了正文（outbox payload_drift）：这不是重试，拒绝发送'
 
-/** WP55 / 48 §4 L3 #5：处理过的信搬进哪个文件夹。 */
-export const ARCHIVE_FOLDER = 'agentsws'
+/**
+ * WP55 / 48 §4 L3 #5：处理过的信搬进哪个文件夹。
+ *
+ * WP161（63 §D「归档文件夹按岗位」）：默认值从 `agentsws` 改成客服岗位那只
+ * `KefuAgents`——这条渠道就是客服收信那一路，与 Luoye 的老产品 KefuAgent 同名。
+ * 服务器上已有大小写变体（`kefuagents`）就沿用那只（适配器里按每只邮箱各认各的）。
+ * 旧配置里显式写了别的名字的照旧；`null` = 关掉归档。
+ */
+export const ARCHIVE_FOLDER = SUPPORT_FOLDER
+
+/** 对账搜到的那只是不是归档文件夹（不分大小写；老默认 `agentsws` 也算）。 */
+export function isArchiveFolder(folder: string, configured?: string | null): boolean {
+  const low = folder.toLowerCase()
+  const names = [configured ?? ARCHIVE_FOLDER, 'agentsws']
+  return names.some((n) => n.toLowerCase() === low)
+}
 
 /** 单轮对账的扫描上限；落后的下一分钟补上。 */
 const RECONCILE_BATCH = 20
@@ -677,7 +692,10 @@ export function createChannels(options: ChannelsOptions): ChannelsAssembly {
       // 卡住整只邮箱、两个进程同时扫同一只邮箱。
       mailbox_state: mailboxState,
       scan_owner: `ws_${workspace_id}`,
-      archive_folder: options.archive_folder ?? ARCHIVE_FOLDER,
+      // `null` = 关掉归档（`??` 会把 null 当成"没给"，所以单独判）
+      ...(options.archive_folder === null
+        ? {}
+        : { archive_folder: options.archive_folder ?? ARCHIVE_FOLDER }),
       archive_mark_read: options.archive_mark_read ?? ARCHIVE_MARK_READ_DEFAULT,
       on_folder_fault: (fault) => {
         options.appendEvent({
@@ -1064,7 +1082,10 @@ export function createChannels(options: ChannelsOptions): ChannelsAssembly {
           const folder = await channel?.source.findMessageId?.(record.message_id)
           if (folder !== undefined) {
             found = {
-              source: folder === ARCHIVE_FOLDER ? 'archive_folder' : 'sent_folder',
+              // WP161：归档文件夹认名不分大小写（`kefuagents` 与 `KefuAgents` 是同一只）
+              source: isArchiveFolder(folder, options.archive_folder)
+                ? 'archive_folder'
+                : 'sent_folder',
             }
           }
         } catch {

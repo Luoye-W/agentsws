@@ -496,6 +496,8 @@ export { secretRoutes } from './routes/secrets.js'
 // WP154「内容与搜索」：问题清单与现在跑一轮
 export type {
   GeoQuestionsView,
+  GoogleSourcesView,
+  GoogleSourceView,
   SeoActor as SeoRouteActor,
   SeoPort,
   SeoRunView,

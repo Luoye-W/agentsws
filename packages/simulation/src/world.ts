@@ -42,6 +42,7 @@ import type {
   KolChannel,
   KolUtm,
   Mandate,
+  MessageRoute,
   ModelFailureKind,
   ModelGateway,
   ModelProvider,
@@ -720,8 +721,9 @@ export interface ScenarioMail {
 /** 一封信分拣完的样子（进事件日志的那一份，**不含正文**）。 */
 export interface MailTriageResult {
   message_id: string
-  route: 'inbox' | 'support' | 'kol'
-  suggested_route?: 'inbox' | 'support' | 'kol'
+  /** WP161：`b2b` 只是契约预留，分拣器不产出它。 */
+  route: MessageRoute
+  suggested_route?: MessageRoute
   labels: string[]
   needs_reply: boolean
   by: 'rule' | 'model' | 'halted' | 'user'

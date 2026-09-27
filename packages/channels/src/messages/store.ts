@@ -20,6 +20,7 @@ import type {
   MessageThreadSummary,
   SenderRule,
 } from '@agentsws/contracts'
+import { isAgentFolderKind, resolveAgentFolder } from './folders.js'
 import { BUILTIN_LABELS } from './labels.js'
 import { aggregateThreads, byNewest, matchesQuery } from './query.js'
 
@@ -73,8 +74,10 @@ export interface MessageStore {
 export function folderKindOf(path: string): MessageFolderKind {
   const p = path.trim().toLowerCase()
   if (p === 'inbox') return 'inbox'
+  // WP161：岗位文件夹认名不分大小写（`KefuAgents` / 早先的 `kefuagents` 都是客服那只）
   if (p === 'kefuagents') return 'support'
   if (p === 'kolagents') return 'kol'
+  if (p === 'btobagents') return 'b2b'
   if (/(^|\/)(sent|sent items|sent messages|sent mail|已发送|已发信件)$/.test(p)) return 'sent'
   if (/(^|\/)(drafts|draft|草稿|草稿箱)$/.test(p)) return 'drafts'
   if (/(^|\/)(trash|deleted items|bin|已删除|垃圾桶)$/.test(p)) return 'trash'
@@ -83,17 +86,19 @@ export function folderKindOf(path: string): MessageFolderKind {
   return 'custom'
 }
 
-/** 语义 → 这只邮箱上的真名（挪信时用）。认不出就用语义名本身。 */
+/**
+ * 语义 → 这只邮箱上的真名（挪信时用）。认不出就用语义名本身。
+ *
+ * 岗位那三只（WP161）走 {@link resolveAgentFolder}：规范名在就用规范名，否则沿用
+ * 服务器上已有的大小写变体，都没有才用规范名（`KefuAgents` / `KOLAgents` / `BtoBAgents`）。
+ */
 export function folderPathFor(kind: MessageFolderKind, known: readonly string[]): string {
+  if (isAgentFolderKind(kind)) return resolveAgentFolder(kind, known)
   const hit = known.find((p) => folderKindOf(p) === kind)
   if (hit !== undefined) return hit
   switch (kind) {
     case 'inbox':
       return 'INBOX'
-    case 'support':
-      return 'kefuagents'
-    case 'kol':
-      return 'kolagents'
     case 'trash':
       return 'Trash'
     case 'spam':

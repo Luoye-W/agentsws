@@ -1100,7 +1100,9 @@ export const CATALOG: readonly CatalogEntry[] = [
     fields: [],
     data_sources: ['ga4'],
     smoke_hints: ['account', 'propert', 'list'],
-    data_note: '连上之后岗位面板里的 GA4 那一块会亮起来；具体的活跃用户 / 事件数据下一版接。',
+    // WP158（docs/82）：真读数接上了——每天读一次，令牌只在连接器里
+    data_note:
+      '连上之后选一下是哪个媒体资源：活跃用户、转化率、事件与按页面收入的 GA4 那两列就是真数（每天读一次）。',
     setup_guide: {
       summary: '用你自己的 Google OAuth 应用授权一次。GA4 的分析数据不属于受限权限，不用安全评估。',
       steps: [
@@ -1126,7 +1128,8 @@ export const CATALOG: readonly CatalogEntry[] = [
     fields: [],
     data_sources: ['gsc'],
     smoke_hints: ['site', 'list'],
-    data_note: '连上之后岗位面板里的 Search Console 那一块会亮起来；查询词与落地页数据下一版接。',
+    data_note:
+      '连上之后选一下是哪个站点：「今天值得动的 5 件事」、查询词与落地页就是真数（每天早上读一次）。',
     setup_guide: {
       summary: '和 GA4 同一个 Google 项目，多启用一个 API 就行。',
       steps: [

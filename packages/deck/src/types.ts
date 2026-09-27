@@ -902,6 +902,53 @@ export interface SocialDeckData {
  * 每一行都带 `role_id` 或不带：四条职责共用同一份投影，面板那一层按职责挑块
  * （`blocksForRole`），**不在这里按职责切**——切了就得算四遍。
  */
+/** WP158：Search Console 汇总后的一行（按查询或按页面；平均排名按曝光加权）。 */
+export interface SearchRollupRow {
+  key: string
+  clicks: number
+  impressions: number
+  /** 0–1。 */
+  ctr: number
+  position: number
+}
+
+/** WP158：GA4 一段时间的全站总量。 */
+export interface SearchGa4Totals {
+  active_users: number
+  sessions: number
+  purchases: number
+  revenue: number
+}
+
+/**
+ * WP158：Search Console 与 GA4 读回来的那几块（宿主从**当天缓存**里递进来；只有汇总后的数，
+ * 没有任何凭据）。
+ *
+ * 不给 = 这台机器没装读数那一层（demo / 测试），那几块照旧空；给了但 `needs_pick` = 连上了、
+ * 还没选是哪个站点 / 媒体资源——块里照实说"先选一下"，不出空表。
+ */
+export interface SearchDeckData {
+  gsc?: {
+    needs_pick?: boolean
+    site_label?: string
+    /** 上一次没读到的人话（用的是上一份 / 这一块先空着）。 */
+    note?: string
+    window?: { start: string; end: string }
+    queries: SearchRollupRow[]
+    pages: SearchRollupRow[]
+  }
+  ga4?: {
+    needs_pick?: boolean
+    property_label?: string
+    note?: string
+    window?: { start: string; end: string }
+    currency?: string
+    current?: SearchGa4Totals
+    previous?: SearchGa4Totals
+    events: { event: string; count: number; key_events: number }[]
+  }
+}
+
 export interface PrDeckData {
   /** 提及流（按情绪；最新的在最上面）。 */
   mentions: PrMentionRow[]
@@ -1088,6 +1135,8 @@ export interface QueryContext {
    * 后者说"去连接页把 Google Alerts 填上"。
    */
   pr?: PrDeckData
+  /** WP158：Search Console 与 GA4 的真读数（不给 = 那几块照旧空）。 */
+  search?: SearchDeckData
   /**
    * WP63：这个岗位判「不正常」用的那几个数（职责 yml 的 `thresholds`）。
    *

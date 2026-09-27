@@ -4912,7 +4912,7 @@ export interface MessageThreadView {
   subject: string
   messages: MessageRecord[]
   /**
-   * 63 §9：`kefuagents` / `kolagents` 里的信顶上那条状态带。
+   * 63 §9：`KefuAgents` / `KOLAgents` 里的信顶上那条状态带。
    * 不为空 = 这一页**不给"直接回复"**（避免人与 Agent 撞车）。
    */
   agent_status?: {
@@ -5603,6 +5603,35 @@ export const setGeoQuestions = (
   assignment?: string,
 ): Promise<GeoQuestionsData> =>
   api('/v1/seo/geo-questions', { method: 'PUT', body: input, ...withAssignment(assignment) })
+
+// ── WP158：Search Console 选哪个站点、GA4 选哪个媒体资源 ─────────────────────────
+
+export interface GoogleSourceData {
+  connected: boolean
+  selected?: string
+  selected_label?: string
+  options: { id: string; label: string }[]
+  /** 连上了、还没选：出那张「选一下」的小卡。 */
+  needs_pick: boolean
+  /** 上一次没读到的人话（服务端写好的）。 */
+  note?: string
+  stale?: boolean
+  window?: { start: string; end: string }
+}
+
+export interface GoogleSourcesData {
+  gsc: GoogleSourceData
+  ga4: GoogleSourceData
+}
+
+export const getGoogleSources = (assignment?: string): Promise<GoogleSourcesData> =>
+  api('/v1/seo/google-sources', withAssignment(assignment))
+
+export const setGoogleSources = (
+  input: { gsc_site?: string; ga4_property?: string },
+  assignment?: string,
+): Promise<GoogleSourcesData> =>
+  api('/v1/seo/google-sources', { method: 'PUT', body: input, ...withAssignment(assignment) })
 
 export const runSeo = (
   what: 'daily' | 'weekly',
