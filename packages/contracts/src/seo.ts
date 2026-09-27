@@ -304,9 +304,58 @@ export interface ContentClaimRule {
   /** 子串匹配（不区分大小写）；`regex: true` 时按正则。 */
   pattern: string
   regex?: boolean
-  category: 'absolute' | 'medical' | 'other'
-  /** 给人看的理由。 */
+  /**
+   * WP159 加了五类（只加）：`green` 环保宣称、`origin` 产地（Made in …）、`endorsement` 评价与代言、
+   * `comparison` 与竞品比较、`performance` 性能 / 寿命 / 效果。
+   */
+  category:
+    | 'absolute'
+    | 'medical'
+    | 'other'
+    | 'green'
+    | 'origin'
+    | 'endorsement'
+    | 'comparison'
+    | 'performance'
+  /** 给人看的理由（一句人话）。 */
   reason: string
+  /** WP159：属于哪个市场组（`global` / `us` / `eu_uk` / `ca` / `au`；自己加的规则可以不写 = 通用）。 */
+  market?: ClaimMarketGroup
+  /** WP159：出处（官方指南）的标题与链接。 */
+  source_title?: string
+  source_url?: string
+}
+
+/**
+ * WP159：违规宣称规则按市场分组。`global` 永远启用（绝对化用语、医疗功效）；其余按品牌档案里的
+ * 目标市场启用（美国 → `us`；欧盟国家与英国 → `eu_uk`；加拿大 → `ca`；澳大利亚 → `au`）。
+ */
+export type ClaimMarketGroup = 'global' | 'us' | 'eu_uk' | 'ca' | 'au'
+
+/** WP159：知识库「违规宣称规则」那张表的一行（带开关与来路）。 */
+export interface ClaimRuleRow extends ContentClaimRule {
+  market: ClaimMarketGroup
+  enabled: boolean
+  /** `builtin` 自带没动过 / `edited` 自带但人改过或关过 / `custom` 人自己加的。 */
+  origin: 'builtin' | 'edited' | 'custom'
+}
+
+/** WP159：一个市场组（标题、开没开、为什么开）。 */
+export interface ClaimMarketGroupView {
+  id: ClaimMarketGroup
+  label: string
+  enabled: boolean
+  /** `always` 通用组 / `market` 按目标市场自动开关 / `manual` 人在知识库里拨过。 */
+  why: 'always' | 'market' | 'manual'
+}
+
+/** WP159：知识库里那张「违规宣称规则」表（`GET /v1/knowledge/claim-rules`）。 */
+export interface ClaimRulesView {
+  /** 品牌档案里的目标市场（ISO 国家码）；档案里没写就是按默认国家算的那一个。 */
+  markets: string[]
+  markets_from: 'brand_profile' | 'default'
+  groups: ClaimMarketGroupView[]
+  rules: ClaimRuleRow[]
 }
 
 export interface ContentQualityIssue {

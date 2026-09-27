@@ -290,6 +290,121 @@ describe('发布前质检（账本 stage 之前的改写口）', () => {
   })
 })
 
+describe('WP159：违规宣称规则按市场分组（知识库里能改能关）', () => {
+  const gateInput = (body: string) => ({
+    workspace_id: 'ws_1',
+    role_id: 'dtc.content',
+    assignment_id: 'asg_content',
+    run_id: 'run_2',
+    change_set_id: 'cs_2',
+    kind: 'publish_post' as const,
+    target: { type: 'article', id: 'art_2' },
+    before: { title: 'Our story', published: false },
+    after: { title: 'Our story', published: true, body },
+    created_by: { kind: 'agent' as const, id: 'agent_dtc.content' },
+    mandate: { caps: {} },
+    level: 'L2' as const,
+    approval: {
+      title: '发布文章',
+      summary: 's',
+      recipients: [{ person: 'p_li', via: 'scope_manager' as const }],
+      proposer: { kind: 'agent' as const, id: 'agent_dtc.content', assignment_id: 'asg_content' },
+    },
+  })
+  /** 替身知识库：`saveClaimRule` 写进来的卡，`knowledge` 原样读回去（后写的在后面）。 */
+  const kb = () => {
+    const cards: {
+      id: string
+      subject: { type: string; key: string }
+      statement: string
+      structured: Record<string, unknown>
+    }[] = []
+    return {
+      cards,
+      knowledge: async () => ({ facts: [], rules: [], rule_cards: [...cards] }),
+      saveClaimRule: async (
+        _a: unknown,
+        input: { key: string; statement: string; structured: Record<string, unknown> },
+      ) => {
+        cards.push({
+          id: `k${cards.length}`,
+          subject: { type: 'content_rule', key: input.key },
+          ...input,
+        })
+      },
+    }
+  }
+  const brandIn = (markets?: string[]) => () => ({
+    name: 'NordVolt',
+    language: 'en' as const,
+    domains: ['nordvolt.example'],
+    shop_host: 'nordvolt.example',
+    currency: 'USD',
+    country: 'us',
+    ...(markets === undefined ? {} : { markets }),
+  })
+  const passed = async (svc: ReturnType<typeof setup>['service'], body: string) =>
+    ((await svc.gatePublish(gateInput(body))).after as { published: boolean }).published
+
+  it('只卖美国：开通用 + 美国；「Made in USA」拦、「carbon neutral」不拦；每条有官方出处', async () => {
+    const k = kb()
+    const { service } = setup({ ...k, brand: brandIn(['US']) })
+    const view = await service.claimRules(CONTENT)
+    expect(view).toMatchObject({ markets: ['US'], markets_from: 'brand_profile' })
+    expect(view.groups.filter((g) => g.enabled).map((g) => g.id)).toEqual(['global', 'us'])
+    expect(view.rules.every((r) => r.source_url?.startsWith('https://'))).toBe(true)
+    expect(await passed(service, 'Made in USA with pride.')).toBe(false)
+    expect(await passed(service, 'Our factory is carbon neutral.')).toBe(true)
+  })
+
+  it('档案里没写市场：按探测国家那一个算（写明是默认）', async () => {
+    const { service } = setup({ ...kb(), brand: brandIn() })
+    expect(await service.claimRules(CONTENT)).toMatchObject({
+      markets: ['US'],
+      markets_from: 'default',
+    })
+  })
+
+  it('在知识库里关掉一条：写一张卡，之后不再拦；改理由也写卡（edited）', async () => {
+    const k = kb()
+    const { service } = setup({ ...k, brand: brandIn(['US']) })
+    await service.setClaimRules(CONTENT, { rule: { id: 'us.made_in_usa', enabled: false } })
+    expect(k.cards[0]).toMatchObject({
+      subject: { key: 'us.made_in_usa' },
+      structured: { enabled: false, market: 'us', source_url: expect.stringContaining('ftc.gov') },
+    })
+    expect(await passed(service, 'Made in USA with pride.')).toBe(true)
+    const view = await service.setClaimRules(CONTENT, {
+      rule: { id: 'abs_zh_top', reason: '我们卖的是入门款，别写顶级' },
+    })
+    expect(view.rules.find((r) => r.id === 'abs_zh_top')).toMatchObject({
+      origin: 'edited',
+      enabled: true,
+      reason: '我们卖的是入门款，别写顶级',
+    })
+  })
+
+  it('手动打开欧盟组：碳中和也拦了，标 manual；加一条自己的规则也生效', async () => {
+    const k = kb()
+    const { service } = setup({ ...k, brand: brandIn(['US']) })
+    const view = await service.setClaimRules(CONTENT, { group: { id: 'eu_uk', enabled: true } })
+    expect(view.groups.find((g) => g.id === 'eu_uk')).toMatchObject({
+      enabled: true,
+      why: 'manual',
+    })
+    expect(await passed(service, 'Our factory is carbon neutral.')).toBe(false)
+    await service.setClaimRules(CONTENT, { add: { pattern: 'military grade', reason: '没法证明' } })
+    expect(await passed(service, 'Military grade aluminium.')).toBe(false)
+  })
+
+  it('没装知识库写口：只能看不能改', async () => {
+    const { service } = setup({ knowledge: kb().knowledge, brand: brandIn(['US']) })
+    await expect(
+      service.setClaimRules(CONTENT, { rule: { id: 'us.made_in_usa', enabled: false } }),
+    ).rejects.toThrow(/只能看不能改/)
+  })
+})
+
 describe('draftTitle', () => {
   it('查询放最前面；原标题已经含查询就不机械改', () => {
     expect(draftTitle('usb c laptop charger', 'USB-C 65W Charger')).toBe(

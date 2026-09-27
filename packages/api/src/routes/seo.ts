@@ -4,6 +4,9 @@
  * - `GET  /v1/seo/geo-questions`：买家会问的问题清单（自动生成 + 人改过的）；
  * - `PUT  /v1/seo/geo-questions`：在面板里改（关掉、改字、加）——人改过的永远赢；
  * - `POST /v1/seo/run`：现在跑一轮（每日判断 / 周小结），不用等到早上 8 点。
+ * - WP159 `GET / PATCH /v1/knowledge/claim-rules`：知识库里那张「违规宣称规则」表（按市场分组、
+ *   带出处）；闸走**知识库**那一套（读 = knowledge.read，改 = knowledge.stage，工作区范围），
+ *   因为这张表就放在知识库里——实现落在内容与搜索那一层（它管质检）。
  *
  * 闸：`content` 域（`dtc.content` 的 scopes 里有 read / stage）。别的职责进不来，
  * 路由里一行 if 都不用写（同 `pr.ts` 文件头第 1 条）。判断与出卡全在服务端的
@@ -11,6 +14,8 @@
  */
 import type {
   AssignmentId,
+  ClaimMarketGroup,
+  ClaimRulesView,
   GeoCostEstimate,
   GeoQuestion,
   GeoSettings,
@@ -70,6 +75,62 @@ export interface SeoPort {
     },
   ): MaybePromise<GeoQuestionsView>
   run(actor: SeoActor, what: 'daily' | 'weekly'): MaybePromise<SeoRunView>
+  /** WP159：违规宣称规则表。没装 = `/v1/knowledge/claim-rules` 回 not_implemented。 */
+  claimRules?(actor: SeoActor): MaybePromise<ClaimRulesView>
+  setClaimRules?(actor: SeoActor, input: ClaimRulesPatch): MaybePromise<ClaimRulesView>
+}
+
+/** WP159：改规则表（三件事一次给一件就行）。 */
+export interface ClaimRulesPatch {
+  group?: { id: ClaimMarketGroup; enabled: boolean } | undefined
+  rule?:
+    | {
+        id: string
+        enabled?: boolean | undefined
+        pattern?: string | undefined
+        reason?: string | undefined
+      }
+    | undefined
+  add?: { pattern: string; reason: string; market?: ClaimMarketGroup | undefined } | undefined
+}
+
+const READ_KNOWLEDGE = {
+  domain: 'knowledge',
+  op: 'read',
+  range: 'workspace',
+  sensitivity: 'internal',
+} as const
+const WRITE_KNOWLEDGE = { ...READ_KNOWLEDGE, op: 'stage' } as const
+
+const Group = z.enum(['global', 'us', 'eu_uk', 'ca', 'au'])
+const ClaimRulesBody = z
+  .object({
+    group: z.object({ id: Group, enabled: z.boolean() }).optional(),
+    rule: z
+      .object({
+        id: z.string().min(1).max(120),
+        enabled: z.boolean().optional(),
+        pattern: z.string().max(200).optional(),
+        reason: z.string().max(300).optional(),
+      })
+      .optional(),
+    add: z
+      .object({
+        pattern: z.string().min(1).max(200),
+        reason: z.string().max(300),
+        market: Group.optional(),
+      })
+      .optional(),
+  })
+  .refine((b) => b.group !== undefined || b.rule !== undefined || b.add !== undefined, {
+    message: 'group / rule / add 至少给一个',
+  })
+
+function claimPortOf(deps: GatewayDeps): Required<Pick<SeoPort, 'claimRules' | 'setClaimRules'>> {
+  const p = portOf(deps)
+  if (p.claimRules === undefined || p.setClaimRules === undefined)
+    throw new ApiError('not_implemented', '这个服务进程没有装配违规宣称规则表。')
+  return { claimRules: p.claimRules.bind(p), setClaimRules: p.setClaimRules.bind(p) }
 }
 
 function portOf(deps: GatewayDeps): SeoPort {
@@ -161,6 +222,37 @@ export function seoRoutes(): Route[] {
         returns: 'SeoRunView',
       },
       async (c, deps) => ok(c, await portOf(deps).run(actorOf(c), (await body(c, RunBody)).what)),
+    ),
+    route(
+      {
+        method: 'get',
+        path: '/v1/knowledge/claim-rules',
+        operationId: 'listClaimRules',
+        summary:
+          '违规宣称规则表（WP159）：按市场分组（通用 / 美国 / 欧盟英国 / 加拿大 / 澳大利亚），每条带官方出处与一句人话；按品牌目标市场开组',
+        tag: 'knowledge',
+        auth: 'bearer',
+        assignment: true,
+        authz: READ_KNOWLEDGE,
+        returns: 'ClaimRulesView',
+      },
+      async (c, deps) => ok(c, await claimPortOf(deps).claimRules(actorOf(c))),
+    ),
+    route(
+      {
+        method: 'patch',
+        path: '/v1/knowledge/claim-rules',
+        operationId: 'setClaimRules',
+        summary: '改违规宣称规则表：拨市场组开关 / 改或关一条（记成知识库里的卡）/ 加一条自己的',
+        tag: 'knowledge',
+        auth: 'bearer',
+        assignment: true,
+        authz: WRITE_KNOWLEDGE,
+        body: ClaimRulesBody,
+        returns: 'ClaimRulesView',
+      },
+      async (c, deps) =>
+        ok(c, await claimPortOf(deps).setClaimRules(actorOf(c), await body(c, ClaimRulesBody))),
     ),
   ]
 }

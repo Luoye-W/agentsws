@@ -55506,6 +55506,275 @@
         }
       }
     },
+    "/v1/knowledge/claim-rules": {
+      "get": {
+        "operationId": "listClaimRules",
+        "summary": "违规宣称规则表（WP159）：按市场分组（通用 / 美国 / 欧盟英国 / 加拿大 / 澳大利亚），每条带官方出处与一句人话；按品牌目标市场开组",
+        "tags": ["knowledge"],
+        "parameters": [
+          {
+            "name": "X-Assignment",
+            "in": "header",
+            "required": true,
+            "description": "本次请求绑定的 Assignment（31 §3.1：一次请求一个 Assignment）",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "ClaimRulesView",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-authz": {
+          "domain": "knowledge",
+          "op": "read",
+          "range": "workspace",
+          "sensitivity": "internal"
+        },
+        "x-returns": "ClaimRulesView"
+      },
+      "patch": {
+        "operationId": "setClaimRules",
+        "summary": "改违规宣称规则表：拨市场组开关 / 改或关一条（记成知识库里的卡）/ 加一条自己的",
+        "tags": ["knowledge"],
+        "parameters": [
+          {
+            "name": "X-Assignment",
+            "in": "header",
+            "required": true,
+            "description": "本次请求绑定的 Assignment（31 §3.1：一次请求一个 Assignment）",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "ClaimRulesView",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-authz": {
+          "domain": "knowledge",
+          "op": "stage",
+          "range": "workspace",
+          "sensitivity": "internal"
+        },
+        "x-returns": "ClaimRulesView",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "group": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "enum": ["global", "us", "eu_uk", "ca", "au"]
+                      },
+                      "enabled": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": ["id", "enabled"]
+                  },
+                  "rule": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 120
+                      },
+                      "enabled": {
+                        "type": "boolean"
+                      },
+                      "pattern": {
+                        "type": "string",
+                        "maxLength": 200
+                      },
+                      "reason": {
+                        "type": "string",
+                        "maxLength": 300
+                      }
+                    },
+                    "required": ["id"]
+                  },
+                  "add": {
+                    "type": "object",
+                    "properties": {
+                      "pattern": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 200
+                      },
+                      "reason": {
+                        "type": "string",
+                        "maxLength": 300
+                      },
+                      "market": {
+                        "type": "string",
+                        "enum": ["global", "us", "eu_uk", "ca", "au"]
+                      }
+                    },
+                    "required": ["pattern", "reason"]
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/messages/accounts": {
       "get": {
         "operationId": "listMessageAccounts",

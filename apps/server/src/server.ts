@@ -339,7 +339,7 @@ import {
   SecretStoreError,
 } from './secret-store.js'
 import { createSecretaryAssembly, type SecretaryAssembly } from './secretary.js'
-import { createSeoService } from './seo-service.js'
+import { claimRuleCard, createSeoService } from './seo-service.js'
 import type { BrokerFetch } from './shopify-broker.js'
 import { createShopifyDevMcp } from './shopify-devmcp.js'
 // WP77（59 §1 / §2）：建站库（三张表）+ `/v1/site/*` 的实现
@@ -2496,6 +2496,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           shop_host: domain === undefined || domain === '' ? 'shop.invalid' : domain,
           currency: w?.base_currency ?? workData.base_currency,
           country: 'us',
+          // WP159：品牌分析确认时写进档案的目标市场（违规宣称规则按它开市场组）
+          ...(() => {
+            const markets = onboardingRef?.brandProfile(ws).markets
+            return markets === undefined ? {} : { markets }
+          })(),
         }
       },
       knowledge: async (actor) => {
@@ -2515,6 +2520,16 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           const r = ruleFromFact(c)
           return r === undefined ? [] : [r]
         })
+        // WP159：规则卡原样交给 seo-service，按市场分组合成（同 key 后改的赢）
+        const rule_cards = cards
+          .filter((c) => c.subject.type === 'content_rule')
+          .sort((a, b) => a.updated_at.localeCompare(b.updated_at))
+          .map((c) => ({
+            id: c.id,
+            subject: c.subject,
+            statement: c.statement,
+            ...(c.structured === undefined ? {} : { structured: c.structured }),
+          }))
         const facts = cards
           .filter((c) => c.subject.type !== 'content_rule')
           .map((c) => {
@@ -2530,7 +2545,30 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
               ],
             }
           })
-        return { facts, rules }
+        return { facts, rules, rule_cards }
+      },
+      /*
+       * WP159：在知识库里改 / 关 / 加一条违规宣称规则——人自己在知识库页上动的，直接生效
+       * （提一张卡 → 由这个人激活），同 key 的旧卡退役（留痕，不删）。
+       */
+      saveClaimRule: async (actor, input) => {
+        const config = roles.effectiveConfig(actor.assignment_id)
+        const retrieval = {
+          person_id: actor.person_id,
+          workspace_id: ws,
+          assignment_id: actor.assignment_id,
+          role_id: actor.role_id,
+          grants: config.scopes,
+          ranges: config.ranges,
+        }
+        const old = (
+          await knowledge.store.list({ workspace_id: ws, status: 'active' }, retrieval)
+        ).filter((c) => c.subject.type === 'content_rule' && c.subject.key === input.key)
+        const card = await knowledge.store.propose(
+          claimRuleCard({ workspace_id: ws, owner: actor.person_id, at: clock.now(), ...input }),
+        )
+        await knowledge.store.activate(card.id, actor.person_id)
+        for (const c of old) await knowledge.store.retire(c.id, actor.person_id)
       },
       /*
        * WP159：改动卡初稿由模型写（这个品牌的模型网关，用量照常记账；每天上限在 seo-service）。
@@ -2559,8 +2597,12 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       brandVoice: async (language) => {
         const w = await identity.getWorkspace(ws)
         const name = w?.brand?.name ?? w?.name
+        const markets = onboardingRef?.brandProfile(ws).markets
         const context = renderBrandContext(
-          name === undefined ? undefined : { brand_name: name },
+          {
+            ...(name === undefined ? {} : { brand_name: name }),
+            ...(markets === undefined ? {} : { markets }),
+          },
           language,
         )
         const voice = brandDesignRef?.profileOf(ws)?.voice?.value
@@ -3897,6 +3939,10 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
             ...(profile.storefront_platform === undefined
               ? {}
               : { storefront_platform: profile.storefront_platform.value }),
+            // WP159：目标市场进档案（违规宣称规则按它开市场组）
+            ...(profile.markets === undefined || profile.markets.value.length === 0
+              ? {}
+              : { markets: profile.markets.value }),
           },
         )
       },
@@ -5132,6 +5178,17 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         )
       if (input.settings !== undefined) svc.setGeoSettings(input.settings)
       return svc.geoView()
+    },
+    // WP159：知识库里那张「违规宣称规则」表（按请求人所在品牌的目标市场开组）
+    claimRules: async (actor) =>
+      (await brandModules.forWorkspace(actor.workspace_id)).seoService.claimRules(actor),
+    setClaimRules: async (actor, input) => {
+      const svc = (await brandModules.forWorkspace(actor.workspace_id)).seoService
+      try {
+        return await svc.setClaimRules(actor, input)
+      } catch (err) {
+        throw new ApiError('invalid_input', err instanceof Error ? err.message : String(err))
+      }
     },
     run: async (actor, what) => {
       const svc = (await brandModules.forWorkspace(actor.workspace_id)).seoService

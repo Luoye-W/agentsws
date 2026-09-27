@@ -26,9 +26,12 @@ import type {
   ApprovalBus,
   ApprovalItem,
   AssignmentId,
+  ClaimMarketGroup,
+  ClaimRulesView,
   Clock,
   ContentClaimRule,
   EventEnvelope,
+  FactCard,
   GeoCostEstimate,
   GeoQuestion,
   GeoSettings,
@@ -51,6 +54,8 @@ import type {
 import {
   type BrandProfileLike,
   buildDaily,
+  CLAIM_MARKET_GROUPS,
+  type ClaimRuleCardLike,
   checkContentQuality,
   DEFAULT_MODEL_DRAFTS_PER_DAY,
   evidenceText,
@@ -65,6 +70,7 @@ import {
   parseSeoDraft,
   probeRows,
   qualitySummary,
+  resolveClaimRules,
   type SearchConsolePort,
   type SeoDraftKind,
   SITE_FACADE_NOTE,
@@ -110,6 +116,11 @@ export interface SeoBrandInfo extends BrandProfileLike {
   currency: string
   /** SERP / AI 探测按哪个国家查。 */
   country: string
+  /**
+   * WP159：目标市场（ISO 国家码，品牌档案里的）。违规宣称规则按它开市场组；
+   * 没写 = 按 `country` 那一个算。
+   */
+  markets?: string[]
 }
 
 export interface SeoServiceOptions {
@@ -149,7 +160,23 @@ export interface SeoServiceOptions {
     language: 'zh' | 'en',
   ): { context?: string; voice?: string } | Promise<{ context?: string; voice?: string }>
   /** 质检要的事实卡与规则表（从知识库投影；没有知识库就是空的）。 */
-  knowledge?(actor: SeoActor): Promise<{ facts: FactLike[]; rules: ContentClaimRule[] }>
+  knowledge?(actor: SeoActor): Promise<{
+    facts: FactLike[]
+    rules: ContentClaimRule[]
+    /**
+     * WP159：知识库里全部 `content_rule` 卡（按更新时间排，后面的赢）。给了就按市场分组合成
+     * （自带的按市场开组 + 卡盖过自带的）；不给就只用上面的 `rules`（WP154 老口径）。
+     */
+    rule_cards?: ClaimRuleCardLike[]
+  }>
+  /**
+   * WP159：在知识库里改 / 关一条违规宣称规则（写一张 `content_rule` 卡，同 key 的旧卡由实现方退役）。
+   * 不给 = 这个进程没装知识库，规则表只读。
+   */
+  saveClaimRule?(
+    actor: SeoActor,
+    input: { key: string; statement: string; structured: Record<string, unknown> },
+  ): Promise<void>
   appendEvent(e: Omit<EventEnvelope, 'id' | 'at'> & { at?: string }): void
   /** 品牌落盘目录（问题清单与"交出去过哪些"记在这里；内存档没有）。 */
   dir?: string
@@ -181,6 +208,27 @@ export interface SeoServiceAssembly {
   gatePublish(input: StageInput): Promise<StageInput>
   /** 卡被决定之后（新页面选题批了 → 开一件写这一页的事项）。 */
   onDecided(item: ApprovalItem): Promise<void>
+  /** WP159：知识库里那张「违规宣称规则」表（按市场分组、带出处与开关）。 */
+  claimRules(actor: SeoActor): Promise<ClaimRulesView>
+  /**
+   * WP159：改那张表——拨一个市场组的开关；改 / 关 / 开一条（自带的改了记成知识库里的卡）；
+   * 加一条自己的。
+   */
+  setClaimRules(actor: SeoActor, input: ClaimRulesInput): Promise<ClaimRulesView>
+}
+
+/** WP159：`setClaimRules` 的入参（三件事可以一次只给一件）。 */
+export interface ClaimRulesInput {
+  group?: { id: ClaimMarketGroup; enabled: boolean } | undefined
+  rule?:
+    | {
+        id: string
+        enabled?: boolean | undefined
+        pattern?: string | undefined
+        reason?: string | undefined
+      }
+    | undefined
+  add?: { pattern: string; reason: string; market?: ClaimMarketGroup | undefined } | undefined
 }
 
 /** 状态文件（品牌目录下）。 */
@@ -221,6 +269,8 @@ interface SeoState {
   handed_off?: Record<string, string>
   /** 站点门面那件事项开过没有。 */
   facade_matter_id?: string
+  /** WP159：违规宣称规则的市场组，人在知识库里拨过的开关（没拨过的按目标市场自动）。 */
+  claim_groups?: Partial<Record<ClaimMarketGroup, boolean>>
   /** WP159：今天模型写了几份初稿（按工作区日期计，跨天归零）。 */
   model_drafts?: { date: string; calls: number }
 }
@@ -256,6 +306,41 @@ export function draftTitle(query: string, current: string | undefined): string |
   if (current?.toLowerCase().includes(query.trim().toLowerCase())) return undefined
   const full = current === undefined || current.trim() === '' ? q : `${q} – ${current.trim()}`
   return full.length <= 70 ? full : `${full.slice(0, 69).trimEnd()}…`
+}
+
+/**
+ * WP159：知识库里一条违规宣称规则卡（`subject.type === 'content_rule'`，`subject.key` = 规则 id）。
+ * 人在知识库页上改的，出处写「人」+ 那条规则的官方出处（有就带上）。
+ */
+export function claimRuleCard(input: {
+  workspace_id: WorkspaceId
+  owner: PersonId
+  key: string
+  statement: string
+  structured: Record<string, unknown>
+  at?: string
+}): Omit<FactCard, 'id' | 'status' | 'usage' | 'created_at' | 'updated_at'> {
+  const at = input.at ?? new Date(0).toISOString()
+  const url = input.structured.source_url
+  return {
+    schema_version: 1,
+    workspace_id: input.workspace_id,
+    layer: 'phrasing',
+    domain: 'company',
+    scope: [],
+    sensitivity: 'internal',
+    subject: { type: 'content_rule', key: input.key },
+    statement: input.statement,
+    structured: input.structured,
+    provenance: [
+      { source: 'human', ref: `person:${input.owner}`, locator: '知识库 · 违规宣称规则', at },
+      ...(typeof url === 'string' ? [{ source: 'web' as const, ref: url, at }] : []),
+    ],
+    confidence: { value: 1, state: 'verified' },
+    valid: { from: at },
+    owner: input.owner,
+    created_by: { kind: 'person', id: input.owner },
+  }
 }
 
 export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly {
@@ -309,6 +394,48 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
       }
     }
     return { ...b, domains: [...hosts] }
+  }
+
+  /** WP159：违规宣称规则按哪几个市场开（档案里没写就按探测国家那一个）。 */
+  const marketsOf = async (): Promise<{ markets: string[]; from: 'brand_profile' | 'default' }> => {
+    const b = await options.brand()
+    const listed = (b.markets ?? []).map((m) => m.trim().toUpperCase()).filter((m) => m !== '')
+    return listed.length > 0
+      ? { markets: listed, from: 'brand_profile' }
+      : { markets: [b.country.toUpperCase()], from: 'default' }
+  }
+
+  /**
+   * WP159：这一次质检 / 初稿检查真用的规则 + 事实卡。知识库给了规则卡就按市场分组合成；
+   * 没给（老装配）就用它投影好的 `rules`（空的 → 质检自己用默认表）。
+   */
+  const knowledgeFor = async (
+    actor: SeoActor,
+  ): Promise<{ facts: FactLike[]; rules: ContentClaimRule[]; view?: ClaimRulesView }> => {
+    const kb = (await options.knowledge?.(actor)) ?? { facts: [], rules: [] }
+    if (kb.rule_cards === undefined) return { facts: kb.facts, rules: kb.rules }
+    const { markets, from } = await marketsOf()
+    const state = loadState()
+    const r = resolveClaimRules({
+      markets,
+      cards: kb.rule_cards,
+      ...(state.claim_groups === undefined ? {} : { group_overrides: state.claim_groups }),
+    })
+    return {
+      facts: kb.facts,
+      rules: r.rules,
+      view: { markets, markets_from: from, groups: r.groups, rules: r.rows },
+    }
+  }
+
+  /** WP159：知识库里那张「违规宣称规则」表。 */
+  const claimRulesView = async (actor: SeoActor): Promise<ClaimRulesView> => {
+    const kb = await knowledgeFor(actor)
+    if (kb.view !== undefined) return kb.view
+    // 老装配（没给规则卡）：只读地画自带那一份
+    const { markets, from } = await marketsOf()
+    const r = resolveClaimRules({ markets, cards: [] })
+    return { markets, markets_from: from, groups: r.groups, rules: r.rows }
   }
 
   const signalOptions = (brand: SeoBrandInfo): SignalOptions => {
@@ -435,7 +562,7 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
       const msg = err instanceof Error ? err.message : String(err)
       return { ok: false, reason: `模型这次没写成（${msg.slice(0, 60)}）` }
     }
-    const rules = (await options.knowledge?.(actor))?.rules ?? []
+    const { rules } = await knowledgeFor(actor)
     const parsed = parseSeoDraft(kind, text, rules)
     if (!parsed.ok) return { ok: false, reason: parsed.reason }
     return { ok: true, after: { ...parsed.draft, target_query: pick.query } }
@@ -944,7 +1071,7 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
         assignment_id: input.assignment_id,
         role_id: input.role_id,
       }
-      const kb = (await options.knowledge?.(actor)) ?? { facts: [], rules: [] }
+      const kb = await knowledgeFor(actor)
       const result = checkContentQuality({
         body,
         ...(title === undefined ? {} : { title }),
@@ -974,6 +1101,63 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
           summary: qualitySummary(result),
         },
       }
+    },
+
+    claimRules: (actor) => claimRulesView(actor),
+
+    async setClaimRules(actor, input) {
+      if (input.group !== undefined && input.group.id !== 'global') {
+        if (!CLAIM_MARKET_GROUPS.includes(input.group.id))
+          throw new Error(`认不出这个市场组：${input.group.id}`)
+        const state = loadState()
+        saveState({
+          ...state,
+          claim_groups: { ...(state.claim_groups ?? {}), [input.group.id]: input.group.enabled },
+        })
+      }
+      const save = options.saveClaimRule
+      if ((input.rule !== undefined || input.add !== undefined) && save === undefined)
+        throw new Error('这个进程没装知识库，规则表只能看不能改')
+      if (input.rule !== undefined && save !== undefined) {
+        const view = await claimRulesView(actor)
+        const cur = view.rules.find((r) => r.id === input.rule?.id)
+        if (cur === undefined) throw new Error('没有这条规则')
+        const pattern = input.rule.pattern?.trim() || cur.pattern
+        const reason = input.rule.reason?.trim() || cur.reason
+        const enabled = input.rule.enabled ?? cur.enabled
+        await save(actor, {
+          key: cur.id,
+          statement: reason,
+          structured: {
+            pattern,
+            // 人改了要拦的字就按字面匹配（人写的多半不是正则）；没改就沿用原来的
+            regex: pattern === cur.pattern && cur.regex === true,
+            category: cur.category,
+            reason,
+            market: cur.market,
+            enabled,
+            ...(cur.source_title === undefined ? {} : { source_title: cur.source_title }),
+            ...(cur.source_url === undefined ? {} : { source_url: cur.source_url }),
+          },
+        })
+      }
+      if (input.add !== undefined && save !== undefined) {
+        const pattern = input.add.pattern.trim()
+        if (pattern === '') throw new Error('要拦的字不能是空的')
+        const reason = input.add.reason.trim() || `「${pattern}」要有证据才能写`
+        await save(actor, {
+          key: pattern,
+          statement: reason,
+          structured: {
+            pattern,
+            category: 'other',
+            reason,
+            market: input.add.market ?? 'global',
+            enabled: true,
+          },
+        })
+      }
+      return claimRulesView(actor)
     },
 
     async onDecided(item) {
