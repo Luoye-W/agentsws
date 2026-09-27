@@ -186,6 +186,13 @@ export interface PageRevenueRow {
   /** GA4 的落地页转化率（0–1）；没接 GA4 就没有这一格。 */
   conversion_rate?: number
   flag?: 'leak' | 'gem'
+  /**
+   * WP158：GA4 口径（只算自然搜索来的会话）的会话数、购买数、购买收入（币种按 GA4 媒体资源）。
+   * **并排口径**：`orders` / `revenue` 仍是 Shopify `landing_site` 那条主口径，两边对不上是常态。
+   */
+  ga4_sessions?: number
+  ga4_purchases?: number
+  ga4_revenue?: number
 }
 
 /** `seo_report` 卡 `variant: 'weekly_revenue'` 的 payload。 */
