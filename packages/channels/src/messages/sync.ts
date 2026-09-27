@@ -36,6 +36,12 @@ import {
   resumeFrom,
 } from '../email/cursors.js'
 import type { MailSource, RawEmailMessage } from '../email/imap.js'
+import {
+  applySupportMailboxActions,
+  type MailboxActionRecord,
+  type SupportMailboxSwitches,
+  supportMailboxSwitches,
+} from '../email/support-mailbox.js'
 import { ChannelError } from '../errors.js'
 import type { RawStore } from '../raw-store.js'
 import { agentFolderVariants, isAgentFolderKind } from './folders.js'
@@ -131,6 +137,13 @@ export interface MailboxSyncOptions {
   backfill_days?: number
   backfill_limit?: number
   scan_owner?: string
+  /**
+   * WP163：判成客服的信在邮箱里怎么动（影子模式 / 接管 / 挪信 / 标已读，照老产品
+   * KefuAgent）。**每封现查**——开关是会变的。不给 = 老产品的默认值（全开、影子关）。
+   */
+  support_mailbox?(): Partial<SupportMailboxSwitches>
+  /** WP163：每一个邮箱动作（标已读 / 挪 / 跳过 / 失败）记一笔。 */
+  on_mailbox_action?(r: MailboxActionRecord): void
   on_error?: (e: unknown) => void
   on_folder_fault?: (fault: FolderSyncFault & { account: string; quarantined: boolean }) => void
 }
@@ -317,12 +330,92 @@ export class MailboxSync {
     await store.update(parsed.id, { triage, route: triage.route, labels: triage.labels })
 
     if (triage.route === 'inbox') return true
+    const record = (r: MailboxActionRecord): void => this.opts.on_mailbox_action?.(r)
     // 交接给客服 / 红人那一侧；那边不接就**不挪信**（信留在 INBOX 仍然看得见）
     const accepted = (await this.opts.handoff?.(parsed, triage)) ?? false
-    if (!accepted) return true
+    if (!accepted) {
+      if (triage.route === 'support') {
+        record({
+          account: account.address,
+          uid: raw.uid,
+          from_folder: folder,
+          action: 'move',
+          status: 'skipped',
+          reason: 'handoff_refused',
+        })
+      }
+      return true
+    }
+    /*
+     * WP163：**已经在岗位文件夹里的信不再自动挪**。挪信只从收件箱 / 垃圾邮件这类
+     * "还没归属"的地方往岗位文件夹里挪；否则同一封信会在 `KefuAgents` 与
+     * `KOLAgents` 之间被两轮分拣挪来挪去。人要改归属走「移到…」（纠错那条路）。
+     */
+    if (isAgentFolderKind(kind)) return true
     // WP161：挪进这只邮箱上**已有**的那只（大小写变体照认），没有才用规范名新建
     const to = folderPathFor(triage.route, account.known_folders ?? account.folders)
-    const moved = (await account.writer?.move(folder, raw.uid, to)) ?? false
+    const switches = supportMailboxSwitches(this.opts.support_mailbox?.())
+    const writer = account.writer
+    if (triage.route === 'support') {
+      // 老产品 moveCustomerServiceMessageToAiFolder 的四个开关与顺序（support-mailbox.ts）
+      const done = await applySupportMailboxActions({
+        switches,
+        account: account.address,
+        uid: raw.uid,
+        from_folder: folder,
+        to_folder: to,
+        ops:
+          writer === undefined
+            ? {}
+            : {
+                markRead: async () => writer.setFlags(folder, raw.uid, ['\\Seen'], []),
+                move: async (dest) => writer.move(folder, raw.uid, dest),
+              },
+        record: (r) => {
+          record(r)
+          // MOVE 失败只 log：信仍在消息里可见（WP55 的纪律；老调用方只看 on_error）
+          if (r.action === 'move' && r.status === 'failed') {
+            this.opts.on_error?.(
+              new ChannelError(
+                'provider_unavailable',
+                `挪不动：${folder} → ${to}（uid ${raw.uid}）`,
+              ),
+            )
+          }
+        },
+      })
+      if (done.marked_read) {
+        await store.update(parsed.id, { flags: { ...parsed.flags, read: true } })
+      }
+      if (done.moved) {
+        report.moved += 1
+        await store.update(parsed.id, { folder: to, folder_kind: folderKindOf(to) })
+      }
+      return true
+    }
+    // 红人那只：影子模式同样一下都不动（影子模式说的是"这只邮箱"，不分岗位）
+    if (switches.shadow_mode) {
+      record({
+        account: account.address,
+        uid: raw.uid,
+        from_folder: folder,
+        action: 'observe',
+        status: 'skipped',
+        reason: 'shadow_mode',
+      })
+      return true
+    }
+    const moved = (await writer?.move(folder, raw.uid, to)) ?? false
+    record({
+      account: account.address,
+      uid: raw.uid,
+      from_folder: folder,
+      to_folder: to,
+      action: 'move',
+      ...(moved
+        ? { status: 'completed' as const }
+        : { status: 'failed' as const, reason: 'server_refused' as const }),
+    })
     if (moved) {
       report.moved += 1
       await store.update(parsed.id, { folder: to, folder_kind: folderKindOf(to) })
