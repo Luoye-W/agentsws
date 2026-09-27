@@ -16,14 +16,15 @@
  * 打一次容器里 `apps/server` 的 `/v1/health`（这一下既是心跳，也让平台看到有活动），
  * 容器没在跑就拉起来。见 docs/64 §13 的偏离说明。
  */
-import type { SubscriptionStatus } from '@agentsws/contracts'
+import type {
+  HostedDesired,
+  HostedState,
+  HostedStopReason,
+  SubscriptionStatus,
+} from '@agentsws/contracts'
 
-export type HostedDesired = 'run' | 'stop'
-
-/** 运营后台那一格看到的四个状态。 */
-export type HostedState = 'running' | 'starting' | 'sleeping' | 'stopped'
-
-export type HostedStopReason = 'cancelled' | 'suspended' | 'manual'
+/** WP164：这三个状态类型挪进了契约（`HostedInstanceStatus` 要用），这里原名重导出。 */
+export type { HostedDesired, HostedState, HostedStopReason }
 
 /**
  * 心跳 / 保活间隔：3 分钟。

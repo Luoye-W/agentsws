@@ -12,9 +12,13 @@ export * from './brand-intake.js'
 export * from './byo-data-source.js'
 export * from './changes.js'
 export * from './channels.js'
+// WP164：聊天转发器的协议、owner 面与访客面（开源侧与官方托管转发器之间的约定）
+export * from './chat-relay.js'
 export * from './cloud.js'
 // 65 云端运营后台（WP115）：角色、后台会话、封禁与黑名单、审计、会员 term / cycle、看板形状
 export * from './cloud-admin.js'
+// WP164（docs/83 §2）：云端对外契约的路由表；`cloud-openapi.json` 由它生成
+export * from './cloud-api.js'
 // 49 服务入口与积分（WP59）。令牌验证那份契约在 WP58 的 cloud.ts 里，不在这里。
 export * from './cloud-entry.js'
 export * from './common.js'
@@ -31,6 +35,8 @@ export * from './dsh-scenes.js'
 export * from './events.js'
 // WP165（docs/83 §2）：托管实例的容器环境变量契约（云上写、容器里的 apps/server 读）
 export * from './hosted-env.js'
+// WP164：托管实例对外的状态形状（从 packages/hosted 挪来）
+export * from './hosted.js'
 export * from './identity.js'
 export * from './join.js'
 export * from './kernel.js'

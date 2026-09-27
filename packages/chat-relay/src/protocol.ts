@@ -17,91 +17,31 @@
  * 生命周期扛不住同步等一个 60 秒的话轮。
  */
 
+import type {
+  HelloRejectReason,
+  RelayClientFrame,
+  RelayPeerKind,
+  RelayServerFrame,
+  RelayWidgetConfig,
+} from '@agentsws/contracts'
+
 /** 当前协议版本。改了帧的形状就 +1；老客户端握手时会拿到 mismatch 与支持区间。 */
 export const RELAY_PROTOCOL_VERSION = 1
 
 /** 心跳间隔（毫秒）。本机侧在这段时间里没收到任何帧就该发 `ping`。 */
 export const RELAY_HEARTBEAT_MS = 15_000
 
-/** 配对失败的判定不做区分提示：密钥错与工作区不存在是同一句话。 */
-export type HelloRejectReason = 'bad_pairing' | 'version_mismatch'
-
-/** 商家本机 / 托管实例握手时带的身份。 */
-export type RelayPeerKind = 'server' | 'hosted'
-
-/** 挂件外观（转发器唯一会替商家存的东西——不是对话正文，是让挂件能画出来的那几格）。 */
-export interface RelayWidgetConfig {
-  enabled: boolean
-  accent: string
-  greeting: string
-  /** 来源白名单（**空 = 全拒**，同 apps/server 那四道门；由本机随 hello/config 推上来）。 */
-  allowed_origins?: string[]
-  /** 挂件位置与界面语言（外观预设；原样透传给挂件）。 */
-  position?: 'left' | 'right'
-  language?: 'auto' | 'zh' | 'en'
-  /** 商家自己在设置页试聊：不计对话数（AI 费用照算，那在本机那一侧）。 */
-  trial?: boolean
-}
+/*
+ * WP164：帧与挂件配置的形状挪进了契约（`@agentsws/contracts` 的 chat-relay.ts），
+ * 开源侧与官方托管转发器之间只认那一份。这里原名重导出，调用方一个字不用改。
+ */
+export type { HelloRejectReason, RelayPeerKind, RelayWidgetConfig }
 
 /** 对面（本机 / 托管实例）→ 转发器。 */
-export type ClientFrame =
-  | {
-      type: 'hello'
-      protocol_version: number
-      workspace: string
-      pairing: string
-      peer: RelayPeerKind
-      config?: RelayWidgetConfig
-    }
-  | {
-      type: 'config'
-      config: RelayWidgetConfig
-    }
-  | {
-      type: 'reply'
-      /** 会话键（转发器在 `visit` 里给的）。 */
-      session: string
-      /** 这一轮的编号（转发器在 `visit` 里给的）。 */
-      turn: string
-      message_id: string
-      text: string
-    }
-  | {
-      /**
-       * 话轮之外的插话（比如教 AI 的那句改写，访客上一条消息的回复已经发过了）。
-       * 与 `reply` 分开是刻意的：「一次话轮恰好一条回复」的账本只认 `reply`；
-       * `note` 不占话轮、不冲账，转发器原样递给访客流。
-       */
-      type: 'note'
-      session: string
-      message_id: string
-      text: string
-    }
-  | { type: 'typing'; session: string; active: boolean }
-  | { type: 'pull_offline' }
-  | { type: 'ping' }
+export type ClientFrame = RelayClientFrame
 
 /** 转发器 → 对面。 */
-export type RelayFrame =
-  | { type: 'hello_ok'; protocol_version: number; heartbeat_ms: number; peer: RelayPeerKind }
-  | { type: 'hello_err'; reason: HelloRejectReason; supported_versions: number[] }
-  | {
-      type: 'visit'
-      session: string
-      turn: string
-      visitor_id: string
-      display?: string
-      text: string
-      /** 页面上下文（72 §6.6 #4）：只留 host + pathname 与商品信息，不采 query。 */
-      page?: { host: string; path: string; product?: string }
-    }
-  | { type: 'visitor_typing'; session: string; active: boolean }
-  | {
-      type: 'offline_batch'
-      items: { id: string; sealed: string; created_at: string }[]
-    }
-  | { type: 'pong' }
-  | { type: 'error'; code: string; message: string }
+export type RelayFrame = RelayServerFrame
 
 /** 两个版本集合的兼容判定：取交集里最大的；空交集即不兼容。 */
 export function negotiateVersion(

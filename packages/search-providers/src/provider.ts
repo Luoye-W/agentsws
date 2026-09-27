@@ -50,6 +50,10 @@ export interface SearchProviderAdapter {
   id: SearchDataProvider
   engines: readonly SearchEngine[]
   platforms: readonly AiPlatform[]
+  /**
+   * WP159：适配器写了、但**登记为不用**的平台（代码留着，不进 `platforms`，状态口不列、问到跳过）。
+   */
+  unused_platforms?: readonly AiPlatform[]
   serp(q: SerpQuery, key: string, fetch: SearchFetch): Promise<ProviderSerp>
   aiAnswer(input: AiAnswerInput, key: string, fetch: SearchFetch): Promise<ProviderAnswer>
   /**

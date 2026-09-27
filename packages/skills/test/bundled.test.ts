@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import {
   BUNDLED_SKILLS_DIR,
@@ -13,22 +14,43 @@ import { makeSkills } from './helpers.js'
 
 const names = listBundledSkills()
 
+/** WP160：改写自第三方（MIT）的五个。 */
+const THIRD_PARTY = [
+  'ad-copywriting',
+  'audience-research',
+  'email-sms',
+  'influencer-marketing',
+  'seo-judgment',
+]
+/** WP162：Agents 工坊自己写的（本仓库的 Apache-2.0）。 */
+const OWN = [
+  'brand-voice',
+  'chargeback-evidence',
+  'policy-review',
+  'returns-policy-calc',
+  'workspace-basics',
+]
+/**
+ * WP162 终审追加：从 KefuAgent 移植来的客服技能（原件在 `packages/support-core/skills/customer-care/`）。
+ * 取代 WP29 起服务端那份三段的默认正文；版本 1.1.0（高于旧的 1.0，已有工作区的包层会被换掉）。
+ */
+const PORTED = ['customer-care']
+const PORTED_FROM = join(
+  fileURLToPath(new URL('../../support-core/skills/', import.meta.url)),
+  'customer-care',
+  'SKILL.md',
+)
+
 /** 各自改编自谁（WP160）：出处那一行必须逐字在。 */
 const MARKETINGSKILLS = '改编自 coreyhaines31/marketingskills（MIT，© 2025 Corey Haines）'
 const OPEN_SEO = '部分判断规矩改编自 every-app/open-seo（MIT）'
 
 describe('自带技能：格式（24 §1 Agent Skills）', () => {
-  it('WP160 的五个都在，目录名即技能名', () => {
-    expect(names).toEqual([
-      'ad-copywriting',
-      'audience-research',
-      'email-sms',
-      'influencer-marketing',
-      'seo-judgment',
-    ])
+  it('WP160 的五个 + WP162 的六个都在，目录名即技能名', () => {
+    expect(names).toEqual([...THIRD_PARTY, ...OWN, ...PORTED].sort())
   })
 
-  for (const name of names) {
+  for (const name of THIRD_PARTY) {
     describe(name, () => {
       const skill = readBundledSkill(name)
 
@@ -96,6 +118,60 @@ describe('自带技能：格式（24 §1 Agent Skills）', () => {
   }
 })
 
+describe('自带技能：Agents 工坊自己写的（WP162）', () => {
+  for (const name of OWN) {
+    describe(name, () => {
+      const skill = readBundledSkill(name)
+
+      it('frontmatter：name 与目录一致，license 是本仓库的 Apache-2.0，tier / version / description 都在', () => {
+        const { frontmatter } = splitFrontmatter(skill.markdown)
+        expect(frontmatter.name).toBe(name)
+        expect(frontmatter.description?.length ?? 0).toBeGreaterThan(20)
+        expect(frontmatter.extra.license).toBe('Apache-2.0')
+        expect(frontmatter.extra.tier).toBe('open')
+        expect(frontmatter.extra.version).toMatch(/^\d+\.\d+\.\d+$/)
+      })
+
+      it('按 ## 切段，段标题唯一且不少于 5 段；第一行说明公司层优先', () => {
+        const { body } = splitFrontmatter(skill.markdown)
+        const headings = splitSections(body)
+          .map((s) => s.heading)
+          .filter((h) => h !== '')
+        expect(headings.length).toBeGreaterThanOrEqual(5)
+        expect(new Set(headings).size).toBe(headings.length)
+        expect(body.trim().split('\n')[0]).toContain('Agents 工坊自带的基础版')
+      })
+
+      it('数字只引事实卡；没有真实联系方式；不是改编来的（不挂第三方出处）', () => {
+        expect(skill.markdown).toContain('事实卡')
+        expect(skill.markdown).not.toMatch(/[\w.+-]+@[\w-]+\.[a-z]{2,}/i)
+        expect(skill.markdown).not.toMatch(/\+?\d[\d\s-]{9,}\d/)
+        expect(skill.markdown).not.toContain('改编自')
+      })
+    })
+  }
+
+  it('customer-care 是移植来的完整版：原件每一段逐字都在，只多了出处一行与「出卡与自动化级别」一段', () => {
+    const md = readBundledSkill('customer-care').markdown
+    const { frontmatter, body } = splitFrontmatter(md)
+    expect(frontmatter.name).toBe('customer-care')
+    expect(frontmatter.extra.license).toBe('Apache-2.0')
+    expect(frontmatter.extra.version).toBe('1.1.0')
+    expect(body.trim().split('\n')[0]).toContain('移植自 KefuAgent')
+    const original = splitFrontmatter(readFileSync(PORTED_FROM, 'utf8')).body
+    const ported = splitSections(body).filter((x) => x.heading !== '')
+    const source = splitSections(original).filter((x) => x.heading !== '')
+    for (const sec of source) {
+      const hit = ported.find((x) => x.heading === sec.heading)
+      expect(hit?.body.trim(), sec.heading).toBe(sec.body.trim())
+    }
+    expect(ported.map((x) => x.heading)).toEqual([
+      ...source.map((x) => x.heading),
+      '出卡与自动化级别',
+    ])
+  })
+})
+
 describe('自带技能：守卫（WP160 改写规矩第一条）', () => {
   it('守卫本身认得出授权字样（含英文、大小写不敏感）', () => {
     expect(findAuthorizationPhrases('授权后可自动执行；Upload directly via CSV')).toEqual([
@@ -118,8 +194,8 @@ describe('自带技能：守卫（WP160 改写规矩第一条）', () => {
   }
 })
 
-describe('自带技能：考题（改写自上游 evals）', () => {
-  for (const name of names) {
+describe('自带技能：考题（改写自上游 evals；WP162 自己写的那几个照同一格式出题）', () => {
+  for (const name of [...THIRD_PARTY, ...OWN]) {
     it(`${name}：至少 3 条，覆盖出卡 / 数字不编 / 合规，每条的规矩都在正文里`, () => {
       const { markdown, evals } = readBundledSkill(name)
       expect(evals.length).toBeGreaterThanOrEqual(3)

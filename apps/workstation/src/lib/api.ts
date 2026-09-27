@@ -4911,6 +4911,15 @@ export interface MessageAccountView {
   unread: number
   folders: MessageFolder[]
   backfill_floor: string
+  /** WP163：最近一次没动成的邮箱动作（判成客服的信标已读 / 挪进客服文件夹）。 */
+  last_mailbox_failure?: {
+    at: string
+    action: 'mark_read' | 'move'
+    /** 原因码：`server_refused` / `error` / `unsupported` …（界面翻成人话）。 */
+    reason: string
+    folder: string
+    to_folder?: string
+  }
 }
 
 /** 打开一条会话时一次拿全（正文 + 状态带）。 */
@@ -5645,3 +5654,50 @@ export const runSeo = (
   assignment?: string,
 ): Promise<{ what: string; approval_item_ids: string[]; skipped?: string; picks?: number }> =>
   api('/v1/seo/run', { method: 'POST', body: { what }, ...withAssignment(assignment) })
+
+/* ── WP159：知识库里那张「违规宣称规则」表（按市场分组，带官方出处） ─────────────── */
+
+export type ClaimMarketGroupId = 'global' | 'us' | 'eu_uk' | 'ca' | 'au'
+
+export interface ClaimRuleRowData {
+  id: string
+  pattern: string
+  regex?: boolean
+  category: string
+  /** 一句人话：为什么不能这么写。 */
+  reason: string
+  market: ClaimMarketGroupId
+  source_title?: string
+  source_url?: string
+  /** 正则规则给人看的写法。 */
+  label?: string
+  enabled: boolean
+  origin: 'builtin' | 'edited' | 'custom'
+}
+
+export interface ClaimRulesData {
+  markets: string[]
+  markets_from: 'brand_profile' | 'default'
+  groups: {
+    id: ClaimMarketGroupId
+    label: string
+    enabled: boolean
+    why: 'always' | 'market' | 'manual'
+  }[]
+  rules: ClaimRuleRowData[]
+}
+
+export interface ClaimRulesPatchInput {
+  group?: { id: ClaimMarketGroupId; enabled: boolean }
+  rule?: { id: string; enabled?: boolean; pattern?: string; reason?: string }
+  add?: { pattern: string; reason: string; market?: ClaimMarketGroupId }
+}
+
+export const getClaimRules = (assignment?: string): Promise<ClaimRulesData> =>
+  api('/v1/knowledge/claim-rules', withAssignment(assignment))
+
+export const setClaimRules = (
+  input: ClaimRulesPatchInput,
+  assignment?: string,
+): Promise<ClaimRulesData> =>
+  api('/v1/knowledge/claim-rules', { method: 'PATCH', body: input, ...withAssignment(assignment) })

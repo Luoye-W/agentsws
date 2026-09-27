@@ -42,7 +42,10 @@ import {
   relayUnavailableResponse,
   sealWithKey,
 } from '@agentsws/chat-relay'
-import type { ServiceSubscription } from '@agentsws/contracts'
+import type {
+  RelayNotification as ContractRelayNotification,
+  ServiceSubscription,
+} from '@agentsws/contracts'
 import { SUPPORT_SERVICE_ID } from '@agentsws/contracts'
 import { desiredFor, type HostedInstanceStatus, stopReasonFor } from '@agentsws/hosted'
 import type { SubscriptionWallet } from '@agentsws/kol-cloud'
@@ -145,14 +148,8 @@ export interface ChatRelayDoOptions {
   wallet?: SubscriptionWallet
 }
 
-/** 站内提醒的形状（owner 的「额度用到 80% / 到顶」）。 */
-export interface RelayNotification {
-  type: 'quota_warn_80' | 'quota_full'
-  at: string
-  message_zh: string
-  count: number
-  limit: number
-}
+/** 站内提醒的形状（owner 的「额度用到 80% / 到顶」）。WP164：形状挪进契约，这里原名重导出。 */
+export type RelayNotification = ContractRelayNotification
 
 /** 留言暂存多久（与 packages/chat-relay 同一个数：7 天）。 */
 const OFFLINE_TTL_MS = 7 * 24 * 60 * 60 * 1000

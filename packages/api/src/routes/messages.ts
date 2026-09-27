@@ -60,6 +60,18 @@ export interface MessageAccountView {
   folders: MessageFolder[]
   /** 现在回溯到哪一天（"再往前取"旁边那句话）。 */
   backfill_floor: string
+  /**
+   * WP163：这只邮箱最近一次没动成的邮箱动作（判成客服的信标已读 / 挪进 `KefuAgents`）。
+   * `reason` 是原因码（`server_refused` / `error` / `unsupported` …），界面翻成人话。
+   * 同一种动作后来成功过就不给。
+   */
+  last_mailbox_failure?: {
+    at: string
+    action: 'mark_read' | 'move'
+    reason: string
+    folder: string
+    to_folder?: string
+  }
 }
 
 /** 打开一封信时一次拿全（正文 + 这条会话 + 右栏那一格要的东西）。 */

@@ -43,7 +43,13 @@ import type {
 import { canonicalJson } from '@agentsws/core'
 import { createDshRuntime, type DshRuntimeMode } from '@agentsws/dsh-adapter'
 import { isKolRole, KOL_TOOL_NAMES } from '@agentsws/kol-core'
-import { type SkillResolver, skillPromptSections } from '@agentsws/learning'
+import {
+  onDemandSkillIndex,
+  type SkillPromptActor,
+  type SkillResolver,
+  skillIndexSection,
+  skillPromptSections,
+} from '@agentsws/learning'
 import type { ModelGatewayApi } from '@agentsws/model-gateway'
 import { houseRulesSection, personaTextIn, type RoleStore } from '@agentsws/roles'
 import { createDirectRuntime, withToolChoice } from '@agentsws/runtime-direct'
@@ -53,10 +59,12 @@ import {
   humanizeToolNames,
   isOwnerRole,
   OWNER_TOOL_NAMES,
+  READ_SKILL_TOOL,
 } from '@agentsws/stand-ins'
 
 import { cardRefOf, type Work } from '@agentsws/work'
 import type { ComputerUseAssembly } from './computer-use.js'
+import { createSkillToolExecutor, isReadSkillTool } from './skill-tools.js'
 
 /**
  * 卡片的出口。类型就是契约的 `CreateApprovalInput`——收件人门禁（31 §3.3）要的
@@ -405,6 +413,12 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
     { view: ActiveRunView; controller: AbortController; settled: Promise<void> }
   >()
 
+  /**
+   * WP162：每次运行解析技能用的「我是谁」（带岗位层）。`read_skill` 按它叠六层——
+   * 岗位不在 RunRequest 上，所以开跑前登记、收尾摘掉（与 `active` 同一个生命周期）。
+   */
+  const skillActors = new Map<string, SkillPromptActor>()
+
   const appendRunEvent = (req: RunRequest, e: RunEvent): void => {
     const { type, ...payload } = e
     options.appendEvent({
@@ -726,10 +740,30 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
     const kol = options.kolTools
     const owner = options.ownerTools
     const dev = options.devTools
-    if (kol === undefined && owner === undefined && dev === undefined) return source.executeTool
+    /*
+     * WP162：按需技能。接了技能库才有这个工具（工具面里也只有那时才摆出 `read_skill`）；
+     * 「我是谁」按这次运行开跑时登记的那一份（带岗位），登记里没有就退回 RunRequest 上的职责。
+     */
+    const readSkill =
+      options.skills === undefined
+        ? undefined
+        : createSkillToolExecutor({
+            registry: options.skills,
+            actorOf: (req) =>
+              skillActors.get(req.id) ?? {
+                person_id: req.actor.person_id,
+                workspace_id: req.workspace_id,
+                role_id: req.actor.role_id,
+              },
+          })
+    if (kol === undefined && owner === undefined && dev === undefined && readSkill === undefined)
+      return source.executeTool
     return async (call) => {
       if (kol !== undefined && KOL_TOOL_NAMES.includes(bareOf(call.name))) {
         return kol(call)
+      }
+      if (readSkill !== undefined && isReadSkillTool(call.name)) {
+        return readSkill(call)
       }
       // WP153：店主的两个只读工具（名字与别处不重名；职责在执行器里再判一次）
       if (owner !== undefined && OWNER_TOOL_NAMES.includes(bareOf(call.name))) {
@@ -928,9 +962,31 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
      * 都没有，只能拿客服的凑。十一个红人工具在 `kol-core` 的目录里，
      * 判据只有 `role_id`（`kol.*`），所以回放时算得出同一份清单。
      */
+    /*
+     * WP162：解析技能的「我是谁」（always 正文、按需索引、`read_skill` 三处用同一份），
+     * 以及这条职责登记的**按需**技能索引。索引里有东西，工具面里才摆出 `read_skill`——
+     * 模型不该看见调不动的工具；一本都没有的职责，工具面与提示词字节一个不变。
+     */
+    const skillActor: SkillPromptActor = {
+      person_id: input.person_id,
+      workspace_id,
+      ...(positionHit.position_id === undefined ? {} : { position_id: positionHit.position_id }),
+      role_id: config.role_id,
+    }
+    const skillIndex =
+      options.skills === undefined
+        ? []
+        : await onDemandSkillIndex({
+            skills: config.skills,
+            actor: skillActor,
+            registry: options.skills,
+          })
+    skillActors.set(input.run_id, skillActor)
     const allow = [
       ...new Set([
         ...config.grounding.map((g) => g.tool),
+        // WP162：有按需技能可读，才有读技能的工具
+        ...(skillIndex.length > 0 ? [READ_SKILL_TOOL] : []),
         ...DEFAULT_TOOLS,
         ...devToolNames(),
         ...(isKolRole(config.role_id) ? KOL_TOOL_NAMES : []),
@@ -1037,16 +1093,16 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
             ? []
             : await skillPromptSections({
                 skills: config.skills,
-                actor: {
-                  person_id: input.person_id,
-                  workspace_id,
-                  ...(positionHit.position_id === undefined
-                    ? {}
-                    : { position_id: positionHit.position_id }),
-                  role_id: config.role_id,
-                },
+                actor: skillActor,
                 registry: options.skills,
               })),
+          /*
+           * WP162：**可用技能索引**——按需技能只列名字 + 一句说明（排在全部技能正文之后，
+           * order 90）；要用哪一本由模型调 `read_skill` 读。没有一本可读就整段不出。
+           */
+          ...[skillIndexSection(skillIndex, READ_SKILL_TOOL)].filter(
+            (x): x is PromptSection => x !== undefined,
+          ),
         ],
       },
       /*
@@ -1104,6 +1160,10 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       brief: input.brief,
       person_id: input.actor.person_id,
       assignment_id: input.actor.assignment_id,
+    }).catch((err: unknown) => {
+      // WP162：装配半路失败，开跑前登记的「我是谁」也要摘掉（收尾那一段走不到）
+      skillActors.delete(run_id)
+      throw err
     })
     /*
      * WP150：登记成「正在跑」。controller 以前只给电脑操控的「停止」用，现在任何一次运行都能被停
@@ -1241,6 +1301,7 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
     } finally {
       scope = undefined
       active.delete(run_id)
+      skillActors.delete(run_id)
       settle()
     }
     return { run_id }

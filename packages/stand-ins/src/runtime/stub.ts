@@ -41,6 +41,7 @@ import {
   renderOwnerAnswer,
 } from './owner.js'
 import { noPlaybookAnswer, noPlaybookSummary, playbookOf } from './playbook.js'
+import { SKILL_TOOL_DEF_BY_NAME } from './skills.js'
 import {
   boundaryGate,
   describeRun,
@@ -244,7 +245,9 @@ function toolDefs(req: RunRequest): ToolDef[] {
     (name) =>
       // WP153：店主那两个只读工具的描述是写给模型的人话（它挑工具时读的就是这一句）；
       // 别的名字照旧是占位描述——这一行只对工具面里有它们的运行生效，老的 prompt 字节不变
-      OWNER_TOOL_DEF_BY_NAME.get(name) ?? {
+      // WP162：`read_skill` 同理（只有登记了按需技能的运行才有它）
+      OWNER_TOOL_DEF_BY_NAME.get(name) ??
+      SKILL_TOOL_DEF_BY_NAME.get(name) ?? {
         name,
         description: `stand-in tool ${name}`,
         input_schema: { type: 'object' },

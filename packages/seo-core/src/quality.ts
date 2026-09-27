@@ -98,8 +98,14 @@ export function ruleFromFact(card: {
   const s = card.structured ?? {}
   const pattern = typeof s.pattern === 'string' && s.pattern !== '' ? s.pattern : card.subject.key
   if (pattern.trim() === '') return undefined
-  const category =
-    s.category === 'absolute' || s.category === 'medical' ? s.category : ('other' as const)
+  // WP159：多认五类（环保 / 产地 / 评价与代言 / 比较 / 性能）；认不出的一律 `other`
+  const category: ContentClaimRule['category'] =
+    typeof s.category === 'string' &&
+    ['absolute', 'medical', 'green', 'origin', 'endorsement', 'comparison', 'performance'].includes(
+      s.category,
+    )
+      ? (s.category as ContentClaimRule['category'])
+      : 'other'
   return {
     id: card.id,
     pattern,

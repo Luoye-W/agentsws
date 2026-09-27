@@ -7,6 +7,8 @@ export * from './email/imap.js'
 export * from './email/mime.js'
 export * from './email/presets.js'
 export * from './email/smtp.js'
+// WP163：判成客服的信在邮箱里做什么（照老产品 KefuAgent 的四个开关）
+export * from './email/support-mailbox.js'
 export * from './email/threads.js'
 export * from './errors.js'
 // WP85（54 §5）：卡片进 IM 只出「文本摘要 + 去工作台处理」的深链，审批动作不在 IM 里做
