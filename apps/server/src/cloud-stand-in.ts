@@ -8,7 +8,9 @@
  *
  * - 「发登录信」→ 回「信发出去了」；过一小会儿（默认 1.5 秒）替身**自己点一下信里的链接**
  *   （GET 本机回环口的 `/v1/cloud/account/callback`），于是 demo 里能看到「已关联」；
- * - 关联之后：积分余额、本月用量、价目三块（本地 `pricing.json` 同源）、充值四档都有；
+ * - 价目与充值四档：公开的 `/v1/pricing`（WP165：一份固定样例，`@agentsws/stand-ins` 的
+ *   `SAMPLE_PRICING_CATALOG`；关联前后都看得到，和真云一样不要令牌）；
+ * - 关联之后：积分余额、本月用量都有；
  * - 真收钱的那一跳（`POST /v1/wallet/topup`）不做：回一句人话，界面上是「建不了充值单」；
  * - 其余没列到的路径一律 404「演示里没有这一项」，不编数据。
  *
@@ -17,8 +19,8 @@
 
 import { randomBytes } from 'node:crypto'
 import type { Clock, UsageReport, WalletBalance } from '@agentsws/contracts'
-import { pricingBlockOf } from '@agentsws/contracts'
-import { buildPricing, TOPUP_TIERS_FILE } from '@agentsws/metering'
+import { PRICING_CATALOG_PATH, pricingBlockOf } from '@agentsws/contracts'
+import { SAMPLE_PRICING_CATALOG } from '@agentsws/stand-ins'
 
 /** demo 用的云地址：`.invalid` 是保留顶级域（RFC 2606），任何请求漏出去都只会解析失败。 */
 export const CLOUD_STAND_IN_BASE_URL = 'https://cloud.demo.invalid'
@@ -142,7 +144,7 @@ export function cloudStandIn(options: CloudStandInOptions = {}): CloudStandIn {
 
   /** 本月用量：三块各挑一项能力（价目表里真有的），数字是合成的。 */
   const usage = (group: string): UsageReport => {
-    const pricing = buildPricing()
+    const pricing = SAMPLE_PRICING_CATALOG.pricing
     const pick = (block: string): string | undefined =>
       pricing.entries.find((e) => pricingBlockOf(e) === block)?.capability
     const split: [string | undefined, number, number][] = [
@@ -193,6 +195,8 @@ export function cloudStandIn(options: CloudStandInOptions = {}): CloudStandIn {
   ): CloudStandInResponse => {
     const path = url.pathname
     const token = bearer(headers)
+    // ── WP165：公开价目（不要令牌；价目表 + 充值四档，固定样例）
+    if (method === 'GET' && path === PRICING_CATALOG_PATH) return ok(SAMPLE_PRICING_CATALOG)
     // ── 账号那一跳（49 M1）
     if (method === 'POST' && path === '/v1/cloud/auth/magic-link') {
       const email = typeof body.email === 'string' ? body.email : ''
@@ -247,8 +251,10 @@ export function cloudStandIn(options: CloudStandInOptions = {}): CloudStandIn {
       if (method === 'GET' && path === '/v1/wallet') return ok(balance())
       if (method === 'GET' && path === '/v1/wallet/usage')
         return ok(usage(url.searchParams.get('group') ?? 'capability'))
-      if (method === 'GET' && path === '/v1/wallet/pricing') return ok(buildPricing())
-      if (method === 'GET' && path === '/v1/wallet/topup/tiers') return ok(TOPUP_TIERS_FILE)
+      if (method === 'GET' && path === '/v1/wallet/pricing')
+        return ok(SAMPLE_PRICING_CATALOG.pricing)
+      if (method === 'GET' && path === '/v1/wallet/topup/tiers')
+        return ok(SAMPLE_PRICING_CATALOG.topup_tiers)
       if (method === 'POST' && path === '/v1/wallet/topup')
         // WP142：demo 里点充值那一句——说清这是演示、正式版里会发生什么
         return fail(503, 'provider_unavailable', DEMO_TOPUP_MESSAGE)

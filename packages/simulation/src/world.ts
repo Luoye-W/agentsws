@@ -113,22 +113,6 @@ import {
   planCampaign,
   reviewOutreachBody,
 } from '@agentsws/kol-core'
-/*
- * WP68（48 §5.3）：云端公共红人库在世界里**真的跑一份**。
- *
- * 用那一份真服务（真钱包、真价目、真加密）而不是一个替身：这条题要钉的是
- * "浏览免费、reveal 扣积分、余额不够回人话"，而这三件事全是那一份代码算出来的。
- */
-import { KolPublicService, MemoryKolStore, nodeKolSecrets } from '@agentsws/kol-public'
-import {
-  bonusExpiresAt,
-  buildPricing,
-  MemoryWalletStore,
-  roundCredits,
-  signupBonus,
-  signupBonusSourceRef,
-  Wallet,
-} from '@agentsws/metering'
 import type { ModelGatewayApi, ModelGatewayPolicy, PriceTable } from '@agentsws/model-gateway'
 import {
   checkModel,
@@ -207,16 +191,29 @@ import type {
   StandIns,
   ToolExecution,
 } from '@agentsws/stand-ins'
+/*
+ * WP165（docs/83 §2 第 5 条）：云端公共红人库与钱包在世界里走**按契约写的内存替身**
+ * （`@agentsws/stand-ins` 的 `KolPublicStandIn` / `StandInWallet`，价钱取那份固定价目样例）。
+ * 以前这里真跑 `packages/kol-public` + `packages/metering`；云端代码搬去私有仓之后，开源这一侧
+ * 只认契约。这几条题要钉的口径（浏览按次收、reveal 另收、余额不够只拒这一次、注册赠送是
+ * granted 90 天）都写在替身里，真服务那一份的行为测试留在云端那一侧。
+ */
 import {
+  bonusExpiresAtOf,
   connectToolExecutor,
   createStandIns,
+  KolPublicStandIn,
   MCP_DOCS_TOOL,
   MCP_SCHEMA_TOOL,
   MCP_VALIDATE_TOOL,
   MemoryInboundPipeline,
   MockDevMcp,
   MockShopifyCli,
+  roundStandInCredits,
+  SAMPLE_SIGNUP_BONUS,
+  StandInWallet,
   SyntheticClock,
+  signupBonusSourceRefOf,
 } from '@agentsws/stand-ins'
 import {
   AMAZON_CHANNEL,
@@ -1381,8 +1378,8 @@ export interface OrgOps {
    *
    * - 那一轮网址分析走 `@agentsws/brand-intake` 的 `analyzeBrand`（真解析、真算钱、
    *   真封顶），抓取口replay 的是 pack 里的 `fixtures/site/*`——**一个字节不出这台机器**；
-   * - 送的那几个积分与这一轮的花销走 `@agentsws/metering` 的真钱包（`granted` 那一类，
-   *   90 天到期也是它算的），金额取自 `bonuses.json`；
+   * - 送的那几个积分与这一轮的花销走钱包（WP165 起是 `@agentsws/stand-ins` 的契约替身：
+   *   `granted` 那一类、90 天到期），金额取自替身里那份注册赠送样例（云上规则的 09-27 快照）；
    * - 「重新分析不覆盖手改」走的是 `mergeProfile` 本人。
    *
    * 假的只有两样：登录信那一跳（这里等于"用户已经点开了"）与自有模型那一把钥匙
@@ -3594,11 +3591,10 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
   /**
    * WP121b：这个世界里那一份钱包（注册送的 10 积分与这一轮分析的花销都走它）。
    *
-   * 用的是 `@agentsws/metering` 的真钱包，不是一个计数器：`granted` 那一类、
-   * 90 天到期、余额不够就拦——这三件事是它算的，不是场景写死的数。
+   * 用的是钱包的契约替身（WP165 起；以前是 `@agentsws/metering` 的真钱包），不是一个计数器：
+   * `granted` 那一类、90 天到期、余额不够就拦——这三件事是它算的，不是场景写死的数。
    */
-  const onboardingWallet = new Wallet({
-    store: new MemoryWalletStore(),
+  const onboardingWallet = new StandInWallet({
     now: () => now(clock),
     newId: (prefix) => `${prefix}_onb_${sides.size}_${Math.floor(random() * 1e6).toString(36)}`,
   })
@@ -4270,16 +4266,16 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
 
       let signup_credits = 0
       if (input.ai === 'official') {
-        const rule = signupBonus()
-        // 取不到就是**不送**——宁可不送也不猜一个金额（`bonuses.json` 那条纪律）
-        if (rule !== undefined && rule.credits > 0) {
-          const expires_at = bonusExpiresAt(rule, now(clock))
+        const rule = SAMPLE_SIGNUP_BONUS
+        // 金额为 0 就是**不送**——宁可不送也不猜一个金额（云上 `bonuses.json` 那条纪律）
+        if (rule.credits > 0) {
+          const expires_at = bonusExpiresAtOf(rule, now(clock))
           onboardingWallet.topup({
             org_id: workspace_id,
             credits: rule.credits,
             kind: rule.kind,
             ...(expires_at === undefined ? {} : { expires_at }),
-            source_ref: signupBonusSourceRef(`acct_${input.who}`),
+            source_ref: signupBonusSourceRefOf(`acct_${input.who}`),
           })
           signup_credits = rule.credits
         }
@@ -4327,7 +4323,7 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
       if (input.reanalyze === true) {
         const again = await analyzeBrand(siteReplay(), urls, { capCredits: cap })
         profile = mergeProfile(profile, again.profile)
-        spent = roundCredits(spent + again.budget.spent_credits)
+        spent = roundStandInCredits(spent + again.budget.spent_credits)
       }
 
       /*
@@ -5404,14 +5400,13 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
   const kolContactPlain = new Map<string, string>()
 
   /**
-   * WP68：云端公共红人库（48 §5.3）——在世界里**真的跑一份**。
+   * WP68：云端公共红人库（48 §5.3）。
    *
-   * 用的是 `packages/kol-public` 那一份真服务（真钱包、真价目、真加密），
-   * 不是一个替身：这条题要钉的是"浏览免费、reveal 扣积分、余额不够回人话"，
-   * 而这三件事全是那一份代码算出来的。少了它，断言就只是在验场景自己写的数。
+   * WP165 起走契约替身（`KolPublicStandIn` + `StandInWallet`，价钱取固定价目样例）：
+   * 这条题要钉的是"浏览按次收、reveal 另收、余额不够回人话"，这几条口径写在替身里、
+   * 价钱来自价目表而不是场景；真服务（加密、审计、计量事件）的行为测试留在云端那一侧。
    */
-  const kolWallet = new Wallet({
-    store: new MemoryWalletStore(),
+  const kolWallet = new StandInWallet({
     now: () => now(clock),
     newId: (prefix) => `${prefix}_${kolPublicSeq()}`,
   })
@@ -5420,14 +5415,8 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
     kolSeq += 1
     return `${now(clock).replace(/\D/g, '').slice(0, 14)}_${kolSeq}`
   }
-  const kolPublicService = new KolPublicService({
-    store: new MemoryKolStore(),
+  const kolPublicService = new KolPublicStandIn({
     wallet: kolWallet,
-    pricing: buildPricing(),
-    // 测试用的一把邮箱密钥（32 字节全 7）：仓库里没有真 key，这是世界自己造的
-    secrets: nodeKolSecrets({
-      env: { AGENTSWS_KOL_EMAIL_KEY: Buffer.alloc(32, 7).toString('base64url') },
-    }),
     now: () => now(clock),
     newId: (prefix) => `${prefix}_${kolPublicSeq()}`,
   })
@@ -6117,7 +6106,7 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
       }
       kolPublicService.contributeAs(kolPrincipal, [
         {
-          channel,
+          channel: channel as KolChannel,
           handle,
           followers,
           posts_30d: 6,

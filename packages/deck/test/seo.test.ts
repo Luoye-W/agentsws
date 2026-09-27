@@ -136,4 +136,26 @@ describe('WP154 内容与搜索面板', () => {
       { question: 'Q1', seen: '1 / 2 个平台', advice: '交公关' },
     ])
   })
+
+  it('WP166：好几个市场时按市场分开算可见度，多一列「市场」', () => {
+    const geo = report('weekly_geo', {
+      rows: [
+        { question: 'Q1', platform: 'chatgpt', market: 'US', brand_mentioned: false },
+        { question: 'Q1', platform: 'gemini', market: 'US', brand_mentioned: false },
+        { question: 'Q1', platform: 'chatgpt', market: 'GB', brand_mentioned: true },
+        { question: 'Q1', platform: 'gemini', market: 'GB', our_domain_cited: true },
+      ],
+      gaps: [{ question: 'Q1', market: 'US', suggestion: '交公关' }],
+    })
+    const out = runQuery('seo.geo_visibility', ctx(['approvals'], [geo]), 'last_7d')
+    const cols =
+      out.status === 'ok'
+        ? (out.data as { columns: { key: string }[] }).columns.map((c) => c.key)
+        : []
+    expect(cols[0]).toBe('market')
+    expect(rowsOf('seo.geo_visibility', ctx(['approvals'], [geo]))).toEqual([
+      { market: '美国', question: 'Q1', seen: '0 / 2 个平台', advice: '交公关' },
+      { market: '英国', question: 'Q1', seen: '2 / 2 个平台', advice: '' },
+    ])
+  })
 })

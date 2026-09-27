@@ -380,6 +380,21 @@ describe('钱包路由', () => {
     expect(data.entries.map((e) => e.capability)).toContain('ai.chat')
   })
 
+  it('WP165：公开价目 /v1/pricing 不要令牌，和带令牌那条同一份，可缓存', async () => {
+    const h = harness()
+    const res = await h.app.fetch(new Request('http://entry/v1/pricing'))
+    expect(res.status).toBe(200)
+    expect(res.headers.get('cache-control')).toContain('public')
+    const { data } = (await res.json()) as {
+      data: { pricing: unknown; topup_tiers: { credits_per_usd: number } }
+    }
+    const authed = await h.app.fetch(
+      new Request('http://entry/v1/wallet/pricing', { headers: auth() }),
+    )
+    expect(data.pricing).toEqual(((await authed.json()) as { data: unknown }).data)
+    expect(data.topup_tiers.credits_per_usd).toBe(7)
+  })
+
   it('owner 看整个组织，成员只看自己工作区', async () => {
     const h = harness()
     h.wallet.topup({ org_id: 'org_1', credits: 100, kind: 'purchased' })

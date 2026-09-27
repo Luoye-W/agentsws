@@ -2,8 +2,11 @@
  * 49 M1 本地那一半，端到端：关联 → 状态 → 解除。
  *
  * "端到端"是认真的：跑的是**真装配线**（路由 → 端口 → 加密库 → 事件日志），
- * 只把最外面那一跳换成一个**内存版的云服务端**（`createCloudServer()`，
- * 同一份代码，库在 `:memory:`）——全程不联网，也不需要任何真账号。
+ * 只把最外面那一跳换成**云端账号面的契约替身**（WP165 起：`@agentsws/stand-ins` 的
+ * `CloudAccountsStandIn`；以前是内存版的真云进程 `createCloudServer()`）——全程不联网，
+ * 也不需要任何真账号。云上那一半的行为（库里只存哈希、撤销是一列、一次性链接、补签
+ * 同组织同权）在云端那一侧的测试里钉（`apps/cloud/test/links.test.ts`、`auth.test.ts`、
+ * `wp165-from-server.test.ts`）。
  *
  * 四条硬断言：
  * 1. 令牌明文**不出现在**任何响应体、事件日志与数据目录的字节里；
@@ -16,8 +19,8 @@ import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from 'node:f
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { CloudAccountView } from '@agentsws/api'
-import { type CloudMail, type CloudServer, createCloudServer } from '@agentsws/cloud'
 import type { EventEnvelope } from '@agentsws/contracts'
+import { CloudAccountsStandIn, cloudStandInFetch, type StandInMail } from '@agentsws/stand-ins'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { CLOUD_TOKEN_SECRET_ID, createServer, type Server } from '../src/index.js'
 import { SECRETS_KEY_ENV } from '../src/secret-store.js'
@@ -39,10 +42,12 @@ function seeded(seed = 13): () => number {
 
 interface Ctx {
   server: Server
-  cloud: CloudServer
+  cloud: CloudAccountsStandIn
+  /** 拔网线用（`down = true`）。 */
+  wire: ReturnType<typeof cloudStandInFetch>
   url: string
   dir: string
-  mails: CloudMail[]
+  mails: StandInMail[]
 }
 
 let ctx: Ctx
@@ -86,7 +91,7 @@ function allBytes(dir: string): { name: string; bytes: Buffer }[] {
 }
 
 /** 从最近一封信里取出 `?token=`。这是"用户点了链接"那一步的替身。 */
-function tokenFromMail(mails: CloudMail[]): { token: string; state: string } {
+function tokenFromMail(mails: StandInMail[]): { token: string; state: string } {
   const last = mails.at(-1)
   if (last === undefined) throw new Error('还没发过信')
   const match = /https?:\/\/\S+/.exec(last.text)
@@ -122,16 +127,9 @@ beforeEach(async () => {
       return new Date(t).toISOString()
     },
   }
-  const mails: CloudMail[] = []
-  // 内存版云服务端：同一份 apps/cloud 的代码，库在 :memory:，信落进数组
-  const cloud = createCloudServer({
-    clock: { now: () => new Date(t).toISOString() },
-    quiet: true,
-    env: { AGENTSWS_CLOUD_BASE_URL: CLOUD_BASE },
-    mail: async (mail) => {
-      mails.push(mail)
-    },
-  })
+  // 云端账号面的契约替身：信落进数组，令牌库里只存哈希
+  const cloud = new CloudAccountsStandIn({ now: () => new Date(t).toISOString() })
+  const wire = cloudStandInFetch({ accounts: cloud })
   const server = await createServer({
     dbDir: dir,
     clock,
@@ -140,25 +138,15 @@ beforeEach(async () => {
     env: { [SECRETS_KEY_ENV]: SECRETS_KEY, AGENTSWS_CLOUD_BASE_URL: CLOUD_BASE },
     tokenRefreshIntervalMs: 0,
     scheduleIntervalMs: 0,
-    // 本地 → 云的那一跳走内存服务端，全程不出网
-    cloudFetch: async (input, init) => {
-      const res = await cloud.fetch(
-        new Request(input, {
-          method: init?.method ?? 'GET',
-          ...(init?.headers === undefined ? {} : { headers: init.headers }),
-          ...(init?.body === undefined ? {} : { body: init.body }),
-        }),
-      )
-      return { ok: res.ok, status: res.status, text: () => res.text() }
-    },
+    // 本地 → 云的那一跳走契约替身，全程不出网
+    cloudFetch: wire.fetch as never,
   })
   const { url } = await server.listen(0)
-  ctx = { server, cloud, url, dir, mails }
+  ctx = { server, cloud, wire, url, dir, mails: cloud.mails }
 })
 
 afterEach(async () => {
   await ctx.server.close()
-  await ctx.cloud.close()
   rmSync(ctx.dir, { recursive: true, force: true })
 })
 
@@ -181,18 +169,16 @@ describe('49 M1 本地云账号：关联 → 状态 → 解除', () => {
     expect(view.scopes).toEqual(['ai', 'wallet:read'])
     expect(Date.parse(view.expires_at ?? '')).toBeGreaterThan(Date.parse(T0))
     // 云侧确实有一条活着的关联，绑的是本工作区
-    const link = ctx.cloud.store.activeLinkOfWorkspace(ctx.server.bootstrap.workspace.id)
+    const link = ctx.cloud.activeLinkOfWorkspace(ctx.server.bootstrap.workspace.id)
     expect(link).toBeDefined()
   })
 
   it('令牌明文不进响应、不进事件日志、不进数据目录', async () => {
     await linkOnce()
-    // 从云侧的库里反推那把明文是查不到的，所以这里用"库里只有哈希"这条来钉
-    const rows = ctx.cloud.store.db.prepare('SELECT token_sha256 FROM workspace_links').all() as {
-      token_sha256: string
-    }[]
+    // 云侧库里只有哈希（真云那一半在 apps/cloud/test/links.test.ts 钉）；这里拿哈希查本机这一侧
+    const rows = ctx.cloud.linkHashes()
     expect(rows).toHaveLength(1)
-    const hash = rows[0]?.token_sha256 ?? ''
+    const hash = rows[0] ?? ''
     expect(hash).toMatch(/^[0-9a-f]{64}$/)
 
     const status = await (await api('/v1/cloud/account')).text()
@@ -263,7 +249,7 @@ describe('49 M1 本地云账号：关联 → 状态 → 解除', () => {
 
   it('解除：本机删掉，云侧那条也撤了', async () => {
     await linkOnce()
-    const before = ctx.cloud.store.activeLinkOfWorkspace(ctx.server.bootstrap.workspace.id)
+    const before = ctx.cloud.activeLinkOfWorkspace(ctx.server.bootstrap.workspace.id)
     expect(before).toBeDefined()
 
     const res = await api('/v1/cloud/account/unlink', { method: 'POST' })
@@ -274,8 +260,8 @@ describe('49 M1 本地云账号：关联 → 状态 → 解除', () => {
     expect((await data<CloudAccountView>(await api('/v1/cloud/account'))).linked).toBe(false)
     expect(ctx.server.secrets.record(CLOUD_TOKEN_SECRET_ID)).toBeUndefined()
     // 云侧：行还在（撤销是一列不是删行），但验不过了
-    expect(ctx.cloud.store.link(before?.id ?? '')?.revoked_at).toBeDefined()
-    expect(ctx.cloud.store.activeLinkOfWorkspace(ctx.server.bootstrap.workspace.id)).toBeUndefined()
+    expect(ctx.cloud.link(before?.id ?? '')?.revoked_at).toBeDefined()
+    expect(ctx.cloud.activeLinkOfWorkspace(ctx.server.bootstrap.workspace.id)).toBeUndefined()
 
     const unlinked = (await allEvents()).filter((e) => e.type === 'cloud.account_unlinked')
     expect(unlinked).toHaveLength(1)
@@ -293,8 +279,8 @@ describe('49 M1 本地云账号：关联 → 状态 → 解除', () => {
 
   it('云连不上时：关联报错不留痕；解除照样本地断开，但如实说云侧没撤掉', async () => {
     await linkOnce()
-    // 把云关掉之后再解除——这条是"网络不通"的样子
-    await ctx.cloud.close()
+    // 拔掉网线之后再解除——这条是"网络不通"的样子
+    ctx.wire.down = true
     const res = await api('/v1/cloud/account/unlink', { method: 'POST' })
     expect(res.status).toBe(200)
     const out = await data<{ unlinked: boolean; revoked_on_cloud: boolean; reason?: string }>(res)
@@ -328,22 +314,22 @@ describe('WP66 每个品牌各一把云令牌', () => {
     await linkOnce()
 
     // 两个品牌在云上各有一条**活着的**关联，而且不是同一条
-    const a = ctx.cloud.store.activeLinkOfWorkspace(ctx.server.bootstrap.workspace.id)
-    const b = ctx.cloud.store.activeLinkOfWorkspace(brandB)
+    const a = ctx.cloud.activeLinkOfWorkspace(ctx.server.bootstrap.workspace.id)
+    const b = ctx.cloud.activeLinkOfWorkspace(brandB)
     expect(a).toBeDefined()
     expect(b).toBeDefined()
     expect(a?.id).not.toBe(b?.id)
 
     // 关联之后再加的品牌：当场补签一把
     const brandC = await addBrand('诺伏特配件')
-    expect(ctx.cloud.store.activeLinkOfWorkspace(brandC)).toBeDefined()
+    expect(ctx.cloud.activeLinkOfWorkspace(brandC)).toBeDefined()
 
     // 解除是整家公司的事：三把一起撤
     const res = await api('/v1/cloud/account/unlink', { method: 'POST' })
     expect(res.status).toBe(200)
-    expect(ctx.cloud.store.activeLinkOfWorkspace(ctx.server.bootstrap.workspace.id)).toBeUndefined()
-    expect(ctx.cloud.store.activeLinkOfWorkspace(brandB)).toBeUndefined()
-    expect(ctx.cloud.store.activeLinkOfWorkspace(brandC)).toBeUndefined()
+    expect(ctx.cloud.activeLinkOfWorkspace(ctx.server.bootstrap.workspace.id)).toBeUndefined()
+    expect(ctx.cloud.activeLinkOfWorkspace(brandB)).toBeUndefined()
+    expect(ctx.cloud.activeLinkOfWorkspace(brandC)).toBeUndefined()
   })
 
   it('令牌按品牌存在各自那一段加密库里（品牌甲的模型面取不到品牌乙那把）', async () => {

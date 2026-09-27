@@ -33,6 +33,7 @@ import type {
   EventEnvelope,
   FactCard,
   GeoCostEstimate,
+  GeoMarketSummary,
   GeoQuestion,
   GeoSettings,
   GscRow,
@@ -66,6 +67,8 @@ import {
   type LandingConversion,
   type LandingOrder,
   MAX_GEO_QUESTIONS,
+  marketName,
+  pageBodyText,
   pageRevenue,
   parseSeoDraft,
   probeRows,
@@ -114,11 +117,13 @@ export interface SeoBrandInfo extends BrandProfileLike {
   /** 店铺域名（`landing_site` 是路径时拼成完整地址用）。 */
   shop_host: string
   currency: string
-  /** SERP / AI 探测按哪个国家查。 */
+  /**
+   * 档案里没写目标市场时，SERP / AI 探测按哪个国家查（服务端缺省 `us`，界面写明「按默认」）。
+   */
   country: string
   /**
    * WP159：目标市场（ISO 国家码，品牌档案里的）。违规宣称规则按它开市场组；
-   * 没写 = 按 `country` 那一个算。
+   * WP166：SERP 与 AI 问答探测也按它**每个市场分别探**。没写 = 按 `country` 那一个算。
    */
   markets?: string[]
 }
@@ -154,6 +159,17 @@ export interface SeoServiceOptions {
    * 每天最多调几次看职责阈值 `seo_model_drafts_per_day`（缺省 `DEFAULT_MODEL_DRAFTS_PER_DAY`）。
    */
   drafter?(meta: { actor: SeoActor; run_id: string }): SeoDraftModel | undefined
+  /**
+   * WP166：模型写初稿前读这一页的正文——优先店铺连接的只读口（Shopify 页面 / 商品 / 博客正文），
+   * 读不到再抓公开网址（只抓自家域名，沿用品牌分析那条抓取纪律）。回的可以是 HTML，这里会去标签、
+   * 截长度。读不到回 `undefined`：照原来的写法，卡上注明「没读到正文」。
+   */
+  pageBody?(input: {
+    url: string
+    page?: SitePage | undefined
+    /** 我们自己的域名（公开网址那条路只抓这些）。 */
+    domains: readonly string[]
+  }): Promise<{ text: string; from: 'store' | 'web' } | undefined>
   /**
    * WP159：品牌口吻（照 WP122 的注入口径）：品牌档案那一段（`renderBrandContext`）+
    * 品牌设计规范里的「气质」一句。取不到就不写那一句。
@@ -200,11 +216,12 @@ export interface SeoServiceAssembly {
   geoQuestions(): Promise<GeoQuestion[]>
   setGeoQuestions(list: readonly GeoQuestion[]): GeoQuestion[]
   /** 面板上那一块：问题清单 + 开关与问几个 + 每周大概花多少。 */
-  geoView(): Promise<{ questions: GeoQuestion[]; settings: GeoSettings; estimate: GeoCostEstimate }>
-  /** 改开关 / 问几个（1–10）。 */
+  geoView(): Promise<GeoView>
+  /** 改开关 / 问几个（1–10）/ WP166：关掉哪几个市场的探测（只关探测，不改公司档案）。 */
   setGeoSettings(input: {
     enabled?: boolean | undefined
     max_questions?: number | undefined
+    markets_off?: string[] | undefined
   }): GeoSettings
   /** 账本 stage 之前的改写口：`publish_post` 要发出去时跑质检。 */
   gatePublish(input: StageInput): Promise<StageInput>
@@ -217,6 +234,16 @@ export interface SeoServiceAssembly {
    * 加一条自己的。
    */
   setClaimRules(actor: SeoActor, input: ClaimRulesInput): Promise<ClaimRulesView>
+}
+
+/** 面板那一块：问题清单 + 开关与问几个 + 每周大概花多少 + WP166 每个目标市场探不探。 */
+export interface GeoView {
+  questions: GeoQuestion[]
+  settings: GeoSettings
+  estimate: GeoCostEstimate
+  /** WP166：目标市场（档案里的；没写就是默认那一个）与这个市场这周探不探。 */
+  markets: { code: string; probing: boolean }[]
+  markets_from: 'brand_profile' | 'default'
 }
 
 /** WP159：`setClaimRules` 的入参（三件事可以一次只给一件）。 */
@@ -244,23 +271,41 @@ const DEFAULT_GEO_QUESTIONS = Math.min(6, MAX_GEO_QUESTIONS)
 const geoSettingsOf = (state: SeoState): GeoSettings =>
   state.geo_settings ?? { enabled: true, max_questions: DEFAULT_GEO_QUESTIONS }
 
-/** 每周大概花多少：官方那条路按单价算，自带 key 是 0，没接就不写数。 */
-function estimateOf(questions: number, status: SearchDataStatus): GeoCostEstimate {
+/**
+ * 每周大概花多少：官方那条路按单价算，自带 key 是 0，没接就不写数。
+ * WP166：按「问题 × 平台 × 市场」算（每个目标市场分别探），价目不变。
+ */
+function estimateOf(
+  questions: number,
+  status: SearchDataStatus,
+  markets: readonly string[],
+): GeoCostEstimate {
   // WP159：默认问 ChatGPT、Gemini、Google AI 概览——再与这条路能探测的取交集
   const platforms = geoPlatformsFor(status.platforms).length
-  const base = { questions, platforms, route: status.route }
+  const base = {
+    questions,
+    platforms,
+    route: status.route,
+    markets: markets.length,
+    market_codes: [...markets],
+  }
   if (!status.configured) return base
   if (status.route === 'byo') return { ...base, credits_per_week: 0 }
   const price = status.prices?.ai_answer
   return price === undefined
     ? base
-    : { ...base, credits_per_week: Math.round(questions * platforms * price * 10) / 10 }
+    : {
+        ...base,
+        credits_per_week: Math.round(questions * platforms * markets.length * price * 10) / 10,
+      }
 }
 
 function estimateText(e: GeoCostEstimate): string {
   if (e.credits_per_week === undefined) return ''
-  return e.route === 'byo'
-    ? '（用你自己的 key，不扣积分）'
+  if (e.route === 'byo') return '（用你自己的 key，不扣积分）'
+  const m = e.markets ?? 1
+  return m > 1
+    ? `（${e.questions} 问 × ${e.platforms} 个平台 × ${m} 个市场，约 ${e.credits_per_week} 积分）`
     : `（${e.questions} 问 × ${e.platforms} 个平台，约 ${e.credits_per_week} 积分）`
 }
 
@@ -432,13 +477,29 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
     return { ...b, domains: [...hosts] }
   }
 
-  /** WP159：违规宣称规则按哪几个市场开（档案里没写就按探测国家那一个）。 */
+  /**
+   * WP159 / WP166：目标市场——违规宣称规则开组、SERP 与 AI 问答探测都读这一份（品牌档案里的
+   * `WorkspaceProfile.markets`，唯一来源）；档案里没写才退回品牌的 `country`（界面写明「按默认」）。
+   */
   const marketsOf = async (): Promise<{ markets: string[]; from: 'brand_profile' | 'default' }> => {
     const b = await options.brand()
-    const listed = (b.markets ?? []).map((m) => m.trim().toUpperCase()).filter((m) => m !== '')
+    const listed = [
+      ...new Set((b.markets ?? []).map((m) => m.trim().toUpperCase()).filter((m) => m !== '')),
+    ]
     return listed.length > 0
       ? { markets: listed, from: 'brand_profile' }
       : { markets: [b.country.toUpperCase()], from: 'default' }
+  }
+
+  /** WP166：这周真探的市场 = 目标市场 − 面板上关掉的（只关探测，不改档案）。 */
+  const probeMarketsOf = async (): Promise<{
+    all: string[]
+    probing: string[]
+    from: 'brand_profile' | 'default'
+  }> => {
+    const { markets, from } = await marketsOf()
+    const off = new Set((geoSettingsOf(loadState()).markets_off ?? []).map((m) => m.toUpperCase()))
+    return { all: markets, probing: markets.filter((m) => !off.has(m)), from }
   }
 
   /**
@@ -568,7 +629,10 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
     pick: SeoPick,
     page: SitePage | undefined,
     brand: SeoBrandInfo,
-  ): Promise<{ ok: true; after: Record<string, unknown> } | { ok: false; reason: string }> => {
+  ): Promise<
+    | { ok: true; after: Record<string, unknown>; body: 'store' | 'web' | 'none' }
+    | { ok: false; reason: string }
+  > => {
     const run_id = `run_seo_${nextId('d')}`
     const model = options.drafter?.({ actor, run_id })
     if (model === undefined) return { ok: false, reason: '没配模型' }
@@ -578,12 +642,27 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
     if (used >= cap) return { ok: false, reason: `今天模型写初稿已到上限（${cap} 份）` }
     saveState({ ...state, model_drafts: { date: date(), calls: used + 1 } })
     const voice = (await options.brandVoice?.(brand.language)) ?? {}
+    // WP166：先读这一页的正文（店铺只读口 → 公开网址）；读不到照原来的写法，卡上注明
+    let body: { text: string; from: 'store' | 'web' } | undefined
+    if (pick.page !== undefined && options.pageBody !== undefined) {
+      try {
+        const got = await options.pageBody({ url: pick.page, page, domains: brand.domains })
+        const text = got === undefined ? '' : pageBodyText(got.text)
+        body = got === undefined || text === '' ? undefined : { text, from: got.from }
+      } catch {
+        body = undefined
+      }
+    }
     const prompt = seoDraftPrompt({
       kind,
       query: pick.query,
       suggestion: pick.suggestion,
       evidence: evidenceText(pick.evidence),
-      page: { url: pick.page ?? '', ...(page?.title === undefined ? {} : { title: page.title }) },
+      page: {
+        url: pick.page ?? '',
+        ...(page?.title === undefined ? {} : { title: page.title }),
+        ...(body === undefined ? {} : { body: body.text }),
+      },
       language: brand.language,
       brand: {
         name: brand.name,
@@ -601,7 +680,11 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
     const { rules } = await knowledgeFor(actor)
     const parsed = parseSeoDraft(kind, text, rules)
     if (!parsed.ok) return { ok: false, reason: parsed.reason }
-    return { ok: true, after: { ...parsed.draft, target_query: pick.query } }
+    return {
+      ok: true,
+      after: { ...parsed.draft, target_query: pick.query },
+      body: body?.from ?? 'none',
+    }
   }
 
   /** 开一件事项（交给别的岗位，或者本职责自己要写的）。同一件事 14 天内不重复开。 */
@@ -657,11 +740,22 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
               kind === 'page_seo_edit'
                 ? `改页面标题、描述与开头：${page?.title ?? pick.page}`
                 : `给页面加一个小节：${page?.title ?? pick.page}`,
-              `${body}\n初稿由模型按品牌口吻写好了，可以在卡上改字、删掉不想改的那格，或者点「指导」让它重写。`,
+              `${body}\n初稿由模型按品牌口吻写好了${drafted.body === 'none' ? '（没读到这一页的正文，只按查询与标题写的）' : '（读过这一页的正文）'}，可以在卡上改字、删掉不想改的那格，或者点「指导」让它重写。`,
             )
             return id === undefined
-              ? { kind: 'none', note: '这条改动没提上去（额度或门禁）', draft: 'model' }
-              : { kind: 'change', id, draft: 'model' }
+              ? {
+                  kind: 'none',
+                  note: '这条改动没提上去（额度或门禁）',
+                  draft: 'model',
+                  body: drafted.body,
+                }
+              : {
+                  kind: 'change',
+                  id,
+                  draft: 'model',
+                  body: drafted.body,
+                  ...(drafted.body === 'none' ? { note: '没读到正文' } : {}),
+                }
           }
           fallback = drafted.reason
         }
@@ -876,12 +970,15 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
       if (actor === undefined) return { skipped, picks: 0, changes: 0, topics: 0, matters: 0 }
       const consoleRead = await readConsole()
       const brand = await brandOf(consoleRead.pages)
+      // WP166：搜索结果页人群核对按每个目标市场分别看（面板上关掉的市场不看）
+      const { probing } = await probeMarketsOf()
       const payload: SeoDailyPayload = await buildDaily({
         rows: consoleRead.rows,
         pages: consoleRead.pages,
         signals: signalOptions(brand),
         search: options.searchData(),
         country: brand.country,
+        countries: probing.map((m) => m.toLowerCase()),
         language: brand.language,
         our_domains: brand.domains,
         date: date(),
@@ -985,30 +1082,54 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
       // WP159：默认只问 ChatGPT、Gemini、Google AI 概览（Perplexity 不再考虑），
       // 再与这条路能探测的取交集（官方那一侧没有 Copilot）；不在里面的不问、不花钱
       const platforms = geoPlatformsFor(status.platforms)
-      const estimate = estimateOf(enabled.length, status)
+      // WP166：每个目标市场分别探（问题 × 平台 × 市场），面板上关掉的市场不探
+      const { probing } = await probeMarketsOf()
+      const many = probing.length > 1
+      const estimate = estimateOf(enabled.length, status, probing)
       const notes: string[] = []
       const rows: SeoWeeklyGeoPayload['rows'] = []
       if (!settings.enabled) notes.push('每周 AI 探测在面板里关掉了，这周没有探测。')
       else if (!status.configured) notes.push('搜索数据接口还没接，这周没有探测各 AI 平台。')
+      else if (probing.length === 0) notes.push('每个市场的探测都在面板上关掉了，这周没有探测。')
       else {
-        for (const q of enabled) {
-          try {
-            const answers = await search.aiAnswers({
-              question: q.text,
-              platforms,
-              country: brand.country,
-              language: brand.language,
-              brand: { name: brand.name, domains: brand.domains },
-            })
-            rows.push(...probeRows(q.text, answers))
-          } catch (err) {
-            notes.push(
-              `「${q.text}」这一问没查到（${(err instanceof Error ? err.message : String(err)).slice(0, 60)}）`,
-            )
+        for (const market of probing) {
+          for (const q of enabled) {
+            try {
+              const answers = await search.aiAnswers({
+                question: q.text,
+                platforms,
+                country: market.toLowerCase(),
+                language: brand.language,
+                brand: { name: brand.name, domains: brand.domains },
+              })
+              rows.push(...probeRows(q.text, answers, market))
+            } catch (err) {
+              notes.push(
+                `${many ? `${marketName(market)}：` : ''}「${q.text}」这一问没查到（${(err instanceof Error ? err.message : String(err)).slice(0, 60)}）`,
+              )
+            }
           }
         }
       }
-      const gaps = geoGaps(rows, pages, brand.domains)
+      // 可见度与缺位**按市场分开算**（不混在一起）
+      const gaps = probing.flatMap((market) =>
+        geoGaps(
+          rows.filter((r) => r.market === market),
+          pages,
+          brand.domains,
+        ).map((g) => ({ ...g, market })),
+      )
+      const summaries: GeoMarketSummary[] = probing.map((market) => {
+        const mine = rows.filter((r) => r.market === market)
+        return {
+          market,
+          questions: new Set(mine.map((r) => r.question)).size,
+          seen: new Set(
+            mine.filter((r) => r.brand_mentioned || r.our_domain_cited).map((r) => r.question),
+          ).size,
+          gaps: gaps.filter((g) => g.market === market).length,
+        }
+      })
       const payload: SeoWeeklyGeoPayload = {
         variant: 'weekly_geo',
         week_of: date(),
@@ -1018,6 +1139,7 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
         gaps,
         notes,
         ...(settings.enabled ? { estimate } : {}),
+        ...(rows.length === 0 ? {} : { markets: summaries }),
       }
       // 缺位里「交公关」的那几条合成一件交给公关的事项
       const toPr = gaps.filter((g) => g.lane === 'pr_handoff')
@@ -1026,7 +1148,12 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
         openMatter(`geo_pr|${payload.week_of}`, {
           kind: 'project',
           title: `交公关：AI 回答里缺我们（${toPr.length} 个问题）`,
-          summary: toPr.map((g) => `「${g.question}」：${g.suggestion}`).join('\n'),
+          summary: toPr
+            .map(
+              (g) =>
+                `${many && g.market !== undefined ? `【${marketName(g.market)}】` : ''}「${g.question}」：${g.suggestion}`,
+            )
+            .join('\n'),
           entry: 'position',
           position_template_id: 'pr',
           ...(pr === undefined
@@ -1054,18 +1181,26 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
       const seen = new Set(
         rows.filter((r) => r.brand_mentioned || r.our_domain_cited).map((r) => r.question),
       )
+      // WP166：好几个市场时每个市场一句（不混在一起算可见度）
+      const line = many
+        ? `${summaries
+            .map(
+              (m) =>
+                `${marketName(m.market)}：${m.questions} 问里 ${m.seen} 个提到或引用了我们，缺位 ${m.gaps} 个`,
+            )
+            .join('；')}。${estimateText(estimate)}`
+        : `${enabled.length} 个买家问题，${seen.size} 个在某个平台上提到或引用了我们；缺位 ${gaps.length} 个。${estimateText(estimate)}`
       const approval_item_id = await report(
         actor,
         'weekly_geo',
         payload.week_of,
         `AI 平台可见度（${payload.week_of} 那一周）`,
-        status.configured && settings.enabled
-          ? `${enabled.length} 个买家问题，${seen.size} 个在某个平台上提到或引用了我们；缺位 ${gaps.length} 个。${estimateText(estimate)}`
-          : (notes[0] ?? ''),
+        status.configured && settings.enabled && probing.length > 0 ? line : (notes[0] ?? ''),
         payload,
       )
       emit('seo.weekly_geo', actor.assignment_id, {
         questions: enabled.length,
+        markets: probing,
         probed: rows.length,
         gaps: gaps.length,
         search_data: payload.search_data,
@@ -1080,17 +1215,35 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
       const settings = geoSettingsOf(loadState())
       const status = await options.searchData().status()
       const n = Math.min(questions.filter((q) => q.enabled).length, settings.max_questions)
-      return { questions, settings, estimate: estimateOf(settings.enabled ? n : 0, status) }
+      const { all, probing, from } = await probeMarketsOf()
+      return {
+        questions,
+        settings,
+        estimate: estimateOf(settings.enabled ? n : 0, status, probing),
+        markets: all.map((code) => ({ code, probing: probing.includes(code) })),
+        markets_from: from,
+      }
     },
 
     setGeoSettings(input) {
       const cur = geoSettingsOf(loadState())
+      const off =
+        input.markets_off === undefined
+          ? cur.markets_off
+          : [
+              ...new Set(
+                input.markets_off
+                  .map((m) => m.trim().toUpperCase())
+                  .filter((m) => /^[A-Z]{2}$/.test(m)),
+              ),
+            ]
       const next: GeoSettings = {
         enabled: input.enabled ?? cur.enabled,
         max_questions: Math.max(
           1,
           Math.min(10, Math.round(input.max_questions ?? cur.max_questions)),
         ),
+        ...(off === undefined || off.length === 0 ? {} : { markets_off: off }),
       }
       saveState({ ...loadState(), geo_settings: next })
       return next

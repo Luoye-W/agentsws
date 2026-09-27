@@ -59,7 +59,6 @@ import {
   NO_VISION_REASON,
   VISION_MODEL_EXAMPLES,
 } from '@agentsws/contracts'
-import { buildPricing, creditsFor } from '@agentsws/metering'
 import type {
   AccountFetch,
   CatalogPrice,
@@ -283,6 +282,11 @@ export interface ModelsOptions {
   appendEvent?: (e: Omit<EventEnvelope, 'id' | 'at'> & { at?: string }) => void
   /** 记事件要写在哪个工作区。取值函数——身份装在模型面之后。 */
   workspace_id?: () => string | undefined
+  /**
+   * WP165：官方接口的积分价从哪读（云上公开价目 + 本机缓存，`pricing-catalog.ts`）。
+   * 同步、只读手上那一份、从不打网；不给 / 手上没有就不显示那个数——不编。
+   */
+  pricing?: { creditsFor(capability: string, quantity?: number): number | undefined }
   /**
    * WP134：「用我的 DeepSeek 账号登录」那一路。**只有两样**：登录了没有（同步）与官方
    * `resolveToken`（每次请求现取）。不给 = 这个进程没装这条路，那种 provider 永远挂不上。
@@ -1237,8 +1241,11 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
     return vision === undefined ? 'unchecked' : vision ? 'ok' : 'no'
   }
 
-  /** WP127：官方接口一张图多少积分（`pricing.json` 的 `ai.image`；界面常显）。 */
-  const creditsPerImage = (): number | undefined => creditsFor(buildPricing(), 'ai.image', 1)
+  /**
+   * WP127：官方接口一张图多少积分（价目的 `ai.image`；界面常显）。WP165 起价目只在云上：
+   * 读本机手上那一份（取过云才有），没有就不显示——不编一个数。
+   */
+  const creditsPerImage = (): number | undefined => options.pricing?.creditsFor('ai.image', 1)
 
   /** WP127：生图那一档现在挂哪一条（配了、而且那一条现在能用才有）。 */
   const imageConfig = (): { config: ModelProviderConfig; model: string } | undefined => {

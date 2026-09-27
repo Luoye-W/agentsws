@@ -50,7 +50,6 @@ import { blobKey, blobUri, openBlobStore } from '@agentsws/blob'
 import { designRoleFamily } from '@agentsws/brand-design'
 import type { PageFetch as BrandIntakeFetch } from '@agentsws/brand-intake'
 import type { ResolveMx } from '@agentsws/channels'
-import type { SearchFetch } from '@agentsws/cloud-entry'
 import type {
   ApprovalBus,
   ApprovalItem,
@@ -89,7 +88,6 @@ import {
   type RecheckStatus,
   zipFiles,
 } from '@agentsws/knowledge'
-import { buildPricing, entryFor, PRICING_FILE } from '@agentsws/metering'
 import {
   type AccountFetch,
   createModelGateway,
@@ -109,6 +107,7 @@ import {
   rangeTargetOfProduct,
   renderBrandContext,
 } from '@agentsws/roles'
+import type { SearchFetch } from '@agentsws/search-providers'
 import {
   disconnectedSearchConsole,
   pendingSearchConsole,
@@ -266,6 +265,8 @@ import {
   seedDefaultSkill,
 } from './learning.js'
 import { createLiveDataSource, type LiveDataSource } from './live-data.js'
+// WP77（59 §1 / §2）：建站库（三张表）+ `/v1/site/*` 的实现
+import { createStoreMarketsSync, marketsFromIntake } from './markets.js'
 import { createMeetings, type MeetingsAssembly, seedDemoMeetings } from './meetings.js'
 // WP113（63）：消息——统一收件处（消息库 / 全量同步 / 分拣 / 回写）
 import { createMessages, type MessagesAssembly, type MessagesOptions } from './messages.js'
@@ -279,6 +280,7 @@ import {
   type OrganizationsAssembly,
 } from './organizations.js'
 import { createOwnerToolExecutor } from './owner-tools.js'
+import { createPageBodyReader } from './page-body.js'
 import {
   createFilePersonaBackend,
   createPersonas,
@@ -289,6 +291,7 @@ import {
 import { createPositions, type PositionsAssembly } from './positions.js'
 import { createPrStore, prDeckData, seedDemoPr } from './pr.js'
 import { createPrService } from './pr-service.js'
+import { createPricingCatalog, type PricingCatalogSource } from './pricing-catalog.js'
 import {
   createReconcileGuard,
   type ReconcileGuard,
@@ -344,7 +347,6 @@ import { createSecretaryAssembly, type SecretaryAssembly } from './secretary.js'
 import { claimRuleCard, createSeoService, pickRoleHolder } from './seo-service.js'
 import type { BrokerFetch } from './shopify-broker.js'
 import { createShopifyDevMcp } from './shopify-devmcp.js'
-// WP77（59 §1 / §2）：建站库（三张表）+ `/v1/site/*` 的实现
 import { createConnectSiteFacts, createSiteService, createSiteStore, seedDemoSite } from './site.js'
 import { createSocialStore, seedDemoSocial, socialDeckData } from './social.js'
 // WP73（56 §6）：九条渠道真打出去的那一跳 + 社媒库的 /v1 面
@@ -798,6 +800,11 @@ export interface Server {
   secrets: SecretStore
   /** WP58（49 M1）：云账号关联（令牌在上面那个加密库里，key 名 `cloud.workspace_token`）。 */
   cloudAccount: CloudAccountAssembly
+  /**
+   * WP165：本机手上的价目（云上公开的 `/v1/pricing` + 本机缓存）。生产入口 listen 之后
+   * 调一次 `refresh()`；demo 也可以。测试不调就一个字节都不出机器。
+   */
+  pricingCatalog: PricingCatalogSource
   /** 25 定时与流程：调度器 + 流程引擎 + 各个消费者的登记。 */
   schedule: ScheduleAssembly
   /**
@@ -975,6 +982,18 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
 
   // 08 / 18：OpenConnector 的地址只在这一处解析（桌面壳读同名环境变量）
   const connectUrl = connectBaseUrl(env)
+
+  /*
+   * WP165（docs/83 §2）：价目只放云上。一台机器一份（不分品牌）：云上公开的 `/v1/pricing`
+   * + 数据目录里一份缓存。同步读的那几处（生图 / 看邮箱 / 体检的积分价）只读手上这一份，
+   * 从不因为同步读打网；生产入口 listen 之后顺手刷一次（`index.ts`），界面看价目时按需刷。
+   */
+  const pricingCatalog = createPricingCatalog({
+    clock,
+    baseUrl: cloudBaseUrl(env),
+    ...(options.cloudFetch === undefined ? {} : { fetch: options.cloudFetch }),
+    ...(dbDir === undefined ? {} : { dir: dbDir }),
+  })
 
   const kernel = await createKernel({ dbPath: file('events.db'), clock, random, env })
   const traceScope = createAsyncTraceScope()
@@ -2269,9 +2288,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       kol: () => kol,
       ...(dir === undefined ? {} : { dbDir: dir }),
       ...(options.cloudFetch === undefined ? {} : { fetch: options.cloudFetch }),
+      pricingCatalog,
     })
     const ownModels = createModels({
       clock,
+      pricing: pricingCatalog,
       gateway: ownGateway,
       secrets: brandSecrets,
       env,
@@ -2480,6 +2501,24 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         ? undefined
         : { workspace_id: ws, person_id: a.person_id, assignment_id: a.id, role_id: a.role_id }
     }
+    /*
+     * WP166：店铺（Shopify）连上以后，按店里配的市场 / 配送区域把目标市场校正一次（人改过的不动），
+     * 改了什么写进档案的出处里（界面上可见）。每条店铺连接只校正一次；读不到下次连接变化再试。
+     */
+    const storeMarkets = createStoreMarketsSync({
+      connect: connections.connect as never,
+      connection: () =>
+        connections
+          .liveConnections()
+          .find((c) => c.service.startsWith('shopify') && c.status === 'active'),
+      current: () => onboardingRef?.brandProfile(ws) ?? {},
+      apply: (markets, source) => onboardingRef?.setMarkets(ws, markets, source) ?? false,
+      now: () => clock.now(),
+      ...(dir === undefined ? {} : { dir }),
+    })
+    connections.onConnectionChange(() => {
+      void storeMarkets.check()
+    })
     const seoService = createSeoService({
       workspace_id: ws,
       clock,
@@ -2636,6 +2675,18 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           return { text: completion.text }
         }
       },
+      /*
+       * WP166：模型写初稿前读这一页正文——店铺连接的只读口优先，读不到再抓公开网址（品牌分析那一口
+       * 抓取，只抓自家域名）。
+       */
+      pageBody: createPageBodyReader({
+        connect: connections.connect as never,
+        connection: () =>
+          connections
+            .liveConnections()
+            .find((c) => c.service.startsWith('shopify') && c.status === 'active'),
+        fetch: options.brandIntakeFetch ?? (globalThis.fetch as never),
+      }),
       // WP159：品牌口吻——品牌档案那一段 + 品牌设计规范（WP122）里的「气质」一句，取不到就不写
       brandVoice: async (language) => {
         const w = await identity.getWorkspace(ws)
@@ -3990,9 +4041,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
               ? {}
               : { storefront_platform: profile.storefront_platform.value }),
             // WP159：目标市场进档案（违规宣称规则按它开市场组）
-            ...(profile.markets === undefined || profile.markets.value.length === 0
-              ? {}
-              : { markets: profile.markets.value }),
+            // WP166：连出处一起写；人在档案卡上改过（`edited`）的记成「人改的」，清空也算数
+            ...marketsFromIntake(profile.markets, clock.now()),
           },
         )
       },
@@ -5182,19 +5232,12 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         serverVersion: env.AGENTSWS_VERSION ?? '0.1.0',
         // WP119c：深链的基底（hello 的 workbench_url）；没绑端口就不出这一格。
         workbenchUrl: () => (boundPort === undefined ? undefined : `http://127.0.0.1:${boundPort}`),
-        // WP119c：看一次邮箱的积分价——价目是数据不是代码，取 pricing.json 那一条。
-        revealPriceCredits: () =>
-          entryFor(buildPricing(), KOL_LOOKUP_CAPABILITY)?.credits_per_unit ??
-          PRICING_FILE.entries.find((e) => e.capability === KOL_LOOKUP_CAPABILITY)
-            ?.credits_per_unit ??
-          0,
+        // WP119c：看一次邮箱的积分价——价目是数据不是代码。WP165 起价目只在云上：
+        // 读本机手上那一份（云上取过才有）；手上没有就是 0（插件那头显示「以云上为准」）。
+        revealPriceCredits: () => pricingCatalog.creditsFor(KOL_LOOKUP_CAPABILITY) ?? 0,
         // WP131：「采集后自动评分」的体检那一半——这个品牌连公共库的客户端 + 体检的价
         auditor: brand.kolPublic,
-        auditPriceCredits: () =>
-          entryFor(buildPricing(), KOL_AUDIT_CAPABILITY)?.credits_per_unit ??
-          PRICING_FILE.entries.find((e) => e.capability === KOL_AUDIT_CAPABILITY)
-            ?.credits_per_unit ??
-          0,
+        auditPriceCredits: () => pricingCatalog.creditsFor(KOL_AUDIT_CAPABILITY) ?? 0,
       }
     },
   })
@@ -5813,6 +5856,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     offboard,
     secrets,
     cloudAccount,
+    pricingCatalog,
     schedule,
     reconcile,
     ...(boot.runtime === undefined ? {} : { runtime: boot.runtime }),

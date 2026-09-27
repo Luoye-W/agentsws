@@ -29,20 +29,20 @@ import type {
   DataSourceRoute,
   KolCloudDeleteResult,
   KolCloudExport,
-  Pricing,
+  LocalPricing,
+  LocalTopupTiers,
   ServiceSubscription,
   TopupOrder,
-  TopupTiers,
   UsageGroup,
   UsageReport,
   WalletBalance,
 } from '@agentsws/contracts'
 import { DEFAULT_DATA_SOURCE_ORDER } from '@agentsws/contracts'
-import { buildPricing, TOPUP_TIERS_FILE } from '@agentsws/metering'
 import type { KolStore } from './kol.js'
 import type { KolCloudCall, KolCloudCallFn, KolCloudSync } from './kol-cloud-sync.js'
 import { createKolCloudSync } from './kol-cloud-sync.js'
 import { CLOUD_BASE_URL_ENV, CLOUD_TOKEN_SECRET_ID, DEFAULT_CLOUD_BASE_URL } from './models.js'
+import { createPricingCatalog, type PricingCatalogSource } from './pricing-catalog.js'
 import type { SecretStore } from './secret-store.js'
 
 /** 余额缓存多久（毫秒）。 */
@@ -83,6 +83,11 @@ export interface CloudOptions {
    * 只跑模型面的进程不该被迫建一个红人库出来。
    */
   kol?: () => KolStore | undefined
+  /**
+   * WP165：价目从哪来（云上公开的 `/v1/pricing` + 本机缓存）。价目不分品牌，服务进程
+   * 建一份、各品牌共用；不给就自己建一份（缓存落在 `dbDir`）。
+   */
+  pricingCatalog?: PricingCatalogSource
 }
 
 export interface CloudAssembly {
@@ -147,6 +152,14 @@ const NOT_LINKED =
 export function createCloud(options: CloudOptions): CloudAssembly {
   const { clock, secrets, env } = options
   const base = cloudBaseUrl(env)
+  const catalog =
+    options.pricingCatalog ??
+    createPricingCatalog({
+      clock,
+      baseUrl: base,
+      ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
+      ...(options.dbDir === undefined ? {} : { dir: options.dbDir }),
+    })
   const stateFile =
     options.dbDir === undefined ? undefined : join(options.dbDir, 'capability-sources.json')
 
@@ -365,9 +378,11 @@ export function createCloud(options: CloudOptions): CloudAssembly {
     return view
   }
 
-  /** 云上的价目表；取不到就回本地内置那一份——价目表不该因为断网就一片空白。 */
-  const pricingView = async (): Promise<Pricing> =>
-    (await callCloud<Pricing>('/v1/wallet/pricing')) ?? buildPricing()
+  /**
+   * 云上的价目表（WP165：公开的 `/v1/pricing`，不要令牌）。取不到用本机存的上一份；
+   * 从没取到过就回一份空的、带一句「价目暂时拿不到」——**不编数**（价目不再内置进开源仓）。
+   */
+  const pricingView = (): Promise<LocalPricing> => catalog.pricing()
 
   const settingsOf = (actor: CloudActor): CapabilitySourceSettings => ({
     workspace_id: actor.workspace_id,
@@ -403,11 +418,10 @@ export function createCloud(options: CloudOptions): CloudAssembly {
   }
 
   /**
-   * 充值四档。云上取不到就回本地内置那一份——四张卡不该因为断网就一片空白
-   * （与价目表同一条理由）。
+   * 充值四档（与价目表同一份、同一条路：云上公开的 `/v1/pricing` + 本机缓存）。
+   * 从没取到过就是空的，界面上说「价目暂时拿不到」。
    */
-  const tiersView = async (): Promise<TopupTiers> =>
-    (await callCloud<TopupTiers>('/v1/wallet/topup/tiers')) ?? TOPUP_TIERS_FILE
+  const tiersView = (): Promise<LocalTopupTiers> => catalog.topupTiers()
 
   /**
    * 按档建一笔充值单。
@@ -537,7 +551,12 @@ export function createCloud(options: CloudOptions): CloudAssembly {
         disabled: [],
       },
     priceOf: async (capability) => {
-      const found = (await pricingView()).entries.find((e) => e.capability === capability)
+      /*
+       * WP165：关联了账号才去云上按需刷新（与以前「关联了才打云」同一个口径：搜红人每一次都要问价，
+       * 没关联的机器不该因为一次本机搜索就去敲云）；没关联就只读手上存的那一份。
+       */
+      if (tokenOf() !== undefined) await catalog.refresh()
+      const found = catalog.current()?.pricing.entries.find((e) => e.capability === capability)
       return found === undefined ? undefined : { credits: found.credits_per_unit, unit: found.unit }
     },
   }

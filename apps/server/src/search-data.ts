@@ -21,14 +21,6 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { ApiError, type SearchDataApiPort } from '@agentsws/api'
-import {
-  judgeAnswer,
-  normalizeProbe,
-  normalizeSerpQuery,
-  SearchDataError,
-  type SearchFetch,
-  searchProviderOf,
-} from '@agentsws/cloud-entry'
 import type {
   AiAnswerProbe,
   AiAnswerResult,
@@ -42,6 +34,14 @@ import type {
   SerpResult,
 } from '@agentsws/contracts'
 import { SEARCH_DATA_PROVIDERS, searchSourceByo } from '@agentsws/contracts'
+import {
+  judgeAnswer,
+  normalizeProbe,
+  normalizeSerpQuery,
+  SearchDataError,
+  type SearchFetch,
+  searchProviderOf,
+} from '@agentsws/search-providers'
 import type { SecretStore } from './secret-store.js'
 
 /** 自带 key 在本机加密库里的名字。**全仓只有这一处拼它。** */

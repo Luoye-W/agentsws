@@ -159,6 +159,8 @@ const state = {
   /** WP142：建单失败（demo 替身的那一句）。 */
   topupError: undefined as string | undefined,
   credits: LINKED as CloudCreditsView,
+  /** WP165：价目只在云上——从没取到过时回空的 + 一句话。不给就是正常那份。 */
+  pricingUnavailable: false,
   providers: [] as ModelProviderView[],
   sources: { workspace_id: 'ws_1', capability_sources: {} } as CapabilitySourceSettings,
 }
@@ -172,9 +174,20 @@ vi.mock('@/lib/api', async () => {
   return {
     ...actual,
     getCloudCredits: async () => state.credits,
-    getCloudPricing: async () => PRICING,
+    getCloudPricing: async () =>
+      state.pricingUnavailable
+        ? {
+            ...PRICING,
+            entries: [],
+            source: 'unavailable',
+            unavailable_reason: '价目暂时拿不到',
+          }
+        : PRICING,
     getCloudUsage: async (group: 'capability' | 'workspace' | 'day') => USAGE[group] ?? null,
-    getTopupTiers: async () => TIERS,
+    getTopupTiers: async () =>
+      state.pricingUnavailable
+        ? { ...TIERS, tiers: [], source: 'unavailable', unavailable_reason: '价目暂时拿不到' }
+        : TIERS,
     getKolCloudStatus: async () => {
       if (state.kolCloud === undefined) throw new Error('没配')
       return state.kolCloud
@@ -220,6 +233,7 @@ vi.mock('@/lib/api', async () => {
 })
 
 beforeEach(() => {
+  state.pricingUnavailable = false
   state.kolCloud = undefined
   state.topupError = undefined
   orders.length = 0
@@ -399,6 +413,23 @@ describe('连接页那个开关（49 M2）', () => {
       expect(screen.queryByTestId('capability-source'), `${service} 不该有开关`).toBeNull()
       unmount()
     }
+  })
+})
+
+describe('WP165 价目只在云上：从没取到过就说一句，不编数', () => {
+  it('价目表与充值四档都不画，各说一句「价目暂时拿不到」', async () => {
+    state.credits = NOT_LINKED
+    state.pricingUnavailable = true
+    renderWithProviders(<CreditsPanel assignment="asg_owner" />)
+    expect((await screen.findByTestId('credits-pricing-unavailable')).textContent).toContain(
+      '价目暂时拿不到',
+    )
+    expect((await screen.findByTestId('credits-tiers-unavailable')).textContent).toContain(
+      '价目暂时拿不到',
+    )
+    expect(screen.queryAllByTestId('credits-tier')).toHaveLength(0)
+    expect(screen.queryAllByTestId('credits-pricing-block')).toHaveLength(0)
+    expect(screen.queryByTestId('credits-pricing-local')).toBeNull()
   })
 })
 

@@ -1,0 +1,8 @@
+{"version":"0.1.20260722","status_code":20000,"status_message":"Ok.","cost":0.0096,"tasks_count":1,"tasks_error":0,
+ "tasks":[{"id":"t4","status_code":20000,"status_message":"Ok.","cost":0.0096,"result_count":1,"path":["v3","ai_optimization"],
+  "data":{"api":"ai_optimization","function":"llm_responses","se":"perplexity"},
+  "result":[{"model_name":"sonar","input_tokens":812,"output_tokens":301,"reasoning_tokens":0,"web_search":true,"money_spent":0.009,"datetime":"2026-09-26 17:54:30 +00:00",
+   "items":[{"type":"message","sections":[{"type":"text","text":"For iPhone users, the Voltbrick 20K and Anker MagGo are frequently recommended.",
+     "annotations":[{"title":"Voltbrick 20K review","url":"https://www.voltbrick.com/blog/20k-review","start_index":null,"end_index":null,"text":null},
+      {"title":"Anker MagGo","url":"https://www.anker.com/maggo","start_index":null,"end_index":null,"text":null}]}]}],
+   "fan_out_queries":null}]}]}

@@ -10,8 +10,7 @@ import {
   normalizeSerpQuery,
   redact,
   SearchDataError,
-} from '../src/search/analyze.js'
-import { MemorySearchCache } from '../src/search/cache.js'
+} from '../src/analyze.js'
 
 describe('判断「提没提到」', () => {
   it('拉丁名字按词找；中文按子串；大小写不敏感', () => {
@@ -110,18 +109,5 @@ describe('输入校验', () => {
 
   it('redact 抹掉 key', () => {
     expect(redact('bad key abcd1234 here', 'abcd1234')).toBe('bad key *** here')
-  })
-})
-
-describe('缓存', () => {
-  it('过期即失效；超出上限挤掉最久没用的', () => {
-    const c = new MemorySearchCache(2)
-    c.put('a', 1, 0, 100)
-    c.put('b', 2, 0, 100)
-    c.get('a', 10)
-    c.put('c', 3, 10, 100)
-    expect(c.get('b', 20)).toBeUndefined()
-    expect(c.get('a', 20)).toBe(1)
-    expect(c.get('a', 200)).toBeUndefined()
   })
 })

@@ -7,20 +7,21 @@
  * 修法：本机那一跳带 `via: 'extension'`，云端对插件来源放宽这两格为可选
  * （缺的行不进 k-匿名基准）；本机有值就送、没有就不送。
  *
- * 端到端：真的 `createExtensionContributor` → 真的公共库路由（内存档）。全部替身，不联网。
+ * 端到端：真的 `createExtensionContributor` → 公共库 HTTP 面的契约替身（WP165 起；云端真路由
+ * 对 `via: 'extension'` 的放宽与不进 k-匿名基准，在 `packages/kol-public/test/plugin-metrics-optional.test.ts`
+ * 与那条一致性测试里钉）。全部替身，不联网。
  */
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { ExtensionObservation, ExtensionSession } from '@agentsws/api'
-import type { Clock, PersonId, VerifiedCloudToken, WorkspaceId } from '@agentsws/contracts'
+import type { Clock, PersonId, WorkspaceId } from '@agentsws/contracts'
 import {
-  createKolPublicApp,
-  KolPublicService,
-  MemoryKolStore,
-  nodeKolSecrets,
-} from '@agentsws/kol-public'
-import { buildPricing, MemoryWalletStore, Wallet } from '@agentsws/metering'
+  cloudStandInFetch,
+  KolPublicStandIn,
+  type StandInKolPrincipal,
+  StandInWallet,
+} from '@agentsws/stand-ins'
 import { afterEach, describe, expect, it } from 'vitest'
 import { CLOUD_TOKEN_SECRET_ID } from '../src/cloud-account.js'
 import { createExtensionContributor } from '../src/extension-contribute.js'
@@ -58,36 +59,29 @@ const obs = (over: Partial<ExtensionObservation> = {}): ExtensionObservation => 
   ...over,
 })
 
-/** 真公共库（内存档）+ 真 contributor + 真本机服务，一条线接起来。 */
+/** 公共库契约替身 + 真 contributor + 真本机服务，一条线接起来。 */
 function assemble() {
-  const cloudStore = new MemoryKolStore()
   let seq = 0
   const newId = (prefix: string): string => `${prefix}_${String(++seq)}`
-  const service = new KolPublicService({
-    store: cloudStore,
-    wallet: new Wallet({ store: new MemoryWalletStore(), now: () => NOW, newId }),
-    pricing: buildPricing(),
-    secrets: nodeKolSecrets({ env: {} }),
+  const cloudStore = new KolPublicStandIn({
+    wallet: new StandInWallet({ now: () => NOW, newId }),
     now: () => NOW,
     newId,
   })
-  const verified: VerifiedCloudToken = {
+  const verified: StandInKolPrincipal = {
     account_id: 'acc_1',
     org_id: 'org_1',
     workspace_id: WS,
     scopes: ['data'],
+    region: 'global',
   }
-  const app = createKolPublicApp({
-    service,
-    verifier: async (t) => (t === 'wst_fixture_token' ? verified : undefined),
+  const wire = cloudStandInFetch({
+    kolPublic: cloudStore,
+    kolPrincipalOf: (t) => (t === 'wst_fixture_token' ? verified : undefined),
   })
   const calls: { path: string; body: unknown; status: number }[] = []
   const fetch: KolPublicFetch = async (url, init) => {
-    const res = await app.request(url, {
-      method: init.method,
-      headers: init.headers,
-      ...(init.body === undefined ? {} : { body: init.body }),
-    })
+    const res = await wire.fetch(url, init)
     calls.push({
       path: `${init.method} ${new URL(url).pathname}`,
       body: init.body === undefined ? undefined : JSON.parse(String(init.body)),
@@ -119,7 +113,7 @@ function assemble() {
   return { port, kol, cloudStore, calls }
 }
 
-describe('WP130 红人观测转发：端到端（真 contributor → 真公共库路由）', () => {
+describe('WP130 红人观测转发：端到端（真 contributor → 公共库契约替身）', () => {
   it('只有粉丝数的一条也进了公共库：卡建起来、来源记 plugin、没有编出来的 0', async () => {
     const { port, cloudStore, calls } = assemble()
     const out = await port.ingest(session, { observations: [obs()] })

@@ -35,6 +35,8 @@ export * from './dsh-scenes.js'
 export * from './events.js'
 // WP164：托管实例对外的状态形状（从 packages/hosted 挪来）
 export * from './hosted.js'
+// WP165（docs/83 §2）：托管实例的容器环境变量契约（云上写、容器里的 apps/server 读）
+export * from './hosted-env.js'
 export * from './identity.js'
 export * from './join.js'
 export * from './kernel.js'
@@ -44,6 +46,8 @@ export * from './kol.js'
 export * from './kol-cloud.js'
 // 48 §5.3 / 49 §6 WP61：云上的公共红人库服务（本地那六个红人对象在 kol.ts，WP67）
 export * from './kol-public.js'
+// WP166：目标市场一处定、处处用（国家码清单、归一化、出处）
+export * from './markets.js'
 export * from './meetings.js'
 // WP113（63）：消息——统一收件处。v1 只有邮箱一种来源，但数据模型按"来源可扩"建
 export * from './messages.js'
@@ -52,6 +56,8 @@ export * from './packages.js'
 // 60 §1 / §2 公共关系的四条职责与四个对象（WP78）。与 social.ts 一条都不共用：
 // `social.reddit` 是**我们自己的** subreddit，`pr.reddit` 是**别人的**。
 export * from './pr.js'
+// WP165（docs/83 §2）：公开价目 `GET /v1/pricing`（价目只放云上，本机缓存一份离线显示）
+export * from './pricing-catalog.js'
 export * from './roles.js'
 export * from './run.js'
 export * from './schedule.js'

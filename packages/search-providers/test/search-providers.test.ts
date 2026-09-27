@@ -5,11 +5,11 @@
  * 且**错误信息里没有 key**。
  */
 import { describe, expect, it } from 'vitest'
-import { SearchDataError } from '../src/search/analyze.js'
-import { dataforseo, languageCodeOf, locationNameOf } from '../src/search/providers/dataforseo.js'
-import { searchProviderOf } from '../src/search/providers/index.js'
-import { serpapi } from '../src/search/providers/serpapi.js'
-import { serper } from '../src/search/providers/serper.js'
+import { SearchDataError } from '../src/analyze.js'
+import { dataforseo, languageCodeOf, locationNameOf } from '../src/providers/dataforseo.js'
+import { searchProviderOf } from '../src/providers/index.js'
+import { serpapi } from '../src/providers/serpapi.js'
+import { serper } from '../src/providers/serper.js'
 import { abortError, fakeFetch, fixture } from './search-fakes.js'
 
 /** 一把假 key（不是任何真服务商的 key）。 */

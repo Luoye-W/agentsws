@@ -15,7 +15,12 @@ import { mkdtempSync, readdirSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { ModelProviderTemplate, ModelProviderView } from '@agentsws/api'
-import type { CapabilitySourceSettings, CloudCreditsView, Pricing } from '@agentsws/contracts'
+import type {
+  CapabilitySourceSettings,
+  CloudCreditsView,
+  LocalPricing,
+  LocalTopupTiers,
+} from '@agentsws/contracts'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { CloudFetch } from '../src/cloud.js'
 import { createServer, type Server } from '../src/index.js'
@@ -237,27 +242,35 @@ function fakeCloud(): FakeCloud {
         }),
       }
     }
-    if (url.includes('/v1/wallet/pricing')) {
+    if (url.endsWith('/v1/pricing') || url.includes('/v1/wallet/pricing')) {
+      // WP165：公开价目（`/v1/pricing`）一次给齐价目表 + 充值档位；老的 `/v1/wallet/pricing` 只有价目表
+      const pricing = {
+        version: 1,
+        as_of: '2026-09-15',
+        credit_cny: 1,
+        ai_multiplier: 3,
+        fx: { CNY: 1 },
+        entries: [
+          {
+            capability: 'ai.chat',
+            unit: '1k_tokens',
+            credits_per_unit: 0.1,
+            label_zh: '来自云上的价目表',
+            label_en: 'from the cloud',
+          },
+        ],
+      }
+      const tiers = {
+        version: 1,
+        as_of: '2026-09-15',
+        credits_per_usd: 7,
+        tiers: [{ id: 'usd20', usd: 20, credits: 140, label_zh: '入门', label_en: 'Starter' }],
+      }
       return {
         ok: true,
         status: 200,
         json: async () => ({
-          data: {
-            version: 1,
-            as_of: '2026-09-15',
-            credit_cny: 1,
-            ai_multiplier: 3,
-            fx: { CNY: 1 },
-            entries: [
-              {
-                capability: 'ai.chat',
-                unit: '1k_tokens',
-                credits_per_unit: 0.1,
-                label_zh: '来自云上的价目表',
-                label_en: 'from the cloud',
-              },
-            ],
-          },
+          data: url.endsWith('/v1/pricing') ? { version: 1, pricing, topup_tiers: tiers } : pricing,
         }),
       }
     }
@@ -467,21 +480,48 @@ describe('/v1/cloud/credits（49 M5）', () => {
   })
 })
 
-describe('/v1/cloud/pricing', () => {
-  it('关联之后拿云上那份', async () => {
-    linkAccount()
-    const pricing = await data<Pricing>(await api('/v1/cloud/pricing'))
+describe('/v1/cloud/pricing（WP165：价目只在云上，公开的 /v1/pricing + 本机缓存）', () => {
+  it('没关联也拿得到：打的是公开那条，不带令牌', async () => {
+    const pricing = await data<LocalPricing>(await api('/v1/cloud/pricing'))
     expect(pricing.entries[0]?.label_zh).toBe('来自云上的价目表')
+    expect(pricing.source).toBe('cloud')
+    const hit = ctx.cloud.calls.find((c) => c.url.endsWith('/v1/pricing'))
+    expect(hit?.auth).toBeUndefined()
+    const tiers = await data<LocalTopupTiers>(await api('/v1/cloud/topup/tiers'))
+    expect(tiers.tiers.map((t) => t.id)).toEqual(['usd20'])
   })
 
-  it('没关联 / 连不上就回本地内置那份——价目表不该因为断网就一片空白', async () => {
-    const pricing = await data<Pricing>(await api('/v1/cloud/pricing'))
-    expect(pricing.credit_cny).toBe(1)
-    // WP118 加了两条订阅（红人已上线、客服只登记），WP127 加了生图（按张），09-23 又把联系方式揭示
-    // 从 lookup 里单开成 data.kol.reveal，所以是 12 条
-    // WP155 加了搜索数据两条
-    expect(pricing.entries.length).toBe(14)
-    expect(pricing.entries.map((e) => e.capability)).toContain('crawl.page')
+  it('从没取到过又连不上：空的 + 一句「暂时拿不到」，一个数都不编', async () => {
+    ctx.cloud.mode = 'down'
+    const pricing = await data<LocalPricing>(await api('/v1/cloud/pricing'))
+    expect(pricing.entries).toEqual([])
+    expect(pricing.source).toBe('unavailable')
+    expect(pricing.unavailable_reason).toContain('暂时拿不到')
+    const tiers = await data<LocalTopupTiers>(await api('/v1/cloud/topup/tiers'))
+    expect(tiers.tiers).toEqual([])
+  })
+
+  it('取到过一次再断网：用存下的那一份（重启进程也在）', async () => {
+    await api('/v1/cloud/pricing')
+    expect(readdirSync(ctx.dir)).toContain('pricing-cache.json')
+    ctx.cloud.mode = 'down'
+    const again = await createServer({
+      dbDir: ctx.dir,
+      clock: ctx.clock,
+      random: seeded(),
+      quiet: true,
+      env: { [SECRETS_KEY_ENV]: SECRETS_KEY, [CLOUD_BASE_URL_ENV]: CLOUD_BASE },
+      cloudFetch: ctx.cloud.fetch,
+      tokenRefreshIntervalMs: 0,
+    })
+    try {
+      const pricing = await again.pricingCatalog.pricing()
+      expect(pricing.source).toBe('cache')
+      expect(pricing.entries[0]?.label_zh).toBe('来自云上的价目表')
+      expect(again.pricingCatalog.creditsFor('ai.chat', 10)).toBe(1)
+    } finally {
+      await again.close()
+    }
   })
 })
 

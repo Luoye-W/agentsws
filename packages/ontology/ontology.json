@@ -25,6 +25,7 @@
     "packages/contracts/src/design.ts",
     "packages/contracts/src/dsh-scenes.ts",
     "packages/contracts/src/events.ts",
+    "packages/contracts/src/hosted-env.ts",
     "packages/contracts/src/hosted.ts",
     "packages/contracts/src/identity.ts",
     "packages/contracts/src/join.ts",
@@ -33,11 +34,13 @@
     "packages/contracts/src/kol-cloud.ts",
     "packages/contracts/src/kol-public.ts",
     "packages/contracts/src/kol.ts",
+    "packages/contracts/src/markets.ts",
     "packages/contracts/src/meetings.ts",
     "packages/contracts/src/messages.ts",
     "packages/contracts/src/model.ts",
     "packages/contracts/src/packages.ts",
     "packages/contracts/src/pr.ts",
+    "packages/contracts/src/pricing-catalog.ts",
     "packages/contracts/src/roles.ts",
     "packages/contracts/src/run.ts",
     "packages/contracts/src/schedule.ts",
@@ -93,7 +96,7 @@
     "packages/roles/roles/social/x.yml",
     "packages/roles/roles/social/youtube.yml"
   ],
-  "source_digest": "68e2c08a105dff70d336d07f842656c7",
+  "source_digest": "dee898634877e6fc3539845e212f28d4",
   "objects": [
     {
       "id": "ad",

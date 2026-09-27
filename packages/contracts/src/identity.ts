@@ -1,5 +1,6 @@
 import type { CloudOrgId } from './cloud.js'
 import type { Iso8601, MaybePromise, PersonId, RangeRef, WorkspaceId } from './common.js'
+import type { MarketsSource } from './markets.js'
 import type { WorkspacePolicy } from './roles.js'
 
 /** 52 O1：一个组织（公司）的 id。 */
@@ -408,6 +409,11 @@ export interface WorkspaceProfile {
    * 对应市场组。没写过 = 不知道（不猜）。
    */
   markets?: string[]
+  /**
+   * WP166：这份市场是从哪看出来的（官网 / Amazon / 店铺后台 / 人自己改的）。人改过的（`human`）
+   * 之后自动推断与店铺校正都不再覆盖。没有 = 老档案（WP159 写的），按"不知道从哪来"处理。
+   */
+  markets_source?: MarketsSource
   set_at: Iso8601
 }
 

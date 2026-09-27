@@ -161,11 +161,32 @@ export function domainOf(url: string): string {
   }
 }
 
-/** 一个问题在各平台的结果 → 面板上的行（只留判断要的几格）。 */
-export function probeRows(question: string, results: readonly AiAnswerResult[]): GeoProbeRow[] {
+/** 国家码 → 国名（默认中文：卡上与报告里用）。认不出来原样给。 */
+export function marketName(code: string, lang: 'zh' | 'en' = 'zh'): string {
+  try {
+    return (
+      new Intl.DisplayNames([lang === 'zh' ? 'zh-CN' : 'en'], { type: 'region' }).of(
+        code.toUpperCase(),
+      ) ?? code
+    )
+  } catch {
+    return code
+  }
+}
+
+/**
+ * 一个问题在各平台的结果 → 面板上的行（只留判断要的几格）。
+ * WP166：`market` 给了就在每一行上标这是哪个市场问的（大写国家码）。
+ */
+export function probeRows(
+  question: string,
+  results: readonly AiAnswerResult[],
+  market?: string,
+): GeoProbeRow[] {
   return results.map((r) => ({
     question,
     platform: r.platform,
+    ...(market === undefined ? {} : { market: market.toUpperCase() }),
     brand_mentioned: r.brand_mentioned,
     our_domain_cited: r.our_domain_cited,
     cited_domains: [...new Set(r.cited_urls.map(domainOf))],

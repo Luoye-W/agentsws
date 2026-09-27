@@ -13022,7 +13022,7 @@ export interface operations {
     }
     requestBody?: never
     responses: {
-      /** @description Pricing */
+      /** @description LocalPricing */
       200: {
         headers: {
           [name: string]: unknown
@@ -13183,7 +13183,7 @@ export interface operations {
     }
     requestBody?: never
     responses: {
-      /** @description TopupTiers */
+      /** @description LocalTopupTiers */
       200: {
         headers: {
           [name: string]: unknown
@@ -25521,6 +25521,7 @@ export interface operations {
           /** @enum {string} */
           storefront_platform?: 'shopify' | 'woocommerce' | 'magento' | 'other' | 'none'
           brand_name?: string
+          markets?: string[]
         }
       }
     }
@@ -43471,6 +43472,7 @@ export interface operations {
           settings?: {
             enabled?: boolean
             max_questions?: number
+            markets_off?: string[]
           }
         }
       }

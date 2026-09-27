@@ -1283,6 +1283,11 @@ const zh: Table = {
   'kind.seo_topic': '新页面选题',
   'seo.geo.title': '买家会问的问题（每周拿去问各 AI 平台）',
   'seo.geo.cost': '每周问 {n} 个 × {p} 个平台，约 {c} 积分',
+  'seo.geo.cost_markets': '每周问 {n} 个 × {p} 个平台 × {m} 个市场，约 {c} 积分',
+  'seo.geo.markets': '探测哪些市场',
+  'seo.geo.markets.hint':
+    '每个目标市场分别探、分别算可见度。这里只关探测，不改公司档案；改目标市场去设置页「公司档案」。',
+  'seo.geo.markets.default': '档案里没写，按默认',
   'seo.geo.cost.byo': '用你自己的搜索数据 key，不扣积分',
   'seo.geo.cost.unknown': '搜索数据接口还没接：先不探测，也不花钱',
   'seo.geo.off': '每周探测关着：不问、不花钱',
@@ -2136,6 +2141,25 @@ const zh: Table = {
   'intake.field.category': '品类',
   'intake.field.support_email': '客服邮箱',
   'intake.field.currency': '币种',
+  // ── WP166 目标市场：一处定、处处用（档案卡与设置页同一个选择器）─────
+  'intake.field.markets': '市场',
+  'markets.label': '目标市场',
+  'markets.hint': '搜索结果与 AI 回答按这几个市场分别探测，违规宣称规则也按它开组。',
+  'markets.empty': '没看出来，请选一下',
+  'markets.add': '加市场',
+  'markets.common': '常用',
+  'markets.all': '全部',
+  'markets.remove': '去掉{name}',
+  'markets.from.site': '我们从官网的{what}看出来的',
+  'markets.from.amazon': '我们从 Amazon 链接的站点看出来的',
+  'markets.from.store': '按店铺后台配的市场校正过',
+  'markets.from.human': '你自己选的',
+  'markets.kind.localization': '国家切换',
+  'markets.kind.hreflang': '语言版本',
+  'markets.kind.tld': '域名',
+  'markets.kind.shipping': '配送政策',
+  'markets.kind.ships_to': '「Ships to」那一句',
+  'markets.kind.currency': '商品币种',
 
   // ── WP122（71）品牌设计规范 DESIGN.md ────────────────────────────
   //
@@ -2937,7 +2961,9 @@ const zh: Table = {
   'credits.link_first': '先关联',
   'credits.blocks.price': '三块怎么收钱',
   'credits.blocks.from': '积分起 · {unit}',
-  'credits.pricing.local': '这是本机内置的价目，以关联后显示为准。',
+  'credits.pricing.local': '这是云上的公开价目，以关联后显示为准。',
+  'credits.pricing.unavailable': '价目暂时拿不到（云上连不通，这台电脑也还没存过一份）。',
+  'credits.pricing.cached': '云上暂时连不通，这是上次存下的那一份。',
   'credits.unit.image': '每张',
 }
 
@@ -4243,6 +4269,11 @@ const en: Table = {
   'kind.seo_topic': 'New page topic',
   'seo.geo.title': 'Questions buyers ask (asked to AI platforms weekly)',
   'seo.geo.cost': '{n} questions × {p} platforms a week, about {c} credits',
+  'seo.geo.cost_markets': '{n} questions × {p} platforms × {m} markets a week, about {c} credits',
+  'seo.geo.markets': 'Markets to check',
+  'seo.geo.markets.hint':
+    'Each target market is checked and scored on its own. Turning one off here only stops checking — your company profile stays as is.',
+  'seo.geo.markets.default': 'Not in your profile, using the default',
   'seo.geo.cost.byo': 'Using your own search-data key — no credits',
   'seo.geo.cost.unknown': 'Search data not connected yet: no probing, no cost',
   'seo.geo.off': 'Weekly probing is off: nothing asked, nothing spent',
@@ -5104,6 +5135,26 @@ const en: Table = {
   'intake.field.category': 'Category',
   'intake.field.support_email': 'Support email',
   'intake.field.currency': 'Currency',
+  // ── WP166 target markets: set once, used everywhere ─────────────────
+  'intake.field.markets': 'Markets',
+  'markets.label': 'Target markets',
+  'markets.hint':
+    'Search results and AI answers are checked per market, and the claim rules follow them too.',
+  'markets.empty': "Couldn't tell — please pick",
+  'markets.add': 'Add market',
+  'markets.common': 'Common',
+  'markets.all': 'All',
+  'markets.remove': 'Remove {name}',
+  'markets.from.site': 'We read this from your site: {what}',
+  'markets.from.amazon': 'We read this from the Amazon store you linked',
+  'markets.from.store': 'Corrected from the markets set up in your store',
+  'markets.from.human': 'You picked these',
+  'markets.kind.localization': 'country switcher',
+  'markets.kind.hreflang': 'language versions',
+  'markets.kind.tld': 'domain',
+  'markets.kind.shipping': 'shipping policy',
+  'markets.kind.ships_to': '"Ships to" line',
+  'markets.kind.currency': 'product currency',
 
   // ── WP122 (71) the brand's DESIGN.md ─────────────────────────────
   'design.md.title': 'Design spec',
@@ -5949,7 +6000,10 @@ const en: Table = {
   'credits.blocks.price': 'How the three blocks are charged',
   'credits.blocks.from': 'credits and up · {unit}',
   'credits.pricing.local':
-    'This is the built-in price list; the one shown after linking is what counts.',
+    'This is the public price list from the cloud; the one shown after linking is what counts.',
+  'credits.pricing.unavailable':
+    "Prices aren't available right now (can't reach the cloud, and this computer hasn't saved a copy yet).",
+  'credits.pricing.cached': "Can't reach the cloud right now; this is the last copy saved.",
   'credits.unit.image': 'per image',
 }
 

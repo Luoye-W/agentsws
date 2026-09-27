@@ -21,8 +21,8 @@ const view = {
   settings: { enabled: true, max_questions: 6 },
   estimate: { questions: 2, platforms: 3, route: 'official' as const, credits_per_week: 1.2 },
 }
-const getGeoQuestions = vi.fn(async () => view)
-const setGeoQuestions = vi.fn(async (input: { settings?: { enabled?: boolean } }) => ({
+const getGeoQuestions = vi.fn(async (): Promise<Record<string, unknown>> => view)
+const setGeoQuestions = vi.fn(async (input: { settings?: Record<string, unknown> }) => ({
   ...view,
   settings: { ...view.settings, ...(input.settings ?? {}) },
 }))
@@ -64,5 +64,33 @@ describe('买家会问的问题', () => {
     await waitFor(() => expect(setGeoQuestions).toHaveBeenCalled())
     expect(setGeoQuestions.mock.calls[0]?.[0]).toEqual({ settings: { enabled: false } })
     await waitFor(() => expect(screen.getByTestId('geo-cost').textContent).not.toContain('1.2'))
+  })
+})
+
+describe('WP166 每个目标市场分别探', () => {
+  const multi = {
+    ...view,
+    estimate: { ...view.estimate, markets: 2, market_codes: ['US', 'GB'], credits_per_week: 2.4 },
+    markets: [
+      { code: 'US', probing: true },
+      { code: 'GB', probing: true },
+    ],
+    markets_from: 'brand_profile' as const,
+  }
+
+  it('花费明示「2 个市场」；关掉英国只发 markets_off，不动公司档案；卡上字数仍在上限内', async () => {
+    getGeoQuestions.mockImplementation(async () => multi)
+    setGeoQuestions.mockClear()
+    renderWithProviders(<GeoQuestions assignment="asg_content" />)
+    const cost = await screen.findByTestId('geo-cost')
+    expect(cost.textContent).toBe('每周问 2 个 × 3 个平台 × 2 个市场，约 2.4 积分')
+    expect(screen.getByTestId('geo-markets').textContent).toContain('英国')
+    const { reportCard, CARD_TEXT_LIMIT } = await import('./less-text-guard')
+    const report = reportCard(screen.getByTestId('geo-questions'))
+    expect(report.weight, report.text).toBeLessThanOrEqual(CARD_TEXT_LIMIT)
+    await userEvent.click(screen.getByTestId('geo-market-GB'))
+    await waitFor(() => expect(setGeoQuestions).toHaveBeenCalled())
+    expect(setGeoQuestions.mock.calls[0]?.[0]).toEqual({ settings: { markets_off: ['GB'] } })
+    getGeoQuestions.mockImplementation(async () => view)
   })
 })

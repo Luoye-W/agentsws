@@ -9506,7 +9506,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Pricing",
+            "description": "LocalPricing",
             "content": {
               "application/json": {
                 "schema": {
@@ -9587,7 +9587,7 @@
           "range": "workspace",
           "sensitivity": "internal"
         },
-        "x-returns": "Pricing"
+        "x-returns": "LocalPricing"
       }
     },
     "/v1/cloud/usage": {
@@ -9737,7 +9737,7 @@
         ],
         "responses": {
           "200": {
-            "description": "TopupTiers",
+            "description": "LocalTopupTiers",
             "content": {
               "application/json": {
                 "schema": {
@@ -9818,7 +9818,7 @@
           "range": "workspace",
           "sensitivity": "internal"
         },
-        "x-returns": "TopupTiers"
+        "x-returns": "LocalTopupTiers"
       }
     },
     "/v1/cloud/topup": {
@@ -28614,6 +28614,14 @@
                     "type": "string",
                     "minLength": 1,
                     "maxLength": 64
+                  },
+                  "markets": {
+                    "maxItems": 60,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z]{2}$"
+                    }
                   }
                 },
                 "required": ["legal_name"]
@@ -55620,6 +55628,14 @@
                         "type": "integer",
                         "minimum": 1,
                         "maximum": 10
+                      },
+                      "markets_off": {
+                        "maxItems": 60,
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "pattern": "^[A-Za-z]{2}$"
+                        }
                       }
                     }
                   }

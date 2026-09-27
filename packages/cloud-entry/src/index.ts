@@ -1,3 +1,26 @@
+// WP155（docs/81）：搜索数据接口——官方那三条路；三家适配器、判断与校验 WP165 起住在开源包
+// `@agentsws/search-providers`（本机自带 key 那一档也用），这里原样转出，老的导入不用改
+export {
+  AI_ANSWER_TIMEOUT_MS,
+  type AiAnswerInput,
+  domainMatches,
+  domainOf,
+  excerptOf,
+  judgeAnswer,
+  mentions,
+  normalizeProbe,
+  normalizeSerpQuery,
+  type ProviderAnswer,
+  type ProviderSerp,
+  redact,
+  SEARCH_PROVIDERS,
+  SERP_TIMEOUT_MS,
+  SearchDataError,
+  type SearchFetch,
+  type SearchProviderAdapter,
+  type SearchResponseLike,
+  searchProviderOf,
+} from '@agentsws/search-providers'
 export {
   aiRoutes,
   cnAllowed,
@@ -14,30 +37,7 @@ export {
   mountEntryRoutes,
   WORKSPACE_TOKEN_PREFIX,
 } from './routes.js'
-// WP155（docs/81）：搜索数据接口——官方那三条路、三家适配器、判断与校验（本机自带 key 那一档也用）
-export {
-  domainMatches,
-  domainOf,
-  excerptOf,
-  judgeAnswer,
-  mentions,
-  normalizeProbe,
-  normalizeSerpQuery,
-  redact,
-  SearchDataError,
-} from './search/analyze.js'
 export { MemorySearchCache, SEARCH_CACHE_TTL_MS, type SearchCache } from './search/cache.js'
-export {
-  AI_ANSWER_TIMEOUT_MS,
-  type AiAnswerInput,
-  type ProviderAnswer,
-  type ProviderSerp,
-  SERP_TIMEOUT_MS,
-  type SearchFetch,
-  type SearchProviderAdapter,
-  type SearchResponseLike,
-} from './search/provider.js'
-export { SEARCH_PROVIDERS, searchProviderOf } from './search/providers/index.js'
 export {
   answerCacheKey,
   type OfficialAiAnswers,
@@ -71,4 +71,10 @@ export type {
   TokenVerifier,
 } from './types.js'
 export { ENTRY_STATUS, EntryError, secretOf } from './types.js'
-export { monthStart, WALLET_ADMIN_SCOPE, walletRoutes } from './wallet-routes.js'
+export {
+  monthStart,
+  pricingCatalogOf,
+  pricingCatalogResponse,
+  WALLET_ADMIN_SCOPE,
+  walletRoutes,
+} from './wallet-routes.js'

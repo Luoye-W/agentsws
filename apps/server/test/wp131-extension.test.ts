@@ -6,28 +6,23 @@
  * 2. **采集批次**：列表采集第一块回一个 `bt_…`，后几块带回来落同一批；主页单条观测不算批次。
  * 3. **采集后自动评分**：每工作区一个开关、默认关；开着时收进即排队——本机打分（免费）+
  *    关联了云账号时的云端体检（`data.kol.audit`，真扣积分）；30 天内体检过不重复花钱；
- *    积分不够就停体检、不停打分。云那一半用**真的** `createKolPublicClient` 打**真的**
- *    公共库路由（内存档 + 真钱包），不联网。
+ *    积分不够就停体检、不停打分。云那一半用**真的** `createKolPublicClient` 打公共库
+ *    HTTP 面的**契约替身**（WP165 起；`@agentsws/stand-ins`，与真路由的一致性在云端那一侧钉），不联网。
  */
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { ExtensionObservation, ExtensionSession } from '@agentsws/api'
 import { EXTENSION_BATCH_ID } from '@agentsws/api'
-import type {
-  Clock,
-  PersonId,
-  PublicCreatorObservation,
-  VerifiedCloudToken,
-  WorkspaceId,
-} from '@agentsws/contracts'
+import type { Clock, PersonId, PublicCreatorObservation, WorkspaceId } from '@agentsws/contracts'
+import { catalogCreditsFor } from '@agentsws/contracts'
 import {
-  createKolPublicApp,
-  KolPublicService,
-  MemoryKolStore,
-  nodeKolSecrets,
-} from '@agentsws/kol-public'
-import { buildPricing, entryFor, MemoryWalletStore, Wallet } from '@agentsws/metering'
+  cloudStandInFetch,
+  KolPublicStandIn,
+  SAMPLE_PRICING_CATALOG,
+  type StandInKolPrincipal,
+  StandInWallet,
+} from '@agentsws/stand-ins'
 import { afterEach, describe, expect, it } from 'vitest'
 import { CLOUD_TOKEN_SECRET_ID } from '../src/cloud-account.js'
 import type { PublicContentRow, PublicLibraryContributor } from '../src/extension-service.js'
@@ -68,7 +63,7 @@ const listRow = (
   ...over,
 })
 
-const AUDIT_PRICE = entryFor(buildPricing(), 'data.kol.audit')?.credits_per_unit ?? 0
+const AUDIT_PRICE = catalogCreditsFor(SAMPLE_PRICING_CATALOG.pricing, 'data.kol.audit') ?? 0
 
 /** 云上同一个人的几条完整观测（够体检出完整结论——样本不够的体检不收钱）。 */
 const seedObservations = (handle: string): PublicCreatorObservation[] =>
@@ -83,45 +78,31 @@ const seedObservations = (handle: string): PublicCreatorObservation[] =>
   }))
 
 /**
- * 真公共库（内存档 + 真钱包）+ 真 `createKolPublicClient`（体检那一跳）+ 真本机服务。
+ * 公共库契约替身（内存档 + 钱包替身）+ 真 `createKolPublicClient`（体检那一跳）+ 真本机服务。
  * `linked: false` = 这台机器没关联云账号（加密库里没有工作区令牌）。
  */
 function assemble(options: { credits?: number; linked?: boolean; now?: () => string } = {}) {
   const now = options.now ?? (() => NOW)
   const clock: Clock = { now }
-  const cloudStore = new MemoryKolStore()
   let seq = 0
   const newId = (prefix: string): string => `${prefix}_${String(++seq)}`
-  const wallet = new Wallet({ store: new MemoryWalletStore(), now, newId })
-  const service = new KolPublicService({
-    store: cloudStore,
-    wallet,
-    pricing: buildPricing(),
-    secrets: nodeKolSecrets({ env: {} }),
-    now,
-    newId,
-  })
-  const verified: VerifiedCloudToken = {
+  const wallet = new StandInWallet({ now, newId })
+  const service = new KolPublicStandIn({ wallet, now, newId })
+  const verified: StandInKolPrincipal = {
     account_id: 'acc_1',
     org_id: 'org_1',
     workspace_id: WS,
     scopes: ['data'],
+    region: 'global',
   }
   if ((options.credits ?? 0) > 0)
     wallet.topup({ org_id: 'org_1', credits: options.credits ?? 0, kind: 'purchased' })
-  const app = createKolPublicApp({
-    service,
-    verifier: async (t) => (t === 'wst_fixture_token' ? verified : undefined),
+  const wire = cloudStandInFetch({
+    kolPublic: service,
+    kolPrincipalOf: (t) => (t === 'wst_fixture_token' ? verified : undefined),
   })
-  const calls: string[] = []
-  const fetch: KolPublicFetch = async (url, init) => {
-    calls.push(`${init.method} ${new URL(url).pathname}`)
-    return app.request(url, {
-      method: init.method,
-      headers: init.headers,
-      ...(init.body === undefined ? {} : { body: init.body }),
-    })
-  }
+  const calls = wire.calls
+  const fetch = wire.fetch as unknown as KolPublicFetch
 
   const dir = mkdtempSync(join(tmpdir(), 'agentsws-wp131-'))
   dirs.push(dir)
@@ -163,7 +144,7 @@ function assemble(options: { credits?: number; linked?: boolean; now?: () => str
     auditPriceCredits: () => AUDIT_PRICE,
   })
   const seedCloud = (handle: string): void => {
-    service.contributeAs({ ...verified, region: 'global' }, seedObservations(handle))
+    service.contributeAs(verified, seedObservations(handle))
   }
   return { port, kol, wallet, calls, forwarded, seedCloud }
 }

@@ -28,6 +28,8 @@ import type {
   ObjectRef,
   RangeRef,
   RunEvent,
+  SearchDataPort,
+  WorkspaceId,
 } from '@agentsws/contracts'
 import type { DataSourceStatus, DeckCard, InventoryRow, OrderRow, PostRow } from '@agentsws/deck'
 import { PLANNED_SOURCE_NOTES } from '@agentsws/deck'
@@ -124,6 +126,12 @@ export interface DemoOptions {
    * 不给就是替身的默认值（1.5 秒）。负数 = 不自动点。
    */
   cloudAutoLinkAfterMs?: number
+  /**
+   * WP166：搜索数据接口换成一个替身。**只给截图脚本用**（`scripts/e2e-wp166-shots.mjs`）：
+   * demo 默认没有搜索数据（连接页那一行显示「不接」），要拍「每个市场分别探」的面板得有数。
+   * 不给就和原来一样。
+   */
+  searchDataFor?: (workspace_id: WorkspaceId) => SearchDataPort | undefined
 }
 
 export interface Demo {
@@ -1244,6 +1252,7 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
     brandData: (ws) => extraBrandData.get(ws),
     // WP154：「现在读一遍 Search Console」在 demo 里读的是替身那一周（不连真 Google）
     searchConsoleFor: () => standInSearchConsole({ rows: DEMO_GSC_ROWS, pages: DEMO_PAGES }),
+    ...(options.searchDataFor === undefined ? {} : { searchDataFor: options.searchDataFor }),
     // WP158：Search Console 读数层配替身连接器（两个站点 → 先出「选一下」那张小卡）
     googleReadsFor: (ws) => {
       const hit = demoGoogle.get(ws) ?? demoGoogleReads({ workspace_id: ws, clock: world.clock })
@@ -1293,6 +1302,8 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
       AGENTSWS_SECRETS_KEY: process.env.AGENTSWS_SECRETS_KEY ?? randomBytes(32).toString('base64'),
     },
   })
+  // WP165：价目只在云上——demo 从替身那份固定样例取一次（不出网），生图 / 看邮箱的积分价就有数了
+  await server.pricingCatalog.refresh()
 
   /**
    * WP28 交付 D：合成公司的**三个人都真的是成员**。
