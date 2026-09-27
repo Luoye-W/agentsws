@@ -2160,6 +2160,9 @@ const zh: Table = {
   'markets.kind.shipping': '配送政策',
   'markets.kind.ships_to': '「Ships to」那一句',
   'markets.kind.currency': '商品币种',
+  'markets.cost': '多一个市场，搜索可见度的探测花费多一份',
+  'markets.cost.hint':
+    '每周默认问 {q} 个 × {p} 个 AI 平台 × {m} 个市场 × 每次 {price} 积分，约 {c} 积分；每日看搜索结果页每个市场各 {serp} 次。「内容与搜索」面板里可以按市场关掉。',
 
   // ── WP122（71）品牌设计规范 DESIGN.md ────────────────────────────
   //
@@ -5155,6 +5158,9 @@ const en: Table = {
   'markets.kind.shipping': 'shipping policy',
   'markets.kind.ships_to': '"Ships to" line',
   'markets.kind.currency': 'product currency',
+  'markets.cost': 'Each extra market adds one more share of search-visibility probing cost',
+  'markets.cost.hint':
+    'Weekly default: {q} questions × {p} AI platforms × {m} markets × {price} credits each ≈ {c} credits; daily search-results checks: {serp} per market. You can turn a market off in the Content & Search panel.',
 
   // ── WP122 (71) the brand's DESIGN.md ─────────────────────────────
   'design.md.title': 'Design spec',

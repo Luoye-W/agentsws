@@ -165,6 +165,13 @@ describe('WP166 档案卡上的市场：可增删、出处进问号、推不出�
     expect(screen.getByTestId('markets-origin').getAttribute('data-hint')).toBe(
       '我们从官网的配送政策、语言版本看出来的',
     )
+    // WP169：两个市场——一句花费提示，细节（每周 6 × 3 × 2 × 0.2 ≈ 7.2 积分、SERP 每市场 5 次）进问号
+    expect(screen.getByTestId('markets-cost').textContent).toBe(
+      '多一个市场，搜索可见度的探测花费多一份',
+    )
+    expect(screen.getByTestId('markets-cost-hint').getAttribute('data-hint')).toContain(
+      '约 7.2 积分',
+    )
     await user.click(screen.getByTestId('market-remove-CA'))
     expect(onEdit).toHaveBeenLastCalledWith('markets', ['US'])
     await user.selectOptions(screen.getByTestId('market-add'), 'GB')
@@ -174,6 +181,8 @@ describe('WP166 档案卡上的市场：可增删、出处进问号、推不出�
   it('改过就用改过的那一份，问号说「你自己选的」；删光了明说请选一下', () => {
     paint({ edits: { markets: ['DE'] } })
     expect(screen.getAllByTestId('market-chip').map((c) => c.textContent)).toEqual(['德国'])
+    // WP169：只有一个市场不出花费提示
+    expect(screen.queryByTestId('markets-cost')).toBeNull()
     expect(screen.getByTestId('markets-origin').getAttribute('data-hint')).toBe('你自己选的')
     cleanup()
     paint({ edits: { markets: [] } })

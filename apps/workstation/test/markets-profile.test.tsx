@@ -54,6 +54,39 @@ describe('WP166 设置页「公司档案」的目标市场', () => {
     expect(saved[0]?.markets).toEqual(['US', 'GB'])
   })
 
+  it('WP169：选了两个及以上市场时一句花费提示，细节进问号；只剩一个就不出', async () => {
+    renderWithProviders(
+      <ProfileForm
+        profile={{
+          legal_name: 'Nordvik Supply AB',
+          brand_name: 'Nordvik',
+          discoverable: true,
+          vertical: 'goods',
+          storefront_platform: 'shopify',
+          markets: ['US', 'GB'],
+          markets_source: { from: 'human', at: AT },
+          set_at: AT,
+        }}
+        busy={false}
+        saved={false}
+        onSave={() => {}}
+      />,
+    )
+    expect(screen.getByTestId('markets-cost').textContent).toBe(
+      '多一个市场，搜索可见度的探测花费多一份',
+    )
+    const hint = screen.getByTestId('markets-cost-hint').getAttribute('data-hint') ?? ''
+    expect(hint).toContain('6 个 × 3 个 AI 平台 × 2 个市场 × 每次 0.2 积分，约 7.2 积分')
+    expect(hint).toContain('每个市场各 5 次')
+    await userEvent.click(screen.getByTestId('market-remove-GB'))
+    expect(screen.queryByTestId('markets-cost')).toBeNull()
+    await userEvent.selectOptions(screen.getByTestId('market-add'), 'DE')
+    await userEvent.selectOptions(screen.getByTestId('market-add'), 'FR')
+    expect(screen.getByTestId('markets-cost-hint').getAttribute('data-hint')).toContain(
+      '约 10.8 积分',
+    )
+  })
+
   it('还没有市场：明说请选一下', () => {
     renderWithProviders(<ProfileForm busy={false} saved={false} onSave={() => {}} />)
     expect(screen.getByTestId('markets-empty').textContent).toBe('没看出来，请选一下')
