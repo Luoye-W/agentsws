@@ -1,10 +1,11 @@
 /**
  * WP68（49 M2 / 48 §5.3）：本地这一侧真的连上云端公共红人库，端到端。
  *
- * "端到端"是认真的：跑的是**真装配线**（本地路由 → 端口 → 加密库 → HTTP →
- * `packages/kol-public` 的**真路由** → 真钱包 → 真价目），只把最外面那一跳换成
- * 一个内存版的云进程。所以这条测试里**没有一处 mock 出来的形状**——
- * 路由名、参数名、响应字段、扣费口径全是那一份真代码说了算。
+ * 本机这一侧跑的是**真装配线**（本地路由 → 端口 → 加密库 → HTTP），最外面那一跳是
+ * **云端 HTTP 面的契约替身**（WP165 起：`@agentsws/stand-ins` 的 `cloudStandInFetch` +
+ * `CloudAccountsStandIn` + `KolPublicStandIn` + `StandInWallet`；以前是内存版的真云进程）。
+ * 替身与真服务在状态码、错误码、每步扣的积分上逐条一致——那条一致性测试在云端那一侧
+ * （`packages/kol-public/test/wp165-stand-in-conformance.test.ts`），扣费口径本身的测试也在那边。
  *
  * 四条硬断言：
  * 1. 开关拨到 "用 agentsws 的" 之后，找人真的改查公共库（`source: public_library`）；
@@ -13,11 +14,14 @@
  * 4. 余额不够时回的是一句人话（云那边 402），不是一个红框。
  */
 
-import type { CloudMail } from '@agentsws/cloud'
-import { type CloudServer, createCloudServer, mountEntry, mountKolPublic } from '@agentsws/cloud'
 import { DEFAULT_CLOUD_SCOPES } from '@agentsws/contracts'
-import { MemoryKolStore } from '@agentsws/kol-public'
-import { MemoryWalletStore } from '@agentsws/metering'
+import {
+  CloudAccountsStandIn,
+  cloudStandInFetch,
+  KolPublicStandIn,
+  type StandInMail,
+  StandInWallet,
+} from '@agentsws/stand-ins'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { CLOUD_TOKEN_SECRET_ID, createServer, type Server } from '../src/index.js'
 import { SECRETS_KEY_ENV } from '../src/secret-store.js'
@@ -25,8 +29,6 @@ import { SECRETS_KEY_ENV } from '../src/secret-store.js'
 const T0 = '2026-09-15T00:00:00.000Z'
 const SECRETS_KEY = 'f'.repeat(64)
 const CLOUD_BASE = 'http://cloud.test'
-/** 云侧那把邮箱密钥（32 字节）。仓库里没有真 key，这是测试自己造的。 */
-const EMAIL_KEY = Buffer.alloc(32, 9).toString('base64url')
 
 function seeded(seed = 682): () => number {
   let a = seed >>> 0
@@ -40,11 +42,11 @@ function seeded(seed = 682): () => number {
 }
 
 let server: Server
-let cloud: CloudServer
+let cloud: CloudAccountsStandIn
 let url: string
-let mails: CloudMail[]
-let wallet: ReturnType<typeof mountEntry>['wallet']
-let kolCloud: ReturnType<typeof mountKolPublic>
+let mails: StandInMail[]
+let wallet: StandInWallet
+let kolCloud: KolPublicStandIn
 let assignment: string
 
 const api = async (path: string, init: RequestInit = {}): Promise<Response> => {
@@ -92,7 +94,7 @@ function seedCreator(handle: string, hasContact = true): void {
     scopes: [...DEFAULT_CLOUD_SCOPES],
     region: 'global' as const,
   }
-  kolCloud.service.contributeAs(principal, [
+  kolCloud.contributeAs(principal, [
     {
       channel: 'youtube',
       handle,
@@ -104,7 +106,7 @@ function seedCreator(handle: string, hasContact = true): void {
     },
   ])
   if (hasContact)
-    kolCloud.service.saveContact(
+    kolCloud.saveContact(
       {
         id: `ws:${principal.workspace_id}`,
         workspace_id: principal.workspace_id,
@@ -118,27 +120,14 @@ function seedCreator(handle: string, hasContact = true): void {
 
 beforeEach(async () => {
   let t = Date.parse(T0)
-  mails = []
-  cloud = createCloudServer({
-    clock: { now: () => new Date(t).toISOString() },
-    quiet: true,
-    env: { AGENTSWS_CLOUD_BASE_URL: CLOUD_BASE },
-    mail: async (mail) => {
-      mails.push(mail)
-    },
-  })
-  const entry = mountEntry(cloud, {
-    clock: { now: () => new Date(t).toISOString() },
-    walletStore: new MemoryWalletStore(),
-  })
-  wallet = entry.wallet
-  kolCloud = mountKolPublic(cloud, {
-    wallet: entry.wallet,
-    pricing: entry.pricing,
-    clock: { now: () => new Date(t).toISOString() },
-    store: new MemoryKolStore(),
-    env: { AGENTSWS_KOL_EMAIL_KEY: EMAIL_KEY },
-  })
+  let seq = 0
+  const newId = (prefix: string): string => `${prefix}_${String(++seq)}`
+  const now = (): string => new Date(t).toISOString()
+  cloud = new CloudAccountsStandIn({ now })
+  mails = cloud.mails
+  wallet = new StandInWallet({ now, newId })
+  kolCloud = new KolPublicStandIn({ wallet, now, newId })
+  const wire = cloudStandInFetch({ accounts: cloud, kolPublic: kolCloud })
 
   server = await createServer({
     quiet: true,
@@ -156,17 +145,8 @@ beforeEach(async () => {
       [SECRETS_KEY_ENV]: SECRETS_KEY,
       AGENTSWS_CLOUD_BASE_URL: CLOUD_BASE,
     },
-    // 本地 → 云的那一跳走内存服务端，全程不出网
-    cloudFetch: async (input, init) => {
-      const res = await cloud.fetch(
-        new Request(input, {
-          method: init?.method ?? 'GET',
-          ...(init?.headers === undefined ? {} : { headers: init.headers }),
-          ...(init?.body === undefined ? {} : { body: init.body }),
-        }),
-      )
-      return { ok: res.ok, status: res.status, text: () => res.text(), json: () => res.json() }
-    },
+    // 本地 → 云的那一跳走契约替身，全程不出网
+    cloudFetch: wire.fetch as never,
   })
   ;({ url } = await server.listen(0))
   assignment = server.roles.assignments.create({
@@ -180,8 +160,6 @@ beforeEach(async () => {
 
 afterEach(async () => {
   await server.close()
-  kolCloud.close()
-  await cloud.close()
 })
 
 /** 把 `kol.youtube` 那个开关拨到「用 agentsws 的」。 */
@@ -229,12 +207,12 @@ describe('WP68 / 49 M2：用我的 / 用 agentsws 的', () => {
     seedCreator('gadgetjonas')
     // WP126：搜索本身也按次扣积分，先充一点
     wallet.topup({
-      org_id: cloud.store.ensureAccount('luoye@example.com').org.id,
+      org_id: cloud.ensureAccount('luoye@example.com').org_id,
       credits: 10,
       kind: 'purchased',
     })
 
-    const before = wallet.balance(cloud.store.ensureAccount('luoye@example.com').org.id).available
+    const before = wallet.balance(cloud.ensureAccount('luoye@example.com').org_id).available
     const out = await data<{
       ok: boolean
       source: string
@@ -253,7 +231,7 @@ describe('WP68 / 49 M2：用我的 / 用 agentsws 的', () => {
     expect(out.reveal_price?.note).toContain('积分')
     // WP126：搜索本身也按 data.kol.lookup 扣了一次（0.2）——官方接口没有免费动作了
     expect(
-      before - wallet.balance(cloud.store.ensureAccount('luoye@example.com').org.id).available,
+      before - wallet.balance(cloud.ensureAccount('luoye@example.com').org_id).available,
     ).toBeCloseTo(0.2, 6)
   })
 
@@ -261,7 +239,7 @@ describe('WP68 / 49 M2：用我的 / 用 agentsws 的', () => {
     await link()
     await useOurs()
     seedCreator('gadgetjonas')
-    const org = cloud.store.ensureAccount('luoye@example.com').org.id
+    const org = cloud.ensureAccount('luoye@example.com').org_id
     wallet.topup({ org_id: org, credits: 100, kind: 'purchased' })
     const before = wallet.balance(org).available
 
@@ -323,7 +301,7 @@ describe('WP68 / 49 M2：用我的 / 用 agentsws 的', () => {
     await link()
     await useOurs()
     seedCreator('nomail', false)
-    const org = cloud.store.ensureAccount('luoye@example.com').org.id
+    const org = cloud.ensureAccount('luoye@example.com').org_id
     wallet.topup({ org_id: org, credits: 100, kind: 'purchased' })
     const before = wallet.balance(org).available
 
@@ -343,11 +321,11 @@ describe('WP68 / 49 M2：用我的 / 用 agentsws 的', () => {
     await useOurs()
     seedCreator('gadgetjonas')
     // 把云上那条关联换成一把**没有 data** 的令牌，本地那一把也换掉
-    const { account, org } = cloud.store.ensureAccount('luoye@example.com')
-    const issued = cloud.store.createLink({
+    const { account_id, org_id } = cloud.ensureAccount('luoye@example.com')
+    const issued = cloud.issue({
       workspace_id: 'ws_no_data',
-      cloud_org_id: org.id,
-      created_by: account.id,
+      cloud_org_id: org_id,
+      created_by: account_id,
       scopes: DEFAULT_CLOUD_SCOPES.filter((s) => s !== 'data'),
     })
     server.secrets.put(CLOUD_TOKEN_SECRET_ID, { token: issued.token })

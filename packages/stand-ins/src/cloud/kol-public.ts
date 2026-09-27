@@ -152,7 +152,12 @@ export class KolPublicStandIn {
     return observations.length
   }
 
-  /** 测试里直接看替身那本库：这个人身上的观察、某条内容。 */
+  /** 测试里直接看替身那本库：这个人的卡、身上的观察、某条内容。 */
+  creator(channel: KolChannel, handle: string): PublicCreatorCard | undefined {
+    const card = this.cards.get(keyOf(channel, handle))
+    return card === undefined ? undefined : { ...card, categories: [...card.categories] }
+  }
+
   observationsOf(channel: KolChannel, handle: string): PublicCreatorObservation[] {
     return [...(this.observationRows.get(keyOf(channel, handle)) ?? [])]
   }

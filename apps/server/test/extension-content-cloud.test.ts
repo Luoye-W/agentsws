@@ -6,8 +6,9 @@
  * 2. 先落本机、再转发；云挂了不回滚、不让请求失败，回执如实报 0；
  * 3. 送出去的是**窄行**：没有页面 / 封面地址、没有作者名与粉丝数、没有评论文本；
  *    认不出 handle（只有 `UC…`）不送；
- * 4. 端到端：真的 `createExtensionContributor` → 真的公共库路由（内存档），内容与
- *    带货 / 广告标识落进云端的库。
+ * 4. 端到端：真的 `createExtensionContributor` → 公共库 HTTP 面的契约替身（WP165 起；
+ *    云端真路由怎么存、按 UTC 日计一行指标，在 `packages/kol-public/test/content.test.ts`），
+ *    内容与带货 / 广告标识照原样送到。
  *
  * 全部替身，不联网。
  */
@@ -15,14 +16,13 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { ExtensionContentObservation, ExtensionSession } from '@agentsws/api'
-import type { Clock, PersonId, VerifiedCloudToken, WorkspaceId } from '@agentsws/contracts'
+import type { Clock, PersonId, WorkspaceId } from '@agentsws/contracts'
 import {
-  createKolPublicApp,
-  KolPublicService,
-  MemoryKolStore,
-  nodeKolSecrets,
-} from '@agentsws/kol-public'
-import { buildPricing, MemoryWalletStore, Wallet } from '@agentsws/metering'
+  cloudStandInFetch,
+  KolPublicStandIn,
+  type StandInKolPrincipal,
+  StandInWallet,
+} from '@agentsws/stand-ins'
 import { afterEach, describe, expect, it } from 'vitest'
 import { CLOUD_TOKEN_SECRET_ID } from '../src/cloud-account.js'
 import { createExtensionContributor } from '../src/extension-contribute.js'
@@ -197,38 +197,28 @@ describe('WP129 内容观测转发：规则', () => {
   })
 })
 
-describe('WP129 内容观测转发：端到端（真 contributor → 真公共库路由，内存档）', () => {
+describe('WP129 内容观测转发：端到端（真 contributor → 公共库契约替身）', () => {
   it('登录态工作区令牌送进去，云端库里有这条内容与两个标识，贡献回执算一条', async () => {
-    const cloudStore = new MemoryKolStore()
     let seq = 0
     const newId = (prefix: string): string => `${prefix}_${String(++seq)}`
-    const service = new KolPublicService({
-      store: cloudStore,
-      wallet: new Wallet({ store: new MemoryWalletStore(), now: () => NOW, newId }),
-      pricing: buildPricing(),
-      secrets: nodeKolSecrets({ env: {} }),
+    const cloudStore = new KolPublicStandIn({
+      wallet: new StandInWallet({ now: () => NOW, newId }),
       now: () => NOW,
       newId,
     })
-    const verified: VerifiedCloudToken = {
+    const verified: StandInKolPrincipal = {
       account_id: 'acc_1',
       org_id: 'org_1',
       workspace_id: WS,
       scopes: ['data'],
+      region: 'global',
     }
-    const app = createKolPublicApp({
-      service,
-      verifier: async (t) => (t === 'wst_fixture_token' ? verified : undefined),
+    const wire = cloudStandInFetch({
+      kolPublic: cloudStore,
+      kolPrincipalOf: (t) => (t === 'wst_fixture_token' ? verified : undefined),
     })
-    const calls: string[] = []
-    const fetch: KolPublicFetch = async (url, init) => {
-      calls.push(`${init.method} ${new URL(url).pathname}`)
-      return app.request(url, {
-        method: init.method,
-        headers: init.headers,
-        ...(init.body === undefined ? {} : { body: init.body }),
-      })
-    }
+    const calls = wire.calls
+    const fetch = wire.fetch as unknown as KolPublicFetch
 
     const { port } = assemble({
       cloudFor: (secrets) => {
@@ -240,7 +230,7 @@ describe('WP129 内容观测转发：端到端（真 contributor → 真公共�
     const out = await port.contentObservation(session, input())
     expect(out.forwarded_to_public_library).toBe(1)
     expect(calls).toEqual(['POST /v1/data/kol/content-observations'])
-    expect(cloudStore.content('youtube', 'vid_1')).toMatchObject({
+    expect(cloudStore.contentOf('youtube', 'vid_1')).toMatchObject({
       handle: 'fixture',
       views: 10_000,
       comments: 42,
@@ -249,9 +239,8 @@ describe('WP129 内容观测转发：端到端（真 contributor → 真公共�
       shoppable: false,
       source: 'plugin',
     })
-    expect(cloudStore.contentMetricOnDay('youtube', 'vid_1', NOW.slice(0, 10))).toBe(true)
     // 云端那一份里没有任何地址 / 作者名
-    expect(JSON.stringify(cloudStore.content('youtube', 'vid_1'))).not.toContain('share-token')
-    expect(JSON.stringify(cloudStore.content('youtube', 'vid_1'))).not.toContain('夹具频道')
+    expect(JSON.stringify(cloudStore.contentOf('youtube', 'vid_1'))).not.toContain('share-token')
+    expect(JSON.stringify(cloudStore.contentOf('youtube', 'vid_1'))).not.toContain('夹具频道')
   })
 })
