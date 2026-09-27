@@ -75,7 +75,14 @@ describe('公共红人库替身', () => {
     const wallet = new StandInWallet({ now: () => T0, newId })
     const kol = new KolPublicStandIn({ wallet, now: () => T0, newId })
     kol.contributeAs(principal, [
-      { channel: 'youtube', handle: 'Kevin', followers: 1000, observed_at: T0 },
+      {
+        channel: 'youtube',
+        handle: 'Kevin',
+        followers: 1000,
+        posts_30d: 4,
+        engagement_rate: 0.03,
+        observed_at: T0,
+      },
     ])
     expect(() => kol.browse(principal, { channel: 'youtube' })).toThrow(/积分不够了/)
     kol.saveContact({}, { channel: 'youtube', handle: 'kevin' }, { email: 'k@example.test' })
@@ -97,7 +104,16 @@ describe('公共红人库替身', () => {
     wallet.topup({ org_id: 'org_1', credits: 10, kind: 'purchased' })
     const kol = new KolPublicStandIn({ wallet, now: () => T0, newId })
     expect(kol.browse(principal, { q: 'nobody' }).credits).toBe(0)
-    kol.contributeAs(principal, [{ channel: 'x', handle: 'amy', followers: 5, observed_at: T0 }])
+    kol.contributeAs(principal, [
+      {
+        channel: 'x',
+        handle: 'amy',
+        followers: 5,
+        posts_30d: 1,
+        engagement_rate: 0.01,
+        observed_at: T0,
+      },
+    ])
     expect(() => kol.reveal(principal, { channel: 'x', handle: 'amy' })).toThrow(/不收钱/)
     expect(kol.browse(principal, { q: 'amy' }).credits).toBeGreaterThan(0)
     expect(kol.browse(principal, { q: 'amy', limit: 5 }).credits).toBe(0)
