@@ -1183,6 +1183,41 @@
         }
       }
     },
+    "/v1/pricing": {
+      "get": {
+        "operationId": "getV1Pricing",
+        "summary": "公开价目：价目表 + 充值档位一次给齐（WP165，docs/83 §2「价目表只放云上」）",
+        "description": "不要令牌、可缓存（`Cache-Control: public, max-age=300`）；和带令牌的 `/v1/wallet/pricing`、\n`/v1/wallet/topup/tiers` 是同一份数据。本机没关联账号也据此显示价格，并缓存一份离线看。",
+        "tags": ["wallet"],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/PricingCatalog"
+                    }
+                  },
+                  "required": ["data"]
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "description": "`public, max-age=300`（见 `PRICING_CATALOG_MAX_AGE_S`）。",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/wallet/pricing": {
       "get": {
         "operationId": "getV1WalletPricing",
@@ -7746,6 +7781,23 @@
         "type": "string",
         "enum": ["data", "ai", "service"],
         "description": "付费的三块（67 §1，Luoye 2026-09-19 定）。"
+      },
+      "PricingCatalog": {
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": "number",
+            "const": 1
+          },
+          "pricing": {
+            "$ref": "#/components/schemas/Pricing"
+          },
+          "topup_tiers": {
+            "$ref": "#/components/schemas/TopupTiers"
+          }
+        },
+        "required": ["version", "pricing", "topup_tiers"],
+        "description": "`GET /v1/pricing` 的 `data`。"
       },
       "PricingEntry": {
         "type": "object",
