@@ -5,5 +5,6 @@
  * 改用这里按 `@agentsws/contracts` 写的内存替身：一份固定价目样例、一个钱包、一个公共红人库。
  */
 export * from './kol-public.js'
+export * from './kol-sync.js'
 export * from './pricing-sample.js'
 export * from './wallet.js'
