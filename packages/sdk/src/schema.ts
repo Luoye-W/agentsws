@@ -25300,6 +25300,7 @@ export interface operations {
           /** @enum {string} */
           storefront_platform?: 'shopify' | 'woocommerce' | 'magento' | 'other' | 'none'
           brand_name?: string
+          markets?: string[]
         }
       }
     }
@@ -43250,6 +43251,7 @@ export interface operations {
           settings?: {
             enabled?: boolean
             max_questions?: number
+            markets_off?: string[]
           }
         }
       }

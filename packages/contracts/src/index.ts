@@ -46,6 +46,8 @@ export * from './kol.js'
 export * from './kol-cloud.js'
 // 48 §5.3 / 49 §6 WP61：云上的公共红人库服务（本地那六个红人对象在 kol.ts，WP67）
 export * from './kol-public.js'
+// WP166：目标市场一处定、处处用（国家码清单、归一化、出处）
+export * from './markets.js'
 export * from './meetings.js'
 // WP113（63）：消息——统一收件处。v1 只有邮箱一种来源，但数据模型按"来源可扩"建
 export * from './messages.js'

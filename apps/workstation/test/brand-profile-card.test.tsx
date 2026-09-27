@@ -97,7 +97,7 @@ describe('WP121 品牌档案卡', () => {
     expect(screen.getByTestId('intake-products').textContent).toContain('Granite Wallet')
     expect(screen.getByTestId('intake-products').textContent).toContain('€49')
     // WP142：市场 `SE` 说人话 →「瑞典」
-    expect(screen.getByTestId('intake-tags').textContent).toContain('瑞典')
+    expect(screen.getByTestId('intake-row-markets').textContent).toContain('瑞典')
     // 政策不逐条铺开，只说读到了几份
     expect(screen.getByTestId('intake-policies').textContent).toContain('1')
   })
@@ -140,5 +140,50 @@ describe('WP121 品牌档案卡', () => {
     paint({ busy: true })
     expect((screen.getByTestId('intake-confirm') as HTMLButtonElement).disabled).toBe(true)
     expect((screen.getByTestId('intake-reanalyze') as HTMLButtonElement).disabled).toBe(true)
+  })
+})
+
+describe('WP166 档案卡上的市场：可增删、出处进问号、推不出就请选', () => {
+  it('去掉一个、加一个：往上抛国家码数组', async () => {
+    const user = userEvent.setup()
+    const { onEdit } = paint({
+      profile: {
+        ...PROFILE,
+        markets: {
+          value: ['US', 'CA'],
+          confidence: 'medium',
+          evidence: [
+            { url: 'https://nordvik.example/policies/shipping-policy', locator: 'policy:shipping' },
+            { url: 'https://nordvik.example/', locator: 'hreflang' },
+          ],
+        },
+      },
+    })
+    const chips = screen.getAllByTestId('market-chip').map((c) => c.textContent)
+    expect(chips).toEqual(['美国', '加拿大'])
+    // 出处在问号里：「我们从官网的配送政策、语言版本看出来的」
+    expect(screen.getByTestId('markets-origin').getAttribute('data-hint')).toBe(
+      '我们从官网的配送政策、语言版本看出来的',
+    )
+    await user.click(screen.getByTestId('market-remove-CA'))
+    expect(onEdit).toHaveBeenLastCalledWith('markets', ['US'])
+    await user.selectOptions(screen.getByTestId('market-add'), 'GB')
+    expect(onEdit).toHaveBeenLastCalledWith('markets', ['US', 'CA', 'GB'])
+  })
+
+  it('改过就用改过的那一份，问号说「你自己选的」；删光了明说请选一下', () => {
+    paint({ edits: { markets: ['DE'] } })
+    expect(screen.getAllByTestId('market-chip').map((c) => c.textContent)).toEqual(['德国'])
+    expect(screen.getByTestId('markets-origin').getAttribute('data-hint')).toBe('你自己选的')
+    cleanup()
+    paint({ edits: { markets: [] } })
+    expect(screen.getByTestId('markets-empty').textContent).toBe('没看出来，请选一下')
+  })
+
+  it('没推出来：这一行照样在，说「没看出来，请选一下」，没有问号', () => {
+    const { markets: _m, ...rest } = PROFILE
+    paint({ profile: rest })
+    expect(screen.getByTestId('markets-empty').textContent).toBe('没看出来，请选一下')
+    expect(screen.queryByTestId('markets-origin')).toBeNull()
   })
 })

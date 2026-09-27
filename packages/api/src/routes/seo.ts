@@ -64,6 +64,12 @@ export interface GeoQuestionsView {
   questions: GeoQuestion[]
   settings: GeoSettings
   estimate: GeoCostEstimate
+  /**
+   * WP166：目标市场（公司档案里的；没写就是默认那一个）与这个市场探不探（面板上能关某个市场的
+   * 探测，只关探测、不改档案）。老装配不给。
+   */
+  markets?: { code: string; probing: boolean }[]
+  markets_from?: 'brand_profile' | 'default'
 }
 
 /** WP158：一个 Google 源（Search Console / GA4）在选择器上的样子。 */
@@ -93,7 +99,14 @@ export interface SeoPort {
     actor: SeoActor,
     input: {
       questions?: { id?: string | undefined; text: string; enabled: boolean }[] | undefined
-      settings?: { enabled?: boolean | undefined; max_questions?: number | undefined } | undefined
+      settings?:
+        | {
+            enabled?: boolean | undefined
+            max_questions?: number | undefined
+            /** WP166：关掉哪几个市场的探测（给全量清单；空数组 = 都探）。 */
+            markets_off?: string[] | undefined
+          }
+        | undefined
     },
   ): MaybePromise<GeoQuestionsView>
   run(actor: SeoActor, what: 'daily' | 'weekly'): MaybePromise<SeoRunView>
@@ -198,6 +211,11 @@ const QuestionsBody = z.object({
     .object({
       enabled: z.boolean().optional(),
       max_questions: z.number().int().min(1).max(10).optional(),
+      // WP166：关掉哪几个市场的探测（只关探测，不改公司档案）
+      markets_off: z
+        .array(z.string().regex(/^[A-Za-z]{2}$/))
+        .max(60)
+        .optional(),
     })
     .optional(),
 })

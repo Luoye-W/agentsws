@@ -60,6 +60,16 @@ export {
   titleOf,
   visibleText,
 } from './html.js'
+export type { MarketInputs } from './markets.js'
+export {
+  countriesIn,
+  hreflangCountries,
+  inferMarkets,
+  localizationCountries,
+  MARKET_SELECTOR_MAX,
+  shippingCountries,
+  tldCountry,
+} from './markets.js'
 export type { SiteIntakeResult } from './site.js'
 export { analyzeSite, detectPlatform, looksLikePolicy, POLICY_PROBE_PATHS } from './site.js'
 
@@ -169,7 +179,20 @@ export async function analyzeBrand(
      * 后面补的那些只填它没填上的格子。`mergeProfile` 里"改过的不动"那条
      * 在这里还用不上（都是机器填的），但用同一个函数省得两套规则。
      */
+    // WP166：目标市场是例外——官网配送到的国家与 Amazon 站点所在国**都是**市场，合在一起（去重、保序）
+    const both =
+      profile.markets !== undefined && got.profile.markets !== undefined
+        ? {
+            value: [...new Set([...profile.markets.value, ...got.profile.markets.value])],
+            confidence:
+              profile.markets.confidence === 'low'
+                ? got.profile.markets.confidence
+                : profile.markets.confidence,
+            evidence: [...profile.markets.evidence, ...got.profile.markets.evidence],
+          }
+        : undefined
     profile = mergeProfile(profile, dropFilled(profile, got.profile))
+    if (both !== undefined) profile.markets = both
     // 只有真抓着的页面才算钱
     spent = Math.round(pages.filter((p) => p.ok).length * CREDITS_PER_PAGE * 100) / 100
     if (spent >= cap) stopped = true

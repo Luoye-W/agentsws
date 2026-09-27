@@ -265,6 +265,8 @@ import {
   seedDefaultSkill,
 } from './learning.js'
 import { createLiveDataSource, type LiveDataSource } from './live-data.js'
+// WP77（59 §1 / §2）：建站库（三张表）+ `/v1/site/*` 的实现
+import { createStoreMarketsSync, marketsFromIntake } from './markets.js'
 import { createMeetings, type MeetingsAssembly, seedDemoMeetings } from './meetings.js'
 // WP113（63）：消息——统一收件处（消息库 / 全量同步 / 分拣 / 回写）
 import { createMessages, type MessagesAssembly, type MessagesOptions } from './messages.js'
@@ -278,6 +280,7 @@ import {
   type OrganizationsAssembly,
 } from './organizations.js'
 import { createOwnerToolExecutor } from './owner-tools.js'
+import { createPageBodyReader } from './page-body.js'
 import {
   createFilePersonaBackend,
   createPersonas,
@@ -344,7 +347,6 @@ import { createSecretaryAssembly, type SecretaryAssembly } from './secretary.js'
 import { claimRuleCard, createSeoService, pickRoleHolder } from './seo-service.js'
 import type { BrokerFetch } from './shopify-broker.js'
 import { createShopifyDevMcp } from './shopify-devmcp.js'
-// WP77（59 §1 / §2）：建站库（三张表）+ `/v1/site/*` 的实现
 import { createConnectSiteFacts, createSiteService, createSiteStore, seedDemoSite } from './site.js'
 import { createSocialStore, seedDemoSocial, socialDeckData } from './social.js'
 // WP73（56 §6）：九条渠道真打出去的那一跳 + 社媒库的 /v1 面
@@ -2499,6 +2501,24 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         ? undefined
         : { workspace_id: ws, person_id: a.person_id, assignment_id: a.id, role_id: a.role_id }
     }
+    /*
+     * WP166：店铺（Shopify）连上以后，按店里配的市场 / 配送区域把目标市场校正一次（人改过的不动），
+     * 改了什么写进档案的出处里（界面上可见）。每条店铺连接只校正一次；读不到下次连接变化再试。
+     */
+    const storeMarkets = createStoreMarketsSync({
+      connect: connections.connect as never,
+      connection: () =>
+        connections
+          .liveConnections()
+          .find((c) => c.service.startsWith('shopify') && c.status === 'active'),
+      current: () => onboardingRef?.brandProfile(ws) ?? {},
+      apply: (markets, source) => onboardingRef?.setMarkets(ws, markets, source) ?? false,
+      now: () => clock.now(),
+      ...(dir === undefined ? {} : { dir }),
+    })
+    connections.onConnectionChange(() => {
+      void storeMarkets.check()
+    })
     const seoService = createSeoService({
       workspace_id: ws,
       clock,
@@ -2655,6 +2675,18 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           return { text: completion.text }
         }
       },
+      /*
+       * WP166：模型写初稿前读这一页正文——店铺连接的只读口优先，读不到再抓公开网址（品牌分析那一口
+       * 抓取，只抓自家域名）。
+       */
+      pageBody: createPageBodyReader({
+        connect: connections.connect as never,
+        connection: () =>
+          connections
+            .liveConnections()
+            .find((c) => c.service.startsWith('shopify') && c.status === 'active'),
+        fetch: options.brandIntakeFetch ?? (globalThis.fetch as never),
+      }),
       // WP159：品牌口吻——品牌档案那一段 + 品牌设计规范（WP122）里的「气质」一句，取不到就不写
       brandVoice: async (language) => {
         const w = await identity.getWorkspace(ws)
@@ -4007,9 +4039,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
               ? {}
               : { storefront_platform: profile.storefront_platform.value }),
             // WP159：目标市场进档案（违规宣称规则按它开市场组）
-            ...(profile.markets === undefined || profile.markets.value.length === 0
-              ? {}
-              : { markets: profile.markets.value }),
+            // WP166：连出处一起写；人在档案卡上改过（`edited`）的记成「人改的」，清空也算数
+            ...marketsFromIntake(profile.markets, clock.now()),
           },
         )
       },

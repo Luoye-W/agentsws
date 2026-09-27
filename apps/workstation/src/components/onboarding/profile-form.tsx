@@ -16,6 +16,7 @@
  * 用户凭它决定要不要把开关打开。
  */
 import { useState } from 'react'
+import { MarketsPicker } from '@/components/onboarding/markets-picker'
 import { Button } from '@/components/ui/button'
 import { Hint, SafetyNote } from '@/components/ui/hint'
 import { Input } from '@/components/ui/input'
@@ -39,6 +40,8 @@ export interface ProfileDraft {
   vertical: 'goods' | 'digital'
   /** WP62（51 §1 N0）：网站是用什么搭的。默认 Shopify。 */
   storefront_platform: StorefrontPlatform
+  /** WP166：目标市场（ISO 国家码）。与向导档案卡是同一份（`WorkspaceProfile.markets`）。 */
+  markets: string[]
 }
 
 export function ProfileForm({
@@ -92,6 +95,7 @@ export function ProfileForm({
     brand_name: profile?.brand_name ?? '',
     vertical: profile?.vertical ?? 'goods',
     storefront_platform: profile?.storefront_platform ?? 'shopify',
+    markets: profile?.markets ?? [],
   })
   /** 选中的那一条「你卖的是」——它那一句人话是这一栏**唯一**出的解释（WP79 ⑤）。 */
   const pickedVertical = verticals?.find((v) => v.key === draft.vertical)
@@ -309,6 +313,48 @@ export function ProfileForm({
                 </div>
               </div>
             )}
+          </div>
+        )}
+        {/*
+          WP166：目标市场（设置页「公司档案」同一份可改）。出处进问号；改了保存后立刻生效——
+          搜索结果 / AI 回答按市场探测、违规宣称规则开组都读这一份。
+        */}
+        {firstBrand ? null : (
+          <div className="flex flex-col gap-1" data-testid="profile-markets">
+            <Label className="flex items-center gap-1">
+              {t('markets.label')}
+              <Hint text={t('markets.hint')} testId="profile-markets-hint" />
+            </Label>
+            <MarketsPicker
+              value={draft.markets}
+              onChange={(markets) => {
+                setDraft({ ...draft, markets })
+              }}
+              origin={
+                profile?.markets_source === undefined
+                  ? undefined
+                  : {
+                      from: profile.markets_source.from,
+                      ...(profile.markets_source.evidence === undefined
+                        ? {}
+                        : { evidence: profile.markets_source.evidence }),
+                      ...(profile.markets_source.note === undefined
+                        ? {}
+                        : { note: profile.markets_source.note }),
+                    }
+              }
+            />
+            {/* 店铺后台校正过：改了什么是状态，一眼可见 */}
+            {profile?.markets_source?.from === 'store' &&
+            profile.markets_source.note !== undefined ? (
+              <p
+                className="text-xs text-muted-foreground"
+                data-slot="status"
+                data-testid="profile-markets-note"
+              >
+                {profile.markets_source.note}
+              </p>
+            ) : null}
           </div>
         )}
       </section>

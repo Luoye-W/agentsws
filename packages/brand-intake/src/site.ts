@@ -44,6 +44,7 @@ import {
   titleOf,
   visibleText,
 } from './html.js'
+import { inferMarkets } from './markets.js'
 
 /** Shopify / 自建页两套约定（KefuAgent 那边按真站验过的顺序）。 */
 export const POLICY_PROBE_PATHS: readonly { path: string; kind: BrandIntakePolicy['kind'] }[] = [
@@ -325,6 +326,8 @@ export async function analyzeSite(
 
   // ── 政策（硬探那几条固定路径）────────────────────────────────────
   const policies: BrandIntakePolicy[] = []
+  // WP166：配送政策正文留一份，推目标市场要看它写了送到哪些国家
+  let shippingPolicy: { url: string; text: string } | undefined
   for (const probe of POLICY_PROBE_PATHS) {
     const url = `${origin}${probe.path}`
     const html = await get(url, 'policy')
@@ -332,6 +335,7 @@ export async function analyzeSite(
     const text = visibleText(html, 4000)
     // 内容说了算：302 回首页的那种在这里被挡掉
     if (!looksLikePolicy(text)) continue
+    if (probe.kind === 'shipping') shippingPolicy = { url, text: visibleText(html, 12_000) }
     policies.push({ kind: probe.kind, summary: text.slice(0, 300), url })
   }
   if (policies.length > 0)
@@ -348,9 +352,11 @@ export async function analyzeSite(
     if (productUrls.length >= BRAND_INTAKE_MAX_PRODUCTS) break
   }
   const products: BrandIntakeProduct[] = []
+  const productPages: { url: string; html: string }[] = []
   for (const url of productUrls) {
     const html = await get(url, 'product')
     if (html === undefined) continue
+    productPages.push({ url, html })
     const node = jsonLdNodes(html).find((n) => isType(n, /product/i))
     const card = node === undefined ? undefined : productFromJsonLd(node, url)
     if (card === undefined) continue
@@ -366,6 +372,19 @@ export async function analyzeSite(
         quote: currency,
       })
   }
+
+  // ── 目标市场（WP166）：站上自己写明的那几样，推不出就空着 ─────────
+  const currencyCode = profile.currency?.value
+  const markets = inferMarkets({
+    entryUrl,
+    home,
+    ...(shippingPolicy === undefined ? {} : { shipping: shippingPolicy }),
+    products: productPages,
+    ...(currencyCode === undefined
+      ? {}
+      : { currency: { code: currencyCode, url: profile.currency?.evidence[0]?.url ?? origin } }),
+  })
+  if (markets !== undefined) profile.markets = markets
 
   // 品牌名一个都没取到的时候，退到 `<title>`（把握度只能是 medium）
   if (profile.brand_name === undefined) {

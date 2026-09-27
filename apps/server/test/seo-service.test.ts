@@ -651,3 +651,63 @@ describe('WP158：真读数接进每日与周收入', () => {
     expect(payload2.notes).toContain('GA4 连上了，还没选是哪个媒体资源')
   })
 })
+
+describe('WP166：模型初稿读页面正文', () => {
+  const META = JSON.stringify({
+    title: 'USB-C Laptop Charger, 65W GaN | NordVolt',
+    meta_description: 'A compact USB-C laptop charger that powers a laptop and a phone at once.',
+    h1: 'USB-C Laptop Charger',
+    opening:
+      'This USB-C laptop charger powers most laptops from one plug. It also tops up a phone.',
+  })
+  const SECTION = JSON.stringify({
+    heading: 'How to care for a braided cable',
+    body: 'Coil it loosely and keep it away from sharp bends. Wipe it with a dry cloth.',
+  })
+  const model = () => {
+    const prompts: string[] = []
+    const drafter: SeoServiceOptions['drafter'] =
+      () =>
+      async ({ prompt }) => {
+        prompts.push(prompt)
+        return { text: prompt.includes('"heading"') ? SECTION : META }
+      }
+    return { prompts, drafter }
+  }
+
+  it('读到正文：去 HTML 放进数据围栏，卡上记「读过正文」、结果标来源', async () => {
+    const m = model()
+    const asked: { url: string; domains: readonly string[] }[] = []
+    const { service, txn } = setup({
+      drafter: m.drafter,
+      pageBody: async (input) => {
+        asked.push(input)
+        return { text: '<p>Our 65W charger &amp; cable.</p><script>x()</script>', from: 'store' }
+      },
+    })
+    const out = await service.daily()
+    expect(asked.length).toBe(2)
+    expect(asked[0]?.domains).toContain('shop.example')
+    expect(m.prompts[0]).toContain('<<<PAGE_BODY\nOur 65W charger & cable.\nPAGE_BODY>>>')
+    const report = await txn.approvals.get(out.approval_item_id ?? '')
+    const picks =
+      (report?.payload as { picks: { outcome?: { id?: string; body?: string } }[] })?.picks ?? []
+    expect(picks.filter((p) => p.outcome?.body === 'store')).toHaveLength(2)
+    const changeId = picks.find((p) => p.outcome?.body === 'store')?.outcome?.id
+    const card = await txn.approvals.get(changeId ?? '')
+    expect(card?.summary).toContain('读过这一页的正文')
+  })
+
+  it('读不到正文：照原来的写法，卡上注明「没读到正文」', async () => {
+    const m = model()
+    const { service, txn } = setup({ drafter: m.drafter, pageBody: async () => undefined })
+    const out = await service.daily()
+    expect(m.prompts[0]).toContain('[Page body] Not available')
+    const report = await txn.approvals.get(out.approval_item_id ?? '')
+    const picks =
+      (report?.payload as { picks: { outcome?: { body?: string; note?: string } }[] })?.picks ?? []
+    const drafted = picks.filter((p) => p.outcome?.body === 'none')
+    expect(drafted).toHaveLength(2)
+    expect(drafted[0]?.outcome?.note).toBe('没读到正文')
+  })
+})

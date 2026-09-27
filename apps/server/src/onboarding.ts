@@ -43,6 +43,7 @@ import type {
   ApprovalBus,
   Clock,
   EventEnvelope,
+  MarketsSource,
   PersonId,
   Position,
   RangeRef,
@@ -54,6 +55,7 @@ import type {
 } from '@agentsws/contracts'
 import {
   DEFAULT_STOREFRONT_PLATFORM,
+  normalizeMarkets,
   STOREFRONT_PLATFORMS,
   storefrontUsableService,
 } from '@agentsws/contracts'
@@ -338,7 +340,14 @@ export interface OnboardingAssembly {
     storefront_platform?: StorefrontPlatform
     /** WP159：目标市场（品牌分析确认时写的；没写过就没有这一格）。 */
     markets?: string[]
+    /** WP166：这份市场是从哪看出来的（官网 / Amazon / 店铺后台 / 人改的）。 */
+    markets_source?: MarketsSource
   }
+  /**
+   * WP166：直接改某个品牌的目标市场（店铺连上后按店里配的市场 / 配送区域校正那一次用）。
+   * 人改过的（`markets_source.from === 'human'`）**不动**，回 `false`；改了回 `true`。
+   */
+  setMarkets(workspace_id: WorkspaceId, markets: readonly string[], source: MarketsSource): boolean
   /**
    * WP65（52 O1）：公司级那三样的当前值（读以组织为准，还没迁过就是档案里那一份）。
    *
@@ -468,6 +477,9 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
     vertical: p.vertical ?? 'goods',
     // WP62（51 §1 N0）：没设过就是 Shopify——存量档案里没有这个字段，它们的行为不许变
     storefront_platform: p.storefront_platform ?? DEFAULT_STOREFRONT_PLATFORM,
+    // WP166：目标市场与出处（设置页「公司档案」同一份可改）
+    ...(p.markets === undefined ? {} : { markets: [...p.markets] }),
+    ...(p.markets_source === undefined ? {} : { markets_source: p.markets_source }),
     set_at: p.set_at,
   })
 
@@ -692,21 +704,14 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
       // WP62（51 §1 N0）：同上——不给就沿用上一次；从来没设过就是 Shopify
       const storefront_platform =
         normalizeStorefrontPlatform(input.storefront_platform) ?? previous?.storefront_platform
-      // WP159：目标市场——不给就沿用上一次（只认两位字母的国家码，统一大写、去重）
-      const markets =
-        input.markets === undefined
-          ? previous?.markets
-          : [
-              ...new Set(
-                input.markets
-                  .map((m) => m.trim().toUpperCase())
-                  .filter((m) => /^[A-Z]{2}$/.test(m)),
-              ),
-            ]
+      // WP159 / WP166：目标市场——不给就沿用上一次（只认国家码清单里的，统一大写、去重）；
+      // 人改过的那一份，自动推断（品牌分析确认）不再覆盖它
+      const { markets, markets_source } = nextMarkets(previous, input, clock.now())
       const next: WorkspaceProfile = {
         legal_name,
         ...(domain === '' ? {} : { domain }),
         ...(markets === undefined || markets.length === 0 ? {} : { markets }),
+        ...(markets_source === undefined ? {} : { markets_source }),
         discoverable: input.discoverable ?? company?.discoverable ?? previous?.discoverable ?? true,
         ...(vertical === undefined ? {} : { vertical }),
         ...(storefront_platform === undefined ? {} : { storefront_platform }),
@@ -883,7 +888,33 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
           ? {}
           : { storefront_platform: p.storefront_platform }),
         ...(p?.markets === undefined ? {} : { markets: [...p.markets] }),
+        ...(p?.markets_source === undefined ? {} : { markets_source: p.markets_source }),
       }
+    },
+    setMarkets(ws, list, source) {
+      const previous = profileOf(ws)
+      if (previous === undefined) return false
+      if (previous.markets_source?.from === 'human' && source.from !== 'human') return false
+      const markets = normalizeMarkets(list)
+      const { markets: _old, markets_source: _src, ...rest } = previous
+      backend.put(ws, {
+        ...rest,
+        ...(markets.length === 0 ? {} : { markets }),
+        markets_source: source,
+      })
+      appendEvent({
+        schema_version: 1,
+        workspace_id: ws,
+        type: 'workspace.markets_set',
+        actor: { kind: 'agent', id: `markets_${source.from}` },
+        correlation: { trace_id: `tr_onboarding_${clock.now()}` },
+        payload: {
+          markets,
+          from: source.from,
+          ...(source.note === undefined ? {} : { note: source.note }),
+        },
+      })
+      return true
     },
     setBrandProfile(ws, input) {
       const company = companyOf()
@@ -898,6 +929,9 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
           : { storefront_platform: input.storefront_platform }),
         // WP159：目标市场不归这一步管，沿用档案里的
         ...(previous?.markets === undefined ? {} : { markets: previous.markets }),
+        ...(previous?.markets_source === undefined
+          ? {}
+          : { markets_source: previous.markets_source }),
         set_at: clock.now(),
       })
     },
@@ -909,4 +943,33 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
       backend.close()
     },
   }
+}
+
+/**
+ * WP166：`setProfile` 那一步的目标市场与出处。
+ *
+ * - 没给 `markets` → 沿用上一次（连出处一起）；
+ * - 给了、和上一次一样 → 沿用上一次的出处（设置页原样存一遍不该把「从官网看出来的」改成「你改的」）；
+ * - 给了、不一样 → 出处用调用方给的（品牌分析确认时是 `site` / `amazon`），不给就是 `human`；
+ * - 上一次是人改的、这一次是自动的 → **不动**（人说了算）。
+ */
+export function nextMarkets(
+  previous: WorkspaceProfile | undefined,
+  input: { markets?: string[] | undefined; markets_source?: MarketsSource | undefined },
+  at: string,
+): { markets?: string[]; markets_source?: MarketsSource } {
+  const keep = {
+    ...(previous?.markets === undefined ? {} : { markets: previous.markets }),
+    ...(previous?.markets_source === undefined ? {} : { markets_source: previous.markets_source }),
+  }
+  if (input.markets === undefined) return keep
+  const markets = normalizeMarkets(input.markets)
+  const same =
+    previous?.markets !== undefined &&
+    previous.markets.length === markets.length &&
+    previous.markets.every((m, i) => m === markets[i])
+  if (same) return keep
+  const source: MarketsSource = input.markets_source ?? { from: 'human', at }
+  if (previous?.markets_source?.from === 'human' && source.from !== 'human') return keep
+  return { markets, markets_source: source }
 }

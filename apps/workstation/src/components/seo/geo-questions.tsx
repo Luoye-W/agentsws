@@ -13,14 +13,16 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Plus, Search, Sparkles } from 'lucide-react'
 import { useEffect, useState } from 'react'
+import { marketLabel } from '@/components/onboarding/markets-picker'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Hint } from '@/components/ui/hint'
 import { Input } from '@/components/ui/input'
 import { type GeoQuestionData, getGeoQuestions, runSeo, setGeoQuestions } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 
 export function GeoQuestions({ assignment }: { assignment: string }): React.ReactNode {
-  const { t } = useApp()
+  const { t, lang } = useApp()
   const qc = useQueryClient()
   const view = useQuery({
     queryKey: ['geo-questions', assignment],
@@ -51,16 +53,25 @@ export function GeoQuestions({ assignment }: { assignment: string }): React.Reac
   const data = view.data
   if (data === undefined) return null
   const { settings, estimate } = data
+  const markets = data.markets ?? []
+  // WP166：好几个市场时花费明示「N 个市场」（数是服务端乘好的，界面不自己乘）
   const cost =
     estimate.credits_per_week === undefined
       ? t('seo.geo.cost.unknown')
       : estimate.route === 'byo'
         ? t('seo.geo.cost.byo')
-        : t('seo.geo.cost', {
-            n: String(estimate.questions),
-            p: String(estimate.platforms),
-            c: String(estimate.credits_per_week),
-          })
+        : (estimate.markets ?? 1) > 1
+          ? t('seo.geo.cost_markets', {
+              n: String(estimate.questions),
+              p: String(estimate.platforms),
+              m: String(estimate.markets),
+              c: String(estimate.credits_per_week),
+            })
+          : t('seo.geo.cost', {
+              n: String(estimate.questions),
+              p: String(estimate.platforms),
+              c: String(estimate.credits_per_week),
+            })
 
   return (
     <Card data-testid="geo-questions">
@@ -103,6 +114,38 @@ export function GeoQuestions({ assignment }: { assignment: string }): React.Reac
             />
           </label>
         </div>
+        {/*
+          WP166：每个目标市场一个开关——只关探测（SERP 与 AI 问答都不查这个市场），不改公司档案。
+        */}
+        {markets.length === 0 ? null : (
+          <div className="flex flex-wrap items-center gap-2 text-sm" data-testid="geo-markets">
+            <span className="flex items-center gap-1 text-muted-foreground">
+              {t('seo.geo.markets')}
+              <Hint text={t('seo.geo.markets.hint')} testId="geo-markets-hint" />
+            </span>
+            {markets.map((m) => (
+              <label key={m.code} className="flex items-center gap-1">
+                <input
+                  type="checkbox"
+                  checked={m.probing}
+                  data-testid={`geo-market-${m.code}`}
+                  onChange={(e) => {
+                    const off = markets
+                      .filter((x) => (x.code === m.code ? !e.target.checked : !x.probing))
+                      .map((x) => x.code)
+                    save.mutate({ settings: { markets_off: off } })
+                  }}
+                />
+                {marketLabel(m.code, lang)}
+              </label>
+            ))}
+            {data.markets_from === 'default' ? (
+              <span className="text-xs text-muted-foreground" data-slot="status">
+                {t('seo.geo.markets.default')}
+              </span>
+            ) : null}
+          </div>
+        )}
         <ul className="flex flex-col gap-1.5">
           {draft.map((q, i) => (
             <li key={q.id} className="flex items-center gap-2">
