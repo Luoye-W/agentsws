@@ -67,6 +67,7 @@
 | 42 | WP158 接 Search Console 与 Google Analytics 4 的真实读数（只读 OAuth、按天缓存、选站点 / 属性小卡） | `WP158-gsc-ga4-real-reads.md` | `wp158-gsc-ga4` · `wp/158-gsc-ga4` | — | 进行中（Claude） |
 | 43 | WP159 内容与搜索后续：去 Perplexity 并把 AI 问答探测降到 0.2、改动卡初稿由模型写、违规宣称规则按市场 | `WP159-content-search-followups.md` | `wp159-seo-followups` · `wp/159-seo-followups` | — | 进行中（Claude） |
 | 44 | WP160 写五个营销技能（seo-judgment / ad-copywriting / audience-research / 邮件与短信 / 红人营销；改编 marketingskills 与 open-seo，MIT） | `WP160-five-marketing-skills.md` | `wp160-skills` · `wp/160-skills` | — | 进行中（Claude） |
+| 45 | WP161 邮箱子文件夹名与老产品对齐 KefuAgents / KOLAgents（认已有不分大小写），预留 BtoBAgents | `WP161-mail-folder-names.md` | `wp161-mail-folders` · `wp/161-mail-folders` | — | 进行中（Claude） |
 
 WP117b 的补充要求（派工单里没有，写在这）：demo 服务的是 `apps/workstation/dist`，测界面前先 `pnpm -F @agentsws/workstation exec vite build`；交付一个真实点击的 playwright 脚本 `scripts/e2e-kol-sandbox.mjs`（playwright 库在 `node_modules/.pnpm/playwright@1.63.0/node_modules/playwright`），走完「选合成红人 → 起草开发信 → 批准发送 → 已发 ≥ 1 → 跳到 N 天后 → 回信 ≥ 1 → 分类 → 议价卡 → 阶段推进 → 交付物 → 追踪链接」，每步截图到 `docs/assets/workstation/kol-e2e-NN.png`，脚本里断言计数确实变了；演练数据从真实漏斗 / 归因里排除，单独显示「演练漏斗」。
 
