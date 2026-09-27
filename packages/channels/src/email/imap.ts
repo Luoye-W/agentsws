@@ -224,6 +224,9 @@ export const DEFAULT_SENT_FOLDERS: readonly string[] = [
   '[Gmail]/Sent Mail',
   '已发送',
   'agentsws',
+  // WP161：归档文件夹默认改成客服岗位那只（与老产品同名），早先的全小写也照搜
+  'KefuAgents',
+  'kefuagents',
 ]
 
 export interface ImapMailSourceOptions {

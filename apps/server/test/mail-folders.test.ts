@@ -10,6 +10,7 @@ import type { Clock, EventEnvelope } from '@agentsws/contracts'
 import { MemoryHalt } from '@agentsws/kernel'
 import { createWork } from '@agentsws/work'
 import { describe, expect, it } from 'vitest'
+import { ARCHIVE_FOLDER, createChannels, isArchiveFolder } from '../src/channels.js'
 import type { MailAccount } from '../src/index.js'
 import { createMessages, DEFAULT_FOLDERS, FOLDER_LIST_TTL_MS } from '../src/messages.js'
 
@@ -218,5 +219,84 @@ describe('WP161：每只邮箱先列文件夹，岗位文件夹认已有真名',
     const moved = await messages.port.move(ACTOR, row?.id ?? '', { to: 'support' })
     expect(moved.message.folder).toBe('kefuagents')
     expect(legacy.writer.moves.at(-1)).toEqual({ folder: 'INBOX', uid: 1, to: 'kefuagents' })
+  })
+})
+
+/* ── 客服渠道的归档文件夹（48 §4 L3 #5）：默认 KefuAgents，认已有真名 ────────── */
+
+class ArchiveSource implements MailSource {
+  readonly archived: string[] = []
+  #drained = false
+  constructor(
+    private readonly listed: string[],
+    private readonly address: string,
+  ) {}
+  async fetchSince(): Promise<RawEmailMessage[]> {
+    if (this.#drained) return []
+    this.#drained = true
+    return [{ uid: 1, mailbox: 'INBOX', source: mime(1, this.address) }]
+  }
+  async health(): Promise<{ ok: boolean }> {
+    return { ok: true }
+  }
+  async listFolders(): Promise<string[]> {
+    return this.listed
+  }
+  async archive(_uid: number, folder: string): Promise<boolean> {
+    this.archived.push(folder)
+    return true
+  }
+}
+
+async function archiveRound(
+  sources: Map<string, ArchiveSource>,
+  archive_folder?: string | null,
+): Promise<void> {
+  const clock: Clock = { now: () => T0, sleep: async () => undefined }
+  const channels = createChannels({
+    clock,
+    workspace_id: WS,
+    appendEvent: () => undefined,
+    halt: new MemoryHalt({}),
+    accounts: () => [...sources.keys()].map((id) => accountOf(id, `${id}@shop.example`)),
+    credentials: { password: () => 'pw' },
+    work: createWork({ workspace_id: WS, clock, random: () => 0.5 }),
+    position: () => ({ person_id: 'p_owner', assignment_id: 'asg_1', role_id: 'dtc.support' }),
+    makeSource: (a) => sources.get(a.connection_id) as ArchiveSource,
+    ...(archive_folder === undefined ? {} : { archive_folder }),
+  })
+  await channels.poll()
+}
+
+describe('WP161：客服渠道的归档文件夹', () => {
+  it('默认值是 KefuAgents；每只邮箱各认各的（已有小写就沿用）', async () => {
+    expect(ARCHIVE_FOLDER).toBe('KefuAgents')
+    const legacy = new ArchiveSource(['INBOX', 'kefuagents'], 'conn_a@shop.example')
+    const fresh = new ArchiveSource(['INBOX'], 'conn_b@shop.example')
+    await archiveRound(
+      new Map([
+        ['conn_a', legacy],
+        ['conn_b', fresh],
+      ]),
+    )
+    expect(legacy.archived).toEqual(['kefuagents'])
+    expect(fresh.archived).toEqual(['KefuAgents'])
+  })
+
+  it('旧配置显式写了别的名字照旧；null = 关掉归档', async () => {
+    const custom = new ArchiveSource(['INBOX', 'kefuagents'], 'conn_a@shop.example')
+    await archiveRound(new Map([['conn_a', custom]]), 'Processed')
+    expect(custom.archived).toEqual(['Processed'])
+    const off = new ArchiveSource(['INBOX'], 'conn_a@shop.example')
+    await archiveRound(new Map([['conn_a', off]]), null)
+    expect(off.archived).toEqual([])
+  })
+
+  it('对账搜到的归档文件夹认名不分大小写（老默认 agentsws 也算）', () => {
+    expect(isArchiveFolder('kefuagents')).toBe(true)
+    expect(isArchiveFolder('KefuAgents')).toBe(true)
+    expect(isArchiveFolder('agentsws')).toBe(true)
+    expect(isArchiveFolder('Sent')).toBe(false)
+    expect(isArchiveFolder('processed', 'Processed')).toBe(true)
   })
 })
