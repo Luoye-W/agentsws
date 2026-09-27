@@ -462,6 +462,7 @@ AGENTSWS_CLOUD_ADMIN_TOKEN=… node scripts/import-kol-public.mjs https://cloud.
 | `packages/hosted/` | 托管实例的纯逻辑：起停判定、容器环境变量契约、托管令牌、按官方单价的费用估算 |
 | `deploy/Dockerfile.hosted` | 容器镜像（只有 `apps/server`，amd64，不带工作区号与密钥） |
 | `apps/cloud/src/app.ts` | **两个形态共用**的路由表与鉴权装配 |
+| `packages/contracts/cloud-openapi.json` | **对外接口一览**（WP164）：客户端与其他产品会调的全部云端路径、请求 / 回包 / 错误形状。由 `packages/contracts/src/cloud-api.ts` 生成（`node scripts/gen-cloud-contract.mjs`），CI 核零漂移；`apps/cloud-worker/test/wp164-contract.test.ts` 核真实现对得上它 |
 | `deploy/smoke.sh` | 冒烟（两个形态共用） |
 | `docs/61-…` | **Compose 自建形态**的 runbook（留给开源自建用户） |
 

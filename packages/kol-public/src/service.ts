@@ -26,10 +26,13 @@ import type {
   IssuedPluginToken,
   KolChannel,
   KolObservationSource,
+  KolPublicBenchmarkResult,
+  KolPublicBrowseResult,
+  KolPublicDisputeResult,
+  KolPublicRefreshResult,
   PluginPairing,
   PublicContentObservation,
   PublicContentSample,
-  PublicCreatorCard,
   PublicCreatorObservation,
   RevealedContact,
 } from '@agentsws/contracts'
@@ -109,32 +112,14 @@ export const SEARCH_IDEMPOTENCY_WINDOW_MS = 10 * 60 * 1000
  */
 export const AUDIT_NOT_CHARGED_NOTE = '样本不够，这次不收。'
 
-export interface BrowseResult {
-  creators: PublicCreatorCard[]
-  /** 这一次扣了多少积分（命中缓存与未命中同价；窗口内重复搜索为 0）。 */
-  credits: number
-}
-
-export interface RefreshResult {
-  /** 有没有真的去外部取一次数。 */
-  refreshed: boolean
-  used: SourceOutcome['used']
-  reason?: SourceOutcome['reason']
-  message: string
-  credits: number
-  card?: PublicCreatorCard
-}
-
-export interface BenchmarkResult extends Benchmark {
-  note: string
-  /** 这一次扣了多少积分（桶不够 k 不收钱 → 0）。 */
-  credits: number
-}
-
-export interface DisputeResult {
-  dispute: Dispute
-  message: string
-}
+/*
+ * WP164：这四个回包的形状挪进了契约（`@agentsws/contracts` 的 cloud-api.ts），
+ * 开源侧与私有云之间只认那一份；这里原名留着，调用方一个字不用改。
+ */
+export type BrowseResult = KolPublicBrowseResult
+export type RefreshResult = KolPublicRefreshResult
+export type BenchmarkResult = KolPublicBenchmarkResult
+export type DisputeResult = KolPublicDisputeResult
 
 /**
  * 卡面的可信度：来源档 × 观察条数带来的把握 × 新鲜度。

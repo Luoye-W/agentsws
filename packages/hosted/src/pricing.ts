@@ -17,14 +17,10 @@
  * 官网改价了就改这一张表（与 `packages/metering/src/pricing.json` 同一条纪律：
  * 改数 = 改数据，不改逻辑），`as_of` 同步改。
  */
+import type { HostedInstanceType } from '@agentsws/contracts'
 
-export type HostedInstanceType =
-  | 'lite'
-  | 'basic'
-  | 'standard-1'
-  | 'standard-2'
-  | 'standard-3'
-  | 'standard-4'
+/** WP164：实例规格挪进契约（`HostedInstanceStatus` 要用），这里原样重导出。 */
+export type { HostedInstanceType }
 
 export interface InstanceSpec {
   /** vCPU（lite 是 1/16）。 */

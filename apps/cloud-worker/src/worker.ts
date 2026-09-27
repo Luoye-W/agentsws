@@ -423,7 +423,15 @@ async function handleRelayOwner(
   }
   // 对象按工作区命名：配对密钥、计数、留言都在这一个对象里
   const stub = env.CHAT_RELAY.get(env.CHAT_RELAY.idFromName(principal.workspace_id))
-  return stub.fetch(withInternalHeaders(request, { principal }))
+  /*
+   * WP164 修：以前这里把公网路径（`/v1/chat/relay/pairing`）原样转进 DO，而 DO 只认
+   * `/__internal/*`——那张表里写了 `internal` 却没人用，三条 owner 路由从入口 Worker
+   * 进来一律 400「路径里缺工作区号」（WP124 的测试是直接打 DO 的，没走这一跳；
+   * 与 WP128 修过的 `/v1/support/subscription` 同一个坑）。契约一致性测试打出来的。
+   */
+  const internal = new URL(request.url)
+  internal.pathname = mapped.internal
+  return stub.fetch(withInternalHeaders(new Request(internal, request), { principal }))
 }
 
 /**
