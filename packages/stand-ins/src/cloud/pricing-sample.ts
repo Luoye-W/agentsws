@@ -494,7 +494,7 @@ export const SAMPLE_PRICING_CATALOG: PricingCatalog = {
       {
         capability: 'data.search.ai_answer',
         unit: 'call',
-        credits_per_unit: 0.4,
+        credits_per_unit: 0.2,
         label_zh: 'AI 平台问答探测（每个平台一次）',
         label_en: 'AI answer probe (per platform)',
         block: 'data',
