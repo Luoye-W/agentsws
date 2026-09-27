@@ -94,55 +94,58 @@ function ClaimGroup(props: {
           />
         </div>
       </CardHeader>
-      <CardContent className="space-y-2">
-        <table className="w-full text-xs">
-          <thead className="text-left text-muted-foreground">
-            <tr>
-              <th className="py-1 pr-2 font-normal">{t('knowledge.claims.col.pattern')}</th>
-              <th className="py-1 pr-2 font-normal">{t('knowledge.claims.col.reason')}</th>
-              <th className="py-1 pr-2 font-normal">{t('knowledge.claims.col.source')}</th>
-              <th className="py-1 font-normal">{t('knowledge.claims.col.on')}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {props.rows.map((r) => (
-              <ClaimRow key={r.id} row={r} busy={props.busy} onPatch={props.onPatch} />
-            ))}
-          </tbody>
-        </table>
-        {adding ? (
-          <div className="flex flex-wrap gap-2">
-            <Input
-              className="h-8 w-40"
-              value={pattern}
-              placeholder={t('knowledge.claims.col.pattern')}
-              onChange={(e) => setPattern(e.target.value)}
-            />
-            <Input
-              className="h-8 flex-1"
-              value={reason}
-              placeholder={t('knowledge.claims.col.reason')}
-              onChange={(e) => setReason(e.target.value)}
-            />
-            <Button
-              size="sm"
-              disabled={pattern.trim() === '' || props.busy}
-              onClick={() => {
-                props.onPatch({ add: { pattern, reason, market: props.id } })
-                setPattern('')
-                setReason('')
-                setAdding(false)
-              }}
-            >
-              {t('knowledge.claims.save')}
+      {/* 没开的组只留一行标题与开关，表收起来（页面不堆字） */}
+      {props.enabled ? (
+        <CardContent className="space-y-2">
+          <table className="w-full text-xs">
+            <thead className="text-left text-muted-foreground">
+              <tr>
+                <th className="py-1 pr-2 font-normal">{t('knowledge.claims.col.pattern')}</th>
+                <th className="py-1 pr-2 font-normal">{t('knowledge.claims.col.reason')}</th>
+                <th className="py-1 pr-2 font-normal">{t('knowledge.claims.col.source')}</th>
+                <th className="py-1 font-normal">{t('knowledge.claims.col.on')}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {props.rows.map((r) => (
+                <ClaimRow key={r.id} row={r} busy={props.busy} onPatch={props.onPatch} />
+              ))}
+            </tbody>
+          </table>
+          {adding ? (
+            <div className="flex flex-wrap gap-2">
+              <Input
+                className="h-8 w-40"
+                value={pattern}
+                placeholder={t('knowledge.claims.col.pattern')}
+                onChange={(e) => setPattern(e.target.value)}
+              />
+              <Input
+                className="h-8 flex-1"
+                value={reason}
+                placeholder={t('knowledge.claims.col.reason')}
+                onChange={(e) => setReason(e.target.value)}
+              />
+              <Button
+                size="sm"
+                disabled={pattern.trim() === '' || props.busy}
+                onClick={() => {
+                  props.onPatch({ add: { pattern, reason, market: props.id } })
+                  setPattern('')
+                  setReason('')
+                  setAdding(false)
+                }}
+              >
+                {t('knowledge.claims.save')}
+              </Button>
+            </div>
+          ) : (
+            <Button size="sm" variant="outline" onClick={() => setAdding(true)}>
+              {t('knowledge.claims.add')}
             </Button>
-          </div>
-        ) : (
-          <Button size="sm" variant="outline" onClick={() => setAdding(true)}>
-            {t('knowledge.claims.add')}
-          </Button>
-        )}
-      </CardContent>
+          )}
+        </CardContent>
+      ) : null}
     </Card>
   )
 }
@@ -159,11 +162,12 @@ function ClaimRow(props: {
   const [reason, setReason] = useState(row.reason)
   return (
     <tr className="border-t align-top" data-testid={`claim-rule-${row.id}`}>
-      <td className="py-1 pr-2 font-mono">
-        {editing ? (
+      <td className="py-1 pr-2">
+        {/* 正则规则不露正则、也不让在这里改字（改理由可以）；人写的规则按字面改 */}
+        {editing && row.regex !== true ? (
           <Input className="h-7" value={pattern} onChange={(e) => setPattern(e.target.value)} />
         ) : (
-          row.pattern
+          (row.label ?? row.pattern)
         )}
       </td>
       <td className="py-1 pr-2">
@@ -175,7 +179,9 @@ function ClaimRow(props: {
                 size="sm"
                 disabled={props.busy}
                 onClick={() => {
-                  props.onPatch({ rule: { id: row.id, pattern, reason } })
+                  props.onPatch({
+                    rule: { id: row.id, ...(row.regex === true ? {} : { pattern }), reason },
+                  })
                   setEditing(false)
                 }}
               >

@@ -416,6 +416,38 @@ export const MARKET_CLAIM_RULES: readonly MarketClaimRule[] = [
   ),
 ]
 
+/** 正则规则给人看的写法（界面不露正则）。 */
+const LABELS: Readonly<Record<string, string>> = {
+  abs_en_best: 'best in the world',
+  abs_en_guarantee: 'guarantee、guaranteed',
+  abs_en_never: 'never fails、never breaks',
+  med_en_cure: 'cures / heals / treats + 疾病（disease、cancer…）',
+  med_en_fda: 'FDA approved',
+  'us.unproven_efficacy': 'clinically proven、scientifically tested、doctor recommended…',
+  'us.made_in_usa': 'Made in USA、Made in America…',
+  'us.endorsement': 'as seen on、featured in、customers love…',
+  'us.fake_reviews': '5-star reviews、five-star reviews',
+  'us.green_generic': 'eco-friendly、environmentally friendly…',
+  'eu.green_generic': 'eco-friendly、climate-friendly、good for the planet…',
+  'eu.offset_neutral': 'carbon neutral、climate neutral、net zero…',
+  'uk.green_claims': 'sustainable、biodegradable、compostable、100% recyclable',
+  'eu.comparison': 'better / cheaper … than competitors',
+  'eu.superlative': 'number one、world’s best、unbeatable…',
+  'uk.health': 'boosts immunity、detox、anti-ageing',
+  'eu.misleading': 'limited time only、only 3 left、last chance',
+  'ca.made_in_canada': 'Made in Canada、Product of Canada',
+  'ca.performance': 'lasts up to 10…、3x faster、lab-tested',
+  'ca.green': 'eco-friendly、carbon neutral、sustainable…',
+  'au.made_in_australia': 'Made in Australia、Australian made',
+  'au.green': 'eco-friendly、carbon neutral、biodegradable…',
+  'au.reviews': '5-star、customers love…',
+  'au.therapeutic': 'relieves pain、soothes arthritis…',
+}
+for (const r of MARKET_CLAIM_RULES) {
+  const label = LABELS[r.id]
+  if (label !== undefined) r.label = label
+}
+
 const BUILTIN = new Map(MARKET_CLAIM_RULES.map((r) => [r.id, r]))
 
 const CATEGORIES = new Set<ContentClaimRule['category']>([
@@ -452,6 +484,8 @@ function rowOf(
       : (base?.reason ?? card.statement)
   const source_title = typeof s.source_title === 'string' ? s.source_title : base?.source_title
   const source_url = typeof s.source_url === 'string' ? s.source_url : base?.source_url
+  // 人改了要拦的字，自带那句写法就不对了
+  const label = base?.label !== undefined && pattern === base.pattern ? base.label : undefined
   return {
     id: base?.id ?? card.id,
     pattern,
@@ -461,6 +495,7 @@ function rowOf(
     market: base?.market ?? (isGroup(s.market) ? s.market : 'global'),
     ...(source_title === undefined ? {} : { source_title }),
     ...(source_url === undefined ? {} : { source_url }),
+    ...(label === undefined ? {} : { label }),
     enabled: s.enabled !== false,
     origin: base === undefined ? 'custom' : 'edited',
   }

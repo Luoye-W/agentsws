@@ -22,7 +22,11 @@ describe('自带规则表', () => {
       expect(r.source_url, r.id).toMatch(OFFICIAL)
       expect(r.source_title.length, r.id).toBeGreaterThan(3)
       expect(r.reason.length, r.id).toBeGreaterThan(5)
-      if (r.regex === true) expect(() => new RegExp(r.pattern, 'i'), r.id).not.toThrow()
+      if (r.regex === true) {
+        expect(() => new RegExp(r.pattern, 'i'), r.id).not.toThrow()
+        // 界面不露正则：每条正则规则都有一句人看得懂的写法
+        expect(r.label, r.id).toBeTruthy()
+      }
     }
     expect(new Set(MARKET_CLAIM_RULES.map((r) => r.id)).size).toBe(MARKET_CLAIM_RULES.length)
   })

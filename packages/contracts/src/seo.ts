@@ -324,6 +324,8 @@ export interface ContentClaimRule {
   /** WP159：出处（官方指南）的标题与链接。 */
   source_title?: string
   source_url?: string
+  /** WP159：`regex` 规则给人看的写法（「eco-friendly、environmentally friendly…」），界面不露正则。 */
+  label?: string
 }
 
 /**

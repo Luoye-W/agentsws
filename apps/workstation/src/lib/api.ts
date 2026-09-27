@@ -5624,6 +5624,8 @@ export interface ClaimRuleRowData {
   market: ClaimMarketGroupId
   source_title?: string
   source_url?: string
+  /** 正则规则给人看的写法。 */
+  label?: string
   enabled: boolean
   origin: 'builtin' | 'edited' | 'custom'
 }

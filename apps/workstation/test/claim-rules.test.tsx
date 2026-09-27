@@ -61,7 +61,10 @@ describe('违规宣称规则（按市场分组）', () => {
     const us = screen.getByTestId('claim-group-us')
     const link = within(us).getByRole('link')
     expect(link.getAttribute('href')).toContain('ftc.gov')
-    expect(screen.getByTestId('claim-group-eu_uk').className).toContain('opacity-60')
+    const eu = screen.getByTestId('claim-group-eu_uk')
+    expect(eu.className).toContain('opacity-60')
+    // 没开的组表收起来
+    expect(within(eu).queryByRole('table')).toBeNull()
   })
 
   it('关一条 / 开一组：各发一次 PATCH', async () => {
