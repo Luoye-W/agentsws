@@ -8,8 +8,8 @@
  * 之后只会偶尔来看一眼花了多少；连接是要长期管的（试连、重新授权、断开）。
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { Link, useLocation } from 'react-router-dom'
 import { DataMapPanel } from '@/components/data-map'
 import { ModelsPanel } from '@/components/models/models-panel'
 import { NoModelBanner } from '@/components/models/no-model-banner'
@@ -66,6 +66,16 @@ export function SettingsPage({
    * 多一张卡只是多一件要理解的事。真有第二个品牌或第二个人了它才出现，
    * 而且只说三句：这家公司叫什么、有几个品牌几个人、去哪管品牌。
    */
+  /*
+   * WP169：首页告警区「目标市场按店铺后台改了」点开来的是 `/settings#company`——档案一到就滚到
+   * 「公司档案」那一张（前端路由跳转浏览器不会自己按 # 滚）。
+   */
+  const { hash } = useLocation()
+  const companyReady = onboarding.data !== undefined
+  useEffect(() => {
+    if (hash !== '#company' || !companyReady) return
+    document.getElementById('company')?.scrollIntoView?.({ block: 'start' })
+  }, [hash, companyReady])
   const orgs = useQuery({ queryKey: ['orgs'], queryFn: () => listOrganizations(), retry: false })
   const org = orgs.data?.[0]
   const save = useMutation({
@@ -146,7 +156,7 @@ export function SettingsPage({
           </CardContent>
         </Card>
         {onboarding.data === undefined ? null : (
-          <Card data-testid="settings-company">
+          <Card id="company" data-testid="settings-company">
             <CardHeader>
               <CardTitle className="flex items-center gap-1 text-sm">
                 {t('settings.company')}

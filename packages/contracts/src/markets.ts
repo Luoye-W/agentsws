@@ -79,3 +79,154 @@ export interface MarketsSource {
   note?: string
   at: Iso8601
 }
+
+/**
+ * WP169（Luoye 09-27 定）：每个市场的**主要语言**（ISO 639-1 小写）。每周 AI 问答探测用它问
+ * （问题由模型从品牌语言翻过来），每日搜索结果页（SERP）的 `language` 也按它。
+ *
+ * 多语国家取第一语言（加拿大 → 英语、瑞士 → 德语、比利时 → 荷兰语、新加坡 / 印度 → 英语）；
+ * 台湾 / 香港 / 澳门带地区子标签（繁体：`zh-tw` / `zh-hk`），大陆是 `zh`。
+ * 档案里可以按市场覆盖（`WorkspaceProfile.market_languages`）。表里没有的市场按品牌语言问。
+ */
+export const MARKET_PRIMARY_LANGUAGE: Readonly<Record<string, string>> = {
+  US: 'en',
+  GB: 'en',
+  CA: 'en',
+  AU: 'en',
+  NZ: 'en',
+  IE: 'en',
+  SG: 'en',
+  IN: 'en',
+  ZA: 'en',
+  PH: 'en',
+  NG: 'en',
+  KE: 'en',
+  MT: 'en',
+  JM: 'en',
+  TT: 'en',
+  DE: 'de',
+  AT: 'de',
+  CH: 'de',
+  LI: 'de',
+  LU: 'de',
+  FR: 'fr',
+  BE: 'nl',
+  MC: 'fr',
+  SN: 'fr',
+  CI: 'fr',
+  MA: 'ar',
+  DZ: 'ar',
+  TN: 'ar',
+  NL: 'nl',
+  IT: 'it',
+  SM: 'it',
+  VA: 'it',
+  ES: 'es',
+  AD: 'ca',
+  PT: 'pt',
+  BR: 'pt',
+  MX: 'es',
+  AR: 'es',
+  CL: 'es',
+  CO: 'es',
+  PE: 'es',
+  UY: 'es',
+  PY: 'es',
+  BO: 'es',
+  EC: 'es',
+  VE: 'es',
+  CR: 'es',
+  PA: 'es',
+  GT: 'es',
+  HN: 'es',
+  SV: 'es',
+  NI: 'es',
+  DO: 'es',
+  PR: 'es',
+  CU: 'es',
+  SE: 'sv',
+  NO: 'no',
+  DK: 'da',
+  FI: 'fi',
+  IS: 'is',
+  EE: 'et',
+  LV: 'lv',
+  LT: 'lt',
+  PL: 'pl',
+  CZ: 'cs',
+  SK: 'sk',
+  HU: 'hu',
+  RO: 'ro',
+  MD: 'ro',
+  BG: 'bg',
+  GR: 'el',
+  CY: 'el',
+  HR: 'hr',
+  SI: 'sl',
+  RS: 'sr',
+  BA: 'bs',
+  ME: 'sr',
+  MK: 'mk',
+  AL: 'sq',
+  UA: 'uk',
+  BY: 'be',
+  RU: 'ru',
+  KZ: 'kk',
+  TR: 'tr',
+  IL: 'he',
+  GE: 'ka',
+  AM: 'hy',
+  AZ: 'az',
+  AE: 'ar',
+  SA: 'ar',
+  QA: 'ar',
+  KW: 'ar',
+  BH: 'ar',
+  OM: 'ar',
+  JO: 'ar',
+  LB: 'ar',
+  EG: 'ar',
+  IQ: 'ar',
+  IR: 'fa',
+  JP: 'ja',
+  KR: 'ko',
+  CN: 'zh',
+  HK: 'zh-hk',
+  TW: 'zh-tw',
+  MO: 'zh-hk',
+  TH: 'th',
+  VN: 'vi',
+  ID: 'id',
+  MY: 'ms',
+  BD: 'bn',
+  PK: 'ur',
+  LK: 'si',
+  NP: 'ne',
+  KH: 'km',
+  MN: 'mn',
+}
+
+/** ISO 639-1（可带地区子标签，如 `zh-tw`；与搜索数据接口认的同一个口径）。 */
+const LANGUAGE_CODE = /^[a-z]{2,3}(-[a-z0-9]{2,8})?$/
+
+/** 归一化档案里的覆盖表：国家码按 {@link normalizeMarkets} 认、语言码小写（`de` / `zh-tw`）；认不出的丢掉。 */
+export function normalizeMarketLanguages(
+  map: Readonly<Record<string, string>> | undefined,
+): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const [k, v] of Object.entries(map ?? {})) {
+    const [code] = normalizeMarkets([k])
+    const lang = typeof v === 'string' ? v.trim().toLowerCase() : ''
+    if (code !== undefined && LANGUAGE_CODE.test(lang)) out[code] = lang
+  }
+  return out
+}
+
+/** 一个市场用什么语言问：档案里覆盖的优先，其次表里的第一语言；都没有回 `undefined`（按品牌语言）。 */
+export function marketLanguage(
+  code: string,
+  overrides?: Readonly<Record<string, string>> | undefined,
+): string | undefined {
+  const cc = code.trim().toUpperCase() === 'UK' ? 'GB' : code.trim().toUpperCase()
+  return normalizeMarketLanguages(overrides)[cc] ?? MARKET_PRIMARY_LANGUAGE[cc]
+}

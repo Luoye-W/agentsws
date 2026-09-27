@@ -28622,6 +28622,17 @@
                       "type": "string",
                       "pattern": "^[A-Za-z]{2}$"
                     }
+                  },
+                  "market_languages": {
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z]{2}$"
+                    },
+                    "additionalProperties": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})?$"
+                    }
                   }
                 },
                 "required": ["legal_name"]

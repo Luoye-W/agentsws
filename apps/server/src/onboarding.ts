@@ -55,6 +55,7 @@ import type {
 } from '@agentsws/contracts'
 import {
   DEFAULT_STOREFRONT_PLATFORM,
+  normalizeMarketLanguages,
   normalizeMarkets,
   STOREFRONT_PLATFORMS,
   storefrontUsableService,
@@ -342,6 +343,8 @@ export interface OnboardingAssembly {
     markets?: string[]
     /** WP166：这份市场是从哪看出来的（官网 / Amazon / 店铺后台 / 人改的）。 */
     markets_source?: MarketsSource
+    /** WP169：按市场覆盖的探测语言（没覆盖过就没有）。 */
+    market_languages?: Record<string, string>
   }
   /**
    * WP166：直接改某个品牌的目标市场（店铺连上后按店里配的市场 / 配送区域校正那一次用）。
@@ -480,6 +483,7 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
     // WP166：目标市场与出处（设置页「公司档案」同一份可改）
     ...(p.markets === undefined ? {} : { markets: [...p.markets] }),
     ...(p.markets_source === undefined ? {} : { markets_source: p.markets_source }),
+    ...(p.market_languages === undefined ? {} : { market_languages: { ...p.market_languages } }),
     set_at: p.set_at,
   })
 
@@ -707,11 +711,19 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
       // WP159 / WP166：目标市场——不给就沿用上一次（只认国家码清单里的，统一大写、去重）；
       // 人改过的那一份，自动推断（品牌分析确认）不再覆盖它
       const { markets, markets_source } = nextMarkets(previous, input, clock.now())
+      // WP169：按市场覆盖探测语言——不给就沿用上一次；给了按国家码 / 语言码归一化（空 = 清空）
+      const market_languages =
+        input.market_languages === undefined
+          ? previous?.market_languages
+          : normalizeMarketLanguages(input.market_languages)
       const next: WorkspaceProfile = {
         legal_name,
         ...(domain === '' ? {} : { domain }),
         ...(markets === undefined || markets.length === 0 ? {} : { markets }),
         ...(markets_source === undefined ? {} : { markets_source }),
+        ...(market_languages === undefined || Object.keys(market_languages).length === 0
+          ? {}
+          : { market_languages }),
         discoverable: input.discoverable ?? company?.discoverable ?? previous?.discoverable ?? true,
         ...(vertical === undefined ? {} : { vertical }),
         ...(storefront_platform === undefined ? {} : { storefront_platform }),
@@ -889,6 +901,9 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
           : { storefront_platform: p.storefront_platform }),
         ...(p?.markets === undefined ? {} : { markets: [...p.markets] }),
         ...(p?.markets_source === undefined ? {} : { markets_source: p.markets_source }),
+        ...(p?.market_languages === undefined
+          ? {}
+          : { market_languages: { ...p.market_languages } }),
       }
     },
     setMarkets(ws, list, source) {
@@ -932,6 +947,9 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
         ...(previous?.markets_source === undefined
           ? {}
           : { markets_source: previous.markets_source }),
+        ...(previous?.market_languages === undefined
+          ? {}
+          : { market_languages: previous.market_languages }),
         set_at: clock.now(),
       })
     },

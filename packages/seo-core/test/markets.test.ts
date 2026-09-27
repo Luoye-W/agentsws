@@ -158,3 +158,19 @@ describe('WP166 · 搜索结果页人群核对按市场分别看', () => {
     expect(marketName('GB', 'en')).toBe('United Kingdom')
   })
 })
+
+describe('WP169 · SERP 的 language 按市场', () => {
+  it('给了每个市场的语言就按它查；没给到的市场用品牌语言', async () => {
+    const search = byCountry(['gb'])
+    await buildDaily({
+      ...base,
+      rows: DEMO_GSC_ROWS,
+      search,
+      countries: ['us', 'de', 'jp'],
+      languages: { de: 'de', jp: 'ja' },
+    })
+    expect(search.calls.length).toBeGreaterThan(0)
+    for (const q of search.calls)
+      expect(q.language).toBe({ us: 'en', de: 'de', jp: 'ja' }[q.country] ?? '?')
+  })
+})

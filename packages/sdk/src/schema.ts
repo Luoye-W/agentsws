@@ -25522,6 +25522,9 @@ export interface operations {
           storefront_platform?: 'shopify' | 'woocommerce' | 'magento' | 'other' | 'none'
           brand_name?: string
           markets?: string[]
+          market_languages?: {
+            [key: string]: string
+          }
         }
       }
     }

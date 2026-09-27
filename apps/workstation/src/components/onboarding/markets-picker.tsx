@@ -61,6 +61,26 @@ export function useMarketsOriginText(): (origin: MarketsOrigin | undefined) => s
   }
 }
 
+/**
+ * WP169（Luoye 09-27 定）：多一个市场，搜索可见度的探测就多一份花费——选了 2 个及以上时一句提示，
+ * 细节进问号（36 §7）。这几个数与服务端同一口径（界面不另算价目，只把默认值摆出来）：
+ * 每周默认问 6 个（`seo-service` 的 `DEFAULT_GEO_QUESTIONS`）× 3 个平台（`seo-core` 的
+ * `geoPlatformsFor` 默认那三个）× 市场数 × 每次 0.2 积分（`metering/pricing.json` 的
+ * `data.search.ai_answer`）；每日搜索结果页每个市场各 5 次（`MAX_SERP_CHECKS_PER_DAY`）。
+ */
+export const MARKETS_COST_DEFAULTS = {
+  questions: 6,
+  platforms: 3,
+  credits_per_probe: 0.2,
+  serp_per_market_per_day: 5,
+} as const
+
+/** 每周默认花费（积分）：问题 × 平台 × 市场 × 单价，保留一位小数。 */
+export function weeklyProbeCredits(markets: number): number {
+  const d = MARKETS_COST_DEFAULTS
+  return Math.round(d.questions * d.platforms * markets * d.credits_per_probe * 10) / 10
+}
+
 export function MarketsPicker({
   value,
   onChange,
@@ -147,6 +167,26 @@ export function MarketsPicker({
         </optgroup>
       </select>
       {originText === undefined ? null : <Hint text={originText} testId="markets-origin" />}
+      {value.length < 2 ? null : (
+        <span
+          className="flex basis-full items-center gap-1 text-[11px] text-ws-muted-fg"
+          data-slot="status"
+          data-testid="markets-cost"
+        >
+          {t('markets.cost')}
+          <Hint
+            testId="markets-cost-hint"
+            text={t('markets.cost.hint', {
+              q: String(MARKETS_COST_DEFAULTS.questions),
+              p: String(MARKETS_COST_DEFAULTS.platforms),
+              m: String(value.length),
+              price: String(MARKETS_COST_DEFAULTS.credits_per_probe),
+              c: String(weeklyProbeCredits(value.length)),
+              serp: String(MARKETS_COST_DEFAULTS.serp_per_market_per_day),
+            })}
+          />
+        </span>
+      )}
     </div>
   )
 }

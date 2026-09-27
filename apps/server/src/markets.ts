@@ -14,6 +14,8 @@ import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { BrandIntakeField, MarketsSource } from '@agentsws/contracts'
 import { normalizeMarkets } from '@agentsws/contracts'
+import type { DeckCard } from '@agentsws/deck'
+import { actionsFor, labelsFor, layoutFor } from '@agentsws/deck'
 
 /** 店里配的国家超过这个数就当"卖全世界"，不拿它校正（与官网那一路的国家切换同一个数）。 */
 export const STORE_MARKETS_MAX = 25
@@ -228,6 +230,11 @@ export function createStoreMarketsSync(options: {
   apply(markets: string[], source: MarketsSource): boolean
   now(): string
   dir?: string
+  /**
+   * WP169：真改了档案之后（没改不调）——宿主拿它给工作区所有者推一条通知。
+   * 抛了也不影响校正本身。
+   */
+  onChanged?(change: { markets: string[]; source: MarketsSource }): void | Promise<void>
 }): { check(): Promise<{ changed: boolean; note?: string } | undefined> } {
   let memory: { checked?: string[] } = {}
   const load = (): { checked?: string[] } => {
@@ -269,6 +276,13 @@ export function createStoreMarketsSync(options: {
     })
     if (next === undefined) return { changed: false }
     const changed = options.apply(next.markets, next.source)
+    if (changed) {
+      try {
+        await options.onChanged?.({ markets: next.markets, source: next.source })
+      } catch {
+        // 通知推不出去不回滚校正：档案出处里那一句照样在设置页可见
+      }
+    }
     return changed && next.source.note !== undefined
       ? { changed, note: next.source.note }
       : { changed }
@@ -282,5 +296,121 @@ export function createStoreMarketsSync(options: {
         })
       return running
     },
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* WP169：店铺校正改了市场 → 给工作区所有者推一条通知                     */
+/* ------------------------------------------------------------------ */
+
+/** 校正通知在首页告警区挂几天（没人动就自己退场；人改过市场当场退场）。 */
+export const STORE_MARKETS_NOTICE_DAYS = 7
+
+/** 点开去哪：设置页「公司档案」那一张（工作台按 `#company` 滚到那里）。 */
+export const MARKETS_SETTINGS_PATH = '/settings#company'
+
+/** 一次校正留下的那条通知（记在品牌目录里，重启还在）。 */
+export interface StoreMarketsNotice {
+  id: string
+  /** 那一句人话（= 档案出处里的 `note`）。 */
+  note: string
+  markets: string[]
+  /** = 档案出处的 `at`：出处还是这一次，通知才算没被处理。 */
+  at: string
+  /** 工作区所有者（只推给他）。 */
+  owner: string
+  /** 所有者那条 `common.owner` 分配（卡属于哪个岗位；找不到是空串）。 */
+  position_id: string
+}
+
+const NOTICE_FILE = 'markets-notice.json'
+
+/**
+ * 校正通知：照 36 §2.2b「`system_alert` → 通知 + 告警块」那条现成的路走（06 §1.2 首页告警条），
+ * 不是卡——它不要人拍板，只要人知道、要改去设置页改。
+ *
+ * - `push`：校正真改了市场才调（没改不推）；新的一条顶掉旧的；
+ * - `alerts(person, source)`：只给所有者；档案出处已经不是这一次（人改过 / 又校正了一次）或过了
+ *   {@link STORE_MARKETS_NOTICE_DAYS} 天就不再出。
+ */
+export function createStoreMarketsNotices(options: { dir?: string; now(): string }): {
+  push(notice: StoreMarketsNotice): void
+  current(): StoreMarketsNotice | undefined
+  alerts(person_id: string, source: MarketsSource | undefined): DeckCard[]
+} {
+  let memory: StoreMarketsNotice | undefined
+  const load = (): StoreMarketsNotice | undefined => {
+    if (options.dir === undefined) return memory
+    try {
+      return JSON.parse(readFileSync(join(options.dir, NOTICE_FILE), 'utf8')) as StoreMarketsNotice
+    } catch {
+      return undefined
+    }
+  }
+  return {
+    push(notice) {
+      memory = notice
+      if (options.dir === undefined) return
+      try {
+        writeFileSync(
+          join(options.dir, NOTICE_FILE),
+          `${JSON.stringify(notice, null, 2)}\n`,
+          'utf8',
+        )
+      } catch {
+        // 记不下来只是重启后不再提醒，不碍事
+      }
+    },
+    current: load,
+    alerts(person_id, source) {
+      const n = load()
+      if (n === undefined || n.owner !== person_id) return []
+      if (source?.from !== 'store' || source.at !== n.at) return []
+      const age = Date.parse(options.now()) - Date.parse(n.at)
+      if (!(age < STORE_MARKETS_NOTICE_DAYS * 86_400_000)) return []
+      return [storeMarketsNoticeCard(n)]
+    },
+  }
+}
+
+/** 通知 → 首页告警区那一行（`system_alert`，点「去处理」到设置页公司档案）。 */
+export function storeMarketsNoticeCard(n: StoreMarketsNotice): DeckCard {
+  const title = `目标市场按店铺后台改了：${n.note.replace(/^按店铺后台的(「市场」|配送区域)(校正：)?/, '')}`
+  const summary = `${n.note}。不对的话去设置页「公司档案」改。`
+  const actions = actionsFor('system_alert', 'pending')
+  return {
+    id: n.id,
+    kind: 'system_alert',
+    layout: layoutFor('system_alert'),
+    status: 'pending',
+    priority_band: 'P3',
+    priority: 'queue',
+    risk_class: 'low',
+    title,
+    summary,
+    content_variants: { zh_summary: summary },
+    position_id: n.position_id,
+    role_id: 'common.owner',
+    channel: 'system',
+    source: 'system',
+    highlights: [],
+    evidence_chips: [],
+    entity_chips: [],
+    available_actions: actions,
+    action_labels: labelsFor('system_alert', actions),
+    detail: {
+      payload: { kind: 'markets_store_sync', open_path: MARKETS_SETTINGS_PATH, markets: n.markets },
+      precheck: {},
+      citations: [],
+      links: { children: [] },
+      created_at: n.at,
+      updated_at: n.at,
+      proposer: { kind: 'system', id: 'markets_store' },
+      enrichment: { dropped_refs: 0 },
+    },
+    dedupe_key: `markets_store|${n.at}`,
+    snooze_count: 0,
+    merge_count: 1,
+    version: 1,
   }
 }

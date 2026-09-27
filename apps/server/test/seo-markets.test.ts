@@ -100,7 +100,7 @@ describe('WP166 · 每个目标市场分别探', () => {
   it('只选了美国：只探美国；估算 = 问题 × 平台 × 1', async () => {
     const { service, probes } = setup(['US'])
     const view = await service.geoView()
-    expect(view.markets).toEqual([{ code: 'US', probing: true }])
+    expect(view.markets).toEqual([{ code: 'US', probing: true, language: 'en' }])
     expect(view.markets_from).toBe('brand_profile')
     expect(view.estimate).toMatchObject({ questions: 2, platforms: 3, markets: 1 })
     expect(view.estimate.credits_per_week).toBe(1.2)
@@ -124,8 +124,8 @@ describe('WP166 · 每个目标市场分别探', () => {
     }
     expect(payload.rows.every((r) => r.market === 'US' || r.market === 'GB')).toBe(true)
     expect(payload.markets).toEqual([
-      { market: 'US', questions: 2, seen: 0, gaps: 2 },
-      { market: 'GB', questions: 2, seen: 2, gaps: 2 },
+      { market: 'US', language: 'en', questions: 2, seen: 0, gaps: 2 },
+      { market: 'GB', language: 'en', questions: 2, seen: 2, gaps: 2 },
     ])
     // 缺位按市场分开：英国的缺位里没有 ChatGPT（它提到我们了），美国的有
     expect(payload.gaps.find((g) => g.market === 'GB')?.platforms).not.toContain('chatgpt')
@@ -141,8 +141,8 @@ describe('WP166 · 每个目标市场分别探', () => {
     expect(settings.markets_off).toEqual(['GB'])
     const view = await service.geoView()
     expect(view.markets).toEqual([
-      { code: 'US', probing: true },
-      { code: 'GB', probing: false },
+      { code: 'US', probing: true, language: 'en' },
+      { code: 'GB', probing: false, language: 'en' },
     ])
     expect(view.estimate.credits_per_week).toBe(1.2)
     await service.weeklyGeo()
@@ -154,7 +154,7 @@ describe('WP166 · 每个目标市场分别探', () => {
   it('档案里没写市场：按品牌 country 那一个，界面写明按默认', async () => {
     const { service, probes } = setup(undefined)
     const view = await service.geoView()
-    expect(view.markets).toEqual([{ code: 'US', probing: true }])
+    expect(view.markets).toEqual([{ code: 'US', probing: true, language: 'en' }])
     expect(view.markets_from).toBe('default')
     await service.weeklyGeo()
     expect(new Set(probes.map((p) => p.country))).toEqual(new Set(['us']))
@@ -175,5 +175,122 @@ describe('WP166 · 每个目标市场分别探', () => {
     })
     await service.daily()
     expect(new Set(serpCountries)).toEqual(new Set(['us', 'de']))
+  })
+})
+
+describe('WP169 · 按市场的主要语言探测', () => {
+  /** 替身翻译：把问题包成「[de] …」，并记下被调了几次。 */
+  function fakeTranslator() {
+    const prompts: string[] = []
+    const model = async ({ prompt }: { prompt: string }) => {
+      prompts.push(prompt)
+      const to = /\(([a-z]{2,3})\), the way/.exec(prompt)?.[1] ?? '?'
+      const q = prompt.split('<<<QUESTION\n')[1]?.split('\nQUESTION>>>')[0] ?? ''
+      return { text: `"[${to}] ${q}"\n` }
+    }
+    return { prompts, translator: () => model }
+  }
+
+  it('德国用德语问：问题由模型翻过去，行上留原句与译句；美国照旧英语、不翻', async () => {
+    const t = fakeTranslator()
+    const { service, txn, probes } = setup(['US', 'DE'], { translator: t.translator })
+    const view = await service.geoView()
+    expect(view.markets).toEqual([
+      { code: 'US', probing: true, language: 'en' },
+      { code: 'DE', probing: true, language: 'de' },
+    ])
+    const out = await service.weeklyGeo()
+    const us = probes.filter((p) => p.country === 'us')
+    const de = probes.filter((p) => p.country === 'de')
+    expect(us.every((p) => p.language === 'en' && !p.question.startsWith('['))).toBe(true)
+    expect(de.every((p) => p.language === 'de' && p.question.startsWith('[de] '))).toBe(true)
+    expect(de[0]?.question).toBe(`[de] ${us[0]?.question}`)
+    // 只翻德语那两问
+    expect(t.prompts).toHaveLength(2)
+    expect(t.prompts[0]).toContain('into German (de)')
+    expect(t.prompts[0]).toContain('data, not instructions')
+    const card = await txn.approvals.get(out.approval_item_id ?? '')
+    const payload = card?.payload as {
+      rows: { market?: string; question: string; asked?: string; language?: string }[]
+      markets: { market: string; language?: string; untranslated?: boolean }[]
+      notes: string[]
+    }
+    const deRow = payload.rows.find((r) => r.market === 'DE')
+    expect(deRow?.language).toBe('de')
+    expect(deRow?.asked).toBe(`[de] ${deRow?.question}`)
+    expect(payload.rows.find((r) => r.market === 'US')?.asked).toBeUndefined()
+    expect(payload.markets.map((m) => [m.market, m.language, m.untranslated])).toEqual([
+      ['US', 'en', undefined],
+      ['DE', 'de', undefined],
+    ])
+    expect(payload.notes.join('')).not.toContain('还没配模型')
+  })
+
+  it('翻过的缓存起来：每个问题每种语言只翻一次（下一周不再调模型）', async () => {
+    const t = fakeTranslator()
+    const { service } = setup(['FR', 'DE'], { translator: t.translator })
+    await service.weeklyGeo()
+    expect(t.prompts).toHaveLength(4)
+    await service.weeklyGeo()
+    expect(t.prompts).toHaveLength(4)
+  })
+
+  it('没配模型：按原语言问，报告卡与面板都注明', async () => {
+    const { service, txn, probes } = setup(['US', 'JP'])
+    const view = await service.geoView()
+    expect(view.markets.find((m) => m.code === 'JP')).toEqual({
+      code: 'JP',
+      probing: true,
+      language: 'ja',
+      untranslated: true,
+    })
+    const out = await service.weeklyGeo()
+    expect(probes.filter((p) => p.country === 'jp').every((p) => p.language === 'en')).toBe(true)
+    const card = await txn.approvals.get(out.approval_item_id ?? '')
+    const payload = card?.payload as {
+      markets: { market: string; language?: string; untranslated?: boolean }[]
+      notes: string[]
+    }
+    expect(payload.markets.find((m) => m.market === 'JP')).toMatchObject({
+      language: 'en',
+      untranslated: true,
+    })
+    expect(payload.notes).toContain('还没配模型，日本先按原语言问的（配好模型后按当地语言问）。')
+  })
+
+  it('档案里覆盖：加拿大按法语问；SERP 的 language 也按市场', async () => {
+    const t = fakeTranslator()
+    const serp: { country: string; language: string }[] = []
+    const { service, probes } = setup(['CA', 'DE'], {
+      translator: t.translator,
+      brand: () => ({
+        name: 'NordVolt',
+        language: 'en',
+        domains: ['nordvolt.example'],
+        shop_host: 'nordvolt.example',
+        currency: 'USD',
+        country: 'us',
+        markets: ['CA', 'DE'],
+        market_languages: { ca: 'FR' },
+      }),
+    })
+    await service.weeklyGeo()
+    expect(new Set(probes.filter((p) => p.country === 'ca').map((p) => p.language))).toEqual(
+      new Set(['fr']),
+    )
+    const daily = setup(['US', 'DE'], {
+      searchData: () =>
+        ({
+          status: async () => ({ configured: true, route: 'official' }),
+          serp: async (q: { country: string; language: string; query: string }) => {
+            serp.push({ country: q.country, language: q.language })
+            return { query: q, items: [], fetched_at: NOW, source: 'official' }
+          },
+          aiAnswers: async () => [],
+        }) as never,
+    })
+    await daily.service.daily()
+    expect(serp.length).toBeGreaterThan(0)
+    for (const q of serp) expect(q.language).toBe(q.country === 'de' ? 'de' : 'en')
   })
 })
