@@ -5,9 +5,10 @@
  *
  * 1. **每天早上读一遍 Search Console**（定时 `seo.daily_read`，工作区时区 08:00）→
  *    「今天值得动的 5 件事」报告卡（`seo_report`，同日报一样不进队列）+ 每件落成什么：
- *    - 改页面标题 / 开头（`page_seo_edit`）、调内链（`internal_link_edit`）→ 本职责出**改动卡**，
- *      `after` 是机械的第一稿（把查询原样放进标题与 H1 / 用查询做锚文本），人在卡上改或"指导"；
- *    - 加小节（`page_section_add`）要写正文 → 开一件本职责的事项，写好了走同名动作出卡；
+ *    - 改页面标题 / 描述 / H1 / 开头（`page_seo_edit`）、加小节（`page_section_add`）→ 本职责出
+ *      **改动卡**，初稿由**模型按品牌口吻写**（WP159；每天有上限、花费进用量）；模型没配 / 到上限 /
+ *      超预算 / 回文不合规矩时退回规则版：标题与 H1 把查询原样放前面，加小节开一件本职责的事项；
+ *    - 调内链（`internal_link_edit`）→ 改动卡，用查询做锚文本（机械的，不用模型）；
  *    - 新页面（SERP 看过、人群对）→ **新页面选题卡**（`seo_topic`），批了才开一件写这一页的事项；
  *    - 跳转 / 规范网址 / 没收录 → 开一件交给「建站」的事项；站外提及 → 开一件交给「公关」的事项。
  * 2. **每周**（周一 08:30）：按页面收入小结（`weekly_revenue`）+ AI 平台可见度（`weekly_geo`）；
@@ -51,6 +52,7 @@ import {
   type BrandProfileLike,
   buildDaily,
   checkContentQuality,
+  DEFAULT_MODEL_DRAFTS_PER_DAY,
   evidenceText,
   type FactLike,
   generateGeoQuestions,
@@ -60,11 +62,14 @@ import {
   type LandingOrder,
   MAX_GEO_QUESTIONS,
   pageRevenue,
+  parseSeoDraft,
   probeRows,
   qualitySummary,
   type SearchConsolePort,
+  type SeoDraftKind,
   SITE_FACADE_NOTE,
   type SignalOptions,
+  seoDraftPrompt,
 } from '@agentsws/seo-core'
 import type { StageInput, StageOutcome } from '@agentsws/txn'
 
@@ -75,6 +80,12 @@ export interface SeoActor {
   assignment_id: AssignmentId
   role_id: RoleId
 }
+
+/**
+ * WP159：写改动卡初稿的那一口模型（服务端经这个品牌的模型网关打，用量照常进用量账）。
+ * 回的是模型原文；读 / 校验在 `@agentsws/seo-core` 的 `parseSeoDraft`。
+ */
+export type SeoDraftModel = (input: { prompt: string }) => Promise<{ text: string }>
 
 /** 开事项那一跳（`@agentsws/work` 的 `createMatter` 的最小子集）。 */
 export interface SeoMatterPort {
@@ -125,6 +136,18 @@ export interface SeoServiceOptions {
   orders(): readonly LandingOrder[]
   /** 品牌档案（名字、域名、币种……）。域名为空时用 Search Console 页面清单里的主机名。 */
   brand(): SeoBrandInfo | Promise<SeoBrandInfo>
+  /**
+   * WP159：写初稿的模型口，**每次现取**——没配模型（或只有 stub）回 `undefined`，用规则版。
+   * 每天最多调几次看职责阈值 `seo_model_drafts_per_day`（缺省 `DEFAULT_MODEL_DRAFTS_PER_DAY`）。
+   */
+  drafter?(meta: { actor: SeoActor; run_id: string }): SeoDraftModel | undefined
+  /**
+   * WP159：品牌口吻（照 WP122 的注入口径）：品牌档案那一段（`renderBrandContext`）+
+   * 品牌设计规范里的「气质」一句。取不到就不写那一句。
+   */
+  brandVoice?(
+    language: 'zh' | 'en',
+  ): { context?: string; voice?: string } | Promise<{ context?: string; voice?: string }>
   /** 质检要的事实卡与规则表（从知识库投影；没有知识库就是空的）。 */
   knowledge?(actor: SeoActor): Promise<{ facts: FactLike[]; rules: ContentClaimRule[] }>
   appendEvent(e: Omit<EventEnvelope, 'id' | 'at'> & { at?: string }): void
@@ -198,6 +221,8 @@ interface SeoState {
   handed_off?: Record<string, string>
   /** 站点门面那件事项开过没有。 */
   facade_matter_id?: string
+  /** WP159：今天模型写了几份初稿（按工作区日期计，跨天归零）。 */
+  model_drafts?: { date: string; calls: number }
 }
 
 const rec = (v: unknown): Record<string, unknown> =>
@@ -323,7 +348,7 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
   /** 定时那一轮提一条改动（机械第一稿）。 */
   const stageFix = async (
     actor: SeoActor,
-    kind: 'page_seo_edit' | 'internal_link_edit',
+    kind: 'page_seo_edit' | 'page_section_add' | 'internal_link_edit',
     target: ObjectRef,
     before: Record<string, unknown>,
     after: Record<string, unknown>,
@@ -364,6 +389,58 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
     return out.ok ? out.approval.id : undefined
   }
 
+  /** 每天最多让模型写几份初稿（职责阈值可改；0 = 不用模型）。 */
+  const draftCap = (): number => {
+    const v = options.thresholds().seo_model_drafts_per_day
+    return typeof v === 'number' && v >= 0 ? Math.floor(v) : DEFAULT_MODEL_DRAFTS_PER_DAY
+  }
+
+  /**
+   * WP159：让模型按品牌口吻写一份初稿。没配模型 / 到了每天上限 / 模型报错（含超预算）/
+   * 回文不合规矩 → `{ ok: false, reason }`，调用方退回规则版。**先记数再打**：打出去就算花了。
+   */
+  const modelDraft = async (
+    actor: SeoActor,
+    kind: SeoDraftKind,
+    pick: SeoPick,
+    page: SitePage | undefined,
+    brand: SeoBrandInfo,
+  ): Promise<{ ok: true; after: Record<string, unknown> } | { ok: false; reason: string }> => {
+    const run_id = `run_seo_${nextId('d')}`
+    const model = options.drafter?.({ actor, run_id })
+    if (model === undefined) return { ok: false, reason: '没配模型' }
+    const cap = draftCap()
+    const state = loadState()
+    const used = state.model_drafts?.date === date() ? state.model_drafts.calls : 0
+    if (used >= cap) return { ok: false, reason: `今天模型写初稿已到上限（${cap} 份）` }
+    saveState({ ...state, model_drafts: { date: date(), calls: used + 1 } })
+    const voice = (await options.brandVoice?.(brand.language)) ?? {}
+    const prompt = seoDraftPrompt({
+      kind,
+      query: pick.query,
+      suggestion: pick.suggestion,
+      evidence: evidenceText(pick.evidence),
+      page: { url: pick.page ?? '', ...(page?.title === undefined ? {} : { title: page.title }) },
+      language: brand.language,
+      brand: {
+        name: brand.name,
+        ...(voice.context === undefined ? {} : { context: voice.context }),
+        ...(voice.voice === undefined ? {} : { voice: voice.voice }),
+      },
+    })
+    let text: string
+    try {
+      text = (await model({ prompt })).text
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      return { ok: false, reason: `模型这次没写成（${msg.slice(0, 60)}）` }
+    }
+    const rules = (await options.knowledge?.(actor))?.rules ?? []
+    const parsed = parseSeoDraft(kind, text, rules)
+    if (!parsed.ok) return { ok: false, reason: parsed.reason }
+    return { ok: true, after: { ...parsed.draft, target_query: pick.query } }
+  }
+
   /** 开一件事项（交给别的岗位，或者本职责自己要写的）。同一件事 14 天内不重复开。 */
   const openMatter = (
     key: string,
@@ -390,12 +467,42 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
     actor: SeoActor,
     pick: SeoPick,
     pages: readonly SitePage[],
+    brand: SeoBrandInfo,
   ): Promise<SeoPick['outcome']> => {
     const page = pages.find((p) => p.url === pick.page)
     const evidence = evidenceText(pick.evidence)
     const body = `${pick.suggestion}\n证据：${evidence}`
     switch (pick.lane) {
       case 'fix_page': {
+        // WP159：要改文字的（标题 / 描述 / H1 / 开头、加小节）先让模型按品牌口吻写初稿；
+        // 写不成就走下面的规则版（兜底）。无论哪一版都出卡等人批。
+        let fallback: string | undefined
+        if (
+          (pick.fix === 'page_seo_edit' || pick.fix === 'page_section_add') &&
+          pick.page !== undefined
+        ) {
+          const kind = pick.fix
+          const drafted = await modelDraft(actor, kind, pick, page, brand)
+          if (drafted.ok) {
+            const target = { type: targetTypeOf(page), id: pick.page }
+            const id = await stageFix(
+              actor,
+              kind,
+              target,
+              { url: pick.page, ...(page?.title === undefined ? {} : { title: page.title }) },
+              drafted.after,
+              kind === 'page_seo_edit'
+                ? `改页面标题、描述与开头：${page?.title ?? pick.page}`
+                : `给页面加一个小节：${page?.title ?? pick.page}`,
+              `${body}\n初稿由模型按品牌口吻写好了，可以在卡上改字、删掉不想改的那格，或者点「指导」让它重写。`,
+            )
+            return id === undefined
+              ? { kind: 'none', note: '这条改动没提上去（额度或门禁）', draft: 'model' }
+              : { kind: 'change', id, draft: 'model' }
+          }
+          fallback = drafted.reason
+        }
+        const why = fallback === undefined ? '' : `（模型初稿没用上：${fallback}）`
         if (pick.fix === 'page_seo_edit' && pick.page !== undefined) {
           const title = draftTitle(pick.query, page?.title)
           if (title !== undefined) {
@@ -407,11 +514,16 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
               { url: pick.page, ...(page?.title === undefined ? {} : { title: page.title }) },
               { title, h1: title, target_query: pick.query },
               `改页面标题与 H1：${page?.title ?? pick.page}`,
-              `${body}\n这是机械的第一稿（把查询原样放进标题与 H1）；描述与开头两句可以在卡上改，或者点「指导」让它重写。`,
+              `${body}\n这是规则版的第一稿（把查询原样放进标题与 H1）${why}；描述与开头两句可以在卡上改，或者点「指导」让它重写。`,
             )
             return id === undefined
-              ? { kind: 'none', note: '这条改动没提上去（额度或门禁）' }
-              : { kind: 'change', id }
+              ? { kind: 'none', note: '这条改动没提上去（额度或门禁）', draft: 'rules' }
+              : {
+                  kind: 'change',
+                  id,
+                  draft: 'rules',
+                  ...(fallback === undefined ? {} : { note: `模型初稿没用上：${fallback}` }),
+                }
           }
         }
         if (
@@ -447,7 +559,11 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
         })
         return id === undefined
           ? { kind: 'none', note: '这件两周内已经开过了' }
-          : { kind: 'matter', id }
+          : {
+              kind: 'matter',
+              id,
+              ...(fallback === undefined ? {} : { note: `模型初稿没用上：${fallback}` }),
+            }
       }
       case 'new_page': {
         if (pick.serp_check?.right_crowd !== true)
@@ -604,13 +720,17 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
       })
       if (consoleRead.error !== undefined) payload.notes.unshift(consoleRead.error.slice(0, 160))
       const counts = { changes: 0, topics: 0, matters: 0 }
+      const drafts = { model: 0, rules: 0 }
       for (const pick of payload.picks) {
-        const outcome = await land(actor, pick, consoleRead.pages)
+        const outcome = await land(actor, pick, consoleRead.pages, brand)
         if (outcome !== undefined) pick.outcome = outcome
+        if (outcome?.draft === 'model') drafts.model += 1
+        if (outcome?.draft === 'rules') drafts.rules += 1
         if (outcome?.kind === 'change') counts.changes += 1
         if (outcome?.kind === 'topic') counts.topics += 1
         if (outcome?.kind === 'matter') counts.matters += 1
       }
+      if (drafts.model + drafts.rules > 0) payload.drafts = { ...drafts, cap: draftCap() }
       const summary =
         payload.picks.length === 0
           ? (payload.notes[0] ?? '今天没有值得动的')
@@ -629,6 +749,7 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
         search_data: payload.search_data,
         picks: payload.picks.length,
         ...counts,
+        ...(payload.drafts === undefined ? {} : { drafts: payload.drafts }),
       })
       return { approval_item_id, picks: payload.picks.length, ...counts }
     },

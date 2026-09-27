@@ -356,3 +356,127 @@ describe('每周 AI 探测花多少（WP155 提醒：看得到、调得动、关
     expect((await service.geoView()).estimate.questions).toBe(0)
   })
 })
+
+describe('WP159：改动卡初稿由模型写（规则版兜底）', () => {
+  const META = JSON.stringify({
+    title: 'USB-C Laptop Charger, 65W GaN | NordVolt',
+    meta_description: 'A compact USB-C laptop charger that powers a laptop and a phone at once.',
+    h1: 'USB-C Laptop Charger',
+    opening:
+      'This USB-C laptop charger powers most laptops from one plug. It also tops up a phone.',
+  })
+  const SECTION = JSON.stringify({
+    heading: 'How to care for a braided cable',
+    body: 'Coil it loosely and keep it away from sharp bends. Wipe it with a dry cloth.',
+  })
+  const fakeModel = (reply: (prompt: string) => string | Promise<string>) => {
+    const prompts: string[] = []
+    const drafter: SeoServiceOptions['drafter'] =
+      () =>
+      async ({ prompt }) => {
+        prompts.push(prompt)
+        return { text: await reply(prompt) }
+      }
+    return { prompts, drafter }
+  }
+  const byKind = (prompt: string): string => (prompt.includes('"heading"') ? SECTION : META)
+
+  it('标题 / 描述 / H1 / 开头与加小节都由模型写、都出卡；品牌口吻注进提示词；报告卡记几份', async () => {
+    const m = fakeModel(byKind)
+    const { service, txn, matters } = setup({
+      drafter: m.drafter,
+      brandVoice: () => ({ context: 'Brand: NordVolt', voice: 'calm, practical, no hype' }),
+    })
+    const out = await service.daily()
+    expect(out).toMatchObject({ changes: 3, matters: 1 })
+    expect(m.prompts).toHaveLength(2)
+    expect(m.prompts[0]).toContain('NordVolt')
+    expect(m.prompts[0]).toContain('calm, practical, no hype')
+    const changes = await txn.ledger.list({ workspace_id: 'ws_1' })
+    expect(changes.map((c) => c.kind).sort()).toEqual([
+      'internal_link_edit',
+      'page_section_add',
+      'page_seo_edit',
+    ])
+    const seo = changes.find((c) => c.kind === 'page_seo_edit')
+    expect(seo?.after).toMatchObject({
+      title: 'USB-C Laptop Charger, 65W GaN | NordVolt',
+      meta_description: expect.stringContaining('compact'),
+      target_query: 'usb c laptop charger',
+    })
+    expect(changes.find((c) => c.kind === 'page_section_add')?.after).toMatchObject({
+      heading: 'How to care for a braided cable',
+    })
+    // 加小节不再开事项（只剩交建站那一件）
+    expect(matters.every((m) => m.position_template_id === 'site')).toBe(true)
+    const report = await txn.approvals.get(out.approval_item_id ?? '')
+    const payload = report?.payload as {
+      drafts?: unknown
+      picks: { outcome?: { draft?: string } }[]
+    }
+    expect(payload.drafts).toEqual({ model: 2, rules: 0, cap: 5 })
+    expect(payload.picks.filter((p) => p.outcome?.draft === 'model')).toHaveLength(2)
+  })
+
+  it('没配模型：规则版照旧（标题机械第一稿 + 加小节开事项）', async () => {
+    const { service, txn } = setup({ drafter: () => undefined })
+    const out = await service.daily()
+    expect(out).toMatchObject({ changes: 2, matters: 2 })
+    const report = await txn.approvals.get(out.approval_item_id ?? '')
+    expect((report?.payload as { drafts?: unknown } | undefined)?.drafts).toEqual({
+      model: 0,
+      rules: 1,
+      cap: 5,
+    })
+  })
+
+  it('每天有上限：调到 1 份，第二件退回规则版并写明原因；同一天再跑一次模型一次都不打', async () => {
+    const m = fakeModel(byKind)
+    const { service, txn, matters } = setup({
+      drafter: m.drafter,
+      thresholds: () => ({
+        seo_position_min: 3,
+        seo_position_max: 20,
+        seo_model_drafts_per_day: 1,
+      }),
+    })
+    const out = await service.daily()
+    expect(m.prompts).toHaveLength(1)
+    expect(out.changes).toBe(2)
+    const payload = (await txn.approvals.get(out.approval_item_id ?? ''))?.payload as {
+      picks: { outcome?: { note?: string } }[]
+    }
+    expect(payload.picks.some((p) => p.outcome?.note?.includes('上限（1 份）'))).toBe(true)
+    expect(matters.some((x) => x.title.includes('braided'))).toBe(true)
+    await service.daily()
+    expect(m.prompts).toHaveLength(1)
+  })
+
+  it('模型报错（比如超预算）或初稿里有违规宣称：不用那一份，退回规则版', async () => {
+    const broken = fakeModel(() => {
+      throw new Error('budget exceeded')
+    })
+    const a = setup({ drafter: broken.drafter })
+    const outA = await a.service.daily()
+    expect(outA).toMatchObject({ changes: 2, matters: 2 })
+    const seoA = (await a.txn.ledger.list({ workspace_id: 'ws_1' })).find(
+      (c) => c.kind === 'page_seo_edit',
+    )
+    expect((seoA?.after as { title?: string } | undefined)?.title).toBe(
+      'Usb C Laptop Charger – USB-C 65W Charger',
+    )
+    const bragging = fakeModel((p) =>
+      p.includes('"heading"')
+        ? SECTION
+        : JSON.stringify({ ...JSON.parse(META), opening: 'The best in the world. Guaranteed.' }),
+    )
+    const b = setup({ drafter: bragging.drafter })
+    await b.service.daily()
+    const kinds = (await b.txn.ledger.list({ workspace_id: 'ws_1' })).map((c) => c.kind).sort()
+    expect(kinds).toEqual(['internal_link_edit', 'page_section_add', 'page_seo_edit'])
+    const seoB = (await b.txn.ledger.list({ workspace_id: 'ws_1' })).find(
+      (c) => c.kind === 'page_seo_edit',
+    )
+    expect(seoB?.after).not.toHaveProperty('opening')
+  })
+})

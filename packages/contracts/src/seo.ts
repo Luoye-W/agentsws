@@ -149,6 +149,11 @@ export interface SeoPick {
     kind: 'change' | 'topic' | 'matter' | 'dropped' | 'none'
     id?: string
     note?: string
+    /**
+     * WP159：改动卡里的文字是谁写的初稿——`model`（模型按品牌口吻写）/ `rules`（规则版兜底：
+     * 模型没配、超出每天上限、超预算、回文不合规矩时）。不是改文字的那几件不写。
+     */
+    draft?: 'model' | 'rules'
   }
 }
 
@@ -164,6 +169,11 @@ export interface SeoDailyPayload {
   signal_counts: Record<SeoSignalId, number>
   /** 人话备注：「搜索数据接口还没接」「Search Console 还没连，接上才看得到」…… */
   notes: string[]
+  /**
+   * WP159：今天的改动卡初稿，模型写了几份、规则版兜底几份、每天上限几份（服务端回填；
+   * 这一轮没有要改文字的就不写）。
+   */
+  drafts?: { model: number; rules: number; cap: number }
 }
 
 /* ------------------------------------------------------------------ */

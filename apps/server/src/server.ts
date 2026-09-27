@@ -106,6 +106,7 @@ import {
   type RangeExpanded,
   type RoleStore,
   rangeTargetOfProduct,
+  renderBrandContext,
 } from '@agentsws/roles'
 import {
   disconnectedSearchConsole,
@@ -2530,6 +2531,43 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
             }
           })
         return { facts, rules }
+      },
+      /*
+       * WP159：改动卡初稿由模型写（这个品牌的模型网关，用量照常记账；每天上限在 seo-service）。
+       * **每次现取**：模型设置改完下一轮就生效；只有 stub（没接模型）→ undefined，用规则版。
+       */
+      drafter: ({ actor, run_id }) => {
+        if (!effectiveModels().configured()) return undefined
+        const ref = effectiveModels().purposeRef('run')
+        if (ref.provider === 'stub') return undefined
+        return async ({ prompt }) => {
+          const completion = await gatewayProxy.complete({
+            messages: [{ role: 'user', content: prompt }],
+            meta: {
+              workspace_id: ws,
+              assignment_id: actor.assignment_id,
+              role_id: actor.role_id,
+              run_id: run_id as never,
+              purpose: 'run',
+            },
+            model: ref,
+          })
+          return { text: completion.text }
+        }
+      },
+      // WP159：品牌口吻——品牌档案那一段 + 品牌设计规范（WP122）里的「气质」一句，取不到就不写
+      brandVoice: async (language) => {
+        const w = await identity.getWorkspace(ws)
+        const name = w?.brand?.name ?? w?.name
+        const context = renderBrandContext(
+          name === undefined ? undefined : { brand_name: name },
+          language,
+        )
+        const voice = brandDesignRef?.profileOf(ws)?.voice?.value
+        return {
+          ...(context === '' ? {} : { context }),
+          ...(voice === undefined || voice.trim() === '' ? {} : { voice }),
+        }
       },
       appendEvent,
       ...(dir === undefined ? {} : { dir }),

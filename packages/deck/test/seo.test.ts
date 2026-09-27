@@ -79,6 +79,26 @@ describe('WP154 内容与搜索面板', () => {
     expect(String(rows[0]?.evidence)).toContain('曝光 2400')
   })
 
+  it('WP159：改动卡初稿是模型写的，「谁动」那一格标一下', () => {
+    const drafted = report('daily', {
+      picks: [
+        {
+          rank: 1,
+          signal: 'no_clicks',
+          query: 'q',
+          evidence: {},
+          lane: 'fix_page',
+          suggestion: 's',
+          outcome: { kind: 'change', id: 'ap_1', draft: 'model' },
+        },
+      ],
+      notes: [],
+    })
+    expect(rowsOf('seo.today', ctx(['gsc'], [drafted]))[0]?.lane).toBe(
+      '改这页（本职责） · 模型初稿',
+    )
+  })
+
   it('还没读过：一行人话，不出空表', () => {
     const rows = rowsOf('seo.today', ctx(['gsc'], []))
     expect(rows[0]?.what).toBe('今天早上还没读过 Search Console')

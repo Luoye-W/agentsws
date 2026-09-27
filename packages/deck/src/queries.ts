@@ -1733,7 +1733,8 @@ const QUERY_LIST: QueryDef[] = [
           what: `${SEO_SIGNAL_LABEL[String(p.signal)] ?? String(p.signal)} · ${String(p.query ?? '')}`,
           evidence: seoEvidenceText(e),
           action: String(p.suggestion ?? ''),
-          lane: SEO_LANE_LABEL[String(p.lane)] ?? String(p.lane),
+          // WP159：改动卡的文字是模型按品牌口吻写的初稿时标一下（规则版兜底不标）
+          lane: `${SEO_LANE_LABEL[String(p.lane)] ?? String(p.lane)}${isRecord(p.outcome) && p.outcome.draft === 'model' ? ' · 模型初稿' : ''}`,
         }
       })
       // 一件都没有时照实说为什么（没响 / 还没读过），不出一张空表
