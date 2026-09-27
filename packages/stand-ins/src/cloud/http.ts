@@ -355,13 +355,17 @@ export function kolPublicHttp(
 export function cloudStandInFetch(parts: {
   accounts?: CloudAccountsStandIn
   kolPublic?: KolPublicStandIn
+  /** 公共红人库认谁（不给就用 `accounts` 签出来的那些工作区令牌）。 */
+  kolPrincipalOf?: (token: string | undefined) => StandInKolPrincipal | undefined
   pricing?: PricingCatalog
 }): { fetch: StandInHttpFetch; calls: string[]; down: boolean } {
   const kol =
     parts.kolPublic === undefined
       ? undefined
-      : kolPublicHttp(parts.kolPublic, (t) =>
-          parts.accounts === undefined ? undefined : parts.accounts.verify(t),
+      : kolPublicHttp(
+          parts.kolPublic,
+          parts.kolPrincipalOf ??
+            ((t) => (parts.accounts === undefined ? undefined : parts.accounts.verify(t))),
         )
   const state = {
     calls: [] as string[],
