@@ -13,9 +13,11 @@
  * 不出进程；加密那一段的测试留在云端那一侧。
  */
 import type {
+  AuditReport,
   Iso8601,
   KolChannel,
   KolObservationSource,
+  PublicContentObservation,
   PublicCreatorCard,
   PublicCreatorObservation,
   RevealedContact,
@@ -23,10 +25,12 @@ import type {
 import {
   catalogCreditsFor,
   DEFAULT_CREATOR_LIMIT,
+  KOL_AUDIT_CAPABILITY,
   KOL_LOOKUP_CAPABILITY,
   KOL_REVEAL_CAPABILITY,
   KOL_UNIT,
   MAX_CREATOR_LIMIT,
+  MIN_AUDIT_SAMPLES,
   type Pricing,
 } from '@agentsws/contracts'
 import { SAMPLE_PRICING_CATALOG } from './pricing-sample.js'
@@ -65,6 +69,16 @@ export class KolPublicStandIn {
   private readonly cards = new Map<string, PublicCreatorCard>()
   private readonly contacts = new Map<string, { email: string; source: KolObservationSource }>()
   private readonly searchCharges = new Map<string, Iso8601>()
+  /** 每个人身上的观察（体检的样本量看它）。 */
+  private readonly observationRows = new Map<
+    string,
+    (PublicCreatorObservation & { source: KolObservationSource })[]
+  >()
+  /** 内容观测（`channel:external_id` → 最近一条）。 */
+  private readonly contentRows = new Map<
+    string,
+    PublicContentObservation & { source: KolObservationSource }
+  >()
   private readonly wallet: StandInWallet
   private readonly pricing: Pricing
   private readonly now: () => Iso8601
@@ -82,24 +96,38 @@ export class KolPublicStandIn {
     this.pricing = options.pricing ?? SAMPLE_PRICING_CATALOG.pricing
   }
 
-  /** 工作区手填的观察（来源记 `manual`）。回进库了几条。 */
+  /**
+   * 工作区报的观察：手填的来源记 `manual`；本机转发插件观测（`via: 'extension'`）记 `plugin`，
+   * 那一路 `posts_30d` / `engagement_rate` 可缺（缺不是 0）。回进库了几条。
+   */
   contributeAs(
     _principal: StandInKolPrincipal,
     observations: readonly PublicCreatorObservation[],
+    options: { via?: 'extension' } = {},
   ): number {
+    const source: KolObservationSource = options.via === 'extension' ? 'plugin' : 'manual'
     for (const o of observations) {
+      if (
+        source === 'manual' &&
+        (typeof o.posts_30d !== 'number' || typeof o.engagement_rate !== 'number')
+      )
+        throw new StandInKolError('invalid_input', 'posts_30d 与 engagement_rate 要是数。')
       const key = keyOf(o.channel, o.handle)
       const before = this.cards.get(key)
+      const handle = o.handle.replace(/^@/u, '').toLowerCase()
+      const rows = this.observationRows.get(key) ?? []
+      rows.push({ ...o, handle, source })
+      this.observationRows.set(key, rows)
       this.cards.set(key, {
         channel: o.channel,
-        handle: o.handle.replace(/^@/u, '').toLowerCase(),
+        handle,
         followers: o.followers,
         posts_30d: o.posts_30d ?? before?.posts_30d ?? 0,
         engagement_rate: o.engagement_rate ?? before?.engagement_rate ?? 0,
         categories: [...(o.categories ?? before?.categories ?? [])],
         observed_at: o.observed_at,
-        source: 'manual',
-        observations: (before?.observations ?? 0) + 1,
+        source,
+        observations: rows.length,
         confidence: before?.confidence ?? 0.5,
         has_contact: before?.has_contact ?? false,
         updated_at: this.now(),
@@ -108,6 +136,56 @@ export class KolPublicStandIn {
       })
     }
     return observations.length
+  }
+
+  /** 内容观测（本机转发插件采到的内容；来源记 `plugin`）。回收下几条。 */
+  contributeContentAs(
+    _principal: StandInKolPrincipal,
+    observations: readonly PublicContentObservation[],
+  ): number {
+    for (const o of observations)
+      this.contentRows.set(`${o.channel}:${o.external_id}`, {
+        ...o,
+        handle: o.handle.replace(/^@/u, '').toLowerCase(),
+        source: 'plugin',
+      })
+    return observations.length
+  }
+
+  /** 测试里直接看替身那本库：这个人身上的观察、某条内容。 */
+  observationsOf(channel: KolChannel, handle: string): PublicCreatorObservation[] {
+    return [...(this.observationRows.get(keyOf(channel, handle)) ?? [])]
+  }
+
+  contentOf(channel: KolChannel, external_id: string): PublicContentObservation | undefined {
+    return this.contentRows.get(`${channel}:${external_id}`)
+  }
+
+  /**
+   * 体检（`data.kol.audit`）：样本够（≥ {@link MIN_AUDIT_SAMPLES} 条观察）才收钱；不够照出报告、
+   * 明说样本不够、这次不收。替身只出骨架（样本量、近 30 天活跃、一句话）——粉丝真实度、分位、
+   * 风险标记是云上真服务算的，那几格不编。
+   */
+  audit(principal: StandInKolPrincipal, key: { channel: KolChannel; handle: string }): AuditReport {
+    const at = this.now()
+    const card = this.cardOrThrow(key.channel, key.handle)
+    const sample_size = this.observationsOf(card.channel, card.handle).length
+    const insufficient_samples = sample_size < MIN_AUDIT_SAMPLES
+    const base: AuditReport = {
+      channel: card.channel,
+      handle: card.handle,
+      depth: 'basic',
+      sample_size,
+      insufficient_samples,
+      active_30d: card.posts_30d > 0,
+      risk_flags: [],
+      note: insufficient_samples
+        ? `样本不够：这个人身上只有 ${String(sample_size)} 条观察，至少要 ${String(MIN_AUDIT_SAMPLES)} 条。样本不够，这次不收。`
+        : `基于 ${String(sample_size)} 条观察。`,
+      generated_at: at,
+    }
+    if (insufficient_samples) return { ...base, credits: 0 }
+    return { ...base, credits: this.charge(principal, KOL_AUDIT_CAPABILITY) }
   }
 
   /** 回填联系方式（库里得先有这个人）。 */
