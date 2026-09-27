@@ -33,6 +33,8 @@ export const TOOL_WORDS_ZH: Readonly<Record<string, string>> = {
   // WP153：店主的两个只读工具
   list_positions: '岗位清单',
   list_connections: '连接清单',
+  // WP162：按需技能（名词口径：「我翻了「技能手册」」）
+  read_skill: '技能手册',
   // Dev MCP（WP44）
   'shopify.docs.search': 'Shopify 官方文档',
   'shopify.schema.introspect': 'Shopify 接口说明',
