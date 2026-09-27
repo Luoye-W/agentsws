@@ -68,6 +68,12 @@ jobs:
       - name: gen-ontology（零漂移）
         run: node scripts/gen-ontology.mjs --check
 
+      # WP164（docs/83 §2）：云端对外契约 packages/contracts/cloud-openapi.json 由
+      # packages/contracts/src/cloud-api.ts 的 TS 类型生成并签进仓库。云端搬进私有仓之后，
+      # 两边唯一的约定就是这份；改了类型忘了重出（或者手改了 JSON）都红在这里。
+      - name: gen-cloud-contract（云端对外契约零漂移）
+        run: node scripts/gen-cloud-contract.mjs --check
+
       # WP91：上游登记表（docs/10 §3.2）与仓库里真锁的版本必须一致。
       # 升级时改了 package.json 却忘了改 upstreams.yml（或者反过来）会红在这里——
       # 哨兵读的就是 upstreams.yml，那份错了，之后每一趟都在看错的版本。

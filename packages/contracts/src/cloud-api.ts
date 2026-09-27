@@ -1534,7 +1534,9 @@ export interface CloudStandbyApi {
  * 真源是 `packages/contracts/src/cloud-api.ts` 的 `CloudApi` 类型；本文件由
  * `node scripts/gen-cloud-contract.mjs` 生成，CI 跑 `--check` 核对零漂移。
  * 三种响应外形照实际行为写：账号层 `{ data, trace_id }`；钱包、红人、转发、托管 `{ data }`；
- * AI、搜索数据、值守直接是正文。运营后台（`/v1/admin/*`）不在这里。
+ * AI、搜索数据、值守直接是正文。运营后台（`/v1/admin/*`）与 Stripe 的回调不在这里；
+ * 值守的公网反代 `/w/{workspace_id}/*` 原样转给值守子进程（即 `apps/server` 自己的 API），
+ * 也不在这里。
  */
 export interface CloudApi
   extends CloudAccountApi,
