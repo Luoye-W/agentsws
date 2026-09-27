@@ -17,7 +17,12 @@
  * 4. **自助豁免**：读"我这个工作区要不要走向导"、算"我勾了这些岗位要配什么"都是
  *    读自己的绑定，不要求策略层读权限；真改公司档案、发邀请码、批申请一律 owner 级。
  */
-import type { MaybePromise, MembershipRequestVia, StorefrontPlatform } from '@agentsws/contracts'
+import type {
+  MarketsSource,
+  MaybePromise,
+  MembershipRequestVia,
+  StorefrontPlatform,
+} from '@agentsws/contracts'
 import { z } from 'zod'
 import { ApiError } from '../errors.js'
 import {
@@ -75,10 +80,12 @@ export interface WorkspaceProfileInput {
    */
   brand_name?: string | undefined
   /**
-   * WP159：目标市场（ISO 国家码）。品牌分析确认时服务端内部写进来（HTTP 这一面不收它）；
-   * 不给 = 沿用上一次。
+   * WP159：目标市场（ISO 国家码）。不给 = 沿用上一次。
+   * WP166：HTTP 这一面也收了（设置页「公司档案」可以增删）；从这里改的出处记成「人改的」。
    */
   markets?: string[] | undefined
+  /** WP166：这份市场是从哪看出来的（服务端内部用：品牌分析确认时是官网 / Amazon；HTTP 不收）。 */
+  markets_source?: MarketsSource | undefined
 }
 
 /** 公司档案的对外形状。**没有归一化哈希**——它是发现用的，不是给人看的。 */
@@ -92,6 +99,10 @@ export interface WorkspaceProfileView {
   vertical: 'goods' | 'digital'
   /** WP62（51 §1 N0）：网站是用什么搭的。缺省 = `shopify`。 */
   storefront_platform: StorefrontPlatform
+  /** WP166：目标市场（ISO 国家码，大写）。没写过就没有。 */
+  markets?: string[]
+  /** WP166：这份市场是从哪看出来的（界面问号里那一句）。 */
+  markets_source?: MarketsSource
   set_at: string
 }
 
@@ -331,6 +342,11 @@ const ProfileBody = z.object({
   storefront_platform: z.enum(['shopify', 'woocommerce', 'magento', 'other', 'none']).optional(),
   // WP65（52 O4）：第 ① 步下半块「第一个品牌」的名字。不给 = 不改。
   brand_name: z.string().min(1).max(64).optional(),
+  // WP166：目标市场（两位国家码；服务端再按国家码清单归一化）。不给 = 不改；给空数组 = 清空。
+  markets: z
+    .array(z.string().regex(/^[A-Za-z]{2}$/))
+    .max(60)
+    .optional(),
 })
 
 const PlanBody = z.object({
@@ -438,6 +454,7 @@ export function onboardingRoutes(): Route[] {
               ? {}
               : { storefront_platform: input.storefront_platform }),
             ...(input.brand_name === undefined ? {} : { brand_name: input.brand_name }),
+            ...(input.markets === undefined ? {} : { markets: input.markets }),
           }),
         )
       },

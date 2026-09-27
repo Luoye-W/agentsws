@@ -28351,6 +28351,14 @@
                     "type": "string",
                     "minLength": 1,
                     "maxLength": 64
+                  },
+                  "markets": {
+                    "maxItems": 60,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z]{2}$"
+                    }
                   }
                 },
                 "required": ["legal_name"]
