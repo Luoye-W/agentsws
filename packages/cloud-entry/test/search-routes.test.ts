@@ -92,9 +92,11 @@ describe('状态口（不收钱）', () => {
       configured: true,
       route: 'official',
       engines: ['google', 'bing'],
-      prices: { serp: 0.2, ai_answer: 0.4 },
+      prices: { serp: 0.2, ai_answer: 0.2 },
     })
     expect(s.platforms).not.toContain('copilot')
+    // WP159：Perplexity 登记为不用，状态口不列
+    expect(s.platforms).toEqual(['chatgpt', 'gemini', 'google_ai_overview'])
     expect(JSON.stringify(s)).not.toMatch(/dataforseo/i)
     const off = harness(fakeFetch([]).fetch, { upstream: { ai: { base_url: 'x', api_key: 'x' } } })
     expect(await (await off.get('/v1/data/search/status')).json()).toMatchObject({
@@ -192,62 +194,65 @@ describe('SERP 一次', () => {
 })
 
 describe('AI 问答（每个平台一次，只收成功的）', () => {
-  it('ChatGPT + Perplexity 成功、Copilot 官方探测不了：预扣 2 次、结算 2 次；判出提没提到我们与竞品', async () => {
+  it('ChatGPT + Gemini 成功；Perplexity 登记为不用、Copilot 官方探测不了：预扣 2 次、结算 2 次；判出竞品（WP159）', async () => {
     const f = fakeFetch([
       ['/chat_gpt/llm_scraper/', { body: fixture('dataforseo-chatgpt-scraper') }],
+      ['/gemini/llm_scraper/', { body: fixture('dataforseo-chatgpt-scraper') }],
       ['/perplexity/llm_responses/', { body: fixture('dataforseo-perplexity') }],
     ])
     const h = harness(f.fetch)
-    const res = await h.post('/v1/data/search/ai-answers', PROBE)
+    const res = await h.post('/v1/data/search/ai-answers', {
+      ...PROBE,
+      platforms: ['chatgpt', 'gemini', 'perplexity', 'copilot'],
+    })
     expect(res.status).toBe(200)
     const body = (await res.json()) as {
       results: Record<string, unknown>[]
       skipped: Record<string, unknown>[]
       credits: number
     }
-    expect(body.credits).toBe(0.8)
+    expect(body.credits).toBe(0.4)
     expect(body.skipped).toEqual([
+      expect.objectContaining({ platform: 'perplexity', code: 'unsupported' }),
       expect.objectContaining({ platform: 'copilot', code: 'unsupported' }),
     ])
+    // 不用的平台一跳都不打
+    expect(f.calls.some((c) => c.url.includes('/perplexity/'))).toBe(false)
     const chatgpt = body.results.find((r) => r.platform === 'chatgpt')
     expect(chatgpt).toMatchObject({
       brand_mentioned: false,
       our_domain_cited: false,
       competitors_mentioned: ['Anker', 'Belkin'],
       source: 'official',
-      credits: 0.4,
+      credits: 0.2,
     })
-    const pplx = body.results.find((r) => r.platform === 'perplexity')
-    expect(pplx).toMatchObject({
-      brand_mentioned: true,
-      our_domain_cited: true,
-      competitors_mentioned: ['Anker'],
-    })
-    expect(available(h.wallet)).toBeCloseTo(9.2, 6)
+    expect(body.results.map((r) => r.platform)).toEqual(['chatgpt', 'gemini'])
+    expect(available(h.wallet)).toBeCloseTo(9.6, 6)
     expect(h.store.events({ org_id: 'org_1' }).at(-1)).toMatchObject({
       capability: 'data.search.ai_answer',
       quantity: 2,
-      credits: 0.8,
+      credits: 0.4,
     })
   })
 
   it('一个平台失败、一个空回答：都不收；一个都没成就整笔释放并报错', async () => {
-    const nullText = structuredClone(fixture('dataforseo-perplexity')) as {
-      tasks: { result: { items: { sections: { text: unknown }[] }[] }[] }[]
+    // AI 概览那一格：结果页里没有 ai_overview 那一项 = 空回答
+    const noOverview = structuredClone(fixture('dataforseo-google-serp')) as {
+      tasks: { result: { items: { type: string }[] }[] }[]
     }
-    const sec = nullText.tasks[0]?.result[0]?.items[0]?.sections[0]
-    if (sec !== undefined) sec.text = null
+    const first = noOverview.tasks[0]?.result[0]
+    if (first !== undefined) first.items = first.items.filter((i) => i.type !== 'ai_overview')
     const h = harness(
       fakeFetch([
         ['/chat_gpt/', { status: 500, body: {} }],
-        ['/perplexity/', { body: nullText }],
+        ['/serp/google/', { body: noOverview }],
         ['/gemini/', { body: fixture('dataforseo-chatgpt-scraper') }],
       ]).fetch,
     )
     const ok = (await (
       await h.post('/v1/data/search/ai-answers', {
         ...PROBE,
-        platforms: ['chatgpt', 'perplexity', 'gemini'],
+        platforms: ['chatgpt', 'google_ai_overview', 'gemini'],
       })
     ).json()) as {
       results: unknown[]
@@ -255,9 +260,9 @@ describe('AI 问答（每个平台一次，只收成功的）', () => {
       credits: number
     }
     expect(ok.results).toHaveLength(1)
-    expect(ok.skipped.map((s) => s.platform).sort()).toEqual(['chatgpt', 'perplexity'])
-    expect(ok.credits).toBe(0.4)
-    expect(available(h.wallet)).toBeCloseTo(9.6, 6)
+    expect(ok.skipped.map((s) => s.platform).sort()).toEqual(['chatgpt', 'google_ai_overview'])
+    expect(ok.credits).toBe(0.2)
+    expect(available(h.wallet)).toBeCloseTo(9.8, 6)
 
     const none = harness(fakeFetch([['/chat_gpt/', abortError]]).fetch)
     const res = await none.post('/v1/data/search/ai-answers', { ...PROBE, platforms: ['chatgpt'] })
@@ -274,13 +279,13 @@ describe('AI 问答（每个平台一次，只收成功的）', () => {
     ).json()) as {
       results: { cached: boolean; credits: number }[]
     }
-    expect(again.results[0]).toMatchObject({ cached: true, credits: 0.4 })
+    expect(again.results[0]).toMatchObject({ cached: true, credits: 0.2 })
     expect(f.calls).toHaveLength(1)
-    expect(available(h.wallet)).toBeCloseTo(9.2, 6)
+    expect(available(h.wallet)).toBeCloseTo(9.6, 6)
     expect(h.store.events({ org_id: 'org_1' }).at(-1)?.cost_micros).toBe(0)
     expect(
       (await h.post('/v1/data/search/ai-answers', { ...PROBE, platforms: ['copilot'] })).status,
     ).toBe(400)
-    expect(available(h.wallet)).toBeCloseTo(9.2, 6)
+    expect(available(h.wallet)).toBeCloseTo(9.6, 6)
   })
 })

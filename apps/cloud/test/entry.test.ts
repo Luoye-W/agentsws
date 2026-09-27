@@ -108,7 +108,7 @@ describe('WP155：搜索数据挂进同一个入口（Compose 形态）', () => 
     expect(on.body).toMatchObject({
       configured: true,
       route: 'official',
-      prices: { serp: 0.2, ai_answer: 0.4 },
+      prices: { serp: 0.2, ai_answer: 0.2 },
     })
     expect(JSON.stringify(on.body)).not.toMatch(/dataforseo/i)
     await s.h.close()

@@ -19,8 +19,10 @@
  * GEO 的思路参考过 GEOFlow（AGPL-3.0）的公开 README；**代码一行没搬**，全部自己写。
  */
 export * from './attribution.js'
+export * from './claim-rules.js'
 export * from './daily.js'
 export * from './demo.js'
+export * from './drafts.js'
 export * from './geo.js'
 export * from './google.js'
 export * from './picks.js'

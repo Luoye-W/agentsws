@@ -156,6 +156,8 @@ thresholds:
   # §4：点击至少这么多还没订单 = 漏；点击不超过这么多却出订单 = 宝
   seo_leak_min_clicks: 100
   seo_gem_max_clicks: 50
+  # WP159：每天最多让模型写几份改动卡初稿（超了用规则版兜底；0 = 不用模型）
+  seo_model_drafts_per_day: 5
 home_blocks:
   # 51 §2.2 面板：草稿队列、待发布、近 30 天发布与流量
   - {

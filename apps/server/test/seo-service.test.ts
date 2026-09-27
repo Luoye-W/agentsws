@@ -290,6 +290,121 @@ describe('发布前质检（账本 stage 之前的改写口）', () => {
   })
 })
 
+describe('WP159：违规宣称规则按市场分组（知识库里能改能关）', () => {
+  const gateInput = (body: string) => ({
+    workspace_id: 'ws_1',
+    role_id: 'dtc.content',
+    assignment_id: 'asg_content',
+    run_id: 'run_2',
+    change_set_id: 'cs_2',
+    kind: 'publish_post' as const,
+    target: { type: 'article', id: 'art_2' },
+    before: { title: 'Our story', published: false },
+    after: { title: 'Our story', published: true, body },
+    created_by: { kind: 'agent' as const, id: 'agent_dtc.content' },
+    mandate: { caps: {} },
+    level: 'L2' as const,
+    approval: {
+      title: '发布文章',
+      summary: 's',
+      recipients: [{ person: 'p_li', via: 'scope_manager' as const }],
+      proposer: { kind: 'agent' as const, id: 'agent_dtc.content', assignment_id: 'asg_content' },
+    },
+  })
+  /** 替身知识库：`saveClaimRule` 写进来的卡，`knowledge` 原样读回去（后写的在后面）。 */
+  const kb = () => {
+    const cards: {
+      id: string
+      subject: { type: string; key: string }
+      statement: string
+      structured: Record<string, unknown>
+    }[] = []
+    return {
+      cards,
+      knowledge: async () => ({ facts: [], rules: [], rule_cards: [...cards] }),
+      saveClaimRule: async (
+        _a: unknown,
+        input: { key: string; statement: string; structured: Record<string, unknown> },
+      ) => {
+        cards.push({
+          id: `k${cards.length}`,
+          subject: { type: 'content_rule', key: input.key },
+          ...input,
+        })
+      },
+    }
+  }
+  const brandIn = (markets?: string[]) => () => ({
+    name: 'NordVolt',
+    language: 'en' as const,
+    domains: ['nordvolt.example'],
+    shop_host: 'nordvolt.example',
+    currency: 'USD',
+    country: 'us',
+    ...(markets === undefined ? {} : { markets }),
+  })
+  const passed = async (svc: ReturnType<typeof setup>['service'], body: string) =>
+    ((await svc.gatePublish(gateInput(body))).after as { published: boolean }).published
+
+  it('只卖美国：开通用 + 美国；「Made in USA」拦、「carbon neutral」不拦；每条有官方出处', async () => {
+    const k = kb()
+    const { service } = setup({ ...k, brand: brandIn(['US']) })
+    const view = await service.claimRules(CONTENT)
+    expect(view).toMatchObject({ markets: ['US'], markets_from: 'brand_profile' })
+    expect(view.groups.filter((g) => g.enabled).map((g) => g.id)).toEqual(['global', 'us'])
+    expect(view.rules.every((r) => r.source_url?.startsWith('https://'))).toBe(true)
+    expect(await passed(service, 'Made in USA with pride.')).toBe(false)
+    expect(await passed(service, 'Our factory is carbon neutral.')).toBe(true)
+  })
+
+  it('档案里没写市场：按探测国家那一个算（写明是默认）', async () => {
+    const { service } = setup({ ...kb(), brand: brandIn() })
+    expect(await service.claimRules(CONTENT)).toMatchObject({
+      markets: ['US'],
+      markets_from: 'default',
+    })
+  })
+
+  it('在知识库里关掉一条：写一张卡，之后不再拦；改理由也写卡（edited）', async () => {
+    const k = kb()
+    const { service } = setup({ ...k, brand: brandIn(['US']) })
+    await service.setClaimRules(CONTENT, { rule: { id: 'us.made_in_usa', enabled: false } })
+    expect(k.cards[0]).toMatchObject({
+      subject: { key: 'us.made_in_usa' },
+      structured: { enabled: false, market: 'us', source_url: expect.stringContaining('ftc.gov') },
+    })
+    expect(await passed(service, 'Made in USA with pride.')).toBe(true)
+    const view = await service.setClaimRules(CONTENT, {
+      rule: { id: 'abs_zh_top', reason: '我们卖的是入门款，别写顶级' },
+    })
+    expect(view.rules.find((r) => r.id === 'abs_zh_top')).toMatchObject({
+      origin: 'edited',
+      enabled: true,
+      reason: '我们卖的是入门款，别写顶级',
+    })
+  })
+
+  it('手动打开欧盟组：碳中和也拦了，标 manual；加一条自己的规则也生效', async () => {
+    const k = kb()
+    const { service } = setup({ ...k, brand: brandIn(['US']) })
+    const view = await service.setClaimRules(CONTENT, { group: { id: 'eu_uk', enabled: true } })
+    expect(view.groups.find((g) => g.id === 'eu_uk')).toMatchObject({
+      enabled: true,
+      why: 'manual',
+    })
+    expect(await passed(service, 'Our factory is carbon neutral.')).toBe(false)
+    await service.setClaimRules(CONTENT, { add: { pattern: 'military grade', reason: '没法证明' } })
+    expect(await passed(service, 'Military grade aluminium.')).toBe(false)
+  })
+
+  it('没装知识库写口：只能看不能改', async () => {
+    const { service } = setup({ knowledge: kb().knowledge, brand: brandIn(['US']) })
+    await expect(
+      service.setClaimRules(CONTENT, { rule: { id: 'us.made_in_usa', enabled: false } }),
+    ).rejects.toThrow(/只能看不能改/)
+  })
+})
+
 describe('draftTitle', () => {
   it('查询放最前面；原标题已经含查询就不机械改', () => {
     expect(draftTitle('usb c laptop charger', 'USB-C 65W Charger')).toBe(
@@ -309,7 +424,7 @@ describe('每周 AI 探测花多少（WP155 提醒：看得到、调得动、关
           configured: true,
           route: 'official' as const,
           platforms: ['chatgpt', 'perplexity', 'gemini', 'google_ai_overview'] as const,
-          prices: { serp: 0.2, ai_answer: 0.4 },
+          prices: { serp: 0.2, ai_answer: 0.2 },
         }),
         serp: async () => {
           throw new Error('不该查 SERP')
@@ -322,17 +437,25 @@ describe('每周 AI 探测花多少（WP155 提醒：看得到、调得动、关
     }
   }
 
-  it('默认每周问 6 个 × 官方能探测的 4 个平台 ≈ 9.6 积分；Copilot 不问', async () => {
+  it('默认每周问 6 个 × 3 个平台（ChatGPT / Gemini / AI 概览）× 0.2 = 3.6 积分；Perplexity、Copilot 不问（WP159）', async () => {
     const o = official()
     const { service } = setup({ searchData: () => o.port as never })
+    service.setGeoQuestions(
+      Array.from({ length: 8 }, (_, i) => ({
+        id: `q${i}`,
+        text: `question number ${i}`,
+        origin: 'human' as const,
+        enabled: true,
+      })),
+    )
     const view = await service.geoView()
     expect(view.settings).toEqual({ enabled: true, max_questions: 6 })
-    expect(view.estimate.platforms).toBe(4)
-    expect(view.estimate.credits_per_week).toBe(
-      Math.round(view.estimate.questions * 4 * 0.4 * 10) / 10,
-    )
+    expect(view.estimate.platforms).toBe(3)
+    expect(view.estimate.questions).toBe(6)
+    expect(view.estimate.credits_per_week).toBe(3.6)
     await service.weeklyGeo()
-    expect(o.calls.every((c) => !c.includes('copilot'))).toBe(true)
+    expect(o.calls.every((c) => !c.includes('copilot') && !c.includes('perplexity'))).toBe(true)
+    expect(o.calls.every((c) => c.endsWith('|chatgpt,gemini,google_ai_overview'))).toBe(true)
     expect(o.calls.length).toBe(view.estimate.questions)
   })
 
@@ -346,6 +469,130 @@ describe('每周 AI 探测花多少（WP155 提醒：看得到、调得动、关
     await service.weeklyGeo()
     expect(o.calls).toHaveLength(2)
     expect((await service.geoView()).estimate.questions).toBe(0)
+  })
+})
+
+describe('WP159：改动卡初稿由模型写（规则版兜底）', () => {
+  const META = JSON.stringify({
+    title: 'USB-C Laptop Charger, 65W GaN | NordVolt',
+    meta_description: 'A compact USB-C laptop charger that powers a laptop and a phone at once.',
+    h1: 'USB-C Laptop Charger',
+    opening:
+      'This USB-C laptop charger powers most laptops from one plug. It also tops up a phone.',
+  })
+  const SECTION = JSON.stringify({
+    heading: 'How to care for a braided cable',
+    body: 'Coil it loosely and keep it away from sharp bends. Wipe it with a dry cloth.',
+  })
+  const fakeModel = (reply: (prompt: string) => string | Promise<string>) => {
+    const prompts: string[] = []
+    const drafter: SeoServiceOptions['drafter'] =
+      () =>
+      async ({ prompt }) => {
+        prompts.push(prompt)
+        return { text: await reply(prompt) }
+      }
+    return { prompts, drafter }
+  }
+  const byKind = (prompt: string): string => (prompt.includes('"heading"') ? SECTION : META)
+
+  it('标题 / 描述 / H1 / 开头与加小节都由模型写、都出卡；品牌口吻注进提示词；报告卡记几份', async () => {
+    const m = fakeModel(byKind)
+    const { service, txn, matters } = setup({
+      drafter: m.drafter,
+      brandVoice: () => ({ context: 'Brand: NordVolt', voice: 'calm, practical, no hype' }),
+    })
+    const out = await service.daily()
+    expect(out).toMatchObject({ changes: 3, matters: 1 })
+    expect(m.prompts).toHaveLength(2)
+    expect(m.prompts[0]).toContain('NordVolt')
+    expect(m.prompts[0]).toContain('calm, practical, no hype')
+    const changes = await txn.ledger.list({ workspace_id: 'ws_1' })
+    expect(changes.map((c) => c.kind).sort()).toEqual([
+      'internal_link_edit',
+      'page_section_add',
+      'page_seo_edit',
+    ])
+    const seo = changes.find((c) => c.kind === 'page_seo_edit')
+    expect(seo?.after).toMatchObject({
+      title: 'USB-C Laptop Charger, 65W GaN | NordVolt',
+      meta_description: expect.stringContaining('compact'),
+      target_query: 'usb c laptop charger',
+    })
+    expect(changes.find((c) => c.kind === 'page_section_add')?.after).toMatchObject({
+      heading: 'How to care for a braided cable',
+    })
+    // 加小节不再开事项（只剩交建站那一件）
+    expect(matters.every((m) => m.position_template_id === 'site')).toBe(true)
+    const report = await txn.approvals.get(out.approval_item_id ?? '')
+    const payload = report?.payload as {
+      drafts?: unknown
+      picks: { outcome?: { draft?: string } }[]
+    }
+    expect(payload.drafts).toEqual({ model: 2, rules: 0, cap: 5 })
+    expect(payload.picks.filter((p) => p.outcome?.draft === 'model')).toHaveLength(2)
+  })
+
+  it('没配模型：规则版照旧（标题机械第一稿 + 加小节开事项）', async () => {
+    const { service, txn } = setup({ drafter: () => undefined })
+    const out = await service.daily()
+    expect(out).toMatchObject({ changes: 2, matters: 2 })
+    const report = await txn.approvals.get(out.approval_item_id ?? '')
+    expect((report?.payload as { drafts?: unknown } | undefined)?.drafts).toEqual({
+      model: 0,
+      rules: 1,
+      cap: 5,
+    })
+  })
+
+  it('每天有上限：调到 1 份，第二件退回规则版并写明原因；同一天再跑一次模型一次都不打', async () => {
+    const m = fakeModel(byKind)
+    const { service, txn, matters } = setup({
+      drafter: m.drafter,
+      thresholds: () => ({
+        seo_position_min: 3,
+        seo_position_max: 20,
+        seo_model_drafts_per_day: 1,
+      }),
+    })
+    const out = await service.daily()
+    expect(m.prompts).toHaveLength(1)
+    expect(out.changes).toBe(2)
+    const payload = (await txn.approvals.get(out.approval_item_id ?? ''))?.payload as {
+      picks: { outcome?: { note?: string } }[]
+    }
+    expect(payload.picks.some((p) => p.outcome?.note?.includes('上限（1 份）'))).toBe(true)
+    expect(matters.some((x) => x.title.includes('braided'))).toBe(true)
+    await service.daily()
+    expect(m.prompts).toHaveLength(1)
+  })
+
+  it('模型报错（比如超预算）或初稿里有违规宣称：不用那一份，退回规则版', async () => {
+    const broken = fakeModel(() => {
+      throw new Error('budget exceeded')
+    })
+    const a = setup({ drafter: broken.drafter })
+    const outA = await a.service.daily()
+    expect(outA).toMatchObject({ changes: 2, matters: 2 })
+    const seoA = (await a.txn.ledger.list({ workspace_id: 'ws_1' })).find(
+      (c) => c.kind === 'page_seo_edit',
+    )
+    expect((seoA?.after as { title?: string } | undefined)?.title).toBe(
+      'Usb C Laptop Charger – USB-C 65W Charger',
+    )
+    const bragging = fakeModel((p) =>
+      p.includes('"heading"')
+        ? SECTION
+        : JSON.stringify({ ...JSON.parse(META), opening: 'The best in the world. Guaranteed.' }),
+    )
+    const b = setup({ drafter: bragging.drafter })
+    await b.service.daily()
+    const kinds = (await b.txn.ledger.list({ workspace_id: 'ws_1' })).map((c) => c.kind).sort()
+    expect(kinds).toEqual(['internal_link_edit', 'page_section_add', 'page_seo_edit'])
+    const seoB = (await b.txn.ledger.list({ workspace_id: 'ws_1' })).find(
+      (c) => c.kind === 'page_seo_edit',
+    )
+    expect(seoB?.after).not.toHaveProperty('opening')
   })
 })
 
