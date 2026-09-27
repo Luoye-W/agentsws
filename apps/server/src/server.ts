@@ -3016,6 +3016,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       // WP167（docs/63 §D「收信一个入口」）：分拣判成 `support` 的来信递进渠道的入站管线——
       // Amazon 子渠道判定、线程台账、去重、落事项、客服判断层（WP125）、起 Run 都在那一条里
       intakeSupport: (input) => channels.intakeSupportMail(input),
+      // WP167 终审追加：升级那一拍把老版本已经处理过的信预写进台账（只做一次）
+      seedSupportIntake: (marker, keys) => channels.seedSupportIntake(marker, keys),
       ...(dir === undefined ? {} : { dbDir: dir }),
       ...(options.messageSource === undefined ? {} : { makeSource: options.messageSource }),
       ...(options.messageWriter === undefined ? {} : { makeWriter: options.messageWriter }),

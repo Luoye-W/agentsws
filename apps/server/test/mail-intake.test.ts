@@ -373,3 +373,127 @@ describe('WP167：开关落盘', () => {
     }
   })
 })
+
+describe('WP167 终审追加：升级那一拍预写台账', () => {
+  it('老版本已处理的信（事项钉着的、适配器游标之前的）升级后第一次扫描 0 事项 0 Run；游标之后的新客户信照常 1 事项 1 Run', async () => {
+    const { mkdtempSync, rmSync } = await import('node:fs')
+    const { tmpdir } = await import('node:os')
+    const { join } = await import('node:path')
+    const dir = mkdtempSync(join(tmpdir(), 'wp167-upgrade-'))
+    // 时钟可拨：升级在两天之后（入站管线自己那张去重表只管 24h，挡不住这一拍）
+    let now = T0
+    const clk: Clock = { now: () => now, sleep: async () => undefined }
+    const box = new Mailbox()
+    const work = createWork({ workspace_id: WS, clock: clk, random: () => 0.5 })
+    const position = () => ({
+      person_id: 'p_owner',
+      assignment_id: 'asg_1',
+      role_id: 'dtc.support',
+    })
+    const runs: string[] = []
+    const events: EventEnvelope[] = []
+    const appendEvent = (e: unknown): void => void events.push(e as EventEnvelope)
+    const channelsWith = (mode: 'old' | 'new') =>
+      createChannels({
+        clock: clk,
+        workspace_id: WS,
+        dbDir: dir,
+        appendEvent,
+        halt: new MemoryHalt({}),
+        accounts: () => [account],
+        credentials: { password: () => 'pw' },
+        work,
+        position,
+        makeSource: () => box.source('INBOX'),
+        startRun: ({ matter }) => {
+          runs.push(matter.id)
+          return { run_id: `run_${runs.length}` }
+        },
+        mailbox_moves: 'message_sync',
+        ...(mode === 'new' ? { inbox_intake: 'message_sync' as const } : {}),
+      })
+    try {
+      // ── 老版本：渠道那一路自己扫 INBOX，每封新信开事项、起 Run（消息同步这一拍还没跑到它们）
+      box.deliver(1, mime(1, 'ann@customer.example'))
+      box.deliver(2, mime(2, 'bob@customer.example'))
+      box.deliver(3, mime(3, 'promo@news.example', NEWSLETTER))
+      // 第一封的后续来信：它的 Message-ID 不是线程 id，事项钉着的线程认不出它——只能靠适配器游标认
+      box.deliver(
+        5,
+        mime(5, 'ann@customer.example', [
+          'In-Reply-To: <m-1@mail.example>',
+          'References: <m-1@mail.example>',
+        ]),
+      )
+      const old = channelsWith('old')
+      await old.poll()
+      expect(runs).toHaveLength(4)
+      expect(work.listMatters({ kind: 'conversation' })).toHaveLength(3)
+      await old.close()
+      // 人在手机上把第二封挪进了垃圾邮件（换了文件夹、换了 UID：适配器游标认不出它，只能靠事项钉着的线程认）
+      box.writer().move('INBOX', 2, 'Junk')
+
+      // ── 升级：收信只走消息同步
+      now = '2026-09-29T02:00:00.000Z'
+      const channels = channelsWith('new')
+      const messages = createMessages({
+        clock: clk,
+        workspace_id: WS,
+        dbDir: dir,
+        appendEvent,
+        halt: new MemoryHalt({}),
+        accounts: () => [account],
+        credentials: { password: () => 'pw' },
+        work,
+        position,
+        activeRoles: () => ['dtc.support'],
+        models: modelSaying(0.95),
+        rawStore: channels.raw,
+        makeSource: (_a, folder) => box.source(folder),
+        makeWriter: () => box.writer(),
+        listFolders: async () => [...box.folders.keys()],
+        intakeSupport: (input) => channels.intakeSupportMail(input),
+        seedSupportIntake: (marker, keys) => channels.seedSupportIntake(marker, keys),
+      })
+      const tick = async (): Promise<void> => {
+        await channels.poll()
+        await messages.poll()
+      }
+      await tick()
+      // 第一次扫描：四封老信都进了消息库，一条事项、一次 Run 都没多
+      expect((await messages.store.list({})).length).toBe(4)
+      expect(runs).toHaveLength(4)
+      expect(work.listMatters({ kind: 'conversation' })).toHaveLength(3)
+      // 那封后续来信是按适配器游标认出来的"老信"
+      expect(
+        events.some(
+          (e) =>
+            e.type === 'inbound.support_intake' &&
+            (e.payload as { legacy?: boolean }).legacy === true,
+        ),
+      ).toBe(true)
+      const seeded = events.filter((e) => e.type === 'inbound.support_intake_seeded')
+      expect(seeded).toHaveLength(1)
+      // 事件里只有条数，没有 Message-ID
+      expect(JSON.stringify(seeded)).not.toContain('mail.example')
+
+      // 游标之后的新客户信：照常一条事项、一次 Run
+      box.deliver(6, mime(6, 'carol@customer.example'))
+      await tick()
+      expect(runs).toHaveLength(5)
+      expect(work.listMatters({ kind: 'conversation' })).toHaveLength(4)
+
+      // 只做一次：再起一遍新装配，台账里有标记，不再算第二遍
+      await channels.close()
+      messages.close()
+      const again = channelsWith('new')
+      const out = await again.seedSupportIntake('meta:wp167_legacy_seed_v1', () => {
+        throw new Error('不该再算一遍')
+      })
+      expect(out).toEqual({ already: true, seeded: 0 })
+      await again.close()
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+})

@@ -198,6 +198,9 @@ export function classifyAmazonSubChannel(
   }
 }
 
+/** 渠道适配器原先扫的那个文件夹（`EmailChannelAdapter` 的缺省 `mailbox`）。 */
+const LEGACY_INBOX = 'INBOX'
+
 /** 一个装好的邮箱账号：适配器 + 它自己的那条入站管线。 */
 interface MailChannel {
   account: MailAccount
@@ -457,6 +460,17 @@ export interface ChannelsAssembly {
    * 不另写一份。同一封信只进一次（按 Message-ID，没有才按邮箱 × 文件夹 × UID；台账不过期）。
    */
   intakeSupportMail(input: SupportMailIntake): Promise<SupportMailIntakeResult>
+  /**
+   * WP167 终审追加：**升级那一拍预写台账**——把"老版本已经处理过的信"一次写进去，
+   * 升级后消息同步第一次扫到它们时不再开事项、不再起 Run。
+   *
+   * 只做一次：`marker` 已在台账里就直接回（`already: true`），`keys` 不会被调用；
+   * 可重入：写到一半进程没了，下次再来时 marker 还没写，整批重写一遍（写入本来就幂等）。
+   */
+  seedSupportIntake(
+    marker: string,
+    keys: () => Promise<readonly string[]> | readonly string[],
+  ): Promise<{ already: boolean; seeded: number }>
   /** 连接页新增 / 断开邮箱之后热更新（幂等，可反复调）。 */
   refresh(): void
   /** WP55 / 48 §4 L3 #2：Amazon 24h SLA 三档 sweep（调度器每 5 分钟调一次）。 */
@@ -567,6 +581,37 @@ export function createChannels(options: ChannelsOptions): ChannelsAssembly {
   const clawbotState: ClawBotStateStore = sqliteStores?.clawbot ?? new MemoryClawBotStateStore()
   /** WP167：进过客服管线的信（不过期；去重表那个 24h 窗口挡不住"交两次"）。 */
   const intakeLedger: SupportIntakeLedger = sqliteStores?.intake ?? new MemorySupportIntakeLedger()
+  /**
+   * WP167 终审追加：渠道适配器原先那条 INBOX 游标（按邮箱各一条）。
+   *
+   * 收信归消息同步之后，适配器不再推这条游标，所以它停在"老版本处理到哪儿"——游标之前的信
+   * 老版本都开过事项、起过 Run，消息同步第一次扫到它们时一律当"已处理"。`UIDVALIDITY` 变了
+   * （服务器重建过邮箱）这条游标作废，不当数。查一次就记住（本进程里它不会再动）。
+   */
+  const legacyCutoffs = new Map<string, number | undefined>()
+  const legacyCutoffOf = async (channel: MailChannel): Promise<number | undefined> => {
+    const address = channel.account.address
+    if (legacyCutoffs.has(address)) return legacyCutoffs.get(address)
+    const prior = await mailboxState.cursor(address, LEGACY_INBOX)
+    let cutoff: number | undefined
+    if (prior !== undefined && prior.last_seen_uid > 0) {
+      let validity: number | undefined
+      try {
+        validity = await channel.source.uidValidity?.()
+      } catch {
+        // 问不到就按"没变"算：宁可少起一次 Run，也不给一个月前的信再起草一遍回复
+        validity = undefined
+      }
+      const changed =
+        validity !== undefined &&
+        validity !== 0 &&
+        prior.uid_validity !== 0 &&
+        validity !== prior.uid_validity
+      cutoff = changed ? undefined : prior.last_seen_uid
+    }
+    legacyCutoffs.set(address, cutoff)
+    return cutoff
+  }
   const outbox = new Outbox({
     store: sqliteStores?.outbox ?? new MemoryOutboxStore(),
     workspace_id,
@@ -957,7 +1002,13 @@ export function createChannels(options: ChannelsOptions): ChannelsAssembly {
           ?.listMatters({ kind: 'conversation' })
           .find((m) => m.context.pinned.some((p) => p.type === 'thread' && p.id === thread))?.id
       }
-      if (await intakeLedger.has(key)) {
+      // WP167 终审追加：老版本渠道那一路已经处理过的 INBOX 信（适配器游标之前的）——当"已处理"
+      const legacy =
+        options.inbox_intake === 'message_sync' &&
+        input.raw.mailbox.toUpperCase() === LEGACY_INBOX &&
+        input.raw.uid <= ((await legacyCutoffOf(channel)) ?? 0)
+      if (legacy) await intakeLedger.add(key, clock.now())
+      if (legacy || (await intakeLedger.has(key))) {
         options.appendEvent({
           schema_version: 1,
           workspace_id,
@@ -965,7 +1016,12 @@ export function createChannels(options: ChannelsOptions): ChannelsAssembly {
           actor: { kind: 'system', id: 'channel:email' },
           correlation: { trace_id: `tr_intake_${sha256(key).slice(0, 16)}` },
           // 只有钥匙的哈希与谁判的：没有正文、没有地址
-          payload: { key_hash: sha256(key).slice(0, 16), by: input.by, duplicate: true },
+          payload: {
+            key_hash: sha256(key).slice(0, 16),
+            by: input.by,
+            duplicate: true,
+            ...(legacy ? { legacy: true } : {}),
+          },
         })
         return { accepted: true, duplicate: true }
       }
@@ -993,6 +1049,25 @@ export function createChannels(options: ChannelsOptions): ChannelsAssembly {
         duplicate: out.deduped,
         ...(matter_id === undefined ? {} : { matter_id }),
       }
+    },
+
+    async seedSupportIntake(marker, keys) {
+      if (await intakeLedger.has(marker)) return { already: true, seeded: 0 }
+      const list = await keys()
+      const at = clock.now()
+      for (const key of list) await intakeLedger.add(key, at)
+      // marker 最后写：写到一半进程没了，下次整批重来
+      await intakeLedger.add(marker, at)
+      options.appendEvent({
+        schema_version: 1,
+        workspace_id,
+        type: 'inbound.support_intake_seeded',
+        actor: { kind: 'system', id: 'channel:email' },
+        correlation: { trace_id: `tr_intake_seed_${at}` },
+        // 只有条数：钥匙里是 Message-ID，不进日志
+        payload: { marker, seeded: list.length },
+      })
+      return { already: false, seeded: list.length }
     },
 
     async deliver(item, opts): Promise<BackendResult | undefined> {

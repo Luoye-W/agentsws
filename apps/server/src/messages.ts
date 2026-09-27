@@ -60,6 +60,7 @@ import {
   restoreRemoteImages,
   SqliteMailboxStateStore,
   SqliteMessageStore,
+  supportIntakeKey,
   supportMailboxSwitches,
   triageMessage,
   userVerdict,
@@ -191,6 +192,15 @@ export interface MessagesOptions {
    * 都在渠道的入站管线里，这里不另写一份。不给 = 老行为（只开事项 + 递一次判断层信号）。
    */
   intakeSupport?(input: SupportMailIntake): Promise<SupportMailIntakeResult>
+  /**
+   * WP167 终审追加：升级那一拍预写台账（`channels.seedSupportIntake`）。接了 {@link intakeSupport}
+   * 才有意义：第一次同步之前，把已有事项钉着的线程里每一封信写进"进过客服管线"的台账，
+   * 于是升级后第一次扫描不会给老信再开事项、再起 Run。只做一次（台账里有标记就不再算）。
+   */
+  seedSupportIntake?(
+    marker: string,
+    keys: () => Promise<readonly string[]>,
+  ): Promise<{ already: boolean; seeded: number }>
 }
 
 /**
@@ -210,6 +220,12 @@ export const DEFAULT_FOLDERS: readonly string[] = [
   SUPPORT_FOLDER,
   KOL_FOLDER,
 ]
+
+/**
+ * WP167 终审追加：升级那一拍预写台账的标记（写进台账里，有它就不再算第二遍）。
+ * 以后要是改了"老信"的口径需要再补一遍，换一个版本号就行。
+ */
+export const LEGACY_SEED_MARKER = 'meta:wp167_legacy_seed_v1'
 
 /** WP161：每只邮箱的文件夹清单多久重列一次（第一次挪信新建的那只会随手补进去）。 */
 export const FOLDER_LIST_TTL_MS = 10 * 60_000
@@ -1039,6 +1055,7 @@ export function createMessages(options: MessagesOptions): MessagesAssembly {
       id: string,
       input: MessageConfirmRouteInput,
     ): Promise<MessageConfirmRouteResult> {
+      await ensureSeeded()
       const row = await requireMessage(id)
       const at = clock.now()
       const route = input.route
@@ -1112,6 +1129,7 @@ export function createMessages(options: MessagesOptions): MessagesAssembly {
     },
 
     async sync(): Promise<MessageSyncReport> {
+      await ensureSeeded()
       rulesCache = await store.senderRules()
       await refreshFolders()
       return sync.sync()
@@ -1121,6 +1139,51 @@ export function createMessages(options: MessagesOptions): MessagesAssembly {
       const address = input.account ?? options.accounts()[0]?.address ?? ''
       return { floor: sync.backfill(address, input.days ?? 30) }
     },
+  }
+
+  /**
+   * WP167 终审追加：升级那一拍预写台账（本进程只跑一次；台账里有标记就不再算）。
+   *
+   * 算的是"老版本已经交给客服那一路的信"：工作模型里每条会话事项钉着的线程——线程 id 就是
+   * 那条线程第一封信的 Message-ID——外加消息库里这些线程下的每一封信。INBOX 里老版本处理过
+   * 但消息库还没见过的信，由渠道那边按适配器原先的游标认（见 `channels.ts` 的 `legacyCutoffOf`）。
+   */
+  let seeding: Promise<void> | undefined
+  const ensureSeeded = (): Promise<void> => {
+    const seed = options.seedSupportIntake
+    if (seed === undefined || options.intakeSupport === undefined) return Promise.resolve()
+    seeding ??= seed(LEGACY_SEED_MARKER, async () => {
+      const threads = new Set<string>()
+      for (const m of options.work?.listMatters({ kind: 'conversation' }) ?? []) {
+        for (const p of m.context.pinned) if (p.type === 'thread') threads.add(p.id)
+      }
+      const keys = new Set<string>()
+      for (const thread of threads) {
+        // 渠道那一路给没有 Message-ID 的信造的线程 id（`email-thread:…`）不是一封信的身份
+        if (!thread.startsWith('email-thread:')) {
+          keys.add(supportIntakeKey({ account: '', message_id: thread, folder: '' }))
+        }
+        for (const row of await store.thread(thread)) {
+          keys.add(
+            supportIntakeKey({
+              account: row.account,
+              message_id: row.message_id,
+              folder: row.folder,
+              uid: row.uid,
+            }),
+          )
+        }
+      }
+      return [...keys]
+    }).then(
+      () => undefined,
+      (e) => {
+        // 这一次没写成：下一轮再来（标记没写，重来一遍是幂等的）
+        seeding = undefined
+        logQuiet('support_intake_seed_failed', '', e)
+      },
+    )
+    return seeding
   }
 
   const takeover = (): boolean => supportEnabled()
@@ -1152,6 +1215,7 @@ export function createMessages(options: MessagesOptions): MessagesAssembly {
     port,
     switches,
     async poll(): Promise<MessageSyncReport> {
+      await ensureSeeded()
       rulesCache = await store.senderRules()
       // WP161：每只邮箱先列文件夹（各列各的、各缓存各的），再扫
       await refreshFolders()
