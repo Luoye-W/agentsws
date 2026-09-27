@@ -18,8 +18,14 @@ const MARKETINGSKILLS = '改编自 coreyhaines31/marketingskills（MIT，© 2025
 const OPEN_SEO = '部分判断规矩改编自 every-app/open-seo（MIT）'
 
 describe('自带技能：格式（24 §1 Agent Skills）', () => {
-  it('至少有一份，目录名即技能名', () => {
-    expect(names.length).toBeGreaterThan(0)
+  it('WP160 的五个都在，目录名即技能名', () => {
+    expect(names).toEqual([
+      'ad-copywriting',
+      'audience-research',
+      'email-sms',
+      'influencer-marketing',
+      'seo-judgment',
+    ])
   })
 
   for (const name of names) {
