@@ -47,11 +47,13 @@ import {
   MemoryOutboxStore,
   MemoryQueueStore,
   MemoryRawStore,
+  MemorySupportIntakeLedger,
   mergeThread,
   messageIdFor,
   Outbox,
   type OutboxTransitionEvent,
   outboxPayloadHash,
+  type RawEmailMessage,
   type RawStore,
   type RouteInput,
   type RouteResult,
@@ -59,7 +61,9 @@ import {
   SqliteRawStore,
   type SubChannelHints,
   type SubChannelVerdict,
+  type SupportIntakeLedger,
   type SupportMailboxSwitches,
+  supportIntakeKey,
 } from '@agentsws/channels'
 import type {
   ApprovalItem,
@@ -81,7 +85,7 @@ import type {
 } from '@agentsws/contracts'
 import { SUPPORT_FOLDER } from '@agentsws/contracts'
 import type { RawBlobPort, RawCipher } from '@agentsws/core'
-import { redactOutboundText } from '@agentsws/core'
+import { redactOutboundText, sha256 } from '@agentsws/core'
 import {
   AMAZON_MESSAGE_ACTIONS,
   type AmazonSlaThreadState,
@@ -269,6 +273,16 @@ export interface ChannelsOptions {
    */
   mailbox_moves?: 'channel' | 'message_sync'
   /**
+   * WP167（docs/63 §D「收信一个入口」）：INBOX 的信**由谁收**。
+   *
+   * - `'channel'`（缺省）：只装了渠道、没装消息同步的老调用方——渠道适配器自己轮询 INBOX，
+   *   每封新信落事项、起 Run（WP55 的老行为，一个字没改）；
+   * - `'message_sync'`：消息同步也装着（服务进程里就是这样）——**渠道适配器不再轮询 INBOX**，
+   *   只有消息同步分拣判成客服的信经 {@link ChannelsAssembly.intakeSupportMail} 递进来，
+   *   走的仍是同一条入站管线（Amazon 子渠道判定、线程台账、去重、判断层、起 Run）。
+   */
+  inbox_intake?: 'channel' | 'message_sync'
+  /**
    * WP163：老产品 KefuAgent 的另两个开关（影子模式 / 挪信）。接管开关就是
    * `archive_folder`（`null` = 关），标已读开关就是 `archive_mark_read`。
    */
@@ -380,6 +394,28 @@ export interface UnresolvedDelivery {
   last_error?: string
 }
 
+/** WP167：消息同步递进来的一封客服信。 */
+export interface SupportMailIntake {
+  /** 哪只邮箱（按它挑那条管线：线程台账与收件人门禁是按邮箱的）。 */
+  account: string
+  /** 原始 MIME（消息同步刚拉到的，或人工确认时从受控原始材料区取回的）。 */
+  raw: RawEmailMessage
+  /** 这封信的 Message-ID（去重钥匙用；没有就按邮箱 × 文件夹 × UID）。 */
+  message_id?: string
+  /** 谁判的：分拣（`triage`）还是人在「待确认」里点的（`user`）。 */
+  by: 'triage' | 'user'
+}
+
+/** WP167：递进客服那一路的结果。 */
+export interface SupportMailIntakeResult {
+  /** 客服那一路接住了（这一次进了管线，或者早就进过）。`false` = 这台机器接不了（没装这只邮箱）。 */
+  accepted: boolean
+  /** 这封信早就进过客服管线了：这一次**没有**再开事项、再起 Run。 */
+  duplicate: boolean
+  /** 落到的那条事项（找得到才有）。 */
+  matter_id?: string
+}
+
 /** WP85：IM 渠道（微信 / 企业微信）要的那条入站管线的最小面。 */
 export interface ImInboundPipeline {
   ingest(
@@ -414,6 +450,13 @@ export interface ChannelsAssembly {
   addresses(): string[]
   /** 调度器消费者：拉一轮所有邮箱 + 推一轮重试队列。 */
   poll(): Promise<MailPollReport>
+  /**
+   * WP167（docs/63 §D「收信一个入口」）：消息同步判成客服的一封信**递进客服那一路**。
+   *
+   * 复用这只邮箱那条入站管线（Amazon 子渠道判定、线程台账、去重、落事项、判断层、起 Run），
+   * 不另写一份。同一封信只进一次（按 Message-ID，没有才按邮箱 × 文件夹 × UID；台账不过期）。
+   */
+  intakeSupportMail(input: SupportMailIntake): Promise<SupportMailIntakeResult>
   /** 连接页新增 / 断开邮箱之后热更新（幂等，可反复调）。 */
   refresh(): void
   /** WP55 / 48 §4 L3 #2：Amazon 24h SLA 三档 sweep（调度器每 5 分钟调一次）。 */
@@ -522,6 +565,8 @@ export function createChannels(options: ChannelsOptions): ChannelsAssembly {
   const mailboxState = sqliteStores?.mailbox ?? new MemoryMailboxStateStore()
   /** WP85：微信 ClawBot 的游标与会话上下文（落盘档与队列同一张库）。 */
   const clawbotState: ClawBotStateStore = sqliteStores?.clawbot ?? new MemoryClawBotStateStore()
+  /** WP167：进过客服管线的信（不过期；去重表那个 24h 窗口挡不住"交两次"）。 */
+  const intakeLedger: SupportIntakeLedger = sqliteStores?.intake ?? new MemorySupportIntakeLedger()
   const outbox = new Outbox({
     store: sqliteStores?.outbox ?? new MemoryOutboxStore(),
     workspace_id,
@@ -863,6 +908,12 @@ export function createChannels(options: ChannelsOptions): ChannelsAssembly {
       let retried = 0
       const failed: string[] = []
       for (const channel of channels) {
+        // WP167：收信归消息同步时，渠道适配器不再自己轮询 INBOX——客服信由消息同步分拣后
+        // 经 `intakeSupportMail` 递进来。重试队列照推（上一轮递进来的信触发失败要重排）。
+        if (options.inbox_intake === 'message_sync') {
+          retried += await channel.pipeline.pump()
+          continue
+        }
         try {
           // **要 await**：管线的每一跳（去重 / 脱敏 / 路由 / 起 Run）都在这一条里，
           // 放开手不管的话「拉完一轮」就只是「网络收完了」，不是「处理完了」。
@@ -887,6 +938,61 @@ export function createChannels(options: ChannelsOptions): ChannelsAssembly {
         retried += await channel.pipeline.pump()
       }
       return { accounts: channels.length, messages, retried, failed }
+    },
+
+    async intakeSupportMail(input): Promise<SupportMailIntakeResult> {
+      refresh()
+      const address = input.account.toLowerCase()
+      const channel = channels.find((c) => c.account.address.toLowerCase() === address)
+      if (channel === undefined) return { accepted: false, duplicate: false }
+      const key = supportIntakeKey({
+        account: channel.account.address,
+        message_id: input.message_id,
+        folder: input.raw.mailbox,
+        uid: input.raw.uid,
+      })
+      const matterOf = (thread: string | undefined): string | undefined => {
+        if (thread === undefined) return undefined
+        return options.work
+          ?.listMatters({ kind: 'conversation' })
+          .find((m) => m.context.pinned.some((p) => p.type === 'thread' && p.id === thread))?.id
+      }
+      if (await intakeLedger.has(key)) {
+        options.appendEvent({
+          schema_version: 1,
+          workspace_id,
+          type: 'inbound.support_intake',
+          actor: { kind: 'system', id: 'channel:email' },
+          correlation: { trace_id: `tr_intake_${sha256(key).slice(0, 16)}` },
+          // 只有钥匙的哈希与谁判的：没有正文、没有地址
+          payload: { key_hash: sha256(key).slice(0, 16), by: input.by, duplicate: true },
+        })
+        return { accepted: true, duplicate: true }
+      }
+      // 入站管线的六步（去重 / 脱敏 / 路由 / 落事项 / 判断层 / 起 Run）一步不少；
+      // 触发失败的那几条照旧进重试队列，由 `poll()` 里的 `pump()` 推
+      const out = await channel.pipeline.ingest('email', input.raw, workspace_id)
+      await intakeLedger.add(key, clock.now())
+      const matter_id = matterOf(out.event?.thread?.external_id)
+      options.appendEvent({
+        schema_version: 1,
+        workspace_id,
+        type: 'inbound.support_intake',
+        actor: { kind: 'system', id: 'channel:email' },
+        correlation: { trace_id: `tr_intake_${sha256(key).slice(0, 16)}` },
+        payload: {
+          key_hash: sha256(key).slice(0, 16),
+          by: input.by,
+          duplicate: false,
+          deduped: out.deduped,
+          ...(matter_id === undefined ? {} : { matter_id }),
+        },
+      })
+      return {
+        accepted: true,
+        duplicate: out.deduped,
+        ...(matter_id === undefined ? {} : { matter_id }),
+      }
     },
 
     async deliver(item, opts): Promise<BackendResult | undefined> {

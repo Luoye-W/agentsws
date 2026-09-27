@@ -2798,6 +2798,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       // WP163（docs/63 §D「挪信归谁」）：同一只邮箱下面的消息同步也在扫，而且它有分拣——
       // 挪信 / 标已读只归它。这一路只收信、落事项，一下都不动邮箱。
       mailbox_moves: 'message_sync',
+      // WP167（docs/63 §D「收信一个入口」）：INBOX 也只由消息同步收——它先分拣，只有判成客服的信
+      // 才经 `channels.intakeSupportMail` 递进这一路（开事项、判断层、起 Run）。
+      inbox_intake: 'message_sync',
       // WP53 / 31 §3.3：发件人解析成线程台账里的那条联系人，并钉在事项上
       ...(records.contactOf === undefined
         ? {}
@@ -2959,10 +2962,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           text: h.statement_redacted,
         }))
       },
-      // WP125（72 §P0-1）：分拣判成 `support` 的来信，下一步进客服判断层
-      onSupportMail: async (input) => {
-        await supportJudgmentRef?.judgeInbound(input)
-      },
+      // WP167（docs/63 §D「收信一个入口」）：分拣判成 `support` 的来信递进渠道的入站管线——
+      // Amazon 子渠道判定、线程台账、去重、落事项、客服判断层（WP125）、起 Run 都在那一条里
+      intakeSupport: (input) => channels.intakeSupportMail(input),
       ...(dir === undefined ? {} : { dbDir: dir }),
       ...(options.messageSource === undefined ? {} : { makeSource: options.messageSource }),
       ...(options.messageWriter === undefined ? {} : { makeWriter: options.messageWriter }),

@@ -12,6 +12,7 @@ import {
   aggregateThreads,
   createSqliteChannelStores,
   intakeOf,
+  isAutomatedMail,
   MailboxSync,
   MemoryMailboxStateStore,
   MemoryMessageStore,
@@ -183,5 +184,25 @@ describe('WP167 消息同步把原信与邮箱地址递给宿主', () => {
     expect(handed.map((r) => r?.uid)).toEqual([9])
     expect(handed[0]?.source).toContain('Message-ID: <m-9@customer.example>')
     expect(asked).toEqual([ME])
+  })
+})
+
+describe('WP167 顺手修：noreply 发件人第 ③ 层真能命中', () => {
+  it('光秃秃的 noreply@ / no-reply@ / 带前缀的 shop.noreply@ 都算机器信；普通地址不算', () => {
+    const at = (from_email: string) =>
+      isAutomatedMail({
+        from_email,
+        subject: 's',
+        text: '',
+        thread_id: 't',
+        references: [],
+        headers: {},
+        has_attachments: false,
+      })
+    expect(at('noreply@notify.example')).toBe('noreply 发件人')
+    expect(at('no-reply@shop.example')).toBe('noreply 发件人')
+    expect(at('shop.noreply@x.example')).toBe('noreply 发件人')
+    expect(at('ann@customer.example')).toBeUndefined()
+    expect(at('knoreply@x.example')).toBeUndefined()
   })
 })

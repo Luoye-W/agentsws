@@ -277,6 +277,41 @@ export interface ConnectionsPort {
    * 手改 SQLite 把它们放回队列——这条口子就是那次留下的后置项。
    */
   requeueDeadLetter?(actor: ConnectionsActor, id: string): MaybePromise<{ requeued: boolean }>
+  /**
+   * WP167：这只邮箱卡上的开关（影子模式 / 挪进 KefuAgents / 标已读 + 只读的「接管」）。
+   *
+   * 不实现 = 这台机器没装消息同步（卡上就不画开关）。不是邮箱的连接回 `not_found`。
+   */
+  mailboxSwitches?(actor: ConnectionsActor, id: string): MaybePromise<MailboxSwitchesView>
+  /** WP167：改开关——立刻生效（下一封信就按新的走），改一次写一条事件。 */
+  setMailboxSwitches?(
+    actor: ConnectionsActor,
+    id: string,
+    input: MailboxSwitchesInput,
+  ): MaybePromise<MailboxSwitchesView>
+}
+
+/**
+ * WP167：一只邮箱在「判成客服的信」上怎么动邮箱（老产品 KefuAgent 的四个开关）。
+ *
+ * `takeover`（接管）只读：它就是这个品牌开没开客服岗位——岗位页的事，这里不另存一份。
+ */
+export interface MailboxSwitchesView {
+  connection_id: string
+  /** 只看不动：客服那一路照跑，邮箱一下都不动。 */
+  shadow_mode: boolean
+  /** 客服信挪进 `KefuAgents`。 */
+  move: boolean
+  /** 客服信标已读。 */
+  mark_read: boolean
+  /** 接管 = 客服岗位开着（只读）。 */
+  takeover: boolean
+}
+
+export interface MailboxSwitchesInput {
+  shadow_mode?: boolean
+  move?: boolean
+  mark_read?: boolean
 }
 
 /** 一条死信在界面上的样子。正文不进这里——只有"是谁、什么时候、为什么"。 */
@@ -296,6 +331,14 @@ export interface DeadLetterView {
 // ── 校验 ───────────────────────────────────────────────────────────────
 
 const OWNERSHIP = z.enum(['workspace', 'person'])
+
+const MailboxSwitchesBody = z
+  .object({
+    shadow_mode: z.boolean().optional(),
+    move: z.boolean().optional(),
+    mark_read: z.boolean().optional(),
+  })
+  .strict()
 
 const BeginBody = z.object({
   alias: z.string().min(1).max(64).optional(),
@@ -555,6 +598,57 @@ export function connectionRoutes(): Route[] {
         if (port.requeueDeadLetter === undefined)
           throw new ApiError('not_found', '这台机器没有装渠道，没有可重投的死信')
         return ok(c, await port.requeueDeadLetter(actorOf(c), param(c, 'id')))
+      },
+    ),
+    // ── WP167：邮箱卡上的开关（影子模式 / 挪进 KefuAgents / 标已读）──────────
+    route(
+      {
+        method: 'get',
+        path: '/v1/connections/:id/mailbox-switches',
+        operationId: 'getMailboxSwitches',
+        summary: '这只邮箱的开关：影子模式 / 挪进 KefuAgents / 标已读，外加只读的「接管」',
+        tag: TAG,
+        auth: 'bearer',
+        assignment: true,
+        authz: READ,
+        params: [ID_PARAM],
+        returns: 'MailboxSwitchesView',
+      },
+      async (c, deps) => {
+        const port = portOf(deps)
+        if (port.mailboxSwitches === undefined)
+          throw new ApiError('not_found', '这台机器没装消息同步，邮箱没有开关')
+        return ok(c, await port.mailboxSwitches(actorOf(c), param(c, 'id')))
+      },
+    ),
+    route(
+      {
+        method: 'put',
+        path: '/v1/connections/:id/mailbox-switches',
+        operationId: 'setMailboxSwitches',
+        summary: '改这只邮箱的开关（owner）：立刻生效，改一次写一条事件',
+        tag: TAG,
+        auth: 'bearer',
+        assignment: true,
+        // 改的是"Agent 能不能动这只邮箱"：按写类权限判，与建 / 删连接同一档
+        authz: WRITE,
+        params: [ID_PARAM],
+        body: MailboxSwitchesBody,
+        returns: 'MailboxSwitchesView',
+      },
+      async (c, deps) => {
+        const port = portOf(deps)
+        if (port.setMailboxSwitches === undefined)
+          throw new ApiError('not_found', '这台机器没装消息同步，邮箱没有开关')
+        const input = await body(c, MailboxSwitchesBody)
+        return ok(
+          c,
+          await port.setMailboxSwitches(actorOf(c), param(c, 'id'), {
+            ...(input.shadow_mode === undefined ? {} : { shadow_mode: input.shadow_mode }),
+            ...(input.move === undefined ? {} : { move: input.move }),
+            ...(input.mark_read === undefined ? {} : { mark_read: input.mark_read }),
+          }),
+        )
       },
     ),
     route(
