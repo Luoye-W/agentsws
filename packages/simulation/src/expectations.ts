@@ -720,6 +720,15 @@ export function checkExpectations(
       if (want.confidence !== undefined && !matchNumeric(confidence, want.confidence)) {
         problems.push(`把握 ${confidence}，不合期望`)
       }
+      if (want.intake !== undefined && p.intake !== want.intake) {
+        problems.push(`去了 ${String(p.intake)} 那一路，不是 ${want.intake}`)
+      }
+      if (want.opened_matter !== undefined && (p.opened_matter === true) !== want.opened_matter) {
+        problems.push(want.opened_matter ? '这封信没开事项' : '这封信不该开事项，却开了')
+      }
+      if (want.started_run !== undefined && (p.started_run === true) !== want.started_run) {
+        problems.push(want.started_run ? '这封信没起 Run' : '这封信不该起 Run，却起了')
+      }
       add(
         'message_triage',
         problems.length === 0,
@@ -730,6 +739,50 @@ export function checkExpectations(
           : problems.join('；'),
       )
     }
+  }
+  /*
+   * WP167（63 §D「收信一个入口」）：这一轮所有信各去了哪一路。
+   *
+   * 订阅、通知、供应商信只进消息页：不开事项、不起 Run。起 Run 的只有交给客服的那几封——
+   * 以前渠道那一路给每封新信都开事项、起 Run，这组数字就是那条缝有没有堵上。
+   */
+  if (expected.message_intake !== undefined) {
+    const all = evidence.events
+      .filter((e) => e.type === 'simulation.message_triaged')
+      .map((e) => payloadOf(e))
+    const want = expected.message_intake
+    const count = (pred: (p: Record<string, unknown>) => boolean): number => all.filter(pred).length
+    const got = {
+      support: count((p) => p.intake === 'support'),
+      kol: count((p) => p.intake === 'kol'),
+      pending: count((p) => p.intake === 'pending'),
+      only_messages: count((p) => p.intake === 'none'),
+      matters_opened: count((p) => p.opened_matter === true),
+      runs_started: count((p) => p.started_run === true),
+    }
+    const labels: Record<keyof typeof got, string> = {
+      support: '交给客服',
+      kol: '交给红人',
+      pending: '待确认',
+      only_messages: '只进消息页',
+      matters_opened: '开了事项',
+      runs_started: '起了 Run',
+    }
+    const problems: string[] = []
+    for (const k of Object.keys(got) as (keyof typeof got)[]) {
+      const w = want[k]
+      if (w !== undefined && !matchNumeric(got[k], w))
+        problems.push(`${labels[k]} ${got[k]} 封，不合期望`)
+    }
+    add(
+      'message_intake',
+      all.length > 0 && problems.length === 0,
+      all.length === 0
+        ? '这一轮一封信都没被分拣'
+        : problems.length === 0
+          ? `${all.length} 封信：交客服 ${got.support}、交红人 ${got.kol}、待确认 ${got.pending}、只进消息页 ${got.only_messages}；开了 ${got.matters_opened} 条事项、起了 ${got.runs_started} 次 Run`
+          : problems.join('；'),
+    )
   }
   /*
    * WP76 / 58 §1：那一张需求单。

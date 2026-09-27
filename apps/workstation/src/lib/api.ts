@@ -1360,6 +1360,35 @@ export const requeueDeadLetter = (
     ...withAssignment(assignment),
   })
 
+/** WP167：邮箱卡上的开关（`takeover` 只读 = 客服岗位开着）。 */
+export interface MailboxSwitchesView {
+  connection_id: string
+  shadow_mode: boolean
+  move: boolean
+  mark_read: boolean
+  takeover: boolean
+}
+
+export type MailboxSwitchName = 'shadow_mode' | 'move' | 'mark_read'
+
+export const getMailboxSwitches = (id: string, assignment?: string): Promise<MailboxSwitchesView> =>
+  api<MailboxSwitchesView>(
+    `/v1/connections/${encodeURIComponent(id)}/mailbox-switches`,
+    withAssignment(assignment),
+  )
+
+/** WP167：改一个开关——立刻生效，服务端写一条事件。 */
+export const setMailboxSwitches = (
+  id: string,
+  input: Partial<Record<MailboxSwitchName, boolean>>,
+  assignment?: string,
+): Promise<MailboxSwitchesView> =>
+  api<MailboxSwitchesView>(`/v1/connections/${encodeURIComponent(id)}/mailbox-switches`, {
+    method: 'PUT',
+    body: input,
+    ...withAssignment(assignment),
+  })
+
 // ── WP25 交付 A/B：Shopify 两种接法 + 邮箱自动识别 ──────────────────────
 
 /** 同一个服务的另一种接法（Shopify：Dev Dashboard 应用 / 老的访问令牌）。 */
@@ -4977,6 +5006,8 @@ export function messageQuery(q: {
   unread?: boolean
   starred?: boolean
   q?: string
+  /** WP167：只看「待确认」。 */
+  pending_route?: boolean
   limit?: number
 }): string {
   const params = new URLSearchParams()
@@ -5012,6 +5043,19 @@ export const moveMessage = (
   input: { to: MessageFolderKind; remember_sender?: boolean },
 ): Promise<{ message: MessageRecord; rule?: SenderRule }> =>
   api(`/v1/messages/${encodeURIComponent(id)}/move`, { method: 'POST', body: input })
+
+/**
+ * WP167：「待确认」里人点的那一下（人工分拣）。「这是客服」交给客服那一路（开事项、起 Run），
+ * 「不是」只记人的判断。交不出去（客服岗位没开）时 `handed_off: false`，信原样不动。
+ */
+export const confirmMessageRoute = (
+  id: string,
+  route: 'support' | 'kol' | 'inbox',
+): Promise<{ message: MessageRecord; handed_off: boolean; matter_id?: string }> =>
+  api(`/v1/messages/${encodeURIComponent(id)}/confirm-route`, {
+    method: 'POST',
+    body: { route },
+  })
 
 export const setMessageLabels = (
   id: string,

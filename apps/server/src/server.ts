@@ -2849,6 +2849,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       // WP163（docs/63 §D「挪信归谁」）：同一只邮箱下面的消息同步也在扫，而且它有分拣——
       // 挪信 / 标已读只归它。这一路只收信、落事项，一下都不动邮箱。
       mailbox_moves: 'message_sync',
+      // WP167（docs/63 §D「收信一个入口」）：INBOX 也只由消息同步收——它先分拣，只有判成客服的信
+      // 才经 `channels.intakeSupportMail` 递进这一路（开事项、判断层、起 Run）。
+      inbox_intake: 'message_sync',
       // WP53 / 31 §3.3：发件人解析成线程台账里的那条联系人，并钉在事项上
       ...(records.contactOf === undefined
         ? {}
@@ -3010,10 +3013,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           text: h.statement_redacted,
         }))
       },
-      // WP125（72 §P0-1）：分拣判成 `support` 的来信，下一步进客服判断层
-      onSupportMail: async (input) => {
-        await supportJudgmentRef?.judgeInbound(input)
-      },
+      // WP167（docs/63 §D「收信一个入口」）：分拣判成 `support` 的来信递进渠道的入站管线——
+      // Amazon 子渠道判定、线程台账、去重、落事项、客服判断层（WP125）、起 Run 都在那一条里
+      intakeSupport: (input) => channels.intakeSupportMail(input),
+      // WP167 终审追加：升级那一拍把老版本已经处理过的信预写进台账（只做一次）
+      seedSupportIntake: (marker, keys) => channels.seedSupportIntake(marker, keys),
       ...(dir === undefined ? {} : { dbDir: dir }),
       ...(options.messageSource === undefined ? {} : { makeSource: options.messageSource }),
       ...(options.messageWriter === undefined ? {} : { makeWriter: options.messageWriter }),
@@ -3581,9 +3585,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
          * WP113（63 §3）：同一拍里把**整只邮箱**也拉一轮（六个文件夹各一个游标）。
          *
          * 挂在同一条任务上而不是另起一条定时器：两条路看的是同一只邮箱，
-         * 分开跑只会让"现在到底收到哪儿了"有两个答案。上面那一轮扫 INBOX 把客户
-         * 来信变成事项，这一轮把每一封信落进消息库——租约 key 已经错开
-         * （`msg:<地址>`），互相不抢。
+         * 分开跑只会让"现在到底收到哪儿了"有两个答案。WP167 起上面那一轮不再扫 INBOX
+         * （`inbox_intake: 'message_sync'`，只推重试队列）；收信只有这一个入口——落消息库、
+         * 分拣，判成客服的信再经 `channels.intakeSupportMail` 递回渠道那条管线开事项、起 Run。
          *
          * 一个品牌的消息同步炸了不该拖垮别的品牌的收信，所以单独 catch。
          */

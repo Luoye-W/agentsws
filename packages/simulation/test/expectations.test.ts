@@ -211,3 +211,20 @@ describe('运行档', () => {
     expect(soak.passed).toBe(true)
   })
 })
+
+describe('WP167：收信一个入口（message_intake）', () => {
+  it('订阅 / 通知信只进消息页；数字对不上就判红', async () => {
+    const { evidence } = await runPackScenario('messages/one-intake-only-support-runs.yml')
+    const metrics = computeMetrics(evidence)
+    const good = checkExpectations(
+      { message_intake: { support: 1, only_messages: 4, matters_opened: 1, runs_started: 1 } },
+      evidence,
+      metrics,
+    )
+    expect(good.every((c) => c.ok)).toBe(true)
+    // 以前渠道那一路给每封新信都起 Run——那样的话这里会是 5，这条断言要能抓到
+    const bad = checkExpectations({ message_intake: { runs_started: 5 } }, evidence, metrics)
+    expect(bad.find((c) => c.key === 'message_intake')?.ok).toBe(false)
+    expect(bad.find((c) => c.key === 'message_intake')?.detail).toContain('起了 Run 1 封')
+  })
+})

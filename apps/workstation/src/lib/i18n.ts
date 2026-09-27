@@ -961,6 +961,25 @@ const zh: Table = {
   'connections.dead_letters.hint': '处理时出错、重试完还是没成的信。修好之后可以重投一次。',
   'connections.requeue': '重投',
   'connections.requeuing': '重投中…',
+  // ── WP167：邮箱卡上的开关（判成客服的信在邮箱里怎么动）──────────────
+  'connections.mailbox.title': '客服信怎么动邮箱',
+  'connections.mailbox.title.hint':
+    '只管判成客服的信。订阅、通知、供应商这类信一律原地不动。改了立刻生效，下一封就按新的走。',
+  'connections.mailbox.takeover.on': '客服接管',
+  'connections.mailbox.takeover.off': '客服没开',
+  'connections.mailbox.takeover.hint':
+    '接管 = 这个品牌开了客服岗位。没开的话，客服信也只进「消息」页：不开事项、不动邮箱。到岗位页去开。',
+  'connections.mailbox.shadow_mode': '影子模式',
+  'connections.mailbox.shadow_mode.hint':
+    '客服照常处理，但一下都不动你的邮箱：不挪信、不标已读。上线前拿真邮箱对照着看用。',
+  'connections.mailbox.shadow.on': '只看不动',
+  'connections.mailbox.move': '挪进 KefuAgents',
+  'connections.mailbox.move.hint':
+    '判成客服的信挪进 KefuAgents 文件夹。邮箱里已有同名（大小写不同也算）的就沿用，没有才新建。',
+  'connections.mailbox.mark_read': '标已读',
+  'connections.mailbox.mark_read.hint':
+    '判成客服的信在邮箱里标成已读，你在邮件软件里就不用再看一遍。',
+  'connections.mailbox.failed': '没改成，稍后再试一次。',
   // ── WP83（54（将改号 55）§4）：连接目录与岗位连接清单 ──────────────
   'connections.directory.title': '添加连接',
   'connections.directory.subtitle': '按分类翻一翻，或者直接搜名字。',
@@ -1543,6 +1562,13 @@ const zh: Table = {
   'messages.mailbox_failure.reason.server_refused': '邮箱服务器没答应',
   'messages.mailbox_failure.reason.error': '连邮箱时出了错',
   'messages.mailbox_failure.reason.unsupported': '这只邮箱不支持这个动作',
+  // ── WP167：待确认（分拣拿不准的信）──────────────────────────────────
+  'messages.pending': '待确认',
+  'messages.pending.hint': '分拣拿不准的信：没开事项、没挪。点一下交给客服，或者说不是。',
+  'messages.pending.support': '这是客服',
+  'messages.pending.kol': '这是红人',
+  'messages.pending.no': '不是',
+  'messages.pending.refused': '客服岗位没开，交不出去',
   'messages.no_mailbox': '这台机器上还没连邮箱。',
   'messages.no_mailbox.hint':
     '连上之后，收件箱、已发、草稿、垃圾箱与客服 / 红人那两个文件夹都会出现在这里。',
@@ -3891,6 +3917,25 @@ const en: Table = {
     'Messages that errored out and ran out of retries. Once the cause is fixed you can re-queue them.',
   'connections.requeue': 'Re-queue',
   'connections.requeuing': 'Re-queueing…',
+  // ── WP167: mailbox switches (what happens to support emails in the mailbox) ──
+  'connections.mailbox.title': 'Support emails in this mailbox',
+  'connections.mailbox.title.hint':
+    'Only emails judged as support are touched. Newsletters, notifications and suppliers stay where they are. Changes apply from the next email.',
+  'connections.mailbox.takeover.on': 'Support on',
+  'connections.mailbox.takeover.off': 'Support off',
+  'connections.mailbox.takeover.hint':
+    'Support is on when this brand has a support position. Otherwise support emails only show up under Messages: no work item, no changes to the mailbox. Turn it on from Positions.',
+  'connections.mailbox.shadow_mode': 'Shadow mode',
+  'connections.mailbox.shadow_mode.hint':
+    'Support keeps working, but your mailbox is never touched: nothing is moved or marked as read. Handy for a side-by-side check before going live.',
+  'connections.mailbox.shadow.on': 'Watch only',
+  'connections.mailbox.move': 'Move to KefuAgents',
+  'connections.mailbox.move.hint':
+    'Support emails are moved to the KefuAgents folder. An existing folder with the same name (any case) is reused; otherwise it is created.',
+  'connections.mailbox.mark_read': 'Mark as read',
+  'connections.mailbox.mark_read.hint':
+    'Support emails are marked as read in the mailbox, so you do not read them twice in your mail app.',
+  'connections.mailbox.failed': 'That did not save. Try again in a moment.',
   // ── WP83：connection directory & per-position checklist ─────────────
   'connections.directory.title': 'Add a connection',
   'connections.directory.subtitle': 'Browse by category or search by name.',
@@ -4499,6 +4544,14 @@ const en: Table = {
   'messages.mailbox_failure.reason.server_refused': 'the mail server said no',
   'messages.mailbox_failure.reason.error': 'something went wrong talking to the mailbox',
   'messages.mailbox_failure.reason.unsupported': 'this mailbox does not support that action',
+  // ── WP167: to confirm (emails triage was unsure about) ──────────────
+  'messages.pending': 'To confirm',
+  'messages.pending.hint':
+    'Emails triage was unsure about: no work item opened, nothing moved. Hand one to support with a click, or say no.',
+  'messages.pending.support': "It's support",
+  'messages.pending.kol': "It's a creator",
+  'messages.pending.no': 'No',
+  'messages.pending.refused': 'Support is off, so it could not be handed over',
   'messages.no_mailbox': 'No mailbox connected on this machine yet.',
   'messages.no_mailbox.hint':
     'Once you connect one, your inbox, sent, drafts, trash and the two agent folders all show up here.',

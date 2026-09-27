@@ -20,6 +20,8 @@
 import type {
   MaybePromise,
   MessageBackfillInput,
+  MessageConfirmRouteInput,
+  MessageConfirmRouteResult,
   MessageDraft,
   MessageDraftInput,
   MessageFlagsInput,
@@ -146,6 +148,15 @@ export interface MessagesPort {
     id: string,
     labels: string[],
   ): MaybePromise<{ message: MessageRecord }>
+  /**
+   * WP167：「待确认」那一栏上人点的那一下（人工分拣，写事件）：「这是客服」交给客服那一路，
+   * 「不是」只记人的判断。不实现 = 这台机器没有这一栏（路由回 501）。
+   */
+  confirmRoute?(
+    actor: MessageActor,
+    id: string,
+    input: MessageConfirmRouteInput,
+  ): MaybePromise<MessageConfirmRouteResult>
   /** 「显示图片」/「总是信任这个发件人」。 */
   showImages(
     actor: MessageActor,
@@ -216,6 +227,8 @@ const MoveBody = z.object({
   remember_sender: z.boolean().optional(),
 })
 
+const ConfirmRouteBody = z.object({ route: z.enum(['support', 'kol', 'inbox']) })
+
 const LabelsBody = z.object({ labels: z.array(z.string().min(1).max(64)).max(20) })
 
 const LabelBody = z.object({
@@ -280,6 +293,7 @@ function queryOf(c: Parameters<typeof principalOf>[0]): MessageListQuery {
     ...(q('unread') === 'true' ? { unread: true } : {}),
     ...(q('starred') === 'true' ? { starred: true } : {}),
     ...(q('q') === undefined ? {} : { q: q('q') as string }),
+    ...(q('pending_route') === 'true' ? { pending_route: true } : {}),
     ...(intParam(c, 'limit') === undefined ? {} : { limit: intParam(c, 'limit') as number }),
   }
 }
@@ -297,6 +311,11 @@ const LIST_PARAMS = [
   { name: 'unread', in: 'query' as const, description: '`true` = 只看未读' },
   { name: 'starred', in: 'query' as const, description: '`true` = 只看星标' },
   { name: 'q', in: 'query' as const, description: '搜索：发件人 / 主题 / 正文 / 标签 / 文件夹' },
+  {
+    name: 'pending_route',
+    in: 'query' as const,
+    description: '`true` = 只看「待确认」：分拣判不准、没开事项、等人点「这是客服」的那几封',
+  },
   {
     name: 'limit',
     in: 'query' as const,
@@ -571,6 +590,34 @@ export function messageRoutes(): Route[] {
             (await body(c, MoveBody)) as MessageMoveInput,
           ),
         ),
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/messages/:id/confirm-route',
+        operationId: 'confirmMessageRoute',
+        summary:
+          '「待确认」里人点的那一下（人工分拣，写事件）：「这是客服」交给客服那一路（开事项、起 Run），「不是」只记人的判断',
+        tag: 'messages',
+        auth: 'bearer',
+        assignment: true,
+        authz: WRITE,
+        body: ConfirmRouteBody,
+        returns: 'MessageConfirmRouteResult',
+      },
+      async (c, deps) => {
+        const port = portOf(deps)
+        if (port.confirmRoute === undefined)
+          throw new ApiError('not_implemented', '这个服务进程的消息面没有「待确认」这一栏')
+        return ok(
+          c,
+          await port.confirmRoute(
+            actorOf(c),
+            param(c, 'id'),
+            (await body(c, ConfirmRouteBody)) as MessageConfirmRouteInput,
+          ),
+        )
+      },
     ),
     route(
       {

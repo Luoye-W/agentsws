@@ -136,6 +136,10 @@ const saveMessageDraft = vi.fn(async () => ({
   },
 }))
 const getMailAssistant = vi.fn(async () => assistant)
+const confirmMessageRoute = vi.fn(async (_id: string, route: string) => ({
+  message: message(),
+  handed_off: route !== 'inbox' && route !== 'refuse',
+}))
 const syncMessages = vi.fn(async () => ({
   accounts: 1,
   folders: 6,
@@ -163,6 +167,7 @@ vi.mock('@/lib/api', async () => {
     messageToTodo: async () => ({ todo: undefined }),
     backfillMessages: async () => ({ floor: T0 }),
     discardMessageDraft: async () => ({ deleted: true }),
+    confirmMessageRoute: (...a: unknown[]) => confirmMessageRoute(...(a as [string, string])),
   }
 })
 
@@ -340,5 +345,43 @@ describe('第三栏 mail-assistant（63 §8）', () => {
     expect(seen).toEqual(['这就给你补发。'])
     expect(sendMessage).not.toHaveBeenCalled()
     resetMessageFocus()
+  })
+})
+
+describe('WP167：「待确认」那一栏', () => {
+  it('左栏有一格「待确认」（有信时亮一个点）；点开只列拿不准的信，「这是客服 / 不是」各打一次人工分拣', async () => {
+    listMessageThreads.mockImplementation(async (query?: string) =>
+      query?.includes('pending_route=true') === true
+        ? {
+            threads: [
+              summary({ suggested_route: 'support', pending_message_id: 'msg_9', unread: 0 }),
+            ],
+          }
+        : { threads: [summary()] },
+    )
+    const user = userEvent.setup()
+    renderWithProviders(<MessagesPage />)
+    await user.click(await screen.findByTestId('messages-pending'))
+    expect(await screen.findByTestId('messages-pending-dot')).toBeDefined()
+    // 列表那一条请求带的是 pending_route，不带文件夹
+    await waitFor(() => {
+      expect(
+        listMessageThreads.mock.calls.some(
+          ([q]) => q?.includes('pending_route=true') === true && !q.includes('folder_kind'),
+        ),
+      ).toBe(true)
+    })
+    await user.click(await screen.findByTestId('messages-pending-yes'))
+    await waitFor(() => {
+      expect(confirmMessageRoute).toHaveBeenCalledWith('msg_9', 'support')
+    })
+    expect(screen.getByTestId('messages-pending-yes').textContent).toBe('这是客服')
+    await user.click(screen.getByTestId('messages-pending-no'))
+    await waitFor(() => {
+      expect(confirmMessageRoute).toHaveBeenCalledWith('msg_9', 'inbox')
+    })
+    // 问号里说清楚这一栏是什么（36 §7：解释进问号）
+    expect(screen.getByLabelText(/分拣拿不准的信/)).toBeDefined()
+    listMessageThreads.mockImplementation(async () => ({ threads: [summary()] }))
   })
 })

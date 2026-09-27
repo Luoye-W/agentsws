@@ -18,7 +18,21 @@ export function matchesQuery(m: MessageRecord, q: MessageListQuery): boolean {
   if (q.unread === true && m.flags.read) return false
   if (q.starred === true && !m.flags.starred) return false
   if (q.q !== undefined && q.q.trim() !== '' && !matchesText(m, q.q)) return false
+  if (q.pending_route === true && pendingRouteOf(m) === undefined) return false
   return true
+}
+
+/**
+ * WP167：这封信是不是「待确认」——分拣判不准（把握不够）的客服 / 红人信。
+ *
+ * 判据只有一条：分拣挂了 `suggested_route`、信还留在 `inbox` 那条路上、而且人还没判过。
+ * 人点过「这是客服」或「不是」之后分拣结论就是 `by: 'user'`，它从这一栏里消失。
+ */
+export function pendingRouteOf(m: MessageRecord): MessageRecord['route'] | undefined {
+  const t = m.triage
+  if (t === undefined || t.by === 'user' || m.route !== 'inbox') return undefined
+  const s = t.suggested_route
+  return s === 'support' || s === 'kol' ? s : undefined
 }
 
 /**
@@ -81,7 +95,10 @@ export function aggregateThreads(messages: readonly MessageRecord[]): MessageThr
     let unread = 0
     let starred = false
     let needs_reply = false
+    let pending: { route: MessageRecord['route']; id: string } | undefined
     for (const m of sorted) {
+      const wanted = pendingRouteOf(m)
+      if (pending === undefined && wanted !== undefined) pending = { route: wanted, id: m.id }
       for (const l of m.labels) labels.add(l)
       folders.add(m.folder)
       accounts.add(m.account)
@@ -110,6 +127,9 @@ export function aggregateThreads(messages: readonly MessageRecord[]): MessageThr
       needs_reply,
       snippet: last.snippet,
       last_message_id: last.id,
+      ...(pending === undefined
+        ? {}
+        : { suggested_route: pending.route, pending_message_id: pending.id }),
     })
   }
   return out.sort((a, b) => Date.parse(b.last_at) - Date.parse(a.last_at))

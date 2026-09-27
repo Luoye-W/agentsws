@@ -312,6 +312,7 @@ export function ConnectionsPage(): React.ReactNode {
                   disconnect.mutate(c.id)
                 }}
                 deadLetters={deadLettersFor(c, deadLetters.data?.dead_letters ?? [])}
+                assignment={ownerId}
                 {...(requeueing === undefined ? {} : { requeueing })}
                 onRequeue={(id) => {
                   setRequeueing(id)

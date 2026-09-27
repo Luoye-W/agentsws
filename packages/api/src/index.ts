@@ -202,6 +202,8 @@ export type {
   CredentialStore,
   MailboxDetectResult,
   MailboxPresetView,
+  MailboxSwitchesInput,
+  MailboxSwitchesView,
   ProviderAuthKind,
   ProviderAuthOption,
   ProviderFieldSpec,

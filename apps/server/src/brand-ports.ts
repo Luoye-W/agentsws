@@ -22,6 +22,7 @@ import type {
   DeepSeekAccountView,
   DesignPort,
   KolPort,
+  MailboxSwitchesInput,
   MessagesPort,
   ModelDefaultsView,
   ModelsActor,
@@ -114,7 +115,38 @@ export function brandConnectionsPort(brands: BrandModules): ConnectionsPort {
     },
     requeueDeadLetter: async (actor: { workspace_id: WorkspaceId }, id: string) =>
       (await brands.forWorkspace(actor.workspace_id)).channels.requeueDeadLetter(id),
+    /*
+     * WP167：邮箱卡上的开关。开关存在消息那一侧（挪信归消息同步，docs/63 §D），
+     * 这里只是按连接 id 找到那只邮箱的地址再转过去——连接面本身不认识"挪信"。
+     */
+    mailboxSwitches: async (actor: { workspace_id: WorkspaceId }, id: string) => {
+      const brand = await brands.forWorkspace(actor.workspace_id)
+      const address = mailboxAddressOf(brand, id)
+      return { connection_id: id, ...brand.messages.switches.get(address) }
+    },
+    setMailboxSwitches: async (
+      actor: { workspace_id: WorkspaceId; person_id: string },
+      id: string,
+      input: MailboxSwitchesInput,
+    ) => {
+      const brand = await brands.forWorkspace(actor.workspace_id)
+      const address = mailboxAddressOf(brand, id)
+      return {
+        connection_id: id,
+        ...brand.messages.switches.set(address, input, actor.person_id),
+      }
+    },
   })
+}
+
+/** 连接 id → 这只邮箱的地址；不是邮箱（或已断开）就 404。 */
+function mailboxAddressOf(
+  brand: { connections: { mailAccounts(): { connection_id: string; address: string }[] } },
+  id: string,
+): string {
+  const account = brand.connections.mailAccounts().find((a) => a.connection_id === id)
+  if (account === undefined) throw new ApiError('not_found', '这条连接不是一只已连的邮箱')
+  return account.address
 }
 
 export interface BrandModelsPortOptions {

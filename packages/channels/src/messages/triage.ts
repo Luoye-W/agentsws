@@ -104,7 +104,9 @@ export function isAutomatedMail(input: TriageInput): string | undefined {
   if (auto !== undefined && auto.trim().toLowerCase() !== 'no') return 'Auto-Submitted'
   const prec = (h.precedence ?? '').trim().toLowerCase()
   if (prec === 'bulk' || prec === 'list' || prec === 'junk') return `Precedence: ${prec}`
-  if (NOREPLY.test(`x${input.from_email}`)) return 'noreply 发件人'
+  // WP167 修：以前拿 `x${地址}` 去配，`^` 永远配不上，光秃秃的 `noreply@…` 一次都没命中过——
+  // 每封平台通知都白花一次模型，还可能被判成客服信开事项
+  if (NOREPLY.test(input.from_email)) return 'noreply 发件人'
   return undefined
 }
 

@@ -1610,6 +1610,22 @@ async function seedMessages(server: Server, world: World): Promise<void> {
         reasons: ['模型分拣（便宜档，只送头与正文前 2000 字）'],
       }),
     }),
+    // WP167：分拣拿不准的一封——没开事项、没挪，在「消息」页的「待确认」一栏等人点一下
+    base({
+      id: 'm109',
+      from: { email: 'jordan@shopper.example', name: 'Jordan Wells' },
+      subject: 'Quick question about the gift box',
+      text: 'Hi, does the gift box come with a card? I might order two next week.',
+      minutes: 95,
+      triage: verdict({
+        suggested_route: 'support',
+        needs_reply: true,
+        summary: '问礼盒带不带卡片，可能下周下单',
+        confidence: 0.45,
+        by: 'model',
+        reasons: ['模型判成客服，但把握不够'],
+      }),
+    }),
     base({
       id: 'm108',
       from: { email: 'ops@luminous-lab.example', name: '李默' },

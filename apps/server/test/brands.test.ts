@@ -476,11 +476,15 @@ describe('WP66 渠道按品牌', () => {
     const reportB = await brandB.channels.poll()
     expect(reportA.accounts).toBe(1)
     expect(reportB.accounts).toBe(1)
+    // WP167（docs/63 §D「收信一个入口」）：服务进程里真去连邮箱收信的是消息同步（渠道那一路
+    // 不再自己扫 INBOX），所以"连不上"落在消息同步那一轮的报告里
+    const mailA = await brandA.messages.poll()
+    const mailB = await brandB.messages.poll()
     // 连不上的地址：两边都失败，但**失败的是各自那个账号**，不会互相带
-    expect(reportA.failed.join()).toContain('support@nordvolt.cn')
-    expect(reportA.failed.join()).not.toContain('hello@nordvolt.courses')
-    expect(reportB.failed.join()).toContain('hello@nordvolt.courses')
-    expect(reportB.failed.join()).not.toContain('support@nordvolt.cn')
+    expect(mailA.failed.join()).toContain('support@nordvolt.cn')
+    expect(mailA.failed.join()).not.toContain('hello@nordvolt.courses')
+    expect(mailB.failed.join()).toContain('hello@nordvolt.courses')
+    expect(mailB.failed.join()).not.toContain('support@nordvolt.cn')
   })
 
   it('聊天窗的来源白名单按品牌：甲放行的域名在乙那里不放行', async () => {

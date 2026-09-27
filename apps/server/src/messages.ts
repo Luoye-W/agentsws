@@ -32,10 +32,12 @@ import type {
 import type {
   CredentialSource,
   MailboxAccount,
+  MailboxActionRecord,
   MailboxStateStore,
   MailboxWriter,
   MailSource,
   MessageStore,
+  RawEmailMessage,
   RawStore,
   SuggestModel,
   SuggestRequest,
@@ -44,10 +46,12 @@ import type {
   TriageModel,
 } from '@agentsws/channels'
 import {
+  applySupportMailboxActions,
   folderKindOf,
   folderPathFor,
   ImapMailboxWriter,
   ImapMailSource,
+  isAgentFolderKind,
   MailboxSync,
   MemoryMailboxStateStore,
   MemoryMessageStore,
@@ -56,6 +60,8 @@ import {
   restoreRemoteImages,
   SqliteMailboxStateStore,
   SqliteMessageStore,
+  supportIntakeKey,
+  supportMailboxSwitches,
   triageMessage,
   userVerdict,
 } from '@agentsws/channels'
@@ -65,6 +71,8 @@ import type {
   Halt,
   Iso8601,
   MessageBackfillInput,
+  MessageConfirmRouteInput,
+  MessageConfirmRouteResult,
   MessageDraft,
   MessageDraftInput,
   MessageFlagsInput,
@@ -78,6 +86,7 @@ import type {
   MessageSendResult,
   MessageSyncReport,
   MessageThreadSummary,
+  MessageTriage,
   ModelGateway,
   PersonId,
   ReplySuggestion,
@@ -90,9 +99,19 @@ import type {
 import { KOL_FOLDER, SUPPORT_FOLDER } from '@agentsws/contracts'
 import { sha256 } from '@agentsws/core'
 import type { Work } from '@agentsws/work'
-import type { DirectMailInput, DirectMailResult } from './channels.js'
+import type {
+  DirectMailInput,
+  DirectMailResult,
+  SupportMailIntake,
+  SupportMailIntakeResult,
+} from './channels.js'
 import type { MailAccount } from './connections.js'
 import { MailboxActionFailures, mailboxActionEvent, maskAddress } from './mailbox-actions.js'
+import {
+  type MailboxSwitchPatch,
+  type MailboxSwitchSettings,
+  MailboxSwitchStore,
+} from './mailbox-switches.js'
 
 /** 客服岗位的那几条职责（开了其中任何一条就算"启用了客服岗位"）。 */
 const SUPPORT_ROLE_PREFIXES = ['dtc.support', 'dtc.aftersales', 'dtc.live-chat', 'support.']
@@ -160,8 +179,28 @@ export interface MessagesOptions {
    * 接管 / 挪信 / 标已读）。**每封现查**。不给 = 老产品的默认值（全开、影子关）。
    *
    * 挪信只由消息同步负责（docs/63 §D「挪信归谁」）：渠道那一路在服务进程里不再挪信。
+   *
+   * WP167：不给 = 按连接页那只邮箱卡上的三个开关（{@link MessagesAssembly.switches}）；
+   * 给了就以它为准（测试与没有界面的装配用）。按邮箱地址各一份。
    */
-  supportMailbox?(): Partial<SupportMailboxSwitches>
+  supportMailbox?(account: string): Partial<SupportMailboxSwitches>
+  /**
+   * WP167（docs/63 §D「收信一个入口」）：判成客服的信**递进客服那一路**
+   * （`channels.intakeSupportMail`：Amazon 子渠道判定、线程台账、去重、落事项、判断层、起 Run）。
+   *
+   * 给了它，交接就不再自己开事项、也不再调 {@link MessagesOptions.onSupportMail}——那几步
+   * 都在渠道的入站管线里，这里不另写一份。不给 = 老行为（只开事项 + 递一次判断层信号）。
+   */
+  intakeSupport?(input: SupportMailIntake): Promise<SupportMailIntakeResult>
+  /**
+   * WP167 终审追加：升级那一拍预写台账（`channels.seedSupportIntake`）。接了 {@link intakeSupport}
+   * 才有意义：第一次同步之前，把已有事项钉着的线程里每一封信写进"进过客服管线"的台账，
+   * 于是升级后第一次扫描不会给老信再开事项、再起 Run。只做一次（台账里有标记就不再算）。
+   */
+  seedSupportIntake?(
+    marker: string,
+    keys: () => Promise<readonly string[]>,
+  ): Promise<{ already: boolean; seeded: number }>
 }
 
 /**
@@ -182,6 +221,12 @@ export const DEFAULT_FOLDERS: readonly string[] = [
   KOL_FOLDER,
 ]
 
+/**
+ * WP167 终审追加：升级那一拍预写台账的标记（写进台账里，有它就不再算第二遍）。
+ * 以后要是改了"老信"的口径需要再补一遍，换一个版本号就行。
+ */
+export const LEGACY_SEED_MARKER = 'meta:wp167_legacy_seed_v1'
+
 /** WP161：每只邮箱的文件夹清单多久重列一次（第一次挪信新建的那只会随手补进去）。 */
 export const FOLDER_LIST_TTL_MS = 10 * 60_000
 
@@ -189,6 +234,18 @@ export interface MessagesAssembly {
   store: MessageStore
   sync: MailboxSync
   port: MessagesPort
+  /**
+   * WP167：连接页那只邮箱卡上的三个开关（影子模式 / 挪进 KefuAgents / 标已读）。
+   * 改了立刻生效（消息同步每封现查），改一次写一条 `mailbox.switches_changed`。
+   */
+  switches: {
+    get(address: string): MailboxSwitchSettings & { takeover: boolean }
+    set(
+      address: string,
+      patch: MailboxSwitchPatch,
+      by: string,
+    ): MailboxSwitchSettings & { takeover: boolean }
+  }
   /** 调度器消费者：拉一轮所有邮箱的所有文件夹。 */
   poll(): Promise<MessageSyncReport>
   close(): void
@@ -370,6 +427,118 @@ export function createMessages(options: MessagesOptions): MessagesAssembly {
   /** WP163：每只邮箱最近一次没动成的邮箱动作（「消息」页左栏那一行）。 */
   const mailboxFailures = new MailboxActionFailures()
 
+  const onMailboxAction = (record: MailboxActionRecord): void => {
+    const at = clock.now()
+    mailboxFailures.note(record, at)
+    options.appendEvent(mailboxActionEvent({ workspace_id, actor_id: 'messages', at, record }))
+  }
+
+  /* ── WP167：连接页那只邮箱卡上的三个开关 ───────────────────────────────── */
+
+  const switchStore = new MailboxSwitchStore(
+    options.dbDir === undefined ? {} : { dir: options.dbDir },
+  )
+  /** 这只邮箱现在按什么开关动邮箱：装配方给了就以它为准，否则取卡上那三个。 */
+  const switchesOf = (account: string): Partial<SupportMailboxSwitches> =>
+    options.supportMailbox?.(account) ?? switchStore.get(account)
+
+  /* ── 交给客服 / 红人那一路 ─────────────────────────────────────────── */
+
+  /**
+   * 这封信的原始 MIME（人在「待确认」里点「这是客服」时，同步那一拍早过去了）：
+   * 从受控原始材料区取回。取不到（没接原始材料区、材料过了保留期）= 交不出去。
+   */
+  const rawOf = async (record: MessageRecord): Promise<RawEmailMessage | undefined> => {
+    if (options.rawStore === undefined || record.raw_ref === undefined) return undefined
+    const row = await options.rawStore.get(record.raw_ref)
+    const payload = row?.payload
+    const source =
+      typeof payload === 'string'
+        ? payload
+        : payload instanceof Uint8Array
+          ? new TextDecoder().decode(payload)
+          : undefined
+    if (source === undefined) return undefined
+    return { uid: record.uid ?? 0, mailbox: record.folder, source }
+  }
+
+  /** 钉着这条线程的那条事项（有就给，没有不开）。 */
+  const matterOfThread = (thread_id: string): string | undefined =>
+    options.work
+      ?.listMatters({ kind: 'conversation' })
+      .find((m) => m.context.pinned.some((p) => p.type === 'thread' && p.id === thread_id))?.id
+
+  /**
+   * 一封信交给客服 / 红人那一路（分拣判的，或人在「待确认」里点的）。
+   *
+   * 客服信（WP167，docs/63 §D「收信一个入口」）：递进渠道的入站管线——Amazon 子渠道判定、
+   * 线程台账、去重、落事项、判断层、起 Run 都在那一条里；同一封信只进一次（渠道那边按
+   * Message-ID 记台账）。**已经在岗位文件夹里的信**（老产品或人自己的过滤规则挪过去的）
+   * 不再开事项、不起 Run：有事项就挂上，算"那一侧早就接了"，信不动。
+   *
+   * 红人信照现在的规矩：归并到那条合作线程的事项上。
+   */
+  const handOff = async (
+    record: MessageRecord,
+    route: 'support' | 'kol',
+    raw: RawEmailMessage | undefined,
+    by: 'triage' | 'user',
+  ): Promise<{ accepted: boolean; matter_id?: string }> => {
+    const work = options.work
+    const position = options.position?.()
+    if (work === undefined || position === undefined) return { accepted: false }
+    if (route === 'support' && !supportEnabled()) return { accepted: false }
+    if (route === 'kol' && !kolEnabled()) return { accepted: false }
+    const link = async (matter_id: string | undefined): Promise<void> => {
+      if (matter_id === undefined) return
+      await store.update(record.id, { linked: { type: 'matter', id: matter_id } })
+    }
+    const intake = options.intakeSupport
+    if (route === 'support' && intake !== undefined) {
+      if (isAgentFolderKind(record.folder_kind)) {
+        const existing = matterOfThread(record.thread_id)
+        await link(existing)
+        return existing === undefined ? { accepted: true } : { accepted: true, matter_id: existing }
+      }
+      const source = raw ?? (await rawOf(record))
+      if (source === undefined) return { accepted: false }
+      const out = await intake({
+        account: record.account,
+        raw: source,
+        ...(record.message_id === undefined ? {} : { message_id: record.message_id }),
+        by,
+      })
+      if (!out.accepted) return { accepted: false }
+      const matter_id = out.matter_id ?? matterOfThread(record.thread_id)
+      await link(matter_id)
+      return matter_id === undefined ? { accepted: true } : { accepted: true, matter_id }
+    }
+    const ref = { type: 'thread' as const, id: record.thread_id }
+    const existing = work
+      .listMatters({ kind: 'conversation' })
+      .find((m) => m.context.pinned.some((p) => p.type === ref.type && p.id === ref.id))
+    const matter =
+      existing ??
+      work.createMatter({
+        kind: 'conversation',
+        title: `与 ${record.from.name ?? record.from.email} 的往来`,
+        pinned: [ref],
+        position_id: position.assignment_id,
+      })
+    await link(matter.id)
+    // WP125（72 §P0-1）：没接渠道那一路的老装配——分拣判成 `support` 的那一封递一次判断层信号
+    if (route === 'support') {
+      await options.onSupportMail?.({
+        thread_id: record.thread_id,
+        matter_id: matter.id,
+        text: record.text,
+        subject: record.subject,
+        from: record.from.email,
+      })
+    }
+    return { accepted: true, matter_id: matter.id }
+  }
+
   const sync = new MailboxSync({
     clock,
     workspace_id,
@@ -394,52 +563,23 @@ export function createMessages(options: MessagesOptions): MessagesAssembly {
         triageModel,
       ),
     /**
-     * 交给客服 / 红人现有流程。
+     * 交给客服 / 红人那一路；那一侧不接就回 `false`——于是信不挪、留在收件箱里可见。
      *
-     * "现有流程"就是 37 的事项：渠道那一侧（`channels.ts`）本来就会把 INBOX 的
-     * 客户来信落成 `conversation` 事项并起 Run。这里要做的只是**确认那条路走得通**
-     * （有岗位、有工作模型），走不通就回 `false`——于是信不挪、留在收件箱里可见。
+     * WP167：客服信递进渠道的入站管线（开事项、判断层、起 Run 都在那里），见 {@link handOff}。
+     * 交接炸了不让这封信变成毒消息：它已经落进消息库了，只是没交出去——记一笔、信不动。
      */
-    handoff: async (record, triage) => {
-      const work = options.work
-      const position = options.position?.()
-      if (work === undefined || position === undefined) return false
-      if (triage.route === 'support' && !supportEnabled()) return false
-      if (triage.route === 'kol' && !kolEnabled()) return false
-      const ref = { type: 'thread' as const, id: record.thread_id }
-      const existing = work
-        .listMatters({ kind: 'conversation' })
-        .find((m) => m.context.pinned.some((p) => p.type === ref.type && p.id === ref.id))
-      const matter =
-        existing ??
-        work.createMatter({
-          kind: 'conversation',
-          title: `与 ${record.from.name ?? record.from.email} 的往来`,
-          pinned: [ref],
-          position_id: position.assignment_id,
-        })
-      await store.update(record.id, { linked: { type: 'matter', id: matter.id } })
-      // WP125（72 §P0-1）：分拣判成 `support` 的那一封，交给客服判断层
-      if (triage.route === 'support') {
-        await options.onSupportMail?.({
-          thread_id: record.thread_id,
-          matter_id: matter.id,
-          text: record.text,
-          subject: record.subject,
-          from: record.from.email,
-        })
+    handoff: async (record, triage, raw) => {
+      if (triage.route !== 'support' && triage.route !== 'kol') return false
+      try {
+        return (await handOff(record, triage.route, raw, 'triage')).accepted
+      } catch (e) {
+        logQuiet('support_intake_failed', record.account, e)
+        return false
       }
-      return true
     },
-    // WP163：老产品的四个开关每封现查；每个动作一条事件 + 记住最近一次失败
-    ...(options.supportMailbox === undefined
-      ? {}
-      : { support_mailbox: () => options.supportMailbox?.() ?? {} }),
-    on_mailbox_action: (record) => {
-      const at = clock.now()
-      mailboxFailures.note(record, at)
-      options.appendEvent(mailboxActionEvent({ workspace_id, actor_id: 'messages', at, record }))
-    },
+    // WP163 / WP167：四个开关每封现查（按邮箱各一份）；每个动作一条事件 + 记住最近一次失败
+    support_mailbox: (account) => switchesOf(account),
+    on_mailbox_action: onMailboxAction,
     on_error: (e) => logQuiet('message_sync_failed', '', e),
     on_folder_fault: (fault) => {
       options.appendEvent({
@@ -489,6 +629,80 @@ export function createMessages(options: MessagesOptions): MessagesAssembly {
     flag(input.answered, '\\Answered')
     if (add.length === 0 && remove.length === 0) return
     await writer.setFlags(record.folder, uid, add, remove)
+  }
+
+  /**
+   * WP167：人工分拣交出去之后，按这只邮箱的开关动邮箱（与同步那一路同一套：
+   * `applySupportMailboxActions` 的顺序与记账，红人那只只看影子模式）。
+   * 已经在岗位文件夹里的信不挪（WP163）。
+   */
+  const moveAfterHandoff = async (
+    record: MessageRecord,
+    route: 'support' | 'kol',
+  ): Promise<MessageRecord> => {
+    const account = accountOf(record.account)
+    const uid = record.uid
+    if (account === undefined || uid === undefined || isAgentFolderKind(record.folder_kind)) {
+      return record
+    }
+    const writer = writerFor(account)
+    const to = folderPathFor(route, knownOf(account))
+    const switches = supportMailboxSwitches(switchesOf(record.account))
+    const from_folder = record.folder
+    const moveOne = async (dest: string): Promise<boolean> => {
+      const moved = (await writer?.move(from_folder, uid, dest)) ?? false
+      if (moved) noteFolder(account, dest)
+      return moved
+    }
+    if (route === 'support') {
+      const done = await applySupportMailboxActions({
+        switches,
+        account: record.account,
+        uid,
+        from_folder,
+        to_folder: to,
+        ops:
+          writer === undefined
+            ? {}
+            : {
+                markRead: async () => writer.setFlags(from_folder, uid, ['\\Seen'], []),
+                move: async (dest) => moveOne(dest),
+              },
+        record: onMailboxAction,
+      })
+      const patch: Partial<MessageRecord> = {
+        ...(done.marked_read ? { flags: { ...record.flags, read: true } } : {}),
+        ...(done.moved ? { folder: to, folder_kind: folderKindOf(to) } : {}),
+      }
+      return Object.keys(patch).length === 0
+        ? record
+        : ((await store.update(record.id, patch)) ?? record)
+    }
+    if (switches.shadow_mode) {
+      onMailboxAction({
+        account: record.account,
+        uid,
+        from_folder,
+        action: 'observe',
+        status: 'skipped',
+        reason: 'shadow_mode',
+      })
+      return record
+    }
+    const moved = await moveOne(to)
+    onMailboxAction({
+      account: record.account,
+      uid,
+      from_folder,
+      to_folder: to,
+      action: 'move',
+      ...(moved
+        ? { status: 'completed' as const }
+        : { status: 'failed' as const, reason: 'server_refused' as const }),
+    })
+    return moved
+      ? ((await store.update(record.id, { folder: to, folder_kind: folderKindOf(to) })) ?? record)
+      : record
   }
 
   const requireMessage = async (id: string): Promise<MessageRecord> => {
@@ -829,6 +1043,76 @@ export function createMessages(options: MessagesOptions): MessagesAssembly {
       }
     },
 
+    /**
+     * WP167：「待确认」那一栏上人点的那一下——**人工分拣**，写事件。
+     *
+     * 「这是客服」= 交给客服那一路（开事项、判断层、起 Run），再按这只邮箱的开关动邮箱；
+     * 交不出去（客服岗位没开、原信取不回）就什么都不改，信还挂在待确认里，界面照实说。
+     * 「不是」= 只记人的判断，信留在收件箱，从待确认里消失。
+     */
+    async confirmRoute(
+      actor: MessageActor,
+      id: string,
+      input: MessageConfirmRouteInput,
+    ): Promise<MessageConfirmRouteResult> {
+      await ensureSeeded()
+      const row = await requireMessage(id)
+      const at = clock.now()
+      const route = input.route
+      let handed: { accepted: boolean; matter_id?: string } = { accepted: false }
+      if (route !== 'inbox') {
+        try {
+          handed = await handOff(row, route, undefined, 'user')
+        } catch (e) {
+          logQuiet('support_intake_failed', row.account, e)
+        }
+      }
+      const event = (handed_off: boolean): void =>
+        options.appendEvent({
+          schema_version: 1,
+          workspace_id,
+          type: 'messages.route_confirmed',
+          actor: { kind: 'person', id: actor.person_id },
+          subject: { type: 'message', id: row.id },
+          correlation: { trace_id: `tr_msgconfirm_${row.id}_${at}` },
+          // 63 §10：没有正文、地址遮过
+          payload: {
+            route,
+            handed_off,
+            account: maskAddress(row.account),
+            ...(row.triage?.suggested_route === undefined
+              ? {}
+              : { suggested_route: row.triage.suggested_route }),
+            ...(handed.matter_id === undefined ? {} : { matter_id: handed.matter_id }),
+          },
+        })
+      if (route !== 'inbox' && !handed.accepted) {
+        event(false)
+        return { message: row, handed_off: false }
+      }
+      const triage: MessageTriage = {
+        ...userVerdict(route, at, row.labels),
+        summary: row.triage?.summary ?? '',
+        reasons: ['人工分拣：在「待确认」里点的'],
+      }
+      let next =
+        (await store.update(row.id, {
+          route,
+          triage,
+          ...(handed.matter_id === undefined
+            ? {}
+            : { linked: { type: 'matter' as const, id: handed.matter_id } }),
+        })) ?? row
+      suggester.invalidate(row.id)
+      if (route !== 'inbox') next = await moveAfterHandoff(next, route)
+      event(route !== 'inbox')
+      return {
+        message: next,
+        handed_off: route !== 'inbox',
+        ...(handed.matter_id === undefined ? {} : { matter_id: handed.matter_id }),
+      }
+    },
+
     async toTodo(actor: MessageActor, id: string): Promise<{ todo: Todo }> {
       const work = options.work
       if (work === undefined) throw new Error('这个服务进程没装工作模型，转不了待办')
@@ -845,6 +1129,7 @@ export function createMessages(options: MessagesOptions): MessagesAssembly {
     },
 
     async sync(): Promise<MessageSyncReport> {
+      await ensureSeeded()
       rulesCache = await store.senderRules()
       await refreshFolders()
       return sync.sync()
@@ -856,11 +1141,81 @@ export function createMessages(options: MessagesOptions): MessagesAssembly {
     },
   }
 
+  /**
+   * WP167 终审追加：升级那一拍预写台账（本进程只跑一次；台账里有标记就不再算）。
+   *
+   * 算的是"老版本已经交给客服那一路的信"：工作模型里每条会话事项钉着的线程——线程 id 就是
+   * 那条线程第一封信的 Message-ID——外加消息库里这些线程下的每一封信。INBOX 里老版本处理过
+   * 但消息库还没见过的信，由渠道那边按适配器原先的游标认（见 `channels.ts` 的 `legacyCutoffOf`）。
+   */
+  let seeding: Promise<void> | undefined
+  const ensureSeeded = (): Promise<void> => {
+    const seed = options.seedSupportIntake
+    if (seed === undefined || options.intakeSupport === undefined) return Promise.resolve()
+    seeding ??= seed(LEGACY_SEED_MARKER, async () => {
+      const threads = new Set<string>()
+      for (const m of options.work?.listMatters({ kind: 'conversation' }) ?? []) {
+        for (const p of m.context.pinned) if (p.type === 'thread') threads.add(p.id)
+      }
+      const keys = new Set<string>()
+      for (const thread of threads) {
+        // 渠道那一路给没有 Message-ID 的信造的线程 id（`email-thread:…`）不是一封信的身份
+        if (!thread.startsWith('email-thread:')) {
+          keys.add(supportIntakeKey({ account: '', message_id: thread, folder: '' }))
+        }
+        for (const row of await store.thread(thread)) {
+          keys.add(
+            supportIntakeKey({
+              account: row.account,
+              message_id: row.message_id,
+              folder: row.folder,
+              uid: row.uid,
+            }),
+          )
+        }
+      }
+      return [...keys]
+    }).then(
+      () => undefined,
+      (e) => {
+        // 这一次没写成：下一轮再来（标记没写，重来一遍是幂等的）
+        seeding = undefined
+        logQuiet('support_intake_seed_failed', '', e)
+      },
+    )
+    return seeding
+  }
+
+  const takeover = (): boolean => supportEnabled()
+  const switches: MessagesAssembly['switches'] = {
+    get: (address) => ({ ...switchStore.get(address), takeover: takeover() }),
+    set: (address, patch, by) => {
+      const { after, changed } = switchStore.set(address, patch)
+      if (changed.length > 0) {
+        options.appendEvent({
+          schema_version: 1,
+          workspace_id,
+          type: 'mailbox.switches_changed',
+          actor: { kind: 'person', id: by },
+          correlation: { trace_id: `tr_mbxsw_${clock.now()}` },
+          // 只有改了哪几个、改成什么；地址遮过（63 §10）
+          payload: {
+            account: maskAddress(address),
+            changed: Object.fromEntries(changed.map((k) => [k, after[k]])),
+          },
+        })
+      }
+      return { ...after, takeover: takeover() }
+    },
+  }
+
   return {
     store,
     sync,
     port,
+    switches,
     async poll(): Promise<MessageSyncReport> {
+      await ensureSeeded()
       rulesCache = await store.senderRules()
       // WP161：每只邮箱先列文件夹（各列各的、各缓存各的），再扫
       await refreshFolders()

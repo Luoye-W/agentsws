@@ -130,8 +130,12 @@ export interface MailboxSyncOptions {
   /**
    * 分拣判成 `support` / `kol` 之后**真正要做的事**（交给客服流程 / 归并到红人
    * 合作线程）。回 `false` = 那一侧不接（岗位没开、线程建不了），此时**不挪信**。
+   *
+   * WP167：第三个参数是这封信的原始 MIME——客服那一路要把它递进渠道的入站管线
+   * （Amazon 子渠道判定、线程台账、去重、判断层、起 Run 都在那条管线里），
+   * 不在这里另写一份。老调用方不看它也照常工作。
    */
-  handoff?(record: MessageRecord, triage: MessageTriage): Promise<boolean>
+  handoff?(record: MessageRecord, triage: MessageTriage, raw?: RawEmailMessage): Promise<boolean>
   /** 原始 MIME 落受控原始材料区；不给就不落（测试）。 */
   rawStore?: RawStore
   backfill_days?: number
@@ -140,8 +144,10 @@ export interface MailboxSyncOptions {
   /**
    * WP163：判成客服的信在邮箱里怎么动（影子模式 / 接管 / 挪信 / 标已读，照老产品
    * KefuAgent）。**每封现查**——开关是会变的。不给 = 老产品的默认值（全开、影子关）。
+   *
+   * WP167：开关按**邮箱**各一份（连接页那只邮箱卡上的三个开关），所以这里带上邮箱地址。
    */
-  support_mailbox?(): Partial<SupportMailboxSwitches>
+  support_mailbox?(account: string): Partial<SupportMailboxSwitches>
   /** WP163：每一个邮箱动作（标已读 / 挪 / 跳过 / 失败）记一笔。 */
   on_mailbox_action?(r: MailboxActionRecord): void
   on_error?: (e: unknown) => void
@@ -332,7 +338,7 @@ export class MailboxSync {
     if (triage.route === 'inbox') return true
     const record = (r: MailboxActionRecord): void => this.opts.on_mailbox_action?.(r)
     // 交接给客服 / 红人那一侧；那边不接就**不挪信**（信留在 INBOX 仍然看得见）
-    const accepted = (await this.opts.handoff?.(parsed, triage)) ?? false
+    const accepted = (await this.opts.handoff?.(parsed, triage, raw)) ?? false
     if (!accepted) {
       if (triage.route === 'support') {
         record({
@@ -354,7 +360,7 @@ export class MailboxSync {
     if (isAgentFolderKind(kind)) return true
     // WP161：挪进这只邮箱上**已有**的那只（大小写变体照认），没有才用规范名新建
     const to = folderPathFor(triage.route, account.known_folders ?? account.folders)
-    const switches = supportMailboxSwitches(this.opts.support_mailbox?.())
+    const switches = supportMailboxSwitches(this.opts.support_mailbox?.(account.address))
     const writer = account.writer
     if (triage.route === 'support') {
       // 老产品 moveCustomerServiceMessageToAiFolder 的四个开关与顺序（support-mailbox.ts）
