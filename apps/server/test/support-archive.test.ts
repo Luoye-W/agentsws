@@ -4,7 +4,7 @@
  * 两条收信路共用一只替身邮箱（内存里的文件夹 → 信），按服务进程里调度器的顺序跑：
  * 先 `channels.poll()`（渠道那一路），再 `messages.poll()`（消息同步）。不联网。
  */
-import type { MailboxWriter, MailSource, RawEmailMessage } from '@agentsws/channels'
+import type { MailboxWriter, MailSource } from '@agentsws/channels'
 import type { Clock, EventEnvelope, ModelGateway, RoleId } from '@agentsws/contracts'
 import { MemoryHalt } from '@agentsws/kernel'
 import { createWork } from '@agentsws/work'
@@ -93,7 +93,8 @@ class Mailbox {
     const dest = this.folders.get(to) ?? []
     this.folders.set(to, dest)
     // IMAP：挪过去的信在目标文件夹里拿一个新 UID
-    dest.push({ ...row, uid: (this.next += 1) })
+    this.next += 1
+    dest.push({ ...row, uid: this.next })
     this.moves.push(`${folder}/${uid} → ${to}`)
     return true
   }
