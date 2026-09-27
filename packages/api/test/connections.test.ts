@@ -151,6 +151,7 @@ describe('WP20 网关：路由与信封', () => {
     expect(specs.map((s) => `${s.method.toUpperCase()} ${s.path}`).sort()).toEqual([
       'DELETE /v1/connections/:id',
       'GET /v1/connections',
+      'GET /v1/connections/:id/mailbox-switches',
       'GET /v1/connections/mail/detect',
       'GET /v1/connections/providers',
       'GET /v1/connections/requests/:id',
@@ -158,6 +159,7 @@ describe('WP20 网关：路由与信封', () => {
       'POST /v1/connections/:id/test',
       'POST /v1/connections/:service/begin',
       'POST /v1/connections/:service/submit',
+      'PUT /v1/connections/:id/mailbox-switches',
     ])
     for (const s of specs) {
       expect(s.auth).toBe('bearer')
@@ -324,5 +326,65 @@ describe('WP20 网关：向导与状态条', () => {
       (await data<{ connections: unknown[] }>(await call('GET', '/v1/connections'))).connections,
     ).toEqual([])
     expect(port.calls).toContain('remove')
+  })
+})
+
+describe('WP167：邮箱卡上的开关', () => {
+  it('没装消息同步的端口：GET / PUT 都回 404（卡上就不画开关）', async () => {
+    const { call } = await wired()
+    expect((await call('GET', '/v1/connections/conn_1/mailbox-switches')).status).toBe(404)
+    expect(
+      (await call('PUT', '/v1/connections/conn_1/mailbox-switches', { shadow_mode: true })).status,
+    ).toBe(404)
+  })
+
+  it('读走读类元组、改走写类元组；只认三个布尔，多给一个字段就 400', async () => {
+    const h = await harness()
+    const seen: unknown[] = []
+    const port = Object.assign(new FakePort(), {
+      mailboxSwitches: (_a: unknown, id: string) => ({
+        connection_id: id,
+        shadow_mode: false,
+        move: true,
+        mark_read: true,
+        takeover: true,
+      }),
+      setMailboxSwitches: (_a: unknown, id: string, input: Record<string, boolean>) => {
+        seen.push(input)
+        return {
+          connection_id: id,
+          shadow_mode: input.shadow_mode ?? false,
+          move: true,
+          mark_read: true,
+          takeover: true,
+        }
+      },
+    })
+    const gateway = createGateway({ ...h.deps, connections: port })
+    const call = (method: string, body?: unknown): Promise<Response> =>
+      Promise.resolve(
+        gateway.fetch(
+          new Request('http://127.0.0.1/v1/connections/conn_1/mailbox-switches', {
+            method,
+            headers: {
+              Authorization: `Bearer ${h.token}`,
+              'X-Assignment': h.assignment.id,
+              ...(body === undefined ? {} : { 'content-type': 'application/json' }),
+            },
+            ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+          }),
+        ),
+      )
+    const got = await call('GET')
+    expect(got.status).toBe(200)
+    expect(await data(got)).toMatchObject({ connection_id: 'conn_1', takeover: true })
+    const put = await call('PUT', { shadow_mode: true })
+    expect(put.status).toBe(200)
+    expect(await data(put)).toMatchObject({ shadow_mode: true })
+    expect(seen).toEqual([{ shadow_mode: true }])
+    expect((await call('PUT', { shadow_mode: true, folder_enabled: false })).status).toBe(400)
+    const specs = h.gateway.specs.filter((s) => s.path.endsWith('/mailbox-switches'))
+    expect(specs.find((s) => s.method === 'get')?.authz).toMatchObject({ op: 'read' })
+    expect(specs.find((s) => s.method === 'put')?.authz).toMatchObject({ op: 'stage' })
   })
 })

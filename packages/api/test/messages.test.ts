@@ -10,6 +10,8 @@
  */
 import type {
   MessageBackfillInput,
+  MessageConfirmRouteInput,
+  MessageConfirmRouteResult,
   MessageDraft,
   MessageDraftInput,
   MessageFlagsInput,
@@ -260,6 +262,16 @@ class FakeMessages implements MessagesPort {
     this.record('sync', actor)
     return { accounts: 1, folders: 6, fetched: 4, triaged: 2, moved: 1, failed: [] }
   }
+  confirmRoute(
+    actor: MessageActor,
+    id: string,
+    input: MessageConfirmRouteInput,
+  ): MessageConfirmRouteResult {
+    this.record('confirmRoute', actor, id, input)
+    return input.route === 'inbox'
+      ? { message: message({ id }), handed_off: false }
+      : { message: message({ id, route: input.route }), handed_off: true, matter_id: 'mat_1' }
+  }
   backfill(actor: MessageActor, input: MessageBackfillInput): { floor: string } {
     this.record('backfill', actor, input)
     return { floor: T0 }
@@ -463,5 +475,26 @@ describe('63 消息面路由', () => {
       person_id: t.h.person_id,
       assignment_id: t.h.assignment.id,
     })
+  })
+})
+
+describe('WP167：「待确认」那一栏', () => {
+  it('列表带得上 pending_route；「这是客服 / 不是」走 confirm-route，只认三条路', async () => {
+    const t = await messageHarness()
+    await t.get('/v1/messages?pending_route=true')
+    expect(t.messages.last('threads')?.[0]).toEqual({ pending_route: true })
+    await t.get('/v1/messages?pending_route=false')
+    expect(t.messages.last('threads')?.[0]).toEqual({})
+
+    const yes = await t.post('/v1/messages/msg_1/confirm-route', { route: 'support' })
+    expect(yes.status).toBe(200)
+    expect(await data(yes)).toMatchObject({ handed_off: true, matter_id: 'mat_1' })
+    expect(t.messages.last('confirmRoute')).toEqual(['msg_1', { route: 'support' }])
+    const no = await t.post('/v1/messages/msg_1/confirm-route', { route: 'inbox' })
+    expect(await data(no)).toMatchObject({ handed_off: false })
+    expect((await t.post('/v1/messages/msg_1/confirm-route', { route: 'trash' })).status).toBe(400)
+    const spec = t.h.gateway.specs.find((s) => s.path === '/v1/messages/:id/confirm-route')
+    expect(spec?.authz).toMatchObject({ op: 'stage' })
+    expect(spec?.outbound).not.toBe(true)
   })
 })
