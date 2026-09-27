@@ -210,3 +210,33 @@ SERP：0.0294 ÷ 0.2 = 0.147 → **0.2**。AI 问答（WP159，去掉 Perplexity
 3. **要不要补 Copilot**：官方那一侧加 Bright Data（要书面授权 / KYC）；或者先不做，界面照实说「官方探测不了 Copilot」。
 4. **自带那一档列服务商名**与 docs/75 §4「不做任何平台预设」看起来相反——理由：这里接的是服务商**自己的**接口，
    不知道是哪家就拼不出请求（红人那张卡接的是工坊的通用格式 byo/v1，不需要知道）。请确认这一例外。
+
+## 补充（09-27 调研）：Semrush / Ahrefs / Similarweb、AI 可见度看板类、Cloudflare AEO
+
+> Luoye 09-27：不考虑 Perplexity；AI 可见度只比 ChatGPT、Gemini、Google AI 概览 / AI Mode、Copilot。以下只读官方页面，没注册、没用 key；「未核实」= 官方页没读到。
+
+**结论**：Semrush、Ahrefs、Similarweb 条款都**禁止转售**，只能做「用户自带账号」接入；官方数据源继续用 **DataForSEO**，缺的 Copilot 用 **Bright Data Copilot 抓取接口**补（约 $1.5 / 千次）。两家上线前都先拿到书面的按次转售授权。
+
+| 服务商 | 实时 SERP | ChatGPT | Gemini | AI 概览 / AI Mode | Copilot | API 门槛 | 单次 / 起步价 | 转售 | 自带账号 |
+|---|---|---|---|---|---|---|---|---|---|
+| DataForSEO（现用） | ✓ | ✓ | ✓ | ✓ / ✓ | ✗ | 按量，最低充 $50 | 抓取 $4 / 千次，SERP $2 / 千次 | 条款未禁，需书面确认 | ✓ |
+| Bright Data | ✓ | ✓ | ✓ | AI Mode ✓ | ✓ | 按量，每月 5k 免费 | Copilot / Gemini $1.5 / 千次 | 需书面授权 | ✓ |
+| Semrush | 自有库 | 看板 | 看板 | 看板 | 未列 | API 要 Business 档再买单位（价不公开）；AI 可见度 API 仅 Enterprise | AI 工具包 $99/月/域名 | ✗（ToS §3.3） | 只能走官方 MCP（条款禁止把输出喂给非官方集成的 AI） |
+| Ahrefs | SERP Overview 前 100 | ✓ | ✓ | ✓ / ✓ | ✓ | API v3 从 Lite 起 | Lite $129/月；Brand Radar $199/月 | ✗（Connect §6(v)） | 用户自己的 MCP key 可以；OAuth 正式接入要我们买 Enterprise $1,499/月 |
+| Similarweb | ✗ | 看板 | 看板 | 看板 | 只统计 AI 带来的流量 | API 只在定制套餐 | AEO $99/月（不含 API） | ✗（§6(i)(iv)） | 小卖家基本拿不到 API |
+| Otterly.AI / Peec AI / Profound / SE Ranking | ✗（SE Ranking 有 SEO API） | ✓ | ✓/加购 | ✓ | Otterly ✓ | 看板型，API 多在高档 | $29–189/月起 | 未核实 | 只能读它平台上配好的问题 |
+
+**自带账号接入顺序（以后做）**：① Ahrefs（唯一用 API 拿得到四个平台 AI 可见度，走用户自己的 MCP key，上线前问一下 Ahrefs）；② Semrush（只能官方 MCP）；③ Similarweb（最后，API 要找销售）。三家起步 $99–455/月，多数小卖家不会订，优先级低于官方档。
+
+**Cloudflare AEO Visibility Dashboard**（AEO Suite，2026-08-06 发布，早期体验）：自己生成买家问题去问 Claude 与 GPT，给被引用率 / 被提及率 / 显眼程度 / 声量占比，另有 AI 抓取与带回访客数据。没有 Gemini / Copilot / AI 概览、问题不能自定义、没找到 API → **替代不了我们的探测，但「AI 抓了多少、带回多少访客」只有它有**，写进教程给用 Cloudflare 的用户自己申请。
+
+**DataForSEO 背景**：2011 年起做内部工具、2016 年成立（爱沙尼亚），自称 3 万+ 客户、99.95% 可用率；Trustpilot 4.5（58 条）。「很多大 SEO 工具背后用它」业内流传但未找到大工具官方公开写明（未核实）。
+
+出处：Semrush [ToS](https://www.semrush.com/company/legal/terms-of-service/) · [API](https://www.semrush.com/kb/5-api) · [MCP](https://developer.semrush.com/api/introduction/semrush-mcp/)；Ahrefs [API v3](https://help.ahrefs.com/en/articles/6559232-about-api-v3) · [Connect 条款](https://docs.ahrefs.com/ahrefs-connect/docs/terms-of-service.md) · [MCP](https://docs.ahrefs.com/mcp/docs/introduction.md)；Similarweb [条款](https://www.similarweb.com/corp/legal/terms/) · [AI Search 价目](https://www.similarweb.com/packages/ai-search/)；[Bright Data Copilot](https://brightdata.com/products/web-scraper/microsoft-copilot)；Cloudflare [博客](https://blog.cloudflare.com/aeo/) · [新闻稿](https://www.cloudflare.com/press/press-releases/2026/cloudflare-adds-aeo-visibility-dashboard-to-its-aeo-suite-showing-brands-whether-ai-assistants-are-recommending-them/)；DataForSEO [关于](https://dataforseo.com/about-us)。
+
+## 补充（09-27）：AIsa 与 Apify
+
+- **AIsa 不能当官方转售数据源**：[AIsa Services Agreement](https://aisa.one/TOS)（2026-08-24 版）§2.5(a) 禁止 service bureau / pass-through，§2.5(g) 禁止转售或分发服务的任何部分；上游条款照样约束（§3.2D）。要转售得先找 developer@aisa.one 签书面协议。它转接 DataForSEO 按上游成本 ×2 计价，比直连贵一倍。
+- **AIsa 适合「自带 key」档**：一把 key、按次付费、无月费，覆盖 Semrush 19 / Similarweb 23 / Ahrefs 2 / DataForSEO 445 / Apollo 54 个接口，另有 TikHub 的 TikTok、YouTube、Instagram、LinkedIn（逐端点价格见 [openapi.yaml](https://aisa.one/openapi.yaml)）。没有 Copilot、没有海关数据；邮箱查找 / 验证全是「Coming Soon」。公司：AIPAY INC.，2026-07 种子轮 $6.5M（阿里巴巴、Tribe Capital 领投）。
+- **Apify 适合红人与 B2B 官方档**：[通用条款](https://docs.apify.com/legal/general-terms-and-conditions) §5.8 与 [Actor 条款](https://docs.apify.com/legal/actor-terms-and-conditions) §4.3 规定输出数据归用户，没有禁止商用或转售输出（平台本身不能转授 §5.2）；抓取合法性由用户自负（§11.1）。Google Search Scraper 能补 Copilot（付费档每次 $0.003–0.005）；LinkedIn 资料 $0.004–0.01；Google 地图单个地点 $0.0015–0.004。Similarweb 网页抓取类 Actor 违反 Similarweb 条款，不用。
+- **值得跟进**：AIsa 上 Oxylabs 的 AI 回答探测最便宜（Google AI 概览 / AI Mode $0.001，ChatGPT / Gemini $0.00145），Oxylabs 直签的转售条款未核实。
