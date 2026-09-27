@@ -263,6 +263,13 @@ export interface MessageThreadSummary {
   snippet: string
   /** 会话里最后一封的 id（点开默认定位到它）。 */
   last_message_id: string
+  /**
+   * WP167：这条会话里有没有「分拣判不准、等人确认」的信（把握不够的客服 / 红人判定）。
+   * 有就是那封信想去的路；「消息」页的「待确认」一栏按它画「这是客服」。
+   */
+  suggested_route?: MessageRoute
+  /** WP167：等人确认的那封信的 id（点「这是客服」确认的就是它）。 */
+  pending_message_id?: string
 }
 
 /* ── 标签 ─────────────────────────────────────────────────────────────── */
@@ -366,6 +373,11 @@ export interface MessageListQuery {
   starred?: boolean | undefined
   /** 发件人 / 主题 / 正文全文（搜索框那一个口）。 */
   q?: string | undefined
+  /**
+   * WP167：只看「待确认」的——分拣判不准（把握不够）的客服 / 红人信：它们没开事项、
+   * 没挪信，留在收件箱里等人点一下「这是客服」。
+   */
+  pending_route?: boolean | undefined
   limit?: number | undefined
   cursor?: string | undefined
 }
@@ -386,6 +398,26 @@ export interface MessageMoveInput {
   to: MessageFolderKind
   /** 顺手写一条发件人规则（"以后这个发件人都这样"）。 */
   remember_sender?: boolean | undefined
+}
+
+/**
+ * WP167：「待确认」那一栏上人点的那一下（**人工分拣**，写事件）。
+ *
+ * - `support`：「这是客服」→ 交给客服那一路（开事项、过判断层、起 Run），再按这只邮箱的
+ *   开关标已读 / 挪进 `KefuAgents`；
+ * - `kol`：「这是红人」→ 交给红人那一路（照现在的规矩）；
+ * - `inbox`：「不是」→ 只记人的判断，信留在收件箱，不再挂在「待确认」里。
+ */
+export interface MessageConfirmRouteInput {
+  route: 'support' | 'kol' | 'inbox'
+}
+
+/** 人工分拣的结果：交没交出去（客服岗位没开 / 客服那一路不接 = `false`，信不动）。 */
+export interface MessageConfirmRouteResult {
+  message: MessageRecord
+  handed_off: boolean
+  /** 交给客服 / 红人那一路之后落到的事项。 */
+  matter_id?: string
 }
 
 /** 写信框每隔几秒打一次的那一份（`id` 为空 = 新建）。 */

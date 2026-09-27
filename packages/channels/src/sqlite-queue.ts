@@ -16,6 +16,7 @@ import type { Clock, InboundEvent, Iso8601, WorkspaceId } from '@agentsws/contra
 import type { Database as Db } from 'better-sqlite3'
 import Database from 'better-sqlite3'
 import type { FolderCursor, FolderSyncFault, MailboxStateStore } from './email/cursors.js'
+import type { SupportIntakeLedger } from './messages/intake.js'
 import { type Migration, migrate, schemaVersion } from './migrations.js'
 import type { ConfirmationSource, OutboxRecord, OutboxStore } from './outbox.js'
 import { ACCEPTED_RECONCILE_GRACE_MS, MAX_RECONCILE_ATTEMPTS } from './outbox.js'
@@ -147,6 +148,22 @@ CREATE TABLE IF NOT EXISTS im_context_tokens (
   token         TEXT NOT NULL,
   expires_at_ms INTEGER NOT NULL,
   PRIMARY KEY (account, user_id)
+) STRICT;
+`,
+  },
+  {
+    /*
+     * WP167：进过客服管线的那几封信（按 Message-ID，没有才按「邮箱 × 文件夹 × UID」）。
+     *
+     * 去重表（`dedupe`）是 24h 窗口，挡的是"同一封信在队列里重投"；这一张**不过期**，
+     * 挡的是"同一封信被消息同步交两次、或人在「待确认」里又点了一下"——那会再开一次 Run。
+     * 只有钥匙与时间，没有正文。
+     */
+    version: 5,
+    sql: `
+CREATE TABLE IF NOT EXISTS support_intake (
+  key TEXT PRIMARY KEY NOT NULL,
+  at  TEXT NOT NULL
 ) STRICT;
 `,
   },
@@ -835,6 +852,29 @@ export class SqliteClawBotStateStore implements ClawBotStateStore {
   }
 }
 
+/** WP167：进过客服管线的信（{@link SupportIntakeLedger} 的 SQLite 档）。 */
+export class SqliteSupportIntakeLedger implements SupportIntakeLedger {
+  readonly #db: Db
+
+  constructor(options: { database: Db }) {
+    this.#db = options.database
+  }
+
+  has(key: string): boolean {
+    return (
+      this.#db
+        .prepare<[string], { key: string }>('SELECT key FROM support_intake WHERE key = ?')
+        .get(key) !== undefined
+    )
+  }
+
+  add(key: string, at: Iso8601): void {
+    this.#db
+      .prepare('INSERT INTO support_intake (key, at) VALUES (?, ?) ON CONFLICT(key) DO NOTHING')
+      .run(key, at)
+  }
+}
+
 /** 一张库、一个连接，同时给队列与去重表用（`apps/server` 的装配走这条）。 */
 export function createSqliteChannelStores(options: SqliteChannelStoreOptions = {}): {
   queue: SqliteQueueStore
@@ -843,6 +883,8 @@ export function createSqliteChannelStores(options: SqliteChannelStoreOptions = {
   mailbox: SqliteMailboxStateStore
   /** WP85：微信 ClawBot 的游标与会话上下文。 */
   clawbot: SqliteClawBotStateStore
+  /** WP167：进过客服管线的信。 */
+  intake: SqliteSupportIntakeLedger
   close(): void
 } {
   const database = openDb(options)
@@ -851,6 +893,7 @@ export function createSqliteChannelStores(options: SqliteChannelStoreOptions = {
   const outbox = new SqliteOutboxStore({ database })
   const mailbox = new SqliteMailboxStateStore({ database })
   const clawbot = new SqliteClawBotStateStore({ database })
+  const intake = new SqliteSupportIntakeLedger({ database })
   let closed = false
   return {
     queue,
@@ -858,6 +901,7 @@ export function createSqliteChannelStores(options: SqliteChannelStoreOptions = {
     outbox,
     mailbox,
     clawbot,
+    intake,
     close(): void {
       if (closed) return
       closed = true

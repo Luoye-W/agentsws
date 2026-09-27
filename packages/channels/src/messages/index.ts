@@ -6,6 +6,7 @@
  * 两边共用同一批解析零件与同一套游标 / 租约 / 毒消息纪律，不另起炉灶。
  */
 export * from './folders.js'
+export * from './intake.js'
 export * from './labels.js'
 export * from './parse.js'
 export * from './query.js'
