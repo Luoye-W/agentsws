@@ -70,7 +70,7 @@
 | 45 | WP161 邮箱子文件夹名与老产品对齐 KefuAgents / KOLAgents（认已有不分大小写），预留 BtoBAgents | `WP161-mail-folder-names.md` | `wp161-mail-folders` · `wp/161-mail-folders` | — | 已合并（09-27，Fable 终审；遗留：客服收信把所有处理过的信都挪进归档文件夹 → WP163） |
 | 46 | WP162 技能正文真的进到模型：自带技能入库、按需技能可读（`read_skill`）、每个登记的技能都有正文 | `WP162-skills-reach-the-model.md` | `wp162-skills-load` · `wp/162-skills-load` | — | 已合并（09-27，Fable 终审追加两件：read_skill 结果不包外部数据围栏（只白名单这一个工具）、客服技能换 support-core 完整版 1.1.0；相关 89 文件 1933 条过，六组模拟门禁过） |
 | 47 | WP163 客服收信只把判成客服的信挪进 KefuAgents（照老产品：影子模式、挪信 / 标已读两个开关、动作日志），挪信只由一处负责 | `WP163-support-archive-only-support-mail.md` | `wp163-support-archive` · `wp/163-support-archive` | — | 已合并（09-27，Fable 终审：邮件相关 43 文件 742 条过，六组模拟门禁过；遗留：渠道那一路仍给每封新信开事项起 Run → WP167） |
-| 48 | WP164 云端对外契约补全：一份完整 OpenAPI（除运营后台）、契约 ↔ 真云服务一致性测试、CI 核对 | `WP164-cloud-openapi-contract.md` | `wp164-cloud-contract` · `wp/164-cloud-contract` | — | 待审（报告 docs/briefs/reports/WP164.md） |
+| 48 | WP164 云端对外契约补全：一份完整 OpenAPI（除运营后台）、契约 ↔ 真云服务一致性测试、CI 核对 | `WP164-cloud-openapi-contract.md` | `wp164-cloud-contract` · `wp/164-cloud-contract` | — | 已合并（09-27，Fable 终审：补修红人库入口令牌判断；云端 60 文件 577 条 + cloud-worker 126 条过，契约 --check 零漂移，wrangler dry-run 过，六组模拟门禁过） |
 | 49 | WP165 开源仓不再直接依赖云端代码：自带 key 适配器拆成开源包、价目从云上取（`/v1/pricing`）、测试与模拟换契约替身、import 守卫 | `WP165-open-repo-decouple-cloud.md` | `wp165-decouple` · `wp/165-decouple` | — | 进行中（Claude） |
 | 50 | WP166 目标市场一处定处处用：初始化从官网自动判断市场（可增删改）、SEO 每个目标市场分别探测、模型初稿读页面正文 | `WP166-markets-and-seo-reads.md` | `wp166-markets` · `wp/166-markets` | — | 进行中（Claude） |
 
