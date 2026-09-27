@@ -87,6 +87,10 @@ const ALIASES: readonly [RegExp, string][] = [
   [/\bSouth Korea\b/i, 'KR'],
   [/\bUAE\b/, 'AE'],
   [/\bHolland\b/i, 'NL'],
+  // 中文里的简称（`Intl` 给的是「中国香港特别行政区」这种全称）；「国内 / 全国 / 大陆」在中文站上就是中国
+  [/香港/, 'HK'],
+  [/澳门/, 'MO'],
+  [/国内|全国|中国大陆|内地/, 'CN'],
 ]
 
 /** 国名 → 国家码（英文与简体中文两套，第一次用时现算）。 */
@@ -130,18 +134,19 @@ export function countriesIn(text: string): string[] {
   return [...at.entries()].sort((a, b) => a[1] - b[1]).map(([code]) => code)
 }
 
-/** 把一段话切成句子（中英文句号、换行）。 */
+/** 把一段话切成句子（中文句号 / 分号后面不带空格，英文句号后面带空格；换行也算）。 */
 function sentences(text: string): string[] {
   return text
-    .split(/(?<=[.!?。！？])\s+|\n+/)
+    .split(/(?<=[。！？；])|(?<=[.!?])\s+|\n+/)
     .map((s) => s.trim())
     .filter((s) => s !== '')
 }
 
-const SHIP_WORDS = /\b(ship|ships|shipping|deliver|delivers|delivery)\b|配送|发货|寄送|送达/i
+const SHIP_WORDS =
+  /\b(ship|ships|shipping|deliver|delivers|delivery)\b|配送|发货|寄送|送达|发往|只发|发到|寄往|寄到|送往|邮寄|快递|顺丰|包邮/i
 /** 否定句（"We do not ship to …"）里的国家不是市场。 */
 const NOT_SHIP =
-  /\b(do not|don't|does not|doesn't|cannot|can't|no longer|unable to)\b|不(?:配送|发货|寄)/i
+  /\b(do not|don't|does not|doesn't|cannot|can't|no longer|unable to)\b|不(?:配送|发货|寄|发)|暂不|无法/i
 
 /** 配送政策 / 「Ships to …」那几句里提到的国家（否定句里的不算）。 */
 export function shippingCountries(text: string): { codes: string[]; quote?: string } {

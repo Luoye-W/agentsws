@@ -690,11 +690,10 @@ describe('WP166：模型初稿读页面正文', () => {
     expect(asked[0]?.domains).toContain('shop.example')
     expect(m.prompts[0]).toContain('<<<PAGE_BODY\nOur 65W charger & cable.\nPAGE_BODY>>>')
     const report = await txn.approvals.get(out.approval_item_id ?? '')
-    const picks = (report?.payload as { picks: { outcome?: { body?: string } }[] }).picks
+    const picks =
+      (report?.payload as { picks: { outcome?: { id?: string; body?: string } }[] })?.picks ?? []
     expect(picks.filter((p) => p.outcome?.body === 'store')).toHaveLength(2)
-    const changeId = (
-      report?.payload as { picks: { outcome?: { id?: string; body?: string } }[] }
-    ).picks.find((p) => p.outcome?.body === 'store')?.outcome?.id
+    const changeId = picks.find((p) => p.outcome?.body === 'store')?.outcome?.id
     const card = await txn.approvals.get(changeId ?? '')
     expect(card?.summary).toContain('读过这一页的正文')
   })
@@ -705,8 +704,8 @@ describe('WP166：模型初稿读页面正文', () => {
     const out = await service.daily()
     expect(m.prompts[0]).toContain('[Page body] Not available')
     const report = await txn.approvals.get(out.approval_item_id ?? '')
-    const picks = (report?.payload as { picks: { outcome?: { body?: string; note?: string } }[] })
-      .picks
+    const picks =
+      (report?.payload as { picks: { outcome?: { body?: string; note?: string } }[] })?.picks ?? []
     const drafted = picks.filter((p) => p.outcome?.body === 'none')
     expect(drafted).toHaveLength(2)
     expect(drafted[0]?.outcome?.note).toBe('没读到正文')

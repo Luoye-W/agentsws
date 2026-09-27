@@ -56,6 +56,11 @@ describe('WP166 · 从官网推目标市场', () => {
     const r = shippingCountries(text)
     expect(r.codes).toEqual(['US', 'GB', 'AU', 'JP'])
     expect(r.quote).toContain('United States')
+    // 中文政策页：句号后面不带空格也要切开；「只发香港、澳门与台湾」认得出，「其余国家暂时不发」不算
+    const zh = shippingCountries(
+      '国内顺丰，通常 2 到 4 天到；偏远地区会多两天。海外目前只发香港、澳门与台湾，走的是集运。其余国家暂时不发。',
+    )
+    expect(zh.codes).toEqual(['CN', 'HK', 'MO', 'TW'])
     // 小写的 us 是代词，不是美国
     expect(countriesIn('contact us for shipping')).toEqual([])
   })
