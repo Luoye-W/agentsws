@@ -58437,7 +58437,7 @@
             "name": "folder",
             "in": "query",
             "required": false,
-            "description": "文件夹真名（`INBOX` / `kefuagents`）",
+            "description": "文件夹真名（`INBOX` / `KefuAgents`）",
             "schema": {
               "type": "string"
             }

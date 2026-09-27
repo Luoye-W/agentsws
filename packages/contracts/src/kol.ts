@@ -313,7 +313,7 @@ export interface KolExchange {
   bounce_reason?: string
   /** 这一封属于演练（见 {@link Creator.sandbox}）。 */
   sandbox?: boolean
-  /** 归并进消息库之后那一条的 id（63 那条链：红人来信进 `kolagents`）。 */
+  /** 归并进消息库之后那一条的 id（63 那条链：红人来信进 `KOLAgents`）。 */
   message_id?: string
   /** 出站那一封对应的变更 id（回到变更账本上看它是怎么被批的）。 */
   change_id?: string

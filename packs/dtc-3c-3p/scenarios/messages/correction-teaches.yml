@@ -38,7 +38,7 @@ expected:
     # 教过一次之后：不再花模型
     model_calls: 0
     moved: true
-    moved_to: kefuagents
+    moved_to: KefuAgents
   event_types:
     - simulation.message_corrected
     - simulation.message_triaged

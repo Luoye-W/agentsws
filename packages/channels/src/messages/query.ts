@@ -60,7 +60,7 @@ export function byNewest(a: MessageRecord, b: MessageRecord): number {
  * - `unread` 是"这条会话里还有几封没读"（不是"最后一封读没读"）；
  * - `starred` 是"里面有没有星标的"（星标是钉在一封上的，但列表上是一行）；
  * - `labels` 与 `folders` 是并集——一条会话的信可能一半在 INBOX、一半已经被
- *   挪进 `kefuagents`，界面要说得出这件事。
+ *   挪进 `KefuAgents`，界面要说得出这件事。
  */
 export function aggregateThreads(messages: readonly MessageRecord[]): MessageThreadSummary[] {
   const groups = new Map<string, MessageRecord[]>()

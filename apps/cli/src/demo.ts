@@ -1470,7 +1470,7 @@ async function seedMessages(server: Server, world: World): Promise<void> {
       text: '你好，昨天收到 #1042，外箱压扁了，里面那瓶漏了一半。我想退款，或者你们重寄一瓶也行。附了两张照片。',
       minutes: 26,
       route: 'support',
-      folder: 'kefuagents',
+      folder: 'KefuAgents',
       folder_kind: 'support',
       labels: ['orders'],
       attachments: [
@@ -1495,7 +1495,7 @@ async function seedMessages(server: Server, world: World): Promise<void> {
       text: "Hi! I run a 120k travel channel and I'd love to do a sponsored video on the new bottle. Could you send over your rates and whether you can ship to Berlin?",
       minutes: 95,
       route: 'kol',
-      folder: 'kolagents',
+      folder: 'KOLAgents',
       folder_kind: 'kol',
       labels: ['partnership'],
       triage: verdict({
