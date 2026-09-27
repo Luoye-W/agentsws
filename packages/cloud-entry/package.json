@@ -21,6 +21,7 @@
   "dependencies": {
     "@agentsws/contracts": "workspace:*",
     "@agentsws/metering": "workspace:*",
+    "@agentsws/search-providers": "workspace:*",
     "hono": "^4.13.7"
   },
   "devDependencies": {

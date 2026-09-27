@@ -11,7 +11,7 @@
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { SearchFetch } from '@agentsws/cloud-entry'
+import type { SearchFetch } from '@agentsws/search-providers'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
   createOfficialSearchClient,

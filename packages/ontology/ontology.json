@@ -25,6 +25,7 @@
     "packages/contracts/src/design.ts",
     "packages/contracts/src/dsh-scenes.ts",
     "packages/contracts/src/events.ts",
+    "packages/contracts/src/hosted-env.ts",
     "packages/contracts/src/hosted.ts",
     "packages/contracts/src/identity.ts",
     "packages/contracts/src/join.ts",
@@ -38,6 +39,7 @@
     "packages/contracts/src/model.ts",
     "packages/contracts/src/packages.ts",
     "packages/contracts/src/pr.ts",
+    "packages/contracts/src/pricing-catalog.ts",
     "packages/contracts/src/roles.ts",
     "packages/contracts/src/run.ts",
     "packages/contracts/src/schedule.ts",
@@ -93,7 +95,7 @@
     "packages/roles/roles/social/x.yml",
     "packages/roles/roles/social/youtube.yml"
   ],
-  "source_digest": "9879e1b56fddd10cf6fd38c457ef6c83",
+  "source_digest": "0e7ee2091b4bb59882041a5b3829a1a4",
   "objects": [
     {
       "id": "ad",

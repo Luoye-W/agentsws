@@ -12801,7 +12801,7 @@ export interface operations {
     }
     requestBody?: never
     responses: {
-      /** @description Pricing */
+      /** @description LocalPricing */
       200: {
         headers: {
           [name: string]: unknown
@@ -12962,7 +12962,7 @@ export interface operations {
     }
     requestBody?: never
     responses: {
-      /** @description TopupTiers */
+      /** @description LocalTopupTiers */
       200: {
         headers: {
           [name: string]: unknown

@@ -1,0 +1,23 @@
+{
+  "name": "@agentsws/search-providers",
+  "version": "0.0.0",
+  "private": true,
+  "description": "搜索数据服务商适配器（SERP / AI 问答）：拼请求、翻成契约形状、判「提没提到」、错误码表。自带 key 那一档在本机直接用，官方那一档在云上用同一份（WP165 从 cloud-entry 拆出）",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@agentsws/contracts": "workspace:*"
+  }
+}

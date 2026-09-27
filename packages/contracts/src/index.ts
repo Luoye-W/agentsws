@@ -35,6 +35,8 @@ export * from './dsh-scenes.js'
 export * from './events.js'
 // WP164：托管实例对外的状态形状（从 packages/hosted 挪来）
 export * from './hosted.js'
+// WP165（docs/83 §2）：托管实例的容器环境变量契约（云上写、容器里的 apps/server 读）
+export * from './hosted-env.js'
 export * from './identity.js'
 export * from './join.js'
 export * from './kernel.js'
@@ -52,6 +54,8 @@ export * from './packages.js'
 // 60 §1 / §2 公共关系的四条职责与四个对象（WP78）。与 social.ts 一条都不共用：
 // `social.reddit` 是**我们自己的** subreddit，`pr.reddit` 是**别人的**。
 export * from './pr.js'
+// WP165（docs/83 §2）：公开价目 `GET /v1/pricing`（价目只放云上，本机缓存一份离线显示）
+export * from './pricing-catalog.js'
 export * from './roles.js'
 export * from './run.js'
 export * from './schedule.js'

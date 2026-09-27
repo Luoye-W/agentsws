@@ -22,7 +22,7 @@
       "path": "../../packages/chat-relay"
     },
     {
-      "path": "../../packages/cloud-entry"
+      "path": "../../packages/search-providers"
     },
     {
       "path": "../../packages/brand-intake"
@@ -41,9 +41,6 @@
     },
     {
       "path": "../../packages/core"
-    },
-    {
-      "path": "../../packages/hosted"
     },
     {
       "path": "../../packages/credentials-openconnector"
@@ -74,9 +71,6 @@
     },
     {
       "path": "../../packages/meetings"
-    },
-    {
-      "path": "../../packages/metering"
     },
     {
       "path": "../../packages/model-gateway"

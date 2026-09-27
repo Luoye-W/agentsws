@@ -119,6 +119,9 @@
       "path": "packages/roles"
     },
     {
+      "path": "packages/search-providers"
+    },
+    {
       "path": "packages/seo-core"
     },
     {

@@ -1,9 +1,9 @@
 /**
  * 红人营销增值服务的**本地那一头**（67 §3，WP118）。
  *
- * 对面不是替身，是**真的 `KolCloudService`**（内存库 + 假钱包），中间那一跳用一个
- * 手写的假传输接起来：这样测的是两头真在按同一份协议说话，而不是"我按我自己的
- * 理解写了两遍、两遍刚好一致"。全程不出这个进程，不联网、不花钱。
+ * 对面是**同步协议的契约替身**（WP165 起；以前是真的 `KolCloudService`），中间那一跳用
+ * 一个手写的假传输接起来。「两头按同一份协议说话」由云端那一侧的一致性测试兜着（见下）。
+ * 全程不出这个进程，不联网、不花钱。
  *
  * 要钉住的（派工单点名的那几条在本地的落点）：
  *
@@ -15,8 +15,7 @@
  * 6. 本地删掉一条已同步的 → 云上也没了（墓碑真的推上去了）。
  */
 import type { KolSyncObject } from '@agentsws/contracts'
-import type { SubscriptionWallet } from '@agentsws/kol-cloud'
-import { KolCloudService, KolCloudStore } from '@agentsws/kol-cloud'
+import { KolSyncStandIn, StandInKolSyncError } from '@agentsws/stand-ins'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { createKolStore, type KolStore } from '../src/kol.js'
 import {
@@ -26,203 +25,20 @@ import {
 } from '../src/kol-cloud-sync.js'
 
 /* ------------------------------------------------------------------ */
-/* 假传输：本地 ⇄ 真的 KolCloudService                                  */
+/* 假传输：本地 ⇄ 云端同步协议的契约替身                                  */
 /* ------------------------------------------------------------------ */
 
-const PRINCIPAL = {
-  account_id: 'acc_1',
-  org_id: 'org_1',
-  workspace_id: 'ws_1',
-  scopes: ['kol'],
-}
-
-/**
- * 内存版的 `SqliteLike`。
- *
- * `KolCloudStore` 只用 sqlite 的很小一角（几条固定的 prepare），所以照它自己那份
- * 测试的办法给一个内存替身：真 better-sqlite3 是原生模块，为跑几条 SQL 装它不值当。
- * **没实现的那条 SQL 直接抛**——协议或库改了而替身没跟上，测试要红，不能悄悄过。
+/*
+ * WP165（docs/83 §2 第 5 条）：对面从「真的 `KolCloudService`」换成**按契约写的替身**
+ * （`@agentsws/stand-ins` 的 `KolSyncStandIn`）——云端代码要搬去私有仓，开源这一侧不再
+ * 依赖它。「两头真在按同一份协议说话」这件事没丢：云端那一侧的一致性测试
+ * （`packages/kol-cloud/test/wp165-stand-in-conformance.test.ts`）拿同一串动作同时喂
+ * 真服务与这个替身，回执逐条比对。
  */
-type StubRow = Record<string, unknown>
-
-function memoryDb() {
-  const tables = new Map<string, Map<string, StubRow>>()
-  const of = (name: string): Map<string, StubRow> => {
-    const found = tables.get(name)
-    if (found !== undefined) return found
-    const fresh = new Map<string, StubRow>()
-    tables.set(name, fresh)
-    return fresh
-  }
-  const rows = (name: string): StubRow[] => [...of(name).values()]
-  const unresolved = (): StubRow[] =>
-    rows('kol_cloud_conflicts').filter((r) => r.resolved_at === null)
-
-  const runOf = (sql: string, args: unknown[]): unknown => {
-    if (sql.includes('INSERT INTO kol_cloud_meta')) {
-      of('kol_cloud_meta').set(String(args[0]), { value: String(args[1]) })
-      return { changes: 1 }
-    }
-    if (sql.includes('INSERT INTO kol_cloud_objects')) {
-      const [kind, id, version, updated_at, writer, deleted, body, seq] = args
-      of('kol_cloud_objects').set(`${String(kind)}|${String(id)}`, {
-        kind,
-        id,
-        version,
-        updated_at,
-        writer,
-        deleted,
-        body,
-        seq,
-      })
-      return { changes: 1 }
-    }
-    if (sql.includes('INSERT INTO kol_cloud_conflicts')) {
-      const [id, kind, object_id, winner, loser, at] = args
-      const table = of('kol_cloud_conflicts')
-      if (!table.has(String(id)))
-        table.set(String(id), { id, kind, object_id, winner, loser, at, resolved_at: null })
-      return { changes: 1 }
-    }
-    if (sql.includes('INSERT INTO kol_cloud_subscription')) {
-      const prev = of('kol_cloud_subscription').get(String(args[0]))
-      of('kol_cloud_subscription').set(String(args[0]), {
-        service_id: String(args[0]),
-        json: String(args[1]),
-        last_sync_at: prev?.last_sync_at ?? null,
-      })
-      return { changes: 1 }
-    }
-    if (sql.includes('UPDATE kol_cloud_subscription SET last_sync_at')) {
-      const row = of('kol_cloud_subscription').get(String(args[1]))
-      if (row !== undefined) row.last_sync_at = String(args[0])
-      return { changes: 1 }
-    }
-    if (sql.includes('INSERT INTO kol_cloud_charges')) {
-      const table = of('kol_cloud_charges')
-      if (!table.has(String(args[0])))
-        table.set(String(args[0]), {
-          charge_key: String(args[0]),
-          json: String(args[1]),
-          at: String(args[2]),
-        })
-      return { changes: 1 }
-    }
-    if (sql.includes('INSERT INTO kol_cloud_audit')) {
-      of('kol_cloud_audit').set(String(args[0]), {
-        seq: args[0],
-        at: args[1],
-        org_id: args[2],
-        action: args[3],
-        actor: args[4],
-        note: args[5],
-      })
-      return { changes: 1 }
-    }
-    if (sql.includes('UPDATE kol_cloud_conflicts SET resolved_at')) {
-      // 两种标法：按冲突号，或按对象（界面上"这一条我处理完了"）
-      if (sql.includes('object_id = ?')) {
-        const [at, kind, object_id] = args
-        for (const row of unresolved())
-          if (row.kind === kind && row.object_id === object_id) row.resolved_at = at
-        return { changes: 1 }
-      }
-      const row = of('kol_cloud_conflicts').get(String(args[1]))
-      if (row !== undefined && row.resolved_at === null) row.resolved_at = args[0]
-      return { changes: 1 }
-    }
-    throw new Error(`内存替身没实现这条 SQL：${sql}`)
-  }
-
-  const allOf = (sql: string, args: unknown[]): unknown[] => {
-    if (sql.includes('FROM kol_cloud_objects')) {
-      let list = rows('kol_cloud_objects')
-      if (sql.includes('seq > ?')) {
-        list = list.filter((r) => Number(r.seq) > Number(args[0]))
-        if (sql.includes('writer <> ?')) list = list.filter((r) => r.writer !== args[1])
-        list.sort((a, b) => Number(a.seq) - Number(b.seq))
-        return list.slice(0, Number(args[sql.includes('writer <> ?') ? 2 : 1]))
-      }
-      if (sql.includes('GROUP BY kind')) {
-        const counts = new Map<string, number>()
-        for (const r of list.filter((x) => Number(x.deleted) === 0))
-          counts.set(String(r.kind), (counts.get(String(r.kind)) ?? 0) + 1)
-        return [...counts].sort().map(([kind, n]) => ({ kind, n }))
-      }
-      return list.sort((a, b) =>
-        `${String(a.kind)}|${String(a.id)}`.localeCompare(`${String(b.kind)}|${String(b.id)}`),
-      )
-    }
-    if (sql.includes('FROM kol_cloud_conflicts'))
-      // 导出要的是**全部**（含已处理的），界面上的标记要的是还没处理的那些
-      return sql.includes('resolved_at IS NULL') ? unresolved() : rows('kol_cloud_conflicts')
-    if (sql.includes('FROM kol_cloud_charges')) return rows('kol_cloud_charges')
-    if (sql.includes('FROM kol_cloud_audit')) return rows('kol_cloud_audit').reverse()
-    throw new Error(`内存替身没实现这条查询：${sql}`)
-  }
-
-  const getOf = (sql: string, args: unknown[]): unknown => {
-    if (sql.includes('FROM kol_cloud_meta')) {
-      const v = of('kol_cloud_meta').get(String(args[0]))
-      return v === undefined ? undefined : { value: String(v.value) }
-    }
-    if (sql.includes('COUNT(*) AS n FROM kol_cloud_objects'))
-      return { n: rows('kol_cloud_objects').filter((r) => Number(r.deleted) === 0).length }
-    if (sql.includes('COUNT(*) AS n FROM kol_cloud_conflicts'))
-      return {
-        n: sql.includes('object_id = ?')
-          ? unresolved().filter((c) => c.kind === args[0] && c.object_id === args[1]).length
-          : unresolved().length,
-      }
-    if (sql.includes('FROM kol_cloud_objects'))
-      return of('kol_cloud_objects').get(`${String(args[0])}|${String(args[1])}`)
-    if (sql.includes('FROM kol_cloud_subscription'))
-      return of('kol_cloud_subscription').get(String(args[0]))
-    throw new Error(`内存替身没实现这条查询：${sql}`)
-  }
-
-  return {
-    exec(sql: string) {
-      if (sql.startsWith('DELETE FROM kol_cloud_objects')) of('kol_cloud_objects').clear()
-      else if (sql.startsWith('DELETE FROM kol_cloud_conflicts')) of('kol_cloud_conflicts').clear()
-      return undefined
-    },
-    prepare(sql: string) {
-      return {
-        run: (...args: unknown[]) => runOf(sql, args),
-        get: (...args: unknown[]) => getOf(sql, args),
-        all: (...args: unknown[]) => allOf(sql, args),
-      }
-    },
-    close() {},
-    /** 测试里直接看云上那本账（不经协议）。 */
-    raw: {
-      objects: () => rows('kol_cloud_objects'),
-      audit: () => rows('kol_cloud_audit'),
-    },
-  }
-}
-
-/** 钱包替身：记下被扣了几次，可以随时调成"没钱"。 */
-function fakeWallet(): SubscriptionWallet & { charges: string[]; broke: boolean } {
-  const state = {
-    charges: [] as string[],
-    broke: false,
-    async charge(args: { request_id: string; credits: number }) {
-      if (state.broke)
-        return { ok: false as const, reason: `积分不够：这一次要 ${String(args.credits)} 积分。` }
-      state.charges.push(args.request_id)
-      return { ok: true as const, credits: args.credits }
-    },
-  }
-  return state
-}
 
 interface FakeCloud {
-  service: KolCloudService
+  service: KolSyncStandIn
   call: KolCloudCallFn
-  db: ReturnType<typeof memoryDb>
-  wallet: ReturnType<typeof fakeWallet>
   /** 打上过哪些路（断言"没关联账号时一个字节都不发"）。 */
   calls: string[]
   /** 拔网线。 */
@@ -230,10 +46,8 @@ interface FakeCloud {
 }
 
 function newCloud(now: () => string): FakeCloud {
-  const db = memoryDb()
-  const wallet = fakeWallet()
-  const service = new KolCloudService({ store: new KolCloudStore(db), wallet, now })
-  const cloud: FakeCloud = { service, call, db, wallet, calls: [], offline: false }
+  const service = new KolSyncStandIn({ now, org_id: 'org_1' })
+  const cloud: FakeCloud = { service, call, calls: [], offline: false }
 
   async function call<T>(
     path: string,
@@ -247,28 +61,24 @@ function newCloud(now: () => string): FakeCloud {
     const limit = Number(params.get('limit'))
     try {
       let data: unknown
-      if (pathname === '/v1/kol/sync/status') data = service.status(PRINCIPAL)
-      else if (pathname === '/v1/kol/sync/push') data = service.push(PRINCIPAL, init.body as never)
+      if (pathname === '/v1/kol/sync/status') data = service.status()
+      else if (pathname === '/v1/kol/sync/push') data = service.push(init.body as never)
       else if (pathname === '/v1/kol/sync/pull')
-        data = service.pull(PRINCIPAL, {
+        data = service.pull({
           ...(params.get('cursor') === null ? {} : { cursor: params.get('cursor') as string }),
           ...(params.get('writer') === null ? {} : { writer: params.get('writer') as string }),
           ...(Number.isFinite(limit) ? { limit } : {}),
         })
-      else if (pathname === '/v1/kol/sync/conflicts') data = service.conflicts(PRINCIPAL)
+      else if (pathname === '/v1/kol/sync/conflicts') data = service.conflicts()
       else if (pathname === '/v1/kol/sync/conflicts/resolve')
-        data = service.resolveConflicts(PRINCIPAL, init.body as never)
-      else if (pathname === '/v1/kol/subscription') data = await service.subscribe(PRINCIPAL)
+        data = service.resolveConflicts(init.body as never)
+      else if (pathname === '/v1/kol/subscription') data = service.subscribe()
       else return { ok: false, status: 404, code: 'not_found', message: '没有这条路' }
       return { ok: true, status: 200, data: data as T }
     } catch (err) {
-      const e = err as { status?: number; code?: string; message?: string }
-      return {
-        ok: false,
-        status: e.status ?? 500,
-        ...(e.code === undefined ? {} : { code: e.code }),
-        message: e.message ?? '云侧出了点问题',
-      }
+      if (err instanceof StandInKolSyncError)
+        return { ok: false, status: err.status, code: err.code, message: err.message }
+      return { ok: false, status: 500, message: '云侧出了点问题' }
     }
   }
   return cloud
@@ -305,10 +115,10 @@ describe('红人营销增值服务 · 本地那一头', () => {
   let sync: ReturnType<typeof createKolCloudSync>
 
   const subscribe = async (): Promise<void> => {
-    await cloud.service.subscribe(PRINCIPAL)
+    cloud.service.subscribe()
   }
   /** 云上那本账里现在有哪些对象（`kind|id`）。 */
-  const cloudRows = (): string[] => cloud.db.raw.objects().map((o) => `${o.kind}|${o.id}`)
+  const cloudRows = (): string[] => cloud.service.rawObjects().map((o) => `${o.kind}|${o.id}`)
 
   beforeEach(() => {
     clock = T0
@@ -336,7 +146,7 @@ describe('红人营销增值服务 · 本地那一头', () => {
     expect(run.pushed).toBe(3)
     expect(run.pulled).toBe(0)
     expect(sync.pending()).toBe(0)
-    expect(cloud.service.status(PRINCIPAL).object_count).toBe(3)
+    expect(cloud.service.status().object_count).toBe(3)
     expect(cloudRows().sort()).toEqual([
       'collaboration|col_1',
       'creator|cre_1',
@@ -398,7 +208,7 @@ describe('红人营销增值服务 · 本地那一头', () => {
 
   it('另一台机器写的：拉下来进本地库', async () => {
     await subscribe()
-    cloud.service.push(PRINCIPAL, {
+    cloud.service.push({
       writer: 'device:other',
       objects: [
         {
@@ -434,7 +244,7 @@ describe('红人营销增值服务 · 本地那一头', () => {
     await sync.sync()
 
     // 另一台机器改同一条（版本号接着往上数，云上干净接受）
-    cloud.service.push(PRINCIPAL, {
+    cloud.service.push({
       writer: 'device:other',
       objects: [
         {
@@ -463,14 +273,14 @@ describe('红人营销增值服务 · 本地那一头', () => {
     expect(list[0]?.label).toBe('本地又改了')
     expect(list[0]?.source).toBe('cloud')
     // 云上也记着这一条（后台抽屉那个标就是它）
-    expect(cloud.service.status(PRINCIPAL).pending_conflicts).toBe(1)
+    expect(cloud.service.status().pending_conflicts).toBe(1)
   })
 
   it('挑回被盖掉的那一份：两本账都收敛到它，云上的标记消掉', async () => {
     await subscribe()
     store.saveCreator(creator('cre_1', '第一版'))
     await sync.sync()
-    cloud.service.push(PRINCIPAL, {
+    cloud.service.push({
       writer: 'device:other',
       objects: [
         {
@@ -495,24 +305,24 @@ describe('红人营销增值服务 · 本地那一头', () => {
     expect(run.ok).toBe(true)
     // 推上去之后两本都是被挑回来的那一份
     expect(store.creator('cre_1')?.display_name).toBe('别的机器改的')
-    const exported = cloud.service.exportAll(PRINCIPAL).objects.find((o) => o.id === 'cre_1')
+    const exported = cloud.service.exportAll().objects.find((o) => o.id === 'cre_1')
     expect((exported?.body as { display_name?: string })?.display_name).toBe('别的机器改的')
     // 标记消掉了，但输的那一份仍在导出里（一条不删）
-    expect(cloud.service.conflicts(PRINCIPAL).pending_conflicts).toBe(0)
-    expect(cloud.service.exportAll(PRINCIPAL).conflicts).toHaveLength(1)
+    expect(cloud.service.conflicts().pending_conflicts).toBe(0)
+    expect(cloud.service.exportAll().conflicts).toHaveLength(1)
   })
 
   it('本地删掉一条已同步的：云上也删掉（墓碑推上去了）', async () => {
     await subscribe()
     store.saveCreator(creator('cre_1', 'Gadget Jonas'))
     await sync.sync()
-    expect(cloud.service.status(PRINCIPAL).object_count).toBe(1)
+    expect(cloud.service.status().object_count).toBe(1)
 
     store.removeRow('creator', 'cre_1')
     expect(sync.pending()).toBe(1)
     const run = await sync.sync()
     expect(run.pushed).toBe(1)
-    expect(cloud.service.status(PRINCIPAL).object_count).toBe(0)
+    expect(cloud.service.status().object_count).toBe(0)
     // 墓碑推完之后不该每次都再推一次
     expect(sync.pending()).toBe(0)
   })
@@ -549,10 +359,10 @@ describe('红人营销增值服务 · 本地那一头', () => {
     await subscribe()
     store.saveCreator(creator('cre_1', 'Gadget Jonas'))
     await sync.sync()
-    const row = cloud.db.raw.objects().find((o) => o.id === 'cre_1')
+    // 本机推上去的是正文（云端库里存成可读 JSON 那一半在云端的一致性测试里钉）
+    const row = cloud.service.rawObjects().find((o) => o.id === 'cre_1')
     expect(row?.body).toBeDefined()
-    const body = JSON.parse(String(row?.body)) as { display_name?: string }
-    expect(body.display_name).toBe('Gadget Jonas')
+    expect((row?.body as { display_name?: string } | undefined)?.display_name).toBe('Gadget Jonas')
   })
 
   it('联系方式只上行那个 key 名，明文一个字节都不出本地', async () => {
@@ -565,7 +375,7 @@ describe('红人营销增值服务 · 本地那一头', () => {
       value_ref: 'kol_email:cre_1',
     } as never)
     await sync.sync()
-    const row = cloud.db.raw.objects().find((o) => o.id === 'ctc_1')
+    const row = cloud.service.rawObjects().find((o) => o.id === 'ctc_1')
     const body = JSON.stringify(row?.body)
     expect(body).toContain('kol_email:cre_1')
     expect(body).not.toContain('@')
@@ -595,7 +405,7 @@ describe('红人营销增值服务 · 本地那一头', () => {
     const run = await sync.sync()
     expect(run.ok).toBe(true)
     expect(run.pushed).toBe(520)
-    expect(cloud.service.status(PRINCIPAL).object_count).toBe(520)
+    expect(cloud.service.status().object_count).toBe(520)
     expect(cloud.calls.filter((c) => c.endsWith('/v1/kol/sync/push'))).toHaveLength(2)
   })
 
@@ -613,7 +423,7 @@ describe('红人营销增值服务 · 本地那一头', () => {
   it('对象种类的映射：本地七张表都同步，契约先行的三个报出来不静默扔', async () => {
     await subscribe()
     // 云上有一条本地还没有表的（`note`）
-    cloud.service.push(PRINCIPAL, {
+    cloud.service.push({
       writer: 'device:other',
       objects: [
         {

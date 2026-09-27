@@ -143,7 +143,7 @@ export type EntryEnv = { Variables: { principal: EntryPrincipal; request_id: str
 export interface EntryRoute {
   method: 'get' | 'post'
   path: string
-  /** `public` 的那条只有 Stripe 的 webhook（它带的是签名，不是我们的令牌）。 */
+  /** `public` 的：Stripe 的 webhook（它带的是签名，不是我们的令牌）与 WP165 的公开价目 `/v1/pricing`。 */
   auth: 'bearer' | 'public'
   /** 需要哪个 scope（`bearer` 才有意义）。 */
   scope?: string

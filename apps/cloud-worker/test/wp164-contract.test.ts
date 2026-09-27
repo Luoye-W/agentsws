@@ -473,6 +473,19 @@ describe('WP164 契约 ↔ Workers 形态 · 钱包与充值', () => {
   })
 })
 
+describe('WP165 契约 ↔ Workers 形态 · 公开价目', () => {
+  it('不带令牌拿得到价目表 + 充值档位，和带令牌那两条同一份，带公开缓存头', async () => {
+    const open = await hit(w, '/v1/pricing')
+    expect(open.status).toBe(200)
+    expect(open.res.headers.get('cache-control')).toMatch(/^public, max-age=\d+$/)
+    const catalog = dataOf<{ pricing: unknown; topup_tiers: unknown }>(open)
+    expect(catalog.pricing).toEqual(dataOf(await hit(w, '/v1/wallet/pricing', { token: me.token })))
+    expect(catalog.topup_tiers).toEqual(
+      dataOf(await hit(w, '/v1/wallet/topup/tiers', { token: me.token })),
+    )
+  })
+})
+
 describe('WP164 契约 ↔ Workers 形态 · AI', () => {
   it('对话（非流式 / 流式）、向量、生图、模型清单（含 cn）；422 驻留、403 缺动作、402 没钱', async () => {
     const chat = {

@@ -16,12 +16,12 @@
  */
 
 import { ADMIN_TOKEN_ENV } from '@agentsws/cloud/workers-kit'
-import { authenticate, errorResponse } from '@agentsws/cloud-entry'
+import { authenticate, errorResponse, pricingCatalogResponse } from '@agentsws/cloud-entry'
 import type { CloudTokenVerifier, VerifiedCloudToken } from '@agentsws/contracts'
-import { SEARCH_DATA_CLOUD_PREFIX } from '@agentsws/contracts'
+import { PRICING_CATALOG_PATH, SEARCH_DATA_CLOUD_PREFIX } from '@agentsws/contracts'
 import { isKolCloudPath } from '@agentsws/kol-cloud'
 import { isKolPath, type KolCharge, type KolWalletOp, kolChargeFor } from '@agentsws/kol-public'
-import type { WalletReservation } from '@agentsws/metering'
+import { buildPricing, type WalletReservation } from '@agentsws/metering'
 import type { WorkerEnv } from './env.js'
 import { handleHosted, hostedAwareVerifier, isHostedPath } from './hosted-routes.js'
 import {
@@ -481,6 +481,13 @@ export async function route(request: Request, env: WorkerEnv): Promise<Response>
 
   if (url.pathname === ADMIN_TOPUP_PATH && clean.method === 'POST')
     return handleAdminTopup(env, clean, origin)
+
+  /*
+   * WP165（docs/83 §2）：公开价目。不要令牌、不进任何对象——价目是数据，前门自己回；
+   * 和 `WalletDO` 里 `/v1/wallet/pricing` 用的是同一份（`buildPricing()`）。
+   */
+  if (url.pathname === PRICING_CATALOG_PATH && clean.method === 'GET')
+    return pricingCatalogResponse(buildPricing())
 
   /*
    * WP115 的后台。**不在这里判权限**——那一层在 `AccountsDO` 里（会话、角色、

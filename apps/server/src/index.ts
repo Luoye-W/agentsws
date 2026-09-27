@@ -485,6 +485,8 @@ export async function main(): Promise<void> {
   }
 
   await server.listen()
+  // WP165：价目只在云上——起来之后顺手取一次（取不到不拦启动：用上次存的，或者界面上说「暂时拿不到」）
+  void server.pricingCatalog.refresh()
   // 起来了才记：下次就知道上一版是什么、各库到了哪一版
   if (dbDir !== undefined) recordUpgradeSuccess({ dataDir: dbDir, release, clock })
   // WP128：托管实例每 6 小时推一份快照回云端

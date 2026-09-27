@@ -9243,7 +9243,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Pricing",
+            "description": "LocalPricing",
             "content": {
               "application/json": {
                 "schema": {
@@ -9324,7 +9324,7 @@
           "range": "workspace",
           "sensitivity": "internal"
         },
-        "x-returns": "Pricing"
+        "x-returns": "LocalPricing"
       }
     },
     "/v1/cloud/usage": {
@@ -9474,7 +9474,7 @@
         ],
         "responses": {
           "200": {
-            "description": "TopupTiers",
+            "description": "LocalTopupTiers",
             "content": {
               "application/json": {
                 "schema": {
@@ -9555,7 +9555,7 @@
           "range": "workspace",
           "sensitivity": "internal"
         },
-        "x-returns": "TopupTiers"
+        "x-returns": "LocalTopupTiers"
       }
     },
     "/v1/cloud/topup": {

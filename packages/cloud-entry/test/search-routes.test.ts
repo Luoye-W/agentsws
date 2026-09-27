@@ -10,10 +10,10 @@
  * - 没开通 501 一分不扣；错误信息里没有服务商名、没有 key。
  */
 import { buildPricing, MemoryWalletStore, Wallet } from '@agentsws/metering'
+import type { SearchFetch } from '@agentsws/search-providers'
 import { describe, expect, it } from 'vitest'
 import { createEntryApp } from '../src/routes.js'
 import { MemorySearchCache } from '../src/search/cache.js'
-import type { SearchFetch } from '../src/search/provider.js'
 import type { EntryDeps, FetchLike } from '../src/types.js'
 import { abortError, fakeFetch, fixture } from './search-fakes.js'
 

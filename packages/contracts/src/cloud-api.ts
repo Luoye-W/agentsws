@@ -72,6 +72,7 @@ import type {
   PublicCreatorQuery,
   RevealedContact,
 } from './kol-public.js'
+import type { PricingCatalog } from './pricing-catalog.js'
 import type {
   AiAnswerProbe,
   AiAnswerResult,
@@ -453,6 +454,12 @@ interface CloudAccountErrors {
   429: 'rate_limited'
 }
 
+/** WP165：公开价目带的缓存头。 */
+export interface PricingCatalogHeaders {
+  /** `public, max-age=300`（见 `PRICING_CATALOG_MAX_AGE_S`）。 */
+  'Cache-Control': string
+}
+
 export interface CloudAccountApi {
   /** 活着没有：版本、各模块挂没挂上、模型汇聚层通不通（不回任何密钥与地址） */
   'GET /v1/cloud/health': {
@@ -613,6 +620,21 @@ export interface CloudWalletApi {
     query: WalletUsageQuery
     ok: { status: 200; body: CloudDataEnvelope<UsageReport> }
     errors: EntryAuthErrors & { 400: 'invalid_input' }
+    errorBody: CloudEntryErrorBody
+  }
+  /**
+   * 公开价目：价目表 + 充值档位一次给齐（WP165，docs/83 §2「价目表只放云上」）
+   * 不要令牌、可缓存（`Cache-Control: public, max-age=300`）；和带令牌的 `/v1/wallet/pricing`、
+   * `/v1/wallet/topup/tiers` 是同一份数据。本机没关联账号也据此显示价格，并缓存一份离线看。
+   */
+  'GET /v1/pricing': {
+    auth: 'public'
+    tag: 'wallet'
+    ok: {
+      status: 200
+      body: CloudDataEnvelope<PricingCatalog>
+      headers: PricingCatalogHeaders
+    }
     errorBody: CloudEntryErrorBody
   }
   /** 价目表（能力 → 单位 → 积分）。对用户只显示最终积分价 */

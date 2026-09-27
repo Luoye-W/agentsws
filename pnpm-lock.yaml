@@ -336,9 +336,6 @@ importers:
       '@agentsws/chat-relay':
         specifier: workspace:*
         version: link:../../packages/chat-relay
-      '@agentsws/cloud-entry':
-        specifier: workspace:*
-        version: link:../../packages/cloud-entry
       '@agentsws/connect-adapter':
         specifier: workspace:*
         version: link:../../packages/connect-adapter
@@ -363,9 +360,6 @@ importers:
       '@agentsws/dsh-adapter':
         specifier: workspace:*
         version: link:../../packages/dsh-adapter
-      '@agentsws/hosted':
-        specifier: workspace:*
-        version: link:../../packages/hosted
       '@agentsws/kernel':
         specifier: workspace:*
         version: link:../../packages/kernel
@@ -381,9 +375,6 @@ importers:
       '@agentsws/meetings':
         specifier: workspace:*
         version: link:../../packages/meetings
-      '@agentsws/metering':
-        specifier: workspace:*
-        version: link:../../packages/metering
       '@agentsws/model-gateway':
         specifier: workspace:*
         version: link:../../packages/model-gateway
@@ -399,6 +390,9 @@ importers:
       '@agentsws/schedule':
         specifier: workspace:*
         version: link:../../packages/schedule
+      '@agentsws/search-providers':
+        specifier: workspace:*
+        version: link:../../packages/search-providers
       '@agentsws/secretary':
         specifier: workspace:*
         version: link:../../packages/secretary
@@ -448,15 +442,6 @@ importers:
         specifier: ^8.18.0
         version: 8.21.3
     devDependencies:
-      '@agentsws/cloud':
-        specifier: workspace:*
-        version: link:../cloud
-      '@agentsws/kol-cloud':
-        specifier: workspace:*
-        version: link:../../packages/kol-cloud
-      '@agentsws/kol-public':
-        specifier: workspace:*
-        version: link:../../packages/kol-public
       '@types/better-sqlite3':
         specifier: ^7.6.13
         version: 7.6.13
@@ -746,6 +731,9 @@ importers:
       '@agentsws/metering':
         specifier: workspace:*
         version: link:../metering
+      '@agentsws/search-providers':
+        specifier: workspace:*
+        version: link:../search-providers
       hono:
         specifier: ^4.13.7
         version: 4.13.7
@@ -1080,6 +1068,9 @@ importers:
         specifier: ^4.13.7
         version: 4.13.7
     devDependencies:
+      '@agentsws/stand-ins':
+        specifier: workspace:*
+        version: link:../stand-ins
       '@types/better-sqlite3':
         specifier: ^7.6.13
         version: 7.6.13
@@ -1108,6 +1099,9 @@ importers:
         specifier: ^4.13.7
         version: 4.13.7
     devDependencies:
+      '@agentsws/stand-ins':
+        specifier: workspace:*
+        version: link:../stand-ins
       '@types/better-sqlite3':
         specifier: ^7.6.13
         version: 7.6.13
@@ -1177,6 +1171,9 @@ importers:
         specifier: ^12.0.0
         version: 12.11.1
     devDependencies:
+      '@agentsws/stand-ins':
+        specifier: workspace:*
+        version: link:../stand-ins
       '@types/better-sqlite3':
         specifier: ^7.6.13
         version: 7.6.13
@@ -1286,6 +1283,12 @@ importers:
         specifier: ^7.13.0
         version: 7.13.0(typescript@5.9.3)
 
+  packages/search-providers:
+    dependencies:
+      '@agentsws/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+
   packages/secretary:
     dependencies:
       '@agentsws/contracts':
@@ -1358,15 +1361,9 @@ importers:
       '@agentsws/kol-core':
         specifier: workspace:*
         version: link:../kol-core
-      '@agentsws/kol-public':
-        specifier: workspace:*
-        version: link:../kol-public
       '@agentsws/learning':
         specifier: workspace:*
         version: link:../learning
-      '@agentsws/metering':
-        specifier: workspace:*
-        version: link:../metering
       '@agentsws/model-gateway':
         specifier: workspace:*
         version: link:../model-gateway

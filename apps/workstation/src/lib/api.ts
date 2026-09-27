@@ -1455,6 +1455,10 @@ export interface PricingView {
   ai_multiplier: number
   fx: Record<string, number>
   entries: PricingEntry[]
+  /** WP165：这一份哪来的（云上 / 本机存的上一份 / 从没取到过）。 */
+  source?: 'cloud' | 'cache' | 'unavailable'
+  fetched_at?: string
+  unavailable_reason?: string
 }
 
 export interface CapabilitySourceSettings {
@@ -1585,6 +1589,9 @@ export interface TopupTiersView {
   as_of: string
   credits_per_usd: number
   tiers: TopupTierView[]
+  /** WP165：同价目表（从没取到过时 `tiers` 是空的、带这一句）。 */
+  source?: 'cloud' | 'cache' | 'unavailable'
+  unavailable_reason?: string
 }
 
 export interface TopupOrderView {

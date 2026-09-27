@@ -2911,7 +2911,9 @@ const zh: Table = {
   'credits.link_first': '先关联',
   'credits.blocks.price': '三块怎么收钱',
   'credits.blocks.from': '积分起 · {unit}',
-  'credits.pricing.local': '这是本机内置的价目，以关联后显示为准。',
+  'credits.pricing.local': '这是云上的公开价目，以关联后显示为准。',
+  'credits.pricing.unavailable': '价目暂时拿不到（云上连不通，这台电脑也还没存过一份）。',
+  'credits.pricing.cached': '云上暂时连不通，这是上次存下的那一份。',
   'credits.unit.image': '每张',
 }
 
@@ -5896,7 +5898,10 @@ const en: Table = {
   'credits.blocks.price': 'How the three blocks are charged',
   'credits.blocks.from': 'credits and up · {unit}',
   'credits.pricing.local':
-    'This is the built-in price list; the one shown after linking is what counts.',
+    'This is the public price list from the cloud; the one shown after linking is what counts.',
+  'credits.pricing.unavailable':
+    "Prices aren't available right now (can't reach the cloud, and this computer hasn't saved a copy yet).",
+  'credits.pricing.cached': "Can't reach the cloud right now; this is the last copy saved.",
   'credits.unit.image': 'per image',
 }
 

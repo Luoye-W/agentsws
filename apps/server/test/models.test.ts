@@ -28,6 +28,7 @@ import type {
 import type { EventEnvelope } from '@agentsws/contracts'
 import type { FetchLike, PageFetch } from '@agentsws/model-gateway'
 import { catalogVisionByName, VISION_PROBE_WORD } from '@agentsws/model-gateway'
+import { SAMPLE_PRICING_CATALOG } from '@agentsws/stand-ins'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createServer, type Server } from '../src/index.js'
 import { CLOUD_TOKEN_SECRET_ID, DEEPSEEK_KEY_ENV } from '../src/models.js'
@@ -254,6 +255,16 @@ async function boot(
     env: { [SECRETS_KEY_ENV]: SECRETS_KEY, ...env },
     modelFetch: upstream.fetch,
     pricingFetch: pricing.fetch,
+    // WP165：云上公开价目的替身（只认 `/v1/pricing`；其余一律 404——这一组不连云）
+    cloudFetch: async (url: string) =>
+      url.endsWith('/v1/pricing')
+        ? {
+            ok: true,
+            status: 200,
+            json: async () => ({ data: SAMPLE_PRICING_CATALOG }),
+            text: async () => '',
+          }
+        : { ok: false, status: 404, json: async () => ({}), text: async () => '' },
     // 一次性任务不留后台计时器
     tokenRefreshIntervalMs: 0,
   })
@@ -814,7 +825,14 @@ describe('WP127 验证三步：文字模型必须能看图', () => {
 })
 
 describe('WP127 生图单独一档', () => {
+  it('价目还没从云上取过：单价那一格不出现（不编一个数）', async () => {
+    const view = await data<ModelImageView>(await api('/v1/models/image'))
+    expect(view.credits_per_image).toBeUndefined()
+  })
+
   it('没配：说人话，单价照样常显', async () => {
+    // WP165：价目只在云上——取过一次（生产入口起来就取），单价就常显
+    await ctx.server.pricingCatalog.refresh()
     const view = await data<ModelImageView>(await api('/v1/models/image'))
     expect(view.configured).toBe(false)
     expect(view.unavailable_reason).toContain('生图还没配')
