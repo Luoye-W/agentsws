@@ -340,7 +340,7 @@ import {
   SecretStoreError,
 } from './secret-store.js'
 import { createSecretaryAssembly, type SecretaryAssembly } from './secretary.js'
-import { claimRuleCard, createSeoService } from './seo-service.js'
+import { claimRuleCard, createSeoService, pickRoleHolder } from './seo-service.js'
 import type { BrokerFetch } from './shopify-broker.js'
 import { createShopifyDevMcp } from './shopify-devmcp.js'
 // WP77（59 §1 / §2）：建站库（三张表）+ `/v1/site/*` 的实现
@@ -2468,10 +2468,13 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
      * "读数还没接"）与搜索数据接口（WP155；不给就是"还没接"，SERP 与 GEO 跳过）。
      * 定时那一轮用真持有「内容与搜索」的那条分配去提，没人持有就不跑。
      */
+    // WP159（Fable 追加）：好几个人持有同一条职责时非店主优先、再按最早分到的（规则见 pickRoleHolder）
     const holderOf = (role_id: string) => {
-      const a = roles.assignments
-        .listByRole(role_id)
-        .find((x) => x.workspace_id === ws && x.revoked_at === undefined)
+      const a = pickRoleHolder(roles.assignments.listByRole(role_id), ws, (person_id) =>
+        roles.assignments
+          .listByPerson(person_id, { workspace_id: ws, role_id: 'common.owner' })
+          .some((x) => x.revoked_at === undefined),
+      )
       return a === undefined
         ? undefined
         : { workspace_id: ws, person_id: a.person_id, assignment_id: a.id, role_id: a.role_id }

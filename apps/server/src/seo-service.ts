@@ -311,6 +311,40 @@ export function draftTitle(query: string, current: string | undefined): string |
 }
 
 /**
+ * WP159（Fable 追加）：一条职责有好几个人持有时，定时那一轮用谁的分配去提。
+ *
+ * 规则（一条一条往下比）：
+ * 1. 只看这个品牌里没撤销的分配；
+ * 2. **非店主优先**——店主（持有 `common.owner`）常顺手挂着所有职责，但真正每天看这块面板的是
+ *    专门被分到这条职责的人（demo 里是李默）；只有店主一个人持有时才给店主；
+ * 3. 还有好几个 → **最早分到的那个**（`granted_at` 早的；一样早按分配 id），它就是主负责人——
+ *    后加的人多半是来帮忙的。契约里没有「主负责人」标记，等有了再改成认它。
+ */
+export function pickRoleHolder<
+  A extends {
+    id: string
+    person_id: string
+    workspace_id: string
+    granted_at: string
+    revoked_at?: string | undefined
+  },
+>(
+  assignments: readonly A[],
+  workspace_id: string,
+  isOwner: (person_id: string) => boolean,
+): A | undefined {
+  const live = assignments.filter(
+    (a) => a.workspace_id === workspace_id && a.revoked_at === undefined,
+  )
+  const pool = live.some((a) => !isOwner(a.person_id))
+    ? live.filter((a) => !isOwner(a.person_id))
+    : live
+  return [...pool].sort(
+    (a, b) => a.granted_at.localeCompare(b.granted_at) || a.id.localeCompare(b.id),
+  )[0]
+}
+
+/**
  * WP159：知识库里一条违规宣称规则卡（`subject.type === 'content_rule'`，`subject.key` = 规则 id）。
  * 人在知识库页上改的，出处写「人」+ 那条规则的官方出处（有就带上）。
  */
