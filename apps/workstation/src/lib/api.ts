@@ -5604,6 +5604,35 @@ export const setGeoQuestions = (
 ): Promise<GeoQuestionsData> =>
   api('/v1/seo/geo-questions', { method: 'PUT', body: input, ...withAssignment(assignment) })
 
+// ── WP158：Search Console 选哪个站点、GA4 选哪个媒体资源 ─────────────────────────
+
+export interface GoogleSourceData {
+  connected: boolean
+  selected?: string
+  selected_label?: string
+  options: { id: string; label: string }[]
+  /** 连上了、还没选：出那张「选一下」的小卡。 */
+  needs_pick: boolean
+  /** 上一次没读到的人话（服务端写好的）。 */
+  note?: string
+  stale?: boolean
+  window?: { start: string; end: string }
+}
+
+export interface GoogleSourcesData {
+  gsc: GoogleSourceData
+  ga4: GoogleSourceData
+}
+
+export const getGoogleSources = (assignment?: string): Promise<GoogleSourcesData> =>
+  api('/v1/seo/google-sources', withAssignment(assignment))
+
+export const setGoogleSources = (
+  input: { gsc_site?: string; ga4_property?: string },
+  assignment?: string,
+): Promise<GoogleSourcesData> =>
+  api('/v1/seo/google-sources', { method: 'PUT', body: input, ...withAssignment(assignment) })
+
 export const runSeo = (
   what: 'daily' | 'weekly',
   assignment?: string,

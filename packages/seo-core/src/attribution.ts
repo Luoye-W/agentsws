@@ -43,6 +43,10 @@ export interface LandingConversion {
   page: string
   /** 0–1。 */
   conversion_rate: number
+  /** WP158：GA4 口径（自然搜索）的会话、购买、购买收入——与 Shopify 那条并排放，不替换它。 */
+  sessions?: number
+  purchases?: number
+  revenue?: number
 }
 
 export interface RevenueOptions {
@@ -141,9 +145,10 @@ export function pageRevenue(input: {
     row.revenue = round2(row.revenue + order.total)
     row.currency = order.currency
   }
-  const ga4 = new Map((input.ga4 ?? []).map((g) => [pathKey(g.page) ?? g.page, g.conversion_rate]))
+  const ga4 = new Map((input.ga4 ?? []).map((g) => [pathKey(g.page) ?? g.page, g]))
   const out = [...rows.entries()].map(([key, row]) => {
-    const cr = ga4.get(key)
+    const g = ga4.get(key)
+    const cr = g?.conversion_rate
     const flag: PageRevenueRow['flag'] =
       row.clicks >= o.leak_min_clicks && row.orders === 0
         ? 'leak'
@@ -153,6 +158,9 @@ export function pageRevenue(input: {
     return {
       ...row,
       ...(cr === undefined ? {} : { conversion_rate: cr }),
+      ...(g?.sessions === undefined ? {} : { ga4_sessions: g.sessions }),
+      ...(g?.purchases === undefined ? {} : { ga4_purchases: g.purchases }),
+      ...(g?.revenue === undefined ? {} : { ga4_revenue: g.revenue }),
       ...(flag === undefined ? {} : { flag }),
     }
   })

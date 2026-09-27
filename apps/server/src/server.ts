@@ -226,6 +226,7 @@ import { createPrivacyErase, type PrivacyErase } from './erase.js'
 // WP119（68）：浏览器插件的本地一面（配对表按机器、写库按品牌、转发由本机做）
 import { createExtensionContributor } from './extension-contribute.js'
 import { brandExtensionPort } from './extension-port.js'
+import { createGoogleReads, type GoogleReads } from './google-reads.js'
 import {
   createHostedOwnerClient,
   ensureCloudModelDefault,
@@ -585,6 +586,11 @@ export interface ServerOptions {
    * （连接目录里那张卡能授权，查询词与页面的读口是下一版——本单不接真 GSC）。
    */
   searchConsoleFor?: (workspace_id: WorkspaceId) => SearchConsolePort | undefined
+  /**
+   * WP158：换掉某个品牌的 Search Console / GA4 读数层（demo 用替身连接器，不连真 Google）。
+   * 不给 = 按这个品牌的真连接经 OpenConnector 读。生产路径从不传它。
+   */
+  googleReadsFor?: (workspace_id: WorkspaceId) => GoogleReads | undefined
   /**
    * WP154：换掉搜索数据接口（测试与 demo 用替身）。不给 = 这个品牌自己那一份 WP155
    * 路由口（官方 / 自带 key / 不接）；没接时 SERP 检查与 GEO 探测跳过，其余照跑。
@@ -1744,8 +1750,33 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
      * 一个"连接"（它就在这台机器上），所以它与上游连没连、demo 挂没挂合成世界
      * 都无关——哪一条路装配出来的数据源，红人那一块都是同一个来源。
      */
+    /**
+     * WP158（docs/82）：这个品牌的 Search Console 与 GA4 真读数。
+     *
+     * 经连接器的只读 Action 读、按天缓存在内存里；Google 的令牌只在 OpenConnector 里。
+     * 没连这两家时它什么都不做（面板那几块照旧「去连接」）。
+     */
+    const googleReads =
+      options.googleReadsFor?.(ws) ??
+      createGoogleReads({
+        workspace_id: ws,
+        clock,
+        connections: () => connections.liveConnections(),
+        connect: connections.connect,
+        appendEvent,
+        ...(dir === undefined ? {} : { dir }),
+      })
+    connections.onConnectionChange(() => {
+      googleReads.invalidate()
+    })
     const workData: WorkstationDataSource = {
       ...baseWorkData,
+      // WP158：读之前先把 GSC / GA4 拉新（当天有缓存就是空操作；永不抛）
+      ensureFresh: async () => {
+        await baseWorkData.ensureFresh?.()
+        await googleReads.ensureFresh()
+      },
+      search: () => googleReads.deckData(),
       kol: () => kolDeckData(kol, { now: clock.now() }),
       // WP72（56 §2）：社媒那几块同理——内容日历上的行是**我们自己排的**，
       // 一个平台都没连也照样在那儿摆着。渠道那八个源才是"连没连"的事。
@@ -2466,11 +2497,19 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       work: {
         createMatter: (input) => work.createMatter(input),
       },
-      searchConsole: (): SearchConsolePort =>
-        options.searchConsoleFor?.(ws) ??
-        (workData.sources().some((s) => s.id === 'gsc' && s.connected)
+      // WP158：连上了就是真读数（`google-reads.ts`）；注入的模拟世界里「连着」却没有真连接的，
+      // 照旧说"读数那一步还没接"
+      searchConsole: (): SearchConsolePort => {
+        const injectedPort = options.searchConsoleFor?.(ws)
+        if (injectedPort !== undefined) return injectedPort
+        const real = googleReads.searchConsole()
+        if (real.connected()) return real
+        return workData.sources().some((s) => s.id === 'gsc' && s.connected)
           ? pendingSearchConsole()
-          : disconnectedSearchConsole()),
+          : disconnectedSearchConsole()
+      },
+      ga4: () => googleReads.ga4Conversions(),
+      ga4Note: () => googleReads.ga4Note(),
       // WP155：这个品牌的搜索数据接口（官方 / 自带 key / 不接）；测试与 demo 可以换替身
       searchData: () => options.searchDataFor?.(ws) ?? searchData,
       orders: () => {
@@ -3049,6 +3088,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       pr,
       prService,
       seoService,
+      googleReads,
       social,
       socialService,
       socialChannels,
@@ -5094,6 +5134,24 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         )
       if (input.settings !== undefined) svc.setGeoSettings(input.settings)
       return svc.geoView()
+    },
+    // WP158：Search Console 选哪个站点、GA4 选哪个媒体资源
+    googleSources: async (actor) =>
+      (await brandModules.forWorkspace(actor.workspace_id)).googleReads.sources(),
+    setGoogleSources: async (actor, input) => {
+      const brand = await brandModules.forWorkspace(actor.workspace_id)
+      let out: Awaited<ReturnType<typeof brand.googleReads.select>>
+      try {
+        out = await brand.googleReads.select(input)
+      } catch (err) {
+        const code = (err as { code?: unknown }).code
+        if (code === 'invalid_input')
+          throw new ApiError('invalid_input', err instanceof Error ? err.message : String(err))
+        throw err
+      }
+      // 选了立刻刷新：换了站点就重出今天的 5 件事（换 GA4 只影响周收入表，下一次周小结带上）
+      if (out.gsc_changed) await brand.seoService.daily()
+      return out.view
     },
     run: async (actor, what) => {
       const svc = (await brandModules.forWorkspace(actor.workspace_id)).seoService
