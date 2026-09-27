@@ -298,6 +298,11 @@ export type KnownEventType =
   | 'outbound.reconciled'
   /** 邮箱加固：毒消息隔离、扫描租约被别人占着、归档文件夹动不了。 */
   | 'inbound.folder_fault'
+  /**
+   * WP163：判成客服的信在邮箱里的一个动作（标已读 / 挪进 `KefuAgents` / 跳过 / 失败）。
+   * payload 只有原因码、文件夹与 uid，地址遮掉，没有正文。
+   */
+  | 'inbound.mailbox_action'
   /** 死信被人重投回队列。 */
   | 'inbound.requeued'
 

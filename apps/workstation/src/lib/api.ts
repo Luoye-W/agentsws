@@ -4904,6 +4904,15 @@ export interface MessageAccountView {
   unread: number
   folders: MessageFolder[]
   backfill_floor: string
+  /** WP163：最近一次没动成的邮箱动作（判成客服的信标已读 / 挪进客服文件夹）。 */
+  last_mailbox_failure?: {
+    at: string
+    action: 'mark_read' | 'move'
+    /** 原因码：`server_refused` / `error` / `unsupported` …（界面翻成人话）。 */
+    reason: string
+    folder: string
+    to_folder?: string
+  }
 }
 
 /** 打开一条会话时一次拿全（正文 + 状态带）。 */

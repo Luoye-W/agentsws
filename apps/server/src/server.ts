@@ -2795,6 +2795,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       accounts: () => connections.mailAccounts(),
       credentials: connections.credentialSource(),
       work,
+      // WP163（docs/63 §D「挪信归谁」）：同一只邮箱下面的消息同步也在扫，而且它有分拣——
+      // 挪信 / 标已读只归它。这一路只收信、落事项，一下都不动邮箱。
+      mailbox_moves: 'message_sync',
       // WP53 / 31 §3.3：发件人解析成线程台账里的那条联系人，并钉在事项上
       ...(records.contactOf === undefined
         ? {}
