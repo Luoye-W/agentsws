@@ -49,6 +49,7 @@ import type {
   ObjectRef,
   PressRelease,
   ProvenanceState,
+  Recipient,
   StagedChange,
   SubredditPolicy,
   WorkspaceId,
@@ -68,6 +69,7 @@ import {
 import { checkOutbound } from '@agentsws/social-core'
 import type { StageInput, StageOutcome } from '@agentsws/txn'
 import type { PrStore, StoredMention } from './pr.js'
+import { recipientOf, type ScopeManagerRouter } from './supervisor.js'
 
 /** 动作 id（职责 yml 里那几个）。**只有这一处拼它们**。 */
 export const PR_ACTIONS = {
@@ -113,6 +115,11 @@ export interface PrServiceOptions {
    */
   holdersOf(role_id: string): { person_id: string }[]
   owner(): Promise<string | undefined>
+  /**
+   * WP174：`scope_manager` 的卡落到谁（岗位上级 → 老板，`./supervisor.ts`）。
+   * 不给就照旧落在提的人自己身上（单测与没装公司页的进程）。
+   */
+  routeScopeManager?: ScopeManagerRouter
   /**
    * 这个版的规矩。不给 / 查不到就按 {@link conservativePolicy}。
    *
@@ -208,6 +215,21 @@ export function createPrService(options: PrServiceOptions): PrServiceAssembly {
     return { run_id, seen: grouped, read_full: seen.map((r) => r.id), recorded_at: clock.now() }
   }
 
+  /** WP174：`scope_manager` 的卡按岗位上级走；别的规则照旧落在提的人身上。 */
+  const recipientFor = async (
+    actor: PrActor,
+    rule: 'role_holder' | 'scope_manager' | 'owner',
+  ): Promise<Recipient> =>
+    rule === 'scope_manager' && options.routeScopeManager !== undefined
+      ? recipientOf(
+          await options.routeScopeManager({
+            workspace_id: options.workspace_id,
+            role_id: actor.role_id,
+            proposer: actor.person_id,
+          }),
+        )
+      : { person: actor.person_id, via: rule }
+
   /** 一条 staged change 的共用那一段（提上去 → 翻成视图）。 */
   const stageOne = async (input: {
     actor: PrActor
@@ -241,7 +263,7 @@ export function createPrService(options: PrServiceOptions): PrServiceAssembly {
       approval: {
         title: input.title,
         summary: input.summary,
-        recipients: [{ person: input.actor.person_id, via: input.rule }],
+        recipients: [await recipientFor(input.actor, input.rule)],
         proposer: {
           kind: 'person',
           id: input.actor.person_id,

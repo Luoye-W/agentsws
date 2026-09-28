@@ -45,6 +45,20 @@ describe('projectCard（36 §2 审批项 → 卡片）', () => {
     expect(card.customer_label).toBe('Anna Meyer')
   })
 
+  it('WP174：收件人带理由 → 卡上一句「转给了谁、为什么」；没带就不出', () => {
+    expect(projectCard(item(), ctx).routed_note).toBeUndefined()
+    const base = item()
+    const routed = item({
+      routing: {
+        ...base.routing,
+        recipients: [
+          { person: 'p_lin', via: 'scope_manager', reason: '转给了「B2B」岗位的上级林峰' },
+        ],
+      },
+    })
+    expect(projectCard(routed, ctx).routed_note).toBe('转给了「B2B」岗位的上级林峰')
+  })
+
   it('37 §1 第 5 行：没有展示名就没有客户标签，绝不退化成裸 id', () => {
     expect(projectCard(item(), ctx).customer_label).toBeUndefined()
   })

@@ -348,6 +348,10 @@ const zh: Table = {
   'org.positions.roles': '包含这些职责',
   'org.positions.who': '现在谁在做',
   'org.positions.nobody': '还没人做这个岗位。',
+  'org.positions.supervisor': '上级',
+  'org.positions.supervisor.none': '不设（转老板）',
+  'org.positions.supervisor.hint':
+    '这个岗位里超出授权的事（比如报价超了金额或毛利）先转上级批；不设、或上级就是提的人自己，就转老板。上级离开工作区会自动清空，并提醒你重设。',
   'org.positions.holders': '{n} 人在做',
   'org.positions.assign': '分给同事',
   'org.positions.edit': '加减职责',
@@ -3386,6 +3390,10 @@ const en: Table = {
   'org.positions.roles': 'Includes these duties',
   'org.positions.who': 'Who does it now',
   'org.positions.nobody': 'Nobody holds this position yet.',
+  'org.positions.supervisor': 'Supervisor',
+  'org.positions.supervisor.none': 'None (goes to owner)',
+  'org.positions.supervisor.hint':
+    'Anything in this position that goes beyond its authority (say a quote over the amount or margin limit) goes to the supervisor first. With no supervisor, or when the supervisor made the request, it goes to the owner. If the supervisor leaves the workspace this is cleared and you get a reminder to pick someone new.',
   'org.positions.holders': '{n} people',
   'org.positions.assign': 'Give to a colleague',
   'org.positions.edit': 'Edit duties',

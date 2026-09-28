@@ -83,6 +83,26 @@ export function quoteBreaches(
 }
 
 /**
+ * WP174（Fable 终审）：超了授权的那几条，卡面上说**人话**——不露 `amount` / `margin` 这种字段名。
+ * 中英各一套；键与 `QUOTE_MANDATE_RULES` 的 `rule` 逐字相同（测试钉住一条不漏）。
+ */
+export const QUOTE_BREACH_WORDS: Readonly<Record<string, { zh: string; en: string }>> = {
+  quote_amount_over_mandate: { zh: '金额', en: 'amount' },
+  quote_margin_under_mandate: { zh: '毛利', en: 'margin' },
+  quote_discount_over_mandate: { zh: '折扣', en: 'discount' },
+  quote_payment_terms_over_mandate: { zh: '账期', en: 'payment terms' },
+}
+
+/** 超了哪几条，一句人话（中文用「、」，英文用 ", "）。没登记的规则名不硬印，说「其他条件」。 */
+export function quoteBreachText(breaches: readonly string[], lang: 'zh' | 'en' = 'zh'): string {
+  const words = breaches.map(
+    (b) => QUOTE_BREACH_WORDS[b]?.[lang] ?? (lang === 'zh' ? '其他条件' : 'other terms'),
+  )
+  return [...new Set(words)].join(lang === 'zh' ? '、' : ', ')
+}
+
+/**
+ * 超授权的报价卡转给谁：/**
  * 超授权的报价卡转给谁：先上级（这条职责所在部门的负责人），没有上级再老板
  * （§11.1 第 3 条）。授权内业务员自己批。
  */

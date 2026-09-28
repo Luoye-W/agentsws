@@ -119,6 +119,14 @@ export type {
   UpdateAssignmentInput,
 } from './store.js'
 export { createRoleStore } from './store.js'
+// WP174：`scope_manager` 的审批落到谁（岗位上级 → 老板），服务进程与模拟世界共用
+export type {
+  ScopeManagerInput,
+  ScopeManagerReason,
+  ScopeManagerRoute,
+  SupervisedPosition,
+} from './supervisor.js'
+export { positionOfRole, resolveScopeManager, scopeManagerReasonText } from './supervisor.js'
 export type {
   AccessRequest,
   DecisionOutcome,

@@ -38,6 +38,7 @@ import type {
   PromotionTier,
   Range,
   RangeRef,
+  Recipient,
   RetrievalActor,
   RetrievalHit,
   RoleId,
@@ -704,6 +705,15 @@ export interface GatewayDeps {
   eventLog: EventLogPort
   modules: ModulesPort
   approvals: ApprovalBus
+  /**
+   * WP174：`scope_manager` 的卡落到谁（岗位上级 → 老板）。`POST /v1/approvals` 给了
+   * `rule: 'scope_manager'` 却没给收件人时用它；没装配就照旧落在提的人自己身上。
+   */
+  routeScopeManager?(input: {
+    workspace_id: WorkspaceId
+    role_id: RoleId
+    proposer: PersonId
+  }): Promise<Recipient>
   changes: ChangesPort
   /**
    * WP95（36 §11，`docs/upstream/sidebar-compare.md` #11）：一条变更改了哪几个文件。

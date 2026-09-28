@@ -82,6 +82,7 @@ import {
   seoDraftPrompt,
 } from '@agentsws/seo-core'
 import type { StageInput, StageOutcome } from '@agentsws/txn'
+import { recipientOf, type ScopeManagerRouter } from './supervisor.js'
 
 /** 定时那一轮用谁的分配去提。 */
 export interface SeoActor {
@@ -206,6 +207,11 @@ export interface SeoServiceOptions {
   appendEvent(e: Omit<EventEnvelope, 'id' | 'at'> & { at?: string }): void
   /** 品牌落盘目录（问题清单与"交出去过哪些"记在这里；内存档没有）。 */
   dir?: string
+  /**
+   * WP174：`scope_manager` 的卡落到谁（岗位上级 → 老板，`./supervisor.ts`）。
+   * 不给就照旧落在提的人自己身上（单测与没装公司页的进程）。
+   */
+  routeScopeManager?: ScopeManagerRouter
 }
 
 export interface SeoDailyOutcome {
@@ -694,7 +700,18 @@ export function createSeoService(options: SeoServiceOptions): SeoServiceAssembly
       approval: {
         title,
         summary,
-        recipients: [{ person: actor.person_id, via: 'scope_manager' }],
+        // WP174：机械第一稿也按岗位上级走（没设 → 老板）
+        recipients: [
+          options.routeScopeManager === undefined
+            ? { person: actor.person_id, via: 'scope_manager' }
+            : recipientOf(
+                await options.routeScopeManager({
+                  workspace_id,
+                  role_id: actor.role_id,
+                  proposer: actor.person_id,
+                }),
+              ),
+        ],
         proposer: {
           kind: 'agent',
           id: `agent_${actor.role_id}`,

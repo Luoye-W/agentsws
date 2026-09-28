@@ -108,6 +108,7 @@ import {
   type RoleStore,
   rangeTargetOfProduct,
   renderBrandContext,
+  type SupervisedPosition,
 } from '@agentsws/roles'
 import type { SearchFetch } from '@agentsws/search-providers'
 import {
@@ -377,6 +378,7 @@ import { createStandby } from './standby.js'
 import { mountStatic } from './static.js'
 import { createStorage } from './storage.js'
 import { createSubscription, type SubscriptionOptions } from './subscription.js'
+import { createScopeManagerRouter } from './supervisor.js'
 import {
   createSupportJudgment,
   SUPPORT_SLA_HANDLER,
@@ -1480,6 +1482,24 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       ? createMemoryIdentity({ clock, random })
       : createSqliteIdentity({ dbPath: join(dbDir, 'identity.sqlite'), clock, random })
 
+  /*
+   * WP174（docs/84 §11.1 第 3 条）：`scope_manager` 的审批落到谁——岗位上级 → 老板。
+   * 各品牌的服务（公关、建站、社媒、SEO、投放、B2B）装得比公司页早，所以岗位表是
+   * 晚绑定的：公司页装好之后填 `supervisorPositions`，之前（还没有任何卡）当没有岗位。
+   */
+  let supervisorPositions: (() => readonly SupervisedPosition[]) | undefined
+  const routeScopeManager = createScopeManagerRouter({
+    positions: () => supervisorPositions?.() ?? [],
+    assignments: (person_id, ws) =>
+      roles.assignments
+        .listByPerson(person_id, {})
+        .filter((a) => a.workspace_id === ws && a.revoked_at === undefined),
+    activeMembers: async (ws) =>
+      (await identity.members(ws)).filter((m) => m.left_at === undefined).map((m) => m.person_id),
+    owner: async (ws) => (await identity.getWorkspace(ws))?.owner_id,
+    personName: async (id) => (await identity.getPerson(id))?.name,
+  })
+
   // 37 工作模型：给了数据目录就落盘（事项 / 时间线 / 目标 / 待办 / 计划 / 复盘）
   const workStore =
     dbDir === undefined
@@ -2085,6 +2105,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
      */
     const socialService = createSocialService({
       workspace_id: ws,
+      routeScopeManager,
       store: social,
       // WP73：到点真发出去那一跳走这九条适配器
       channels: socialChannels,
@@ -2123,6 +2144,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
      */
     const b2bService = createB2bService({
       workspace_id: ws,
+      routeScopeManager,
       store: b2b,
       clock,
       random,
@@ -2142,6 +2164,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     })
     const prService = createPrService({
       workspace_id: ws,
+      routeScopeManager,
       store: pr,
       clock,
       approvals: txn.approvals,
@@ -2179,6 +2202,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
      */
     const adsService = createAdsService({
       workspace_id: ws,
+      routeScopeManager,
       store: ads,
       clock,
       ledger: txn.ledger,
@@ -2197,6 +2221,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
      */
     const siteService = createSiteService({
       workspace_id: ws,
+      routeScopeManager,
       store: site,
       clock,
       approvals: txn.approvals,
@@ -2682,6 +2707,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     }
     const seoService = createSeoService({
       workspace_id: ws,
+      routeScopeManager,
       clock,
       random,
       approvals,
@@ -4168,8 +4194,13 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     appendEvent,
     ...(dbDir === undefined ? {} : { dbDir }),
     brandName: () => brandNameOfWorkspace(workspace.id),
+    // WP174：上级离职时，各品牌里他手上的卡都要改派（审批总线是同一条）
+    workspaceIds: () => [
+      ...new Set([workspace.id, ...(brands?.loaded().map((b) => b.workspace_id) ?? [])]),
+    ],
   })
   rangeExpandedSink = org.onRangeExpanded
+  supervisorPositions = () => org.positions()
 
   /**
    * WP51 首次设置与同事发现（46）。
@@ -4538,6 +4569,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     memory: knowledge.memory,
     schedule: schedule.store,
     ...(dbDir === undefined ? {} : { dbDir }),
+    // WP174：离职的人若是岗位上级 → 清空、提醒老板、改派他手上的卡
+    onLeft: (person_id, by) => org.onMemberLeft(person_id, by),
   })
 
   const knowledgePort: KnowledgePort = {
@@ -5652,6 +5685,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     modules: kernel.modules,
     reconcile,
     approvals,
+    // WP174：`POST /v1/approvals` 的 `scope_manager` 也走岗位上级 → 老板
+    routeScopeManager,
     changes: txn.ledger,
     guardrails,
     knowledge: knowledgePort,

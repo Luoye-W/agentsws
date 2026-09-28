@@ -426,6 +426,7 @@ export type {
   PersonalLayerPolicy,
   PolicyPatchInput,
   PositionInput,
+  PositionSupervisorInput,
   PositionView,
   ProductLineInput,
   ProductLineRuleInput,

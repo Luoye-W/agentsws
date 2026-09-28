@@ -27,6 +27,7 @@ import {
   outreachFooter,
   quoteApprover,
   quoteBreaches,
+  quoteBreachText,
   screenProspects,
   splitByQuota,
 } from '@agentsws/b2b-core'
@@ -93,6 +94,7 @@ import {
   adsPlatformSpec,
   // WP171：B2B 五条职责的唯一一份清单、红卡的审批种类、报价授权默认值
   B2B_FRAUD_ALERT_KIND,
+  B2B_POSITION_ID,
   B2B_ROLE_IDS,
   BTOBAGENTS_FOLDER,
   DEFAULT_B2B_QUOTE_MANDATE,
@@ -169,7 +171,7 @@ import {
   parseSubredditRules,
   triageMention,
 } from '@agentsws/pr-core'
-import type { EffectiveConfig, RoleStore } from '@agentsws/roles'
+import type { EffectiveConfig, RoleStore, SupervisedPosition } from '@agentsws/roles'
 import {
   changeKindOf,
   createRoleStore,
@@ -178,6 +180,8 @@ import {
   productLineMatches,
   type RangeExpanded,
   rangeTargetOfProduct,
+  resolveScopeManager,
+  scopeManagerReasonText,
 } from '@agentsws/roles'
 import {
   aftersalesBrainProvider,
@@ -7508,7 +7512,21 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
    * - **来信**：改收款账户由 `core` 的 `detectPaymentAccountChange` 判，命中出一张红卡
    *   （`b2b_fraud_alert`），信里的账户**一个字都不采纳**——卡上没有那串号码。
    */
-  const b2bHasScopeManager = pack.people.some((p) => p.scope_manager === true)
+  /*
+   * WP174：谁是「上级」与服务进程用**同一个解析函数**（`@agentsws/roles` 的 `resolveScopeManager`）：
+   * 包里标了 `scope_manager: true` 的那个人就是 B2B 岗位的上级；提的人自己就是上级、
+   * 或者包里没有上级 → 老板。以前这里是模拟世界自己的一条 `hasScopeManager` 判断，
+   * 服务进程里却没有上级概念（WP172 报告「需要定」第 1 条）——两边现在是一句话。
+   */
+  const b2bSupervisor = pack.people.find((p) => p.scope_manager === true)?.id
+  const b2bPositions: SupervisedPosition[] = [
+    {
+      id: B2B_POSITION_ID,
+      name: { zh: 'B2B', en: 'B2B' },
+      roles: B2B_ROLE_IDS.map((role) => ({ role, default: true })),
+      ...(b2bSupervisor === undefined ? {} : { supervisor_person_id: b2bSupervisor }),
+    },
+  ]
   const b2bRoleOf = (role: string): RoleId => {
     if (!B2B_ROLE_IDS.includes(role))
       throw new SimulationError('invalid_input', `没有这条 B2B 职责：${role}`)
@@ -7561,15 +7579,30 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
             DEFAULT_B2B_QUOTE_MANDATE.max_payment_terms_days,
           ),
         })
-        approver = quoteApprover(breaches, b2bHasScopeManager)
+        // 超了先当「转上级」，真落到谁由下面那个解析函数说了算
+        approver = quoteApprover(breaches, true)
       } else {
         approver = typeof spec.route_to === 'string' ? spec.route_to : 'role_holder'
       }
+      const route =
+        approver === 'scope_manager'
+          ? resolveScopeManager({ role_id, proposer: who, owner, positions: b2bPositions })
+          : undefined
+      if (route !== undefined) approver = route.via
       const routed_to: PersonId =
-        approver === 'role_holder' ? who : approver === 'scope_manager' ? scopeManager : owner
-      const breachWords = breaches
-        .map((b) => b.replace(/^quote_|_(over|under)_mandate$/g, ''))
-        .join('、')
+        route?.person ??
+        (approver === 'role_holder' ? who : approver === 'scope_manager' ? scopeManager : owner)
+      const routedName =
+        route === undefined ? undefined : pack.people.find((p) => p.id === route.person)?.name
+      const routedReason =
+        route === undefined
+          ? undefined
+          : scopeManagerReasonText(route, {
+              ...(routedName === undefined ? {} : { person: routedName }),
+              position: 'B2B',
+            })
+      // WP174：卡面说人话（金额 / 毛利 / 折扣 / 账期），与服务进程同一张表
+      const breachWords = quoteBreachText(breaches)
       const cardTitle =
         title ??
         (kind === 'b2b_quote'
@@ -7600,7 +7633,13 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
         approval: {
           title: cardTitle,
           summary: cardSummary,
-          recipients: [{ person: routed_to, via: approver }],
+          recipients: [
+            {
+              person: routed_to,
+              via: approver,
+              ...(routedReason === undefined ? {} : { reason: routedReason }),
+            },
+          ],
           proposer: { kind: 'agent', id: `agent_${asg.role_id}`, assignment_id: asg.id },
           rule: approver,
           // 业务员自己批自己那张（授权内的报价）：不是"一人既提又批"的那种越权——提的是 Agent

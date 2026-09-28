@@ -699,6 +699,12 @@ const CHANNEL_OF: Record<string, DeckCard['channel']> = {
 }
 
 /** 36 §2：审批项 → 卡片。 */
+/** WP174：收件人上那一句「转给了谁、为什么」（第一条带理由的；没有就不出）。 */
+function routedNoteOf(item: ApprovalItem): { routed_note?: string } {
+  const reason = item.routing.recipients.find((r) => r.reason !== undefined)?.reason
+  return reason === undefined || reason === '' ? {} : { routed_note: reason }
+}
+
 export function projectCard(item: ApprovalItem, ctx: ProjectContext): DeckCard {
   const kind = item.kind as DeckKind
   const risk = ctx.riskClass?.(item) ?? riskClassFor(kind)
@@ -744,6 +750,8 @@ export function projectCard(item: ApprovalItem, ctx: ProjectContext): DeckCard {
     ...(matter_id === undefined ? {} : { matter_id }),
     ...(matter_label === undefined ? {} : { matter_label }),
     ...(todo_id === undefined ? {} : { todo_id }),
+    // WP174：「转给了谁、为什么」——路由真做过判断的卡才有（上级 / 老板 / 改派）
+    ...routedNoteOf(item),
     source: sourceOf(item, kind),
     highlights: highlightsOf(item, ctx),
     evidence_chips: evidenceChipsOf(item, ctx),

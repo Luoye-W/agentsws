@@ -347,6 +347,12 @@ export function DeckCardView({
       >
         {/* ② 一句话标题 */}
         <p className="text-[15px] leading-6 font-semibold">{card.title}</p>
+        {/* WP174：转给了谁、为什么（路由真做过判断的卡才有这一句） */}
+        {card.routed_note === undefined ? null : (
+          <p className="mt-0.5 text-xs text-muted-foreground" data-testid="deck-routed-note">
+            {card.routed_note}
+          </p>
+        )}
 
         {/* ③ 主体 —— WP96：按 card.layout 换十一种排版，见 deck-card-body.tsx */}
         <DeckCardBody

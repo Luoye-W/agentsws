@@ -2191,6 +2191,8 @@ export interface OrgPositionView {
   source: 'bundled' | 'custom'
   roles: { role_id: string; name: string; default: boolean; loaded: boolean }[]
   holders: { person_id: string; name: string; ranges: { kind: string; id: string }[] }[]
+  /** WP174：这个岗位的上级（超授权的审批先转他）；没设 = 转老板。 */
+  supervisor?: { person_id: string; name: string }
 }
 
 export interface OrgAssignmentView {
@@ -2548,6 +2550,18 @@ export const updateOrgPosition = (
   api<OrgPositionView>(`/v1/org/positions/${encodeURIComponent(id)}`, {
     method: 'PUT',
     body: input,
+    ...withAssignment(assignment),
+  })
+
+/** WP174：设 / 清岗位上级（`null` = 清掉，落回老板）。 */
+export const setOrgPositionSupervisor = (
+  id: string,
+  person_id: string | null,
+  assignment?: string,
+): Promise<OrgPositionView> =>
+  api<OrgPositionView>(`/v1/org/positions/${encodeURIComponent(id)}/supervisor`, {
+    method: 'PUT',
+    body: { person_id },
     ...withAssignment(assignment),
   })
 

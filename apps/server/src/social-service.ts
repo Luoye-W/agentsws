@@ -54,6 +54,7 @@ import type {
   Mandate,
   ObjectRef,
   ProvenanceState,
+  Recipient,
   SocialAccount,
   SocialChannel,
   SocialPost,
@@ -79,6 +80,7 @@ import {
 import type { StageInput, StageOutcome } from '@agentsws/txn'
 import type { SocialStore } from './social.js'
 import type { SocialChannelsAssembly } from './social-channels.js'
+import { recipientOf, type ScopeManagerRouter } from './supervisor.js'
 
 /**
  * 群规的默认一份（56 §2「群规」那一格还没有界面，所以先给一份能用的）。
@@ -176,6 +178,11 @@ export interface SocialServiceOptions {
    * "今天三条"会算成两天各一条半，日额度就形同虚设（`social-core/calendar.ts`）。
    */
   tzOffsetMinutes?: number
+  /**
+   * WP174：`scope_manager` 的卡落到谁（岗位上级 → 老板，`./supervisor.ts`）。
+   * 不给就照旧落在提的人自己身上（单测与没装公司页的进程）。
+   */
+  routeScopeManager?: ScopeManagerRouter
 }
 
 export interface SocialServiceAssembly {
@@ -286,6 +293,21 @@ export function createSocialService(options: SocialServiceOptions): SocialServic
     return found
   }
 
+  /** WP174：`scope_manager` 的卡按岗位上级走；别的规则照旧落在提的人身上。 */
+  const recipientFor = async (
+    actor: SocialActor,
+    rule: 'role_holder' | 'scope_manager' | 'owner',
+  ): Promise<Recipient> =>
+    rule === 'scope_manager' && options.routeScopeManager !== undefined
+      ? recipientOf(
+          await options.routeScopeManager({
+            workspace_id: options.workspace_id,
+            role_id: actor.role_id,
+            proposer: actor.person_id,
+          }),
+        )
+      : { person: actor.person_id, via: rule }
+
   /** 一条 staged change 的共用那一段（提上去 → 翻成视图）。 */
   const stageOne = async (input: {
     actor: SocialActor
@@ -320,7 +342,7 @@ export function createSocialService(options: SocialServiceOptions): SocialServic
       approval: {
         title: input.title,
         summary: input.summary,
-        recipients: [{ person: input.actor.person_id, via: input.rule }],
+        recipients: [await recipientFor(input.actor, input.rule)],
         proposer: {
           kind: 'person',
           id: input.actor.person_id,

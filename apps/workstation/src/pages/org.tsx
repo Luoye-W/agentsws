@@ -66,6 +66,7 @@ import {
   removeMember,
   requestMembership,
   revokeAssignment,
+  setOrgPositionSupervisor,
   updateOrgPosition,
   updateRangeGroup,
 } from '@/lib/api'
@@ -230,6 +231,17 @@ export function OrgPage(): React.ReactNode {
       id: string
       body: { name: string; roles: { role_id: string; default: boolean }[] }
     }) => updateOrgPosition(input.id, input.body, owner),
+    onSuccess: async () => {
+      setFailure(undefined)
+      await refresh()
+    },
+    onError: say,
+  })
+
+  // WP174：岗位上级（下拉一改就存，写事件在服务端）
+  const supervise = useMutation({
+    mutationFn: (input: { id: string; person_id: string | null }) =>
+      setOrgPositionSupervisor(input.id, input.person_id, owner),
     onSuccess: async () => {
       setFailure(undefined)
       await refresh()
@@ -525,6 +537,12 @@ export function OrgPage(): React.ReactNode {
               }}
               onSaveRoles={(id, body) => {
                 update.mutate({ id, body })
+              }}
+              people={(members.data ?? [])
+                .filter((m) => m.left_at === undefined)
+                .map((m) => ({ person_id: m.person_id, name: m.name }))}
+              onSupervisor={(id, person_id) => {
+                supervise.mutate({ id, person_id })
               }}
               onDelete={(id) => {
                 drop.mutate(id)
