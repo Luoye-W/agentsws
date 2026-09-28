@@ -389,6 +389,11 @@ export interface OrgOptions {
   baseUrl?: string
   /** WP138：当前品牌的名字（「选范围」里「整个品牌」那一项显示它）；不给就说「整个品牌」。 */
   brandName?: () => string
+  /**
+   * WP174：上级离职时要去哪几个工作区把他手上的卡改派给老板（品牌各一个工作区，
+   * 审批总线是同一条）。不给就只看本工作区。
+   */
+  workspaceIds?: () => WorkspaceId[] | Promise<WorkspaceId[]>
 }
 
 export interface OrgAssembly {
@@ -407,6 +412,12 @@ export interface OrgAssembly {
    * 各自多了少了什么"的地方，在这边重算一遍等于把同一条规则写两份。
    */
   onRangeExpanded(e: RangeExpanded): void
+  /**
+   * WP174：有人离开工作区（移出成员 / 离职编排）之后调一次。他是哪几个岗位的上级，
+   * 那几个岗位的上级就清空（落回老板）、提醒老板重设，他手上还没批的「转上级」的卡改派给老板。
+   * 回清掉了哪几个岗位。
+   */
+  onMemberLeft(person_id: PersonId, by?: PersonId): Promise<string[]>
   close(): void
 }
 
@@ -873,9 +884,124 @@ export function createOrg(options: OrgOptions): OrgAssembly {
           loaded: roles.roles.get(r.role) !== undefined,
         })),
         holders: await holdersOf(p, people),
+        ...(p.supervisor_person_id === undefined
+          ? {}
+          : {
+              supervisor: {
+                person_id: p.supervisor_person_id,
+                name: await personName(p.supervisor_person_id),
+              },
+            }),
       })
     }
     return out
+  }
+
+  /**
+   * WP174：上级离开了工作区——清空、提醒老板、改派他手上的卡。
+   *
+   * 三件事的顺序有讲究：先清空（之后新来的卡立刻按老板走），再改派旧卡，最后发提醒。
+   * 提醒是一张 L3「只通知」卡（与品牌范围变了那张同一个形）：重设上级是老板自己的事，
+   * 不用他点头，但他得知道。`only` 给了就只处理这个人（离职那一刻），不给就把
+   * 所有已经不在工作区的上级一起扫掉（打开岗位页时兜一次底）。
+   */
+  const clearLeftSupervisors = async (by: PersonId, only?: PersonId): Promise<string[]> => {
+    const active = new Set(await memberIds())
+    const stale = backend
+      .positions()
+      .filter(
+        (p) =>
+          p.supervisor_person_id !== undefined &&
+          (only === undefined || p.supervisor_person_id === only) &&
+          !active.has(p.supervisor_person_id),
+      )
+    if (stale.length === 0) return []
+    const workspace = await identity.getWorkspace(workspace_id)
+    const owner = workspace?.owner_id
+    const byLeft = new Map<PersonId, StoredPosition[]>()
+    for (const p of stale) {
+      const left = p.supervisor_person_id as PersonId
+      const { supervisor_person_id: _gone, ...rest } = p
+      backend.putPosition(rest)
+      emit('position.supervisor_cleared', by, {
+        position_id: p.id,
+        previous: left,
+        reason: 'left_workspace',
+      })
+      byLeft.set(left, [...(byLeft.get(left) ?? []), p])
+    }
+    for (const [left, positions] of byLeft) {
+      const leftName = await personName(left)
+      const names = positions.map((p) => `「${p.name.zh}」`).join('、')
+      // 他手上还没批的「转上级」的卡 → 各自工作区的老板
+      const spaces = (await options.workspaceIds?.()) ?? [workspace_id]
+      let moved = 0
+      for (const ws of spaces) {
+        const wsOwner = (await identity.getWorkspace(ws))?.owner_id ?? owner
+        if (wsOwner === undefined || wsOwner === left || approvals.reroute === undefined) continue
+        const cards = await approvals.queue({ workspace_id: ws, person_id: left, lane: 'mine' })
+        for (const card of cards) {
+          const mine = card.routing.recipients.find((r) => r.person === left)
+          if (mine?.via !== 'scope_manager') continue
+          const done = await approvals.reroute(card.id, {
+            from: left,
+            to: wsOwner,
+            via: 'owner',
+            reason: `上级${leftName}已经离开工作区，改派给老板${await personName(wsOwner)}`,
+          })
+          if (done !== undefined) moved += 1
+        }
+      }
+      if (owner === undefined) continue
+      const summary = `${leftName}离开了工作区，他是${names}岗位的上级。这几个岗位现在没有上级，超授权的审批先落到你；${moved === 0 ? '' : `他手上还没批的 ${moved} 张卡已经改派给你。`}想换人就去「公司 → 岗位」重设上级。`
+      try {
+        await approvals.create({
+          workspace_id,
+          schema_version: 1,
+          kind: 'policy_change',
+          role_id: 'common.owner',
+          subject: { object: { type: 'policy', id: `position_supervisor:${left}` } },
+          dedupe_key: `${workspace_id}:supervisor_left:${left}`,
+          title: `${names}岗位的上级空了`,
+          summary,
+          payload: {
+            target: 'position_supervisor',
+            positions: positions.map((p) => p.id),
+            previous: left,
+            rerouted: moved,
+          },
+          evidence: {
+            source_events: [],
+            diff: { before: { supervisor: leftName }, after: { supervisor: null }, summary },
+            provenance: { seen: [] },
+            precheck: { permission_diff: 'ok', semantic_diff: 'ok' },
+          },
+          proposer: { kind: 'system', id: 'org.supervisor' },
+          // L3 = 只通知：重设上级是老板自己的事，不用他点头
+          automation: {
+            level_at_creation: 'L3',
+            auto_approved: true,
+            mandate_check: { within: true, caps_hit: [] },
+            sampling: { selected: false },
+          },
+          routing: {
+            recipients: [{ person: owner, via: 'owner' }],
+            rule: 'owner',
+            escalation: {
+              after_hours: 48,
+              business_hours: true,
+              chain: ['owner'],
+              escalated_at: [],
+            },
+            separation_of_duties: false,
+          },
+          priority: 'queue',
+        })
+      } catch {
+        // 发不出提醒不该把已经清空的上级回滚——事件已经记上了
+      }
+    }
+    return stale.map((p) => p.id)
   }
 
   const policyView = (): WorkspacePolicyView => {
@@ -1097,9 +1223,42 @@ export function createOrg(options: OrgOptions): OrgAssembly {
       })
     },
 
-    async positions(_actor) {
+    async positions(actor) {
       await reconcile()
+      // WP174 兜底：上级走了但没经过离职 / 移出那两条路（比如直接改了身份库）也清掉
+      await clearLeftSupervisors(actor.person_id)
       return positionViews()
+    },
+
+    async setPositionSupervisor(actor, id, input) {
+      await reconcile()
+      const existing = positionOf(id)
+      if (existing === undefined) throw ORG_ERROR('not_found', `没有这个岗位：${id}`)
+      const previous = existing.supervisor_person_id
+      if (input.person_id === null) {
+        const { supervisor_person_id: _gone, ...rest } = existing
+        backend.putPosition(rest)
+        if (previous !== undefined)
+          emit('position.supervisor_cleared', actor.person_id, {
+            position_id: id,
+            previous,
+            reason: 'manual',
+          })
+      } else {
+        if (!(await memberIds()).includes(input.person_id))
+          throw ORG_ERROR('invalid_input', '上级得是工作区里还在的人')
+        // 只动这一格：改上级不是改模板，版本号与来源都不变（05 §2 那条规矩管的是职责包）
+        backend.putPosition({ ...existing, supervisor_person_id: input.person_id })
+        if (previous !== input.person_id)
+          emit('position.supervisor_set', actor.person_id, {
+            position_id: id,
+            supervisor: input.person_id,
+            ...(previous === undefined ? {} : { previous }),
+          })
+      }
+      const found = (await positionViews()).find((p) => p.id === id)
+      if (found === undefined) throw ORG_ERROR('not_found', `没有这个岗位：${id}`)
+      return found
     },
 
     async createPosition(actor, input: PositionInput) {
@@ -1289,6 +1448,8 @@ export function createOrg(options: OrgOptions): OrgAssembly {
         person_id,
         revoked_assignments: active.length,
       })
+      // WP174：他是哪几个岗位的上级，就清空、提醒老板、改派他手上的卡
+      await clearLeftSupervisors(actor.person_id, person_id)
       return { revoked_assignments: active.length }
     },
 
@@ -1582,6 +1743,7 @@ export function createOrg(options: OrgOptions): OrgAssembly {
     port,
     positions: () => backend.positions(),
     onRangeExpanded,
+    onMemberLeft: (person_id, by) => clearLeftSupervisors(by ?? 'system', person_id),
     close() {
       backend.close()
     },

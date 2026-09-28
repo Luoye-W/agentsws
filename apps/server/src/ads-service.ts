@@ -33,11 +33,13 @@ import type {
   Mandate,
   ObjectRef,
   ProvenanceState,
+  Recipient,
   WorkspaceId,
 } from '@agentsws/contracts'
 import { ADS_DEFAULT_CAPS, adsPlatformOfRole } from '@agentsws/contracts'
 import type { StageInput, StageOutcome } from '@agentsws/txn'
 import type { AdsStore } from './ads.js'
+import { recipientOf, type ScopeManagerRouter } from './supervisor.js'
 
 export interface AdsServiceOptions {
   workspace_id: WorkspaceId
@@ -49,6 +51,11 @@ export interface AdsServiceOptions {
   effectiveConfig(id: AssignmentId): EffectiveConfig
   appendEvent(e: Omit<EventEnvelope, 'id' | 'at'> & { at?: string }): void
   random(): number
+  /**
+   * WP174：`scope_manager` 的卡落到谁（岗位上级 → 老板，`./supervisor.ts`）。
+   * 不给就照旧落在提的人自己身上（单测与没装公司页的进程）。
+   */
+  routeScopeManager?: ScopeManagerRouter
 }
 
 export interface AdsServiceAssembly {
@@ -168,6 +175,21 @@ export function createAdsService(options: AdsServiceOptions): AdsServiceAssembly
     }
   }
 
+  /** WP174：`scope_manager` 的卡按岗位上级走；别的规则照旧落在提的人身上。 */
+  const recipientFor = async (
+    actor: AdsActor,
+    rule: 'role_holder' | 'scope_manager' | 'owner',
+  ): Promise<Recipient> =>
+    rule === 'scope_manager' && options.routeScopeManager !== undefined
+      ? recipientOf(
+          await options.routeScopeManager({
+            workspace_id: options.workspace_id,
+            role_id: actor.role_id,
+            proposer: actor.person_id,
+          }),
+        )
+      : { person: actor.person_id, via: rule }
+
   /** 一条 staged change 的共用那一段（提上去 → 翻成视图）。 */
   const stageOne = async (input: {
     actor: AdsActor
@@ -227,7 +249,7 @@ export function createAdsService(options: AdsServiceOptions): AdsServiceAssembly
         title: input.title,
         // 总闸那句话也进摘要：人点头之前要看得见今天还剩多少
         summary: `${input.summary}｜${gate.reason}`,
-        recipients: [{ person: input.actor.person_id, via: input.rule }],
+        recipients: [await recipientFor(input.actor, input.rule)],
         proposer: {
           kind: 'person',
           id: input.actor.person_id,

@@ -46,6 +46,7 @@ import type {
   ExportShipment,
   Mandate,
   PersonId,
+  Recipient,
   TradeShow,
   TradeShowLead,
   WorkspaceId,
@@ -55,6 +56,7 @@ import type { B2bDeckData } from '@agentsws/deck'
 import type { BackendResult, StageInput, StageOutcome } from '@agentsws/txn'
 import { addressHash, type B2bStore } from './b2b-store.js'
 import { maskAddress } from './mailbox-actions.js'
+import { recipientOf, type ScopeManagerRouter } from './supervisor.js'
 
 /** 每类对象提交时出哪一种卡、走职责 yml 里哪一个动作。 */
 export const B2B_ACTION_OF: Readonly<Record<B2bCollection, { kind: ChangeKind; action: string }>> =
@@ -120,6 +122,11 @@ export interface B2bServiceOptions {
   owner(): Promise<PersonId | undefined>
   /** 这个人所在部门的负责人（报价超授权先转他）。不给 / 回空 = 没有上级，转老板。 */
   scopeManager?(person_id: PersonId): PersonId | undefined
+  /**
+   * WP174：`scope_manager` 的卡落到谁（岗位上级 → 老板，`./supervisor.ts`）。
+   * 给了就以它为准（`scopeManager` 不再看）；服务进程里装的是这一个。
+   */
+  routeScopeManager?: ScopeManagerRouter
 }
 
 export interface B2bServiceAssembly {
@@ -388,15 +395,32 @@ export function createB2bService(options: B2bServiceOptions): B2bServiceAssembly
           DEFAULT_B2B_QUOTE_MANDATE.max_payment_terms_days,
         ),
       })
-      approver = quoteApprover(breaches, manager !== undefined)
+      // 有路由口：超了就先当「转上级」，真落到谁（上级 / 老板）由路由口说了算
+      approver = quoteApprover(
+        breaches,
+        options.routeScopeManager !== undefined || manager !== undefined,
+      )
     }
     const owner = (await options.owner()) ?? actor.person_id
-    const person: PersonId =
-      approver === 'role_holder'
-        ? actor.person_id
-        : approver === 'scope_manager'
-          ? (manager ?? owner)
-          : owner
+    let recipient: Recipient
+    if (approver === 'scope_manager' && options.routeScopeManager !== undefined) {
+      recipient = recipientOf(
+        await options.routeScopeManager({
+          workspace_id,
+          role_id: actor.role_id,
+          proposer: actor.person_id,
+        }),
+      )
+      approver = recipient.via === 'owner' ? 'owner' : 'scope_manager'
+    } else {
+      const person: PersonId =
+        approver === 'role_holder'
+          ? actor.person_id
+          : approver === 'scope_manager'
+            ? (manager ?? owner)
+            : owner
+      recipient = { person, via: approver }
+    }
     const title = titleOf(d)
     const summary =
       kind === 'b2b_quote'
@@ -433,7 +457,7 @@ export function createB2bService(options: B2bServiceOptions): B2bServiceAssembly
       approval: {
         title,
         summary,
-        recipients: [{ person, via: approver }],
+        recipients: [recipient],
         proposer: { kind: 'person', id: actor.person_id, assignment_id: actor.assignment_id },
         rule: approver,
         // 业务员批自己那张（授权内的报价）不算"一人既提又批"：卡是它自己起草、自己点头的日常

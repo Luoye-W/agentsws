@@ -5,6 +5,7 @@ import type {
   ApprovalState,
   DecideInput,
   Diff,
+  Recipient,
   Todo,
 } from '@agentsws/contracts'
 import { projectCard, resolveDecision } from '@agentsws/deck'
@@ -348,10 +349,30 @@ export function approvalRoutes(): Route[] {
         const p = principalOf(c)
         const assignment = assignmentOf(c)
         const input = await body(c, CreateBody)
-        // 收件人不给就是本人（个人档最常见的那种：自己给自己提一条待办式的卡）
-        const recipients =
-          input.routing?.recipients ?? ([{ person: p.person_id, via: 'role_holder' }] as const)
+        // 收件人不给就是本人（个人档最常见的那种：自己给自己提一条待办式的卡）；
+        // WP174：给了 `rule: 'scope_manager'` 却没给收件人 → 岗位上级 → 老板
         const rule = input.routing?.rule ?? 'role_holder'
+        const routed =
+          input.routing?.recipients === undefined &&
+          rule === 'scope_manager' &&
+          deps.routeScopeManager !== undefined
+            ? await deps.routeScopeManager({
+                workspace_id: p.workspace_id,
+                role_id: assignment.role_id,
+                proposer: p.person_id,
+              })
+            : undefined
+        const recipients: readonly Recipient[] =
+          input.routing?.recipients ??
+          (routed === undefined
+            ? [{ person: p.person_id, via: 'role_holder' }]
+            : [
+                {
+                  person: routed.person,
+                  via: routed.via,
+                  ...(routed.reason === undefined ? {} : { reason: routed.reason }),
+                },
+              ])
         const created = await deps.approvals.create({
           workspace_id: p.workspace_id,
           schema_version: 1,

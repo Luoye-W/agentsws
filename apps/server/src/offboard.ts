@@ -201,6 +201,11 @@ export interface OffboardOptions {
   schedule?: ScheduleStore
   /** 给了就落盘（`offboard.sqlite`）；不给就纯内存。 */
   dbDir?: string
+  /**
+   * WP174：人移出工作区之后调（公司页的 `onMemberLeft`）：他当上级的岗位清空、提醒老板、
+   * 他手上还没批的「转上级」的卡改派给老板。不给就跳过——新卡照样按老板走（路由会看他还在不在）。
+   */
+  onLeft?(person_id: PersonId, by: PersonId): Promise<unknown>
 }
 
 export interface Offboard {
@@ -369,6 +374,10 @@ export function createOffboard(options: OffboardOptions): Offboard {
   /**
    * 05 §3：没有指定接手人时，按他每条职责的 `handover.fallback` 兜底。
    * v1 单工作区里 `scope_manager` 与 `owner` 都落到 owner 身上（14 §7 升级链同一条道理）。
+   *
+   * WP174 之后**审批**的 `scope_manager` 有了真的人（岗位上级，`./supervisor.ts`）；这里管的是
+   * **接手在办的事**，仍落 owner——把一个离职业务员的全部在办事项默默压给他的上级，
+   * 是一件该由老板点名的事（离职单上本来就能指定接手人）。
    */
   const fallbackSuccessor = async (person: PersonId): Promise<PersonId> => {
     const workspace = await options.identity.getWorkspace(workspace_id)
@@ -480,6 +489,12 @@ export function createOffboard(options: OffboardOptions): Offboard {
         steps.push({ step: 'revoke', status: 'done', counts: { assignments: active.length } })
       } catch (e) {
         steps.push({ step: 'revoke', status: 'failed', error: messageOf(e) })
+      }
+      // WP174：他是哪几个岗位的上级 → 清空、提醒老板、改派卡。挂了不影响离职本身
+      try {
+        await options.onLeft?.(input.person_id, actor)
+      } catch {
+        // 路由会看上级还在不在：没清成，新卡照样按老板走
       }
 
       // ② 真转：在办事项 / 未完待办 / 他建的定时任务与流程实例
