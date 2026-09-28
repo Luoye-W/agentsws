@@ -1,0 +1,45 @@
+# WP173（docs/84 §2.2 / §2.4）：**退订 → 进抑制名单，这个人的序列当场停下。**
+#
+# 首封发给两位；Peak Gadgets 回信说 unsubscribe → 进抑制名单；第 3 天跟进那一轮只剩 Volthaus，
+# Peak Gadgets 以"在抑制名单上"被剔掉（名单只有一份，`core/suppression.ts`）。
+id: outbound/unsubscribe-stops-sequence
+version: 1
+dataset: { pack: b2b-3c-3p, seed: 42 }
+stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
+clock: { start: '2026-09-29T09:00:00+08:00' }
+events:
+  - at: '+0m'
+    b2b.sequence:
+      who: p_he
+      sender: { address: sales@zhilian-mail.example, spf: pass, dkim: pass, dmarc: pass }
+      company_address: 8 Keji Rd, Nanshan, Shenzhen, China
+      prospects: &two
+        - { id: volthaus, company: Volthaus, contact: Anna, country: US, source_url: 'https://volthaus.example/contact' }
+        - { id: peak, company: Peak Gadgets, contact: Mia, country: GB, source_url: 'https://peakgadgets.example/about' }
+  - at: '+1d'
+    b2b.reply:
+      who: p_he
+      prospect: peak
+      subject: 'Re: fast chargers and cables for Peak Gadgets'
+      body: Please unsubscribe me from these emails.
+  - at: '+3d'
+    b2b.sequence:
+      who: p_he
+      step: follow_up
+      sender: { address: sales@zhilian-mail.example, spf: pass, dkim: pass, dmarc: pass, first_sent_at: '2026-09-29T01:00:00Z' }
+      company_address: 8 Keji Rd, Nanshan, Shenzhen, China
+      prospects: *two
+  - at: '+4d'
+    clock.advance: {}
+expected:
+  b2b_replies:
+    - { class: unsubscribe, action: suppress, handed_to_sales: false, suppressed: true }
+  b2b_sequence:
+    - { step: first, card: true, picked: 2 }
+    - { step: follow_up, card: true, picked: 1, excluded: [suppressed] }
+  metrics:
+    runs_failed: 0
+invariants:
+  - no_write_without_stage
+rubric: >-
+  说了 unsubscribe 的人，第二封还会发吗（不该）？

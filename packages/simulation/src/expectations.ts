@@ -1467,6 +1467,86 @@ export function checkExpectations(
     add('b2b', problems.length === 0, problems.length === 0 ? seen.join('；') : problems.join('；'))
   }
   /*
+   * WP173 / docs/84 §2：开发信那几轮，**按出现顺序一条对一条**。读的是真事件
+   * （`simulation.b2b_sequence`）：谁被剔掉、今天几封、排到明天几封是 `b2b-core` 算的，
+   * 拦下来的规则名是 guardrail 的 hit 名。
+   */
+  if (expected.b2b_sequence !== undefined) {
+    const rounds = evidence.events.filter((e) => e.type === 'simulation.b2b_sequence')
+    const problems: string[] = []
+    const seen: string[] = []
+    const numOk = (want: number | string | undefined, got: unknown): boolean =>
+      want === undefined || Number(want) === Number(got)
+    expected.b2b_sequence.forEach((want, i) => {
+      const got = rounds[i]
+      const tag = `第 ${i + 1} 轮`
+      if (got === undefined) {
+        problems.push(`${tag}：没有发生`)
+        return
+      }
+      const p = payloadOf(got)
+      seen.push(
+        `${String(p.step)}：${p.card === true ? `出卡 ${String(p.picked)} 封` : '没出卡'}，排明天 ${String(p.queued_tomorrow)}`,
+      )
+      if (want.step !== undefined && String(p.step) !== want.step)
+        problems.push(`${tag}：实际是 ${String(p.step)}`)
+      if (want.card !== undefined && (p.card === true) !== want.card)
+        problems.push(want.card ? `${tag}：该出一张卡却没出` : `${tag}：不该出卡`)
+      if (!numOk(want.picked, p.picked)) problems.push(`${tag}：进卡 ${String(p.picked)} 封`)
+      if (!numOk(want.queued_tomorrow, p.queued_tomorrow))
+        problems.push(`${tag}：排明天 ${String(p.queued_tomorrow)} 封`)
+      const excluded = Array.isArray(p.excluded) ? p.excluded.map(String) : []
+      for (const r of want.excluded ?? [])
+        if (!excluded.includes(r))
+          problems.push(`${tag}：没剔出 ${r}（实际 ${excluded.join('、') || '无'}）`)
+      if (want.level !== undefined && String(p.level) !== want.level)
+        problems.push(`${tag}：卡落 ${String(p.level)}，不合期望 ${want.level}`)
+      const rules = Array.isArray(p.rules) ? p.rules.map(String) : []
+      for (const r of want.blocked_rules ?? [])
+        if (!rules.includes(r))
+          problems.push(`${tag}：没拦出 ${r}（实际 ${rules.join('、') || '无'}）`)
+    })
+    add(
+      'b2b_sequence',
+      problems.length === 0,
+      problems.length === 0 ? seen.join('；') : problems.join('；'),
+    )
+  }
+  /* WP173 / docs/84 §2.2：回开发信的那几封——分类、停序列、转业务 / 进名单。 */
+  if (expected.b2b_replies !== undefined) {
+    const replies = evidence.events.filter((e) => e.type === 'simulation.b2b_reply')
+    const problems: string[] = []
+    const seen: string[] = []
+    expected.b2b_replies.forEach((want, i) => {
+      const got = replies[i]
+      const tag = `第 ${i + 1} 封回信`
+      if (got === undefined) {
+        problems.push(`${tag}：没有发生`)
+        return
+      }
+      const p = payloadOf(got)
+      seen.push(`${String(p.class)} → ${String(p.action)}`)
+      if (want.class !== undefined && String(p.class) !== want.class)
+        problems.push(`${tag}：分成了 ${String(p.class)}`)
+      if (want.action !== undefined && String(p.action) !== want.action)
+        problems.push(`${tag}：处理成了 ${String(p.action)}`)
+      if (
+        want.handed_to_sales !== undefined &&
+        (p.handed_to_sales === true) !== want.handed_to_sales
+      )
+        problems.push(want.handed_to_sales ? `${tag}：该交给业务却没交` : `${tag}：不该交给业务`)
+      if (want.suppressed !== undefined && (p.suppressed === true) !== want.suppressed)
+        problems.push(want.suppressed ? `${tag}：该进抑制名单却没进` : `${tag}：不该进抑制名单`)
+      if (want.routed_to !== undefined && String(p.routed_to) !== want.routed_to)
+        problems.push(`${tag}：交给了 ${String(p.routed_to)}，不合期望 ${want.routed_to}`)
+    })
+    add(
+      'b2b_replies',
+      problems.length === 0,
+      problems.length === 0 ? seen.join('；') : problems.join('；'),
+    )
+  }
+  /*
    * WP171 / docs/84 §11.3：改收款账户的那封信 → 红卡，信里的账户不采纳。
    */
   if (expected.b2b_fraud !== undefined) {

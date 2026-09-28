@@ -202,3 +202,54 @@ export function parseModelDraft(text: string): { subject: string; body: string }
   if (subject === '' || body.length < 40 || body.length > 3000) return undefined
   return { subject, body }
 }
+
+/**
+ * 一批开发信的改动卡 `after`（`b2b_outreach`）：guardrail 认的那几格摆在顶层。服务进程与模拟世界
+ * **同一个函数拼**——模拟测的就是真卡长什么样，不是它自己拼的一份。
+ */
+export function outreachBatchAfter(input: {
+  step: B2bSequenceStep
+  batch_id: string
+  sender: {
+    address: string
+    separate_domain: boolean
+    auth: { spf: string; dkim: string; dmarc: string }
+  }
+  emails: readonly { subject: string; body: string }[]
+  /** 收件人的地址哈希（与抑制名单同一口径）。 */
+  recipients: readonly string[]
+  suppressed: readonly string[]
+  /** 页脚加得上（公司地址有）。 */
+  footer: boolean
+  contacts_missing_source: number
+  /** 没有往来的那几位的国家（德奥那一格看它）。 */
+  countries: readonly string[]
+  de_at_confirmed: boolean
+  /** 附带给执行器的（每封给谁、哪条序列）。 */
+  extra?: Record<string, unknown>
+}): Record<string, unknown> {
+  return {
+    step: input.step,
+    batch_id: input.batch_id,
+    sender: input.sender.address,
+    count: input.emails.length,
+    ...input.extra,
+    subject: input.emails[0]?.subject ?? '',
+    body: input.emails.map((m) => `${m.subject}\n${m.body}`).join('\n\n---\n\n'),
+    recipients: [...input.recipients],
+    suppressed: [...input.suppressed],
+    suppression_checked: true,
+    footer_unsubscribe: input.footer,
+    footer_address: input.footer,
+    contacts_missing_source: input.contacts_missing_source,
+    sender_auth: {
+      spf: input.sender.auth.spf,
+      dkim: input.sender.auth.dkim,
+      dmarc: input.sender.auth.dmarc,
+    },
+    shared_sending_domain: !input.sender.separate_domain,
+    countries: [...input.countries],
+    de_at_confirmed: input.de_at_confirmed,
+    existing_relationship: input.countries.length === 0,
+  }
+}

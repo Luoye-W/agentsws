@@ -689,6 +689,50 @@ export interface ScenarioB2bInbound {
   body: string
 }
 
+/**
+ * WP173（docs/84 §2）：开一轮开发信（首封批量一张卡）或到点的跟进 / 收尾。
+ *
+ * 场景只递**发信邮箱的体检结果、名单与今天发过几封**；筛人（德奥默认不发）、预热配额、
+ * 模板与页脚、卡的 `after` 全走 `@agentsws/b2b-core` 与服务进程同一套函数，能不能提由 guardrail 判。
+ */
+export interface ScenarioB2bSequence {
+  who: string
+  step?: 'first' | 'follow_up' | 'final'
+  sender: {
+    address: string
+    separate_domain?: boolean
+    spf?: string
+    dkim?: string
+    dmarc?: string
+    /** 第一次从这只邮箱发开发信的时间（预热从这天算；不给 = 今天是第一天）。 */
+    first_sent_at?: string
+    /** 今天已经发过几封。 */
+    sent_today?: number
+  }
+  /** 页脚上的公司实体地址（不给 = 没填）。 */
+  company_address?: string
+  de_at_confirmed?: boolean
+  prospects: {
+    id: string
+    company: string
+    contact: string
+    country?: string
+    source_url?: string
+    /** 有往来（回过信 / 询过盘 / 在谈）。 */
+    existing?: boolean
+    public_source?: boolean
+  }[]
+}
+
+/** WP173：回开发信的一封信（分类 → 停序列 / 转业务 / 进名单）。 */
+export interface ScenarioB2bReply {
+  who: string
+  /** 回的是名单上哪一位（`ScenarioB2bSequence.prospects[].id`）。 */
+  prospect: string
+  subject: string
+  body: string
+}
+
 /* ── WP78（60）：公共关系那三件事 ──────────────────────────────────── */
 
 /**
@@ -923,6 +967,10 @@ export type ScenarioEvent =
   | { at: string; type: 'b2b.propose'; b2b_propose: ScenarioB2bPropose }
   /** WP171：收一封 B2B 的信（改收款账户 → 红卡，docs/84 §11.3）。 */
   | { at: string; type: 'b2b.inbound'; b2b_inbound: ScenarioB2bInbound }
+  /** WP173：开一轮开发信 / 到点的跟进（docs/84 §2）。 */
+  | { at: string; type: 'b2b.sequence'; b2b_sequence: ScenarioB2bSequence }
+  /** WP173：回开发信的一封（docs/84 §2.2）。 */
+  | { at: string; type: 'b2b.reply'; b2b_reply: ScenarioB2bReply }
   /** WP78：在别人的社区里提一条帖子（60 §1，**永远 L1** + 版规 + 冷却）。 */
   | { at: string; type: 'pr.external_post'; external_post: ScenarioPrExternalPost }
   /** WP67：起草并提一封开发信（48 §5.1，禁承诺由 guardrail 拦）。 */
@@ -1499,6 +1547,28 @@ export interface ScenarioExpected {
     routed_to?: string
     auto_approved?: boolean
     stated_on_card?: boolean
+  }[]
+  /**
+   * WP173（docs/84 §2）：开发信那几轮，**按出现顺序**一条对一条（读 `simulation.b2b_sequence`）。
+   * `excluded` = 被剔掉的原因（`de_at` / `suppressed` …），得全在里面。
+   */
+  b2b_sequence?: {
+    step?: string
+    card?: boolean
+    picked?: number | string
+    queued_tomorrow?: number | string
+    excluded?: string[]
+    level?: string
+    /** 卡被 guardrail 拦下的规则名（`sender_auth` …）。 */
+    blocked_rules?: string[]
+  }[]
+  /** WP173（docs/84 §2.2）：回开发信的那几封，按出现顺序（读 `simulation.b2b_reply`）。 */
+  b2b_replies?: {
+    class?: string
+    action?: string
+    handed_to_sales?: boolean
+    suppressed?: boolean
+    routed_to?: string
   }[]
   /** WP171（docs/84 §11.3）：改收款账户的那封信。 */
   b2b_fraud?: {

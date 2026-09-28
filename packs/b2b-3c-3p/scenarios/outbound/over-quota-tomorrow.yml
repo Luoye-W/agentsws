@@ -1,0 +1,42 @@
+# WP173（docs/84 §11.1 第 5 条）：**配额按发信邮箱算，超了排到明天。**
+#
+# 这只发信邮箱今天是预热期第一天（每天 20 封），已经发了 18 封；这一轮五位 → 只进 2 封，
+# 3 位排到明天。第二天（配额回来了）再走一遍：已在序列里的两位不重发，排着的 3 位进新的一张卡。
+id: outbound/over-quota-tomorrow
+version: 1
+dataset: { pack: b2b-3c-3p, seed: 42 }
+stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
+clock: { start: '2026-09-29T16:00:00+08:00' }
+events:
+  - at: '+0m'
+    b2b.sequence:
+      who: p_he
+      sender: { address: sales@zhilian-mail.example, spf: pass, dkim: pass, dmarc: pass, sent_today: 18 }
+      company_address: 8 Keji Rd, Nanshan, Shenzhen, China
+      prospects: &five
+        - { id: volthaus, company: Volthaus, contact: Anna, country: US, source_url: 'https://volthaus.example/contact' }
+        - { id: peak, company: Peak Gadgets, contact: Mia, country: GB, source_url: 'https://peakgadgets.example/about' }
+        - { id: maple, company: Maple Mobile, contact: Sam, country: AU, source_url: 'https://maplemobile.example/team' }
+        - { id: lumen, company: Lumen Retail, contact: Ivy, country: US, source_url: 'https://lumenretail.example/buyers' }
+        - { id: kiwi, company: Kiwi Charge, contact: Tom, country: NZ, source_url: 'https://kiwicharge.example/contact' }
+  - at: '+17h'
+    b2b.sequence:
+      who: p_he
+      sender: { address: sales@zhilian-mail.example, spf: pass, dkim: pass, dmarc: pass, first_sent_at: '2026-09-29T08:00:00Z', sent_today: 0 }
+      company_address: 8 Keji Rd, Nanshan, Shenzhen, China
+      prospects: *five
+  - at: '+18h'
+    clock.advance: {}
+expected:
+  b2b_sequence:
+    - { step: first, card: true, picked: 2, queued_tomorrow: 3 }
+    - { step: first, card: true, picked: 3, queued_tomorrow: 0, excluded: [in_sequence] }
+  staged_change_kinds: [b2b_outreach, b2b_outreach]
+  event_types:
+    - simulation.b2b_sequence
+  metrics:
+    runs_failed: 0
+invariants:
+  - no_write_without_stage
+rubric: >-
+  面板上看得出"今天配额满了，3 位明天发"吗？第二天是不是没有重发昨天那两位？

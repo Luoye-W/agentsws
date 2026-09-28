@@ -1,0 +1,35 @@
+# WP173（docs/84 §2.3 / §11.1 第 4 条）：**SPF 或 DKIM 没过不发**（送达前提，不是二选一）。
+#
+# 发信邮箱的 SPF 没过（DNS 里 SPF 有两条）。卡递到 guardrail 那道门——`sender_auth` block，
+# 一封都没出去。服务进程里这一步更早就停了（体检没过的序列排着、不出卡）；模拟这里特意
+# 把卡递上去，钉住"最后那道闸也在"。
+id: outbound/spf-fail-no-send
+version: 1
+dataset: { pack: b2b-3c-3p, seed: 42 }
+stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
+clock: { start: '2026-09-29T09:00:00+08:00' }
+events:
+  - at: '+0m'
+    b2b.sequence:
+      who: p_he
+      sender: { address: sales@zhilian-mail.example, spf: fail, dkim: pass, dmarc: pass }
+      company_address: 8 Keji Rd, Nanshan, Shenzhen, China
+      prospects:
+        - { id: volthaus, company: Volthaus, contact: Anna, country: US, source_url: 'https://volthaus.example/contact' }
+  - at: '+1h'
+    clock.advance: {}
+expected:
+  b2b_sequence:
+    - { step: first, card: false, blocked_rules: [sender_auth] }
+  b2b:
+    - kind: b2b_outreach
+      blocked: true
+      rules: [sender_auth]
+  event_types:
+    - simulation.b2b_blocked
+  metrics:
+    runs_failed: 0
+invariants:
+  - no_write_without_stage
+rubric: >-
+  卡上 / 面板上有没有说清"SPF 没过，没过不发"，并指到怎么配？
