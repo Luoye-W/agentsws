@@ -173,7 +173,9 @@ describe('WP181 官方「自动化任务」', () => {
     await backend.deselect(SCHEDULE)
     const out = await s.schedule.scheduler.runNow(task?.id ?? '')
     expect(out.result).toEqual({ skipped: 'plugin_off' })
-    expect(s.work.matterView(matter_id).timeline.some((e) => e.text.startsWith('到点了'))).toBe(false)
+    expect(s.work.matterView(matter_id).timeline.some((e) => e.text.startsWith('到点了'))).toBe(
+      false,
+    )
     expect(tasks()).toHaveLength(1)
   })
 })
