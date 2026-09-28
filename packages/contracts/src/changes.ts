@@ -363,6 +363,12 @@ export type ChangeKind =
   | 'marketplace_listing'
   /** 平台上改出价、预算、开直通车。花钱口子，**永远人审**（`HARD_L1`，同投放）。 */
   | 'marketplace_spend'
+  /**
+   * WP172：B2B 库里新建 / 修改一条记录（客户、联系人、商机、展会、展会线索、出运单）。
+   * 报价、样品、名单导入另有自己的 kind；这一条管的是"没有钱、不对外发信"的那几类。
+   * L1 起；联系人没写来源 → block（GDPR 第 14 条）。
+   */
+  | 'b2b_record'
 
 export type ChangeStatus =
   | 'staged'

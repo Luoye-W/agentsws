@@ -33,6 +33,14 @@ connectors:
   - { kind: business_card_scan, required: false, grants: [read], ownership: workspace }
 
 actions:
+  # WP172：B2B 库里建 / 改一条展会与展会线索——读不经卡，写都经卡（L1 起）
+  - id: stage_b2b_record
+    target: trade_show_lead
+    kind: staged_change
+    mandate:
+      caps: {}
+      window: { max_count: 200, per: day }
+    route_to: role_holder
   # 报名与缴费：一笔钱，永远人审
   - id: stage_trade_show_registration
     target: trade_show
@@ -71,6 +79,11 @@ actions:
     route_to: role_holder
 
 automation:
+  stage_b2b_record:
+    ceiling: L2
+    initial: L1
+    promotion: { adoption_rate_min: 0.95, window_weeks: 4, min_samples: 30 }
+    demotion_triggers: [guardrail_hit, manual]
   stage_trade_show_registration:
     ceiling: L1
     initial: L1

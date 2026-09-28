@@ -42,8 +42,8 @@ export type MessageSource = 'email' | 'chat'
  * - `support` / `kol` **只在对应岗位启用时**才可能出现（63 §4）：没开客服岗位的
  *   工作区里，一封客户投诉照样只是 `inbox` 里打了标签的一封信。
  * - `inbox` = 留在收件箱，**不挪**。这是绝大多数信的归宿，也是默认值。
- * - `b2b`（WP161 预留，Luoye 09-27）：B2B 岗位接上之前**分拣器不产出它**——
- *   `allowRoute` 会把它降回 `inbox`。先占住名字，免得那张单来时改契约。
+ * - `b2b`（WP161 预留，WP172 接上）：只在 **B2B 岗位开着、且这只邮箱的「收 B2B 信」开关开着**
+ *   时出现（docs/84 §5）；否则 `allowRoute` 把它降回 `inbox`。
  */
 export type MessageRoute = 'inbox' | 'support' | 'kol' | 'b2b'
 
@@ -124,7 +124,7 @@ export type MessageFolderKind =
 export const SUPPORT_FOLDER = 'KefuAgents'
 /** 红人营销岗位的归档文件夹。 */
 export const KOL_FOLDER = 'KOLAgents'
-/** B2B 岗位的归档文件夹（WP161 预留；B2B 岗位的那张单接上分拣之后才会往里挪信）。 */
+/** B2B 岗位的归档文件夹（WP161 预留，WP172 起判成 B2B 的信挪进这里）。 */
 export const BTOBAGENTS_FOLDER = 'BtoBAgents'
 /** 与上面三个同值的老产品叫法（读代码的人照老产品的名字也搜得到）。 */
 export const KEFUAGENTS_FOLDER = SUPPORT_FOLDER
@@ -409,7 +409,8 @@ export interface MessageMoveInput {
  * - `inbox`：「不是」→ 只记人的判断，信留在收件箱，不再挂在「待确认」里。
  */
 export interface MessageConfirmRouteInput {
-  route: 'support' | 'kol' | 'inbox'
+  /** WP172：`b2b` =「这是 B2B」→ 交给 B2B 那一路（落成询盘 / 往来记录），再挪进 `BtoBAgents`。 */
+  route: 'support' | 'kol' | 'b2b' | 'inbox'
 }
 
 /** 人工分拣的结果：交没交出去（客服岗位没开 / 客服那一路不接 = `false`，信不动）。 */

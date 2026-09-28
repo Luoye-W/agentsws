@@ -40,6 +40,14 @@ connectors:
   - { kind: customs_data, required: false, grants: [read], ownership: workspace }
 
 actions:
+  # WP172：B2B 库里建 / 改一条联系人与客户（公司）——读不经卡，写都经卡（L1 起）
+  - id: stage_b2b_record
+    target: b2b_contact
+    kind: staged_change
+    mandate:
+      caps: {}
+      window: { max_count: 200, per: day }
+    route_to: role_holder
   # 每一轮序列的首封：一批一张卡（一次看完这一批）
   - id: stage_b2b_outreach
     target: b2b_contact
@@ -59,6 +67,11 @@ actions:
     route_to: scope_manager
 
 automation:
+  stage_b2b_record:
+    ceiling: L2
+    initial: L1
+    promotion: { adoption_rate_min: 0.95, window_weeks: 4, min_samples: 30 }
+    demotion_triggers: [guardrail_hit, manual]
   stage_b2b_outreach:
     ceiling: L2
     initial: L1

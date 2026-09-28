@@ -39,6 +39,7 @@ export const B2B_GUARDED_KINDS: ReadonlySet<ChangeKind> = new Set<ChangeKind>([
   'payment_instruction',
   'marketplace_listing',
   'marketplace_spend',
+  'b2b_record',
 ])
 
 /**
@@ -206,6 +207,19 @@ export function evaluateB2bChange(
           'fact_card',
           String(after.account_matches_fact_card ?? 'unchecked'),
         )
+      break
+    }
+    case 'b2b_record': {
+      // WP172：联系人没写"从哪来的"不许进库（GDPR 第 14 条，docs/84 §2.4）
+      if (after.collection === 'b2b_contact') {
+        const src = (after.record as Record<string, unknown> | undefined)?.source as
+          | Record<string, unknown>
+          | undefined
+        if (src === undefined || typeof src.kind !== 'string' || typeof src.observed_at !== 'string')
+          block('contact_source_required', 'source', 'missing')
+      }
+      // 出运单上没有"收款账户"那一格：备注里夹一串账户也不行（只认事实卡，§11.3）
+      accountOnlyFromFactCard(after, JSON.stringify(after.record ?? {}), block)
       break
     }
     default:

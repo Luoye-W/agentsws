@@ -34,6 +34,14 @@ connectors:
   - { kind: calendar, required: false, grants: [read, write], ownership: person }
 
 actions:
+  # WP172：B2B 库里建 / 改一条出运单（生产进度、船期、单证状态）——读不经卡，写都经卡（L1 起）
+  - id: stage_b2b_record
+    target: export_shipment
+    kind: staged_change
+    mandate:
+      caps: {}
+      window: { max_count: 200, per: day }
+    route_to: role_holder
   - id: stage_shipment_booking
     target: export_shipment
     kind: staged_change
@@ -72,6 +80,11 @@ actions:
     route_to: owner
 
 automation:
+  stage_b2b_record:
+    ceiling: L2
+    initial: L1
+    promotion: { adoption_rate_min: 0.95, window_weeks: 4, min_samples: 30 }
+    demotion_triggers: [guardrail_hit, manual]
   stage_shipment_booking:
     ceiling: L2
     initial: L1
