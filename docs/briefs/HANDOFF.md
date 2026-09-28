@@ -86,7 +86,8 @@
 | 61 | WP177 dsh 升级 0.1.7-rc.2 → 0.2.0-rc.1（照 docs/42 七步；大版本号，seam 逐个对；账号网页搜索默认关、自动化任务改插件包） | `WP177-dsh-0.2.0-rc.1.md` | `wp177-dsh-020` · `wp/177-dsh-020` | — | 已合并（09-29，Fable 终审：干净构建，234 文件 3540 条过（仅 RPC 噪声），三个模拟包 × 三运行时门禁过；桌面打包最后一步待有 vendor 时补跑） |
 | 62 | WP178 第 1 步部署事故复盘与修复（私有仓）：`run_worker_first` 数组 + SPA 回退吞掉接口 → 改 `true`、后台资源由 Worker 发；部署前 `smoke-workerd` 进 CI | 私有仓 `docs/briefs/WP178-assets-routing-outage.md` | 私有仓 `wp/178-assets` | WP168 | 已合并（09-29，私有仓 main `01f00dd`；Fable 终审：690 条过、smoke-workerd 44/44、四份 dry-run 过；未部署） |
 | 63 | WP179 官方功能优先：用官方网页搜索 / 抓网页（账号免 key）接进职责，逐行重判 profile 锁定（功能能开都开，真冲突保留，数据外发交 Luoye 定），docs/42 红线更新 | `WP179-deepseek-native-search.md` | `wp179-ds-search` · `wp/179-ds-search` | WP177 | 已合并（09-29，Fable 终审：干净构建，317 文件 4380 条过，三个模拟包 × 三运行时门禁过（dtc-3c-3p 65）） |
-| 64 | WP180 官方插件管理（装卸出卡 + 白名单 + 不许写回锁定行）与配置写回（只许写非锁定行）包一层后打开；每次运行带当前时间与公司时区 | `WP180-official-plugins-wrap.md` | `wp180-plugins` · `wp/180-plugins` | WP179 | 进行中（Claude） |
+| 64 | WP180 官方插件管理（装卸出卡 + 白名单 + 不许写回锁定行）与配置写回（只许写非锁定行）包一层后打开；每次运行带当前时间与公司时区 | `WP180-official-plugins-wrap.md` | `wp180-plugins` · `wp/180-plugins` | WP179 | 已合并（09-29，Fable 终审：干净构建，322 文件 4408 条过，三个模拟包 × 三运行时门禁过） |
+| 65 | WP181 官方「自动化任务」插件在我们运行里真用起来（与 packages/schedule 并存 / 迁移、右栏定时任务面板）；桌面包带 profiles；秘书运行带时间 | `WP181-official-automation-plugin.md` | `wp181-automation` · `wp/181-automation` | WP180 | 进行中（Claude） |
 
 WP117b 的补充要求（派工单里没有，写在这）：demo 服务的是 `apps/workstation/dist`，测界面前先 `pnpm -F @agentsws/workstation exec vite build`；交付一个真实点击的 playwright 脚本 `scripts/e2e-kol-sandbox.mjs`（playwright 库在 `node_modules/.pnpm/playwright@1.63.0/node_modules/playwright`），走完「选合成红人 → 起草开发信 → 批准发送 → 已发 ≥ 1 → 跳到 N 天后 → 回信 ≥ 1 → 分类 → 议价卡 → 阶段推进 → 交付物 → 追踪链接」，每步截图到 `docs/assets/workstation/kol-e2e-NN.png`，脚本里断言计数确实变了；演练数据从真实漏斗 / 归因里排除，单独显示「演练漏斗」。
 
