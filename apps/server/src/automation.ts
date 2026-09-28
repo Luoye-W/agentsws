@@ -225,7 +225,9 @@ export function createAutomation(options: AutomationOptions): AutomationAssembly
       kind: 'scheduled_task',
       role_id: who.role_id,
       subject: { object: { type: 'scheduled_task', id: task_id } },
-      dedupe_key: `${workspace_id}:scheduled_task:${task_id}:${record.kind}`,
+      // 一条任务一个键：还在等批时内容又改了，审批总线按键改写同一张卡（新内容、新一版），不多出一张；
+      // 批过之后再改，旧卡已结束，总线出新卡并标「取代」。`wrap` 里再核一遍卡上的内容与任务现在的一致
+      dedupe_key: `${workspace_id}:scheduled_task:${task_id}`,
       title: `要不要设这条定时：${record.title}`,
       summary: '到点会往外发或写数据。批了才开始；到点那次运行里的对外动作照样一张张出卡。',
       payload: {

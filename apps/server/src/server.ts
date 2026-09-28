@@ -139,7 +139,7 @@ import { adsDeckData, createAdsStore, seedDemoAds } from './ads.js'
 import { createAdsService } from './ads-service.js'
 import { compositeApprovals } from './approvals-composite.js'
 import { createAskPort } from './ask.js'
-import { createAutomation } from './automation.js'
+import { type AutomationAssembly, createAutomation } from './automation.js'
 import { demoB2bDeckData, withDemoB2b } from './b2b.js'
 import { createB2bMail } from './b2b-mail.js'
 import { type B2bOutboundAssembly, createB2bOutbound } from './b2b-outbound.js'
@@ -888,6 +888,8 @@ export interface Server {
   pricingCatalog: PricingCatalogSource
   /** 25 定时与流程：调度器 + 流程引擎 + 各个消费者的登记。 */
   schedule: ScheduleAssembly
+  /** WP181：官方「自动化任务」包的那一层（四个工具的执行器、到点的处理器、`scheduled_task` 卡）。 */
+  automation: AutomationAssembly
   /**
    * 15 §5.8「备份恢复后先跑对账再放开出站」。
    *
@@ -6310,6 +6312,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     cloudAccount,
     pricingCatalog,
     schedule,
+    automation,
     reconcile,
     ...(boot.runtime === undefined ? {} : { runtime: boot.runtime }),
     identity,

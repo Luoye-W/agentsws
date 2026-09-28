@@ -150,7 +150,7 @@ describe('WP181 官方「自动化任务」', () => {
   })
 
   it('会往外发的周期任务：先出卡、停着；批了才开始', async () => {
-    const { api, data, tasks, say } = await boot(true)
+    const { s, api, data, tasks, say } = await boot(true)
     await say('每周一 9 点给老客户群发邮件问好')
     const [task] = tasks()
     expect(task?.state).toBe('paused')
@@ -159,7 +159,31 @@ describe('WP181 官方「自动化任务」', () => {
     const items = Array.isArray(queue) ? queue : queue.items
     const card = items.find((i) => i.kind === 'scheduled_task')
     expect(card?.payload).toMatchObject({ task_id: task?.id, effect: 'sends' })
-    await api(`/v1/approvals/${card?.id}/decide`, { body: { action: 'approve' } })
+    // 还在等批时内容又改了：总线按键改写同一张卡（不多出一张），卡上是新内容
+    const req = {
+      id: 'run_edit',
+      workspace_id: s.bootstrap.workspace.id,
+      actor: {
+        person_id: task?.owner,
+        assignment_id: task?.assignment_id,
+        role_id: task?.role_id,
+      },
+      work_item: { id: task?.origin?.conversation_id },
+    } as never
+    await s.automation.executeTool({
+      name: 'schedule_update',
+      input: { id: task?.id, prompt: '每周一 9 点给老客户群发邮件问好，附上新品' },
+      request: req,
+    })
+    const again = await data<{ items: ApprovalItem[] } | ApprovalItem[]>(await api('/v1/approvals'))
+    const cardsNow = (Array.isArray(again) ? again : again.items).filter(
+      (i) => i.kind === 'scheduled_task',
+    )
+    expect(cardsNow).toHaveLength(1)
+    expect(cardsNow[0]?.payload).toMatchObject({
+      prompt: '每周一 9 点给老客户群发邮件问好，附上新品',
+    })
+    await api(`/v1/approvals/${cardsNow[0]?.id}/decide`, { body: { action: 'approve' } })
     const after = tasks()[0]
     expect(after?.state).toBe('active')
     expect(after?.params?.approved).toBe(true)
