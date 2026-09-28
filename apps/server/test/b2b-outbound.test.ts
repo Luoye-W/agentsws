@@ -437,8 +437,8 @@ describe('开发信序列（服务端）', () => {
     const id =
       h.store.enrollments().find((x) => x.status === 'awaiting_approval')?.pending_approval_id ?? ''
     const card = await h.txn.approvals.get(id)
-    const emails = (card?.payload as { after: { emails: { by: string; subject: string }[] } }).after
-      .emails
+    const payload = card?.payload as { after: { emails: { by: string; subject: string }[] } }
+    const emails = payload.after.emails
     expect(emails.map((m) => m.by)).toEqual(['template', 'model', 'model'])
     expect(emails[0]?.subject).toBe('our products for Maple Mobile')
     expect(card?.summary).toContain('2 封由模型按开发信技能写，1 封用模板')
