@@ -11002,19 +11002,19 @@
                       "type": "object",
                       "properties": {
                         "order": {
-                          "maxItems": 3,
+                          "maxItems": 4,
                           "type": "array",
                           "items": {
                             "type": "string",
-                            "enum": ["official_key", "byo_source", "workshop"]
+                            "enum": ["official_key", "byo_source", "workshop", "deepseek_native"]
                           }
                         },
                         "disabled": {
-                          "maxItems": 3,
+                          "maxItems": 4,
                           "type": "array",
                           "items": {
                             "type": "string",
-                            "enum": ["official_key", "byo_source", "workshop"]
+                            "enum": ["official_key", "byo_source", "workshop", "deepseek_native"]
                           }
                         }
                       },

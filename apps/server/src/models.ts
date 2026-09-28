@@ -356,6 +356,13 @@ export interface ModelsAssembly {
    * 这个品牌没有那一条就什么都不做、回 `false`。
    */
   dropAccountProvider(reason: 'signed_out' | 'expired'): boolean
+  /**
+   * WP179：官方网页搜索的第二顺位凭据——**用户自己的 DeepSeek API key**（模型设置里那张「DeepSeek 官方」卡，
+   * 接口地址是 `api.deepseek.com` 的那一条）。每次现取，不在任何配置对象里长住；没有就 `undefined`。
+   */
+  deepseekSearchKey(): string | undefined
+  /** WP179：同上，但只看在不在、不读值（组 `RunRequest.web` 时判"搜不搜得了"用）。 */
+  hasDeepseekSearchKey(): boolean
 }
 
 // ── 可以新建哪几种 ─────────────────────────────────────────────────────
@@ -1136,6 +1143,13 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
     }
     return rows
   }
+
+  /**
+   * WP179：「DeepSeek 官方」那几张卡（kind `deepseek`、地址是官方 `api.deepseek.com`）——
+   * 官方网页搜索只认官方地址的 key（它打的是 `api.deepseek.com/anthropic`），自建代理那种不算。
+   */
+  const deepseekOfficialConfigs = (): ModelProviderConfig[] =>
+    effectiveConfigs().filter((c) => c.kind === 'deepseek' && isOfficialDeepSeek(c))
 
   const fromEnvOnly = (id: string): boolean =>
     id === ENV_PROVIDER_ID && !state.providers.some((p) => p.id === ENV_PROVIDER_ID)
@@ -2202,6 +2216,14 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
       reassemble()
     },
     purposeRef: (purpose) => policyOf().by_purpose?.[purpose] ?? defaultRef(),
+    deepseekSearchKey() {
+      for (const c of deepseekOfficialConfigs()) {
+        const key = keySource(c.id)()
+        if (key !== undefined) return key
+      }
+      return undefined
+    },
+    hasDeepseekSearchKey: () => deepseekOfficialConfigs().some((c) => hasKey(c.id)),
     dropAccountProvider(reason) {
       const rows = state.providers.filter((p) => p.kind === 'deepseek_account')
       if (rows.length === 0) return false

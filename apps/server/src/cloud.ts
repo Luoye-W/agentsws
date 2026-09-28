@@ -37,7 +37,11 @@ import type {
   UsageReport,
   WalletBalance,
 } from '@agentsws/contracts'
-import { DEFAULT_DATA_SOURCE_ORDER } from '@agentsws/contracts'
+import {
+  DEFAULT_DATA_SOURCE_ORDER,
+  DEFAULT_WEB_SEARCH_ORDER,
+  WEB_SEARCH_ROUTE_KEY,
+} from '@agentsws/contracts'
 import type { KolStore } from './kol.js'
 import type { KolCloudCall, KolCloudCallFn, KolCloudSync } from './kol-cloud-sync.js'
 import { createKolCloudSync } from './kol-cloud-sync.js'
@@ -107,6 +111,11 @@ export interface CloudAssembly {
    * 红人装配把它递给 `kol-service`，搜人那四级路由按它走。
    */
   routeOf(channel: 'youtube' | 'instagram' | 'tiktok' | 'facebook' | 'x'): DataSourceRoute
+  /**
+   * WP179：网页搜索这一项能力（`web.search`）的路由。默认第一级就是官方那条
+   * （`deepseek_native`，对外叫「用你的 DeepSeek 账号搜索」）；用户在设置里关掉就是 `disabled` 里有它。
+   */
+  webSearchRoute(): DataSourceRoute
   /** 一项能力的价目（49 M4）。取不到就回 `undefined`——不编一个数。 */
   priceOf(capability: string): Promise<{ credits: number; unit: string } | undefined>
   /**
@@ -513,14 +522,13 @@ export function createCloud(options: CloudOptions): CloudAssembly {
           : { ...(state.data_source_routing ?? {}) }
       if (routingInput !== undefined && routing !== undefined)
         for (const [channel, entry] of Object.entries(routingInput)) {
-          const order = entry.order.filter(
-            (l): l is DataSourceLevel =>
-              l === 'official_key' || l === 'byo_source' || l === 'workshop',
-          )
-          const disabled = entry.disabled.filter(
-            (l): l is DataSourceLevel =>
-              l === 'official_key' || l === 'byo_source' || l === 'workshop',
-          )
+          // WP179：每一项能力只认它自己那几级——网页搜索只有官方那一级，红人渠道只有原来三级
+          const levelOk = (l: DataSourceLevel): boolean =>
+            channel === WEB_SEARCH_ROUTE_KEY
+              ? l === 'deepseek_native'
+              : l === 'official_key' || l === 'byo_source' || l === 'workshop'
+          const order = entry.order.filter((l): l is DataSourceLevel => levelOk(l))
+          const disabled = entry.disabled.filter((l): l is DataSourceLevel => levelOk(l))
           if (order.length === 0 && disabled.length === 0) delete routing[channel]
           else routing[channel] = { order, disabled }
         }
@@ -548,6 +556,11 @@ export function createCloud(options: CloudOptions): CloudAssembly {
     routeOf: (channel) =>
       state.data_source_routing?.[`kol.${channel}`] ?? {
         order: [...DEFAULT_DATA_SOURCE_ORDER],
+        disabled: [],
+      },
+    webSearchRoute: () =>
+      state.data_source_routing?.[WEB_SEARCH_ROUTE_KEY] ?? {
+        order: [...DEFAULT_WEB_SEARCH_ORDER],
         disabled: [],
       },
     priceOf: async (capability) => {
