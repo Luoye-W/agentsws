@@ -1334,6 +1334,9 @@ importers:
       '@agentsws/ads-core':
         specifier: workspace:*
         version: link:../ads-core
+      '@agentsws/b2b-core':
+        specifier: workspace:*
+        version: link:../b2b-core
       '@agentsws/brand-intake':
         specifier: workspace:*
         version: link:../brand-intake

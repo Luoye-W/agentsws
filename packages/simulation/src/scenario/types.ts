@@ -659,6 +659,35 @@ export interface ScenarioCommunityRulesEdit {
   level?: 'L1' | 'L2' | 'L3'
 }
 
+/* ── WP171（docs/84）：B2B 那两件事 ─────────────────────────────────── */
+
+/**
+ * B2B 某条职责提一个写动作（`stage_b2b_quote` / `stage_b2b_outreach` …）。
+ *
+ * 场景只递**动作与数**，判断全走真机制：guardrail 判承诺 / 授权 / 页脚 / 德奥 / 账户，
+ * 报价谁批由 `@agentsws/b2b-core` 的 `quoteApprover` 算（场景递不进来一个结论）。
+ */
+export interface ScenarioB2bPropose {
+  who: string
+  /** 职责 id（`b2b.sales` …）。 */
+  role: string
+  /** 这条职责 yml 里的动作 id。 */
+  action: string
+  target_id?: string
+  before?: Record<string, unknown>
+  after: Record<string, unknown>
+  level?: 'L1' | 'L2' | 'L3'
+  title?: string
+}
+
+/** 收一封 B2B 的信（询盘 / 客户来信）。"改收款账户"由 `core` 的识别判，命中出红卡。 */
+export interface ScenarioB2bInbound {
+  who: string
+  from: string
+  subject: string
+  body: string
+}
+
 /* ── WP78（60）：公共关系那三件事 ──────────────────────────────────── */
 
 /**
@@ -889,6 +918,10 @@ export type ScenarioEvent =
   | { at: string; type: 'pr.mention'; mention: ScenarioPrMention }
   /** WP78：提一篇新闻稿（60 §2，数字没出处就 block）。 */
   | { at: string; type: 'pr.release'; release: ScenarioPrRelease }
+  /** WP171：B2B 某条职责提一个写动作（docs/84）。 */
+  | { at: string; type: 'b2b.propose'; b2b_propose: ScenarioB2bPropose }
+  /** WP171：收一封 B2B 的信（改收款账户 → 红卡，docs/84 §11.3）。 */
+  | { at: string; type: 'b2b.inbound'; b2b_inbound: ScenarioB2bInbound }
   /** WP78：在别人的社区里提一条帖子（60 §1，**永远 L1** + 版规 + 冷却）。 */
   | { at: string; type: 'pr.external_post'; external_post: ScenarioPrExternalPost }
   /** WP67：起草并提一封开发信（48 §5.1，禁承诺由 guardrail 拦）。 */
@@ -1442,6 +1475,30 @@ export interface ScenarioExpected {
     requested_level?: string
     auto_approved?: boolean
     stated_on_card?: boolean
+  }
+  /**
+   * WP171（docs/84）：B2B 这一轮提的那几个写动作，**按出现顺序**一条对一条。
+   * 每条认 `kind`；`blocked` 为真读拦下那条事件，否则读提上去那条。
+   */
+  b2b?: {
+    kind: string
+    blocked?: boolean
+    /** 拦下（或转人审）的规则名，得全在里面（与 guardrail 的 hit 名逐字相同）。 */
+    rules?: string[]
+    /** 报价谁批：`role_holder` / `scope_manager` / `owner`。 */
+    approver?: string
+    /** 卡落到了谁手上（person id）。 */
+    routed_to?: string
+    auto_approved?: boolean
+    stated_on_card?: boolean
+  }[]
+  /** WP171（docs/84 §11.3）：改收款账户的那封信。 */
+  b2b_fraud?: {
+    red_card?: boolean
+    /** 信里的账户有没有被采纳（必须是假）。 */
+    adopted?: boolean
+    phrases?: string[]
+    routed_to?: string
   }
   /** WP78（60 §1）：那一条外部发帖。`blocked` 为真 = 版规不让 / 冷却没过。 */
   pr_external_post?: {

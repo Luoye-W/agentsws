@@ -1,0 +1,52 @@
+# WP171（docs/84 §11.3）：**跟单与单证：不符点先列出来，尾款没到放单要多一句提醒。**
+#
+# 1. 发单证给银行（`export_docs_send`）：信用证单据有 2 处不符点、没确认 → 转人审（`doc_discrepancy`）；
+# 2. 放单（`bill_release`，`HARD_L1`）：尾款还没到 → 多一条 `balance_unpaid`，卡落到老板手上。
+id: b2b/export-docs-check
+version: 1
+dataset: { pack: b2b-3c-3p, seed: 42 }
+stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
+clock: { start: '2026-09-29T09:00:00+08:00' }
+events:
+  - at: '+0m'
+    b2b.propose:
+      who: p_he
+      role: b2b.fulfillment
+      action: stage_export_docs_send
+      target_id: shp_po7702
+      after:
+        subject: PO-7702 presentation documents
+        docs:
+          - { kind: commercial_invoice, status: checked }
+          - { kind: packing_list, status: checked }
+          - { kind: lc_documents, status: discrepancy, discrepancies: ['发票金额与信用证差 0.5%', '提单日期晚于最迟装运日'] }
+  - at: '+1h'
+    b2b.propose:
+      who: p_he
+      role: b2b.fulfillment
+      action: stage_bill_release
+      target_id: shp_po7740
+      after: { release: telex, balance_usd: 42000, balance_received: false }
+  - at: '+2h'
+    clock.advance: {}
+expected:
+  b2b:
+    - kind: export_docs_send
+      blocked: false
+      rules: [doc_discrepancy]
+      routed_to: p_he
+      auto_approved: false
+    - kind: bill_release
+      blocked: false
+      rules: [hard_ceiling, balance_unpaid]
+      approver: owner
+      routed_to: p_zhou
+      auto_approved: false
+  staged_change_kinds: [export_docs_send, bill_release]
+  metrics:
+    runs_failed: 0
+invariants:
+  - no_write_without_stage
+  - provenance_respected
+rubric: >-
+  老板打开放单那张卡，看得出"尾款 4.2 万还没到"吗？

@@ -55,6 +55,9 @@
       "path": "../pr-core"
     },
     {
+      "path": "../b2b-core"
+    },
+    {
       "path": "../roles"
     },
     {

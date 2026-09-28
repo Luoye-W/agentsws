@@ -1423,6 +1423,45 @@ async function execute(
         await tick()
         return
       }
+      // ── WP171 B2B（docs/84）────────────────────────────────────────
+      case 'b2b.propose': {
+        const e = event.b2b_propose
+        const out = await world.b2b.propose({
+          who: e.who,
+          role: e.role,
+          action: e.action,
+          ...(e.target_id === undefined ? {} : { target_id: e.target_id }),
+          ...(e.before === undefined ? {} : { before: e.before }),
+          after: e.after,
+          ...(e.level === undefined ? {} : { level: e.level }),
+          ...(e.title === undefined ? {} : { title: e.title }),
+        })
+        world.appendEvent('simulation.b2b_propose_requested', {
+          kind: out.kind,
+          staged: out.staged,
+          rules: out.rules,
+          ...(out.approver === undefined ? {} : { approver: out.approver }),
+          ...(out.reason === undefined ? {} : { reason: out.reason }),
+        })
+        await tick()
+        return
+      }
+      case 'b2b.inbound': {
+        const e = event.b2b_inbound
+        const out = await world.b2b.inbound({
+          who: e.who,
+          from: e.from,
+          subject: e.subject,
+          body: e.body,
+        })
+        world.appendEvent('simulation.b2b_inbound_requested', {
+          red_card: out.red_card,
+          phrases: out.phrases,
+          commitments: out.commitments,
+        })
+        await tick()
+        return
+      }
       // ── WP75 投放（57 §1 / §4、04 §5）──────────────────────────────
       case 'ads.campaign': {
         const e = event.ads_campaign

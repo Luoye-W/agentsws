@@ -208,6 +208,9 @@ const EVENT_KEYS = [
   'ads.budget_change',
   'ads.pause',
   'ads.attribution',
+  // WP171 B2B（docs/84）
+  'b2b.propose',
+  'b2b.inbound',
   // WP78 公共关系（60 §1 / §2）
   'pr.mention',
   'pr.release',
@@ -320,6 +323,9 @@ const EXPECTED_KEYS = [
   'ads_budget',
   'ads_stop_loss',
   'ads_attribution',
+  // WP171（docs/84）
+  'b2b',
+  'b2b_fraud',
   // WP78（60）
   'pr_mention',
   'pr_release',
@@ -1264,6 +1270,56 @@ function parseEvent(source: string, index: number, raw: unknown): ScenarioEvent 
             ? {}
             : { distribute: requireBool(source, `${path}.${key}.distribute`, body.distribute) }),
           ...(relLevel === undefined ? {} : { level: relLevel as 'L1' | 'L2' | 'L3' }),
+        },
+      }
+    }
+    // WP171（docs/84）：B2B 那两件事
+    case 'b2b.propose': {
+      known(source, `${path}.${key}`, body, [
+        'who',
+        'role',
+        'action',
+        'target_id',
+        'before',
+        'after',
+        'level',
+        'title',
+      ])
+      const role = str(source, `${path}.${key}.role`, body.role)
+      if (!role.startsWith('b2b.')) fail(source, `${path}.${key}.role`, 'role 只能是 b2b.* 的职责')
+      if (!isRec(body.after)) fail(source, `${path}.${key}.after`, '必须是对象')
+      if (body.before !== undefined && !isRec(body.before))
+        fail(source, `${path}.${key}.before`, '必须是对象')
+      const lvl = optStr(source, `${path}.${key}.level`, body.level)
+      if (lvl !== undefined && !['L1', 'L2', 'L3'].includes(lvl))
+        fail(source, `${path}.${key}.level`, 'level 只能是 L1 / L2 / L3')
+      const targetId = optStr(source, `${path}.${key}.target_id`, body.target_id)
+      const title = optStr(source, `${path}.${key}.title`, body.title)
+      return {
+        at,
+        type: 'b2b.propose',
+        b2b_propose: {
+          who: str(source, `${path}.${key}.who`, body.who),
+          role,
+          action: str(source, `${path}.${key}.action`, body.action),
+          ...(targetId === undefined ? {} : { target_id: targetId }),
+          ...(body.before === undefined ? {} : { before: body.before as Record<string, unknown> }),
+          after: body.after as Record<string, unknown>,
+          ...(lvl === undefined ? {} : { level: lvl as 'L1' | 'L2' | 'L3' }),
+          ...(title === undefined ? {} : { title }),
+        },
+      }
+    }
+    case 'b2b.inbound': {
+      known(source, `${path}.${key}`, body, ['who', 'from', 'subject', 'body'])
+      return {
+        at,
+        type: 'b2b.inbound',
+        b2b_inbound: {
+          who: str(source, `${path}.${key}.who`, body.who),
+          from: str(source, `${path}.${key}.from`, body.from),
+          subject: str(source, `${path}.${key}.subject`, body.subject),
+          body: str(source, `${path}.${key}.body`, body.body),
         },
       }
     }
@@ -2411,6 +2467,32 @@ function parseExpected(source: string, raw: unknown): ScenarioExpected {
     const parsed = shaped(source, key, raw[key], spec)
     if (parsed !== undefined) bag[key] = parsed
   }
+  // WP171（docs/84）：B2B 那几个写动作是一张**有序的表**（一条对一条），不是一个平对象
+  if (raw.b2b !== undefined) {
+    if (!Array.isArray(raw.b2b)) fail(source, 'expected.b2b', '必须是数组')
+    out.b2b = raw.b2b.map((item, i) => {
+      const at = `b2b[${i}]`
+      const parsed = shaped(source, at, item, {
+        kind: 'str',
+        blocked: 'bool',
+        rules: 'strs',
+        approver: 'str',
+        routed_to: 'str',
+        auto_approved: 'bool',
+        stated_on_card: 'bool',
+      }) as Record<string, unknown> | undefined
+      if (parsed === undefined || typeof parsed.kind !== 'string')
+        fail(source, `expected.${at}`, '要写 kind')
+      return parsed as NonNullable<ScenarioExpected['b2b']>[number]
+    })
+  }
+  const fraud = shaped(source, 'b2b_fraud', raw.b2b_fraud, {
+    red_card: 'bool',
+    adopted: 'bool',
+    phrases: 'strs',
+    routed_to: 'str',
+  })
+  if (fraud !== undefined) out.b2b_fraud = fraud as NonNullable<ScenarioExpected['b2b_fraud']>
   return out
 }
 

@@ -1,0 +1,22 @@
+# b2b-3c-3p
+
+WP171（docs/84）B2B 岗位的模拟包。**手写**（`agentsws synth` 只生成 dtc 家族）。
+一家 3 人的 3C 电源工厂兼外贸公司：老板周岚、销售经理林峰（`scope_manager`）、业务员何佳
+（B2B 四条职责都挂在她身上；平台运营是第二批，没人挂）。
+
+演示数据改写自 Luoye 自己的 BtoBAgents（`demo-data.ts` / `runtime-v2/seed.ts`）：GaN 充电器、
+移动电源、TWS 耳机，样品与报价例外、展会线索。客户名全是虚构的，邮箱一律 `.example`，
+原来写死的 ElectroMart 那一页不搬。
+
+六条场景（`scenarios/b2b/`），每条的判断都走真机制：
+
+| 场景 | 钉住什么 |
+|---|---|
+| `inquiry-commitment-needs-card` | 回询盘碰到 MOQ / 交期 → 转人审（B2B 承诺词表） |
+| `quote-over-mandate-to-manager` | 报价永远出卡；授权内业务员批、超授权转上级（`b2b-core` 的 `quoteApprover`）；报价版本不可改 |
+| `sample-needs-tracking` | 样品标"已寄"必须带快递单号 |
+| `trade-show-followup` | 展会缴费永远出卡、落老板；会后跟进照开发信的闸；德国默认不发 |
+| `export-docs-check` | 单证不符点转人审；尾款没到放单多一条提醒、落老板 |
+| `payment-account-change-red-card` | 改收款账户的信 → 红卡、账户不采纳；照信提付款指示被拦 |
+
+`baseline.json` 是 stub / direct / dsh 三个运行时 fast 档 `--seed 42` 跑出来的基线。

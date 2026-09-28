@@ -1,0 +1,38 @@
+# 三个人的外贸公司：业务员何佳把 B2B 四条职责都挂在自己身上（docs/84 §11.3：
+# 小公司是一个业务员把这几摊都干了）；销售经理林峰也挂业务那一条（超授权的报价转给他）；
+# 老板周岚是 owner。平台运营是第二批，这里没人挂。
+- person_id: p_he
+  role_id: b2b.sales
+  ranges:
+    - kind: brand
+      id: ws_b2b3c
+  granted_by: p_zhou
+  primary: true
+- person_id: p_he
+  role_id: b2b.outbound
+  ranges:
+    - kind: brand
+      id: ws_b2b3c
+  granted_by: p_zhou
+- person_id: p_he
+  role_id: b2b.exhibition
+  ranges:
+    - kind: brand
+      id: ws_b2b3c
+  granted_by: p_zhou
+- person_id: p_he
+  role_id: b2b.fulfillment
+  ranges:
+    - kind: brand
+      id: ws_b2b3c
+  granted_by: p_zhou
+- person_id: p_lin
+  role_id: b2b.sales
+  ranges:
+    - kind: brand
+      id: ws_b2b3c
+  granted_by: p_zhou
+- person_id: p_zhou
+  role_id: common.owner
+  ranges: []
+  granted_by: p_zhou

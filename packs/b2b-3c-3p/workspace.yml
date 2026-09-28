@@ -1,0 +1,19 @@
+id: ws_b2b3c
+name: 智联电源（演示）
+tz: Asia/Shanghai
+base_currency: USD
+locales:
+  customers: en
+  operators: zh
+markets:
+  - kind: brand
+    id: ws_b2b3c
+company_md: |
+  # 智联电源（演示）
+
+  深圳一家三个人的 3C 电源工厂兼外贸公司：老板（周岚）、销售经理（林峰）、业务员（何佳）。
+  产品是 GaN 充电器、移动电源、TWS 耳机，做 OEM / 自有品牌，客户是北美与欧洲的分销商和零售商。
+
+  - 报价永远出卡：单笔 1 万美元 / 毛利 20% / 折扣 5% / 账期 30 天以内业务员自己批，超了转销售经理
+  - 收款账户只认知识库里那一张事实卡；邮件里要求改账户的一律当诈骗处理
+  - 开发信用单独的发信域名 `zhilian-mail.example`

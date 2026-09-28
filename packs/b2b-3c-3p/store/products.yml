@@ -1,0 +1,32 @@
+- id: prod_gan65
+  title: GaN 65W Charger (OEM)
+  price: 9.8
+  cost: 7.4
+  currency: USD
+  status: active
+  record_version: v1
+  inventory: 5000
+- id: prod_gan100
+  title: GaN 100W Charger (OEM)
+  price: 15.6
+  cost: 11.9
+  currency: USD
+  status: active
+  record_version: v1
+  inventory: 3000
+- id: prod_pb20k
+  title: Power Bank 20000mAh
+  price: 12.4
+  cost: 9.1
+  currency: USD
+  status: active
+  record_version: v1
+  inventory: 4000
+- id: prod_tws
+  title: TWS Earbuds
+  price: 8.9
+  cost: 6.2
+  currency: USD
+  status: active
+  record_version: v1
+  inventory: 6000

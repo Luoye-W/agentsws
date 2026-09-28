@@ -1,0 +1,14 @@
+- id: p_zhou
+  name: 周岚
+  email: zhou@zhilian-power.example
+  title: 老板
+  owner: true
+- id: p_lin
+  name: 林峰
+  email: lin@zhilian-power.example
+  title: 销售经理
+  scope_manager: true
+- id: p_he
+  name: 何佳
+  email: he@zhilian-power.example
+  title: 业务员（兼开发、展会、跟单）

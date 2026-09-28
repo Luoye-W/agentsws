@@ -1,0 +1,69 @@
+# WP171（docs/84 §3.2 / §11.1 第 3 条）：**报价永远出卡，授权只决定谁批。**
+#
+# 三件事都是真发生的：
+#
+# 1. V1 在授权内（8000 美元、毛利 26%）→ 照样出卡（报价在 `HARD_L1` 里，报 L3 也按回 L1），
+#    卡落在业务员何佳自己手上；
+# 2. V2 超了单笔金额与最低毛利 → 卡转**上级**（销售经理林峰，`scope_manager`）；
+#    谁批是 `@agentsws/b2b-core` 的 `quoteApprover` 按 yml 里那四个数算的，场景递不进去；
+# 3. 想"改"V2（同一个版本号再提一次）→ **block**：报价版本不可改，改价要新建一版。
+id: b2b/quote-over-mandate-to-manager
+version: 1
+dataset: { pack: b2b-3c-3p, seed: 42 }
+stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
+clock: { start: '2026-09-28T10:00:00+08:00' }
+events:
+  - at: '+0m'
+    b2b.propose:
+      who: p_he
+      role: b2b.sales
+      action: stage_b2b_quote
+      target_id: q_harbor_0927
+      level: L3
+      after: { version: 1, amount_usd: 8000, margin_pct: 26, discount_pct: 3, payment_terms_days: 30, incoterm: FOB }
+  - at: '+30m'
+    b2b.propose:
+      who: p_he
+      role: b2b.sales
+      action: stage_b2b_quote
+      target_id: q_volthaus_0928
+      before: { version: 1 }
+      after: { version: 2, amount_usd: 18400, margin_pct: 18.5, discount_pct: 3, payment_terms_days: 30, incoterm: FOB }
+  - at: '+1h'
+    b2b.propose:
+      who: p_he
+      role: b2b.sales
+      action: stage_b2b_quote
+      target_id: q_volthaus_0928_edit
+      before: { version: 2 }
+      after: { version: 2, amount_usd: 17800, margin_pct: 18.5, discount_pct: 3, payment_terms_days: 30, incoterm: FOB }
+  - at: '+2h'
+    clock.advance: {}
+expected:
+  b2b:
+    - kind: b2b_quote
+      blocked: false
+      rules: [hard_ceiling]
+      approver: role_holder
+      routed_to: p_he
+      auto_approved: false
+      stated_on_card: true
+    - kind: b2b_quote
+      blocked: false
+      rules: [quote_amount_over_mandate, quote_margin_under_mandate]
+      approver: scope_manager
+      routed_to: p_lin
+      auto_approved: false
+      stated_on_card: true
+    - kind: b2b_quote
+      blocked: true
+      rules: [quote_version_immutable]
+  blocked_rules: [quote_version_immutable]
+  staged_change_kinds: [b2b_quote]
+  metrics:
+    runs_failed: 0
+invariants:
+  - no_write_without_stage
+  - provenance_respected
+rubric: >-
+  销售经理打开那张 V2 的卡，一眼看得出"超了金额与毛利、所以转给我"吗？

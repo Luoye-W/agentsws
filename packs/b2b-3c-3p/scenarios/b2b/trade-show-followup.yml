@@ -1,0 +1,77 @@
+# WP171（docs/84 §11.2）：**展会：缴费永远出卡，会后跟进照开发信的规矩。**
+#
+# 1. 报名缴费（`trade_show_registration`，`HARD_L1`）→ 卡落到老板手上（yml 的 `route_to: owner`）；
+# 2. 会后 48 小时跟进一位美国的来访者：页脚（退订 + 公司地址）齐、来源记了、SPF / DKIM 过了、
+#    用独立发信域名 → 出卡，落在业务员手上（L1 起步）；
+# 3. 跟进一位德国的来访者、没勾"确认风险" → **block**：德国、奥地利默认不发（§11.1 第 6 条）。
+id: b2b/trade-show-followup
+version: 1
+dataset: { pack: b2b-3c-3p, seed: 42 }
+stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
+clock: { start: '2026-09-28T14:00:00+08:00' }
+events:
+  - at: '+0m'
+    b2b.propose:
+      who: p_he
+      role: b2b.exhibition
+      action: stage_trade_show_registration
+      target_id: show_hk_autumn
+      after: { show: 香港秋季电子展, booth: 5E-B12, fee_usd: 3800 }
+  - at: '+1h'
+    b2b.propose:
+      who: p_he
+      role: b2b.exhibition
+      action: stage_b2b_outreach
+      target_id: lead_peak_gadgets
+      after:
+        subject: Great meeting you at booth 5E-B12
+        body: Hi Mia, thanks for stopping by our booth. You mentioned a private-mould 100W GaN for Q1 — shall I send the spec sheet?
+        countries: [US]
+        count: 1
+        footer_unsubscribe: true
+        footer_address: true
+        contacts_missing_source: 0
+        sender_auth: { spf: pass, dkim: pass, dmarc: pass }
+        suppression_checked: true
+  - at: '+2h'
+    b2b.propose:
+      who: p_he
+      role: b2b.exhibition
+      action: stage_b2b_outreach
+      target_id: lead_volthaus_booth
+      after:
+        subject: Nice to meet you at the show
+        body: Hi Jonas, thanks for visiting. Shall I send the GaN catalogue?
+        countries: [DE]
+        count: 1
+        footer_unsubscribe: true
+        footer_address: true
+        contacts_missing_source: 0
+        sender_auth: { spf: pass, dkim: pass, dmarc: pass }
+        suppression_checked: true
+  - at: '+3h'
+    clock.advance: {}
+expected:
+  b2b:
+    - kind: trade_show_registration
+      blocked: false
+      rules: [hard_ceiling]
+      approver: owner
+      routed_to: p_zhou
+      auto_approved: false
+    - kind: b2b_outreach
+      blocked: false
+      routed_to: p_he
+      auto_approved: false
+    - kind: b2b_outreach
+      blocked: true
+      rules: [country_excluded]
+  blocked_rules: [country_excluded]
+  staged_change_kinds: [trade_show_registration, b2b_outreach]
+  metrics:
+    runs_failed: 0
+invariants:
+  - no_write_without_stage
+  - provenance_respected
+rubric: >-
+  德国那一封被拦下时，用户看得懂"为什么默认不发、要发得自己确认风险"吗？

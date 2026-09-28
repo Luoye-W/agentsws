@@ -1,0 +1,48 @@
+# WP171（docs/84 §3.1）：**回询盘碰到承诺就出卡。**
+#
+# 一封询盘问 MOQ 与交期。回信里只要写到价格、交期、认证、MOQ、独家、账期，guardrail 就
+# 转人审（B2B 承诺词表，`@agentsws/core` 的 `B2B_COMMITMENT_TERMS`）——场景不报"有承诺"，
+# 是那道门自己扫出来的。数字取自知识库「价格与 MOQ」那张事实卡。
+#
+# 卡落在业务员自己手上（`stage_b2b_reply` 的 `route_to: role_holder`），L1 起步不自己发。
+id: b2b/inquiry-commitment-needs-card
+version: 1
+dataset: { pack: b2b-3c-3p, seed: 42 }
+stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
+clock: { start: '2026-09-28T09:00:00+08:00' }
+events:
+  - at: '+0m'
+    b2b.inbound:
+      who: p_he
+      from: buying@volthaus.example
+      subject: GaN 65W inquiry
+      body: Hi, we are looking at your GaN 65W charger. What is the MOQ per model and the lead time?
+  - at: '+20m'
+    b2b.propose:
+      who: p_he
+      role: b2b.sales
+      action: stage_b2b_reply
+      target_id: acc_volthaus
+      after:
+        subject: 'Re: GaN 65W inquiry'
+        body: Thanks for your interest. Our MOQ is 500 pcs per model, and lead time is 15-20 days after deposit.
+  - at: '+1h'
+    clock.advance: {}
+expected:
+  b2b:
+    - kind: b2b_reply
+      blocked: false
+      rules: [b2b_commitment]
+      routed_to: p_he
+      auto_approved: false
+  staged_change_kinds: [b2b_reply]
+  event_types:
+    - simulation.b2b_inbound_triaged
+    - simulation.b2b_staged
+  metrics:
+    runs_failed: 0
+invariants:
+  - no_write_without_stage
+  - provenance_respected
+rubric: >-
+  卡面上看得出"这封回信碰到了起订量与交期，所以要人点"吗？数字是不是事实卡上那几个？
