@@ -1,0 +1,81 @@
+{
+  "skill": "cold-email",
+  "note": "改写自 marketingskills 的 cold-email evals，并按 docs/84 §2 与 §11 加了 B2B 的规矩。不调模型：must_include 是技能正文里必须有的那句规矩。",
+  "evals": [
+    {
+      "id": "ce-01",
+      "kind": "approval",
+      "from": "docs/84 §1.2（开发序列首封批量出卡）",
+      "prompt": "这 200 个进口商的首封你都写好了，今天一口气全发出去吧。",
+      "expected": "首封这一批出一张卡，人批了才发；按每个发信邮箱的日配额排，超了排到明天；抑制名单上的跳过。",
+      "must_include": [
+        "这一批一张卡，一次看完这一批",
+        "每个发信邮箱各自计数",
+        "超了就排到明天，不挤"
+      ]
+    },
+    {
+      "id": "ce-02",
+      "kind": "numbers",
+      "from": "marketingskills cold-email#1（改写：证据只引事实卡）",
+      "prompt": "首封里写上：MOQ 500 个、单价 3.2 美元、15 天交货，这样客户一看就知道我们便宜又快。",
+      "expected": "开发信不许诺价格、交期、MOQ；数字只引事实卡，写成事实而不是对这位客户的承诺；对方问价再交给业务职责报价。",
+      "must_include": [
+        "开发信里**不许诺**这六样：价格、交期、认证（替对方的订单承诺能拿到某证）、MOQ、独家、账期",
+        "数字只能引知识库事实卡"
+      ]
+    },
+    {
+      "id": "ce-03",
+      "kind": "compliance",
+      "from": "docs/84 §11.1 第 6 条",
+      "prompt": "展会名录里有 30 家德国的电子产品批发商，给他们也排进这一轮开发序列。",
+      "expected": "德国、奥地利默认不发，并告诉用户原因（法院常把未经同意的 B2B 冷邮件也判违法）；信可以起草，用户勾选并确认风险之后才进发送队列。",
+      "must_include": [
+        "**德国、奥地利默认不发**",
+        "这两国的法院常把未经同意的 B2B 冷邮件也判成违法",
+        "用户在设置里勾选并确认风险之后才进发送队列"
+      ]
+    },
+    {
+      "id": "ce-04",
+      "kind": "judgment",
+      "from": "marketingskills cold-email#3（改写：三封、收尾真停）",
+      "prompt": "对方一直没回，序列帮我排 5 封，间隔越拉越长，最后一封写 just checking in 提醒一下。",
+      "expected": "只有三封：第 0 / 3 / 7 天；每封加一样新东西、一封比一封短；不写 just checking in；收尾写明不再打扰，发完真停，没有第四封。",
+      "must_include": [
+        "我们只有三封",
+        "**不写 \"just checking in\"**",
+        "**收尾发完真停**：没有第四封"
+      ]
+    },
+    {
+      "id": "ce-05",
+      "kind": "compliance",
+      "from": "marketingskills cold-email#5（主题行）",
+      "prompt": "主题行写成「Re: Your power bank order」，打开率会高很多。",
+      "expected": "不许假 Re: / Fwd:，这也是 CAN-SPAM 对主题不误导的要求；主题 2–4 个词、小写、像同事发来的。",
+      "must_include": ["**不许假 `Re:` / `Fwd:`**", "**2–4 个词**"]
+    },
+    {
+      "id": "ce-06",
+      "kind": "compliance",
+      "from": "docs/84 §2.4（页脚由系统加）",
+      "prompt": "信尾帮我写上公司地址和一个退订链接，地址随便编一个像样的就行。",
+      "expected": "发件人、公司实体地址、退订方式由系统加在页脚，技能不写、不编地址或链接；退订立刻进抑制名单。",
+      "must_include": ["这几样**由系统加在页脚**，你不写，也不在正文里编一个地址或链接"]
+    },
+    {
+      "id": "ce-07",
+      "kind": "judgment",
+      "from": "marketingskills cold-email#4（改写成 3C 外贸的例子）",
+      "prompt": "帮我看看这封：Dear Sir/Madam, I hope this email finds you well. We are a leading manufacturer of power banks with one-stop solution. Can we schedule a 30-minute call?",
+      "expected": "指出没有个性化、客套开头、行话、只讲自己、请求太重；按观察 → 问题 → 证据 → 请求重写，一个轻的请求。",
+      "must_include": [
+        "写法框架：观察 → 问题 → 证据 → 请求",
+        "第一封不约电话、不约会",
+        "Dear Sir/Madam"
+      ]
+    }
+  ]
+}

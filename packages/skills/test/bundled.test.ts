@@ -14,21 +14,26 @@ import { makeSkills } from './helpers.js'
 
 const names = listBundledSkills()
 
-/** WP160：改写自第三方（MIT）的五个。 */
+/** WP160：改写自第三方（MIT）的五个；WP170 又改写了 B2B 的两个。 */
+const B2B_PORTED = ['cold-email']
 const THIRD_PARTY = [
   'ad-copywriting',
   'audience-research',
   'email-sms',
   'influencer-marketing',
   'seo-judgment',
+  ...B2B_PORTED,
 ]
-/** WP162：Agents 工坊自己写的（本仓库的 Apache-2.0）。 */
+/** WP170：B2B 岗位自己写的四个（本仓库的 Apache-2.0）。 */
+const B2B_OWN: string[] = []
+/** WP162：Agents 工坊自己写的（本仓库的 Apache-2.0）；WP170 加上 B2B 的四个。 */
 const OWN = [
   'brand-voice',
   'chargeback-evidence',
   'policy-review',
   'returns-policy-calc',
   'workspace-basics',
+  ...B2B_OWN,
 ]
 /**
  * WP162 终审追加：从 KefuAgent 移植来的客服技能（原件在 `packages/support-core/skills/customer-care/`）。
@@ -46,7 +51,7 @@ const MARKETINGSKILLS = '改编自 coreyhaines31/marketingskills（MIT，© 2025
 const OPEN_SEO = '部分判断规矩改编自 every-app/open-seo（MIT）'
 
 describe('自带技能：格式（24 §1 Agent Skills）', () => {
-  it('WP160 的五个 + WP162 的六个都在，目录名即技能名', () => {
+  it('WP160 的五个 + WP162 的六个 + WP170 的 B2B 六个都在，目录名即技能名', () => {
     expect(names).toEqual([...THIRD_PARTY, ...OWN, ...PORTED].sort())
   })
 
