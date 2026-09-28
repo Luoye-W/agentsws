@@ -211,7 +211,6 @@ export function collectRoutes(): Route[] {
     ...adsRoutes(),
     // WP78（60 §5）：公关库的最小一套（提及 / 稿子 / 外部发帖 / 媒体名单）
     ...prRoutes(),
-    ...b2bRoutes(),
     ...seoRoutes(),
     /*
      * WP113（63）：消息。`/v1/messages*` 是独立前缀，与已有路径都不撞。
@@ -228,6 +227,8 @@ export function collectRoutes(): Route[] {
     ...extensionRoutes(),
     // WP144（docs/80）：电脑操控。`/v1/settings/computer-use*` 与 `/v1/computer-use/*` 都是新路径，与别处不撞
     ...computerUseRoutes(),
+    // WP172（docs/84）：B2B 库。`/v1/b2b/*` 是新前缀，与别处都不撞（放在最后：生成物的顺序不动别人）
+    ...b2bRoutes(),
   ]
 }
 
