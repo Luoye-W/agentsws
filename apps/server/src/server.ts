@@ -339,6 +339,7 @@ import {
   ensureSystemTasks,
   ensureTask,
   offsetToTz,
+  parkPendingApprovals,
   registerAmazonSla,
   registerApprovalHousekeeping,
   registerB2bSequence,
@@ -3907,6 +3908,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   }
   // WP181：官方「自动化任务」到点接着原来那件事跑一次（开关与上限在 `automation.ts`）
   automation.register()
+  // WP181（Fable 终审）：老库里等批却建成 `pending`（到点照跑）的那几条，改成停着、批了再开始
+  await parkPendingApprovals(schedule.scheduler)
   // ① 每日计划、② 复盘（day / week / month）、⑦ 复盘 → 次日计划草案的接力
   registerDailyPlan(schedule.scheduler, planDeps)
   const relay = registerPlanRelay({

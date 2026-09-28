@@ -480,7 +480,8 @@ describe('25 §5 API', () => {
         }),
       }),
     )
-    expect(task.state).toBe('pending')
+    // WP181（Fable 终审）：等批的停着（以前建成 `pending`，调度器里到点照跑）
+    expect(task.state).toBe('paused')
     expect(task.owner).toBe('p_other')
     expect(task.approval).toBeDefined()
     const items = (await server.txn.approvals.queue({
@@ -489,6 +490,98 @@ describe('25 §5 API', () => {
       lane: 'mine',
     })) as ApprovalItem[]
     expect(items.map((i) => i.kind)).toContain('scheduled_task')
+  })
+
+  it('WP181：等批期间到点 0 次运行；卡批了，下一个到点 1 次；驳回的取消', async () => {
+    const other = server.roles.assignments.create({
+      person_id: 'p_other',
+      workspace_id: server.bootstrap.workspace.id,
+      role_id: 'common.member',
+      granted_by: server.bootstrap.person.id,
+      ranges: [],
+    })
+    const runs: string[] = []
+    server.schedule.scheduler.register('test.count', (ctx) => {
+      runs.push(ctx.at)
+    })
+    // 两条的标题与触发器都不一样（不然「建之前先查」回 409 similar_exists）
+    const create = async (title: string, every_ms: number) =>
+      dataOf<{ id: string; state: string; approval: string }>(
+        await call('/v1/schedules', {
+          method: 'POST',
+          body: JSON.stringify({
+            title,
+            handler: 'test.count',
+            trigger: { kind: 'interval', every_ms },
+            effect: 'sends',
+            assignment_id: other.id,
+          }),
+        }),
+      )
+    const task = await create('每小时给客户发一次跟进', 3_600_000)
+    const dropped = await create('每周给供应商对一次账', 7 * 86_400_000)
+    expect(task.state).toBe('paused')
+    // 等批期间走过两个到点：一次都不跑
+    for (let i = 0; i < 2; i += 1) {
+      clock.advance(3_600_000)
+      await server.schedule.scheduler.runDue(clock.now())
+    }
+    expect(runs).toEqual([])
+    // 批了（经网关那条包过的总线）→ 开始；另一张驳回 → 取消
+    const bus = server.automation.wrap(server.txn.approvals)
+    const token = async (id: string): Promise<string> => {
+      const item = (await server.txn.approvals.get(id)) as ApprovalItem
+      return item.deliveries.find((d) => d.to === 'p_other')?.decision_token ?? ''
+    }
+    await bus.decide(
+      task.approval,
+      'p_other' as never,
+      {
+        action: 'approve',
+        decision_token: await token(task.approval),
+      } as never,
+    )
+    await bus.decide(
+      dropped.approval,
+      'p_other' as never,
+      {
+        action: 'reject',
+        reason: '不要',
+        decision_token: await token(dropped.approval),
+      } as never,
+    )
+    expect(server.schedule.scheduler.get(task.id)?.state).toBe('active')
+    expect(server.schedule.scheduler.get(dropped.id)?.state).toBe('cancelled')
+    const next = server.schedule.scheduler.get(task.id)?.next_fire_at ?? ''
+    clock.set(next)
+    await server.schedule.scheduler.runDue(clock.now())
+    expect(runs).toEqual([next])
+  })
+
+  it('WP181：老库里等批却是 pending 的，启动时改成停着', async () => {
+    const other = server.roles.assignments.create({
+      person_id: 'p_other',
+      workspace_id: server.bootstrap.workspace.id,
+      role_id: 'common.member',
+      granted_by: server.bootstrap.person.id,
+      ranges: [],
+    })
+    const legacy = await server.schedule.scheduler.schedule({
+      workspace_id: server.bootstrap.workspace.id,
+      owner: 'p_other',
+      role_id: 'common.member',
+      assignment_id: other.id,
+      title: '老路建的',
+      trigger: { kind: 'interval', every_ms: 3_600_000 },
+      state: 'pending',
+      created_by: 'user',
+      misfire_policy: 'run_once_now',
+      handler: 'test.count',
+      approval: 'apv_legacy',
+    })
+    const { parkPendingApprovals } = await import('../src/schedule.js')
+    expect(await parkPendingApprovals(server.schedule.scheduler)).toBe(1)
+    expect(server.schedule.scheduler.get(legacy.id)?.state).toBe('paused')
   })
 
   it('POST /v1/schedules：岗位不存在 → 404；请求体不合法 → 400', async () => {

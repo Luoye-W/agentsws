@@ -48,6 +48,7 @@ import type { Scheduler, ScheduleTask } from '@agentsws/schedule'
 import type { ToolExecution, ToolExecutor } from '@agentsws/stand-ins'
 import { isScheduleTool } from '@agentsws/stand-ins'
 import type { Work } from '@agentsws/work'
+import { settleScheduleApproval } from './schedule.js'
 
 /** 到点交给谁（调度器里登记的名字）。 */
 export const AUTOMATION_HANDLER = 'automation.reminder'
@@ -583,6 +584,8 @@ export function createAutomation(options: AutomationOptions): AutomationAssembly
         return async (id: string, by: never, input: DecideInput): Promise<ApprovalItem> => {
           const out = await target.decide(id, by, input)
           if (out.kind !== 'scheduled_task') return out
+          // 老路（`POST /v1/schedules` 给别人岗位建的）：按任务上记的卡 id 激活 / 取消
+          await settleScheduleApproval(scheduler, out)
           const payload = (out.payload ?? {}) as {
             task_id?: unknown
             prompt?: unknown
@@ -599,7 +602,11 @@ export function createAutomation(options: AutomationOptions): AutomationAssembly
               params: { ...task.params, awaiting_approval: false, approved: true },
             })
             if (task.state === 'paused') await scheduler.resume(task.id)
-          } else if (out.state === 'rejected') {
+          } else if (
+            out.state === 'rejected' ||
+            out.state === 'withdrawn' ||
+            out.state === 'expired'
+          ) {
             await scheduler.cancel(task.id)
           }
           return out

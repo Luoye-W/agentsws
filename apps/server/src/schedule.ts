@@ -1581,6 +1581,52 @@ async function createTaskApproval(
   return item.id
 }
 
+/**
+ * WP181（Fable 终审）：`scheduled_task` 卡定了 → 对应的定时任务跟着走。批了（含改后批）就开始，
+ * 驳回 / 撤回 / 过期就取消（记录留着，不再触发）。按任务上记的 `approval` 认——卡是先出的、任务后建，
+ * 卡上没有任务 id。还没定（`pending` / `in_review` / 推迟）什么都不动。回动了几条。
+ */
+export async function settleScheduleApproval(
+  scheduler: Scheduler,
+  item: Pick<ApprovalItem, 'id' | 'kind' | 'state' | 'workspace_id'>,
+): Promise<number> {
+  if (item.kind !== 'scheduled_task') return 0
+  const approved = item.state === 'approved' || item.state === 'approved_edited'
+  const refused =
+    item.state === 'rejected' || item.state === 'withdrawn' || item.state === 'expired'
+  if (!approved && !refused) return 0
+  let n = 0
+  for (const task of scheduler.list({ workspace_id: item.workspace_id })) {
+    if (task.approval !== item.id) continue
+    // 官方「自动化任务」建的那几条另有一道核对（卡上内容与任务现在的一致），在 `automation.ts` 的 `wrap`
+    if (task.params?.official !== undefined) continue
+    if (task.state === 'cancelled' || task.state === 'done' || task.state === 'failed') continue
+    if (approved) {
+      if (task.state === 'paused') await scheduler.resume(task.id)
+    } else {
+      await scheduler.cancel(task.id)
+    }
+    n += 1
+  }
+  return n
+}
+
+/**
+ * WP181（Fable 终审）：老库里「等批却建成 `pending`」的那几条（WP27 起的洞：到点照跑）——
+ * 启动时一次性改成停着，批了再开始。回改了几条。
+ */
+export async function parkPendingApprovals(scheduler: Scheduler): Promise<number> {
+  let n = 0
+  for (const workspace_id of scheduler.store.workspaces()) {
+    for (const task of scheduler.list({ workspace_id, state: ['pending'] })) {
+      if (task.approval === undefined) continue
+      await scheduler.pause(task.id)
+      n += 1
+    }
+  }
+  return n
+}
+
 export function createSchedulePort(options: SchedulePortOptions): SchedulePort {
   const { scheduler, workflows } = options
 
@@ -1631,7 +1677,9 @@ export function createSchedulePort(options: SchedulePortOptions): SchedulePort {
         title: input.title,
         // 触发器的形状 zod 已经校过，这里只是把它交给调度器再算一次 next_fire_at
         trigger: input.trigger as ScheduleTask['trigger'],
-        state: decision.state,
+        // WP181（Fable 终审）：等批的一律**停着**（`paused`）。调度器里 `pending` 也算到点能跑
+        // （`RUNNABLE_STATES`），以前那样建就是「没批就跑」；卡批了由 `settleScheduleApproval` 激活
+        state: decision.needs_approval ? 'paused' : 'active',
         created_by: 'user',
         misfire_policy: input.misfire_policy,
         ...(input.handler === undefined ? {} : { handler: input.handler }),
