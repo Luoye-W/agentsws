@@ -381,6 +381,11 @@ export type {
   SubscriptionView,
 } from './routes/models.js'
 export { MODEL_PURPOSES, modelRoutes, parseModelId } from './routes/models.js'
+export {
+  type OfficialPluginsActor,
+  type OfficialPluginsPort,
+  officialPluginsRoutes,
+} from './routes/official-plugins.js'
 export type {
   DiscoveryHelloView,
   DiscoveryPeerView,
