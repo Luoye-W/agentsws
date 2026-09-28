@@ -60,6 +60,11 @@
     "packages/roles/roles/ads/tiktok.yml",
     "packages/roles/roles/ads/x.yml",
     "packages/roles/roles/amz/support.yml",
+    "packages/roles/roles/b2b/exhibition.yml",
+    "packages/roles/roles/b2b/fulfillment.yml",
+    "packages/roles/roles/b2b/marketplace.yml",
+    "packages/roles/roles/b2b/outbound.yml",
+    "packages/roles/roles/b2b/sales.yml",
     "packages/roles/roles/common/member.yml",
     "packages/roles/roles/common/owner.yml",
     "packages/roles/roles/design/ads.yml",
@@ -97,7 +102,7 @@
     "packages/roles/roles/social/x.yml",
     "packages/roles/roles/social/youtube.yml"
   ],
-  "source_digest": "fa3d488c9b22c8807e72fb42720c27e5",
+  "source_digest": "4894ea5042bec33a7a63f4d71b73e4e9",
   "objects": [
     {
       "id": "ad",
@@ -845,7 +850,7 @@
       "domain": "b2b_account",
       "source_of_truth": "local_ledger",
       "freshness": "realtime",
-      "read_ranges": [],
+      "read_ranges": ["assigned"],
       "properties": [
         {
           "name": "id",
@@ -936,7 +941,7 @@
       "domain": "b2b_contact",
       "source_of_truth": "local_ledger",
       "freshness": "realtime",
-      "read_ranges": [],
+      "read_ranges": ["assigned"],
       "properties": [
         {
           "name": "id",
@@ -1015,7 +1020,7 @@
       "domain": "b2b_list",
       "source_of_truth": "local_ledger",
       "freshness": "realtime",
-      "read_ranges": [],
+      "read_ranges": ["assigned"],
       "properties": [
         {
           "name": "id",
@@ -1076,7 +1081,7 @@
       "domain": "b2b_opportunity",
       "source_of_truth": "local_ledger",
       "freshness": "realtime",
-      "read_ranges": [],
+      "read_ranges": ["assigned"],
       "properties": [
         {
           "name": "id",
@@ -1161,7 +1166,7 @@
       "domain": "b2b_quote",
       "source_of_truth": "local_ledger",
       "freshness": "realtime",
-      "read_ranges": [],
+      "read_ranges": ["assigned"],
       "properties": [
         {
           "name": "id",
@@ -1234,7 +1239,7 @@
       "domain": "b2b_sample",
       "source_of_truth": "local_ledger",
       "freshness": "realtime",
-      "read_ranges": [],
+      "read_ranges": ["assigned"],
       "properties": [
         {
           "name": "id",
@@ -2087,7 +2092,7 @@
       "domain": "design_request",
       "source_of_truth": "local_ledger",
       "freshness": "realtime",
-      "read_ranges": ["assigned"],
+      "read_ranges": ["assigned", "own"],
       "properties": [
         {
           "name": "id",
@@ -2225,7 +2230,7 @@
       "domain": "export_shipment",
       "source_of_truth": "local_ledger",
       "freshness": "realtime",
-      "read_ranges": [],
+      "read_ranges": ["assigned"],
       "properties": [
         {
           "name": "id",
@@ -5108,7 +5113,7 @@
       "domain": "trade_show",
       "source_of_truth": "local_ledger",
       "freshness": "realtime",
-      "read_ranges": [],
+      "read_ranges": ["assigned"],
       "properties": [
         {
           "name": "id",
@@ -5193,7 +5198,7 @@
       "domain": "trade_show_lead",
       "source_of_truth": "local_ledger",
       "freshness": "realtime",
-      "read_ranges": [],
+      "read_ranges": ["assigned"],
       "properties": [
         {
           "name": "id",
@@ -5712,6 +5717,38 @@
     },
     {
       "from": "approval_item",
+      "to": "b2b_account",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "subject.object",
+      "lookup": []
+    },
+    {
+      "from": "approval_item",
+      "to": "b2b_list",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "subject.object",
+      "lookup": []
+    },
+    {
+      "from": "approval_item",
+      "to": "b2b_quote",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "subject.object",
+      "lookup": []
+    },
+    {
+      "from": "approval_item",
+      "to": "b2b_sample",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "subject.object",
+      "lookup": []
+    },
+    {
+      "from": "approval_item",
       "to": "campaign",
       "direction": "out",
       "cardinality": "one",
@@ -5813,6 +5850,14 @@
       "cardinality": "one",
       "via": "subject.object",
       "lookup": ["shopify_admin.get_email_template", "shopify_admin.list_email_templates"]
+    },
+    {
+      "from": "approval_item",
+      "to": "export_shipment",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "subject.object",
+      "lookup": []
     },
     {
       "from": "approval_item",
@@ -5968,6 +6013,22 @@
     },
     {
       "from": "approval_item",
+      "to": "trade_show",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "subject.object",
+      "lookup": []
+    },
+    {
+      "from": "approval_item",
+      "to": "trade_show_lead",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "subject.object",
+      "lookup": []
+    },
+    {
+      "from": "approval_item",
       "to": "variant",
       "direction": "out",
       "cardinality": "one",
@@ -6064,6 +6125,38 @@
     },
     {
       "from": "b2b_account",
+      "to": "approval_item",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "approval_item.subject.object",
+      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+    },
+    {
+      "from": "b2b_account",
+      "to": "staged_change",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "staged_change.apply.outcome_ref",
+      "lookup": ["changes.pending_app_install", "changes.pending_email_enable"]
+    },
+    {
+      "from": "b2b_account",
+      "to": "staged_change",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "staged_change.target",
+      "lookup": ["changes.pending_app_install", "changes.pending_email_enable"]
+    },
+    {
+      "from": "b2b_account",
+      "to": "workflow_instance",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "workflow_instance.subject",
+      "lookup": []
+    },
+    {
+      "from": "b2b_account",
       "to": "workspace",
       "direction": "out",
       "cardinality": "one",
@@ -6076,6 +6169,38 @@
       "direction": "out",
       "cardinality": "one",
       "via": "workspace_id",
+      "lookup": []
+    },
+    {
+      "from": "b2b_list",
+      "to": "approval_item",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "approval_item.subject.object",
+      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+    },
+    {
+      "from": "b2b_list",
+      "to": "staged_change",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "staged_change.apply.outcome_ref",
+      "lookup": ["changes.pending_app_install", "changes.pending_email_enable"]
+    },
+    {
+      "from": "b2b_list",
+      "to": "staged_change",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "staged_change.target",
+      "lookup": ["changes.pending_app_install", "changes.pending_email_enable"]
+    },
+    {
+      "from": "b2b_list",
+      "to": "workflow_instance",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "workflow_instance.subject",
       "lookup": []
     },
     {
@@ -6096,10 +6221,74 @@
     },
     {
       "from": "b2b_quote",
+      "to": "approval_item",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "approval_item.subject.object",
+      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+    },
+    {
+      "from": "b2b_quote",
+      "to": "staged_change",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "staged_change.apply.outcome_ref",
+      "lookup": ["changes.pending_app_install", "changes.pending_email_enable"]
+    },
+    {
+      "from": "b2b_quote",
+      "to": "staged_change",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "staged_change.target",
+      "lookup": ["changes.pending_app_install", "changes.pending_email_enable"]
+    },
+    {
+      "from": "b2b_quote",
+      "to": "workflow_instance",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "workflow_instance.subject",
+      "lookup": []
+    },
+    {
+      "from": "b2b_quote",
       "to": "workspace",
       "direction": "out",
       "cardinality": "one",
       "via": "workspace_id",
+      "lookup": []
+    },
+    {
+      "from": "b2b_sample",
+      "to": "approval_item",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "approval_item.subject.object",
+      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+    },
+    {
+      "from": "b2b_sample",
+      "to": "staged_change",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "staged_change.apply.outcome_ref",
+      "lookup": ["changes.pending_app_install", "changes.pending_email_enable"]
+    },
+    {
+      "from": "b2b_sample",
+      "to": "staged_change",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "staged_change.target",
+      "lookup": ["changes.pending_app_install", "changes.pending_email_enable"]
+    },
+    {
+      "from": "b2b_sample",
+      "to": "workflow_instance",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "workflow_instance.subject",
       "lookup": []
     },
     {
@@ -6680,6 +6869,38 @@
     },
     {
       "from": "email_template",
+      "to": "workflow_instance",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "workflow_instance.subject",
+      "lookup": []
+    },
+    {
+      "from": "export_shipment",
+      "to": "approval_item",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "approval_item.subject.object",
+      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+    },
+    {
+      "from": "export_shipment",
+      "to": "staged_change",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "staged_change.apply.outcome_ref",
+      "lookup": ["changes.pending_app_install", "changes.pending_email_enable"]
+    },
+    {
+      "from": "export_shipment",
+      "to": "staged_change",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "staged_change.target",
+      "lookup": ["changes.pending_app_install", "changes.pending_email_enable"]
+    },
+    {
+      "from": "export_shipment",
       "to": "workflow_instance",
       "direction": "in",
       "cardinality": "many",
@@ -7496,6 +7717,70 @@
     },
     {
       "from": "staged_change",
+      "to": "b2b_account",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "apply.outcome_ref",
+      "lookup": []
+    },
+    {
+      "from": "staged_change",
+      "to": "b2b_account",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "target",
+      "lookup": []
+    },
+    {
+      "from": "staged_change",
+      "to": "b2b_list",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "apply.outcome_ref",
+      "lookup": []
+    },
+    {
+      "from": "staged_change",
+      "to": "b2b_list",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "target",
+      "lookup": []
+    },
+    {
+      "from": "staged_change",
+      "to": "b2b_quote",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "apply.outcome_ref",
+      "lookup": []
+    },
+    {
+      "from": "staged_change",
+      "to": "b2b_quote",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "target",
+      "lookup": []
+    },
+    {
+      "from": "staged_change",
+      "to": "b2b_sample",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "apply.outcome_ref",
+      "lookup": []
+    },
+    {
+      "from": "staged_change",
+      "to": "b2b_sample",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "target",
+      "lookup": []
+    },
+    {
+      "from": "staged_change",
       "to": "campaign",
       "direction": "out",
       "cardinality": "one",
@@ -7701,6 +7986,22 @@
       "cardinality": "one",
       "via": "target",
       "lookup": ["shopify_admin.get_email_template", "shopify_admin.list_email_templates"]
+    },
+    {
+      "from": "staged_change",
+      "to": "export_shipment",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "apply.outcome_ref",
+      "lookup": []
+    },
+    {
+      "from": "staged_change",
+      "to": "export_shipment",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "target",
+      "lookup": []
     },
     {
       "from": "staged_change",
@@ -7937,6 +8238,38 @@
     {
       "from": "staged_change",
       "to": "tracked_link",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "target",
+      "lookup": []
+    },
+    {
+      "from": "staged_change",
+      "to": "trade_show",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "apply.outcome_ref",
+      "lookup": []
+    },
+    {
+      "from": "staged_change",
+      "to": "trade_show",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "target",
+      "lookup": []
+    },
+    {
+      "from": "staged_change",
+      "to": "trade_show_lead",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "apply.outcome_ref",
+      "lookup": []
+    },
+    {
+      "from": "staged_change",
+      "to": "trade_show_lead",
       "direction": "out",
       "cardinality": "one",
       "via": "target",
@@ -8136,6 +8469,14 @@
     },
     {
       "from": "trade_show",
+      "to": "approval_item",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "approval_item.subject.object",
+      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+    },
+    {
+      "from": "trade_show",
       "to": "design_request",
       "direction": "out",
       "cardinality": "one",
@@ -8144,10 +8485,66 @@
     },
     {
       "from": "trade_show",
+      "to": "staged_change",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "staged_change.apply.outcome_ref",
+      "lookup": ["changes.pending_app_install", "changes.pending_email_enable"]
+    },
+    {
+      "from": "trade_show",
+      "to": "staged_change",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "staged_change.target",
+      "lookup": ["changes.pending_app_install", "changes.pending_email_enable"]
+    },
+    {
+      "from": "trade_show",
+      "to": "workflow_instance",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "workflow_instance.subject",
+      "lookup": []
+    },
+    {
+      "from": "trade_show",
       "to": "workspace",
       "direction": "out",
       "cardinality": "one",
       "via": "workspace_id",
+      "lookup": []
+    },
+    {
+      "from": "trade_show_lead",
+      "to": "approval_item",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "approval_item.subject.object",
+      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+    },
+    {
+      "from": "trade_show_lead",
+      "to": "staged_change",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "staged_change.apply.outcome_ref",
+      "lookup": ["changes.pending_app_install", "changes.pending_email_enable"]
+    },
+    {
+      "from": "trade_show_lead",
+      "to": "staged_change",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "staged_change.target",
+      "lookup": ["changes.pending_app_install", "changes.pending_email_enable"]
+    },
+    {
+      "from": "trade_show_lead",
+      "to": "workflow_instance",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "workflow_instance.subject",
       "lookup": []
     },
     {
@@ -8237,6 +8634,38 @@
       "cardinality": "one",
       "via": "subject",
       "lookup": ["shopify_admin.get_article", "shopify_admin.list_articles"]
+    },
+    {
+      "from": "workflow_instance",
+      "to": "b2b_account",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "subject",
+      "lookup": []
+    },
+    {
+      "from": "workflow_instance",
+      "to": "b2b_list",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "subject",
+      "lookup": []
+    },
+    {
+      "from": "workflow_instance",
+      "to": "b2b_quote",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "subject",
+      "lookup": []
+    },
+    {
+      "from": "workflow_instance",
+      "to": "b2b_sample",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "subject",
+      "lookup": []
     },
     {
       "from": "workflow_instance",
@@ -8341,6 +8770,14 @@
       "cardinality": "one",
       "via": "subject",
       "lookup": ["shopify_admin.get_email_template", "shopify_admin.list_email_templates"]
+    },
+    {
+      "from": "workflow_instance",
+      "to": "export_shipment",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "subject",
+      "lookup": []
     },
     {
       "from": "workflow_instance",
@@ -8457,6 +8894,22 @@
     {
       "from": "workflow_instance",
       "to": "tracked_link",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "subject",
+      "lookup": []
+    },
+    {
+      "from": "workflow_instance",
+      "to": "trade_show",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "subject",
+      "lookup": []
+    },
+    {
+      "from": "workflow_instance",
+      "to": "trade_show_lead",
       "direction": "out",
       "cardinality": "one",
       "via": "subject",
@@ -9752,7 +10205,7 @@
       "risk_class": "high",
       "requires_approval": true,
       "route_to": "role_holder",
-      "roles": ["dtc.store", "kol.youtube", "social.meta"],
+      "roles": ["b2b.exhibition", "dtc.store", "kol.youtube", "social.meta"],
       "what": "request design"
     },
     {
@@ -9825,6 +10278,80 @@
       "what": "stage asset"
     },
     {
+      "id": "stage_b2b_account_transfer",
+      "object": "b2b_account",
+      "source": "role",
+      "access": "write",
+      "change_kind": "b2b_account_transfer",
+      "risk_class": "medium",
+      "requires_approval": true,
+      "route_to": "owner",
+      "roles": ["b2b.sales"],
+      "what": "stage b2b account transfer"
+    },
+    {
+      "id": "stage_b2b_list_import",
+      "object": "b2b_list",
+      "source": "role",
+      "access": "write",
+      "change_kind": "b2b_list_import",
+      "risk_class": "medium",
+      "requires_approval": true,
+      "route_to": "role_holder",
+      "roles": ["b2b.exhibition", "b2b.outbound"],
+      "what": "stage b2b list import"
+    },
+    {
+      "id": "stage_b2b_outreach",
+      "object": "trade_show_lead",
+      "source": "role",
+      "access": "write",
+      "change_kind": "b2b_outreach",
+      "risk_class": "low",
+      "requires_approval": true,
+      "route_to": "role_holder",
+      "roles": ["b2b.exhibition", "b2b.outbound"],
+      "tool": "draft_reply",
+      "what": "stage b2b outreach"
+    },
+    {
+      "id": "stage_b2b_quote",
+      "object": "b2b_quote",
+      "source": "role",
+      "access": "write",
+      "change_kind": "b2b_quote",
+      "risk_class": "medium",
+      "requires_approval": true,
+      "route_to": "scope_manager",
+      "roles": ["b2b.sales"],
+      "what": "stage b2b quote"
+    },
+    {
+      "id": "stage_b2b_reply",
+      "object": "b2b_account",
+      "source": "role",
+      "access": "write",
+      "change_kind": "b2b_reply",
+      "risk_class": "low",
+      "requires_approval": true,
+      "route_to": "role_holder",
+      "roles": ["b2b.marketplace", "b2b.sales"],
+      "tool": "draft_reply",
+      "what": "stage b2b reply"
+    },
+    {
+      "id": "stage_b2b_sample",
+      "object": "b2b_sample",
+      "source": "role",
+      "access": "write",
+      "change_kind": "b2b_sample",
+      "risk_class": "low",
+      "requires_approval": true,
+      "route_to": "role_holder",
+      "roles": ["b2b.sales"],
+      "what": "stage b2b sample"
+    },
+    {
       "id": "stage_bid_change",
       "object": "ad_account",
       "source": "role",
@@ -9835,6 +10362,18 @@
       "route_to": "scope_manager",
       "roles": ["ads.google", "ads.meta", "ads.tiktok", "ads.x"],
       "what": "stage bid change"
+    },
+    {
+      "id": "stage_bill_release",
+      "object": "export_shipment",
+      "source": "role",
+      "access": "write",
+      "change_kind": "bill_release",
+      "risk_class": "high",
+      "requires_approval": true,
+      "route_to": "owner",
+      "roles": ["b2b.fulfillment"],
+      "what": "stage bill release"
     },
     {
       "id": "stage_broadcast",
@@ -9993,6 +10532,19 @@
       "what": "stage email template"
     },
     {
+      "id": "stage_export_docs_send",
+      "object": "export_shipment",
+      "source": "role",
+      "access": "write",
+      "change_kind": "export_docs_send",
+      "risk_class": "medium",
+      "requires_approval": true,
+      "route_to": "role_holder",
+      "roles": ["b2b.fulfillment"],
+      "tool": "draft_reply",
+      "what": "stage export docs send"
+    },
+    {
       "id": "stage_external_post",
       "object": "external_post",
       "source": "role",
@@ -10052,6 +10604,30 @@
       "what": "改商品 / 页面的文案、图与 SEO"
     },
     {
+      "id": "stage_marketplace_listing",
+      "object": "product",
+      "source": "role",
+      "access": "write",
+      "change_kind": "marketplace_listing",
+      "risk_class": "medium",
+      "requires_approval": true,
+      "route_to": "role_holder",
+      "roles": ["b2b.marketplace"],
+      "what": "stage marketplace listing"
+    },
+    {
+      "id": "stage_marketplace_spend",
+      "object": "b2b_account",
+      "source": "role",
+      "access": "write",
+      "change_kind": "marketplace_spend",
+      "risk_class": "high",
+      "requires_approval": true,
+      "route_to": "owner",
+      "roles": ["b2b.marketplace"],
+      "what": "stage marketplace spend"
+    },
+    {
       "id": "stage_outreach",
       "object": "creator_contact",
       "source": "role",
@@ -10097,6 +10673,18 @@
       "route_to": "scope_manager",
       "roles": ["dtc.content"],
       "what": "stage page seo edit"
+    },
+    {
+      "id": "stage_payment_instruction",
+      "object": "export_shipment",
+      "source": "role",
+      "access": "write",
+      "change_kind": "payment_instruction",
+      "risk_class": "high",
+      "requires_approval": true,
+      "route_to": "owner",
+      "roles": ["b2b.fulfillment"],
+      "what": "stage payment instruction"
     },
     {
       "id": "stage_post",
@@ -10258,6 +10846,18 @@
       "what": "stage segment edit"
     },
     {
+      "id": "stage_shipment_booking",
+      "object": "export_shipment",
+      "source": "role",
+      "access": "write",
+      "change_kind": "shipment_booking",
+      "risk_class": "medium",
+      "requires_approval": true,
+      "route_to": "role_holder",
+      "roles": ["b2b.fulfillment"],
+      "what": "stage shipment booking"
+    },
+    {
       "id": "stage_split_order",
       "object": "order",
       "source": "role",
@@ -10314,6 +10914,18 @@
       "route_to": "role_holder",
       "roles": ["kol.facebook", "kol.instagram", "kol.tiktok", "kol.x", "kol.youtube"],
       "what": "stage tracked link"
+    },
+    {
+      "id": "stage_trade_show_registration",
+      "object": "trade_show",
+      "source": "role",
+      "access": "write",
+      "change_kind": "trade_show_registration",
+      "risk_class": "high",
+      "requires_approval": true,
+      "route_to": "owner",
+      "roles": ["b2b.exhibition"],
+      "what": "stage trade show registration"
     },
     {
       "id": "stage_unpublish_product",

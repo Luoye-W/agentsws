@@ -1,0 +1,150 @@
+# docs/84 §4 B2B 岗位的第 5 条职责：**B2B 平台运营**（WP171，**第二批**，`status: planned`）。
+# 骨架见 `b2b/sales.yml` 文件头。
+#
+# YAML 先建好（scopes / 动作 / 面板 / 白名单都写了），第一版不做：岗位模板里 `default: false`，
+# 向导里不默认勾。先做阿里国际站（用的人最多），中国制造网、环球资源以后照同一套加。
+#
+# 阿里国际站、中国制造网、环球资源**对卖家基本没有开放接口**，平台也不允许机器自动操作。
+# 所以走**浏览器模式**（`mode: browser`）：第三栏受控浏览器，读可以自动；写（发产品、改价、
+# 调直通车、回 RFQ）先出卡，人点了再做，失效就停。做法同 `social.facebook-group`。
+#
+# 花钱口子（出价、预算、开直通车）永远 L1（`marketplace_spend` 在 `HARD_L1` 里，同投放）。
+# 平台违规词与类目规则写进 `b2b-listing` 技能（第二批，还没有正文，所以这里先不登记）。
+id: b2b.marketplace
+version: 1.0.0
+domain: b2b
+name: { zh: B2B 平台运营, en: B2B Marketplaces }
+description: 阿里国际站这类 B2B 平台上的产品发布与优化、关键词与直通车、回 RFQ、平台询盘分给业务、店铺数据
+status: planned
+mode: browser
+
+scopes:
+  - { domain: b2b_account, ops: [read, stage], range: assigned, max_sensitivity: internal }
+  - { domain: b2b_opportunity, ops: [read], range: assigned, max_sensitivity: internal }
+  - { domain: product, ops: [read], range: assigned, max_sensitivity: internal }
+  - { domain: knowledge, ops: [read], range: workspace, max_sensitivity: internal }
+  - { domain: approval, ops: [read, approve], range: own, max_sensitivity: internal }
+
+# 平台后台没有开放给卖家的接口：没有连接卡，走浏览器；平台通知信靠邮件分拣认出来
+connectors: []
+
+actions:
+  - id: stage_marketplace_listing
+    target: product
+    kind: staged_change
+    mandate:
+      caps: {}
+      window: { max_count: 20, per: day }
+    route_to: role_holder
+  - id: stage_marketplace_spend
+    target: b2b_account
+    kind: staged_change
+    mandate:
+      caps: { max_daily_spend_usd: 50 }
+      per_change_limits: { max_items: 1 }
+      window: { max_count: 5, per: day }
+    review_cannot_be_disabled: true
+    route_to: owner
+  # 回 RFQ：带报价的那一封碰到承诺词就转人审（同回询盘）
+  - id: stage_b2b_reply
+    target: b2b_account
+    kind: outbound_message
+    mandate:
+      caps: { max_replies_per_day: 30 }
+      window: { max_count: 30, per: day }
+    route_to: role_holder
+
+automation:
+  stage_marketplace_listing:
+    ceiling: L2
+    initial: L1
+    promotion: { adoption_rate_min: 0.95, window_weeks: 4, min_samples: 20 }
+    demotion_triggers: [guardrail_hit, manual]
+  stage_marketplace_spend:
+    ceiling: L1
+    initial: L1
+    hard_ceiling: true
+    promotion: { adoption_rate_min: 1, window_weeks: 0, min_samples: 0 }
+    demotion_triggers: [manual]
+  stage_b2b_reply:
+    ceiling: L1
+    initial: L1
+    promotion: { adoption_rate_min: 1, window_weeks: 0, min_samples: 0 }
+    demotion_triggers: [manual]
+
+skills:
+  - { name: brand-voice, tier: open, load: always }
+
+home_blocks:
+  # docs/84 §1.2 面板（少字）：平台询盘 · 待优化产品 · RFQ
+  - { id: b2b.marketplace.inquiries, placement: focus, component: table, query: b2b.marketplace_inquiries, default_order: 10, pinnable: true, adaptive: true }
+  - { id: b2b.marketplace.listings, placement: role_view, component: table, query: b2b.listings_to_improve, default_order: 20, pinnable: true, adaptive: true }
+  - { id: b2b.marketplace.rfqs, placement: queue, component: table, query: b2b.rfqs, default_order: 30, pinnable: true, adaptive: true }
+
+grounding:
+  - {
+      name: marketplace_intent,
+      intent_terms: [阿里国际站, 国际站, 中国制造网, 环球资源, 直通车, P4P, RFQ, Alibaba, Made-in-China, Global Sources],
+      cue_terms: [产品发布, 关键词, 出价, 橱窗, 平台询盘, 店铺数据, listing, keyword, bid],
+      tool: search_policies,
+      prefetch: false,
+    }
+
+notifications:
+  - { event: 'approval.created:stage_marketplace_spend', mode: immediate, recipients: [owner], escalate_after_hours: 12 }
+
+# 浏览器只许打开这几个平台（空白名单一律拒）
+browser_scope:
+  - alibaba.com
+  - '*.alibaba.com'
+  - made-in-china.com
+  - '*.made-in-china.com'
+  - globalsources.com
+  - '*.globalsources.com'
+
+handover:
+  transfers: [open_work_items, context, home_blocks, queue_lane]
+  fallback: scope_manager
+  revoke_context_on_removal: true
+
+requires: []
+
+quick_prompts:
+  - id: platform_inquiries
+    label: { zh: "平台上的询盘", en: "Marketplace inquiries" }
+    prompt: "看阿里国际站后台今天的询盘，按真买家信号排好，分给业务"
+    kind: ask
+  - id: listing_check
+    label: { zh: "哪几个产品该改", en: "Listings to improve" }
+    prompt: "看国际站上曝光和点击最低的 5 个产品，各给一条改标题与关键词的建议"
+    kind: ask
+  - id: p4p_review
+    label: { zh: "直通车花得值不值", en: "Is P4P worth it" }
+    prompt: "看上周直通车每个词花了多少、带来几条询盘，列出该降价或停掉的词"
+    kind: review
+
+task_examples:
+  - id: improve_listing
+    title: { zh: "优化一个产品页", en: "Improve a listing" }
+    description: "国际站上一个主推款曝光很低，想改标题和关键词。"
+    expected_output: "一份改前改后的对照（标题、关键词、属性），改是一张待你批的卡，由你点了再在后台里做。"
+  - id: rfq_reply
+    title: { zh: "回一条 RFQ", en: "Reply to an RFQ" }
+    description: "国际站上来了一条 RFQ，想报个价抢一下。"
+    expected_output: "一封 RFQ 回复草稿，价格与交期只引事实卡；带报价的回复是一张待你批的卡。"
+
+persona:
+  zh: |
+    你是谁：B2B 岗位里管阿里国际站这类平台后台的人。
+    你负责：平台上的产品发布与优化、关键词与直通车、回 RFQ、把平台询盘分给业务、看店铺数据。
+    你不负责：询盘之后的报价与谈判→业务；站外找客户→主动开发；自己独立站→网站运营。
+    怎么做：平台没有开放接口，读在受控浏览器里做；写动作先出卡、人点了再做；花钱的一律等人点。
+    口气：像个熟后台的平台运营，只说数据和改哪儿。
+    必须出卡：发布或修改产品、改出价与预算、开直通车、回 RFQ 报价。
+  en: |
+    Who you are: the person running Alibaba.com-style marketplace back-ends in the B2B position.
+    You handle: publishing and improving listings, keywords and pay-per-click, RFQ replies, routing marketplace inquiries to Sales, store data.
+    Not yours: quotes and negotiation after an inquiry → Sales; finding buyers off-platform → Outbound; our own website → Web Operations.
+    How you work: these platforms have no seller API, so reading happens in the controlled browser; every write is a card first, done only after a human clicks; anything that spends money waits for a human.
+    Tone: like a seasoned marketplace operator — numbers and exactly what to change.
+    Always ask: publishing or editing a listing, changing bids or budgets, turning on pay-per-click, RFQ replies with a quote.

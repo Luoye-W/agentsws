@@ -82,6 +82,15 @@ describe('内置职责填了什么（55 §3）', () => {
       '*.xda-developers.com',
       '*.reddit.com',
     ],
+    // WP171（docs/84 §4）：B2B 平台运营走浏览器（三家平台对卖家都没有开放接口）。第二批
+    'b2b.marketplace': [
+      'alibaba.com',
+      '*.alibaba.com',
+      'made-in-china.com',
+      '*.made-in-china.com',
+      'globalsources.com',
+      '*.globalsources.com',
+    ],
     'amz.support': [
       'sellercentral.amazon.com',
       'sellercentral-europe.amazon.com',

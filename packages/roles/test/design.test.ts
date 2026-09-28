@@ -138,7 +138,8 @@ describe('设计岗位模板（58 §5：默认全勾）', () => {
 })
 
 describe('三条「向设计岗下需求单」是独立段落', () => {
-  const sources = ['dtc.store', 'social.meta', 'kol.youtube']
+  // WP171（docs/84 §11.2）：展会那条也向设计岗下需求单（展位与印刷品设计交给 `design.exhibition`）
+  const sources = ['dtc.store', 'social.meta', 'kol.youtube', 'b2b.exhibition']
 
   it('三条都加上了，动作与自动化等级一致', () => {
     for (const id of sources) {

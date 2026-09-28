@@ -525,6 +525,13 @@ export const BUNDLED_ROLES = [
   'pr.reddit',
   'pr.forums',
   'pr.monitoring',
+  // WP171（docs/84 §11.5）：B2B 岗位的五条职责（第五条平台运营是第二批，YAML 先建、默认不勾）。
+  // 与红人 / 社媒同一条理由：种岗位那一步会把解析不到的职责筛掉，少一条向导里就少一个勾。
+  'b2b.sales',
+  'b2b.outbound',
+  'b2b.exhibition',
+  'b2b.fulfillment',
+  'b2b.marketplace',
 ] as const
 
 /**

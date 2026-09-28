@@ -303,6 +303,13 @@ export interface RoleDefinition {
    */
   mode?: 'api' | 'browser'
   /**
+   * WP171（docs/84 §11.5）：这条职责第一版做不做。不写 = `active`。
+   *
+   * `planned` = YAML 先建好（scopes / 动作 / 面板都写了），但第一版不做：岗位模板里
+   * `default: false`，向导里不默认勾。第一个是 `b2b.marketplace`（B2B 平台运营，第二批）。
+   */
+  status?: 'active' | 'planned'
+  /**
    * WP120（69）：**这条职责的角色定位**——系统提示里的「你是谁」。
    *
    * 为什么非有不可：69 §0 那条亲测记录——让红人营销岗位找红人，回出来的是客服的话。

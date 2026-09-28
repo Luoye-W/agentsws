@@ -71,6 +71,8 @@ import {
   KOL_FOLDER,
   // WP121b（70 §2.2）：试跑失败分档（向导挑那一句人话与这里的断言用同一张表）
   modelFailureKind,
+  // WP171：B2B 五条职责的唯一一份清单
+  B2B_ROLE_IDS,
   // WP72：渠道 id → 职责 id 与中文名。**全仓唯一**那张渠道清单，不在这里拼字符串
   PR_ROLE_IDS,
   SUPPORT_FOLDER,
@@ -1801,6 +1803,9 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
     loadBundledRole('pr.reddit'),
     loadBundledRole('pr.forums'),
     loadBundledRole('pr.monitoring'),
+    // WP171（docs/84 §11.5）：B2B 岗位的五条职责。`b2b-3c-3p` 那个 pack 里真挂着前四条；
+    // 装进库里的理由同上（向导里「B2B」那个岗位显示五条而不是一条）。
+    ...B2B_ROLE_IDS.map((id) => loadBundledRole(id)),
   ]
   const packRoles = pack.roles.map((r) => parseRole(r.yaml, `${pack.dir}/${r.path}`))
   const overridden = new Set(packRoles.map((r) => r.id))

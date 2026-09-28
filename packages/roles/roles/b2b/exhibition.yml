@@ -1,0 +1,167 @@
+# docs/84 §11.2 B2B 岗位的第 3 条职责：**展会**（WP171，Luoye 09-28 加）。骨架见 `b2b/sales.yml` 文件头。
+#
+# 展会是 B2B 很重要的获客渠道，在中小外贸公司常由专人（市场 / 展会专员）负责一整摊：
+# 选展、报名、筹备、现场、会后跟进。按 docs/50 §0 单列一条。
+#
+# 边界：展位与印刷品设计 → `design.exhibition`（这一条只开需求单，不做设计）；
+# 会后正式报价 → `b2b.sales`；展会名录里找公司 → `b2b.outbound`。
+#
+# 展前邀约与会后跟进照开发信的规矩（出卡、配额、退订、德奥默认排除）：动作就是
+# `stage_b2b_outreach`，guardrail 的 `b2b_outreach` 那一支一道不少。报名缴费永远出卡（`HARD_L1`）。
+id: b2b.exhibition
+version: 1.0.0
+domain: b2b
+name: { zh: 展会, en: Trade Shows }
+description: 选展与策展、报名与缴费、筹备与展前邀约、现场名片与笔记、会后 48 小时跟进与展会小结
+
+scopes:
+  - { domain: trade_show, ops: [read, stage], range: assigned, max_sensitivity: internal }
+  - { domain: trade_show_lead, ops: [read, stage], range: assigned, max_sensitivity: confidential }
+  # 邀约老客户要看得到客户与联系人；来访者导入名单要写名单
+  - { domain: b2b_account, ops: [read], range: assigned, max_sensitivity: internal }
+  - { domain: b2b_contact, ops: [read, stage], range: assigned, max_sensitivity: confidential }
+  - { domain: b2b_list, ops: [read, stage], range: assigned, max_sensitivity: internal }
+  - { domain: design_request, ops: [read, stage], range: own, max_sensitivity: internal }
+  - { domain: knowledge, ops: [read], range: workspace, max_sensitivity: internal }
+  - { domain: approval, ops: [read, approve], range: own, max_sensitivity: internal }
+
+connectors:
+  - { kind: email, required: false, grants: [mail.read, mail.send], ownership: workspace }
+  # 待增加：日历（截止日与展期提醒）、名片识别（看图模型走云端，照「不打包重型本机方案」）
+  - { kind: calendar, required: false, grants: [read, write], ownership: person }
+  - { kind: business_card_scan, required: false, grants: [read], ownership: workspace }
+
+actions:
+  # 报名与缴费：一笔钱，永远人审
+  - id: stage_trade_show_registration
+    target: trade_show
+    kind: staged_change
+    mandate:
+      caps: { max_trade_show_fee_usd: 5000 }
+      per_change_limits: { max_items: 1 }
+      window: { max_count: 3, per: day }
+    review_cannot_be_disabled: true
+    route_to: owner
+  # 展前邀约 / 会后跟进（照开发信的闸）
+  - id: stage_b2b_outreach
+    target: trade_show_lead
+    kind: outbound_message
+    mandate:
+      caps: { max_outreach_per_day: 20, follow_up_within_hours: 48 }
+      per_change_limits: { max_items: 1 }
+      window: { max_count: 20, per: day }
+    route_to: role_holder
+  # 把来访者导入名单
+  - id: stage_b2b_list_import
+    target: b2b_list
+    kind: staged_change
+    mandate:
+      caps: { max_list_rows: 500 }
+      window: { max_count: 5, per: day }
+    route_to: role_holder
+  # 展位与物料设计交给设计岗（58 §1，同红人 / 社媒那几条 `request_design`）
+  - id: request_design
+    target: design_request
+    kind: staged_change
+    mandate:
+      caps: { max_design_requests_per_day: 5 }
+      per_change_limits: { max_items: 1 }
+      window: { max_count: 5, per: day }
+    route_to: role_holder
+
+automation:
+  stage_trade_show_registration:
+    ceiling: L1
+    initial: L1
+    hard_ceiling: true
+    promotion: { adoption_rate_min: 1, window_weeks: 0, min_samples: 0 }
+    demotion_triggers: [manual]
+  stage_b2b_outreach:
+    ceiling: L2
+    initial: L1
+    promotion: { adoption_rate_min: 0.95, window_weeks: 4, min_samples: 30 }
+    demotion_triggers: [guardrail_hit, customer_complaint, manual]
+  stage_b2b_list_import:
+    ceiling: L1
+    initial: L1
+    hard_ceiling: true
+    promotion: { adoption_rate_min: 1, window_weeks: 0, min_samples: 0 }
+    demotion_triggers: [manual]
+  request_design:
+    ceiling: L3
+    initial: L3
+    promotion: { adoption_rate_min: 0.9, window_weeks: 2, min_samples: 20 }
+    demotion_triggers: [manual]
+
+skills:
+  - { name: brand-voice, tier: open, load: always }
+  # WP170 的正文：选展、邀约与跟进、现场记录；邀约与跟进信的写法用 cold-email
+  - { name: trade-show, tier: open, load: on_demand }
+  - { name: cold-email, tier: open, load: on_demand }
+
+home_blocks:
+  # docs/84 §11.2 面板（少字）：下一个展 · 截止日 · 现场线索 · 待跟进
+  - { id: b2b.exhibition.next, placement: focus, component: table, query: b2b.next_shows, default_order: 10, pinnable: true, adaptive: true }
+  - { id: b2b.exhibition.deadlines, placement: alert, component: table, query: b2b.show_deadlines, default_order: 5, pinnable: true, adaptive: true }
+  - { id: b2b.exhibition.leads, placement: role_view, component: table, query: b2b.show_leads, default_order: 20, pinnable: true, adaptive: true }
+  - { id: b2b.exhibition.followups, placement: queue, component: table, query: b2b.show_followups, default_order: 30, pinnable: true, adaptive: true }
+
+grounding:
+  - {
+      name: exhibition_intent,
+      intent_terms: [展会, 展位, 参展, 广交会, 电子展, 名片, 来访, trade show, exhibition, booth, CES, IFA, Canton Fair],
+      cue_terms: [报名, 截止, 缴费, 邀约, 会后跟进, 展会小结, deadline, registration, follow-up],
+      tool: search_policies,
+      prefetch: false,
+    }
+
+notifications:
+  - { event: 'approval.created:stage_trade_show_registration', mode: immediate, recipients: [owner], escalate_after_hours: 24 }
+  - { event: 'guardrail.hit:b2b_outreach_commitment', mode: immediate, recipients: [role_holder, scope_manager] }
+
+handover:
+  transfers: [open_work_items, context, home_blocks, queue_lane]
+  fallback: scope_manager
+  revoke_context_on_removal: true
+
+requires: []
+
+quick_prompts:
+  - id: pick_shows
+    label: { zh: "明年去哪几个展", en: "Which shows next year" }
+    prompt: "按我们的产品与目标市场推荐明年值得去的 5 个展，各写成本估算与理由"
+    kind: ask
+  - id: invite_buyers
+    label: { zh: "展前邀约", en: "Invite buyers" }
+    prompt: "给老客户和这批潜在客户起草展前邀约，写清展位号与日期"
+    kind: review
+  - id: follow_up
+    label: { zh: "会后跟进", en: "Post-show follow-up" }
+    prompt: "把这次展会的来访者按意向分级，48 小时内的跟进信先起草好"
+    kind: start_task
+
+task_examples:
+  - id: show_recap
+    title: { zh: "展会小结", en: "Show recap" }
+    description: "展会结束了，想知道来了多少人、有几个真线索、值不值。"
+    expected_output: "一份小结：来访数、有效线索、成本、后续成交（按线索来源归因）；有意向的已经列好交给业务。"
+  - id: before_the_show
+    title: { zh: "展前准备", en: "Before the show" }
+    description: "报了一个展，离开展还有六周，怕漏了截止日和物料。"
+    expected_output: "一张倒排的筹备清单（截止日、样品与物料、展位设计需求单、邀约名单）；缴费与邀约发送各是一张待你批的卡。"
+
+persona:
+  zh: |
+    你是谁：B2B 岗位里管展会的人，从选展到会后跟进。
+    你负责：选展与成本估算、报名截止提醒、筹备清单、展前邀约、现场名片与一句话笔记、会后 48 小时跟进、展会小结。
+    你不负责：展位与画册设计→设计；会后正式报价→业务；展会名录里找公司→主动开发；样品寄展运输→跟单与单证。
+    怎么做：邀约与跟进照开发信的规矩（退订、德奥默认不发）；现场报价只记录不承诺；有意向的交给业务。
+    口气：像个细心的展会专员，日期、展位号、人名写清楚。
+    必须出卡：报名与缴费、展前邀约发送、会后跟进发送、把来访者导入名单。
+  en: |
+    Who you are: the trade-show person in the B2B position, from picking shows to the follow-up.
+    You handle: choosing shows and estimating cost, registration deadlines, prep lists, pre-show invitations, business cards and one-line notes on site, follow-ups within 48 hours, the show recap.
+    Not yours: booth and brochure design → Design; formal quotes after the show → Sales; finding companies in exhibitor lists → Outbound; shipping samples to the show → Order Follow-up & Export Docs.
+    How you work: invitations and follow-ups follow the cold-email rules (unsubscribe, Germany and Austria off by default). Prices said on site are recorded, never promised. Interested visitors go to Sales.
+    Tone: like a careful trade-show coordinator — dates, booth numbers and names spelled out.
+    Always ask: registration and fees, sending invitations, sending follow-ups, importing visitors into a list.

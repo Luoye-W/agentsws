@@ -2967,6 +2967,13 @@ const zh: Table = {
   'skill.name.policy-review': '政策核对',
   'skill.name.returns-policy-calc': '退换货规则',
   'skill.name.workspace-basics': '工作台基础',
+  // WP170 / WP171（docs/84）：B2B 六个技能
+  'skill.name.b2b-inquiry': '询盘回复',
+  'skill.name.cold-email': '开发信',
+  'skill.name.export-docs': '跟单与单证',
+  'skill.name.prospecting': '找客户与打分',
+  'skill.name.quotation': '报价单',
+  'skill.name.trade-show': '展会',
   'kol.campaign.already': '已在合作里',
   'kol.campaign.all_existing':
     '清单上这 {n} 位都已经在合作里了，所以没有新建。去合作线程接着谈，或者先找更多人。',
@@ -6024,6 +6031,13 @@ const en: Table = {
   'skill.name.policy-review': 'Policy check',
   'skill.name.returns-policy-calc': 'Returns rules',
   'skill.name.workspace-basics': 'Workspace basics',
+  // WP170 / WP171（docs/84）
+  'skill.name.b2b-inquiry': 'Inquiry replies',
+  'skill.name.cold-email': 'Cold email',
+  'skill.name.export-docs': 'Export documents',
+  'skill.name.prospecting': 'Prospecting',
+  'skill.name.quotation': 'Quotations',
+  'skill.name.trade-show': 'Trade shows',
   'kol.campaign.already': 'already working together',
   'kol.campaign.all_existing':
     'All {n} people on this list are already in a collaboration, so nothing new was created. Continue in the threads, or find more people first.',
