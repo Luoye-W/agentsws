@@ -74,6 +74,8 @@ export interface MessageAccountView {
     folder: string
     to_folder?: string
   }
+  /** WP172：这只邮箱收 B2B 信（B2B 岗位开着 + 邮箱卡上「收 B2B 信」开着）——左栏据此画「B2B 往来」。 */
+  b2b?: boolean
 }
 
 /** 打开一封信时一次拿全（正文 + 这条会话 + 右栏那一格要的东西）。 */

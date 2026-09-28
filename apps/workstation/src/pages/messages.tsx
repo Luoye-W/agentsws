@@ -73,8 +73,8 @@ import { cn } from '@/lib/utils'
  *
  * WP161：岗位那三只的显示名走 i18n（客服在处理 / 红人合作 / B2B 往来），服务器上的
  * 真名是 `KefuAgents` / `KOLAgents` / `BtoBAgents`（或用户邮箱里已有的大小写变体）。
- * `onlyWhenPresent` = 还没有对应岗位时不画：B2B 岗位还在设计，消息库里没有 B2B 那只
- * 文件夹的信就不显示它。
+ * `onlyWhenPresent` = 没有对应岗位时不画：WP172 起「B2B 往来」按岗位判断——有一只邮箱在收
+ * B2B 信（B2B 岗位开着），或者消息库里已经有 B2B 那只文件夹的信，才显示它。
  */
 const FOLDERS: readonly {
   kind: MessageFolderKind
@@ -299,7 +299,10 @@ export function MessagesPage(): ReactNode {
         <nav className="flex flex-col gap-0.5" aria-label={t('messages.folders')}>
           {FOLDERS.filter(
             ({ kind, onlyWhenPresent }) =>
-              onlyWhenPresent !== true || list.some((a) => a.folders.some((f) => f.kind === kind)),
+              onlyWhenPresent !== true ||
+              list.some(
+                (a) => (kind === 'b2b' && a.b2b === true) || a.folders.some((f) => f.kind === kind),
+              ),
           ).map(({ kind, icon: Icon }) => {
             const unread = list
               .flatMap((a) => a.folders)

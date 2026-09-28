@@ -561,6 +561,28 @@ describe('WP167：邮箱卡上的三个开关', () => {
     expect(screen.getByTestId('mailbox-switches').getAttribute('data-shadow')).toBe('true')
   })
 
+  it('WP172：B2B 岗位没开不画「收 B2B 信」；开着才画，拨一下写一次', async () => {
+    switches.view = { ...ON, b2b: true, b2b_position: false }
+    state.connections = [MAIL_CONNECTION]
+    const first = renderWithProviders(<ConnectionsPage />, '/connections')
+    const card = await screen.findByTestId('mailbox-switches')
+    expect(within(card).queryByTestId('mailbox-switch-b2b')).toBeNull()
+    first.unmount()
+
+    const user = userEvent.setup()
+    switches.view = { ...ON, b2b: true, b2b_position: true }
+    switches.writes.length = 0
+    renderWithProviders(<ConnectionsPage />, '/connections')
+    const b2b = await screen.findByTestId('mailbox-switch-b2b')
+    expect(b2b.getAttribute('aria-checked')).toBe('true')
+    await user.click(b2b)
+    await waitFor(() => {
+      expect(switches.writes).toEqual([
+        { id: 'conn_mail_1', input: { b2b: false }, assignment: 'asg_owner' },
+      ])
+    })
+  })
+
   it('没装消息同步（接口 404）或不是邮箱：一个开关都不画', async () => {
     state.connections = [MAIL_CONNECTION]
     renderWithProviders(<ConnectionsPage />, '/connections')

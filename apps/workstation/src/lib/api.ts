@@ -1369,9 +1369,13 @@ export interface MailboxSwitchesView {
   move: boolean
   mark_read: boolean
   takeover: boolean
+  /** WP172：这只邮箱收 B2B 信（缺省开）。 */
+  b2b?: boolean
+  /** WP172：B2B 岗位开着（只读；没开时卡上不画「收 B2B 信」）。 */
+  b2b_position?: boolean
 }
 
-export type MailboxSwitchName = 'shadow_mode' | 'move' | 'mark_read'
+export type MailboxSwitchName = 'shadow_mode' | 'move' | 'mark_read' | 'b2b'
 
 export const getMailboxSwitches = (id: string, assignment?: string): Promise<MailboxSwitchesView> =>
   api<MailboxSwitchesView>(
@@ -4965,6 +4969,8 @@ export interface MessageAccountView {
     folder: string
     to_folder?: string
   }
+  /** WP172：这只邮箱收 B2B 信（B2B 岗位开着 + 邮箱卡上「收 B2B 信」开着）——左栏据此画「B2B 往来」。 */
+  b2b?: boolean
 }
 
 /** 打开一条会话时一次拿全（正文 + 状态带）。 */
@@ -5059,7 +5065,7 @@ export const moveMessage = (
  */
 export const confirmMessageRoute = (
   id: string,
-  route: 'support' | 'kol' | 'inbox',
+  route: 'support' | 'kol' | 'b2b' | 'inbox',
 ): Promise<{ message: MessageRecord; handed_off: boolean; matter_id?: string }> =>
   api(`/v1/messages/${encodeURIComponent(id)}/confirm-route`, {
     method: 'POST',

@@ -3,6 +3,7 @@
  *
  * - 显示名走 i18n，不露服务器真名：客服在处理 / 红人合作 / B2B 往来；
  * - B2B 岗位还在设计：消息库里没有 B2B 那只文件夹的信就**不显示**它。
+ * - WP172：改成按岗位判断——有一只邮箱在收 B2B 信（B2B 岗位开着）就显示，哪怕还没有一封。
  */
 import type { MessageLabel } from '@agentsws/contracts'
 import { screen } from '@testing-library/react'
@@ -71,6 +72,13 @@ describe('消息页左栏：岗位文件夹（WP161）', () => {
         ],
       },
     ]
+    renderWithProviders(<MessagesPage />)
+    expect(await screen.findByText('B2B 往来')).toBeDefined()
+    expect(folderKinds()).toContain('b2b')
+  })
+
+  it('WP172：B2B 岗位开着（有一只邮箱在收 B2B 信）→ 还没有一封 B2B 信也显示「B2B 往来」', async () => {
+    accounts = [{ ...base, b2b: true }]
     renderWithProviders(<MessagesPage />)
     expect(await screen.findByText('B2B 往来')).toBeDefined()
     expect(folderKinds()).toContain('b2b')

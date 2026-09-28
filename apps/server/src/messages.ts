@@ -772,6 +772,7 @@ export function createMessages(options: MessagesOptions): MessagesAssembly {
           folders,
           backfill_floor: sync.backfillFloor(address),
           ...(failure === undefined ? {} : { last_mailbox_failure: failure }),
+          ...(b2bEnabledFor(address) ? { b2b: true } : {}),
         })
       }
       return { accounts: out }
