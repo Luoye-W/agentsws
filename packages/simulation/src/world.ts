@@ -18,7 +18,7 @@ import {
  * WP171（docs/84）：B2B 那两件事的判断——授权谁批（`b2b-core`）、承诺与改收款账户（`core`）。
  * 世界里不另写一份，否则这几条题验的就是场景自己写的答案。
  */
-import { quoteApprover, quoteBreaches } from '@agentsws/b2b-core'
+import { quoteApprover, quoteBreaches, quoteBreachText } from '@agentsws/b2b-core'
 // WP121b（70 §1–§3）：向导第 ② 步那一轮分析走这一份真解析器（夹具 replay，不联网）
 import type { PageFetch } from '@agentsws/brand-intake'
 import { analyzeBrand, applyEdits, mergeProfile } from '@agentsws/brand-intake'
@@ -7568,9 +7568,8 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
               ...(routedName === undefined ? {} : { person: routedName }),
               position: 'B2B',
             })
-      const breachWords = breaches
-        .map((b) => b.replace(/^quote_|_(over|under)_mandate$/g, ''))
-        .join('、')
+      // WP174：卡面说人话（金额 / 毛利 / 折扣 / 账期），与服务进程同一张表
+      const breachWords = quoteBreachText(breaches)
       const cardTitle =
         title ??
         (kind === 'b2b_quote'

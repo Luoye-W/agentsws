@@ -26,7 +26,7 @@ import type {
   B2bStagedView,
 } from '@agentsws/api'
 import { ApiError } from '@agentsws/api'
-import { parseCustomerCsv, quoteApprover, quoteBreaches } from '@agentsws/b2b-core'
+import { parseCustomerCsv, quoteApprover, quoteBreaches, quoteBreachText } from '@agentsws/b2b-core'
 import type {
   ApprovalBus,
   AssignmentId,
@@ -426,7 +426,7 @@ export function createB2bService(options: B2bServiceOptions): B2bServiceAssembly
       kind === 'b2b_quote'
         ? breaches.length === 0
           ? '在授权内，业务员自己批（报价永远出卡）'
-          : `超了授权（${breaches.map((b) => b.replace(/^quote_|_(over|under)_mandate$/g, '')).join('、')}），转${approver === 'owner' ? '老板' : '上级'}批`
+          : `超了授权（${quoteBreachText(breaches)}），转${approver === 'owner' ? '老板' : '上级'}批`
         : d.op === 'create'
           ? '新建一条记录，批了才进 B2B 库'
           : '改一条记录，批了才生效（原样见「改之前」）'
