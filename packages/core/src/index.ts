@@ -15,3 +15,5 @@ export * from './sensitive-mask.js'
 export * from './sequence.js'
 export * from './snapshot.js'
 export * from './suppression.js'
+// WP180：每次运行的上下文里写一次「现在时间 + 公司时区」
+export * from './time-context.js'

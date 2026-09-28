@@ -47,6 +47,7 @@ import { meetingRoutes } from './routes/meetings.js'
 // WP113（63）：消息——统一收件处 `/v1/messages/*`
 import { messageRoutes } from './routes/messages.js'
 import { modelRoutes } from './routes/models.js'
+import { officialPluginsRoutes } from './routes/official-plugins.js'
 import { onboardingRoutes } from './routes/onboarding.js'
 import { ontologyRoutes } from './routes/ontology.js'
 import { orgRoutes } from './routes/org.js'
@@ -227,6 +228,8 @@ export function collectRoutes(): Route[] {
     ...extensionRoutes(),
     // WP144（docs/80）：电脑操控。`/v1/settings/computer-use*` 与 `/v1/computer-use/*` 都是新路径，与别处不撞
     ...computerUseRoutes(),
+    // WP180：官方插件（装 / 升级 / 卸载出卡、只从审过的清单装、配置写回只许写非锁定行）。`/v1/settings/official-plugins*` 是新路径
+    ...officialPluginsRoutes(),
     // WP172（docs/84）：B2B 库。`/v1/b2b/*` 是新前缀，与别处都不撞（放在最后：生成物的顺序不动别人）
     ...b2bRoutes(),
   ]

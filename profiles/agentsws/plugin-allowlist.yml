@@ -1,0 +1,61 @@
+# 官方插件的**审过的清单**（WP180）——设置 →「官方插件」只列这里的、也只许装这里的。
+#
+# 规矩（docs/42 红线 7「官方功能优先」+ WP179 B 类结论「包一层就能开」）：
+# - 清单外的一律直接拒（服务进程 + 完整 profile 里的守门插件两处都拒）；
+# - 装 / 升级 / 卸载一律出卡（`official_plugin`），卡上写的就是下面每一项的字段；
+# - 装完 profile patch（`cordis.patch.yml`）一个字节都不许变；锁定表里的行谁都改不动。
+#
+# 每一项都逐个核过（出处都是 dsh 0.2.0-rc.1 安装里自带的那一份，路径 `node_modules/@deepseek-ai/<包>/`）：
+# - `license`：包里 `package.json` 的 `license` 字段 + `LICENSE` 文件第一行（都是「MIT License / Copyright (c) 2026 DeepSeek」）；
+# - `rows`：包里 `cordis.patch.yml` 的 `insert` 行（`packages/dsh-adapter/test/official-plugins.test.ts` 逐项对照，上游改了就红）；
+# - `tools`：包的 README「Model Experience」写的模型面工具；
+# - `network`：README 里写到的出网（下载、上报）。
+#
+# 为什么现在只有 `shipped` 一种来源：上游 `@deepseek-ai/dsh-app-boot` 的 `OPTIONAL_BUNDLES`（0.2.0 起
+# 「实验能力改成可选插件包」）四个包**随 dsh 安装一起发、默认关着**——"装"就是选进来，不下载、不跑 pnpm。
+# 以后要加 npm 上的官方包，照同样的字段加一项、`source: npm`、版本写死。
+#
+# **没放进来的**：`@deepseek-ai/dsh-experimental-auto-review`（自动审阅）——它让模型自己判"放行"就按全权执行，
+# 正好绕过出卡 / 授权（WP179 表二判 B）。不在清单上 = 点不了、装不上。
+
+- name: '@deepseek-ai/dsh-experimental-schedule-bundle'
+  version: 0.2.0-rc.1
+  source: shipped
+  license: MIT
+  title: 自动化任务
+  summary: 让 AI 能建定时任务和提醒，到点接着在原来那次对话里做；每一步还会知道现在几点。
+  tools: [schedule_create, schedule_list, schedule_update, schedule_delete]
+  network: false
+  rows: [time-context, schedule, ui-schedule]
+
+- name: '@deepseek-ai/dsh-experimental-agent-team-profile'
+  version: 0.2.0-rc.1
+  source: shipped
+  license: MIT
+  title: 团队协作
+  summary: 让 AI 叫几个队友分工做一件事，共用一张任务表，互相发消息。
+  tools:
+    [
+      spawn_teammate,
+      list_agents,
+      send_message,
+      interrupt_agent,
+      wait_agent,
+      team_task_create,
+      team_task_get,
+      team_task_list,
+      team_task_update,
+    ]
+  network: false
+  rows: [agent-team, tool-agent-team, ui-agent-team]
+
+- name: '@deepseek-ai/dsh-experimental-voice-input-bundle'
+  version: 0.2.0-rc.1
+  source: shipped
+  license: MIT
+  title: 语音输入
+  summary: 在官方网页里对着麦克风说话，本机转成文字。
+  tools: []
+  network: true
+  network_note: 第一次准备时从 huggingface.co（或 hf-mirror.com）下载语音识别模型文件，版本和校验值钉死；录音不出这台电脑。
+  rows: [speech-to-text, speech-to-text-sensevoice, api-speech-to-text, ui-voice-input]

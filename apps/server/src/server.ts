@@ -82,6 +82,10 @@ import {
 import { evaluateGuardrail, extractFigures, uncitedFigures } from '@agentsws/core'
 import { createDataStore, type SqliteDataStore } from '@agentsws/data'
 import { withOwnSources } from '@agentsws/deck'
+import {
+  type OfficialPluginBackend,
+  OfficialPluginError,
+} from '@agentsws/dsh-adapter/official-plugins'
 import { createKernel, type Kernel, seededRandom } from '@agentsws/kernel'
 import {
   cardsToPack,
@@ -294,6 +298,7 @@ import { createMeetings, type MeetingsAssembly, seedDemoMeetings } from './meeti
 import { createMessages, type MessagesAssembly, type MessagesOptions } from './messages.js'
 import { createModels, type ModelsAssembly, STUB_REF, templatesFor } from './models.js'
 import { createOffboard, type Offboard } from './offboard.js'
+import { createOfficialPlugins, officialPluginsDirIn } from './official-plugins.js'
 import { createOnboarding, type OnboardingAssembly } from './onboarding.js'
 import { createOrg, type OrgAssembly } from './org.js'
 import { createOrgDuplicateScan, type OrgDuplicateScan } from './org-duplicates.js'
@@ -433,6 +438,21 @@ export const BIND_HOST_ENV = 'AGENTSWS_BIND_HOST'
 /** 只接受回环与「全部网卡」两种——写别的地址多半是配错了，不如报出来。 */
 /** 从字节认图型（视觉消息的 `mime` 那一格，WP122b 交付 ⑤）。认不出按 jpeg——provider 会拒，别在这一层猜第二遍。 */
 /** WP144：电脑操控的两种错误翻成网关错误（人话原样带出去）。 */
+/** WP180：官方插件被拒翻成网关错误——清单外 / 版本没审过是 forbidden，动作说不通（已装 / 没装）是 conflict。 */
+async function officialPluginCall<T>(fn: () => T | Promise<T>): Promise<T> {
+  try {
+    return await fn()
+  } catch (err) {
+    if (err instanceof OfficialPluginError) {
+      const conflict = ['already_installed', 'not_installed', 'up_to_date'].includes(err.code)
+      throw new ApiError(conflict ? 'conflict' : 'forbidden', err.message, {
+        details: { reason: err.code },
+      })
+    }
+    throw err
+  }
+}
+
 async function computerUseCall<T>(fn: () => T | Promise<T>): Promise<T> {
   try {
     return await fn()
@@ -651,6 +671,15 @@ export interface ServerOptions {
    * `await import('@agentsws/dsh-adapter')`。
    */
   subscriptionLogin?: SubscriptionOptions['createLogin']
+  /**
+   * WP180：官方插件的注入点（测试用：换清单 / 锁定 patch 的路径、换插件层后端）。生产不传——
+   * 清单与锁定 patch 用仓库里那两份，插件层用官方模块建在数据目录下。
+   */
+  officialPlugins?: {
+    allowlistPath?: string
+    profilePatchPath?: string
+    backend?: OfficialPluginBackend
+  }
   /**
    * WP134：「用我的 DeepSeek 账号登录」的注入点（测试 / demo 用替身 → 全程不联网）。
    * 生产不传：第一次有人点"用 DeepSeek 账号登录"时才 `import()` 官方模块。
@@ -1227,6 +1256,24 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     runtimeMode,
     clock,
   })
+  /*
+   * WP180：官方插件——同样**一台机器一份**（插件跟着这台电脑上的 dsh 走）。装 / 升级 / 卸载出卡、
+   * 只从审过的清单装、做完锁定 patch 逐字节比一遍；插件层在数据目录下 `official-plugins/`。
+   */
+  const officialPlugins = createOfficialPlugins({
+    ...(dbDir === undefined ? {} : { dir: officialPluginsDirIn(dbDir) }),
+    ...(options.officialPlugins?.allowlistPath === undefined
+      ? {}
+      : { allowlistPath: options.officialPlugins.allowlistPath }),
+    ...(options.officialPlugins?.profilePatchPath === undefined
+      ? {}
+      : { profilePatchPath: options.officialPlugins.profilePatchPath }),
+    ...(options.officialPlugins?.backend === undefined
+      ? {}
+      : { backend: options.officialPlugins.backend }),
+    appendEvent,
+    clock,
+  })
 
   /*
    * WP90（55 §9 Q8）：用 ChatGPT / Claude 的**订阅**登录——也是"一台机器一份"，
@@ -1605,7 +1652,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   // WP154：选题卡批了 → 按卡片所属品牌开事项（钩子在品牌模块建好之后才挂上）
   const seoDecidedHook: SeoDecidedHook = {}
   const approvals = seoDecided(
-    computerUse.wrap(catalog.wrap(learning.wrap(rawApprovals))),
+    officialPlugins.wrap(computerUse.wrap(catalog.wrap(learning.wrap(rawApprovals)))),
     seoDecidedHook,
   )
   // ── WP66（52 O1「每个品牌的所有东西都单独设置」）：一个进程装多套品牌模块 ──
@@ -2566,6 +2613,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
               port: () => b2bOutboundLate.current?.port,
             }),
             vertical: () => brandProfileOf(ws).vertical,
+            // WP180：公司时区（工作区档案的 tz，每次现取）——每次运行的上下文里写一次「现在时间 + 公司时区」
+            timeZone: async () => (await identity.getWorkspace(ws))?.tz,
             // WP82：这台机器配了浏览器才有；配没配由设置页说了算，改了不用重启
             browser: () => browserSettings.forRun(),
             // WP144：电脑操控（三层开关的前两层 + 批过的授权；设置页改了下一次运行就生效）
@@ -5778,6 +5827,15 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
      * WP144（docs/80）：电脑操控。**不按品牌**（同浏览器）。下载驱动与自检都是本机的事
      * （下载 + 校验 sha256 / 起一次驱动），留在服务进程这一侧；设置页只管按钮与结果。
      */
+    /*
+     * WP180：官方插件。**不按品牌**（同电脑操控）。出卡走同一条审批总线（批卡在 `officialPlugins.wrap` 里接住）。
+     */
+    officialPlugins: {
+      view: () => officialPlugins.view(),
+      request: (actor, input) =>
+        officialPluginCall(() => officialPlugins.request(actor, input, approvals)),
+      saveConfig: (actor, input) => officialPlugins.saveConfig(actor, input),
+    },
     computerUse: {
       settings: () => computerUse.get(),
       setSettings: (_actor, input) => computerUseCall(() => computerUse.set(input)),

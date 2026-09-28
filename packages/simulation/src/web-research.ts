@@ -23,7 +23,7 @@ import type {
   RunRequest,
   RunWeb,
 } from '@agentsws/contracts'
-import { canonicalJson, EXTERNAL_FENCE } from '@agentsws/core'
+import { canonicalJson, EXTERNAL_FENCE, timeContextItem } from '@agentsws/core'
 import type { WebUse } from '@agentsws/dsh-adapter'
 import type { ToolExecution } from '@agentsws/stand-ins'
 import {
@@ -163,6 +163,8 @@ export function installWebResearch(world: World): WebResearchLoop {
         content: { subject: ask, participants: [], text },
         bytes: Buffer.byteLength(content, 'utf8'),
       },
+      // WP180：「现在时间 + 公司时区」，与服务端 `buildRequest` 同一个函数（事项材料之后）
+      timeContextItem({ now: world.clock.now(), companyTz: world.pack.workspace.tz }),
     ]
     const request: RunRequest = {
       id: run_id,

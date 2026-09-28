@@ -19,6 +19,7 @@ import { CloudAccountCard } from '@/components/settings/cloud-account'
 import { ComputerUseCard } from '@/components/settings/computer-use-card'
 import { CreditsPanel } from '@/components/settings/credits-panel'
 import { ModelCloudCard } from '@/components/settings/model-cloud-card'
+import { OfficialPluginsPanel } from '@/components/settings/official-plugins'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Hint } from '@/components/ui/hint'
@@ -39,7 +40,7 @@ export function SettingsPage({
   defaultTab = 'general',
 }: {
   identity?: string
-  defaultTab?: 'general' | 'account'
+  defaultTab?: 'general' | 'account' | 'plugins'
 }): React.ReactNode {
   const { t, theme, toggleTheme, lang, setLang, position } = useApp()
   const client = useQueryClient()
@@ -118,6 +119,10 @@ export function SettingsPage({
         <TabsTrigger value="general">{t('settings.tab.general')}</TabsTrigger>
         {/* 49 M5「设置 → 账号与积分」：上半张是账号卡（WP58），下半张是积分（WP59） */}
         <TabsTrigger value="account">{t('settings.tab.account')}</TabsTrigger>
+        {/* WP180：官方插件——装 / 升级 / 卸载都出卡、只列审过的；与模型 key 同一档权限（所有者） */}
+        {ownerId === undefined ? null : (
+          <TabsTrigger value="plugins">{t('settings.tab.plugins')}</TabsTrigger>
+        )}
       </TabsList>
       <TabsContent value="general" className="flex flex-col gap-4">
         <NoModelBanner />
@@ -242,6 +247,11 @@ export function SettingsPage({
         <CloudAccountCard {...(ownerId === undefined ? {} : { assignment: ownerId })} />
         <CreditsPanel />
       </TabsContent>
+      {ownerId === undefined ? null : (
+        <TabsContent value="plugins" className="flex flex-col gap-4">
+          <OfficialPluginsPanel assignment={ownerId} />
+        </TabsContent>
+      )}
     </Tabs>
   )
 }

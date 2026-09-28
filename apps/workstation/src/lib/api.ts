@@ -5656,6 +5656,28 @@ export const getComputerUseActive = (
 export const stopComputerUse = (assignment?: string): Promise<{ stopped: number }> =>
   api('/v1/computer-use/stop', { method: 'POST', ...withAssignment(assignment) })
 
+// ── WP180：官方插件 ──────────────────────────────────────────────────────
+//
+// 一台机器一份。只列审过的清单；点装 / 升级 / 卸载 = 出一张卡（在牌堆里批），批了才做。
+
+export type OfficialPluginsView = import('@agentsws/contracts').OfficialPluginsView
+export type OfficialPluginView = import('@agentsws/contracts').OfficialPluginView
+export type OfficialPluginAction = import('@agentsws/contracts').OfficialPluginAction
+
+export const getOfficialPlugins = (assignment?: string): Promise<OfficialPluginsView> =>
+  api('/v1/settings/official-plugins', withAssignment(assignment))
+
+/** 点装 / 升级 / 卸载：只出一张卡（清单外 → 403，说不通 → 409）。 */
+export const requestOfficialPluginChange = (
+  input: { action: OfficialPluginAction; name: string },
+  assignment?: string,
+): Promise<OfficialPluginsView> =>
+  api('/v1/settings/official-plugins/requests', {
+    method: 'POST',
+    body: input,
+    ...withAssignment(assignment),
+  })
+
 // ── WP151：DeepSeek 余额不足（只追加）─────────────────────────────────────
 //
 // 账号那一路引到账号的充值页（官方 `links.topUpUrl`），API key 那一路引到开放平台的充值页——

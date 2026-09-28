@@ -42,7 +42,7 @@ import type {
   TodoId,
   WorkspaceVertical,
 } from '@agentsws/contracts'
-import { canonicalJson } from '@agentsws/core'
+import { canonicalJson, timeContextItem } from '@agentsws/core'
 import {
   classifySideEffect,
   createDshRuntime,
@@ -194,6 +194,12 @@ export interface RuntimeOptions {
    * 下一次运行就该用新的那一套，不该等重启。不给就实物。
    */
   vertical?: () => WorkspaceVertical | undefined
+  /**
+   * WP180：公司时区（工作区档案里的 `tz`）。给了，每次运行的上下文里就写一次「现在时间 + 公司时区」
+   * （`timeContextItem`：按小时取整、三个运行时同一份字节）；档案里没有 / 认不出用本机时区。
+   * 晚绑定、每次现取（用户改了时区下一次运行就用新的）。不给 = 不写这一条（老的单测与回放照旧）。
+   */
+  timeZone?: () => string | undefined | Promise<string | undefined>
   /**
    * WP29：技能库。给了就把 `resolve` 出来的技能正文当 persona 段拼进 prompt——
    * 学习回路采纳的那条 overlay 是靠这一步生效的（"下次运行用新版本"）。
@@ -1202,10 +1208,22 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
         role_id: config.role_id,
       },
       trigger: { event_id: input.run_id, source: 'manual' },
-      context: await contextOf(input.matter, input.brief, {
-        ...(positionHit.position_id === undefined ? {} : { position_id: positionHit.position_id }),
-        person_id: input.person_id,
-      }),
+      context: [
+        ...(await contextOf(input.matter, input.brief, {
+          ...(positionHit.position_id === undefined
+            ? {}
+            : { position_id: positionHit.position_id }),
+          person_id: input.person_id,
+        })),
+        /*
+         * WP180：「现在时间 + 公司时区」，每次运行写一次（排在事项材料后面：它每小时一变，
+         * 放后面让前面那些字节稳定的部分多吃缓存）。为什么不挂官方 `dsh-time-context` 见 `@agentsws/core` 的
+         * `time-context.ts` 头注释。
+         */
+        ...(options.timeZone === undefined
+          ? []
+          : [timeContextItem({ now: clock.now(), companyTz: await options.timeZone() })]),
+      ],
       grounding: config.grounding,
       // 16 §3：公司端 write_external 一律经执行器，运行时拿不到写口
       tools: { allow, connect_token, side_effect_policy: 'executor' },

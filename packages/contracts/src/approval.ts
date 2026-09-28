@@ -105,6 +105,14 @@ export type ApprovalKind =
    * 选了哪只都要过 SPF / DKIM 体检才发。payload = `{ options, recommended, primary_domains }`。
    */
   | 'b2b_sender_choice'
+  /**
+   * WP180：**官方插件的装 / 升级 / 卸载卡**（dsh 官方插件管理包一层后打开）。
+   *
+   * 设置 →「官方插件」里点装 / 升级 / 卸载 = 出这一张；批了才由服务进程照做（只从审过的清单里装、
+   * 装完 profile patch 一个字节不许变）。卡上写插件名、版本、来源、许可证、会注册哪些工具、会不会出网。
+   * payload = `OfficialPluginCardPayload`。
+   */
+  | 'official_plugin'
 
 /** 14 §13.2 抽检复核：L2 自动批被抽中后，范围管理者看完说什么（WP32） */
 export interface SamplingReview {

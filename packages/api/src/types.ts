@@ -76,6 +76,7 @@ import type { KolPort } from './routes/kol.js'
 import type { MeetingsPort } from './routes/meetings.js'
 import type { MessagesPort } from './routes/messages.js'
 import type { ModelsPort } from './routes/models.js'
+import type { OfficialPluginsPort } from './routes/official-plugins.js'
 import type { OnboardingPort } from './routes/onboarding.js'
 import type { OffboardPort, OrgPort } from './routes/org.js'
 import type { OrganizationsPort } from './routes/organizations.js'
@@ -931,6 +932,11 @@ export interface GatewayDeps {
    * `/v1/settings/computer-use*` 与 `/v1/computer-use/*` 回 not_implemented。
    */
   computerUse?: ComputerUsePort
+  /**
+   * WP180：设置 →「官方插件」——装 / 升级 / 卸载出卡、只从审过的清单装；运行中保存配置只许写非锁定行。
+   * 一台机器一份；没装配时 `/v1/settings/official-plugins*` 回 not_implemented。
+   */
+  officialPlugins?: OfficialPluginsPort
 }
 
 /**
