@@ -343,7 +343,7 @@ export function createB2bOutbound(options: B2bOutboundOptions): B2bOutboundAssem
         options: choices.map((o) => ({ id: o.id, label: o.label })),
         recommended: choices[0]?.id,
         primary_domains,
-        tutorial: '/help/b2b-sending-domain',
+        tutorial: 'agentsws://help/b2b-sending-domain',
       },
       options: choices.map((o) => ({ id: o.id, label: o.label })),
       evidence: { source_events: [], provenance: { seen: [] }, precheck: {} },
