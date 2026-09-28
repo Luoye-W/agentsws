@@ -371,6 +371,8 @@ export interface DirectMailInput {
   text: string
   in_reply_to?: string
   references?: readonly string[]
+  /** WP173：额外的信头（开发信的 `List-Unsubscribe: <mailto:…?subject=unsubscribe>`）。 */
+  headers?: Readonly<Record<string, string>>
   /** 落 outbox 用（回信时是会话 id；新写的信没有会话就用 `compose:<幂等键>`）。 */
   thread_ref?: string
   idempotency_key: string
@@ -1281,6 +1283,7 @@ export function createChannels(options: ChannelsOptions): ChannelsAssembly {
           ...(input.references === undefined || input.references.length === 0
             ? {}
             : { references: input.references.join(' ') }),
+          ...(input.headers === undefined ? {} : { headers: input.headers }),
         })
         row = await outbox.markAccepted(row, clock.now(), sent.message_id)
         return {

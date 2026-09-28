@@ -121,6 +121,8 @@ export const HANDLERS = {
   reconcileDeliveries: 'channels.reconcile_deliveries',
   /** WP68 / 48 §5.2：红人开发信的序列跟进（首封 / 3 天 / 7 天），每天一轮。 */
   kolSequence: 'kol.outreach_sequence',
+  /** WP173 / docs/84 §2：B2B 开发信序列（跟进 / 收尾到点出卡、排着的首封再走一遍），每天一轮。 */
+  b2bSequence: 'b2b.outreach_sequence',
   /** WP73 / 56 §6：到点把**已批准**的帖子经适配器发出去（每 5 分钟一轮）。 */
   socialPublish: 'social.publish_due',
   /** WP73 / 56 §6：批过的群发**分批**发出去（每批 50、间隔 2 秒、失败即停）。 */
@@ -153,6 +155,12 @@ export const AMAZON_SLA_SWEEP_INTERVAL_MS = 5 * 60_000
  * 一封跟进信当天就该有人看一眼——L2 自动发的那一档也一样，出了问题要来得及拦。
  */
 export const KOL_SEQUENCE_CRON = '0 9 * * *'
+
+/**
+ * WP173：B2B 开发信序列也是每天 09:00 一轮（同红人那条的理由）。配额按**自然日**算，
+ * 所以早上这一拍正好是"排到明天"的那一批该出卡的时候。
+ */
+export const B2B_SEQUENCE_CRON = '0 9 * * *'
 
 /**
  * WP73：到点发布的巡检节奏。
@@ -836,6 +844,16 @@ export function registerKolSequence(scheduler: Scheduler, deps: KolSequenceDeps)
   scheduler.register(HANDLERS.kolSequence, () => deps.sweep())
 }
 
+/* WP173 / docs/84 §2：B2B 开发信序列：每天 09:00 */
+export interface B2bSequenceDeps {
+  /** 每个品牌一轮：到点的跟进 / 收尾出卡、排着的首封再走一遍、驳回的卡落账。**每一批仍是一张卡**。 */
+  sweep(): Promise<{ staged: number; queued: number; stopped: number }>
+}
+
+export function registerB2bSequence(scheduler: Scheduler, deps: B2bSequenceDeps): void {
+  scheduler.register(HANDLERS.b2bSequence, () => deps.sweep())
+}
+
 /* ------------------------------------------------------------------ */
 /* ⑰ WP73 / 56 §6：社媒定时发布：每 5 分钟                                  */
 /* ------------------------------------------------------------------ */
@@ -1101,6 +1119,8 @@ export interface SchedulePlanOptions {
     orgDuplicates?: boolean
     /** WP68：红人开发信的序列跟进（有人持有红人那几条职责时才建）。 */
     kol?: boolean
+    /** WP173：B2B 开发信序列（有人持有 `b2b.outbound` 时才建）。 */
+    b2b?: boolean
     /**
      * WP78：品牌监控（有人持有公关那四条职责之一时才建）。
      *
@@ -1326,6 +1346,20 @@ export async function ensureSystemTasks(
         title: '每天看一眼哪几封开发信该跟进了',
         handler: HANDLERS.kolSequence,
         trigger: { kind: 'cron', expr: KOL_SEQUENCE_CRON, tz },
+        misfire_policy: 'skip',
+      }),
+    )
+  }
+  /*
+   * WP173：B2B 开发信序列，每天 09:00。**错过了不补跑**（同红人那一条：不把三天欠的一次提出来）。
+   */
+  if (options.has.b2b === true) {
+    await add(
+      'sched_b2b_sequence',
+      systemTask(base, {
+        title: '每天看一眼哪几封开发信该发了',
+        handler: HANDLERS.b2bSequence,
+        trigger: { kind: 'cron', expr: B2B_SEQUENCE_CRON, tz },
         misfire_policy: 'skip',
       }),
     )

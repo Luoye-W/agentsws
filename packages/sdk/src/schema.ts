@@ -7163,6 +7163,74 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/v1/b2b/outbound': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** 主动开发：发信邮箱体检与今天配额、序列漏斗、排着的人与原因、默认不发的人数（德奥写明为什么） */
+    get: operations['getB2bOutbound']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/v1/b2b/outbound/settings': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    /** 主动开发的设置：页脚上的公司名与实体地址（没有地址不能发）、署名、德国 / 奥地利勾选并确认风险 */
+    put: operations['saveB2bOutboundSettings']
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/v1/b2b/outbound/sequences': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /** 开一轮开发信：筛人（抑制名单 / 没来源 / 德奥默认不发）→ 发信邮箱与体检 → 按今天配额，首封批量一张卡、超了排到明天 */
+    post: operations['startB2bSequence']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/v1/b2b/outbound/sender/check': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /** 再体检一次发信邮箱：查 SPF / DMARC 的 DNS 记录，给自己发一封测试信看 DKIM */
+    post: operations['checkB2bSender']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
 }
 export type webhooks = Record<string, never>
 export interface components {
@@ -52434,6 +52502,352 @@ export interface operations {
     }
     responses: {
       /** @description B2bImportView */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Envelope']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      400: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      401: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      403: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      409: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      429: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      500: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      503: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+    }
+  }
+  getB2bOutbound: {
+    parameters: {
+      query?: never
+      header: {
+        /** @description 本次请求绑定的 Assignment（31 §3.1：一次请求一个 Assignment） */
+        'X-Assignment': string
+      }
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description B2bOutboundView */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Envelope']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      400: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      401: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      403: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      429: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      500: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      503: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+    }
+  }
+  saveB2bOutboundSettings: {
+    parameters: {
+      query?: never
+      header: {
+        /** @description 本次请求绑定的 Assignment（31 §3.1：一次请求一个 Assignment） */
+        'X-Assignment': string
+      }
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': {
+          company_name?: string
+          postal_address?: string
+          sender_name?: string
+          de_at_confirm?: boolean
+        }
+      }
+    }
+    responses: {
+      /** @description B2bOutboundView */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Envelope']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      400: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      401: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      403: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      429: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      500: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      503: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+    }
+  }
+  startB2bSequence: {
+    parameters: {
+      query?: never
+      header: {
+        /** @description 本次请求绑定的 Assignment（31 §3.1：一次请求一个 Assignment） */
+        'X-Assignment': string
+        /** @description 幂等键；24h 内同键重放原响应（28 §2） */
+        'Idempotency-Key'?: string
+      }
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': {
+          contact_ids?: string[]
+          product?: string
+        }
+      }
+    }
+    responses: {
+      /** @description B2bSequenceStartView */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Envelope']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      400: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      401: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      403: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      409: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      429: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      500: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      503: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+    }
+  }
+  checkB2bSender: {
+    parameters: {
+      query?: never
+      header: {
+        /** @description 本次请求绑定的 Assignment（31 §3.1：一次请求一个 Assignment） */
+        'X-Assignment': string
+        /** @description 幂等键；24h 内同键重放原响应（28 §2） */
+        'Idempotency-Key'?: string
+      }
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description B2bOutboundView */
       200: {
         headers: {
           [name: string]: unknown

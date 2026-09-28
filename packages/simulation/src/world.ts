@@ -18,7 +18,19 @@ import {
  * WP171（docs/84）：B2B 那两件事的判断——授权谁批（`b2b-core`）、承诺与改收款账户（`core`）。
  * 世界里不另写一份，否则这几条题验的就是场景自己写的答案。
  */
-import { quoteApprover, quoteBreaches, quoteBreachText } from '@agentsws/b2b-core'
+import {
+  B2B_REPLY_ACTION,
+  type B2bProspect,
+  classifyB2bReply,
+  draftB2bOutreach,
+  outreachBatchAfter,
+  outreachFooter,
+  quoteApprover,
+  quoteBreaches,
+  quoteBreachText,
+  screenProspects,
+  splitByQuota,
+} from '@agentsws/b2b-core'
 // WP121b（70 §1–§3）：向导第 ② 步那一轮分析走这一份真解析器（夹具 replay，不联网）
 import type { PageFetch } from '@agentsws/brand-intake'
 import { analyzeBrand, applyEdits, mergeProfile } from '@agentsws/brand-intake'
@@ -106,6 +118,7 @@ import {
   sha256,
   suppressedRecipients,
   uncitedFigures,
+  warmupCap,
   withoutSuppressed,
 } from '@agentsws/core'
 import type { DataActor, SqliteDataStore } from '@agentsws/data'
@@ -274,6 +287,7 @@ import type { Pack, PackAssignment, PackCustomer } from './pack.js'
 import type { PositionsLoop } from './positions.js'
 import { installDailyRoutine, type Routine, type RoutineOptions } from './routine.js'
 import type { RuntimeName } from './runtime-name.js'
+import type { ScenarioB2bReply, ScenarioB2bSequence } from './scenario/types.js'
 import type { SecretaryLoop } from './secretary.js'
 
 const CUSTOMERS = defineCollection({
@@ -1284,6 +1298,22 @@ export interface B2bOps {
     subject: string
     body: string
   }): Promise<B2bInboundResult>
+  /**
+   * WP173（docs/84 §2）：开一轮开发信（首封批量一张卡）或到点的跟进 / 收尾。筛人、预热配额、
+   * 模板与页脚、卡的 `after` 都是 `b2b-core` 与服务进程同一套函数；能不能提由 guardrail 判。
+   */
+  sequence(input: ScenarioB2bSequence): Promise<B2bSequenceResult>
+  /** WP173：回开发信的一封——分类、停序列；有意向的交给业务，不感兴趣 / 退订进名单。 */
+  reply(input: ScenarioB2bReply): Promise<{ class: string; action: string }>
+}
+
+export interface B2bSequenceResult {
+  step: string
+  card: boolean
+  picked: number
+  queued_tomorrow: number
+  excluded: string[]
+  rules: string[]
 }
 
 export interface B2bProposeResult {
@@ -7508,6 +7538,9 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
   }
 
   const b2b: B2bOps = {
+    // WP173：开发信序列与回信（实现在下面「开发信序列」那一段）
+    sequence: (input) => b2bSequence(input),
+    reply: (input) => b2bReply(input),
     async propose({ who, role, action, target_id, before, after, level, title }) {
       const role_id = b2bRoleOf(role)
       const asg = assignmentFor(who, role_id)
@@ -7761,6 +7794,243 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
         ...(item.state === 'blocked' ? {} : { approval_item_id: item.id }),
       }
     },
+  }
+
+  /* ── WP173（docs/84 §2）：开发信序列 ─────────────────────────────────
+   *
+   * 世界里记两样：每位潜在客户走到哪了（`seqState`）、谁进了抑制名单（`seqSuppressed`）。
+   * 判断一条都不在这里写：筛人 / 配额 / 模板 / 页脚 / 卡的 after 用 `b2b-core`，回信分类同上，
+   * 预热用 `core` 的 `warmupCap`（红人共用那一份的邻居），能不能提由 guardrail 判。
+   */
+  const seqState = new Map<string, 'active' | 'handed_to_sales' | 'stopped' | 'replied'>()
+  const seqSuppressed = new Set<string>()
+  const salesHolder =
+    pack.assignments.find((a) => a.role_id === 'b2b.sales' && a.primary === true)?.person_id ??
+    pack.assignments.find((a) => a.role_id === 'b2b.sales')?.person_id
+
+  const b2bSequence: B2bOps['sequence'] = async (input) => {
+    const step = input.step ?? 'first'
+    const role_id = b2bRoleOf('b2b.outbound')
+    const who = input.who as PersonId
+    const asg = assignmentFor(who, role_id)
+    const { mandate, level: configured } = actionOf(asg, 'stage_b2b_outreach')
+    const caps = mandate.caps as Record<string, unknown>
+    const at = now(clock)
+    const w = warmupCap({
+      policy: {
+        cap_new: capNum(caps, 'max_outreach_per_day', 20),
+        cap_warmed: capNum(caps, 'max_outreach_per_day_warmed', 50),
+        warmup_days: capNum(caps, 'warmup_days', 14),
+      },
+      ...(input.sender.first_sent_at === undefined
+        ? {}
+        : { first_sent_at: input.sender.first_sent_at }),
+      now: at,
+    })
+    const prospects: B2bProspect[] = input.prospects.map((p) => ({
+      contact_id: p.id,
+      account_id: `acc_${p.id}`,
+      name: p.contact,
+      company: p.company,
+      ...(p.country === undefined ? {} : { country: p.country }),
+      has_email: true,
+      ...(p.source_url === undefined ? {} : { source: { url: p.source_url, observed_at: at } }),
+      ...(p.public_source === undefined ? {} : { public_source: p.public_source }),
+      existing_relationship: p.existing === true,
+      suppressed: seqSuppressed.has(p.id),
+      in_sequence: step === 'first' && seqState.has(p.id),
+    }))
+    const screened =
+      step === 'first'
+        ? screenProspects(prospects, { de_at_confirmed: input.de_at_confirmed === true })
+        : {
+            eligible: prospects.filter(
+              (p) => !p.suppressed && seqState.get(p.contact_id) === 'active',
+            ),
+            excluded: prospects
+              .filter((p) => p.suppressed || seqState.get(p.contact_id) !== 'active')
+              .map((p) => ({ prospect: p, reason: p.suppressed ? 'suppressed' : 'in_sequence' })),
+          }
+    const excluded = [...new Set(screened.excluded.map((x) => String(x.reason)))]
+    const { today, later } = splitByQuota(
+      screened.eligible,
+      Math.max(0, w.cap - (input.sender.sent_today ?? 0)),
+    )
+    const report = (card: boolean, rules: string[], level?: string): B2bSequenceResult => {
+      appendEnvelope({
+        schema_version: 1,
+        workspace_id,
+        type: 'simulation.b2b_sequence',
+        actor: { kind: 'agent', id: asg.id },
+        correlation: { trace_id: traceId() },
+        payload: {
+          step,
+          card,
+          picked: card ? today.length : 0,
+          queued_tomorrow: later.length,
+          excluded,
+          rules,
+          cap: w.cap,
+          warming: w.warming,
+          ...(level === undefined ? {} : { level }),
+        },
+      })
+      return {
+        step,
+        card,
+        picked: card ? today.length : 0,
+        queued_tomorrow: later.length,
+        excluded,
+        rules,
+      }
+    }
+    if (today.length === 0) return report(false, [])
+    const our = pack.workspace.name
+    const footer = outreachFooter({
+      company_name: our,
+      postal_address: input.company_address,
+      step,
+      source: today[0]?.source,
+    })
+    const emails = today.map((p) =>
+      draftB2bOutreach(step, {
+        first_name: p.name,
+        company: p.company,
+        our_company: our,
+        product: 'fast chargers and cables',
+        sender_name: our,
+      }),
+    )
+    const batch_id = `obt_${sha256(`${step}:${today.map((p) => p.contact_id).join(',')}`).slice(0, 10)}`
+    const target: ObjectRef = { type: 'b2b_outreach_batch', id: batch_id }
+    const after = outreachBatchAfter({
+      step,
+      batch_id,
+      sender: {
+        address: input.sender.address,
+        separate_domain: input.sender.separate_domain ?? true,
+        auth: {
+          spf: input.sender.spf ?? 'pass',
+          dkim: input.sender.dkim ?? 'pass',
+          dmarc: input.sender.dmarc ?? 'pass',
+        },
+      },
+      emails,
+      recipients: today.map((p) => sha256(`b2b-addr|${p.contact_id}`)),
+      suppressed: [...seqSuppressed].map((id) => sha256(`b2b-addr|${id}`)),
+      footer: footer !== undefined,
+      contacts_missing_source: today.filter((p) => p.source === undefined).length,
+      countries: [
+        ...new Set(
+          today
+            .filter((p) => !p.existing_relationship)
+            .map((p) => p.country?.toUpperCase())
+            .filter((c): c is string => c !== undefined),
+        ),
+      ],
+      de_at_confirmed: input.de_at_confirmed === true,
+    })
+    const run = await beginShopRun(asg)
+    const run_id = run.run_id
+    const title = `开发信 · ${step === 'first' ? '第一轮首封' : step === 'follow_up' ? '跟进' : '收尾'} · ${today.length} 封`
+    const outcome = await txn.ledger.stage({
+      workspace_id,
+      role_id: asg.role_id,
+      assignment_id: asg.id,
+      run_id,
+      change_set_id: `cs_b2bout_${run_id}`,
+      kind: 'b2b_outreach',
+      target,
+      before: {},
+      after,
+      notes: [title],
+      created_by: { kind: 'agent', id: `agent_${asg.role_id}` },
+      // 今天这只邮箱的上限（预热）就是 guardrail 那道 max_outreach_per_day
+      mandate: { ...mandate, caps: { ...mandate.caps, max_outreach_per_day: w.cap } },
+      // 每一轮首封批量一张卡（强制 L1）；跟进与收尾按自动化级别
+      level: step === 'first' ? 'L1' : configured,
+      provenance: run.finish({ seen: [target], outputs: [], summary: title }),
+      approval: {
+        title,
+        summary: title,
+        recipients: [{ person: who, via: 'role_holder' }],
+        proposer: { kind: 'agent', id: `agent_${asg.role_id}`, assignment_id: asg.id },
+        rule: 'role_holder',
+        separation_of_duties: false,
+        source_events: [],
+      },
+    })
+    if (!outcome.ok) {
+      const rules = (outcome.guardrail?.hits ?? [])
+        .filter((h) => h.severity === 'block')
+        .map((h) => h.rule)
+      blocked.push({
+        rule: rules[0] ?? 'guardrail',
+        at: now(clock),
+        run_id,
+        message: outcome.message,
+      })
+      appendEnvelope({
+        schema_version: 1,
+        workspace_id,
+        type: 'simulation.b2b_blocked',
+        actor: { kind: 'agent', id: asg.id },
+        correlation: { trace_id: traceId(), run_id },
+        payload: { kind: 'b2b_outreach', role: role_id, action: 'stage_b2b_outreach', rules },
+      })
+      return report(false, rules)
+    }
+    await flushCards()
+    const rules = (outcome.change.guardrail?.hits ?? []).map((h) => h.rule)
+    appendEnvelope({
+      schema_version: 1,
+      workspace_id,
+      type: 'simulation.b2b_staged',
+      actor: { kind: 'agent', id: asg.id },
+      correlation: { trace_id: traceId(), run_id },
+      payload: {
+        kind: 'b2b_outreach',
+        role: role_id,
+        action: 'stage_b2b_outreach',
+        rules,
+        approver: 'role_holder',
+        routed_to: who,
+        level_requested: step === 'first' ? 'L1' : configured,
+        level_at_creation: outcome.approval.automation.level_at_creation,
+        auto_approved: outcome.approval.automation.auto_approved,
+        stated_on_card: true,
+      },
+    })
+    for (const p of today) seqState.set(p.contact_id, 'active')
+    return report(true, rules, outcome.approval.automation.level_at_creation)
+  }
+
+  const b2bReply: B2bOps['reply'] = async (input) => {
+    const cls = classifyB2bReply({ subject: input.subject, text: input.body, now: now(clock) })
+    const action = B2B_REPLY_ACTION[cls.klass]
+    // 任何一封真回信都让这个人的序列停下；只有自动回复不算（顺延）
+    if (action !== 'postpone')
+      seqState.set(input.prospect, action === 'hand_to_sales' ? 'handed_to_sales' : 'stopped')
+    if (action === 'suppress') seqSuppressed.add(input.prospect)
+    appendEnvelope({
+      schema_version: 1,
+      workspace_id,
+      type: 'simulation.b2b_reply',
+      actor: { kind: 'agent', id: String(input.who) },
+      correlation: { trace_id: traceId() },
+      payload: {
+        class: cls.klass,
+        action,
+        handed_to_sales: action === 'hand_to_sales',
+        suppressed: action === 'suppress',
+        sequence_stopped: action !== 'postpone',
+        // 有意向 / 要资料 / 问价 → 落成询盘，交给持「业务」那条的人
+        ...(action === 'hand_to_sales' && salesHolder !== undefined
+          ? { routed_to: salesHolder }
+          : {}),
+      },
+    })
+    return { class: cls.klass, action }
   }
 
   /* ── WP75（57 §1 / §4、04 §5）：投放 ────────────────────────────────── */

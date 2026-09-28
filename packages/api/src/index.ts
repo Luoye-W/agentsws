@@ -135,8 +135,13 @@ export type {
   B2bDraftView,
   B2bImportView,
   B2bListView,
+  B2bOutboundPort,
+  B2bOutboundSettingsInput,
+  B2bOutboundView,
   B2bPort,
   B2bRow,
+  B2bSequenceStartInput,
+  B2bSequenceStartView,
   B2bStagedView,
 } from './routes/b2b.js'
 export { B2B_COLLECTION_ROUTES, b2bRoutes } from './routes/b2b.js'

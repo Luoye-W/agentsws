@@ -5795,3 +5795,75 @@ export const setClaimRules = (
   assignment?: string,
 ): Promise<ClaimRulesData> =>
   api('/v1/knowledge/claim-rules', { method: 'PATCH', body: input, ...withAssignment(assignment) })
+
+// ── WP173（docs/84 §2）：B2B 开发信序列 ──────────────────────────────────
+
+export type B2bAuthResultData = 'pass' | 'fail' | 'missing' | 'pending' | 'unknown'
+
+export interface B2bOutboundData {
+  settings: {
+    company_name?: string
+    postal_address?: string
+    sender_name?: string
+    de_at_confirmed: boolean
+    sender_choice?: 'separate' | 'primary' | 'separate_pending'
+    sender_address?: string
+    choice_card_id?: string
+  }
+  sender?: {
+    address: string
+    separate_domain: boolean
+    auth: {
+      spf: B2bAuthResultData
+      dkim: B2bAuthResultData
+      dmarc: B2bAuthResultData
+      checked_at?: string
+      notes: string[]
+    }
+    quota: {
+      cap: number
+      sent_today: number
+      reserved: number
+      remaining: number
+      warming: boolean
+      warm_from?: string
+    }
+  }
+  needs: ('quota' | 'sender_choice' | 'sender_auth' | 'company_address')[]
+  funnel: { stage: string; label: string; count: number }[]
+  queued: Partial<Record<'quota' | 'sender_choice' | 'sender_auth' | 'company_address', number>>
+  eligible: number
+  excluded: { reason: string; label: string; count: number }[]
+}
+
+export interface B2bSequenceStartData {
+  status: 'staged' | 'queued' | 'nothing_to_send' | 'blocked'
+  message: string
+  approval_item_id?: string
+  picked: number
+  queued_tomorrow: number
+  excluded: { contact_id: string; name: string; company: string; reason: string; label: string }[]
+}
+
+export const getB2bOutbound = (assignment?: string): Promise<B2bOutboundData> =>
+  api('/v1/b2b/outbound', withAssignment(assignment))
+
+export const saveB2bOutboundSettings = (
+  input: {
+    company_name?: string
+    postal_address?: string
+    sender_name?: string
+    de_at_confirm?: boolean
+  },
+  assignment?: string,
+): Promise<B2bOutboundData> =>
+  api('/v1/b2b/outbound/settings', { method: 'PUT', body: input, ...withAssignment(assignment) })
+
+export const startB2bSequence = (
+  input: { contact_ids?: string[]; product?: string },
+  assignment?: string,
+): Promise<B2bSequenceStartData> =>
+  api('/v1/b2b/outbound/sequences', { method: 'POST', body: input, ...withAssignment(assignment) })
+
+export const checkB2bSender = (assignment?: string): Promise<B2bOutboundData> =>
+  api('/v1/b2b/outbound/sender/check', { method: 'POST', ...withAssignment(assignment) })

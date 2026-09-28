@@ -30,6 +30,7 @@ import type { ModelGatewayApi } from '@agentsws/model-gateway'
 import type { Work } from '@agentsws/work'
 import type { AdsStore } from './ads.js'
 import type { AdsServiceAssembly } from './ads-service.js'
+import type { B2bOutboundAssembly } from './b2b-outbound.js'
 import type { B2bServiceAssembly } from './b2b-service.js'
 import type { B2bStore } from './b2b-store.js'
 import type { ChannelsAssembly } from './channels.js'
@@ -221,6 +222,8 @@ export interface BrandModuleSet {
   b2b: B2bStore
   /** WP172：B2B 库的 `/v1` 面（草稿 → 改动卡 → 批了才落库）与执行器那一跳。 */
   b2bService: B2bServiceAssembly
+  /** WP173：开发信序列（`/v1/b2b/outbound/*`、`b2b_outreach` 卡的执行器、每天一轮巡检）。 */
+  b2bOutbound: B2bOutboundAssembly
   /**
    * WP154「内容与搜索」：这个品牌的 SEO / GEO 那一层（每日 5 件事、每周收入与 AI 可见度、
    * 发布前质检）。按品牌一份：Search Console 与订单都是这个品牌自己的，问题清单落在

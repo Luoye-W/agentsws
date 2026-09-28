@@ -163,6 +163,8 @@ export const CATEGORY_BY_KIND: Partial<Record<DeckKind, string>> = {
   digest: 'digest',
   // WP171（docs/84 §11.3）：改收款账户红卡
   b2b_fraud_alert: 'fraud_alert',
+  // WP173：发信域名选择卡
+  b2b_sender_choice: 'sender_choice',
 }
 
 /** `ChangeKind` → 类别人话（`staged_change` 专用；画布头一行写的就是这一列）。 */

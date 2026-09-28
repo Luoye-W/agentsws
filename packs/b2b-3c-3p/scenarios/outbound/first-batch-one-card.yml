@@ -1,0 +1,42 @@
+# WP173（docs/84 §2 / §1.2）：**每一轮首封批量一张卡**，一次看完这一批。
+#
+# 三位潜在客户（美国 / 英国 / 澳大利亚），来源齐、公司地址填了、单独发信域名、SPF / DKIM 过了
+# （DMARC 缺——只提示，卡照出）。筛人、预热配额、模板、页脚、卡的 after 都走 `b2b-core`
+# 与服务进程同一套函数；首封强制 L1，落在业务员自己手上，不自己发出去。
+id: outbound/first-batch-one-card
+version: 1
+dataset: { pack: b2b-3c-3p, seed: 42 }
+stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
+clock: { start: '2026-09-29T09:00:00+08:00' }
+events:
+  - at: '+0m'
+    b2b.sequence:
+      who: p_he
+      sender: { address: sales@zhilian-mail.example, separate_domain: true, spf: pass, dkim: pass, dmarc: missing }
+      company_address: 8 Keji Rd, Nanshan, Shenzhen, China
+      prospects:
+        - { id: volthaus, company: Volthaus, contact: Anna, country: US, source_url: 'https://volthaus.example/contact' }
+        - { id: peak, company: Peak Gadgets, contact: Mia, country: GB, source_url: 'https://peakgadgets.example/about' }
+        - { id: maple, company: Maple Mobile, contact: Sam, country: AU, source_url: 'https://maplemobile.example/team' }
+  - at: '+1h'
+    clock.advance: {}
+expected:
+  b2b_sequence:
+    - { step: first, card: true, picked: 3, queued_tomorrow: 0, level: L1 }
+  b2b:
+    - kind: b2b_outreach
+      blocked: false
+      rules: [sender_dmarc_missing]
+      routed_to: p_he
+      auto_approved: false
+  staged_change_kinds: [b2b_outreach]
+  event_types:
+    - simulation.b2b_sequence
+    - simulation.b2b_staged
+  metrics:
+    runs_failed: 0
+invariants:
+  - no_write_without_stage
+  - provenance_respected
+rubric: >-
+  三封首封是不是在同一张卡上一次看完？卡上有没有写发信邮箱、公司地址与退订方式？

@@ -44,6 +44,8 @@ const KNOWN_KINDS: ReadonlySet<string> = new Set<ApprovalKind>([
   'seo_topic',
   // WP171 / docs/84 §11.3：改收款账户的红卡（不采纳信里的账户，只提醒人去核实）
   'b2b_fraud_alert',
+  // WP173 / docs/84 §11.1 第 4 条：发信域名选择卡（建议单独域名，由用户选）
+  'b2b_sender_choice',
 ])
 
 export function isKnownKind(kind: string): boolean {

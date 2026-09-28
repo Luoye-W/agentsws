@@ -18,8 +18,11 @@
 import type {
   B2bCollection,
   B2bDraft,
+  B2bEnrollment,
   B2bInquiry,
+  B2bOutboundSettings,
   B2bQuoteVersion,
+  B2bSender,
   B2bSuppressionEntry,
   WorkspaceId,
 } from '@agentsws/contracts'
@@ -47,7 +50,7 @@ const envelope = (table: string): string => `CREATE TABLE IF NOT EXISTS ${table}
 
 /**
  * 迁移。**只加不改**：要改表就加一版。v1 = 九类对象 + 报价版本；v2 = 草稿 / 询盘 / 抑制名单 /
- * 我们发出去的信 / 联系人地址哈希。
+ * 我们发出去的信 / 联系人地址哈希；v3（WP173）= 开发序列（每人一条）、发信邮箱、主动开发设置。
  */
 export const B2B_MIGRATIONS: readonly Migration[] = [
   {
@@ -104,6 +107,12 @@ CREATE TABLE IF NOT EXISTS b2b_contact_email (
   PRIMARY KEY (workspace_id, key_hash)
 );`,
   },
+  {
+    version: 3,
+    sql: `${envelope('b2b_enrollment')}
+${envelope('b2b_sender')}
+${envelope('b2b_outbound_settings')}`,
+  },
 ]
 
 /** 我们发出去的一封 B2B 信（开发信 / 报价信）：回信按它对线程（docs/84 §5 ①）。 */
@@ -112,6 +121,9 @@ export interface B2bOutboundNote {
   kind: 'outreach' | 'quote' | 'reply'
   account_id?: string
   contact_id?: string
+  /** WP173：开发信属于哪一条序列、第几封（回信按它停序列）。 */
+  enrollment_id?: string
+  step?: B2bEnrollment['steps'][number]['step']
 }
 
 export interface B2bStore {
@@ -149,6 +161,18 @@ export interface B2bStore {
   /** 联系人的地址哈希 → 联系人 id（建联系人时记，按发件人认人时查）。 */
   indexContactEmail(key_hash: string, contact_id: string): void
   contactIdByEmail(address: string): string | undefined
+
+  /** WP173：开发序列（每个联系人每一轮一条）。 */
+  enrollments(): B2bEnrollment[]
+  enrollment(id: string): B2bEnrollment | undefined
+  saveEnrollment(e: B2bEnrollment): void
+  /** WP173：发信邮箱（id = 小写地址）。 */
+  senders(): B2bSender[]
+  sender(address: string): B2bSender | undefined
+  saveSender(s: B2bSender): void
+  /** WP173：主动开发的设置（一个品牌一份）。 */
+  outboundSettings(): B2bOutboundSettings
+  saveOutboundSettings(s: B2bOutboundSettings): void
   close(): void
 }
 
@@ -277,6 +301,15 @@ export function createB2bStore(options: B2bStoreOptions): B2bStore {
           'SELECT contact_id FROM b2b_contact_email WHERE workspace_id = ? AND key_hash = ?',
         )
         .getSync(ws, addressHash(address))?.contact_id,
+
+    enrollments: () => all<B2bEnrollment>('b2b_enrollment'),
+    enrollment: (id) => one<B2bEnrollment>('b2b_enrollment', id),
+    saveEnrollment: (e) => upsert('b2b_enrollment', e.id, e),
+    senders: () => all<B2bSender>('b2b_sender'),
+    sender: (address) => one<B2bSender>('b2b_sender', address.trim().toLowerCase()),
+    saveSender: (s) => upsert('b2b_sender', s.address.trim().toLowerCase(), s),
+    outboundSettings: () => one<B2bOutboundSettings>('b2b_outbound_settings', 'settings') ?? {},
+    saveOutboundSettings: (s) => upsert('b2b_outbound_settings', 'settings', s),
     close: () => {
       driver.closeSync()
     },

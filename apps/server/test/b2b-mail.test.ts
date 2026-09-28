@@ -19,6 +19,7 @@ import { createTxn } from '@agentsws/txn'
 import { createWork } from '@agentsws/work'
 import { describe, expect, it } from 'vitest'
 import { createB2bMail } from '../src/b2b-mail.js'
+import { createB2bOutbound } from '../src/b2b-outbound.js'
 import { b2bDeckFromStore } from '../src/b2b-service.js'
 import { addressHash, createB2bStore } from '../src/b2b-store.js'
 import type { MailAccount } from '../src/index.js'
@@ -128,6 +129,8 @@ function assemble(over: {
   roles?: RoleId[]
   route?: string
   confidence?: number
+  /** WP173：接上开发信序列（回信分类、停序列）。 */
+  outbound?: boolean
 }) {
   const events: EventEnvelope[] = []
   const appendEvent = (e: unknown): void => void events.push(e as EventEnvelope)
@@ -141,7 +144,26 @@ function assemble(over: {
   })
   const runs: string[] = []
   const roles = over.roles ?? ['b2b.sales', 'b2b.outbound']
+  const outbound =
+    over.outbound === true
+      ? createB2bOutbound({
+          workspace_id: WS,
+          store,
+          clock,
+          random: () => 0.3,
+          timeZone: () => '+08:00',
+          ledger: txn.ledger,
+          approvals: txn.approvals,
+          effectiveConfig: () => ({ actions: [], automation: {} }) as never,
+          appendEvent,
+          mailboxes: () => [ME],
+          primaryDomains: () => ['zhilian.example'],
+          companyName: () => 'Zhilian',
+          outboundHolder: () => undefined,
+        })
+      : undefined
   const b2b = createB2bMail({
+    ...(outbound === undefined ? {} : { outbound }),
     workspace_id: WS,
     store,
     clock,
@@ -265,6 +287,77 @@ describe('WP172：判成 B2B 的信挪进 BtoBAgents、落成询盘', () => {
     expect(all.map((i) => i.basis).sort()).toEqual(['known_sender', 'our_thread'])
     expect(all.every((i) => i.kind === 'correspondence')).toBe(true)
     expect(all.find((i) => i.basis === 'known_sender')?.account_id).toBe('acc_peak')
+  })
+
+  it('WP173：回开发信的——有意向落成询盘交给业务、停序列；不感兴趣只记往来、进名单、不开事项', async () => {
+    const box = new Mailbox()
+    const h = assemble({
+      boxes: [{ address: ME, box }],
+      route: 'support',
+      confidence: 0.99,
+      outbound: true,
+    })
+    for (const [n, contact] of [
+      [1, 'ctc_mia'],
+      [2, 'ctc_leo'],
+    ] as const) {
+      h.store.saveEnrollment({
+        id: `enr_${n}`,
+        workspace_id: WS,
+        contact_id: contact,
+        account_id: 'acc_peak',
+        sender: ME,
+        status: 'active',
+        steps: [{ step: 'first', at: T0, message_id: `<out-${n}@zhilian.example>` }],
+        next_step: 'follow_up',
+        due_at: '2026-10-01T02:00:00.000Z',
+        created_at: T0,
+        updated_at: T0,
+      })
+      h.store.noteOutbound(
+        {
+          message_id: `<out-${n}@zhilian.example>`,
+          kind: 'outreach',
+          contact_id: contact,
+          enrollment_id: `enr_${n}`,
+          step: 'first',
+        },
+        T0,
+      )
+    }
+    box.deliver(
+      1,
+      mime({
+        from: 'mia@peakgadgets.example',
+        subject: 'Re: GaN chargers for Peak Gadgets',
+        body: 'Interesting. Please send your catalog and pricing.',
+        headers: ['In-Reply-To: <out-1@zhilian.example>', 'References: <out-1@zhilian.example>'],
+        mid: 'rep-1',
+      }),
+    )
+    box.deliver(
+      2,
+      mime({
+        from: 'leo@peakgadgets.example',
+        subject: 'Re: GaN chargers for Peak Gadgets',
+        body: 'No thanks, we already have a supplier.',
+        headers: ['In-Reply-To: <out-2@zhilian.example>', 'References: <out-2@zhilian.example>'],
+        mid: 'rep-2',
+      }),
+    )
+    await h.messages.poll()
+    const all = h.store.inquiries()
+    const hot = all.find((i) => i.reply_class === 'asks_price')
+    const cold = all.find((i) => i.reply_class === 'not_interested')
+    expect(hot).toMatchObject({ kind: 'inquiry', status: 'new', basis: 'our_thread' })
+    expect(cold).toMatchObject({ kind: 'correspondence', status: 'closed' })
+    expect(hot?.matter_id).toBeDefined()
+    expect(cold?.matter_id).toBeUndefined()
+    expect(h.runs).toHaveLength(1)
+    expect(h.store.enrollment('enr_1')?.status).toBe('handed_to_sales')
+    expect(h.store.enrollment('enr_2')?.status).toBe('stopped')
+    expect(h.store.isSuppressed('leo@peakgadgets.example')).toBe(true)
+    expect(h.ofType('b2b.handed_to_sales')).toHaveLength(1)
   })
 
   it('阿里国际站询盘通知：规则认出来，开一条「去后台回复」的待办，不起 Run', async () => {

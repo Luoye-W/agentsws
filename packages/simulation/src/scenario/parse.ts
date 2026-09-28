@@ -211,6 +211,9 @@ const EVENT_KEYS = [
   // WP171 B2B（docs/84）
   'b2b.propose',
   'b2b.inbound',
+  // WP173 开发信序列（docs/84 §2）
+  'b2b.sequence',
+  'b2b.reply',
   // WP78 公共关系（60 §1 / §2）
   'pr.mention',
   'pr.release',
@@ -326,6 +329,9 @@ const EXPECTED_KEYS = [
   // WP171（docs/84）
   'b2b',
   'b2b_fraud',
+  // WP173（docs/84 §2）
+  'b2b_sequence',
+  'b2b_replies',
   // WP78（60）
   'pr_mention',
   'pr_release',
@@ -1318,6 +1324,120 @@ function parseEvent(source: string, index: number, raw: unknown): ScenarioEvent 
         b2b_inbound: {
           who: str(source, `${path}.${key}.who`, body.who),
           from: str(source, `${path}.${key}.from`, body.from),
+          subject: str(source, `${path}.${key}.subject`, body.subject),
+          body: str(source, `${path}.${key}.body`, body.body),
+        },
+      }
+    }
+    // WP173（docs/84 §2）：开发信序列与回信
+    case 'b2b.sequence': {
+      known(source, `${path}.${key}`, body, [
+        'who',
+        'step',
+        'sender',
+        'company_address',
+        'de_at_confirmed',
+        'prospects',
+      ])
+      const step = optStr(source, `${path}.${key}.step`, body.step)
+      if (step !== undefined && !['first', 'follow_up', 'final'].includes(step))
+        fail(source, `${path}.${key}.step`, 'step 只能是 first / follow_up / final')
+      if (!isRec(body.sender)) fail(source, `${path}.${key}.sender`, '必须是对象')
+      if (!Array.isArray(body.prospects)) fail(source, `${path}.${key}.prospects`, '必须是数组')
+      const sender = body.sender as Record<string, unknown>
+      known(source, `${path}.${key}.sender`, sender, [
+        'address',
+        'separate_domain',
+        'spf',
+        'dkim',
+        'dmarc',
+        'first_sent_at',
+        'sent_today',
+      ])
+      const prospects = (body.prospects as unknown[]).map((raw, i) => {
+        const at = `${path}.${key}.prospects[${i}]`
+        if (!isRec(raw)) fail(source, at, '必须是对象')
+        known(source, at, raw, [
+          'id',
+          'company',
+          'contact',
+          'country',
+          'source_url',
+          'existing',
+          'public_source',
+        ])
+        const country = optStr(source, `${at}.country`, raw.country)
+        const url = optStr(source, `${at}.source_url`, raw.source_url)
+        return {
+          id: str(source, `${at}.id`, raw.id),
+          company: str(source, `${at}.company`, raw.company),
+          contact: str(source, `${at}.contact`, raw.contact),
+          ...(country === undefined ? {} : { country }),
+          ...(url === undefined ? {} : { source_url: url }),
+          ...(raw.existing === undefined
+            ? {}
+            : { existing: requireBool(source, `${at}.existing`, raw.existing) }),
+          ...(raw.public_source === undefined
+            ? {}
+            : { public_source: requireBool(source, `${at}.public_source`, raw.public_source) }),
+        }
+      })
+      const opt = (k: string): string | undefined =>
+        optStr(source, `${path}.${key}.sender.${k}`, sender[k])
+      const addr = optStr(source, `${path}.${key}.company_address`, body.company_address)
+      return {
+        at,
+        type: 'b2b.sequence',
+        b2b_sequence: {
+          who: str(source, `${path}.${key}.who`, body.who),
+          ...(step === undefined ? {} : { step: step as 'first' | 'follow_up' | 'final' }),
+          sender: {
+            address: str(source, `${path}.${key}.sender.address`, sender.address),
+            ...(sender.separate_domain === undefined
+              ? {}
+              : {
+                  separate_domain: requireBool(
+                    source,
+                    `${path}.${key}.sender.separate_domain`,
+                    sender.separate_domain,
+                  ),
+                }),
+            ...(opt('spf') === undefined ? {} : { spf: opt('spf') as string }),
+            ...(opt('dkim') === undefined ? {} : { dkim: opt('dkim') as string }),
+            ...(opt('dmarc') === undefined ? {} : { dmarc: opt('dmarc') as string }),
+            ...(opt('first_sent_at') === undefined
+              ? {}
+              : { first_sent_at: opt('first_sent_at') as string }),
+            ...(sender.sent_today === undefined
+              ? {}
+              : {
+                  sent_today: Number(
+                    numeric(source, `${path}.${key}.sender.sent_today`, sender.sent_today),
+                  ),
+                }),
+          },
+          ...(addr === undefined ? {} : { company_address: addr }),
+          ...(body.de_at_confirmed === undefined
+            ? {}
+            : {
+                de_at_confirmed: requireBool(
+                  source,
+                  `${path}.${key}.de_at_confirmed`,
+                  body.de_at_confirmed,
+                ),
+              }),
+          prospects,
+        },
+      }
+    }
+    case 'b2b.reply': {
+      known(source, `${path}.${key}`, body, ['who', 'prospect', 'subject', 'body'])
+      return {
+        at,
+        type: 'b2b.reply',
+        b2b_reply: {
+          who: str(source, `${path}.${key}.who`, body.who),
+          prospect: str(source, `${path}.${key}.prospect`, body.prospect),
           subject: str(source, `${path}.${key}.subject`, body.subject),
           body: str(source, `${path}.${key}.body`, body.body),
         },
@@ -2489,6 +2609,35 @@ function parseExpected(source: string, raw: unknown): ScenarioExpected {
         fail(source, `expected.${at}`, '要写 kind')
       return parsed as NonNullable<ScenarioExpected['b2b']>[number]
     })
+  }
+  // WP173（docs/84 §2）：开发信那几轮与回信，同样是有序的表
+  if (raw.b2b_sequence !== undefined) {
+    if (!Array.isArray(raw.b2b_sequence)) fail(source, 'expected.b2b_sequence', '必须是数组')
+    out.b2b_sequence = raw.b2b_sequence.map(
+      (item, i) =>
+        shaped(source, `b2b_sequence[${i}]`, item, {
+          step: 'str',
+          card: 'bool',
+          picked: 'num',
+          queued_tomorrow: 'num',
+          excluded: 'strs',
+          level: 'str',
+          blocked_rules: 'strs',
+        }) as NonNullable<ScenarioExpected['b2b_sequence']>[number],
+    )
+  }
+  if (raw.b2b_replies !== undefined) {
+    if (!Array.isArray(raw.b2b_replies)) fail(source, 'expected.b2b_replies', '必须是数组')
+    out.b2b_replies = raw.b2b_replies.map(
+      (item, i) =>
+        shaped(source, `b2b_replies[${i}]`, item, {
+          class: 'str',
+          action: 'str',
+          handed_to_sales: 'bool',
+          suppressed: 'bool',
+          routed_to: 'str',
+        }) as NonNullable<ScenarioExpected['b2b_replies']>[number],
+    )
   }
   const fraud = shaped(source, 'b2b_fraud', raw.b2b_fraud, {
     red_card: 'bool',

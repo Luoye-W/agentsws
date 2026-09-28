@@ -471,6 +471,8 @@ export interface B2bInquiry {
   run_id?: string
   /** 信里要求改收款账户 → 红卡的 id（不采纳）。 */
   fraud_alert_id?: string
+  /** WP173：回我们开发信的那一封被分成了哪一类（有意向 / 要资料 / 问价 / …，docs/84 §2.2）。 */
+  reply_class?: B2bReplyClass
   received_at: Iso8601
   created_at: Iso8601
 }
@@ -484,7 +486,8 @@ export interface B2bInquiry {
 export interface B2bSuppressionEntry {
   key_hash: string
   masked: string
-  reason: 'unsubscribe' | 'hard_bounce' | 'manual'
+  /** WP173 加 `declined`：开发信回信说"不感兴趣"（docs/84 §2.2：退订、不感兴趣都进名单）。 */
+  reason: 'unsubscribe' | 'hard_bounce' | 'manual' | 'declined'
   /** 从哪封信认出来的（消息库 id）。 */
   message_id?: string
   /** 对上了哪个联系人（这个联系人的开发序列就此停下）。 */
@@ -544,3 +547,144 @@ export interface B2bDraft {
   created_at: Iso8601
   updated_at: Iso8601
 }
+
+/* ── WP173：开发信序列（docs/84 §2 / §11.1）────────────────────────────── */
+
+/** 序列里的第几封（与 `@agentsws/core` 的 `OutreachStep` 同一组字面量）。 */
+export type B2bSequenceStep = 'first' | 'follow_up' | 'final'
+
+/**
+ * 一个联系人在开发序列里走到哪了。
+ *
+ * - `queued`：排着（今天配额满了 / 还没选发信邮箱 / 发信邮箱体检没过 / 公司地址没填）；
+ * - `awaiting_approval`：进了一张待批的卡（占着今天的配额）；
+ * - `active`：发过至少一封，等下一封到点；
+ * - `replied` / `handed_to_sales`：回信了（有意向的交给业务）；
+ * - `stopped`：退订、退信、不感兴趣、卡被驳回；
+ * - `finished`：收尾那封发完了——**真停**。
+ */
+export type B2bEnrollmentStatus =
+  | 'queued'
+  | 'awaiting_approval'
+  | 'active'
+  | 'replied'
+  | 'handed_to_sales'
+  | 'stopped'
+  | 'finished'
+
+/** 排着的原因（面板上照实写）。 */
+export type B2bQueuedReason = 'quota' | 'sender_choice' | 'sender_auth' | 'company_address'
+
+/** 开发信回信的分类（docs/84 §2.2，形状照 `kol-core/replies.ts`）。 */
+export type B2bReplyClass =
+  | 'interested'
+  | 'wants_info'
+  | 'asks_price'
+  | 'later'
+  | 'not_interested'
+  | 'unsubscribe'
+  | 'auto_reply'
+  | 'bounce'
+  | 'unknown'
+
+export interface B2bEnrollment {
+  id: string
+  workspace_id: WorkspaceId
+  contact_id: string
+  account_id: string
+  /** 从哪只邮箱发（配额按它算）。 */
+  sender: string
+  status: B2bEnrollmentStatus
+  queued_reason?: B2bQueuedReason
+  stop_reason?: string
+  /** 发过的那几封（Message-ID 用来对回信的线程）。 */
+  steps: {
+    step: B2bSequenceStep
+    at: Iso8601
+    message_id?: string
+    change_id?: string
+    /** 这一封的主题（跟进回在同一条线程里，用首封那一个）。 */
+    subject?: string
+  }[]
+  /** 下一封是哪封、什么时候到点。 */
+  next_step?: B2bSequenceStep
+  due_at?: Iso8601
+  /** 等批的那张卡（批了才发）。 */
+  pending_change_id?: string
+  pending_approval_id?: string
+  reply_class?: B2bReplyClass
+  replied_at?: Iso8601
+  /** 交给业务时开的那件事项。 */
+  matter_id?: string
+  created_at: Iso8601
+  updated_at: Iso8601
+}
+
+/** 发信邮箱体检的一格。`pending` = 测试信还没收回来。 */
+export type B2bAuthResult = 'pass' | 'fail' | 'missing' | 'pending' | 'unknown'
+
+/**
+ * 发信邮箱体检（docs/84 §2.3）：SPF / DMARC 查 DNS，DKIM 看给自己发的那封测试信的
+ * `Authentication-Results`。**SPF 或 DKIM 没过不发**；DMARC 缺了只提示。
+ */
+export interface B2bSenderAuth {
+  spf: B2bAuthResult
+  dkim: B2bAuthResult
+  dmarc: B2bAuthResult
+  checked_at?: Iso8601
+  /** 那封测试信的 Message-ID（收回来时按它认）。 */
+  test_message_id?: string
+  /** 给人看的几句（没过的原因、怎么配）。 */
+  notes: string[]
+}
+
+/** 一只发信邮箱（用户在「发信域名」那张卡上选的）。 */
+export interface B2bSender {
+  address: string
+  domain: string
+  /** 是不是单独的发信域名（与主站 / 客服邮箱不同域）。 */
+  separate_domain: boolean
+  chosen_at: Iso8601
+  chosen_by?: PersonId
+  /** 第一次从这只邮箱发开发信的时间（预热从这天算）。 */
+  first_sent_at?: Iso8601
+  auth: B2bSenderAuth
+  /** 上一次查到的 DNS 记录（测试信收回来时拿它和信头一起再判一次）。 */
+  dns?: { spf_txt?: string[]; dmarc_txt?: string[] }
+}
+
+/** 主动开发的几样设置（一个品牌一份）。 */
+export interface B2bOutboundSettings {
+  /** 页脚上的公司名（不填用公司档案的全称）。 */
+  company_name?: string
+  /** 页脚上的公司实体地址（CAN-SPAM 硬要求）。**没有就不能发**。 */
+  postal_address?: string
+  /** 署名。 */
+  sender_name?: string
+  /** 想聊的产品线（开一轮时给的，下一轮沿用）。 */
+  product?: string
+  /** 「发信域名」那张卡的答案。`separate_pending` = 选了单独域名但还没接上那只邮箱。 */
+  sender_choice?: 'separate' | 'primary' | 'separate_pending'
+  /** 选定的发信邮箱。 */
+  sender_address?: string
+  /** 那张卡的 id（还没答时面板上指过去）。 */
+  choice_card_id?: string
+  /** 德国 / 奥地利：用户勾选并确认风险后才发（docs/84 §11.1 第 6 条）。 */
+  de_at?: { confirmed_by: PersonId; confirmed_at: Iso8601 }
+  updated_at?: Iso8601
+}
+
+/**
+ * 默认不发开发信的国家（ISO 两位码）：德国、奥地利。**只拦没有往来的潜在客户**，
+ * 已有往来的照常出卡（Fable 09-28，WP170 终审）。
+ */
+export const B2B_EXCLUDED_COUNTRIES: readonly string[] = ['DE', 'AT']
+
+/** 卡上那一句原因（docs/84 §11.1 第 6 条：告诉用户为什么）。 */
+export const B2B_DE_AT_REASON = '两国法院常把未经同意的 B2B 冷邮件判为违法'
+
+/**
+ * WP173：「发信域名」那张选择题卡的审批种类（docs/84 §11.1 第 4 条：**建议而不强制**，
+ * 由用户选；不问不设）。payload = `{ options, recommended, primary_domains }`。
+ */
+export const B2B_SENDER_CHOICE_KIND = 'b2b_sender_choice' as const

@@ -1462,6 +1462,26 @@ async function execute(
         await tick()
         return
       }
+      // ── WP173 开发信序列（docs/84 §2）──────────────────────────────
+      case 'b2b.sequence': {
+        const out = await world.b2b.sequence(event.b2b_sequence)
+        world.appendEvent('simulation.b2b_sequence_requested', {
+          step: out.step,
+          card: out.card,
+          picked: out.picked,
+        })
+        await tick()
+        return
+      }
+      case 'b2b.reply': {
+        const out = await world.b2b.reply(event.b2b_reply)
+        world.appendEvent('simulation.b2b_reply_requested', {
+          class: out.class,
+          action: out.action,
+        })
+        await tick()
+        return
+      }
       // ── WP75 投放（57 §1 / §4、04 §5）──────────────────────────────
       case 'ads.campaign': {
         const e = event.ads_campaign

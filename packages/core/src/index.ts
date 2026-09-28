@@ -11,5 +11,7 @@ export * from './redact-outbound.js'
 export * from './secret-patterns.js'
 // WP125（72 §P0-2）：客户贴进来的支付 / 身份标识，进 prompt 前打码（打码先于围栏）
 export * from './sensitive-mask.js'
+// WP173：开发序列（三封节奏）、日配额与预热——红人与 B2B 开发信共用
+export * from './sequence.js'
 export * from './snapshot.js'
 export * from './suppression.js'

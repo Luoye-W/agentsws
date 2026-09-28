@@ -1,0 +1,45 @@
+# WP173（docs/84 §2.2）：**回信有意向 → 停这个人的序列，交给业务**（落成询盘）。
+#
+# 首封发给两位；Volthaus 回信要目录和价格（问价）→ 序列停下、交给持「业务」那条的何佳；
+# 第 3 天跟进那一轮只剩没回信的 Peak Gadgets（已交给业务的不再跟）。
+id: outbound/reply-interested-to-sales
+version: 1
+dataset: { pack: b2b-3c-3p, seed: 42 }
+stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
+clock: { start: '2026-09-29T09:00:00+08:00' }
+events:
+  - at: '+0m'
+    b2b.sequence:
+      who: p_he
+      sender: { address: sales@zhilian-mail.example, spf: pass, dkim: pass, dmarc: pass }
+      company_address: 8 Keji Rd, Nanshan, Shenzhen, China
+      prospects: &two
+        - { id: volthaus, company: Volthaus, contact: Anna, country: US, source_url: 'https://volthaus.example/contact' }
+        - { id: peak, company: Peak Gadgets, contact: Mia, country: GB, source_url: 'https://peakgadgets.example/about' }
+  - at: '+1d'
+    b2b.reply:
+      who: p_he
+      prospect: volthaus
+      subject: 'Re: fast chargers and cables for Volthaus'
+      body: Interesting. Please send your catalog and pricing for the 65W models.
+  - at: '+3d'
+    b2b.sequence:
+      who: p_he
+      step: follow_up
+      sender: { address: sales@zhilian-mail.example, spf: pass, dkim: pass, dmarc: pass, first_sent_at: '2026-09-29T01:00:00Z' }
+      company_address: 8 Keji Rd, Nanshan, Shenzhen, China
+      prospects: *two
+  - at: '+4d'
+    clock.advance: {}
+expected:
+  b2b_replies:
+    - { class: asks_price, action: hand_to_sales, handed_to_sales: true, suppressed: false, routed_to: p_he }
+  b2b_sequence:
+    - { step: first, card: true, picked: 2 }
+    - { step: follow_up, card: true, picked: 1, excluded: [in_sequence] }
+  metrics:
+    runs_failed: 0
+invariants:
+  - no_write_without_stage
+rubric: >-
+  问价的那封有没有变成业务那边的一条询盘？跟进那一轮是不是没再打扰已经回信的人？

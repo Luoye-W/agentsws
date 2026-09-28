@@ -4,6 +4,7 @@
  * 装配顺序：kernel → data → roles → knowledge → skills → model-gateway → txn → identity → api。
  * 只监听 127.0.0.1；一个进程一个端口（`AGENTSWS_PORT`，默认 4317）。
  */
+import { promises as dnsPromises } from 'node:dns'
 import { mkdirSync } from 'node:fs'
 import type { IncomingMessage } from 'node:http'
 import { join } from 'node:path'
@@ -69,6 +70,7 @@ import type {
   WorkspaceVertical,
 } from '@agentsws/contracts'
 import {
+  B2B_SENDER_CHOICE_KIND,
   brandNameOf,
   KOL_AUDIT_CAPABILITY,
   KOL_CHANNEL_IDS,
@@ -116,7 +118,7 @@ import {
   type SearchConsolePort,
 } from '@agentsws/seo-core'
 import { siteDesignPrompt, themeDesignVariables } from '@agentsws/site-core'
-import { createSkills, type Skills } from '@agentsws/skills'
+import { createSkills, readBundledSkill, type Skills } from '@agentsws/skills'
 // WP74（37 §2.5）：统一日历里社媒那一层的撞车说明，判据只有 social-core 这一份
 import { scheduleConflicts } from '@agentsws/social-core'
 import { detectAnsweredBoundaries, SUPPORT_BOUNDARIES } from '@agentsws/support-core'
@@ -131,6 +133,7 @@ import { compositeApprovals } from './approvals-composite.js'
 import { createAskPort } from './ask.js'
 import { demoB2bDeckData, withDemoB2b } from './b2b.js'
 import { createB2bMail } from './b2b-mail.js'
+import { type B2bOutboundAssembly, createB2bOutbound } from './b2b-outbound.js'
 import { createB2bService } from './b2b-service.js'
 import { type B2bStore, createB2bStore } from './b2b-store.js'
 import { MemoryBackend } from './backend.js'
@@ -156,6 +159,7 @@ import {
 import {
   brandAdsPort,
   brandAskPort,
+  brandB2bOutboundPort,
   brandB2bPort,
   brandCloudPort,
   brandConnectionDirectoryPort,
@@ -182,7 +186,13 @@ import {
 import { createCatalogIndex } from './catalog-index.js'
 // WP95（36 §11）：第三栏「变更审阅」逐文件 diff / 「运行中的浏览器」汇总，两条只读投影
 import { changeFiles } from './change-files.js'
-import { type ChannelsAssembly, type ChannelsOptions, createChannels } from './channels.js'
+import {
+  type ChannelsAssembly,
+  type ChannelsOptions,
+  createChannels,
+  type DirectMailInput,
+  type DirectMailResult,
+} from './channels.js'
 // WP57（48 §4 L3 #11）：在线聊天的实时车道（会话 / 轮次 / 计划 / 求助超时）
 import {
   CHAT_ASSIST_TASK_ID,
@@ -320,6 +330,7 @@ import {
   offsetToTz,
   registerAmazonSla,
   registerApprovalHousekeeping,
+  registerB2bSequence,
   registerBackup,
   registerDailyPlan,
   registerIdempotencySweep,
@@ -679,6 +690,18 @@ export interface ServerOptions {
    */
   brandIntakeFetch?: BrandIntakeFetch
   /**
+   * WP173：开发信那几跳的**替身**（测试与 demo 用；生产路径一个都不传）。
+   *
+   * - `dns`：发信邮箱体检查 SPF / DMARC（不做真 DNS 查询）；不传走 `node:dns` 的 `resolveTxt`；
+   * - `mailboxes`：demo 没有真邮箱连接，「发信域名」那张卡的选项从这里来；不传读连接页；
+   * - `sendMail`：替身 SMTP（测试信与开发信都进它，不真发）；不传走消息层的 `sendMail`。
+   */
+  b2bStandIns?: {
+    dns?: { txt(name: string): Promise<readonly string[]> }
+    mailboxes?: readonly string[]
+    sendMail?: (input: DirectMailInput) => Promise<DirectMailResult>
+  }
+  /**
    * WP73：社媒那九条渠道打出去的那一跳（测试塞一个假的对着真 URL 断言）。
    * 生产路径不传它，走全局 fetch。
    */
@@ -775,6 +798,8 @@ export interface Server {
   messages: MessagesAssembly
   /** WP172（docs/84）：B2B 库（九类对象 + 询盘 / 抑制名单）——bootstrap 品牌那一份。 */
   b2b: B2bStore
+  /** WP173（docs/84 §2）：开发信序列——bootstrap 品牌那一份（demo 的替身测试信要调它的 `observe`）。 */
+  b2bOutbound: B2bOutboundAssembly
   /** WP57 在线聊天的实时车道（会话 / 轮次聚合 / 五种动作 / 求助超时）。 */
   chat: ChatLane
   /** WP25 模型面（provider 配置 / 热更新 / 按 purpose 记账）。 */
@@ -1423,6 +1448,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       // WP172：B2B 库的卡批了才落库（不是 B2B 库的卡回 undefined，掉回原来那条路）
       const b2bApplied = brand?.b2bService.apply(change)
       if (b2bApplied !== undefined) return b2bApplied
+      // WP173：开发信那一批卡批了才发（不是 b2b_outreach 回 undefined）
+      const outreachSent = await brand?.b2bOutbound.apply(change)
+      if (outreachSent !== undefined) return outreachSent
       return backend.apply(change, opts)
     },
     // 18 §3：批准了的对外草稿真发出去。渠道接不住的（不是邮件 / 没装邮箱）
@@ -1880,10 +1908,13 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       pr: () => prDeckData(pr),
       // WP171 / WP172（docs/84）：B2B 那十九块从这个品牌自己的 B2B 库来（邮件分拣落成的询盘、
       // 批了的客户 / 报价 / 样品 …）。demo 里库里的排前面、后面垫一份演示投影
-      b2b: () =>
-        isBootstrap && mount !== undefined
-          ? withDemoB2b(b2bService.deckData(clock.now()), demoB2bDeckData(clock.now()))
-          : b2bService.deckData(clock.now()),
+      // WP173：主动开发那三块（今天待发 · 序列漏斗 · 回复待分）从开发序列来
+      b2b: () => {
+        const own = { ...b2bService.deckData(clock.now()), ...b2bOutbound.deckData(clock.now()) }
+        return isBootstrap && mount !== undefined
+          ? withDemoB2b(own, demoB2bDeckData(clock.now()))
+          : own
+      },
       // 红人库与社媒库都不是"连接"，所以它们不在那两份写死的数据源表里（见 `withOwnSources`）
       sources: () => withOwnSources(baseWorkData.sources()),
     }
@@ -3125,9 +3156,59 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
      * WP172（docs/84 §5）：邮件分拣之后 B2B 这一路——落成询盘 / 往来记录，B2B 岗位开着才开事项、
      * 起 Run（落在持「业务」那条职责的人名下）；退订与退信进抑制名单。挪信仍只归消息同步。
      */
+    /**
+     * WP173（docs/84 §2）：开发信序列——首封批量一张卡、跟进收尾按自动化级别；发信域名建议而不强制
+     * （第一次开出一张选择卡），SPF / DKIM 没过不发；按发信邮箱、按自然日算配额（预热 20 → 50）；
+     * 发出去的每一封记 `noteOutbound`（回信按它对线程、停序列）。
+     */
+    const b2bOutbound = createB2bOutbound({
+      workspace_id: ws,
+      store: b2b,
+      clock,
+      random,
+      timeZone: () => offsetToTz(workData.tz_offset_minutes),
+      ledger: txn.ledger,
+      approvals: txn.approvals,
+      effectiveConfig: (id) => roles.effectiveConfig(id),
+      appendEvent,
+      secrets: { get: (id) => (brandSecrets.available ? brandSecrets.get(id) : undefined) },
+      mailboxes: () =>
+        options.b2bStandIns?.mailboxes === undefined
+          ? connections.mailAccounts().map((a) => a.address)
+          : [...options.b2bStandIns.mailboxes],
+      // 主域名：公司档案的域名；没填就把第一只接上的邮箱当主域名（宁可少认一只"单独域名"）
+      primaryDomains: () => {
+        const org = onboardingRef?.companyProfile()?.domain?.trim()
+        if (org !== undefined && org !== '') return [org]
+        const first = options.b2bStandIns?.mailboxes?.[0] ?? connections.mailAccounts()[0]?.address
+        return first === undefined ? [] : [first.slice(first.lastIndexOf('@') + 1)]
+      },
+      companyName: () => onboardingRef?.companyProfile()?.legal_name ?? brandNameOfWorkspace(ws),
+      sendMail: options.b2bStandIns?.sendMail ?? ((input) => channels.sendMail(input)),
+      dns: options.b2bStandIns?.dns ?? {
+        txt: async (name) => (await dnsPromises.resolveTxt(name)).map((chunks) => chunks.join('')),
+      },
+      outboundHolder: () => {
+        const a = roles.assignments
+          .listByWorkspace(ws)
+          .find((x) => x.revoked_at === undefined && x.role_id === 'b2b.outbound')
+        return a === undefined
+          ? undefined
+          : { person_id: a.person_id, assignment_id: a.id, role_id: a.role_id }
+      },
+      drafter: ({ assignment_id, role_id, run_id }) => seoModel({ assignment_id, role_id }, run_id),
+      coldEmailSkill: () => {
+        try {
+          return readBundledSkill('cold-email').markdown
+        } catch {
+          return undefined
+        }
+      },
+    })
     const b2bMail = createB2bMail({
       workspace_id: ws,
       store: b2b,
+      outbound: b2bOutbound,
       clock,
       appendEvent,
       holders: () =>
@@ -3400,6 +3481,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       prService,
       b2b,
       b2bService,
+      b2bOutbound,
       seoService,
       googleReads,
       social,
@@ -3450,6 +3532,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   // WP154：选题卡批了 → 按卡片所属品牌开事项（品牌模块到这里才建得出来）
   seoDecidedHook.current = async (item) => {
     const brand = await brands?.forWorkspace(item.workspace_id)
+    // WP173：「发信域名」那张选择卡选了 → 记下发信邮箱、体检、排着的首封往前推
+    if (item.kind === B2B_SENDER_CHOICE_KIND) return brand?.b2bOutbound.onSenderChosen(item)
     await brand?.seoService.onDecided(item)
   }
   brands = createBrandModules({
@@ -3813,6 +3897,21 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
    * WP68 / 48 §5.2：红人开发信的序列跟进，每天一轮，**按品牌各跑一轮**
    * （照 WP66 的写法）。一个品牌的跟进信只能用那个品牌的红人库与那个品牌的额度。
    */
+  /*
+   * WP173（docs/84 §2）：B2B 开发信序列，每天一轮，**按品牌各跑一轮**（发信邮箱与配额都是品牌自己的）。
+   */
+  registerB2bSequence(schedule.scheduler, {
+    sweep: async () => {
+      const out = { staged: 0, queued: 0, stopped: 0 }
+      for (const brand of await brandModules.all()) {
+        const one = await brand.b2bOutbound.sweep()
+        out.staged += one.staged
+        out.queued += one.queued
+        out.stopped += one.stopped
+      }
+      return out
+    },
+  })
   registerKolSequence(schedule.scheduler, {
     sweep: async () => {
       const out = { scanned: 0, staged: 0, skipped: [] as unknown[] }
@@ -4058,6 +4157,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       social: SOCIAL_ROLE_IDS.some((role_id) => roles.assignments.listByRole(role_id).length > 0),
       // WP78（60 §5）：有人持有公关那四条职责之一才建品牌监控那条定时
       pr: PR_ROLE_IDS.some((role_id) => roles.assignments.listByRole(role_id).length > 0),
+      // WP173：有人持有「主动开发」才建开发信序列那条定时
+      b2b: roles.assignments.listByRole('b2b.outbound').length > 0,
       // WP154：有人持有「内容与搜索」才建每日读 Search Console 与每周小结那两条
       seo: roles.assignments.listByRole('dtc.content').length > 0,
     },
@@ -5431,6 +5532,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     brandModules,
     async (ws) => (await brandModules.forWorkspace(ws)).b2bService.port,
   )
+  /** WP173（docs/84 §2）：开发信序列 `/v1/b2b/outbound/*`（同上；一个品牌一份）。 */
+  const b2bOutboundPortOf = brandB2bOutboundPort(
+    brandModules,
+    async (ws) => (await brandModules.forWorkspace(ws)).b2bOutbound.port,
+  )
   /** WP78（60 §5）：公关库 `/v1/pr/*`（同上；媒体名单是一家公司攒了很多年的东西）。 */
   const prPortOf = brandPrPort(
     brandModules,
@@ -5886,6 +5992,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     pr: prPortOf,
     // WP172（docs/84）：本地 B2B 库 `/v1/b2b/*`
     b2b: b2bPortOf,
+    b2bOutbound: b2bOutboundPortOf,
     // WP154「内容与搜索」`/v1/seo/*`：按请求人所在品牌取那一份
     seo: seoPort,
     traceScope,
@@ -6004,6 +6111,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     channels: boot.channels,
     messages: boot.messages,
     b2b: boot.b2b,
+    b2bOutbound: boot.b2bOutbound,
     // WP57：在线聊天车道
     chat: boot.chat,
     modelSettings: boot.ownModels,
@@ -6175,7 +6283,7 @@ function seoDecided(bus: ApprovalBus, hook: SeoDecidedHook): ApprovalBus {
       }
       return async (...args: Parameters<ApprovalBus['decide']>): Promise<ApprovalItem> => {
         const out = await target.decide(...args)
-        if (out.kind === 'seo_topic') {
+        if (out.kind === 'seo_topic' || out.kind === B2B_SENDER_CHOICE_KIND) {
           try {
             await hook.current?.(out)
           } catch {

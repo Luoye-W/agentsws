@@ -16,19 +16,27 @@
  */
 
 import type { KolChannel } from '@agentsws/contracts'
-import { KOL_OUTREACH_FORBIDDEN, suppressionKey, withoutSuppressed } from '@agentsws/core'
+import {
+  KOL_OUTREACH_FORBIDDEN,
+  type OutreachQuota,
+  type OutreachStep,
+  suppressionKey,
+} from '@agentsws/core'
 
-/** 序列里的第几封。 */
-export type OutreachStep = 'first' | 'follow_up' | 'final'
-
-/** 序列的节奏（天）。首封是第 0 天。 */
-export const SEQUENCE_DAYS: Readonly<Record<OutreachStep, number>> = {
-  first: 0,
-  follow_up: 3,
-  final: 7,
-}
-
-export const SEQUENCE_ORDER: readonly OutreachStep[] = ['first', 'follow_up', 'final']
+/*
+ * WP173（docs/84 §2.1）：序列节奏、日配额、下一封是哪封这几个**和渠道无关**的函数提到了
+ * `@agentsws/core` 的 `sequence.ts`，红人与 B2B 开发信共用一份。这里原名 re-export，
+ * 本包的调用方一个字都不用改，行为逐字节不变。
+ */
+export {
+  type NextInSequence,
+  nextInSequence,
+  type OutreachQuota,
+  type OutreachStep,
+  outreachQuota,
+  SEQUENCE_DAYS,
+  SEQUENCE_ORDER,
+} from '@agentsws/core'
 
 /** 起草一封信要的变量。少一个必填变量就不起草（见 {@link draftOutreach}）。 */
 export interface OutreachVars {
@@ -205,88 +213,6 @@ export function reviewOutreachBody(input: { subject: string; body: string }): {
     ok: false,
     forbidden_hits: hits,
     message: `这封信里写了「${hits.join('」「')}」这类承诺。给钱、白送样品、保证效果都要走"建一条合作"那条路（那一步永远要人点头），不能在信里写死。把这几句删掉或者改成"我们再聊具体怎么做"。`,
-  }
-}
-
-/** 今天还能发几封（日配额）。 */
-export interface OutreachQuota {
-  /** 上限（职责 yml 的 `max_outreach_per_day`）。 */
-  cap: number
-  /** 今天已经发出去几封。 */
-  sent_today: number
-  /** 还剩几封。 */
-  remaining: number
-  /** 还能不能发。 */
-  allowed: boolean
-}
-
-/**
- * 算日配额。
- *
- * **只算，不拦**：真正的拦在 guardrail（`max_outreach_per_day`）。这里算出来的数
- * 是给面板与卡面用的——"今天还能发 12 封"这句话要在人点批准之前就看得见。
- */
-export function outreachQuota(input: {
-  cap: number
-  /** 今天发出去那几封的时间戳（ISO）。 */
-  sent_at: readonly string[]
-  /** 现在（注入）。 */
-  now: string
-}): OutreachQuota {
-  const t = Date.parse(input.now)
-  const dayAgo = t - 86_400_000
-  const sent = input.sent_at.filter((s) => {
-    const at = Date.parse(s)
-    return !Number.isNaN(at) && at > dayAgo && at <= t
-  }).length
-  const remaining = Math.max(0, input.cap - sent)
-  return { cap: input.cap, sent_today: sent, remaining, allowed: remaining > 0 }
-}
-
-/** 序列里下一封该是哪一封、什么时候发。 */
-export interface NextInSequence {
-  step: OutreachStep
-  /** 该发的时间（ISO）。 */
-  due_at: string
-  /** 为什么是它（卡面上那一句）。 */
-  why: string
-}
-
-/**
- * 算序列的下一封。
- *
- * 三种情况没有下一封（回 `undefined`），每一种都是**故意**的：
- * - 对方回过信了：序列的目的达到了，接下来是人在谈，不是机器在跟；
- * - 收尾那封已经发了：序列里没有第四封；
- * - 这个人在抑制名单上：他说过别来找我。
- */
-export function nextInSequence(input: {
-  /** 已经发过的那几封（按发送顺序）。 */
-  sent: readonly { step: OutreachStep; at: string }[]
-  /** 对方回过信没有。 */
-  replied: boolean
-  /** 联系方式（比抑制名单用）。 */
-  contact: string
-  /** 抑制 / 退订名单。 */
-  suppressed: readonly string[]
-}): NextInSequence | undefined {
-  if (input.replied) return undefined
-  if (withoutSuppressed([input.contact], input.suppressed).length === 0) return undefined
-  const done = new Set(input.sent.map((s) => s.step))
-  if (done.has('final')) return undefined
-  const first = input.sent.find((s) => s.step === 'first')
-  if (first === undefined) return { step: 'first', due_at: '', why: '这个人还没发过第一封。' }
-  const base = Date.parse(first.at)
-  if (Number.isNaN(base)) return undefined
-  const step: OutreachStep = done.has('follow_up') ? 'final' : 'follow_up'
-  const due = new Date(base + SEQUENCE_DAYS[step] * 86_400_000).toISOString()
-  return {
-    step,
-    due_at: due,
-    why:
-      step === 'follow_up'
-        ? `首封发出去 ${SEQUENCE_DAYS.follow_up} 天了还没回音，跟进一封。`
-        : `第二封也没回音，发收尾那封——写明不再打扰，然后真的不再发。`,
   }
 }
 

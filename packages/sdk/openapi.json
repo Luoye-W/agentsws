@@ -68414,6 +68414,507 @@
           }
         }
       }
+    },
+    "/v1/b2b/outbound": {
+      "get": {
+        "operationId": "getB2bOutbound",
+        "summary": "主动开发：发信邮箱体检与今天配额、序列漏斗、排着的人与原因、默认不发的人数（德奥写明为什么）",
+        "tags": ["b2b"],
+        "parameters": [
+          {
+            "name": "X-Assignment",
+            "in": "header",
+            "required": true,
+            "description": "本次请求绑定的 Assignment（31 §3.1：一次请求一个 Assignment）",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "B2bOutboundView",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-authz": {
+          "domain": "b2b_contact",
+          "op": "read",
+          "range": "assigned",
+          "sensitivity": "internal"
+        },
+        "x-returns": "B2bOutboundView"
+      }
+    },
+    "/v1/b2b/outbound/settings": {
+      "put": {
+        "operationId": "saveB2bOutboundSettings",
+        "summary": "主动开发的设置：页脚上的公司名与实体地址（没有地址不能发）、署名、德国 / 奥地利勾选并确认风险",
+        "tags": ["b2b"],
+        "parameters": [
+          {
+            "name": "X-Assignment",
+            "in": "header",
+            "required": true,
+            "description": "本次请求绑定的 Assignment（31 §3.1：一次请求一个 Assignment）",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "B2bOutboundView",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-authz": {
+          "domain": "b2b_contact",
+          "op": "stage",
+          "range": "assigned",
+          "sensitivity": "internal"
+        },
+        "x-returns": "B2bOutboundView",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "company_name": {
+                    "type": "string",
+                    "maxLength": 200
+                  },
+                  "postal_address": {
+                    "type": "string",
+                    "maxLength": 500
+                  },
+                  "sender_name": {
+                    "type": "string",
+                    "maxLength": 100
+                  },
+                  "de_at_confirm": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/b2b/outbound/sequences": {
+      "post": {
+        "operationId": "startB2bSequence",
+        "summary": "开一轮开发信：筛人（抑制名单 / 没来源 / 德奥默认不发）→ 发信邮箱与体检 → 按今天配额，首封批量一张卡、超了排到明天",
+        "tags": ["b2b"],
+        "parameters": [
+          {
+            "name": "X-Assignment",
+            "in": "header",
+            "required": true,
+            "description": "本次请求绑定的 Assignment（31 §3.1：一次请求一个 Assignment）",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "幂等键；24h 内同键重放原响应（28 §2）",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "B2bSequenceStartView",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-authz": {
+          "domain": "b2b_contact",
+          "op": "stage",
+          "range": "assigned",
+          "sensitivity": "confidential"
+        },
+        "x-returns": "B2bSequenceStartView",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "contact_ids": {
+                    "maxItems": 2000,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 100
+                    }
+                  },
+                  "product": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/b2b/outbound/sender/check": {
+      "post": {
+        "operationId": "checkB2bSender",
+        "summary": "再体检一次发信邮箱：查 SPF / DMARC 的 DNS 记录，给自己发一封测试信看 DKIM",
+        "tags": ["b2b"],
+        "parameters": [
+          {
+            "name": "X-Assignment",
+            "in": "header",
+            "required": true,
+            "description": "本次请求绑定的 Assignment（31 §3.1：一次请求一个 Assignment）",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "幂等键；24h 内同键重放原响应（28 §2）",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "B2bOutboundView",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-authz": {
+          "domain": "b2b_contact",
+          "op": "stage",
+          "range": "assigned",
+          "sensitivity": "internal"
+        },
+        "x-returns": "B2bOutboundView"
+      }
     }
   },
   "x-asyncapi": {

@@ -9,6 +9,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link2Off, ScanSearch } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { B2bOutboundPanel } from '@/components/b2b/outbound-panel'
 import { BlockCard } from '@/components/blocks/block-view'
 import { CalendarLink } from '@/components/calendar/calendar-link'
 import { connectPathFor } from '@/components/connections/links'
@@ -216,6 +217,8 @@ function ViewTab({ id }: { id: string }): React.ReactNode {
       {isLiveChat ? <ChatWindowEntry /> : null}
       {isLiveChat ? <ChatSandboxEntry /> : null}
       {kolChannel === undefined ? null : <KolPanel assignment={id} channel={kolChannel} />}
+      {/* WP173：主动开发那一条的开发信（发信邮箱与体检、公司地址、德奥确认、开一轮） */}
+      {here?.role_id === 'b2b.outbound' ? <B2bOutboundPanel assignment={id} /> : null}
       {noRange ? null : (
         <StoreSections id={id} range={range} setRange={setRange} view={view.data} />
       )}
