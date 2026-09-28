@@ -106,6 +106,13 @@ export type KnownEventType =
    * payload 只有行 id、原因码与想改的字段名（**不带值**）。
    */
   | 'profile.config_rejected'
+  /**
+   * WP181：模型调了官方「自动化任务」的一个工具（建 / 查 / 改 / 删提醒）。payload 只有工具名、这次运行、
+   * 任务 id、结果（建了 / 等批 / 改了 / 删了 / 被拒）与原因码——**提醒正文不进**。
+   */
+  | 'automation.requested'
+  /** WP181：到点了但这个岗位今天的自动运行次数到了上限，这一次没跑。payload：任务 id、上限、今天第几次。 */
+  | 'automation.capped'
   // knowledge (19)
   | 'knowledge.card.proposed'
   | 'knowledge.card.activated'

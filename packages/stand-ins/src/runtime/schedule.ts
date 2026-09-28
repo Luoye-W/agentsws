@@ -160,3 +160,59 @@ export const SCHEDULE_TOOL_DEFS: readonly ToolDef[] = [
 export const SCHEDULE_TOOL_DEF_BY_NAME: ReadonlyMap<string, ToolDef> = new Map(
   SCHEDULE_TOOL_DEFS.map((d) => [d.name, d]),
 )
+
+/* ── stub 的剧本（模拟与演示用；只有工具面里有 `schedule_create` 的运行才走得到）──────────── */
+
+const ASKS = /提醒我|每天|每周|工作日|分钟后|小时后|定时/
+const WEEKDAY: Record<string, number> = { 一: 1, 二: 2, 三: 3, 四: 4, 五: 5, 六: 6, 日: 7, 天: 7 }
+
+/** 「下午 3 点半」「9:30」「早上 8 点」→ `HH:mm:00`；没说几点就是 09:00。 */
+function clockOf(text: string): string {
+  const m = /(上午|早上|中午|下午|晚上)?\s*(\d{1,2})\s*(?:[点:：时])\s*(半|\d{1,2})?/.exec(text)
+  if (m === null || m[2] === undefined) return '09:00:00'
+  let hour = Number.parseInt(m[2], 10)
+  if ((m[1] === '下午' || m[1] === '晚上') && hour < 12) hour += 12
+  const minute = m[3] === '半' ? 30 : m[3] === undefined ? 0 : Number.parseInt(m[3], 10)
+  const pad = (n: number): string => String(Math.min(n, 59)).padStart(2, '0')
+  return `${String(Math.min(hour, 23)).padStart(2, '0')}:${pad(minute)}:00`
+}
+
+/**
+ * stub 的岔口：工具面里有 `schedule_create`、话里在要提醒 / 定时，才走这一边（回要调的入参）；
+ * 到点那次运行（官方外框 `[SCHEDULE REMINDER`）一律不走——不然每天到点又建一条。
+ * 时区不写：执行器按公司时区补（我们包的那一层）。
+ */
+export function scheduleBranch(
+  allow: readonly string[],
+  text: string,
+): Record<string, unknown> | undefined {
+  if (!allow.includes(SCHEDULE_CREATE_TOOL)) return undefined
+  if (text.includes('[SCHEDULE REMINDER') || !ASKS.test(text)) return undefined
+  const line = text.trim().split('\n')[0]?.trim() ?? ''
+  const title = line.length > 24 ? `${line.slice(0, 24)}…` : line
+  const base = { title: title === '' ? '提醒' : title, prompt: line === '' ? '提醒' : line }
+  const minutes = /(\d+)\s*分钟后/.exec(text)
+  if (minutes?.[1] !== undefined) return { ...base, after_seconds: Number(minutes[1]) * 60 }
+  const hours = /(\d+)\s*小时后/.exec(text)
+  if (hours?.[1] !== undefined) return { ...base, after_seconds: Number(hours[1]) * 3600 }
+  const time = clockOf(text)
+  if (/工作日/.test(text)) return { ...base, weekly: { time, weekdays: [1, 2, 3, 4, 5] } }
+  const week = /每周([一二三四五六日天、,，和及]+)/.exec(text)
+  if (week?.[1] !== undefined) {
+    const days = [...new Set([...week[1]].map((c) => WEEKDAY[c]).filter((d) => d !== undefined))]
+    if (days.length > 0) return { ...base, weekly: { time, weekdays: days.sort() } }
+  }
+  return { ...base, daily: { time } }
+}
+
+/** stub 回话：设成了说哪天几点，等批的说等你批，没设成照实说官方的原话。 */
+export function renderScheduleAnswer(data: unknown): string {
+  const o = data !== null && typeof data === 'object' ? (data as Record<string, unknown>) : {}
+  if (typeof o.code === 'string') return `这条定时没设成：${String(o.message ?? o.code)}`
+  const title = typeof o.title === 'string' ? o.title : '提醒'
+  const at = typeof o.scheduledAt === 'string' ? o.scheduledAt : ''
+  if (o.approval === 'pending') {
+    return `**${title}** 到点会往外发东西，我先出了一张卡，你批了才开始。`
+  }
+  return `设好了：**${title}**，下一次在 ${at}。到点我会接着这件事再跑一次。`
+}

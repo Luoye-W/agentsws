@@ -43,6 +43,7 @@ import type {
   RoleId,
   WorkspaceId,
 } from '@agentsws/contracts'
+import { officialRuleResolver } from '@agentsws/dsh-adapter/official-schedule'
 import {
   createScheduler,
   createSqliteScheduleStore,
@@ -255,6 +256,8 @@ export function createScheduleAssembly(options: ScheduleAssemblyOptions): Schedu
     clock,
     store,
     eventSink,
+    // WP181：官方「自动化任务」的时间规则（每天 / 每周几 / cron / 固定间隔）照官方算法排下一次
+    rules: officialRuleResolver,
     ...(options.random === undefined ? {} : { random: options.random }),
     ...(options.intervalMs === undefined ? {} : { intervalMs: options.intervalMs }),
   })
@@ -1513,6 +1516,11 @@ export interface SchedulePortOptions {
   approvals: ApprovalBus
   /** 判断一条任务是不是本人自己的岗位（25 §5：给别人建的要那边点头）。 */
   assignmentOf(id: string): { person_id: PersonId; role_id: RoleId } | undefined
+  /**
+   * WP181：按官方「自动化任务」的时间写法改时间（`automation.ts` 的 `retime`：官方校验、官方算下一次）。
+   * 不给就不支持 `rule`（回 `not_implemented`）。
+   */
+  retime?(task: ScheduleTask, rule: Record<string, unknown>): Promise<ScheduleTask>
 }
 
 /** 本人能看能管的：同一个工作区、而且是自己的。 */
@@ -1637,9 +1645,29 @@ export function createSchedulePort(options: SchedulePortOptions): SchedulePort {
     },
 
     async update(actor, id, patch) {
-      assertOwn(scheduler.get(id), actor, id)
+      const own = assertOwn(scheduler.get(id), actor, id)
       if (patch.action === 'pause') return view(await scheduler.pause(id))
       if (patch.action === 'resume') return view(await scheduler.resume(id))
+      if (patch.rule !== undefined) {
+        if (options.retime === undefined) {
+          throw new ServerScheduleError(
+            'not_implemented',
+            '这个进程没接官方「自动化任务」的时间规则',
+          )
+        }
+        try {
+          const retimed = await options.retime(own, patch.rule)
+          return view(
+            patch.title === undefined
+              ? retimed
+              : await scheduler.update(id, { title: patch.title }),
+          )
+        } catch (e) {
+          // 官方的校验报错（时间写错了、太频繁、时区认不出）→ 网关的 invalid_input，原话带上
+          if (e instanceof ServerScheduleError) throw e
+          throw new ServerScheduleError('invalid_input', e instanceof Error ? e.message : String(e))
+        }
+      }
       return view(
         await scheduler.update(id, {
           ...(patch.trigger === undefined

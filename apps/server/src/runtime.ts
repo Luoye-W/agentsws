@@ -70,8 +70,10 @@ import {
   humanizeToolNames,
   isB2bOutboundRole,
   isOwnerRole,
+  isScheduleTool,
   OWNER_TOOL_NAMES,
   READ_SKILL_TOOL,
+  SCHEDULE_TOOL_NAMES,
   WEB_FETCH_TOOL,
   WEB_SEARCH_TOOL,
 } from '@agentsws/stand-ins'
@@ -102,9 +104,14 @@ const DEFAULT_TOOLS = ['get_order', 'get_product', 'list_orders', 'search_polici
  * WP148 带浏览器的红人运行走 dsh 时也撞的是同一条，这一张表一并修掉。
  */
 const HOST_TOOL_EFFECTS: Readonly<Record<string, ToolSideEffect>> = Object.fromEntries(
-  [...KOL_TOOL_NAMES, ...B2B_OUTBOUND_TOOL_NAMES, ...OWNER_TOOL_NAMES, READ_SKILL_TOOL].map(
-    (name) => [name, classifySideEffect(name) === 'read_external' ? 'read_external' : 'local'],
-  ),
+  [
+    ...KOL_TOOL_NAMES,
+    ...B2B_OUTBOUND_TOOL_NAMES,
+    ...OWNER_TOOL_NAMES,
+    READ_SKILL_TOOL,
+    // WP181：官方「自动化任务」的四个工具——只动本机调度器、会往外发的出卡
+    ...SCHEDULE_TOOL_NAMES,
+  ].map((name) => [name, classifySideEffect(name) === 'read_external' ? 'read_external' : 'local']),
 )
 
 /** ObjectRef.type → ContextItem.kind；不认识的按摘要注入。 */
@@ -225,6 +232,12 @@ export interface RuntimeOptions {
    * 的工具面——别的职责一律没有；执行器里还会再判一次职责。
    */
   b2bOutboundTools?: ToolExecutor
+  /**
+   * WP181：官方「自动化任务」的四个工具（`automation.ts` 建的那一份）。**装了那个官方插件**
+   * （`enabled()`，每次运行现问）才进工具面——所有职责都有（给自己建提醒）；会往外发的周期任务
+   * 由执行器出卡。没装的运行工具面与提示词字节一个不变。
+   */
+  automation?: { enabled(): Promise<boolean> | boolean; executeTool: ToolExecutor }
   /**
    * WP44：Shopify 官方 Dev MCP 的只读工具源（`shopify-devmcp.ts` 起的那个进程）。
    *
@@ -802,6 +815,7 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
     const owner = options.ownerTools
     const b2bOut = options.b2bOutboundTools
     const dev = options.devTools
+    const automation = options.automation
     /*
      * WP162：按需技能。接了技能库才有这个工具（工具面里也只有那时才摆出 `read_skill`）；
      * 「我是谁」按这次运行开跑时登记的那一份（带岗位），登记里没有就退回 RunRequest 上的职责。
@@ -823,7 +837,8 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       owner === undefined &&
       b2bOut === undefined &&
       dev === undefined &&
-      readSkill === undefined
+      readSkill === undefined &&
+      automation === undefined
     )
       return source.executeTool
     return async (call) => {
@@ -832,6 +847,10 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       }
       if (readSkill !== undefined && isReadSkillTool(call.name)) {
         return readSkill(call)
+      }
+      // WP181：官方「自动化任务」的四个工具（名字与别处不重名；装没装插件在执行器里再判一次）
+      if (automation !== undefined && isScheduleTool(call.name)) {
+        return automation.executeTool(call)
       }
       // WP153：店主的两个只读工具（名字与别处不重名；职责在执行器里再判一次）
       if (owner !== undefined && OWNER_TOOL_NAMES.includes(bareOf(call.name))) {
@@ -1156,6 +1175,9 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
      * 搜索另要两件：设置里「用你的 DeepSeek 账号搜索」没关、手上有凭据（账号登录优先，其次官方 key）。
      */
     const web = webFor(config.web)
+    // WP181：装了官方「自动化任务」插件才挂那四个工具（每次运行现问）
+    const automationOn =
+      options.automation === undefined ? false : await options.automation.enabled()
     const allow = [
       ...new Set([
         ...config.grounding.map((g) => g.tool),
@@ -1175,6 +1197,7 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
         // WP179：官方网页工具（只有真给了的那几个）
         ...(web?.search === true ? [WEB_SEARCH_TOOL] : []),
         ...(web?.fetch === true ? [WEB_FETCH_TOOL] : []),
+        ...(automationOn ? SCHEDULE_TOOL_NAMES : []),
       ]),
     ].sort()
     const connect_token = (await source.readToken?.(input.assignment_id)) ?? ''
