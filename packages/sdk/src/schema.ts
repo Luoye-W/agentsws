@@ -21846,6 +21846,29 @@ export interface operations {
         'application/json': {
           /** @enum {string} */
           action?: 'pause' | 'resume'
+          rule?: {
+            daily?: {
+              time: string
+              time_zone?: string
+            }
+            weekly?: {
+              time: string
+              time_zone?: string
+              weekdays: number[]
+            }
+            cron?: {
+              expression: string
+              time_zone?: string
+            }
+            every_seconds?: number
+            at?:
+              | string
+              | {
+                  date: string
+                  time: string
+                  time_zone?: string
+                }
+          }
           trigger?:
             | {
                 /** @constant */

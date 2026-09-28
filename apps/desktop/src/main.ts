@@ -72,7 +72,7 @@ import {
   nodeTimers,
   systemClock,
 } from './node-runtime.js'
-import { desktopPaths, thirdPartyLicensesFile } from './paths.js'
+import { bundledProfileDir, desktopPaths, thirdPartyLicensesFile } from './paths.js'
 import type { FetchLike } from './ports.js'
 import { createRedactor } from './redact.js'
 import { createSecretVault, type DesktopSecrets, secretLiterals, toHex } from './secrets.js'
@@ -339,6 +339,7 @@ async function bootstrap(): Promise<void> {
     ...(secrets === undefined ? {} : { redactor: createRedactor(secretLiterals(secrets)) }),
   })
 
+  const profileDir = bundledProfileDir(app.isPackaged ? process.resourcesPath : undefined)
   let boundPort = config.port
   const serverUrl = (): string => runtimeMode.serverUrl ?? `http://127.0.0.1:${boundPort}`
 
@@ -378,6 +379,8 @@ async function bootstrap(): Promise<void> {
         // WP136（docs/79）：dsh 场景与本机凭据库住在 `<userData>/dsh`，不碰用户另装的 `~/.dsh`
         dshHome: paths.dshHome,
         appDataDir: paths.userData,
+        // WP181：审过的官方插件清单与锁定 patch 随安装包带（开发期不给，服务进程读仓库那一份）
+        ...(profileDir === undefined ? {} : { profileDir }),
         secrets: secrets ?? EMPTY_SECRETS,
         version,
         baseEnv: process.env,

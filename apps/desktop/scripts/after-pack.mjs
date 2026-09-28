@@ -16,6 +16,7 @@
  *    `pnpm licenses list` 生成的 `THIRD_PARTY_LICENSES.txt`（`third-party-licenses.mjs`），
  *    Electron 自己的 LICENSE 与 Chromium 的 `LICENSES.chromium.html`。托盘「开源软件许可」
  *    打开的就是这个目录里的那份 txt。**包里带原生二进制、却不在清单里**的包有一个就失败。
+ * 5. **审过的官方插件清单与锁定 patch 在包里**（WP181，`<resources>/profiles/agentsws/` 的两份）。
  */
 import { execFileSync } from 'node:child_process'
 import {
@@ -300,6 +301,22 @@ export function copyElectronLicenses(searchDirs, licensesDir) {
   return [...copied].sort()
 }
 
+// ── ⑤ 审过的官方插件清单与锁定 patch（WP181）─────────────────────────────
+
+/** 安装包里放 profile 的目录（`<resources>/profiles/agentsws`）。桌面壳按同一个相对路径给服务进程。 */
+export const PROFILE_DIR = join('profiles', 'agentsws')
+
+/** 必须在包里的两份（`electron-builder.yml` 的 extraResources 带进来）。 */
+export const PROFILE_FILES = ['cordis.patch.yml', 'plugin-allowlist.yml']
+
+/**
+ * 包里缺了哪几份（空 = 都在）。缺了打包失败——不然装好的桌面版「设置 → 官方插件」整页
+ * 读不到清单（fail closed，没法装），而且锁定 patch 没了守门就没有真源可比。
+ */
+export function missingProfileFiles(resources) {
+  return PROFILE_FILES.filter((name) => !existsSync(join(resources, PROFILE_DIR, name)))
+}
+
 // ── 钩子本体 ────────────────────────────────────────────────────────────
 
 export default async function afterPack(context) {
@@ -359,6 +376,14 @@ export default async function afterPack(context) {
     `第三方许可证：${notice.packages} 个包，原生二进制 ${natives.length} 个包` +
       `（libvips：${notice.libvips.join(', ') || '无'}）；Electron / Chromium：${electronLicenses.join(', ') || '没找到'}`,
   )
+
+  // ⑤ WP181：官方插件清单与锁定 patch 在不在（每个平台都要有，放在冒烟之前）
+  const missingProfile = missingProfileFiles(resources)
+  if (missingProfile.length > 0)
+    throw new Error(
+      `安装包里没有 ${PROFILE_DIR} 下的 ${missingProfile.join('、')}（extraResources 没生效？）`,
+    )
+  log(`官方插件清单与锁定 patch：${PROFILE_FILES.join('、')}`)
 
   const nodeExec =
     platformName === 'win32'

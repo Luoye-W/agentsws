@@ -312,6 +312,20 @@ export function createOfficialPlugins(options: OfficialPluginsOptions): Official
   return { view, request, wrap, saveConfig }
 }
 
+/** WP181：桌面安装包把 profile 那两份放在哪（桌面壳经这个环境变量告诉服务进程）。 */
+export const PROFILE_DIR_ENV = 'AGENTSWS_PROFILE_DIR'
+
+/** WP181：某个 profile 目录下的审过的清单与锁定 patch（桌面安装包里是 `<resources>/profiles/agentsws/`）。 */
+export function officialPluginPathsIn(profileDir: string): {
+  allowlistPath: string
+  profilePatchPath: string
+} {
+  return {
+    allowlistPath: join(profileDir, 'plugin-allowlist.yml'),
+    profilePatchPath: join(profileDir, 'cordis.patch.yml'),
+  }
+}
+
 /** 插件层目录：数据目录下 `official-plugins/`。 */
 export function officialPluginsDirIn(dataDir: string): string {
   return join(dataDir, 'official-plugins')

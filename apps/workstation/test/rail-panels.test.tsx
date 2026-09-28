@@ -196,7 +196,7 @@ describe('第三栏骨架（36 §9）', () => {
 
   it('WP140：还没做的那几个内测期间不上图标轨（开关放出来的那一路见 rail-registry）', () => {
     renderRail()
-    for (const id of ['data', 'runs', 'schedules', 'files'])
+    for (const id of ['data', 'runs', 'files'])
       expect(screen.queryByTestId(`rail-icon-${id}`)).toBeNull()
   })
 })

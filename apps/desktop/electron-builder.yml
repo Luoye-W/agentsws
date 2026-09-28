@@ -24,6 +24,14 @@ extraResources:
     to: node
     filter:
       - '**/*'
+  # WP181：审过的官方插件清单与锁定 patch（设置 → 官方插件要读它们；读不到整页"装不了"）。
+  # 只带这两份——profile 里别的东西（package.json、说明）装好的桌面版用不上。
+  # 桌面壳经 `AGENTSWS_PROFILE_DIR` 把 `<resources>/profiles/agentsws` 告诉服务进程；afterPack 查它们在不在。
+  - from: ../../profiles/agentsws
+    to: profiles/agentsws
+    filter:
+      - cordis.patch.yml
+      - plugin-allowlist.yml
 # 打完包再做四件事（见 scripts/after-pack.mjs）：补齐 electron-builder 漏收的 pnpm 依赖、
 # 把原生模块换成捆绑 Node 的 ABI 那份、用捆绑的 Node 冒烟一次 import、放第三方许可证。
 # WP148：Electron 发行包刚解出来时先存下它自带的两份许可证（mac 上之后会被丢掉），

@@ -21284,6 +21284,98 @@
                     "type": "string",
                     "enum": ["pause", "resume"]
                   },
+                  "rule": {
+                    "type": "object",
+                    "properties": {
+                      "daily": {
+                        "type": "object",
+                        "properties": {
+                          "time": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "time_zone": {
+                            "type": "string",
+                            "minLength": 1
+                          }
+                        },
+                        "required": ["time"],
+                        "additionalProperties": false
+                      },
+                      "weekly": {
+                        "type": "object",
+                        "properties": {
+                          "time": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "time_zone": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "weekdays": {
+                            "minItems": 1,
+                            "type": "array",
+                            "items": {
+                              "type": "integer",
+                              "minimum": -9007199254740991,
+                              "maximum": 9007199254740991
+                            }
+                          }
+                        },
+                        "required": ["time", "weekdays"],
+                        "additionalProperties": false
+                      },
+                      "cron": {
+                        "type": "object",
+                        "properties": {
+                          "expression": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "time_zone": {
+                            "type": "string",
+                            "minLength": 1
+                          }
+                        },
+                        "required": ["expression"],
+                        "additionalProperties": false
+                      },
+                      "every_seconds": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
+                      },
+                      "at": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "date": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "time": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "time_zone": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            },
+                            "required": ["date", "time"],
+                            "additionalProperties": false
+                          }
+                        ]
+                      }
+                    },
+                    "additionalProperties": false
+                  },
                   "trigger": {
                     "anyOf": [
                       {

@@ -54,9 +54,43 @@ const CreateBody = z.object({
   duplicate_ack: DuplicateAck.optional(),
 })
 
+/** WP181：官方「自动化任务」的时间写法（形状照官方工具参数；恰好一个、校验交给官方）。 */
+const Zone = z.string().min(1).optional()
+const RuleBody = z
+  .object({
+    daily: z
+      .object({ time: z.string().min(1), time_zone: Zone })
+      .strict()
+      .optional(),
+    weekly: z
+      .object({
+        time: z.string().min(1),
+        time_zone: Zone,
+        weekdays: z.array(z.number().int()).min(1),
+      })
+      .strict()
+      .optional(),
+    cron: z
+      .object({ expression: z.string().min(1), time_zone: Zone })
+      .strict()
+      .optional(),
+    every_seconds: z.number().int().optional(),
+    at: z
+      .union([
+        z.string().min(1),
+        z.object({ date: z.string().min(1), time: z.string().min(1), time_zone: Zone }).strict(),
+      ])
+      .optional(),
+  })
+  .strict()
+  .refine((v) => Object.values(v).filter((x) => x !== undefined).length === 1, {
+    message: '时间写法要恰好一个（每天 / 每周几 / cron / 固定间隔 / 某一刻）',
+  })
+
 const PatchBody = z
   .object({
     action: z.enum(['pause', 'resume']).optional(),
+    rule: RuleBody.optional(),
     trigger: TriggerBody.optional(),
     title: z.string().min(1).max(120).optional(),
     params: z.record(z.string(), z.unknown()).optional(),
@@ -68,7 +102,8 @@ const PatchBody = z
       v.trigger !== undefined ||
       v.title !== undefined ||
       v.params !== undefined ||
-      v.misfire_policy !== undefined,
+      v.misfire_policy !== undefined ||
+      v.rule !== undefined,
     { message: '至少要改一样（暂停 / 恢复 / 时间 / 标题 / 参数 / 错过策略）' },
   )
 

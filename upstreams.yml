@@ -92,6 +92,9 @@ upstreams:
       - 'dsh-attachment-local: dshHome 指一次运行的临时目录；readImageRequest(ref, { width, height, maxBytes })'
       - 'dsh-llm: requestImageDimensions / requiredImageOffload / projectOffloadedImages / offloadedImageText / requestImageHandleText；IMAGE_OFFLOAD_REQUIRED'
       - 'dsh-compaction-image-offload: agent/request-error 上的 IMAGE_OFFLOAD_REQUIRED → 记 image/offload、retry'
+      # WP181：官方「自动化任务」在两档运行时里用起来（官方 Host 服务不挂，只用它公开的这些；src/official-schedule.ts）
+      - 'dsh-schedule: create*ScheduleRecord 六种时间写法的校验与报错码、resolveEveryOccurrence、scheduleView、renderReminderFraming / renderRecurringReminderBatchFraming'
+      - 'dsh-schedule: registerScheduleTools 注册那一刻不碰 Host 服务（我们拿假 tools.register 接住四份定义）'
     wishlist:
       - 官方 SDK 出现 server→client 请求（dsh-sdk-jsonrpc-server 里的 transport.request）
       - headless 的 turn 驱动能被宿主接管（--json 只是单向投影，不算）

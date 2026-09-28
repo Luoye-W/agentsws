@@ -7,7 +7,7 @@
  * - 装插件永远不许改到锁定 patch：坏后端改了它 → 原样恢复、没装、记被拒；
  * - 运行中保存配置：一次保存企图把 C 类上报打开 → 被拒、记 `profile.config_rejected`（不带值）；别的行照写。
  */
-import { copyFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type {
@@ -17,12 +17,14 @@ import type {
   ProfileConfigWriteResult,
 } from '@agentsws/contracts'
 import {
+  defaultAllowlistPath,
   defaultProfilePatchPath,
   type OfficialPluginBackend,
   shippedBundleBackend,
 } from '@agentsws/dsh-adapter/official-plugins'
 import { afterEach, describe, expect, it } from 'vitest'
 import { createServer, type Server } from '../src/index.js'
+import { officialPluginPathsIn } from '../src/official-plugins.js'
 import { SECRETS_KEY_ENV } from '../src/secret-store.js'
 
 const SCHEDULE = '@deepseek-ai/dsh-experimental-schedule-bundle'
@@ -197,5 +199,49 @@ describe('WP180 配置写回：只许写不在锁定表里的行', () => {
     )
     expect(good).toEqual({ ok: true, row_id: 'time-context' })
     expect(readFileSync(join(backend.dir, 'cordis.patch.yml'), 'utf8')).toContain('Asia/Shanghai')
+  })
+})
+
+describe('WP181：桌面安装包里的那两份', () => {
+  it('给了 profile 目录（桌面壳经 AGENTSWS_PROFILE_DIR 给）就从那里读清单与锁定 patch', async () => {
+    dir = mkdtempSync(join(tmpdir(), 'agentsws-wp181-profile-'))
+    const profile = join(dir, 'resources', 'profiles', 'agentsws')
+    mkdirSync(profile, { recursive: true })
+    copyFileSync(defaultAllowlistPath(), join(profile, 'plugin-allowlist.yml'))
+    copyFileSync(defaultProfilePatchPath(), join(profile, 'cordis.patch.yml'))
+    expect(officialPluginPathsIn(profile)).toEqual({
+      allowlistPath: join(profile, 'plugin-allowlist.yml'),
+      profilePatchPath: join(profile, 'cordis.patch.yml'),
+    })
+    server = await createServer({
+      dbDir: join(dir, 'data'),
+      quiet: true,
+      env: { [SECRETS_KEY_ENV]: 'c'.repeat(64) },
+      tokenRefreshIntervalMs: 0,
+      officialPlugins: officialPluginPathsIn(profile),
+    })
+    const s = server
+    const res = await s.gateway.fetch(
+      new Request('http://127.0.0.1/v1/settings/official-plugins', {
+        headers: {
+          Authorization: `Bearer ${s.bootstrap.internalToken}`,
+          'X-Assignment': s.bootstrap.ownerAssignment.id,
+        },
+      }),
+    )
+    const view = await data<OfficialPluginsView>(res)
+    expect(view.blocked_reason).toBeUndefined()
+    expect(view.plugins.map((p) => p.name)).toContain(SCHEDULE)
+    // 那一份挪走 → 整页"装不了"（fail closed），证明读的真是给的那个目录
+    rmSync(join(profile, 'plugin-allowlist.yml'))
+    const gone = await s.gateway.fetch(
+      new Request('http://127.0.0.1/v1/settings/official-plugins', {
+        headers: {
+          Authorization: `Bearer ${s.bootstrap.internalToken}`,
+          'X-Assignment': s.bootstrap.ownerAssignment.id,
+        },
+      }),
+    )
+    expect((await data<OfficialPluginsView>(gone)).blocked_reason).toContain('读不到审过的插件清单')
   })
 })

@@ -14,13 +14,14 @@
 import type {
   CalendarItem,
   Clock,
+  ContextItem,
   EventEnvelope,
   Iso8601,
   ModelRef,
   PersonId,
   WorkspaceId,
 } from '@agentsws/contracts'
-import { redactOutboundText, sha256 } from '@agentsws/core'
+import { redactOutboundText, sha256, timeContextItem } from '@agentsws/core'
 import { alternativeSlots, busySlots, checkAgenda } from './agenda.js'
 import { answerQuestion, classifyQuestion } from './answer.js'
 import { notFound, SecretaryError } from './errors.js'
@@ -124,6 +125,11 @@ export interface SecretaryOptions {
   /** 工作区时区偏移（分钟），日界线与"几点"按它切；默认 +8 */
   tz_offset_minutes?: number
   appendEvent: SecretaryEventSink
+  /**
+   * WP181（WP180 那条「现在时间 + 公司时区」）：公司时区（工作区档案的 `tz`，每次现取）。给了，
+   * 代答与路由的每次运行都带一条 `time` 上下文，代答那一句也按它说「今天 / 明天」；不给 = 老行为（字节不变）。
+   */
+  timeZone?(): string | undefined | Promise<string | undefined>
 
   /* ── 世界（宿主注入；给不了的就是这一格没有，秘书照答别的）────────────── */
 
@@ -356,14 +362,17 @@ export class Secretary {
           content: facts,
           bytes: Buffer.byteLength(JSON.stringify(facts), 'utf8'),
         },
+        // WP181：现在时间 + 公司时区（排最后，同运行时那一条）
+        ...(await this.#timeItems(at)),
       ],
     })
+    const now = request.context.find((c) => c.kind === 'time')
     const answer = await this.#run(request, async () => {
       if (this.#options.complete === undefined || ruled.refused) return ruled.answer
       try {
         const text = await this.#options.complete({
           system: request.persona.sections.map((s) => s.text).join('\n\n'),
-          user: `现场材料（已经按公开级别过滤过，只能用这些）：\n${JSON.stringify(facts)}\n\n问题：${input.question}\n\n规则版答案（可以润色，但事实一个字都不能改、不能添）：${ruled.answer}`,
+          user: `现场材料（已经按公开级别过滤过，只能用这些）：\n${JSON.stringify(facts)}\n\n问题：${input.question}\n\n规则版答案（可以润色，但事实一个字都不能改、不能添）：${ruled.answer}${now === undefined ? '' : `\n\n${String(now.content)}`}`,
           run_id,
           purpose: 'ask',
         })
@@ -680,6 +689,7 @@ export class Secretary {
           content: { verdict, existing_tools, similar_in_progress },
           bytes: Buffer.byteLength(JSON.stringify(verdict), 'utf8'),
         },
+        ...(await this.#timeItems(at)),
       ],
     })
 
@@ -770,6 +780,12 @@ export class Secretary {
       })
       throw err
     }
+  }
+
+  /** WP181：给了公司时区才有这一条（`@agentsws/core` 的 `timeContextItem`，与运行时同一份字节）。 */
+  async #timeItems(now: Iso8601): Promise<ContextItem[]> {
+    if (this.#options.timeZone === undefined) return []
+    return [timeContextItem({ now, companyTz: await this.#options.timeZone() })]
   }
 
   #emit(

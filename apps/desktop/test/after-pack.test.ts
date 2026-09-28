@@ -6,13 +6,17 @@
  */
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { afterAll, describe, expect, it } from 'vitest'
 import {
   ARCH_NAMES,
   fillMissingDependencies,
   findNativeModules,
   installedNames,
+  missingProfileFiles,
+  PROFILE_DIR,
+  PROFILE_FILES,
   planNativeSwap,
   resourcesDirOf,
   runtimeDependencyNames,
@@ -224,5 +228,31 @@ describe('runtimeDependencyNames', () => {
       runtimeDependencyNames({ dependencies: { a: '*' }, peerDependencies: { a: '*' } }),
     ).toEqual(['a'])
     expect(runtimeDependencyNames(undefined)).toEqual([])
+  })
+})
+
+describe('WP181：审过的官方插件清单与锁定 patch 在包里', () => {
+  const desktop = join(dirname(fileURLToPath(import.meta.url)), '..')
+
+  it('少一份就报出来（afterPack 据此让打包失败）；两份都在就是空', () => {
+    const resources = scratch()
+    expect(missingProfileFiles(resources)).toEqual([...PROFILE_FILES])
+    mkdirSync(join(resources, PROFILE_DIR), { recursive: true })
+    writeFileSync(join(resources, PROFILE_DIR, 'cordis.patch.yml'), '[]')
+    expect(missingProfileFiles(resources)).toEqual(['plugin-allowlist.yml'])
+    writeFileSync(join(resources, PROFILE_DIR, 'plugin-allowlist.yml'), '[]')
+    expect(missingProfileFiles(resources)).toEqual([])
+  })
+
+  it('打包配置把仓库里那两份摆进 <resources>/profiles/agentsws，源文件真在', () => {
+    const yml = readFileSync(join(desktop, 'electron-builder.yml'), 'utf8')
+    const block = yml.slice(yml.indexOf('from: ../../profiles/agentsws'))
+    expect(block.startsWith('from: ../../profiles/agentsws')).toBe(true)
+    expect(block).toMatch(
+      /^from: \.\.\/\.\.\/profiles\/agentsws\n\s+to: profiles\/agentsws\n\s+filter:\n\s+- cordis\.patch\.yml\n\s+- plugin-allowlist\.yml/,
+    )
+    for (const name of PROFILE_FILES) {
+      expect(existsSync(join(desktop, '..', '..', 'profiles', 'agentsws', name)), name).toBe(true)
+    }
   })
 })

@@ -79,13 +79,17 @@ import {
   PR_ROLE_IDS,
   SOCIAL_ROLE_IDS,
 } from '@agentsws/contracts'
-import { evaluateGuardrail, extractFigures, uncitedFigures } from '@agentsws/core'
+import { evaluateGuardrail, extractFigures, resolveTimeZone, uncitedFigures } from '@agentsws/core'
 import { createDataStore, type SqliteDataStore } from '@agentsws/data'
 import { withOwnSources } from '@agentsws/deck'
 import {
   type OfficialPluginBackend,
   OfficialPluginError,
 } from '@agentsws/dsh-adapter/official-plugins'
+import {
+  OFFICIAL_SCHEDULE_BUNDLE,
+  type OfficialSelector,
+} from '@agentsws/dsh-adapter/official-schedule'
 import { createKernel, type Kernel, seededRandom } from '@agentsws/kernel'
 import {
   cardsToPack,
@@ -135,6 +139,7 @@ import { adsDeckData, createAdsStore, seedDemoAds } from './ads.js'
 import { createAdsService } from './ads-service.js'
 import { compositeApprovals } from './approvals-composite.js'
 import { createAskPort } from './ask.js'
+import { type AutomationAssembly, createAutomation, sqliteFireCounter } from './automation.js'
 import { demoB2bDeckData, withDemoB2b } from './b2b.js'
 import { createB2bMail } from './b2b-mail.js'
 import { type B2bOutboundAssembly, createB2bOutbound } from './b2b-outbound.js'
@@ -334,6 +339,7 @@ import {
   ensureSystemTasks,
   ensureTask,
   offsetToTz,
+  parkPendingApprovals,
   registerAmazonSla,
   registerApprovalHousekeeping,
   registerB2bSequence,
@@ -883,6 +889,8 @@ export interface Server {
   pricingCatalog: PricingCatalogSource
   /** 25 定时与流程：调度器 + 流程引擎 + 各个消费者的登记。 */
   schedule: ScheduleAssembly
+  /** WP181：官方「自动化任务」包的那一层（四个工具的执行器、到点的处理器、`scheduled_task` 卡）。 */
+  automation: AutomationAssembly
   /**
    * 15 §5.8「备份恢复后先跑对账再放开出站」。
    *
@@ -1274,6 +1282,36 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     appendEvent,
     clock,
   })
+  /*
+   * WP181：官方「自动化任务」在我们运行里真用起来（`automation.ts`）。**一个进程一份**、跨品牌
+   * （调度器本来就是一个进程一个，任务上带着各自的品牌）。开关就是上面那一行插件装没装——设置 →
+   * 官方插件装上（出卡批过）之后，下一次运行就挂四个工具；卸了就停（任务留着）。
+   * 调度器、审批总线、品牌模块都比这里晚建，所以全是惰性取值。
+   */
+  // 每天到点自动跑的次数落盘（Fable 终审：重启不清零）；全内存档就记在内存
+  const automationFires =
+    dbDir === undefined ? undefined : sqliteFireCounter(join(dbDir, 'automation.sqlite'))
+  const automation = createAutomation({
+    ...(automationFires === undefined ? {} : { fires: automationFires }),
+    scheduler: () => schedule.scheduler,
+    clock,
+    appendEvent,
+    approvals: () => approvals,
+    enabled: async () =>
+      (await officialPlugins.view()).plugins.some(
+        (p) => p.name === OFFICIAL_SCHEDULE_BUNDLE && p.state === 'installed',
+      ),
+    companyZone: async (ws) => resolveTimeZone((await identity.getWorkspace(ws))?.tz).zone,
+    runner: async (ws) => {
+      const brand = await brands?.forWorkspace(ws)
+      return brand === undefined
+        ? undefined
+        : {
+            work: brand.work,
+            ...(brand.startRun === undefined ? {} : { startRun: brand.startRun }),
+          }
+    },
+  })
 
   /*
    * WP90（55 §9 Q8）：用 ChatGPT / Claude 的**订阅**登录——也是"一台机器一份"，
@@ -1652,7 +1690,10 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   // WP154：选题卡批了 → 按卡片所属品牌开事项（钩子在品牌模块建好之后才挂上）
   const seoDecidedHook: SeoDecidedHook = {}
   const approvals = seoDecided(
-    officialPlugins.wrap(computerUse.wrap(catalog.wrap(learning.wrap(rawApprovals)))),
+    // WP181：最外一层——`scheduled_task` 卡批了就让那条自动化任务开始、拒了就取消
+    automation.wrap(
+      officialPlugins.wrap(computerUse.wrap(catalog.wrap(learning.wrap(rawApprovals)))),
+    ),
     seoDecidedHook,
   )
   // ── WP66（52 O1「每个品牌的所有东西都单独设置」）：一个进程装多套品牌模块 ──
@@ -2615,6 +2656,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
             vertical: () => brandProfileOf(ws).vertical,
             // WP180：公司时区（工作区档案的 tz，每次现取）——每次运行的上下文里写一次「现在时间 + 公司时区」
             timeZone: async () => (await identity.getWorkspace(ws))?.tz,
+            // WP181：官方「自动化任务」的四个工具（装了那个官方插件才挂；执行器是进程那一份）
+            automation,
             // WP82：这台机器配了浏览器才有；配没配由设置页说了算，改了不用重启
             browser: () => browserSettings.forRun(),
             // WP144：电脑操控（三层开关的前两层 + 批过的授权；设置页改了下一次运行就生效）
@@ -3867,6 +3910,10 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     cardsWaiting: async (p: SchedulePosition) =>
       (await cardsOfPosition(p)).filter((i) => WAITING_QUEUE_STATES.has(i.state)).length,
   }
+  // WP181：官方「自动化任务」到点接着原来那件事跑一次（开关与上限在 `automation.ts`）
+  automation.register()
+  // WP181（Fable 终审）：老库里等批却建成 `pending`（到点照跑）的那几条，改成停着、批了再开始
+  await parkPendingApprovals(schedule.scheduler)
   // ① 每日计划、② 复盘（day / week / month）、⑦ 复盘 → 次日计划草案的接力
   registerDailyPlan(schedule.scheduler, planDeps)
   const relay = registerPlanRelay({
@@ -5049,6 +5096,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     random,
     appendEvent,
     tz_offset_minutes: workData.tz_offset_minutes,
+    // WP181：代答也带「现在时间 + 公司时区」（与运行时同一条 ContextItem）
+    timeZone: async () => (await identity.getWorkspace(workspace.id))?.tz,
     ...(dbDir === undefined ? {} : { dbDir }),
     identity: {
       members: (ws) => identity.members(ws),
@@ -6001,6 +6050,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           ? undefined
           : { person_id: found.person_id, role_id: found.role_id }
       },
+      // WP181：右栏定时任务面板的「每天 / 每周几点」——官方校验、官方算下一次
+      retime: (task, rule) => automation.retime(task, rule as OfficialSelector),
     }),
     // 21 §4「删这个人」：网关只转发，编排在 ./erase.ts；actor 带上 grants 与 ranges，
     // 因为数据层的删除同样要过 21 §3 的授权（没给删除开后门）
@@ -6268,6 +6319,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     cloudAccount,
     pricingCatalog,
     schedule,
+    automation,
     reconcile,
     ...(boot.runtime === undefined ? {} : { runtime: boot.runtime }),
     identity,
@@ -6357,6 +6409,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       if (options.mount === undefined) roles.close()
       meetings.close()
       schedule.close()
+      automationFires?.close?.()
       catalog.close()
       secretary.close()
       // WP66：每个品牌那一套各关各的（聊天车道 / 渠道 / 活数据源 / 连接面）

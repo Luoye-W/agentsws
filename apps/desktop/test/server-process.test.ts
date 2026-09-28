@@ -58,6 +58,12 @@ describe('serverSpawnRequest', () => {
     expect(request.env.ELECTRON_RUN_AS_NODE).toBeUndefined()
   })
 
+  it('WP181：安装包里的官方插件清单目录经 AGENTSWS_PROFILE_DIR 给；开发期不给就没有这一条', () => {
+    const dir = '/Applications/agentsws.app/Contents/Resources/profiles/agentsws'
+    expect(serverSpawnRequest(input({ profileDir: dir })).env.AGENTSWS_PROFILE_DIR).toBe(dir)
+    expect(serverSpawnRequest(input()).env.AGENTSWS_PROFILE_DIR).toBeUndefined()
+  })
+
   it('端口、数据目录、版本号都经环境变量给（apps/server 就读这几个）', () => {
     const request = serverSpawnRequest(input({ port: 0 }))
     expect(request.env.AGENTSWS_PORT).toBe('0')

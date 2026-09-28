@@ -39,6 +39,14 @@ export function thirdPartyLicensesFile(resourcesPath: string | undefined): strin
     : join(resourcesPath, 'licenses', 'THIRD_PARTY_LICENSES.txt')
 }
 
+/**
+ * WP181：安装包里审过的官方插件清单与锁定 patch（`electron-builder.yml` 的 extraResources 摆进
+ * `<resources>/profiles/agentsws/`，afterPack 查过在不在）。没打包就没有——服务进程读仓库里那一份。
+ */
+export function bundledProfileDir(resourcesPath: string | undefined): string | undefined {
+  return resourcesPath === undefined ? undefined : join(resourcesPath, 'profiles', 'agentsws')
+}
+
 export function desktopPaths(userData: string): DesktopPaths {
   const logDir = join(userData, 'logs')
   return {

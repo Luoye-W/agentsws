@@ -52,6 +52,12 @@ import {
   renderOwnerAnswer,
 } from './owner.js'
 import { noPlaybookAnswer, noPlaybookSummary, playbookOf } from './playbook.js'
+import {
+  renderScheduleAnswer,
+  SCHEDULE_CREATE_TOOL,
+  SCHEDULE_TOOL_DEF_BY_NAME,
+  scheduleBranch,
+} from './schedule.js'
 import { SKILL_TOOL_DEF_BY_NAME } from './skills.js'
 import {
   boundaryGate,
@@ -272,7 +278,9 @@ function toolDefs(req: RunRequest): ToolDef[] {
       // WP176：主动开发的三个开发信工具（只有那条职责的运行才有它们）
       B2B_OUTBOUND_TOOL_DEF_BY_NAME.get(name) ??
       // WP179：官方网页工具（只有开了网页工具的运行，工具面里才有这两个名字）
-      WEB_TOOL_DEF_BY_NAME.get(name) ?? {
+      WEB_TOOL_DEF_BY_NAME.get(name) ??
+      // WP181：官方「自动化任务」的四个工具（只有装了那个官方插件的运行才有）
+      SCHEDULE_TOOL_DEF_BY_NAME.get(name) ?? {
         name,
         description: `stand-in tool ${name}`,
         input_schema: { type: 'object' },
@@ -774,6 +782,58 @@ export function createStubRuntime(options: StubRuntimeOptions): RuntimeAdapter {
           summary,
         })
         return finish(exhausted ? 'budget_exhausted' : 'completed', summary)
+      }
+
+      /*
+       * WP181：官方「自动化任务」。工具面里有 `schedule_create`（装了那个官方插件）、话里在要提醒 / 定时，
+       * 就调一次 `schedule_create`，把结果说成人话。别的运行一个字节不变。
+       */
+      const scheduleInput = scheduleBranch(
+        req.tools.allow,
+        [threadText, plainText(itemsOfKind(req, 'matter_summary')[0]?.content ?? '')].join('\n'),
+      )
+      if (scheduleInput !== undefined) {
+        const call_id = `call_${toolCalls + 1}`
+        sink({ type: 'tool.call', call_id, tool: SCHEDULE_CREATE_TOOL, input: scheduleInput })
+        const res =
+          options.executeTool === undefined
+            ? { status: 'error' as const, reason: 'no_tool_executor' }
+            : await options.executeTool({
+                name: SCHEDULE_CREATE_TOOL,
+                input: scheduleInput,
+                request: req,
+              })
+        toolCalls += 1
+        sink({
+          type: 'tool.result',
+          call_id,
+          status: res.status,
+          ...(res.reason === undefined ? {} : { reason: res.reason }),
+        })
+        const answer =
+          res.status === 'ok'
+            ? renderScheduleAnswer(res.data)
+            : `这条定时没设成：${res.reason ?? '这一步没走通'}`
+        outputs.push({ kind: 'answer', text: answer })
+        usage.output_tokens = Math.ceil(answer.length / 4) + (seed % 7)
+        const summary = describeRun({
+          readTools: res.status === 'ok' ? [SCHEDULE_CREATE_TOOL] : [],
+          drafted: false,
+          reply: answer,
+          tools: req.tools.allow,
+        })
+        sink({
+          type: 'run.completed',
+          usage: {
+            ...usage,
+            tool_calls: toolCalls,
+            seconds: Math.max(0, (Date.parse(clock.now()) - startedMs) / 1000),
+            cost_base: 0,
+          },
+          outputs,
+          summary,
+        })
+        return finish('completed', summary)
       }
 
       /*

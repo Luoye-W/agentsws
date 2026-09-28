@@ -657,6 +657,12 @@ export interface SchedulePatchInput {
   title?: string | undefined
   params?: Record<string, unknown> | undefined
   misfire_policy?: 'run_once_now' | 'skip' | undefined
+  /**
+   * WP181：按官方「自动化任务」的时间写法改时间（右栏定时任务面板的「每天 / 每周几点」）——
+   * `daily` / `weekly` / `cron` / `every_seconds` / `at` 恰好一个，形状照官方工具参数。
+   * 只对用官方规则建的任务有效；校验与下一次怎么算都是官方的。
+   */
+  rule?: Record<string, unknown> | undefined
 }
 
 export interface ScheduleRunOutcome {

@@ -19,6 +19,7 @@ import { invalid, notFound, ScheduleError } from './errors.js'
 import { counterRandom, type IdFactory, makeIdFactory } from './ids.js'
 import { MemoryScheduleStore } from './store.js'
 import {
+  type RuleResolver,
   SCHEDULE_EVENTS,
   type ScheduleEventSink,
   type ScheduleFilter,
@@ -51,6 +52,8 @@ export interface SchedulerOptions {
   intervalMs?: number
   /** 租约持有者标识（进程 id / 世界 id）；同一库多进程时用得上。 */
   holder?: string
+  /** WP181：`rule` 触发器（官方「自动化任务」的时间规则）怎么算；不给就拒建这类任务。 */
+  rules?: RuleResolver
 }
 
 export interface TickResult {
@@ -78,9 +81,21 @@ function summarize(value: unknown): string | undefined {
 
 const iso = (ms: number): Iso8601 => new Date(ms).toISOString()
 
+/** `rule` 触发器没接解析器：拒，不猜（猜错了就是在错的时间替人做事）。 */
+function needRules(rules: RuleResolver | undefined): RuleResolver {
+  if (rules === undefined) throw invalid('这条定时用的是官方的时间规则，这个进程没接规则解析器')
+  return rules
+}
+
 /** 严格晚于 `afterMs` 的下一次触发；一次性 / 等事件的没有下一次。 */
-export function nextFireAfter(trigger: ScheduleTrigger, afterMs: number): Iso8601 | undefined {
+export function nextFireAfter(
+  trigger: ScheduleTrigger,
+  afterMs: number,
+  rules?: RuleResolver,
+): Iso8601 | undefined {
   switch (trigger.kind) {
+    case 'rule':
+      return needRules(rules).next(trigger.rule, afterMs)
     case 'once':
       return undefined
     case 'interval': {
@@ -97,8 +112,14 @@ export function nextFireAfter(trigger: ScheduleTrigger, afterMs: number): Iso860
 }
 
 /** 第一次触发的时刻（`schedule()` 与「改时间」都用它）。 */
-export function firstFireAt(trigger: ScheduleTrigger, nowMs: number): Iso8601 | undefined {
+export function firstFireAt(
+  trigger: ScheduleTrigger,
+  nowMs: number,
+  rules?: RuleResolver,
+): Iso8601 | undefined {
   switch (trigger.kind) {
+    case 'rule':
+      return needRules(rules).first(trigger.rule, nowMs)
     case 'once': {
       const at = Date.parse(trigger.at)
       if (!Number.isFinite(at)) throw invalid(`once 的 at 不是 ISO-8601：${trigger.at}`)
@@ -203,7 +224,7 @@ export function createScheduler(options: SchedulerOptions): Scheduler {
 
   /** 触发之后排下一次；一次性的排完就 `done`。 */
   const advance = (task: ScheduleTask, nowMs: number): ScheduleTask => {
-    const next = nextFireAfter(task.trigger, nowMs)
+    const next = nextFireAfter(task.trigger, nowMs, options.rules)
     return next === undefined
       ? { ...task, next_fire_at: undefined }
       : { ...task, next_fire_at: next }
@@ -211,7 +232,7 @@ export function createScheduler(options: SchedulerOptions): Scheduler {
 
   /** 跳过错过的那几次：把排期挪到 `now` 之后的第一个点。 */
   const skipTo = (task: ScheduleTask, nowMs: number): ScheduleTask => {
-    const next = nextFireAfter(task.trigger, nowMs)
+    const next = nextFireAfter(task.trigger, nowMs, options.rules)
     return next === undefined
       ? { ...task, next_fire_at: undefined, state: 'done' as const }
       : { ...task, next_fire_at: next }
@@ -369,7 +390,7 @@ export function createScheduler(options: SchedulerOptions): Scheduler {
     async schedule(input) {
       const now = clock.now()
       const nowMs = Date.parse(now)
-      const next = firstFireAt(input.trigger, nowMs)
+      const next = firstFireAt(input.trigger, nowMs, options.rules)
       const task: ScheduleTask = {
         ...input,
         id: input.id ?? newId('sched'),
@@ -401,7 +422,8 @@ export function createScheduler(options: SchedulerOptions): Scheduler {
       }
       const trigger = patch.trigger ?? task.trigger
       const nowMs = Date.parse(clock.now())
-      const next = patch.trigger === undefined ? task.next_fire_at : firstFireAt(trigger, nowMs)
+      const next =
+        patch.trigger === undefined ? task.next_fire_at : firstFireAt(trigger, nowMs, options.rules)
       const updated = save({
         ...task,
         trigger,
@@ -434,7 +456,7 @@ export function createScheduler(options: SchedulerOptions): Scheduler {
       const next =
         task.next_fire_at !== undefined && Date.parse(task.next_fire_at) > nowMs
           ? task.next_fire_at
-          : nextFireAfter(task.trigger, nowMs)
+          : nextFireAfter(task.trigger, nowMs, options.rules)
       const resumed = save({ ...task, state: 'active', next_fire_at: next })
       emit(SCHEDULE_EVENTS.resumed, resumed, { next_fire_at: resumed.next_fire_at })
       return resumed

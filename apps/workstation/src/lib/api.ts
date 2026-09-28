@@ -709,13 +709,54 @@ export interface ScheduledTaskRow {
   id: string
   title?: string
   handler?: string
-  trigger: { kind: string; expr?: string; tz?: string; at?: string; every_ms?: number }
+  trigger: {
+    kind: string
+    expr?: string
+    tz?: string
+    at?: string
+    every_ms?: number
+    rule?: Record<string, unknown>
+  }
   state: string
   fire_count: number
   next_fire_at?: string
   last_fire_at?: string
   last_result?: string
+  /** WP181：谁建的（`agent` = 模型用官方「自动化任务」工具建的） */
+  created_by?: 'user' | 'agent'
+  /** WP181：从哪件事建的（事项 id） */
+  origin?: { conversation_id?: string }
+  /** WP181：官方记录（`official`）、等不等批（`awaiting_approval`） */
+  params?: Record<string, unknown>
 }
+
+/** WP181：官方「自动化任务」建的那几条到点交给谁（与服务端 `AUTOMATION_HANDLER` 同名）。 */
+export const AUTOMATION_HANDLER = 'automation.reminder'
+
+/** WP181：本人全部的定时任务（右栏面板；跨岗位）。 */
+export const getMySchedules = (): Promise<ScheduledTaskRow[]> =>
+  api<ScheduledTaskRow[]>('/v1/schedules?scope=mine')
+
+/** WP181：按官方的时间写法改时间（`daily` / `weekly` / `at` 恰好一个；校验在服务端官方那一层）。 */
+export const patchScheduleRule = (
+  id: string,
+  rule: Record<string, unknown>,
+): Promise<ScheduledTaskRow> =>
+  api<ScheduledTaskRow>(`/v1/schedules/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body: { rule },
+  })
+
+/** WP181：暂停 / 恢复（不指定岗位：用当前那一条，服务端按「是不是本人的」判）。 */
+export const toggleSchedule = (id: string, action: 'pause' | 'resume'): Promise<ScheduledTaskRow> =>
+  api<ScheduledTaskRow>(`/v1/schedules/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body: { action },
+  })
+
+/** WP181：删掉（不再触发；记录留着）。 */
+export const deleteSchedule = (id: string): Promise<ScheduledTaskRow> =>
+  api<ScheduledTaskRow>(`/v1/schedules/${encodeURIComponent(id)}`, { method: 'DELETE' })
 
 export const getSchedules = (assignment: string): Promise<ScheduledTaskRow[]> =>
   api<ScheduledTaskRow[]>('/v1/schedules', { assignment })

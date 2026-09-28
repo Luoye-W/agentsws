@@ -16,6 +16,7 @@ import {
   B2B_OUTBOUND_TOOL_DEF_BY_NAME,
   B2B_START_ROUND_TOOL,
   isMcpReadTool,
+  isScheduleTool,
   isWebTool,
   OWNER_TOOL_DEF_BY_NAME,
   READ_SKILL_TOOL,
@@ -28,6 +29,7 @@ import type { JsonValue } from '@deepseek-ai/dsh-util-values'
 import { browserSkillToolName, classifyBrowserSkillEffect } from './browserskill.js'
 import { DshAdapterError } from './errors.js'
 import type { DraftArgs, StageArgs } from './gate.js'
+import { officialScheduleTools } from './official-schedule.js'
 import type { ToolSideEffect } from './types.js'
 
 /**
@@ -395,6 +397,22 @@ function readTool(name: string, hooks: ReadToolHooks): ToolDefinition {
   })
 }
 
+/**
+ * WP181：官方「自动化任务」的四个工具——**名字、描述、参数用官方注册出来的那一份**（`official-schedule.ts`），
+ * 执行走与只读工具同一条出口（服务端的执行器判谁能建、存进我们的调度器、会往外发的出卡）。
+ * 结果照旧包外部围栏（官方原样回 JSON；我们宁可多围一次——`prompt` 可能是界面上改过的）。
+ */
+function scheduleTool(name: string, hooks: ReadToolHooks): ToolDefinition {
+  const official = officialScheduleTools().find((t) => t.name === name)
+  const base = readTool(name, hooks)
+  if (official === undefined) return base
+  return {
+    ...base,
+    description: official.description,
+    parameters: official.parameters as ToolDefinition['parameters'],
+  }
+}
+
 function stageTool(hooks: StageToolHooks): ToolDefinition {
   return defineTool({
     name: STAGE_TOOL,
@@ -466,7 +484,7 @@ export function buildToolDefinitions(
   const defs: ToolDefinition[] = names
     // WP179：`web_search` / `web_fetch` 是官方 `dsh-tool-web` 注册的（`web.ts`），这里不再造一份
     .filter((n) => n !== STAGE_TOOL && n !== DRAFT_TOOL && !isWebTool(n))
-    .map((n) => readTool(n, read))
+    .map((n) => (isScheduleTool(n) ? scheduleTool(n, read) : readTool(n, read)))
   defs.push(stageTool(staging), draftTool(staging))
   return defs
 }

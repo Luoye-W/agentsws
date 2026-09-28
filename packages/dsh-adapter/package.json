@@ -28,6 +28,10 @@
       "types": "./dist/official-plugins.d.ts",
       "import": "./dist/official-plugins.js"
     },
+    "./official-schedule": {
+      "types": "./dist/official-schedule.d.ts",
+      "import": "./dist/official-schedule.js"
+    },
     "./profile-guard": {
       "types": "./dist/profile-guard.d.ts",
       "import": "./dist/profile-guard.js"
@@ -78,6 +82,7 @@
     "@deepseek-ai/dsh-sandbox": "0.2.0-rc.1",
     "@deepseek-ai/dsh-sandbox-local": "0.2.0-rc.1",
     "@deepseek-ai/dsh-sandbox-policy": "0.2.0-rc.1",
+    "@deepseek-ai/dsh-schedule": "0.2.0-rc.1",
     "@deepseek-ai/dsh-scope": "0.2.0-rc.1",
     "@deepseek-ai/dsh-sdk-client": "0.2.0-rc.1",
     "@deepseek-ai/dsh-sdk-protocol": "0.2.0-rc.1",
