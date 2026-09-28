@@ -92,6 +92,20 @@ export type KnownEventType =
    */
   | 'web.searched'
   | 'web.fetched'
+  /**
+   * WP180：官方插件装 / 升级 / 卸载**做完了**（卡批了之后）。payload 只有动作、包名、版本、卡的 id。
+   */
+  | 'official_plugin.changed'
+  /**
+   * WP180：一次官方插件变动**被拒**——不在审过的清单里、版本不对、或者做完会改到 profile patch
+   * （那一下已经原样恢复）。payload 只有动作、包名、原因码与一句人话。
+   */
+  | 'official_plugin.rejected'
+  /**
+   * WP180：一次运行中的配置保存**被拒**——它想写锁定表里的行（B / C 类，例如把会话日志上报打开）。
+   * payload 只有行 id、原因码与想改的字段名（**不带值**）。
+   */
+  | 'profile.config_rejected'
   // knowledge (19)
   | 'knowledge.card.proposed'
   | 'knowledge.card.activated'

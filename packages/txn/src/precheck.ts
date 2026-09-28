@@ -46,6 +46,8 @@ const KNOWN_KINDS: ReadonlySet<string> = new Set<ApprovalKind>([
   'b2b_fraud_alert',
   // WP173 / docs/84 §11.1 第 4 条：发信域名选择卡（建议单独域名，由用户选）
   'b2b_sender_choice',
+  // WP180：官方插件的装 / 升级 / 卸载卡（只从审过的清单装、批了才做）
+  'official_plugin',
 ])
 
 export function isKnownKind(kind: string): boolean {

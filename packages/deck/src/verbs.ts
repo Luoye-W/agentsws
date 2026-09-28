@@ -94,6 +94,8 @@ const PRIMARY_BY_KIND: Partial<Record<DeckLayout, Record<string, string>>> = {
   // WP144：授权卡上"批准"说不清批了什么——写明是"允许它操作电脑"
   policy: {
     computer_use: 'verb.policy.approve.computer_use',
+    // WP180：卡上写明是"照做"（装 / 升级 / 卸载）
+    official_plugin: 'verb.policy.approve.official_plugin',
   },
   aftermath: {
     pause_ad: 'verb.aftermath.approve.pause_ad',
@@ -165,6 +167,8 @@ export const CATEGORY_BY_KIND: Partial<Record<DeckKind, string>> = {
   b2b_fraud_alert: 'fraud_alert',
   // WP173：发信域名选择卡
   b2b_sender_choice: 'sender_choice',
+  // WP180：官方插件的装 / 升级 / 卸载卡
+  official_plugin: 'official_plugin',
 }
 
 /** `ChangeKind` → 类别人话（`staged_change` 专用；画布头一行写的就是这一列）。 */

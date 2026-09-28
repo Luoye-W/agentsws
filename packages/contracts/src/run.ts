@@ -37,6 +37,11 @@ export interface ContextItem {
     | 'boundary'
     /** WP22 / 37 §2.2b：事项的「到哪了」摘要，事项续跑时注入（direct-llm 没有会话文件，靠它接上） */
     | 'matter_summary'
+    /**
+     * WP180：「现在时间 + 公司时区」——每次运行的上下文里写一次（三个运行时同一份字节）。
+     * 公司档案（工作区）有时区就用它，没有 / 认不出就用本机时区。时间按小时取整（22 §2 缓存纪律）。
+     */
+    | 'time'
   source_ref: ObjectRef | string
   sensitivity: Sensitivity
   content: unknown

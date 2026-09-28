@@ -101,6 +101,8 @@ export const LAYOUT_BY_KIND: Record<Exclude<DeckKind, 'staged_change'>, DeckLayo
   b2b_fraud_alert: 'handoff',
   // WP173（docs/84 §11.1 第 4 条）：发信域名用哪只——单选，由用户选，不猜
   b2b_sender_choice: 'choice',
+  // WP180：装 / 升级 / 卸载一个官方插件——一道是非题（卡上写名字、版本、来源、许可证、工具、出不出网）
+  official_plugin: 'policy',
 }
 
 /**

@@ -2959,6 +2959,10 @@ const zh: Table = {
   'kind.computer_use': '操作电脑',
   'category.computer_use': '操作电脑',
   'verb.policy.approve.computer_use': '允许',
+  // WP180：官方插件的装 / 升级 / 卸载卡
+  'kind.official_plugin': '官方插件',
+  'category.official_plugin': '官方插件',
+  'verb.policy.approve.official_plugin': '照做',
   // ── WP142：红人为主的朋友第一步 ──
   'onboarding.ai.official.pending': '正在连 Agents 工坊云…',
   'onboarding.ai.official.offline': '网络不通，这一下没连上 Agents 工坊云。',
@@ -6098,6 +6102,9 @@ const en: Table = {
   'kind.computer_use': 'Use the computer',
   'category.computer_use': 'Use the computer',
   'verb.policy.approve.computer_use': 'Allow',
+  'kind.official_plugin': 'Official plugin',
+  'category.official_plugin': 'Official plugin',
+  'verb.policy.approve.official_plugin': 'Go ahead',
   // ── WP142：红人为主的朋友第一步 ──
   'onboarding.ai.official.pending': 'Connecting to Agents Workshop cloud…',
   'onboarding.ai.official.offline':
