@@ -4,7 +4,8 @@
  * 新写的（BtoBAgents 里没有开发信）。序列节奏、日配额、预热与"下一封是哪封"是
  * `@agentsws/core` 的 `sequence.ts`（红人共用那一份），这里只放 B2B 自己的：
  *
- * 1. **筛**（{@link screenProspects}）：抑制名单上的、没写来源的、没邮箱的、已经在序列里的剔掉；
+ * 1. **筛**（{@link screenProspects}）：抑制名单上的、没写来源的、没邮箱的、已经在序列里的、
+ *    说过不感兴趣还在冷却期里的（WP176）剔掉；
  *    **德国 / 奥地利没有往来的潜在客户默认不发**，卡上一句原因；加拿大没有「公开来源」的不发。
  * 2. **分**（{@link splitByQuota}）：今天配额以内的进这一张卡，超了的排到明天。
  * 3. **写**（{@link draftB2bOutreach}）：三封模板（英文：收信人是海外买家）。里面**没有**价格、
@@ -32,6 +33,12 @@ export interface B2bProspect {
   suppressed: boolean
   /** 已经在一轮序列里（排着 / 待批 / 进行中）。 */
   in_sequence: boolean
+  /**
+   * WP176：说过「不感兴趣」的冷却到哪天（没说过不给）。冷却期内不进任何新一轮；期满可以再选。
+   */
+  cooldown_until?: string
+  /** WP176：以前说过几次不感兴趣（卡上提醒用；没说过不给）。 */
+  declined_count?: number
 }
 
 export type B2bExcludeReason =
@@ -41,6 +48,8 @@ export type B2bExcludeReason =
   | 'in_sequence'
   | 'de_at'
   | 'ca_no_public_source'
+  /** WP176：说过不感兴趣，还在冷却期里。 */
+  | 'cooldown'
 
 /** 卡上 / 面板上那一句（德奥那句就是 docs/84 §11.1 第 6 条要"告诉用户"的原因）。 */
 export const EXCLUDE_REASON_ZH: Readonly<Record<B2bExcludeReason, string>> = {
@@ -50,6 +59,37 @@ export const EXCLUDE_REASON_ZH: Readonly<Record<B2bExcludeReason, string>> = {
   in_sequence: '已经在一轮开发信里了',
   de_at: `德国 / 奥地利默认不发：${B2B_DE_AT_REASON}。要发得在「主动开发」里勾选并确认风险`,
   ca_no_public_source: '加拿大：对方没有自己公开过这个邮箱，默认不发（CASL）',
+  cooldown: '说过不感兴趣，冷却中（到期后可以再联系）',
+}
+
+/** WP176：冷却中的那一个人的原因（写明到哪天）。 */
+export function cooldownLabel(until: string): string {
+  return `说过不感兴趣，冷却到 ${until.slice(0, 10)}（到期后可以再联系）`
+}
+
+/**
+ * WP176（Luoye 09-28）：这一次说「不感兴趣」冷却多久。第一次 `base_days`（默认 90 天），
+ * 之后每多说一次翻一倍（第二次 180 天）。**只停这一轮**：不进永久抑制名单。
+ */
+export function declineCooldown(input: {
+  /** 以前说过几次（第一次说 = 0）。 */
+  prior_count: number
+  base_days: number
+  now: string
+}): { count: number; days: number; until: string } {
+  const count = Math.max(0, Math.floor(input.prior_count)) + 1
+  const base = Number.isFinite(input.base_days) && input.base_days > 0 ? input.base_days : 90
+  const days = base * 2 ** Math.min(count - 1, 4)
+  return {
+    count,
+    days,
+    until: new Date(Date.parse(input.now) + days * 86_400_000).toISOString(),
+  }
+}
+
+/** WP176：冷却还没到期（`until` 在 `now` 之后）。 */
+export function inCooldown(until: string | undefined, now: string): boolean {
+  return until !== undefined && Date.parse(until) > Date.parse(now)
 }
 
 /** 这家公司算不算"有往来"：回过信、在谈、寄过样、报过价、成交过、丢单过（`contacted` 只是我们找过他）。 */
@@ -66,7 +106,11 @@ export function hasRelationship(account: { stage?: B2bStage; last_contact_at?: s
  */
 export function screenProspects(
   prospects: readonly B2bProspect[],
-  opts: { de_at_confirmed: boolean },
+  opts: {
+    de_at_confirmed: boolean
+    /** WP176：现在（冷却到没到期按它比）。不给 = 有冷却日期的一律算还在冷却。 */
+    now?: string
+  },
 ): {
   eligible: B2bProspect[]
   excluded: { prospect: B2bProspect; reason: B2bExcludeReason }[]
@@ -75,22 +119,27 @@ export function screenProspects(
   const excluded: { prospect: B2bProspect; reason: B2bExcludeReason }[] = []
   for (const p of prospects) {
     const country = p.country?.trim().toUpperCase()
+    const cooling =
+      p.cooldown_until !== undefined &&
+      (opts.now === undefined || inCooldown(p.cooldown_until, opts.now))
     const reason: B2bExcludeReason | undefined = p.suppressed
       ? 'suppressed'
       : p.in_sequence
         ? 'in_sequence'
-        : !p.has_email
-          ? 'no_email'
-          : p.source?.observed_at === undefined || p.source.observed_at === ''
-            ? 'no_source'
-            : country !== undefined &&
-                B2B_EXCLUDED_COUNTRIES.includes(country) &&
-                !p.existing_relationship &&
-                !opts.de_at_confirmed
-              ? 'de_at'
-              : country === 'CA' && p.public_source !== true && !p.existing_relationship
-                ? 'ca_no_public_source'
-                : undefined
+        : cooling
+          ? 'cooldown'
+          : !p.has_email
+            ? 'no_email'
+            : p.source?.observed_at === undefined || p.source.observed_at === ''
+              ? 'no_source'
+              : country !== undefined &&
+                  B2B_EXCLUDED_COUNTRIES.includes(country) &&
+                  !p.existing_relationship &&
+                  !opts.de_at_confirmed
+                ? 'de_at'
+                : country === 'CA' && p.public_source !== true && !p.existing_relationship
+                  ? 'ca_no_public_source'
+                  : undefined
     if (reason === undefined) eligible.push(p)
     else excluded.push({ prospect: p, reason })
   }

@@ -55,8 +55,10 @@ import { houseRulesSection, personaTextIn, type RoleStore } from '@agentsws/role
 import { createDirectRuntime, withToolChoice } from '@agentsws/runtime-direct'
 import type { CreatePolicyQuestionFn, DraftPayload, ToolExecutor } from '@agentsws/stand-ins'
 import {
+  B2B_OUTBOUND_TOOL_NAMES,
   createStubRuntime,
   humanizeToolNames,
+  isB2bOutboundRole,
   isOwnerRole,
   OWNER_TOOL_NAMES,
   READ_SKILL_TOOL,
@@ -184,6 +186,11 @@ export interface RuntimeOptions {
    * 执行器里还会再判一次职责。
    */
   ownerTools?: ToolExecutor
+  /**
+   * WP176：主动开发的三个开发信工具（`b2b-outbound-tools.ts` 建的那一份）。给了才进 `b2b.outbound`
+   * 的工具面——别的职责一律没有；执行器里还会再判一次职责。
+   */
+  b2bOutboundTools?: ToolExecutor
   /**
    * WP44：Shopify 官方 Dev MCP 的只读工具源（`shopify-devmcp.ts` 起的那个进程）。
    *
@@ -739,6 +746,7 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
      */
     const kol = options.kolTools
     const owner = options.ownerTools
+    const b2bOut = options.b2bOutboundTools
     const dev = options.devTools
     /*
      * WP162：按需技能。接了技能库才有这个工具（工具面里也只有那时才摆出 `read_skill`）；
@@ -756,7 +764,13 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
                 role_id: req.actor.role_id,
               },
           })
-    if (kol === undefined && owner === undefined && dev === undefined && readSkill === undefined)
+    if (
+      kol === undefined &&
+      owner === undefined &&
+      b2bOut === undefined &&
+      dev === undefined &&
+      readSkill === undefined
+    )
       return source.executeTool
     return async (call) => {
       if (kol !== undefined && KOL_TOOL_NAMES.includes(bareOf(call.name))) {
@@ -768,6 +782,10 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       // WP153：店主的两个只读工具（名字与别处不重名；职责在执行器里再判一次）
       if (owner !== undefined && OWNER_TOOL_NAMES.includes(bareOf(call.name))) {
         return owner(call)
+      }
+      // WP176：主动开发的开发信工具（名字与别处不重名；职责在执行器里再判一次）
+      if (b2bOut !== undefined && B2B_OUTBOUND_TOOL_NAMES.includes(bareOf(call.name))) {
+        return b2bOut(call)
       }
       if (dev !== undefined && devToolNames().includes(call.name)) {
         try {
@@ -993,6 +1011,10 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
         // WP153：店主才有「列岗位 / 列连接」这两个只读工具
         ...(isOwnerRole(config.role_id) && options.ownerTools !== undefined
           ? OWNER_TOOL_NAMES
+          : []),
+        // WP176：主动开发才有开发信那三个工具（列序列 / 开一轮 / 分回信）
+        ...(isB2bOutboundRole(config.role_id) && options.b2bOutboundTools !== undefined
+          ? B2B_OUTBOUND_TOOL_NAMES
           : []),
       ]),
     ].sort()

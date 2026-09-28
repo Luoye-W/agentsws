@@ -91,4 +91,38 @@ describe('WP166 设置页「公司档案」的目标市场', () => {
     renderWithProviders(<ProfileForm busy={false} saved={false} onSave={() => {}} />)
     expect(screen.getByTestId('markets-empty').textContent).toBe('没看出来，请选一下')
   })
+  it('WP176：公司实体地址在档案里（设置页才出）；改了随保存发上去', async () => {
+    const saved: ProfileDraft[] = []
+    renderWithProviders(
+      <ProfileForm
+        profile={{
+          legal_name: 'Nordvik Supply AB',
+          brand_name: 'Nordvik',
+          discoverable: true,
+          vertical: 'goods',
+          storefront_platform: 'shopify',
+          postal_address: '8 Keji Rd',
+          set_at: AT,
+        }}
+        busy={false}
+        saved={false}
+        onSave={(draft) => {
+          saved.push(draft)
+        }}
+      />,
+    )
+    const input = screen.getByTestId('company-postal-address') as HTMLInputElement
+    expect(input.value).toBe('8 Keji Rd')
+    await userEvent.clear(input)
+    await userEvent.type(input, '9 New Rd, Shenzhen')
+    await userEvent.click(screen.getByTestId('company-save'))
+    expect(saved[0]?.postal_address).toBe('9 New Rd, Shenzhen')
+  })
+
+  it('WP176：向导里（第一个品牌）不问地址', () => {
+    renderWithProviders(
+      <ProfileForm firstBrand busy={false} saved={false} onSave={() => undefined} />,
+    )
+    expect(screen.queryByTestId('profile-address')).toBeNull()
+  })
 })

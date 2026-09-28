@@ -1539,6 +1539,14 @@ export function checkExpectations(
         problems.push(want.suppressed ? `${tag}：该进抑制名单却没进` : `${tag}：不该进抑制名单`)
       if (want.routed_to !== undefined && String(p.routed_to) !== want.routed_to)
         problems.push(`${tag}：交给了 ${String(p.routed_to)}，不合期望 ${want.routed_to}`)
+      // WP176：不感兴趣只停这一轮——进冷却，不进名单
+      if (want.cooldown !== undefined && (p.cooldown === true) !== want.cooldown)
+        problems.push(want.cooldown ? `${tag}：该进冷却却没进` : `${tag}：不该进冷却`)
+      if (
+        want.cooldown_days !== undefined &&
+        Number(want.cooldown_days) !== Number(p.cooldown_days)
+      )
+        problems.push(`${tag}：冷却 ${String(p.cooldown_days)} 天，不合期望 ${want.cooldown_days}`)
     })
     add(
       'b2b_replies',

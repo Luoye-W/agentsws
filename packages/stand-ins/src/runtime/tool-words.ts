@@ -33,6 +33,10 @@ export const TOOL_WORDS_ZH: Readonly<Record<string, string>> = {
   // WP153：店主的两个只读工具
   list_positions: '岗位清单',
   list_connections: '连接清单',
+  // WP176：主动开发的三个开发信工具
+  list_outreach_sequences: '开发信序列',
+  start_outreach_round: '开一轮开发信',
+  classify_outreach_reply: '回信分类',
   // WP162：按需技能（名词口径：「我翻了「技能手册」」）
   read_skill: '技能手册',
   // Dev MCP（WP44）

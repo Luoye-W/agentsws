@@ -91,6 +91,10 @@ export interface WorkspaceProfileInput {
    * 给空对象 = 清空覆盖（全按每个市场的第一语言）。
    */
   market_languages?: Record<string, string> | undefined
+  /**
+   * WP176：公司实体地址（开发信页脚、报价单、单证从这里取）。不给 = 不改；给空串 = 清空。
+   */
+  postal_address?: string | undefined
 }
 
 /** 公司档案的对外形状。**没有归一化哈希**——它是发现用的，不是给人看的。 */
@@ -110,6 +114,8 @@ export interface WorkspaceProfileView {
   markets_source?: MarketsSource
   /** WP169：按市场覆盖的探测语言（没覆盖过就没有）。 */
   market_languages?: Record<string, string>
+  /** WP176：公司实体地址（没填过就没有）。 */
+  postal_address?: string
   set_at: string
 }
 
@@ -368,6 +374,8 @@ const ProfileBody = z.object({
       z.string().regex(/^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})?$/),
     )
     .optional(),
+  // WP176：公司实体地址。不给 = 不改；空串 = 清空。
+  postal_address: z.string().max(500).optional(),
 })
 
 const PlanBody = z.object({
@@ -479,6 +487,8 @@ export function onboardingRoutes(): Route[] {
             ...(input.market_languages === undefined
               ? {}
               : { market_languages: input.market_languages }),
+            // WP176：公司实体地址（不给 = 不改；空串 = 清空）
+            ...(input.postal_address === undefined ? {} : { postal_address: input.postal_address }),
           }),
         )
       },

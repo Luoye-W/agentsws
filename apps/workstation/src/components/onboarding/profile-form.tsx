@@ -42,6 +42,8 @@ export interface ProfileDraft {
   storefront_platform: StorefrontPlatform
   /** WP166：目标市场（ISO 国家码）。与向导档案卡是同一份（`WorkspaceProfile.markets`）。 */
   markets: string[]
+  /** WP176：公司实体地址（开发信页脚、报价单、单证从这里取）。空 = 没填。 */
+  postal_address: string
 }
 
 export function ProfileForm({
@@ -96,6 +98,7 @@ export function ProfileForm({
     vertical: profile?.vertical ?? 'goods',
     storefront_platform: profile?.storefront_platform ?? 'shopify',
     markets: profile?.markets ?? [],
+    postal_address: profile?.postal_address ?? '',
   })
   /** 选中的那一条「你卖的是」——它那一句人话是这一栏**唯一**出的解释（WP79 ⑤）。 */
   const pickedVertical = verticals?.find((v) => v.key === draft.vertical)
@@ -355,6 +358,27 @@ export function ProfileForm({
                 {profile.markets_source.note}
               </p>
             ) : null}
+          </div>
+        )}
+        {/*
+          WP176：公司实体地址（设置页才出；向导不问）。开发信页脚、报价单、单证都从这里取——
+          以前在 B2B「主动开发」里单独一格，已有值启动时搬过来了。
+        */}
+        {firstBrand ? null : (
+          <div className="flex flex-col gap-1" data-testid="profile-address">
+            <Label htmlFor="company-postal-address" className="flex items-center gap-1">
+              {t('onboarding.company.address')}
+              <Hint text={t('onboarding.company.address.hint')} />
+            </Label>
+            <Input
+              id="company-postal-address"
+              data-testid="company-postal-address"
+              value={draft.postal_address}
+              placeholder={t('onboarding.company.address.placeholder')}
+              onChange={(e) => {
+                setDraft({ ...draft, postal_address: e.target.value })
+              }}
+            />
           </div>
         )}
       </section>

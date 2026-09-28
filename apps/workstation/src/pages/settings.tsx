@@ -95,6 +95,10 @@ export function SettingsPage({
           ...(sameMarkets(draft.markets, onboarding.data?.profile?.markets ?? [])
             ? {}
             : { markets: draft.markets }),
+          // WP176：公司实体地址——只在改过时发（空 = 清空）
+          ...(draft.postal_address.trim() === (onboarding.data?.profile?.postal_address ?? '')
+            ? {}
+            : { postal_address: draft.postal_address.trim() }),
         },
         ownerId,
       ),

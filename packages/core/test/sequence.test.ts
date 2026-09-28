@@ -60,4 +60,15 @@ describe('sequence（core）', () => {
     // yml 改过的数照改过的算
     expect(warmupCap({ policy: { cap_new: 10 }, now: '2026-09-28T09:00:00.000Z' }).cap).toBe(10)
   })
+  it('WP176：老邮箱免预热——勾了直接按预热之后那一档', () => {
+    expect(warmupCap({ established: true, now: '2026-09-28T09:00:00.000Z' })).toEqual({
+      cap: 50,
+      warming: false,
+    })
+    expect(
+      warmupCap({ established: true, policy: { cap_warmed: 40 }, now: '2026-09-28T09:00:00.000Z' })
+        .cap,
+    ).toBe(40)
+    expect(warmupCap({ established: false, now: '2026-09-28T09:00:00.000Z' }).cap).toBe(20)
+  })
 })

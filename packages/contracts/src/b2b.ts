@@ -636,6 +636,16 @@ export interface B2bSenderAuth {
   test_message_id?: string
   /** 给人看的几句（没过的原因、怎么配）。 */
   notes: string[]
+  /** WP176：测试信是什么时候发出去的（等超过 10 分钟没收回来，就按 DNS 查 DKIM 兜底）。 */
+  test_sent_at?: Iso8601
+  /**
+   * WP176：DKIM 这一格是怎么判的。`test_mail` = 读了测试信的信头（实信验证）；`dns` = 测试信没收回来
+   * （Gmail 自己发给自己的信常常不进收件箱），按常见选择器在 DNS 里查到了公钥记录——
+   * 「DNS 已配置（未经实信验证）」，允许发，卡上写明。没有这一格 = 老数据（按测试信判的）。
+   */
+  dkim_via?: 'test_mail' | 'dns'
+  /** WP176：DNS 兜底查到的那个选择器（`google` / `selector1` …）。 */
+  dkim_selector?: string
 }
 
 /** 一只发信邮箱（用户在「发信域名」那张卡上选的）。 */
@@ -651,13 +661,21 @@ export interface B2bSender {
   auth: B2bSenderAuth
   /** 上一次查到的 DNS 记录（测试信收回来时拿它和信头一起再判一次）。 */
   dns?: { spf_txt?: string[]; dmarc_txt?: string[] }
+  /**
+   * WP176：用户勾了「这只邮箱已经正常发信很久」——**不走预热**，直接按每天 50 封（预热之后那一档）。
+   * 新域名别勾（面板上那一句提醒）。不勾 = 照旧从第一次发开发信那天起预热两周。
+   */
+  established?: { by?: PersonId; at: Iso8601 }
 }
 
 /** 主动开发的几样设置（一个品牌一份）。 */
 export interface B2bOutboundSettings {
   /** 页脚上的公司名（不填用公司档案的全称）。 */
   company_name?: string
-  /** 页脚上的公司实体地址（CAN-SPAM 硬要求）。**没有就不能发**。 */
+  /**
+   * 页脚上的公司实体地址（CAN-SPAM 硬要求）。**没有就不能发**。
+   * WP176：真源改成公司档案（`WorkspaceProfile.postal_address`）；这一格只在档案还没建时兜底。
+   */
   postal_address?: string
   /** 署名。 */
   sender_name?: string
@@ -671,8 +689,58 @@ export interface B2bOutboundSettings {
   choice_card_id?: string
   /** 德国 / 奥地利：用户勾选并确认风险后才发（docs/84 §11.1 第 6 条）。 */
   de_at?: { confirmed_by: PersonId; confirmed_at: Iso8601 }
+  /**
+   * WP176：`postal_address` 搬进公司档案的时刻（搬完这里那一格清掉，页脚改从档案取）。
+   * 公司档案还没建时搬不成，照旧读这一格。
+   */
+  postal_address_moved_at?: Iso8601
   updated_at?: Iso8601
 }
+
+/**
+ * WP176（Luoye 09-28）：说过「不感兴趣」的人**只停这一轮**，进冷却——冷却期内不进任何新一轮，
+ * 期满可以再被选进新一轮。**不进永久抑制名单**（退订与硬退信才进，不变）。
+ *
+ * 按地址哈希记（同抑制名单的口径：同一个人换了联系人记录也认得出）。同一个人第二次说不感兴趣
+ * 冷却翻倍（90 → 180 天），第三次再翻倍。
+ */
+export interface B2bDeclineCooldown {
+  /** `sha256(suppressionKey(地址))`，与抑制名单同一个口径。 */
+  key_hash: string
+  masked: string
+  contact_id?: string
+  /** 第几次说不感兴趣（1 起）。 */
+  count: number
+  /** 这一次冷却多少天（90 / 180 …）。 */
+  days: number
+  declined_at: Iso8601
+  /** 冷却到哪天（这之前不进任何新一轮）。 */
+  until: Iso8601
+  /** 从哪封信认出来的（消息库 id）。 */
+  message_id?: string
+}
+
+/** WP176：「不感兴趣」的冷却天数默认值（职责阈值 `b2b_declined_cooldown_days` 可改）。 */
+export const B2B_DECLINED_COOLDOWN_DAYS = 90
+
+/**
+ * WP176：DKIM 兜底时按顺序查的常见选择器（`<选择器>._domainkey.<域名>` 的 TXT）。
+ * Google Workspace 是 `google`，Microsoft 365 是 `selector1` / `selector2`，Mailchimp / Mandrill 是 `k1`，
+ * 其余是常见服务商的默认写法。
+ */
+export const B2B_DKIM_SELECTORS: readonly string[] = [
+  'google',
+  'selector1',
+  'selector2',
+  'k1',
+  'k2',
+  's1',
+  's2',
+  'default',
+  'dkim',
+  'mail',
+  'zoho',
+]
 
 /**
  * 默认不发开发信的国家（ISO 两位码）：德国、奥地利。**只拦没有往来的潜在客户**，

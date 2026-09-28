@@ -41,4 +41,12 @@ WP173 加六条开发信序列场景（`scenarios/outbound/`，筛人 / 预热�
 | `reply-interested-to-sales` | 回信问价 → 停序列、交给业务；跟进那一轮只剩没回信的 |
 | `unsubscribe-stops-sequence` | 回信退订 → 进抑制名单；跟进那一轮把他剔掉 |
 
+WP176（Luoye 09-28「不感兴趣只停这一轮」）加三条：
+
+| 场景 | 钉住什么 |
+|---|---|
+| `not-interested-cooldown` | 回信不感兴趣 → 进冷却（默认 90 天，职责阈值 `b2b_declined_cooldown_days`），**不进**抑制名单；冷却期内再开一轮剔掉（原因 `cooldown`） |
+| `cooldown-expired-reselect` | 冷却期满能再选进新一轮、出卡；第二次说不感兴趣冷却翻倍（180 天），期内再开又剔掉 |
+| `unsubscribe-still-permanent` | 退订仍永久进抑制名单：200 天后再开一轮照样剔掉 |
+
 `baseline.json` 是 stub / direct / dsh 三个运行时 fast 档 `--seed 42` 跑出来的基线。

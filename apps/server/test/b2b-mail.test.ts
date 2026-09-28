@@ -289,7 +289,7 @@ describe('WP172：判成 B2B 的信挪进 BtoBAgents、落成询盘', () => {
     expect(all.find((i) => i.basis === 'known_sender')?.account_id).toBe('acc_peak')
   })
 
-  it('WP173：回开发信的——有意向落成询盘交给业务、停序列；不感兴趣只记往来、进名单、不开事项', async () => {
+  it('WP173：回开发信的——有意向落成询盘交给业务、停序列；不感兴趣只记往来、进冷却（WP176：不进名单）、不开事项', async () => {
     const box = new Mailbox()
     const h = assemble({
       boxes: [{ address: ME, box }],
@@ -356,7 +356,12 @@ describe('WP172：判成 B2B 的信挪进 BtoBAgents、落成询盘', () => {
     expect(h.runs).toHaveLength(1)
     expect(h.store.enrollment('enr_1')?.status).toBe('handed_to_sales')
     expect(h.store.enrollment('enr_2')?.status).toBe('stopped')
-    expect(h.store.isSuppressed('leo@peakgadgets.example')).toBe(true)
+    // WP176（Luoye 09-28）：不感兴趣只停这一轮——进冷却，不进永久抑制名单
+    expect(h.store.isSuppressed('leo@peakgadgets.example')).toBe(false)
+    expect(h.store.cooldown(addressHash('leo@peakgadgets.example'))).toMatchObject({
+      contact_id: 'ctc_leo',
+      count: 1,
+    })
     expect(h.ofType('b2b.handed_to_sales')).toHaveLength(1)
   })
 

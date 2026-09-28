@@ -22,6 +22,7 @@ import {
   B2B_REPLY_ACTION,
   type B2bProspect,
   classifyB2bReply,
+  declineCooldown,
   draftB2bOutreach,
   outreachBatchAfter,
   outreachFooter,
@@ -7804,6 +7805,11 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
    */
   const seqState = new Map<string, 'active' | 'handed_to_sales' | 'stopped' | 'replied'>()
   const seqSuppressed = new Set<string>()
+  /**
+   * WP176（Luoye 09-28）：说过不感兴趣的人**只停这一轮**——冷却到哪天、说过几次（第二次翻倍）。
+   * 天数读职责 yml 的 `thresholds.b2b_declined_cooldown_days`（与服务进程同一个数）。
+   */
+  const seqCooldown = new Map<string, { until: string; count: number }>()
   const salesHolder =
     pack.assignments.find((a) => a.role_id === 'b2b.sales' && a.primary === true)?.person_id ??
     pack.assignments.find((a) => a.role_id === 'b2b.sales')?.person_id
@@ -7838,11 +7844,16 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
       ...(p.public_source === undefined ? {} : { public_source: p.public_source }),
       existing_relationship: p.existing === true,
       suppressed: seqSuppressed.has(p.id),
-      in_sequence: step === 'first' && seqState.has(p.id),
+      // WP176：说过不感兴趣而停下的那一轮不算"开过序列"——冷却期满可以再开
+      in_sequence: step === 'first' && seqState.has(p.id) && !seqCooldown.has(p.id),
+      ...(() => {
+        const cd = seqCooldown.get(p.id)
+        return cd === undefined ? {} : { cooldown_until: cd.until, declined_count: cd.count }
+      })(),
     }))
     const screened =
       step === 'first'
-        ? screenProspects(prospects, { de_at_confirmed: input.de_at_confirmed === true })
+        ? screenProspects(prospects, { de_at_confirmed: input.de_at_confirmed === true, now: at })
         : {
             eligible: prospects.filter(
               (p) => !p.suppressed && seqState.get(p.contact_id) === 'active',
@@ -8012,6 +8023,18 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
     if (action !== 'postpone')
       seqState.set(input.prospect, action === 'hand_to_sales' ? 'handed_to_sales' : 'stopped')
     if (action === 'suppress') seqSuppressed.add(input.prospect)
+    // WP176：不感兴趣 → 冷却（默认 90 天，第二次翻倍），不进抑制名单
+    let cooldown: { until: string; count: number; days: number } | undefined
+    if (action === 'cooldown') {
+      const base = roles.roles.get('b2b.outbound')?.thresholds?.b2b_declined_cooldown_days ?? 90
+      const next = declineCooldown({
+        prior_count: seqCooldown.get(input.prospect)?.count ?? 0,
+        base_days: base,
+        now: now(clock),
+      })
+      cooldown = next
+      seqCooldown.set(input.prospect, { until: next.until, count: next.count })
+    }
     appendEnvelope({
       schema_version: 1,
       workspace_id,
@@ -8023,6 +8046,10 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
         action,
         handed_to_sales: action === 'hand_to_sales',
         suppressed: action === 'suppress',
+        cooldown: action === 'cooldown',
+        ...(cooldown === undefined
+          ? {}
+          : { cooldown_days: cooldown.days, cooldown_until: cooldown.until }),
         sequence_stopped: action !== 'postpone',
         // 有意向 / 要资料 / 问价 → 落成询盘，交给持「业务」那条的人
         ...(action === 'hand_to_sales' && salesHolder !== undefined

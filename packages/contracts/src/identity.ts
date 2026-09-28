@@ -419,6 +419,11 @@ export interface WorkspaceProfile {
    * `MARKET_PRIMARY_LANGUAGE` 的第一语言；表里也没有就按品牌语言。
    */
   market_languages?: Record<string, string>
+  /**
+   * WP176：公司实体地址（开发信页脚、报价单、单证都从这里取；CAN-SPAM 要求开发信带它）。
+   * 没填 = 开发信不能发。以前住在 B2B「主动开发」的设置里，已有值启动时搬过来。
+   */
+  postal_address?: string
   set_at: Iso8601
 }
 

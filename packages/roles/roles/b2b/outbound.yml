@@ -111,6 +111,11 @@ notifications:
   - { event: 'guardrail.hit:b2b_outreach_commitment', mode: immediate, recipients: [role_holder, scope_manager] }
   - { event: 'guardrail.hit:suppression_list', mode: immediate, recipients: [role_holder, scope_manager] }
 
+# WP176（Luoye 09-28）：说「不感兴趣」的人只停这一轮，冷却这么多天内不进任何新一轮（第二次说翻倍）；
+# 退订与硬退信仍永久进抑制名单
+thresholds:
+  b2b_declined_cooldown_days: 90
+
 handover:
   transfers: [open_work_items, context, home_blocks, queue_lane]
   fallback: scope_manager

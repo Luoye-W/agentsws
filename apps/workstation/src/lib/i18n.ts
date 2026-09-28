@@ -3048,6 +3048,19 @@ const zh: Table = {
   'b2b.out.reason.sender_choice': '还没选发信邮箱',
   'b2b.out.reason.sender_auth': '发信邮箱体检没过',
   'b2b.out.reason.company_address': '公司地址没填',
+  'onboarding.company.address': '公司地址',
+  'onboarding.company.address.hint': '实体地址。开发信页脚（法规要求）、报价单、单证都用这一份',
+  'onboarding.company.address.placeholder': '如 8 Keji Rd, Nanshan, Shenzhen, China',
+  'b2b.out.address.none': '还没填',
+  'b2b.out.address.edit': '去公司档案改',
+  'b2b.out.address.from': '开发信页脚、报价单、单证用的都是公司档案里这一份',
+  'b2b.out.established': '这只邮箱已经正常发信很久',
+  'b2b.out.established.hint': '勾了就不预热，直接每天 50 封。新买的域名别勾：一上来就发满最伤信誉',
+  'b2b.out.auth.dns': 'DNS 已配置（未经实信验证）',
+  'b2b.out.cooling': '冷却中 {count} 位（说过不感兴趣）',
+  'b2b.out.cooling.hint':
+    '只停这一轮：到期后可以再选进新一轮。说过两次的冷却翻倍。退订的在抑制名单上，不在这里',
+  'b2b.out.cooling.row': '{who}：到 {date}',
 }
 
 const en: Table = {
@@ -6174,6 +6187,22 @@ const en: Table = {
   'b2b.out.reason.sender_choice': 'no sending mailbox picked yet',
   'b2b.out.reason.sender_auth': 'sending mailbox failed the health check',
   'b2b.out.reason.company_address': 'company address missing',
+  'onboarding.company.address': 'Company address',
+  'onboarding.company.address.hint':
+    'Postal address. Cold-email footers (required by law), quotes and shipping documents all use this one',
+  'onboarding.company.address.placeholder': 'e.g. 8 Keji Rd, Nanshan, Shenzhen, China',
+  'b2b.out.address.none': 'Not set',
+  'b2b.out.address.edit': 'Edit in company profile',
+  'b2b.out.address.from':
+    'Cold-email footers, quotes and shipping documents all use this one from the company profile',
+  'b2b.out.established': 'This mailbox has been sending normally for a long time',
+  'b2b.out.established.hint':
+    'Skips warm-up and goes straight to 50 a day. Leave it off for a new domain: sending the full amount on day one hurts its reputation most',
+  'b2b.out.auth.dns': 'set up in DNS (not verified by a real email)',
+  'b2b.out.cooling': '{count} cooling off (said not interested)',
+  'b2b.out.cooling.hint':
+    'Only this round stops: once the date passes they can be picked for a new round. A second "not interested" doubles it. Unsubscribes are on the suppression list, not here',
+  'b2b.out.cooling.row': '{who}: until {date}',
 }
 
 const TABLES: Record<Lang, Table> = { zh, en }

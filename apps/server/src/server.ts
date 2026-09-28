@@ -134,6 +134,7 @@ import { createAskPort } from './ask.js'
 import { demoB2bDeckData, withDemoB2b } from './b2b.js'
 import { createB2bMail } from './b2b-mail.js'
 import { type B2bOutboundAssembly, createB2bOutbound } from './b2b-outbound.js'
+import { createB2bOutboundToolExecutor } from './b2b-outbound-tools.js'
 import { createB2bService } from './b2b-service.js'
 import { type B2bStore, createB2bStore } from './b2b-store.js'
 import { MemoryBackend } from './backend.js'
@@ -2042,6 +2043,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       now: () => clock.now(),
       ...(options.searchFetch === undefined ? {} : { fetch: options.searchFetch }),
     })
+    // WP176：开发信装配（`b2bOutbound`）比运行时晚建；运行时里的开发信工具经这个盒子懒取
+    const b2bOutboundLate: { current?: B2bOutboundAssembly } = {}
     const kolService = createKolService({
       workspace_id: ws,
       store: kol,
@@ -2551,6 +2554,14 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
                       .listByRole(id, { workspace_id: ws })
                       .some((a) => a.revoked_at === undefined),
                   ),
+            }),
+            /*
+             * WP176：主动开发的三个开发信工具（列序列 / 开一轮 / 分回信），落到与「主动开发」界面
+             * 同一份装配上。开发信装配比运行时晚建——取值函数只在真调工具那一刻才碰它。
+             */
+            b2bOutboundTools: createB2bOutboundToolExecutor({
+              workspace_id: ws,
+              port: () => b2bOutboundLate.current?.port,
             }),
             vertical: () => brandProfileOf(ws).vertical,
             // WP82：这台机器配了浏览器才有；配没配由设置页说了算，改了不用重启
@@ -3161,6 +3172,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
      * （第一次开出一张选择卡），SPF / DKIM 没过不发；按发信邮箱、按自然日算配额（预热 20 → 50）；
      * 发出去的每一封记 `noteOutbound`（回信按它对线程、停序列）。
      */
+    const lateMessages: { current?: MessagesAssembly } = {}
     const b2bOutbound = createB2bOutbound({
       workspace_id: ws,
       store: b2b,
@@ -3204,7 +3216,21 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           return undefined
         }
       },
+      // WP176：「不感兴趣」冷却天数（职责阈值，默认 90）
+      declinedCooldownDays: () =>
+        roles.roles.get('b2b.outbound')?.thresholds?.b2b_declined_cooldown_days,
+      // WP176：公司实体地址的真源是公司档案（开发信页脚、报价单、单证同一份）
+      companyAddress: () => onboardingRef?.brandProfile(ws).postal_address,
+      saveCompanyAddress: (address) => onboardingRef?.setPostalAddress(ws, address) ?? false,
+      // WP176：Run 里「把一封回信分类」按消息库 id 取正文（消息层在下面才建，懒取）
+      message: async (id) => {
+        const m = await lateMessages.current?.store.get(id)
+        return m === undefined
+          ? undefined
+          : { subject: m.subject, text: m.text, headers: m.headers }
+      },
     })
+    b2bOutboundLate.current = b2bOutbound
     const b2bMail = createB2bMail({
       workspace_id: ws,
       store: b2b,
@@ -3271,6 +3297,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       ...(options.messageSource === undefined ? {} : { makeSource: options.messageSource }),
       ...(options.messageWriter === undefined ? {} : { makeWriter: options.messageWriter }),
     })
+    lateMessages.current = messages
 
     /*
      * WP124：转发器设置进本机加密库（与邮箱口令、模型 key 同一个库）；

@@ -6,7 +6,8 @@
  * |---|---|
  * | 有意向 / 要资料 / 问价 | **停序列，交给 `b2b.sales`**（落成询盘） |
  * | 晚点再说 | 停序列（不拉黑） |
- * | 不感兴趣 / 退订 | 停序列 + 进抑制名单 |
+ * | 不感兴趣 | 停这一轮 + **冷却**（WP176：默认 90 天内不进新一轮，期满可以再联系；不进抑制名单） |
+ * | 退订 | 停序列 + 进抑制名单（永久） |
  * | 自动回复（休假） | 不算回信：按对方写的回来日期顺延 |
  * | 退信 | 停序列（硬退信在分拣时已进名单） |
  * | 看不出 | 停序列，进「回复待分」等人读 |
@@ -24,14 +25,15 @@ export interface B2bReplyClassification {
   return_date?: string
 }
 
-export type B2bReplyAction = 'hand_to_sales' | 'suppress' | 'postpone' | 'stop'
+/** WP176 加 `cooldown`：不感兴趣只停这一轮、进冷却（退订仍是 `suppress`）。 */
+export type B2bReplyAction = 'hand_to_sales' | 'suppress' | 'postpone' | 'stop' | 'cooldown'
 
 export const B2B_REPLY_ACTION: Readonly<Record<B2bReplyClass, B2bReplyAction>> = {
   interested: 'hand_to_sales',
   wants_info: 'hand_to_sales',
   asks_price: 'hand_to_sales',
   later: 'stop',
-  not_interested: 'suppress',
+  not_interested: 'cooldown',
   unsubscribe: 'suppress',
   auto_reply: 'postpone',
   bounce: 'stop',

@@ -2636,6 +2636,8 @@ function parseExpected(source: string, raw: unknown): ScenarioExpected {
           handed_to_sales: 'bool',
           suppressed: 'bool',
           routed_to: 'str',
+          cooldown: 'bool',
+          cooldown_days: 'num',
         }) as NonNullable<ScenarioExpected['b2b_replies']>[number],
     )
   }
