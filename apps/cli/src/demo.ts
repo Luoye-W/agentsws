@@ -41,6 +41,7 @@ import type {
   MatterRecordSource,
   MountedWorld,
   Server,
+  ServerOptions,
   WorkstationDataSource,
 } from '@agentsws/server'
 import {
@@ -132,6 +133,11 @@ export interface DemoOptions {
    * 不给就和原来一样。
    */
   searchDataFor?: (workspace_id: WorkspaceId) => SearchDataPort | undefined
+  /**
+   * WP181：官方插件那一层（插件层目录或替身后端）。**只给截图脚本用**（`scripts/e2e-wp181-shots.mjs`：
+   * 装上「自动化任务」拍右栏定时任务面板）；demo 默认全内存、没有插件层（设置页照实说「装不了」）。
+   */
+  officialPlugins?: ServerOptions['officialPlugins']
 }
 
 export interface Demo {
@@ -1314,6 +1320,7 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
     // WP154：「现在读一遍 Search Console」在 demo 里读的是替身那一周（不连真 Google）
     searchConsoleFor: () => standInSearchConsole({ rows: DEMO_GSC_ROWS, pages: DEMO_PAGES }),
     ...(options.searchDataFor === undefined ? {} : { searchDataFor: options.searchDataFor }),
+    ...(options.officialPlugins === undefined ? {} : { officialPlugins: options.officialPlugins }),
     // WP158：Search Console 读数层配替身连接器（两个站点 → 先出「选一下」那张小卡）
     googleReadsFor: (ws) => {
       const hit = demoGoogle.get(ws) ?? demoGoogleReads({ workspace_id: ws, clock: world.clock })
