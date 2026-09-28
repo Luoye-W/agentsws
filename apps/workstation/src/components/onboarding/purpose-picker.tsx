@@ -11,11 +11,7 @@
  * 两件事放在同一个容器里，读屏与走查都会把三个目的钮当成三个岗位。
  */
 import { PickToggle } from '@/components/onboarding/pick-toggle'
-import {
-  BOTH_PURPOSES,
-  type Purpose,
-  toggleBoth,
-} from '@/components/onboarding/preset-roles'
+import { BOTH_PURPOSES, type Purpose, toggleBoth } from '@/components/onboarding/preset-roles'
 import { useApp } from '@/lib/app-context'
 
 export function PurposePicker({

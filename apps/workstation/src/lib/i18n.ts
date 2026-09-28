@@ -6015,7 +6015,8 @@ const en: Table = {
   'onboarding.purpose.b2b': 'B2B',
   'onboarding.purpose.both': 'Both',
   'role.planned': 'Later',
-  'role.planned.hint': 'This duty is set up but not built out in the first release. It stays unticked; tick it if you want to try it early.',
+  'role.planned.hint':
+    'This duty is set up but not built out in the first release. It stays unticked; tick it if you want to try it early.',
   'onboarding.purpose.hint':
     'We tick the positions for you from this; you can still change them below.',
   'onboarding.done.skipped': '{n} more you already had, so they were not created again.',
