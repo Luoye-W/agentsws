@@ -61,7 +61,8 @@ async function main() {
   const me = await api('/v1/me', { token: ownerToken })
   const ownerAsg = me.assignments.find((a) => a.role_id === 'common.owner')?.id
   const ownerSales = me.assignments.find((a) => a.role_id === 'b2b.sales')?.id
-  if (ownerAsg === undefined || ownerSales === undefined) throw new Error('老板没有 owner / B2B 分配')
+  if (ownerAsg === undefined || ownerSales === undefined)
+    throw new Error('老板没有 owner / B2B 分配')
   const members = await api(`/v1/workspaces/${me.workspace.id}/members`, {
     token: ownerToken,
     assignment: ownerAsg,
@@ -73,7 +74,11 @@ async function main() {
       method: 'POST',
       token: ownerToken,
       assignment: ownerAsg,
-      body: { person_id: li.person_id, role_id: 'b2b.sales', ranges: [{ kind: 'store', id: 'store_main' }] },
+      body: {
+        person_id: li.person_id,
+        role_id: 'b2b.sales',
+        ranges: [{ kind: 'store', id: 'store_main' }],
+      },
     })
   await api('/v1/org/positions/b2b/supervisor', {
     method: 'PUT',
@@ -145,6 +150,8 @@ async function main() {
     const note = lin.locator('[data-testid="deck-routed-note"]').first()
     await note.waitFor({ timeout: 20_000 })
     await note.scrollIntoViewIfNeeded()
+    // 让整张卡（标题、那一句、超了哪两条、按钮）都进画面
+    await lin.mouse.wheel(0, 380)
     await lin.waitForTimeout(500)
     await lin.screenshot({ path: join(SHOTS, 'quote-to-supervisor.png') })
     console.log(`  📷 quote-to-supervisor.png（${await note.textContent()}）`)
