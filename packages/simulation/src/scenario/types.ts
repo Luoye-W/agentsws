@@ -1569,6 +1569,10 @@ export interface ScenarioExpected {
     handed_to_sales?: boolean
     suppressed?: boolean
     routed_to?: string
+    /** WP176：不感兴趣进了冷却（只停这一轮，不进抑制名单）。 */
+    cooldown?: boolean
+    /** WP176：这一次冷却几天（第二次说翻倍）。 */
+    cooldown_days?: number | string
   }[]
   /** WP171（docs/84 §11.3）：改收款账户的那封信。 */
   b2b_fraud?: {

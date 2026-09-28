@@ -1,0 +1,45 @@
+# WP176（Luoye 09-28）：**「不感兴趣」只停这一轮，进冷却，不进永久抑制名单。**
+#
+# 首封发给两位；Peak Gadgets 回信说不感兴趣 → 分成 not_interested、进冷却（默认 90 天，
+# 职责阈值 `b2b_declined_cooldown_days`）、**不进**抑制名单；第 10 天再开一轮，Peak Gadgets 以
+# "冷却中"被剔掉（到期前不进任何新一轮），Volthaus 以"已经在序列里"剔掉——这一轮不出卡。
+id: outbound/not-interested-cooldown
+version: 1
+dataset: { pack: b2b-3c-3p, seed: 42 }
+stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
+clock: { start: '2026-09-29T09:00:00+08:00' }
+events:
+  - at: '+0m'
+    b2b.sequence:
+      who: p_he
+      sender: { address: sales@zhilian-mail.example, spf: pass, dkim: pass, dmarc: pass }
+      company_address: 8 Keji Rd, Nanshan, Shenzhen, China
+      prospects: &two
+        - { id: volthaus, company: Volthaus, contact: Anna, country: US, source_url: 'https://volthaus.example/contact' }
+        - { id: peak, company: Peak Gadgets, contact: Mia, country: GB, source_url: 'https://peakgadgets.example/about' }
+  - at: '+1d'
+    b2b.reply:
+      who: p_he
+      prospect: peak
+      subject: 'Re: fast chargers and cables for Peak Gadgets'
+      body: No thanks, not interested.
+  - at: '+10d'
+    b2b.sequence:
+      who: p_he
+      sender: { address: sales@zhilian-mail.example, spf: pass, dkim: pass, dmarc: pass, first_sent_at: '2026-09-29T01:00:00Z' }
+      company_address: 8 Keji Rd, Nanshan, Shenzhen, China
+      prospects: *two
+  - at: '+11d'
+    clock.advance: {}
+expected:
+  b2b_replies:
+    - { class: not_interested, action: cooldown, suppressed: false, cooldown: true, cooldown_days: 90 }
+  b2b_sequence:
+    - { step: first, card: true, picked: 2 }
+    - { step: first, card: false, picked: 0, excluded: [cooldown, in_sequence] }
+  metrics:
+    runs_failed: 0
+invariants:
+  - no_write_without_stage
+rubric: >-
+  说了不感兴趣的人，是只停这一轮（冷却）还是被永久拉黑（不该）？冷却期内会不会被下一轮选进去（不该）？

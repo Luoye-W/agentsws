@@ -1,0 +1,57 @@
+# WP176（Luoye 09-28）：**冷却期满可以再被选进新一轮；第二次说不感兴趣冷却翻倍（180 天）。**
+#
+# Peak Gadgets 第 1 天说不感兴趣 → 冷却 90 天；第 91 天再开一轮 → 冷却已过，放进来、出一张卡；
+# 第 92 天又说不感兴趣 → 第二次，冷却翻倍到 180 天；第 200 天再开 → 还在冷却里，剔掉。
+id: outbound/cooldown-expired-reselect
+version: 1
+dataset: { pack: b2b-3c-3p, seed: 42 }
+stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
+clock: { start: '2026-09-29T09:00:00+08:00' }
+events:
+  - at: '+0m'
+    b2b.sequence:
+      who: p_he
+      sender: { address: sales@zhilian-mail.example, spf: pass, dkim: pass, dmarc: pass }
+      company_address: 8 Keji Rd, Nanshan, Shenzhen, China
+      prospects: &peak
+        - { id: peak, company: Peak Gadgets, contact: Mia, country: GB, source_url: 'https://peakgadgets.example/about' }
+  - at: '+1d'
+    b2b.reply:
+      who: p_he
+      prospect: peak
+      subject: 'Re: fast chargers and cables for Peak Gadgets'
+      body: No thanks, not interested.
+  - at: '+91d'
+    b2b.sequence:
+      who: p_he
+      sender: { address: sales@zhilian-mail.example, spf: pass, dkim: pass, dmarc: pass, first_sent_at: '2026-09-29T01:00:00Z' }
+      company_address: 8 Keji Rd, Nanshan, Shenzhen, China
+      prospects: *peak
+  - at: '+92d'
+    b2b.reply:
+      who: p_he
+      prospect: peak
+      subject: 'Re: fast chargers and cables for Peak Gadgets'
+      body: Not interested, thanks.
+  - at: '+200d'
+    b2b.sequence:
+      who: p_he
+      sender: { address: sales@zhilian-mail.example, spf: pass, dkim: pass, dmarc: pass, first_sent_at: '2026-09-29T01:00:00Z' }
+      company_address: 8 Keji Rd, Nanshan, Shenzhen, China
+      prospects: *peak
+  - at: '+201d'
+    clock.advance: {}
+expected:
+  b2b_replies:
+    - { class: not_interested, action: cooldown, suppressed: false, cooldown: true, cooldown_days: 90 }
+    - { class: not_interested, action: cooldown, suppressed: false, cooldown: true, cooldown_days: 180 }
+  b2b_sequence:
+    - { step: first, card: true, picked: 1 }
+    - { step: first, card: true, picked: 1 }
+    - { step: first, card: false, picked: 0, excluded: [cooldown] }
+  metrics:
+    runs_failed: 0
+invariants:
+  - no_write_without_stage
+rubric: >-
+  冷却期满的人能不能再选进新一轮（该）？第二次说不感兴趣冷却有没有翻倍（该）？
