@@ -25,7 +25,7 @@ const THIRD_PARTY = [
   ...B2B_PORTED,
 ]
 /** WP170：B2B 岗位自己写的四个（本仓库的 Apache-2.0）。 */
-const B2B_OWN: string[] = []
+const B2B_OWN: string[] = ['b2b-inquiry']
 /** WP162：Agents 工坊自己写的（本仓库的 Apache-2.0）；WP170 加上 B2B 的四个。 */
 const OWN = [
   'brand-voice',
