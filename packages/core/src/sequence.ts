@@ -138,9 +138,15 @@ export function warmupCap(input: {
   policy?: Partial<WarmupPolicy>
   /** 这个邮箱第一次发开发信的时间（没发过不给）。 */
   first_sent_at?: string
+  /**
+   * WP176：用户说「这只邮箱已经正常发信很久」——不预热，直接按预热之后那一档。
+   * 新域名别这么说（面板上一句提醒）。
+   */
+  established?: boolean
   now: string
 }): { cap: number; warming: boolean; warm_from?: string } {
   const p = { ...DEFAULT_WARMUP, ...input.policy }
+  if (input.established === true) return { cap: p.cap_warmed, warming: false }
   const start = input.first_sent_at === undefined ? Number.NaN : Date.parse(input.first_sent_at)
   const now = Date.parse(input.now)
   const from = (Number.isNaN(start) ? now : start) + p.warmup_days * 86_400_000

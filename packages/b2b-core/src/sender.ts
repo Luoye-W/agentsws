@@ -198,7 +198,60 @@ export function evaluateSenderAuth(input: {
         : 'DKIM：测试信没带上你域名的 DKIM 签名。去邮箱服务商后台开 DKIM，把给的那条记录加进 DNS。',
     )
   }
-  return { spf, dkim, dmarc, notes }
+  return {
+    spf,
+    dkim,
+    dmarc,
+    notes,
+    // WP176：读了测试信的信头 = 实信验证
+    ...(input.auth_header === undefined ? {} : { dkim_via: 'test_mail' as const }),
+  }
+}
+
+/** WP176：测试信等多久没收回来，就改按 DNS 查 DKIM（10 分钟）。 */
+export const DKIM_TEST_WAIT_MS = 10 * 60_000
+
+/** WP176：该不该改按 DNS 查 DKIM 了（测试信在路上、发出去超过 10 分钟）。 */
+export function dkimWaitedTooLong(
+  auth: Pick<B2bSenderAuth, 'dkim' | 'test_sent_at' | 'checked_at'>,
+  now: string,
+): boolean {
+  if (auth.dkim !== 'pending') return false
+  const sent = Date.parse(auth.test_sent_at ?? auth.checked_at ?? '')
+  return !Number.isNaN(sent) && Date.parse(now) - sent >= DKIM_TEST_WAIT_MS
+}
+
+/**
+ * WP176：测试信收不回来时的**本机兜底**——按常见选择器（`B2B_DKIM_SELECTORS`）查
+ * `<选择器>._domainkey.<域名>` 的 TXT。查到带公钥（`p=` 非空）的记录就算「DNS 已配置（未经实信验证）」：
+ * 允许发，卡上写明；一个都查不到仍不发。`p=`（空）= 公钥被撤了，不算。
+ *
+ * `records` 按查询顺序给；`txt` 是 `undefined` = 那一个没查成（DNS 出错，不是"没有"）。
+ */
+export function evaluateDkimDns(input: {
+  domain: string
+  records: readonly { selector: string; txt: readonly string[] | undefined }[]
+}): { dkim: B2bAuthResult; selector?: string; note: string } {
+  for (const r of input.records) {
+    const hit = (r.txt ?? [])
+      .map((t) => t.replace(/"\s*"/g, '').replace(/^"|"$/g, '').trim())
+      .find((t) => /(^|;)\s*p\s*=\s*[A-Za-z0-9+/=]{16,}/.test(t))
+    if (hit !== undefined)
+      return {
+        dkim: 'pass',
+        selector: r.selector,
+        note: `DKIM：测试信 10 分钟没收回来（Gmail 自己发给自己的信常常不进收件箱），按 DNS 查到了「${r.selector}」的 DKIM 公钥——算 DNS 已配置（未经实信验证），可以发。`,
+      }
+  }
+  if (input.records.length > 0 && input.records.every((r) => r.txt === undefined))
+    return {
+      dkim: 'unknown',
+      note: 'DKIM：测试信没收回来，DNS 也没查成，稍后再查一次。',
+    }
+  return {
+    dkim: 'missing',
+    note: `DKIM：测试信没收回来，DNS 里常见的几个选择器也没查到 ${input.domain} 的 DKIM 记录。去邮箱服务商后台开 DKIM，把给的那条记录加进 DNS。`,
+  }
 }
 
 /** 能不能发：SPF 与 DKIM 都要 pass（DMARC 不拦）。 */
