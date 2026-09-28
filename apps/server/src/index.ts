@@ -395,6 +395,7 @@ import {
   restoreHostedSnapshot,
   startHostedSnapshotLoop,
 } from './hosted-mode.js'
+import { officialPluginPathsIn, PROFILE_DIR_ENV } from './official-plugins.js'
 import { createServer } from './server.js'
 import {
   guardBeforeStart,
@@ -410,6 +411,8 @@ export async function main(): Promise<void> {
   const dbDir = process.env.AGENTSWS_DATA_DIR ?? process.env.AGENTSWS_DB_DIR
   // 单机真账号档：给了工作台构建目录就一并托管（demo 之外也能开工作台）
   const staticDir = process.env.AGENTSWS_STATIC_DIR
+  // WP181：桌面安装包里审过的官方插件清单与锁定 patch（不给就读仓库里那一份）
+  const profileDir = process.env[PROFILE_DIR_ENV]
   const release = process.env.AGENTSWS_VERSION ?? '0.0.0'
   const clock = { now: () => new Date().toISOString() }
   const log = (line: string): void => {
@@ -479,6 +482,9 @@ export async function main(): Promise<void> {
     server = await createServer({
       ...(dbDir === undefined ? {} : { dbDir }),
       ...(staticDir === undefined ? {} : { staticDir }),
+      ...(profileDir === undefined || profileDir === ''
+        ? {}
+        : { officialPlugins: officialPluginPathsIn(profileDir) }),
     })
   } catch (err) {
     return noteAndRethrow('migrate', err)

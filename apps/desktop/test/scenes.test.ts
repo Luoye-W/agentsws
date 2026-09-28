@@ -15,7 +15,7 @@ import { createApiClient } from '../src/api-client.js'
 import type { HealthSnapshot } from '../src/health.js'
 import { strings } from '../src/i18n.js'
 import { buildTrayMenu, sceneSubmenu, type TrayModelInput } from '../src/menu.js'
-import { desktopPaths, thirdPartyLicensesFile } from '../src/paths.js'
+import { bundledProfileDir, desktopPaths, thirdPartyLicensesFile } from '../src/paths.js'
 import type { ApiFetchLike, ApiResponseLike } from '../src/ports.js'
 import { serverSpawnRequest } from '../src/server-process.js'
 
@@ -223,5 +223,10 @@ describe('WP148：安装包里的第三方许可证说明在哪', () => {
       '/Applications/agentsws.app/Contents/Resources/licenses/THIRD_PARTY_LICENSES.txt',
     )
     expect(thirdPartyLicensesFile(undefined)).toBeUndefined()
+    // WP181：审过的官方插件清单与锁定 patch 随安装包带
+    expect(bundledProfileDir('/Applications/agentsws.app/Contents/Resources')).toBe(
+      '/Applications/agentsws.app/Contents/Resources/profiles/agentsws',
+    )
+    expect(bundledProfileDir(undefined)).toBeUndefined()
   })
 })

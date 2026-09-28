@@ -86,6 +86,11 @@ export interface ServerSpawnInput {
   dshHome?: string
   /** 应用数据目录（`<userData>`）：其他场景的工作目录不许在它里面，也不许包含它。 */
   appDataDir?: string
+  /**
+   * WP181：安装包里审过的官方插件清单与锁定 patch 所在目录（`<resources>/profiles/agentsws`）。
+   * 经 `AGENTSWS_PROFILE_DIR` 给服务进程；开发期不给（服务进程按仓库里的那一份读）。
+   */
+  profileDir?: string
 }
 
 export function serverSpawnRequest(input: ServerSpawnInput): SpawnRequest {
@@ -102,6 +107,7 @@ export function serverSpawnRequest(input: ServerSpawnInput): SpawnRequest {
       ? {}
       : { AGENTSWS_DSH_HOME: input.dshHome, DSH_HOME: input.dshHome }),
     ...(input.appDataDir === undefined ? {} : { AGENTSWS_APP_DATA_DIR: input.appDataDir }),
+    ...(input.profileDir === undefined ? {} : { AGENTSWS_PROFILE_DIR: input.profileDir }),
     ...haltEnv(input.halt),
     ...secretsToEnv(input.secrets),
   }
