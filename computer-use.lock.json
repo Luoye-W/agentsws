@@ -53,7 +53,7 @@
     }
   },
   "providers": {
-    "@deepseek-ai/dsh-computer-use": "0.1.7-rc.2",
-    "@deepseek-ai/dsh-experimental-computer-use-cua-driver-mcp": "0.1.7-rc.2"
+    "@deepseek-ai/dsh-computer-use": "0.2.0-rc.1",
+    "@deepseek-ai/dsh-experimental-computer-use-cua-driver-mcp": "0.2.0-rc.1"
   }
 }
