@@ -9,7 +9,8 @@ This product includes software developed by third parties under their own licens
 - DESIGN.md format specification (Apache-2.0) - https://github.com/google-labs-code/design.md
   (format alignment only; no code imported. Extraction algorithms credited in docs/71 SS8 and upstreams.yml)
 - Portions adapted from coreyhaines31/marketingskills (MIT, Copyright (c) 2025 Corey Haines) - https://github.com/coreyhaines31/marketingskills
-  (translated and rewritten into packages/skills/bundled/*/SKILL.md; license text in packages/skills/bundled/THIRD-PARTY-NOTICES)
+  (translated and rewritten into packages/skills/bundled/*/SKILL.md, including the B2B cold-email and prospecting skills;
+   license text in packages/skills/bundled/THIRD-PARTY-NOTICES)
 - Portions adapted from every-app/open-seo (MIT, Copyright (c) 2026 Ben Senescu) - https://github.com/every-app/open-seo
   (SEO judgment rules in packages/skills/bundled/seo-judgment/SKILL.md)
 See each package's LICENSE for details.
