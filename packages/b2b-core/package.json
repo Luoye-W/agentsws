@@ -1,0 +1,24 @@
+{
+  "name": "@agentsws/b2b-core",
+  "version": "0.0.0",
+  "private": true,
+  "description": "B2B 岗位的判断逻辑（docs/84 §7）：报价授权与审批路由、证据分级、离职交接、客户 CSV 导入、行业识别与认证清单、B2B 知识六类。移植自 Luoye 自己的 BtoBAgents 业务纯函数，不含任何模板代码。纯逻辑，碰不到凭据。",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@agentsws/contracts": "workspace:*",
+    "@agentsws/core": "workspace:*"
+  }
+}
