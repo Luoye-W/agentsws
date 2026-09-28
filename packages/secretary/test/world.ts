@@ -10,6 +10,7 @@ import {
   createSecretary,
   type ProfilePosition,
   type Secretary,
+  type SecretaryOptions,
 } from '../src/index.js'
 import {
   ADS,
@@ -50,7 +51,7 @@ const NAMES: Record<string, string> = {
   p_out: '外人',
 }
 
-export function fakeWorld(at?: Iso8601): FakeWorld {
+export function fakeWorld(at?: Iso8601, extra: Partial<SecretaryOptions> = {}): FakeWorld {
   const clock = fixedClock(at)
   const events: Omit<EventEnvelope, 'id' | 'at'>[] = []
   const meetings: FakeMeeting[] = []
@@ -147,6 +148,7 @@ export function fakeWorld(at?: Iso8601): FakeWorld {
       })
       return { meeting_id: id }
     },
+    ...extra,
   })
 
   return { secretary, clock, events, meetings, claims, inProgress, positions, agendaOf }

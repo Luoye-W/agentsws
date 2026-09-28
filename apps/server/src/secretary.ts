@@ -90,6 +90,8 @@ export interface SecretaryAssemblyOptions {
   scheduledTasks?(person_id: PersonId): ScheduledTaskLike[]
   /** 卡片挂在哪个职责下；秘书永远是 `common.member`（06 §2.1） */
   role_id?: RoleId
+  /** WP181：公司时区（工作区档案的 `tz`，每次现取）——代答 / 路由的运行也写一条「现在时间 + 公司时区」。 */
+  timeZone?(): string | undefined | Promise<string | undefined>
 }
 
 export interface SecretaryAssembly {
@@ -205,6 +207,7 @@ export function createSecretaryAssembly(options: SecretaryAssemblyOptions): Secr
     ...(options.tz_offset_minutes === undefined
       ? {}
       : { tz_offset_minutes: options.tz_offset_minutes }),
+    ...(options.timeZone === undefined ? {} : { timeZone: options.timeZone }),
     personName: (id) => dir.names.get(id),
     isMember: (id) => dir.members.has(id),
     positionsOf,

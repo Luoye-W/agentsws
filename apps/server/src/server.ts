@@ -5087,6 +5087,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     random,
     appendEvent,
     tz_offset_minutes: workData.tz_offset_minutes,
+    // WP181：代答也带「现在时间 + 公司时区」（与运行时同一条 ContextItem）
+    timeZone: async () => (await identity.getWorkspace(workspace.id))?.tz,
     ...(dbDir === undefined ? {} : { dbDir }),
     identity: {
       members: (ws) => identity.members(ws),
