@@ -54,6 +54,10 @@
  * 被打开、别的锁定一行不动；opt-in 文件里的 id 同样走「id 存在、指向的还是那个插件」的校验。
  * 两档运行时的模块图里仍然**没有**它（`FORBIDDEN` 不变）：服务进程只从
  * `@agentsws/dsh-adapter/deepseek-account` 子路径懒加载，主入口不 re-export。
+ *
+ * WP177（dsh 0.2.0-rc.1）：再加三行，同一个形状——base 新 insert 的 `otel`（上报通道工厂）、
+ * 改走它的 `session-telemetry-otel`（点"反馈"就发整条会话日志）、这一版起能拿 DeepSeek 账号令牌
+ * 直接上网搜索的 `web-search-deepseek`。理由写在 patch 文件里那一段。
  */
 import { spawnSync } from 'node:child_process'
 import {
@@ -75,13 +79,18 @@ import { defaultChildEntry, subprocessAvailable } from '../src/index.js'
 
 /**
  * 这些包一旦出现在两档的模块图里，就说明运行时里真有一条装任意代码 / 热替换模块 /
- * 改写 profile patch / 默认出网登录的路。前两个是 WP93，后两个是 WP132（0.1.7-rc.1）。
+ * 改写 profile patch / 默认出网登录的路。前两个是 WP93，接着两个是 WP132（0.1.7-rc.1），
+ * 最后三个是 WP177（0.2.0-rc.1：上报通道、反馈上报、能用账号令牌出网的网页搜索）。
  */
 const FORBIDDEN = [
   '@deepseek-ai/dsh-plugin-manager',
   '@deepseek-ai/dsh-hmr',
   '@deepseek-ai/dsh-config-editor',
   '@deepseek-ai/dsh-deepseek-account-platform',
+  // WP177（0.2.0-rc.1）
+  '@deepseek-ai/dsh-otel',
+  '@deepseek-ai/dsh-session-telemetry-otel',
+  '@deepseek-ai/dsh-web-search-deepseek',
 ] as const
 
 /** 反向哨兵：录到的图里必须有这两个，否则说明钩子没生效、测试是假绿。 */
@@ -90,7 +99,7 @@ const EXPECTED = ['@deepseek-ai/dsh-tools', '@deepseek-ai/dsh-agent-loop'] as co
 /**
  * profile 的 patch 层（`profiles/agentsws/cordis.patch.yml`）里的全部锁定，一行一条。
  * `name` 是这个 id 在当前 dsh 组合里**应当**指向的插件——id 还在、但换了一个插件，也算红。
- * WP70 一行（改配置）、WP93 三行、WP132 三行（关掉）。
+ * WP70 一行（改配置）、WP93 三行、WP132 三行、WP177 三行（关掉）。
  */
 const LOCKDOWN: readonly LockdownRow[] = [
   {
@@ -104,6 +113,10 @@ const LOCKDOWN: readonly LockdownRow[] = [
   { id: 'config-editor', name: '@deepseek-ai/dsh-config-editor', disabled: true },
   { id: 'settings', name: '@deepseek-ai/dsh-settings', disabled: true },
   { id: 'deepseek-account', name: '@deepseek-ai/dsh-deepseek-account-platform', disabled: true },
+  // WP177（0.2.0-rc.1）：base 新 insert 的共享上报通道、经它发的反馈上报、能用账号令牌出网的网页搜索
+  { id: 'otel', name: '@deepseek-ai/dsh-otel', disabled: true },
+  { id: 'session-telemetry-otel', name: '@deepseek-ai/dsh-session-telemetry-otel', disabled: true },
+  { id: 'web-search-deepseek', name: '@deepseek-ai/dsh-web-search-deepseek', disabled: true },
 ]
 
 /**
