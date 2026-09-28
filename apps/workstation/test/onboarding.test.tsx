@@ -33,7 +33,7 @@ import {
 } from '@/components/onboarding/preset-roles'
 import { ProfileForm } from '@/components/onboarding/profile-form'
 import { PurposePicker } from '@/components/onboarding/purpose-picker'
-import { RolePicker } from '@/components/onboarding/role-picker'
+import { expandPick, RolePicker } from '@/components/onboarding/role-picker'
 import type {
   BrandIntakeRun,
   CapabilitySourceSettings,
@@ -1707,13 +1707,11 @@ describe('WP171 第 ③ 步多问一项「B2B」', () => {
 
   it('第二批的职责标「第二批」，说明进问号；仍默认不勾', async () => {
     const user = userEvent.setup()
-    renderWithProviders(
-      <RolePicker
-        positions={WITH_B2B}
-        value={{ position_ids: ['b2b'], role_ids: [], custom_position_name: '' }}
-        onChange={() => {}}
-      />,
-    )
+    const onChange = vi.fn()
+    const picked = { position_ids: ['b2b'], role_ids: [], custom_position_name: '' }
+    // 勾岗位不带上第二批那条（与服务端 expandRoles 同一条规矩）
+    expect(expandPick(picked, WITH_B2B)).toEqual(['b2b.sales', 'b2b.outbound'])
+    renderWithProviders(<RolePicker positions={WITH_B2B} value={picked} onChange={onChange} />)
     const expands = screen.getAllByTestId('onboarding-expand')
     // 岗位按出场顺序摆，B2B 是最后一个
     await user.click(expands[expands.length - 1] as HTMLElement)
@@ -1724,6 +1722,17 @@ describe('WP171 第 ③ 步多问一项「B2B」', () => {
       '第一版还不做',
     )
     expect(WITH_B2B.find((p) => p.id === 'b2b')?.roles.find((r) => r.planned)?.default).toBe(false)
+    // 岗位勾着时别的职责点不动，第二批那条能单独勾（归到这个岗位下，不另起自定义岗位）
+    const toggles = screen.getAllByTestId('onboarding-role')
+    const planned = toggles.find((b) => b.textContent === 'B2B 平台运营') as HTMLElement
+    expect(planned.getAttribute('aria-pressed')).toBe('false')
+    expect(toggles.find((b) => b.textContent === '业务')?.hasAttribute('disabled')).toBe(true)
+    await user.click(planned)
+    expect(onChange).toHaveBeenLastCalledWith({ ...picked, role_ids: ['b2b.marketplace'] })
+    expect(expandPick({ ...picked, role_ids: ['b2b.marketplace'] }, WITH_B2B)).toContain(
+      'b2b.marketplace',
+    )
+    expect(screen.queryByTestId('onboarding-custom')).toBeNull()
   })
 })
 

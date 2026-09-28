@@ -434,6 +434,28 @@ describe('46 §3 岗位与职责 → 清单', () => {
     // 别的岗位一条都不带这个标记
     const others = positions.filter((p) => p.id !== 'b2b').flatMap((p) => p.roles)
     expect(others.some((r) => r.planned === true)).toBe(false)
+
+    // Fable 终审：勾「B2B」岗位不带上第二批那条
+    const plan = await data<
+      PlanView & { positions: { position_id: string; role_ids: string[] }[] }
+    >(await m.call('POST', '/v1/onboarding/plan', { body: { position_ids: ['b2b'] } }))
+    expect(plan.role_ids).toEqual([
+      'b2b.sales',
+      'b2b.outbound',
+      'b2b.exhibition',
+      'b2b.fulfillment',
+    ])
+    // 单独勾了才进，而且归在 B2B 岗位下，不另起一个自定义岗位
+    const withPlanned = await data<
+      PlanView & { positions: { position_id: string; role_ids: string[] }[] }
+    >(
+      await m.call('POST', '/v1/onboarding/plan', {
+        body: { position_ids: ['b2b'], role_ids: ['b2b.marketplace'] },
+      }),
+    )
+    expect(withPlanned.role_ids).toContain('b2b.marketplace')
+    expect(withPlanned.positions.map((p) => p.position_id)).toEqual(['b2b'])
+    expect(withPlanned.positions[0]?.role_ids).toContain('b2b.marketplace')
   })
 
   it('勾岗位 = 该岗位职责全勾；连接与技能去重汇总；模型没接时排第一条', async () => {

@@ -36,7 +36,8 @@ export function expandPick(pick: RolePick, positions: OnboardingPositionView[]):
   }
   for (const id of pick.position_ids) {
     const position = positions.find((p) => p.id === id)
-    for (const r of position?.roles ?? []) push(r.id)
+    // WP171（Fable 终审）：勾岗位不带上第二批的职责——那几条要单独勾
+    for (const r of position?.roles ?? []) if (r.planned !== true) push(r.id)
   }
   for (const id of pick.role_ids) push(id)
   return out
@@ -131,7 +132,8 @@ export function RolePicker({
                         checked={expanded.includes(r.id)}
                         // 岗位勾着的时候它的职责就是全勾——再点单条没有意义，
                         // 要只勾几条得先把岗位那一勾取消掉
-                        disabled={value.position_ids.includes(p.id)}
+                        // 第二批的那条不跟岗位走，岗位勾着也能单独勾
+                        disabled={value.position_ids.includes(p.id) && r.planned !== true}
                         testId="onboarding-role"
                         onToggle={() => {
                           toggleRole(r.id)
