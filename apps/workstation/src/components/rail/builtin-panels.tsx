@@ -10,7 +10,7 @@
  * **身体一律 `lazy()`**（#6）：面板的代码在**第一次被打开**之前既不下载也不挂载，
  * 于是"刷新之后恢复布局"这件事不会顺手把上次那个面板的请求也重放一遍。
  * 图标轨照样画得出十三个格子（WP97 加了 Office 预览）——它读的是第一段（类型），那一段是静态的。
- * WP100 给「证据」补了身体，于是还占着位的只剩上组那三个（数据面板 / 运行中 / 定时任务）。
+ * WP100 给「证据」补了身体，WP181 给「定时任务」补了身体，于是还占着位的只剩上组那两个（数据面板 / 运行中）。
  *
  * **占位面板只注册类型不注册身体**：点开显示"还没做"（`right-rail.tsx` 兜的），
  * 位置先占住——图标轨的位置定了就不该再挪（肌肉记忆）。
@@ -114,6 +114,15 @@ const EvidenceBody = lazy(async () => {
   return { default: m.EvidencePanel }
 })
 
+/**
+ * WP181：**定时任务**（官方「自动化任务」的任务页借形）。位置 WP71 起就占着、WP140 藏起来；
+ * 做好了原位放出来，走与别的面板逐字相同的两句注册。
+ */
+const SchedulesBody = lazy(async () => {
+  const m = await import('@/components/rail/panels/schedules-panel')
+  return { default: m.SchedulesPanel }
+})
+
 /** WP95 新增：运行中的浏览器（#12 借形，我们自己的组件画 WP82 / WP92 的会话）。 */
 const RunBrowserBody = lazy(async () => {
   const m = await import('@/components/rail/panels/run-browser-panel')
@@ -180,8 +189,11 @@ const DesignMdBody = lazy(async () => {
  */
 export const SHOW_UNBUILT_PANELS = false
 
-/** 还只有类型、没有身体的那几个（数据面板 / 运行中 / 定时任务 / 文件）。 */
-export const UNBUILT_PANELS: readonly string[] = ['data', 'runs', 'schedules', 'files']
+/**
+ * 还只有类型、没有身体的那几个（数据面板 / 运行中 / 文件）。
+ * WP181：「定时任务」做好了（照官方「自动化任务」的任务页借形），原位放出来。
+ */
+export const UNBUILT_PANELS: readonly string[] = ['data', 'runs', 'files']
 
 export function ensureBuiltinPanels(options: { showUnbuilt?: boolean } = {}): void {
   if (panelType('memory') !== undefined) return
@@ -206,13 +218,14 @@ export function ensureBuiltinPanels(options: { showUnbuilt?: boolean } = {}): vo
     priority: 'builtin',
     group: 'context',
   })
-  registerUnbuilt({
+  registerPanelType({
     id: 'schedules',
     label: 'rail.panel.schedules',
     icon: Clock,
     priority: 'builtin',
     group: 'context',
   })
+  registerPanelBody('schedules', SchedulesBody)
   registerPanelType({
     id: 'evidence',
     label: 'rail.panel.evidence',

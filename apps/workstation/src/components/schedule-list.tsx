@@ -12,9 +12,16 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { getSchedules, patchSchedule, type ScheduledTaskRow } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 import { formatDate } from '@/lib/format'
+import type { Lang } from '@/lib/i18n'
+import { frequencyText, ruleOfTrigger } from '@/lib/schedule-rule'
 
 /** 触发器 → 一句人话。cron 不翻译成自然语言（会翻错），原样给但标出时区。 */
-export function triggerText(trigger: ScheduledTaskRow['trigger']): string {
+export function triggerText(trigger: ScheduledTaskRow['trigger'], lang: Lang = 'zh'): string {
+  // WP181：官方「自动化任务」的时间规则（每天 / 每周几 / 工作日……）
+  if (trigger.kind === 'rule') {
+    const rule = ruleOfTrigger(trigger)
+    return rule === undefined ? trigger.kind : frequencyText(rule, lang)
+  }
   if (trigger.kind === 'cron') return `cron ${String(trigger.expr)}（${String(trigger.tz)}）`
   if (trigger.kind === 'interval') {
     const minutes = Math.round((trigger.every_ms ?? 0) / 60000)
@@ -64,7 +71,7 @@ export function ScheduleList({ positionId }: { positionId: string }): React.Reac
                     {paused ? <Badge variant="secondary">{t('schedule.paused')}</Badge> : null}
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    {triggerText(row.trigger)}
+                    {triggerText(row.trigger, lang)}
                     {row.next_fire_at === undefined
                       ? ''
                       : ` · ${t('schedule.next')} ${formatDate(row.next_fire_at, lang)}`}
