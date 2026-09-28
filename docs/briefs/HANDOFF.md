@@ -76,6 +76,8 @@
 | 51 | WP167 收信只走一个入口：消息同步分拣后只有客服信进客服那一路开事项起 Run；判不准的进「待确认」；邮箱三个开关（影子模式 / 挪信 / 标已读）上连接页 | `WP167-single-mail-intake.md` | `wp167-mail-intake` · `wp/167-mail-intake` | — | 已合并（09-27，Fable 终审追加：升级那一拍预写台账，老信不再开事项起 Run；267 文件 3295 条过，六组模拟门禁过（3 人包 64 场景）） |
 | 52 | WP168 建私有仓 `Luoye-W/agentsws-cloud`：带历史搬云端代码、三层各自部署（Service Bindings）、开源仓作 submodule、CI；不部署、不删开源仓 | `WP168-private-cloud-repo.md` | 私有仓 `~/Documents/agentsws-cloud` | WP164、WP165 | 已完成（09-27，Fable 终审：私有仓 `Luoye-W/agentsws-cloud`（PRIVATE）main 已推，Actions 全绿 621 条；终审追加修后台类型声明外泄；未部署） |
 | 53 | WP169 市场三件小事：向导多市场花费提示、店铺校正后推动态、按市场主要语言探测 | `WP169-markets-followups.md` | `wp169-markets-2` · `wp/169-markets-2` | WP166 | 已合并（09-27，Fable 终审：239 文件 2658 条过，契约 / 本体零漂移，六组模拟门禁过） |
+| 54 | WP170 B2B 六个技能：cold-email、prospecting（改写 marketingskills）、b2b-inquiry、quotation、trade-show、export-docs | `WP170-b2b-skills.md` | `wp170-b2b-skills` · `wp/170-b2b-skills` | docs/84 | 进行中（Claude） |
+| 55 | WP171 B2B 岗位骨架：契约对象、五条职责（含展会、跟单与单证）、岗位模板「B2B」、b2b-core（移植 BtoBAgents 判断逻辑）、面板骨架、模拟包 b2b-3c-3p | `WP171-b2b-skeleton.md` | `wp171-b2b-skeleton` · `wp/171-b2b-skeleton` | docs/84 | 进行中（Claude） |
 
 WP117b 的补充要求（派工单里没有，写在这）：demo 服务的是 `apps/workstation/dist`，测界面前先 `pnpm -F @agentsws/workstation exec vite build`；交付一个真实点击的 playwright 脚本 `scripts/e2e-kol-sandbox.mjs`（playwright 库在 `node_modules/.pnpm/playwright@1.63.0/node_modules/playwright`），走完「选合成红人 → 起草开发信 → 批准发送 → 已发 ≥ 1 → 跳到 N 天后 → 回信 ≥ 1 → 分类 → 议价卡 → 阶段推进 → 交付物 → 追踪链接」，每步截图到 `docs/assets/workstation/kol-e2e-NN.png`，脚本里断言计数确实变了；演练数据从真实漏斗 / 归因里排除，单独显示「演练漏斗」。
 
