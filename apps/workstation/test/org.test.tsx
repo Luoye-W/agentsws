@@ -236,6 +236,7 @@ const lineWrites: unknown[] = []
 const invited: unknown[] = []
 const proposed: unknown[] = []
 const revoked: string[] = []
+const supervised: unknown[] = []
 
 vi.mock('@/lib/api', async () => {
   const actual = await vi.importActual<typeof import('@/lib/api')>('@/lib/api')
@@ -302,6 +303,10 @@ vi.mock('@/lib/api', async () => {
     createOrgPosition: async () => POSITIONS[0],
     updateOrgPosition: async () => POSITIONS[0],
     deleteOrgPosition: async () => ({ deleted: true }),
+    setOrgPositionSupervisor: async (id: string, person_id: string | null) => {
+      supervised.push({ id, person_id })
+      return POSITIONS[0]
+    },
   }
 })
 
@@ -312,6 +317,7 @@ beforeEach(() => {
   invited.length = 0
   proposed.length = 0
   revoked.length = 0
+  supervised.length = 0
   state.ownerPositions = [
     {
       position_id: OWNER_ASSIGNMENT,
@@ -369,6 +375,34 @@ describe('公司页：岗位', () => {
     expect(text).not.toContain('dtc.support')
     expect(text).not.toContain('asg_')
     expect(text).not.toContain('common.member')
+  })
+})
+
+describe('公司页：岗位上级（WP174）', () => {
+  it('岗位卡上一个「上级」下拉：候选是还在的人，说明进问号；改了就存，选「不设」发 null', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(<OrgPage />)
+    const cards = await screen.findAllByTestId('position-card')
+    const support = within(cards[0] as HTMLElement)
+    const row = support.getByTestId('position-supervisor')
+    expect(row.textContent).toContain('上级')
+    // 说明不铺在卡上，在问号里
+    expect(row.querySelector('[data-slot="hint"]')?.getAttribute('data-hint')).toContain('转老板')
+    const select = support.getByTestId('position-supervisor-select') as HTMLSelectElement
+    expect(select.value).toBe('')
+    const options = [...select.options].map((o) => o.textContent)
+    expect(options[0]).toBe('不设（转老板）')
+    expect(options).toContain('王岚')
+    const first = MEMBERS[0]
+    if (first === undefined) throw new Error('no member')
+    await user.selectOptions(select, first.person_id)
+    await user.selectOptions(select, '')
+    await waitFor(() => {
+      expect(supervised).toEqual([
+        { id: POSITIONS[0]?.id, person_id: first.person_id },
+        { id: POSITIONS[0]?.id, person_id: null },
+      ])
+    })
   })
 })
 

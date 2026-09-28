@@ -11,6 +11,7 @@ import type {
   Iso8601,
   PersonId,
   Recipient,
+  RerouteInput,
   RoleId,
   StagedChange,
   WorkspaceId,
@@ -699,6 +700,46 @@ export class ApprovalBusImpl implements ApprovalBus {
     item.updated_at = this.rt.now()
     this.rt.store.putApproval(item)
     return item
+  }
+
+  /**
+   * WP174：改派一张还没定的卡（上级离职 → 老板）。
+   *
+   * 只换 `from` 那一格收件人，别的收件人一个不动；认领人是他就放掉。
+   * 与 redirect 同一条路：revision + 1、重算快照、旧 token 全废、按新的收件人重新投递——
+   * 于是离职那个人手里那张旧 token 当场失效，新收件人拿到一张新的。
+   * 已经定了（或在"稍后"里）的卡一个字不动，回 `undefined`。
+   */
+  async reroute(id: string, input: RerouteInput): Promise<ApprovalItem | undefined> {
+    const item = this.rt.store.getApproval(id)
+    if (!item || (item.state !== 'pending' && item.state !== 'in_review')) return undefined
+    if (!item.routing.recipients.some((r) => r.person === input.from)) return undefined
+    const now = this.rt.now()
+    const next: Recipient = { person: input.to, via: input.via, reason: input.reason }
+    const kept = item.routing.recipients.filter(
+      (r) => r.person !== input.from && r.person !== input.to,
+    )
+    item.revision += 1
+    item.routing = { ...item.routing, recipients: [next, ...kept] }
+    if (item.routing.assignee === input.from) {
+      delete item.routing.assignee
+      item.state = 'pending'
+    }
+    item.execution_snapshot = this.snapshotOf(item, this.contextOf(item))
+    item.updated_at = now
+    this.rt.tx(() => {
+      this.rt.store.revokeTokensFor(item.id)
+      this.rt.store.putApproval(item)
+    })
+    await this.rt.emit('approval.rerouted', {
+      workspace_id: item.workspace_id,
+      actor: { kind: 'system', id: 'txn' },
+      subject: { type: 'approval_item', id: item.id },
+      payload: { from: input.from, to: input.to, via: input.via, reason: input.reason },
+      item_id: item.id,
+    })
+    await this.route(item)
+    return this.rt.store.getApproval(item.id)
   }
 
   /** §4.5：pending 可撤回；已 approved 不可撤 → 409 conflict。 */

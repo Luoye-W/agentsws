@@ -104,6 +104,15 @@ export interface PositionView {
   roles: { role_id: string; name: string; default: boolean; loaded: boolean }[]
   /** 持有这个岗位的人：默认包里的职责都在他名下才算（岗位不落库，看的是分配）。 */
   holders: { person_id: string; name: string; ranges: RangeRef[] }[]
+  /**
+   * WP174：这个岗位的上级（`scope_manager` 的审批先落到他）。没设 = 没有这一格，落老板。
+   */
+  supervisor?: { person_id: string; name: string }
+}
+
+/** WP174：设 / 清岗位上级。`person_id: null` = 清掉（落回老板）。 */
+export interface PositionSupervisorInput {
+  person_id: string | null
 }
 
 export interface AssignmentView {
@@ -467,6 +476,15 @@ export interface OrgPort {
   createPosition(actor: OrgActor, input: PositionInput): MaybePromise<PositionView>
   updatePosition(actor: OrgActor, id: string, input: PositionInput): MaybePromise<PositionView>
   deletePosition(actor: OrgActor, id: string): MaybePromise<void>
+  /**
+   * WP174：设岗位上级（工作区里一个还在的人）或清掉。记 `position.supervisor_set` /
+   * `position.supervisor_cleared`。可选：没装的宿主回 501。
+   */
+  setPositionSupervisor?(
+    actor: OrgActor,
+    id: string,
+    input: PositionSupervisorInput,
+  ): MaybePromise<PositionView>
   assign(actor: OrgActor, input: AssignInput): MaybePromise<AssignmentView[]>
   updateAssignment(
     actor: OrgActor,
@@ -658,6 +676,10 @@ const PositionBody = z.object({
     .array(z.object({ role_id: z.string().min(1).max(128), default: z.boolean().optional() }))
     .min(1)
     .max(30),
+})
+
+const PositionSupervisorBody = z.object({
+  person_id: z.string().min(1).max(128).nullable(),
 })
 
 const AssignBody = z.object({
@@ -951,6 +973,28 @@ export function orgRoutes(): Route[] {
       async (c, deps) => {
         const input = await body(c, PositionBody)
         return ok(c, await portOf(deps).updatePosition(actorOf(c), param(c, 'id'), input))
+      },
+    ),
+    route(
+      {
+        method: 'put',
+        path: '/v1/org/positions/:id/supervisor',
+        operationId: 'setPositionSupervisor',
+        summary: '设 / 清岗位上级（WP174：scope_manager 的审批先落到他，没有就落老板）',
+        tag: TAG,
+        auth: 'bearer',
+        assignment: true,
+        authz: WRITE,
+        params: [{ name: 'id', in: 'path', required: true, description: '岗位 id' }],
+        body: PositionSupervisorBody,
+        returns: 'PositionView',
+      },
+      async (c, deps) => {
+        const input = await body(c, PositionSupervisorBody)
+        const port = portOf(deps)
+        if (port.setPositionSupervisor === undefined)
+          throw new ApiError('not_implemented', '这个服务进程不支持设岗位上级')
+        return ok(c, await port.setPositionSupervisor(actorOf(c), param(c, 'id'), input))
       },
     ),
     route(

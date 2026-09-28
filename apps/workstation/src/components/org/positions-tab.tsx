@@ -17,6 +17,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { DutyFold } from '@/components/ui/duty-fold'
+import { Hint } from '@/components/ui/hint'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import type { OrgPositionView, RoleSummaryView } from '@/lib/api'
@@ -63,6 +64,8 @@ export function PositionsTab({
   onDelete,
   onCopyRole,
   onProposeRole,
+  people = [],
+  onSupervisor,
 }: {
   positions: OrgPositionView[]
   roles: RoleSummaryView[]
@@ -80,6 +83,10 @@ export function PositionsTab({
   /** 原「职责」tab 的两个动作，现在挂在折叠层里每条职责下面。 */
   onCopyRole(id: string): void
   onProposeRole(id: string, patch: RoleChangePatch): void
+  /** WP174：上级下拉的候选（工作区里还在的人）。 */
+  people?: { person_id: string; name: string }[]
+  /** WP174：改上级（`null` = 不设，超授权的审批转老板）。不给就不出这一行。 */
+  onSupervisor?(position_id: string, person_id: string | null): void
 }): React.ReactNode {
   const { t } = useApp()
   const [editing, setEditing] = useState<string | null>(null)
@@ -121,6 +128,37 @@ export function PositionsTab({
               )}
             </CardHeader>
             <CardContent className="flex flex-col gap-3 text-sm">
+              {/* WP174：上级——超授权的审批先转他，没设就转老板。说明进问号（界面少字） */}
+              {onSupervisor === undefined ? null : (
+                <div className="flex items-center gap-2" data-testid="position-supervisor">
+                  <label htmlFor={`supervisor-${p.id}`} className="text-xs text-muted-foreground">
+                    {t('org.positions.supervisor')}
+                  </label>
+                  <select
+                    id={`supervisor-${p.id}`}
+                    data-testid="position-supervisor-select"
+                    className="h-8 rounded-md border bg-background px-2 text-sm"
+                    disabled={busy}
+                    value={p.supervisor?.person_id ?? ''}
+                    onChange={(e) => {
+                      onSupervisor(p.id, e.target.value === '' ? null : e.target.value)
+                    }}
+                  >
+                    <option value="">{t('org.positions.supervisor.none')}</option>
+                    {people.map((m) => (
+                      <option key={m.person_id} value={m.person_id}>
+                        {m.name}
+                      </option>
+                    ))}
+                    {/* 上级不在候选里（刚走、名单还没刷新）也照实显示他，不悄悄换成「没设」 */}
+                    {p.supervisor === undefined ||
+                    people.some((m) => m.person_id === p.supervisor?.person_id) ? null : (
+                      <option value={p.supervisor.person_id}>{p.supervisor.name}</option>
+                    )}
+                  </select>
+                  <Hint text={t('org.positions.supervisor.hint')} />
+                </div>
+              )}
               {/* WP70：职责是第二层，默认折叠；点开才看得到这个岗位含哪几条 */}
               <DutyFold
                 testId="position-duties"

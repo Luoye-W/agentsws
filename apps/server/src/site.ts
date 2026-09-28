@@ -43,6 +43,7 @@ import type {
   Mandate,
   ObjectRef,
   ProvenanceState,
+  Recipient,
   ShopAppRecord,
   ShopEmailTemplate,
   WorkspaceId,
@@ -65,6 +66,7 @@ import {
 } from '@agentsws/site-core'
 import type { StageInput, StageOutcome } from '@agentsws/txn'
 import type BetterSqlite3 from 'better-sqlite3'
+import { recipientOf, type ScopeManagerRouter } from './supervisor.js'
 
 /** 库里的三张表。名字与对象类型一一对应，不另起别名。 */
 export type SiteTable = 'launch_run' | 'email_template' | 'shop_app'
@@ -220,6 +222,11 @@ export interface SiteServiceOptions {
   connectedKinds?: () => readonly string[]
   appendEvent(e: Omit<EventEnvelope, 'id' | 'at'> & { at?: string }): void
   random(): number
+  /**
+   * WP174：`scope_manager` 的卡落到谁（岗位上级 → 老板，`./supervisor.ts`）。
+   * 不给就照旧落在提的人自己身上（单测与没装公司页的进程）。
+   */
+  routeScopeManager?: ScopeManagerRouter
 }
 
 export interface SiteServiceAssembly {
@@ -298,6 +305,21 @@ export function createSiteService(options: SiteServiceOptions): SiteServiceAssem
     return first === undefined ? '' : `${first.type}:${first.id}`
   }
 
+  /** WP174：`scope_manager` 的卡按岗位上级走；别的规则照旧落在提的人身上。 */
+  const recipientFor = async (
+    actor: SiteActor,
+    rule: 'role_holder' | 'scope_manager' | 'owner',
+  ): Promise<Recipient> =>
+    rule === 'scope_manager' && options.routeScopeManager !== undefined
+      ? recipientOf(
+          await options.routeScopeManager({
+            workspace_id: options.workspace_id,
+            role_id: actor.role_id,
+            proposer: actor.person_id,
+          }),
+        )
+      : { person: actor.person_id, via: rule }
+
   /** 一条 staged change 的共用那一段（提上去 → 翻成视图）。 */
   const stageOne = async (input: {
     actor: SiteActor
@@ -332,7 +354,7 @@ export function createSiteService(options: SiteServiceOptions): SiteServiceAssem
       approval: {
         title: input.title,
         summary: input.summary,
-        recipients: [{ person: input.actor.person_id, via: input.rule }],
+        recipients: [await recipientFor(input.actor, input.rule)],
         proposer: {
           kind: 'person',
           id: input.actor.person_id,

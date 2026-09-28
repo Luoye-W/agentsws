@@ -482,3 +482,22 @@ describe('37 §1 第 11 行：卡面顶部的「属于：事项 X」', () => {
     expect(link).toContain('还没起名')
   })
 })
+
+describe('WP174：卡上一句「转给了谁、为什么」', () => {
+  it('有 routed_note 就在标题下面出一行；没有就不出', () => {
+    const { unmount } = renderWithProviders(
+      <DeckCardView
+        card={draftCard({ routed_note: '转给了「B2B」岗位的上级林峰' })}
+        mode="zh_summary"
+        onDecide={noop}
+        onOpen={noop}
+      />,
+    )
+    expect(screen.getByTestId('deck-routed-note').textContent).toBe('转给了「B2B」岗位的上级林峰')
+    unmount()
+    renderWithProviders(
+      <DeckCardView card={draftCard()} mode="zh_summary" onDecide={noop} onOpen={noop} />,
+    )
+    expect(screen.queryByTestId('deck-routed-note')).toBeNull()
+  })
+})

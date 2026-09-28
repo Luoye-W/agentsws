@@ -426,6 +426,47 @@ describe('审批总线其他行为（14 §4 §7 §8）', () => {
     expect(out.routing.recipients.map((r) => r.person)).toEqual(['p_ops'])
   })
 
+  it('WP174 reroute：只换那一格收件人、旧 token 作废、新收件人拿新 token；定了的卡不动', async () => {
+    const h = harness()
+    const item = await h.txn.approvals.create(outboundInput())
+    await h.txn.approvals.claim(item.id, 'p_wang')
+    const moved = await h.txn.approvals.reroute(item.id, {
+      from: 'p_wang',
+      to: 'p_boss',
+      via: 'owner',
+      reason: '上级离职了，改由老板批',
+    })
+    expect(moved?.state).toBe('pending')
+    expect(moved?.revision).toBe(2)
+    expect(moved?.routing.assignee).toBeUndefined()
+    expect(moved?.routing.recipients).toEqual([
+      { person: 'p_boss', via: 'owner', reason: '上级离职了，改由老板批' },
+    ])
+    await expect(
+      h.txn.approvals.decide(item.id, 'p_wang', {
+        decision_token: tokenOf(item),
+        action: 'approve',
+        via: 'workstation',
+      }),
+    ).rejects.toBeInstanceOf(TxnError)
+    if (moved === undefined) throw new Error('not moved')
+    const done = await h.txn.approvals.decide(item.id, 'p_boss', {
+      decision_token: tokenOf(moved, 'p_boss'),
+      action: 'reject',
+      reason: '不发',
+      via: 'workstation',
+    })
+    expect(done.state).toBe('rejected')
+    expect(
+      await h.txn.approvals.reroute(item.id, {
+        from: 'p_boss',
+        to: 'p_wang',
+        via: 'owner',
+        reason: 'x',
+      }),
+    ).toBeUndefined()
+  })
+
   it('reject 必须给 reason；对外草稿默认 48 小时过期', async () => {
     const h = harness()
     const item: ApprovalItem = await h.txn.approvals.create(outboundInput())

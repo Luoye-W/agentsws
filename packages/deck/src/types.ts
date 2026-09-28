@@ -292,6 +292,11 @@ export interface DeckCard {
   /** 卡挂在哪条待办下（37 §2.1 交点一） */
   todo_id?: string
   matter_label?: string
+  /**
+   * WP174：卡上一句「转给了谁、为什么」（`recipients[].reason`，服务端已带人名）。
+   * 只在路由真做过判断时有：`scope_manager` 落到上级或老板、上级离职后改派。
+   */
+  routed_note?: string
   source: DeckSource
   highlights: DeckHighlight[]
   evidence_chips: DeckEvidenceChip[]
