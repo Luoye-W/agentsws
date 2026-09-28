@@ -2948,6 +2948,9 @@ const zh: Table = {
   'onboarding.purpose.care': '客服',
   'onboarding.purpose.b2b': 'B2B',
   'onboarding.purpose.both': '都要',
+  // WP171（Fable 终审）：第二批的职责只标一个短标签，说明进问号
+  'role.planned': '第二批',
+  'role.planned.hint': '这条职责先建好了，第一版还不做；默认不勾，想先试可以勾上。',
   'onboarding.purpose.hint': '按你选的先把岗位勾好，下面还能改。',
   'onboarding.done.skipped': '另外 {n} 条你本来就有，没重复建。',
   'onboarding.done.all_held':
@@ -6010,7 +6013,9 @@ const en: Table = {
   'onboarding.purpose.kol': 'Creator marketing',
   'onboarding.purpose.care': 'Customer care',
   'onboarding.purpose.b2b': 'B2B',
-  'onboarding.purpose.both': 'All of them',
+  'onboarding.purpose.both': 'Both',
+  'role.planned': 'Later',
+  'role.planned.hint': 'This duty is set up but not built out in the first release. It stays unticked; tick it if you want to try it early.',
   'onboarding.purpose.hint':
     'We tick the positions for you from this; you can still change them below.',
   'onboarding.done.skipped': '{n} more you already had, so they were not created again.',

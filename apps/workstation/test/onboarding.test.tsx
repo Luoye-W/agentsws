@@ -29,8 +29,11 @@ import {
   availablePurposes,
   presetPick,
   purposesOf,
+  toggleBoth,
 } from '@/components/onboarding/preset-roles'
 import { ProfileForm } from '@/components/onboarding/profile-form'
+import { PurposePicker } from '@/components/onboarding/purpose-picker'
+import { RolePicker } from '@/components/onboarding/role-picker'
 import type {
   BrandIntakeRun,
   CapabilitySourceSettings,
@@ -1659,6 +1662,7 @@ describe('WP171 第 ③ 步多问一项「B2B」', () => {
           name: 'B2B 平台运营',
           default: false,
           what_it_does: '国际站后台。',
+          planned: true,
         },
       ],
     },
@@ -1673,6 +1677,53 @@ describe('WP171 第 ③ 步多问一项「B2B」', () => {
     expect(purposesOf(picked)).toEqual(['b2b'])
     // 再把 B2B 按掉：只去掉 B2B，网站运营原样
     expect(applyPurposes(picked, [], WITH_B2B).position_ids).toEqual(['web-ops'])
+  })
+
+  it('Fable 终审：「都要」只按齐红人与客服，不勾 B2B；B2B 选没选原样留着', () => {
+    const all = ['kol', 'care', 'b2b'] as const
+    expect(toggleBoth([], all)).toEqual(['kol', 'care'])
+    expect(applyPurposes(base, toggleBoth([], all), WITH_B2B).position_ids).not.toContain('b2b')
+    // 用户明确按了 B2B，再按「都要」：B2B 留着
+    expect(toggleBoth(['b2b'], all)).toEqual(['kol', 'care', 'b2b'])
+    // 松开「都要」：只去掉红人与客服
+    expect(toggleBoth(['kol', 'care', 'b2b'], all)).toEqual(['b2b'])
+  })
+
+  it('界面上按「都要」：发出去的是红人 + 客服；只按 B2B 时「都要」不亮', async () => {
+    const user = userEvent.setup()
+    const onChange = vi.fn()
+    const first = renderWithProviders(
+      <PurposePicker available={['kol', 'care', 'b2b']} value={[]} onChange={onChange} />,
+    )
+    await user.click(screen.getByTestId('onboarding-purpose-both'))
+    expect(onChange).toHaveBeenLastCalledWith(['kol', 'care'])
+    first.unmount()
+    renderWithProviders(
+      <PurposePicker available={['kol', 'care', 'b2b']} value={['b2b']} onChange={onChange} />,
+    )
+    expect(screen.getByTestId('onboarding-purpose-both').getAttribute('aria-pressed')).toBe('false')
+    expect(screen.getByTestId('onboarding-purpose-b2b').getAttribute('aria-pressed')).toBe('true')
+  })
+
+  it('第二批的职责标「第二批」，说明进问号；仍默认不勾', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(
+      <RolePicker
+        positions={WITH_B2B}
+        value={{ position_ids: ['b2b'], role_ids: [], custom_position_name: '' }}
+        onChange={() => {}}
+      />,
+    )
+    const expands = screen.getAllByTestId('onboarding-expand')
+    // 岗位按出场顺序摆，B2B 是最后一个
+    await user.click(expands[expands.length - 1] as HTMLElement)
+    const tags = screen.getAllByTestId('onboarding-role-planned')
+    expect(tags).toHaveLength(1)
+    expect(tags[0]?.textContent).toContain('第二批')
+    expect(tags[0]?.querySelector('[data-hint]')?.getAttribute('data-hint')).toContain(
+      '第一版还不做',
+    )
+    expect(WITH_B2B.find((p) => p.id === 'b2b')?.roles.find((r) => r.planned)?.default).toBe(false)
   })
 })
 

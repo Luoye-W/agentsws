@@ -112,6 +112,14 @@ describe('WP140 demo 种子', () => {
     expect(positions.find((p) => p.position_id === 'kol-marketing')?.roles).toHaveLength(5)
   })
 
+  it('WP171：B2B 岗位五条都在店主名下；岗位页上只有平台运营那条标「第二批」', async () => {
+    const b2b = (await positionsOf()).find((p) => p.position_id === 'b2b')
+    expect(b2b?.roles.filter((r) => r.my_assignment_id !== undefined)).toHaveLength(5)
+    expect(b2b?.roles.filter((r) => r.planned === true).map((r) => r.role_id)).toEqual([
+      'b2b.marketplace',
+    ])
+  })
+
   it('同一条职责不挂两遍；首页「Meta Ads」数据块只出一次', async () => {
     const holder = demo.world.roleHolder
     const roles = demo.world.roles.assignments

@@ -298,6 +298,8 @@ export function createPositions(options: PositionsOptions): PositionsAssembly {
           ...(my === undefined ? {} : { my_assignment_id: my }),
           ...(prompts.length === 0 ? {} : { quick_prompts: prompts }),
           ...(examples.length === 0 ? {} : { task_examples: examples }),
+          // WP171：第二批的职责（`status: planned`）界面上标「第二批」
+          ...(def?.status === 'planned' ? { planned: true as const } : {}),
         }
       }),
       open_matters,

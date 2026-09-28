@@ -173,7 +173,14 @@ export interface OnboardingStateView {
 export interface OnboardingPositionView {
   id: string
   name: string
-  roles: { id: string; name: string; default: boolean; what_it_does: string }[]
+  roles: {
+    id: string
+    name: string
+    default: boolean
+    what_it_does: string
+    /** WP171：第二批的职责（`status: planned`），向导里标「第二批」。 */
+    planned?: true
+  }[]
 }
 
 /** 清单里的一条"要连的平台"。 */

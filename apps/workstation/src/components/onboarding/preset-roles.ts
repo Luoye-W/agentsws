@@ -107,6 +107,20 @@ export const PURPOSE_POSITION: Readonly<Record<Purpose, string>> = {
 
 export const PURPOSES: readonly Purpose[] = ['kol', 'care', 'b2b']
 
+/**
+ * WP171（Fable 终审）：「都要」只按齐**红人营销与客服**。B2B 只有用户明确按了那一项才勾——
+ * 做独立站的人按「都要」不该多出一个 B2B 岗位。
+ */
+export const BOTH_PURPOSES: readonly Purpose[] = ['kol', 'care']
+
+/** 按下 / 松开「都要」：只动红人与客服那两项，B2B 选没选原样留着。 */
+export function toggleBoth(value: readonly Purpose[], available: readonly Purpose[]): Purpose[] {
+  const both = BOTH_PURPOSES.filter((p) => available.includes(p))
+  const on = both.length > 0 && both.every((p) => value.includes(p))
+  const rest = value.filter((p) => !both.includes(p))
+  return on ? rest : PURPOSES.filter((p) => rest.includes(p) || both.includes(p))
+}
+
 /** 这台机器上问得出哪几个（岗位没装就不问那一项）。 */
 export function availablePurposes(positions: OnboardingPositionView[]): Purpose[] {
   return PURPOSES.filter((p) => has(positions, PURPOSE_POSITION[p]))

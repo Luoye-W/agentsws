@@ -14,6 +14,7 @@ import { PickToggle } from '@/components/onboarding/pick-toggle'
 import { Hint } from '@/components/ui/hint'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { PlannedTag } from '@/components/ui/planned-tag'
 import type { OnboardingPositionView } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 
@@ -139,6 +140,7 @@ export function RolePicker({
                         {r.name}
                       </PickToggle>
                       <Hint text={r.what_it_does} testId="onboarding-role-hint" />
+                      {r.planned === true ? <PlannedTag testId="onboarding-role-planned" /> : null}
                     </span>
                   ))}
                 </div>

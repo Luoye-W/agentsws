@@ -573,6 +573,8 @@ export interface PositionInstanceData {
     quick_prompts?: RoleQuickPromptData[]
     /** WP84：这条职责的示例任务（指导抽屉顶部的选择题）。 */
     task_examples?: RoleTaskExampleData[]
+    /** WP171：第二批的职责（`status: planned`），标「第二批」。 */
+    planned?: true
   }[]
   open_matters: number
   pending_cards: number
@@ -3168,7 +3170,14 @@ export interface OnboardingStateView {
 export interface OnboardingPositionView {
   id: string
   name: string
-  roles: { id: string; name: string; default: boolean; what_it_does: string }[]
+  roles: {
+    id: string
+    name: string
+    default: boolean
+    what_it_does: string
+    /** WP171：第二批的职责，标「第二批」（说明进问号），仍默认不勾。 */
+    planned?: true
+  }[]
 }
 
 export interface OnboardingConnectorItem {

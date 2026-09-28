@@ -455,6 +455,11 @@ export interface PositionInstance {
     quick_prompts?: RoleQuickPrompt[]
     /** WP84：这条职责的示例任务（指导抽屉顶部的选择题）。同样是原样抄来的。 */
     task_examples?: RoleTaskExample[]
+    /**
+     * WP171（Fable 终审）：这条职责是第二批（职责定义 `status: planned`）。
+     * 界面上标一个短标签「第二批」，说明进问号。只在为真时出现。
+     */
+    planned?: true
   }[]
   /** 这个岗位下还没关的事项数（本人可见的） */
   open_matters: number

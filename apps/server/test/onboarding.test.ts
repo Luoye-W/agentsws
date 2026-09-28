@@ -413,6 +413,29 @@ interface PlanView {
 }
 
 describe('46 §3 岗位与职责 → 清单', () => {
+  it('WP171：「B2B」岗位五条，前四条默认勾；平台运营标 planned（第二批）、默认不勾', async () => {
+    const m = await machine({
+      lan: createLanBus(),
+      host: '10.0.0.3',
+      ownerEmail: 'b2b@example.com',
+    })
+    const positions = await data<
+      { id: string; name: string; roles: { id: string; default: boolean; planned?: true }[] }[]
+    >(await m.call('GET', '/v1/onboarding/positions'))
+    const b2b = positions.find((p) => p.id === 'b2b')
+    expect(b2b?.name).toBe('B2B')
+    expect(b2b?.roles.map((r) => [r.id, r.default, r.planned === true])).toEqual([
+      ['b2b.sales', true, false],
+      ['b2b.outbound', true, false],
+      ['b2b.exhibition', true, false],
+      ['b2b.fulfillment', true, false],
+      ['b2b.marketplace', false, true],
+    ])
+    // 别的岗位一条都不带这个标记
+    const others = positions.filter((p) => p.id !== 'b2b').flatMap((p) => p.roles)
+    expect(others.some((r) => r.planned === true)).toBe(false)
+  })
+
   it('勾岗位 = 该岗位职责全勾；连接与技能去重汇总；模型没接时排第一条', async () => {
     const lan = createLanBus()
     const m = await machine({ lan, host: '10.0.0.1', ownerEmail: 'wang@nordvolt.cn' })

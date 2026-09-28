@@ -784,6 +784,8 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
                   default: r.default,
                   // 46 §1 表 ③「每条职责旁有一句'它会干什么'」——就是 05 里的 description
                   what_it_does: def.description,
+                  // WP171（Fable 终审）：第二批的职责向导里标「第二批」，仍按模板默认不勾
+                  ...(def.status === 'planned' ? { planned: true as const } : {}),
                 },
               ]
         }),
