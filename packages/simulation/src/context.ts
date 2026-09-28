@@ -13,7 +13,7 @@ import type {
   PromptSection,
   RunRequest,
 } from '@agentsws/contracts'
-import { canonicalJson } from '@agentsws/core'
+import { canonicalJson, timeContextItem } from '@agentsws/core'
 import { bundledPositionOfRole, personaTextIn } from '@agentsws/roles'
 import { MemoryInboundPipeline } from '@agentsws/stand-ins'
 import type { RunContext, World } from './world.js'
@@ -209,6 +209,11 @@ export async function buildRunRequest(input: BuildRequestInput): Promise<RunRequ
     content: threadContent,
     bytes: bytesOf(threadContent),
   })
+  /*
+   * WP180：「现在时间 + 公司时区」，与服务端 `buildRequest` 同一个函数、同一个位置（最后一条）。
+   * 时间用世界的合成时钟（同 seed 同字节），时区用这份数据集的公司时区（`workspace.yml` 的 `tz`）。
+   */
+  items.push(timeContextItem({ now: world.clock.now(), companyTz: world.pack.workspace.tz }))
 
   const connect_token = await world.issueReadToken()
   const request: RunRequest = {

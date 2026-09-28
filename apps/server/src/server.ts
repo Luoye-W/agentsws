@@ -2613,6 +2613,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
               port: () => b2bOutboundLate.current?.port,
             }),
             vertical: () => brandProfileOf(ws).vertical,
+            // WP180：公司时区（工作区档案的 tz，每次现取）——每次运行的上下文里写一次「现在时间 + 公司时区」
+            timeZone: async () => (await identity.getWorkspace(ws))?.tz,
             // WP82：这台机器配了浏览器才有；配没配由设置页说了算，改了不用重启
             browser: () => browserSettings.forRun(),
             // WP144：电脑操控（三层开关的前两层 + 批过的授权；设置页改了下一次运行就生效）
