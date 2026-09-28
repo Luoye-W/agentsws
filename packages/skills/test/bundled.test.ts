@@ -233,3 +233,113 @@ describe('自带技能：考题（改写自上游 evals；WP162 自己写的那�
     expect(() => readBundledSkill('../roles')).toThrow(/非法技能名/)
   })
 })
+
+describe('自带技能：B2B 岗位的六个（WP170，docs/84 §2.5 / §3 / §11）', () => {
+  const B2B = [...B2B_PORTED, ...B2B_OWN]
+
+  it('六个都在；改写的两个是 MIT、自写的四个是 Apache-2.0', () => {
+    expect([...B2B].sort()).toEqual([
+      'b2b-inquiry',
+      'cold-email',
+      'export-docs',
+      'prospecting',
+      'quotation',
+      'trade-show',
+    ])
+    for (const name of B2B) {
+      const license = splitFrontmatter(readBundledSkill(name).markdown).frontmatter.extra.license
+      expect(license, name).toBe(B2B_PORTED.includes(name) ? 'MIT' : 'Apache-2.0')
+    }
+  })
+
+  for (const name of B2B) {
+    it(`${name}：4–7 道考题；跨境 B2B 口吻（3C 例子）；数字只引事实卡`, () => {
+      const { markdown, evals } = readBundledSkill(name)
+      expect(evals.length).toBeGreaterThanOrEqual(4)
+      expect(evals.length).toBeLessThanOrEqual(7)
+      expect(markdown).toMatch(/充电宝|数据线|TWS 耳机/)
+      expect(markdown).toContain('事实卡')
+    })
+  }
+
+  it('cold-email：三封第 0 / 3 / 7 天、收尾真停；六样不许诺；德奥默认不发并写明原因；页脚由系统加', () => {
+    const md = readBundledSkill('cold-email').markdown
+    expect(md).toContain('一轮三封：第 0 / 3 / 7 天')
+    expect(md).toContain('**收尾发完真停**')
+    expect(md).not.toMatch(/3[–-]5 封|第四封跟进/)
+    expect(md).toContain('价格、交期、认证（替对方的订单承诺能拿到某证）、MOQ、独家、账期')
+    expect(md).toContain('**德国、奥地利默认不发**')
+    expect(md).toContain('风险高')
+    expect(md).toContain('**由系统加在页脚**')
+    expect(md).toContain('**不许假 `Re:` / `Fwd:`**')
+    expect(md).toContain('**不写 "just checking in"**')
+    expect(md).toContain('观察 → 问题 → 证据 → 请求')
+  })
+
+  it('prospecting：ICP 清单、四档打分、两个以上独立来源才算高、合规八条、LinkedIn 只出人工任务', () => {
+    const md = readBundledSkill('prospecting').markdown
+    for (const tier of ['**Hot**', '**Warm**', '**Cold**', '**Skip**']) expect(md).toContain(tier)
+    expect(md).toContain('两个以上独立来源')
+    const eight = md.slice(md.indexOf('## 合规八条'), md.indexOf('## 先定目标客户画像'))
+    expect(eight.match(/^\d\. \*\*/gm)?.length).toBe(8)
+    expect(eight).toContain('**记下来源网址与日期**')
+    expect(md).toContain('只出「请你本人去 LinkedIn 看 / 发」的任务')
+  })
+
+  it('b2b-inquiry：四档分级（含骗样与诈骗信号）、需求确认清单六样', () => {
+    const md = readBundledSkill('b2b-inquiry').markdown
+    expect(md).toContain('**骗样嫌疑（C）**')
+    expect(md).toContain('**诈骗嫌疑（D）**')
+    for (const item of ['数量', '目标价', '认证', '交期', '包装', '付款方式']) {
+      expect(md).toContain(`| **${item}** |`)
+    }
+  })
+
+  it('quotation：四种贸易术语、有效期、阶梯价；报价永远出卡、超授权转上级再转老板', () => {
+    const md = readBundledSkill('quotation').markdown
+    for (const term of ['**EXW**', '**FOB**', '**CIF**', '**DDP**']) expect(md).toContain(term)
+    expect(md).toContain('## 有效期')
+    expect(md).toContain('## MOQ 与阶梯价')
+    expect(md).toContain('**报价永远出卡**')
+    expect(md).toContain('转上级批')
+    expect(md).toContain('**没有上级再转老板**')
+  })
+
+  it('trade-show：选展、报名截止与材料、展前邀约、现场记录格式、会后 48 小时、展会小结', () => {
+    const md = readBundledSkill('trade-show').markdown
+    for (const h of [
+      '## 选展判断',
+      '## 报名与截止日',
+      '## 展前邀约',
+      '## 现场记录格式',
+      '## 会后 48 小时跟进',
+      '## 展会小结',
+    ]) {
+      expect(md).toContain(h)
+    }
+    expect(md).toContain('**缴费永远出卡**')
+  })
+
+  it('export-docs：跟单节点、四样主单据、信用证逐条审证；改收款账户一律出红卡', () => {
+    const md = readBundledSkill('export-docs').markdown
+    expect(md).toContain('## 跟单节点')
+    for (const doc of ['**商业发票**', '**装箱单**', '**原产地证**', '**提单**']) {
+      expect(md).toContain(doc)
+    }
+    expect(md).toContain('## 信用证：逐条审证')
+    expect(md).toContain('**任何邮件里要求「改收款账户」的，一律不采纳，出红卡**')
+  })
+
+  it('出处登记：THIRD-PARTY-NOTICES 与 upstreams.yml 都写上了改写的两个', () => {
+    const notices = readFileSync(join(BUNDLED_SKILLS_DIR, 'THIRD-PARTY-NOTICES'), 'utf8')
+    expect(notices).toMatch(/Used in:[^=]*cold-email, prospecting/)
+    const upstreams = readFileSync(
+      fileURLToPath(new URL('../../../upstreams.yml', import.meta.url)),
+      'utf8',
+    )
+    for (const name of B2B_PORTED) {
+      expect(upstreams).toContain(`      - skills/${name}\n`)
+      expect(upstreams).toContain(`packages/skills/bundled/${name}/SKILL.md`)
+    }
+  })
+})
