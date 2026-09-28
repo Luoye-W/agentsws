@@ -18,6 +18,17 @@ import { orderTools, runOntologyBrief } from '@agentsws/ontology'
 import type { BoundaryItem } from '@agentsws/support-core'
 import { renderReplyBody, replySubject } from '@agentsws/support-core'
 import {
+  B2B_LIST_SEQUENCES_TOOL,
+  B2B_OUTBOUND_TOOL_DEF_BY_NAME,
+  B2B_START_ROUND_TOOL,
+  type B2bSequencesData,
+  type B2bStartRoundData,
+  b2bOutboundBranch,
+  renderB2bOutboundAnswer,
+  sequencesOf,
+  startRoundOf,
+} from './b2b-outbound.js'
+import {
   countOf,
   describeKolRun,
   foundOf,
@@ -247,7 +258,9 @@ function toolDefs(req: RunRequest): ToolDef[] {
       // 别的名字照旧是占位描述——这一行只对工具面里有它们的运行生效，老的 prompt 字节不变
       // WP162：`read_skill` 同理（只有登记了按需技能的运行才有它）
       OWNER_TOOL_DEF_BY_NAME.get(name) ??
-      SKILL_TOOL_DEF_BY_NAME.get(name) ?? {
+      SKILL_TOOL_DEF_BY_NAME.get(name) ??
+      // WP176：主动开发的三个开发信工具（只有那条职责的运行才有它们）
+      B2B_OUTBOUND_TOOL_DEF_BY_NAME.get(name) ?? {
         name,
         description: `stand-in tool ${name}`,
         input_schema: { type: 'object' },
@@ -633,6 +646,84 @@ export function createStubRuntime(options: StubRuntimeOptions): RuntimeAdapter {
         outputs.push({ kind: 'answer', text: answer })
         usage.output_tokens = Math.ceil(answer.length / 4) + (seed % 7)
         // 摘要：回话的第一句（与 direct / dsh 同一份拼法，WP153 §2）
+        const summary = describeRun({
+          readTools,
+          drafted: false,
+          reply: answer,
+          tools: req.tools.allow,
+          ...(exhausted === undefined ? {} : { exhausted: exhausted.which }),
+        })
+        sink({
+          type: 'run.completed',
+          usage: {
+            ...usage,
+            tool_calls: toolCalls,
+            seconds: Math.max(0, (Date.parse(clock.now()) - startedMs) / 1000),
+            cost_base: 0,
+          },
+          outputs,
+          summary,
+        })
+        return finish(exhausted ? 'budget_exhausted' : 'completed', summary)
+      }
+
+      /*
+       * WP176：**主动开发问开发信**。工具面里有开发信工具、问的是起草 / 开一轮 / 进度 / 回信，
+       * 就去调：先列序列（看还差什么），要开一轮再开（出卡，不直接发），把结果说成人话。
+       * 别的问法照旧往下走（一个字节不变）。
+       */
+      const b2bText = [
+        threadText,
+        plainText(itemsOfKind(req, 'matter_summary')[0]?.content ?? ''),
+      ].join('\n')
+      const b2bCalls = b2bOutboundBranch(req, b2bText)
+      if (b2bCalls !== undefined) {
+        let sequences: B2bSequencesData | undefined
+        let started: B2bStartRoundData | undefined
+        const failed: Record<string, string> = {}
+        for (const tool of b2bCalls) {
+          if (signal.aborted) {
+            sink({ type: 'run.cancelled' })
+            return finish('cancelled', '运行被中断')
+          }
+          const call_id = `call_${toolCalls + 1}`
+          sink({ type: 'tool.call', call_id, tool, input: {} })
+          if (toolCalls >= req.budget.max_tool_calls) {
+            exhausted = { which: 'max_tool_calls', used: toolCalls, cap: req.budget.max_tool_calls }
+            sink({ type: 'budget.exhausted', ...exhausted })
+            sink({ type: 'tool.result', call_id, status: 'blocked', reason: 'budget_exhausted' })
+            break
+          }
+          const res =
+            options.executeTool === undefined
+              ? { status: 'error' as const, reason: 'no_tool_executor' }
+              : await options.executeTool({ name: tool, input: {}, request: req })
+          toolCalls += 1
+          sink({
+            type: 'tool.result',
+            call_id,
+            status: res.status,
+            ...(res.reason === undefined ? {} : { reason: res.reason }),
+          })
+          if (res.status !== 'ok') {
+            failed[tool] =
+              res.reason === 'no_tool_executor'
+                ? '这个进程没接工具'
+                : (res.reason ?? '这一步没走通')
+            continue
+          }
+          readTools.push(tool)
+          if (tool === B2B_LIST_SEQUENCES_TOOL) sequences = sequencesOf(res.data)
+          if (tool === B2B_START_ROUND_TOOL) started = startRoundOf(res.data)
+        }
+        const answer = renderB2bOutboundAnswer({
+          ...(sequences === undefined ? {} : { sequences }),
+          ...(started === undefined ? {} : { started }),
+          replies: !b2bCalls.includes(B2B_START_ROUND_TOOL) && /回信|回复|分类|repl/i.test(b2bText),
+          failed,
+        })
+        outputs.push({ kind: 'answer', text: answer })
+        usage.output_tokens = Math.ceil(answer.length / 4) + (seed % 7)
         const summary = describeRun({
           readTools,
           drafted: false,

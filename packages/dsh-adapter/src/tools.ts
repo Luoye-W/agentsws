@@ -12,6 +12,9 @@ import { EXTERNAL_FENCE, redactOutbound, redactOutboundText } from '@agentsws/co
 import { orderTools } from '@agentsws/ontology'
 import type { CreateDraftResult } from '@agentsws/stand-ins'
 import {
+  B2B_CLASSIFY_REPLY_TOOL,
+  B2B_OUTBOUND_TOOL_DEF_BY_NAME,
+  B2B_START_ROUND_TOOL,
   isMcpReadTool,
   OWNER_TOOL_DEF_BY_NAME,
   READ_SKILL_TOOL,
@@ -285,6 +288,23 @@ const SKILL_PARAMS = {
   },
 } as const
 
+/** WP176：主动开发的两个带参数的开发信工具（与 stub / direct 那份定义同一个意思）。 */
+const B2B_OUTBOUND_PARAMS: Readonly<Record<string, Record<string, unknown>>> = {
+  [B2B_START_ROUND_TOOL]: {
+    product: { type: 'string', description: '想聊的产品线（英文）；不给用上一次的' },
+    contact_ids: {
+      type: 'array',
+      items: { type: 'string' },
+      description: '只开这几位（联系人 id）；不给 = 全部还没开过的',
+    },
+  },
+  [B2B_CLASSIFY_REPLY_TOOL]: {
+    inquiry_id: { type: 'string', description: '往来记录的 id' },
+    subject: { type: 'string', description: '回信主题（没有记录 id 时给）' },
+    text: { type: 'string', description: '回信正文（没有记录 id 时给）' },
+  },
+}
+
 const STAGE_PARAMS = {
   order_id: { type: 'string', description: 'Order the refund belongs to.', required: true },
   amount: { type: 'number', description: 'Refund amount in the order currency.', required: true },
@@ -336,9 +356,14 @@ function readTool(name: string, hooks: ReadToolHooks): ToolDefinition {
     description:
       OWNER_TOOL_DEF_BY_NAME.get(name)?.description ??
       SKILL_TOOL_DEF_BY_NAME.get(name)?.description ??
+      B2B_OUTBOUND_TOOL_DEF_BY_NAME.get(name)?.description ??
       `agentsws read tool ${name}`,
-    // WP162：读技能只要一个名字；别的只读工具照旧是那一张共用参数表
-    parameters: name === READ_SKILL_TOOL ? SKILL_PARAMS : READ_PARAMS,
+    // WP162：读技能只要一个名字；WP176：开发信那两个有自己的参数；别的只读工具照旧是那一张共用参数表
+    parameters:
+      name === READ_SKILL_TOOL
+        ? SKILL_PARAMS
+        : ((B2B_OUTBOUND_PARAMS[name] as typeof READ_PARAMS | undefined) ??
+          (B2B_OUTBOUND_TOOL_DEF_BY_NAME.has(name) ? {} : READ_PARAMS)),
     output: {
       schema: { type: 'json' },
       render: (args, value) => renderReadResult(name, args as Record<string, unknown>, value),
