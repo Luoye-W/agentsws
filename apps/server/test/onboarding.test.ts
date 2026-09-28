@@ -267,6 +267,35 @@ describe('46 §1 首次设置', () => {
   })
 
   // WP54（48 v2 L2 / 46 §1）
+  it('WP176：公司实体地址进档案——不给沿用、空串清空、地址不进日志', async () => {
+    const lan = createLanBus()
+    const m = await machine({ lan, host: '10.0.0.1', ownerEmail: 'wang@nordvolt.cn' })
+    const first = await data<{ postal_address?: string }>(
+      await m.call('PUT', '/v1/workspace/profile', {
+        body: { legal_name: '一家店', postal_address: '  8 Keji Rd,   Nanshan\n\nShenzhen  ' },
+      }),
+    )
+    expect(first.postal_address).toBe('8 Keji Rd, Nanshan\nShenzhen')
+    const kept = await data<{ postal_address?: string }>(
+      await m.call('PUT', '/v1/workspace/profile', { body: { legal_name: '一家店铺' } }),
+    )
+    expect(kept.postal_address).toBe('8 Keji Rd, Nanshan\nShenzhen')
+    const state = await data<{ profile?: { postal_address?: string } }>(
+      await m.call('GET', '/v1/onboarding/state'),
+    )
+    expect(state.profile?.postal_address).toBe('8 Keji Rd, Nanshan\nShenzhen')
+    const cleared = await data<{ postal_address?: string }>(
+      await m.call('PUT', '/v1/workspace/profile', {
+        body: { legal_name: '一家店铺', postal_address: '' },
+      }),
+    )
+    expect(cleared.postal_address).toBeUndefined()
+    const events = await data<{ events: { payload: Record<string, unknown> }[] }>(
+      await m.call('GET', '/v1/events?types=workspace.profile_set'),
+    )
+    expect(JSON.stringify(events.events)).not.toContain('Keji')
+  })
+
   it('「你卖的是」：默认实物、可改成虚拟产品、再存一次不给就沿用；选项与人话从垂直包来', async () => {
     const lan = createLanBus()
     const m = await machine({ lan, host: '10.0.0.1', ownerEmail: 'wang@nordvolt.cn' })

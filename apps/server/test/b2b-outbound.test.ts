@@ -73,7 +73,19 @@ const PROSPECTS: Prospect[] = [
 ]
 
 function setup(
-  opts: { cap?: number; address?: string; spf?: string[]; model?: (prompt: string) => string } = {},
+  opts: {
+    cap?: number
+    address?: string
+    spf?: string[]
+    model?: (prompt: string) => string
+    /** WP176：DKIM 选择器那几条 TXT（`<sel>._domainkey.<域名>` → 记录）。 */
+    dkimTxt?: Record<string, string[]>
+    /** WP176：公司档案（给了就装配 companyAddress / saveCompanyAddress）。 */
+    profile?: { address?: string; exists?: boolean }
+    cooldownDays?: number
+    /** WP176：云端检查地址（给了测试信就发到那里；`header` = 云端读到的信头）。 */
+    cloud?: { header?: string }
+  } = {},
 ) {
   let now = T0
   const clock = { now: () => now, sleep: async () => undefined }
@@ -120,6 +132,8 @@ function setup(
     deliverOutbound: () => ({ status: 'ok', execution_id: 'exec_1' }),
   })
   let n = 0
+  const timers: (() => void)[] = []
+  const profile = opts.profile
   outbound = createB2bOutbound({
     workspace_id: WS,
     store,
@@ -146,8 +160,35 @@ function setup(
     },
     dns: {
       txt: async (name) =>
-        name.startsWith('_dmarc.') ? [] : (opts.spf ?? ['v=spf1 include:_spf.mx.example ~all']),
+        name.includes('._domainkey.')
+          ? (opts.dkimTxt?.[name] ?? [])
+          : name.startsWith('_dmarc.')
+            ? []
+            : (opts.spf ?? ['v=spf1 include:_spf.mx.example ~all']),
     },
+    later: (fn) => {
+      timers.push(fn)
+    },
+    ...(opts.cloud === undefined
+      ? {}
+      : {
+          cloudAuthCheck: {
+            address: () => 'probe@check.example',
+            result: async () => opts.cloud?.header,
+          },
+        }),
+    ...(opts.cooldownDays === undefined ? {} : { declinedCooldownDays: () => opts.cooldownDays }),
+    ...(profile === undefined
+      ? {}
+      : {
+          companyAddress: () => profile.address,
+          saveCompanyAddress: (address: string | undefined) => {
+            if (profile.exists === false) return false
+            if (address === undefined) delete profile.address
+            else profile.address = address
+            return true
+          },
+        }),
     outboundHolder: () => ({
       person_id: 'p_leo',
       assignment_id: 'asg_outbound',
@@ -215,6 +256,7 @@ function setup(
     port,
     decide,
     mail,
+    timers,
     setNow: (t: string) => {
       now = t
     },
@@ -345,7 +387,7 @@ describe('开发信序列（服务端）', () => {
     expect(badSpf.sent.filter((m) => !m.subject.includes('体检'))).toHaveLength(0)
   })
 
-  it('回信：有意向转业务、不感兴趣进名单、自动回复顺延', async () => {
+  it('回信：有意向转业务、不感兴趣进冷却（WP176：不进名单）、自动回复顺延', async () => {
     const h = setup({ address: 'X Rd', cap: 3 })
     const first = await h.port.start(LEO, {})
     await chooseAndPass(h, first.approval_item_id ?? '')
@@ -370,9 +412,10 @@ describe('开发信序列（服务端）', () => {
       record: h.mail({ from: { email: 'mia@peak.example' }, subject: 'Re: x', text: 'No thanks.' }),
       note: { message_id: 'm', kind: 'outreach', contact_id: 'ctc_peak', enrollment_id: peak },
     })
-    expect(r2).toMatchObject({ klass: 'not_interested', action: 'suppress' })
+    expect(r2).toMatchObject({ klass: 'not_interested', action: 'cooldown' })
     expect(h.store.enrollment(peak)?.status).toBe('stopped')
-    expect(h.store.isSuppressed('mia@peak.example')).toBe(true)
+    expect(h.store.isSuppressed('mia@peak.example')).toBe(false)
+    expect(h.store.cooldown(addressHash('mia@peak.example'))).toMatchObject({ count: 1, days: 90 })
     h.outbound.onReply({
       record: h.mail({
         from: { email: 'sam@maple.example' },
@@ -442,5 +485,334 @@ describe('开发信序列（服务端）', () => {
     expect(emails.map((m) => m.by)).toEqual(['template', 'model', 'model'])
     expect(emails[0]?.subject).toBe('our products for Maple Mobile')
     expect(card?.summary).toContain('2 封由模型按开发信技能写，1 封用模板')
+  })
+})
+
+/** WP176：开一轮 → 选单独域名 → 体检过 → 批了首封卡，发出去。回：那张卡的 id。 */
+async function firstBatchSent(h: ReturnType<typeof setup>): Promise<void> {
+  const first = await h.port.start(LEO, { product: 'GaN chargers' })
+  await chooseAndPass(h, first.approval_item_id ?? '')
+  const id =
+    h.store.enrollments().find((x) => x.status === 'awaiting_approval')?.pending_approval_id ?? ''
+  await h.decide(id, { action: 'approve' })
+  await h.txn.executor.applyApproval(id)
+}
+
+const declineFrom = (h: ReturnType<typeof setup>, contact: string, email: string) => {
+  const e = h.store
+    .enrollments()
+    .filter((x) => x.contact_id === contact)
+    .at(-1)
+  return h.outbound.onReply({
+    record: h.mail({ from: { email }, subject: 'Re: x', text: 'No thanks, not interested.' }),
+    note: { message_id: 'm', kind: 'outreach', contact_id: contact, enrollment_id: e?.id ?? '' },
+  })
+}
+
+describe('WP176：不感兴趣只停这一轮', () => {
+  it('进冷却（90 天，写明到哪天）；冷却中开新一轮剔掉；期满能再选、卡上点名；第二次翻倍；退订仍永久', async () => {
+    const h = setup({ address: 'X Rd', cap: 3 })
+    await firstBatchSent(h)
+    expect(declineFrom(h, 'ctc_peak', 'mia@peak.example').action).toBe('cooldown')
+    expect(h.store.isSuppressed('mia@peak.example')).toBe(false)
+    const view = await h.port.view(LEO)
+    expect(view.cooling).toEqual([
+      expect.objectContaining({
+        contact_id: 'ctc_peak',
+        company: 'Peak Gadgets',
+        until: '2026-12-27T02:00:00.000Z',
+        count: 1,
+      }),
+    ])
+    // 冷却中：点名开也开不进来，原因写明到哪天
+    h.setNow('2026-10-20T02:00:00.000Z')
+    const during = await h.port.start(LEO, { contact_ids: ['ctc_peak'] })
+    expect(during.status).toBe('nothing_to_send')
+    expect(during.excluded[0]).toMatchObject({ reason: 'cooldown' })
+    expect(during.excluded[0]?.label).toContain('2026-12-27')
+    // 退订的另一位：永久
+    h.outbound.onReply({
+      record: h.mail({
+        from: { email: 'sam@maple.example' },
+        subject: 'Re: x',
+        text: 'unsubscribe',
+      }),
+      note: { message_id: 'm', kind: 'outreach', contact_id: 'ctc_maple' },
+    })
+    expect(h.store.isSuppressed('sam@maple.example')).toBe(true)
+    // 期满：能再选进新一轮，卡上点名"以前说过不感兴趣"
+    h.setNow('2026-12-28T02:00:00.000Z')
+    const again = await h.port.start(LEO, { contact_ids: ['ctc_peak', 'ctc_maple'] })
+    expect(again.excluded.map((x) => x.reason)).toEqual(['suppressed'])
+    expect(again.status).toBe('staged')
+    const card = await h.txn.approvals.get(again.approval_item_id ?? '')
+    expect(card?.summary).toContain('以前说过不感兴趣、冷却期已满又选进来的 1 位')
+    // 第二次说不感兴趣：冷却翻倍（180 天），卡上下次提醒"说过 2 次"
+    await h.decide(again.approval_item_id ?? '', { action: 'approve' })
+    await h.txn.executor.applyApproval(again.approval_item_id ?? '')
+    declineFrom(h, 'ctc_peak', 'mia@peak.example')
+    expect(h.store.cooldown(addressHash('mia@peak.example'))).toMatchObject({
+      count: 2,
+      days: 180,
+      until: '2027-06-26T02:00:00.000Z',
+    })
+    expect(h.events.some((e) => e.type === 'b2b.cooldown_started')).toBe(true)
+  })
+
+  it('冷却天数按职责阈值；老数据里「不感兴趣」进了名单的，迁移成冷却', async () => {
+    const h = setup({ address: 'X Rd', cap: 3, cooldownDays: 30 })
+    await firstBatchSent(h)
+    declineFrom(h, 'ctc_peak', 'mia@peak.example')
+    expect(h.store.cooldown(addressHash('mia@peak.example'))?.days).toBe(30)
+
+    const { openSqliteDriver, migrateSync } = await import('@agentsws/core/sql')
+    const { B2B_MIGRATIONS } = await import('../src/b2b-store.js')
+    const driver = openSqliteDriver({ path: ':memory:' })
+    migrateSync(driver, B2B_MIGRATIONS.slice(0, 3), T0)
+    const put = driver.prepareSync(
+      'INSERT INTO b2b_suppression (workspace_id, key_hash, at, body) VALUES (?, ?, ?, ?)',
+    )
+    put.runSync(
+      WS,
+      'h_declined',
+      T0,
+      JSON.stringify({
+        key_hash: 'h_declined',
+        masked: 'a***@x.com',
+        reason: 'declined',
+        contact_id: 'ctc_x',
+        at: T0,
+      }),
+    )
+    put.runSync(
+      WS,
+      'h_unsub',
+      T0,
+      JSON.stringify({ key_hash: 'h_unsub', masked: 'b***@x.com', reason: 'unsubscribe', at: T0 }),
+    )
+    migrateSync(driver, B2B_MIGRATIONS, T0)
+    const left = driver
+      .prepareSync<{ key_hash: string }>('SELECT key_hash FROM b2b_suppression')
+      .allSync()
+      .map((r) => r.key_hash)
+    expect(left).toEqual(['h_unsub'])
+    const moved = driver
+      .prepareSync<{ body: string }>('SELECT body FROM b2b_cooldown')
+      .allSync()
+      .map((r) => JSON.parse(r.body) as Record<string, unknown>)
+    expect(moved).toEqual([
+      {
+        key_hash: 'h_declined',
+        masked: 'a***@x.com',
+        count: 1,
+        days: 90,
+        declined_at: T0,
+        until: '2026-12-27T02:00:00.000Z',
+        contact_id: 'ctc_x',
+      },
+    ])
+    driver.closeSync()
+  })
+})
+
+describe('WP176：公司地址进档案、老邮箱免预热、跟进也由模型写', () => {
+  it('旧设置里的地址搬进公司档案（搬完只读显示）；档案没建搬不成就照旧读；PUT 设置写进档案', async () => {
+    const profile: { address?: string } = {}
+    const h = setup({ address: '8 Keji Rd, Shenzhen', profile })
+    const view = await h.port.view(LEO)
+    expect(profile.address).toBe('8 Keji Rd, Shenzhen')
+    expect(view.settings).toMatchObject({
+      postal_address: '8 Keji Rd, Shenzhen',
+      postal_address_from: 'profile',
+    })
+    expect(h.store.outboundSettings().postal_address).toBeUndefined()
+    expect(h.store.outboundSettings().postal_address_moved_at).toBe(T0)
+    await h.port.saveSettings(LEO, { postal_address: '9 New Rd' })
+    expect(profile.address).toBe('9 New Rd')
+    // 档案还没建：搬不成，照旧从这一格读
+    const noProfile = setup({ address: 'Old Rd', profile: { exists: false } })
+    const v2 = await noProfile.port.view(LEO)
+    expect(v2.settings).toMatchObject({
+      postal_address: 'Old Rd',
+      postal_address_from: 'outbound_settings',
+    })
+    // 档案里清空了地址：不能发（不会从旧设置里"复活"）
+    const cleared = setup({ address: 'Old Rd', profile: { address: 'Profile Rd' } })
+    await cleared.port.view(LEO)
+    await cleared.port.saveSettings(LEO, { postal_address: '' })
+    expect((await cleared.port.view(LEO)).needs).toContain('company_address')
+  })
+
+  it('勾了「这只邮箱已经正常发信很久」：直接 50 封、不预热，卡上一句提醒', async () => {
+    const h = setup({ address: 'X Rd', cap: 2 })
+    const first = await h.port.start(LEO, {})
+    // 先勾（选邮箱之前勾不上：还没有发信邮箱）
+    const item = await h.decide(first.approval_item_id ?? '', {
+      action: 'approve',
+      option: `separate:${SEPARATE}`,
+    })
+    await h.outbound.onSenderChosen(item)
+    const v = await h.port.saveSettings(LEO, { sender_established: true })
+    expect(v.sender).toMatchObject({ established: true })
+    expect(v.sender?.quota).toMatchObject({ cap: 50, warming: false })
+    h.outbound.observe(
+      h.mail({
+        message_id: '<m1@trybrand.example>',
+        headers: { 'authentication-results': 'mx; dkim=pass header.d=trybrand.example; spf=pass' },
+      }),
+    )
+    await new Promise((r) => setTimeout(r, 20))
+    const waiting = h.store.enrollments().filter((e) => e.status === 'awaiting_approval')
+    expect(waiting).toHaveLength(3)
+    const card = await h.txn.approvals.get(waiting[0]?.pending_approval_id ?? '')
+    expect(card?.summary).toContain('已经正常发信很久')
+    const off = await h.port.saveSettings(LEO, { sender_established: false })
+    expect(off.sender?.established).toBe(false)
+  })
+
+  it('跟进与收尾也先问模型；主题用系统那一个（Re: 首封主题）；写了价格退回模板', async () => {
+    const prompts: string[] = []
+    const h = setup({
+      address: 'X Rd',
+      cap: 3,
+      model: (prompt) => {
+        prompts.push(prompt)
+        if (prompt.includes('收尾'))
+          return 'Subject: bye\n\nHi, the price is USD 2 per unit if you change your mind.\n\nLeo'
+        return 'Subject: Quick one\n\nHi, saw your new accessory range online. Would a one-page overview of our GaN line help?\n\nLeo'
+      },
+    })
+    await firstBatchSent(h)
+    h.setNow('2026-10-01T02:30:00.000Z')
+    await h.outbound.sweep()
+    const follow = h.store
+      .enrollments()
+      .find((e) => e.next_step === 'follow_up' && e.status === 'awaiting_approval')
+    expect(prompts.some((p) => p.includes('跟进'))).toBe(true)
+    const card = await h.txn.approvals.get(follow?.pending_approval_id ?? '')
+    type Batch = { after: { emails: { by: string; subject: string; body: string }[] } }
+    const emails = (card?.payload as Batch | undefined)?.after.emails ?? []
+    expect(emails.length).toBeGreaterThan(0)
+    expect(emails.every((m) => m.by === 'model')).toBe(true)
+    expect(emails.every((m) => m.subject.startsWith('Re: '))).toBe(true)
+    await h.decide(follow?.pending_approval_id ?? '', { action: 'approve' })
+    await h.txn.executor.applyApproval(follow?.pending_approval_id ?? '')
+    h.setNow('2026-10-05T02:30:00.000Z')
+    // 满一周，体检重查一次（测试信又发了一封）：收回来之后再巡检一拍，收尾那一批出卡
+    await h.outbound.sweep()
+    const n = h.sent.map((m) => m.subject.includes('体检')).lastIndexOf(true) + 1
+    h.outbound.observe(
+      h.mail({
+        message_id: `<m${n}@trybrand.example>`,
+        headers: { 'authentication-results': 'mx; dkim=pass header.d=trybrand.example; spf=pass' },
+      }),
+    )
+    await h.outbound.sweep()
+    const fin = h.store
+      .enrollments()
+      .find((e) => e.next_step === 'final' && e.status === 'awaiting_approval')
+    const finCard = await h.txn.approvals.get(fin?.pending_approval_id ?? '')
+    const finEmails = (finCard?.payload as Batch | undefined)?.after.emails ?? []
+    expect(finEmails.length).toBeGreaterThan(0)
+    expect(finEmails.every((m) => m.by === 'template')).toBe(true)
+    expect(finEmails[0]?.body).toContain("won't follow up again")
+  })
+})
+
+describe('WP176：DKIM 检查不卡在 Gmail', () => {
+  const KEY = 'v=DKIM1; k=rsa; p=MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA'
+
+  it('测试信 10 分钟没收回来 → 按常见选择器查 DNS，查到公钥就算「DNS 已配置（未经实信验证）」并出卡', async () => {
+    const h = setup({
+      address: 'X Rd',
+      dkimTxt: { 'selector1._domainkey.trybrand.example': [KEY] },
+    })
+    const first = await h.port.start(LEO, {})
+    const item = await h.decide(first.approval_item_id ?? '', {
+      action: 'approve',
+      option: `separate:${SEPARATE}`,
+    })
+    await h.outbound.onSenderChosen(item)
+    expect(h.timers).toHaveLength(1)
+    // 9 分钟：还在等
+    h.setNow('2026-09-28T02:09:00.000Z')
+    expect((await h.port.view(LEO)).sender?.auth.dkim).toBe('pending')
+    // 11 分钟：定时那一拍到点
+    h.setNow('2026-09-28T02:11:00.000Z')
+    h.timers[0]?.()
+    await new Promise((r) => setTimeout(r, 30))
+    const view = await h.port.view(LEO)
+    expect(view.sender?.auth).toMatchObject({
+      dkim: 'pass',
+      dkim_via: 'dns',
+      dkim_selector: 'selector1',
+    })
+    expect(view.sender?.auth.notes.join(' ')).toContain('未经实信验证')
+    const waiting = h.store.enrollments().filter((e) => e.status === 'awaiting_approval')
+    expect(waiting.length).toBeGreaterThan(0)
+    const card = await h.txn.approvals.get(waiting[0]?.pending_approval_id ?? '')
+    expect(card?.summary).toContain('DKIM 按 DNS 记录判的（selector1）')
+    // 测试信后来真收回来了：以实信为准
+    h.outbound.observe(
+      h.mail({
+        message_id: '<m1@trybrand.example>',
+        headers: { 'authentication-results': 'mx; dkim=pass header.d=trybrand.example; spf=pass' },
+      }),
+    )
+    expect(h.store.sender(SEPARATE)?.auth).toMatchObject({ dkim: 'pass', dkim_via: 'test_mail' })
+    expect(h.store.sender(SEPARATE)?.auth.dkim_selector).toBeUndefined()
+  })
+
+  it('DNS 里也查不到：仍不发；接了云端检查地址就先问它要信头', async () => {
+    const h = setup({ address: 'X Rd' })
+    const first = await h.port.start(LEO, {})
+    const item = await h.decide(first.approval_item_id ?? '', {
+      action: 'approve',
+      option: `separate:${SEPARATE}`,
+    })
+    await h.outbound.onSenderChosen(item)
+    h.setNow('2026-09-28T02:15:00.000Z')
+    const view = await h.port.view(LEO)
+    expect(view.sender?.auth.dkim).toBe('missing')
+    expect(view.needs).toContain('sender_auth')
+    expect(h.store.enrollments().every((e) => e.status === 'queued')).toBe(true)
+
+    const c = setup({
+      address: 'X Rd',
+      cloud: { header: 'check.example; dkim=pass header.d=trybrand.example; spf=pass' },
+    })
+    const f2 = await c.port.start(LEO, {})
+    const i2 = await c.decide(f2.approval_item_id ?? '', {
+      action: 'approve',
+      option: `separate:${SEPARATE}`,
+    })
+    await c.outbound.onSenderChosen(i2)
+    expect(c.sent.find((m) => m.subject.includes('体检'))?.to).toEqual(['probe@check.example'])
+    c.setNow('2026-09-28T02:15:00.000Z')
+    expect((await c.port.view(LEO)).sender?.auth).toMatchObject({
+      dkim: 'pass',
+      dkim_via: 'test_mail',
+    })
+  })
+})
+
+describe('WP176：Run 里工具用的两个只读口', () => {
+  it('序列一览每人一行；回信分类只判不改', async () => {
+    const h = setup({ address: 'X Rd', cap: 3 })
+    await firstBatchSent(h)
+    const rows = (await h.port.sequences?.(LEO))?.rows ?? []
+    expect(rows).toHaveLength(3)
+    expect(rows[0]).toMatchObject({ status: 'active', last_step: 'first', next_step: 'follow_up' })
+    const cls = await h.port.classifyReply?.(LEO, {
+      subject: 'Re: GaN chargers',
+      text: 'Could you send me your price list?',
+    })
+    expect(cls).toMatchObject({ class: 'asks_price', action: 'hand_to_sales' })
+    expect(cls?.action_label).toContain('交给业务')
+    const no = await h.port.classifyReply?.(LEO, { subject: 'Re: x', text: 'Not interested.' })
+    expect(no).toMatchObject({ class: 'not_interested', action: 'cooldown' })
+    // 只判：序列没动
+    expect(h.store.enrollments().every((e) => e.status === 'active')).toBe(true)
+    await expect(h.port.classifyReply?.(LEO, {})).rejects.toThrow('没有信可分')
   })
 })

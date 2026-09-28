@@ -23,6 +23,9 @@ import type {
   B2bOutboundPort,
   B2bOutboundSettingsInput,
   B2bOutboundView,
+  B2bReplyClassifyInput,
+  B2bReplyClassifyView,
+  B2bSequenceRowView,
   B2bSequenceStartInput,
   B2bSequenceStartView,
 } from '@agentsws/api'
@@ -33,13 +36,20 @@ import {
   type B2bOutreachDraft,
   type B2bOutreachVars,
   type B2bProspect,
+  type B2bReplyAction,
   classifyB2bReply,
   coldEmailPrompt,
+  cooldownLabel,
+  DKIM_TEST_WAIT_MS,
+  declineCooldown,
+  dkimWaitedTooLong,
   domainOfAddress,
   draftB2bOutreach,
   EXCLUDE_REASON_ZH,
+  evaluateDkimDns,
   evaluateSenderAuth,
   hasRelationship,
+  inCooldown,
   isSeparateSendingDomain,
   listUnsubscribeHeader,
   localDay,
@@ -62,6 +72,7 @@ import type {
   AssignmentId,
   B2bAccount,
   B2bContact,
+  B2bDeclineCooldown,
   B2bEnrollment,
   B2bQueuedReason,
   B2bSender,
@@ -75,7 +86,12 @@ import type {
   RoleId,
   WorkspaceId,
 } from '@agentsws/contracts'
-import { B2B_DE_AT_REASON, B2B_SENDER_CHOICE_KIND } from '@agentsws/contracts'
+import {
+  B2B_DE_AT_REASON,
+  B2B_DECLINED_COOLDOWN_DAYS,
+  B2B_DKIM_SELECTORS,
+  B2B_SENDER_CHOICE_KIND,
+} from '@agentsws/contracts'
 import { nextInSequence, outreachQuota, warmupCap } from '@agentsws/core'
 import type { B2bDeckData } from '@agentsws/deck'
 import type { BackendResult, StageInput, StageOutcome } from '@agentsws/txn'
@@ -126,6 +142,32 @@ export interface B2bOutboundOptions {
   }): ((input: { prompt: string }) => Promise<{ text: string }>) | undefined
   /** `cold-email` 技能正文。 */
   coldEmailSkill?(): string | undefined
+  /** WP176：「不感兴趣」冷却天数（职责阈值 `b2b_declined_cooldown_days`；不给 = 90）。 */
+  declinedCooldownDays?(): number | undefined
+  /**
+   * WP176：公司档案上的公司实体地址（开发信页脚、报价单、单证同一份）。不给 = 老装配：
+   * 仍用「主动开发」设置里那一格。
+   */
+  companyAddress?(): string | undefined
+  /** WP176：写回公司档案（旧设置里的地址搬过去 / 老客户端 PUT 设置时）。档案还没建回 `false`。 */
+  saveCompanyAddress?(address: string | undefined): boolean
+  /**
+   * WP176：云端检查地址（测试信发到云端、由云端读信头；网关那边做，这里只留接口）。
+   * 给了且回得出地址，测试信就发到那里，等满 10 分钟先问它要信头，要不到再按 DNS 兜底。
+   */
+  cloudAuthCheck?: {
+    address(sender: string): string | undefined
+    result(test_message_id: string): Promise<string | undefined>
+  }
+  /** WP176：定个时（测试信等满 10 分钟再按 DNS 查 DKIM）。不给用 `setTimeout`（unref）。 */
+  later?(fn: () => void, ms: number): void
+  /** WP176：按消息库 id 取一封信（Run 里「把一封回信分类」用）。 */
+  message?(
+    id: string,
+  ):
+    | { subject: string; text: string; headers: Record<string, string> }
+    | undefined
+    | Promise<{ subject: string; text: string; headers: Record<string, string> } | undefined>
 }
 
 export interface B2bOutboundAssembly {
@@ -139,7 +181,8 @@ export interface B2bOutboundAssembly {
   /** 回我们开发信的那一封：分类、停序列、该进名单的进名单。 */
   onReply(input: { record: MessageRecord; note: B2bOutboundNote }): {
     klass: B2bEnrollment['reply_class'] & string
-    action: 'hand_to_sales' | 'suppress' | 'postpone' | 'stop'
+    /** WP176 加 `cooldown`：不感兴趣只停这一轮、进冷却（不进抑制名单）。 */
+    action: B2bReplyAction
     label: string
   }
   /** 退订 / 硬退信（分拣时认出来的）：这个人的序列停下。 */
@@ -161,6 +204,15 @@ export const STEP_ZH: Readonly<Record<'first' | 'follow_up' | 'final', string>> 
   first: '第一轮首封',
   follow_up: '跟进',
   final: '收尾',
+}
+
+/** WP176：回信之后接下来怎么办（Run 里分类工具回的那一句）。 */
+export const REPLY_ACTION_ZH: Readonly<Record<B2bReplyAction, string>> = {
+  hand_to_sales: '停序列，交给业务',
+  suppress: '停序列，进抑制名单（永久）',
+  postpone: '自动回复，不算回信：按回来日期顺延',
+  stop: '停序列',
+  cooldown: '停这一轮，进冷却（期满可以再联系）',
 }
 
 export const QUEUED_ZH: Readonly<Record<B2bQueuedReason, string>> = {
@@ -215,6 +267,68 @@ export function createB2bOutbound(options: B2bOutboundOptions): B2bOutboundAssem
   }
 
   const settingsOf = () => store.outboundSettings()
+
+  /**
+   * WP176（Fable 09-28）：公司实体地址搬进公司档案。「主动开发」设置里原来那一格有值、档案里还没有，
+   * 就搬过去（档案里已经有了以档案为准），搬完把这一格清掉。档案还没建过就搬不成，照旧读这一格。
+   */
+  const moveAddress = (): void => {
+    const settings = settingsOf()
+    const old = settings.postal_address?.trim()
+    if (old === undefined || old === '' || options.saveCompanyAddress === undefined) return
+    const current = options.companyAddress?.()?.trim()
+    const had = current !== undefined && current !== ''
+    if (!had && !options.saveCompanyAddress(old)) return
+    const { postal_address: _moved, ...rest } = settings
+    const now = clock.now()
+    store.saveOutboundSettings({ ...rest, postal_address_moved_at: now, updated_at: now })
+    emit('b2b.company_address_moved', { profile_had_address: had })
+  }
+
+  /** 页脚用的公司实体地址（公司档案为准；档案还没建时兜底用旧设置那一格）。 */
+  const postalAddress = (): { value?: string; from: 'profile' | 'outbound_settings' } => {
+    moveAddress()
+    const profile = options.companyAddress?.()?.trim()
+    if (profile !== undefined && profile !== '') return { value: profile, from: 'profile' }
+    const old = settingsOf().postal_address?.trim()
+    if (old !== undefined && old !== '') return { value: old, from: 'outbound_settings' }
+    return { from: options.companyAddress === undefined ? 'outbound_settings' : 'profile' }
+  }
+
+  /* ── WP176：「不感兴趣」冷却 ─────────────────────────────────────────── */
+
+  const cooldownDays = (): number => {
+    const d = options.declinedCooldownDays?.()
+    return d !== undefined && Number.isFinite(d) && d > 0 ? d : B2B_DECLINED_COOLDOWN_DAYS
+  }
+
+  /** 冷却记录两种认法：地址哈希（同一个人换了联系人记录也认得出）、联系人 id（从别的地址回的信）。 */
+  const cooldownIndex = (): {
+    byHash: Map<string, B2bDeclineCooldown>
+    byContact: Map<string, B2bDeclineCooldown>
+  } => {
+    const byHash = new Map<string, B2bDeclineCooldown>()
+    const byContact = new Map<string, B2bDeclineCooldown>()
+    for (const c of store.cooldowns()) {
+      byHash.set(c.key_hash, c)
+      if (c.contact_id === undefined) continue
+      const prior = byContact.get(c.contact_id)
+      if (prior === undefined || prior.until < c.until) byContact.set(c.contact_id, c)
+    }
+    return { byHash, byContact }
+  }
+  const cooldownOf = (
+    index: ReturnType<typeof cooldownIndex>,
+    contact: { id: string; email_key_hash?: string } | undefined,
+  ): B2bDeclineCooldown | undefined => {
+    if (contact === undefined) return undefined
+    const a =
+      contact.email_key_hash === undefined ? undefined : index.byHash.get(contact.email_key_hash)
+    const b = index.byContact.get(contact.id)
+    if (a === undefined) return b
+    if (b === undefined) return a
+    return a.until >= b.until ? a : b
+  }
   const saveEnrollment = (e: B2bEnrollment, patch: Partial<B2bEnrollment>): B2bEnrollment => {
     const next = { ...e, ...patch, updated_at: clock.now() }
     store.saveEnrollment(next)
@@ -239,6 +353,8 @@ export function createB2bOutbound(options: B2bOutboundOptions): B2bOutboundAssem
           : { warmup_days: num(caps.warmup_days) as number }),
       },
       ...(sender.first_sent_at === undefined ? {} : { first_sent_at: sender.first_sent_at }),
+      // WP176：用户勾了「这只邮箱已经正常发信很久」——不预热
+      established: sender.established !== undefined,
       now,
     })
     const tz = options.timeZone()
@@ -272,7 +388,12 @@ export function createB2bOutbound(options: B2bOutboundOptions): B2bOutboundAssem
         .filter((x): x is string => x !== undefined),
     )
     const suppressed = new Set(store.suppressions().map((s) => s.key_hash))
-    const enrolled = new Set(store.enrollments().map((e) => e.contact_id))
+    // WP176：说过不感兴趣而停下的那一轮不算"开过序列"——冷却期满可以再开；其余开过的照旧不自动重开
+    const declined = new Set<string>()
+    const enrolled = new Set<string>()
+    for (const e of store.enrollments())
+      (e.reply_class === 'not_interested' ? declined : enrolled).add(e.contact_id)
+    const cooling = cooldownIndex()
     return store
       .list<ContactRow>('b2b_contact')
       .filter((c) => ids === undefined || ids.includes(c.id))
@@ -290,7 +411,14 @@ export function createB2bOutbound(options: B2bOutboundOptions): B2bOutboundAssem
           existing_relationship:
             (a !== undefined && hasRelationship(a)) || inquired.has(c.account_id),
           suppressed: typeof c.email_key_hash === 'string' && suppressed.has(c.email_key_hash),
-          in_sequence: enrolled.has(c.id),
+          ...(() => {
+            const cd = cooldownOf(cooling, c)
+            return {
+              // 说过不感兴趣却找不到冷却记录（不该有）：按"开过序列"算，宁可不发
+              in_sequence: enrolled.has(c.id) || (declined.has(c.id) && cd === undefined),
+              ...(cd === undefined ? {} : { cooldown_until: cd.until, declined_count: cd.count }),
+            }
+          })(),
         }
       })
   }
@@ -392,10 +520,12 @@ export function createB2bOutbound(options: B2bOutboundOptions): B2bOutboundAssem
     ])
     let test_message_id: string | undefined
     const notes: string[] = []
+    // WP176：接了云端检查地址就发到那里（Gmail 自己发给自己的信常常不进收件箱）；没接照旧发给自己
+    const probe = options.cloudAuthCheck?.address(sender.address)
     if (options.sendMail !== undefined) {
       const sent = await options.sendMail({
         account: sender.address,
-        to: [sender.address],
+        to: [probe ?? sender.address],
         subject: 'Agents 工坊发信体检（可以删掉）',
         text: '这是一封发信体检的测试信：Agents 工坊读它的信头，看 DKIM 签没签上。可以直接删掉。',
         idempotency_key: `b2b-auth:${sender.address}:${now}`,
@@ -416,7 +546,7 @@ export function createB2bOutbound(options: B2bOutboundOptions): B2bOutboundAssem
         ...ev,
         notes: [...ev.notes, ...notes],
         checked_at: now,
-        ...(test_message_id === undefined ? {} : { test_message_id }),
+        ...(test_message_id === undefined ? {} : { test_message_id, test_sent_at: now }),
       },
       dns: {
         ...(spf_txt === undefined ? {} : { spf_txt }),
@@ -430,7 +560,108 @@ export function createB2bOutbound(options: B2bOutboundOptions): B2bOutboundAssem
       dkim: ev.dkim,
       dmarc: ev.dmarc,
     })
+    // WP176：测试信 10 分钟还没收回来，就按 DNS 查 DKIM（到点再看一眼；那时已收回来就什么都不做）
+    if (test_message_id !== undefined) {
+      const tick = (): void => {
+        void settleDkim()
+          .then((ok) => {
+            if (ok) advanceLater()
+          })
+          .catch((e: unknown) => {
+            emit('b2b.sender_check_failed', { detail: String(e).slice(0, 160) })
+          })
+      }
+      if (options.later !== undefined) options.later(tick, DKIM_TEST_WAIT_MS + 1_000)
+      else setTimeout(tick, DKIM_TEST_WAIT_MS + 1_000).unref?.()
+    }
     return next
+  }
+
+  /** 测试信的信头到手了（收件箱里收回来 / 云端检查地址读到）：判 DKIM。回 SPF + DKIM 过没过。 */
+  const applyTestHeader = (sender: B2bSender, header: string, from: string): boolean => {
+    const ev = evaluateSenderAuth({
+      domain: sender.domain,
+      spf_txt: sender.dns?.spf_txt,
+      dmarc_txt: sender.dns?.dmarc_txt,
+      auth_header: header,
+      test_sent: true,
+    })
+    const {
+      test_message_id: _t,
+      test_sent_at: _s,
+      dkim_selector: _k,
+      dkim_via: _v,
+      ...rest
+    } = sender.auth
+    store.saveSender({ ...sender, auth: { ...rest, ...ev, checked_at: clock.now() } })
+    emit('b2b.sender_checked', {
+      domain: sender.domain,
+      spf: ev.spf,
+      dkim: ev.dkim,
+      dmarc: ev.dmarc,
+      from,
+    })
+    return senderAuthOk(ev)
+  }
+
+  /**
+   * WP176（Fable 09-28）：**DKIM 检查不卡在 Gmail**。测试信发出去满 10 分钟还没收回来：
+   * 先问云端检查地址要信头（接了的话），要不到就按常见选择器查 DKIM 的 DNS 记录——查到公钥就算
+   * 「DNS 已配置（未经实信验证）」，允许发（卡上写明）；查不到仍不发。测试信的 Message-ID 留着：
+   * 之后真收回来了，照样按信头再判一次（实信结果为准）。回：有没有哪只邮箱因此变成能发了。
+   */
+  const settleDkim = async (): Promise<boolean> => {
+    const now = clock.now()
+    let unlocked = false
+    for (const sender of store.senders()) {
+      if (!dkimWaitedTooLong(sender.auth, now)) continue
+      const cloud = options.cloudAuthCheck
+      const id = sender.auth.test_message_id
+      if (cloud !== undefined && id !== undefined) {
+        let header: string | undefined
+        try {
+          header = await cloud.result(id)
+        } catch {
+          header = undefined
+        }
+        if (header !== undefined) {
+          if (applyTestHeader(sender, header, 'cloud_probe')) unlocked = true
+          continue
+        }
+      }
+      const records: { selector: string; txt: string[] | undefined }[] = []
+      for (const selector of B2B_DKIM_SELECTORS) {
+        const t = await txt(`${selector}._domainkey.${sender.domain}`)
+        records.push({ selector, txt: t })
+        if (
+          evaluateDkimDns({ domain: sender.domain, records: [{ selector, txt: t }] }).dkim ===
+          'pass'
+        )
+          break
+      }
+      const r = evaluateDkimDns({ domain: sender.domain, records })
+      const { dkim_selector: _k, dkim_via: _v, ...rest } = sender.auth
+      const auth = {
+        ...rest,
+        dkim: r.dkim,
+        notes: [...rest.notes.filter((n) => !n.startsWith('DKIM：')), r.note],
+        checked_at: now,
+        ...(r.dkim === 'pass' && r.selector !== undefined
+          ? { dkim_via: 'dns' as const, dkim_selector: r.selector }
+          : {}),
+      }
+      store.saveSender({ ...sender, auth })
+      emit('b2b.sender_checked', {
+        domain: sender.domain,
+        spf: auth.spf,
+        dkim: auth.dkim,
+        dmarc: auth.dmarc,
+        from: 'dns_selector',
+        ...(r.selector === undefined ? {} : { selector: r.selector }),
+      })
+      if (senderAuthOk(auth)) unlocked = true
+    }
+    return unlocked
   }
 
   /* ── 面板与设置 ─────────────────────────────────────────────────────── */
@@ -443,19 +674,21 @@ export function createB2bOutbound(options: B2bOutboundOptions): B2bOutboundAssem
     for (const e of enrollments)
       if (e.status === 'queued' && e.queued_reason !== undefined)
         queued[e.queued_reason] = (queued[e.queued_reason] ?? 0) + 1
+    const now = clock.now()
     const screened = screenProspects(prospectsOf(), {
       de_at_confirmed: settings.de_at !== undefined,
+      now,
     })
+    const address = postalAddress()
     const needs: B2bQueuedReason[] = []
     if (sender === undefined) needs.push('sender_choice')
-    if ((settings.postal_address ?? '').trim() === '') needs.push('company_address')
+    if (address.value === undefined) needs.push('company_address')
     if (sender !== undefined && !senderAuthOk(sender.auth)) needs.push('sender_auth')
     return {
       settings: {
         ...(settings.company_name === undefined ? {} : { company_name: settings.company_name }),
-        ...(settings.postal_address === undefined
-          ? {}
-          : { postal_address: settings.postal_address }),
+        ...(address.value === undefined ? {} : { postal_address: address.value }),
+        postal_address_from: address.from,
         ...(settings.sender_name === undefined ? {} : { sender_name: settings.sender_name }),
         de_at_confirmed: settings.de_at !== undefined,
         ...(settings.sender_choice === undefined ? {} : { sender_choice: settings.sender_choice }),
@@ -473,6 +706,7 @@ export function createB2bOutbound(options: B2bOutboundOptions): B2bOutboundAssem
               address: sender.address,
               separate_domain: sender.separate_domain,
               auth: sender.auth,
+              established: sender.established !== undefined,
               quota: quotaOf(
                 sender,
                 actor?.assignment_id ?? options.outboundHolder()?.assignment_id,
@@ -484,7 +718,34 @@ export function createB2bOutbound(options: B2bOutboundOptions): B2bOutboundAssem
       queued,
       eligible: screened.eligible.length,
       excluded: excludedSummary(screened.excluded.filter((x) => x.reason !== 'in_sequence')),
+      cooling: coolingList(now),
     }
+  }
+
+  /** WP176：冷却中的人（最先到期的在前，最多 50 位）。名字从联系人库里取，认不出只给遮过的地址。 */
+  const coolingList = (now: string): NonNullable<B2bOutboundView['cooling']> => {
+    const contacts = new Map(store.list<ContactRow>('b2b_contact').map((c) => [c.id, c]))
+    const byHash = new Map<string, ContactRow>()
+    for (const c of contacts.values())
+      if (c.email_key_hash !== undefined) byHash.set(c.email_key_hash, c)
+    const accounts = new Map(store.list<B2bAccount>('b2b_account').map((a) => [a.id, a]))
+    return store
+      .cooldowns()
+      .filter((c) => inCooldown(c.until, now))
+      .slice(0, 50)
+      .map((c) => {
+        const contact =
+          (c.contact_id === undefined ? undefined : contacts.get(c.contact_id)) ??
+          byHash.get(c.key_hash)
+        const company = contact === undefined ? undefined : accounts.get(contact.account_id)?.name
+        return {
+          ...(contact === undefined ? {} : { contact_id: contact.id, name: contact.name }),
+          ...(company === undefined ? {} : { company }),
+          masked: c.masked,
+          until: c.until,
+          count: c.count,
+        }
+      })
   }
 
   const saveSettings = (actor: B2bActor, input: B2bOutboundSettingsInput): B2bOutboundView => {
@@ -493,8 +754,14 @@ export function createB2bOutbound(options: B2bOutboundOptions): B2bOutboundAssem
       v === undefined ? undefined : v.trim() === '' ? undefined : v.trim()
     const next = { ...prior, updated_at: clock.now() }
     if (input.company_name !== undefined) next.company_name = trim(input.company_name) as string
-    if (input.postal_address !== undefined)
-      next.postal_address = trim(input.postal_address) as string
+    // WP176：地址的真源是公司档案——写得进档案就写档案（这一格清掉），档案还没建才落在这里
+    if (input.postal_address !== undefined) {
+      const moved = options.saveCompanyAddress?.(trim(input.postal_address)) === true
+      if (moved) {
+        delete next.postal_address
+        next.postal_address_moved_at = clock.now()
+      } else next.postal_address = trim(input.postal_address) as string
+    }
     if (input.sender_name !== undefined) next.sender_name = trim(input.sender_name) as string
     for (const k of ['company_name', 'postal_address', 'sender_name'] as const)
       if (next[k] === undefined) delete next[k]
@@ -504,6 +771,20 @@ export function createB2bOutbound(options: B2bOutboundOptions): B2bOutboundAssem
     store.saveOutboundSettings(next)
     if (input.de_at_confirm !== undefined)
       emit('b2b.de_at_confirmation', { confirmed: input.de_at_confirm, by: actor.person_id })
+    // WP176：「这只邮箱已经正常发信很久」——勾了不预热（新域名别勾）
+    const sender = currentSender()
+    if (input.sender_established !== undefined && sender !== undefined) {
+      const { established: _e, ...rest } = sender
+      store.saveSender(
+        input.sender_established
+          ? { ...rest, established: { by: actor.person_id, at: clock.now() } }
+          : rest,
+      )
+      emit('b2b.sender_established', {
+        domain: sender.domain,
+        established: input.sender_established,
+      })
+    }
     return view(actor)
   }
 
@@ -524,7 +805,10 @@ export function createB2bOutbound(options: B2bOutboundOptions): B2bOutboundAssem
   const ourCompany = (): string =>
     settingsOf().company_name ?? options.companyName() ?? store.workspace_id
 
-  /** 一封：首封先问模型（按 cold-email 技能），不合规矩就退回模板；跟进与收尾用模板。 */
+  /**
+   * 一封：先问模型（按 cold-email 技能），不合规矩就退回模板。WP176（Fable 09-28）：跟进与收尾
+   * 也由模型写（和首封同一个上限、同一道承诺词自查）；它们回在首封那条线程里，主题一律用系统那一个。
+   */
   const draftOne = async (
     actor: B2bActor,
     step: B2bSequenceStep,
@@ -546,7 +830,7 @@ export function createB2bOutbound(options: B2bOutboundOptions): B2bOutboundAssem
     let draft: B2bOutreachDraft = draftB2bOutreach(step, vars)
     const skill = options.coldEmailSkill?.()
     const model =
-      step === 'first' && budget.model > 0 && skill !== undefined
+      budget.model > 0 && skill !== undefined
         ? options.drafter?.({
             assignment_id: actor.assignment_id,
             role_id: actor.role_id,
@@ -560,6 +844,7 @@ export function createB2bOutbound(options: B2bOutboundOptions): B2bOutboundAssem
           prompt: coldEmailPrompt({
             skill,
             vars,
+            step,
             prospect: {
               ...(contact?.title === undefined ? {} : { title: contact.title }),
               ...(account?.country === undefined ? {} : { country: account.country }),
@@ -568,7 +853,10 @@ export function createB2bOutbound(options: B2bOutboundOptions): B2bOutboundAssem
             },
           }),
         })
-        const parsed = parseModelDraft(out.text)
+        const raw = parseModelDraft(out.text)
+        // 跟进 / 收尾回在同一条线程里：主题用系统那一个（`Re:` + 首封主题），模型写的主题不用
+        const parsed =
+          raw === undefined || step === 'first' ? raw : { ...raw, subject: draft.subject }
         if (parsed !== undefined && reviewB2bOutreach({ step, ...parsed }).ok)
           draft = { step, ...parsed, by: 'model' }
       } catch {
@@ -619,10 +907,40 @@ export function createB2bOutbound(options: B2bOutboundOptions): B2bOutboundAssem
     const { mandate, level } = actionOf(actor.assignment_id)
     const footer = outreachFooter({
       company_name: ourCompany(),
-      postal_address: settings.postal_address,
+      postal_address: postalAddress().value,
       step,
       source: contacts[0]?.source,
     })
+    // WP176：以前说过不感兴趣、冷却期满又选进来的人——卡上点名（说过两次的另外提醒）
+    const cooling = cooldownIndex()
+    const again = (step === 'first' ? list : [])
+      .map((e, i) => ({ e, c: contacts[i], cd: cooldownOf(cooling, contacts[i]) }))
+      .filter((x) => x.cd !== undefined)
+    const againNotes =
+      again.length === 0
+        ? []
+        : [
+            `以前说过不感兴趣、冷却期已满又选进来的 ${again.length} 位：${again
+              .slice(0, 3)
+              .map(
+                (x) =>
+                  `${accounts.get(x.e.account_id)?.name ?? x.e.account_id}（${x.c?.name ?? '—'}${(x.cd?.count ?? 0) >= 2 ? `，说过 ${x.cd?.count} 次` : ''}）`,
+              )
+              .join('、')}${again.length > 3 ? ' 等' : ''}。`,
+            ...(again.some((x) => (x.cd?.count ?? 0) >= 2)
+              ? ['说过两次以上不感兴趣的，这一轮再没回音就别再找了。']
+              : []),
+          ]
+    const senderNotes = [
+      ...(sender.established === undefined
+        ? []
+        : ['这只邮箱标了「已经正常发信很久」，不走预热（每天按上限发）；新域名别这么标。']),
+      ...(sender.auth.dkim_via === 'dns'
+        ? [
+            `DKIM 按 DNS 记录判的（${sender.auth.dkim_selector ?? '常见选择器'}）：测试信没收回来，未经实信验证。`,
+          ]
+        : []),
+    ]
     const batch_id = nextId('obt')
     const run_id = `run_b2b_out_${nextId('r')}`
     const ids = list.map((e) => e.contact_id)
@@ -638,6 +956,8 @@ export function createB2bOutbound(options: B2bOutboundOptions): B2bOutboundAssem
       `${STEP_ZH[step]} · ${list.length} 封 · 从 ${sender.address} 发${sender.separate_domain ? '' : `（主域名：${PRIMARY_DOMAIN_RISK}）`}`,
       `收件：${names.join('、')}${list.length > 3 ? ` 等 ${list.length} 家` : ''}`,
       ...notes,
+      ...againNotes,
+      ...senderNotes,
       byModel > 0 ? `${byModel} 封由模型按开发信技能写，${emails.length - byModel} 封用模板。` : '',
       '',
       sample === undefined ? '' : `样稿（第 1 封）：\nSubject: ${sample.subject}\n\n${sample.body}`,
@@ -747,6 +1067,8 @@ export function createB2bOutbound(options: B2bOutboundOptions): B2bOutboundAssem
       queued_tomorrow: 0,
     }
     if (pending.length === 0) return none
+    // WP176：测试信等满 10 分钟没收回来的，先按 DNS 把 DKIM 判了
+    await settleDkim()
     const settings = settingsOf()
     const sender = currentSender()
     if (sender === undefined) {
@@ -766,14 +1088,15 @@ export function createB2bOutbound(options: B2bOutboundOptions): B2bOutboundAssem
               : '先在卡上选用哪只邮箱发（强烈建议单独的发信域名）。',
       }
     }
-    if ((settings.postal_address ?? '').trim() === '') {
+    if (postalAddress().value === undefined) {
       markQueued(pending, 'company_address')
       return {
         status: 'queued',
         queued_reason: 'company_address',
         picked: 0,
         queued_tomorrow: 0,
-        message: '每封开发信的页脚都要公司实体地址（法规要求），先在「主动开发」里填上再发。',
+        message:
+          '每封开发信的页脚都要公司实体地址（法规要求），先在「设置 → 公司档案」里填上再发。',
       }
     }
     let checked = sender
@@ -804,6 +1127,7 @@ export function createB2bOutbound(options: B2bOutboundOptions): B2bOutboundAssem
     // 德奥默认没放进来的那几位：卡上也写一句原因（选邮箱之后才出卡时，开一轮那一刻的说明已经过去了）
     const deAt = screenProspects(prospectsOf(), {
       de_at_confirmed: settings.de_at !== undefined,
+      now: clock.now(),
     }).excluded.filter((x) => x.reason === 'de_at').length
     const deAtNote =
       deAt > 0 && !notes.some((n) => n.includes(B2B_DE_AT_REASON))
@@ -838,6 +1162,7 @@ export function createB2bOutbound(options: B2bOutboundOptions): B2bOutboundAssem
     const settings = settingsOf()
     const { eligible, excluded } = screenProspects(prospectsOf(input.contact_ids), {
       de_at_confirmed: settings.de_at !== undefined,
+      now: clock.now(),
     })
     const shown = excluded
       .filter((x) => input.contact_ids !== undefined || x.reason !== 'in_sequence')
@@ -846,7 +1171,11 @@ export function createB2bOutbound(options: B2bOutboundOptions): B2bOutboundAssem
         name: x.prospect.name,
         company: x.prospect.company,
         reason: x.reason,
-        label: EXCLUDE_REASON_ZH[x.reason],
+        // WP176：冷却中的写明到哪天
+        label:
+          x.reason === 'cooldown' && x.prospect.cooldown_until !== undefined
+            ? cooldownLabel(x.prospect.cooldown_until)
+            : EXCLUDE_REASON_ZH[x.reason],
       }))
     const now = clock.now()
     for (const p of eligible)
@@ -942,9 +1271,10 @@ export function createB2bOutbound(options: B2bOutboundOptions): B2bOutboundAssem
     // 发之前再查一次：体检没过就不发（fail-closed，docs/84 §11.1 第 4 条）
     if (!senderAuthOk(sender.auth))
       return failed(`发信邮箱 ${sender.address} 体检没过（SPF / DKIM），没发。`, 'sender_auth')
-    const settings = settingsOf()
     if (options.sendMail === undefined) return failed('这台机器上没有能发信的邮箱，没发。')
     const now = clock.now()
+    const postal = postalAddress().value
+    const cooling = cooldownIndex()
     let sent = 0
     let retry = false
     const errors: string[] = []
@@ -952,7 +1282,7 @@ export function createB2bOutbound(options: B2bOutboundOptions): B2bOutboundAssem
       const contact = store.get<ContactRow>('b2b_contact', e.contact_id)
       const footer = outreachFooter({
         company_name: ourCompany(),
-        postal_address: settings.postal_address,
+        postal_address: postal,
         step,
         source: contact?.source,
       })
@@ -963,6 +1293,12 @@ export function createB2bOutbound(options: B2bOutboundOptions): B2bOutboundAssem
         store.suppressions().some((s) => s.key_hash === contact.email_key_hash)
       ) {
         saveEnrollment(e, { status: 'stopped', stop_reason: 'suppressed' })
+        continue
+      }
+      // WP176：批卡之前这个人说了不感兴趣（从别的线程 / 别的联系人记录）——冷却中，这一封不发
+      const cd = contact === undefined ? undefined : cooldownOf(cooling, contact)
+      if (cd !== undefined && inCooldown(cd.until, now)) {
+        saveEnrollment(e, { status: 'stopped', stop_reason: 'cooldown' })
         continue
       }
       const address =
@@ -1100,23 +1436,8 @@ export function createB2bOutbound(options: B2bOutboundOptions): B2bOutboundAssem
           norm(s.auth.test_message_id) === norm(record.message_id as string),
       )
     if (sender === undefined) return
-    const ev = evaluateSenderAuth({
-      domain: sender.domain,
-      spf_txt: sender.dns?.spf_txt,
-      dmarc_txt: sender.dns?.dmarc_txt,
-      auth_header: record.headers['authentication-results'] ?? '',
-      test_sent: true,
-    })
-    const { test_message_id: _t, ...rest } = sender.auth
-    store.saveSender({ ...sender, auth: { ...rest, ...ev, checked_at: clock.now() } })
-    emit('b2b.sender_checked', {
-      domain: sender.domain,
-      spf: ev.spf,
-      dkim: ev.dkim,
-      dmarc: ev.dmarc,
-      from: 'test_mail',
-    })
-    if (senderAuthOk(ev)) advanceLater()
+    if (applyTestHeader(sender, record.headers['authentication-results'] ?? '', 'test_mail'))
+      advanceLater()
   }
 
   const enrollmentOf = (note: B2bOutboundNote): B2bEnrollment | undefined =>
@@ -1151,14 +1472,48 @@ export function createB2bOutbound(options: B2bOutboundOptions): B2bOutboundAssem
           status:
             action === 'hand_to_sales'
               ? 'handed_to_sales'
-              : action === 'suppress'
+              : action === 'suppress' || action === 'cooldown'
                 ? 'stopped'
                 : 'replied',
           reply_class: cls.klass,
           replied_at: now,
-          ...(action === 'suppress' ? { stop_reason: cls.klass } : {}),
+          ...(action === 'suppress' || action === 'cooldown' ? { stop_reason: cls.klass } : {}),
         })
       }
+    }
+    /*
+     * WP176（Luoye 09-28）：「不感兴趣」只停这一轮——进冷却（默认 90 天，职责阈值可改），
+     * 期满可以再被选进新一轮；同一个人第二次说冷却翻倍。**不进永久抑制名单**。
+     */
+    let cooldown: B2bDeclineCooldown | undefined
+    if (action === 'cooldown') {
+      const key_hash = addressHash(record.from.email)
+      const prior = cooldownOf(cooldownIndex(), {
+        id: note.contact_id ?? '',
+        email_key_hash: key_hash,
+      })
+      const next = declineCooldown({
+        prior_count: prior?.count ?? 0,
+        base_days: cooldownDays(),
+        now,
+      })
+      cooldown = {
+        key_hash,
+        masked: maskAddress(record.from.email),
+        ...(note.contact_id === undefined ? {} : { contact_id: note.contact_id }),
+        count: next.count,
+        days: next.days,
+        declined_at: now,
+        until: next.until,
+        message_id: record.id,
+      }
+      store.saveCooldown(cooldown)
+      emit('b2b.cooldown_started', {
+        ...(note.contact_id === undefined ? {} : { contact_id: note.contact_id }),
+        count: next.count,
+        days: next.days,
+        until: next.until,
+      })
     }
     if (action === 'suppress')
       store.suppress({
@@ -1174,6 +1529,7 @@ export function createB2bOutbound(options: B2bOutboundOptions): B2bOutboundAssem
       action,
       ...(note.contact_id === undefined ? {} : { contact_id: note.contact_id }),
       stopped: action !== 'postpone',
+      ...(cooldown === undefined ? {} : { cooldown_until: cooldown.until }),
     })
     return { klass: cls.klass, action, label: B2B_REPLY_ZH[cls.klass] }
   }
@@ -1207,6 +1563,8 @@ export function createB2bOutbound(options: B2bOutboundOptions): B2bOutboundAssem
     }
     const actor = holderActor()
     if (actor === undefined) return out
+    // ②a WP176：测试信等满 10 分钟没收回来的，按 DNS 判 DKIM
+    await settleDkim()
     // ② 体检过期了（一周）再查一次；测试信还在路上的不重发
     const sender = currentSender()
     if (
@@ -1310,11 +1668,77 @@ export function createB2bOutbound(options: B2bOutboundOptions): B2bOutboundAssem
     }
   }
 
+  /* ── WP176：Run 里的开发信工具用的两个只读口 ─────────────────────────── */
+
+  const sequences = (_actor: B2bActor): { rows: B2bSequenceRowView[] } => {
+    const contacts = new Map(store.list<ContactRow>('b2b_contact').map((c) => [c.id, c]))
+    const accounts = new Map(store.list<B2bAccount>('b2b_account').map((a) => [a.id, a]))
+    const rows = store
+      .enrollments()
+      .sort((a, b) => b.updated_at.localeCompare(a.updated_at))
+      .map((e) => {
+        const last = e.steps.at(-1)?.step
+        return {
+          enrollment_id: e.id,
+          contact_id: e.contact_id,
+          name: contacts.get(e.contact_id)?.name ?? e.contact_id,
+          company: accounts.get(e.account_id)?.name ?? e.account_id,
+          status: e.status,
+          ...(last === undefined ? {} : { last_step: last }),
+          ...(e.next_step === undefined || !LIVE.has(e.status) ? {} : { next_step: e.next_step }),
+          ...(e.due_at === undefined || e.status !== 'active' ? {} : { due_at: e.due_at }),
+          ...(e.queued_reason === undefined || e.status !== 'queued'
+            ? {}
+            : { queued_reason: e.queued_reason }),
+          ...(e.reply_class === undefined ? {} : { reply_class: e.reply_class }),
+        }
+      })
+    return { rows }
+  }
+
+  /** 只判不改：真回信停序列、进冷却 / 名单，是邮件分拣那一路（`onReply`）的事。 */
+  const classifyReply = async (
+    _actor: B2bActor,
+    input: B2bReplyClassifyInput,
+  ): Promise<B2bReplyClassifyView> => {
+    let subject = input.subject ?? ''
+    let text = input.text ?? ''
+    let headers: Record<string, string> = {}
+    const inquiry = input.inquiry_id === undefined ? undefined : store.inquiry(input.inquiry_id)
+    if (input.inquiry_id !== undefined && inquiry === undefined)
+      throw new Error(`找不到这条往来记录：${input.inquiry_id}`)
+    if (inquiry !== undefined) {
+      const m = await options.message?.(inquiry.message_id)
+      subject = m?.subject ?? inquiry.subject
+      text = m?.text ?? text
+      headers = m?.headers ?? {}
+    }
+    if (subject.trim() === '' && text.trim() === '')
+      throw new Error('没有信可分：给一条往来记录的 id，或者给信的主题与正文。')
+    const cls = classifyB2bReply({ subject, text, headers, now: clock.now() })
+    const action = B2B_REPLY_ACTION[cls.klass]
+    return {
+      class: cls.klass,
+      label: B2B_REPLY_ZH[cls.klass],
+      action,
+      action_label: REPLY_ACTION_ZH[action],
+      signals: cls.signals,
+      ...(cls.return_date === undefined ? {} : { return_date: cls.return_date }),
+      ...(inquiry === undefined ? {} : { inquiry_id: inquiry.id }),
+    }
+  }
+
   const port: B2bOutboundPort = {
-    view: (actor) => view(actor),
+    // WP176：面板一刷新，测试信等满 10 分钟没收回来的就按 DNS 判 DKIM
+    view: async (actor) => {
+      if (await settleDkim()) advanceLater()
+      return view(actor)
+    },
     saveSettings,
     start,
     checkSender,
+    sequences,
+    classifyReply,
   }
 
   return { port, apply, onSenderChosen, observe, onReply, stopContact, sweep, deckData }

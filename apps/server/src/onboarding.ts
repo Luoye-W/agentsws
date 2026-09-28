@@ -345,7 +345,14 @@ export interface OnboardingAssembly {
     markets_source?: MarketsSource
     /** WP169：按市场覆盖的探测语言（没覆盖过就没有）。 */
     market_languages?: Record<string, string>
+    /** WP176：公司实体地址（没填过就没有）。 */
+    postal_address?: string
   }
+  /**
+   * WP176：只改某个品牌档案上的公司实体地址（B2B「主动开发」里原来那一格搬过来那一次用；
+   * 设置页走 `setProfile`）。档案还没建过回 `false`（不替人建档案）。`undefined` / 空串 = 清空。
+   */
+  setPostalAddress(workspace_id: WorkspaceId, address: string | undefined): boolean
   /**
    * WP166：直接改某个品牌的目标市场（店铺连上后按店里配的市场 / 配送区域校正那一次用）。
    * 人改过的（`markets_source.from === 'human'`）**不动**，回 `false`；改了回 `true`。
@@ -484,6 +491,8 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
     ...(p.markets === undefined ? {} : { markets: [...p.markets] }),
     ...(p.markets_source === undefined ? {} : { markets_source: p.markets_source }),
     ...(p.market_languages === undefined ? {} : { market_languages: { ...p.market_languages } }),
+    // WP176：公司实体地址（开发信页脚、报价单、单证从这里取）
+    ...(p.postal_address === undefined ? {} : { postal_address: p.postal_address }),
     set_at: p.set_at,
   })
 
@@ -731,9 +740,15 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
         input.market_languages === undefined
           ? previous?.market_languages
           : normalizeMarketLanguages(input.market_languages)
+      // WP176：公司实体地址——不给就沿用上一次；给空串 = 清空
+      const postal_address =
+        input.postal_address === undefined
+          ? previous?.postal_address
+          : normalizePostalAddress(input.postal_address)
       const next: WorkspaceProfile = {
         legal_name,
         ...(domain === '' ? {} : { domain }),
+        ...(postal_address === undefined ? {} : { postal_address }),
         ...(markets === undefined || markets.length === 0 ? {} : { markets }),
         ...(markets_source === undefined ? {} : { markets_source }),
         ...(market_languages === undefined || Object.keys(market_languages).length === 0
@@ -921,7 +936,25 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
         ...(p?.market_languages === undefined
           ? {}
           : { market_languages: { ...p.market_languages } }),
+        ...(p?.postal_address === undefined ? {} : { postal_address: p.postal_address }),
       }
+    },
+    setPostalAddress(ws, address) {
+      const previous = profileOf(ws)
+      if (previous === undefined) return false
+      const { postal_address: _old, ...rest } = previous
+      const next = address === undefined ? undefined : normalizePostalAddress(address)
+      backend.put(ws, { ...rest, ...(next === undefined ? {} : { postal_address: next }) })
+      appendEvent({
+        schema_version: 1,
+        workspace_id: ws,
+        type: 'workspace.postal_address_set',
+        actor: { kind: 'system', id: 'onboarding' },
+        correlation: { trace_id: `tr_onboarding_${clock.now()}` },
+        // 地址不进日志，只记有没有
+        payload: { has_address: next !== undefined },
+      })
+      return true
     },
     setMarkets(ws, list, source) {
       const previous = profileOf(ws)
@@ -967,6 +1000,10 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
         ...(previous?.market_languages === undefined
           ? {}
           : { market_languages: previous.market_languages }),
+        // WP176：公司实体地址也不归这一步管
+        ...(previous?.postal_address === undefined
+          ? {}
+          : { postal_address: previous.postal_address }),
         set_at: clock.now(),
       })
     },
@@ -978,6 +1015,16 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
       backend.close()
     },
   }
+}
+
+/** WP176：公司实体地址归一化（多余空白收成一个，去两端；空 = 没有）。 */
+export function normalizePostalAddress(value: string): string | undefined {
+  const v = value
+    .split('\n')
+    .map((line) => line.replace(/\s+/g, ' ').trim())
+    .filter((line) => line !== '')
+    .join('\n')
+  return v === '' ? undefined : v.slice(0, 500)
 }
 
 /**

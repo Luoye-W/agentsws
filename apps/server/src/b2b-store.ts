@@ -17,6 +17,7 @@
  */
 import type {
   B2bCollection,
+  B2bDeclineCooldown,
   B2bDraft,
   B2bEnrollment,
   B2bInquiry,
@@ -50,7 +51,7 @@ const envelope = (table: string): string => `CREATE TABLE IF NOT EXISTS ${table}
 
 /**
  * 迁移。**只加不改**：要改表就加一版。v1 = 九类对象 + 报价版本；v2 = 草稿 / 询盘 / 抑制名单 /
- * 我们发出去的信 / 联系人地址哈希；v3（WP173）= 开发序列（每人一条）、发信邮箱、主动开发设置。
+ * 我们发出去的信 / 联系人地址哈希；v3（WP173）= 开发序列（每人一条）、发信邮箱、主动开发设置；v4（WP176）= 「不感兴趣」冷却表。
  */
 export const B2B_MIGRATIONS: readonly Migration[] = [
   {
@@ -113,6 +114,45 @@ CREATE TABLE IF NOT EXISTS b2b_contact_email (
 ${envelope('b2b_sender')}
 ${envelope('b2b_outbound_settings')}`,
   },
+  /*
+   * v4（WP176，Luoye 09-28）：「不感兴趣」**只停这一轮**——不再进永久抑制名单，改进冷却表（默认 90 天）。
+   * WP173 期间已经因为"不感兴趣"进了名单的那几条，原样搬进冷却表（从当时那一刻起 90 天），
+   * 再从名单里拿掉；退订与硬退信一条不动。
+   */
+  {
+    version: 4,
+    sql: `CREATE TABLE IF NOT EXISTS b2b_cooldown (
+  workspace_id TEXT NOT NULL,
+  key_hash TEXT NOT NULL,
+  until TEXT NOT NULL,
+  body TEXT NOT NULL,
+  PRIMARY KEY (workspace_id, key_hash)
+);
+INSERT OR IGNORE INTO b2b_cooldown (workspace_id, key_hash, until, body)
+SELECT workspace_id, key_hash,
+  strftime('%Y-%m-%dT%H:%M:%fZ', at, '+90 days'),
+  json_object(
+    'key_hash', key_hash,
+    'masked', json_extract(body, '$.masked'),
+    'count', 1,
+    'days', 90,
+    'declined_at', at,
+    'until', strftime('%Y-%m-%dT%H:%M:%fZ', at, '+90 days'),
+    'migrated', 'wp176'
+  )
+FROM b2b_suppression WHERE json_extract(body, '$.reason') = 'declined';
+UPDATE b2b_cooldown SET body = json_set(body, '$.contact_id', (
+  SELECT json_extract(s.body, '$.contact_id') FROM b2b_suppression s
+  WHERE s.workspace_id = b2b_cooldown.workspace_id AND s.key_hash = b2b_cooldown.key_hash
+)) WHERE json_extract(body, '$.migrated') = 'wp176' AND EXISTS (
+  SELECT 1 FROM b2b_suppression s
+  WHERE s.workspace_id = b2b_cooldown.workspace_id AND s.key_hash = b2b_cooldown.key_hash
+    AND json_extract(s.body, '$.contact_id') IS NOT NULL
+);
+UPDATE b2b_cooldown SET body = json_remove(body, '$.migrated')
+WHERE json_extract(body, '$.migrated') = 'wp176';
+DELETE FROM b2b_suppression WHERE json_extract(body, '$.reason') = 'declined';`,
+  },
 ]
 
 /** 我们发出去的一封 B2B 信（开发信 / 报价信）：回信按它对线程（docs/84 §5 ①）。 */
@@ -173,6 +213,10 @@ export interface B2bStore {
   /** WP173：主动开发的设置（一个品牌一份）。 */
   outboundSettings(): B2bOutboundSettings
   saveOutboundSettings(s: B2bOutboundSettings): void
+  /** WP176：说过「不感兴趣」的冷却（按地址哈希，一人一条；再说一次覆盖成翻倍的那一条）。 */
+  cooldowns(): B2bDeclineCooldown[]
+  cooldown(key_hash: string): B2bDeclineCooldown | undefined
+  saveCooldown(c: B2bDeclineCooldown): void
   close(): void
 }
 
@@ -310,6 +354,29 @@ export function createB2bStore(options: B2bStoreOptions): B2bStore {
     saveSender: (s) => upsert('b2b_sender', s.address.trim().toLowerCase(), s),
     outboundSettings: () => one<B2bOutboundSettings>('b2b_outbound_settings', 'settings') ?? {},
     saveOutboundSettings: (s) => upsert('b2b_outbound_settings', 'settings', s),
+    cooldowns: () =>
+      driver
+        .prepareSync<{ body: string }>(
+          'SELECT body FROM b2b_cooldown WHERE workspace_id = ? ORDER BY until',
+        )
+        .allSync(ws)
+        .map((r) => JSON.parse(r.body) as B2bDeclineCooldown),
+    cooldown: (key_hash) => {
+      const row = driver
+        .prepareSync<{ body: string }>(
+          'SELECT body FROM b2b_cooldown WHERE workspace_id = ? AND key_hash = ?',
+        )
+        .getSync(ws, key_hash)
+      return row === undefined ? undefined : (JSON.parse(row.body) as B2bDeclineCooldown)
+    },
+    saveCooldown: (c) => {
+      driver
+        .prepareSync(
+          `INSERT INTO b2b_cooldown (workspace_id, key_hash, until, body) VALUES (?, ?, ?, ?)
+           ON CONFLICT (workspace_id, key_hash) DO UPDATE SET until = excluded.until, body = excluded.body`,
+        )
+        .runSync(ws, c.key_hash, c.until, JSON.stringify(c))
+    },
     close: () => {
       driver.closeSync()
     },

@@ -672,7 +672,10 @@ export interface B2bSender {
 export interface B2bOutboundSettings {
   /** 页脚上的公司名（不填用公司档案的全称）。 */
   company_name?: string
-  /** 页脚上的公司实体地址（CAN-SPAM 硬要求）。**没有就不能发**。 */
+  /**
+   * 页脚上的公司实体地址（CAN-SPAM 硬要求）。**没有就不能发**。
+   * WP176：真源改成公司档案（`WorkspaceProfile.postal_address`）；这一格只在档案还没建时兜底。
+   */
   postal_address?: string
   /** 署名。 */
   sender_name?: string
@@ -686,6 +689,11 @@ export interface B2bOutboundSettings {
   choice_card_id?: string
   /** 德国 / 奥地利：用户勾选并确认风险后才发（docs/84 §11.1 第 6 条）。 */
   de_at?: { confirmed_by: PersonId; confirmed_at: Iso8601 }
+  /**
+   * WP176：`postal_address` 搬进公司档案的时刻（搬完这里那一格清掉，页脚改从档案取）。
+   * 公司档案还没建时搬不成，照旧读这一格。
+   */
+  postal_address_moved_at?: Iso8601
   updated_at?: Iso8601
 }
 

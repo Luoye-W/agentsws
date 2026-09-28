@@ -3161,6 +3161,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
      * （第一次开出一张选择卡），SPF / DKIM 没过不发；按发信邮箱、按自然日算配额（预热 20 → 50）；
      * 发出去的每一封记 `noteOutbound`（回信按它对线程、停序列）。
      */
+    const lateMessages: { current?: MessagesAssembly } = {}
     const b2bOutbound = createB2bOutbound({
       workspace_id: ws,
       store: b2b,
@@ -3203,6 +3204,19 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         } catch {
           return undefined
         }
+      },
+      // WP176：「不感兴趣」冷却天数（职责阈值，默认 90）
+      declinedCooldownDays: () =>
+        roles.roles.get('b2b.outbound')?.thresholds?.b2b_declined_cooldown_days,
+      // WP176：公司实体地址的真源是公司档案（开发信页脚、报价单、单证同一份）
+      companyAddress: () => onboardingRef?.brandProfile(ws).postal_address,
+      saveCompanyAddress: (address) => onboardingRef?.setPostalAddress(ws, address) ?? false,
+      // WP176：Run 里「把一封回信分类」按消息库 id 取正文（消息层在下面才建，懒取）
+      message: async (id) => {
+        const m = await lateMessages.current?.store.get(id)
+        return m === undefined
+          ? undefined
+          : { subject: m.subject, text: m.text, headers: m.headers }
       },
     })
     const b2bMail = createB2bMail({
@@ -3271,6 +3285,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       ...(options.messageSource === undefined ? {} : { makeSource: options.messageSource }),
       ...(options.messageWriter === undefined ? {} : { makeWriter: options.messageWriter }),
     })
+    lateMessages.current = messages
 
     /*
      * WP124：转发器设置进本机加密库（与邮箱口令、模型 key 同一个库）；

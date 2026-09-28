@@ -17,6 +17,7 @@ import type {
   AssignmentId,
   B2bCollection,
   B2bDraft,
+  B2bEnrollment,
   B2bInquiry,
   B2bQueuedReason,
   B2bQuoteVersion,
@@ -165,12 +166,19 @@ export interface B2bOutboundView {
     sender_address?: string
     /** 「发信域名」那张卡（还没答时指过去）。 */
     choice_card_id?: string
+    /**
+     * WP176：`postal_address` 从哪来的。`profile` = 公司档案（开发信、报价单、单证同一份，
+     * 这里只读显示、链到公司档案）；`outbound_settings` = 还在「主动开发」设置里（档案还没建，没搬成）。
+     */
+    postal_address_from?: 'profile' | 'outbound_settings'
   }
   /** 选定的发信邮箱：体检结果与今天的配额（预热）。 */
   sender?: {
     address: string
     separate_domain: boolean
     auth: B2bSenderAuth
+    /** WP176：用户勾了「这只邮箱已经正常发信很久」（不预热，直接每天 50 封）。 */
+    established?: boolean
     quota: {
       cap: number
       sent_today: number
@@ -191,6 +199,19 @@ export interface B2bOutboundView {
   eligible: number
   /** 默认不发 / 发不了的人数与原因（德奥那一行就是那句"为什么"）。 */
   excluded: { reason: string; label: string; count: number }[]
+  /**
+   * WP176：说过「不感兴趣」、还在冷却里的人（冷却到哪天；最先到期的在前，最多 50 位）。
+   * 冷却期满可以再被选进新一轮；退订的在抑制名单上，不在这里。
+   */
+  cooling?: {
+    contact_id?: string
+    name?: string
+    company?: string
+    masked: string
+    until: string
+    /** 说过几次不感兴趣（2 次起冷却翻倍）。 */
+    count: number
+  }[]
 }
 
 export interface B2bOutboundSettingsInput {
@@ -199,6 +220,11 @@ export interface B2bOutboundSettingsInput {
   sender_name?: string | undefined
   /** `true` = 勾选并确认风险：德国 / 奥地利也发；`false` = 收回。 */
   de_at_confirm?: boolean | undefined
+  /**
+   * WP176：「这只邮箱已经正常发信很久」（当前发信邮箱）。`true` = 不预热、直接每天 50 封；`false` = 收回。
+   * 新域名别勾。
+   */
+  sender_established?: boolean | undefined
 }
 
 export interface B2bSequenceStartInput {
@@ -222,8 +248,47 @@ export interface B2bSequenceStartView {
   excluded: { contact_id: string; name: string; company: string; reason: string; label: string }[]
 }
 
+/** WP176：开发信序列一览里的一行（Run 里的工具「列序列与漏斗」用）。 */
+export interface B2bSequenceRowView {
+  enrollment_id: string
+  contact_id: string
+  name: string
+  company: string
+  status: B2bEnrollment['status']
+  /** 发到第几封了（`first` / `follow_up` / `final`；还没发 = 没有）。 */
+  last_step?: B2bEnrollment['next_step']
+  next_step?: B2bEnrollment['next_step']
+  due_at?: string
+  queued_reason?: B2bQueuedReason
+  reply_class?: B2bEnrollment['reply_class']
+}
+
+/** WP176：把一封回信分类（Run 里的工具用；只判，不改序列）。 */
+export interface B2bReplyClassifyInput {
+  /** 询盘 / 往来记录的 id（邮件分拣落进来的那一条）。 */
+  inquiry_id?: string | undefined
+  /** 没有记录时直接给信的主题与正文。 */
+  subject?: string | undefined
+  text?: string | undefined
+}
+
+export interface B2bReplyClassifyView {
+  class: B2bEnrollment['reply_class'] & string
+  label: string
+  /** 接下来怎么办（交给业务 / 冷却 / 进名单 / 顺延 / 停）。 */
+  action: string
+  action_label: string
+  signals: string[]
+  return_date?: string
+  inquiry_id?: string
+}
+
 export interface B2bOutboundPort {
   view(actor: B2bActor): MaybePromise<B2bOutboundView>
+  /** WP176：序列一览（每人一行，新的在前）。可选：老装配没有。 */
+  sequences?(actor: B2bActor): MaybePromise<{ rows: B2bSequenceRowView[] }>
+  /** WP176：把一封回信分类（只判，不改序列；真回信由邮件分拣那一路停序列）。可选。 */
+  classifyReply?(actor: B2bActor, input: B2bReplyClassifyInput): MaybePromise<B2bReplyClassifyView>
   saveSettings(actor: B2bActor, input: B2bOutboundSettingsInput): MaybePromise<B2bOutboundView>
   /** 开一轮：筛人 → 选发信邮箱 / 体检 / 配额 → 首封批量一张卡。 */
   start(actor: B2bActor, input: B2bSequenceStartInput): MaybePromise<B2bSequenceStartView>
@@ -364,6 +429,7 @@ const OutboundSettingsBody = z.object({
   postal_address: z.string().max(500).optional(),
   sender_name: z.string().max(100).optional(),
   de_at_confirm: z.boolean().optional(),
+  sender_established: z.boolean().optional(),
 })
 
 const SequenceStartBody = z.object({
