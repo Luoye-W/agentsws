@@ -1567,6 +1567,7 @@ const zh: Table = {
   'messages.delete': '删除',
   'messages.readonly': 'Agent 在处理这条线程；要亲自回，先在工作线程里点「我来接手」。',
   'messages.agent.working': '客服 Agent 在处理',
+  'messages.agent.working_b2b': 'B2B Agent 在处理',
   'messages.agent.waiting_for_you': '等你拍板',
   'messages.agent.replied': '已回复',
   'messages.agent.route.support': '这条归客服岗位',
@@ -4586,6 +4587,7 @@ const en: Table = {
   'messages.readonly':
     'An agent is handling this thread; to answer yourself, take it over in the work thread first.',
   'messages.agent.working': 'Support agent is on it',
+  'messages.agent.working_b2b': 'B2B agent is on it',
   'messages.agent.waiting_for_you': 'Waiting on you',
   'messages.agent.replied': 'Replied',
   'messages.agent.route.support': 'Handled by the support position',

@@ -769,7 +769,14 @@ function AgentBand({
       data-testid="messages-agent-band"
       data-state={status.state}
     >
-      <StatusPill tone={tone}>{t(`messages.agent.${status.state}`)}</StatusPill>
+      <StatusPill tone={tone}>
+        {/* WP172：B2B 那条路说「B2B Agent 在处理」，不借客服那一句 */}
+        {t(
+          status.route === 'b2b' && status.state === 'working'
+            ? 'messages.agent.working_b2b'
+            : `messages.agent.${status.state}`,
+        )}
+      </StatusPill>
       <span className="text-[12px] text-ws-muted-fg">
         {t(`messages.agent.route.${status.route}`)}
       </span>
