@@ -98,6 +98,13 @@ export type ApprovalKind =
    * payload = `{ from, subject, phrases, has_account_details, thread_id? }`。
    */
   | 'b2b_fraud_alert'
+  /**
+   * WP173（docs/84 §11.1 第 4 条）：**发信域名选择卡**。第一次开开发序列时出一张：
+   * 强烈建议用单独的发信域名（主域名进垃圾箱会连累客服与订单邮件），**由用户选**——
+   * 用单独域名（选一只已接的邮箱，或看教程去买 / 配）/ 就用现在的邮箱（卡上一句风险提示）。
+   * 选了哪只都要过 SPF / DKIM 体检才发。payload = `{ options, recommended, primary_domains }`。
+   */
+  | 'b2b_sender_choice'
 
 /** 14 §13.2 抽检复核：L2 自动批被抽中后，范围管理者看完说什么（WP32） */
 export interface SamplingReview {

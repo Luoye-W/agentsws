@@ -99,6 +99,8 @@ export const LAYOUT_BY_KIND: Record<Exclude<DeckKind, 'staged_change'>, DeckLayo
   digest: 'aftermath',
   // WP171（docs/84 §11.3）：改收款账户的红卡——信里的原话 + 为什么可疑，人去打电话核实
   b2b_fraud_alert: 'handoff',
+  // WP173（docs/84 §11.1 第 4 条）：发信域名用哪只——单选，由用户选，不猜
+  b2b_sender_choice: 'choice',
 }
 
 /**

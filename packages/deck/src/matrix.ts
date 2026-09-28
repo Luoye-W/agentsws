@@ -52,6 +52,8 @@ const BY_KIND: Partial<Record<DeckKind, DeckAction[]>> = {
   membership: ['approve', 'reject', 'snooze', 'open'],
   // WP144：允许 / 不允许；「指导」无从谈起（问的只是能不能碰这台电脑）
   computer_use: ['approve', 'reject', 'snooze', 'open'],
+  // WP173：发信域名选一只——选项就是答案，「指导」「驳回」无从谈起（不选就还是不发）
+  b2b_sender_choice: ['approve', 'snooze', 'open'],
 }
 
 export function actionsFor(kind: DeckKind, state: ApprovalState): DeckAction[] {
