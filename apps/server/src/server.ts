@@ -2471,6 +2471,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       transcribe: (req, meta, model) => effectiveGateway().transcribe(req, meta, model),
       usage: (filter) => effectiveGateway().usage(filter),
       records: () => effectiveGateway().records(),
+      // WP179：官方网页搜索不经网关，补记那一笔也记在跟随的那一份账上
+      recordExternal: (input) => effectiveGateway().recordExternal?.(input),
       reconfigure: (next) => {
         effectiveGateway().reconfigure(next)
       },

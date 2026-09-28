@@ -155,6 +155,8 @@ export function traceGateway(inner: ModelGatewayApi, trace: ModelTrace): ModelGa
     usage: (filter) => inner.usage(filter),
     budget: (scope) => inner.budget(scope),
     records: () => inner.records(),
+    // WP179：不经网关的那一笔（官方网页搜索）照原样转给里面那一份
+    recordExternal: (input) => inner.recordExternal?.(input),
     reconfigure: (next) => inner.reconfigure(next),
     providers: () => inner.providers(),
   }

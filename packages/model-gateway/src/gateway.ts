@@ -97,12 +97,31 @@ export interface TranscribeRequest extends Omit<TranscribeAudio, 'ref'> {
   estimated_output_tokens?: number
 }
 
+/** WP179：一笔不经网关的模型调用（`ModelGatewayApi.recordExternal`）。 */
+export interface ExternalUsage {
+  meta: ModelMeta
+  /** 实际打的是谁（例：`{ provider: 'deepseek-account', model: 'deepseek-v4-flash' }`）。 */
+  model: ModelRef
+  /** 拿得到就给；拿不到的项记 0。`cost_base` 一律 0（工坊不收这笔钱）。 */
+  usage?: Partial<Omit<CompletionUsage, 'cost_base'>>
+  duration_ms?: number
+}
+
 export interface ModelGatewayApi extends ModelGateway {
   complete(req: CompleteRequest): Promise<Completion>
   transcribe(req: TranscribeRequest, meta: ModelMeta, model?: ModelRef): Promise<Transcription>
   usage(filter: UsageFilter): Promise<UsageReport>
   /** 只读账目，测试与报表用（与 model.usage 事件一一对应）。 */
   records(): readonly UsageRecord[]
+  /**
+   * WP179：**不经网关的那一次模型调用**补记一笔（官方 `dsh-web-search-deepseek`：一次网页搜索 =
+   * 一次完整的 DeepSeek 模型回合，但它直接打 DeepSeek，不经我们的 provider）。
+   *
+   * 记账口径与 `complete` 相同：进 `records()`、发一条 `model.usage`，用量页照 purpose 汇总看得到。
+   * **不动预算**：这笔钱是用户自己的 DeepSeek 账号 / key 付的，工坊不扣积分；token 拿得到就记，
+   * 拿不到（官方提供方不回报）就记 0——"调了一次"这件事照样看得见。可选方法：老的实现不用改。
+   */
+  recordExternal?(input: ExternalUsage): void
   /**
    * 换一套 provider / 策略（WP25 设置页「保存后立刻生效」）。
    *
@@ -611,6 +630,22 @@ class Gateway implements ModelGatewayApi {
 
   records(): readonly UsageRecord[] {
     return this.usageRecords
+  }
+
+  recordExternal(input: ExternalUsage): void {
+    this.record(
+      input.meta,
+      input.model,
+      {
+        input_tokens: input.usage?.input_tokens ?? 0,
+        output_tokens: input.usage?.output_tokens ?? 0,
+        cached_tokens: input.usage?.cached_tokens ?? 0,
+        cost_base: 0,
+      },
+      this.opts.clock.now(),
+      '',
+      input.duration_ms ?? 0,
+    )
   }
 
   reconfigure(next: {
