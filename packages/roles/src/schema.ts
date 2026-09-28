@@ -299,6 +299,11 @@ export const ROLE_SCHEMA: Node = Schema.object({
    */
   browser_scope: Schema.array(Schema.string()),
   /**
+   * WP179：这条职责能用哪几个官方网页工具（`web_search` / `web_fetch`）。不填 = 没有。
+   * 枚举只认这两个名字——拼错一个字就在加载时拒，不让它静默变成"没挂"。
+   */
+  web_tools: Schema.array(Schema.union(['web_search', 'web_fetch'] as const)),
+  /**
    * WP72（56 §1）：这条职责靠什么干活。不写 = `api`。
    * `browser` = 这条渠道没有可用的接口，动作走第三栏受控浏览器。
    */

@@ -10,6 +10,7 @@ import type {
   AssignmentId,
   ConnectorDependency,
   DataDomain,
+  EffectiveWeb,
   ErrorCode,
   Level,
   Mandate,
@@ -131,6 +132,11 @@ export interface EffectiveConfig {
    * 没填 = 空数组 = 这条职责开不了浏览器。服务端据它算 `RunRequest.allowed_hosts`。
    */
   browser_scope: string[]
+  /**
+   * WP179：这条职责的官方网页工具（`RoleDefinition.web_tools`）与每条运行的次数上限
+   * （`thresholds.web_search_per_run` / `web_fetch_per_run`，缺省 5 / 10）。没填 `web_tools` 就没有这一格。
+   */
+  web?: EffectiveWeb
   /** WP120（69 §3）：这条职责的角色定位，已经叠加过公司层覆盖。 */
   persona?: PersonaText
   /** 展开后的范围（44 G1：挂的范围组已经摊平进来了）。 */
