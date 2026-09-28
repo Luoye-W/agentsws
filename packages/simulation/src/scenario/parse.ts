@@ -937,13 +937,13 @@ function parseEvent(source: string, index: number, raw: unknown): ScenarioEvent 
     case 'messages.disable_position': {
       known(source, `${path}.${key}`, body, ['position'])
       const position = str(source, `${path}.${key}.position`, body.position)
-      if (!['support', 'kol'].includes(position)) {
-        fail(source, `${path}.${key}.position`, 'position 只能是 support / kol')
+      if (!['support', 'kol', 'b2b'].includes(position)) {
+        fail(source, `${path}.${key}.position`, 'position 只能是 support / kol / b2b')
       }
       return {
         at,
         type: 'messages.disable_position',
-        disable_position: { position: position as 'support' | 'kol' },
+        disable_position: { position: position as 'support' | 'kol' | 'b2b' },
       }
     }
     case 'messages.halt_model': {
@@ -2327,11 +2327,15 @@ function parseExpected(source: string, raw: unknown): ScenarioExpected {
       intake: 'str',
       opened_matter: 'bool',
       started_run: 'bool',
+      suppressed: 'bool',
+      suppression_reason: 'str',
     },
     // WP167（63 §D「收信一个入口」）：这一轮所有信各去了哪一路
     message_intake: {
       support: 'num',
       kol: 'num',
+      b2b: 'num',
+      suppressed: 'num',
       pending: 'num',
       only_messages: 'num',
       matters_opened: 'num',

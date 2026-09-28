@@ -729,6 +729,15 @@ export function checkExpectations(
       if (want.started_run !== undefined && (p.started_run === true) !== want.started_run) {
         problems.push(want.started_run ? '这封信没起 Run' : '这封信不该起 Run，却起了')
       }
+      if (want.suppressed !== undefined && (p.suppressed === true) !== want.suppressed) {
+        problems.push(want.suppressed ? '没进抑制名单' : '不该进抑制名单，却进了')
+      }
+      if (
+        want.suppression_reason !== undefined &&
+        p.suppression_reason !== want.suppression_reason
+      ) {
+        problems.push(`进名单的理由是 ${String(p.suppression_reason ?? '无')}`)
+      }
       add(
         'message_triage',
         problems.length === 0,
@@ -755,6 +764,8 @@ export function checkExpectations(
     const got = {
       support: count((p) => p.intake === 'support'),
       kol: count((p) => p.intake === 'kol'),
+      b2b: count((p) => p.intake === 'b2b'),
+      suppressed: count((p) => p.suppressed === true),
       pending: count((p) => p.intake === 'pending'),
       only_messages: count((p) => p.intake === 'none'),
       matters_opened: count((p) => p.opened_matter === true),
@@ -763,6 +774,8 @@ export function checkExpectations(
     const labels: Record<keyof typeof got, string> = {
       support: '交给客服',
       kol: '交给红人',
+      b2b: '交给 B2B',
+      suppressed: '进了抑制名单',
       pending: '待确认',
       only_messages: '只进消息页',
       matters_opened: '开了事项',

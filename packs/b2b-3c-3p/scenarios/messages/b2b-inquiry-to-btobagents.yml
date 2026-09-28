@@ -1,0 +1,48 @@
+# WP172（docs/84 §5）：**客户询盘挪进 BtoBAgents、交给 B2B 那一路**（开事项、起 Run）。
+#
+# 两封信，判法都不是场景给的——是 `@agentsws/channels` 的 `triageMessage` 真判的：
+#
+# 1. 一个新买家（不在客户库里）问价、问 MOQ、要目录 → 分拣第 ④ 层（模型）判成 B2B；
+# 2. 老客户 VoltHaus（pack 客户库里有这家的域名）来信 → 第 ② 层「发件人在 B2B 库里」直达，**不花模型**。
+#
+# 服务进程里这两封会落成询盘 / 往来记录（`apps/server/test/b2b-mail.test.ts` 钉着）；
+# 世界里看的是同一个 `intakeOf` 算出来的去向。
+id: messages/b2b-inquiry-to-btobagents
+version: 1
+dataset: { pack: b2b-3c-3p, seed: 42 }
+actors: {}
+stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
+clock: { start: '2026-09-29T09:00:00+08:00' }
+events:
+  - at: '+0m'
+    messages.inbound:
+      from: purchasing@northline.example
+      subject: Quotation request - 20000mAh power bank
+      body: Hello, we are a distributor in Canada. Please send your price list, MOQ and catalog for the 20000mAh power bank, FOB Shenzhen.
+  - at: '+5m'
+    messages.inbound:
+      from: buying@volthaus.example
+      subject: Next order
+      body: Hi, can we talk about the next shipment schedule?
+expected:
+  message_triage:
+    route: b2b
+    by: rule
+    moved: true
+    moved_to: BtoBAgents
+    model_calls: 0
+    intake: b2b
+    opened_matter: true
+    started_run: true
+  message_intake:
+    b2b: 2
+    matters_opened: 2
+    runs_started: 2
+  event_types:
+    - simulation.message_triaged
+  metrics:
+    runs_failed: 0
+invariants:
+  - no_write_without_stage
+rubric: >-
+  两封都进了「B2B 往来」，业务员在 B2B 面板上看得到这两条待回的询盘 / 来信吗？
