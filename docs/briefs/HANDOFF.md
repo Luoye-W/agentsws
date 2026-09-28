@@ -78,7 +78,9 @@
 | 53 | WP169 市场三件小事：向导多市场花费提示、店铺校正后推动态、按市场主要语言探测 | `WP169-markets-followups.md` | `wp169-markets-2` · `wp/169-markets-2` | WP166 | 已合并（09-27，Fable 终审：239 文件 2658 条过，契约 / 本体零漂移，六组模拟门禁过） |
 | 54 | WP170 B2B 六个技能：cold-email、prospecting（改写 marketingskills）、b2b-inquiry、quotation、trade-show、export-docs | `WP170-b2b-skills.md` | `wp170-b2b-skills` · `wp/170-b2b-skills` | docs/84 | 已合并（09-28，Fable 终审：skills / learning / upstreams 10 文件 341 条过；职责登记与显示名随 WP171） |
 | 55 | WP171 B2B 岗位骨架：契约对象、五条职责（含展会、跟单与单证）、岗位模板「B2B」、b2b-core（移植 BtoBAgents 判断逻辑）、面板骨架、模拟包 b2b-3c-3p | `WP171-b2b-skeleton.md` | `wp171-b2b-skeleton` · `wp/171-b2b-skeleton` | docs/84 | 已合并（09-28，Fable 终审追加：「都要」不勾 B2B、平台运营标「第二批」、勾岗位不带第二批职责；干净构建，307 文件 3728 条过，三个模拟包 × 三运行时门禁过） |
-| 56 | WP172 B2B 数据落盘与邮件分拣：B2B 库、`/v1/b2b/*`、分拣产出 b2b 挪进 BtoBAgents 并交给 B2B 这一路、退订退信进抑制名单、待确认加「这是 B2B」 | `WP172-b2b-store-and-triage.md` | `wp172-b2b-store` · `wp/172-b2b-store` | WP171 | 进行中（Claude） |
+| 56 | WP172 B2B 数据落盘与邮件分拣：B2B 库、`/v1/b2b/*`、分拣产出 b2b 挪进 BtoBAgents 并交给 B2B 这一路、退订退信进抑制名单、待确认加「这是 B2B」 | `WP172-b2b-store-and-triage.md` | `wp172-b2b-store` · `wp/172-b2b-store` | WP171 | 已合并（09-28，Fable 终审：309 文件 3742 条过，16 条起服务钩子在高负载下超时、7 个文件串行重跑 154 条全过；三个模拟包 × 三运行时门禁过） |
+| 57 | WP173 B2B 开发信序列：三封节奏（共用序列函数）、日配额与预热、发信域名建议不强制 + SPF/DKIM 体检、页脚与来源、德奥默认不发、回复停序列转业务 | `WP173-b2b-outbound-sequence.md` | `wp173-b2b-outbound` · `wp/173-b2b-outbound` | WP172 | 进行中（Claude） |
+| 58 | WP174 组织里的「上级」：岗位可设上级，`scope_manager` 审批真落到上级、没有才落老板；离职自动落回老板 | `WP174-org-supervisor.md` | `wp174-supervisor` · `wp/174-supervisor` | — | 进行中（Claude） |
 
 WP117b 的补充要求（派工单里没有，写在这）：demo 服务的是 `apps/workstation/dist`，测界面前先 `pnpm -F @agentsws/workstation exec vite build`；交付一个真实点击的 playwright 脚本 `scripts/e2e-kol-sandbox.mjs`（playwright 库在 `node_modules/.pnpm/playwright@1.63.0/node_modules/playwright`），走完「选合成红人 → 起草开发信 → 批准发送 → 已发 ≥ 1 → 跳到 N 天后 → 回信 ≥ 1 → 分类 → 议价卡 → 阶段推进 → 交付物 → 追踪链接」，每步截图到 `docs/assets/workstation/kol-e2e-NN.png`，脚本里断言计数确实变了；演练数据从真实漏斗 / 归因里排除，单独显示「演练漏斗」。
 
