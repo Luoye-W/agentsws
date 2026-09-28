@@ -491,3 +491,56 @@ export interface B2bSuppressionEntry {
   contact_id?: string
   at: Iso8601
 }
+
+/* ── WP172：B2B 库的写法——草稿 → 改动卡 → 批了才落库 ─────────────────── */
+
+/** B2B 库里的九类对象（表名 = 对象类型名；报价版本挂在 `b2b_quote` 下面）。 */
+export type B2bCollection =
+  | 'b2b_account'
+  | 'b2b_contact'
+  | 'b2b_opportunity'
+  | 'b2b_quote'
+  | 'b2b_sample'
+  | 'b2b_list'
+  | 'trade_show'
+  | 'trade_show_lead'
+  | 'export_shipment'
+
+export const B2B_COLLECTIONS: readonly B2bCollection[] = [
+  'b2b_account',
+  'b2b_contact',
+  'b2b_opportunity',
+  'b2b_quote',
+  'b2b_sample',
+  'b2b_list',
+  'trade_show',
+  'trade_show_lead',
+  'export_shipment',
+]
+
+/**
+ * 一份还没生效的改动（新建或修改一条 B2B 记录）。
+ *
+ * **写都经卡**：草稿存着不算数；「提交」= 出一张改动卡（`b2b_record` / `b2b_quote` /
+ * `b2b_sample` / `b2b_list_import` …），批了执行器才把它落进库里。读不经卡。
+ */
+export interface B2bDraft {
+  id: string
+  workspace_id: WorkspaceId
+  collection: B2bCollection
+  op: 'create' | 'update'
+  /** 要建 / 要改的那条记录的 id（新建时预先分好）。 */
+  record_id: string
+  /** 记录本身（新建是全量，修改是改完之后的全量）。联系方式只有 `*_ref`，没有明文。 */
+  record: Record<string, unknown>
+  /** 报价：这一版（只读，批了才写进版本表）。 */
+  quote_version?: B2bQuoteVersion
+  status: 'draft' | 'submitted' | 'applied' | 'blocked'
+  change_id?: string
+  approval_item_id?: string
+  /** 被 guardrail 拦下时那句人话。 */
+  message?: string
+  created_by: PersonId
+  created_at: Iso8601
+  updated_at: Iso8601
+}

@@ -86,7 +86,8 @@ export interface MessageThreadView {
    * 不为空 = 这一页**不给"直接回复"**（避免人与 Agent 撞车）。
    */
   agent_status?: {
-    route: 'support' | 'kol'
+    /** WP172：`b2b` = B2B 岗位在处理（`BtoBAgents` 里的信）。 */
+    route: 'support' | 'kol' | 'b2b'
     /** `working` / `waiting_for_you` / `replied`。 */
     state: 'working' | 'waiting_for_you' | 'replied'
     /** 去对应工作线程的深链（`/matters/<id>`）。 */
@@ -227,7 +228,7 @@ const MoveBody = z.object({
   remember_sender: z.boolean().optional(),
 })
 
-const ConfirmRouteBody = z.object({ route: z.enum(['support', 'kol', 'inbox']) })
+const ConfirmRouteBody = z.object({ route: z.enum(['support', 'kol', 'b2b', 'inbox']) })
 
 const LabelsBody = z.object({ labels: z.array(z.string().min(1).max(64)).max(20) })
 

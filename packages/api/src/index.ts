@@ -126,6 +126,20 @@ export type { AdsAccountRow, AdsCampaignRow, AdsPort, AdsStagedView } from './ro
 export { adsRoutes } from './routes/ads.js'
 export type { AdsActor } from './routes/ads-types.js'
 export { type AskActor, type AskAnswer, type AskPort, askRoutes } from './routes/ask.js'
+// WP172（docs/84）：B2B 库的列表 / 详情 / 草稿 / 提交改动卡 / CSV 导入
+export type {
+  B2bActor,
+  B2bCsvImportInput,
+  B2bDetailView,
+  B2bDraftInput,
+  B2bDraftView,
+  B2bImportView,
+  B2bListView,
+  B2bPort,
+  B2bRow,
+  B2bStagedView,
+} from './routes/b2b.js'
+export { B2B_COLLECTION_ROUTES, b2bRoutes } from './routes/b2b.js'
 export type { BackupExportView, BackupPort } from './routes/backup.js'
 export { backupRoutes } from './routes/backup.js'
 // WP122（71）：每个品牌一份 DESIGN.md

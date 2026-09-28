@@ -15,6 +15,7 @@ import { adsRoutes } from './routes/ads.js'
 import { approvalRoutes } from './routes/approvals.js'
 import { askRoutes } from './routes/ask.js'
 import { assignmentRoutes } from './routes/assignments.js'
+import { b2bRoutes } from './routes/b2b.js'
 import { backupRoutes } from './routes/backup.js'
 import { brandDesignRoutes } from './routes/brand-design.js'
 import { brandIntakeRoutes } from './routes/brand-intake.js'
@@ -210,6 +211,7 @@ export function collectRoutes(): Route[] {
     ...adsRoutes(),
     // WP78（60 §5）：公关库的最小一套（提及 / 稿子 / 外部发帖 / 媒体名单）
     ...prRoutes(),
+    ...b2bRoutes(),
     ...seoRoutes(),
     /*
      * WP113（63）：消息。`/v1/messages*` 是独立前缀，与已有路径都不撞。

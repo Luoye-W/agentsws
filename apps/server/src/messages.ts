@@ -99,6 +99,7 @@ import type {
 import { KOL_FOLDER, SUPPORT_FOLDER } from '@agentsws/contracts'
 import { sha256 } from '@agentsws/core'
 import type { Work } from '@agentsws/work'
+import type { B2bMail } from './b2b-mail.js'
 import type {
   DirectMailInput,
   DirectMailResult,
@@ -201,6 +202,13 @@ export interface MessagesOptions {
     marker: string,
     keys: () => Promise<readonly string[]>,
   ): Promise<{ already: boolean; seeded: number }>
+  /**
+   * WP172（docs/84 §5）：B2B 那一路（`b2b-mail.ts`）。给了它，分拣开始产出 `b2b`——
+   * 只在 B2B 岗位开着、而且这只邮箱卡上「收 B2B 信」开着时；判成 B2B 的信落成询盘 /
+   * 往来记录（岗位开着才开事项、起 Run），再挪进这只邮箱的 `BtoBAgents`。退订与退信
+   * 每封都过一遍（进抑制名单）。不给 = 老行为（一封 B2B 都不产出）。
+   */
+  b2b?: B2bMail
 }
 
 /**
@@ -239,12 +247,12 @@ export interface MessagesAssembly {
    * 改了立刻生效（消息同步每封现查），改一次写一条 `mailbox.switches_changed`。
    */
   switches: {
-    get(address: string): MailboxSwitchSettings & { takeover: boolean }
+    get(address: string): MailboxSwitchSettings & { takeover: boolean; b2b_position: boolean }
     set(
       address: string,
       patch: MailboxSwitchPatch,
       by: string,
-    ): MailboxSwitchSettings & { takeover: boolean }
+    ): MailboxSwitchSettings & { takeover: boolean; b2b_position: boolean }
   }
   /** 调度器消费者：拉一轮所有邮箱的所有文件夹。 */
   poll(): Promise<MessageSyncReport>
@@ -383,6 +391,10 @@ export function createMessages(options: MessagesOptions): MessagesAssembly {
     roles().some((r) => SUPPORT_ROLE_PREFIXES.some((p) => r === p || r.startsWith(p)))
   const kolEnabled = (): boolean =>
     roles().some((r) => KOL_ROLE_PREFIXES.some((p) => r.startsWith(p)))
+  /** WP172：B2B 岗位开着（有人持着 `b2b.*`）——看的是 B2B 那一路自己的现查。 */
+  const b2bEnabled = (): boolean => options.b2b?.enabled() ?? false
+  /** 这只邮箱收不收 B2B 信：岗位开着 + 邮箱卡上「收 B2B 信」开着（缺省开）。 */
+  const b2bEnabledFor = (account: string): boolean => b2bEnabled() && switchStore.get(account).b2b
 
   /* ── 分拣 ───────────────────────────────────────────────────────────── */
 
@@ -411,9 +423,13 @@ export function createMessages(options: MessagesOptions): MessagesAssembly {
    * 线程"、被挪进 `KefuAgents`——正是 WP163 要堵的那条缝。63 §D ① 的原话本来就是
    * "In-Reply-To / References 命中"。
    */
-  const triageCtx = (followUp = true): TriageContext => ({
+  const triageCtx = (followUp = true, account?: string): TriageContext => ({
     support_enabled: supportEnabled(),
     kol_enabled: kolEnabled(),
+    // WP172：B2B 按邮箱开关算（「收 B2B 信」），线程归并同样只认后续来信
+    b2b_enabled: account === undefined ? b2bEnabled() : b2bEnabledFor(account),
+    isB2bThread: (id, refs) => followUp && (options.b2b?.isOurThread(id, refs) ?? false),
+    isB2bSender: (email) => options.b2b?.isKnownSender(email) ?? false,
     isSupportThread: (id, refs) => followUp && supportEnabled() && knownThread(id, refs),
     isKolThread: (id, refs) => followUp && kolEnabled() && knownThread(id, refs),
     senderRules: rulesCache,
@@ -480,19 +496,40 @@ export function createMessages(options: MessagesOptions): MessagesAssembly {
    */
   const handOff = async (
     record: MessageRecord,
-    route: 'support' | 'kol',
+    route: 'support' | 'kol' | 'b2b',
     raw: RawEmailMessage | undefined,
     by: 'triage' | 'user',
+    triage?: MessageTriage,
   ): Promise<{ accepted: boolean; matter_id?: string }> => {
+    const link = async (matter_id: string | undefined): Promise<void> => {
+      if (matter_id === undefined) return
+      await store.update(record.id, { linked: { type: 'matter', id: matter_id } })
+    }
+    /*
+     * WP172：B2B 那一路落成询盘 / 往来记录（开事项、起 Run 在 `b2b-mail.ts` 里，只在 B2B 岗位开着时）。
+     * 没开 B2B 岗位、或这只邮箱不收 B2B 信 → 不接（信不挪、不开事项，同 WP163 的规矩）。
+     * 已经在岗位文件夹里的信（人自己的过滤规则挪过去的）同客服那条：不开事项、不起 Run。
+     */
+    if (route === 'b2b') {
+      const b2b = options.b2b
+      if (b2b === undefined || !b2bEnabledFor(record.account)) return { accepted: false }
+      if (isAgentFolderKind(record.folder_kind)) {
+        const existing = matterOfThread(record.thread_id)
+        await link(existing)
+        return existing === undefined ? { accepted: true } : { accepted: true, matter_id: existing }
+      }
+      const out = await b2b.intake(record, triage ?? userVerdict('b2b', clock.now()), by)
+      if (!out.accepted) return { accepted: false }
+      await link(out.matter_id)
+      return out.matter_id === undefined
+        ? { accepted: true }
+        : { accepted: true, matter_id: out.matter_id }
+    }
     const work = options.work
     const position = options.position?.()
     if (work === undefined || position === undefined) return { accepted: false }
     if (route === 'support' && !supportEnabled()) return { accepted: false }
     if (route === 'kol' && !kolEnabled()) return { accepted: false }
-    const link = async (matter_id: string | undefined): Promise<void> => {
-      if (matter_id === undefined) return
-      await store.update(record.id, { linked: { type: 'matter', id: matter_id } })
-    }
     const intake = options.intakeSupport
     if (route === 'support' && intake !== undefined) {
       if (isAgentFolderKind(record.folder_kind)) {
@@ -559,9 +596,17 @@ export function createMessages(options: MessagesOptions): MessagesAssembly {
           headers: record.headers,
           has_attachments: record.attachments.length > 0,
         },
-        triageCtx(record.in_reply_to !== undefined || record.references.length > 0),
+        triageCtx(record.in_reply_to !== undefined || record.references.length > 0, record.account),
         triageModel,
-      ),
+      ).then((verdict) => {
+        // WP172（docs/84 §5 第 5 条）：退订回信、硬退信分拣时直接进抑制名单，不等 Run
+        try {
+          options.b2b?.observe(record)
+        } catch (e) {
+          logQuiet('b2b_suppression_failed', record.account, e)
+        }
+        return verdict
+      }),
     /**
      * 交给客服 / 红人那一路；那一侧不接就回 `false`——于是信不挪、留在收件箱里可见。
      *
@@ -569,9 +614,10 @@ export function createMessages(options: MessagesOptions): MessagesAssembly {
      * 交接炸了不让这封信变成毒消息：它已经落进消息库了，只是没交出去——记一笔、信不动。
      */
     handoff: async (record, triage, raw) => {
-      if (triage.route !== 'support' && triage.route !== 'kol') return false
+      if (triage.route !== 'support' && triage.route !== 'kol' && triage.route !== 'b2b')
+        return false
       try {
-        return (await handOff(record, triage.route, raw, 'triage')).accepted
+        return (await handOff(record, triage.route, raw, 'triage', triage)).accepted
       } catch (e) {
         logQuiet('support_intake_failed', record.account, e)
         return false
@@ -638,7 +684,7 @@ export function createMessages(options: MessagesOptions): MessagesAssembly {
    */
   const moveAfterHandoff = async (
     record: MessageRecord,
-    route: 'support' | 'kol',
+    route: 'support' | 'kol' | 'b2b',
   ): Promise<MessageRecord> => {
     const account = accountOf(record.account)
     const uid = record.uid
@@ -741,10 +787,10 @@ export function createMessages(options: MessagesOptions): MessagesAssembly {
     async thread(_actor: MessageActor, thread_id: string): Promise<MessageThreadView> {
       const messages = await store.thread(thread_id)
       const last = messages[messages.length - 1]
-      // 状态带只给有 Agent 在处理的那两条路（`b2b` 是 WP161 的预留，还没有岗位）
+      // 状态带只给有 Agent 在处理的那几条路（WP172 起 B2B 也算）
       const agentRoute = messages
         .map((m) => m.route)
-        .find((r): r is 'support' | 'kol' => r === 'support' || r === 'kol')
+        .find((r): r is 'support' | 'kol' | 'b2b' => r === 'support' || r === 'kol' || r === 'b2b')
       const linked = messages.find((m) => m.linked !== undefined)?.linked
       return {
         thread_id,
@@ -1188,7 +1234,11 @@ export function createMessages(options: MessagesOptions): MessagesAssembly {
 
   const takeover = (): boolean => supportEnabled()
   const switches: MessagesAssembly['switches'] = {
-    get: (address) => ({ ...switchStore.get(address), takeover: takeover() }),
+    get: (address) => ({
+      ...switchStore.get(address),
+      takeover: takeover(),
+      b2b_position: b2bEnabled(),
+    }),
     set: (address, patch, by) => {
       const { after, changed } = switchStore.set(address, patch)
       if (changed.length > 0) {
@@ -1205,7 +1255,7 @@ export function createMessages(options: MessagesOptions): MessagesAssembly {
           },
         })
       }
-      return { ...after, takeover: takeover() }
+      return { ...after, takeover: takeover(), b2b_position: b2bEnabled() }
     },
   }
 
@@ -1277,6 +1327,8 @@ function mailboxState(options: MessagesOptions): MailboxStateStore {
 
 const TRIAGE_SYSTEM = [
   '你是一个邮件分拣助手。读一封邮件的头与正文前 2000 字，判断它归哪一类。',
+  'route 的含义：support = 零售顾客的售后 / 订单问题；kol = 红人 / 博主想谈合作；',
+  'b2b = 企业买家的询盘（询价、要目录、问起订量、要样品、找代理 / 分销、OEM）；inbox = 其他。',
   '只输出一个 JSON 对象，不要任何解释文字。字段：',
   'route（只能是给定 allowed_routes 里的一个）、labels（给定 allowed_labels 的子集）、',
   'needs_reply（布尔）、priority（high/normal/low）、summary（≤40 个字的中文一句话，',

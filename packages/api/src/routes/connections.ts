@@ -306,12 +306,17 @@ export interface MailboxSwitchesView {
   mark_read: boolean
   /** 接管 = 客服岗位开着（只读）。 */
   takeover: boolean
+  /** WP172：这只邮箱收 B2B 信（判成 B2B 的挪进 `BtoBAgents`）。缺省开。 */
+  b2b?: boolean
+  /** WP172：B2B 岗位开着（只读；没开时「收 B2B 信」不起作用）。 */
+  b2b_position?: boolean
 }
 
 export interface MailboxSwitchesInput {
   shadow_mode?: boolean
   move?: boolean
   mark_read?: boolean
+  b2b?: boolean
 }
 
 /** 一条死信在界面上的样子。正文不进这里——只有"是谁、什么时候、为什么"。 */
@@ -337,6 +342,7 @@ const MailboxSwitchesBody = z
     shadow_mode: z.boolean().optional(),
     move: z.boolean().optional(),
     mark_read: z.boolean().optional(),
+    b2b: z.boolean().optional(),
   })
   .strict()
 
@@ -647,6 +653,7 @@ export function connectionRoutes(): Route[] {
             ...(input.shadow_mode === undefined ? {} : { shadow_mode: input.shadow_mode }),
             ...(input.move === undefined ? {} : { move: input.move }),
             ...(input.mark_read === undefined ? {} : { mark_read: input.mark_read }),
+            ...(input.b2b === undefined ? {} : { b2b: input.b2b }),
           }),
         )
       },

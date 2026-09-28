@@ -4977,7 +4977,7 @@ export interface MessageThreadView {
    * 不为空 = 这一页**不给"直接回复"**（避免人与 Agent 撞车）。
    */
   agent_status?: {
-    route: 'support' | 'kol'
+    route: 'support' | 'kol' | 'b2b'
     state: 'working' | 'waiting_for_you' | 'replied'
     href?: string
     takeover_matter_id?: string

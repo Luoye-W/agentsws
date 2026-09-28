@@ -16,7 +16,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { SUPPORT_MAILBOX_DEFAULTS } from '@agentsws/channels'
 
-/** 界面上那三个开关（`folder_enabled` 不在这里：接管 = 客服岗位开没开）。 */
+/** 界面上那几个开关（`folder_enabled` 不在这里：接管 = 客服岗位开没开）。 */
 export interface MailboxSwitchSettings {
   /** 只看不动：流程照跑，邮箱一下都不动。 */
   shadow_mode: boolean
@@ -24,6 +24,11 @@ export interface MailboxSwitchSettings {
   move: boolean
   /** 客服信标已读。 */
   mark_read: boolean
+  /**
+   * WP172（docs/84 §5 第 3 条）：这只邮箱收 B2B 信（判成 B2B 的挪进 `BtoBAgents`、交给 B2B 那一路）。
+   * **缺省开**：发开发信专用的那只邮箱也要开，回信会回到它那里。B2B 岗位没开时它不起作用。
+   */
+  b2b: boolean
 }
 
 export type MailboxSwitchPatch = Partial<MailboxSwitchSettings>
@@ -32,12 +37,14 @@ export const MAILBOX_SWITCH_KEYS: readonly (keyof MailboxSwitchSettings)[] = [
   'shadow_mode',
   'move',
   'mark_read',
+  'b2b',
 ]
 
 const DEFAULTS: MailboxSwitchSettings = {
   shadow_mode: SUPPORT_MAILBOX_DEFAULTS.shadow_mode,
   move: SUPPORT_MAILBOX_DEFAULTS.move,
   mark_read: SUPPORT_MAILBOX_DEFAULTS.mark_read,
+  b2b: true,
 }
 
 interface StateFile {
@@ -57,13 +64,14 @@ export class MailboxSwitchStore {
     this.state = this.load()
   }
 
-  /** 这只邮箱现在的三个开关（没改过的按老产品默认值：影子关、挪信开、标已读开）。 */
+  /** 这只邮箱现在的开关（没改过的按老产品默认值：影子关、挪信开、标已读开；WP172 收 B2B 信开）。 */
   get(address: string): MailboxSwitchSettings {
     const saved = this.state.mailboxes[keyOf(address)] ?? {}
     return {
       shadow_mode: saved.shadow_mode ?? DEFAULTS.shadow_mode,
       move: saved.move ?? DEFAULTS.move,
       mark_read: saved.mark_read ?? DEFAULTS.mark_read,
+      b2b: saved.b2b ?? DEFAULTS.b2b,
     }
   }
 

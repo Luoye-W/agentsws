@@ -128,7 +128,10 @@ import { adsDeckData, createAdsStore, seedDemoAds } from './ads.js'
 import { createAdsService } from './ads-service.js'
 import { compositeApprovals } from './approvals-composite.js'
 import { createAskPort } from './ask.js'
-import { demoB2bDeckData } from './b2b.js'
+import { demoB2bDeckData, withDemoB2b } from './b2b.js'
+import { createB2bMail } from './b2b-mail.js'
+import { createB2bService } from './b2b-service.js'
+import { createB2bStore } from './b2b-store.js'
 import { MemoryBackend } from './backend.js'
 import { type BackupRunResult, backupDirOf, backupKeepOf, runBackup } from './backup.js'
 import {
@@ -152,6 +155,7 @@ import {
 import {
   brandAdsPort,
   brandAskPort,
+  brandB2bPort,
   brandCloudPort,
   brandConnectionDirectoryPort,
   brandConnectionsPort,
@@ -1412,6 +1416,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       const brand = await brands?.forWorkspace(change.workspace_id)
       const sandboxed = kolOutreachApply(brand, change) ?? kolQuoteApply(brand, change)
       if (sandboxed !== undefined) return sandboxed
+      // WP172：B2B 库的卡批了才落库（不是 B2B 库的卡回 undefined，掉回原来那条路）
+      const b2bApplied = brand?.b2bService.apply(change)
+      if (b2bApplied !== undefined) return b2bApplied
       return backend.apply(change, opts)
     },
     // 18 §3：批准了的对外草稿真发出去。渠道接不住的（不是邮件 / 没装邮箱）
@@ -1849,9 +1856,12 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       // **我们自己写的**，与连没连 Google Alerts 无关。外面那一侧（提及流 /
       // 负面预警）走 `google_alerts` 那个源，没连就照 36 §3 明说。
       pr: () => prDeckData(pr),
-      // WP171（docs/84）：B2B 那十九块。这一单只有骨架（B2B 库在后面几单落盘）：
-      // demo 里放一份演示投影，真工作区里不给 = 空态（"还没有"，不是"去连接"）
-      ...(isBootstrap && mount !== undefined ? { b2b: () => demoB2bDeckData(clock.now()) } : {}),
+      // WP171 / WP172（docs/84）：B2B 那十九块从这个品牌自己的 B2B 库来（邮件分拣落成的询盘、
+      // 批了的客户 / 报价 / 样品 …）。demo 里库里的排前面、后面垫一份演示投影
+      b2b: () =>
+        isBootstrap && mount !== undefined
+          ? withDemoB2b(b2bService.deckData(clock.now()), demoB2bDeckData(clock.now()))
+          : b2bService.deckData(clock.now()),
       // 红人库与社媒库都不是"连接"，所以它们不在那两份写死的数据源表里（见 `withOwnSources`）
       sources: () => withOwnSources(baseWorkData.sources()),
     }
@@ -1882,6 +1892,15 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
      */
     const pr = createPrStore({
       workspace_id: ws,
+      ...(dir === undefined ? {} : { dbDir: dir }),
+    })
+    /**
+     * WP172（docs/84）：这个品牌的 B2B 库（九类对象 + 询盘 / 草稿 / 抑制名单，`b2b.sqlite`）。
+     * 与公关库并排建，理由一样：客户名单与报价是一家外贸公司攒了很多年的东西。
+     */
+    const b2b = createB2bStore({
+      workspace_id: ws,
+      now: () => clock.now(),
       ...(dir === undefined ? {} : { dbDir: dir }),
     })
     /**
@@ -2065,6 +2084,29 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
      * 要这个品牌连接页上那两张卡真连上才有东西可拉。没配的时候
      * `monitorSweep()` 照实说"还没配监控源"，**不是**"今天没人提我们"。
      */
+    /**
+     * WP172（docs/84）：B2B 库的 `/v1/b2b/*`。写都经卡（草稿 → 改动卡 → 批了执行器才落库，
+     * 见 `backendApply`）；报价谁批由授权四个数算。服务进程里还没有"部门负责人"，超授权落老板。
+     */
+    const b2bService = createB2bService({
+      workspace_id: ws,
+      store: b2b,
+      clock,
+      random,
+      approvals: txn.approvals,
+      ledger: txn.ledger,
+      effectiveConfig: (id) => roles.effectiveConfig(id),
+      appendEvent,
+      // 邮箱 / 电话明文只进本机加密库（同红人库的联系方式）
+      secrets: {
+        put: (id, fields) => {
+          if (!brandSecrets.available)
+            throw new ApiError('invalid_input', '本机加密库没开，存不了邮箱 / 电话。')
+          return brandSecrets.put(id, fields)
+        },
+      },
+      owner: async () => (await identity.getWorkspace(ws))?.owner_id,
+    })
     const prService = createPrService({
       workspace_id: ws,
       store: pr,
@@ -3051,9 +3093,29 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
      * （人自己按下发送的那一封走 outbox 七态 + 对账）。凭据仍然只从
      * `connections` 来，**这一层不新增任何凭据入口**。
      */
+    /**
+     * WP172（docs/84 §5）：邮件分拣之后 B2B 这一路——落成询盘 / 往来记录，B2B 岗位开着才开事项、
+     * 起 Run（落在持「业务」那条职责的人名下）；退订与退信进抑制名单。挪信仍只归消息同步。
+     */
+    const b2bMail = createB2bMail({
+      workspace_id: ws,
+      store: b2b,
+      clock,
+      appendEvent,
+      holders: () =>
+        roles.assignments
+          .listByWorkspace(ws)
+          .filter((a) => a.revoked_at === undefined && a.role_id.startsWith('b2b.'))
+          .map((a) => ({ person_id: a.person_id, assignment_id: a.id, role_id: a.role_id })),
+      owner: async () => (await identity.getWorkspace(ws))?.owner_id,
+      approvals: txn.approvals,
+      work,
+      ...(startRun === undefined ? {} : { startRun }),
+    })
     const messages = createMessages({
       clock,
       workspace_id: ws,
+      b2b: b2bMail,
       appendEvent,
       halt: kernel.halt,
       accounts: () => connections.mailAccounts(),
@@ -3308,6 +3370,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       searchData,
       pr,
       prService,
+      b2b,
+      b2bService,
       seoService,
       googleReads,
       social,
@@ -3337,6 +3401,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         liveData?.close()
         connections.close()
         kol.close()
+        b2b.close()
         // 云端红人库的同步账本也握着一个句柄（WP118）：跟着这个品牌一起关
         ownCloud.kolSync?.close()
         site.close()
@@ -5326,6 +5391,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     brandModules,
     async (ws) => (await brandModules.forWorkspace(ws)).socialService.port,
   )
+  /** WP172（docs/84）：B2B 库 `/v1/b2b/*`（同上；一个品牌一张库）。 */
+  const b2bPortOf = brandB2bPort(
+    brandModules,
+    async (ws) => (await brandModules.forWorkspace(ws)).b2bService.port,
+  )
   /** WP78（60 §5）：公关库 `/v1/pr/*`（同上；媒体名单是一家公司攒了很多年的东西）。 */
   const prPortOf = brandPrPort(
     brandModules,
@@ -5777,6 +5847,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     ads: adsPortOf,
     // WP78（60 §5）：本地公关库 `/v1/pr/*`
     pr: prPortOf,
+    // WP172（docs/84）：本地 B2B 库 `/v1/b2b/*`
+    b2b: b2bPortOf,
     // WP154「内容与搜索」`/v1/seo/*`：按请求人所在品牌取那一份
     seo: seoPort,
     traceScope,
