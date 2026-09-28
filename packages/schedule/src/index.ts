@@ -58,6 +58,7 @@ export {
   RUNNABLE_STATES,
 } from './store.js'
 export {
+  type RuleResolver,
   SCHEDULE_EVENTS,
   type ScheduleEventSink,
   type ScheduleFilter,

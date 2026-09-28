@@ -34,6 +34,24 @@ export type ScheduleTrigger =
   | { kind: 'interval'; every_ms: number; from?: Iso8601 }
   | { kind: 'cron'; expr: string; tz: string }
   | { kind: 'after_event'; event: string }
+  /**
+   * WP181：官方「自动化任务」（`@deepseek-ai/dsh-schedule`）的时间规则——每天 / 每周几 / cron /
+   * 固定间隔，原样存官方校验过的那份记录（`kind` + `time` / `timeZone` / `weekdays` / `expression` /
+   * `everySeconds`）。本包不认识它：第一次与下一次都交给注入的 {@link RuleResolver}（官方的算法，
+   * 夏令时跳过 / 重叠只取早的那一次都照官方）。没注入就拒建。
+   */
+  | { kind: 'rule'; rule: Record<string, unknown> }
+
+/**
+ * WP181：`rule` 触发器的时间怎么算（宿主注入；服务端接的是官方 `dsh-schedule` 的算法）。
+ * 两个函数都只看给定的毫秒，不读墙钟——模拟回路的合成时钟照样管得住。
+ */
+export interface RuleResolver {
+  /** 刚建 / 刚改规则时的第一次（严格晚于 `nowMs`）。 */
+  first(rule: Record<string, unknown>, nowMs: number): Iso8601 | undefined
+  /** 触发之后的下一次（严格晚于 `afterMs`）；没有下一次回 `undefined`。 */
+  next(rule: Record<string, unknown>, afterMs: number): Iso8601 | undefined
+}
 
 /** 25 §3 状态机：`scheduled(pending/active) → running → done | failed | cancelled`。 */
 export type ScheduleTaskState =

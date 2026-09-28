@@ -143,6 +143,8 @@ export function triggerKeyOf(
     | { kind: 'interval'; every_ms: number; from?: string | undefined }
     | { kind: 'cron'; expr: string; tz: string }
     | { kind: 'after_event'; event: string }
+    // WP181：官方「自动化任务」的时间规则（每天 / 每周几 / cron / 固定间隔）
+    | { kind: 'rule'; rule: Record<string, unknown> }
     | undefined,
 ): string | undefined {
   if (trigger === undefined) return undefined
@@ -155,6 +157,13 @@ export function triggerKeyOf(
       return `once:${trigger.at}`
     case 'after_event':
       return `event:${trigger.event}`
+    case 'rule':
+      // 锚点（`scheduledAt`）每次触发都往后挪，不算钥匙；剩下的键排好序，同一条规则同一个字符串
+      return `rule:${Object.keys(trigger.rule)
+        .filter((k) => k !== 'scheduledAt')
+        .sort()
+        .map((k) => `${k}=${JSON.stringify(trigger.rule[k])}`)
+        .join(';')}`
     default:
       return undefined
   }
