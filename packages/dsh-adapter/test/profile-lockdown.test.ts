@@ -59,6 +59,13 @@
  * 改走它的 `session-telemetry-otel`（点"反馈"就发整条会话日志）、这一版起能拿 DeepSeek 账号令牌
  * 直接上网搜索的 `web-search-deepseek`，以及存量里查出来的 `plugin-package-inventory-deepseek`
  * （每次官方 API 请求附上插件包清单）。理由写在 patch 文件里那一段。
+ *
+ * WP179（Luoye 09-29「官方功能优先」）：逐行重判，锁定只留给 **B 真冲突**与 **C 数据外发**，别的官方功能
+ * 一律接进来。撤了两行：`web-search-deepseek`（A：官方网页搜索，两档运行时由 `src/web.ts` 挂起来用）、
+ * `hmr`（A，跟官方：官方 headless 包自己就关着它）。测试跟着改——
+ * - B / C 类（`LOCKDOWN`）：原断言一条不改；
+ * - A 类撤锁的（`OPENED`）：我们的 patch 里没有这一行、组合树里这一行是开的、两档模块图里真有这个包（能用）；
+ * - 跟官方的（`FOLLOW_OFFICIAL`）：我们不写，组合结果等于官方 bundle 自己写的那个值。
  */
 import { spawnSync } from 'node:child_process'
 import {
@@ -88,10 +95,9 @@ const FORBIDDEN = [
   '@deepseek-ai/dsh-hmr',
   '@deepseek-ai/dsh-config-editor',
   '@deepseek-ai/dsh-deepseek-account-platform',
-  // WP177（0.2.0-rc.1）
+  // WP177（0.2.0-rc.1）；WP179 把 `dsh-web-search-deepseek` 挪去了 `OPENED`（官方网页搜索接进来用了）
   '@deepseek-ai/dsh-otel',
   '@deepseek-ai/dsh-session-telemetry-otel',
-  '@deepseek-ai/dsh-web-search-deepseek',
   '@deepseek-ai/dsh-plugin-package-inventory-deepseek',
 ] as const
 
@@ -111,14 +117,12 @@ const LOCKDOWN: readonly LockdownRow[] = [
   },
   { id: 'plugin-manager', name: '@deepseek-ai/dsh-plugin-manager', disabled: true },
   { id: 'tool-plugin-manager', name: '@deepseek-ai/dsh-plugin-manager/tools', disabled: true },
-  { id: 'hmr', name: '@deepseek-ai/dsh-hmr', disabled: true },
   { id: 'config-editor', name: '@deepseek-ai/dsh-config-editor', disabled: true },
   { id: 'settings', name: '@deepseek-ai/dsh-settings', disabled: true },
   { id: 'deepseek-account', name: '@deepseek-ai/dsh-deepseek-account-platform', disabled: true },
   // WP177（0.2.0-rc.1）：base 新 insert 的共享上报通道、经它发的反馈上报、能用账号令牌出网的网页搜索
   { id: 'otel', name: '@deepseek-ai/dsh-otel', disabled: true },
   { id: 'session-telemetry-otel', name: '@deepseek-ai/dsh-session-telemetry-otel', disabled: true },
-  { id: 'web-search-deepseek', name: '@deepseek-ai/dsh-web-search-deepseek', disabled: true },
   // WP177：把组合里"不带 disabled、会上报"的行整体过一遍时查出来的存量（随官方 API 请求附插件清单）
   {
     id: 'plugin-package-inventory-deepseek',
@@ -126,6 +130,33 @@ const LOCKDOWN: readonly LockdownRow[] = [
     disabled: true,
   },
 ]
+
+/**
+ * WP179：**A 类、撤了锁、接进来用**的行。我们的 patch 里不许再有它们；组合树里它们是开的；
+ * `pkg` 是它在两档运行时里真的被用上的那个包（模块图里必须有）。
+ * 网页搜索那一行的三个兄弟（`web` / `web-fetch-http` / `tool-web`）WP177 就没锁，这里一起钉"开着且在用"。
+ */
+const OPENED: readonly { id: string; name: string; pkg: string }[] = [
+  {
+    id: 'web-search-deepseek',
+    name: '@deepseek-ai/dsh-web-search-deepseek',
+    pkg: '@deepseek-ai/dsh-web-search-deepseek',
+  },
+  { id: 'web', name: '@deepseek-ai/dsh-web', pkg: '@deepseek-ai/dsh-web' },
+  {
+    id: 'web-fetch-http',
+    name: '@deepseek-ai/dsh-web-fetch-http',
+    pkg: '@deepseek-ai/dsh-web-fetch-http',
+  },
+  { id: 'tool-web', name: '@deepseek-ai/dsh-tool-web', pkg: '@deepseek-ai/dsh-tool-web' },
+]
+
+/**
+ * WP179：**我们不再写、跟官方走**的行：组合结果必须等于官方 bundle 自己写的值（`bundle` 那份 patch 里的
+ * `disabled`）。`hmr`：官方 headless 包自己就关着它。
+ */
+const FOLLOW_OFFICIAL: readonly { id: string; name: string; bundle: string; disabled: boolean }[] =
+  [{ id: 'hmr', name: '@deepseek-ai/dsh-hmr', bundle: '@deepseek-ai/dsh-headless', disabled: true }]
 
 /**
  * WP144（docs/80）：profile 层**插进来、默认关**的行（dsh-base 里本来没有它们）。
@@ -254,6 +285,24 @@ describe('WP93 Plugin Manager / HMR 不进我们的运行时（16 §3 / 31 §3.5
     const entry = fileURLToPath(new URL('../dist/index.js', import.meta.url))
     const packages = dshPackagesOf(resolvedModules(entry))
     for (const name of FORBIDDEN) expect([...packages], name).not.toContain(name)
+  })
+
+  it('WP179 A 类：撤了锁的官方网页那几个包，两档的模块图里都真的有（接进来在用，不是只开了）', () => {
+    for (const entry of [
+      defaultChildEntry(),
+      fileURLToPath(new URL('../dist/index.js', import.meta.url)),
+    ]) {
+      const packages = dshPackagesOf(resolvedModules(entry))
+      for (const row of OPENED) expect([...packages], `${entry}：${row.pkg}`).toContain(row.pkg)
+    }
+  })
+
+  it('WP179：A 类撤了锁的行与"跟官方"的行，我们的 patch 里一行都没有', () => {
+    const rows = parsePatch(readFileSync(PATCH, 'utf8'))
+    const ids = [...lockRows(rows), ...insertedRows(rows)].map((r) => r?.id)
+    for (const row of [...OPENED, ...FOLLOW_OFFICIAL]) {
+      expect(ids, `${row.id} 已按 WP179 撤锁，不许再写回来`).not.toContain(row.id)
+    }
   })
 
   it('profile 的 patch 层把这几行显式写死（不靠"碰巧没装"），而且文件里只有锁定', () => {
@@ -497,6 +546,41 @@ describe('WP133 锁定的每个 id 都真的存在于当前 dsh 的配置 schema
     }
   }, 120_000)
 
+  it('WP179 A 类：撤了锁的行在组合树里是开的、指向的还是那个官方包', () => {
+    const composed = parseComposed(runDsh(home, '--dump-config'))
+    for (const want of OPENED) {
+      const row = composed.find((r) => r?.id === want.id)
+      expect(row, `组合树里没有 ${want.id}`).toBeDefined()
+      expect(row?.name, want.id).toBe(want.name)
+      expect(row?.disabled === true, `${want.id} 应当是开的`).toBe(false)
+    }
+    // id 在当前 dsh 的 schema 里真的存在、没换人（WP133 那条同样适用于"开着的"行）
+    expect(
+      lockdownProblems(
+        OPENED.map((r) => ({ id: r.id })),
+        dump,
+        OPENED.map((r) => ({ id: r.id, name: r.name })),
+      ),
+    ).toEqual([])
+  }, 120_000)
+
+  it('WP179 跟官方：我们不写的行，组合结果等于官方 bundle 自己写的值', () => {
+    const composed = parseComposed(runDsh(home, '--dump-config'))
+    for (const want of FOLLOW_OFFICIAL) {
+      const bundlePatch = join(
+        dirname(require.resolve(`${want.bundle}/package.json`)),
+        'cordis.patch.yml',
+      )
+      const official = parsePatch(readFileSync(bundlePatch, 'utf8')).find((r) => r?.id === want.id)
+      expect(official?.disabled, `${want.bundle} 自己对 ${want.id} 的写法变了，重判一次`).toBe(
+        want.disabled,
+      )
+      const row = composed.find((r) => r?.id === want.id)
+      expect(row?.name, want.id).toBe(want.name)
+      expect(row?.disabled === true, want.id).toBe(want.disabled)
+    }
+  }, 120_000)
+
   it('反向哨兵：塞一行不存在的 id，同一套检查必须报出它', () => {
     const bogus = 'agentsws-no-such-entry'
     const extra = `\n- id: ${bogus}\n  disabled: true\n`
@@ -521,12 +605,12 @@ describe('WP133 锁定的每个 id 都真的存在于当前 dsh 的配置 schema
       'x-cordis': {
         ...dump['x-cordis'],
         entries: dump['x-cordis'].entries.map((e) =>
-          e.id === 'hmr' ? { ...e, name: '@someone/else-hmr' } : e,
+          e.id === 'plugin-manager' ? { ...e, name: '@someone/else-plugin-manager' } : e,
         ),
       },
     }
     expect(lockdownProblems(lockRows(rows), swapped)).toEqual([
-      'hmr：现在指向 @someone/else-hmr，不是 @deepseek-ai/dsh-hmr',
+      'plugin-manager：现在指向 @someone/else-plugin-manager，不是 @deepseek-ai/dsh-plugin-manager',
     ])
   })
 
