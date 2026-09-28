@@ -26,8 +26,12 @@ import type {
 import {
   boundaryGate,
   contextItemHash,
+  isWebTool,
   ontologyBriefOf,
   rewriteForChannelGuard,
+  WebUsageCounter,
+  webQueriesOf,
+  webUrlOf,
 } from '@agentsws/stand-ins'
 import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
@@ -66,6 +70,7 @@ import {
   STAGE_TOOL,
 } from './tools.js'
 import type { DshRuntimeOptions, GateRecord } from './types.js'
+import { codeOf, webBrief } from './web.js'
 
 /** dsh 的审批 seam 词汇（我们只用它的四个结果值，其余靠 answerer 自己判断）。 */
 const GRANT: ApprovalOutcome = 'allowed-once'
@@ -253,6 +258,12 @@ export function installGate(ctx: Context, input: GateInput): GateApi {
   const cuGranted = computerUseGranted(computerUse, wallNow())
   /** Agent 调过 `computer_handoff`：这次运行不再碰电脑。 */
   let handedOff = false
+  /*
+   * WP179：官方网页工具。**在不在取决于两样**：`RunRequest.web` 给了（`harness.ts` 才挂官方
+   * `dsh-tool-web`）、名字在职责白名单 `tools.allow` 里（服务端按职责 YAML 的 `web_tools` 给）。
+   * 挂上了还要过这一关：每条运行的次数上限（与 stub / direct 同一份 `WebUsageCounter`）。
+   */
+  const webCounter = new WebUsageCounter(request)
   const allowed = (name: string): boolean =>
     allow.has(name) ||
     presetTools.has(name) ||
@@ -532,6 +543,11 @@ export function installGate(ctx: Context, input: GateInput): GateApi {
     // WP144：自有的那一个电脑操控工具是全局注册的（同 stage / draft），不列就被白名单挡掉。
     // 驱动那一整组是提供方在 Agent scope 里注册的（与浏览器 provider 同类），不列、也不能列。
     ...computerUseTools.map((d) => d.name),
+    // WP179：官方 `web_search` / `web_fetch` 是 `harness.ts` 在 `agents.create` 之前全局注册的
+    // （同 `bash`），不列就被职责白名单挡掉；白名单里没有的名字照样不列
+    ...(request.web === undefined
+      ? []
+      : [...registered].filter((n) => isWebTool(n) && allow.has(n)).sort()),
   ]
   if (visible.length > 0) scopedCtx.tools.restrict({ allow: visible })
 
@@ -576,6 +592,11 @@ export function installGate(ctx: Context, input: GateInput): GateApi {
       return next()
     }
     if (!allowed(exec.name)) return deny(`not_in_allowlist: ${exec.name}`)
+    // WP179：网页工具——这次运行开没开、有没有超每条运行的上限（按查询条数算）
+    if (isWebTool(exec.name)) {
+      const denial = webCounter.take(exec.name, exec.arguments)
+      if (denial !== undefined) return deny(denial)
+    }
     // WP144：两个自有工具只出卡（与 stage 同类），不走读写分类（那样公司端一律拒）
     if (isComputerUseOwnTool(exec.name)) return next()
     // 36 §2.2：没答过的边界挡着变更——拒掉这次 stage，同时把选择题发给商家
@@ -684,6 +705,7 @@ export function installGate(ctx: Context, input: GateInput): GateApi {
       emitResult(api, sink, call_id)
       return decision
     }
+    if (isWebTool(exec.name)) reportWeb(exec.name, exec.arguments, result)
     if (result.isError) {
       // 失败结果不允许被替换 value（dsh 的规矩），只登记与发事件
       const existing = api.records.get(call_id)
@@ -739,6 +761,43 @@ export function installGate(ctx: Context, input: GateInput): GateApi {
     }
     return { kind: 'accept', value: fenced }
   })
+
+  /**
+   * WP179：一次网页工具调用的**审计**报给宿主（`web.searched` / `web.fetched`）。
+   * 只有查询串或网址、结果条数 / 状态码、成没成——正文一个字都不带。
+   */
+  function reportWeb(name: string, args: unknown, result: ToolExecutionResult): void {
+    const onUse = options.web?.onUse
+    if (onUse === undefined) return
+    const bare = name.includes('.') ? name.slice(name.lastIndexOf('.') + 1) : name
+    const error = result.isError ? codeOf(result.error) : undefined
+    const value = result.isError ? {} : asRecord(result.value)
+    if (bare === 'web_search') {
+      const sources = Array.isArray(value.sources) ? value.sources.length : 0
+      onUse(
+        {
+          kind: 'search',
+          queries: webQueriesOf(args),
+          results: sources,
+          ok: !result.isError,
+          ...(error === undefined ? {} : { error }),
+        },
+        request,
+      )
+      return
+    }
+    onUse(
+      {
+        kind: 'fetch',
+        url: typeof value.url === 'string' ? value.url : webUrlOf(args),
+        ...(typeof value.statusCode === 'number' ? { status: value.statusCode } : {}),
+        ...(typeof value.truncated === 'boolean' ? { truncated: value.truncated } : {}),
+        ok: !result.isError,
+        ...(error === undefined ? {} : { error }),
+      },
+      request,
+    )
+  }
 
   // ── `approval/request` answerer：dsh 的审批请求 → 我们的审批项 ────────────
   ctx.on('approval/request', async (req, next): Promise<ApprovalOutcome> => {
@@ -825,6 +884,11 @@ export function installGate(ctx: Context, input: GateInput): GateApi {
             ...(shell.store === undefined ? {} : { store: shell.store }),
           }),
         ]),
+    /*
+     * WP179：网页那一段也进**这一个**段。官方 `dsh-tool-web` 自己加的 `tool:web_search` /
+     * `tool:web_fetch` 两段会被 complete 段遮掉，意思由 `webBrief` 写全（外加次数上限）。
+     */
+    webBrief(request),
     /*
      * WP144：电脑操控那一段也进**这一个**段。官方提供方一句指导都不写（它只挂驱动报的
      * 工具），「什么时候能动、遇到密码怎么办、截图看不看得到」只能我们写。

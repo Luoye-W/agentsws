@@ -83,6 +83,13 @@ export const M_HOST_DRAFT = 'agentsws/host/draft'
 export const M_HOST_BOUNDARY = 'agentsws/host/boundary'
 /** WP144：电脑操控的授权卡 / 接手卡（`DshRuntimeOptions.requestComputerUse`）。 */
 export const M_HOST_COMPUTER_USE = 'agentsws/host/computer-use'
+/**
+ * WP179：网页那一层要宿主回答的三件事（`DshRuntimeOptions.web`）——搜索凭据、替身搜索、替身抓取。
+ * 凭据只在要发请求的那一刻过线一次（stdio 管道，不落盘、不进事件），子进程用完即丢。
+ */
+export const M_HOST_WEB = 'agentsws/host/web'
+/** WP179：通知——一次网页使用（审计 + 用量），宿主照 `DshRuntimeOptions.web.onUse` 处理。 */
+export const M_WEB_USE = 'agentsws/web-use'
 
 /** 子进程档能透传的运行时选项（回调、时钟、网关都在宿主侧，不过线）。 */
 export interface WireRuntimeOptions {
@@ -94,6 +101,8 @@ export interface WireRuntimeOptions {
   sideEffects?: Record<string, ToolSideEffect>
   /** WP147：宿主替这次运行的模型答好的「能不能看图」（回调不过线，只传结论）。 */
   imageInput?: boolean
+  /** WP179：搜索口地址（测试指向本机替身；缺省官方地址）。 */
+  webSearchBaseUrl?: string
   /** 宿主侧是否接了这些回调；子进程据此决定 `options.stage` 之类给不给。 */
   has: {
     executeTool: boolean
@@ -102,6 +111,10 @@ export interface WireRuntimeOptions {
     createPolicyQuestion: boolean
     /** WP144：老宿主不发这一格 = 没接。 */
     requestComputerUse?: boolean
+    /** WP179：宿主接了网页凭据 / 替身 / 回报（老宿主不发这几格 = 没接）。 */
+    webCredential?: boolean
+    webStandIn?: boolean
+    webUse?: boolean
   }
 }
 
@@ -214,4 +227,22 @@ export interface ComputerUseCardParams {
 }
 export interface ComputerUseCardResult extends HostReply {
   approval_item_id?: string
+}
+
+/** WP179：子进程问宿主网页那一层的事。 */
+export type WebHostParams =
+  | { token: string; op: 'credential'; endpoint: string }
+  | { token: string; op: 'search'; query: string }
+  | { token: string; op: 'fetch'; url: string }
+export interface WebHostResult extends HostReply {
+  /** `op: 'credential'`：没有就不给。 */
+  credential?: { kind: 'account'; token: string } | { kind: 'api_key'; key: string }
+  /** `op: 'search' | 'fetch'`：替身的结果（官方 `WebSearchResult` / `WebFetchResult` 的形状）。 */
+  value?: unknown
+  /** 替身抛了错：官方 `WebError` 的机器码与一句话。 */
+  error?: { code: string; message: string }
+}
+export interface WebUseParams {
+  token: string
+  use: unknown
 }

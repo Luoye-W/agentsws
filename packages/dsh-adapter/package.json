@@ -81,9 +81,13 @@
     "@deepseek-ai/dsh-system-prompt": "0.2.0-rc.1",
     "@deepseek-ai/dsh-timeout": "0.2.0-rc.1",
     "@deepseek-ai/dsh-tool-bash": "0.2.0-rc.1",
+    "@deepseek-ai/dsh-tool-web": "0.2.0-rc.1",
     "@deepseek-ai/dsh-tools": "0.2.0-rc.1",
     "@deepseek-ai/dsh-user-approval": "0.2.0-rc.1",
     "@deepseek-ai/dsh-util-values": "0.2.0-rc.1",
+    "@deepseek-ai/dsh-web": "0.2.0-rc.1",
+    "@deepseek-ai/dsh-web-fetch-http": "0.2.0-rc.1",
+    "@deepseek-ai/dsh-web-search-deepseek": "0.2.0-rc.1",
     "@deepseek-ai/schemastery": "3.18.4",
     "@wxg-prc-cpg/browser-skill-dsh-plugin": "0.3.0",
     "yaml": "^2.5.0"
