@@ -15,6 +15,7 @@ import { adsRoutes } from './routes/ads.js'
 import { approvalRoutes } from './routes/approvals.js'
 import { askRoutes } from './routes/ask.js'
 import { assignmentRoutes } from './routes/assignments.js'
+import { b2bRoutes } from './routes/b2b.js'
 import { backupRoutes } from './routes/backup.js'
 import { brandDesignRoutes } from './routes/brand-design.js'
 import { brandIntakeRoutes } from './routes/brand-intake.js'
@@ -226,6 +227,8 @@ export function collectRoutes(): Route[] {
     ...extensionRoutes(),
     // WP144（docs/80）：电脑操控。`/v1/settings/computer-use*` 与 `/v1/computer-use/*` 都是新路径，与别处不撞
     ...computerUseRoutes(),
+    // WP172（docs/84）：B2B 库。`/v1/b2b/*` 是新前缀，与别处都不撞（放在最后：生成物的顺序不动别人）
+    ...b2bRoutes(),
   ]
 }
 

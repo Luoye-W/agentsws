@@ -326,7 +326,15 @@ describe('WP167：邮箱卡上的开关', () => {
     const box = new Mailbox()
     const h = assemble({ box })
     const sw = h.messages?.switches
-    expect(sw?.get(ME)).toEqual({ shadow_mode: false, move: true, mark_read: true, takeover: true })
+    // WP172 起多两格：收 B2B 信（缺省开）与 B2B 岗位开没开（只读）
+    expect(sw?.get(ME)).toEqual({
+      shadow_mode: false,
+      move: true,
+      mark_read: true,
+      b2b: true,
+      takeover: true,
+      b2b_position: false,
+    })
     expect(sw?.set(ME, { shadow_mode: true }, 'p_owner')).toMatchObject({ shadow_mode: true })
     // 没变的不写事件
     sw?.set(ME, { shadow_mode: true }, 'p_owner')
@@ -364,7 +372,7 @@ describe('WP167：开关落盘', () => {
       const a = new MailboxSwitchStore({ dir })
       expect(a.set('Hello@Shop.example', { mark_read: false }).changed).toEqual(['mark_read'])
       const b = new MailboxSwitchStore({ dir })
-      expect(b.get(ME)).toEqual({ shadow_mode: false, move: true, mark_read: false })
+      expect(b.get(ME)).toEqual({ shadow_mode: false, move: true, mark_read: false, b2b: true })
       expect(b.get('other@shop.example').mark_read).toBe(true)
       writeFileSync(join(dir, 'mailbox-switches.json'), '{oops')
       expect(new MailboxSwitchStore({ dir }).get(ME).mark_read).toBe(true)

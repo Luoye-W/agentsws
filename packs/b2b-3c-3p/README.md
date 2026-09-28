@@ -19,4 +19,14 @@ WP171（docs/84）B2B 岗位的模拟包。**手写**（`agentsws synth` 只生�
 | `export-docs-check` | 单证不符点转人审；尾款没到放单多一条提醒、落老板 |
 | `payment-account-change-red-card` | 改收款账户的信 → 红卡、账户不采纳；照信提付款指示被拦 |
 
+WP172 加四条邮件分拣场景（`scenarios/messages/`，判法是 `@agentsws/channels` 的 `triageMessage`，
+与服务进程里跑的同一个函数）：
+
+| 场景 | 钉住什么 |
+|---|---|
+| `b2b-inquiry-to-btobagents` | 新买家询价 → 模型判 B2B；老客户（客户库里的域名）→ 规则直达、不花模型；都挪进 BtoBAgents、开事项、起 Run |
+| `b2b-platform-notice` | 阿里国际站询盘通知（noreply + 退订头）→ 规则判 B2B，不起 Run（去后台回复） |
+| `b2b-unsubscribe-suppressed` | 人回的退订、硬退信进抑制名单；软退信不拉黑 |
+| `b2b-no-position-no-move` | 没开 B2B 岗位 → 不挪、不开事项、不起 Run |
+
 `baseline.json` 是 stub / direct / dsh 三个运行时 fast 档 `--seed 42` 跑出来的基线。

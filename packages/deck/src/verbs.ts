@@ -248,6 +248,8 @@ export const CATEGORY_BY_CHANGE: Partial<Record<ChangeKind, string>> = {
   payment_instruction: 'payment_instruction',
   marketplace_listing: 'marketplace_listing',
   marketplace_spend: 'marketplace_spend',
+  // WP172：B2B 库里建 / 改一条记录
+  b2b_record: 'trade_record',
 }
 
 /**

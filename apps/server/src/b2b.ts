@@ -148,3 +148,16 @@ export function demoB2bDeckData(now: string): B2bDeckData {
     rfqs: [],
   }
 }
+
+/**
+ * WP172：demo 里库里真有的（邮件分拣落成的询盘、批了的记录）排前面，后面垫演示投影。
+ * 真工作区不走这里——库里没有就是空态。
+ */
+export function withDemoB2b(real: B2bDeckData, demo: B2bDeckData): B2bDeckData {
+  const out = { ...demo }
+  for (const key of Object.keys(real) as (keyof B2bDeckData)[]) {
+    const mine = real[key] as unknown[]
+    ;(out as Record<string, unknown[]>)[key] = [...mine, ...(demo[key] as unknown[])]
+  }
+  return out
+}

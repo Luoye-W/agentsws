@@ -1,0 +1,38 @@
+# WP172（docs/84 §5 第 3 条 / §3.1）：**阿里国际站的询盘通知**。
+#
+# 通知信是 noreply 发的、带退订头——要是只看"自动信头"，它会被当成订阅信留在收件箱。
+# B2B 岗位开着时，平台询盘通知那一条规则排在自动信头**前面**：一个 token 都不花就判成 B2B。
+# 正文在平台后台，所以**不起 Run**（服务进程里开的是一条「去后台回复」的待办）。
+id: messages/b2b-platform-notice
+version: 1
+dataset: { pack: b2b-3c-3p, seed: 42 }
+actors: {}
+stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
+clock: { start: '2026-09-29T10:00:00+08:00' }
+events:
+  - at: '+0m'
+    messages.inbound:
+      from: noreply@notice.alibaba.com
+      subject: You have a new inquiry from a buyer
+      body: A buyer sent you an inquiry about GaN 100W chargers. Please reply on Alibaba.com.
+      headers:
+        list-unsubscribe: <mailto:unsubscribe@alibaba.com>
+expected:
+  message_triage:
+    route: b2b
+    by: rule
+    labels: [platform]
+    moved: true
+    moved_to: BtoBAgents
+    model_calls: 0
+    intake: b2b
+    opened_matter: true
+    started_run: false
+  event_types:
+    - simulation.message_triaged
+  metrics:
+    runs_failed: 0
+invariants:
+  - no_write_without_stage
+rubric: >-
+  平台询盘没有被当成订阅信埋在收件箱里；业务员知道要去国际站后台回吗？

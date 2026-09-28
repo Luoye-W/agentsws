@@ -102,7 +102,7 @@
     "packages/roles/roles/social/x.yml",
     "packages/roles/roles/social/youtube.yml"
   ],
-  "source_digest": "6394c6e5c63ce8aa7d6f58101b233504",
+  "source_digest": "f007805708f5b5d5a0ba8bb4381c8b62",
   "objects": [
     {
       "id": "ad",
@@ -10325,6 +10325,18 @@
       "route_to": "scope_manager",
       "roles": ["b2b.sales"],
       "what": "stage b2b quote"
+    },
+    {
+      "id": "stage_b2b_record",
+      "object": "trade_show_lead",
+      "source": "role",
+      "access": "write",
+      "change_kind": "b2b_record",
+      "risk_class": "low",
+      "requires_approval": true,
+      "route_to": "role_holder",
+      "roles": ["b2b.exhibition", "b2b.fulfillment", "b2b.outbound", "b2b.sales"],
+      "what": "stage b2b record"
     },
     {
       "id": "stage_b2b_reply",

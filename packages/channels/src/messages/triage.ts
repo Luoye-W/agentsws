@@ -25,6 +25,7 @@
 
 import type { MessagePriority, MessageRoute, MessageTriage, SenderRule } from '@agentsws/contracts'
 import { TRIAGE_CONFIDENCE_FLOOR } from '@agentsws/contracts'
+import { looksLikeB2bInquiry, platformInquiryOf } from './b2b-signals.js'
 
 /** 分拣要看的那几样（全是已解析的头与正文；判定方自己不碰 MIME）。 */
 export interface TriageInput {
@@ -52,6 +53,15 @@ export interface TriageContext {
   isSupportThread(thread_id: string, refs: readonly string[]): boolean
   /** 这条会话是不是红人合作线程。 */
   isKolThread(thread_id: string, refs: readonly string[]): boolean
+  /**
+   * WP172（docs/84 §5）：B2B 岗位开着、而且**这只邮箱**的「收 B2B 信」开关开着。
+   * 不给 = 关（老调用方一封 B2B 都不产出，与 WP161 的预留一致）。
+   */
+  b2b_enabled?: boolean
+  /** B2B ①：回的是我们发出去的 B2B 信（开发信 / 报价信，按 Message-ID 对线程）。 */
+  isB2bThread?(thread_id: string, refs: readonly string[]): boolean
+  /** B2B ②：发件人在 B2B 客户 / 联系人库里（按地址哈希或公司域名对）。 */
+  isB2bSender?(from_email: string): boolean
   /** 用户教过的发件人规则（② ）。 */
   senderRules: readonly SenderRule[]
   /** `halt.model` 开着吗。 */
@@ -262,6 +272,22 @@ export function triageByRules(input: TriageInput, ctx: TriageContext): MessageTr
     }
   }
 
+  // WP172 B2B ①：回我们发出去的开发信 / 报价信——线程对得上就是 B2B，不靠猜
+  const b2b = ctx.b2b_enabled === true
+  if (b2b && ctx.isB2bThread?.(input.thread_id, input.references) === true) {
+    return {
+      route: 'b2b',
+      labels: [],
+      needs_reply: true,
+      priority: 'high',
+      summary: clip('回了我们发出去的 B2B 信'),
+      confidence: 1,
+      by: 'rule',
+      reasons: ['In-Reply-To / References 命中我们发出去的 B2B 信'],
+      at: ctx.at,
+    }
+  }
+
   // ② 发件人规则（用户教过的）
   const rule = matchSenderRule(ctx.senderRules, input.from_email)
   if (rule !== undefined) {
@@ -275,6 +301,36 @@ export function triageByRules(input: TriageInput, ctx: TriageContext): MessageTr
       confidence: 1,
       by: 'rule',
       reasons: [`发件人规则：${rule.sender}`],
+      at: ctx.at,
+    }
+  }
+
+  // WP172 B2B ②：发件人已经在 B2B 客户 / 联系人库里——和客服抢的时候按库里算（docs/84 §5）
+  if (b2b && ctx.isB2bSender?.(input.from_email) === true) {
+    return {
+      route: 'b2b',
+      labels: [],
+      needs_reply: true,
+      priority: 'normal',
+      summary: clip('B2B 客户的来信'),
+      confidence: 1,
+      by: 'rule',
+      reasons: ['发件人在 B2B 客户 / 联系人库里'],
+      at: ctx.at,
+    }
+  }
+  // WP172 B2B ③：平台询盘通知（要在"自动信头"之前：这些通知都是 noreply 发的）
+  const platform = b2b ? platformInquiryOf(input) : undefined
+  if (platform !== undefined) {
+    return {
+      route: 'b2b',
+      labels: ['platform'],
+      needs_reply: true,
+      priority: 'high',
+      summary: clip('B2B 平台来了一条询盘'),
+      confidence: 0.95,
+      by: 'rule',
+      reasons: [`B2B 平台询盘通知：${platform}`],
       at: ctx.at,
     }
   }
@@ -319,12 +375,19 @@ export function triageFallback(input: TriageInput, ctx: TriageContext): MessageT
   if (hits(text, SUSPICIOUS_TERMS).length > 0) labels.push('suspicious')
   const supportHits = hits(text, SUPPORT_TERMS)
   // 像客服信但没开客服岗位（或没把握）：**不挪**，只挂一个"像是客服信？"
-  const suggested =
-    supportHits.length > 0 && ctx.support_enabled ? ('support' as MessageRoute) : undefined
+  // WP172：像询盘、B2B 开着 → 挂"像是 B2B？"（客服词面优先：零售客户问退款不是询盘）
+  const b2bHits =
+    ctx.b2b_enabled === true && supportHits.length === 0 ? looksLikeB2bInquiry(input) : []
+  const suggested: MessageRoute | undefined =
+    supportHits.length > 0 && ctx.support_enabled
+      ? 'support'
+      : b2bHits.length > 0
+        ? 'b2b'
+        : undefined
   return {
     route: 'inbox',
     labels,
-    needs_reply: supportHits.length > 0,
+    needs_reply: supportHits.length > 0 || b2bHits.length > 0,
     priority: 'normal',
     summary: clip(ctx.model_halted ? '未分拣（模型已急停）' : '未分拣'),
     confidence: ctx.model_halted ? 0 : 0.3,
@@ -374,6 +437,7 @@ export function allowedRoutes(ctx: TriageContext): MessageRoute[] {
   const out: MessageRoute[] = ['inbox']
   if (ctx.support_enabled) out.push('support')
   if (ctx.kol_enabled) out.push('kol')
+  if (ctx.b2b_enabled === true) out.push('b2b')
   return out
 }
 
@@ -394,7 +458,7 @@ const BUILTIN_LABEL_ORDER: readonly string[] = [
 /**
  * 模型的结论落地前的三道收口：
  * ① 岗位没开的路一律降回 `inbox`；
- * ② 把握不够的 support / kol **不挪**，降回 `inbox` 并挂 `suggested_route`；
+ * ② 把握不够的 support / kol / b2b **不挪**，降回 `inbox` 并挂 `suggested_route`；
  * ③ 摘要裁到 40 字、标签只留认得的那几个。
  */
 export function normalizeVerdict(
@@ -433,6 +497,8 @@ export function normalizeVerdict(
 export function allowRoute(route: MessageRoute, ctx: TriageContext): MessageRoute {
   if (route === 'support') return ctx.support_enabled ? 'support' : 'inbox'
   if (route === 'kol') return ctx.kol_enabled ? 'kol' : 'inbox'
+  // WP172：B2B 岗位没开、或这只邮箱不收 B2B 信 → 落回收件箱（不挪、不开事项）
+  if (route === 'b2b') return ctx.b2b_enabled === true ? 'b2b' : 'inbox'
   return 'inbox'
 }
 

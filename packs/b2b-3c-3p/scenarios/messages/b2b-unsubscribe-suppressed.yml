@@ -1,0 +1,44 @@
+# WP172（docs/84 §2.2 / §5 第 5 条）：**退订回信、硬退信 → 直接进抑制名单**，不等 Run。
+#
+# 三封：一封人回的"别再发了"、一封硬退信（5.1.1 用户不存在）、一封软退信（邮箱满了，4.2.2）。
+# 前两封进名单，软退信**不拉黑**（过几天可能就好了）。判据是 `@agentsws/channels` 的
+# `unsubscribeReplyOf` / `bounceOf`——服务进程里同一对纯函数。
+id: messages/b2b-unsubscribe-suppressed
+version: 1
+dataset: { pack: b2b-3c-3p, seed: 42 }
+actors: {}
+stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
+clock: { start: '2026-09-29T11:00:00+08:00' }
+events:
+  - at: '+0m'
+    messages.inbound:
+      from: mia@peakgadgets.example
+      subject: 'Re: GaN chargers for Peak Gadgets'
+      body: Please remove me from your mailing list. Thanks.
+  - at: '+5m'
+    messages.inbound:
+      from: postmaster@mx.example
+      subject: Delivery Status Notification (Delay)
+      body: '<busy@full.example>: mailbox full. Status: 4.2.2'
+  - at: '+10m'
+    messages.inbound:
+      from: MAILER-DAEMON@mx.example
+      subject: Undelivered Mail Returned to Sender
+      body: "Final-Recipient: rfc822; old.buyer@gone.example\nStatus: 5.1.1\nuser unknown"
+expected:
+  message_triage:
+    route: inbox
+    moved: false
+    suppressed: true
+    suppression_reason: hard_bounce
+  message_intake:
+    suppressed: 2
+    runs_started: 0
+  event_types:
+    - simulation.message_triaged
+  metrics:
+    runs_failed: 0
+invariants:
+  - no_write_without_stage
+rubric: >-
+  说了"别再发"的人和退信的地址，下一轮开发信里还会出现吗（不该出现）？邮箱满了的那位没有被误拉黑吧？

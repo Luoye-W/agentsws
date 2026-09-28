@@ -53,9 +53,11 @@ const quoteChange = (after: Record<string, unknown>, before: Record<string, unkn
 })
 
 describe('B2B kind 的风险级与硬顶', () => {
-  it('十三条都有风险级，而且都归 b2b-guardrail 判', () => {
+  it('十四条（WP171 十三条 + WP172 的 b2b_record）都有风险级，而且都归 b2b-guardrail 判', () => {
     for (const k of B2B_GUARDED_KINDS) expect(KIND_RISK[k]).toBeDefined()
-    expect(B2B_GUARDED_KINDS.size).toBe(13)
+    expect(B2B_GUARDED_KINDS.size).toBe(14)
+    expect(KIND_RISK.b2b_record).toBe('low')
+    expect(HARD_L1.has('b2b_record')).toBe(false)
   })
   it('报价、展会缴费、放单、付款指示、平台花钱永远人审', () => {
     for (const k of [
@@ -293,5 +295,40 @@ describe('跟单：放单与单证', () => {
       'stage',
     )
     expect(rules(r, 'block')).toEqual(['sample_tracking_required'])
+  })
+})
+
+describe('WP172：B2B 库记录（b2b_record）', () => {
+  const contact = { type: 'b2b_contact', id: 'ct_1' } as const
+  const change = (record: Record<string, unknown>, collection = 'b2b_contact') => ({
+    kind: 'b2b_record' as const,
+    target: contact,
+    before: {},
+    after: { collection, op: 'create', record },
+  })
+  it('联系人没写来源 → block（GDPR 第 14 条）', () => {
+    const r = evaluateGuardrail(change({ name: 'Mia' }), { caps: {} }, facts(contact), 'stage')
+    expect(rules(r, 'block')).toContain('contact_source_required')
+  })
+  it('联系人写了来源就放行', () => {
+    const r = evaluateGuardrail(
+      change({ name: 'Mia', source: { kind: 'manual', observed_at: now } }),
+      { caps: {} },
+      facts(contact),
+      'stage',
+    )
+    expect(rules(r, 'block')).toEqual([])
+  })
+  it('客户记录不要求来源格式；备注里夹一串收款账户 → block（只认事实卡）', () => {
+    const acct = evaluateGuardrail(
+      change(
+        { name: 'VoltHaus', note: 'new bank account IBAN DE89 3704 0044 0532 0130 00' },
+        'b2b_account',
+      ),
+      { caps: {} },
+      facts(contact),
+      'stage',
+    )
+    expect(rules(acct, 'block')).toContain('payment_account_not_from_fact_card')
   })
 })

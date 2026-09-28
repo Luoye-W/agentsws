@@ -979,6 +979,9 @@ const zh: Table = {
   'connections.mailbox.mark_read': '标已读',
   'connections.mailbox.mark_read.hint':
     '判成客服的信在邮箱里标成已读，你在邮件软件里就不用再看一遍。',
+  'connections.mailbox.b2b': '收 B2B 信',
+  'connections.mailbox.b2b.hint':
+    '询盘、老客户来信、回我们开发信的信挪进 BtoBAgents 文件夹，交给 B2B 岗位。发开发信用的那只邮箱也要开：回信会回到它那里。',
   'connections.mailbox.failed': '没改成，稍后再试一次。',
   // ── WP83（54（将改号 55）§4）：连接目录与岗位连接清单 ──────────────
   'connections.directory.title': '添加连接',
@@ -1435,6 +1438,7 @@ const zh: Table = {
   'category.payment_instruction': '付款指示',
   'category.marketplace_listing': '平台产品',
   'category.marketplace_spend': '平台花钱',
+  'category.trade_record': 'B2B 记录',
   'category.fraud_alert': '疑似诈骗',
   'category.collection_edit': '改集合',
   'category.inventory': '调库存',
@@ -1563,10 +1567,12 @@ const zh: Table = {
   'messages.delete': '删除',
   'messages.readonly': 'Agent 在处理这条线程；要亲自回，先在工作线程里点「我来接手」。',
   'messages.agent.working': '客服 Agent 在处理',
+  'messages.agent.working_b2b': 'B2B Agent 在处理',
   'messages.agent.waiting_for_you': '等你拍板',
   'messages.agent.replied': '已回复',
   'messages.agent.route.support': '这条归客服岗位',
   'messages.agent.route.kol': '这条归红人营销岗位',
+  'messages.agent.route.b2b': '这条归 B2B 岗位',
   'messages.agent.open': '去工作线程 →',
   'messages.images.blocked': '为了不被追踪，远程图片没有加载。',
   'messages.images.show': '显示图片',
@@ -1580,11 +1586,13 @@ const zh: Table = {
   'messages.mailbox_failure.reason.unsupported': '这只邮箱不支持这个动作',
   // ── WP167：待确认（分拣拿不准的信）──────────────────────────────────
   'messages.pending': '待确认',
-  'messages.pending.hint': '分拣拿不准的信：没开事项、没挪。点一下交给客服，或者说不是。',
+  'messages.pending.hint': '分拣拿不准的信：没开事项、没挪。点一下交给客服 / B2B，或者说不是。',
   'messages.pending.support': '这是客服',
   'messages.pending.kol': '这是红人',
+  'messages.pending.b2b': '这是 B2B',
   'messages.pending.no': '不是',
   'messages.pending.refused': '客服岗位没开，交不出去',
+  'messages.pending.refused_b2b': 'B2B 岗位没开，或这只邮箱不收 B2B 信',
   'messages.no_mailbox': '这台机器上还没连邮箱。',
   'messages.no_mailbox.hint':
     '连上之后，收件箱、已发、草稿、垃圾箱与客服 / 红人那两个文件夹都会出现在这里。',
@@ -3965,6 +3973,9 @@ const en: Table = {
   'connections.mailbox.mark_read': 'Mark as read',
   'connections.mailbox.mark_read.hint':
     'Support emails are marked as read in the mailbox, so you do not read them twice in your mail app.',
+  'connections.mailbox.b2b': 'Take B2B mail',
+  'connections.mailbox.b2b.hint':
+    'Inquiries, mail from existing buyers and replies to our cold emails go to the BtoBAgents folder and to the B2B position. Keep it on for the mailbox you send cold emails from: replies land there.',
   'connections.mailbox.failed': 'That did not save. Try again in a moment.',
   // ── WP83：connection directory & per-position checklist ─────────────
   'connections.directory.title': 'Add a connection',
@@ -4446,6 +4457,7 @@ const en: Table = {
   'category.payment_instruction': 'Payment instruction',
   'category.marketplace_listing': 'Marketplace listing',
   'category.marketplace_spend': 'Marketplace spend',
+  'category.trade_record': 'B2B record',
   'category.fraud_alert': 'Possible fraud',
   'category.collection_edit': 'Collection edit',
   'category.inventory': 'Inventory',
@@ -4575,10 +4587,12 @@ const en: Table = {
   'messages.readonly':
     'An agent is handling this thread; to answer yourself, take it over in the work thread first.',
   'messages.agent.working': 'Support agent is on it',
+  'messages.agent.working_b2b': 'B2B agent is on it',
   'messages.agent.waiting_for_you': 'Waiting on you',
   'messages.agent.replied': 'Replied',
   'messages.agent.route.support': 'Handled by the support position',
   'messages.agent.route.kol': 'Handled by the creator-marketing position',
+  'messages.agent.route.b2b': 'Handled by the B2B position',
   'messages.agent.open': 'Open work thread →',
   'messages.images.blocked': 'Remote images are blocked so senders cannot track you.',
   'messages.images.show': 'Show images',
@@ -4597,8 +4611,10 @@ const en: Table = {
     'Emails triage was unsure about: no work item opened, nothing moved. Hand one to support with a click, or say no.',
   'messages.pending.support': "It's support",
   'messages.pending.kol': "It's a creator",
+  'messages.pending.b2b': "It's B2B",
   'messages.pending.no': 'No',
   'messages.pending.refused': 'Support is off, so it could not be handed over',
+  'messages.pending.refused_b2b': 'B2B is off, or this mailbox does not take B2B mail',
   'messages.no_mailbox': 'No mailbox connected on this machine yet.',
   'messages.no_mailbox.hint':
     'Once you connect one, your inbox, sent, drafts, trash and the two agent folders all show up here.',

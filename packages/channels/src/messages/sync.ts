@@ -68,6 +68,8 @@ export const DEFAULT_SYNC_FOLDER_KINDS: readonly MessageFolderKind[] = [
   'spam',
   'support',
   'kol',
+  // WP172：B2B 那只（`BtoBAgents`）。服务器上没有这只就不扫——第一次挪信时建出来，下一轮就有了
+  'b2b',
 ]
 
 /**
@@ -399,7 +401,7 @@ export class MailboxSync {
       }
       return true
     }
-    // 红人那只：影子模式同样一下都不动（影子模式说的是"这只邮箱"，不分岗位）
+    // 红人 / B2B 那只：影子模式同样一下都不动（影子模式说的是"这只邮箱"，不分岗位）
     if (switches.shadow_mode) {
       record({
         account: account.address,

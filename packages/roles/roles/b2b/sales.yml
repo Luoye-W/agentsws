@@ -48,6 +48,14 @@ connectors:
   - { kind: calendar, required: false, grants: [read, write], ownership: person }
 
 actions:
+  # WP172：B2B 库里建 / 改一条客户、联系人、商机——读不经卡，写都经卡（L1 起）
+  - id: stage_b2b_record
+    target: b2b_account
+    kind: staged_change
+    mandate:
+      caps: {}
+      window: { max_count: 200, per: day }
+    route_to: role_holder
   - id: stage_b2b_reply
     target: b2b_account
     kind: outbound_message
@@ -85,6 +93,11 @@ actions:
     route_to: owner
 
 automation:
+  stage_b2b_record:
+    ceiling: L2
+    initial: L1
+    promotion: { adoption_rate_min: 0.95, window_weeks: 4, min_samples: 30 }
+    demotion_triggers: [guardrail_hit, manual]
   # 回信 L1 起，采纳率够了可以升 L2；碰承诺的那一封永远转人审（guardrail，不靠等级）
   stage_b2b_reply:
     ceiling: L2

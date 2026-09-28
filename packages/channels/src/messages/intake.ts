@@ -21,12 +21,13 @@ import type { Iso8601, MessageFolderKind, MessageTriage } from '@agentsws/contra
  *
  * - `support`：交给客服那一路（开事项、过判断层、起 Run）；
  * - `kol`：交给红人那一路（照现在的规矩：归并到合作线程）；
+ * - `b2b`（WP172）：交给 B2B 那一路（落成询盘或往来记录；B2B 岗位开着才开事项、起 Run）；
  * - `pending`：分拣判不准（把握不够的客服 / 红人判定）——**不开事项**，放「消息」页的
  *   「待确认」一栏，人点一下才交出去；
  * - `none`：其余一切（订阅、通知、供应商、没开岗位的客服信）——只进「消息」页，
  *   不开事项、不起 Run、不花模型钱。
  */
-export type MailIntake = 'support' | 'kol' | 'pending' | 'none'
+export type MailIntake = 'support' | 'kol' | 'b2b' | 'pending' | 'none'
 
 export function intakeOf(input: {
   triage: Pick<MessageTriage, 'route' | 'suggested_route' | 'by'>
@@ -38,8 +39,10 @@ export function intakeOf(input: {
   if (folder_kind === 'sent' || folder_kind === 'drafts' || folder_kind === 'trash') return 'none'
   if (triage.route === 'support') return 'support'
   if (triage.route === 'kol') return 'kol'
+  if (triage.route === 'b2b') return 'b2b'
   const wanted = triage.suggested_route
-  if (triage.by !== 'user' && (wanted === 'support' || wanted === 'kol')) return 'pending'
+  if (triage.by !== 'user' && (wanted === 'support' || wanted === 'kol' || wanted === 'b2b'))
+    return 'pending'
   return 'none'
 }
 

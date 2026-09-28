@@ -318,6 +318,9 @@ importers:
       '@agentsws/api':
         specifier: workspace:*
         version: link:../../packages/api
+      '@agentsws/b2b-core':
+        specifier: workspace:*
+        version: link:../../packages/b2b-core
       '@agentsws/blob':
         specifier: workspace:*
         version: link:../../packages/blob

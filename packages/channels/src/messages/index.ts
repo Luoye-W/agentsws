@@ -5,6 +5,7 @@
  * 这边是"用户看到的那只邮箱"（消息库、分拣、标签、草稿、回写）。
  * 两边共用同一批解析零件与同一套游标 / 租约 / 毒消息纪律，不另起炉灶。
  */
+export * from './b2b-signals.js'
 export * from './folders.js'
 export * from './intake.js'
 export * from './labels.js'

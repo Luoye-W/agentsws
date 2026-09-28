@@ -53,6 +53,7 @@ import type { DeckCard, QueryContext as DeckQueryContext } from '@agentsws/deck'
 import type { IdempotencyStore } from './idempotency.js'
 import type { AdsPort } from './routes/ads.js'
 import type { AskPort } from './routes/ask.js'
+import type { B2bPort } from './routes/b2b.js'
 import type { BackupPort } from './routes/backup.js'
 import type { BrandDesignPort } from './routes/brand-design.js'
 import type { BrandIntakePort } from './routes/brand-intake.js'
@@ -769,6 +770,8 @@ export interface GatewayDeps {
    * WP78（60 §5）：本地公关库。没装配时 `/v1/pr/*` 回 not_implemented——
    * 公共关系那四条职责要它才动得了。
    */
+  /** WP172（docs/84）：B2B 库（`/v1/b2b/*`）。不给 = 那几条路 501。 */
+  b2b?: B2bPort
   pr?: PrPort
   /**
    * WP154「内容与搜索」：问题清单与"现在跑一轮"。没装配时 `/v1/seo/*` 回 not_implemented。

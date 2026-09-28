@@ -256,7 +256,8 @@ export interface ScenarioMessageCorrect {
 
 /** 把某个岗位撤了（这个工作区没有人持那条职责了）。 */
 export interface ScenarioMessageDisablePosition {
-  position: 'support' | 'kol'
+  /** WP172：`b2b` = 这个工作区没人持 B2B 职责了。 */
+  position: 'support' | 'kol' | 'b2b'
 }
 
 /** 人按了托盘的「暂停」（`halt.model`）。 */
@@ -1306,6 +1307,9 @@ export interface ScenarioExpected {
     opened_matter?: boolean
     /** WP167：这一封起没起 Run。 */
     started_run?: boolean
+    /** WP172：这一封（退订 / 硬退信）让人进了抑制名单吗。 */
+    suppressed?: boolean
+    suppression_reason?: string
   }
   /**
    * WP167（docs/63 §D「收信一个入口」）：**这一轮所有信**加起来，各去了哪一路。
@@ -1318,6 +1322,10 @@ export interface ScenarioExpected {
     support?: NumericAssertion
     /** 交给红人那一路的封数。 */
     kol?: NumericAssertion
+    /** WP172：交给 B2B 那一路的封数。 */
+    b2b?: NumericAssertion
+    /** WP172：进了抑制名单的封数（退订 / 硬退信）。 */
+    suppressed?: NumericAssertion
     /** 进「待确认」的封数。 */
     pending?: NumericAssertion
     /** 只进消息页的封数。 */

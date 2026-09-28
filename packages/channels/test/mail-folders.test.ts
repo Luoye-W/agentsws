@@ -102,8 +102,14 @@ describe('扫描清单按服务器上真有的排', () => {
     ])
   })
 
-  it('岗位文件夹一只都没有就先不扫；BtoBAgents 不在缺省扫描里（预留）', () => {
-    expect(mailboxFoldersFrom(['INBOX', 'Sent', 'BtoBAgents'])).toEqual(['INBOX', 'Sent'])
+  it('岗位文件夹一只都没有就先不扫；WP172 起服务器上有 BtoBAgents 就扫它（大小写变体照认）', () => {
+    expect(mailboxFoldersFrom(['INBOX', 'Sent'])).toEqual(['INBOX', 'Sent'])
+    expect(mailboxFoldersFrom(['INBOX', 'Sent', 'BtoBAgents'])).toEqual([
+      'INBOX',
+      'Sent',
+      'BtoBAgents',
+    ])
+    expect(mailboxFoldersFrom(['INBOX', 'btobagents'])).toEqual(['INBOX', 'btobagents'])
   })
 
   it('列不到（空清单）→ undefined，调用方退回缺省名单', () => {
@@ -112,7 +118,7 @@ describe('扫描清单按服务器上真有的排', () => {
   })
 })
 
-describe('B2B 只预留：分拣器不产出它', () => {
+describe('老调用方（不给 b2b_enabled）：分拣器不产出 b2b', () => {
   const ctx = {
     support_enabled: true,
     kol_enabled: true,

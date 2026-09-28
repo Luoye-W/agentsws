@@ -385,3 +385,32 @@ describe('WP167：「待确认」那一栏', () => {
     listMessageThreads.mockImplementation(async () => ({ threads: [summary()] }))
   })
 })
+
+describe('WP172：「待确认」里的「这是 B2B」', () => {
+  it('拿不准的询盘挂「这是 B2B」；交不出去时说清楚为什么', async () => {
+    listMessageThreads.mockImplementation(async (query?: string) =>
+      query?.includes('pending_route=true') === true
+        ? {
+            threads: [
+              summary({ suggested_route: 'b2b', pending_message_id: 'msg_b2b', unread: 0 }),
+            ],
+          }
+        : { threads: [summary()] },
+    )
+    confirmMessageRoute.mockImplementationOnce(async () => ({
+      message: {} as never,
+      handed_off: false,
+    }))
+    const user = userEvent.setup()
+    renderWithProviders(<MessagesPage />)
+    await user.click(await screen.findByTestId('messages-pending'))
+    const yes = await screen.findByTestId('messages-pending-yes')
+    expect(yes.textContent).toBe('这是 B2B')
+    await user.click(yes)
+    await waitFor(() => {
+      expect(confirmMessageRoute).toHaveBeenCalledWith('msg_b2b', 'b2b')
+    })
+    expect(await screen.findByText('B2B 岗位没开，或这只邮箱不收 B2B 信')).toBeDefined()
+    listMessageThreads.mockImplementation(async () => ({ threads: [summary()] }))
+  })
+})

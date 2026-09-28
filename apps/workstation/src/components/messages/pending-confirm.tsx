@@ -3,6 +3,7 @@
  *
  * 这些信**没开事项、没起 Run、没挪**（docs/63 §D「收信一个入口」），只在这里等人点一下：
  * 「这是客服」交给客服那一路（开事项、起 Run，再按邮箱卡上的开关挪信），「不是」只记人的判断。
+ * WP172：拿不准的询盘挂「这是 B2B」——交给 B2B 那一路（落成询盘），再挪进 `BtoBAgents`。
  * 两下都算**人工分拣**，服务端写事件。
  *
  * 少字：左栏一格（有待确认的信就亮一个点，和未读同一种点），每行底下两个小按钮；解释进问号。
@@ -72,9 +73,11 @@ export function PendingActions({
   const { t } = useApp()
   const [refused, setRefused] = useState(false)
   const id = row.pending_message_id
-  const wanted = row.suggested_route === 'kol' ? 'kol' : 'support'
+  const wanted =
+    row.suggested_route === 'kol' ? 'kol' : row.suggested_route === 'b2b' ? 'b2b' : 'support'
   const confirm = useMutation({
-    mutationFn: (route: 'support' | 'kol' | 'inbox') => confirmMessageRoute(id as string, route),
+    mutationFn: (route: 'support' | 'kol' | 'b2b' | 'inbox') =>
+      confirmMessageRoute(id as string, route),
     onSuccess: (out, route) => {
       setRefused(route !== 'inbox' && !out.handed_off)
       onDone()
@@ -96,7 +99,7 @@ export function PendingActions({
           confirm.mutate(wanted)
         }}
       >
-        {t(wanted === 'kol' ? 'messages.pending.kol' : 'messages.pending.support')}
+        {t(`messages.pending.${wanted}`)}
       </Button>
       <Button
         size="xs"
@@ -111,7 +114,7 @@ export function PendingActions({
       </Button>
       {refused ? (
         <span role="alert" className="text-[11px] text-destructive">
-          {t('messages.pending.refused')}
+          {t(wanted === 'b2b' ? 'messages.pending.refused_b2b' : 'messages.pending.refused')}
         </span>
       ) : null}
     </div>

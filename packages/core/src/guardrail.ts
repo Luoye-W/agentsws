@@ -143,6 +143,8 @@ export const KIND_RISK: Record<ChangeKind, RiskClass> = {
   payment_instruction: 'high',
   marketplace_listing: 'medium',
   marketplace_spend: 'high',
+  // WP172：B2B 库里建 / 改一条客户、联系人、商机、展会、线索、出运单——不动钱、不对外发信
+  b2b_record: 'low',
 }
 export const HARD_L1: ReadonlySet<ChangeKind> = new Set([
   // WP64（51 §2.3）：一次群发出去收不回来，而且收信的是**顾客**不是同事——发送永远人审。

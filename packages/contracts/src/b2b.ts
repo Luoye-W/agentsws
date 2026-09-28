@@ -417,3 +417,130 @@ export interface PaymentAccountChangeSignal {
 
 /** 红卡的审批种类（`ApprovalKind`）。 */
 export const B2B_FRAUD_ALERT_KIND = 'b2b_fraud_alert' as const
+
+/* ── WP172：邮件分拣落进 B2B 库的那几样（docs/84 §5）──────────────────── */
+
+/**
+ * B2B 平台的询盘 / RFQ 通知信的发信域名（docs/84 §5 第 3 条）。
+ *
+ * 只认域名还不够：同一个域名也发营销订阅。分拣时还要看主题 / 正文里有没有询盘字样
+ * （`@agentsws/channels` 的 `platformInquiryOf`）。
+ */
+export const B2B_PLATFORM_DOMAINS: readonly { domain: string; platform: string }[] = [
+  { domain: 'alibaba.com', platform: 'alibaba' },
+  { domain: 'made-in-china.com', platform: 'made_in_china' },
+  { domain: 'globalsources.com', platform: 'global_sources' },
+]
+
+/** 一封信为什么判成了 B2B（docs/84 §5 的四条，按顺序）。 */
+export type B2bMailBasis = 'our_thread' | 'known_sender' | 'platform_notice' | 'model' | 'user'
+
+/**
+ * 分拣判成 B2B 的一封信在 B2B 库里落成的样子：**询盘**（新的需求）或**往来记录**
+ * （已有客户 / 我们发出去那封信的后续）。
+ *
+ * 正文不在这里（在消息库里，`message_id` 指过去）；发件人只存遮过的地址与哈希。
+ */
+export interface B2bInquiry {
+  id: string
+  workspace_id: WorkspaceId
+  /** `inquiry` = 询盘（新需求、平台通知）；`correspondence` = 已有客户 / 回我们的信。 */
+  kind: 'inquiry' | 'correspondence'
+  basis: B2bMailBasis
+  /** 平台通知信是哪个平台（`alibaba` …）。 */
+  platform?: string
+  /** 对上了库里哪家客户 / 哪个联系人。 */
+  account_id?: string
+  contact_id?: string
+  subject: string
+  /** 发件人（遮过：`a***@b.com`）。 */
+  from_masked: string
+  /** 发件人域名（没遮：公司域名不是个人数据，交接与去重要它）。 */
+  from_domain: string
+  /** 哪只邮箱收的（遮过）。 */
+  mailbox_masked: string
+  /** 消息库里那封信的 id（正文、原信都在那边）。 */
+  message_id: string
+  thread_id: string
+  /** 回信里碰到的承诺类别（价格 / 交期 / 认证 …），面板上一眼看得见。 */
+  commitments: string[]
+  status: 'new' | 'replied' | 'closed'
+  /** B2B 岗位开着时开的那条事项。 */
+  matter_id?: string
+  /** 起的那次 Run。 */
+  run_id?: string
+  /** 信里要求改收款账户 → 红卡的 id（不采纳）。 */
+  fraud_alert_id?: string
+  received_at: Iso8601
+  created_at: Iso8601
+}
+
+/**
+ * 抑制名单上的一条（docs/84 §2.1「只有一份」，规则在 `@agentsws/core` 的 `suppression.ts`）。
+ *
+ * **不存明文地址**：`key_hash` 是 `sha256(suppressionKey(地址))`，比对时把收件人照同一个口径算一遍；
+ * `masked` 只给人认（`a***@b.com`）。
+ */
+export interface B2bSuppressionEntry {
+  key_hash: string
+  masked: string
+  reason: 'unsubscribe' | 'hard_bounce' | 'manual'
+  /** 从哪封信认出来的（消息库 id）。 */
+  message_id?: string
+  /** 对上了哪个联系人（这个联系人的开发序列就此停下）。 */
+  contact_id?: string
+  at: Iso8601
+}
+
+/* ── WP172：B2B 库的写法——草稿 → 改动卡 → 批了才落库 ─────────────────── */
+
+/** B2B 库里的九类对象（表名 = 对象类型名；报价版本挂在 `b2b_quote` 下面）。 */
+export type B2bCollection =
+  | 'b2b_account'
+  | 'b2b_contact'
+  | 'b2b_opportunity'
+  | 'b2b_quote'
+  | 'b2b_sample'
+  | 'b2b_list'
+  | 'trade_show'
+  | 'trade_show_lead'
+  | 'export_shipment'
+
+export const B2B_COLLECTIONS: readonly B2bCollection[] = [
+  'b2b_account',
+  'b2b_contact',
+  'b2b_opportunity',
+  'b2b_quote',
+  'b2b_sample',
+  'b2b_list',
+  'trade_show',
+  'trade_show_lead',
+  'export_shipment',
+]
+
+/**
+ * 一份还没生效的改动（新建或修改一条 B2B 记录）。
+ *
+ * **写都经卡**：草稿存着不算数；「提交」= 出一张改动卡（`b2b_record` / `b2b_quote` /
+ * `b2b_sample` / `b2b_list_import` …），批了执行器才把它落进库里。读不经卡。
+ */
+export interface B2bDraft {
+  id: string
+  workspace_id: WorkspaceId
+  collection: B2bCollection
+  op: 'create' | 'update'
+  /** 要建 / 要改的那条记录的 id（新建时预先分好）。 */
+  record_id: string
+  /** 记录本身（新建是全量，修改是改完之后的全量）。联系方式只有 `*_ref`，没有明文。 */
+  record: Record<string, unknown>
+  /** 报价：这一版（只读，批了才写进版本表）。 */
+  quote_version?: B2bQuoteVersion
+  status: 'draft' | 'submitted' | 'applied' | 'blocked'
+  change_id?: string
+  approval_item_id?: string
+  /** 被 guardrail 拦下时那句人话。 */
+  message?: string
+  created_by: PersonId
+  created_at: Iso8601
+  updated_at: Iso8601
+}

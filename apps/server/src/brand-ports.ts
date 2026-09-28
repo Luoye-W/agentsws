@@ -16,6 +16,7 @@
 import type {
   AdsPort,
   AskPort,
+  B2bPort,
   CloudPort,
   ConnectionDirectoryPort,
   ConnectionsPort,
@@ -402,6 +403,14 @@ export function brandPrPort(
   make: (workspace_id: WorkspaceId) => Promise<PrPort>,
 ): PrPort {
   return scopedPort<PrPort>(make, () => brands.bootstrap)
+}
+
+/** WP172（docs/84）：B2B 库 `/v1/b2b/*`——一个品牌一张库（客户名单与报价是一家公司的命根子）。 */
+export function brandB2bPort(
+  brands: BrandModules,
+  make: (workspace_id: WorkspaceId) => Promise<B2bPort>,
+): B2bPort {
+  return scopedPort<B2bPort>(make, () => brands.bootstrap)
 }
 
 /**

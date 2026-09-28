@@ -8,6 +8,8 @@
  * 那是"Agent 在处理，但你的邮箱一下都没动"，人得一眼看出来，不然会以为挪信坏了。
  *
  * 不是邮箱、或这台机器没装消息同步（接口回 404）：什么都不画。
+ *
+ * WP172：B2B 岗位开着时多一个「收 B2B 信」（判成 B2B 的挪进 `BtoBAgents`，缺省开）。
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { EyeOff } from 'lucide-react'
@@ -23,6 +25,8 @@ import { useApp } from '@/lib/app-context'
 import { cn } from '@/lib/utils'
 
 const SWITCHES: readonly MailboxSwitchName[] = ['shadow_mode', 'move', 'mark_read']
+/** WP172：B2B 岗位开着才画这一格（没开时它不起作用，画出来只会让人困惑）。 */
+const B2B_SWITCHES: readonly MailboxSwitchName[] = [...SWITCHES, 'b2b']
 
 export function MailboxSwitches({
   connectionId,
@@ -90,12 +94,12 @@ export function MailboxSwitches({
         ) : null}
       </div>
       <ul className="flex flex-wrap gap-x-4 gap-y-1">
-        {SWITCHES.map((name) => (
+        {(data.b2b_position === true ? B2B_SWITCHES : SWITCHES).map((name) => (
           <li key={name} className="flex items-center gap-1.5 text-xs">
             <Switch
               size="sm"
               id={`mailbox-${connectionId}-${name}`}
-              checked={data[name]}
+              checked={data[name] ?? true}
               disabled={flip.isPending}
               aria-label={t(`connections.mailbox.${name}`)}
               data-testid={`mailbox-switch-${name}`}

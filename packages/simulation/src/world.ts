@@ -31,7 +31,16 @@ import {
   rewriteAliasedAssignments,
 } from '@agentsws/catalog'
 // WP113（63 §4）：分拣那条链与真服务进程里跑的是**同一个函数**
-import { intakeOf, type MailIntake, type TriageModel, triageMessage } from '@agentsws/channels'
+import {
+  bounceOf,
+  intakeOf,
+  looksLikeB2bInquiry,
+  type MailIntake,
+  senderDomain,
+  type TriageModel,
+  triageMessage,
+  unsubscribeReplyOf,
+} from '@agentsws/channels'
 import type {
   AdsCaps,
   ApprovalItem,
@@ -74,6 +83,7 @@ import {
   // WP171：B2B 五条职责的唯一一份清单、红卡的审批种类、报价授权默认值
   B2B_FRAUD_ALERT_KIND,
   B2B_ROLE_IDS,
+  BTOBAGENTS_FOLDER,
   DEFAULT_B2B_QUOTE_MANDATE,
   DEFAULT_BRAND_INTAKE_CAP_CREDITS,
   DEFAULT_STOREFRONT_PLATFORM,
@@ -735,7 +745,7 @@ export interface ScenarioMail {
 /** 一封信分拣完的样子（进事件日志的那一份，**不含正文**）。 */
 export interface MailTriageResult {
   message_id: string
-  /** WP161：`b2b` 只是契约预留，分拣器不产出它。 */
+  /** WP172：B2B 岗位开着时分拣器产出 `b2b`（WP161 预留的那一格）。 */
   route: MessageRoute
   suggested_route?: MessageRoute
   labels: string[]
@@ -754,8 +764,11 @@ export interface MailTriageResult {
   intake: MailIntake
   /** 这一封开了一条新事项吗（客服 / 红人那一路的新线程才开；订阅、通知一律不开）。 */
   opened_matter: boolean
-  /** 这一封起了 Run 吗（只有交给客服那一路的才起）。 */
+  /** 这一封起了 Run 吗（交给客服那一路的才起；WP172 起 B2B 询盘也起，平台通知除外）。 */
   started_run: boolean
+  /** WP172：这一封是退订回信 / 硬退信，发件人（或退回的收件人）进了抑制名单。 */
+  suppressed: boolean
+  suppression_reason?: 'unsubscribe' | 'hard_bounce'
 }
 
 export interface MailOps {
@@ -774,7 +787,7 @@ export interface MailOps {
    * 岗位没开的那条路**一封信都不挪**——这是 Luoye 原话的直译，
    * 也是这一组场景里最要紧的那一条。
    */
-  disablePosition(input: { position: 'support' | 'kol' }): void
+  disablePosition(input: { position: 'support' | 'kol' | 'b2b' }): void
   /**
    * 人按了托盘的「暂停」（`halt.model`）。
    *
@@ -5540,17 +5553,30 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
    * 用户教过哪几条发件人规则、这个工作区还开着哪几个岗位、模型有没有被按停。
    */
   const mailRules: SenderRule[] = []
-  const mailDisabled = new Set<'support' | 'kol'>()
+  const mailDisabled = new Set<'support' | 'kol' | 'b2b'>()
   let mailHalted = false
   /** 已经归给客服 / 红人的那几条线程（线程归并那一层看它）。 */
   const mailSupportThreads = new Set<string>()
   const mailKolThreads = new Set<string>()
+  /** WP172：已经归给 B2B 的线程（后续来信走线程归并）。 */
+  const mailB2bThreads = new Set<string>()
+  /**
+   * WP172：B2B 客户库里的公司域名（pack 的 `customers` 在 B2B 包里就是外贸客户）。
+   * 只在 B2B 岗位开着时才用得上——dtc 那两个包里 `b2b_enabled` 永远是假。
+   */
+  const mailB2bDomains = new Set(
+    pack.customers
+      .map((c) => senderDomain(c.email ?? ''))
+      .filter((d) => d !== '' && !/^(gmail|outlook|hotmail|yahoo|icloud|qq|163)\./.test(d)),
+  )
   let mailSeq = 0
   /** 这一轮花了几次模型（`by: 'model'` 那一层走的是真网关）。 */
   let mailModelCalls = 0
 
-  const mailPositionOpen = (position: 'support' | 'kol'): boolean => {
+  const mailPositionOpen = (position: 'support' | 'kol' | 'b2b'): boolean => {
     if (mailDisabled.has(position)) return false
+    // WP172：B2B 岗位开着 = pack 里有人持着 `b2b.*` 里任何一条
+    if (position === 'b2b') return pack.assignments.some((a) => a.role_id.startsWith('b2b.'))
     const role: RoleId = position === 'support' ? 'dtc.support' : 'kol.youtube'
     return (
       created.has(`p_wang|${role}`) || created.has(`p_li|${role}`) || assignment.role_id === role
@@ -5588,6 +5614,24 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
         { text: input.body, subject: input.subject, from: input.from_email },
         { now: now(clock) },
       )
+      /*
+       * WP172：B2B 开着时先问"这像不像一封询盘"（问价、要目录、问 MOQ、要样品、找代理）。
+       * 判据是 `@agentsws/channels` 的 `looksLikeB2bInquiry`（服务进程里模型不可用时的同一个兜底）。
+       * B2B 没开的工作区（dtc 两个包）根本走不到这一句——`allowed_routes` 里没有 b2b。
+       */
+      const b2bHits = input.allowed_routes.includes('b2b')
+        ? looksLikeB2bInquiry({ subject: input.subject, text: input.body })
+        : []
+      if (b2bHits.length > 0) {
+        return {
+          route: 'b2b',
+          labels: [],
+          needs_reply: true,
+          priority: 'normal',
+          summary: '企业买家询价',
+          confidence: b2bHits.length >= 3 ? 0.9 : 0.6,
+        }
+      }
       // ① 先问"这是不是客服诉求"：`support-core` 的词表，全仓同一份
       if (support.is_customer_service) {
         return {
@@ -5653,6 +5697,9 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
         {
           support_enabled: mailPositionOpen('support'),
           kol_enabled: mailPositionOpen('kol'),
+          b2b_enabled: mailPositionOpen('b2b'),
+          isB2bThread: (id) => mailB2bThreads.has(id),
+          isB2bSender: (email) => mailB2bDomains.has(senderDomain(email)),
           isSupportThread: (id) => mailSupportThreads.has(id),
           isKolThread: (id) => mailKolThreads.has(id),
           senderRules: mailRules,
@@ -5666,17 +5713,43 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
       const intake = intakeOf({ triage: verdict, folder_kind: 'inbox' })
       const opened_matter =
         (intake === 'support' && !mailSupportThreads.has(thread_id)) ||
-        (intake === 'kol' && !mailKolThreads.has(thread_id))
-      const started_run = intake === 'support'
+        (intake === 'kol' && !mailKolThreads.has(thread_id)) ||
+        (intake === 'b2b' && !mailB2bThreads.has(thread_id))
+      // WP172：B2B 那一路起 Run；平台询盘通知例外（正文在平台后台，开的是「去后台回复」的待办）
+      const started_run =
+        intake === 'support' || (intake === 'b2b' && !verdict.labels.includes('platform'))
       // 岗位开着才真挪；挪了才记进那一侧的线程（下一封走线程归并，不花模型）
       const moved_to =
         verdict.route === 'support'
           ? SUPPORT_FOLDER
           : verdict.route === 'kol'
             ? KOL_FOLDER
-            : undefined
+            : verdict.route === 'b2b'
+              ? BTOBAGENTS_FOLDER
+              : undefined
       if (verdict.route === 'support') mailSupportThreads.add(thread_id)
       if (verdict.route === 'kol') mailKolThreads.add(thread_id)
+      if (verdict.route === 'b2b') mailB2bThreads.add(thread_id)
+      /*
+       * WP172（docs/84 §5 第 5 条）：退订回信、硬退信分拣时直接进抑制名单，不等 Run。
+       * 判据是服务进程里同一对纯函数（`unsubscribeReplyOf` / `bounceOf`）。
+       */
+      const triageInput = {
+        from_email: input.from.trim().toLowerCase(),
+        subject: input.subject,
+        text: input.body,
+        thread_id,
+        references: input.in_reply_to === undefined ? [] : [input.in_reply_to],
+        headers: input.headers ?? {},
+        has_attachments: false,
+      }
+      const bounce = bounceOf(triageInput)
+      const suppression_reason =
+        bounce?.hard === true && bounce.recipient !== undefined
+          ? 'hard_bounce'
+          : bounce === undefined && unsubscribeReplyOf(triageInput) !== undefined
+            ? 'unsubscribe'
+            : undefined
       const result: MailTriageResult = {
         message_id: thread_id,
         route: verdict.route,
@@ -5693,6 +5766,8 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
         intake,
         opened_matter,
         started_run,
+        suppressed: suppression_reason !== undefined,
+        ...(suppression_reason === undefined ? {} : { suppression_reason }),
       }
       appendEnvelope({
         schema_version: 1,
@@ -5717,6 +5792,8 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
           intake: result.intake,
           opened_matter: result.opened_matter,
           started_run: result.started_run,
+          suppressed: result.suppressed,
+          ...(suppression_reason === undefined ? {} : { suppression_reason }),
         },
       })
       return result
