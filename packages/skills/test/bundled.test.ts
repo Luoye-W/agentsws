@@ -15,7 +15,7 @@ import { makeSkills } from './helpers.js'
 const names = listBundledSkills()
 
 /** WP160：改写自第三方（MIT）的五个；WP170 又改写了 B2B 的两个。 */
-const B2B_PORTED = ['cold-email']
+const B2B_PORTED = ['cold-email', 'prospecting']
 const THIRD_PARTY = [
   'ad-copywriting',
   'audience-research',
