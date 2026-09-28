@@ -152,6 +152,8 @@ export const SOURCE_LABELS: Record<DataSourceId, string> = {
   // 名字就是用户在连接页上看到的那个名字——"去连接"点过去要对得上。
   pr: '公关库',
   google_alerts: 'Google Alerts',
+  // WP171（docs/84）：我们自己的 B2B 库，永远算连上
+  b2b: 'B2B 库',
 }
 
 /** 「查看完整报告 →」外链（36 §3 三层链路的最后一层）。 */
@@ -462,6 +464,43 @@ const DESIGN_BLOCKS = (duty: string): BlockDef[] => [
   block(`design.${duty}.weekly`, 'table', '本周产出', 'design.weekly_output'),
 ]
 
+/**
+ * WP171（docs/84 §1.2 / §11.2 / §11.3）：B2B 五条职责各自的面板块（少字，36 §7）。
+ *
+ * 全走 `b2b` 这一个源（我们自己的库，永远算连上）。一块店铺后台的积木都不放：
+ * B2B 的 scopes 里没有 order / store_config——那是零售那一侧的事，19 §3 说无权的
+ * 数据源连「去连接」都不该出。块 id 与职责 yml 的 `home_blocks[].id` 一一对上。
+ */
+const B2B_SALES_BLOCKS = (): BlockDef[] => [
+  block('b2b.sales.inquiries', 'table', '待回询盘', 'b2b.inquiries'),
+  block('b2b.sales.quotes', 'table', '报价待审', 'b2b.quotes_pending'),
+  block('b2b.sales.samples', 'table', '样品在途', 'b2b.samples'),
+  block('b2b.sales.dormant', 'table', '该唤醒的老客户', 'b2b.dormant_accounts'),
+]
+const B2B_OUTBOUND_BLOCKS = (): BlockDef[] => [
+  block('b2b.outbound.today', 'table', '今天待发', 'b2b.outreach_today'),
+  block('b2b.outbound.funnel', 'table', '序列漏斗', 'b2b.sequence_funnel'),
+  block('b2b.outbound.replies', 'table', '回复待分', 'b2b.replies_to_triage'),
+  block('b2b.outbound.lists', 'table', '名单来源', 'b2b.lists'),
+]
+const B2B_EXHIBITION_BLOCKS = (): BlockDef[] => [
+  block('b2b.exhibition.next', 'table', '下一个展', 'b2b.next_shows'),
+  block('b2b.exhibition.deadlines', 'table', '截止日', 'b2b.show_deadlines'),
+  block('b2b.exhibition.leads', 'table', '现场线索', 'b2b.show_leads'),
+  block('b2b.exhibition.followups', 'table', '待跟进', 'b2b.show_followups'),
+]
+const B2B_FULFILLMENT_BLOCKS = (): BlockDef[] => [
+  block('b2b.fulfillment.production', 'table', '在产订单', 'b2b.in_production'),
+  block('b2b.fulfillment.to_ship', 'table', '待出运', 'b2b.to_ship'),
+  block('b2b.fulfillment.docs', 'table', '单证待核', 'b2b.docs_to_check'),
+  block('b2b.fulfillment.balance', 'table', '尾款待收', 'b2b.balance_due'),
+]
+const B2B_MARKETPLACE_BLOCKS = (): BlockDef[] => [
+  block('b2b.marketplace.inquiries', 'table', '平台询盘', 'b2b.marketplace_inquiries'),
+  block('b2b.marketplace.listings', 'table', '待优化产品', 'b2b.listings_to_improve'),
+  block('b2b.marketplace.rfqs', 'table', 'RFQ', 'b2b.rfqs'),
+]
+
 const QUEUE_BLOCKS = (): BlockDef[] => [
   block('records.timeline', 'timeline', '记录', 'records.timeline'),
 ]
@@ -569,6 +608,12 @@ const VIEW_BY_ROLE: Record<RoleId, () => BlockDef[]> = {
   'pr.reddit': () => PR_OUTREACH_BLOCKS(),
   'pr.forums': () => PR_OUTREACH_BLOCKS(),
   'pr.monitoring': () => PR_MONITORING_BLOCKS(),
+  // WP171（docs/84）：B2B 五条职责，各看自己那几块（一个人挂着几条就是几个岗位视图）
+  'b2b.sales': () => B2B_SALES_BLOCKS(),
+  'b2b.outbound': () => B2B_OUTBOUND_BLOCKS(),
+  'b2b.exhibition': () => B2B_EXHIBITION_BLOCKS(),
+  'b2b.fulfillment': () => B2B_FULFILLMENT_BLOCKS(),
+  'b2b.marketplace': () => B2B_MARKETPLACE_BLOCKS(),
 }
 
 export function blocksForRole(role_id: RoleId): BlockDef[] {
