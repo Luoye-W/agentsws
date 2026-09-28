@@ -30,7 +30,7 @@ function unionMembers(relative: string, typeName: string): string[] {
   // 联合结束于下一个顶格的 `export` / `/**`（不在 `  | ` 行上的东西）
   const end = rest.search(/\n(?:export |\/\*\*\n \* )/)
   const body = end === -1 ? rest : rest.slice(0, end)
-  return [...body.matchAll(/^\s*\|\s*'([a-z_]+)'/gm)].map((m) => m[1] as string)
+  return [...body.matchAll(/^\s*\|\s*'([a-z0-9_]+)'/gm)].map((m) => m[1] as string)
 }
 
 describe('十一种排版', () => {

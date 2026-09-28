@@ -9,6 +9,7 @@ import type {
   ObjectRef,
   RiskClass,
 } from '@agentsws/contracts'
+import { B2B_GUARDED_KINDS, evaluateB2bChange } from './b2b-guardrail.js'
 import { capBool, capList, capNumber, mandateHash } from './mandate.js'
 import type { Provenance } from './provenance.js'
 import { suppressedRecipients } from './suppression.js'
@@ -120,6 +121,28 @@ export const KIND_RISK: Record<ChangeKind, RiskClass> = {
   page_seo_edit: 'low',
   page_section_add: 'low',
   internal_link_edit: 'low',
+  /*
+   * WP171（docs/84）：B2B 那十三条。
+   *
+   * 回询盘、寄样、开发信按 low：对外但改不了钱——承诺那一半由 switch 里的
+   * 承诺词表拦（回信转人审、开发信 block），不靠风险级说话（同 `kol_outreach`）。
+   * 报价、导入名单、客户转交、发单证、订舱按 medium：一张报价是一个价、一次转交是
+   * 一摞客户、单证发错了银行拒付。展会缴费、放单、付款指示、平台花钱按 high：
+   * 四条都是钱或货权（都在 `HARD_L1` 里）。平台发产品按 medium（第二批，浏览器模式）。
+   */
+  b2b_reply: 'low',
+  b2b_quote: 'medium',
+  b2b_sample: 'low',
+  b2b_outreach: 'low',
+  b2b_list_import: 'medium',
+  b2b_account_transfer: 'medium',
+  trade_show_registration: 'high',
+  export_docs_send: 'medium',
+  shipment_booking: 'medium',
+  bill_release: 'high',
+  payment_instruction: 'high',
+  marketplace_listing: 'medium',
+  marketplace_spend: 'high',
 }
 export const HARD_L1: ReadonlySet<ChangeKind> = new Set([
   // WP64（51 §2.3）：一次群发出去收不回来，而且收信的是**顾客**不是同事——发送永远人审。
@@ -212,6 +235,22 @@ export const HARD_L1: ReadonlySet<ChangeKind> = new Set([
    * 放宽，硬顶不行（15 §2）。采纳率再高也升不了级——那是这条纪律的全部意义。
    */
   'asset_publish',
+  /**
+   * WP171（docs/84 §3.2 / §11）：**报价、展会缴费、放单、付款指示、平台花钱永远人审**。
+   *
+   * 报价：docs/84 §3.2「报价永远出卡」，BtoBAgents 里那种"金额毛利都在授权内就自动执行（L3）"
+   * **不搬**。授权四个数只决定这张卡谁批（业务员 / 上级 / 老板），不决定要不要出卡。
+   * 缴费与平台花钱：花钱口子永远 L1（同投放）。放单：货权交出去就收不回来。
+   * 付款指示：改收款账户是 B2B 最常见的诈骗（§11.3），任何一笔都要人点。
+   *
+   * 放在硬顶而不是只写在职责 yml 的 `ceiling: L1` 里：yml 可以被工作区策略放宽，
+   * 硬顶不行（15 §2）。
+   */
+  'b2b_quote',
+  'trade_show_registration',
+  'bill_release',
+  'payment_instruction',
+  'marketplace_spend',
 ])
 
 /**
@@ -1684,6 +1723,9 @@ export function evaluateGuardrail(
       break
     }
     default:
+      // WP171（docs/84）：B2B 那十三条在 `b2b-guardrail.ts` 里判（switch 只多这一处分派）
+      if (B2B_GUARDED_KINDS.has(change.kind))
+        evaluateB2bChange(change.kind, before, after, mandate, facts.windowCount, review, block)
       break
   }
 

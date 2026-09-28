@@ -1,3 +1,6 @@
+// WP171（docs/84）：B2B 承诺词表与「改收款账户」识别
+export * from './b2b-guardrail.js'
+export * from './b2b-terms.js'
 export * from './company.js'
 export * from './fencing.js'
 export * from './guardrail.js'

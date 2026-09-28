@@ -21,7 +21,7 @@ function contractUnion(name: string): string[] {
   expect(at, `契约里没有 ${name}`).toBeGreaterThan(-1)
   const body = src.slice(at, src.indexOf('\n\n', at))
   // 只认「行首一个 `|` 加一个字符串字面量」这种形状的成员行，注释里提到的名字不算
-  return [...body.matchAll(/^\s*\|\s*'([a-z_]+)'/gm)].map((m) => m[1] as string)
+  return [...body.matchAll(/^\s*\|\s*'([a-z0-9_]+)'/gm)].map((m) => m[1] as string)
 }
 
 describe('47 J1 登记表：每一格都有出处', () => {

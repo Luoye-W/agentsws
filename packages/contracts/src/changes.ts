@@ -315,6 +315,54 @@ export type ChangeKind =
    * 卡住的那页站稳了再把链接挪给下一页。只动链接，不动正文。
    */
   | 'internal_link_edit'
+  /*
+   * ── WP171（docs/84）：B2B 那一侧的写动作 ─────────────────────────────
+   *
+   * 发信 / 报价 / 缴费 / 放单 / 付款一律 L1 起步（§11 与派工单）。其中
+   * 报价、展会缴费、放单、付款指示四条进 `HARD_L1`——它们要么是钱、要么是
+   * "货交出去就收不回来"，采纳率再高也证明不了"这个价该给、这笔钱该付"。
+   */
+  /**
+   * 回一封询盘 / 客户来信。回信里只要碰到价格、交期、认证、MOQ、独家、账期，
+   * guardrail 就转人审（B2B 承诺词表，`@agentsws/core` 的 `B2B_COMMITMENT_TERMS`）。
+   */
+  | 'b2b_reply'
+  /**
+   * 发一版正式报价（新建一个 `B2bQuoteVersion`，旧版不动）。**永远人审**（`HARD_L1`）。
+   * 授权四个数决定这张卡谁批：授权内业务员自己批，超出转上级、没有上级转老板。
+   */
+  | 'b2b_quote'
+  /** 寄样通知（标"已寄"必须带快递单号）。L1 起。 */
+  | 'b2b_sample'
+  /**
+   * 开发信序列的首封（一批一张卡）。禁承诺词 block（同 `kol_outreach`）；
+   * 缺退订 / 公司地址页脚、联系人缺来源、SPF / DKIM 没过、德奥未确认 → block。
+   */
+  | 'b2b_outreach'
+  /** 导入或购买一张名单（官方档要扣积分，卡上写预计扣多少）。L1。 */
+  | 'b2b_list_import'
+  /** 把客户 / 商机 / 未回询盘转给别的业务员（离职交接，`buildTransferPlan`）。L1，老板批。 */
+  | 'b2b_account_transfer'
+  /** 展会报名与缴费。**永远人审**（`HARD_L1`）：这是一笔钱。 */
+  | 'trade_show_registration'
+  /** 把单证发给客户或银行（商业发票、装箱单、原产地证、信用证单据）。L1 起。 */
+  | 'export_docs_send'
+  /** 订舱确认（向货代确认舱位与船期）。L1 起。 */
+  | 'shipment_booking'
+  /**
+   * 放单（电放 / 交提单）。**永远人审**（`HARD_L1`）：货权一交出去就收不回来，
+   * 尾款没到时 guardrail 再多报一条 `balance_unpaid`。
+   */
+  | 'bill_release'
+  /**
+   * 任何付款 / 收款指示。**永远人审**（`HARD_L1`）；账户与事实卡对不上就 block
+   * （改收款账户是 B2B 最常见的邮件诈骗，docs/84 §11.3）。
+   */
+  | 'payment_instruction'
+  /** 平台（阿里国际站）上发布或修改产品。第二批；浏览器模式，写动作先出卡。 */
+  | 'marketplace_listing'
+  /** 平台上改出价、预算、开直通车。花钱口子，**永远人审**（`HARD_L1`，同投放）。 */
+  | 'marketplace_spend'
 
 export type ChangeStatus =
   | 'staged'
