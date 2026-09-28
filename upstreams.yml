@@ -418,7 +418,7 @@ upstreams:
   # （出卡、数字只引事实卡、结构化数据交建站……），所以上游改了只**对照**，不自动同步。
   - id: marketingskills
     kind: ported
-    why: 五个营销技能（seo-judgment / ad-copywriting / audience-research / email-sms / influencer-marketing）的正文翻译改写自它的十个技能（MIT）；上游改了判断规矩要对照回来
+    why: 五个营销技能（seo-judgment / ad-copywriting / audience-research / email-sms / influencer-marketing）的正文翻译改写自它的十个技能（MIT）；WP170 又改写了 B2B 的 cold-email / prospecting 两个；上游改了判断规矩要对照回来
     repo: coreyhaines31/marketingskills
     pinned_commit: 5b2c0007766c6a1cf1d53fd8fc73e979e0821022
     watch: [releases, readme, wishlist]
@@ -433,15 +433,19 @@ upstreams:
       - skills/sms
       - skills/emails
       - skills/influencer-marketing
+      - skills/cold-email
+      - skills/prospecting
     we_depend_on:
       - 'skills/{ai-seo,seo-audit,content-strategy,copy-editing} → packages/skills/bundled/seo-judgment/SKILL.md'
       - 'skills/{ad-creative,ads} → packages/skills/bundled/ad-copywriting/SKILL.md'
       - 'skills/customer-research → packages/skills/bundled/audience-research/SKILL.md'
       - 'skills/{sms,emails} → packages/skills/bundled/email-sms/SKILL.md'
       - 'skills/influencer-marketing（含 UGC 附录） → packages/skills/bundled/influencer-marketing/SKILL.md'
+      - 'skills/cold-email（含写法框架 / 主题行 / 跟进序列 / 个性化附录；序列改成三封） → packages/skills/bundled/cold-email/SKILL.md'
+      - 'skills/prospecting（含 B2B / 合规 / 数据来源附录） → packages/skills/bundled/prospecting/SKILL.md'
       - '各技能的 evals/evals.json 改写成我们的考题（packages/skills/bundled/*/evals/evals.json）'
     wishlist:
-      - 合规条款（TCPA / 10DLC / GDPR / CASL / FTC 披露）有更新
+      - 合规条款（TCPA / 10DLC / GDPR / CASL / FTC 披露 / CAN-SPAM）有更新
       - evals 新增考题
     covered_by:
       - packages/skills/test/bundled.test.ts
