@@ -131,7 +131,7 @@ import { createAskPort } from './ask.js'
 import { demoB2bDeckData, withDemoB2b } from './b2b.js'
 import { createB2bMail } from './b2b-mail.js'
 import { createB2bService } from './b2b-service.js'
-import { createB2bStore } from './b2b-store.js'
+import { type B2bStore, createB2bStore } from './b2b-store.js'
 import { MemoryBackend } from './backend.js'
 import { type BackupRunResult, backupDirOf, backupKeepOf, runBackup } from './backup.js'
 import {
@@ -771,6 +771,8 @@ export interface Server {
   channels: ChannelsAssembly
   /** WP113（63）消息面（消息库 / 全量同步 / 分拣 / IMAP 回写）——bootstrap 品牌那一份。 */
   messages: MessagesAssembly
+  /** WP172（docs/84）：B2B 库（九类对象 + 询盘 / 抑制名单）——bootstrap 品牌那一份。 */
+  b2b: B2bStore
   /** WP57 在线聊天的实时车道（会话 / 轮次聚合 / 五种动作 / 求助超时）。 */
   chat: ChatLane
   /** WP25 模型面（provider 配置 / 热更新 / 按 purpose 记账）。 */
@@ -5966,6 +5968,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     ...(boot.liveData === undefined ? {} : { liveData: boot.liveData }),
     channels: boot.channels,
     messages: boot.messages,
+    b2b: boot.b2b,
     // WP57：在线聊天车道
     chat: boot.chat,
     modelSettings: boot.ownModels,

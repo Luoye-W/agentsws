@@ -1634,6 +1634,43 @@ async function seedMessages(server: Server, world: World): Promise<void> {
         reasons: ['模型判成客服，但把握不够'],
       }),
     }),
+    /*
+     * WP172（docs/84 §5）：一封已经判成 B2B、挪进 BtoBAgents 的询盘（左栏「B2B 往来」里看得见，
+     * B2B 面板「待回询盘」里也有这一条），外加一封拿不准的询盘在「待确认」里等人点「这是 B2B」。
+     */
+    base({
+      id: 'm110',
+      from: { email: 'purchasing@northline.example', name: 'Dana Brooks' },
+      subject: 'Quotation request - 20000mAh power bank',
+      text: 'Hello, we are a distributor in Canada. Please send your price list, MOQ and catalog for the 20000mAh power bank, FOB Shenzhen.',
+      minutes: 40,
+      folder: 'BtoBAgents',
+      folder_kind: 'b2b',
+      route: 'b2b',
+      triage: verdict({
+        route: 'b2b',
+        needs_reply: true,
+        summary: '加拿大分销商要移动电源的报价与目录',
+        confidence: 0.9,
+        by: 'model',
+        reasons: ['模型分拣（便宜档，只送头与正文前 2000 字）'],
+      }),
+    }),
+    base({
+      id: 'm111',
+      from: { email: 'sam@brightmart.example', name: 'Sam Lee' },
+      subject: 'Samples for our store?',
+      text: 'Hi, we run three electronics stores. Could you send samples of the GaN chargers? We may need a few hundred.',
+      minutes: 75,
+      triage: verdict({
+        suggested_route: 'b2b',
+        needs_reply: true,
+        summary: '三家门店的店主问能不能寄 GaN 充电器样品',
+        confidence: 0.5,
+        by: 'model',
+        reasons: ['模型判成 B2B，但把握不够'],
+      }),
+    }),
     base({
       id: 'm108',
       from: { email: 'ops@luminous-lab.example', name: '李默' },
@@ -1647,6 +1684,27 @@ async function seedMessages(server: Server, world: World): Promise<void> {
   ]
 
   for (const row of rows) await store.put(row)
+
+  // WP172：挪进 BtoBAgents 的那封在 B2B 库里落成了一条询盘（真路径见 `b2b-mail.ts`）
+  const inquiry = rows.find((r) => r.id === 'm110')
+  if (inquiry !== undefined && server.b2b.inquiryByMessage(inquiry.id) === undefined) {
+    server.b2b.saveInquiry({
+      id: 'inq_demo_northline',
+      workspace_id: world.workspace_id,
+      kind: 'inquiry',
+      basis: 'model',
+      subject: inquiry.subject,
+      from_masked: 'p***@northline.example',
+      from_domain: 'northline.example',
+      mailbox_masked: 'h***@luminous-lab.example',
+      message_id: inquiry.id,
+      thread_id: inquiry.thread_id,
+      commitments: ['价格', '起订量'],
+      status: 'new',
+      received_at: inquiry.date,
+      created_at: inquiry.date,
+    })
+  }
 }
 
 /** 第二个品牌的名字（截图与文档里都用它，别改来改去）。 */
