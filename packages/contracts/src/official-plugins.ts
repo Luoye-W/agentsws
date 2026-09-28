@@ -43,13 +43,29 @@ export interface OfficialPluginSpec {
   rows: string[]
 }
 
-/** 一个插件在这台机器上的状态。 */
-export type OfficialPluginState = 'available' | 'installed' | 'upgradable' | 'pending'
+/**
+ * 一个插件在这台机器上的状态。
+ *
+ * - `available`：清单里有、没装；
+ * - `installed`：装着，版本就是审过的那个；
+ * - `upgradable`：装着的是旧的审过版本，清单与 dsh 安装里都是新版本了——升级要出卡；
+ * - `pending`：有一张卡还没批；
+ * - `unreviewed`：dsh 安装里带的版本和清单里审过的对不上（dsh 升级了、清单还没重审）——
+ *   装不了；已经装着的也**不进组合**，直到清单重审。
+ */
+export type OfficialPluginState =
+  | 'available'
+  | 'installed'
+  | 'upgradable'
+  | 'pending'
+  | 'unreviewed'
 
 export interface OfficialPluginView extends OfficialPluginSpec {
   state: OfficialPluginState
   /** 装着的版本（没装就没有）。 */
   installed_version?: string
+  /** dsh 安装里实际带的版本（`shipped` 才有；找不到这个包就没有）。 */
+  available_version?: string
   /** 有一张还没批的卡：批了要做什么、卡的 id。 */
   pending?: { action: OfficialPluginAction; approval_item_id: string }
 }

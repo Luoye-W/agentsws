@@ -66,6 +66,12 @@
  * - B / C 类（`LOCKDOWN`）：原断言一条不改；
  * - A 类撤锁的（`OPENED`）：我们的 patch 里没有这一行、组合树里这一行是开的、两档模块图里真有这个包（能用）；
  * - 跟官方的（`FOLLOW_OFFICIAL`）：我们不写，组合结果等于官方 bundle 自己写的那个值。
+ *
+ * WP180（B 类"包一层后打开"）：再撤四行——`plugin-manager` / `config-editor` / `settings` 进 `WRAPPED`
+ * （组合树里是开的，**而且包的那一层生效**：守门插件那一行插在组合里、开着、指向我们的模块；它包住的行为另由
+ * `profile-guard.test.ts` 在真的 cordis 树里钉）；`tool-plugin-manager` 进 `FOLLOW_OFFICIAL`（dsh-base 自己写死关）。
+ * 两档运行时的模块图里仍然**没有**官方插件管理 / 配置编辑（`FORBIDDEN` 不变）：一次运行用不着装插件或存配置，
+ * 装插件那条路在服务进程（`@agentsws/dsh-adapter/official-plugins` 子路径，主入口不 re-export）。
  */
 import { spawnSync } from 'node:child_process'
 import {
@@ -115,10 +121,7 @@ const LOCKDOWN: readonly LockdownRow[] = [
     name: '@deepseek-ai/dsh-session-log-deepseek',
     config: { enabled: false },
   },
-  { id: 'plugin-manager', name: '@deepseek-ai/dsh-plugin-manager', disabled: true },
-  { id: 'tool-plugin-manager', name: '@deepseek-ai/dsh-plugin-manager/tools', disabled: true },
-  { id: 'config-editor', name: '@deepseek-ai/dsh-config-editor', disabled: true },
-  { id: 'settings', name: '@deepseek-ai/dsh-settings', disabled: true },
+  // WP180：plugin-manager / tool-plugin-manager / config-editor / settings 包一层后撤锁（见 `WRAPPED` / `FOLLOW_OFFICIAL`）
   { id: 'deepseek-account', name: '@deepseek-ai/dsh-deepseek-account-platform', disabled: true },
   // WP177（0.2.0-rc.1）：base 新 insert 的共享上报通道、经它发的反馈上报、能用账号令牌出网的网页搜索
   { id: 'otel', name: '@deepseek-ai/dsh-otel', disabled: true },
@@ -156,7 +159,34 @@ const OPENED: readonly { id: string; name: string; pkg: string }[] = [
  * `disabled`）。`hmr`：官方 headless 包自己就关着它。
  */
 const FOLLOW_OFFICIAL: readonly { id: string; name: string; bundle: string; disabled: boolean }[] =
-  [{ id: 'hmr', name: '@deepseek-ai/dsh-hmr', bundle: '@deepseek-ai/dsh-headless', disabled: true }]
+  [
+    {
+      id: 'hmr',
+      name: '@deepseek-ai/dsh-hmr',
+      bundle: '@deepseek-ai/dsh-headless',
+      disabled: true,
+    },
+    // WP180：模型面装插件的工具——dsh-base 自己写死关着（装插件要出卡，那条路不给模型）
+    {
+      id: 'tool-plugin-manager',
+      name: '@deepseek-ai/dsh-plugin-manager/tools',
+      bundle: '@deepseek-ai/dsh-base',
+      disabled: true,
+    },
+  ]
+
+/**
+ * WP180：**B 类、包一层后撤锁**的行。我们的 patch 里不许再有它们；组合树里它们是开的（完整 profile 里）；
+ * 包的那一层就是 {@link GUARD} 那一行——它必须插在组合里、开着、指向我们的守门模块。
+ */
+const WRAPPED: readonly { id: string; name: string }[] = [
+  { id: 'plugin-manager', name: '@deepseek-ai/dsh-plugin-manager' },
+  { id: 'config-editor', name: '@deepseek-ai/dsh-config-editor' },
+  { id: 'settings', name: '@deepseek-ai/dsh-settings' },
+]
+
+/** WP180：守门插件那一行（`cordis.patch.yml` 末尾插进来、开着）。 */
+const GUARD = { id: 'agentsws-profile-guard', name: '@agentsws/dsh-adapter/profile-guard' } as const
 
 /**
  * WP144（docs/80）：profile 层**插进来、默认关**的行（dsh-base 里本来没有它们）。
@@ -300,8 +330,8 @@ describe('WP93 Plugin Manager / HMR 不进我们的运行时（16 §3 / 31 §3.5
   it('WP179：A 类撤了锁的行与"跟官方"的行，我们的 patch 里一行都没有', () => {
     const rows = parsePatch(readFileSync(PATCH, 'utf8'))
     const ids = [...lockRows(rows), ...insertedRows(rows)].map((r) => r?.id)
-    for (const row of [...OPENED, ...FOLLOW_OFFICIAL]) {
-      expect(ids, `${row.id} 已按 WP179 撤锁，不许再写回来`).not.toContain(row.id)
+    for (const row of [...OPENED, ...FOLLOW_OFFICIAL, ...WRAPPED]) {
+      expect(ids, `${row.id} 已按 WP179 / WP180 撤锁，不许再写回来`).not.toContain(row.id)
     }
   })
 
@@ -327,13 +357,19 @@ describe('WP93 Plugin Manager / HMR 不进我们的运行时（16 §3 / 31 §3.5
     }
   })
 
-  it('WP144：唯一允许的 insert 是 INSERTED_OFF 那几行，而且每一行都写死 disabled: true', () => {
+  it('WP144：允许的 insert 只有 INSERTED_OFF 那几行（每一行都写死 disabled: true）+ WP180 的守门插件（开着）', () => {
     const rows = parsePatch(readFileSync(PATCH, 'utf8'))
     const inserted = insertedRows(rows)
-    expect(inserted.map((r) => ({ id: r.id, name: r.name }))).toEqual(
-      INSERTED_OFF.map((r) => ({ id: r.id, name: r.name })),
-    )
-    for (const row of inserted) expect(row.disabled, `${row.id} 必须写死 disabled: true`).toBe(true)
+    expect(inserted.map((r) => ({ id: r.id, name: r.name }))).toEqual([
+      ...INSERTED_OFF.map((r) => ({ id: r.id, name: r.name })),
+      { id: GUARD.id, name: GUARD.name },
+    ])
+    for (const row of inserted) {
+      if (row.id === GUARD.id) {
+        expect(row.disabled, '守门插件不许关').toBeUndefined()
+        expect(row.config, '守门插件用它自己的锁定表常量，不在 patch 里另写').toBeUndefined()
+      } else expect(row.disabled, `${row.id} 必须写死 disabled: true`).toBe(true)
+    }
   })
 })
 
@@ -380,6 +416,10 @@ function stageProfile(extraPatch = ''): string {
     mkdirSync(dirname(link), { recursive: true })
     symlinkSync(dirname(manifest), link, 'dir')
   }
+  // WP180：守门插件在 `@agentsws/dsh-adapter`（profile 的 package.json 里本来就依赖它）——同样链进去
+  const self = join(dir, 'node_modules', '@agentsws', 'dsh-adapter')
+  mkdirSync(dirname(self), { recursive: true })
+  symlinkSync(fileURLToPath(new URL('..', import.meta.url)), self, 'dir')
   return home
 }
 
@@ -564,6 +604,30 @@ describe('WP133 锁定的每个 id 都真的存在于当前 dsh 的配置 schema
     ).toEqual([])
   }, 120_000)
 
+  it('WP180 包一层后撤锁：插件管理 / 配置写回在组合树里是开的，守门插件那一行插着、开着、真的加载得到', () => {
+    const composed = parseComposed(runDsh(home, '--dump-config'))
+    for (const want of WRAPPED) {
+      const row = composed.find((r) => r?.id === want.id)
+      expect(row, `组合树里没有 ${want.id}`).toBeDefined()
+      expect(row?.name, want.id).toBe(want.name)
+      expect(row?.disabled === true, `${want.id} 应当是开的（完整 profile 里）`).toBe(false)
+    }
+    const guard = composed.find((r) => r?.id === GUARD.id)
+    expect(guard?.name).toBe(GUARD.name)
+    expect(guard?.disabled === true, '守门插件应当开着').toBe(false)
+    // schema 导出真的 import 到了它（不是"找不到模块"），也没换人
+    expect(lockdownProblems([{ id: GUARD.id }], dump, [GUARD])).toEqual([])
+    const hit = dump['x-cordis'].entries.find((e) => e.id === GUARD.id)
+    expect(hit?.status, JSON.stringify(dump['x-cordis'].diagnostics)).not.toBe('error')
+    expect(
+      lockdownProblems(
+        WRAPPED.map((r) => ({ id: r.id })),
+        dump,
+        WRAPPED,
+      ),
+    ).toEqual([])
+  }, 120_000)
+
   it('WP179 跟官方：我们不写的行，组合结果等于官方 bundle 自己写的值', () => {
     const composed = parseComposed(runDsh(home, '--dump-config'))
     for (const want of FOLLOW_OFFICIAL) {
@@ -571,7 +635,11 @@ describe('WP133 锁定的每个 id 都真的存在于当前 dsh 的配置 schema
         dirname(require.resolve(`${want.bundle}/package.json`)),
         'cordis.patch.yml',
       )
-      const official = parsePatch(readFileSync(bundlePatch, 'utf8')).find((r) => r?.id === want.id)
+      const officialRows = parsePatch(readFileSync(bundlePatch, 'utf8'))
+      // 官方可能写成覆盖行，也可能在 insert 块里（dsh-base 的 tool-plugin-manager 就是后者）
+      const official = [...lockRows(officialRows), ...insertedRows(officialRows)].find(
+        (r) => r?.id === want.id,
+      )
       expect(official?.disabled, `${want.bundle} 自己对 ${want.id} 的写法变了，重判一次`).toBe(
         want.disabled,
       )
@@ -605,12 +673,12 @@ describe('WP133 锁定的每个 id 都真的存在于当前 dsh 的配置 schema
       'x-cordis': {
         ...dump['x-cordis'],
         entries: dump['x-cordis'].entries.map((e) =>
-          e.id === 'plugin-manager' ? { ...e, name: '@someone/else-plugin-manager' } : e,
+          e.id === 'otel' ? { ...e, name: '@someone/else-otel' } : e,
         ),
       },
     }
     expect(lockdownProblems(lockRows(rows), swapped)).toEqual([
-      'plugin-manager：现在指向 @someone/else-plugin-manager，不是 @deepseek-ai/dsh-plugin-manager',
+      'otel：现在指向 @someone/else-otel，不是 @deepseek-ai/dsh-otel',
     ])
   })
 

@@ -1,7 +1,7 @@
-# agentsws profile 的 patch 层（16 §1）——**这份文件只放锁定**（WP133）。
+# agentsws profile 的 patch 层（16 §1）——**这份文件只放锁定**（WP133；WP180 起外加一行守门插件，见文件末尾）。
 #
 # 组合顺序：dsh-base 的 patch → dsh-headless 的 patch → 这一层 → $DSH_HOME/cordis.patch.yml → `--patch`。
-# 下面九行是 docs/42 红线 7 要的"上游默认会开、我们必须关"的锁定，一行都不许是占位；
+# 下面的每一行锁定都是 docs/42 红线 7 要的"上游默认会开、我们必须关"的锁定（WP180 后剩五行 + 插进来写死关的两行），一行都不许是占位；
 # 以前混在这里的占位注释（system-prompt / user-approval / preset 声明的写法）挪到了同目录 README。
 #
 # **WP179（Luoye 09-29「官方功能优先」）逐行重判过一遍**：锁定只留给两种——
@@ -14,6 +14,14 @@
 # - `hmr`（A，跟官方）：不是冲突、也不外发；官方 headless 包自己就把它关着（一次性任务用不上热替换），
 #   我们不再多写一行，组合结果跟官方走。
 # 每一行归哪一类、为什么，整张表在 `packages/dsh-adapter/README.md`「逐行重判」一节。
+#
+# **WP180（B 类"包一层后打开"）**：又撤了四行——`plugin-manager` / `tool-plugin-manager`（官方插件管理）、
+# `config-editor` / `settings`（运行中保存配置写回）。包的那一层有两处落点：
+# - 服务进程：设置 →「官方插件」装 / 升级 / 卸载一律出卡、只从同目录 `plugin-allowlist.yml`（审过的清单）装、
+#   做完这份文件逐字节比一遍（`packages/dsh-adapter/src/official-plugins.ts` + `apps/server/src/official-plugins.ts`）；
+# - 完整 profile：文件末尾插进来的守门插件 `agentsws-profile-guard`——配置保存想写本文件里任何一行（锁定表）直接拒，
+#   官方插件管理的写方法一律拒（装插件要出卡，那条路在服务进程）。`tool-plugin-manager` 跟官方：dsh-base 自己写死关着。
+# 现在这份文件里只剩 **C 类四行**、两处"选了才开"（账号登录、电脑操控）与守门插件——它们合起来就是"锁定表"。
 #
 # 为什么锁定就写在 profile 这一层、不拆成 bundle 的独立 patch 文件（WP133 实测，
 # 出处：`@deepseek-ai/dsh-app-boot` 的 `lib/types/profile.d.ts` 里 `loadProfile` 的说明「Unreadable or
@@ -59,7 +67,7 @@
 # ——————————————————————————————————————————————————————————————————————
 
 # ——————————————————————————————————————————————————————————————————————
-# 生效的第二条（WP93，dsh 0.1.6-alpha.2）：把 Plugin Manager 关死（WP179 重判：B 类，真冲突）。
+# 原第二条（WP93，dsh 0.1.6-alpha.2）：把 Plugin Manager 关死（WP179 重判：B 类，真冲突；**WP180 包一层后撤锁**，下面是出处）。
 # 原来同一段还关了 `hmr`——WP179 撤掉了（见文件头），下面那段历史说明留着当出处。
 #
 # alpha.2 往 `dsh-base` 的 patch 里 **insert 了两个新行**（出处：上游
@@ -100,14 +108,13 @@
 # WP179 重判（B 类）：插件管理是"以宿主用户身份装任意第三方代码、在沙箱外跑、还能改写这份文件"——
 # 装一个插件没有任何人批（绕过出卡 / 授权），装进来的插件还能把下面 C 类那几行上报悄悄打开。
 # 包一层能开：装插件改成出卡、只从我们审过的清单装、装完不写 profile patch（另立一单，M）。
-- id: plugin-manager
-  disabled: true
-- id: tool-plugin-manager
-  disabled: true
+#
+# **WP180 撤了这两行**（上面是出处）：`plugin-manager` 跟官方（完整 profile 里开），写方法由文件末尾的守门插件一律拒；
+# `tool-plugin-manager`（模型面装插件的工具）跟官方——dsh-base 自己写死 `disabled: true`，组合结果仍是关。
 # ——————————————————————————————————————————————————————————————————————
 
 # ——————————————————————————————————————————————————————————————————————
-# 生效的第三条（WP132，dsh 0.1.7-rc.1）：配置写回、账号登录这三行关死。
+# 生效的第三条（WP132，dsh 0.1.7-rc.1）：配置写回、账号登录这三行关死（**WP180 包一层后撤了配置写回两行，只剩账号登录**）。
 #
 # 0.1.7-rc.1 往 `dsh-base` 的 patch 里 **insert 了三行新服务**、换掉了一行（出处：上游
 # `packages/bundle/base/cordis.patch.yml` 的 diff，`dsh-v0.1.6-alpha.2...dsh-v0.1.7-rc.1`）：
@@ -152,12 +159,10 @@
 # WP179 重判：`config-editor` / `settings` 是 B 类（真冲突）——它们在运行中把表单保存**写回这份文件**并立刻生效，
 # 一次保存就能把下面 C 类的上报（`session-log-deepseek` 等）打开，而那几行是要 Luoye 拍板的数据外发；
 # 我们的产品也没有官方设置页这个入口。包一层能开：只许写不在锁定表里的行、或改写到 `$DSH_HOME` 那一层（另立一单，S–M）。
+# **WP180 撤了 `config-editor` / `settings` 两行**：跟官方（完整 profile 里开）；`configEditor.edit` 由文件末尾的守门插件包住——
+# 想写本文件里任何一行（锁定表）直接拒、记一条，别的行照官方原样写。服务进程那一侧的保存写进插件层自己的 patch（不是这份）。
 # `deepseek-account` 是 A 类、**已经接进来**（WP134：设置里选「用我的 DeepSeek 账号登录」就开，完整 profile 叠
 # `deepseek-account.on.patch.yml`）；这一行留着是"没选时关"的那一半。
-- id: config-editor
-  disabled: true
-- id: settings
-  disabled: true
 - id: deepseek-account
   disabled: true
 # ——————————————————————————————————————————————————————————————————————
@@ -231,4 +236,17 @@
       config:
         command: !!js "process.env.AGENTSWS_CUA_DRIVER || 'agentsws-cua-driver-not-installed'"
         args: [mcp, --direct]
+# ——————————————————————————————————————————————————————————————————————
+
+# ——————————————————————————————————————————————————————————————————————
+# WP180：**守门插件**（B 类"包一层后打开"在完整 profile 这条路上的那一层）。插进来、开着。
+#
+# 它包住官方的两样：`configEditor.edit`（配置写回）——想写本文件里的任何一行（锁定表）直接拒、记一条 warn，
+# 别的行照官方原样写；`pluginManager` 的写方法（装 / 卸 / 选 bundle / 开关某一行 / 放行不兼容版本）——一律拒，
+# 读的方法照常。装插件要出卡、只从审过的清单装，那条路在 Agents 工坊的「设置 → 官方插件」。
+# 它自己也在锁定表里（配置保存改不动它）。模块只 import 类型，挂它不会把官方插件管理的代码拖进我们的运行时。
+# 钉住它的测试：`packages/dsh-adapter/test/profile-guard.test.ts`、`profile-lockdown.test.ts` 的 `WRAPPED` 一组。
+- insert:
+    - id: agentsws-profile-guard
+      name: '@agentsws/dsh-adapter/profile-guard'
 # ——————————————————————————————————————————————————————————————————————
