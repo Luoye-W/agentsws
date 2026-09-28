@@ -1,7 +1,7 @@
 # agentsws profile 的 patch 层（16 §1）——**这份文件只放锁定**（WP133）。
 #
 # 组合顺序：dsh-base 的 patch → dsh-headless 的 patch → 这一层 → $DSH_HOME/cordis.patch.yml → `--patch`。
-# 下面十行（WP177 起；原来七行）是 docs/42 红线 7 要的"上游默认会开、我们必须关"的锁定，一行都不许是占位；
+# 下面十一行（WP177 起；原来七行）是 docs/42 红线 7 要的"上游默认会开、我们必须关"的锁定，一行都不许是占位；
 # 以前混在这里的占位注释（system-prompt / user-approval / preset 声明的写法）挪到了同目录 README。
 #
 # 为什么锁定就写在 profile 这一层、不拆成 bundle 的独立 patch 文件（WP133 实测，
@@ -143,7 +143,7 @@
 # ——————————————————————————————————————————————————————————————————————
 
 # ——————————————————————————————————————————————————————————————————————
-# 生效的第四条（WP177，dsh 0.2.0-rc.1）：共享上报通道、反馈上报、DeepSeek 网页搜索三行关死。
+# 生效的第四条（WP177，dsh 0.2.0-rc.1）：共享上报通道、反馈上报、插件清单上报、DeepSeek 网页搜索四行关死。
 #
 # 0.2.0-rc.1 往 `dsh-base` 的 patch 里 **insert 了一行新服务**（出处：上游
 # `packages/bundle/base/cordis.patch.yml` 的 diff，`dsh-v0.1.7-rc.2...dsh-v0.2.0-rc.1`）：
@@ -168,15 +168,20 @@
 #   这是一条新的出网路：绕开我们自己的数据接口路由（docs/75 / docs/81：计费、缓存、审计都在那一层）。
 #   它没有单独关"账号令牌"的配置项（`resolveAccountToken` 写死在 `apply` 里），所以整行关；
 #   原来那条用 `DEEPSEEK_API_KEY` 搜的路一起关掉——同样是绕开我们路由的出网，我们的两档运行时从没挂过它。
+# - `plugin-package-inventory-deepseek`：不是这一跳新来的，是这次把组合里"不带 `disabled`、会上报"的行整体过一遍时
+#   查出来的（docs/42 WP177 修订注）。README：「owns the `dsh_plugin_packages` field」——每次走官方 DeepSeek API 的请求
+#   都附上当前挂着的**全部插件包清单**（含我们自己的包名与版本）。同 `session-log-deepseek` 一类（随请求上报），一起关。
 #
-# 同 WP93 / WP132：两档运行时的真实模块图里这三个包都是 0 命中（`harness.ts` 自己搭树，不读 bundle），
-# 这三行管的是"哪天真起了完整 profile"那条路。钉住它们的测试：
-# `packages/dsh-adapter/test/profile-lockdown.test.ts`（WP177 那三行）。
+# 同 WP93 / WP132：两档运行时的真实模块图里这四个包都是 0 命中（`harness.ts` 自己搭树，不读 bundle），
+# 这四行管的是"哪天真起了完整 profile"那条路。钉住它们的测试：
+# `packages/dsh-adapter/test/profile-lockdown.test.ts`（WP177 那四行）。
 - id: otel
   disabled: true
 - id: session-telemetry-otel
   disabled: true
 - id: web-search-deepseek
+  disabled: true
+- id: plugin-package-inventory-deepseek
   disabled: true
 # ——————————————————————————————————————————————————————————————————————
 
