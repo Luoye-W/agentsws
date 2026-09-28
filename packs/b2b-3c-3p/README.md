@@ -29,4 +29,16 @@ WP172 加四条邮件分拣场景（`scenarios/messages/`，判法是 `@agentsws
 | `b2b-unsubscribe-suppressed` | 人回的退订、硬退信进抑制名单；软退信不拉黑 |
 | `b2b-no-position-no-move` | 没开 B2B 岗位 → 不挪、不开事项、不起 Run |
 
+WP173 加六条开发信序列场景（`scenarios/outbound/`，筛人 / 预热配额 / 模板 / 页脚 / 卡的 after /
+回信分类用 `@agentsws/b2b-core`，与服务进程同一套函数；能不能提由 guardrail 判）：
+
+| 场景 | 钉住什么 |
+|---|---|
+| `first-batch-one-card` | 每一轮首封批量一张卡（L1，落业务员自己手上）；DMARC 缺只提示 |
+| `over-quota-tomorrow` | 按发信邮箱算的预热配额（20 封 / 天）：超了排到明天，第二天不重发 |
+| `spf-fail-no-send` | SPF 没过 → guardrail `sender_auth` 拦下，一封都不发 |
+| `germany-default-excluded` | 德国没有往来的潜在客户默认剔掉（原因 `de_at`），老客户照常；确认风险后才发 |
+| `reply-interested-to-sales` | 回信问价 → 停序列、交给业务；跟进那一轮只剩没回信的 |
+| `unsubscribe-stops-sequence` | 回信退订 → 进抑制名单；跟进那一轮把他剔掉 |
+
 `baseline.json` 是 stub / direct / dsh 三个运行时 fast 档 `--seed 42` 跑出来的基线。
