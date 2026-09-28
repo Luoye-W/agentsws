@@ -143,6 +143,8 @@ const switches = {
     move: boolean
     mark_read: boolean
     takeover: boolean
+    b2b?: boolean
+    b2b_position?: boolean
   },
   writes: [] as { id: string; input: Record<string, boolean>; assignment?: string }[],
 }
