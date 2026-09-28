@@ -1193,8 +1193,8 @@ export const CONNECTION_DIRECTORY: readonly ConnectionDirectoryEntry[] = [
     side_effect: 'read_external',
     status: 'planned',
     note: {
-      zh: '看谁在持续进口你这类产品。按年订阅、条款多数禁止转售，所以只能用你自己的账号接进来。等有人真在用某一家再做那一家。',
-      en: 'See who keeps importing products like yours. Annual subscriptions whose terms mostly forbid resale, so it can only be your own account. We will build the one people actually use.',
+      zh: '看谁在持续进口你这类产品。第一版用你自己的账号接进来；之后也会有按次扣积分的官方档（要先找到允许转售的数据商）。还没做。',
+      en: 'See who keeps importing products like yours. First release: your own account. An official pay-per-lookup tier comes later, once a provider allows resale. Not built yet.',
     },
   },
   // ── 自定义 ──────────────────────────────────────────────────────────
