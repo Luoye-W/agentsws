@@ -9,10 +9,14 @@
  * 1. 一行一件事；原因进问号，长说明进教程（`b2b-sending-domain`）。
  * 2. **发不了的原因看得见**：没选邮箱、体检没过、没填地址、德奥默认不发，都是可见的一句，不是灰掉的按钮。
  * 3. 德奥要**勾选 + 再点一次确认**才发（docs/84 §11.1 第 6 条），那句原因常驻。
+ *
+ * WP176：公司地址搬进公司档案（这里只读显示、链过去）；「这只邮箱已经正常发信很久」可勾（不预热）；
+ * DKIM 按 DNS 判的写明「未经实信验证」；说过不感兴趣、还在冷却里的人一行，名单与到期日进问号。
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Mail, RefreshCw, Send } from 'lucide-react'
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { StatusPill } from '@/components/design/primitives'
 import type { Tone } from '@/components/design/tone'
 import { TutorialLink } from '@/components/help/tutorial-link'
@@ -43,17 +47,31 @@ function AuthPill({
   label,
   result,
   soft,
+  viaDns,
 }: {
   label: string
   result: B2bAuthResultData
   /** DMARC 缺了只提示：没过也是黄的，不是红的。 */
   soft?: boolean
+  /** WP176：DKIM 按 DNS 记录判的（测试信没收回来）——能发，但黄色、写明未经实信验证。 */
+  viaDns?: boolean
 }): React.ReactNode {
   const { t } = useApp()
-  const tone = soft === true && AUTH_TONE[result] === 'bad' ? 'warn' : AUTH_TONE[result]
+  const tone =
+    viaDns === true && result === 'pass'
+      ? 'warn'
+      : soft === true && AUTH_TONE[result] === 'bad'
+        ? 'warn'
+        : AUTH_TONE[result]
   return (
-    <StatusPill tone={tone} data-auth={label.toLowerCase()} data-result={result}>
-      {label} {t(`b2b.out.auth.${result}`)}
+    <StatusPill
+      tone={tone}
+      data-auth={label.toLowerCase()}
+      data-result={result}
+      {...(viaDns === true ? { 'data-via': 'dns' } : {})}
+    >
+      {label}{' '}
+      {viaDns === true && result === 'pass' ? t('b2b.out.auth.dns') : t(`b2b.out.auth.${result}`)}
     </StatusPill>
   )
 }
@@ -63,7 +81,6 @@ export function B2bOutboundPanel({ assignment }: { assignment: string }): React.
   const qc = useQueryClient()
   const key = ['b2b-outbound', assignment]
   const q = useQuery({ queryKey: key, queryFn: () => getB2bOutbound(assignment) })
-  const [address, setAddress] = useState<string | undefined>(undefined)
   const [product, setProduct] = useState('')
   const [confirming, setConfirming] = useState(false)
   const [result, setResult] = useState<B2bSequenceStartData | undefined>(undefined)
@@ -89,7 +106,8 @@ export function B2bOutboundPanel({ assignment }: { assignment: string }): React.
   if (v === undefined) return null
   const deAt = v.excluded.find((x) => x.reason === 'de_at')
   const sender = v.sender
-  const postal = address ?? v.settings.postal_address ?? ''
+  const postal = v.settings.postal_address
+  const cooling = v.cooling ?? []
 
   return (
     <Card data-testid="b2b-outbound-panel">
@@ -128,7 +146,11 @@ export function B2bOutboundPanel({ assignment }: { assignment: string }): React.
           {sender === undefined ? null : (
             <div className="flex flex-wrap items-center gap-2">
               <AuthPill label="SPF" result={sender.auth.spf} />
-              <AuthPill label="DKIM" result={sender.auth.dkim} />
+              <AuthPill
+                label="DKIM"
+                result={sender.auth.dkim}
+                viaDns={sender.auth.dkim_via === 'dns'}
+              />
               <AuthPill label="DMARC" result={sender.auth.dmarc} soft />
               {sender.auth.notes.length === 0 ? null : (
                 <Hint text={sender.auth.notes.join('\n')} testId="b2b-auth-notes" />
@@ -150,6 +172,19 @@ export function B2bOutboundPanel({ assignment }: { assignment: string }): React.
             </p>
           ) : null}
           {sender === undefined ? null : (
+            <label className="flex items-center gap-2 text-ws-muted-fg">
+              <input
+                type="checkbox"
+                data-testid="b2b-established"
+                checked={sender.established === true}
+                disabled={save.isPending}
+                onChange={(e) => save.mutate({ sender_established: e.target.checked })}
+              />
+              {t('b2b.out.established')}
+              <Hint text={t('b2b.out.established.hint')} testId="b2b-established-hint" />
+            </label>
+          )}
+          {sender === undefined ? null : (
             <p className="text-ws-muted-fg" data-testid="b2b-quota">
               {t('b2b.out.quota', { remaining: sender.quota.remaining })} ·{' '}
               {sender.quota.warming && sender.quota.warm_from !== undefined
@@ -162,26 +197,29 @@ export function B2bOutboundPanel({ assignment }: { assignment: string }): React.
           )}
         </section>
 
-        {/* ② 公司地址（页脚要；没有就不能发） */}
-        <section className="flex flex-col gap-1.5" data-testid="b2b-address">
+        {/* ② 公司地址：真源是公司档案（开发信页脚、报价单、单证同一份），这里只读显示、链过去 */}
+        <section className="flex flex-col gap-1" data-testid="b2b-address">
           <span className="flex items-center gap-1 text-ws-muted-fg">
             {t('b2b.out.address')}
-            <Hint text={t('b2b.out.address.hint')} />
+            <Hint text={`${t('b2b.out.address.hint')}。${t('b2b.out.address.from')}`} />
           </span>
-          <div className="flex gap-2">
-            <Input
-              value={postal}
-              placeholder={t('b2b.out.address.placeholder')}
-              onChange={(e) => setAddress(e.target.value)}
-            />
-            <Button
-              size="sm"
-              variant="secondary"
-              disabled={save.isPending || postal.trim() === (v.settings.postal_address ?? '')}
-              onClick={() => save.mutate({ postal_address: postal })}
+          <div className="flex flex-wrap items-center gap-2">
+            {postal === undefined ? (
+              <span className="text-ws-bad" data-testid="b2b-address-none">
+                {t('b2b.out.address.none')}
+              </span>
+            ) : (
+              <span className="whitespace-pre-line" data-testid="b2b-address-value">
+                {postal}
+              </span>
+            )}
+            <Link
+              to="/settings#company"
+              className="text-primary underline-offset-4 hover:underline"
+              data-testid="b2b-address-edit"
             >
-              {t('b2b.out.save')}
-            </Button>
+              {t('b2b.out.address.edit')}
+            </Link>
           </div>
         </section>
 
@@ -256,6 +294,26 @@ export function B2bOutboundPanel({ assignment }: { assignment: string }): React.
                 : t('b2b.out.start', { count: v.eligible })}
             </Button>
           </div>
+          {cooling.length === 0 ? null : (
+            <p className="flex items-center gap-1 text-ws-muted-fg" data-testid="b2b-cooling">
+              {t('b2b.out.cooling', { count: cooling.length })}
+              <Hint
+                testId="b2b-cooling-hint"
+                text={[
+                  t('b2b.out.cooling.hint'),
+                  ...cooling.slice(0, 10).map((c) =>
+                    t('b2b.out.cooling.row', {
+                      who:
+                        c.company === undefined
+                          ? (c.name ?? c.masked)
+                          : `${c.company}（${c.name ?? c.masked}）`,
+                      date: c.until.slice(0, 10),
+                    }),
+                  ),
+                ].join('\n')}
+              />
+            </p>
+          )}
           {Object.entries(v.queued).map(([reason, count]) => (
             <p
               key={reason}

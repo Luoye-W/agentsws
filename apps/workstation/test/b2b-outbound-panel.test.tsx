@@ -144,4 +144,54 @@ describe('开发信面板', () => {
     expect(result.getAttribute('data-status')).toBe('nothing_to_send')
     expect(result.textContent).toContain('Nordlicht（Jan）：德国 / 奥地利默认不发')
   })
+  it('WP176：公司地址只读显示、链到公司档案；没填写明「还没填」', async () => {
+    getB2bOutbound.mockResolvedValue({
+      ...WITH_SENDER,
+      settings: { ...WITH_SENDER.settings, postal_address_from: 'profile' },
+    })
+    renderWithProviders(<B2bOutboundPanel assignment="asg_out" />)
+    expect((await screen.findByTestId('b2b-address-value')).textContent).toBe('8 Keji Rd')
+    expect(screen.getByTestId('b2b-address-edit').getAttribute('href')).toBe('/settings#company')
+    expect(document.querySelector('[data-testid="b2b-address"] input')).toBeNull()
+  })
+
+  it('WP176：没填地址 → 「还没填」；勾「已经正常发信很久」发出设置请求；DKIM 按 DNS 判的写明未经实信验证；冷却一行', async () => {
+    getB2bOutbound.mockResolvedValue({
+      ...WITH_SENDER,
+      settings: { de_at_confirmed: false, sender_address: 'hello@brand.example' },
+      needs: ['company_address'],
+      sender: {
+        ...(WITH_SENDER.sender as NonNullable<B2bOutboundData['sender']>),
+        auth: {
+          spf: 'pass',
+          dkim: 'pass',
+          dmarc: 'pass',
+          notes: [],
+          dkim_via: 'dns',
+          dkim_selector: 'selector1',
+        },
+      },
+      cooling: [
+        {
+          contact_id: 'ctc_peak',
+          name: 'Mia',
+          company: 'Peak Gadgets',
+          masked: 'm***@peak.example',
+          until: '2026-12-27T02:00:00.000Z',
+          count: 1,
+        },
+      ],
+    })
+    saveB2bOutboundSettings.mockResolvedValue(WITH_SENDER)
+    renderWithProviders(<B2bOutboundPanel assignment="asg_out" />)
+    expect((await screen.findByTestId('b2b-address-none')).textContent).toBe('还没填')
+    const dkim = document.querySelector('[data-auth="dkim"]')
+    expect(dkim?.getAttribute('data-via')).toBe('dns')
+    expect(dkim?.textContent).toContain('DNS 已配置（未经实信验证）')
+    expect(screen.getByTestId('b2b-cooling').textContent).toContain('冷却中 1 位')
+    fireEvent.click(screen.getByTestId('b2b-established'))
+    await waitFor(() =>
+      expect(saveB2bOutboundSettings).toHaveBeenCalledWith({ sender_established: true }),
+    )
+  })
 })

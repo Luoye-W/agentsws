@@ -3142,6 +3142,8 @@ export interface WorkspaceProfileView {
   markets?: string[]
   /** WP166：这份市场是从哪看出来的（问号里那一句）。 */
   markets_source?: MarketsSource
+  /** WP176：公司实体地址（开发信页脚、报价单、单证从这里取）。 */
+  postal_address?: string
   set_at: string
 }
 
@@ -3295,6 +3297,8 @@ export const setWorkspaceProfile = (
     brand_name?: string
     /** WP166：目标市场（不给 = 不改；空数组 = 清空）。 */
     markets?: string[]
+    /** WP176：公司实体地址（不给 = 不改；空串 = 清空）。 */
+    postal_address?: string
   },
   assignment?: string,
 ): Promise<WorkspaceProfileView> =>
@@ -5809,6 +5813,8 @@ export interface B2bOutboundData {
     sender_choice?: 'separate' | 'primary' | 'separate_pending'
     sender_address?: string
     choice_card_id?: string
+    /** WP176：地址从哪来（`profile` = 公司档案，这里只读显示）。 */
+    postal_address_from?: 'profile' | 'outbound_settings'
   }
   sender?: {
     address: string
@@ -5819,7 +5825,12 @@ export interface B2bOutboundData {
       dmarc: B2bAuthResultData
       checked_at?: string
       notes: string[]
+      /** WP176：`dns` = 测试信没收回来，按 DNS 记录判的（未经实信验证）。 */
+      dkim_via?: 'test_mail' | 'dns'
+      dkim_selector?: string
     }
+    /** WP176：勾了「这只邮箱已经正常发信很久」（不预热）。 */
+    established?: boolean
     quota: {
       cap: number
       sent_today: number
@@ -5834,6 +5845,15 @@ export interface B2bOutboundData {
   queued: Partial<Record<'quota' | 'sender_choice' | 'sender_auth' | 'company_address', number>>
   eligible: number
   excluded: { reason: string; label: string; count: number }[]
+  /** WP176：说过不感兴趣、还在冷却里的人（最先到期的在前）。 */
+  cooling?: {
+    contact_id?: string
+    name?: string
+    company?: string
+    masked: string
+    until: string
+    count: number
+  }[]
 }
 
 export interface B2bSequenceStartData {
@@ -5854,6 +5874,8 @@ export const saveB2bOutboundSettings = (
     postal_address?: string
     sender_name?: string
     de_at_confirm?: boolean
+    /** WP176：「这只邮箱已经正常发信很久」（新域名别勾）。 */
+    sender_established?: boolean
   },
   assignment?: string,
 ): Promise<B2bOutboundData> =>
