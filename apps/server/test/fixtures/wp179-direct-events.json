@@ -1,0 +1,322 @@
+{
+  "no_web_tools": [
+    {
+      "schema_version": 1,
+      "workspace_id": "ws_1",
+      "type": "run.started",
+      "actor": {
+        "kind": "agent",
+        "id": "asg_1",
+        "run_id": "run_zik0zj1"
+      },
+      "correlation": {
+        "trace_id": "trc_run_run_zik0zj1",
+        "run_id": "run_zik0zj1",
+        "work_item_id": "mat_1"
+      },
+      "payload": {
+        "request_id": "run_zik0zj1",
+        "runtime": "direct-llm",
+        "model": {
+          "provider": "stub",
+          "model": "stub-v1",
+          "region": "cn"
+        }
+      }
+    },
+    {
+      "schema_version": 1,
+      "workspace_id": "ws_1",
+      "type": "context.injected",
+      "actor": {
+        "kind": "agent",
+        "id": "asg_1",
+        "run_id": "run_zik0zj1"
+      },
+      "correlation": {
+        "trace_id": "trc_run_run_zik0zj1",
+        "run_id": "run_zik0zj1",
+        "work_item_id": "mat_1"
+      },
+      "payload": {
+        "item_id": "brief_mat_1",
+        "kind": "thread",
+        "bytes": 142,
+        "hash": "c6eb2a4d4c340110646ed3814e7808567908773932f1bca64c5dd1764d3428e8",
+        "source": "request"
+      }
+    },
+    {
+      "schema_version": 1,
+      "workspace_id": "ws_1",
+      "type": "prompt.assembled",
+      "actor": {
+        "kind": "agent",
+        "id": "asg_1",
+        "run_id": "run_zik0zj1"
+      },
+      "correlation": {
+        "trace_id": "trc_run_run_zik0zj1",
+        "run_id": "run_zik0zj1",
+        "work_item_id": "mat_1"
+      },
+      "payload": {
+        "hash": "94510b3a7b3537427610efa8b93aad4dbbf22b20922c96be8029b9befb12a8d6",
+        "static_prefix_hash": "a7fbcd5d17303f05222c76f4e416a54aaf06a8b09163fc971f81eae68c79d5ae",
+        "total_tokens": 279
+      }
+    },
+    {
+      "schema_version": 1,
+      "workspace_id": "ws_1",
+      "type": "tool.call",
+      "actor": {
+        "kind": "agent",
+        "id": "asg_1",
+        "run_id": "run_zik0zj1"
+      },
+      "correlation": {
+        "trace_id": "trc_run_run_zik0zj1",
+        "run_id": "run_zik0zj1",
+        "work_item_id": "mat_1"
+      },
+      "payload": {
+        "call_id": "call_1",
+        "tool": "search_policies",
+        "input": {
+          "query": "退货"
+        }
+      }
+    },
+    {
+      "schema_version": 1,
+      "workspace_id": "ws_1",
+      "type": "tool.result",
+      "actor": {
+        "kind": "agent",
+        "id": "asg_1",
+        "run_id": "run_zik0zj1"
+      },
+      "correlation": {
+        "trace_id": "trc_run_run_zik0zj1",
+        "run_id": "run_zik0zj1",
+        "work_item_id": "mat_1"
+      },
+      "payload": {
+        "call_id": "call_1",
+        "status": "error",
+        "reason": "no_tool_executor"
+      }
+    },
+    {
+      "schema_version": 1,
+      "workspace_id": "ws_1",
+      "type": "text.delta",
+      "actor": {
+        "kind": "agent",
+        "id": "asg_1",
+        "run_id": "run_zik0zj1"
+      },
+      "correlation": {
+        "trace_id": "trc_run_run_zik0zj1",
+        "run_id": "run_zik0zj1",
+        "work_item_id": "mat_1"
+      },
+      "payload": {
+        "text": "查完了。"
+      }
+    },
+    {
+      "schema_version": 1,
+      "workspace_id": "ws_1",
+      "type": "run.completed",
+      "actor": {
+        "kind": "agent",
+        "id": "asg_1",
+        "run_id": "run_zik0zj1"
+      },
+      "correlation": {
+        "trace_id": "trc_run_run_zik0zj1",
+        "run_id": "run_zik0zj1",
+        "work_item_id": "mat_1"
+      },
+      "payload": {
+        "usage": {
+          "input_tokens": 20,
+          "output_tokens": 10,
+          "cached_tokens": 0,
+          "tool_calls": 1,
+          "seconds": 0,
+          "cost_base": 0
+        },
+        "outputs": [
+          {
+            "kind": "answer",
+            "text": "查完了。"
+          }
+        ],
+        "summary": "查完了。"
+      }
+    }
+  ],
+  "no_web_option": [
+    {
+      "schema_version": 1,
+      "workspace_id": "ws_1",
+      "type": "run.started",
+      "actor": {
+        "kind": "agent",
+        "id": "asg_1",
+        "run_id": "run_zik0zj1"
+      },
+      "correlation": {
+        "trace_id": "trc_run_run_zik0zj1",
+        "run_id": "run_zik0zj1",
+        "work_item_id": "mat_1"
+      },
+      "payload": {
+        "request_id": "run_zik0zj1",
+        "runtime": "direct-llm",
+        "model": {
+          "provider": "stub",
+          "model": "stub-v1",
+          "region": "cn"
+        }
+      }
+    },
+    {
+      "schema_version": 1,
+      "workspace_id": "ws_1",
+      "type": "context.injected",
+      "actor": {
+        "kind": "agent",
+        "id": "asg_1",
+        "run_id": "run_zik0zj1"
+      },
+      "correlation": {
+        "trace_id": "trc_run_run_zik0zj1",
+        "run_id": "run_zik0zj1",
+        "work_item_id": "mat_1"
+      },
+      "payload": {
+        "item_id": "brief_mat_1",
+        "kind": "thread",
+        "bytes": 142,
+        "hash": "c6eb2a4d4c340110646ed3814e7808567908773932f1bca64c5dd1764d3428e8",
+        "source": "request"
+      }
+    },
+    {
+      "schema_version": 1,
+      "workspace_id": "ws_1",
+      "type": "prompt.assembled",
+      "actor": {
+        "kind": "agent",
+        "id": "asg_1",
+        "run_id": "run_zik0zj1"
+      },
+      "correlation": {
+        "trace_id": "trc_run_run_zik0zj1",
+        "run_id": "run_zik0zj1",
+        "work_item_id": "mat_1"
+      },
+      "payload": {
+        "hash": "94510b3a7b3537427610efa8b93aad4dbbf22b20922c96be8029b9befb12a8d6",
+        "static_prefix_hash": "a7fbcd5d17303f05222c76f4e416a54aaf06a8b09163fc971f81eae68c79d5ae",
+        "total_tokens": 279
+      }
+    },
+    {
+      "schema_version": 1,
+      "workspace_id": "ws_1",
+      "type": "tool.call",
+      "actor": {
+        "kind": "agent",
+        "id": "asg_1",
+        "run_id": "run_zik0zj1"
+      },
+      "correlation": {
+        "trace_id": "trc_run_run_zik0zj1",
+        "run_id": "run_zik0zj1",
+        "work_item_id": "mat_1"
+      },
+      "payload": {
+        "call_id": "call_1",
+        "tool": "search_policies",
+        "input": {
+          "query": "退货"
+        }
+      }
+    },
+    {
+      "schema_version": 1,
+      "workspace_id": "ws_1",
+      "type": "tool.result",
+      "actor": {
+        "kind": "agent",
+        "id": "asg_1",
+        "run_id": "run_zik0zj1"
+      },
+      "correlation": {
+        "trace_id": "trc_run_run_zik0zj1",
+        "run_id": "run_zik0zj1",
+        "work_item_id": "mat_1"
+      },
+      "payload": {
+        "call_id": "call_1",
+        "status": "error",
+        "reason": "no_tool_executor"
+      }
+    },
+    {
+      "schema_version": 1,
+      "workspace_id": "ws_1",
+      "type": "text.delta",
+      "actor": {
+        "kind": "agent",
+        "id": "asg_1",
+        "run_id": "run_zik0zj1"
+      },
+      "correlation": {
+        "trace_id": "trc_run_run_zik0zj1",
+        "run_id": "run_zik0zj1",
+        "work_item_id": "mat_1"
+      },
+      "payload": {
+        "text": "查完了。"
+      }
+    },
+    {
+      "schema_version": 1,
+      "workspace_id": "ws_1",
+      "type": "run.completed",
+      "actor": {
+        "kind": "agent",
+        "id": "asg_1",
+        "run_id": "run_zik0zj1"
+      },
+      "correlation": {
+        "trace_id": "trc_run_run_zik0zj1",
+        "run_id": "run_zik0zj1",
+        "work_item_id": "mat_1"
+      },
+      "payload": {
+        "usage": {
+          "input_tokens": 20,
+          "output_tokens": 10,
+          "cached_tokens": 0,
+          "tool_calls": 1,
+          "seconds": 0,
+          "cost_base": 0
+        },
+        "outputs": [
+          {
+            "kind": "answer",
+            "text": "查完了。"
+          }
+        ],
+        "summary": "查完了。"
+      }
+    }
+  ]
+}

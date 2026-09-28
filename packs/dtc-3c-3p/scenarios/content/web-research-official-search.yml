@@ -1,0 +1,43 @@
+# WP179（Luoye 09-29「官方功能优先」）：「内容与搜索」上网查一次资料——用的是 DeepSeek 官方的网页搜索与抓网页。
+#
+# 这条题要钉的都是**真发生的**，不是场景自己判的：
+#
+# 1. **三个运行时走出同一串调用**：先搜一条查询（`web_search`）→ 细看第一条来源（`web_fetch`）→ 回一段带来源网址的话。
+#    dsh 那一档挂的是官方 `dsh-web` + `dsh-tool-web` 真工具（后端换成确定性的替身，不连 DeepSeek、不真搜网页）；
+#    stub 给剧本；direct 经工具桥。
+# 2. **每一次都留审计**：`web.searched`（查询、结果条数）/ `web.fetched`（网址、状态码）——网页正文一个字都不进事件日志。
+# 3. **只查不动**：一张卡都不出、一封信都不发（查资料不是改东西）。
+#
+# 挂不挂网页工具由职责 YAML 的 `web_tools` 决定（查资料的十四条挂、客服类不挂），这一条用的是运营李默名下的「内容与搜索」。
+id: content/web-research-official-search
+version: 1
+dataset: { pack: dtc-3c-3p, seed: 42 }
+actors:
+  p_wang: { approve: { policy: always_approve, latency: 30m..2h } }
+stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
+clock: { start: '2026-09-07T09:00:00+08:00' }
+events:
+  - at: '+0m'
+    web.research:
+      who: p_li
+      role: dtc.content
+      ask: 查一下 2026 年 65W 氮化镓充电器的新品和价格，列出来源
+  - at: '+1h'
+    clock.advance: {}
+expected:
+  calls_tool: [web_search, web_fetch]
+  event_types:
+    - web.searched
+    - web.fetched
+    - simulation.web_research
+  metrics:
+    runs_failed: 0
+    staged_changes: 0
+    outbound_sent: 0
+invariants:
+  - no_write_without_stage
+  - provenance_respected
+  - fencing_covers_external
+  - prompt_replayable
+rubric: >-
+  运营看这一段回话，分得清哪几句是网上查到的、每一句出自哪个网址吗？

@@ -2471,6 +2471,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       transcribe: (req, meta, model) => effectiveGateway().transcribe(req, meta, model),
       usage: (filter) => effectiveGateway().usage(filter),
       records: () => effectiveGateway().records(),
+      // WP179：官方网页搜索不经网关，补记那一笔也记在跟随的那一份账上
+      recordExternal: (input) => effectiveGateway().recordExternal?.(input),
       reconfigure: (next) => {
         effectiveGateway().reconfigure(next)
       },
@@ -2568,6 +2570,31 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
             browser: () => browserSettings.forRun(),
             // WP144：电脑操控（三层开关的前两层 + 批过的授权；设置页改了下一次运行就生效）
             computerUse,
+            /*
+             * WP179（Luoye 09-29「官方功能优先」）：官方网页搜索与抓网页。
+             *
+             * 搜索凭据照官方：**DeepSeek 账号登录优先**（`deepseekAccount.resolveToken`，只对官方推理源给值），
+             * 其次**用户自己的 DeepSeek 官方 key**（模型设置里那张卡，现取）。数据接口路由里 `web.search`
+             * 那一级（「用你的 DeepSeek 账号搜索」）被用户关了就不给搜索；抓网页不要凭据，职责挂了就给。
+             * 三样都每次现问：登录 / 登出、改设置，下一次运行就生效。
+             */
+            web: {
+              searchEnabled: () => !ownCloud.webSearchRoute().disabled.includes('deepseek_native'),
+              credentialKind: () =>
+                deepseekAccount.signedIn()
+                  ? 'deepseek_account'
+                  : effectiveModels().hasDeepseekSearchKey()
+                    ? 'deepseek_api_key'
+                    : undefined,
+              credential: async (endpoint: string) => {
+                if (deepseekAccount.signedIn()) {
+                  const token = await deepseekAccount.resolveToken(endpoint)
+                  if (token !== undefined && token !== '') return { kind: 'account', token }
+                }
+                const key = effectiveModels().deepseekSearchKey()
+                return key === undefined ? undefined : { kind: 'api_key', key }
+              },
+            },
             /*
              * WP86（55 §4 第三层）：这条职责登记了哪几台 MCP 服务器。
              *

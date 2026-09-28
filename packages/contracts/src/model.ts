@@ -10,6 +10,11 @@ export type ModelPurpose =
   | 'judge'
   /** WP23：ASR（会议转写）。驻留与预算走与其它 purpose 相同的一套策略。 */
   | 'transcription'
+  /**
+   * WP179：官方 DeepSeek 原生网页搜索（`dsh-web-search-deepseek`）。一次搜索 = 一次完整的模型回合，
+   * 所以照 `model.usage` 记一条；它不经我们的网关，由宿主在搜完那一刻补记（工坊不扣积分）。
+   */
+  | 'web_search'
 /**
  * 一条消息的 content 可以是纯文本（**既有调用方原样传 string**），或
  * 文本 + 图片部件的数组（WP122b 交付 ⑤：视觉档，图进模型这一格）。

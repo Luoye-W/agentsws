@@ -14778,8 +14778,8 @@ export interface operations {
           }
           data_source_routing?: {
             [key: string]: {
-              order: ('official_key' | 'byo_source' | 'workshop')[]
-              disabled: ('official_key' | 'byo_source' | 'workshop')[]
+              order: ('official_key' | 'byo_source' | 'workshop' | 'deepseek_native')[]
+              disabled: ('official_key' | 'byo_source' | 'workshop' | 'deepseek_native')[]
             }
           }
         }

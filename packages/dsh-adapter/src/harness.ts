@@ -70,6 +70,7 @@ import {
   subscriptionProviderOf,
   watchSubscriptionCalls,
 } from './subscription.js'
+import { mountWebService, mountWebTools, webWanted } from './web.js'
 
 /** 装配 dsh 服务时等注入就绪的上限（毫秒）。 */
 const READY_TIMEOUT_MS = 5000
@@ -88,9 +89,17 @@ export const DEFAULT_MAX_STEPS = 8
 export function maxStepsFor(request: {
   browser?: unknown
   computer_use?: unknown
+  web?: unknown
   budget: { max_tool_calls: number }
 }): number {
-  if (request.browser === undefined && request.computer_use === undefined) return DEFAULT_MAX_STEPS
+  // WP179：挂了网页工具的运行同理——搜一次、抓两页、再搜一次，一步一个工具
+  if (
+    request.browser === undefined &&
+    request.computer_use === undefined &&
+    request.web === undefined
+  ) {
+    return DEFAULT_MAX_STEPS
+  }
   return Math.max(DEFAULT_MAX_STEPS, request.budget.max_tool_calls + 1)
 }
 
@@ -424,6 +433,13 @@ export async function createHarness(input: HarnessInput): Promise<DshHarness> {
     root.plugin(AgentswsBashExecutor, { cwd: shell.workspace_root } as never)
     root.plugin(ShellEnv, {} as never)
   }
+  /*
+   * WP179（Luoye 09-29「官方功能优先」）：**只有这次运行开了网页工具，才有 `ctx.web` 这一层**。
+   * 挂的是官方 `dsh-web` 服务；后端（DeepSeek 原生搜索 / 匿名抓网页）与模型面的两个工具
+   * 在服务就绪之后挂（`web.ts`），与浏览器、终端同一条纪律：不用的东西不挂。
+   */
+  const web = webWanted(input.request)
+  if (web) mountWebService(root)
   // 串行：并行工具调用会让两档的事件顺序不可比（17 §4「换宿主不换语义」）
   root.plugin(AgentLoop, { maxParallelToolCalls: 1, agents: [] })
   /*
@@ -453,6 +469,7 @@ export async function createHarness(input: HarnessInput): Promise<DshHarness> {
     ...(imageHome === undefined ? [] : ['attachments']),
     ...(preset === undefined ? [] : ['agentPresets']),
     ...(shell === undefined ? [] : ['shell', 'sandbox', 'sandboxPolicy', 'shellEnv', 'subprocess']),
+    ...(web ? ['web'] : []),
     // Cordis 的规矩：没 `inject` 过的服务连读都读不到（"cannot get property … without inject"）
     ...(credentials === undefined ? [] : ['credentials']),
   ]).catch((e: unknown) => {
@@ -477,6 +494,17 @@ export async function createHarness(input: HarnessInput): Promise<DshHarness> {
    */
   if (shell !== undefined) {
     await ctx.plugin(ToolBash, { enableRunInBackground: false, promoteOnTimeout: false } as never)
+  }
+  /*
+   * WP179：官方网页后端 + `web_search` / `web_fetch` 两个工具。同 `bash`：**必须在 `agents.create`
+   * 之前挂完**，`tools.restrict({ allow })` 只认那一刻已经全局注册的名字。
+   */
+  if (web) {
+    await mountWebTools(ctx, input.request, input.options.web).catch(async (e: unknown) => {
+      await root.fiber.dispose()
+      dropImages()
+      throw e
+    })
   }
 
   /*

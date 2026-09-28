@@ -35,6 +35,7 @@ import {
   describeRun,
   renderTrustedToolResult,
   rewriteForChannelGuard,
+  WebUsageCounter,
 } from '@agentsws/stand-ins'
 import { assembleDirect, DRAFT_REPLY_TOOL, STAGE_REFUND_TOOL } from './assemble.js'
 import { failureOf } from './errors.js'
@@ -141,6 +142,12 @@ export function createDirectRuntime(options: DirectRuntimeOptions): RuntimeAdapt
       const openCalls = new Map<string, string>()
       const usage = { input_tokens: 0, output_tokens: 0, cached_tokens: 0, cost_base: 0 }
       let toolCalls = 0
+      /*
+       * WP179：官方网页工具在 direct 这一档**经工具桥**：工具面里有 `web_search` / `web_fetch`
+       * （名字与参数照官方，定义在 `@agentsws/stand-ins` 的 `web.ts`），执行交给宿主的 `executeTool`。
+       * 服务端带网页工具的运行本来就走 dsh（官方工具只在那条路上挂）；这条桥给模拟的三运行时 parity 用。
+       */
+      const webCounter = new WebUsageCounter(req)
       let staged = false
       let finalText = ''
       let exhausted: { which: keyof RunRequest['budget']; used: number; cap: number } | undefined
@@ -610,12 +617,16 @@ export function createDirectRuntime(options: DirectRuntimeOptions): RuntimeAdapt
           }
 
           const decision = gateToolCall(call.name, effective, options.sideEffectOf)
+          // WP179：官方网页工具经工具桥——开没开、有没有超每条运行的上限，与 stub / dsh 同一份判定
+          const webDenial = decision.allowed ? webCounter.take(call.name, input) : undefined
           let exec: ToolExecution
           if (!decision.allowed) {
             exec = {
               status: 'blocked',
               ...(decision.reason === undefined ? {} : { reason: decision.reason }),
             }
+          } else if (webDenial !== undefined) {
+            exec = { status: 'blocked', reason: webDenial }
           } else if (call.name === STAGE_REFUND_TOOL) {
             exec = await doStage(input)
           } else if (call.name === DRAFT_REPLY_TOOL) {

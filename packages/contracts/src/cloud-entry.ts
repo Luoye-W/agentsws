@@ -402,7 +402,22 @@ export interface CloudCreditsView {
  * - `workshop`：**Agents 工坊官方数据接口**（积分计价；对外只有这一个名字，
  *   绝不出现上游名）。
  */
-export type DataSourceLevel = 'official_key' | 'byo_source' | 'workshop'
+export type DataSourceLevel =
+  | 'official_key'
+  | 'byo_source'
+  | 'workshop'
+  /**
+   * WP179：**用你的 DeepSeek 账号搜索**——官方 `dsh-web-search-deepseek`（账号登录优先，
+   * 其次用户自己的 DeepSeek API key）。只属于 {@link WEB_SEARCH_ROUTE_KEY} 这一项能力；
+   * 红人那几条（`kol.<渠道>`）不认它。用户付的是 DeepSeek 的 token，工坊不扣积分。
+   */
+  | 'deepseek_native'
+
+/** WP179：网页搜索这一项能力在 `data_source_routing` 里的键。 */
+export const WEB_SEARCH_ROUTE_KEY = 'web.search'
+
+/** WP179：网页搜索的默认顺序——第一级就是官方那条（Luoye 09-29）。 */
+export const DEFAULT_WEB_SEARCH_ORDER: readonly DataSourceLevel[] = ['deepseek_native']
 
 /** 默认顺序（WP126 定论 1）：自己的 key → 自己的接口 → 工坊的（积分）。 */
 export const DEFAULT_DATA_SOURCE_ORDER: readonly DataSourceLevel[] = [

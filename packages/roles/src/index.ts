@@ -17,7 +17,7 @@ export {
 } from './automation.js'
 export type { AssignmentFilter, StoreBackend } from './backend.js'
 export { createMemoryBackend, createSqliteBackend } from './backend.js'
-export { changeKindOf, effectiveConfig, riskClassOf } from './effective.js'
+export { changeKindOf, effectiveConfig, riskClassOf, webOf } from './effective.js'
 export {
   BUNDLED_POSITIONS_DIR,
   BUNDLED_ROLES_DIR,

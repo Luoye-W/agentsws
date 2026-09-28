@@ -29,6 +29,7 @@ import { ModelCheckSteps } from '@/components/models/model-check-steps'
 import { ModelForm, type ModelFormValues, suggestProviderId } from '@/components/models/model-form'
 import { QuotaNotice } from '@/components/models/quota-notice'
 import { SubscriptionPlan } from '@/components/models/subscription-plan'
+import { WebSearchToggle } from '@/components/models/web-search-toggle'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Hint } from '@/components/ui/hint'
@@ -523,6 +524,21 @@ export function ModelsPanel({ assignment }: { assignment?: string }): React.Reac
             </section>
           </>
         )}
+
+        {/*
+          WP179：「用你的 DeepSeek 账号搜索」——查资料的岗位上网搜索用的是 DeepSeek 官方的搜索，
+          凭据是这里的 DeepSeek 账号 / 官方 key，所以开关放在模型这一页
+        */}
+        <Separator />
+        <WebSearchToggle
+          {...(assignment === undefined ? {} : { assignment })}
+          ready={rows.some(
+            (p) =>
+              p.has_key &&
+              (isDeepSeekAccountKind(p.kind) ||
+                (p.kind === 'deepseek' && p.base_url.startsWith('https://api.deepseek.com'))),
+          )}
+        />
 
         {/* WP127：第二块「生图」——单独一档，可以不配 */}
         <Separator />

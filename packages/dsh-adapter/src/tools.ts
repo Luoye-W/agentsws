@@ -16,6 +16,7 @@ import {
   B2B_OUTBOUND_TOOL_DEF_BY_NAME,
   B2B_START_ROUND_TOOL,
   isMcpReadTool,
+  isWebTool,
   OWNER_TOOL_DEF_BY_NAME,
   READ_SKILL_TOOL,
   renderTrustedToolResult,
@@ -200,6 +201,12 @@ export function classifySideEffect(
   const bare = tool.includes('.') ? tool.slice(tool.indexOf('.') + 1) : tool
   const explicit = overrides?.[tool] ?? overrides?.[bare]
   if (explicit !== undefined) return explicit
+  /*
+   * WP179：官方网页工具只读外部（搜索看结果、抓网页看正文，不提交任何东西）。显式列出来：
+   * 它们不是 `get_` / `list_` 开头，落到兜底会被当成写外部、在公司端一调就拒。
+   * 次数上限与"这次运行开没开"在门禁里另判（`WebUsageCounter`）。
+   */
+  if (isWebTool(tool)) return 'read_external'
   // WP82：浏览器工具走自己那张显式表；表外的一律按写（上游随时会加新工具，
   // 新来的那个默认进不了公司端——这正是我们要的方向）。
   const browser = browserToolName(tool)
@@ -457,7 +464,8 @@ export function buildToolDefinitions(
 ): ToolDefinition[] {
   const names = orderTools([...new Set(req.tools.allow)])
   const defs: ToolDefinition[] = names
-    .filter((n) => n !== STAGE_TOOL && n !== DRAFT_TOOL)
+    // WP179：`web_search` / `web_fetch` 是官方 `dsh-tool-web` 注册的（`web.ts`），这里不再造一份
+    .filter((n) => n !== STAGE_TOOL && n !== DRAFT_TOOL && !isWebTool(n))
     .map((n) => readTool(n, read))
   defs.push(stageTool(staging), draftTool(staging))
   return defs

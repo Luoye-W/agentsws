@@ -14,6 +14,7 @@ import { asRecord, type OrderView, orderIdFromText, orderView } from '../view.js
 import { kolBrain, kolRunOf } from './kol-brain.js'
 import type { ScriptedTurn, ScriptFn } from './scripted.js'
 import { scriptedProvider } from './scripted.js'
+import { webBrainTurn } from './web-brain.js'
 
 /**
  * 售后"规则脑"：一个**确定性的** ModelProvider，用工具协议说话。
@@ -110,6 +111,12 @@ export function aftersalesBrain(options: AftersalesBrainOptions): ScriptFn {
      * 有就整轮交给红人规则脑——售后这一整套（查单 → 退货窗口 → 提退款 → 回信）
      * 一行都不执行。没有的话下面逐字不变，老场景的基线一个字节都不动。
      */
+    /*
+     * WP179：**去网上查一下**。工具面里有官方 `web_search`、事项那句话像"搜 / 查 / 调研"才走；
+     * 判定与 stub 的剧本同一份。工具面里没有网页工具的运行下面逐字不变。
+     */
+    const web = webBrainTurn(messages, tools)
+    if (web !== undefined) return web
     if (kolRunOf(messages, tools) !== undefined) {
       return kolBrain({ clock: options.clock })(input)
     }

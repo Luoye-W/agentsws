@@ -86,6 +86,12 @@ export type KnownEventType =
    * 或平台说登录失效（`reason: 'expired'`）。payload 只有 provider id 与原因，没有账号名、没有令牌。
    */
   | 'model.account_signed_out'
+  /**
+   * WP179：一次网页搜索 / 一次抓网页的**审计**（官方 `web_search` / `web_fetch`）。
+   * payload 只有查询串或网址、结果条数 / 状态码、凭据种类与成败——**网页正文一个字都不进**。
+   */
+  | 'web.searched'
+  | 'web.fetched'
   // knowledge (19)
   | 'knowledge.card.proposed'
   | 'knowledge.card.activated'

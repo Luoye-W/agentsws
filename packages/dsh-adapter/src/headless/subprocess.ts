@@ -20,6 +20,7 @@ import { fileURLToPath } from 'node:url'
 import type { RunEvent, RunRequest, RunResult, RuntimeAdapter } from '@agentsws/contracts'
 import { JsonRpcLineTransport } from '@deepseek-ai/dsh-sdk-protocol'
 import type { DshRuntimeOptions } from '../types.js'
+import type { WebUse } from '../web.js'
 import {
   type BoundaryParams,
   BRIDGE_PROTOCOL_VERSION,
@@ -38,11 +39,15 @@ import {
   M_HOST_DRAFT,
   M_HOST_STAGE,
   M_HOST_TOOL,
+  M_HOST_WEB,
   M_RUN,
   M_SHUTDOWN,
+  M_WEB_USE,
   type RunResponse,
   type StageParams,
   type ToolCallParams,
+  type WebHostParams,
+  type WebUseParams,
   type WireRuntimeOptions,
 } from './protocol.js'
 
@@ -128,12 +133,19 @@ function wireOptions(options: DshRuntimeOptions, request?: RunRequest): WireRunt
     ...(options.presetRoot === undefined ? {} : { presetRoot: options.presetRoot }),
     ...(options.sessionLogRoot === undefined ? {} : { sessionLogRoot: options.sessionLogRoot }),
     ...(options.sideEffects === undefined ? {} : { sideEffects: options.sideEffects }),
+    ...(options.web?.searchBaseUrl === undefined
+      ? {}
+      : { webSearchBaseUrl: options.web.searchBaseUrl }),
     has: {
       executeTool: options.executeTool !== undefined,
       stage: options.stage !== undefined,
       createDraft: options.createDraft !== undefined,
       createPolicyQuestion: options.createPolicyQuestion !== undefined,
       requestComputerUse: options.requestComputerUse !== undefined,
+      // WP179：网页那一层的三样回调（不接的就不发这一格，老子进程照旧）
+      ...(options.web?.credential === undefined ? {} : { webCredential: true }),
+      ...(options.web?.standIn === undefined ? {} : { webStandIn: true }),
+      ...(options.web?.onUse === undefined ? {} : { webUse: true }),
     },
   }
 }
@@ -284,6 +296,35 @@ export function createSubprocessDshRuntime(options: DshRuntimeOptions): RuntimeA
           ...(res === undefined ? {} : { approval_item_id: res.approval_item_id }),
         }
       }
+      if (method === M_HOST_WEB) {
+        /*
+         * WP179：凭据只在这一跳过线（宿主现取、子进程用完即丢）；替身的错误照官方的样子带机器码回去。
+         */
+        const p = body as unknown as WebHostParams
+        const web = options.web
+        if (p.op === 'credential') {
+          const credential = await web?.credential?.(p.endpoint)
+          return { now: options.clock.now(), ...(credential === undefined ? {} : { credential }) }
+        }
+        const standIn = web?.standIn
+        if (standIn === undefined) {
+          return { now, error: { code: 'WEB_PROVIDER_UNAVAILABLE', message: '宿主没接网页替身' } }
+        }
+        try {
+          const value =
+            p.op === 'search' ? await standIn.search(p.query) : await standIn.fetch(p.url)
+          return { now: options.clock.now(), value }
+        } catch (e) {
+          const code = (e as { code?: unknown }).code
+          return {
+            now: options.clock.now(),
+            error: {
+              code: typeof code === 'string' ? code : 'WEB_PROVIDER_ERROR',
+              message: e instanceof Error ? e.message : String(e),
+            },
+          }
+        }
+      }
       throw new Error(`unknown_method: ${method}`)
     })
     child.transport.start()
@@ -394,6 +435,13 @@ export function createSubprocessDshRuntime(options: DshRuntimeOptions): RuntimeA
       }
 
       child.transport.onNotification((method, params) => {
+        if (method === M_WEB_USE) {
+          // WP179：一次网页使用（审计 + 用量）——宿主照 `web.onUse` 处理
+          const p = params as unknown as WebUseParams
+          if (p.token !== child.token) return
+          options.web?.onUse?.(p.use as WebUse, req)
+          return
+        }
         if (method !== M_EVENT) return
         const p = params as unknown as EventParams
         if (p.token !== child.token) return

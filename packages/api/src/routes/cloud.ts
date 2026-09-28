@@ -155,8 +155,13 @@ const SourcesBody = z.object({
     .record(
       z.string().min(1).max(64),
       z.object({
-        order: z.array(z.enum(['official_key', 'byo_source', 'workshop'])).max(3),
-        disabled: z.array(z.enum(['official_key', 'byo_source', 'workshop'])).max(3),
+        // WP179：`deepseek_native` 只属于 `web.search` 这一项（服务端按键再洗一遍）
+        order: z
+          .array(z.enum(['official_key', 'byo_source', 'workshop', 'deepseek_native']))
+          .max(4),
+        disabled: z
+          .array(z.enum(['official_key', 'byo_source', 'workshop', 'deepseek_native']))
+          .max(4),
       }),
     )
     .optional(),

@@ -160,6 +160,43 @@ export interface RunShell {
 }
 
 /**
+ * WP179（Luoye 09-29「官方功能优先」）：这次运行的**网页搜索与抓网页**。
+ *
+ * 工具本身是 dsh 官方的（`dsh-tool-web` 的 `web_search` / `web_fetch`，后端是官方
+ * `dsh-web-search-deepseek` 与 `dsh-web-fetch-http`）；这里只放我们包在外面的那一层：
+ * 开哪几个、每条运行最多几次、搜索用哪种凭据。
+ *
+ * **不给 = 这次运行一个网页工具都没有**（老的运行记录回放出来照旧）。给了也只在工具名同时
+ * 出现在 `tools.allow` 里时才可调——白名单来自职责 YAML 的 `web_tools`，执行器再判一次。
+ */
+export interface RunWeb {
+  /** 挂官方 `web_search`（DeepSeek 原生搜索：一次搜索 = 一次完整的模型回合）。 */
+  search: boolean
+  /** 挂官方 `web_fetch`（匿名抓公开网页，只认公网地址）。 */
+  fetch: boolean
+  /** 这条运行最多搜几次（按查询条数算：一次调用带 3 条查询算 3 次）。缺省 {@link DEFAULT_WEB_LIMITS}。 */
+  max_searches: number
+  /** 这条运行最多抓几个网页。 */
+  max_fetches: number
+  /**
+   * 搜索用哪种凭据（照官方：**DeepSeek 账号登录优先，其次用户自己的 DeepSeek API key**）。
+   * 这里只有"哪种"，**没有值**——值由宿主在每次搜索的那一刻现取（13 §4）。
+   */
+  credential?: 'deepseek_account' | 'deepseek_api_key'
+}
+
+/** WP179：官方网页工具的名字（`dsh-tool-web` 注册的就是这两个）。 */
+export const WEB_SEARCH_TOOL = 'web_search'
+export const WEB_FETCH_TOOL = 'web_fetch'
+export const WEB_TOOL_NAMES: readonly string[] = [WEB_FETCH_TOOL, WEB_SEARCH_TOOL]
+
+/** WP179：每条运行的缺省次数上限（职责阈值 `web_search_per_run` / `web_fetch_per_run` 可调）。 */
+export const DEFAULT_WEB_LIMITS: Readonly<{ max_searches: number; max_fetches: number }> = {
+  max_searches: 5,
+  max_fetches: 10,
+}
+
+/**
  * WP82（55 §3 末段）：**这台机器上**的浏览器怎么配（`/v1/settings/browser` 的形状）。
  *
  * 为什么是"这台机器"而不是"这个品牌"：attach 接的是用户自己电脑上那个 Chrome，
@@ -375,6 +412,11 @@ export interface RunRequest {
    * 老的运行记录里没有这个字段，回放出来照样是「碰不到电脑」。
    */
   computer_use?: RunComputerUse
+  /**
+   * WP179：这次运行的网页搜索与抓网页（官方 `web_search` / `web_fetch`）。
+   * 不给 = 没有网页工具；老的运行记录里没有这个字段，回放出来照旧"一个网页都上不了"。
+   */
+  web?: RunWeb
   idempotency_key: string
 }
 

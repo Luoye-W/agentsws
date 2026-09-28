@@ -291,6 +291,16 @@ export interface RoleDefinition {
    */
   browser_scope?: string[]
   /**
+   * WP179（Luoye 09-29「官方功能优先」）：**这条职责能用哪几个官方网页工具**
+   * （`web_search` 用 DeepSeek 原生搜索、`web_fetch` 抓公开网页）。
+   *
+   * 不填 = 这条职责没有网页工具。默认给要查资料的职责挂上（内容与搜索、B2B 主动开发 / 业务 /
+   * 展会、红人五条、店铺管理、投放四条）；**客服类不挂**（不让客服回复夹网页内容）。
+   * 每条运行的次数上限走 `thresholds.web_search_per_run` / `web_fetch_per_run`（缺省 5 / 10）。
+   * 服务端据它给 `RunRequest.web` 与 `tools.allow`；执行器（门禁）再判一次。
+   */
+  web_tools?: ('web_search' | 'web_fetch')[]
+  /**
    * WP72（56 §1）：这条职责靠什么干活。不写 = `api`（走连接器）。
    *
    * 写 `browser` = 这条渠道**没有可用的接口**，动作要走第三栏的受控浏览器
@@ -506,6 +516,15 @@ export interface EffectiveAutomation {
   risk_class: RiskClass
   clamped_by?: 'ceiling' | 'risk_class'
 }
+/** WP179：一条职责的官方网页工具（`EffectiveConfig.web`）。 */
+export interface EffectiveWeb {
+  /** 排好序（`tools.allow` 要字节稳定）。 */
+  tools: ('web_search' | 'web_fetch')[]
+  /** 每条运行最多搜几次（`thresholds.web_search_per_run`，缺省 5）。 */
+  max_searches: number
+  /** 每条运行最多抓几个网页（`thresholds.web_fetch_per_run`，缺省 10）。 */
+  max_fetches: number
+}
 export interface EffectiveConfig {
   assignment_id: AssignmentId
   person_id: PersonId
@@ -524,6 +543,11 @@ export interface EffectiveConfig {
    * 服务端组 `RunRequest.allowed_hosts` 时读它；空 = 这条职责开不了浏览器。
    */
   browser_scope: string[]
+  /**
+   * WP179：这条职责的官方网页工具与每条运行的次数上限（`RoleDefinition.web_tools` +
+   * `thresholds.web_*_per_run`）。没填 `web_tools` 就没有这一格。
+   */
+  web?: EffectiveWeb
   /**
    * WP120（69 §3）：这条职责的角色定位，**包里的原文**。
    *

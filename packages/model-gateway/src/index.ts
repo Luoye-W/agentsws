@@ -1,4 +1,5 @@
 export type {
+  ExternalUsage,
   ModelGatewayApi,
   ModelGatewayOptions,
   TranscribeRequest,

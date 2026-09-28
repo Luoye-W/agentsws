@@ -12,6 +12,7 @@ import type {
   RunEvent,
   RunRequest,
   RunShell,
+  RunWeb,
 } from '@agentsws/contracts'
 import { EXTERNAL_FENCE } from '@agentsws/core'
 import { staticPrefixHash } from '@agentsws/model-gateway'
@@ -74,6 +75,8 @@ export interface RequestOverrides {
   shell?: RunShell
   /** WP144：这次运行能不能操作电脑（不给 = 连请求工具都没有）。 */
   computer_use?: RunComputerUse
+  /** WP179：这次运行的官方网页工具（不给 = 一个网页工具都没有）。 */
+  web?: RunWeb
   /** 换一条职责（preset id 与目录名跟着它走）。 */
   role_id?: string
   workspace_id?: string
@@ -165,6 +168,7 @@ export function makeRequest(o: RequestOverrides = {}): RunRequest {
     ...(o.connections === undefined ? {} : { connections: o.connections }),
     ...(o.shell === undefined ? {} : { shell: o.shell }),
     ...(o.computer_use === undefined ? {} : { computer_use: o.computer_use }),
+    ...(o.web === undefined ? {} : { web: o.web }),
     idempotency_key: 'idem_test',
   }
 }

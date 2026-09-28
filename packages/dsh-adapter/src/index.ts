@@ -177,3 +177,17 @@ export type {
   ModelGatewayLike,
   ToolSideEffect,
 } from './types.js'
+export type {
+  DshWebOptions,
+  WebCredential,
+  WebCredentialKind,
+  WebStandIn,
+  WebUse,
+} from './web.js'
+export {
+  HTTP_FETCH_PROVIDER_ID,
+  officialSearchProvider,
+  WEB_SEARCH_TIMEOUT_MS,
+  webBrief,
+  webWanted,
+} from './web.js'

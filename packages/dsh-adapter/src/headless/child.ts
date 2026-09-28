@@ -41,13 +41,16 @@ import {
   M_HOST_DRAFT,
   M_HOST_STAGE,
   M_HOST_TOOL,
+  M_HOST_WEB,
   M_READY,
   M_RUN,
   M_SHUTDOWN,
+  M_WEB_USE,
   type RunParams,
   type RunResponse,
   type StageResult,
   type ToolCallResult,
+  type WebHostResult,
 } from './protocol.js'
 
 /** 子进程侧的时钟：宿主每次应答都带 `now`，这里对表。合成时钟因此在子进程里也成立。 */
@@ -59,6 +62,14 @@ class MirrorClock implements Clock {
   sync(at: unknown): void {
     if (typeof at === 'string' && at.length > 0) this.at = at as Iso8601
   }
+}
+
+/** WP179：替身回来的值；替身抛了错就照官方的样子抛一个带机器码的错（门禁按 `code` 记审计）。 */
+function webValue<T>(reply: WebHostResult): T {
+  if (reply.error !== undefined) {
+    throw Object.assign(new Error(reply.error.message), { code: reply.error.code })
+  }
+  return reply.value as T
 }
 
 function asRecord(v: unknown): Record<string, unknown> {
@@ -206,6 +217,50 @@ export function startChildBridge(io: {
               return reply.approval_item_id === undefined
                 ? undefined
                 : { approval_item_id: reply.approval_item_id }
+            },
+          }
+        : {}),
+      /*
+       * WP179：网页那一层的三样回调都在宿主侧——凭据现取（经管道过来、用完即丢）、
+       * 替身搜索 / 抓取（模拟与测试）、审计与用量回报（通知，不等回话）。
+       */
+      ...(wire.has.webCredential === true ||
+      wire.has.webStandIn === true ||
+      wire.has.webUse === true ||
+      wire.webSearchBaseUrl !== undefined
+        ? {
+            web: {
+              ...(wire.webSearchBaseUrl === undefined
+                ? {}
+                : { searchBaseUrl: wire.webSearchBaseUrl }),
+              ...(wire.has.webCredential === true
+                ? {
+                    credential: async (endpoint: string) => {
+                      const reply = await ask<WebHostResult>(M_HOST_WEB, {
+                        op: 'credential',
+                        endpoint,
+                      })
+                      return reply.credential
+                    },
+                  }
+                : {}),
+              ...(wire.has.webStandIn === true
+                ? {
+                    standIn: {
+                      search: async (query: string) =>
+                        webValue(await ask<WebHostResult>(M_HOST_WEB, { op: 'search', query })),
+                      fetch: async (url: string) =>
+                        webValue(await ask<WebHostResult>(M_HOST_WEB, { op: 'fetch', url })),
+                    },
+                  }
+                : {}),
+              ...(wire.has.webUse === true
+                ? {
+                    onUse: (use: unknown) => {
+                      transport.notify(M_WEB_USE, { token: io.token, use })
+                    },
+                  }
+                : {}),
             },
           }
         : {}),

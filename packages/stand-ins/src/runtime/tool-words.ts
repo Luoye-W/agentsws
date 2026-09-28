@@ -46,6 +46,9 @@ export const TOOL_WORDS_ZH: Readonly<Record<string, string>> = {
   // 电脑操控 / 浏览器（WP144 / WP148）
   request_computer_use: '操作电脑的授权',
   computer_handoff: '请人接手',
+  // WP179：官方网页工具（对外叫「用你的 DeepSeek 账号搜索」；名词口径：「我用「网页搜索」查了两轮」）
+  web_search: '网页搜索',
+  web_fetch: '网页抓取',
 }
 
 /** 去掉 `service.` 前缀（`shopify.get_order` → `get_order`）；点在中间的 MCP 全名原样。 */

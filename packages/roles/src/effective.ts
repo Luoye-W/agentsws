@@ -2,7 +2,15 @@
  * 05 §4（09-08 修订，31 §3.1）：EffectiveConfig 按**单个 Assignment**算，不做跨 Assignment 并集。
  * scopes 原样生效；额度按该 Assignment 的 role 解析；自动化等级取该 Assignment 的当前状态。
  */
-import type { ChangeKind, Level, RiskClass, WriteActionSpec } from '@agentsws/contracts'
+import type {
+  ChangeKind,
+  EffectiveWeb,
+  Level,
+  RiskClass,
+  RoleDefinition,
+  WriteActionSpec,
+} from '@agentsws/contracts'
+import { DEFAULT_WEB_LIMITS } from '@agentsws/contracts'
 import { KIND_RISK, resolveMandate } from '@agentsws/core'
 import {
   type EffectiveAction,
@@ -164,6 +172,8 @@ export function effectiveConfig(input: EffectiveConfigInput): EffectiveConfig {
     grounding: role.grounding ?? [],
     // WP82：没填 = 空 = 这条职责开不了浏览器（55 §3 的白名单是"允许"表）
     browser_scope: [...(role.browser_scope ?? [])],
+    // WP179：没填 `web_tools` 就没有这一格（老职责的有效配置一个字节不变）
+    ...webOf(role),
     ...(role.persona !== undefined ? { persona: role.persona } : {}),
     ranges: [...assignment.ranges],
     ...(assignment.range_groups === undefined || assignment.range_groups.length === 0
@@ -173,5 +183,30 @@ export function effectiveConfig(input: EffectiveConfigInput): EffectiveConfig {
     notifications: role.notifications.map((n) => ({ ...n })),
     ready: missing.length === 0,
     unassigned_range: needsRanges && assignment.ranges.length === 0,
+  }
+}
+
+/**
+ * WP179：职责的官方网页工具 + 每条运行的次数上限。
+ *
+ * 上限从 `thresholds` 读（`web_search_per_run` / `web_fetch_per_run`）——那一格本来就是
+ * "这条职责按自己的活调的数"；写成 0 或负数不算数，退回缺省（5 / 10），不让一个手滑
+ * 把工具挂上了却一次都调不动。
+ */
+export function webOf(role: Pick<RoleDefinition, 'web_tools' | 'thresholds'>): {
+  web?: EffectiveWeb
+} {
+  const tools = [...new Set(role.web_tools ?? [])].sort()
+  if (tools.length === 0) return {}
+  const limit = (key: string, fallback: number): number => {
+    const v = role.thresholds?.[key]
+    return typeof v === 'number' && Number.isInteger(v) && v > 0 ? v : fallback
+  }
+  return {
+    web: {
+      tools,
+      max_searches: limit('web_search_per_run', DEFAULT_WEB_LIMITS.max_searches),
+      max_fetches: limit('web_fetch_per_run', DEFAULT_WEB_LIMITS.max_fetches),
+    },
   }
 }

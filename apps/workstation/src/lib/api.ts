@@ -1507,7 +1507,12 @@ export interface CapabilitySourceSettings {
 
 /* ── WP126：数据接口路由 + 自带数据接口 ─────────────────────────── */
 
-export type DataSourceLevel = 'official_key' | 'byo_source' | 'workshop'
+export type DataSourceLevel =
+  | 'official_key'
+  | 'byo_source'
+  | 'workshop'
+  /** WP179：「用你的 DeepSeek 账号搜索」——只属于 `web.search` 这一项 */
+  | 'deepseek_native'
 
 export interface DataSourceRoute {
   order: DataSourceLevel[]
@@ -1846,6 +1851,8 @@ export type ModelPurposeName =
   | 'embedding'
   | 'judge'
   | 'transcription'
+  /** WP179：官方网页搜索（只出现在用量表里，不能选模型） */
+  | 'web_search'
 
 export interface ModelTestResult {
   ok: boolean

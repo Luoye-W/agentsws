@@ -41,6 +41,8 @@ const LEVEL_LABEL_KEYS: Record<DataSourceLevel, string> = {
   official_key: 'data.route.official_key',
   byo_source: 'data.route.byo_source',
   workshop: 'data.route.workshop',
+  // WP179：只属于网页搜索那一项（红人渠道的表里不会出现），开关在模型页
+  deepseek_native: 'web.search.title',
 }
 
 /** 当前生效的顺序（没配过的渠道用默认）。 */

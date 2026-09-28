@@ -24,6 +24,7 @@ import type {
   ComputerUseGrantPayload,
   ContextItem,
   CreateApprovalInput,
+  EffectiveWeb,
   EventEnvelope,
   GateDecision,
   Matter,
@@ -36,12 +37,21 @@ import type {
   RunEvent,
   RunRequest,
   RuntimeAdapter,
+  RunWeb,
   StartRun,
   TodoId,
   WorkspaceVertical,
 } from '@agentsws/contracts'
 import { canonicalJson } from '@agentsws/core'
-import { createDshRuntime, type DshRuntimeMode } from '@agentsws/dsh-adapter'
+import {
+  classifySideEffect,
+  createDshRuntime,
+  type DshRuntimeMode,
+  type ToolSideEffect,
+  type WebCredential,
+  type WebCredentialKind,
+  type WebUse,
+} from '@agentsws/dsh-adapter'
 import { isKolRole, KOL_TOOL_NAMES } from '@agentsws/kol-core'
 import {
   onDemandSkillIndex,
@@ -62,6 +72,8 @@ import {
   isOwnerRole,
   OWNER_TOOL_NAMES,
   READ_SKILL_TOOL,
+  WEB_FETCH_TOOL,
+  WEB_SEARCH_TOOL,
 } from '@agentsws/stand-ins'
 
 import { cardRefOf, type Work } from '@agentsws/work'
@@ -78,6 +90,22 @@ export interface ApprovalSink {
 
 /** 只读目录：没接连接器时 stub / direct 也照样能走完（工具执行器缺席就是一条 error 结果）。 */
 const DEFAULT_TOOLS = ['get_order', 'get_product', 'list_orders', 'search_policies'] as const
+
+/**
+ * WP179：**服务端自己的执行器**接的那几类工具，在 dsh 门禁里按什么读写分类。
+ *
+ * direct 那条路不给副作用表（每个放进白名单的工具都按"读"放行，真正的闸在执行器里：红人工具只动本机记录或出卡、
+ * 开发信只出卡、店主工具只读）。dsh 门禁按**名字前缀**判，表外一律按"写外部"——于是 `draft_outreach`、
+ * `start_outreach_round` 这些在公司端一调就被拒（`write_external_requires_executor`）。挂了网页工具的运行
+ * （红人五条、主动开发都挂）改走 dsh 之后，这些工具必须与 direct 那条路一样能调，所以在这里写清：
+ * 前缀判得出"读"的照旧读，其余记成 `local`（工坊本机的执行器，只动本机记录或出卡，不直接写外部）。
+ * WP148 带浏览器的红人运行走 dsh 时也撞的是同一条，这一张表一并修掉。
+ */
+const HOST_TOOL_EFFECTS: Readonly<Record<string, ToolSideEffect>> = Object.fromEntries(
+  [...KOL_TOOL_NAMES, ...B2B_OUTBOUND_TOOL_NAMES, ...OWNER_TOOL_NAMES, READ_SKILL_TOOL].map(
+    (name) => [name, classifySideEffect(name) === 'read_external' ? 'read_external' : 'local'],
+  ),
+)
 
 /** ObjectRef.type → ContextItem.kind；不认识的按摘要注入。 */
 const KIND_BY_REF: Record<string, ContextItem['kind']> = {
@@ -283,6 +311,26 @@ export interface RuntimeOptions {
    * 测试钉成 `in-process`，结果才不随「dsh-adapter 编没编过」变。
    */
   dshMode?: DshRuntimeMode
+  /**
+   * WP179（Luoye 09-29「官方功能优先」）：**官方网页搜索与抓网页**要服务端给的那几样。
+   *
+   * 不接 = 老行为：`RunRequest.web` 永远不给，谁都上不了网。接了也要职责 YAML 挂了 `web_tools`
+   * （`EffectiveConfig.web`）、而且有模型才给——带 `web` 的运行**改走 dsh 运行时**
+   * （官方工具只在那一条路上挂），别的运行照旧 direct / stub，一个字节不变。
+   */
+  web?: RunWebOptions
+}
+
+/** WP179：服务端装配给运行时的网页那一层。 */
+export interface RunWebOptions {
+  /** 数据接口路由里 `web.search` 那一级（「用你的 DeepSeek 账号搜索」）开着没。每次现问。 */
+  searchEnabled(): boolean
+  /** 现在搜索用哪种凭据：登录了 DeepSeek 账号 → 账号；否则有 DeepSeek 官方 key → key；都没有 → 不给搜索。 */
+  credentialKind(): WebCredentialKind | undefined
+  /** 真要搜的那一刻现取凭据值（账号令牌只对官方推理源给值）。 */
+  credential(endpoint: string): Promise<WebCredential | undefined>
+  /** 搜索口地址（测试指向本机替身；缺省官方地址）。 */
+  searchBaseUrl?: string
 }
 
 /**
@@ -843,6 +891,80 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
     health: () => current().health(),
   }
 
+  /**
+   * WP179：官方网页那一层交给 dsh 运行时的三样——凭据（现取）、审计、用量。
+   *
+   * - 审计：一次工具调用一条 `web.searched` / `web.fetched`（查询或网址、结果条数 / 状态码、成败），
+   *   **正文一个字都不进**事件日志；
+   * - 用量：官方搜索每真打一次 DeepSeek（一条查询 = 一次完整的模型回合）就照 `model.usage` 补记一笔
+   *   （purpose `web_search`，provider 标明账号还是 key），用量页按 purpose 汇总看得到；
+   *   这笔钱是用户自己的 DeepSeek 账号 / key 付的，**工坊不扣积分**（`cost_base` 0，不动预算）。
+   */
+  const dshWebOf = (web: RunWebOptions) => ({
+    credential: (endpoint: string) => web.credential(endpoint),
+    ...(web.searchBaseUrl === undefined ? {} : { searchBaseUrl: web.searchBaseUrl }),
+    onUse: (use: WebUse, request: RunRequest) => {
+      const actor = { kind: 'agent' as const, id: request.actor.assignment_id, run_id: request.id }
+      const correlation = {
+        trace_id: `trc_run_${request.id}`,
+        run_id: request.id,
+        ...(request.work_item === undefined ? {} : { work_item_id: request.work_item.id }),
+      }
+      const who = { run_id: request.id, role_id: request.actor.role_id }
+      if (use.kind === 'search_usage') {
+        options.models.recordExternal?.({
+          meta: {
+            workspace_id,
+            assignment_id: request.actor.assignment_id,
+            role_id: request.actor.role_id,
+            run_id: request.id,
+            purpose: 'web_search',
+          },
+          model: {
+            provider: use.credential === 'deepseek_api_key' ? 'deepseek' : 'deepseek-account',
+            model: use.model,
+          },
+        })
+        return
+      }
+      if (use.kind === 'search') {
+        options.appendEvent({
+          schema_version: 1,
+          workspace_id,
+          type: 'web.searched',
+          actor,
+          correlation,
+          payload: {
+            ...who,
+            queries: use.queries,
+            results: use.results,
+            ok: use.ok,
+            ...(request.web?.credential === undefined
+              ? {}
+              : { credential: request.web.credential }),
+            ...(use.error === undefined ? {} : { error: use.error }),
+          },
+        })
+        return
+      }
+      options.appendEvent({
+        schema_version: 1,
+        workspace_id,
+        type: 'web.fetched',
+        actor,
+        correlation,
+        payload: {
+          ...who,
+          url: use.url,
+          ...(use.status === undefined ? {} : { status: use.status }),
+          ...(use.truncated === undefined ? {} : { truncated: use.truncated }),
+          ok: use.ok,
+          ...(use.error === undefined ? {} : { error: use.error }),
+        },
+      })
+    },
+  })
+
   /*
    * WP144 / WP148：带 `computer_use` **或** `browser` 的运行走 **dsh 运行时**——官方电脑操控
    * 提供方与浏览器提供方（Playwright / BrowserSkill）都只在那一条路上挂（`dsh-adapter` 的
@@ -851,7 +973,7 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
    * 别的运行照旧 direct，一个字节不变。
    */
   const dshAdapterOnce =
-    options.computerUse !== undefined || options.browser !== undefined
+    options.computerUse !== undefined || options.browser !== undefined || options.web !== undefined
       ? memo(() =>
           createDshRuntime({
             gateway: { complete: (r) => options.models.complete(r) },
@@ -869,6 +991,10 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
             imageInput: (model) =>
               declaresImageInput(options.modelVision?.(), options.modelRef?.(), model),
             ...(executeTool === undefined ? {} : { executeTool }),
+            // WP179：服务端执行器接的工具，读写分类与 direct 那条路对齐（见 HOST_TOOL_EFFECTS）
+            sideEffects: HOST_TOOL_EFFECTS,
+            // WP179：官方网页工具的凭据（现取）、审计与用量回报
+            ...(options.web === undefined ? {} : { web: dshWebOf(options.web) }),
           }),
         )
       : undefined
@@ -944,6 +1070,24 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
     return items
   }
 
+  /** WP179：这条职责这一次的 `RunRequest.web`（不给 = 没有网页工具）。 */
+  const webFor = (roleWeb: EffectiveWeb | undefined): RunWeb | undefined => {
+    const opt = options.web
+    if (roleWeb === undefined || opt === undefined || !useDirect()) return undefined
+    const kind =
+      roleWeb.tools.includes('web_search') && opt.searchEnabled() ? opt.credentialKind() : undefined
+    const search = kind !== undefined
+    const fetch = roleWeb.tools.includes('web_fetch')
+    if (!search && !fetch) return undefined
+    return {
+      search,
+      fetch,
+      max_searches: roleWeb.max_searches,
+      max_fetches: roleWeb.max_fetches,
+      ...(kind === undefined ? {} : { credential: kind }),
+    }
+  }
+
   const buildRequest = async (input: {
     run_id: string
     matter: Matter
@@ -1000,6 +1144,12 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
             registry: options.skills,
           })
     skillActors.set(input.run_id, skillActor)
+    /*
+     * WP179：这条职责的官方网页工具（职责 YAML 的 `web_tools`）。三件事都成立才给：
+     * 服务端接了网页那一层、有模型（没模型的替身档驱动不了它）、职责挂了；
+     * 搜索另要两件：设置里「用你的 DeepSeek 账号搜索」没关、手上有凭据（账号登录优先，其次官方 key）。
+     */
+    const web = webFor(config.web)
     const allow = [
       ...new Set([
         ...config.grounding.map((g) => g.tool),
@@ -1016,6 +1166,9 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
         ...(isB2bOutboundRole(config.role_id) && options.b2bOutboundTools !== undefined
           ? B2B_OUTBOUND_TOOL_NAMES
           : []),
+        // WP179：官方网页工具（只有真给了的那几个）
+        ...(web?.search === true ? [WEB_SEARCH_TOOL] : []),
+        ...(web?.fetch === true ? [WEB_FETCH_TOOL] : []),
       ]),
     ].sort()
     const connect_token = (await source.readToken?.(input.assignment_id)) ?? ''
@@ -1135,7 +1288,15 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
        */
       budget: {
         max_tokens: 60_000,
-        max_tool_calls: granted ? 40 : browser !== undefined && allowed_hosts.length > 0 ? 30 : 12,
+        /*
+         * WP179：挂了网页工具的运行同理放到 30——搜一次、抓两三页、再搜一次，12 次不够；
+         * 次数上限另在门禁里按职责阈值管（搜索缺省 5、抓取 10）。
+         */
+        max_tool_calls: granted
+          ? 40
+          : (browser !== undefined && allowed_hosts.length > 0) || web !== undefined
+            ? 30
+            : 12,
         max_seconds: 120,
         max_cost_base: 5,
       },
@@ -1170,6 +1331,8 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       ...(connections.length === 0 ? {} : { connections }),
       // WP144：不给就不写这个字段——老的运行记录回放出来仍是「碰不到电脑」
       ...(computer_use === undefined ? {} : { computer_use }),
+      // WP179：同上——不给就不写，没挂网页工具的运行 RunRequest 一个字节不变
+      ...(web === undefined ? {} : { web }),
       idempotency_key: `idem_${input.run_id}`,
     }
   }
@@ -1264,7 +1427,9 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
        */
       const cu = request.computer_use
       // WP148：开了浏览器的运行同样走 dsh（只有那棵树上挂得了浏览器提供方）
-      const needsDsh = cu !== undefined || request.browser !== undefined
+      // WP179：挂了官方网页工具的运行也走 dsh（官方 `web_search` / `web_fetch` 只在那棵树上挂）
+      const needsDsh =
+        cu !== undefined || request.browser !== undefined || request.web !== undefined
       const dsh = needsDsh ? dshAdapter() : undefined
       const runner = dsh ?? adapter
       if (cu?.granted_until !== undefined) {

@@ -2121,6 +2121,14 @@ const zh: Table = {
   'models.purpose.embedding': '向量（知识库检索）',
   'models.purpose.judge': '判分（自检与抽检）',
   'models.purpose.transcription': '转写（会议录音）',
+  // WP179：官方网页搜索（用量表里一行 + 模型页一个开关）
+  'models.purpose.web_search': '网页搜索（DeepSeek）',
+  'web.search.title': '用你的 DeepSeek 账号搜索',
+  'web.search.hint':
+    '查资料的岗位（内容与搜索、B2B、红人、店铺、投放）干活时可以上网搜索。用的是 DeepSeek 官方的搜索：登录了 DeepSeek 账号就用账号，没登录就用你填的 DeepSeek 官方 key。一次搜索要跑一次模型，花的是你 DeepSeek 的钱，记在上面的用量里，工坊不扣积分。客服岗位不上网搜。',
+  'web.search.on': '开着：查资料的岗位会上网搜索。',
+  'web.search.off': '关着：不上网搜索（打开指定网页照旧可以）。',
+  'web.search.no_key': '开着，但还没登录 DeepSeek 账号、也没填 DeepSeek 官方 key，暂时搜不了。',
   'models.residency': '数据驻留',
   'models.residency.cn': '只用境内的模型',
   'models.residency.any': '境内境外都可以',
@@ -5221,6 +5229,15 @@ const en: Table = {
   'models.purpose.embedding': 'Embedding (knowledge search)',
   'models.purpose.judge': 'Judging (self-checks and sampling)',
   'models.purpose.transcription': 'Transcription (meeting audio)',
+  // WP179
+  'models.purpose.web_search': 'Web search (DeepSeek)',
+  'web.search.title': 'Search with your DeepSeek account',
+  'web.search.hint':
+    'Research roles (content & search, B2B, creators, store, ads) can search the web while they work. It uses DeepSeek’s own search: your DeepSeek account if you are signed in, otherwise your official DeepSeek key. Each search runs one model turn billed to your DeepSeek account and shows up in the usage above; the Workshop charges no credits. Support roles never search the web.',
+  'web.search.on': 'On: research roles can search the web.',
+  'web.search.off': 'Off: no web search (opening a given page still works).',
+  'web.search.no_key':
+    'On, but you have not signed in to DeepSeek or added an official DeepSeek key yet, so search is unavailable.',
   'models.residency': 'Data residency',
   'models.residency.cn': 'China-based models only',
   'models.residency.any': 'Anywhere is fine',

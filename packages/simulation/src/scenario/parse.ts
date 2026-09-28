@@ -232,6 +232,8 @@ const EVENT_KEYS = [
   // WP63 店铺管理与内容与博客（51 §2.1 / §2.2）
   'shop.publish_product',
   'content.blog_post',
+  // WP179 官方网页搜索与抓网页
+  'web.research',
   'store.daily_report',
   'content.seo_daily',
   // WP47 范围模型（44）
@@ -1842,6 +1844,18 @@ function parseEvent(source: string, index: number, raw: unknown): ScenarioEvent 
           ...(body.body === undefined
             ? {}
             : { body: str(source, `${path}.${key}.body`, body.body) }),
+        },
+      }
+    }
+    case 'web.research': {
+      known(source, `${path}.${key}`, body, ['who', 'role', 'ask'])
+      return {
+        at,
+        type: 'web.research',
+        web_research: {
+          who: str(source, `${path}.${key}.who`, body.who),
+          role: str(source, `${path}.${key}.role`, body.role),
+          ask: str(source, `${path}.${key}.ask`, body.ask),
         },
       }
     }

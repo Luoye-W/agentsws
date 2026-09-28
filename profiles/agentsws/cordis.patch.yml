@@ -1,8 +1,19 @@
 # agentsws profile 的 patch 层（16 §1）——**这份文件只放锁定**（WP133）。
 #
 # 组合顺序：dsh-base 的 patch → dsh-headless 的 patch → 这一层 → $DSH_HOME/cordis.patch.yml → `--patch`。
-# 下面十一行（WP177 起；原来七行）是 docs/42 红线 7 要的"上游默认会开、我们必须关"的锁定，一行都不许是占位；
+# 下面九行是 docs/42 红线 7 要的"上游默认会开、我们必须关"的锁定，一行都不许是占位；
 # 以前混在这里的占位注释（system-prompt / user-approval / preset 声明的写法）挪到了同目录 README。
+#
+# **WP179（Luoye 09-29「官方功能优先」）逐行重判过一遍**：锁定只留给两种——
+# **B 真冲突**（打开会让我们的工具跑不起来，或会绕过出卡 / 授权 / 花钱闸）与
+# **C 把用户业务数据发给第三方的上报**（交 Luoye 定，先关着）。
+# 别的官方功能一律**不锁、接进来用**（A 类）。这一次撤了两行：
+# - `web-search-deepseek`（A）：官方网页搜索，用 DeepSeek 账号免 key 搜（其次用户自己的 key）；
+#   我们的两档运行时由 `packages/dsh-adapter/src/web.ts` 挂官方 `dsh-web` + `dsh-tool-web` +
+#   `dsh-web-fetch-http` + 这个包的 `DeepSeekSearchProvider`，只在外面包了凭据 / 审计 / 用量 / 次数上限。
+# - `hmr`（A，跟官方）：不是冲突、也不外发；官方 headless 包自己就把它关着（一次性任务用不上热替换），
+#   我们不再多写一行，组合结果跟官方走。
+# 每一行归哪一类、为什么，整张表在 `packages/dsh-adapter/README.md`「逐行重判」一节。
 #
 # 为什么锁定就写在 profile 这一层、不拆成 bundle 的独立 patch 文件（WP133 实测，
 # 出处：`@deepseek-ai/dsh-app-boot` 的 `lib/types/profile.d.ts` 里 `loadProfile` 的说明「Unreadable or
@@ -48,7 +59,8 @@
 # ——————————————————————————————————————————————————————————————————————
 
 # ——————————————————————————————————————————————————————————————————————
-# 生效的第二条（WP93，dsh 0.1.6-alpha.2）：把 Plugin Manager 与 HMR 关死。
+# 生效的第二条（WP93，dsh 0.1.6-alpha.2）：把 Plugin Manager 关死（WP179 重判：B 类，真冲突）。
+# 原来同一段还关了 `hmr`——WP179 撤掉了（见文件头），下面那段历史说明留着当出处。
 #
 # alpha.2 往 `dsh-base` 的 patch 里 **insert 了两个新行**（出处：上游
 # `packages/bundle/base/cordis.patch.yml` 的 diff）：
@@ -84,11 +96,13 @@
 # `@deepseek-ai/dsh-plugin-manager` / `-hmr` 两档都是 0 命中。但红线 7 要的就是
 # 不许拿这个当保证：这三行管的是"哪天真起了完整 profile"那条路。
 # 钉住它们的测试：`packages/dsh-adapter/test/profile-lockdown.test.ts`。
+#
+# WP179 重判（B 类）：插件管理是"以宿主用户身份装任意第三方代码、在沙箱外跑、还能改写这份文件"——
+# 装一个插件没有任何人批（绕过出卡 / 授权），装进来的插件还能把下面 C 类那几行上报悄悄打开。
+# 包一层能开：装插件改成出卡、只从我们审过的清单装、装完不写 profile patch（另立一单，M）。
 - id: plugin-manager
   disabled: true
 - id: tool-plugin-manager
-  disabled: true
-- id: hmr
   disabled: true
 # ——————————————————————————————————————————————————————————————————————
 
@@ -134,6 +148,12 @@
 # 同 WP93：两档运行时的真实模块图里这三个包都是 0 命中（`harness.ts` 自己搭树，不读 bundle），
 # 这三行管的是"哪天真起了完整 profile"那条路。钉住它们的测试：
 # `packages/dsh-adapter/test/profile-lockdown.test.ts`（WP132 那一组）。
+#
+# WP179 重判：`config-editor` / `settings` 是 B 类（真冲突）——它们在运行中把表单保存**写回这份文件**并立刻生效，
+# 一次保存就能把下面 C 类的上报（`session-log-deepseek` 等）打开，而那几行是要 Luoye 拍板的数据外发；
+# 我们的产品也没有官方设置页这个入口。包一层能开：只许写不在锁定表里的行、或改写到 `$DSH_HOME` 那一层（另立一单，S–M）。
+# `deepseek-account` 是 A 类、**已经接进来**（WP134：设置里选「用我的 DeepSeek 账号登录」就开，完整 profile 叠
+# `deepseek-account.on.patch.yml`）；这一行留着是"没选时关"的那一半。
 - id: config-editor
   disabled: true
 - id: settings
@@ -143,7 +163,8 @@
 # ——————————————————————————————————————————————————————————————————————
 
 # ——————————————————————————————————————————————————————————————————————
-# 生效的第四条（WP177，dsh 0.2.0-rc.1）：共享上报通道、反馈上报、插件清单上报、DeepSeek 网页搜索四行关死。
+# 生效的第四条（WP177，dsh 0.2.0-rc.1）：共享上报通道、反馈上报、插件清单上报三行关死（C 类）。
+# WP177 原来还关了 `web-search-deepseek`，WP179 按"官方功能优先"撤了（见文件头）；下面那段历史说明留着当出处。
 #
 # 0.2.0-rc.1 往 `dsh-base` 的 patch 里 **insert 了一行新服务**（出处：上游
 # `packages/bundle/base/cordis.patch.yml` 的 diff，`dsh-v0.1.7-rc.2...dsh-v0.2.0-rc.1`）：
@@ -175,11 +196,12 @@
 # 同 WP93 / WP132：两档运行时的真实模块图里这四个包都是 0 命中（`harness.ts` 自己搭树，不读 bundle），
 # 这四行管的是"哪天真起了完整 profile"那条路。钉住它们的测试：
 # `packages/dsh-adapter/test/profile-lockdown.test.ts`（WP177 那四行）。
+#
+# WP179 重判：这三行加上第一条的 `session-log-deepseek` 都是 **C 类**（把用户业务数据发给第三方的上报），
+# 本单**保持关**，逐条"打开会把什么数据发给谁"写在 `packages/dsh-adapter/README.md`，交 Luoye 定。
 - id: otel
   disabled: true
 - id: session-telemetry-otel
-  disabled: true
-- id: web-search-deepseek
   disabled: true
 - id: plugin-package-inventory-deepseek
   disabled: true

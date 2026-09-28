@@ -14,6 +14,7 @@ import type {
   StageFn,
   ToolExecutor,
 } from '@agentsws/stand-ins'
+import type { DshWebOptions } from './web.js'
 
 /**
  * 22 §1 网关的最小面：适配器只用 `complete`。
@@ -102,6 +103,12 @@ export interface DshRuntimeOptions {
    * 附件库进模型；false / 不给时路由不声明，截图的位置是官方诊断文字（与以前一样看不到图）。
    */
   imageInput?: (model: ModelRef) => boolean
+  /**
+   * WP179（Luoye 09-29「官方功能优先」）：**官方网页搜索与抓网页**要宿主给的三样——
+   * 搜索凭据（账号登录优先、其次用户自己的 DeepSeek API key，现取现用）、审计与用量回报、
+   * 模拟 / 测试用的替身后端。只在 `RunRequest.web` 给了的运行里用得到（`web.ts`）。
+   */
+  web?: DshWebOptions
 }
 
 /** WP144：出一张电脑操控卡；回 `undefined` = 没出成（宿主没接 / 这一档不允许）。 */
