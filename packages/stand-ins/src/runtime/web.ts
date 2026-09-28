@@ -211,8 +211,14 @@ export function webResearchPlan(
 ): { query: string; fetch: boolean } | undefined {
   if (!webToolEnabled(req, WEB_SEARCH_TOOL)) return undefined
   const trimmed = text.trim()
-  if (trimmed === '' || !RESEARCH.test(trimmed)) return undefined
+  if (!looksLikeResearch(trimmed)) return undefined
   return { query: researchQueryOf(trimmed), fetch: webToolEnabled(req, WEB_FETCH_TOOL) }
+}
+
+/** 这句话像不像"去网上查一下"（stub 的剧本与规则脑同一份判定）。 */
+export function looksLikeResearch(text: string): boolean {
+  const trimmed = text.trim()
+  return trimmed !== '' && RESEARCH.test(trimmed)
 }
 
 /** 从一句话里取查询串：第一行、去掉"帮我 / 请"之类的口头语，最多 80 个字。 */
@@ -242,7 +248,9 @@ export function renderWebAnswer(input: {
   if (input.sources.length === 0) return `搜了「${input.query}」，没有找到来源，不下结论。`
   const lines = [
     `搜了「${input.query}」，找到 ${input.sources.length} 条来源：`,
-    ...input.sources.map((s) => `- ${s.title ?? s.url}：${s.url}`),
+    // 只列网址：三个运行时手上的来源形状不一样（stub 拿到结构化值、模型拿到渲染后的文字），
+    // 网址是三边都有的那一样，回话因此逐字相同
+    ...input.sources.map((s) => `- ${s.url}`),
   ]
   if (input.fetched !== undefined) {
     lines.push(

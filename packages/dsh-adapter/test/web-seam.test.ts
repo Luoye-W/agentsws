@@ -344,6 +344,52 @@ describe('WP179 官方网页工具：进程内', () => {
   })
 })
 
+describe('WP179 规则脑（模拟的模型替身）在 dsh 这一档', () => {
+  it('与 direct 走出同一串调用：先搜、再抓第一条、最后列来源网址', async () => {
+    const ask = '查一下 2026 年 65W 氮化镓充电器的新品和价格'
+    const base = webRequest()
+    const request: RunRequest = {
+      ...base,
+      expectations: { outputs: ['answer'], must_stage_if_change_requested: false },
+      grounding: [],
+      context: [
+        {
+          id: 'brief_1',
+          kind: 'thread',
+          source_ref: { type: 'matter', id: 'mat_1' },
+          sensitivity: 'internal',
+          content: { subject: ask, participants: [], text: ask },
+          bytes: 100,
+        },
+      ],
+    }
+    const calls: string[] = []
+    const runtime = createDshRuntime({
+      ...baseOptions(),
+      mode: 'in-process',
+      web: {
+        standIn: {
+          search: async (q) => {
+            calls.push(`search:${q}`)
+            return standInWebSearch(q)
+          },
+          fetch: async (url) => {
+            calls.push(`fetch:${url}`)
+            return standInWebFetch(url)
+          },
+        },
+      },
+    })
+    const { sink, events } = collect()
+    const result = await runtime.run(request, sink, new AbortController().signal)
+    const first = standInWebSearch(ask).sources[0]?.url
+    expect(calls).toEqual([`search:${ask}`, `fetch:${first}`])
+    expect(results(events).map((r) => r.status)).toEqual(['ok', 'ok'])
+    const answer = result.outputs.find((o) => o.kind === 'answer')
+    expect(answer?.kind === 'answer' ? answer.text : '').toContain('细看了第一条')
+  })
+})
+
 describe.runIf(subprocessAvailable())('WP179 官方网页工具：子进程档', () => {
   it('凭据经管道现取；审计与用量经通知回到宿主；令牌不进事件', async () => {
     seen.length = 0
