@@ -7,7 +7,8 @@
 # 会后正式报价 → `b2b.sales`；展会名录里找公司 → `b2b.outbound`。
 #
 # 展前邀约与会后跟进照开发信的规矩（出卡、配额、退订、德奥默认排除）：动作就是
-# `stage_b2b_outreach`，guardrail 的 `b2b_outreach` 那一支一道不少。报名缴费永远出卡（`HARD_L1`）。
+# `stage_b2b_outreach`，guardrail 的 `b2b_outreach` 那一支一道不少（德奥只拦没有往来的潜在客户，
+# 已有往来的老客户照常出卡——Fable 09-28，after 里报 `existing_relationship`）。报名缴费永远出卡（`HARD_L1`）。
 id: b2b.exhibition
 version: 1.0.0
 domain: b2b

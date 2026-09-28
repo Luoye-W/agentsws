@@ -152,9 +152,15 @@ export function evaluateB2bChange(
       // 用主域名发是用户自己选的：能发，卡上一句风险提示（§11.1 第 4 条）
       if (after.shared_sending_domain === true)
         review('shared_sending_domain', 'separate', 'primary')
-      // 德国、奥地利默认不发，用户勾选并确认风险后才发（§11.1 第 6 条）
+      // 德国、奥地利默认不发，用户勾选并确认风险后才发（§11.1 第 6 条）。
+      // Fable 09-28（WP170 终审）：只拦**没有往来的潜在客户**——德奥那几位都是已有往来的
+      // 老客户（`existing_relationship`，比如展前邀约老客户）照常出卡。
       const excluded = strings(after.countries).filter((c) => c === 'DE' || c === 'AT')
-      if (excluded.length > 0 && after.de_at_confirmed !== true)
+      if (
+        excluded.length > 0 &&
+        after.de_at_confirmed !== true &&
+        after.existing_relationship !== true
+      )
         block('country_excluded', 'DE,AT', excluded.join(','))
       if (after.suppression_checked !== true)
         block('suppression_list_required', 'checked', String(after.suppression_checked ?? 'never'))

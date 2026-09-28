@@ -200,6 +200,8 @@ describe('开发信的三道 B2B 闸', () => {
     ])
     expect(rules(run({ countries: ['DE', 'US'] }), 'block')).toEqual(['country_excluded'])
     expect(rules(run({ countries: ['DE'], de_at_confirmed: true }), 'block')).toEqual([])
+    // 德奥已有往来的老客户（展前邀约老客户）照常出卡，只拦没有往来的潜在客户
+    expect(rules(run({ countries: ['AT'], existing_relationship: true }), 'block')).toEqual([])
   })
   it('用主域名发：能发，只多一句风险提示；DMARC 缺了只提示', () => {
     const r = run({ shared_sending_domain: true, sender_auth: { spf: 'pass', dkim: 'pass' } })
