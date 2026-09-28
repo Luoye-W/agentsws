@@ -1414,6 +1414,72 @@ export function checkExpectations(
     )
   }
   /*
+   * WP171 / docs/84：B2B 这一轮提的那几个写动作，**按出现顺序一条对一条**。
+   *
+   * 每一条读的是真事件（`simulation.b2b_staged` / `simulation.b2b_blocked`），不是场景
+   * 自己报的结论：报价谁批是 `b2b-core` 算的，拦下来的规则名是 guardrail 的 hit 名。
+   */
+  if (expected.b2b !== undefined) {
+    const outcomes = evidence.events.filter(
+      (e) => e.type === 'simulation.b2b_staged' || e.type === 'simulation.b2b_blocked',
+    )
+    const problems: string[] = []
+    const seen: string[] = []
+    expected.b2b.forEach((want, i) => {
+      const got = outcomes[i]
+      const tag = `第 ${i + 1} 条（${want.kind}）`
+      if (got === undefined) {
+        problems.push(`${tag}：没有发生`)
+        return
+      }
+      const p = payloadOf(got)
+      const isBlocked = got.type === 'simulation.b2b_blocked'
+      seen.push(`${String(p.kind)}${isBlocked ? ' 拦下' : ` → ${String(p.routed_to)}`}`)
+      if (String(p.kind) !== want.kind) problems.push(`${tag}：实际是 ${String(p.kind)}`)
+      if (want.blocked !== undefined && isBlocked !== want.blocked)
+        problems.push(want.blocked ? `${tag}：该被拦下却提上去了` : `${tag}：不该被拦下`)
+      const rules = Array.isArray(p.rules) ? p.rules.map(String) : []
+      for (const r of want.rules ?? [])
+        if (!rules.includes(r))
+          problems.push(`${tag}：没判出 ${r}（实际 ${rules.join('、') || '无'}）`)
+      if (want.approver !== undefined && String(p.approver) !== want.approver)
+        problems.push(`${tag}：谁批是 ${String(p.approver)}，不合期望 ${want.approver}`)
+      if (want.routed_to !== undefined && String(p.routed_to) !== want.routed_to)
+        problems.push(`${tag}：卡落到 ${String(p.routed_to)}，不合期望 ${want.routed_to}`)
+      if (want.auto_approved !== undefined && (p.auto_approved === true) !== want.auto_approved)
+        problems.push(want.auto_approved ? `${tag}：没能自己出去` : `${tag}：不该自动放行`)
+      if (want.stated_on_card !== undefined && (p.stated_on_card === true) !== want.stated_on_card)
+        problems.push(`${tag}：卡面上没写清谁批、为什么`)
+    })
+    add('b2b', problems.length === 0, problems.length === 0 ? seen.join('；') : problems.join('；'))
+  }
+  /*
+   * WP171 / docs/84 §11.3：改收款账户的那封信 → 红卡，信里的账户不采纳。
+   */
+  if (expected.b2b_fraud !== undefined) {
+    const want = expected.b2b_fraud
+    const alert = [...evidence.events]
+      .reverse()
+      .find((e) => e.type === 'simulation.b2b_fraud_alert')
+    const problems: string[] = []
+    const p = alert === undefined ? {} : payloadOf(alert)
+    const red = alert !== undefined && p.red_card === true
+    if (want.red_card !== undefined && red !== want.red_card)
+      problems.push(want.red_card ? '该出红卡却没出' : '不该出红卡')
+    if (want.adopted !== undefined && (p.adopted === true) !== want.adopted)
+      problems.push(want.adopted ? '信里的账户没被采纳' : '信里的账户被采纳了')
+    const phrases = Array.isArray(p.phrases) ? p.phrases.map(String) : []
+    for (const w of want.phrases ?? [])
+      if (!phrases.includes(w)) problems.push(`没认出这句话：${w}`)
+    if (want.routed_to !== undefined && String(p.routed_to) !== want.routed_to)
+      problems.push(`红卡落到 ${String(p.routed_to)}，不合期望 ${want.routed_to}`)
+    add(
+      'b2b_fraud',
+      problems.length === 0,
+      problems.length === 0 ? `红卡：${phrases.join('、')}；账户不采纳` : problems.join('；'),
+    )
+  }
+  /*
    * WP75 / 57 §1 / 04 §5：**开花钱口子永远 L1**，总闸满了直接拦。
    *
    * 两种结局各有各的事件：提上去了看 `..._staged`，被总闸拦下了看 `..._blocked`。

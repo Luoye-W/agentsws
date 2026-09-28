@@ -41,6 +41,8 @@ export type ConnectionCategory =
   | 'dev'
   /** WP76（58 §1）：设计工具（Figma / Canva）。两条现在都是「待增加」。 */
   | 'design'
+  /** WP171（docs/84）：B2B 的数据与工具（名片识别、自带 key 的数据服务、海关数据）。现在都是「待增加」。 */
+  | 'b2b'
   | 'custom'
 
 /**
@@ -1134,6 +1136,67 @@ export const CONNECTION_DIRECTORY: readonly ConnectionDirectoryEntry[] = [
       en: 'For the design position: lay out a version from a template, or export a finished asset to each platform size. Everything else works without it.',
     },
   },
+  // ── WP171（docs/84）：B2B 那几张「待增加」卡 ─────────────────────────
+  // 职责 yml 里写成可选连接器；明着列出来而不是藏起来——找不到海关数据的人只会以为是自己没找到。
+  {
+    kind: 'calendar',
+    name: { zh: '日历（Google / Outlook）', en: 'Calendar (Google / Outlook)' },
+    category: 'mailbox',
+    auth: 'oauth',
+    mode: 'openconnector_provider',
+    fields: OAUTH_NO_FIELDS,
+    side_effect: 'write_external',
+    status: 'planned',
+    note: {
+      zh: 'B2B 岗位用：会议、样品跟进、展会与船期提醒。还没做；在那之前这些日期写在事项与面板上。',
+      en: 'For the B2B position: meetings, sample follow-ups, trade-show and sailing dates. Not built yet; until then those dates live on tasks and panels.',
+    },
+  },
+  {
+    kind: 'business_card_scan',
+    name: { zh: '名片识别', en: 'Business card scan' },
+    category: 'b2b',
+    auth: 'none',
+    mode: 'builtin',
+    fields: [],
+    side_effect: 'read_external',
+    status: 'planned',
+    note: {
+      zh: '展会现场拍名片录联系人。要看图的模型，走云端（不往安装包里塞本地模型）。在那之前手填或导入表格。',
+      en: 'Snap business cards at a trade show to add contacts. Needs a vision model in the cloud. Until then, type them in or import a sheet.',
+    },
+  },
+  {
+    kind: 'b2b_data',
+    name: { zh: 'B2B 数据（自带 key）', en: 'B2B data (bring your own key)' },
+    category: 'b2b',
+    auth: 'api_key',
+    mode: 'openconnector_provider',
+    fields: apiKeyField('这家数据服务给你的 API key', 'The API key from your data provider'),
+    side_effect: 'read_external',
+    status: 'planned',
+    note: {
+      zh: '找客户用：AIsa / Hunter / Apollo 这类服务用你自己的账号，本机直连、不经过我们的云。还没做。',
+      en: 'For prospecting: AIsa / Hunter / Apollo on your own account, called directly from this machine, never through our cloud. Not built yet.',
+    },
+  },
+  {
+    kind: 'customs_data',
+    name: { zh: '海关数据（自带账号）', en: 'Customs data (your own account)' },
+    category: 'b2b',
+    auth: 'api_key',
+    mode: 'openconnector_provider',
+    fields: apiKeyField(
+      '海关数据服务给你的 API key',
+      'The API key from your customs-data provider',
+    ),
+    side_effect: 'read_external',
+    status: 'planned',
+    note: {
+      zh: '看谁在持续进口你这类产品。第一版用你自己的账号接进来；之后也会有按次扣积分的官方档（要先找到允许转售的数据商）。还没做。',
+      en: 'See who keeps importing products like yours. First release: your own account. An official pay-per-lookup tier comes later, once a provider allows resale. Not built yet.',
+    },
+  },
   // ── 自定义 ──────────────────────────────────────────────────────────
   {
     kind: 'mcp_server',
@@ -1173,6 +1236,8 @@ export const CONNECTION_CATEGORIES: readonly {
   { id: 'dev', name: { zh: '开发', en: 'Developer' } },
   // WP76（58 §1）
   { id: 'design', name: { zh: '设计', en: 'Design' } },
+  // WP171（docs/84）
+  { id: 'b2b', name: { zh: 'B2B', en: 'B2B' } },
   { id: 'custom', name: { zh: '自定义', en: 'Custom' } },
 ]
 

@@ -69,6 +69,7 @@ import type {
   WorkspaceId,
   WorkspacePolicy,
 } from '@agentsws/contracts'
+import { B2B_POSITION_ID, B2B_ROLES } from '@agentsws/contracts'
 import { canonicalJson, sha256 } from '@agentsws/core'
 import {
   parseRole,
@@ -357,6 +358,18 @@ const SEED_POSITIONS: readonly {
       ['design.social', true],
       ['design.ads', true],
       ['design.exhibition', true],
+      ['common.member', false],
+    ],
+  },
+  // WP171（docs/84 §11 / 54）：**B2B** 岗位 = 五条职责（顺序 = 契约 `B2B_ROLES`）。
+  // 前四条默认全勾（小公司是一个业务员把这几摊都干了）；B2B 平台运营是第二批，默认不勾。
+  // 默认勾不勾**读契约那一份**，不在这里再抄一遍。
+  {
+    id: B2B_POSITION_ID,
+    zh: 'B2B',
+    en: 'B2B',
+    roles: [
+      ...B2B_ROLES.map((r): [RoleId, boolean] => [r.role_id, r.default]),
       ['common.member', false],
     ],
   },

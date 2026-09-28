@@ -535,6 +535,21 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
     return kept.length === 0 ? [...roles] : kept
   }
 
+  /**
+   * WP171（Fable 终审）：**勾岗位不带上第二批的职责**（职责定义 `status: planned`）。
+   * 它们在向导里照样列出来（标「第二批」），用户单独勾了才进清单，而且归到那个岗位下，
+   * 不另起一个"自定义岗位"。
+   */
+  function isPlannedRole(id: RoleId): boolean {
+    return roles.roles.get(id)?.status === 'planned'
+  }
+  function tickedRoles<T extends { role: RoleId }>(
+    list: readonly T[],
+    explicit: readonly RoleId[],
+  ): T[] {
+    return wizardRoles(list).filter((r) => !isPlannedRole(r.role) || explicit.includes(r.role))
+  }
+
   function expandRoles(input: OnboardingPlanInput, positions: PositionLike[]): RoleId[] {
     const out: RoleId[] = []
     const seen = new Set<RoleId>()
@@ -548,7 +563,7 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
     for (const id of input.position_ids) {
       const position = positions.find((p) => p.id === id)
       if (position === undefined) throw new OnboardingError('not_found', `没有这个岗位：${id}`)
-      for (const r of wizardRoles(position.roles)) push(r.role)
+      for (const r of tickedRoles(position.roles, input.role_ids)) push(r.role)
     }
     for (const id of input.role_ids) push(id)
     return out
@@ -623,7 +638,7 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
     const held = new Set(activeOf(options.owner).map((a) => a.role_id))
     const plannedPositions: OnboardingPositionPlanItem[] = input.position_ids.map((id) => {
       const position = positions.find((p) => p.id === id)
-      const ids = wizardRoles(position?.roles ?? [])
+      const ids = tickedRoles(position?.roles ?? [], input.role_ids)
         .map((r) => r.role)
         .filter((r) => roles.roles.get(r) !== undefined)
       return {
@@ -784,6 +799,8 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
                   default: r.default,
                   // 46 §1 表 ③「每条职责旁有一句'它会干什么'」——就是 05 里的 description
                   what_it_does: def.description,
+                  // WP171（Fable 终审）：第二批的职责向导里标「第二批」，仍按模板默认不勾
+                  ...(def.status === 'planned' ? { planned: true as const } : {}),
                 },
               ]
         }),

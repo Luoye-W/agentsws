@@ -140,6 +140,13 @@ const SOURCE_AUTHZ = {
    */
   pr: { domain: 'mention', range: 'assigned' },
   google_alerts: { domain: 'mention', range: 'assigned' },
+  /*
+   * WP171（docs/84）：B2B 那一个源。
+   *
+   * 挂 `b2b_account` 域：五条 B2B 职责的 scopes 里**五条都有**的只有它（展会与跟单
+   * 那两条是只读）。挂 `b2b_quote` 的话，主动开发、展会、跟单三条会看不见自己的面板。
+   */
+  b2b: { domain: 'b2b_account', range: 'assigned' },
 } as const
 
 const RANGE_PARAM = {

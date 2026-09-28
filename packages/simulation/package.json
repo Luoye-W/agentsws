@@ -33,6 +33,7 @@
     "@agentsws/kol-core": "workspace:*",
     "@agentsws/learning": "workspace:*",
     "@agentsws/model-gateway": "workspace:*",
+    "@agentsws/b2b-core": "workspace:*",
     "@agentsws/pr-core": "workspace:*",
     "@agentsws/roles": "workspace:*",
     "@agentsws/runtime-direct": "workspace:*",

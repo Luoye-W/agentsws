@@ -207,6 +207,28 @@ describe('形状校验', () => {
     expect(problems.join('\n')).toContain(needle)
   })
 
+  // WP171：Luoye 自己的私有仓库（BtoBAgents）只登记来源与提交，不 watch 公网
+  it('私有来源：watch 空、不写 repo / npm / image、钉提交，就没问题', () => {
+    const priv = {
+      id: 'private-one',
+      kind: 'ported',
+      why: '私有仓库搬过来的业务代码',
+      private_source: '本机 ~/Documents/x',
+      pinned_commit: 'abc1234',
+      watch: [],
+    }
+    expect(validateShape([priv])).toEqual([])
+    expect(validateShape([{ ...priv, watch: ['readme'] }]).join('\n')).toContain(
+      '`watch` 要写成 []',
+    )
+    expect(validateShape([{ ...priv, repo: 'a/b' }]).join('\n')).toContain(
+      '不写 npm / repo / image',
+    )
+    expect(validateShape([{ ...priv, pinned_commit: undefined }]).join('\n')).toContain(
+      'pinned_commit',
+    )
+  })
+
   it('id 重复要报出来', () => {
     expect(validateShape([base(), base()]).join('\n')).toContain('`id` 重复')
   })

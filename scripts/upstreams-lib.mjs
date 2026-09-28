@@ -35,6 +35,8 @@ const SCALAR_FIELDS = [
   'bin_version',
   'bin_tag_prefix',
   'bin_lock_file',
+  // WP171：Luoye 自己的**私有**仓库（不在公网，不 watch）——写它在哪，不写 repo / npm / image
+  'private_source',
 ]
 const LIST_FIELDS = [
   'watch',
@@ -194,12 +196,20 @@ export function validateShape(items) {
     if (!it.why || String(it.why).trim() === '') p(`${where} 缺 \`why\`（一句话：我们哪里用到它）`)
 
     const watch = Array.isArray(it.watch) ? it.watch : []
-    if (watch.length === 0) p(`${where} \`watch\` 不能为空`)
+    const isPrivate = it.private_source !== undefined && String(it.private_source).trim() !== ''
+    // 私有来源不在公网：没有东西可盯，`watch` 必须是空的（写了也查不到，等于静默失效）
+    if (isPrivate) {
+      if (watch.length > 0) p(`${where} 私有来源不 watch 公网，\`watch\` 要写成 []`)
+      if (it.npm || it.repo || it.image)
+        p(`${where} 私有来源不写 npm / repo / image（写了周报会去公网找它）`)
+      if (!it.pinned_commit) p(`${where} 私有来源要钉 \`pinned_commit\`（搬的是哪一版）`)
+    } else if (watch.length === 0) p(`${where} \`watch\` 不能为空`)
     for (const w of watch) {
       if (!WATCH_ITEMS.includes(String(w))) p(`${where} \`watch\` 里不认识的项 \`${w}\``)
     }
 
-    if (!it.npm && !it.repo && !it.image) p(`${where} npm / repo / image 至少要有一个`)
+    if (!it.npm && !it.repo && !it.image && !isPrivate)
+      p(`${where} npm / repo / image 至少要有一个（私有仓库写 private_source）`)
     if (it.repo && !/^[\w.-]+\/[\w.-]+$/.test(String(it.repo)))
       p(`${where} \`repo\` 要写成 owner/name，写的是 \`${it.repo}\``)
 

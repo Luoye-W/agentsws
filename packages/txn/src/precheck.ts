@@ -42,6 +42,8 @@ const KNOWN_KINDS: ReadonlySet<string> = new Set<ApprovalKind>([
   'seo_report',
   // WP154：新页面选题卡（批了开一件写这一页的事项）
   'seo_topic',
+  // WP171 / docs/84 §11.3：改收款账户的红卡（不采纳信里的账户，只提醒人去核实）
+  'b2b_fraud_alert',
 ])
 
 export function isKnownKind(kind: string): boolean {

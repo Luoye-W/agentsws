@@ -32,6 +32,9 @@
       "path": "packages/api"
     },
     {
+      "path": "packages/b2b-core"
+    },
+    {
       "path": "packages/blob"
     },
     {

@@ -70,6 +70,18 @@ const DATA_DOMAIN = Schema.union([
   'press_release',
   'mention',
   'external_post',
+  // WP171（docs/84）：B2B 那九个域，与契约的 `DataDomain` 同步。
+  // 一个域一把闸：联系人（confidential）只有业务 / 主动开发 / 展会碰得到；
+  // 出运单与单证只有跟单那一条写得了；报价是钱，只有业务那一条提得了。
+  'b2b_account',
+  'b2b_contact',
+  'b2b_opportunity',
+  'b2b_quote',
+  'b2b_sample',
+  'b2b_list',
+  'trade_show',
+  'trade_show_lead',
+  'export_shipment',
   'review',
   'finance',
   'approval',
@@ -252,6 +264,9 @@ export const ROLE_SCHEMA: Node = Schema.object({
     'common',
     // WP78（60）：公共关系。四条职责 `pr.press` / `pr.reddit` / `pr.forums` / `pr.monitoring`
     'pr',
+    // WP171（docs/84）：B2B。五条职责 `b2b.sales` / `b2b.outbound` / `b2b.exhibition` /
+    // `b2b.fulfillment` / `b2b.marketplace`（第二批）
+    'b2b',
   ] as const).required(),
   name: NAME,
   description: str(),
@@ -288,6 +303,11 @@ export const ROLE_SCHEMA: Node = Schema.object({
    * `browser` = 这条渠道没有可用的接口，动作走第三栏受控浏览器。
    */
   mode: Schema.union(['api', 'browser'] as const),
+  /**
+   * WP171（docs/84 §11.5）：这条职责第一版做不做。不写 = `active`。
+   * `planned` = YAML 先建、向导里不默认勾（`b2b.marketplace`，第二批）。
+   */
+  status: Schema.union(['active', 'planned'] as const),
   /**
    * WP120（69 §1）：这条职责的角色定位。`{ zh, en }` 或老的纯字符串。
    *

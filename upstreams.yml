@@ -511,6 +511,30 @@ upstreams:
     covered_by:
       - apps/workstation/src/components/brand-icons.tsx
 
+  # WP171（docs/84 §7）：B2B 岗位的判断逻辑移植自 Luoye 自己的 BtoBAgents。**私有仓库、不在公网**：
+  # 只登记来源与提交，不 watch（`watch: []` + `private_source`）。BtoBAgents 基于 MkSaaS 商业模板，
+  # 模板文件（与 KOLAgents 纯模板提交 cb506142 逐字节相同的那 615 个、payment / credits / mail /
+  # components/ui 这类目录）一个没搬；搬的只有 Luoye 自己写的业务纯函数与测试，每个文件头注明出处。
+  # 那个产品已停止单独开发（docs/84 §11.1 第 13 条），所以这里不会有"上游更新要对照"这回事。
+  - id: btobagents
+    kind: ported
+    why: B2B 岗位的报价授权、证据分级、离职交接、客户 CSV 导入、行业识别与知识六类移植自它（Luoye 自己的私有仓库，业务代码非模板）
+    private_source: Luoye 的私有仓库，本机 ~/Documents/BtoBAgents
+    pinned_commit: 940f12b
+    watch: []
+    we_depend_on:
+      - 'src/features/btobagents/domain/policy.ts → packages/b2b-core/src/policy.ts（去掉 L3 自动报价、阈值统一成 1 万 / 20% / 5% / 30 天）'
+      - 'src/features/btobagents/domain/evidence.ts → packages/b2b-core/src/evidence.ts'
+      - 'src/features/btobagents/domain/ownership.ts → packages/b2b-core/src/ownership.ts'
+      - 'src/features/btobagents/imports/csv.ts → packages/b2b-core/src/csv.ts'
+      - 'src/features/btobagents/runtime-v2/onboarding.ts → packages/b2b-core/src/onboarding.ts'
+      - 'src/features/btobagents/demo-data.ts 的 companyBrainCategories → packages/b2b-core/src/company-brain.ts'
+      - 'tests/unit/btobagents-domain.test.ts、tests/unit/btobagents/customer-csv.test.ts → packages/b2b-core/test/'
+      - 'demo-data.ts / runtime-v2/seed.ts 的演示数据 → packs/b2b-3c-3p 与 apps/server/src/b2b.ts（改写，客户名换虚构）'
+    covered_by:
+      - packages/b2b-core/src/policy.ts
+      - packages/b2b-core/test/domain.test.ts
+
   # ── reference：不升级，只看"有没有新想法"（docs/10 §3.1 第四类）─────────────
   - id: dsh-experimental
     kind: reference

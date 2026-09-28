@@ -14,6 +14,7 @@ import type {
 import type { ApprovalBus, ApprovalItem, Clock, ObjectRef } from '@agentsws/contracts'
 import type {
   AdsDeckData,
+  B2bDeckData,
   DataSourceStatus,
   DeckCard,
   DesignDeckData,
@@ -99,6 +100,13 @@ export interface WorkstationDataSource {
    * "还没连"说的是外面那一侧那个源（`google_alerts`）。
    */
   pr?(view?: { assignment_id?: string }): PrDeckData | undefined
+  /**
+   * WP171（docs/84）：B2B 五条职责那十九块要的行。
+   *
+   * 不给 = 这台机器上还没有 B2B 岗位，那几块是空表。B2B 库永远算连上
+   * （`ALWAYS_CONNECTED`），空的意思是"还没有询盘 / 报价 / 出运单"，不是"去连接"。
+   */
+  b2b?(view?: { assignment_id?: string }): B2bDeckData | undefined
   /**
    * WP158：Search Console 与 GA4 读回来的汇总（当天缓存）。不给 = 没装读数那一层，
    * GSC / GA4 那几块照旧空；给了但没选站点 = 块里说"先选一下"。
@@ -211,6 +219,7 @@ export function createWorkstationPort(options: WorkstationPortOptions): Workstat
       const site = options.data.site?.(view)
       const ads = options.data.ads?.(view)
       const pr = options.data.pr?.(view)
+      const b2b = options.data.b2b?.(view)
       const search = options.data.search?.()
       const thresholds = options.roles.roles.get(position.role_id)?.thresholds
       return {
@@ -233,6 +242,7 @@ export function createWorkstationPort(options: WorkstationPortOptions): Workstat
         ...(site === undefined ? {} : { site }),
         ...(ads === undefined ? {} : { ads }),
         ...(pr === undefined ? {} : { pr }),
+        ...(b2b === undefined ? {} : { b2b }),
         ...(search === undefined ? {} : { search }),
         // WP63（51 §2.1）：异常卡的阈值从**职责定义**来，不硬写在积木里——
         // 什么叫"销售骤降"，卖家具的和卖快消的不是一个数

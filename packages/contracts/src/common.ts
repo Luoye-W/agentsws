@@ -162,6 +162,22 @@ export type ObjectType =
   | 'press_release'
   | 'mention'
   | 'external_post'
+  /**
+   * WP171（docs/84）：B2B 那一侧的九类。
+   *
+   * 为什么不复用 `company` / `contact`：那两个是客服那一侧的顾客档案（归 `customer` 域），
+   * B2B 的客户是一家要谈价、寄样、出运的**公司**，联系人要记来源（GDPR 第 14 条）。
+   * 报价版本不单列一类——它是 `b2b_quote` 下面只读的一串。**只加不删**。
+   */
+  | 'b2b_account'
+  | 'b2b_contact'
+  | 'b2b_opportunity'
+  | 'b2b_quote'
+  | 'b2b_sample'
+  | 'b2b_list'
+  | 'trade_show'
+  | 'trade_show_lead'
+  | 'export_shipment'
   | (string & {})
 
 export interface ObjectRef {
@@ -293,6 +309,22 @@ export type DataDomain =
   | 'press_release'
   | 'mention'
   | 'external_post'
+  /**
+   * WP171（docs/84）：B2B 那九个域。
+   *
+   * 分开而不是塞进一个 `b2b`，理由与红人那五个一样：**可读范围不一样**。
+   * 联系人（`b2b_contact`，confidential）只有业务 / 主动开发 / 展会碰得到；
+   * 出运单与单证只有跟单那一条写得了；报价是钱，只有业务那一条提得了。
+   */
+  | 'b2b_account'
+  | 'b2b_contact'
+  | 'b2b_opportunity'
+  | 'b2b_quote'
+  | 'b2b_sample'
+  | 'b2b_list'
+  | 'trade_show'
+  | 'trade_show_lead'
+  | 'export_shipment'
 
 export type Operation = 'read' | 'stage' | 'approve' | 'agent_auto'
 export type Range = 'own' | 'assigned' | 'workspace'

@@ -451,6 +451,14 @@ export type DataSourceId =
    * 一个根本没连的监控块点亮——36 §3 最忌讳的那种空图。
    */
   | 'google_alerts'
+  /**
+   * WP171（docs/84）：**我们自己的 B2B 库**（客户、询盘、报价、样品、名单、展会、出运单）。
+   * 永远算连上——它就在这台机器上，没有"去连接"这回事（同 `kol` / `pr`）。
+   *
+   * 五条职责十九块全走它：询盘是邮件分拣进来之后**我们记下的**，报价与出运单是
+   * **我们自己的账**。平台后台（阿里国际站）没有接口，走浏览器——不是一条连接。
+   */
+  | 'b2b'
 
 export interface DataSourceStatus {
   id: DataSourceId
@@ -987,6 +995,85 @@ export interface PrDeckData {
   handoffs: (PrMentionRow & { approval_id?: string })[]
 }
 
+/**
+ * WP171（docs/84）：B2B 库那几张投影（宿主递进来；不给 = 这台机器上还没有 B2B 岗位，
+ * 十九块一律空——**不是**"还没连"，B2B 库永远算连上）。
+ *
+ * 每一格都是**已经念成人话**的值由查询层做（状态 → 中文），这里只放原始值。
+ */
+export interface B2bDeckData {
+  /** 待回询盘（邮件 / WhatsApp / 平台通知 / 开发信的有意向回复）。 */
+  inquiries: {
+    account: string
+    subject: string
+    source: 'email' | 'whatsapp' | 'marketplace' | 'outbound_reply' | 'trade_show'
+    received_at: string
+    /** 碰到了哪几类承诺（价格 / 交期 …），回信会转人审。 */
+    commitments?: string[]
+  }[]
+  /** 报价待审：谁批（业务员 / 上级 / 老板）与超了哪几条。 */
+  quotes_pending: {
+    number: string
+    account: string
+    version: number
+    amount_usd: number
+    margin_pct: number
+    approver: 'role_holder' | 'scope_manager' | 'owner'
+    breaches: string[]
+  }[]
+  /** 样品：待寄 / 已寄 / 已签收 / 已反馈。 */
+  samples: {
+    account: string
+    items: string
+    status: 'to_ship' | 'shipped' | 'delivered' | 'feedback'
+    due: string
+    tracking_no?: string
+  }[]
+  /** 该唤醒的老客户（下过单、很久没联系）。 */
+  dormant: { account: string; last_contact_at: string; days: number }[]
+  /** 今天待发的开发信（一批一行）。 */
+  outreach_today: { batch: string; count: number; sender: string; separate_domain: boolean }[]
+  /** 序列漏斗：首封 / 跟进 / 收尾 / 回了 / 退订。 */
+  sequence_funnel: { stage: string; label: string; count: number }[]
+  /** 回复待分。 */
+  replies: { account: string; category: string; received_at: string }[]
+  /** 名单与来源。 */
+  lists: {
+    name: string
+    tier: 'own' | 'official' | 'byo_key'
+    count: number
+    imported_at: string
+  }[]
+  /** 下一个展。 */
+  shows: { name: string; city: string; starts_on: string; status: string; booth?: string }[]
+  /** 截止日（报名 / 物料 / 邀约）。 */
+  deadlines: { show: string; what: string; due: string }[]
+  /** 现场线索。 */
+  show_leads: {
+    show: string
+    name: string
+    company: string
+    intent: 'hot' | 'warm' | 'cold'
+    note: string
+  }[]
+  /** 会后待跟进。 */
+  followups: { show: string; company: string; follow_up_by: string; status: string }[]
+  /** 在产订单。 */
+  in_production: { po: string; account: string; etd: string; status: string }[]
+  /** 待出运。 */
+  to_ship: { po: string; account: string; etd: string; booked: boolean }[]
+  /** 单证待核（有不符点的排前面）。 */
+  docs_to_check: { po: string; doc: string; status: string; discrepancies: number }[]
+  /** 尾款待收。 */
+  balance_due: { po: string; account: string; balance_usd: number; due: string }[]
+  /** 平台询盘（第二批）。 */
+  marketplace_inquiries: { platform: string; buyer: string; subject: string; received_at: string }[]
+  /** 待优化产品（第二批）。 */
+  listings_to_improve: { platform: string; product: string; issue: string }[]
+  /** RFQ（第二批）。 */
+  rfqs: { platform: string; subject: string; qty: string; closes_at: string }[]
+}
+
 /** 一条提及在面板上的样子（提及流 / 负面预警 / 转客服三块共用）。 */
 export interface PrMentionRow {
   mention_id: string
@@ -1135,6 +1222,11 @@ export interface QueryContext {
    * 后者说"去连接页把 Google Alerts 填上"。
    */
   pr?: PrDeckData
+  /**
+   * WP171（docs/84）：B2B 库那几张投影。不给 = 这台机器上还没有 B2B 岗位，
+   * 十九块一律空——**不是**"还没连"（B2B 库永远算连上）。
+   */
+  b2b?: B2bDeckData
   /** WP158：Search Console 与 GA4 的真读数（不给 = 那几块照旧空）。 */
   search?: SearchDeckData
   /**

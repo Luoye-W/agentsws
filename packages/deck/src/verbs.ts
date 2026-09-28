@@ -161,6 +161,8 @@ export const CATEGORY_BY_KIND: Partial<Record<DeckKind, string>> = {
   seo_report: 'seo_report',
   seo_topic: 'seo_topic',
   digest: 'digest',
+  // WP171（docs/84 §11.3）：改收款账户红卡
+  b2b_fraud_alert: 'fraud_alert',
 }
 
 /** `ChangeKind` → 类别人话（`staged_change` 专用；画布头一行写的就是这一列）。 */
@@ -232,6 +234,20 @@ export const CATEGORY_BY_CHANGE: Partial<Record<ChangeKind, string>> = {
   launch_check: 'launch_check',
   community_membership: 'join',
   mention_triage: 'handoff',
+  // WP171（docs/84）：B2B 那十三条（类别名不带数字：i18n 键后缀只许小写字母与下划线）
+  b2b_reply: 'inquiry_reply',
+  b2b_outreach: 'cold_outreach',
+  b2b_quote: 'quote',
+  b2b_sample: 'sample',
+  b2b_list_import: 'list_import',
+  b2b_account_transfer: 'account_transfer',
+  trade_show_registration: 'trade_show_fee',
+  export_docs_send: 'export_docs',
+  shipment_booking: 'shipment_booking',
+  bill_release: 'bill_release',
+  payment_instruction: 'payment_instruction',
+  marketplace_listing: 'marketplace_listing',
+  marketplace_spend: 'marketplace_spend',
 }
 
 /**

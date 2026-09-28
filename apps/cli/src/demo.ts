@@ -1171,6 +1171,14 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
     'site.shopify-apps',
     // WP76（58 §3）：设计岗位挂一条 `design.dtc`（五条骨架相同，只挂一条就够）
     'design.dtc',
+    // WP171（docs/84）：B2B 岗位五条全挂（岗位页写「5 条职责」，左栏就得展开出 5 条）。
+    // 四条的面板有演示数据（`apps/server/src/b2b.ts`）；第二批的平台运营那一条是空态——
+    // 两种样子在 demo 里都看得见。
+    'b2b.sales',
+    'b2b.outbound',
+    'b2b.exhibition',
+    'b2b.fulfillment',
+    'b2b.marketplace',
   ]) {
     if (held.has(role)) continue
     held.add(role)

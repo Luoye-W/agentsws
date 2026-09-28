@@ -127,6 +127,8 @@ export const ALWAYS_CONNECTED: readonly DataSourceId[] = [
   'site',
   // WP76：设计库同理（三张表）——出图走模型网关的图片槽，不是一条连接
   'design',
+  // WP171：B2B 库同理——询盘、报价、出运单是我们自己的账
+  'b2b',
 ]
 
 /** 全部数据源，按面板里的出场顺序。 */
@@ -164,6 +166,8 @@ export const ALL_DATA_SOURCES: readonly DataSourceId[] = [
   // WP78（60 §3）：我们自己的公关库 + 外面那一侧（Google Alerts / Reddit 搜索）
   'pr',
   'google_alerts',
+  // WP171（docs/84）：我们自己的 B2B 库（平台后台走浏览器，没有渠道源）
+  'b2b',
 ]
 
 /**

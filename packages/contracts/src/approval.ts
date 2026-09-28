@@ -89,6 +89,15 @@ export type ApprovalKind =
    * payload = `SeoTopicPayload`。
    */
   | 'seo_topic'
+  /**
+   * WP171（docs/84 §11.3）：**B2B 防诈骗红卡**。
+   *
+   * 一封信里要求"改收款账户"（或出现新的银行账号）——B2B 最常见的邮件诈骗就是冒充
+   * 客户或自己人改账户。这张卡**不采纳**信里的任何账户信息，只提醒人打电话核实；
+   * 收款账户只从知识库事实卡取。识别在 `@agentsws/core` 的 `detectPaymentAccountChange`。
+   * payload = `{ from, subject, phrases, has_account_details, thread_id? }`。
+   */
+  | 'b2b_fraud_alert'
 
 /** 14 §13.2 抽检复核：L2 自动批被抽中后，范围管理者看完说什么（WP32） */
 export interface SamplingReview {

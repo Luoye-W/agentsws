@@ -6,6 +6,7 @@
     "packages/connect-adapter/src/shopify-actions.ts",
     "packages/contracts/src/ads.ts",
     "packages/contracts/src/approval.ts",
+    "packages/contracts/src/b2b.ts",
     "packages/contracts/src/blocks.ts",
     "packages/contracts/src/brand-design.ts",
     "packages/contracts/src/brand-intake.ts",
@@ -59,6 +60,11 @@
     "packages/roles/roles/ads/tiktok.yml",
     "packages/roles/roles/ads/x.yml",
     "packages/roles/roles/amz/support.yml",
+    "packages/roles/roles/b2b/exhibition.yml",
+    "packages/roles/roles/b2b/fulfillment.yml",
+    "packages/roles/roles/b2b/marketplace.yml",
+    "packages/roles/roles/b2b/outbound.yml",
+    "packages/roles/roles/b2b/sales.yml",
     "packages/roles/roles/common/member.yml",
     "packages/roles/roles/common/owner.yml",
     "packages/roles/roles/design/ads.yml",
@@ -96,7 +102,7 @@
     "packages/roles/roles/social/x.yml",
     "packages/roles/roles/social/youtube.yml"
   ],
-  "source_digest": "fe700f1940777e39d33c4ad316d00cbe",
+  "source_digest": "6f52a1df306e0bcf654c07b7a0e4d172",
   "objects": [
     {
       "id": "ad",
@@ -836,6 +842,486 @@
       ],
       "read_via": [],
       "contract": "Assignment"
+    },
+    {
+      "id": "b2b_account",
+      "label": "b2b_account",
+      "key_format": "`<前缀>_<哈希>`，本地生成，跨机唯一",
+      "domain": "b2b_account",
+      "source_of_truth": "local_ledger",
+      "freshness": "realtime",
+      "read_ranges": ["assigned"],
+      "properties": [
+        {
+          "name": "id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "workspace_id",
+          "type": "WorkspaceId",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "sensitivity": "confidential",
+          "optional": false
+        },
+        {
+          "name": "domain",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "country",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "region",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "product_lines",
+          "type": "string[]",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "stage",
+          "type": "B2bStage",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "owner_person_id",
+          "type": "PersonId",
+          "sensitivity": "confidential",
+          "optional": true
+        },
+        {
+          "name": "source",
+          "type": "B2bSource",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "last_contact_at",
+          "type": "Iso8601",
+          "sensitivity": "confidential",
+          "optional": true
+        },
+        {
+          "name": "created_at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "updated_at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": false
+        }
+      ],
+      "read_via": [],
+      "contract": "B2bAccount"
+    },
+    {
+      "id": "b2b_contact",
+      "label": "b2b_contact",
+      "key_format": "`<前缀>_<哈希>`，本地生成，跨机唯一",
+      "domain": "b2b_contact",
+      "source_of_truth": "local_ledger",
+      "freshness": "realtime",
+      "read_ranges": ["assigned"],
+      "properties": [
+        {
+          "name": "id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "workspace_id",
+          "type": "WorkspaceId",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "account_id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "sensitivity": "confidential",
+          "optional": false
+        },
+        {
+          "name": "title",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "email_ref",
+          "type": "string",
+          "sensitivity": "confidential",
+          "optional": true
+        },
+        {
+          "name": "phone_ref",
+          "type": "string",
+          "sensitivity": "confidential",
+          "optional": true
+        },
+        {
+          "name": "source",
+          "type": "B2bSource",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "public_source",
+          "type": "boolean",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "suppressed",
+          "type": "boolean",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "created_at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": false
+        }
+      ],
+      "read_via": [],
+      "contract": "B2bContact"
+    },
+    {
+      "id": "b2b_list",
+      "label": "b2b_list",
+      "key_format": "`<前缀>_<哈希>`，本地生成，跨机唯一",
+      "domain": "b2b_list",
+      "source_of_truth": "local_ledger",
+      "freshness": "realtime",
+      "read_ranges": ["assigned"],
+      "properties": [
+        {
+          "name": "id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "workspace_id",
+          "type": "WorkspaceId",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "sensitivity": "confidential",
+          "optional": false
+        },
+        {
+          "name": "tier",
+          "type": "'own' | 'official' | 'byo_key'",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "source",
+          "type": "B2bSource",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "contact_count",
+          "type": "number",
+          "sensitivity": "confidential",
+          "optional": false
+        },
+        {
+          "name": "credits_spent",
+          "type": "number",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "imported_at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": false
+        }
+      ],
+      "read_via": [],
+      "contract": "B2bList"
+    },
+    {
+      "id": "b2b_opportunity",
+      "label": "b2b_opportunity",
+      "key_format": "`<前缀>_<哈希>`，本地生成，跨机唯一",
+      "domain": "b2b_opportunity",
+      "source_of_truth": "local_ledger",
+      "freshness": "realtime",
+      "read_ranges": ["assigned"],
+      "properties": [
+        {
+          "name": "id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "workspace_id",
+          "type": "WorkspaceId",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "account_id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "sensitivity": "confidential",
+          "optional": false
+        },
+        {
+          "name": "stage",
+          "type": "B2bStage",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "value_usd",
+          "type": "number",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "product",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "owner_person_id",
+          "type": "PersonId",
+          "sensitivity": "confidential",
+          "optional": true
+        },
+        {
+          "name": "expected_close",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "lead_source",
+          "type": "'inquiry' | 'outbound' | 'trade_show' | 'marketplace' | 'referral' | 'repeat'",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "created_at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "updated_at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": false
+        }
+      ],
+      "read_via": [],
+      "contract": "B2bOpportunity"
+    },
+    {
+      "id": "b2b_quote",
+      "label": "b2b_quote",
+      "key_format": "`<前缀>_<哈希>`，本地生成，跨机唯一",
+      "domain": "b2b_quote",
+      "source_of_truth": "local_ledger",
+      "freshness": "realtime",
+      "read_ranges": ["assigned"],
+      "properties": [
+        {
+          "name": "id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "workspace_id",
+          "type": "WorkspaceId",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "account_id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "opportunity_id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "number",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "status",
+          "type": "B2bQuoteStatus",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "current_version",
+          "type": "number",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "owner_person_id",
+          "type": "PersonId",
+          "sensitivity": "confidential",
+          "optional": true
+        },
+        {
+          "name": "created_at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "updated_at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": false
+        }
+      ],
+      "read_via": [],
+      "contract": "B2bQuote"
+    },
+    {
+      "id": "b2b_sample",
+      "label": "b2b_sample",
+      "key_format": "`<前缀>_<哈希>`，本地生成，跨机唯一",
+      "domain": "b2b_sample",
+      "source_of_truth": "local_ledger",
+      "freshness": "realtime",
+      "read_ranges": ["assigned"],
+      "properties": [
+        {
+          "name": "id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "workspace_id",
+          "type": "WorkspaceId",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "account_id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "opportunity_id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "items",
+          "type": "{ sku: string; qty: number }[]",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "status",
+          "type": "B2bSampleStatus",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "charge_usd",
+          "type": "number",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "carrier",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "tracking_no",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "ship_by",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "feedback_by",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "feedback",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "updated_at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": false
+        }
+      ],
+      "read_via": [],
+      "contract": "B2bSample"
     },
     {
       "id": "campaign",
@@ -1606,7 +2092,7 @@
       "domain": "design_request",
       "source_of_truth": "local_ledger",
       "freshness": "realtime",
-      "read_ranges": ["assigned"],
+      "read_ranges": ["assigned", "own"],
       "properties": [
         {
           "name": "id",
@@ -1736,6 +2222,115 @@
       "properties": [],
       "read_via": ["shopify_admin.get_email_template", "shopify_admin.list_email_templates"],
       "platforms": ["shopify"]
+    },
+    {
+      "id": "export_shipment",
+      "label": "export_shipment",
+      "key_format": "`<前缀>_<哈希>`，本地生成，跨机唯一",
+      "domain": "export_shipment",
+      "source_of_truth": "local_ledger",
+      "freshness": "realtime",
+      "read_ranges": ["assigned"],
+      "properties": [
+        {
+          "name": "id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "workspace_id",
+          "type": "WorkspaceId",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "account_id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "po_number",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "status",
+          "type": "ExportShipmentStatus",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "incoterm",
+          "type": "Incoterm",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "etd",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "eta",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "bl_no",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "docs",
+          "type": "ExportDoc[]",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "payment.terms",
+          "type": "'tt' | 'lc' | 'dp' | 'oa'",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "payment.deposit_received",
+          "type": "boolean",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "payment.balance_usd",
+          "type": "number",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "payment.balance_received",
+          "type": "boolean",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "payment.lc_presentation_by",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "updated_at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": false
+        }
+      ],
+      "read_via": [],
+      "contract": "ExportShipment"
     },
     {
       "id": "external_post",
@@ -4512,6 +5107,182 @@
       "contract": "TrackedLink"
     },
     {
+      "id": "trade_show",
+      "label": "trade_show",
+      "key_format": "`<前缀>_<哈希>`，本地生成，跨机唯一",
+      "domain": "trade_show",
+      "source_of_truth": "local_ledger",
+      "freshness": "realtime",
+      "read_ranges": ["assigned"],
+      "properties": [
+        {
+          "name": "id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "workspace_id",
+          "type": "WorkspaceId",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "sensitivity": "confidential",
+          "optional": false
+        },
+        {
+          "name": "city",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "country",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "starts_on",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "ends_on",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "registration_deadline",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "status",
+          "type": "TradeShowStatus",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "booth",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "cost_estimate_usd",
+          "type": "number",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "design_request_id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        }
+      ],
+      "read_via": [],
+      "contract": "TradeShow"
+    },
+    {
+      "id": "trade_show_lead",
+      "label": "trade_show_lead",
+      "key_format": "`<前缀>_<哈希>`，本地生成，跨机唯一",
+      "domain": "trade_show_lead",
+      "source_of_truth": "local_ledger",
+      "freshness": "realtime",
+      "read_ranges": ["assigned"],
+      "properties": [
+        {
+          "name": "id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "workspace_id",
+          "type": "WorkspaceId",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "show_id",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "name",
+          "type": "string",
+          "sensitivity": "confidential",
+          "optional": false
+        },
+        {
+          "name": "company",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "title",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "email_ref",
+          "type": "string",
+          "sensitivity": "confidential",
+          "optional": true
+        },
+        {
+          "name": "card_image_ref",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "note",
+          "type": "string",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "intent",
+          "type": "'hot' | 'warm' | 'cold'",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "captured_at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "follow_up_by",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": false
+        },
+        {
+          "name": "status",
+          "type": "'new' | 'followed_up' | 'handed_to_sales' | 'nurture'",
+          "sensitivity": "internal",
+          "optional": false
+        }
+      ],
+      "read_via": [],
+      "contract": "TradeShowLead"
+    },
+    {
       "id": "variant",
       "label": "变体",
       "key_format": "平台给的 id，原样存、不解析",
@@ -4946,6 +5717,38 @@
     },
     {
       "from": "approval_item",
+      "to": "b2b_account",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "subject.object",
+      "lookup": []
+    },
+    {
+      "from": "approval_item",
+      "to": "b2b_list",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "subject.object",
+      "lookup": []
+    },
+    {
+      "from": "approval_item",
+      "to": "b2b_quote",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "subject.object",
+      "lookup": []
+    },
+    {
+      "from": "approval_item",
+      "to": "b2b_sample",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "subject.object",
+      "lookup": []
+    },
+    {
+      "from": "approval_item",
       "to": "campaign",
       "direction": "out",
       "cardinality": "one",
@@ -5047,6 +5850,14 @@
       "cardinality": "one",
       "via": "subject.object",
       "lookup": ["shopify_admin.get_email_template", "shopify_admin.list_email_templates"]
+    },
+    {
+      "from": "approval_item",
+      "to": "export_shipment",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "subject.object",
+      "lookup": []
     },
     {
       "from": "approval_item",
@@ -5202,6 +6013,22 @@
     },
     {
       "from": "approval_item",
+      "to": "trade_show",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "subject.object",
+      "lookup": []
+    },
+    {
+      "from": "approval_item",
+      "to": "trade_show_lead",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "subject.object",
+      "lookup": []
+    },
+    {
+      "from": "approval_item",
       "to": "variant",
       "direction": "out",
       "cardinality": "one",
@@ -5290,6 +6117,182 @@
     },
     {
       "from": "assignment",
+      "to": "workspace",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "workspace_id",
+      "lookup": []
+    },
+    {
+      "from": "b2b_account",
+      "to": "approval_item",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "approval_item.subject.object",
+      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+    },
+    {
+      "from": "b2b_account",
+      "to": "staged_change",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "staged_change.apply.outcome_ref",
+      "lookup": ["changes.pending_app_install", "changes.pending_email_enable"]
+    },
+    {
+      "from": "b2b_account",
+      "to": "staged_change",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "staged_change.target",
+      "lookup": ["changes.pending_app_install", "changes.pending_email_enable"]
+    },
+    {
+      "from": "b2b_account",
+      "to": "workflow_instance",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "workflow_instance.subject",
+      "lookup": []
+    },
+    {
+      "from": "b2b_account",
+      "to": "workspace",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "workspace_id",
+      "lookup": []
+    },
+    {
+      "from": "b2b_contact",
+      "to": "workspace",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "workspace_id",
+      "lookup": []
+    },
+    {
+      "from": "b2b_list",
+      "to": "approval_item",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "approval_item.subject.object",
+      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+    },
+    {
+      "from": "b2b_list",
+      "to": "staged_change",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "staged_change.apply.outcome_ref",
+      "lookup": ["changes.pending_app_install", "changes.pending_email_enable"]
+    },
+    {
+      "from": "b2b_list",
+      "to": "staged_change",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "staged_change.target",
+      "lookup": ["changes.pending_app_install", "changes.pending_email_enable"]
+    },
+    {
+      "from": "b2b_list",
+      "to": "workflow_instance",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "workflow_instance.subject",
+      "lookup": []
+    },
+    {
+      "from": "b2b_list",
+      "to": "workspace",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "workspace_id",
+      "lookup": []
+    },
+    {
+      "from": "b2b_opportunity",
+      "to": "workspace",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "workspace_id",
+      "lookup": []
+    },
+    {
+      "from": "b2b_quote",
+      "to": "approval_item",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "approval_item.subject.object",
+      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+    },
+    {
+      "from": "b2b_quote",
+      "to": "staged_change",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "staged_change.apply.outcome_ref",
+      "lookup": ["changes.pending_app_install", "changes.pending_email_enable"]
+    },
+    {
+      "from": "b2b_quote",
+      "to": "staged_change",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "staged_change.target",
+      "lookup": ["changes.pending_app_install", "changes.pending_email_enable"]
+    },
+    {
+      "from": "b2b_quote",
+      "to": "workflow_instance",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "workflow_instance.subject",
+      "lookup": []
+    },
+    {
+      "from": "b2b_quote",
+      "to": "workspace",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "workspace_id",
+      "lookup": []
+    },
+    {
+      "from": "b2b_sample",
+      "to": "approval_item",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "approval_item.subject.object",
+      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+    },
+    {
+      "from": "b2b_sample",
+      "to": "staged_change",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "staged_change.apply.outcome_ref",
+      "lookup": ["changes.pending_app_install", "changes.pending_email_enable"]
+    },
+    {
+      "from": "b2b_sample",
+      "to": "staged_change",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "staged_change.target",
+      "lookup": ["changes.pending_app_install", "changes.pending_email_enable"]
+    },
+    {
+      "from": "b2b_sample",
+      "to": "workflow_instance",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "workflow_instance.subject",
+      "lookup": []
+    },
+    {
+      "from": "b2b_sample",
       "to": "workspace",
       "direction": "out",
       "cardinality": "one",
@@ -5786,6 +6789,14 @@
     },
     {
       "from": "design_request",
+      "to": "trade_show",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "trade_show.design_request_id",
+      "lookup": []
+    },
+    {
+      "from": "design_request",
       "to": "workflow_instance",
       "direction": "in",
       "cardinality": "many",
@@ -5862,6 +6873,46 @@
       "direction": "in",
       "cardinality": "many",
       "via": "workflow_instance.subject",
+      "lookup": []
+    },
+    {
+      "from": "export_shipment",
+      "to": "approval_item",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "approval_item.subject.object",
+      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+    },
+    {
+      "from": "export_shipment",
+      "to": "staged_change",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "staged_change.apply.outcome_ref",
+      "lookup": ["changes.pending_app_install", "changes.pending_email_enable"]
+    },
+    {
+      "from": "export_shipment",
+      "to": "staged_change",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "staged_change.target",
+      "lookup": ["changes.pending_app_install", "changes.pending_email_enable"]
+    },
+    {
+      "from": "export_shipment",
+      "to": "workflow_instance",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "workflow_instance.subject",
+      "lookup": []
+    },
+    {
+      "from": "export_shipment",
+      "to": "workspace",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "workspace_id",
       "lookup": []
     },
     {
@@ -6666,6 +7717,70 @@
     },
     {
       "from": "staged_change",
+      "to": "b2b_account",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "apply.outcome_ref",
+      "lookup": []
+    },
+    {
+      "from": "staged_change",
+      "to": "b2b_account",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "target",
+      "lookup": []
+    },
+    {
+      "from": "staged_change",
+      "to": "b2b_list",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "apply.outcome_ref",
+      "lookup": []
+    },
+    {
+      "from": "staged_change",
+      "to": "b2b_list",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "target",
+      "lookup": []
+    },
+    {
+      "from": "staged_change",
+      "to": "b2b_quote",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "apply.outcome_ref",
+      "lookup": []
+    },
+    {
+      "from": "staged_change",
+      "to": "b2b_quote",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "target",
+      "lookup": []
+    },
+    {
+      "from": "staged_change",
+      "to": "b2b_sample",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "apply.outcome_ref",
+      "lookup": []
+    },
+    {
+      "from": "staged_change",
+      "to": "b2b_sample",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "target",
+      "lookup": []
+    },
+    {
+      "from": "staged_change",
       "to": "campaign",
       "direction": "out",
       "cardinality": "one",
@@ -6871,6 +7986,22 @@
       "cardinality": "one",
       "via": "target",
       "lookup": ["shopify_admin.get_email_template", "shopify_admin.list_email_templates"]
+    },
+    {
+      "from": "staged_change",
+      "to": "export_shipment",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "apply.outcome_ref",
+      "lookup": []
+    },
+    {
+      "from": "staged_change",
+      "to": "export_shipment",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "target",
+      "lookup": []
     },
     {
       "from": "staged_change",
@@ -7107,6 +8238,38 @@
     {
       "from": "staged_change",
       "to": "tracked_link",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "target",
+      "lookup": []
+    },
+    {
+      "from": "staged_change",
+      "to": "trade_show",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "apply.outcome_ref",
+      "lookup": []
+    },
+    {
+      "from": "staged_change",
+      "to": "trade_show",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "target",
+      "lookup": []
+    },
+    {
+      "from": "staged_change",
+      "to": "trade_show_lead",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "apply.outcome_ref",
+      "lookup": []
+    },
+    {
+      "from": "staged_change",
+      "to": "trade_show_lead",
       "direction": "out",
       "cardinality": "one",
       "via": "target",
@@ -7305,6 +8468,94 @@
       "lookup": []
     },
     {
+      "from": "trade_show",
+      "to": "approval_item",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "approval_item.subject.object",
+      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+    },
+    {
+      "from": "trade_show",
+      "to": "design_request",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "design_request_id",
+      "lookup": ["list_design_requests"]
+    },
+    {
+      "from": "trade_show",
+      "to": "staged_change",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "staged_change.apply.outcome_ref",
+      "lookup": ["changes.pending_app_install", "changes.pending_email_enable"]
+    },
+    {
+      "from": "trade_show",
+      "to": "staged_change",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "staged_change.target",
+      "lookup": ["changes.pending_app_install", "changes.pending_email_enable"]
+    },
+    {
+      "from": "trade_show",
+      "to": "workflow_instance",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "workflow_instance.subject",
+      "lookup": []
+    },
+    {
+      "from": "trade_show",
+      "to": "workspace",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "workspace_id",
+      "lookup": []
+    },
+    {
+      "from": "trade_show_lead",
+      "to": "approval_item",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "approval_item.subject.object",
+      "lookup": ["approvals.pending_replies", "approvals.refund_requests"]
+    },
+    {
+      "from": "trade_show_lead",
+      "to": "staged_change",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "staged_change.apply.outcome_ref",
+      "lookup": ["changes.pending_app_install", "changes.pending_email_enable"]
+    },
+    {
+      "from": "trade_show_lead",
+      "to": "staged_change",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "staged_change.target",
+      "lookup": ["changes.pending_app_install", "changes.pending_email_enable"]
+    },
+    {
+      "from": "trade_show_lead",
+      "to": "workflow_instance",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "workflow_instance.subject",
+      "lookup": []
+    },
+    {
+      "from": "trade_show_lead",
+      "to": "workspace",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "workspace_id",
+      "lookup": []
+    },
+    {
       "from": "variant",
       "to": "approval_item",
       "direction": "in",
@@ -7383,6 +8634,38 @@
       "cardinality": "one",
       "via": "subject",
       "lookup": ["shopify_admin.get_article", "shopify_admin.list_articles"]
+    },
+    {
+      "from": "workflow_instance",
+      "to": "b2b_account",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "subject",
+      "lookup": []
+    },
+    {
+      "from": "workflow_instance",
+      "to": "b2b_list",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "subject",
+      "lookup": []
+    },
+    {
+      "from": "workflow_instance",
+      "to": "b2b_quote",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "subject",
+      "lookup": []
+    },
+    {
+      "from": "workflow_instance",
+      "to": "b2b_sample",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "subject",
+      "lookup": []
     },
     {
       "from": "workflow_instance",
@@ -7487,6 +8770,14 @@
       "cardinality": "one",
       "via": "subject",
       "lookup": ["shopify_admin.get_email_template", "shopify_admin.list_email_templates"]
+    },
+    {
+      "from": "workflow_instance",
+      "to": "export_shipment",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "subject",
+      "lookup": []
     },
     {
       "from": "workflow_instance",
@@ -7610,6 +8901,22 @@
     },
     {
       "from": "workflow_instance",
+      "to": "trade_show",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "subject",
+      "lookup": []
+    },
+    {
+      "from": "workflow_instance",
+      "to": "trade_show_lead",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "subject",
+      "lookup": []
+    },
+    {
+      "from": "workflow_instance",
       "to": "variant",
       "direction": "out",
       "cardinality": "one",
@@ -7650,6 +8957,54 @@
     },
     {
       "from": "workspace",
+      "to": "b2b_account",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "b2b_account.workspace_id",
+      "lookup": []
+    },
+    {
+      "from": "workspace",
+      "to": "b2b_contact",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "b2b_contact.workspace_id",
+      "lookup": []
+    },
+    {
+      "from": "workspace",
+      "to": "b2b_list",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "b2b_list.workspace_id",
+      "lookup": []
+    },
+    {
+      "from": "workspace",
+      "to": "b2b_opportunity",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "b2b_opportunity.workspace_id",
+      "lookup": []
+    },
+    {
+      "from": "workspace",
+      "to": "b2b_quote",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "b2b_quote.workspace_id",
+      "lookup": []
+    },
+    {
+      "from": "workspace",
+      "to": "b2b_sample",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "b2b_sample.workspace_id",
+      "lookup": []
+    },
+    {
+      "from": "workspace",
       "to": "connection",
       "direction": "in",
       "cardinality": "many",
@@ -7679,6 +9034,14 @@
       "cardinality": "many",
       "via": "design_request.workspace_id",
       "lookup": ["list_design_requests"]
+    },
+    {
+      "from": "workspace",
+      "to": "export_shipment",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "export_shipment.workspace_id",
+      "lookup": []
     },
     {
       "from": "workspace",
@@ -7830,6 +9193,22 @@
       "direction": "in",
       "cardinality": "many",
       "via": "todo.workspace_id",
+      "lookup": []
+    },
+    {
+      "from": "workspace",
+      "to": "trade_show",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "trade_show.workspace_id",
+      "lookup": []
+    },
+    {
+      "from": "workspace",
+      "to": "trade_show_lead",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "trade_show_lead.workspace_id",
       "lookup": []
     },
     {
@@ -8826,7 +10205,7 @@
       "risk_class": "high",
       "requires_approval": true,
       "route_to": "role_holder",
-      "roles": ["dtc.store", "kol.youtube", "social.meta"],
+      "roles": ["b2b.exhibition", "dtc.store", "kol.youtube", "social.meta"],
       "what": "request design"
     },
     {
@@ -8899,6 +10278,80 @@
       "what": "stage asset"
     },
     {
+      "id": "stage_b2b_account_transfer",
+      "object": "b2b_account",
+      "source": "role",
+      "access": "write",
+      "change_kind": "b2b_account_transfer",
+      "risk_class": "medium",
+      "requires_approval": true,
+      "route_to": "owner",
+      "roles": ["b2b.sales"],
+      "what": "stage b2b account transfer"
+    },
+    {
+      "id": "stage_b2b_list_import",
+      "object": "b2b_list",
+      "source": "role",
+      "access": "write",
+      "change_kind": "b2b_list_import",
+      "risk_class": "medium",
+      "requires_approval": true,
+      "route_to": "role_holder",
+      "roles": ["b2b.exhibition", "b2b.outbound"],
+      "what": "stage b2b list import"
+    },
+    {
+      "id": "stage_b2b_outreach",
+      "object": "trade_show_lead",
+      "source": "role",
+      "access": "write",
+      "change_kind": "b2b_outreach",
+      "risk_class": "low",
+      "requires_approval": true,
+      "route_to": "role_holder",
+      "roles": ["b2b.exhibition", "b2b.outbound"],
+      "tool": "draft_reply",
+      "what": "stage b2b outreach"
+    },
+    {
+      "id": "stage_b2b_quote",
+      "object": "b2b_quote",
+      "source": "role",
+      "access": "write",
+      "change_kind": "b2b_quote",
+      "risk_class": "medium",
+      "requires_approval": true,
+      "route_to": "scope_manager",
+      "roles": ["b2b.sales"],
+      "what": "stage b2b quote"
+    },
+    {
+      "id": "stage_b2b_reply",
+      "object": "b2b_account",
+      "source": "role",
+      "access": "write",
+      "change_kind": "b2b_reply",
+      "risk_class": "low",
+      "requires_approval": true,
+      "route_to": "role_holder",
+      "roles": ["b2b.marketplace", "b2b.sales"],
+      "tool": "draft_reply",
+      "what": "stage b2b reply"
+    },
+    {
+      "id": "stage_b2b_sample",
+      "object": "b2b_sample",
+      "source": "role",
+      "access": "write",
+      "change_kind": "b2b_sample",
+      "risk_class": "low",
+      "requires_approval": true,
+      "route_to": "role_holder",
+      "roles": ["b2b.sales"],
+      "what": "stage b2b sample"
+    },
+    {
       "id": "stage_bid_change",
       "object": "ad_account",
       "source": "role",
@@ -8909,6 +10362,18 @@
       "route_to": "scope_manager",
       "roles": ["ads.google", "ads.meta", "ads.tiktok", "ads.x"],
       "what": "stage bid change"
+    },
+    {
+      "id": "stage_bill_release",
+      "object": "export_shipment",
+      "source": "role",
+      "access": "write",
+      "change_kind": "bill_release",
+      "risk_class": "high",
+      "requires_approval": true,
+      "route_to": "owner",
+      "roles": ["b2b.fulfillment"],
+      "what": "stage bill release"
     },
     {
       "id": "stage_broadcast",
@@ -9067,6 +10532,19 @@
       "what": "stage email template"
     },
     {
+      "id": "stage_export_docs_send",
+      "object": "export_shipment",
+      "source": "role",
+      "access": "write",
+      "change_kind": "export_docs_send",
+      "risk_class": "medium",
+      "requires_approval": true,
+      "route_to": "role_holder",
+      "roles": ["b2b.fulfillment"],
+      "tool": "draft_reply",
+      "what": "stage export docs send"
+    },
+    {
       "id": "stage_external_post",
       "object": "external_post",
       "source": "role",
@@ -9126,6 +10604,30 @@
       "what": "改商品 / 页面的文案、图与 SEO"
     },
     {
+      "id": "stage_marketplace_listing",
+      "object": "product",
+      "source": "role",
+      "access": "write",
+      "change_kind": "marketplace_listing",
+      "risk_class": "medium",
+      "requires_approval": true,
+      "route_to": "role_holder",
+      "roles": ["b2b.marketplace"],
+      "what": "stage marketplace listing"
+    },
+    {
+      "id": "stage_marketplace_spend",
+      "object": "b2b_account",
+      "source": "role",
+      "access": "write",
+      "change_kind": "marketplace_spend",
+      "risk_class": "high",
+      "requires_approval": true,
+      "route_to": "owner",
+      "roles": ["b2b.marketplace"],
+      "what": "stage marketplace spend"
+    },
+    {
       "id": "stage_outreach",
       "object": "creator_contact",
       "source": "role",
@@ -9171,6 +10673,18 @@
       "route_to": "scope_manager",
       "roles": ["dtc.content"],
       "what": "stage page seo edit"
+    },
+    {
+      "id": "stage_payment_instruction",
+      "object": "export_shipment",
+      "source": "role",
+      "access": "write",
+      "change_kind": "payment_instruction",
+      "risk_class": "high",
+      "requires_approval": true,
+      "route_to": "owner",
+      "roles": ["b2b.fulfillment"],
+      "what": "stage payment instruction"
     },
     {
       "id": "stage_post",
@@ -9332,6 +10846,18 @@
       "what": "stage segment edit"
     },
     {
+      "id": "stage_shipment_booking",
+      "object": "export_shipment",
+      "source": "role",
+      "access": "write",
+      "change_kind": "shipment_booking",
+      "risk_class": "medium",
+      "requires_approval": true,
+      "route_to": "role_holder",
+      "roles": ["b2b.fulfillment"],
+      "what": "stage shipment booking"
+    },
+    {
       "id": "stage_split_order",
       "object": "order",
       "source": "role",
@@ -9388,6 +10914,18 @@
       "route_to": "role_holder",
       "roles": ["kol.facebook", "kol.instagram", "kol.tiktok", "kol.x", "kol.youtube"],
       "what": "stage tracked link"
+    },
+    {
+      "id": "stage_trade_show_registration",
+      "object": "trade_show",
+      "source": "role",
+      "access": "write",
+      "change_kind": "trade_show_registration",
+      "risk_class": "high",
+      "requires_approval": true,
+      "route_to": "owner",
+      "roles": ["b2b.exhibition"],
+      "what": "stage trade show registration"
     },
     {
       "id": "stage_unpublish_product",

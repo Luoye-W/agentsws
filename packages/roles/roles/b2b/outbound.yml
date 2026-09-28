@@ -1,0 +1,146 @@
+# docs/84 §2 B2B 岗位的第 2 条职责：**主动开发**（WP171）。骨架见 `b2b/sales.yml` 文件头。
+#
+# 单列一条是因为这摊活**常常交给另一个人或外包**（开发专员 SDR、获客服务商、新人练手），
+# 它的工具和风险也最集中：名单、数据费、发信域名、反垃圾邮件法。
+#
+# 纪律照搬红人开发信（`kol-core/outreach.ts`）：一轮三封（第 0 / 3 / 7 天）、第三封发完真停、
+# 禁承诺词、抑制名单只有一份（`core/suppression.ts`）。另加 B2B 的几道闸（guardrail 的
+# `b2b_outreach` 那一支）：
+#
+# 1. 每封信带退订方式与公司实体地址——**页脚由系统加**，缺了 block（CAN-SPAM / CASL / GDPR）；
+# 2. 每个联系人记"从哪来的"（来源网址 + 日期），缺了 block（GDPR 第 14 条）；
+# 3. SPF / DKIM 没过不发（送达前提）；DMARC 缺了只提示；
+# 4. 发信域名**不强制独立**（docs/84 §11.1 第 4 条）：首次设置强烈建议、由用户选；
+#    用主域名发也能发，卡上一句风险提示（`shared_sending_domain`）；
+# 5. 德国、奥地利**默认不发**并告诉用户原因，勾选确认后才发（§11.1 第 6 条）；
+# 6. 预热：新域名前两周每个发信邮箱每天 20 封，之后最多 50 封（§11.1 第 5 条）——
+#    按**发信邮箱**算，不按工作区。下面的 `max_outreach_per_day: 20` 是新域名那一档。
+#
+# LinkedIn 只出"请你本人去发"的任务，不自动抓、不自动发（§6.1）；Apify 查 LinkedIn 默认关。
+id: b2b.outbound
+version: 1.0.0
+domain: b2b
+name: { zh: 主动开发, en: Outbound }
+description: 定目标客户画像、找公司与联系人、核验与打分、开发信三封序列、回复分类后把有意向的交给业务
+
+scopes:
+  - { domain: b2b_account, ops: [read, stage], range: assigned, max_sensitivity: internal }
+  - { domain: b2b_contact, ops: [read, stage], range: assigned, max_sensitivity: confidential }
+  - { domain: b2b_list, ops: [read, stage], range: assigned, max_sensitivity: internal }
+  # 有意向的回复开一个事项交给业务：商机只读（建商机是业务那一条的事）
+  - { domain: b2b_opportunity, ops: [read], range: assigned, max_sensitivity: internal }
+  - { domain: knowledge, ops: [read], range: workspace, max_sensitivity: internal }
+  - { domain: approval, ops: [read, approve], range: own, max_sensitivity: internal }
+
+connectors:
+  # 发信用的那个邮箱（建议是独立发信域名那一个，由用户选）
+  - { kind: email, required: false, grants: [mail.read, mail.send], ownership: workspace }
+  # 待增加：自带 key 档的数据服务（AIsa / Hunter / Apollo）与海关数据，本机直连不经过我们的云
+  - { kind: b2b_data, required: false, grants: [read], ownership: workspace }
+  - { kind: customs_data, required: false, grants: [read], ownership: workspace }
+
+actions:
+  # 每一轮序列的首封：一批一张卡（一次看完这一批）
+  - id: stage_b2b_outreach
+    target: b2b_contact
+    kind: outbound_message
+    mandate:
+      caps: { max_outreach_per_day: 20, max_outreach_per_day_warmed: 50, warmup_days: 14 }
+      per_change_limits: { max_items: 1 }
+      window: { max_count: 20, per: day }
+    route_to: role_holder
+  # 导入或购买名单（官方档按条扣积分，卡上写预计扣多少）
+  - id: stage_b2b_list_import
+    target: b2b_list
+    kind: staged_change
+    mandate:
+      caps: { max_list_rows: 2000 }
+      window: { max_count: 5, per: day }
+    route_to: scope_manager
+
+automation:
+  stage_b2b_outreach:
+    ceiling: L2
+    initial: L1
+    promotion: { adoption_rate_min: 0.95, window_weeks: 4, min_samples: 30 }
+    demotion_triggers: [guardrail_hit, customer_complaint, manual]
+  stage_b2b_list_import:
+    ceiling: L1
+    initial: L1
+    hard_ceiling: true
+    promotion: { adoption_rate_min: 1, window_weeks: 0, min_samples: 0 }
+    demotion_triggers: [manual]
+
+skills:
+  - { name: brand-voice, tier: open, load: always }
+  # WP170 的正文：开发信写法、找客户与打分（改写自 marketingskills，MIT）
+  - { name: cold-email, tier: open, load: on_demand }
+  - { name: prospecting, tier: open, load: on_demand }
+
+home_blocks:
+  # docs/84 §1.2 面板（少字）：今天待发 · 序列漏斗 · 回复待分 · 名单来源
+  - { id: b2b.outbound.today, placement: focus, component: table, query: b2b.outreach_today, default_order: 10, pinnable: true, adaptive: true }
+  - { id: b2b.outbound.funnel, placement: role_view, component: table, query: b2b.sequence_funnel, default_order: 20, pinnable: true, adaptive: true }
+  - { id: b2b.outbound.replies, placement: queue, component: table, query: b2b.replies_to_triage, default_order: 30, pinnable: true, adaptive: true }
+  - { id: b2b.outbound.lists, placement: role_view, component: table, query: b2b.lists, default_order: 40, pinnable: true, adaptive: false }
+
+grounding:
+  - {
+      name: outbound_intent,
+      intent_terms: [开发信, 找客户, 开发客户, 名单, 目标客户, 画像, cold email, prospecting, outreach, ICP, lead list],
+      cue_terms: [序列, 跟进, 退订, 发信域名, 预热, 打分, 海关数据, sequence, follow-up, unsubscribe],
+      tool: search_policies,
+      prefetch: false,
+    }
+
+notifications:
+  - { event: 'approval.created:stage_b2b_list_import', mode: immediate, recipients: [scope_manager], escalate_after_hours: 24 }
+  - { event: 'guardrail.hit:b2b_outreach_commitment', mode: immediate, recipients: [role_holder, scope_manager] }
+  - { event: 'guardrail.hit:suppression_list', mode: immediate, recipients: [role_holder, scope_manager] }
+
+handover:
+  transfers: [open_work_items, context, home_blocks, queue_lane]
+  fallback: scope_manager
+  revoke_context_on_removal: true
+
+requires: []
+
+quick_prompts:
+  - id: find_buyers
+    label: { zh: "找一批客户", en: "Find buyers" }
+    prompt: "按我们的产品找 30 家北美的分销商，打分分四档，写明每家从哪查到的"
+    kind: start_task
+  - id: draft_sequence
+    label: { zh: "起草开发信", en: "Draft cold emails" }
+    prompt: "给这批名单起草三封开发信（第 0 / 3 / 7 天），不写价格与交期"
+    kind: review
+  - id: triage_replies
+    label: { zh: "分一下回信", en: "Sort the replies" }
+    prompt: "把开发信的回信分类：有兴趣的交给业务，退订的进抑制名单"
+    kind: ask
+
+task_examples:
+  - id: list_to_first_email
+    title: { zh: "从名单到第一封信", en: "From a list to the first email" }
+    description: "手上有一张展会名录，想挑出值得联系的发第一轮开发信。"
+    expected_output: "一份打过分的名单（每家写明来源与日期），外加一批首封草稿；发出去是一张待你批的卡。"
+  - id: reply_sort
+    title: { zh: "回信怎么分", en: "Sorting the replies" }
+    description: "开发信发出去一周，回信里有问价的、有退订的、有自动回复的。"
+    expected_output: "按有兴趣 / 要资料 / 问价 / 晚点再说 / 不感兴趣 / 退订分好；有意向的开成事项交给业务，退订的已进抑制名单。"
+
+persona:
+  zh: |
+    你是谁：B2B 岗位里做主动开发的人，找客户、发开发信。
+    你负责：定目标客户画像、找公司与联系人并打分、写三封开发信、分回信并把有意向的交给业务。
+    你不负责：回询盘与报价→业务；展会邀约→展会；平台 RFQ→B2B 平台运营。
+    怎么做：每个联系人记来源与日期；信里不写价格交期认证独家；德国奥地利默认不发；退订立刻停；LinkedIn 只出让本人去发的任务。
+    口气：像一个懂行的开发专员，短、具体、一封信只问一件事。
+    必须出卡：每一轮的首封（一批一张）、导入或购买名单、查联系方式要花钱的那一次。
+  en: |
+    Who you are: the outbound person in the B2B position — finding buyers and sending cold email.
+    You handle: the ideal-customer profile, finding and scoring companies and contacts, the three-email sequence, sorting replies and handing interested buyers to Sales.
+    Not yours: replying to inquiries and quotes → Sales; trade-show invitations → Trade Shows; marketplace RFQs → B2B Marketplaces.
+    How you work: record the source and date for every contact. No prices, lead times, certifications or exclusivity in the email. Germany and Austria are off by default. Stop at the first unsubscribe. LinkedIn only as a task for a human to send.
+    Tone: like a sharp business-development rep — short, specific, one question per email.
+    Always ask: the first email of every batch, importing or buying a list, any paid contact lookup.

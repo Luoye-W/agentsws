@@ -97,6 +97,13 @@ const SKILL_NAMES = new Set([
   // WP154「内容与搜索」
   'seo-judgment',
   'workspace-basics',
+  // WP170 / WP171（docs/84）：B2B 六个技能
+  'b2b-inquiry',
+  'cold-email',
+  'export-docs',
+  'prospecting',
+  'quotation',
+  'trade-show',
 ])
 
 export function skillLabel(name: string, t: (key: string) => string): string {

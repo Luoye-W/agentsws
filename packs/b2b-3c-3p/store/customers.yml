@@ -1,0 +1,12 @@
+- id: acc_volthaus
+  name: VoltHaus GmbH
+  email: buying@volthaus.example
+  market: de
+- id: acc_harbor
+  name: Harbor Retail Co.
+  email: sourcing@harbor-retail.example
+  market: us
+- id: acc_dubai
+  name: Dubai Power LLC
+  email: ap@dubai-power.example
+  market: ae

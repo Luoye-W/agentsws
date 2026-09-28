@@ -35,6 +35,8 @@ const WEB_OPS = 'web-ops'
 const CUSTOMER_CARE = 'customer-care'
 const SOCIAL_MEDIA = 'social-media'
 const KOL_MARKETING = 'kol-marketing'
+/** WP171（docs/84 §11）：B2B 岗位（契约 `B2B_POSITION_ID`）。 */
+const B2B = 'b2b'
 
 function has(positions: OnboardingPositionView[], id: string): boolean {
   return positions.some((p) => p.id === id)
@@ -94,14 +96,30 @@ export function presetPick({ run, positions }: PresetInput): RolePick {
  * 于是红人营销从来不会被预勾，而来内测的朋友一大半是冲红人来的。所以直接问，
  * 按答案勾岗位。可多选；默认就是网址预勾出来的那个样子（勾了客服就是「客服」）。
  */
-export type Purpose = 'kol' | 'care'
+export type Purpose = 'kol' | 'care' | 'b2b'
 
 export const PURPOSE_POSITION: Readonly<Record<Purpose, string>> = {
   kol: KOL_MARKETING,
   care: CUSTOMER_CARE,
+  // WP171：做外贸的工厂 / 贸易公司是冲 B2B 来的——网址同样看不出来，所以也直接问
+  b2b: B2B,
 }
 
-export const PURPOSES: readonly Purpose[] = ['kol', 'care']
+export const PURPOSES: readonly Purpose[] = ['kol', 'care', 'b2b']
+
+/**
+ * WP171（Fable 终审）：「都要」只按齐**红人营销与客服**。B2B 只有用户明确按了那一项才勾——
+ * 做独立站的人按「都要」不该多出一个 B2B 岗位。
+ */
+export const BOTH_PURPOSES: readonly Purpose[] = ['kol', 'care']
+
+/** 按下 / 松开「都要」：只动红人与客服那两项，B2B 选没选原样留着。 */
+export function toggleBoth(value: readonly Purpose[], available: readonly Purpose[]): Purpose[] {
+  const both = BOTH_PURPOSES.filter((p) => available.includes(p))
+  const on = both.length > 0 && both.every((p) => value.includes(p))
+  const rest = value.filter((p) => !both.includes(p))
+  return on ? rest : PURPOSES.filter((p) => rest.includes(p) || both.includes(p))
+}
 
 /** 这台机器上问得出哪几个（岗位没装就不问那一项）。 */
 export function availablePurposes(positions: OnboardingPositionView[]): Purpose[] {

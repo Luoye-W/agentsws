@@ -97,6 +97,8 @@ export const LAYOUT_BY_KIND: Record<Exclude<DeckKind, 'staged_change'>, DeckLayo
   seo_topic: 'choice',
   system_alert: 'aftermath',
   digest: 'aftermath',
+  // WP171（docs/84 §11.3）：改收款账户的红卡——信里的原话 + 为什么可疑，人去打电话核实
+  b2b_fraud_alert: 'handoff',
 }
 
 /**
@@ -186,6 +188,26 @@ export const LAYOUT_BY_CHANGE: Record<ChangeKind, DeckLayout> = {
 
   // ── ⑨ 转交 / 认领：原话 + 分类依据 + 认领 ─────────────────────────
   mention_triage: 'handoff',
+
+  /*
+   * ── WP171（docs/84）：B2B 那十三条 ──────────────────────────────────
+   * 回信与开发信是正文；报价、缴费、放单、付款问的是"这笔钱 / 这批货给不给"；
+   * 寄样、单证、订舱、导入名单问的是"这一步做不做"（前后两格 + 依据）；
+   * 客户转交是一摞客户换人，同转交认领。
+   */
+  b2b_reply: 'outbound',
+  b2b_outreach: 'outbound',
+  b2b_quote: 'money',
+  trade_show_registration: 'money',
+  bill_release: 'money',
+  payment_instruction: 'money',
+  marketplace_spend: 'money',
+  b2b_sample: 'change',
+  b2b_list_import: 'change',
+  export_docs_send: 'change',
+  shipment_booking: 'change',
+  marketplace_listing: 'publish',
+  b2b_account_transfer: 'handoff',
 }
 
 /** 兜底：表里没有的（第十二种 kind 出现那天）走改动卡，它的双格对任何 diff 都成立。 */

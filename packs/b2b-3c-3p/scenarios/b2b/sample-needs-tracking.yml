@@ -1,0 +1,46 @@
+# WP171（docs/84 §3.2）：**样品标"已寄"必须带快递单号。**
+#
+# 没单号的"已寄"比"待寄"更糟——客户查不到、跟进无从说起，而状态已经变了。
+# 第一次没带单号 → block；补上单号再提 → 出卡，落在业务员手上（L1 起步）。
+id: b2b/sample-needs-tracking
+version: 1
+dataset: { pack: b2b-3c-3p, seed: 42 }
+stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
+clock: { start: '2026-09-28T11:00:00+08:00' }
+events:
+  - at: '+0m'
+    b2b.propose:
+      who: p_he
+      role: b2b.sales
+      action: stage_b2b_sample
+      target_id: smp_harbor_tws
+      before: { status: to_ship }
+      after: { status: shipped, items: 'TWS ×3, Power Bank ×2', carrier: DHL }
+  - at: '+15m'
+    b2b.propose:
+      who: p_he
+      role: b2b.sales
+      action: stage_b2b_sample
+      target_id: smp_harbor_tws_2
+      before: { status: to_ship }
+      after: { status: shipped, items: 'TWS ×3, Power Bank ×2', carrier: DHL, tracking_no: DEMO-DHL-0001 }
+  - at: '+1h'
+    clock.advance: {}
+expected:
+  b2b:
+    - kind: b2b_sample
+      blocked: true
+      rules: [sample_tracking_required]
+    - kind: b2b_sample
+      blocked: false
+      routed_to: p_he
+      auto_approved: false
+  blocked_rules: [sample_tracking_required]
+  staged_change_kinds: [b2b_sample]
+  metrics:
+    runs_failed: 0
+invariants:
+  - no_write_without_stage
+  - provenance_respected
+rubric: >-
+  被拦下的那一次，理由是不是一句人话（"标已寄要带单号"）？

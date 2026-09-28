@@ -71,11 +71,15 @@ export function parseArgs(argv) {
   return opts
 }
 
-/** daily 那一趟只看 runtime-dep 里的 dsh；weekly 全量。 */
+/**
+ * daily 那一趟只看 runtime-dep 里的 dsh；weekly 全量。
+ * WP171：私有来源（`private_source`，比如 Luoye 自己的 BtoBAgents）不在公网，周报里不出现。
+ */
 export function selectUpstreams(items, opts) {
-  if (opts.only) return items.filter((it) => opts.only.includes(it.id))
-  if (opts.scope === 'daily') return items.filter((it) => it.id === 'dsh')
-  return items
+  const publicOnes = items.filter((it) => !it.private_source)
+  if (opts.only) return publicOnes.filter((it) => opts.only.includes(it.id))
+  if (opts.scope === 'daily') return publicOnes.filter((it) => it.id === 'dsh')
+  return publicOnes
 }
 
 // ── 取数（全部容错）────────────────────────────────────────────────────────

@@ -14,6 +14,11 @@ import {
   roasBothViews,
   stopLossVerdict,
 } from '@agentsws/ads-core'
+/*
+ * WP171（docs/84）：B2B 那两件事的判断——授权谁批（`b2b-core`）、承诺与改收款账户（`core`）。
+ * 世界里不另写一份，否则这几条题验的就是场景自己写的答案。
+ */
+import { quoteApprover, quoteBreaches } from '@agentsws/b2b-core'
 // WP121b（70 §1–§3）：向导第 ② 步那一轮分析走这一份真解析器（夹具 replay，不联网）
 import type { PageFetch } from '@agentsws/brand-intake'
 import { analyzeBrand, applyEdits, mergeProfile } from '@agentsws/brand-intake'
@@ -66,6 +71,10 @@ import {
   // WP75：57 §6 的额度默认值与"平台 id → 职责 id / 中文名"。**全仓唯一**那张平台清单
   ADS_DEFAULT_CAPS,
   adsPlatformSpec,
+  // WP171：B2B 五条职责的唯一一份清单、红卡的审批种类、报价授权默认值
+  B2B_FRAUD_ALERT_KIND,
+  B2B_ROLE_IDS,
+  DEFAULT_B2B_QUOTE_MANDATE,
   DEFAULT_BRAND_INTAKE_CAP_CREDITS,
   DEFAULT_STOREFRONT_PLATFORM,
   KOL_FOLDER,
@@ -80,7 +89,9 @@ import {
 } from '@agentsws/contracts'
 import {
   companyKey,
+  detectPaymentAccountChange,
   extractFigures,
+  scanB2bCommitments,
   sha256,
   suppressedRecipients,
   uncitedFigures,
@@ -138,6 +149,7 @@ import {
 } from '@agentsws/pr-core'
 import type { EffectiveConfig, RoleStore } from '@agentsws/roles'
 import {
+  changeKindOf,
   createRoleStore,
   loadBundledRole,
   parseRole,
@@ -606,6 +618,11 @@ export interface World {
    *   结论原样递给 guardrail——两处是同一份结论，不是各判一次。
    */
   pr: PrOps
+  /**
+   * WP171 / docs/84：B2B 那两件事。判断全走真机制：guardrail 判承诺 / 授权 / 页脚 / 德奥 /
+   * 账户；报价谁批由 `b2b-core` 的 `quoteApprover` 算；改收款账户由 `core` 的识别判。
+   */
+  b2b: B2bOps
   /**
    * WP47 / 44：品牌（范围组）与产品线的组织动作。
    *
@@ -1225,6 +1242,54 @@ export interface PrOps {
   }): Promise<PrExternalPostResult>
 }
 
+/* ── WP171（docs/84）：B2B 那两件事 ─────────────────────────────────── */
+
+export interface B2bOps {
+  /**
+   * B2B 某条职责提一个写动作（动作 id 取自这条职责的 yml，额度与等级取这个人这条分配的生效配置）。
+   *
+   * 报价（`stage_b2b_quote`）：授权四个数超了 → 卡转上级、没有上级转老板；授权内落在业务员
+   * 自己手上。其余动作按 yml 的 `route_to`。
+   */
+  propose(input: {
+    who: PersonId
+    role: RoleId
+    action: string
+    target_id?: string
+    before?: Record<string, unknown>
+    after: Record<string, unknown>
+    level?: 'L1' | 'L2' | 'L3'
+    title?: string
+  }): Promise<B2bProposeResult>
+  /** 收一封 B2B 的信。要求"改收款账户"的出红卡、**不采纳**信里的账户。 */
+  inbound(input: {
+    who: PersonId
+    from: string
+    subject: string
+    body: string
+  }): Promise<B2bInboundResult>
+}
+
+export interface B2bProposeResult {
+  kind: string
+  staged: boolean
+  /** 拦下 / 转人审的规则名（与 guardrail 的 hit 名逐字相同）。 */
+  rules: string[]
+  approver?: 'role_holder' | 'scope_manager' | 'owner'
+  routed_to?: PersonId
+  change_id?: string
+  approval_item_id?: string
+  reason?: string
+}
+
+export interface B2bInboundResult {
+  red_card: boolean
+  phrases: string[]
+  /** 碰到的承诺类别（询盘里问了价格 / 交期 …，回信会转人审）。 */
+  commitments: string[]
+  approval_item_id?: string
+}
+
 /** WP78：一条提及判完之后的结果。 */
 export interface PrMentionResult {
   triage: string
@@ -1801,6 +1866,9 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
     loadBundledRole('pr.reddit'),
     loadBundledRole('pr.forums'),
     loadBundledRole('pr.monitoring'),
+    // WP171（docs/84 §11.5）：B2B 岗位的五条职责。`b2b-3c-3p` 那个 pack 里真挂着前四条；
+    // 装进库里的理由同上（向导里「B2B」那个岗位显示五条而不是一条）。
+    ...B2B_ROLE_IDS.map((id) => loadBundledRole(id)),
   ]
   const packRoles = pack.roles.map((r) => parseRole(r.yaml, `${pack.dir}/${r.path}`))
   const overridden = new Set(packRoles.map((r) => r.id))
@@ -2809,6 +2877,10 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
     // WP78：同上（60 公共关系那三件事）
     get pr() {
       return pr
+    },
+    // WP171：同上（docs/84 B2B 那两件事）
+    get b2b() {
+      return b2b
     },
     // WP75：同上（57 §1 投放、04 §5 额度纪律）
     get ads() {
@@ -7316,6 +7388,262 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
         staged: true,
         change_id: outcome.change.id,
         approval_item_id: outcome.approval.id,
+      }
+    },
+  }
+
+  /* ── WP171（docs/84）：B2B ────────────────────────────────────────────
+   *
+   * 两件事都走真机制，一条都不是场景自己判的：
+   *
+   * - **写动作**：额度与等级取这个人这条 B2B 分配的生效配置；承诺 / 页脚 / 德奥 / 账户
+   *   由 guardrail 判；报价谁批由 `b2b-core` 的 `quoteApprover` 算（四个数取 yml 的
+   *   `mandate.caps`，首次设置改过就是改过的那一份）。
+   * - **来信**：改收款账户由 `core` 的 `detectPaymentAccountChange` 判，命中出一张红卡
+   *   （`b2b_fraud_alert`），信里的账户**一个字都不采纳**——卡上没有那串号码。
+   */
+  const b2bHasScopeManager = pack.people.some((p) => p.scope_manager === true)
+  const b2bRoleOf = (role: string): RoleId => {
+    if (!B2B_ROLE_IDS.includes(role))
+      throw new SimulationError('invalid_input', `没有这条 B2B 职责：${role}`)
+    return role
+  }
+  const capNum = (caps: Record<string, unknown>, key: string, fallback: number): number => {
+    const v = caps[key]
+    return typeof v === 'number' ? v : fallback
+  }
+
+  const b2b: B2bOps = {
+    async propose({ who, role, action, target_id, before, after, level, title }) {
+      const role_id = b2bRoleOf(role)
+      const asg = assignmentFor(who, role_id)
+      const config = roles.effectiveConfig(asg.id)
+      const spec = config.actions.find((a) => a.id === action)
+      const kind = changeKindOf(action)
+      if (spec === undefined || kind === undefined)
+        throw new SimulationError('invalid_input', `${role_id} 没有这个动作：${action}`)
+      const run = await beginShopRun(asg)
+      const run_id = run.run_id
+      const target: ObjectRef = {
+        type: spec.target,
+        id:
+          target_id ??
+          `${spec.target}_${sha256(`${action}:${JSON.stringify(after)}`).slice(0, 10)}`,
+      }
+      const { mandate, level: configured } = actionOf(asg, action)
+      const level_requested = level ?? configured
+
+      // 谁批：报价按授权四个数算；别的动作照 yml 的 route_to（`{ role }` 那种按本人）
+      let approver: 'role_holder' | 'scope_manager' | 'owner'
+      let breaches: string[] = []
+      if (kind === 'b2b_quote') {
+        const caps = mandate.caps as Record<string, unknown>
+        breaches = quoteBreaches(after as never, {
+          max_amount_usd: capNum(caps, 'max_amount_usd', DEFAULT_B2B_QUOTE_MANDATE.max_amount_usd),
+          min_margin_pct: capNum(caps, 'min_margin_pct', DEFAULT_B2B_QUOTE_MANDATE.min_margin_pct),
+          max_discount_pct: capNum(
+            caps,
+            'max_discount_pct',
+            DEFAULT_B2B_QUOTE_MANDATE.max_discount_pct,
+          ),
+          max_payment_terms_days: capNum(
+            caps,
+            'max_payment_terms_days',
+            DEFAULT_B2B_QUOTE_MANDATE.max_payment_terms_days,
+          ),
+        })
+        approver = quoteApprover(breaches, b2bHasScopeManager)
+      } else {
+        approver = typeof spec.route_to === 'string' ? spec.route_to : 'role_holder'
+      }
+      const routed_to: PersonId =
+        approver === 'role_holder' ? who : approver === 'scope_manager' ? scopeManager : owner
+      const breachWords = breaches
+        .map((b) => b.replace(/^quote_|_(over|under)_mandate$/g, ''))
+        .join('、')
+      const cardTitle =
+        title ??
+        (kind === 'b2b_quote'
+          ? `报价 V${String(after.version ?? '?')}：${String(after.amount_usd ?? '?')} 美元`
+          : `${roles.roles.get(role_id)?.name.zh ?? role_id}：${action}`)
+      const cardSummary =
+        kind === 'b2b_quote'
+          ? breaches.length === 0
+            ? '在授权内，业务员自己批（报价永远出卡）'
+            : `超了授权（${breachWords}），转${approver === 'owner' ? '老板' : '上级'}批`
+          : String(after.subject ?? after.body ?? cardTitle).slice(0, 160)
+
+      const outcome = await txn.ledger.stage({
+        workspace_id,
+        role_id: asg.role_id,
+        assignment_id: asg.id,
+        run_id,
+        change_set_id: `cs_b2b_${run_id}`,
+        kind,
+        target,
+        before: before ?? {},
+        after,
+        notes: [cardSummary],
+        created_by: { kind: 'agent', id: `agent_${asg.role_id}` },
+        mandate,
+        level: level_requested,
+        provenance: run.finish({ seen: [target], outputs: [], summary: cardTitle }),
+        approval: {
+          title: cardTitle,
+          summary: cardSummary,
+          recipients: [{ person: routed_to, via: approver }],
+          proposer: { kind: 'agent', id: `agent_${asg.role_id}`, assignment_id: asg.id },
+          rule: approver,
+          // 业务员自己批自己那张（授权内的报价）：不是"一人既提又批"的那种越权——提的是 Agent
+          separation_of_duties: approver !== 'role_holder',
+          source_events: [],
+        },
+      })
+      if (!outcome.ok) {
+        const rules = (outcome.guardrail?.hits ?? [])
+          .filter((h) => h.severity === 'block')
+          .map((h) => h.rule)
+        const rule = rules[0] ?? 'guardrail'
+        blocked.push({ rule, at: now(clock), run_id, message: outcome.message })
+        appendEnvelope({
+          schema_version: 1,
+          workspace_id,
+          type: 'simulation.b2b_blocked',
+          actor: { kind: 'agent', id: asg.id },
+          correlation: { trace_id: traceId(), run_id },
+          payload: { kind, role: role_id, action, rules },
+        })
+        return { kind, staged: false, rules, reason: outcome.message }
+      }
+      await flushCards()
+      const rules = (outcome.change.guardrail?.hits ?? []).map((h) => h.rule)
+      appendEnvelope({
+        schema_version: 1,
+        workspace_id,
+        type: 'simulation.b2b_staged',
+        actor: { kind: 'agent', id: asg.id },
+        correlation: { trace_id: traceId(), run_id },
+        payload: {
+          kind,
+          role: role_id,
+          action,
+          rules,
+          approver,
+          routed_to,
+          level_requested,
+          level_at_creation: outcome.approval.automation.level_at_creation,
+          auto_approved: outcome.approval.automation.auto_approved,
+          // 报价卡上有没有写清"谁批、为什么"（36 §2：人按下那一下之前要看得见）
+          stated_on_card:
+            kind !== 'b2b_quote' ||
+            (breaches.length === 0
+              ? outcome.approval.summary.includes('授权内')
+              : outcome.approval.summary.includes('超了授权')),
+        },
+      })
+      return {
+        kind,
+        staged: true,
+        rules,
+        approver,
+        routed_to,
+        change_id: outcome.change.id,
+        approval_item_id: outcome.approval.id,
+      }
+    },
+
+    async inbound({ who, from, subject, body }) {
+      const role_id = b2bRoleOf('b2b.sales')
+      const asg = assignmentFor(who, role_id)
+      const run = await beginShopRun(asg)
+      const run_id = run.run_id
+      const thread_id = `b2b_thr_${sha256(`${from}:${subject}`).slice(0, 12)}`
+      const target: ObjectRef = { type: 'thread', id: thread_id }
+      const signal = detectPaymentAccountChange(`${subject}\n${body}`)
+      const commitments = scanB2bCommitments(`${subject}\n${body}`).map((h) => h.category)
+      run.finish({ seen: [target], outputs: [], summary: `收一封来自 ${from} 的信` })
+      if (!signal.hit) {
+        appendEnvelope({
+          schema_version: 1,
+          workspace_id,
+          type: 'simulation.b2b_inbound_triaged',
+          actor: { kind: 'agent', id: asg.id },
+          correlation: { trace_id: traceId(), run_id },
+          payload: {
+            red_card: false,
+            commitments,
+            has_account_details: signal.has_account_details,
+          },
+        })
+        return { red_card: false, phrases: [], commitments }
+      }
+      /*
+       * 红卡：落到老板手上（钱的事），业务员同时收到。卡上写"哪几句可疑、为什么不能照做、
+       * 去打电话核实"——**不写那串账号**（它就是诈骗的一部分，照抄出来等于替它递话）。
+       */
+      const item = await txn.approvals.create({
+        workspace_id,
+        schema_version: 1,
+        kind: B2B_FRAUD_ALERT_KIND,
+        role_id: asg.role_id,
+        subject: { object: target },
+        dedupe_key: `${workspace_id}:b2b_fraud:${thread_id}`,
+        title: `疑似诈骗：${from} 要求改收款账户`,
+        summary: `信里说「${signal.phrases.join('」「')}」。收款账户只认事实卡上那一个，请打电话向对方核实，不要照信里的改。`,
+        payload: {
+          from,
+          subject,
+          phrases: signal.phrases,
+          has_account_details: signal.has_account_details,
+          adopted: false,
+          thread_id,
+        },
+        evidence: {
+          source_events: [],
+          run_id,
+          provenance: { seen: [target] },
+          precheck: { fencing: 'ok' },
+        },
+        proposer: { kind: 'agent', id: `agent_${asg.role_id}`, assignment_id: asg.id },
+        automation: {
+          level_at_creation: 'L1',
+          auto_approved: false,
+          mandate_check: { within: false, caps_hit: ['payment_account_change'] },
+          sampling: { selected: false },
+        },
+        routing: {
+          recipients: [
+            { person: owner, via: 'owner' },
+            ...(who === owner ? [] : [{ person: who, via: 'explicit' as const }]),
+          ],
+          explicit: owner,
+          rule: 'owner',
+          escalation: { after_hours: 2, business_hours: false, chain: ['owner'], escalated_at: [] },
+          separation_of_duties: false,
+        },
+        priority: 'immediate',
+      })
+      await flushCards()
+      appendEnvelope({
+        schema_version: 1,
+        workspace_id,
+        type: 'simulation.b2b_fraud_alert',
+        actor: { kind: 'agent', id: asg.id },
+        correlation: { trace_id: traceId(), run_id },
+        payload: {
+          red_card: true,
+          phrases: signal.phrases,
+          has_account_details: signal.has_account_details,
+          // 信里的账户一个字都没进任何一张改动卡
+          adopted: false,
+          routed_to: owner,
+        },
+      })
+      return {
+        red_card: true,
+        phrases: signal.phrases,
+        commitments,
+        ...(item.state === 'blocked' ? {} : { approval_item_id: item.id }),
       }
     },
   }

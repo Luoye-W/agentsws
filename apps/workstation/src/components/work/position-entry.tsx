@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { DutyFold } from '@/components/ui/duty-fold'
 import { Hint } from '@/components/ui/hint'
+import { PlannedTag } from '@/components/ui/planned-tag'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Textarea } from '@/components/ui/textarea'
 import {
@@ -217,7 +218,10 @@ export function PositionEntry({ id }: { id: string }): React.ReactNode {
                 className="flex items-center justify-between gap-2 rounded-md border px-2 py-1.5 text-sm"
                 data-role={duty.id}
               >
-                <span className="truncate">{duty.name}</span>
+                <span className="flex min-w-0 items-center gap-1">
+                  <span className="truncate">{duty.name}</span>
+                  {role?.planned === true ? <PlannedTag testId="position-role-planned" /> : null}
+                </span>
                 <Button
                   size="xs"
                   variant="ghost"

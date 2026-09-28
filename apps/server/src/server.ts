@@ -128,6 +128,7 @@ import { adsDeckData, createAdsStore, seedDemoAds } from './ads.js'
 import { createAdsService } from './ads-service.js'
 import { compositeApprovals } from './approvals-composite.js'
 import { createAskPort } from './ask.js'
+import { demoB2bDeckData } from './b2b.js'
 import { MemoryBackend } from './backend.js'
 import { type BackupRunResult, backupDirOf, backupKeepOf, runBackup } from './backup.js'
 import {
@@ -525,6 +526,13 @@ export const BUNDLED_ROLES = [
   'pr.reddit',
   'pr.forums',
   'pr.monitoring',
+  // WP171（docs/84 §11.5）：B2B 岗位的五条职责（第五条平台运营是第二批，YAML 先建、默认不勾）。
+  // 与红人 / 社媒同一条理由：种岗位那一步会把解析不到的职责筛掉，少一条向导里就少一个勾。
+  'b2b.sales',
+  'b2b.outbound',
+  'b2b.exhibition',
+  'b2b.fulfillment',
+  'b2b.marketplace',
 ] as const
 
 /**
@@ -1841,6 +1849,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       // **我们自己写的**，与连没连 Google Alerts 无关。外面那一侧（提及流 /
       // 负面预警）走 `google_alerts` 那个源，没连就照 36 §3 明说。
       pr: () => prDeckData(pr),
+      // WP171（docs/84）：B2B 那十九块。这一单只有骨架（B2B 库在后面几单落盘）：
+      // demo 里放一份演示投影，真工作区里不给 = 空态（"还没有"，不是"去连接"）
+      ...(isBootstrap && mount !== undefined ? { b2b: () => demoB2bDeckData(clock.now()) } : {}),
       // 红人库与社媒库都不是"连接"，所以它们不在那两份写死的数据源表里（见 `withOwnSources`）
       sources: () => withOwnSources(baseWorkData.sources()),
     }

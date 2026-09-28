@@ -243,7 +243,7 @@ export const MAX_TASK_EXAMPLES = 6
 export interface RoleDefinition {
   id: RoleId
   version: string
-  domain: 'dtc' | 'amz' | 'social' | 'kol' | 'ads' | 'design' | 'dev' | 'common' | 'pr'
+  domain: 'dtc' | 'amz' | 'social' | 'kol' | 'ads' | 'design' | 'dev' | 'common' | 'pr' | 'b2b'
   name: { zh: string; en: string }
   description: string
   scopes: PermissionScope[]
@@ -302,6 +302,13 @@ export interface RoleDefinition {
    * 后者要出「这条走浏览器」。
    */
   mode?: 'api' | 'browser'
+  /**
+   * WP171（docs/84 §11.5）：这条职责第一版做不做。不写 = `active`。
+   *
+   * `planned` = YAML 先建好（scopes / 动作 / 面板都写了），但第一版不做：岗位模板里
+   * `default: false`，向导里不默认勾。第一个是 `b2b.marketplace`（B2B 平台运营，第二批）。
+   */
+  status?: 'active' | 'planned'
   /**
    * WP120（69）：**这条职责的角色定位**——系统提示里的「你是谁」。
    *
@@ -448,6 +455,11 @@ export interface PositionInstance {
     quick_prompts?: RoleQuickPrompt[]
     /** WP84：这条职责的示例任务（指导抽屉顶部的选择题）。同样是原样抄来的。 */
     task_examples?: RoleTaskExample[]
+    /**
+     * WP171（Fable 终审）：这条职责是第二批（职责定义 `status: planned`）。
+     * 界面上标一个短标签「第二批」，说明进问号。只在为真时出现。
+     */
+    planned?: true
   }[]
   /** 这个岗位下还没关的事项数（本人可见的） */
   open_matters: number

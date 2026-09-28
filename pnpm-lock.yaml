@@ -622,6 +622,15 @@ importers:
         specifier: ^7.6.13
         version: 7.6.13
 
+  packages/b2b-core:
+    dependencies:
+      '@agentsws/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@agentsws/core':
+        specifier: workspace:*
+        version: link:../core
+
   packages/blob:
     dependencies:
       '@agentsws/contracts':
@@ -1325,6 +1334,9 @@ importers:
       '@agentsws/ads-core':
         specifier: workspace:*
         version: link:../ads-core
+      '@agentsws/b2b-core':
+        specifier: workspace:*
+        version: link:../b2b-core
       '@agentsws/brand-intake':
         specifier: workspace:*
         version: link:../brand-intake

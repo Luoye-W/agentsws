@@ -17,6 +17,7 @@ import {
   SOCIAL_CHANNELS,
   socialChannelOfRole,
 } from '@agentsws/contracts'
+import { B2B_QUERIES } from './b2b-queries.js'
 import { DeckError } from './errors.js'
 import { ADS_SOURCE_BY_PLATFORM, SOCIAL_SOURCE_BY_CHANNEL } from './sources.js'
 import type {
@@ -2082,6 +2083,8 @@ const QUERY_LIST: QueryDef[] = [
   ...ADS_QUERIES,
   // WP78（60 §3）：公关五块
   ...PR_QUERIES,
+  // WP171（docs/84）：B2B 五条职责十九块
+  ...B2B_QUERIES,
 ]
 
 const EMPTY_SCALAR: ScalarResult = { value: 0, previous: 0, spark: [0, 0, 0, 0, 0, 0, 0] }

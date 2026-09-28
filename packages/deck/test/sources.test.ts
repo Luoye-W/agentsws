@@ -40,6 +40,8 @@ describe('dataSourcesFromConnections', () => {
       'design',
       'site',
       'pr',
+      // WP171：B2B 库同理——询盘、报价、出运单是我们自己的账
+      'b2b',
     ])
     // 没连上就别给「查看完整报告」外链
     expect(rows.find((r) => r.id === 'shop')?.report_url).toBeUndefined()

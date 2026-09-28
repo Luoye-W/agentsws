@@ -1,0 +1,419 @@
+/**
+ * docs/84 B2B 岗位（WP171）：五条职责、九类对象与报价授权。
+ *
+ * **§11 覆盖前文**（Luoye 09-28）：岗位名「B2B」（id `b2b`），五条职责——
+ * 业务、主动开发、展会、跟单与单证、B2B 平台运营（第二批）。
+ *
+ * 五条纪律写在类型里，不写在文档里：
+ *
+ * 1. **报价永远出卡**。{@link B2bQuoteMandate} 不决定"要不要出卡"，只决定**谁批**：
+ *    授权内业务员自己批，超出就转上级（`scope_manager`），没有上级再转老板（`owner`）。
+ *    四个数（单笔 1 万美元 / 毛利 20% / 折扣 5% / 账期 30 天）是
+ *    {@link DEFAULT_B2B_QUOTE_MANDATE}，首次设置可改。
+ * 2. **报价版本不可改**。{@link B2bQuoteVersion} 一旦生成就是只读；改价 = 新建一个版本
+ *    （照 BtoBAgents 的 quote / quoteVersion 两张表）。
+ * 3. **每个联系人都记"从哪来的"**。{@link B2bContact.source} 必填（网址 + 日期），
+ *    GDPR 第 14 条：对方问"你怎么有我邮箱"时必须答得上。
+ * 4. **联系方式不落明文**。`email_ref` / `phone_ref` 是加密库里的 key 名，
+ *    与 `CreatorContact.value_ref`、`MediaContact.email_ref` 逐字同一条。
+ * 5. **收款账户只认事实卡**。{@link ExportShipment.payment} 里没有"账户号"这一格；
+ *    邮件里要求"改收款账户"的一律出红卡、不采纳（§11.3）。
+ */
+
+import type { Iso8601, PersonId, WorkspaceId } from './common.js'
+
+/* ── 五条职责（docs/84 §11.5）──────────────────────────────────────────── */
+
+/**
+ * 这条职责第一版做不做。
+ *
+ * - `active`：第一版就做，向导里按岗位模板的 `default` 勾；
+ * - `planned`：YAML 先建、**向导里不默认勾**（`b2b.marketplace`，第二批）。
+ */
+export type B2bRoleStatus = 'active' | 'planned'
+
+export interface B2bRoleSpec {
+  /** 职责 id（`b2b.sales` …）。 */
+  role_id: string
+  zh: string
+  en: string
+  status: B2bRoleStatus
+  /** 岗位模板里默认勾不勾（`planned` 的一律不勾）。 */
+  default: boolean
+}
+
+/**
+ * docs/84 §11.5 那张表的机器可读版。**只有这一份**：岗位模板、`SEED_POSITIONS`、
+ * 面板分块与模拟世界都读它，谁都不许再抄一张五条职责的清单。
+ */
+export const B2B_ROLES: readonly B2bRoleSpec[] = [
+  { role_id: 'b2b.sales', zh: '业务', en: 'Sales', status: 'active', default: true },
+  { role_id: 'b2b.outbound', zh: '主动开发', en: 'Outbound', status: 'active', default: true },
+  { role_id: 'b2b.exhibition', zh: '展会', en: 'Trade Shows', status: 'active', default: true },
+  {
+    role_id: 'b2b.fulfillment',
+    zh: '跟单与单证',
+    en: 'Order Follow-up & Export Docs',
+    status: 'active',
+    default: true,
+  },
+  {
+    role_id: 'b2b.marketplace',
+    zh: 'B2B 平台运营',
+    en: 'B2B Marketplaces',
+    status: 'planned',
+    default: false,
+  },
+]
+
+/** 五条职责的 id，按出场顺序（`BUNDLED_ROLES` 与岗位模板读它）。 */
+export const B2B_ROLE_IDS: readonly string[] = B2B_ROLES.map((r) => r.role_id)
+
+/** 岗位模板 id（`packages/roles/positions/b2b.yml`）。 */
+export const B2B_POSITION_ID = 'b2b'
+
+/** 职责 id → 规格；不是 B2B 职责回 `undefined`（不编造一条）。 */
+export function b2bRoleSpec(role_id: string): B2bRoleSpec | undefined {
+  return B2B_ROLES.find((r) => r.role_id === role_id)
+}
+
+/* ── 报价授权（docs/84 §3.2 / §11.1 第 3 条）────────────────────────────── */
+
+/**
+ * 报价授权四个数。**不决定要不要出卡**（报价永远出卡），决定这张卡谁来批。
+ *
+ * BtoBAgents 里两处写的不一样（`domain/policy.ts` 1 万 / 32% / 8% / 30 天，
+ * `runtime-v2/runtime.ts` 10 万 / 20% / 5% / 30 天），这里统一成一套。
+ */
+export interface B2bQuoteMandate {
+  /** 单笔报价金额上限（美元）。超了转上级。 */
+  max_amount_usd: number
+  /** 最低毛利（百分数，20 = 20%）。低于它转上级。 */
+  min_margin_pct: number
+  /** 最大折扣（百分数）。超了转上级。 */
+  max_discount_pct: number
+  /** 最长账期（天）。超了转上级。 */
+  max_payment_terms_days: number
+}
+
+/** docs/84 §3.2 统一值；职责 yml 的 `mandate.caps` 与首次设置都从这里起。 */
+export const DEFAULT_B2B_QUOTE_MANDATE: Readonly<B2bQuoteMandate> = {
+  max_amount_usd: 10_000,
+  min_margin_pct: 20,
+  max_discount_pct: 5,
+  max_payment_terms_days: 30,
+}
+
+/* ── 对象一：客户（公司）与联系人 ──────────────────────────────────────── */
+
+/** 销售阶段（BtoBAgents `crm.defaultStages` 那七档）。 */
+export type B2bStage =
+  | 'contacted'
+  | 'replied'
+  | 'meeting'
+  | 'sample'
+  | 'quote'
+  | 'negotiation'
+  | 'won'
+  | 'lost'
+
+/** 一个联系人 / 一家公司是从哪来的（GDPR 第 14 条要答得上）。 */
+export interface B2bSource {
+  /** 来源种类：自己导入的表、展会名片、官网联系页、数据服务（官方档 / 自带 key）、手填。 */
+  kind: 'import' | 'trade_show' | 'website' | 'data_provider' | 'manual' | 'inbound'
+  /** 来源网址（官网联系页、展会名录页、数据服务的记录页）；手填与导入可以没有。 */
+  url?: string
+  /** 在哪一天看到的。 */
+  observed_at: Iso8601
+  /** 哪张名单导进来的（{@link B2bList.id}）。 */
+  list_id?: string
+}
+
+/** B2B 客户（一家公司）。 */
+export interface B2bAccount {
+  id: string
+  workspace_id: WorkspaceId
+  name: string
+  /** 公司域名（`example.com`，不带协议）。 */
+  domain?: string
+  /** 国家（ISO 3166-1 alpha-2，`DE` / `US`）。德国、奥地利默认不进开发序列（§11.1 第 6 条）。 */
+  country?: string
+  /** 地区（交接规则按它分：`EU` / `NA` …）。 */
+  region?: string
+  /** 产品线（交接规则按它分）。 */
+  product_lines: string[]
+  stage: B2bStage
+  /** 这家客户归哪个业务员。 */
+  owner_person_id?: PersonId
+  source: B2bSource
+  /** 最后一次往来（唤醒沉睡客户看它）。 */
+  last_contact_at?: Iso8601
+  created_at: Iso8601
+  updated_at: Iso8601
+}
+
+/**
+ * 一个联系人。**来源必填**；联系方式只存加密库里的 key 名。
+ *
+ * CASL（加拿大）：对方公开发布了邮箱、且信的内容与他的职务相关才算默认同意——
+ * `public_source` 记的就是"这个邮箱是不是他自己公开的"。
+ */
+export interface B2bContact {
+  id: string
+  workspace_id: WorkspaceId
+  account_id: string
+  name: string
+  title?: string
+  /** 加密库里的 key 名，**不是邮箱明文**。 */
+  email_ref?: string
+  /** 加密库里的 key 名，**不是电话明文**。 */
+  phone_ref?: string
+  source: B2bSource
+  /** 这个联系方式是不是对方自己公开发布的（CASL 默认同意的前提）。 */
+  public_source?: boolean
+  /** 在抑制名单上（退订 / 硬退信 / 说过别再发）。名单本身在 `core/suppression.ts`。 */
+  suppressed?: boolean
+  created_at: Iso8601
+}
+
+/* ── 对象二：商机 ──────────────────────────────────────────────────────── */
+
+export interface B2bOpportunity {
+  id: string
+  workspace_id: WorkspaceId
+  account_id: string
+  name: string
+  stage: B2bStage
+  /** 预计金额（美元）。 */
+  value_usd?: number
+  product?: string
+  owner_person_id?: PersonId
+  expected_close?: Iso8601
+  /** 从哪条线索来的（展会线索 / 开发信回复 / 平台询盘），按来源归因。 */
+  lead_source?: 'inquiry' | 'outbound' | 'trade_show' | 'marketplace' | 'referral' | 'repeat'
+  created_at: Iso8601
+  updated_at: Iso8601
+}
+
+/* ── 对象三：报价与不可改的报价版本 ────────────────────────────────────── */
+
+/** 贸易术语（`quotation` 技能讲它们的区别）。 */
+export type Incoterm = 'EXW' | 'FOB' | 'CIF' | 'DDP' | 'DAP' | 'FCA'
+
+export type B2bQuoteStatus =
+  | 'draft'
+  | 'pending_approval'
+  | 'sent'
+  | 'accepted'
+  | 'rejected'
+  | 'expired'
+
+/** 一张报价（一串版本的"文件夹"）。当前是哪一版看 {@link B2bQuote.current_version}。 */
+export interface B2bQuote {
+  id: string
+  workspace_id: WorkspaceId
+  account_id: string
+  opportunity_id?: string
+  /** 报价单号（`Q-2026-0928-01`）。 */
+  number: string
+  status: B2bQuoteStatus
+  current_version: number
+  owner_person_id?: PersonId
+  created_at: Iso8601
+  updated_at: Iso8601
+}
+
+export interface B2bQuoteLine {
+  sku: string
+  description: string
+  qty: number
+  /** 单价（美元）。 */
+  unit_price_usd: number
+}
+
+/**
+ * 报价的一个版本。**只读**：改价、改账期、改数量一律新建一版，旧版原样留着。
+ *
+ * 金额 / 毛利 / 折扣 / 账期四个数就是 {@link B2bQuoteMandate} 比的那四个。
+ */
+export interface B2bQuoteVersion {
+  readonly quote_id: string
+  /** 从 1 起，每改一次加 1。 */
+  readonly version: number
+  readonly lines: readonly B2bQuoteLine[]
+  readonly amount_usd: number
+  readonly margin_pct: number
+  readonly discount_pct: number
+  readonly payment_terms_days: number
+  readonly incoterm: Incoterm
+  readonly valid_until: Iso8601
+  readonly created_at: Iso8601
+  readonly created_by: PersonId | 'agent'
+}
+
+/* ── 对象四：样品 ──────────────────────────────────────────────────────── */
+
+/** 待寄 → 已寄（单号）→ 已签收 → 已反馈（docs/84 §3.2）。 */
+export type B2bSampleStatus = 'to_ship' | 'shipped' | 'delivered' | 'feedback'
+
+export interface B2bSample {
+  id: string
+  workspace_id: WorkspaceId
+  account_id: string
+  opportunity_id?: string
+  items: { sku: string; qty: number }[]
+  status: B2bSampleStatus
+  /** 收费样品的金额（美元）；免费样品不填。 */
+  charge_usd?: number
+  carrier?: string
+  /** 快递单号。**标"已寄"必须带它**（guardrail 拦）。 */
+  tracking_no?: string
+  /** 最晚哪天寄出（超期不寄出提醒）。 */
+  ship_by: Iso8601
+  /** 最晚哪天该有反馈（超期没反馈出提醒）。 */
+  feedback_by?: Iso8601
+  feedback?: string
+  updated_at: Iso8601
+}
+
+/* ── 对象五：名单 ──────────────────────────────────────────────────────── */
+
+/**
+ * 一张名单（导入的表、展会名录、数据服务查回来的一批）。
+ *
+ * 三档数据（docs/84 §6.1）：自己的免费；官方档（云端调 Apify）按条扣积分；
+ * 自带 key 档用户直接付给服务商、本机直连不经过我们的云。
+ */
+export interface B2bList {
+  id: string
+  workspace_id: WorkspaceId
+  name: string
+  tier: 'own' | 'official' | 'byo_key'
+  source: B2bSource
+  contact_count: number
+  /** 官方档扣了多少积分（价目取云上 `/v1/pricing`，不写死）。 */
+  credits_spent?: number
+  imported_at: Iso8601
+}
+
+/* ── 对象六：展会与展会线索（docs/84 §11.2）───────────────────────────── */
+
+export type TradeShowStatus =
+  | 'considering'
+  | 'registered'
+  | 'preparing'
+  | 'on_site'
+  | 'done'
+  | 'skipped'
+
+export interface TradeShow {
+  id: string
+  workspace_id: WorkspaceId
+  /** 展会名（"香港秋季电子展"）。 */
+  name: string
+  city: string
+  country: string
+  starts_on: Iso8601
+  ends_on: Iso8601
+  /** 报名截止日（截止日提醒看它）。 */
+  registration_deadline?: Iso8601
+  status: TradeShowStatus
+  /** 展位号。 */
+  booth?: string
+  /** 成本估算（美元：展位费 + 差旅 + 物料）。 */
+  cost_estimate_usd?: number
+  /** 展位与印刷品设计交给 `design.exhibition` 的那张需求单 id。 */
+  design_request_id?: string
+}
+
+/** 现场一位来访者（名片 + 一句话笔记 + 意向分级）。 */
+export interface TradeShowLead {
+  id: string
+  workspace_id: WorkspaceId
+  show_id: string
+  name: string
+  company: string
+  title?: string
+  /** 加密库里的 key 名，不是邮箱明文。 */
+  email_ref?: string
+  /** 名片照片在 blob store 里的 key（看图模型走云端）。 */
+  card_image_ref?: string
+  /** 一句话笔记。现场报价只记录不承诺。 */
+  note: string
+  intent: 'hot' | 'warm' | 'cold'
+  captured_at: Iso8601
+  /** 会后跟进的最晚时间（默认展会结束后 48 小时）。 */
+  follow_up_by: Iso8601
+  status: 'new' | 'followed_up' | 'handed_to_sales' | 'nurture'
+}
+
+/* ── 对象七：出运单（跟单与单证，docs/84 §11.3）──────────────────────────── */
+
+export type ExportShipmentStatus =
+  | 'in_production'
+  | 'ready'
+  | 'booked'
+  | 'shipped'
+  | 'arrived'
+  | 'closed'
+
+export type ExportDocKind =
+  | 'commercial_invoice'
+  | 'packing_list'
+  | 'certificate_of_origin'
+  | 'bill_of_lading'
+  | 'lc_documents'
+  | 'customs_declaration'
+
+export interface ExportDoc {
+  kind: ExportDocKind
+  status: 'missing' | 'draft' | 'checked' | 'discrepancy' | 'sent'
+  /** 单证不符点（信用证逐条核对时提前列出来）。 */
+  discrepancies?: string[]
+}
+
+/**
+ * 一票出运。**没有"收款账户"这一格**：账户只从知识库事实卡取，
+ * 邮件里要求改账户的一律出红卡、不采纳。
+ */
+export interface ExportShipment {
+  id: string
+  workspace_id: WorkspaceId
+  account_id: string
+  /** 客户的订单号（PO）。 */
+  po_number: string
+  status: ExportShipmentStatus
+  incoterm?: Incoterm
+  etd?: Iso8601
+  eta?: Iso8601
+  /** 提单号。 */
+  bl_no?: string
+  docs: ExportDoc[]
+  payment: {
+    terms: 'tt' | 'lc' | 'dp' | 'oa'
+    deposit_received: boolean
+    /** 尾款（美元）。 */
+    balance_usd?: number
+    balance_received: boolean
+    /** 信用证交单截止日。 */
+    lc_presentation_by?: Iso8601
+  }
+  updated_at: Iso8601
+}
+
+/* ── 收款账户变更信号（docs/84 §11.3 防诈骗）────────────────────────────── */
+
+/**
+ * 一封信里"改收款账户"的识别结论。识别在 `@agentsws/core` 的
+ * `detectPaymentAccountChange`；命中 = 出红卡（{@link B2B_FRAUD_ALERT_KIND}）、不采纳。
+ */
+export interface PaymentAccountChangeSignal {
+  hit: boolean
+  /** 命中的说法（原样，卡面上显示）。 */
+  phrases: string[]
+  /** 信里有没有出现像账号 / IBAN / SWIFT 的东西（只报有没有，不回显号码）。 */
+  has_account_details: boolean
+}
+
+/** 红卡的审批种类（`ApprovalKind`）。 */
+export const B2B_FRAUD_ALERT_KIND = 'b2b_fraud_alert' as const

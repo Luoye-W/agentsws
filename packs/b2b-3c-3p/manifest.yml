@@ -1,0 +1,21 @@
+# WP171（docs/84）：B2B 岗位的模拟包。**手写**（不是 `agentsws synth` 生成的：synth 只会 dtc 家族）。
+# 演示数据改写自 Luoye 自己的 BtoBAgents（`demo-data.ts` / `runtime-v2/seed.ts`，HEAD 940f12b）：
+# 「深圳智联 3C 出海」的 GaN 充电器 / 移动电源 / TWS 耳机；客户名全换成虚构的，
+# 原来写死的 ElectroMart 那一页不搬，邮箱一律 `.example`。
+schema_version: 1
+pack: b2b-3c-3p
+family: b2b-3c
+seed: 42
+anchor: 2026-09-28T01:00:00.000Z
+generator: hand-written (WP171)
+sizes:
+  people: 3
+  assignments: 6
+  products: 4
+  customers: 3
+  orders: 0
+  shipments: 0
+  threads: 0
+  knowledge: 5
+  stores: 0
+  roles: 0
