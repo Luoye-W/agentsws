@@ -81,6 +81,9 @@ SDK 那组用 `test/fake-runtime.mjs`（只说线协议、不跑模型）——�
 
 ## 逐行重判：官方功能优先（WP179，Luoye 09-29）
 
+> **WP180 更新**：表一里 B 类的插件管理、配置写回两类已**包一层后撤锁**（见那两行）；`dsh-time-context` 的意思接进来了（见表二）。
+> 锁定表现在 = `cordis.patch.yml` 里的每一个 id：C 类四行、两处"选了才开"、守门插件自己。
+
 Luoye 09-29 定的新规矩：**官方更新了什么、有什么新功能，尽量都集成进来用起来；除非真的有冲突、导致我们整个工具运行不起来，
 否则一定要尽量多。** 所以 `profiles/agentsws/cordis.patch.yml` 的每一行锁定、以及这个包里别处"默认关"的东西，逐行按三类重判：
 
@@ -100,8 +103,8 @@ Luoye 09-29 定的新规矩：**官方更新了什么、有什么新功能，尽
 | `hmr` | 监视 profile 目录、热替换模块（开发用） | **A，跟官方** | 不是冲突、也不外发，撤掉我们这一行；官方 headless 包自己就关着它（一次性任务用不上热替换），组合结果仍是关——入口：无（开发工具，不是给用户的功能） |
 | `deepseek-account` | 官方 DeepSeek 账号登录 / 余额 / 登出 | **A，已接（WP134）** | 设置里选「用我的 DeepSeek 账号登录」就开（服务进程懒加载官方模块；完整 profile 叠 `deepseek-account.on.patch.yml`）。profile 这一行留着是"没选时关"的那一半 |
 | `computer-use` / `computer-use-cua-driver-mcp`（插进来） | 官方电脑操控 + Cua Driver MCP 提供方 | **A，已接（WP144）** | 设置里打开「电脑操控」、这件事的授权卡批了才叠 `computer-use.on.patch.yml`。插进来写死关是"没选时关"的那一半 |
-| `plugin-manager` / `tool-plugin-manager` | 插件管理页 / 模型面的装插件工具：以宿主用户身份跑 pnpm 装任意包，装完的代码在沙箱外、同进程里跑，还能放行被挡的构建脚本、改写这份 patch | **B** | 绕过出卡 / 授权：装一段任意第三方代码没有任何人批；装进来的插件还能把下面 C 类的上报悄悄打开。**包一层能开**：装插件改成出卡、只从我们审过的清单装、装完不写 profile patch（另立一单，M）。自动审阅、定时任务这类官方可选包都要经它装，所以它们也一起等这一单（见表二） |
-| `config-editor` / `settings` | 把表单保存**写回这份 patch 文件**并立刻生效；`settings` 的写回走前者，还会导入并改名 `$DSH_HOME/settings.yaml` | **B** | 一次表单保存就能把 C 类的上报打开（那是要 Luoye 拍板的数据外发），也绕开 `patchReload: startup`；我们的产品没有官方设置页这个入口。**包一层能开**：只许写不在锁定表里的行，或改写到 `$DSH_HOME` 那一层（另立一单，S–M） |
+| `plugin-manager` / `tool-plugin-manager` | 插件管理页 / 模型面的装插件工具：以宿主用户身份跑 pnpm 装任意包，装完的代码在沙箱外、同进程里跑，还能放行被挡的构建脚本、改写这份 patch | **B → WP180 包一层后已撤锁** | WP179 判 B（装任意代码没人批、能把 C 类上报打开）。WP180 包的那一层：设置 →「官方插件」装 / 升级 / 卸载一律出卡（`official_plugin`），只从审过的清单 `profiles/agentsws/plugin-allowlist.yml` 装（dsh 自带的官方可选包：自动化任务、团队协作、语音输入；自动审阅不在里面），做完锁定 patch 逐字节比一遍（`src/official-plugins.ts` + `apps/server/src/official-plugins.ts`）；完整 profile 里 `plugin-manager` 跟官方开着，写方法由守门插件 `agentsws-profile-guard`（`src/profile-guard.ts`）一律拒；`tool-plugin-manager` 跟官方（dsh-base 写死关，装插件不给模型） |
+| `config-editor` / `settings` | 把表单保存**写回这份 patch 文件**并立刻生效；`settings` 的写回走前者，还会导入并改名 `$DSH_HOME/settings.yaml` | **B → WP180 包一层后已撤锁** | WP179 判 B（一次保存就能把 C 类上报打开）。WP180 包的那一层：只许写不在锁定表里的行——锁定表 = 这份 patch 里的每一个 id + 守门插件自己；碰锁定行直接拒并记 `profile.config_rejected`（只带字段名不带值）。服务进程那一侧写进插件层自己的 patch（`PUT /v1/settings/official-plugins/config`）；完整 profile 里官方 `configEditor.edit` 由守门插件包住 |
 | `session-log-deepseek`（`enabled: false`） | 每次走官方 DeepSeek API 的请求附上会话日志 | **C** | 打开会把**整条会话记录**（客户原文、订单、政策、工具入参与结果、系统提示）随每次请求增量发给 **DeepSeek（官方 API 的 `dsh_session_log` 字段）**。注：我们的模型走自己的网关，这条上传通路今天根本不存在（AGENT-LAYER §7）；它管的是"哪天真起了完整 profile、真接了官方 provider" |
 | `otel` | 上报通道工厂 | **C** | 单独挂着不发东西，但它是下面那条反馈上报与官方产品埋点的发送层；打开 = 给它们开了往 **DeepSeek 的收集端**发数据的通道 |
 | `session-telemetry-otel` | 反馈上报（默认 `FEEDBACK_ONLY`） | **C** | 打开后用户一点"反馈"，就把**整条会话日志**（消息原文、工具参数与结果、系统提示……）连同匿名用户 id 发到 **DeepSeek 的收集端 `dsh-otel-collector.deepseeksvc.com`** |
@@ -114,9 +117,9 @@ Luoye 09-29 定的新规矩：**官方更新了什么、有什么新功能，尽
 | `tool-bash` 的 `enableRunInBackground: false` / `promoteOnTimeout: false` | **B** | 后台命令在一次运行结束（树销毁）之后没有主人，还在跑——绕过「停止」按钮与时间 / 花钱上限。**包一层能开**：后台任务登记成事项里一条可停的任务、跟着事项走（M） |
 | `dsh-agent-loop` 的 `maxParallelToolCalls: 1`（串行） | **A，入口排后** | 并行不绕闸（每个调用照样过门禁），但会让同一件事两次跑出的事件顺序不同；打开要先把模拟 parity 与升级指纹改成按 `call_id` 比（S–M），另立一单 |
 | `dsh-system-prompt` 的 `includeHarnessIdentity: false` | **A，但打开没有效果** | 我们的 persona 是 `complete` 段，官方那句身份说明打开也会被遮掉；不动 |
-| `dsh-time-context`（每一步给模型报时） | **A，入口排后** | 不冲突；但它挂在 agent-loop 每一步、会改每一次运行的提示词，只在 dsh 一档挂会破三运行时 parity。建议另一单在三个运行时的上下文里写一次"现在时间 + 公司时区"（S） |
+| `dsh-time-context`（每一步给模型报时） | **A，意思接进来、官方包不挂** | WP180：每次运行的上下文里写一次「现在时间 + 公司时区」（ContextItem `time`，`@agentsws/core` 的 `timeContextItem`），三个运行时同一份字节。官方包不挂的三条理由：它是 dsh agent-loop 的 `agent/pre-step` 钩子（stub / direct 挂不上，破三运行时 parity）；自己读墙钟（模拟 / 回放的注入时钟管不到）；时区按浏览器记录定（我们的运行没有，公司时区在工作区档案）。官方默认刷新 10 分钟；我们一次运行写一次、按小时取整（22 §2）。装了「自动化任务」可选包的完整 profile 里官方那一行照样会挂 |
 | `dsh-schedule` / `ui-schedule` / `dsh-experimental-schedule-bundle`（定时 / 提醒） | **A，但官方说 headless 挂不上** | 官方 README：要官方 Web 的会话控制器与持久会话；我们的定时是自己的 `packages/schedule`。借设计（daily / weekly 写法、运行记录翻页），见 UPGRADE.md WP149 §5.1 |
-| `dsh-experimental-auto-review`（自动审阅） | **B** | 每次工具调用前让模型自己判，"放行"就按全权执行——正好绕过出卡 / 授权（我们要人批的都经 `approval/request` 出卡）。官方也标了"可能放行不安全的动作"。只能经插件管理装（上表 B） |
+| `dsh-experimental-auto-review`（自动审阅） | **B（WP180：不进插件清单）** | 每次工具调用前让模型自己判，"放行"就按全权执行——正好绕过出卡 / 授权（我们要人批的都经 `approval/request` 出卡）。官方也标了"可能放行不安全的动作"。只能经插件管理装（上表 B） |
 | Inspector | **没有可开的** | 官方 0.1.7-rc.2 起不再默认提供，依赖树里没有这个包 |
 | 工作过程展示（官方 web 客户端 `ui-chat` 的 transcript 设置） | **A，借形** | 是官方网页客户端的界面设置，我们的界面是自己的工作台；事项时间线就是"工作过程"，不挂包 |
 | Cua 驱动的遥测 / 查更新（`applyCuaEnv`） | 遥测 **C**；查更新**不归这张表** | 遥测打开会把驱动的使用数据发给 **Cua（trycua，驱动厂商）**，交 Luoye 定；查更新是第三方驱动自己去 GitHub 看新版，我们的驱动钉版本 + sha256 装（`computer-use.lock.json`），换版本走 docs/42 |

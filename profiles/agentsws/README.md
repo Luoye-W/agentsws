@@ -9,6 +9,12 @@ dsh profile（16 §1）：**"我们这种模式"的技术实体**。
   `web-search-deepseek` 与 `hmr` 两行已撤。逐行归类见 `packages/dsh-adapter/README.md`「逐行重判」。
   每一行的 id 由 `packages/dsh-adapter/test/profile-lockdown.test.ts` 对照 `dsh --dump-config-schema`
   导出的配置 schema 校验：id 在当前 dsh 里不存在、或指向的插件换了人，测试就红（WP133）。
+  **WP180**：B 类"包一层后打开"——插件管理两行（`plugin-manager` / `tool-plugin-manager`）、配置写回两行（`config-editor` / `settings`）
+  也撤了；文件末尾插进来一行开着的**守门插件** `agentsws-profile-guard`（`@agentsws/dsh-adapter/profile-guard`）：配置保存想写本文件里
+  任何一行直接拒，官方插件管理的写方法一律拒。锁定表现在 = 本文件里的每一个 id（C 类四行、两处"选了才开"、守门插件）。
+- `plugin-allowlist.yml` —— **审过的官方插件清单**（WP180）。设置 →「官方插件」只列、也只许装这里的；装 / 升级 / 卸载一律出卡，
+  做完 `cordis.patch.yml` 逐字节比一遍。每一项的版本 / 许可证 / 插进来的行由 `packages/dsh-adapter/test/official-plugins.test.ts`
+  对照 dsh 安装里那一份，dsh 升级时要重审（对不上的在界面上是"新版本待审"、不进组合）。
 - `deepseek-account.on.patch.yml` —— **运行时 patch**（WP134）：只把 `deepseek-account`（官方 DeepSeek 账号登录）
   那一行打开。默认不叠——profile 层那一行仍是关死的；用户在向导 / 设置里选了「用我的 DeepSeek 账号登录」才 `--patch` 叠上。
   钉住"没选关、选了开、别的锁定不动"：`profile-lockdown.test.ts` 的 `OPT_IN` 一组。
