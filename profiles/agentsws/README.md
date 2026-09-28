@@ -4,7 +4,9 @@ dsh profile（16 §1）：**"我们这种模式"的技术实体**。
 
 - `package.json` —— `dsh.profile.bundles` 列出组合的 bundle，并把每个 `@deepseek-ai/dsh-*`
   **锁到 0.2.0-rc.1**（WP177；不用 `^`：上游预发布期"可自由重命名重组"，浮动版本等于随时炸）。
-- `cordis.patch.yml` —— 我们的 patch 层，**只放锁定**（docs/42 红线 7：上游默认会开、我们必须关的那几行）。
+- `cordis.patch.yml` —— 我们的 patch 层，**只放锁定**（docs/42 红线 7）。WP179（Luoye 09-29「官方功能优先」）起
+  锁定只留给 **B 真冲突**（插件管理两行、配置写回两行）与 **C 数据外发**（四行上报）；别的官方功能一律接进来——
+  `web-search-deepseek` 与 `hmr` 两行已撤。逐行归类见 `packages/dsh-adapter/README.md`「逐行重判」。
   每一行的 id 由 `packages/dsh-adapter/test/profile-lockdown.test.ts` 对照 `dsh --dump-config-schema`
   导出的配置 schema 校验：id 在当前 dsh 里不存在、或指向的插件换了人，测试就红（WP133）。
 - `deepseek-account.on.patch.yml` —— **运行时 patch**（WP134）：只把 `deepseek-account`（官方 DeepSeek 账号登录）
