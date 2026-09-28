@@ -32,12 +32,24 @@ You buy the domain and edit DNS at your registrar; we only give the steps.
 
 **No email goes out until SPF and DKIM pass.** A missing DMARC record is only a warning.
 
+If the test email hasn't come back after 10 minutes (Gmail often keeps mail you send to yourself out of the inbox), we look up the DKIM key in DNS under the usual selectors (`google`, `selector1`, `selector2`, `k1` and a few more). If one is there, DKIM counts as "set up in DNS (not verified by a real email)" and sending is allowed, with a note on the card. If none is there, nothing is sent. When the test email does arrive later, its headers win.
+
 ## Daily limits
 
 Each sending mailbox has its own count: up to 20 a day for the first two weeks, then up to 50. Anything over the limit waits until tomorrow.
 
+If the mailbox has been sending normally for a long time (not a newly bought domain), tick "This mailbox has been sending normally for a long time" under Outbound to go straight to 50 a day. **Leave it off for a new domain**: sending the full amount on day one hurts its reputation most.
+
+## After a "not interested" reply
+
+Only this round stops. The person cools off: by default they aren't picked for any new round for 90 days, and after that they can be picked again. A second "not interested" doubles it to 180 days. People cooling off show up as one line under Outbound, with the dates in the tooltip.
+
+An **unsubscribe** reply or a hard bounce is what puts someone on the suppression list for good.
+
+Your company's postal address lives in Settings → Company profile: cold-email footers, quotes and shipping documents all use that one.
+
 ## FAQ
 
-- **DKIM stays at "waiting for the test email"**: some providers don't deliver mail you send to yourself into your inbox. Make sure the mailbox is receiving on the Connections page, then press "Check again".
+- **DKIM stays at "waiting for the test email"**: some providers don't deliver mail you send to yourself into your inbox. After 10 minutes we check DNS instead; if there's no DKIM record there either, turn DKIM on at your provider.
 - **DKIM is signed by another domain**: your provider is using its default signature. Turn on custom-domain DKIM and add the record it gives you.
 - **Two SPF records**: two count as none. Merge them into one.
