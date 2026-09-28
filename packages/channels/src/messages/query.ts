@@ -23,7 +23,7 @@ export function matchesQuery(m: MessageRecord, q: MessageListQuery): boolean {
 }
 
 /**
- * WP167：这封信是不是「待确认」——分拣判不准（把握不够）的客服 / 红人信。
+ * WP167：这封信是不是「待确认」——分拣判不准（把握不够）的客服 / 红人信（WP172 起也收 B2B）。
  *
  * 判据只有一条：分拣挂了 `suggested_route`、信还留在 `inbox` 那条路上、而且人还没判过。
  * 人点过「这是客服」或「不是」之后分拣结论就是 `by: 'user'`，它从这一栏里消失。
@@ -32,7 +32,7 @@ export function pendingRouteOf(m: MessageRecord): MessageRecord['route'] | undef
   const t = m.triage
   if (t === undefined || t.by === 'user' || m.route !== 'inbox') return undefined
   const s = t.suggested_route
-  return s === 'support' || s === 'kol' ? s : undefined
+  return s === 'support' || s === 'kol' || s === 'b2b' ? s : undefined
 }
 
 /**

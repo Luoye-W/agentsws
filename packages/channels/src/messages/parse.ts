@@ -182,6 +182,9 @@ export const TRIAGE_HEADERS: readonly string[] = [
   'precedence',
   'authentication-results',
   'return-path',
+  // WP172：认退信（DSN）用——`multipart/report; report-type=delivery-status` 与退回的收件人
+  'content-type',
+  'x-failed-recipients',
 ]
 
 /**
