@@ -241,6 +241,7 @@ import {
   bonusExpiresAtOf,
   connectToolExecutor,
   createStandIns,
+  isWebTool,
   KolPublicStandIn,
   MCP_DOCS_TOOL,
   MCP_SCHEMA_TOOL,
@@ -253,6 +254,8 @@ import {
   StandInWallet,
   SyntheticClock,
   signupBonusSourceRefOf,
+  standInWebFetch,
+  standInWebSearch,
 } from '@agentsws/stand-ins'
 import {
   AMAZON_CHANNEL,
@@ -290,6 +293,7 @@ import { installDailyRoutine, type Routine, type RoutineOptions } from './routin
 import type { RuntimeName } from './runtime-name.js'
 import type { ScenarioB2bReply, ScenarioB2bSequence } from './scenario/types.js'
 import type { SecretaryLoop } from './secretary.js'
+import type { WebResearchLoop } from './web-research.js'
 
 const CUSTOMERS = defineCollection({
   name: 'customers',
@@ -512,6 +516,11 @@ export interface World {
    * `HARD_L1`。
    */
   design?: DesignLoop
+  /**
+   * WP179：官方网页搜索与抓网页。**惰性**——场景里没有 `web.research` 就不装（同 `design`）。
+   * 装了之后 stub / direct 的网页工具经工具桥走它，dsh 的门禁把审计报给它。
+   */
+  webResearch?: WebResearchLoop
   /**
    * WP32：每一拍的审批总线例行公事——过期、升级链、抽检复核、把新投递刷成卡片。
    *
@@ -2197,6 +2206,18 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
           createPolicyQuestion: (i) => (holder.createPolicyQuestion ?? (async () => undefined))(i),
           executeTool: (c) =>
             (holder.executeTool ?? (async () => ({ status: 'error' as const })))(c),
+          /*
+           * WP179：官方网页工具在 dsh 这一档真挂（`dsh-web` + `dsh-tool-web`），后端换成确定性的替身
+           * （不连 DeepSeek、不真搜网页）；门禁报的审计回到世界（装了 `webResearch` 才记）。
+           * 只有带 `RunRequest.web` 的运行用得到——别的运行一个字节不变。
+           */
+          web: {
+            standIn: {
+              search: async (query) => standInWebSearch(query),
+              fetch: async (url) => standInWebFetch(url),
+            },
+            onUse: (use, req) => world.webResearch?.onUse(use, req),
+          },
         })
       : opts.runtime === 'direct'
         ? createDirectRuntime({
@@ -2852,6 +2873,13 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
     storefrontUnsupportedNote(pack.workspace.storefront_platform)
 
   holder.executeTool = async (call) => {
+    // WP179：官方网页工具在 stub / direct 这两档经工具桥走到这里（dsh 那一档真挂官方工具，不经这里）
+    if (isWebTool(call.name)) {
+      const web = world.webResearch
+      return web === undefined
+        ? { status: 'error', reason: 'web_not_installed: 这个世界没装网页那一层' }
+        : web.execute(call)
+    }
     const bare = call.name.slice(call.name.lastIndexOf('.') + 1)
     const note = platformNote()
     if (note !== undefined && SHOP_TOOL_NAMES.has(bare)) {

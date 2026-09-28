@@ -476,6 +476,18 @@ export interface ScenarioContentBlogPost {
   body?: string
 }
 
+/**
+ * WP179（Luoye 09-29「官方功能优先」）：交给某人某条职责一件"去网上查一下"的事——
+ * 真走运行时（官方 `web_search` / `web_fetch`；后端是确定性的替身）。
+ */
+export interface ScenarioWebResearch {
+  who: string
+  /** 哪条职责（要挂了 `web_tools` 的那几条之一）。 */
+  role: string
+  /** 那句话（进事项的 `thread` 那一格）。 */
+  ask: string
+}
+
 /** WP63（51 §2.1 数据日报）：出一张日报卡。 */
 export interface ScenarioStoreDailyReport {
   who: string
@@ -995,6 +1007,8 @@ export type ScenarioEvent =
   | { at: string; type: 'shop.publish_product'; publish_product: ScenarioShopPublishProduct }
   /** WP63：写 / 发一篇博客文章（51 §2.2，草稿 L2、发布 L1）。 */
   | { at: string; type: 'content.blog_post'; blog_post: ScenarioContentBlogPost }
+  /** WP179：交给一条查资料的职责一件"去网上查一下"的事（官方网页工具，真走运行时）。 */
+  | { at: string; type: 'web.research'; web_research: ScenarioWebResearch }
   /** WP63：出一张店铺日报卡（51 §2.1，L3 自动出、看完归档）。 */
   | { at: string; type: 'store.daily_report'; daily_report: ScenarioStoreDailyReport }
   /** WP154：每日读一遍 Search Console → 「今天值得动的 5 件事」报告卡。 */

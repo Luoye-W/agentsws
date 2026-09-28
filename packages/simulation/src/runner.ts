@@ -52,6 +52,7 @@ import type {
 } from './scenario/types.js'
 import type { SecretaryLoop } from './secretary.js'
 import { installSecretary } from './secretary.js'
+import { installWebResearch } from './web-research.js'
 import type { RealModelBinding, RunContext, World } from './world.js'
 import { createWorld } from './world.js'
 
@@ -1700,6 +1701,23 @@ async function execute(
           publish: e.publish ?? false,
           staged: out.staged,
           ...(out.reason === undefined ? {} : { reason: out.reason }),
+        })
+        return
+      }
+      case 'web.research': {
+        // WP179：惰性装配（场景里没有这一类事件就不装，原有场景一个字节不变）
+        world.webResearch ??= installWebResearch(world)
+        const e = event.web_research
+        const out = await world.webResearch.research({
+          who: e.who,
+          role: e.role,
+          ask: e.ask,
+        })
+        world.appendEvent('simulation.web_research', {
+          who: e.who,
+          role_id: out.role_id,
+          run_id: out.run_id,
+          status: out.status,
         })
         return
       }

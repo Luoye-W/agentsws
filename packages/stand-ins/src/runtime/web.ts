@@ -221,9 +221,16 @@ export function looksLikeResearch(text: string): boolean {
   return trimmed !== '' && RESEARCH.test(trimmed)
 }
 
-/** 从一句话里取查询串：第一行、去掉"帮我 / 请"之类的口头语，最多 80 个字。 */
+/**
+ * 从一句话里取查询串：第一行、去掉"帮我 / 请"之类的口头语，最多 80 个字。
+ * 围栏标签那两行（`<external_data>` / `</external_data>`）不算——线程文本进运行时之前都包过围栏。
+ */
 export function researchQueryOf(text: string): string {
-  const first = text.split('\n').find((l) => l.trim() !== '') ?? text
+  const first =
+    text
+      .split('\n')
+      .map((l) => l.trim())
+      .find((l) => l !== '' && !/^<\/?external_data>$/.test(l)) ?? text
   return first
     .replace(/^(请|帮我|麻烦|能不能)\s*/u, '')
     .trim()
