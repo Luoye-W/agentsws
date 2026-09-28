@@ -408,6 +408,14 @@ export interface Position {
    * 只加字段：不填的岗位一切照旧（但内置的九个岗位一个都不许空，见 69 §2）。
    */
   persona?: PersonaText
+  /**
+   * WP174（docs/84 §11.1 第 3 条）：**这个岗位的上级**——工作区里的一个人。
+   *
+   * `scope_manager` 的审批先落到他；没设、是提议者本人、或者他已经离开工作区，
+   * 就落到老板（`owner`）。包里的模板永远不填：它只在工作区存下来的那一份上有。
+   * 以后要按部门再扩，先按岗位。
+   */
+  supervisor_person_id?: PersonId
 }
 
 /**

@@ -196,6 +196,23 @@ export interface GateDecision {
 export interface Recipient {
   person: PersonId
   via: 'role_holder' | 'scope_manager' | 'owner' | 'explicit' | 'escalation'
+  /**
+   * WP174：卡上那一句「转给了谁、为什么」（人话，已带名字）。
+   *
+   * 只在路由真的做过判断时才有：`scope_manager` 解析到上级或落回老板、
+   * 上级离职后改派给老板。别的收件人不写，界面上就不出这一行。
+   */
+  reason?: string
+}
+
+/** WP174：把一张还没定的卡从某个人手上改派给另一个人（上级离职 → 老板）。 */
+export interface RerouteInput {
+  /** 原来的收件人（只换掉他那一格，别的收件人不动）。 */
+  from: PersonId
+  to: PersonId
+  via: Recipient['via']
+  /** 卡上那一句为什么改派（人话）。 */
+  reason: string
 }
 
 export interface Decision {
@@ -445,4 +462,10 @@ export interface ApprovalBus {
   escalate(now: Iso8601): Promise<ApprovalItem[]>
   expire(now: Iso8601): Promise<ApprovalItem[]>
   history(id: string): Promise<{ revisions: ApprovalItem[]; events: string[] }>
+  /**
+   * WP174：改派一张**还没定**的卡（`pending` / `in_review`）。已经定了的回 `undefined`、
+   * 一个字不动。换人即作废旧 token、给新收件人投一张；记 `approval.rerouted`。
+   * 可选：没实现的宿主由调用方跳过（上级离职时新卡照样按老板走，只是旧卡不挪）。
+   */
+  reroute?(id: string, input: RerouteInput): Promise<ApprovalItem | undefined>
 }
