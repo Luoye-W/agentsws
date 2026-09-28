@@ -40,12 +40,17 @@ import { describe, expect, it } from 'vitest'
  * **WP149（0.1.7-rc.1 → 0.1.7-rc.2）：FROM 直接用仓库里的 `0.1.7-rc.1.json`。** 不是沿用旧的：
  * 升级前在当前代码树（WP133–WP148 之后）重采了一份，与 `0.1.7-rc.1.json` **逐字节相同**（`cmp` 无输出），
  * 所以没有另存一份同样内容的 `-wp149` 文件（WP133 同一做法）。cordis 这一跳不动（rc.2 仍要 `~4.0.4`）。
+ *
+ * **WP177（0.1.7-rc.2 → 0.2.0-rc.1，第一次跨 minor）：FROM_FILE 是重采的 `0.1.7-rc.2-wp177.json`。**
+ * 升级前在当前代码树（WP150–WP176 之后）重采：pack 从 62 条长到 64 条、16 条场景因我们自己的改动变了指纹，
+ * 与仓库里的 `0.1.7-rc.2.json` 不再相同，所以按 docs/42 ① 另存一份。cordis 仍不动（0.2.0-rc.1 仍要 `~4.0.4`）。
+ * 旧的十一份一个不删。
  */
-const FROM_FILE = '0.1.7-rc.1'
-const TO_FILE = '0.1.7-rc.2'
-const FROM = '0.1.7-rc.1'
-const TO = '0.1.7-rc.2'
-/** cordis 这一跳的新旧号（WP132 升到 4.0.4；WP149 不动）。 */
+const FROM_FILE = '0.1.7-rc.2-wp177'
+const TO_FILE = '0.2.0-rc.1'
+const FROM = '0.1.7-rc.2'
+const TO = '0.2.0-rc.1'
+/** cordis 这一跳的新旧号（WP132 升到 4.0.4；WP149 / WP177 不动）。 */
 const CORDIS_FROM = '4.0.4'
 const CORDIS_TO = '4.0.4'
 

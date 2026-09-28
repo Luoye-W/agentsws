@@ -91,7 +91,7 @@ export const DEEPSEEK_ACCOUNT_MESSAGES_BASE_URL = `${DEEPSEEK_ACCOUNT_INFERENCE_
 export const OFFICIAL_DEFAULTS: PlatformAccountConfig = { desktopPlatform: null }
 
 /**
- * WP149（dsh 0.1.7-rc.2）：官方账号模块的每一次平台调用（查资料 / 查余额 / 起登录 / 登出）都要带一份
+ * WP149（dsh 0.1.7-rc.2 起；WP177 升 0.2.0-rc.1 时核过头与算法没变，只改了版本号）：官方账号模块的每一次平台调用（查资料 / 查余额 / 起登录 / 登出）都要带一份
  * **调用方身份** `AccountClientMetadata`（`version` / `locale` / `timezoneOffsetSeconds`），官方据它拼
  * `x-client-version` / `x-client-locale` / `x-client-timezone-offset` 三个头（`platformClientHeaders`，
  * 另两个 `x-client-bundle-id: ""`、`x-client-platform` 与 rc.1 相同）。rc.1 没有这三个头。
@@ -101,7 +101,7 @@ export const OFFICIAL_DEFAULTS: PlatformAccountConfig = { desktopPlatform: null 
  * 所以送同一个号——**不**冒充别的客户端、也不编一个平台不认识的号。`test/deepseek-account.test.ts` 钉着
  * 它与装着的 `@deepseek-ai/dsh-deepseek-account-platform` 版本相等：升 dsh 时那条会红，提醒改这里。
  */
-export const DEEPSEEK_ACCOUNT_CLIENT_VERSION = '0.1.7-rc.2'
+export const DEEPSEEK_ACCOUNT_CLIENT_VERSION = '0.2.0-rc.1'
 
 /** 没有显式给语言的调用（查资料 / 余额 / 登出）用的界面语言：我们的界面是中文。 */
 export const DEEPSEEK_ACCOUNT_DEFAULT_LOCALE = 'zh-CN'

@@ -1,7 +1,7 @@
 # agentsws profile 的 patch 层（16 §1）——**这份文件只放锁定**（WP133）。
 #
 # 组合顺序：dsh-base 的 patch → dsh-headless 的 patch → 这一层 → $DSH_HOME/cordis.patch.yml → `--patch`。
-# 下面七行是 docs/42 红线 7 要的"上游默认会开、我们必须关"的锁定，一行都不许是占位；
+# 下面十一行（WP177 起；原来七行）是 docs/42 红线 7 要的"上游默认会开、我们必须关"的锁定，一行都不许是占位；
 # 以前混在这里的占位注释（system-prompt / user-approval / preset 声明的写法）挪到了同目录 README。
 #
 # 为什么锁定就写在 profile 这一层、不拆成 bundle 的独立 patch 文件（WP133 实测，
@@ -139,6 +139,49 @@
 - id: settings
   disabled: true
 - id: deepseek-account
+  disabled: true
+# ——————————————————————————————————————————————————————————————————————
+
+# ——————————————————————————————————————————————————————————————————————
+# 生效的第四条（WP177，dsh 0.2.0-rc.1）：共享上报通道、反馈上报、插件清单上报、DeepSeek 网页搜索四行关死。
+#
+# 0.2.0-rc.1 往 `dsh-base` 的 patch 里 **insert 了一行新服务**（出处：上游
+# `packages/bundle/base/cordis.patch.yml` 的 diff，`dsh-v0.1.7-rc.2...dsh-v0.2.0-rc.1`）：
+#
+#     - id: otel
+#       name: '@deepseek-ai/dsh-otel'
+#
+# 并把它下面那行 `session-telemetry-otel` 改成经 `otel` 发，收件地址从
+# `harness-telemetry.deepseeksvc.com` 换成 `dsh-otel-collector.deepseeksvc.com`。
+#
+# 为什么关（出处都是上游各包 README 的 Summary / Use this package）：
+# - `otel`：「Mount one `otel` service to create ordinary-event and Session-log reporting channels」——
+#   它是**上报通道的工厂**。单独挂着不发东西（「Mounting alone … sends nothing」），但它存在的
+#   唯一用途就是上报；关掉它，任何要 `inject: ['otel']` 的上报插件都起不来（fail-closed），
+#   上游哪天往 base 里再加一个产品埋点（`dsh-host-product-telemetry-otel` 已经在 web-app 里挂着）也白加。
+# - `session-telemetry-otel`：**没有 `disabled` 表达式，任何组合默认就挂**，模式默认 `FEEDBACK_ONLY`：
+#   用户一点"反馈"，就把**整条会话日志**（「message content, tool arguments and results, the system
+#   prompt …」）连同匿名用户 id 发到 DeepSeek 的收集端。与 `session-log-deepseek` 同一类数据、同一个
+#   收件方；0.1.7 起它就在 base 里，WP132 看到过但没锁（当时只判了"上报不换"），这一跳它换了通道和地址，补上。
+# - `web-search-deepseek`：这一版起「A search initiated by a Session on the DeepSeek account route
+#   authenticates with the account token」——用了 DeepSeek 账号的会话**不需要 API Key** 就能经它上网搜索。
+#   这是一条新的出网路：绕开我们自己的数据接口路由（docs/75 / docs/81：计费、缓存、审计都在那一层）。
+#   它没有单独关"账号令牌"的配置项（`resolveAccountToken` 写死在 `apply` 里），所以整行关；
+#   原来那条用 `DEEPSEEK_API_KEY` 搜的路一起关掉——同样是绕开我们路由的出网，我们的两档运行时从没挂过它。
+# - `plugin-package-inventory-deepseek`：不是这一跳新来的，是这次把组合里"不带 `disabled`、会上报"的行整体过一遍时
+#   查出来的（docs/42 WP177 修订注）。README：「owns the `dsh_plugin_packages` field」——每次走官方 DeepSeek API 的请求
+#   都附上当前挂着的**全部插件包清单**（含我们自己的包名与版本）。同 `session-log-deepseek` 一类（随请求上报），一起关。
+#
+# 同 WP93 / WP132：两档运行时的真实模块图里这四个包都是 0 命中（`harness.ts` 自己搭树，不读 bundle），
+# 这四行管的是"哪天真起了完整 profile"那条路。钉住它们的测试：
+# `packages/dsh-adapter/test/profile-lockdown.test.ts`（WP177 那四行）。
+- id: otel
+  disabled: true
+- id: session-telemetry-otel
+  disabled: true
+- id: web-search-deepseek
+  disabled: true
+- id: plugin-package-inventory-deepseek
   disabled: true
 # ——————————————————————————————————————————————————————————————————————
 

@@ -1641,3 +1641,234 @@ WP149 §8 第 1、2 条（Fable 09-25 定：两件都跟）。**判定与清本�
 **升 dsh 时要看**：`dsh-deepseek-account-platform` README 第三段（哪些状态码 / 响应码算失效）与 `lib/index.js` 的 `expireCredential`
 还发不发 `deepseek-account/session-expired`（事件名写在 `DEEPSEEK_ACCOUNT_SESSION_EXPIRED_EVENT`）；`dsh-llm-deepseek-account` 的
 `onRequestError` 是否仍只认 401。`test/deepseek-account.test.ts` 的「WP150 登录失效」一组用官方模块原样跑这几条，变了会先红。
+
+## 0.1.7-rc.2 → 0.2.0-rc.1（2026-09-28，WP177）
+
+### 0. 版本口径
+
+Luoye 09-28：「DeepSeek harness 有一个非常大的更新，0.2.0 出来了，同步更新到最新版」。升级当天 `npm view @deepseek-ai/dsh dist-tags --json`：
+
+| tag | 版本 | 发布时间（`npm view … time`） |
+|---|---|---|
+| `next` | **0.2.0-rc.1** | 2026-09-28T12:34:03Z |
+| `latest` | 0.1.7-rc.2 | 2026-09-24T14:18:11Z |
+| `alpha` | 0.1.7-alpha.2 | 2026-09-22T16:08:55Z |
+
+**还没有裸 `0.2.0`**；`latest` 这次从 0.1.5-rc.3 挪到了 0.1.7-rc.2（我们上一次锁的号）。锁精确版本。
+这是第一次跨 minor（0.1 → 0.2），但下面会看到：**对我们这一侧，它比 rc.1 → rc.2 那一跳还小**——大头是官方 web / 桌面客户端。
+
+**兄弟包这次不动**：`npm view @deepseek-ai/dsh@0.2.0-rc.1 dependencies` 仍是 `cordis ~4.0.4` / `schemastery ~3.18.4` /
+`cordis-plugin-loader ~1.0.5` / `-include ~1.0.9` / `-timer ~1.1.6`，我们锁的号都在范围里（docs/42 ② 的判据：不必要）。
+
+**逐包查新版在不在**：仓库里写死 `0.1.7-rc.2` 的 `@deepseek-ai/dsh*` 一共 45 个不同的包（dsh-adapter 45 行、profile 11 行、
+credentials-openconnector 1 行，共 57 处；另有 `computer-use.lock.json` 的 `providers` 两行），`npm view <包>@0.2.0-rc.1 version` **45 个全在**。
+
+**上游包清单对比**：`gh api "repos/deepseek-ai/deepseek-harness/git/trees/dsh-v{0.1.7-rc.2,0.2.0-rc.1}?recursive=1"`（`truncated: false`）
+列 `packages/**/package.json`，再从两份源码逐个读 `name` / `private`：321 → 325 个包，**新增 4 个、改名 0、消失 0、private ↔ public 翻转 0、转正 0**：
+
+| 新包 | 是什么 | 进我们的树吗 |
+|---|---|---|
+| `dsh-otel`（`packages/telemetry/otel`） | **共享上报通道工厂**：`ctx.otel.createEventReporter` / `createSessionLogReporter`，「Mounting alone … sends nothing」 | 进（`dsh-base` 的新依赖，base patch 新 insert 一行 `otel`），我们的两档不挂；profile 层关死（§5） |
+| `dsh-client-product-analytics` | 桌面端产品埋点（客户端半边，`enabled` 默认 true） | 进（`dsh-web-app` 拖来），不挂；只在 web-app bundle 里、且只在 `desktop` profile 启用 |
+| `dsh-client-ui-settings-session-log` | 网页设置里「用官方模型 API 时上传会话日志」开关 | 进（`dsh-web-app`），不挂 |
+| `dsh-experimental-schedule-bundle` | 定时任务 / 时间上下文**改成可选插件包**（`OPTIONAL_BUNDLES` 第四个，插件管理页装） | 进（`@deepseek-ai/dsh` 元包的依赖），不挂；插件管理在 profile 层关死 |
+
+另有一个旧包第一次进我们的树：`dsh-host-product-telemetry-otel`（0.1.7-rc.1 就在上游，这次成了 `dsh-web-app` 的依赖，桌面产品埋点的宿主半边）。
+
+第 ② 步的材料：release notes 用 `gh api repos/deepseek-ai/deepseek-harness/releases/tags/dsh-v0.2.0-rc.1`；提交摘要用 compare 接口
+**翻页**取全（`?per_page=100&page=1..3`，共 **261** 条）；两个 tag 的源码（`gh api …/tarball/<tag>`；新 tag 那份 `gh api` 下到一半断了，
+改走同一仓库的 `codeload.github.com/…/tar.gz/refs/tags/dsh-v0.2.0-rc.1` 重下）——④bis 与 bundle patch diff 都在这两份源码上做。
+
+### 1. 上游改了什么
+
+比对方法同前几次：升级前后各把 `packages/dsh-adapter/node_modules/@deepseek-ai/*`（49 个包）的 `*.d.ts` + `README*` + `package.json`
+抄一份，`diff -rq`。**这一跳对我们极小**：去掉 `package.json` 与 `README.i18n.yaml`，只有 **6 个包、17 个文件**变了，
+其中 `.d.ts` 只有 **6 个文件**；五个 seam 所在的包（`dsh-tools` / `dsh-scope` / `dsh-system-prompt` / `dsh-user-approval` / `dsh-llm`）
+**`.d.ts` 与 README 全部逐字节相同**。`tsc -p packages/dsh-adapter --noEmit`（以及 credentials-openconnector / model-gateway / kernel / apps/server）**0 错**。
+
+| 包 | 变化 | 出处 | 碰到我们吗 |
+|---|---|---|---|
+| `dsh-agent-loop` / `dsh-session` | 步骤失败时，给还没结果的工具调用补一条错误结果：已记下 `tool/call` 的给 `TOOL_OUTCOME_UNKNOWN`（「Its outcome is unknown」，只许重试只读 / 幂等操作，可能有副作用的先核实外部状态或问人），没记下的给 `TOOL_NOT_STARTED`；新导出 `ToolCallRecovery` | `dsh-agent-loop/lib/types/tool-calls.d.ts` 与 README「Unanswered calls after step failure」；`dsh-session/lib/types/{index,repair}.d.ts`；提交 `6a6f350b fix(agent-loop): settle pending tool results before failed steps close` | 否（§4 第 3 条） |
+| `dsh-deepseek-account` / `-platform` | 加 `getDeviceIdentity()`（读已有的设备 id / 账号 id / 系统版本串，不建设备、不给凭据；给官方反馈问卷预填用）；登录时的 `os_version` 抽成同一个函数 | `dsh-deepseek-account/lib/types/index.d.ts`、`-platform/lib/types/index.d.ts` 与 `lib/index.js` 的 diff；提交 `3ae5c883 feat(web): 反馈问卷预填账号、版本与桌面设备信息` | 否。`DeepSeekAccountHost` 不透它；替身不继承抽象类（`tsc` 0 错） |
+| `dsh-sandbox-local` | Windows 内置 runner + 有 `skills` 服务时注册「ACL 权限诊断」技能 | README 第 83 行；上游 `sandbox-local/src/index.ts` 第 300–303 行（`process.platform === 'win32' && runnerCommand === undefined` 才 `ctx.inject(['skills'], …)`） | 否。我们的树里没有 `skills` 服务，技能永远不注册；只是 `dsh-sandbox-windows-acl` 多 import 了 `dsh-skill`（模块图 +1，§4 第 6 条） |
+| `dsh-util-values` | README 一句：跨 realm 认数组 / 普通对象 | README | 否 |
+| 其余 43 个包 | **`.d.ts` 与 README 逐字节相同**（只有 `package.json` 版本号与 `README.i18n.yaml`） | `diff -rq` | 否 |
+
+**我们不 import、但行为上要看的三个包**（npm 包的 `lib/` 与上游源码对照）：
+
+- `dsh-web-search-deepseek`：**这一版起，用 DeepSeek 账号路由的会话搜索网页时直接用账号令牌**（`x-dsh-auth-token`），不要 API Key；
+  没有单独关它的配置项（`resolveAccountToken` 写死在 `apply` 里）。出处：`lib/types/index.d.ts` 头注释、README「Authentication」、
+  `lib/index.js` 第 290–311 行；提交 `b3c672e4 fix(web-search): 账号路由会话的 DeepSeek 搜索使用账号 token 鉴权`。我们的两档不挂它（模块图 0 命中）；
+  完整 profile 那条路在 profile 层整行关死（§5.1）。
+- `dsh-session-log-deepseek`：`enabled` 变成 `Volatile`（每次请求现读），网页设置新开关经宿主配置写回。默认仍是 `true`；
+  我们 profile 那行 `enabled: false` 照旧生效，写回走的 `config-editor` 本来就关死。
+- `dsh-session-telemetry-otel`：改经新的 `otel` 服务发，收件地址从 `harness-telemetry.deepseeksvc.com` 换成 `dsh-otel-collector.deepseeksvc.com`，
+  单次请求上限 4,000,000 字节。它在 base 里**没有 `disabled`**、默认 `FEEDBACK_ONLY`（用户点"反馈"就把整条会话日志发出去）。§5。
+
+WP147 留的"升 dsh 时要看"四条逐条过：`dsh-mcp-client` README 两节、`dsh-attachment-local` 的 `Config`、`dsh-llm` 的图片卸载那组导出、
+`dsh-llm-pi-ai` 的两个默认值——**四个包的 `.d.ts` 与 README 全部逐字节相同**。
+WP150 留的：`dsh-llm-deepseek-account` 的 `lib/` 与源码**逐字节相同**（`onRequestError` 仍只认 401）；`dsh-deepseek-account-platform` 的
+`expireCredential` / `deepseek-account/session-expired` 没动（`lib/index.js` 的 diff 只有新加的 `getDeviceIdentity` 与抽出来的 `deviceOsVersion()` 两处）。
+
+WP143 的移植（`model-gateway` 的 `deepseek-files.ts` / `deepseek-account.ts`）对照上游 `packages/llm/llm-deepseek/src`：`replay.ts` **逐字节相同**；
+`file-store.ts` / `request-files.ts` / `upload-index.ts` 改了一处——模型口说 file id 陈旧时，把"逐条删映射"（`Promise.all` 并发几次加锁改写）
+改成"**一次加锁改写删掉全部点名的映射**"（提交 `fix(llm): remove every stale DeepSeek file mapping in one index update`）。作废哪些、只重发一次、
+失败退内联、判定正则**都没变**。我们的索引是同步的进程内表（可选落 JSON 文件），循环删在事件循环里本来就是一次做完，结果与官方新写法相同，
+只是 JSON 文件模式下多写几次盘——**移植文件不动**（docs/42 WP143 那条的"变了才改"：变的是它持久索引的加锁方式，不是规则）。
+
+#### 1.1 bundle 的 patch 层（第三个面）
+
+`packages/bundle/headless/cordis.patch.yml` **逐字节相同**。`packages/bundle/base/cordis.patch.yml` 的 diff 两处：
+
+```diff
++    - id: otel
++      name: '@deepseek-ai/dsh-otel'
++
+     - id: session-telemetry-otel
+       name: '@deepseek-ai/dsh-session-telemetry-otel'
+       config:
+         mode: !!js process.env.DSH_TELEMETRY_MODE || 'FEEDBACK_ONLY'
+         shutdownTimeoutMillis: 3000
++        maxRequestBytes: 4000000
+         exporter:
+-          url: !!js process.env.DSH_TELEMETRY_OTLP_URL ?? 'https://harness-telemetry.deepseeksvc.com/v1/logs'
++          url: !!js process.env.DSH_TELEMETRY_OTLP_URL ?? 'https://dsh-otel-collector.deepseeksvc.com/v1/logs'
+```
+
+用 docs/42 修订注说的第二个看法复核：新旧两版 dsh 各跑一次 `dsh --profile agentsws --dump-config-schema`，比 `x-cordis.entries` 的 `id / name / status`：
+97 → 98 行，差别**只有**多一行 `otel → @deepseek-ai/dsh-otel`；没有"id 没变、换了人"的行；`diagnostics` 两边都是空。
+`--dump-config` 组合出来的配置除上面三处与临时目录路径外逐字相同。十一行锁定（原七行 + 本次四行）、两行 `INSERTED_OFF` 全在、全关。
+**`auto-review`、`inspector`、`schedule`、`time-context`、`ui-schedule` 在我们的组合里仍是 0 行。**
+
+别的 bundle（不在我们的 `bundles` 里，只记一笔）：`web-app` 把 `schedule` / `time-context` / `ui-schedule` 三行**删掉**（挪进可选包
+`dsh-experimental-schedule-bundle`，那份 patch 只有一个 `insert`，三行都不带 `disabled`——装了就开），另 insert 了
+`desktop-product-telemetry` + `product-analytics` 两行（`disabled: !!js "ctx.get('profileContext')?.name !== 'desktop'"`，只在官方桌面端开）
+与 `ui-settings-session-log`。我们的场景切换（WP136）起的官方模板是 `web` / `headless` / `sdk` / `sdk-minimal` / `acp`，没有 `desktop`。
+
+### 2. 依赖树与原生依赖
+
+依赖树 diff（`awk` 取 lockfile 的 `packages:` 段，去版本号后 `comm`）：1679 → 1694 条。
+
+| | 包 |
+|---|---|
+| **新增 5 个 dsh 包** | `dsh-otel`（`dsh-base`）、`dsh-host-product-telemetry-otel` / `dsh-client-product-analytics` / `dsh-client-ui-settings-session-log`（`dsh-web-app`）、`dsh-experimental-schedule-bundle`（`@deepseek-ai/dsh`） |
+| **新增第三方** | `got@14.6.6` 一族（`dsh-otel` 发普通事件用）：`got` 本身与 `@keyv/serialize` / `byte-counter` / `form-data-encoder` 三个新名字，另有 `cacheable-lookup@7` / `cacheable-request@13` / `decompress-response@10` / `http2-wrapper@2` / `keyv@5` / `lowercase-keys@3` / `mimic-response@4` / `normalize-url@8` / `p-cancelable@4` / `responselike@4` 这些已在树里的包的新大版本（旧的 `got@11` 一族照旧留着，给别人用）。**全是 MIT、纯 JS**，合计约 1.1 MB；没有 install / preinstall / postinstall（`got` 只有 `prepare`，从 registry 装不跑）、没有可选依赖 |
+| **消失** | `@opentelemetry/exporter-logs-otlp-http`（`session-telemetry-otel` 改走 `dsh-otel` 之后不用了）；`koffi` 的 `android-arm64` / `android-x64` / `linux-arm` 三个平台包（见下一行） |
+| 非 dsh 的换版 | `koffi` **3.2.1 → 3.1.1**（上游 `fix(deps): pin Koffi to the tested release`，退回测过的那一版）。`allowBuilds: koffi: false` 照旧（它有 install 脚本，我们不跑）；平台预编译包 `@koromix/koffi-<平台>` 跟着换号，本机 darwin-arm64 那一个 1.2 MB，与原来同一类，不新增处理 |
+
+- **`allowBuilds` / `ignoredOptionalDependencies` 一字未改**；`libreoffice-kit` 仍是 0.1.1、平台包仍 0 个，`sherpa-onnx-<平台>` 仍 0 个。
+- **`minimumReleaseAgeExclude` 279 → 284**：原有 279 条原位换号（这次先手工 `sed` 换号再 `pnpm install`，pnpm 只追加了 5 条新包、没有写 `||`、没吃注释），
+  5 条新包按字母序挪回原位。脚本核对：lockfile 里 `@deepseek-ai/dsh*@0.2.0-rc.1` 284 个 = 排除表 284 条，逐条相等、无重复，lockfile 里 `0.1.7-rc.2` 0 处。
+- **BrowserSkill 那四条 `overrides`** 跟着改成 0.2.0-rc.1，`pnpm install --frozen-lockfile` 通过（「Lockfile passes supply-chain policies (1690 entries)」）。
+  `pnpm peers check` 只报那条与 dsh 无关的旧账（`wrangler` 要 `@cloudflare/workers-types ^5`）。
+
+### 3. 我们改了什么
+
+① **版本号**：57 处 `0.1.7-rc.2` → `0.2.0-rc.1`（dsh-adapter 45、profile 11、credentials-openconnector 1）；`computer-use.lock.json` 的 `providers` 两行与
+`referenced_by`；`src/deepseek-account.ts` 的 `DEEPSEEK_ACCOUNT_CLIENT_VERSION`（`deepseek-account.test.ts` 那条"等于装着的包"如约先红、改完绿；
+`accountClientMetadata` 的算法与三个 `x-client-*` 头官方没动）；`runtime.ts` 的 health 文案；`apps/server/test/dsh-scenes.test.ts` 真 dsh 用例断言的
+`dsh_version`、`apps/workstation/test/scene-switcher.test.tsx` 替身里的版本字符串；`upstreams.yml` 三条 `locked_version`。
+
+② **profile 层再关四行**（§5.1）：`otel`、`session-telemetry-otel`、`web-search-deepseek`、`plugin-package-inventory-deepseek`，
+`profile-lockdown.test.ts` 的 `LOCKDOWN` 表与两档模块图的 `FORBIDDEN` 各加四行。
+
+**没改的**：`llm.ts` / `harness.ts` / `gate.ts` / `preset.ts` / `headless/*` 一行没动（红线 4 的"修 seam"这次是零）；`packages/model-gateway` 的两个
+移植文件（§1 末段）；`cua-driver` 的钉版本（新版 README 仍链 `blob/cua-driver-rs-v0.28.0/`，上游 native 提供方仍精确钉 `@trycua/cua-driver 0.28.0`）。
+
+### 4. 怎么证明行为没变
+
+1. **seam 契约**（`seams.test.ts`）：30 条，一条没改、全绿。
+2. **`@agentsws/dsh-adapter` 全量**：升级前 **24 文件 1113 条**全过；升级后 **24 文件 1139 条**全过——多的 26 条全在 `upgrade.test.ts`
+   （对比的场景从 62 条变成 64 条，每条 13 个断言）。`profile-lockdown`（18 条，表里多四行）/ `telemetry` / `browser-seam` / `browserskill-seam` /
+   `preset-seam` / `shell-seam` / `subscription` / `computer-use-seam` / `screenshots-to-model` / `scenes` / `turn-summary` / `persona-sections` /
+   `read-skill` 全过；`deepseek-account` 只改了一个版本号常量。
+3. **指纹逐条对比**：升级前在当前代码树（WP150–WP176 之后）重采——pack 已从 62 条长到 **64 条**、16 条场景的指纹因我们自己的改动变了，
+   与仓库里的 `0.1.7-rc.2.json` 不再相同，所以按 docs/42 ① 另存 `0.1.7-rc.2-wp177.json` 当 FROM；TO = `0.2.0-rc.1.json`。
+   64 场景 × 2 档 = **128 条**，事件类型序列 / `type@at` / 六条不变量 / 场景断言 / 运行摘要**全部相同**，`tokens_per_item` **偏差 0.00%**，两档之间仍逐条相等；
+   去掉 `dsh_version` 与 `packages` 两个字段后两份 JSON **逐字节相同**。含 `ops/model-outage` 与 `ops/budget-exhausted` 两条运行失败的场景——
+   官方新加的"失败步骤补结果"（§1 第一行）一条事件都没多出来：我们的运行在失败那一步就结束，那几条补出来的结果只落在随即销毁的内存 Session 里。
+4. **三个模拟包 fast 档**：`--runtime dsh` 升级前后各跑一次，b2b 3 人包 **19/19**、dtc 3 人包 **64/64**、dtc 15 人包 **22/22**，`summary.txt` **逐字节相同**
+   （**323 + 1088 + 374 = 1785 个指标值 0 差**）；升级后 stub / direct 两个运行时也各跑一遍——九次门禁全部"通过（fast 全过且指标未劣化）"。
+   `packs/*/baseline.json` **一个数都没重定**（`--rewrite-baseline` 没用）。
+5. **提示词**：升级前后在同一段临时测试里各导一次三种组合（裸默认 / `includeHarnessIdentity: false` / 加我们的 `complete: true` 段）的段名、段长、
+   `variables` 键集合、渲染结果的 sha256——**逐字节相同**（这次是升级前先导好、存下，不用再回退安装）。
+6. **两档的真实模块图**（ESM resolve 钩子，同 `telemetry.test.ts`）：同进程档与子进程 child 都是 **53 → 54 个 dsh 包**，多的一个是 `@deepseek-ai/dsh-skill`，
+   由 `dsh-sandbox-windows-acl` 的类型模块 import（它要给 Windows 注册「ACL 诊断」技能）。注册只在 `win32` 且树里有 `skills` 服务时发生，
+   我们的树没有 `skills` 服务，所以只是多加载一个模块、什么都不注册。`dsh-otel` / `dsh-session-telemetry-otel` / `dsh-web-search-deepseek` /
+   `dsh-plugin-manager` / `dsh-hmr` / `dsh-config-editor` / `dsh-deepseek-account-platform` / `dsh-experimental-auto-review` /
+   `dsh-experimental-schedule-bundle` / `dsh-schedule` / `dsh-time-context` / `dsh-plugin-package-inventory-deepseek` **全部 0 命中**（WP177 锁的四个现在由 `profile-lockdown.test.ts` 的 `FORBIDDEN` 钉着）。
+
+### 5. 派工单点名的六条，逐条判
+
+| # | release notes 那一条 | 碰到我们吗 | 出处 / 实测 |
+|---|---|---|---|
+| 1 | **自动化任务改由可选插件包提供** | 否。① 我们服务端的定时（每日 SEO、开发信 09:00 巡检、岗位例行）全是自己的 `packages/schedule` + `apps/server/src/schedule.ts`，`git grep dsh-schedule` 在 `apps/` `packages/*/src` 里 0 处，**没借 dsh 的**；② `dsh-schedule` / `time-context` / `ui-schedule` 三行从 `web-app` bundle 挪进可选包 `dsh-experimental-schedule-bundle`（`OPTIONAL_BUNDLES` 第四个），只能经插件管理页装——`plugin-manager` / `tool-plugin-manager` 在 profile 层关死，我们的 `bundles` 也只有 base / headless；③ 组合里 0 行、模块图 0 命中 | `dsh-app-boot` 的 `OPTIONAL_BUNDLES`（`lib` 第 552–557 行）；`experimental/schedule-bundle/cordis.patch.yml`；提交 `41c29fa8 feat(schedule): ship the Schedule switch as an optional bundle` |
+| 2 | **DeepSeek 账号模型的会话无需 API Key 即可网页搜索** | 两档运行时**碰不到**：`dsh-web-search-deepseek` / `dsh-tool-web` 不在模块图里；账号那棵最小树（`src/deepseek-account.ts`）只挂凭据 + 授权 + 账号模块，没有 `web` / `agents`。**完整 profile 那条路碰得到**：`web-search-deepseek` 在 base 里默认挂、没有关账号令牌的配置项，叠了 `deepseek-account.on.patch.yml` 的完整 profile 里，账号路由的会话一搜就直接拿账号令牌出网，绕开我们的数据接口路由（docs/75 / docs/81）。**处理**：profile 层整行 `disabled: true`（连带原来那条用 API Key 搜的路——同样绕开我们路由），`LOCKDOWN` + `FORBIDDEN` 钉住。要不要把"账号用户免 key 搜索"接进我们自己的数据接口，见报告「需要定的事」 | `dsh-web-search-deepseek` `lib/index.js` 第 290–311 行；README「Authentication」；提交 `b3c672e4` / `b38da295` |
+| 3 | **工具调度异常后对话能继续；结果未知的操作提示先核实副作用、不盲目重试** | 否，也**不冲突**。官方做的是：步骤失败时给没结果的工具调用补一条错误结果（`TOOL_OUTCOME_UNKNOWN` / `TOOL_NOT_STARTED`），让**同一会话的下一次请求**看得到"那一步结果未知，有副作用的先核实"。我们一次运行一棵树、失败即结束，没有"同一会话接着问"；重跑是新开一次运行、不带历史。发信 / 付款这类副作用本来就不在模型手里：模型只能出卡（stage），执行器照 15 §5.8 用幂等键——超时 = 结果未知、键留在"进行中"、重试拿 409、对账之后才放行（`packages/stand-ins/src/connect/mock-connect.ts` 第 392 / 524 行，`mock-connect.test.ts`「超时后结果未知」一条）。指纹 128 条逐字节相同，含失败场景 | `dsh-agent-loop` README「Unanswered calls after step failure」；`dsh-session/lib/types/repair.d.ts` 的 `ToolCallRecovery`；提交 `6a6f350b`、`8de4e518` |
+| 4 | **工作过程展示默认值 / 创造模式插件开发指引与体验技能 / 插件管理与安装引导** | 否。前一条是官方 web 客户端 `ui-chat` 的设置（`b066690f` / `a03e63d1`）；第二条是 `dsh-agent-preset` 的内置技能（`agent-experience`，我们只用 `agent-preset-registry`，`.d.ts` / README 逐字节相同）；第三条是插件管理页（关死）。profile 锁定复核：`plugin-manager` / `tool-plugin-manager` / `hmr` / `config-editor` / `settings` 仍在、仍关；`auto-review` 与 `inspector` 组合里 0 行（Auto review 仍是 `OPTIONAL_BUNDLES`，Inspector 不默认提供） | `--dump-config-schema` 的 `x-cordis.entries`；`profile-lockdown.test.ts` 全过 |
+| 5 | **图片失效后自动重传并继续请求的可靠性** | 否（顺带复核 WP147 / WP143 那两条路）。对应提交是 `llm-deepseek` 的"一次改写删掉全部陈旧映射"（§1 末段）；我们的移植结果相同、不动。截图进模型那条（`dsh-mcp-client` / `-attachment-local` / `-llm` / `-llm-pi-ai` / `-compaction-image-offload`）`.d.ts` 与 README 逐字节相同；`screenshots-to-model.test.ts` 8 条全过 | 提交 `fix(llm): remove every stale DeepSeek file mapping in one index update`；`diff -rq` |
+| 6 | 电脑操控 / 截图进模型 / DeepSeek 账号 / 场景切换 / 浏览器运行时 / `read_skill` 工具桥的测试；`computer-use.lock.json` 的 cua-driver | 全过：`computer-use-seam`（20）、`screenshots-to-model`（8）、`deepseek-account`（dsh-adapter 20 / model-gateway 20 / server 11 + lifecycle 11）、`scenes`（dsh-adapter 11 / desktop 9）+ `apps/server` 的 `dsh-scenes`（12，含真 dsh 起官方 `web`）、`browser-seam`（23）/ `browserskill-seam`（49）、`read-skill`（dsh-adapter 3 / server 7）、`computer-use-install`（11）。**cua-driver 不动**：新版 MCP 提供方 README 逐字节相同、仍链 `cua-driver-rs-v0.28.0`；上游源码里 native 提供方仍精确钉 `@trycua/cua-driver 0.28.0`。只改 `providers` 两行与 `referenced_by` | `diff` 两版 README；两个 tag 的 `experimental/computer-use-cua-driver-native/package.json` 第 40 行 |
+
+#### 5.1 安全：profile 层再关四行（红线 7）
+
+| id | 插件 | 为什么关 | 以前为什么没关 |
+|---|---|---|---|
+| `otel` | `dsh-otel` | base 新 insert、**不带 `disabled`**。它是上报通道工厂（README：「Mount one `otel` service to create ordinary-event and Session-log reporting channels」），单独挂不发东西，但存在的唯一用途是上报；关掉它，任何 `inject: ['otel']` 的上报插件都起不来（fail-closed），上游以后往 base 里再加埋点也白加 | 新行 |
+| `session-telemetry-otel` | `dsh-session-telemetry-otel` | base 里**不带 `disabled`**、默认 `FEEDBACK_ONLY`：用户点"反馈"就把**整条会话日志**（消息原文、工具入参与结果、系统提示…）连同匿名用户 id 发到 DeepSeek 的收集端——与 `session-log-deepseek` 同一类数据、同一个收件方。这一跳它换了通道（改经 `otel`）和地址（`dsh-otel-collector.deepseeksvc.com`） | 0.1.7-rc.1 起就在 base 里。WP132 的对照表看到过它（「会话日志 / 反馈上报…上报不换」），但没按红线 7 锁——当时只看了 patch diff，它没出现在"新增"里。这次它在 diff 里变了，补上 |
+| `web-search-deepseek` | `dsh-web-search-deepseek` | 这一版起账号路由的会话直接拿账号令牌出网搜索（§5 第 2 条），没有单独关它的配置项 | 以前它只认 `DEEPSEEK_API_KEY`（我们的两档不挂；完整 profile 里不配 key 就搜不了），没锁；这次多出一条"免 key 出网"的路 |
+| `plugin-package-inventory-deepseek` | `dsh-plugin-package-inventory-deepseek` | README：「owns the `dsh_plugin_packages` field」——每次走官方 DeepSeek API 的请求都附上当前挂着的**全部插件包清单**（含我们自己的包名与版本），与 `session-log-deepseek` 同一类（随请求上报）。只对官方 `dsh-llm-deepseek` 那条路生效（经 `deepseekLlmApiExtensions`），我们的两档不经它 | 存量：这次按下面「整体过一遍」查出来的，rc.2 里就在，WP 记录里从没提过 |
+
+四行都在 `profiles/agentsws/cordis.patch.yml`（新一段「生效的第四条」），`profile-lockdown.test.ts` 的 `LOCKDOWN` 表与 `FORBIDDEN` 各加四行：
+id 在 0.2.0-rc.1 的 `--dump-config-schema` 里真的存在、指向的插件没换人、组合后确实是关的；两档模块图里 0 命中。`deepseek-account.on.patch.yml`
+叠上时"只打开那一行、别的锁定不动"那组断言照旧成立（所以叠了账号的完整 profile 里，网页搜索也仍是关的）。
+
+**存量整体过一遍**（docs/42 WP177 修订注）：新版 `--dump-config` 组合 98 行，没写死 `disabled: true` 的 85 行逐行看"会不会出网 / 上报"：
+- 已锁 / 已关：`session-log-deepseek`（`enabled: false`）；
+- 这次补锁：`plugin-package-inventory-deepseek`（上表）；
+- **不锁、写明理由**：`llm-deepseek` / `llm-deepseek-account` / `llm-pi-ai` / `session-title-llm`（模型路由与用模型起标题——出网就是"调模型"本身，
+  账号那条没账号模块就一个请求都不发，WP149 判过）；`deepseek-llm-api-extensions`（只是"随官方 API 请求附加字段"的登记处，自己不发；组合里往它登记字段的两个——会话日志、插件清单——一个 `enabled: false`、一个这次锁了）；
+  `web` / `web-fetch-http` / `tool-web`（模型按需抓网页的工具，与沙箱里的 `bash` 同一类"模型动手"，不是后台上报；搜索提供方已关）；
+  `command-feedback`（只在本机记一条反馈事件，README：「Recording is immediate and never starts model work」；发出去靠 `session-telemetry-otel`，已锁）；
+  其余是本机的会话 / 存储 / 工具 / 沙箱 / 子代理。
+
+### 6. ④bis 默认值扫描
+
+两份源码照 `scan-default-flips.sh` 的 `diff -r -u -U0`（去掉 `node_modules` / `dist` / `lib` / 锁文件）+ awk 跑：**7 行**，逐条看：
+
+| 行 | 判断 |
+|---|---|
+| `session/session-log-deepseek`：`enabled: z.boolean().default(true)` → `.default(true).volatile()` | 出网类，但**默认值没翻**（一直是 true），只是改成每次请求现读、网页设置能改。我们 profile 那行 `enabled: false` 照旧生效；网页设置写回走的 `config-editor` 关死 |
+| `client/ui-settings-account`：`contactFormUrl` 的默认飞书问卷地址加了 `hide_uid=1&hide_device_info=1…` 参数 | 官方 web 客户端的反馈问卷链接，不挂 |
+| `client/ui-chat`：`TRANSCRIPT_VIEW_FIELD` 的 `.default(DEFAULT_TRANSCRIPT_VIEW_MODE)` 消失（「工作过程展示」默认值改在客户端代码里算） | web 客户端，不挂 |
+| `terminal/terminal-bash`：新增 `promptTailGraceMs` `.default(0)` | 无关出网；我们挂的是 `tool-bash`（非 terminal） |
+| `core/session/src/repair.ts`：`default:` | 误报（`switch` 分支） |
+
+新文件里的默认值另看了一遍：`client/product-analytics` 的 `enabled: z.boolean().default(true).volatile()`——**默认开的产品埋点**，但它只在 `web-app`
+bundle 里、且那两行写着 `disabled: !!js "ctx.get('profileContext')?.name !== 'desktop'"`（只在官方桌面端开），我们的 base / headless 组合里 0 行、
+模块图 0 命中；`telemetry/otel`、`experimental/schedule-bundle`、`client/ui-settings-session-log` 没有 `.default(`。
+
+**一条出网 / 上报 / 遥测开关都没有从关翻成开。** 第三个面（bundle patch）那两处见 §1.1，按红线 7 关死见 §5.1。
+`desktopPlatform` 那个上游洞（WP134）仍在，`OFFICIAL_DEFAULTS` 与哨兵留着（`deepseek-account.test.ts` 不改全过）。
+
+### 7. 重判上次放弃的选项（docs/42 §⑤）
+
+线照旧：≤ 100 行且两档事件序列仍然相等才换。
+
+| # | 上次的判断 | 这次实测 | 还成立吗 |
+|---|---|---|---|
+| 1 | 官方 SDK 没有 server→client 请求 | `packages/sdk/{client,protocol,server}` 只有 `package.json` 版本号变了；`transport.request(` 在 `sdk/server/src` 里 0 处（只在 client 里） | **成立**，不换 |
+| 2 | headless `--json` 替不了子进程档 | `packages/bundle/headless` 只有 `package.json` 变了，patch 与源码逐字节相同 | **成立** |
+| 3 | `plugin-manager` 不能替 preset 承载 | 这一跳的插件管理改动全是界面与安装引导（两条"bundle 整组开关"的提交 `e42f262b` / `b9ace787` 又被 `738178f1` / `6085a56e` revert 了）；仍关死 | 同 WP132（已部分解决） |
+| 4 | `workspace-changes` 形可借体不能用 | README 逐字节相同，两句硬伤原样在 | **成立** |
+| 5 | 官方账号推理路由 `dsh-llm-deepseek-account` 替我们 `model-gateway` 的 `deepseek-account` provider | 源码与 `lib/` 逐字节相同 | **成立**，不换（WP134 / WP149） |
+
+### 8. 留下的东西
+
+1. **账号用户免 key 网页搜索要不要做**（§5 第 2 条）：官方这条路我们关了；要给账号用户这个能力，正确的接法是在我们自己的数据接口里加一个
+   "DeepSeek 原生搜索"后端、用账号令牌当上游凭据，计费 / 缓存 / 审计仍在我们那一层。M。**要 Luoye 定**。
+2. **`session-telemetry-otel` 与 `plugin-package-inventory-deepseek` 是补锁**（§5.1）：至少从 0.1.7-rc.1 起就该锁、一直没锁。两个包在我们的两档里从没挂过，
+   所以没有数据真出去过；锁上之后完整 profile 里的"反馈"按钮也不再上传、官方 API 请求也不再附插件清单。
+3. **`DEEPSEEK_ACCOUNT_CLIENT_VERSION` 每次升 dsh 都要改**（测试钉着，这次如约先红）。
+4. `desktopPlatform` 上游洞（WP134）仍在。
+5. docs/42 修订注补一条（WP177）：第三个面除了看 diff，还要把**组合里所有不带 `disabled`、会出网的行**对着 `LOCKDOWN` 表整体过一遍——`session-telemetry-otel` 就是
+   "上游早就挂着、每次 diff 都不出现"而至少漏了两跳（WP132、WP149）的。
