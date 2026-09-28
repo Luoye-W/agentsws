@@ -471,6 +471,8 @@ export interface B2bInquiry {
   run_id?: string
   /** 信里要求改收款账户 → 红卡的 id（不采纳）。 */
   fraud_alert_id?: string
+  /** WP173：回我们开发信的那一封被分成了哪一类（有意向 / 要资料 / 问价 / …，docs/84 §2.2）。 */
+  reply_class?: B2bReplyClass
   received_at: Iso8601
   created_at: Iso8601
 }
@@ -596,7 +598,14 @@ export interface B2bEnrollment {
   queued_reason?: B2bQueuedReason
   stop_reason?: string
   /** 发过的那几封（Message-ID 用来对回信的线程）。 */
-  steps: { step: B2bSequenceStep; at: Iso8601; message_id?: string; change_id?: string }[]
+  steps: {
+    step: B2bSequenceStep
+    at: Iso8601
+    message_id?: string
+    change_id?: string
+    /** 这一封的主题（跟进回在同一条线程里，用首封那一个）。 */
+    subject?: string
+  }[]
   /** 下一封是哪封、什么时候到点。 */
   next_step?: B2bSequenceStep
   due_at?: Iso8601
@@ -640,6 +649,8 @@ export interface B2bSender {
   /** 第一次从这只邮箱发开发信的时间（预热从这天算）。 */
   first_sent_at?: Iso8601
   auth: B2bSenderAuth
+  /** 上一次查到的 DNS 记录（测试信收回来时拿它和信头一起再判一次）。 */
+  dns?: { spf_txt?: string[]; dmarc_txt?: string[] }
 }
 
 /** 主动开发的几样设置（一个品牌一份）。 */
@@ -650,6 +661,8 @@ export interface B2bOutboundSettings {
   postal_address?: string
   /** 署名。 */
   sender_name?: string
+  /** 想聊的产品线（开一轮时给的，下一轮沿用）。 */
+  product?: string
   /** 「发信域名」那张卡的答案。`separate_pending` = 选了单独域名但还没接上那只邮箱。 */
   sender_choice?: 'separate' | 'primary' | 'separate_pending'
   /** 选定的发信邮箱。 */

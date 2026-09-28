@@ -45,6 +45,7 @@ import {
   sha256,
 } from '@agentsws/core'
 import type { Work } from '@agentsws/work'
+import type { B2bOutboundAssembly } from './b2b-outbound.js'
 import { addressHash, type B2bStore } from './b2b-store.js'
 import { maskAddress } from './mailbox-actions.js'
 
@@ -87,6 +88,11 @@ export interface B2bMailOptions {
   approvals?: ApprovalBus
   work?: Work
   startRun?: StartRun
+  /**
+   * WP173：开发信序列。回我们开发信的那一封先交给它分类、停序列（有意向 / 要资料 / 问价的
+   * 落成询盘交给业务；不感兴趣 / 退订进名单；自动回复顺延）；体检测试信也在这里认。
+   */
+  outbound?: Pick<B2bOutboundAssembly, 'observe' | 'onReply' | 'stopContact'>
 }
 
 export interface B2bIntakeResult {
@@ -263,6 +269,17 @@ export function createB2bMail(options: B2bMailOptions): B2bMail {
     const now = clock.now()
     const { basis, platform } = basisOf(record, triage, by)
     const outbound = store.outboundMatch([record.thread_id, ...record.references])
+    /*
+     * WP173（docs/84 §2.2）：回我们开发信的——先分类、停这个人的序列。有意向 / 要资料 / 问价
+     * 落成**询盘**交给业务（开事项、起 Run）；看不出的照旧开事项等人读；其余（不感兴趣、退订、
+     * 晚点再说、自动回复）只记一笔往来，不开事项、不花模型钱。
+     */
+    const reply =
+      basis === 'our_thread' && outbound?.kind === 'outreach' && options.outbound !== undefined
+        ? options.outbound.onReply({ record, note: outbound })
+        : undefined
+    const quiet =
+      reply !== undefined && reply.action !== 'hand_to_sales' && reply.klass !== 'unknown'
     const contact_id = outbound?.contact_id ?? store.contactIdByEmail(record.from.email)
     const account_id =
       outbound?.account_id ??
@@ -274,9 +291,11 @@ export function createB2bMail(options: B2bMailOptions): B2bMail {
     ]
     const fraud = detectPaymentAccountChange(hay)
     const kind: B2bInquiry['kind'] =
-      basis === 'our_thread' || (basis === 'known_sender' && account_id !== undefined)
-        ? 'correspondence'
-        : 'inquiry'
+      reply?.action === 'hand_to_sales'
+        ? 'inquiry'
+        : basis === 'our_thread' || (basis === 'known_sender' && account_id !== undefined)
+          ? 'correspondence'
+          : 'inquiry'
     const inquiry: B2bInquiry = {
       id: `inq_${sha256(`${workspace_id}|${record.id}`).slice(0, 16)}`,
       workspace_id,
@@ -292,7 +311,8 @@ export function createB2bMail(options: B2bMailOptions): B2bMail {
       message_id: record.id,
       thread_id: record.thread_id,
       commitments,
-      status: 'new',
+      status: quiet ? 'closed' : 'new',
+      ...(reply === undefined ? {} : { reply_class: reply.klass }),
       received_at: record.date,
       created_at: now,
     }
@@ -301,7 +321,7 @@ export function createB2bMail(options: B2bMailOptions): B2bMail {
     const work = options.work
     let matter_id = matterOfThread(record.thread_id)
     let opened = false
-    if (work !== undefined && matter_id === undefined) {
+    if (work !== undefined && matter_id === undefined && !quiet) {
       const matter = work.createMatter({
         kind: 'conversation',
         title:
@@ -329,7 +349,7 @@ export function createB2bMail(options: B2bMailOptions): B2bMail {
 
     let run_id: string | undefined
     let todo = false
-    if (work !== undefined && matter_id !== undefined && !fraud.hit) {
+    if (work !== undefined && matter_id !== undefined && !fraud.hit && !quiet) {
       if (basis === 'platform_notice') {
         // 平台询盘通知只有摘要，正文在平台后台（docs/84 §3.1）：开一条待办，不起 Run
         work.createTodo({
@@ -380,9 +400,20 @@ export function createB2bMail(options: B2bMailOptions): B2bMail {
         run_started: run_id !== undefined,
         todo_opened: todo,
         red_card: fraud_alert_id !== undefined,
+        ...(reply === undefined ? {} : { reply_class: reply.klass, reply_action: reply.action }),
       },
       record.id,
     )
+    if (reply?.action === 'hand_to_sales')
+      emit(
+        'b2b.handed_to_sales',
+        {
+          reply_class: reply.klass,
+          ...(outbound?.contact_id === undefined ? {} : { contact_id: outbound.contact_id }),
+          ...(matter_id === undefined ? {} : { matter_id }),
+        },
+        record.id,
+      )
     return {
       accepted: true,
       inquiry_id: inquiry.id,
@@ -391,6 +422,12 @@ export function createB2bMail(options: B2bMailOptions): B2bMail {
   }
 
   const observe = (record: MessageRecord): number => {
+    // WP173：发信体检的测试信收回来了——读它的 Authentication-Results（DKIM）
+    try {
+      options.outbound?.observe(record)
+    } catch (e) {
+      emit('b2b.sender_check_failed', { detail: String(e).slice(0, 160) }, record.id)
+    }
     if (
       record.folder_kind === 'sent' ||
       record.folder_kind === 'drafts' ||
@@ -433,9 +470,11 @@ export function createB2bMail(options: B2bMailOptions): B2bMail {
         },
         record.id,
       )
-      // 这个联系人的开发序列就此停下（序列本身是下一单；先把这件事写成事件）
-      if (contact_id !== undefined)
+      // 这个联系人的开发序列就此停下（WP173：序列本身也停）
+      if (contact_id !== undefined) {
+        options.outbound?.stopContact(contact_id, hit.reason)
         emit('b2b.sequence_stopped', { contact_id, reason: hit.reason }, record.id)
+      }
     }
     return added
   }

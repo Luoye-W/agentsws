@@ -111,6 +111,12 @@ export function splitByQuota<T>(
  * 不按滚动 24 小时——否则早上 9 点那一拍永远还差昨天 10 点那几封没"过期"。
  */
 export function localDay(iso: string, timeZone: string): string {
+  // 定时任务那边的时区写成 `+08:00` 这种偏移；IANA 名（`Asia/Shanghai`）也认
+  const off = /^([+-])(\d{2}):(\d{2})$/.exec(timeZone)
+  if (off !== null) {
+    const minutes = (off[1] === '-' ? -1 : 1) * (Number(off[2]) * 60 + Number(off[3]))
+    return new Date(Date.parse(iso) + minutes * 60_000).toISOString().slice(0, 10)
+  }
   const parts = new Intl.DateTimeFormat('en-CA', {
     timeZone,
     year: 'numeric',

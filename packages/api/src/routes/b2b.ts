@@ -18,7 +18,9 @@ import type {
   B2bCollection,
   B2bDraft,
   B2bInquiry,
+  B2bQueuedReason,
   B2bQuoteVersion,
+  B2bSenderAuth,
   B2bSuppressionEntry,
   DataDomain,
   MaybePromise,
@@ -149,6 +151,86 @@ export interface B2bPort {
   suppressions(actor: B2bActor): MaybePromise<{ rows: B2bSuppressionEntry[] }>
 }
 
+/* ── WP173：开发信序列（`/v1/b2b/outbound/*`）──────────────────────────── */
+
+/** 「主动开发」那一块的全貌（面板与右栏共用）。 */
+export interface B2bOutboundView {
+  settings: {
+    company_name?: string
+    postal_address?: string
+    sender_name?: string
+    /** 德国 / 奥地利：用户勾选并确认过风险没有。 */
+    de_at_confirmed: boolean
+    sender_choice?: 'separate' | 'primary' | 'separate_pending'
+    sender_address?: string
+    /** 「发信域名」那张卡（还没答时指过去）。 */
+    choice_card_id?: string
+  }
+  /** 选定的发信邮箱：体检结果与今天的配额（预热）。 */
+  sender?: {
+    address: string
+    separate_domain: boolean
+    auth: B2bSenderAuth
+    quota: {
+      cap: number
+      sent_today: number
+      /** 在待批的卡里占着的。 */
+      reserved: number
+      remaining: number
+      warming: boolean
+      warm_from?: string
+    }
+  }
+  /** 还差什么才能发（`sender_choice` / `company_address` / `sender_auth`）。 */
+  needs: B2bQueuedReason[]
+  /** 序列漏斗（格子固定）。 */
+  funnel: { stage: string; label: string; count: number }[]
+  /** 排着的几个人按原因分（`quota` = 今天配额满了，排到明天）。 */
+  queued: Partial<Record<B2bQueuedReason, number>>
+  /** 还没进过序列、现在就能开的联系人数。 */
+  eligible: number
+  /** 默认不发 / 发不了的人数与原因（德奥那一行就是那句"为什么"）。 */
+  excluded: { reason: string; label: string; count: number }[]
+}
+
+export interface B2bOutboundSettingsInput {
+  company_name?: string | undefined
+  postal_address?: string | undefined
+  sender_name?: string | undefined
+  /** `true` = 勾选并确认风险：德国 / 奥地利也发；`false` = 收回。 */
+  de_at_confirm?: boolean | undefined
+}
+
+export interface B2bSequenceStartInput {
+  /** 开哪几位（不给 = 库里所有还没进过序列的联系人）。 */
+  contact_ids?: string[] | undefined
+  /** 想聊的产品线（不给用上一次的）。 */
+  product?: string | undefined
+}
+
+/** 开一轮之后回来的那一份：出了卡、排着、还是一个都发不了（原因逐个写明）。 */
+export interface B2bSequenceStartView {
+  status: 'staged' | 'queued' | 'nothing_to_send' | 'blocked'
+  message: string
+  approval_item_id?: string
+  change_id?: string
+  /** 进了这一张卡的人数。 */
+  picked: number
+  /** 超了今天配额、排到明天的人数。 */
+  queued_tomorrow: number
+  queued_reason?: B2bQueuedReason
+  excluded: { contact_id: string; name: string; company: string; reason: string; label: string }[]
+}
+
+export interface B2bOutboundPort {
+  view(actor: B2bActor): MaybePromise<B2bOutboundView>
+  saveSettings(actor: B2bActor, input: B2bOutboundSettingsInput): MaybePromise<B2bOutboundView>
+  /** 开一轮：筛人 → 选发信邮箱 / 体检 / 配额 → 首封批量一张卡。 */
+  start(actor: B2bActor, input: B2bSequenceStartInput): MaybePromise<B2bSequenceStartView>
+  /** 再体检一次发信邮箱（查 DNS + 给自己发一封测试信）。 */
+  checkSender(actor: B2bActor): MaybePromise<B2bOutboundView>
+}
+
 /* ── 九类对象的路由表 ─────────────────────────────────────────────────── */
 
 interface CollectionRoute {
@@ -266,6 +348,28 @@ function actorOf(c: Parameters<typeof principalOf>[0]): B2bActor {
     role_id: a.role_id,
   }
 }
+
+function outboundOf(deps: GatewayDeps): B2bOutboundPort {
+  const p = deps.b2bOutbound
+  if (p === undefined)
+    throw new ApiError(
+      'not_implemented',
+      '这个服务进程没有装配开发信序列（GatewayDeps.b2bOutbound）。',
+    )
+  return p
+}
+
+const OutboundSettingsBody = z.object({
+  company_name: z.string().max(200).optional(),
+  postal_address: z.string().max(500).optional(),
+  sender_name: z.string().max(100).optional(),
+  de_at_confirm: z.boolean().optional(),
+})
+
+const SequenceStartBody = z.object({
+  contact_ids: z.array(z.string().min(1).max(100)).max(2000).optional(),
+  product: z.string().min(1).max(120).optional(),
+})
 
 const QuoteVersionBody = z.object({
   lines: z
@@ -429,6 +533,82 @@ export function b2bRoutes(): Route[] {
           c,
           await portOf(deps).importCsv(actorOf(c), (await body(c, CsvBody)) as B2bCsvImportInput),
         ),
+    ),
+    // WP173（docs/84 §2）：开发信序列——放在表尾，SDK 生成物里前面的路径不挪位
+    route(
+      {
+        method: 'get',
+        path: '/v1/b2b/outbound',
+        operationId: 'getB2bOutbound',
+        summary:
+          '主动开发：发信邮箱体检与今天配额、序列漏斗、排着的人与原因、默认不发的人数（德奥写明为什么）',
+        tag: 'b2b',
+        auth: 'bearer',
+        assignment: true,
+        authz: tuple('b2b_contact', 'read', 'internal'),
+        returns: 'B2bOutboundView',
+      },
+      async (c, deps) => ok(c, await outboundOf(deps).view(actorOf(c))),
+    ),
+    route(
+      {
+        method: 'put',
+        path: '/v1/b2b/outbound/settings',
+        operationId: 'saveB2bOutboundSettings',
+        summary:
+          '主动开发的设置：页脚上的公司名与实体地址（没有地址不能发）、署名、德国 / 奥地利勾选并确认风险',
+        tag: 'b2b',
+        auth: 'bearer',
+        assignment: true,
+        authz: tuple('b2b_contact', 'stage', 'internal'),
+        body: OutboundSettingsBody,
+        returns: 'B2bOutboundView',
+      },
+      async (c, deps) =>
+        ok(
+          c,
+          await outboundOf(deps).saveSettings(
+            actorOf(c),
+            (await body(c, OutboundSettingsBody)) as B2bOutboundSettingsInput,
+          ),
+        ),
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/b2b/outbound/sequences',
+        operationId: 'startB2bSequence',
+        summary:
+          '开一轮开发信：筛人（抑制名单 / 没来源 / 德奥默认不发）→ 发信邮箱与体检 → 按今天配额，首封批量一张卡、超了排到明天',
+        tag: 'b2b',
+        auth: 'bearer',
+        assignment: true,
+        authz: tuple('b2b_contact', 'stage', 'confidential'),
+        body: SequenceStartBody,
+        returns: 'B2bSequenceStartView',
+      },
+      async (c, deps) =>
+        ok(
+          c,
+          await outboundOf(deps).start(
+            actorOf(c),
+            (await body(c, SequenceStartBody)) as B2bSequenceStartInput,
+          ),
+        ),
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/b2b/outbound/sender/check',
+        operationId: 'checkB2bSender',
+        summary: '再体检一次发信邮箱：查 SPF / DMARC 的 DNS 记录，给自己发一封测试信看 DKIM',
+        tag: 'b2b',
+        auth: 'bearer',
+        assignment: true,
+        authz: tuple('b2b_contact', 'stage', 'internal'),
+        returns: 'B2bOutboundView',
+      },
+      async (c, deps) => ok(c, await outboundOf(deps).checkSender(actorOf(c))),
     ),
   ]
 }

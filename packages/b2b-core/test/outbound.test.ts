@@ -83,6 +83,8 @@ describe('筛人', () => {
     expect(splitByQuota([1, 2], 0)).toEqual({ today: [], later: [1, 2] })
     expect(localDay('2026-09-28T17:00:00Z', 'Asia/Shanghai')).toBe('2026-09-29')
     expect(localDay('2026-09-28T15:00:00Z', 'Asia/Shanghai')).toBe('2026-09-28')
+    expect(localDay('2026-09-28T17:00:00Z', '+08:00')).toBe('2026-09-29')
+    expect(localDay('2026-09-28T02:00:00Z', '-05:00')).toBe('2026-09-27')
   })
 })
 

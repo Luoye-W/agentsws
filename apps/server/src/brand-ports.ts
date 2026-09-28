@@ -16,6 +16,7 @@
 import type {
   AdsPort,
   AskPort,
+  B2bOutboundPort,
   B2bPort,
   CloudPort,
   ConnectionDirectoryPort,
@@ -411,6 +412,14 @@ export function brandB2bPort(
   make: (workspace_id: WorkspaceId) => Promise<B2bPort>,
 ): B2bPort {
   return scopedPort<B2bPort>(make, () => brands.bootstrap)
+}
+
+/** WP173（docs/84 §2）：开发信序列 `/v1/b2b/outbound/*`——一个品牌一份（发信邮箱与配额是这个品牌的）。 */
+export function brandB2bOutboundPort(
+  brands: BrandModules,
+  make: (workspace_id: WorkspaceId) => Promise<B2bOutboundPort>,
+): B2bOutboundPort {
+  return scopedPort<B2bOutboundPort>(make, () => brands.bootstrap)
 }
 
 /**
