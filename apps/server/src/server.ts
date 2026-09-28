@@ -139,7 +139,7 @@ import { adsDeckData, createAdsStore, seedDemoAds } from './ads.js'
 import { createAdsService } from './ads-service.js'
 import { compositeApprovals } from './approvals-composite.js'
 import { createAskPort } from './ask.js'
-import { type AutomationAssembly, createAutomation } from './automation.js'
+import { type AutomationAssembly, createAutomation, sqliteFireCounter } from './automation.js'
 import { demoB2bDeckData, withDemoB2b } from './b2b.js'
 import { createB2bMail } from './b2b-mail.js'
 import { type B2bOutboundAssembly, createB2bOutbound } from './b2b-outbound.js'
@@ -1288,7 +1288,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
    * 官方插件装上（出卡批过）之后，下一次运行就挂四个工具；卸了就停（任务留着）。
    * 调度器、审批总线、品牌模块都比这里晚建，所以全是惰性取值。
    */
+  // 每天到点自动跑的次数落盘（Fable 终审：重启不清零）；全内存档就记在内存
+  const automationFires =
+    dbDir === undefined ? undefined : sqliteFireCounter(join(dbDir, 'automation.sqlite'))
   const automation = createAutomation({
+    ...(automationFires === undefined ? {} : { fires: automationFires }),
     scheduler: () => schedule.scheduler,
     clock,
     appendEvent,
@@ -6405,6 +6409,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       if (options.mount === undefined) roles.close()
       meetings.close()
       schedule.close()
+      automationFires?.close?.()
       catalog.close()
       secretary.close()
       // WP66：每个品牌那一套各关各的（聊天车道 / 渠道 / 活数据源 / 连接面）

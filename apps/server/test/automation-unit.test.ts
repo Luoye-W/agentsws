@@ -2,15 +2,28 @@
  * WP181：`automation.ts` 包的那一层——谁能动、上限、出卡、改了内容旧卡不算数、每天次数上限、审计不带正文。
  * 调度器是真的（内存档 + 官方的时间算法），审批总线与事项是替身。
  */
+
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import type { ApprovalItem, DecideInput, EventEnvelope, RunRequest } from '@agentsws/contracts'
 import { officialRuleResolver } from '@agentsws/dsh-adapter/official-schedule'
 import { createScheduler } from '@agentsws/schedule'
 import { describe, expect, it } from 'vitest'
-import { AUTOMATION_HANDLER, createAutomation, effectOf } from '../src/automation.js'
+import {
+  AUTOMATION_HANDLER,
+  type AutomationFireCounter,
+  createAutomation,
+  effectOf,
+  localDay,
+  sqliteFireCounter,
+} from '../src/automation.js'
 
 const T0 = '2026-09-29T02:00:00.000Z'
 
-function setup(opts: { limits?: Record<string, number>; enabled?: boolean } = {}) {
+function setup(
+  opts: { limits?: Record<string, number>; enabled?: boolean; fires?: AutomationFireCounter } = {},
+) {
   let t = Date.parse(T0)
   const clock = { now: () => new Date(t).toISOString() }
   const scheduler = createScheduler({ clock, rules: officialRuleResolver })
@@ -58,6 +71,7 @@ function setup(opts: { limits?: Record<string, number>; enabled?: boolean } = {}
       },
     }),
     ...(opts.limits === undefined ? {} : { limits: opts.limits }),
+    ...(opts.fires === undefined ? {} : { fires: opts.fires }),
     random: () => 0.5,
   })
   automation.register()
@@ -189,6 +203,46 @@ describe('包的那一层', () => {
     expect(second.result).toEqual({ skipped: 'daily_cap' })
     expect(events.map((e) => e.type)).toContain('automation.capped')
     expect(scheduler.get(made.id)?.handler).toBe(AUTOMATION_HANDLER)
+  })
+
+  it('每天的次数落盘：按岗位按自然日（公司时区）计，重启不清零，第二天重新算', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'agentsws-wp181-fires-'))
+    try {
+      const path = join(dir, 'automation.sqlite')
+      const first = setup({ limits: { fires_per_day: 1 }, fires: sqliteFireCounter(path) })
+      const made = (
+        await first.call('schedule_create', {
+          title: '看库存',
+          prompt: '看一眼库存',
+          daily: { time: '09:00:00' },
+        })
+      ).data as { id: string }
+      await first.scheduler.runNow(made.id)
+      expect(first.runs).toHaveLength(1)
+      // 「重启」：新进程、新调度器，同一份库
+      const again = setup({ limits: { fires_per_day: 1 }, fires: sqliteFireCounter(path) })
+      const made2 = (
+        await again.call('schedule_create', {
+          title: '看库存',
+          prompt: '看一眼库存',
+          daily: { time: '09:00:00' },
+        })
+      ).data as { id: string }
+      expect((await again.scheduler.runNow(made2.id)).result).toEqual({ skipped: 'daily_cap' })
+      expect(again.runs).toEqual([])
+      // 公司时区（东八区）的第二天：重新算
+      again.advance(24 * 3_600_000)
+      await again.scheduler.runNow(made2.id)
+      expect(again.runs).toHaveLength(1)
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('自然日按公司时区切（UTC 16:30 在东八区已经是第二天）', () => {
+    expect(localDay('2026-09-29T16:30:00.000Z', 'Etc/GMT-8')).toBe('2026-09-30')
+    expect(localDay('2026-09-29T16:30:00.000Z', '+08:00')).toBe('2026-09-30')
+    expect(localDay('2026-09-29T16:30:00.000Z', 'UTC')).toBe('2026-09-29')
   })
 
   it('审计：每次调用一条 automation.requested，不带提醒正文', async () => {

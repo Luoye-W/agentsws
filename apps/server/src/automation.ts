@@ -13,9 +13,10 @@
  * | 存哪 | 我们的调度器（落盘、重启续跑、不重入、`schedule.*` 事件）；官方那份记录原样放在 `params.official` |
  * | 到点 | 接着原来那件事跑一次这个岗位的运行（官方是投回原来那次对话）；对外动作照样出卡 |
  * | 出卡 | **会往外发 / 写数据的周期任务**先出一张 `scheduled_task` 卡，批了才开始（一次性提醒不出卡） |
- * | 上限 | 每个岗位最多 20 条；周期的两次之间至少 15 分钟；每个岗位每天到点自动跑最多 24 次 |
+ * | 上限 | 每个岗位最多 20 条；周期的两次之间至少 15 分钟；每个岗位每个自然日（公司时区）到点自动跑最多 24 次（落盘计数） |
  * | 审计 | 每次工具调用记 `automation.requested`（不带正文）；到了上限没跑记 `automation.capped` |
  */
+
 import type {
   ApprovalItem,
   Clock,
@@ -48,6 +49,7 @@ import type { Scheduler, ScheduleTask } from '@agentsws/schedule'
 import type { ToolExecution, ToolExecutor } from '@agentsws/stand-ins'
 import { isScheduleTool } from '@agentsws/stand-ins'
 import type { Work } from '@agentsws/work'
+import Database from 'better-sqlite3'
 import { settleScheduleApproval } from './schedule.js'
 
 /** 到点交给谁（调度器里登记的名字）。 */
@@ -59,7 +61,7 @@ export const AUTOMATION_LIMITS = {
   per_assignment: 20,
   /** 周期任务两次之间最短隔多久（秒）。官方下限是 60 秒；到点跑的是一次模型运行，所以我们收紧到一刻钟。 */
   min_gap_seconds: 15 * 60,
-  /** 一个岗位一天里到点自动跑最多几次（滚动 24 小时）。 */
+  /** 一个岗位一个自然日（公司时区）里到点自动跑最多几次（落盘计数，重启不清零）。 */
   fires_per_day: 24,
 } as const
 
@@ -89,6 +91,85 @@ export interface AutomationOptions {
     | undefined
   limits?: Partial<typeof AUTOMATION_LIMITS>
   random?: () => number
+  /** 每天到点自动跑的次数记在哪（服务端有数据目录时给落盘那一份）；不给 = 内存（重启清零）。 */
+  fires?: AutomationFireCounter
+}
+
+/**
+ * WP181（Fable 终审）：每个岗位每个自然日（公司时区）到点自动跑了几次。**落盘**——重启不清零，
+ * 否则「每天最多 24 次」重启一次就又有 24 次。
+ */
+export interface AutomationFireCounter {
+  count(assignment_id: string, day: string): number
+  /** 记一次，回记完之后的次数。 */
+  bump(assignment_id: string, day: string): number
+  close?(): void
+}
+
+export function memoryFireCounter(): AutomationFireCounter {
+  const counts = new Map<string, number>()
+  const key = (a: string, d: string): string => `${a}\u0000${d}`
+  return {
+    count: (a, d) => counts.get(key(a, d)) ?? 0,
+    bump(a, d) {
+      const n = (counts.get(key(a, d)) ?? 0) + 1
+      counts.set(key(a, d), n)
+      return n
+    },
+  }
+}
+
+/** 落盘那一份：数据目录下 `automation.sqlite` 的一张表（岗位 × 自然日 → 次数）。只留最近 7 天。 */
+export function sqliteFireCounter(dbPath: string): AutomationFireCounter {
+  const db = new Database(dbPath)
+  db.pragma('journal_mode = WAL')
+  db.exec(
+    `CREATE TABLE IF NOT EXISTS automation_fires (
+       assignment_id TEXT NOT NULL,
+       day TEXT NOT NULL,
+       count INTEGER NOT NULL,
+       PRIMARY KEY (assignment_id, day)
+     )`,
+  )
+  const get = db.prepare('SELECT count FROM automation_fires WHERE assignment_id = ? AND day = ?')
+  const up = db.prepare(
+    `INSERT INTO automation_fires (assignment_id, day, count) VALUES (?, ?, 1)
+     ON CONFLICT (assignment_id, day) DO UPDATE SET count = count + 1`,
+  )
+  const prune = db.prepare('DELETE FROM automation_fires WHERE day < ?')
+  const count = (a: string, d: string): number =>
+    (get.get(a, d) as { count: number } | undefined)?.count ?? 0
+  return {
+    count,
+    bump(a, d) {
+      up.run(a, d)
+      // 自然日是 `YYYY-MM-DD`，按字符串比就是按日期比
+      const cutoff = new Date(Date.parse(`${d}T00:00:00Z`) - 7 * 86_400_000)
+        .toISOString()
+        .slice(0, 10)
+      prune.run(cutoff)
+      return count(a, d)
+    },
+    close() {
+      db.close()
+    },
+  }
+}
+
+/** 某一刻在某个时区里是哪一天（`YYYY-MM-DD`）；时区认不出按 UTC。 */
+export function localDay(at: string, zone: string): string {
+  const fmt = (tz: string): string =>
+    new Intl.DateTimeFormat('en-CA', {
+      timeZone: tz,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(new Date(at))
+  try {
+    return fmt(zone)
+  } catch {
+    return fmt('UTC')
+  }
 }
 
 export interface AutomationAssembly {
@@ -148,8 +229,8 @@ export function createAutomation(options: AutomationOptions): AutomationAssembly
   })
   const limits = { ...AUTOMATION_LIMITS, ...options.limits }
   const random = options.random ?? Math.random
-  /** 每个岗位最近 24 小时里到点跑过的时刻（进程内；重启清零——宁可多跑一次，不会少出一张卡）。 */
-  const fired = new Map<string, number[]>()
+  /** 每个岗位每个自然日到点跑过几次（服务端给的是落盘那一份，重启不清零）。 */
+  const fires = options.fires ?? memoryFireCounter()
 
   const enabled = async (): Promise<boolean> => {
     try {
@@ -515,12 +596,9 @@ export function createAutomation(options: AutomationOptions): AutomationAssembly
     }
   }
 
-  /** 滚动 24 小时里这个岗位到点跑过几次（先清掉过期的）。 */
-  const firesToday = (assignment_id: string, nowMs: number): number[] => {
-    const kept = (fired.get(assignment_id) ?? []).filter((t) => nowMs - t < 24 * 3_600_000)
-    fired.set(assignment_id, kept)
-    return kept
-  }
+  /** 公司时区的自然日（`YYYY-MM-DD`）：每天的次数按它切。 */
+  const dayOf = async (workspace_id: WorkspaceId, at: string): Promise<string> =>
+    localDay(at, await options.companyZone(workspace_id))
 
   function register(): void {
     scheduler.register(AUTOMATION_HANDLER, async (ctx) => {
@@ -529,14 +607,14 @@ export function createAutomation(options: AutomationOptions): AutomationAssembly
       if (record === undefined) throw new Error('这条定时没有官方规则记录，跑不了')
       // 卸了插件：任务留着、到点不跑（官方：关掉插件包，存着的任务还在盘上）
       if (!(await enabled())) return { skipped: 'plugin_off' }
-      const nowMs = Date.parse(ctx.at)
-      const window = firesToday(task.assignment_id, nowMs)
-      if (window.length >= limits.fires_per_day) {
+      const day = await dayOf(task.workspace_id, ctx.at)
+      const count = fires.count(task.assignment_id, day)
+      if (count >= limits.fires_per_day) {
         emit(
           task.workspace_id,
           'automation.capped',
           { kind: 'system', id: 'automation' },
-          { task_id: task.id, limit: limits.fires_per_day, count: window.length },
+          { task_id: task.id, limit: limits.fires_per_day, count, day },
         )
         return { skipped: 'daily_cap' }
       }
@@ -549,7 +627,7 @@ export function createAutomation(options: AutomationOptions): AutomationAssembly
       if (work === undefined || startRun === undefined || matter === undefined) {
         throw new Error('原来那件事找不到了（或者这个进程不跑运行），这一次没跑')
       }
-      window.push(nowMs)
+      fires.bump(task.assignment_id, day)
       const title = task.title ?? record.title
       work.appendEvent(matter.id, {
         kind: 'status',
