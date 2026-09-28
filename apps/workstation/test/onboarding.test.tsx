@@ -1645,6 +1645,37 @@ describe('WP142 第 ③ 步：先问「这次主要想让它干什么」，按�
   })
 })
 
+describe('WP171 第 ③ 步多问一项「B2B」', () => {
+  const WITH_B2B: OnboardingPositionView[] = [
+    ...POSITIONS,
+    {
+      id: 'b2b',
+      name: 'B2B',
+      roles: [
+        { id: 'b2b.sales', name: '业务', default: true, what_it_does: '回询盘、出报价。' },
+        { id: 'b2b.outbound', name: '主动开发', default: true, what_it_does: '找客户、发开发信。' },
+        {
+          id: 'b2b.marketplace',
+          name: 'B2B 平台运营',
+          default: false,
+          what_it_does: '国际站后台。',
+        },
+      ],
+    },
+  ]
+  const base = { position_ids: ['web-ops'], role_ids: [], custom_position_name: '' }
+
+  it('装了 B2B 岗位才问这一项；按下去勾的是 B2B 岗位，别的不动', () => {
+    expect(availablePurposes(POSITIONS)).toEqual(['kol', 'care'])
+    expect(availablePurposes(WITH_B2B)).toEqual(['kol', 'care', 'b2b'])
+    const picked = applyPurposes(base, ['b2b'], WITH_B2B)
+    expect(picked.position_ids).toEqual(['web-ops', 'b2b'])
+    expect(purposesOf(picked)).toEqual(['b2b'])
+    // 再把 B2B 按掉：只去掉 B2B，网站运营原样
+    expect(applyPurposes(picked, [], WITH_B2B).position_ids).toEqual(['web-ops'])
+  })
+})
+
 describe('WP142 完成屏：数字与第 ④ 步同口径，已有的被跳过要说', () => {
   async function finish(): Promise<void> {
     const user = userEvent.setup()

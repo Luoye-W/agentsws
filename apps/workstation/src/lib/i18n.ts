@@ -2946,6 +2946,7 @@ const zh: Table = {
   'onboarding.purpose.title': '你这次主要想让它干什么？',
   'onboarding.purpose.kol': '红人营销',
   'onboarding.purpose.care': '客服',
+  'onboarding.purpose.b2b': 'B2B',
   'onboarding.purpose.both': '都要',
   'onboarding.purpose.hint': '按你选的先把岗位勾好，下面还能改。',
   'onboarding.done.skipped': '另外 {n} 条你本来就有，没重复建。',
@@ -6008,7 +6009,8 @@ const en: Table = {
   'onboarding.purpose.title': 'What do you mainly want it to do this time?',
   'onboarding.purpose.kol': 'Creator marketing',
   'onboarding.purpose.care': 'Customer care',
-  'onboarding.purpose.both': 'Both',
+  'onboarding.purpose.b2b': 'B2B',
+  'onboarding.purpose.both': 'All of them',
   'onboarding.purpose.hint':
     'We tick the positions for you from this; you can still change them below.',
   'onboarding.done.skipped': '{n} more you already had, so they were not created again.',
