@@ -85,7 +85,7 @@
 | 60 | WP176 开发信后续：「不感兴趣」只停这一轮（冷却 90 天）、公司地址进档案、跟进也由模型写、老邮箱免预热、Run 里的开发信工具、DKIM 检查不卡在 Gmail | `WP176-b2b-outbound-followups.md` | `wp176-outbound-2` · `wp/176-outbound-2` | WP173 | 已合并（09-28，Fable 终审：342 文件 4654 条过（仅 onTaskUpdate 噪声），b2b 19/19、dtc 64/64、22/22 × 三运行时） |
 | 61 | WP177 dsh 升级 0.1.7-rc.2 → 0.2.0-rc.1（照 docs/42 七步；大版本号，seam 逐个对；账号网页搜索默认关、自动化任务改插件包） | `WP177-dsh-0.2.0-rc.1.md` | `wp177-dsh-020` · `wp/177-dsh-020` | — | 已合并（09-29，Fable 终审：干净构建，234 文件 3540 条过（仅 RPC 噪声），三个模拟包 × 三运行时门禁过；桌面打包最后一步待有 vendor 时补跑） |
 | 62 | WP178 第 1 步部署事故复盘与修复（私有仓）：`run_worker_first` 数组 + SPA 回退吞掉接口 → 改 `true`、后台资源由 Worker 发；部署前 `smoke-workerd` 进 CI | 私有仓 `docs/briefs/WP178-assets-routing-outage.md` | 私有仓 `wp/178-assets` | WP168 | 已合并（09-29，私有仓 main `01f00dd`；Fable 终审：690 条过、smoke-workerd 44/44、四份 dry-run 过；未部署） |
-| 63 | WP179 DeepSeek 原生网页搜索进我们的数据接口路由（账号 / 自带 key 免积分）+ 模型 `web_search` 工具，官方那行仍锁 | `WP179-deepseek-native-search.md` | `wp179-ds-search` · `wp/179-ds-search` | WP177 | 进行中（Claude） |
+| 63 | WP179 官方功能优先：用官方网页搜索 / 抓网页（账号免 key）接进职责，逐行重判 profile 锁定（功能能开都开，真冲突保留，数据外发交 Luoye 定），docs/42 红线更新 | `WP179-deepseek-native-search.md` | `wp179-ds-search` · `wp/179-ds-search` | WP177 | 进行中（Claude） |
 
 WP117b 的补充要求（派工单里没有，写在这）：demo 服务的是 `apps/workstation/dist`，测界面前先 `pnpm -F @agentsws/workstation exec vite build`；交付一个真实点击的 playwright 脚本 `scripts/e2e-kol-sandbox.mjs`（playwright 库在 `node_modules/.pnpm/playwright@1.63.0/node_modules/playwright`），走完「选合成红人 → 起草开发信 → 批准发送 → 已发 ≥ 1 → 跳到 N 天后 → 回信 ≥ 1 → 分类 → 议价卡 → 阶段推进 → 交付物 → 追踪链接」，每步截图到 `docs/assets/workstation/kol-e2e-NN.png`，脚本里断言计数确实变了；演练数据从真实漏斗 / 归因里排除，单独显示「演练漏斗」。
 
