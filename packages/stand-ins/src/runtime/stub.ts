@@ -59,6 +59,16 @@ import {
   marketplaceLinkSlip,
   rewriteForChannelGuard,
 } from './support.js'
+import {
+  renderWebAnswer,
+  urlsIn,
+  WEB_FETCH_TOOL,
+  WEB_SEARCH_TOOL,
+  WEB_TOOL_DEF_BY_NAME,
+  type WebSource,
+  WebUsageCounter,
+  webResearchPlan,
+} from './web.js'
 
 export interface ToolExecution {
   status: 'ok' | 'error' | 'blocked'
@@ -260,7 +270,9 @@ function toolDefs(req: RunRequest): ToolDef[] {
       OWNER_TOOL_DEF_BY_NAME.get(name) ??
       SKILL_TOOL_DEF_BY_NAME.get(name) ??
       // WP176：主动开发的三个开发信工具（只有那条职责的运行才有它们）
-      B2B_OUTBOUND_TOOL_DEF_BY_NAME.get(name) ?? {
+      B2B_OUTBOUND_TOOL_DEF_BY_NAME.get(name) ??
+      // WP179：官方网页工具（只有开了网页工具的运行，工具面里才有这两个名字）
+      WEB_TOOL_DEF_BY_NAME.get(name) ?? {
         name,
         description: `stand-in tool ${name}`,
         input_schema: { type: 'object' },
@@ -470,6 +482,96 @@ export function createStubRuntime(options: StubRuntimeOptions): RuntimeAdapter {
       const readTools: string[] = []
       const threadItem = itemsOfKind(req, 'thread')[0]
       const threadText = threadItem ? plainText(threadItem.content) : ''
+
+      /*
+       * WP179：**去网上查一下**。这次运行开了官方网页搜索（`RunRequest.web`）、问的又是"搜 / 查 / 调研"，
+       * 就走这段剧本：搜一条查询 → 开了抓网页就抓第一条来源 → 把来源列成一段话。
+       * 次数上限与另外两个运行时同一份判定（`WebUsageCounter`）；没开网页工具的运行一个字节不变。
+       */
+      const webPlan = webResearchPlan(
+        req,
+        [threadText, plainText(itemsOfKind(req, 'matter_summary')[0]?.content ?? '')].join('\n'),
+      )
+      if (webPlan !== undefined) {
+        const counter = new WebUsageCounter(req)
+        let sources: WebSource[] = []
+        let fetched: { url: string; status: number } | undefined
+        let failed: string | undefined
+        const calls: { tool: string; input: Record<string, unknown> }[] = [
+          { tool: WEB_SEARCH_TOOL, input: { queries: [webPlan.query] } },
+        ]
+        for (let i = 0; i < calls.length; i += 1) {
+          const call = calls[i] as { tool: string; input: Record<string, unknown> }
+          if (signal.aborted) {
+            sink({ type: 'run.cancelled' })
+            return finish('cancelled', '运行被中断')
+          }
+          const call_id = `call_${toolCalls + 1}`
+          sink({ type: 'tool.call', call_id, tool: call.tool, input: call.input })
+          if (toolCalls >= req.budget.max_tool_calls) {
+            exhausted = { which: 'max_tool_calls', used: toolCalls, cap: req.budget.max_tool_calls }
+            sink({ type: 'budget.exhausted', ...exhausted })
+            sink({ type: 'tool.result', call_id, status: 'blocked', reason: 'budget_exhausted' })
+            break
+          }
+          const denial = counter.take(call.tool, call.input)
+          const res =
+            denial !== undefined
+              ? { status: 'blocked' as const, reason: denial }
+              : options.executeTool === undefined
+                ? { status: 'error' as const, reason: 'no_tool_executor' }
+                : await options.executeTool({ name: call.tool, input: call.input, request: req })
+          toolCalls += 1
+          sink({
+            type: 'tool.result',
+            call_id,
+            status: res.status,
+            ...(res.reason === undefined ? {} : { reason: res.reason }),
+          })
+          if (res.status !== 'ok') {
+            if (call.tool === WEB_SEARCH_TOOL) failed = res.reason ?? '这一步没走通'
+            continue
+          }
+          readTools.push(call.tool)
+          if (call.tool === WEB_SEARCH_TOOL) {
+            sources = webSourcesOf(res.data)
+            const first = sources[0]?.url ?? urlsIn(JSON.stringify(res.data ?? ''))[0]
+            if (webPlan.fetch && first !== undefined) {
+              calls.push({ tool: WEB_FETCH_TOOL, input: { url: first } })
+            }
+          } else {
+            const url = typeof call.input.url === 'string' ? call.input.url : ''
+            fetched = { url, status: webStatusOf(res.data) }
+          }
+        }
+        const answer = renderWebAnswer({
+          query: webPlan.query,
+          sources,
+          ...(fetched === undefined ? {} : { fetched }),
+          ...(failed === undefined ? {} : { failed }),
+        })
+        outputs.push({ kind: 'answer', text: answer })
+        usage.output_tokens = Math.ceil(answer.length / 4) + (seed % 7)
+        const summary = describeRun({
+          readTools,
+          drafted: false,
+          reply: answer,
+          tools: req.tools.allow,
+          ...(exhausted === undefined ? {} : { exhausted: exhausted.which }),
+        })
+        sink({
+          type: 'run.completed',
+          usage: {
+            ...usage,
+            tool_calls: toolCalls,
+            seconds: Math.max(0, (Date.parse(clock.now()) - startedMs) / 1000),
+            cost_base: 0,
+          },
+          outputs,
+          summary,
+        })
+        return finish(exhausted ? 'budget_exhausted' : 'completed', summary)
+      }
 
       /*
        * WP117（66 断点 #1）：**红人的岔口**。
@@ -1084,4 +1186,20 @@ function threadParticipants(item?: ContextItem): string[] {
 
 function threadRecipient(item?: ContextItem): string | undefined {
   return threadParticipants(item)[0]?.split('@')[0]
+}
+
+/** WP179：`web_search` 回来的来源（官方值形状 `{ sources }`；形状不对就当没有）。 */
+function webSourcesOf(data: unknown): WebSource[] {
+  const o = data !== null && typeof data === 'object' ? (data as Record<string, unknown>) : {}
+  if (!Array.isArray(o.sources)) return []
+  return o.sources.filter(
+    (s): s is WebSource =>
+      s !== null && typeof s === 'object' && typeof (s as { url?: unknown }).url === 'string',
+  )
+}
+
+/** WP179：`web_fetch` 回来的状态码（官方值形状 `{ statusCode }`）。 */
+function webStatusOf(data: unknown): number {
+  const o = data !== null && typeof data === 'object' ? (data as Record<string, unknown>) : {}
+  return typeof o.statusCode === 'number' ? o.statusCode : 0
 }

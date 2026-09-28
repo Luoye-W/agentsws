@@ -56,6 +56,7 @@ export * from './runtime/skills.js'
 export * from './runtime/stub.js'
 export * from './runtime/support.js'
 export * from './runtime/tool-words.js'
+export * from './runtime/web.js'
 
 export const DEFAULT_START: Iso8601 = '2026-09-07T01:00:00.000Z'
 
