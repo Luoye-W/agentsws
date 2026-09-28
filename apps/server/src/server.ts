@@ -132,7 +132,7 @@ import { compositeApprovals } from './approvals-composite.js'
 import { createAskPort } from './ask.js'
 import { demoB2bDeckData, withDemoB2b } from './b2b.js'
 import { createB2bMail } from './b2b-mail.js'
-import { createB2bOutbound } from './b2b-outbound.js'
+import { type B2bOutboundAssembly, createB2bOutbound } from './b2b-outbound.js'
 import { createB2bService } from './b2b-service.js'
 import { type B2bStore, createB2bStore } from './b2b-store.js'
 import { MemoryBackend } from './backend.js'
@@ -185,7 +185,13 @@ import {
 import { createCatalogIndex } from './catalog-index.js'
 // WP95（36 §11）：第三栏「变更审阅」逐文件 diff / 「运行中的浏览器」汇总，两条只读投影
 import { changeFiles } from './change-files.js'
-import { type ChannelsAssembly, type ChannelsOptions, createChannels } from './channels.js'
+import {
+  type ChannelsAssembly,
+  type ChannelsOptions,
+  createChannels,
+  type DirectMailInput,
+  type DirectMailResult,
+} from './channels.js'
 // WP57（48 §4 L3 #11）：在线聊天的实时车道（会话 / 轮次 / 计划 / 求助超时）
 import {
   CHAT_ASSIST_TASK_ID,
@@ -682,10 +688,17 @@ export interface ServerOptions {
    */
   brandIntakeFetch?: BrandIntakeFetch
   /**
-   * WP173：开发信发信邮箱体检那一跳 DNS（TXT）。测试与 demo 塞一个替身（不做真 DNS 查询）；
-   * 生产路径不传，走 `node:dns` 的 `resolveTxt`。
+   * WP173：开发信那几跳的**替身**（测试与 demo 用；生产路径一个都不传）。
+   *
+   * - `dns`：发信邮箱体检查 SPF / DMARC（不做真 DNS 查询）；不传走 `node:dns` 的 `resolveTxt`；
+   * - `mailboxes`：demo 没有真邮箱连接，「发信域名」那张卡的选项从这里来；不传读连接页；
+   * - `sendMail`：替身 SMTP（测试信与开发信都进它，不真发）；不传走消息层的 `sendMail`。
    */
-  b2bDns?: { txt(name: string): Promise<readonly string[]> }
+  b2bStandIns?: {
+    dns?: { txt(name: string): Promise<readonly string[]> }
+    mailboxes?: readonly string[]
+    sendMail?: (input: DirectMailInput) => Promise<DirectMailResult>
+  }
   /**
    * WP73：社媒那九条渠道打出去的那一跳（测试塞一个假的对着真 URL 断言）。
    * 生产路径不传它，走全局 fetch。
@@ -783,6 +796,8 @@ export interface Server {
   messages: MessagesAssembly
   /** WP172（docs/84）：B2B 库（九类对象 + 询盘 / 抑制名单）——bootstrap 品牌那一份。 */
   b2b: B2bStore
+  /** WP173（docs/84 §2）：开发信序列——bootstrap 品牌那一份（demo 的替身测试信要调它的 `observe`）。 */
+  b2bOutbound: B2bOutboundAssembly
   /** WP57 在线聊天的实时车道（会话 / 轮次聚合 / 五种动作 / 求助超时）。 */
   chat: ChatLane
   /** WP25 模型面（provider 配置 / 热更新 / 按 purpose 记账）。 */
@@ -3131,17 +3146,20 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       effectiveConfig: (id) => roles.effectiveConfig(id),
       appendEvent,
       secrets: { get: (id) => (brandSecrets.available ? brandSecrets.get(id) : undefined) },
-      mailboxes: () => connections.mailAccounts().map((a) => a.address),
+      mailboxes: () =>
+        options.b2bStandIns?.mailboxes === undefined
+          ? connections.mailAccounts().map((a) => a.address)
+          : [...options.b2bStandIns.mailboxes],
       // 主域名：公司档案的域名；没填就把第一只接上的邮箱当主域名（宁可少认一只"单独域名"）
       primaryDomains: () => {
         const org = onboardingRef?.companyProfile()?.domain?.trim()
         if (org !== undefined && org !== '') return [org]
-        const first = connections.mailAccounts()[0]?.address
+        const first = options.b2bStandIns?.mailboxes?.[0] ?? connections.mailAccounts()[0]?.address
         return first === undefined ? [] : [first.slice(first.lastIndexOf('@') + 1)]
       },
       companyName: () => onboardingRef?.companyProfile()?.legal_name ?? brandNameOfWorkspace(ws),
-      sendMail: (input) => channels.sendMail(input),
-      dns: options.b2bDns ?? {
+      sendMail: options.b2bStandIns?.sendMail ?? ((input) => channels.sendMail(input)),
+      dns: options.b2bStandIns?.dns ?? {
         txt: async (name) => (await dnsPromises.resolveTxt(name)).map((chunks) => chunks.join('')),
       },
       outboundHolder: () => {
@@ -6058,6 +6076,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     channels: boot.channels,
     messages: boot.messages,
     b2b: boot.b2b,
+    b2bOutbound: boot.b2bOutbound,
     // WP57：在线聊天车道
     chat: boot.chat,
     modelSettings: boot.ownModels,

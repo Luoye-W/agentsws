@@ -338,7 +338,7 @@ export function createB2bOutbound(options: B2bOutboundOptions): B2bOutboundAssem
       role_id: actor.role_id,
       subject: { object: { type: 'b2b_outbound', id: workspace_id } },
       dedupe_key: `${workspace_id}:b2b_sender_choice:${clock.now().slice(0, 10)}`,
-      title: '开发信从哪只邮箱发？',
+      title: '开发信从哪只邮箱发？强烈建议用单独的发信域名',
       summary: SENDER_CHOICE_SUMMARY,
       payload: {
         options: choices.map((o) => ({ id: o.id, label: o.label })),
@@ -801,9 +801,17 @@ export function createB2bOutbound(options: B2bOutboundOptions): B2bOutboundAssem
         queued_tomorrow: later.length,
         message: `今天 ${checked.address} 的配额用完了（${quota.cap} 封），排到明天。`,
       }
+    // 德奥默认没放进来的那几位：卡上也写一句原因（选邮箱之后才出卡时，开一轮那一刻的说明已经过去了）
+    const deAt = screenProspects(prospectsOf(), {
+      de_at_confirmed: settings.de_at !== undefined,
+    }).excluded.filter((x) => x.reason === 'de_at').length
+    const deAtNote =
+      deAt > 0 && !notes.some((n) => n.includes(B2B_DE_AT_REASON))
+        ? [`德国 / 奥地利 ${deAt} 位没放进来：${B2B_DE_AT_REASON}。`]
+        : []
     const extra =
       later.length > 0 ? [`另有 ${later.length} 位超了今天配额（${quota.cap} 封），排到明天。`] : []
-    const out = await stageBatch(actor, 'first', today, checked, [...extra, ...notes])
+    const out = await stageBatch(actor, 'first', today, checked, [...extra, ...deAtNote, ...notes])
     if (!out.ok)
       return { status: 'blocked', message: out.message, picked: 0, queued_tomorrow: later.length }
     return {
@@ -1281,7 +1289,8 @@ export function createB2bOutbound(options: B2bOutboundOptions): B2bOutboundAssem
       .filter(
         (i) =>
           i.basis === 'our_thread' &&
-          i.reply_class !== undefined &&
+          // 分过类的 + 没分出来还开着的（WP172 那一种，待分）
+          (i.reply_class !== undefined || i.status === 'new') &&
           Date.parse(i.received_at) >= since,
       )
       .map((i) => ({
@@ -1293,7 +1302,12 @@ export function createB2bOutbound(options: B2bOutboundOptions): B2bOutboundAssem
       }))
       // 待分的排前面（要人读）
       .sort((a, b) => Number(b.category === '待分') - Number(a.category === '待分'))
-    return { outreach_today: today, sequence_funnel: sequenceFunnel(enrollments), replies }
+    return {
+      outreach_today: today,
+      // 还没开过序列 = 空态（不画一排 0）
+      sequence_funnel: enrollments.length === 0 ? [] : sequenceFunnel(enrollments),
+      replies,
+    }
   }
 
   const port: B2bOutboundPort = {

@@ -57,7 +57,7 @@ export function draftB2bOutreach(step: B2bSequenceStep, v: B2bOutreachVars): B2b
         '',
         observation,
         '',
-        `When a range adds new accessories, keeping the supplier list short usually matters as much as the product itself. ${evidence === '' ? '' : `${evidence} `}We make ${clean(v.product)} at ${clean(v.our_company)}.`,
+        `When a range adds new accessories, keeping the supplier list short usually matters as much as the product itself. ${evidence === '' ? '' : `${evidence} `}We make ${clean(v.product)} at ${clean(v.our_company).replace(/\.$/, '')}.`,
         '',
         'Would a one-page overview be useful?',
         '',

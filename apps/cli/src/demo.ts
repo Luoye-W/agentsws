@@ -1252,10 +1252,63 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
       ? {}
       : { autoLinkAfterMs: options.cloudAutoLinkAfterMs }),
   })
+  /*
+   * WP173：开发信那几跳在 demo 里全是替身——不做真 DNS 查询、没有真邮箱、不真发信。
+   * 发信体检的测试信"收回来"也是替身：过一秒把一封带 `dkim=pass` 信头的信交给 `observe`，
+   * 于是在界面上选好发信邮箱之后，批量首封卡会真的出现；批了之后"发出去"的信落在这个替身里。
+   */
+  let demoServer: Server | undefined
+  let demoMailSeq = 0
+  const b2bStandIns = {
+    dns: {
+      txt: async (name: string): Promise<readonly string[]> =>
+        name.startsWith('_dmarc.') ? [] : ['v=spf1 include:_spf.demo-mail.example ~all'],
+    },
+    mailboxes: [DEMO_B2B_PRIMARY, DEMO_B2B_SENDER],
+    sendMail: async (input: { account?: string; subject: string; to: readonly string[] }) => {
+      demoMailSeq += 1
+      const account = input.account ?? DEMO_B2B_SENDER
+      const domain = account.slice(account.lastIndexOf('@') + 1)
+      const message_id = `<demo-out-${demoMailSeq}@${domain}>`
+      if (input.subject.includes('体检'))
+        setTimeout(() => {
+          demoServer?.b2bOutbound.observe({
+            id: `demo_auth_${demoMailSeq}`,
+            workspace_id: world.workspace_id,
+            source: 'email',
+            account,
+            folder: 'INBOX',
+            folder_kind: 'inbox',
+            thread_id: message_id,
+            message_id,
+            references: [],
+            headers: {
+              'authentication-results': `demo-mx; dkim=pass header.d=${domain}; spf=pass smtp.mailfrom=${account}`,
+            },
+            from: { email: account },
+            to: [{ email: account }],
+            cc: [],
+            bcc: [],
+            subject: input.subject,
+            snippet: '',
+            text: '',
+            has_remote_images: false,
+            attachments: [],
+            date: world.clock.now(),
+            received_at: world.clock.now(),
+            flags: { read: false, starred: false, answered: false, draft: false },
+            labels: [],
+            route: 'inbox',
+          } as MessageRecord)
+        }, 1000)
+      return { ok: true, outbox_id: `demo_ob_${demoMailSeq}`, message_id, account }
+    },
+  }
   const server = await createServer({
     clock: world.clock,
     random: world.random,
     mount,
+    b2bStandIns,
     staticDir,
     brandData: (ws) => extraBrandData.get(ws),
     // WP154：「现在读一遍 Search Console」在 demo 里读的是替身那一周（不连真 Google）
@@ -1385,6 +1438,11 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
 
   // WP113（63）：消息页的样例来信（客服在处理的 / 红人的 / 供应商 / 账单 / 订阅 / 可疑 / 应聘 / 已发）
   await seedMessages(server, world)
+
+  // WP173（docs/84 §2）：主动开发的开发信——名单里 6 家（含一家德国潜在客户），开一轮 →
+  // 出「发信域名」那张选择卡（还没选），德国那家默认没放进来
+  demoServer = server
+  await seedOutbound(server, world)
 
   // WP96：十一种排版各一张（默认不造，见 `DemoOptions.cardGallery`）
   if (options.cardGallery === true) await seedCardGallery(world)
@@ -1705,6 +1763,111 @@ async function seedMessages(server: Server, world: World): Promise<void> {
       created_at: inquiry.date,
     })
   }
+}
+
+/** WP173：demo 里「发信域名」那张卡的两只邮箱（主域名 / 单独的发信域名）。 */
+export const DEMO_B2B_PRIMARY = 'hello@nordvolt.example'
+export const DEMO_B2B_SENDER = 'sales@nordvolt-mail.example'
+
+/**
+ * WP173（docs/84 §2）：主动开发的开发信种子。**走真路径**：名单进 B2B 库（demo 里当作已经批过的
+ * 那一张导入卡），然后用持「主动开发」的那条分配开一轮——于是：没选发信邮箱 → 出选择卡；
+ * 德国那家没有往来 → 默认不放进来（面板上写原因）。其余在界面上点：选了邮箱 → 体检（替身）→
+ * 批量首封卡出现 → 批了"发出去"（替身）→ 序列漏斗有数。
+ */
+async function seedOutbound(server: Server, world: World): Promise<void> {
+  if (server.b2b.enrollments().length > 0) return
+  const asg = world.roles.assignments
+    .listByWorkspace(world.workspace_id)
+    .find((a) => a.role_id === 'b2b.outbound' && a.revoked_at === undefined)
+  if (asg === undefined) return
+  const now = world.clock.now()
+  const prospects = [
+    {
+      id: 'volthaus',
+      company: 'Volthaus Supply',
+      contact: 'Anna Weber',
+      country: 'US',
+      host: 'volthaus.example',
+    },
+    {
+      id: 'peak',
+      company: 'Peak Gadgets',
+      contact: 'Mia Clarke',
+      country: 'GB',
+      host: 'peakgadgets.example',
+    },
+    {
+      id: 'maple',
+      company: 'Maple Mobile',
+      contact: 'Sam Lee',
+      country: 'AU',
+      host: 'maplemobile.example',
+    },
+    {
+      id: 'lumen',
+      company: 'Lumen Retail',
+      contact: 'Ivy Chen',
+      country: 'US',
+      host: 'lumenretail.example',
+    },
+    {
+      id: 'kiwi',
+      company: 'Kiwi Charge',
+      contact: 'Tom Hart',
+      country: 'NZ',
+      host: 'kiwicharge.example',
+    },
+    {
+      id: 'nordlicht',
+      company: 'Nordlicht Handel',
+      contact: 'Jan Becker',
+      country: 'DE',
+      host: 'nordlicht.example',
+    },
+  ]
+  for (const p of prospects) {
+    server.b2b.put('b2b_account', {
+      id: `acc_demo_${p.id}`,
+      name: p.company,
+      domain: p.host,
+      country: p.country,
+      product_lines: [],
+      stage: 'contacted',
+      source: { kind: 'import', url: `https://${p.host}/`, observed_at: now },
+      created_at: now,
+      updated_at: now,
+    })
+    const email = `${p.contact.split(' ')[0]?.toLowerCase() ?? 'buyer'}@${p.host}`
+    // 明文只进本机加密库（demo 那把临时钥匙；bootstrap 品牌的前缀为空）
+    if (server.secrets.available)
+      server.secrets.put(`b2b.contact.ctc_demo_${p.id}.email`, { value: email })
+    server.b2b.put('b2b_contact', {
+      id: `ctc_demo_${p.id}`,
+      account_id: `acc_demo_${p.id}`,
+      name: p.contact,
+      email_ref: `b2b.contact.ctc_demo_${p.id}.email`,
+      email_masked: `${p.contact[0]?.toLowerCase() ?? 'x'}***@${p.host}`,
+      source: { kind: 'website', url: `https://${p.host}/contact`, observed_at: now },
+      created_at: now,
+    })
+  }
+  server.b2b.saveOutboundSettings({
+    company_name: 'Nordvolt Power Co., Ltd.',
+    postal_address: '8 Keji Rd, Nanshan, Shenzhen, China',
+    sender_name: 'Leo',
+    product: 'GaN chargers',
+    updated_at: now,
+  })
+  await server.b2bOutbound.port.start(
+    {
+      workspace_id: world.workspace_id,
+      person_id: asg.person_id,
+      assignment_id: asg.id,
+      role_id: asg.role_id,
+    },
+    {},
+  )
 }
 
 /** 第二个品牌的名字（截图与文档里都用它，别改来改去）。 */

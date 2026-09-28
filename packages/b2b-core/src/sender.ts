@@ -69,7 +69,7 @@ export function senderChoiceOptions(input: {
   const primary = input.mailboxes.filter((m) => !separate.includes(m))
   const out: SenderChoiceOption[] = separate.map((address) => ({
     id: `separate:${address}`,
-    label: `用单独的发信域名：${address}`,
+    label: `用单独的发信域名：${address}（推荐）`,
     kind: 'separate',
     address,
   }))

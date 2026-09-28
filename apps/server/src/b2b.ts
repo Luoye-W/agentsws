@@ -153,10 +153,24 @@ export function demoB2bDeckData(now: string): B2bDeckData {
  * WP172：demo 里库里真有的（邮件分拣落成的询盘、批了的记录）排前面，后面垫演示投影。
  * 真工作区不走这里——库里没有就是空态。
  */
+/**
+ * WP173：这几块是**一整张**（漏斗的格子、今天待发、回复待分）——库里有了就只画库里的，
+ * 不和演示投影拼在一起（拼起来漏斗会出现两遍"首封"）。
+ */
+const WHOLE: ReadonlySet<keyof B2bDeckData> = new Set<keyof B2bDeckData>([
+  'outreach_today',
+  'sequence_funnel',
+  'replies',
+])
+
 export function withDemoB2b(real: B2bDeckData, demo: B2bDeckData): B2bDeckData {
   const out = { ...demo }
   for (const key of Object.keys(real) as (keyof B2bDeckData)[]) {
     const mine = real[key] as unknown[]
+    if (WHOLE.has(key) && mine.length > 0) {
+      ;(out as Record<string, unknown[]>)[key] = mine
+      continue
+    }
     ;(out as Record<string, unknown[]>)[key] = [...mine, ...(demo[key] as unknown[])]
   }
   return out

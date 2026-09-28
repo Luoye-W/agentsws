@@ -19,6 +19,7 @@ import { useMutation, useQuery } from '@tanstack/react-query'
 import { Play } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
+import { B2bOutboundPanel } from '@/components/b2b/outbound-panel'
 import { CalendarLink } from '@/components/calendar/calendar-link'
 import { WsTag } from '@/components/design'
 import { PanelError } from '@/components/rail/panel-error'
@@ -332,6 +333,15 @@ export function DutyPage(): React.ReactNode {
             WP154「内容与搜索」：买家会问的问题（每周拿去问各 AI 平台）+ 花多少 + 开关，
             以及"现在跑一轮"。每日 5 件事与收入表在岗位面板上（那是数，这里是设置）。
           */}
+          {/*
+            WP173（docs/84 §2）：「主动开发」的开发信——发信邮箱与体检、公司地址、德奥勾选确认、开一轮。
+            请求挂的是**这条职责自己那条分配**（额度与配额从它来），没有就用岗位这一条。
+          */}
+          {role_id === 'b2b.outbound' ? (
+            <div className="mb-4">
+              <B2bOutboundPanel assignment={here?.my_assignment_id ?? assignment} />
+            </div>
+          ) : null}
           {role_id === 'dtc.content' ? (
             <div className="mb-4 flex flex-col gap-4">
               {/* WP158：连上了没选站点 / 媒体资源时先选一下（选好了不画） */}
