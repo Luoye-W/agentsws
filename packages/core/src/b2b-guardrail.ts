@@ -215,7 +215,11 @@ export function evaluateB2bChange(
         const src = (after.record as Record<string, unknown> | undefined)?.source as
           | Record<string, unknown>
           | undefined
-        if (src === undefined || typeof src.kind !== 'string' || typeof src.observed_at !== 'string')
+        if (
+          src === undefined ||
+          typeof src.kind !== 'string' ||
+          typeof src.observed_at !== 'string'
+        )
           block('contact_source_required', 'source', 'missing')
       }
       // 出运单上没有"收款账户"那一格：备注里夹一串账户也不行（只认事实卡，§11.3）
