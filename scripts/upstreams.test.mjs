@@ -218,9 +218,15 @@ describe('形状校验', () => {
       watch: [],
     }
     expect(validateShape([priv])).toEqual([])
-    expect(validateShape([{ ...priv, watch: ['readme'] }]).join('\n')).toContain('`watch` 要写成 []')
-    expect(validateShape([{ ...priv, repo: 'a/b' }]).join('\n')).toContain('不写 npm / repo / image')
-    expect(validateShape([{ ...priv, pinned_commit: undefined }]).join('\n')).toContain('pinned_commit')
+    expect(validateShape([{ ...priv, watch: ['readme'] }]).join('\n')).toContain(
+      '`watch` 要写成 []',
+    )
+    expect(validateShape([{ ...priv, repo: 'a/b' }]).join('\n')).toContain(
+      '不写 npm / repo / image',
+    )
+    expect(validateShape([{ ...priv, pinned_commit: undefined }]).join('\n')).toContain(
+      'pinned_commit',
+    )
   })
 
   it('id 重复要报出来', () => {

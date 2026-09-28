@@ -14,6 +14,11 @@ import {
   roasBothViews,
   stopLossVerdict,
 } from '@agentsws/ads-core'
+/*
+ * WP171（docs/84）：B2B 那两件事的判断——授权谁批（`b2b-core`）、承诺与改收款账户（`core`）。
+ * 世界里不另写一份，否则这几条题验的就是场景自己写的答案。
+ */
+import { quoteApprover, quoteBreaches } from '@agentsws/b2b-core'
 // WP121b（70 §1–§3）：向导第 ② 步那一轮分析走这一份真解析器（夹具 replay，不联网）
 import type { PageFetch } from '@agentsws/brand-intake'
 import { analyzeBrand, applyEdits, mergeProfile } from '@agentsws/brand-intake'
@@ -66,15 +71,15 @@ import {
   // WP75：57 §6 的额度默认值与"平台 id → 职责 id / 中文名"。**全仓唯一**那张平台清单
   ADS_DEFAULT_CAPS,
   adsPlatformSpec,
+  // WP171：B2B 五条职责的唯一一份清单、红卡的审批种类、报价授权默认值
+  B2B_FRAUD_ALERT_KIND,
+  B2B_ROLE_IDS,
+  DEFAULT_B2B_QUOTE_MANDATE,
   DEFAULT_BRAND_INTAKE_CAP_CREDITS,
   DEFAULT_STOREFRONT_PLATFORM,
   KOL_FOLDER,
   // WP121b（70 §2.2）：试跑失败分档（向导挑那一句人话与这里的断言用同一张表）
   modelFailureKind,
-  // WP171：B2B 五条职责的唯一一份清单、红卡的审批种类、报价授权默认值
-  B2B_FRAUD_ALERT_KIND,
-  B2B_ROLE_IDS,
-  DEFAULT_B2B_QUOTE_MANDATE,
   // WP72：渠道 id → 职责 id 与中文名。**全仓唯一**那张渠道清单，不在这里拼字符串
   PR_ROLE_IDS,
   SUPPORT_FOLDER,
@@ -82,11 +87,6 @@ import {
   storefrontUnsupportedNote,
   storefrontUsableService,
 } from '@agentsws/contracts'
-/*
- * WP171（docs/84）：B2B 那两件事的判断——授权谁批（`b2b-core`）、承诺与改收款账户（`core`）。
- * 世界里不另写一份，否则这几条题验的就是场景自己写的答案。
- */
-import { quoteApprover, quoteBreaches } from '@agentsws/b2b-core'
 import {
   companyKey,
   detectPaymentAccountChange,

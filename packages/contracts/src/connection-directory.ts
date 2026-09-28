@@ -1186,7 +1186,10 @@ export const CONNECTION_DIRECTORY: readonly ConnectionDirectoryEntry[] = [
     category: 'b2b',
     auth: 'api_key',
     mode: 'openconnector_provider',
-    fields: apiKeyField('海关数据服务给你的 API key', 'The API key from your customs-data provider'),
+    fields: apiKeyField(
+      '海关数据服务给你的 API key',
+      'The API key from your customs-data provider',
+    ),
     side_effect: 'read_external',
     status: 'planned',
     note: {
