@@ -28783,6 +28783,10 @@
                       "type": "string",
                       "pattern": "^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})?$"
                     }
+                  },
+                  "postal_address": {
+                    "type": "string",
+                    "maxLength": 500
                   }
                 },
                 "required": ["legal_name"]
@@ -68638,6 +68642,9 @@
                     "maxLength": 100
                   },
                   "de_at_confirm": {
+                    "type": "boolean"
+                  },
+                  "sender_established": {
                     "type": "boolean"
                   }
                 }

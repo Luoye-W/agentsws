@@ -26369,6 +26369,7 @@ export interface operations {
           market_languages?: {
             [key: string]: string
           }
+          postal_address?: string
         }
       }
     }
@@ -52669,6 +52670,7 @@ export interface operations {
           postal_address?: string
           sender_name?: string
           de_at_confirm?: boolean
+          sender_established?: boolean
         }
       }
     }
