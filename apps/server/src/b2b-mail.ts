@@ -319,12 +319,17 @@ export function createB2bMail(options: B2bMailOptions): B2bMail {
     // 红卡：信里要改收款账户 → 不起 Run、不采纳
     let fraud_alert_id: string | undefined
     if (fraud.hit) {
-      fraud_alert_id = await redCard(record, holder, fraud.phrases, fraud.has_account_details)
+      try {
+        fraud_alert_id = await redCard(record, holder, fraud.phrases, fraud.has_account_details)
+      } catch (e) {
+        // 红卡没出成也不能照信里的办：询盘照落、不起 Run，记一笔
+        emit('b2b.fraud_alert_failed', { detail: String(e).slice(0, 160) }, record.id)
+      }
     }
 
     let run_id: string | undefined
     let todo = false
-    if (work !== undefined && matter_id !== undefined && fraud_alert_id === undefined) {
+    if (work !== undefined && matter_id !== undefined && !fraud.hit) {
       if (basis === 'platform_notice') {
         // 平台询盘通知只有摘要，正文在平台后台（docs/84 §3.1）：开一条待办，不起 Run
         work.createTodo({
