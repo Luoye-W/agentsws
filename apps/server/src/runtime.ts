@@ -44,8 +44,10 @@ import type {
 } from '@agentsws/contracts'
 import { canonicalJson } from '@agentsws/core'
 import {
+  classifySideEffect,
   createDshRuntime,
   type DshRuntimeMode,
+  type ToolSideEffect,
   type WebCredential,
   type WebCredentialKind,
   type WebUse,
@@ -88,6 +90,22 @@ export interface ApprovalSink {
 
 /** 只读目录：没接连接器时 stub / direct 也照样能走完（工具执行器缺席就是一条 error 结果）。 */
 const DEFAULT_TOOLS = ['get_order', 'get_product', 'list_orders', 'search_policies'] as const
+
+/**
+ * WP179：**服务端自己的执行器**接的那几类工具，在 dsh 门禁里按什么读写分类。
+ *
+ * direct 那条路不给副作用表（每个放进白名单的工具都按"读"放行，真正的闸在执行器里：红人工具只动本机记录或出卡、
+ * 开发信只出卡、店主工具只读）。dsh 门禁按**名字前缀**判，表外一律按"写外部"——于是 `draft_outreach`、
+ * `start_outreach_round` 这些在公司端一调就被拒（`write_external_requires_executor`）。挂了网页工具的运行
+ * （红人五条、主动开发都挂）改走 dsh 之后，这些工具必须与 direct 那条路一样能调，所以在这里写清：
+ * 前缀判得出"读"的照旧读，其余记成 `local`（工坊本机的执行器，只动本机记录或出卡，不直接写外部）。
+ * WP148 带浏览器的红人运行走 dsh 时也撞的是同一条，这一张表一并修掉。
+ */
+const HOST_TOOL_EFFECTS: Readonly<Record<string, ToolSideEffect>> = Object.fromEntries(
+  [...KOL_TOOL_NAMES, ...B2B_OUTBOUND_TOOL_NAMES, ...OWNER_TOOL_NAMES, READ_SKILL_TOOL].map(
+    (name) => [name, classifySideEffect(name) === 'read_external' ? 'read_external' : 'local'],
+  ),
+)
 
 /** ObjectRef.type → ContextItem.kind；不认识的按摘要注入。 */
 const KIND_BY_REF: Record<string, ContextItem['kind']> = {
@@ -973,6 +991,8 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
             imageInput: (model) =>
               declaresImageInput(options.modelVision?.(), options.modelRef?.(), model),
             ...(executeTool === undefined ? {} : { executeTool }),
+            // WP179：服务端执行器接的工具，读写分类与 direct 那条路对齐（见 HOST_TOOL_EFFECTS）
+            sideEffects: HOST_TOOL_EFFECTS,
             // WP179：官方网页工具的凭据（现取）、审计与用量回报
             ...(options.web === undefined ? {} : { web: dshWebOf(options.web) }),
           }),

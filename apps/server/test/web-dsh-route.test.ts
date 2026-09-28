@@ -78,10 +78,13 @@ function scripted(calls: { name: string; input?: Record<string, unknown> }[]): M
 }
 
 /** 一条职责；`web` 就是职责 YAML 的 `web_tools` 算出来的那一格（不给 = 没挂）。 */
-function fakeRoles(web?: { tools: ('web_search' | 'web_fetch')[] }): RoleStore {
+function fakeRoles(
+  web?: { tools: ('web_search' | 'web_fetch')[] },
+  role_id = 'dtc.content',
+): RoleStore {
   return {
     effectiveConfig: () => ({
-      role_id: 'dtc.content',
+      role_id,
       grounding: [],
       skills: [],
       browser_scope: [],
@@ -150,6 +153,7 @@ function webOption(over: Partial<WebOpt> = {}): WebOpt {
 
 async function runOnce(input: {
   web?: { tools: ('web_search' | 'web_fetch')[] }
+  role_id?: string
   calls?: { name: string; input?: Record<string, unknown> }[]
   extra?: Partial<RuntimeOptions>
 }) {
@@ -163,7 +167,7 @@ async function runOnce(input: {
     env: {},
     models: gateway,
     approvals: { create: async () => ({ id: 'apv_1' }) } as unknown as RuntimeOptions['approvals'],
-    roles: fakeRoles(input.web),
+    roles: fakeRoles(input.web, input.role_id),
     appendEvent: (e) => events.push(e),
     prefer: 'direct',
     modelRef: () => MODEL,
@@ -269,5 +273,30 @@ describe('挂了网页工具的运行：走 dsh，官方两个工具在模型面
     })
     // 只挂了搜索、搜索又给不了 → 整个网页那一层都不挂，照旧 direct
     expect(gateway.seen[0]?.tools).not.toContain('web_search')
+  })
+})
+
+describe('挂了网页工具的红人运行走 dsh 之后，红人工具照样调得动（与 direct 那条路对齐）', () => {
+  it('draft_outreach 这类服务端执行器的工具不被当成"写外部"拦下', async () => {
+    const calls: string[] = []
+    const { events } = await runOnce({
+      web: { tools: ['web_search', 'web_fetch'] },
+      role_id: 'kol.youtube',
+      calls: [
+        { name: 'draft_outreach', input: { creator_id: 'cr_1' } },
+        { name: 'score_creator', input: { creator_id: 'cr_1' } },
+      ],
+      extra: {
+        web: webOption(),
+        kolTools: async (call: { name: string }) => {
+          calls.push(call.name)
+          return { status: 'ok', data: { ok: true } }
+        },
+      } as unknown as Partial<RuntimeOptions>,
+    })
+    expect(payloadsOf(events, 'run.started')[0]?.runtime).toBe('dsh')
+    expect(calls).toEqual(['draft_outreach', 'score_creator'])
+    const results = payloadsOf(events, 'tool.result')
+    expect(results.map((r) => r.status)).toEqual(['ok', 'ok'])
   })
 })
