@@ -279,7 +279,8 @@ export function AppShell({
             标记给 24（Luoye 09-18 定：再缩一点）；再小就退单色，见 `@agentsws/brand` 的 `MIN_GRADIENT_PX`。
             字标是产品名「Agents 工坊」（Luoye 09-18 定；`agentsws` 只留作仓库 / 包 / 域名），
             走 Outfit（WP96：与页面大标题同一种字）；整句留给读屏当 aria-label。
-            这里用的是**静态**那一姿态：一直在动的 logo 是噪音，不是品牌。
+            WP195（Luoye 09-29「静态的 logo 其实不好看」）：改成**待机**——大部分时间一动不动，
+            隔几秒轻轻动一下；鼠标移上去播一次「一变一队」再回待机。点了回首页不变。
           */}
             <div className="px-2 pt-1 pb-4">
               <NavLink
@@ -289,7 +290,7 @@ export function AppShell({
                 data-testid="brand-home"
                 className="inline-flex items-center gap-2 rounded-[10px] outline-offset-4"
               >
-                <BrandMark size={24} />
+                <BrandMark size={24} motion="idle" playOnHover />
                 <span className="ws-display text-[14px]">Agents 工坊</span>
               </NavLink>
             </div>

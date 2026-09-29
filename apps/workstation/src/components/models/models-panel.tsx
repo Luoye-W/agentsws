@@ -943,7 +943,7 @@ function VendorCard({
           WP188（Luoye 09-29）：积分那一张是我们自己——用品牌标记，不是字母圆圈。
         */}
         {plan.kind === 'agentsws_cloud' ? (
-          <BrandMark size={20} />
+          <BrandMark size={20} playOnHover />
         ) : (
           <BrandIcon provider={card.id} />
         )}

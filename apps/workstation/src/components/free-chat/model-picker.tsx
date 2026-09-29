@@ -19,7 +19,7 @@ export function ChoiceIcon({
 }: {
   choice: Pick<FreeChatModelChoice, 'id' | 'official'>
 }): React.ReactNode {
-  if (choice.official) return <BrandMark size={16} />
+  if (choice.official) return <BrandMark size={16} playOnHover />
   return <BrandIcon provider={choice.id.slice(0, choice.id.indexOf('/'))} size={16} />
 }
 

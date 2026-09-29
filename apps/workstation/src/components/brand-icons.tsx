@@ -273,7 +273,7 @@ export function BrandIcon({
         aria-hidden
         className={`inline-flex shrink-0 ${className}`}
       >
-        <BrandMark size={size} />
+        <BrandMark size={size} playOnHover />
       </span>
     )
   }

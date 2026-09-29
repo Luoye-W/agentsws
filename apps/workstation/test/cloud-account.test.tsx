@@ -86,6 +86,13 @@ describe('49 M1 设置页账号卡', () => {
     renderWithProviders(<CloudAccountCard assignment="asg_1" />)
     await screen.findByTestId('cloud-account-unlinked')
     expect(screen.getByText(/关联后能一键用 Agents 工坊的模型/)).toBeTruthy()
+    // WP195：卡头是待机的品牌标记（关联的就是「Agents 工坊」账号），不再是一朵云
+    expect(
+      screen
+        .getByTestId('cloud-account')
+        .querySelector('svg[data-testid="brand-mark"]')
+        ?.getAttribute('data-motion'),
+    ).toBe('idle')
     // WP156：「不关联也照常用、一分不扣」那半句进了问号
     expect(
       screen
