@@ -193,6 +193,17 @@ export type AuditAction =
   | 'data.capability.define'
   /** WP192 追加：通用 REST 渠道的主机白名单增删。 */
   | 'data.hosts.update'
+  /**
+   * WP198 网页账号页（`${云地址}/account`）上用户自己做的三件事。
+   *
+   * `actor_account_id` 与 `target_id` 都是本人账号号，`target_kind` 是 `account`。
+   * `token_revoke` = 撤掉一台设备 / 一把令牌（details 只有令牌前缀）；`logout` = 退出网页登录；
+   * `topup_checkout` = 点了充值、去了收款方的页面（details 只有档位与收款方名字，**卡号、
+   * 付款链接一个字都不进审计**；真到账以收款方回调那一条为准）。
+   */
+  | 'account.token_revoke'
+  | 'account.logout'
+  | 'account.topup_checkout'
 
 /**
  * 一条审计。**只增不改**：没有 update，没有 delete，主键是自增号。

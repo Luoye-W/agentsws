@@ -441,6 +441,8 @@ describe('/v1/cloud/credits（49 M5）', () => {
     expect(view.reason).toContain('关联')
     expect(view.balance).toBeUndefined()
     expect(ctx.cloud.calls).toHaveLength(0)
+    // WP198b：网页账号页的地址由本机服务端按它连的云填，没关联也给（网页上能登录）
+    expect(view.account_url).toBe(`${CLOUD_BASE}/account`)
   })
 
   it('关联之后：余额与本月用量都是云上那份的透传，令牌只在出站的头里', async () => {
@@ -449,6 +451,7 @@ describe('/v1/cloud/credits（49 M5）', () => {
     expect(view.linked).toBe(true)
     expect(view.balance).toMatchObject({ purchased: 800, granted: 120, available: 920 })
     expect(view.month_credits).toBe(37.5)
+    expect(view.account_url).toBe(`${CLOUD_BASE}/account`)
     expect(ctx.cloud.calls.every((c) => c.auth === `Bearer ${WORKSPACE_TOKEN}`)).toBe(true)
     expect(JSON.stringify(view)).not.toContain(WORKSPACE_TOKEN)
   })
@@ -477,6 +480,7 @@ describe('/v1/cloud/credits（49 M5）', () => {
     const view = await data<CloudCreditsView>(res)
     expect(view.linked).toBe(true)
     expect(view.reason).toContain('暂时取不到')
+    expect(view.account_url).toBe(`${CLOUD_BASE}/account`)
   })
 })
 
