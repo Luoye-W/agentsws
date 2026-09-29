@@ -1927,6 +1927,8 @@ const zh: Table = {
   'org.tab.credits': '积分',
   'alloc.hint':
     '在公司余额上给每个人、每个岗位设每月上限；不设就是不限。到 80% 和用完时本人与管理员都会看到提醒。',
+  'alloc.title': '公司积分',
+  'alloc.actor.account': '公司账号',
   'alloc.balance': '公司余额',
   'alloc.month_total': '本月已用',
   'alloc.unattributed': '其中没标注是谁 {n}',
@@ -5148,6 +5150,8 @@ const en: Table = {
   'org.tab.credits': 'Credits',
   'alloc.hint':
     'Set a monthly limit per person and per position on the shared company balance; no limit by default. The person and admins are told at 80% and when it runs out.',
+  'alloc.title': 'Company credits',
+  'alloc.actor.account': 'Company account',
   'alloc.balance': 'Company balance',
   'alloc.month_total': 'Used this month',
   'alloc.unattributed': '{n} not tied to anyone',

@@ -157,7 +157,7 @@ export function CreditsTab({
   const nameOf = (kind: AllocationSubjectKind, id: string): string =>
     kind === 'member' ? (memberName.get(id)?.name ?? id) : (positionName.get(id) ?? id)
   const actorName = (actor: string): string =>
-    actor.startsWith('account:') ? t('alloc.balance') : (memberName.get(actor)?.name ?? actor)
+    actor.startsWith('account:') ? t('alloc.actor.account') : (memberName.get(actor)?.name ?? actor)
 
   const balance = credits.data?.balance
   const linked = credits.data?.linked === true
@@ -167,7 +167,7 @@ export function CreditsTab({
       <Card>
         <CardContent className="flex flex-col gap-4 pt-6 text-sm">
           <div className="flex items-center gap-1 text-xs text-muted-foreground">
-            {t('alloc.buckets')}
+            {t('alloc.title')}
             <Hint text={t('alloc.hint')} />
           </div>
           <section className="grid grid-cols-2 gap-2 sm:grid-cols-6" data-testid="alloc-summary">
@@ -242,44 +242,46 @@ export function CreditsTab({
         </p>
       ) : null}
 
-      <section className="flex flex-col gap-2">
-        <button
-          type="button"
-          className="flex items-center gap-1 text-xs text-muted-foreground"
-          data-testid="alloc-audit-toggle"
-          onClick={() => {
-            setAuditOpen(!auditOpen)
-          }}
-        >
-          {auditOpen ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" />}
-          {t('alloc.audit')}
-        </button>
-        {auditOpen ? (
-          <ul
-            className="flex flex-col gap-1 text-xs text-muted-foreground"
-            data-testid="alloc-audit"
+      <Card>
+        <CardContent className="flex flex-col gap-2 pt-4">
+          <button
+            type="button"
+            className="flex items-center gap-1 text-xs text-muted-foreground"
+            data-testid="alloc-audit-toggle"
+            onClick={() => {
+              setAuditOpen(!auditOpen)
+            }}
           >
-            {(audit.data?.entries ?? []).slice(0, 10).map((e: AllocationAuditEntry) => (
-              <li key={e.id} className="tabular-nums">
-                <span className="mr-2">{e.at.slice(5, 16).replace('T', ' ')}</span>
-                {t(
-                  e.action === 'member_removed'
-                    ? 'alloc.audit.removed'
-                    : e.action === 'clear'
-                      ? 'alloc.audit.clear'
-                      : 'alloc.audit.set',
-                  {
-                    who: actorName(e.actor),
-                    subject: nameOf(e.kind, e.subject_id),
-                    from: e.from === undefined ? t('alloc.unlimited') : num(e.from),
-                    to: e.to === undefined ? t('alloc.unlimited') : num(e.to),
-                  },
-                )}
-              </li>
-            ))}
-          </ul>
-        ) : null}
-      </section>
+            {auditOpen ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" />}
+            {t('alloc.audit')}
+          </button>
+          {auditOpen ? (
+            <ul
+              className="flex flex-col gap-1 text-xs text-muted-foreground"
+              data-testid="alloc-audit"
+            >
+              {(audit.data?.entries ?? []).slice(0, 10).map((e: AllocationAuditEntry) => (
+                <li key={e.id} className="tabular-nums">
+                  <span className="mr-2">{e.at.slice(5, 16).replace('T', ' ')}</span>
+                  {t(
+                    e.action === 'member_removed'
+                      ? 'alloc.audit.removed'
+                      : e.action === 'clear'
+                        ? 'alloc.audit.clear'
+                        : 'alloc.audit.set',
+                    {
+                      who: actorName(e.actor),
+                      subject: nameOf(e.kind, e.subject_id),
+                      from: e.from === undefined ? t('alloc.unlimited') : num(e.from),
+                      to: e.to === undefined ? t('alloc.unlimited') : num(e.to),
+                    },
+                  )}
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </CardContent>
+      </Card>
     </div>
   )
 }

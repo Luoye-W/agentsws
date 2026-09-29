@@ -268,11 +268,15 @@ export function cloudStandIn(options: CloudStandInOptions = {}): CloudStandIn {
     }
   }
 
+  /** WP194：种过额度用量就以它为准（本月已用、余额与「积分」页同一个数）。 */
+  const monthUsed = (): number =>
+    usageCells.length === 0 ? MONTH_USED : round(usageCells.reduce((sum, c) => sum + c.credits, 0))
+
   const balance = (): WalletBalance => ({
     org_id: STAND_IN_ORG.id,
     purchased: PURCHASED,
     granted: GRANTED,
-    available: PURCHASED + GRANTED - MONTH_USED,
+    available: round(Math.max(0, PURCHASED + GRANTED - monthUsed())),
     reserved: 0,
     expiring: [{ credits: GRANTED, expires_at: days(30) }],
     low_balance_threshold: 20,
@@ -285,23 +289,37 @@ export function cloudStandIn(options: CloudStandInOptions = {}): CloudStandIn {
     const pricing = SAMPLE_PRICING_CATALOG.pricing
     const pick = (block: string): string | undefined =>
       pricing.entries.find((e) => pricingBlockOf(e) === block)?.capability
-    const split: [string | undefined, number, number][] = [
-      [pick('ai'), 8.2, 41],
-      [pick('data'), 3.2, 16],
-      [pick('service'), 1, 1],
-    ]
+    const seeded = (bucket: AllocationBucket): [number, number] => {
+      const cells = usageCells.filter((c) => c.bucket === bucket)
+      return [
+        round(cells.reduce((sum, c) => sum + c.credits, 0)),
+        cells.reduce((n, c) => n + c.calls, 0),
+      ]
+    }
+    const split: [string | undefined, number, number][] =
+      usageCells.length === 0
+        ? [
+            [pick('ai'), 8.2, 41],
+            [pick('data'), 3.2, 16],
+            [pick('service'), 1, 1],
+          ]
+        : ([
+            [pick('ai'), ...seeded('ai')],
+            [pick('data'), ...seeded('data')],
+            [pick('service'), ...seeded('other')],
+          ].filter((row) => (row[2] as number) > 0) as [string | undefined, number, number][])
     const rows =
       group === 'capability'
         ? split.flatMap(([key, credits, calls]) =>
             key === undefined ? [] : [{ key, credits, quantity: calls, calls }],
           )
-        : [{ key: now().slice(0, 10), credits: MONTH_USED, quantity: 58, calls: 58 }]
+        : [{ key: now().slice(0, 10), credits: monthUsed(), quantity: 58, calls: 58 }]
     return {
       group: group === 'workspace' || group === 'day' ? group : 'capability',
       from: monthStart(),
       to: now(),
       rows,
-      total_credits: MONTH_USED,
+      total_credits: monthUsed(),
     }
   }
 
