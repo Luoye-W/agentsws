@@ -20,6 +20,7 @@ import { BrandMark } from '@/components/design'
 import { JoinPanel } from '@/components/onboarding/join-panel'
 import { AssignWizard } from '@/components/org/assign-wizard'
 import { BrandsTab } from '@/components/org/brands-tab'
+import { CreditsTab } from '@/components/org/credits-tab'
 import { InprogressTab } from '@/components/org/inprogress-tab'
 import { type JoinChoice, JoinTab } from '@/components/org/join-tab'
 import { MembersTab } from '@/components/org/members-tab'
@@ -80,7 +81,9 @@ export function OrgPage(): React.ReactNode {
   // ⌘K 与顶栏切换器的"管理品牌"跳这里：`/org?tab=brands`
   const initialTab = params.get('tab')
   const [tab, setTab] = useState(
-    initialTab === 'toolbox' || initialTab === 'brands' ? initialTab : 'positions',
+    initialTab === 'toolbox' || initialTab === 'brands' || initialTab === 'credits'
+      ? initialTab
+      : 'positions',
   )
   const query = params.get('q')
   const [wizard, setWizard] = useState<string | null>(null)
@@ -504,6 +507,10 @@ export function OrgPage(): React.ReactNode {
           <TabsTrigger value="brands">{t('org.tab.brands')}</TabsTrigger>
           <TabsTrigger value="positions">{t('org.tab.positions')}</TabsTrigger>
           <TabsTrigger value="members">{t('org.tab.members')}</TabsTrigger>
+          {/* WP194：公司统一充值、给成员 / 岗位设每月上限（这一页本来就只有所有者进得来） */}
+          <TabsTrigger value="credits" data-testid="org-tab-credits">
+            {t('org.tab.credits')}
+          </TabsTrigger>
           <TabsTrigger value="ranges">{t('org.tab.ranges')}</TabsTrigger>
           <TabsTrigger value="invite">{t('onboarding.join.title')}</TabsTrigger>
           <TabsTrigger value="join">{t('org.tab.join')}</TabsTrigger>
@@ -579,6 +586,14 @@ export function OrgPage(): React.ReactNode {
               }}
             />
           )}
+        </TabsContent>
+
+        <TabsContent value="credits" className="pt-3">
+          <CreditsTab
+            {...(owner === undefined ? {} : { assignment: owner })}
+            members={members.data ?? []}
+            positions={positions.data ?? []}
+          />
         </TabsContent>
 
         {/* 44：品牌与产品线（G1 / G2） */}

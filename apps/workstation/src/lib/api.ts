@@ -7,10 +7,15 @@
  * - 前端不引入任何模型 SDK：卡片按钮只打 decide（29 §5 动作不经模型）。
  */
 import type {
+  AllocationAuditList,
+  AllocationLimitChanged,
+  AllocationLimitRequest,
   BrandDesignDoc,
   BrandDesignRevision,
   BrandDesignRun,
   CalendarItem,
+  CloudAllocationView,
+  CloudMyAllocationView,
   DailyPlan,
   Goal,
   GoalProgress,
@@ -1696,6 +1701,39 @@ export const createTopup = (tier_id: string, assignment?: string): Promise<Topup
     method: 'POST',
     body: { tier_id },
   })
+
+/* ------------------------------------------------------------------ */
+/* WP194：成员 / 岗位额度（公司共用余额上的每月上限）                     */
+/* ------------------------------------------------------------------ */
+
+/** 公司「积分」页：本月按人 / 按岗位 / 按能力（只有公司的 owner / admin 拿得到）。 */
+export const getCloudAllocation = (
+  assignment?: string,
+  month?: string,
+): Promise<CloudAllocationView> =>
+  api(
+    `/v1/cloud/allocation${month === undefined ? '' : `?month=${encodeURIComponent(month)}`}`,
+    withAssignment(assignment),
+  )
+
+/** 设置 → 积分里的「我的本月额度」。 */
+export const getMyCloudAllocation = (assignment?: string): Promise<CloudMyAllocationView> =>
+  api('/v1/cloud/allocation/me', withAssignment(assignment))
+
+/** 设 / 清一个成员或岗位的每月上限（`null` = 不限）。 */
+export const setCloudAllocationLimit = (
+  input: AllocationLimitRequest,
+  assignment?: string,
+): Promise<AllocationLimitChanged> =>
+  api('/v1/cloud/allocation/limits', {
+    ...withAssignment(assignment),
+    method: 'POST',
+    body: input,
+  })
+
+/** 最近的改额度记录（谁、从多少改到多少）。 */
+export const getCloudAllocationAudit = (assignment?: string): Promise<AllocationAuditList> =>
+  api('/v1/cloud/allocation/audit', withAssignment(assignment))
 
 /* ------------------------------------------------------------------ */
 /* 红人营销增值服务（67 §3，WP118）                                     */

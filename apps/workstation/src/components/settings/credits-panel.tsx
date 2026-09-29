@@ -40,6 +40,7 @@ import {
   getCloudCredits,
   getCloudPricing,
   getCloudUsage,
+  getMyCloudAllocation,
   getTopupTiers,
 } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
@@ -281,6 +282,9 @@ export function CreditsPanel({ assignment }: { assignment?: string }): React.Rea
               <Figure label={t('credits.granted')} value={num(balance.granted)} />
             </section>
 
+            {/* WP194：我的本月额度（公司给每个人 / 每个岗位设的每月上限；没设就是不限） */}
+            <MyAllowance assignment={assignment} num={num} />
+
             {/* ② 这个月钱花在哪：付费三块各一张小卡（67 §1） */}
             <section
               className="flex flex-col gap-1.5"
@@ -516,7 +520,7 @@ export function CreditsPanel({ assignment }: { assignment?: string }): React.Rea
  * 充值四档（67 §2）。已关联：点下去去云上建单、开 Stripe 的页面；
  * WP142 没关联：四张卡照常摆着（朋友看得到多少钱），按钮换成「先关联」。
  */
-function TierCards({
+export function TierCards({
   tiers,
   unavailable,
   pending,
@@ -598,6 +602,76 @@ function TierCards({
             </button>
           ))}
         </div>
+      )}
+    </section>
+  )
+}
+
+/**
+ * WP194：「我的本月额度：已用 X / 上限 Y」。到 80% 出一句「快用完了」，用完出那句人话
+ * （与云上 402 同一句——出错处看到的就是它）。没设上限只写已用、不画进度条。
+ */
+function MyAllowance({
+  assignment,
+  num,
+}: {
+  assignment: string | undefined
+  num: (n: number) => string
+}): React.ReactNode {
+  const { t } = useApp()
+  const mine = useQuery({
+    queryKey: ['cloud-allocation-me', assignment],
+    queryFn: () => getMyCloudAllocation(assignment),
+    retry: false,
+  })
+  const data = mine.data?.mine
+  if (data === undefined) return null
+  const limit = data.monthly_limit
+  const percent = data.percent ?? 0
+  const state =
+    limit === undefined ? 'none' : percent >= 100 ? 'full' : percent >= 80 ? 'near' : 'ok'
+  const position = data.position
+  return (
+    <section
+      className="flex flex-col gap-1.5 rounded-lg border p-2.5"
+      data-slot="data"
+      data-testid="credits-mine"
+      data-state={state}
+    >
+      <div className="flex items-baseline justify-between gap-2">
+        <h4 className="text-xs font-medium text-muted-foreground">{t('credits.mine.title')}</h4>
+        <span className="text-sm tabular-nums">
+          {limit === undefined
+            ? t('credits.mine.unlimited', { used: num(data.used) })
+            : t('credits.mine.used', { used: num(data.used), limit: num(limit) })}
+        </span>
+      </div>
+      {limit === undefined ? null : (
+        <span className="h-1.5 w-full overflow-hidden rounded bg-muted">
+          <span
+            className={`block h-full ${
+              state === 'full' ? 'bg-destructive' : state === 'near' ? 'bg-amber-500' : 'bg-primary'
+            }`}
+            style={{ width: `${String(Math.min(100, percent))}%` }}
+          />
+        </span>
+      )}
+      {state === 'full' ? (
+        <p className="text-xs text-destructive" data-testid="credits-mine-full">
+          {t('credits.mine.full')}
+        </p>
+      ) : state === 'near' ? (
+        <p className="text-xs text-amber-600 dark:text-amber-400" data-testid="credits-mine-near">
+          {t('credits.mine.near', { p: String(percent) })}
+        </p>
+      ) : null}
+      {position?.monthly_limit === undefined ? null : (
+        <p className="text-[11px] text-muted-foreground tabular-nums">
+          {t('credits.mine.position', {
+            used: num(position.used),
+            limit: num(position.monthly_limit),
+          })}
+        </p>
       )}
     </section>
   )
