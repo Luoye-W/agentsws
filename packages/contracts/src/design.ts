@@ -101,7 +101,8 @@ export const DESIGN_DUTIES: readonly DesignDutySpec[] = [
     en: 'Social Design',
     produces_zh: '帖子 / Reels 封面 / 故事 / 头像与主页视觉（按各平台尺寸）',
     produces_en: 'Posts, Reels covers, stories, avatars and profile visuals',
-    // WP191（docs/86 §7）：Meta 拆成三条，另加 X / LinkedIn；`social.meta` 留着（老分配迁移前还会来单）
+    // WP191（docs/86 §7）：`social.meta` 上那条「向设计岗下需求单」随拆分带到 FB 主页与 IG 两条；
+    // `social.meta` 留着（老分配迁移前还会来单）
     request_sources: [
       'social.meta',
       'social.tiktok',
@@ -109,9 +110,6 @@ export const DESIGN_DUTIES: readonly DesignDutySpec[] = [
       'kol.youtube',
       'social.facebook',
       'social.instagram',
-      'social.threads',
-      'social.x',
-      'social.linkedin',
     ],
     spec_families: ['social'],
   },

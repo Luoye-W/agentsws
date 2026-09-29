@@ -1,17 +1,25 @@
-# 56 §2 社媒运营的第 3 条职责：**X 运营**（WP72）。
+# 56 §2 社媒运营的内容账号组：**X 运营**（WP72；WP191 按 docs/86 充实）。
 #
-# 内容账号组四条职责的骨架**完全相同**（56 §2 上半行），不同的只有三样：
-# 渠道连接器、grounding 的意图词、还有下面那一段"这条渠道特有的部分"。
-# 骨架为什么长这样，写在 `social/meta.yml` 的文件头里，不在这里抄第二遍。
+# 内容账号组各条职责的骨架**完全相同**（56 §2 上半行）：动作 id、数据域、审批等级
+# 一个都不许改（54：同构的职责只靠意图词分得开）。不同的只有：渠道连接器、额度、
+# grounding 的意图词、persona、快捷提示，还有下面那一段"这条渠道特有的部分"。
+# 骨架为什么长这样，写在 `social/meta.yml` 的文件头里；每条渠道的定义怎么来的，
+# 写在 docs/86（WP191 调研：开源技能、职业标准、平台官方规则、行业数据）。
 #
-# 这条渠道特有的三件事：
+# 这条渠道特有的部分（docs/86 §3.2）：
 #
-# 1. **官方接口是付费档**。免费档几乎读不到、写额度也少得没法用。界面上说的是
-#    "这个口子在付费档上"，不是"连接失败"——前者用户知道怎么办，后者他会去反复重连。
-# 2. **回复与发推是同一个接口**（`POST /2/tweets` 加一格 `reply`）。所以这条渠道上
-#    "发一条"与"回一条"共用同一份日额度的现实要说清楚，别让人以为回复不算数。
-# 3. **一条推 280 字**。文案超长在这条渠道上是硬错，不是风格问题——
-#    起草那一跳要先量一遍。
+# 1. **官方接口按条计费**（docs/86 §1.3：发一条 0.015 美元、带链接 0.20 美元；原来的
+#    Free / Basic / Pro 三档官方文档已不再写）。界面上说的是"这个口子要花钱"，不是"连接失败"。
+# 2. **回复与发推是同一个接口**（`POST /2/tweets` 加一格 `reply`），共用同一份日额度。
+# 3. **一条推 280 字**：文案超长是硬错，起草那一跳先量一遍（`social-core` 的 `platform.ts`）。
+#    Premium 长帖不能排期，所以我们只按 280 排。
+# 4. **自动化规则是这条渠道最大的坑**：不许按关键词搜到就自动回陌生人、不许发重复或
+#    近似的推、不许自动蹭热搜。所以这条只回**我们帖子下面**与**直接 @ 我们**的，不去搜；
+#    同一段话一周内不发两次。
+# 5. **作者回复的权重是点赞的 150 倍**（2023 开源排序：75 对 0.5）：发完一小时内守着回。
+#
+# 「发完守着回」「两小时内回提及」参考了 msitarzewski/agency-agents 的 Twitter 角色（MIT），
+# 用自己的话写，未搬原文；排序权重来自 twitter/the-algorithm-ml 公开代码的 README。
 #
 # 边界（56 表头，Luoye 09-16 定）：内容、氛围、活动、群规归我；
 # **客户的问题不归我，转客服**（`dtc.community-support`）。下面 `description` 与
@@ -20,7 +28,7 @@ id: social.x
 version: 1.0.0
 domain: social
 name: { zh: X 运营, en: X }
-description: 我们自己的 X 账号：发推与排期、回复、账号资料、近 30 天表现。内容、氛围、活动归我；客户的问题不归我，转客服
+description: X 账号（我们自己的）：发推与推文串、排期、回复、账号资料、近 30 天表现。内容、氛围、活动归我；客户的问题不归我，转客服
 
 scopes:
   - { domain: social_account, ops: [read, stage], range: assigned, max_sensitivity: internal }
@@ -32,16 +40,19 @@ scopes:
 
 connectors:
   # `required: false`：没连也能排内容、写草稿、攒审批——真发出去那一跳才需要它。
+  # 与红人岗位的 `kol.x` 是同一张卡；按条计费（docs/86 §3.2）。
   - { kind: x_api, required: false, grants: [read_tweets, publish_tweets, read_metrics], ownership: workspace }
 
 actions:
+  # 额度写在**动作**上不写在职责上（同 51 §2.3）。数从哪来见 docs/86 §3.1。
   - id: stage_post
     target: social_account
     kind: staged_change
     mandate:
-      caps: { max_posts_per_day: 3 }
+      # 一天 5 条（docs/86 §3.1：行业建议一天 2–4 条；回复与发推共用这一份）。
+      caps: { max_posts_per_day: 5 }
       per_change_limits: { max_items: 1 }
-      window: { max_count: 3, per: day }
+      window: { max_count: 5, per: day }
     review_cannot_be_disabled: true
     route_to: scope_manager
   - id: reply_comment
@@ -58,6 +69,7 @@ actions:
       caps: {}
       per_change_limits: { max_items: 1 }
       window: { max_count: 5, per: week }
+    # 改 handle 连提都不许提（`@agentsws/core` 的 `PROTECTED_FIELDS`）
     protected_fields: [handle, username, account_id, external_id]
     review_cannot_be_disabled: true
     route_to: owner
@@ -134,14 +146,16 @@ home_blocks:
     }
 
 grounding:
-  # 54 §2：九条社媒职责的动作 id 与数据域完全一样，**意图词是唯一分得开它们的东西**。
+  # 54 §2：内容组各条的动作 id 与数据域完全一样，**意图词是唯一分得开它们的东西**。
+  # WP191：去掉了 `thread`——它是 `Threads` 的子串，留着会把 Threads 的活判给 X。
   - {
       name: x_intent,
-      intent_terms: [X, Twitter, 推特, 推文, 发推, 转推, 引用, thread, tweet, retweet],
-      cue_terms: [发, 排期, 定时, 回复, 转发, 点赞, 曝光, 互动, 粉丝, 话题],
+      intent_terms: [X, Twitter, 推特, 推文, 发推, 转推, 推文串, 引用, tweet, retweet],
+      cue_terms: [发, 排期, 定时, 回复, 提及, 转发, 点赞, 曝光, 互动, 粉丝, 话题],
       tool: list_social_posts,
       prefetch: false,
     }
+  # 19：文案里说到产品、价格、时效、政策之前先查事实卡
   - {
       name: facts_before_post,
       intent_terms: [文案, 发帖, 起草, 上新, 活动, post, caption, announce],
@@ -149,6 +163,7 @@ grounding:
       tool: search_policies,
       prefetch: true,
     }
+  # 56 的边界：客户的问题不归我。意图词写足，54 的路由才判得到"转客服"
   - {
       name: customer_question_goes_to_support,
       intent_terms: [订单, 发货, 物流, 退款, 退货, 保修, 怎么用, order, refund, shipping, warranty],
@@ -158,6 +173,7 @@ grounding:
     }
 
 notifications:
+  # 发布永远人审，卡压着不动 = 这条内容错过了它的时间点
   - {
       event: 'approval.created:stage_post',
       mode: immediate,
@@ -187,15 +203,19 @@ requires: []
 quick_prompts:
   - id: week_plan
     label: { zh: "排下周的推", en: "Plan next week" }
-    prompt: "按这周的互动和手上的素材，给 X 排下周的推文，一天不超过一条，撞车的说清楚"
+    prompt: "按这周的互动和手上的素材，给 X 排下周的推文，一天两三条，撞车的说清楚"
     kind: start_task
   - id: draft_post
     label: { zh: "起草一条", en: "Draft a post" }
     prompt: "给这次上新起一条推文，280 字以内，按品牌话术来，价格和时效只写事实卡里有的"
     kind: start_task
+  - id: draft_thread
+    label: { zh: "写一串推文", en: "Draft a thread" }
+    prompt: "把这篇博客拆成一串推文，每条 280 字以内，第一条单独看也成立"
+    kind: start_task
   - id: comments_waiting
     label: { zh: "有哪些回复等着回", en: "Replies waiting" }
-    prompt: "现在有哪些回复还没处理？哪些是客户的问题该转客服、哪些我自己回，分开列"
+    prompt: "现在有哪些回复和 @ 我们的还没处理？哪些是客户的问题该转客服、哪些我自己回，分开列"
     kind: ask
   - id: last_30d
     label: { zh: "这个月发得怎么样", en: "How did the last 30 days go" }
@@ -207,30 +227,30 @@ task_examples:
     title: { zh: "排一周的推", en: "Fill a week of the calendar" }
     description: "下周有一次上新，想在 X 上摊开几条来讲。"
     expected_output: "一份按天排好的日历（每条写清什么时间发、文案是什么，都在 280 字以内），撞车的地方直接给下一个空档；每一条都要你点一下才真发出去。"
-  - id: paid_tier
-    title: { zh: "免费档能干什么", en: "What the free tier can do" }
-    description: "还没买 X 的付费档，但想先用起来。"
-    expected_output: "排期、文案、审批照常；到点了提醒你去后台手工发一下，并说清楚哪一步卡在付费档上——不会把这条从日历上抹掉。"
+  - id: paid_api
+    title: { zh: "接口要花钱", en: "The API costs money" }
+    description: "还没给 X 的接口充值，但想先用起来。"
+    expected_output: "排期、文案、审批照常；到点了提醒你去后台手工发一下，并说清楚哪一步要花钱——不会把这条从日历上抹掉。"
   - id: reply_triage
     title: { zh: "把回复分一分", en: "Sort the replies" }
     description: "一条推下面有几十条回复，来不及一条条看。"
-    expected_output: "按六类分好的一张表：客户的问题已经变成转客服卡，合作询问提示转红人营销，夸和投诉给出回复草稿。"
+    expected_output: "按六类分好的一张表：客户的问题已经变成转客服卡，合作询问提示转红人营销，夸和投诉给出回复草稿；不会去搜关键词回陌生人。"
 
 # ── WP120（69 §2）：**角色定位**。提示里的「你是谁」，六段骨架一段不许少 ──────────
-# 第三段「你不负责」是防串岗的那一条：69 §0 那条亲测记录（红人岗位回出客服的话）
-# 就是因为提示里从头到尾没有这一句。改这一段之前先读 docs/69。
+# 第三段「你不负责」是防串岗的那一条。改这一段之前先读 docs/69；
+# 「怎么做」那一句的平台做法来自 docs/86 §2 / §3（出处与许可证在那里）。
 persona:
   zh: |
     你是谁：社媒运营岗位里管我们自己 X 账号的人。
-    你负责：发推与排期、回复、账号资料、近 30 天表现。
+    你负责：发推与推文串、排期、回复、账号资料、近 30 天表现。
     你不负责：订单、退款、物流→客服（评论区冒出来的也转）；找红人→红人营销；买广告→投放；别人的版→公共关系。
-    怎么做：先看这账号最近发过什么、评论区在聊什么；这里回复很容易被截图传开，写之前先想一遍被断章取义会怎样；拿不准的评论按客户问题转走。
+    怎么做：发完一小时内守着回；只回我们帖子下与 @ 我们的，不搜关键词去回；同一段话一周不发两次；拿不准的评论按客户问题转走。
     口气：像社区里的人，接地气、不官腔、不承诺。
     必须出卡：发布与排期、改账号资料、任何对外可见的回复。
   en: |
     Who you are: the person running our own X account, inside the social-media position.
-    You handle: posting and scheduling, replies, the account profile, the last 30 days of performance.
+    You handle: posts and threads, scheduling, replies, the account profile, the last 30 days of performance.
     Not yours: orders, refunds and shipping → Customer Care, including the ones raised in the comments; creators → Creator Marketing; ads → Paid Ads; other people’s forums → Public Relations.
-    How you work: read what this account posted recently and what the comments are about. Replies here get screenshotted and spread — read yours once more imagining it quoted out of context. When a comment is borderline, treat it as a customer question and hand it over rather than answering it yourself.
+    How you work: stay for the first hour after posting and reply. Only answer replies to our posts and direct mentions — never search keywords to reply to strangers. Never post the same text twice in a week. Replies get screenshotted: read yours once more imagining it quoted out of context. When a comment is borderline, treat it as a customer question and hand it over.
     Tone: like a person in the community — human, no corporate voice, no promises.
     Always ask: publishing and scheduling, profile edits, every outward reply.

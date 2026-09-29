@@ -1,6 +1,12 @@
-import { SOCIAL_CHANNELS, socialChannelsOfGroup } from '@agentsws/contracts'
+import {
+  ACTIVE_SOCIAL_ROLE_IDS,
+  SOCIAL_CHANNELS,
+  socialChannelHeirs,
+  socialChannelSpec,
+  socialChannelsOfGroup,
+} from '@agentsws/contracts'
 import { describe, expect, it } from 'vitest'
-import { loadBundledPosition, loadBundledRole } from '../src/index.js'
+import { loadBundledPosition, loadBundledRole, ROLE_ID_SPLITS } from '../src/index.js'
 
 /** 九条职责按契约那张表读进来——**渠道清单只有那一份**（56 §2）。 */
 const ROLES = SOCIAL_CHANNELS.map((c) => loadBundledRole(c.role_id))
@@ -14,6 +20,11 @@ describe('56 §2 九条渠道职责（WP72）', () => {
       'social.tiktok',
       'social.x',
       'social.youtube',
+      // WP191（docs/86）：内容组末尾加四条；老的 `social.meta` 文件留着
+      'social.facebook',
+      'social.instagram',
+      'social.threads',
+      'social.linkedin',
       'social.facebook-group',
       'social.reddit',
       'social.discord',
@@ -56,7 +67,19 @@ describe('56 §2 九条渠道职责（WP72）', () => {
   })
 })
 
-describe('56 §2 内容账号组四条（发布永远 L1）', () => {
+/** WP191（docs/86 §3.1）：[发帖 / 天, 回评论 / 天]。与 `social-core` 的 `PLATFORM_LIMITS` 是同一个数的两个位置。 */
+const CONTENT_CAPS: Record<string, [number, number]> = {
+  'social.meta': [3, 50],
+  'social.tiktok': [3, 50],
+  'social.x': [5, 50],
+  'social.youtube': [2, 50],
+  'social.facebook': [2, 50],
+  'social.instagram': [3, 50],
+  'social.threads': [3, 100],
+  'social.linkedin': [1, 50],
+}
+
+describe('56 §2 内容账号组（发布永远 L1）', () => {
   it('三个写动作、额度是 56 §7 那两个数', () => {
     for (const role of CONTENT) {
       expect(
@@ -65,13 +88,14 @@ describe('56 §2 内容账号组四条（发布永远 L1）', () => {
         role.actions.map((a) => a.id).filter((id) => id !== 'request_design'),
         role.id,
       ).toEqual(['stage_post', 'reply_comment', 'stage_profile_edit'])
-      // 发帖 3 / 天、回评论 50 / 天（56 §7）
-      expect(role.actions[0]?.mandate.caps, role.id).toMatchObject({ max_posts_per_day: 3 })
-      expect(role.actions[0]?.mandate.window, role.id).toEqual({ max_count: 3, per: 'day' })
+      // WP191（docs/86 §3.1）：额度按平台节奏定，不再一刀切 3 / 50
+      const [posts, replies] = CONTENT_CAPS[role.id] ?? [0, 0]
+      expect(role.actions[0]?.mandate.caps, role.id).toMatchObject({ max_posts_per_day: posts })
+      expect(role.actions[0]?.mandate.window, role.id).toEqual({ max_count: posts, per: 'day' })
       expect(role.actions[1]?.mandate.caps, role.id).toMatchObject({
-        max_comment_replies_per_day: 50,
+        max_comment_replies_per_day: replies,
       })
-      expect(role.actions[1]?.mandate.window, role.id).toEqual({ max_count: 50, per: 'day' })
+      expect(role.actions[1]?.mandate.window, role.id).toEqual({ max_count: replies, per: 'day' })
     }
   })
 
@@ -269,14 +293,17 @@ describe('56 §4 客服的第四条职责：社群管理', () => {
 })
 
 describe('56 §2 / §4 两个岗位模板', () => {
-  it('社媒运营 = 九条，默认勾 Meta / TikTok / YouTube（56 §6）', () => {
+  it('社媒运营 = 还在用的十二条，默认勾 FB / IG / TikTok / YouTube（WP191，Luoye 09-29）', () => {
     const position = loadBundledPosition('social-media')
     expect(position.name.zh).toBe('社媒运营')
-    expect(position.roles.map((r) => r.role)).toEqual(SOCIAL_CHANNELS.map((c) => c.role_id))
+    expect(position.roles.map((r) => r.role)).toEqual(ACTIVE_SOCIAL_ROLE_IDS)
+    // 新建岗位里不再单独出现「Meta 社媒运营」
+    expect(position.roles.map((r) => r.role)).not.toContain('social.meta')
     expect(position.roles.filter((r) => r.default).map((r) => r.role)).toEqual([
-      'social.meta',
       'social.tiktok',
       'social.youtube',
+      'social.facebook',
+      'social.instagram',
     ])
   })
 
@@ -289,5 +316,60 @@ describe('56 §2 / §4 两个岗位模板', () => {
       'dtc.community-support',
     ])
     expect(position.roles.every((r) => r.default)).toBe(true)
+  })
+})
+
+describe('WP191（docs/86 §5 / §6）Meta 拆三条 + LinkedIn', () => {
+  it('拆分表与契约的 superseded_by 一字不差（同一件事的两个位置）', () => {
+    for (const spec of SOCIAL_CHANNELS.filter((c) => c.superseded_by !== undefined)) {
+      const heirs = (socialChannelHeirs(spec.id) ?? []).map((h) => socialChannelSpec(h)?.role_id)
+      expect(ROLE_ID_SPLITS[spec.role_id], spec.role_id).toEqual(heirs)
+    }
+    expect(ROLE_ID_SPLITS['social.meta']).toEqual(['social.facebook', 'social.instagram'])
+  })
+
+  it('FB 与 IG 接手了 meta 的一切：同一张卡、同一套动作（含向设计岗下单）', () => {
+    const meta = loadBundledRole('social.meta')
+    for (const id of ['social.facebook', 'social.instagram']) {
+      const role = loadBundledRole(id)
+      expect(
+        role.connectors.map((c) => c.kind),
+        id,
+      ).toEqual(['meta_graph'])
+      expect(
+        role.actions.map((a) => a.id),
+        id,
+      ).toEqual(meta.actions.map((a) => a.id))
+      expect(role.scopes, id).toEqual(meta.scopes)
+    }
+  })
+
+  it('Threads 与 LinkedIn 各连自己那张新卡', () => {
+    expect(loadBundledRole('social.threads').connectors[0]?.kind).toBe('threads_api')
+    expect(loadBundledRole('social.linkedin').connectors[0]?.kind).toBe('linkedin_api')
+  })
+
+  it('意图词分得开：FB 不写 IG 与群组，IG 不写 FB，X 与红人 X 都不再写会撞上 Threads 的 `thread`', () => {
+    const intents = (id: string) =>
+      (loadBundledRole(id).grounding?.[0]?.intent_terms ?? []).map((t) => t.toLowerCase())
+    expect(intents('social.facebook')).not.toContain('ig')
+    expect(intents('social.facebook')).not.toContain('instagram')
+    expect(intents('social.facebook')).not.toContain('群组')
+    expect(intents('social.instagram')).not.toContain('facebook')
+    expect(intents('social.x')).not.toContain('thread')
+    expect(intents('kol.x')).not.toContain('thread')
+    expect(intents('social.threads')).toContain('threads')
+    expect(intents('social.linkedin')).toContain('linkedin')
+  })
+
+  it('LinkedIn 这条：不加人不私信写在 persona 里，找客户点名 B2B', () => {
+    const p = loadBundledRole('social.linkedin').persona
+    const zh = typeof p === 'string' ? p : (p?.zh ?? '')
+    expect(zh).toContain('B2B')
+    expect(zh).toContain('不自动加人私信')
+    expect(loadBundledRole('social.linkedin').description).toContain('转 B2B')
+    // B2B 那边反过来点名社媒运营
+    const b2b = loadBundledRole('b2b.outbound').persona
+    expect(typeof b2b === 'string' ? b2b : (b2b?.zh ?? '')).toContain('社媒运营')
   })
 })

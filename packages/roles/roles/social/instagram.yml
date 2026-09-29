@@ -1,4 +1,4 @@
-# 56 §2 社媒运营的内容账号组：**YouTube 运营**（WP72；WP191 按 docs/86 充实）。
+# WP191（docs/86 §5）：社媒运营的内容账号组：**Instagram 运营**（从 `social.meta` 拆出）。
 #
 # 内容账号组各条职责的骨架**完全相同**（56 §2 上半行）：动作 id、数据域、审批等级
 # 一个都不许改（54：同构的职责只靠意图词分得开）。不同的只有：渠道连接器、额度、
@@ -8,29 +8,28 @@
 #
 # 这条渠道特有的部分（docs/86 §3.2）：
 #
-# 1. **连接卡与红人岗位的 `kol.youtube` 是同一张**（56 §1）：一把 key 管两条职责。
-#    红人那条读**别人的**频道，这条读写**我们自己的**；连接页上只有一张 YouTube。
-# 2. **配额是全站的，不是我们的**。现在的模型（docs/86 §1.3）：上传每天 100 次单独一桶，
-#    其余接口共用每天 10,000 单位，回一条评论 50 单位，太平洋时间零点重置。
-#    我们不自己算：上游说配额没了就照实说，并告诉用户明天重置。
-# 3. **没过审计的 API 项目上传的视频只能私享**（2020-07-28 之后建的项目）。
-#    上传本身也不走这条路（resumable upload 在后台做），这条职责出的是排期卡与提醒。
-# 4. **警告 90 天内三次封频道，删视频不消警告**；AI 模板片、幻灯片合集算「不真实内容」，
-#    不能变现。Shorts ≤ 3 分钟且竖屏，否则算长视频。
-# 5. **先定标题与缩略图，再谈剪辑**；点击率、留存拿不到就说拿不到，不编。
-#    有一周不发，那一周的增长就掉到这个频道自己的基线以下——日历按「不断更」排。
+# 1. **与 Facebook 主页共用 `meta_graph` 一张卡**（连一次、批一次）：走「Facebook 登录」那条路，
+#    IG 专业账号要关联 FB 主页；只用「Instagram 登录」的是另一次授权，这一版不支持。
+# 2. **发布是两跳、API 没有排期**：先建容器再 `media_publish`；视频要等处理完。
+#    排期由我们自己的调度器到点发（`social-core` 的 `channels/instagram.ts`）。
+# 3. **硬限制先量**：配文 2,200 字、30 个话题标签、20 个 @；轮播最多 10 张、只收 JPEG；
+#    Reels 要进推荐得 ≤ 3 分钟；API 发帖 24 小时 100 条（`platform.ts`）。
+# 4. **原创被硬执行**：加边框、水印、变速、只注明来源都不算原创，不原创的不给非粉丝推荐；
+#    2026-04 起以转发为主的号图与轮播也不推荐。**同一条不许从 FB 原样搬过来**。
+# 5. **找 IG 红人不归这条**（`kol.instagram`）：IG 没有按关键词搜人这回事，那是红人岗位的事；
+#    这条管的是**我们自己的号**。私信与私下回复里的客户问题转客服。
 #
-# 「先定标题与缩略图」「不编点击率与留存」这两条做法参考了 social-media-skills/skills
-# 的 youtube-long-form（MIT）与 msitarzewski/agency-agents 的视频优化角色（MIT），用自己的话写，未搬原文。
+# 「轮播拿互动、Reels 拿触达」来自 Buffer 2026 数据（docs/86 §2）；「常驻日历只续写不重排」
+# 参考了 anthropics/knowledge-work-plugins 的 social-content-engine（Apache-2.0），用自己的话写。
 #
 # 边界（56 表头，Luoye 09-16 定）：内容、氛围、活动、群规归我；
 # **客户的问题不归我，转客服**（`dtc.community-support`）。下面 `description` 与
 # `grounding` 的意图词就是 54 §2 岗位路由判这件事的依据——写不足 = 路由不到。
-id: social.youtube
+id: social.instagram
 version: 1.0.0
 domain: social
-name: { zh: YouTube 运营, en: YouTube }
-description: YouTube 频道（我们自己的）：长视频与 Shorts 的排期、标题描述缩略图、回评论、频道资料、近 30 天表现。内容、氛围、活动归我；客户的问题不归我，转客服
+name: { zh: Instagram 运营, en: Instagram }
+description: Instagram 账号（我们自己的）：图文、轮播、Reels 与快拍的排期发布、回评论、简介与链接、近 30 天表现。内容、氛围、活动归我；客户的问题不归我，转客服
 
 scopes:
   - { domain: social_account, ops: [read, stage], range: assigned, max_sensitivity: internal }
@@ -42,8 +41,8 @@ scopes:
 
 connectors:
   # `required: false`：没连也能排内容、写草稿、攒审批——真发出去那一跳才需要它。
-  # 与红人岗位的 `kol.youtube` 是同一张卡（56 §1）。
-  - { kind: youtube_data, required: false, grants: [read_channel, read_videos, manage_comments], ownership: workspace }
+  # 与 `social.facebook` 共用这一张（连一次、批一次，docs/86 §5）。
+  - { kind: meta_graph, required: false, grants: [read_pages, read_insights, publish_posts, manage_comments], ownership: workspace }
 
 actions:
   # 额度写在**动作**上不写在职责上（同 51 §2.3）。数从哪来见 docs/86 §3.1。
@@ -51,10 +50,10 @@ actions:
     target: social_account
     kind: staged_change
     mandate:
-      # 一天 2 条（docs/86 §3.1：长视频一周 1 条 + Shorts；原来的 3 对一个频道太多了）。
-      caps: { max_posts_per_day: 2 }
+      # 一天 3 条，快拍计在内（docs/86 §3.1：Feed 一周 3–5 条 + 快拍一天 1–2 条）。
+      caps: { max_posts_per_day: 3 }
       per_change_limits: { max_items: 1 }
-      window: { max_count: 2, per: day }
+      window: { max_count: 3, per: day }
     review_cannot_be_disabled: true
     route_to: scope_manager
   - id: reply_comment
@@ -75,6 +74,16 @@ actions:
     protected_fields: [handle, username, account_id, external_id]
     review_cannot_be_disabled: true
     route_to: owner
+  # WP76（58 §1）→ WP191：原 `social.meta` 上那条「向设计岗下需求单」随拆分带过来。
+  # L3 自动：下一张需求单不产生任何外部可见的东西（→ `design.social`）。
+  - id: request_design
+    target: design_request
+    kind: staged_change
+    mandate:
+      caps: { max_design_requests_per_day: 5 }
+      per_change_limits: { max_items: 1 }
+      window: { max_count: 5, per: day }
+    route_to: role_holder
 
 automation:
   # **发布永远 L1**（56 §2 / 15 §2 的 `HARD_L1`）。
@@ -96,13 +105,18 @@ automation:
     hard_ceiling: true
     promotion: { adoption_rate_min: 1, window_weeks: 0, min_samples: 0 }
     demotion_triggers: [manual]
+  request_design:
+    ceiling: L3
+    initial: L3
+    promotion: { adoption_rate_min: 0.9, window_weeks: 2, min_samples: 20 }
+    demotion_triggers: [manual]
 
 skills:
   - { name: brand-voice, tier: open, load: always }
 
 home_blocks:
   - {
-      id: social.youtube.calendar,
+      id: social.instagram.calendar,
       placement: focus,
       component: table,
       query: social.content_calendar,
@@ -111,7 +125,7 @@ home_blocks:
       adaptive: true,
     }
   - {
-      id: social.youtube.queue,
+      id: social.instagram.queue,
       placement: queue,
       component: table,
       query: social.publish_queue,
@@ -120,7 +134,7 @@ home_blocks:
       adaptive: true,
     }
   - {
-      id: social.youtube.performance,
+      id: social.instagram.performance,
       placement: role_view,
       component: table,
       query: social.performance_30d,
@@ -129,7 +143,7 @@ home_blocks:
       adaptive: false,
     }
   - {
-      id: social.youtube.comments,
+      id: social.instagram.comments,
       placement: queue,
       component: table,
       query: social.pending_comments,
@@ -138,7 +152,7 @@ home_blocks:
       adaptive: true,
     }
   - {
-      id: social.youtube.handoffs,
+      id: social.instagram.handoffs,
       placement: role_view,
       component: table,
       query: social.support_handoffs,
@@ -149,10 +163,11 @@ home_blocks:
 
 grounding:
   # 54 §2：内容组各条的动作 id 与数据域完全一样，**意图词是唯一分得开它们的东西**。
+  # 与红人那条 `kol.instagram` 同名同平台：跨岗位靠「红人 / 博主 / 合作」这些词分开（docs/86 §5）。
   - {
-      name: youtube_intent,
-      intent_terms: [YouTube, 油管, 频道, 长视频, 短片, Shorts, 缩略图, 封面图, 字幕, 播放列表, 章节, channel],
-      cue_terms: [发, 排期, 定时, 播放, 点击率, 留存, 观看时长, 点赞, 评论, 订阅, 涨粉, 标题, 描述],
+      name: instagram_intent,
+      intent_terms: [Instagram, Instagram 账号, IG, IG 账号, ins, Reels, 快拍, story, 轮播, carousel, 图文],
+      cue_terms: [发, 排期, 定时, 帖子, 评论, 回复, 粉丝, 触达, 收藏, 转发, 涨粉, 简介, 链接],
       tool: list_social_posts,
       prefetch: false,
     }
@@ -203,55 +218,55 @@ requires: []
 
 quick_prompts:
   - id: week_plan
-    label: { zh: "排下周的视频", en: "Plan next week" }
-    prompt: "按这周的播放和手上的素材，给 YouTube 排下周的长视频与 Shorts，一周至少一条长的，撞车的说清楚"
+    label: { zh: "排下周的内容", en: "Plan next week" }
+    prompt: "按这周的表现和手上的素材，给 IG 排下周的内容：Feed 三到五条（轮播和 Reels 各一半）加快拍，撞车的说清楚"
     kind: start_task
   - id: draft_post
-    label: { zh: "起草标题和描述", en: "Draft title and description" }
-    prompt: "给这条视频起三个标题和一段描述，按品牌话术来，参数和时效只写事实卡里有的"
+    label: { zh: "起草一条", en: "Draft a post" }
+    prompt: "给这次上新起一条 IG 轮播的配文和每张图上的一句话，标签不超过五个，价格和时效只写事实卡里有的"
+    kind: start_task
+  - id: reel_script
+    label: { zh: "写一条 Reels", en: "Script a Reel" }
+    prompt: "给这个产品写一条 30 秒以内的 Reels 脚本：开头一句、三个画面、结尾一句"
     kind: start_task
   - id: comments_waiting
     label: { zh: "有哪些评论等着回", en: "Comments waiting" }
-    prompt: "现在有哪些评论还没回？哪些是客户的问题该转客服、哪些我自己回，分开列"
-    kind: ask
-  - id: retention_drop
-    label: { zh: "留存掉在哪", en: "Where viewers drop off" }
-    prompt: "最近三条长视频的观众大多在第几分钟走的？拿不到留存数就直说，不要估"
+    prompt: "IG 上现在有哪些评论还没回？哪些是客户的问题该转客服、哪些我自己回，分开列"
     kind: ask
   - id: last_30d
     label: { zh: "这个月发得怎么样", en: "How did the last 30 days go" }
-    prompt: "近 30 天发的视频里，点击率和平均观看时长最好的三条是哪几条，它们有什么共同点"
+    prompt: "近 30 天 IG 发的内容里，触达、收藏和转发最好的三条是哪几条，它们有什么共同点"
     kind: ask
 
 task_examples:
   - id: weekly_calendar
-    title: { zh: "排一周的视频", en: "Fill a week of the calendar" }
-    description: "下周有一条长片和两条短片，不知道怎么摊开。"
-    expected_output: "一份按天排好的日历（每条写清什么时间发、标题与描述是什么），撞车的地方直接给下一个空档；每一条都要你点一下才真发出去。"
-  - id: title_thumbnail
-    title: { zh: "标题与缩略图三选一", en: "Pick a title and thumbnail" }
-    description: "视频剪好了，标题和封面还没定。"
-    expected_output: "三组「标题 + 缩略图方向」，每组说清想让谁点、点进来看到的和标题对不对得上；选哪组由你定。"
-  - id: shared_key
-    title: { zh: "和红人岗位共用一把 key", en: "One key, two duties" }
-    description: "已经为红人营销连过 YouTube，社媒这边还要不要再连一次。"
-    expected_output: "不用。连接页上只有一张 YouTube 卡，两条职责读同一把 key；这条职责能不能发，仍由它自己的额度与审批说了算。"
+    title: { zh: "排一周的内容", en: "Fill a week of the calendar" }
+    description: "下周有一次上新，手上有十几张图和两段视频。"
+    expected_output: "一份按天排好的 IG 日历（每条写清是轮播 / Reels / 快拍、时间、配文），撞车的地方直接给下一个空档；每一条都要你点一下才真发出去。"
+  - id: carousel
+    title: { zh: "做一组轮播", en: "Build a carousel" }
+    description: "想用一组轮播讲清楚这款产品怎么用。"
+    expected_output: "一组不超过 10 张的轮播：每张一句话、配文与标签；超了平台上限（字数 / 标签 / 张数）的当场指出来。"
+  - id: not_creators
+    title: { zh: "找红人不在这里", en: "Creators live elsewhere" }
+    description: "想在 IG 上找几个博主合作。"
+    expected_output: "说清楚这是红人营销岗位的事（IG 红人那条），这条只管我们自己的号。"
 
 # ── WP120（69 §2）：**角色定位**。提示里的「你是谁」，六段骨架一段不许少 ──────────
 # 第三段「你不负责」是防串岗的那一条。改这一段之前先读 docs/69；
 # 「怎么做」那一句的平台做法来自 docs/86 §2 / §3（出处与许可证在那里）。
 persona:
   zh: |
-    你是谁：社媒运营岗位里管我们自己 YouTube 频道的人。
-    你负责：长视频与 Shorts 排期、标题描述缩略图、回评论、频道资料、近 30 天表现。
-    你不负责：订单、退款、物流→客服（评论区冒出来的也转）；找红人→红人营销；买广告→投放；别人的版→公共关系；红人合作视频的验收→红人营销。
-    怎么做：先看最近的点击率与留存；先定标题缩略图再谈剪辑；拿不到的数不编；别断更；拿不准的评论按客户问题转走。
+    你是谁：社媒运营岗位里管我们自己 Instagram 账号的人。
+    你负责：图文、轮播、Reels 与快拍的排期发布、回评论、简介与链接、近 30 天表现。
+    你不负责：订单、退款、物流→客服（评论区冒出来的也转）；找红人→红人营销；买广告→投放；别人的版→公共关系。
+    怎么做：先看最近哪条收藏与转发多；轮播讲清楚、Reels 拿触达；不把 FB 那条原样搬来、不带别家水印；拿不准的评论按客户问题转走。
     口气：像社区里的人，接地气、不官腔、不承诺。
     必须出卡：发布与排期、改账号资料、任何对外可见的回复。
   en: |
-    Who you are: the person running our own YouTube channel, inside the social-media position.
-    You handle: scheduling long videos and Shorts, titles, descriptions and thumbnails, replying to comments, the channel profile, the last 30 days of performance.
-    Not yours: orders, refunds and shipping → Customer Care, including the ones raised in the comments; creators → Creator Marketing; ads → Paid Ads; other people’s forums → Public Relations; reviewing creator-made videos → Creator Marketing.
-    How you work: check recent click-through and retention first. Settle the title and thumbnail before the edit. Never invent a number you could not read — say it is unavailable. Do not let a week go by without an upload. When a comment is borderline, treat it as a customer question and hand it over.
+    Who you are: the person running our own Instagram account, inside the social-media position.
+    You handle: scheduling and publishing posts, carousels, Reels and Stories, replying to comments, the bio and link, the last 30 days of performance.
+    Not yours: orders, refunds and shipping → Customer Care, including the ones raised in the comments; creators → Creator Marketing; ads → Paid Ads; other people’s forums → Public Relations.
+    How you work: check which recent posts were saved and shared most. Carousels explain, Reels reach new people. Never copy the Facebook post across unchanged and never use another platform’s watermark. When a comment is borderline, treat it as a customer question and hand it over.
     Tone: like a person in the community — human, no corporate voice, no promises.
     Always ask: publishing and scheduling, profile edits, every outward reply.
