@@ -383,7 +383,7 @@ export const SHOPIFY_WRITE_ACTIONS: readonly ShopifyWriteAction[] = [
     not_stageable:
       '51 §1 N0 / §3 N2：**结账 / 支付 / 税不给写动作**。配错了顾客付不了钱，' +
       '而这不是"改回来"能了结的。目录里的 `payment_config` 这一版没有任何职责给得出入口——' +
-      '要改请店主自己去后台点。',
+      '要改请负责人自己去后台点。',
   },
   {
     action_id: 'shopify_admin.update_tax_settings',

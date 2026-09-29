@@ -94,7 +94,7 @@ vi.mock('@/lib/api', async () => {
     getPositions: async () => ({
       positions: [
         summary({}),
-        summary({ position_id: 'asg_owner', role_id: 'common.owner', role_name: '店主' }),
+        summary({ position_id: 'asg_owner', role_id: 'common.owner', role_name: '公司设置与授权' }),
       ],
       tile_library: [],
       max_tiles: 6,

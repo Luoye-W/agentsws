@@ -458,7 +458,7 @@ export function createExtensionService(options: ExtensionServiceOptions): Extens
   const notLinkedContribution = (): ExtensionContactContribution => ({
     status: 'unavailable',
     message:
-      '还没关联 agentsws 云账号，公共红人库用不了。这条联系方式只存在你自己的电脑上（本机红人池照收）。',
+      '还没关联 Agents 工坊账号，公共红人库用不了。这条联系方式只存在你自己的电脑上（本机红人池照收）。',
   })
 
   const revealPrice = (): number => options.revealPriceCredits?.() ?? 0
@@ -947,7 +947,7 @@ export function createExtensionService(options: ExtensionServiceOptions): Extens
         status: 'none',
         message: options.publicLibrary?.linked()
           ? '公共红人库里还没有这个人的联系方式。没有取到就不收钱。'
-          : '本机红人池里没有这个人的联系方式，也还没关联 agentsws 云账号，所以公共库进不去。没连也能用：手动填一个就好。',
+          : '本机红人池里没有这个人的联系方式，也还没关联 Agents 工坊账号，所以公共库进不去。没连也能用：手动填一个就好。',
       }
     },
 

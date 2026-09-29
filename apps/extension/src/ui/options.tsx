@@ -202,9 +202,7 @@ export function PrivacyCopy(props: { cloudLinked: boolean }): React.ReactNode {
         （127.0.0.1 上的 Agents 工坊）。插件自己不认识任何云端地址。
       </p>
       <p>
-        <strong>
-          登录 Agents 工坊云账号之后，你浏览时采集到的红人公开数据会共享到公共红人库。
-        </strong>
+        <strong>登录 Agents 工坊账号之后，你浏览时采集到的红人公开数据会共享到公共红人库。</strong>
         这是账号自带的，没有单独的开关——共享出去的只有平台上本来就公开可见的那些：
         <ul>
           <li>渠道、账号名、主页链接、头像</li>

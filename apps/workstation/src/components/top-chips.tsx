@@ -32,9 +32,21 @@ function Chip({
       className="flex items-center gap-1 rounded-md border px-2 py-1 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
     >
       <Icon aria-hidden className="size-3.5" />
-      <span className="max-w-32 truncate tabular-nums">{label}</span>
+      <span className="max-w-48 truncate tabular-nums">{label}</span>
     </Link>
   )
+}
+
+/**
+ * WP196：顶栏模型芯片上给人看的名字。模型 id 是 `来源/型号`；积分那一路的来源 id 是
+ * `agentsws`（仓库名，不给人看）→ 显示成「Agents 工坊 · 型号」。id 本身一个字不动。
+ */
+export function modelChipLabel(model: string, product: string): string {
+  const cut = model.indexOf('/')
+  if (cut <= 0) return model
+  const source = model.slice(0, cut)
+  if (source !== 'agentsws' && source !== 'agentsws-cloud') return model
+  return `${product} · ${model.slice(cut + 1)}`
 }
 
 export function ModelChip(): React.ReactNode {
@@ -46,12 +58,13 @@ export function ModelChip(): React.ReactNode {
   })
   const model = defaults.data?.default
   if (model === undefined || model === '') return null
+  const label = modelChipLabel(model, t('app.title'))
   return (
     <Chip
       to="/settings?tab=models"
       icon={Cpu}
-      label={model}
-      title={t('topbar.model', { model })}
+      label={label}
+      title={t('topbar.model', { model: label })}
       testId="model-chip"
     />
   )
