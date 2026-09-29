@@ -21,6 +21,7 @@ import { join, resolve } from 'node:path'
 import { promisify } from 'node:util'
 import { ApiError } from '@agentsws/api'
 import type {
+  DshOfficialDesktopView,
   DshSceneOpenResult,
   DshSceneState,
   DshScenesView,
@@ -30,8 +31,12 @@ import {
   AGENTSWS_SCENE,
   DSH_SCENE_TEMPLATES,
   type DshLauncher,
+  detectOfficialDesktop,
   dshLauncher,
   isInside,
+  OFFICIAL_DESKTOP_PRODUCT,
+  type OfficialDesktopInstall,
+  officialDesktopLaunch,
   parseWebSceneUrl,
   portOfUrl,
   RESERVED_SCENE_NAMES,
@@ -76,6 +81,81 @@ export function workspaceRootOf(env: Readonly<Record<string, string | undefined>
     : join(homedir(), 'dsh-workspace')
 }
 
+/**
+ * WP184（docs/79 §9）：把这台电脑上的官方 DeepSeek Harness 桌面端当成它装在哪（演示 / 测试用）；
+ * 写 `off` = 不去找。不设 = 按平台的常见位置与 `dsh://` 协议找。
+ */
+export const OFFICIAL_DESKTOP_APP_ENV = 'AGENTSWS_OFFICIAL_DESKTOP_APP'
+
+/** WP184：认得出、点得开用户自己装的官方桌面端（测试塞替身）。 */
+export interface OfficialDesktopPort {
+  detect(): Promise<OfficialDesktopInstall | undefined>
+  launch(install: OfficialDesktopInstall): Promise<void>
+}
+
+/**
+ * 真的那一份：找 `/Applications` 与 `dsh://`（macOS）、注册表与常见路径（Windows）；
+ * 启动时**不带我们的任何环境变量**（连 `DSH_HOME` 都不给——它用它自己的 `~/.dsh`）。
+ */
+export function systemOfficialDesktop(
+  env: Readonly<Record<string, string | undefined>>,
+  platform: string = process.platform,
+): OfficialDesktopPort {
+  const override = env[OFFICIAL_DESKTOP_APP_ENV]?.trim()
+  const launchEnv = (): Record<string, string> => {
+    const out = sceneEnv({ base: env, dshHome: '' })
+    delete out.DSH_HOME
+    return out
+  }
+  return {
+    async detect() {
+      if (override === 'off') return undefined
+      if (override !== undefined && override !== '')
+        return existsSync(override) ? { app: resolve(override), protocol: false } : undefined
+      return detectOfficialDesktop({
+        platform,
+        home: homedir(),
+        env,
+        exists: (p) => existsSync(p),
+        readText: (p) => {
+          try {
+            return readFileSync(p, 'utf8')
+          } catch {
+            return undefined
+          }
+        },
+        queryRegistry: async (key) => {
+          const out = await execFileAsync('reg', ['query', key, '/ve'], {
+            timeout: 5000,
+            windowsHide: true,
+          })
+          return out.stdout
+        },
+      })
+    },
+    async launch(install) {
+      const { command, args } = officialDesktopLaunch(install, platform)
+      if (platform === 'darwin') {
+        // `open` 交给系统去启动，自己很快就退出；退出码不是 0 就是没打开
+        await execFileAsync(command, args, { timeout: 15_000, env: launchEnv() })
+        return
+      }
+      await new Promise<void>((res, rej) => {
+        const child = spawn(command, args, {
+          detached: true,
+          stdio: 'ignore',
+          env: launchEnv(),
+        })
+        child.once('error', rej)
+        child.once('spawn', () => {
+          child.unref()
+          res()
+        })
+      })
+    },
+  }
+}
+
 export interface DshScenesOptions {
   dshHome: string
   /** 其他场景启动时的工作目录。 */
@@ -98,6 +178,10 @@ export interface DshScenesOptions {
   stopTimeoutMs?: number
   /** 只记"谁起了、谁停了、为什么失败"；网址里的 token 在这之前已经抹掉。 */
   log?: (line: string) => void
+  /** WP184：用户自己装的官方桌面端。不给 = {@link systemOfficialDesktop}（从 `baseEnv` 读覆盖）。 */
+  officialDesktop?: OfficialDesktopPort
+  /** 官方桌面端的检测结果缓存多久（装 / 卸一个应用不常有；列表 3 秒问一次）。 */
+  officialDesktopCacheMs?: number
 }
 
 /** 一个网页场景的进程。 */
@@ -129,6 +213,10 @@ export interface DshScenesManager {
   }
   /** 关服务进程时把起过的场景全停掉。 */
   close(): Promise<void>
+  /** WP184：本机有没有装官方桌面端（缓存一会儿）；没装回 `undefined`。 */
+  officialDesktop(): Promise<DshOfficialDesktopView | undefined>
+  /** WP184：启动它。现查一遍（不用缓存）；没装回 `not_found`。 */
+  launchOfficialDesktop(): Promise<{ launched: true }>
 }
 
 /** 工作区根与受保护目录的关系；有问题回一句人话。 */
@@ -211,6 +299,24 @@ export function createDshScenes(options: DshScenesOptions): DshScenesManager {
   const running = new Map<string, Running>()
   /** 上一次没起来 / 意外退出的原因（场景名 → 一句人话）。 */
   const lastError = new Map<string, string>()
+
+  // WP184：用户自己装的官方桌面端（只认、只点，不碰它的 `~/.dsh`）
+  const desktopPort = options.officialDesktop ?? systemOfficialDesktop(baseEnv)
+  const desktopCacheMs = options.officialDesktopCacheMs ?? 30_000
+  let desktopCache: { at: number; value: Promise<OfficialDesktopInstall | undefined> } | undefined
+  const detectDesktop = (fresh: boolean): Promise<OfficialDesktopInstall | undefined> => {
+    const at = Date.now()
+    if (!fresh && desktopCache !== undefined && at - desktopCache.at < desktopCacheMs)
+      return desktopCache.value
+    const value = desktopPort.detect().catch(() => undefined)
+    desktopCache = { at, value }
+    return value
+  }
+  const desktopView = (i: OfficialDesktopInstall): DshOfficialDesktopView => ({
+    name: OFFICIAL_DESKTOP_PRODUCT,
+    app_path: i.app,
+    via_protocol: i.protocol,
+  })
 
   const wsProblem = workspaceProblem(workspaceRoot, options.protectedDirs)
   if (wsProblem !== undefined) throw new Error(wsProblem)
@@ -504,6 +610,25 @@ export function createDshScenes(options: DshScenesOptions): DshScenesManager {
     },
     async close() {
       await Promise.all([...running.keys()].map((name) => stopProc(name)))
+    },
+    async officialDesktop() {
+      const found = await detectDesktop(false)
+      return found === undefined ? undefined : desktopView(found)
+    },
+    async launchOfficialDesktop() {
+      const found = await detectDesktop(true)
+      if (found === undefined)
+        throw new ApiError('not_found', `这台电脑上没有装官方的 ${OFFICIAL_DESKTOP_PRODUCT} 桌面端`)
+      try {
+        await desktopPort.launch(found)
+      } catch (err) {
+        throw new ApiError(
+          'provider_unavailable',
+          `官方桌面端没打开：${err instanceof Error ? err.message : String(err)}`,
+        )
+      }
+      log(`已启动用户自己装的官方桌面端（${found.protocol ? 'dsh://open' : found.app}）`)
+      return { launched: true }
     },
   }
 }

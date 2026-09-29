@@ -76,6 +76,21 @@ export {
   toChatMessages,
   toToolDefs,
 } from './llm.js'
+export {
+  type DetectOfficialDesktopDeps,
+  detectOfficialDesktop,
+  exeFromProtocolCommand,
+  OFFICIAL_DESKTOP_OPEN_URL,
+  OFFICIAL_DESKTOP_PRODUCT,
+  OFFICIAL_DESKTOP_PROTOCOL,
+  OFFICIAL_DESKTOP_REGISTRY_KEY,
+  type OfficialDesktopInstall,
+  type OfficialDesktopPlaces,
+  officialDesktopCandidates,
+  officialDesktopLaunch,
+  parseRegQuery,
+  plistDeclaresScheme,
+} from './official-desktop.js'
 export type { PresetComposition, PresetPaths } from './preset.js'
 export {
   GATE_PLUGIN_MODULE,

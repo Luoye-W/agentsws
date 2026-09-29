@@ -32,6 +32,10 @@ export type MenuAction =
   | 'switch-scene'
   /** WP136：打开工作台里的场景面板（新建 / 关闭 / 删除都在那儿）。 */
   | 'manage-scenes'
+  /** WP184（docs/79 §9）：启动用户自己装的官方 DeepSeek Harness 桌面端。 */
+  | 'launch-official-desktop'
+  /** WP184：官方场景改回用系统浏览器打开（默认在我们自己的窗口里）。 */
+  | 'toggle-scene-in-browser'
   /** WP144（docs/80 §5）：AI 正在操作电脑时的「停止」——撤销授权 + 中断那次运行。 */
   | 'stop-computer-use'
   /** WP148：打开安装包里的第三方许可证说明（`<resources>/licenses/THIRD_PARTY_LICENSES.txt`）。 */
@@ -102,6 +106,10 @@ export interface TrayModelInput {
    * 那时「切换场景」这一项不出现——摆一个点开是空的子菜单比没有它更糟。
    */
   scenes?: TrayScene[]
+  /** WP184：这台电脑上装了官方 DeepSeek Harness 桌面端（用户自己装的），子菜单多一行。 */
+  officialDesktop?: boolean
+  /** WP184：官方场景用系统浏览器打开（默认 `false` = 在我们自己的窗口里）。 */
+  sceneInBrowser?: boolean
   /**
    * WP144（docs/80 §5）：现在有没有 AI 在操作这台电脑（`GET /v1/computer-use/active`）。
    * 有 = 托盘图标变红、菜单最上面一行「AI 正在操作电脑 · 停止」。`until` 是授权到的 ISO 时间。
@@ -333,7 +341,24 @@ export function sceneSubmenu(input: TrayModelInput): MenuItemModel | undefined {
           scene: s.name,
         }),
       ),
+      ...(input.officialDesktop === true
+        ? [
+            {
+              id: 'launch-official-desktop',
+              type: 'normal',
+              label: t.officialDesktop,
+              enabled: true,
+            } satisfies MenuItemModel,
+          ]
+        : []),
       separator,
+      {
+        id: 'toggle-scene-in-browser',
+        type: 'checkbox',
+        label: t.sceneInBrowser,
+        enabled: true,
+        checked: input.sceneInBrowser === true,
+      },
       { id: 'manage-scenes', type: 'normal', label: t.manageScenes, enabled: true },
     ],
   }

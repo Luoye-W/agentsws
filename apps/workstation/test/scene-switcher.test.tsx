@@ -54,6 +54,7 @@ const state = {
   opened: [] as string[],
   created: [] as { name: string; template: string }[],
   deleted: [] as { name: string; confirm: string }[],
+  launched: 0,
 }
 
 vi.mock('@/lib/api', async () => {
@@ -82,6 +83,10 @@ vi.mock('@/lib/api', async () => {
       state.created.push(input)
       return row({ name: input.name, origin: 'custom' })
     },
+    launchOfficialDesktop: async () => {
+      state.launched += 1
+      return { launched: true }
+    },
     deleteDshScene: async (name: string, confirm: string) => {
       state.deleted.push({ name, confirm })
       return { deleted: true }
@@ -97,6 +102,7 @@ beforeEach(() => {
   state.opened = []
   state.created = []
   state.deleted = []
+  state.launched = 0
   bridge.openExternal.mockClear()
   ;(window as unknown as { agentsws?: unknown }).agentsws = bridge
 })
@@ -189,5 +195,63 @@ describe('左下角「场景」', () => {
   it('托盘「管理场景…」带 ?scenes=1 进来：面板自己展开', async () => {
     renderWithProviders(<SceneSwitcher />, '/?scenes=1')
     expect(await screen.findByTestId('scene-panel')).toBeTruthy()
+  })
+})
+
+describe('WP184：官方场景开在壳自己的窗口里；用户自己装的官方桌面端', () => {
+  it('新壳有 openScene：交给壳（网址不经过页面），不自己调接口', async () => {
+    const openScene = vi.fn(async () => ({ ok: true as const, where: 'window' as const }))
+    ;(window as unknown as { agentsws?: unknown }).agentsws = { ...bridge, openScene }
+    renderWithProviders(<SceneSwitcher />)
+    await userEvent.click(await screen.findByTestId('scene-toggle'))
+    await userEvent.click(screen.getByTestId('scene-open-web'))
+    await waitFor(() => {
+      expect(openScene).toHaveBeenCalledWith('web', { restart: false })
+    })
+    expect(state.opened).toEqual([])
+    expect(bridge.openExternal).not.toHaveBeenCalled()
+    expect((await screen.findByTestId('scene-message')).textContent).toContain('已在新窗口里打开')
+    await userEvent.click(screen.getByTestId('scene-restart-web'))
+    await waitFor(() => {
+      expect(openScene).toHaveBeenLastCalledWith('web', { restart: true })
+    })
+  })
+
+  it('壳说没开起来：把那句话说出来', async () => {
+    const openScene = vi.fn(async () => ({ ok: false as const, reason: '端口被占了' }))
+    ;(window as unknown as { agentsws?: unknown }).agentsws = { ...bridge, openScene }
+    renderWithProviders(<SceneSwitcher />)
+    await userEvent.click(await screen.findByTestId('scene-toggle'))
+    await userEvent.click(screen.getByTestId('scene-open-web'))
+    expect((await screen.findByTestId('scene-message')).textContent).toContain('端口被占了')
+  })
+
+  it('装了官方桌面端：多一行「官方桌面端 · 你自己装的」，写明是两份；点了让服务进程去启动它', async () => {
+    state.data = {
+      ...LIST,
+      official_desktop: {
+        name: 'DeepSeek Harness',
+        app_path: '/Applications/DeepSeek Harness.app',
+        via_protocol: true,
+      },
+    }
+    renderWithProviders(<SceneSwitcher />)
+    await userEvent.click(await screen.findByTestId('scene-toggle'))
+    const desktop = screen.getByTestId('scene-official-desktop')
+    expect(desktop.textContent).toContain('官方桌面端')
+    expect(desktop.textContent).toContain('你自己装的')
+    expect(desktop.textContent).toContain('和上面的官方场景是两份')
+    await userEvent.click(screen.getByTestId('scene-open-official-desktop'))
+    await waitFor(() => {
+      expect(state.launched).toBe(1)
+    })
+    expect((await screen.findByTestId('scene-message')).textContent).toContain('已打开官方桌面端')
+  })
+
+  it('没装：没有这一行；面板上有「看教程」', async () => {
+    renderWithProviders(<SceneSwitcher />)
+    await userEvent.click(await screen.findByTestId('scene-toggle'))
+    expect(screen.queryByTestId('scene-official-desktop')).toBeNull()
+    expect(screen.getByTestId('tutorial-link').getAttribute('data-slug')).toBe('dsh-scenes')
   })
 })

@@ -5585,7 +5585,13 @@ export interface DshScenesData {
   workspace_root?: string
   scenes: DshSceneRow[]
   templates: { name: string; surface: 'web' | 'cli' }[]
+  /** WP184：用户自己装的官方 DeepSeek Harness 桌面端（没装就没有）。形状同契约 `DshOfficialDesktopView`。 */
+  official_desktop?: { name: string; app_path: string; via_protocol: boolean }
 }
+
+/** WP184：启动用户自己装的官方桌面端（`dsh://open` 或直接打开应用；它用自己的 `~/.dsh`）。 */
+export const launchOfficialDesktop = (assignment?: string): Promise<{ launched: true }> =>
+  api('/v1/dsh-scenes/official-desktop/launch', { method: 'POST', ...withAssignment(assignment) })
 
 export const getDshScenes = (assignment?: string): Promise<DshScenesData> =>
   api<DshScenesData>('/v1/dsh-scenes', withAssignment(assignment))

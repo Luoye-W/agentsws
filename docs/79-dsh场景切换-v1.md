@@ -3,21 +3,26 @@
 > 状态：**已实现**（分支 `wp/136-dsh-scenes`）。Luoye 09-24 定：dsh 的 Profile 就是「不同的工作场景」；
 > Agents 工坊只专注跨境电商 / 出海营销，是 dsh 里的**一个**场景。用户想编程、做别的事，切到 dsh 官方的
 > 场景（或自己建的），**不用再单独下载一份 dsh**。其他场景不是我们做的，我们只提供入口，不维护它们。
+>
+> **WP184（09-29）**：官方场景默认在**我们自己的独立窗口**里打开（体验接近官方桌面端，借了官方壳的几段做法，§3.1），
+> 系统浏览器仍可选；另认**用户自己装的**官方 DeepSeek Harness 桌面端，场景列表多一行点了直接启动它（§9）。
 
 ## 0. 一句话
 
 安装包里本来就带着完整的 dsh（0.1.7-rc.1）和 Node 22（WP111），这一版只是**给用户留了入口**：
 托盘「切换场景」、工作台左下角「场景」一行。点官方的 `web` 场景 = 服务进程用捆绑的 Node 起捆绑的
-`dsh --profile web`（只听 127.0.0.1、端口系统挑），拿到带一次性 token 的网址交给系统浏览器。
+`dsh --profile web`（只听 127.0.0.1、端口系统挑），拿到带一次性 token 的网址——WP184 起默认开在壳自己的
+独立窗口里（「DeepSeek Harness（官方）」），托盘勾了「在浏览器里打开场景」才交给系统浏览器。
 
 ## 1. 有哪些场景（事实全部查自 dsh 0.1.7-rc.1）
 
-| 场景 | 谁维护 | 在这里能做什么 |
-|---|---|---|
-| **Agents 工坊** | 我们 | 固定第一、默认、打勾。它就是这个工作台本身，**不是** `$DSH_HOME/profiles/` 下的目录——我们的运行时一直是 dsh-adapter 自己搭的最小组合（`harness.ts`，不读 `DSH_HOME`），不走 `dsh --profile` |
-| `web` | DeepSeek 官方模板 | 打开 / 重启 / 关闭。dsh 官方的浏览器界面（聊天、模型设置、会话历史、插件管理）|
-| 自建（例：`coding`） | 用户自己 | 从官方模板建（选模板、起名），打开 / 重启 / 关闭 / **删除** |
-| `headless` `sdk` `sdk-minimal` `acp` | DeepSeek 官方模板 | 只列名字：一个跑完一件事就退出，三个是给程序接的标准输入输出服务，工作台里打不开；新建场景时可以选它们当底子 |
+| 场景 | 谁维护 | 在这里能做什么 | 打开方式（WP184） |
+|---|---|---|---|
+| **Agents 工坊** | 我们 | 固定第一、默认、打勾。它就是这个工作台本身，**不是** `$DSH_HOME/profiles/` 下的目录——我们的运行时一直是 dsh-adapter 自己搭的最小组合（`harness.ts`，不读 `DSH_HOME`），不走 `dsh --profile` | 工坊主窗口 |
+| `web` | DeepSeek 官方模板 | 打开 / 重启 / 关闭。dsh 官方的浏览器界面（聊天、模型设置、会话历史、插件管理）——和官方桌面端里面是同一个 Web 应用 | **默认：壳里的独立窗口**「DeepSeek Harness（官方）」；可选：系统浏览器（托盘勾选）；工坊跑在浏览器里时开新标签页 |
+| 自建（例：`coding`） | 用户自己 | 从官方模板建（选模板、起名），打开 / 重启 / 关闭 / **删除** | 同 `web`（窗口标题「DeepSeek Harness · coding」） |
+| `headless` `sdk` `sdk-minimal` `acp` | DeepSeek 官方模板 | 只列名字：一个跑完一件事就退出，三个是给程序接的标准输入输出服务，工作台里打不开；新建场景时可以选它们当底子 | —— |
+| **官方桌面端（你自己装的）** | DeepSeek 官方 | 只有用户自己装过官方 DeepSeek Harness 桌面端才出现；点了启动它。它用自己的 `~/.dsh`，与上面的官方场景是两份（§9） | 启动那个应用（`dsh://open` 或直接打开） |
 
 出处：模板表 = `@deepseek-ai/dsh-app-boot` 的 `PROFILE_TEMPLATES`（`packages/dsh-adapter/test/scenes.test.ts`
 逐项对照，上游加 / 删 / 改一个模板就红）；`desktop` 名字归 Electron 版 dsh（`dsh` 的 `rejectElectronProfile`）；
@@ -70,6 +75,33 @@
 | `DELETE /v1/dsh-scenes/:name?confirm=<name>` | 删自建场景：先停，只删 `$DSH_HOME/profiles/<name>`（目录是链接就只拆链接）|
 | `POST /v1/dsh-scenes/:name/open` | 网页场景：没起就起，回 `{scene, url}` |
 | `POST /v1/dsh-scenes/:name/stop` / `restart` | 关 / 重启 |
+
+## 3.1 官方场景在我们自己的窗口里打开（WP184）
+
+Luoye 09-29 问「官方桌面端能不能集成进来作为官方标准 Profile」。查实：官方桌面端 = 完整 dsh Web 应用外面包一层
+Electron 壳（MIT，`apps/desktop` + `apps/desktop-host`），不在 npm 上、GitHub Release 也没有安装包；它独占
+`$DSH_HOME/profiles/desktop`、自带强制更新与产品埋点。**Fable 定**：不把它整个打进安装包（两份 Electron、体积翻倍、
+强制更新和我们锁版本的升级流程打架、埋点默认开），而是把官方场景**开在我们自己的独立窗口里**，能借的壳做法借过来。
+
+| 借了什么（`deepseek-ai/deepseek-harness@4878cdab`，MIT，文件头注出处，`upstreams.yml` 的 `dsh-desktop-shell`） | 我们这边 |
+|---|---|
+| `web-document.ts` 的 `authenticateWebHost`：主进程拿启动网址换 Host 的 cookie（303 + set-cookie），页面的 cookie 罐里没有它 | `scene-window.ts` 的 `authenticateSceneHost` / `withoutSetCookie`。**token 不进窗口网址**：窗口加载的是 `http://127.0.0.1:<端口>/` |
+| `main.ts` 的 `ws://127.0.0.1/*` 请求头钩子：凭据**只附给归属窗口**（`webContentsId` 与主机都对上）、来源不对的 WebSocket 拒 | `sceneRequestHeaders`，同时管 http 与 ws；别的窗口 / 别的主机原样放行、不补凭据 |
+| `directory-picker.ts` + `preload-app.ts` 的 `__DSH_DIRECTORY_PICKER__`：原生目录选择（替代浏览模式） | `scene-preload.cts` 只挂这一个和 `__DSH_HOST_PATHS__`（拖进来的文件用本机路径引用）；主进程只接归属窗口主 frame 的请求 |
+| `microphone-permissions.ts`：麦克风只给归属窗口主 frame、只要音频，macOS 再问系统 | `decideScenePermission`；其他权限照官方默认给，但只限这个场景自己的源 |
+| DevTools：`toggleDevTools` 默认键 + F12 | `isDevToolsShortcut`（macOS ⌥⌘I、其他 Ctrl+Shift+I、F12） |
+| 关主窗口 = 隐藏，页面与 Host 继续跑；退出前查询运行中任务再确认（`quit-confirmation.ts`） | 关窗隐藏；`quit-confirmation.ts` 原样移植。**差别**：官方在自己的 Host 进程里挂了查询口，我们起的是标准 `dsh --profile web`，没有那条进程内通道——所以只要有官方场景在跑，就照官方「查不到当作有任务」的规矩问一句；系统关机不问 |
+
+**不借**：官方的自动 / 强制更新（版本跟捆绑的 dsh 走 docs/42）、产品埋点（官方场景里 dsh 自己的上报按官方默认，我们不改它的开关；
+壳这一层不加任何埋点）、账号浮层、欢迎页、键位设置、侧栏浏览器（`webview`）。
+
+**隔离**：官方场景窗口住在单独的会话分区 `persist:agentsws-dsh-scenes`——工作台 defaultSession 上那份只许 self 的 CSP、
+「权限一律拒」都不串过去（官方页面按它自己的 CSP 跑），反过来官方页面也碰不到工作台的 cookie。这些窗口没有工作台的桥
+（`window.agentsws`），只能在自己的源里走动，外链交系统浏览器。
+
+**入口**：托盘「切换场景 ▸ web」、工作台左下角「场景 ▸ 打开」（桌面壳里经桥 `openScene`，壳自己去问服务进程、自己拿网址，
+网址不经过工作台页面；旧壳 / 浏览器里照旧开标签页）。重启过（端口变了）再打开会重新换 cookie、重新加载；场景被关掉后窗口随之收掉。
+**系统浏览器仍可选**：托盘「切换场景 ▸ 在浏览器里打开场景」（`config.json` 的 `sceneInBrowser`）。
 
 ## 4. 边界（交付 3）
 
@@ -124,8 +156,9 @@ gzip 约 7.6 MB**（最大的是 `dsh-client-ui-sidebar-documentpreview` 13.8 MB
 ## 7. 入口（交付 5）
 
 - **托盘**：「切换场景 ▸」子菜单在「打开工作台 / 在浏览器打开」下面——Agents 工坊（打勾）、各网页场景（在跑的挂「运行中」）、
+  （WP184）「官方桌面端（你自己装的）」（装了才有）、「在浏览器里打开场景」（勾选项）、
   「管理场景…」（打开 `/?scenes=1`，工作台看到这个参数就把面板展开）。连公司服务器、服务没起来、问不到清单时这一项不出现。
-  清单 15 秒问一次。点一个网页场景 = `POST …/open` → `shell.openExternal(网址)`；起不来弹一句人话。
+  清单 15 秒问一次。点一个网页场景 = `POST …/open` → 壳里的独立窗口（WP184；勾了浏览器就 `shell.openExternal`）；起不来弹一句人话。
 - **工作台**：左栏最下面、账户块上方一行「场景」（一个图标、两个字；有其他场景在跑时右边一个绿色数字）。点开是朝上的小面板：
   每个场景一行（官方 / 自建标签、状态胶囊、打开 / 重启 / 关闭 / 删除）、官方维护那句话、命令行场景一行名字、「新建场景」。
   删除要再输入一遍名字才点得动，并说明「只删这个场景自己的文件夹，Agents 工坊的数据不受影响」。只有所有者看得到。
@@ -139,3 +172,23 @@ gzip 约 7.6 MB**（最大的是 `dsh-client-ui-sidebar-documentpreview` 13.8 MB
    `DSH_TELEMETRY_DISABLED=1`？（单子写的是按默认，这一版没带。）
 2. 默认工作目录 `~/dsh-workspace` 这个名字 / 位置行不行（非技术用户可能更习惯「文稿」下面）。
 3. 第 5 节的积分接口作为其他场景模型来源，做不做、什么时候做。
+4. （WP184）退出确认：我们问不到官方场景里有没有任务（没有官方 Host 那条进程内查询口），所以**只要官方场景在跑，退出都会问一句**。
+   嫌烦的话可以改成「只有窗口开着才问」或加「不再提示」。
+5. （WP184）官方场景窗口里「其他权限照官方默认给」（通知、剪贴板等，只限这个场景自己的源）——要不要收紧到只给麦克风。
+
+## 9. 用户自己装的官方桌面端（WP184）
+
+**检测**（`packages/dsh-adapter/src/official-desktop.ts`，事实查自官方 `electron-builder-config.mjs` 与 `main.ts`；服务进程
+`systemOfficialDesktop`，结果缓存 30 秒）：
+
+| 系统 | 看哪里 | 怎么启动 |
+|---|---|---|
+| macOS | `/Applications/DeepSeek Harness.app`、`~/Applications/DeepSeek Harness.app`；它的 `Info.plist` 声明了 `dsh` 协议 | `open dsh://open`（协议在）或 `open <.app>` |
+| Windows | 注册表 `HKCU\Software\Classes\dsh\shell\open\command` 指向的 exe（**只认文件名 `DeepSeek Harness.exe`**，别的程序抢了协议不算）；再看 `%LOCALAPPDATA%\Programs\DeepSeek Harness\`、`Program Files` | 直接起那个 exe（它自己单实例，开着就把窗口端出来） |
+| 其他 | 官方只发 macOS / Windows 包，不找 | —— |
+
+- 接口：`GET /v1/dsh-scenes` 多一个可选 `official_desktop: { name, app_path, via_protocol }`（没装就没有）；
+  `POST /v1/dsh-scenes/official-desktop/launch`（权限同其他场景动作：只有所有者；没装回 404）。
+- 启动时**不带我们的任何环境变量**（白名单继承，连 `DSH_HOME` 都不给——它用它自己的 `~/.dsh`）。我们不下载、不安装、
+  不改它的任何设置。界面上说一句：「用它自己的数据和登录，和上面的官方场景是两份。」
+- `AGENTSWS_OFFICIAL_DESKTOP_APP=<路径>` 把某个路径当作它（演示 / 截图用，直接打开应用）；`=off` 不去找。

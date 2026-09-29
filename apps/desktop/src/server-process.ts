@@ -34,6 +34,10 @@ export const INHERITED_ENV = [
   'USERPROFILE',
   'ComSpec',
   'NODE_EXTRA_CA_CERTS',
+  // WP184（docs/79）：两个不含机密的场景开关——其他场景的工作目录、把哪里当作用户自己装的官方桌面端
+  // （`off` = 不找）。docs/79 说工作目录能改，但以前桌面壳没把它传下去。
+  'AGENTSWS_DSH_WORKSPACE',
+  'AGENTSWS_OFFICIAL_DESKTOP_APP',
 ] as const
 
 export function inheritEnv(

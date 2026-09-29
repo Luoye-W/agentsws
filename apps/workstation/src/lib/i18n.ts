@@ -2884,6 +2884,13 @@ const zh: Table = {
   'scenes.notice.custom': '这是你自己建的场景（从官方模板起步），Agents 工坊不对它负责。',
   'scenes.unavailable': '这台部署不能切换场景：{reason}',
   'scenes.opened': '已在浏览器里打开「{name}」。',
+  // WP184：官方场景默认开在工坊自己的窗口里；另认用户自己装的官方桌面端
+  'scenes.opened.window': '已在新窗口里打开「{name}」。',
+  'scenes.officialDesktop': '官方桌面端',
+  'scenes.officialDesktop.tag': '你自己装的',
+  'scenes.officialDesktop.note': '用它自己的数据和登录，和上面的官方场景是两份。',
+  'scenes.officialDesktop.opened': '已打开官方桌面端。',
+  'help.dsh-scenes.title': '切换场景',
   'scenes.error': '没办成：{message}',
   // ── WP141（docs/78 §1 #4、§2）：牌堆与屏上的字 ─────────────────────────
   'kind.kol_campaign': '红人挑人清单',
@@ -6059,6 +6066,13 @@ const en: Table = {
     'You created this scene from an official template. Agents Workshop is not responsible for it.',
   'scenes.unavailable': 'This deployment cannot switch scenes: {reason}',
   'scenes.opened': 'Opened "{name}" in your browser.',
+  'scenes.opened.window': 'Opened "{name}" in a new window.',
+  'scenes.officialDesktop': 'Official desktop app',
+  'scenes.officialDesktop.tag': 'Installed by you',
+  'scenes.officialDesktop.note':
+    'Uses its own data and sign-in, separate from the official scene above.',
+  'scenes.officialDesktop.opened': 'Opened the official desktop app.',
+  'help.dsh-scenes.title': 'Switching scenes',
   'scenes.error': 'That did not work: {message}',
   // ── WP141 (docs/78 §1 #4, §2): the deck and the words on screen ─────────
   'kind.kol_campaign': 'Creator shortlist',

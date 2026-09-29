@@ -7,14 +7,21 @@ import { memoryFileStore } from '../src/node-files.js'
 import * as ports from '../src/ports.js'
 
 describe('bridge-types', () => {
-  it('桥面只有四件能力（13 §5：桥接层要小）', () => {
-    const bridge: DesktopBridge = {
+  it('桥面只有这几件能力（13 §5：桥接层要小；WP184 加了可选的「打开场景」）', () => {
+    const bridge: Required<DesktopBridge> = {
       platform: 'darwin',
       version: '0.1.0',
       notify: async () => true,
       openExternal: async () => true,
+      openScene: async () => ({ ok: true, where: 'window' }),
     }
-    expect(Object.keys(bridge).sort()).toEqual(['notify', 'openExternal', 'platform', 'version'])
+    expect(Object.keys(bridge).sort()).toEqual([
+      'notify',
+      'openExternal',
+      'openScene',
+      'platform',
+      'version',
+    ])
   })
 
   it('挂载名与 IPC 通道固定下来', () => {
@@ -23,6 +30,7 @@ describe('bridge-types', () => {
       info: 'agentsws:bridge-info',
       notify: 'agentsws:notify',
       openExternal: 'agentsws:open-external',
+      openScene: 'agentsws:open-scene',
     })
   })
 

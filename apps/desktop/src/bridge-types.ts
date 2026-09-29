@@ -12,7 +12,7 @@
  * else new Notification('有 3 条待审批')       // 普通浏览器里的退化路径
  * ```
  *
- * 桥面只有四件能力，多一件都不给：给得越少，"同一份 UI 在普通浏览器里完整可用"
+ * 桥面只有这几件能力（WP184 加了「打开场景」），多一件都不给：给得越少，"同一份 UI 在普通浏览器里完整可用"
  * 这条就越站得住。凭据类的东西一概不走这里（13 §4.3：原生表单直填，不经渲染进程）。
  */
 
@@ -30,7 +30,18 @@ export interface DesktopBridge {
   notify(input: NotifyInput): Promise<boolean>
   /** 用系统浏览器打开；只接受 http / https / mailto，其余返回 false。 */
   openExternal(url: string): Promise<boolean>
+  /**
+   * WP184（docs/79 §3.1）：打开一个 dsh 网页场景（官方 `web` 或自建的）。壳自己问服务进程、
+   * 自己拿那条带一次性 token 的网址——**网址不进渲染进程**；默认开在壳的独立窗口里，
+   * 用户在托盘勾了「在浏览器里打开场景」就交给系统浏览器。旧壳没有这一项：先判空。
+   */
+  openScene?(name: string, options?: { restart?: boolean }): Promise<SceneOpenOutcome>
 }
+
+/** WP184：`openScene` 的结果。`where` 说开在了哪（界面据此说一句「已在窗口 / 浏览器里打开」）。 */
+export type SceneOpenOutcome =
+  | { ok: true; where: 'window' | 'browser' }
+  | { ok: false; reason: string }
 
 declare global {
   interface Window {
@@ -47,6 +58,8 @@ export const BRIDGE_CHANNELS = {
   info: 'agentsws:bridge-info',
   notify: 'agentsws:notify',
   openExternal: 'agentsws:open-external',
+  /** WP184 */
+  openScene: 'agentsws:open-scene',
 } as const
 
 export interface BridgeInfo {

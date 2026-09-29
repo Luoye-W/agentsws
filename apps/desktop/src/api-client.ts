@@ -124,6 +124,19 @@ export interface ApiClient {
    * 只交给 `shell.openExternal`，不进日志。
    */
   openScene(session: DesktopSession, assignment: string, name: string): Promise<ApiResult<string>>
+  /** WP184：同 {@link ApiClient.scenes}，再带上「这台电脑装没装官方桌面端」。 */
+  sceneMenu(
+    session: DesktopSession,
+    assignment: string,
+  ): Promise<ApiResult<{ scenes: TrayScene[]; officialDesktop: boolean }>>
+  /** WP184：重启一个网页场景（`POST /v1/dsh-scenes/:name/restart`）；回的网址同 `openScene`。 */
+  restartScene(
+    session: DesktopSession,
+    assignment: string,
+    name: string,
+  ): Promise<ApiResult<string>>
+  /** WP184：启动用户自己装的官方桌面端（`POST /v1/dsh-scenes/official-desktop/launch`）。 */
+  launchOfficialDesktop(session: DesktopSession, assignment: string): Promise<ApiResult<true>>
   /**
    * WP144（docs/80 §5）：现在有没有 AI 在操作这台电脑（`GET /v1/computer-use/active`）。
    * 服务没装配电脑操控（501）当"没有"——托盘不该因为这一项报错。
@@ -179,6 +192,50 @@ export function createApiClient(options: ApiClientOptions): ApiClient {
     } finally {
       guard?.done()
     }
+  }
+
+  const sceneMenu: ApiClient['sceneMenu'] = async (session, assignment) => {
+    const out = await call<{
+      available?: boolean
+      scenes?: { name?: unknown; origin?: unknown; state?: unknown; launchable?: unknown }[]
+      official_desktop?: { app_path?: unknown }
+    }>('/v1/dsh-scenes', {
+      method: 'GET',
+      headers: { cookie: session.cookie, 'X-Assignment': assignment },
+    })
+    if (!out.ok) return out
+    if (out.value.value.available !== true)
+      return { ok: true, value: { scenes: [], officialDesktop: false } }
+    const origins = ['agentsws', 'official', 'custom'] as const
+    const states = ['stopped', 'starting', 'running', 'failed'] as const
+    const scenes: TrayScene[] = []
+    for (const s of out.value.value.scenes ?? []) {
+      const origin = origins.find((o) => o === s.origin)
+      const state = states.find((v) => v === s.state) ?? 'stopped'
+      if (typeof s.name !== 'string' || origin === undefined || s.launchable !== true) continue
+      scenes.push({ name: s.name, origin, state })
+    }
+    const officialDesktop = typeof out.value.value.official_desktop?.app_path === 'string'
+    return { ok: true, value: { scenes, officialDesktop } }
+  }
+
+  /** 打开 / 重启回的网址带 dsh 的一次性 token——只交给打开它的那一方，不进日志。 */
+  const sceneUrl = async (
+    path: string,
+    session: DesktopSession,
+    assignment: string,
+  ): Promise<ApiResult<string>> => {
+    const out = await call<{ url?: unknown }>(path, {
+      method: 'POST',
+      headers: { cookie: session.cookie, 'X-Assignment': assignment },
+      // 第一次打开要等 dsh 初始化场景目录、起网页服务；服务端自己 60 秒封顶
+      timeoutMs: 90_000,
+    })
+    if (!out.ok) return out
+    const url = out.value.value.url
+    return typeof url === 'string'
+      ? { ok: true, value: url }
+      : { ok: false, reason: '响应里没有网址' }
   }
 
   return {
@@ -272,39 +329,30 @@ export function createApiClient(options: ApiClientOptions): ApiClient {
     },
 
     async scenes(session, assignment) {
-      const out = await call<{
-        available?: boolean
-        scenes?: { name?: unknown; origin?: unknown; state?: unknown; launchable?: unknown }[]
-      }>('/v1/dsh-scenes', {
-        method: 'GET',
-        headers: { cookie: session.cookie, 'X-Assignment': assignment },
-      })
-      if (!out.ok) return out
-      if (out.value.value.available !== true) return { ok: true, value: [] }
-      const origins = ['agentsws', 'official', 'custom'] as const
-      const states = ['stopped', 'starting', 'running', 'failed'] as const
-      const value: TrayScene[] = []
-      for (const s of out.value.value.scenes ?? []) {
-        const origin = origins.find((o) => o === s.origin)
-        const state = states.find((v) => v === s.state) ?? 'stopped'
-        if (typeof s.name !== 'string' || origin === undefined || s.launchable !== true) continue
-        value.push({ name: s.name, origin, state })
-      }
-      return { ok: true, value }
+      const out = await sceneMenu(session, assignment)
+      return out.ok ? { ok: true, value: out.value.scenes } : out
     },
 
+    sceneMenu,
+
     async openScene(session, assignment, name) {
-      const out = await call<{ url?: unknown }>(`/v1/dsh-scenes/${encodeURIComponent(name)}/open`, {
+      return sceneUrl(`/v1/dsh-scenes/${encodeURIComponent(name)}/open`, session, assignment)
+    },
+
+    async restartScene(session, assignment, name) {
+      return sceneUrl(`/v1/dsh-scenes/${encodeURIComponent(name)}/restart`, session, assignment)
+    },
+
+    async launchOfficialDesktop(session, assignment) {
+      const out = await call<{ launched?: unknown }>('/v1/dsh-scenes/official-desktop/launch', {
         method: 'POST',
         headers: { cookie: session.cookie, 'X-Assignment': assignment },
-        // 第一次打开要等 dsh 初始化场景目录、起网页服务；服务端自己 60 秒封顶
-        timeoutMs: 90_000,
+        timeoutMs: 20_000,
       })
       if (!out.ok) return out
-      const url = out.value.value.url
-      return typeof url === 'string'
-        ? { ok: true, value: url }
-        : { ok: false, reason: '响应里没有网址' }
+      return out.value.value.launched === true
+        ? { ok: true, value: true }
+        : { ok: false, reason: '没打开' }
     },
 
     async computerUseActive(session, assignment) {
