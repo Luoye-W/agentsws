@@ -487,7 +487,12 @@ function portOf(deps: GatewayDeps): ExtensionPort {
  */
 function sessionOf(c: Parameters<Route['handler']>[0], deps: GatewayDeps): ExtensionSession {
   const raw = c.req.header('Authorization') ?? ''
-  const session = portOf(deps).store.authenticate(raw, c.req.header('Origin'))
+  // WP201：Sec-Fetch-Site 一并交给闸（真 Chrome 的扩展 GET 不带 Origin，见 browserSaysExtensionRequest）
+  const session = portOf(deps).store.authenticate(
+    raw,
+    c.req.header('Origin'),
+    c.req.header('Sec-Fetch-Site'),
+  )
   if (session === undefined)
     throw new ApiError(
       'unauthenticated',

@@ -71,6 +71,30 @@ VARIANTS('%s：配对与令牌（WP119b）', (_name, make) => {
     expect(store.authenticate(`Bearer ${first.issued.token}`, ORIGIN)).toBeUndefined()
   })
 
+  it('WP201：真 Chrome 扩展的 GET 没有 Origin——只有 Sec-Fetch-Site: none 才验令牌；撤销 / 过期照旧不认', () => {
+    const clock = fakeClock()
+    const store = make(clock)
+    const pairing = store.createPairing({ workspace_id: WS, person_id: PERSON })
+    const redeem = store.redeem({ code: pairing.code, origin: ORIGIN })
+    if (!redeem.ok) throw new Error('兑换失败')
+    const bearer = `Bearer ${redeem.issued.token}`
+    // 浏览器说「不是网页发的」：认，而且认出来的是配对时那个扩展
+    expect(store.authenticate(bearer, undefined, 'none')?.extension_id).toBe('abcdefghijklmnop')
+    // 没有 Origin、也没有 Sec-Fetch-Site（curl 那种）/ 浏览器说是网页发的：不认
+    expect(store.authenticate(bearer, undefined)).toBeUndefined()
+    expect(store.authenticate(bearer, undefined, 'cross-site')).toBeUndefined()
+    // 有 Origin 就必须是配对时那个扩展，Sec-Fetch-Site 救不了
+    expect(store.authenticate(bearer, OTHER_ORIGIN, 'none')).toBeUndefined()
+    expect(store.authenticate(bearer, 'https://www.youtube.com', 'none')).toBeUndefined()
+    // 错的令牌照旧不认
+    expect(store.authenticate('Bearer ext_nope', undefined, 'none')).toBeUndefined()
+    // 撤销之后没有 Origin 的那一路也不认
+    const row = store.list(WS)[0]
+    if (row === undefined) throw new Error('清单是空的')
+    store.revoke(WS, row.id)
+    expect(store.authenticate(bearer, undefined, 'none')).toBeUndefined()
+  })
+
   it('过期令牌不认：拨过 31 天，认证返回空', () => {
     const clock = fakeClock()
     const store = make(clock)

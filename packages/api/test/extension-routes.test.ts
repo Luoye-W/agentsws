@@ -136,11 +136,12 @@ async function wired() {
   const plugin = (
     method: string,
     path: string,
-    init: { token?: string; origin?: string; body?: unknown } = {},
+    init: { token?: string; origin?: string; fetchSite?: string; body?: unknown } = {},
   ): Promise<Response> => {
     const headers = new Headers()
     if (init.token !== undefined) headers.set('Authorization', `Bearer ${init.token}`)
     if (init.origin !== undefined) headers.set('Origin', init.origin)
+    if (init.fetchSite !== undefined) headers.set('Sec-Fetch-Site', init.fetchSite)
     if (init.body !== undefined) headers.set('content-type', 'application/json')
     return Promise.resolve(
       gateway.fetch(
@@ -239,6 +240,56 @@ describe('插件这一侧：Origin 与令牌要同时对', () => {
     const w = await wired()
     const token = await paired(w)
     const res = await w.plugin('GET', '/v1/extension/hello', { token })
+    expect(res.status).toBe(401)
+  })
+
+  /*
+   * WP201（真浏览器端到端才撞出来的）：Chrome 给**有 host 权限的扩展**发的 GET
+   * **不带 Origin**（Fetch 规范：响应污染是 basic 时 GET / HEAD 不加 Origin；
+   * POST 照带），只带 `Sec-Fetch-Site: none`。于是 hello / setup / report /
+   * reveal-pricing 这些 GET 在真 Chrome 里一律 401，面板说「这把配对已经不能用了」。
+   * `Sec-Fetch-*` 是浏览器写的、网页改不了：网页发的跨源请求一定带 Origin、
+   * `Sec-Fetch-Site` 是 cross-site / same-site，永远不会是 none。
+   */
+  it('WP201：真 Chrome 扩展的 GET（没有 Origin、Sec-Fetch-Site: none）+ 对的令牌 = 通', async () => {
+    const w = await wired()
+    const token = await paired(w)
+    const res = await w.plugin('GET', '/v1/extension/hello', { token, fetchSite: 'none' })
+    expect(res.status).toBe(200)
+    const setup = await w.plugin('GET', '/v1/extension/setup', { token, fetchSite: 'none' })
+    expect(setup.status).toBe(200)
+  })
+
+  it('WP201：没有 Origin 但浏览器说是网页发的（cross-site / same-site）→ 不通', async () => {
+    const w = await wired()
+    const token = await paired(w)
+    for (const fetchSite of ['cross-site', 'same-site', 'same-origin']) {
+      const res = await w.plugin('GET', '/v1/extension/hello', { token, fetchSite })
+      expect(res.status).toBe(401)
+    }
+  })
+
+  it('WP201：有 Origin 时照旧必须是配对时那个扩展（Sec-Fetch-Site: none 也救不了搬走的令牌）', async () => {
+    const w = await wired()
+    const token = await paired(w)
+    const moved = await w.plugin('GET', '/v1/extension/hello', {
+      token,
+      origin: 'chrome-extension://otherextension1',
+      fetchSite: 'none',
+    })
+    expect(moved.status).toBe(401)
+    const page = await w.plugin('GET', '/v1/extension/hello', {
+      token,
+      origin: PAGE_ORIGIN,
+      fetchSite: 'none',
+    })
+    expect(page.status).toBe(401)
+  })
+
+  it('WP201：没有 Origin + Sec-Fetch-Site: none 也得有对的令牌', async () => {
+    const w = await wired()
+    await paired(w)
+    const res = await w.plugin('GET', '/v1/extension/hello', { token: 'ext_nope', fetchSite: 'none' })
     expect(res.status).toBe(401)
   })
 
