@@ -24,21 +24,35 @@ import { sha256 } from '@agentsws/core'
 
 type Tier = EscalationStep['tier']
 
-/** 一步的指纹：挂在哪张卡、哪个 revision、接在哪一步后面、这一步本身。 */
-export function escalationDigest(
-  item_id: string,
-  step: { revision: number; tier: Tier; to: PersonId; at: Iso8601; added: boolean },
-  prev: string,
-): string {
-  return sha256(
-    [item_id, step.revision, prev, step.tier, step.to, step.at, step.added ? '1' : '0'].join('|'),
-  )
+type StepBody = {
+  revision: number
+  tier: Tier
+  to: PersonId
+  at: Iso8601
+  added: boolean
+  handover_from?: PersonId
 }
 
-/** 在卡上追加一步（总线升级时调）。返回新的这一步。 */
+/** 一步的指纹：挂在哪张卡、哪个 revision、接在哪一步后面、这一步本身。 */
+export function escalationDigest(item_id: string, step: StepBody, prev: string): string {
+  const parts: unknown[] = [
+    item_id,
+    step.revision,
+    prev,
+    step.tier,
+    step.to,
+    step.at,
+    step.added ? '1' : '0',
+  ]
+  // 交接步才有这一格；升级步的指纹与没有这一格之前逐字节相同
+  if (step.handover_from !== undefined) parts.push(`handover:${step.handover_from}`)
+  return sha256(parts.join('|'))
+}
+
+/** 在卡上追加一步（总线升级 / 交接时调）。返回新的这一步。 */
 export function appendEscalationStep(
   item: ApprovalItem,
-  step: { tier: Tier; to: PersonId; at: Iso8601; added: boolean },
+  step: { tier: Tier; to: PersonId; at: Iso8601; added: boolean; handover_from?: PersonId },
 ): EscalationStep {
   const trail = item.routing.escalation.trail ?? []
   const prev = trail[trail.length - 1]?.digest ?? ''
@@ -49,20 +63,39 @@ export function appendEscalationStep(
 }
 
 /**
- * 当前 revision 下、按升级链核对得上的「升级追加进来的人」。
- *
- * 链从头走：哪一步的指纹对不上（被改过 / 被插过），这一步和它后面的都不认。
+ * 链从头走，回「核对得上的那几步」：哪一步的指纹对不上（被改过 / 被插过）、级别不在这张卡的
+ * 升级链里、同一级升了两次、或者交接不是从这一级当前那个人手上交出去的——这一步和它后面的都不认。
  */
-export function verifiedEscalatedRecipients(item: ApprovalItem): Set<PersonId> {
+export function verifiedEscalationSteps(item: ApprovalItem): EscalationStep[] {
   const { chain, trail = [] } = item.routing.escalation
-  const out = new Set<PersonId>()
-  const tiers = new Set<Tier>()
+  const holders = new Map<Tier, PersonId>()
+  const ok: EscalationStep[] = []
   let prev = ''
   for (const step of trail) {
     if (step.digest !== escalationDigest(item.id, step, prev)) break
-    if (!chain.includes(step.tier) || tiers.has(step.tier)) break
+    if (!chain.includes(step.tier)) break
+    if (step.handover_from === undefined) {
+      if (holders.has(step.tier)) break
+    } else if (holders.get(step.tier) !== step.handover_from) break
     prev = step.digest
-    tiers.add(step.tier)
+    holders.set(step.tier, step.to)
+    ok.push(step)
+  }
+  return ok
+}
+
+/** 这个人现在是不是某一级升级送到卡上的（核对得上的最后一个持有者）。回那一级。 */
+export function escalationTierHeldBy(item: ApprovalItem, person: PersonId): Tier | undefined {
+  const holders = new Map<Tier, PersonId>()
+  for (const step of verifiedEscalationSteps(item)) holders.set(step.tier, step.to)
+  for (const [tier, who] of holders) if (who === person) return tier
+  return undefined
+}
+
+/** 当前 revision 下、按升级链核对得上的「升级追加进来的人」。 */
+export function verifiedEscalatedRecipients(item: ApprovalItem): Set<PersonId> {
+  const out = new Set<PersonId>()
+  for (const step of verifiedEscalationSteps(item)) {
     if (!step.added || step.revision !== item.revision) continue
     if (item.routing.recipients.some((r) => r.person === step.to && r.via === 'escalation'))
       out.add(step.to)

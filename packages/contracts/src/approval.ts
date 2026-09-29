@@ -236,7 +236,12 @@ export interface EscalationStep {
   added: boolean
   /** 这一步发生时卡的 revision；改派 / 重提之后旧步骤只作留痕，不再算数。 */
   revision: number
-  /** sha256(item_id | revision | 上一步 digest | tier | to | at | added)。 */
+  /**
+   * WP199：这一步是**交接**，不是往上升——这一级原来那个人（被升级送到卡上的人）离开了，
+   * 由 `to` 接手。只认「这一级当前就是他」的交接，链照样首尾相接。
+   */
+  handover_from?: PersonId
+  /** sha256(item_id | revision | 上一步 digest | tier | to | at | added [| handover_from])。 */
   digest: string
 }
 

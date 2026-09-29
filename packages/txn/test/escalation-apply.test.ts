@@ -13,7 +13,12 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { ApprovalItem } from '@agentsws/contracts'
 import { describe, expect, it } from 'vitest'
-import { boundRecipients, escalationDigest, verifiedEscalatedRecipients } from '../src/index.js'
+import {
+  boundRecipients,
+  escalationDigest,
+  verifiedEscalatedRecipients,
+  verifiedEscalationSteps,
+} from '../src/index.js'
 import { SqliteTxnStore } from '../src/sqlite-store.js'
 import { harness, outboundInput, refundStage, tokenOf } from './helpers.js'
 
@@ -522,5 +527,135 @@ describe('WP199 重启之后', () => {
       s2.close()
       rmSync(dir, { recursive: true, force: true })
     }
+  })
+})
+
+describe('WP199 离职交接：被升级送到卡上的人走了', () => {
+  /** 出卡给 p_wang → 只升到第一级（经理 p_manager 被加进来），老板那级还没到点。 */
+  async function escalatedToManager(h: ReturnType<typeof escalationHarness>) {
+    const item = await h.txn.approvals.create(
+      outboundInput({ expires_at: '2026-10-01T00:00:00.000Z' }),
+    )
+    h.clock.set('2026-09-07T13:30:00.000Z') // 4 工作小时
+    const [escalated] = await h.txn.approvals.escalate()
+    if (escalated === undefined) throw new Error('not escalated')
+    expect(escalated.routing.recipients.map((r) => r.person)).toEqual(['p_wang', 'p_manager'])
+    return { item, escalated }
+  }
+
+  it('经理离职 → 他那一格交给接手的人、升级链上追加一步交接（链不断）→ 接手的人批 → 施行成功', async () => {
+    const h = escalationHarness()
+    const { item, escalated } = await escalatedToManager(h)
+    const moved = await h.txn.approvals.reroute(item.id, {
+      from: 'p_manager',
+      to: 'p_boss',
+      via: 'owner',
+      reason: '经理离开了工作区，由老板接手',
+    })
+    if (moved === undefined) throw new Error('not moved')
+    expect(moved.revision).toBe(2)
+    expect(moved.routing.recipients).toEqual([
+      { person: 'p_boss', via: 'escalation', reason: '经理离开了工作区，由老板接手' },
+      { person: 'p_wang', via: 'role_holder' },
+    ])
+    const trail = moved.routing.escalation.trail ?? []
+    expect(trail.map((s) => [s.tier, s.to, s.handover_from, s.added, s.revision])).toEqual([
+      ['scope_manager', 'p_manager', undefined, true, 1],
+      ['scope_manager', 'p_boss', 'p_manager', true, 2],
+    ])
+    // 留痕连续：每一步都核对得上，交接那一步接在升级那一步后面
+    expect(verifiedEscalationSteps(moved)).toHaveLength(2)
+    expect(trail[1]?.digest).toBe(
+      escalationDigest(item.id, trail[1] as never, trail[0]?.digest ?? ''),
+    )
+    expect(h.events.find((e) => e.type === 'approval.rerouted')?.payload).toMatchObject({
+      escalation_tier: 'scope_manager',
+      via: 'escalation',
+    })
+
+    // 离职的人再点：旧 token 已废，拒
+    await expect(
+      h.txn.approvals.decide(item.id, 'p_manager', {
+        decision_token: tokenOf(escalated, 'p_manager'),
+        action: 'approve',
+        via: 'workstation',
+      }),
+    ).rejects.toMatchObject({ code: 'conflict' })
+    // 拿着接手人的 token 冒名也不行
+    await expect(
+      h.txn.approvals.decide(item.id, 'p_manager', {
+        decision_token: liveToken(moved, 'p_boss'),
+        action: 'approve',
+        via: 'workstation',
+      }),
+    ).rejects.toMatchObject({ code: 'forbidden' })
+
+    await h.txn.approvals.decide(item.id, 'p_boss', {
+      decision_token: liveToken(moved, 'p_boss'),
+      action: 'approve',
+      via: 'workstation',
+    })
+    h.clock.advance(121_000)
+    expect((await h.txn.executor.applyApproval(item.id)).state).toBe('applied')
+  })
+
+  it('交接之后再升到老板那一级：链接着往下走，老板批 → 施行成功', async () => {
+    const h = escalationHarness()
+    const { item } = await escalatedToManager(h)
+    await h.txn.approvals.reroute(item.id, {
+      from: 'p_manager',
+      to: 'p_boss',
+      via: 'owner',
+      reason: '经理离开了工作区，由老板接手',
+    })
+    h.clock.set('2026-09-07T17:30:00.000Z') // 8 工作小时：升到 owner 那一级
+    const [again] = await h.txn.approvals.escalate()
+    if (again === undefined) throw new Error('not escalated')
+    const trail = again.routing.escalation.trail ?? []
+    expect(trail.map((s) => [s.tier, s.to])).toEqual([
+      ['scope_manager', 'p_manager'],
+      ['scope_manager', 'p_boss'],
+      ['owner', 'p_owner'],
+    ])
+    expect(verifiedEscalationSteps(again)).toHaveLength(3)
+    // 升级到老板那一步快照不动，施行前靠链核对
+    expect(boundRecipients(again)).toEqual(['p_wang'])
+    await h.txn.approvals.decide(item.id, 'p_owner', {
+      decision_token: liveToken(again, 'p_owner'),
+      action: 'approve',
+      via: 'workstation',
+    })
+    h.clock.advance(121_000)
+    expect((await h.txn.executor.applyApproval(item.id)).state).toBe('applied')
+  })
+
+  it('交接步不是从这一级当前那个人手上交出去的 → 那一步和后面的都不认', async () => {
+    const h = escalationHarness()
+    const { item, escalated } = await escalatedToManager(h)
+    const trail = escalated.routing.escalation.trail ?? []
+    const body = {
+      tier: 'scope_manager' as const,
+      to: 'p_x',
+      at: escalated.updated_at,
+      added: true,
+      revision: 1,
+      handover_from: 'p_someone_else',
+    }
+    const forged: ApprovalItem = {
+      ...escalated,
+      routing: {
+        ...escalated.routing,
+        recipients: [...escalated.routing.recipients, { person: 'p_x', via: 'escalation' }],
+        escalation: {
+          ...escalated.routing.escalation,
+          trail: [
+            ...trail,
+            { ...body, digest: escalationDigest(item.id, body, trail[0]?.digest ?? '') },
+          ],
+        },
+      },
+    }
+    expect(verifiedEscalationSteps(forged)).toHaveLength(1)
+    expect(boundRecipients(forged)).toEqual(['p_wang', 'p_x'])
   })
 })

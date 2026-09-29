@@ -10,7 +10,9 @@ export {
   boundRecipients,
   deciderIsLegitimate,
   escalationDigest,
+  escalationTierHeldBy,
   verifiedEscalatedRecipients,
+  verifiedEscalationSteps,
 } from './escalation.js'
 export { Executor, type ReconcileOutcome } from './executor.js'
 export { ChangeLedgerImpl } from './ledger.js'
