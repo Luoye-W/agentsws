@@ -28,7 +28,7 @@ const T0 = '2026-09-15T09:00:00.000Z'
 
 const CLOUD_TEMPLATE: ModelProviderTemplate = {
   kind: 'agentsws_cloud',
-  label: 'agentsws 云（用积分）',
+  label: 'Agents 工坊（用积分）',
   summary: '不填 key、不注册。关联一次账号就能用，按积分扣，随时切回自己的 key。',
   default_base_url: 'https://cloud.agentsws.com/v1/ai',
   default_model: 'deepseek-flash',
@@ -40,7 +40,7 @@ const CLOUD_TEMPLATE: ModelProviderTemplate = {
 const CLOUD_PROVIDER: ModelProviderView = {
   id: 'agentsws',
   kind: 'agentsws_cloud',
-  label: 'agentsws 云（用积分）',
+  label: 'Agents 工坊（用积分）',
   base_url: 'https://cloud.agentsws.com/v1/ai',
   model: 'deepseek-flash',
   region: 'cn',
@@ -167,6 +167,8 @@ const state = {
 
 const orders: string[] = []
 const saved: { id: string; input: Record<string, unknown> }[] = []
+/** WP188：启用之后接着跑的三步验证。 */
+const tested: string[] = []
 const sourceWrites: Record<string, string>[] = []
 
 vi.mock('@/lib/api', async () => {
@@ -229,6 +231,10 @@ vi.mock('@/lib/api', async () => {
       state.providers = []
       return { removed: true }
     },
+    testModelProvider: async (id: string) => {
+      tested.push(id)
+      return { ok: true, checked_at: T0 }
+    },
   }
 })
 
@@ -241,6 +247,7 @@ beforeEach(() => {
   state.providers = []
   state.sources = { workspace_id: 'ws_1', capability_sources: {} }
   saved.length = 0
+  tested.length = 0
   sourceWrites.length = 0
 })
 
@@ -249,7 +256,7 @@ describe('第三张模型卡（49 M5）', () => {
     state.credits = NOT_LINKED
     renderWithProviders(<ModelCloudCard assignment="asg_owner" />)
     const card = await screen.findByTestId('model-cloud-card')
-    expect(card.dataset.linked).toBe('false')
+    expect((await screen.findByTestId('model-cloud-actions')).dataset.linked).toBe('false')
     expect(within(card).getByTestId('model-cloud-link-account').textContent).toContain('先关联账号')
     expect(screen.queryByTestId('model-cloud-numbers')).toBeNull()
     expect(screen.queryByTestId('model-cloud-enable')).toBeNull()
@@ -265,6 +272,10 @@ describe('第三张模型卡（49 M5）', () => {
     expect(saved[0]?.input).toEqual({ kind: 'agentsws_cloud', model: 'deepseek-flash' })
     // **没有 api_key 这个键**——这一条的凭据是工作区令牌，不是用户填的东西
     expect(Object.keys(saved[0]?.input ?? {})).not.toContain('api_key')
+    // WP188：启用完接着跑三步验证
+    await waitFor(() => {
+      expect(tested).toEqual(['agentsws'])
+    })
   })
 
   it('已经在用：显示本月用了多少、余额多少', async () => {

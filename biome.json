@@ -8,6 +8,7 @@
       "!.claude",
       "!**/dist",
       "!docs/assets",
+      "!docs/design",
       "!**/src/assets/brand",
       "!**/*.dc.html",
       "!**/test/fixtures",

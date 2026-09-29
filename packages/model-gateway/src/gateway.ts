@@ -379,6 +379,54 @@ class Gateway implements ModelGatewayApi {
       req.estimated_output_tokens,
     )
 
+    /*
+     * WP188：流式与停止。`streamed` 是这一次已经交给调用方的正文——停下时它就是结果，
+     * provider 不会流式时（没调过 `on_delta`）拿到整段之后补调一次。
+     */
+    let streamed = ''
+    const onDelta =
+      req.on_delta === undefined
+        ? undefined
+        : (text: string): void => {
+            if (text === '') return
+            streamed += text
+            req.on_delta?.(text)
+          }
+    const stoppedCompletion = (ref: ModelRef): Completion => {
+      const finishedAt = this.opts.clock.now()
+      const cpt = this.opts.policy.estimate?.chars_per_token ?? DEFAULT_CHARS_PER_TOKEN
+      const partial = {
+        input_tokens: estimateInputTokens(req.messages, req.tools, cpt),
+        output_tokens: Math.ceil(streamed.length / cpt),
+        cached_tokens: 0,
+      }
+      const usage: CompletionUsage = {
+        ...partial,
+        cost_base: costOf(priceFor(this.opts.policy.prices, ref), partial),
+      }
+      this.ledger.settle(reservation, usage.cost_base)
+      this.record(
+        meta,
+        ref,
+        usage,
+        finishedAt,
+        staticPrefix,
+        Math.max(Date.parse(finishedAt) - Date.parse(startedAt), 0),
+      )
+      return { text: streamed, usage, model: ref, static_prefix_hash: staticPrefix, stopped: true }
+    }
+    if (req.signal?.aborted === true) {
+      // 还没发请求就停了：什么都没花，不记账
+      this.ledger.release(reservation)
+      return {
+        text: '',
+        usage: { ...ZERO_USAGE },
+        model: primary,
+        static_prefix_hash: staticPrefix,
+        stopped: true,
+      }
+    }
+
     const attempts: ProviderDownPayload['attempts'] = []
     /*
      * WP150：provider 明说"要重新登录"（`unauthenticated`，例如 DeepSeek 账号登录失效）不是上游宕了——
@@ -402,7 +450,7 @@ class Gateway implements ModelGatewayApi {
           continue
         }
         try {
-          const raw = await provider.complete({
+          const call = provider.complete({
             messages: req.messages,
             ...(req.tools === undefined ? {} : { tools: req.tools }),
             ...(req.seed === undefined ? {} : { seed: req.seed }),
@@ -412,7 +460,13 @@ class Gateway implements ModelGatewayApi {
             ...(req.tool_choice === undefined || provider.supports_tool_choice !== true
               ? {}
               : { tool_choice: req.tool_choice }),
+            ...(onDelta === undefined ? {} : { on_delta: onDelta }),
+            ...(req.signal === undefined ? {} : { signal: req.signal }),
           })
+          // WP188：停了就不再等上游（不会流式的 provider 也一样停得下来）
+          const raw = req.signal === undefined ? await call : await untilAborted(call, req.signal)
+          if (raw === STOPPED) return stoppedCompletion(ref)
+          if (onDelta !== undefined && streamed === '' && raw.text !== '') req.on_delta?.(raw.text)
           const finishedAt = this.opts.clock.now()
           const usage: CompletionUsage = {
             input_tokens: raw.usage.input_tokens,
@@ -443,6 +497,8 @@ class Gateway implements ModelGatewayApi {
             static_prefix_hash: staticPrefix,
           }
         } catch (e) {
+          // WP188：调用方停的——不算上游坏了，不降级、不报 provider_down
+          if (isAborted(req.signal)) return stoppedCompletion(ref)
           attempts.push({
             model: ref,
             ...(e instanceof ProviderError && e.status !== undefined ? { status: e.status } : {}),
@@ -460,6 +516,8 @@ class Gateway implements ModelGatewayApi {
             break
           }
           if (!isRetryableProviderError(e)) break
+          // 已经往外吐过字了：换一家从头说会把两段拼在一起，不如照实报错
+          if (streamed !== '') break
         }
       }
     } catch (e) {
@@ -712,4 +770,45 @@ function messageOf(e: unknown): string {
 /** 22：唯一持有 provider 凭据与预算的入口；业务代码只见这个函数。 */
 export function createModelGateway(opts: ModelGatewayOptions): ModelGatewayApi {
   return new Gateway(opts)
+}
+
+/** WP188：停下时网关没来得及发请求（一开始就停了）——什么都没花。 */
+const ZERO_USAGE: CompletionUsage = {
+  input_tokens: 0,
+  output_tokens: 0,
+  cached_tokens: 0,
+  cost_base: 0,
+}
+
+const STOPPED = Symbol('stopped')
+
+/** 读一次"停了没有"（不让 TS 把前面判过一次的结果当成永远不变）。 */
+const isAborted = (signal: AbortSignal | undefined): boolean => signal?.aborted === true
+
+/**
+ * WP188：等 provider，或者等调用方喊停——先到先算。喊停之后 provider 那边的 Promise 还在跑
+ * （会流式的 provider 自己也收到同一个 `signal`，会停），它迟来的结果 / 报错一律吞掉。
+ */
+function untilAborted<T>(work: Promise<T>, signal: AbortSignal): Promise<T | typeof STOPPED> {
+  if (signal.aborted) {
+    work.catch(() => undefined)
+    return Promise.resolve(STOPPED)
+  }
+  return new Promise<T | typeof STOPPED>((resolve, reject) => {
+    const onAbort = (): void => {
+      resolve(STOPPED)
+    }
+    signal.addEventListener('abort', onAbort, { once: true })
+    work.then(
+      (v) => {
+        signal.removeEventListener('abort', onAbort)
+        resolve(v)
+      },
+      (e: unknown) => {
+        signal.removeEventListener('abort', onAbort)
+        if (signal.aborted) resolve(STOPPED)
+        else reject(e)
+      },
+    )
+  })
 }

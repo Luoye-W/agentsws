@@ -24,6 +24,7 @@ import type {
   ConnectionsPort,
   DeepSeekAccountView,
   DesignPort,
+  FreeChatPort,
   KolPort,
   MailboxSwitchesInput,
   MessagesPort,
@@ -333,6 +334,14 @@ export function brandAskPort(
   make: (workspace_id: WorkspaceId) => Promise<AskPort>,
 ): AskPort {
   return scopedPort<AskPort>(make, () => brands.bootstrap)
+}
+
+/** WP188「随便聊」：会话存在**这个品牌**的目录里，模型用这个品牌解析之后的那一份。 */
+export function brandFreeChatPort(
+  brands: BrandModules,
+  make: (workspace_id: WorkspaceId) => Promise<FreeChatPort>,
+): FreeChatPort {
+  return scopedPort<FreeChatPort>(make, () => brands.bootstrap)
 }
 
 /**

@@ -33,6 +33,7 @@ import {
   ListTodo,
   type LucideIcon,
   Megaphone,
+  MessageCircle,
   MessageSquare,
   MessagesSquare,
   Plug,
@@ -41,7 +42,7 @@ import {
   Store,
   Users,
 } from 'lucide-react'
-import { type ReactNode, useCallback, useState } from 'react'
+import { type ReactNode, useCallback, useMemo, useState } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import { AccountBlock } from '@/components/account-block'
 import { BrandSwitcher } from '@/components/brand-switcher'
@@ -49,6 +50,7 @@ import { CommandPalette } from '@/components/command-palette'
 import { BrandMark } from '@/components/design'
 import { NoModelBanner } from '@/components/models/no-model-banner'
 import { QuotaChip } from '@/components/models/quota-notice'
+import { type Handoff, PaletteProvider } from '@/components/palette-context'
 import { RailStateProvider } from '@/components/rail/rail-state'
 import { RightRail } from '@/components/rail/right-rail'
 // WP60（48 L6）：值守中的角标。自带数据，顶栏这里只有一行
@@ -234,6 +236,17 @@ export function AppShell({
 }): ReactNode {
   const { t, position } = useApp()
   const [paletteOpen, setPaletteOpen] = useState(false)
+  /** WP188：「交给岗位去做」带过来的那件事（面板开着时只列岗位）。 */
+  const [handoff, setHandoff] = useState<Handoff | undefined>(undefined)
+  const palette = useMemo(
+    () => ({
+      open: (next?: Handoff) => {
+        setHandoff(next)
+        setPaletteOpen(true)
+      },
+    }),
+    [],
+  )
   /** 现在开着的是首次设置向导吗（顶栏那条「还没接模型」在向导期间不出，70 §2.2）。 */
   const onboarding = useLocation().pathname === '/onboarding'
   // 岗位面装着就按岗位列；没装（或一个岗位都算不出来）退回老样子
@@ -252,210 +265,225 @@ export function AppShell({
 
   return (
     <RailStateProvider>
-      <div className="flex min-h-screen bg-background text-foreground">
-        {/*
+      <PaletteProvider value={palette}>
+        <div className="flex min-h-screen bg-background text-foreground">
+          {/*
           WP71：左栏**钉在视口上**（`sticky` + `h-screen`）。
           账号块在最下面，而主区经常比一屏长——不钉住的话它会跟着页面滚走，
           "最下面"就成了"文档的最下面"，滚三屏才见得到。
         */}
-        <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col border-r border-ws-line bg-sidebar p-3 md:flex">
-          {/*
+          <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col border-r border-ws-line bg-sidebar p-3 md:flex">
+            {/*
             WP112：左栏顶部 = **母品牌标记 + 字标**，点了回首页。
 
             标记给 24（Luoye 09-18 定：再缩一点）；再小就退单色，见 `@agentsws/brand` 的 `MIN_GRADIENT_PX`。
             字标是产品名「Agents 工坊」（Luoye 09-18 定；`agentsws` 只留作仓库 / 包 / 域名），
             走 Outfit（WP96：与页面大标题同一种字）；整句留给读屏当 aria-label。
-            这里用的是**静态**那一姿态：一直在动的 logo 是噪音，不是品牌。
+            WP195（Luoye 09-29「静态的 logo 其实不好看」）：改成**待机**——大部分时间一动不动，
+            隔几秒轻轻动一下；鼠标移上去播一次「一变一队」再回待机。点了回首页不变。
           */}
-          <div className="px-2 pt-1 pb-4">
-            <NavLink
-              to="/"
-              end
-              aria-label={t('app.title')}
-              data-testid="brand-home"
-              className="inline-flex items-center gap-2 rounded-[10px] outline-offset-4"
+            <div className="px-2 pt-1 pb-4">
+              <NavLink
+                to="/"
+                end
+                aria-label={t('app.title')}
+                data-testid="brand-home"
+                className="inline-flex items-center gap-2 rounded-[10px] outline-offset-4"
+              >
+                <BrandMark size={24} motion="idle" playOnHover />
+                <span className="ws-display text-[14px]">Agents 工坊</span>
+              </NavLink>
+            </div>
+            <nav
+              className="flex flex-1 flex-col gap-0.5 overflow-y-auto"
+              aria-label={t('nav.main')}
+              data-testid="main-nav"
             >
-              <BrandMark size={24} />
-              <span className="ws-display text-[14px]">Agents 工坊</span>
-            </NavLink>
-          </div>
-          <nav
-            className="flex flex-1 flex-col gap-0.5 overflow-y-auto"
-            aria-label={t('nav.main')}
-            data-testid="main-nav"
-          >
-            <NavLink to="/" end className={navClass}>
-              <NavIcon icon={Home} />
-              {t('nav.home')}
-            </NavLink>
-            {/*
+              {/*
+              WP188（Luoye 09-29）：「随便聊」在最上面——想试一个模型、问个随手的问题，
+              不必先"交给某个岗位一件事"。像 DeepSeek 网页版：会话列表 + 对话 + 输入框。
+            */}
+              <NavLink to="/free-chat" className={navClass} data-testid="nav-free-chat">
+                <NavIcon icon={MessageCircle} />
+                {t('nav.free_chat')}
+              </NavLink>
+              <NavLink to="/" end className={navClass}>
+                <NavIcon icon={Home} />
+                {t('nav.home')}
+              </NavLink>
+              {/*
               WP113（63 §1）：这一格原来是「目标」。Luoye 定：换成**消息**——
               一只邮箱是人每天真正会去的地方，而目标是每周看一次的东西。
               目标模型**没删**（37 的每日计划与复盘都靠它），入口收进「待办」页的
               一个 tab，`/goals` 路由留着，⌘K 里仍然搜得到。
               顺序：首页 / 消息 / 待办 / 日历。
             */}
-            <NavLink to="/messages" className={navClass} data-testid="nav-messages">
-              <NavIcon icon={Inbox} />
-              {t('nav.messages')}
-              <MessagesUnread />
-            </NavLink>
-            {/*
+              <NavLink to="/messages" className={navClass} data-testid="nav-messages">
+                <NavIcon icon={Inbox} />
+                {t('nav.messages')}
+                <MessagesUnread />
+              </NavLink>
+              {/*
               WP139（docs/78 阻断 #2 第 4 条）：**聊天窗的常驻入口**。以前只能从「网站在线客服」
               那条职责的面板进，而那块面板一被「还没分配范围」挡住，全站就没有路通到 /chat-window。
               放在「消息」正下面：网站访客的对话也是消息，左栏是"去哪儿"（36 §9）。
               只在名下有这条职责时出现——没有它，这一格点进去也什么都做不了。
             */}
-            {holdsDuty(me?.assignments ?? [], 'dtc.live-chat') ? (
-              <NavLink to="/chat-window" className={navClass} data-testid="nav-chat-window">
-                <NavIcon icon={MessagesSquare} />
-                {t('nav.chat_window')}
+              {holdsDuty(me?.assignments ?? [], 'dtc.live-chat') ? (
+                <NavLink to="/chat-window" className={navClass} data-testid="nav-chat-window">
+                  <NavIcon icon={MessagesSquare} />
+                  {t('nav.chat_window')}
+                </NavLink>
+              ) : null}
+              {/* 37 工作模型：待办 / 日历 */}
+              <NavLink to="/todos" className={navClass}>
+                <NavIcon icon={ListTodo} />
+                {t('nav.todos')}
               </NavLink>
-            ) : null}
-            {/* 37 工作模型：待办 / 日历 */}
-            <NavLink to="/todos" className={navClass}>
-              <NavIcon icon={ListTodo} />
-              {t('nav.todos')}
-            </NavLink>
-            <NavLink to="/calendar" className={navClass}>
-              <NavIcon icon={CalendarDays} />
-              {t('nav.calendar')}
-            </NavLink>
-            <div className="px-2.5 pt-4 pb-1.5 text-[11px] tracking-wider text-ws-muted-fg uppercase">
-              {t('nav.positions')}
-            </div>
-            {byPosition.length > 0
-              ? byPosition.map((p) => {
-                  const open = flags[p.position_id] ?? p.position_id === current?.position_id
-                  return (
-                    <PositionNav
+              <NavLink to="/calendar" className={navClass}>
+                <NavIcon icon={CalendarDays} />
+                {t('nav.calendar')}
+              </NavLink>
+              <div className="px-2.5 pt-4 pb-1.5 text-[11px] tracking-wider text-ws-muted-fg uppercase">
+                {t('nav.positions')}
+              </div>
+              {byPosition.length > 0
+                ? byPosition.map((p) => {
+                    const open = flags[p.position_id] ?? p.position_id === current?.position_id
+                    return (
+                      <PositionNav
+                        key={p.position_id}
+                        instance={p}
+                        open={open}
+                        onToggle={() => {
+                          toggle(p.position_id, open)
+                        }}
+                      />
+                    )
+                  })
+                : positions.map((p) => (
+                    <NavLink
                       key={p.position_id}
-                      instance={p}
-                      open={open}
-                      onToggle={() => {
-                        toggle(p.position_id, open)
-                      }}
-                    />
-                  )
-                })
-              : positions.map((p) => (
-                  <NavLink
-                    key={p.position_id}
-                    to={`/positions/${p.position_id}`}
-                    className={navClass}
-                    data-testid="nav-position"
-                  >
-                    <NavIcon icon={positionIcon(p.role_id)} />
-                    <span className="truncate">{p.role_name}</span>
-                  </NavLink>
-                ))}
-            <Separator className="my-2" />
-            {/* 41 §1：每人自带的个人代理——问别人的代理、管自己的 profile 与日程 */}
-            <NavLink to="/secretary" className={navClass}>
-              <NavIcon icon={Bot} />
-              {t('nav.secretary')}
-            </NavLink>
-            <NavLink to="/meetings" className={navClass}>
-              <NavIcon icon={Users} />
-              {t('nav.meetings')}
-            </NavLink>
-            <NavLink to="/knowledge" className={navClass}>
-              <NavIcon icon={BookOpen} />
-              {t('nav.knowledge')}
-            </NavLink>
-            <NavLink to="/skills" className={navClass}>
-              <NavIcon icon={Sparkles} />
-              {t('nav.skills')}
-            </NavLink>
-            {/* WP28 制度面：岗位 / 成员 / 职责（谁在做什么、能做到哪一步） */}
-            <NavLink to="/org" className={navClass}>
-              <NavIcon icon={Building2} />
-              {t('nav.org')}
-            </NavLink>
-            <NavLink to="/connections" className={navClass}>
-              <NavIcon icon={Plug} />
-              {t('nav.connections')}
-            </NavLink>
-            {/* WP85（54 §5）：微信 / 企业微信——把代理接到聊天软件上 */}
-            <NavLink to="/im-channels" className={navClass}>
-              <NavIcon icon={MessageSquare} />
-              {t('nav.im')}
-            </NavLink>
-            <NavLink to="/settings" className={navClass}>
-              <NavIcon icon={Settings} />
-              {t('nav.settings')}
-            </NavLink>
-          </nav>
-          {/*
+                      to={`/positions/${p.position_id}`}
+                      className={navClass}
+                      data-testid="nav-position"
+                    >
+                      <NavIcon icon={positionIcon(p.role_id)} />
+                      <span className="truncate">{p.role_name}</span>
+                    </NavLink>
+                  ))}
+              <Separator className="my-2" />
+              {/* 41 §1：每人自带的个人代理——问别人的代理、管自己的 profile 与日程 */}
+              <NavLink to="/secretary" className={navClass}>
+                <NavIcon icon={Bot} />
+                {t('nav.secretary')}
+              </NavLink>
+              <NavLink to="/meetings" className={navClass}>
+                <NavIcon icon={Users} />
+                {t('nav.meetings')}
+              </NavLink>
+              <NavLink to="/knowledge" className={navClass}>
+                <NavIcon icon={BookOpen} />
+                {t('nav.knowledge')}
+              </NavLink>
+              <NavLink to="/skills" className={navClass}>
+                <NavIcon icon={Sparkles} />
+                {t('nav.skills')}
+              </NavLink>
+              {/* WP28 制度面：岗位 / 成员 / 职责（谁在做什么、能做到哪一步） */}
+              <NavLink to="/org" className={navClass}>
+                <NavIcon icon={Building2} />
+                {t('nav.org')}
+              </NavLink>
+              <NavLink to="/connections" className={navClass}>
+                <NavIcon icon={Plug} />
+                {t('nav.connections')}
+              </NavLink>
+              {/* WP85（54 §5）：微信 / 企业微信——把代理接到聊天软件上 */}
+              <NavLink to="/im-channels" className={navClass}>
+                <NavIcon icon={MessageSquare} />
+                {t('nav.im')}
+              </NavLink>
+              <NavLink to="/settings" className={navClass}>
+                <NavIcon icon={Settings} />
+                {t('nav.settings')}
+              </NavLink>
+            </nav>
+            {/*
           WP71（36 §10）：品牌与账号在**最下面**。
           个人用户（一个人一个品牌）看不到品牌切换器，那一块自己不渲染（52 O1）。
         */}
-          <div
-            className="mt-2 flex flex-col gap-1 border-t border-ws-line pt-2"
-            data-testid="rail-bottom"
-          >
-            <BrandSwitcher />
-            {/* WP136（docs/79）：账户块上方一行「场景」——切到 dsh 的其他场景（只有所有者看得到） */}
-            <SceneSwitcher />
-            <AccountBlock {...(me === undefined ? {} : { me })} />
-          </div>
-        </aside>
+            <div
+              className="mt-2 flex flex-col gap-1 border-t border-ws-line pt-2"
+              data-testid="rail-bottom"
+            >
+              <BrandSwitcher />
+              {/* WP136（docs/79）：账户块上方一行「场景」——切到 dsh 的其他场景（只有所有者看得到） */}
+              <SceneSwitcher />
+              <AccountBlock {...(me === undefined ? {} : { me })} />
+            </div>
+          </aside>
 
-        <div className="flex min-w-0 flex-1 flex-col">
-          {/*
+          <div className="flex min-w-0 flex-1 flex-col">
+            {/*
             WP96：顶栏还是那几样（⌘K / 模型 / 积分），只是换成纸底 + 一条浅线，
             并且 ⌘K 做成画布上那个"交给某个岗位一件事…"的长条搜索框样子。
           */}
-          <header className="flex items-center justify-end gap-2 border-b border-ws-line bg-ws-paper px-5 py-2.5">
-            {/* WP125（本单交付 4）：合成世界的「演示数据」标记——不显眼但始终在 */}
-            <DemoBadge />
-            <StandbyBadge />
-            <button
-              type="button"
-              onClick={() => {
-                setPaletteOpen(true)
-              }}
-              aria-label="命令面板 (⌘K)"
-              data-testid="top-command"
-              className="flex h-9 w-full max-w-[280px] items-center gap-2 rounded-[10px] bg-ws-card px-3 text-[13px] text-ws-muted-fg shadow-ws transition-shadow hover:shadow-ws-hover"
-            >
-              <CommandIcon aria-hidden className="size-4" />
-              <span className="truncate">{t('nav.command')}</span>
-              <span className="ws-num ml-auto hidden text-[11px] sm:inline">⌘K</span>
-            </button>
-            {/* WP71：顶栏只剩这两个数——现在用哪个模型、还剩多少积分（问不到就不出） */}
-            {/*
+            <header className="flex items-center justify-end gap-2 border-b border-ws-line bg-ws-paper px-5 py-2.5">
+              {/* WP125（本单交付 4）：合成世界的「演示数据」标记——不显眼但始终在 */}
+              <DemoBadge />
+              <StandbyBadge />
+              <button
+                type="button"
+                onClick={() => {
+                  palette.open()
+                }}
+                aria-label="命令面板 (⌘K)"
+                data-testid="top-command"
+                className="flex h-9 w-full max-w-[280px] items-center gap-2 rounded-[10px] bg-ws-card px-3 text-[13px] text-ws-muted-fg shadow-ws transition-shadow hover:shadow-ws-hover"
+              >
+                <CommandIcon aria-hidden className="size-4" />
+                <span className="truncate">{t('nav.command')}</span>
+                <span className="ws-num ml-auto hidden text-[11px] sm:inline">⌘K</span>
+              </button>
+              {/* WP71：顶栏只剩这两个数——现在用哪个模型、还剩多少积分（问不到就不出） */}
+              {/*
               WP98（09-18 收口）：「还没接模型」原来是首页第一屏一整条黄条。
               它说的是**整个工作区的状态**，不是今天的哪一件事——所以它和模型 / 积分
               是同一类东西，收进顶栏当一个黄色小胶囊，第一屏还给岗位卡。
             */}
-            {/*
+              {/*
               WP121b（70 §2.2 末段）：**向导期间这条不出**。向导第 ① 步问的就是
               "用哪个 AI"，同一屏上再顶一条黄条等于同一句话说两遍。走完向导
               （包括走了演示旁路那条路）之后它照常出现——那时它才是一条新消息。
             */}
-            {onboarding ? null : <NoModelBanner variant="chip" />}
-            {/* WP151：DeepSeek 余额不足（同一类：整个工作区的状态），点了去「设置 → 模型」充值 */}
-            {onboarding ? null : <QuotaChip />}
-            <ModelChip />
-            <CreditsChip />
-          </header>
-          <main className="min-w-0 flex-1 bg-ws-paper p-4 md:p-7">{children}</main>
+              {onboarding ? null : <NoModelBanner variant="chip" />}
+              {/* WP151：DeepSeek 余额不足（同一类：整个工作区的状态），点了去「设置 → 模型」充值 */}
+              {onboarding ? null : <QuotaChip />}
+              <ModelChip />
+              <CreditsChip />
+            </header>
+            <main className="min-w-0 flex-1 bg-ws-paper p-4 md:p-7">{children}</main>
+          </div>
+
+          {/* 36 §9 第三栏：默认收成 44px 图标轨，一次开一个面板 */}
+          <RightRail {...(instances === undefined ? {} : { instances })} />
+
+          <CommandPalette
+            open={paletteOpen}
+            onOpenChange={(next) => {
+              setPaletteOpen(next)
+              if (!next) setHandoff(undefined)
+            }}
+            {...(handoff === undefined ? {} : { handoff })}
+            positions={positions}
+            {...(instances === undefined ? {} : { instances })}
+            cards={cards}
+            tileLibrary={tileLibrary}
+            onAddTile={onAddTile}
+          />
         </div>
-
-        {/* 36 §9 第三栏：默认收成 44px 图标轨，一次开一个面板 */}
-        <RightRail {...(instances === undefined ? {} : { instances })} />
-
-        <CommandPalette
-          open={paletteOpen}
-          onOpenChange={setPaletteOpen}
-          positions={positions}
-          {...(instances === undefined ? {} : { instances })}
-          cards={cards}
-          tileLibrary={tileLibrary}
-          onAddTile={onAddTile}
-        />
-      </div>
+      </PaletteProvider>
     </RailStateProvider>
   )
 }

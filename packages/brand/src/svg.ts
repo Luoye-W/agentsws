@@ -15,17 +15,31 @@ import {
   ALL_BLOCKS,
   BLOCK_RADIUS,
   BLOCK_SIZE,
+  type BlockGradient,
+  blockGradient,
+  DEFAULT_IDLE_STYLE,
+  EASING,
   GRADIENT_AXIS,
+  IDLE_BLINK,
+  IDLE_SHEEN,
+  IDLE_START_MS,
+  IDLE_WAVE,
+  IDLE_WAVE_DELAYS_MS,
+  IDLE_WAVE_SHEEN,
+  IDLE_WAVE_SHEEN_DELAYS_MS,
+  type IdleStyle,
+  idlePercent,
+  MARK_BOX,
   STOPS_ON_DARK,
   STOPS_ON_LIGHT,
   type Stop,
   VIEW_BOX,
 } from './geometry.js'
 
-function rects(fill: string): string {
+function rects(fill: string | ((i: number) => string), extra?: (i: number) => string): string {
   return ALL_BLOCKS.map(
-    (b) =>
-      `<rect x="${b.x}" y="${b.y}" width="${BLOCK_SIZE}" height="${BLOCK_SIZE}" rx="${BLOCK_RADIUS}" fill="${fill}"/>`,
+    (b, i) =>
+      `<rect x="${b.x}" y="${b.y}" width="${BLOCK_SIZE}" height="${BLOCK_SIZE}" rx="${BLOCK_RADIUS}" fill="${typeof fill === 'string' ? fill : fill(i)}"${extra?.(i) ?? ''}/>`,
   ).join('')
 }
 
@@ -47,12 +61,23 @@ export function markSvg(
     /** 给了就是单色（印刷、灰度、favicon 的小尺寸、刻蚀），渐变那一段整个不出。 */
     solid?: string
     id?: string
+    /**
+     * WP195：给了就出一张**自己会动**的待机标记（`<style>` 内联在 SVG 里，不靠外部样式表），
+     * 用在云端后台、官网、动态 favicon 这些拿不到工作台 `BrandMark` 组件的地方。
+     * 系统开了「少一点动效」时它自己停（SVG 里带着那条 media query）。
+     */
+    idle?: IdleStyle
   } = {},
 ): string {
   const id = options.id ?? 'aw-mark'
   const head = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${VIEW_BOX}" fill="none">`
   if (options.solid !== undefined) return `${head}${rects(options.solid)}</svg>`
   const stops = options.stops ?? STOPS_ON_DARK
+  if (options.idle !== undefined) {
+    // 待机时领头那块会往上 / 右探出外框几个单位：内联用时让它画出框外（当 <img> 用时会被裁，四周留边即可）
+    const open = head.replace('fill="none">', 'fill="none" overflow="visible">')
+    return `${open}${idleBody(options.idle, id, stops)}</svg>`
+  }
   return `${head}<defs>${gradient(id, stops)}</defs>${rects(`url(#${id})`)}</svg>`
 }
 
@@ -69,3 +94,106 @@ export const BRAND_MARK_SVG_LIGHT = markSvg({ stops: STOPS_ON_LIGHT, id: 'aw-mar
  * 渐变只剩一团糊（§1.3）。深底该取 `MONO_ON_DARK`，浅底取 `MONO_ON_LIGHT`。
  */
 export const BRAND_MARK_SVG_MONO = markSvg({ solid: 'currentColor' })
+
+// ── 待机（WP195）──────────────────────────────────────────────────────
+
+/** 动的块每块自己一条 objectBoundingBox 渐变（§3.0），左下 → 右上。 */
+function blockGradients(id: string, stops: readonly Stop[]): string {
+  return ALL_BLOCKS.map((b, i) => {
+    const g: BlockGradient = blockGradient(b, stops)
+    return `<linearGradient id="${id}-b${i}" x1="0" y1="1" x2="1" y2="0"><stop offset="0%" stop-color="${g.from}"/><stop offset="100%" stop-color="${g.to}"/></linearGradient>`
+  }).join('')
+}
+
+/**
+ * 待机那一段的 CSS：一条 keyframes + 基类 + 「少一点动效」时停。
+ *
+ * `cls` 是挂在动的元素上的类名，也拿来当 keyframes 的名字——同一页里塞两张不同 id 的
+ * 标记不会互相串。工作台 `index.css` 里手写的 `ws-bm-idle-*` 是同一套数字
+ * （`apps/workstation/test/brand-idle.test.tsx` 逐个对）。
+ */
+export function idleCss(style: IdleStyle, cls: string): string {
+  const base = `.${cls}{transform-box:fill-box;transform-origin:center;`
+  const reduce = `@media (prefers-reduced-motion: reduce){.${cls}{animation:none}}`
+  if (style === 'wave-sheen') {
+    // 两个类：`cls` 挂在每块那个会抬起的 <g> 上，`cls-band` 挂在亮带上；亮带匀速（linear）
+    const w = IDLE_WAVE_SHEEN
+    const up = idlePercent(w.riseMs, w.periodMs)
+    const down = idlePercent(w.riseMs + w.fallMs, w.periodMs)
+    const end = idlePercent(w.sweepMs, w.periodMs)
+    const far = Number((MARK_BOX.width * w.travel).toFixed(2))
+    const band = `${cls}-band`
+    return `${base}animation:${cls} ${w.periodMs}ms ease-in-out infinite both}@keyframes ${cls}{0%{transform:translateY(0)}${up}{transform:translateY(-${w.lift}px)}${down},100%{transform:translateY(0)}}.${band}{transform:translate(-${far}px,${far}px);animation:${band} ${w.periodMs}ms linear ${IDLE_START_MS}ms infinite both}@keyframes ${band}{0%{transform:translate(-${far}px,${far}px)}${end},100%{transform:translate(${far}px,-${far}px)}}@media (prefers-reduced-motion: reduce){.${cls}{animation:none}.${band}{animation:none;opacity:0}}`
+  }
+  if (style === 'wave') {
+    const w = IDLE_WAVE
+    const up = idlePercent(w.riseMs, w.periodMs)
+    const down = idlePercent(w.riseMs + w.fallMs, w.periodMs)
+    return `${base}animation:${cls} ${w.periodMs}ms ease-in-out infinite both}@keyframes ${cls}{0%{transform:translateY(0)}${up}{transform:translateY(-${w.lift}px)}${down},100%{transform:translateY(0)}}${reduce}`
+  }
+  if (style === 'blink') {
+    const k = IDLE_BLINK
+    const out = idlePercent(k.outMs, k.periodMs)
+    const back = idlePercent(k.outMs + k.backMs, k.periodMs)
+    return `${base}animation:${cls} ${k.periodMs}ms ${EASING.lead} ${IDLE_START_MS}ms infinite both}@keyframes ${cls}{0%{transform:translate(0,0)}${out}{transform:translate(${k.dx}px,${k.dy}px)}${back},100%{transform:translate(0,0)}}${reduce}`
+  }
+  const k = IDLE_SHEEN
+  const end = idlePercent(k.sweepMs, k.periodMs)
+  const far = MARK_BOX.width
+  return `${base}transform:translate(-${far}px,${far}px);animation:${cls} ${k.periodMs}ms ${EASING.transition} ${IDLE_START_MS}ms infinite both}@keyframes ${cls}{0%{transform:translate(-${far}px,${far}px)}${end},100%{transform:translate(${far}px,-${far}px)}}@media (prefers-reduced-motion: reduce){.${cls}{animation:none;opacity:0}}`
+}
+
+/** 流光那道亮带：沿对角线、两侧羽化，只在中间 `bandWidth` 那一段里亮。 */
+function sheenGradient(
+  id: string,
+  band: { bandWidth: number; peakOpacity: number } = IDLE_SHEEN,
+): string {
+  const half = band.bandWidth / 2
+  const at = (t: number): string => `${Number((t * 100).toFixed(2))}%`
+  return `<linearGradient id="${id}" x1="0" y1="1" x2="1" y2="0"><stop offset="${at(0.5 - half)}" stop-color="#fff" stop-opacity="0"/><stop offset="50%" stop-color="#fff" stop-opacity="${band.peakOpacity}"/><stop offset="${at(0.5 + half)}" stop-color="#fff" stop-opacity="0"/></linearGradient>`
+}
+
+function idleBody(style: IdleStyle, id: string, stops: readonly Stop[]): string {
+  const cls = `${id}-idle`
+  const css = `<style>${idleCss(style, cls)}</style>`
+  if (style === 'sheen') {
+    // 方块不动，照静态那条规矩：一条 userSpaceOnUse 铺满，六块切开；亮带被六块裁出来
+    const clip = `<clipPath id="${id}-clip">${rects('#000')}</clipPath>`
+    const band = `<g clip-path="url(#${id}-clip)"><rect class="${cls}" x="${MARK_BOX.x}" y="${MARK_BOX.y}" width="${MARK_BOX.width}" height="${MARK_BOX.height}" fill="url(#${id}-sheen)"/></g>`
+    return `${css}<defs>${gradient(id, stops)}${sheenGradient(`${id}-sheen`)}${clip}</defs>${rects(`url(#${id})`)}${band}`
+  }
+  if (style === 'wave-sheen') {
+    // 每块一个会抬起的 <g>：块本身 + 被它自己裁出来的那一份亮带，一起抬——光不会漏到缝里。
+    // 六份亮带同一条动画、同一个起点，所以看上去就是一道光。
+    const box = `x="${MARK_BOX.x}" y="${MARK_BOX.y}" width="${MARK_BOX.width}" height="${MARK_BOX.height}"`
+    const clips = ALL_BLOCKS.map(
+      (b, i) =>
+        `<clipPath id="${id}-c${i}"><rect x="${b.x}" y="${b.y}" width="${BLOCK_SIZE}" height="${BLOCK_SIZE}" rx="${BLOCK_RADIUS}"/></clipPath>`,
+    ).join('')
+    const groups = ALL_BLOCKS.map(
+      (b, i) =>
+        `<g class="${cls}" style="animation-delay:${IDLE_START_MS + (IDLE_WAVE_SHEEN_DELAYS_MS[i] ?? 0)}ms"><rect x="${b.x}" y="${b.y}" width="${BLOCK_SIZE}" height="${BLOCK_SIZE}" rx="${BLOCK_RADIUS}" fill="url(#${id}-b${i})"/><g clip-path="url(#${id}-c${i})"><rect class="${cls}-band" ${box} fill="url(#${id}-sheen)"/></g></g>`,
+    ).join('')
+    return `${css}<defs>${blockGradients(id, stops)}${sheenGradient(`${id}-sheen`, IDLE_WAVE_SHEEN)}${clips}</defs>${groups}`
+  }
+  const lead = ALL_BLOCKS.length - 1
+  const extra = (i: number): string => {
+    if (style === 'blink') return i === lead ? ` class="${cls}"` : ''
+    return ` class="${cls}" style="animation-delay:${IDLE_START_MS + (IDLE_WAVE_DELAYS_MS[i] ?? 0)}ms"`
+  }
+  return `${css}<defs>${blockGradients(id, stops)}</defs>${rects((i) => `url(#${id}-b${i})`, extra)}`
+}
+
+/** 深底上的待机标记（默认那一种）：云端后台左上角、官网深色区用它。 */
+export const BRAND_MARK_SVG_IDLE_DARK = markSvg({
+  stops: STOPS_ON_DARK,
+  id: 'aw-idle-dark',
+  idle: DEFAULT_IDLE_STYLE,
+})
+
+/** 浅底上的待机标记（压暗端点）。 */
+export const BRAND_MARK_SVG_IDLE_LIGHT = markSvg({
+  stops: STOPS_ON_LIGHT,
+  id: 'aw-idle-light',
+  idle: DEFAULT_IDLE_STYLE,
+})

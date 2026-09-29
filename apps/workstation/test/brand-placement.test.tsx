@@ -28,7 +28,7 @@ const positions: PositionSummary[] = [
 ]
 
 describe('左栏顶部：标记 + 字标，点了回首页', () => {
-  it('是一条指向 / 的链接，里面一个静态标记加一个字标', () => {
+  it('是一条指向 / 的链接，里面一个待机标记加一个字标', () => {
     renderWithProviders(
       <AppShell positions={positions} cards={[]} tileLibrary={[]} onAddTile={() => {}}>
         <div>主区</div>
@@ -42,8 +42,8 @@ describe('左栏顶部：标记 + 字标，点了回首页', () => {
 
     const svg = home.querySelector('svg[data-testid="brand-mark"]')
     expect(svg).not.toBeNull()
-    // logo 是**静态**的：一直在动的 logo 是噪音
-    expect((svg as SVGElement).getAttribute('data-motion')).toBe('none')
+    // WP195：logo 改成**待机**（Luoye 09-29「静态的 logo 其实不好看」）——大部分时间静止，隔几秒动一下
+    expect((svg as SVGElement).getAttribute('data-motion')).toBe('idle')
     // 规范 §1.3 的最小可用尺寸，再小方块间的缝会并起来
     expect((svg as SVGElement).getAttribute('width')).toBe('24')
     expect((svg as SVGElement).getAttribute('data-variant')).toBe('gradient')
@@ -182,23 +182,26 @@ describe('index.html：标签页图标接上了', () => {
   })
 })
 
-describe('public/favicon.svg：深色圆底 + 一条整体渐变', () => {
-  it('圆底是墨色，渐变仍是 userSpaceOnUse 的那一条，六块共用', async () => {
+describe('public/favicon.svg：深色圆底 + 会动的待机标记（WP195）', () => {
+  it('圆底是墨色；标记本体就是品牌包那张待机 SVG，动效与「少一点动效」都内联在里面', async () => {
     const { readFileSync } = await import('node:fs')
     const { dirname, join } = await import('node:path')
     const { fileURLToPath } = await import('node:url')
-    const { GRADIENT_AXIS, INK } = await import('@agentsws/brand')
+    const { DEFAULT_IDLE_STYLE, INK, STOPS_ON_DARK, markSvg } = await import('@agentsws/brand')
     const svg = readFileSync(
       join(dirname(fileURLToPath(import.meta.url)), '..', 'public', 'favicon.svg'),
       'utf8',
     )
     expect(svg).toContain(`fill="${INK}"`)
     expect(svg).toContain('<circle')
-    expect(svg).toContain('gradientUnits="userSpaceOnUse"')
-    expect(svg).toContain(
-      `x1="${GRADIENT_AXIS.x1}" y1="${GRADIENT_AXIS.y1}" x2="${GRADIENT_AXIS.x2}" y2="${GRADIENT_AXIS.y2}"`,
-    )
-    expect(svg.match(/<rect/g) ?? []).toHaveLength(6)
-    expect(svg.match(/<linearGradient/g) ?? []).toHaveLength(1)
+    // 生成脚本只把开头换成摆位置的属性，其余与品牌包逐字相同——手改过就对不上
+    const inner = markSvg({ idle: DEFAULT_IDLE_STYLE, stops: STOPS_ON_DARK, id: 'fav' })
+    expect(svg).toContain(inner.replace('<svg xmlns="http://www.w3.org/2000/svg" ', ''))
+    expect(svg).toContain('@keyframes fav-idle')
+    expect(svg).toContain('prefers-reduced-motion: reduce')
+    expect(svg).not.toMatch(/<script|href="http/)
+    // 六块（每块自己一条渐变 fav-b0…b5）；波 + 流光时另有每块一份裁出来的亮带，不数它们
+    expect(svg.match(/<rect [^>]*fill="url\(#fav-b\d\)"/g) ?? []).toHaveLength(6)
+    expect(svg).toContain('<title>Agents 工坊</title>')
   })
 })

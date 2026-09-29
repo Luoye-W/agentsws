@@ -96,6 +96,11 @@ export interface CloudStandIn {
    * WP194：给 demo 种本月的用量与上限（替身不真扣钱，数字是合成的）。上限按 `null` 清。
    * 种完「积分」页就有人有岗位、「我的额度」就有数，能演示「额度到了」。
    */
+  /**
+   * WP194：demo 的官方模型替身在答之前问这一声——这个人（`X-Agentsws-Member`）本月额度到了就回
+   * 402 + 「本月额度用完了，找管理员加。」（与真云同一个信封），没到回 `undefined`。
+   */
+  aiGate(headers: Record<string, string>): { status: number; body: unknown } | undefined
   seedAllocation(input: {
     usage?: CloudStandInUsageSeed[]
     limits?: { kind: AllocationSubjectKind; subject_id: string; monthly_limit: number | null }[]
@@ -227,6 +232,21 @@ export function cloudStandIn(options: CloudStandInOptions = {}): CloudStandIn {
       ([k]) => k.toLowerCase() === name.toLowerCase(),
     )?.[1]
     return attributionIdOk(raw) ? raw : undefined
+  }
+  const aiGate = (
+    headers: Record<string, string> | undefined,
+  ): { status: number; body: unknown } | undefined => {
+    const member = headerOf(headers, MEMBER_HEADER)
+    const row = member === undefined ? undefined : rowOf('member', member)
+    if (row?.monthly_limit === undefined || row.used < row.monthly_limit) return undefined
+    return {
+      status: 402,
+      body: {
+        code: 'insufficient_credits',
+        message: ALLOCATION_EXHAUSTED_MESSAGE,
+        details: { reason: 'member_limit', monthly_limit: row.monthly_limit, used: row.used },
+      },
+    }
   }
   const setLimit = (
     kind: AllocationSubjectKind,
@@ -467,14 +487,8 @@ export function cloudStandIn(options: CloudStandInOptions = {}): CloudStandIn {
     if (method === 'POST' && path === '/v1/ai/chat/completions') {
       if (token === undefined || !workspaceTokens.has(token))
         return fail(401, 'unauthenticated', '令牌无效')
-      const member = headerOf(headers, MEMBER_HEADER)
-      const row = member === undefined ? undefined : rowOf('member', member)
-      if (row?.monthly_limit !== undefined && row.used >= row.monthly_limit)
-        return respond(402, {
-          code: 'insufficient_credits',
-          message: ALLOCATION_EXHAUSTED_MESSAGE,
-          details: { reason: 'member_limit', monthly_limit: row.monthly_limit, used: row.used },
-        })
+      const blocked = aiGate(headers)
+      if (blocked !== undefined) return respond(blocked.status, blocked.body)
     }
     return fail(404, 'not_found', '演示里没有这一项（demo 不连真云）')
   }
@@ -497,6 +511,7 @@ export function cloudStandIn(options: CloudStandInOptions = {}): CloudStandIn {
       return route(method, url, init?.headers, body)
     },
     requests: () => [...seen],
+    aiGate: (headers) => aiGate(headers),
     seedAllocation(input) {
       for (const cell of input.usage ?? []) usageCells.push({ ...cell })
       for (const l of input.limits ?? [])

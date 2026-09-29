@@ -11,6 +11,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { DataMapPanel } from '@/components/data-map'
+import { MOTION_PREFS, setMotionPref, useMotionPref } from '@/components/design'
 import { ModelsPanel } from '@/components/models/models-panel'
 import { NoModelBanner } from '@/components/models/no-model-banner'
 import { type ProfileDraft, ProfileForm } from '@/components/onboarding/profile-form'
@@ -18,7 +19,6 @@ import { BrowserCard } from '@/components/settings/browser-card'
 import { CloudAccountCard } from '@/components/settings/cloud-account'
 import { ComputerUseCard } from '@/components/settings/computer-use-card'
 import { CreditsPanel } from '@/components/settings/credits-panel'
-import { ModelCloudCard } from '@/components/settings/model-cloud-card'
 import { OfficialPluginsPanel } from '@/components/settings/official-plugins'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -43,6 +43,7 @@ export function SettingsPage({
   defaultTab?: 'general' | 'account' | 'plugins'
 }): React.ReactNode {
   const { t, theme, toggleTheme, lang, setLang, position } = useApp()
+  const motionPref = useMotionPref()
   const client = useQueryClient()
   const [saved, setSaved] = useState(false)
   const [failure, setFailure] = useState<string | undefined>(undefined)
@@ -149,6 +150,40 @@ export function SettingsPage({
                 {lang === 'zh' ? '中文' : 'English'}
               </Button>
             </div>
+            {/*
+              WP195：界面动效——跟随系统（默认）/ 开 / 关。没有单独的「外观」页，
+              就和主题、语言放在一起。管的是品牌标记的动效，加载转圈不归它管。
+            */}
+            <div className="flex items-center justify-between">
+              <span className="flex items-center gap-1">
+                {t('settings.motion')}
+                <Hint text={t('settings.motion.hint')} />
+              </span>
+              <fieldset
+                className="inline-flex rounded-full border p-0.5 text-xs"
+                aria-label={t('settings.motion')}
+                data-testid="settings-motion"
+              >
+                {MOTION_PREFS.map((m) => (
+                  <button
+                    key={m}
+                    type="button"
+                    aria-pressed={m === motionPref}
+                    data-value={m}
+                    className={
+                      m === motionPref
+                        ? 'rounded-full bg-primary px-2.5 py-0.5 text-primary-foreground'
+                        : 'rounded-full px-2.5 py-0.5 text-muted-foreground hover:text-foreground'
+                    }
+                    onClick={() => {
+                      setMotionPref(m)
+                    }}
+                  >
+                    {t(`settings.motion.${m}`)}
+                  </button>
+                ))}
+              </fieldset>
+            </div>
             {identity === undefined ? null : (
               <div className="flex items-center justify-between">
                 <span>{t('settings.identity')}</span>
@@ -231,8 +266,10 @@ export function SettingsPage({
         {/* WP144（docs/80）：电脑操控，紧跟浏览器（同一类"让 AI 动手的地方"，同一档权限） */}
         {ownerId === undefined ? null : <ComputerUseCard assignment={ownerId} />}
         {ownerId === undefined ? null : <ModelsPanel assignment={ownerId} />}
-        {/* 49 M5 第三张模型卡：agentsws 云（用积分）。不填 key，一键启用 */}
-        {ownerId === undefined ? null : <ModelCloudCard assignment={ownerId} />}
+        {/*
+          49 M5 那张「Agents 工坊（用积分）」卡：WP188 起就在上面「加一个」里（同一个组件
+          `CloudPlanActions`：先关联账号 / 启用 / 看余额与用量），这里不再另摆一张。
+        */}
         {/*
           WP152：「用我的 DeepSeek 账号登录」原来是这里单独一张卡；现在收进上面「加一个」里的
           「DeepSeek 官方」卡（二选一：官方账户登录 / 官方 API 接口连接），这里不再重复一张。

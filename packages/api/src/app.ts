@@ -36,6 +36,7 @@ import { dshScenesRoutes } from './routes/dsh-scenes.js'
 import { eventRoutes } from './routes/events.js'
 // WP119（68）：浏览器插件的本地一面 `/v1/extension/*`（配对、观测、状态）
 import { extensionRoutes } from './routes/extension.js'
+import { freeChatRoutes } from './routes/free-chat.js'
 import { haltRoutes } from './routes/halt.js'
 import { healthRoutes } from './routes/health.js'
 import { identityRoutes } from './routes/identity.js'
@@ -184,6 +185,8 @@ export function collectRoutes(): Route[] {
     ...workRoutes(),
     // 36 §3 对话入口之二：问 AI（单轮、只你可见）
     ...askRoutes(),
+    // WP188：随便聊（不开事项、不起岗位运行；会话存本机，计量照常）
+    ...freeChatRoutes(),
     // 40 §2 工具箱与查重；`/v1/catalog/similar` 与 `/v1/catalog/duplicates` 是定值段，与 `/v1/catalog` 不撞
     ...catalogRoutes(),
     // 41 §1 秘书面：`/v1/me/profile`、`/v1/people/:id/ask`、`/v1/meetings/:id/brief`。

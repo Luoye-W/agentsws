@@ -48,9 +48,11 @@ import {
   CLOUD_STAND_IN_BASE_URL,
   type CloudStandIn,
   type CloudStandInUsageSeed,
+  cloudAiStandInFetch,
   cloudStandIn,
   createServer,
   deepseekAccountStandIn,
+  demoWebSearch,
   periodQueryRunner,
 } from '@agentsws/server'
 import type { Pack, RunContext, World } from '@agentsws/simulation'
@@ -1349,6 +1351,13 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
      */
     deepseekAccount: deepseekAccountStandIn(),
     cloudFetch: cloud.fetch,
+    /*
+     * WP188：关联了替身云之后，「Agents 工坊（用积分）」那条模型来源打的是替身的 `/v1/ai`
+     * （流式回一段演示回答）；别的地址照旧走真 fetch。随便聊的联网搜索也是替身（不连 DeepSeek）。
+     */
+    // WP194：官方模型替身答之前先问替身云「这个人本月额度到了没有」（演示「额度到了」那句人话）
+    modelFetch: cloudAiStandInFetch({ gate: (headers) => cloud.aiGate(headers) }),
+    freeChatWebSearch: demoWebSearch,
     ...(options.quiet === undefined ? {} : { quiet: options.quiet }),
     env: {
       ...process.env,

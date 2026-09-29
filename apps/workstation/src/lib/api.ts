@@ -1932,6 +1932,8 @@ export type ModelPurposeName =
   | 'transcription'
   /** WP179：官方网页搜索（只出现在用量表里，不能选模型） */
   | 'web_search'
+  /** WP188：随便聊（只出现在用量表里，不能选模型） */
+  | 'free_chat'
 
 export interface ModelTestResult {
   ok: boolean
@@ -1993,7 +1995,8 @@ export interface ModelProviderTemplate {
   /** 方案排序；小的在前，卡打开时默认选第一个。 */
   plan_order?: number
   /** 这个方案怎么认证：填 key（默认），还是用订阅登录（没有表单，只有一个登录按钮）。 */
-  auth?: 'api_key' | 'subscription'
+  /** WP188：`cloud` = 「Agents 工坊（用积分）」——不填 key，卡里是关联账号 / 启用 / 看余额。 */
+  auth?: 'api_key' | 'subscription' | 'account' | 'cloud'
   /** `auth: 'subscription'` 时走哪一家。 */
   subscription_provider?: SubscriptionProviderId
   default_base_url: string

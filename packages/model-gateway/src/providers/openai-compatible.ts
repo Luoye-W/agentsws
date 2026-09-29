@@ -9,12 +9,14 @@ import type {
   ProviderTranscription,
   ToolDef,
 } from '@agentsws/contracts'
+import { estimateInputTokens } from '../pricing.js'
 import { GatewayError, ProviderError } from '../types.js'
 import {
   type DeepSeekBalanceListener,
   deepseekQuotaError,
   isDeepSeekQuotaFailure,
 } from './deepseek-quota.js'
+import { readChatStream } from './openai-stream.js'
 
 export type FetchLike = (
   input: string,
@@ -30,6 +32,8 @@ export type FetchLike = (
   status: number
   json(): Promise<unknown>
   text(): Promise<string>
+  /** WP188：流式回包的字节流（真 fetch 有；替身可以不给，退回 `text()` 一次读完）。 */
+  body?: ReadableStream<Uint8Array> | null
 }>
 
 export interface OpenAiCompatibleOptions {
@@ -302,20 +306,30 @@ export function openaiCompatibleProvider(options: OpenAiCompatibleOptions): Mode
   }
 
   /** 一次上游调用。**唯一**发请求的地方——header 由 `authHeaders()` 现取现用。 */
-  const request = async (
+  const open = async (
     url: string,
     init: {
       method: 'GET' | 'POST'
       body?: string | FormData
       multipart?: boolean
+      /** WP188：调用方的停止信号（流式那条路给）。 */
+      signal?: AbortSignal
+      /** WP194：这一次多带的头（官方接口那一条的「谁 / 哪个岗位」）。 */
       headers?: Record<string, string>
     },
-  ): Promise<unknown> => {
+  ): Promise<Awaited<ReturnType<FetchLike>>> => {
     const headers = { ...authHeaders(), ...init.headers }
     // multipart 的 boundary 由 fetch 自己写，手工塞 content-type 会让上游解不出来
     if (init.multipart === true) delete headers['content-type']
-    const signal =
+    const timeout =
       options.timeoutMs === undefined ? undefined : AbortSignal.timeout(options.timeoutMs)
+    const signals = [timeout, init.signal].filter((x): x is AbortSignal => x !== undefined)
+    const signal =
+      signals.length === 0
+        ? undefined
+        : signals.length === 1
+          ? signals[0]
+          : AbortSignal.any(signals)
     let res: Awaited<ReturnType<FetchLike>>
     try {
       res = await doFetch(url, {
@@ -343,8 +357,18 @@ export function openaiCompatibleProvider(options: OpenAiCompatibleOptions): Mode
         status: res.status,
       })
     }
-    return res.json()
+    return res
   }
+
+  const request = async (
+    url: string,
+    init: {
+      method: 'GET' | 'POST'
+      body?: string | FormData
+      multipart?: boolean
+      headers?: Record<string, string>
+    },
+  ): Promise<unknown> => (await open(url, init)).json()
 
   const post = async (
     path: string,
@@ -389,25 +413,68 @@ export function openaiCompatibleProvider(options: OpenAiCompatibleOptions): Mode
     throw first
   }
 
+  /** WP188：流式请求一次，拼回非流式那个形状（后面的工具调用解析、用量换算照旧）。 */
+  const streamed = async (
+    payload: Record<string, unknown>,
+    onText: (text: string) => void,
+    signal: AbortSignal | undefined,
+    headers?: Record<string, string>,
+  ): Promise<WireChatResponse> => {
+    const res = await open(`${baseUrl}/chat/completions`, {
+      method: 'POST',
+      body: JSON.stringify({ ...payload, stream: true, stream_options: { include_usage: true } }),
+      ...(signal === undefined ? {} : { signal }),
+      ...(headers === undefined ? {} : { headers }),
+    })
+    const reply = await readChatStream(res, onText, signal)
+    return {
+      choices: [
+        {
+          message: {
+            content: reply.content,
+            ...(reply.reasoning === '' ? {} : { reasoning_content: reply.reasoning }),
+            ...(reply.tool_calls.length === 0
+              ? {}
+              : {
+                  tool_calls: reply.tool_calls.map((c) => ({
+                    ...(c.id === undefined ? {} : { id: c.id }),
+                    function: {
+                      ...(c.name === undefined ? {} : { name: c.name }),
+                      arguments: c.arguments === '' ? '{}' : c.arguments,
+                    },
+                  })),
+                }),
+          },
+        },
+      ],
+      ...(reply.usage === undefined ? {} : { usage: reply.usage }),
+    }
+  }
+
   const provider: ModelProvider = {
     ref,
     // WP127：能力声明由装配方给（来自上一次验证）；没给就是"还不知道"，网关照常放行
     ...(options.capabilities === undefined ? {} : { capabilities: { ...options.capabilities } }),
     listModels,
     async complete(req) {
-      const json = (await post(
-        '/chat/completions',
-        {
-          model: options.model,
-          messages: toWireMessages(req.messages),
-          ...(req.tools === undefined ? {} : { tools: req.tools.map(toWireTool) }),
-          ...(req.seed === undefined ? {} : { seed: req.seed }),
-          stream: false,
-        },
-        undefined,
-        // WP194：官方接口那一条带上「谁 / 哪个岗位」
-        options.requestHeaders?.(req.meta),
-      )) as WireChatResponse
+      const payload = {
+        model: options.model,
+        messages: toWireMessages(req.messages),
+        ...(req.tools === undefined ? {} : { tools: req.tools.map(toWireTool) }),
+        ...(req.seed === undefined ? {} : { seed: req.seed }),
+      }
+      // WP194：官方接口那一条带上「谁 / 哪个岗位」
+      const extra = options.requestHeaders?.(req.meta)
+      // WP188：调用方要一段一段收（随便聊）→ 走流式；拼回来的形状与非流式一模一样
+      const json: WireChatResponse =
+        req.on_delta === undefined
+          ? ((await post(
+              '/chat/completions',
+              { ...payload, stream: false },
+              undefined,
+              extra,
+            )) as WireChatResponse)
+          : await streamed(payload, req.on_delta, req.signal, extra)
       const message = json.choices?.[0]?.message
       if (message === undefined) {
         throw new ProviderError('provider response has no choices')
@@ -435,16 +502,26 @@ export function openaiCompatibleProvider(options: OpenAiCompatibleOptions): Mode
       })
       const usage = json.usage
       const reasoning = message.reasoning_content
+      const text = message.content ?? ''
       return {
-        text: message.content ?? '',
+        text,
         ...(calls.length === 0 ? {} : { tool_calls: calls }),
         ...(typeof reasoning === 'string' && reasoning.length > 0 ? { reasoning } : {}),
-        usage: {
-          input_tokens: usage?.prompt_tokens ?? 0,
-          output_tokens: usage?.completion_tokens ?? 0,
-          cached_tokens: cachedOf(usage),
-          cost_base: 0,
-        },
+        usage:
+          usage === undefined && req.on_delta !== undefined
+            ? // WP188：有的上游流式时不回用量（不认 include_usage）——按字数估，好过记 0
+              {
+                input_tokens: estimateInputTokens(req.messages, req.tools, 4),
+                output_tokens: Math.ceil((text.length + (reasoning?.length ?? 0)) / 4),
+                cached_tokens: 0,
+                cost_base: 0,
+              }
+            : {
+                input_tokens: usage?.prompt_tokens ?? 0,
+                output_tokens: usage?.completion_tokens ?? 0,
+                cached_tokens: cachedOf(usage),
+                cost_base: 0,
+              },
       }
     },
   }

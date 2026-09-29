@@ -1,5 +1,9 @@
 /**
- * 设置 → 模型的**第三张卡**：「agentsws 云（用积分）」（49 M5）。
+ * 设置 → 模型的**第三张卡**：「Agents 工坊（用积分）」（49 M5）。
+ *
+ * WP188（Luoye 09-29）：它在「加一个」列表里原来显示的是通用的「+ 填 API key」——不对，它不填 key。
+ * 现在那张卡里放的就是这里的 {@link CloudPlanActions}（同一套：先关联账号 / 启用 / 看余额与用量），
+ * 设置页不再另外摆一张。图标用我们自己的品牌标记，不是字母圆圈。
  *
  * 为什么另开一个件而不是塞进 `ModelsPanel` 的模板循环：那两张卡的正文是
  * "要准备什么"（去哪儿注册、复制哪一串、粘到哪里），这一张的正文恰好是
@@ -14,7 +18,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Cloud, Loader2 } from 'lucide-react'
 import { Link } from 'react-router-dom'
-import { BrandIcon } from '@/components/brand-icons'
+import { BrandMark } from '@/components/design'
 import { TutorialLink } from '@/components/help/tutorial-link'
 import { Button } from '@/components/ui/button'
 import { Hint } from '@/components/ui/hint'
@@ -24,6 +28,7 @@ import {
   listModelProviders,
   removeModelProvider,
   saveModelProvider,
+  testModelProvider,
 } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 
@@ -42,6 +47,36 @@ export const CLOUD_PROVIDER_ID = 'agentsws'
 export const ACCOUNT_TAB_HREF = '/settings?tab=credits'
 
 export function ModelCloudCard({ assignment }: { assignment?: string }): React.ReactNode {
+  const { t } = useApp()
+  const providers = useQuery({
+    queryKey: ['model-providers', assignment],
+    queryFn: () => listModelProviders(assignment),
+  })
+  if (providers.isPending) return <Skeleton className="h-28 w-full" />
+  const template = providers.data?.templates.find((tpl) => tpl.kind === 'agentsws_cloud')
+  return (
+    <div className="rounded-lg border p-2.5" data-testid="model-cloud-card">
+      <p className="flex items-center gap-2 text-sm font-medium">
+        <BrandMark size={20} playOnHover />
+        {t('models.cloud.title')}
+        <Hint text={t('models.cloud.hint')} />
+        <TutorialLink slug="agentsws-credits" className="ml-auto font-normal" />
+      </p>
+      <p className="mt-0.5 text-xs text-muted-foreground">
+        {template?.summary ?? t('models.cloud.summary')}
+      </p>
+      <CloudPlanActions {...(assignment === undefined ? {} : { assignment })} />
+    </div>
+  )
+}
+
+/**
+ * 「Agents 工坊（用积分）」的状态与按钮（WP188 抽出来：设置页「加一个」那张卡与这张卡共用一份）。
+ *
+ * 三种状态各一句话：还没关联账号 →「先关联账号」（去账号与积分）；关联了没启用 →「启用」
+ * （启用完接着跑三步验证）；在用 → 本月用量与余额 +「看余额与用量」+「停用」。**没有 key 输入框。**
+ */
+export function CloudPlanActions({ assignment }: { assignment?: string }): React.ReactNode {
   const { t, lang } = useApp()
   const client = useQueryClient()
   // 与积分面板同一个口径：钱留两位小数，多了是噪音
@@ -63,14 +98,15 @@ export function ModelCloudCard({ assignment }: { assignment?: string }): React.R
     void client.invalidateQueries({ queryKey: ['model-defaults'] })
     void client.invalidateQueries({ queryKey: ['cloud-credits'] })
     void client.invalidateQueries({ queryKey: ['home'] })
+    void client.invalidateQueries({ queryKey: ['free-chat', 'models'] })
   }
 
   const template = providers.data?.templates.find((tpl) => tpl.kind === 'agentsws_cloud')
   const existing = providers.data?.providers.find((p) => p.kind === 'agentsws_cloud')
 
   const enable = useMutation({
-    mutationFn: () =>
-      saveModelProvider(
+    mutationFn: async () => {
+      const saved = await saveModelProvider(
         CLOUD_PROVIDER_ID,
         {
           kind: 'agentsws_cloud',
@@ -78,7 +114,11 @@ export function ModelCloudCard({ assignment }: { assignment?: string }): React.R
           model: template?.default_model ?? 'deepseek-flash',
         },
         assignment,
-      ),
+      )
+      // WP188：启用完接着跑三步验证（连通 → 文字 → 看图），与别的来源保存后同一套
+      await testModelProvider(saved.id, assignment).catch(() => undefined)
+      return saved
+    },
     onSuccess: refresh,
   })
   const disable = useMutation({
@@ -86,7 +126,7 @@ export function ModelCloudCard({ assignment }: { assignment?: string }): React.R
     onSuccess: refresh,
   })
 
-  if (providers.isPending) return <Skeleton className="h-28 w-full" />
+  if (providers.isPending) return <Skeleton className="mt-2 h-8 w-full" />
 
   const linked = credits.data?.linked === true
   const balance = credits.data?.balance
@@ -95,17 +135,7 @@ export function ModelCloudCard({ assignment }: { assignment?: string }): React.R
   const failed = enable.error ?? disable.error
 
   return (
-    <div className="rounded-lg border p-2.5" data-testid="model-cloud-card" data-linked={linked}>
-      <p className="flex items-center gap-2 text-sm font-medium">
-        <BrandIcon provider="agentsws_cloud" />
-        {template?.label ?? t('models.cloud.title')}
-        <Hint text={t('models.cloud.hint')} />
-        <TutorialLink slug="agentsws-credits" className="ml-auto font-normal" />
-      </p>
-      <p className="mt-0.5 text-xs text-muted-foreground">
-        {template?.summary ?? t('models.cloud.summary')}
-      </p>
-
+    <div data-testid="model-cloud-actions" data-linked={linked}>
       {/* 数字只在"已经在用"时出——没启用的时候摆一行 0 是噪音 */}
       {existing !== undefined && balance !== undefined ? (
         <p className="mt-1.5 text-xs" data-slot="status" data-testid="model-cloud-numbers">
@@ -153,7 +183,7 @@ export function ModelCloudCard({ assignment }: { assignment?: string }): React.R
           </Button>
         ) : (
           <>
-            <Button size="sm" variant="ghost" asChild>
+            <Button size="sm" variant="ghost" asChild data-testid="model-cloud-manage">
               <Link to={ACCOUNT_TAB_HREF}>{t('models.cloud.manage')}</Link>
             </Button>
             <Button
