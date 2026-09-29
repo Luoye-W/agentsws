@@ -182,23 +182,25 @@ describe('index.html：标签页图标接上了', () => {
   })
 })
 
-describe('public/favicon.svg：深色圆底 + 一条整体渐变', () => {
-  it('圆底是墨色，渐变仍是 userSpaceOnUse 的那一条，六块共用', async () => {
+describe('public/favicon.svg：深色圆底 + 会动的待机标记（WP195）', () => {
+  it('圆底是墨色；标记本体就是品牌包那张待机 SVG，动效与「少一点动效」都内联在里面', async () => {
     const { readFileSync } = await import('node:fs')
     const { dirname, join } = await import('node:path')
     const { fileURLToPath } = await import('node:url')
-    const { GRADIENT_AXIS, INK } = await import('@agentsws/brand')
+    const { DEFAULT_IDLE_STYLE, INK, STOPS_ON_DARK, markSvg } = await import('@agentsws/brand')
     const svg = readFileSync(
       join(dirname(fileURLToPath(import.meta.url)), '..', 'public', 'favicon.svg'),
       'utf8',
     )
     expect(svg).toContain(`fill="${INK}"`)
     expect(svg).toContain('<circle')
-    expect(svg).toContain('gradientUnits="userSpaceOnUse"')
-    expect(svg).toContain(
-      `x1="${GRADIENT_AXIS.x1}" y1="${GRADIENT_AXIS.y1}" x2="${GRADIENT_AXIS.x2}" y2="${GRADIENT_AXIS.y2}"`,
-    )
+    // 生成脚本只把开头换成摆位置的属性，其余与品牌包逐字相同——手改过就对不上
+    const inner = markSvg({ idle: DEFAULT_IDLE_STYLE, stops: STOPS_ON_DARK, id: 'fav' })
+    expect(svg).toContain(inner.replace('<svg xmlns="http://www.w3.org/2000/svg" ', ''))
+    expect(svg).toContain('@keyframes fav-idle')
+    expect(svg).toContain('prefers-reduced-motion: reduce')
+    expect(svg).not.toMatch(/<script|href="http/)
     expect(svg.match(/<rect/g) ?? []).toHaveLength(6)
-    expect(svg.match(/<linearGradient/g) ?? []).toHaveLength(1)
+    expect(svg).toContain('<title>Agents 工坊</title>')
   })
 })

@@ -113,6 +113,10 @@ describe('登录页', () => {
     await waitFor(() => {
       expect(email.value).toBe('wang@nordvolt.example')
     })
+    // WP195：登录页的标记是待机（原来是集结——集结只留给冷启动与首次设置）
+    expect(
+      screen.getByTestId('login-brand').querySelector('svg')?.getAttribute('data-motion'),
+    ).toBe('idle')
     await user.click(screen.getByRole('button', { name: '给我一个登录链接' }))
     expect(await screen.findByTestId('login-enter')).toBeTruthy()
     expect(asked).toEqual(['wang@nordvolt.example'])

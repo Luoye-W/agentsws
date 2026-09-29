@@ -7,12 +7,15 @@
 
 出这几样：
 
-  apps/workstation/public/favicon.svg        深色圆底 + 渐变标记
+  apps/workstation/public/favicon.svg        深色圆底 + 渐变标记（WP195 起自己会动：待机那一段
+                                             内联在 SVG 里；浏览器支持就动，不支持就是静态）
   apps/workstation/public/favicon-32.png     32px 后备（老浏览器不吃 SVG favicon）
   apps/desktop/build/icon.png                1024，macOS 图标网格：824 内容区 + 圆角
   apps/desktop/build/trayTemplate.png        22，单色模板图（黑 + alpha，系统自己反色）
   apps/desktop/build/trayTemplate@2x.png     44
   docs/assets/brand/mark-{dark,light,mono}.svg  仓库门面用的 SVG 副本
+
+只重出 favicon.svg（不碰任何位图）：python3 scripts/gen-brand-assets.py --favicon-only
 
 并把托盘那两张的 base64 **写回** `apps/desktop/src/tray-icon.ts`——托盘图标是壳启动
 的第一件事，不该依赖打包后的资源路径，所以它是内嵌的 data URL。
@@ -63,6 +66,8 @@ console.log(JSON.stringify({{
   svgDark: b.BRAND_MARK_SVG_DARK,
   svgLight: b.BRAND_MARK_SVG_LIGHT,
   svgMono: b.BRAND_MARK_SVG_MONO,
+  svgFaviconIdle: b.markSvg({{ idle: b.DEFAULT_IDLE_STYLE, stops: b.STOPS_ON_DARK, id: 'fav' }}),
+  defaultIdle: b.DEFAULT_IDLE_STYLE,
 }}));
 """
     out = subprocess.run(
@@ -180,31 +185,27 @@ FAVICON_RATIO = 0.64
 
 
 def favicon_svg() -> str:
-    """深色圆底 + 渐变标记（§1.2「浅底的坑」第 1 条解法）。"""
-    ratio = FAVICON_RATIO
-    scale = 100 * ratio / BOX["width"]
-    ox = (100 - BOX["width"] * scale) / 2 - BOX["x"] * scale
-    oy = (100 - BOX["height"] * scale) / 2 - BOX["y"] * scale
-    stops = "".join(
-        f'<stop offset="{s["offset"] * 100:g}%" stop-color="{s["color"]}"/>' for s in B["dark"]
-    )
-    ax = B["axis"]
-    rects = "".join(
-        f'<rect x="{x:g}" y="{y:g}" width="{SU:g}" height="{SU:g}" rx="{RU:g}" fill="url(#fav)"/>'
-        for x, y in BLOCKS
-    )
+    """深色圆底 + 会动的待机标记（WP195；圆底是 §1.2「浅底的坑」第 1 条解法）。
+
+    标记本体整段取 `@agentsws/brand` 的 `markSvg({ idle })`——keyframes 与「少一点动效」
+    那条 media query 都内联在里面，这里只把它当一个嵌套 `<svg>` 摆进圆底的正中。
+    Firefox 会让标签页图标动起来；Chrome / Safari 只取第一帧，第一帧就是静态标记。
+    """
+    size = 100 * FAVICON_RATIO
+    off = (100 - size) / 2
+    inner = B["svgFaviconIdle"]
+    head = '<svg xmlns="http://www.w3.org/2000/svg" '
+    if not inner.startswith(head):
+        sys.exit("markSvg 的开头变了，favicon 这里对不上")
+    inner = f'<svg x="{off:g}" y="{off:g}" width="{size:g}" height="{size:g}" ' + inner[len(head):]
     return (
         '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100"'
-        ' role="img" aria-label="agentsws">\n'
-        "  <!-- WP112 · 出海Agents工坊 标记。由 scripts/gen-brand-assets.py 生成，不手改。\n"
+        ' role="img" aria-label="Agents 工坊">\n'
+        f"  <!-- WP112 / WP195 · 出海Agents工坊 标记（待机：{B['defaultIdle']}）。由 scripts/gen-brand-assets.py 生成，不手改。\n"
         "       浅底的坑（规范 §1.2）：这里走的是第 1 条解法——深色圆底。 -->\n"
-        "  <title>agentsws</title>\n"
+        "  <title>Agents 工坊</title>\n"
         f'  <circle cx="50" cy="50" r="50" fill="{B["ink"]}"/>\n'
-        "  <defs>\n"
-        f'    <linearGradient id="fav" gradientUnits="userSpaceOnUse"'
-        f' x1="{ax["x1"]}" y1="{ax["y1"]}" x2="{ax["x2"]}" y2="{ax["y2"]}">{stops}</linearGradient>\n'
-        "  </defs>\n"
-        f'  <g transform="translate({ox:.5f},{oy:.5f}) scale({scale:.6f})">{rects}</g>\n'
+        f"  {inner}\n"
         "</svg>\n"
     )
 
@@ -234,6 +235,9 @@ def main() -> None:
     pub.mkdir(parents=True, exist_ok=True)
     (pub / "favicon.svg").write_text(favicon_svg(), encoding="utf-8")
     made.append(pub / "favicon.svg")
+    if "--favicon-only" in sys.argv:
+        print(f"  {(pub / 'favicon.svg').relative_to(ROOT)}")
+        return
     made.append(
         render(
             pub / "favicon-32.png",
