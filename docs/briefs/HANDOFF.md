@@ -89,7 +89,8 @@
 | 64 | WP180 官方插件管理（装卸出卡 + 白名单 + 不许写回锁定行）与配置写回（只许写非锁定行）包一层后打开；每次运行带当前时间与公司时区 | `WP180-official-plugins-wrap.md` | `wp180-plugins` · `wp/180-plugins` | WP179 | 已合并（09-29，Fable 终审：干净构建，322 文件 4408 条过，三个模拟包 × 三运行时门禁过） |
 | 65 | WP181 官方「自动化任务」插件在我们运行里真用起来（与 packages/schedule 并存 / 迁移、右栏定时任务面板）；桌面包带 profiles；秘书运行带时间 | `WP181-official-automation-plugin.md` | `wp181-automation` · `wp/181-automation` | WP180 | 已合并（09-29，Fable 终审追加：等批的定时任务暂停、批了才开始，每日次数落盘；干净构建，325 文件 4547 条过，三个模拟包 × 三运行时门禁过；桌面包未真打） |
 | 66 | WP182 B2B 询盘与报价：询盘接客服管线、六类事实卡、报价卡与报价单 PDF、样品跟踪、离职交接卡 | `WP182-b2b-inquiry-quote.md` | `wp182-b2b-sales` · `wp/182-b2b-sales` | WP172–WP176 | 进行中（Claude） |
-| 67 | WP183 调研与设计：agentsws 做成 DSH 插件（官方桌面端装上就能用），只读 + 讨论稿 docs/85 | `WP183-agentsws-as-dsh-plugins.md` | `wp183-dsh-plugin` · `wp/183-dsh-plugin` | WP180 | 进行中（Claude） |
+| 67 | WP183 调研与设计：agentsws 做成 DSH 插件（官方桌面端装上就能用），只读 + 讨论稿 docs/85 | `WP183-agentsws-as-dsh-plugins.md` | `wp183-dsh-plugin` · `wp/183-dsh-plugin` | WP180 | 已合并（09-29，讨论稿 docs/85；§6 八件事待 Luoye 定） |
+| 68 | WP184 官方场景在我们自己的窗口里打开（借官方桌面端壳，MIT）；认用户自己装的官方桌面端 | `WP184-official-desktop-scene.md` | `wp184-official-desktop` · `wp/184-official-desktop` | WP136 | 进行中（Claude） |
 
 WP117b 的补充要求（派工单里没有，写在这）：demo 服务的是 `apps/workstation/dist`，测界面前先 `pnpm -F @agentsws/workstation exec vite build`；交付一个真实点击的 playwright 脚本 `scripts/e2e-kol-sandbox.mjs`（playwright 库在 `node_modules/.pnpm/playwright@1.63.0/node_modules/playwright`），走完「选合成红人 → 起草开发信 → 批准发送 → 已发 ≥ 1 → 跳到 N 天后 → 回信 ≥ 1 → 分类 → 议价卡 → 阶段推进 → 交付物 → 追踪链接」，每步截图到 `docs/assets/workstation/kol-e2e-NN.png`，脚本里断言计数确实变了；演练数据从真实漏斗 / 归因里排除，单独显示「演练漏斗」。
 
