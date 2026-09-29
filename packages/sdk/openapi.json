@@ -50080,6 +50080,10 @@
                       "tiktok",
                       "x",
                       "youtube",
+                      "facebook",
+                      "instagram",
+                      "threads",
+                      "linkedin",
                       "facebook_group",
                       "reddit",
                       "discord",
@@ -50389,7 +50393,18 @@
                   },
                   "kind": {
                     "type": "string",
-                    "enum": ["post", "image", "video", "short", "story", "thread", "poll"]
+                    "enum": [
+                      "post",
+                      "image",
+                      "video",
+                      "short",
+                      "story",
+                      "thread",
+                      "poll",
+                      "reel",
+                      "carousel",
+                      "document"
+                    ]
                   },
                   "body": {
                     "type": "string",
