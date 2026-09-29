@@ -205,6 +205,40 @@ function createSqliteBackend(dbPath: string): OrgBackend {
   }
 }
 
+/** WP196：最高那个岗位（id `owner`）的默认名。 */
+export const OWNER_POSITION_NAME = { zh: '负责人', en: 'Lead' } as const
+
+/**
+ * WP196：这个岗位以前出厂时叫过的名字。库里还是这几个之一 = 用户没改过，启动时换成新默认名；
+ * 不在表里的（CEO、海外业务总监……）一律是用户自己起的，不动。中英各判各的。
+ */
+const OWNER_POSITION_OLD_NAMES = {
+  zh: ['店主 / 负责人', '店主/负责人', '店主'],
+  en: ['Owner', 'Shop Owner', 'Store Owner'],
+} as const
+
+/**
+ * WP196：老工作区迁移——把「负责人」岗位上还停在旧出厂名的中文 / 英文名换成新默认名。
+ *
+ * 只看 id `owner` 这一个岗位、只换**逐字等于旧出厂名**的那一半；用户改过的名字一律不动。
+ * 纯函数、可重复跑（跑第二遍什么都不变），改了返回新的那份，没改返回 `undefined`。
+ */
+export function migrateOwnerPositionName<
+  T extends { id: string; name: { zh: string; en: string } },
+>(position: T): T | undefined {
+  if (position.id !== 'owner') return undefined
+  const zhOld = (OWNER_POSITION_OLD_NAMES.zh as readonly string[]).includes(position.name.zh.trim())
+  const enOld = (OWNER_POSITION_OLD_NAMES.en as readonly string[]).includes(position.name.en.trim())
+  if (!zhOld && !enOld) return undefined
+  return {
+    ...position,
+    name: {
+      zh: zhOld ? OWNER_POSITION_NAME.zh : position.name.zh,
+      en: enOld ? OWNER_POSITION_NAME.en : position.name.en,
+    },
+  }
+}
+
 /**
  * 首批岗位（27 §1 三人包那三行）。只保留"职责定义真的在这台机器上"的那些条目：
  * 默认包里一个职责都不剩的岗位不种——界面上出现一个点不动的卡片比没有它更糟。
@@ -215,10 +249,12 @@ const SEED_POSITIONS: readonly {
   en: string
   roles: [RoleId, boolean][]
 }[] = [
+  // WP196（Luoye 09-29）：最高那个岗位默认叫「负责人」（Lead）——不一定是 CEO，也可能是
+  // 管海外业务的那位；用户在公司页可以自己改（CEO、海外业务总监……）。id 仍是 `owner`。
   {
     id: 'owner',
-    zh: '店主 / 负责人',
-    en: 'Owner',
+    zh: OWNER_POSITION_NAME.zh,
+    en: OWNER_POSITION_NAME.en,
     roles: [
       ['common.owner', true],
       ['dtc.analytics', true],
@@ -476,6 +512,11 @@ export function createOrg(options: OrgOptions): OrgAssembly {
         source: 'bundled',
       })
     }
+  }
+  // WP196：老工作区里「负责人」岗位还叫旧出厂名的，换成新默认名（用户改过的不动；可重复跑）
+  for (const p of backend.positions()) {
+    const renamed = migrateOwnerPositionName(p)
+    if (renamed !== undefined) backend.putPosition(renamed)
   }
 
   const now = (): string => clock.now()
@@ -1290,14 +1331,33 @@ export function createOrg(options: OrgOptions): OrgAssembly {
       const existing = positionOf(id)
       if (existing === undefined) throw ORG_ERROR('not_found', `没有这个岗位：${id}`)
       const [major = '1', minor = '0'] = existing.version.split('.')
+      const zh = input.name.trim()
+      if (zh === '') throw ORG_ERROR('invalid_input', '岗位名不能是空的')
+      const en = input.name_en?.trim() ?? ''
+      const name = { zh, en: en === '' ? existing.name.en : en }
+      const roleList = input.roles.map((r) => ({ role: r.role_id, default: r.default ?? true }))
+      // WP196：只改了名字（职责一条没动）不算改模板——版本号与来源都不变；改名另记一条审计。
+      // 路由看的是职责、不看岗位显示名，所以改名不影响谁接什么活。
+      const sameRoles = canonicalJson(roleList) === canonicalJson(existing.roles)
+      const renamed = name.zh !== existing.name.zh || name.en !== existing.name.en
       backend.putPosition({
         ...existing,
-        name: { zh: input.name, en: input.name_en ?? existing.name.en },
-        roles: input.roles.map((r) => ({ role: r.role_id, default: r.default ?? true })),
-        version: `${major}.${String(Number(minor) + 1)}.0`,
-        // 05 §2：改模板不影响已分配的人，所以这里只动模板，一条分配都不碰
-        source: existing.source === 'bundled' ? 'custom' : existing.source,
+        name,
+        roles: roleList,
+        ...(sameRoles
+          ? {}
+          : {
+              version: `${major}.${String(Number(minor) + 1)}.0`,
+              // 05 §2：改模板不影响已分配的人，所以这里只动模板，一条分配都不碰
+              source: existing.source === 'bundled' ? ('custom' as const) : existing.source,
+            }),
       })
+      if (renamed)
+        emit('position.renamed', actor.person_id, {
+          position_id: id,
+          from: { zh: existing.name.zh, en: existing.name.en },
+          to: name,
+        })
       emit('position.updated', actor.person_id, { position_id: id })
       const found = (await positionViews()).find((p) => p.id === id)
       if (found === undefined) throw ORG_ERROR('not_found', `没有这个岗位：${id}`)

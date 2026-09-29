@@ -235,7 +235,7 @@ describe('WP174 岗位上级：scope_manager 真的落到上级，没有才落�
 
   it('POST /v1/approvals 给了 rule: scope_manager 没给收件人 → 同一个解析口', async () => {
     const lin = await colleague('lin@example.com', '林峰')
-    // 老板自己那条 `common.owner` 在「店主 / 负责人」岗位里；给那个岗位设个上级
+    // 老板自己那条 `common.owner` 在「负责人」岗位里；给那个岗位设个上级
     expect(
       (await call('PUT', '/v1/org/positions/owner/supervisor', { body: { person_id: lin.id } }))
         .status,
@@ -253,7 +253,7 @@ describe('WP174 岗位上级：scope_manager 真的落到上级，没有才落�
       }),
     )
     expect(created.routing.recipients).toEqual([
-      { person: lin.id, via: 'scope_manager', reason: '转给了「店主 / 负责人」岗位的上级林峰' },
+      { person: lin.id, via: 'scope_manager', reason: '转给了「负责人」岗位的上级林峰' },
     ])
   })
 })
