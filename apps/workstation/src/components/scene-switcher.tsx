@@ -11,10 +11,20 @@
  * 托盘「管理场景…」打开的是 `/?scenes=1`，这里看到那个参数就自己展开一次。
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Check, ExternalLink, Layers, Plus, RotateCw, Square, Trash2 } from 'lucide-react'
+import {
+  AppWindow,
+  Check,
+  ExternalLink,
+  Layers,
+  Plus,
+  RotateCw,
+  Square,
+  Trash2,
+} from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { StatusPill, WsTag } from '@/components/design'
+import { TutorialLink } from '@/components/help/tutorial-link'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Separator } from '@/components/ui/separator'
@@ -24,6 +34,7 @@ import {
   deleteDshScene,
   getDshScenes,
   getPositions,
+  launchOfficialDesktop,
   openDshScene,
   restartDshScene,
   stopDshScene,
@@ -31,11 +42,19 @@ import {
 import { useApp } from '@/lib/app-context'
 import { cn } from '@/lib/utils'
 
+/** 桌面壳的桥里场景用得着的那几样（形状同 `@agentsws/desktop/bridge` 的 `DesktopBridge`）。 */
+interface SceneBridge {
+  openExternal(url: string): Promise<boolean>
+  /** WP184：新一点的壳才有——壳自己去拿网址、开在它自己的窗口里（网址不进页面）。 */
+  openScene?(
+    name: string,
+    options?: { restart?: boolean },
+  ): Promise<{ ok: true; where: 'window' | 'browser' } | { ok: false; reason: string }>
+}
+
 /** 桌面壳的桥（只在运行时看一眼 `window.agentsws` 在不在；工作台不依赖桌面壳这个包）。 */
-function bridge(): { openExternal(url: string): Promise<boolean> } | undefined {
-  const w = globalThis.window as unknown as
-    | { agentsws?: { openExternal(url: string): Promise<boolean> } }
-    | undefined
+function bridge(): SceneBridge | undefined {
+  const w = globalThis.window as unknown as { agentsws?: SceneBridge } | undefined
   return w?.agentsws
 }
 
@@ -105,21 +124,41 @@ export function SceneSwitcher(): React.ReactNode {
   }
 
   const openScene = useMutation({
-    mutationFn: async (input: { name: string; restart: boolean; pending: Window | null }) => {
+    mutationFn: async (input: {
+      name: string
+      restart: boolean
+      pending: Window | null
+    }): Promise<{ name: string; where: 'window' | 'browser' }> => {
+      // WP184：新壳自己开窗（体验接近官方桌面端），网址不经过这个页面
+      const native = bridge()?.openScene
+      if (native !== undefined) {
+        const out = await native(input.name, { restart: input.restart })
+        if (!out.ok) throw new Error(out.reason)
+        return { name: input.name, where: out.where }
+      }
       try {
         const res = input.restart
           ? await restartDshScene(input.name, assignment)
           : await openDshScene(input.name, assignment)
         handOff(res.url, input.pending)
-        return res
+        return { name: res.scene.name, where: 'browser' }
       } catch (err) {
         input.pending?.close()
         throw err
       }
     },
     onSuccess: (res) => {
-      setMessage(t('scenes.opened', { name: res.scene.name }))
+      setMessage(
+        t(res.where === 'window' ? 'scenes.opened.window' : 'scenes.opened', { name: res.name }),
+      )
       refresh()
+    },
+    onError: fail,
+  })
+  const launchDesktop = useMutation({
+    mutationFn: () => launchOfficialDesktop(assignment),
+    onSuccess: () => {
+      setMessage(t('scenes.officialDesktop.opened'))
     },
     onError: fail,
   })
@@ -159,6 +198,7 @@ export function SceneSwitcher(): React.ReactNode {
   const launchable = rows.filter((s) => s.launchable)
   const cli = rows.filter((s) => !s.launchable)
   const running = launchable.filter((s) => s.origin !== 'agentsws' && s.state === 'running').length
+  const desktop = data?.official_desktop
 
   return (
     <div className="relative" data-testid="scene-switcher">
@@ -189,7 +229,9 @@ export function SceneSwitcher(): React.ReactNode {
           className="absolute bottom-full left-0 z-50 mb-1 w-80 rounded-md border bg-popover p-2 shadow-md"
         >
           <p className="px-1 text-sm font-medium">{t('scenes.title')}</p>
-          <p className="px-1 pb-2 text-xs text-muted-foreground">{t('scenes.hint')}</p>
+          <p className="px-1 pb-2 text-xs text-muted-foreground">
+            {t('scenes.hint')} <TutorialLink slug="dsh-scenes" className="align-middle" />
+          </p>
           <ul className="flex flex-col gap-1">
             {launchable.map((s) => (
               <SceneRow
@@ -209,6 +251,35 @@ export function SceneSwitcher(): React.ReactNode {
                 }}
               />
             ))}
+            {desktop === undefined ? null : (
+              <li
+                className="flex flex-col gap-1 rounded-md px-1 py-1.5 hover:bg-accent/50"
+                data-testid="scene-official-desktop"
+                title={desktop.app_path}
+              >
+                <div className="flex items-center gap-2">
+                  <span className="min-w-0 flex-1 truncate text-sm font-medium">
+                    {t('scenes.officialDesktop')}
+                  </span>
+                  <WsTag>{t('scenes.officialDesktop.tag')}</WsTag>
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  {t('scenes.officialDesktop.note')}
+                </p>
+                <div className="flex flex-wrap gap-1">
+                  <SmallAction
+                    icon={AppWindow}
+                    label={t('scenes.open')}
+                    disabled={launchDesktop.isPending}
+                    onClick={() => {
+                      setMessage(undefined)
+                      launchDesktop.mutate()
+                    }}
+                    testid="scene-open-official-desktop"
+                  />
+                </div>
+              </li>
+            )}
           </ul>
           {deleting === undefined ? null : (
             <div
