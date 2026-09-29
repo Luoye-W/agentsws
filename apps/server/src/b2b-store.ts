@@ -20,11 +20,14 @@ import type {
   B2bDeclineCooldown,
   B2bDraft,
   B2bEnrollment,
+  B2bHandoverItem,
   B2bInquiry,
   B2bOutboundSettings,
   B2bQuoteVersion,
+  B2bSampleReminder,
   B2bSender,
   B2bSuppressionEntry,
+  PersonId,
   WorkspaceId,
 } from '@agentsws/contracts'
 import { sha256, suppressionKey } from '@agentsws/core'
@@ -51,7 +54,8 @@ const envelope = (table: string): string => `CREATE TABLE IF NOT EXISTS ${table}
 
 /**
  * 迁移。**只加不改**：要改表就加一版。v1 = 九类对象 + 报价版本；v2 = 草稿 / 询盘 / 抑制名单 /
- * 我们发出去的信 / 联系人地址哈希；v3（WP173）= 开发序列（每人一条）、发信邮箱、主动开发设置；v4（WP176）= 「不感兴趣」冷却表。
+ * 我们发出去的信 / 联系人地址哈希；v3（WP173）= 开发序列（每人一条）、发信邮箱、主动开发设置；v4（WP176）= 「不感兴趣」冷却表；
+ * v5（WP182）= 样品提醒（同一个截止日只提醒一次）、离职交接单。
  */
 export const B2B_MIGRATIONS: readonly Migration[] = [
   {
@@ -153,7 +157,26 @@ UPDATE b2b_cooldown SET body = json_remove(body, '$.migrated')
 WHERE json_extract(body, '$.migrated') = 'wp176';
 DELETE FROM b2b_suppression WHERE json_extract(body, '$.reason') = 'declined';`,
   },
+  // v5（WP182）：样品提醒不改样品记录本身（写九类对象只经卡），单独记一行防重复；离职交接单一人一次一张
+  {
+    version: 5,
+    sql: `${envelope('b2b_sample_reminder')}
+${envelope('b2b_handover')}`,
+  },
 ]
+
+/** WP182：一次离职交接（卡批了才改归属）。 */
+export interface B2bHandover {
+  id: string
+  departing: PersonId
+  items: B2bHandoverItem[]
+  unassigned: B2bHandoverItem[]
+  status: 'pending' | 'applied' | 'rejected' | 'empty'
+  change_id?: string
+  approval_item_id?: string
+  created_at: string
+  applied_at?: string
+}
 
 /** 我们发出去的一封 B2B 信（开发信 / 报价信）：回信按它对线程（docs/84 §5 ①）。 */
 export interface B2bOutboundNote {
@@ -217,8 +240,19 @@ export interface B2bStore {
   cooldowns(): B2bDeclineCooldown[]
   cooldown(key_hash: string): B2bDeclineCooldown | undefined
   saveCooldown(c: B2bDeclineCooldown): void
+  /** WP182：样品提醒（id = 样品 + 哪一种 + 截止日）。 */
+  sampleReminders(): B2bSampleReminder[]
+  saveSampleReminder(r: B2bSampleReminder): boolean
+  /** WP182：离职交接单。 */
+  handovers(): B2bHandover[]
+  handover(id: string): B2bHandover | undefined
+  saveHandover(h: B2bHandover): void
   close(): void
 }
+
+export const sampleReminderId = (
+  r: Pick<B2bSampleReminder, 'sample_id' | 'kind' | 'due'>,
+): string => `${r.sample_id}:${r.kind}:${r.due.slice(0, 10)}`
 
 export interface B2bStoreOptions {
   workspace_id: WorkspaceId
@@ -377,6 +411,16 @@ export function createB2bStore(options: B2bStoreOptions): B2bStore {
         )
         .runSync(ws, c.key_hash, c.until, JSON.stringify(c))
     },
+    sampleReminders: () => all<B2bSampleReminder>('b2b_sample_reminder'),
+    saveSampleReminder: (r) => {
+      const id = sampleReminderId(r)
+      if (one('b2b_sample_reminder', id) !== undefined) return false
+      upsert('b2b_sample_reminder', id, r)
+      return true
+    },
+    handovers: () => all<B2bHandover>('b2b_handover'),
+    handover: (id) => one<B2bHandover>('b2b_handover', id),
+    saveHandover: (h) => upsert('b2b_handover', h.id, h),
     close: () => {
       driver.closeSync()
     },

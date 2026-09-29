@@ -249,6 +249,14 @@ export interface B2bQuoteVersion {
   readonly valid_until: Iso8601
   readonly created_at: Iso8601
   readonly created_by: PersonId | 'agent'
+  /** WP182：贸易术语的地点（`FOB Shenzhen` 的 Shenzhen）。只写术语不写地点等于没写。 */
+  readonly incoterm_place?: string
+  /** WP182：阶梯价（数量档 → 单价，美元）。量越大单价不能越高。 */
+  readonly tiers?: readonly { readonly min_qty: number; readonly unit_price_usd: number }[]
+  /** WP182：付款方式那一句（`30% T/T deposit, balance against B/L copy`）；不给按账期天数写。 */
+  readonly payment_method?: string
+  /** WP182：和上一版比改了什么、为什么（改价只能出新版本）。 */
+  readonly change_note?: string
 }
 
 /* ── 对象四：样品 ──────────────────────────────────────────────────────── */
@@ -273,6 +281,8 @@ export interface B2bSample {
   /** 最晚哪天该有反馈（超期没反馈出提醒）。 */
   feedback_by?: Iso8601
   feedback?: string
+  /** WP182：寄给哪位联系人（寄样通知发给他）。 */
+  contact_id?: string
   updated_at: Iso8601
 }
 
@@ -473,8 +483,72 @@ export interface B2bInquiry {
   fraud_alert_id?: string
   /** WP173：回我们开发信的那一封被分成了哪一类（有意向 / 要资料 / 问价 / …，docs/84 §2.2）。 */
   reply_class?: B2bReplyClass
+  /** WP182：从哪条渠道来的（不给 = 邮件）。 */
+  channel?: B2bInquiryChannel
+  /** WP182：分级（真买家 / 在比价 / 骗样嫌疑 / 诈骗嫌疑）与一句理由，给人看的提示。 */
+  grade?: B2bInquiryGrade
+  grade_reasons?: string[]
+  /** WP182：落在谁名下（持「业务」的那个人；离职交接按它分）。 */
+  owner_person_id?: PersonId
+  /** WP182：首回那张卡（`b2b_reply`）。 */
+  reply_change_id?: string
+  reply_approval_id?: string
+  /** WP182：首回是模型按 `b2b-inquiry` 技能写的，还是退回了模板。 */
+  reply_by?: 'model' | 'template'
+  /** WP182：WhatsApp 对方最近一条消息的时刻（24 小时客服窗口从这里算）。 */
+  last_inbound_at?: Iso8601
   received_at: Iso8601
   created_at: Iso8601
+}
+
+/* ── WP182：询盘分级（`b2b-inquiry` 技能「先分级」那四档）────────────────── */
+
+/** 询盘从哪条渠道来。WhatsApp 沿用 opt-in 与 24 小时窗口三道闸。 */
+export type B2bInquiryChannel = 'email' | 'whatsapp'
+
+/**
+ * 询盘分级：真买家（A）/ 在比价（B）/ 骗样嫌疑（C）/ 诈骗嫌疑（D）。
+ * 分级只是给人看的提示，回信对谁都一样礼貌；诈骗嫌疑出红卡、不起草。
+ */
+export type B2bInquiryGrade = 'buyer' | 'comparing' | 'sample_hunter' | 'scam'
+
+export const B2B_INQUIRY_GRADES: readonly B2bInquiryGrade[] = [
+  'buyer',
+  'comparing',
+  'sample_hunter',
+  'scam',
+]
+
+export const B2B_INQUIRY_GRADE_ZH: Readonly<Record<B2bInquiryGrade, string>> = {
+  buyer: '真买家',
+  comparing: '在比价',
+  sample_hunter: '骗样嫌疑',
+  scam: '诈骗嫌疑',
+}
+
+/** 知识库里 B2B 六类事实卡的 `subject.type`（`subject.key` = `b2b:<类别>`）。 */
+export const B2B_FACT_SUBJECT_TYPE = 'b2b_fact' as const
+
+/** 样品提醒（超期不寄 / 超期没反馈）。提醒不改样品记录本身，单独记一行防重复。 */
+export interface B2bSampleReminder {
+  sample_id: string
+  kind: 'ship_overdue' | 'feedback_overdue'
+  /** 那个截止日（同一个截止日只提醒一次）。 */
+  due: Iso8601
+  days_over: number
+  todo_id?: string
+  at: Iso8601
+}
+
+/** 离职交接卡上的一条：谁的哪条记录交给谁（`b2b-core` 的 `buildTransferPlan` 算的）。 */
+export interface B2bHandoverItem {
+  kind: 'account' | 'deal' | 'inquiry'
+  id: string
+  name: string
+  successor_id?: PersonId
+  region?: string
+  product_line?: string
+  value_usd?: number
 }
 
 /**
@@ -543,6 +617,9 @@ export interface B2bDraft {
   approval_item_id?: string
   /** 被 guardrail 拦下时那句人话。 */
   message?: string
+  /** WP182：报价卡真落到谁那一档（业务员 / 上级 / 老板）与超了哪几条（面板「报价待审」读它）。 */
+  approver?: 'role_holder' | 'scope_manager' | 'owner'
+  breaches?: string[]
   created_by: PersonId
   created_at: Iso8601
   updated_at: Iso8601

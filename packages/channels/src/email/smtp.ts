@@ -23,6 +23,15 @@ export interface OutboundMail {
   /** 由调用方决定的 Message-ID（幂等键派生，不用随机） */
   message_id?: string
   headers?: Readonly<Record<string, string>>
+  /** WP182：附件（报价单 PDF）。老调用方一条都不传。 */
+  attachments?: readonly MailAttachment[]
+}
+
+/** 一个附件（字节在内存里，发完就丢；不落盘）。 */
+export interface MailAttachment {
+  filename: string
+  content_type: string
+  content: Uint8Array
 }
 
 /** 发信端口：适配器与投递都用它，nodemailer/SMTP 是默认实现。 */
@@ -61,6 +70,7 @@ export interface TransportLike {
     references?: string
     messageId?: string
     headers?: Record<string, string>
+    attachments?: { filename: string; content: Buffer; contentType: string }[]
   }): Promise<{ messageId?: string }>
   verify(): Promise<boolean>
   close?(): void
@@ -118,6 +128,15 @@ export class SmtpMailer implements Mailer {
         ...(mail.references === undefined ? {} : { references: mail.references }),
         ...(mail.message_id === undefined ? {} : { messageId: mail.message_id }),
         ...(mail.headers === undefined ? {} : { headers: { ...mail.headers } }),
+        ...(mail.attachments === undefined || mail.attachments.length === 0
+          ? {}
+          : {
+              attachments: mail.attachments.map((a) => ({
+                filename: a.filename,
+                content: Buffer.from(a.content),
+                contentType: a.content_type,
+              })),
+            }),
       })
       return { message_id: info.messageId ?? mail.message_id ?? '' }
     } catch (e) {

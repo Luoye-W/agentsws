@@ -3,6 +3,7 @@ layer: fact
 domain: knowledge
 subject_key: b2b.pricing_moq
 sensitivity: internal
+reply_en: The MOQ for the GaN 65W is 500 pcs per model (FOB Shenzhen); the 20000mAh power bank is 1000 pcs.
 ---
 # 价格与 MOQ
 

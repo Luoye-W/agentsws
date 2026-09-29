@@ -26,7 +26,13 @@ import type {
   B2bStagedView,
 } from '@agentsws/api'
 import { ApiError } from '@agentsws/api'
-import { parseCustomerCsv, quoteApprover, quoteBreaches, quoteBreachText } from '@agentsws/b2b-core'
+import {
+  parseCustomerCsv,
+  quoteAmount,
+  quoteApprover,
+  quoteBreaches,
+  quoteBreachText,
+} from '@agentsws/b2b-core'
 import type {
   ApprovalBus,
   AssignmentId,
@@ -249,8 +255,7 @@ export function createB2bService(options: B2bServiceOptions): B2bServiceAssembly
     current: number,
     input: NonNullable<B2bDraftInput['quote_version']>,
   ): B2bQuoteVersion => {
-    const gross = input.lines.reduce((n, l) => n + l.qty * l.unit_price_usd, 0)
-    const amount = Math.round(gross * (1 - input.discount_pct / 100) * 100) / 100
+    const amount = quoteAmount(input.lines, input.discount_pct)
     return {
       quote_id,
       version: current + 1,
@@ -263,6 +268,11 @@ export function createB2bService(options: B2bServiceOptions): B2bServiceAssembly
       valid_until: input.valid_until,
       created_at: clock.now(),
       created_by: actor.person_id,
+      // WP182：报价单上的条款（地点、阶梯价、付款方式那一句、这一版改了什么）
+      ...(input.incoterm_place === undefined ? {} : { incoterm_place: input.incoterm_place }),
+      ...(input.tiers === undefined ? {} : { tiers: input.tiers.map((t) => ({ ...t })) }),
+      ...(input.payment_method === undefined ? {} : { payment_method: input.payment_method }),
+      ...(input.change_note === undefined ? {} : { change_note: input.change_note }),
     }
   }
 
@@ -342,6 +352,9 @@ export function createB2bService(options: B2bServiceOptions): B2bServiceAssembly
         quote_version: v,
         version: v.version,
         amount_usd: v.amount_usd,
+        // WP182：卡面上那一个大数（金钱卡读 `after.amount` + `currency`）
+        amount: v.amount_usd,
+        currency: 'USD',
         margin_pct: v.margin_pct,
         discount_pct: v.discount_pct,
         payment_terms_days: v.payment_terms_days,
@@ -485,6 +498,8 @@ export function createB2bService(options: B2bServiceOptions): B2bServiceAssembly
       status: 'submitted',
       change_id: outcome.change.id,
       approval_item_id: outcome.approval.id,
+      // WP182：面板「报价待审」读真落到的那一档，不再按默认授权重算
+      ...(kind === 'b2b_quote' ? { approver, breaches } : {}),
       updated_at: clock.now(),
     })
     emit('b2b.draft_submitted', actor.person_id, {
@@ -753,7 +768,8 @@ export function b2bDeckFromStore(store: B2bStore, now: string): B2bDeckData {
     quotes_pending: quoteDrafts.flatMap((d) => {
       const v = d.quote_version
       if (v === undefined) return []
-      const breaches = quoteBreaches(v as never)
+      // WP182：提交时记下了真落到哪一档就用它（按职责 yml 的授权算的、经过上级路由的）
+      const breaches = d.breaches ?? quoteBreaches(v as never)
       return [
         {
           number: String(d.record.number ?? d.record_id),
@@ -761,7 +777,7 @@ export function b2bDeckFromStore(store: B2bStore, now: string): B2bDeckData {
           version: v.version,
           amount_usd: v.amount_usd,
           margin_pct: v.margin_pct,
-          approver: quoteApprover(breaches, false),
+          approver: d.approver ?? quoteApprover(breaches, false),
           breaches,
         },
       ]
@@ -776,12 +792,19 @@ export function b2bDeckFromStore(store: B2bStore, now: string): B2bDeckData {
         due: dayOf(s.status === 'to_ship' ? s.ship_by : (s.feedback_by ?? s.ship_by)),
         ...(s.tracking_no === undefined ? {} : { tracking_no: s.tracking_no }),
       })),
+    /*
+     * WP182：「该唤醒的老客户」= 下过单（阶段到过成交）、最近一次往来（记录上的 / 收到的信 / 我们发的报价）
+     * 离现在 180 天以上。最近一次往来取几处里最晚的那个，不写回客户记录（写九类对象只经卡）。
+     */
     dormant: accounts.flatMap((a) => {
-      if (a.last_contact_at === undefined) return []
-      const days = Math.floor((Date.parse(now) - Date.parse(a.last_contact_at)) / DAY)
-      return days >= 180
-        ? [{ account: a.name, last_contact_at: dayOf(a.last_contact_at), days }]
-        : []
+      const seen = [
+        a.last_contact_at,
+        ...inquiries.filter((i) => i.account_id === a.id).map((i) => i.received_at),
+      ].filter((x): x is string => x !== undefined)
+      if (seen.length === 0 || (a.stage !== 'won' && a.last_contact_at === undefined)) return []
+      const last = seen.reduce((m, x) => (x > m ? x : m))
+      const days = Math.floor((Date.parse(now) - Date.parse(last)) / DAY)
+      return days >= 180 ? [{ account: a.name, last_contact_at: dayOf(last), days }] : []
     }),
     outreach_today: [],
     sequence_funnel: [],

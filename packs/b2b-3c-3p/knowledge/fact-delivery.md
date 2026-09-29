@@ -3,6 +3,7 @@ layer: fact
 domain: knowledge
 subject_key: b2b.delivery
 sensitivity: internal
+reply_en: Standard lead time is 15-20 days after deposit, shipping from Shenzhen.
 ---
 # 交付能力
 

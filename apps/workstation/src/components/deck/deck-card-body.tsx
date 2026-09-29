@@ -428,9 +428,12 @@ export function DeckCardBody({
             >
               {quote}
             </blockquote>
-            <p className="text-xs text-ws-muted-fg">
-              {t('deck.handoff.basis', { basis: str(payload.reason) ?? content.text })}
-            </p>
+            {/* WP182：没有单独的依据时不再把正文原样重复一遍（离职交接卡的正文就是那份清单） */}
+            {str(payload.reason) === undefined && quote === content.text ? null : (
+              <p className="text-xs text-ws-muted-fg">
+                {t('deck.handoff.basis', { basis: str(payload.reason) ?? content.text })}
+              </p>
+            )}
           </div>
         )
       }

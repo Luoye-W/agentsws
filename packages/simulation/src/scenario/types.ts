@@ -745,6 +745,55 @@ export interface ScenarioB2bReply {
   body: string
 }
 
+/* ── WP182（docs/84 §3）：业务——询盘首回、报价新版本、样品提醒、离职交接 ─────── */
+
+/** 一封询盘：分级 → 诈骗嫌疑出红卡 / 其余起草首回出卡（只引 pack 里 B2B 事实卡的英文那一句）。 */
+export interface ScenarioB2bInquiry {
+  who: string
+  from: string
+  subject: string
+  body: string
+  /** 附件文件名（只看名字，不打开）。 */
+  attachments?: string[]
+}
+
+/** 出一版报价：版本号世界里记（同一张报价每提一次加 1），金额按行算，谁批按授权四个数。 */
+export interface ScenarioB2bQuote {
+  who: string
+  quote_id: string
+  lines: { sku: string; description: string; qty: number; unit_price_usd: number }[]
+  margin_pct: number
+  discount_pct: number
+  payment_terms_days: number
+  incoterm: string
+  incoterm_place?: string
+}
+
+/** 样品巡检：超期不寄 / 超期没反馈各提醒一次（天数取职责 yml）。 */
+export interface ScenarioB2bSamples {
+  who: string
+  samples: {
+    id: string
+    account: string
+    status: 'to_ship' | 'shipped' | 'delivered' | 'feedback'
+    ship_by: string
+    feedback_by?: string
+    delivered_at?: string
+  }[]
+}
+
+/** 业务员离开：他名下的客户按接手的人在管的地区 / 产品线分，出一张交接卡给老板。 */
+export interface ScenarioB2bMemberLeft {
+  who: string
+  accounts: {
+    id: string
+    name: string
+    owner: string
+    region?: string
+    product_line?: string
+  }[]
+}
+
 /* ── WP78（60）：公共关系那三件事 ──────────────────────────────────── */
 
 /**
@@ -983,6 +1032,14 @@ export type ScenarioEvent =
   | { at: string; type: 'b2b.sequence'; b2b_sequence: ScenarioB2bSequence }
   /** WP173：回开发信的一封（docs/84 §2.2）。 */
   | { at: string; type: 'b2b.reply'; b2b_reply: ScenarioB2bReply }
+  /** WP182：一封询盘（分级 + 首回卡 / 红卡，docs/84 §3.1）。 */
+  | { at: string; type: 'b2b.inquiry'; b2b_inquiry: ScenarioB2bInquiry }
+  /** WP182：出一版报价（新建版本、按授权转上级，docs/84 §3.2）。 */
+  | { at: string; type: 'b2b.quote'; b2b_quote: ScenarioB2bQuote }
+  /** WP182：样品巡检（超期提醒）。 */
+  | { at: string; type: 'b2b.samples'; b2b_samples: ScenarioB2bSamples }
+  /** WP182：业务员离开（交接卡给老板）。 */
+  | { at: string; type: 'b2b.member_left'; b2b_member_left: ScenarioB2bMemberLeft }
   /** WP78：在别人的社区里提一条帖子（60 §1，**永远 L1** + 版规 + 冷却）。 */
   | { at: string; type: 'pr.external_post'; external_post: ScenarioPrExternalPost }
   /** WP67：起草并提一封开发信（48 §5.1，禁承诺由 guardrail 拦）。 */
@@ -1561,7 +1618,34 @@ export interface ScenarioExpected {
     routed_to?: string
     auto_approved?: boolean
     stated_on_card?: boolean
+    /** WP182：报价这一张是第几版（改价 = 新建一版）。 */
+    version?: number
   }[]
+  /** WP182（docs/84 §3.1）：询盘那几封，按出现顺序（读 `simulation.b2b_inquiry`）。 */
+  b2b_inquiry?: {
+    grade?: string
+    red_card?: boolean
+    /** 起草了首回、出了卡。 */
+    reply_card?: boolean
+    /** 首回引了几张事实卡。 */
+    cited?: number | string
+    /** 事实卡里没有、回信里说去确认的类别（中文名），得全在里面。 */
+    to_confirm?: string[]
+  }[]
+  /** WP182：样品巡检那几拍，按出现顺序（读 `simulation.b2b_sample_reminders`）。 */
+  b2b_samples?: {
+    ship_overdue?: number | string
+    feedback_overdue?: number | string
+  }[]
+  /** WP182：离职交接（读 `simulation.b2b_handover`）。 */
+  b2b_handover?: {
+    card?: boolean
+    items?: number | string
+    unassigned?: number | string
+    routed_to?: string
+    /** 哪一条交给了谁（记录 id → person id）。 */
+    successors?: Record<string, string>
+  }
   /**
    * WP173（docs/84 §2）：开发信那几轮，**按出现顺序**一条对一条（读 `simulation.b2b_sequence`）。
    * `excluded` = 被剔掉的原因（`de_at` / `suppressed` …），得全在里面。

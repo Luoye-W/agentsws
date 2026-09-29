@@ -614,11 +614,18 @@ export function entityChipsOf(
 export function contentVariantsOf(item: ApprovalItem): DeckContentVariants {
   const payload = isRecord(item.payload) ? item.payload : {}
   const body = isRecord(payload.body) ? payload.body : {}
+  /*
+   * WP182：B2B 的回信卡是账本里的改动（`staged_change`），正文在 `after.body`——
+   * 只认 `b2b_reply`（询盘首回、报价单与寄样通知），别的改动卡一格不动。
+   */
+  const after = isRecord(payload.after) ? payload.after : {}
+  const b2bBody = payload.kind === 'b2b_reply' ? str(after.body) : undefined
   const original =
     str(payload.original) ??
     str(payload.original_text) ??
     str(payload.source_text) ??
-    str(body.text)
+    str(body.text) ??
+    b2bBody
   const en = str(payload.summary_en) ?? str(payload.en)
   return {
     zh_summary: item.summary,

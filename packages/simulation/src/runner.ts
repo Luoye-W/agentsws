@@ -1483,6 +1483,36 @@ async function execute(
         await tick()
         return
       }
+      // ── WP182 业务（docs/84 §3）────────────────────────────────────
+      case 'b2b.inquiry': {
+        const out = await world.b2b.inquiry(event.b2b_inquiry)
+        world.appendEvent('simulation.b2b_inquiry_requested', { ...out })
+        await tick()
+        return
+      }
+      case 'b2b.quote': {
+        const out = await world.b2b.quote(event.b2b_quote)
+        world.appendEvent('simulation.b2b_quote_requested', {
+          version: out.version,
+          staged: out.staged,
+          rules: out.rules,
+          ...(out.approver === undefined ? {} : { approver: out.approver }),
+        })
+        await tick()
+        return
+      }
+      case 'b2b.samples': {
+        const out = await world.b2b.samples(event.b2b_samples)
+        world.appendEvent('simulation.b2b_samples_requested', { ...out })
+        await tick()
+        return
+      }
+      case 'b2b.member_left': {
+        const out = await world.b2b.memberLeft(event.b2b_member_left)
+        world.appendEvent('simulation.b2b_member_left_requested', { ...out })
+        await tick()
+        return
+      }
       // ── WP75 投放（57 §1 / §4、04 §5）──────────────────────────────
       case 'ads.campaign': {
         const e = event.ads_campaign

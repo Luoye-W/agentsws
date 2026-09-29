@@ -373,6 +373,8 @@ export interface DirectMailInput {
   references?: readonly string[]
   /** WP173：额外的信头（开发信的 `List-Unsubscribe: <mailto:…?subject=unsubscribe>`）。 */
   headers?: Readonly<Record<string, string>>
+  /** WP182：附件（报价单 PDF；字节在内存里，发完就丢）。 */
+  attachments?: readonly { filename: string; content_type: string; content: Uint8Array }[]
   /** 落 outbox 用（回信时是会话 id；新写的信没有会话就用 `compose:<幂等键>`）。 */
   thread_ref?: string
   idempotency_key: string
@@ -1284,6 +1286,9 @@ export function createChannels(options: ChannelsOptions): ChannelsAssembly {
             ? {}
             : { references: input.references.join(' ') }),
           ...(input.headers === undefined ? {} : { headers: input.headers }),
+          ...(input.attachments === undefined || input.attachments.length === 0
+            ? {}
+            : { attachments: input.attachments }),
         })
         row = await outbox.markAccepted(row, clock.now(), sent.message_id)
         return {

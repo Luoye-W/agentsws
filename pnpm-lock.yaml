@@ -633,6 +633,9 @@ importers:
       '@agentsws/core':
         specifier: workspace:*
         version: link:../core
+      '@agentsws/support-core':
+        specifier: workspace:*
+        version: link:../support-core
 
   packages/blob:
     dependencies:

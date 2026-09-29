@@ -214,6 +214,11 @@ const EVENT_KEYS = [
   // WP173 开发信序列（docs/84 §2）
   'b2b.sequence',
   'b2b.reply',
+  // WP182 业务（docs/84 §3）
+  'b2b.inquiry',
+  'b2b.quote',
+  'b2b.samples',
+  'b2b.member_left',
   // WP78 公共关系（60 §1 / §2）
   'pr.mention',
   'pr.release',
@@ -334,6 +339,10 @@ const EXPECTED_KEYS = [
   // WP173（docs/84 §2）
   'b2b_sequence',
   'b2b_replies',
+  // WP182（docs/84 §3）
+  'b2b_inquiry',
+  'b2b_samples',
+  'b2b_handover',
   // WP78（60）
   'pr_mention',
   'pr_release',
@@ -1443,6 +1452,120 @@ function parseEvent(source: string, index: number, raw: unknown): ScenarioEvent 
           subject: str(source, `${path}.${key}.subject`, body.subject),
           body: str(source, `${path}.${key}.body`, body.body),
         },
+      }
+    }
+    // WP182（docs/84 §3）：询盘、报价、样品巡检、离职交接
+    case 'b2b.inquiry': {
+      known(source, `${path}.${key}`, body, ['who', 'from', 'subject', 'body', 'attachments'])
+      const attachments = optStrList(source, `${path}.${key}.attachments`, body.attachments)
+      return {
+        at,
+        type: 'b2b.inquiry',
+        b2b_inquiry: {
+          who: str(source, `${path}.${key}.who`, body.who),
+          from: str(source, `${path}.${key}.from`, body.from),
+          subject: str(source, `${path}.${key}.subject`, body.subject),
+          body: str(source, `${path}.${key}.body`, body.body),
+          ...(attachments === undefined ? {} : { attachments }),
+        },
+      }
+    }
+    case 'b2b.quote': {
+      known(source, `${path}.${key}`, body, [
+        'who',
+        'quote_id',
+        'lines',
+        'margin_pct',
+        'discount_pct',
+        'payment_terms_days',
+        'incoterm',
+        'incoterm_place',
+      ])
+      if (!Array.isArray(body.lines) || body.lines.length === 0)
+        fail(source, `${path}.${key}.lines`, '至少一行')
+      const lines = (body.lines as unknown[]).map((raw, i) => {
+        const at = `${path}.${key}.lines[${i}]`
+        if (!isRec(raw)) fail(source, at, '必须是对象')
+        known(source, at, raw, ['sku', 'description', 'qty', 'unit_price_usd'])
+        return {
+          sku: str(source, `${at}.sku`, raw.sku),
+          description: str(source, `${at}.description`, raw.description),
+          qty: Number(numeric(source, `${at}.qty`, raw.qty)),
+          unit_price_usd: Number(numeric(source, `${at}.unit_price_usd`, raw.unit_price_usd)),
+        }
+      })
+      const place = optStr(source, `${path}.${key}.incoterm_place`, body.incoterm_place)
+      const n = (k: string): number => Number(numeric(source, `${path}.${key}.${k}`, body[k]))
+      return {
+        at,
+        type: 'b2b.quote',
+        b2b_quote: {
+          who: str(source, `${path}.${key}.who`, body.who),
+          quote_id: str(source, `${path}.${key}.quote_id`, body.quote_id),
+          lines,
+          margin_pct: n('margin_pct'),
+          discount_pct: n('discount_pct'),
+          payment_terms_days: n('payment_terms_days'),
+          incoterm: str(source, `${path}.${key}.incoterm`, body.incoterm),
+          ...(place === undefined ? {} : { incoterm_place: place }),
+        },
+      }
+    }
+    case 'b2b.samples': {
+      known(source, `${path}.${key}`, body, ['who', 'samples'])
+      if (!Array.isArray(body.samples)) fail(source, `${path}.${key}.samples`, '必须是数组')
+      const samples = (body.samples as unknown[]).map((raw, i) => {
+        const at = `${path}.${key}.samples[${i}]`
+        if (!isRec(raw)) fail(source, at, '必须是对象')
+        known(source, at, raw, [
+          'id',
+          'account',
+          'status',
+          'ship_by',
+          'feedback_by',
+          'delivered_at',
+        ])
+        const status = str(source, `${at}.status`, raw.status)
+        if (!['to_ship', 'shipped', 'delivered', 'feedback'].includes(status))
+          fail(source, `${at}.status`, 'status 只能是 to_ship / shipped / delivered / feedback')
+        const fb = optStr(source, `${at}.feedback_by`, raw.feedback_by)
+        const dl = optStr(source, `${at}.delivered_at`, raw.delivered_at)
+        return {
+          id: str(source, `${at}.id`, raw.id),
+          account: str(source, `${at}.account`, raw.account),
+          status: status as 'to_ship' | 'shipped' | 'delivered' | 'feedback',
+          ship_by: str(source, `${at}.ship_by`, raw.ship_by),
+          ...(fb === undefined ? {} : { feedback_by: fb }),
+          ...(dl === undefined ? {} : { delivered_at: dl }),
+        }
+      })
+      return {
+        at,
+        type: 'b2b.samples',
+        b2b_samples: { who: str(source, `${path}.${key}.who`, body.who), samples },
+      }
+    }
+    case 'b2b.member_left': {
+      known(source, `${path}.${key}`, body, ['who', 'accounts'])
+      if (!Array.isArray(body.accounts)) fail(source, `${path}.${key}.accounts`, '必须是数组')
+      const accounts = (body.accounts as unknown[]).map((raw, i) => {
+        const at = `${path}.${key}.accounts[${i}]`
+        if (!isRec(raw)) fail(source, at, '必须是对象')
+        known(source, at, raw, ['id', 'name', 'owner', 'region', 'product_line'])
+        const region = optStr(source, `${at}.region`, raw.region)
+        const line = optStr(source, `${at}.product_line`, raw.product_line)
+        return {
+          id: str(source, `${at}.id`, raw.id),
+          name: str(source, `${at}.name`, raw.name),
+          owner: str(source, `${at}.owner`, raw.owner),
+          ...(region === undefined ? {} : { region }),
+          ...(line === undefined ? {} : { product_line: line }),
+        }
+      })
+      return {
+        at,
+        type: 'b2b.member_left',
+        b2b_member_left: { who: str(source, `${path}.${key}.who`, body.who), accounts },
       }
     }
     case 'pr.external_post': {
@@ -2618,6 +2741,7 @@ function parseExpected(source: string, raw: unknown): ScenarioExpected {
         routed_to: 'str',
         auto_approved: 'bool',
         stated_on_card: 'bool',
+        version: 'num',
       }) as Record<string, unknown> | undefined
       if (parsed === undefined || typeof parsed.kind !== 'string')
         fail(source, `expected.${at}`, '要写 kind')
@@ -2662,6 +2786,51 @@ function parseExpected(source: string, raw: unknown): ScenarioExpected {
     routed_to: 'str',
   })
   if (fraud !== undefined) out.b2b_fraud = fraud as NonNullable<ScenarioExpected['b2b_fraud']>
+  // WP182（docs/84 §3）：询盘、样品巡检（有序）与离职交接
+  if (raw.b2b_inquiry !== undefined) {
+    if (!Array.isArray(raw.b2b_inquiry)) fail(source, 'expected.b2b_inquiry', '必须是数组')
+    out.b2b_inquiry = raw.b2b_inquiry.map(
+      (item, i) =>
+        shaped(source, `b2b_inquiry[${i}]`, item, {
+          grade: 'str',
+          red_card: 'bool',
+          reply_card: 'bool',
+          cited: 'num',
+          to_confirm: 'strs',
+        }) as NonNullable<ScenarioExpected['b2b_inquiry']>[number],
+    )
+  }
+  if (raw.b2b_samples !== undefined) {
+    if (!Array.isArray(raw.b2b_samples)) fail(source, 'expected.b2b_samples', '必须是数组')
+    out.b2b_samples = raw.b2b_samples.map(
+      (item, i) =>
+        shaped(source, `b2b_samples[${i}]`, item, {
+          ship_overdue: 'num',
+          feedback_overdue: 'num',
+        }) as NonNullable<ScenarioExpected['b2b_samples']>[number],
+    )
+  }
+  if (raw.b2b_handover !== undefined) {
+    const h = raw.b2b_handover
+    if (!isRec(h)) fail(source, 'expected.b2b_handover', '必须是对象')
+    const { successors, ...rest } = h
+    const parsed = shaped(source, 'b2b_handover', rest, {
+      card: 'bool',
+      items: 'num',
+      unassigned: 'num',
+      routed_to: 'str',
+    }) as NonNullable<ScenarioExpected['b2b_handover']>
+    if (successors !== undefined) {
+      if (!isRec(successors)) fail(source, 'expected.b2b_handover.successors', '必须是对象')
+      parsed.successors = Object.fromEntries(
+        Object.entries(successors).map(([k, v]) => [
+          k,
+          str(source, `expected.b2b_handover.successors.${k}`, v),
+        ]),
+      )
+    }
+    out.b2b_handover = parsed
+  }
   return out
 }
 

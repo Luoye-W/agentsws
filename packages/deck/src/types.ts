@@ -1015,6 +1015,8 @@ export interface B2bDeckData {
     received_at: string
     /** 碰到了哪几类承诺（价格 / 交期 …），回信会转人审。 */
     commitments?: string[]
+    /** WP182：分级（真买家 / 在比价 / 骗样嫌疑 / 诈骗嫌疑，已是人话）。 */
+    grade?: string
   }[]
   /** 报价待审：谁批（业务员 / 上级 / 老板）与超了哪几条。 */
   quotes_pending: {
@@ -1033,6 +1035,8 @@ export interface B2bDeckData {
     status: 'to_ship' | 'shipped' | 'delivered' | 'feedback'
     due: string
     tracking_no?: string
+    /** WP182：超期几天（不寄 / 没反馈）。 */
+    overdue_days?: number
   }[]
   /** 该唤醒的老客户（下过单、很久没联系）。 */
   dormant: { account: string; last_contact_at: string; days: number }[]

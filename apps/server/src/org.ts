@@ -394,6 +394,11 @@ export interface OrgOptions {
    * 审批总线是同一条）。不给就只看本工作区。
    */
   workspaceIds?: () => WorkspaceId[] | Promise<WorkspaceId[]>
+  /**
+   * WP182：一个人离开工作区（被移出 / 走完离职编排）之后调——B2B 业务员的客户、商机、没回的询盘
+   * 出一张交接卡给老板。出错不拦移出本身（交接卡可以事后再出，人已经走了）。
+   */
+  afterMemberLeft?: (person_id: PersonId, by: PersonId) => Promise<unknown>
 }
 
 export interface OrgAssembly {
@@ -1450,6 +1455,8 @@ export function createOrg(options: OrgOptions): OrgAssembly {
       })
       // WP174：他是哪几个岗位的上级，就清空、提醒老板、改派他手上的卡
       await clearLeftSupervisors(actor.person_id, person_id)
+      // WP182：B2B 业务员的客户 / 商机 / 没回的询盘 → 交接卡给老板
+      await options.afterMemberLeft?.(person_id, actor.person_id).catch(() => undefined)
       return { revoked_assignments: active.length }
     },
 
@@ -1743,7 +1750,12 @@ export function createOrg(options: OrgOptions): OrgAssembly {
     port,
     positions: () => backend.positions(),
     onRangeExpanded,
-    onMemberLeft: (person_id, by) => clearLeftSupervisors(by ?? 'system', person_id),
+    onMemberLeft: async (person_id, by) => {
+      const out = await clearLeftSupervisors(by ?? 'system', person_id)
+      // WP182：离职编排那条路同样出 B2B 交接卡
+      await options.afterMemberLeft?.(person_id, by ?? 'system').catch(() => undefined)
+      return out
+    },
     close() {
       backend.close()
     },

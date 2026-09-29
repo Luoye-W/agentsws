@@ -1,0 +1,42 @@
+# WP182（docs/84 §3.2）：**样品超期不寄、超期没反馈出提醒，同一个截止日只提醒一次。**
+#
+# 天数取职责 yml（`stage_b2b_sample` 的 `sample_overdue_days: 3`、`feedback_overdue_days: 14`）：
+# - smp_harbor：9-24 该寄，到 9-29 还是待寄（过了宽限 3 天）→ 一条「超期没寄」；
+# - smp_volthaus：9-10 签收，19 天没反馈 → 一条「超期没反馈」；
+# - smp_dubai：9-27 该寄，还在宽限里 → 不提醒；
+# 第二拍同一批：一条都不再提醒。
+id: b2b/sales/sample-overdue-reminder
+version: 1
+dataset: { pack: b2b-3c-3p, seed: 42 }
+stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
+clock: { start: '2026-09-29T09:00:00+08:00' }
+events:
+  - at: '+0m'
+    b2b.samples:
+      who: p_he
+      samples:
+        - { id: smp_harbor, account: acc_harbor, status: to_ship, ship_by: '2026-09-24T00:00:00Z' }
+        - { id: smp_volthaus, account: acc_volthaus, status: delivered, ship_by: '2026-09-05T00:00:00Z', delivered_at: '2026-09-10T00:00:00Z' }
+        - { id: smp_dubai, account: acc_dubai, status: to_ship, ship_by: '2026-09-27T00:00:00Z' }
+  - at: '+1h'
+    b2b.samples:
+      who: p_he
+      samples:
+        - { id: smp_harbor, account: acc_harbor, status: to_ship, ship_by: '2026-09-24T00:00:00Z' }
+        - { id: smp_volthaus, account: acc_volthaus, status: delivered, ship_by: '2026-09-05T00:00:00Z', delivered_at: '2026-09-10T00:00:00Z' }
+  - at: '+2h'
+    clock.advance: {}
+expected:
+  b2b_samples:
+    - ship_overdue: 1
+      feedback_overdue: 1
+    - ship_overdue: 0
+      feedback_overdue: 0
+  event_types:
+    - simulation.b2b_sample_reminders
+  metrics:
+    runs_failed: 0
+invariants:
+  - no_write_without_stage
+rubric: >-
+  提醒是不是只提了真超期的那两份？第二拍有没有重复提醒（不该有）？

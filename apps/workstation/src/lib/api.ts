@@ -5965,3 +5965,104 @@ export const startB2bSequence = (
 
 export const checkB2bSender = (assignment?: string): Promise<B2bOutboundData> =>
   api('/v1/b2b/outbound/sender/check', { method: 'POST', ...withAssignment(assignment) })
+
+/* ── WP182（docs/84 §3）：B2B 业务——事实卡、报价单、样品、交接 ─────────────── */
+
+export interface B2bFactCategoryData {
+  category: string
+  name: string
+  description: string
+  covers: string[]
+  card?: { id: string; status: string; statement: string; reply_en?: string; prefilled?: boolean }
+}
+
+export interface B2bFactsData {
+  industry?: string
+  recommended_certifications: string[]
+  categories: B2bFactCategoryData[]
+  ready: number
+}
+
+export interface B2bSalesData {
+  facts: B2bFactsData
+  quotes: {
+    id: string
+    number: string
+    account: string
+    version: number
+    amount_usd: number
+    status: string
+    pending?: { version: number; approver?: string; breaches: string[]; approval_item_id?: string }
+  }[]
+  samples: {
+    id: string
+    account: string
+    items: string
+    status: 'to_ship' | 'shipped' | 'delivered' | 'feedback'
+    tracking_no?: string
+    due?: string
+    overdue_days?: number
+    overdue?: 'ship_overdue' | 'feedback_overdue'
+    pending?: boolean
+  }[]
+  handovers: { id: string; departing: string; items: number; unassigned: number; status: string }[]
+}
+
+export interface B2bStagedData {
+  staged: boolean
+  draft_id: string
+  change_id?: string
+  approval_item_id?: string
+  message?: string
+  level?: string
+}
+
+export const getB2bSales = (assignment?: string): Promise<B2bSalesData> =>
+  api('/v1/b2b/sales', withAssignment(assignment))
+
+export const setupB2bFacts = (assignment?: string): Promise<B2bFactsData & { proposed: number }> =>
+  api('/v1/b2b/facts/setup', { method: 'POST', ...withAssignment(assignment) })
+
+export const sendB2bQuote = (
+  quote_id: string,
+  input: { version?: number; note?: string },
+  assignment?: string,
+): Promise<B2bStagedData> =>
+  api(`/v1/b2b/quotes/${encodeURIComponent(quote_id)}/send`, {
+    method: 'POST',
+    body: input,
+    ...withAssignment(assignment),
+  })
+
+export const advanceB2bSample = (
+  sample_id: string,
+  input: {
+    status: 'shipped' | 'delivered' | 'feedback'
+    tracking_no?: string
+    carrier?: string
+    feedback?: string
+  },
+  assignment?: string,
+): Promise<B2bStagedData> =>
+  api(`/v1/b2b/samples/${encodeURIComponent(sample_id)}/advance`, {
+    method: 'POST',
+    body: input,
+    ...withAssignment(assignment),
+  })
+
+/** 报价单 PDF（带登录与分配头取回来，调用方开一个 blob 地址预览）。 */
+export async function fetchB2bQuotePdf(
+  quote_id: string,
+  version?: number,
+  assignment?: string,
+): Promise<Blob> {
+  const headers = new Headers()
+  const token = readStoredToken()
+  if (token !== null) headers.set('Authorization', `Bearer ${token}`)
+  const asg = assignment ?? currentAssignment
+  if (asg !== null) headers.set('X-Assignment', asg)
+  const q = version === undefined ? '' : `?version=${version}`
+  const res = await fetch(`/v1/b2b/quotes/${encodeURIComponent(quote_id)}/pdf${q}`, { headers })
+  if (!res.ok) throw new ApiClientError(res.status, (await res.json()) as ApiErrorBody)
+  return res.blob()
+}
