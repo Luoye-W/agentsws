@@ -19,6 +19,7 @@
   },
   "dependencies": {
     "@agentsws/contracts": "workspace:*",
-    "@agentsws/core": "workspace:*"
+    "@agentsws/core": "workspace:*",
+    "@agentsws/support-core": "workspace:*"
   }
 }
