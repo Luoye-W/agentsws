@@ -195,12 +195,15 @@ home_blocks:
     }
 
 grounding:
+  # WP191（docs/86 §5）：加了「红人 / 博主 / 达人 / KOL」这几个词——社媒运营那边拆出了
+  # 同名平台的职责（`social.instagram` 等），跨岗位只靠它们分得开「找 IG 红人」与「回 IG 评论」。
+  # 另把 `thread` 换成「推文串」：它是 `Threads` 的子串，留着会把 Threads 的活判到这里。
   # 54 §2：岗位路由在**一个岗位的职责集合内**按这几样判"这件事该走哪条"。
   # 五条渠道职责的动作 id 与数据域完全一样，所以在红人这个岗位里，
   # **意图词就是唯一分得开它们的东西**——写不足 = 路由不到。
   - {
       name: x_intent,
-      intent_terms: [X, 推特, Twitter, 推, 帖子, 长文, 转发, thread, tweet],
+      intent_terms: [X, 推特, Twitter, 推, 帖子, 长文, 转发, 推文串, tweet, 红人, 博主, 达人, KOL, influencer, creator],
       cue_terms: [粉丝, 互动率, 合作, 开发信, 报价, 交付, 联盟码],
       tool: search_creators,
       prefetch: false,

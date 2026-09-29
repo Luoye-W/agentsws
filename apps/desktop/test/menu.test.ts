@@ -203,6 +203,12 @@ describe('trayTooltip', () => {
     expect(trayTooltip(input())).toBe('Agents 工坊 0.1.0 · 服务运行中')
     expect(trayTooltip(input({ paused: true }))).toContain('已暂停')
   })
+
+  it('WP196：英文界面用英文产品名，不露 agentsws', () => {
+    const en = trayTooltip(input({ language: 'en-US' }))
+    expect(en.startsWith('Agents Workshop 0.1.0')).toBe(true)
+    expect(en).not.toContain('agentsws')
+  })
 })
 
 describe('WP36 / 40 §1.3：连公司服务器那一档', () => {

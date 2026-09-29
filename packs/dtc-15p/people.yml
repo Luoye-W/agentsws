@@ -1,7 +1,7 @@
 - id: p_wang
   name: 王岚
   email: wang@nordvolt.example
-  title: 店主
+  title: 负责人
   owner: true
 - id: p_li
   name: 李默

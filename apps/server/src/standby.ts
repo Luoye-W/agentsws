@@ -45,7 +45,7 @@ export const STANDBY_TIMEOUT_MS = 180_000
 /** 状态那一跳快得多：它只是一次读。 */
 export const STANDBY_READ_TIMEOUT_MS = 8_000
 
-const NOT_LINKED = '还没关联 agentsws 账号。去"设置 → 账号与积分"里关联一次，再回来开值守。'
+const NOT_LINKED = '还没关联 Agents 工坊账号。去"设置 → 账号与积分"里关联一次，再回来开值守。'
 
 const NO_STANDBY_SCOPE =
   '这台机器上的账号令牌还不能开值守。去云上的账号页重新关联一次，把"值守"这一项放开。'

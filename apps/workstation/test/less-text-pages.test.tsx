@@ -126,7 +126,7 @@ vi.mock('@/lib/api', async () => {
         {
           position_id: 'asg_owner',
           role_id: 'common.owner',
-          role_name: '工作区所有者',
+          role_name: '公司设置与授权',
           ranges: [],
           ready: true,
           missing_connectors: [],

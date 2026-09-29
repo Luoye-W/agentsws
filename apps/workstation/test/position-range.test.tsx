@@ -104,7 +104,7 @@ describe('岗位页：还没分配范围', () => {
     openPosition()
     const card = await screen.findByTestId('no-range-card')
     expect(within(card).queryByTestId('no-range-assign')).toBeNull()
-    expect(within(card).getByTestId('no-range-ask-owner').textContent).toContain('所有者')
+    expect(within(card).getByTestId('no-range-ask-owner').textContent).toContain('负责人')
   })
 
   it('挂了产品线的岗位不算"没范围"——面板照常出（44 G2）', async () => {

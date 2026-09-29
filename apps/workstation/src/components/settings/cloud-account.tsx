@@ -12,8 +12,8 @@
  * （令牌在本机加密库里，21 §5）。所以这个文件里没有一处 token 变量。
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Cloud } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
+import { BrandMark } from '@/components/design'
 import { TutorialLink } from '@/components/help/tutorial-link'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -108,8 +108,9 @@ export function CloudAccountCard({ assignment }: { assignment?: string }): React
   return (
     <Card data-testid="cloud-account">
       <CardHeader>
-        <CardTitle className="flex items-center gap-1.5 text-sm">
-          <Cloud className="size-4" />
+        <CardTitle className="flex items-center gap-2 text-sm">
+          {/* WP195：关联的就是「Agents 工坊」账号，图标换成待机的品牌标记（原来是一朵云） */}
+          <BrandMark size={24} motion="idle" />
           {t('cloud.account.title')}
           <TutorialLink slug="agentsws-credits" className="ml-auto font-normal" />
         </CardTitle>

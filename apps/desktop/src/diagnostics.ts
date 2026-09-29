@@ -272,8 +272,8 @@ export function diagnosticsListing(bundle: DiagnosticsBundle, language: Language
   return `${head}\n${body}${tail}`
 }
 
-/** `agentsws-诊断-0.1.0-beta.2-20260918T100000Z.zip` —— 名字里就带着版本与时间。 */
+/** `Agents工坊-诊断-0.1.0-beta.2-20260918T100000Z.zip` —— 名字里就带着版本与时间（WP196：用户看得到的产品名，不用仓库名）。 */
 export function diagnosticsFileName(version: string, at: string): string {
   const stamp = at.replace(/[-:]/g, '').replace(/\.\d+Z$/, 'Z')
-  return `agentsws-诊断-${version}-${stamp}.zip`
+  return `Agents工坊-诊断-${version}-${stamp}.zip`
 }

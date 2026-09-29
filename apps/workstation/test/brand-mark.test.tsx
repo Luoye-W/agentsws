@@ -330,7 +330,8 @@ describe('index.css：规范 §4.1 的三个坑', () => {
   it('reduce 那一档在 CSS 里也兜了一层', () => {
     const at = CSS.indexOf('@media (prefers-reduced-motion: reduce)')
     expect(at).toBeGreaterThan(-1)
-    expect(CSS.slice(at, at + 400)).toContain('animation: none')
+    // WP195 之后那一档列了七个类（外加「设置里选了开」让路的选择器），所以多看一段
+    expect(CSS.slice(at, at + 800)).toContain('animation: none')
   })
 })
 

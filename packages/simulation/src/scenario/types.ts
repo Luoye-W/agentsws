@@ -1464,6 +1464,11 @@ export interface ScenarioExpected {
     auto_approved?: boolean
     scheduled_at?: string
     stated_on_card?: boolean
+    /**
+     * WP191（docs/86 §4）：「批了之后会变成一条待办、不会自动发出去」那一句在不在卡面上
+     * （只有契约上标了 `publish_fallback: 'manual_task'` 的渠道才有这一句——LinkedIn）。
+     */
+    manual_fallback_stated_on_card?: boolean
   }
   /**
    * WP75 / 57 §1：那一条新建 campaign 的提案。

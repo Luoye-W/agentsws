@@ -57,7 +57,7 @@ export function ModelCloudCard({ assignment }: { assignment?: string }): React.R
   return (
     <div className="rounded-lg border p-2.5" data-testid="model-cloud-card">
       <p className="flex items-center gap-2 text-sm font-medium">
-        <BrandMark size={20} />
+        <BrandMark size={20} playOnHover />
         {t('models.cloud.title')}
         <Hint text={t('models.cloud.hint')} />
         <TutorialLink slug="agentsws-credits" className="ml-auto font-normal" />

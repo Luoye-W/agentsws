@@ -25,7 +25,7 @@ const PEOPLE: PersonCard[] = [
   {
     person_id: 'p_wang',
     name: '王岚',
-    positions: [{ role_id: 'common.owner', role_name: '店主' }],
+    positions: [{ role_id: 'common.owner', role_name: '公司设置与授权' }],
   },
   {
     person_id: 'p_li',
@@ -38,7 +38,9 @@ const PEOPLE: PersonCard[] = [
 const MY_PROFILE: MyProfile = {
   person_id: 'p_wang',
   name: '王岚',
-  positions: [{ position_id: 'a1', role_id: 'common.owner', role_name: '店主', ranges: [] }],
+  positions: [
+    { position_id: 'a1', role_id: 'common.owner', role_name: '公司设置与授权', ranges: [] },
+  ],
   ranges: [],
   skills: [{ name: '定价', source: 'self' }],
   contact_policy: { prefer: 'secretary' },

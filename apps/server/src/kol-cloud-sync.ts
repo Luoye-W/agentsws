@@ -372,7 +372,7 @@ export interface KolCloudSync {
 
 /** 没关联账号时的那句（与 `cloud.ts` 的 `NOT_LINKED` 同一句话，同一件事）。 */
 export const KOL_CLOUD_NOT_LINKED =
-  '还没关联 agentsws 账号。去"设置 → 账号与积分"里关联一次，才能把红人库同步到云上。'
+  '还没关联 Agents 工坊账号。去"设置 → 账号与积分"里关联一次，才能把红人库同步到云上。'
 
 /** 云连不通时的那句。**不说"失败"**——本地这一份一条没丢，说清楚这一点最要紧。 */
 export const KOL_CLOUD_UNREACHABLE =

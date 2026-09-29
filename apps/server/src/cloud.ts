@@ -170,7 +170,7 @@ function monthStart(at: string): string {
 }
 
 const NOT_LINKED =
-  '还没关联 agentsws 账号。去"设置 → 账号与积分"里关联一次，就能用积分跑模型、看余额与用量。'
+  '还没关联 Agents 工坊账号。去"设置 → 账号与积分"里关联一次，就能用积分跑模型、看余额与用量。'
 
 export function createCloud(options: CloudOptions): CloudAssembly {
   const { clock, secrets, env } = options

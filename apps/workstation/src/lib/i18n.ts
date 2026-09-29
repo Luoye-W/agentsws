@@ -170,7 +170,7 @@ const zh: Table = {
   'nav.org': '公司',
   'org.title': '公司',
   'org.subtitle': '谁在做什么、能做到哪一步、管哪几个店。',
-  'org.not_owner': '这一页是给工作区所有者用的。要建岗位、分人、邀请同事，找一下你们的负责人。',
+  'org.not_owner': '这一页是给负责人用的。要建岗位、分人、邀请同事，找一下你们的负责人。',
   'org.tab.positions': '岗位',
   'org.tab.members': '成员',
   'org.tab.roles': '职责',
@@ -506,6 +506,12 @@ const zh: Table = {
   'org.positions.duties': '{count} 条职责',
   'org.positions.duty.detail': '这条职责的规矩',
   'org.positions.duty.close': '收起规矩',
+  // WP196：岗位改名（只改显示名；中英各一）
+  'org.positions.rename': '改名',
+  'org.positions.rename.zh': '中文名',
+  'org.positions.rename.en': '英文名',
+  'org.positions.rename.hint':
+    '只改显示的名字，比如「CEO」「海外业务总监」。岗位里的职责、谁在做、活怎么分都不变。',
   'memory.position': '{name}（岗位层）',
   'memory.role': '{name}（职责层）',
   'memory.empty': '这一层还没有攒下东西。',
@@ -733,7 +739,7 @@ const zh: Table = {
   'duty.skills': '挂着的技能',
   'duty.connectors': '要的连接器：{list}',
   'account.menu': '账号',
-  'account.role.owner': 'Owner',
+  'account.role.owner': '所有者',
   'account.role.member': '成员',
   'account.logout': '退出',
   'topbar.model': '现在用的模型：{model}',
@@ -772,7 +778,7 @@ const zh: Table = {
   'view.no_range.detail':
     '范围是空的，所以看不到店铺数据——不是没数，是这个岗位还没被指定管哪几家店。',
   'view.no_range.action': '去分配',
-  'view.no_range.ask_owner': '找工作区所有者给这个岗位指一下范围。',
+  'view.no_range.ask_owner': '找负责人给这个岗位指一下范围。',
   // WP138：店主本人看时一键挂上整个品牌（红人 / 在线客服不按店划，挂品牌就能开工）
   'view.no_range.self': '给我自己挂上这个品牌',
   'view.no_range.self.pending': '正在挂…',
@@ -995,6 +1001,11 @@ const zh: Table = {
   'settings.title': '设置',
   'settings.theme': '主题',
   'settings.lang': '语言',
+  'settings.motion': '界面动效',
+  'settings.motion.hint': '标记的小动作。跟随系统：系统里开了「减少动态效果」就不动。',
+  'settings.motion.system': '跟随系统',
+  'settings.motion.on': '开',
+  'settings.motion.off': '关',
   'settings.identity': '身份',
   'settings.placeholder': '这台机器上的偏好；连接在左栏的「连接」里。',
   // ── WP20 连接向导 ──────────────────────────────────────────────
@@ -1149,6 +1160,9 @@ const zh: Table = {
   'connections.line.tiktok_research': '申请制：向 TikTok 说明用途，批了才有数据。',
   'connections.line.x_api': 'X 的官方接口要付费档，免费档读不了用户资料。',
   'connections.line.meta_graph': '一把 token 管 FB 主页 + IG：连上就能读，能发要过审核。',
+  // WP191（docs/86 §4 / §5）
+  'connections.line.threads_api': '发 Threads、管回复；授权与 FB / IG 分开，要过审核。',
+  'connections.line.linkedin_api': '发到公司主页或老板本人号；批不下来就给你一条待办去发。',
   'connections.line.tiktok_content': '发 TikTok 视频；申请制，与红人那条的 Research API 分开申请。',
   'connections.line.reddit': '注册一个 Reddit 应用；群发只能是置顶帖，不许群发私信。',
   'connections.line.discord_bot': '读消息与成员、发公告、删消息、禁言。',
@@ -1301,7 +1315,7 @@ const zh: Table = {
   'connections.oauth.failed': '授权没完成。可以再试一次。',
   'connections.oauth.manual': '没自动打开？点这里',
   'connections.data_note': '说明',
-  'connections.owner_only': '连接由工作区所有者管理。你的账号还没有这个岗位，找所有者来接。',
+  'connections.owner_only': '连接由负责人管理。你的账号还没有这个岗位，找负责人来接。',
   'kind.outbound_draft': '回复草稿待审',
   'kind.staged_change': '变更待批',
   'kind.policy_change': '业务边界问题',
@@ -2933,7 +2947,7 @@ const zh: Table = {
   'chat.forbidden': '你现在用的职责没有「网站在线客服」的权限，这里读不到对话。',
   'need.duty.live_chat': '网站在线客服',
   'need.duty.kol': '红人营销',
-  'need.duty.owner': '所有者',
+  'need.duty.owner': '公司设置与授权',
   'need.none': '你名下没有「{duty}」这条职责。',
   'need.none.how': '在「公司」里给自己加上这条职责，或者重走一遍设置向导把它勾上。',
   'need.go_org': '去「公司」加上',
@@ -2996,9 +3010,11 @@ const zh: Table = {
   'help.conn-shopify.title': '连 Shopify 店铺',
   'help.conn-email.title': '连邮箱（任意邮箱 IMAP / SMTP）',
   'help.conn-google.title': 'Google 家的几个连接',
-  'help.conn-meta.title': 'Meta 家的几个连接（Facebook / Instagram / WhatsApp）',
+  'help.conn-meta.title': 'Meta 家的几个连接（Facebook / Instagram / Threads / WhatsApp）',
   'help.conn-tiktok.title': 'TikTok 的三个连接',
   'help.conn-x.title': 'X（Twitter）的两个连接',
+  // WP191（docs/86 §4）
+  'help.conn-linkedin.title': 'LinkedIn：公司主页与老板本人号',
   'help.conn-community.title': '社群机器人：Reddit / Discord / Telegram',
   'help.conn-marketing-logistics.title': '邮件营销与物流追踪',
   'help.browser-extension.title': '浏览器插件「红人助手」',
@@ -3356,8 +3372,7 @@ const en: Table = {
   'nav.org': 'Company',
   'org.title': 'Company',
   'org.subtitle': 'Who does what, how far they can go, and which stores they cover.',
-  'org.not_owner':
-    'This page is for the workspace owner. Ask them to create positions or invite people.',
+  'org.not_owner': 'This page is for your Lead. Ask them to create positions or invite people.',
   'org.tab.positions': 'Positions',
   'org.tab.members': 'People',
   'org.tab.roles': 'Duties',
@@ -3701,6 +3716,11 @@ const en: Table = {
   'org.positions.duties': '{count} duties',
   'org.positions.duty.detail': 'How this duty is set up',
   'org.positions.duty.close': 'Hide the setup',
+  'org.positions.rename': 'Rename',
+  'org.positions.rename.zh': 'Chinese name',
+  'org.positions.rename.en': 'English name',
+  'org.positions.rename.hint':
+    'Only changes the name people see, e.g. “CEO” or “Head of International”. Duties, holders and how work is routed stay the same.',
   'memory.position': '{name} (position layer)',
   'memory.role': '{name} (duty layer)',
   'memory.empty': 'Nothing has accumulated at this layer yet.',
@@ -3978,7 +3998,7 @@ const en: Table = {
   'view.no_range.detail':
     'Its scope is empty, so there is no store data to show — the data exists, this position just has not been told which stores it covers.',
   'view.no_range.action': 'Assign a scope',
-  'view.no_range.ask_owner': 'Ask the workspace owner to give this position a scope.',
+  'view.no_range.ask_owner': 'Ask your Lead to give this position a scope.',
   'view.no_range.self': 'Assign this brand to me',
   'view.no_range.self.pending': 'Assigning…',
   'view.no_range.self.error': 'That did not work: {message}',
@@ -4186,6 +4206,12 @@ const en: Table = {
   'settings.title': 'Settings',
   'settings.theme': 'Theme',
   'settings.lang': 'Language',
+  'settings.motion': 'Motion',
+  'settings.motion.hint':
+    'Small animations on the logo. Follow system: stays still when "Reduce motion" is on.',
+  'settings.motion.system': 'Follow system',
+  'settings.motion.on': 'On',
+  'settings.motion.off': 'Off',
   'settings.identity': 'Identity',
   'settings.placeholder': 'Preferences on this machine. Connections live under “Connections”.',
   'nav.connections': 'Connections',
@@ -4355,6 +4381,11 @@ const en: Table = {
   'connections.line.x_api': 'X’s API is paid; the free tier cannot read profiles.',
   'connections.line.meta_graph':
     'One token for an FB Page + IG: reads once connected, posting needs App Review.',
+  // WP191（docs/86 §4 / §5）
+  'connections.line.threads_api':
+    'Post to Threads and manage replies; authorised separately from FB / IG, needs review.',
+  'connections.line.linkedin_api':
+    'Post to the Company Page or the founder’s profile; if not approved, you get a to-do instead.',
   'connections.line.tiktok_content':
     'Post TikTok videos; by application, separate from the Research API.',
   'connections.line.reddit':
@@ -4523,7 +4554,7 @@ const en: Table = {
   'connections.oauth.manual': 'Did not open? Click here',
   'connections.data_note': 'Note',
   'connections.owner_only':
-    'Connections are managed by the workspace owner. Your account does not hold that position yet.',
+    'Connections are managed by your Lead. Your account does not hold that position yet.',
   'kind.outbound_draft': 'Reply draft',
   'kind.staged_change': 'Change to approve',
   'kind.policy_change': 'Business boundary',
@@ -6200,7 +6231,7 @@ const en: Table = {
     'The duty you are using has no permission for Website live chat, so conversations cannot be read here.',
   'need.duty.live_chat': 'Website live chat',
   'need.duty.kol': 'Creator marketing',
-  'need.duty.owner': 'Owner',
+  'need.duty.owner': 'Company Settings & Permissions',
   'need.none': 'You do not hold the "{duty}" duty.',
   'need.none.how': 'Add it to yourself under Company, or run the setup wizard again and tick it.',
   'need.go_org': 'Add it under Company',
@@ -6266,9 +6297,11 @@ const en: Table = {
   'help.conn-shopify.title': 'Connect your Shopify store',
   'help.conn-email.title': 'Connect a mailbox (any email via IMAP / SMTP)',
   'help.conn-google.title': 'The Google connections',
-  'help.conn-meta.title': 'The Meta connections (Facebook / Instagram / WhatsApp)',
+  'help.conn-meta.title': 'The Meta connections (Facebook / Instagram / Threads / WhatsApp)',
   'help.conn-tiktok.title': 'The three TikTok connections',
   'help.conn-x.title': 'The two X (Twitter) connections',
+  // WP191（docs/86 §4）
+  'help.conn-linkedin.title': 'LinkedIn: the Company Page and the founder’s own profile',
   'help.conn-community.title': 'Community bots: Reddit / Discord / Telegram',
   'help.conn-marketing-logistics.title': 'Email marketing and shipment tracking',
   'help.browser-extension.title': 'The “Creator helper” browser extension',

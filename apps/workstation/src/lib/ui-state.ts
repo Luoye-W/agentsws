@@ -42,6 +42,12 @@ export const CALENDAR_LAYERS_KEY = 'agentsws.calendar.layers'
 /** 日历上次停在哪个视图（日 / 周 / 月 / 议程）。 */
 export const CALENDAR_VIEW_KEY = 'agentsws.calendar.view'
 
+/**
+ * WP195：「界面动效：跟随系统 / 开 / 关」（`system` | `on` | `off`）。与主题、语言同一类——
+ * 纯偏好，丢了回「跟随系统」。读写在 `components/design/motion-pref.ts`。
+ */
+export const MOTION_PREF_KEY = 'agentsws.motion'
+
 export const RIGHT_RAIL_MIN_WIDTH = 320
 export const RIGHT_RAIL_MAX_WIDTH = 520
 export const RIGHT_RAIL_DEFAULT_WIDTH = 380

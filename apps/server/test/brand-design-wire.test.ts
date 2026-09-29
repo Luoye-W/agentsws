@@ -193,7 +193,8 @@ describe('WP122b ①：三个注入口通电', () => {
   it('社媒职责的运行请求带品牌令牌与岗位要点；替身模型收到的 messages 里也有', async () => {
     const m = await boot()
     const mate = await m.invite('she@nordvolt.cn', 'social-media')
-    expect(mate.role_id).toBe('social.meta')
+    // WP191：岗位模板的第一条从 `social.meta` 变成 `social.tiktok`（Meta 拆开、FB / IG 排在内容组末尾）
+    expect(mate.role_id).toBe('social.tiktok')
     // 先跑一轮：没有规范时不注
     const before = await m.run(mate.assignment_id)
     expect(sectionOf(before)).toBeUndefined()

@@ -191,7 +191,7 @@ describe('角色面板：看（69 §4）', () => {
      */
     const { RolePanel } = await import('@/components/rail/panels/role-panel')
     renderWithProviders(
-      <RolePanel scope={{ tier: 'role', scope_id: 'common.owner', name: '店主 / 负责人' }} />,
+      <RolePanel scope={{ tier: 'role', scope_id: 'common.owner', name: '负责人' }} />,
       '/',
       'asg_store',
     )

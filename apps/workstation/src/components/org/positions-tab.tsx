@@ -11,6 +11,7 @@
  * "岗位"在这里是 05 §2 的模板：它只在分配那一刻展开成一组职责，
  * 所以"分给了谁"是算出来的（谁名下有这个岗位的全部默认职责），不是另存一张表。
  */
+import { Pencil } from 'lucide-react'
 import { useState } from 'react'
 import { type RoleChangePatch, RoleDetail } from '@/components/org/roles-tab'
 import { Badge } from '@/components/ui/badge'
@@ -66,6 +67,7 @@ export function PositionsTab({
   onProposeRole,
   people = [],
   onSupervisor,
+  onRename,
 }: {
   positions: OrgPositionView[]
   roles: RoleSummaryView[]
@@ -87,8 +89,17 @@ export function PositionsTab({
   people?: { person_id: string; name: string }[]
   /** WP174：改上级（`null` = 不设，超授权的审批转老板）。不给就不出这一行。 */
   onSupervisor?(position_id: string, person_id: string | null): void
+  /**
+   * WP196：岗位改名（只改显示名，中英各一；id、职责、路由都不动）。不给就不出「改名」。
+   * `name_en` 空着 = 英文名不变。
+   */
+  onRename?(position_id: string, input: { name: string; name_en?: string }): void
 }): React.ReactNode {
-  const { t } = useApp()
+  const { t, lang } = useApp()
+  // WP196：正在改名的那个岗位与两格草稿（一次一个）
+  const [renaming, setRenaming] = useState<string | null>(null)
+  const [renameZh, setRenameZh] = useState('')
+  const [renameEn, setRenameEn] = useState('')
   const [editing, setEditing] = useState<string | null>(null)
   const [draft, setDraft] = useState<string[]>([])
   const [creating, setCreating] = useState(false)
@@ -112,10 +123,28 @@ export function PositionsTab({
           <Card key={p.id} data-testid="position-card" data-position={p.id}>
             <CardHeader className="flex-row flex-wrap items-center justify-between gap-2">
               <CardTitle className="flex items-center gap-2 text-sm">
-                {p.name}
+                <span data-testid="position-name">
+                  {lang === 'en' && p.name_en !== '' ? p.name_en : p.name}
+                </span>
                 <Badge variant="outline" data-testid="position-duty-count">
                   {t('org.positions.duties', { count: p.roles.length })}
                 </Badge>
+                {onRename === undefined || renaming === p.id ? null : (
+                  <Button
+                    size="xs"
+                    variant="ghost"
+                    data-testid="position-rename"
+                    disabled={busy}
+                    onClick={() => {
+                      setRenaming(p.id)
+                      setRenameZh(p.name)
+                      setRenameEn(p.name_en)
+                    }}
+                  >
+                    <Pencil aria-hidden className="size-3" />
+                    {t('org.positions.rename')}
+                  </Button>
+                )}
               </CardTitle>
               {p.holders.length === 0 ? (
                 <span className="text-muted-foreground text-xs">{t('org.positions.nobody')}</span>
@@ -128,6 +157,69 @@ export function PositionsTab({
               )}
             </CardHeader>
             <CardContent className="flex flex-col gap-3 text-sm">
+              {/* WP196：改名——只改显示名，中英各一格；说明进问号（界面少字） */}
+              {onRename === undefined || renaming !== p.id ? null : (
+                <div
+                  className="flex flex-wrap items-end gap-2 rounded-md border p-2"
+                  data-testid="position-rename-form"
+                >
+                  <div className="flex min-w-40 flex-1 flex-col gap-1">
+                    <Label htmlFor={`rename-zh-${p.id}`} className="text-xs">
+                      {t('org.positions.rename.zh')}
+                    </Label>
+                    <Input
+                      id={`rename-zh-${p.id}`}
+                      data-testid="position-rename-zh"
+                      value={renameZh}
+                      maxLength={64}
+                      onChange={(e) => {
+                        setRenameZh(e.target.value)
+                      }}
+                    />
+                  </div>
+                  <div className="flex min-w-40 flex-1 flex-col gap-1">
+                    <Label htmlFor={`rename-en-${p.id}`} className="text-xs">
+                      {t('org.positions.rename.en')}
+                    </Label>
+                    <Input
+                      id={`rename-en-${p.id}`}
+                      data-testid="position-rename-en"
+                      value={renameEn}
+                      maxLength={64}
+                      onChange={(e) => {
+                        setRenameEn(e.target.value)
+                      }}
+                    />
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <Hint text={t('org.positions.rename.hint')} />
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setRenaming(null)
+                      }}
+                    >
+                      {t('org.cancel')}
+                    </Button>
+                    <Button
+                      size="sm"
+                      data-testid="position-rename-save"
+                      disabled={renameZh.trim() === '' || busy}
+                      onClick={() => {
+                        const en = renameEn.trim()
+                        onRename(p.id, {
+                          name: renameZh.trim(),
+                          ...(en === '' ? {} : { name_en: en }),
+                        })
+                        setRenaming(null)
+                      }}
+                    >
+                      {t('org.save')}
+                    </Button>
+                  </div>
+                </div>
+              )}
               {/* WP174：上级——超授权的审批先转他，没设就转老板。说明进问号（界面少字） */}
               {onSupervisor === undefined ? null : (
                 <div className="flex items-center gap-2" data-testid="position-supervisor">

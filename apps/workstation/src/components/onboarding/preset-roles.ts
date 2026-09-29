@@ -23,11 +23,15 @@ import type { BrandIntakeProfile, BrandIntakeRun, OnboardingPositionView } from 
 
 /** 社媒平台 → 社媒运营里的哪条渠道职责。认不出来的平台一条都不勾。 */
 const SOCIAL_ROLE: Record<string, string> = {
-  instagram: 'social.meta',
-  facebook: 'social.meta',
+  // WP191（docs/86 §5）：Meta 拆成两条，各勾各的（以前两个平台都落到 `social.meta`）
+  instagram: 'social.instagram',
+  facebook: 'social.facebook',
+  threads: 'social.threads',
   tiktok: 'social.tiktok',
   youtube: 'social.youtube',
   x: 'social.x',
+  // 首页上挂着 LinkedIn 公司主页 → 预勾 LinkedIn 那条（岗位模板里默认不勾，这里按证据勾）
+  linkedin: 'social.linkedin',
 }
 
 /** 网站运营 / 客服 / 社媒运营 / 红人营销这几个岗位在种子表里的 id（`apps/server/src/org.ts`）。 */

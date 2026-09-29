@@ -183,17 +183,22 @@ describe('制度面：职责与岗位', () => {
   })
 
   // WP72（56 §2 / 54）：社媒运营岗位 = 九条渠道职责，默认勾三条
-  it('首批岗位里有「社媒运营」，九条渠道职责，默认勾 Meta / TikTok / YouTube', async () => {
+  // WP191（docs/86 §5）：Meta 拆成 FB 主页 + IG，默认勾 FB / IG / TikTok / YouTube；
+  // 新建岗位里不再出现「Meta 社媒运营」
+  it('首批岗位里有「社媒运营」，默认勾 FB / IG / TikTok / YouTube，没有 social.meta', async () => {
     const positions = await data<{ id: string; name: string; roles: { role_id: string }[] }[]>(
       await call('GET', '/v1/org/positions'),
     )
     const social = positions.find((p) => p.id === 'social-media')
     expect(social?.name).toBe('社媒运营')
     expect(social?.roles.map((r) => r.role_id)).toContain('social.facebook-group')
+    expect(social?.roles.map((r) => r.role_id)).not.toContain('social.meta')
+    expect(social?.roles.map((r) => r.role_id)).toContain('social.linkedin')
     expect(social?.roles.filter((r) => r.default).map((r) => r.role_id)).toEqual([
-      'social.meta',
       'social.tiktok',
       'social.youtube',
+      'social.facebook',
+      'social.instagram',
     ])
   })
 

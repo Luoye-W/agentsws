@@ -1,18 +1,25 @@
-# 56 §2 社媒运营的第 2 条职责：**TikTok 运营**（WP72）。
+# 56 §2 社媒运营的内容账号组：**TikTok 运营**（WP72；WP191 按 docs/86 充实）。
 #
-# 内容账号组四条职责的骨架**完全相同**（56 §2 上半行），不同的只有三样：
-# 渠道连接器、grounding 的意图词、还有下面那一段"这条渠道特有的部分"。
-# 骨架为什么长这样，写在 `social/meta.yml` 的文件头里，不在这里抄第二遍。
+# 内容账号组各条职责的骨架**完全相同**（56 §2 上半行）：动作 id、数据域、审批等级
+# 一个都不许改（54：同构的职责只靠意图词分得开）。不同的只有：渠道连接器、额度、
+# grounding 的意图词、persona、快捷提示，还有下面那一段"这条渠道特有的部分"。
+# 骨架为什么长这样，写在 `social/meta.yml` 的文件头里；每条渠道的定义怎么来的，
+# 写在 docs/86（WP191 调研：开源技能、职业标准、平台官方规则、行业数据）。
 #
-# 这条渠道特有的三件事：
+# 这条渠道特有的部分（docs/86 §3.2）：
 #
-# 1. **发布接口是申请制**（Content Posting API，与红人那条职责用的 Research API
-#    不是同一个东西，要分别申请）。没批下来之前，排期、草稿、审批照常能用，
-#    只是最后那一跳发不出去——界面上说的是"要先申请"，不是"连接失败"。
-# 2. **发布是两跳**：init 拿一个 publish_id 与上传地址，素材传上去之后轮询状态。
-#    一跳发完这件事在 TikTok 上不存在，所以"发出去了"要等轮询回来才算数。
-# 3. **没有开放的评论读写接口**。待回评论这一块在这条渠道上是空的——
-#    空的理由要说出来（36 §3），不是假装我们漏了。
+# 1. **发布接口是申请制**（Content Posting API，与红人那条用的 Research API 要分别申请）。
+#    **没过审计的应用发出去的只有自己看得见**、账号还得设成私密——"发出去了"不等于
+#    "大家看得到"，卡面与准备说明里要写清。
+# 2. **发布是两跳**：init 拿 publish_id，TikTok 抓素材后轮询状态；"发出去了"要等轮询回来才算。
+#    发之前必须先查 `creator_info`；**可见范围要人亲手选**、商业内容声明开关默认关——
+#    这两格替人选就违反了 TikTok 的内容分享规范。
+# 3. **没有开放的评论读写接口**。待回评论这一块在这条渠道上是空的——空的理由要说出来。
+# 4. **不进推荐的内容**：搬运没有二创、带别家水印、极短或纯静图（For You 资格标准）。
+#    开头三秒定生死；粉丝数与过去的爆款不是推荐的直接因素（TikTok 2020）。
+#
+# 「三秒钩子」「一周 3–5 条起、做得到再加」参考了 coreyhaines31/marketingskills 的 social（MIT）
+# 与 msitarzewski/agency-agents 的 TikTok 角色（MIT），用自己的话写，未搬原文。
 #
 # 边界（56 表头，Luoye 09-16 定）：内容、氛围、活动、群规归我；
 # **客户的问题不归我，转客服**（`dtc.community-support`）。下面 `description` 与
@@ -21,7 +28,7 @@ id: social.tiktok
 version: 1.0.0
 domain: social
 name: { zh: TikTok 运营, en: TikTok }
-description: 我们自己的 TikTok 账号：视频排期与发布、回评论、账号资料、近 30 天表现。内容、氛围、活动归我；客户的问题不归我，转客服
+description: TikTok 账号（我们自己的）：短视频排期与发布、钩子与配文、回评论、账号资料、近 30 天表现。内容、氛围、活动归我；客户的问题不归我，转客服
 
 scopes:
   - { domain: social_account, ops: [read, stage], range: assigned, max_sensitivity: internal }
@@ -33,13 +40,16 @@ scopes:
 
 connectors:
   # `required: false`：没连也能排内容、写草稿、攒审批——真发出去那一跳才需要它。
+  # 申请制；没过审计时发出去的只有自己看得见（docs/86 §3.2）。
   - { kind: tiktok_content, required: false, grants: [read_profile, read_videos, publish_video], ownership: workspace }
 
 actions:
+  # 额度写在**动作**上不写在职责上（同 51 §2.3）。数从哪来见 docs/86 §3.1。
   - id: stage_post
     target: social_account
     kind: staged_change
     mandate:
+      # 一天 3 条（docs/86 §3.1：平台自己建议一天 1–4 条，行业数一周 2–5 条起；3 是"别刷屏"的线）。
       caps: { max_posts_per_day: 3 }
       per_change_limits: { max_items: 1 }
       window: { max_count: 3, per: day }
@@ -59,6 +69,7 @@ actions:
       caps: {}
       per_change_limits: { max_items: 1 }
       window: { max_count: 5, per: week }
+    # 改 handle 连提都不许提（`@agentsws/core` 的 `PROTECTED_FIELDS`）
     protected_fields: [handle, username, account_id, external_id]
     review_cannot_be_disabled: true
     route_to: owner
@@ -135,14 +146,15 @@ home_blocks:
     }
 
 grounding:
-  # 54 §2：九条社媒职责的动作 id 与数据域完全一样，**意图词是唯一分得开它们的东西**。
+  # 54 §2：内容组各条的动作 id 与数据域完全一样，**意图词是唯一分得开它们的东西**。
   - {
       name: tiktok_intent,
-      intent_terms: [TikTok, 抖音国际版, 短视频, 视频, dou, 合拍, 挑战赛, video, short],
-      cue_terms: [发, 排期, 定时, 播放, 完播, 点赞, 评论, 粉丝, 涨粉, 话题, 标签],
+      intent_terms: [TikTok, 抖音国际版, 短视频, dou, 合拍, 拼接, 挑战赛, 草稿箱, 钩子, short video],
+      cue_terms: [发, 排期, 定时, 播放, 完播, 观看时长, 点赞, 评论, 分享, 粉丝, 涨粉, 话题, 标签],
       tool: list_social_posts,
       prefetch: false,
     }
+  # 19：文案里说到产品、价格、时效、政策之前先查事实卡
   - {
       name: facts_before_post,
       intent_terms: [文案, 发帖, 起草, 上新, 活动, post, caption, announce],
@@ -150,6 +162,7 @@ grounding:
       tool: search_policies,
       prefetch: true,
     }
+  # 56 的边界：客户的问题不归我。意图词写足，54 的路由才判得到"转客服"
   - {
       name: customer_question_goes_to_support,
       intent_terms: [订单, 发货, 物流, 退款, 退货, 保修, 怎么用, order, refund, shipping, warranty],
@@ -159,6 +172,7 @@ grounding:
     }
 
 notifications:
+  # 发布永远人审，卡压着不动 = 这条内容错过了它的时间点
   - {
       event: 'approval.created:stage_post',
       mode: immediate,
@@ -192,7 +206,11 @@ quick_prompts:
     kind: start_task
   - id: draft_post
     label: { zh: "起草一条", en: "Draft a post" }
-    prompt: "给这条视频起一段文案和话题标签，按品牌话术来，价格和时效只写事实卡里有的"
+    prompt: "给这条视频写开头三秒的钩子、一段配文和话题标签，按品牌话术来，价格和时效只写事实卡里有的"
+    kind: start_task
+  - id: hook_ideas
+    label: { zh: "三个开头", en: "Three hooks" }
+    prompt: "同一条视频给我三个不同的开头三秒，各写一句为什么会有人停下来"
     kind: start_task
   - id: comments_waiting
     label: { zh: "有哪些评论等着回", en: "Comments waiting" }
@@ -206,32 +224,32 @@ quick_prompts:
 task_examples:
   - id: weekly_calendar
     title: { zh: "排一周的视频", en: "Fill a week of the calendar" }
-    description: "下周有一次上新，手上有几段素材，不知道怎么摊到一周里。"
-    expected_output: "一份按天排好的日历（每条写清什么时间发、文案与话题标签是什么），撞车的地方直接给下一个空档；每一条都要你点一下才真发出去。"
-  - id: not_approved_yet
-    title: { zh: "接口还没批下来怎么办", en: "What if the API is not approved yet" }
-    description: "发布接口还在申请中，但内容不能停。"
-    expected_output: "排期与文案照样做完，到点了提醒你去后台手工发一下——不会假装已经发出去了，也不会把这条从日历上抹掉。"
-  - id: comment_triage
-    title: { zh: "把评论分一分", en: "Sort the comments" }
-    description: "一条爆了的视频下面有几十条评论。"
-    expected_output: "按六类分好的一张表：客户的问题已经变成转客服卡，合作询问提示转红人营销；这条渠道的评论要人工贴进来（TikTok 没有开放的评论接口）。"
+    description: "下周要推一个新品，手上有几段素材。"
+    expected_output: "一份按天排好的日历（每条写清钩子、配文、话题、什么时间发），撞车的地方直接给下一个空档；每一条都要你点一下才真发出去。"
+  - id: hook_rewrite
+    title: { zh: "重写开头三秒", en: "Rewrite the first three seconds" }
+    description: "上一条完播率很低，想换个开头重发。"
+    expected_output: "三个新开头，每个一句话说清为什么会让人停下；提醒哪些改法算原创、哪些（加边框、变速）平台不认。"
+  - id: audit_pending
+    title: { zh: "没过审计时发出去看得见吗", en: "Before the audit" }
+    description: "发布接口批了，但应用还没过 TikTok 的审计。"
+    expected_output: "说清楚：没过审计时经接口发出去的只有自己看得见；在此之前建议把视频放进草稿箱、你在 App 里点发布。"
 
 # ── WP120（69 §2）：**角色定位**。提示里的「你是谁」，六段骨架一段不许少 ──────────
-# 第三段「你不负责」是防串岗的那一条：69 §0 那条亲测记录（红人岗位回出客服的话）
-# 就是因为提示里从头到尾没有这一句。改这一段之前先读 docs/69。
+# 第三段「你不负责」是防串岗的那一条。改这一段之前先读 docs/69；
+# 「怎么做」那一句的平台做法来自 docs/86 §2 / §3（出处与许可证在那里）。
 persona:
   zh: |
     你是谁：社媒运营岗位里管我们自己 TikTok 账号的人。
-    你负责：视频排期与发布、回评论、账号资料、近 30 天表现。
+    你负责：短视频排期与发布、钩子与配文、话题、回评论、账号资料、近 30 天表现。
     你不负责：订单、退款、物流→客服（评论区冒出来的也转）；找红人→红人营销；买广告→投放；别人的版→公共关系。
-    怎么做：先看这账号最近发过什么、评论区在聊什么；带货相关的话按小店后台的真实数字说，没数就说没数；拿不准的评论按客户问题转走。
+    怎么做：先看最近的播放与完播；开头三秒写三个挑一个；不搬运、不带别家水印；可见范围让人亲手选；拿不准的评论按客户问题转走。
     口气：像社区里的人，接地气、不官腔、不承诺。
     必须出卡：发布与排期、改账号资料、任何对外可见的回复。
   en: |
     Who you are: the person running our own TikTok account, inside the social-media position.
-    You handle: scheduling and publishing videos, replying to comments, the account profile, the last 30 days of performance.
+    You handle: scheduling and publishing short videos, hooks and captions, hashtags, replying to comments, the account profile, the last 30 days of performance.
     Not yours: orders, refunds and shipping → Customer Care, including the ones raised in the comments; creators → Creator Marketing; ads → Paid Ads; other people’s forums → Public Relations.
-    How you work: read what this account posted recently and what the comments are about. Anything about sales comes from the real numbers in the shop back office; when there are none, say there are none. When a comment is borderline, treat it as a customer question and hand it over rather than answering it yourself.
+    How you work: check recent views and completion first. Write three openings for the first three seconds and pick one. No reposts, no other platforms’ watermarks. Let a person choose who can see each video. When a comment is borderline, treat it as a customer question and hand it over.
     Tone: like a person in the community — human, no corporate voice, no promises.
     Always ask: publishing and scheduling, profile edits, every outward reply.

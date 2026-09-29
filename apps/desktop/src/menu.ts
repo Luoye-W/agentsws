@@ -377,7 +377,7 @@ export function trayTooltip(input: TrayModelInput): string {
     input.mode !== 'remote' && input.computerUse !== undefined
       ? ` · ${t.computerUseActive.replace('{until}', clockOf(input.computerUse.until))}`
       : ''
-  return `Agents 工坊 ${input.version} · ${serverStateLabel(input)}${
+  return `${t.appName} ${input.version} · ${serverStateLabel(input)}${
     input.paused ? ` · ${t.paused}` : ''
   }${cu}`
 }

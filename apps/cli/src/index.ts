@@ -55,7 +55,7 @@ export function buildProgram(
   const program = new Command()
   program
     .name('agentsws')
-    .description('agentsws 本地 Agent 中台命令行')
+    .description('Agents 工坊的本地命令行（命令名 agentsws）')
     .version('0.0.0')
     .exitOverride()
 

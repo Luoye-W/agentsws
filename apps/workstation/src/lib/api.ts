@@ -2595,7 +2595,8 @@ export const createOrgPosition = (
 
 export const updateOrgPosition = (
   id: string,
-  input: { name: string; roles: { role_id: string; default?: boolean }[] },
+  /** WP196：`name_en` 给了就一起改英文名（不给 = 英文名不变）。 */
+  input: { name: string; name_en?: string; roles: { role_id: string; default?: boolean }[] },
   assignment?: string,
 ): Promise<OrgPositionView> =>
   api<OrgPositionView>(`/v1/org/positions/${encodeURIComponent(id)}`, {
@@ -4575,12 +4576,17 @@ export const saveWecomBot = (values: {
 
 /* ── WP73（56 §6）：社媒库 `/v1/social/*` ───────────────────────────────── */
 
-/** 九条渠道（真源是契约的 `SOCIAL_CHANNELS`；工作台不依赖服务端包，这里照抄一份）。 */
+/** 各条渠道（真源是契约的 `SOCIAL_CHANNELS`；工作台不依赖服务端包，这里照抄一份）。 */
 export type SocialChannelId =
   | 'meta'
   | 'tiktok'
   | 'x'
   | 'youtube'
+  // WP191（docs/86 §5）：Meta 拆成 FB 主页 + IG，另加 Threads 与 LinkedIn（`meta` 留着认老数据）
+  | 'facebook'
+  | 'instagram'
+  | 'threads'
+  | 'linkedin'
   | 'facebook_group'
   | 'reddit'
   | 'discord'

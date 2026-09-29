@@ -45,6 +45,23 @@ export const ROLE_ID_ALIASES: Readonly<Record<string, RoleId>> = {
   'site.builder': 'site.shopify-theme',
 }
 
+/**
+ * WP191（docs/86 §6）：**一条拆成几条**的旧职责 id（`ROLE_ID_ALIASES` 管的是一对一改名）。
+ *
+ * - `social.meta` → `social.facebook` + `social.instagram`（Luoye 09-29：Meta 下面是
+ *   Facebook、Instagram、Threads 三个平台，拆开定义；Threads 是新加的一条，不从这里分）
+ *
+ * 顺序有意义：**第一条接手原分配**（id 不变——待办、审批卡、队列车道、定时任务、交接
+ * 都挂在分配 id 上，一件都不用搬），其余各**复制一条**（范围、额度覆盖、自动化状态照抄）。
+ * 迁移在宿主启动时做（`assignments.splitRoleIds()`），可重复跑。
+ *
+ * 与契约 `SOCIAL_CHANNELS` 上那格 `superseded_by` 是同一件事的两个位置，测试钉住一字不差。
+ * 与 `ROLE_ID_ALIASES` 同一条纪律：**只可加行**。
+ */
+export const ROLE_ID_SPLITS: Readonly<Record<string, readonly RoleId[]>> = {
+  'social.meta': ['social.facebook', 'social.instagram'],
+}
+
 /** 旧 id → 新 id；不是旧 id 就原样返回。 */
 export function resolveRoleId(id: RoleId): RoleId {
   return ROLE_ID_ALIASES[id] ?? id

@@ -142,7 +142,7 @@ function harness(options: HarnessOptions = {}): {
                     ok: false,
                     reason: 'not_linked' as const,
                     message:
-                      '这条渠道的开关拨到了"用 agentsws 的"，但这台机器还没关联 agentsws 账号。',
+                      '这条渠道的开关拨到了"用 Agents 工坊的"，但这台机器还没关联 Agents 工坊账号。',
                   }
                 : {
                     ok: true,

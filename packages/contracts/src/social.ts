@@ -43,6 +43,14 @@ export type SocialChannel =
   | 'discord'
   | 'telegram_group'
   | 'whatsapp'
+  // ── WP191（docs/86）：只加不改 ──────────────────────────────────────
+  // Luoye 09-29：Meta 下面是三个平台，拆开定义。`meta` 这一格**不删**——老工作区的
+  // 帖子、账号、审批里写着它；它在 {@link SOCIAL_CHANNELS} 上标了 `superseded_by`，
+  // 新建岗位不再出现，已有分配启动时迁成 facebook + instagram（docs/86 §6）。
+  | 'facebook'
+  | 'instagram'
+  | 'threads'
+  | 'linkedin'
 
 /**
  * 两组（56 §0）。**只是模板里的摆法**，不是两种职责——骨架相同，读写不同：
@@ -91,6 +99,22 @@ export interface SocialChannelSpec {
    */
   connector_kind?: string
   mode: SocialChannelMode
+  /**
+   * WP191（docs/86 §6）：这条渠道**已经拆成了哪几条**。有这一格 = 老渠道：
+   * 数据照样读得进来（老帖子、老审批上写着它），但新建岗位不再出它，
+   * 已有分配启动时迁成这几条（第一条接手原分配的 id、队列与定时任务，
+   * 其余各复制一条）。只有 `meta` 有：它拆成了 `facebook` + `instagram`。
+   */
+  superseded_by?: readonly SocialChannel[]
+  /**
+   * WP191（docs/86 §4.3）：没连上 / 平台没批发布权限时，到点那条已批准的帖子
+   * **变成一条「复制文案去平台发」的待办**，而不是只在日志里记一句"没发"。
+   *
+   * 只有 LinkedIn 有：公司主页的发帖权限要过 Community Management API 审核，
+   * 多数小公司一直批不下来；而 LinkedIn 用户协议又禁止任何自动化手段代发，
+   * 所以"人去发"是这条渠道的常态，不是例外。
+   */
+  publish_fallback?: 'manual_task'
 }
 
 /**
@@ -112,6 +136,8 @@ export const SOCIAL_CHANNELS: readonly SocialChannelSpec[] = [
     api_access: 'official',
     connector_kind: 'meta_graph',
     mode: 'api',
+    // WP191（docs/86 §6）：拆成 FB 主页 + IG 两条（Threads 是新加的第三条，不从这里分）
+    superseded_by: ['facebook', 'instagram'],
   },
   {
     id: 'tiktok',
@@ -148,6 +174,60 @@ export const SOCIAL_CHANNELS: readonly SocialChannelSpec[] = [
     // 写成两个 kind 的后果是用户在连接页上看到两张 YouTube，连了一张另一张还说没连。
     connector_kind: 'youtube_data',
     mode: 'api',
+  },
+  // ── WP191（docs/86）：内容账号组末尾加四条（只加不改）─────────────────
+  {
+    id: 'facebook',
+    role_id: 'social.facebook',
+    zh: 'Facebook 主页',
+    en: 'Facebook Page',
+    group: 'content',
+    icon: 'facebook',
+    // Pages API 公开可用，发布权限（pages_manage_posts）要过 App Review
+    api_access: 'official',
+    // **与 IG 共用一张卡**（Luoye 09-29）：同一个 Meta 应用、同一次授权，
+    // 连一次、批一次。写成两个 kind 的后果是为同一件事连两遍。
+    connector_kind: 'meta_graph',
+    mode: 'api',
+  },
+  {
+    id: 'instagram',
+    role_id: 'social.instagram',
+    zh: 'Instagram',
+    en: 'Instagram',
+    group: 'content',
+    icon: 'instagram',
+    // instagram_content_publish 要过 App Review；API 发帖 24 小时 100 条上限
+    api_access: 'official',
+    connector_kind: 'meta_graph',
+    mode: 'api',
+  },
+  {
+    id: 'threads',
+    role_id: 'social.threads',
+    zh: 'Threads',
+    en: 'Threads',
+    group: 'content',
+    icon: 'threads',
+    // Threads API 是自己的一套授权（graph.threads.net + threads_* 权限），
+    // Meta 那把主页令牌用不上——所以是自己一张卡（docs/86 §3.3）
+    api_access: 'official',
+    connector_kind: 'threads_api',
+    mode: 'api',
+  },
+  {
+    id: 'linkedin',
+    role_id: 'social.linkedin',
+    zh: 'LinkedIn',
+    en: 'LinkedIn',
+    group: 'content',
+    icon: 'linkedin',
+    // 个人号 w_member_social 自助开通；公司主页要 Community Management API 审核
+    api_access: 'apply',
+    connector_kind: 'linkedin_api',
+    mode: 'api',
+    // 批不下来是常态、用户协议又禁自动化：到点变成"复制文案去 LinkedIn 发"的待办
+    publish_fallback: 'manual_task',
   },
   // ── 社群组（56 §2 下半行）───────────────────────────────────────────
   {
@@ -229,6 +309,29 @@ export function socialChannelsOfGroup(group: SocialChannelGroup): readonly Socia
 /** 九条职责的 id，按出场顺序（`packages/roles` 的 `BUNDLED_ROLES` 与岗位模板读它）。 */
 export const SOCIAL_ROLE_IDS: readonly string[] = SOCIAL_CHANNELS.map((c) => c.role_id)
 
+/**
+ * WP191（docs/86 §6）：**还在用的**渠道（去掉标了 `superseded_by` 的老渠道）。
+ *
+ * 岗位模板、首次设置向导、新建岗位的勾选只读这一份；{@link SOCIAL_CHANNELS}
+ * 仍是全表（老数据上写着 `meta`，读的时候要认得它）。
+ */
+export const ACTIVE_SOCIAL_CHANNELS: readonly SocialChannelSpec[] = SOCIAL_CHANNELS.filter(
+  (c) => c.superseded_by === undefined,
+)
+
+/** 还在用的职责 id（岗位模板 `social-media.yml` 的顺序就是它）。 */
+export const ACTIVE_SOCIAL_ROLE_IDS: readonly string[] = ACTIVE_SOCIAL_CHANNELS.map(
+  (c) => c.role_id,
+)
+
+/**
+ * 老渠道 → 接手它的那几条渠道（`meta` → `facebook` + `instagram`）；
+ * 不是老渠道回 `undefined`。
+ */
+export function socialChannelHeirs(id: string): readonly SocialChannel[] | undefined {
+  return socialChannelSpec(id)?.superseded_by
+}
+
 /* ── 四个对象（56 §6 WP72 那一行）──────────────────────────────────── */
 
 /**
@@ -257,7 +360,18 @@ export interface SocialAccount {
 }
 
 /** 一条内容的形态（九条渠道的并集；平台没有的形态就不出现在那条渠道上）。 */
-export type SocialPostKind = 'post' | 'image' | 'video' | 'short' | 'story' | 'thread' | 'poll'
+export type SocialPostKind =
+  | 'post'
+  | 'image'
+  | 'video'
+  | 'short'
+  | 'story'
+  | 'thread'
+  | 'poll'
+  // WP191（docs/86 §3）：IG / FB 的 Reels、IG 轮播、LinkedIn 文档帖（PDF 翻页）。只加不改
+  | 'reel'
+  | 'carousel'
+  | 'document'
 
 /**
  * 一条帖子的状态。

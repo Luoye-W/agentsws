@@ -1,0 +1,64 @@
+# WP191（docs/86 §4）：**LinkedIn 公司主页帖：起草 → 出卡 → 没连上时变成「去 LinkedIn 发」的待办。**
+#
+# 这条题钉三件事，每一件都是真机制，不是场景自己判的：
+#
+# 1. **发布永远人审**。报了 L3 也被 `HARD_L1` 按回 L1——与别的内容渠道一样。
+# 2. **卡面上先说清楚"批了之后不会自动发"**。LinkedIn 在契约上标了
+#    `publish_fallback: 'manual_task'`（公司主页发帖要过 Community Management API 审核，
+#    多数小公司批不下来；用户协议又禁止任何自动化手段代发）。合成世界里没有它的连接，
+#    所以卡面上那句"批了之后会变成一条待办"必须在人按下之前看得见。
+# 3. **批了之后是一条待办，不是一次发布**。执行器那一跳开一条「复制文案去 LinkedIn 发」
+#    的待办，落在持有这条职责的人（李默）头上；出站观察表里一条都不多——
+#    **没有任何一跳打到 LinkedIn**（不抓取、不自动发）。
+id: social/linkedin-post-becomes-manual-task
+version: 1
+dataset: { pack: dtc-3c-3p, seed: 42 }
+# 发布卡 route_to: scope_manager——3 人公司里没有这个人，落到店主王岚手上，由她点头
+actors:
+  p_wang: { approve: { policy: always_approve, latency: 30m..2h } }
+stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
+clock: { start: '2026-09-29T09:00:00+08:00' }
+events:
+  # 李默（运营，兼着社媒运营的 LinkedIn 那条）给公司主页起一条观点帖。level: L3 是故意报高的——硬顶应当把它拉回人审
+  - at: '+0m'
+    social.post:
+      who: p_li
+      channel: linkedin
+      body: 我们为什么只做一种桌垫：三年里退回来的 1,200 张里，八成是尺寸选错。这次把尺寸表放在了第一屏。
+      level: L3
+  # 空跑几个小时：王岚点头，执行器那一跳开出待办
+  - at: '+2h'
+    clock.advance: {}
+  - at: '+4h'
+    clock.advance: {}
+  - at: '+6h'
+    clock.advance: {}
+expected:
+  social_post:
+    requested_level: L3
+    auto_approved: false
+    stated_on_card: true
+    # 「批了之后会变成一条待办」那一句在卡面上
+    manual_fallback_stated_on_card: true
+  staged_change_kinds: [social_post]
+  approval_kinds: { staged_change: 1 }
+  no_applied_changes_before: $approve
+  auto_approved: 0
+  event_types:
+    - simulation.social_post_staged
+    - simulation.social_manual_task
+    - todo.created
+  metrics:
+    staged_changes: 1
+    # "施行"= 开出那条待办（不是发出去）
+    applied_changes: 1
+    runs_failed: 0
+    # 一条都没发出去：没有任何一跳打到 LinkedIn
+    outbound_sent: 0
+invariants:
+  - no_write_without_stage
+  - apply_only_after_approved
+  - provenance_respected
+rubric: >-
+  卡面上"批了之后这条不会自动发、会变成一条待办让你去 LinkedIn 发"，人读完答得上来吗？
+  待办里的文案能直接复制去发吗？
