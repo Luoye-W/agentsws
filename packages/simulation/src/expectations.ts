@@ -976,6 +976,12 @@ export function checkExpectations(
       ) {
         problems.push('卡面上没写清楚这条什么时候发出去')
       }
+      if (
+        want.manual_fallback_stated_on_card !== undefined &&
+        (p.manual_fallback_stated_on_card === true) !== want.manual_fallback_stated_on_card
+      ) {
+        problems.push('卡面上没说"批了之后会变成一条待办、不会自动发出去"')
+      }
       add(
         'social_post',
         problems.length === 0,

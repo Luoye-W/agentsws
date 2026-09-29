@@ -461,6 +461,8 @@ export function socialDeckData(
  * 服务器）、五条帖子（排期 / 已发 / 草稿 / 退回各有）、三个入群申请、四条线程
  * （其中一条是客户问题——它就是 56 那条边界在演示里的落点）。一个 token 都不放。
  */
+// WP191（docs/86 §5）：演示那个号是 FB 主页（URL 是 facebook.com），渠道从 `meta` 改成 `facebook`；
+// id 仍叫 `sa_demo_meta`，免得演示里别处挂着它的行断开。
 export function seedDemoSocial(store: SocialStore, now: string): void {
   if (store.accounts().length > 0) return
   const nowMs = Date.parse(now)
@@ -471,7 +473,7 @@ export function seedDemoSocial(store: SocialStore, now: string): void {
   store.saveAccount({
     id: 'sa_demo_meta',
     workspace_id: store.workspace_id,
-    channel: 'meta',
+    channel: 'facebook',
     handle: '@nordvolt',
     display_name: 'Nordvolt 主页',
     url: 'https://www.facebook.com/nordvolt',
@@ -494,7 +496,7 @@ export function seedDemoSocial(store: SocialStore, now: string): void {
   store.savePost({
     id: 'sp_demo_1',
     account_id: 'sa_demo_meta',
-    channel: 'meta',
+    channel: 'facebook',
     kind: 'image',
     status: 'published',
     body: '65W 桌面充电器上新：一个口喂饱笔记本、手机和耳机。',
@@ -506,7 +508,7 @@ export function seedDemoSocial(store: SocialStore, now: string): void {
   store.savePost({
     id: 'sp_demo_2',
     account_id: 'sa_demo_meta',
-    channel: 'meta',
+    channel: 'facebook',
     kind: 'post',
     status: 'scheduled',
     body: '周四晚八点开一场桌面收纳直播，来的人送线材收纳夹。',
@@ -515,7 +517,7 @@ export function seedDemoSocial(store: SocialStore, now: string): void {
   store.savePost({
     id: 'sp_demo_3',
     account_id: 'sa_demo_meta',
-    channel: 'meta',
+    channel: 'facebook',
     kind: 'image',
     status: 'failed',
     body: '春季桌面焕新合集（九宫格）。',
@@ -577,7 +579,7 @@ export function seedDemoSocial(store: SocialStore, now: string): void {
   store.saveThread({
     id: 'ct_demo_1',
     account_id: 'sa_demo_meta',
-    channel: 'meta',
+    channel: 'facebook',
     external_id: 'fb_c_1',
     surface: 'comment',
     author_external_id: 'u_2001',
@@ -589,7 +591,7 @@ export function seedDemoSocial(store: SocialStore, now: string): void {
   store.saveThread({
     id: 'ct_demo_2',
     account_id: 'sa_demo_meta',
-    channel: 'meta',
+    channel: 'facebook',
     external_id: 'fb_c_2',
     surface: 'comment',
     author_external_id: 'u_2002',
@@ -625,4 +627,54 @@ export function seedDemoSocial(store: SocialStore, now: string): void {
     status: 'open',
     triage: 'spam',
   })
+}
+
+/**
+ * WP191（docs/86 §6）：库里还写着**已拆掉的渠道**（`meta`）的行，迁到接手它的那条上。
+ *
+ * 老数据里一个 `meta` 账号只会是 FB 主页或 IG 号之一，**URL 就是答案**：
+ * `instagram.com` → `instagram`，其余 → `facebook`（契约 `superseded_by` 的第一条）。
+ * 帖子、线程、成员跟着账号走（按 `account_id`），不各判各的。
+ *
+ * 幂等：迁完的库里再没有 `meta` 账号，第二遍什么也不做。只改 `channel` 一格，
+ * 别的一个字不动（数字、状态、排期、平台 id 全留着）。
+ */
+export function migrateSupersededChannels(store: SocialStore): {
+  accounts: number
+  posts: number
+  threads: number
+  members: number
+} {
+  const out = { accounts: 0, posts: 0, threads: 0, members: 0 }
+  for (const account of store.accounts({ channel: 'meta' })) {
+    const heir: SocialChannel = /(^|\.)instagram\.com/i.test(hostOf(account.url))
+      ? 'instagram'
+      : 'facebook'
+    store.saveAccount({ ...account, channel: heir })
+    out.accounts += 1
+    for (const post of store.posts({ account_id: account.id }))
+      if (post.channel === 'meta') {
+        store.savePost({ ...post, channel: heir })
+        out.posts += 1
+      }
+    for (const thread of store.threads({ account_id: account.id }))
+      if (thread.channel === 'meta') {
+        store.saveThread({ ...thread, channel: heir })
+        out.threads += 1
+      }
+    for (const member of store.members({ account_id: account.id }))
+      if (member.channel === 'meta') {
+        store.saveMember({ ...member, channel: heir })
+        out.members += 1
+      }
+  }
+  return out
+}
+
+function hostOf(url: string): string {
+  try {
+    return new URL(url).hostname
+  } catch {
+    return ''
+  }
 }

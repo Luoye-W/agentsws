@@ -187,6 +187,7 @@ import {
   parseRole,
   productLineMatches,
   type RangeExpanded,
+  ROLE_ID_SPLITS,
   rangeTargetOfProduct,
   resolveScopeManager,
   scopeManagerReasonText,
@@ -226,6 +227,7 @@ import {
   handoffOf,
   type ScheduleConflict,
   scheduleConflicts,
+  scheduleRulesFor,
   triageThread,
 } from '@agentsws/social-core'
 import type {
@@ -1919,6 +1921,12 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
     loadBundledRole('social.discord'),
     loadBundledRole('social.telegram-group'),
     loadBundledRole('social.whatsapp'),
+    // WP191（docs/86 §5）：Meta 拆成 FB 主页 + IG，另加 Threads 与 LinkedIn。`social.meta` 仍在上面：
+    // pack 的 `assignments.yml` 写的还是它（那就是一个"老工作区"），装配完照样跑一遍拆分迁移
+    loadBundledRole('social.facebook'),
+    loadBundledRole('social.instagram'),
+    loadBundledRole('social.threads'),
+    loadBundledRole('social.linkedin'),
     loadBundledRole('dtc.community-support'),
     // WP76（58 §1）：设计岗位的五条职责。3 人 pack 里"运营"真挂着 `design.dtc`
     // （`assignments.yml`），其余四条躺在库里——躺着不产生任何行为，
@@ -1984,6 +1992,17 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
       granted_by: a.granted_by,
     })
     created.set(`${a.person_id}|${a.role_id}`, assignment)
+  }
+  /*
+   * WP191（docs/86 §6）：与服务进程启动时**同一段**拆分迁移。pack 里写着 `social.meta` 的
+   * 那几条分配，原地改成 `social.facebook`（id 不变）、另复制一条 `social.instagram`。
+   * 下面按 `人|职责` 查分配的那张表跟着补上，场景里写 `channel: facebook / instagram` 才找得到人。
+   */
+  for (const m of roles.assignments.splitRoleIds({ workspace_id })) {
+    const migrated = roles.assignments.get(m.assignment_id)
+    if (migrated !== undefined) created.set(`${m.person_id}|${m.to}`, migrated)
+    // 老 id 那一格指向的是改名前的快照，留着会让人按 `social.meta` 取到一份过期的分配
+    if (m.split_from === undefined) created.delete(`${m.person_id}|${m.from}`)
   }
   const primary: PackAssignment | undefined = pack.assignments.find((a) => a.primary === true)
   if (primary === undefined) {
@@ -2568,6 +2587,41 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
           },
         }
       }
+      /*
+       * WP191（docs/86 §4）：LinkedIn 这类"发不出去是常态"的渠道（契约 `publish_fallback`）。
+       * 合成世界里一条社媒平台的连接都没有（`connected` 只有 email / shopify），所以批了之后
+       * 这一跳**不是发出去，是开一条待办**「复制文案去 LinkedIn 发」，落在提这条帖子的那个人头上。
+       * 别的渠道照旧（下面那句"未实现"——不假装发出去了）。
+       */
+      if (change.kind === 'social_post') {
+        const after = change.after as { channel?: unknown; body?: unknown }
+        const channel = typeof after.channel === 'string' ? after.channel : ''
+        const spec = socialChannelSpec(channel)
+        const holder = roles.assignments.get(change.assignment_id)
+        if (spec?.publish_fallback === 'manual_task' && holder !== undefined) {
+          const todo = work.createTodo({
+            title: `复制文案去 ${spec.zh} 发`,
+            owner: holder.person_id,
+            note: typeof after.body === 'string' ? after.body : '',
+            horizon: 'today',
+            source: 'card',
+            position_id: holder.id,
+          })
+          appendEnvelope({
+            schema_version: 1,
+            workspace_id,
+            type: 'simulation.social_manual_task',
+            actor: { kind: 'system', id: 'sim.executor' },
+            correlation: { trace_id: traceId() },
+            payload: { change_id: change.id, channel, todo_id: todo.id, owner: holder.person_id },
+          })
+          return {
+            status: 'ok',
+            execution_id: `manual_${change.id}`,
+            outcome_ref: { type: 'todo', id: todo.id },
+          }
+        }
+      }
       if (change.kind !== 'refund') {
         return { status: 'failed', error: { message: `模拟执行器未实现 kind：${change.kind}` } }
       }
@@ -2667,8 +2721,12 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
     },
     directory: {
       canApprove: (person, item) =>
-        pack.assignments.some((a) => a.person_id === person && a.role_id === item.role_id) ||
-        person === owner,
+        pack.assignments.some(
+          (a) =>
+            a.person_id === person &&
+            // WP191：pack 里写的是老 id（`social.meta`），卡上是拆分之后的新 id
+            (a.role_id === item.role_id || ROLE_ID_SPLITS[a.role_id]?.includes(item.role_id)),
+        ) || person === owner,
       memberCount: () => pack.people.length,
       // 14 §7：升级链第一级是范围管理者。3 人公司里没有这个人，退回 owner；
       // 15 / 50 人 pack 在 people.yml 里标了 `scope_manager: true`，升级才真的换人。
@@ -6485,8 +6543,19 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
           ? []
           : scheduleConflicts({ account_id, scheduled_at, body }, socialScheduled as never, {
               now: now(clock),
+              // WP191（docs/86 §3.1）：每日上限按渠道取，与服务进程那一份同一个判据
+              rules: scheduleRulesFor(channel),
             })
       const conflicts = conflictHits.map((c) => c.message)
+      /*
+       * WP191（docs/86 §4）：这条渠道发不出去是常态（LinkedIn）、而世界里又没有它的连接 →
+       * 卡面上先说清楚"批了之后会变成一条待办，人去发"，不让人以为点了就自动出去了。
+       */
+      const spec = socialChannelSpec(channel)
+      const manualNote =
+        spec?.publish_fallback === 'manual_task'
+          ? `${spec.zh} 没连上（或发帖权限没批）：批了之后这条会变成一条待办「复制文案去 ${spec.zh} 发」，不会自动发出去。`
+          : undefined
       const outcome = await txn.ledger.stage({
         workspace_id,
         role_id: asg.role_id,
@@ -6508,6 +6577,7 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
             ? '没排时间：批了就发。'
             : `排在 ${scheduled_at} 自己出去——到点之后没有第二道门，所以门在这一下。`,
           ...conflicts,
+          ...(manualNote === undefined ? [] : [manualNote]),
         ],
         created_by: { kind: 'agent', id: `agent_${asg.role_id}` },
         mandate,
@@ -6520,12 +6590,13 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
         }),
         approval: {
           title: `发布：${socialLabelOf(channel)}`,
-          summary:
+          summary: `${
             scheduled_at === undefined
               ? body.slice(0, 120)
               : `${body.slice(0, 100)}（排在 ${scheduled_at}）${
                   conflicts.length === 0 ? '' : ` ⚠ ${conflicts.join(' ')}`
-                }`,
+                }`
+          }${manualNote === undefined ? '' : ` ${manualNote}`}`,
           recipients: [recipientOf('scope_manager')],
           proposer: { kind: 'agent', id: `agent_${asg.role_id}`, assignment_id: asg.id },
           rule: 'scope_manager',
@@ -6565,6 +6636,10 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
           conflict_kinds: conflictHits.map((c) => c.kind),
           conflict_stated_on_card:
             conflicts.length === 0 || conflicts.every((c) => outcome.approval.summary.includes(c)),
+          // WP191：批了之后会变成待办的那一句在不在卡面上（只有 LinkedIn 这类渠道才有这一格）
+          ...(manualNote === undefined
+            ? {}
+            : { manual_fallback_stated_on_card: outcome.approval.summary.includes(manualNote) }),
         },
       })
       // 排进去了才算占位：被 guardrail 拦下的那一条不占下一条的时间

@@ -32,7 +32,7 @@ import {
   type StoreBackend,
 } from './backend.js'
 import { effectiveConfig as effectiveConfigPure, riskClassOf } from './effective.js'
-import { ROLE_ID_ALIASES, resolveRoleId } from './load.js'
+import { ROLE_ID_ALIASES, ROLE_ID_SPLITS, resolveRoleId } from './load.js'
 import { assertTighterOverrides } from './overrides.js'
 import { compilePolicies as compilePoliciesPure, createPolicyEngine } from './policy.js'
 import { applyPosition as applyPositionPure, buildAssignment } from './position.js'
@@ -228,6 +228,11 @@ export interface RoleMigration {
   to: RoleId
   /** 迁过去之后记下的职责版本。 */
   role_version: string
+  /**
+   * WP191：这一条是从哪条分配**复制**出来的（一拆几的时候，第二条及以后）。
+   * 没有这一格 = 原分配就地改名。
+   */
+  split_from?: AssignmentId
 }
 
 export interface AssignmentApi {
@@ -251,6 +256,12 @@ export interface AssignmentApi {
    * 的活分配改写成新 id。幂等：没有旧 id 的库跑一遍返回空数组。
    */
   migrateRoleIds(filter?: { workspace_id?: WorkspaceId }): RoleMigration[]
+  /**
+   * WP191（docs/86 §6）：把**一拆几**的旧职责（`ROLE_ID_SPLITS`）的活分配迁过去：
+   * 原分配就地改成第一条（id 不变），其余各复制一条。幂等：没有旧 id 的库跑一遍返回空数组；
+   * 中途断过的库再跑一遍只补没做完的那一半。
+   */
+  splitRoleIds(filter?: { workspace_id?: WorkspaceId }): RoleMigration[]
   /** 44：整个工作区活着的分配（算范围下推 / 品牌影响面时用）。 */
   listByWorkspace(
     workspace: WorkspaceId,
@@ -778,6 +789,64 @@ export function createRoleStore(options: RoleStoreOptions): RoleStore {
             from,
             to,
             role_version: role.version,
+          })
+        }
+      }
+      return out
+    },
+    /**
+     * WP191（docs/86 §6）：一拆几。
+     *
+     * **先复制、后改名**：中途断电重跑时，原分配还写着旧 id → 看到复制的那条已经在了
+     * 就跳过 → 再改名。反过来的话，改完名就认不出它原来是哪条，复制的那条永远补不上。
+     * 复制那条的 id 由（原分配 id × 目标职责）派生，所以"复制过没有"不需要另一张标记表。
+     *
+     * 复制的只有**分配本身**（范围、额度覆盖、自动化状态与采纳率）：待办、卡、队列、
+     * 定时任务挂在原 id 上，留给接手的第一条——它们本来就是同一个号上的同一摊活。
+     */
+    splitRoleIds(filter) {
+      const out: RoleMigration[] = []
+      for (const [from, heirs] of Object.entries(ROLE_ID_SPLITS)) {
+        const [primary, ...rest] = heirs
+        if (primary === undefined) continue
+        const primaryRole = roleMap.get(primary)
+        const restRoles = rest.map((id) => ({ id, role: roleMap.get(id) }))
+        // 新职责有一条没加载就整组跳过（宁可不改也不改坏）
+        if (primaryRole === undefined || restRoles.some((r) => r.role === undefined)) continue
+        const found = backend.listAssignments({
+          ...(filter?.workspace_id === undefined ? {} : { workspace_id: filter.workspace_id }),
+          role_id: from,
+        })
+        for (const assignment of found) {
+          if (assignment.revoked_at !== undefined) continue
+          for (const { id: to, role } of restRoles) {
+            if (role === undefined) continue
+            const id = mintId(canonicalJson({ split_from: assignment.id, role: to }))
+            if (backend.getAssignment(id) !== undefined) continue
+            persist({
+              ...structuredClone(assignment),
+              id,
+              role_id: to,
+              role_version: role.version,
+            })
+            out.push({
+              assignment_id: id,
+              person_id: assignment.person_id,
+              workspace_id: assignment.workspace_id,
+              from,
+              to,
+              role_version: role.version,
+              split_from: assignment.id,
+            })
+          }
+          persist({ ...assignment, role_id: primary, role_version: primaryRole.version })
+          out.push({
+            assignment_id: assignment.id,
+            person_id: assignment.person_id,
+            workspace_id: assignment.workspace_id,
+            from,
+            to: primary,
+            role_version: primaryRole.version,
           })
         }
       }

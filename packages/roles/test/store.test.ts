@@ -340,3 +340,122 @@ describe('旧职责 id 的别名与迁移（WP54 / 48 v2 L1）', () => {
     reopened.close()
   })
 })
+
+describe('WP191（docs/86 §6）一拆几：social.meta → social.facebook + social.instagram', () => {
+  const socialRoles = () => [
+    loadBundledRole('social.meta'),
+    loadBundledRole('social.facebook'),
+    loadBundledRole('social.instagram'),
+  ]
+
+  it('原分配就地改成 FB（id 不变），另复制一条 IG；范围、额度覆盖、自动化状态照抄；可重复跑', () => {
+    const dbPath = tempDb()
+    const s = createRoleStore({ clock: fixedClock(), dbPath, roles: socialRoles() })
+    const live = s.assignments.create({
+      person_id: 'p_li',
+      workspace_id: 'ws_1',
+      role_id: 'social.meta',
+      ranges: [{ kind: 'store', id: 'shop_a' }],
+      granted_by: 'p_owner',
+      mandate_overrides: { stage_post: { caps: { max_posts_per_day: 2 } } },
+    })
+    const gone = s.assignments.create({
+      person_id: 'p_chen',
+      workspace_id: 'ws_1',
+      role_id: 'social.meta',
+      granted_by: 'p_owner',
+    })
+    s.assignments.revoke(gone.id)
+    s.close()
+
+    // 重开一次：迁移是启动时做的
+    const reopened = createRoleStore({ clock: fixedClock(), dbPath, roles: socialRoles() })
+    const before = reopened.assignments.require(live.id)
+    const out = reopened.assignments.splitRoleIds()
+    expect(out).toHaveLength(2)
+    const copied = out.find((m) => m.split_from !== undefined)
+    const renamed = out.find((m) => m.split_from === undefined)
+    expect(renamed).toMatchObject({
+      assignment_id: live.id,
+      from: 'social.meta',
+      to: 'social.facebook',
+    })
+    expect(copied).toMatchObject({
+      from: 'social.meta',
+      to: 'social.instagram',
+      split_from: live.id,
+    })
+
+    const fb = reopened.assignments.require(live.id)
+    expect(fb.role_id).toBe('social.facebook')
+    const ig = reopened.assignments.require(copied?.assignment_id ?? '')
+    expect(ig.role_id).toBe('social.instagram')
+    expect(ig.id).not.toBe(live.id)
+    for (const a of [fb, ig]) {
+      expect(a.person_id).toBe('p_li')
+      expect(a.ranges).toEqual(before.ranges)
+      expect(a.mandate_overrides).toEqual(before.mandate_overrides)
+      expect(a.automation_state).toEqual(before.automation_state)
+      expect(a.granted_at).toBe(before.granted_at)
+    }
+    // 已撤销的不动
+    expect(reopened.assignments.require(gone.id).role_id).toBe('social.meta')
+    // 幂等
+    expect(reopened.assignments.splitRoleIds()).toEqual([])
+    expect(reopened.assignments.listByPerson('p_li').filter((a) => !a.revoked_at)).toHaveLength(2)
+    reopened.close()
+  })
+
+  it('中途断过（IG 已复制、原分配还没改名）：再跑只补改名那一半，不会复制第二条 IG', () => {
+    const dbPath = tempDb()
+    const s = createRoleStore({ clock: fixedClock(), dbPath, roles: socialRoles() })
+    const live = s.assignments.create({
+      person_id: 'p_li',
+      workspace_id: 'ws_1',
+      role_id: 'social.meta',
+      granted_by: 'p_owner',
+    })
+    const first = s.assignments.splitRoleIds()
+    const igId = first.find((m) => m.split_from !== undefined)?.assignment_id ?? ''
+    s.close()
+
+    // 伪造"断在改名之前"：把原分配改回 social.meta
+    const require_ = createRequire(import.meta.url)
+    const Database = require_('better-sqlite3') as new (
+      path: string,
+    ) => { prepare(sql: string): { run(...args: string[]): void }; close(): void }
+    const raw = new Database(dbPath)
+    raw
+      .prepare(
+        'UPDATE assignments SET role_id = ?, doc = replace(doc, \'"social.facebook"\', \'"social.meta"\') WHERE id = ?',
+      )
+      .run('social.meta', live.id)
+    raw.close()
+
+    const reopened = createRoleStore({ clock: fixedClock(), dbPath, roles: socialRoles() })
+    const again = reopened.assignments.splitRoleIds()
+    expect(again).toEqual([
+      expect.objectContaining({ assignment_id: live.id, to: 'social.facebook' }),
+    ])
+    expect(reopened.assignments.require(igId).role_id).toBe('social.instagram')
+    expect(
+      reopened.assignments.listByPerson('p_li').filter((a) => a.role_id === 'social.instagram'),
+    ).toHaveLength(1)
+    reopened.close()
+  })
+
+  it('新职责没加载就整组跳过（宁可不改也不改坏）', () => {
+    const s = createRoleStore({
+      clock: fixedClock(),
+      roles: [loadBundledRole('social.meta'), loadBundledRole('social.facebook')],
+    })
+    s.assignments.create({
+      person_id: 'p_li',
+      workspace_id: 'ws_1',
+      role_id: 'social.meta',
+      granted_by: 'p_owner',
+    })
+    expect(s.assignments.splitRoleIds()).toEqual([])
+    expect(s.assignments.listByPerson('p_li')[0]?.role_id).toBe('social.meta')
+  })
+})

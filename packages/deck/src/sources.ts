@@ -46,6 +46,9 @@ export const SOURCES_BY_SERVICE: Readonly<Record<string, readonly DataSourceId[]
   // WP72（56 §1）：社媒运营那六张新卡，一张喂一个渠道源。
   // Facebook 群组不在这里——它没有连接器（Groups API 已停），走受控浏览器。
   meta_graph: ['social_meta'],
+  // WP191（docs/86 §5）
+  threads_api: ['social_threads'],
+  linkedin_api: ['social_linkedin'],
   tiktok_content: ['social_tiktok'],
   reddit: ['social_reddit'],
   discord_bot: ['social_discord'],
@@ -101,6 +104,11 @@ export const SOCIAL_SOURCE_BY_CHANNEL: Readonly<Record<string, DataSourceId>> = 
   discord: 'social_discord',
   telegram_group: 'social_telegram',
   whatsapp: 'social_whatsapp',
+  // WP191（docs/86 §5）：FB 主页与 IG 都读 `social_meta`（同一张 `meta_graph` 卡）
+  facebook: 'social_meta',
+  instagram: 'social_meta',
+  threads: 'social_threads',
+  linkedin: 'social_linkedin',
 }
 
 /**
@@ -154,6 +162,9 @@ export const ALL_DATA_SOURCES: readonly DataSourceId[] = [
   'social_discord',
   'social_telegram',
   'social_whatsapp',
+  // WP191（docs/86 §5）
+  'social_threads',
+  'social_linkedin',
   // WP76（58 §3）：我们自己的设计库。设计岗位没有渠道源（见上面那段注释）
   'design',
   // WP77（59 §2）：我们自己的建站库（巡检结论、邮件模板、已装 App）

@@ -4575,12 +4575,17 @@ export const saveWecomBot = (values: {
 
 /* ── WP73（56 §6）：社媒库 `/v1/social/*` ───────────────────────────────── */
 
-/** 九条渠道（真源是契约的 `SOCIAL_CHANNELS`；工作台不依赖服务端包，这里照抄一份）。 */
+/** 各条渠道（真源是契约的 `SOCIAL_CHANNELS`；工作台不依赖服务端包，这里照抄一份）。 */
 export type SocialChannelId =
   | 'meta'
   | 'tiktok'
   | 'x'
   | 'youtube'
+  // WP191（docs/86 §5）：Meta 拆成 FB 主页 + IG，另加 Threads 与 LinkedIn（`meta` 留着认老数据）
+  | 'facebook'
+  | 'instagram'
+  | 'threads'
+  | 'linkedin'
   | 'facebook_group'
   | 'reddit'
   | 'discord'

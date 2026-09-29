@@ -78,6 +78,8 @@ export function looksLikePolicy(text: string): boolean {
 const SOCIAL_HOSTS: readonly [RegExp, string][] = [
   [/(^|\.)instagram\.com$/i, 'instagram'],
   [/(^|\.)facebook\.com$/i, 'facebook'],
+  // WP191（docs/86 §5）：Threads 从 Meta 里拆出来成了一条社媒职责，首页挂着它就要认得出来
+  [/(^|\.)threads\.(net|com)$/i, 'threads'],
   [/(^|\.)tiktok\.com$/i, 'tiktok'],
   [/(^|\.)youtube\.com$/i, 'youtube'],
   [/(^|\.)(twitter|x)\.com$/i, 'x'],

@@ -1154,6 +1154,9 @@ const zh: Table = {
   'connections.line.tiktok_research': '申请制：向 TikTok 说明用途，批了才有数据。',
   'connections.line.x_api': 'X 的官方接口要付费档，免费档读不了用户资料。',
   'connections.line.meta_graph': '一把 token 管 FB 主页 + IG：连上就能读，能发要过审核。',
+  // WP191（docs/86 §4 / §5）
+  'connections.line.threads_api': '发 Threads、管回复；授权与 FB / IG 分开，要过审核。',
+  'connections.line.linkedin_api': '发到公司主页或老板本人号；批不下来就给你一条待办去发。',
   'connections.line.tiktok_content': '发 TikTok 视频；申请制，与红人那条的 Research API 分开申请。',
   'connections.line.reddit': '注册一个 Reddit 应用；群发只能是置顶帖，不许群发私信。',
   'connections.line.discord_bot': '读消息与成员、发公告、删消息、禁言。',
@@ -3001,9 +3004,11 @@ const zh: Table = {
   'help.conn-shopify.title': '连 Shopify 店铺',
   'help.conn-email.title': '连邮箱（任意邮箱 IMAP / SMTP）',
   'help.conn-google.title': 'Google 家的几个连接',
-  'help.conn-meta.title': 'Meta 家的几个连接（Facebook / Instagram / WhatsApp）',
+  'help.conn-meta.title': 'Meta 家的几个连接（Facebook / Instagram / Threads / WhatsApp）',
   'help.conn-tiktok.title': 'TikTok 的三个连接',
   'help.conn-x.title': 'X（Twitter）的两个连接',
+  // WP191（docs/86 §4）
+  'help.conn-linkedin.title': 'LinkedIn：公司主页与老板本人号',
   'help.conn-community.title': '社群机器人：Reddit / Discord / Telegram',
   'help.conn-marketing-logistics.title': '邮件营销与物流追踪',
   'help.browser-extension.title': '浏览器插件「红人助手」',
@@ -4366,6 +4371,11 @@ const en: Table = {
   'connections.line.x_api': 'X’s API is paid; the free tier cannot read profiles.',
   'connections.line.meta_graph':
     'One token for an FB Page + IG: reads once connected, posting needs App Review.',
+  // WP191（docs/86 §4 / §5）
+  'connections.line.threads_api':
+    'Post to Threads and manage replies; authorised separately from FB / IG, needs review.',
+  'connections.line.linkedin_api':
+    'Post to the Company Page or the founder’s profile; if not approved, you get a to-do instead.',
   'connections.line.tiktok_content':
     'Post TikTok videos; by application, separate from the Research API.',
   'connections.line.reddit':
@@ -6277,9 +6287,11 @@ const en: Table = {
   'help.conn-shopify.title': 'Connect your Shopify store',
   'help.conn-email.title': 'Connect a mailbox (any email via IMAP / SMTP)',
   'help.conn-google.title': 'The Google connections',
-  'help.conn-meta.title': 'The Meta connections (Facebook / Instagram / WhatsApp)',
+  'help.conn-meta.title': 'The Meta connections (Facebook / Instagram / Threads / WhatsApp)',
   'help.conn-tiktok.title': 'The three TikTok connections',
   'help.conn-x.title': 'The two X (Twitter) connections',
+  // WP191（docs/86 §4）
+  'help.conn-linkedin.title': 'LinkedIn: the Company Page and the founder’s own profile',
   'help.conn-community.title': 'Community bots: Reddit / Discord / Telegram',
   'help.conn-marketing-logistics.title': 'Email marketing and shipment tracking',
   'help.browser-extension.title': 'The “Creator helper” browser extension',

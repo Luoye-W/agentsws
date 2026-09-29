@@ -12,10 +12,14 @@
 
 import type { SocialChannel } from '@agentsws/contracts'
 import { createDiscordAdapter } from './discord.js'
+import { createFacebookPageAdapter } from './facebook.js'
 import { type BrowserExecutor, createFacebookGroupAdapter } from './facebook-group.js'
+import { createInstagramAdapter } from './instagram.js'
+import { createLinkedInAdapter } from './linkedin.js'
 import { createMetaAdapter } from './meta.js'
 import { createRedditAdapter } from './reddit.js'
 import { createTelegramAdapter } from './telegram.js'
+import { createThreadsAdapter } from './threads.js'
 import { createTikTokAdapter } from './tiktok.js'
 import type { SocialChannelAdapter, SocialTransport } from './types.js'
 import { createWhatsAppAdapter } from './whatsapp.js'
@@ -23,17 +27,21 @@ import { createXAdapter } from './x.js'
 import { createYouTubeSocialAdapter } from './youtube.js'
 
 export * from './discord.js'
+export * from './facebook.js'
 export * from './facebook-group.js'
+export * from './instagram.js'
+export * from './linkedin.js'
 export * from './meta.js'
 export * from './reddit.js'
 export * from './telegram.js'
+export * from './threads.js'
 export * from './tiktok.js'
 export * from './types.js'
 export * from './whatsapp.js'
 export * from './x.js'
 export * from './youtube.js'
 
-/** 一个 transport → 九条渠道的适配器。 */
+/** 一个 transport → 全部渠道的适配器（WP191 起十三条，含老的 `meta`）。 */
 export function createSocialAdapters(
   transport: SocialTransport,
   /**
@@ -47,6 +55,12 @@ export function createSocialAdapters(
     tiktok: createTikTokAdapter(transport),
     x: createXAdapter(transport),
     youtube: createYouTubeSocialAdapter(transport),
+    // WP191（docs/86 §5）：Meta 拆成三条 + LinkedIn。`meta` 那一行留着——
+    // 老工作区迁移前排下的帖子，到点仍按它发（与 `facebook` 是同一份实现）
+    facebook: createFacebookPageAdapter(transport),
+    instagram: createInstagramAdapter(transport),
+    threads: createThreadsAdapter(transport),
+    linkedin: createLinkedInAdapter(transport),
     facebook_group: createFacebookGroupAdapter(
       transport,
       options.browser === undefined ? {} : { browser: options.browser },

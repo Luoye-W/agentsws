@@ -2630,6 +2630,8 @@ function parseExpected(source: string, raw: unknown): ScenarioExpected {
       auto_approved: 'bool',
       scheduled_at: 'str',
       stated_on_card: 'bool',
+      // WP191（docs/86 §4）
+      manual_fallback_stated_on_card: 'bool',
     },
     social_reply: {
       triage: 'str',

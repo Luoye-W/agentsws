@@ -41,7 +41,13 @@ export type SocialFetch = (
     body?: string
     signal?: AbortSignal
   },
-) => Promise<{ ok: boolean; status: number; text(): Promise<string> }>
+) => Promise<{
+  ok: boolean
+  status: number
+  text(): Promise<string>
+  /** WP191：LinkedIn 发帖的 id 在 `x-restli-id` 头上（`globalThis.fetch` 的 Response 结构上满足它）。 */
+  headers?: { get(name: string): string | null }
+}>
 
 /** 打一跳最多等多久。 */
 export const SOCIAL_HTTP_TIMEOUT_MS = 12_000
@@ -106,6 +112,11 @@ export function createSocialChannels(options: SocialChannelsOptions): SocialChan
       return connectionOf(channel) !== undefined
     },
     now: () => options.clock.now(),
+    // WP191：IG / Threads 的视频容器要等处理完——隔几秒问一次（`social-core` 自己不碰计时器）
+    sleep: (ms) =>
+      new Promise<void>((resolve) => {
+        setTimeout(resolve, ms)
+      }),
     credential: async (channel) => {
       const connection = connectionOf(channel)
       if (connection === undefined) throw new Error(`${channel} 现在没有连上`)
@@ -130,7 +141,12 @@ export function createSocialChannels(options: SocialChannelsOptions): SocialChan
           ...(init?.body === undefined ? {} : { body: init.body }),
           signal: controller.signal,
         })
-        return { ok: res.ok, status: res.status, text: () => res.text() }
+        return {
+          ok: res.ok,
+          status: res.status,
+          text: () => res.text(),
+          ...(res.headers === undefined ? {} : { headers: res.headers }),
+        }
       } finally {
         clearTimeout(timer)
       }
