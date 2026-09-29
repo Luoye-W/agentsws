@@ -6541,7 +6541,7 @@ export interface paths {
       path?: never
       cookie?: never
     }
-    /** 看一次邮箱的积分价（不消耗；价取 pricing.json 的 data.kol.lookup） */
+    /** 看一次邮箱的积分价（不消耗；价取 pricing.json 的 data.kol.reveal） */
     get: operations['extensionRevealPricing']
     put?: never
     post?: never
