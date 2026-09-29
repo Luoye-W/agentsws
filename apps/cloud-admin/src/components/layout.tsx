@@ -3,9 +3,12 @@
  *
  * 左上角是母品牌标记——取 `@agentsws/brand` 的那一份 SVG（WP112），**不自己画**：
  * 全仓只有一处几何，标记改一次所有地方跟着改。
+ *
+ * WP195：用的是**待机**那一张（`BRAND_MARK_SVG_IDLE_DARK`，keyframes 与「少一点动效」时停
+ * 都内联在 SVG 里）——大部分时间一动不动，隔几秒沿渐变方向轻轻起伏一下。
  */
 
-import { BRAND_MARK_SVG_DARK } from '@agentsws/brand'
+import { BRAND_MARK_SVG_IDLE_DARK } from '@agentsws/brand'
 import {
   Activity,
   Building2,
@@ -48,7 +51,7 @@ export function Layout({ children }: { children: React.ReactNode }): React.React
             className="inline-flex size-8 shrink-0 items-center justify-center rounded-[10px] bg-[#1B1D22]"
             aria-hidden
             // 标记是一段固定的 SVG 常量（`@agentsws/brand`），不含任何外部输入
-            dangerouslySetInnerHTML={{ __html: sized(BRAND_MARK_SVG_DARK, 20) }}
+            dangerouslySetInnerHTML={{ __html: sized(BRAND_MARK_SVG_IDLE_DARK, 20) }}
           />
           <span className="ws-display min-w-0 text-[13px] leading-tight">
             Agents {lang === 'zh' ? '工坊' : 'Workshop'}

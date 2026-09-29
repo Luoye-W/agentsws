@@ -11,6 +11,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { DataMapPanel } from '@/components/data-map'
+import { MOTION_PREFS, setMotionPref, useMotionPref } from '@/components/design'
 import { ModelsPanel } from '@/components/models/models-panel'
 import { NoModelBanner } from '@/components/models/no-model-banner'
 import { type ProfileDraft, ProfileForm } from '@/components/onboarding/profile-form'
@@ -42,6 +43,7 @@ export function SettingsPage({
   defaultTab?: 'general' | 'account' | 'plugins'
 }): React.ReactNode {
   const { t, theme, toggleTheme, lang, setLang, position } = useApp()
+  const motionPref = useMotionPref()
   const client = useQueryClient()
   const [saved, setSaved] = useState(false)
   const [failure, setFailure] = useState<string | undefined>(undefined)
@@ -147,6 +149,40 @@ export function SettingsPage({
               >
                 {lang === 'zh' ? '中文' : 'English'}
               </Button>
+            </div>
+            {/*
+              WP195：界面动效——跟随系统（默认）/ 开 / 关。没有单独的「外观」页，
+              就和主题、语言放在一起。管的是品牌标记的动效，加载转圈不归它管。
+            */}
+            <div className="flex items-center justify-between">
+              <span className="flex items-center gap-1">
+                {t('settings.motion')}
+                <Hint text={t('settings.motion.hint')} />
+              </span>
+              <fieldset
+                className="inline-flex rounded-full border p-0.5 text-xs"
+                aria-label={t('settings.motion')}
+                data-testid="settings-motion"
+              >
+                {MOTION_PREFS.map((m) => (
+                  <button
+                    key={m}
+                    type="button"
+                    aria-pressed={m === motionPref}
+                    data-value={m}
+                    className={
+                      m === motionPref
+                        ? 'rounded-full bg-primary px-2.5 py-0.5 text-primary-foreground'
+                        : 'rounded-full px-2.5 py-0.5 text-muted-foreground hover:text-foreground'
+                    }
+                    onClick={() => {
+                      setMotionPref(m)
+                    }}
+                  >
+                    {t(`settings.motion.${m}`)}
+                  </button>
+                ))}
+              </fieldset>
             </div>
             {identity === undefined ? null : (
               <div className="flex items-center justify-between">

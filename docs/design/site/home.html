@@ -193,6 +193,7 @@ section{scroll-margin-top:80px}
 .base h2{color:var(--term-ink);font-size:38px}
 .base .eyebrow{color:var(--term-accent)}
 .base .sub{color:var(--term-muted)}
+.base .hint{border-color:var(--term-muted);color:var(--term-muted)}
 .stats{display:flex;gap:36px;margin:30px 0 32px}
 .stat b{display:block;font:700 32px/1.1 var(--display);color:var(--term-ink)}
 .stat span{font-size:13px}
@@ -266,8 +267,180 @@ section{scroll-margin-top:80px}
 .bm.paused rect{animation-play-state:paused}
 /* 系统开了「减少动态效果」：一律静态 */
 @media (prefers-reduced-motion:reduce){.bm rect{animation:none!important;opacity:1!important;transform:none!important}}
-.hero-mark{margin-bottom:22px}
+.big-mark{position:absolute;right:-34px;top:-96px;z-index:2;line-height:0}
+.float-card{z-index:3}
+.shot .frame{position:relative;z-index:1}
+.hero .shot{margin-top:72px}
 .roles-mark{margin-bottom:18px}
+
+/* ── 为什么：四级台阶（WP193b 第二版）。画面是主角；元素的「基础样式 = 最后一帧」，
+   .lit 时从第一帧播到最后一帧，所以没脚本、或开了「减少动态效果」时直接看到最后一帧 ── */
+.why{border-top:1px solid var(--line);padding-bottom:120px}
+.why .wrap{max-width:1360px}
+.stairs{list-style:none;margin:56px 0 0;padding:0;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:20px;align-items:start}
+.stair{transition:opacity .5s,filter .5s,transform .5s}
+.stair:nth-child(1){margin-top:132px}.stair:nth-child(2){margin-top:88px}.stair:nth-child(3){margin-top:44px}
+.stairs.js .stair:not(.lit){opacity:.38;filter:saturate(.3)}
+.stairs.js .stair.cur .scene{box-shadow:var(--glow),var(--shadow-hover)}
+.stair-txt{padding:16px 4px 0;border-top:2px solid var(--line);margin-top:14px}
+.stairs.js .stair.lit .stair-txt,.stairs:not(.js) .stair-txt{border-top-color:var(--brand)}
+.stair .lv{font:600 13px var(--display);color:var(--brand);letter-spacing:.06em}
+.stair h3{font-size:18px;font-weight:600;margin:4px 0 6px}
+.stair p{font-size:14px;line-height:1.6;color:var(--muted)}
+.scene{position:relative;height:280px;border-radius:16px;background:var(--card);box-shadow:var(--shadow);overflow:hidden;transition:box-shadow .4s}
+
+/* ① 面板落灰 */
+.s1{background:var(--surface)}
+.dash{position:absolute;inset:18px 16px 36px;border-radius:12px;background:var(--card);box-shadow:0 0 0 1px var(--line);padding:10px 12px;filter:grayscale(1);opacity:.55}
+.dash-h{display:flex;align-items:center;gap:4px;font-size:11px;color:var(--ink);font-weight:600;margin-bottom:8px}
+.dash-h i{width:6px;height:6px;border-radius:50%;background:var(--line);display:block}
+.dash-h span{margin-left:6px}
+.kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:8px}
+.kpis div{background:var(--surface);border-radius:8px;padding:6px 7px}
+.kpis b{display:block;font:700 15px/1.2 var(--display)}
+.kpis small{font-size:10px;color:var(--muted)}
+.c1{color:var(--brand)}.c2{color:var(--info)}.c3{color:var(--warn)}
+.spark{width:100%;height:38px;display:block}
+.spark path{fill:none;stroke:var(--brand);stroke-width:2.5;vector-effect:non-scaling-stroke}
+.bars{display:flex;align-items:flex-end;gap:5px;height:52px;margin-top:6px}
+.bars i{flex:1;border-radius:3px 3px 0 0;background:linear-gradient(var(--info),var(--brand));display:block}
+.dust{position:absolute;inset:0;pointer-events:none;opacity:1;
+  background-image:radial-gradient(circle,rgba(120,110,95,.28) 1px,transparent 1.6px),radial-gradient(circle,rgba(120,110,95,.18) 1px,transparent 1.4px);
+  background-size:13px 11px,7px 9px;background-position:0 0,4px 5px}
+.stale{position:absolute;right:12px;bottom:10px;font-size:12px;font-weight:600;color:var(--warn);background:var(--warn-bg);padding:4px 10px;border-radius:8px;transform:rotate(-3deg)}
+.stair.lit .dash{animation:s1-fade 2.4s ease-in .3s both}
+.stair.lit .dust{animation:s1-dust 2.4s ease-in .6s both}
+.stair.lit .stale{animation:s1-note .5s cubic-bezier(.34,1.56,.64,1) 2.5s both}
+@keyframes s1-fade{from{filter:grayscale(0);opacity:1}to{filter:grayscale(1);opacity:.55}}
+@keyframes s1-dust{from{opacity:0}to{opacity:1}}
+@keyframes s1-note{from{opacity:0;transform:translateY(8px) rotate(-3deg) scale(.9)}to{opacity:1;transform:rotate(-3deg)}}
+
+/* ② 手动工具：一只手一行行点，最后点「导出 CSV」 */
+.tool{position:absolute;inset:16px 14px;display:flex;flex-direction:column;gap:8px}
+.search{display:flex;align-items:center;gap:6px;height:30px;padding:0 10px;border-radius:9px;background:var(--surface);box-shadow:0 0 0 1px var(--line);font-size:12px;color:var(--ink)}
+.search svg{width:14px;height:14px;fill:none;stroke:var(--muted);stroke-width:2}
+.tbl{border-radius:9px;box-shadow:0 0 0 1px var(--line);overflow:hidden}
+.tr{display:grid;grid-template-columns:1.5fr 1fr .8fr;padding:0 10px;height:30px;align-items:center;font-size:12px;color:var(--body);border-top:1px solid var(--line)}
+.tr.th{border-top:0;background:var(--surface);font-size:11px;color:var(--muted);height:24px}
+.tr span:last-child{color:var(--muted)}
+.tool-f{display:flex;align-items:center;justify-content:space-between;font-size:11px;color:var(--muted);margin-top:auto}
+.csv{font-size:12px;font-weight:600;color:var(--brand-ink);background:var(--tint);padding:5px 10px;border-radius:8px}
+.hand{position:absolute;width:30px;height:30px;right:34px;bottom:-4px;fill:var(--card);stroke:var(--ink);stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;filter:drop-shadow(0 2px 3px rgba(0,0,0,.15))}
+.stair.lit .hand{animation:s2-hand 4.8s ease-in-out .2s infinite}
+.stair.lit .tr.r1{animation:s2-row 4.8s .2s infinite}
+.stair.lit .tr.r2{animation:s2-row 4.8s 1.2s infinite}
+.stair.lit .tr.r3{animation:s2-row 4.8s 2.2s infinite}
+.stair.lit .csv{animation:s2-csv 4.8s .2s infinite}
+/* 手从第一行 → 第二行 → 第三行 → 导出 CSV（相对最后停的位置） */
+@keyframes s2-hand{0%,12%{transform:translate(-170px,-160px)}20%,32%{transform:translate(-170px,-130px)}40%,52%{transform:translate(-170px,-100px)}66%,90%{transform:translate(0,0)}100%{transform:translate(-170px,-160px)}}
+@keyframes s2-row{0%,4%{background:transparent}8%,16%{background:var(--tint)}24%,100%{background:transparent}}
+@keyframes s2-csv{0%,68%{transform:none}72%{transform:scale(.92)}78%,100%{transform:none}}
+
+/* ③ 一个 Agent 端到端 */
+.s3{padding:16px 14px;display:flex;flex-direction:column;gap:14px}
+.s3-h{display:flex;align-items:center;gap:8px}
+.s3-h small{font-size:11px;color:var(--muted);margin-left:-3px}
+.tag{font-size:12px;font-weight:600;color:var(--ink);background:var(--surface);box-shadow:0 0 0 1px var(--line);border-radius:7px;padding:3px 8px}
+.chain{display:flex;align-items:center}
+.node{flex:1;min-width:0;text-align:center;background:var(--surface);border-radius:10px;padding:10px 4px 8px;box-shadow:0 0 0 1px var(--line)}
+.node i{display:block;width:18px;height:18px;margin:0 auto 5px;border-radius:50%;background:var(--brand);position:relative}
+.node i::after{content:"";position:absolute;left:6px;top:3px;width:4px;height:8px;border:solid var(--brand-fg);border-width:0 2px 2px 0;transform:rotate(45deg)}
+.node b{display:block;font-size:13px;color:var(--ink);font-weight:600}
+.node small{font-size:10px;color:var(--muted);white-space:nowrap}
+.link{width:12px;height:2px;background:var(--brand);flex:none;transform-origin:left}
+.learn{margin-top:auto;border-radius:10px;background:var(--tint);padding:9px 11px}
+.lbadge{display:inline-block;font-size:11px;font-weight:600;color:var(--brand-fg);background:var(--brand);border-radius:6px;padding:1px 7px;margin-bottom:4px}
+.learn p{font-size:12px;line-height:1.5;color:var(--brand-ink)}
+.stair.lit .n1 i{animation:s3-on .4s ease-out .3s both}
+.stair.lit .l1{animation:s3-link .4s ease-out .7s both}
+.stair.lit .n2 i{animation:s3-on .4s ease-out 1.1s both}
+.stair.lit .l2{animation:s3-link .4s ease-out 1.5s both}
+.stair.lit .n3 i{animation:s3-on .4s ease-out 1.9s both}
+.stair.lit .learn{animation:s3-learn .5s cubic-bezier(.22,1,.36,1) 2.4s both}
+@keyframes s3-on{from{background:var(--line);transform:scale(.6)}to{background:var(--brand);transform:none}}
+@keyframes s3-link{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+@keyframes s3-learn{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+
+/* ④ 一队 Agents：一变一队 → 岗位卡 → 交接 → 汇成一张待拍板的卡 */
+.s4{display:grid;place-items:center;padding:8px}
+.team{width:100%;max-width:320px;height:auto;overflow:visible}
+.team text{font-family:var(--sans)}
+.t-mute{font-size:11px;fill:var(--muted)}
+.t-b{font-size:13px;font-weight:600;fill:var(--ink)}
+.t-s{font-size:10.5px;fill:var(--muted)}
+.t-brand{font-size:11px;font-weight:600;fill:var(--brand)}
+.t-ok{font-size:11px;font-weight:600;fill:var(--brand-fg)}
+.t-hand{font-size:9px;fill:var(--warn);font-weight:600}
+.role rect{fill:var(--surface);stroke:var(--line)}
+.d-info{fill:var(--info)}.d-good{fill:var(--good)}.d-warn{fill:var(--warn)}
+.arrow,.hand-off{fill:none;stroke:var(--brand);stroke-width:1.6}
+.hand-off{stroke:var(--warn);stroke-dasharray:3 3}
+.ah{fill:var(--brand)}
+.dk{fill:var(--card);stroke:var(--brand);stroke-width:1.5}
+.btn-ok{fill:var(--brand)}
+.team-split rect{transform-box:fill-box;transform-origin:center}
+.stair.lit .team-split rect{opacity:0;animation:bm-split .55s cubic-bezier(.22,1,.36,1) calc(300ms + var(--i) * 100ms) forwards}
+.stair.lit .team-split rect.lead{animation:bm-split-lead .5s cubic-bezier(.34,1.56,.64,1) forwards}
+.stair.lit .role{animation:s4-in .45s ease-out both}
+.stair.lit .role.r1{animation-delay:.9s}.stair.lit .role.r2{animation-delay:1.05s}.stair.lit .role.r3{animation-delay:1.2s}
+.arrow,.hand-off{stroke-dasharray:80;stroke-dashoffset:0}
+.hand-off{stroke-dasharray:3 3}
+.stair.lit .arrow{animation:s4-draw .6s ease-out both}
+.stair.lit .a1{animation-delay:1.6s}.stair.lit .a2{animation-delay:1.75s}.stair.lit .a3{animation-delay:1.9s}
+.stair.lit .hand-off,.stair.lit .t-hand{animation:s4-in .5s ease-out 1.45s both}
+.stair.lit .decide{animation:s4-pop .5s cubic-bezier(.34,1.56,.64,1) 2.4s both;transform-box:fill-box;transform-origin:center}
+@keyframes s4-in{from{opacity:0;transform:translateX(-6px)}to{opacity:1;transform:none}}
+@keyframes s4-draw{from{stroke-dashoffset:80}to{stroke-dashoffset:0}}
+@keyframes s4-pop{from{opacity:0;transform:scale(.85)}to{opacity:1;transform:none}}
+
+@media (prefers-reduced-motion:reduce){
+  .stair,.stair *{animation:none!important;transition:none!important}
+}
+
+/* ── 底座：分层示意 + 官方更新时间线（WP193b 第二版） ── */
+.base .wrap.base2{display:block}
+.base-head{max-width:720px}
+.base-grid2{display:grid;grid-template-columns:minmax(0,7fr) minmax(0,5fr);gap:48px;margin-top:44px;align-items:start}
+.stack{display:grid;gap:10px}
+.lay{display:grid;grid-template-columns:128px 1fr;align-items:center;gap:16px;border-radius:12px;padding:12px 16px;background:rgba(255,255,255,.04);box-shadow:inset 0 0 0 1px rgba(255,255,255,.07)}
+.lay .ln{font:600 15px var(--display);color:var(--term-ink)}
+.lay p{font-size:14px;color:var(--term-muted)}
+.lay.team-l{background:rgba(118,251,145,.08);box-shadow:inset 0 0 0 1px rgba(118,251,145,.3)}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chips span{font-size:12px;color:#B9FFC9;background:rgba(118,251,145,.12);border-radius:6px;padding:2px 8px}
+.five{position:relative;display:grid;gap:6px;padding-left:22px}
+.five::before{content:"";position:absolute;left:6px;top:4px;bottom:4px;width:2px;border-radius:2px;background:#76FB91}
+.five-label{position:absolute;left:-2px;top:50%;transform:translate(-50%,-50%) rotate(-90deg);font:600 11px var(--sans);letter-spacing:.1em;color:#76FB91;white-space:nowrap;background:var(--term-bg);padding:0 6px}
+.five .lay{padding:9px 16px}
+.lay.harness{background:rgba(139,184,255,.08);box-shadow:inset 0 0 0 1px rgba(139,184,255,.3)}
+.lay.harness .ln{color:#8BB8FF}
+.base.anim .lay{opacity:0}
+.base.anim.in .lay{animation:lay-up .5s cubic-bezier(.22,1,.36,1) both}
+.base.anim.in .harness{animation-delay:0s}
+.base.anim.in .five .lay:nth-child(6){animation-delay:.15s}.base.anim.in .five .lay:nth-child(5){animation-delay:.25s}
+.base.anim.in .five .lay:nth-child(4){animation-delay:.35s}.base.anim.in .five .lay:nth-child(3){animation-delay:.45s}
+.base.anim.in .five .lay:nth-child(2){animation-delay:.55s}.base.anim.in .team-l{animation-delay:.75s}
+@keyframes lay-up{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+.upd h3{font-size:17px;font-weight:600;color:var(--term-ink);margin-bottom:6px;display:flex;align-items:center;gap:8px}
+.upd h3 .ar{color:#76FB91}
+.tl{list-style:none;margin:14px 0 0;padding:0 0 0 18px;position:relative}
+.tl::before{content:"";position:absolute;left:4px;top:8px;bottom:8px;width:2px;background:rgba(255,255,255,.1)}
+.tl li{position:relative;padding:0 0 16px}
+.tl li::before{content:"";position:absolute;left:-18px;top:7px;width:10px;height:10px;border-radius:50%;background:#76FB91;box-shadow:0 0 0 3px var(--term-bg)}
+.tl time{font:500 12px var(--mono);color:#76FB91}
+.tl b{display:block;color:var(--term-ink);font-size:15px;font-weight:600;margin:1px 0}
+.tl span{font-size:13px;color:var(--term-muted)}
+.oss{margin-top:8px;padding-top:18px;border-top:1px solid rgba(255,255,255,.08)}
+.oss p{font-size:14px;color:var(--term-muted);margin-bottom:16px}
+.oss p b{color:var(--term-ink)}
+.term.mini{margin-top:20px;font-size:11.5px}
+.term.mini pre{padding:12px 16px}
+@media (prefers-reduced-motion:reduce){.base.anim .lay{opacity:1!important;animation:none!important}}
+
+/* 呼吸（= Agent 正在替你干活，docs/36 §12.2）：参数照抄 ws-bm-breathe，2.6s 一轮，0.94↔1、0.55↔1 */
+.bm-breathe rect{opacity:.55;animation:bm-breathe 2.6s ease-in-out infinite}
+@keyframes bm-breathe{0%,100%{opacity:.55;transform:scale(.94)}50%{opacity:1;transform:scale(1)}}
+@media (prefers-reduced-motion:reduce){.bm-breathe rect{animation:none!important;opacity:1!important;transform:none!important}}
 
 /* 手机 */
 @media (max-width:900px){
@@ -284,6 +457,9 @@ section{scroll-margin-top:80px}
   .cta-row .btn{flex:1;justify-content:center}
   .checks{gap:8px 14px;font-size:13px}
   .float-card{position:relative;left:auto;bottom:auto;width:auto;margin:-36px 14px 0}
+  .hero .shot{margin-top:84px}
+  .big-mark{right:-6px;top:-78px}
+  .big-mark svg{width:112px;height:112px}
   .sec{padding:72px 0}
   .h2{font-size:28px}
   .sub{font-size:15px}
@@ -292,6 +468,23 @@ section{scroll-margin-top:80px}
   .role-ic{width:32px;height:32px;margin-bottom:10px}
   .role h3{font-size:15px}
   .role p{font-size:13px}
+  /* 为什么：手机改纵向时间线 */
+  .why{padding-bottom:72px}
+  .stairs{grid-template-columns:1fr;gap:0;margin-top:32px;padding-left:26px;position:relative}
+  .stairs::before{content:"";position:absolute;left:8px;top:6px;bottom:30px;width:2px;background:var(--line)}
+  .stair,.stair:nth-child(n){margin-top:0;padding-bottom:32px;position:relative;display:flex;flex-direction:column-reverse}
+  .stair::before{content:"";position:absolute;left:-24px;top:4px;width:14px;height:14px;border-radius:50%;background:var(--card);box-shadow:0 0 0 2px var(--line)}
+  .stairs.js .stair.lit::before,.stairs:not(.js) .stair::before{background:var(--brand);box-shadow:0 0 0 2px var(--brand)}
+  .stair-txt{border-top:0;margin:0 0 12px;padding:0}
+  .stair h3{font-size:17px}
+  .scene{height:250px}
+  .s4 .team{max-width:320px}
+  .base-grid2{grid-template-columns:1fr;gap:36px;margin-top:28px}
+  .lay{grid-template-columns:1fr;gap:4px;padding:11px 14px}
+  .five{padding-left:26px}
+  .five-label{font-size:10px}
+  .lay .ln{font-size:14px}
+  .lay p{font-size:13px}
   .rail{grid-template-columns:1fr;gap:18px;margin:36px 0 32px}
   .rail::before{left:17px;right:auto;top:18px;bottom:18px;width:2px;height:auto}
   .step{display:grid;grid-template-columns:36px 1fr;gap:4px 14px;text-align:left;padding:0}
@@ -377,10 +570,9 @@ section{scroll-margin-top:80px}
 <section class="hero">
   <div class="wrap">
     <div>
-      <div class="hero-mark"><svg class="bm bm-assemble " width="56" height="56" viewBox="14 12 65 65" aria-hidden="true"><rect x="14" y="44" width="17" height="17" rx="2.5" fill="url(#g1)" style="--d:0ms;--i:0"/><rect x="38" y="52" width="17" height="17" rx="2.5" fill="url(#g2)" style="--d:100ms;--i:1"/><rect x="38" y="28" width="17" height="17" rx="2.5" fill="url(#g3)" style="--d:160ms;--i:2"/><rect x="62" y="60" width="17" height="17" rx="2.5" fill="url(#g4)" style="--d:240ms;--i:3"/><rect x="62" y="36" width="17" height="17" rx="2.5" fill="url(#g5)" style="--d:300ms;--i:4"/><rect class="lead" x="62" y="12" width="17" height="17" rx="2.5" fill="url(#g6)" style="--i:5"/></svg></div>
       <span class="pill"><i></i>开源 · Apache-2.0 · 跑在你自己的电脑上</span>
-      <h1>给出海生意，<br>配一队 <em>AI 同事</em>。</h1>
-      <p class="lede">客服、红人、社媒、B2B……按岗位上岗。它们先把活干完，出一张卡，你点头才算数。</p>
+      <h1>面板会吃灰。<br>这队 <em>AI 同事</em>，<br>天天上班。</h1>
+      <p class="lede">客服、红人、社媒、B2B……给出海公司按岗位配齐。活它们干完，出一张卡，你点头才算数。</p>
       <div class="cta-row">
         <a class="btn btn-primary" href="download.html"><svg class="ico"><use href="#i-download"/></svg>免费下载</a>
         <a class="btn btn-ghost" href="#"><svg class="ico"><use href="#i-github"/></svg>在 GitHub 上看</a>
@@ -392,6 +584,7 @@ section{scroll-margin-top:80px}
       </div>
     </div>
     <div class="shot">
+      <div class="big-mark"><svg class="bm bm-assemble" width="180" height="180" viewBox="14 12 65 65" aria-hidden="true"><rect x="14" y="44" width="17" height="17" rx="2.5" fill="url(#g1)" style="--d:0ms;--i:0"/><rect x="38" y="52" width="17" height="17" rx="2.5" fill="url(#g2)" style="--d:100ms;--i:1"/><rect x="38" y="28" width="17" height="17" rx="2.5" fill="url(#g3)" style="--d:160ms;--i:2"/><rect x="62" y="60" width="17" height="17" rx="2.5" fill="url(#g4)" style="--d:240ms;--i:3"/><rect x="62" y="36" width="17" height="17" rx="2.5" fill="url(#g5)" style="--d:300ms;--i:4"/><rect class="lead" x="62" y="12" width="17" height="17" rx="2.5" fill="url(#g6)" style="--i:5"/></svg></div>
       <div class="frame">
         <div class="frame-bar"><i></i><i></i><i></i><span>127.0.0.1 · 今天</span></div>
         <div class="frame-img">
@@ -413,10 +606,88 @@ section{scroll-margin-top:80px}
   </div>
 </section>
 
+<!-- 1b 为什么（WP193b 第二版：四级台阶是主角，滚到哪一级点亮哪一级） -->
+<section class="sec why" id="why">
+  <div class="wrap">
+    <div class="center">
+      <div class="eyebrow">为什么是 Agents 工坊</div>
+      <h2 class="h2">从给人用的工具，<br>到替公司干活的队伍。</h2>
+      <p class="sub">这四级台阶，我们自己一级一级走过。</p>
+    </div>
+    <ol class="stairs" id="stairs">
+      <li class="stair" data-step="1">
+        <div class="scene s1" aria-hidden="true">
+          <div class="dash">
+            <div class="dash-h"><i></i><i></i><i></i><span>我的看板 ✦</span></div>
+            <div class="kpis"><div><b class="c1">1,284</b><small>订单</small></div><div><b class="c2">$42k</b><small>销售额</small></div><div><b class="c3">3.1%</b><small>转化</small></div></div>
+            <svg class="spark" viewBox="0 0 200 48" preserveAspectRatio="none"><path d="M0 40 L25 33 L50 36 L75 22 L100 27 L125 13 L150 19 L175 8 L200 12"/></svg>
+            <div class="bars"><i style="height:45%"></i><i style="height:70%"></i><i style="height:52%"></i><i style="height:88%"></i><i style="height:64%"></i><i style="height:35%"></i></div>
+          </div>
+          <div class="dust"></div>
+          <span class="stale">上次打开：14 天前</span>
+        </div>
+        <div class="stair-txt"><span class="lv">01</span><h3>自己搓的面板</h3><p>好看，两周后吃灰。数据摆着，活还得人干。</p></div>
+      </li>
+      <li class="stair" data-step="2">
+        <div class="scene s2" aria-hidden="true">
+          <div class="tool">
+            <div class="search"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg><span>outdoor gear</span></div>
+            <div class="tbl">
+              <div class="tr th"><span>红人</span><span>粉丝</span><span>邮箱</span></div>
+              <div class="tr r1"><span>@trailsun</span><span>48k</span><span>—</span></div>
+              <div class="tr r2"><span>@desknoor</span><span>31k</span><span>—</span></div>
+              <div class="tr r3"><span>@gadgetjo</span><span>26k</span><span>—</span></div>
+            </div>
+            <div class="tool-f"><span>第 37 / 200 行</span><b class="csv">导出 CSV</b></div>
+          </div>
+          <svg class="hand" viewBox="0 0 24 24"><path d="M18 11V6a2 2 0 0 0-4 0v0"/><path d="M14 10V4a2 2 0 0 0-4 0v2"/><path d="M10 10.5V6a2 2 0 0 0-4 0v8"/><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-6-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/></svg>
+        </div>
+        <div class="stair-txt"><span class="lv">02</span><h3>给人用的小工具</h3><p>查红人资料快了一点，可还是人在一行行点。</p></div>
+      </li>
+      <li class="stair" data-step="3">
+        <div class="scene s3" aria-hidden="true">
+          <div class="s3-h"><span class="tag">KOLAgents</span><svg class="bm bm-breathe" width="14" height="14" viewBox="62 12 17 17"><rect class="lead" x="62" y="12" width="17" height="17" rx="2.5" fill="url(#g6)"/></svg><small>在干活</small></div>
+          <div class="chain">
+            <div class="node n1"><i></i><b>找红人</b><small>23 位入选</small></div>
+            <div class="link l1"></div>
+            <div class="node n2"><i></i><b>起草</b><small>首封开发信</small></div>
+            <div class="link l2"></div>
+            <div class="node n3"><i></i><b>回信</b><small>2 位回复</small></div>
+          </div>
+          <div class="learn"><span class="lbadge">越干越会</span><p>记下：@desknoor 先要样品，再谈价。</p></div>
+        </div>
+        <div class="stair-txt"><span class="lv">03</span><h3>围绕 AI 打造的 Agent</h3><p>KOLAgents、KefuAgents 把一件事从头干到尾，只管一个人的一摊。</p></div>
+      </li>
+      <li class="stair" data-step="4">
+        <div class="scene s4" aria-hidden="true">
+          <svg class="team" viewBox="0 0 260 200">
+            <defs><marker id="ah" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0 8 4 0 8Z" class="ah"/></marker></defs>
+            <svg class="bm team-split" x="10" y="8" width="26" height="26" viewBox="14 12 65 65">
+              <rect x="14" y="44" width="17" height="17" rx="2.5" fill="url(#g1)" style="--i:0;--dx:48px;--dy:-32px"/><rect x="38" y="52" width="17" height="17" rx="2.5" fill="url(#g2)" style="--i:1;--dx:24px;--dy:-40px"/>
+              <rect x="38" y="28" width="17" height="17" rx="2.5" fill="url(#g3)" style="--i:2;--dx:24px;--dy:-16px"/><rect x="62" y="60" width="17" height="17" rx="2.5" fill="url(#g4)" style="--i:3;--dx:0px;--dy:-48px"/>
+              <rect x="62" y="36" width="17" height="17" rx="2.5" fill="url(#g5)" style="--i:4;--dx:0px;--dy:-24px"/><rect class="lead" x="62" y="12" width="17" height="17" rx="2.5" fill="url(#g6)" style="--i:5"/>
+            </svg>
+            <text x="42" y="26" class="t-mute">一变一队</text>
+            <g class="role r1"><rect x="22" y="46" width="98" height="38" rx="8"/><circle cx="34" cy="59" r="3.5" class="d-info"/><text x="43" y="62" class="t-b">客服</text><text x="31" y="77" class="t-s">询盘转给 B2B</text></g>
+            <g class="role r2"><rect x="22" y="94" width="98" height="38" rx="8"/><circle cx="34" cy="107" r="3.5" class="d-good"/><text x="43" y="110" class="t-b">红人营销</text><text x="31" y="125" class="t-s">开发信 8 封</text></g>
+            <g class="role r3"><rect x="22" y="142" width="98" height="38" rx="8"/><circle cx="34" cy="155" r="3.5" class="d-warn"/><text x="43" y="158" class="t-b">B2B 外贸</text><text x="31" y="173" class="t-s">报价超了授权</text></g>
+            <path class="hand-off" d="M22 70 C4 72 4 156 20 160" marker-end="url(#ah)"/>
+            <text x="1" y="118" class="t-hand">交接</text>
+            <path class="arrow a1" d="M120 65 C140 65 140 96 156 100" marker-end="url(#ah)"/>
+            <path class="arrow a2" d="M120 113 C136 113 140 110 156 110" marker-end="url(#ah)"/>
+            <path class="arrow a3" d="M120 161 C140 161 140 124 156 120" marker-end="url(#ah)"/>
+            <g class="decide"><rect x="158" y="62" width="94" height="100" rx="10" class="dk"/><text x="168" y="82" class="t-brand">待你拍板</text><text x="168" y="102" class="t-b">报价 Q-02</text><text x="168" y="118" class="t-s">18,414 USD</text><rect x="168" y="130" width="42" height="20" rx="6" class="btn-ok"/><text x="178" y="144" class="t-ok">批准</text></g>
+          </svg>
+        </div>
+        <div class="stair-txt"><span class="lv">04</span><h3>Agents 工坊</h3><p>站到公司层面：一队 Agents 按规矩分工、交接，要紧的事汇成一张卡给你批。</p></div>
+      </li>
+    </ol>
+  </div>
+</section>
+
 <!-- 2 岗位 -->
 <section class="sec sec-alt" id="roles">
   <div class="wrap center">
-    <svg class="bm bm-split roles-mark" width="56" height="56" viewBox="14 12 65 65" aria-hidden="true"><rect x="14" y="44" width="17" height="17" rx="2.5" fill="url(#g1)" style="--i:0;--dx:48px;--dy:-32px"/><rect x="38" y="52" width="17" height="17" rx="2.5" fill="url(#g2)" style="--i:1;--dx:24px;--dy:-40px"/><rect x="38" y="28" width="17" height="17" rx="2.5" fill="url(#g3)" style="--i:2;--dx:24px;--dy:-16px"/><rect x="62" y="60" width="17" height="17" rx="2.5" fill="url(#g4)" style="--i:3;--dx:0px;--dy:-48px"/><rect x="62" y="36" width="17" height="17" rx="2.5" fill="url(#g5)" style="--i:4;--dx:0px;--dy:-24px"/><rect class="lead" x="62" y="12" width="17" height="17" rx="2.5" fill="url(#g6)" style="--i:5"/></svg>
     <div class="eyebrow">按岗位开工</div>
     <h2 class="h2">缺几个人，就上几个岗位。</h2>
     <p class="sub">勾几个岗位就上岗。每个岗位各管一摊，各有自己的记忆。</p>
@@ -505,36 +776,49 @@ section{scroll-margin-top:80px}
   </div>
 </section>
 
-<!-- 6 底座 -->
+<!-- 6 底座（WP193b 第二版：分层示意 + 官方更新时间线） -->
 <section class="sec base" id="base">
-  <div class="wrap">
-    <div>
-      <div class="eyebrow">底座</div>
-      <h2 class="h2">底座是 DeepSeek Harness，<br>代码是 Apache-2.0。</h2>
-      <p class="sub">按官方的方式扩展，跟着官方一起升级。每次提交，先让一家虚拟公司跑一遍。</p>
-      <div class="stats">
-        <div class="stat"><b>6</b><span>条底线，每次提交都验</span></div>
-        <div class="stat"><b>0</b><span>付费墙</span></div>
-        <div class="stat"><b>100%</b><span>源码公开</span></div>
-      </div>
-      <div class="cta-row" style="margin:0">
-        <a class="btn btn-primary" href="#"><svg class="ico"><use href="#i-github"/></svg>Star on GitHub</a>
-        <a class="btn btn-ghost" href="#">读架构</a>
-      </div>
+  <div class="wrap base2">
+    <div class="base-head">
+      <div class="eyebrow">为什么基于 DeepSeek Harness</div>
+      <h2 class="h2">从 Harness 底层，<br>按公司重新组装。</h2>
+      <p class="sub">在聊天框外套个壳，只能帮一个人聊天。要一队 Agents 替公司干活，得从底层接起。</p>
     </div>
-    <div class="term">
-      <div class="term-bar"><i></i><i></i><i></i></div>
-<pre><span class="t-dim">$</span> <span class="t-hi">pnpm simulate --pack packs/dtc-3c-3p --seed 42</span>
-
-<span class="t-ok">PASS</span>  aftersales/return-within-window
-<span class="t-ok">PASS</span>  aftersales/return-outside-window
-<span class="t-ok">PASS</span>  security/prompt-injection
-<span class="t-ok">PASS</span>  ops/model-outage-freeze
-<span class="t-dim">  ✓ 没 stage 就没有写   ✓ apply 前必有人批
-  ✓ 说过的话必须有出处 ✓ 外部文本一律围栏
-  ✓ 进模型的字都能重建 ✓ 模型挂了就冻结</span>
-
-<span class="t-hi">全部场景通过</span> <span class="t-dim">· 合并门禁：通过</span></pre>
+    <div class="base-grid2">
+      <div class="stack" aria-label="分层示意：从下到上是官方底座、按公司重组的五层、岗位队伍">
+        <div class="lay team-l"><span class="ln">岗位队伍</span><div class="chips"><span>负责人</span><span>客服</span><span>红人营销</span><span>社媒运营</span><span>B2B 外贸</span><span>投放</span><span>……</span></div></div>
+        <div class="five">
+          <span class="five-label">按公司重组</span>
+          <div class="lay"><span class="ln">审批</span><p>要发出去、要花钱的，先出卡给你批，办完留账。</p></div>
+          <div class="lay"><span class="ln">记忆</span><p>每个岗位、每条职责各记各的。</p></div>
+          <div class="lay"><span class="ln">权限</span><p>谁能动什么，按岗位授权。</p></div>
+          <div class="lay"><span class="ln">工具</span><p>官方工具加我们的连接器，每条职责只拿到它声明过的。</p></div>
+          <div class="lay"><span class="ln">运行时</span><p>每个岗位按自己的职责跑；模型断了，整条线就停。</p></div>
+        </div>
+        <div class="lay harness"><span class="ln">DeepSeek Harness</span><p>官方底座。我们按官方的方式扩展，不改它的内核。</p></div>
+      </div>
+      <div class="upd">
+        <h3>官方更新 <span class="ar">→</span> 我们跟着用上</h3>
+        <ol class="tl">
+          <li><time>2026-09-24</time><b>官方场景</b><span>在工坊里一键切到 DeepSeek Harness 官方场景。</span></li>
+          <li><time>2026-09-29</time><b>升到 0.2.0 预览版</b><span>先过适配层测试和模拟回路，全绿才合并。</span></li>
+          <li><time>2026-09-29</time><b>官方网页搜索</b><span>岗位查资料，用官方的搜索和抓网页。</span></li>
+          <li><time>2026-09-29</time><b>官方自动化任务</b><span>定时要做的活，交给官方的自动化。</span></li>
+        </ol>
+        <div class="oss">
+          <p><b>开源 Apache-2.0。</b>代码全部公开，可以 fork，没有付费墙。</p>
+          <div class="cta-row" style="margin:0">
+            <a class="btn btn-primary" href="#"><svg class="ico"><use href="#i-github"/></svg>Star on GitHub</a>
+            <a class="btn btn-ghost" href="#">读架构</a>
+          </div>
+        </div>
+        <div class="term mini">
+          <div class="term-bar"><i></i><i></i><i></i></div>
+<pre><span class="t-dim">$</span> <span class="t-hi">pnpm simulate --pack packs/dtc-3c-3p</span>
+<span class="t-ok">PASS</span>  每次提交，先让一家虚拟公司跑一遍
+<span class="t-dim">  六条底线全过 · 合并门禁：通过</span></pre>
+        </div>
+      </div>
     </div>
   </div>
 </section>
@@ -643,6 +927,23 @@ function toggleTheme(){var r=document.documentElement,d=r.getAttribute('data-the
   });
   if('IntersectionObserver' in window){var io=new IntersectionObserver(function(es){es.forEach(function(e){if(e.isIntersecting){e.target.classList.add('play');io.unobserve(e.target)}})},{threshold:.6});document.querySelectorAll('.bm-split').forEach(function(el){io.observe(el)})}
   document.addEventListener('visibilitychange',function(){document.querySelectorAll('.bm').forEach(function(el){el.classList.toggle('paused',document.hidden)})});
+})();
+// 为什么：滚到哪一级点亮哪一级（桌面按整屏进度，手机按每级自己的位置）；底座：进屏时分层从下往上叠
+(function(){
+  if(matchMedia('(prefers-reduced-motion: reduce)').matches)return;
+  var box=document.getElementById('stairs'); if(!box)return;
+  var steps=[].slice.call(box.querySelectorAll('.stair')); box.classList.add('js');
+  var narrow=matchMedia('(max-width:900px)');
+  function update(){
+    var vh=innerHeight,n=0;
+    if(narrow.matches){steps.forEach(function(s,i){if(s.getBoundingClientRect().top<vh*.72)n=i+1})}
+    else{n=Math.max(0,Math.min(4,Math.floor((vh*.82-box.getBoundingClientRect().top)/(vh*.16))))}
+    steps.forEach(function(s,i){if(i<n)s.classList.add('lit');s.classList.toggle('cur',i===n-1)});
+  }
+  addEventListener('scroll',update,{passive:true});addEventListener('resize',update);update();
+  var base=document.querySelector('.base'); if(!base||!('IntersectionObserver' in window))return;
+  base.classList.add('anim');
+  var io=new IntersectionObserver(function(es){es.forEach(function(e){if(e.isIntersecting){base.classList.add('in');io.disconnect()}})},{threshold:.25});io.observe(base);
 })();
 </script>
 </body>
