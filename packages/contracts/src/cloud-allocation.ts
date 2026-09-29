@@ -15,6 +15,7 @@
  * 不认邮箱。不带这两个头的调用（老客户端、别的产品还没接）只受组织余额限制，
  * 报表里记在「没标注」那一格。
  */
+import type { WalletBalance } from './cloud-entry.js'
 import type { Iso8601 } from './common.js'
 
 /** 请求头：这一次是谁在用（本机公司成员的 `person_id`）。 */
@@ -171,6 +172,11 @@ export interface AllocationLimitRequest {
   kind: AllocationSubjectKind
   subject_id: string
   monthly_limit: number | null
+  /**
+   * 给人看的名字（「王岚」「客服」）。**只用在用到 100% 时那封提醒信里**——云上别处只认 id。
+   * 不给就在信里写「一位成员 / 一个岗位」。最长 60 字。
+   */
+  label?: string
 }
 
 /** 改额度的一条审计（谁、从多少改到多少）。`from` / `to` 没有 = 不设上限。 */
@@ -197,10 +203,57 @@ export interface AllocationAuditList {
   entries: AllocationAuditEntry[]
 }
 
-/** `POST /v1/wallet/allocation/settings`：公司时区（自然月按它切）。 */
+/** `POST /v1/wallet/allocation/settings`：公司时区与提醒信发给谁（两样都可以只给一样）。 */
 export interface AllocationSettings {
-  /** IANA 时区名（`Asia/Shanghai`）。 */
+  /** IANA 时区名（`Asia/Shanghai`、`Etc/GMT-8`）。 */
+  timezone?: string
+  /**
+   * 用到 100% 时那封提醒信发给谁：公司的 owner 与 admin（本机按公司成员表给）。云上另外总会加上
+   * 这个组织 owner 的云账号邮箱。每人每月每个对象只发一次。整张表一次给全（给空数组 = 清空）；最多 20 个。
+   */
+  notify_emails?: string[]
+}
+
+/** 设完之后的样子（不回邮箱本身，只回有几个收件人）。 */
+export interface AllocationSettingsView {
   timezone: string
+  notify_recipients: number
+}
+
+/** 不带时区时（或认不出）按它切自然月。 */
+export const ALLOCATION_FALLBACK_TIMEZONE_NOTE = '按北京时间切月'
+
+/**
+ * 本机的公司时区 → 推给云的 IANA 名。`Asia/Shanghai` 这种原样；`+08:00` / `UTC+8` / `-05:00` 这种偏移
+ * 换成 `Etc/GMT∓h`（整点）或常见的半点时区；认不出回 `undefined`（云上按上海切）。
+ */
+export function allocationTimezoneOf(raw: string | undefined): string | undefined {
+  const tz = raw?.trim() ?? ''
+  if (tz === '') return undefined
+  if (tz === 'UTC' || tz === 'GMT' || tz.includes('/')) return tz
+  const m = /^(?:UTC|GMT)?\s*([+-])(\d{1,2})(?::?(\d{2}))?$/i.exec(tz)
+  if (m === null) return undefined
+  const sign = m[1] === '-' ? -1 : 1
+  const hours = Number(m[2])
+  const minutes = m[3] === undefined ? 0 : Number(m[3])
+  if (hours > 14 || minutes >= 60) return undefined
+  if (minutes === 0) {
+    if (hours === 0) return 'UTC'
+    // IANA 的 Etc/GMT 符号是反的：东八区是 Etc/GMT-8
+    return `Etc/GMT${sign > 0 ? '-' : '+'}${String(hours)}`
+  }
+  const HALF: Record<string, string> = {
+    '+3:30': 'Asia/Tehran',
+    '+4:30': 'Asia/Kabul',
+    '+5:30': 'Asia/Kolkata',
+    '+5:45': 'Asia/Kathmandu',
+    '+6:30': 'Asia/Yangon',
+    '+9:30': 'Australia/Darwin',
+    '+10:30': 'Australia/Lord_Howe',
+    '-3:30': 'America/St_Johns',
+    '-9:30': 'Pacific/Marquesas',
+  }
+  return HALF[`${sign > 0 ? '+' : '-'}${String(hours)}:${String(minutes).padStart(2, '0')}`]
 }
 
 /** `POST /v1/wallet/allocation/members/remove`：删成员时清掉他的额度行（历史用量保留）。 */
@@ -242,6 +295,12 @@ export interface CloudAllocationView {
   linked: boolean
   reason?: string
   report?: AllocationReport
+  /** 公司余额（与设置 → 积分同一份透传；公司的 admin 不一定看得到设置那一页，所以在这里一并给）。 */
+  balance?: WalletBalance
+  /** 本机的名字：成员 `person_id` → 名字、岗位 id → 名字（云上只有 id）。 */
+  names?: { members: Record<string, string>; positions: Record<string, string> }
+  /** 看这一页的人在公司里是什么身份（admin 只开这一页，公司页其它 tab 照旧只给所有者）。 */
+  role?: 'owner' | 'admin'
 }
 
 /** 本机 `GET /v1/cloud/allocation/me`：设置 → 积分里的「我的本月额度」。 */

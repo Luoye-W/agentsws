@@ -1662,7 +1662,7 @@
     "/v1/wallet/allocation/settings": {
       "post": {
         "operationId": "postV1WalletAllocationSettings",
-        "summary": "公司时区（自然月按它切；缺省 Asia/Shanghai）",
+        "summary": "公司时区（自然月按它切；缺省 Asia/Shanghai）与用到 100% 时提醒信发给谁",
         "tags": ["wallet"],
         "security": [
           {
@@ -1689,7 +1689,7 @@
                   "type": "object",
                   "properties": {
                     "data": {
-                      "$ref": "#/components/schemas/AllocationSettings"
+                      "$ref": "#/components/schemas/AllocationSettingsView"
                     }
                   },
                   "required": ["data"]
@@ -7129,6 +7129,10 @@
                 "type": "number"
               }
             ]
+          },
+          "label": {
+            "type": "string",
+            "description": "给人看的名字（「王岚」「客服」）。**只用在用到 100% 时那封提醒信里**——云上别处只认 id。 不给就在信里写「一位成员 / 一个岗位」。最长 60 字。"
           }
         },
         "required": ["kind", "subject_id", "monthly_limit"],
@@ -7294,11 +7298,30 @@
         "properties": {
           "timezone": {
             "type": "string",
-            "description": "IANA 时区名（`Asia/Shanghai`）。"
+            "description": "IANA 时区名（`Asia/Shanghai`、`Etc/GMT-8`）。"
+          },
+          "notify_emails": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "用到 100% 时那封提醒信发给谁：公司的 owner 与 admin（本机按公司成员表给）。云上另外总会加上 这个组织 owner 的云账号邮箱。每人每月每个对象只发一次。整张表一次给全（给空数组 = 清空）；最多 20 个。"
           }
         },
-        "required": ["timezone"],
-        "description": "`POST /v1/wallet/allocation/settings`：公司时区（自然月按它切）。"
+        "description": "`POST /v1/wallet/allocation/settings`：公司时区与提醒信发给谁（两样都可以只给一样）。"
+      },
+      "AllocationSettingsView": {
+        "type": "object",
+        "properties": {
+          "timezone": {
+            "type": "string"
+          },
+          "notify_recipients": {
+            "type": "number"
+          }
+        },
+        "required": ["timezone", "notify_recipients"],
+        "description": "设完之后的样子（不回邮箱本身，只回有几个收件人）。"
       },
       "AllocationSubjectKind": {
         "type": "string",

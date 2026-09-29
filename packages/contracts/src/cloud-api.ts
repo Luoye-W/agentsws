@@ -45,6 +45,7 @@ import type {
   AllocationReport,
   AllocationReportQuery,
   AllocationSettings,
+  AllocationSettingsView,
   AttributionHeaders,
   MyAllocation,
 } from './cloud-allocation.js'
@@ -1603,13 +1604,13 @@ export interface CloudAllocationApi {
     errors: EntryAuthErrors & { 400: 'invalid_input' }
     errorBody: CloudEntryErrorBody
   }
-  /** 公司时区（自然月按它切；缺省 Asia/Shanghai） */
+  /** 公司时区（自然月按它切；缺省 Asia/Shanghai）与用到 100% 时提醒信发给谁 */
   'POST /v1/wallet/allocation/settings': {
     auth: 'workspace_token'
     scope: 'wallet:topup'
     tag: 'wallet'
     body: AllocationSettings
-    ok: { status: 200; body: CloudDataEnvelope<AllocationSettings> }
+    ok: { status: 200; body: CloudDataEnvelope<AllocationSettingsView> }
     errors: EntryAuthErrors & { 400: 'invalid_input' }
     errorBody: CloudEntryErrorBody
   }
