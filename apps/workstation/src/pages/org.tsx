@@ -20,6 +20,7 @@ import { BrandMark } from '@/components/design'
 import { JoinPanel } from '@/components/onboarding/join-panel'
 import { AssignWizard } from '@/components/org/assign-wizard'
 import { BrandsTab } from '@/components/org/brands-tab'
+import { CreditsTab } from '@/components/org/credits-tab'
 import { InprogressTab } from '@/components/org/inprogress-tab'
 import { type JoinChoice, JoinTab } from '@/components/org/join-tab'
 import { MembersTab } from '@/components/org/members-tab'
@@ -46,6 +47,7 @@ import {
   deleteProductLine,
   deleteRangeGroup,
   ensureSession,
+  getCloudAllocation,
   getOnboardingState,
   getPositions,
   inviteMember,
@@ -80,7 +82,9 @@ export function OrgPage(): React.ReactNode {
   // ⌘K 与顶栏切换器的"管理品牌"跳这里：`/org?tab=brands`
   const initialTab = params.get('tab')
   const [tab, setTab] = useState(
-    initialTab === 'toolbox' || initialTab === 'brands' ? initialTab : 'positions',
+    initialTab === 'toolbox' || initialTab === 'brands' || initialTab === 'credits'
+      ? initialTab
+      : 'positions',
   )
   const query = params.get('q')
   const [wizard, setWizard] = useState<string | null>(null)
@@ -108,6 +112,17 @@ export function OrgPage(): React.ReactNode {
   const workspace = session.data?.workspace.id
 
   const enabled = owner !== undefined && workspace !== undefined
+  /*
+   * WP194（Fable 09-29 定）：公司的 admin 没有所有者职责，但「积分」这一页给他开。
+   * 他能不能看由服务端判（公司成员表里的身份）；这里用他自己手上的第一条分配去问一声。
+   */
+  const ownAssignment = mine.data?.positions[0]?.position_id
+  const creditsOnly = useQuery({
+    queryKey: ['cloud-allocation', ownAssignment],
+    enabled: !enabled && mine.data !== undefined && ownAssignment !== undefined,
+    queryFn: () => getCloudAllocation(ownAssignment),
+    retry: false,
+  })
   const positions = useQuery({
     queryKey: ['org', 'positions'],
     enabled,
@@ -428,6 +443,22 @@ export function OrgPage(): React.ReactNode {
     return <Skeleton className="h-64 w-full" />
   }
 
+  if (!enabled && creditsOnly.data?.role !== undefined) {
+    return (
+      <div className="flex flex-col gap-4" data-testid="org-credits-only">
+        <div>
+          <h1 className="text-sm font-semibold">{t('org.title')}</h1>
+          <p className="text-xs text-muted-foreground">{t('org.credits_only')}</p>
+        </div>
+        <CreditsTab
+          {...(ownAssignment === undefined ? {} : { assignment: ownAssignment })}
+          members={[]}
+          positions={[]}
+        />
+      </div>
+    )
+  }
+
   if (!enabled) {
     return (
       <Card>
@@ -504,6 +535,10 @@ export function OrgPage(): React.ReactNode {
           <TabsTrigger value="brands">{t('org.tab.brands')}</TabsTrigger>
           <TabsTrigger value="positions">{t('org.tab.positions')}</TabsTrigger>
           <TabsTrigger value="members">{t('org.tab.members')}</TabsTrigger>
+          {/* WP194：公司统一充值、给成员 / 岗位设每月上限（这一页本来就只有所有者进得来） */}
+          <TabsTrigger value="credits" data-testid="org-tab-credits">
+            {t('org.tab.credits')}
+          </TabsTrigger>
           <TabsTrigger value="ranges">{t('org.tab.ranges')}</TabsTrigger>
           <TabsTrigger value="invite">{t('onboarding.join.title')}</TabsTrigger>
           <TabsTrigger value="join">{t('org.tab.join')}</TabsTrigger>
@@ -591,6 +626,14 @@ export function OrgPage(): React.ReactNode {
               }}
             />
           )}
+        </TabsContent>
+
+        <TabsContent value="credits" className="pt-3">
+          <CreditsTab
+            {...(owner === undefined ? {} : { assignment: owner })}
+            members={members.data ?? []}
+            positions={positions.data ?? []}
+          />
         </TabsContent>
 
         {/* 44：品牌与产品线（G1 / G2） */}

@@ -357,7 +357,10 @@ export function createGateway(deps: GatewayDeps): Gateway {
             details: { assignment_id: assignment.id, domain, op, range, sensitivity },
           })
       }
-      await next()
+      // WP194：宿主开一个「这一次算在谁头上」的作用域（打云时带归属头）
+      if (deps.requestScope !== undefined)
+        await deps.requestScope({ person_id: p.person_id, assignment }, () => next())
+      else await next()
     }
   }
 

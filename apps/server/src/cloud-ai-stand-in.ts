@@ -79,7 +79,15 @@ function sseOf(
 }
 
 export function cloudAiStandInFetch(
-  options: { next?: FetchLike; delayMs?: number } = {},
+  options: {
+    next?: FetchLike
+    delayMs?: number
+    /**
+     * WP194：对话之前先问一声「这个人本月额度还够不够」（demo 里接 `cloud-stand-in` 的 `aiGate`）。
+     * 回一个 `{ status, body }` 就照它回（402 + 那句人话），不回就照常答。
+     */
+    gate?: (headers: Record<string, string>) => { status: number; body: unknown } | undefined
+  } = {},
 ): FetchLike {
   const base = `${CLOUD_STAND_IN_BASE_URL}/v1/ai`
   const next = options.next ?? (globalThis.fetch as unknown as FetchLike)
@@ -90,6 +98,8 @@ export function cloudAiStandInFetch(
       return reply({ object: 'list', data: [{ id: 'deepseek-flash' }, { id: 'deepseek-pro' }] })
     if (path !== '/chat/completions')
       return { ...reply({ code: 'not_found' }), ok: false, status: 404 }
+    const blocked = options.gate?.(init.headers ?? {})
+    if (blocked !== undefined) return { ...reply(blocked.body), ok: false, status: blocked.status }
     const body = JSON.parse(String(init.body ?? '{}')) as Json
     const messages = (body.messages ?? []) as { role: string; content: unknown }[]
     const hasImage = JSON.stringify(messages).includes('"image_url"')

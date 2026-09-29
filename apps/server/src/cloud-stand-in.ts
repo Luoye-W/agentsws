@@ -18,8 +18,28 @@
  */
 
 import { randomBytes } from 'node:crypto'
-import type { Clock, UsageReport, WalletBalance } from '@agentsws/contracts'
-import { PRICING_CATALOG_PATH, pricingBlockOf } from '@agentsws/contracts'
+import type {
+  AllocationAuditEntry,
+  AllocationBucket,
+  AllocationNotice,
+  AllocationReport,
+  AllocationRow,
+  AllocationSubjectKind,
+  Clock,
+  MyAllocation,
+  UsageReport,
+  WalletBalance,
+} from '@agentsws/contracts'
+import {
+  ALLOCATION_BUCKETS,
+  ALLOCATION_EXHAUSTED_MESSAGE,
+  attributionIdOk,
+  DEFAULT_ALLOCATION_TIMEZONE,
+  MEMBER_HEADER,
+  POSITION_HEADER,
+  PRICING_CATALOG_PATH,
+  pricingBlockOf,
+} from '@agentsws/contracts'
 import {
   DataServiceStandIn,
   SAMPLE_PRICING_CATALOG,
@@ -65,9 +85,31 @@ export type CloudStandInFetch = (
   },
 ) => Promise<CloudStandInResponse>
 
+/** WP194：demo 里种的一格本月用量（成员 × 岗位 × 能力）。 */
+export interface CloudStandInUsageSeed {
+  member_id?: string
+  position_id?: string
+  bucket: AllocationBucket
+  credits: number
+  calls: number
+}
+
 export interface CloudStandIn {
   fetch: CloudStandInFetch
   requests(): CloudStandInRequest[]
+  /**
+   * WP194：给 demo 种本月的用量与上限（替身不真扣钱，数字是合成的）。上限按 `null` 清。
+   * 种完「积分」页就有人有岗位、「我的额度」就有数，能演示「额度到了」。
+   */
+  /**
+   * WP194：demo 的官方模型替身在答之前问这一声——这个人（`X-Agentsws-Member`）本月额度到了就回
+   * 402 + 「本月额度用完了，找管理员加。」（与真云同一个信封），没到回 `undefined`。
+   */
+  aiGate(headers: Record<string, string>): { status: number; body: unknown } | undefined
+  seedAllocation(input: {
+    usage?: CloudStandInUsageSeed[]
+    limits?: { kind: AllocationSubjectKind; subject_id: string; monthly_limit: number | null }[]
+  }): void
   /** 等替身那一下「点链接」做完（测试用）。没有在途的就立刻回。 */
   settled(): Promise<void>
 }
@@ -118,6 +160,124 @@ export function cloudStandIn(options: CloudStandInOptions = {}): CloudStandIn {
   const workspaceTokens = new Set<string>()
   const mint = (prefix: string): string => `${prefix}_${randomBytes(12).toString('hex')}`
 
+  /* ── WP194：成员 / 岗位额度（替身版：内存里一张表，数字是合成的）── */
+  const usageCells: CloudStandInUsageSeed[] = []
+  let timezone = DEFAULT_ALLOCATION_TIMEZONE
+  let notifyEmails: string[] = []
+  const limits = new Map<string, { monthly_limit: number; updated_at: string }>()
+  const audits: AllocationAuditEntry[] = []
+  const limitKey = (kind: AllocationSubjectKind, id: string): string => `${kind}:${id}`
+  const round = (n: number): number => Math.round(n * 10_000) / 10_000
+  const rowOf = (kind: AllocationSubjectKind, id: string): AllocationRow => {
+    const cells = usageCells.filter((c) => (kind === 'member' ? c.member_id : c.position_id) === id)
+    const used = round(cells.reduce((sum, c) => sum + c.credits, 0))
+    const limit = limits.get(limitKey(kind, id))
+    return {
+      kind,
+      subject_id: id,
+      used,
+      reserved: 0,
+      calls: cells.reduce((sum, c) => sum + c.calls, 0),
+      ...(limit === undefined
+        ? {}
+        : {
+            monthly_limit: limit.monthly_limit,
+            percent:
+              limit.monthly_limit <= 0 ? 100 : Math.floor((used / limit.monthly_limit) * 100),
+            updated_at: limit.updated_at,
+          }),
+    }
+  }
+  const noticesOf = (): AllocationNotice[] => {
+    const out: AllocationNotice[] = []
+    for (const [key, limit] of limits) {
+      const [kind, id] = key.split(/:(.*)/s) as [AllocationSubjectKind, string]
+      const row = rowOf(kind, id)
+      for (const level of [80, 100] as const)
+        if ((row.percent ?? 0) >= level)
+          out.push({ kind, subject_id: id, level, month: now().slice(0, 7), at: limit.updated_at })
+    }
+    return out
+  }
+  const subjects = (kind: AllocationSubjectKind): AllocationRow[] => {
+    const ids = new Set<string>()
+    for (const c of usageCells) {
+      const id = kind === 'member' ? c.member_id : c.position_id
+      if (id !== undefined) ids.add(id)
+    }
+    for (const key of limits.keys())
+      if (key.startsWith(`${kind}:`)) ids.add(key.slice(kind.length + 1))
+    return [...ids].map((id) => rowOf(kind, id)).sort((a, b) => b.used - a.used)
+  }
+  const report = (): AllocationReport => ({
+    month: now().slice(0, 7),
+    timezone,
+    from: monthStart(),
+    to: now(),
+    members: subjects('member'),
+    positions: subjects('position'),
+    buckets: ALLOCATION_BUCKETS.map((bucket) => {
+      const cells = usageCells.filter((c) => c.bucket === bucket)
+      return {
+        bucket,
+        credits: round(cells.reduce((sum, c) => sum + c.credits, 0)),
+        calls: cells.reduce((sum, c) => sum + c.calls, 0),
+      }
+    }),
+    cells: usageCells.map((c) => ({ ...c })),
+    total_credits: round(usageCells.reduce((sum, c) => sum + c.credits, 0)),
+    unattributed_credits: round(
+      usageCells.filter((c) => c.member_id === undefined).reduce((sum, c) => sum + c.credits, 0),
+    ),
+    notices: noticesOf(),
+  })
+  const headerOf = (
+    headers: Record<string, string> | undefined,
+    name: string,
+  ): string | undefined => {
+    const raw = Object.entries(headers ?? {}).find(
+      ([k]) => k.toLowerCase() === name.toLowerCase(),
+    )?.[1]
+    return attributionIdOk(raw) ? raw : undefined
+  }
+  const aiGate = (
+    headers: Record<string, string> | undefined,
+  ): { status: number; body: unknown } | undefined => {
+    const member = headerOf(headers, MEMBER_HEADER)
+    const row = member === undefined ? undefined : rowOf('member', member)
+    if (row?.monthly_limit === undefined || row.used < row.monthly_limit) return undefined
+    return {
+      status: 402,
+      body: {
+        code: 'insufficient_credits',
+        message: ALLOCATION_EXHAUSTED_MESSAGE,
+        details: { reason: 'member_limit', monthly_limit: row.monthly_limit, used: row.used },
+      },
+    }
+  }
+  const setLimit = (
+    kind: AllocationSubjectKind,
+    subject_id: string,
+    monthly_limit: number | null,
+    actor: string,
+  ): AllocationAuditEntry => {
+    const prev = limits.get(limitKey(kind, subject_id))
+    if (monthly_limit === null) limits.delete(limitKey(kind, subject_id))
+    else limits.set(limitKey(kind, subject_id), { monthly_limit, updated_at: now() })
+    const entry: AllocationAuditEntry = {
+      id: mint('alc'),
+      at: now(),
+      actor,
+      action: monthly_limit === null ? 'clear' : 'set',
+      kind,
+      subject_id,
+      ...(prev === undefined ? {} : { from: prev.monthly_limit }),
+      ...(monthly_limit === null ? {} : { to: monthly_limit }),
+    }
+    audits.unshift(entry)
+    return entry
+  }
+
   const bearer = (headers: Record<string, string> | undefined): string | undefined => {
     const raw = Object.entries(headers ?? {}).find(([k]) => k.toLowerCase() === 'authorization')
     const value = raw?.[1].replace(/^Bearer\s+/i, '').trim()
@@ -154,11 +314,15 @@ export function cloudStandIn(options: CloudStandInOptions = {}): CloudStandIn {
     }
   }
 
+  /** WP194：种过额度用量就以它为准（本月已用、余额与「积分」页同一个数）。 */
+  const monthUsed = (): number =>
+    usageCells.length === 0 ? MONTH_USED : round(usageCells.reduce((sum, c) => sum + c.credits, 0))
+
   const balance = (): WalletBalance => ({
     org_id: STAND_IN_ORG.id,
     purchased: PURCHASED,
     granted: GRANTED,
-    available: PURCHASED + GRANTED - MONTH_USED,
+    available: round(Math.max(0, PURCHASED + GRANTED - monthUsed())),
     reserved: 0,
     expiring: [{ credits: GRANTED, expires_at: days(30) }],
     low_balance_threshold: 20,
@@ -171,23 +335,37 @@ export function cloudStandIn(options: CloudStandInOptions = {}): CloudStandIn {
     const pricing = SAMPLE_PRICING_CATALOG.pricing
     const pick = (block: string): string | undefined =>
       pricing.entries.find((e) => pricingBlockOf(e) === block)?.capability
-    const split: [string | undefined, number, number][] = [
-      [pick('ai'), 8.2, 41],
-      [pick('data'), 3.2, 16],
-      [pick('service'), 1, 1],
-    ]
+    const seeded = (bucket: AllocationBucket): [number, number] => {
+      const cells = usageCells.filter((c) => c.bucket === bucket)
+      return [
+        round(cells.reduce((sum, c) => sum + c.credits, 0)),
+        cells.reduce((n, c) => n + c.calls, 0),
+      ]
+    }
+    const split: [string | undefined, number, number][] =
+      usageCells.length === 0
+        ? [
+            [pick('ai'), 8.2, 41],
+            [pick('data'), 3.2, 16],
+            [pick('service'), 1, 1],
+          ]
+        : ([
+            [pick('ai'), ...seeded('ai')],
+            [pick('data'), ...seeded('data')],
+            [pick('service'), ...seeded('other')],
+          ].filter((row) => (row[2] as number) > 0) as [string | undefined, number, number][])
     const rows =
       group === 'capability'
         ? split.flatMap(([key, credits, calls]) =>
             key === undefined ? [] : [{ key, credits, quantity: calls, calls }],
           )
-        : [{ key: now().slice(0, 10), credits: MONTH_USED, quantity: 58, calls: 58 }]
+        : [{ key: now().slice(0, 10), credits: monthUsed(), quantity: 58, calls: 58 }]
     return {
       group: group === 'workspace' || group === 'day' ? group : 'capability',
       from: monthStart(),
       to: now(),
       rows,
-      total_credits: MONTH_USED,
+      total_credits: monthUsed(),
     }
   }
 
@@ -282,6 +460,63 @@ export function cloudStandIn(options: CloudStandInOptions = {}): CloudStandIn {
       if (method === 'POST' && path === '/v1/wallet/topup')
         // WP142：demo 里点充值那一句——说清这是演示、正式版里会发生什么
         return fail(503, 'provider_unavailable', DEMO_TOPUP_MESSAGE)
+      // ── WP194：成员 / 岗位额度
+      if (method === 'GET' && path === '/v1/wallet/allocation') return ok(report())
+      if (method === 'GET' && path === '/v1/wallet/allocation/me') {
+        const member = headerOf(headers, MEMBER_HEADER)
+        const position = headerOf(headers, POSITION_HEADER)
+        const row = member === undefined ? undefined : rowOf('member', member)
+        const top = noticesOf()
+          .filter((n) => n.kind === 'member' && n.subject_id === member)
+          .reduce<80 | 100 | undefined>(
+            (hi, n) => (hi === undefined || n.level > hi ? n.level : hi),
+            undefined,
+          )
+        const mine: MyAllocation = {
+          month: now().slice(0, 7),
+          timezone: DEFAULT_ALLOCATION_TIMEZONE,
+          ...(member === undefined ? {} : { member_id: member }),
+          used: row?.used ?? 0,
+          reserved: 0,
+          ...(row?.monthly_limit === undefined ? {} : { monthly_limit: row.monthly_limit }),
+          ...(row?.percent === undefined ? {} : { percent: row.percent }),
+          ...(position === undefined ? {} : { position: rowOf('position', position) }),
+          ...(top === undefined ? {} : { notice: top }),
+        }
+        return ok(mine)
+      }
+      if (method === 'GET' && path === '/v1/wallet/allocation/audit') return ok({ entries: audits })
+      if (method === 'POST' && path === '/v1/wallet/allocation/limits') {
+        const kind =
+          body.kind === 'position' ? 'position' : body.kind === 'member' ? 'member' : undefined
+        const subject = typeof body.subject_id === 'string' ? body.subject_id : ''
+        const limit = body.monthly_limit
+        if (kind === undefined || !attributionIdOk(subject))
+          return fail(400, 'invalid_input', '要给 kind（member / position）与 subject_id')
+        if (limit !== null && (typeof limit !== 'number' || !Number.isFinite(limit) || limit < 0))
+          return fail(400, 'invalid_input', 'monthly_limit 要么是不小于 0 的数，要么是 null')
+        const actor = headerOf(headers, MEMBER_HEADER) ?? 'account:acct_demo'
+        const audit = setLimit(kind, subject, limit, actor)
+        return ok({ row: rowOf(kind, subject), audit })
+      }
+      if (method === 'POST' && path === '/v1/wallet/allocation/settings') {
+        if (typeof body.timezone === 'string') timezone = body.timezone
+        if (Array.isArray(body.notify_emails))
+          notifyEmails = body.notify_emails.filter((e): e is string => typeof e === 'string')
+        return ok({ timezone, notify_recipients: notifyEmails.length })
+      }
+      if (method === 'POST' && path === '/v1/wallet/allocation/members/remove') {
+        const member = typeof body.member_id === 'string' ? body.member_id : ''
+        const had = limits.delete(limitKey('member', member))
+        return ok({ member_id: member, cleared: had ? 1 : 0 })
+      }
+    }
+    // WP194：官方模型口在 demo 里不真跑；只演「额度到了」那一句（其余照旧说演示里没有）
+    if (method === 'POST' && path === '/v1/ai/chat/completions') {
+      if (token === undefined || !workspaceTokens.has(token))
+        return fail(401, 'unauthenticated', '令牌无效')
+      const blocked = aiGate(headers)
+      if (blocked !== undefined) return respond(blocked.status, blocked.body)
     }
     // ── WP192：官方数据接口统一能力口（只认替身签过的工作区令牌）
     if (
@@ -344,6 +579,12 @@ export function cloudStandIn(options: CloudStandInOptions = {}): CloudStandIn {
       return route(method, url, init?.headers, body)
     },
     requests: () => [...seen],
+    aiGate: (headers) => aiGate(headers),
+    seedAllocation(input) {
+      for (const cell of input.usage ?? []) usageCells.push({ ...cell })
+      for (const l of input.limits ?? [])
+        setLimit(l.kind, l.subject_id, l.monthly_limit, 'account:acct_demo')
+    },
     async settled() {
       await Promise.all([...inFlight])
     },

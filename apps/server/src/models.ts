@@ -45,18 +45,22 @@ import type {
   SetModelImageInput,
 } from '@agentsws/api'
 import type {
+  Attribution,
   Clock,
   EventEnvelope,
   Halt,
+  ModelMeta,
   ModelProvider,
   ModelPurpose,
   ModelRef,
 } from '@agentsws/contracts'
 import {
+  attributionHeaders,
   CLOUD_BASE_URL_ENV,
   cloudBaseUrl,
   DEFAULT_CLOUD_BASE_URL,
   NO_VISION_REASON,
+  ORG_BALANCE_EXHAUSTED_MESSAGE,
   VISION_MODEL_EXAMPLES,
 } from '@agentsws/contracts'
 import type {
@@ -305,6 +309,12 @@ export interface ModelsOptions {
     reportBalance?(insufficient: boolean): void
     quota?(): DeepSeekQuotaView | undefined
   }
+  /**
+   * WP194：一次模型调用算在谁头上（本机公司成员 + 岗位）。「Agents 工坊官方接口」那一条据此在
+   * 请求头里带 `X-Agentsws-Member` / `X-Agentsws-Position`，云上按人 / 按岗位判每月上限。
+   * 取值函数：分配表与岗位在模型面之后才装好。不给 = 不带（只受公司余额限制）。
+   */
+  cloudAttribution?: (meta: ModelMeta) => Attribution
 }
 
 /**
@@ -1257,6 +1267,12 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
               'X-Agentsws-Region':
                 (state.defaults.data_residency ?? 'cn') === 'cn' ? 'cn' : 'global',
             },
+            // WP194：带上「谁 / 哪个岗位」；402 那句人话（额度到了 / 公司没钱）原样端给用户
+            requestHeaders: (meta: ModelMeta | undefined) =>
+              meta === undefined || options.cloudAttribution === undefined
+                ? {}
+                : attributionHeaders(options.cloudAttribution(meta)),
+            cloudErrors: true,
           }
         : {}),
     })
@@ -2330,6 +2346,13 @@ function lastAttempt(e: unknown): { status?: number; message: string } | undefin
 
 /** WP188：随便聊里一次模型调用没成，给人看的那一句（与「测试」同一套措辞）。 */
 export function humanizeGatewayError(e: unknown): string {
+  /*
+   * WP194：官方接口说「积分不够」——那是云上的人话，原样给（不套「预算用完了，先把上限调高」
+   * 那一句：那是本机预算的说法）。公司没钱了统一说「公司的积分用完了，找管理员充值。」
+   */
+  const details = (e as { details?: { source?: unknown; reason?: unknown } } | undefined)?.details
+  if (codeOf(e) === 'budget_exhausted' && details?.source === 'agentsws_cloud')
+    return details.reason === 'org_balance' ? ORG_BALANCE_EXHAUSTED_MESSAGE : messageOf(e)
   return humanizeModelError(codeOf(e), messageOf(e))
 }
 

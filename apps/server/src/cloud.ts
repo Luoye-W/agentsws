@@ -20,17 +20,26 @@ import { dirname, join } from 'node:path'
 import type { CloudActor, CloudPort } from '@agentsws/api'
 import { ApiError } from '@agentsws/api'
 import type {
+  AllocationAuditList,
+  AllocationLimitChanged,
+  AllocationLimitRequest,
+  AllocationMemberRemoved,
+  AllocationReport,
+  Attribution,
   CapabilitySource,
   CapabilitySourceSettings,
   CapabilitySources,
   Clock,
+  CloudAllocationView,
   CloudCreditsView,
+  CloudMyAllocationView,
   DataSourceLevel,
   DataSourceRoute,
   KolCloudDeleteResult,
   KolCloudExport,
   LocalPricing,
   LocalTopupTiers,
+  MyAllocation,
   ServiceSubscription,
   TopupOrder,
   UsageGroup,
@@ -38,14 +47,18 @@ import type {
   WalletBalance,
 } from '@agentsws/contracts'
 import {
+  allocationTimezoneOf,
+  attributionHeaders,
   DATA_CAPABILITY_ROUTE_LEVELS,
   DATA_CAPABILITY_ROUTE_PREFIX,
+  DEFAULT_ALLOCATION_TIMEZONE,
   DEFAULT_DATA_CAPABILITY_ORDER,
   DEFAULT_DATA_SOURCE_ORDER,
   DEFAULT_WEB_SEARCH_ORDER,
   dataCapabilityRouteKey,
   WEB_SEARCH_ROUTE_KEY,
 } from '@agentsws/contracts'
+import { currentCloudHeaders } from './cloud-attribution.js'
 import type { KolStore } from './kol.js'
 import type { KolCloudCall, KolCloudCallFn, KolCloudSync } from './kol-cloud-sync.js'
 import { createKolCloudSync } from './kol-cloud-sync.js'
@@ -96,6 +109,36 @@ export interface CloudOptions {
    * 建一份、各品牌共用；不给就自己建一份（缓存落在 `dbDir`）。
    */
   pricingCatalog?: PricingCatalogSource
+  /**
+   * WP194：一条职责归哪个岗位（`positions.positionOf`）。打云时据此带 `X-Agentsws-Position`；
+   * 取值函数——岗位面在云面之后才装好。不给 = 只带「谁」，不带岗位。
+   */
+  positionOf?: (role_id: string) => string | undefined
+  /**
+   * WP194：公司时区（工作区档案的 `tz`）。改额度时顺手告诉云上（自然月按它切）；
+   * 只认 IANA 名（`Asia/Shanghai`），`+08:00` 这种偏移不传（云上缺省就是上海）。
+   */
+  timeZone?: () => Promise<string | undefined> | string | undefined
+  /**
+   * WP194：这个人能不能管公司的积分（公司的 owner / admin，或本工作区所有者职责的持有人）。
+   * 不给 = 谁都不能看公司那一页（最保守：漏放一个人看全公司的账比多拦一次糟）。
+   */
+  canManage?: (
+    actor: CloudActor,
+  ) => Promise<'owner' | 'admin' | boolean | undefined> | 'owner' | 'admin' | boolean | undefined
+  /**
+   * WP194：本机公司的名册——成员 / 岗位的名字（云上只有 id，「积分」页与 100% 提醒信要名字），
+   * 与提醒信发给谁（公司的 owner / admin 的邮箱）。取值函数：名册在云面之后才装好。
+   */
+  directory?: () => Promise<CreditsDirectory> | CreditsDirectory
+}
+
+/** WP194：本机公司的名册（给「积分」页与提醒信用）。 */
+export interface CreditsDirectory {
+  members: Record<string, string>
+  positions: Record<string, string>
+  /** 公司的 owner / admin 的邮箱（用到 100% 时那封提醒信发给他们）。 */
+  notify_emails: string[]
 }
 
 export interface CloudAssembly {
@@ -120,6 +163,11 @@ export interface CloudAssembly {
    * （`deepseek_native`，对外叫「用你的 DeepSeek 账号搜索」）；用户在设置里关掉就是 `disabled` 里有它。
    */
   webSearchRoute(): DataSourceRoute
+  /**
+   * WP194：删成员时把他在云上的额度行清掉（历史用量保留）。**尽力而为**：没关联 / 连不上
+   * 不拦删人——本地这一刀已经切了，云上那一行留着也不会再被用到（他不再出现在请求头里）。
+   */
+  forgetMember(person_id: string, by: string): Promise<boolean>
   /**
    * WP192：官方数据接口统一能力口那些能力（`maps.places`、`serp.google`……）的路由，
    * 键 `data.<能力>`。默认只有「Agents 工坊（用积分）」一级（`workshop`）。
@@ -228,7 +276,7 @@ export function createCloud(options: CloudOptions): CloudAssembly {
   /** 打一次云侧。令牌在这一行进头，函数返回之后没人再引用它。 */
   const callCloud = async <T>(
     path: string,
-    init: { method?: string; body?: string } = {},
+    init: { method?: string; body?: string; headers?: Record<string, string> } = {},
   ): Promise<T | undefined> => {
     const token = tokenOf()
     if (token === undefined) return undefined
@@ -243,6 +291,9 @@ export function createCloud(options: CloudOptions): CloudAssembly {
           Authorization: `Bearer ${token}`,
           accept: 'application/json',
           ...(init.body === undefined ? {} : { 'content-type': 'application/json' }),
+          // WP194：算在谁头上（作用域里的那一份；显式给的优先）
+          ...currentCloudHeaders(),
+          ...init.headers,
         },
         ...(init.body === undefined ? {} : { body: init.body }),
         signal: controller.signal,
@@ -266,9 +317,14 @@ export function createCloud(options: CloudOptions): CloudAssembly {
    * 要把云上那句话原样端给用户——**402「还没开通」与 503「云连不上」是两句话**，
    * 一句给"去开通"，一句给"稍后再试"，合成一句用户就不知道该怎么办了。
    */
-  const cloudCall: KolCloudCallFn = async <T>(
+  const cloudCall = async <T>(
     path: string,
-    init: { method?: string; body?: unknown; timeout_ms?: number } = {},
+    init: {
+      method?: string
+      body?: unknown
+      headers?: Record<string, string>
+      timeout_ms?: number
+    } = {},
   ): Promise<KolCloudCall<T>> => {
     const token = tokenOf()
     if (token === undefined) return { ok: false, status: 0 }
@@ -283,6 +339,8 @@ export function createCloud(options: CloudOptions): CloudAssembly {
           Authorization: `Bearer ${token}`,
           accept: 'application/json',
           ...(init.body === undefined ? {} : { 'content-type': 'application/json' }),
+          ...currentCloudHeaders(),
+          ...init.headers,
         },
         ...(init.body === undefined ? {} : { body: JSON.stringify(init.body) }),
         signal: controller.signal,
@@ -355,6 +413,96 @@ export function createCloud(options: CloudOptions): CloudAssembly {
         res.message ?? `云上出了点问题，这一次没有${action}。`,
       )
     throw new ApiError('invalid_input', res.message ?? `云上没答应这一次${action}。`)
+  }
+
+  /**
+   * WP194：这一次算在谁头上——本机公司成员（`person_id`）+ 这条职责归的岗位。
+   * 云上的令牌是工作区级的、分不出人，所以由持令牌的本机服务在请求头里声明。
+   */
+  const whoOf = (actor: CloudActor): Attribution => {
+    const position = options.positionOf?.(actor.role_id)
+    return {
+      member_id: actor.person_id,
+      ...(position === undefined ? {} : { position_id: position }),
+    }
+  }
+  const headersOf = (actor: CloudActor): Record<string, string> => attributionHeaders(whoOf(actor))
+
+  const directoryOf = async (): Promise<CreditsDirectory> => {
+    try {
+      return (await options.directory?.()) ?? { members: {}, positions: {}, notify_emails: [] }
+    } catch {
+      return { members: {}, positions: {}, notify_emails: [] }
+    }
+  }
+
+  /**
+   * 公司时区与提醒信收件人（改额度前推一次，尽力而为）。时区：IANA 名原样、`+08:00` 这类偏移换算后推，
+   * 认不出的按上海（Fable 09-29 定；界面上注一句「按北京时间切月」）。
+   */
+  const pushSettings = async (directory: CreditsDirectory): Promise<void> => {
+    try {
+      const tz = allocationTimezoneOf(await options.timeZone?.()) ?? DEFAULT_ALLOCATION_TIMEZONE
+      await cloudCall('/v1/wallet/allocation/settings', {
+        method: 'POST',
+        body: { timezone: tz, notify_emails: directory.notify_emails.slice(0, 20) },
+      })
+    } catch {
+      /* 没推上去不拦改额度：云上照上海时区切，提醒信照样发给组织 owner */
+    }
+  }
+
+  const MANAGERS_ONLY = '只有公司的所有者和管理员看得到、改得了公司的积分分配。'
+  const assertManager = async (actor: CloudActor): Promise<'owner' | 'admin'> => {
+    const role = await options.canManage?.(actor)
+    if (role === 'admin') return 'admin'
+    if (role === 'owner' || role === true) return 'owner'
+    throw new ApiError('forbidden', MANAGERS_ONLY)
+  }
+
+  /** 公司「积分」页那一份（管理员看）。 */
+  const allocationView = async (
+    actor: CloudActor,
+    month: string | undefined,
+  ): Promise<CloudAllocationView> => {
+    if (tokenOf() === undefined) return { linked: false, reason: NOT_LINKED }
+    const query = month === undefined ? '' : `?month=${encodeURIComponent(month)}`
+    const res = await cloudCall<AllocationReport>(`/v1/wallet/allocation${query}`, {
+      headers: headersOf(actor),
+    })
+    if (res.ok && res.data !== undefined) {
+      // 公司的 admin 不一定进得了设置 → 积分那一页，余额与名字在这里一并给
+      const [balance, directory] = await Promise.all([
+        callCloud<WalletBalance>('/v1/wallet'),
+        directoryOf(),
+      ])
+      return {
+        linked: true,
+        report: res.data,
+        ...(balance === undefined ? {} : { balance }),
+        names: { members: directory.members, positions: directory.positions },
+      }
+    }
+    return {
+      linked: true,
+      reason:
+        res.status === 0
+          ? '暂时取不到（云上连不通）。稍后再看一眼。'
+          : (res.message ?? '暂时取不到公司的额度与用量。'),
+    }
+  }
+
+  /** 「我的本月额度」（成员自己看）。 */
+  const myAllocationView = async (actor: CloudActor): Promise<CloudMyAllocationView> => {
+    if (tokenOf() === undefined) return { linked: false, reason: NOT_LINKED }
+    const res = await cloudCall<MyAllocation>('/v1/wallet/allocation/me', {
+      headers: headersOf(actor),
+    })
+    if (res.ok && res.data !== undefined) return { linked: true, mine: res.data }
+    return {
+      linked: true,
+      reason: res.status === 0 ? '暂时取不到（云上连不通）。' : (res.message ?? '暂时取不到。'),
+    }
   }
 
   let cached: { at: number; view: CloudCreditsView } | undefined
@@ -472,6 +620,42 @@ export function createCloud(options: CloudOptions): CloudAssembly {
   }
 
   const port: CloudPort = {
+    // WP194：成员 / 岗位额度（谁能看公司那一页在路由那一层判：公司的 owner / admin）
+    allocation: async (actor, filter) => {
+      const role = await assertManager(actor)
+      return { ...(await allocationView(actor, filter.month)), role }
+    },
+    myAllocation: (actor) => myAllocationView(actor),
+    setAllocationLimit: async (actor, input: AllocationLimitRequest) => {
+      await assertManager(actor)
+      if (tokenOf() === undefined) throw new ApiError('invalid_input', NOT_LINKED)
+      const directory = await directoryOf()
+      await pushSettings(directory)
+      // 名字只进 100% 那封提醒信（云上别处只认 id）
+      const label =
+        input.label ??
+        (input.kind === 'member'
+          ? directory.members[input.subject_id]
+          : directory.positions[input.subject_id])
+      return unwrap(
+        await cloudCall<AllocationLimitChanged>('/v1/wallet/allocation/limits', {
+          method: 'POST',
+          body: { ...input, ...(label === undefined ? {} : { label }) },
+          headers: headersOf(actor),
+        }),
+        '改额度',
+      )
+    },
+    allocationAudit: async (actor) => {
+      await assertManager(actor)
+      if (tokenOf() === undefined) throw new ApiError('invalid_input', NOT_LINKED)
+      return unwrap(
+        await cloudCall<AllocationAuditList>('/v1/wallet/allocation/audit', {
+          headers: headersOf(actor),
+        }),
+        '读改额度记录',
+      )
+    },
     credits: () => creditsView(),
     pricing: () => pricingView(),
     usage: (_actor, filter) => usageView(filter),
@@ -565,6 +749,15 @@ export function createCloud(options: CloudOptions): CloudAssembly {
     ...(kolSync === undefined ? {} : { kolSync }),
     relayCloudStatus: () => callCloud('/v1/chat/relay/status'),
     linked: () => tokenOf() !== undefined,
+    forgetMember: async (person_id, by) => {
+      if (tokenOf() === undefined) return false
+      const res = await cloudCall<AllocationMemberRemoved>('/v1/wallet/allocation/members/remove', {
+        method: 'POST',
+        body: { member_id: person_id },
+        headers: attributionHeaders({ member_id: by }),
+      })
+      return res.ok
+    },
     sourceOf: (capability) => state.capability_sources[capability] ?? 'mine',
     /**
      * WP126：某条渠道的数据接口路由（顺序 + 被关掉的那几级）。

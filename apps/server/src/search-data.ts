@@ -42,6 +42,7 @@ import {
   type SearchFetch,
   searchProviderOf,
 } from '@agentsws/search-providers'
+import { currentCloudHeaders } from './cloud-attribution.js'
 import type { SecretStore } from './secret-store.js'
 
 /** 自带 key 在本机加密库里的名字。**全仓只有这一处拼它。** */
@@ -209,6 +210,8 @@ export function createOfficialSearchClient(options: {
           Authorization: `Bearer ${token}`,
           accept: 'application/json',
           ...(payload === undefined ? {} : { 'content-type': 'application/json' }),
+          // WP194：算在谁头上（本机成员 + 岗位；云上按人按岗位的每月上限）
+          ...currentCloudHeaders(),
         },
         ...(payload === undefined ? {} : { body: JSON.stringify(payload) }),
         signal: controller.signal,

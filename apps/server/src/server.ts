@@ -230,6 +230,7 @@ import {
   type CloudFetch,
   createCloudAccount,
 } from './cloud-account.js'
+import { withCloudAttribution } from './cloud-attribution.js'
 import { ComputerUseError, createComputerUse } from './computer-use.js'
 import { ComputerUseInstallError } from './computer-use-install.js'
 import { connectBaseUrl } from './connect-url.js'
@@ -1873,6 +1874,72 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
    * （与 `runtime.bind(work)` 打断 `Work ↔ startRun` 那个环是同一个套路）。
    */
   const positionAssemblies = new Map<WorkspaceId, PositionsAssembly>()
+  /**
+   * WP194：一条分配（或一条职责）归哪个岗位——打云时带 `X-Agentsws-Position`。
+   * 岗位面按品牌晚装，所以每次现查；查不到就不带（只受个人上限与公司余额限制）。
+   */
+  const cloudPositionOf = (workspace_id: WorkspaceId, role_id: string): string | undefined =>
+    positionAssemblies.get(workspace_id)?.positionOf(role_id).position_id
+  /** WP194：一次调用算在谁头上（本机公司成员 + 岗位）。 */
+  const cloudAttributionOf = (assignment_id: string, fallback_role?: string) => {
+    const a = roles.assignments.get(assignment_id)
+    if (a === undefined) return {}
+    const position = cloudPositionOf(a.workspace_id, a.role_id ?? fallback_role)
+    return { member_id: a.person_id, ...(position === undefined ? {} : { position_id: position }) }
+  }
+  /**
+   * WP194：这个人能不能管公司的积分，是什么身份——
+   * owner：本工作区所有者职责的持有人、工作区成员表里的 owner、公司成员表里的 owner；
+   * admin：工作区成员表里的 manager、公司成员表里的 admin（离开了的都不算）。
+   * admin 只开公司页的「积分」那一页（Fable 09-29 定），公司页其它 tab 照旧只给所有者。
+   */
+  const creditsRoleOf = async (
+    person_id: string,
+    workspace_id: string,
+  ): Promise<'owner' | 'admin' | undefined> => {
+    const holdsOwner = roles.assignments
+      .listByPerson(person_id, { workspace_id, role_id: 'common.owner' })
+      .some((a) => a.revoked_at === undefined)
+    if (holdsOwner) return 'owner'
+    let admin = false
+    try {
+      const m = (await identity.members(workspace_id)).find(
+        (x) => x.person_id === person_id && x.left_at === undefined,
+      )
+      if (m?.role === 'owner') return 'owner'
+      if (m?.role === 'manager') admin = true
+      for (const o of await identity.organizationsOf(person_id)) {
+        const om = o.members.find((x) => x.person_id === person_id && x.left_at === undefined)
+        if (om?.role === 'owner') return 'owner'
+        if (om?.role === 'admin') admin = true
+      }
+    } catch {
+      // 查不到当没有：最保守
+    }
+    return admin ? 'admin' : undefined
+  }
+  /** WP194：岗位 id → 名字（公司页装好之后才有；之前是空表）。 */
+  let creditsPositionNames: () => Record<string, string> = () => ({})
+  /**
+   * WP194：本机公司的名册——成员与岗位的名字（「积分」页与 100% 提醒信用），
+   * 与提醒信发给谁（公司的 owner / admin 的邮箱）。
+   */
+  const creditsDirectory = async (workspace_id: string) => {
+    const members: Record<string, string> = {}
+    const notify = new Set<string>()
+    for (const m of await identity.members(workspace_id)) {
+      const person = await identity.getPerson(m.person_id)
+      if (person === undefined) continue
+      members[person.id] = person.name
+      if (m.left_at !== undefined) continue
+      if (
+        (await creditsRoleOf(person.id, workspace_id)) !== undefined &&
+        person.email.includes('@')
+      )
+        notify.add(person.email.trim().toLowerCase())
+    }
+    return { members, positions: creditsPositionNames(), notify_emails: [...notify] }
+  }
 
   /*
    * ── WP120（69）：**角色定位** ───────────────────────────────────────────
@@ -2600,6 +2667,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       ...(dir === undefined ? {} : { dbDir: dir }),
       ...(options.cloudFetch === undefined ? {} : { fetch: options.cloudFetch }),
       pricingCatalog,
+      // WP194：打云时带「谁 / 哪个岗位」；公司「积分」页只给 owner / admin；改额度顺手推公司时区
+      positionOf: (role_id) => cloudPositionOf(ws, role_id),
+      canManage: (actor) => creditsRoleOf(actor.person_id, ws),
+      directory: () => creditsDirectory(ws),
+      timeZone: async () => (await identity.getWorkspace(ws))?.tz,
     })
     const ownModels = createModels({
       clock,
@@ -2613,6 +2685,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         appendEvent(e)
       },
       workspace_id: () => ws,
+      // WP194：官方接口那一条带上「谁 / 哪个岗位」（云上按人按岗位的每月上限）
+      cloudAttribution: (meta) => cloudAttributionOf(meta.assignment_id, meta.role_id),
       ...(dir === undefined ? {} : { dbDir: dir }),
       ...(options.modelFetch === undefined ? {} : { fetch: options.modelFetch }),
       ...(options.pricingFetch === undefined ? {} : { pageFetch: options.pricingFetch }),
@@ -2665,6 +2739,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         ? undefined
         : createRuntime({
             workspace_id: ws,
+            // WP194：运行里打云的数据接口带上「谁 / 哪个岗位」
+            aroundRun: (actor, fn) =>
+              withCloudAttribution(cloudAttributionOf(actor.assignment_id, actor.role_id), fn),
             clock,
             random,
             env,
@@ -4594,10 +4671,19 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     // WP182：B2B 业务员离开 → 各品牌里他名下的客户 / 商机 / 没回的询盘各出一张交接卡给老板
     afterMemberLeft: async (person_id, by) => {
       for (const brand of await brandModules.all()) await brand.b2bSales.onMemberLeft(person_id, by)
+      /*
+       * WP194：删人时把他在云上的额度行清掉（历史用量留着，账对得上）。钱在公司那一个云组织上，
+       * 任一个关联了的品牌清一次就够；尽力而为——没关联 / 连不上不拦删人。
+       */
+      for (const brand of await brandModules.all()) {
+        if (!brand.ownCloud.linked()) continue
+        if (await brand.ownCloud.forgetMember(person_id, by).catch(() => false)) break
+      }
     },
   })
   rangeExpandedSink = org.onRangeExpanded
   supervisorPositions = () => org.positions()
+  creditsPositionNames = () => Object.fromEntries(org.positions().map((p) => [p.id, p.name.zh]))
 
   /**
    * WP51 首次设置与同事发现（46）。
@@ -6225,6 +6311,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
 
   const deps: GatewayDeps = {
     identity,
+    // WP194：一次请求绑好分配之后，开一个「算在谁头上」的作用域（打云时带归属头）
+    requestScope: (scope, next) =>
+      withCloudAttribution(cloudAttributionOf(scope.assignment.id), next),
     halt: kernel.halt,
     trace: kernel.trace,
     clock,

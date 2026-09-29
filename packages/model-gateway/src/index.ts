@@ -106,6 +106,8 @@ export {
 } from './providers/deepseek-quota.js'
 export type { FetchLike, OpenAiCompatibleOptions } from './providers/openai-compatible.js'
 export {
+  // WP194：官方接口回 402（本月额度 / 公司积分）→ 那句人话
+  cloudQuotaError,
   extensionFor,
   ollamaTagsUrl,
   openaiCompatibleProvider,

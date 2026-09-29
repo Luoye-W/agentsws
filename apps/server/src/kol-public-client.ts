@@ -33,6 +33,7 @@ import type {
 } from '@agentsws/kol-core'
 import { cloudBaseUrl } from './cloud.js'
 import { CLOUD_TOKEN_SECRET_ID } from './cloud-account.js'
+import { currentCloudHeaders } from './cloud-attribution.js'
 import { CONTACT_SECRET_FIELD, contactSecretId } from './kol-service.js'
 import type { SecretStore } from './secret-store.js'
 
@@ -129,7 +130,12 @@ export function createKolPublicClient(options: KolPublicClientOptions): PublicLi
       // 令牌只在这一行进头
       const res = await doFetch(`${base}${path}`, {
         method: init.method,
-        headers: { Authorization: `Bearer ${token}`, accept: 'application/json' },
+        // WP194：算在谁头上（本机成员 + 岗位；云上按人按岗位的每月上限）
+        headers: {
+          Authorization: `Bearer ${token}`,
+          accept: 'application/json',
+          ...currentCloudHeaders(),
+        },
         signal: controller.signal,
       })
       const text = await res.text()

@@ -2,6 +2,7 @@ import type {
   ChatContentPart,
   ChatMessage,
   ModelCapabilities,
+  ModelMeta,
   ModelProvider,
   ModelRef,
   ProviderModelInfo,
@@ -78,6 +79,17 @@ export interface OpenAiCompatibleOptions {
    * 不给 = 照旧（别家的 402 仍是泛泛的上游错误）。
    */
   deepseekBalance?: { onBalance?: DeepSeekBalanceListener }
+  /**
+   * WP194：每次对话现算的额外请求头（拿得到这一次的 {@link ModelMeta}）。「Agents 工坊官方接口」
+   * 那一条用它带 `X-Agentsws-Member` / `X-Agentsws-Position`；别家不给。回的值只进请求头。
+   */
+  requestHeaders?: (meta: ModelMeta | undefined) => Record<string, string>
+  /**
+   * WP194：这一条是 **Agents 工坊官方接口**。给了：上游回 402 且正文是我们的错误信封
+   * `{ code, message, details }` 时，以那句人话失败（`budget_exhausted`，网关原样往上抛）——
+   * 「本月额度用完了，找管理员加。」与「积分不够了」是两句话，不能被翻成泛泛的上游错误。
+   */
+  cloudErrors?: boolean
 }
 
 interface WireToolCall {
@@ -243,6 +255,30 @@ const cachedOf = (u: WireUsage | undefined): number =>
   u?.prompt_tokens_details?.cached_tokens ?? u?.prompt_cache_hit_tokens ?? 0
 
 /** 网关是唯一持凭据的地方；这里也只拿环境变量名，不接受字面量凭据。 */
+/**
+ * WP194：官方接口回的 402 → 那句人话（`budget_exhausted`）。
+ *
+ * 正文是我们自己的错误信封 `{ code, message, details }`：`details.reason` 分
+ * `member_limit`（本月额度用完了）/ `position_limit`（这个岗位的额度用完了）/ `org_balance`（公司积分用完了）。
+ * 不是信封（中间有代理改了正文）就说一句不分人的。
+ */
+export function cloudQuotaError(detail: string): GatewayError {
+  let message = '官方接口说积分不够了，这一次没做。'
+  let reason: string | undefined
+  try {
+    const body = JSON.parse(detail) as { message?: unknown; details?: { reason?: unknown } }
+    if (typeof body.message === 'string' && body.message.trim() !== '') message = body.message
+    if (typeof body.details?.reason === 'string') reason = body.details.reason
+  } catch {
+    // 不是信封：用上面那句
+  }
+  return new GatewayError('budget_exhausted', message, {
+    source: 'agentsws_cloud',
+    status: 402,
+    ...(reason === undefined ? {} : { reason }),
+  })
+}
+
 export function openaiCompatibleProvider(options: OpenAiCompatibleOptions): ModelProvider {
   const baseUrl = (options.baseUrl ?? 'https://api.deepseek.com').replace(/\/+$/, '')
   const env = options.env ?? process.env
@@ -278,9 +314,11 @@ export function openaiCompatibleProvider(options: OpenAiCompatibleOptions): Mode
       multipart?: boolean
       /** WP188：调用方的停止信号（流式那条路给）。 */
       signal?: AbortSignal
+      /** WP194：这一次多带的头（官方接口那一条的「谁 / 哪个岗位」）。 */
+      headers?: Record<string, string>
     },
   ): Promise<Awaited<ReturnType<FetchLike>>> => {
-    const headers = authHeaders()
+    const headers = { ...authHeaders(), ...init.headers }
     // multipart 的 boundary 由 fetch 自己写，手工塞 content-type 会让上游解不出来
     if (init.multipart === true) delete headers['content-type']
     const timeout =
@@ -310,6 +348,7 @@ export function openaiCompatibleProvider(options: OpenAiCompatibleOptions): Mode
     }
     if (!res.ok) {
       const detail = await res.text().catch(() => '')
+      if (options.cloudErrors === true && res.status === 402) throw cloudQuotaError(detail)
       if (options.deepseekBalance !== undefined && isDeepSeekQuotaFailure(res.status, detail)) {
         options.deepseekBalance.onBalance?.(true)
         throw deepseekQuotaError('api_key', res.status)
@@ -323,14 +362,25 @@ export function openaiCompatibleProvider(options: OpenAiCompatibleOptions): Mode
 
   const request = async (
     url: string,
-    init: { method: 'GET' | 'POST'; body?: string | FormData; multipart?: boolean },
+    init: {
+      method: 'GET' | 'POST'
+      body?: string | FormData
+      multipart?: boolean
+      headers?: Record<string, string>
+    },
   ): Promise<unknown> => (await open(url, init)).json()
 
-  const post = async (path: string, body: unknown, form?: FormData): Promise<unknown> =>
+  const post = async (
+    path: string,
+    body: unknown,
+    form?: FormData,
+    headers?: Record<string, string>,
+  ): Promise<unknown> =>
     request(`${baseUrl}${path}`, {
       method: 'POST',
       body: form ?? JSON.stringify(body),
       ...(form === undefined ? {} : { multipart: true }),
+      ...(headers === undefined ? {} : { headers }),
     })
 
   /**
@@ -368,11 +418,13 @@ export function openaiCompatibleProvider(options: OpenAiCompatibleOptions): Mode
     payload: Record<string, unknown>,
     onText: (text: string) => void,
     signal: AbortSignal | undefined,
+    headers?: Record<string, string>,
   ): Promise<WireChatResponse> => {
     const res = await open(`${baseUrl}/chat/completions`, {
       method: 'POST',
       body: JSON.stringify({ ...payload, stream: true, stream_options: { include_usage: true } }),
       ...(signal === undefined ? {} : { signal }),
+      ...(headers === undefined ? {} : { headers }),
     })
     const reply = await readChatStream(res, onText, signal)
     return {
@@ -411,11 +463,18 @@ export function openaiCompatibleProvider(options: OpenAiCompatibleOptions): Mode
         ...(req.tools === undefined ? {} : { tools: req.tools.map(toWireTool) }),
         ...(req.seed === undefined ? {} : { seed: req.seed }),
       }
+      // WP194：官方接口那一条带上「谁 / 哪个岗位」
+      const extra = options.requestHeaders?.(req.meta)
       // WP188：调用方要一段一段收（随便聊）→ 走流式；拼回来的形状与非流式一模一样
       const json: WireChatResponse =
         req.on_delta === undefined
-          ? ((await post('/chat/completions', { ...payload, stream: false })) as WireChatResponse)
-          : await streamed(payload, req.on_delta, req.signal)
+          ? ((await post(
+              '/chat/completions',
+              { ...payload, stream: false },
+              undefined,
+              extra,
+            )) as WireChatResponse)
+          : await streamed(payload, req.on_delta, req.signal, extra)
       const message = json.choices?.[0]?.message
       if (message === undefined) {
         throw new ProviderError('provider response has no choices')
