@@ -88,7 +88,7 @@
 | 63 | WP179 官方功能优先：用官方网页搜索 / 抓网页（账号免 key）接进职责，逐行重判 profile 锁定（功能能开都开，真冲突保留，数据外发交 Luoye 定），docs/42 红线更新 | `WP179-deepseek-native-search.md` | `wp179-ds-search` · `wp/179-ds-search` | WP177 | 已合并（09-29，Fable 终审：干净构建，317 文件 4380 条过，三个模拟包 × 三运行时门禁过（dtc-3c-3p 65）） |
 | 64 | WP180 官方插件管理（装卸出卡 + 白名单 + 不许写回锁定行）与配置写回（只许写非锁定行）包一层后打开；每次运行带当前时间与公司时区 | `WP180-official-plugins-wrap.md` | `wp180-plugins` · `wp/180-plugins` | WP179 | 已合并（09-29，Fable 终审：干净构建，322 文件 4408 条过，三个模拟包 × 三运行时门禁过） |
 | 65 | WP181 官方「自动化任务」插件在我们运行里真用起来（与 packages/schedule 并存 / 迁移、右栏定时任务面板）；桌面包带 profiles；秘书运行带时间 | `WP181-official-automation-plugin.md` | `wp181-automation` · `wp/181-automation` | WP180 | 已合并（09-29，Fable 终审追加：等批的定时任务暂停、批了才开始，每日次数落盘；干净构建，325 文件 4547 条过，三个模拟包 × 三运行时门禁过；桌面包未真打） |
-| 66 | WP182 B2B 询盘与报价：询盘接客服管线、六类事实卡、报价卡与报价单 PDF、样品跟踪、离职交接卡 | `WP182-b2b-inquiry-quote.md` | `wp182-b2b-sales` · `wp/182-b2b-sales` | WP172–WP176 | 待审（报告 docs/briefs/reports/WP182.md） |
+| 66 | WP182 B2B 询盘与报价：询盘接客服管线、六类事实卡、报价卡与报价单 PDF、样品跟踪、离职交接卡 | `WP182-b2b-inquiry-quote.md` | `wp182-b2b-sales` · `wp/182-b2b-sales` | WP172–WP176 | 已合并（09-29，Fable 终审：干净构建，330 文件 3928 条过（仅 RPC 噪声），b2b 24/24、dtc 65/65、22/22 × 三运行时） |
 | 67 | WP183 调研与设计：agentsws 做成 DSH 插件（官方桌面端装上就能用），只读 + 讨论稿 docs/85 | `WP183-agentsws-as-dsh-plugins.md` | `wp183-dsh-plugin` · `wp/183-dsh-plugin` | WP180 | 已合并（09-29，讨论稿 docs/85；§6 八件事待 Luoye 定） |
 | 68 | WP184 官方场景在我们自己的窗口里打开（借官方桌面端壳，MIT）；认用户自己装的官方桌面端 | `WP184-official-desktop-scene.md` | `wp184-official-desktop` · `wp/184-official-desktop` | WP136 | 已合并（09-29，Fable 终审：干净构建，290 文件 4152 条过，stub 三包零漂移；Electron e2e 场景窗口过） |
 
