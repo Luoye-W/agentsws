@@ -342,6 +342,11 @@ export interface ModelProvider {
     tools?: ToolDef[]
     seed?: number
     tool_choice?: ToolChoice
+    /**
+     * WP194（只加）：这一次是谁、哪条分配在调。网关原样递下来；provider 可以不看。
+     * 「Agents 工坊官方接口」那一条靠它在请求头里带上「谁 / 哪个岗位」（云上按人按岗位的每月上限）。
+     */
+    meta?: ModelMeta
   }): Promise<ProviderCompletion>
   /** 是否原生支持 `tool_choice`；缺省视为不支持（网关会剥掉该字段）。 */
   supports_tool_choice?: boolean
