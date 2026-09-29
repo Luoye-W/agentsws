@@ -392,6 +392,42 @@ upstreams:
       - browserskill.lock.json
 
   # ── ported：抄进来的源码，上游改了要对照回来 ──────────────────────────────
+  # WP184（docs/79 §3.1）：官方场景在我们自己的窗口里打开，借官方桌面端壳的几段做法（MIT）。
+  # 只借壳的做法（凭据只附给归属窗口、目录选择、麦克风、DevTools 键、关窗隐藏、退出确认），
+  # 不借强制更新与埋点，也不把官方桌面端打进安装包。上游改了这几个文件要对照回来。
+  - id: dsh-desktop-shell
+    kind: ported
+    why: 官方场景窗口的凭据转发、原生目录选择、麦克风授权、DevTools 快捷键、退出前确认移植自官方桌面端 Electron 壳（MIT）；另按它的打包配置认用户自己装的官方桌面端
+    repo: deepseek-ai/deepseek-harness
+    pinned_commit: 4878cdabd87d4041bdaff61d04c966883b9fd07a
+    watch: [releases, wishlist]
+    watch_paths:
+      - apps/desktop/src/web-document.ts
+      - apps/desktop/src/main.ts
+      - apps/desktop/src/microphone-permissions.ts
+      - apps/desktop/src/directory-picker.ts
+      - apps/desktop/src/preload-app.ts
+      - apps/desktop/src/quit-confirmation.ts
+      - apps/desktop-host/src/quit-inspection.ts
+      - apps/desktop/scripts/electron-builder-config.mjs
+    we_depend_on:
+      - 'web-document.ts 的 authenticateWebHost 与「set-cookie 不进页面」→ apps/desktop/src/scene-window.ts（authenticateSceneHost / withoutSetCookie）'
+      - 'main.ts 里 ws://127.0.0.1/* 的 onBeforeSendHeaders（凭据只附给归属窗口、来源不对就拒）→ scene-window.ts 的 sceneRequestHeaders'
+      - 'microphone-permissions.ts → scene-window.ts 的 decideScenePermission'
+      - 'directory-picker.ts 的来源检查 → scene-window.ts 的 sceneSender；main.ts 的 agentsws:scene-directory-pick'
+      - 'preload-app.ts 的 __DSH_DIRECTORY_PICKER__ / __DSH_HOST_PATHS__ 两段 → apps/desktop/src/scene-preload.cts'
+      - 'quit-confirmation.ts（resolveDesktopQuitPrompt + DesktopQuitConfirmation）→ apps/desktop/src/quit-confirmation.ts'
+      - 'electron-builder-config.mjs 的 productName / protocols / NSIS 按用户安装 → packages/dsh-adapter/src/official-desktop.ts'
+    wishlist:
+      - 官方桌面端改了 Host 认证（launch token → cookie 的换法）或 WebSocket 的来源规则
+      - 前端认的桌面全局名（__DSH_DIRECTORY_PICKER__ / __DSH_HOST_PATHS__）改名
+      - 产品名、dsh:// 协议或 Windows 安装目录变了（认用户自己装的那一份会认不出）
+      - 官方桌面端上了 npm 或 GitHub Release 有了安装包
+    covered_by:
+      - apps/desktop/test/scene-window.test.ts
+      - apps/desktop/test/quit-confirmation.test.ts
+      - packages/dsh-adapter/test/official-desktop.test.ts
+
   - id: commerce-agents
     kind: ported
     why: 围栏与变更账本是从它移植的（Apache-2.0），上游修规则我们要跟
