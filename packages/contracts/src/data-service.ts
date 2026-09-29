@@ -222,3 +222,421 @@ export const DEFAULT_DATA_CAPABILITY_ORDER: readonly DataSourceLevel[] = ['works
 
 /** 这些能力认哪几级。 */
 export const DATA_CAPABILITY_ROUTE_LEVELS: readonly DataSourceLevel[] = ['byo_source', 'workshop']
+
+/* ------------------------------------------------------------------ */
+/* 能力目录（WP192 第一批）                                             */
+/* ------------------------------------------------------------------ */
+
+/**
+ * 一项能力的**规格**（不含价——价只在云上，`/v1/pricing` 与 `GET /v1/data/capabilities` 给）。
+ *
+ * 这张表是本机与云上共同认的名字与输入白名单：本机按它显示标签、校验输入；云上按它挑渠道、
+ * 丢掉白名单以外的字段、决定能不能进共享缓存。云上可以比这张表多（新能力先在云上开），
+ * 本机遇到认不出的能力就原样显示云上给的 `label_zh`。
+ */
+export interface DataCapabilitySpec {
+  id: string
+  label_zh: string
+  label_en: string
+  group: DataCapabilityGroup
+  mode: DataCapabilityMode
+  unit: DataBillingUnit
+  input: DataInputField[]
+  /** 异步：一次最多多少条；同步按行：一次最多多少行。 */
+  max_items?: number
+  /** 异步不给 `max_items` 时按这个数跑。 */
+  default_items?: number
+  /**
+   * 结果里有**个人或企业的联系方式**（邮箱、电话、个人主页）。这样的结果**永不进共享缓存**
+   * （docs/83 §5）；红人那一侧的联系方式仍走公共红人库「按次揭示 + 审计」。
+   */
+  personal_contacts?: boolean
+  /** 默认关（后台打开才有）。LinkedIn 那一项是这样（docs/84 §11 第 7 条）。 */
+  default_off?: boolean
+}
+
+const COUNTRY: DataInputField = {
+  name: 'country',
+  type: 'string',
+  required: true,
+  max: 8,
+  label_zh: '国家（两位字母，如 us）',
+}
+const LANGUAGE: DataInputField = {
+  name: 'language',
+  type: 'string',
+  required: true,
+  max: 16,
+  label_zh: '语言（如 en）',
+}
+const MARKETPLACE: DataInputField = {
+  name: 'marketplace',
+  type: 'string',
+  required: true,
+  enum: ['US', 'CA', 'MX', 'UK', 'DE', 'FR', 'IT', 'ES', 'JP', 'AU', 'IN', 'AE', 'BR'],
+  label_zh: 'Amazon 站点',
+}
+const USERNAMES: DataInputField = {
+  name: 'usernames',
+  type: 'string[]',
+  required: true,
+  max: 100,
+  max_count: 50,
+  label_zh: '账号名（不带 @）',
+}
+const AI_QUESTION: DataInputField[] = [
+  { name: 'question', type: 'string', required: true, max: 1000, label_zh: '问题' },
+  COUNTRY,
+  LANGUAGE,
+]
+
+/** WP192 第一批能力。 */
+export const DATA_CAPABILITY_CATALOG: readonly DataCapabilitySpec[] = [
+  {
+    id: 'serp.google',
+    label_zh: 'Google 搜索结果页',
+    label_en: 'Google results page',
+    group: 'search',
+    mode: 'sync',
+    unit: 'call',
+    input: [
+      { name: 'query', type: 'string', required: true, max: 400, label_zh: '搜索词' },
+      COUNTRY,
+      LANGUAGE,
+      { name: 'device', type: 'string', enum: ['desktop', 'mobile'], label_zh: '设备' },
+    ],
+  },
+  {
+    id: 'serp.bing',
+    label_zh: 'Bing 搜索结果页',
+    label_en: 'Bing results page',
+    group: 'search',
+    mode: 'sync',
+    unit: 'call',
+    input: [
+      { name: 'query', type: 'string', required: true, max: 400, label_zh: '搜索词' },
+      COUNTRY,
+      LANGUAGE,
+      { name: 'device', type: 'string', enum: ['desktop', 'mobile'], label_zh: '设备' },
+    ],
+  },
+  {
+    id: 'ai_answer.chatgpt',
+    label_zh: 'ChatGPT 回答探测',
+    label_en: 'ChatGPT answer probe',
+    group: 'search',
+    mode: 'sync',
+    unit: 'call',
+    input: AI_QUESTION,
+  },
+  {
+    id: 'ai_answer.gemini',
+    label_zh: 'Gemini 回答探测',
+    label_en: 'Gemini answer probe',
+    group: 'search',
+    mode: 'sync',
+    unit: 'call',
+    input: AI_QUESTION,
+  },
+  {
+    id: 'ai_answer.google_ai_overview',
+    label_zh: 'Google AI 概览探测',
+    label_en: 'Google AI Overview probe',
+    group: 'search',
+    mode: 'sync',
+    unit: 'call',
+    input: AI_QUESTION,
+  },
+  {
+    id: 'amazon.keyword_research',
+    label_zh: 'Amazon 关键词挖掘',
+    label_en: 'Amazon keyword research',
+    group: 'amazon',
+    mode: 'sync',
+    unit: 'call',
+    input: [
+      { name: 'keyword', type: 'string', required: true, max: 200, label_zh: '种子词' },
+      MARKETPLACE,
+      { name: 'limit', type: 'number', min: 1, max: 200, label_zh: '最多几个词' },
+    ],
+  },
+  {
+    id: 'amazon.asin_keywords',
+    label_zh: 'Amazon ASIN 反查关键词',
+    label_en: 'Amazon ASIN reverse keywords',
+    group: 'amazon',
+    mode: 'sync',
+    unit: 'call',
+    input: [
+      { name: 'asin', type: 'string', required: true, max: 10, label_zh: 'ASIN' },
+      MARKETPLACE,
+      { name: 'limit', type: 'number', min: 1, max: 200, label_zh: '最多几个词' },
+    ],
+  },
+  {
+    id: 'seo.backlinks',
+    label_zh: '外链列表',
+    label_en: 'Backlinks',
+    group: 'seo',
+    mode: 'sync',
+    unit: 'row',
+    max_items: 1000,
+    input: [
+      { name: 'target', type: 'string', required: true, max: 500, label_zh: '域名或网址' },
+      {
+        name: 'mode',
+        type: 'string',
+        enum: ['domain', 'subdomains', 'prefix', 'exact'],
+        label_zh: '范围',
+      },
+      { name: 'limit', type: 'number', min: 1, max: 1000, label_zh: '最多几行' },
+    ],
+  },
+  {
+    id: 'seo.domain_rating',
+    label_zh: '域名权重',
+    label_en: 'Domain rating',
+    group: 'seo',
+    mode: 'sync',
+    unit: 'call',
+    input: [{ name: 'target', type: 'string', required: true, max: 500, label_zh: '域名' }],
+  },
+  {
+    id: 'maps.places',
+    label_zh: '地图商家（找客户）',
+    label_en: 'Map places (lead finding)',
+    group: 'b2b',
+    mode: 'async',
+    unit: 'item',
+    max_items: 500,
+    default_items: 50,
+    input: [
+      {
+        name: 'query',
+        type: 'string',
+        required: true,
+        max: 200,
+        label_zh: '找什么（行业 / 品类）',
+      },
+      { name: 'location', type: 'string', max: 200, label_zh: '在哪儿（城市 / 国家）' },
+      { name: 'language', type: 'string', max: 16, label_zh: '结果语言' },
+    ],
+  },
+  {
+    id: 'contacts.website',
+    label_zh: '网站公开联系方式',
+    label_en: 'Website public contacts',
+    group: 'b2b',
+    mode: 'async',
+    unit: 'item',
+    max_items: 50,
+    default_items: 20,
+    personal_contacts: true,
+    input: [
+      {
+        name: 'urls',
+        type: 'string[]',
+        required: true,
+        max: 500,
+        max_count: 50,
+        label_zh: '网站地址',
+      },
+    ],
+  },
+  {
+    id: 'social.instagram.profile',
+    label_zh: 'Instagram 公开主页',
+    label_en: 'Instagram public profiles',
+    group: 'social',
+    mode: 'async',
+    unit: 'item',
+    max_items: 50,
+    default_items: 10,
+    input: [USERNAMES],
+  },
+  {
+    id: 'social.instagram.posts',
+    label_zh: 'Instagram 公开帖子',
+    label_en: 'Instagram public posts',
+    group: 'social',
+    mode: 'async',
+    unit: 'item',
+    max_items: 500,
+    default_items: 50,
+    input: [USERNAMES],
+  },
+  {
+    id: 'social.tiktok.profile',
+    label_zh: 'TikTok 公开主页',
+    label_en: 'TikTok public profiles',
+    group: 'social',
+    mode: 'async',
+    unit: 'item',
+    max_items: 50,
+    default_items: 10,
+    input: [USERNAMES],
+  },
+  {
+    id: 'social.tiktok.posts',
+    label_zh: 'TikTok 公开视频',
+    label_en: 'TikTok public videos',
+    group: 'social',
+    mode: 'async',
+    unit: 'item',
+    max_items: 500,
+    default_items: 50,
+    input: [USERNAMES],
+  },
+  {
+    id: 'amazon.product',
+    label_zh: 'Amazon 商品详情',
+    label_en: 'Amazon product details',
+    group: 'amazon',
+    mode: 'async',
+    unit: 'item',
+    max_items: 100,
+    default_items: 10,
+    input: [
+      {
+        name: 'asins',
+        type: 'string[]',
+        required: true,
+        max: 10,
+        max_count: 100,
+        label_zh: 'ASIN',
+      },
+      MARKETPLACE,
+    ],
+  },
+  {
+    id: 'amazon.reviews',
+    label_zh: 'Amazon 商品评论',
+    label_en: 'Amazon product reviews',
+    group: 'amazon',
+    mode: 'async',
+    unit: 'item',
+    max_items: 1000,
+    default_items: 100,
+    input: [
+      { name: 'asin', type: 'string', required: true, max: 10, label_zh: 'ASIN' },
+      MARKETPLACE,
+    ],
+  },
+  {
+    id: 'social.linkedin.profile',
+    label_zh: 'LinkedIn 公开资料',
+    label_en: 'LinkedIn public profiles',
+    group: 'b2b',
+    mode: 'async',
+    unit: 'item',
+    max_items: 50,
+    default_items: 10,
+    personal_contacts: true,
+    default_off: true,
+    input: [
+      {
+        name: 'profile_urls',
+        type: 'string[]',
+        required: true,
+        max: 300,
+        max_count: 50,
+        label_zh: '资料页地址',
+      },
+    ],
+  },
+]
+
+/** 按 id 找一项能力的规格（认不出回 `undefined`）。 */
+export function dataCapabilitySpec(id: string): DataCapabilitySpec | undefined {
+  return DATA_CAPABILITY_CATALOG.find((c) => c.id === id)
+}
+
+/** 输入校验的结果。 */
+export type DataInputCheck =
+  | { ok: true; input: Record<string, unknown> }
+  | { ok: false; field?: string; message: string }
+
+/** 这几个字段统一小写（国家 / 语言码、社媒账号名大小写不敏感）。 */
+const LOWERCASE_FIELDS = new Set(['country', 'language', 'usernames'])
+/** 这几个字段统一大写（ASIN）。 */
+const UPPERCASE_FIELDS = new Set(['asin', 'asins'])
+
+function tidy(name: string, value: string): string {
+  let v = value.trim()
+  if (name === 'usernames') v = v.replace(/^@+/u, '')
+  if (LOWERCASE_FIELDS.has(name)) v = v.toLowerCase()
+  if (UPPERCASE_FIELDS.has(name)) v = v.toUpperCase()
+  return v
+}
+
+/**
+ * 按能力的输入白名单**校验并规范化**：白名单以外的字段丢掉；字符串去首尾空白；
+ * 列表去空、去重、排序（同一个问法才算同一次——共享缓存的键就用它，docs/83 §5）；
+ * 枚举不分大小写、归成表里的写法；数字要在范围里。
+ *
+ * 云上与本机替身用同一个函数，所以「这个输入合不合法」两边的话一样。
+ */
+export function normalizeDataInput(spec: DataCapabilitySpec, raw: unknown): DataInputCheck {
+  const src =
+    typeof raw === 'object' && raw !== null && !Array.isArray(raw)
+      ? (raw as Record<string, unknown>)
+      : {}
+  const out: Record<string, unknown> = {}
+  for (const field of spec.input) {
+    const value = src[field.name]
+    const missing =
+      value === undefined ||
+      value === null ||
+      (typeof value === 'string' && value.trim() === '') ||
+      (Array.isArray(value) && value.length === 0)
+    if (missing) {
+      if (field.required === true)
+        return { ok: false, field: field.name, message: `缺「${field.label_zh}」` }
+      continue
+    }
+    const bad = (why: string): DataInputCheck => ({
+      ok: false,
+      field: field.name,
+      message: `「${field.label_zh}」${why}`,
+    })
+    if (field.type === 'string') {
+      if (typeof value !== 'string') return bad('要是文字')
+      let v = tidy(field.name, value)
+      if (field.max !== undefined && v.length > field.max)
+        return bad(`太长了（最多 ${String(field.max)} 个字）`)
+      if (field.enum !== undefined) {
+        const hit = field.enum.find((e) => e.toLowerCase() === v.toLowerCase())
+        if (hit === undefined) return bad(`只能是 ${field.enum.join(' / ')}`)
+        v = hit
+      }
+      out[field.name] = v
+    } else if (field.type === 'number') {
+      const n = typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : NaN
+      if (!Number.isFinite(n)) return bad('要是数字')
+      if (field.min !== undefined && n < field.min) return bad(`不能小于 ${String(field.min)}`)
+      if (field.max !== undefined && n > field.max) return bad(`不能大于 ${String(field.max)}`)
+      out[field.name] = Math.floor(n)
+    } else if (field.type === 'boolean') {
+      if (typeof value !== 'boolean') return bad('要是 true / false')
+      out[field.name] = value
+    } else {
+      const list = Array.isArray(value) ? value : typeof value === 'string' ? [value] : undefined
+      if (list === undefined || !list.every((x) => typeof x === 'string'))
+        return bad('要是一组文字')
+      const cleaned = [...new Set((list as string[]).map((x) => tidy(field.name, x)))]
+        .filter((x) => x !== '')
+        .sort()
+      if (cleaned.length === 0) {
+        if (field.required === true) return bad('不能是空的')
+        continue
+      }
+      if (field.max_count !== undefined && cleaned.length > field.max_count)
+        return bad(`最多 ${String(field.max_count)} 个`)
+      const each = field.max
+      if (each !== undefined && cleaned.some((x) => x.length > each))
+        return bad(`每一项最多 ${String(each)} 个字`)
+      out[field.name] = cleaned
+    }
+  }
+  return { ok: true, input: out }
+}
