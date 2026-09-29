@@ -50,15 +50,24 @@ describe('浅底那道光调淡，深底不变', () => {
 
   it('浅底那道光是很淡的颜色（每个通道 ≥ 0xD0）：是光，不是往块上刷一层别的色', () => {
     const c = SHEEN_ON_LIGHT.color
-    for (const at of [1, 3, 5]) expect(Number.parseInt(c.slice(at, at + 2), 16)).toBeGreaterThanOrEqual(0xd0)
+    for (const at of [1, 3, 5])
+      expect(Number.parseInt(c.slice(at, at + 2), 16)).toBeGreaterThanOrEqual(0xd0)
   })
 
   it('不给 sheen 时按底色挑；给了就听给的', () => {
     const light = markSvg({ idle: 'sheen', stops: STOPS_ON_LIGHT, id: 'l' })
-    expect(peakStop(light, 'l').opacity).toBeCloseTo(IDLE_SHEEN.peakOpacity * SHEEN_ON_LIGHT.strength, 3)
+    expect(peakStop(light, 'l').opacity).toBeCloseTo(
+      IDLE_SHEEN.peakOpacity * SHEEN_ON_LIGHT.strength,
+      3,
+    )
     const dark = markSvg({ idle: 'sheen', stops: STOPS_ON_DARK, id: 'd' })
     expect(peakStop(dark, 'd')).toEqual({ color: '#fff', opacity: IDLE_SHEEN.peakOpacity })
-    const forced = markSvg({ idle: 'wave-sheen', stops: STOPS_ON_LIGHT, id: 'f', sheen: SHEEN_ON_DARK })
+    const forced = markSvg({
+      idle: 'wave-sheen',
+      stops: STOPS_ON_LIGHT,
+      id: 'f',
+      sheen: SHEEN_ON_DARK,
+    })
     expect(peakStop(forced, 'f')).toEqual({ color: '#fff', opacity: IDLE_WAVE_SHEEN.peakOpacity })
   })
 })
@@ -77,14 +86,17 @@ describe('README 顶上那张会动的', () => {
 
   it('四周放宽 README_MARK_PAD 个单位：<img> 里抬起 / 探出的那块不被裁', () => {
     const p = README_MARK_PAD
-    for (const [, svg] of both) expect(svg).toContain(`viewBox="${14 - p} ${12 - p} ${65 + 2 * p} ${65 + 2 * p}"`)
+    for (const [, svg] of both)
+      expect(svg).toContain(`viewBox="${14 - p} ${12 - p} ${65 + 2 * p} ${65 + 2 * p}"`)
     expect(IDLE_WAVE_SHEEN.lift).toBeLessThanOrEqual(p)
     expect(IDLE_WAVE.lift).toBeLessThanOrEqual(p)
     expect(Math.max(Math.abs(IDLE_BLINK.dx), Math.abs(IDLE_BLINK.dy))).toBeLessThanOrEqual(p)
   })
 
   it('浅色那张用浅底那道淡光，深色那张用纯白', () => {
-    expect(peakStop(BRAND_MARK_SVG_README_LIGHT, 'aw-readme-light').color).toBe(SHEEN_ON_LIGHT.color)
+    expect(peakStop(BRAND_MARK_SVG_README_LIGHT, 'aw-readme-light').color).toBe(
+      SHEEN_ON_LIGHT.color,
+    )
     expect(peakStop(BRAND_MARK_SVG_README_DARK, 'aw-readme-dark').color).toBe('#fff')
   })
 

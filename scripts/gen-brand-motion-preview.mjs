@@ -171,7 +171,9 @@ const tintRow = (label, cls) =>
         (t) =>
           `<figure class="frame" data-t="${b.IDLE_START_MS + t}">${mark(s, 'idle', 'wave-sheen')}<figcaption>${s}px · +${(t / 1000).toFixed(1)}s</figcaption></figure>`,
       ).join('')}</div>`,
-  ).join('')}<figure>${mark(96, 'idle', 'wave-sheen')}<figcaption>在动</figcaption></figure></div></div>`
+  ).join(
+    '',
+  )}<figure>${mark(96, 'idle', 'wave-sheen')}<figcaption>在动</figcaption></figure></div></div>`
 const tint = () =>
   `<section class="cand" id="light-sheen"><p class="note">浅色主题下光扫过时，纯白 ${b.IDLE_WAVE_SHEEN.peakOpacity} 会让块短暂发白。改后换成极淡的品牌青（<code>${b.SHEEN_ON_LIGHT.color}</code>），力度 ×${b.SHEEN_ON_LIGHT.strength}；深色主题不变。连拍冻结在光扫过中段的三个时刻。</p>${tintRow('改前（WP195：纯白 0.42）', 'sheen-before')}${tintRow(`改后（WP200：${b.SHEEN_ON_LIGHT.color} × ${b.SHEEN_ON_LIGHT.strength}）`, '')}<div class="tint"><h4>深色主题（不变）</h4>${panel('dark', SIZES.map((s) => cell(s, mark(s, 'idle', 'wave-sheen'))).join(''))}</div></section>`
 
