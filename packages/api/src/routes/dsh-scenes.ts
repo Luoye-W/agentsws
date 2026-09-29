@@ -56,6 +56,11 @@ export interface DshScenesPort {
   open(actor: DshScenesActor, name: string): MaybePromise<DshSceneOpenResult>
   stop(actor: DshScenesActor, name: string): MaybePromise<DshSceneView>
   restart(actor: DshScenesActor, name: string): MaybePromise<DshSceneOpenResult>
+  /**
+   * WP184：把用户**自己装的**官方 DeepSeek Harness 桌面端启动起来（`dsh://open` 或直接打开应用）。
+   * 没装就 `not_found`。它用它自己的数据与登录，我们不碰。可选：旧的实现没有它，路由回 not_implemented。
+   */
+  launchOfficialDesktop?(actor: DshScenesActor): MaybePromise<{ launched: true }>
 }
 
 const CreateBody = z.object({
@@ -179,6 +184,26 @@ export function dshScenesRoutes(): Route[] {
         returns: 'DshSceneOpenResult',
       },
       async (c, deps) => ok(c, await portOf(deps).restart(actorOf(c), param(c, 'name'))),
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/dsh-scenes/official-desktop/launch',
+        operationId: 'launchOfficialDesktop',
+        summary:
+          'WP184：启动用户自己装的官方 DeepSeek Harness 桌面端（`dsh://open` 或打开应用）；它用自己的 `~/.dsh`，和工坊里的官方场景是两份',
+        tag: TAG,
+        auth: 'bearer',
+        assignment: true,
+        authz: WRITE,
+        returns: '{ launched: true }',
+      },
+      async (c, deps) => {
+        const port = portOf(deps)
+        if (port.launchOfficialDesktop === undefined)
+          throw new ApiError('not_implemented', '这个服务进程不认官方桌面端')
+        return ok(c, await port.launchOfficialDesktop(actorOf(c)))
+      },
     ),
   ]
 }

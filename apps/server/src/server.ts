@@ -5865,7 +5865,17 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
      */
     searchData: searchDataApiPort(async (ws) => (await brandModules.forWorkspace(ws)).searchData),
     dshScenes: {
-      list: () => dshScenesSetup.manager?.list() ?? unavailableScenes(dshScenesSetup.reason),
+      list: async () => {
+        const manager = dshScenesSetup.manager
+        if (manager === undefined) return unavailableScenes(dshScenesSetup.reason)
+        // WP184：用户自己装的官方桌面端多一行（没装就没有这个字段）
+        const desktop = await manager.officialDesktop()
+        return {
+          ...manager.list(),
+          ...(desktop === undefined ? {} : { official_desktop: desktop }),
+        }
+      },
+      launchOfficialDesktop: () => dshScenes().launchOfficialDesktop(),
       create: (_actor, input) => dshScenes().create(input),
       remove: (_actor, name, confirm) => dshScenes().remove(name, confirm),
       open: (_actor, name) => dshScenes().open(name),

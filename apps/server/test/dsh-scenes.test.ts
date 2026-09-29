@@ -18,6 +18,9 @@ import {
   createServer,
   type DshScenesManager,
   dshHomeOf,
+  OFFICIAL_DESKTOP_APP_ENV,
+  type OfficialDesktopPort,
+  systemOfficialDesktop,
   workspaceProblem,
   workspaceRootOf,
 } from '../src/index.js'
@@ -319,6 +322,100 @@ describe('真的 dsh 0.2.0-rc.1', () => {
       data: { available: boolean }
     }
     expect(memoryList.data.available).toBe(false)
+  }, 60_000)
+})
+
+describe('WP184：用户自己装的官方桌面端', () => {
+  /** 一个假的「本机装没装」：记下被问了几次、被启动了几次。 */
+  function fakeDesktop(installed: boolean, fail = false) {
+    const calls = { detect: 0, launch: [] as string[] }
+    const port: OfficialDesktopPort = {
+      detect: async () => {
+        calls.detect += 1
+        return installed ? { app: '/Applications/DeepSeek Harness.app', protocol: true } : undefined
+      },
+      launch: async (install) => {
+        if (fail) throw new Error('open 退出码 1')
+        calls.launch.push(install.app)
+      },
+    }
+    return { port, calls }
+  }
+
+  it('装了：列出来（名字、位置、走协议）并缓存；点开时现查一遍再启动', async () => {
+    const { port, calls } = fakeDesktop(true)
+    const { scenes } = fakeScenes({ officialDesktop: port })
+    expect(await scenes.officialDesktop()).toEqual({
+      name: 'DeepSeek Harness',
+      app_path: '/Applications/DeepSeek Harness.app',
+      via_protocol: true,
+    })
+    await scenes.officialDesktop()
+    expect(calls.detect).toBe(1)
+    expect(await scenes.launchOfficialDesktop()).toEqual({ launched: true })
+    expect(calls.detect).toBe(2)
+    expect(calls.launch).toEqual(['/Applications/DeepSeek Harness.app'])
+    // 它不是我们起的场景：场景清单里没有它
+    expect(scenes.list().scenes.map((s) => s.name)).not.toContain('desktop')
+  })
+
+  it('没装：没有这一行，点开回 not_found；启动失败回一句人话', async () => {
+    const none = fakeScenes({ officialDesktop: fakeDesktop(false).port }).scenes
+    expect(await none.officialDesktop()).toBeUndefined()
+    await expect(none.launchOfficialDesktop()).rejects.toMatchObject({ code: 'not_found' })
+    const broken = fakeScenes({ officialDesktop: fakeDesktop(true, true).port }).scenes
+    await expect(broken.launchOfficialDesktop()).rejects.toMatchObject({
+      code: 'provider_unavailable',
+    })
+  })
+
+  it('覆盖变量：给一个在的路径就认它（直接打开应用）；写 off 就不找', async () => {
+    const app = temp('agentsws-official-desktop-')
+    expect(await systemOfficialDesktop({ [OFFICIAL_DESKTOP_APP_ENV]: app }).detect()).toEqual({
+      app,
+      protocol: false,
+    })
+    expect(
+      await systemOfficialDesktop({ [OFFICIAL_DESKTOP_APP_ENV]: join(app, 'nope') }).detect(),
+    ).toBeUndefined()
+    expect(
+      await systemOfficialDesktop({ [OFFICIAL_DESKTOP_APP_ENV]: 'off' }).detect(),
+    ).toBeUndefined()
+  })
+
+  it('HTTP：列表多一个 official_desktop；不认得时启动回 404', async () => {
+    const root = temp('agentsws-scenes-desktop-')
+    const app = join(root, 'DeepSeek Harness.app')
+    mkdirSync(app)
+    const call = await boot({
+      AGENTSWS_DSH_HOME: join(root, 'dsh'),
+      AGENTSWS_DSH_WORKSPACE: join(root, 'ws'),
+      [OFFICIAL_DESKTOP_APP_ENV]: app,
+    })
+    const list = (await (await call('/v1/dsh-scenes')).json()) as {
+      data: { official_desktop?: { name: string; app_path: string; via_protocol: boolean } }
+    }
+    expect(list.data.official_desktop).toEqual({
+      name: 'DeepSeek Harness',
+      app_path: app,
+      via_protocol: false,
+    })
+    const off = await boot({
+      AGENTSWS_DSH_HOME: join(root, 'dsh2'),
+      AGENTSWS_DSH_WORKSPACE: join(root, 'ws2'),
+      [OFFICIAL_DESKTOP_APP_ENV]: 'off',
+    })
+    const offList = (await (await off('/v1/dsh-scenes')).json()) as {
+      data: { official_desktop?: unknown }
+    }
+    expect(offList.data.official_desktop).toBeUndefined()
+    const launched = await off('/v1/dsh-scenes/official-desktop/launch', { method: 'POST' })
+    expect(launched.status).toBe(404)
+    // 托管档：不装配，回 not_implemented
+    const hosted = await boot({ AGENTSWS_RUNTIME_MODE: 'hosted' })
+    expect(
+      (await hosted('/v1/dsh-scenes/official-desktop/launch', { method: 'POST' })).status,
+    ).toBe(501)
   }, 60_000)
 })
 

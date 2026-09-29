@@ -57,6 +57,21 @@ export interface DshScenesView {
   scenes: DshSceneView[]
   /** 新建场景时能选的官方模板。 */
   templates: { name: string; surface: 'web' | 'cli' }[]
+  /**
+   * WP184：这台电脑上**用户自己装的**官方 DeepSeek Harness 桌面端（没装就没有这个字段）。
+   * 它不是我们起的场景，用它自己的数据与登录（`~/.dsh`），和上面的官方场景是两份。
+   */
+  official_desktop?: DshOfficialDesktopView
+}
+
+/** WP184：用户自己装的官方桌面端。点开 = `POST /v1/dsh-scenes/official-desktop/launch`。 */
+export interface DshOfficialDesktopView {
+  /** 应用名（`DeepSeek Harness`）。 */
+  name: string
+  /** 装在哪（macOS 的 `.app` / Windows 的 exe）。 */
+  app_path: string
+  /** `true` = 点开走 `dsh://open`（系统里这个协议归它）；`false` = 直接打开应用。 */
+  via_protocol: boolean
 }
 
 /** 打开 / 重启一个网页场景的结果。`url` 带一次性 token，只交给打开它的那一方，不进日志。 */
