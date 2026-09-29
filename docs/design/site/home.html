@@ -193,6 +193,12 @@ section{scroll-margin-top:80px}
 .base h2{color:var(--term-ink);font-size:38px}
 .base .eyebrow{color:var(--term-accent)}
 .base .sub{color:var(--term-muted)}
+.whys{list-style:none;margin:28px 0 32px;padding:0;counter-reset:w;display:grid;gap:14px}
+.whys li{display:grid;grid-template-columns:30px 1fr;column-gap:12px;counter-increment:w}
+.whys li::before{content:counter(w);grid-row:span 2;width:26px;height:26px;border-radius:8px;display:grid;place-items:center;font:600 13px var(--display);color:#0E100F;background:#76FB91}
+.whys b{color:var(--term-ink);font-weight:600;font-size:16px}
+.whys span{font-size:14px;color:var(--term-muted)}
+.base .hint{border-color:var(--term-muted);color:var(--term-muted)}
 .stats{display:flex;gap:36px;margin:30px 0 32px}
 .stat b{display:block;font:700 32px/1.1 var(--display);color:var(--term-ink)}
 .stat span{font-size:13px}
@@ -269,6 +275,36 @@ section{scroll-margin-top:80px}
 .hero-mark{margin-bottom:22px}
 .roles-mark{margin-bottom:18px}
 
+/* ── 为什么：四级台阶（WP193b） ── */
+.why{border-top:1px solid var(--line)}
+.stairs{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:18px;margin-top:52px;align-items:start;text-align:left}
+.stair{background:var(--card);border-radius:16px;box-shadow:var(--shadow);padding:16px 18px 20px}
+.stair:nth-child(1){margin-top:108px}.stair:nth-child(2){margin-top:72px}.stair:nth-child(3){margin-top:36px}
+.stair.sel{box-shadow:var(--glow),var(--shadow-hover)}
+.stair .lv{font:600 12px var(--display);letter-spacing:.06em;color:var(--muted)}
+.stair.sel .lv{color:var(--brand)}
+.stair h3{font-size:17px;font-weight:600;margin:4px 0 6px}
+.stair p{font-size:14px;line-height:1.6;color:var(--muted)}
+.stair.sel p{color:var(--body)}
+/* 「为什么」台阶的小示意 */
+.ill{height:104px;border-radius:12px;background:var(--surface);display:grid;place-items:center;position:relative;overflow:hidden;margin-bottom:16px}
+.ill-dash .dash{width:62%;height:54px;display:flex;align-items:flex-end;gap:6px;padding:8px;border-radius:8px;background:var(--card);box-shadow:0 0 0 1px var(--line);filter:grayscale(1);opacity:.5}
+.ill-dash .dash i{flex:1;border-radius:3px 3px 0 0;background:var(--muted);display:block}
+.ill-dash .dust{position:absolute;bottom:8px;right:10px;font-size:11px;color:var(--muted)}
+.ill-tool{place-items:stretch;align-content:center;padding:0 14px;gap:6px}
+.trow{display:flex;align-items:center;justify-content:space-between;height:22px;padding:0 8px;border-radius:6px;background:var(--card);box-shadow:0 0 0 1px var(--line);font-size:11px;color:var(--muted);position:relative}
+.trow b{font-weight:500;color:var(--body)}
+.trow span{white-space:nowrap;font-size:10px;padding:0 6px;border-radius:4px;box-shadow:0 0 0 1px var(--line)}
+.trow span.hot{background:var(--tint);color:var(--brand-ink);box-shadow:none}
+.trow .cur{position:absolute;right:-4px;top:9px;width:14px;height:14px;fill:var(--ink);stroke:var(--card);stroke-width:1.5}
+.ill-agent{gap:6px;align-content:center}
+.ill-agent .solo{font-size:11px;color:var(--muted)}
+.ill-team{background:var(--tint)}
+/* 呼吸（= Agent 正在替你干活，docs/36 §12.2）：参数照抄 ws-bm-breathe，2.6s 一轮，0.94↔1、0.55↔1 */
+.bm-breathe rect{opacity:.55;animation:bm-breathe 2.6s ease-in-out infinite}
+@keyframes bm-breathe{0%,100%{opacity:.55;transform:scale(.94)}50%{opacity:1;transform:scale(1)}}
+@media (prefers-reduced-motion:reduce){.bm-breathe rect{animation:none!important;opacity:1!important;transform:none!important}}
+
 /* 手机 */
 @media (max-width:900px){
   .wrap{padding:0 20px}
@@ -292,6 +328,14 @@ section{scroll-margin-top:80px}
   .role-ic{width:32px;height:32px;margin-bottom:10px}
   .role h3{font-size:15px}
   .role p{font-size:13px}
+  .stairs{grid-template-columns:1fr;gap:12px;margin-top:32px}
+  .stair,.stair:nth-child(n){margin-top:0;display:grid;grid-template-columns:92px 1fr;column-gap:14px;padding:14px}
+  .stair .ill{grid-row:span 3;height:92px;margin:0}
+  .ill-tool{padding:0 8px}
+  .trow{height:18px;font-size:9px;padding:0 5px}
+  .trow b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:44px}
+  .trow .cur,.ill-agent .solo{display:none}
+  .ill-dash .dust{display:none}
   .rail{grid-template-columns:1fr;gap:18px;margin:36px 0 32px}
   .rail::before{left:17px;right:auto;top:18px;bottom:18px;width:2px;height:auto}
   .step{display:grid;grid-template-columns:36px 1fr;gap:4px 14px;text-align:left;padding:0}
@@ -379,8 +423,8 @@ section{scroll-margin-top:80px}
     <div>
       <div class="hero-mark"><svg class="bm bm-assemble " width="56" height="56" viewBox="14 12 65 65" aria-hidden="true"><rect x="14" y="44" width="17" height="17" rx="2.5" fill="url(#g1)" style="--d:0ms;--i:0"/><rect x="38" y="52" width="17" height="17" rx="2.5" fill="url(#g2)" style="--d:100ms;--i:1"/><rect x="38" y="28" width="17" height="17" rx="2.5" fill="url(#g3)" style="--d:160ms;--i:2"/><rect x="62" y="60" width="17" height="17" rx="2.5" fill="url(#g4)" style="--d:240ms;--i:3"/><rect x="62" y="36" width="17" height="17" rx="2.5" fill="url(#g5)" style="--d:300ms;--i:4"/><rect class="lead" x="62" y="12" width="17" height="17" rx="2.5" fill="url(#g6)" style="--i:5"/></svg></div>
       <span class="pill"><i></i>开源 · Apache-2.0 · 跑在你自己的电脑上</span>
-      <h1>给出海生意，<br>配一队 <em>AI 同事</em>。</h1>
-      <p class="lede">客服、红人、社媒、B2B……按岗位上岗。它们先把活干完，出一张卡，你点头才算数。</p>
+      <h1>面板会吃灰。<br>这队 <em>AI 同事</em>，<br>天天上班。</h1>
+      <p class="lede">客服、红人、社媒、B2B……给出海公司按岗位配齐。活它们干完，出一张卡，你点头才算数。</p>
       <div class="cta-row">
         <a class="btn btn-primary" href="download.html"><svg class="ico"><use href="#i-download"/></svg>免费下载</a>
         <a class="btn btn-ghost" href="#"><svg class="ico"><use href="#i-github"/></svg>在 GitHub 上看</a>
@@ -413,15 +457,29 @@ section{scroll-margin-top:80px}
   </div>
 </section>
 
+<!-- 1b 为什么（WP193b） -->
+<section class="sec why" id="why">
+  <div class="wrap center">
+    <div class="eyebrow">为什么是 Agents 工坊</div>
+    <h2 class="h2">从一块面板，到一支队伍。</h2>
+    <p class="sub">这四级台阶，我们自己一级一级走过。</p>
+    <div class="stairs">
+      <div class="stair"><div class="ill ill-dash" aria-hidden="true"><div class="dash"><i style="height:40%"></i><i style="height:70%"></i><i style="height:55%"></i><i style="height:85%"></i><i style="height:30%"></i></div><span class="dust">上次打开 · 14 天前</span></div><span class="lv">第 1 级</span><h3>自己搓的面板</h3><p>好看，两周后吃灰：数据摆着，活还得人干。</p></div>
+      <div class="stair"><div class="ill ill-tool" aria-hidden="true"><div class="trow"><b>@trailsun</b><span>复制</span></div><div class="trow"><b>@desknoor</b><span>复制</span></div><div class="trow"><b>@gadgetjo</b><span class="hot">复制</span><svg class="cur" viewBox="0 0 24 24"><path d="M5 3l14 8-6 2-3 6Z"/></svg></div></div><span class="lv">第 2 级</span><h3>给人用的小工具</h3><p>查红人资料快了一点，可还是人在一个个点。</p></div>
+      <div class="stair"><div class="ill ill-agent" aria-hidden="true"><svg class="bm bm-breathe" width="40" height="40" viewBox="62 12 17 17" aria-hidden="true"><rect class="lead" x="62" y="12" width="17" height="17" rx="2.5" fill="url(#g6)" style="--i:0"/></svg><span class="solo">一个人 · 一个岗位</span></div><span class="lv">第 3 级</span><h3>围绕 AI 打造的 Agent</h3><p>KOLAgents、KefuAgents 把一件事从头干到尾、越干越会，但只管一个人的一摊。</p></div>
+      <div class="stair sel"><div class="ill ill-team" aria-hidden="true"><svg class="bm bm-split" width="64" height="64" viewBox="14 12 65 65" aria-hidden="true"><rect x="14" y="44" width="17" height="17" rx="2.5" fill="url(#g1)" style="--i:0;--dx:48px;--dy:-32px"/><rect x="38" y="52" width="17" height="17" rx="2.5" fill="url(#g2)" style="--i:1;--dx:24px;--dy:-40px"/><rect x="38" y="28" width="17" height="17" rx="2.5" fill="url(#g3)" style="--i:2;--dx:24px;--dy:-16px"/><rect x="62" y="60" width="17" height="17" rx="2.5" fill="url(#g4)" style="--i:3;--dx:0px;--dy:-48px"/><rect x="62" y="36" width="17" height="17" rx="2.5" fill="url(#g5)" style="--i:4;--dx:0px;--dy:-24px"/><rect class="lead" x="62" y="12" width="17" height="17" rx="2.5" fill="url(#g6)" style="--i:5"/></svg></div><span class="lv">第 4 级</span><h3>Agents 工坊</h3><p>站到公司层面：一队 Agents 按公司规矩分工、交接，要紧的事出卡给你批。</p></div>
+    </div>
+  </div>
+</section>
+
 <!-- 2 岗位 -->
 <section class="sec sec-alt" id="roles">
   <div class="wrap center">
-    <svg class="bm bm-split roles-mark" width="56" height="56" viewBox="14 12 65 65" aria-hidden="true"><rect x="14" y="44" width="17" height="17" rx="2.5" fill="url(#g1)" style="--i:0;--dx:48px;--dy:-32px"/><rect x="38" y="52" width="17" height="17" rx="2.5" fill="url(#g2)" style="--i:1;--dx:24px;--dy:-40px"/><rect x="38" y="28" width="17" height="17" rx="2.5" fill="url(#g3)" style="--i:2;--dx:24px;--dy:-16px"/><rect x="62" y="60" width="17" height="17" rx="2.5" fill="url(#g4)" style="--i:3;--dx:0px;--dy:-48px"/><rect x="62" y="36" width="17" height="17" rx="2.5" fill="url(#g5)" style="--i:4;--dx:0px;--dy:-24px"/><rect class="lead" x="62" y="12" width="17" height="17" rx="2.5" fill="url(#g6)" style="--i:5"/></svg>
     <div class="eyebrow">按岗位开工</div>
     <h2 class="h2">缺几个人，就上几个岗位。</h2>
     <p class="sub">勾几个岗位就上岗。每个岗位各管一摊，各有自己的记忆。</p>
     <div class="roles">
-      <a class="role" href="#"><div class="role-ic"><svg class="ico"><use href="#i-crown"/></svg></div><h3>店主 / 负责人</h3><p>每天一张日报，要拍板的都在这</p></a>
+      <a class="role" href="#"><div class="role-ic"><svg class="ico"><use href="#i-crown"/></svg></div><h3>负责人</h3><p>每天一张日报，要拍板的都在这</p></a>
       <a class="role" href="#"><div class="role-ic"><svg class="ico"><use href="#i-headset"/></svg></div><h3>客服</h3><p>邮件、聊天窗、Amazon 消息，先起草</p></a>
       <a class="role" href="#"><div class="role-ic"><svg class="ico"><use href="#i-star"/></svg></div><h3>红人营销</h3><p>找人、体检、开发信，跟到交付</p></a>
       <a class="role" href="#"><div class="role-ic"><svg class="ico"><use href="#i-share"/></svg></div><h3>社媒运营</h3><p>排内容、回评论、管社群</p></a>
@@ -505,18 +563,18 @@ section{scroll-margin-top:80px}
   </div>
 </section>
 
-<!-- 6 底座 -->
+<!-- 6 底座（WP193b 改写：为什么深入 Harness 底层） -->
 <section class="sec base" id="base">
   <div class="wrap">
     <div>
-      <div class="eyebrow">底座</div>
-      <h2 class="h2">底座是 DeepSeek Harness，<br>代码是 Apache-2.0。</h2>
-      <p class="sub">按官方的方式扩展，跟着官方一起升级。每次提交，先让一家虚拟公司跑一遍。</p>
-      <div class="stats">
-        <div class="stat"><b>6</b><span>条底线，每次提交都验</span></div>
-        <div class="stat"><b>0</b><span>付费墙</span></div>
-        <div class="stat"><b>100%</b><span>源码公开</span></div>
-      </div>
+      <div class="eyebrow">为什么基于 DeepSeek Harness</div>
+      <h2 class="h2">从 Harness 底层，<br>按公司重新组装。</h2>
+      <p class="sub">在聊天框外套个壳，只能帮一个人聊天。要一队 Agents 替公司干活，得从底层接起。</p>
+      <ol class="whys">
+        <li><b>按公司重新组装</b><span>运行时、工具、权限、记忆、审批，都按岗位和公司规矩接过一遍。<span class="hint" data-hint="每个岗位、每条职责有自己的上下文和记忆；谁能动什么按岗位授权；要发出去、要花钱的先进审批队列，办完留账。19 份接口契约都在仓库里。">?</span></span></li>
+        <li><b>官方更新，跟着用上</b><span>现在跑在 DeepSeek Harness 0.2.0 预览版上，官方的网页搜索、自动化任务、官方场景都已接上。<span class="hint" data-hint="版本锁在 0.2.0-rc.1。每次升级先过适配层测试和模拟回路，全绿才合并。">?</span></span></li>
+        <li><b>开源 Apache-2.0</b><span>代码全部公开，可以 fork，没有付费墙。</span></li>
+      </ol>
       <div class="cta-row" style="margin:0">
         <a class="btn btn-primary" href="#"><svg class="ico"><use href="#i-github"/></svg>Star on GitHub</a>
         <a class="btn btn-ghost" href="#">读架构</a>
