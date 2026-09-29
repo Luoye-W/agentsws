@@ -197,7 +197,11 @@ def favicon_svg() -> str:
     head = '<svg xmlns="http://www.w3.org/2000/svg" '
     if not inner.startswith(head):
         sys.exit("markSvg 的开头变了，favicon 这里对不上")
-    inner = f'<svg x="{off:g}" y="{off:g}" width="{size:g}" height="{size:g}" ' + inner[len(head):]
+    # 嵌套的那个 <svg> 是装饰（外层已经有 title 与 aria-label）
+    inner = (
+        f'<svg x="{off:g}" y="{off:g}" width="{size:g}" height="{size:g}" aria-hidden="true" '
+        + inner[len(head):]
+    )
     return (
         '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100"'
         ' role="img" aria-label="Agents 工坊">\n'

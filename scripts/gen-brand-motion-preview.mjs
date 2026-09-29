@@ -277,7 +277,7 @@ function setRate(r) { rate = r; for (const a of all()) if (!a.effect?.target?.cl
   for (const btn of document.querySelectorAll('[data-rate]')) btn.setAttribute('aria-pressed', String(Number(btn.dataset.rate) === r)); }
 function freeze() { for (const f of document.querySelectorAll('.frame')) { const t = Number(f.dataset.t);
   for (const a of f.querySelector('svg').getAnimations({ subtree: true })) { a.pause(); a.currentTime = t; } } }
-function replay() { for (const box of document.querySelectorAll('.replay .panel')) box.innerHTML = box.innerHTML; setRate(rate); }
+function replay() { for (const box of document.querySelectorAll('.replay .panel')) { const html = box.innerHTML; box.innerHTML = ''; box.innerHTML = html; } setRate(rate); }
 document.addEventListener('visibilitychange', () => { for (const s of document.querySelectorAll('svg')) s.classList.toggle('ws-bm-paused', document.hidden); });
 for (const h of document.querySelectorAll('.hover')) {
   let busy = false;
@@ -305,7 +305,7 @@ ${motionCss}
 <main>
 <h1>品牌标记动效预览</h1>
 <p class="lead">一直挂在屏幕上的标记改成「待机」：大部分时间一动不动，隔几秒轻轻动一下。四个候选并排，明暗两套、三个尺寸。挂上后先静 ${b.IDLE_START_MS / 1000} 秒才动第一下。「波 + 流光」是 Luoye 09-29 点的结合版，放在最前。系统开了「减少动态效果」时这一页也不会动。</p>
-<div class="bar"><button data-rate="1" aria-pressed="true">正常速度</button><button data-rate="4" aria-pressed="false">快进 ×4</button><button data-replay>重播集结 / 一变一队</button></div>
+<div class="bar"><button type="button" data-rate="1" aria-pressed="true">正常速度</button><button type="button" data-rate="4" aria-pressed="false">快进 ×4</button><button type="button" data-replay>重播集结 / 一变一队</button></div>
 
 <h2>对比 · 波 + 流光 / 单独的波 / 单独的流光</h2>
 <section class="cand" id="compare"><p class="note">三个同时挂上、同时起步，方便并排看。点「快进 ×4」可以不用等。</p><div class="pair">${compare('light')}${compare('dark')}</div></section>
