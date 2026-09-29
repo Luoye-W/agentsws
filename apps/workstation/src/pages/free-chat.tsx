@@ -234,7 +234,12 @@ export function FreeChatPage(): React.ReactNode {
       </aside>
       <section className="flex min-w-0 flex-1 flex-col">
         <header className="flex items-center gap-2 px-4 py-2">
-          <ModelPicker choices={choices} value={picked} onChange={setModel} />
+          {/* 清单回来之前不画（不然会先闪一下「还没接模型」） */}
+          {models.data === undefined ? (
+            <span className="h-7" />
+          ) : (
+            <ModelPicker choices={choices} value={picked} onChange={setModel} />
+          )}
         </header>
         {id === undefined && live === undefined ? (
           <div
