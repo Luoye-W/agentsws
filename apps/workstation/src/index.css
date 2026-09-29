@@ -390,6 +390,8 @@
   .ws-bm-breathe,
   .ws-bm-split,
   .ws-bm-split-lead,
+  .ws-bm-idle-ws,
+  .ws-bm-idle-ws-band,
   .ws-bm-idle-wave,
   .ws-bm-idle-sheen,
   .ws-bm-idle-blink {
@@ -551,6 +553,44 @@
     }
   }
 
+  /*
+   * 波 + 流光（Luoye 09-29「波和流光结合看看」）：**同一道光带着方块起伏**。
+   * 亮带匀速（linear，这样才能和抬起对上）从左下扫到右上，2s 扫完、8s 一轮；
+   * 每块一个 <g>（块 + 被它自己裁出来的那份亮带）挂 `ws-bm-idle-ws`，起步延迟由组件按
+   * 「亮带中心经过这块中心的时刻 − 抬起用的 280ms」写进去——光到哪块，哪块正好抬到最高。
+   */
+  .ws-bm-idle-ws {
+    animation: ws-bm-idle-ws 8s ease-in-out infinite both;
+  }
+
+  @keyframes ws-bm-idle-ws {
+    0% {
+      transform: translateY(0);
+    }
+    3.5% {
+      transform: translateY(-3px);
+    }
+    9.25%,
+    100% {
+      transform: translateY(0);
+    }
+  }
+
+  .ws-bm-idle-ws-band {
+    transform: translate(-45.5px, 45.5px);
+    animation: ws-bm-idle-ws-band 8s linear 1600ms infinite both;
+  }
+
+  @keyframes ws-bm-idle-ws-band {
+    0% {
+      transform: translate(-45.5px, 45.5px);
+    }
+    25%,
+    100% {
+      transform: translate(45.5px, -45.5px);
+    }
+  }
+
   /* 眨眼：只有领头那块，9s 一次往右上探出 3 个单位再回弹归位 */
   .ws-bm-idle-blink {
     animation: ws-bm-idle-blink 9s cubic-bezier(0.34, 1.56, 0.64, 1) 1600ms infinite both;
@@ -587,6 +627,7 @@
     :root:not([data-ws-motion="on"]) .ws-bm-breathe,
     :root:not([data-ws-motion="on"]) .ws-bm-split,
     :root:not([data-ws-motion="on"]) .ws-bm-split-lead,
+    :root:not([data-ws-motion="on"]) .ws-bm-idle-ws,
     :root:not([data-ws-motion="on"]) .ws-bm-idle-wave,
     :root:not([data-ws-motion="on"]) .ws-bm-idle-blink {
       animation: none;
@@ -594,7 +635,8 @@
       transform: none;
     }
 
-    :root:not([data-ws-motion="on"]) .ws-bm-idle-sheen {
+    :root:not([data-ws-motion="on"]) .ws-bm-idle-sheen,
+    :root:not([data-ws-motion="on"]) .ws-bm-idle-ws-band {
       animation: none;
       opacity: 0;
     }
@@ -605,6 +647,7 @@
   :root[data-ws-motion="off"] .ws-bm-breathe,
   :root[data-ws-motion="off"] .ws-bm-split,
   :root[data-ws-motion="off"] .ws-bm-split-lead,
+  :root[data-ws-motion="off"] .ws-bm-idle-ws,
   :root[data-ws-motion="off"] .ws-bm-idle-wave,
   :root[data-ws-motion="off"] .ws-bm-idle-blink {
     animation: none;
@@ -612,7 +655,8 @@
     transform: none;
   }
 
-  :root[data-ws-motion="off"] .ws-bm-idle-sheen {
+  :root[data-ws-motion="off"] .ws-bm-idle-sheen,
+  :root[data-ws-motion="off"] .ws-bm-idle-ws-band {
     animation: none;
     opacity: 0;
   }

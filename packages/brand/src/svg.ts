@@ -25,6 +25,8 @@ import {
   IDLE_START_MS,
   IDLE_WAVE,
   IDLE_WAVE_DELAYS_MS,
+  IDLE_WAVE_SHEEN,
+  IDLE_WAVE_SHEEN_DELAYS_MS,
   type IdleStyle,
   idlePercent,
   MARK_BOX,
@@ -113,6 +115,16 @@ function blockGradients(id: string, stops: readonly Stop[]): string {
 export function idleCss(style: IdleStyle, cls: string): string {
   const base = `.${cls}{transform-box:fill-box;transform-origin:center;`
   const reduce = `@media (prefers-reduced-motion: reduce){.${cls}{animation:none}}`
+  if (style === 'wave-sheen') {
+    // 两个类：`cls` 挂在每块那个会抬起的 <g> 上，`cls-band` 挂在亮带上；亮带匀速（linear）
+    const w = IDLE_WAVE_SHEEN
+    const up = idlePercent(w.riseMs, w.periodMs)
+    const down = idlePercent(w.riseMs + w.fallMs, w.periodMs)
+    const end = idlePercent(w.sweepMs, w.periodMs)
+    const far = Number((MARK_BOX.width * w.travel).toFixed(2))
+    const band = `${cls}-band`
+    return `${base}animation:${cls} ${w.periodMs}ms ease-in-out infinite both}@keyframes ${cls}{0%{transform:translateY(0)}${up}{transform:translateY(-${w.lift}px)}${down},100%{transform:translateY(0)}}.${band}{transform:translate(-${far}px,${far}px);animation:${band} ${w.periodMs}ms linear ${IDLE_START_MS}ms infinite both}@keyframes ${band}{0%{transform:translate(-${far}px,${far}px)}${end},100%{transform:translate(${far}px,-${far}px)}}@media (prefers-reduced-motion: reduce){.${cls}{animation:none}.${band}{animation:none;opacity:0}}`
+  }
   if (style === 'wave') {
     const w = IDLE_WAVE
     const up = idlePercent(w.riseMs, w.periodMs)
@@ -132,10 +144,13 @@ export function idleCss(style: IdleStyle, cls: string): string {
 }
 
 /** 流光那道亮带：沿对角线、两侧羽化，只在中间 `bandWidth` 那一段里亮。 */
-function sheenGradient(id: string): string {
-  const half = IDLE_SHEEN.bandWidth / 2
+function sheenGradient(
+  id: string,
+  band: { bandWidth: number; peakOpacity: number } = IDLE_SHEEN,
+): string {
+  const half = band.bandWidth / 2
   const at = (t: number): string => `${Number((t * 100).toFixed(2))}%`
-  return `<linearGradient id="${id}" x1="0" y1="1" x2="1" y2="0"><stop offset="${at(0.5 - half)}" stop-color="#fff" stop-opacity="0"/><stop offset="50%" stop-color="#fff" stop-opacity="${IDLE_SHEEN.peakOpacity}"/><stop offset="${at(0.5 + half)}" stop-color="#fff" stop-opacity="0"/></linearGradient>`
+  return `<linearGradient id="${id}" x1="0" y1="1" x2="1" y2="0"><stop offset="${at(0.5 - half)}" stop-color="#fff" stop-opacity="0"/><stop offset="50%" stop-color="#fff" stop-opacity="${band.peakOpacity}"/><stop offset="${at(0.5 + half)}" stop-color="#fff" stop-opacity="0"/></linearGradient>`
 }
 
 function idleBody(style: IdleStyle, id: string, stops: readonly Stop[]): string {
@@ -146,6 +161,20 @@ function idleBody(style: IdleStyle, id: string, stops: readonly Stop[]): string 
     const clip = `<clipPath id="${id}-clip">${rects('#000')}</clipPath>`
     const band = `<g clip-path="url(#${id}-clip)"><rect class="${cls}" x="${MARK_BOX.x}" y="${MARK_BOX.y}" width="${MARK_BOX.width}" height="${MARK_BOX.height}" fill="url(#${id}-sheen)"/></g>`
     return `${css}<defs>${gradient(id, stops)}${sheenGradient(`${id}-sheen`)}${clip}</defs>${rects(`url(#${id})`)}${band}`
+  }
+  if (style === 'wave-sheen') {
+    // 每块一个会抬起的 <g>：块本身 + 被它自己裁出来的那一份亮带，一起抬——光不会漏到缝里。
+    // 六份亮带同一条动画、同一个起点，所以看上去就是一道光。
+    const box = `x="${MARK_BOX.x}" y="${MARK_BOX.y}" width="${MARK_BOX.width}" height="${MARK_BOX.height}"`
+    const clips = ALL_BLOCKS.map(
+      (b, i) =>
+        `<clipPath id="${id}-c${i}"><rect x="${b.x}" y="${b.y}" width="${BLOCK_SIZE}" height="${BLOCK_SIZE}" rx="${BLOCK_RADIUS}"/></clipPath>`,
+    ).join('')
+    const groups = ALL_BLOCKS.map(
+      (b, i) =>
+        `<g class="${cls}" style="animation-delay:${IDLE_START_MS + (IDLE_WAVE_SHEEN_DELAYS_MS[i] ?? 0)}ms"><rect x="${b.x}" y="${b.y}" width="${BLOCK_SIZE}" height="${BLOCK_SIZE}" rx="${BLOCK_RADIUS}" fill="url(#${id}-b${i})"/><g clip-path="url(#${id}-c${i})"><rect class="${cls}-band" ${box} fill="url(#${id}-sheen)"/></g></g>`,
+    ).join('')
+    return `${css}<defs>${blockGradients(id, stops)}${sheenGradient(`${id}-sheen`, IDLE_WAVE_SHEEN)}${clips}</defs>${groups}`
   }
   const lead = ALL_BLOCKS.length - 1
   const extra = (i: number): string => {

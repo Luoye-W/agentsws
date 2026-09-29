@@ -85,6 +85,7 @@ function mark(size, motion = 'none', idle = b.DEFAULT_IDLE_STYLE) {
   const mono = size < b.MIN_GRADIENT_PX
   const active = motion === 'idle' && mono ? 'none' : motion
   const sheen = active === 'idle' && idle === 'sheen'
+  const ws = active === 'idle' && idle === 'wave-sheen'
   const perBlock = active !== 'none' && !sheen
   const rect = (blk, attrs) =>
     `<rect x="${blk.x}" y="${blk.y}" width="${b.BLOCK_SIZE}" height="${b.BLOCK_SIZE}" rx="${b.BLOCK_RADIUS}"${attrs}/>`
@@ -101,20 +102,30 @@ function mark(size, motion = 'none', idle = b.DEFAULT_IDLE_STYLE) {
     ).join('')
     defs = `<linearGradient id="${id}" gradientUnits="userSpaceOnUse" x1="${a.x1}" y1="${a.y1}" x2="${a.x2}" y2="${a.y2}">${stops}</linearGradient>`
   }
-  if (sheen && !mono) {
-    const h = b.IDLE_SHEEN.bandWidth / 2
-    defs += `<linearGradient id="${id}-sheen" x1="0" y1="1" x2="1" y2="0"><stop offset="${(0.5 - h) * 100}%" stop-color="#fff" stop-opacity="0"/><stop offset="50%" stop-color="#fff" stop-opacity="${b.IDLE_SHEEN.peakOpacity}"/><stop offset="${(0.5 + h) * 100}%" stop-color="#fff" stop-opacity="0"/></linearGradient>`
-    defs += `<clipPath id="${id}-clip">${b.ALL_BLOCKS.map((blk) => rect(blk, ' fill="#000"')).join('')}</clipPath>`
+  if ((sheen || ws) && !mono) {
+    const band = ws ? b.IDLE_WAVE_SHEEN : b.IDLE_SHEEN
+    const h = band.bandWidth / 2
+    defs += `<linearGradient id="${id}-sheen" x1="0" y1="1" x2="1" y2="0"><stop offset="${(0.5 - h) * 100}%" stop-color="#fff" stop-opacity="0"/><stop offset="50%" stop-color="#fff" stop-opacity="${band.peakOpacity}"/><stop offset="${(0.5 + h) * 100}%" stop-color="#fff" stop-opacity="0"/></linearGradient>`
+    defs += ws
+      ? b.ALL_BLOCKS.map(
+          (blk, i) => `<clipPath id="${id}-c${i}">${rect(blk, ' fill="#000"')}</clipPath>`,
+        ).join('')
+      : `<clipPath id="${id}-clip">${b.ALL_BLOCKS.map((blk) => rect(blk, ' fill="#000"')).join('')}</clipPath>`
   }
+  const box = b.MARK_BOX
+  const boxAttrs = `x="${box.x}" y="${box.y}" width="${box.width}" height="${box.height}"`
   const blocks = b.ALL_BLOCKS.map((blk, i) => {
     const fill = mono ? 'currentColor' : `url(#${perBlock ? `${id}-b${i}` : id})`
+    if (ws) {
+      const delay = b.IDLE_START_MS + b.IDLE_WAVE_SHEEN_DELAYS_MS[i]
+      return `<g class="ws-bm-idle-ws" style="animation-delay:${delay}ms">${rect(blk, ` fill="${fill}"`)}<g clip-path="url(#${id}-c${i})"><rect class="ws-bm-idle-ws-band" ${boxAttrs} fill="url(#${id}-sheen)"/></g></g>`
+    }
     const p = pose(active, idle, i)
     return rect(
       blk,
       ` fill="${fill}"${p.cls ? ` class="${p.cls}"` : ''}${p.style ? ` style="${p.style}"` : ''}`,
     )
   }).join('')
-  const box = b.MARK_BOX
   const band =
     sheen && !mono
       ? `<g clip-path="url(#${id}-clip)"><rect class="ws-bm-idle-sheen" x="${box.x}" y="${box.y}" width="${box.width}" height="${box.height}" fill="url(#${id}-sheen)"/></g>`
@@ -124,6 +135,10 @@ function mark(size, motion = 'none', idle = b.DEFAULT_IDLE_STYLE) {
 
 // ── 页面 ──────────────────────────────────────────────────────────────
 const IDLE = {
+  'wave-sheen': {
+    name: '波 + 流光',
+    note: `隔 ${b.IDLE_WAVE_SHEEN.periodMs / 1000} 秒，一道很淡的光沿渐变方向匀速扫过（${b.IDLE_WAVE_SHEEN.sweepMs / 1000} 秒），扫到哪块，哪块正好轻轻抬起再落下——是同一道光带着方块起伏。`,
+  },
   wave: {
     name: '波',
     note: `隔 ${b.IDLE_WAVE.periodMs / 1000} 秒，六块沿渐变方向（左下 → 右上）依次轻轻抬一下，像一道波走过。`,
@@ -139,10 +154,20 @@ const IDLE = {
 }
 const SIZES = [24, 40, 96]
 const FILM = {
+  'wave-sheen': [300, 550, 800, 1000, 1150, 1300, 1500, 1750, 2100],
   wave: [0, 150, 300, 450, 600, 750, 900, 1100, 1400],
   sheen: [0, 250, 500, 625, 750, 875, 1000, 1250, 1500],
   blink: [0, 90, 180, 270, 360, 450, 540, 630, 800],
 }
+
+const COMPARE = ['wave-sheen', 'wave', 'sheen']
+const compare = (theme) =>
+  panel(
+    theme,
+    COMPARE.map(
+      (st) => `<figure>${mark(96, 'idle', st)}<figcaption>${IDLE[st].name}</figcaption></figure>`,
+    ).join(''),
+  )
 
 const panel = (theme, inner) => `<div class="panel ${theme}">${inner}</div>`
 const cell = (size, svg) => `<figure>${svg}<figcaption>${size}px</figcaption></figure>`
@@ -192,6 +217,11 @@ const small = (theme) =>
   )
 
 const params = [
+  [
+    '波 + 流光 wave-sheen',
+    `${b.IDLE_WAVE_SHEEN.periodMs}ms`,
+    `光匀速扫 ${b.IDLE_WAVE_SHEEN.sweepMs}ms（最亮 ${b.IDLE_WAVE_SHEEN.peakOpacity}、宽 ${b.IDLE_WAVE_SHEEN.bandWidth * 100}%）；光到哪块哪块抬 ${b.IDLE_WAVE_SHEEN.lift} 单位（${b.IDLE_WAVE_SHEEN.riseMs}+${b.IDLE_WAVE_SHEEN.fallMs}ms），起步 ${b.IDLE_WAVE_SHEEN_DELAYS_MS.join(' / ')}ms`,
+  ],
   [
     '波 wave',
     `${b.IDLE_WAVE.periodMs}ms`,
@@ -274,10 +304,13 @@ ${motionCss}
 <body>
 <main>
 <h1>品牌标记动效预览</h1>
-<p class="lead">一直挂在屏幕上的标记改成「待机」：大部分时间一动不动，隔几秒轻轻动一下。三个候选并排，明暗两套、三个尺寸。挂上后先静 ${b.IDLE_START_MS / 1000} 秒才动第一下。系统开了「减少动态效果」时这一页也不会动。</p>
+<p class="lead">一直挂在屏幕上的标记改成「待机」：大部分时间一动不动，隔几秒轻轻动一下。四个候选并排，明暗两套、三个尺寸。挂上后先静 ${b.IDLE_START_MS / 1000} 秒才动第一下。「波 + 流光」是 Luoye 09-29 点的结合版，放在最前。系统开了「减少动态效果」时这一页也不会动。</p>
 <div class="bar"><button data-rate="1" aria-pressed="true">正常速度</button><button data-rate="4" aria-pressed="false">快进 ×4</button><button data-replay>重播集结 / 一变一队</button></div>
 
-<h2>待机 · 三个候选</h2>
+<h2>对比 · 波 + 流光 / 单独的波 / 单独的流光</h2>
+<section class="cand" id="compare"><p class="note">三个同时挂上、同时起步，方便并排看。点「快进 ×4」可以不用等。</p><div class="pair">${compare('light')}${compare('dark')}</div></section>
+
+<h2>待机 · 四个候选</h2>
 ${b.IDLE_STYLES.map(idleRow).join('\n')}
 
 <h2>连拍 · 动的那一下（从第一次动起算）</h2>

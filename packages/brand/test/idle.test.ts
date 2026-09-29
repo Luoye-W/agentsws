@@ -16,6 +16,8 @@ import {
   IDLE_STYLES,
   IDLE_WAVE,
   IDLE_WAVE_DELAYS_MS,
+  IDLE_WAVE_SHEEN,
+  IDLE_WAVE_SHEEN_DELAYS_MS,
   idleCss,
   idlePercent,
   markSvg,
@@ -28,13 +30,18 @@ import {
 const GAP = 24 - BLOCK_SIZE
 
 describe('待机：四条规矩', () => {
-  it('三个候选，默认那个在里面', () => {
-    expect(IDLE_STYLES).toEqual(['wave', 'sheen', 'blink'])
-    expect(IDLE_STYLES).toContain(DEFAULT_IDLE_STYLE)
+  it('四个候选（波 + 流光排最前），默认那个在里面', () => {
+    expect(IDLE_STYLES).toEqual(['wave-sheen', 'wave', 'sheen', 'blink'])
+    expect(DEFAULT_IDLE_STYLE).toBe('wave-sheen')
   })
 
   it('一轮都 ≥ 6 秒，且比呼吸那 2.6s 长得多（不会被看成「Agent 在干活」）', () => {
-    for (const period of [IDLE_WAVE.periodMs, IDLE_SHEEN.periodMs, IDLE_BLINK.periodMs]) {
+    for (const period of [
+      IDLE_WAVE_SHEEN.periodMs,
+      IDLE_WAVE.periodMs,
+      IDLE_SHEEN.periodMs,
+      IDLE_BLINK.periodMs,
+    ]) {
       expect(period).toBeGreaterThanOrEqual(6000)
       expect(period).toBeGreaterThan(BREATHE_PERIOD_MS * 2)
     }
@@ -45,18 +52,26 @@ describe('待机：四条规矩', () => {
     expect(wave / IDLE_WAVE.periodMs).toBeLessThan(0.2)
     expect(IDLE_SHEEN.sweepMs / IDLE_SHEEN.periodMs).toBeLessThan(0.2)
     expect((IDLE_BLINK.outMs + IDLE_BLINK.backMs) / IDLE_BLINK.periodMs).toBeLessThan(0.2)
+    // 波 + 流光：光扫 2s（其间各块轮流抬一下），一轮里四分之三的时间一动不动
+    expect(IDLE_WAVE_SHEEN.sweepMs / IDLE_WAVE_SHEEN.periodMs).toBeLessThanOrEqual(0.25)
   })
 
   it('幅度小：位移都不超过方块间缝（7）', () => {
     expect(IDLE_WAVE.lift).toBeLessThanOrEqual(GAP)
     expect(Math.hypot(IDLE_BLINK.dx, IDLE_BLINK.dy)).toBeLessThanOrEqual(GAP)
+    expect(IDLE_WAVE_SHEEN.lift).toBeLessThanOrEqual(GAP)
+    expect(IDLE_WAVE_SHEEN.peakOpacity).toBeLessThanOrEqual(0.5)
     expect(IDLE_SHEEN.peakOpacity).toBeLessThanOrEqual(0.6)
   })
 
   it('三段 keyframes 只写 transform（颜色、渐变、布局一概不动）', () => {
     for (const style of IDLE_STYLES) {
       const css = idleCss(style, 'x')
-      const frames = css.slice(css.indexOf('@keyframes'), css.indexOf('@media'))
+      // 抠出每一段 @keyframes（波 + 流光有两段）
+      const frames = [...css.matchAll(/@keyframes [\w-]+\{((?:[^{}]*\{[^{}]*\})*)\}/g)]
+        .map((m) => m[1])
+        .join('')
+      expect(frames.length).toBeGreaterThan(0)
       const props = [...frames.matchAll(/([a-z-]+):/g)].map((m) => m[1])
       expect(new Set(props)).toEqual(new Set(['transform']))
       expect(css).toContain('transform-box:fill-box')
@@ -87,6 +102,33 @@ describe('波：沿渐变方向走', () => {
   })
 })
 
+describe('波 + 流光：同一道光带着方块起伏', () => {
+  it('每块抬到最高的那一刻，亮带中心正好经过它的中心', () => {
+    const w = IDLE_WAVE_SHEEN
+    ALL_BLOCKS.forEach((blk, i) => {
+      const peak = (IDLE_WAVE_SHEEN_DELAYS_MS[i] ?? 0) + w.riseMs
+      // 亮带中心在渐变轴上的位置（匀速）
+      const u = 0.5 - w.travel + (2 * w.travel * peak) / w.sweepMs
+      const cx = blk.x + BLOCK_SIZE / 2
+      const cy = blk.y + BLOCK_SIZE / 2
+      const tb = (cx - 14 - (cy - 77)) / 130
+      expect(Math.abs(u - tb)).toBeLessThan(0.005)
+    })
+  })
+
+  it('亮带是匀速的（linear）——否则上面那条对不上', () => {
+    expect(idleCss('wave-sheen', 'x')).toMatch(/\.x-band\{[^}]*linear/)
+  })
+
+  it('SVG：每块一个会抬起的 <g>，里面是块 + 被它自己裁出来的那份亮带', () => {
+    const svg = markSvg({ idle: 'wave-sheen', id: 'w' })
+    expect(svg.match(/<g class="w-idle"/g)).toHaveLength(6)
+    expect(svg.match(/class="w-idle-band"/g)).toHaveLength(6)
+    expect(svg.match(/<clipPath id="w-c\d"/g)).toHaveLength(6)
+    expect(svg).not.toContain('userSpaceOnUse')
+  })
+})
+
 describe('一变一队整段时长', () => {
   it('= 最后一块起步 + 它自己那一段', () => {
     expect(SPLIT_TOTAL_MS).toBe(
@@ -96,13 +138,18 @@ describe('一变一队整段时长', () => {
 })
 
 describe('自己会动的 SVG（云端后台、官网、favicon 用）', () => {
-  it('波：六块都挂类、每块自己一条渐变（§3.0），样式内联', () => {
+  it('默认那两张（波 + 流光）：样式内联、每块自己一条渐变（§3.0）+ 一条亮带', () => {
     const svg = BRAND_MARK_SVG_IDLE_DARK
     expect(svg).toContain('<style>')
-    expect(svg.match(/<rect [^>]*class="aw-idle-dark-idle"/g)).toHaveLength(6)
+    expect(svg.match(/<g class="aw-idle-dark-idle"/g)).toHaveLength(6)
     expect(svg).not.toContain('userSpaceOnUse')
-    expect(svg.match(/<linearGradient /g)).toHaveLength(6)
+    expect(svg.match(/<linearGradient /g)).toHaveLength(7)
     expect(BRAND_MARK_SVG_IDLE_LIGHT).toContain('aw-idle-light-idle')
+  })
+
+  it('波：六块都挂类', () => {
+    const svg = markSvg({ idle: 'wave', id: 'v' })
+    expect(svg.match(/<rect [^>]*class="v-idle"/g)).toHaveLength(6)
   })
 
   it('眨眼：只有领头那一块挂类', () => {

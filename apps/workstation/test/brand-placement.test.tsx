@@ -200,7 +200,8 @@ describe('public/favicon.svg：深色圆底 + 会动的待机标记（WP195）',
     expect(svg).toContain('@keyframes fav-idle')
     expect(svg).toContain('prefers-reduced-motion: reduce')
     expect(svg).not.toMatch(/<script|href="http/)
-    expect(svg.match(/<rect/g) ?? []).toHaveLength(6)
+    // 六块（每块自己一条渐变 fav-b0…b5）；波 + 流光时另有每块一份裁出来的亮带，不数它们
+    expect(svg.match(/<rect [^>]*fill="url\(#fav-b\d\)"/g) ?? []).toHaveLength(6)
     expect(svg).toContain('<title>Agents 工坊</title>')
   })
 })

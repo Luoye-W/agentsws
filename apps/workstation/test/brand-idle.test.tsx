@@ -15,6 +15,9 @@ import {
   IDLE_START_MS,
   IDLE_WAVE,
   IDLE_WAVE_DELAYS_MS,
+  IDLE_WAVE_SHEEN,
+  IDLE_WAVE_SHEEN_DELAYS_MS,
+  idlePercent,
   MIN_GRADIENT_PX,
   MIN_IDLE_PX,
   SPLIT_TOTAL_MS,
@@ -80,10 +83,28 @@ afterEach(() => {
 })
 
 describe('待机类名挂上', () => {
-  it('默认候选是「波」：六块都挂，延迟 = 1.6s + 沿渐变方向的错开', () => {
-    expect(DEFAULT_IDLE_STYLE).toBe('wave')
+  it('默认候选是「波 + 流光」：每块一个会抬起的 <g>（块 + 它自己那份亮带），延迟由亮带位置算出', () => {
+    expect(DEFAULT_IDLE_STYLE).toBe('wave-sheen')
     const svg = mark(<BrandMark size={32} motion="idle" />)
     expect(svg.getAttribute('data-motion')).toBe('idle')
+    expect(svg.getAttribute('data-idle-style')).toBe('wave-sheen')
+    const groups = [...svg.querySelectorAll<SVGGElement>(':scope > g.ws-bm-idle-ws')]
+    expect(groups).toHaveLength(6)
+    groups.forEach((g, i) => {
+      expect(g.style.animationDelay).toBe(
+        `${IDLE_START_MS + (IDLE_WAVE_SHEEN_DELAYS_MS[i] ?? 0)}ms`,
+      )
+      // 块本身 + 被它自己裁出来的那份亮带
+      expect(g.querySelector(':scope > rect')?.getAttribute('fill')).toMatch(/^url\(#.+-b\d\)$/)
+      const band = g.querySelector('.ws-bm-idle-ws-band')
+      expect(band?.parentElement?.getAttribute('clip-path')).toMatch(/^url\(#.+-clip\d\)$/)
+    })
+    expect(svg.querySelectorAll('clipPath')).toHaveLength(6)
+    expect(svg.querySelectorAll('linearGradient[gradientUnits="userSpaceOnUse"]')).toHaveLength(0)
+  })
+
+  it('波：六块都挂，延迟 = 1.6s + 沿渐变方向的错开', () => {
+    const svg = mark(<BrandMark size={32} motion="idle" idleStyle="wave" />)
     expect(svg.getAttribute('data-idle-style')).toBe('wave')
     const blocks = rects(svg)
     expect(blocks).toHaveLength(6)
@@ -276,17 +297,45 @@ describe('index.css：待机那几段与 @agentsws/brand 的数字一致', () =>
   it('三个类都在 transform-box: fill-box 那一组里（§4.1 坑 1）', () => {
     const at = CSS.indexOf('.ws-bm-assemble,')
     const group = CSS.slice(at, CSS.indexOf('}', at))
-    for (const cls of ['.ws-bm-idle-wave', '.ws-bm-idle-sheen', '.ws-bm-idle-blink']) {
+    for (const cls of [
+      '.ws-bm-idle-ws',
+      '.ws-bm-idle-ws-band',
+      '.ws-bm-idle-wave',
+      '.ws-bm-idle-sheen',
+      '.ws-bm-idle-blink',
+    ]) {
       expect(group).toContain(cls)
     }
   })
 
-  it('三段 keyframes 只动 transform', () => {
-    for (const name of ['ws-bm-idle-wave', 'ws-bm-idle-sheen', 'ws-bm-idle-blink']) {
+  it('五段 keyframes 只动 transform', () => {
+    for (const name of [
+      'ws-bm-idle-ws',
+      'ws-bm-idle-ws-band',
+      'ws-bm-idle-wave',
+      'ws-bm-idle-sheen',
+      'ws-bm-idle-blink',
+    ]) {
       const body = block(`@keyframes ${name}`)
       const props = [...body.matchAll(/([a-z-]+):\s/g)].map((m) => m[1])
       expect(new Set(props)).toEqual(new Set(['transform']))
     }
+  })
+
+  it('波 + 流光：8s；块 3.5% 抬到 -3px、9.25% 落回；亮带匀速、1.6s 后起、25% 扫完、走 ±45.5', () => {
+    const w = IDLE_WAVE_SHEEN
+    expect(rule('ws-bm-idle-ws')).toContain(`${w.periodMs / 1000}s`)
+    const lift = block('@keyframes ws-bm-idle-ws')
+    expect(lift).toContain(`${idlePercent(w.riseMs, w.periodMs)} {`)
+    expect(lift).toContain(`translateY(-${w.lift}px)`)
+    expect(lift).toContain(`${idlePercent(w.riseMs + w.fallMs, w.periodMs)},`)
+    const band = rule('ws-bm-idle-ws-band')
+    expect(band).toContain(`${w.periodMs / 1000}s linear ${IDLE_START_MS}ms`)
+    const far = Number((65 * w.travel).toFixed(2))
+    const kf = block('@keyframes ws-bm-idle-ws-band')
+    expect(kf).toContain(`${idlePercent(w.sweepMs, w.periodMs)},`)
+    expect(kf).toContain(`translate(-${far}px, ${far}px)`)
+    expect(kf).toContain(`translate(${far}px, -${far}px)`)
   })
 
   it('波：7.2s、5% 抬到 -4px、12.5% 落回', () => {
@@ -325,7 +374,13 @@ describe('index.css：待机那几段与 @agentsws/brand 的数字一致', () =>
 
   it('reduce 兜底层与「关」那一层都列了待机三个类', () => {
     const reduce = block('@media (prefers-reduced-motion: reduce)')
-    for (const cls of ['ws-bm-idle-wave', 'ws-bm-idle-blink', 'ws-bm-idle-sheen']) {
+    for (const cls of [
+      'ws-bm-idle-ws',
+      'ws-bm-idle-ws-band',
+      'ws-bm-idle-wave',
+      'ws-bm-idle-blink',
+      'ws-bm-idle-sheen',
+    ]) {
       expect(reduce).toContain(`:root:not([data-ws-motion="on"]) .${cls}`)
       expect(CSS).toContain(`:root[data-ws-motion="off"] .${cls}`)
     }

@@ -51,9 +51,12 @@ import {
   DEFAULT_IDLE_STYLE,
   GRADIENT_AXIS,
   IDLE_CLASS,
+  IDLE_BAND_CLASS,
   IDLE_SHEEN,
   IDLE_START_MS,
   IDLE_WAVE_DELAYS_MS,
+  IDLE_WAVE_SHEEN,
+  IDLE_WAVE_SHEEN_DELAYS_MS,
   type IdleStyle,
   MARK_BOX,
   MIN_GRADIENT_PX,
@@ -201,6 +204,8 @@ export function BrandMark({
   const active: BrandMarkMotion = allowed ? wanted : 'none'
   const moving = active !== 'none'
   const sheen = active === 'idle' && idleStyle === 'sheen'
+  // 波 + 流光：每块一个会抬起的 <g>（块 + 它自己那份亮带），延迟由亮带的位置算出来
+  const waveSheen = active === 'idle' && idleStyle === 'wave-sheen' && !mono
   // 流光时方块自己不动，照静态那条规矩用一条整体渐变；其余动效每块自己一条（§3.0）
   const perBlock = moving && !sheen
 
@@ -248,6 +253,7 @@ export function BrandMark({
     if (active === 'idle') {
       if (idleStyle === 'blink') return lead ? { className: IDLE_CLASS.blink } : {}
       if (idleStyle === 'sheen') return {}
+      if (idleStyle === 'wave-sheen') return {} // 类挂在外面那个 <g> 上，见下面 body
       // 波：沿渐变方向错开，全体再往后推 IDLE_START_MS——一挂上就动像在抢注意力
       return {
         className: IDLE_CLASS.wave,
@@ -285,14 +291,28 @@ export function BrandMark({
   // 流光：一层白色亮带，被六块裁出来，只动它的位置（标记本身一个像素的颜色都不改）
   const sheenId = `${uid}-sheen`
   const clipId = `${uid}-clip`
-  const half = IDLE_SHEEN.bandWidth / 2
+  const band = waveSheen ? IDLE_WAVE_SHEEN : IDLE_SHEEN
+  const half = band.bandWidth / 2
+  const bandGradient = (
+    <linearGradient id={sheenId} x1="0" y1="1" x2="1" y2="0">
+      <stop offset={`${(0.5 - half) * 100}%`} stopColor="#fff" stopOpacity={0} />
+      <stop offset="50%" stopColor="#fff" stopOpacity={band.peakOpacity} />
+      <stop offset={`${(0.5 + half) * 100}%`} stopColor="#fff" stopOpacity={0} />
+    </linearGradient>
+  )
+  const waveSheenDefs = waveSheen ? (
+    <>
+      {bandGradient}
+      {ALL_BLOCKS.map((b, i) => (
+        <clipPath key={`${b.x}-${b.y}`} id={`${clipId}${i}`}>
+          <Blk x={b.x} y={b.y} fill="#000" />
+        </clipPath>
+      ))}
+    </>
+  ) : null
   const sheenDefs = sheen ? (
     <>
-      <linearGradient id={sheenId} x1="0" y1="1" x2="1" y2="0">
-        <stop offset={`${(0.5 - half) * 100}%`} stopColor="#fff" stopOpacity={0} />
-        <stop offset="50%" stopColor="#fff" stopOpacity={IDLE_SHEEN.peakOpacity} />
-        <stop offset={`${(0.5 + half) * 100}%`} stopColor="#fff" stopOpacity={0} />
-      </linearGradient>
+      {bandGradient}
       <clipPath id={clipId}>
         {ALL_BLOCKS.map((b) => (
           <Blk key={`${b.x}-${b.y}`} x={b.x} y={b.y} fill="#000" />
@@ -307,11 +327,34 @@ export function BrandMark({
         <defs>
           {perBlock ? motionGradients : staticGradient}
           {sheenDefs}
+          {waveSheenDefs}
         </defs>
       )}
-      {ALL_BLOCKS.map((b, i) => (
-        <Blk key={`${b.x}-${b.y}`} x={b.x} y={b.y} fill={fillOf(i)} {...poseOf(i)} />
-      ))}
+      {ALL_BLOCKS.map((b, i) =>
+        waveSheen ? (
+          <g
+            key={`${b.x}-${b.y}`}
+            className={IDLE_CLASS['wave-sheen']}
+            style={{
+              animationDelay: `${IDLE_START_MS + (IDLE_WAVE_SHEEN_DELAYS_MS[i] ?? 0)}ms`,
+            }}
+          >
+            <Blk x={b.x} y={b.y} fill={fillOf(i)} />
+            <g clipPath={`url(#${clipId}${i})`}>
+              <rect
+                x={MARK_BOX.x}
+                y={MARK_BOX.y}
+                width={MARK_BOX.width}
+                height={MARK_BOX.height}
+                fill={`url(#${sheenId})`}
+                className={IDLE_BAND_CLASS}
+              />
+            </g>
+          </g>
+        ) : (
+          <Blk key={`${b.x}-${b.y}`} x={b.x} y={b.y} fill={fillOf(i)} {...poseOf(i)} />
+        ),
+      )}
       {sheen && !mono ? (
         <g clipPath={`url(#${clipId})`} data-testid="brand-mark-sheen">
           <rect

@@ -29,6 +29,8 @@ export {
   IDLE_STYLES,
   IDLE_WAVE,
   IDLE_WAVE_DELAYS_MS,
+  IDLE_WAVE_SHEEN,
+  IDLE_WAVE_SHEEN_DELAYS_MS,
   type IdleStyle,
   LEAD,
   MARK_BOX,
@@ -81,13 +83,19 @@ export const MOTION_CLASS = {
  *
  * - 波：六块都挂，延迟按渐变方向错开；
  * - 流光：挂在叠在方块上那一层亮带上，方块自己不动；
- * - 眨眼：只挂领头那一块。
+ * - 眨眼：只挂领头那一块；
+ * - 波 + 流光：挂在每块那个会抬起的 `<g>` 上（块 + 它自己那份亮带一起抬），
+ *   亮带另挂 `IDLE_BAND_CLASS`。
  */
 export const IDLE_CLASS = {
+  'wave-sheen': 'ws-bm-idle-ws',
   wave: 'ws-bm-idle-wave',
   sheen: 'ws-bm-idle-sheen',
   blink: 'ws-bm-idle-blink',
 } as const
+
+/** 波 + 流光里那道亮带（每块一份，同一条动画）。 */
+export const IDLE_BAND_CLASS = 'ws-bm-idle-ws-band'
 
 /** 页面不在前台时挂在 `<svg>` 上：底下所有动画暂停（`animation-play-state: paused`）。 */
 export const PAUSED_CLASS = 'ws-bm-paused'

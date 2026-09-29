@@ -242,13 +242,19 @@ export const SPLIT_TOTAL_MS = Math.max(
  *
  * 位移的单位是标记自己的坐标（外框 65×65），CSS 里写成 `px` 就是这个单位。
  */
-export type IdleStyle = 'wave' | 'sheen' | 'blink'
+export type IdleStyle = 'wave-sheen' | 'wave' | 'sheen' | 'blink'
 
-/** 三个候选，预览页（`docs/design/brand-motion.html`）并排放着让 Luoye 挑。 */
-export const IDLE_STYLES: readonly IdleStyle[] = ['wave', 'sheen', 'blink']
+/**
+ * 四个候选，预览页（`docs/design/brand-motion.html`）按这个顺序并排放着让 Luoye 挑。
+ * `wave-sheen`（波 + 流光）是 Luoye 09-29 看完前三个之后点的「波和流光结合看看」，排最前。
+ */
+export const IDLE_STYLES: readonly IdleStyle[] = ['wave-sheen', 'wave', 'sheen', 'blink']
 
-/** 默认那一个：波（理由写在 `docs/briefs/reports/WP195.md`）。 */
-export const DEFAULT_IDLE_STYLE: IdleStyle = 'wave'
+/**
+ * 默认那一个：波 + 流光（理由写在 `docs/briefs/reports/WP195.md`：光与起伏是同一件事，
+ * 比单独的波多一层"有光扫过"的质感，又不像单独的流光那样块一动不动、小尺寸几乎看不见）。
+ */
+export const DEFAULT_IDLE_STYLE: IdleStyle = 'wave-sheen'
 
 /**
  * 待机只给**渐变**那一档：单色（小于 `MIN_GRADIENT_PX`，或明写 mono）一律不挂。
@@ -325,3 +331,38 @@ export const IDLE_WAVE_DELAYS_MS: readonly number[] = (() => {
 export function idlePercent(ms: number, periodMs: number): string {
   return `${Number(((ms / periodMs) * 100).toFixed(3))}%`
 }
+
+/**
+ * 波 + 流光（Luoye 09-29「波和流光的一个结合看看」）：**同一道光带着方块起伏**。
+ *
+ * 一道亮带沿渐变方向**匀速**从左下扫到右上（2s），扫过哪块，哪块就在亮带中心经过它中心的
+ * 那一刻抬到最高再落回。两件事不是两套各跑各的动画：每块抬起的延迟是从亮带的位置
+ * 算出来的（`IDLE_WAVE_SHEEN_DELAYS_MS`），亮带匀速走（linear），所以对得上。
+ *
+ * 亮带每块一份、被那块自己裁出来、和那块一起抬——抬起的块上不会有光漏到缝里。
+ * 暗底上亮度压在 0.42：看得见，不刺眼。一轮 8s，其余 6s 一动不动。
+ */
+export const IDLE_WAVE_SHEEN = {
+  periodMs: 8000,
+  sweepMs: 2000,
+  /** 亮带中心从渐变轴 `0.5 - travel` 走到 `0.5 + travel`（= 两头都完全出了标记）。 */
+  travel: 0.7,
+  peakOpacity: 0.42,
+  bandWidth: 0.4,
+  lift: 3,
+  riseMs: 280,
+  fallMs: 460,
+} as const
+
+/**
+ * 波 + 流光：六块（顺序同 `ALL_BLOCKS`）各自开始抬起的时刻，从亮带起扫算起，不含 `IDLE_START_MS`。
+ *
+ * 亮带中心在渐变轴上的位置 u(t) = 0.5 − travel + 2·travel·t / sweepMs（匀速）；
+ * 它经过某块中心（轴上位置 tb）的时刻减去抬起用的 `riseMs`，就是那块起步的时刻——
+ * 于是亮带正好在那块抬到最高时经过它。
+ */
+export const IDLE_WAVE_SHEEN_DELAYS_MS: readonly number[] = ALL_BLOCKS.map((blk) => {
+  const w = IDLE_WAVE_SHEEN
+  const cross = ((blockAxis(blk) - 0.5 + w.travel) / (2 * w.travel)) * w.sweepMs
+  return Math.round(cross - w.riseMs)
+})
