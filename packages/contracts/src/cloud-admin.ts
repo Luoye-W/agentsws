@@ -187,6 +187,12 @@ export type AuditAction =
   | 'data.channel.key_rotate'
   | 'data.limits.update'
   | 'data.capability.switch'
+  /** WP192 追加：后台「试调用」（真打一次上游，不计费、不进缓存；details 只有能力名与结果条数）。 */
+  | 'data.channel.try'
+  /** WP192 追加：在后台新增 / 修改一项自定义数据能力（输入 schema、同步 / 异步、价格）。 */
+  | 'data.capability.define'
+  /** WP192 追加：通用 REST 渠道的主机白名单增删。 */
+  | 'data.hosts.update'
 
 /**
  * 一条审计。**只增不改**：没有 update，没有 delete，主键是自增号。

@@ -7574,7 +7574,7 @@
       },
       "DataCapabilityGroup": {
         "type": "string",
-        "enum": ["search", "b2b", "social", "amazon", "seo"],
+        "enum": ["search", "b2b", "social", "amazon", "seo", "other"],
         "description": "能力分组（界面分组、后台筛选用）。"
       },
       "DataCapabilityList": {

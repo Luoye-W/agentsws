@@ -39,7 +39,14 @@ export type DataCapabilityMode = 'sync' | 'async'
 export type DataBillingUnit = 'call' | 'item' | 'row'
 
 /** 能力分组（界面分组、后台筛选用）。 */
-export type DataCapabilityGroup = 'search' | 'b2b' | 'social' | 'amazon' | 'seo'
+export type DataCapabilityGroup =
+  | 'search'
+  | 'b2b'
+  | 'social'
+  | 'amazon'
+  | 'seo'
+  /** WP192 追加：运营后台新增的自定义能力没归到上面几类的。 */
+  | 'other'
 
 /**
  * 一项能力收哪些输入。**白名单**：不在这张表里的字段云端一律丢掉，不转给上游。
