@@ -14,6 +14,7 @@ import type {
   AskPort,
   ChatPort,
   ConnectionDirectoryPort,
+  FreeChatPort,
   PositionEntryPort,
   WorkPort,
   WorkstationPort,
@@ -85,6 +86,7 @@ import {
 import { evaluateGuardrail, extractFigures, resolveTimeZone, uncitedFigures } from '@agentsws/core'
 import { createDataStore, type SqliteDataStore } from '@agentsws/data'
 import { withOwnSources } from '@agentsws/deck'
+import type { WebCredential } from '@agentsws/dsh-adapter'
 import {
   type OfficialPluginBackend,
   OfficialPluginError,
@@ -180,6 +182,7 @@ import {
   brandConnectionDirectoryPort,
   brandConnectionsPort,
   brandDesignPort,
+  brandFreeChatPort,
   brandKolPort,
   brandMessagesPort,
   brandModelsPort,
@@ -258,6 +261,8 @@ import { createPrivacyErase, type PrivacyErase } from './erase.js'
 // WP119（68）：浏览器插件的本地一面（配对表按机器、写库按品牌、转发由本机做）
 import { createExtensionContributor } from './extension-contribute.js'
 import { brandExtensionPort } from './extension-port.js'
+import { chatCredits, createFreeChatPort } from './free-chat.js'
+import { createFreeChatStore, type FreeChatStore } from './free-chat-store.js'
 import { createGoogleReads, type GoogleReads } from './google-reads.js'
 import {
   createHostedOwnerClient,
@@ -306,7 +311,13 @@ import {
 import { createMeetings, type MeetingsAssembly, seedDemoMeetings } from './meetings.js'
 // WP113（63）：消息——统一收件处（消息库 / 全量同步 / 分拣 / 回写）
 import { createMessages, type MessagesAssembly, type MessagesOptions } from './messages.js'
-import { createModels, type ModelsAssembly, STUB_REF, templatesFor } from './models.js'
+import {
+  createModels,
+  humanizeGatewayError,
+  type ModelsAssembly,
+  STUB_REF,
+  templatesFor,
+} from './models.js'
 import { createOffboard, type Offboard } from './offboard.js'
 import { createOfficialPlugins, officialPluginsDirIn } from './official-plugins.js'
 import { createOnboarding, type OnboardingAssembly } from './onboarding.js'
@@ -685,6 +696,13 @@ export interface ServerOptions {
   resolveMx?: ResolveMx
   /** WP25：模型试跑用的 fetch（测试注入 →「测试」按钮全程不联网）。 */
   modelFetch?: FetchLike
+  /**
+   * WP188：随便聊「联网搜索」的替身（测试与 demo 不连 DeepSeek）。给了就不走官方搜索，
+   * 也不要求登录 DeepSeek 账号 / 填 key（设置里把搜索关了仍然不搜）。
+   */
+  freeChatWebSearch?: (
+    query: string,
+  ) => Promise<{ sources: readonly { url: string; title?: string; snippet?: string }[] }>
   /** WP42：抓各家价目页用的 fetch（测试回放固定页面 → 价目刷新全程不联网）。 */
   pricingFetch?: PageFetch
   /**
@@ -5725,6 +5743,144 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     return port
   }
   /**
+   * WP188「随便聊」：一个品牌一份（会话存这个品牌目录下的 `free-chat.sqlite`）。
+   *
+   * 模型与网关用**解析之后**的那一份（跟随公司默认时是公司默认品牌的）；联网搜索照 WP179 的规矩——
+   * 数据接口路由里「用你的 DeepSeek 账号搜索」开着、而且登录了 DeepSeek 账号或填了 DeepSeek 官方 key
+   * 才搜得了；每搜一次照 `model.usage{purpose: web_search}` 记一笔、`web.searched` 审计一条（只有查询串）。
+   */
+  const freeChatPorts = new Map<WorkspaceId, FreeChatPort>()
+  const freeChatStores: FreeChatStore[] = []
+  const freeChatPortFor = async (ws: WorkspaceId): Promise<FreeChatPort> => {
+    const cached = freeChatPorts.get(ws)
+    if (cached !== undefined) return cached
+    const brand = await brandModules.forWorkspace(ws)
+    const dir = brandDirOf(dbDir, ws, workspace.id)
+    if (dir !== undefined) mkdirSync(dir, { recursive: true })
+    const store = createFreeChatStore(dir === undefined ? undefined : join(dir, 'free-chat.sqlite'))
+    freeChatStores.push(store)
+    const searchCredential = async (endpoint: string): Promise<WebCredential | undefined> => {
+      if (deepseekAccount.signedIn()) {
+        const token = await deepseekAccount.resolveToken(endpoint)
+        if (token !== undefined && token !== '') return { kind: 'account', token }
+      }
+      const key = (await brandModules.models(ws)).deepseekSearchKey()
+      return key === undefined ? undefined : { kind: 'api_key', key }
+    }
+    const port = createFreeChatPort({
+      clock,
+      store,
+      gateway: () => brandModules.gateway(ws),
+      models: () => brandModules.models(ws),
+      roleOf: (id) => roles.assignments.get(id)?.role_id,
+      humanize: humanizeGatewayError,
+      newId: (prefix) =>
+        `${prefix}_${Date.parse(clock.now()).toString(36)}${random().toString(36).slice(2, 10)}`,
+      credits: (model, usage) => chatCredits(pricingCatalog.current()?.pricing, model, usage),
+      web: {
+        status: async () => {
+          if (brand.ownCloud.webSearchRoute().disabled.includes('deepseek_native'))
+            return {
+              available: false,
+              reason: '「用你的 DeepSeek 账号搜索」在设置里关着，这一次先不联网回答。',
+            }
+          if (options.freeChatWebSearch !== undefined) return { available: true }
+          const has =
+            deepseekAccount.signedIn() || (await brandModules.models(ws)).hasDeepseekSearchKey()
+          return has
+            ? { available: true }
+            : {
+                available: false,
+                reason:
+                  '联网搜索要先登录 DeepSeek 账号，或者在「设置 → 模型」里填 DeepSeek 官方 key。',
+              }
+        },
+        search: async (query, ctx, signal) => {
+          const gateway = await brandModules.gateway(ws)
+          const meta = {
+            workspace_id: ws,
+            assignment_id: ctx.actor.assignment_id,
+            role_id: ctx.role_id,
+            run_id: ctx.run_id,
+            purpose: 'web_search' as const,
+          }
+          const audit = (results: number, ok: boolean, error?: string): void => {
+            appendEvent({
+              schema_version: 1,
+              workspace_id: ws,
+              type: 'web.searched',
+              actor: { kind: 'person', id: ctx.actor.person_id },
+              correlation: { trace_id: `trc_${ctx.run_id}`, run_id: ctx.run_id },
+              payload: {
+                run_id: ctx.run_id,
+                role_id: ctx.role_id,
+                queries: [query],
+                results,
+                ok,
+                entry: 'free_chat',
+                ...(error === undefined ? {} : { error }),
+              },
+            })
+          }
+          try {
+            let found: { sources: readonly { url: string; title?: string; snippet?: string }[] }
+            if (options.freeChatWebSearch !== undefined) {
+              found = await options.freeChatWebSearch(query)
+              gateway.recordExternal?.({
+                meta,
+                model: { provider: 'stand-in', model: 'web-search' },
+              })
+            } else {
+              const { officialWebSearch } = await import('@agentsws/dsh-adapter')
+              const provider = officialWebSearch({
+                credential: searchCredential,
+                onUse: (use) => {
+                  if (use.kind !== 'search_usage') return
+                  gateway.recordExternal?.({
+                    meta,
+                    model: {
+                      provider:
+                        use.credential === 'deepseek_api_key' ? 'deepseek' : 'deepseek-account',
+                      model: use.model,
+                    },
+                  })
+                },
+              })
+              found = await provider.search({ query, maxResults: 8 }, signal)
+            }
+            audit(found.sources.length, true)
+            return found
+          } catch (e) {
+            audit(0, false, (e as { code?: string }).code ?? 'error')
+            throw e
+          }
+        },
+      },
+      knowledge: async (actor, text) => {
+        const config = roles.effectiveConfig(actor.assignment_id)
+        const { hits } = await knowledge.retrieval.search({
+          text,
+          k: 8,
+          actor: {
+            person_id: actor.person_id,
+            workspace_id: actor.workspace_id,
+            assignment_id: actor.assignment_id,
+            role_id: config.role_id,
+            grants: config.scopes,
+            ranges: config.ranges,
+          },
+        })
+        return hits.map((h) => ({
+          fact_card_id: h.fact_card_id,
+          text: h.statement_redacted,
+          ...(h.provenance_summary === '' ? {} : { source: h.provenance_summary }),
+        }))
+      },
+    })
+    freeChatPorts.set(ws, port)
+    return port
+  }
+  /**
    * WP69（54）岗位面：一个品牌一份（事项与 Run 落在这个品牌的 `Work` 里）。
    *
    * 岗位模板、职责定义、分配表是**制度层**的东西，跨品牌共用一份——所以这里递的是
@@ -6064,6 +6220,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   const workPortOf = brandWorkPort(brandModules, workPortFor)
   const workstationPortOf = brandWorkstationPort(brandModules, workstationPortFor)
   const askPortOf = brandAskPort(brandModules, askPortFor)
+  const freeChatPortOf = brandFreeChatPort(brandModules, freeChatPortFor)
 
   const deps: GatewayDeps = {
     identity,
@@ -6285,6 +6442,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     chat: chatPortOf(boot),
     // WP66：问 AI 用**这个品牌**的模型与事项（问的是"我这个品牌现在怎么样"）
     ask: askPortOf,
+    // WP188：随便聊（会话按品牌存；不开事项、不起运行）
+    freeChat: freeChatPortOf,
     // 25 §5 定时与流程面
     schedules: createSchedulePort({
       workspace_id: workspace.id,
@@ -6662,6 +6821,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       automationFires?.close?.()
       catalog.close()
       secretary.close()
+      // WP188：随便聊的会话库（每个品牌一个）
+      for (const store of freeChatStores) store.close()
       // WP66：每个品牌那一套各关各的（聊天车道 / 渠道 / 活数据源 / 连接面）
       await brandModules.dispose()
       await devMcp?.close()

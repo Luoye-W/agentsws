@@ -363,6 +363,21 @@ export interface ModelsAssembly {
   deepseekSearchKey(): string | undefined
   /** WP179：同上，但只看在不在、不读值（组 `RunRequest.web` 时判"搜不搜得了"用）。 */
   hasDeepseekSearchKey(): boolean
+  /**
+   * WP188「随便聊」的模型下拉：**挂在网关上的每一个**（每条能用的来源的主模型 + 被默认 / 按用途选中的），
+   * 按"已配的"列表的顺序。只列挂上的——没挂上的模型网关会退回同一家的第一个，选了等于白选。
+   */
+  chatChoices(): ModelChatChoice[]
+}
+
+/** WP188：随便聊下拉里的一项。 */
+export interface ModelChatChoice {
+  /** `provider_id/model`。 */
+  id: string
+  label: string
+  /** 「Agents 工坊（用积分）」那一条（按积分扣）。 */
+  official: boolean
+  vision: ModelVisionStatus
 }
 
 // ── 可以新建哪几种 ─────────────────────────────────────────────────────
@@ -496,6 +511,9 @@ const ANTHROPIC_VENDOR = {
  * 只动展示名与分组：provider id（`deepseek` / `deepseek-account`）、kind、存储、接口、计费一律不变。
  * 已配的那几条的显示名走 {@link providerDisplayLabel}（老数据里存的旧名字照样认）。
  */
+/** WP188（Luoye 09-29）：积分那一路模型来源的名字。「agentsws 云」不再对用户出现。 */
+export const CLOUD_LABEL = 'Agents 工坊（用积分）'
+
 export const DEEPSEEK_CARD_LABEL = 'DeepSeek 官方'
 export const DEEPSEEK_API_PLAN_LABEL = '官方 API 接口连接'
 export const DEEPSEEK_ACCOUNT_PLAN_LABEL = '官方账户登录'
@@ -528,6 +546,8 @@ const DEEPSEEK_API_LEGACY_LABELS: ReadonlySet<string> = new Set([
  */
 export function providerDisplayLabel(config: { kind: string; label: string }): string {
   if (config.kind === 'deepseek_account') return DEEPSEEK_ACCOUNT_LABEL
+  // WP188（Luoye 09-29）：积分那一路一律叫「Agents 工坊（用积分）」（存量配置里还是老名字）
+  if (config.kind === 'agentsws_cloud') return CLOUD_LABEL
   if (config.kind === 'deepseek' && DEEPSEEK_API_LEGACY_LABELS.has(config.label.trim())) {
     return DEEPSEEK_API_LABEL
   }
@@ -930,19 +950,21 @@ export const MODEL_TEMPLATES: readonly ModelProviderTemplate[] = [
    */
   {
     kind: 'agentsws_cloud',
-    label: 'agentsws 云（用积分）',
-    summary: '不填 key、不注册。关联一次账号就能用，按积分扣，随时切回自己的 key。',
+    label: CLOUD_LABEL,
+    summary: '不填 key、不注册。关联一次 Agents 工坊账号就能用，按积分扣，随时切回自己的 key。',
     vendor: 'agentsws-cloud',
-    vendor_label: 'agentsws 云（用积分）',
-    vendor_summary: '不填 key、不注册。关联一次账号就能用，按积分扣，随时切回自己的 key。',
+    vendor_label: CLOUD_LABEL,
+    vendor_summary:
+      '不填 key、不注册。关联一次 Agents 工坊账号就能用，按积分扣，随时切回自己的 key。',
     plan_label: '按积分',
     plan_order: 1,
-    auth: 'api_key',
+    // WP188：不填 key——界面上是「先关联账号 / 启用 / 看余额与用量」，不是通用的 key 表单
+    auth: 'cloud',
     default_base_url: `${DEFAULT_CLOUD_BASE_URL}/v1/ai`,
     default_model: 'deepseek-flash',
     region: 'cn',
     steps: [
-      '在"设置 → 账号与积分"里关联 agentsws 账号',
+      '在"设置 → 账号与积分"里关联 Agents 工坊账号',
       '回到这里点"启用"',
       '选一个模型（清单是云上给的，按积分价排）',
       '用起来——每次调用扣多少积分，在"账号与积分"里看得到',
@@ -1658,7 +1680,7 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
             inactive_reason:
               // 云那条不是"没填 key"——它本来就不填 key，是还没关联账号
               config.kind === 'agentsws_cloud'
-                ? '还没关联 agentsws 账号。去"设置 → 账号与积分"里关联一次就能用。'
+                ? '还没关联 Agents 工坊账号。去"设置 → 账号与积分"里关联一次就能用。'
                 : config.kind === 'deepseek_account'
                   ? '还没用 DeepSeek 账号登录（或者已经登出）。点"用 DeepSeek 账号登录"，在浏览器里登录一次就能用。'
                   : secrets.available
@@ -1822,11 +1844,11 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
       if (input.kind === 'agentsws_cloud') {
         if (input.api_key !== undefined && input.api_key.trim() !== '') {
           throw invalid(
-            '"agentsws 云"这一条不用填 key——它用的是关联账号时拿到的工作区令牌。去"设置 → 账号与积分"里关联一次即可。',
+            '「Agents 工坊（用积分）」这一条不用填 key——它用的是关联账号时拿到的工作区令牌。去"设置 → 账号与积分"里关联一次即可。',
           )
         }
         if (!hasCloudToken()) {
-          throw invalid('还没关联 agentsws 账号。先去"设置 → 账号与积分"里关联一次。')
+          throw invalid('还没关联 Agents 工坊账号。先去"设置 → 账号与积分"里关联一次。')
         }
       }
       const key = input.api_key?.trim()
@@ -2224,6 +2246,16 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
       return undefined
     },
     hasDeepseekSearchKey: () => deepseekOfficialConfigs().some((c) => hasKey(c.id)),
+    chatChoices: () =>
+      activeConfigs().flatMap((c) =>
+        selectedModels(c).map((model) => ({
+          id: `${c.id}/${model}`,
+          // 来源的名字；模型名界面从 id 里取、另起一行小字（「Agents 工坊（用积分）」后面不再套一层括号）
+          label: providerDisplayLabel(c),
+          official: c.kind === 'agentsws_cloud',
+          vision: visionStatusOf(c, model),
+        })),
+      ),
     dropAccountProvider(reason) {
       const rows = state.providers.filter((p) => p.kind === 'deepseek_account')
       if (rows.length === 0) return false
@@ -2294,6 +2326,11 @@ function lastAttempt(e: unknown): { status?: number; message: string } | undefin
     ...(typeof last.status === 'number' ? { status: last.status } : {}),
     message: last.message,
   }
+}
+
+/** WP188：随便聊里一次模型调用没成，给人看的那一句（与「测试」同一套措辞）。 */
+export function humanizeGatewayError(e: unknown): string {
+  return humanizeModelError(codeOf(e), messageOf(e))
 }
 
 /** 试跑失败的中文人话。原文只在括号里当补充。 */

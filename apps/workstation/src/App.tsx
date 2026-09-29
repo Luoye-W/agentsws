@@ -28,6 +28,8 @@ import { ChatSandboxPage } from '@/pages/chat-sandbox'
 import { ChatWindowPage } from '@/pages/chat-window'
 import { ConnectionsPage } from '@/pages/connections'
 import { DutyPage } from '@/pages/duty'
+// WP188：随便聊（像 DeepSeek 网页版的自由对话入口）
+import { FreeChatPage } from '@/pages/free-chat'
 import { GoalsPage } from '@/pages/goals'
 import { HomePage } from '@/pages/home'
 // WP85（54 §5）：消息渠道（微信 ClawBot / 企业微信智能机器人）
@@ -201,6 +203,8 @@ function Workspace(): ReactNode {
     >
       <Routes>
         <Route path="/" element={<HomePage />} />
+        {/* WP188：随便聊。一条路由带可选的会话 id——发第一句时换地址不重挂页面（流不断） */}
+        <Route path="/free-chat/:id?" element={<FreeChatPage />} />
         {/* 46 §1：首次设置向导（公司 → 你 → 你做什么 → 要配的东西） */}
         <Route path="/onboarding" element={<OnboardingPage />} />
         <Route path="/positions/:id" element={<PositionPage />} />

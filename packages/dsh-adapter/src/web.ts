@@ -185,7 +185,6 @@ export function officialSearchProvider(
     onUse: (use: WebUse) => void
   },
 ): WebSearchProvider {
-  const endpoint = `${input.baseUrl}/messages`
   const recordRequest = (request: DeepSeekSearchLlmRequest): void => {
     // 官方插件同款：只记"发了什么请求体"（不含请求头与凭据），挂在发起这次搜索的会话上
     const agents = ctx.get('agents') as
@@ -195,10 +194,27 @@ export function officialSearchProvider(
       | undefined
     agents?.currentInitiator()?.session.append('web/deepseek-search-llm-request', request)
   }
+  return officialWebSearch({ ...input, recordRequest })
+}
+
+/**
+ * WP188：同一个官方 DeepSeek 搜索提供方，**不挂在 dsh 那棵树上**——「随便聊」不起岗位运行，
+ * 没有 cordis 上下文，但要的是同一次官方搜索（请求、解析、错误措辞、凭据规矩一个字节不差）。
+ * `recordRequest` 不给就不记请求体（随便聊没有会话日志可挂）。
+ */
+export function officialWebSearch(input: {
+  credential?: (endpoint: string) => Promise<WebCredential | undefined>
+  baseUrl?: string
+  onUse: (use: WebUse) => void
+  recordRequest?: (request: DeepSeekSearchLlmRequest) => void
+}): WebSearchProvider {
+  const baseUrl = input.baseUrl ?? DEEPSEEK_DEFAULT_BASE_URL
+  const endpoint = `${baseUrl}/messages`
+  const recordRequest = input.recordRequest ?? ((): void => undefined)
   return {
     id: DEEPSEEK_PROVIDER_ID,
     // 官方的可用性判定也只看"有没有取凭据的办法"（异步凭据库查不了，失败留到搜索那一刻）
-    available: () => input.credential !== undefined && URL.canParse(input.baseUrl),
+    available: () => input.credential !== undefined && URL.canParse(baseUrl),
     async search(request, signal) {
       let kind: WebCredentialKind | undefined
       let got: Promise<WebCredential | undefined> | undefined
@@ -219,7 +235,7 @@ export function officialSearchProvider(
           kind = 'deepseek_api_key'
           return c.key
         },
-        baseURL: input.baseUrl,
+        baseURL: baseUrl,
         model: DEEPSEEK_DEFAULT_MODEL,
         apiVersion: DEEPSEEK_DEFAULT_API_VERSION,
         maxTokens: DEEPSEEK_DEFAULT_MAX_TOKENS,

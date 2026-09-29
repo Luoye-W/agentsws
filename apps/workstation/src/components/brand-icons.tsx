@@ -30,6 +30,7 @@
  */
 
 import { Mail, Plug } from 'lucide-react'
+import { BrandMark } from '@/components/design/brand-mark'
 
 /**
  * 抓回来入库的官方图：`assets/brand/` 里有什么就认什么，文件名（去掉后缀）就是
@@ -106,6 +107,8 @@ type IconChoice =
   | { kind: 'lucide-mail' }
   /** 拿不到 CC0 品牌图标时的首字母圆形单色徽标。 */
   | { kind: 'letter'; letter: string }
+  /** WP188（Luoye 09-29）：我们自己（积分那一路）——用品牌标记，不是字母圆圈。 */
+  | { kind: 'ours' }
 
 /**
  * id 从 `apps/server/src/catalog.ts`（连接目录）与 `packages/api/src/routes/models.ts`
@@ -184,10 +187,14 @@ const ICONS: Record<string, IconChoice> = {
    * **不属于任何一家**的：通用 OpenAI 兼容网关、我们自己的云。
    */
   'openai-compatible': { kind: 'letter', letter: 'O' },
-  'agentsws-cloud': { kind: 'letter', letter: 'A' },
-  // 49 M2「用 agentsws 的」那张卡。这一家是我们自己，没有第三方商标可用，
-  // 也不该去别处扒一个——首字母徽标跟着主题走，与 openai_compatible 同一档。
-  agentsws_cloud: { kind: 'letter', letter: 'A' },
+  /*
+   * 49 M2「Agents 工坊（用积分）」那张卡 / 那条来源：这一家是我们自己。WP188（Luoye 09-29）起
+   * 用我们已定的品牌标记（WP112 的六块标记，小尺寸自动单色），不再是字母「A」圆圈。
+   * `agentsws` 是那条来源在设置里的固定 id（随便聊的下拉按 id 认图标）。
+   */
+  'agentsws-cloud': { kind: 'ours' },
+  agentsws_cloud: { kind: 'ours' },
+  agentsws: { kind: 'ours' },
   // WP134：「用我的 DeepSeek 账号登录」——还是 DeepSeek 这一家，戴它自己的标志
   deepseek_account: { kind: 'glyph', glyph: 'deepseek' },
 }
@@ -256,6 +263,19 @@ export function BrandIcon({
 
   if (choice === undefined) {
     return <Plug {...common} data-icon="fallback" />
+  }
+  if (choice.kind === 'ours') {
+    return (
+      <span
+        data-testid="brand-icon"
+        data-provider={provider}
+        data-icon="brand-mark"
+        aria-hidden
+        className={`inline-flex shrink-0 ${className}`}
+      >
+        <BrandMark size={size} />
+      </span>
+    )
   }
   if (choice.kind === 'lucide-mail') {
     return <Mail {...common} data-icon="mail" />
