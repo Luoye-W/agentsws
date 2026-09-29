@@ -216,3 +216,16 @@ describe('WP182：B2B 回信卡的正文看得见', () => {
     expect(contentVariantsOf(item('b2b_record')).original).toBeUndefined()
   })
 })
+
+describe('WP182：离职交接卡的动词', () => {
+  it('按这份交接 / 改一下分法 / 先不转，不借客服转交的说法', async () => {
+    const { verbKey } = await import('../src/verbs.js')
+    expect(verbKey('handoff', 'approve', 'b2b_account_transfer')).toBe(
+      'verb.handoff.approve.account_transfer',
+    )
+    expect(verbKey('handoff', 'reject', 'b2b_account_transfer')).toBe(
+      'verb.handoff.reject.account_transfer',
+    )
+    expect(verbKey('handoff', 'reject', 'mention_triage')).toBe('verb.handoff.reject')
+  })
+})

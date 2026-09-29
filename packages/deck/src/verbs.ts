@@ -117,12 +117,27 @@ const PRIMARY_BY_KIND: Partial<Record<DeckLayout, Record<string, string>>> = {
  */
 export function verbKey(layout: DeckLayout, action: DeckAction, kind?: string): string | undefined {
   if (action === 'open' || action === 'snooze') return undefined
+  // WP182：个别 kind 连次动词也要自己的说法（离职交接卡上「认领 / 不是客户问题」是错话）
+  const own = kind === undefined ? undefined : VERB_BY_KIND[kind]?.[action]
+  if (own !== undefined) return own
   const verbs = LAYOUT_VERBS[layout]
   if (action === verbs.primary && kind !== undefined) {
     const specific = PRIMARY_BY_KIND[layout]?.[kind]
     if (specific !== undefined) return specific
   }
   return `verb.${layout}.${action}`
+}
+
+/**
+ * WP182：按 kind 整排换说法的那几种（主动词与次动词都换）。转交排版原来只有「客服转交」一种用法，
+ * 离职交接卡借了这个排版，问的却是「按这份清单转不转」。
+ */
+const VERB_BY_KIND: Readonly<Record<string, Partial<Record<DeckAction, string>>>> = {
+  b2b_account_transfer: {
+    approve: 'verb.handoff.approve.account_transfer',
+    instruct: 'verb.handoff.instruct.account_transfer',
+    reject: 'verb.handoff.reject.account_transfer',
+  },
 }
 
 /** 这个动作在这张卡上是主动词、次动词，还是收进 `···` 的那一档。 */

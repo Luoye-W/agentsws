@@ -352,6 +352,9 @@ export function createB2bService(options: B2bServiceOptions): B2bServiceAssembly
         quote_version: v,
         version: v.version,
         amount_usd: v.amount_usd,
+        // WP182：卡面上那一个大数（金钱卡读 `after.amount` + `currency`）
+        amount: v.amount_usd,
+        currency: 'USD',
         margin_pct: v.margin_pct,
         discount_pct: v.discount_pct,
         payment_terms_days: v.payment_terms_days,
