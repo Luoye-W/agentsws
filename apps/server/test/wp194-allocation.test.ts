@@ -183,7 +183,7 @@ describe('WP194 本机：带「谁」与谁能管', () => {
         subject_id: 'cs',
         monthly_limit: 50,
       })
-      expect((hits[0]?.body as { timezone: string }).timezone).toBe(want)
+      expect(hits[0]?.body).toMatchObject({ timezone: want })
       expect(hits[1]?.body).toMatchObject({ label: '客服' })
     }
   })
