@@ -24,6 +24,7 @@ import {
   HandHeart,
   ListTodo,
   type LucideIcon,
+  MessageCircle,
   MoreHorizontal,
   Target,
   Users,
@@ -505,6 +506,15 @@ export function HomePage(): React.ReactNode {
             })}
           </p>
         </div>
+        {/* WP188：一句话进随便聊（少字：一个图标 + 一句问句） */}
+        <Link
+          to="/free-chat"
+          data-testid="home-free-chat"
+          className="ml-auto flex items-center gap-2 rounded-full bg-ws-card px-3.5 py-2 text-[13px] text-ws-muted-fg shadow-ws transition-shadow hover:text-foreground hover:shadow-ws-hover"
+        >
+          <MessageCircle aria-hidden className="size-4" />
+          {t('home.free_chat')}
+        </Link>
       </header>
 
       {/* ② WP69（54 §4）：首页只列**岗位**卡，职责不出现 */}

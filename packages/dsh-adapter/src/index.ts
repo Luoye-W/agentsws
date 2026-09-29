@@ -202,6 +202,7 @@ export type {
 export {
   HTTP_FETCH_PROVIDER_ID,
   officialSearchProvider,
+  officialWebSearch,
   WEB_SEARCH_TIMEOUT_MS,
   webBrief,
   webWanted,

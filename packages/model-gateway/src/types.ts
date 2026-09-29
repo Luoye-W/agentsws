@@ -3,6 +3,7 @@ import type {
   AssignmentId,
   ChatMessage,
   Completion,
+  CompletionStream,
   ErrorCode,
   EventEnvelope,
   Iso8601,
@@ -109,8 +110,11 @@ export interface BudgetExhaustedPayload {
 export type ModelGatewayEvent = Omit<EventEnvelope<ModelEventType, unknown>, 'id'>
 export type ModelEventSink = (event: ModelGatewayEvent) => void
 
-/** 22 §1 complete 请求；在契约基础上加运行预算、EU 客户标记与输出估算（都可选）。 */
-export interface CompleteRequest {
+/**
+ * 22 §1 complete 请求；在契约基础上加运行预算、EU 客户标记与输出估算（都可选）。
+ * WP188：再加流式与停止（`on_delta` / `signal`，见契约 {@link CompletionStream}）。
+ */
+export interface CompleteRequest extends CompletionStream {
   model?: ModelRef
   messages: ChatMessage[]
   tools?: ToolDef[]

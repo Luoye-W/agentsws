@@ -70,6 +70,7 @@ import type { ConnectionsPort } from './routes/connections.js'
 import type { DesignPort } from './routes/design.js'
 import type { DshScenesPort } from './routes/dsh-scenes.js'
 import type { ExtensionPort } from './routes/extension.js'
+import type { FreeChatPort } from './routes/free-chat.js'
 import type { ReconcilePort } from './routes/health.js'
 import type { JoinPort } from './routes/join.js'
 import type { KolPort } from './routes/kol.js'
@@ -897,6 +898,8 @@ export interface GatewayDeps {
   join?: JoinPort
   /** 36 §3「问 AI」；不给的话那条路回 not_implemented。 */
   ask?: AskPort
+  /** WP188「随便聊」；不给的话 `/v1/free-chat/*` 回 not_implemented。 */
+  freeChat?: FreeChatPort
   /**
    * WP57（48 §4 L3 #11）：网站在线客服。没装配时 `/v1/chat/*` 回 not_implemented——
    * 在线客服是一条职责，不是工作台的前提。

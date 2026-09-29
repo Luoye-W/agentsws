@@ -31,6 +31,8 @@ export type MarkdownBlock =
   | { kind: 'ol'; start: number; items: string[] }
   | { kind: 'table'; rows: string[][] }
   | { kind: 'quote'; lines: string[] }
+  /** WP188：```` ``` ```` 围起来的代码块（随便聊里常见）。原样当字，一个字符都不解析。 */
+  | { kind: 'code'; lang: string; lines: string[] }
 
 const HEADING = /^(#{1,6})\s+(.*)$/
 const BULLET = /^[-*+]\s+(.*)$/
@@ -58,8 +60,22 @@ export function parseMarkdown(text: string): MarkdownBlock[] {
     else if (block.kind === 'quote' && last?.kind === 'quote') last.lines.push(...block.lines)
     else out.push(block)
   }
+  let code: { kind: 'code'; lang: string; lines: string[] } | undefined
   for (const raw of text.split('\n')) {
     const line = raw.trim()
+    // WP188：代码块里的行原样收（不去缩进、不认任何记号），直到收尾的那行 ```
+    if (code !== undefined) {
+      if (line.startsWith('```')) {
+        out.push(code)
+        code = undefined
+      } else code.lines.push(raw)
+      continue
+    }
+    if (line.startsWith('```')) {
+      flush()
+      code = { kind: 'code', lang: line.slice(3).trim(), lines: [] }
+      continue
+    }
     if (line === '') {
       flush()
       out.push({ kind: 'p', lines: [] }) // 断开标记，最后滤掉
@@ -102,6 +118,8 @@ export function parseMarkdown(text: string): MarkdownBlock[] {
     para.push(line)
   }
   flush()
+  // 没收尾的代码块（流式答到一半）也照样画出来
+  if (code !== undefined) out.push(code)
   return out.filter((b) => b.kind !== 'p' || b.lines.length > 0)
 }
 
@@ -294,6 +312,17 @@ export function SafeMarkdown({
             </ol>
           )
         if (b.kind === 'table') return <Table key={key} rows={b.rows} />
+        if (b.kind === 'code')
+          return (
+            <pre
+              key={key}
+              data-slot="code"
+              data-lang={b.lang}
+              className="overflow-x-auto rounded-md bg-ws-surface px-3 py-2 font-mono text-[12px] leading-5"
+            >
+              <code>{b.lines.join('\n')}</code>
+            </pre>
+          )
         if (b.kind === 'quote')
           return (
             <p

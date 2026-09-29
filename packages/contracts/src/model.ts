@@ -15,6 +15,11 @@ export type ModelPurpose =
    * 所以照 `model.usage` 记一条；它不经我们的网关，由宿主在搜完那一刻补记（工坊不扣积分）。
    */
   | 'web_search'
+  /**
+   * WP188：「随便聊」——不开事项、不起岗位运行的自由对话。照常过网关（计量、预算、积分都走原路），
+   * 用量页多一行。
+   */
+  | 'free_chat'
 /**
  * 一条消息的 content 可以是纯文本（**既有调用方原样传 string**），或
  * 文本 + 图片部件的数组（WP122b 交付 ⑤：视觉档，图进模型这一格）。
@@ -107,6 +112,21 @@ export interface Completion {
   usage: CompletionUsage
   model: ModelRef
   static_prefix_hash: string
+  /**
+   * WP188（只加）：这一次是**被调用方停下的**（流式请求带了 `signal` 并且中途 abort）。
+   * `text` 是停下那一刻已经吐出来的部分，`usage` 是网关按已吐出的字数估的（上游没来得及报）。
+   */
+  stopped?: boolean
+}
+
+/**
+ * WP188（只加）：流式与停止。调用方给了 `on_delta` 就一段一段收正文；provider 不会流式时，
+ * 网关在拿到整段之后补调一次（调用方不用分两种写）。`signal` abort = 停：网关不再等上游，
+ * 把已经收到的那部分当作这一次的结果（`Completion.stopped`）。
+ */
+export interface CompletionStream {
+  on_delta?: (text: string) => void
+  signal?: AbortSignal
 }
 
 /* ------------------------------------------------------------------ */
@@ -337,12 +357,14 @@ export interface ModelProvider {
    * 网关照常放行；填了 `vision: false` 的，带图的请求在网关就被拦下并说人话。
    */
   capabilities?: ModelCapabilities
-  complete(req: {
-    messages: ChatMessage[]
-    tools?: ToolDef[]
-    seed?: number
-    tool_choice?: ToolChoice
-  }): Promise<ProviderCompletion>
+  complete(
+    req: {
+      messages: ChatMessage[]
+      tools?: ToolDef[]
+      seed?: number
+      tool_choice?: ToolChoice
+    } & CompletionStream,
+  ): Promise<ProviderCompletion>
   /** 是否原生支持 `tool_choice`；缺省视为不支持（网关会剥掉该字段）。 */
   supports_tool_choice?: boolean
   embed?(texts: string[]): Promise<{ vectors: number[][]; usage: CompletionUsage }>
