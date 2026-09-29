@@ -297,7 +297,7 @@ describe('index.css：待机那几段与 @agentsws/brand 的数字一致', () =>
     expect(kf).toContain(`${((IDLE_WAVE.riseMs + IDLE_WAVE.fallMs) / IDLE_WAVE.periodMs) * 100}%,`)
   })
 
-  it('流光：8s、1.6s 后起、17.5% 扫完', () => {
+  it('流光：8s、1.6s 后起、18.75% 扫完', () => {
     const sheen = rule('ws-bm-idle-sheen')
     expect(sheen).toContain(`${IDLE_SHEEN.periodMs / 1000}s`)
     expect(sheen).toContain(`${IDLE_START_MS}ms`)

@@ -535,7 +535,7 @@
     }
   }
 
-  /* 流光：一道很淡的白色亮带（被六块裁出来）从左下扫到右上，8s 一轮，扫一次 1.4s */
+  /* 流光：一道很淡的白色亮带（被六块裁出来）从左下扫到右上，8s 一轮，扫一次 1.5s */
   .ws-bm-idle-sheen {
     transform: translate(-65px, 65px);
     animation: ws-bm-idle-sheen 8s cubic-bezier(0.65, 0, 0.35, 1) 1600ms infinite both;
@@ -545,7 +545,7 @@
     0% {
       transform: translate(-65px, 65px);
     }
-    17.5%,
+    18.75%,
     100% {
       transform: translate(65px, -65px);
     }

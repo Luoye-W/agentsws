@@ -71,7 +71,11 @@ export function markSvg(
   const head = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${VIEW_BOX}" fill="none">`
   if (options.solid !== undefined) return `${head}${rects(options.solid)}</svg>`
   const stops = options.stops ?? STOPS_ON_DARK
-  if (options.idle !== undefined) return `${head}${idleBody(options.idle, id, stops)}</svg>`
+  if (options.idle !== undefined) {
+    // 待机时领头那块会往上 / 右探出外框几个单位：内联用时让它画出框外（当 <img> 用时会被裁，四周留边即可）
+    const open = head.replace('fill="none">', 'fill="none" overflow="visible">')
+    return `${open}${idleBody(options.idle, id, stops)}</svg>`
+  }
   return `${head}<defs>${gradient(id, stops)}</defs>${rects(`url(#${id})`)}</svg>`
 }
 

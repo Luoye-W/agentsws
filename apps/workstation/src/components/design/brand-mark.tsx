@@ -335,6 +335,9 @@ export function BrandMark({
     width: size,
     height: size,
     fill: 'none',
+    // WP195：viewBox 就是标记外框，待机时领头那块往上 / 右探出几个单位会被外框裁掉——
+    // 让它画出框外（周围本来就留着安全区，§1.4）
+    overflow: 'visible',
     'data-testid': 'brand-mark',
     'data-variant': mono ? 'mono' : 'gradient',
     'data-motion': active,
