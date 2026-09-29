@@ -74,6 +74,7 @@ import { canonicalJson, sha256 } from '@agentsws/core'
 import {
   parseRole,
   type RangeExpanded,
+  ROLE_ID_SPLITS,
   type RoleDefinitionFull,
   RoleError,
   type RoleStore,
@@ -722,6 +723,10 @@ export function createOrg(options: OrgOptions): OrgAssembly {
       hard_ceiling: spec.hard_ceiling ?? false,
     })),
     connectors: role.connectors.map((c) => ({ kind: c.kind, required: c.required })),
+    // WP202：拆过的老职责带上接手的那几条（勾选里据此不再列它）
+    ...(ROLE_ID_SPLITS[role.id] === undefined
+      ? {}
+      : { superseded_by: [...(ROLE_ID_SPLITS[role.id] ?? [])] }),
   })
 
   const detailOf = (role: RoleDefinitionFull): RoleDetailView => ({

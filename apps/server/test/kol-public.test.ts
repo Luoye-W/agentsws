@@ -235,6 +235,43 @@ describe('WP68 / 49 M2：用我的 / 用 agentsws 的', () => {
     ).toBeCloseTo(0.2, 6)
   })
 
+  it('WP202：云上说「互动率其实没有」（插件报的、只有粉丝数）→ 本机这一行不带互动率，不当 0%', async () => {
+    await link()
+    await useOurs()
+    seedCreator('gadgetfull')
+    kolCloud.contributeAs(
+      {
+        account_id: 'acc_seed',
+        org_id: 'org_seed',
+        workspace_id: 'ws_seed',
+        scopes: [...DEFAULT_CLOUD_SCOPES],
+        region: 'global',
+      },
+      [{ channel: 'youtube', handle: 'gadgetplugin', followers: 9_000, observed_at: T0 }],
+      { via: 'extension' },
+    )
+    // 替身那张卡：必填的数照旧是 0（老契约不改），但标了「其实没有」
+    expect(kolCloud.creator('youtube', 'gadgetplugin')).toMatchObject({
+      engagement_rate: 0,
+      metrics_missing: ['posts_30d', 'engagement_rate'],
+    })
+    expect(kolCloud.creator('youtube', 'gadgetfull')).not.toHaveProperty('metrics_missing')
+    wallet.topup({
+      org_id: cloud.ensureAccount('luoye@example.com').org_id,
+      credits: 10,
+      kind: 'purchased',
+    })
+    const out = await data<{
+      ok: boolean
+      rows: { handle: string; engagement_rate?: number }[]
+    }>(await api('/v1/kol/search?channel=youtube&q=gadget'))
+    expect(out.ok).toBe(true)
+    const byHandle = new Map(out.rows.map((r) => [r.handle, r]))
+    expect(byHandle.get('gadgetfull')?.engagement_rate).toBe(0.035)
+    expect(byHandle.get('gadgetplugin')).toBeDefined()
+    expect(byHandle.get('gadgetplugin')).not.toHaveProperty('engagement_rate')
+  })
+
   it('reveal：扣积分、明文当场进本机加密库、响应体里只有脱敏形态', async () => {
     await link()
     await useOurs()

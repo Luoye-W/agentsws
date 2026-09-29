@@ -55,7 +55,10 @@ const obs = (over: Partial<ExtensionObservation> = {}): ExtensionObservation => 
 })
 
 /** 建一套真的库（sqlite 落临时目录）+ 一把加密库。 */
-function assemble(cloud?: PublicLibraryContributor): {
+function assemble(
+  cloud?: PublicLibraryContributor,
+  extra: { kolRoleHeld?: () => boolean; workbenchUrl?: () => string | undefined } = {},
+): {
   kol: KolStore
   secrets: SecretStore
   port: ReturnType<typeof createExtensionService>
@@ -78,6 +81,7 @@ function assemble(cloud?: PublicLibraryContributor): {
     random: () => 0.5,
     ...(cloud === undefined ? {} : { publicLibrary: cloud }),
     serverVersion: '0.1.0',
+    ...extra,
   })
   return { kol, secrets, port }
 }
@@ -249,5 +253,29 @@ describe('hello', () => {
     const said = await port.hello(session)
     expect(said.cloud_linked).toBe(true)
     expect(said.shares_to_public_library).toBe(true)
+  })
+
+  it('WP202：没人持有红人职责 → kol_role_held: false + 去建岗位的深链；有人 → true、没有深链', async () => {
+    let held = false
+    const { port } = assemble(undefined, {
+      kolRoleHeld: () => held,
+      workbenchUrl: () => 'http://127.0.0.1:4317',
+    })
+    const none = await port.hello(session)
+    expect(none.kol_role_held).toBe(false)
+    expect(none.kol_setup_url).toBe('http://127.0.0.1:4317/org?tab=positions&new=kol')
+    expect(await port.kolRoleHeld?.(WS)).toBe(false)
+    held = true
+    const some = await port.hello(session)
+    expect(some.kol_role_held).toBe(true)
+    expect(some).not.toHaveProperty('kol_setup_url')
+  })
+
+  it('WP202：装配不知道（老装配）就一格都不出，不瞎说「没有」', async () => {
+    const { port } = assemble()
+    const said = await port.hello(session)
+    expect(said).not.toHaveProperty('kol_role_held')
+    expect(said).not.toHaveProperty('kol_setup_url')
+    expect(port.kolRoleHeld).toBeUndefined()
   })
 })

@@ -179,6 +179,8 @@ export function createKolPublicClient(options: KolPublicClientOptions): PublicLi
     region?: string
     observed_at: string
     has_contact: boolean
+    /** WP202：云上说「这一格其实没有」的那几格（垫的 0 不当真）。 */
+    metrics_missing?: string[]
   }): PublicCreatorRow => ({
     // 公共库里一个人的自足键就是 `{channel, handle}`（WP61 的契约里没有 id）
     public_id: `${card.channel}:${card.handle}`,
@@ -187,7 +189,9 @@ export function createKolPublicClient(options: KolPublicClientOptions): PublicLi
     // 公共库里没有"显示名"这一格（去标识化），所以拿 handle 当名字用
     display_name: card.handle,
     ...(card.followers === undefined ? {} : { followers: card.followers }),
-    ...(card.engagement_rate === undefined ? {} : { engagement_rate: card.engagement_rate }),
+    ...(card.engagement_rate === undefined || card.metrics_missing?.includes('engagement_rate')
+      ? {}
+      : { engagement_rate: card.engagement_rate }),
     ...(card.categories?.[0] === undefined ? {} : { category: card.categories[0] }),
     ...(card.language === undefined ? {} : { language: card.language }),
     ...(card.region === undefined ? {} : { region: card.region }),

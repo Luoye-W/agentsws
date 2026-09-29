@@ -22,6 +22,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Puzzle } from 'lucide-react'
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { TutorialLink } from '@/components/help/tutorial-link'
 import { Button } from '@/components/ui/button'
 import { Hint, SafetyNote } from '@/components/ui/hint'
@@ -34,6 +35,12 @@ import {
 } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 import type { Lang } from '@/lib/i18n'
+
+/**
+ * WP202：「去建岗位」跳哪儿——公司页打开新建岗位，预填「红人营销」+ YouTube / Instagram 红人。
+ * 与本机服务 hello 里 `kol_setup_url` 的路径（`@agentsws/api` 的 `KOL_SETUP_PATH`）是同一串。
+ */
+export const KOL_SETUP_PATH = '/org?tab=positions&new=kol'
 
 /** 码的有效期（与本机服务那一侧的 `PAIRING_TTL_MS` 是同一个数）。 */
 const PAIRING_TTL_MS = 5 * 60 * 1000
@@ -110,6 +117,25 @@ export function BrowserExtensionSection(props: { assignment?: string }): React.R
       <p className="text-sm text-muted-foreground">{t('extension.line')}</p>
       {/* 安全承诺，按 36 §7 可见：插件能做的只有三件事 */}
       <SafetyNote text={t('extension.scope')} />
+      {/*
+       * WP202：插件能配、能收，但这个品牌还没人持有红人职责时，收进来的人在红人页上看不到。
+       * 只在服务端明说「没有」时出（不知道就不说），给一个去建岗位的入口。
+       */}
+      {tokens.data?.kol_role_held === false ? (
+        <p
+          className="flex flex-wrap items-center gap-2 text-sm text-[var(--ws-warn)]"
+          data-testid="extension-no-kol-role"
+        >
+          {t('extension.no_kol_role')}
+          <Link
+            to={KOL_SETUP_PATH}
+            className="underline underline-offset-2"
+            data-testid="extension-no-kol-role-go"
+          >
+            {t('extension.no_kol_role.go')}
+          </Link>
+        </p>
+      ) : null}
 
       <div className="rounded-2xl bg-card p-4 shadow-[var(--ws-shadow)]">
         {pairing === undefined ? (

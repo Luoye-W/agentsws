@@ -44,6 +44,10 @@ export interface ExtensionStatus {
   queued: number
   /** 上一次出了什么事（人话，直接印在卡片上）。 */
   note?: string | undefined
+  /** WP202：本机说这个品牌还没人持有红人职责（`false`）；不知道就没有这一格。 */
+  kol_role_held?: boolean | undefined
+  /** WP202：「去建岗位」的工作台深链（hello 给了才有）。 */
+  kol_setup_url?: string | undefined
 }
 
 export type ObserveOutcome =
@@ -85,10 +89,25 @@ export function statusFromHello(hello: ExtensionHello): {
   workspace_name: string
   cloud_linked: boolean
   shares_to_public_library: boolean
+  kol_role_held?: boolean
+  kol_setup_url?: string
 } {
   return {
     workspace_name: hello.workspace_name,
     cloud_linked: hello.cloud_linked,
     shares_to_public_library: hello.shares_to_public_library,
+    ...(hello.kol_role_held === undefined ? {} : { kol_role_held: hello.kol_role_held }),
+    ...(hello.kol_setup_url === undefined ? {} : { kol_setup_url: hello.kol_setup_url }),
+  }
+}
+
+/** WP202：面板上那句「你还没有红人营销岗位」。只在本机明说「没有」时出。 */
+export const NO_KOL_ROLE_LINE = '你还没有红人营销岗位，收进来的人暂时看不到。'
+
+export function kolRoleNote(status: ExtensionStatus): { text: string; url?: string } | undefined {
+  if (!status.paired || !status.online || status.kol_role_held !== false) return undefined
+  return {
+    text: NO_KOL_ROLE_LINE,
+    ...(status.kol_setup_url === undefined ? {} : { url: status.kol_setup_url }),
   }
 }

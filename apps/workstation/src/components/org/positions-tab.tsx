@@ -12,7 +12,7 @@
  * 所以"分给了谁"是算出来的（谁名下有这个岗位的全部默认职责），不是另存一张表。
  */
 import { Pencil } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { type RoleChangePatch, RoleDetail } from '@/components/org/roles-tab'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -53,6 +53,20 @@ function Holder({
   )
 }
 
+/**
+ * WP202：勾选职责时能列哪几条。拆过的老职责（`superseded_by`，如「Meta 社媒运营」）
+ * 不再给人新勾；只有这个岗位**本来就含着它**时照常列出（老岗位不能看着像少了一条）。
+ */
+export function pickableRoles(roles: RoleSummaryView[], held: string[] = []): RoleSummaryView[] {
+  return roles.filter((r) => r.superseded_by === undefined || held.includes(r.id))
+}
+
+/** 新建岗位时的预填（WP202：从「连接 → 浏览器插件」那句提示跳来，预填红人营销）。 */
+export interface PositionDraft {
+  name: string
+  roles: string[]
+}
+
 export function PositionsTab({
   positions,
   roles,
@@ -68,6 +82,9 @@ export function PositionsTab({
   people = [],
   onSupervisor,
   onRename,
+  assigning,
+  below,
+  draft: preset,
 }: {
   positions: OrgPositionView[]
   roles: RoleSummaryView[]
@@ -94,6 +111,16 @@ export function PositionsTab({
    * `name_en` 空着 = 英文名不变。
    */
   onRename?(position_id: string, input: { name: string; name_en?: string }): void
+  /**
+   * WP202：正在「分给同事」的那个岗位。向导（`below` 给的那块）**就长在这张岗位卡下面**，
+   * 不再摆在页顶——按钮在页面下半截时，页顶那张卡根本看不见，点了像没反应。
+   * 打开时焦点给向导里第一个选项；关上（取消 / 完成）时焦点回到这张卡的「分给同事」。
+   */
+  assigning?: string
+  /** WP202：某张岗位卡下面要就地展开的那一块（分配向导 / 上岗回执）；没有就回 `null`。 */
+  below?(position_id: string): React.ReactNode
+  /** WP202：一进来就打开「新建岗位」并预填（名字 + 勾好的职责）。 */
+  draft?: PositionDraft
 }): React.ReactNode {
   const { t, lang } = useApp()
   // WP196：正在改名的那个岗位与两格草稿（一次一个）
@@ -102,9 +129,49 @@ export function PositionsTab({
   const [renameEn, setRenameEn] = useState('')
   const [editing, setEditing] = useState<string | null>(null)
   const [draft, setDraft] = useState<string[]>([])
-  const [creating, setCreating] = useState(false)
-  const [newName, setNewName] = useState('')
-  const [newRoles, setNewRoles] = useState<string[]>([])
+  const [creating, setCreating] = useState(preset !== undefined)
+  const [newName, setNewName] = useState(preset?.name ?? '')
+  const [newRoles, setNewRoles] = useState<string[]>(preset?.roles ?? [])
+  const createRef = useRef<HTMLDivElement>(null)
+  // 预填是从别的页跳来的：打开以后把「新建岗位」那张卡滚到眼前
+  const presetKey = preset === undefined ? undefined : `${preset.name}|${preset.roles.join(',')}`
+  useEffect(() => {
+    if (presetKey === undefined) return
+    setCreating(true)
+    const [name = '', list = ''] = presetKey.split('|')
+    setNewName(name)
+    setNewRoles(list === '' ? [] : list.split(','))
+    requestAnimationFrame(() => {
+      createRef.current?.scrollIntoView?.({ block: 'nearest' })
+    })
+  }, [presetKey])
+
+  /*
+   * WP202：分配向导就地展开 + 焦点来回。开的时候把焦点给向导里第一个能按的，
+   * 关的时候（取消 / 完成）焦点回到那张卡的「分给同事」——人从哪儿点的，回哪儿去。
+   */
+  const listRef = useRef<HTMLDivElement>(null)
+  const lastAssigning = useRef<string | undefined>(undefined)
+  useEffect(() => {
+    const root = listRef.current
+    const previous = lastAssigning.current
+    lastAssigning.current = assigning
+    if (root === null || previous === assigning) return
+    const cardOf = (id: string): Element | null =>
+      [...root.querySelectorAll('[data-testid="position-card"]')].find(
+        (el) => el.getAttribute('data-position') === id,
+      ) ?? null
+    if (assigning !== undefined) {
+      const panel = cardOf(assigning)?.querySelector('[data-testid="position-below"]')
+      panel?.scrollIntoView?.({ block: 'nearest' })
+      panel?.querySelector<HTMLElement>('button:not([disabled]), input, select')?.focus()
+      return
+    }
+    if (previous === undefined) return
+    const button = cardOf(previous)?.querySelector<HTMLElement>('[data-testid="position-assign"]')
+    button?.scrollIntoView?.({ block: 'nearest' })
+    button?.focus()
+  }, [assigning])
   // 折叠层里展开看规矩的那一条职责（一次一条：`岗位 id / 职责 id`）
   const [detail, setDetail] = useState<string | null>(null)
 
@@ -118,7 +185,7 @@ export function PositionsTab({
           {error}
         </p>
       )}
-      <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-3" ref={listRef}>
         {positions.map((p) => (
           <Card key={p.id} data-testid="position-card" data-position={p.id}>
             <CardHeader className="flex-row flex-wrap items-center justify-between gap-2">
@@ -307,7 +374,10 @@ export function PositionsTab({
                 <div className="flex flex-col gap-2 rounded-md border p-2">
                   <span className="text-xs text-muted-foreground">{t('org.positions.pick')}</span>
                   <div className="flex flex-wrap gap-1">
-                    {roles.map((r) => (
+                    {pickableRoles(
+                      roles,
+                      p.roles.map((r) => r.role_id),
+                    ).map((r) => (
                       <button
                         key={r.id}
                         type="button"
@@ -356,6 +426,7 @@ export function PositionsTab({
                 <Button
                   size="sm"
                   data-testid="position-assign"
+                  aria-expanded={assigning === p.id}
                   onClick={() => {
                     onAssign(p.id)
                   }}
@@ -384,13 +455,20 @@ export function PositionsTab({
                   {t('org.positions.delete')}
                 </Button>
               </div>
+              {/* WP202：分配向导 / 上岗回执就地展开在这张卡里，不在页顶 */}
+              {(() => {
+                const node = below?.(p.id)
+                return node === null || node === undefined ? null : (
+                  <div data-testid="position-below">{node}</div>
+                )
+              })()}
             </CardContent>
           </Card>
         ))}
       </div>
 
       {creating ? (
-        <Card>
+        <Card ref={createRef} data-testid="new-position-card">
           <CardHeader>
             <CardTitle className="text-sm">{t('org.positions.new')}</CardTitle>
           </CardHeader>
@@ -409,7 +487,7 @@ export function PositionsTab({
             <div className="flex flex-col gap-1.5">
               <span className="text-xs text-muted-foreground">{t('org.positions.pick')}</span>
               <div className="flex flex-wrap gap-1">
-                {roles.map((r) => (
+                {pickableRoles(roles).map((r) => (
                   <button
                     key={r.id}
                     type="button"

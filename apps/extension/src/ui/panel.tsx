@@ -24,7 +24,7 @@ import {
   formatRatioPercent,
 } from '@/lib/health'
 import type { ExtensionStatus, ObserveOutcome } from '@/lib/messages'
-import { destinationLine, send } from '@/lib/messages'
+import { destinationLine, kolRoleNote, send } from '@/lib/messages'
 import type { ContentSnapshot, CreatorSnapshot } from '@/lib/snapshot'
 import { creatorObservation } from '@/lib/to-observation'
 import { BrandMark } from './brand-mark'
@@ -87,6 +87,22 @@ export function Panel(props: PanelProps): React.ReactNode {
           </button>
         </p>
       ) : null}
+
+      {/* WP202：配上了、连得上，但这个品牌还没人持有红人职责——收进去了也看不到 */}
+      {(() => {
+        const note = status === undefined ? undefined : kolRoleNote(status)
+        if (note === undefined) return null
+        return (
+          <p className="ws-note ws-note--warn" data-testid="ws-no-kol-role">
+            {note.text}
+            {note.url === undefined ? null : (
+              <a href={note.url} target="_blank" rel="noreferrer" style={{ marginLeft: 4 }}>
+                去建岗位
+              </a>
+            )}
+          </p>
+        )
+      })()}
 
       {status !== undefined && status.queued > 0 ? (
         <p className="ws-note ws-note--warn" data-testid="ws-queued">

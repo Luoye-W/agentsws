@@ -9924,6 +9924,13 @@
           "imported_from": {
             "type": "string",
             "description": "这一行是从哪儿搬来的（`kolagents`）。空 = 本系统自己攒的。"
+          },
+          "metrics_missing": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PublicCreatorMetric"
+            },
+            "description": "WP202（只加）：卡上**哪几格其实没有数**。"
           }
         },
         "required": [
@@ -9941,6 +9948,11 @@
           "updated_at"
         ],
         "description": "公共库里对外的那张卡。"
+      },
+      "PublicCreatorMetric": {
+        "type": "string",
+        "enum": ["posts_30d", "engagement_rate"],
+        "description": "WP202：卡上可能「其实没有」的那两格。"
       },
       "PublicCreatorObservation": {
         "type": "object",

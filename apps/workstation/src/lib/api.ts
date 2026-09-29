@@ -2267,6 +2267,8 @@ export interface RoleSummaryView {
   }[]
   automation: { action_id: string; ceiling: string; initial: string; hard_ceiling: boolean }[]
   connectors: { kind: string; required: boolean }[]
+  /** WP202：拆过的老职责（`social.meta`）才有——新建岗位 / 加减职责的勾选里不列它。 */
+  superseded_by?: string[]
 }
 
 export interface RoleDetailView extends RoleSummaryView {
@@ -5375,8 +5377,12 @@ export interface ExtensionPairingView {
 
 export const listExtensionTokens = (
   assignment?: string,
-): Promise<{ tokens: ExtensionTokenView[] }> =>
-  api<{ tokens: ExtensionTokenView[] }>('/v1/extension/tokens', withAssignment(assignment))
+): Promise<{ tokens: ExtensionTokenView[]; kol_role_held?: boolean }> =>
+  // WP202：`kol_role_held`（只加）——这个品牌还没人持有红人职责时是 false
+  api<{ tokens: ExtensionTokenView[]; kol_role_held?: boolean }>(
+    '/v1/extension/tokens',
+    withAssignment(assignment),
+  )
 
 export const createExtensionPairing = (
   assignment?: string,

@@ -14,7 +14,7 @@
  * 2. **改职责模板不会立刻生效**：提交之后只显示「已提交审批」，卡片回到首页队列里等你定。
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { BrandMark } from '@/components/design'
 import { JoinPanel } from '@/components/onboarding/join-panel'
@@ -24,7 +24,7 @@ import { CreditsTab } from '@/components/org/credits-tab'
 import { InprogressTab } from '@/components/org/inprogress-tab'
 import { type JoinChoice, JoinTab } from '@/components/org/join-tab'
 import { MembersTab } from '@/components/org/members-tab'
-import { PositionsTab } from '@/components/org/positions-tab'
+import { type PositionDraft, PositionsTab } from '@/components/org/positions-tab'
 import { type ProductLineDraft, type RangeGroupDraft, RangesTab } from '@/components/org/ranges-tab'
 import { ToolboxTab } from '@/components/org/toolbox-tab'
 import { Button } from '@/components/ui/button'
@@ -74,6 +74,9 @@ import {
 } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 
+/** WP202：预填的红人营销岗位勾哪两条（与 WP201b 在真线上建的那一个一样）。 */
+const KOL_PRESET_ROLES = ['kol.youtube', 'kol.instagram']
+
 export function OrgPage(): React.ReactNode {
   const { t } = useApp()
   const client = useQueryClient()
@@ -87,6 +90,12 @@ export function OrgPage(): React.ReactNode {
       : 'positions',
   )
   const query = params.get('q')
+  /**
+   * WP202：`/org?new=kol`——从「连接 → 浏览器插件」那句「你还没有红人营销岗位」跳来。
+   * 已经有含红人职责的岗位（只是没人拿着）就在那张卡下面打开「分给同事」；
+   * 没有就打开「新建岗位」，预填「红人营销」+ YouTube / Instagram 红人两条。
+   */
+  const wantKol = params.get('new') === 'kol'
   const [wizard, setWizard] = useState<string | null>(null)
   const [fresh, setFresh] = useState<OrgInvitationView | undefined>(undefined)
   const [submitted, setSubmitted] = useState<string | undefined>(undefined)
@@ -100,7 +109,12 @@ export function OrgPage(): React.ReactNode {
    *
    * 名字认不出来就是 `null`（不出回执）：宁可没有，也不在界面上印一串 id。
    */
-  const [receipt, setReceipt] = useState<{ person: string; position: string } | null>(null)
+  const [receipt, setReceipt] = useState<{
+    person: string
+    position: string
+    /** WP202：回执长在哪张岗位卡下面（就地展开，和向导同一个位置）。 */
+    position_id: string
+  } | null>(null)
 
   const session = useQuery({ queryKey: ['session'], queryFn: ensureSession })
   // 52 O1：这个品牌挂在哪家公司下（品牌一览要它）
@@ -225,7 +239,11 @@ export function OrgPage(): React.ReactNode {
       // 两张清单里认，认不出来就不出回执——宁可没有，也不印一串 id
       const person = (members.data ?? []).find((m) => m.person_id === input.person_id)?.name
       const position = (positions.data ?? []).find((x) => x.id === input.position_id)?.name
-      setReceipt(person === undefined || position === undefined ? null : { person, position })
+      setReceipt(
+        person === undefined || position === undefined
+          ? null
+          : { person, position, position_id: input.position_id },
+      )
       await refresh()
     },
     onError: say,
@@ -418,6 +436,28 @@ export function OrgPage(): React.ReactNode {
     onError: say,
   })
 
+  // WP202：`?new=kol` 只在拿到岗位与职责清单后判一次
+  const kolHandled = useRef(false)
+  const [kolDraft, setKolDraft] = useState<PositionDraft | undefined>(undefined)
+  useEffect(() => {
+    if (!wantKol || kolHandled.current) return
+    if (positions.data === undefined || roles.data === undefined) return
+    kolHandled.current = true
+    setTab('positions')
+    const existing = positions.data.find(
+      (p) => p.holders.length === 0 && p.roles.some((r) => r.role_id.startsWith('kol.')),
+    )
+    if (existing !== undefined) {
+      setWizard(existing.id)
+      return
+    }
+    const known = new Set(roles.data.map((r) => r.id))
+    setKolDraft({
+      name: t('org.positions.kol_preset'),
+      roles: KOL_PRESET_ROLES.filter((id) => known.has(id)),
+    })
+  }, [wantKol, positions.data, roles.data, t])
+
   const busy =
     assign.isPending ||
     newInvite.isPending ||
@@ -438,6 +478,55 @@ export function OrgPage(): React.ReactNode {
     remove.isPending ||
     copy.isPending ||
     propose.isPending
+
+  /** WP202：某张岗位卡下面就地展开的那一块——正在分的向导，或刚分完的回执。 */
+  const below = (position_id: string): React.ReactNode => {
+    if (wizard === position_id)
+      return (
+        <div className="flex flex-col gap-3 rounded-md border p-3" data-testid="assign-inline">
+          <p className="font-medium">{t('org.assign.title')}</p>
+          <AssignWizard
+            members={members.data ?? []}
+            positions={positions.data ?? []}
+            rangeOptions={ranges.data ?? []}
+            rangeGroups={brands.data ?? []}
+            productLines={lines.data ?? []}
+            presetPosition={wizard}
+            busy={assign.isPending}
+            {...(failure === undefined ? {} : { error: failure })}
+            onCancel={() => {
+              setWizard(null)
+            }}
+            onConfirm={(choice) => {
+              assign.mutate(choice)
+            }}
+          />
+        </div>
+      )
+    if (receipt?.position_id === position_id)
+      return (
+        <div className="flex items-center gap-4 rounded-md border p-3" data-testid="assign-receipt">
+          <BrandMark size={44} motion="split" />
+          <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+            <p className="ws-display text-[15px]">
+              {t('org.assign.receipt', { person: receipt.person, position: receipt.position })}
+            </p>
+            <p className="text-[12.5px] text-ws-muted-fg">{t('org.assign.receipt.hint')}</p>
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            data-testid="assign-receipt-close"
+            onClick={() => {
+              setReceipt(null)
+            }}
+          >
+            {t('org.assign.receipt.close')}
+          </Button>
+        </div>
+      )
+    return null
+  }
 
   if (mine.data === undefined || session.data === undefined) {
     return <Skeleton className="h-64 w-full" />
@@ -479,56 +568,6 @@ export function OrgPage(): React.ReactNode {
         <p className="text-xs text-muted-foreground">{t('org.subtitle')}</p>
       </div>
 
-      {receipt === null ? null : (
-        <Card data-testid="assign-receipt">
-          <CardContent className="flex items-center gap-4 pt-6">
-            <BrandMark size={44} motion="split" />
-            <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-              <p className="ws-display text-[15px]">
-                {t('org.assign.receipt', { person: receipt.person, position: receipt.position })}
-              </p>
-              <p className="text-[12.5px] text-ws-muted-fg">{t('org.assign.receipt.hint')}</p>
-            </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              data-testid="assign-receipt-close"
-              onClick={() => {
-                setReceipt(null)
-              }}
-            >
-              {t('org.assign.receipt.close')}
-            </Button>
-          </CardContent>
-        </Card>
-      )}
-
-      {wizard === null ? null : (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm">{t('org.assign.title')}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <AssignWizard
-              members={members.data ?? []}
-              positions={positions.data ?? []}
-              rangeOptions={ranges.data ?? []}
-              rangeGroups={brands.data ?? []}
-              productLines={lines.data ?? []}
-              presetPosition={wizard}
-              busy={assign.isPending}
-              {...(failure === undefined ? {} : { error: failure })}
-              onCancel={() => {
-                setWizard(null)
-              }}
-              onConfirm={(choice) => {
-                assign.mutate(choice)
-              }}
-            />
-          </CardContent>
-        </Card>
-      )}
-
       <Tabs value={tab} onValueChange={setTab}>
         <TabsList>
           {/* 52 O2：品牌一览排在最前——公司页问的第一件事就是"这家公司有哪几个品牌" */}
@@ -563,9 +602,14 @@ export function OrgPage(): React.ReactNode {
               busy={busy}
               {...(submitted === undefined ? {} : { submitted })}
               {...(failure === undefined || wizard !== null ? {} : { error: failure })}
+              {...(wizard === null ? {} : { assigning: wizard })}
+              below={below}
+              {...(kolDraft === undefined ? {} : { draft: kolDraft })}
               onAssign={(id) => {
                 setFailure(undefined)
-                setWizard(id)
+                setReceipt(null)
+                // 再点一次同一张卡的「分给同事」= 收起
+                setWizard((current) => (current === id ? null : id))
               }}
               onCreate={(input) => {
                 create.mutate(input)

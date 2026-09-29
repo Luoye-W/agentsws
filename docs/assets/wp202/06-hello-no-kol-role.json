@@ -1,0 +1,18 @@
+{
+    "data": {
+        "workspace_id": "ws_dtc3c",
+        "workspace_name": "NordVolt Gear",
+        "cloud_linked": false,
+        "shares_to_public_library": false,
+        "scopes": [
+            "kol.observe",
+            "kol.capture",
+            "kol.read"
+        ],
+        "server_version": "0.1.0",
+        "workbench_url": "http://127.0.0.1:4399",
+        "kol_role_held": false,
+        "kol_setup_url": "http://127.0.0.1:4399/org?tab=positions&new=kol"
+    },
+    "trace_id": "d002aee7025daab6bce28c6be64a5b7e"
+}

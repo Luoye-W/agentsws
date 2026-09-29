@@ -87,6 +87,12 @@ export interface RoleSummaryView {
   /** 05 §1.4 自动化上限 */
   automation: { action_id: string; ceiling: string; initial: string; hard_ceiling: boolean }[]
   connectors: { kind: string; required: boolean }[]
+  /**
+   * WP202（docs/86 §6，只加）：这条职责**已经拆成了哪几条**（`social.meta` →
+   * `social.facebook` + `social.instagram`）。有这一格 = 老职责：新建岗位与加减职责的
+   * 勾选里不再出它；已经持有它的老分配照常显示（迁移在启动时做）。没拆过就没有这一格。
+   */
+  superseded_by?: string[]
 }
 
 export interface RoleDetailView extends RoleSummaryView {
