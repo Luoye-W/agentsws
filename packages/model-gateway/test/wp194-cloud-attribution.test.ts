@@ -50,6 +50,18 @@ describe('WP194 官方接口：带「谁」', () => {
     expect(calls[1]?.headers['X-Agentsws-Member']).toBeUndefined()
   })
 
+  it('流式那条路（随便聊）也带归属头', async () => {
+    const { p, calls } = provider(() => ({ status: 200, body: completion }))
+    await p
+      .complete({
+        messages: [userPrompt('hi')],
+        meta: meta({ assignment_id: 'asg_s' }),
+        on_delta: () => undefined,
+      })
+      .catch(() => undefined)
+    expect(calls[0]?.headers['X-Agentsws-Member']).toBe('p_asg_s')
+  })
+
   it('网关把 meta 递给 provider', async () => {
     const { p, calls } = provider(() => ({ status: 200, body: completion }))
     const gw = createModelGateway({

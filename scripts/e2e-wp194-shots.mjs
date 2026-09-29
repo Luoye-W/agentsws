@@ -8,6 +8,7 @@
  * 3. `my-allowance.png`：设置 → 积分里的「我的本月额度：已用 X / 上限 Y」；
  * 4. `my-allowance-full.png`：额度到了——同一块变红，写着「本月额度用完了，找管理员加。」
  * 5. `org-credits-full.png`：回到公司页，成员表里那一行标红「用完了」。
+ * 6. `free-chat-quota-error.png`：出错处——随便聊里用「Agents 工坊（用积分）」问一句，回「本月额度用完了，找管理员加。」
  *
  * 全走 demo 的真路由与真界面；云是替身（`cloud-stand-in`，数字是 demo 种的合成数，不真扣钱）。
  *
@@ -108,6 +109,26 @@ async function main() {
       .getByTestId('alloc-members')
       .screenshot({ path: join(SHOTS, 'org-credits-full.png') })
     console.log('  📷 org-credits-full.png')
+
+    // ⑥ 出错处：随便聊里用「Agents 工坊（用积分）」问一句，额度到了回那句人话
+    await page.goto(`${BASE}/settings`, { waitUntil: 'load' })
+    const enable = page.getByTestId('model-cloud-enable')
+    await enable.waitFor({ timeout: 20_000 }).catch(() => undefined)
+    if ((await enable.count()) > 0) {
+      await enable.click()
+      await page.getByTestId('model-cloud-disable').waitFor({ timeout: 20_000 })
+    }
+    await page.goto(`${BASE}/free-chat`, { waitUntil: 'load' })
+    await page.getByTestId('free-chat-model').click()
+    await page.getByTestId('free-chat-model-option').filter({ hasText: 'Agents' }).first().click()
+    await page.getByTestId('free-chat-input').fill('帮我写一段新品上架的文案')
+    await page.getByTestId('free-chat-send').click()
+    await page.getByTestId('free-chat-error').waitFor({ timeout: 30_000 })
+    await page.waitForTimeout(300)
+    await page
+      .getByTestId('free-chat-page')
+      .screenshot({ path: join(SHOTS, 'free-chat-quota-error.png') })
+    console.log('  📷 free-chat-quota-error.png')
   } finally {
     await browser.close()
   }

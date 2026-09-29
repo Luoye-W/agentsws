@@ -16,9 +16,16 @@ import type {
   CloudAllocationView,
   CloudMyAllocationView,
 } from '@agentsws/contracts'
-import { ALLOCATION_EXHAUSTED_MESSAGE, MEMBER_HEADER, POSITION_HEADER } from '@agentsws/contracts'
+import {
+  ALLOCATION_EXHAUSTED_MESSAGE,
+  MEMBER_HEADER,
+  ORG_BALANCE_EXHAUSTED_MESSAGE,
+  POSITION_HEADER,
+} from '@agentsws/contracts'
+import { cloudQuotaError } from '@agentsws/model-gateway'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { type CloudFetch, createCloud } from '../src/cloud.js'
+import { cloudAiStandInFetch } from '../src/cloud-ai-stand-in.js'
 import { withCloudAttribution } from '../src/cloud-attribution.js'
 import {
   CLOUD_STAND_IN_BASE_URL,
@@ -27,7 +34,7 @@ import {
   createServer,
   type Server,
 } from '../src/index.js'
-import { CLOUD_TOKEN_SECRET_ID } from '../src/models.js'
+import { CLOUD_TOKEN_SECRET_ID, humanizeGatewayError } from '../src/models.js'
 import type { SecretStore } from '../src/secret-store.js'
 import { SECRETS_KEY_ENV } from '../src/secret-store.js'
 
@@ -174,6 +181,42 @@ describe('WP194 替身云本身', () => {
     })
     for (const path of ['/v1/wallet/allocation', '/v1/wallet/allocation/me'])
       expect((await standIn.fetch(`${CLOUD_STAND_IN_BASE_URL}${path}`, {})).status).toBe(401)
+  })
+})
+
+describe('WP194 demo 的官方模型替身问一声额度', () => {
+  it('这个人额度到了 → 402 那句人话；没到照常答', async () => {
+    const standIn = cloudStandIn({ autoLinkAfterMs: -1 })
+    standIn.seedAllocation({
+      usage: [{ member_id: 'p_a', bucket: 'ai', credits: 12, calls: 3 }],
+      limits: [{ kind: 'member', subject_id: 'p_a', monthly_limit: 10 }],
+    })
+    const ai = cloudAiStandInFetch({ gate: (h) => standIn.aiGate(h), delayMs: 0 })
+    const url = `${CLOUD_STAND_IN_BASE_URL}/v1/ai/chat/completions`
+    const body = JSON.stringify({ messages: [{ role: 'user', content: 'hi' }] })
+    const over = await ai(url, { method: 'POST', headers: { [MEMBER_HEADER]: 'p_a' }, body })
+    expect(over.status).toBe(402)
+    expect(((await over.json()) as { message: string }).message).toBe(ALLOCATION_EXHAUSTED_MESSAGE)
+    const fine = await ai(url, { method: 'POST', headers: { [MEMBER_HEADER]: 'p_b' }, body })
+    expect(fine.status).toBe(200)
+  })
+})
+
+describe('WP194 出错处那句人话', () => {
+  it('官方接口的额度到了原样说；公司没钱说「找管理员充值」；本机预算照旧', () => {
+    const quota = (reason: string, message: string) =>
+      cloudQuotaError(
+        JSON.stringify({ code: 'insufficient_credits', message, details: { reason } }),
+      )
+    expect(humanizeGatewayError(quota('member_limit', ALLOCATION_EXHAUSTED_MESSAGE))).toBe(
+      ALLOCATION_EXHAUSTED_MESSAGE,
+    )
+    expect(
+      humanizeGatewayError(quota('org_balance', '积分不够了：这一次要 1 积分，可用 0。')),
+    ).toBe(ORG_BALANCE_EXHAUSTED_MESSAGE)
+    expect(
+      humanizeGatewayError({ code: 'budget_exhausted', message: 'workspace daily', details: {} }),
+    ).toContain('预算用完了')
   })
 })
 

@@ -60,6 +60,7 @@ import {
   cloudBaseUrl,
   DEFAULT_CLOUD_BASE_URL,
   NO_VISION_REASON,
+  ORG_BALANCE_EXHAUSTED_MESSAGE,
   VISION_MODEL_EXAMPLES,
 } from '@agentsws/contracts'
 import type {
@@ -2345,6 +2346,13 @@ function lastAttempt(e: unknown): { status?: number; message: string } | undefin
 
 /** WP188：随便聊里一次模型调用没成，给人看的那一句（与「测试」同一套措辞）。 */
 export function humanizeGatewayError(e: unknown): string {
+  /*
+   * WP194：官方接口说「积分不够」——那是云上的人话，原样给（不套「预算用完了，先把上限调高」
+   * 那一句：那是本机预算的说法）。公司没钱了统一说「公司的积分用完了，找管理员充值。」
+   */
+  const details = (e as { details?: { source?: unknown; reason?: unknown } } | undefined)?.details
+  if (codeOf(e) === 'budget_exhausted' && details?.source === 'agentsws_cloud')
+    return details.reason === 'org_balance' ? ORG_BALANCE_EXHAUSTED_MESSAGE : messageOf(e)
   return humanizeModelError(codeOf(e), messageOf(e))
 }
 
