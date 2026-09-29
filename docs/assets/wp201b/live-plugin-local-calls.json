@@ -1,0 +1,94 @@
+{
+ "calls": [
+  {
+   "at": "2026-09-29T17:00:35.994Z",
+   "method": "GET",
+   "path": "/v1/extension/hello",
+   "status": 200
+  },
+  {
+   "at": "2026-09-29T17:01:14.611Z",
+   "method": "GET",
+   "path": "/v1/extension/setup",
+   "status": 200
+  },
+  {
+   "at": "2026-09-29T17:01:19.403Z",
+   "method": "GET",
+   "path": "/v1/extension/setup",
+   "status": 200
+  },
+  {
+   "at": "2026-09-29T17:01:19.407Z",
+   "method": "GET",
+   "path": "/v1/extension/auto-score",
+   "status": 200
+  },
+  {
+   "at": "2026-09-29T17:01:49.430Z",
+   "method": "GET",
+   "path": "/v1/extension/setup",
+   "status": 200
+  },
+  {
+   "at": "2026-09-29T17:01:57.191Z",
+   "method": "GET",
+   "path": "/v1/extension/setup",
+   "status": 200
+  },
+  {
+   "at": "2026-09-29T17:01:57.191Z",
+   "method": "GET",
+   "path": "/v1/extension/auto-score",
+   "status": 200
+  },
+  {
+   "at": "2026-09-29T17:02:06.184Z",
+   "method": "POST",
+   "path": "/v1/extension/observations",
+   "status": 200,
+   "receipt": {
+    "rows": [
+     {
+      "handle": "@phonecasepk",
+      "status": "ok"
+     },
+     {
+      "handle": "@cellphonecasesreviews1491",
+      "status": "ok"
+     },
+     {
+      "handle": "@juggernautcase2000",
+      "status": "ok"
+     },
+     {
+      "handle": "@CoralCase",
+      "status": "ok"
+     },
+     {
+      "handle": "@VizveraStore",
+      "status": "ok"
+     },
+     {
+      "handle": "@thecasecompanydotin",
+      "status": "ok"
+     },
+     {
+      "handle": "@wildflowercases",
+      "status": "ok"
+     },
+     {
+      "handle": "@premium_phone_cases",
+      "status": "ok"
+     }
+    ],
+    "forwarded_to_public_library": 8,
+    "public_library_pending": null,
+    "batch_id": "bt_1vfxcp21"
+   }
+  }
+ ],
+ "observation_request_sent_at": [
+  "2026-09-29T17:02:02.375Z"
+ ]
+}
