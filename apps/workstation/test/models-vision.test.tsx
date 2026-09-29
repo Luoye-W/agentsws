@@ -43,7 +43,12 @@ const IMAGE_NONE: ModelImageView = {
   official: false,
   credits_per_image: 0.5,
   choices: [
-    { provider_id: 'agentsws', label: 'Agents 工坊（用积分）', official: true, default_model: 'gpt-image-1' },
+    {
+      provider_id: 'agentsws',
+      label: 'Agents 工坊（用积分）',
+      official: true,
+      default_model: 'gpt-image-1',
+    },
   ],
   unavailable_reason: '生图还没配：去设置 → 模型 →「生图」那一块选一个。',
 }
