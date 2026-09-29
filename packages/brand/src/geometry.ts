@@ -366,3 +366,45 @@ export const IDLE_WAVE_SHEEN_DELAYS_MS: readonly number[] = ALL_BLOCKS.map((blk)
   const cross = ((blockAxis(blk) - 0.5 + w.travel) / (2 * w.travel)) * w.sweepMs
   return Math.round(cross - w.riseMs)
 })
+
+// ── 流光在明暗两种底上的颜色（WP200）─────────────────────────────────
+
+/**
+ * 那道光的颜色与力度：`color` 是亮带的颜色，`strength` 乘在亮带最亮处的不透明度上
+ * （`IDLE_WAVE_SHEEN.peakOpacity` / `IDLE_SHEEN.peakOpacity`）。
+ */
+export interface SheenTint {
+  readonly color: string
+  readonly strength: number
+}
+
+/** 深底：纯白、原样（WP195 调好的那一版，不动）。 */
+export const SHEEN_ON_DARK: SheenTint = { color: '#FFFFFF', strength: 1 }
+
+/**
+ * 浅底（WP200，Luoye 09-29 同意）：纯白 0.42 扫过压暗那套端点时，那块会短暂发白
+ * （WP195 截图 `compare-1000ms.png`）。换成一道**极淡的品牌青**、力度压到一半多一点
+ * （波 + 流光最亮处 0.42 × 0.55 ≈ 0.23）：光还看得见，块不再褪成灰白。
+ *
+ * 没用深底那套亮青（`#2FE0C8`）：它扫过领头那块时会把品牌黄染成绿。
+ */
+export const SHEEN_ON_LIGHT: SheenTint = { color: '#E0FAF4', strength: 0.55 }
+
+/**
+ * 亮带那一层的矩形（WP200 修「块中间一条竖直分界」）。
+ *
+ * WP195 的亮带是一个和外框一样大（65×65）的矩形，渐变用 `objectBoundingBox` 从它的左下角到
+ * 右上角。那样亮带最亮的那条线正好是矩形的另一条对角线（左上角 → 右下角），**亮带在矩形的四条边
+ * 上被切断**；矩形一平移，它竖直的右边 / 水平的上边就扫过方块，块中间于是出现一条硬的明暗分界
+ * （96px 起肉眼可见，官网首屏 180px 更明显）。和尺寸、精度无关，是几何上的。
+ *
+ * 修法：渐变改成 `userSpaceOnUse`、轴就是 `GRADIENT_AXIS`（= 原来那个 65×65 矩形的左下 → 右上，
+ * 所以光的位置、宽度、亮度一个像素都不变），矩形往四周各放宽两个外框（325×325）。平移最远
+ * ±65（单独的流光）时它离标记四边仍有一个外框远，被切断的地方永远裁不到块上。
+ */
+export const SHEEN_BAND_BOX = {
+  x: MARK_BOX.x - 2 * MARK_BOX.width,
+  y: MARK_BOX.y - 2 * MARK_BOX.height,
+  width: MARK_BOX.width * 5,
+  height: MARK_BOX.height * 5,
+} as const

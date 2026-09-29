@@ -35,7 +35,8 @@ function braced(at) {
 
 function brandVars(selector) {
   const block = braced(css.indexOf(`${selector} {`))
-  return [...block.matchAll(/(--ws-brand-mark-[\w-]+):\s*([^;]+);/g)].map(
+  // WP200：连同亮带那两个变量（--ws-brand-sheen / -strength）一起抠
+  return [...block.matchAll(/(--ws-brand-(?:mark-[\w-]+|sheen[\w-]*)):\s*([^;]+);/g)].map(
     (m) => `${m[1]}: ${m[2]};`,
   )
 }
@@ -105,14 +106,16 @@ function mark(size, motion = 'none', idle = b.DEFAULT_IDLE_STYLE) {
   if ((sheen || ws) && !mono) {
     const band = ws ? b.IDLE_WAVE_SHEEN : b.IDLE_SHEEN
     const h = band.bandWidth / 2
-    defs += `<linearGradient id="${id}-sheen" x1="0" y1="1" x2="1" y2="0"><stop offset="${(0.5 - h) * 100}%" stop-color="#fff" stop-opacity="0"/><stop offset="50%" stop-color="#fff" stop-opacity="${band.peakOpacity}"/><stop offset="${(0.5 + h) * 100}%" stop-color="#fff" stop-opacity="0"/></linearGradient>`
+    const ax = b.GRADIENT_AXIS
+    defs += `<linearGradient id="${id}-sheen" gradientUnits="userSpaceOnUse" x1="${ax.x1}" y1="${ax.y1}" x2="${ax.x2}" y2="${ax.y2}"><stop offset="${(0.5 - h) * 100}%" stop-color="var(--ws-brand-sheen)" stop-opacity="0"/><stop offset="50%" stop-color="var(--ws-brand-sheen)" stop-opacity="${band.peakOpacity}"/><stop offset="${(0.5 + h) * 100}%" stop-color="var(--ws-brand-sheen)" stop-opacity="0"/></linearGradient>`
     defs += ws
       ? b.ALL_BLOCKS.map(
           (blk, i) => `<clipPath id="${id}-c${i}">${rect(blk, ' fill="#000"')}</clipPath>`,
         ).join('')
       : `<clipPath id="${id}-clip">${b.ALL_BLOCKS.map((blk) => rect(blk, ' fill="#000"')).join('')}</clipPath>`
   }
-  const box = b.MARK_BOX
+  // WP200：亮带矩形放大（SHEEN_BAND_BOX），不在方块上被切断
+  const box = b.SHEEN_BAND_BOX
   const boxAttrs = `x="${box.x}" y="${box.y}" width="${box.width}" height="${box.height}"`
   const blocks = b.ALL_BLOCKS.map((blk, i) => {
     const fill = mono ? 'currentColor' : `url(#${perBlock ? `${id}-b${i}` : id})`
@@ -159,6 +162,27 @@ const FILM = {
   sheen: [0, 250, 500, 625, 750, 875, 1000, 1250, 1500],
   blink: [0, 90, 180, 270, 360, 450, 540, 630, 800],
 }
+
+// ── WP200 · 浅色主题那道光：改前 / 改后 ─────────────────────────────
+// 「改前」就是把两个亮带变量压回 WP195 的样子（纯白、力度 1），其余一模一样。
+const TINT_AT = [800, 1200, 1600]
+const tintRow = (label, cls) =>
+  `<div class="tint"><h4>${label}</h4><div class="panel light ${cls}">${SIZES.map(
+    (s) =>
+      `<div class="col">${TINT_AT.map(
+        (t) =>
+          `<figure class="frame" data-t="${b.IDLE_START_MS + t}">${mark(s, 'idle', 'wave-sheen')}<figcaption>${s}px · +${(t / 1000).toFixed(1)}s</figcaption></figure>`,
+      ).join('')}</div>`,
+  ).join(
+    '',
+  )}<figure>${mark(96, 'idle', 'wave-sheen')}<figcaption>在动</figcaption></figure></div></div>`
+const tint = () =>
+  `<section class="cand" id="light-sheen"><p class="note">浅色主题下光扫过时，纯白 ${b.IDLE_WAVE_SHEEN.peakOpacity} 会让块短暂发白。改后换成极淡的品牌青（<code>${b.SHEEN_ON_LIGHT.color}</code>），力度 ×${b.SHEEN_ON_LIGHT.strength}；深色主题不变。连拍冻结在光扫过中段的三个时刻。</p>${tintRow('改前（WP195：纯白 0.42）', 'sheen-before')}${tintRow(`改后（WP200：${b.SHEEN_ON_LIGHT.color} × ${b.SHEEN_ON_LIGHT.strength}）`, '')}<div class="tint"><h4>深色主题（不变）</h4>${panel('dark', SIZES.map((s) => cell(s, mark(s, 'idle', 'wave-sheen'))).join(''))}</div></section>`
+
+// ── WP200 · README 顶上那张（独立 SVG，当 <img> 挂，和 GitHub 上一样）──────
+const dataUri = (svg) => `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`
+const readme = () =>
+  `<section class="cand" id="readme"><p class="note">和 GitHub 一样当 <code>&lt;img&gt;</code> 挂（不是内联）：动画写在 SVG 自己的 &lt;style&gt; 里，不带脚本；四周各留 ${b.README_MARK_PAD} 个单位，抬起的那块不会被裁。系统开了「减少动态效果」时静止。</p><div class="pair"><div class="panel gh-light"><figure><img src="${dataUri(b.BRAND_MARK_SVG_README_LIGHT)}" width="99" height="99" alt=""><figcaption>GitHub 浅色 · mark-idle-light.svg</figcaption></figure></div><div class="panel gh-dark"><figure><img src="${dataUri(b.BRAND_MARK_SVG_README_DARK)}" width="99" height="99" alt=""><figcaption>GitHub 深色 · mark-idle-dark.svg</figcaption></figure></div></div></section>`
 
 const COMPARE = ['wave-sheen', 'wave', 'sheen']
 const compare = (theme) =>
@@ -265,6 +289,10 @@ figcaption { font-size: 11px; opacity: .6; }
 .word { font-weight: 600; font-size: 14px; }
 .hover { display: inline-flex; cursor: default; }
 .film .panel { gap: 10px; margin-top: 8px; }
+.sheen-before { --ws-brand-sheen: #ffffff; --ws-brand-sheen-strength: 1; }
+.tint { margin-top: 10px; } .tint .panel { gap: 24px; } .col { display: flex; gap: 14px; align-items: flex-end; }
+.panel.gh-light { background: #ffffff; color: #1f2328; border: 1px solid #d1d9e0; }
+.panel.gh-dark { background: #0d1117; color: #f0f6fc; }
 table { border-collapse: collapse; width: 100%; background: #fff; border-radius: 12px; overflow: hidden; }
 th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid #ECEFEA; font-size: 13px; }
 @media (max-width: 720px) { .pair { grid-template-columns: 1fr; } }
@@ -296,7 +324,7 @@ const html = `<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>品牌标记动效预览</title>
-<!-- WP195 · 由 scripts/gen-brand-motion-preview.mjs 生成，不手改。CSS 原样取自 apps/workstation/src/index.css。 -->
+<!-- WP195 / WP200 · 由 scripts/gen-brand-motion-preview.mjs 生成，不手改。CSS 原样取自 apps/workstation/src/index.css。 -->
 <style>${pageCss}
 ${motionCss}
 </style>
@@ -306,6 +334,12 @@ ${motionCss}
 <h1>品牌标记动效预览</h1>
 <p class="lead">一直挂在屏幕上的标记改成「待机」：大部分时间一动不动，隔几秒轻轻动一下。四个候选并排，明暗两套、三个尺寸。挂上后先静 ${b.IDLE_START_MS / 1000} 秒才动第一下。「波 + 流光」是 Luoye 09-29 点的结合版，放在最前。系统开了「减少动态效果」时这一页也不会动。</p>
 <div class="bar"><button type="button" data-rate="1" aria-pressed="true">正常速度</button><button type="button" data-rate="4" aria-pressed="false">快进 ×4</button><button type="button" data-replay>重播集结 / 一变一队</button></div>
+
+<h2>WP200 · 浅色主题的光：改前 / 改后</h2>
+${tint()}
+
+<h2>WP200 · README 顶上那张（会动）</h2>
+${readme()}
 
 <h2>对比 · 波 + 流光 / 单独的波 / 单独的流光</h2>
 <section class="cand" id="compare"><p class="note">三个同时挂上、同时起步，方便并排看。点「快进 ×4」可以不用等。</p><div class="pair">${compare('light')}${compare('dark')}</div></section>

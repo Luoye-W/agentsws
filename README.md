@@ -1,7 +1,7 @@
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/brand/mark-dark.svg">
-    <img src="docs/assets/brand/mark-light.svg" alt="出海Agents工坊" width="88" height="88">
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/brand/mark-idle-dark.svg">
+    <img src="docs/assets/brand/mark-idle-light.svg" alt="出海Agents工坊" width="99" height="99">
   </picture>
 </p>
 

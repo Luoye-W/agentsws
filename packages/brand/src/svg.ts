@@ -30,6 +30,10 @@ import {
   type IdleStyle,
   idlePercent,
   MARK_BOX,
+  SHEEN_BAND_BOX,
+  SHEEN_ON_DARK,
+  SHEEN_ON_LIGHT,
+  type SheenTint,
   STOPS_ON_DARK,
   STOPS_ON_LIGHT,
   type Stop,
@@ -67,16 +71,32 @@ export function markSvg(
      * 系统开了「少一点动效」时它自己停（SVG 里带着那条 media query）。
      */
     idle?: IdleStyle
+    /**
+     * WP200：待机里那道光的颜色与力度。不给就按底色挑——`stops` 是 `STOPS_ON_LIGHT`（浅底）
+     * 取 `SHEEN_ON_LIGHT`（极淡的品牌青、力度减半），否则取 `SHEEN_ON_DARK`（纯白原样）。
+     */
+    sheen?: SheenTint
+    /**
+     * WP200：viewBox 四周各放宽几个单位。当 `<img>` 用（README、邮件）时待机里抬起的那块
+     * 不会被外框裁掉；内联用不需要（那时靠 `overflow="visible"`）。不给就是 0 = 外框本身。
+     */
+    pad?: number
   } = {},
 ): string {
   const id = options.id ?? 'aw-mark'
-  const head = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${VIEW_BOX}" fill="none">`
+  const pad = options.pad ?? 0
+  const viewBox =
+    pad === 0
+      ? VIEW_BOX
+      : `${MARK_BOX.x - pad} ${MARK_BOX.y - pad} ${MARK_BOX.width + 2 * pad} ${MARK_BOX.height + 2 * pad}`
+  const head = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${viewBox}" fill="none">`
   if (options.solid !== undefined) return `${head}${rects(options.solid)}</svg>`
   const stops = options.stops ?? STOPS_ON_DARK
   if (options.idle !== undefined) {
     // 待机时领头那块会往上 / 右探出外框几个单位：内联用时让它画出框外（当 <img> 用时会被裁，四周留边即可）
     const open = head.replace('fill="none">', 'fill="none" overflow="visible">')
-    return `${open}${idleBody(options.idle, id, stops)}</svg>`
+    const tint = options.sheen ?? (stops === STOPS_ON_LIGHT ? SHEEN_ON_LIGHT : SHEEN_ON_DARK)
+    return `${open}${idleBody(options.idle, id, stops, tint)}</svg>`
   }
   return `${head}<defs>${gradient(id, stops)}</defs>${rects(`url(#${id})`)}</svg>`
 }
@@ -143,29 +163,53 @@ export function idleCss(style: IdleStyle, cls: string): string {
   return `${base}transform:translate(-${far}px,${far}px);animation:${cls} ${k.periodMs}ms ${EASING.transition} ${IDLE_START_MS}ms infinite both}@keyframes ${cls}{0%{transform:translate(-${far}px,${far}px)}${end},100%{transform:translate(${far}px,-${far}px)}}@media (prefers-reduced-motion: reduce){.${cls}{animation:none;opacity:0}}`
 }
 
-/** 流光那道亮带：沿对角线、两侧羽化，只在中间 `bandWidth` 那一段里亮。 */
+/** 亮带颜色写进 SVG 的样子：纯白照旧写 `#fff`（深底那一版逐字节不变）。 */
+function sheenColor(tint: SheenTint): string {
+  return tint.color.toUpperCase() === '#FFFFFF' ? '#fff' : tint.color
+}
+
+/**
+ * 流光那道亮带：沿对角线、两侧羽化，只在中间 `bandWidth` 那一段里亮。
+ * 颜色与力度看底色（WP200：浅底极淡的品牌青、力度减半；深底纯白原样）。
+ */
 function sheenGradient(
   id: string,
   band: { bandWidth: number; peakOpacity: number } = IDLE_SHEEN,
+  tint: SheenTint = SHEEN_ON_DARK,
 ): string {
   const half = band.bandWidth / 2
   const at = (t: number): string => `${Number((t * 100).toFixed(2))}%`
-  return `<linearGradient id="${id}" x1="0" y1="1" x2="1" y2="0"><stop offset="${at(0.5 - half)}" stop-color="#fff" stop-opacity="0"/><stop offset="50%" stop-color="#fff" stop-opacity="${band.peakOpacity}"/><stop offset="${at(0.5 + half)}" stop-color="#fff" stop-opacity="0"/></linearGradient>`
+  const c = sheenColor(tint)
+  const peak = Number((band.peakOpacity * tint.strength).toFixed(3))
+  // WP200：userSpaceOnUse + 放大的矩形（SHEEN_BAND_BOX），亮带不再在矩形边上被切断
+  const a = GRADIENT_AXIS
+  return `<linearGradient id="${id}" gradientUnits="userSpaceOnUse" x1="${a.x1}" y1="${a.y1}" x2="${a.x2}" y2="${a.y2}"><stop offset="${at(0.5 - half)}" stop-color="${c}" stop-opacity="0"/><stop offset="50%" stop-color="${c}" stop-opacity="${peak}"/><stop offset="${at(0.5 + half)}" stop-color="${c}" stop-opacity="0"/></linearGradient>`
 }
 
-function idleBody(style: IdleStyle, id: string, stops: readonly Stop[]): string {
+/** 亮带那一层矩形的属性（WP200：放大到 SHEEN_BAND_BOX）。 */
+function bandBox(): string {
+  const r = SHEEN_BAND_BOX
+  return `x="${r.x}" y="${r.y}" width="${r.width}" height="${r.height}"`
+}
+
+function idleBody(
+  style: IdleStyle,
+  id: string,
+  stops: readonly Stop[],
+  tint: SheenTint = SHEEN_ON_DARK,
+): string {
   const cls = `${id}-idle`
   const css = `<style>${idleCss(style, cls)}</style>`
   if (style === 'sheen') {
     // 方块不动，照静态那条规矩：一条 userSpaceOnUse 铺满，六块切开；亮带被六块裁出来
     const clip = `<clipPath id="${id}-clip">${rects('#000')}</clipPath>`
-    const band = `<g clip-path="url(#${id}-clip)"><rect class="${cls}" x="${MARK_BOX.x}" y="${MARK_BOX.y}" width="${MARK_BOX.width}" height="${MARK_BOX.height}" fill="url(#${id}-sheen)"/></g>`
-    return `${css}<defs>${gradient(id, stops)}${sheenGradient(`${id}-sheen`)}${clip}</defs>${rects(`url(#${id})`)}${band}`
+    const band = `<g clip-path="url(#${id}-clip)"><rect class="${cls}" ${bandBox()} fill="url(#${id}-sheen)"/></g>`
+    return `${css}<defs>${gradient(id, stops)}${sheenGradient(`${id}-sheen`, IDLE_SHEEN, tint)}${clip}</defs>${rects(`url(#${id})`)}${band}`
   }
   if (style === 'wave-sheen') {
     // 每块一个会抬起的 <g>：块本身 + 被它自己裁出来的那一份亮带，一起抬——光不会漏到缝里。
     // 六份亮带同一条动画、同一个起点，所以看上去就是一道光。
-    const box = `x="${MARK_BOX.x}" y="${MARK_BOX.y}" width="${MARK_BOX.width}" height="${MARK_BOX.height}"`
+    const box = bandBox()
     const clips = ALL_BLOCKS.map(
       (b, i) =>
         `<clipPath id="${id}-c${i}"><rect x="${b.x}" y="${b.y}" width="${BLOCK_SIZE}" height="${BLOCK_SIZE}" rx="${BLOCK_RADIUS}"/></clipPath>`,
@@ -174,7 +218,7 @@ function idleBody(style: IdleStyle, id: string, stops: readonly Stop[]): string 
       (b, i) =>
         `<g class="${cls}" style="animation-delay:${IDLE_START_MS + (IDLE_WAVE_SHEEN_DELAYS_MS[i] ?? 0)}ms"><rect x="${b.x}" y="${b.y}" width="${BLOCK_SIZE}" height="${BLOCK_SIZE}" rx="${BLOCK_RADIUS}" fill="url(#${id}-b${i})"/><g clip-path="url(#${id}-c${i})"><rect class="${cls}-band" ${box} fill="url(#${id}-sheen)"/></g></g>`,
     ).join('')
-    return `${css}<defs>${blockGradients(id, stops)}${sheenGradient(`${id}-sheen`, IDLE_WAVE_SHEEN)}${clips}</defs>${groups}`
+    return `${css}<defs>${blockGradients(id, stops)}${sheenGradient(`${id}-sheen`, IDLE_WAVE_SHEEN, tint)}${clips}</defs>${groups}`
   }
   const lead = ALL_BLOCKS.length - 1
   const extra = (i: number): string => {
@@ -196,4 +240,26 @@ export const BRAND_MARK_SVG_IDLE_LIGHT = markSvg({
   stops: STOPS_ON_LIGHT,
   id: 'aw-idle-light',
   idle: DEFAULT_IDLE_STYLE,
+})
+
+/**
+ * README 门面那两张会动的标记（WP200）：四周各留几个单位，GitHub 用 `<img>` 挂它时
+ * 抬起的那块不会被裁。`scripts/gen-brand-assets.py` 把它们写到 `docs/assets/brand/`。
+ */
+export const README_MARK_PAD = 4
+
+/** README 深色主题那张（会动，内联 CSS keyframes，不带脚本）。 */
+export const BRAND_MARK_SVG_README_DARK = markSvg({
+  stops: STOPS_ON_DARK,
+  id: 'aw-readme-dark',
+  idle: DEFAULT_IDLE_STYLE,
+  pad: README_MARK_PAD,
+})
+
+/** README 浅色主题那张（压暗端点 + 浅底那道淡光）。 */
+export const BRAND_MARK_SVG_README_LIGHT = markSvg({
+  stops: STOPS_ON_LIGHT,
+  id: 'aw-readme-light',
+  idle: DEFAULT_IDLE_STYLE,
+  pad: README_MARK_PAD,
 })

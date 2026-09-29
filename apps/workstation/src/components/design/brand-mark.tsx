@@ -58,11 +58,11 @@ import {
   IDLE_WAVE_SHEEN,
   IDLE_WAVE_SHEEN_DELAYS_MS,
   type IdleStyle,
-  MARK_BOX,
   MIN_GRADIENT_PX,
   MOTION_CLASS,
   motionStopVars,
   PAUSED_CLASS,
+  SHEEN_BAND_BOX,
   SPLIT_FIRST_DELAY_MS,
   SPLIT_OFFSETS,
   SPLIT_STEP_MS,
@@ -72,6 +72,9 @@ import {
   VIEW_BOX,
 } from './brand-mark.geometry'
 import { useMotionPref } from './motion-pref'
+
+/** 亮带颜色（明暗两套定义在 `index.css` 的 `:root` / `.dark`）。 */
+const SHEEN_COLOR = 'var(--ws-brand-sheen)'
 
 export type BrandMarkVariant = 'gradient' | 'mono'
 export type BrandMarkMotion = 'none' | 'assemble' | 'breathe' | 'split' | 'idle'
@@ -288,16 +291,27 @@ export function BrandMark({
     }
   }
 
-  // 流光：一层白色亮带，被六块裁出来，只动它的位置（标记本身一个像素的颜色都不改）
+  // 流光：一层亮带，被六块裁出来，只动它的位置（标记本身一个像素的颜色都不改）。
+  // 颜色走 `--ws-brand-sheen`、力度走亮带那层的 opacity（`--ws-brand-sheen-strength`）：
+  // 深底纯白原样，浅底极淡的品牌青、力度减半（WP200，不然扫过时块会短暂发白）。
   const sheenId = `${uid}-sheen`
   const clipId = `${uid}-clip`
   const band = waveSheen ? IDLE_WAVE_SHEEN : IDLE_SHEEN
   const half = band.bandWidth / 2
   const bandGradient = (
-    <linearGradient id={sheenId} x1="0" y1="1" x2="1" y2="0">
-      <stop offset={`${(0.5 - half) * 100}%`} stopColor="#fff" stopOpacity={0} />
-      <stop offset="50%" stopColor="#fff" stopOpacity={band.peakOpacity} />
-      <stop offset={`${(0.5 + half) * 100}%`} stopColor="#fff" stopOpacity={0} />
+    // WP200：userSpaceOnUse、轴 = GRADIENT_AXIS，矩形放大到 SHEEN_BAND_BOX——亮带不会在矩形边上
+    // 被切断（原来 65×65 + objectBoundingBox 时，矩形的右边扫过右下那块会切出一条竖直分界）
+    <linearGradient
+      id={sheenId}
+      gradientUnits="userSpaceOnUse"
+      x1={GRADIENT_AXIS.x1}
+      y1={GRADIENT_AXIS.y1}
+      x2={GRADIENT_AXIS.x2}
+      y2={GRADIENT_AXIS.y2}
+    >
+      <stop offset={`${(0.5 - half) * 100}%`} stopColor={SHEEN_COLOR} stopOpacity={0} />
+      <stop offset="50%" stopColor={SHEEN_COLOR} stopOpacity={band.peakOpacity} />
+      <stop offset={`${(0.5 + half) * 100}%`} stopColor={SHEEN_COLOR} stopOpacity={0} />
     </linearGradient>
   )
   const waveSheenDefs = waveSheen ? (
@@ -342,10 +356,10 @@ export function BrandMark({
             <Blk x={b.x} y={b.y} fill={fillOf(i)} />
             <g clipPath={`url(#${clipId}${i})`}>
               <rect
-                x={MARK_BOX.x}
-                y={MARK_BOX.y}
-                width={MARK_BOX.width}
-                height={MARK_BOX.height}
+                x={SHEEN_BAND_BOX.x}
+                y={SHEEN_BAND_BOX.y}
+                width={SHEEN_BAND_BOX.width}
+                height={SHEEN_BAND_BOX.height}
                 fill={`url(#${sheenId})`}
                 className={IDLE_BAND_CLASS}
               />
@@ -358,10 +372,10 @@ export function BrandMark({
       {sheen && !mono ? (
         <g clipPath={`url(#${clipId})`} data-testid="brand-mark-sheen">
           <rect
-            x={MARK_BOX.x}
-            y={MARK_BOX.y}
-            width={MARK_BOX.width}
-            height={MARK_BOX.height}
+            x={SHEEN_BAND_BOX.x}
+            y={SHEEN_BAND_BOX.y}
+            width={SHEEN_BAND_BOX.width}
+            height={SHEEN_BAND_BOX.height}
             fill={`url(#${sheenId})`}
             className={IDLE_CLASS.sheen}
           />

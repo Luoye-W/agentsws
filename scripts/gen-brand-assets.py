@@ -13,9 +13,12 @@
   apps/desktop/build/icon.png                1024，macOS 图标网格：824 内容区 + 圆角
   apps/desktop/build/trayTemplate.png        22，单色模板图（黑 + alpha，系统自己反色）
   apps/desktop/build/trayTemplate@2x.png     44
-  docs/assets/brand/mark-{dark,light,mono}.svg  仓库门面用的 SVG 副本
+  docs/assets/brand/mark-{dark,light,mono}.svg  仓库门面用的 SVG 副本（静态）
+  docs/assets/brand/mark-idle-{dark,light}.svg  README 顶上那张（WP200：会动，内联 keyframes、
+                                             不带脚本；四周留边，<img> 里抬起的块不被裁）
 
 只重出 favicon.svg（不碰任何位图）：python3 scripts/gen-brand-assets.py --favicon-only
+只重出全部 SVG（favicon + docs 那几张，不碰任何位图）：python3 scripts/gen-brand-assets.py --svg-only
 
 并把托盘那两张的 base64 **写回** `apps/desktop/src/tray-icon.ts`——托盘图标是壳启动
 的第一件事，不该依赖打包后的资源路径，所以它是内嵌的 data URL。
@@ -66,6 +69,8 @@ console.log(JSON.stringify({{
   svgDark: b.BRAND_MARK_SVG_DARK,
   svgLight: b.BRAND_MARK_SVG_LIGHT,
   svgMono: b.BRAND_MARK_SVG_MONO,
+  svgReadmeDark: b.BRAND_MARK_SVG_README_DARK,
+  svgReadmeLight: b.BRAND_MARK_SVG_README_LIGHT,
   svgFaviconIdle: b.markSvg({{ idle: b.DEFAULT_IDLE_STYLE, stops: b.STOPS_ON_DARK, id: 'fav' }}),
   defaultIdle: b.DEFAULT_IDLE_STYLE,
 }}));
@@ -231,6 +236,23 @@ def patch_tray_icon(one_x: Path, two_x: Path) -> None:
     print(f"  {ts.relative_to(ROOT)}（两个 base64 常量已同步）")
 
 
+def docs_svgs() -> list[Path]:
+    """仓库门面用的 SVG 副本：静态三张 + README 顶上那两张会动的（WP200）。"""
+    brand_docs = ROOT / "docs/assets/brand"
+    brand_docs.mkdir(parents=True, exist_ok=True)
+    out: list[Path] = []
+    for name, svg in (
+        ("mark-dark.svg", B["svgDark"]),
+        ("mark-light.svg", B["svgLight"]),
+        ("mark-mono.svg", B["svgMono"]),
+        ("mark-idle-dark.svg", B["svgReadmeDark"]),
+        ("mark-idle-light.svg", B["svgReadmeLight"]),
+    ):
+        (brand_docs / name).write_text(f"{svg}\n", encoding="utf-8")
+        out.append(brand_docs / name)
+    return out
+
+
 def main() -> None:
     made: list[Path] = []
 
@@ -241,6 +263,11 @@ def main() -> None:
     made.append(pub / "favicon.svg")
     if "--favicon-only" in sys.argv:
         print(f"  {(pub / 'favicon.svg').relative_to(ROOT)}")
+        return
+    if "--svg-only" in sys.argv:
+        made += docs_svgs()
+        for p in made:
+            print(f"  {p.relative_to(ROOT)}")
         return
     made.append(
         render(
@@ -272,15 +299,7 @@ def main() -> None:
     made += [tray1, tray2]
 
     # ── 仓库门面用的 SVG 副本 ────────────────────────────────────────
-    brand_docs = ROOT / "docs/assets/brand"
-    brand_docs.mkdir(parents=True, exist_ok=True)
-    for name, svg in (
-        ("mark-dark.svg", B["svgDark"]),
-        ("mark-light.svg", B["svgLight"]),
-        ("mark-mono.svg", B["svgMono"]),
-    ):
-        (brand_docs / name).write_text(f"{svg}\n", encoding="utf-8")
-        made.append(brand_docs / name)
+    made += docs_svgs()
 
     for p in made:
         print(f"  {p.relative_to(ROOT)}")
