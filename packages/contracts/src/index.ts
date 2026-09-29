@@ -32,6 +32,8 @@ export * from './connect.js'
 // 54（将改号 55）§4 第一层：连接目录（按职责模板的 `kind` 登记的总表，WP83）
 export * from './connection-directory.js'
 export * from './data.js'
+// WP192（docs/83 §4）：官方数据接口的统一能力口（同步调用 + 异步任务）
+export * from './data-service.js'
 // 58 §1 / §2 设计岗位的五条职责、三个对象与规格表（WP76）
 export * from './design.js'
 // WP136（docs/79）：dsh 的「场景」（Profile）——Agents 工坊是其中一个，其余由 DeepSeek 官方维护

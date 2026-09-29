@@ -30,6 +30,7 @@ import { cloudAccountRoutes } from './routes/cloud-account.js'
 import { computerUseRoutes } from './routes/computer-use.js'
 import { connectionDirectoryRoutes } from './routes/connection-directory.js'
 import { connectionRoutes } from './routes/connections.js'
+import { dataServiceRoutes } from './routes/data-service.js'
 import { designRoutes } from './routes/design.js'
 // WP136（docs/79）：dsh 场景切换
 import { dshScenesRoutes } from './routes/dsh-scenes.js'
@@ -122,6 +123,8 @@ export function collectRoutes(): Route[] {
     ...dshScenesRoutes(),
     // WP155（docs/81）：搜索数据接口（连接页那一行 + SERP / AI 问答探测）
     ...searchDataRoutes(),
+    // WP192（docs/83 §4）：官方数据接口统一能力口（本机按能力路由，转给云上的 /v1/data/*）
+    ...dataServiceRoutes(),
     // WP31 本机秘密库密钥轮换（owner）；`/v1/secrets/rotate` 与连接面不撞
     ...secretRoutes(),
     /*

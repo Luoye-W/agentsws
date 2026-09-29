@@ -49,14 +49,18 @@ import type {
 import {
   allocationTimezoneOf,
   attributionHeaders,
+  DATA_CAPABILITY_ROUTE_LEVELS,
+  DATA_CAPABILITY_ROUTE_PREFIX,
   DEFAULT_ALLOCATION_TIMEZONE,
+  DEFAULT_DATA_CAPABILITY_ORDER,
   DEFAULT_DATA_SOURCE_ORDER,
   DEFAULT_WEB_SEARCH_ORDER,
+  dataCapabilityRouteKey,
   WEB_SEARCH_ROUTE_KEY,
 } from '@agentsws/contracts'
 import { currentCloudHeaders } from './cloud-attribution.js'
 import type { KolStore } from './kol.js'
-import type { KolCloudCall, KolCloudSync } from './kol-cloud-sync.js'
+import type { KolCloudCall, KolCloudCallFn, KolCloudSync } from './kol-cloud-sync.js'
 import { createKolCloudSync } from './kol-cloud-sync.js'
 import { CLOUD_BASE_URL_ENV, CLOUD_TOKEN_SECRET_ID, DEFAULT_CLOUD_BASE_URL } from './models.js'
 import { createPricingCatalog, type PricingCatalogSource } from './pricing-catalog.js'
@@ -164,6 +168,16 @@ export interface CloudAssembly {
    * 不拦删人——本地这一刀已经切了，云上那一行留着也不会再被用到（他不再出现在请求头里）。
    */
   forgetMember(person_id: string, by: string): Promise<boolean>
+  /**
+   * WP192：官方数据接口统一能力口那些能力（`maps.places`、`serp.google`……）的路由，
+   * 键 `data.<能力>`。默认只有「Agents 工坊（用积分）」一级（`workshop`）。
+   */
+  dataRouteOf(capability: string): DataSourceRoute
+  /**
+   * WP192：打云侧一跳、把状态码与那句人话一起带回来（与红人云同步那一组同一个函数）。
+   * 数据能力口（`/v1/data/capabilities`、`/v1/data/call/*`、`/v1/data/tasks*`）经它走。
+   */
+  call: KolCloudCallFn
   /** 一项能力的价目（49 M4）。取不到就回 `undefined`——不编一个数。 */
   priceOf(capability: string): Promise<{ credits: number; unit: string } | undefined>
   /**
@@ -305,14 +319,19 @@ export function createCloud(options: CloudOptions): CloudAssembly {
    */
   const cloudCall = async <T>(
     path: string,
-    init: { method?: string; body?: unknown; headers?: Record<string, string> } = {},
+    init: {
+      method?: string
+      body?: unknown
+      headers?: Record<string, string>
+      timeout_ms?: number
+    } = {},
   ): Promise<KolCloudCall<T>> => {
     const token = tokenOf()
     if (token === undefined) return { ok: false, status: 0 }
     const controller = new AbortController()
     const timer = setTimeout(() => {
       controller.abort()
-    }, CLOUD_TIMEOUT_MS)
+    }, init.timeout_ms ?? CLOUD_TIMEOUT_MS)
     try {
       const res = await doFetch(`${base}${path}`, {
         method: init.method ?? 'GET',
@@ -705,7 +724,10 @@ export function createCloud(options: CloudOptions): CloudAssembly {
           const levelOk = (l: DataSourceLevel): boolean =>
             channel === WEB_SEARCH_ROUTE_KEY
               ? l === 'deepseek_native'
-              : l === 'official_key' || l === 'byo_source' || l === 'workshop'
+              : // WP192：数据能力口那些能力只认「自带数据接口」与「Agents 工坊（用积分）」两级
+                channel.startsWith(DATA_CAPABILITY_ROUTE_PREFIX)
+                ? DATA_CAPABILITY_ROUTE_LEVELS.includes(l)
+                : l === 'official_key' || l === 'byo_source' || l === 'workshop'
           const order = entry.order.filter((l): l is DataSourceLevel => levelOk(l))
           const disabled = entry.disabled.filter((l): l is DataSourceLevel => levelOk(l))
           if (order.length === 0 && disabled.length === 0) delete routing[channel]
@@ -751,6 +773,12 @@ export function createCloud(options: CloudOptions): CloudAssembly {
         order: [...DEFAULT_WEB_SEARCH_ORDER],
         disabled: [],
       },
+    dataRouteOf: (capability) =>
+      state.data_source_routing?.[dataCapabilityRouteKey(capability)] ?? {
+        order: [...DEFAULT_DATA_CAPABILITY_ORDER],
+        disabled: [],
+      },
+    call: cloudCall,
     priceOf: async (capability) => {
       /*
        * WP165：关联了账号才去云上按需刷新（与以前「关联了才打云」同一个口径：搜红人每一次都要问价，

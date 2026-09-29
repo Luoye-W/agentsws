@@ -24,6 +24,7 @@ import {
   type PricingCatalog,
   WORKSPACE_TOKEN_PREFIX,
 } from '@agentsws/contracts'
+import { type DataServiceStandIn, StandInDataError } from './data-service.js'
 import { type KolPublicStandIn, StandInKolError, type StandInKolPrincipal } from './kol-public.js'
 import { SAMPLE_PRICING_CATALOG } from './pricing-sample.js'
 
@@ -349,12 +350,72 @@ export function kolPublicHttp(
 }
 
 /**
+ * WP192：官方数据接口统一能力口的 HTTP 面（`/v1/data/capabilities`、`/v1/data/call/*`、
+ * `/v1/data/tasks*`）。成功 `{ data }`，错误 `{ code, message }`，状态码照契约。
+ */
+export function dataServiceHttp(
+  service: DataServiceStandIn,
+  principalOf: (token: string | undefined) => StandInKolPrincipal | undefined,
+): (
+  method: string,
+  url: URL,
+  token: string | undefined,
+  body: Record<string, unknown>,
+) => StandInHttpResponse | undefined {
+  return (method, url, token, body) => {
+    const path = url.pathname
+    const mine =
+      path === '/v1/data/capabilities' ||
+      path.startsWith('/v1/data/call/') ||
+      path === '/v1/data/tasks' ||
+      path.startsWith('/v1/data/tasks/')
+    if (!mine) return undefined
+    const principal = principalOf(token)
+    if (principal === undefined) return fail(401, 'unauthenticated', '令牌无效')
+    if (!principal.scopes.includes(KOL_PUBLIC_SCOPE))
+      return fail(403, 'forbidden', '这把令牌没有「数据服务」这一项权限。', {
+        required_scope: KOL_PUBLIC_SCOPE,
+      })
+    try {
+      if (method === 'GET' && path === '/v1/data/capabilities') return ok(service.capabilities())
+      if (method === 'POST' && path.startsWith('/v1/data/call/')) {
+        const capability = decodeURIComponent(path.slice('/v1/data/call/'.length))
+        return ok(
+          service.call(principal, capability, {
+            input: body.input,
+            ...(body.fresh === true ? { fresh: true } : {}),
+          }),
+        )
+      }
+      if (method === 'POST' && path === '/v1/data/tasks') {
+        const out = service.submit(principal, body)
+        return ok(out.task, out.created ? 202 : 200)
+      }
+      const m = /^\/v1\/data\/tasks\/([^/]+)(\/items|\/cancel)?$/u.exec(path)
+      if (m !== null) {
+        const id = decodeURIComponent(m[1] as string)
+        if (method === 'GET' && m[2] === undefined) return ok(service.task(principal, id))
+        if (method === 'GET' && m[2] === '/items')
+          return ok(service.items(principal, id, url.searchParams.get('cursor') ?? undefined))
+        if (method === 'POST' && m[2] === '/cancel') return ok(service.cancel(principal, id))
+      }
+    } catch (err) {
+      if (err instanceof StandInDataError) return fail(err.status, err.code, err.message)
+      throw err
+    }
+    return fail(404, 'not_found', `替身里没有这条路：${method} ${path}`)
+  }
+}
+
+/**
  * 把几块替身拼成一个 fetch（本机各处的 `cloudFetch` / `KolPublicFetch` 注入点都认它）。
  * `/v1/pricing` 永远在（公开价目，默认那份固定样例）。`down` 置真 = 拔网线（抛错）。
  */
 export function cloudStandInFetch(parts: {
   accounts?: CloudAccountsStandIn
   kolPublic?: KolPublicStandIn
+  /** WP192：官方数据接口统一能力口（认谁同公共红人库）。 */
+  dataService?: DataServiceStandIn
   /** 公共红人库认谁（不给就用 `accounts` 签出来的那些工作区令牌）。 */
   kolPrincipalOf?: (token: string | undefined) => StandInKolPrincipal | undefined
   pricing?: PricingCatalog
@@ -364,6 +425,14 @@ export function cloudStandInFetch(parts: {
       ? undefined
       : kolPublicHttp(
           parts.kolPublic,
+          parts.kolPrincipalOf ??
+            ((t) => (parts.accounts === undefined ? undefined : parts.accounts.verify(t))),
+        )
+  const data =
+    parts.dataService === undefined
+      ? undefined
+      : dataServiceHttp(
+          parts.dataService,
           parts.kolPrincipalOf ??
             ((t) => (parts.accounts === undefined ? undefined : parts.accounts.verify(t))),
         )
@@ -394,6 +463,8 @@ export function cloudStandInFetch(parts: {
     if (fromAccounts !== undefined) return fromAccounts
     const fromKol = kol?.(method, url, token, body)
     if (fromKol !== undefined) return fromKol
+    const fromData = data?.(method, url, token, body)
+    if (fromData !== undefined) return fromData
     return fail(404, 'not_found', `替身里没有这条路：${method} ${url.pathname}`)
   }
   return state

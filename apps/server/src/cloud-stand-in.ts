@@ -40,7 +40,12 @@ import {
   PRICING_CATALOG_PATH,
   pricingBlockOf,
 } from '@agentsws/contracts'
-import { SAMPLE_PRICING_CATALOG } from '@agentsws/stand-ins'
+import {
+  DataServiceStandIn,
+  SAMPLE_PRICING_CATALOG,
+  StandInDataError,
+  StandInWallet,
+} from '@agentsws/stand-ins'
 
 /** demo 用的云地址：`.invalid` 是保留顶级域（RFC 2606），任何请求漏出去都只会解析失败。 */
 export const CLOUD_STAND_IN_BASE_URL = 'https://cloud.demo.invalid'
@@ -278,6 +283,25 @@ export function cloudStandIn(options: CloudStandInOptions = {}): CloudStandIn {
     const value = raw?.[1].replace(/^Bearer\s+/i, '').trim()
     return value === undefined || value === '' ? undefined : value
   }
+  /*
+   * WP192：官方数据接口统一能力口（`/v1/data/capabilities`、`/v1/data/call/*`、`/v1/data/tasks*`）。
+   * 数据是编的、价是示意价，扣的是替身自己的一小本账（与上面那个合成余额分开，不互相影响）。
+   */
+  let idSeq = 0
+  const dataWallet = new StandInWallet({ now, newId: (p) => `${p}_${String(++idSeq)}` })
+  dataWallet.topup({ org_id: STAND_IN_ORG.id, credits: PURCHASED, kind: 'purchased' })
+  const dataService = new DataServiceStandIn({
+    wallet: dataWallet,
+    now,
+    newId: (p) => `${p}_${String(++idSeq)}`,
+  })
+  const dataPrincipal = {
+    account_id: 'acct_demo',
+    org_id: STAND_IN_ORG.id,
+    workspace_id: 'ws_demo',
+    scopes: ['data'],
+    region: 'global' as const,
+  }
   const days = (n: number): string => new Date(Date.parse(now()) + n * 86_400_000).toISOString()
   const monthStart = (): string => `${now().slice(0, 7)}-01T00:00:00.000Z`
 
@@ -493,6 +517,46 @@ export function cloudStandIn(options: CloudStandInOptions = {}): CloudStandIn {
         return fail(401, 'unauthenticated', '令牌无效')
       const blocked = aiGate(headers)
       if (blocked !== undefined) return respond(blocked.status, blocked.body)
+    }
+    // ── WP192：官方数据接口统一能力口（只认替身签过的工作区令牌）
+    if (
+      path === '/v1/data/capabilities' ||
+      path.startsWith('/v1/data/call/') ||
+      path === '/v1/data/tasks' ||
+      path.startsWith('/v1/data/tasks/')
+    ) {
+      if (token === undefined || !workspaceTokens.has(token))
+        return fail(401, 'unauthenticated', '令牌无效')
+      try {
+        if (method === 'GET' && path === '/v1/data/capabilities')
+          return ok(dataService.capabilities())
+        if (method === 'POST' && path.startsWith('/v1/data/call/'))
+          return ok(
+            dataService.call(
+              dataPrincipal,
+              decodeURIComponent(path.slice('/v1/data/call/'.length)),
+              { input: body.input, ...(body.fresh === true ? { fresh: true } : {}) },
+            ),
+          )
+        if (method === 'POST' && path === '/v1/data/tasks') {
+          const out = dataService.submit(dataPrincipal, body)
+          return respond(out.created ? 202 : 200, { data: out.task })
+        }
+        const m = /^\/v1\/data\/tasks\/([^/]+)(\/items|\/cancel)?$/u.exec(path)
+        if (m !== null) {
+          const id = decodeURIComponent(m[1] as string)
+          if (method === 'GET' && m[2] === undefined) return ok(dataService.task(dataPrincipal, id))
+          if (method === 'GET' && m[2] === '/items')
+            return ok(
+              dataService.items(dataPrincipal, id, url.searchParams.get('cursor') ?? undefined),
+            )
+          if (method === 'POST' && m[2] === '/cancel')
+            return ok(dataService.cancel(dataPrincipal, id))
+        }
+      } catch (err) {
+        if (err instanceof StandInDataError) return fail(err.status, err.code, err.message)
+        throw err
+      }
     }
     return fail(404, 'not_found', '演示里没有这一项（demo 不连真云）')
   }

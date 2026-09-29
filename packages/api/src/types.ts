@@ -67,6 +67,7 @@ import type { CloudAccountPort } from './routes/cloud-account.js'
 import type { ComputerUsePort } from './routes/computer-use.js'
 import type { ConnectionDirectoryPort } from './routes/connection-directory.js'
 import type { ConnectionsPort } from './routes/connections.js'
+import type { DataServiceApiPort } from './routes/data-service.js'
 import type { DesignPort } from './routes/design.js'
 import type { DshScenesPort } from './routes/dsh-scenes.js'
 import type { ExtensionPort } from './routes/extension.js'
@@ -842,6 +843,11 @@ export interface GatewayDeps {
    * 没装配时 `/v1/search-data*` 回 not_implemented。
    */
   searchData?: SearchDataApiPort
+  /**
+   * WP192（docs/83 §4）：官方数据接口统一能力口（能力清单、同步调用、异步任务）。按品牌取。
+   * 没装配时 `/v1/data-service*` 回 not_implemented。
+   */
+  dataService?: DataServiceApiPort
   /** WP31 本机秘密库密钥轮换；没装配时 `POST /v1/secrets/rotate` 回 not_implemented。 */
   secrets?: SecretsPort
   /**
