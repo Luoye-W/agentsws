@@ -34,7 +34,7 @@ const SITE: SiteDeckData = {
       state: 'missing',
       severity: 'blocker',
       detail: '一个收款方式都没启用',
-      fix: '请店主自己去 Shopify 后台点一下。',
+      fix: '请你自己去 Shopify 后台点一下。',
       fixable: false,
     },
     {
@@ -43,7 +43,7 @@ const SITE: SiteDeckData = {
       state: 'unknown',
       severity: 'warning',
       detail: '没读到税务设置',
-      fix: '请店主自己去 Shopify 后台点一下。',
+      fix: '请你自己去 Shopify 后台点一下。',
       fixable: false,
     },
     {

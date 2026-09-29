@@ -130,7 +130,7 @@ export function createOwnerToolExecutor(options: OwnerToolsOptions): ToolExecuto
   return async (call): Promise<ToolExecution> => {
     const bare = call.name.includes('.') ? call.name.slice(call.name.indexOf('.') + 1) : call.name
     if (!isOwnerRole(call.request.actor.role_id))
-      return { status: 'blocked', reason: '只有工作区所有者能看全部岗位与连接' }
+      return { status: 'blocked', reason: '只有「公司设置与授权」这条职责能看全部岗位与连接' }
     try {
       if (bare === OWNER_POSITIONS_TOOL) {
         const rows = await options.positions(call.request.actor)

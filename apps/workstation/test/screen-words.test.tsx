@@ -161,7 +161,7 @@ vi.mock('@/lib/api', async () => {
     getPosition: async () => ({
       position_id: 'owner',
       roles: [
-        { role_id: 'common.owner', role_name: '工作区所有者', assignment_ids: ['asg_owner'] },
+        { role_id: 'common.owner', role_name: '公司设置与授权', assignment_ids: ['asg_owner'] },
       ],
     }),
     getHome: async () => home,
@@ -202,7 +202,7 @@ describe('WP141 守卫：屏幕上没有内部值', () => {
     expect(text).not.toContain('](')
     expect(text).toContain('最该先处理的三件事')
     // 「路由到 …」写的是职责名字，不是职责 id
-    await screen.findByText('路由到 工作区所有者')
+    await screen.findByText('路由到 公司设置与授权')
     expect(screenText(container)).not.toContain('common.owner')
   })
 

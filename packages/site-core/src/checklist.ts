@@ -201,8 +201,8 @@ const item = (
 }
 
 const BACKEND_ONLY = {
-  zh: '这一项建站岗位没有写动作（51 §3 N2）——请店主自己去 Shopify 后台点一下。',
-  en: 'No write action exists for this (51 §3 N2) — the owner has to set it in the Shopify admin.',
+  zh: '这一项建站岗位没有写动作（51 §3 N2）——请你自己去 Shopify 后台点一下。',
+  en: 'No write action exists for this (51 §3 N2) — set it yourself in the Shopify admin.',
 }
 
 /**
@@ -240,7 +240,7 @@ export function runLaunchChecklist(
           en: 'Still on the myshopify.com subdomain',
         },
         {
-          zh: '把买好的域名接到这家店上；域名本身要店主去注册商那边改解析。',
+          zh: '把买好的域名接到这家店上；域名本身要你去注册商那边改解析。',
           en: 'Point your own domain at this shop; DNS changes happen at your registrar.',
         },
       ),

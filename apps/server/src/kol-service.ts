@@ -1699,7 +1699,7 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
           ...(mine === undefined
             ? {
                 // WP141：不把职责 id 印给人看——说「{渠道}红人」这条职责
-                reason: `你名下没有「${channelLabel(group.channel)} 红人」这条职责，所以这一组只能看不能建。要做这条渠道，让店主把这条职责分给你——一次挑人不会把别人的权限并给你。`,
+                reason: `你名下没有「${channelLabel(group.channel)} 红人」这条职责，所以这一组只能看不能建。要做这条渠道，让负责人把这条职责分给你——一次挑人不会把别人的权限并给你。`,
               }
             : {}),
           picks,

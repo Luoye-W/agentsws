@@ -91,7 +91,7 @@ export function fakeWorld(at?: Iso8601, extra: Partial<SecretaryOptions> = {}): 
         },
       ],
     ],
-    ['p_wang', [{ position_id: 'a_wang', role_id: 'common.owner', role_name: '店主', ranges: [] }]],
+    ['p_wang', [{ position_id: 'a_wang', role_id: 'common.owner', role_name: '公司设置与授权', ranges: [] }]],
   ])
 
   const agendaOf = (person: PersonId): CalendarItem[] =>
