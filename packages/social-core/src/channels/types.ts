@@ -37,6 +37,9 @@ export type SocialFailure =
   | 'browser_required'
   | 'rate_limited'
   | 'upstream_error'
+  // WP191（docs/86 §1.4）：正文超了平台的硬限制（字数 / 标签 / @ / 链接）。
+  // 与 `upstream_error` 分开：这个用户自己改得好，那个他改不好。
+  | 'content_rejected'
 
 export interface SocialError {
   ok: false
@@ -63,6 +66,11 @@ export interface SocialHttpResponse {
   ok: boolean
   status: number
   text(): Promise<string>
+  /**
+   * WP191：响应头（可选，只加不改）。LinkedIn 发帖成功回 201 + 空 body，
+   * 新帖的 id 只在 `x-restli-id` 头上——没有这一格就拿不到它。
+   */
+  headers?: { get(name: string): string | null }
 }
 
 export type SocialFetch = (
@@ -95,6 +103,11 @@ export interface SocialTransport {
   credential(channel: SocialChannel): Promise<Record<string, string>>
   /** 现在（注入；这个包里没有 `Date.now()`）。 */
   now(): string
+  /**
+   * WP191：等一会儿（可选，只加不改）。IG / Threads 的视频是两跳发布，容器要等
+   * 平台处理完才能发；给了它就隔几秒问一次状态，不给就只问一次、没好就照实说。
+   */
+  sleep?(ms: number): Promise<void>
 }
 
 /* ── 八个口子的出入参 ───────────────────────────────────────────────── */
@@ -270,6 +283,21 @@ export function needsPaidTier(label: string, what: string): SocialError {
     ok: false,
     reason: 'needs_paid_tier',
     message: `${label} 的${what}在付费档上。免费档拿不到这个口子——要么买档，要么这一块人工做。`,
+  }
+}
+
+/**
+ * WP191：正文超了平台硬限制那一句（`checkPostText` 量出来的几条原样拼上）。
+ * 发出去一定会被平台退回的东西，不打那一跳。
+ */
+export function contentRejected(
+  label: string,
+  problems: readonly { message: string }[],
+): SocialError {
+  return {
+    ok: false,
+    reason: 'content_rejected',
+    message: `${label} 会退回这条：${problems.map((p) => p.message).join(' ')}`,
   }
 }
 
