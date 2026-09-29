@@ -168,7 +168,7 @@ describe('WP188 /v1/free-chat 端到端', () => {
       }),
     )
     expect(
-      (upstream[0]?.tools as { function: { name: string } }[]).map((t) => t.function.name),
+      ((upstream[0]?.tools ?? []) as { function: { name: string } }[]).map((t) => t.function.name),
     ).toEqual(['web_search'])
     const done = got.find((f) => f.type === 'done')
     expect(done?.type === 'done' ? done.message.sources : undefined).toEqual([
