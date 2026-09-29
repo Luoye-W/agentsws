@@ -156,3 +156,14 @@ describe('两处都用它', () => {
     expect(within(panel).getByTestId('help-back')).toBeTruthy()
   })
 })
+
+describe('WP188：代码块（随便聊里常见）', () => {
+  it('``` 围起来的原样当字：不认记号、不插 HTML；没收尾（流式答到一半）也照画', () => {
+    expect(parseMarkdown('看这段：\n```ts\nconst a = `**x**` <b>\n```\n完')).toEqual([
+      { kind: 'p', lines: ['看这段：'] },
+      { kind: 'code', lang: 'ts', lines: ['const a = `**x**` <b>'] },
+      { kind: 'p', lines: ['完'] },
+    ])
+    expect(parseMarkdown('```\nhalf')).toEqual([{ kind: 'code', lang: '', lines: ['half'] }])
+  })
+})

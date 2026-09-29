@@ -2250,7 +2250,8 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
       activeConfigs().flatMap((c) =>
         selectedModels(c).map((model) => ({
           id: `${c.id}/${model}`,
-          label: `${providerDisplayLabel(c)}（${model}）`,
+          // 来源的名字；模型名界面从 id 里取、另起一行小字（「Agents 工坊（用积分）」后面不再套一层括号）
+          label: providerDisplayLabel(c),
           official: c.kind === 'agentsws_cloud',
           vision: visionStatusOf(c, model),
         })),

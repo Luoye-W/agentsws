@@ -195,14 +195,14 @@ const TEMPLATES: ModelProviderTemplate[] = [
   } as unknown as Parameters<typeof tpl>[0]),
   tpl({
     kind: 'agentsws_cloud',
-    label: 'agentsws 云（用积分）',
+    label: 'Agents 工坊（用积分）',
     summary: '不填 key、不注册。关联一次账号就能用，按积分扣，随时切回自己的 key。',
     vendor: 'agentsws-cloud',
-    vendor_label: 'agentsws 云（用积分）',
+    vendor_label: 'Agents 工坊（用积分）',
     vendor_summary: '不填 key、不注册。关联一次账号就能用，按积分扣，随时切回自己的 key。',
     plan_label: '按积分',
     plan_order: 1,
-    auth: 'api_key',
+    auth: 'cloud',
     links: [{ label: '价目表与余额', url: '/settings' }],
   }),
 ]
@@ -480,9 +480,9 @@ describe('设置页', () => {
     }
   })
 
-  it('模型 → Agents 工坊云那张卡', async () => {
+  it('模型 → Agents 工坊（用积分）那张卡', async () => {
     renderWithProviders(<ModelCloudCard assignment="asg_1" />)
-    check('模型 · Agents 工坊云', await screen.findByTestId('model-cloud-card'))
+    check('模型 · Agents 工坊（用积分）', await screen.findByTestId('model-cloud-card'))
   })
 
   it('账号与积分：账号卡与积分面板里的每张卡', async () => {
