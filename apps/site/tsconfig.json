@@ -1,0 +1,23 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "outDir": "dist-types",
+    "tsBuildInfoFile": "dist-types/.tsbuildinfo",
+    "emitDeclarationOnly": true,
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["ES2022", "DOM"],
+    "types": ["node"],
+    "resolveJsonModule": true
+  },
+  "include": ["src/lib", "src/i18n", "src/config.ts", "src/scripts", "src/data/*.json", "test"],
+  "references": [
+    {
+      "path": "../../packages/brand"
+    },
+    {
+      "path": "../../packages/contracts"
+    }
+  ]
+}

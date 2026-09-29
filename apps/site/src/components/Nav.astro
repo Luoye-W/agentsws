@@ -1,0 +1,48 @@
+---
+import { accountUrl, GITHUB_URL } from '../config.js'
+import { COMMON, type Lang, localePath } from '../i18n/common.js'
+import Icon from './Icon.astro'
+import Mark from './Mark.astro'
+
+interface Props {
+  lang: Lang
+  path: string
+  current?: 'roles' | 'pricing' | 'docs' | 'changelog' | 'download' | undefined
+}
+const { lang, path, current } = Astro.props
+const c = COMMON[lang].nav
+const other: Lang = lang === 'zh' ? 'en' : 'zh'
+const links = [
+  { key: 'roles', href: localePath('/roles/', lang), label: c.roles },
+  { key: 'pricing', href: localePath('/pricing/', lang), label: c.pricing },
+  { key: 'docs', href: localePath('/docs/', lang), label: c.docs },
+  { key: 'changelog', href: localePath('/changelog/', lang), label: c.changelog },
+] as const
+---
+<header class="nav">
+  <div class="wrap">
+    <a class="logo" href={localePath('/', lang)} aria-label={c.home} data-split-host>
+      <Mark id="nav" pose="assemble" idle />
+      <span>{COMMON[lang].brand}</span>
+    </a>
+    <nav class="nav-links" aria-label={c.menu}>
+      {links.map((l) => <a href={l.href} aria-current={current === l.key ? 'page' : undefined}>{l.label}</a>)}
+    </nav>
+    <div class="nav-right">
+      <a class="nav-text nav-hide" href={GITHUB_URL} rel="noopener"><Icon name="github" />{c.github}</a>
+      <a class="nav-text nav-hide" href={localePath(path, other)} hreflang={other === 'zh' ? 'zh-CN' : 'en'} lang={other === 'zh' ? 'zh-CN' : 'en'}>{c.langSwitch}</a>
+      <button class="iconbtn" type="button" data-theme-toggle aria-label={c.theme}><Icon name="sun" /></button>
+      <a class="btn btn-ghost btn-sm nav-hide" href={accountUrl('login', lang)} rel="noopener">{c.login}</a>
+      <a class="btn btn-primary btn-sm" href={localePath('/download/', lang)} aria-current={current === 'download' ? 'page' : undefined}>{c.download}</a>
+      <details class="menu">
+        <summary class="iconbtn" aria-label={c.menu}><Icon name="menu" /></summary>
+        <div class="menu-panel">
+          {links.map((l) => <a href={l.href}>{l.label}</a>)}
+          <a href={GITHUB_URL} rel="noopener">{c.github}</a>
+          <a href={accountUrl('login', lang)} rel="noopener">{c.login}</a>
+          <a href={localePath(path, other)} lang={other === 'zh' ? 'zh-CN' : 'en'}>{c.langSwitchLabel}</a>
+        </div>
+      </details>
+    </div>
+  </div>
+</header>

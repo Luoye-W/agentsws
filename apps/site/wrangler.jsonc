@@ -1,0 +1,23 @@
+// 官网部署配置（WP197）：Cloudflare Workers 静态资源（assets-only，没有 Worker 脚本）。
+// 这一单只写配置、不部署、不建任何 Cloudflare 资源、不动 DNS；上线步骤见 README.md「部署」一节，由 Fable 找 Luoye 确认后做。
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "agentsws-site",
+  "compatibility_date": "2026-09-01",
+  "assets": {
+    "directory": "./dist",
+    // `/pricing` → `/pricing/`，与站内 `trailingSlash: 'always'` 一致
+    "html_handling": "auto-trailing-slash",
+    // 找不到的路径回 dist/404.html（状态码 404）
+    "not_found_handling": "404-page"
+  },
+  // 不开 workers.dev 预览域名：官网只从 agentsws.com 访问
+  "workers_dev": false,
+  "preview_urls": false,
+  // 上线时再打开（会让 Cloudflare 给 agentsws.com / www 建记录，属于「动 DNS」，这一单不做）：
+  // "routes": [
+  //   { "pattern": "agentsws.com", "custom_domain": true },
+  //   { "pattern": "www.agentsws.com", "custom_domain": true }
+  // ],
+  "observability": { "enabled": false }
+}

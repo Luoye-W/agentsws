@@ -1,0 +1,4 @@
+.astro/
+dist-types/
+# 构建时从云上取的公开价目（取不到就用样例），每次构建重出，不进仓库
+src/data/pricing.generated.json

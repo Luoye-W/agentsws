@@ -1,0 +1,10 @@
+---
+import { ICONS, type IconName } from '../lib/icons.js'
+
+interface Props {
+  name: IconName
+  class?: string
+}
+const { name, class: cls } = Astro.props
+---
+<svg class:list={['ico', cls]} viewBox="0 0 24 24" aria-hidden="true" focusable="false" set:html={ICONS[name]} />

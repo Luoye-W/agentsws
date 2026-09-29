@@ -1,0 +1,44 @@
+{
+  "$comment": "下载页的清单（WP197）。url / sha256 / size 上线前由 Fable 按托管位置填；url 为 null 的那一项页面上显示「即将提供」。size 单位字节。",
+  "version": "0.1.0-beta",
+  "channel": "beta",
+  "released": null,
+  "desktop": [
+    {
+      "id": "mac-arm64",
+      "os": "mac",
+      "arch": "arm64",
+      "file": "Agents-Workshop-0.1.0-beta-arm64.dmg",
+      "url": null,
+      "sha256": null,
+      "size": null
+    },
+    {
+      "id": "mac-x64",
+      "os": "mac",
+      "arch": "x64",
+      "file": "Agents-Workshop-0.1.0-beta-x64.dmg",
+      "url": null,
+      "sha256": null,
+      "size": null
+    },
+    {
+      "id": "win-x64",
+      "os": "win",
+      "arch": "x64",
+      "file": "Agents-Workshop-Setup-0.1.0-beta-x64.exe",
+      "url": null,
+      "sha256": null,
+      "size": null
+    }
+  ],
+  "extension": {
+    "id": "extension",
+    "version": "0.1.0-beta",
+    "browsers": ["chrome", "edge"],
+    "file": "agents-workshop-extension-0.1.0-beta.zip",
+    "url": null,
+    "sha256": null,
+    "size": null
+  }
+}

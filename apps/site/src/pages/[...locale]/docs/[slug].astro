@@ -1,0 +1,13 @@
+---
+import { helpSlugs } from '../../../lib/help.js'
+import { localeStaticPaths } from '../../../lib/locales.js'
+import DocPage from '../../../views/DocPage.astro'
+
+export function getStaticPaths() {
+  return localeStaticPaths().flatMap((l) =>
+    helpSlugs().map((slug) => ({ params: { ...l.params, slug }, props: { ...l.props, slug } })),
+  )
+}
+const { lang, slug } = Astro.props
+---
+<DocPage lang={lang} slug={slug} />

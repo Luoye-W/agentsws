@@ -1,0 +1,26 @@
+---
+/** 404：一页中英两句（静态托管只有一个 404.html，不分语言）。 */
+import Icon from '../components/Icon.astro'
+import Mark from '../components/Mark.astro'
+import { PAGES } from '../i18n/pages.js'
+import Base from '../layouts/Base.astro'
+import '../styles/pages.css'
+
+const zh = PAGES.zh.notFound
+const en = PAGES.en.notFound
+---
+<Base lang="zh" path="/404/" title={zh.meta.title} description={zh.meta.description} og="home" noindex>
+  <section class="nf">
+    <div class="wrap">
+      <Mark id="nf" pose="split" />
+      <h1>{zh.title}</h1>
+      <p class="sub" style="margin:0 auto">{zh.sub}</p>
+      <p class="sub" style="margin:6px auto 0" lang="en">{en.title} {en.sub}</p>
+      <div class="cta-row">
+        <a class="btn btn-primary" href="/">{zh.home}</a>
+        <a class="btn btn-ghost" href="/docs/"><Icon name="news" />{zh.docs}</a>
+        <a class="btn btn-ghost" href="/en/" lang="en">{en.home}</a>
+      </div>
+    </div>
+  </section>
+</Base>
