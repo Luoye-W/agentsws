@@ -245,24 +245,27 @@ section{scroll-margin-top:80px}
 .foot .tagline{color:var(--muted);margin-top:12px;max-width:22em}
 .foot-bottom{display:flex;justify-content:space-between;gap:16px;margin-top:40px;padding-top:20px;border-top:1px solid var(--line);color:var(--muted);font-size:13px}
 
-/* ── 品牌标记动效：参数照抄 apps/workstation/src/index.css 的 ws-bm-*（母品牌规范 §3.2 / §3.3），一个没改 ── */
+/* ── 品牌标记动效：集结 / 一变一队的参数照抄 apps/workstation/src/index.css 的 ws-bm-*（母品牌规范 §3.2 / §3.3），一个没改 ── */
 .bm{overflow:visible;flex:none}
 .bm rect{transform-box:fill-box;transform-origin:center}
-/* 集结：五块依次到位（0/100/160/240/300ms），领头块 380ms 落下并回弹一次；播完停住 */
-.bm-assemble rect{opacity:0;animation:bm-assemble 1.2s cubic-bezier(.22,1,.36,1) var(--d) forwards,bm-idle 5.2s ease-in-out calc(3s + var(--i) * 180ms) infinite}
-.bm-assemble rect.lead{animation:bm-assemble-lead .9s cubic-bezier(.34,1.56,.64,1) 380ms forwards,bm-idle 5.2s ease-in-out calc(3s + var(--i) * 180ms) infinite}
+/* 集结：五块依次到位（0/100/160/240/300ms），领头块 380ms 落下并回弹一次；播完由脚本换成待机 */
+.bm-assemble rect{opacity:0;animation:bm-assemble 1.2s cubic-bezier(.22,1,.36,1) var(--d) forwards}
+.bm-assemble rect.lead{animation:bm-assemble-lead .9s cubic-bezier(.34,1.56,.64,1) 380ms forwards}
 @keyframes bm-assemble{0%{opacity:0;transform:translateY(12px) scale(.72)}58%{opacity:1;transform:translateY(0) scale(1.06)}100%{opacity:1;transform:translateY(0) scale(1)}}
 @keyframes bm-assemble-lead{0%{opacity:0;transform:translateY(16px) scale(.5)}60%{opacity:1;transform:translateY(-3px) scale(1.22)}100%{opacity:1;transform:translateY(0) scale(1)}}
-/* 待机（官网暂用，等 WP195 定工作台的常驻待机动效再对齐）：集结停住后，六块沿渐变方向依次微微一暗，
-   像一队人依次报到；5.2s 一轮，只动透明度、不缩放——刻意和「呼吸」（= Agent 正在干活）分开 */
-@keyframes bm-idle{0%,16%,100%{opacity:1}8%{opacity:.62}}
-/* 一变一队：领头块先出现，其余五块从它的位置分出去，间隔 100ms；滚到眼前才播（.play） */
+/* 待机（官网暂用；WP195 定了工作台的常驻待机动效后换成同一个）：六块沿渐变方向依次微微一暗，
+   像一队人依次报到。7.2s 一轮、大部分时间静止，只动透明度——刻意和「呼吸」（= Agent 正在干活）分开 */
+.bm-idle rect{animation:bm-idle 7.2s ease-in-out calc(1.2s + var(--i) * 180ms) infinite}
+@keyframes bm-idle{0%,12%,100%{opacity:1}6%{opacity:.62}}
+/* 一变一队：领头块先出现，其余五块从它的位置分出去，间隔 100ms（岗位一屏滚到眼前播一次；页头标记悬停播一次） */
 .bm-split.play rect{opacity:0;animation:bm-split .55s cubic-bezier(.22,1,.36,1) calc(300ms + var(--i) * 100ms) forwards}
 .bm-split.play rect.lead{animation:bm-split-lead .5s cubic-bezier(.34,1.56,.64,1) forwards}
 @keyframes bm-split-lead{0%{opacity:0;transform:scale(0)}60%{opacity:1;transform:scale(1.18)}100%{opacity:1;transform:scale(1)}}
 @keyframes bm-split{0%{opacity:0;transform:translate(var(--dx),var(--dy)) scale(.3)}100%{opacity:1;transform:translate(0,0) scale(1)}}
+/* 页面不在前台就停 */
+.bm.paused rect{animation-play-state:paused}
 /* 系统开了「减少动态效果」：一律静态 */
-@media (prefers-reduced-motion:reduce){.bm rect,.bm-split.play rect{animation:none!important;opacity:1!important;transform:none!important}}
+@media (prefers-reduced-motion:reduce){.bm rect{animation:none!important;opacity:1!important;transform:none!important}}
 .hero-mark{margin-bottom:22px}
 .roles-mark{margin-bottom:18px}
 
@@ -540,8 +543,22 @@ section{scroll-margin-top:80px}
 <script>
 function toggleTheme(){var r=document.documentElement,d=r.getAttribute('data-theme');var sys=matchMedia('(prefers-color-scheme: dark)').matches;var now=d?d==='dark':sys;r.setAttribute('data-theme',now?'light':'dark')}
 
-// 「一变一队」滚到眼前才播一次
-(function(){if(!('IntersectionObserver' in window))return;var io=new IntersectionObserver(function(es){es.forEach(function(e){if(e.isIntersecting){e.target.classList.add('play');io.unobserve(e.target)}})},{threshold:.6});document.querySelectorAll('.bm-split').forEach(function(el){io.observe(el)})})();
+// 标记：集结播完换待机；页头标记悬停播一次「一变一队」再回待机；「一变一队」滚到眼前才播；页面藏起来就停
+(function(){
+  var SPLIT_MS=1300; // 300 + 4×100 + 550，最后一块到位
+  function idle(el){el.setAttribute('class','bm bm-idle')}
+  document.querySelectorAll('.bm-assemble').forEach(function(el){setTimeout(function(){idle(el)},1400)});
+  document.querySelectorAll('.logo .bm').forEach(function(el){
+    var busy=false;
+    el.parentNode.addEventListener('mouseenter',function(){
+      if(busy||!el.classList.contains('bm-idle'))return;busy=true;
+      el.setAttribute('class','bm bm-split play');
+      setTimeout(function(){idle(el);busy=false},SPLIT_MS);
+    });
+  });
+  if('IntersectionObserver' in window){var io=new IntersectionObserver(function(es){es.forEach(function(e){if(e.isIntersecting){e.target.classList.add('play');io.unobserve(e.target)}})},{threshold:.6});document.querySelectorAll('.bm-split').forEach(function(el){io.observe(el)})}
+  document.addEventListener('visibilitychange',function(){document.querySelectorAll('.bm').forEach(function(el){el.classList.toggle('paused',document.hidden)})});
+})();
 </script>
 </body>
 </html>
