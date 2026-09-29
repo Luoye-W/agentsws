@@ -22,6 +22,7 @@ import { Brain, CheckCircle2, Plus, RefreshCw, Trash2, XCircle } from 'lucide-re
 import { useEffect, useRef, useState } from 'react'
 import { BrandIcon } from '@/components/brand-icons'
 import { BrandScopeNote } from '@/components/brand-scope-note'
+import { BrandMark } from '@/components/design'
 import { InlineGuideLink, TutorialLink } from '@/components/help/tutorial-link'
 import { DeepSeekAccountLogin } from '@/components/models/deepseek-account-login'
 import { ImageModelSection } from '@/components/models/image-model-section'
@@ -30,6 +31,7 @@ import { ModelForm, type ModelFormValues, suggestProviderId } from '@/components
 import { QuotaNotice } from '@/components/models/quota-notice'
 import { SubscriptionPlan } from '@/components/models/subscription-plan'
 import { WebSearchToggle } from '@/components/models/web-search-toggle'
+import { CloudPlanActions } from '@/components/settings/model-cloud-card'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Hint } from '@/components/ui/hint'
@@ -936,8 +938,15 @@ function VendorCard({
       data-template={slug}
     >
       <p className="flex items-center gap-2 text-sm font-medium">
-        {/* WP45 / WP90：图标按**卡的 id** 认（官网抓回来的官方图，运行时不联网） */}
-        <BrandIcon provider={card.id} />
+        {/*
+          WP45 / WP90：图标按**卡的 id** 认（官网抓回来的官方图，运行时不联网）。
+          WP188（Luoye 09-29）：积分那一张是我们自己——用品牌标记，不是字母圆圈。
+        */}
+        {plan.kind === 'agentsws_cloud' ? (
+          <BrandMark size={20} />
+        ) : (
+          <BrandIcon provider={card.id} />
+        )}
         {card.label}
         {/* WP156：服务端那段整句介绍进问号；卡面上是下面那一句 */}
         {card.summary === '' ? null : <Hint text={card.summary} testId="model-template-summary" />}
@@ -1006,7 +1015,15 @@ function VendorCard({
         订阅登录那种方案**没有表单**——没有 key 可填，只有一个登录按钮。
         其余方案照旧：一个"填 API key"按钮展开原生表单。
       */}
-      {isAccountTemplate(plan) ? (
+      {plan.kind === 'agentsws_cloud' || plan.auth === 'cloud' ? (
+        /*
+         * WP188：「Agents 工坊（用积分）」不填 key——卡里就是那一套「先关联账号 / 启用 / 看余额与用量」
+         * （与原来设置页那张单独的卡同一个组件），没有「+ 填 API key」、没有表单。
+         */
+        <div data-testid="model-plan-cloud">
+          <CloudPlanActions {...(assignment === undefined ? {} : { assignment })} />
+        </div>
+      ) : isAccountTemplate(plan) ? (
         /* WP152：「官方账户登录」——没有表单，就是原来那张账号卡的内容（余额 / 充值 / 登出 / 失效提示） */
         <div className="mt-2" data-testid="model-plan-account">
           <DeepSeekAccountLogin {...(assignment === undefined ? {} : { assignment })} />

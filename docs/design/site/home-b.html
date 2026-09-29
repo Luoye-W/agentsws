@@ -1,0 +1,603 @@
+<!doctype html>
+<!--
+  Agents 工坊官网 · 首页 · 方向 B「夜航」（WP193 设计稿，静态，不是实现代码）
+  与方向 A 同一套文案、同一套 --ws-* 令牌与六块标记；视觉换成：深色优先、编辑排版（编号分节 + 左栏标签）、
+  大号标记做首屏主图（「集结」只播一次，每块自己一条渐变，见 docs/36 §12.5）、细线网格、少阴影。
+  原创设计，未引用任何第三方模板代码或样式。明暗：跟随系统；右上角按钮可切。
+-->
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agents 工坊</title>
+<meta name="description" content="给出海小团队的开源 AI 同事：按岗位上岗，先出卡、你点头才办。跑在你自己的电脑上。">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+/* 深色是这个方向的默认；浅色作为第二套 */
+:root{
+  --paper:#0E100F;--card:#171A18;--line:#242825;--ink:#F1F4F0;--body:#C9D2CC;--muted:#98A29B;
+  --brand:#76FB91;--brand-ink:#B9FFC9;--brand-fg:#0E100F;--tint:#173C24;--surface:#1C201D;
+  --good:#76FB91;--good-bg:#173C24;--warn:#F5C451;--warn-bg:#3A2E10;--info:#8BB8FF;--info-bg:#1A2436;
+  --glow:0 0 0 1px rgba(118,251,145,.32),0 0 12px 2px rgba(118,251,145,.14);
+  --grid:rgba(241,244,240,.045);
+  --m0:#4EA8FF;--m1:#2FE0C8;--m2:#FFD84D;
+  --b1a:#47b5f2;--b1b:#37d1d6;--b2a:#3fc3e5;--b2b:#30dfc9;--b3a:#34d6d1;--b3b:#7add9c;
+  --b4a:#38d0d8;--b4b:#5fdeac;--b5a:#3edfbf;--b5b:#afdb7c;--b6a:#8edc90;--b6b:#ffd84d;
+  --display:"Outfit","Noto Sans SC",system-ui,sans-serif;
+  --sans:system-ui,-apple-system,"PingFang SC","Noto Sans SC","Microsoft YaHei",sans-serif;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  color-scheme:dark;
+}
+@media (prefers-color-scheme:light){:root:not([data-theme="dark"]){
+  --paper:#F3F5F2;--card:#FFFFFF;--line:#DDE3DC;--ink:#263331;--body:#4B5550;--muted:#6B746F;
+  --brand:#007B67;--brand-ink:#045246;--brand-fg:#FFFFFF;--tint:#E8F3F0;--surface:#F7F9F6;
+  --good:#158A4B;--good-bg:#E3F5EA;--warn:#B26E0B;--warn-bg:#FFF4DB;--info:#2F63C8;--info-bg:#E9F0FB;
+  --glow:0 0 0 1px rgba(0,123,103,.32),0 0 12px 2px rgba(0,123,103,.14);
+  --grid:rgba(38,51,49,.05);
+  --m0:#2E86D8;--m1:#1FB8A4;--m2:#D9A82E;
+  --b1a:#2a92cc;--b1b:#23abb2;--b2a:#279ebf;--b2b:#1fb7a5;--b3a:#22afad;--b3b:#62b27a;
+  --b4a:#23aab3;--b4b:#4ab489;--b5a:#2cb79c;--b5b:#91ae5b;--b6a:#74b16e;--b6b:#d9a82e;
+  color-scheme:light;
+}}
+:root[data-theme="light"]{
+  --paper:#F3F5F2;--card:#FFFFFF;--line:#DDE3DC;--ink:#263331;--body:#4B5550;--muted:#6B746F;
+  --brand:#007B67;--brand-ink:#045246;--brand-fg:#FFFFFF;--tint:#E8F3F0;--surface:#F7F9F6;
+  --good:#158A4B;--good-bg:#E3F5EA;--warn:#B26E0B;--warn-bg:#FFF4DB;--info:#2F63C8;--info-bg:#E9F0FB;
+  --glow:0 0 0 1px rgba(0,123,103,.32),0 0 12px 2px rgba(0,123,103,.14);
+  --grid:rgba(38,51,49,.05);
+  --m0:#2E86D8;--m1:#1FB8A4;--m2:#D9A82E;
+  --b1a:#2a92cc;--b1b:#23abb2;--b2a:#279ebf;--b2b:#1fb7a5;--b3a:#22afad;--b3b:#62b27a;
+  --b4a:#23aab3;--b4b:#4ab489;--b5a:#2cb79c;--b5b:#91ae5b;--b6a:#74b16e;--b6b:#d9a82e;
+  color-scheme:light;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--paper);color:var(--body);font:16px/1.65 var(--sans);-webkit-font-smoothing:antialiased;overflow-x:hidden}
+a{color:inherit;text-decoration:none}
+h1,h2,h3{color:var(--ink);font-family:var(--display);margin:0;letter-spacing:-.02em}
+p{margin:0}
+.wrap{max-width:1280px;margin:0 auto;padding:0 40px}
+.ico{width:18px;height:18px;flex:none;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.mono{font-family:var(--mono);font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+
+.btn{display:inline-flex;align-items:center;gap:8px;height:46px;padding:0 22px;border-radius:12px;font-weight:600;font-size:15px;white-space:nowrap}
+.btn-primary{background:var(--brand);color:var(--brand-fg)}
+.btn-line{color:var(--ink);box-shadow:inset 0 0 0 1px var(--line)}
+.btn-line:hover{box-shadow:inset 0 0 0 1px var(--muted)}
+.btn-sm{height:34px;padding:0 14px;border-radius:10px;font-size:14px}
+
+/* 顶栏 */
+.nav{position:sticky;top:0;z-index:20;background:color-mix(in srgb,var(--paper) 82%,transparent);backdrop-filter:blur(12px);border-bottom:1px solid var(--line)}
+.nav .wrap{display:flex;align-items:center;height:60px;gap:32px}
+.logo{display:flex;align-items:center;gap:10px;font-family:var(--display);font-weight:600;font-size:17px;color:var(--ink)}
+.nav-links{display:flex;gap:28px;font-size:14px;color:var(--muted)}
+.nav-links a:hover{color:var(--ink)}
+.nav-right{margin-left:auto;display:flex;align-items:center;gap:10px}
+.iconbtn{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;color:var(--muted);background:transparent;border:0;cursor:pointer}
+.menu{display:none}
+.ann{display:inline-flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)}
+.ann i{width:6px;height:6px;border-radius:50%;background:var(--brand);box-shadow:0 0 8px var(--brand)}
+
+/* 首屏 */
+.hero{position:relative;border-bottom:1px solid var(--line);overflow:hidden;
+  background-image:linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px);background-size:64px 64px;background-position:-1px -1px}
+.hero>.wrap{display:grid;grid-template-columns:minmax(0,7fr) minmax(0,5fr);gap:40px;align-items:center;padding-top:96px;padding-bottom:88px}
+.hero .mono{display:flex;gap:18px;margin-bottom:28px}
+.hero .mono span+span::before{content:"/";margin-right:18px;color:var(--line)}
+.hero h1{font-size:84px;line-height:1.04;font-weight:700}
+.hero h1 .u{background:linear-gradient(transparent 78%,color-mix(in srgb,var(--brand) 26%,transparent) 78%)}
+.lede{font-size:19px;max-width:28em;margin:30px 0 36px;color:var(--body)}
+.cta-row{display:flex;gap:12px;flex-wrap:wrap}
+.hero-art{display:grid;place-items:center}
+.hero-art svg{width:min(360px,100%);height:auto;overflow:visible}
+/* ── 品牌标记动效：集结 / 一变一队的参数照抄 apps/workstation/src/index.css 的 ws-bm-*（母品牌规范 §3.2 / §3.3），一个没改 ── */
+.bm{overflow:visible;flex:none}
+.bm rect{transform-box:fill-box;transform-origin:center}
+/* 集结：五块依次到位（0/100/160/240/300ms），领头块 380ms 落下并回弹一次；播完由脚本换成待机 */
+.bm-assemble rect{opacity:0;animation:bm-assemble 1.2s cubic-bezier(.22,1,.36,1) var(--d) forwards}
+.bm-assemble rect.lead{animation:bm-assemble-lead .9s cubic-bezier(.34,1.56,.64,1) 380ms forwards}
+@keyframes bm-assemble{0%{opacity:0;transform:translateY(12px) scale(.72)}58%{opacity:1;transform:translateY(0) scale(1.06)}100%{opacity:1;transform:translateY(0) scale(1)}}
+@keyframes bm-assemble-lead{0%{opacity:0;transform:translateY(16px) scale(.5)}60%{opacity:1;transform:translateY(-3px) scale(1.22)}100%{opacity:1;transform:translateY(0) scale(1)}}
+/* 待机（官网暂用；WP195 定了工作台的常驻待机动效后换成同一个）：六块沿渐变方向依次微微一暗，
+   像一队人依次报到。7.2s 一轮、大部分时间静止，只动透明度——刻意和「呼吸」（= Agent 正在干活）分开 */
+.bm-idle rect{animation:bm-idle 7.2s ease-in-out calc(1.2s + var(--i) * 180ms) infinite}
+@keyframes bm-idle{0%,12%,100%{opacity:1}6%{opacity:.62}}
+/* 一变一队：领头块先出现，其余五块从它的位置分出去，间隔 100ms（岗位一屏滚到眼前播一次；页头标记悬停播一次） */
+.bm-split.play rect{opacity:0;animation:bm-split .55s cubic-bezier(.22,1,.36,1) calc(300ms + var(--i) * 100ms) forwards}
+.bm-split.play rect.lead{animation:bm-split-lead .5s cubic-bezier(.34,1.56,.64,1) forwards}
+@keyframes bm-split-lead{0%{opacity:0;transform:scale(0)}60%{opacity:1;transform:scale(1.18)}100%{opacity:1;transform:scale(1)}}
+@keyframes bm-split{0%{opacity:0;transform:translate(var(--dx),var(--dy)) scale(.3)}100%{opacity:1;transform:translate(0,0) scale(1)}}
+/* 页面不在前台就停 */
+.bm.paused rect{animation-play-state:paused}
+/* 系统开了「减少动态效果」：一律静态 */
+@media (prefers-reduced-motion:reduce){.bm rect{animation:none!important;opacity:1!important;transform:none!important}}
+.sec-label .bm{display:block;margin-top:22px}
+
+/* ── 为什么：四级台阶（WP193b）：每级顶上一条踏步线，往右一级比一级高 ── */
+.bsteps{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:0;margin-top:48px;align-items:start}
+.bstep{padding:20px 20px 0 0;border-top:2px solid var(--line)}
+.bstep+.bstep{padding-left:20px}
+.bstep:nth-child(1){margin-top:120px}.bstep:nth-child(2){margin-top:80px}.bstep:nth-child(3){margin-top:40px}
+.bstep.sel{border-top-color:var(--brand)}
+.bstep.sel .mono{color:var(--brand)}
+.bstep h3{font-size:19px;font-weight:600;margin:6px 0 6px}
+.bstep p{font-size:14px;color:var(--muted)}
+.bstep.sel p{color:var(--body)}
+.reasons li{align-items:flex-start}
+.facts.reasons b{font:500 13px/1.6 var(--mono);color:var(--brand);min-width:36px}
+.reasons em{display:block;font-style:normal;font-weight:600;font-size:17px;color:var(--ink);margin-bottom:2px}
+/* 「为什么」台阶的小示意 */
+.ill{height:104px;border-radius:12px;background:var(--surface);display:grid;place-items:center;position:relative;overflow:hidden;margin-bottom:16px}
+.ill-dash .dash{width:62%;height:54px;display:flex;align-items:flex-end;gap:6px;padding:8px;border-radius:8px;background:var(--card);box-shadow:0 0 0 1px var(--line);filter:grayscale(1);opacity:.5}
+.ill-dash .dash i{flex:1;border-radius:3px 3px 0 0;background:var(--muted);display:block}
+.ill-dash .dust{position:absolute;bottom:8px;right:10px;font-size:11px;color:var(--muted)}
+.ill-tool{place-items:stretch;align-content:center;padding:0 14px;gap:6px}
+.trow{display:flex;align-items:center;justify-content:space-between;height:22px;padding:0 8px;border-radius:6px;background:var(--card);box-shadow:0 0 0 1px var(--line);font-size:11px;color:var(--muted);position:relative}
+.trow b{font-weight:500;color:var(--body)}
+.trow span{white-space:nowrap;font-size:10px;padding:0 6px;border-radius:4px;box-shadow:0 0 0 1px var(--line)}
+.trow span.hot{background:var(--tint);color:var(--brand-ink);box-shadow:none}
+.trow .cur{position:absolute;right:-4px;top:9px;width:14px;height:14px;fill:var(--ink);stroke:var(--card);stroke-width:1.5}
+.ill-agent{gap:6px;align-content:center}
+.ill-agent .solo{font-size:11px;color:var(--muted)}
+.ill-team{background:var(--tint)}
+/* 呼吸（= Agent 正在替你干活，docs/36 §12.2）：参数照抄 ws-bm-breathe，2.6s 一轮，0.94↔1、0.55↔1 */
+.bm-breathe rect{opacity:.55;animation:bm-breathe 2.6s ease-in-out infinite}
+@keyframes bm-breathe{0%,100%{opacity:.55;transform:scale(.94)}50%{opacity:1;transform:scale(1)}}
+@media (prefers-reduced-motion:reduce){.bm-breathe rect{animation:none!important;opacity:1!important;transform:none!important}}
+
+.strip{border-top:1px solid var(--line);position:relative;background:var(--paper)}
+.strip .wrap{display:flex;gap:0;overflow:hidden;height:56px;align-items:center}
+.strip span{font-family:var(--display);font-size:15px;color:var(--muted);padding:0 22px;border-left:1px solid var(--line);white-space:nowrap}
+.strip span:first-child{border-left:0;padding-left:0}
+.strip b{color:var(--ink);font-weight:600}
+
+/* 分节：左栏编号 + 标签，右栏内容 */
+.sec{border-bottom:1px solid var(--line)}
+.sec .wrap{display:grid;grid-template-columns:240px minmax(0,1fr);gap:48px;padding-top:96px;padding-bottom:96px}
+.sec-label{position:relative}
+.sec-label .num{font:600 56px/1 var(--display);color:var(--line);letter-spacing:-.03em}
+.sec-label .mono{margin-top:12px;display:block}
+.h2{font-size:48px;line-height:1.12;font-weight:700}
+.sub{font-size:18px;color:var(--muted);margin-top:14px;max-width:34em}
+
+/* 01 岗位 */
+.rolelist{display:grid;grid-template-columns:1fr 1fr;margin-top:44px;border-top:1px solid var(--line)}
+.rolerow{display:grid;grid-template-columns:150px 1fr 20px;align-items:center;gap:16px;padding:20px 4px;border-bottom:1px solid var(--line)}
+.rolerow:nth-child(odd){padding-right:28px;border-right:1px solid var(--line)}
+.rolerow:nth-child(even){padding-left:28px}
+.rolerow h3{font-size:20px;font-weight:600}
+.rolerow p{font-size:14px;color:var(--muted)}
+.rolerow .ar{color:var(--line);transition:color .15s,transform .15s}
+.rolerow:hover .ar{color:var(--brand);transform:translateX(3px)}
+.rolerow .new{font:500 11px/18px var(--sans);padding:0 6px;border-radius:6px;background:var(--warn-bg);color:var(--warn);margin-left:6px;vertical-align:4px}
+.after{margin-top:22px;font-size:14px;color:var(--muted)}
+.after a{color:var(--brand)}
+
+/* 02 出卡 */
+.flow{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:56px;margin-top:48px;align-items:start}
+.steps{list-style:none;margin:0;padding:0;counter-reset:s}
+.steps li{display:grid;grid-template-columns:52px 1fr;gap:4px 12px;padding:16px 0;border-top:1px solid var(--line)}
+.steps li:last-child{border-bottom:1px solid var(--line)}
+.steps li::before{counter-increment:s;content:"0" counter(s);font:600 15px/1.6 var(--mono);color:var(--muted);grid-row:span 2}
+.steps li.on::before{color:var(--brand)}
+.steps h3{font-size:19px;font-weight:600}
+.steps p{font-size:14px;color:var(--muted)}
+.stack{position:relative;height:430px}
+.dcard{position:absolute;width:88%;background:var(--card);border-radius:16px;box-shadow:0 0 0 1px var(--line),0 20px 50px rgba(0,0,0,.18);overflow:hidden}
+.dcard.c1{top:0;left:12%}
+.dcard.c2{top:70px;left:6%}
+.dcard.c1>*{opacity:.45}.dcard.c2>*{opacity:.7}
+.dcard.c3{top:150px;left:0;box-shadow:var(--glow),0 24px 60px rgba(0,0,0,.28)}
+.dcard-h{display:flex;align-items:center;gap:6px;padding:14px 16px 0}
+.chip{display:inline-flex;align-items:center;gap:5px;height:22px;padding:0 9px;border-radius:999px;font-size:12px;font-weight:500;white-space:nowrap}
+.chip::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+.chip.info{background:var(--info-bg);color:var(--info)}
+.chip.warn{background:var(--warn-bg);color:var(--warn)}
+.chip.good{background:var(--good-bg);color:var(--good)}
+.dcard-b{padding:12px 16px 14px}
+.dcard-b h4{margin:0 0 8px;color:var(--ink);font-size:15px;font-weight:600}
+.quote{background:var(--surface);border-radius:10px;padding:10px 12px;font-size:13px;line-height:1.6}
+.big-num{font:700 30px/1.2 var(--display);color:var(--ink)}
+.dcard-f{display:flex;gap:6px;padding:11px 16px;border-top:1px solid var(--line)}
+.dcard-f .b{height:30px;padding:0 12px;border-radius:8px;font-size:13px;display:inline-flex;align-items:center;color:var(--ink);box-shadow:inset 0 0 0 1px var(--line)}
+.dcard-f .b.p{background:var(--brand);color:var(--brand-fg);box-shadow:none}
+.never{margin-top:36px;padding:18px 22px;border-radius:14px;background:var(--tint);color:var(--brand-ink);display:flex;gap:12px;align-items:center;font-size:15px}
+
+/* 03 本地 */
+.big-quote{font:700 64px/1.08 var(--display);color:var(--ink);letter-spacing:-.03em}
+.big-quote em{font-style:normal;color:var(--brand)}
+.four{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));margin-top:56px;border-top:1px solid var(--line)}
+.four>div{padding:22px 22px 0 0}
+.four>div+div{padding-left:22px;border-left:1px solid var(--line)}
+.four .mono{color:var(--brand)}
+.four h3{font-size:19px;font-weight:600;margin:10px 0 6px}
+.four p{font-size:14px;color:var(--muted)}
+.hint{display:inline-grid;place-items:center;width:15px;height:15px;border-radius:50%;border:1px solid var(--muted);color:var(--muted);font:600 10px/1 var(--sans);margin-left:6px;vertical-align:3px;cursor:help;position:relative}
+.hint:hover::after{content:attr(data-hint);position:absolute;bottom:22px;left:50%;transform:translateX(-50%);width:230px;padding:8px 10px;border-radius:8px;background:var(--ink);color:var(--paper);font:400 12px/1.5 var(--sans);text-align:left;z-index:5}
+
+/* 04 免费 */
+.vs{display:grid;grid-template-columns:1fr 1fr;margin-top:44px;border:1px solid var(--line);border-radius:18px;overflow:hidden}
+.vs>div{padding:28px 30px}
+.vs>div+div{background:var(--card);box-shadow:inset 1px 0 0 var(--line)}
+.vs h3{font-size:14px;font-family:var(--mono);font-weight:500;letter-spacing:.06em;color:var(--muted);text-transform:uppercase;margin-bottom:10px}
+.vs ul{list-style:none;margin:0;padding:0}
+.vs li{display:flex;justify-content:space-between;gap:16px;padding:13px 0;border-top:1px solid var(--line);font-size:15px}
+.vs li:first-child{border-top:0}
+.vs .them li span:last-child{color:var(--muted);text-decoration:line-through;text-decoration-color:color-mix(in srgb,var(--muted) 60%,transparent)}
+.vs .us li{color:var(--ink)}
+.vs .us li span:last-child{color:var(--brand);font-weight:600}
+.fine{margin-top:12px;font-size:12px;color:var(--muted)}
+
+/* 05 底座 */
+.base-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.1fr);gap:48px;margin-top:44px;align-items:start}
+.facts{list-style:none;margin:0;padding:0}
+.facts li{display:flex;gap:16px;align-items:baseline;padding:14px 0;border-top:1px solid var(--line)}
+.facts b{font:700 28px/1 var(--display);color:var(--ink);min-width:72px}
+.facts span{color:var(--muted);font-size:15px}
+.term{border-radius:14px;background:#0A0C0B;box-shadow:0 0 0 1px rgba(255,255,255,.08);font:13px/1.75 var(--mono);color:#C9D2CC;overflow:hidden}
+.term-bar{height:34px;display:flex;align-items:center;gap:7px;padding:0 14px;border-bottom:1px solid rgba(255,255,255,.06)}
+.term-bar i{width:10px;height:10px;border-radius:50%;background:#242825;display:block}
+.term pre{margin:0;padding:18px 20px;white-space:pre-wrap}
+.t-dim{color:#6B746F}.t-ok{color:#76FB91}.t-hi{color:#F1F4F0}
+
+/* 06 价格 */
+.plans{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:44px}
+.plan{border-radius:18px;padding:30px;box-shadow:inset 0 0 0 1px var(--line)}
+.plan.sel{background:var(--card);box-shadow:var(--glow)}
+.plan .price{font:700 44px/1.1 var(--display);color:var(--ink);margin:14px 0 18px}
+.plan .price small{font:500 15px var(--sans);color:var(--muted);margin-left:6px}
+.plan ul{list-style:none;padding:0;margin:0 0 26px;display:grid;gap:10px;font-size:15px}
+.plan li{display:flex;gap:10px}
+.plan li::before{content:"—";color:var(--brand)}
+
+/* 07 公开地做 */
+.logs{margin-top:40px;border-top:1px solid var(--line)}
+.log{display:grid;grid-template-columns:110px 220px 1fr 20px;gap:16px;align-items:center;padding:18px 0;border-bottom:1px solid var(--line)}
+.log time{font:500 13px var(--mono);color:var(--brand)}
+.log h3{font-size:18px;font-weight:600}
+.log p{color:var(--muted);font-size:15px}
+.log .ar{color:var(--line)}
+
+/* 08 FAQ */
+.faq{margin-top:40px;display:grid;grid-template-columns:1fr 1fr;gap:0 48px}
+.faq details{border-top:1px solid var(--line)}
+.faq summary{list-style:none;cursor:pointer;padding:18px 0;color:var(--ink);font-weight:600;display:flex;justify-content:space-between;gap:12px}
+.faq summary::-webkit-details-marker{display:none}
+.faq summary::after{content:"+";color:var(--muted);font:400 20px/1 var(--display)}
+.faq details[open] summary::after{content:"−"}
+.faq p{padding-bottom:18px;color:var(--muted);font-size:15px}
+
+/* 收尾 */
+.final{text-align:center;padding:128px 0;background-image:linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px);background-size:64px 64px}
+.final h2{font-size:64px;font-weight:700;margin:36px 0 14px;line-height:1.1}
+.final .sub{margin:0 auto 36px}
+.final .cta-row{justify-content:center}
+
+.foot{border-top:1px solid var(--line);padding:32px 0;font-size:13px;color:var(--muted)}
+.foot .wrap{display:flex;gap:28px;align-items:center;flex-wrap:wrap}
+.foot .links{display:flex;gap:22px;margin-left:auto;flex-wrap:wrap}
+
+@media (max-width:900px){
+  .wrap{padding:0 20px}
+  .nav-links,.ann,.nav-right .btn-line{display:none}
+  .menu{display:grid}
+  .nav .wrap{height:56px}
+  .hero>.wrap{grid-template-columns:1fr;padding-top:48px;padding-bottom:56px;gap:24px}
+  .hero .mono{gap:10px;font-size:11px;margin-bottom:20px;flex-wrap:wrap}
+  .hero .mono span+span::before{display:none}
+  .hero h1{font-size:44px}
+  .lede{font-size:16px;margin:20px 0 26px}
+  .cta-row .btn{flex:1;justify-content:center}
+  .hero-art{order:-1;justify-items:start}
+  .hero-art svg{width:120px}
+  .strip .wrap{flex-wrap:wrap;height:auto;padding-top:14px;padding-bottom:14px;gap:6px 0}
+  .strip span{font-size:13px;padding:0 12px}
+  .strip span:nth-child(6){border-left:0;padding-left:0}
+  .sec .wrap{grid-template-columns:1fr;gap:18px;padding-top:64px;padding-bottom:64px}
+  .sec-label{display:flex;align-items:baseline;gap:12px}
+  .sec-label .num{font-size:32px}
+  .sec-label .mono{margin:0}
+  .sec-label .bm{width:28px;height:28px;margin:0 0 0 auto}
+  .h2{font-size:30px}
+  .sub{font-size:15px}
+  .bsteps{grid-template-columns:1fr;margin-top:28px}
+  .bstep,.bstep+.bstep,.bstep:nth-child(n){margin-top:0;padding:16px 0;display:grid;grid-template-columns:92px 1fr;column-gap:14px}
+  .bstep .ill{grid-row:span 3;height:92px;margin:0}
+  .ill-tool{padding:0 8px}
+  .trow{height:18px;font-size:9px;padding:0 5px}
+  .trow b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:44px}
+  .trow .cur,.ill-agent .solo,.ill-dash .dust{display:none}
+  .rolelist{grid-template-columns:1fr;margin-top:28px}
+  .rolerow,.rolerow:nth-child(odd),.rolerow:nth-child(even){grid-template-columns:96px 1fr 16px;padding:14px 0;border-right:0}
+  .rolerow h3{font-size:16px}
+  .rolerow p{font-size:13px}
+  .flow{grid-template-columns:1fr;gap:28px;margin-top:28px}
+  .stack{height:340px}
+  .dcard{width:92%}
+  .dcard.c2{top:56px}
+  .dcard.c3{top:118px}
+  .big-quote{font-size:38px}
+  .four{grid-template-columns:1fr 1fr;margin-top:32px}
+  .four>div,.four>div+div{padding:18px 12px 18px 0;border-left:0}
+  .four>div:nth-child(even){padding-left:14px;border-left:1px solid var(--line)}
+  .four>div:nth-child(n+3){border-top:1px solid var(--line)}
+  .vs{grid-template-columns:1fr;margin-top:28px}
+  .vs>div{padding:20px}
+  .vs>div+div{box-shadow:inset 0 1px 0 var(--line)}
+  .base-grid{grid-template-columns:1fr;gap:28px;margin-top:28px}
+  .term{font-size:11px}
+  .plans{grid-template-columns:1fr;gap:14px;margin-top:28px}
+  .plan{padding:22px}
+  .log{grid-template-columns:86px 1fr 16px;gap:2px 12px;padding:14px 0}
+  .log time{font-size:11px}
+  .log p{grid-column:2;grid-row:2;font-size:13px}
+  .log .ar{grid-column:3;grid-row:1/3}
+  .faq{grid-template-columns:1fr;margin-top:24px}
+  .final{padding:88px 0}
+  .final h2{font-size:36px;margin-top:24px}
+  .foot .links{margin-left:0}
+}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <linearGradient id="mk" gradientUnits="userSpaceOnUse" x1="14" y1="77" x2="79" y2="12">
+      <stop offset="0" style="stop-color:var(--m0)"/><stop offset=".52" style="stop-color:var(--m1)"/><stop offset="1" style="stop-color:var(--m2)"/>
+    </linearGradient>
+    <!-- 动效用：每块自己一条 objectBoundingBox 渐变，取它在整体渐变上覆盖的那一段（docs/36 §12.5） -->
+    <linearGradient id="g1" x1="0" y1="1" x2="1" y2="0"><stop offset="0" style="stop-color:var(--b1a)"/><stop offset="1" style="stop-color:var(--b1b)"/></linearGradient>
+    <linearGradient id="g2" x1="0" y1="1" x2="1" y2="0"><stop offset="0" style="stop-color:var(--b2a)"/><stop offset="1" style="stop-color:var(--b2b)"/></linearGradient>
+    <linearGradient id="g3" x1="0" y1="1" x2="1" y2="0"><stop offset="0" style="stop-color:var(--b3a)"/><stop offset="1" style="stop-color:var(--b3b)"/></linearGradient>
+    <linearGradient id="g4" x1="0" y1="1" x2="1" y2="0"><stop offset="0" style="stop-color:var(--b4a)"/><stop offset="1" style="stop-color:var(--b4b)"/></linearGradient>
+    <linearGradient id="g5" x1="0" y1="1" x2="1" y2="0"><stop offset="0" style="stop-color:var(--b5a)"/><stop offset="1" style="stop-color:var(--b5b)"/></linearGradient>
+    <linearGradient id="g6" x1="0" y1="1" x2="1" y2="0"><stop offset="0" style="stop-color:var(--b6a)"/><stop offset="1" style="stop-color:var(--b6b)"/></linearGradient>
+    <symbol id="mark" viewBox="14 12 65 65">
+      <rect x="14" y="44" width="17" height="17" rx="2.5" fill="url(#mk)"/><rect x="38" y="52" width="17" height="17" rx="2.5" fill="url(#mk)"/>
+      <rect x="38" y="28" width="17" height="17" rx="2.5" fill="url(#mk)"/><rect x="62" y="60" width="17" height="17" rx="2.5" fill="url(#mk)"/>
+      <rect x="62" y="36" width="17" height="17" rx="2.5" fill="url(#mk)"/><rect x="62" y="12" width="17" height="17" rx="2.5" fill="url(#mk)"/>
+    </symbol>
+    <symbol id="i-github" viewBox="0 0 24 24"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.4 5.4 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></symbol>
+    <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 15V3"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/></symbol>
+    <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></symbol>
+    <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></symbol>
+    <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/><path d="m9 12 2 2 4-4"/></symbol>
+  </defs>
+</svg>
+
+<header class="nav">
+  <div class="wrap">
+    <a class="logo" href="#"><svg class="bm bm-assemble " width="24" height="24" viewBox="14 12 65 65" aria-hidden="true"><rect x="14" y="44" width="17" height="17" rx="2.5" fill="url(#g1)" style="--d:0ms;--i:0"/><rect x="38" y="52" width="17" height="17" rx="2.5" fill="url(#g2)" style="--d:100ms;--i:1"/><rect x="38" y="28" width="17" height="17" rx="2.5" fill="url(#g3)" style="--d:160ms;--i:2"/><rect x="62" y="60" width="17" height="17" rx="2.5" fill="url(#g4)" style="--d:240ms;--i:3"/><rect x="62" y="36" width="17" height="17" rx="2.5" fill="url(#g5)" style="--d:300ms;--i:4"/><rect class="lead" x="62" y="12" width="17" height="17" rx="2.5" fill="url(#g6)" style="--i:5"/></svg>Agents 工坊</a>
+    <nav class="nav-links"><a href="#s1">岗位</a><a href="pricing.html">价格</a><a href="#">文档</a><a href="#">更新</a><a href="#s5">开源</a></nav>
+    <div class="nav-right">
+      <span class="ann"><i></i>内测中 · B2B 外贸岗上线</span>
+      <button class="iconbtn" type="button" onclick="toggleTheme()" aria-label="切换明暗"><svg class="ico"><use href="#i-sun"/></svg></button>
+      <a class="btn btn-line btn-sm" href="#"><svg class="ico" style="width:16px;height:16px"><use href="#i-github"/></svg>GitHub</a>
+      <a class="btn btn-line btn-sm" href="#">登录</a>
+      <a class="btn btn-primary btn-sm" href="download.html">下载</a>
+      <button class="iconbtn menu" type="button" aria-label="菜单"><svg class="ico"><use href="#i-menu"/></svg></button>
+    </div>
+  </div>
+</header>
+
+<main>
+<section class="hero">
+  <div class="wrap">
+    <div>
+      <div class="mono"><span>开源 Apache-2.0</span><span>本地优先</span><span>基于 DeepSeek Harness</span></div>
+      <h1>面板会吃灰。<br>这队 <span class="u">AI 同事</span>，<br>天天上班。</h1>
+      <p class="lede">客服、红人、社媒、B2B……给出海公司按岗位配齐。活它们干完，出一张卡，你点头才算数。</p>
+      <div class="cta-row">
+        <a class="btn btn-primary" href="download.html"><svg class="ico"><use href="#i-download"/></svg>免费下载</a>
+        <a class="btn btn-line" href="#"><svg class="ico"><use href="#i-github"/></svg>在 GitHub 上看</a>
+      </div>
+    </div>
+    <div class="hero-art" aria-hidden="true">
+      <svg class="bm bm-assemble " width="360" height="360" viewBox="14 12 65 65" aria-hidden="true"><rect x="14" y="44" width="17" height="17" rx="2.5" fill="url(#g1)" style="--d:0ms;--i:0"/><rect x="38" y="52" width="17" height="17" rx="2.5" fill="url(#g2)" style="--d:100ms;--i:1"/><rect x="38" y="28" width="17" height="17" rx="2.5" fill="url(#g3)" style="--d:160ms;--i:2"/><rect x="62" y="60" width="17" height="17" rx="2.5" fill="url(#g4)" style="--d:240ms;--i:3"/><rect x="62" y="36" width="17" height="17" rx="2.5" fill="url(#g5)" style="--d:300ms;--i:4"/><rect class="lead" x="62" y="12" width="17" height="17" rx="2.5" fill="url(#g6)" style="--i:5"/></svg>
+    </div>
+  </div>
+  <div class="strip"><div class="wrap">
+    <span><b>负责人</b></span><span><b>客服</b></span><span><b>红人营销</b></span><span><b>社媒运营</b></span><span><b>B2B 外贸</b></span><span>投放</span><span>网站运营</span><span>建站</span><span>设计</span><span>公共关系</span><span>+ 你自己建的</span>
+  </div></div>
+</section>
+
+<section class="sec" id="s0"><div class="wrap">
+  <div class="sec-label"><div class="num">01</div><span class="mono">为什么是 Agents 工坊</span></div>
+  <div>
+    <h2 class="h2">从一块面板，<br>到一支队伍。</h2>
+    <p class="sub">这四级台阶，我们自己一级一级走过。</p>
+    <div class="bsteps">
+      <div class="bstep"><div class="ill ill-dash" aria-hidden="true"><div class="dash"><i style="height:40%"></i><i style="height:70%"></i><i style="height:55%"></i><i style="height:85%"></i><i style="height:30%"></i></div><span class="dust">上次打开 · 14 天前</span></div><span class="mono">第 1 级</span><h3>自己搓的面板</h3><p>好看，两周后吃灰：数据摆着，活还得人干。</p></div>
+      <div class="bstep"><div class="ill ill-tool" aria-hidden="true"><div class="trow"><b>@trailsun</b><span>复制</span></div><div class="trow"><b>@desknoor</b><span>复制</span></div><div class="trow"><b>@gadgetjo</b><span class="hot">复制</span><svg class="cur" viewBox="0 0 24 24"><path d="M5 3l14 8-6 2-3 6Z"/></svg></div></div><span class="mono">第 2 级</span><h3>给人用的小工具</h3><p>查红人资料快了一点，可还是人在一个个点。</p></div>
+      <div class="bstep"><div class="ill ill-agent" aria-hidden="true"><svg class="bm bm-breathe" width="40" height="40" viewBox="62 12 17 17" aria-hidden="true"><rect class="lead" x="62" y="12" width="17" height="17" rx="2.5" fill="url(#g6)" style="--i:0"/></svg><span class="solo">一个人 · 一个岗位</span></div><span class="mono">第 3 级</span><h3>围绕 AI 打造的 Agent</h3><p>KOLAgents、KefuAgents 把一件事从头干到尾、越干越会，但只管一个人的一摊。</p></div>
+      <div class="bstep sel"><div class="ill ill-team" aria-hidden="true"><svg class="bm bm-split" width="64" height="64" viewBox="14 12 65 65" aria-hidden="true"><rect x="14" y="44" width="17" height="17" rx="2.5" fill="url(#g1)" style="--i:0;--dx:48px;--dy:-32px"/><rect x="38" y="52" width="17" height="17" rx="2.5" fill="url(#g2)" style="--i:1;--dx:24px;--dy:-40px"/><rect x="38" y="28" width="17" height="17" rx="2.5" fill="url(#g3)" style="--i:2;--dx:24px;--dy:-16px"/><rect x="62" y="60" width="17" height="17" rx="2.5" fill="url(#g4)" style="--i:3;--dx:0px;--dy:-48px"/><rect x="62" y="36" width="17" height="17" rx="2.5" fill="url(#g5)" style="--i:4;--dx:0px;--dy:-24px"/><rect class="lead" x="62" y="12" width="17" height="17" rx="2.5" fill="url(#g6)" style="--i:5"/></svg></div><span class="mono">第 4 级</span><h3>Agents 工坊</h3><p>站到公司层面：一队 Agents 按公司规矩分工、交接，要紧的事出卡给你批。</p></div>
+    </div>
+  </div>
+</div></section>
+
+<section class="sec" id="s1"><div class="wrap">
+  <div class="sec-label"><div class="num">02</div><span class="mono">按岗位开工</span></div>
+  <div>
+    <h2 class="h2">缺几个人，就上几个岗位。</h2>
+    <p class="sub">勾几个岗位就上岗。每个岗位各管一摊，各有自己的记忆。</p>
+    <div class="rolelist">
+      <a class="rolerow" href="#"><h3>负责人</h3><p>每天一张日报，要拍板的都在这</p><svg class="ico ar"><use href="#i-arrow"/></svg></a>
+      <a class="rolerow" href="#"><h3>客服</h3><p>邮件、聊天窗、Amazon 消息，先起草</p><svg class="ico ar"><use href="#i-arrow"/></svg></a>
+      <a class="rolerow" href="#"><h3>红人营销</h3><p>找人、体检、开发信，跟到交付</p><svg class="ico ar"><use href="#i-arrow"/></svg></a>
+      <a class="rolerow" href="#"><h3>社媒运营</h3><p>排内容、回评论、管社群</p><svg class="ico ar"><use href="#i-arrow"/></svg></a>
+      <a class="rolerow" href="#"><h3>B2B 外贸<span class="new">新</span></h3><p>询盘分级，报价按授权走</p><svg class="ico ar"><use href="#i-arrow"/></svg></a>
+      <a class="rolerow" href="#"><h3>投放</h3><p>盯花费和 ROAS，越线先停</p><svg class="ico ar"><use href="#i-arrow"/></svg></a>
+      <a class="rolerow" href="#"><h3>网站运营</h3><p>订单、库存、转化，异常先报</p><svg class="ico ar"><use href="#i-arrow"/></svg></a>
+      <a class="rolerow" href="#"><h3>建站</h3><p>改页面、上新品，改前给你看</p><svg class="ico ar"><use href="#i-arrow"/></svg></a>
+      <a class="rolerow" href="#"><h3>设计</h3><p>照你的品牌规范出图</p><svg class="ico ar"><use href="#i-arrow"/></svg></a>
+      <a class="rolerow" href="#"><h3>公共关系</h3><p>媒体名单、稿件，口径一致</p><svg class="ico ar"><use href="#i-arrow"/></svg></a>
+    </div>
+    <p class="after">岗位不够用？自己建一个。<a href="#">看每个岗位管什么 →</a></p>
+  </div>
+</div></section>
+
+<section class="sec" id="s2"><div class="wrap">
+  <div class="sec-label"><div class="num">03</div><span class="mono">出卡审批</span></div>
+  <div>
+    <h2 class="h2">AI 只提议。<br>点头的，永远是你。</h2>
+    <p class="sub">要发出去、要花钱、要改东西的，一律先变成一张卡。</p>
+    <div class="flow">
+      <ol class="steps">
+        <li><h3>交给它一件事</h3><p>一句话，交给某个岗位</p></li>
+        <li><h3>岗位自己去办</h3><p>查订单、翻政策、起草</p></li>
+        <li class="on"><h3>出一张卡</h3><p>带理由和出处</p></li>
+        <li class="on"><h3>你点头</h3><p>发送、改一下，或不发</p></li>
+        <li><h3>办完留账</h3><p>谁批的、改了什么，都查得到</p></li>
+      </ol>
+      <div class="stack">
+        <div class="dcard c1"><div class="dcard-h"><span class="chip info">B2B · 报价</span><span class="chip warn">剩 6 天</span></div><div class="dcard-b"><h4>报价 Q-0929-02 · 超了授权，转老板批</h4><div class="big-num">18,414 USD</div></div><div class="dcard-f"><span class="b p">批准</span><span class="b">改金额</span><span class="b">驳回</span></div></div>
+        <div class="dcard c2"><div class="dcard-h"><span class="chip good">红人 · 开发信</span></div><div class="dcard-b"><h4>给 @desknoor 的首封信</h4><div class="quote">评分 90 · 受众和你的买家高度重合。样品合作，不谈佣金。</div></div><div class="dcard-f"><span class="b p">批准并发送</span><span class="b">改一下</span><span class="b">不发</span></div></div>
+        <div class="dcard c3"><div class="dcard-h"><span class="chip info">客服 · 回信</span><span class="chip warn">剩 1 天</span></div><div class="dcard-b"><h4>回复 Anna：退货申请 #1001</h4><div class="quote">Hi Anna, your order #1001 is still inside our 30-day window — here's your prepaid return label…</div></div><div class="dcard-f"><span class="b p">发送</span><span class="b">改一下</span><span class="b">不发</span></div></div>
+      </div>
+    </div>
+    <p class="never"><svg class="ico"><use href="#i-shield"/></svg>退款、补发、改价、发布，永远人审。采纳率再高，也不自动放行。</p>
+  </div>
+</div></section>
+
+<section class="sec" id="s3"><div class="wrap">
+  <div class="sec-label"><div class="num">04</div><span class="mono">本地优先</span></div>
+  <div>
+    <p class="big-quote">你的生意，<br>留在<em>你的电脑</em>上。</p>
+    <div class="four">
+      <div><span class="mono">01</span><h3>双击就装</h3><p>Mac、Windows 都有。不用 Docker。</p></div>
+      <div><span class="mono">02</span><h3>钥匙在你手里<span class="hint" data-hint="店铺、邮箱的密码只在原生表单里填，存在本机加密库；模型看不到，日志里也没有。">?</span></h3><p>密码不经 AI、不进日志。</p></div>
+      <div><span class="mono">03</span><h3>上云你说了算<span class="hint" data-hint="开了云端服务或跑长程任务时才上云：只传需要的那部分，加密存放，随时导出、随时删除。">?</span></h3><p>只传必要的，能导出、能删。</p></div>
+      <div><span class="mono">04</span><h3>模型断了就停</h3><p>AI 连不上时整条线冻结，不瞎发。</p></div>
+    </div>
+  </div>
+</div></section>
+
+<section class="sec" id="s4"><div class="wrap">
+  <div class="sec-label"><div class="num">05</div><span class="mono">别处收费，这里免费</span></div>
+  <div>
+    <h2 class="h2">付费墙后面的东西，<br>都在开源版里。</h2>
+    <div class="vs">
+      <div class="them"><h3>别处常见的收法</h3><ul>
+        <li><span>客服 AI</span><span>按席位月付</span></li>
+        <li><span>连店铺、邮箱、社媒</span><span>按连接数</span></li>
+        <li><span>红人采集插件</span><span>按条、按次</span></li>
+        <li><span>审批流、带权限的知识库</span><span>企业版</span></li>
+        <li><span>多店铺、多品牌</span><span>加钱升级</span></li>
+      </ul></div>
+      <div class="us"><h3>Agents 工坊</h3><ul>
+        <li><span>客服 AI</span><span>免费 · 用你自己的 key</span></li>
+        <li><span>连店铺、邮箱、社媒</span><span>免费 · 账号是你的</span></li>
+        <li><span>红人采集插件</span><span>免费</span></li>
+        <li><span>审批流、带权限的知识库</span><span>免费</span></li>
+        <li><span>多店铺、多品牌</span><span>免费</span></li>
+      </ul></div>
+    </div>
+    <p class="fine">「别处」指市面上常见的收费方式，不特指某一家；以各家官方信息为准。</p>
+  </div>
+</div></section>
+
+<section class="sec" id="s5"><div class="wrap">
+  <div class="sec-label"><div class="num">06</div><span class="mono">为什么基于 DeepSeek Harness</span></div>
+  <div>
+    <h2 class="h2">从 Harness 底层，<br>按公司重新组装。</h2>
+    <p class="sub">在聊天框外套个壳，只能帮一个人聊天。要一队 Agents 替公司干活，得从底层接起。</p>
+    <div class="base-grid">
+      <div>
+        <ul class="facts reasons">
+          <li><b>01</b><span><em>按公司重新组装</em>运行时、工具、权限、记忆、审批，都按岗位和公司规矩接过一遍。<span class="hint" data-hint="每个岗位、每条职责有自己的上下文和记忆；谁能动什么按岗位授权；要发出去、要花钱的先进审批队列，办完留账。19 份接口契约都在仓库里。">?</span></span></li>
+          <li><b>02</b><span><em>官方更新，跟着用上</em>现在跑在 DeepSeek Harness 0.2.0 预览版上，官方的网页搜索、自动化任务、官方场景都已接上。<span class="hint" data-hint="版本锁在 0.2.0-rc.1。每次升级先过适配层测试和模拟回路，全绿才合并。">?</span></span></li>
+          <li><b>03</b><span><em>开源 Apache-2.0</em>代码全部公开，可以 fork，没有付费墙。</span></li>
+        </ul>
+        <div class="cta-row" style="margin-top:26px"><a class="btn btn-primary" href="#"><svg class="ico"><use href="#i-github"/></svg>Star on GitHub</a><a class="btn btn-line" href="#">读架构</a></div>
+      </div>
+      <div class="term"><div class="term-bar"><i></i><i></i><i></i></div>
+<pre><span class="t-dim">$</span> <span class="t-hi">pnpm simulate --pack packs/dtc-3c-3p --seed 42</span>
+
+<span class="t-ok">PASS</span>  aftersales/return-within-window
+<span class="t-ok">PASS</span>  aftersales/return-outside-window
+<span class="t-ok">PASS</span>  security/prompt-injection
+<span class="t-ok">PASS</span>  ops/model-outage-freeze
+<span class="t-dim">  ✓ 没 stage 就没有写   ✓ apply 前必有人批
+  ✓ 说过的话必须有出处 ✓ 外部文本一律围栏
+  ✓ 进模型的字都能重建 ✓ 模型挂了就冻结</span>
+
+<span class="t-hi">全部场景通过</span> <span class="t-dim">· 合并门禁：通过</span></pre></div>
+    </div>
+  </div>
+</div></section>
+
+<section class="sec" id="s6"><div class="wrap">
+  <div class="sec-label"><div class="num">07</div><span class="mono">价格</span></div>
+  <div>
+    <h2 class="h2">开源版全功能免费。<br>想省事，用积分。</h2>
+    <p class="sub">两条路可以混着用：每项能力一个开关。</p>
+    <div class="plans">
+      <div class="plan"><span class="mono">开源版</span><div class="price">¥0<small>永久</small></div><ul><li>全部岗位、全部功能</li><li>自带模型 key，直连，不经我们</li><li>多店铺、多品牌、审批、知识库</li></ul><a class="btn btn-line" href="download.html">免费下载</a></div>
+      <div class="plan sel"><span class="mono">Agents 工坊（用积分）</span><div class="price">1 积分 = ¥1<small>按用量</small></div><ul><li>不填 key、不用去各家注册</li><li>注册送 10 积分</li><li>充值的积分永不过期</li></ul><a class="btn btn-primary" href="pricing.html">看价格</a></div>
+    </div>
+  </div>
+</div></section>
+
+<section class="sec" id="s7"><div class="wrap">
+  <div class="sec-label"><div class="num">08</div><span class="mono">公开地做</span></div>
+  <div>
+    <h2 class="h2">每一步，都摊开给你看。</h2>
+    <div class="logs">
+      <a class="log" href="#"><time>2026-09-29</time><h3>B2B 外贸岗</h3><p>询盘分四档，诈骗嫌疑直接标红。</p><svg class="ico ar"><use href="#i-arrow"/></svg></a>
+      <a class="log" href="#"><time>2026-09-29</time><h3>随便聊</h3><p>像网页版一样直接聊，聊完交给岗位。</p><svg class="ico ar"><use href="#i-arrow"/></svg></a>
+      <a class="log" href="#"><time>2026-09-27</time><h3>目标市场</h3><p>贴一个官网，自动认出你卖到哪些国家。</p><svg class="ico ar"><use href="#i-arrow"/></svg></a>
+    </div>
+    <p class="after"><a href="#">全部更新 →</a></p>
+  </div>
+</div></section>
+
+<section class="sec" id="s8"><div class="wrap">
+  <div class="sec-label"><div class="num">09</div><span class="mono">常见问题</span></div>
+  <div class="faq">
+    <details open><summary>真的免费吗？图什么？</summary><p>开源版全功能免费，没有付费墙。积分是给想省事的人：不想自己去各家开账号、填 key，就用我们的。</p></details>
+    <details open><summary>我的数据会传上去吗？</summary><p>默认全在你电脑上。只有你开了云端服务、或者用积分调模型时，才把那一次需要的内容发出去。</p></details>
+    <details><summary>AI 会不会自己乱发、乱退款？</summary><p>不会。对外发送、退款、改价都先出卡，你点了才办。</p></details>
+    <details><summary>要会写代码吗？</summary><p>不用。下载安装包双击就装，第一步接上 AI，第二步贴你的官网，就能开工。</p></details>
+    <details><summary>能连哪些平台？</summary><p>Shopify、邮箱、Amazon、TikTok、Meta、YouTube、X、WhatsApp 等，连接页里一个平台一张卡。</p></details>
+    <details><summary>和 DeepSeek Harness 是什么关系？</summary><p>它是底座。Agents 工坊是它的一个发行版：按官方的方式扩展，不改它的核心。</p></details>
+  </div>
+</div></section>
+
+<section class="final"><div class="wrap">
+  <svg width="88" height="88"><use href="#mark"/></svg>
+  <h2>先交给它一件小事。</h2>
+  <p class="sub">装上，接一个 AI，把今天最烦的那封邮件交给客服岗。</p>
+  <div class="cta-row"><a class="btn btn-primary" href="download.html"><svg class="ico"><use href="#i-download"/></svg>免费下载</a><a class="btn btn-line" href="#">看教程</a></div>
+</div></section>
+</main>
+
+<footer class="foot"><div class="wrap">
+  <a class="logo" href="#"><svg width="24" height="24"><use href="#mark"/></svg>Agents 工坊</a>
+  <span>© 2026 · 代码 Apache-2.0 · 名称与标志见商标政策</span>
+  <div class="links"><a href="#">教程</a><a href="#">更新日志</a><a href="#">GitHub</a><a href="#">安全</a><a href="#">联系我们</a><a href="#">中文 · English</a></div>
+</div></footer>
+<script>
+function toggleTheme(){var r=document.documentElement,d=r.getAttribute('data-theme');var sysLight=matchMedia('(prefers-color-scheme: light)').matches;var nowLight=d?d==='light':sysLight;r.setAttribute('data-theme',nowLight?'dark':'light')}
+
+// 标记：集结播完换待机；页头标记悬停播一次「一变一队」再回待机；「一变一队」滚到眼前才播；页面藏起来就停
+(function(){
+  var SPLIT_MS=1300; // 300 + 4×100 + 550，最后一块到位
+  function idle(el){el.setAttribute('class','bm bm-idle')}
+  document.querySelectorAll('.bm-assemble').forEach(function(el){setTimeout(function(){idle(el)},1400)});
+  document.querySelectorAll('.logo .bm').forEach(function(el){
+    var busy=false;
+    el.parentNode.addEventListener('mouseenter',function(){
+      if(busy||!el.classList.contains('bm-idle'))return;busy=true;
+      el.setAttribute('class','bm bm-split play');
+      setTimeout(function(){idle(el);busy=false},SPLIT_MS);
+    });
+  });
+  if('IntersectionObserver' in window){var io=new IntersectionObserver(function(es){es.forEach(function(e){if(e.isIntersecting){e.target.classList.add('play');io.unobserve(e.target)}})},{threshold:.6});document.querySelectorAll('.bm-split').forEach(function(el){io.observe(el)})}
+  document.addEventListener('visibilitychange',function(){document.querySelectorAll('.bm').forEach(function(el){el.classList.toggle('paused',document.hidden)})});
+})();
+</script>
+</body>
+</html>

@@ -18,7 +18,6 @@ import { BrowserCard } from '@/components/settings/browser-card'
 import { CloudAccountCard } from '@/components/settings/cloud-account'
 import { ComputerUseCard } from '@/components/settings/computer-use-card'
 import { CreditsPanel } from '@/components/settings/credits-panel'
-import { ModelCloudCard } from '@/components/settings/model-cloud-card'
 import { OfficialPluginsPanel } from '@/components/settings/official-plugins'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -231,8 +230,10 @@ export function SettingsPage({
         {/* WP144（docs/80）：电脑操控，紧跟浏览器（同一类"让 AI 动手的地方"，同一档权限） */}
         {ownerId === undefined ? null : <ComputerUseCard assignment={ownerId} />}
         {ownerId === undefined ? null : <ModelsPanel assignment={ownerId} />}
-        {/* 49 M5 第三张模型卡：agentsws 云（用积分）。不填 key，一键启用 */}
-        {ownerId === undefined ? null : <ModelCloudCard assignment={ownerId} />}
+        {/*
+          49 M5 那张「Agents 工坊（用积分）」卡：WP188 起就在上面「加一个」里（同一个组件
+          `CloudPlanActions`：先关联账号 / 启用 / 看余额与用量），这里不再另摆一张。
+        */}
         {/*
           WP152：「用我的 DeepSeek 账号登录」原来是这里单独一张卡；现在收进上面「加一个」里的
           「DeepSeek 官方」卡（二选一：官方账户登录 / 官方 API 接口连接），这里不再重复一张。

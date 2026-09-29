@@ -24,6 +24,11 @@ export interface StubProviderOptions {
    * - 不能：见到带图的消息就像真上游那样回 400（模拟「配了看不了图的模型」）。
    */
   vision?: boolean
+  /**
+   * WP188：流式时每吐一个词等多久（毫秒，默认 0——只让出一拍，测试照样快）。
+   * demo 里给一点点，界面上看得出"一个词一个词冒出来"。
+   */
+  streamDelayMs?: number
 }
 
 const VOCAB = [
@@ -44,6 +49,12 @@ const VOCAB = [
   'note',
   'ok',
 ]
+
+const abortError = (): Error => {
+  const e = new Error('stream aborted by caller')
+  e.name = 'AbortError'
+  return e
+}
 
 const byte = (hash: string, i: number): number => Number.parseInt(hash.slice(i * 2, i * 2 + 2), 16)
 
@@ -117,7 +128,18 @@ export function stubProvider(options: StubProviderOptions): ModelProvider {
           seed: req.seed ?? options.seed,
         }),
       )
-      return { text: text(hash), usage: usageOf(hash, req.messages, req.tools) }
+      const out = { text: text(hash), usage: usageOf(hash, req.messages, req.tools) }
+      // WP188：要流式就一个词一个词吐；中途被喊停就像真上游那样抛 AbortError
+      if (req.on_delta !== undefined) {
+        const parts = out.text.split(/(?<= )/)
+        for (const part of parts) {
+          if (req.signal?.aborted === true) throw abortError()
+          req.on_delta(part)
+          await new Promise((r) => setTimeout(r, options.streamDelayMs ?? 0))
+        }
+        if (req.signal?.aborted === true) throw abortError()
+      }
+      return out
     },
     async embed(texts) {
       const vectors = texts.map((t) => {

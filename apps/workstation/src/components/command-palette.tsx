@@ -13,10 +13,11 @@
  * 中英两种标题都进搜索词，界面是英文也能用中文名搜到。
  */
 import type { DeckCard, TileSpec } from '@agentsws/deck'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery } from '@tanstack/react-query'
 import { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useBrands } from '@/components/brand-switcher'
+import type { Handoff } from '@/components/palette-context'
 import { useRailState } from '@/components/rail/rail-state'
 import {
   Command,
@@ -29,6 +30,7 @@ import {
 } from '@/components/ui/command'
 import {
   listCatalog,
+  openMatterAtPosition,
   type PositionInstanceData,
   type PositionSummary,
   switchBrand,
@@ -46,9 +48,15 @@ export function CommandPalette({
   cards,
   tileLibrary,
   onAddTile,
+  handoff,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
+  /**
+   * WP188：「交给岗位去做」带过来的那件事。给了就只列岗位——选一个，这件事就交过去
+   * （与岗位页顶部「交给这个岗位一件事」同一条路），然后进事项页。
+   */
+  handoff?: Handoff
   positions: PositionSummary[]
   /** WP70：按岗位聚合的那一份。有它就先列岗位、再列「岗位 › 职责」。 */
   instances?: PositionInstanceData[]
@@ -96,6 +104,58 @@ export function CommandPalette({
     navigate(path)
   }
 
+  const handOver = useMutation({
+    mutationFn: (input: { assignment: string; handoff: Handoff }) =>
+      openMatterAtPosition(input.assignment, input.handoff),
+    onSuccess: (out, input) => {
+      // 判准了直接进事项页；拿不准就去岗位页，让人在那儿点一下走哪条职责
+      go(out.ambiguous ? `/positions/${input.assignment}` : `/matters/${out.matter.id}`)
+    },
+  })
+
+  if (handoff !== undefined) {
+    const targets =
+      byPosition.length > 0
+        ? byPosition.map((p) => ({
+            key: p.position_id,
+            assignment: myAssignments(p)[0] as string,
+            name: lang === 'en' ? p.name.en : p.name.zh,
+          }))
+        : positions.map((p) => ({
+            key: p.position_id,
+            assignment: p.position_id,
+            name: p.role_name,
+          }))
+    return (
+      <CommandDialog open={open} onOpenChange={onOpenChange} title={t('command.handoff.title')}>
+        <Command>
+          <CommandInput placeholder={t('command.handoff.placeholder')} />
+          <CommandList>
+            <CommandEmpty>{t('command.empty')}</CommandEmpty>
+            <CommandGroup heading={t('command.handoff.title')}>
+              {targets.map((target) => (
+                <CommandItem
+                  key={target.key}
+                  value={`${target.name} ${target.key}`}
+                  data-testid="command-handoff"
+                  disabled={handOver.isPending}
+                  onSelect={() => {
+                    handOver.mutate({ assignment: target.assignment, handoff })
+                  }}
+                >
+                  {target.name}
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+          {handOver.error === null ? null : (
+            <p className="px-3 pb-2 text-xs text-destructive">{handOver.error.message}</p>
+          )}
+        </Command>
+      </CommandDialog>
+    )
+  }
+
   return (
     <CommandDialog open={open} onOpenChange={onOpenChange} title={t('command.placeholder')}>
       <Command>
@@ -103,6 +163,16 @@ export function CommandPalette({
         <CommandList>
           <CommandEmpty>{t('command.empty')}</CommandEmpty>
           <CommandGroup heading={t('command.group.go')}>
+            {/* WP188：⌘K 里开一段新的随便聊 */}
+            <CommandItem
+              value={`${t('command.new_chat')} ${t('nav.free_chat')} new chat`}
+              data-testid="command-new-chat"
+              onSelect={() => {
+                go('/free-chat?new=1')
+              }}
+            >
+              {t('command.new_chat')}
+            </CommandItem>
             <CommandItem
               onSelect={() => {
                 go('/')

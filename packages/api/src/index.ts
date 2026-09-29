@@ -310,6 +310,21 @@ export {
   extensionRoutes,
   REVEAL_FREE_WINDOW_DAYS,
 } from './routes/extension.js'
+// WP188：随便聊
+export type {
+  FreeChatActor,
+  FreeChatCitation,
+  FreeChatFrame,
+  FreeChatImage,
+  FreeChatMessageView,
+  FreeChatModelChoice,
+  FreeChatModelsView,
+  FreeChatPort,
+  FreeChatSessionView,
+  FreeChatSource,
+  FreeChatTurnInput,
+} from './routes/free-chat.js'
+export { freeChatRoutes } from './routes/free-chat.js'
 export { HALT_SCOPES, haltRoutes } from './routes/halt.js'
 export { healthRoutes, type ReconcilePort } from './routes/health.js'
 export {
