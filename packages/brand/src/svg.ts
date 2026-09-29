@@ -30,6 +30,7 @@ import {
   type IdleStyle,
   idlePercent,
   MARK_BOX,
+  SHEEN_BAND_BOX,
   SHEEN_ON_DARK,
   SHEEN_ON_LIGHT,
   type SheenTint,
@@ -180,7 +181,15 @@ function sheenGradient(
   const at = (t: number): string => `${Number((t * 100).toFixed(2))}%`
   const c = sheenColor(tint)
   const peak = Number((band.peakOpacity * tint.strength).toFixed(3))
-  return `<linearGradient id="${id}" x1="0" y1="1" x2="1" y2="0"><stop offset="${at(0.5 - half)}" stop-color="${c}" stop-opacity="0"/><stop offset="50%" stop-color="${c}" stop-opacity="${peak}"/><stop offset="${at(0.5 + half)}" stop-color="${c}" stop-opacity="0"/></linearGradient>`
+  // WP200：userSpaceOnUse + 放大的矩形（SHEEN_BAND_BOX），亮带不再在矩形边上被切断
+  const a = GRADIENT_AXIS
+  return `<linearGradient id="${id}" gradientUnits="userSpaceOnUse" x1="${a.x1}" y1="${a.y1}" x2="${a.x2}" y2="${a.y2}"><stop offset="${at(0.5 - half)}" stop-color="${c}" stop-opacity="0"/><stop offset="50%" stop-color="${c}" stop-opacity="${peak}"/><stop offset="${at(0.5 + half)}" stop-color="${c}" stop-opacity="0"/></linearGradient>`
+}
+
+/** 亮带那一层矩形的属性（WP200：放大到 SHEEN_BAND_BOX）。 */
+function bandBox(): string {
+  const r = SHEEN_BAND_BOX
+  return `x="${r.x}" y="${r.y}" width="${r.width}" height="${r.height}"`
 }
 
 function idleBody(
@@ -194,13 +203,13 @@ function idleBody(
   if (style === 'sheen') {
     // 方块不动，照静态那条规矩：一条 userSpaceOnUse 铺满，六块切开；亮带被六块裁出来
     const clip = `<clipPath id="${id}-clip">${rects('#000')}</clipPath>`
-    const band = `<g clip-path="url(#${id}-clip)"><rect class="${cls}" x="${MARK_BOX.x}" y="${MARK_BOX.y}" width="${MARK_BOX.width}" height="${MARK_BOX.height}" fill="url(#${id}-sheen)"/></g>`
+    const band = `<g clip-path="url(#${id}-clip)"><rect class="${cls}" ${bandBox()} fill="url(#${id}-sheen)"/></g>`
     return `${css}<defs>${gradient(id, stops)}${sheenGradient(`${id}-sheen`, IDLE_SHEEN, tint)}${clip}</defs>${rects(`url(#${id})`)}${band}`
   }
   if (style === 'wave-sheen') {
     // 每块一个会抬起的 <g>：块本身 + 被它自己裁出来的那一份亮带，一起抬——光不会漏到缝里。
     // 六份亮带同一条动画、同一个起点，所以看上去就是一道光。
-    const box = `x="${MARK_BOX.x}" y="${MARK_BOX.y}" width="${MARK_BOX.width}" height="${MARK_BOX.height}"`
+    const box = bandBox()
     const clips = ALL_BLOCKS.map(
       (b, i) =>
         `<clipPath id="${id}-c${i}"><rect x="${b.x}" y="${b.y}" width="${BLOCK_SIZE}" height="${BLOCK_SIZE}" rx="${BLOCK_RADIUS}"/></clipPath>`,

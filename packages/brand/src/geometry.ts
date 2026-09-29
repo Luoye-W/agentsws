@@ -389,3 +389,22 @@ export const SHEEN_ON_DARK: SheenTint = { color: '#FFFFFF', strength: 1 }
  * 没用深底那套亮青（`#2FE0C8`）：它扫过领头那块时会把品牌黄染成绿。
  */
 export const SHEEN_ON_LIGHT: SheenTint = { color: '#E0FAF4', strength: 0.55 }
+
+/**
+ * 亮带那一层的矩形（WP200 修「块中间一条竖直分界」）。
+ *
+ * WP195 的亮带是一个和外框一样大（65×65）的矩形，渐变用 `objectBoundingBox` 从它的左下角到
+ * 右上角。那样亮带最亮的那条线正好是矩形的另一条对角线（左上角 → 右下角），**亮带在矩形的四条边
+ * 上被切断**；矩形一平移，它竖直的右边 / 水平的上边就扫过方块，块中间于是出现一条硬的明暗分界
+ * （96px 起肉眼可见，官网首屏 180px 更明显）。和尺寸、精度无关，是几何上的。
+ *
+ * 修法：渐变改成 `userSpaceOnUse`、轴就是 `GRADIENT_AXIS`（= 原来那个 65×65 矩形的左下 → 右上，
+ * 所以光的位置、宽度、亮度一个像素都不变），矩形往四周各放宽两个外框（325×325）。平移最远
+ * ±65（单独的流光）时它离标记四边仍有一个外框远，被切断的地方永远裁不到块上。
+ */
+export const SHEEN_BAND_BOX = {
+  x: MARK_BOX.x - 2 * MARK_BOX.width,
+  y: MARK_BOX.y - 2 * MARK_BOX.height,
+  width: MARK_BOX.width * 5,
+  height: MARK_BOX.height * 5,
+} as const

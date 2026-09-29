@@ -106,14 +106,16 @@ function mark(size, motion = 'none', idle = b.DEFAULT_IDLE_STYLE) {
   if ((sheen || ws) && !mono) {
     const band = ws ? b.IDLE_WAVE_SHEEN : b.IDLE_SHEEN
     const h = band.bandWidth / 2
-    defs += `<linearGradient id="${id}-sheen" x1="0" y1="1" x2="1" y2="0"><stop offset="${(0.5 - h) * 100}%" stop-color="var(--ws-brand-sheen)" stop-opacity="0"/><stop offset="50%" stop-color="var(--ws-brand-sheen)" stop-opacity="${band.peakOpacity}"/><stop offset="${(0.5 + h) * 100}%" stop-color="var(--ws-brand-sheen)" stop-opacity="0"/></linearGradient>`
+    const ax = b.GRADIENT_AXIS
+    defs += `<linearGradient id="${id}-sheen" gradientUnits="userSpaceOnUse" x1="${ax.x1}" y1="${ax.y1}" x2="${ax.x2}" y2="${ax.y2}"><stop offset="${(0.5 - h) * 100}%" stop-color="var(--ws-brand-sheen)" stop-opacity="0"/><stop offset="50%" stop-color="var(--ws-brand-sheen)" stop-opacity="${band.peakOpacity}"/><stop offset="${(0.5 + h) * 100}%" stop-color="var(--ws-brand-sheen)" stop-opacity="0"/></linearGradient>`
     defs += ws
       ? b.ALL_BLOCKS.map(
           (blk, i) => `<clipPath id="${id}-c${i}">${rect(blk, ' fill="#000"')}</clipPath>`,
         ).join('')
       : `<clipPath id="${id}-clip">${b.ALL_BLOCKS.map((blk) => rect(blk, ' fill="#000"')).join('')}</clipPath>`
   }
-  const box = b.MARK_BOX
+  // WP200：亮带矩形放大（SHEEN_BAND_BOX），不在方块上被切断
+  const box = b.SHEEN_BAND_BOX
   const boxAttrs = `x="${box.x}" y="${box.y}" width="${box.width}" height="${box.height}"`
   const blocks = b.ALL_BLOCKS.map((blk, i) => {
     const fill = mono ? 'currentColor' : `url(#${perBlock ? `${id}-b${i}` : id})`

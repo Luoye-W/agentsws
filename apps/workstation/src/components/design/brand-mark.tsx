@@ -58,11 +58,11 @@ import {
   IDLE_WAVE_SHEEN,
   IDLE_WAVE_SHEEN_DELAYS_MS,
   type IdleStyle,
-  MARK_BOX,
   MIN_GRADIENT_PX,
   MOTION_CLASS,
   motionStopVars,
   PAUSED_CLASS,
+  SHEEN_BAND_BOX,
   SPLIT_FIRST_DELAY_MS,
   SPLIT_OFFSETS,
   SPLIT_STEP_MS,
@@ -299,7 +299,16 @@ export function BrandMark({
   const band = waveSheen ? IDLE_WAVE_SHEEN : IDLE_SHEEN
   const half = band.bandWidth / 2
   const bandGradient = (
-    <linearGradient id={sheenId} x1="0" y1="1" x2="1" y2="0">
+    // WP200：userSpaceOnUse、轴 = GRADIENT_AXIS，矩形放大到 SHEEN_BAND_BOX——亮带不会在矩形边上
+    // 被切断（原来 65×65 + objectBoundingBox 时，矩形的右边扫过右下那块会切出一条竖直分界）
+    <linearGradient
+      id={sheenId}
+      gradientUnits="userSpaceOnUse"
+      x1={GRADIENT_AXIS.x1}
+      y1={GRADIENT_AXIS.y1}
+      x2={GRADIENT_AXIS.x2}
+      y2={GRADIENT_AXIS.y2}
+    >
       <stop offset={`${(0.5 - half) * 100}%`} stopColor={SHEEN_COLOR} stopOpacity={0} />
       <stop offset="50%" stopColor={SHEEN_COLOR} stopOpacity={band.peakOpacity} />
       <stop offset={`${(0.5 + half) * 100}%`} stopColor={SHEEN_COLOR} stopOpacity={0} />
@@ -347,10 +356,10 @@ export function BrandMark({
             <Blk x={b.x} y={b.y} fill={fillOf(i)} />
             <g clipPath={`url(#${clipId}${i})`}>
               <rect
-                x={MARK_BOX.x}
-                y={MARK_BOX.y}
-                width={MARK_BOX.width}
-                height={MARK_BOX.height}
+                x={SHEEN_BAND_BOX.x}
+                y={SHEEN_BAND_BOX.y}
+                width={SHEEN_BAND_BOX.width}
+                height={SHEEN_BAND_BOX.height}
                 fill={`url(#${sheenId})`}
                 className={IDLE_BAND_CLASS}
               />
@@ -363,10 +372,10 @@ export function BrandMark({
       {sheen && !mono ? (
         <g clipPath={`url(#${clipId})`} data-testid="brand-mark-sheen">
           <rect
-            x={MARK_BOX.x}
-            y={MARK_BOX.y}
-            width={MARK_BOX.width}
-            height={MARK_BOX.height}
+            x={SHEEN_BAND_BOX.x}
+            y={SHEEN_BAND_BOX.y}
+            width={SHEEN_BAND_BOX.width}
+            height={SHEEN_BAND_BOX.height}
             fill={`url(#${sheenId})`}
             className={IDLE_CLASS.sheen}
           />
