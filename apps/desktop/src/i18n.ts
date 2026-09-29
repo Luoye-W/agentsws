@@ -38,6 +38,8 @@ export interface Strings {
   /** WP184：官方场景改用系统浏览器打开（勾上 = 浏览器；默认在我们自己的窗口里）。 */
   sceneInBrowser: string
   /** WP184：退出前的确认（官方场景还开着）。 */
+  /** WP196：给人看的产品名（托盘悬停等处）；`agentsws` 只是仓库 / 包名。 */
+  appName: string
   quitTitle: string
   quitMessage: string
   quitActiveTasks: string
@@ -117,6 +119,7 @@ const ZH: Strings = {
   officialDesktop: '官方桌面端（你自己装的）',
   officialDesktopFailed: '官方桌面端没打开：{detail}',
   sceneInBrowser: '在浏览器里打开场景',
+  appName: 'Agents 工坊',
   quitTitle: 'Agents 工坊',
   quitMessage: '退出 Agents 工坊？',
   quitActiveTasks: '官方场景还开着，里面可能有正在进行的任务。退出会把它一起关掉。',
@@ -185,6 +188,7 @@ const EN: Strings = {
   officialDesktop: 'Official desktop app (installed by you)',
   officialDesktopFailed: 'The official desktop app did not open: {detail}',
   sceneInBrowser: 'Open scenes in the browser',
+  appName: 'Agents Workshop',
   quitTitle: 'Agents Workshop',
   quitMessage: 'Quit Agents Workshop?',
   quitActiveTasks:

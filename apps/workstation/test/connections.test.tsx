@@ -119,7 +119,7 @@ const state = {
 const OWNER_POSITION = {
   position_id: 'asg_owner',
   role_id: 'common.owner',
-  role_name: '工作区所有者',
+  role_name: '公司设置与授权',
   ranges: [] as { kind: string; id: string }[],
   ready: true,
   missing_connectors: [] as string[],

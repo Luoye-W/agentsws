@@ -153,7 +153,7 @@ export function createExtensionContributor(
   > {
     const token = tokenOf()
     if (token === undefined)
-      return { ok: false, status: 401, message: '还没关联 agentsws 云账号。' }
+      return { ok: false, status: 401, message: '还没关联 Agents 工坊账号。' }
     const controller = new AbortController()
     const timer = setTimeout(() => {
       controller.abort()
@@ -190,7 +190,7 @@ export function createExtensionContributor(
       return {
         ok: false,
         status: 0,
-        message: '连不上 agentsws 云（网络不通，或者云那边暂时不可用）。稍后再试一次。',
+        message: '连不上 Agents 工坊云端（网络不通，或者云端暂时不可用）。稍后再试一次。',
       }
     } finally {
       clearTimeout(timer)

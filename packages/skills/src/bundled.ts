@@ -213,7 +213,7 @@ export async function seedBundledSkills(
  */
 export const DYNAMIC_SKILL_SOURCES: Readonly<Record<string, string>> = {
   'brand-system':
-    '公司层技能，由店主在设计岗那张「先设品牌系统」卡上写' +
+    '公司层技能，由负责人在设计岗那张「先设品牌系统」卡上写' +
     '（卡在 `packages/design-core/src/brand.ts` 的 `brandSystemMissingCard`；' +
     '服务端 `apps/server/src/server.ts` 的 `brandCards` 读 `listSections("brand-system")`）。' +
     '包里故意不给默认正文：有了默认正文，设计岗会以为这家店已经设过品牌系统，那张卡就不出了，' +

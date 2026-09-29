@@ -50,11 +50,11 @@ export type KolPublicFetch = (
 
 /** 没给 `data` 权限时那一句（要让人知道去哪儿点）。 */
 export const NO_DATA_SCOPE_MESSAGE =
-  '关联 agentsws 账号的时候没给"数据服务"这一项权限，所以公共红人库现在进不去。去"设置 → 账号与积分"重新关联一次就好。'
+  '关联 Agents 工坊账号的时候没给"数据服务"这一项权限，所以公共红人库现在进不去。去"设置 → 账号与积分"重新关联一次就好。'
 
 /** 没关联账号时那一句（与 `kol-core` 的 `NOT_LINKED_MESSAGE` 同义，措辞更具体）。 */
 export const NOT_LINKED_MESSAGE =
-  '还没关联 agentsws 账号，所以用不了公共红人库（那是托管档的服务）。没连也能用：找人靠导入你手上那张表与各渠道自己的接口，建联、合作、审核、归因一样不少。'
+  '还没关联 Agents 工坊账号，所以用不了公共红人库（那是托管档的服务）。没连也能用：找人靠导入你手上那张表与各渠道自己的接口，建联、合作、审核、归因一样不少。'
 
 export interface KolPublicClientOptions {
   workspace_id: WorkspaceId
@@ -161,7 +161,7 @@ export function createKolPublicClient(options: KolPublicClientOptions): PublicLi
       return {
         ok: false,
         reason: 'upstream_error',
-        message: '连不上 agentsws 云（网络不通，或者云那边暂时不可用）。稍后再试一次。',
+        message: '连不上 Agents 工坊云端（网络不通，或者云端暂时不可用）。稍后再试一次。',
       }
     } finally {
       clearTimeout(timer)

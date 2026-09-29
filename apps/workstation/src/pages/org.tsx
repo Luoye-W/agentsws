@@ -232,7 +232,7 @@ export function OrgPage(): React.ReactNode {
   const update = useMutation({
     mutationFn: (input: {
       id: string
-      body: { name: string; roles: { role_id: string; default: boolean }[] }
+      body: { name: string; name_en?: string; roles: { role_id: string; default: boolean }[] }
     }) => updateOrgPosition(input.id, input.body, owner),
     onSuccess: async () => {
       setFailure(undefined)
@@ -550,6 +550,18 @@ export function OrgPage(): React.ReactNode {
                 .map((m) => ({ person_id: m.person_id, name: m.name }))}
               onSupervisor={(id, person_id) => {
                 supervise.mutate({ id, person_id })
+              }}
+              onRename={(id, input) => {
+                // WP196：只改名——职责原样带回去（连「可选」那几条的勾选也不动），服务端就不当改模板
+                const current = positions.data?.find((p) => p.id === id)
+                if (current === undefined) return
+                update.mutate({
+                  id,
+                  body: {
+                    ...input,
+                    roles: current.roles.map((r) => ({ role_id: r.role_id, default: r.default })),
+                  },
+                })
               }}
               onDelete={(id) => {
                 drop.mutate(id)

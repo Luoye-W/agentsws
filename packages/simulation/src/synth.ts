@@ -105,7 +105,7 @@ const PEOPLE_15: PersonTemplate[] = [
     id: 'p_wang',
     name: '王岚',
     email: 'wang@nordvolt.example',
-    title: '店主',
+    title: '负责人',
     role: 'common.owner',
     owner: true,
   },
@@ -226,7 +226,7 @@ const PEOPLE_3: PersonTemplate[] = [
     id: 'p_wang',
     name: '王岚',
     email: 'wang@nordvolt.example',
-    title: '店主 / 售后',
+    title: '负责人 / 售后',
     role: 'dtc.support',
     owner: true,
     // WP72（56 §4）：客服岗位新加的第四条「社群管理」也挂在店主身上——
@@ -570,7 +570,7 @@ const ADDRESSES: Record<string, { city: string; country: string; zip: string; ad
 
 const COMPANY_MD = `# NordVolt Gear
 
-三个人的 3C 配件独立站：一个店主（王岚，同时管策略层与授权额度）、
+三个人的 3C 配件独立站：一个负责人（王岚，同时管策略层与授权额度）、
 一个售后（同上）、一个运营（李默）、一个兼职（陈晓）。
 客户在欧洲，站内语言英文；团队内部用中文。
 

@@ -282,7 +282,7 @@ describe('contact：公共库 reveal / 贡献 / 争议', () => {
     const { port } = assemble()
     const out = await port.contactLookup(session, { channel: 'youtube', handle: 'fixture' })
     expect(out.status).toBe('none')
-    if (out.status === 'none') expect(out.message).toContain('云账号')
+    if (out.status === 'none') expect(out.message).toContain('Agents 工坊账号')
   })
 
   it('贡献：云端收下了 → recorded / new；没关联 → unavailable + 人话', async () => {
@@ -305,7 +305,7 @@ describe('contact：公共库 reveal / 贡献 / 争议', () => {
       { value: 'found@fixture.example' },
     )
     expect(soloOut.status).toBe('unavailable')
-    if (soloOut.status === 'unavailable') expect(soloOut.message).toContain('云账号')
+    if (soloOut.status === 'unavailable') expect(soloOut.message).toContain('Agents 工坊账号')
   })
 
   it('争议：免费、云端只记不裁；没关联时如实说 noop', async () => {

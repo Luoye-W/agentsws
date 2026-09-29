@@ -2633,7 +2633,8 @@ export const createOrgPosition = (
 
 export const updateOrgPosition = (
   id: string,
-  input: { name: string; roles: { role_id: string; default?: boolean }[] },
+  /** WP196：`name_en` 给了就一起改英文名（不给 = 英文名不变）。 */
+  input: { name: string; name_en?: string; roles: { role_id: string; default?: boolean }[] },
   assignment?: string,
 ): Promise<OrgPositionView> =>
   api<OrgPositionView>(`/v1/org/positions/${encodeURIComponent(id)}`, {
