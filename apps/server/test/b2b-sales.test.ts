@@ -336,7 +336,7 @@ describe('WP182 询盘接客服那条管线：分级 → 首回卡 / 红卡', ()
     expect(inq?.reply_approval_id).toBeUndefined()
     const red = await h.txn.approvals.get(inq?.fraud_alert_id ?? '')
     expect(red?.kind).toBe('b2b_fraud_alert')
-    expect((red?.payload as { reason: string }).reason).toBe('scam_suspect')
+    expect((red?.payload as { reason?: string } | undefined)?.reason).toBe('scam_suspect')
     expect(red?.routing.recipients.map((r) => r.person)).toEqual(['p_zhou', 'p_he'])
   })
 
@@ -480,7 +480,7 @@ describe('WP182 报价：永远出卡、超授权转上级 / 老板、新建版�
     const send = await h.sales.port.sendQuote(h.actor, d1.draft.record_id, {})
     expect(send.staged).toBe(true)
     const card = await h.txn.approvals.get(send.approval_item_id ?? '')
-    const after = (card?.payload as { after: Record<string, unknown> }).after
+    const after = (card?.payload as { after: Record<string, unknown> } | undefined)?.after ?? {}
     expect(after.attachments).toEqual([
       {
         kind: 'quote_pdf',
@@ -569,7 +569,7 @@ describe('WP182 离职交接：按接手的人在管的地区 / 产品线分，�
     h.store.put('b2b_account', account('acc_berlin', 'p_wu', 'EU', 'Cable'))
     const out = await h.sales.onMemberLeft('p_he' as PersonId, 'p_zhou' as PersonId)
     const card = await h.txn.approvals.get(out.approval_item_id ?? '')
-    expect((card?.payload as { kind: string }).kind).toBe('b2b_account_transfer')
+    expect((card?.payload as { kind?: string } | undefined)?.kind).toBe('b2b_account_transfer')
     expect(card?.routing.recipients[0]).toMatchObject({ person: 'p_zhou', via: 'owner' })
     expect(card?.summary).toContain('VOLTHAUS')
     expect(card?.summary).toContain('Wu Min')
