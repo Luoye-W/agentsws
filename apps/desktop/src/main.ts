@@ -141,7 +141,11 @@ interface TestHandle {
   /** WP36：`remote` 时这台电脑一个 sidecar 都不拉（40 §1.3）。 */
   mode(): DesktopMode
   openWorkstation(path?: string): Promise<string>
-  invoke(action: MenuAction): void
+  invoke(action: MenuAction, scene?: string): void
+  /** WP184：官方场景窗口（名字、窗口里的网址、标题、在不在显示）。 */
+  sceneWindows(): { name: string; url: string; title: string; visible: boolean }[]
+  /** WP184：e2e 收尾用——不弹「官方场景还开着」的退出确认（真退出路径照常停服务进程）。 */
+  skipQuitConfirmation(): void
 }
 
 function trayImage(): Electron.NativeImage {
@@ -1592,6 +1596,18 @@ async function bootstrap(): Promise<void> {
     mode: () => runtimeMode.mode,
     openWorkstation: (path) => openWorkstation(path),
     invoke,
+    sceneWindows: () =>
+      [...sceneWindows.entries()]
+        .filter(([, w]) => !w.window.isDestroyed())
+        .map(([name, w]) => ({
+          name,
+          url: w.window.webContents.getURL(),
+          title: w.window.getTitle(),
+          visible: w.window.isVisible(),
+        })),
+    skipQuitConfirmation: () => {
+      quitApproved = true
+    },
   }
   ;(globalThis as { __agentsws__?: TestHandle }).__agentsws__ = handle
 
