@@ -9,6 +9,7 @@
  */
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
+import { B2B_QUERIES } from '../src/b2b-queries.js'
 import {
   assembleView,
   type B2bDeckData,
@@ -148,5 +149,70 @@ describe('状态念成人话', () => {
       computeBlock('b2b.fulfillment.docs', c, 'today').payload as { rows: { doc: string }[] }
     ).rows
     expect(rows[0]?.doc).toBe('PO-1 · 信用证单据')
+  })
+})
+
+describe('WP182：业务那两块带上分级与超期', () => {
+  it('询盘「要人看」一格先写分级；样品超期写「已超 N 天」', () => {
+    const q = (name: string) => B2B_QUERIES.find((x) => x.name === name)
+    const ctx = {
+      b2b: {
+        ...EMPTY_B2B_FOR_WP182,
+        inquiries: [
+          {
+            account: 'V',
+            subject: 's',
+            source: 'email',
+            received_at: 't',
+            grade: '诈骗嫌疑',
+            commitments: ['价格'],
+          },
+        ],
+        samples: [
+          { account: 'V', items: 'x', status: 'to_ship', due: '2026-09-25', overdue_days: 4 },
+        ],
+      },
+    } as never
+    expect((q('b2b.inquiries')?.run(ctx) as { rows: { flag: string }[] }).rows[0]?.flag).toBe(
+      '诈骗嫌疑 · 价格',
+    )
+    expect((q('b2b.samples')?.run(ctx) as { rows: { due: string }[] }).rows[0]?.due).toBe(
+      '已超 4 天',
+    )
+  })
+})
+
+const EMPTY_B2B_FOR_WP182 = {
+  inquiries: [],
+  quotes_pending: [],
+  samples: [],
+  dormant: [],
+  outreach_today: [],
+  sequence_funnel: [],
+  replies: [],
+  lists: [],
+  shows: [],
+  deadlines: [],
+  show_leads: [],
+  followups: [],
+  in_production: [],
+  to_ship: [],
+  docs_to_check: [],
+  balance_due: [],
+  marketplace_inquiries: [],
+  listings_to_improve: [],
+  rfqs: [],
+}
+
+describe('WP182：B2B 回信卡的正文看得见', () => {
+  it('b2b_reply 的 after.body 当原文；别的改动卡不受影响', async () => {
+    const { contentVariantsOf } = await import('../src/project.js')
+    const item = (kind: string) =>
+      ({
+        summary: '真买家',
+        payload: { kind, after: { body: 'Hi Anna, the MOQ is 500 pcs.' } },
+      }) as never
+    expect(contentVariantsOf(item('b2b_reply')).original).toBe('Hi Anna, the MOQ is 500 pcs.')
+    expect(contentVariantsOf(item('b2b_record')).original).toBeUndefined()
   })
 })

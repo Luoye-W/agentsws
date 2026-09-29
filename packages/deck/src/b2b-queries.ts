@@ -70,8 +70,10 @@ export const B2B_QUERIES: QueryDef[] = [
         account: r.account,
         subject: r.subject,
         source: word(SOURCE_WORDS, r.source),
-        // 碰到承诺的那几类（价格 / 交期 …）：回信会转人审
-        flag: (r.commitments ?? []).join('、'),
+        // 碰到承诺的那几类（价格 / 交期 …）：回信会转人审；WP182：分级排在最前（诈骗嫌疑一眼看见）
+        flag: [r.grade, (r.commitments ?? []).join('、')]
+          .filter((x) => x !== undefined && x !== '')
+          .join(' · '),
       })),
   ),
   table(
@@ -103,7 +105,8 @@ export const B2B_QUERIES: QueryDef[] = [
         account: r.account,
         items: r.items,
         status: word(SAMPLE_WORDS, r.status),
-        due: r.due,
+        // WP182：超期的直接说超了几天（面板按这一格排不了序，至少一眼看得见）
+        due: r.overdue_days === undefined ? r.due : `已超 ${r.overdue_days} 天`,
       })),
   ),
   table(
