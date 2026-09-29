@@ -739,7 +739,7 @@ const zh: Table = {
   'duty.skills': '挂着的技能',
   'duty.connectors': '要的连接器：{list}',
   'account.menu': '账号',
-  'account.role.owner': 'Owner',
+  'account.role.owner': '所有者',
   'account.role.member': '成员',
   'account.logout': '退出',
   'topbar.model': '现在用的模型：{model}',
