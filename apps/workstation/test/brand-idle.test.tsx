@@ -20,6 +20,8 @@ import {
   idlePercent,
   MIN_GRADIENT_PX,
   MIN_IDLE_PX,
+  SHEEN_ON_DARK,
+  SHEEN_ON_LIGHT,
   SPLIT_TOTAL_MS,
 } from '@agentsws/brand'
 import { act, fireEvent, render, screen } from '@testing-library/react'
@@ -383,6 +385,54 @@ describe('index.css：待机那几段与 @agentsws/brand 的数字一致', () =>
     ]) {
       expect(reduce).toContain(`:root:not([data-ws-motion="on"]) .${cls}`)
       expect(CSS).toContain(`:root[data-ws-motion="off"] .${cls}`)
+    }
+  })
+})
+
+describe('WP200：浅色主题那道光调淡，深色不变', () => {
+  /** `:root {` / `.dark {` 那一段（第一次出现的那个，花括号配对）。 */
+  function scope(selector: string): string {
+    const at = CSS.indexOf(`${selector} {`)
+    expect(at).toBeGreaterThan(-1)
+    let depth = 0
+    for (let i = CSS.indexOf('{', at); i < CSS.length; i += 1) {
+      if (CSS[i] === '{') depth += 1
+      if (CSS[i] === '}') {
+        depth -= 1
+        if (depth === 0) return CSS.slice(at, i + 1)
+      }
+    }
+    throw new Error(`${selector} 没闭合`)
+  }
+  const sheenVars = (selector: string): { color: string; strength: number } => {
+    const body = scope(selector)
+    const color = body.match(/--ws-brand-sheen:\s*(#[0-9a-f]{6});/)?.[1]
+    const strength = body.match(/--ws-brand-sheen-strength:\s*([\d.]+);/)?.[1]
+    if (color === undefined || strength === undefined) throw new Error(`${selector} 缺亮带变量`)
+    return { color: color.toUpperCase(), strength: Number(strength) }
+  }
+
+  it('浅色主题 = SHEEN_ON_LIGHT，深色主题 = SHEEN_ON_DARK（逐个相等）', () => {
+    expect(sheenVars(':root')).toEqual(SHEEN_ON_LIGHT)
+    expect(sheenVars('.dark')).toEqual(SHEEN_ON_DARK)
+  })
+
+  it('力度乘在两种亮带那一层的 opacity 上', () => {
+    for (const cls of ['ws-bm-idle-ws-band', 'ws-bm-idle-sheen']) {
+      const at = CSS.indexOf(`.${cls} {\n    opacity`)
+      expect(at).toBeGreaterThan(-1)
+      expect(CSS.slice(at, CSS.indexOf('}', at))).toContain(
+        'opacity: var(--ws-brand-sheen-strength, 1)',
+      )
+    }
+  })
+
+  it('组件里亮带的颜色走变量，不再写死纯白', () => {
+    for (const style of ['wave-sheen', 'sheen'] as const) {
+      const svg = mark(<BrandMark size={40} motion="idle" idleStyle={style} />)
+      const stops = [...svg.querySelectorAll('linearGradient[id$="-sheen"] stop')]
+      expect(stops).toHaveLength(3)
+      for (const st of stops) expect(st.getAttribute('stop-color')).toBe('var(--ws-brand-sheen)')
     }
   })
 })

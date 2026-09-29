@@ -366,3 +366,26 @@ export const IDLE_WAVE_SHEEN_DELAYS_MS: readonly number[] = ALL_BLOCKS.map((blk)
   const cross = ((blockAxis(blk) - 0.5 + w.travel) / (2 * w.travel)) * w.sweepMs
   return Math.round(cross - w.riseMs)
 })
+
+// ── 流光在明暗两种底上的颜色（WP200）─────────────────────────────────
+
+/**
+ * 那道光的颜色与力度：`color` 是亮带的颜色，`strength` 乘在亮带最亮处的不透明度上
+ * （`IDLE_WAVE_SHEEN.peakOpacity` / `IDLE_SHEEN.peakOpacity`）。
+ */
+export interface SheenTint {
+  readonly color: string
+  readonly strength: number
+}
+
+/** 深底：纯白、原样（WP195 调好的那一版，不动）。 */
+export const SHEEN_ON_DARK: SheenTint = { color: '#FFFFFF', strength: 1 }
+
+/**
+ * 浅底（WP200，Luoye 09-29 同意）：纯白 0.42 扫过压暗那套端点时，那块会短暂发白
+ * （WP195 截图 `compare-1000ms.png`）。换成一道**极淡的品牌青**、力度压到一半多一点
+ * （波 + 流光最亮处 0.42 × 0.55 ≈ 0.23）：光还看得见，块不再褪成灰白。
+ *
+ * 没用深底那套亮青（`#2FE0C8`）：它扫过领头那块时会把品牌黄染成绿。
+ */
+export const SHEEN_ON_LIGHT: SheenTint = { color: '#E0FAF4', strength: 0.55 }

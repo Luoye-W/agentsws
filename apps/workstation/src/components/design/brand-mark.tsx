@@ -73,6 +73,9 @@ import {
 } from './brand-mark.geometry'
 import { useMotionPref } from './motion-pref'
 
+/** 亮带颜色（明暗两套定义在 `index.css` 的 `:root` / `.dark`）。 */
+const SHEEN_COLOR = 'var(--ws-brand-sheen)'
+
 export type BrandMarkVariant = 'gradient' | 'mono'
 export type BrandMarkMotion = 'none' | 'assemble' | 'breathe' | 'split' | 'idle'
 export type BrandMarkIdleStyle = IdleStyle
@@ -288,16 +291,18 @@ export function BrandMark({
     }
   }
 
-  // 流光：一层白色亮带，被六块裁出来，只动它的位置（标记本身一个像素的颜色都不改）
+  // 流光：一层亮带，被六块裁出来，只动它的位置（标记本身一个像素的颜色都不改）。
+  // 颜色走 `--ws-brand-sheen`、力度走亮带那层的 opacity（`--ws-brand-sheen-strength`）：
+  // 深底纯白原样，浅底极淡的品牌青、力度减半（WP200，不然扫过时块会短暂发白）。
   const sheenId = `${uid}-sheen`
   const clipId = `${uid}-clip`
   const band = waveSheen ? IDLE_WAVE_SHEEN : IDLE_SHEEN
   const half = band.bandWidth / 2
   const bandGradient = (
     <linearGradient id={sheenId} x1="0" y1="1" x2="1" y2="0">
-      <stop offset={`${(0.5 - half) * 100}%`} stopColor="#fff" stopOpacity={0} />
-      <stop offset="50%" stopColor="#fff" stopOpacity={band.peakOpacity} />
-      <stop offset={`${(0.5 + half) * 100}%`} stopColor="#fff" stopOpacity={0} />
+      <stop offset={`${(0.5 - half) * 100}%`} stopColor={SHEEN_COLOR} stopOpacity={0} />
+      <stop offset="50%" stopColor={SHEEN_COLOR} stopOpacity={band.peakOpacity} />
+      <stop offset={`${(0.5 + half) * 100}%`} stopColor={SHEEN_COLOR} stopOpacity={0} />
     </linearGradient>
   )
   const waveSheenDefs = waveSheen ? (

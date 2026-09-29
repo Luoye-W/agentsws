@@ -82,6 +82,13 @@
   --ws-brand-mark-b5-to: #91ae5b;
   --ws-brand-mark-b6-from: #74b16e;
   --ws-brand-mark-b6-to: #d9a82e;
+  /*
+   * WP200 · 待机里那道光（浅底）：纯白扫过压暗端点会让块短暂发白，换成极淡的品牌青、
+   * 力度乘 0.55（数字 = `@agentsws/brand` 的 `SHEEN_ON_LIGHT`，`test/brand-idle.test.tsx` 核）。
+   * 力度乘在亮带那一层的 opacity 上，所以波 + 流光与单独的流光同一个口径变淡。
+   */
+  --ws-brand-sheen: #e0faf4;
+  --ws-brand-sheen-strength: 0.55;
 
   /* ── shadcn token 指到上面那套值上 ───────────────────────────────── */
   --background: var(--ws-paper);
@@ -162,6 +169,9 @@
   --ws-brand-mark-b5-to: #afdb7c;
   --ws-brand-mark-b6-from: #8edc90;
   --ws-brand-mark-b6-to: #ffd84d;
+  /* WP200：深底那道光原样（纯白、力度 1 = `SHEEN_ON_DARK`） */
+  --ws-brand-sheen: #ffffff;
+  --ws-brand-sheen-strength: 1;
 
   --background: var(--ws-paper);
   --foreground: var(--ws-ink);
@@ -539,6 +549,7 @@
 
   /* 流光：一道很淡的白色亮带（被六块裁出来）从左下扫到右上，8s 一轮，扫一次 1.5s */
   .ws-bm-idle-sheen {
+    opacity: var(--ws-brand-sheen-strength, 1);
     transform: translate(-65px, 65px);
     animation: ws-bm-idle-sheen 8s cubic-bezier(0.65, 0, 0.35, 1) 1600ms infinite both;
   }
@@ -577,6 +588,7 @@
   }
 
   .ws-bm-idle-ws-band {
+    opacity: var(--ws-brand-sheen-strength, 1);
     transform: translate(-45.5px, 45.5px);
     animation: ws-bm-idle-ws-band 8s linear 1600ms infinite both;
   }
