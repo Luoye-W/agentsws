@@ -83,6 +83,14 @@ const CHANNEL_SERVICE: Readonly<Record<KolChannelId, string>> = {
   x: 'x_api',
 }
 
+/**
+ * WP201：显示用的 `@handle`。插件从 YouTube 收进来的 handle 自带 `@`（YouTube 自己就这么写），
+ * 导入的与公共库来的不带——显示时统一成一个 `@`，别出现 `@@TheTechReviewer`。库里的值不动。
+ */
+export function atHandle(handle: string | undefined): string {
+  return handle === undefined || handle === '' ? '—' : `@${handle.replace(/^@+/, '')}`
+}
+
 export function entryHref(id: 'link_account' | 'byo', channel: KolChannelId): string {
   return id === 'link_account'
     ? '/settings/credits'
@@ -252,7 +260,7 @@ function Discovery({
                 <div className="min-w-0">
                   <div className="truncate font-medium">{row.display_name}</div>
                   <div className="text-xs text-muted-foreground">
-                    @{row.handle} · {t('kol.followers', { n: num(row.followers) })}
+                    {atHandle(row.handle)} · {t('kol.followers', { n: num(row.followers) })}
                     {row.in_library === true ? ` · ${t('kol.in_library')}` : ''}
                   </div>
                 </div>
@@ -348,7 +356,7 @@ function Discovery({
                 >
                   <span className="min-w-0 truncate">
                     {row.display_name}
-                    <span className="text-xs text-muted-foreground"> @{row.handle}</span>
+                    <span className="text-xs text-muted-foreground"> {atHandle(row.handle)}</span>
                   </span>
                   <span className="flex shrink-0 items-center gap-2 text-xs text-muted-foreground">
                     {/* 刷粉护栏那一条：清单上看得见"这个数不可信"，不悄悄少一行 */}
@@ -475,7 +483,7 @@ function CreatorDetail({
           {view.accounts.map((a) => (
             <div key={a.id} className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
               <a className="underline" href={a.url} target="_blank" rel="noreferrer">
-                @{a.handle}
+                {atHandle(a.handle)}
               </a>
               <span className="text-xs text-muted-foreground">
                 {t(`kol.channel.${a.channel}`)} · {t('kol.followers', { n: num(a.followers) })} ·
@@ -812,7 +820,7 @@ function Collaborations({
                     {r?.display_name ?? c.creator_id}
                   </span>
                   <span className="truncate text-xs text-muted-foreground">
-                    @{r?.handle ?? '—'} · {t(`kol.channel.${c.channel}`)}
+                    {atHandle(r?.handle)} · {t(`kol.channel.${c.channel}`)}
                   </span>
                   {c.sandbox === true ? (
                     <span
