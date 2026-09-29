@@ -1,0 +1,179 @@
+/**
+ * 价目（构建时取云上、取不到用样例）、下载清单、SEO、文案中英同形。
+ */
+
+import type { PricingCatalog } from '@agentsws/contracts'
+import { describe, expect, it } from 'vitest'
+import manifest from '../src/data/downloads.json'
+import { COMMON, localePath } from '../src/i18n/common.js'
+import { DOWNLOAD } from '../src/i18n/download.js'
+import { HOME } from '../src/i18n/home.js'
+import { PAGES } from '../src/i18n/pages.js'
+import { PRICING } from '../src/i18n/pricing.js'
+import { ROLES, ROLES_PAGE } from '../src/i18n/roles.js'
+import { type DownloadManifest, formatSize, manifestProblems } from '../src/lib/downloads.js'
+import {
+  blockOf,
+  entryLabel,
+  formatCredits,
+  loadPricing,
+  looksLikeCatalog,
+  tiersOf,
+  unitLabel,
+} from '../src/lib/pricing.js'
+import { absolute, alternates, robotsTxt, sitemapXml } from '../src/lib/seo.js'
+
+const sample: PricingCatalog = {
+  version: 1,
+  pricing: {
+    version: 1,
+    as_of: '2026-09-19',
+    credit_cny: 1,
+    ai_multiplier: 3,
+    fx: {},
+    entries: [
+      {
+        capability: 'ai.chat',
+        unit: '1k_tokens',
+        credits_per_unit: 0.3,
+        label_zh: 'AI 对话（按 token）',
+        label_en: 'AI chat (per token)',
+      },
+      {
+        capability: 'kol.service.monthly',
+        unit: 'month',
+        credits_per_unit: 30,
+        label_zh: '红人营销增值服务（每月）',
+        label_en: 'Influencer add-on (monthly)',
+      },
+      {
+        capability: 'crawl.page',
+        unit: 'page',
+        credits_per_unit: 0.2,
+        label_zh: '网页抓取（按页）',
+        label_en: 'Web fetch (per page)',
+      },
+    ],
+  },
+  topup_tiers: {
+    version: 1,
+    as_of: '2026-09-19',
+    credits_per_usd: 7,
+    tiers: [{ id: 'usd20', usd: 20, credits: 140, label_zh: '入门', label_en: 'Starter' }],
+  },
+}
+const ok = (body: unknown) =>
+  (async () => new Response(JSON.stringify(body), { status: 200 })) as unknown as typeof fetch
+
+describe('价目：构建时取云上，取不到用样例', () => {
+  it('取到了就用云上那份', async () => {
+    const cloud = { ...sample, pricing: { ...sample.pricing, as_of: '2026-09-29' } }
+    const p = await loadPricing({
+      url: 'https://x/v1/pricing',
+      sample,
+      fetchImpl: ok({ data: cloud }),
+    })
+    expect(p.source).toBe('cloud')
+    expect(p.catalog.pricing.as_of).toBe('2026-09-29')
+  })
+
+  it('断网、非 200、回包不像价目、强制离线：一律用样例，不编数', async () => {
+    const down = (async () => {
+      throw new Error('offline')
+    }) as unknown as typeof fetch
+    const bad = (async () => new Response('nope', { status: 503 })) as unknown as typeof fetch
+    for (const fetchImpl of [down, bad, ok({ data: { hello: 1 } }), ok({})]) {
+      const p = await loadPricing({ url: 'https://x', sample, fetchImpl })
+      expect(p.source).toBe('sample')
+      expect(p.catalog).toBe(sample)
+    }
+    expect(
+      (
+        await loadPricing({
+          url: 'https://x',
+          sample,
+          fetchImpl: ok({ data: sample }),
+          offline: true,
+        })
+      ).source,
+    ).toBe('sample')
+    expect(looksLikeCatalog(null)).toBe(false)
+  })
+
+  it('分块、单位、标签、积分数、档位', () => {
+    expect(sample.pricing.entries.map(blockOf)).toEqual(['ai', 'service', 'data'])
+    expect(unitLabel('1k_tokens', 'zh')).toBe('每千 token')
+    expect(unitLabel('weird', 'en')).toBe('weird')
+    expect(
+      entryLabel({ label_zh: '网页抓取（按页）', label_en: 'Web fetch (per page)' }, 'zh'),
+    ).toBe('网页抓取')
+    expect(
+      entryLabel({ label_zh: '网页抓取（按页）', label_en: 'Web fetch (per page)' }, 'en'),
+    ).toBe('Web fetch')
+    expect(formatCredits(0.30000000004)).toBe('0.3')
+    expect(formatCredits(30)).toBe('30')
+    expect(tiersOf({ source: 'sample', as_of: '', catalog: sample })).toHaveLength(1)
+  })
+})
+
+describe('下载清单', () => {
+  it('仓库里那份没毛病（链接没定的是 null）', () => {
+    expect(manifestProblems(manifest as unknown as DownloadManifest)).toEqual([])
+  })
+
+  it('给了链接就必须有 https、sha256 与大小', () => {
+    const m = structuredClone(manifest) as unknown as DownloadManifest
+    const d = m.desktop[0]
+    if (d === undefined) throw new Error('清单是空的')
+    d.url = 'http://example.com/a.dmg'
+    const problems = manifestProblems(m)
+    expect(problems.some((p) => p.includes('https'))).toBe(true)
+    expect(problems.some((p) => p.includes('sha256'))).toBe(true)
+    expect(problems.some((p) => p.includes('大小'))).toBe(true)
+    expect(formatSize(null)).toBe('—')
+    expect(formatSize(150 * 1024 * 1024)).toBe('150 MB')
+  })
+})
+
+describe('SEO', () => {
+  it('中英互指 + x-default 指中文；结尾斜杠', () => {
+    expect(alternates('/pricing/')).toEqual([
+      { hreflang: 'zh-CN', href: 'https://agentsws.com/pricing/' },
+      { hreflang: 'en', href: 'https://agentsws.com/en/pricing/' },
+      { hreflang: 'x-default', href: 'https://agentsws.com/pricing/' },
+    ])
+    expect(localePath('/en/docs/x/', 'zh')).toBe('/docs/x/')
+    expect(localePath('/', 'en')).toBe('/en/')
+    expect(absolute('/terms')).toBe('https://agentsws.com/terms/')
+  })
+
+  it('sitemap 每页两条、带 xhtml:link；robots 指向 sitemap', () => {
+    const xml = sitemapXml([{ path: '/' }, { path: '/pricing/' }])
+    expect(xml.match(/<url>/g)).toHaveLength(4)
+    expect(xml).toContain('<loc>https://agentsws.com/en/pricing/</loc>')
+    expect(xml).toContain('hreflang="x-default"')
+    expect(robotsTxt()).toContain('Sitemap: https://agentsws.com/sitemap.xml')
+  })
+})
+
+/** 两份文案的「形状」：键一样、数组一样长。 */
+function shape(v: unknown): unknown {
+  if (Array.isArray(v)) return v.map(shape)
+  if (v !== null && typeof v === 'object')
+    return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, shape(x)]))
+  return typeof v
+}
+
+describe('文案：中英同形（少翻一句会红）', () => {
+  it.each([
+    ['common', COMMON],
+    ['home', HOME],
+    ['roles', ROLES],
+    ['rolesPage', ROLES_PAGE],
+    ['pricing', PRICING],
+    ['download', DOWNLOAD],
+    ['pages', PAGES],
+  ] as const)('%s', (_, copy) => {
+    expect(shape(copy.en)).toEqual(shape(copy.zh))
+  })
+})

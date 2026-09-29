@@ -2,7 +2,7 @@
  * WP165（docs/83 §2、§8 第 2 步）：开源这一侧**不许**直接依赖云端代码。
  *
  * 云端（`apps/cloud*`、`packages/{metering,cloud-entry,hosted,kol-cloud,kol-public,standby}`）要整体搬进
- * 私有仓。搬之前先把线划清：开源这一侧（`apps/{server,workstation,desktop,cli,extension}` 与云端包以外的
+ * 私有仓。搬之前先把线划清：开源这一侧（`apps/{server,workstation,desktop,cli,extension,site}` 与云端包以外的
  * `packages/*`）只认契约（`@agentsws/contracts`）、客户端与替身（`@agentsws/stand-ins`）。
  * 聊天转发核心（`@agentsws/chat-relay`）留开源（docs/83 §2 第 4 条），不在禁单里。
  *
@@ -21,11 +21,21 @@ const CLOUD_PACKAGES = ['metering', 'cloud-entry', 'hosted', 'kol-cloud', 'kol-p
 /** 云端应用。 */
 const CLOUD_APPS = ['cloud', 'cloud-worker', 'cloud-admin']
 /** 开源这一侧的应用。 */
-const OPEN_APPS = ['server', 'workstation', 'desktop', 'cli', 'extension']
+const OPEN_APPS = ['server', 'workstation', 'desktop', 'cli', 'extension', 'site']
 
 const FORBIDDEN_NAMES = [...CLOUD_PACKAGES, ...CLOUD_APPS].map((n) => `@agentsws/${n}`)
-const CODE = /\.(?:[cm]?[jt]sx?)$/u
-const SKIP = new Set(['node_modules', 'dist', 'build', 'out', '.vite', 'coverage', 'release'])
+const CODE = /\.(?:[cm]?[jt]sx?|astro)$/u
+const SKIP = new Set([
+  'node_modules',
+  'dist',
+  'dist-types',
+  'build',
+  'out',
+  '.vite',
+  '.astro',
+  'coverage',
+  'release',
+])
 
 /** 开源这一侧的包目录（相对仓库根）。 */
 function openSideDirs(root = ROOT) {

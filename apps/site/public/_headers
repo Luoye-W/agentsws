@@ -1,0 +1,15 @@
+# Cloudflare Workers 静态资源的响应头（WP197）。官网是纯静态、零表单、零第三方脚本，所以 CSP 能收得很紧。
+# 脚本与样式允许内联：Astro 把那一小段站内脚本与每页 CSS 直接内联进 HTML（少一个阻塞请求）。
+/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: camera=(), microphone=(), geolocation=(), interest-cohort=()
+  X-Frame-Options: DENY
+  Content-Security-Policy: default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; font-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'none'; object-src 'none'
+
+# 构建产物的文件名带内容哈希，可以永久缓存
+/_astro/*
+  Cache-Control: public, max-age=31536000, immutable
+
+/og/*
+  Cache-Control: public, max-age=86400

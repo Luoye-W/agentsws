@@ -23,6 +23,9 @@
       "path": "apps/server"
     },
     {
+      "path": "apps/site"
+    },
+    {
       "path": "apps/workstation"
     },
     {
