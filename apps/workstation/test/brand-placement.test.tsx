@@ -28,7 +28,7 @@ const positions: PositionSummary[] = [
 ]
 
 describe('左栏顶部：标记 + 字标，点了回首页', () => {
-  it('是一条指向 / 的链接，里面一个静态标记加一个字标', () => {
+  it('是一条指向 / 的链接，里面一个待机标记加一个字标', () => {
     renderWithProviders(
       <AppShell positions={positions} cards={[]} tileLibrary={[]} onAddTile={() => {}}>
         <div>主区</div>
@@ -42,8 +42,8 @@ describe('左栏顶部：标记 + 字标，点了回首页', () => {
 
     const svg = home.querySelector('svg[data-testid="brand-mark"]')
     expect(svg).not.toBeNull()
-    // logo 是**静态**的：一直在动的 logo 是噪音
-    expect((svg as SVGElement).getAttribute('data-motion')).toBe('none')
+    // WP195：logo 改成**待机**（Luoye 09-29「静态的 logo 其实不好看」）——大部分时间静止，隔几秒动一下
+    expect((svg as SVGElement).getAttribute('data-motion')).toBe('idle')
     // 规范 §1.3 的最小可用尺寸，再小方块间的缝会并起来
     expect((svg as SVGElement).getAttribute('width')).toBe('24')
     expect((svg as SVGElement).getAttribute('data-variant')).toBe('gradient')
