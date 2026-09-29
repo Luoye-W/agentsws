@@ -173,12 +173,12 @@ describe('WP182：业务那两块带上分级与超期', () => {
         ],
       },
     } as never
-    expect((q('b2b.inquiries')?.run(ctx) as { rows: { flag: string }[] }).rows[0]?.flag).toBe(
-      '诈骗嫌疑 · 价格',
-    )
-    expect((q('b2b.samples')?.run(ctx) as { rows: { due: string }[] }).rows[0]?.due).toBe(
-      '已超 4 天',
-    )
+    expect(
+      (q('b2b.inquiries')?.run(ctx) as { rows: { flag: string }[] } | undefined)?.rows[0]?.flag,
+    ).toBe('诈骗嫌疑 · 价格')
+    expect(
+      (q('b2b.samples')?.run(ctx) as { rows: { due: string }[] } | undefined)?.rows[0]?.due,
+    ).toBe('已超 4 天')
   })
 })
 
