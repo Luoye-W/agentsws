@@ -81,7 +81,8 @@ export async function readChatStream(
     }
     for (const part of delta.tool_calls ?? []) {
       const index = part.index ?? reply.tool_calls.length
-      const slot = (reply.tool_calls[index] ??= { arguments: '' })
+      const slot = reply.tool_calls[index] ?? { arguments: '' }
+      reply.tool_calls[index] = slot
       if (part.id !== undefined) slot.id = part.id
       if (part.function?.name !== undefined) slot.name = (slot.name ?? '') + part.function.name
       if (part.function?.arguments !== undefined) slot.arguments += part.function.arguments

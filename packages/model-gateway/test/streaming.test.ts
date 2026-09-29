@@ -99,7 +99,7 @@ describe('WP188 OpenAI 兼容口流式', () => {
     expect(out.stopped).toBeUndefined()
     const usage = rec.ofType('model.usage')
     expect(usage).toHaveLength(1)
-    expect((usage[0]?.payload as { purpose: string }).purpose).toBe('free_chat')
+    expect((usage[0]?.payload as { purpose: string } | undefined)?.purpose).toBe('free_chat')
   })
 
   it('流式里的工具调用按 index 拼回一整条（与非流式同形）', async () => {
