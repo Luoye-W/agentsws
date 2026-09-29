@@ -26,10 +26,11 @@ actors:
 stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
 clock: { start: '2026-09-07T09:00:00+08:00' }
 events:
+  # WP191（docs/86 §6）：`social.meta` 拆开之后，这条评论在 IG 上（pack 里挂的老分配迁出来的 IG 那条）
   - at: '+0m'
     social.reply:
       who: p_li
-      channel: meta
+      channel: instagram
       author: tinaq
       surface: comment
       text: 这个充电器太好用了，已经推荐给我同事了。

@@ -17,18 +17,20 @@ actors: {}
 stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
 clock: { start: '2026-09-15T09:00:00+08:00' }
 events:
-  # ① 第一条：排在周四下午两点
+  # ① 第一条：排在周四下午两点。
+  # WP191（docs/86 §6）：冯萱挂的老 `social.meta` 在装配时拆成 FB 主页 + IG；两条都发在 FB 主页上。
+  # FB 主页的每日上限是 2（docs/86 §3.1），两条正好不超——这条题钉的仍然只是"挨得太近"
   - at: '+0m'
     social.post:
       who: p_feng
-      channel: meta
+      channel: facebook
       body: 周四晚八点开一场桌面收纳直播，来的人送线材收纳夹。
       scheduled_at: '2026-09-17T06:00:00.000Z'
   # ② 第二条：同一个号、半小时之后 —— 撞了
   - at: '+10m'
     social.post:
       who: p_feng
-      channel: meta
+      channel: facebook
       body: 新到的桌面支架，三个角度都能调。
       scheduled_at: '2026-09-17T06:30:00.000Z'
   - at: '+4h'
