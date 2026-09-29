@@ -92,8 +92,41 @@ export interface ExtensionStore {
   }): { ok: true; issued: RedeemedToken } | { ok: false; reason: RedeemFailure }
   list(workspace_id: WorkspaceId): ExtensionTokenView[]
   revoke(workspace_id: WorkspaceId, id: string): ExtensionTokenView | undefined
-  /** 令牌 + Origin 双校验；通过就顺手记一次 `last_used_at`。 */
-  authenticate(raw: string, origin: string | undefined): ExtensionSession | undefined
+  /**
+   * 令牌 + Origin 双校验；通过就顺手记一次 `last_used_at`。
+   *
+   * WP201：第三个参数（可选，只加）是浏览器写的 `Sec-Fetch-Site`。没有 Origin 时
+   * 只有它是 `none`（浏览器说「这不是网页发的」）才继续验令牌——见
+   * {@link browserSaysExtensionRequest}。
+   */
+  authenticate(
+    raw: string,
+    origin: string | undefined,
+    fetchSite?: string | undefined,
+  ): ExtensionSession | undefined
+}
+
+/**
+ * WP201：**没有 Origin 的扩展请求**认不认。
+ *
+ * 真 Chrome 撞出来的：扩展在 manifest 里拿了 `http://127.0.0.1/*` 的 host 权限，
+ * 它发的请求响应污染是 basic，按 Fetch 规范 **GET / HEAD 不加 Origin**（POST 照加）。
+ * 于是 hello / setup / report / reveal-pricing 这些 GET 在真浏览器里一律 401，
+ * 面板说「这把配对已经不能用了」——而单测里一直手塞 Origin，从来没撞上。
+ *
+ * 放行的条件是**浏览器自己说**这不是网页发的：没有 Origin，并且 `Sec-Fetch-Site: none`。
+ * `Sec-Fetch-*` 与 Origin 一样是禁止头，网页脚本改不了；网页发的跨源请求一定带
+ * Origin、`Sec-Fetch-Site` 是 cross-site / same-site，永远到不了这里。
+ *
+ * 这一条**没有**比原来更松：本机上的别的进程（curl）本来就能伪造任意 Origin，
+ * 「Origin 绑扩展 id」挡的一直是浏览器里的网页，而这一条网页仍然过不来。
+ * 有 Origin 的请求照旧必须是配对时那个扩展（令牌搬进别的扩展，POST 仍然不认）。
+ */
+export function browserSaysExtensionRequest(
+  origin: string | undefined,
+  fetchSite: string | undefined,
+): boolean {
+  return (origin === undefined || origin.trim() === '') && fetchSite?.trim() === 'none'
 }
 
 /** `chrome-extension://abc/` → `abc`；不是扩展 Origin 就 undefined。 */
@@ -272,17 +305,23 @@ export class MemoryExtensionStore implements ExtensionStore {
     return viewOf(row)
   }
 
-  authenticate(raw: string, origin: string | undefined): ExtensionSession | undefined {
+  authenticate(
+    raw: string,
+    origin: string | undefined,
+    fetchSite?: string | undefined,
+  ): ExtensionSession | undefined {
     const token = raw.startsWith('Bearer ') ? raw.slice('Bearer '.length).trim() : raw.trim()
     if (token === '') return undefined
     const extension_id = extensionIdOfOrigin(origin)
-    if (extension_id === undefined) return undefined
+    // WP201：没有 Origin 只在浏览器说「不是网页发的」时继续（扩展的 GET）
+    if (extension_id === undefined && !browserSaysExtensionRequest(origin, fetchSite))
+      return undefined
     const hash = sha256(token)
     const row = this.#tokens.find((r) => fixedTimeEquals(r.token_hash, hash))
     if (row === undefined) return undefined
     if (row.revoked_at !== undefined) return undefined
     // Origin 与令牌绑的那个扩展不是一个 = 这把令牌被搬到别的扩展里去了，不认。
-    if (row.extension_id !== extension_id) return undefined
+    if (extension_id !== undefined && row.extension_id !== extension_id) return undefined
     if (Date.parse(row.expires_at) <= this.#nowMs()) return undefined
     row.last_used_at = this.options.clock.now()
     return {

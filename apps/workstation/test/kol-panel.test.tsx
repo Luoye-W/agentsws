@@ -294,6 +294,16 @@ describe('WP68 红人岗位面板', () => {
     expect(channelOfRole('kol.wechat')).toBeUndefined()
   })
 
+  it('WP201：插件收进来的 YouTube handle 自带 @，清单上只显示一个 @（不是 @@TheTechReviewer）', async () => {
+    getKolCreators.mockResolvedValueOnce({
+      rows: [{ ...(LIBRARY[0] as KolCreatorRowData), handle: '@TheTechReviewer' }],
+    })
+    renderWithProviders(<KolPanel assignment="asg_yt" channel="youtube" />)
+    const [row] = await screen.findAllByTestId('kol-library-row')
+    expect(row?.textContent).toContain('@TheTechReviewer')
+    expect(row?.textContent).not.toContain('@@')
+  })
+
   it('找人清单：刷粉那条的理由写在清单上，不悄悄拿掉', async () => {
     renderWithProviders(<KolPanel assignment="asg_yt" channel="youtube" />)
     expect(await screen.findAllByTestId('kol-library-row')).toHaveLength(2)

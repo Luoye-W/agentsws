@@ -39,6 +39,7 @@ export {
  * `createMemoryExtensionStore` 建那张表，拿 `ExtensionPort` 装配它的实现。
  */
 export {
+  browserSaysExtensionRequest,
   createMemoryExtensionStore,
   EXTENSION_SCOPES,
   EXTENSION_TOKEN_TTL_MS,

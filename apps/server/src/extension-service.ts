@@ -51,7 +51,7 @@ import type {
   PlatformAccount,
   WorkspaceId,
 } from '@agentsws/contracts'
-import { KOL_LOOKUP_CAPABILITY } from '@agentsws/contracts'
+import { KOL_REVEAL_CAPABILITY } from '@agentsws/contracts'
 import { type PublicLibraryClient, scoreCreator } from '@agentsws/kol-core'
 import type {
   KolAccountObservation,
@@ -77,7 +77,18 @@ import type { SecretStore } from './secret-store.js'
  */
 export interface PublicLibraryContributor {
   linked(): boolean
-  contribute(rows: readonly PublicObservationRow[]): Promise<{ accepted: number }>
+  /**
+   * 送一批红人观测。`accepted` 是云端回 2xx 的条数。
+   *
+   * WP201（只加）：`onEach` 每送完一行回调一次（HTTP 状态，0 = 网络不通），本机据此
+   * 在插件那一跳的等待时限内报「已确认几条」；`failed` 是没进去的那几行与状态，
+   * 本机据此决定重试（断网 / 408 / 429 / 5xx）还是放弃（云端明确不收）。
+   * 老实现不回 `failed` = 不重试（与 WP201 之前一样）。
+   */
+  contribute(
+    rows: readonly PublicObservationRow[],
+    onEach?: (row: PublicObservationRow, status: number) => void,
+  ): Promise<{ accepted: number; failed?: { row: PublicObservationRow; status: number }[] }>
   /** 云端 reveal：明文只在这一次回执里出现，调用方马上写进本机加密库。 */
   reveal?(key: { channel: KolChannel; handle: string }): Promise<
     | { ok: true; email: string; source?: string; at?: string; credits: number }
@@ -183,7 +194,7 @@ export interface ExtensionServiceOptions {
    */
   workbenchUrl?: () => string | undefined
   /**
-   * WP119c：看一次邮箱的积分价（`pricing.json` 的 `data.kol.lookup`）。
+   * WP119c：看一次邮箱的积分价（WP201 起取 `pricing.json` 的 `data.kol.reveal`，见 {@link REVEAL_PRICE_CAPABILITY}）。
    * 价目是数据不是代码，所以这里只要一个取数的函数。
    */
   revealPriceCredits?: () => number
@@ -194,7 +205,39 @@ export interface ExtensionServiceOptions {
   auditor?: Pick<PublicLibraryClient, 'linked' | 'audit'> | undefined
   /** WP131：体检一次的积分价（`pricing.json` 的 `data.kol.audit`；面板常显「每位约 N 积分」）。 */
   auditPriceCredits?: () => number
+  /**
+   * WP201：本机为公共库那一跳**最多等多久**再回插件（毫秒，默认 {@link FORWARD_WAIT_MS}）。
+   * 插件打本机只等 8 秒；到点没送完的在后台接着送，回执照实报「还有几条在路上」。
+   */
+  forwardWaitMs?: number
+  /** WP201：没送成（断网 / 408 / 429 / 5xx）的行隔多久重试；数组长度 = 最多重试几次。 */
+  forwardRetryDelaysMs?: readonly number[]
+  /** WP201：每一轮公共库转发记一行（几条 2xx、几条待重试、几条云端不收）。不给就不记。 */
+  log?: (line: string) => void
 }
+
+/** WP201：插件那一跳为公共库最多等 4 秒（插件自己等 8 秒，留足本机写库的余量）。 */
+export const FORWARD_WAIT_MS = 4_000
+
+/** WP201：重试间隔（30 秒、2 分、10 分、30 分、2 小时；之后放弃——本机那一半早写好了，下次再采会再送）。 */
+export const FORWARD_RETRY_DELAYS_MS: readonly number[] = [
+  30_000, 120_000, 600_000, 1_800_000, 7_200_000,
+]
+
+/** WP201：排着等重试的最多留多少行（断网一整天也不会把内存吃光；超了丢最老的并记一行）。 */
+export const FORWARD_RETRY_MAX_ROWS = 2_000
+
+/** WP201：哪些失败值得重试——断网（0）、超时、限流、云端 5xx。400 / 401 / 403 / 404 重试也没用。 */
+export function forwardRetryable(status: number): boolean {
+  return status === 0 || status === 408 || status === 429 || status >= 500
+}
+
+/**
+ * WP201：插件「获取邮箱」按钮上报的价是**哪一条能力**的价——云端取邮箱真扣的那一条
+ * （`data.kol.reveal`，09-23 从 lookup 里单开）。以前报的是 `data.kol.lookup`（搜索的价），
+ * 按钮写 0.2、点下去扣 0.8。装配（server.ts）按这个常量取价，两处只有这一个真源。
+ */
+export const REVEAL_PRICE_CAPABILITY = KOL_REVEAL_CAPABILITY
 
 /** WP131：同一个人 30 天内体检过就不再自动体检（不为同一个结论花两次钱）。 */
 export const AUTO_AUDIT_FRESH_DAYS = 30
@@ -203,6 +246,8 @@ export const AUTO_AUDIT_FRESH_DAYS = 30
 export type ExtensionService = ExtensionPort & {
   /** 自动评分队列跑完（没在跑就立刻返回）。只给测试与关停用。 */
   autoScoreIdle(): Promise<void>
+  /** WP201：公共库转发（含排着的重试）全部了结。只给测试与关停用。 */
+  publicForwardIdle(): Promise<void>
 }
 
 /**
@@ -658,6 +703,97 @@ export function createExtensionService(options: ExtensionServiceOptions): Extens
     return stillOut
   }
 
+  /* ── WP201：公共库转发——不卡插件那一跳，没送成的补 ────────────────────
+   *
+   * 真跑出来的：一行一个请求、一个接一个、等全部回来才回插件；线上往返 3–6.5 秒，
+   * 列表页一块 20 行要一分钟，插件 8 秒就当「应用没开」整块排队重发。
+   * 现在：送的事交给 `forward`（并发在 contributor 那一侧），ingest 最多等
+   * `forwardWaitMs`；没送完的后台接着送；断网 / 5xx 退避重试，云端明确不收的不重试。
+   */
+  const forwardWait = options.forwardWaitMs ?? FORWARD_WAIT_MS
+  const retryDelays = options.forwardRetryDelaysMs ?? FORWARD_RETRY_DELAYS_MS
+  interface RetryRow {
+    row: PublicObservationRow
+    /** 已经重试过几次（第一次送不算）。 */
+    retries: number
+  }
+  const retryRows: RetryRow[] = []
+  let retryTimer: ReturnType<typeof setTimeout> | undefined
+  const forwarding = new Set<Promise<unknown>>()
+  const say = (line: string): void => {
+    options.log?.(`[公共红人库] ${line}`)
+  }
+
+  /** 送一批（第一次或重试），按结果记日志、排重试。`retries` = 这批已经重试过几次。 */
+  function forward(
+    rows: readonly PublicObservationRow[],
+    retries: number,
+    onEach?: (row: PublicObservationRow, status: number) => void,
+  ): Promise<number> {
+    const cloud = options.publicLibrary
+    if (cloud === undefined || rows.length === 0) return Promise.resolve(0)
+    const job = (async () => {
+      let out: Awaited<ReturnType<PublicLibraryContributor['contribute']>>
+      try {
+        out = await cloud.contribute(rows, onEach)
+      } catch {
+        // contributor 自己不抛；万一抛了，当整批断网处理
+        out = { accepted: 0, failed: rows.map((row) => ({ row, status: 0 })) }
+      }
+      const failed = out.failed ?? []
+      const again = failed.filter((f) => forwardRetryable(f.status))
+      const refused = failed.filter((f) => !forwardRetryable(f.status))
+      const canRetry = retries < retryDelays.length
+      const parts = [
+        `${retries === 0 ? '转发' : `第 ${String(retries)} 次重试`} ${String(rows.length)} 条：2xx ${String(out.accepted)}`,
+      ]
+      if (again.length > 0)
+        parts.push(
+          canRetry
+            ? `待重试 ${String(again.length)}（${statusList(again)}）`
+            : `放弃 ${String(again.length)}（${statusList(again)}，重试 ${String(retries)} 次都没成）`,
+        )
+      if (refused.length > 0)
+        parts.push(`云端不收 ${String(refused.length)}（${statusList(refused)}）`)
+      say(parts.join('，'))
+      if (again.length > 0 && canRetry)
+        scheduleRetry(
+          again.map((f) => ({ row: f.row, retries: retries + 1 })),
+          retryDelays[retries] ?? 0,
+        )
+      return out.accepted
+    })()
+    forwarding.add(job)
+    void job.finally(() => forwarding.delete(job))
+    return job
+  }
+
+  function statusList(rows: readonly { status: number }[]): string {
+    const seen = [
+      ...new Set(rows.map((r) => (r.status === 0 ? '断网' : `HTTP ${String(r.status)}`))),
+    ]
+    return seen.join(' / ')
+  }
+
+  function scheduleRetry(rows: readonly RetryRow[], delayMs: number): void {
+    retryRows.push(...rows)
+    const over = retryRows.length - FORWARD_RETRY_MAX_ROWS
+    if (over > 0) {
+      retryRows.splice(0, over)
+      say(`排着重试的太多，丢了最老的 ${String(over)} 条（本机那一半都在，下次再采会再送）`)
+    }
+    if (retryTimer !== undefined) return
+    retryTimer = setTimeout(() => {
+      retryTimer = undefined
+      // 同一轮里重试次数一样的并成一批送
+      const due = retryRows.splice(0)
+      const byRetries = new Map<number, PublicObservationRow[]>()
+      for (const r of due) byRetries.set(r.retries, [...(byRetries.get(r.retries) ?? []), r.row])
+      for (const [n, batch] of byRetries) void forward(batch, n)
+    }, delayMs)
+    retryTimer.unref?.()
+  }
+
   return {
     store: options.store,
 
@@ -753,13 +889,31 @@ export function createExtensionService(options: ExtensionServiceOptions): Extens
         void session
         return { rows, forwarded_to_public_library: 0, ...extra }
       }
-      try {
-        const out = await cloud.contribute(forwardable)
-        return { rows, forwarded_to_public_library: out.accepted, ...extra }
-      } catch {
-        // 云那一跳挂了不影响本机那一半：数据已经在用户自己的电脑上了。
-        // 回执里如实报 0，插件卡片上就不会说"共享了几条"。
-        return { rows, forwarded_to_public_library: 0, ...extra }
+      /*
+       * WP201：最多等 `forwardWait`。到点还没送完就先回插件——回执照实报确认了几条、
+       * 还有几条在路上（后台接着送、失败的退避重试）。云那一跳挂了不影响本机那一半。
+       */
+      let confirmed = 0
+      let settled = 0
+      const job = forward(forwardable, 0, (_row, status) => {
+        settled += 1
+        if (status >= 200 && status < 300) confirmed += 1
+      })
+      let timer: ReturnType<typeof setTimeout> | undefined
+      const finished = await Promise.race([
+        job,
+        new Promise<undefined>((resolve) => {
+          timer = setTimeout(() => resolve(undefined), forwardWait)
+        }),
+      ])
+      if (timer !== undefined) clearTimeout(timer)
+      // 送完了：以 contributor 回的 2xx 条数为准（老实现不逐行回调）
+      if (finished !== undefined) return { rows, forwarded_to_public_library: finished, ...extra }
+      return {
+        rows,
+        forwarded_to_public_library: confirmed,
+        public_library_pending: forwardable.length - settled,
+        ...extra,
       }
     },
 
@@ -865,7 +1019,7 @@ export function createExtensionService(options: ExtensionServiceOptions): Extens
     revealPricing: (session): ExtensionRevealPricing => {
       void session
       return {
-        capability: KOL_LOOKUP_CAPABILITY,
+        capability: REVEAL_PRICE_CAPABILITY,
         credits_per_reveal: revealPrice(),
         free_window_days: REVEAL_FREE_WINDOW_DAYS,
         note: '看一次公共库里的商务邮箱的积分价（查看不扣分，真取才扣）。本机已有的邮箱再也不会扣——已经是你自己的了。',
@@ -1187,6 +1341,14 @@ export function createExtensionService(options: ExtensionServiceOptions): Extens
 
     autoScoreIdle: async (): Promise<void> => {
       while (draining !== undefined) await draining
+    },
+
+    publicForwardIdle: async (): Promise<void> => {
+      // 在路上的送完、排着的重试也到点送完（重试有上限，所以这里一定会停）
+      while (forwarding.size > 0 || retryRows.length > 0 || retryTimer !== undefined) {
+        if (forwarding.size > 0) await Promise.allSettled([...forwarding])
+        else await new Promise((r) => setTimeout(r, 5))
+      }
     },
 
     seedSignature: (session, key): ExtensionSeedSignature | undefined => {

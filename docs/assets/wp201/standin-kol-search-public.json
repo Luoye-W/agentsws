@@ -1,0 +1,27 @@
+{
+ "http": "HTTP 200",
+ "data": {
+  "ok": true,
+  "source": "public_library",
+  "rows": [
+   {
+    "channel": "youtube",
+    "handle": "thetechreviewer",
+    "url": "https://www.youtube.com/@thetechreviewer",
+    "display_name": "thetechreviewer",
+    "followers": 36000,
+    "engagement_rate": 0,
+    "has_contact": false,
+    "in_library": true
+   }
+  ],
+  "reveal_price": {
+   "capability": "data.kol.reveal",
+   "credits": 0.8,
+   "unit": "call",
+   "note": "搜索按次收（界面上常显单价）；取回一个邮箱这一步扣 0.8 积分。库里没有联系方式不收钱。"
+  },
+  "source_label": "公共红人库"
+ },
+ "trace_id": "02aa32fa471574c11437074f4ffac270"
+}

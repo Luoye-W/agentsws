@@ -73,6 +73,12 @@ export interface ExtensionIngestResult {
   /** 这一批里有几条同时转发去了云端公共红人库（未登录 = 0）。 */
   forwarded_to_public_library: number
   /**
+   * WP201（只加）：**还在路上的条数**。本机为公共库那一跳最多等几秒就先回插件
+   * （插件自己只等 8 秒），没送完的后台接着送、断网 / 5xx 退避重试。
+   * 全部送完了（或者没登录、没有要送的）就没有这一格。
+   */
+  public_library_pending?: number
+  /**
    * WP131（只加）：**这次采集批次的 id**（`bt_…`）。插件一次列表采集按 20 条分块发，
    * 第一块不带 `batch_id`、服务端发一个新的；后面几块把它原样带上，同一批就落在同一个
    * 批次里。「回作战室看这批」深链 `/influencer/creators?batch=<id>` 拿它筛。
@@ -156,7 +162,7 @@ export interface ExtensionPort {
     session: ExtensionSession,
     key: ExtensionCreatorKey,
   ): MaybePromise<ExtensionCreatorReport | undefined>
-  /** 看一次邮箱的积分价（**不消耗**；价取 `pricing.json` 的 `data.kol.lookup`）。 */
+  /** 看一次邮箱的积分价（**不消耗**；WP201 起价取 `pricing.json` 的 `data.kol.reveal`——云端真扣的那一条）。 */
   revealPricing(session: ExtensionSession): MaybePromise<ExtensionRevealPricing>
   /** 公共库 reveal（本机代理云端；计费在服务端，余额不足回人话不回裸码）。 */
   contactLookup(
@@ -487,7 +493,12 @@ function portOf(deps: GatewayDeps): ExtensionPort {
  */
 function sessionOf(c: Parameters<Route['handler']>[0], deps: GatewayDeps): ExtensionSession {
   const raw = c.req.header('Authorization') ?? ''
-  const session = portOf(deps).store.authenticate(raw, c.req.header('Origin'))
+  // WP201：Sec-Fetch-Site 一并交给闸（真 Chrome 的扩展 GET 不带 Origin，见 browserSaysExtensionRequest）
+  const session = portOf(deps).store.authenticate(
+    raw,
+    c.req.header('Origin'),
+    c.req.header('Sec-Fetch-Site'),
+  )
   if (session === undefined)
     throw new ApiError(
       'unauthenticated',
@@ -898,7 +909,7 @@ export function extensionRoutes(): Route[] {
         method: 'get',
         path: '/v1/extension/reveal-pricing',
         operationId: 'extensionRevealPricing',
-        summary: '看一次邮箱的积分价（不消耗；价取 pricing.json 的 data.kol.lookup）',
+        summary: '看一次邮箱的积分价（不消耗；价取 pricing.json 的 data.kol.reveal）',
         tag: 'extension',
         auth: 'public',
         returns: 'ExtensionRevealPricing',

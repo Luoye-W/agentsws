@@ -1,0 +1,348 @@
+[
+ {
+  "at": "2026-09-29T15:14:48.151Z",
+  "method": "GET",
+  "path": "/v1/extension/hello",
+  "status": 401,
+  "receipt": "插件令牌无效、已撤销、已过期，或不是从配对时那个扩展发来的"
+ },
+ {
+  "at": "2026-09-29T15:18:48.299Z",
+  "method": "GET",
+  "path": "/v1/extension/reveal-pricing",
+  "status": 401,
+  "receipt": "插件令牌无效、已撤销、已过期，或不是从配对时那个扩展发来的"
+ },
+ {
+  "at": "2026-09-29T15:18:48.301Z",
+  "method": "GET",
+  "path": "/v1/extension/setup",
+  "status": 401,
+  "receipt": "插件令牌无效、已撤销、已过期，或不是从配对时那个扩展发来的"
+ },
+ {
+  "at": "2026-09-29T15:18:48.307Z",
+  "method": "GET",
+  "path": "/v1/extension/hello",
+  "status": 401,
+  "receipt": "插件令牌无效、已撤销、已过期，或不是从配对时那个扩展发来的"
+ },
+ {
+  "at": "2026-09-29T15:20:01.758Z",
+  "method": "GET",
+  "path": "/v1/extension/reveal-pricing",
+  "status": 401,
+  "receipt": "插件令牌无效、已撤销、已过期，或不是从配对时那个扩展发来的"
+ },
+ {
+  "at": "2026-09-29T15:20:01.758Z",
+  "method": "GET",
+  "path": "/v1/extension/setup",
+  "status": 401,
+  "receipt": "插件令牌无效、已撤销、已过期，或不是从配对时那个扩展发来的"
+ },
+ {
+  "at": "2026-09-29T15:20:01.758Z",
+  "method": "GET",
+  "path": "/v1/extension/hello",
+  "status": 401,
+  "receipt": "插件令牌无效、已撤销、已过期，或不是从配对时那个扩展发来的"
+ },
+ {
+  "at": "2026-09-29T15:20:08.238Z",
+  "method": "POST",
+  "path": "/v1/extension/observations",
+  "status": 200,
+  "sent": [
+   {
+    "channel": "youtube",
+    "handle": "@TheTechReviewer",
+    "followers": 36000,
+    "source": "channel_page"
+   }
+  ],
+  "receipt": {
+   "rows": [
+    {
+     "handle": "@TheTechReviewer",
+     "status": "deduped",
+     "creator_id": "cr_02jqm911"
+    }
+   ],
+   "forwarded_to_public_library": 1
+  },
+  "seconds": 6.49
+ },
+ {
+  "at": "2026-09-29T15:20:08.250Z",
+  "method": "GET",
+  "path": "/v1/extension/creators/youtube/UCHxA_q3cXYYx8d1svHkFRZw/report",
+  "status": 401,
+  "receipt": "插件令牌无效、已撤销、已过期，或不是从配对时那个扩展发来的"
+ },
+ {
+  "at": "2026-09-29T15:22:41.341Z",
+  "method": "GET",
+  "path": "/v1/extension/reveal-pricing",
+  "status": 401,
+  "receipt": "插件令牌无效、已撤销、已过期，或不是从配对时那个扩展发来的"
+ },
+ {
+  "at": "2026-09-29T15:22:41.342Z",
+  "method": "GET",
+  "path": "/v1/extension/setup",
+  "status": 401,
+  "receipt": "插件令牌无效、已撤销、已过期，或不是从配对时那个扩展发来的"
+ },
+ {
+  "at": "2026-09-29T15:22:41.342Z",
+  "method": "GET",
+  "path": "/v1/extension/hello",
+  "status": 401,
+  "receipt": "插件令牌无效、已撤销、已过期，或不是从配对时那个扩展发来的"
+ },
+ {
+  "at": "2026-09-29T15:22:44.985Z",
+  "method": "POST",
+  "path": "/v1/extension/observations",
+  "status": 200,
+  "sent": [
+   {
+    "channel": "youtube",
+    "handle": "@MobileReviewsEh",
+    "followers": 546000,
+    "source": "channel_page"
+   }
+  ],
+  "receipt": {
+   "rows": [
+    {
+     "handle": "@MobileReviewsEh",
+     "status": "ok",
+     "creator_id": "cr_0iicssc5"
+    }
+   ],
+   "forwarded_to_public_library": 1
+  },
+  "seconds": 3.67
+ },
+ {
+  "at": "2026-09-29T15:22:44.994Z",
+  "method": "GET",
+  "path": "/v1/extension/creators/youtube/UC1hiI8TEoA0db5HhU4gbsUg/report",
+  "status": 401,
+  "receipt": "插件令牌无效、已撤销、已过期，或不是从配对时那个扩展发来的"
+ },
+ {
+  "at": "2026-09-29T15:24:22.617Z",
+  "method": "GET",
+  "path": "/v1/extension/reveal-pricing",
+  "status": 401,
+  "receipt": "插件令牌无效、已撤销、已过期，或不是从配对时那个扩展发来的"
+ },
+ {
+  "at": "2026-09-29T15:24:22.618Z",
+  "method": "GET",
+  "path": "/v1/extension/setup",
+  "status": 401,
+  "receipt": "插件令牌无效、已撤销、已过期，或不是从配对时那个扩展发来的"
+ },
+ {
+  "at": "2026-09-29T15:24:22.619Z",
+  "method": "GET",
+  "path": "/v1/extension/hello",
+  "status": 401,
+  "receipt": "插件令牌无效、已撤销、已过期，或不是从配对时那个扩展发来的"
+ },
+ {
+  "at": "2026-09-29T15:24:25.466Z",
+  "method": "POST",
+  "path": "/v1/extension/observations",
+  "status": 200,
+  "sent": [
+   {
+    "channel": "youtube",
+    "handle": "@T3CHUP",
+    "followers": 9960,
+    "source": "channel_page"
+   }
+  ],
+  "receipt": {
+   "rows": [
+    {
+     "handle": "@T3CHUP",
+     "status": "ok",
+     "creator_id": "cr_0nystt58"
+    }
+   ],
+   "forwarded_to_public_library": 1
+  },
+  "seconds": 2.87
+ },
+ {
+  "at": "2026-09-29T15:24:25.472Z",
+  "method": "GET",
+  "path": "/v1/extension/creators/youtube/UCwbDsOqt0uHPhQpBIEMkGwg/report",
+  "status": 401,
+  "receipt": "插件令牌无效、已撤销、已过期，或不是从配对时那个扩展发来的"
+ },
+ {
+  "at": "2026-09-29T15:26:02.418Z",
+  "method": "GET",
+  "path": "/v1/extension/reveal-pricing",
+  "status": 401,
+  "receipt": "插件令牌无效、已撤销、已过期，或不是从配对时那个扩展发来的"
+ },
+ {
+  "at": "2026-09-29T15:26:02.419Z",
+  "method": "GET",
+  "path": "/v1/extension/setup",
+  "status": 401,
+  "receipt": "插件令牌无效、已撤销、已过期，或不是从配对时那个扩展发来的"
+ },
+ {
+  "at": "2026-09-29T15:26:02.419Z",
+  "method": "GET",
+  "path": "/v1/extension/hello",
+  "status": 401,
+  "receipt": "插件令牌无效、已撤销、已过期，或不是从配对时那个扩展发来的"
+ },
+ {
+  "at": "2026-09-29T15:26:05.446Z",
+  "method": "POST",
+  "path": "/v1/extension/observations",
+  "status": 200,
+  "sent": [
+   {
+    "channel": "youtube",
+    "handle": "@ZubairRaz",
+    "followers": 27500,
+    "source": "channel_page"
+   }
+  ],
+  "receipt": {
+   "rows": [
+    {
+     "handle": "@ZubairRaz",
+     "status": "ok",
+     "creator_id": "cr_1xdb087b"
+    }
+   ],
+   "forwarded_to_public_library": 1
+  },
+  "seconds": 3.04
+ },
+ {
+  "at": "2026-09-29T15:26:05.451Z",
+  "method": "GET",
+  "path": "/v1/extension/creators/youtube/UC80Sn5qNUZA628m5NUck5JQ/report",
+  "status": 401,
+  "receipt": "插件令牌无效、已撤销、已过期，或不是从配对时那个扩展发来的"
+ },
+ {
+  "at": "2026-09-29T15:27:45.632Z",
+  "method": "GET",
+  "path": "/v1/extension/reveal-pricing",
+  "status": 401,
+  "receipt": "插件令牌无效、已撤销、已过期，或不是从配对时那个扩展发来的"
+ },
+ {
+  "at": "2026-09-29T15:27:45.633Z",
+  "method": "GET",
+  "path": "/v1/extension/setup",
+  "status": 401,
+  "receipt": "插件令牌无效、已撤销、已过期，或不是从配对时那个扩展发来的"
+ },
+ {
+  "at": "2026-09-29T15:27:45.633Z",
+  "method": "GET",
+  "path": "/v1/extension/hello",
+  "status": 401,
+  "receipt": "插件令牌无效、已撤销、已过期，或不是从配对时那个扩展发来的"
+ },
+ {
+  "at": "2026-09-29T15:27:48.708Z",
+  "method": "POST",
+  "path": "/v1/extension/observations",
+  "status": 200,
+  "sent": [
+   {
+    "channel": "youtube",
+    "handle": "@PowerBankExpert",
+    "followers": 2800,
+    "source": "channel_page"
+   }
+  ],
+  "receipt": {
+   "rows": [
+    {
+     "handle": "@PowerBankExpert",
+     "status": "ok",
+     "creator_id": "cr_17usnrte"
+    }
+   ],
+   "forwarded_to_public_library": 1
+  },
+  "seconds": 3.18
+ },
+ {
+  "at": "2026-09-29T15:27:48.717Z",
+  "method": "GET",
+  "path": "/v1/extension/creators/youtube/UC2fPsJpItupdqsNnnf2JrJQ/report",
+  "status": 401,
+  "receipt": "插件令牌无效、已撤销、已过期，或不是从配对时那个扩展发来的"
+ },
+ {
+  "at": "2026-09-29T15:29:34.471Z",
+  "method": "GET",
+  "path": "/v1/extension/reveal-pricing",
+  "status": 401,
+  "receipt": "插件令牌无效、已撤销、已过期，或不是从配对时那个扩展发来的"
+ },
+ {
+  "at": "2026-09-29T15:29:34.472Z",
+  "method": "GET",
+  "path": "/v1/extension/setup",
+  "status": 401,
+  "receipt": "插件令牌无效、已撤销、已过期，或不是从配对时那个扩展发来的"
+ },
+ {
+  "at": "2026-09-29T15:29:34.472Z",
+  "method": "GET",
+  "path": "/v1/extension/hello",
+  "status": 401,
+  "receipt": "插件令牌无效、已撤销、已过期，或不是从配对时那个扩展发来的"
+ },
+ {
+  "at": "2026-09-29T15:29:39.244Z",
+  "method": "POST",
+  "path": "/v1/extension/observations",
+  "status": 200,
+  "sent": [
+   {
+    "channel": "youtube",
+    "handle": "@TheTechReviewer",
+    "followers": 36000,
+    "source": "channel_page"
+   }
+  ],
+  "receipt": {
+   "rows": [
+    {
+     "handle": "@TheTechReviewer",
+     "status": "deduped",
+     "creator_id": "cr_02jqm911"
+    }
+   ],
+   "forwarded_to_public_library": 1
+  },
+  "seconds": 4.8
+ },
+ {
+  "at": "2026-09-29T15:29:39.248Z",
+  "method": "GET",
+  "path": "/v1/extension/creators/youtube/UCHxA_q3cXYYx8d1svHkFRZw/report",
+  "status": 401,
+  "receipt": "插件令牌无效、已撤销、已过期，或不是从配对时那个扩展发来的"
+ }
+]

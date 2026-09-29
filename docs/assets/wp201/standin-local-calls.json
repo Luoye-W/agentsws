@@ -1,0 +1,872 @@
+[
+ {
+  "at": "2026-09-29T15:54:37.722Z",
+  "method": "GET",
+  "path": "/v1/extension/hello",
+  "status": 200,
+  "receipt": "（200，略）"
+ },
+ {
+  "at": "2026-09-29T15:55:15.524Z",
+  "method": "GET",
+  "path": "/v1/extension/reveal-pricing",
+  "status": 200,
+  "receipt": "（200，略）"
+ },
+ {
+  "at": "2026-09-29T15:55:15.524Z",
+  "method": "GET",
+  "path": "/v1/extension/setup",
+  "status": 200,
+  "receipt": "（200，略）"
+ },
+ {
+  "at": "2026-09-29T15:55:15.524Z",
+  "method": "GET",
+  "path": "/v1/extension/hello",
+  "status": 200,
+  "receipt": "（200，略）"
+ },
+ {
+  "at": "2026-09-29T15:55:15.550Z",
+  "method": "GET",
+  "path": "/v1/extension/reveal-pricing",
+  "status": 200,
+  "receipt": "（200，略）"
+ },
+ {
+  "at": "2026-09-29T15:55:18.529Z",
+  "method": "POST",
+  "path": "/v1/extension/observations",
+  "status": 200,
+  "sent": [
+   {
+    "channel": "youtube",
+    "handle": "@TheTechReviewer",
+    "followers": 36000,
+    "source": "channel_page"
+   }
+  ],
+  "receipt": {
+   "rows": [
+    {
+     "handle": "@TheTechReviewer",
+     "status": "ok",
+     "creator_id": "cr_0ijx1oc1"
+    }
+   ],
+   "forwarded_to_public_library": 1
+  },
+  "seconds": 3.02
+ },
+ {
+  "at": "2026-09-29T15:55:18.536Z",
+  "method": "GET",
+  "path": "/v1/extension/creators/youtube/UCHxA_q3cXYYx8d1svHkFRZw/report",
+  "status": 200,
+  "receipt": "（200，略）"
+ },
+ {
+  "at": "2026-09-29T15:56:26.266Z",
+  "method": "GET",
+  "path": "/v1/extension/reveal-pricing",
+  "status": 200,
+  "receipt": "（200，略）"
+ },
+ {
+  "at": "2026-09-29T15:56:26.267Z",
+  "method": "GET",
+  "path": "/v1/extension/setup",
+  "status": 200,
+  "receipt": "（200，略）"
+ },
+ {
+  "at": "2026-09-29T15:56:26.267Z",
+  "method": "GET",
+  "path": "/v1/extension/hello",
+  "status": 200,
+  "receipt": "（200，略）"
+ },
+ {
+  "at": "2026-09-29T15:56:29.271Z",
+  "method": "POST",
+  "path": "/v1/extension/observations",
+  "status": 200,
+  "sent": [
+   {
+    "channel": "youtube",
+    "handle": "@MobileReviewsEh",
+    "followers": 546000,
+    "source": "channel_page"
+   }
+  ],
+  "receipt": {
+   "rows": [
+    {
+     "handle": "@MobileReviewsEh",
+     "status": "ok",
+     "creator_id": "cr_03rydp14"
+    }
+   ],
+   "forwarded_to_public_library": 1
+  },
+  "seconds": 3.01
+ },
+ {
+  "at": "2026-09-29T15:56:29.275Z",
+  "method": "GET",
+  "path": "/v1/extension/creators/youtube/UC1hiI8TEoA0db5HhU4gbsUg/report",
+  "status": 200,
+  "receipt": "（200，略）"
+ },
+ {
+  "at": "2026-09-29T15:57:38.921Z",
+  "method": "GET",
+  "path": "/v1/extension/reveal-pricing",
+  "status": 200,
+  "receipt": "（200，略）"
+ },
+ {
+  "at": "2026-09-29T15:57:38.922Z",
+  "method": "GET",
+  "path": "/v1/extension/setup",
+  "status": 200,
+  "receipt": "（200，略）"
+ },
+ {
+  "at": "2026-09-29T15:57:38.922Z",
+  "method": "GET",
+  "path": "/v1/extension/hello",
+  "status": 200,
+  "receipt": "（200，略）"
+ },
+ {
+  "at": "2026-09-29T15:57:41.933Z",
+  "method": "POST",
+  "path": "/v1/extension/observations",
+  "status": 200,
+  "sent": [
+   {
+    "channel": "youtube",
+    "handle": "@T3CHUP",
+    "followers": 9960,
+    "source": "channel_page"
+   }
+  ],
+  "receipt": {
+   "rows": [
+    {
+     "handle": "@T3CHUP",
+     "status": "ok",
+     "creator_id": "cr_12i7mdm7"
+    }
+   ],
+   "forwarded_to_public_library": 1
+  },
+  "seconds": 3.02
+ },
+ {
+  "at": "2026-09-29T15:57:41.940Z",
+  "method": "GET",
+  "path": "/v1/extension/creators/youtube/UCwbDsOqt0uHPhQpBIEMkGwg/report",
+  "status": 200,
+  "receipt": "（200，略）"
+ },
+ {
+  "at": "2026-09-29T15:58:49.353Z",
+  "method": "GET",
+  "path": "/v1/extension/reveal-pricing",
+  "status": 200,
+  "receipt": "（200，略）"
+ },
+ {
+  "at": "2026-09-29T15:58:49.353Z",
+  "method": "GET",
+  "path": "/v1/extension/setup",
+  "status": 200,
+  "receipt": "（200，略）"
+ },
+ {
+  "at": "2026-09-29T15:58:49.353Z",
+  "method": "GET",
+  "path": "/v1/extension/hello",
+  "status": 200,
+  "receipt": "（200，略）"
+ },
+ {
+  "at": "2026-09-29T15:58:52.360Z",
+  "method": "POST",
+  "path": "/v1/extension/observations",
+  "status": 200,
+  "sent": [
+   {
+    "channel": "youtube",
+    "handle": "@ZubairRaz",
+    "followers": 27500,
+    "source": "channel_page"
+   }
+  ],
+  "receipt": {
+   "rows": [
+    {
+     "handle": "@ZubairRaz",
+     "status": "ok",
+     "creator_id": "cr_0bs4nnja"
+    }
+   ],
+   "forwarded_to_public_library": 1
+  },
+  "seconds": 3.02
+ },
+ {
+  "at": "2026-09-29T15:58:52.368Z",
+  "method": "GET",
+  "path": "/v1/extension/creators/youtube/UC80Sn5qNUZA628m5NUck5JQ/report",
+  "status": 200,
+  "receipt": "（200，略）"
+ },
+ {
+  "at": "2026-09-29T15:59:59.222Z",
+  "method": "GET",
+  "path": "/v1/extension/reveal-pricing",
+  "status": 200,
+  "receipt": "（200，略）"
+ },
+ {
+  "at": "2026-09-29T15:59:59.222Z",
+  "method": "GET",
+  "path": "/v1/extension/setup",
+  "status": 200,
+  "receipt": "（200，略）"
+ },
+ {
+  "at": "2026-09-29T15:59:59.223Z",
+  "method": "GET",
+  "path": "/v1/extension/hello",
+  "status": 200,
+  "receipt": "（200，略）"
+ },
+ {
+  "at": "2026-09-29T16:00:02.233Z",
+  "method": "POST",
+  "path": "/v1/extension/observations",
+  "status": 200,
+  "sent": [
+   {
+    "channel": "youtube",
+    "handle": "@PowerBankExpert",
+    "followers": 2800,
+    "source": "channel_page"
+   }
+  ],
+  "receipt": {
+   "rows": [
+    {
+     "handle": "@PowerBankExpert",
+     "status": "ok",
+     "creator_id": "cr_0gmzoiyd"
+    }
+   ],
+   "forwarded_to_public_library": 1
+  },
+  "seconds": 3.02
+ },
+ {
+  "at": "2026-09-29T16:00:02.239Z",
+  "method": "GET",
+  "path": "/v1/extension/creators/youtube/UC2fPsJpItupdqsNnnf2JrJQ/report",
+  "status": 200,
+  "receipt": "（200，略）"
+ },
+ {
+  "at": "2026-09-29T16:06:08.369Z",
+  "method": "GET",
+  "path": "/v1/extension/setup",
+  "status": 200,
+  "receipt": "（200，略）"
+ },
+ {
+  "at": "2026-09-29T16:06:15.325Z",
+  "method": "GET",
+  "path": "/v1/extension/setup",
+  "status": 200,
+  "receipt": "（200，略）"
+ },
+ {
+  "at": "2026-09-29T16:06:15.326Z",
+  "method": "GET",
+  "path": "/v1/extension/auto-score",
+  "status": 200,
+  "receipt": "（200，略）"
+ },
+ {
+  "at": "2026-09-29T16:06:18.620Z",
+  "method": "POST",
+  "path": "/v1/extension/observations",
+  "status": 200,
+  "sent": [
+   {
+    "channel": "youtube",
+    "handle": "@MobileReviewsEh",
+    "source": "search_results"
+   },
+   {
+    "channel": "youtube",
+    "handle": "@AnkerInnovateEducate",
+    "source": "search_results"
+   },
+   {
+    "channel": "youtube",
+    "handle": "@What_Watts",
+    "source": "search_results"
+   },
+   {
+    "channel": "youtube",
+    "handle": "@adamtalkstech",
+    "source": "search_results"
+   },
+   {
+    "channel": "youtube",
+    "handle": "@TheOutdoorGearReview",
+    "source": "search_results"
+   },
+   {
+    "channel": "youtube",
+    "handle": "@TheForemostPicksof2027",
+    "source": "search_results"
+   },
+   {
+    "channel": "youtube",
+    "handle": "@OneBagTravels",
+    "source": "search_results"
+   },
+   {
+    "channel": "youtube",
+    "handle": "@LeftyMaker",
+    "source": "search_results"
+   },
+   {
+    "channel": "youtube",
+    "handle": "@TechisodeTV",
+    "source": "search_results"
+   },
+   {
+    "channel": "youtube",
+    "handle": "@PackHacker2",
+    "source": "search_results"
+   },
+   {
+    "channel": "youtube",
+    "handle": "@AlexRecommends36",
+    "source": "search_results"
+   },
+   {
+    "channel": "youtube",
+    "handle": "@TheHookUp",
+    "source": "search_results"
+   },
+   {
+    "channel": "youtube",
+    "handle": "@wwjoshdew",
+    "source": "search_results"
+   },
+   {
+    "channel": "youtube",
+    "handle": "@best5zone1",
+    "source": "search_results"
+   }
+  ],
+  "receipt": {
+   "rows": [
+    {
+     "handle": "@MobileReviewsEh",
+     "status": "deduped",
+     "creator_id": "cr_03rydp14"
+    },
+    {
+     "handle": "@AnkerInnovateEducate",
+     "status": "ok",
+     "creator_id": "cr_0zbsxrti"
+    },
+    {
+     "handle": "@What_Watts",
+     "status": "ok",
+     "creator_id": "cr_0a7lvaxl"
+    },
+    {
+     "handle": "@adamtalkstech",
+     "status": "ok",
+     "creator_id": "cr_1ldhp8ho"
+    },
+    {
+     "handle": "@TheOutdoorGearReview",
+     "status": "ok",
+     "creator_id": "cr_0tmfnatr"
+    },
+    {
+     "handle": "@TheForemostPicksof2027",
+     "status": "ok",
+     "creator_id": "cr_06kili3u"
+    },
+    {
+     "handle": "@OneBagTravels",
+     "status": "ok",
+     "creator_id": "cr_155x531x"
+    },
+    {
+     "handle": "@LeftyMaker",
+     "status": "ok",
+     "creator_id": "cr_00dkt2f10"
+    },
+    {
+     "handle": "@TechisodeTV",
+     "status": "ok",
+     "creator_id": "cr_0oqn35h13"
+    },
+    {
+     "handle": "@PackHacker2",
+     "status": "ok",
+     "creator_id": "cr_0t40ihh16"
+    },
+    {
+     "handle": "@AlexRecommends36",
+     "status": "ok",
+     "creator_id": "cr_0b8xgv119"
+    },
+    {
+     "handle": "@TheHookUp",
+     "status": "ok",
+     "creator_id": "cr_0u7xg6l1c"
+    },
+    {
+     "handle": "@wwjoshdew",
+     "status": "ok",
+     "creator_id": "cr_1s8hgah1f"
+    },
+    {
+     "handle": "@best5zone1",
+     "status": "ok",
+     "creator_id": "cr_0w0fhaz1i"
+    }
+   ],
+   "forwarded_to_public_library": 0,
+   "batch_id": "bt_1kctryvg"
+  },
+  "seconds": 0.01
+ },
+ {
+  "at": "2026-09-29T16:06:21.631Z",
+  "method": "POST",
+  "path": "/v1/extension/content-observations",
+  "status": 200,
+  "receipt": "（200，略）"
+ },
+ {
+  "at": "2026-09-29T16:06:24.639Z",
+  "method": "POST",
+  "path": "/v1/extension/content-observations",
+  "status": 200,
+  "receipt": "（200，略）"
+ },
+ {
+  "at": "2026-09-29T16:06:27.658Z",
+  "method": "POST",
+  "path": "/v1/extension/content-observations",
+  "status": 200,
+  "receipt": "（200，略）"
+ },
+ {
+  "at": "2026-09-29T16:06:30.667Z",
+  "method": "POST",
+  "path": "/v1/extension/content-observations",
+  "status": 200,
+  "receipt": "（200，略）"
+ },
+ {
+  "at": "2026-09-29T16:06:33.677Z",
+  "method": "POST",
+  "path": "/v1/extension/content-observations",
+  "status": 200,
+  "receipt": "（200，略）"
+ },
+ {
+  "at": "2026-09-29T16:06:36.688Z",
+  "method": "POST",
+  "path": "/v1/extension/content-observations",
+  "status": 200,
+  "receipt": "（200，略）"
+ },
+ {
+  "at": "2026-09-29T16:06:39.697Z",
+  "method": "POST",
+  "path": "/v1/extension/content-observations",
+  "status": 200,
+  "receipt": "（200，略）"
+ },
+ {
+  "at": "2026-09-29T16:06:42.706Z",
+  "method": "POST",
+  "path": "/v1/extension/content-observations",
+  "status": 200,
+  "receipt": "（200，略）"
+ },
+ {
+  "at": "2026-09-29T16:06:45.720Z",
+  "method": "POST",
+  "path": "/v1/extension/content-observations",
+  "status": 200,
+  "receipt": "（200，略）"
+ },
+ {
+  "at": "2026-09-29T16:06:48.732Z",
+  "method": "POST",
+  "path": "/v1/extension/content-observations",
+  "status": 200,
+  "receipt": "（200，略）"
+ },
+ {
+  "at": "2026-09-29T16:06:51.743Z",
+  "method": "POST",
+  "path": "/v1/extension/content-observations",
+  "status": 200,
+  "receipt": "（200，略）"
+ },
+ {
+  "at": "2026-09-29T16:06:54.760Z",
+  "method": "POST",
+  "path": "/v1/extension/content-observations",
+  "status": 200,
+  "receipt": "（200，略）"
+ },
+ {
+  "at": "2026-09-29T16:06:57.778Z",
+  "method": "POST",
+  "path": "/v1/extension/content-observations",
+  "status": 200,
+  "receipt": "（200，略）"
+ },
+ {
+  "at": "2026-09-29T16:07:00.788Z",
+  "method": "POST",
+  "path": "/v1/extension/content-observations",
+  "status": 200,
+  "receipt": "（200，略）"
+ },
+ {
+  "at": "2026-09-29T16:07:03.801Z",
+  "method": "POST",
+  "path": "/v1/extension/content-observations",
+  "status": 200,
+  "receipt": "（200，略）"
+ },
+ {
+  "at": "2026-09-29T16:07:06.820Z",
+  "method": "POST",
+  "path": "/v1/extension/content-observations",
+  "status": 200,
+  "receipt": "（200，略）"
+ },
+ {
+  "at": "2026-09-29T16:07:09.828Z",
+  "method": "POST",
+  "path": "/v1/extension/content-observations",
+  "status": 200,
+  "receipt": "（200，略）"
+ },
+ {
+  "at": "2026-09-29T16:07:12.845Z",
+  "method": "POST",
+  "path": "/v1/extension/content-observations",
+  "status": 200,
+  "receipt": "（200，略）"
+ },
+ {
+  "at": "2026-09-29T16:07:15.858Z",
+  "method": "POST",
+  "path": "/v1/extension/content-observations",
+  "status": 200,
+  "receipt": "（200，略）"
+ },
+ {
+  "at": "2026-09-29T16:07:18.869Z",
+  "method": "POST",
+  "path": "/v1/extension/content-observations",
+  "status": 200,
+  "receipt": "（200，略）"
+ },
+ {
+  "at": "2026-09-29T16:09:51.860Z",
+  "method": "GET",
+  "path": "/v1/extension/setup",
+  "status": 200,
+  "receipt": "（200，略）"
+ },
+ {
+  "at": "2026-09-29T16:09:59.496Z",
+  "method": "GET",
+  "path": "/v1/extension/setup",
+  "status": 200,
+  "receipt": "（200，略）"
+ },
+ {
+  "at": "2026-09-29T16:09:59.496Z",
+  "method": "GET",
+  "path": "/v1/extension/auto-score",
+  "status": 200,
+  "receipt": "（200，略）"
+ },
+ {
+  "at": "2026-09-29T16:10:06.681Z",
+  "method": "POST",
+  "path": "/v1/extension/observations",
+  "status": 200,
+  "sent": [
+   {
+    "channel": "youtube",
+    "handle": "@Ublue_official",
+    "followers": 25,
+    "followers_text": "25位订阅者",
+    "source": "search_results"
+   },
+   {
+    "channel": "youtube",
+    "handle": "@40ercrystal",
+    "followers": 2,
+    "followers_text": "2位订阅者",
+    "source": "search_results"
+   },
+   {
+    "channel": "youtube",
+    "handle": "@reviews7576",
+    "followers": 1,
+    "followers_text": "1 位订阅者",
+    "source": "search_results"
+   },
+   {
+    "channel": "youtube",
+    "handle": "@WattLogic-y1d",
+    "followers": 117,
+    "followers_text": "117位订阅者",
+    "source": "search_results"
+   },
+   {
+    "channel": "youtube",
+    "handle": "@TechAutos",
+    "followers": 3100,
+    "followers_text": "3100位订阅者",
+    "source": "search_results"
+   },
+   {
+    "channel": "youtube",
+    "handle": "@chargerharbor",
+    "followers": 2230,
+    "followers_text": "2230位订阅者",
+    "source": "search_results"
+   },
+   {
+    "channel": "youtube",
+    "handle": "@mopoint9152",
+    "followers": 45,
+    "followers_text": "45位订阅者",
+    "source": "search_results"
+   },
+   {
+    "channel": "youtube",
+    "handle": "@reviewswithluis",
+    "followers": 3,
+    "followers_text": "3位订阅者",
+    "source": "search_results"
+   },
+   {
+    "channel": "youtube",
+    "handle": "@reviewrevyoutube6921",
+    "source": "search_results"
+   },
+   {
+    "channel": "youtube",
+    "handle": "@Un-Technicalreviews",
+    "followers": 119,
+    "followers_text": "119位订阅者",
+    "source": "search_results"
+   },
+   {
+    "channel": "youtube",
+    "handle": "@techrevus",
+    "followers": 15,
+    "followers_text": "15位订阅者",
+    "source": "search_results"
+   },
+   {
+    "channel": "youtube",
+    "handle": "@1KINDReviews",
+    "followers": 1650,
+    "followers_text": "1650位订阅者",
+    "source": "search_results"
+   },
+   {
+    "channel": "youtube",
+    "handle": "@BirdsReviews",
+    "followers": 8,
+    "followers_text": "8位订阅者",
+    "source": "search_results"
+   },
+   {
+    "channel": "youtube",
+    "handle": "@dubyahMUFC",
+    "followers": 752,
+    "followers_text": "752位订阅者",
+    "source": "search_results"
+   },
+   {
+    "channel": "youtube",
+    "handle": "@captainmarksreviews4061",
+    "followers": 14100,
+    "followers_text": "1.41万位订阅者",
+    "source": "search_results"
+   },
+   {
+    "channel": "youtube",
+    "handle": "@TheReadoutReview",
+    "followers": 1500,
+    "followers_text": "1500位订阅者",
+    "source": "search_results"
+   },
+   {
+    "channel": "youtube",
+    "handle": "@TechSavingsSpot-bm4cy",
+    "followers": 1,
+    "followers_text": "1 位订阅者",
+    "source": "search_results"
+   },
+   {
+    "channel": "youtube",
+    "handle": "@Ryzzun",
+    "followers": 15900,
+    "followers_text": "1.59万位订阅者",
+    "source": "search_results"
+   },
+   {
+    "channel": "youtube",
+    "handle": "@OmnibarOfficial",
+    "followers": 5,
+    "followers_text": "5位订阅者",
+    "source": "search_results"
+   },
+   {
+    "channel": "youtube",
+    "handle": "@3-minutereviews",
+    "followers": 343,
+    "followers_text": "343位订阅者",
+    "source": "search_results"
+   }
+  ],
+  "receipt": {
+   "rows": [
+    {
+     "handle": "@Ublue_official",
+     "status": "ok",
+     "creator_id": "cr_1ucmd8t26"
+    },
+    {
+     "handle": "@40ercrystal",
+     "status": "ok",
+     "creator_id": "cr_149mvae29"
+    },
+    {
+     "handle": "@reviews7576",
+     "status": "ok",
+     "creator_id": "cr_18pvdg32c"
+    },
+    {
+     "handle": "@WattLogic-y1d",
+     "status": "ok",
+     "creator_id": "cr_1aj9xt52f"
+    },
+    {
+     "handle": "@TechAutos",
+     "status": "ok",
+     "creator_id": "cr_0mw38032i"
+    },
+    {
+     "handle": "@chargerharbor",
+     "status": "ok",
+     "creator_id": "cr_1y6t0dk2l"
+    },
+    {
+     "handle": "@mopoint9152",
+     "status": "ok",
+     "creator_id": "cr_1w9x9mo2o"
+    },
+    {
+     "handle": "@reviewswithluis",
+     "status": "ok",
+     "creator_id": "cr_0rxytnw2r"
+    },
+    {
+     "handle": "@reviewrevyoutube6921",
+     "status": "ok",
+     "creator_id": "cr_1t3kpee2u"
+    },
+    {
+     "handle": "@Un-Technicalreviews",
+     "status": "ok",
+     "creator_id": "cr_0a79k872x"
+    },
+    {
+     "handle": "@techrevus",
+     "status": "ok",
+     "creator_id": "cr_0bmgau830"
+    },
+    {
+     "handle": "@1KINDReviews",
+     "status": "ok",
+     "creator_id": "cr_1irfjjf33"
+    },
+    {
+     "handle": "@BirdsReviews",
+     "status": "ok",
+     "creator_id": "cr_0fyllo336"
+    },
+    {
+     "handle": "@dubyahMUFC",
+     "status": "ok",
+     "creator_id": "cr_0zg4dmq39"
+    },
+    {
+     "handle": "@captainmarksreviews4061",
+     "status": "ok",
+     "creator_id": "cr_1nfrhum3c"
+    },
+    {
+     "handle": "@TheReadoutReview",
+     "status": "ok",
+     "creator_id": "cr_0avpcu03f"
+    },
+    {
+     "handle": "@TechSavingsSpot-bm4cy",
+     "status": "ok",
+     "creator_id": "cr_1rauzcg3i"
+    },
+    {
+     "handle": "@Ryzzun",
+     "status": "ok",
+     "creator_id": "cr_0yh71dq3l"
+    },
+    {
+     "handle": "@OmnibarOfficial",
+     "status": "ok",
+     "creator_id": "cr_165pgg13o"
+    },
+    {
+     "handle": "@3-minutereviews",
+     "status": "ok",
+     "creator_id": "cr_04zq0gu3r"
+    }
+   ],
+   "forwarded_to_public_library": 4,
+   "public_library_pending": 15,
+   "batch_id": "bt_13v86a525"
+  },
+  "seconds": 4.01
+ }
+]

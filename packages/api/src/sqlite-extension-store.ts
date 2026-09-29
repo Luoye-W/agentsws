@@ -15,6 +15,7 @@ import type { Clock, Iso8601, PersonId, WorkspaceId } from '@agentsws/contracts'
 import type { Database as Db } from 'better-sqlite3'
 import Database from 'better-sqlite3'
 import {
+  browserSaysExtensionRequest,
   EXTENSION_SCOPES,
   EXTENSION_TOKEN_TTL_MS,
   type ExtensionSession,
@@ -249,18 +250,24 @@ export class SqliteExtensionStore implements ExtensionStore {
     return viewOf(row)
   }
 
-  authenticate(raw: string, origin: string | undefined): ExtensionSession | undefined {
+  authenticate(
+    raw: string,
+    origin: string | undefined,
+    fetchSite?: string | undefined,
+  ): ExtensionSession | undefined {
     const token = raw.startsWith('Bearer ') ? raw.slice('Bearer '.length).trim() : raw.trim()
     if (token === '') return undefined
     const extension_id = extensionIdOfOrigin(origin)
-    if (extension_id === undefined) return undefined
+    // WP201：没有 Origin 只在浏览器说「不是网页发的」时继续（扩展的 GET，见内存档）
+    if (extension_id === undefined && !browserSaysExtensionRequest(origin, fetchSite))
+      return undefined
     const row = this.#db
       .prepare('SELECT * FROM extension_tokens WHERE token_hash = ?')
       .get(sha256(token)) as TokenRow | undefined
     if (row === undefined) return undefined
     if (row.revoked_at !== null) return undefined
     // 令牌与 Origin 绑的不是一个扩展 = 令牌被搬走了，不认。
-    if (row.extension_id !== extension_id) return undefined
+    if (extension_id !== undefined && row.extension_id !== extension_id) return undefined
     if (Date.parse(row.expires_at) <= this.#nowMs()) return undefined
     this.#db
       .prepare('UPDATE extension_tokens SET last_used_at = ? WHERE id = ?')

@@ -63353,7 +63353,7 @@
     "/v1/extension/reveal-pricing": {
       "get": {
         "operationId": "extensionRevealPricing",
-        "summary": "看一次邮箱的积分价（不消耗；价取 pricing.json 的 data.kol.lookup）",
+        "summary": "看一次邮箱的积分价（不消耗；价取 pricing.json 的 data.kol.reveal）",
         "tags": ["extension"],
         "parameters": [],
         "responses": {

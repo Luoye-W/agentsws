@@ -41,6 +41,15 @@ export interface ExtensionContributorOptions {
  */
 export const CONTRIBUTE_MAX_ROWS = 100
 
+/**
+ * WP201：一次最多几个请求同时在路上。
+ *
+ * 以前是一个接一个：线上一次往返 3–6.5 秒，列表页一块 20 行就要一分钟，插件 8 秒
+ * 就放弃了。4 个并发把一块压到 15 秒上下（本机也不会一下子对云开几十条连接）；
+ * 插件那一跳不等这么久——等多久由 `extension-service` 的 `forwardWaitMs` 管。
+ */
+export const CONTRIBUTE_CONCURRENCY = 4
+
 /** 一条内容 → 云端内容观测的请求体（逐键；没有的格子不带）。 */
 function contentBodyOf(row: PublicContentRow): Record<string, unknown> {
   return {
@@ -83,7 +92,8 @@ export function createExtensionContributor(
     }
   }
 
-  async function postOne(token: string, row: PublicObservationRow): Promise<boolean> {
+  /** 送一行。回 HTTP 状态（0 = 网络不通 / 超时）——要不要重试由调用方按状态判。 */
+  async function postOne(token: string, row: PublicObservationRow): Promise<number> {
     const controller = new AbortController()
     const timer = setTimeout(() => {
       controller.abort()
@@ -128,11 +138,12 @@ export function createExtensionContributor(
         body: JSON.stringify(body),
         signal: controller.signal,
       })
-      return res.ok
+      // 个别替身不给 status：按 ok 记成 200 / 500
+      return res.status || (res.ok ? 200 : 500)
     } catch {
       // 网络不通 / 超时：这一条没送成。**不抛**——本机那一半已经写完了，
       // 让整个请求失败等于惩罚一个已经成功的动作。
-      return false
+      return 0
     } finally {
       clearTimeout(timer)
     }
@@ -207,14 +218,28 @@ export function createExtensionContributor(
     // 「登录了没有」就是「这个品牌有没有那把工作区令牌」，没有第二处真源。
     linked: () => tokenOf() !== undefined,
 
-    contribute: async (rows) => {
+    contribute: async (rows, onEach) => {
       const token = tokenOf()
       if (token === undefined) return { accepted: 0 }
+      const batch = rows.slice(0, CONTRIBUTE_MAX_ROWS)
       let accepted = 0
-      for (const row of rows.slice(0, CONTRIBUTE_MAX_ROWS)) {
-        if (await postOne(token, row)) accepted += 1
+      const failed: { row: PublicObservationRow; status: number }[] = []
+      // WP201：几个并发、各自领下一行（不是一个接一个）
+      let next = 0
+      const worker = async (): Promise<void> => {
+        for (let i = next++; i < batch.length; i = next++) {
+          const row = batch[i] as PublicObservationRow
+          const status = await postOne(token, row)
+          const ok = status >= 200 && status < 300
+          if (ok) accepted += 1
+          else failed.push({ row, status })
+          onEach?.(row, status)
+        }
       }
-      return { accepted }
+      await Promise.all(
+        Array.from({ length: Math.min(CONTRIBUTE_CONCURRENCY, batch.length) }, worker),
+      )
+      return { accepted, failed }
     },
 
     /*
