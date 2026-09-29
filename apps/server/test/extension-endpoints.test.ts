@@ -11,9 +11,10 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { ExtensionObservation, ExtensionSession } from '@agentsws/api'
 import type { Clock, PersonId, WorkspaceId } from '@agentsws/contracts'
+import { KOL_REVEAL_CAPABILITY } from '@agentsws/contracts'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { PublicLibraryContributor } from '../src/extension-service.js'
-import { createExtensionService } from '../src/extension-service.js'
+import { createExtensionService, REVEAL_PRICE_CAPABILITY } from '../src/extension-service.js'
 import type { KolStore } from '../src/kol.js'
 import { createKolStore } from '../src/kol.js'
 import { CONTACT_SECRET_FIELD, contactSecretId } from '../src/kol-service.js'
@@ -221,11 +222,17 @@ describe('report：观测历史 + 粉丝趋势 + 已存状态', () => {
 })
 
 describe('reveal-pricing：看价不花钱', () => {
-  it('价目来自装配（pricing.json 的 data.kol.lookup），窗口 30 天', async () => {
+  /*
+   * WP201：以前报的是 data.kol.lookup（搜索的价，0.2），而云端取邮箱真扣的是
+   * data.kol.reveal（09-23 从 lookup 里单开，0.8）——插件按钮上写「获取 · 0.2」，
+   * 点下去扣 0.8。现在报的就是真扣的那一条。
+   */
+  it('价目来自装配（pricing.json 的 data.kol.reveal——云端取邮箱真扣的那一条），窗口 30 天', async () => {
     const { port } = assemble()
     const pricing = await port.revealPricing(session)
+    expect(REVEAL_PRICE_CAPABILITY).toBe(KOL_REVEAL_CAPABILITY)
     expect(pricing).toMatchObject({
-      capability: 'data.kol.lookup',
+      capability: 'data.kol.reveal',
       credits_per_reveal: 12,
       free_window_days: 30,
     })

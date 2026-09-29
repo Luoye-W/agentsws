@@ -157,7 +157,9 @@ describe('WP201 公共库转发不卡插件那一跳', () => {
 
     await port.publicForwardIdle()
     for (let i = 0; i < 20; i++)
-      expect(cloudStore.creator('youtube', `fixturegadget${String(i).padStart(2, '0')}`)).toBeDefined()
+      expect(
+        cloudStore.creator('youtube', `fixturegadget${String(i).padStart(2, '0')}`),
+      ).toBeDefined()
   })
 
   it('云那头快：一次就回全数，回执里没有「在路上」这一格（老插件看到的形状不变）', async () => {

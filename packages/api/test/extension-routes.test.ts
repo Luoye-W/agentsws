@@ -289,7 +289,10 @@ describe('插件这一侧：Origin 与令牌要同时对', () => {
   it('WP201：没有 Origin + Sec-Fetch-Site: none 也得有对的令牌', async () => {
     const w = await wired()
     await paired(w)
-    const res = await w.plugin('GET', '/v1/extension/hello', { token: 'ext_nope', fetchSite: 'none' })
+    const res = await w.plugin('GET', '/v1/extension/hello', {
+      token: 'ext_nope',
+      fetchSite: 'none',
+    })
     expect(res.status).toBe(401)
   })
 

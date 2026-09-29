@@ -51,7 +51,7 @@ import type {
   PlatformAccount,
   WorkspaceId,
 } from '@agentsws/contracts'
-import { KOL_LOOKUP_CAPABILITY } from '@agentsws/contracts'
+import { KOL_REVEAL_CAPABILITY } from '@agentsws/contracts'
 import { type PublicLibraryClient, scoreCreator } from '@agentsws/kol-core'
 import type {
   KolAccountObservation,
@@ -194,7 +194,7 @@ export interface ExtensionServiceOptions {
    */
   workbenchUrl?: () => string | undefined
   /**
-   * WP119c：看一次邮箱的积分价（`pricing.json` 的 `data.kol.lookup`）。
+   * WP119c：看一次邮箱的积分价（WP201 起取 `pricing.json` 的 `data.kol.reveal`，见 {@link REVEAL_PRICE_CAPABILITY}）。
    * 价目是数据不是代码，所以这里只要一个取数的函数。
    */
   revealPriceCredits?: () => number
@@ -231,6 +231,13 @@ export const FORWARD_RETRY_MAX_ROWS = 2_000
 export function forwardRetryable(status: number): boolean {
   return status === 0 || status === 408 || status === 429 || status >= 500
 }
+
+/**
+ * WP201：插件「获取邮箱」按钮上报的价是**哪一条能力**的价——云端取邮箱真扣的那一条
+ * （`data.kol.reveal`，09-23 从 lookup 里单开）。以前报的是 `data.kol.lookup`（搜索的价），
+ * 按钮写 0.2、点下去扣 0.8。装配（server.ts）按这个常量取价，两处只有这一个真源。
+ */
+export const REVEAL_PRICE_CAPABILITY = KOL_REVEAL_CAPABILITY
 
 /** WP131：同一个人 30 天内体检过就不再自动体检（不为同一个结论花两次钱）。 */
 export const AUTO_AUDIT_FRESH_DAYS = 30
@@ -737,14 +744,17 @@ export function createExtensionService(options: ExtensionServiceOptions): Extens
       const again = failed.filter((f) => forwardRetryable(f.status))
       const refused = failed.filter((f) => !forwardRetryable(f.status))
       const canRetry = retries < retryDelays.length
-      const parts = [`${retries === 0 ? '转发' : `第 ${String(retries)} 次重试`} ${String(rows.length)} 条：2xx ${String(out.accepted)}`]
+      const parts = [
+        `${retries === 0 ? '转发' : `第 ${String(retries)} 次重试`} ${String(rows.length)} 条：2xx ${String(out.accepted)}`,
+      ]
       if (again.length > 0)
         parts.push(
           canRetry
             ? `待重试 ${String(again.length)}（${statusList(again)}）`
             : `放弃 ${String(again.length)}（${statusList(again)}，重试 ${String(retries)} 次都没成）`,
         )
-      if (refused.length > 0) parts.push(`云端不收 ${String(refused.length)}（${statusList(refused)}）`)
+      if (refused.length > 0)
+        parts.push(`云端不收 ${String(refused.length)}（${statusList(refused)}）`)
       say(parts.join('，'))
       if (again.length > 0 && canRetry)
         scheduleRetry(
@@ -759,7 +769,9 @@ export function createExtensionService(options: ExtensionServiceOptions): Extens
   }
 
   function statusList(rows: readonly { status: number }[]): string {
-    const seen = [...new Set(rows.map((r) => (r.status === 0 ? '断网' : `HTTP ${String(r.status)}`)))]
+    const seen = [
+      ...new Set(rows.map((r) => (r.status === 0 ? '断网' : `HTTP ${String(r.status)}`))),
+    ]
     return seen.join(' / ')
   }
 
@@ -1007,7 +1019,7 @@ export function createExtensionService(options: ExtensionServiceOptions): Extens
     revealPricing: (session): ExtensionRevealPricing => {
       void session
       return {
-        capability: KOL_LOOKUP_CAPABILITY,
+        capability: REVEAL_PRICE_CAPABILITY,
         credits_per_reveal: revealPrice(),
         free_window_days: REVEAL_FREE_WINDOW_DAYS,
         note: '看一次公共库里的商务邮箱的积分价（查看不扣分，真取才扣）。本机已有的邮箱再也不会扣——已经是你自己的了。',

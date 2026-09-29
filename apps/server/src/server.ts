@@ -78,7 +78,6 @@ import {
   KOL_AUDIT_CAPABILITY,
   KOL_CHANNEL_IDS,
   KOL_FOLDER,
-  KOL_LOOKUP_CAPABILITY,
   PR_ROLE_IDS,
   SOCIAL_ROLE_IDS,
   socialChannelSpec,
@@ -263,6 +262,7 @@ import { createPrivacyErase, type PrivacyErase } from './erase.js'
 // WP119（68）：浏览器插件的本地一面（配对表按机器、写库按品牌、转发由本机做）
 import { createExtensionContributor } from './extension-contribute.js'
 import { brandExtensionPort } from './extension-port.js'
+import { REVEAL_PRICE_CAPABILITY } from './extension-service.js'
 import { chatCredits, createFreeChatPort } from './free-chat.js'
 import { createFreeChatStore, type FreeChatStore } from './free-chat-store.js'
 import { createGoogleReads, type GoogleReads } from './google-reads.js'
@@ -6148,7 +6148,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         workbenchUrl: () => (boundPort === undefined ? undefined : `http://127.0.0.1:${boundPort}`),
         // WP119c：看一次邮箱的积分价——价目是数据不是代码。WP165 起价目只在云上：
         // 读本机手上那一份（云上取过才有）；手上没有就是 0（插件那头显示「以云上为准」）。
-        revealPriceCredits: () => pricingCatalog.creditsFor(KOL_LOOKUP_CAPABILITY) ?? 0,
+        // WP201：取云端取邮箱真扣的那一条（data.kol.reveal），不是搜索的 lookup
+        revealPriceCredits: () => pricingCatalog.creditsFor(REVEAL_PRICE_CAPABILITY) ?? 0,
         // WP131：「采集后自动评分」的体检那一半——这个品牌连公共库的客户端 + 体检的价
         auditor: brand.kolPublic,
         auditPriceCredits: () => pricingCatalog.creditsFor(KOL_AUDIT_CAPABILITY) ?? 0,

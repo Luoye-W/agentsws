@@ -162,7 +162,7 @@ export interface ExtensionPort {
     session: ExtensionSession,
     key: ExtensionCreatorKey,
   ): MaybePromise<ExtensionCreatorReport | undefined>
-  /** 看一次邮箱的积分价（**不消耗**；价取 `pricing.json` 的 `data.kol.lookup`）。 */
+  /** 看一次邮箱的积分价（**不消耗**；WP201 起价取 `pricing.json` 的 `data.kol.reveal`——云端真扣的那一条）。 */
   revealPricing(session: ExtensionSession): MaybePromise<ExtensionRevealPricing>
   /** 公共库 reveal（本机代理云端；计费在服务端，余额不足回人话不回裸码）。 */
   contactLookup(
@@ -909,7 +909,7 @@ export function extensionRoutes(): Route[] {
         method: 'get',
         path: '/v1/extension/reveal-pricing',
         operationId: 'extensionRevealPricing',
-        summary: '看一次邮箱的积分价（不消耗；价取 pricing.json 的 data.kol.lookup）',
+        summary: '看一次邮箱的积分价（不消耗；价取 pricing.json 的 data.kol.reveal）',
         tag: 'extension',
         auth: 'public',
         returns: 'ExtensionRevealPricing',
