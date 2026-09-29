@@ -514,12 +514,47 @@ describe('WP142 没关联也看得到价（docs/78 第 44 步）', () => {
 
   it('demo 里点充值：原样说替身那一句（「演示环境，不真收钱」），不再套「建不了充值单：」', async () => {
     state.topupError =
-      '这是演示环境，不真收钱。正式版里点这一档会打开 Stripe 的付款页，付完积分当场到账。'
+      '这是演示环境，不真收钱。正式版里点这一档会打开收款方的付款页，付完积分当场到账。'
     renderWithProviders(<CreditsPanel assignment="asg_owner" />)
     const tiers = await screen.findAllByTestId('credits-tier')
     await userEvent.click(tiers[0] as HTMLElement)
     const said = await screen.findByTestId('credits-tier-error')
     expect(said.textContent).toBe(state.topupError)
+  })
+})
+
+describe('WP198b 在网页上查看（网页账号页）', () => {
+  /** 故意不是默认云地址：证明链接用的是服务端给的那一个，工作台自己不拼。 */
+  const ACCOUNT_URL = 'https://cloud.self-hosted.invalid/account'
+
+  it('已关联：标题旁一个「在网页上查看」，地址来自服务端，新窗口（系统浏览器）打开', async () => {
+    state.credits = { ...LINKED, account_url: ACCOUNT_URL }
+    renderWithProviders(<CreditsPanel assignment="asg_owner" />)
+    const link = await screen.findByTestId('credits-web-link')
+    expect(link.textContent).toContain('在网页上查看')
+    expect(link.getAttribute('href')).toBe(ACCOUNT_URL)
+    expect(link.getAttribute('target')).toBe('_blank')
+    expect(link.getAttribute('data-hint')).toBe('余额、充值、用量、账单都在网页上看得到')
+  })
+
+  it('没关联也有：网页上能登录、充值', async () => {
+    state.credits = { ...NOT_LINKED, account_url: ACCOUNT_URL }
+    renderWithProviders(<CreditsPanel assignment="asg_owner" />)
+    await screen.findByTestId('credits-not-linked')
+    expect(screen.getByTestId('credits-web-link').getAttribute('href')).toBe(ACCOUNT_URL)
+  })
+
+  it('服务端没给地址（老服务端）：不画，工作台不自己猜一个', async () => {
+    renderWithProviders(<CreditsPanel assignment="asg_owner" />)
+    await screen.findByTestId('credits-balance')
+    expect(screen.queryByTestId('credits-web-link')).toBeNull()
+  })
+
+  it('付款安全那一句不点名收款方（收款方在云上可以切换）', async () => {
+    renderWithProviders(<CreditsPanel assignment="asg_owner" />)
+    const tiers = await screen.findByTestId('credits-tiers')
+    expect(tiers.textContent).toContain('付款在收款方自己的页面上')
+    expect(tiers.textContent).not.toContain('Stripe')
   })
 })
 
