@@ -282,11 +282,16 @@ const SEED_POSITIONS: readonly {
     id: 'social-media',
     zh: '社媒运营',
     en: 'Social Media',
+    // WP191（docs/86 §5 / §6，Luoye 09-29）：`social.meta` 拆成 FB 主页 + IG，不再出现在新建岗位里；
+    // 另加 Threads 与 LinkedIn。顺序 = 契约 `ACTIVE_SOCIAL_CHANNELS`；默认勾 FB / IG / TikTok / YouTube。
     roles: [
-      ['social.meta', true],
       ['social.tiktok', true],
       ['social.x', false],
       ['social.youtube', true],
+      ['social.facebook', true],
+      ['social.instagram', true],
+      ['social.threads', false],
+      ['social.linkedin', false],
       ['social.facebook-group', false],
       ['social.reddit', false],
       ['social.discord', false],

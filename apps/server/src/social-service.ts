@@ -61,7 +61,7 @@ import type {
   StagedChange,
   WorkspaceId,
 } from '@agentsws/contracts'
-import { SOCIAL_CHANNELS } from '@agentsws/contracts'
+import { SOCIAL_CHANNELS, socialChannelSpec } from '@agentsws/contracts'
 import type { CommunityRule, ModerationAction } from '@agentsws/social-core'
 import {
   ACTION_WORDS,
@@ -74,6 +74,7 @@ import {
   nextFreeSlot,
   type ScheduleConflict,
   scheduleConflicts,
+  scheduleRulesFor,
   triageThread,
   weekStart,
 } from '@agentsws/social-core'
@@ -183,6 +184,21 @@ export interface SocialServiceOptions {
    * 不给就照旧落在提的人自己身上（单测与没装公司页的进程）。
    */
   routeScopeManager?: ScopeManagerRouter
+  /**
+   * WP191（docs/86 §4）：到点那条**已批准**的帖子在这条渠道上发不出去时，开一条
+   * 「复制文案去平台发」的待办（只在契约上标了 `publish_fallback: 'manual_task'` 的渠道——
+   * 现在只有 LinkedIn）。回待办 id；不给这个口子就照旧只记一句"没发"。
+   *
+   * 为什么是待办不是卡：这一步已经批过了，再出一张"请批准"的卡是让人批两次；
+   * 剩下的是**一件要人去做的事**，那正是待办。
+   */
+  manualPublishTask?(input: {
+    post: SocialPost
+    account: SocialAccount | undefined
+    channel_label: string
+    /** 为什么发不出去（平台原话或"没连上"），写进待办备注。 */
+    reason: string
+  }): { todo_id: string } | undefined
 }
 
 export interface SocialServiceAssembly {
@@ -229,6 +245,8 @@ export interface SocialPublishSweep {
   failed: number
   /** 没发的那些与为什么（哪个品牌的哪一条没发要看得出来）。 */
   skipped: { post_id: string; reason: string }[]
+  /** WP191：发不出去、已转成「复制文案去平台发」待办的那几条（LinkedIn）。 */
+  manual_tasks?: { post_id: string; todo_id: string }[]
 }
 
 export function createSocialService(options: SocialServiceOptions): SocialServiceAssembly {
@@ -374,7 +392,12 @@ export function createSocialService(options: SocialServiceOptions): SocialServic
     scheduled_at: Iso8601
     body: string
   }): ScheduleConflict[] =>
-    scheduleConflicts(candidate, store.posts(), { now: clock.now(), tz_offset_minutes: tz })
+    scheduleConflicts(candidate, store.posts(), {
+      now: clock.now(),
+      tz_offset_minutes: tz,
+      // WP191（docs/86 §3.1）：每日上限按这个号所在的渠道取（LinkedIn 1、X 5……），与职责 yml 同一个数
+      rules: scheduleRulesFor(store.account(candidate.account_id)?.channel ?? ''),
+    })
 
   /** 提一张发布卡（`social_post` 在 `HARD_L1` 里，**永远人审**）。 */
   const stagePost = async (
@@ -1024,7 +1047,34 @@ export function createSocialService(options: SocialServiceOptions): SocialServic
         continue
       }
       const adapter = options.channels?.adapters[post.channel]
+      // WP191（docs/86 §4）：这条渠道发不出去是常态（LinkedIn）→ 转成待办，人去发
+      const toManual = (reason: string): boolean => {
+        if (socialChannelSpec(post.channel)?.publish_fallback !== 'manual_task') return false
+        const task = options.manualPublishTask?.({
+          post,
+          account: store.account(post.account_id),
+          channel_label: socialChannelSpec(post.channel)?.zh ?? post.channel,
+          reason,
+        })
+        if (task === undefined) return false
+        store.savePost({
+          ...post,
+          status: 'failed',
+          failure_reason: `${reason}——已转成一条待办，复制文案去平台发。`,
+        })
+        out.manual_tasks = [
+          ...(out.manual_tasks ?? []),
+          { post_id: post.id, todo_id: task.todo_id },
+        ]
+        emit('social.post_manual_task', 'system' as never, {
+          post_id: post.id,
+          channel: post.channel,
+          todo_id: task.todo_id,
+        })
+        return true
+      }
       if (adapter?.publish === undefined) {
+        if (toManual('这条渠道现在没接上')) continue
         out.skipped.push({
           post_id: post.id,
           reason: `${post.channel} 这条渠道现在发不出去（还没接上，或者这条渠道没有发布接口）。到点了，去后台手工发一下。`,
@@ -1058,6 +1108,15 @@ export function createSocialService(options: SocialServiceOptions): SocialServic
         })
         continue
       }
+      // WP191：没连 / 没批 / 这一版还不能代发 → 这几种是"人去发就能发"，转成待办
+      if (
+        (result.reason === 'not_connected' ||
+          result.reason === 'needs_approval' ||
+          result.reason === 'not_implemented' ||
+          result.reason === 'needs_paid_tier') &&
+        toManual(result.message)
+      )
+        continue
       // 纪律 2：平台原话原样留着，**不重试**
       store.savePost({ ...post, status: 'failed', failure_reason: result.message })
       out.failed += 1

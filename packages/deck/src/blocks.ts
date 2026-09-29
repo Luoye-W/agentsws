@@ -137,6 +137,9 @@ export const SOURCE_LABELS: Record<DataSourceId, string> = {
   social_discord: 'Discord',
   social_telegram: 'Telegram',
   social_whatsapp: 'WhatsApp',
+  // WP191（docs/86 §5）
+  social_threads: 'Threads',
+  social_linkedin: 'LinkedIn',
   // WP76（58 §3）：设计库也是我们自己的库，永远算连上。设计岗位没有渠道源——
   // 出图走模型网关的图片槽，那不是一条连接（没有一张卡可连，所以也没有"去连接"）。
   design: '设计库',
@@ -564,6 +567,11 @@ const VIEW_BY_ROLE: Record<RoleId, () => BlockDef[]> = {
   'social.tiktok': () => SOCIAL_CONTENT_BLOCKS('tiktok'),
   'social.x': () => SOCIAL_CONTENT_BLOCKS('x'),
   'social.youtube': () => SOCIAL_CONTENT_BLOCKS('youtube'),
+  // WP191（docs/86 §5）：Meta 拆成 FB 主页 + IG，另加 Threads 与 LinkedIn（`social.meta` 那一行留着）
+  'social.facebook': () => SOCIAL_CONTENT_BLOCKS('facebook'),
+  'social.instagram': () => SOCIAL_CONTENT_BLOCKS('instagram'),
+  'social.threads': () => SOCIAL_CONTENT_BLOCKS('threads'),
+  'social.linkedin': () => SOCIAL_CONTENT_BLOCKS('linkedin'),
   // Facebook 群组没有渠道源（没有连接器）：少一块活跃度，不出空表
   'social.facebook-group': () => SOCIAL_COMMUNITY_BLOCKS('facebook_group'),
   'social.reddit': () => SOCIAL_COMMUNITY_BLOCKS('reddit', 'social_reddit'),

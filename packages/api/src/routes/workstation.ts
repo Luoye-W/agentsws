@@ -91,6 +91,9 @@ const SOURCE_AUTHZ = {
   social_discord: { domain: 'social_account', range: 'assigned' },
   social_telegram: { domain: 'social_account', range: 'assigned' },
   social_whatsapp: { domain: 'social_account', range: 'assigned' },
+  // WP191（docs/86 §5）：Threads 与 LinkedIn 各一个源（FB 主页与 IG 共用 `social_meta`）
+  social_threads: { domain: 'social_account', range: 'assigned' },
+  social_linkedin: { domain: 'social_account', range: 'assigned' },
   /*
    * WP76（58 §3）：设计那一个源。
    *

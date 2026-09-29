@@ -20,13 +20,15 @@ const store = () => {
 }
 
 describe('56 §2 社媒库（四类对象）', () => {
-  it('按渠道切得开：Meta 那条职责看不见 Discord 的帖子', () => {
+  // WP191：演示那个号是 FB 主页（渠道从 `meta` 改成 `facebook`，id 仍是 `sa_demo_meta`）
+  it('按渠道切得开：FB 主页那条职责看不见 Discord 的帖子', () => {
     const s = store()
-    expect(s.accounts({ channel: 'meta' }).map((a) => a.id)).toEqual(['sa_demo_meta'])
-    expect(s.posts({ channel: 'meta' }).every((p) => p.channel === 'meta')).toBe(true)
+    expect(s.accounts({ channel: 'facebook' }).map((a) => a.id)).toEqual(['sa_demo_meta'])
+    expect(s.accounts({ channel: 'meta' })).toEqual([])
+    expect(s.posts({ channel: 'facebook' }).every((p) => p.channel === 'facebook')).toBe(true)
     expect(s.posts({ channel: 'discord' }).length).toBeGreaterThan(0)
-    // 九条渠道之间零共享：两边加起来才是全部
-    expect(s.posts({ channel: 'meta' }).length + s.posts({ channel: 'discord' }).length).toBe(
+    // 渠道之间零共享：两边加起来才是全部
+    expect(s.posts({ channel: 'facebook' }).length + s.posts({ channel: 'discord' }).length).toBe(
       s.posts().length,
     )
   })

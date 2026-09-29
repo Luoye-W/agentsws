@@ -72,6 +72,8 @@ const HELP_BY_SERVICE: Record<string, string> = {
   instagram_graph: 'conn-meta',
   facebook_graph: 'conn-meta',
   meta_graph: 'conn-meta',
+  threads_api: 'conn-meta',
+  linkedin_api: 'conn-linkedin',
   meta_marketing: 'conn-meta',
   whatsapp_business: 'conn-meta',
   tiktok_research: 'conn-tiktok',
