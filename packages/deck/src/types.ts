@@ -409,6 +409,10 @@ export type DataSourceId =
   | 'social_discord'
   | 'social_telegram'
   | 'social_whatsapp'
+  // WP191（docs/86 §5）：Threads 与 LinkedIn 各一张新卡、各一个源。FB 主页与 IG 共用
+  // `social_meta`——同一张 `meta_graph` 卡，连一次两条都亮，这正是"连一次、批一次"的意思
+  | 'social_threads'
+  | 'social_linkedin'
   /**
    * WP76（58 §3）：**我们自己的设计库**（需求单、brief、素材）。
    * 永远算连上——它就在这台机器上，没有"去连接"这回事（同 `kol` / `social`）。

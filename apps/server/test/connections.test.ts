@@ -211,6 +211,9 @@ describe('WP20 §A 连接清单与目录', () => {
       // 其中 TikTok / Reddit / WhatsApp 三张标着"还没接"（`planned`），照 WP64 那几张
       // 骨架卡的老规矩：卡照出、状态照实说、点不动。
       'meta_graph',
+      // WP191（docs/86 §5）：Threads 与 LinkedIn 各一张新卡（FB 主页与 IG 共用 `meta_graph`）
+      'threads_api',
+      'linkedin_api',
       'tiktok_content',
       'reddit',
       'discord_bot',
@@ -302,6 +305,9 @@ describe('WP20 §A 连接清单与目录', () => {
       // 其中 TikTok / Reddit / WhatsApp 三张标着"还没接"（`planned`），照 WP64 那几张
       // 骨架卡的老规矩：卡照出、状态照实说、点不动。
       'meta_graph',
+      // WP191（docs/86 §5）：Threads 与 LinkedIn 各一张新卡（FB 主页与 IG 共用 `meta_graph`）
+      'threads_api',
+      'linkedin_api',
       'tiktok_content',
       'reddit',
       'discord_bot',

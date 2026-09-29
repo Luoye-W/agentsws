@@ -85,7 +85,8 @@ function asOk<T>(r: { ok: boolean }): { data: T; observed_at: string } {
 describe('56 §3 九条适配器（WP72）', () => {
   it('九条都在，一处分派；能力表按"有没有这个方法"算，不靠试一次', () => {
     const a = createSocialAdapters(fakeTransport())
-    expect(Object.keys(a)).toHaveLength(9)
+    // WP191：九条 + FB 主页 / IG / Threads / LinkedIn 四条（老的 `meta` 留着）
+    expect(Object.keys(a)).toHaveLength(13)
     expect(a.facebook_group.mode).toBe('browser')
     expect(capabilitiesOf(a.meta).write).toEqual(['publish', 'reply'])
     // YouTube 发视频要 resumable upload，不是一次 JSON 调用 —— 故意缺席

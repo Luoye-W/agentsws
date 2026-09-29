@@ -195,12 +195,14 @@ home_blocks:
     }
 
 grounding:
+  # WP191（docs/86 §5）：加了「红人 / 博主 / 达人 / KOL」这几个词——社媒运营那边拆出了
+  # 同名平台的职责（`social.instagram` 等），跨岗位只靠它们分得开「找 IG 红人」与「回 IG 评论」。
   # 54 §2：岗位路由在**一个岗位的职责集合内**按这几样判"这件事该走哪条"。
   # 五条渠道职责的动作 id 与数据域完全一样，所以在红人这个岗位里，
   # **意图词就是唯一分得开它们的东西**——写不足 = 路由不到。
   - {
       name: tiktok_intent,
-      intent_terms: [TikTok, 抖, 抖音, 短视频, 带货, 达人, TikTok Shop, 小店],
+      intent_terms: [TikTok, 抖, 抖音, 短视频, 带货, 达人, TikTok Shop, 小店, 红人, 博主, KOL, influencer, creator],
       cue_terms: [粉丝, 互动率, 合作, 开发信, 报价, 交付, 联盟码, 佣金],
       tool: search_creators,
       prefetch: false,

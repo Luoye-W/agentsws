@@ -15,7 +15,8 @@
  * | `voice` | 品牌话术：只取公司层技能，不编；出站过承诺扫描 |
  * | `broadcast` | 群发受众、抑制名单、频率；WhatsApp 的两道硬闸 |
  * | `moderation` | 群规匹配与分级（封禁要人点） |
- * | `channels` | 九条渠道适配器（四条有真实现，四条说清为什么还没有，一条走浏览器） |
+ * | `channels` | 各渠道适配器（WP191 起加了 FB 主页 / IG / Threads / LinkedIn 四条，老的 `meta` 留着） |
+ * | `platform` | WP191：各平台的硬限制一张表（字数、标签、@、链接、轮播张数、每日上限） |
  *
  * **不在这里的东西**（各有去处，免得有人在这里找）：
  *
@@ -28,5 +29,6 @@ export * from './broadcast.js'
 export * from './calendar.js'
 export * from './channels/index.js'
 export * from './moderation.js'
+export * from './platform.js'
 export * from './triage.js'
 export * from './voice.js'

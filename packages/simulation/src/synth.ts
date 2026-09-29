@@ -267,6 +267,10 @@ const PEOPLE_3: PersonTemplate[] = [
       'kol.youtube',
       'social.meta',
       'social.discord',
+      // WP191（docs/86 §4）：LinkedIn 公司主页的内容也归他——3 人公司里没有专职社媒。
+      // `social.meta` 仍写老 id：这个 pack 就是一个"老工作区"，模拟世界装配时照服务进程的
+      // 规矩把它拆成 FB 主页 + IG（`splitRoleIds`），题里写 `channel: facebook / instagram`。
+      'social.linkedin',
       // WP76（58 §1）：设计也归他——3 人公司里没有专职设计，官网要一张图的时候
       // 是同一个人自己去做的。**只挂独立站设计一条**：五条的骨架完全相同
       // （58 §1 第一句），多挂几条演示不出新东西，反而让"路由挑哪一条"这件事

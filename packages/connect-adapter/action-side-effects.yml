@@ -363,6 +363,27 @@ actions:
   meta_graph.delete_comment: write
   meta_graph.update_page_profile: write
 
+  # WP191（docs/86 §3.2）：IG 两跳发布的容器状态是读口；建容器与发布是写口
+  meta_graph.get_ig_container_status: read
+  meta_graph.create_ig_container: write
+  meta_graph.reply_ig_comment: write
+
+  # WP191（docs/86 §5）：Threads 自己一张卡（授权与 FB / IG 分开）
+  threads_api.get_profile: read
+  threads_api.list_threads: read
+  threads_api.list_replies: read
+  threads_api.get_container_status: read
+  threads_api.get_publishing_limit: read
+  # 两跳：建容器 → 发布；回复 = 带 reply_to_id 的容器再发布
+  threads_api.create_container: write
+  threads_api.publish: write
+  threads_api.manage_reply: write
+
+  # WP191（docs/86 §4）：LinkedIn 只有发帖与读帖。**没有**加人、私信、点赞的口子——
+  # 用户协议 §8.2 禁止任何自动化手段做这些事（那一摊在 B2B，只出人工任务）
+  linkedin_api.list_posts: read
+  linkedin_api.create_post: write
+
   # TikTok 内容发布（申请制；**WP73 接上了真调用**）
   tiktok_content.get_creator_info: read
   tiktok_content.list_videos: read

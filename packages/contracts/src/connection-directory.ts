@@ -713,6 +713,42 @@ export const CONNECTION_DIRECTORY: readonly ConnectionDirectoryEntry[] = [
       en: 'One token covers the FB Page and the IG business account. Reading works at once; publishing needs App Review.',
     },
   },
+  // ── WP191（docs/86 §4 / §5）：Threads 与 LinkedIn 各一张新卡 ────────────
+  // FB 主页与 IG 仍共用上面那张 `meta_graph`（连一次、批一次）；Threads 的授权是
+  // 另一套（单独用例、单独令牌），主页令牌调不动它，所以是自己一张。
+  {
+    kind: 'threads_api',
+    name: { zh: 'Threads API', en: 'Threads API' },
+    category: 'social',
+    auth: 'oauth',
+    mode: 'openconnector_provider',
+    fields: OAUTH_NO_FIELDS,
+    side_effect: 'write_external',
+    docs_url: 'https://developers.facebook.com/docs/threads',
+    status: 'available',
+    service: 'threads_api',
+    note: {
+      zh: 'Threads 的授权与 FB / IG 分开（单独的用例与令牌，长期令牌 60 天要续）。发帖与管回复都要过 App Review。',
+      en: 'Threads is authorised separately from the FB Page and Instagram (own use case and token; long-lived tokens last 60 days). Publishing and reply management need App Review.',
+    },
+  },
+  {
+    kind: 'linkedin_api',
+    name: { zh: 'LinkedIn（公司主页 + 本人号）', en: 'LinkedIn (Company Page + member)' },
+    category: 'social',
+    auth: 'oauth',
+    mode: 'openconnector_provider',
+    fields: OAUTH_NO_FIELDS,
+    side_effect: 'write_external',
+    docs_url:
+      'https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/posts-api',
+    status: 'available',
+    service: 'linkedin_api',
+    note: {
+      zh: '本人号发帖自助开通；公司主页要过 Community Management API 审核，多数小公司批不下来——批不下来时到点会给你一条「复制文案去 LinkedIn 发」的待办。**不抓取、不自动加人私信**。',
+      en: 'Member posting is self-serve; Company Page posting needs Community Management API review. Until then a due post becomes a "copy and post it on LinkedIn" to-do. No scraping, no automated invites or messages.',
+    },
+  },
   {
     kind: 'tiktok_content',
     name: { zh: 'TikTok Content Posting API', en: 'TikTok Content Posting API' },

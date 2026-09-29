@@ -137,6 +137,62 @@ describe('AGENTSWS_DATA_DIR：整套落盘', () => {
     })
   })
 
+  // WP191（docs/86 §6）：老工作区里分给人的 `social.meta`，起进程时拆成 FB 主页 + IG
+  it('重启：social.meta 的分配拆成 FB 主页（原 id）+ IG（复制一条），两条事件；再重启不重复', async () => {
+    const first = await boot(dir)
+    const person = first.bootstrap.person.id
+    const workspace = first.bootstrap.workspace.id
+    // 新进程启动时已经迁过一遍（库是空的，什么也没发生）；这里直接写一条老的 `social.meta`
+    const assignment = first.roles.assignments.create({
+      person_id: person,
+      workspace_id: workspace,
+      role_id: 'social.meta',
+      granted_by: person,
+      ranges: [{ kind: 'store', id: 'store_1' }],
+    })
+    await first.close()
+
+    const second = await boot(dir)
+    expect(second.roles.assignments.require(assignment.id).role_id).toBe('social.facebook')
+    const mine = second.roles.assignments
+      .listByPerson(person, { workspace_id: workspace })
+      .filter((a) => a.role_id === 'social.instagram')
+    expect(mine).toHaveLength(1)
+    expect(mine[0]?.ranges).toEqual([{ kind: 'store', id: 'store_1' }])
+    const events: { payload: unknown }[] = []
+    for await (const e of second.kernel.eventLog.read({
+      workspace_id: workspace,
+      types: ['assignment.role_migrated'],
+    }))
+      events.push({ payload: e.payload })
+    expect(events.map((e) => e.payload)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          assignment_id: assignment.id,
+          from: 'social.meta',
+          to: 'social.facebook',
+        }),
+        expect.objectContaining({
+          from: 'social.meta',
+          to: 'social.instagram',
+          split_from: assignment.id,
+        }),
+      ]),
+    )
+    await second.close()
+
+    // 第三次起进程：没有 `social.meta` 了，一条事件都不多
+    const third = await boot(dir)
+    const again: unknown[] = []
+    for await (const e of third.kernel.eventLog.read({
+      workspace_id: workspace,
+      types: ['assignment.role_migrated'],
+    }))
+      again.push(e)
+    expect(again).toHaveLength(2)
+    await third.close()
+  })
+
   it('重启：staged 的变更与它的审批项还在账本里，能接着批准与施行', async () => {
     const first = await boot(dir)
     const person = first.bootstrap.person.id
