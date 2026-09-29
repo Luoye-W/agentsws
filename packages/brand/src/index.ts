@@ -6,4 +6,5 @@
  * 都从这里取同一份数字与同一份 SVG，不各写一遍、也不各画一版。
  */
 export * from './geometry.js'
+export * from './live.js'
 export * from './svg.js'
