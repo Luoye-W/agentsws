@@ -176,6 +176,17 @@ export type AuditAction =
    * 什么时候做的。`details` 里只有月数——组织号在 `target_id` 上，别的一个字没有。
    */
   | 'kol_service.grant'
+  /**
+   * WP192 接口管理（官方数据接口的渠道注册表）：建 / 改渠道、换 key、调组织上限、开关能力。
+   *
+   * `target_kind` 用 `system`，`target_id` 是渠道号（或组织号 / 能力名）。**key 一个字都不进审计**：
+   * `details` 里只有渠道类型、末四位与改了哪几格的名字。
+   */
+  | 'data.channel.create'
+  | 'data.channel.update'
+  | 'data.channel.key_rotate'
+  | 'data.limits.update'
+  | 'data.capability.switch'
 
 /**
  * 一条审计。**只增不改**：没有 update，没有 delete，主键是自增号。
