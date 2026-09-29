@@ -220,6 +220,26 @@ export interface Recipient {
   reason?: string
 }
 
+/**
+ * WP199：升级链上的一步（14 §7：升级 = 追加投递，不改出卡时绑定的名单）。
+ *
+ * 执行快照里 `recipients` 那一格只绑出卡（或改派 / 重提）时的名单；升级追加进来的人
+ * 不进那一格，施行前按这条链一步步核对：每一步挂在哪个 revision、第几级、加了谁、
+ * 与上一步首尾相接（`digest`）。链对不上的人照旧算进名单 → 快照对不上 → 不施行。
+ */
+export interface EscalationStep {
+  tier: 'scope_manager' | 'owner'
+  /** 这一级送到了谁。 */
+  to: PersonId
+  at: Iso8601
+  /** 这一步有没有往收件人里新加人（他本来就在名单里 = 只是多一张投递）。 */
+  added: boolean
+  /** 这一步发生时卡的 revision；改派 / 重提之后旧步骤只作留痕，不再算数。 */
+  revision: number
+  /** sha256(item_id | revision | 上一步 digest | tier | to | at | added)。 */
+  digest: string
+}
+
 /** WP174：把一张还没定的卡从某个人手上改派给另一个人（上级离职 → 老板）。 */
 export interface RerouteInput {
   /** 原来的收件人（只换掉他那一格，别的收件人不动）。 */
@@ -369,6 +389,8 @@ export interface ApprovalItem<P = unknown> {
       business_hours: boolean
       chain: ('scope_manager' | 'owner')[]
       escalated_at: Iso8601[]
+      /** WP199：升级链留痕（总线写，调用方不给）。施行前按它核对升级追加的收件人。 */
+      trail?: EscalationStep[]
     }
     separation_of_duties: boolean
   }

@@ -5,6 +5,13 @@ import { TxnRuntime } from './runtime.js'
 import type { TxnOptions } from './types.js'
 
 export { ApprovalBusImpl, type BatchEntry, finalPayload } from './approvals.js'
+export {
+  appendEscalationStep,
+  boundRecipients,
+  deciderIsLegitimate,
+  escalationDigest,
+  verifiedEscalatedRecipients,
+} from './escalation.js'
 export { Executor, type ReconcileOutcome } from './executor.js'
 export { ChangeLedgerImpl } from './ledger.js'
 export { type Migration, migrate, schemaVersion } from './migrations.js'

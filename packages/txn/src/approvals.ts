@@ -16,6 +16,7 @@ import type {
   StagedChange,
   WorkspaceId,
 } from '@agentsws/contracts'
+import { appendEscalationStep, boundRecipients } from './escalation.js'
 import { isKnownKind, runPrecheck } from './precheck.js'
 import type { TxnRuntime } from './runtime.js'
 import type {
@@ -260,7 +261,8 @@ export class ApprovalBusImpl implements ApprovalBus {
       connection: ctx.connection_id ?? '',
       target: refKey({ type: String(target.type), id: String(target.id) }),
       record_version: ctx.record_version ?? '',
-      recipients: item.routing.recipients.map((r) => r.person).sort(),
+      // WP199：只绑出卡 / 改派时的名单；升级追加的人按升级链核对（./escalation.ts）
+      recipients: boundRecipients(item),
       final_payload: finalPayload(item),
       attachments: [...(ctx.attachments ?? [])].sort(),
       executor_version: this.rt.policy.executor_version,
@@ -807,9 +809,11 @@ export class ApprovalBusImpl implements ApprovalBus {
         if (idx < already) continue
         const person = tier === 'scope_manager' ? dir?.scopeManager?.(item) : dir?.owner?.(item)
         if (!person) continue
-        if (!item.routing.recipients.some((r) => r.person === person))
-          item.routing.recipients.push({ person, via: 'escalation' })
+        const added = !item.routing.recipients.some((r) => r.person === person)
+        if (added) item.routing.recipients.push({ person, via: 'escalation' })
         item.routing.escalation.escalated_at.push(now)
+        // WP199：升级 = 在原审批链上追加一步并留痕；快照不动，施行前按这条链核对
+        appendEscalationStep(item, { tier, to: person, at: now, added })
         item.deliveries.push({
           channel: 'workstation',
           to: person,
@@ -825,7 +829,7 @@ export class ApprovalBusImpl implements ApprovalBus {
           workspace_id: item.workspace_id,
           actor: { kind: 'system', id: 'txn' },
           subject: { type: 'approval_item', id: item.id },
-          payload: { tier, to: person, business_hours: elapsed },
+          payload: { tier, to: person, business_hours: elapsed, added },
           item_id: item.id,
         })
       }
