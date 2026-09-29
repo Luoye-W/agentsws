@@ -123,7 +123,7 @@ scripts/dev-real.sh     # 起加固的 OpenConnector 容器 + SQLite 落盘的�
 见下面的状态表。
 
 设置页的「模型」一节是一家一张卡（DeepSeek、OpenAI、Anthropic、阿里云百炼、任意 OpenAI
-兼容网关、agentsws 云），点进去再选方案。**已经在付 ChatGPT Plus / Pro 或 Claude Pro / Max
+兼容网关、Agents 工坊（用积分）），点进去再选方案。**已经在付 ChatGPT Plus / Pro 或 Claude Pro / Max
 的，可以直接用订阅登录**，不用再买一份 API 额度——走的是官方 `dsh-llm-pi-ai` +
 `dsh-authorization`，凭据存在本机加密库里、只在个人档可用。卡上写着风险：第三方工具用
 订阅登录没有得到 OpenAI / Anthropic 的明文授权，可能被限流或封禁；账号只属于你本人。
