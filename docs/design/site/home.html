@@ -23,6 +23,7 @@
   --shadow-hover:0 16px 34px rgba(20,40,30,.14),0 2px 6px rgba(20,40,30,.06);
   --glow:0 0 0 1px rgba(0,123,103,.32),0 0 12px 2px rgba(0,123,103,.14);
   --m0:#2E86D8;--m1:#1FB8A4;--m2:#D9A82E;
+  --b1a:#2a92cc;--b1b:#23abb2;--b2a:#279ebf;--b2b:#1fb7a5;--b3a:#22afad;--b3b:#62b27a;--b4a:#23aab3;--b4b:#4ab489;--b5a:#2cb79c;--b5b:#91ae5b;--b6a:#74b16e;--b6b:#d9a82e;
   --term-bg:#0E100F;--term-ink:#F1F4F0;--term-muted:#98A29B;--term-accent:#76FB91;
   --display:"Outfit","Noto Sans SC",system-ui,sans-serif;
   --sans:system-ui,-apple-system,"PingFang SC","Noto Sans SC","Microsoft YaHei",sans-serif;
@@ -36,7 +37,7 @@
   --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px rgba(0,0,0,.32);
   --shadow-hover:0 16px 34px rgba(0,0,0,.5),0 2px 6px rgba(0,0,0,.36);
   --glow:0 0 0 1px rgba(118,251,145,.32),0 0 12px 2px rgba(118,251,145,.14);
-  --m0:#4EA8FF;--m1:#2FE0C8;--m2:#FFD84D;--term-bg:#171A18;color-scheme:dark;
+  --m0:#4EA8FF;--m1:#2FE0C8;--m2:#FFD84D;--b1a:#47b5f2;--b1b:#37d1d6;--b2a:#3fc3e5;--b2b:#30dfc9;--b3a:#34d6d1;--b3b:#7add9c;--b4a:#38d0d8;--b4b:#5fdeac;--b5a:#3edfbf;--b5b:#afdb7c;--b6a:#8edc90;--b6b:#ffd84d;--term-bg:#171A18;color-scheme:dark;
 }}
 :root[data-theme="dark"]{
   --paper:#0E100F;--card:#171A18;--line:#242825;--ink:#F1F4F0;--body:#C9D2CC;--muted:#98A29B;
@@ -45,7 +46,7 @@
   --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px rgba(0,0,0,.32);
   --shadow-hover:0 16px 34px rgba(0,0,0,.5),0 2px 6px rgba(0,0,0,.36);
   --glow:0 0 0 1px rgba(118,251,145,.32),0 0 12px 2px rgba(118,251,145,.14);
-  --m0:#4EA8FF;--m1:#2FE0C8;--m2:#FFD84D;--term-bg:#171A18;color-scheme:dark;
+  --m0:#4EA8FF;--m1:#2FE0C8;--m2:#FFD84D;--b1a:#47b5f2;--b1b:#37d1d6;--b2a:#3fc3e5;--b2b:#30dfc9;--b3a:#34d6d1;--b3b:#7add9c;--b4a:#38d0d8;--b4b:#5fdeac;--b5a:#3edfbf;--b5b:#afdb7c;--b6a:#8edc90;--b6b:#ffd84d;--term-bg:#171A18;color-scheme:dark;
 }
 *{box-sizing:border-box}
 html,body{margin:0}
@@ -244,6 +245,27 @@ section{scroll-margin-top:80px}
 .foot .tagline{color:var(--muted);margin-top:12px;max-width:22em}
 .foot-bottom{display:flex;justify-content:space-between;gap:16px;margin-top:40px;padding-top:20px;border-top:1px solid var(--line);color:var(--muted);font-size:13px}
 
+/* ── 品牌标记动效：参数照抄 apps/workstation/src/index.css 的 ws-bm-*（母品牌规范 §3.2 / §3.3），一个没改 ── */
+.bm{overflow:visible;flex:none}
+.bm rect{transform-box:fill-box;transform-origin:center}
+/* 集结：五块依次到位（0/100/160/240/300ms），领头块 380ms 落下并回弹一次；播完停住 */
+.bm-assemble rect{opacity:0;animation:bm-assemble 1.2s cubic-bezier(.22,1,.36,1) var(--d) forwards,bm-idle 5.2s ease-in-out calc(3s + var(--i) * 180ms) infinite}
+.bm-assemble rect.lead{animation:bm-assemble-lead .9s cubic-bezier(.34,1.56,.64,1) 380ms forwards,bm-idle 5.2s ease-in-out calc(3s + var(--i) * 180ms) infinite}
+@keyframes bm-assemble{0%{opacity:0;transform:translateY(12px) scale(.72)}58%{opacity:1;transform:translateY(0) scale(1.06)}100%{opacity:1;transform:translateY(0) scale(1)}}
+@keyframes bm-assemble-lead{0%{opacity:0;transform:translateY(16px) scale(.5)}60%{opacity:1;transform:translateY(-3px) scale(1.22)}100%{opacity:1;transform:translateY(0) scale(1)}}
+/* 待机（官网暂用，等 WP195 定工作台的常驻待机动效再对齐）：集结停住后，六块沿渐变方向依次微微一暗，
+   像一队人依次报到；5.2s 一轮，只动透明度、不缩放——刻意和「呼吸」（= Agent 正在干活）分开 */
+@keyframes bm-idle{0%,16%,100%{opacity:1}8%{opacity:.62}}
+/* 一变一队：领头块先出现，其余五块从它的位置分出去，间隔 100ms；滚到眼前才播（.play） */
+.bm-split.play rect{opacity:0;animation:bm-split .55s cubic-bezier(.22,1,.36,1) calc(300ms + var(--i) * 100ms) forwards}
+.bm-split.play rect.lead{animation:bm-split-lead .5s cubic-bezier(.34,1.56,.64,1) forwards}
+@keyframes bm-split-lead{0%{opacity:0;transform:scale(0)}60%{opacity:1;transform:scale(1.18)}100%{opacity:1;transform:scale(1)}}
+@keyframes bm-split{0%{opacity:0;transform:translate(var(--dx),var(--dy)) scale(.3)}100%{opacity:1;transform:translate(0,0) scale(1)}}
+/* 系统开了「减少动态效果」：一律静态 */
+@media (prefers-reduced-motion:reduce){.bm rect,.bm-split.play rect{animation:none!important;opacity:1!important;transform:none!important}}
+.hero-mark{margin-bottom:22px}
+.roles-mark{margin-bottom:18px}
+
 /* 手机 */
 @media (max-width:900px){
   .wrap{padding:0 20px}
@@ -301,6 +323,7 @@ section{scroll-margin-top:80px}
     <linearGradient id="mk" gradientUnits="userSpaceOnUse" x1="14" y1="77" x2="79" y2="12">
       <stop offset="0" style="stop-color:var(--m0)"/><stop offset=".52" style="stop-color:var(--m1)"/><stop offset="1" style="stop-color:var(--m2)"/>
     </linearGradient>
+    <linearGradient id="g1" x1="0" y1="1" x2="1" y2="0"><stop offset="0" style="stop-color:var(--b1a)"/><stop offset="1" style="stop-color:var(--b1b)"/></linearGradient><linearGradient id="g2" x1="0" y1="1" x2="1" y2="0"><stop offset="0" style="stop-color:var(--b2a)"/><stop offset="1" style="stop-color:var(--b2b)"/></linearGradient><linearGradient id="g3" x1="0" y1="1" x2="1" y2="0"><stop offset="0" style="stop-color:var(--b3a)"/><stop offset="1" style="stop-color:var(--b3b)"/></linearGradient><linearGradient id="g4" x1="0" y1="1" x2="1" y2="0"><stop offset="0" style="stop-color:var(--b4a)"/><stop offset="1" style="stop-color:var(--b4b)"/></linearGradient><linearGradient id="g5" x1="0" y1="1" x2="1" y2="0"><stop offset="0" style="stop-color:var(--b5a)"/><stop offset="1" style="stop-color:var(--b5b)"/></linearGradient><linearGradient id="g6" x1="0" y1="1" x2="1" y2="0"><stop offset="0" style="stop-color:var(--b6a)"/><stop offset="1" style="stop-color:var(--b6b)"/></linearGradient>
     <symbol id="mark" viewBox="14 12 65 65">
       <rect x="14" y="44" width="17" height="17" rx="2.5" fill="url(#mk)"/><rect x="38" y="52" width="17" height="17" rx="2.5" fill="url(#mk)"/>
       <rect x="38" y="28" width="17" height="17" rx="2.5" fill="url(#mk)"/><rect x="62" y="60" width="17" height="17" rx="2.5" fill="url(#mk)"/>
@@ -333,7 +356,7 @@ section{scroll-margin-top:80px}
 
 <header class="nav">
   <div class="wrap">
-    <a class="logo" href="#"><svg class="mark" width="26" height="26"><use href="#mark"/></svg>Agents 工坊</a>
+    <a class="logo" href="#"><svg class="bm bm-assemble " width="26" height="26" viewBox="14 12 65 65" aria-hidden="true"><rect x="14" y="44" width="17" height="17" rx="2.5" fill="url(#g1)" style="--d:0ms;--i:0"/><rect x="38" y="52" width="17" height="17" rx="2.5" fill="url(#g2)" style="--d:100ms;--i:1"/><rect x="38" y="28" width="17" height="17" rx="2.5" fill="url(#g3)" style="--d:160ms;--i:2"/><rect x="62" y="60" width="17" height="17" rx="2.5" fill="url(#g4)" style="--d:240ms;--i:3"/><rect x="62" y="36" width="17" height="17" rx="2.5" fill="url(#g5)" style="--d:300ms;--i:4"/><rect class="lead" x="62" y="12" width="17" height="17" rx="2.5" fill="url(#g6)" style="--i:5"/></svg>Agents 工坊</a>
     <nav class="nav-links"><a href="#roles">岗位</a><a href="pricing.html">价格</a><a href="#">文档</a><a href="#">更新</a><a href="#base">开源</a></nav>
     <div class="nav-right">
       <a class="gh" href="#"><svg class="ico"><use href="#i-github"/></svg>GitHub</a>
@@ -351,6 +374,7 @@ section{scroll-margin-top:80px}
 <section class="hero">
   <div class="wrap">
     <div>
+      <div class="hero-mark"><svg class="bm bm-assemble " width="56" height="56" viewBox="14 12 65 65" aria-hidden="true"><rect x="14" y="44" width="17" height="17" rx="2.5" fill="url(#g1)" style="--d:0ms;--i:0"/><rect x="38" y="52" width="17" height="17" rx="2.5" fill="url(#g2)" style="--d:100ms;--i:1"/><rect x="38" y="28" width="17" height="17" rx="2.5" fill="url(#g3)" style="--d:160ms;--i:2"/><rect x="62" y="60" width="17" height="17" rx="2.5" fill="url(#g4)" style="--d:240ms;--i:3"/><rect x="62" y="36" width="17" height="17" rx="2.5" fill="url(#g5)" style="--d:300ms;--i:4"/><rect class="lead" x="62" y="12" width="17" height="17" rx="2.5" fill="url(#g6)" style="--i:5"/></svg></div>
       <span class="pill"><i></i>开源 · Apache-2.0 · 跑在你自己的电脑上</span>
       <h1>给出海生意，<br>配一队 <em>AI 同事</em>。</h1>
       <p class="lede">客服、红人、社媒、B2B……按岗位上岗。它们先把活干完，出一张卡，你点头才算数。</p>
@@ -389,6 +413,7 @@ section{scroll-margin-top:80px}
 <!-- 2 岗位 -->
 <section class="sec sec-alt" id="roles">
   <div class="wrap center">
+    <svg class="bm bm-split roles-mark" width="56" height="56" viewBox="14 12 65 65" aria-hidden="true"><rect x="14" y="44" width="17" height="17" rx="2.5" fill="url(#g1)" style="--i:0;--dx:48px;--dy:-32px"/><rect x="38" y="52" width="17" height="17" rx="2.5" fill="url(#g2)" style="--i:1;--dx:24px;--dy:-40px"/><rect x="38" y="28" width="17" height="17" rx="2.5" fill="url(#g3)" style="--i:2;--dx:24px;--dy:-16px"/><rect x="62" y="60" width="17" height="17" rx="2.5" fill="url(#g4)" style="--i:3;--dx:0px;--dy:-48px"/><rect x="62" y="36" width="17" height="17" rx="2.5" fill="url(#g5)" style="--i:4;--dx:0px;--dy:-24px"/><rect class="lead" x="62" y="12" width="17" height="17" rx="2.5" fill="url(#g6)" style="--i:5"/></svg>
     <div class="eyebrow">按岗位开工</div>
     <h2 class="h2">你缺的不是工具，是人手。</h2>
     <p class="sub">勾几个岗位就上岗。每个岗位各管一摊，各有自己的记忆。</p>
@@ -599,6 +624,9 @@ section{scroll-margin-top:80px}
 </footer>
 <script>
 function toggleTheme(){var r=document.documentElement,d=r.getAttribute('data-theme');var sys=matchMedia('(prefers-color-scheme: dark)').matches;var now=d?d==='dark':sys;r.setAttribute('data-theme',now?'light':'dark')}
+
+// 「一变一队」滚到眼前才播一次
+(function(){if(!('IntersectionObserver' in window))return;var io=new IntersectionObserver(function(es){es.forEach(function(e){if(e.isIntersecting){e.target.classList.add('play');io.unobserve(e.target)}})},{threshold:.6});document.querySelectorAll('.bm-split').forEach(function(el){io.observe(el)})})();
 </script>
 </body>
 </html>
