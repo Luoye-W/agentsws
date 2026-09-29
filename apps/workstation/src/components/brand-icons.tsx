@@ -156,6 +156,9 @@ const ICONS: Record<string, IconChoice> = {
   discord_bot: { kind: 'letter', letter: 'D' },
   telegram_bot: { kind: 'letter', letter: 'T' },
   whatsapp_business: { kind: 'letter', letter: 'W' },
+  // WP191（docs/86 §5）：Threads 与 LinkedIn 两张新卡，理由同上——首字母单色徽标
+  threads_api: { kind: 'letter', letter: '@' },
+  linkedin_api: { kind: 'letter', letter: 'L' },
   // WP78（60 §5）：公共关系那一张新卡。理由与上面两组逐字相同——仓库里那份
   // simple-icons 子集里没有它，去别处扒一个回来既不合 CC0 也不合 36 §8 的商标纪律。
   //

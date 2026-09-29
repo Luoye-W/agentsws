@@ -29,6 +29,8 @@ export const HELP_SLUGS = [
   'conn-meta',
   'conn-tiktok',
   'conn-x',
+  // WP191（docs/86 §4）：社媒运营的 LinkedIn 那条
+  'conn-linkedin',
   'conn-community',
   'conn-marketing-logistics',
   'browser-extension',
@@ -97,6 +99,9 @@ export const HELP_BY_SERVICE: Readonly<Record<string, HelpSlug>> = {
   instagram_graph: 'conn-meta',
   facebook_graph: 'conn-meta',
   meta_graph: 'conn-meta',
+  // WP191（docs/86 §5）：Threads 与 FB / IG 同属 Meta 那一篇；LinkedIn 自己一篇
+  threads_api: 'conn-meta',
+  linkedin_api: 'conn-linkedin',
   meta_marketing: 'conn-meta',
   whatsapp_business: 'conn-meta',
   tiktok_research: 'conn-tiktok',
