@@ -21,14 +21,25 @@ export {
   BLOCK_SIZE,
   BLOCKS,
   BREATHE_PHASE_MS,
+  DEFAULT_IDLE_STYLE,
   GRADIENT_AXIS,
+  IDLE_BLINK,
+  IDLE_SHEEN,
+  IDLE_START_MS,
+  IDLE_STYLES,
+  IDLE_WAVE,
+  IDLE_WAVE_DELAYS_MS,
+  type IdleStyle,
   LEAD,
+  MARK_BOX,
   MIN_GRADIENT_PX,
+  MIN_IDLE_PX,
   MOTION_GRADIENTS_ON_DARK,
   MOTION_GRADIENTS_ON_LIGHT,
   SPLIT_FIRST_DELAY_MS,
   SPLIT_OFFSETS,
   SPLIT_STEP_MS,
+  SPLIT_TOTAL_MS,
   STOPS_ON_DARK,
   STOPS_ON_LIGHT,
   VIEW_BOX,
@@ -63,3 +74,20 @@ export const MOTION_CLASS = {
   breathe: { block: 'ws-bm-breathe', lead: 'ws-bm-breathe' },
   split: { block: 'ws-bm-split', lead: 'ws-bm-split-lead' },
 } as const
+
+/**
+ * WP195 · 待机三个候选各自的类名（keyframes 同在 `index.css`，数字与 `@agentsws/brand` 的
+ * `IDLE_*` 逐个相等，`test/brand-idle.test.tsx` 核）。
+ *
+ * - 波：六块都挂，延迟按渐变方向错开；
+ * - 流光：挂在叠在方块上那一层亮带上，方块自己不动；
+ * - 眨眼：只挂领头那一块。
+ */
+export const IDLE_CLASS = {
+  wave: 'ws-bm-idle-wave',
+  sheen: 'ws-bm-idle-sheen',
+  blink: 'ws-bm-idle-blink',
+} as const
+
+/** 页面不在前台时挂在 `<svg>` 上：底下所有动画暂停（`animation-play-state: paused`）。 */
+export const PAUSED_CLASS = 'ws-bm-paused'

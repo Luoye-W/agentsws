@@ -250,6 +250,12 @@ export const IDLE_STYLES: readonly IdleStyle[] = ['wave', 'sheen', 'blink']
 /** 默认那一个：波（理由写在 `docs/briefs/reports/WP195.md`）。 */
 export const DEFAULT_IDLE_STYLE: IdleStyle = 'wave'
 
+/**
+ * 待机只给**渐变**那一档：单色（小于 `MIN_GRADIENT_PX`，或明写 mono）一律不挂。
+ * 那么小的标记一动，看起来就是抖——模型列表里的小图标只在悬停时播一次。
+ */
+export const MIN_IDLE_PX = MIN_GRADIENT_PX
+
 /** 挂上之后先静这么久才动第一下——一打开就动，像在抢注意力。 */
 export const IDLE_START_MS = 1600
 

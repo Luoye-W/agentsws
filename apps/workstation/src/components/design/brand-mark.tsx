@@ -9,10 +9,16 @@
  *
  * | motion | 说的是 | 用在哪 |
  * |---|---|---|
- * | `none` | 就是这个牌子 | 左栏顶部、favicon、README |
+ * | `none` | 就是这个牌子 | 小图标（单色）、桌面托盘、README |
  * | `assemble` | 这套东西正在起来 | 冷启动首屏、初始化设置第一屏 |
  * | `breathe` | **Agent 正在替你干活** | 对话线程、岗位卡运行点、正在进行 |
  * | `split` | 一个活做通了，复制成一队 | 设置完成屏、新岗位上岗回执 |
+ * | `idle` | 这个牌子是活的（WP195） | 左栏顶部、登录页、账号卡、随便聊空态 |
+ *
+ * `idle` 待机是 WP195 加的第五种（Luoye 09-29「静态的 logo 其实不好看」）：给一直挂在
+ * 屏幕上的标记用，一轮 ≥ 6 秒、大部分时间一动不动、只动 transform，三个候选
+ * （`idleStyle` = 波 / 流光 / 眨眼）。单色那一档不挂待机；页面不在前台时暂停；
+ * `playOnHover` 让鼠标移上去时播一次一变一队再回原姿态。
  *
  * 三条硬规矩，全部来自规范：
  *
@@ -22,11 +28,19 @@
  * 2. **小于 28px 一律退单色**（§1.3）：再小方块间的缝会并起来，渐变只剩一团糊。
  *    单色走 `currentColor`，颜色由摆它的地方说了算。
  * 3. **`prefers-reduced-motion: reduce` 时一律静态**：一个 animation 类都不挂。
+ *    设置里「界面动效」选了「开」或「关」时以那一项为准（`motion-pref.ts`）。
  *
  * SVG 里对 `<rect>` 做 transform 必须写 `transform-box: fill-box` +
  * `transform-origin: center`（§4.1 坑 1），这两句在 `index.css` 的基类里。
  */
-import { type CSSProperties, type ReactNode, useId, useSyncExternalStore } from 'react'
+import {
+  type CSSProperties,
+  type ReactNode,
+  useEffect,
+  useId,
+  useState,
+  useSyncExternalStore,
+} from 'react'
 import {
   ALL_BLOCKS,
   ASSEMBLE_DELAYS_MS,
@@ -34,20 +48,31 @@ import {
   BLOCK_SIZE,
   BLOCKS,
   BREATHE_PHASE_MS,
+  DEFAULT_IDLE_STYLE,
   GRADIENT_AXIS,
+  IDLE_CLASS,
+  IDLE_SHEEN,
+  IDLE_START_MS,
+  IDLE_WAVE_DELAYS_MS,
+  type IdleStyle,
+  MARK_BOX,
   MIN_GRADIENT_PX,
   MOTION_CLASS,
   motionStopVars,
+  PAUSED_CLASS,
   SPLIT_FIRST_DELAY_MS,
   SPLIT_OFFSETS,
   SPLIT_STEP_MS,
+  SPLIT_TOTAL_MS,
   STATIC_STOP_VARS,
   STOPS_ON_DARK,
   VIEW_BOX,
 } from './brand-mark.geometry'
+import { useMotionPref } from './motion-pref'
 
 export type BrandMarkVariant = 'gradient' | 'mono'
-export type BrandMarkMotion = 'none' | 'assemble' | 'breathe' | 'split'
+export type BrandMarkMotion = 'none' | 'assemble' | 'breathe' | 'split' | 'idle'
+export type BrandMarkIdleStyle = IdleStyle
 
 const REDUCE_QUERY = '(prefers-reduced-motion: reduce)'
 
@@ -70,6 +95,36 @@ export function usePrefersReducedMotion(): boolean {
   return useSyncExternalStore(
     subscribe,
     () => globalThis.matchMedia?.(REDUCE_QUERY).matches ?? false,
+    () => false,
+  )
+}
+
+/**
+ * 这一刻标记该不该动：设置里「界面动效」选了开 / 关就听它的，「跟随系统」（默认）就看
+ * 系统的「少一点动效」。
+ */
+export function useMotionAllowed(): boolean {
+  const reduce = usePrefersReducedMotion()
+  const pref = useMotionPref()
+  if (pref === 'on') return true
+  if (pref === 'off') return false
+  return !reduce
+}
+
+function subscribeVisibility(onChange: () => void): () => void {
+  const doc = globalThis.document
+  if (doc === undefined) return () => undefined
+  doc.addEventListener('visibilitychange', onChange)
+  return () => {
+    doc.removeEventListener('visibilitychange', onChange)
+  }
+}
+
+/** 页面在不在前台。切走了（别的标签页、窗口最小化）动画就该停，省电。 */
+export function usePageHidden(): boolean {
+  return useSyncExternalStore(
+    subscribeVisibility,
+    () => globalThis.document?.hidden ?? false,
     () => false,
   )
 }
@@ -106,6 +161,8 @@ export function BrandMark({
   size = 28,
   variant = 'gradient',
   motion = 'none',
+  idleStyle = DEFAULT_IDLE_STYLE,
+  playOnHover = false,
   className,
   label,
 }: {
@@ -113,6 +170,10 @@ export function BrandMark({
   size?: number
   variant?: BrandMarkVariant
   motion?: BrandMarkMotion
+  /** `motion="idle"` 时用哪一个候选（默认 `DEFAULT_IDLE_STYLE`）。 */
+  idleStyle?: BrandMarkIdleStyle
+  /** 鼠标移上去播一次一变一队（1.25s），播完回 `motion` 那一姿态。 */
+  playOnHover?: boolean
   className?: string
   /**
    * 给了就是有意义的图形（`role="img"` + `<title>`）；不给就是装饰
@@ -121,11 +182,27 @@ export function BrandMark({
   label?: string
 }): ReactNode {
   const uid = useId()
-  const reduce = usePrefersReducedMotion()
+  const allowed = useMotionAllowed()
+  const hidden = usePageHidden()
+  const [hovering, setHovering] = useState(false)
+  useEffect(() => {
+    if (!hovering) return
+    const id = setTimeout(() => {
+      setHovering(false)
+    }, SPLIT_TOTAL_MS)
+    return () => {
+      clearTimeout(id)
+    }
+  }, [hovering])
   // 规范 §1.3：小于 28px 一律退单色，无论调用方写的是 gradient 还是什么
   const mono = variant === 'mono' || size < MIN_GRADIENT_PX
-  const active: BrandMarkMotion = reduce ? 'none' : motion
+  // 待机只给渐变那一档（MIN_IDLE_PX = MIN_GRADIENT_PX）：单色的小标记一动就是抖
+  const wanted: BrandMarkMotion = hovering ? 'split' : motion === 'idle' && mono ? 'none' : motion
+  const active: BrandMarkMotion = allowed ? wanted : 'none'
   const moving = active !== 'none'
+  const sheen = active === 'idle' && idleStyle === 'sheen'
+  // 流光时方块自己不动，照静态那条规矩用一条整体渐变；其余动效每块自己一条（§3.0）
+  const perBlock = moving && !sheen
 
   const staticId = `${uid}-mark`
   const blockId = (i: number): string => `${uid}-b${i}`
@@ -162,12 +239,21 @@ export function BrandMark({
   })
 
   const fillOf = (i: number): string =>
-    mono ? 'currentColor' : `url(#${moving ? blockId(i) : staticId})`
+    mono ? 'currentColor' : `url(#${perBlock ? blockId(i) : staticId})`
 
   /** 第 i 块（0–4 是随从，5 是领头）在这一姿态下的类名与内联延迟。 */
   const poseOf = (i: number): { className?: string; style?: CSSProperties } => {
     if (!moving) return {}
     const lead = i === BLOCKS.length
+    if (active === 'idle') {
+      if (idleStyle === 'blink') return lead ? { className: IDLE_CLASS.blink } : {}
+      if (idleStyle === 'sheen') return {}
+      // 波：沿渐变方向错开，全体再往后推 IDLE_START_MS——一挂上就动像在抢注意力
+      return {
+        className: IDLE_CLASS.wave,
+        style: { animationDelay: `${IDLE_START_MS + (IDLE_WAVE_DELAYS_MS[i] ?? 0)}ms` },
+      }
+    }
     if (active === 'assemble') {
       return lead
         ? { className: MOTION_CLASS.assemble.lead }
@@ -196,14 +282,53 @@ export function BrandMark({
     }
   }
 
+  // 流光：一层白色亮带，被六块裁出来，只动它的位置（标记本身一个像素的颜色都不改）
+  const sheenId = `${uid}-sheen`
+  const clipId = `${uid}-clip`
+  const half = IDLE_SHEEN.bandWidth / 2
+  const sheenDefs = sheen ? (
+    <>
+      <linearGradient id={sheenId} x1="0" y1="1" x2="1" y2="0">
+        <stop offset={`${(0.5 - half) * 100}%`} stopColor="#fff" stopOpacity={0} />
+        <stop offset="50%" stopColor="#fff" stopOpacity={IDLE_SHEEN.peakOpacity} />
+        <stop offset={`${(0.5 + half) * 100}%`} stopColor="#fff" stopOpacity={0} />
+      </linearGradient>
+      <clipPath id={clipId}>
+        {ALL_BLOCKS.map((b) => (
+          <Blk key={`${b.x}-${b.y}`} x={b.x} y={b.y} fill="#000" />
+        ))}
+      </clipPath>
+    </>
+  ) : null
+
   const body = (
     <>
-      {mono ? null : <defs>{moving ? motionGradients : staticGradient}</defs>}
+      {mono ? null : (
+        <defs>
+          {perBlock ? motionGradients : staticGradient}
+          {sheenDefs}
+        </defs>
+      )}
       {ALL_BLOCKS.map((b, i) => (
         <Blk key={`${b.x}-${b.y}`} x={b.x} y={b.y} fill={fillOf(i)} {...poseOf(i)} />
       ))}
+      {sheen && !mono ? (
+        <g clipPath={`url(#${clipId})`} data-testid="brand-mark-sheen">
+          <rect
+            x={MARK_BOX.x}
+            y={MARK_BOX.y}
+            width={MARK_BOX.width}
+            height={MARK_BOX.height}
+            fill={`url(#${sheenId})`}
+            className={IDLE_CLASS.sheen}
+          />
+        </g>
+      ) : null}
     </>
   )
+  const classes = [className, moving && hidden ? PAUSED_CLASS : undefined]
+    .filter((c) => c !== undefined && c !== '')
+    .join(' ')
   const shared = {
     xmlns: 'http://www.w3.org/2000/svg',
     viewBox: VIEW_BOX,
@@ -213,7 +338,15 @@ export function BrandMark({
     'data-testid': 'brand-mark',
     'data-variant': mono ? 'mono' : 'gradient',
     'data-motion': active,
-    ...(className === undefined ? {} : { className }),
+    ...(active === 'idle' ? { 'data-idle-style': idleStyle } : {}),
+    ...(classes === '' ? {} : { className: classes }),
+    ...(playOnHover && allowed && !hovering
+      ? {
+          onMouseEnter: () => {
+            setHovering(true)
+          },
+        }
+      : {}),
   } as const
 
   // 两条分支各写一个 `<svg>`，不把 aria 那几个属性摊在同一个展开里：
