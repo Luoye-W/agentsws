@@ -506,6 +506,12 @@ const zh: Table = {
   'org.positions.duties': '{count} 条职责',
   'org.positions.duty.detail': '这条职责的规矩',
   'org.positions.duty.close': '收起规矩',
+  // WP196：岗位改名（只改显示名；中英各一）
+  'org.positions.rename': '改名',
+  'org.positions.rename.zh': '中文名',
+  'org.positions.rename.en': '英文名',
+  'org.positions.rename.hint':
+    '只改显示的名字，比如「CEO」「海外业务总监」。岗位里的职责、谁在做、活怎么分都不变。',
   'memory.position': '{name}（岗位层）',
   'memory.role': '{name}（职责层）',
   'memory.empty': '这一层还没有攒下东西。',
@@ -3356,8 +3362,7 @@ const en: Table = {
   'nav.org': 'Company',
   'org.title': 'Company',
   'org.subtitle': 'Who does what, how far they can go, and which stores they cover.',
-  'org.not_owner':
-    'This page is for your Lead. Ask them to create positions or invite people.',
+  'org.not_owner': 'This page is for your Lead. Ask them to create positions or invite people.',
   'org.tab.positions': 'Positions',
   'org.tab.members': 'People',
   'org.tab.roles': 'Duties',
@@ -3701,6 +3706,11 @@ const en: Table = {
   'org.positions.duties': '{count} duties',
   'org.positions.duty.detail': 'How this duty is set up',
   'org.positions.duty.close': 'Hide the setup',
+  'org.positions.rename': 'Rename',
+  'org.positions.rename.zh': 'Chinese name',
+  'org.positions.rename.en': 'English name',
+  'org.positions.rename.hint':
+    'Only changes the name people see, e.g. “CEO” or “Head of International”. Duties, holders and how work is routed stay the same.',
   'memory.position': '{name} (position layer)',
   'memory.role': '{name} (duty layer)',
   'memory.empty': 'Nothing has accumulated at this layer yet.',

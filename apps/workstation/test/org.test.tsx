@@ -237,6 +237,7 @@ const invited: unknown[] = []
 const proposed: unknown[] = []
 const revoked: string[] = []
 const supervised: unknown[] = []
+const updated: unknown[] = []
 
 vi.mock('@/lib/api', async () => {
   const actual = await vi.importActual<typeof import('@/lib/api')>('@/lib/api')
@@ -301,7 +302,10 @@ vi.mock('@/lib/api', async () => {
     },
     removeMember: async () => ({ revoked_assignments: 1 }),
     createOrgPosition: async () => POSITIONS[0],
-    updateOrgPosition: async () => POSITIONS[0],
+    updateOrgPosition: async (id: string, input: unknown) => {
+      updated.push({ id, input })
+      return POSITIONS[0]
+    },
     deleteOrgPosition: async () => ({ deleted: true }),
     setOrgPositionSupervisor: async (id: string, person_id: string | null) => {
       supervised.push({ id, person_id })
@@ -318,6 +322,7 @@ beforeEach(() => {
   proposed.length = 0
   revoked.length = 0
   supervised.length = 0
+  updated.length = 0
   state.ownerPositions = [
     {
       position_id: OWNER_ASSIGNMENT,
@@ -401,6 +406,64 @@ describe('公司页：岗位上级（WP174）', () => {
       expect(supervised).toEqual([
         { id: POSITIONS[0]?.id, person_id: first.person_id },
         { id: POSITIONS[0]?.id, person_id: null },
+      ])
+    })
+  })
+})
+
+describe('公司页：岗位改名（WP196）', () => {
+  it('岗位卡上「改名」：中英各一格，只发名字 + 原样的职责；中文名空着存不了；说明进问号', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(<OrgPage />)
+    const cards = await screen.findAllByTestId('position-card')
+    const support = within(cards[0] as HTMLElement)
+    expect(support.getByTestId('position-name').textContent).toBe('独立站售后客服')
+    await user.click(support.getByTestId('position-rename'))
+    const form = support.getByTestId('position-rename-form')
+    expect(form.querySelector('[data-slot="hint"]')?.getAttribute('data-hint')).toContain('CEO')
+    const zh = support.getByTestId('position-rename-zh') as HTMLInputElement
+    const en = support.getByTestId('position-rename-en') as HTMLInputElement
+    expect([zh.value, en.value]).toEqual(['独立站售后客服', 'DTC After-sales Support'])
+    await user.clear(zh)
+    expect((support.getByTestId('position-rename-save') as HTMLButtonElement).disabled).toBe(true)
+    await user.type(zh, '海外业务总监')
+    await user.clear(en)
+    await user.type(en, 'Head of International')
+    await user.click(support.getByTestId('position-rename-save'))
+    await waitFor(() => {
+      expect(updated).toEqual([
+        {
+          id: 'dtc-support',
+          input: {
+            name: '海外业务总监',
+            name_en: 'Head of International',
+            roles: [
+              { role_id: 'dtc.support', default: true },
+              { role_id: 'dtc.support-custom', default: true },
+            ],
+          },
+        },
+      ])
+    })
+    // 表单收起，「改名」回来
+    expect(support.queryByTestId('position-rename-form')).toBeNull()
+    expect(support.getByTestId('position-rename')).toBeTruthy()
+  })
+
+  it('英文名清空 = 英文名不变（不发 name_en）', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(<OrgPage />)
+    const cards = await screen.findAllByTestId('position-card')
+    const member = within(cards[1] as HTMLElement)
+    await user.click(member.getByTestId('position-rename'))
+    await user.clear(member.getByTestId('position-rename-en'))
+    await user.click(member.getByTestId('position-rename-save'))
+    await waitFor(() => {
+      expect(updated).toEqual([
+        {
+          id: 'member',
+          input: { name: '普通成员', roles: [{ role_id: 'common.member', default: true }] },
+        },
       ])
     })
   })
