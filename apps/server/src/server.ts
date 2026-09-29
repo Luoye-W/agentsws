@@ -6139,6 +6139,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         random,
         publicLibrary: createExtensionContributor({ secrets: brand.secrets, env }),
         serverVersion: env.AGENTSWS_VERSION ?? '0.1.0',
+        // WP201：每一轮公共库转发记一行（几条 2xx、几条待重试、几条云端不收）——
+        // 「插件采到的到底上没上公共库」在本机日志里有据可查。不带任何令牌与明文。
+        log: (line: string) => {
+          if (options.quiet !== true) process.stdout.write(`${line}\n`)
+        },
         // WP119c：深链的基底（hello 的 workbench_url）；没绑端口就不出这一格。
         workbenchUrl: () => (boundPort === undefined ? undefined : `http://127.0.0.1:${boundPort}`),
         // WP119c：看一次邮箱的积分价——价目是数据不是代码。WP165 起价目只在云上：

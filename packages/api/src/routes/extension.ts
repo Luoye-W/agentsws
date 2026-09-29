@@ -73,6 +73,12 @@ export interface ExtensionIngestResult {
   /** 这一批里有几条同时转发去了云端公共红人库（未登录 = 0）。 */
   forwarded_to_public_library: number
   /**
+   * WP201（只加）：**还在路上的条数**。本机为公共库那一跳最多等几秒就先回插件
+   * （插件自己只等 8 秒），没送完的后台接着送、断网 / 5xx 退避重试。
+   * 全部送完了（或者没登录、没有要送的）就没有这一格。
+   */
+  public_library_pending?: number
+  /**
    * WP131（只加）：**这次采集批次的 id**（`bt_…`）。插件一次列表采集按 20 条分块发，
    * 第一块不带 `batch_id`、服务端发一个新的；后面几块把它原样带上，同一批就落在同一个
    * 批次里。「回作战室看这批」深链 `/influencer/creators?batch=<id>` 拿它筛。
