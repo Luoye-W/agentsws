@@ -1,0 +1,125 @@
+---
+/** 下载页：读 `src/data/downloads.json`（版本、平台、链接、sha256、大小）。链接没定的显示「即将提供」。 */
+import { Image } from 'astro:assets'
+import rolesShot from '../../../../docs/assets/walkthrough/07-ob-roles.png'
+import Hint from '../components/Hint.astro'
+import Icon from '../components/Icon.astro'
+import { GITHUB_URL } from '../config.js'
+import manifestJson from '../data/downloads.json'
+import { type Lang, localePath } from '../i18n/common.js'
+import { DOWNLOAD } from '../i18n/download.js'
+import Base from '../layouts/Base.astro'
+import {
+  type DesktopItem,
+  type DownloadItem,
+  type DownloadManifest,
+  formatSize,
+  manifestProblems,
+} from '../lib/downloads.js'
+import { docHref } from '../lib/markdown.js'
+import '../styles/pages.css'
+
+interface Props {
+  lang: Lang
+}
+const { lang } = Astro.props
+const t = DOWNLOAD[lang]
+const p = (x: string) => localePath(x, lang)
+const m = manifestJson as unknown as DownloadManifest
+const problems = manifestProblems(m)
+if (problems.length > 0) throw new Error(`downloads.json 有问题：\n${problems.join('\n')}`)
+const byId = (id: string) => m.desktop.find((d) => d.id === id) as DesktopItem
+const primaryIds = ['mac-arm64', 'win-x64'] as const
+const osIcon = (d: DesktopItem) => (d.os === 'win' ? 'windows' : 'apple') as 'windows' | 'apple'
+const attrs = (it: DownloadItem) =>
+  it.url === null
+    ? { 'aria-disabled': 'true', title: t.soonHint }
+    : { href: it.url, download: it.file }
+---
+<Base lang={lang} path="/download/" title={t.meta.title} description={t.meta.description} og="download" current="download">
+  <section class="dl-hero">
+    <div class="wrap center">
+      <div class="eyebrow">{t.eyebrow}</div>
+      <h1 class="page-h1">{t.title}</h1>
+      <p class="sub">{t.sub}</p>
+      <div class="cta-row" data-os-primary>
+        {(() => {
+          const d = byId('mac-arm64')
+          return <a class="btn btn-primary btn-lg" {...attrs(d)}><Icon name={osIcon(d)} />{d.url === null ? `${t.primary['mac-arm64']} · ${t.soon}` : t.primary['mac-arm64']}</a>
+        })()}
+      </div>
+      {primaryIds.slice(1).map((id) => {
+        const d = byId(id)
+        return <template data-os={id}><a class="btn btn-primary btn-lg" {...attrs(d)}><Icon name={osIcon(d)} />{d.url === null ? `${t.primary[id]} · ${t.soon}` : t.primary[id]}</a></template>
+      })}
+      <p class="ver">{m.version} · {t.beta} · <a href={p('/changelog/')}>{t.changelog}</a> · <a href="#os">{t.others}</a></p>
+      <div class="dl-shot">
+        <div class="frame">
+          <div class="frame-bar" aria-hidden="true"><i></i><i></i><i></i><span>{t.frameBar}</span></div>
+          <div class="frame-img"><Image src={rolesShot} alt={t.shotAlt} width={1360} height={760} fit="cover" position="top" widths={[680, 980, 1360]} sizes="(max-width: 900px) calc(100vw - 40px), 980px" loading="eager" /></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec sec-alt" id="os" aria-labelledby="os-h">
+    <div class="wrap center">
+      <h2 class="h2" id="os-h">{t.osTitle}</h2>
+      <ul class="oses">
+        {m.desktop.map((d) => {
+          const o = t.os[d.id as keyof typeof t.os]
+          return (
+            <li class:list={['os', { sel: d.id === 'mac-arm64' }]} data-os-card={d.id}>
+              <div class="role-ic"><Icon name={osIcon(d)} /></div>
+              <h3>{o.h}</h3>
+              <p>{o.p}</p>
+              <a class:list={['btn', 'btn-sm', d.id === 'mac-arm64' ? 'btn-primary' : 'btn-ghost']} {...attrs(d)}>{d.url === null ? t.soon : o.btn}</a>
+              <span class="first">{d.os === 'mac' ? t.firstOpen.mac : t.firstOpen.win}<Hint text={d.os === 'mac' ? t.firstOpen.macHint : t.firstOpen.winHint} /></span>
+              {d.url !== null && (
+                <span class="meta"><span>{t.size}：{formatSize(d.size)}</span><span>{t.sha}：<code>{d.sha256}</code></span></span>
+              )}
+            </li>
+          )
+        })}
+      </ul>
+      <p class="safe"><Icon name="shield" />{t.safe}</p>
+    </div>
+  </section>
+
+  <section class="sec" id="next" aria-labelledby="next-h">
+    <div class="wrap">
+      <div class="center"><div class="eyebrow">{t.next.eyebrow}</div><h2 class="h2" id="next-h">{t.next.title}</h2></div>
+      <ol class="rail" style="--n:4">
+        {t.next.steps.map(([h, d], i) => <li class:list={['step', { on: i === 0 }]}><div class="n" aria-hidden="true">{i + 1}</div><h3>{h}</h3><p>{d}</p></li>)}
+      </ol>
+      <p class="center stuck">{t.next.stuck}<a href={p('/docs/')}>{t.next.docs}</a></p>
+    </div>
+  </section>
+
+  <section class="sec sec-alt" id="more" aria-labelledby="more-h">
+    <div class="wrap">
+      <div class="center"><h2 class="h2" id="more-h">{t.more.title}</h2></div>
+      <div class="extras">
+        <div class="extra">
+          <div class="role-ic"><Icon name="puzzle" /></div>
+          <h3>{t.more.ext.h}</h3>
+          <p>{t.more.ext.p}</p>
+          <div class="row">
+            <a class="btn btn-ghost btn-sm" {...attrs(m.extension)}>{m.extension.url === null ? `${t.more.ext.btn} · ${t.soon}` : t.more.ext.btn}</a>
+            <a href={docHref('browser-extension', lang)}>{t.more.ext.how}</a>
+          </div>
+          {m.extension.url !== null && <span class="meta"><span>{m.extension.version} · {t.size}：{formatSize(m.extension.size)}</span><span>{t.sha}：<code>{m.extension.sha256}</code></span></span>}
+        </div>
+        <div class="extra">
+          <div class="role-ic"><Icon name="code" /></div>
+          <h3>{t.more.dev.h}</h3>
+          <p>{t.more.dev.p}</p>
+<pre class="code"><span class="t-dim">$</span> git clone {GITHUB_URL.replace('https://', '')}
+<span class="t-dim">$</span> pnpm install &amp;&amp; pnpm build
+<span class="t-dim">$</span> pnpm dev:demo</pre>
+        </div>
+      </div>
+      <p class="center linux">{t.more.linux}</p>
+    </div>
+  </section>
+</Base>

@@ -1,0 +1,29 @@
+---
+import { LEGAL_EFFECTIVE_DATE } from '../config.js'
+import { type Lang, localePath } from '../i18n/common.js'
+import { PAGES } from '../i18n/pages.js'
+import Base from '../layouts/Base.astro'
+import { LEGAL_PAGES, type LegalPage, loadLegal } from '../lib/legal.js'
+import '../styles/pages.css'
+
+interface Props {
+  lang: Lang
+  page: LegalPage
+}
+const { lang, page } = Astro.props
+const t = PAGES[lang].legal
+const doc = loadLegal(page, lang)
+const brand = lang === 'zh' ? 'Agents 工坊' : 'Agents Workshop'
+---
+<Base lang={lang} path={`/${page}/`} title={`${t[page].title} · ${brand}`} description={t[page].description} og="legal">
+  <section class="legal">
+    <div class="wrap">
+      <h1 class="page-h1">{doc.title || t[page].title}</h1>
+      <p class="updated">{t.updated}：{LEGAL_EFFECTIVE_DATE}</p>
+      <div class="prose" set:html={doc.html} />
+      <nav class="others" aria-label={t.others}>
+        {LEGAL_PAGES.filter((x) => x !== page).map((x) => <a href={localePath(`/${x}/`, lang)}>{t[x].title}</a>)}
+      </nav>
+    </div>
+  </section>
+</Base>

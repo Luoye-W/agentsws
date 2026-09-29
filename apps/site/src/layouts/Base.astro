@@ -1,0 +1,85 @@
+---
+/**
+ * 每一页的外壳：<head>（SEO / 分享 / hreflang）、公告条、顶栏、页脚、标记动效的 CSS 与那一小段脚本。
+ */
+import { ASSEMBLE_TOTAL_MS, liveMarkCss, SPLIT_TOTAL_MS } from '@agentsws/brand'
+import Footer from '../components/Footer.astro'
+import Nav from '../components/Nav.astro'
+import { COMMON, type Lang, localePath } from '../i18n/common.js'
+import { absolute, alternates, type OgKey, ogImage } from '../lib/seo.js'
+import '../styles/site.css'
+
+interface Props {
+  lang: Lang
+  /** 不带语言前缀的路径（`/`、`/pricing/`）。 */
+  path: string
+  title: string
+  description: string
+  og: OgKey
+  /** 顶栏哪一项高亮。 */
+  current?: 'roles' | 'pricing' | 'docs' | 'changelog' | 'download'
+  announce?: boolean
+  noindex?: boolean
+}
+const {
+  lang,
+  path,
+  title,
+  description,
+  og,
+  current,
+  announce = false,
+  noindex = false,
+} = Astro.props
+const c = COMMON[lang]
+const canonical = absolute(localePath(path, lang))
+const image = ogImage(og, lang)
+const other: Lang = lang === 'zh' ? 'en' : 'zh'
+---
+<!doctype html>
+<html lang={c.htmlLang}>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    {noindex ? <meta name="robots" content="noindex" /> : <link rel="canonical" href={canonical} />}
+    {!noindex && alternates(path).map((a) => <link rel="alternate" hreflang={a.hreflang} href={a.href} />)}
+    <meta name="theme-color" content="#F3F5F2" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0E100F" media="(prefers-color-scheme: dark)" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content={c.brand} />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={canonical} />
+    <meta property="og:image" content={image} />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:locale" content={c.ogLocale} />
+    <meta property="og:locale:alternate" content={COMMON[other].ogLocale} />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
+    <meta name="twitter:image" content={image} />
+    <script is:inline>
+      try{var t=localStorage.getItem('aw-theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t)}catch(e){}
+    </script>
+    <style is:inline set:html={liveMarkCss()}></style>
+  </head>
+  <body data-aw-assemble-ms={ASSEMBLE_TOTAL_MS} data-aw-split-ms={SPLIT_TOTAL_MS}>
+    <a class="skip" href="#main">{c.skip}</a>
+    {announce && (
+      <div class="announce"><b>{c.announce.badge}</b> · {c.announce.text}<a href={localePath('/changelog/', lang)}>{c.announce.link}</a></div>
+    )}
+    <Nav lang={lang} path={path} current={current} />
+    <main id="main">
+      <slot />
+    </main>
+    <Footer lang={lang} path={path} />
+    <script>
+      import '../scripts/site.ts'
+    </script>
+  </body>
+</html>

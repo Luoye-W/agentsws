@@ -1,0 +1,35 @@
+---
+import { GITHUB_URL } from '../config.js'
+import type { Lang } from '../i18n/common.js'
+import { PAGES } from '../i18n/pages.js'
+import Base from '../layouts/Base.astro'
+import { loadChangelog } from '../lib/changelog.js'
+import '../styles/pages.css'
+
+interface Props {
+  lang: Lang
+}
+const { lang } = Astro.props
+const t = PAGES[lang].changelog
+const entries = loadChangelog(lang)
+---
+<Base lang={lang} path="/changelog/" title={t.meta.title} description={t.meta.description} og="changelog" current="changelog">
+  <section class="page-hero">
+    <div class="wrap">
+      <div class="eyebrow">{t.eyebrow}</div>
+      <h1 class="page-h1">{t.title}</h1>
+      <p class="sub">{t.sub}</p>
+      <ol class="log-list">
+        {entries.map((e) => (
+          <li class="log-item" id={e.id}>
+            <time datetime={e.date}>{e.date}</time>
+            <h2>{e.title}</h2>
+            <p class="lead">{e.summary}</p>
+            <div class="prose" set:html={e.html} />
+          </li>
+        ))}
+      </ol>
+      <p class="log-repo"><a href={GITHUB_URL} rel="noopener">{t.repo} →</a></p>
+    </div>
+  </section>
+</Base>

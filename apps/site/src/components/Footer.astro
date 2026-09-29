@@ -1,0 +1,79 @@
+---
+import {
+  ARCHITECTURE_URL,
+  CLOUD_LOGIN_URL,
+  CLOUD_URL,
+  CONTRIBUTING_URL,
+  GITHUB_URL,
+  SECURITY_URL,
+  TRADEMARK_URL,
+} from '../config.js'
+import { COMMON, type Lang, localePath } from '../i18n/common.js'
+import Mark from './Mark.astro'
+
+interface Props {
+  lang: Lang
+  path: string
+}
+const { lang, path } = Astro.props
+const c = COMMON[lang]
+const f = c.footer
+const p = (x: string) => localePath(x, lang)
+const cols = [
+  {
+    h: f.product,
+    items: [
+      [f.roles, p('/roles/')],
+      [f.pricing, p('/pricing/')],
+      [f.download, p('/download/')],
+      [f.extension, `${p('/download/')}#more`],
+    ],
+  },
+  {
+    h: f.resources,
+    items: [
+      [f.docs, p('/docs/')],
+      [f.changelog, p('/changelog/')],
+    ],
+  },
+  {
+    h: f.openSource,
+    items: [
+      [f.github, GITHUB_URL],
+      [f.architecture, ARCHITECTURE_URL],
+      [f.contributing, CONTRIBUTING_URL],
+      [f.security, SECURITY_URL],
+    ],
+  },
+  {
+    h: f.account,
+    items: [
+      [f.login, CLOUD_LOGIN_URL],
+      [f.topup, CLOUD_URL],
+      [f.terms, p('/terms/')],
+      [f.privacy, p('/privacy/')],
+      [f.refund, p('/refund/')],
+    ],
+  },
+] as const
+---
+<footer class="foot">
+  <div class="wrap">
+    <div class="foot-grid">
+      <div>
+        <a class="logo" href={p('/')}><Mark id="foot" kind="static" />{c.brand}</a>
+        <p class="tagline">{c.tagline}</p>
+      </div>
+      {cols.map((col) => (
+        <div>
+          <h2>{col.h}</h2>
+          <ul>{col.items.map(([label, href]) => <li><a href={href} rel={href.startsWith('http') ? 'noopener' : undefined}>{label}</a></li>)}</ul>
+        </div>
+      ))}
+    </div>
+    <div class="foot-bottom">
+      <span>{f.bottom.split(f.trademark)[0]}<a href={TRADEMARK_URL} rel="noopener">{f.trademark}</a>{f.bottom.split(f.trademark)[1] ?? ''}</span>
+      <span><a href={localePath(path, 'zh')} lang="zh-CN">中文</a> · <a href={localePath(path, 'en')} lang="en">English</a></span>
+    </div>
+  </div>
+</footer>

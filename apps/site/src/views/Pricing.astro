@@ -1,0 +1,148 @@
+---
+/** 价格页：两张方案卡 → 充值档位（云上取）→ 钱花在哪三块 + 价目表（云上取）→ 关于积分 → 收尾。 */
+import Hint from '../components/Hint.astro'
+import Icon from '../components/Icon.astro'
+import { CLOUD_LOGIN_URL, CLOUD_URL } from '../config.js'
+import { buildPricing } from '../data/pricing-build.js'
+import { type Lang, localePath } from '../i18n/common.js'
+import { PRICING } from '../i18n/pricing.js'
+import Base from '../layouts/Base.astro'
+import {
+  type Block,
+  entriesOf,
+  entryLabel,
+  formatCredits,
+  tiersOf,
+  unitLabel,
+} from '../lib/pricing.js'
+import '../styles/pages.css'
+
+interface Props {
+  lang: Lang
+}
+const { lang } = Astro.props
+const t = PRICING[lang]
+const p = (x: string) => localePath(x, lang)
+const pricing = await buildPricing()
+const tiers = tiersOf(pricing)
+const rate = pricing.catalog.topup_tiers.credits_per_usd || 7
+const groups: { block: Block; label: string }[] = [
+  { block: 'ai', label: t.blocks.ai.h },
+  { block: 'data', label: t.blocks.data.h },
+  { block: 'service', label: t.blocks.service.h },
+]
+const numFmt = new Intl.NumberFormat(lang === 'zh' ? 'zh-CN' : 'en-US')
+---
+<Base lang={lang} path="/pricing/" title={t.meta.title} description={t.meta.description} og="pricing" current="pricing">
+  <section class="page-hero">
+    <div class="wrap center">
+      <div class="eyebrow">{t.eyebrow}</div>
+      <h1 class="page-h1">{t.title[0]}<br />{t.title[1]}</h1>
+      <p class="sub">{t.sub}</p>
+      <div class="plans">
+        <div class="plan">
+          <div class="tag">{t.open.tag}</div>
+          <div class="price">{t.open.price}<small>{t.open.unit}</small></div>
+          <p class="plan-line">{t.open.line}</p>
+          <ul>{t.open.items.map((it) => <li><Icon name="check" />{it}</li>)}</ul>
+          <a class="btn btn-ghost" href={p('/download/')}><Icon name="download" />{t.open.cta}</a>
+        </div>
+        <div class="plan sel">
+          <div class="tag">{t.paid.tag}</div>
+          <div class="price">{t.paid.price}<small>{t.paid.unit}</small></div>
+          <p class="plan-line">{t.paid.line}</p>
+          <ul>{t.paid.items.map((it, i) => <li><Icon name="check" /><span>{it}{i === 1 && <Hint text={t.paid.bonusHint} />}</span></li>)}</ul>
+          <a class="btn btn-primary" href="#topup">{t.paid.cta}</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec sec-alt" id="topup" aria-labelledby="topup-h">
+    <div class="wrap center">
+      <div class="eyebrow">{t.topup.eyebrow}</div>
+      <h2 class="h2" id="topup-h">{t.topup.title}</h2>
+      <p class="sub">{t.topup.sub.replace('{rate}', String(rate))}</p>
+      {tiers.length === 0 ? <p class="sub" style="margin-top:32px">{t.topup.none}</p> : (
+        <ul class="tiers" style={`--n:${Math.min(tiers.length, 4)}`}>
+          {tiers.map((tier) => (
+            <li class:list={['tier', { sel: tier.recommended === true }]}>
+              <div class="lbl">{lang === 'zh' ? tier.label_zh : tier.label_en}</div>
+              <div class="usd">${tier.usd}</div>
+              <div class="cr"><b>{numFmt.format(tier.credits)}</b> {t.topup.credits}</div>
+              <a class:list={['btn', 'btn-sm', tier.recommended ? 'btn-primary' : 'btn-ghost']} href={CLOUD_URL} rel="noopener" aria-label={`${t.topup.cta} $${tier.usd}`}>{t.topup.cta}</a>
+            </li>
+          ))}
+        </ul>
+      )}
+      <p class="safe"><Icon name="shield" />{t.topup.safe}<Hint text={t.topup.safeHint} /></p>
+    </div>
+  </section>
+
+  <section class="sec" id="where" aria-labelledby="where-h">
+    <div class="wrap center">
+      <div class="eyebrow">{t.blocks.eyebrow}</div>
+      <h2 class="h2" id="where-h">{t.blocks.title}</h2>
+      <div class="blocks">
+        <div class="block"><div class="role-ic"><Icon name="globe" /></div><h3>{t.blocks.data.h}</h3><p>{t.blocks.data.p}</p><span class="unit">{t.blocks.data.unit}</span></div>
+        <div class="block"><div class="role-ic"><Icon name="spark" /></div><h3>{t.blocks.ai.h}</h3><p>{t.blocks.ai.p}</p><span class="unit">{t.blocks.ai.unit}</span></div>
+        <div class="block"><div class="role-ic"><Icon name="star" /></div><h3>{t.blocks.service.h}</h3><p>{t.blocks.service.p}</p><span class="unit">{t.blocks.service.unit}</span></div>
+      </div>
+
+      <div class="price-table" id="table">
+        <div class="pt-head">
+          <h3>{t.table.title}</h3>
+          <span class:list={['chip', pricing.source === 'cloud' ? 'good' : 'warn']}>{pricing.source === 'cloud' ? t.table.cloud : t.table.sample}</span>
+          <span class="pt-note">{t.table.note}</span>
+        </div>
+        <table>
+          <thead><tr>{t.table.head.map((h) => <th scope="col">{h}</th>)}</tr></thead>
+          {groups.map((g) => {
+            const rows = entriesOf(pricing, g.block)
+            return rows.length === 0 ? null : (
+              <tbody>
+                <tr class="grp"><td colspan="3">{g.label}</td></tr>
+                {rows.map((e) => (
+                  <tr><td>{entryLabel(e, lang)}</td><td>{unitLabel(e.unit, lang)}</td><td>{formatCredits(e.credits_per_unit)}</td></tr>
+                ))}
+              </tbody>
+            )
+          })}
+        </table>
+        {entriesOf(pricing, 'ai').filter((e) => (e.models?.length ?? 0) > 0).map((e) => (
+          <details>
+            <summary>{t.table.models} · {entryLabel(e, lang)}</summary>
+            <table>
+              <thead><tr><th scope="col">{t.table.model}</th><th scope="col">{t.table.input}</th><th scope="col">{t.table.output}</th></tr></thead>
+              <tbody>
+                {(e.models ?? []).filter((m, i, all) => (m.in > 0 || m.out > 0) && all.findIndex((x) => x.model === m.model && x.cn === m.cn && (x.in > 0 || x.out > 0)) === i).map((m) => (
+                  <tr><td>{m.model}{m.cn ? ` · ${t.table.region}` : ''}</td><td>{formatCredits(m.in)}</td><td>{formatCredits(m.out)}</td></tr>
+                ))}
+              </tbody>
+            </table>
+          </details>
+        ))}
+        <p class:list={['pt-foot', { sample: pricing.source === 'sample' }]}>{pricing.source === 'cloud' ? t.table.asOf.replace('{date}', pricing.as_of) : t.table.sampleNote}</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec sec-alt" id="faq" aria-labelledby="faq-h">
+    <div class="wrap center">
+      <h2 class="h2" id="faq-h">{t.faq.title}</h2>
+      <div class="faq">
+        {t.faq.items.map(([q, a], i) => <details open={i < 2}><summary>{q}</summary><p>{a}</p></details>)}
+      </div>
+    </div>
+  </section>
+
+  <section class="final">
+    <div class="wrap">
+      <h2 style="margin-top:0">{t.final.title}</h2>
+      <div class="cta-row">
+        <a class="btn btn-primary" href={p('/download/')}><Icon name="download" />{t.final.download}</a>
+        <a class="btn btn-ghost" href={CLOUD_LOGIN_URL} rel="noopener">{t.final.login}</a>
+      </div>
+    </div>
+  </section>
+</Base>

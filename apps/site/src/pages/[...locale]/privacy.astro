@@ -1,0 +1,8 @@
+---
+import { localeStaticPaths } from '../../lib/locales.js'
+import Legal from '../../views/Legal.astro'
+
+export const getStaticPaths = localeStaticPaths
+const { lang } = Astro.props
+---
+<Legal lang={lang} page="privacy" />
