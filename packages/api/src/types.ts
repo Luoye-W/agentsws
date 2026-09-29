@@ -706,6 +706,15 @@ export interface SchedulePort {
 
 export interface GatewayDeps {
   identity: IdentityService
+  /**
+   * WP194（只加）：一次请求绑定好分配之后，路由在这个作用域里跑。宿主用它开一个
+   * 「这一次算在谁头上」的作用域（本机公司成员 + 岗位），底下打云的客户端据此带归属头。
+   * 不给 = 直接跑（老行为）。
+   */
+  requestScope?: (
+    scope: { person_id: PersonId; assignment: Assignment },
+    next: () => Promise<void>,
+  ) => Promise<void>
   halt: Halt
   trace: Trace
   clock: Clock

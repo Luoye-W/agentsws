@@ -47,6 +47,7 @@ import type {
 import {
   CLOUD_STAND_IN_BASE_URL,
   type CloudStandIn,
+  type CloudStandInUsageSeed,
   cloudStandIn,
   createServer,
   deepseekAccountStandIn,
@@ -1428,6 +1429,9 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
     await server.drainApprovals()
   }
 
+  // WP194：公司「积分」页与「我的本月额度」要有东西可看（替身里的合成数字，不真扣钱）
+  seedAllocation(cloud, server, world)
+
   // 45（WP50）：公司页「并进来」Tab 与新建品牌时的查重提示都要有东西可看
   await seedJoin(world, server)
 
@@ -1774,6 +1778,47 @@ async function seedMessages(server: Server, world: World): Promise<void> {
       created_at: inquiry.date,
     })
   }
+}
+
+/**
+ * WP194：给替身种本月的用量与上限——**合成数字**，只为让「积分」页（管理员）与「我的本月额度」
+ * （成员）有东西可看、能演示「额度到了」。按真实的分配算人 × 岗位：每个人在他持有的岗位上各记一些
+ * AI 与数据的花费；第一位同事设一个快到的上限（80% 提醒），第二位设一个已经用完的（额度到了）。
+ */
+function seedAllocation(cloud: CloudStandIn, server: Server, world: World): void {
+  const templates = server.org.positions()
+  const pairs = new Map<string, { member_id: string; position_id: string }>()
+  for (const a of world.roles.assignments.listByWorkspace(world.workspace_id)) {
+    if (a.revoked_at !== undefined || a.role_id.startsWith('common.')) continue
+    const position = templates.find((t) => t.roles.some((r) => r.role === a.role_id))?.id
+    if (position === undefined) continue
+    pairs.set(`${a.person_id}|${position}`, { member_id: a.person_id, position_id: position })
+  }
+  const AI = [9.6, 5.4, 3.8, 2.6, 1.9, 1.2]
+  const DATA = [3.2, 2.4, 1.6, 0.8, 0.6, 0.4]
+  const usage: CloudStandInUsageSeed[] = [...pairs.values()].flatMap((p, i) => [
+    { ...p, bucket: 'ai' as const, credits: AI[i % AI.length] ?? 1, calls: 40 + i * 7 },
+    { ...p, bucket: 'data' as const, credits: DATA[i % DATA.length] ?? 0.5, calls: 12 + i * 3 },
+  ])
+  // 月费（红人营销增值服务）归「其它」，没带归属——记在「没标注」那一格
+  usage.push({ bucket: 'other', credits: 30, calls: 1 })
+  cloud.seedAllocation({ usage })
+  const used = (member: string): number =>
+    usage.filter((u) => u.member_id === member).reduce((sum, u) => sum + u.credits, 0)
+  const others = [...new Set([...pairs.values()].map((p) => p.member_id))].filter(
+    (m) => m !== world.roleHolder,
+  )
+  const limits: { kind: 'member' | 'position'; subject_id: string; monthly_limit: number }[] = []
+  const near = others[0]
+  if (near !== undefined)
+    limits.push({ kind: 'member', subject_id: near, monthly_limit: Math.ceil(used(near) / 0.85) })
+  const over = others[1]
+  if (over !== undefined)
+    limits.push({ kind: 'member', subject_id: over, monthly_limit: Math.floor(used(over)) })
+  const firstPosition = [...pairs.values()][0]?.position_id
+  if (firstPosition !== undefined)
+    limits.push({ kind: 'position', subject_id: firstPosition, monthly_limit: 50 })
+  cloud.seedAllocation({ limits })
 }
 
 /**

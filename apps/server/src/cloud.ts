@@ -20,17 +20,26 @@ import { dirname, join } from 'node:path'
 import type { CloudActor, CloudPort } from '@agentsws/api'
 import { ApiError } from '@agentsws/api'
 import type {
+  AllocationAuditList,
+  AllocationLimitChanged,
+  AllocationLimitRequest,
+  AllocationMemberRemoved,
+  AllocationReport,
+  Attribution,
   CapabilitySource,
   CapabilitySourceSettings,
   CapabilitySources,
   Clock,
+  CloudAllocationView,
   CloudCreditsView,
+  CloudMyAllocationView,
   DataSourceLevel,
   DataSourceRoute,
   KolCloudDeleteResult,
   KolCloudExport,
   LocalPricing,
   LocalTopupTiers,
+  MyAllocation,
   ServiceSubscription,
   TopupOrder,
   UsageGroup,
@@ -38,12 +47,14 @@ import type {
   WalletBalance,
 } from '@agentsws/contracts'
 import {
+  attributionHeaders,
   DEFAULT_DATA_SOURCE_ORDER,
   DEFAULT_WEB_SEARCH_ORDER,
   WEB_SEARCH_ROUTE_KEY,
 } from '@agentsws/contracts'
+import { currentCloudHeaders } from './cloud-attribution.js'
 import type { KolStore } from './kol.js'
-import type { KolCloudCall, KolCloudCallFn, KolCloudSync } from './kol-cloud-sync.js'
+import type { KolCloudCall, KolCloudSync } from './kol-cloud-sync.js'
 import { createKolCloudSync } from './kol-cloud-sync.js'
 import { CLOUD_BASE_URL_ENV, CLOUD_TOKEN_SECRET_ID, DEFAULT_CLOUD_BASE_URL } from './models.js'
 import { createPricingCatalog, type PricingCatalogSource } from './pricing-catalog.js'
@@ -92,6 +103,21 @@ export interface CloudOptions {
    * 建一份、各品牌共用；不给就自己建一份（缓存落在 `dbDir`）。
    */
   pricingCatalog?: PricingCatalogSource
+  /**
+   * WP194：一条职责归哪个岗位（`positions.positionOf`）。打云时据此带 `X-Agentsws-Position`；
+   * 取值函数——岗位面在云面之后才装好。不给 = 只带「谁」，不带岗位。
+   */
+  positionOf?: (role_id: string) => string | undefined
+  /**
+   * WP194：公司时区（工作区档案的 `tz`）。改额度时顺手告诉云上（自然月按它切）；
+   * 只认 IANA 名（`Asia/Shanghai`），`+08:00` 这种偏移不传（云上缺省就是上海）。
+   */
+  timeZone?: () => Promise<string | undefined> | string | undefined
+  /**
+   * WP194：这个人能不能管公司的积分（公司的 owner / admin，或本工作区所有者职责的持有人）。
+   * 不给 = 谁都不能看公司那一页（最保守：漏放一个人看全公司的账比多拦一次糟）。
+   */
+  canManage?: (actor: CloudActor) => Promise<boolean> | boolean
 }
 
 export interface CloudAssembly {
@@ -116,6 +142,11 @@ export interface CloudAssembly {
    * （`deepseek_native`，对外叫「用你的 DeepSeek 账号搜索」）；用户在设置里关掉就是 `disabled` 里有它。
    */
   webSearchRoute(): DataSourceRoute
+  /**
+   * WP194：删成员时把他在云上的额度行清掉（历史用量保留）。**尽力而为**：没关联 / 连不上
+   * 不拦删人——本地这一刀已经切了，云上那一行留着也不会再被用到（他不再出现在请求头里）。
+   */
+  forgetMember(person_id: string, by: string): Promise<boolean>
   /** 一项能力的价目（49 M4）。取不到就回 `undefined`——不编一个数。 */
   priceOf(capability: string): Promise<{ credits: number; unit: string } | undefined>
   /**
@@ -214,7 +245,7 @@ export function createCloud(options: CloudOptions): CloudAssembly {
   /** 打一次云侧。令牌在这一行进头，函数返回之后没人再引用它。 */
   const callCloud = async <T>(
     path: string,
-    init: { method?: string; body?: string } = {},
+    init: { method?: string; body?: string; headers?: Record<string, string> } = {},
   ): Promise<T | undefined> => {
     const token = tokenOf()
     if (token === undefined) return undefined
@@ -229,6 +260,9 @@ export function createCloud(options: CloudOptions): CloudAssembly {
           Authorization: `Bearer ${token}`,
           accept: 'application/json',
           ...(init.body === undefined ? {} : { 'content-type': 'application/json' }),
+          // WP194：算在谁头上（作用域里的那一份；显式给的优先）
+          ...currentCloudHeaders(),
+          ...init.headers,
         },
         ...(init.body === undefined ? {} : { body: init.body }),
         signal: controller.signal,
@@ -252,9 +286,9 @@ export function createCloud(options: CloudOptions): CloudAssembly {
    * 要把云上那句话原样端给用户——**402「还没开通」与 503「云连不上」是两句话**，
    * 一句给"去开通"，一句给"稍后再试"，合成一句用户就不知道该怎么办了。
    */
-  const cloudCall: KolCloudCallFn = async <T>(
+  const cloudCall = async <T>(
     path: string,
-    init: { method?: string; body?: unknown } = {},
+    init: { method?: string; body?: unknown; headers?: Record<string, string> } = {},
   ): Promise<KolCloudCall<T>> => {
     const token = tokenOf()
     if (token === undefined) return { ok: false, status: 0 }
@@ -269,6 +303,8 @@ export function createCloud(options: CloudOptions): CloudAssembly {
           Authorization: `Bearer ${token}`,
           accept: 'application/json',
           ...(init.body === undefined ? {} : { 'content-type': 'application/json' }),
+          ...currentCloudHeaders(),
+          ...init.headers,
         },
         ...(init.body === undefined ? {} : { body: JSON.stringify(init.body) }),
         signal: controller.signal,
@@ -341,6 +377,71 @@ export function createCloud(options: CloudOptions): CloudAssembly {
         res.message ?? `云上出了点问题，这一次没有${action}。`,
       )
     throw new ApiError('invalid_input', res.message ?? `云上没答应这一次${action}。`)
+  }
+
+  /**
+   * WP194：这一次算在谁头上——本机公司成员（`person_id`）+ 这条职责归的岗位。
+   * 云上的令牌是工作区级的、分不出人，所以由持令牌的本机服务在请求头里声明。
+   */
+  const whoOf = (actor: CloudActor): Attribution => {
+    const position = options.positionOf?.(actor.role_id)
+    return {
+      member_id: actor.person_id,
+      ...(position === undefined ? {} : { position_id: position }),
+    }
+  }
+  const headersOf = (actor: CloudActor): Record<string, string> => attributionHeaders(whoOf(actor))
+
+  /** 公司时区（IANA 名才传；偏移写法不传，云上缺省就是上海）。尽力而为。 */
+  const pushTimeZone = async (): Promise<void> => {
+    try {
+      const tz = (await options.timeZone?.())?.trim()
+      if (tz === undefined || tz === '' || !(tz === 'UTC' || tz.includes('/'))) return
+      await cloudCall('/v1/wallet/allocation/settings', {
+        method: 'POST',
+        body: { timezone: tz },
+      })
+    } catch {
+      /* 时区没推上去不拦改额度：云上照上海时区切 */
+    }
+  }
+
+  const MANAGERS_ONLY = '只有公司的所有者和管理员看得到、改得了公司的积分分配。'
+  const assertManager = async (actor: CloudActor): Promise<void> => {
+    if ((await options.canManage?.(actor)) !== true) throw new ApiError('forbidden', MANAGERS_ONLY)
+  }
+
+  /** 公司「积分」页那一份（管理员看）。 */
+  const allocationView = async (
+    actor: CloudActor,
+    month: string | undefined,
+  ): Promise<CloudAllocationView> => {
+    if (tokenOf() === undefined) return { linked: false, reason: NOT_LINKED }
+    const query = month === undefined ? '' : `?month=${encodeURIComponent(month)}`
+    const res = await cloudCall<AllocationReport>(`/v1/wallet/allocation${query}`, {
+      headers: headersOf(actor),
+    })
+    if (res.ok && res.data !== undefined) return { linked: true, report: res.data }
+    return {
+      linked: true,
+      reason:
+        res.status === 0
+          ? '暂时取不到（云上连不通）。稍后再看一眼。'
+          : (res.message ?? '暂时取不到公司的额度与用量。'),
+    }
+  }
+
+  /** 「我的本月额度」（成员自己看）。 */
+  const myAllocationView = async (actor: CloudActor): Promise<CloudMyAllocationView> => {
+    if (tokenOf() === undefined) return { linked: false, reason: NOT_LINKED }
+    const res = await cloudCall<MyAllocation>('/v1/wallet/allocation/me', {
+      headers: headersOf(actor),
+    })
+    if (res.ok && res.data !== undefined) return { linked: true, mine: res.data }
+    return {
+      linked: true,
+      reason: res.status === 0 ? '暂时取不到（云上连不通）。' : (res.message ?? '暂时取不到。'),
+    }
   }
 
   let cached: { at: number; view: CloudCreditsView } | undefined
@@ -458,6 +559,35 @@ export function createCloud(options: CloudOptions): CloudAssembly {
   }
 
   const port: CloudPort = {
+    // WP194：成员 / 岗位额度（谁能看公司那一页在路由那一层判：公司的 owner / admin）
+    allocation: async (actor, filter) => {
+      await assertManager(actor)
+      return allocationView(actor, filter.month)
+    },
+    myAllocation: (actor) => myAllocationView(actor),
+    setAllocationLimit: async (actor, input: AllocationLimitRequest) => {
+      await assertManager(actor)
+      if (tokenOf() === undefined) throw new ApiError('invalid_input', NOT_LINKED)
+      await pushTimeZone()
+      return unwrap(
+        await cloudCall<AllocationLimitChanged>('/v1/wallet/allocation/limits', {
+          method: 'POST',
+          body: input,
+          headers: headersOf(actor),
+        }),
+        '改额度',
+      )
+    },
+    allocationAudit: async (actor) => {
+      await assertManager(actor)
+      if (tokenOf() === undefined) throw new ApiError('invalid_input', NOT_LINKED)
+      return unwrap(
+        await cloudCall<AllocationAuditList>('/v1/wallet/allocation/audit', {
+          headers: headersOf(actor),
+        }),
+        '读改额度记录',
+      )
+    },
     credits: () => creditsView(),
     pricing: () => pricingView(),
     usage: (_actor, filter) => usageView(filter),
@@ -548,6 +678,15 @@ export function createCloud(options: CloudOptions): CloudAssembly {
     ...(kolSync === undefined ? {} : { kolSync }),
     relayCloudStatus: () => callCloud('/v1/chat/relay/status'),
     linked: () => tokenOf() !== undefined,
+    forgetMember: async (person_id, by) => {
+      if (tokenOf() === undefined) return false
+      const res = await cloudCall<AllocationMemberRemoved>('/v1/wallet/allocation/members/remove', {
+        method: 'POST',
+        body: { member_id: person_id },
+        headers: attributionHeaders({ member_id: by }),
+      })
+      return res.ok
+    },
     sourceOf: (capability) => state.capability_sources[capability] ?? 'mine',
     /**
      * WP126：某条渠道的数据接口路由（顺序 + 被关掉的那几级）。

@@ -160,6 +160,14 @@ export interface MatterRecordSource {
 
 export interface RuntimeOptions {
   workspace_id: string
+  /**
+   * WP194：一次运行在这个作用域里跑（宿主用它开「这一次算在谁头上」——运行里打云的
+   * 数据接口据此带归属头）。不给 = 直接跑。
+   */
+  aroundRun?: <T>(
+    actor: { person_id: string; assignment_id: string; role_id: string },
+    fn: () => Promise<T>,
+  ) => Promise<T>
   clock: Clock
   random: () => number
   env: Record<string, string | undefined>
@@ -1493,7 +1501,12 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       }
       let result: Awaited<ReturnType<RuntimeAdapter['run']>>
       try {
-        result = await runner.run(request, sink, controller.signal)
+        result =
+          options.aroundRun === undefined
+            ? await runner.run(request, sink, controller.signal)
+            : await options.aroundRun(request.actor, () =>
+                runner.run(request, sink, controller.signal),
+              )
       } finally {
         options.computerUse?.deactivate(run_id)
       }

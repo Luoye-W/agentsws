@@ -58,6 +58,14 @@ export function attributionFromHeaders(
   }
 }
 
+/** 归属 → 请求头（不合法 / 没有的那一项不带）。本机打云的每一处都用这一份。 */
+export function attributionHeaders(a: Attribution | undefined): Record<string, string> {
+  const out: Record<string, string> = {}
+  if (attributionIdOk(a?.member_id)) out[MEMBER_HEADER] = a.member_id
+  if (attributionIdOk(a?.position_id)) out[POSITION_HEADER] = a.position_id
+  return out
+}
+
 /** 上限挂在谁身上。 */
 export type AllocationSubjectKind = 'member' | 'position'
 
@@ -220,4 +228,25 @@ export interface MyAllocation {
   position?: AllocationRow
   /** 本月到过的最高提醒档。 */
   notice?: AllocationNoticeLevel
+}
+
+/* ------------------------------------------------------------------ */
+/* 本机那一面（`/v1/cloud/allocation*`，本机服务进程透传云上那一份）       */
+/* ------------------------------------------------------------------ */
+
+/**
+ * 本机 `GET /v1/cloud/allocation`：公司「积分」那一页。**本地不算账**——报表是云上那一份的透传。
+ * 没关联账号 / 云连不上都不是错：`linked` + 一句人话，界面据此画「先关联」而不是一堆 0。
+ */
+export interface CloudAllocationView {
+  linked: boolean
+  reason?: string
+  report?: AllocationReport
+}
+
+/** 本机 `GET /v1/cloud/allocation/me`：设置 → 积分里的「我的本月额度」。 */
+export interface CloudMyAllocationView {
+  linked: boolean
+  reason?: string
+  mine?: MyAllocation
 }

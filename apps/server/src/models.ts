@@ -45,14 +45,17 @@ import type {
   SetModelImageInput,
 } from '@agentsws/api'
 import type {
+  Attribution,
   Clock,
   EventEnvelope,
   Halt,
+  ModelMeta,
   ModelProvider,
   ModelPurpose,
   ModelRef,
 } from '@agentsws/contracts'
 import {
+  attributionHeaders,
   CLOUD_BASE_URL_ENV,
   cloudBaseUrl,
   DEFAULT_CLOUD_BASE_URL,
@@ -305,6 +308,12 @@ export interface ModelsOptions {
     reportBalance?(insufficient: boolean): void
     quota?(): DeepSeekQuotaView | undefined
   }
+  /**
+   * WP194：一次模型调用算在谁头上（本机公司成员 + 岗位）。「Agents 工坊官方接口」那一条据此在
+   * 请求头里带 `X-Agentsws-Member` / `X-Agentsws-Position`，云上按人 / 按岗位判每月上限。
+   * 取值函数：分配表与岗位在模型面之后才装好。不给 = 不带（只受公司余额限制）。
+   */
+  cloudAttribution?: (meta: ModelMeta) => Attribution
 }
 
 /**
@@ -1235,6 +1244,12 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
               'X-Agentsws-Region':
                 (state.defaults.data_residency ?? 'cn') === 'cn' ? 'cn' : 'global',
             },
+            // WP194：带上「谁 / 哪个岗位」；402 那句人话（额度到了 / 公司没钱）原样端给用户
+            requestHeaders: (meta: ModelMeta | undefined) =>
+              meta === undefined || options.cloudAttribution === undefined
+                ? {}
+                : attributionHeaders(options.cloudAttribution(meta)),
+            cloudErrors: true,
           }
         : {}),
     })

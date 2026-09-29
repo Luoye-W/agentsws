@@ -13,8 +13,13 @@
  * `policy.stage@workspace`——花钱的事归所有者，客服岗位看不到也改不了（05）。
  */
 import type {
+  AllocationAuditList,
+  AllocationLimitChanged,
+  AllocationLimitRequest,
   CapabilitySourceSettings,
+  CloudAllocationView,
   CloudCreditsView,
+  CloudMyAllocationView,
   DataSourceRoute,
   KolCloudDeleteResult,
   KolCloudExport,
@@ -116,6 +121,21 @@ export interface CloudPort {
   kolCloudExport(actor: CloudActor): MaybePromise<KolCloudExport>
   /** 删掉云端这一份。**本地一条不动**，订阅也不动（用户可能只是想清空重来）。 */
   kolCloudDelete(actor: CloudActor): MaybePromise<KolCloudDeleteResult>
+  /**
+   * WP194：公司「积分」页——本月按人 / 按岗位 / 按能力的额度与用量（云上那一份的透传）。
+   * **只有公司的 owner / admin 看得到**：判在实现那一侧（它知道本机公司里谁是谁），
+   * 别人来回 403 人话。没关联 / 云连不上回 `linked` + 一句人话，不是错。
+   */
+  allocation?(actor: CloudActor, filter: { month?: string }): MaybePromise<CloudAllocationView>
+  /** WP194：成员自己的「本月额度：已用 X / 上限 Y」（谁都能看自己的）。 */
+  myAllocation?(actor: CloudActor): MaybePromise<CloudMyAllocationView>
+  /** WP194：设 / 清一个成员或岗位的每月上限（`null` = 不设）。只有 owner / admin。云上记审计。 */
+  setAllocationLimit?(
+    actor: CloudActor,
+    input: AllocationLimitRequest,
+  ): MaybePromise<AllocationLimitChanged>
+  /** WP194：最近的改额度记录（谁、从多少改到多少）。只有 owner / admin。 */
+  allocationAudit?(actor: CloudActor): MaybePromise<AllocationAuditList>
   capabilitySources(actor: CloudActor): MaybePromise<CapabilitySourceSettings>
   setCapabilitySources(
     actor: CloudActor,
@@ -148,6 +168,20 @@ const ConflictBody = z.object({
   pick: z.enum(['winner', 'loser']),
 })
 
+/**
+ * WP194：设 / 清一个上限。`subject_id` 是本机的 `person_id` / 岗位 id（字母数字与 `_ - . : @`）；
+ * `monthly_limit` 为 `null` = 不设上限（和 WP194 之前一样）。
+ */
+const AllocationLimitBody = z.object({
+  kind: z.enum(['member', 'position']),
+  subject_id: z
+    .string()
+    .min(1)
+    .max(128)
+    .regex(/^[A-Za-z0-9_.:@-]+$/),
+  monthly_limit: z.number().min(0).max(10_000_000).nullable(),
+})
+
 const SourcesBody = z.object({
   capability_sources: z.record(z.string().min(1).max(64), z.enum(['mine', 'agentsws'])),
   // WP126：数据接口路由。等级枚举在服务端再洗一遍（zod 这一层只管形状）
@@ -172,6 +206,13 @@ function portOf(deps: GatewayDeps): CloudPort {
   if (p === undefined)
     throw new ApiError('not_implemented', '这个服务进程没有装配云侧那一面（GatewayDeps.cloud）')
   return p
+}
+
+/** 额度那几条是可选的端口方法：没装就 501 人话。 */
+function need<T>(fn: T | undefined): T {
+  if (fn === undefined)
+    throw new ApiError('not_implemented', '这个服务进程没有装配成员 / 岗位额度那一面')
+  return fn
 }
 
 function actorOf(c: Parameters<typeof principalOf>[0]): CloudActor {
@@ -284,6 +325,87 @@ export function cloudRoutes(): Route[] {
       async (c, deps) => {
         const input = TopupBody.parse(await c.req.json())
         return ok(c, await portOf(deps).createTopup(actorOf(c), input), 201)
+      },
+    ),
+    /*
+     * ── WP194：成员 / 岗位额度（公司共用余额上的每月上限）─────────────────
+     *
+     * 四条都**不挂策略元组**：谁能看公司那一页由实现那一侧按本机公司的 owner / admin 判
+     * （成员表里的角色，不是某条职责的动作集）；「我的额度」谁都能看自己的。
+     */
+    route(
+      {
+        method: 'get',
+        path: '/v1/cloud/allocation',
+        operationId: 'getCloudAllocation',
+        summary:
+          '公司「积分」页：本月按人 / 按岗位 / 按能力的额度与用量（云上透传）。只有公司的 owner / admin',
+        tag: TAG,
+        auth: 'bearer',
+        assignment: true,
+        params: [{ name: 'month', in: 'query', required: false, description: 'YYYY-MM；默认本月' }],
+        returns: 'CloudAllocationView',
+      },
+      async (c, deps) => {
+        const port = portOf(deps)
+        const month = c.req.query('month')
+        if (month !== undefined && !/^\d{4}-(0[1-9]|1[0-2])$/.test(month))
+          throw new ApiError('invalid_input', 'month 要写成 YYYY-MM')
+        return ok(
+          c,
+          await need(port.allocation?.bind(port))(actorOf(c), month === undefined ? {} : { month }),
+        )
+      },
+    ),
+    route(
+      {
+        method: 'get',
+        path: '/v1/cloud/allocation/me',
+        operationId: 'getMyCloudAllocation',
+        summary: '我的本月额度：已用 X / 上限 Y（没设上限就只有已用）',
+        tag: TAG,
+        auth: 'bearer',
+        assignment: true,
+        returns: 'CloudMyAllocationView',
+      },
+      async (c, deps) => {
+        const port = portOf(deps)
+        return ok(c, await need(port.myAllocation?.bind(port))(actorOf(c)))
+      },
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/cloud/allocation/limits',
+        operationId: 'setCloudAllocationLimit',
+        summary:
+          '设 / 清一个成员或岗位的每月上限（null = 不设上限）。只有公司的 owner / admin；云上记审计',
+        tag: TAG,
+        auth: 'bearer',
+        assignment: true,
+        body: AllocationLimitBody,
+        returns: 'AllocationLimitChanged',
+      },
+      async (c, deps) => {
+        const port = portOf(deps)
+        const input = await body(c, AllocationLimitBody)
+        return ok(c, await need(port.setAllocationLimit?.bind(port))(actorOf(c), input))
+      },
+    ),
+    route(
+      {
+        method: 'get',
+        path: '/v1/cloud/allocation/audit',
+        operationId: 'getCloudAllocationAudit',
+        summary: '最近的改额度记录（谁、从多少改到多少）。只有公司的 owner / admin',
+        tag: TAG,
+        auth: 'bearer',
+        assignment: true,
+        returns: 'AllocationAuditList',
+      },
+      async (c, deps) => {
+        const port = portOf(deps)
+        return ok(c, await need(port.allocationAudit?.bind(port))(actorOf(c)))
       },
     ),
     /*

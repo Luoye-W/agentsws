@@ -81,6 +81,7 @@ export {
   type CloudStandIn,
   type CloudStandInOptions,
   type CloudStandInRequest,
+  type CloudStandInUsageSeed,
   cloudStandIn,
 } from './cloud-stand-in.js'
 export {

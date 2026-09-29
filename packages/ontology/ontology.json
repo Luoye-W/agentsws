@@ -15,6 +15,7 @@
     "packages/contracts/src/channels.ts",
     "packages/contracts/src/chat-relay.ts",
     "packages/contracts/src/cloud-admin.ts",
+    "packages/contracts/src/cloud-allocation.ts",
     "packages/contracts/src/cloud-api.ts",
     "packages/contracts/src/cloud-entry.ts",
     "packages/contracts/src/cloud.ts",
@@ -103,7 +104,7 @@
     "packages/roles/roles/social/x.yml",
     "packages/roles/roles/social/youtube.yml"
   ],
-  "source_digest": "7c0faa240b86af5e3f6bce76af363037",
+  "source_digest": "9250f5ae55522b7452fdefdb82dd2cae",
   "objects": [
     {
       "id": "ad",
