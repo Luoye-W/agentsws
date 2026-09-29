@@ -47,6 +47,7 @@ import {
   WS_SUBPROTOCOL,
   WsSession,
 } from '@agentsws/api'
+import { guessIndustry } from '@agentsws/b2b-core'
 import { blobKey, blobUri, openBlobStore } from '@agentsws/blob'
 import { designRoleFamily } from '@agentsws/brand-design'
 import type { PageFetch as BrandIntakeFetch } from '@agentsws/brand-intake'
@@ -70,6 +71,7 @@ import type {
   WorkspaceVertical,
 } from '@agentsws/contracts'
 import {
+  B2B_FACT_SUBJECT_TYPE,
   B2B_SENDER_CHOICE_KIND,
   brandNameOf,
   KOL_AUDIT_CAPABILITY,
@@ -144,6 +146,7 @@ import { demoB2bDeckData, withDemoB2b } from './b2b.js'
 import { createB2bMail } from './b2b-mail.js'
 import { type B2bOutboundAssembly, createB2bOutbound } from './b2b-outbound.js'
 import { createB2bOutboundToolExecutor } from './b2b-outbound-tools.js'
+import { b2bLetterheadOf, createB2bSales } from './b2b-sales.js'
 import { createB2bService } from './b2b-service.js'
 import { type B2bStore, createB2bStore } from './b2b-store.js'
 import { MemoryBackend } from './backend.js'
@@ -171,6 +174,7 @@ import {
   brandAskPort,
   brandB2bOutboundPort,
   brandB2bPort,
+  brandB2bSalesPort,
   brandCloudPort,
   brandConnectionDirectoryPort,
   brandConnectionsPort,
@@ -736,6 +740,13 @@ export interface ServerOptions {
     dns?: { txt(name: string): Promise<readonly string[]> }
     mailboxes?: readonly string[]
     sendMail?: (input: DirectMailInput) => Promise<DirectMailResult>
+    /** WP182：WhatsApp 发一条（测试替身；生产里这台机器还没接 WhatsApp 发信）。 */
+    sendWhatsApp?: (input: {
+      to: string
+      text: string
+      last_inbound_at?: string
+      template_id?: string
+    }) => Promise<{ ok: boolean; external_id?: string; message?: string }>
   }
   /**
    * WP73：社媒那九条渠道打出去的那一跳（测试塞一个假的对着真 URL 断言）。
@@ -1533,7 +1544,15 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       if (sandboxed !== undefined) return sandboxed
       // WP172：B2B 库的卡批了才落库（不是 B2B 库的卡回 undefined，掉回原来那条路）
       const b2bApplied = brand?.b2bService.apply(change)
-      if (b2bApplied !== undefined) return b2bApplied
+      if (b2bApplied !== undefined) {
+        // WP182：样品标「已寄」生效了 → 寄样通知再出一张卡（出不成不影响这一张已落库）
+        if (b2bApplied.status === 'ok')
+          await brand?.b2bSales.afterApplied(change).catch(() => undefined)
+        return b2bApplied
+      }
+      // WP182：询盘首回 / 报价单 / 寄样通知批了就发；离职交接批了就改归属
+      const salesApplied = await brand?.b2bSales.apply(change)
+      if (salesApplied !== undefined) return salesApplied
       // WP173：开发信那一批卡批了才发（不是 b2b_outreach 回 undefined）
       const outreachSent = await brand?.b2bOutbound.apply(change)
       if (outreachSent !== undefined) return outreachSent
@@ -1999,7 +2018,10 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       // 批了的客户 / 报价 / 样品 …）。demo 里库里的排前面、后面垫一份演示投影
       // WP173：主动开发那三块（今天待发 · 序列漏斗 · 回复待分）从开发序列来
       b2b: () => {
-        const own = { ...b2bService.deckData(clock.now()), ...b2bOutbound.deckData(clock.now()) }
+        const own = b2bSales.deckPatch(clock.now(), {
+          ...b2bService.deckData(clock.now()),
+          ...b2bOutbound.deckData(clock.now()),
+        })
         return isBootstrap && mount !== undefined
           ? withDemoB2b(own, demoB2bDeckData(clock.now()))
           : own
@@ -3350,10 +3372,158 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       },
     })
     b2bOutboundLate.current = b2bOutbound
+    /**
+     * WP182（docs/84 §3）：业务——询盘分级与首回卡（只引生效的 B2B 事实卡）、六类事实卡预填、
+     * 报价单 PDF 与发给客户（也出卡）、样品往前走与超期提醒、离职交接卡。
+     */
+    const b2bFactActor = async () => {
+      const a = roles.assignments
+        .listByWorkspace(ws)
+        .find((x) => x.revoked_at === undefined && x.role_id.startsWith('b2b.'))
+      const person = a?.person_id ?? (await identity.getWorkspace(ws))?.owner_id
+      if (person === undefined) return undefined
+      const config = a === undefined ? undefined : roles.effectiveConfig(a.id)
+      return {
+        person_id: person,
+        workspace_id: ws,
+        assignment_id: a?.id ?? '',
+        role_id: a?.role_id ?? '',
+        grants: config?.scopes ?? [
+          {
+            domain: 'knowledge' as const,
+            ops: ['read' as const],
+            range: 'workspace' as const,
+            max_sensitivity: 'internal' as const,
+          },
+        ],
+        ranges: config?.ranges ?? [],
+      }
+    }
+    const b2bSales = createB2bSales({
+      workspace_id: ws,
+      store: b2b,
+      clock,
+      random,
+      ledger: txn.ledger,
+      approvals: txn.approvals,
+      effectiveConfig: (id) => roles.effectiveConfig(id),
+      appendEvent,
+      service: b2bService,
+      holders: () =>
+        roles.assignments
+          .listByWorkspace(ws)
+          .filter((a) => a.revoked_at === undefined && a.role_id.startsWith('b2b.'))
+          .map((a) => ({ person_id: a.person_id, assignment_id: a.id, role_id: a.role_id })),
+      owner: async () => (await identity.getWorkspace(ws))?.owner_id,
+      personName: async (id) => (await identity.getPerson(id))?.name,
+      secrets: {
+        get: (id) => (brandSecrets.available ? brandSecrets.get(id) : undefined),
+        put: (id, fields) => {
+          if (!brandSecrets.available)
+            throw new ApiError('invalid_input', '本机加密库没开，存不了联系方式。')
+          return brandSecrets.put(id, fields)
+        },
+      },
+      // 询盘回信：发的那一刻按消息库那封信取发件人与 Message-ID（消息层在下面才建，懒取）
+      messageOf: async (id) => {
+        const m = await lateMessages.current?.store.get(id)
+        return m === undefined
+          ? undefined
+          : {
+              from: m.from.email,
+              ...(m.message_id === undefined ? {} : { rfc_message_id: m.message_id }),
+              references: m.references,
+              account: m.account,
+            }
+      },
+      factCards: async () => {
+        const actor = await b2bFactActor()
+        if (actor === undefined) return []
+        const cards = await knowledge.store.list({ workspace_id: ws }, actor as never)
+        return cards
+          .filter((c) => c.subject.type === B2B_FACT_SUBJECT_TYPE)
+          .map((c) => ({
+            id: c.id,
+            status: c.status,
+            key: c.subject.key,
+            statement: c.statement,
+            ...(c.structured === undefined ? {} : { structured: c.structured }),
+            ...(c.provenance[0]?.locator === undefined ? {} : { locator: c.provenance[0].locator }),
+          }))
+      },
+      proposeFact: async (t, source_url) => {
+        const owner = (await identity.getWorkspace(ws))?.owner_id
+        const at = clock.now()
+        const card = await knowledge.store.propose({
+          schema_version: 1,
+          workspace_id: ws,
+          layer: 'fact',
+          domain: 'company',
+          scope: [],
+          sensitivity: 'internal',
+          subject: { type: B2B_FACT_SUBJECT_TYPE, id: t.category, key: t.key },
+          statement: t.statement,
+          structured: t.structured as unknown as Record<string, unknown>,
+          provenance: [
+            {
+              source: source_url === undefined ? 'manual' : 'web',
+              ref: source_url ?? `b2b-fact-template:${t.category}`,
+              locator: t.locator,
+              quote: t.statement.slice(0, 200),
+              at,
+            },
+          ],
+          confidence: { value: 0.3, state: 'unverified' },
+          valid: { from: at },
+          owner: (owner ?? 'system') as never,
+          created_by: { kind: 'agent', id: 'b2b-facts-setup' },
+        } as never)
+        return card.id
+      },
+      // 按官网判断行业：公司档案（名称、域名）+ 品牌分析建的商品卡
+      industry: async () => {
+        const org = onboardingRef?.companyProfile()
+        const actor = await b2bFactActor()
+        const products =
+          actor === undefined
+            ? []
+            : (await knowledge.store.list({ workspace_id: ws }, actor as never))
+                .filter((c) => c.subject.type === 'product')
+                .map((c) => c.statement)
+        const corpus = [org?.legal_name, org?.domain, brandNameOfWorkspace(ws), ...products]
+          .filter((x): x is string => typeof x === 'string' && x !== '')
+          .join(' ')
+        if (corpus.trim() === '') return undefined
+        const guess = guessIndustry(corpus)
+        const domain = org?.domain?.trim()
+        return {
+          ...guess,
+          ...(domain === undefined || domain === '' ? {} : { website: `https://${domain}` }),
+        }
+      },
+      inquirySkill: () => {
+        try {
+          return readBundledSkill('b2b-inquiry').markdown
+        } catch {
+          return undefined
+        }
+      },
+      drafter: ({ assignment_id, role_id, run_id }) => seoModel({ assignment_id, role_id }, run_id),
+      companyName: () => onboardingRef?.companyProfile()?.legal_name ?? brandNameOfWorkspace(ws),
+      companyAddress: () => onboardingRef?.brandProfile(ws).postal_address,
+      companyWebsite: () => onboardingRef?.companyProfile()?.domain,
+      letterhead: () => b2bLetterheadOf(brandDesignRef?.profileOf(ws)),
+      sendMail: options.b2bStandIns?.sendMail ?? ((input) => channels.sendMail(input)),
+      ...(options.b2bStandIns?.sendWhatsApp === undefined
+        ? {}
+        : { sendWhatsApp: options.b2bStandIns.sendWhatsApp }),
+      work,
+    })
     const b2bMail = createB2bMail({
       workspace_id: ws,
       store: b2b,
       outbound: b2bOutbound,
+      sales: b2bSales,
       clock,
       appendEvent,
       holders: () =>
@@ -3628,6 +3798,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       b2b,
       b2bService,
       b2bOutbound,
+      b2bSales,
       seoService,
       googleReads,
       social,
@@ -4055,6 +4226,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       const out = { staged: 0, queued: 0, stopped: 0 }
       for (const brand of await brandModules.all()) {
         const one = await brand.b2bOutbound.sweep()
+        // WP182：样品超期不寄 / 没反馈的提醒也在这一拍
+        await brand.b2bSales.sweep().catch(() => undefined)
         out.staged += one.staged
         out.queued += one.queued
         out.stopped += one.stopped
@@ -4348,6 +4521,10 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     workspaceIds: () => [
       ...new Set([workspace.id, ...(brands?.loaded().map((b) => b.workspace_id) ?? [])]),
     ],
+    // WP182：B2B 业务员离开 → 各品牌里他名下的客户 / 商机 / 没回的询盘各出一张交接卡给老板
+    afterMemberLeft: async (person_id, by) => {
+      for (const brand of await brandModules.all()) await brand.b2bSales.onMemberLeft(person_id, by)
+    },
   })
   rangeExpandedSink = org.onRangeExpanded
   supervisorPositions = () => org.positions()
@@ -5689,6 +5866,10 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     brandModules,
     async (ws) => (await brandModules.forWorkspace(ws)).b2bOutbound.port,
   )
+  const b2bSalesPortOf = brandB2bSalesPort(
+    brandModules,
+    async (ws) => (await brandModules.forWorkspace(ws)).b2bSales.port,
+  )
   /** WP78（60 §5）：公关库 `/v1/pr/*`（同上；媒体名单是一家公司攒了很多年的东西）。 */
   const prPortOf = brandPrPort(
     brandModules,
@@ -6156,6 +6337,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     // WP172（docs/84）：本地 B2B 库 `/v1/b2b/*`
     b2b: b2bPortOf,
     b2bOutbound: b2bOutboundPortOf,
+    b2bSales: b2bSalesPortOf,
     // WP154「内容与搜索」`/v1/seo/*`：按请求人所在品牌取那一份
     seo: seoPort,
     traceScope,

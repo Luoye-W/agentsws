@@ -37,7 +37,7 @@ import type {
   StartRun,
   WorkspaceId,
 } from '@agentsws/contracts'
-import { B2B_FRAUD_ALERT_KIND } from '@agentsws/contracts'
+import { B2B_FRAUD_ALERT_KIND, B2B_INQUIRY_GRADE_ZH } from '@agentsws/contracts'
 import {
   B2B_COMMITMENT_LABELS,
   detectPaymentAccountChange,
@@ -46,6 +46,7 @@ import {
 } from '@agentsws/core'
 import type { Work } from '@agentsws/work'
 import type { B2bOutboundAssembly } from './b2b-outbound.js'
+import type { B2bSalesAssembly } from './b2b-sales.js'
 import { addressHash, type B2bStore } from './b2b-store.js'
 import { maskAddress } from './mailbox-actions.js'
 
@@ -93,6 +94,11 @@ export interface B2bMailOptions {
    * 落成询盘交给业务；不感兴趣 / 退订进名单；自动回复顺延）；体检测试信也在这里认。
    */
   outbound?: Pick<B2bOutboundAssembly, 'observe' | 'onReply' | 'stopContact'>
+  /**
+   * WP182：业务。给了就**不再为询盘起 Run**：分级、首回（只引事实卡）、出卡在 `b2b-sales` 一次做完；
+   * 诈骗嫌疑出红卡。往来记录（已有客户 / 回我们的信）照旧起 Run。
+   */
+  sales?: Pick<B2bSalesAssembly, 'onInquiry'>
 }
 
 export interface B2bIntakeResult {
@@ -349,7 +355,14 @@ export function createB2bMail(options: B2bMailOptions): B2bMail {
 
     let run_id: string | undefined
     let todo = false
-    if (work !== undefined && matter_id !== undefined && !fraud.hit && !quiet) {
+    // WP182：询盘交给业务那一路（分级 + 首回卡），不起 Run
+    const toSales =
+      options.sales !== undefined &&
+      kind === 'inquiry' &&
+      basis !== 'platform_notice' &&
+      !fraud.hit &&
+      !quiet
+    if (work !== undefined && matter_id !== undefined && !fraud.hit && !quiet && !toSales) {
       if (basis === 'platform_notice') {
         // 平台询盘通知只有摘要，正文在平台后台（docs/84 §3.1）：开一条待办，不起 Run
         work.createTodo({
@@ -380,12 +393,56 @@ export function createB2bMail(options: B2bMailOptions): B2bMail {
         }
       }
     }
-    store.saveInquiry({
+    const saved: B2bInquiry = {
       ...inquiry,
+      owner_person_id: holder.person_id,
       ...(matter_id === undefined ? {} : { matter_id }),
       ...(run_id === undefined ? {} : { run_id }),
       ...(fraud_alert_id === undefined ? {} : { fraud_alert_id }),
-    })
+    }
+    store.saveInquiry(saved)
+    let graded: { grade: string; reply: boolean; red: boolean } | undefined
+    if (toSales && options.sales !== undefined) {
+      try {
+        const out = await options.sales.onInquiry({
+          inquiry: saved,
+          mail: {
+            from_email: record.from.email,
+            ...(record.from.name === undefined ? {} : { from_name: record.from.name }),
+            subject: record.subject,
+            text: record.text,
+            attachments: record.attachments.map((a) => a.name),
+            message_id: record.id,
+            thread_id: record.thread_id,
+            references: record.references,
+            account: record.account,
+          },
+          holder,
+          known: basis === 'known_sender' || account_id !== undefined,
+        })
+        graded = {
+          grade: out.grade,
+          reply: out.reply_approval_id !== undefined,
+          red: out.red_card_id !== undefined,
+        }
+        if (work !== undefined && matter_id !== undefined)
+          work.appendEvent(matter_id, {
+            kind:
+              out.red_card_id !== undefined || out.reply_approval_id !== undefined
+                ? 'card'
+                : 'note',
+            text:
+              out.red_card_id !== undefined
+                ? `收到一条 B2B 询盘，像是诈骗（${out.reasons.slice(0, 2).join('、')}），没起草，出了红卡`
+                : out.reply_approval_id !== undefined
+                  ? `收到一条 B2B 询盘（${B2B_INQUIRY_GRADE_ZH[out.grade]}），首回已起草，等你批`
+                  : `收到一条 B2B 询盘（${B2B_INQUIRY_GRADE_ZH[out.grade]}），首回没出成卡：${out.blocked ?? '原因见事件'}`,
+            actor: { kind: 'agent', id: holder.role_id },
+          })
+      } catch (e) {
+        emit('b2b.inquiry_sales_failed', { detail: String(e).slice(0, 160) }, record.id)
+      }
+    }
     emit(
       'b2b.inquiry_recorded',
       {
@@ -399,7 +456,8 @@ export function createB2bMail(options: B2bMailOptions): B2bMail {
         matter_opened: opened,
         run_started: run_id !== undefined,
         todo_opened: todo,
-        red_card: fraud_alert_id !== undefined,
+        red_card: fraud_alert_id !== undefined || graded?.red === true,
+        ...(graded === undefined ? {} : { grade: graded.grade, reply_staged: graded.reply }),
         ...(reply === undefined ? {} : { reply_class: reply.klass, reply_action: reply.action }),
       },
       record.id,

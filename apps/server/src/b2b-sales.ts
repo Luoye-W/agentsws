@@ -149,7 +149,10 @@ export interface B2bSalesOptions {
   /** 提议一张事实卡（一律 proposed）。 */
   proposeFact?(t: B2bFactTemplate, source_url: string | undefined): Promise<string>
   /** 按官网判断的行业（品牌分析那一份；没分析过 = undefined）。 */
-  industry?(): (IndustryGuess & { website?: string }) | undefined
+  industry?():
+    | Promise<(IndustryGuess & { website?: string }) | undefined>
+    | (IndustryGuess & { website?: string })
+    | undefined
   /** `b2b-inquiry` 技能正文。 */
   inquirySkill?(): string | undefined
   /** 公司层口径（品牌语气等；不许原样抄进回信，防泄露那一道比它）。 */
@@ -674,7 +677,7 @@ export function createB2bSales(options: B2bSalesOptions): B2bSalesAssembly {
 
   const factsView = async (): Promise<B2bFactsView> => {
     const cards = (await options.factCards?.()) ?? []
-    const industry = options.industry?.()
+    const industry = await options.industry?.()
     const categories: B2bFactCategoryView[] = B2B_FACT_CATEGORIES.map((c) => {
       const mine = cards.filter((x) => b2bFactCategoryOf(x.key) === c.id)
       // 生效的优先；同一类有好几张就取最后一张（后改的赢）
@@ -718,7 +721,7 @@ export function createB2bSales(options: B2bSalesOptions): B2bSalesAssembly {
         .filter((c) => c.status === 'active' || c.status === 'proposed')
         .map((c) => b2bFactCategoryOf(c.key)),
     )
-    const industry = options.industry?.()
+    const industry = await options.industry?.()
     let proposed = 0
     for (const t of b2bFactTemplates(industry)) {
       if (have.has(t.category)) continue
@@ -1360,8 +1363,14 @@ export function createB2bSales(options: B2bSalesOptions): B2bSalesAssembly {
     return new Map(due.map((d) => [d.sample_id, d]))
   }
 
+  /** 面板打开时顺带看一眼超期样品（每小时最多一次；定时那一拍可能没建——没人做主动开发时）。 */
+  let lastSweep = 0
   const view = async (): Promise<B2bSalesView> => {
     const now = clock.now()
+    if (Date.parse(now) - lastSweep >= 3_600_000) {
+      lastSweep = Date.parse(now)
+      await sweep().catch(() => undefined)
+    }
     const overdue = overdueOf(now)
     const drafts = store.drafts()
     const pendingOf = (collection: 'b2b_quote' | 'b2b_sample', id: string) =>
@@ -1483,5 +1492,48 @@ export function createB2bSales(options: B2bSalesOptions): B2bSalesAssembly {
     sweep,
     onMemberLeft,
     deckPatch,
+  }
+}
+
+/**
+ * 报价单信头的色与字（品牌设计 `DESIGN.md` 那一份）：主色取名字像 primary / brand 的那一格，
+ * 没有就取第一个不是黑白灰的；字体取标题那一格，没有就取第一个。一样都没有 = 用默认（深灰 + Helvetica）。
+ */
+export function b2bLetterheadOf(
+  profile:
+    | {
+        colors?: Record<string, { value: string }>
+        typography?: Record<string, { value: { fontFamily?: string } }>
+      }
+    | undefined,
+): { color?: string; font_family?: string } {
+  const colors = Object.entries(profile?.colors ?? {})
+  const hex = (v: string): string | undefined => {
+    const m = /^#?([0-9a-f]{6})$/i.exec(v.trim())
+    return m?.[1] === undefined ? undefined : `#${m[1].toLowerCase()}`
+  }
+  const vivid = (v: string): boolean => {
+    const h = hex(v)
+    if (h === undefined) return false
+    const n = Number.parseInt(h.slice(1), 16)
+    const rgb = [(n >> 16) & 255, (n >> 8) & 255, n & 255]
+    return Math.max(...rgb) - Math.min(...rgb) > 40
+  }
+  const named = colors.find(
+    ([k, v]) => /primary|brand|accent/i.test(k) && hex(v.value) !== undefined,
+  )
+  const color = hex(
+    named?.[1].value ??
+      colors.find(([, v]) => vivid(v.value))?.[1].value ??
+      colors[0]?.[1].value ??
+      '',
+  )
+  const fonts = Object.entries(profile?.typography ?? {})
+  const font =
+    fonts.find(([k]) => /heading|display|title|h1/i.test(k))?.[1].value.fontFamily ??
+    fonts.find(([, v]) => v.value.fontFamily !== undefined)?.[1].value.fontFamily
+  return {
+    ...(color === undefined ? {} : { color }),
+    ...(font === undefined ? {} : { font_family: font }),
   }
 }

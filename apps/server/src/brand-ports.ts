@@ -18,6 +18,7 @@ import type {
   AskPort,
   B2bOutboundPort,
   B2bPort,
+  B2bSalesPort,
   CloudPort,
   ConnectionDirectoryPort,
   ConnectionsPort,
@@ -420,6 +421,14 @@ export function brandB2bOutboundPort(
   make: (workspace_id: WorkspaceId) => Promise<B2bOutboundPort>,
 ): B2bOutboundPort {
   return scopedPort<B2bOutboundPort>(make, () => brands.bootstrap)
+}
+
+/** WP182：B2B 业务（事实卡、报价单、样品）按品牌取——报价单信头是这个品牌的色与字。 */
+export function brandB2bSalesPort(
+  brands: BrandModules,
+  make: (workspace_id: WorkspaceId) => Promise<B2bSalesPort>,
+): B2bSalesPort {
+  return scopedPort<B2bSalesPort>(make, () => brands.bootstrap)
 }
 
 /**
