@@ -1,0 +1,63 @@
+{
+ "http": "HTTP 200",
+ "data": {
+  "rows": [
+   {
+    "creator_id": "cr_0iicssc5",
+    "display_name": "MobileReviewsEh",
+    "channel": "youtube",
+    "handle": "@MobileReviewsEh",
+    "url": "https://www.youtube.com/@mobilereviewseh",
+    "followers": 546000,
+    "observed_at": "2026-09-29T15:22:41.312Z",
+    "score": 75,
+    "has_contact": false
+   },
+   {
+    "creator_id": "cr_1xdb087b",
+    "display_name": "Zubair Raz",
+    "channel": "youtube",
+    "handle": "@ZubairRaz",
+    "url": "https://www.youtube.com/@zubairraz",
+    "followers": 27500,
+    "observed_at": "2026-09-29T15:26:02.406Z",
+    "score": 75,
+    "has_contact": false
+   },
+   {
+    "creator_id": "cr_0nystt58",
+    "display_name": "TECH UP!",
+    "channel": "youtube",
+    "handle": "@T3CHUP",
+    "url": "https://www.youtube.com/@t3chup",
+    "followers": 9960,
+    "observed_at": "2026-09-29T15:24:22.596Z",
+    "score": 75,
+    "has_contact": false
+   },
+   {
+    "creator_id": "cr_02jqm911",
+    "display_name": "The Tech Reviewer",
+    "channel": "youtube",
+    "handle": "@TheTechReviewer",
+    "url": "https://www.youtube.com/@thetechreviewer",
+    "followers": 36000,
+    "observed_at": "2026-09-29T15:29:34.440Z",
+    "score": 75,
+    "has_contact": false
+   },
+   {
+    "creator_id": "cr_17usnrte",
+    "display_name": "Power Bank Expert",
+    "channel": "youtube",
+    "handle": "@PowerBankExpert",
+    "url": "https://www.youtube.com/@powerbankexpert",
+    "followers": 2800,
+    "observed_at": "2026-09-29T15:27:45.514Z",
+    "score": 67,
+    "has_contact": false
+   }
+  ]
+ },
+ "trace_id": "42c5ca58bb9830343b20db6f9d81e7b6"
+}
