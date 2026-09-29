@@ -48,8 +48,8 @@ describe('左栏（WP43 §1 图标）', () => {
     renderShell()
     const nav = screen.getByTestId('main-nav')
     const links = Array.from(nav.querySelectorAll('a'))
-    // 固定 12 条（WP85 加了「消息渠道」）+ 岗位 2 条
-    expect(links).toHaveLength(14)
+    // 固定 13 条（WP85 加了「消息渠道」，WP188 加了「随便聊」）+ 岗位 2 条
+    expect(links).toHaveLength(15)
     for (const link of links) {
       expect(link.querySelector('svg'), `「${link.textContent ?? ''}」少了图标`).not.toBeNull()
     }
@@ -61,11 +61,12 @@ describe('左栏（WP43 §1 图标）', () => {
    * 钉两件事：顺序是 首页 / 消息 / 待办 / 日历，而且 `/goals` **不在左栏里**了
    * （路由还在、⌘K 还搜得到、待办页有一个 tab——那几条各自有自己的用例）。
    */
-  it('左栏顺序：首页 / 消息 / 待办 / 日历；目标不在左栏里了', () => {
+  it('左栏顺序：随便聊 / 首页 / 消息 / 待办 / 日历；目标不在左栏里了', () => {
     renderShell()
     const nav = screen.getByTestId('main-nav')
     const hrefs = Array.from(nav.querySelectorAll('a')).map((a) => a.getAttribute('href'))
-    expect(hrefs.slice(0, 4)).toEqual(['/', '/messages', '/todos', '/calendar'])
+    // WP188（Luoye 09-29）：「随便聊」在最上面
+    expect(hrefs.slice(0, 5)).toEqual(['/free-chat', '/', '/messages', '/todos', '/calendar'])
     expect(hrefs).not.toContain('/goals')
   })
 

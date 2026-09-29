@@ -190,8 +190,11 @@ export interface ModelProviderTemplate {
    * WP134：`account` = 用 DeepSeek 账号登录（系统浏览器授权），走
    * `/v1/settings/models/deepseek-account*`；也没有表单。它单独一张卡（向导第 ① 步与设置页各一张），
    * 不进"一家一张卡"那一排。
+   *
+   * WP188：`cloud` = 「Agents 工坊（用积分）」——不填 key，关联一次 Agents 工坊账号就能用；
+   * 卡里是「先关联账号 / 启用 / 看余额与用量」，不是 key 表单。
    */
-  auth?: 'api_key' | 'subscription' | 'account'
+  auth?: 'api_key' | 'subscription' | 'account' | 'cloud'
   /** `auth: 'subscription'` 时走哪一家（与 {@link SubscriptionView.provider} 同一个串）。 */
   subscription_provider?: SubscriptionProviderKind
   default_base_url: string
