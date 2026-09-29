@@ -108,6 +108,14 @@
     - kind: store
       id: store_main
   granted_by: p_wang
+# WP199：冯萱也挂 LinkedIn 公司主页那一条（手工加，不整包重生成）。发布卡落到运营主管李默
+# 手上，他不持有这条、批不了；升级给王岚批了之后要真能施行（`social/escalated-post-applies`）。
+- person_id: p_feng
+  role_id: social.linkedin
+  ranges:
+    - kind: store
+      id: store_main
+  granted_by: p_wang
 - person_id: p_chu
   role_id: common.member
   ranges: []

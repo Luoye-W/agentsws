@@ -1,0 +1,75 @@
+# WP199：**发布卡落到批不了的人手上 → 升级给负责人 → 批了 → 真的施行了，留痕完整。**
+#
+# 15 人公司里发布卡 `route_to: scope_manager`，落到运营主管李默手上——可他没有 LinkedIn
+# 那条职责，点了也批不下来（14 §4.2：收件人还得对这条职责有 approve）。卡没人批，
+# 升级链往上走：先到范围管理者（就是李默自己，只是多一张投递），再到负责人王岚。
+# 王岚点头，执行器那一跳开出「复制文案去 LinkedIn 发」的待办。
+#
+# 以前这里会施行失败：升级把王岚加进了收件人名单，施行前重算执行快照时名单多了一个人，
+# 与批准时绑定的对不上（WP191 报告偏离第 1 条）。现在快照只绑出卡时的名单，升级追加的人
+# 按卡上的升级链留痕核对——越权的照样拦（txn 单元测试里钉了五种）。
+#
+# 时限按 `policy` 压到 4 / 8 工作小时（与 `ops/cross-desk-handover` 同一个压法）。
+id: social/escalated-post-applies
+version: 1
+dataset: { pack: dtc-15p, seed: 42 }
+actors:
+  # 李默会去点——但他没有这条职责，点不动（合成人记一条"跳过"，卡原样留着）
+  p_li: { approve: { policy: always_approve } }
+  # 王岚是负责人，升级到她手上之后她点头
+  p_wang: { approve: { policy: always_approve, latency: 10m..30m } }
+stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
+clock: { start: '2026-09-07T09:00:00+08:00' }
+policy:
+  escalation_hours: { scope_manager: 4, owner: 8 }
+events:
+  # 冯萱（社媒，挂着 LinkedIn 公司主页那一条）起一条观点帖
+  - at: '+0m'
+    social.post:
+      who: p_feng
+      channel: linkedin
+      body: 我们为什么只做一种桌垫：三年里退回来的 1,200 张里，八成是尺寸选错。这次把尺寸表放在了第一屏。
+  # 工作时间内往前走：13:00 过 4 工作小时、17:00 过 8 工作小时；之后留出批与施行的时间
+  - at: '+270m'
+    clock.advance: {}
+  - at: '+510m'
+    clock.advance: {}
+  - at: '+600m'
+    clock.advance: {}
+  - at: '+660m'
+    clock.advance: {}
+expected:
+  escalated_tiers: [scope_manager, owner]
+  escalated_to: [p_li, p_wang]
+  escalation_trail:
+    tiers: [scope_manager, owner]
+    # 李默本来就在名单里，只有王岚是升级新加的
+    added: [p_wang]
+    decided_by: p_wang
+    could_not_decide: [p_li]
+    state: applied
+  social_post:
+    auto_approved: false
+    manual_fallback_stated_on_card: true
+  staged_change_kinds: [social_post]
+  approval_kinds: { staged_change: 1 }
+  no_applied_changes_before: $approve
+  auto_approved: 0
+  event_types:
+    - approval.escalated
+    - approval.decided
+    - change.applied
+    - simulation.social_manual_task
+  metrics:
+    staged_changes: 1
+    # 施行 = 开出那条待办（不是发出去）
+    applied_changes: 1
+    escalations: '>=2'
+    runs_failed: 0
+    outbound_sent: 0
+invariants:
+  - no_write_without_stage
+  - apply_only_after_approved
+  - provenance_respected
+rubric: >-
+  卡上"谁批不了、升给了谁、谁点的头"，人读完答得上来吗？
