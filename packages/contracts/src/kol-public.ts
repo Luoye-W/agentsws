@@ -165,7 +165,20 @@ export interface PublicCreatorCard {
   extra?: Record<string, string | number | boolean>
   /** 这一行是从哪儿搬来的（`kolagents`）。空 = 本系统自己攒的。 */
   imported_from?: string
+
+  /**
+   * WP202（只加）：卡上**哪几格其实没有数**。
+   *
+   * `posts_30d` / `engagement_rate` 在这张卡上是必填的数（老契约，不改），可插件报的观察
+   * 与搬家来的那一批常常没有这两个数，主表里只能垫 0。有这一格时，列在里面的那几个数
+   * **是垫的、不是真的 0**：客户端当它「没有」（界面显示「—」），别当 0% 算。
+   * 没有这一格 = 两个数都是真的。
+   */
+  metrics_missing?: PublicCreatorMetric[]
 }
+
+/** WP202：卡上可能「其实没有」的那两格。 */
+export type PublicCreatorMetric = 'posts_30d' | 'engagement_rate'
 
 /** 浏览的过滤条件（全是可选的；`limit` 有上限 {@link MAX_CREATOR_LIMIT}）。 */
 export interface PublicCreatorQuery {

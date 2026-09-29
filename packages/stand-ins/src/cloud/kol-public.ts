@@ -155,7 +155,24 @@ export class KolPublicStandIn {
   /** 测试里直接看替身那本库：这个人的卡、身上的观察、某条内容。 */
   creator(channel: KolChannel, handle: string): PublicCreatorCard | undefined {
     const card = this.cards.get(keyOf(channel, handle))
-    return card === undefined ? undefined : { ...card, categories: [...card.categories] }
+    return card === undefined ? undefined : this.view(card)
+  }
+
+  /**
+   * WP202：对外那张卡（与云上真服务同一口径）。卡上那两格是必填的数，缺的时候垫 0；
+   * 这个人身上**没有一条观察真带着这个数**、卡上又是 0 → 列进 `metrics_missing`。
+   */
+  private view(card: PublicCreatorCard): PublicCreatorCard {
+    const rows = this.observationRows.get(keyOf(card.channel, card.handle)) ?? []
+    const missing = (['posts_30d', 'engagement_rate'] as const).filter(
+      (m) => card[m] === 0 && !rows.some((r) => typeof r[m] === 'number'),
+    )
+    const { metrics_missing: _stale, ...rest } = card
+    return {
+      ...rest,
+      categories: [...card.categories],
+      ...(missing.length === 0 ? {} : { metrics_missing: [...missing] }),
+    }
   }
 
   observationsOf(channel: KolChannel, handle: string): PublicCreatorObservation[] {
@@ -219,7 +236,7 @@ export class KolPublicStandIn {
       .filter((c) => q === '' || c.handle.includes(q))
       .sort((a, b) => b.followers - a.followers)
       .slice(0, limit)
-      .map((c) => ({ ...c, categories: [...c.categories] }))
+      .map((c) => this.view(c))
     if (creators.length === 0) return { creators, credits: 0 }
     const window = q === '' ? undefined : `${principal.workspace_id}|${query.channel ?? '*'}|${q}`
     const last = window === undefined ? undefined : this.searchCharges.get(window)
