@@ -600,3 +600,36 @@ describe('WP182 报价单信头取品牌设计的色与字', () => {
     expect(b2bLetterheadOf(undefined)).toEqual({})
   })
 })
+
+describe('WP182 面板「该唤醒的老客户」', () => {
+  it('下过单、最近一次来信离现在 180 天以上才算；新近来过信的不算', async () => {
+    const { b2bDeckFromStore } = await import('../src/b2b-service.js')
+    const h = assemble()
+    h.store.put('b2b_account', { ...account('acc_old', 'p_he', 'EU', 'GaN'), stage: 'won' })
+    h.store.put('b2b_account', { ...account('acc_new', 'p_he', 'EU', 'GaN'), stage: 'won' })
+    const inq = (id: string, account_id: string, days: number) =>
+      h.store.saveInquiry({
+        id,
+        workspace_id: WS as never,
+        kind: 'correspondence',
+        basis: 'known_sender',
+        account_id,
+        subject: 'hi',
+        from_masked: 'x',
+        from_domain: 'x.example',
+        mailbox_masked: 'm',
+        message_id: id,
+        thread_id: id,
+        commitments: [],
+        status: 'closed',
+        received_at: new Date(Date.parse(T0) - days * DAY).toISOString(),
+        created_at: T0,
+      })
+    inq('i1', 'acc_old', 200)
+    inq('i2', 'acc_new', 200)
+    inq('i3', 'acc_new', 10)
+    const dormant = b2bDeckFromStore(h.store, T0).dormant
+    expect(dormant.map((d) => d.account)).toEqual(['OLD'])
+    expect(dormant[0]?.days).toBe(200)
+  })
+})

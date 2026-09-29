@@ -784,12 +784,19 @@ export function b2bDeckFromStore(store: B2bStore, now: string): B2bDeckData {
         due: dayOf(s.status === 'to_ship' ? s.ship_by : (s.feedback_by ?? s.ship_by)),
         ...(s.tracking_no === undefined ? {} : { tracking_no: s.tracking_no }),
       })),
+    /*
+     * WP182：「该唤醒的老客户」= 下过单（阶段到过成交）、最近一次往来（记录上的 / 收到的信 / 我们发的报价）
+     * 离现在 180 天以上。最近一次往来取几处里最晚的那个，不写回客户记录（写九类对象只经卡）。
+     */
     dormant: accounts.flatMap((a) => {
-      if (a.last_contact_at === undefined) return []
-      const days = Math.floor((Date.parse(now) - Date.parse(a.last_contact_at)) / DAY)
-      return days >= 180
-        ? [{ account: a.name, last_contact_at: dayOf(a.last_contact_at), days }]
-        : []
+      const seen = [
+        a.last_contact_at,
+        ...inquiries.filter((i) => i.account_id === a.id).map((i) => i.received_at),
+      ].filter((x): x is string => x !== undefined)
+      if (seen.length === 0 || (a.stage !== 'won' && a.last_contact_at === undefined)) return []
+      const last = seen.reduce((m, x) => (x > m ? x : m))
+      const days = Math.floor((Date.parse(now) - Date.parse(last)) / DAY)
+      return days >= 180 ? [{ account: a.name, last_contact_at: dayOf(last), days }] : []
     }),
     outreach_today: [],
     sequence_funnel: [],
