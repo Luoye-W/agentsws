@@ -4,7 +4,7 @@
  */
 export type { BackoffOptions } from './backoff.js'
 export { backoffDelay, DEFAULT_BACKOFF } from './backoff.js'
-export type { BridgeInfo, DesktopBridge, NotifyInput } from './bridge-types.js'
+export type { BridgeInfo, DesktopBridge, NotifyInput, SceneOpenOutcome } from './bridge-types.js'
 export { BRIDGE_CHANNELS, BRIDGE_KEY } from './bridge-types.js'
 export type { ConfigStore, DesktopConfig, Language } from './config.js'
 export {

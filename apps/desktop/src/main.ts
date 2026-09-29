@@ -17,13 +17,15 @@ import {
   type MenuItemConstructorOptions,
   Notification,
   nativeImage,
+  powerMonitor,
   safeStorage,
   session,
   shell,
+  systemPreferences,
   Tray,
 } from 'electron'
 import { type ApiClient, createApiClient, type DesktopSession } from './api-client.js'
-import { BRIDGE_CHANNELS, type BridgeInfo } from './bridge-types.js'
+import { BRIDGE_CHANNELS, type BridgeInfo, type SceneOpenOutcome } from './bridge-types.js'
 import { createConfigStore, type DesktopConfig, type Language } from './config.js'
 import {
   type ConnectRuntimeStatus,
@@ -74,7 +76,20 @@ import {
 } from './node-runtime.js'
 import { bundledProfileDir, desktopPaths, thirdPartyLicensesFile } from './paths.js'
 import type { FetchLike } from './ports.js'
+import { DesktopQuitConfirmation } from './quit-confirmation.js'
 import { createRedactor } from './redact.js'
+import {
+  authenticateSceneHost,
+  decideScenePermission,
+  isDevToolsShortcut,
+  SCENE_PARTITION,
+  type SceneOwner,
+  sceneEntry,
+  sceneRequestHeaders,
+  sceneSender,
+  sceneWindowTitle,
+  withoutSetCookie,
+} from './scene-window.js'
 import { createSecretVault, type DesktopSecrets, secretLiterals, toHex } from './secrets.js'
 import {
   resolveServerEntry,
@@ -425,6 +440,8 @@ async function bootstrap(): Promise<void> {
   let connectStatus: ConnectRuntimeStatus | undefined
   /** WP136：托盘「切换场景」列的那几个；`undefined` = 还没问到（那一项就不出）。 */
   let scenes: TrayScene[] | undefined
+  /** WP184：这台电脑上装了官方 DeepSeek Harness 桌面端（用户自己装的）。 */
+  let officialDesktop = false
   /** WP144：AI 正在操作这台电脑（`undefined` = 没有）。托盘变红与最上面那一行读它。 */
   let computerUseActive: { until: string } | undefined
   /** 当前挂着的是不是红色那一张（只在变化时换图，免得托盘一闪一闪）。 */
@@ -439,6 +456,182 @@ async function bootstrap(): Promise<void> {
    */
   const allowedOrigins = (): string[] => [originOfBaseUrl(serverUrl()) ?? serverUrl()]
 
+  /*
+   * ── WP184（docs/79 §3.1）：官方场景在我们自己的独立窗口里打开，体验接近官方桌面端。
+   *
+   * 这些窗口住在单独的会话分区里（`SCENE_PARTITION`）：工作台 defaultSession 上那份只许 self 的
+   * CSP 与「权限一律拒」都不串过去——官方页面按它自己的 CSP 跑。凭据的做法借自官方桌面端壳
+   * （`scene-window.ts` 头注）：带 token 的网址只在主进程里换一次 cookie，cookie 只附给归属窗口。
+   */
+  interface SceneWindow {
+    window: BrowserWindow
+    owner: SceneOwner
+  }
+  const sceneWindows = new Map<string, SceneWindow>()
+  const liveSceneWindows = (): SceneWindow[] =>
+    [...sceneWindows.values()].filter((w) => !w.window.isDestroyed())
+  const sceneOwners = (): SceneOwner[] => liveSceneWindows().map((w) => w.owner)
+  const sceneOfContents = (id: number): SceneWindow | undefined =>
+    liveSceneWindows().find((w) => w.owner.webContentsId === id)
+  /** 这个页面能在哪些源之间走动：官方场景窗口只在它自己的源里，其余是工作台的源。 */
+  const originsFor = (contents: Electron.WebContents): string[] => {
+    const scene = sceneOfContents(contents.id)
+    return scene === undefined ? allowedOrigins() : [scene.owner.origin]
+  }
+
+  const sceneSession = session.fromPartition(SCENE_PARTITION)
+  const SCENE_URLS = { urls: ['http://127.0.0.1/*', 'ws://127.0.0.1/*'] }
+  sceneSession.webRequest.onBeforeSendHeaders(SCENE_URLS, (details, callback) => {
+    const decision = sceneRequestHeaders({
+      url: details.url,
+      webContentsId: details.webContentsId,
+      requestHeaders: details.requestHeaders,
+      owners: sceneOwners(),
+    })
+    if (decision.action === 'cancel') callback({ cancel: true })
+    else if (decision.action === 'attach') callback({ requestHeaders: decision.requestHeaders })
+    else callback({})
+  })
+  sceneSession.webRequest.onHeadersReceived(SCENE_URLS, (details, callback) => {
+    const owned =
+      details.webContentsId === undefined ? undefined : sceneOfContents(details.webContentsId)
+    if (owned === undefined) {
+      callback({})
+      return
+    }
+    callback({ responseHeaders: withoutSetCookie(details.responseHeaders ?? {}) })
+  })
+  sceneSession.setPermissionRequestHandler((contents, permission, callback, details) => {
+    const scene = sceneOfContents(contents.id)
+    const decision = decideScenePermission({
+      permission,
+      owned: scene !== undefined,
+      isMainFrame: details.isMainFrame,
+      requestingUrl: details.requestingUrl,
+      sceneOrigin: scene?.owner.origin,
+      ...('mediaTypes' in details && details.mediaTypes !== undefined
+        ? { mediaTypes: details.mediaTypes }
+        : {}),
+      platform: process.platform,
+    })
+    if (decision === 'deny') callback(false)
+    else if (decision === 'allow') callback(true)
+    else
+      void systemPreferences.askForMediaAccess('microphone').then(callback, () => {
+        callback(false)
+      })
+  })
+  sceneSession.setPermissionCheckHandler((contents, permission, requestingOrigin, details) => {
+    const scene = contents === null ? undefined : sceneOfContents(contents.id)
+    const decision = decideScenePermission({
+      permission,
+      owned: scene !== undefined,
+      isMainFrame: details.isMainFrame,
+      requestingUrl: requestingOrigin,
+      sceneOrigin: scene?.owner.origin,
+      ...(details.mediaType === undefined ? {} : { mediaTypes: [details.mediaType] }),
+      platform: process.platform,
+    })
+    if (decision === 'ask-microphone')
+      return systemPreferences.getMediaAccessStatus('microphone') === 'granted'
+    return decision === 'allow'
+  })
+
+  // 原生目录选择：只接官方场景窗口主 frame 发来的；同一个窗口同时只开一个框
+  const pendingPick = new WeakMap<BrowserWindow, Promise<string | null>>()
+  ipcMain.handle('agentsws:scene-directory-pick', (event) => {
+    const owner = sceneSender(
+      {
+        webContentsId: event.sender.id,
+        isMainFrame: event.senderFrame !== null && event.senderFrame === event.sender.mainFrame,
+        frameUrl: event.senderFrame?.url ?? '',
+      },
+      sceneOwners(),
+    )
+    const scene = owner === undefined ? undefined : sceneOfContents(owner.webContentsId)
+    if (scene === undefined) throw new Error('只接官方场景窗口发来的目录选择')
+    const win = scene.window
+    const existing = pendingPick.get(win)
+    if (existing !== undefined) return existing
+    if (win.isMinimized()) win.restore()
+    win.show()
+    win.focus()
+    const result = dialog
+      .showOpenDialog(win, { properties: ['openDirectory', 'createDirectory'] })
+      .then(({ canceled, filePaths }) =>
+        win.isDestroyed() || canceled ? null : (filePaths[0] ?? null),
+      )
+      .finally(() => {
+        pendingPick.delete(win)
+      })
+    pendingPick.set(win, result)
+    return result
+  })
+
+  /**
+   * 把一个网页场景端出来：同一个场景、同一个端口的窗口已经在就直接显示；端口变了（重启过）
+   * 就重新换 cookie、重新加载。窗口加载的是**不带 token** 的干净网址。
+   */
+  async function showSceneWindow(name: string, url: string): Promise<void> {
+    const entry = sceneEntry(url)
+    if (entry === undefined) throw new Error('服务进程给的场景网址不是本机回环地址')
+    const existing = sceneWindows.get(name)
+    const alive = existing !== undefined && !existing.window.isDestroyed() ? existing : undefined
+    if (alive !== undefined && alive.owner.origin === entry.origin) {
+      if (alive.window.isMinimized()) alive.window.restore()
+      alive.window.show()
+      alive.window.focus()
+      return
+    }
+    const cookie = await authenticateSceneHost(url, (u, init) => fetch(u, init))
+    let win = alive?.window
+    if (win === undefined) {
+      const created = new BrowserWindow({
+        width: 1280,
+        height: 840,
+        show: false,
+        title: sceneWindowTitle(name, config.language),
+        webPreferences: {
+          partition: SCENE_PARTITION,
+          preload: join(here, 'scene-preload.cjs'),
+          contextIsolation: true,
+          nodeIntegration: false,
+          sandbox: true,
+          webSecurity: true,
+          webviewTag: false,
+          spellcheck: false,
+          devTools: true,
+        },
+      })
+      // 关窗 = 隐藏（场景照跑，里面的任务不受影响）；真退出时才关
+      created.on('close', (event) => {
+        if (quitting) return
+        event.preventDefault()
+        created.hide()
+      })
+      created.on('closed', () => {
+        if (sceneWindows.get(name)?.window === created) sceneWindows.delete(name)
+      })
+      // 标题留我们这一句（一眼看出这是官方的），页面自己的标题不覆盖它
+      created.on('page-title-updated', (event) => {
+        event.preventDefault()
+      })
+      created.webContents.on('before-input-event', (event, input) => {
+        if (!isDevToolsShortcut(input, process.platform)) return
+        event.preventDefault()
+        created.webContents.toggleDevTools()
+      })
+      win = created
+    }
+    sceneWindows.set(name, {
+      window: win,
+      owner: { webContentsId: win.webContents.id, origin: entry.origin, cookie },
+    })
+    await win.loadURL(entry.entry)
+    win.show()
+    win.focus()
+  }
+
   // ── 安全：CSP 只允许 self，覆盖服务端可能发的任何一份。
   session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
     callback({ responseHeaders: withCsp(details.responseHeaders ?? {}) })
@@ -449,14 +642,14 @@ async function bootstrap(): Promise<void> {
 
   app.on('web-contents-created', (_event, contents) => {
     contents.on('will-navigate', (event, url) => {
-      const decision = decideNavigation(url, allowedOrigins())
+      const decision = decideNavigation(url, originsFor(contents))
       if (decision.action === 'allow') return
       event.preventDefault()
       if (decision.action === 'external') void shell.openExternal(decision.url)
       else logger.warn('拒绝导航', { url, reason: decision.reason })
     })
     contents.setWindowOpenHandler(({ url }) => {
-      const decision = decideWindowOpen(url, allowedOrigins())
+      const decision = decideWindowOpen(url, originsFor(contents))
       if (decision.action === 'external') void shell.openExternal(decision.url)
       else if (decision.action === 'allow') void contents.loadURL(url)
       else logger.warn('拒绝开窗', { url, reason: decision.reason })
@@ -491,6 +684,17 @@ async function bootstrap(): Promise<void> {
     await shell.openExternal(raw)
     return true
   })
+  // WP184：工作台左下角「场景」点了一个网页场景——壳自己去拿网址、自己开窗
+  ipcMain.handle(
+    BRIDGE_CHANNELS.openScene,
+    async (event, rawName: unknown, rawOptions: unknown): Promise<SceneOpenOutcome> => {
+      if (!fromLocalWindow(event) || remote) return { ok: false, reason: '这里打不开场景' }
+      if (typeof rawName !== 'string' || !/^[a-z][a-z0-9-]{0,31}$/.test(rawName))
+        return { ok: false, reason: '场景名不对' }
+      const restart = (rawOptions as { restart?: unknown } | null)?.restart === true
+      return openSceneFor(rawName, restart)
+    },
+  )
 
   // ── 服务进程的 /v1：换会话 cookie、运行期急停、换密钥（13 §5 / 28 §1）。
   //     会话密钥只在主进程里出现，换回来的 cookie 也只在主进程里；渲染进程与 URL 里一个字都没有。
@@ -647,6 +851,8 @@ async function bootstrap(): Promise<void> {
     restorable: canRestore(upgradeNote()),
     ...(updateAvailable === undefined ? {} : { updateAvailable }),
     ...(scenes === undefined ? {} : { scenes }),
+    officialDesktop,
+    sceneInBrowser: config.sceneInBrowser,
     ...(computerUseActive === undefined ? {} : { computerUse: computerUseActive }),
     licenses,
   })
@@ -841,40 +1047,90 @@ async function bootstrap(): Promise<void> {
       scenes = undefined
       return
     }
-    const out = await api.scenes(s, assignment)
-    scenes = out.ok && out.value.length > 0 ? out.value : undefined
+    const out = await api.sceneMenu(s, assignment)
+    scenes = out.ok && out.value.scenes.length > 0 ? out.value.scenes : undefined
+    officialDesktop = out.ok && out.value.officialDesktop
+    // WP184：场景已经关了（工作台面板里点了关闭、意外退出）：它的窗口也收掉，不留一个连不上的页面
+    if (out.ok)
+      for (const [name, w] of sceneWindows) {
+        const state = out.value.scenes.find((x) => x.name === name)?.state
+        if (state === 'running' || state === 'starting') continue
+        sceneWindows.delete(name)
+        if (!w.window.isDestroyed()) w.window.destroy()
+      }
     refreshTray()
   }
 
   /**
-   * WP136：切到一个场景。Agents 工坊 = 打开工作台；别的网页场景 = 让服务进程用捆绑的 Node
-   * 起它，拿回带一次性 token 的网址交给系统浏览器（网址不进日志）。
+   * WP136 / WP184：打开一个网页场景。让服务进程用捆绑的 Node 起它（`restart` = 先关再起），
+   * 拿回带一次性 token 的网址——默认开在我们自己的独立窗口里（体验接近官方桌面端），
+   * 托盘勾了「在浏览器里打开场景」就交给系统浏览器。网址不进日志、不进渲染进程。
    */
+  async function openSceneFor(name: string, restart: boolean): Promise<SceneOpenOutcome> {
+    const s = await ensureSession()
+    const assignment = s === undefined ? undefined : await ensureAssignment(s)
+    if (s === undefined || assignment === undefined) return { ok: false, reason: '换不到会话' }
+    const out = restart
+      ? await api.restartScene(s, assignment, name)
+      : await api.openScene(s, assignment, name)
+    if (!out.ok) {
+      logger.warn('打开场景失败', { scene: name, reason: out.reason })
+      return { ok: false, reason: out.reason }
+    }
+    if (config.sceneInBrowser) {
+      await shell.openExternal(out.value)
+      logger.info('已打开场景', { scene: name, where: 'browser' })
+      void pollScenes()
+      return { ok: true, where: 'browser' }
+    }
+    try {
+      await showSceneWindow(name, out.value)
+    } catch (err) {
+      logger.warn('场景窗口没开起来', { scene: name, error: String(err) })
+      return { ok: false, reason: err instanceof Error ? err.message : String(err) }
+    }
+    logger.info('已打开场景', { scene: name, where: 'window' })
+    void pollScenes()
+    return { ok: true, where: 'window' }
+  }
+
+  /** 托盘点了一个场景。Agents 工坊 = 打开工作台；别的 = {@link openSceneFor}，失败弹一句人话。 */
   async function switchScene(name: string | undefined): Promise<void> {
     if (name === undefined || name === 'agentsws') {
       await openWorkstation()
       return
     }
+    const out = await openSceneFor(name, false)
+    if (out.ok) return
+    const t = strings(config.language)
+    dialog
+      .showMessageBox({
+        type: 'warning',
+        message: t.sceneOpenFailed.replace('{name}', name).replace('{detail}', out.reason),
+      })
+      .catch(() => undefined)
+  }
+
+  /** WP184：托盘「官方桌面端（你自己装的）」——让服务进程去启动它（`dsh://open` 或打开应用）。 */
+  async function launchOfficialDesktop(): Promise<void> {
     const t = strings(config.language)
     const s = await ensureSession()
     const assignment = s === undefined ? undefined : await ensureAssignment(s)
     const out =
       s === undefined || assignment === undefined
         ? { ok: false as const, reason: '换不到会话' }
-        : await api.openScene(s, assignment, name)
+        : await api.launchOfficialDesktop(s, assignment)
     if (out.ok) {
-      logger.info('已打开场景', { scene: name })
-      await shell.openExternal(out.value)
-    } else {
-      logger.warn('打开场景失败', { scene: name, reason: out.reason })
-      dialog
-        .showMessageBox({
-          type: 'warning',
-          message: t.sceneOpenFailed.replace('{name}', name).replace('{detail}', out.reason),
-        })
-        .catch(() => undefined)
+      logger.info('已启动用户自己装的官方桌面端')
+      return
     }
-    await pollScenes()
+    logger.warn('官方桌面端没打开', { reason: out.reason })
+    dialog
+      .showMessageBox({
+        type: 'warning',
+        message: t.officialDesktopFailed.replace('{detail}', out.reason),
+      })
+      .catch(() => undefined)
   }
 
   async function checkBrowserExtension(): Promise<void> {
@@ -1038,6 +1294,14 @@ async function bootstrap(): Promise<void> {
         if (remote) break
         void switchScene(scene)
         break
+      case 'launch-official-desktop':
+        if (remote) break
+        void launchOfficialDesktop()
+        break
+      case 'toggle-scene-in-browser':
+        config = configStore.update({ sceneInBrowser: !config.sceneInBrowser })
+        refreshTray()
+        break
       case 'manage-scenes':
         if (remote) break
         // 工作台看到 `?scenes=1` 就把左下角的场景面板打开
@@ -1095,8 +1359,7 @@ async function bootstrap(): Promise<void> {
         void stopComputerUse()
         break
       case 'quit':
-        quitting = true
-        server.stop()
+        // 真正的收尾（停服务进程）在 before-quit 里：官方场景还开着时要先问一句，点取消就什么都不动
         app.quit()
         break
     }
@@ -1112,7 +1375,51 @@ async function bootstrap(): Promise<void> {
   }
 
   let quitting = false
-  app.on('before-quit', () => {
+  /*
+   * WP184：退出前问一句（移植自官方桌面端的 `quit-confirmation.ts`）。官方场景在跑时，退出会把它
+   * 一起关掉；我们起的是标准 `dsh --profile web`，问不到里面有没有任务，就照官方规矩当「可能有」问。
+   * 没有官方场景在跑、系统关机：照旧直接退。
+   */
+  const officialRunning = (): boolean =>
+    liveSceneWindows().length > 0 ||
+    (scenes ?? []).some(
+      (x) => x.origin !== 'agentsws' && (x.state === 'running' || x.state === 'starting'),
+    )
+  const quitConfirmation = new DesktopQuitConfirmation({
+    messages: () => {
+      const t = strings(config.language)
+      return {
+        title: t.quitTitle,
+        message: t.quitMessage,
+        quitActiveTasks: t.quitActiveTasks,
+        quitScheduledTasks: t.quitScheduledTasks,
+        quitActiveAndScheduledTasks: t.quitActiveAndScheduledTasks,
+        quit: t.quitConfirm,
+        cancel: t.wizardCancel,
+      }
+    },
+    inspect: () => (officialRunning() ? Promise.resolve('unknown' as const) : undefined),
+    show: (options) => dialog.showMessageBox(options),
+    focus: () => {
+      app.focus({ steal: true })
+    },
+    platform: process.platform,
+  })
+  let quitApproved = false
+  powerMonitor.on('shutdown', () => {
+    quitApproved = true
+    quitConfirmation.dispose()
+  })
+  app.on('before-quit', (event) => {
+    if (!quitApproved && !quitting && officialRunning()) {
+      event.preventDefault()
+      void quitConfirmation.confirm().then((approved) => {
+        if (!approved) return
+        quitApproved = true
+        app.quit()
+      })
+      return
+    }
     quitting = true
     server.stop()
   })
