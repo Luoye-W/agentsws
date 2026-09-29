@@ -1,8 +1,7 @@
 ---
 import {
   ARCHITECTURE_URL,
-  CLOUD_LOGIN_URL,
-  CLOUD_URL,
+  accountUrl,
   CONTRIBUTING_URL,
   GITHUB_URL,
   SECURITY_URL,
@@ -48,8 +47,8 @@ const cols = [
   {
     h: f.account,
     items: [
-      [f.login, CLOUD_LOGIN_URL],
-      [f.topup, CLOUD_URL],
+      [f.login, accountUrl('login', lang)],
+      [f.topup, accountUrl('topup', lang)],
       [f.terms, p('/terms/')],
       [f.privacy, p('/privacy/')],
       [f.refund, p('/refund/')],

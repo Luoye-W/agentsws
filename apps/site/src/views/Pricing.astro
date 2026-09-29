@@ -2,7 +2,7 @@
 /** 价格页：两张方案卡 → 充值档位（云上取）→ 钱花在哪三块 + 价目表（云上取）→ 关于积分 → 收尾。 */
 import Hint from '../components/Hint.astro'
 import Icon from '../components/Icon.astro'
-import { CLOUD_LOGIN_URL, CLOUD_URL } from '../config.js'
+import { accountUrl } from '../config.js'
 import { buildPricing } from '../data/pricing-build.js'
 import { type Lang, localePath } from '../i18n/common.js'
 import { PRICING } from '../i18n/pricing.js'
@@ -70,7 +70,7 @@ const numFmt = new Intl.NumberFormat(lang === 'zh' ? 'zh-CN' : 'en-US')
               <div class="lbl">{lang === 'zh' ? tier.label_zh : tier.label_en}</div>
               <div class="usd">${tier.usd}</div>
               <div class="cr"><b>{numFmt.format(tier.credits)}</b> {t.topup.credits}</div>
-              <a class:list={['btn', 'btn-sm', tier.recommended ? 'btn-primary' : 'btn-ghost']} href={CLOUD_URL} rel="noopener" aria-label={`${t.topup.cta} $${tier.usd}`}>{t.topup.cta}</a>
+              <a class:list={['btn', 'btn-sm', tier.recommended ? 'btn-primary' : 'btn-ghost']} href={accountUrl('topup', lang)} rel="noopener" aria-label={`${t.topup.cta} $${tier.usd}`}>{t.topup.cta}</a>
             </li>
           ))}
         </ul>
@@ -141,7 +141,7 @@ const numFmt = new Intl.NumberFormat(lang === 'zh' ? 'zh-CN' : 'en-US')
       <h2 style="margin-top:0">{t.final.title}</h2>
       <div class="cta-row">
         <a class="btn btn-primary" href={p('/download/')}><Icon name="download" />{t.final.download}</a>
-        <a class="btn btn-ghost" href={CLOUD_LOGIN_URL} rel="noopener">{t.final.login}</a>
+        <a class="btn btn-ghost" href={accountUrl('account', lang)} rel="noopener">{t.final.login}</a>
       </div>
     </div>
   </section>

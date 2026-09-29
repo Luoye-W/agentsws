@@ -4,6 +4,7 @@
 
 import type { PricingCatalog } from '@agentsws/contracts'
 import { describe, expect, it } from 'vitest'
+import { accountUrl } from '../src/config.js'
 import manifest from '../src/data/downloads.json'
 import { COMMON, localePath } from '../src/i18n/common.js'
 import { DOWNLOAD } from '../src/i18n/download.js'
@@ -175,5 +176,15 @@ describe('文案：中英同形（少翻一句会红）', () => {
     ['pages', PAGES],
   ] as const)('%s', (_, copy) => {
     expect(shape(copy.en)).toEqual(shape(copy.zh))
+  })
+})
+
+describe('账号页链接（WP198 的路径；英文站带 ?lang=en）', () => {
+  it('登录 / 账号 / 充值', () => {
+    expect(accountUrl('login', 'zh')).toBe('https://cloud.agentsws.com/account/login')
+    expect(accountUrl('account', 'zh')).toBe('https://cloud.agentsws.com/account')
+    expect(accountUrl('topup', 'zh')).toBe('https://cloud.agentsws.com/account/topup')
+    expect(accountUrl('login', 'en')).toBe('https://cloud.agentsws.com/account/login?lang=en')
+    expect(accountUrl('topup', 'en')).toBe('https://cloud.agentsws.com/account/topup?lang=en')
   })
 })

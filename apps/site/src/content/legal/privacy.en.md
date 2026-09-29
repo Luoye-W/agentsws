@@ -52,7 +52,10 @@ You can see which model or data provider will be used before a call runs, and yo
 ## 4. Cookies and local storage
 
 - **This website, {{SITE_URL}}, sets no cookies** and currently has no visitor analytics, advertising or cross-site tracking. When you switch between light and dark themes, your browser stores that one preference locally (localStorage); it is never sent to us.
-- **The account pages (cloud.agentsws.com)** use the cookies strictly needed to keep you signed in. Without them you'd have to sign in on every visit; we don't use them for analytics or advertising.
+- **The account pages (cloud.agentsws.com)** use only two cookies, both strictly necessary, never for analytics or advertising:
+  - `__Host-agentsws_account`: keeps you signed in. Readable only by the server (httpOnly), sent only over HTTPS (Secure), SameSite=Lax; it expires after 3 days of inactivity and after 30 days at most. We store only a hash of it, and signing out invalidates it.
+  - `agentsws_account_csrf`: stops other websites from submitting actions with your signed-in session.
+  - The operations back office uses a separate cookie that has nothing to do with your account pages.
 
 ## 5. Cross-border transfer
 
@@ -62,7 +65,7 @@ Our cloud services run on Cloudflare's global network, and some model or data pr
 
 - Account information: for as long as the account exists; deleted or anonymised after closure, except where the law requires us to keep it.
 - Credit and transaction records: for the period required by financial and tax law.
-- Content of requests made with credits: processed only for as long as needed to complete that request; usage records kept for billing disputes don't include the request content.
+- Requests made with credits: our own usage records contain only the capability, quantity, credits charged, model name, token counts and a request ID — **never the request content**. The content passes through our model gateway to the relevant AI provider, whose terms apply to it.
 - Data for cloud features and long-running tasks: kept while the feature is on or the task is running; deleted when you turn the feature off or delete the task. It is not deleted while a service is paused for an unpaid balance.
 
 ## 7. Your rights

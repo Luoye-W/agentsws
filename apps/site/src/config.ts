@@ -10,7 +10,20 @@ export const SITE_URL = 'https://agentsws.com'
  * 官网上的「登录 / 账号 / 充值」**只是链接**，跳过去；官网本身一行账号代码都没有。
  */
 export const CLOUD_URL = 'https://cloud.agentsws.com'
-export const CLOUD_LOGIN_URL = `${CLOUD_URL}/login`
+
+/** 账号页的三个入口（WP198 已上线的路径）。 */
+export const ACCOUNT_PATHS = {
+  login: '/account/login',
+  account: '/account',
+  topup: '/account/topup',
+} as const
+
+export type AccountPage = keyof typeof ACCOUNT_PATHS
+
+/** 账号页链接：英文站带 `?lang=en`，账号页据此出英文。 */
+export function accountUrl(page: AccountPage, lang: 'zh' | 'en'): string {
+  return `${CLOUD_URL}${ACCOUNT_PATHS[page]}${lang === 'en' ? '?lang=en' : ''}`
+}
 
 /** 公开价目（WP165）：构建时取一次，取不到用仓库里的样例并标「以控制台为准」。 */
 export const PRICING_URL = `${CLOUD_URL}/v1/pricing`
