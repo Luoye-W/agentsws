@@ -95,6 +95,7 @@
 | 70 | WP191 社媒运营职责定义：调研开源知识（docs/86）+ 新增 LinkedIn 运营 + 充实 YouTube / TikTok / X | `WP191-social-duty-definitions.md` | `wp191-social-duties` · `wp/191-social-duties` | WP72 | 进行中（Claude） |
 | 71 | WP193 Agents 工坊官网：先出设计（参考 KOLAgents 官网；docs/87 + 静态稿） | `WP193-site-design.md` | `wp193-site-design` · `wp/193-site-design` | WP112 | 进行中（Claude） |
 | 72 | WP195 品牌标记默认动起来：常驻待机动效三候选 + 常驻位置改动态 + 动态 favicon | `WP195-brand-mark-live.md` | `wp195-brand-live` · `wp/195-brand-live` | WP112 | 进行中（Claude） |
+| 73 | WP196 改名扫描：店主→负责人（可改名）、工作区所有者→公司设置与授权、用户可见 agentsws→Agents 工坊 | `WP196-naming-sweep.md` | `wp196-naming` · `wp/196-naming` | WP188 | 进行中（Claude） |
 
 WP117b 的补充要求（派工单里没有，写在这）：demo 服务的是 `apps/workstation/dist`，测界面前先 `pnpm -F @agentsws/workstation exec vite build`；交付一个真实点击的 playwright 脚本 `scripts/e2e-kol-sandbox.mjs`（playwright 库在 `node_modules/.pnpm/playwright@1.63.0/node_modules/playwright`），走完「选合成红人 → 起草开发信 → 批准发送 → 已发 ≥ 1 → 跳到 N 天后 → 回信 ≥ 1 → 分类 → 议价卡 → 阶段推进 → 交付物 → 追踪链接」，每步截图到 `docs/assets/workstation/kol-e2e-NN.png`，脚本里断言计数确实变了；演练数据从真实漏斗 / 归因里排除，单独显示「演练漏斗」。
 
