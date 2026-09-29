@@ -118,10 +118,11 @@
   gap: 20px;
   align-items: start;
 }
-.stair {
+.stair .scene {
   transition:
     opacity 0.5s,
-    filter 0.5s;
+    filter 0.5s,
+    box-shadow 0.4s;
 }
 .stair:nth-child(1) {
   margin-top: 132px;
@@ -132,9 +133,14 @@
 .stair:nth-child(3) {
   margin-top: 44px;
 }
-.stairs.js .stair:not(.lit) {
+/* 没点亮的那几级：画面变淡去色；文字只换成次要色、不做半透明（保证对比度） */
+.stairs.js .stair:not(.lit) .scene {
   opacity: 0.38;
   filter: saturate(0.3);
+}
+.stairs.js .stair:not(.lit) .lv,
+.stairs.js .stair:not(.lit) h3 {
+  color: var(--muted);
 }
 .stairs.js .stair.cur .scene {
   box-shadow: var(--glow), var(--shadow-hover);
@@ -1039,8 +1045,9 @@
 .lay.harness .ln {
   color: #8bb8ff;
 }
+/* 进场用 clip-path 从下往上揭开，不动 opacity：文字颜色始终是最终那个，对比度检查不会量到半透明的中间态 */
 .base.anim .lay {
-  opacity: 0;
+  clip-path: inset(100% 0 0 0 round 12px);
 }
 .base.anim.in .lay {
   animation: lay-up 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
@@ -1065,17 +1072,17 @@
 }
 @keyframes lay-up {
   from {
-    opacity: 0;
+    clip-path: inset(100% 0 0 0 round 12px);
     transform: translateY(14px);
   }
   to {
-    opacity: 1;
+    clip-path: inset(0 0 0 0 round 12px);
     transform: none;
   }
 }
 @media (prefers-reduced-motion: reduce) {
   .base.anim .lay {
-    opacity: 1 !important;
+    clip-path: none !important;
     animation: none !important;
   }
 }

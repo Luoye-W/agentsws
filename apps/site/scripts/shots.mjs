@@ -47,7 +47,7 @@ const browser = await chromium.launch()
 for (const [name, path, width, scheme, full] of SHOTS) {
   const ctx = await browser.newContext({
     viewport: { width, height: width < 600 ? 844 : 900 },
-    deviceScaleFactor: width < 600 ? 2 : 1,
+    deviceScaleFactor: 1,
     colorScheme: scheme,
     reducedMotion: name.startsWith('hero-live') ? 'no-preference' : 'reduce',
   })
