@@ -103,7 +103,7 @@
     "packages/roles/roles/social/x.yml",
     "packages/roles/roles/social/youtube.yml"
   ],
-  "source_digest": "ae19eb03a2b06019a0ec0324972ca425",
+  "source_digest": "8ee2e57a8b4c5318bc5d83ea4eb3397a",
   "objects": [
     {
       "id": "ad",
@@ -1312,6 +1312,12 @@
           "name": "feedback",
           "type": "string",
           "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "contact_id",
+          "type": "string",
+          "sensitivity": "confidential",
           "optional": true
         },
         {
@@ -6276,6 +6282,14 @@
     },
     {
       "from": "b2b_sample",
+      "to": "contact",
+      "direction": "out",
+      "cardinality": "one",
+      "via": "contact_id",
+      "lookup": []
+    },
+    {
+      "from": "b2b_sample",
       "to": "staged_change",
       "direction": "in",
       "cardinality": "many",
@@ -6544,6 +6558,14 @@
       "direction": "out",
       "cardinality": "one",
       "via": "workspace_id",
+      "lookup": []
+    },
+    {
+      "from": "contact",
+      "to": "b2b_sample",
+      "direction": "in",
+      "cardinality": "many",
+      "via": "b2b_sample.contact_id",
       "lookup": []
     },
     {
