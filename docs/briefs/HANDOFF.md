@@ -92,7 +92,7 @@
 | 67 | WP183 调研与设计：agentsws 做成 DSH 插件（官方桌面端装上就能用），只读 + 讨论稿 docs/85 | `WP183-agentsws-as-dsh-plugins.md` | `wp183-dsh-plugin` · `wp/183-dsh-plugin` | WP180 | 已合并（09-29，讨论稿 docs/85；§6 八件事待 Luoye 定） |
 | 68 | WP184 官方场景在我们自己的窗口里打开（借官方桌面端壳，MIT）；认用户自己装的官方桌面端 | `WP184-official-desktop-scene.md` | `wp184-official-desktop` · `wp/184-official-desktop` | WP136 | 已合并（09-29，Fable 终审：干净构建，290 文件 4152 条过，stub 三包零漂移；Electron e2e 场景窗口过） |
 | 69 | WP188「随便聊」：像 DeepSeek 网页版的自由对话入口（会话列表、选模型含官方积分、流式、联网搜索与公司资料开关、交给岗位去做；不开事项不出卡） | `WP188-free-chat.md` | `wp188-free-chat` · `wp/188-free-chat` | WP179 | 已合并 |
-| 70 | WP191 社媒运营职责定义：调研开源知识（docs/86）+ 新增 LinkedIn 运营 + 充实 YouTube / TikTok / X | `WP191-social-duty-definitions.md` | `wp191-social-duties` · `wp/191-social-duties` | WP72 | 进行中（Claude） |
+| 70 | WP191 社媒运营职责定义：调研开源知识（docs/86）+ 新增 LinkedIn 运营 + 充实 YouTube / TikTok / X | `WP191-social-duty-definitions.md` | `wp191-social-duties` · `wp/191-social-duties` | WP72 | 已合并 |
 | 71 | WP193 Agents 工坊官网：先出设计（参考 KOLAgents 官网；docs/87 + 静态稿） | `WP193-site-design.md` | `wp193-site-design` · `wp/193-site-design` | WP112 | 已合并（待 Luoye 选方向） |
 | 72 | WP195 品牌标记默认动起来：常驻待机动效三候选 + 常驻位置改动态 + 动态 favicon | `WP195-brand-mark-live.md` | `wp195-brand-live` · `wp/195-brand-live` | WP112 | 已合并 |
 | 73 | WP196 改名扫描：店主→负责人（可改名）、工作区所有者→公司设置与授权、用户可见 agentsws→Agents 工坊 | `WP196-naming-sweep.md` | `wp196-naming` · `wp/196-naming` | WP188 | 进行中（Claude） |
