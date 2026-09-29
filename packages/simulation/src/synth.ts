@@ -181,7 +181,10 @@ const PEOPLE_15: PersonTemplate[] = [
     // 内容账号组一条、社群组一条。主分配仍是 `common.member`（他还是个普通成员），
     // 权限**各管各的**，不并集（05 §4）。
     role: 'common.member',
-    extra: ['social.meta', 'social.discord'],
+    // WP199：LinkedIn 公司主页那条也归她（15 人 pack 手工维护，这里只为与 assignments.yml 对得上）。
+    // 发布卡落到运营主管李默手上——他没有这条职责、批不了——升级给王岚批，
+    // 这条路靠 `social/escalated-post-applies` 回归。
+    extra: ['social.meta', 'social.discord', 'social.linkedin'],
   },
   {
     id: 'p_chu',

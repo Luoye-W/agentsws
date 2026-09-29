@@ -367,6 +367,49 @@ export function checkExpectations(
         : `没交到：${missing.join(', ')}（实际 [${[...people].join(', ')}]）`,
     )
   }
+  // ── WP199：升级之后批了、施行了，留痕完整 ─────────────────────────────
+  if (expected.escalation_trail !== undefined) {
+    const want = expected.escalation_trail
+    const decidedBy = (id: string): Set<string> =>
+      new Set(
+        evidence.events
+          .filter((e) => e.type === 'approval.decided' && e.subject?.id === id)
+          .map((e) => String(e.actor.id)),
+      )
+    const describe = (i: (typeof evidence.approvals)[number]): string => {
+      const trail = i.routing.escalation.trail ?? []
+      return `${i.kind}[${trail.map((s) => `${s.tier}→${s.to}${s.added ? '+' : ''}`).join(' ')}] 拍板 ${String(i.decision?.by ?? '-')} 状态 ${i.state}`
+    }
+    const withTrail = evidence.approvals.filter(
+      (i) => (i.routing.escalation.trail ?? []).length > 0,
+    )
+    const hit = withTrail.find((i) => {
+      const trail = i.routing.escalation.trail ?? []
+      if (trail.map((s) => s.tier).join(',') !== want.tiers.join(',')) return false
+      if (want.added !== undefined) {
+        const added = trail.filter((s) => s.added).map((s) => s.to)
+        if (added.join(',') !== want.added.join(',')) return false
+      }
+      if (want.decided_by !== undefined && i.decision?.by !== want.decided_by) return false
+      if (want.state !== undefined && i.state !== want.state) return false
+      if (want.could_not_decide !== undefined) {
+        const decided = decidedBy(i.id)
+        for (const p of want.could_not_decide) {
+          if (!i.routing.recipients.some((r) => r.person === p) || decided.has(p)) return false
+        }
+      }
+      return true
+    })
+    add(
+      'escalation_trail',
+      hit !== undefined,
+      hit !== undefined
+        ? describe(hit)
+        : withTrail.length === 0
+          ? '没有一张卡带升级留痕'
+          : `没有一张对得上：${withTrail.map(describe).join('；')}`,
+    )
+  }
   if (expected.sampled !== undefined) {
     const n = evidence.sampling_reviews.length
     add(
