@@ -37,11 +37,11 @@ export const ARCHITECTURE_URL = `${GITHUB_URL}/blob/main/docs/ARCHITECTURE.md`
 export const CONTRIBUTING_URL = `${GITHUB_URL}/blob/main/CONTRIBUTING.md`
 
 /**
- * 运营主体公司全称与联系邮箱：**待 Luoye 提供**。没填之前条款页上照原样显示占位，
- * 一眼看得出还没填（上线前必须换掉，`test/legal.test.ts` 在 `SITE_RELEASE=1` 时会拦）。
+ * 运营主体公司全称与联系邮箱（Luoye 09-29 提供）。英文页也用中文全称——那是注册名，
+ * 没有登记过的英文名就不自己译一个。
  */
-export const OPERATOR_LEGAL_NAME = '{{OPERATOR_LEGAL_NAME}}'
-export const CONTACT_EMAIL = '{{CONTACT_EMAIL}}'
+export const OPERATOR_LEGAL_NAME = '深圳卢耶科技有限公司'
+export const CONTACT_EMAIL = 'support@agentsws.com'
 
 /** 条款三页的生效日期（改条款就改这里）。 */
 export const LEGAL_EFFECTIVE_DATE = '2026-10-01'

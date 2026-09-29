@@ -105,13 +105,13 @@ describe('条款三页', () => {
     }
   })
 
-  it('没填的占位只剩公司全称与联系邮箱两个', () => {
+  it('条款页上一个占位都不剩（公司全称与联系邮箱已填）', () => {
     for (const page of LEGAL_PAGES) {
       for (const lang of ['zh', 'en'] as const) {
         const left = new Set(
           [...loadLegal(page, lang, root).html.matchAll(/\{\{([A-Z_]+)\}\}/gu)].map((m) => m[1]),
         )
-        for (const k of left) expect(['OPERATOR_LEGAL_NAME', 'CONTACT_EMAIL']).toContain(k)
+        expect([...left]).toEqual([])
       }
     }
     expect(fillPlaceholders('{{EFFECTIVE_DATE}} {{SITE_URL}} {{NOPE}}')).toMatch(
