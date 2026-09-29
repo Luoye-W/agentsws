@@ -59,6 +59,15 @@ const usd = (n: number): string =>
   `USD ${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 const day = (iso: string): string => iso.slice(0, 10)
 
+/** 一版报价的金额：按行算、折扣之后，两位小数（服务进程与模拟世界同一个算法）。 */
+export function quoteAmount(
+  lines: readonly { qty: number; unit_price_usd: number }[],
+  discount_pct: number,
+): number {
+  const gross = lines.reduce((n, l) => n + l.qty * l.unit_price_usd, 0)
+  return Math.round(gross * (1 - discount_pct / 100) * 100) / 100
+}
+
 /** 阶梯价有没有倒挂（量越大单价越高）。回倒挂的那一档（没有回 `undefined`）。 */
 export function invertedTier(
   tiers: readonly { min_qty: number; unit_price_usd: number }[],

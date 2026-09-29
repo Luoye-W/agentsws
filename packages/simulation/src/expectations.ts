@@ -1463,6 +1463,9 @@ export function checkExpectations(
         problems.push(want.auto_approved ? `${tag}：没能自己出去` : `${tag}：不该自动放行`)
       if (want.stated_on_card !== undefined && (p.stated_on_card === true) !== want.stated_on_card)
         problems.push(`${tag}：卡面上没写清谁批、为什么`)
+      // WP182：报价是第几版（改价 = 新建一版）
+      if (want.version !== undefined && Number(p.version) !== Number(want.version))
+        problems.push(`${tag}：是第 ${String(p.version)} 版，不合期望 ${want.version}`)
     })
     add('b2b', problems.length === 0, problems.length === 0 ? seen.join('；') : problems.join('；'))
   }
@@ -1578,6 +1581,102 @@ export function checkExpectations(
       'b2b_fraud',
       problems.length === 0,
       problems.length === 0 ? `红卡：${phrases.join('、')}；账户不采纳` : problems.join('；'),
+    )
+  }
+  /*
+   * WP182 / docs/84 §3.1：询盘那几封——分级、诈骗嫌疑红卡、首回出卡、引了几张事实卡。
+   * 读真事件（`simulation.b2b_inquiry`）：分级是 `b2b-core` 判的，首回是 `draftInquiryReply` 写的。
+   */
+  if (expected.b2b_inquiry !== undefined) {
+    const rows = evidence.events.filter((e) => e.type === 'simulation.b2b_inquiry')
+    const problems: string[] = []
+    const seen: string[] = []
+    expected.b2b_inquiry.forEach((want, i) => {
+      const got = rows[i]
+      const tag = `第 ${i + 1} 封询盘`
+      if (got === undefined) {
+        problems.push(`${tag}：没有发生`)
+        return
+      }
+      const p = payloadOf(got)
+      seen.push(
+        `${String(p.grade)}${p.red_card === true ? ' 红卡' : p.reply_card === true ? ' 首回出卡' : ''}`,
+      )
+      if (want.grade !== undefined && String(p.grade) !== want.grade)
+        problems.push(`${tag}：分成了 ${String(p.grade)}`)
+      if (want.red_card !== undefined && (p.red_card === true) !== want.red_card)
+        problems.push(want.red_card ? `${tag}：该出红卡却没出` : `${tag}：不该出红卡`)
+      if (want.reply_card !== undefined && (p.reply_card === true) !== want.reply_card)
+        problems.push(want.reply_card ? `${tag}：首回没出卡` : `${tag}：不该起草首回`)
+      if (want.cited !== undefined && Number(p.cited) !== Number(want.cited))
+        problems.push(`${tag}：引了 ${String(p.cited)} 张事实卡，不合期望 ${want.cited}`)
+      const confirm = Array.isArray(p.to_confirm) ? p.to_confirm.map(String) : []
+      for (const c of want.to_confirm ?? [])
+        if (!confirm.includes(c)) problems.push(`${tag}：没把「${c}」列为要去确认`)
+    })
+    add(
+      'b2b_inquiry',
+      problems.length === 0,
+      problems.length === 0 ? seen.join('；') : problems.join('；'),
+    )
+  }
+  /* WP182：样品巡检那几拍——超期不寄 / 超期没反馈各提醒几条（同一个截止日只提醒一次）。 */
+  if (expected.b2b_samples !== undefined) {
+    const rows = evidence.events.filter((e) => e.type === 'simulation.b2b_sample_reminders')
+    const problems: string[] = []
+    const seen: string[] = []
+    expected.b2b_samples.forEach((want, i) => {
+      const got = rows[i]
+      const tag = `第 ${i + 1} 拍样品巡检`
+      if (got === undefined) {
+        problems.push(`${tag}：没有发生`)
+        return
+      }
+      const p = payloadOf(got)
+      seen.push(`超期没寄 ${String(p.ship_overdue)}、没反馈 ${String(p.feedback_overdue)}`)
+      if (want.ship_overdue !== undefined && Number(p.ship_overdue) !== Number(want.ship_overdue))
+        problems.push(
+          `${tag}：超期没寄提醒了 ${String(p.ship_overdue)} 条，不合期望 ${want.ship_overdue}`,
+        )
+      if (
+        want.feedback_overdue !== undefined &&
+        Number(p.feedback_overdue) !== Number(want.feedback_overdue)
+      )
+        problems.push(
+          `${tag}：超期没反馈提醒了 ${String(p.feedback_overdue)} 条，不合期望 ${want.feedback_overdue}`,
+        )
+    })
+    add(
+      'b2b_samples',
+      problems.length === 0,
+      problems.length === 0 ? seen.join('；') : problems.join('；'),
+    )
+  }
+  /* WP182：离职交接——一张卡给老板批，按接手的人在管的地区 / 产品线分。 */
+  if (expected.b2b_handover !== undefined) {
+    const want = expected.b2b_handover
+    const got = [...evidence.events].reverse().find((e) => e.type === 'simulation.b2b_handover')
+    const problems: string[] = []
+    const p = got === undefined ? {} : payloadOf(got)
+    if (got === undefined) problems.push('没有交接')
+    if (want.card !== undefined && (p.card === true) !== want.card)
+      problems.push(want.card ? '交接卡没出' : '不该出交接卡')
+    if (want.items !== undefined && Number(p.items) !== Number(want.items))
+      problems.push(`分出去 ${String(p.items)} 条，不合期望 ${want.items}`)
+    if (want.unassigned !== undefined && Number(p.unassigned) !== Number(want.unassigned))
+      problems.push(`没人接 ${String(p.unassigned)} 条，不合期望 ${want.unassigned}`)
+    if (want.routed_to !== undefined && String(p.routed_to) !== want.routed_to)
+      problems.push(`交接卡落到 ${String(p.routed_to)}，不合期望 ${want.routed_to}`)
+    const to = (p.successors ?? {}) as Record<string, unknown>
+    for (const [id, person] of Object.entries(want.successors ?? {}))
+      if (String(to[id]) !== person)
+        problems.push(`${id} 交给了 ${String(to[id])}，不合期望 ${person}`)
+    add(
+      'b2b_handover',
+      problems.length === 0,
+      problems.length === 0
+        ? `交接 ${String(p.items)} 条 → ${String(p.routed_to)} 批`
+        : problems.join('；'),
     )
   }
   /*

@@ -49,4 +49,16 @@ WP176（Luoye 09-28「不感兴趣只停这一轮」）加三条：
 | `cooldown-expired-reselect` | 冷却期满能再选进新一轮、出卡；第二次说不感兴趣冷却翻倍（180 天），期内再开又剔掉 |
 | `unsubscribe-still-permanent` | 退订仍永久进抑制名单：200 天后再开一轮照样剔掉 |
 
+WP182（docs/84 §3 业务）加五条（`scenarios/sales/`；分级、首回、报价金额、样品提醒、交接清单都是
+`@agentsws/b2b-core` 的函数，与服务进程 `b2b-sales.ts` 同一份）。四张事实卡的 frontmatter 加了
+`reply_en`（起草能直接引的英文那一句，不进正文）：
+
+| 场景 | 钉住什么 |
+|---|---|
+| `inquiry-first-reply-card` | 真买家询盘 → 首回出 `b2b_reply` 卡（碰起订量 / 交期另报 `b2b_commitment`），引了三张事实卡、问价不报价 |
+| `inquiry-scam-red-card` | 免费邮箱冒充大公司 + 登录看订单 + 压缩包 → 诈骗嫌疑红卡，不起草 |
+| `quote-over-mandate-new-version` | V1 超金额与毛利 → 转上级林峰；改量再报 = 第 2 版，授权内业务员自己批 |
+| `sample-overdue-reminder` | 超期没寄、签收后超期没反馈各提醒一条（天数取 yml）；第二拍不重复 |
+| `salesperson-left-handover` | 何佳离开 → 按接手的人在管的地区 / 产品线分，一张 `b2b_account_transfer` 卡落老板 |
+
 `baseline.json` 是 stub / direct / dsh 三个运行时 fast 档 `--seed 42` 跑出来的基线。

@@ -3,6 +3,7 @@ layer: fact
 domain: knowledge
 subject_key: b2b.certifications
 sensitivity: internal
+reply_en: The GaN 65W is certified to CE, FCC, RoHS and UKCA.
 ---
 # 认证清单
 

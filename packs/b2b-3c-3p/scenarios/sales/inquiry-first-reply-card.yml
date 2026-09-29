@@ -1,0 +1,45 @@
+# WP182（docs/84 §3.1）：**真买家询盘 → 首回出卡，数字只取事实卡。**
+#
+# 三件事都是真发生的：
+#
+# 1. 分级走 `@agentsws/b2b-core` 的 `gradeB2bInquiry`（说得出数量、规格、认证、贸易术语 → 真买家）；
+# 2. 首回走 `draftInquiryReply`：MOQ、交期只引 pack 里「价格与 MOQ」「交付能力」两张事实卡的英文那一句，
+#    问价不报价，只问最缺的两三项；
+# 3. 卡是 `b2b_reply`，碰到起订量 / 交期 guardrail 另报 `b2b_commitment`，落在业务员何佳手上（L1 起）。
+id: b2b/sales/inquiry-first-reply-card
+version: 1
+dataset: { pack: b2b-3c-3p, seed: 42 }
+stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
+clock: { start: '2026-09-29T09:00:00+08:00' }
+events:
+  - at: '+0m'
+    b2b.inquiry:
+      who: p_he
+      from: anna@volthaus.example
+      subject: GaN 65W chargers for the UK
+      body: We are a distributor in the UK. We need 3,000 pcs of 65W USB-C PD chargers with UKCA, FOB Shenzhen. What is the MOQ and lead time, and your best price?
+  - at: '+1h'
+    clock.advance: {}
+expected:
+  b2b_inquiry:
+    - grade: buyer
+      red_card: false
+      reply_card: true
+      cited: 3
+  b2b:
+    - kind: b2b_reply
+      blocked: false
+      rules: [b2b_commitment]
+      routed_to: p_he
+      auto_approved: false
+  staged_change_kinds: [b2b_reply]
+  event_types:
+    - simulation.b2b_inquiry
+    - simulation.b2b_staged
+  metrics:
+    runs_failed: 0
+invariants:
+  - no_write_without_stage
+  - provenance_respected
+rubric: >-
+  卡上一眼看得出是「真买家」吗？回信里的起订量、交期是不是事实卡上那几个数？问了价有没有忍住不报价？

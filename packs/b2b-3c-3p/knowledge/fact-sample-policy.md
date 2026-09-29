@@ -3,6 +3,7 @@ layer: fact
 domain: knowledge
 subject_key: b2b.sample_policy
 sensitivity: internal
+reply_en: Samples: up to 3 pcs per model, sample fee is refunded on order, freight collect via your DHL / FedEx account.
 ---
 # 样品政策
 

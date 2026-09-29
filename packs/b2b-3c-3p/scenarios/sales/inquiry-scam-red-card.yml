@@ -1,0 +1,34 @@
+# WP182（docs/84 §3.1）：**诈骗嫌疑的询盘 → 红卡，不起草。**
+#
+# 自称大公司却用免费邮箱、要先点链接登录才能「看订单」：`gradeB2bInquiry` 判成诈骗嫌疑，
+# 红卡（`b2b_fraud_alert`，理由 `scam_suspect`）落老板、业务员同收；首回一个字都不写。
+id: b2b/sales/inquiry-scam-red-card
+version: 1
+dataset: { pack: b2b-3c-3p, seed: 42 }
+stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
+clock: { start: '2026-09-29T10:00:00+08:00' }
+events:
+  - at: '+0m'
+    b2b.inquiry:
+      who: p_he
+      from: walmart.purchasing@gmail.com
+      subject: Walmart vendor purchase order
+      body: Walmart purchasing department here. Please click the link below and login to view the purchase order, then confirm today.
+      attachments: [PO_2026_0929.zip]
+  - at: '+1h'
+    clock.advance: {}
+expected:
+  b2b_inquiry:
+    - grade: scam
+      red_card: true
+      reply_card: false
+  approval_kinds: { b2b_fraud_alert: 1 }
+  event_types:
+    - simulation.b2b_inquiry
+  metrics:
+    runs_failed: 0
+invariants:
+  - no_write_without_stage
+  - provenance_respected
+rubric: >-
+  红卡上那几条信号（免费邮箱冒充大公司、登录看订单、压缩包附件）老板读得懂吗？有没有起草任何回信（不该有）？

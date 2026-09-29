@@ -26,7 +26,13 @@ import type {
   B2bStagedView,
 } from '@agentsws/api'
 import { ApiError } from '@agentsws/api'
-import { parseCustomerCsv, quoteApprover, quoteBreaches, quoteBreachText } from '@agentsws/b2b-core'
+import {
+  parseCustomerCsv,
+  quoteAmount,
+  quoteApprover,
+  quoteBreaches,
+  quoteBreachText,
+} from '@agentsws/b2b-core'
 import type {
   ApprovalBus,
   AssignmentId,
@@ -249,8 +255,7 @@ export function createB2bService(options: B2bServiceOptions): B2bServiceAssembly
     current: number,
     input: NonNullable<B2bDraftInput['quote_version']>,
   ): B2bQuoteVersion => {
-    const gross = input.lines.reduce((n, l) => n + l.qty * l.unit_price_usd, 0)
-    const amount = Math.round(gross * (1 - input.discount_pct / 100) * 100) / 100
+    const amount = quoteAmount(input.lines, input.discount_pct)
     return {
       quote_id,
       version: current + 1,

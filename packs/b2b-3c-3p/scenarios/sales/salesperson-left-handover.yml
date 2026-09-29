@@ -1,0 +1,42 @@
+# WP182（docs/84 §3.2）：**业务员离职 → 交接卡给老板批。**
+#
+# 何佳名下三家客户；还在做「业务」的是销售经理林峰（他已经在管欧洲 · GaN 那一摊）。
+# `buildTransferPlan`（经 `planHandover`）按接手的人在管的地区 / 产品线分：欧洲那家给林峰，
+# 另外两家对不上的交给兜底的那一位（这里也是林峰——只有他在做业务）。卡是 `b2b_account_transfer`，
+# `route_to: owner`，落老板周岚手上。
+id: b2b/sales/salesperson-left-handover
+version: 1
+dataset: { pack: b2b-3c-3p, seed: 42 }
+stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
+clock: { start: '2026-09-29T16:00:00+08:00' }
+events:
+  - at: '+0m'
+    b2b.member_left:
+      who: p_he
+      accounts:
+        - { id: acc_volthaus, name: VoltHaus GmbH, owner: p_he, region: EU, product_line: GaN }
+        - { id: acc_harbor, name: Harbor Retail Co., owner: p_he, region: NA, product_line: TWS }
+        - { id: acc_dubai, name: Dubai Power LLC, owner: p_he, region: ME, product_line: Power }
+        - { id: acc_berlin, name: Berlin Tech, owner: p_lin, region: EU, product_line: GaN }
+  - at: '+1h'
+    clock.advance: {}
+expected:
+  b2b_handover:
+    card: true
+    items: 3
+    unassigned: 0
+    routed_to: p_zhou
+    successors: { acc_volthaus: p_lin, acc_harbor: p_lin, acc_dubai: p_lin }
+  b2b:
+    - kind: b2b_account_transfer
+      blocked: false
+      routed_to: p_zhou
+      auto_approved: false
+  staged_change_kinds: [b2b_account_transfer]
+  metrics:
+    runs_failed: 0
+invariants:
+  - no_write_without_stage
+  - provenance_respected
+rubric: >-
+  老板读卡能看出每家客户交给谁、为什么（地区 / 产品线）吗？批之前归属有没有被偷偷改掉（不该有）？

@@ -145,6 +145,8 @@ export interface PackKnowledgeDoc {
   sensitivity: 'public' | 'internal' | 'confidential' | 'restricted'
   title: string
   body: string
+  /** WP182：B2B 事实卡起草能直接引的英文那一句（frontmatter `reply_en`；不进正文）。 */
+  reply_en?: string
 }
 
 /** pack 自带的技能（Agent Skills 格式）。WP29 的学习回路要有落脚的段落。 */
@@ -277,6 +279,7 @@ function knowledgeDoc(dir: string, file: string): PackKnowledgeDoc {
     sensitivity: (meta.sensitivity ?? 'internal') as PackKnowledgeDoc['sensitivity'],
     title: titleLine === undefined ? (meta.subject_key ?? 'untitled') : titleLine.slice(2).trim(),
     body,
+    ...(meta.reply_en === undefined ? {} : { reply_en: meta.reply_en }),
   }
 }
 

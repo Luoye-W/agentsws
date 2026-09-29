@@ -20,15 +20,22 @@ import {
  */
 import {
   B2B_REPLY_ACTION,
+  type B2bFactRef,
   type B2bProspect,
+  b2bFactCategoryOf,
   classifyB2bReply,
   declineCooldown,
   draftB2bOutreach,
+  draftInquiryReply,
+  gradeB2bInquiry,
   outreachBatchAfter,
   outreachFooter,
+  planHandover,
+  quoteAmount,
   quoteApprover,
   quoteBreaches,
   quoteBreachText,
+  sampleReminders,
   screenProspects,
   splitByQuota,
 } from '@agentsws/b2b-core'
@@ -291,7 +298,14 @@ import type { Pack, PackAssignment, PackCustomer } from './pack.js'
 import type { PositionsLoop } from './positions.js'
 import { installDailyRoutine, type Routine, type RoutineOptions } from './routine.js'
 import type { RuntimeName } from './runtime-name.js'
-import type { ScenarioB2bReply, ScenarioB2bSequence } from './scenario/types.js'
+import type {
+  ScenarioB2bInquiry,
+  ScenarioB2bMemberLeft,
+  ScenarioB2bQuote,
+  ScenarioB2bReply,
+  ScenarioB2bSamples,
+  ScenarioB2bSequence,
+} from './scenario/types.js'
 import type { SecretaryLoop } from './secretary.js'
 import type { WebResearchLoop } from './web-research.js'
 
@@ -1315,6 +1329,21 @@ export interface B2bOps {
   sequence(input: ScenarioB2bSequence): Promise<B2bSequenceResult>
   /** WP173：回开发信的一封——分类、停序列；有意向的交给业务，不感兴趣 / 退订进名单。 */
   reply(input: ScenarioB2bReply): Promise<{ class: string; action: string }>
+  /**
+   * WP182（docs/84 §3.1）：一封询盘——分级（`b2b-core` 的 `gradeB2bInquiry`）；诈骗嫌疑出红卡不起草，
+   * 其余按 `draftInquiryReply` 起草首回（只引 pack 里 B2B 事实卡的英文那一句）、出 `b2b_reply` 卡。
+   */
+  inquiry(
+    input: ScenarioB2bInquiry,
+  ): Promise<{ grade: string; red_card: boolean; reply_card: boolean }>
+  /** WP182（docs/84 §3.2）：出一版报价——版本号世界里记（改价 = 新建一版），谁批按授权四个数。 */
+  quote(input: ScenarioB2bQuote): Promise<B2bProposeResult & { version: number }>
+  /** WP182：样品巡检——超期不寄 / 超期没反馈各提醒一次（天数取职责 yml）。 */
+  samples(input: ScenarioB2bSamples): Promise<{ ship_overdue: number; feedback_overdue: number }>
+  /** WP182：业务员离开——按接手的人在管的地区 / 产品线分，出一张交接卡给老板。 */
+  memberLeft(
+    input: ScenarioB2bMemberLeft,
+  ): Promise<{ card: boolean; items: number; unassigned: number }>
 }
 
 export interface B2bSequenceResult {
@@ -7570,6 +7599,11 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
     // WP173：开发信序列与回信（实现在下面「开发信序列」那一段）
     sequence: (input) => b2bSequence(input),
     reply: (input) => b2bReply(input),
+    // WP182：业务（实现在下面「业务」那一段）
+    inquiry: (input) => b2bInquiry(input),
+    quote: (input) => b2bQuote(input),
+    samples: (input) => b2bSamples(input),
+    memberLeft: (input) => b2bMemberLeft(input),
     async propose({ who, role, action, target_id, before, after, level, title }) {
       const role_id = b2bRoleOf(role)
       const asg = assignmentFor(who, role_id)
@@ -7710,6 +7744,10 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
           level_requested,
           level_at_creation: outcome.approval.automation.level_at_creation,
           auto_approved: outcome.approval.automation.auto_approved,
+          // WP182：报价是第几版（改价 = 新建一版）
+          ...(kind === 'b2b_quote' && typeof after.version === 'number'
+            ? { version: after.version }
+            : {}),
           // 报价卡上有没有写清"谁批、为什么"（36 §2：人按下那一下之前要看得见）
           stated_on_card:
             kind !== 'b2b_quote' ||
@@ -8086,6 +8124,253 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
       },
     })
     return { class: cls.klass, action }
+  }
+
+  /* ── WP182（docs/84 §3）：业务——询盘首回、报价新版本、样品提醒、离职交接 ─────────
+   *
+   * 判断一条都不在这里写：分级、首回、交接清单、样品提醒、报价金额都是 `b2b-core` 那几个函数，
+   * 服务进程（`apps/server/src/b2b-sales.ts`）用的是同一份；卡走上面那个 `propose`（真账本、真 guardrail）。
+   */
+
+  /** pack 里的 B2B 事实卡（`subject_key: b2b.<类别>`，英文那一句在 frontmatter `reply_en`）。 */
+  const b2bFacts: B2bFactRef[] = pack.knowledge.flatMap((doc) => {
+    const category = b2bFactCategoryOf(doc.subject_key.replace(/^b2b\./, 'b2b:'))
+    if (category === undefined) return []
+    return [
+      {
+        id: `kc_${doc.subject_key}`,
+        category,
+        statement: doc.body.trim(),
+        ...(doc.reply_en === undefined ? {} : { reply_en: doc.reply_en }),
+      },
+    ]
+  })
+
+  const b2bInquiry: B2bOps['inquiry'] = async (input) => {
+    const who = input.who as PersonId
+    const role_id = b2bRoleOf('b2b.sales')
+    const asg = assignmentFor(who, role_id)
+    const { grade, reasons } = gradeB2bInquiry({
+      subject: input.subject,
+      text: input.body,
+      from_email: input.from,
+      ...(input.attachments === undefined ? {} : { attachments: input.attachments }),
+    })
+    const thread_id = `b2b_thr_${sha256(`${input.from}:${input.subject}`).slice(0, 12)}`
+    const emitInquiry = (payload: Record<string, unknown>): void =>
+      appendEnvelope({
+        schema_version: 1,
+        workspace_id,
+        type: 'simulation.b2b_inquiry',
+        actor: { kind: 'agent', id: asg.id },
+        correlation: { trace_id: traceId() },
+        payload: { grade, reasons, ...payload },
+      })
+    if (grade === 'scam') {
+      // 诈骗嫌疑：红卡落老板、业务员同收；不起草、不点链接、不开附件
+      await txn.approvals.create({
+        workspace_id,
+        schema_version: 1,
+        kind: B2B_FRAUD_ALERT_KIND,
+        role_id: asg.role_id,
+        subject: { object: { type: 'thread', id: thread_id } },
+        dedupe_key: `${workspace_id}:b2b_scam:${thread_id}`,
+        title: `疑似诈骗询盘：${input.from}`,
+        summary: `命中：${reasons.join('；')}。没起草回信。`,
+        payload: { reason: 'scam_suspect', signals: reasons, adopted: false, thread_id },
+        evidence: {
+          source_events: [],
+          provenance: { seen: [{ type: 'thread', id: thread_id }] },
+          precheck: { fencing: 'ok' },
+        },
+        proposer: { kind: 'agent', id: `agent_${asg.role_id}`, assignment_id: asg.id },
+        automation: {
+          level_at_creation: 'L1',
+          auto_approved: false,
+          mandate_check: { within: false, caps_hit: ['scam_suspect'] },
+          sampling: { selected: false },
+        },
+        routing: {
+          recipients: [
+            { person: owner, via: 'owner' },
+            ...(who === owner ? [] : [{ person: who, via: 'explicit' as const }]),
+          ],
+          explicit: owner,
+          rule: 'owner',
+          escalation: { after_hours: 2, business_hours: false, chain: ['owner'], escalated_at: [] },
+          separation_of_duties: false,
+        },
+        priority: 'immediate',
+      })
+      await flushCards()
+      emitInquiry({ red_card: true, reply_card: false, cited: 0, to_confirm: [], routed_to: owner })
+      return { grade, red_card: true, reply_card: false }
+    }
+    const person = pack.people.find((p) => p.id === who)
+    const draft = await draftInquiryReply({
+      subject: input.subject,
+      text: input.body,
+      our_company: pack.workspace.name ?? workspace_id,
+      sender_name: person?.name ?? String(who),
+      facts: b2bFacts,
+      grade,
+    })
+    const out = await b2b.propose({
+      who,
+      role: role_id,
+      action: 'stage_b2b_reply',
+      target_id: thread_id,
+      after: {
+        purpose: 'inquiry_first_reply',
+        channel: 'email',
+        subject: draft.subject,
+        body: draft.body,
+        grade,
+        cited_facts: draft.cited,
+        to_confirm: draft.to_confirm,
+      },
+      title: `回询盘：${input.subject}`,
+    })
+    emitInquiry({
+      red_card: false,
+      reply_card: out.staged,
+      cited: draft.cited.length,
+      to_confirm: draft.to_confirm,
+      ...(out.routed_to === undefined ? {} : { routed_to: out.routed_to }),
+    })
+    return { grade, red_card: false, reply_card: out.staged }
+  }
+
+  /** 每张报价现在到第几版（提上去一版就记一版：改价 = 新建一版）。 */
+  const quoteVersions = new Map<string, number>()
+  const b2bQuote: B2bOps['quote'] = async (input) => {
+    const prev = quoteVersions.get(input.quote_id) ?? 0
+    const version = prev + 1
+    const out = await b2b.propose({
+      who: input.who as PersonId,
+      role: 'b2b.sales',
+      action: 'stage_b2b_quote',
+      target_id: `${input.quote_id}_v${version}`,
+      ...(prev === 0 ? {} : { before: { version: prev } }),
+      after: {
+        version,
+        amount_usd: quoteAmount(input.lines, input.discount_pct),
+        margin_pct: input.margin_pct,
+        discount_pct: input.discount_pct,
+        payment_terms_days: input.payment_terms_days,
+        incoterm: input.incoterm,
+        ...(input.incoterm_place === undefined ? {} : { incoterm_place: input.incoterm_place }),
+        lines: input.lines,
+      },
+    })
+    if (out.staged) quoteVersions.set(input.quote_id, version)
+    return { ...out, version }
+  }
+
+  /** 样品提醒过的（同一个截止日只提醒一次）。 */
+  const sampleReminded = new Set<string>()
+  const b2bSamples: B2bOps['samples'] = async (input) => {
+    const asg = assignmentFor(input.who as PersonId, b2bRoleOf('b2b.sales'))
+    const caps = actionOf(asg, 'stage_b2b_sample').mandate.caps as Record<string, unknown>
+    const n = (v: unknown, d: number): number => (typeof v === 'number' ? v : d)
+    const due = sampleReminders(
+      input.samples.map((x) => ({
+        id: x.id,
+        workspace_id,
+        account_id: x.account,
+        items: [],
+        status: x.status,
+        ship_by: x.ship_by,
+        ...(x.feedback_by === undefined ? {} : { feedback_by: x.feedback_by }),
+        ...(x.delivered_at === undefined ? {} : { delivered_at: x.delivered_at }),
+        updated_at: x.delivered_at ?? x.ship_by,
+      })),
+      now(clock),
+      {
+        ship_grace_days: n(caps.sample_overdue_days, 0),
+        feedback_days: n(caps.feedback_overdue_days, 14),
+      },
+    ).filter((d) => {
+      const key = `${d.sample_id}:${d.kind}:${d.due.slice(0, 10)}`
+      if (sampleReminded.has(key)) return false
+      sampleReminded.add(key)
+      return true
+    })
+    const result = {
+      ship_overdue: due.filter((d) => d.kind === 'ship_overdue').length,
+      feedback_overdue: due.filter((d) => d.kind === 'feedback_overdue').length,
+    }
+    appendEnvelope({
+      schema_version: 1,
+      workspace_id,
+      type: 'simulation.b2b_sample_reminders',
+      actor: { kind: 'agent', id: asg.id },
+      correlation: { trace_id: traceId() },
+      payload: { ...result, samples: due.map((d) => d.sample_id) },
+    })
+    return result
+  }
+
+  const b2bMemberLeft: B2bOps['memberLeft'] = async (input) => {
+    const departing = input.who as PersonId
+    const successors = [
+      ...new Set(
+        pack.assignments
+          .filter((a) => a.role_id === 'b2b.sales' && a.person_id !== departing)
+          .map((a) => a.person_id),
+      ),
+    ].sort()
+    const plan = planHandover({
+      departing,
+      accounts: input.accounts.map((a) => ({
+        id: a.id,
+        workspace_id,
+        name: a.name,
+        ...(a.region === undefined ? {} : { region: a.region }),
+        product_lines: a.product_line === undefined ? [] : [a.product_line],
+        stage: 'quote' as const,
+        owner_person_id: a.owner as PersonId,
+        source: { kind: 'manual' as const, observed_at: now(clock) },
+        created_at: now(clock),
+        updated_at: now(clock),
+      })),
+      opportunities: [],
+      inquiries: [],
+      successors: successors.map((id) => ({ person_id: id as PersonId })),
+      ...(successors[0] === undefined
+        ? { fallback: owner }
+        : { fallback: successors[0] as PersonId }),
+    })
+    const proposer = (successors[0] ?? departing) as PersonId
+    const out = await b2b.propose({
+      who: proposer,
+      role: 'b2b.sales',
+      action: 'stage_b2b_account_transfer',
+      target_id: `handover_${departing}`,
+      after: {
+        departing,
+        items: plan.items,
+        unassigned: plan.unassigned,
+        totals: plan.totals,
+        subject: `${pack.people.find((p) => p.id === departing)?.name ?? departing} 离开，交接 ${plan.items.length + plan.unassigned.length} 条`,
+      },
+      title: `离职交接：${departing}`,
+    })
+    appendEnvelope({
+      schema_version: 1,
+      workspace_id,
+      type: 'simulation.b2b_handover',
+      actor: { kind: 'agent', id: String(proposer) },
+      correlation: { trace_id: traceId() },
+      payload: {
+        card: out.staged,
+        items: plan.items.length,
+        unassigned: plan.unassigned.length,
+        successors: Object.fromEntries(plan.items.map((i) => [i.id, i.successor_id])),
+        ...(out.routed_to === undefined ? {} : { routed_to: out.routed_to }),
+      },
+    })
+    return { card: out.staged, items: plan.items.length, unassigned: plan.unassigned.length }
   }
 
   /* ── WP75（57 §1 / §4、04 §5）：投放 ────────────────────────────────── */
