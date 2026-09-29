@@ -125,7 +125,9 @@ describe('波 + 流光：同一道光带着方块起伏', () => {
     expect(svg.match(/<g class="w-idle"/g)).toHaveLength(6)
     expect(svg.match(/class="w-idle-band"/g)).toHaveLength(6)
     expect(svg.match(/<clipPath id="w-c\d"/g)).toHaveLength(6)
-    expect(svg).not.toContain('userSpaceOnUse')
+    // 块是每块自己一条渐变；唯一的 userSpaceOnUse 是亮带那一条（WP200：不在矩形边上被切断）
+    expect(svg.match(/userSpaceOnUse/g)).toHaveLength(1)
+    expect(svg).toContain('<linearGradient id="w-sheen" gradientUnits="userSpaceOnUse"')
   })
 })
 
@@ -142,7 +144,9 @@ describe('自己会动的 SVG（云端后台、官网、favicon 用）', () => {
     const svg = BRAND_MARK_SVG_IDLE_DARK
     expect(svg).toContain('<style>')
     expect(svg.match(/<g class="aw-idle-dark-idle"/g)).toHaveLength(6)
-    expect(svg).not.toContain('userSpaceOnUse')
+    // 唯一的 userSpaceOnUse 是亮带（WP200），块仍是每块自己一条
+    expect(svg.match(/userSpaceOnUse/g)).toHaveLength(1)
+    expect(svg).toContain('<linearGradient id="aw-idle-dark-sheen" gradientUnits="userSpaceOnUse"')
     expect(svg.match(/<linearGradient /g)).toHaveLength(7)
     expect(BRAND_MARK_SVG_IDLE_LIGHT).toContain('aw-idle-light-idle')
   })
@@ -162,7 +166,9 @@ describe('自己会动的 SVG（云端后台、官网、favicon 用）', () => {
 
   it('流光：方块不动，所以还是一条 userSpaceOnUse；亮带被六块裁出来', () => {
     const svg = markSvg({ idle: 'sheen', id: 's' })
-    expect(svg.match(/userSpaceOnUse/g)).toHaveLength(1)
+    // 整体那一条 + 亮带那一条（WP200）
+    expect(svg.match(/userSpaceOnUse/g)).toHaveLength(2)
+    expect(svg).toContain('<linearGradient id="s" gradientUnits="userSpaceOnUse"')
     expect(svg).toContain('<clipPath id="s-clip">')
     expect(svg).toContain('clip-path="url(#s-clip)"')
     expect(svg.match(/class="s-idle"/g)).toHaveLength(1)
