@@ -93,6 +93,7 @@
 | 68 | WP184 官方场景在我们自己的窗口里打开（借官方桌面端壳，MIT）；认用户自己装的官方桌面端 | `WP184-official-desktop-scene.md` | `wp184-official-desktop` · `wp/184-official-desktop` | WP136 | 已合并（09-29，Fable 终审：干净构建，290 文件 4152 条过，stub 三包零漂移；Electron e2e 场景窗口过） |
 | 69 | WP188「随便聊」：像 DeepSeek 网页版的自由对话入口（会话列表、选模型含官方积分、流式、联网搜索与公司资料开关、交给岗位去做；不开事项不出卡） | `WP188-free-chat.md` | `wp188-free-chat` · `wp/188-free-chat` | WP179 | 待审（报告 docs/briefs/reports/WP188.md） |
 | 70 | WP191 社媒运营职责定义：调研开源知识（docs/86）+ 新增 LinkedIn 运营 + 充实 YouTube / TikTok / X | `WP191-social-duty-definitions.md` | `wp191-social-duties` · `wp/191-social-duties` | WP72 | 进行中（Claude） |
+| 71 | WP193 Agents 工坊官网：先出设计（参考 KOLAgents 官网；docs/87 + 静态稿） | `WP193-site-design.md` | `wp193-site-design` · `wp/193-site-design` | WP112 | 进行中（Claude） |
 
 WP117b 的补充要求（派工单里没有，写在这）：demo 服务的是 `apps/workstation/dist`，测界面前先 `pnpm -F @agentsws/workstation exec vite build`；交付一个真实点击的 playwright 脚本 `scripts/e2e-kol-sandbox.mjs`（playwright 库在 `node_modules/.pnpm/playwright@1.63.0/node_modules/playwright`），走完「选合成红人 → 起草开发信 → 批准发送 → 已发 ≥ 1 → 跳到 N 天后 → 回信 ≥ 1 → 分类 → 议价卡 → 阶段推进 → 交付物 → 追踪链接」，每步截图到 `docs/assets/workstation/kol-e2e-NN.png`，脚本里断言计数确实变了；演练数据从真实漏斗 / 归因里排除，单独显示「演练漏斗」。
 
