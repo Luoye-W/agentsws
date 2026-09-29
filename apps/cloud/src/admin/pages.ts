@@ -17,7 +17,7 @@
  */
 
 import type { CloudEnv } from '@agentsws/api'
-import { BRAND_MARK_SVG_DARK } from '@agentsws/brand'
+import { BRAND_MARK_SVG_IDLE_DARK } from '@agentsws/brand'
 import { ADMIN_CSRF_COOKIE, ADMIN_SESSION_COOKIE } from '@agentsws/contracts'
 import type { Context, Hono } from 'hono'
 import type { CloudStore } from '../store.js'
@@ -31,7 +31,10 @@ export const ADMIN_TITLE_ZH = 'Agents 工坊 · 运营后台'
 const escapeHtml = (raw: string): string =>
   raw.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 
-/** 登录页的壳。与 `pages.ts` 那两页同一套色，但标记取 `@agentsws/brand` 那一份。 */
+/**
+ * 登录页的壳。与 `pages.ts` 那两页同一套色，但标记取 `@agentsws/brand` 那一份。
+ * WP195：取的是**待机**那一张（自己会动，系统开了「少一点动效」时自己停）。
+ */
 function shell(title: string, body: string): string {
   return `<!doctype html>
 <html lang="zh-CN">
@@ -58,7 +61,7 @@ button{margin-top:16px;width:100%;height:40px;border:0;border-radius:10px;backgr
 </style>
 </head>
 <body><main>
-<div class="mark">${BRAND_MARK_SVG_DARK}</div>
+<div class="mark">${BRAND_MARK_SVG_IDLE_DARK}</div>
 ${body}
 </main></body>
 </html>

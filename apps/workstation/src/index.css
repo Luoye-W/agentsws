@@ -389,7 +389,12 @@
   .ws-bm-assemble-lead,
   .ws-bm-breathe,
   .ws-bm-split,
-  .ws-bm-split-lead {
+  .ws-bm-split-lead,
+  .ws-bm-idle-ws,
+  .ws-bm-idle-ws-band,
+  .ws-bm-idle-wave,
+  .ws-bm-idle-sheen,
+  .ws-bm-idle-blink {
     transform-box: fill-box;
     transform-origin: center;
     --ws-bm-dx: 0px;
@@ -505,19 +510,154 @@
   }
 
   /*
-   * 系统里开了「少一点动效」：一律静态。
-   * 组件那边本来就不会挂这些类（`usePrefersReducedMotion`），这一段是双保险——
+   * ── WP195 · 待机：给一直挂在屏幕上的标记用，三个候选 ──
+   *
+   * 数字全在 `@agentsws/brand` 的 `IDLE_*` 里（`test/brand-idle.test.tsx` 逐个对）。
+   * 共同的规矩：一轮 ≥ 6s、大部分时间一动不动、只动 transform、幅度不超过方块间缝；
+   * 挂上之后先静 1.6s 再动第一下。和呼吸分得开：呼吸是一直在起伏（Agent 在干活），
+   * 待机是长时间静止里偶尔一下。
+   *
+   * 波：六块沿渐变方向（左下 → 右上）依次抬起 4 个单位再落回，7.2s 一轮；
+   * 每块的起步延迟由组件按块写进 `animation-delay`（1.6s + 0…480ms）。
+   */
+  .ws-bm-idle-wave {
+    animation: ws-bm-idle-wave 7.2s ease-in-out infinite both;
+  }
+
+  @keyframes ws-bm-idle-wave {
+    0% {
+      transform: translateY(0);
+    }
+    5% {
+      transform: translateY(-4px);
+    }
+    12.5%,
+    100% {
+      transform: translateY(0);
+    }
+  }
+
+  /* 流光：一道很淡的白色亮带（被六块裁出来）从左下扫到右上，8s 一轮，扫一次 1.5s */
+  .ws-bm-idle-sheen {
+    transform: translate(-65px, 65px);
+    animation: ws-bm-idle-sheen 8s cubic-bezier(0.65, 0, 0.35, 1) 1600ms infinite both;
+  }
+
+  @keyframes ws-bm-idle-sheen {
+    0% {
+      transform: translate(-65px, 65px);
+    }
+    18.75%,
+    100% {
+      transform: translate(65px, -65px);
+    }
+  }
+
+  /*
+   * 波 + 流光（Luoye 09-29「波和流光结合看看」）：**同一道光带着方块起伏**。
+   * 亮带匀速（linear，这样才能和抬起对上）从左下扫到右上，2s 扫完、8s 一轮；
+   * 每块一个 <g>（块 + 被它自己裁出来的那份亮带）挂 `ws-bm-idle-ws`，起步延迟由组件按
+   * 「亮带中心经过这块中心的时刻 − 抬起用的 280ms」写进去——光到哪块，哪块正好抬到最高。
+   */
+  .ws-bm-idle-ws {
+    animation: ws-bm-idle-ws 8s ease-in-out infinite both;
+  }
+
+  @keyframes ws-bm-idle-ws {
+    0% {
+      transform: translateY(0);
+    }
+    3.5% {
+      transform: translateY(-3px);
+    }
+    9.25%,
+    100% {
+      transform: translateY(0);
+    }
+  }
+
+  .ws-bm-idle-ws-band {
+    transform: translate(-45.5px, 45.5px);
+    animation: ws-bm-idle-ws-band 8s linear 1600ms infinite both;
+  }
+
+  @keyframes ws-bm-idle-ws-band {
+    0% {
+      transform: translate(-45.5px, 45.5px);
+    }
+    25%,
+    100% {
+      transform: translate(45.5px, -45.5px);
+    }
+  }
+
+  /* 眨眼：只有领头那块，9s 一次往右上探出 3 个单位再回弹归位 */
+  .ws-bm-idle-blink {
+    animation: ws-bm-idle-blink 9s cubic-bezier(0.34, 1.56, 0.64, 1) 1600ms infinite both;
+  }
+
+  @keyframes ws-bm-idle-blink {
+    0% {
+      transform: translate(0, 0);
+    }
+    3% {
+      transform: translate(3px, -3px);
+    }
+    8%,
+    100% {
+      transform: translate(0, 0);
+    }
+  }
+
+  /* 页面不在前台（切到别的标签页 / 窗口最小化）：组件在 <svg> 上挂这个类，底下全部暂停 */
+  .ws-bm-paused,
+  .ws-bm-paused * {
+    animation-play-state: paused;
+  }
+
+  /*
+   * 系统里开了「少一点动效」：一律静态——除非人在「设置 → 界面动效」里明选了「开」
+   * （`<html data-ws-motion="on">`）。选了「关」则不论系统怎样都静态。
+   * 组件那边本来就不会挂这些类（`useMotionAllowed`），这一段是双保险——
    * 服务端渲染出的 HTML、或者别处手抄了类名的地方也照样安静。
    */
   @media (prefers-reduced-motion: reduce) {
-    .ws-bm-assemble,
-    .ws-bm-assemble-lead,
-    .ws-bm-breathe,
-    .ws-bm-split,
-    .ws-bm-split-lead {
+    :root:not([data-ws-motion="on"]) .ws-bm-assemble,
+    :root:not([data-ws-motion="on"]) .ws-bm-assemble-lead,
+    :root:not([data-ws-motion="on"]) .ws-bm-breathe,
+    :root:not([data-ws-motion="on"]) .ws-bm-split,
+    :root:not([data-ws-motion="on"]) .ws-bm-split-lead,
+    :root:not([data-ws-motion="on"]) .ws-bm-idle-ws,
+    :root:not([data-ws-motion="on"]) .ws-bm-idle-wave,
+    :root:not([data-ws-motion="on"]) .ws-bm-idle-blink {
       animation: none;
       opacity: 1;
       transform: none;
     }
+
+    :root:not([data-ws-motion="on"]) .ws-bm-idle-sheen,
+    :root:not([data-ws-motion="on"]) .ws-bm-idle-ws-band {
+      animation: none;
+      opacity: 0;
+    }
+  }
+
+  :root[data-ws-motion="off"] .ws-bm-assemble,
+  :root[data-ws-motion="off"] .ws-bm-assemble-lead,
+  :root[data-ws-motion="off"] .ws-bm-breathe,
+  :root[data-ws-motion="off"] .ws-bm-split,
+  :root[data-ws-motion="off"] .ws-bm-split-lead,
+  :root[data-ws-motion="off"] .ws-bm-idle-ws,
+  :root[data-ws-motion="off"] .ws-bm-idle-wave,
+  :root[data-ws-motion="off"] .ws-bm-idle-blink {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+
+  :root[data-ws-motion="off"] .ws-bm-idle-sheen,
+  :root[data-ws-motion="off"] .ws-bm-idle-ws-band {
+    animation: none;
+    opacity: 0;
   }
 }

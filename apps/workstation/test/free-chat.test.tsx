@@ -144,6 +144,10 @@ describe('WP188 随便聊：空态与模型下拉', () => {
   it('空态：一句「想随便问点什么？」+ 输入框；下拉默认是设置里的默认模型', async () => {
     renderPage()
     expect((await screen.findByTestId('free-chat-empty')).textContent).toContain('想随便问点什么？')
+    // WP195：空态的标记是待机
+    expect(
+      screen.getByTestId('free-chat-empty').querySelector('svg')?.getAttribute('data-motion'),
+    ).toBe('idle')
     expect(screen.getByTestId('free-chat-input')).toBeDefined()
     await waitFor(() => {
       expect(screen.getByTestId('free-chat-model').dataset.model).toBe('deepseek/deepseek-flash')

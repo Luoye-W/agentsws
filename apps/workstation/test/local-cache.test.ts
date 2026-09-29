@@ -31,6 +31,7 @@ const SRC = process.cwd().endsWith('workstation')
 const ALLOWED_KEYS = [
   'agentsws.theme', // 偏好：深浅色
   'agentsws.lang', // 偏好：界面语言
+  'agentsws.motion', // 偏好：界面动效 跟随系统 / 开 / 关（WP195）
   'agentsws.session_token', // 会话凭据：不是业务对象，且本来就只该活在本机
   // WP71（36 §9 / §10）：左栏**纯界面折叠态**。存的是"哪几个岗位展开着"——
   // 不是业务对象，丢了最坏的结果是下次打开回默认值。

@@ -246,7 +246,7 @@ export function FreeChatPage(): React.ReactNode {
             className="flex flex-1 flex-col items-center justify-center gap-5 px-4"
             data-testid="free-chat-empty"
           >
-            <BrandMark size={40} />
+            <BrandMark size={40} motion="idle" />
             <h2 className="ws-display text-xl">{t('free_chat.empty')}</h2>
             <div className="w-full max-w-2xl">{composer}</div>
           </div>
