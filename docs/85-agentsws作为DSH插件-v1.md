@@ -244,3 +244,48 @@
 | 7 | 场景切换（docs/79：我们的安装包里打开官方 `web` 场景） | 官方桌面端本身 | **不换**。它和本文是两个方向：79 是「装了工坊，顺手用官方」；本文是「装了官方，顺手用工坊」。两条都留，互相给入口（A 的说明页指向工坊，工坊的场景列表指向官方） | — |
 | 8 | 写工具说明与岗位提示词没有成文规矩 | 官方创造模式的 `agent-experience` 技能（最小上下文、每个事实只说一次、参数规则写在参数上） | 已在 WP177 #9 记着；做方案 A 时顺手按它把工具说明过一遍 | S |
 | 9 | 连接器、渠道、巡检、账本、学习、多人 | 官方没有 | 不换（§2 第 2、6、7、9–11、18 行） | — |
+
+---
+
+## 6. 要 Luoye 定的事
+
+| # | 事 | 我的推荐 |
+|---|---|---|
+| 1 | **走不走「插件」这条路，先做哪个** | 走。**先做 A 岗位包**（M），它几乎零风险、能让官方桌面端的用户第一次认识「Agents 工坊」；B1 等 A 亲测有正反馈再派；C 不做 |
+| 2 | **插件的颗粒度**：一个总包，还是每个岗位一个包 | **一个总包**，10 个岗位都在里面；用户在官方插件页里能逐行关掉不要的岗位（官方原生支持）。包多了用户难找、我们发布也累 |
+| 3 | **插件模式下模型和钱**：用官方桌面端自己的模型设置（DeepSeek 账号或用户的 key），我们不经手、不扣积分 | 同意。与「官方功能优先」一致；我们只对自己云上的数据接口（SERP、红人库等）按次收——那要用户在插件里登录工坊云账号，放到 B 再做 |
+| 4 | **方案 B 走 MCP 口**。这会改两条旧决定：38 D5「MCP 面后置到开源后」、53 §5「我们不做 MCP server 端」 | 改。理由：插件侧几乎不用写代码、跟官方升级最稳；同一个口 Claude Code / Codex / Cursor 也能接，是 build in public 的免费引流面。口子只听 `127.0.0.1`、要配对令牌、每次调用照旧过门禁与出卡 |
+| 5 | **写操作的底线**：插件里的工具只能「提议」（在工坊出卡），任何情况下不在插件里直接执行 | 同意。这是我们和别家最大的不同（53 §3「HITL 默认关」那一行的对照），插件形态不能破 |
+| 6 | **数据边界怎么说**：插件模式下对话存在官方桌面端、能不能上报由官方设置决定；我们的组合包**不去改**用户官方应用里的上报开关 | 不去改，只在插件说明页写一句白话：「在 DeepSeek Harness 里用本插件时，对话记录由 DeepSeek Harness 保存，是否上传以它的设置为准；想让客户数据只留在本机，请在 Agents 工坊里用」。按 09-19 规矩（没有「云上不许有业务内容」这条），说清楚即可 |
+| 7 | **跟随官方升级的方式**：`peerDependencies` 声明到 dsh 的一个小版本范围（如 `>=0.2.0-rc.1 <0.3.0`），每次上游发版由上游评估例程真加载一遍；rc 期间插件页标「实验」 | 同意。不写范围 = 不检查，官方一改就在用户那里静默坏；写死精确版本 = 官方桌面端一自动更新我们就被跳过 |
+| 8 | **发布渠道与账号**：npm 公共源（国内经 npmmirror 同步），GitHub 仓库加 `dsh-plugin` 话题；不自建插件市场 | 同意。**需要你亲自做一件事**：在 npm 注册 `@agentsws` 组织（发布令牌放 CI，不进仓库） |
+
+---
+
+## 7. 出处与没能核实的
+
+**出处**（本机 = `node_modules/.pnpm/@deepseek-ai+<包>@0.2.0-rc.1*/node_modules/@deepseek-ai/<包>/`；上游 = `deepseek-ai/deepseek-harness@dsh-v0.2.0-rc.1`）：
+
+- 组合包与 profile、安装进 profile、加载顺序、从 GitHub 装要批构建脚本：上游 `docs/user/develop/basic/publish.zh.md`
+- 插件管理（安装来源、镜像回退、失败恢复、版本兼容与豁免、`plugin_manager` 要批）：本机 `dsh-plugin-manager/README.zh.md`
+- 插件页（添加插件、安装引导、信任提示、官方分组、逐行开关、配置页插槽）：本机 `dsh-client-ui-plugin-manager/README.zh.md` 与 `lib/client.js` 里的中文文案
+- profile、peer 版本检查、`compatibility.json`、桌面端 profile 由应用持有：本机 `dsh-app-boot/README.zh.md`
+- 桌面端（`$DSH_HOME/profiles/desktop` 独占、内置 pnpm、宿主与插件同一个 Electron Node 进程、恢复框「禁用第三方插件」、退出确认、埋点）：上游 `apps/desktop/README.zh.md`
+- 官方可选包的样子（只带 patch 的组合包、locale、icon）：本机 `dsh-experimental-schedule-bundle/`
+- 创造模式的插件开发指引、MCP 组合包模板、UI 插件规矩（React 组件进插槽、不许 iframe、别引用官方界面组件包）、`agent-experience`：本机 `dsh-agent-preset/skills/cordis-plugin-development/`（`SKILL.md`、`references/*.md`、`templates/*`）
+- 界面插槽全表：上游 `docs/subsystems/slots.zh.md`；官方界面 React 版本：本机 `dsh-client-ui-renderer/package.json`（`react ^18.2.0`）
+- 技能注册表与六个技能根目录：上游 `docs/subsystems/skills.zh.md`
+- 人设：本机 `dsh-persona/README.zh.md`；preset：本机 `dsh-agent-preset/README.zh.md`
+- 审批只有「这一次允许 / 拒 / 取消 / 没人答」：上游 `docs/subsystems/approval.zh.md`
+- MCP 客户端（`stdio` / `streamable-http`、请求头、子进程环境清洗）：本机 `dsh-mcp-client/README.zh.md`
+- 插件展示元信息与图标规则：上游 `docs/cookbook/adding-a-package.zh.md` §5
+- 0.2.0-rc.1 发布说明（插件管理改版、创造模式开发指引与体验技能、自动化任务改可选包）：`gh api …/releases/tags/dsh-v0.2.0-rc.1`
+- 我们这边：`profiles/agentsws/`、`packages/dsh-adapter/README.md`、`packages/roles/`、`packages/skills/bundled/`、docs/16、53、76、79、WP177 / WP180 / WP181 报告
+
+**没能核实的（要真机才知道）**：
+
+1. **官方桌面端从哪下载**：上游 GitHub Release（0.2.0-rc.1 及之前几版）都没有安装包附件；桌面端 README 写了签名、公证、自动更新，推测走 DeepSeek 自己的下载与更新渠道。本单没装、没看下载页。
+2. **原生模块能不能在官方桌面端里装上并加载**（§1.4）：从文档推断风险高，没实测。方案 A / B 都不需要原生模块，只影响方案 C。
+3. **preset 在官方桌面端对话首页的选择器里长什么样**、10 个岗位排起来是否好选：要 ② 亲测。
+4. **`dsh-mcp-client` 的请求头能否从插件自己的配置里取令牌**（而不是环境变量）：官方写法是 `!!js` 表达式，理论可行，B1 开工时先做一个最小样例验证。
+5. 官方桌面端的**产品埋点具体采什么**：README 只说「遵循产品采集策略及其动态应用配置」，没细看策略本身。
