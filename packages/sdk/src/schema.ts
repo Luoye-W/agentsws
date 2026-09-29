@@ -49401,7 +49401,7 @@ export interface operations {
     }
     requestBody?: never
     responses: {
-      /** @description { tokens: ExtensionTokenView[] } */
+      /** @description { tokens: ExtensionTokenView[]; kol_role_held?: boolean } */
       200: {
         headers: {
           [name: string]: unknown

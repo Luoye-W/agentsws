@@ -62532,7 +62532,7 @@
         ],
         "responses": {
           "200": {
-            "description": "{ tokens: ExtensionTokenView[] }",
+            "description": "{ tokens: ExtensionTokenView[]; kol_role_held?: boolean }",
             "content": {
               "application/json": {
                 "schema": {
@@ -62613,7 +62613,7 @@
           "range": "workspace",
           "sensitivity": "internal"
         },
-        "x-returns": "{ tokens: ExtensionTokenView[] }"
+        "x-returns": "{ tokens: ExtensionTokenView[]; kol_role_held?: boolean }"
       }
     },
     "/v1/extension/tokens/{id}/revoke": {
