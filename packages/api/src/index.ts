@@ -242,6 +242,11 @@ export type {
   SubmitConnectionInput,
 } from './routes/connections.js'
 export { connectionRoutes } from './routes/connections.js'
+export {
+  type DataServiceActor,
+  type DataServiceApiPort,
+  dataServiceRoutes,
+} from './routes/data-service.js'
 // WP76（58 §5）：设计库的 `/v1` 面
 export type {
   DesignAssetInput,

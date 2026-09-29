@@ -324,7 +324,8 @@ export interface KolCloudCall<T> {
 /** 打云侧那一跳（`apps/server/src/cloud.ts` 提供：令牌只在那一处出现）。 */
 export type KolCloudCallFn = <T>(
   path: string,
-  init?: { method?: string; body?: unknown },
+  /** WP192：`timeout_ms` 可选——数据能力口的同步调用要等上游，比默认的 8 秒长。 */
+  init?: { method?: string; body?: unknown; timeout_ms?: number },
 ) => Promise<KolCloudCall<T>>
 
 export interface KolCloudSyncOptions {

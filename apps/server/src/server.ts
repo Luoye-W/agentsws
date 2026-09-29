@@ -238,6 +238,7 @@ import {
   createConnections,
   createMailProbe,
 } from './connections.js'
+import { dataServiceApiPort } from './data-service.js'
 import {
   createDeepSeekAccount,
   DEEPSEEK_ACCOUNT_PROVIDER_ID,
@@ -6051,6 +6052,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
      * 自带 key 只从 PUT 进来一次、进加密库，读视图里只有 has_key。
      */
     searchData: searchDataApiPort(async (ws) => (await brandModules.forWorkspace(ws)).searchData),
+    /*
+     * WP192（docs/83 §4）：官方数据接口统一能力口，按品牌的云客户端走（路由键 `data.<能力>`，
+     * 默认只有「Agents 工坊（用积分）」一级）。
+     */
+    dataService: dataServiceApiPort((ws) => brandModules.cloud(ws)),
     dshScenes: {
       list: async () => {
         const manager = dshScenesSetup.manager
