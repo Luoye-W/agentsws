@@ -290,9 +290,7 @@ const liveToken = (item: ApprovalItem, person: string): string => {
 
 /** 出卡 → 两级升级（经理、老板都进名单）。 */
 async function escalatedDraft(h: ReturnType<typeof escalationHarness>) {
-  await h.txn.approvals.create(
-    outboundInput({ expires_at: '2026-10-01T00:00:00.000Z' }),
-  )
+  await h.txn.approvals.create(outboundInput({ expires_at: '2026-10-01T00:00:00.000Z' }))
   h.clock.set('2026-09-07T17:30:00.000Z')
   const [escalated] = await h.txn.approvals.escalate()
   if (escalated === undefined) throw new Error('not escalated')
