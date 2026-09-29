@@ -51,7 +51,7 @@ You can see which model or data provider will be used before a call runs, and yo
 
 ## 4. Cookies and local storage
 
-- **This website, {{SITE_URL}}, sets no cookies** and has no advertising or cross-site tracking. When you switch between light and dark themes, your browser stores that one preference locally (localStorage); it is never sent to us.
+- **This website, {{SITE_URL}}, sets no cookies** and currently has no visitor analytics, advertising or cross-site tracking. When you switch between light and dark themes, your browser stores that one preference locally (localStorage); it is never sent to us.
 - **The account pages (cloud.agentsws.com)** use the cookies strictly needed to keep you signed in. Without them you'd have to sign in on every visit; we don't use them for analytics or advertising.
 
 ## 5. Cross-border transfer
