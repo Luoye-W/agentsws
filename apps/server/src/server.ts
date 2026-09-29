@@ -146,8 +146,8 @@ import { demoB2bDeckData, withDemoB2b } from './b2b.js'
 import { createB2bMail } from './b2b-mail.js'
 import { type B2bOutboundAssembly, createB2bOutbound } from './b2b-outbound.js'
 import { createB2bOutboundToolExecutor } from './b2b-outbound-tools.js'
-import { b2bLetterheadOf, createB2bSales } from './b2b-sales.js'
-import { createB2bService } from './b2b-service.js'
+import { type B2bSalesAssembly, b2bLetterheadOf, createB2bSales } from './b2b-sales.js'
+import { type B2bServiceAssembly, createB2bService } from './b2b-service.js'
 import { type B2bStore, createB2bStore } from './b2b-store.js'
 import { MemoryBackend } from './backend.js'
 import { type BackupRunResult, backupDirOf, backupKeepOf, runBackup } from './backup.js'
@@ -847,6 +847,10 @@ export interface Server {
   b2b: B2bStore
   /** WP173（docs/84 §2）：开发信序列——bootstrap 品牌那一份（demo 的替身测试信要调它的 `observe`）。 */
   b2bOutbound: B2bOutboundAssembly
+  /** WP182（docs/84 §3）：业务——bootstrap 品牌那一份（demo 种询盘首回、报价、样品、交接要调它）。 */
+  b2bSales: B2bSalesAssembly
+  /** WP182：B2B 库的草稿 → 卡那一口（demo 种报价用）。 */
+  b2bService: B2bServiceAssembly
   /** WP57 在线聊天的实时车道（会话 / 轮次聚合 / 五种动作 / 求助超时）。 */
   chat: ChatLane
   /** WP25 模型面（provider 配置 / 热更新 / 按 purpose 记账）。 */
@@ -3453,6 +3457,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       },
       proposeFact: async (t, source_url) => {
         const owner = (await identity.getWorkspace(ws))?.owner_id
+        if (owner === undefined)
+          throw new ApiError('conflict', '这个工作区没有所有者，建不了事实卡。')
         const at = clock.now()
         const card = await knowledge.store.propose({
           schema_version: 1,
@@ -3466,7 +3472,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           structured: t.structured as unknown as Record<string, unknown>,
           provenance: [
             {
-              source: source_url === undefined ? 'manual' : 'web',
+              source: source_url === undefined ? 'human' : 'web',
               ref: source_url ?? `b2b-fact-template:${t.category}`,
               locator: t.locator,
               quote: t.statement.slice(0, 200),
@@ -3475,9 +3481,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           ],
           confidence: { value: 0.3, state: 'unverified' },
           valid: { from: at },
-          owner: (owner ?? 'system') as never,
+          owner,
           created_by: { kind: 'agent', id: 'b2b-facts-setup' },
-        } as never)
+        })
         return card.id
       },
       // 按官网判断行业：公司档案（名称、域名）+ 品牌分析建的商品卡
@@ -6457,6 +6463,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     messages: boot.messages,
     b2b: boot.b2b,
     b2bOutbound: boot.b2bOutbound,
+    b2bSales: boot.b2bSales,
+    b2bService: boot.b2bService,
     // WP57：在线聊天车道
     chat: boot.chat,
     modelSettings: boot.ownModels,

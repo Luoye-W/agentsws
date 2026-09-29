@@ -1451,6 +1451,10 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
   demoServer = server
   await seedOutbound(server, world)
 
+  // WP182（docs/84 §3）：业务——两张生效的事实卡 + 按行业预填其余几类、那封询盘的首回卡、
+  // 一张在批的超授权报价（第 2 版）与一张批过的、两份样品（一份超期没寄）、一张离职交接卡
+  await seedSales(server, world)
+
   // WP96：十一种排版各一张（默认不造，见 `DemoOptions.cardGallery`）
   if (options.cardGallery === true) await seedCardGallery(world)
   // WP66（52 O1）：第二个品牌（默认不造，见 `DemoOptions.twoBrands`）
@@ -1770,6 +1774,194 @@ async function seedMessages(server: Server, world: World): Promise<void> {
       created_at: inquiry.date,
     })
   }
+}
+
+/**
+ * WP182（docs/84 §3）：业务的种子。**走真路径**：询盘首回走 `b2bSales.onInquiry`（分级 + 只引生效的事实卡），
+ * 报价走 `b2bService` 的草稿 → 卡（超授权转上级 / 老板），交接走 `onMemberLeft`。批过的那一版报价与
+ * 样品是「当作已经批过」直接落库的（demo 里没人去点那几张卡）。
+ */
+async function seedSales(server: Server, world: World): Promise<void> {
+  if (server.b2b.handovers().length > 0) return
+  const asg = world.roles.assignments
+    .listByWorkspace(world.workspace_id)
+    .find((a) => a.role_id === 'b2b.sales' && a.revoked_at === undefined)
+  if (asg === undefined) return
+  const actor = {
+    workspace_id: world.workspace_id,
+    person_id: asg.person_id,
+    assignment_id: asg.id,
+    role_id: asg.role_id,
+  }
+  const holder = { person_id: asg.person_id, assignment_id: asg.id, role_id: asg.role_id }
+  const now = world.clock.now()
+  // ① 事实卡：价格与 MOQ、交付能力两张人核过的（生效）；其余按官网行业预填（提议，待核）
+  for (const f of [
+    {
+      category: 'pricing_moq',
+      statement: '移动电源 20000mAh：MOQ 1000 个 / 款；GaN 65W：MOQ 500 个 / 款；FOB 深圳',
+      reply_en: 'The MOQ for the 20000mAh power bank is 1000 pcs per model (FOB Shenzhen).',
+    },
+    {
+      category: 'delivery',
+      statement: '常规交期定金到账后 15–20 天，深圳盐田出货',
+      reply_en: 'Standard lead time is 15-20 days after deposit, shipping from Shenzhen.',
+    },
+  ]) {
+    const card = await server.knowledge.store.propose({
+      schema_version: 1,
+      workspace_id: world.workspace_id,
+      layer: 'fact',
+      domain: 'company',
+      scope: [],
+      sensitivity: 'internal',
+      subject: { type: 'b2b_fact', id: f.category, key: `b2b:${f.category}` },
+      statement: f.statement,
+      structured: { category: f.category, fields: {}, reply_en: f.reply_en },
+      provenance: [{ source: 'human', ref: `demo:${f.category}`, at: now }],
+      confidence: { value: 0.9, state: 'probable' },
+      valid: { from: now },
+      owner: asg.person_id,
+      created_by: { kind: 'person', id: asg.person_id },
+    })
+    await server.knowledge.store.activate(card.id, asg.person_id)
+  }
+  await server.b2bSales.port.setupFacts(actor as never)
+  // ② 那封加拿大询盘：分级 + 首回卡
+  const inquiry = server.b2b.inquiry('inq_demo_northline')
+  if (inquiry !== undefined && inquiry.reply_approval_id === undefined)
+    await server.b2bSales.onInquiry({
+      inquiry,
+      mail: {
+        from_email: 'purchasing@northline.example',
+        from_name: 'Dana Brooks',
+        subject: inquiry.subject,
+        text: 'Hello, we are a distributor in Canada. Please send your price list, MOQ and catalog for the 20000mAh power bank, FOB Shenzhen.',
+        attachments: [],
+        message_id: inquiry.message_id,
+        thread_id: inquiry.thread_id,
+        references: [],
+        account: 'hello@luminous-lab.example',
+      },
+      holder,
+      known: false,
+    })
+  // ③ 报价：Northline 那张批过的 V1（授权内）+ Volthaus 那张在批的 V1（超金额与毛利，转上级 / 老板）
+  server.b2b.put('b2b_account', {
+    id: 'acc_demo_northline',
+    name: 'Northline Distribution',
+    domain: 'northline.example',
+    country: 'CA',
+    region: 'NA',
+    product_lines: ['Power Bank'],
+    stage: 'quote',
+    owner_person_id: 'p_li',
+    source: { kind: 'inbound', observed_at: now },
+    created_at: now,
+    updated_at: now,
+  })
+  if (server.secrets.available)
+    server.secrets.put('b2b.contact.ctc_demo_dana.email', { value: 'purchasing@northline.example' })
+  server.b2b.put('b2b_contact', {
+    id: 'ctc_demo_dana',
+    account_id: 'acc_demo_northline',
+    name: 'Dana Brooks',
+    email_ref: 'b2b.contact.ctc_demo_dana.email',
+    email_masked: 'p***@northline.example',
+    source: { kind: 'inbound', observed_at: now },
+    created_at: now,
+  })
+  const line = (qty: number, price: number) => ({
+    sku: 'PB20K-PD',
+    description: '20000mAh PD 22.5W power bank',
+    qty,
+    unit_price_usd: price,
+  })
+  server.b2b.put('b2b_quote', {
+    id: 'quo_demo_northline',
+    account_id: 'acc_demo_northline',
+    number: 'Q-20260928-01',
+    status: 'draft',
+    current_version: 1,
+    owner_person_id: 'p_li',
+    created_at: now,
+    updated_at: now,
+  })
+  server.b2b.addQuoteVersion({
+    quote_id: 'quo_demo_northline',
+    version: 1,
+    lines: [line(1000, 8.9)],
+    amount_usd: 8900,
+    margin_pct: 24,
+    discount_pct: 0,
+    payment_terms_days: 30,
+    incoterm: 'FOB',
+    incoterm_place: 'Shenzhen',
+    tiers: [
+      { min_qty: 1000, unit_price_usd: 8.9 },
+      { min_qty: 3000, unit_price_usd: 8.5 },
+    ],
+    payment_method: '30% T/T deposit, balance against B/L copy',
+    valid_until: new Date(Date.parse(now) + 30 * 86_400_000).toISOString(),
+    created_at: now,
+    created_by: asg.person_id,
+  })
+  const { draft } = await server.b2bService.port.saveDraft(actor as never, 'b2b_quote', {
+    record: { account_id: 'acc_demo_volthaus', number: 'Q-20260929-02' },
+    quote_version: {
+      lines: [
+        {
+          sku: 'GaN65-C2',
+          description: 'GaN 65W 2C1A charger, UKCA plug',
+          qty: 3000,
+          unit_price_usd: 6.2,
+        },
+      ],
+      margin_pct: 18.5,
+      discount_pct: 1,
+      payment_terms_days: 30,
+      incoterm: 'FOB',
+      incoterm_place: 'Shenzhen',
+      valid_until: new Date(Date.parse(now) + 21 * 86_400_000).toISOString(),
+      tiers: [
+        { min_qty: 1000, unit_price_usd: 6.5 },
+        { min_qty: 3000, unit_price_usd: 6.2 },
+      ],
+      payment_method: '30% T/T deposit, balance against B/L copy',
+    },
+  })
+  await server.b2bService.port.submitDraft(actor as never, 'b2b_quote', draft.id)
+  // ④ 样品：Northline 那份超期没寄；Volthaus 那份已寄在路上
+  server.b2b.put('b2b_sample', {
+    id: 'smp_demo_northline',
+    account_id: 'acc_demo_northline',
+    contact_id: 'ctc_demo_dana',
+    items: [{ sku: 'PB20K-PD', qty: 2 }],
+    status: 'to_ship',
+    ship_by: new Date(Date.parse(now) - 4 * 86_400_000).toISOString(),
+    updated_at: now,
+  })
+  server.b2b.put('b2b_sample', {
+    id: 'smp_demo_volthaus',
+    account_id: 'acc_demo_volthaus',
+    items: [{ sku: 'GaN65-C2', qty: 3 }],
+    status: 'shipped',
+    carrier: 'DHL',
+    tracking_no: 'DEMO-DHL-7730',
+    ship_by: new Date(Date.parse(now) - 6 * 86_400_000).toISOString(),
+    feedback_by: new Date(Date.parse(now) + 10 * 86_400_000).toISOString(),
+    updated_at: now,
+  })
+  // ⑤ 离职交接：李默名下的两家客户（北美 · 移动电源、欧洲 · GaN）→ 一张卡给老板
+  const volthaus = server.b2b.get<Record<string, unknown>>('b2b_account', 'acc_demo_volthaus')
+  if (volthaus !== undefined)
+    server.b2b.put('b2b_account', {
+      ...(volthaus as { id: string }),
+      region: 'EU',
+      product_lines: ['GaN'],
+      owner_person_id: 'p_li',
+    })
+  await server.b2bSales.onMemberLeft('p_li' as never, world.owner as never)
 }
 
 /** WP173：demo 里「发信域名」那张卡的两只邮箱（主域名 / 单独的发信域名）。 */
