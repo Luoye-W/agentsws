@@ -113,6 +113,11 @@ export interface B2bDraftInput {
         payment_terms_days: number
         incoterm: B2bQuoteVersion['incoterm']
         valid_until: string
+        /** WP182：贸易术语地点、阶梯价、付款方式那一句、这一版改了什么。 */
+        incoterm_place?: string | undefined
+        tiers?: { min_qty: number; unit_price_usd: number }[] | undefined
+        payment_method?: string | undefined
+        change_note?: string | undefined
       }
     | undefined
 }
@@ -296,6 +301,131 @@ export interface B2bOutboundPort {
   checkSender(actor: B2bActor): MaybePromise<B2bOutboundView>
 }
 
+/* ── WP182：业务（`/v1/b2b/sales` · 事实卡 · 报价单 · 样品）────────────── */
+
+/** 六类事实卡里的一类（知识库 `subject.type = b2b_fact`，`subject.key = b2b:<类别>`）。 */
+export interface B2bFactCategoryView {
+  category: string
+  name: string
+  /** 这一类该写什么。 */
+  description: string
+  /** 这一类管哪几种承诺（价格 / 交期 …，中文）。 */
+  covers: string[]
+  /** 库里这一类的那张卡（生效的优先，没有就是提议中的）。 */
+  card?: {
+    id: string
+    status: string
+    statement: string
+    /** 起草能直接引的英文那一句（空 = 起草只说「我去确认」）。 */
+    reply_en?: string
+    /** 按官网推荐的行业预填的（待核）。 */
+    prefilled?: boolean
+  }
+}
+
+export interface B2bFactsView {
+  /** 按官网判断的行业（没分析过官网就没有）。 */
+  industry?: string
+  /** 按行业推荐的认证清单。 */
+  recommended_certifications: string[]
+  categories: B2bFactCategoryView[]
+  /** 生效了、起草能引的几类。 */
+  ready: number
+}
+
+/** 报价单（按某一版算出来的；PDF 由 `…/pdf` 给）。 */
+export interface B2bQuoteSheetView {
+  quote_id: string
+  number: string
+  version: number
+  account: string
+  total_usd: number
+  incoterm_text: string
+  payment_text: string
+  valid_until: string
+  moq?: string
+  lead_time?: string
+  /** 自查问题（没写地点 / 阶梯倒挂 / 过期 / MOQ 交期没取到事实卡）。 */
+  issues: string[]
+  /** PDF 里用的内置字体（品牌字体没嵌，映射到最接近的那一个）与品牌色。 */
+  font: string
+  color?: string
+  brand_font?: string
+  /** 有字符编不进 PDF（中文等），换成了 `?`。 */
+  lossy: boolean
+}
+
+/** 「业务」职责页那一块能动手的：报价（看报价单、发给客户）与样品（往前走一步）。 */
+export interface B2bSalesView {
+  facts: B2bFactsView
+  quotes: {
+    id: string
+    number: string
+    account: string
+    version: number
+    amount_usd: number
+    status: string
+    /** 在批的那一版（卡还没批）。 */
+    pending?: { version: number; approver?: string; breaches: string[]; approval_item_id?: string }
+  }[]
+  samples: {
+    id: string
+    account: string
+    items: string
+    status: string
+    tracking_no?: string
+    due?: string
+    /** 超期几天（不寄 / 没反馈）。 */
+    overdue_days?: number
+    overdue?: 'ship_overdue' | 'feedback_overdue'
+    /** 卡在批（这一步还没生效）。 */
+    pending?: boolean
+  }[]
+  /** 等老板批的离职交接。 */
+  handovers: { id: string; departing: string; items: number; unassigned: number; status: string }[]
+}
+
+export interface B2bQuoteSendInput {
+  /** 发哪一版（不给 = 最新生效那一版）。 */
+  version?: number | undefined
+  /** 发给哪位联系人（不给 = 这家客户的第一位有邮箱的联系人）。 */
+  contact_id?: string | undefined
+  /** 正文里加的一两句（不写价格，价格在报价单上）。 */
+  note?: string | undefined
+}
+
+export interface B2bSampleAdvanceInput {
+  status: 'shipped' | 'delivered' | 'feedback'
+  tracking_no?: string | undefined
+  carrier?: string | undefined
+  feedback?: string | undefined
+}
+
+export interface B2bSalesPort {
+  view(actor: B2bActor): MaybePromise<B2bSalesView>
+  facts(actor: B2bActor): MaybePromise<B2bFactsView>
+  /** 按官网判断的行业预填六类事实卡（一律提议，人核过点生效才被起草引用）。已有的那一类不动。 */
+  setupFacts(actor: B2bActor): MaybePromise<B2bFactsView & { proposed: number }>
+  quoteSheet(actor: B2bActor, quote_id: string, version?: number): MaybePromise<B2bQuoteSheetView>
+  quotePdf(
+    actor: B2bActor,
+    quote_id: string,
+    version?: number,
+  ): MaybePromise<{ bytes: Uint8Array; filename: string }>
+  /** 把报价单发给客户：**也出卡**（`b2b_reply`，报价单 PDF 附在卡上），批了才发。 */
+  sendQuote(
+    actor: B2bActor,
+    quote_id: string,
+    input: B2bQuoteSendInput,
+  ): MaybePromise<B2bStagedView>
+  /** 样品往前走一步（出 `b2b_sample` 卡；已寄必须带单号）。 */
+  advanceSample(
+    actor: B2bActor,
+    sample_id: string,
+    input: B2bSampleAdvanceInput,
+  ): MaybePromise<B2bStagedView>
+}
+
 /* ── 九类对象的路由表 ─────────────────────────────────────────────────── */
 
 interface CollectionRoute {
@@ -424,6 +554,34 @@ function outboundOf(deps: GatewayDeps): B2bOutboundPort {
   return p
 }
 
+function salesOf(deps: GatewayDeps): B2bSalesPort {
+  const p = deps.b2bSales
+  if (p === undefined)
+    throw new ApiError('not_implemented', '这个服务进程没有装配 B2B 业务（GatewayDeps.b2bSales）。')
+  return p
+}
+
+const optionalVersion = (raw: string | undefined): number | undefined => {
+  if (raw === undefined || raw === '') return undefined
+  const n = Number(raw)
+  if (!Number.isInteger(n) || n < 1)
+    throw new ApiError('invalid_input', 'version 要是从 1 起的整数')
+  return n
+}
+
+const QuoteSendBody = z.object({
+  version: z.number().int().positive().optional(),
+  contact_id: z.string().min(1).max(100).optional(),
+  note: z.string().max(1000).optional(),
+})
+
+const SampleAdvanceBody = z.object({
+  status: z.enum(['shipped', 'delivered', 'feedback']),
+  tracking_no: z.string().min(1).max(100).optional(),
+  carrier: z.string().min(1).max(60).optional(),
+  feedback: z.string().max(2000).optional(),
+})
+
 const OutboundSettingsBody = z.object({
   company_name: z.string().max(200).optional(),
   postal_address: z.string().max(500).optional(),
@@ -454,6 +612,18 @@ const QuoteVersionBody = z.object({
   payment_terms_days: z.number().int().min(0).max(365),
   incoterm: z.enum(['EXW', 'FOB', 'CIF', 'DDP', 'DAP', 'FCA']),
   valid_until: z.string().min(1).max(40),
+  incoterm_place: z.string().min(1).max(120).optional(),
+  tiers: z
+    .array(
+      z.object({
+        min_qty: z.number().int().positive().max(10_000_000),
+        unit_price_usd: z.number().nonnegative().max(10_000_000),
+      }),
+    )
+    .max(20)
+    .optional(),
+  payment_method: z.string().min(1).max(300).optional(),
+  change_note: z.string().max(500).optional(),
 })
 
 const DraftBody = z.object({
@@ -675,6 +845,156 @@ export function b2bRoutes(): Route[] {
         returns: 'B2bOutboundView',
       },
       async (c, deps) => ok(c, await outboundOf(deps).checkSender(actorOf(c))),
+    ),
+    // WP182（docs/84 §3）：业务——事实卡、报价单、样品。放在表尾，SDK 生成物里前面的路径不挪位
+    route(
+      {
+        method: 'get',
+        path: '/v1/b2b/sales',
+        operationId: 'getB2bSales',
+        summary:
+          '业务：六类事实卡齐没齐、报价（在批的那一版与谁批）、样品到哪了（超期标出来）、等批的离职交接',
+        tag: 'b2b',
+        auth: 'bearer',
+        assignment: true,
+        authz: tuple('b2b_account', 'read', 'internal'),
+        returns: 'B2bSalesView',
+      },
+      async (c, deps) => ok(c, await salesOf(deps).view(actorOf(c))),
+    ),
+    route(
+      {
+        method: 'get',
+        path: '/v1/b2b/facts',
+        operationId: 'getB2bFacts',
+        summary:
+          'B2B 六类事实卡（产品线 / 价格与 MOQ / 认证清单 / 交付能力 / 样品政策 / 售后规则）：每一类有没有生效的卡',
+        tag: 'b2b',
+        auth: 'bearer',
+        assignment: true,
+        authz: tuple('b2b_account', 'read', 'internal'),
+        returns: 'B2bFactsView',
+      },
+      async (c, deps) => ok(c, await salesOf(deps).facts(actorOf(c))),
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/b2b/facts/setup',
+        operationId: 'setupB2bFacts',
+        summary:
+          '按官网判断的行业预填六类事实卡（3C → CE / FCC / RoHS / UKCA / PSE …）。一律提议，人核过点生效才被起草引用',
+        tag: 'b2b',
+        auth: 'bearer',
+        assignment: true,
+        authz: tuple('b2b_account', 'stage', 'internal'),
+        returns: 'B2bFactsView & { proposed }',
+      },
+      async (c, deps) => ok(c, await salesOf(deps).setupFacts(actorOf(c))),
+    ),
+    route(
+      {
+        method: 'get',
+        path: '/v1/b2b/quotes/:id/sheet',
+        operationId: 'getB2bQuoteSheet',
+        summary: '报价单（按某一版算：条款、合计、自查问题；`?version=` 不给 = 最新一版）',
+        tag: 'b2b',
+        auth: 'bearer',
+        assignment: true,
+        authz: tuple('b2b_quote', 'read', 'confidential'),
+        params: [
+          { name: 'id', in: 'path', required: true, description: '报价 id' },
+          { name: 'version', in: 'query', required: false, description: '第几版' },
+        ],
+        returns: 'B2bQuoteSheetView',
+      },
+      async (c, deps) =>
+        ok(
+          c,
+          await salesOf(deps).quoteSheet(
+            actorOf(c),
+            param(c, 'id'),
+            optionalVersion(c.req.query('version')),
+          ),
+        ),
+    ),
+    route(
+      {
+        method: 'get',
+        path: '/v1/b2b/quotes/:id/pdf',
+        operationId: 'getB2bQuotePdf',
+        summary: '报价单 PDF（本机生成：信头用品牌设计的色与字，条款来自报价卡与事实卡）',
+        tag: 'b2b',
+        auth: 'bearer',
+        assignment: true,
+        authz: tuple('b2b_quote', 'read', 'confidential'),
+        params: [
+          { name: 'id', in: 'path', required: true, description: '报价 id' },
+          { name: 'version', in: 'query', required: false, description: '第几版' },
+        ],
+        returns: 'application/pdf',
+      },
+      async (c, deps) => {
+        const out = await salesOf(deps).quotePdf(
+          actorOf(c),
+          param(c, 'id'),
+          optionalVersion(c.req.query('version')),
+        )
+        return c.body(out.bytes as unknown as ArrayBuffer, 200, {
+          'content-type': 'application/pdf',
+          'content-disposition': `inline; filename="${out.filename.replace(/[^\w.-]/g, '_')}"`,
+          'content-length': String(out.bytes.byteLength),
+        })
+      },
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/b2b/quotes/:id/send',
+        operationId: 'sendB2bQuote',
+        summary: '把报价单发给客户：**也出卡**（报价单 PDF 附在卡上），批了才发',
+        tag: 'b2b',
+        auth: 'bearer',
+        assignment: true,
+        authz: tuple('b2b_quote', 'stage', 'confidential'),
+        params: [{ name: 'id', in: 'path', required: true, description: '报价 id' }],
+        body: QuoteSendBody,
+        returns: 'B2bStagedView',
+      },
+      async (c, deps) =>
+        ok(
+          c,
+          await salesOf(deps).sendQuote(
+            actorOf(c),
+            param(c, 'id'),
+            (await body(c, QuoteSendBody)) as B2bQuoteSendInput,
+          ),
+        ),
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/b2b/samples/:id/advance',
+        operationId: 'advanceB2bSample',
+        summary:
+          '样品往前走一步：待寄 → 已寄（必须带单号）→ 已签收 → 已反馈。出卡，批了才生效；标已寄批了再出一张寄样通知卡',
+        tag: 'b2b',
+        auth: 'bearer',
+        assignment: true,
+        authz: tuple('b2b_sample', 'stage', 'internal'),
+        params: [{ name: 'id', in: 'path', required: true, description: '样品 id' }],
+        body: SampleAdvanceBody,
+        returns: 'B2bStagedView',
+      },
+      async (c, deps) =>
+        ok(
+          c,
+          await salesOf(deps).advanceSample(
+            actorOf(c),
+            param(c, 'id'),
+            (await body(c, SampleAdvanceBody)) as B2bSampleAdvanceInput,
+          ),
+        ),
     ),
   ]
 }

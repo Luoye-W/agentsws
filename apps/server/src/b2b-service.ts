@@ -263,6 +263,11 @@ export function createB2bService(options: B2bServiceOptions): B2bServiceAssembly
       valid_until: input.valid_until,
       created_at: clock.now(),
       created_by: actor.person_id,
+      // WP182：报价单上的条款（地点、阶梯价、付款方式那一句、这一版改了什么）
+      ...(input.incoterm_place === undefined ? {} : { incoterm_place: input.incoterm_place }),
+      ...(input.tiers === undefined ? {} : { tiers: input.tiers.map((t) => ({ ...t })) }),
+      ...(input.payment_method === undefined ? {} : { payment_method: input.payment_method }),
+      ...(input.change_note === undefined ? {} : { change_note: input.change_note }),
     }
   }
 
@@ -485,6 +490,8 @@ export function createB2bService(options: B2bServiceOptions): B2bServiceAssembly
       status: 'submitted',
       change_id: outcome.change.id,
       approval_item_id: outcome.approval.id,
+      // WP182：面板「报价待审」读真落到的那一档，不再按默认授权重算
+      ...(kind === 'b2b_quote' ? { approver, breaches } : {}),
       updated_at: clock.now(),
     })
     emit('b2b.draft_submitted', actor.person_id, {
@@ -753,7 +760,8 @@ export function b2bDeckFromStore(store: B2bStore, now: string): B2bDeckData {
     quotes_pending: quoteDrafts.flatMap((d) => {
       const v = d.quote_version
       if (v === undefined) return []
-      const breaches = quoteBreaches(v as never)
+      // WP182：提交时记下了真落到哪一档就用它（按职责 yml 的授权算的、经过上级路由的）
+      const breaches = d.breaches ?? quoteBreaches(v as never)
       return [
         {
           number: String(d.record.number ?? d.record_id),
@@ -761,7 +769,7 @@ export function b2bDeckFromStore(store: B2bStore, now: string): B2bDeckData {
           version: v.version,
           amount_usd: v.amount_usd,
           margin_pct: v.margin_pct,
-          approver: quoteApprover(breaches, false),
+          approver: d.approver ?? quoteApprover(breaches, false),
           breaches,
         },
       ]
