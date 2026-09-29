@@ -2,14 +2,14 @@
 /**
  * WP153：真账号冒烟那一问在 demo（stub 运行时）里复现一次的截图出处（可重跑）。
  *
- * 起一个 demo（不联网、不用真账号），用店主身份在「店主 / 负责人」岗位上问：
+ * 起一个 demo（不联网、不用真账号），用负责人身份在「负责人」岗位上问：
  * 「帮我看看有哪些岗位和连接，最该先处理哪三件事」，然后拍事项页：
  *
  * 1. `owner-reply.png`：整页——顶部摘要是这件事本身，时间线里的回话有真岗位 / 连接名、
  *    粗体与编号正常显示、没有工具名；
  * 2. `owner-reply-timeline.png`：只拍时间线那一段（看得清粗体与列表）。
  *
- * 同时在终端里打出回话与摘要，并检查：路由落到「工作区所有者」、回话里没有工具名、
+ * 同时在终端里打出回话与摘要，并检查：路由落到「公司设置与授权」、回话里没有工具名、
  * 没有原样的 `**`（界面上）。
  *
  * ```
@@ -97,16 +97,16 @@ async function main() {
     const auth = { Authorization: `Bearer ${token}` }
     const me = await json('/v1/me', { headers: auth })
     const owner = me.assignments.find((a) => a.role_id === 'common.owner' && !a.revoked_at)
-    if (owner === undefined) throw new Error('demo 身份没有店主职责')
+    if (owner === undefined) throw new Error('demo 身份没有「公司设置与授权」职责')
 
-    // 在「店主 / 负责人」岗位上问（不点名职责：岗位内路由要把它交给工作区所有者）
+    // 在「负责人」岗位上问（不点名职责：岗位内路由要把它交给「公司设置与授权」）
     const opened = await json('/v1/positions/owner/matters', {
       method: 'POST',
       headers: { ...auth, 'X-Assignment': owner.id, 'content-type': 'application/json' },
       body: JSON.stringify({ title: ASK }),
     })
     console.log(`  路由：${opened.picked?.role_name}（${opened.reason}）`)
-    if (opened.picked?.role_id !== 'common.owner') throw new Error('没有路由到工作区所有者')
+    if (opened.picked?.role_id !== 'common.owner') throw new Error('没有路由到「公司设置与授权」')
 
     const view = await json(`/v1/matters/${opened.matter.id}`, {
       headers: { ...auth, 'X-Assignment': owner.id },
