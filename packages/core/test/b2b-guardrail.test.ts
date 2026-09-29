@@ -332,3 +332,33 @@ describe('WP172：B2B 库记录（b2b_record）', () => {
     expect(rules(acct, 'block')).toContain('payment_account_not_from_fact_card')
   })
 })
+
+describe('WP182：WhatsApp 来的询盘沿用三道闸', () => {
+  const reply = { type: 'b2b_account', id: 'acc_wa' } as const
+  const run = (after: Record<string, unknown>) =>
+    evaluateGuardrail(
+      { kind: 'b2b_reply', target: reply, before: {}, after: { body: 'Thanks!', ...after } },
+      { caps: {} },
+      facts(reply),
+      'stage',
+    )
+  it('窗口里自由文本能提；窗口外没模板 → block', () => {
+    expect(rules(run({ channel: 'whatsapp', window_open: true }), 'block')).toEqual([])
+    expect(rules(run({ channel: 'whatsapp', window_open: false }), 'block')).toEqual([
+      'whatsapp_window_closed',
+    ])
+    // 不报窗口 = 当成关着
+    expect(rules(run({ channel: 'whatsapp' }), 'block')).toEqual(['whatsapp_window_closed'])
+  })
+  it('按模板发要 opt-in', () => {
+    expect(rules(run({ channel: 'whatsapp', template_id: 'follow_up' }), 'block')).toEqual([
+      'whatsapp_opt_in_required',
+    ])
+    expect(
+      rules(run({ channel: 'whatsapp', template_id: 'follow_up', opt_in_verified: true }), 'block'),
+    ).toEqual([])
+  })
+  it('邮件那一路不受影响', () => {
+    expect(rules(run({}), 'block')).toEqual([])
+  })
+})

@@ -104,6 +104,22 @@ export function evaluateB2bChange(
           hits.map((h) => h.term).join(', '),
         )
       accountOnlyFromFactCard(after, body, block)
+      /*
+       * WP182：WhatsApp 来的询盘同一条路，沿用客服 / 社群那三道闸（56 §1）：
+       * 24 小时客服窗口里才能发自由文本；窗口外只能按审过的模板发，而模板消息要收件人 opt-in 过。
+       * 窗口开没开由调用方按对方最近一条消息的时刻算好报上来（`window_open`），不报按关着算。
+       */
+      if (after.channel === 'whatsapp') {
+        const template = typeof after.template_id === 'string' ? after.template_id.trim() : ''
+        if (template === '' && after.window_open !== true)
+          block('whatsapp_window_closed', '24h', String(after.last_inbound_at ?? 'never'))
+        if (template !== '' && after.opt_in_verified !== true)
+          block(
+            'whatsapp_opt_in_required',
+            'opt_in_verified',
+            String(after.opt_in_verified ?? 'never'),
+          )
+      }
       break
     }
     case 'b2b_quote': {
