@@ -75,6 +75,8 @@ export {
   DEFAULT_CLOUD_BASE_URL,
   LINK_PENDING_TTL_MS,
 } from './cloud-account.js'
+// WP188：demo 里「Agents 工坊（用积分）」模型口与联网搜索的替身（不出网）
+export { cloudAiStandInFetch, demoWebSearch } from './cloud-ai-stand-in.js'
 // WP140：demo 里「官方云那一跳」的替身（不出网）
 export {
   CLOUD_STAND_IN_BASE_URL,
