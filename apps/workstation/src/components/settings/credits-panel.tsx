@@ -20,7 +20,7 @@
  * 三条纪律：
  * - **这一层不算账**。每个数字都是云上那一份的透传。唯一的例外是三张小卡上那个
  *   和——它是把云上给的每条明细按块相加，加数与加法都看得见，且**不参与任何扣费**。
- * - **本地不碰支付凭据**：四张卡点下去是去云上建一笔单，然后打开 Stripe 自己的页面。
+ * - **本地不碰支付凭据**：四张卡点下去是去云上建一笔单，然后打开收款方自己的页面。
  * - **看得到多少由令牌说了算**：owner 那把看整个组织，成员那把只看自己那个工作区。
  *   界面不做第二次裁剪——裁两次就会有一次是错的。
  */
@@ -33,6 +33,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Hint, SafetyNote } from '@/components/ui/hint'
 import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import type { PricingEntry, TopupTierView, UsageReportView } from '@/lib/api'
 import {
   ApiClientError,
@@ -84,6 +85,39 @@ export function goLinkAccount(navigate: (to: string) => void): void {
   }
   card.scrollIntoView({ behavior: 'smooth', block: 'center' })
   card.querySelector<HTMLInputElement>('input[type="email"], input')?.focus()
+}
+
+/**
+ * WP198b：「在网页上查看」——余额、充值、用量、账单在网页账号页（`${云地址}/account`）上都有。
+ *
+ * 地址**由本机服务端给**（`CloudCreditsView.account_url`）：工作台不知道连的是哪朵云。
+ * 没给就不画（老服务端）。普通外链：`target="_blank"`，桌面壳按 navigation.ts 的规则交给系统浏览器。
+ */
+export function AccountWebLink({ url }: { url: string | undefined }): React.ReactNode {
+  const { t } = useApp()
+  if (url === undefined || url === '') return null
+  const tip = t('credits.web.tip')
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <a
+            href={url}
+            target="_blank"
+            rel="noreferrer noopener"
+            className="inline-flex items-center gap-1 text-[11px] font-normal text-primary hover:underline"
+            data-slot="action"
+            data-testid="credits-web-link"
+            data-hint={tip}
+          >
+            {t('credits.web')}
+            <ExternalLink className="size-3" aria-hidden />
+          </a>
+        </TooltipTrigger>
+        <TooltipContent>{tip}</TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  )
 }
 
 /** 一块里最便宜的那一条（「最低 N 积分 / 每次」）。价目表空着就没有。 */
@@ -189,6 +223,9 @@ export function CreditsPanel({ assignment }: { assignment?: string }): React.Rea
           <Coins className="size-4" aria-hidden />
           {t('credits.title')}
           <Hint text={t('credits.hint')} />
+          <span className="ml-auto">
+            <AccountWebLink url={credits.data?.account_url} />
+          </span>
         </CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-4 text-sm">
@@ -517,7 +554,7 @@ export function CreditsPanel({ assignment }: { assignment?: string }): React.Rea
 }
 
 /**
- * 充值四档（67 §2）。已关联：点下去去云上建单、开 Stripe 的页面；
+ * 充值四档（67 §2）。已关联：点下去去云上建单、开收款方自己的页面；
  * WP142 没关联：四张卡照常摆着（朋友看得到多少钱），按钮换成「先关联」。
  */
 export function TierCards({

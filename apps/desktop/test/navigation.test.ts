@@ -86,6 +86,20 @@ describe('decideWindowOpen', () => {
 })
 
 /**
+ * WP198b：积分那两处的「在网页上查看」是普通 `target="_blank"` 外链——桌面壳不加新代码，
+ * 走 `setWindowOpenHandler` → 系统浏览器；工作台窗口里不加载云上的页面。
+ */
+describe('WP198b 网页账号页交给系统浏览器', () => {
+  it('默认云与英文站都判 external，原样交出去', () => {
+    for (const url of [
+      'https://cloud.agentsws.com/account',
+      'https://cloud.agentsws.com/account/topup?lang=en',
+    ])
+      expect(decideWindowOpen(url, LOCAL)).toEqual({ action: 'external', url })
+  })
+})
+
+/**
  * WP134：「用我的 DeepSeek 账号登录」在桌面壳里**不加任何新代码**——工作台把授权页交给
  * `window.agentsws.openExternal`（现有的外链打开逻辑），这里钉住那条路对它放行；
  * 回调是官方模块在服务进程**现有端口**上的 `/oauth/callback`，系统浏览器直接打到本机服务，

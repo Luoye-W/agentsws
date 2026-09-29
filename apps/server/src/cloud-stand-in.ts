@@ -141,7 +141,7 @@ const STAND_IN_ORG = { id: 'org_demo', name: '演示公司' }
 
 /** WP142：demo 里点充值的那一句（界面原样显示）。 */
 export const DEMO_TOPUP_MESSAGE =
-  '这是演示环境，不真收钱。正式版里点这一档会打开 Stripe 的付款页，付完积分当场到账。'
+  '这是演示环境，不真收钱。正式版里点这一档会打开收款方的付款页，付完积分当场到账。'
 /** 替身余额：140 买的 + 10 注册赠送，本月用掉 12.4。 */
 const PURCHASED = 140
 const GRANTED = 10

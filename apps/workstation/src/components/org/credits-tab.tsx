@@ -20,7 +20,7 @@ import type {
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { useState } from 'react'
-import { TierCards } from '@/components/settings/credits-panel'
+import { AccountWebLink, TierCards } from '@/components/settings/credits-panel'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Hint } from '@/components/ui/hint'
@@ -115,9 +115,13 @@ export function CreditsTab({
   const report = view.data?.report
   if (report === undefined)
     return (
-      <p className="text-sm text-muted-foreground" data-testid="alloc-not-linked">
-        {view.data?.reason ?? t('credits.not_linked')}
-      </p>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-sm text-muted-foreground" data-testid="alloc-not-linked">
+          {view.data?.reason ?? t('credits.not_linked')}
+        </p>
+        {/* WP198b：没关联也给——网页上能登录、充值 */}
+        <AccountWebLink url={credits.data?.account_url} />
+      </div>
     )
 
   /*
@@ -191,11 +195,15 @@ export function CreditsTab({
           <div className="flex items-center gap-1 text-xs text-muted-foreground">
             {t('alloc.title')}
             <Hint text={t('alloc.hint')} />
-            {beijing ? (
-              <span className="ml-auto text-[11px]" data-testid="alloc-timezone">
-                {t('alloc.timezone.beijing')}
-              </span>
-            ) : null}
+            <span className="ml-auto flex items-center gap-3">
+              {beijing ? (
+                <span className="text-[11px]" data-testid="alloc-timezone">
+                  {t('alloc.timezone.beijing')}
+                </span>
+              ) : null}
+              {/* WP198b：余额、充值、用量、账单在网页账号页上都有；地址由本机服务端给 */}
+              <AccountWebLink url={credits.data?.account_url} />
+            </span>
           </div>
           <section className="grid grid-cols-2 gap-2 sm:grid-cols-6" data-testid="alloc-summary">
             <Figure

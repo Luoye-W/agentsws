@@ -1509,6 +1509,8 @@ export interface CloudCreditsView {
   balance?: WalletBalanceView
   month_credits?: number
   fetched_at?: string
+  /** 网页账号页（`${云地址}/account`，WP198b）；本机服务端按它的云地址填，没关联也有。 */
+  account_url?: string
 }
 
 export interface PricingModelEntry {

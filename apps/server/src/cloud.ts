@@ -506,6 +506,8 @@ export function createCloud(options: CloudOptions): CloudAssembly {
   }
 
   let cached: { at: number; view: CloudCreditsView } | undefined
+  /** WP198b：网页账号页。工作台不知道云地址，这里按本机连的那朵云填；没关联也给。 */
+  const accountUrl = `${base}/account`
 
   const creditsView = async (): Promise<CloudCreditsView> => {
     const nowMs = Date.parse(clock.now())
@@ -521,7 +523,7 @@ export function createCloud(options: CloudOptions): CloudAssembly {
     )
       return cached.view
     if (!linkedNow) {
-      const view: CloudCreditsView = { linked: false, reason: NOT_LINKED }
+      const view: CloudCreditsView = { linked: false, reason: NOT_LINKED, account_url: accountUrl }
       cached = { at: nowMs, view }
       return view
     }
@@ -538,12 +540,14 @@ export function createCloud(options: CloudOptions): CloudAssembly {
             linked: true,
             reason: '暂时取不到余额（云上连不通或者令牌被撤了）。稍后再看一眼。',
             fetched_at: at,
+            account_url: accountUrl,
           }
         : {
             linked: true,
             balance,
             month_credits: usage?.total_credits ?? 0,
             fetched_at: at,
+            account_url: accountUrl,
           }
     cached = { at: nowMs, view }
     return view
