@@ -24,6 +24,9 @@
       "name": "data-search"
     },
     {
+      "name": "data-service"
+    },
+    {
       "name": "kol-public"
     },
     {
@@ -2095,6 +2098,660 @@
           "502": {
             "description": "provider_error",
             "x-error-codes": ["provider_error"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/data/capabilities": {
+      "get": {
+        "operationId": "getV1DataCapabilities",
+        "summary": "能用哪些数据能力：同步 / 异步、单价、上限、开没开通（不收钱）",
+        "tags": ["data-service"],
+        "security": [
+          {
+            "workspace_token": []
+          }
+        ],
+        "x-scope": "data",
+        "parameters": [
+          {
+            "name": "X-Agentsws-Region",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": ["cn", "global"]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/DataCapabilityList"
+                    }
+                  },
+                  "required": ["data"]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "unauthenticated",
+            "x-error-codes": ["unauthenticated"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "令牌没有这条路由要的动作（`details.required_scope`）",
+            "x-error-codes": ["forbidden"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/data/call/{capability}": {
+      "post": {
+        "operationId": "postV1DataCallCapability",
+        "summary": "同步调用一项能力（查一次就回）；先预扣，命中共享缓存照价收，失败 / 0 条不收",
+        "tags": ["data-service"],
+        "security": [
+          {
+            "workspace_token": []
+          }
+        ],
+        "x-scope": "data",
+        "parameters": [
+          {
+            "name": "capability",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Agentsws-Region",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": ["cn", "global"]
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DataCallRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/DataCallResult"
+                    }
+                  },
+                  "required": ["data"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "invalid_input",
+            "x-error-codes": ["invalid_input"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "unauthenticated",
+            "x-error-codes": ["unauthenticated"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "insufficient_credits",
+            "x-error-codes": ["insufficient_credits"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "令牌没有这条路由要的动作（`details.required_scope`）",
+            "x-error-codes": ["forbidden"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "没有这项能力 / 没有这个任务（别的组织的任务也是这一句）",
+            "x-error-codes": ["not_found"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "境外渠道被数据驻留挡住",
+            "x-error-codes": ["residency_blocked"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "这个组织今天的次数 / 同时在跑的任务到上限了（后台可调）",
+            "x-error-codes": ["rate_limited"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "这项能力云上还没开通（一分不扣）",
+            "x-error-codes": ["not_implemented"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "provider_error",
+            "x-error-codes": ["provider_error"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/data/tasks": {
+      "post": {
+        "operationId": "postV1DataTasks",
+        "summary": "提交一个异步任务（带幂等键）；按上限条数预扣，跑完按实际条数结算，失败 / 超时全退",
+        "tags": ["data-service"],
+        "security": [
+          {
+            "workspace_token": []
+          }
+        ],
+        "x-scope": "data",
+        "parameters": [
+          {
+            "name": "X-Agentsws-Region",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": ["cn", "global"]
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DataTaskSubmit"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "同一个幂等键已经有这个任务了：原样回它现在的样子",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/DataTaskView"
+                    }
+                  },
+                  "required": ["data"]
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "已受理（排队中）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/DataTaskView"
+                    }
+                  },
+                  "required": ["data"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "invalid_input",
+            "x-error-codes": ["invalid_input"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "unauthenticated",
+            "x-error-codes": ["unauthenticated"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "insufficient_credits",
+            "x-error-codes": ["insufficient_credits"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "令牌没有这条路由要的动作（`details.required_scope`）",
+            "x-error-codes": ["forbidden"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "没有这项能力 / 没有这个任务（别的组织的任务也是这一句）",
+            "x-error-codes": ["not_found"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "境外渠道被数据驻留挡住",
+            "x-error-codes": ["residency_blocked"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "这个组织今天的次数 / 同时在跑的任务到上限了（后台可调）",
+            "x-error-codes": ["rate_limited"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "这项能力云上还没开通（一分不扣）",
+            "x-error-codes": ["not_implemented"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "provider_error",
+            "x-error-codes": ["provider_error"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/data/tasks/{id}": {
+      "get": {
+        "operationId": "getV1DataTasksId",
+        "summary": "看一个任务现在怎么样",
+        "tags": ["data-service"],
+        "security": [
+          {
+            "workspace_token": []
+          }
+        ],
+        "x-scope": "data",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/DataTaskView"
+                    }
+                  },
+                  "required": ["data"]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "unauthenticated",
+            "x-error-codes": ["unauthenticated"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "令牌没有这条路由要的动作（`details.required_scope`）",
+            "x-error-codes": ["forbidden"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "not_found",
+            "x-error-codes": ["not_found"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/data/tasks/{id}/items": {
+      "get": {
+        "operationId": "getV1DataTasksIdItems",
+        "summary": "分页取一个任务的结果（每页最多 100 条）",
+        "tags": ["data-service"],
+        "security": [
+          {
+            "workspace_token": []
+          }
+        ],
+        "x-scope": "data",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "上一页回的 `next_cursor`；不给就从头取。",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/DataTaskItemsPage"
+                    }
+                  },
+                  "required": ["data"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "invalid_input",
+            "x-error-codes": ["invalid_input"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "unauthenticated",
+            "x-error-codes": ["unauthenticated"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "令牌没有这条路由要的动作（`details.required_scope`）",
+            "x-error-codes": ["forbidden"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "not_found",
+            "x-error-codes": ["not_found"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "还没跑完",
+            "x-error-codes": ["conflict"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "结果过了保留期，已经删了",
+            "x-error-codes": ["gone"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/data/tasks/{id}/cancel": {
+      "post": {
+        "operationId": "postV1DataTasksIdCancel",
+        "summary": "取消一个任务（已经拿到的那几条照收，其余退回；已经结束的原样回）",
+        "tags": ["data-service"],
+        "security": [
+          {
+            "workspace_token": []
+          }
+        ],
+        "x-scope": "data",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/DataTaskView"
+                    }
+                  },
+                  "required": ["data"]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "unauthenticated",
+            "x-error-codes": ["unauthenticated"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "令牌没有这条路由要的动作（`details.required_scope`）",
+            "x-error-codes": ["forbidden"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "not_found",
+            "x-error-codes": ["not_found"],
             "content": {
               "application/json": {
                 "schema": {
@@ -6849,6 +7506,321 @@
         },
         "required": ["link"],
         "description": "`GET /v1/cloud/links/current`：这把令牌自己是谁。"
+      },
+      "DataBillingUnit": {
+        "type": "string",
+        "enum": ["call", "item", "row"],
+        "description": "按什么计价：按次 / 按条（异步任务拿回来的每一条）/ 按行（同步回来的每一行）。"
+      },
+      "DataCallRequest": {
+        "type": "object",
+        "properties": {
+          "input": {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": {},
+            "description": "按能力的 `input` 白名单给；多给的字段丢掉。"
+          },
+          "fresh": {
+            "type": "boolean",
+            "description": "「重新查」：不用共享缓存，照常收费（docs/83 §5）。"
+          }
+        },
+        "required": ["input"],
+        "description": "同步调用的请求。"
+      },
+      "DataCallResult": {
+        "type": "object",
+        "properties": {
+          "capability": {
+            "type": "string"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DataItem"
+            }
+          },
+          "quantity": {
+            "type": "number",
+            "description": "计费数量：按次 = 1；按行 = 行数；0 条不收钱时是 0。"
+          },
+          "credits": {
+            "type": "number"
+          },
+          "cached": {
+            "type": "boolean",
+            "description": "命中共享缓存（照价收，docs/83 §5）。"
+          },
+          "fetched_at": {
+            "type": "string",
+            "description": "这份数据是什么时候取的（命中缓存时是当初取的时刻）。"
+          },
+          "source": {
+            "type": "string",
+            "const": "official"
+          }
+        },
+        "required": [
+          "capability",
+          "items",
+          "quantity",
+          "credits",
+          "cached",
+          "fetched_at",
+          "source"
+        ],
+        "description": "同步调用的结果。"
+      },
+      "DataCapabilityGroup": {
+        "type": "string",
+        "enum": ["search", "b2b", "social", "amazon", "seo", "other"],
+        "description": "能力分组（界面分组、后台筛选用）。"
+      },
+      "DataCapabilityList": {
+        "type": "object",
+        "properties": {
+          "capabilities": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DataCapabilityView"
+            }
+          },
+          "at": {
+            "type": "string"
+          }
+        },
+        "required": ["capabilities", "at"]
+      },
+      "DataCapabilityMode": {
+        "type": "string",
+        "enum": ["sync", "async"],
+        "description": "一项能力是查一次就回（`sync`），还是提交任务、过一会儿再取（`async`）。"
+      },
+      "DataCapabilityView": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "label_zh": {
+            "type": "string"
+          },
+          "label_en": {
+            "type": "string"
+          },
+          "group": {
+            "$ref": "#/components/schemas/DataCapabilityGroup"
+          },
+          "mode": {
+            "$ref": "#/components/schemas/DataCapabilityMode"
+          },
+          "unit": {
+            "$ref": "#/components/schemas/DataBillingUnit"
+          },
+          "credits_per_unit": {
+            "type": "number",
+            "description": "每单位多少积分（与 `/v1/pricing` 同一份）。云上价目里没有这一条就没有这一格——没价就不能用。"
+          },
+          "max_items": {
+            "type": "number",
+            "description": "异步：一次最多多少条；同步按行计价：一次最多多少行。"
+          },
+          "default_items": {
+            "type": "number",
+            "description": "不给 `max_items` 时按这个数跑（异步）。"
+          },
+          "available": {
+            "type": "boolean",
+            "description": "现在能不能用（云上有可用的渠道、后台没关、有价）。"
+          },
+          "reason": {
+            "type": "string",
+            "description": "不能用时一句人话（还没开通 / 这项能力暂时关了……）。"
+          },
+          "input": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DataInputField"
+            }
+          }
+        },
+        "required": ["id", "label_zh", "label_en", "group", "mode", "unit", "available", "input"],
+        "description": "`GET /v1/data/capabilities` 里的一项能力。"
+      },
+      "DataInputField": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["string", "number", "boolean", "string[]"]
+          },
+          "required": {
+            "type": "boolean"
+          },
+          "max": {
+            "type": "number",
+            "description": "`string` / `string[]` 每一项最长多少个字符；`number` 的上限；`string[]` 另见 `max_count`。"
+          },
+          "min": {
+            "type": "number",
+            "description": "`number` 的下限。"
+          },
+          "max_count": {
+            "type": "number",
+            "description": "`string[]` 最多几项。"
+          },
+          "enum": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "只认这几个值。"
+          },
+          "label_zh": {
+            "type": "string"
+          }
+        },
+        "required": ["name", "type", "label_zh"],
+        "description": "一项能力收哪些输入。**白名单**：不在这张表里的字段云端一律丢掉，不转给上游。"
+      },
+      "DataItem": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": {},
+        "description": "一条结果（规范化之后的，字段按能力固定；不带上游原始字段）。"
+      },
+      "DataTaskError": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string",
+            "description": "一句人话（不带上游名）。"
+          }
+        },
+        "required": ["code", "message"]
+      },
+      "DataTaskItemsPage": {
+        "type": "object",
+        "properties": {
+          "task_id": {
+            "type": "string"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DataItem"
+            }
+          },
+          "next_cursor": {
+            "type": "string",
+            "description": "还有下一页才有。"
+          },
+          "total": {
+            "type": "number",
+            "description": "一共几条。"
+          },
+          "expires_at": {
+            "type": "string"
+          }
+        },
+        "required": ["task_id", "items", "total"],
+        "description": "一页结果。"
+      },
+      "DataTaskSubmit": {
+        "type": "object",
+        "properties": {
+          "capability": {
+            "type": "string"
+          },
+          "input": {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": {}
+          },
+          "max_items": {
+            "type": "number",
+            "description": "最多要几条（按它预扣）；不给按能力的 `default_items`，超过 `max_items` 按 `max_items`。"
+          },
+          "idempotency_key": {
+            "type": "string",
+            "description": "幂等键（1–128 个字符）：同一个组织同一个键只建一个任务，网络抖了重发拿回的是同一个。"
+          }
+        },
+        "required": ["capability", "input", "idempotency_key"],
+        "description": "`POST /v1/data/tasks` 的请求。"
+      },
+      "DataTaskView": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "capability": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["running", "cancelled", "failed", "queued", "succeeded", "timed_out"]
+          },
+          "max_items": {
+            "type": "number"
+          },
+          "item_count": {
+            "type": "number",
+            "description": "已经拿到几条。"
+          },
+          "reserved_credits": {
+            "type": "number",
+            "description": "提交时按上限预扣了多少积分。"
+          },
+          "credits": {
+            "type": "number",
+            "description": "实际扣了多少（结束之前是 0）。"
+          },
+          "refunded_credits": {
+            "type": "number",
+            "description": "退回了多少（= 预扣 − 实扣；结束之后才有）。"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "started_at": {
+            "type": "string"
+          },
+          "finished_at": {
+            "type": "string"
+          },
+          "expires_at": {
+            "type": "string",
+            "description": "结果保留到什么时候；过了就取不到了。"
+          },
+          "error": {
+            "$ref": "#/components/schemas/DataTaskError"
+          },
+          "source": {
+            "type": "string",
+            "const": "official"
+          }
+        },
+        "required": [
+          "id",
+          "capability",
+          "status",
+          "max_items",
+          "item_count",
+          "reserved_credits",
+          "credits",
+          "created_at",
+          "source"
+        ],
+        "description": "一个任务的样子。"
       },
       "Dispute": {
         "type": "object",

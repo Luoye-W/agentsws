@@ -46,6 +46,18 @@ import type {
   WalletBalance,
 } from './cloud-entry.js'
 import type { Iso8601, WorkspaceId } from './common.js'
+import type {
+  DataCallParams,
+  DataCallRequest,
+  DataCallResult,
+  DataCapabilityList,
+  DataRegionHeaders,
+  DataTaskItemsPage,
+  DataTaskItemsQuery,
+  DataTaskParams,
+  DataTaskSubmit,
+  DataTaskView,
+} from './data-service.js'
 import type { HostedInstanceStatus, HostedSnapshotStored } from './hosted.js'
 import type { KolChannel } from './kol.js'
 import type {
@@ -784,6 +796,103 @@ export interface CloudSearchDataApi {
     body: AiAnswerProbe
     ok: { status: 200; body: SearchDataAiAnswers }
     errors: SearchErrors
+    errorBody: CloudEntryErrorBody
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* 路由表：官方数据接口的统一能力口（WP192，docs/83 §4）                  */
+/* ------------------------------------------------------------------ */
+
+interface DataServiceErrors extends EntryAuthErrors {
+  400: 'invalid_input'
+  402: 'insufficient_credits'
+  /** 没有这项能力 / 没有这个任务（别的组织的任务也是这一句） */
+  404: 'not_found'
+  /** 境外渠道被数据驻留挡住 */
+  422: 'residency_blocked'
+  /** 这个组织今天的次数 / 同时在跑的任务到上限了（后台可调） */
+  429: 'rate_limited'
+  /** 这项能力云上还没开通（一分不扣） */
+  501: 'not_implemented'
+  502: 'provider_error'
+}
+
+export interface CloudDataServiceApi {
+  /** 能用哪些数据能力：同步 / 异步、单价、上限、开没开通（不收钱） */
+  'GET /v1/data/capabilities': {
+    auth: 'workspace_token'
+    scope: 'data'
+    tag: 'data-service'
+    headers: DataRegionHeaders
+    ok: { status: 200; body: CloudDataEnvelope<DataCapabilityList> }
+    errors: EntryAuthErrors
+    errorBody: CloudEntryErrorBody
+  }
+  /** 同步调用一项能力（查一次就回）；先预扣，命中共享缓存照价收，失败 / 0 条不收 */
+  'POST /v1/data/call/{capability}': {
+    auth: 'workspace_token'
+    scope: 'data'
+    tag: 'data-service'
+    params: DataCallParams
+    headers: DataRegionHeaders
+    body: DataCallRequest
+    ok: { status: 200; body: CloudDataEnvelope<DataCallResult> }
+    errors: DataServiceErrors
+    errorBody: CloudEntryErrorBody
+  }
+  /** 提交一个异步任务（带幂等键）；按上限条数预扣，跑完按实际条数结算，失败 / 超时全退 */
+  'POST /v1/data/tasks': {
+    auth: 'workspace_token'
+    scope: 'data'
+    tag: 'data-service'
+    headers: DataRegionHeaders
+    body: DataTaskSubmit
+    ok: { status: 202; body: CloudDataEnvelope<DataTaskView>; description: '已受理（排队中）' }
+    alt: {
+      status: 200
+      body: CloudDataEnvelope<DataTaskView>
+      description: '同一个幂等键已经有这个任务了：原样回它现在的样子'
+    }
+    errors: DataServiceErrors
+    errorBody: CloudEntryErrorBody
+  }
+  /** 看一个任务现在怎么样 */
+  'GET /v1/data/tasks/{id}': {
+    auth: 'workspace_token'
+    scope: 'data'
+    tag: 'data-service'
+    params: DataTaskParams
+    ok: { status: 200; body: CloudDataEnvelope<DataTaskView> }
+    errors: EntryAuthErrors & { 404: 'not_found' }
+    errorBody: CloudEntryErrorBody
+  }
+  /** 分页取一个任务的结果（每页最多 100 条） */
+  'GET /v1/data/tasks/{id}/items': {
+    auth: 'workspace_token'
+    scope: 'data'
+    tag: 'data-service'
+    params: DataTaskParams
+    query: DataTaskItemsQuery
+    ok: { status: 200; body: CloudDataEnvelope<DataTaskItemsPage> }
+    errors: EntryAuthErrors & {
+      400: 'invalid_input'
+      404: 'not_found'
+      /** 还没跑完 */
+      409: 'conflict'
+      /** 结果过了保留期，已经删了 */
+      410: 'gone'
+    }
+    errorBody: CloudEntryErrorBody
+  }
+  /** 取消一个任务（已经拿到的那几条照收，其余退回；已经结束的原样回） */
+  'POST /v1/data/tasks/{id}/cancel': {
+    auth: 'workspace_token'
+    scope: 'data'
+    tag: 'data-service'
+    params: DataTaskParams
+    ok: { status: 200; body: CloudDataEnvelope<DataTaskView> }
+    errors: EntryAuthErrors & { 404: 'not_found' }
     errorBody: CloudEntryErrorBody
   }
 }
@@ -1565,6 +1674,7 @@ export interface CloudApi
     CloudWalletApi,
     CloudAiApi,
     CloudSearchDataApi,
+    CloudDataServiceApi,
     CloudKolPublicApi,
     CloudKolCloudApi,
     CloudChatRelayApi,
