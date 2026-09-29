@@ -203,7 +203,7 @@ describe('给用户看的那张单子', () => {
 describe('diagnosticsFileName', () => {
   it('名字里带版本与时间（她发过来的那个文件我们要认得出是哪一版）', () => {
     expect(diagnosticsFileName('0.1.0-beta.2', '2026-09-18T10:00:00.000Z')).toBe(
-      'agentsws-诊断-0.1.0-beta.2-20260918T100000Z.zip',
+      'Agents工坊-诊断-0.1.0-beta.2-20260918T100000Z.zip',
     )
   })
 })

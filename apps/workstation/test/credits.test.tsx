@@ -33,7 +33,7 @@ const CLOUD_TEMPLATE: ModelProviderTemplate = {
   default_base_url: 'https://cloud.agentsws.com/v1/ai',
   default_model: 'deepseek-flash',
   region: 'cn',
-  steps: ['在"设置 → 账号与积分"里关联 agentsws 账号', '回到这里点"启用"'],
+  steps: ['在"设置 → 账号与积分"里关联 Agents 工坊账号', '回到这里点"启用"'],
   links: [],
 }
 
@@ -67,7 +67,7 @@ const LINKED: CloudCreditsView = {
 
 const NOT_LINKED: CloudCreditsView = {
   linked: false,
-  reason: '还没关联 agentsws 账号。去"设置 → 账号与积分"里关联一次。',
+  reason: '还没关联 Agents 工坊账号。去"设置 → 账号与积分"里关联一次。',
 }
 
 const PRICING: PricingView = {
@@ -449,7 +449,7 @@ describe('WP142 没关联也看得到价（docs/78 第 44 步）', () => {
     state.credits = NOT_LINKED
     state.kolCloud = {
       linked: false,
-      reason: '先关联 agentsws 账号，才能开通这一项。',
+      reason: '先关联 Agents 工坊账号，才能开通这一项。',
       cloud_reachable: false,
       pending: 0,
       conflicts: [],

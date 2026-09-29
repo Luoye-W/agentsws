@@ -38,7 +38,7 @@ With the support add-on you do not need this: the cloud takes over automatically
 
 ## Support add-on: the cloud minds the chat
 
-1. First link an Agents Workshop cloud account in “Settings → Account and credits” (see [credits](help:agentsws-credits)).
+1. First link an Agents Workshop account in “Settings → Account and credits” (see [credits](help:agentsws-credits)).
 2. Back here, click **Subscribe (30 credits / month)**. The status goes from starting to minding the chat.
 3. After changing support settings or knowledge locally, click **Update the cloud with this computer**; to bring the cloud copy back, click **Bring the cloud copy home**.
 
