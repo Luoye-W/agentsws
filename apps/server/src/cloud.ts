@@ -47,7 +47,9 @@ import type {
   WalletBalance,
 } from '@agentsws/contracts'
 import {
+  allocationTimezoneOf,
   attributionHeaders,
+  DEFAULT_ALLOCATION_TIMEZONE,
   DEFAULT_DATA_SOURCE_ORDER,
   DEFAULT_WEB_SEARCH_ORDER,
   WEB_SEARCH_ROUTE_KEY,
@@ -117,7 +119,22 @@ export interface CloudOptions {
    * WP194：这个人能不能管公司的积分（公司的 owner / admin，或本工作区所有者职责的持有人）。
    * 不给 = 谁都不能看公司那一页（最保守：漏放一个人看全公司的账比多拦一次糟）。
    */
-  canManage?: (actor: CloudActor) => Promise<boolean> | boolean
+  canManage?: (
+    actor: CloudActor,
+  ) => Promise<'owner' | 'admin' | boolean | undefined> | 'owner' | 'admin' | boolean | undefined
+  /**
+   * WP194：本机公司的名册——成员 / 岗位的名字（云上只有 id，「积分」页与 100% 提醒信要名字），
+   * 与提醒信发给谁（公司的 owner / admin 的邮箱）。取值函数：名册在云面之后才装好。
+   */
+  directory?: () => Promise<CreditsDirectory> | CreditsDirectory
+}
+
+/** WP194：本机公司的名册（给「积分」页与提醒信用）。 */
+export interface CreditsDirectory {
+  members: Record<string, string>
+  positions: Record<string, string>
+  /** 公司的 owner / admin 的邮箱（用到 100% 时那封提醒信发给他们）。 */
+  notify_emails: string[]
 }
 
 export interface CloudAssembly {
@@ -392,23 +409,36 @@ export function createCloud(options: CloudOptions): CloudAssembly {
   }
   const headersOf = (actor: CloudActor): Record<string, string> => attributionHeaders(whoOf(actor))
 
-  /** 公司时区（IANA 名才传；偏移写法不传，云上缺省就是上海）。尽力而为。 */
-  const pushTimeZone = async (): Promise<void> => {
+  const directoryOf = async (): Promise<CreditsDirectory> => {
     try {
-      const tz = (await options.timeZone?.())?.trim()
-      if (tz === undefined || tz === '' || !(tz === 'UTC' || tz.includes('/'))) return
+      return (await options.directory?.()) ?? { members: {}, positions: {}, notify_emails: [] }
+    } catch {
+      return { members: {}, positions: {}, notify_emails: [] }
+    }
+  }
+
+  /**
+   * 公司时区与提醒信收件人（改额度前推一次，尽力而为）。时区：IANA 名原样、`+08:00` 这类偏移换算后推，
+   * 认不出的按上海（Fable 09-29 定；界面上注一句「按北京时间切月」）。
+   */
+  const pushSettings = async (directory: CreditsDirectory): Promise<void> => {
+    try {
+      const tz = allocationTimezoneOf(await options.timeZone?.()) ?? DEFAULT_ALLOCATION_TIMEZONE
       await cloudCall('/v1/wallet/allocation/settings', {
         method: 'POST',
-        body: { timezone: tz },
+        body: { timezone: tz, notify_emails: directory.notify_emails.slice(0, 20) },
       })
     } catch {
-      /* 时区没推上去不拦改额度：云上照上海时区切 */
+      /* 没推上去不拦改额度：云上照上海时区切，提醒信照样发给组织 owner */
     }
   }
 
   const MANAGERS_ONLY = '只有公司的所有者和管理员看得到、改得了公司的积分分配。'
-  const assertManager = async (actor: CloudActor): Promise<void> => {
-    if ((await options.canManage?.(actor)) !== true) throw new ApiError('forbidden', MANAGERS_ONLY)
+  const assertManager = async (actor: CloudActor): Promise<'owner' | 'admin'> => {
+    const role = await options.canManage?.(actor)
+    if (role === 'admin') return 'admin'
+    if (role === 'owner' || role === true) return 'owner'
+    throw new ApiError('forbidden', MANAGERS_ONLY)
   }
 
   /** 公司「积分」页那一份（管理员看）。 */
@@ -421,7 +451,19 @@ export function createCloud(options: CloudOptions): CloudAssembly {
     const res = await cloudCall<AllocationReport>(`/v1/wallet/allocation${query}`, {
       headers: headersOf(actor),
     })
-    if (res.ok && res.data !== undefined) return { linked: true, report: res.data }
+    if (res.ok && res.data !== undefined) {
+      // 公司的 admin 不一定进得了设置 → 积分那一页，余额与名字在这里一并给
+      const [balance, directory] = await Promise.all([
+        callCloud<WalletBalance>('/v1/wallet'),
+        directoryOf(),
+      ])
+      return {
+        linked: true,
+        report: res.data,
+        ...(balance === undefined ? {} : { balance }),
+        names: { members: directory.members, positions: directory.positions },
+      }
+    }
     return {
       linked: true,
       reason:
@@ -561,18 +603,25 @@ export function createCloud(options: CloudOptions): CloudAssembly {
   const port: CloudPort = {
     // WP194：成员 / 岗位额度（谁能看公司那一页在路由那一层判：公司的 owner / admin）
     allocation: async (actor, filter) => {
-      await assertManager(actor)
-      return allocationView(actor, filter.month)
+      const role = await assertManager(actor)
+      return { ...(await allocationView(actor, filter.month)), role }
     },
     myAllocation: (actor) => myAllocationView(actor),
     setAllocationLimit: async (actor, input: AllocationLimitRequest) => {
       await assertManager(actor)
       if (tokenOf() === undefined) throw new ApiError('invalid_input', NOT_LINKED)
-      await pushTimeZone()
+      const directory = await directoryOf()
+      await pushSettings(directory)
+      // 名字只进 100% 那封提醒信（云上别处只认 id）
+      const label =
+        input.label ??
+        (input.kind === 'member'
+          ? directory.members[input.subject_id]
+          : directory.positions[input.subject_id])
       return unwrap(
         await cloudCall<AllocationLimitChanged>('/v1/wallet/allocation/limits', {
           method: 'POST',
-          body: input,
+          body: { ...input, ...(label === undefined ? {} : { label }) },
           headers: headersOf(actor),
         }),
         '改额度',

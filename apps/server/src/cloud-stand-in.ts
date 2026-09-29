@@ -157,6 +157,8 @@ export function cloudStandIn(options: CloudStandInOptions = {}): CloudStandIn {
 
   /* ── WP194：成员 / 岗位额度（替身版：内存里一张表，数字是合成的）── */
   const usageCells: CloudStandInUsageSeed[] = []
+  let timezone = DEFAULT_ALLOCATION_TIMEZONE
+  let notifyEmails: string[] = []
   const limits = new Map<string, { monthly_limit: number; updated_at: string }>()
   const audits: AllocationAuditEntry[] = []
   const limitKey = (kind: AllocationSubjectKind, id: string): string => `${kind}:${id}`
@@ -204,7 +206,7 @@ export function cloudStandIn(options: CloudStandInOptions = {}): CloudStandIn {
   }
   const report = (): AllocationReport => ({
     month: now().slice(0, 7),
-    timezone: DEFAULT_ALLOCATION_TIMEZONE,
+    timezone,
     from: monthStart(),
     to: now(),
     members: subjects('member'),
@@ -473,10 +475,12 @@ export function cloudStandIn(options: CloudStandInOptions = {}): CloudStandIn {
         const audit = setLimit(kind, subject, limit, actor)
         return ok({ row: rowOf(kind, subject), audit })
       }
-      if (method === 'POST' && path === '/v1/wallet/allocation/settings')
-        return ok({
-          timezone: typeof body.timezone === 'string' ? body.timezone : DEFAULT_ALLOCATION_TIMEZONE,
-        })
+      if (method === 'POST' && path === '/v1/wallet/allocation/settings') {
+        if (typeof body.timezone === 'string') timezone = body.timezone
+        if (Array.isArray(body.notify_emails))
+          notifyEmails = body.notify_emails.filter((e): e is string => typeof e === 'string')
+        return ok({ timezone, notify_recipients: notifyEmails.length })
+      }
       if (method === 'POST' && path === '/v1/wallet/allocation/members/remove') {
         const member = typeof body.member_id === 'string' ? body.member_id : ''
         const had = limits.delete(limitKey('member', member))

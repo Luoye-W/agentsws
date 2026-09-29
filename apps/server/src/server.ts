@@ -1887,27 +1887,57 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     return { member_id: a.person_id, ...(position === undefined ? {} : { position_id: position }) }
   }
   /**
-   * WP194：这个人能不能管公司的积分——本工作区所有者职责的持有人，或本机公司成员表里的
-   * owner / admin（离开了的不算）。
+   * WP194：这个人能不能管公司的积分，是什么身份——
+   * owner：本工作区所有者职责的持有人、工作区成员表里的 owner、公司成员表里的 owner；
+   * admin：工作区成员表里的 manager、公司成员表里的 admin（离开了的都不算）。
+   * admin 只开公司页的「积分」那一页（Fable 09-29 定），公司页其它 tab 照旧只给所有者。
    */
-  const canManageCredits = async (person_id: string, workspace_id: string): Promise<boolean> => {
-    const owner = roles.assignments
+  const creditsRoleOf = async (
+    person_id: string,
+    workspace_id: string,
+  ): Promise<'owner' | 'admin' | undefined> => {
+    const holdsOwner = roles.assignments
       .listByPerson(person_id, { workspace_id, role_id: 'common.owner' })
       .some((a) => a.revoked_at === undefined)
-    if (owner) return true
+    if (holdsOwner) return 'owner'
+    let admin = false
     try {
-      const orgs = await identity.organizationsOf(person_id)
-      return orgs.some((o) =>
-        o.members.some(
-          (m) =>
-            m.person_id === person_id &&
-            m.left_at === undefined &&
-            (m.role === 'owner' || m.role === 'admin'),
-        ),
+      const m = (await identity.members(workspace_id)).find(
+        (x) => x.person_id === person_id && x.left_at === undefined,
       )
+      if (m?.role === 'owner') return 'owner'
+      if (m?.role === 'manager') admin = true
+      for (const o of await identity.organizationsOf(person_id)) {
+        const om = o.members.find((x) => x.person_id === person_id && x.left_at === undefined)
+        if (om?.role === 'owner') return 'owner'
+        if (om?.role === 'admin') admin = true
+      }
     } catch {
-      return false
+      // 查不到当没有：最保守
     }
+    return admin ? 'admin' : undefined
+  }
+  /** WP194：岗位 id → 名字（公司页装好之后才有；之前是空表）。 */
+  let creditsPositionNames: () => Record<string, string> = () => ({})
+  /**
+   * WP194：本机公司的名册——成员与岗位的名字（「积分」页与 100% 提醒信用），
+   * 与提醒信发给谁（公司的 owner / admin 的邮箱）。
+   */
+  const creditsDirectory = async (workspace_id: string) => {
+    const members: Record<string, string> = {}
+    const notify = new Set<string>()
+    for (const m of await identity.members(workspace_id)) {
+      const person = await identity.getPerson(m.person_id)
+      if (person === undefined) continue
+      members[person.id] = person.name
+      if (m.left_at !== undefined) continue
+      if (
+        (await creditsRoleOf(person.id, workspace_id)) !== undefined &&
+        person.email.includes('@')
+      )
+        notify.add(person.email.trim().toLowerCase())
+    }
+    return { members, positions: creditsPositionNames(), notify_emails: [...notify] }
   }
 
   /*
@@ -2638,7 +2668,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       pricingCatalog,
       // WP194：打云时带「谁 / 哪个岗位」；公司「积分」页只给 owner / admin；改额度顺手推公司时区
       positionOf: (role_id) => cloudPositionOf(ws, role_id),
-      canManage: (actor) => canManageCredits(actor.person_id, ws),
+      canManage: (actor) => creditsRoleOf(actor.person_id, ws),
+      directory: () => creditsDirectory(ws),
       timeZone: async () => (await identity.getWorkspace(ws))?.tz,
     })
     const ownModels = createModels({
@@ -4651,6 +4682,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   })
   rangeExpandedSink = org.onRangeExpanded
   supervisorPositions = () => org.positions()
+  creditsPositionNames = () => Object.fromEntries(org.positions().map((p) => [p.id, p.name.zh]))
 
   /**
    * WP51 首次设置与同事发现（46）。

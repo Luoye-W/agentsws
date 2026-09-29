@@ -47,6 +47,7 @@ import {
   deleteProductLine,
   deleteRangeGroup,
   ensureSession,
+  getCloudAllocation,
   getOnboardingState,
   getPositions,
   inviteMember,
@@ -111,6 +112,17 @@ export function OrgPage(): React.ReactNode {
   const workspace = session.data?.workspace.id
 
   const enabled = owner !== undefined && workspace !== undefined
+  /*
+   * WP194（Fable 09-29 定）：公司的 admin 没有所有者职责，但「积分」这一页给他开。
+   * 他能不能看由服务端判（公司成员表里的身份）；这里用他自己手上的第一条分配去问一声。
+   */
+  const ownAssignment = mine.data?.positions[0]?.position_id
+  const creditsOnly = useQuery({
+    queryKey: ['cloud-allocation', ownAssignment],
+    enabled: !enabled && mine.data !== undefined && ownAssignment !== undefined,
+    queryFn: () => getCloudAllocation(ownAssignment),
+    retry: false,
+  })
   const positions = useQuery({
     queryKey: ['org', 'positions'],
     enabled,
@@ -429,6 +441,22 @@ export function OrgPage(): React.ReactNode {
 
   if (mine.data === undefined || session.data === undefined) {
     return <Skeleton className="h-64 w-full" />
+  }
+
+  if (!enabled && creditsOnly.data?.role !== undefined) {
+    return (
+      <div className="flex flex-col gap-4" data-testid="org-credits-only">
+        <div>
+          <h1 className="text-sm font-semibold">{t('org.title')}</h1>
+          <p className="text-xs text-muted-foreground">{t('org.credits_only')}</p>
+        </div>
+        <CreditsTab
+          {...(ownAssignment === undefined ? {} : { assignment: ownAssignment })}
+          members={[]}
+          positions={[]}
+        />
+      </div>
+    )
   }
 
   if (!enabled) {

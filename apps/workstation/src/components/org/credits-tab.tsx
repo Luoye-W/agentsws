@@ -105,7 +105,7 @@ export function CreditsTab({
     },
   })
 
-  if (view.isPending || credits.isPending) return <Skeleton className="h-64 w-full" />
+  if (view.isPending) return <Skeleton className="h-64 w-full" />
   if (view.isError)
     return (
       <p className="text-sm text-muted-foreground" data-testid="alloc-error">
@@ -120,22 +120,35 @@ export function CreditsTab({
       </p>
     )
 
-  const memberName = new Map(members.map((m) => [m.person_id, m]))
-  const positionName = new Map(
-    positions.map((p) => [p.id, lang === 'zh' ? p.name : p.name_en || p.name]),
-  )
+  /*
+   * 名字：所有者这边有成员 / 岗位两张清单（公司页已经取了）；公司的 admin 拿不到那两张，
+   * 就用服务端随报表给的名册（`view.names`）。
+   */
+  const names = view.data?.names
+  const memberName = new Map<string, { name: string }>([
+    ...Object.entries(names?.members ?? {}).map(([id, name]) => [id, { name }] as const),
+    ...members.map((m) => [m.person_id, { name: m.name }] as const),
+  ])
+  const positionName = new Map<string, string>([
+    ...Object.entries(names?.positions ?? {}),
+    ...positions.map((p) => [p.id, lang === 'zh' ? p.name : p.name_en || p.name] as const),
+  ])
+  const roster =
+    members.length > 0
+      ? members
+      : Object.keys(names?.members ?? {}).map((id) => ({ person_id: id, left_at: undefined }))
   const memberLines: Line[] = [
-    ...members
+    ...roster
       .filter((m) => m.left_at === undefined)
       .map((m) => ({
         id: m.person_id,
-        name: m.name,
+        name: memberName.get(m.person_id)?.name ?? m.person_id,
         left: false,
         row: report.members.find((r) => r.subject_id === m.person_id),
       })),
     // 云上有账、本机已经不在成员里的（离开了的）：历史照样显示，账对得上
     ...report.members
-      .filter((r) => !members.some((m) => m.person_id === r.subject_id && m.left_at === undefined))
+      .filter((r) => !roster.some((m) => m.person_id === r.subject_id && m.left_at === undefined))
       .map((r) => ({
         id: r.subject_id,
         name: memberName.get(r.subject_id)?.name ?? r.subject_id,
@@ -143,24 +156,33 @@ export function CreditsTab({
         row: r,
       })),
   ]
+  const positionIds =
+    positions.length > 0 ? positions.map((p) => p.id) : Object.keys(names?.positions ?? {})
   const positionLines: Line[] = [
-    ...positions.map((p) => ({
-      id: p.id,
-      name: positionName.get(p.id) ?? p.id,
+    ...positionIds.map((id) => ({
+      id,
+      name: positionName.get(id) ?? id,
       left: false,
-      row: report.positions.find((r) => r.subject_id === p.id),
+      row: report.positions.find((r) => r.subject_id === id),
     })),
     ...report.positions
-      .filter((r) => !positions.some((p) => p.id === r.subject_id))
-      .map((r) => ({ id: r.subject_id, name: r.subject_id, left: true, row: r })),
+      .filter((r) => !positionIds.includes(r.subject_id))
+      .map((r) => ({
+        id: r.subject_id,
+        name: positionName.get(r.subject_id) ?? r.subject_id,
+        left: true,
+        row: r,
+      })),
   ]
   const nameOf = (kind: AllocationSubjectKind, id: string): string =>
     kind === 'member' ? (memberName.get(id)?.name ?? id) : (positionName.get(id) ?? id)
   const actorName = (actor: string): string =>
     actor.startsWith('account:') ? t('alloc.actor.account') : (memberName.get(actor)?.name ?? actor)
 
-  const balance = credits.data?.balance
-  const linked = credits.data?.linked === true
+  const balance = credits.data?.balance ?? view.data?.balance
+  const linked = credits.data?.linked === true || view.data?.linked === true
+  /** Fable 09-29 定：认不出公司时区的按上海切，页面上注一句。 */
+  const beijing = report.timezone === 'Asia/Shanghai' || report.timezone === 'Etc/GMT-8'
 
   return (
     <div className="flex flex-col gap-4" data-testid="alloc-tab">
@@ -169,6 +191,11 @@ export function CreditsTab({
           <div className="flex items-center gap-1 text-xs text-muted-foreground">
             {t('alloc.title')}
             <Hint text={t('alloc.hint')} />
+            {beijing ? (
+              <span className="ml-auto text-[11px]" data-testid="alloc-timezone">
+                {t('alloc.timezone.beijing')}
+              </span>
+            ) : null}
           </div>
           <section className="grid grid-cols-2 gap-2 sm:grid-cols-6" data-testid="alloc-summary">
             <Figure
@@ -196,18 +223,21 @@ export function CreditsTab({
               )
             })}
           </section>
-          <Separator />
-          <TierCards
-            tiers={tiers.data?.tiers}
-            unavailable={tiers.data?.unavailable_reason}
-            pending={tiers.isPending}
-            linked={linked}
-            busy={order.isPending}
-            num={num}
-            onPick={(id) => {
-              order.mutate(id)
-            }}
-          />
+          {/* 充值：进得了设置 → 积分的人才有（公司的 admin 不一定有那一档权限，就不画一排点不动的卡） */}
+          {tiers.data === undefined ? null : <Separator />}
+          {tiers.data === undefined ? null : (
+            <TierCards
+              tiers={tiers.data?.tiers}
+              unavailable={tiers.data?.unavailable_reason}
+              pending={tiers.isPending}
+              linked={linked}
+              busy={order.isPending}
+              num={num}
+              onPick={(id) => {
+                order.mutate(id)
+              }}
+            />
+          )}
           {order.isError ? (
             <p className="text-[11px] text-destructive" data-testid="alloc-topup-error">
               {order.error instanceof ApiClientError ? order.error.message : t('error.generic')}

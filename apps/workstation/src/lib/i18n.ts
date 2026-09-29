@@ -1942,6 +1942,8 @@ const zh: Table = {
   'alloc.hint':
     '在公司余额上给每个人、每个岗位设每月上限；不设就是不限。到 80% 和用完时本人与管理员都会看到提醒。',
   'alloc.title': '公司积分',
+  'alloc.timezone.beijing': '按北京时间切月',
+  'org.credits_only': '你是公司的管理员：这里只有「积分」这一页。建岗位、分人找公司的所有者。',
   'alloc.actor.account': '公司账号',
   'alloc.balance': '公司余额',
   'alloc.month_total': '本月已用',
@@ -5223,6 +5225,9 @@ const en: Table = {
   'alloc.hint':
     'Set a monthly limit per person and per position on the shared company balance; no limit by default. The person and admins are told at 80% and when it runs out.',
   'alloc.title': 'Company credits',
+  'alloc.timezone.beijing': 'Months follow Beijing time',
+  'org.credits_only':
+    "You're a company admin: only the Credits page is open to you. Ask the owner about positions and people.",
   'alloc.actor.account': 'Company account',
   'alloc.balance': 'Company balance',
   'alloc.month_total': 'Used this month',

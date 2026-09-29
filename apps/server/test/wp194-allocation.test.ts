@@ -59,7 +59,10 @@ interface Hit {
   body?: unknown
 }
 
-function harness(token: string | null = 'wst_test_not_real') {
+function harness(
+  token: string | null = 'wst_test_not_real',
+  tz: string | undefined = 'Asia/Shanghai',
+) {
   const hits: Hit[] = []
   const fetch: CloudFetch = async (input, init) => {
     const body = (init as { body?: string }).body
@@ -86,8 +89,14 @@ function harness(token: string | null = 'wst_test_not_real') {
     env: { AGENTSWS_CLOUD_BASE_URL: 'https://cloud.test.invalid' },
     fetch,
     positionOf: (role_id) => (role_id === 'support.aftersales' ? 'cs' : undefined),
-    canManage: (actor) => actor.person_id === 'p_boss',
-    timeZone: () => 'Asia/Shanghai',
+    canManage: (actor) =>
+      actor.person_id === 'p_boss' ? 'owner' : actor.person_id === 'p_admin' ? 'admin' : undefined,
+    timeZone: () => tz,
+    directory: () => ({
+      members: { p_b: '陈晓', p_boss: '王岚' },
+      positions: { cs: '客服' },
+      notify_emails: ['boss@example.com', 'admin@example.com'],
+    }),
   })
   return { cloud, hits }
 }
@@ -142,8 +151,41 @@ describe('WP194 本机：带「谁」与谁能管', () => {
       '/v1/wallet/allocation/settings',
       '/v1/wallet/allocation/limits',
     ])
-    expect(hits[0]?.body).toEqual({ timezone: 'Asia/Shanghai' })
+    expect(hits[0]?.body).toEqual({
+      timezone: 'Asia/Shanghai',
+      notify_emails: ['boss@example.com', 'admin@example.com'],
+    })
+    // 名字从本机名册来，只进 100% 提醒信
+    expect(hits[1]?.body).toMatchObject({ subject_id: 'p_b', label: '陈晓' })
     expect(hits[1]?.headers[MEMBER_HEADER]).toBe('p_boss')
+  })
+
+  it('公司的 admin 也看得到（带 role）；余额与名字随报表一起给', async () => {
+    const admin = { ...staff, person_id: 'p_admin' }
+    const { cloud } = harness()
+    const view = (await cloud.port.allocation?.(admin, {})) as CloudAllocationView
+    expect(view.role).toBe('admin')
+    expect(view.names?.members.p_b).toBe('陈晓')
+    expect(view.names?.positions.cs).toBe('客服')
+    expect((await cloud.port.allocation?.(boss, {}))?.role).toBe('owner')
+  })
+
+  it('公司时区：偏移写法换算后推，认不出按上海', async () => {
+    for (const [raw, want] of [
+      ['+08:00', 'Etc/GMT-8'],
+      ['+05:30', 'Asia/Kolkata'],
+      ['北京时间', 'Asia/Shanghai'],
+      [undefined, 'Asia/Shanghai'],
+    ] as const) {
+      const { cloud, hits } = harness('wst_test_not_real', raw)
+      await cloud.port.setAllocationLimit?.(boss, {
+        kind: 'position',
+        subject_id: 'cs',
+        monthly_limit: 50,
+      })
+      expect((hits[0]?.body as { timezone: string }).timezone).toBe(want)
+      expect(hits[1]?.body).toMatchObject({ label: '客服' })
+    }
   })
 
   it('作用域里的归属进了每一跳（余额那一跳也带）；没有作用域就不带', async () => {
