@@ -1,0 +1,66 @@
+---
+/** 岗位页：十个岗位各一行（一句话、会出的卡、要连什么）；客服、红人、B2B 三个附一张工作台截图。 */
+import { Image } from 'astro:assets'
+import kolShot from '../../../../docs/assets/walkthrough/13-kol-position.png'
+import supportShot from '../../../../docs/assets/walkthrough/35-care-position.png'
+import b2bShot from '../../../../docs/assets/wp182/b2b-panel-sales.png'
+import Icon from '../components/Icon.astro'
+import { type Lang, localePath } from '../i18n/common.js'
+import { HOME } from '../i18n/home.js'
+import { ROLES, ROLES_PAGE } from '../i18n/roles.js'
+import Base from '../layouts/Base.astro'
+import '../styles/pages.css'
+
+interface Props {
+  lang: Lang
+}
+const { lang } = Astro.props
+const t = ROLES_PAGE[lang]
+const roles = ROLES[lang]
+const p = (x: string) => localePath(x, lang)
+const shots: Record<string, { src: ImageMetadata; w: number; h: number }> = {
+  support: { src: supportShot, w: 1360, h: 760 },
+  kol: { src: kolShot, w: 1360, h: 760 },
+  b2b: { src: b2bShot, w: 1280, h: 715 },
+}
+---
+<Base lang={lang} path="/roles/" title={t.meta.title} description={t.meta.description} og="roles" current="roles">
+  <section class="page-hero" style="padding-bottom:64px">
+    <div class="wrap center">
+      <div class="eyebrow">{t.eyebrow}</div>
+      <h1 class="page-h1">{t.title}</h1>
+      <p class="sub">{t.sub}</p>
+      <p class="role-status">{t.status}</p>
+      <ul class="role-list">
+        {roles.map((r) => {
+          const shot = shots[r.id]
+          return (
+            <li class="role-row" id={r.id}>
+              <div class="role-ic"><Icon name={r.icon} /></div>
+              <div>
+                <h2>{r.name}{r.isNew && <span class="new">{HOME[lang].roles.newBadge}</span>}</h2>
+                <p class="line">{r.line}</p>
+              </div>
+              <div class="cards"><h3>{t.cardsLabel}</h3><ul class="tags card-tags">{r.cards.map((c) => <li>{c}</li>)}</ul></div>
+              <div class="connects"><h3>{t.connectsLabel}</h3><ul class="tags">{r.connects.map((c) => <li>{c}</li>)}</ul></div>
+              {shot && (
+                <figure class="role-shot" style="margin:8px 0 0">
+                  <figcaption>{t.featured}</figcaption>
+                  <div class="frame"><Image src={shot.src} alt={`${r.name} · ${t.featured}`} width={shot.w} height={shot.h} fit="cover" position="top" widths={[640, 960, 1280]} sizes="(max-width: 900px) calc(100vw - 40px), 860px" loading="lazy" /></div>
+                </figure>
+              )}
+            </li>
+          )
+        })}
+      </ul>
+      <div class="custom">
+        <h2>{t.custom.title}</h2>
+        <p>{t.custom.sub}</p>
+      </div>
+      <div class="cta-row">
+        <a class="btn btn-primary" href={p('/download/')}><Icon name="download" />{t.cta}</a>
+        <a class="btn btn-ghost" href={p('/docs/')}>{t.docs}</a>
+      </div>
+    </div>
+  </section>
+</Base>

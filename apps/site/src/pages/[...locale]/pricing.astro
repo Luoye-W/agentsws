@@ -1,0 +1,8 @@
+---
+import { localeStaticPaths } from '../../lib/locales.js'
+import Pricing from '../../views/Pricing.astro'
+
+export const getStaticPaths = localeStaticPaths
+const { lang } = Astro.props
+---
+<Pricing lang={lang} />

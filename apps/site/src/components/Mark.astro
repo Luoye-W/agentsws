@@ -1,0 +1,56 @@
+---
+/**
+ * 品牌标记：一律出自 `@agentsws/brand`（WP195 待机 wave-sheen、集结、一变一队、呼吸），
+ * 站点里不另写一套几何与参数。浅底 / 深底两套端点各出一张，CSS 只显示当前主题那一张。
+ */
+import { liveMarkSvg, markSvg, STOPS_ON_DARK, STOPS_ON_LIGHT } from '@agentsws/brand'
+
+interface Props {
+  /** 同一页里每张要不一样（渐变 id 前缀）。 */
+  id: string
+  /** live = 会动（默认）；static = 整体一条渐变的静态标记（收尾、页脚）。 */
+  kind?: 'live' | 'static'
+  pose?: 'assemble' | 'split' | 'breathe'
+  idle?: boolean
+  leadOnly?: boolean
+  label?: string
+  class?: string
+  /** 深色块上（底座那屏）：两种主题都用深底那套端点。 */
+  onDark?: boolean
+}
+const {
+  id,
+  kind = 'live',
+  pose,
+  idle = false,
+  leadOnly = false,
+  label,
+  class: cls,
+  onDark = false,
+} = Astro.props
+
+function one(theme: 'light' | 'dark'): string {
+  const stops = onDark || theme === 'dark' ? STOPS_ON_DARK : STOPS_ON_LIGHT
+  const mid = `${id}-${theme}`
+  if (kind === 'static') {
+    const svg = markSvg({ stops, id: mid })
+    const a11y = label !== undefined ? ` role="img" aria-label="${label}"` : ' aria-hidden="true"'
+    return svg.replace('<svg ', `<svg class="aw-mark"${a11y} `)
+  }
+  return liveMarkSvg({
+    id: mid,
+    stops,
+    ...(idle ? { idle: 'wave-sheen' as const } : {}),
+    ...(pose !== undefined ? { pose } : {}),
+    ...(leadOnly ? { leadOnly: true } : {}),
+    ...(label !== undefined ? { label } : {}),
+  })
+}
+const light = one('light')
+const dark = one('dark')
+---
+{onDark ? (
+  <span class:list={['mark', cls]} set:html={light} />
+) : (
+  <span class:list={['mark', cls]}><span class="only-light" set:html={light} /><span class="only-dark" set:html={dark} /></span>
+)}

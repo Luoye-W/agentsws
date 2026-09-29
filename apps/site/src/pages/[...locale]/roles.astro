@@ -1,0 +1,8 @@
+---
+import { localeStaticPaths } from '../../lib/locales.js'
+import Roles from '../../views/Roles.astro'
+
+export const getStaticPaths = localeStaticPaths
+const { lang } = Astro.props
+---
+<Roles lang={lang} />

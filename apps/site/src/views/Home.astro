@@ -1,0 +1,313 @@
+---
+/**
+ * 首页（照 docs/design/site/home.html 方向 A）：首屏 → 为什么（四级台阶）→ 岗位 → 出卡审批 → 本地优先
+ * → 别处收费这里免费 → 底座 → 价格 → 公开地做 → 常见问题 → 收尾。
+ */
+import { Image } from 'astro:assets'
+import homeShot from '../../../../docs/assets/walkthrough/10-home.png'
+import darkShot from '../../../../docs/assets/walkthrough/48b-dark-kol.png'
+import Hint from '../components/Hint.astro'
+import Icon from '../components/Icon.astro'
+import Mark from '../components/Mark.astro'
+import { ARCHITECTURE_URL, GITHUB_URL } from '../config.js'
+import { type Lang, localePath } from '../i18n/common.js'
+import { HOME } from '../i18n/home.js'
+import { ROLES } from '../i18n/roles.js'
+import Base from '../layouts/Base.astro'
+import { loadChangelog } from '../lib/changelog.js'
+import { emph } from '../lib/locales.js'
+import '../styles/home.css'
+
+interface Props {
+  lang: Lang
+}
+const { lang } = Astro.props
+const t = HOME[lang]
+const roles = ROLES[lang]
+const p = (x: string) => localePath(x, lang)
+const logs = loadChangelog(lang).slice(0, 3)
+const shotSizes = '(max-width: 900px) calc(100vw - 40px), 680px'
+---
+<Base lang={lang} path="/" title={t.meta.title} description={t.meta.description} og="home" announce>
+  <section class="hero">
+    <div class="wrap">
+      <div>
+        <span class="pill"><i></i>{t.hero.pill}</span>
+        <h1>{t.hero.title.map((line) => <span set:html={emph(line)} />)}</h1>
+        <p class="lede">{t.hero.lede}</p>
+        <div class="cta-row">
+          <a class="btn btn-primary" href={p('/download/')}><Icon name="download" />{t.hero.download}</a>
+          <a class="btn btn-ghost" href={GITHUB_URL} rel="noopener"><Icon name="github" />{t.hero.github}</a>
+        </div>
+        <ul class="checks">
+          {t.hero.checks.map((c) => <li><Icon name="check" />{c}</li>)}
+        </ul>
+      </div>
+      <div class="shot">
+        <div class="big-mark"><Mark id="hero" pose="assemble" idle /></div>
+        <div class="frame">
+          <div class="frame-bar" aria-hidden="true"><i></i><i></i><i></i><span>{t.hero.frameBar}</span></div>
+          <div class="frame-img">
+            <Image class="only-light" src={homeShot} alt={t.hero.shotAlt} width={1360} height={820} fit="cover" position="top" widths={[680, 1020, 1360]} sizes={shotSizes} loading="eager" fetchpriority="high" />
+            <Image class="only-dark" src={darkShot} alt={t.hero.shotAlt} width={1360} height={820} fit="cover" position="top" widths={[680, 1020, 1360]} sizes={shotSizes} loading="lazy" />
+          </div>
+        </div>
+        <div class="float-card" aria-hidden="true">
+          <div class="dcard sel">
+            <div class="dcard-h"><span class="chip info">{t.hero.card.chip}</span><span class="chip warn">{t.hero.card.due}</span><span class="chip plain end">{t.hero.card.evidence}</span></div>
+            <div class="dcard-b"><h4>{t.hero.card.title}</h4><div class="quote" lang="en">{t.hero.card.quote}</div></div>
+            <div class="dcard-f"><span>{t.hero.card.send}</span><span>{t.hero.card.edit}</span><span>{t.hero.card.drop}</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec why" id="why" aria-labelledby="why-h">
+    <div class="wrap">
+      <div class="center">
+        <div class="eyebrow">{t.why.eyebrow}</div>
+        <h2 class="h2" id="why-h">{t.why.title.map((l, i) => <>{l}{i < t.why.title.length - 1 && <br />}</>)}</h2>
+        <p class="sub">{t.why.sub}</p>
+      </div>
+      <ol class="stairs" id="stairs">
+        <li class="stair">
+          <div class="scene s1" aria-hidden="true">
+            <div class="dash">
+              <div class="dash-h"><i></i><i></i><i></i><span>{t.why.s1.board}</span></div>
+              <div class="kpis"><div><b class="c1">1,284</b><small>{t.why.s1.kpi[0]}</small></div><div><b class="c2">$42k</b><small>{t.why.s1.kpi[1]}</small></div><div><b class="c3">3.1%</b><small>{t.why.s1.kpi[2]}</small></div></div>
+              <svg class="spark" viewBox="0 0 200 48" preserveAspectRatio="none"><path d="M0 40 L25 33 L50 36 L75 22 L100 27 L125 13 L150 19 L175 8 L200 12" /></svg>
+              <div class="bars"><i style="height:45%"></i><i style="height:70%"></i><i style="height:52%"></i><i style="height:88%"></i><i style="height:64%"></i><i style="height:35%"></i></div>
+            </div>
+            <div class="dust"></div>
+            <span class="stale">{t.why.s1.stale}</span>
+          </div>
+          <div class="stair-txt"><span class="lv">01</span><h3>{t.why.steps[0]?.h}</h3><p>{t.why.steps[0]?.p}</p></div>
+        </li>
+        <li class="stair">
+          <div class="scene s2" aria-hidden="true">
+            <div class="tool">
+              <div class="search"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7" /><path d="m20 20-4-4" /></svg><span>{t.why.s2.search}</span></div>
+              <div class="tbl">
+                <div class="tr th">{t.why.s2.cols.map((c) => <span>{c}</span>)}</div>
+                <div class="tr r1"><span>@trailsun</span><span>48k</span><span>—</span></div>
+                <div class="tr r2"><span>@desknoor</span><span>31k</span><span>—</span></div>
+                <div class="tr r3"><span>@gadgetjo</span><span>26k</span><span>—</span></div>
+              </div>
+              <div class="tool-f"><span>{t.why.s2.row}</span><b class="csv">{t.why.s2.csv}</b></div>
+            </div>
+            <svg class="hand" viewBox="0 0 24 24"><path d="M18 11V6a2 2 0 0 0-4 0v0" /><path d="M14 10V4a2 2 0 0 0-4 0v2" /><path d="M10 10.5V6a2 2 0 0 0-4 0v8" /><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-6-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15" /></svg>
+          </div>
+          <div class="stair-txt"><span class="lv">02</span><h3>{t.why.steps[1]?.h}</h3><p>{t.why.steps[1]?.p}</p></div>
+        </li>
+        <li class="stair">
+          <div class="scene s3" aria-hidden="true">
+            <div class="s3-h"><span class="tag">KOLAgents</span><Mark id="breathe" pose="breathe" leadOnly /><small>{t.why.s3.working}</small></div>
+            <div class="chain">
+              <div class="node n1"><i></i><b>{t.why.s3.nodes[0]?.[0]}</b><small>{t.why.s3.nodes[0]?.[1]}</small></div>
+              <div class="link l1"></div>
+              <div class="node n2"><i></i><b>{t.why.s3.nodes[1]?.[0]}</b><small>{t.why.s3.nodes[1]?.[1]}</small></div>
+              <div class="link l2"></div>
+              <div class="node n3"><i></i><b>{t.why.s3.nodes[2]?.[0]}</b><small>{t.why.s3.nodes[2]?.[1]}</small></div>
+            </div>
+            <div class="learn"><span class="lbadge">{t.why.s3.learn}</span><p>{t.why.s3.note}</p></div>
+          </div>
+          <div class="stair-txt"><span class="lv">03</span><h3>{t.why.steps[2]?.h}</h3><p>{t.why.steps[2]?.p}</p></div>
+        </li>
+        <li class="stair">
+          <div class="scene s4" aria-hidden="true">
+            <svg class="team" viewBox="0 0 260 200">
+              <defs><marker id="ah" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0 8 4 0 8Z" class="ah" /></marker></defs>
+              <foreignObject x="10" y="8" width="26" height="26" class="team-mark"><Mark id="team" /></foreignObject>
+              <text x="42" y="26" class="t-mute">{t.why.s4.split}</text>
+              <g class="t-role r1"><rect x="22" y="46" width="98" height="38" rx="8" /><circle cx="34" cy="59" r="3.5" class="d-info" /><text x="43" y="62" class="t-b">{t.why.s4.roles[0]?.[0]}</text><text x="31" y="77" class="t-s">{t.why.s4.roles[0]?.[1]}</text></g>
+              <g class="t-role r2"><rect x="22" y="94" width="98" height="38" rx="8" /><circle cx="34" cy="107" r="3.5" class="d-good" /><text x="43" y="110" class="t-b">{t.why.s4.roles[1]?.[0]}</text><text x="31" y="125" class="t-s">{t.why.s4.roles[1]?.[1]}</text></g>
+              <g class="t-role r3"><rect x="22" y="142" width="98" height="38" rx="8" /><circle cx="34" cy="155" r="3.5" class="d-warn" /><text x="43" y="158" class="t-b">{t.why.s4.roles[2]?.[0]}</text><text x="31" y="173" class="t-s">{t.why.s4.roles[2]?.[1]}</text></g>
+              <path class="hand-off" d="M22 70 C4 72 4 156 20 160" marker-end="url(#ah)" />
+              <text x="1" y="118" class="t-hand">{t.why.s4.handoff}</text>
+              <path class="arrow a1" d="M120 65 C140 65 140 96 156 100" marker-end="url(#ah)" />
+              <path class="arrow a2" d="M120 113 C136 113 140 110 156 110" marker-end="url(#ah)" />
+              <path class="arrow a3" d="M120 161 C140 161 140 124 156 120" marker-end="url(#ah)" />
+              <g class="decide"><rect x="158" y="62" width="94" height="100" rx="10" class="dk" /><text x="168" y="82" class="t-brand">{t.why.s4.decide}</text><text x="168" y="102" class="t-b">{t.why.s4.quote}</text><text x="168" y="118" class="t-s">{t.why.s4.amount}</text><rect x="168" y="130" width="42" height="20" rx="6" class="btn-ok" /><text x="178" y="144" class="t-ok">{t.why.s4.approve}</text></g>
+            </svg>
+          </div>
+          <div class="stair-txt"><span class="lv">04</span><h3>{t.why.steps[3]?.h}</h3><p>{t.why.steps[3]?.p}</p></div>
+        </li>
+      </ol>
+    </div>
+  </section>
+
+  <section class="sec sec-alt" id="roles" aria-labelledby="roles-h">
+    <div class="wrap center">
+      <div class="eyebrow">{t.roles.eyebrow}</div>
+      <h2 class="h2" id="roles-h">{t.roles.title}</h2>
+      <p class="sub">{t.roles.sub}</p>
+      <ul class="roles">
+        {roles.map((r) => (
+          <li>
+            <a class="role" href={`${p('/roles/')}#${r.id}`}>
+              <div class="role-ic"><Icon name={r.icon} /></div>
+              <h3>{r.name}{r.isNew && <span class="new">{t.roles.newBadge}</span>}</h3>
+              <p>{r.line}</p>
+            </a>
+          </li>
+        ))}
+      </ul>
+      <p class="role-more">{t.roles.more}<a href={p('/roles/')}>{t.roles.moreLink}</a></p>
+    </div>
+  </section>
+
+  <section class="sec" id="cards" aria-labelledby="cards-h">
+    <div class="wrap center">
+      <div class="eyebrow">{t.cards.eyebrow}</div>
+      <h2 class="h2" id="cards-h">{t.cards.title}</h2>
+      <p class="sub">{t.cards.sub}</p>
+      <ol class="rail" style="--n:5">
+        {t.cards.steps.map(([h, d], i) => (
+          <li class:list={['step', { on: i === 2 || i === 3 }]}><div class="n" aria-hidden="true">{i + 1}</div><h3>{h}</h3><p>{d}</p></li>
+        ))}
+      </ol>
+      <div class="deck">
+        {t.cards.deck.map((c, i) => (
+          <div class:list={['dcard', { sel: i === 1 }]}>
+            <div class="dcard-h"><span class:list={['chip', c.tone]}>{c.chip}</span><span class:list={['chip', i === 1 ? 'plain end' : 'warn']}>{c.due}</span></div>
+            <div class="dcard-b">
+              <h4>{c.title}</h4>
+              {'amount' in c ? <div class="big-num">{c.amount}</div> : <div class="quote">{'body' in c ? c.body : ''}</div>}
+            </div>
+            <div class="dcard-f" aria-hidden="true">{c.actions.map((a) => <span>{a}</span>)}</div>
+          </div>
+        ))}
+      </div>
+      <p class="never"><Icon name="shield" />{t.cards.never}</p>
+    </div>
+  </section>
+
+  <section class="sec sec-alt" id="local" aria-labelledby="local-h">
+    <div class="wrap local">
+      <div>
+        <div class="eyebrow">{t.local.eyebrow}</div>
+        <h2 class="h2" id="local-h">{t.local.title.map((l, i) => <>{l}{i === 0 && <br />}</>)}</h2>
+        <p class="sub">{t.local.sub}</p>
+      </div>
+      <div class="promises">
+        {t.local.promises.map((pr) => (
+          <div class="promise">
+            <div class="role-ic"><Icon name={pr.icon as 'laptop'} /></div>
+            <h3>{pr.h}{'hint' in pr && pr.hint !== undefined && <Hint text={pr.hint} />}</h3>
+            <p>{pr.p}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  </section>
+
+  <section class="sec" id="free" aria-labelledby="free-h">
+    <div class="wrap center">
+      <div class="eyebrow">{t.free.eyebrow}</div>
+      <h2 class="h2" id="free-h">{t.free.title}</h2>
+      <p class="sub">{t.free.sub}</p>
+      <table class="cmp">
+        <thead><tr>{t.free.head.map((h) => <th scope="col">{h}</th>)}</tr></thead>
+        <tbody>
+          {t.free.rows.map(([k, them, us]) => (
+            <tr><th scope="row">{k}</th><td class="them">{them}</td><td class="us"><Icon name="check" />{us}</td></tr>
+          ))}
+        </tbody>
+      </table>
+      <p class="fine">{t.free.fine}</p>
+    </div>
+  </section>
+
+  <section class="sec base" id="base" aria-labelledby="base-h">
+    <div class="wrap">
+      <div class="base-head">
+        <div class="eyebrow">{t.base.eyebrow}</div>
+        <h2 class="h2" id="base-h">{t.base.title.map((l, i) => <>{l}{i === 0 && <br />}</>)}</h2>
+        <p class="sub">{t.base.sub}</p>
+      </div>
+      <div class="base-grid">
+        <div class="stack" role="img" aria-label={t.base.stackLabel}>
+          <div class="lay team-l"><span class="ln">{t.base.team}</span><ul class="chips">{t.base.teamChips.map((c) => <li>{c}</li>)}</ul></div>
+          <div class="five">
+            <span class="five-label">{t.base.rebuilt}</span>
+            {t.base.layers.map(([n, d]) => <div class="lay"><span class="ln">{n}</span><p>{d}</p></div>)}
+          </div>
+          <div class="lay harness"><span class="ln">{t.base.harness[0]}</span><p>{t.base.harness[1]}</p></div>
+        </div>
+        <div class="upd">
+          <h3>{t.base.updTitle} <span class="ar" aria-hidden="true">→</span> {t.base.updTitle2}</h3>
+          <ol class="tl">
+            {t.base.timeline.map(([d, h, s]) => <li><time datetime={d}>{d}</time><b>{h}</b><span>{s}</span></li>)}
+          </ol>
+          <div class="oss">
+            <p><b>{t.base.oss[0]}</b>{t.base.oss[1]}</p>
+            <div class="cta-row" style="margin:0">
+              <a class="btn btn-primary" href={GITHUB_URL} rel="noopener"><Icon name="github" />{t.base.star}</a>
+              <a class="btn btn-ghost" href={ARCHITECTURE_URL} rel="noopener">{t.base.arch}</a>
+            </div>
+          </div>
+          <div class="term" aria-hidden="true">
+            <div class="term-bar"><i></i><i></i><i></i></div>
+            <pre><span class="t-dim">$</span> <span class="t-hi">pnpm simulate --pack packs/dtc-3c-3p</span>
+<span class="t-ok">PASS</span>  {t.base.term[0]}
+<span class="t-dim">  {t.base.term[1]}</span></pre>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec sec-alt" id="credits" aria-labelledby="credits-h">
+    <div class="wrap center">
+      <div class="eyebrow">{t.credits.eyebrow}</div>
+      <h2 class="h2" id="credits-h">{t.credits.title}</h2>
+      <p class="sub">{t.credits.sub}</p>
+      <div class="plans">
+        {[t.credits.open, t.credits.paid].map((pl, i) => (
+          <div class:list={['plan', { sel: i === 1 }]}>
+            <div class="tag">{pl.tag}</div>
+            <div class="price">{pl.price}<small>{pl.unit}</small></div>
+            <ul>{pl.items.map((it) => <li><Icon name="check" />{it}</li>)}</ul>
+            <a class:list={['btn', i === 1 ? 'btn-primary' : 'btn-ghost']} href={i === 1 ? p('/pricing/') : p('/download/')}>{pl.cta}</a>
+          </div>
+        ))}
+      </div>
+    </div>
+  </section>
+
+  <section class="sec" id="log" aria-labelledby="log-h">
+    <div class="wrap center">
+      <div class="eyebrow">{t.log.eyebrow}</div>
+      <h2 class="h2" id="log-h">{t.log.title}</h2>
+      <p class="sub">{t.log.sub}</p>
+      <ul class="logs">
+        {logs.map((l) => (
+          <li><a class="log" href={`${p('/changelog/')}#${l.id}`}><time datetime={l.date}>{l.date.slice(5)}</time><h3>{l.title}</h3><p>{l.summary}</p></a></li>
+        ))}
+      </ul>
+      <p class="logs-all"><a href={p('/changelog/')}>{t.log.all}</a></p>
+    </div>
+  </section>
+
+  <section class="sec sec-alt" id="faq" aria-labelledby="faq-h">
+    <div class="wrap center">
+      <h2 class="h2" id="faq-h">{t.faq.title}</h2>
+      <div class="faq">
+        {t.faq.items.map(([q, a], i) => <details open={i === 0}><summary>{q}</summary><p>{a}</p></details>)}
+      </div>
+    </div>
+  </section>
+
+  <section class="final">
+    <div class="wrap">
+      <Mark id="final" kind="static" />
+      <h2>{t.final.title}</h2>
+      <p class="sub" style="margin:0 auto">{t.final.sub}</p>
+      <div class="cta-row">
+        <a class="btn btn-primary" href={p('/download/')}><Icon name="download" />{t.final.download}</a>
+        <a class="btn btn-ghost" href={p('/docs/')}>{t.final.docs}</a>
+      </div>
+    </div>
+  </section>
+</Base>

@@ -1,0 +1,26 @@
+{
+  "name": "@agentsws/site",
+  "version": "0.0.0",
+  "private": true,
+  "description": "官网 agentsws.com（WP197）：只放公开页面，纯静态，零后端；登录 / 账号 / 充值只是跳 cloud.agentsws.com 的链接",
+  "license": "Apache-2.0",
+  "type": "module",
+  "scripts": {
+    "dev": "node scripts/astro.mjs dev",
+    "build": "tsc -b ../../packages/brand && node scripts/astro.mjs build",
+    "preview": "node scripts/astro.mjs preview",
+    "og": "node scripts/og.mjs",
+    "deploy:check": "WRANGLER_SEND_METRICS=false wrangler deploy --dry-run",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@agentsws/brand": "workspace:*",
+    "@fontsource/outfit": "^5.3.0",
+    "astro": "7.3.5",
+    "sharp": "0.35.4"
+  },
+  "devDependencies": {
+    "@agentsws/contracts": "workspace:*",
+    "wrangler": "^4.134.0"
+  }
+}

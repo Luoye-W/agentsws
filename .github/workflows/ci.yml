@@ -56,6 +56,18 @@ jobs:
       - name: biome check
         run: pnpm exec biome check .
 
+      # WP197：官网 apps/site 只构建、不部署（部署由 Fable 找 Luoye 确认后手动做）。
+      # CI 里不打网取价目（AGENTSWS_SITE_OFFLINE=1 → 用仓库样例），构建结果不随云上改价而变；
+      # 取价目那段逻辑由 apps/site/test 覆盖。wrangler dry-run 只校验部署配置，不上传。
+      - name: site build（官网，只构建不部署）
+        if: matrix.os == 'ubuntu-latest'
+        env:
+          AGENTSWS_SITE_OFFLINE: '1'
+          WRANGLER_SEND_METRICS: 'false'
+        run: |
+          pnpm --filter @agentsws/site build
+          pnpm --filter @agentsws/site exec wrangler deploy --dry-run
+
       # WP33：SDK 是从路由声明生成并签进仓库的。这里重生成一遍再比 diff——
       # 「改了路由但忘了重生成」会红在这里，而不是等第三方接的时候才发现。
       - name: gen-sdk（生成后无 diff）

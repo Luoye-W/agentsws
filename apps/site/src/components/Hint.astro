@@ -1,0 +1,9 @@
+---
+/** 问号提示：悬停或用键盘聚焦时显示一句话（docs/36 §7：短的进问号）。 */
+interface Props {
+  text: string
+  label?: string
+}
+const { text, label = '?' } = Astro.props
+---
+<button class="hint" type="button" aria-label={text}>{label}<span class="tip" aria-hidden="true">{text}</span></button>

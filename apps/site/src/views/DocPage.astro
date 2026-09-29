@@ -1,0 +1,58 @@
+---
+/** 一篇教程：左边目录（全部教程）、中间正文（docs/help 原文，安全渲染）、右边本页目录。 */
+import { GITHUB_URL } from '../config.js'
+import type { Lang } from '../i18n/common.js'
+import { PAGES } from '../i18n/pages.js'
+import Base from '../layouts/Base.astro'
+import { HELP_DIR, helpGroup, helpSlugs, loadHelp } from '../lib/help.js'
+import { docHref } from '../lib/markdown.js'
+import '../styles/pages.css'
+
+interface Props {
+  lang: Lang
+  slug: string
+}
+const { lang, slug } = Astro.props
+const t = PAGES[lang].docs
+const slugs = helpSlugs()
+const all = slugs.map((s) => loadHelp(s, lang))
+const doc = all.find((d) => d.slug === slug)
+if (doc === undefined) throw new Error(`没有这一篇教程：${slug}`)
+const i = slugs.indexOf(slug)
+const prev = i > 0 ? all[i - 1] : undefined
+const next = i < all.length - 1 ? all[i + 1] : undefined
+const order = ['start', 'models', 'connect', 'channels', 'tools'] as const
+const source = `${GITHUB_URL}/blob/main/${HELP_DIR}/${lang === 'en' ? `${slug}.en.md` : `${slug}.md`}`
+const brand = lang === 'zh' ? 'Agents 工坊' : 'Agents Workshop'
+---
+<Base lang={lang} path={`/docs/${slug}/`} title={`${doc.title} · ${brand}`} description={doc.summary.slice(0, 160)} og="docs" current="docs">
+  <div class="wrap doc-shell">
+    <nav class="doc-nav" aria-label={t.all}>
+      {order.map((g) => {
+        const list = all.filter((d) => helpGroup(d.slug) === g)
+        return list.length === 0 ? null : (
+          <>
+            <h2>{t.groups[g]}</h2>
+            <ul>{list.map((d) => <li><a href={docHref(d.slug, lang)} aria-current={d.slug === slug ? 'page' : undefined}>{d.title}</a></li>)}</ul>
+          </>
+        )
+      })}
+    </nav>
+    <article class="doc-main">
+      <div class="eyebrow">{t.eyebrow}</div>
+      <h1>{doc.title}</h1>
+      <div class="prose" set:html={doc.html} />
+      <div class="doc-foot">
+        {prev ? <a href={docHref(prev.slug, lang)}>← {t.prev}：{prev.title}</a> : <span />}
+        {next ? <a href={docHref(next.slug, lang)}>{t.next}：{next.title} →</a> : <span />}
+        <a class="edit" href={source} rel="noopener">{t.edit}</a>
+      </div>
+    </article>
+    {doc.toc.length > 1 && (
+      <aside class="doc-toc">
+        <h2>{t.toc}</h2>
+        <ul>{doc.toc.map((h) => <li><a href={`#${h.id}`}>{h.text}</a></li>)}</ul>
+      </aside>
+    )}
+  </div>
+</Base>
