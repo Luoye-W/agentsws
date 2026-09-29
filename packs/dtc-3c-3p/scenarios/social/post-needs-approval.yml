@@ -19,11 +19,13 @@ actors: {}
 stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
 clock: { start: '2026-09-07T09:00:00+08:00' }
 events:
-  # 李默（运营，兼着社媒运营的 Meta 那条职责）排一条周四的内容
+  # 李默（运营，兼着社媒运营的 Meta 那条职责）排一条周四的内容。
+  # WP191（docs/86 §6）：pack 里他挂的还是老的 `social.meta`，模拟世界装配时照服务进程的规矩
+  # 拆成 FB 主页 + IG；直播预告发在 FB 主页上，所以渠道写 `facebook`
   - at: '+0m'
     social.post:
       who: p_li
-      channel: meta
+      channel: facebook
       body: 周四晚八点开一场桌面收纳直播，来的人送线材收纳夹。
       scheduled_at: '2026-09-10T12:00:00.000Z'
       level: L3

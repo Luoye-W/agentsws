@@ -80,7 +80,8 @@ const POSITIONS: OnboardingPositionView[] = [
     id: 'social-media',
     name: '社媒运营',
     roles: [
-      { id: 'social.meta', name: 'Meta', default: true, what_it_does: '发帖与回评论。' },
+      // WP191（docs/86 §5）：Meta 拆成 FB 主页 + IG，IG 那条单独勾
+      { id: 'social.instagram', name: 'Instagram', default: true, what_it_does: '发帖与回评论。' },
       { id: 'social.tiktok', name: 'TikTok', default: true, what_it_does: '发短视频。' },
       { id: 'social.reddit', name: 'Reddit', default: false, what_it_does: '看版聊。' },
     ],
@@ -989,7 +990,7 @@ describe('70 §5 第 ③ 步：按分析结果预勾', () => {
   it('对照表：社媒勾到渠道；自定义岗位名不预填（WP142：不替他起名）', () => {
     const pick = presetPick({ run: websiteRun(), positions: POSITIONS })
     expect(pick.position_ids).toEqual(['web-ops', 'customer-care'])
-    expect(pick.role_ids).toEqual(['social.meta', 'social.tiktok'])
+    expect(pick.role_ids).toEqual(['social.instagram', 'social.tiktok'])
     expect(pick.custom_position_name).toBe('')
   })
 

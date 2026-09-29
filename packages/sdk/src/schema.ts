@@ -42071,6 +42071,10 @@ export interface operations {
             | 'tiktok'
             | 'x'
             | 'youtube'
+            | 'facebook'
+            | 'instagram'
+            | 'threads'
+            | 'linkedin'
             | 'facebook_group'
             | 'reddit'
             | 'discord'
@@ -42263,7 +42267,17 @@ export interface operations {
         'application/json': {
           account_id: string
           /** @enum {string} */
-          kind: 'post' | 'image' | 'video' | 'short' | 'story' | 'thread' | 'poll'
+          kind:
+            | 'post'
+            | 'image'
+            | 'video'
+            | 'short'
+            | 'story'
+            | 'thread'
+            | 'poll'
+            | 'reel'
+            | 'carousel'
+            | 'document'
           body: string
           scheduled_at?: string
           media_refs?: string[]

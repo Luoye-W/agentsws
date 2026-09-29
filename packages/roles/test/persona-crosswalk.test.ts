@@ -68,7 +68,8 @@ describe('跨岗位禁语：每条职责都写死了转给谁（69 §2 第三段
 
   it('社媒那九条：客户问题一律转客服，哪怕它出现在评论区 / 群里', () => {
     const social = loadBundledRoles().filter((r) => r.domain === 'social')
-    expect(social).toHaveLength(9)
+    // WP191：九条 + FB 主页 / IG / Threads / LinkedIn（老的 `social.meta` 文件还在）
+    expect(social).toHaveLength(13)
     for (const role of social) {
       const seg = notYours(role.id)
       expect(seg, role.id).toContain('客服')
@@ -142,7 +143,12 @@ describe('路由那一半：每个岗位一句典型任务落到对的职责上�
     ['kol-marketing', '在油管上找 20 个粉丝一万到十万的频道，按匹配度排给我', 'kol.youtube'],
     ['customer-care', '客服邮箱里有一笔拒付争议，帮我准备材料', 'dtc.support'],
     ['web-ops', '把 A 商品降价 10%', 'dtc.store'],
-    ['social-media', '给我们自己的 Instagram 账号排一条本周的帖子', 'social.meta'],
+    // WP191：Meta 拆开之后这句落在 IG 那条上（之前是 `social.meta`）
+    ['social-media', '给我们自己的 Instagram 账号排一条本周的帖子', 'social.instagram'],
+    ['social-media', '给 FB 主页排一条周四的直播预告', 'social.facebook'],
+    ['social-media', '给 Threads 写一条帖子引大家聊聊线材收纳', 'social.threads'],
+    ['social-media', '在我们的 LinkedIn 公司主页发一条观点帖', 'social.linkedin'],
+    ['social-media', '给推特排三条推文', 'social.x'],
     ['pr', '看看最近外面有没有人在提我们，负面的挑出来', 'pr.monitoring'],
   ]
 
@@ -177,4 +183,31 @@ describe('路由那一半：每个岗位一句典型任务落到对的职责上�
     // 客服的四条职责动作与额度逐字相同，分开它们的只有渠道——不带渠道就该问一句
     expect(routeWithinPosition('客户问退款什么时候到账', profiles).ambiguous).toBe(true)
   })
+})
+
+describe('WP191（docs/86 §5）同一个平台名、三个岗位：社媒 / 红人 / 投放 / B2B 的判据分得开', () => {
+  // 同一个人同时挂着这四个岗位：所有职责放在一起比，**第一名**必须是对的那条
+  // （跨岗位时份额被几十条职责摊薄，是否"判得准"由秘书先选岗位，这里只钉排序）。
+  const profiles = ['social-media', 'kol-marketing', 'ads', 'b2b'].flatMap((position_id) =>
+    loadBundledPosition(position_id).roles.map((r) => {
+      const def = loadBundledRole(r.role)
+      return {
+        role_id: def.id,
+        role_name: def.name.zh,
+        terms: roleRouteTerms(def),
+        positions: [{ position_id, person_id: 'p_wang' }],
+      }
+    }),
+  )
+  const cases: [string, string][] = [
+    ['IG 帖子下面的评论回一下', 'social.instagram'],
+    ['找 20 个 IG 红人', 'kol.instagram'],
+    ['IG 广告预算加一点', 'ads.meta'],
+    ['在 LinkedIn 上找采购经理加好友', 'b2b.outbound'],
+    ['在 LinkedIn 公司主页发一条观点帖', 'social.linkedin'],
+  ]
+  for (const [text, expected] of cases)
+    it(`「${text}」→ 第一名是 ${expected}`, () => {
+      expect(routeWithinPosition(text, profiles).candidates[0]?.role_id).toBe(expected)
+    })
 })

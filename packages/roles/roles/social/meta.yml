@@ -1,5 +1,21 @@
 # 56 §2 社媒运营的第 1 条职责：**Meta 社媒运营**（FB 主页 + IG）（WP72）。
 #
+# ── WP191（docs/86 §5 / §6，Luoye 09-29）：**这一条已经拆成 `social.facebook` +
+# `social.instagram` 两条**（Threads 另起一条 `social.threads`，不从这里分）。
+#
+# 文件留着（只加不删）：老工作区的分配、审批、事件、帖子上写着 `social.meta`，
+# 读的时候要认得它。但：
+#
+# - 岗位模板 `social-media.yml` 与 `SEED_POSITIONS` 里**不再有它**——新建岗位不会再出现
+#   「Meta 社媒运营」；契约上它标了 `superseded_by: [facebook, instagram]`。
+# - 已有的活分配在**进程启动时**迁走（`packages/roles` 的 `ROLE_ID_SPLITS` +
+#   `assignments.splitRoleIds()`）：原分配就地改成 `social.facebook`（id 不变，待办、卡、
+#   队列、定时任务、交接都跟着它），再复制一条 `social.instagram`。可重复跑、不丢数据。
+#
+# 下面是 WP72 的原文，一个字没改——拆开之前它就是这个样子。
+#
+# ────────────────────────────────────────────────────────────────────────
+#
 # 内容账号组四条职责的骨架**完全相同**（56 §2 上半行），不同的只有三样：
 # 渠道连接器、grounding 的意图词、还有下面那一段"这条渠道特有的部分"。
 #

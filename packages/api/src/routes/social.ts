@@ -389,7 +389,19 @@ const ThreadBody = z.object({
   created_at: z.string().min(1).max(40).optional(),
 })
 
-const KINDS = ['post', 'image', 'video', 'short', 'story', 'thread', 'poll'] as const
+const KINDS = [
+  'post',
+  'image',
+  'video',
+  'short',
+  'story',
+  'thread',
+  'poll',
+  // WP191（docs/86 §3）：Reels / 轮播 / LinkedIn 文档帖
+  'reel',
+  'carousel',
+  'document',
+] as const
 
 const PostBody = z.object({
   account_id: z.string().min(1),

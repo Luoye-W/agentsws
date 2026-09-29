@@ -51,6 +51,9 @@ export const ROLE_CONNECTOR_KIND: Readonly<Record<string, string>> = {
   discord_bot: 'discord_bot',
   telegram_bot: 'telegram_bot',
   whatsapp_business: 'whatsapp_business',
+  // WP191（docs/86 §5）：Threads 与 LinkedIn 各一张（FB 主页与 IG 共用上面那行 `meta_graph`）
+  threads_api: 'threads_api',
+  linkedin_api: 'linkedin_api',
   // WP78（60 §5）：品牌监控的 RSS 入口。service 名与 kind 同名。
   //
   // `reddit` **就是上面那一行**——60 分界行：`social.reddit` 是我们自己的版、
@@ -481,6 +484,103 @@ export const SOCIAL_CONNECTORS: readonly CatalogEntry[] = [
     },
     data_note:
       '没连也能排内容、写草稿、攒审批——真发出去那一跳才需要它。发布权限还在审核里的时候，到点了我们提醒你去后台手工发一下，不会假装已经发出去了。',
+  },
+  /*
+   * WP191（docs/86 §4 / §5）：Threads 与 LinkedIn 各一张新卡。
+   *
+   * FB 主页与 IG 仍共用上面那张 `meta_graph`（连一次、批一次）；Threads 的授权是另一套
+   * （单独用例、单独令牌），主页令牌调不动 graph.threads.net，所以是自己一张。
+   * LinkedIn 原来**没有**卡（B2B 那边只出人工任务，不连接口）。
+   */
+  {
+    service: 'threads_api',
+    upstream: 'local',
+    label: 'Threads API',
+    auth: 'api_key',
+    store: 'local_vault',
+    data_sources: ['social_threads'],
+    smoke_hints: ['get_profile', 'list_threads'],
+    fields: [
+      {
+        name: 'access_token',
+        label: '长期访问令牌',
+        secret: true,
+        required: true,
+        kind: 'password',
+        hint: 'Threads 自己的长期令牌（60 天有效，要续）。与 FB / IG 那把主页令牌不是一把。只存在这台电脑的加密库里',
+      },
+      {
+        name: 'threads_user_id',
+        label: 'Threads 账号 id',
+        secret: false,
+        required: true,
+        kind: 'text',
+        placeholder: '26000000000000000',
+      },
+    ],
+    setup_guide: {
+      summary:
+        'Threads 的授权**与 FB / IG 分开**：同一个 Meta 应用里要单独加「Threads 用例」、单独换令牌（长期令牌 60 天要续）。发帖与管回复的权限都要过 App Review。正文一条 500 字、最多 5 个链接、一个话题标签——超了的我们起草时就指出来，不打那一跳。',
+      steps: [
+        '在 Meta 开发者后台的应用里加上「Threads 用例」（和 FB / IG 可以是同一个应用）',
+        '申请 threads_basic / threads_content_publish / threads_manage_replies（**要过审核**）',
+        '走 Threads 的授权换一把长期令牌，并抄下你的 Threads 账号 id',
+        '把令牌与 id 填进下面的表单——只存在这台电脑上',
+      ],
+      links: [{ label: 'Threads API 文档', url: 'https://developers.facebook.com/docs/threads' }],
+    },
+    data_note:
+      '没连也能排内容、写草稿、攒审批——真发出去那一跳才需要它。令牌过期（60 天）时我们说"去重新授权"，不是"连接失败"。',
+  },
+  {
+    service: 'linkedin_api',
+    upstream: 'local',
+    label: 'LinkedIn（公司主页 + 本人号）',
+    auth: 'api_key',
+    store: 'local_vault',
+    data_sources: ['social_linkedin'],
+    smoke_hints: ['list_posts'],
+    fields: [
+      {
+        name: 'access_token',
+        label: '访问令牌',
+        secret: true,
+        required: true,
+        kind: 'password',
+        hint: '本人号要带 w_member_social；公司主页要带 w_organization_social（要过审核）。只存在这台电脑的加密库里',
+      },
+      {
+        name: 'author_urn',
+        label: '以谁的名义发',
+        secret: false,
+        required: true,
+        kind: 'text',
+        placeholder: 'urn:li:organization:12345',
+        hint: '公司主页填 urn:li:organization:…，本人号填 urn:li:person:…',
+      },
+    ],
+    setup_guide: {
+      summary:
+        '**本人号发帖自助开通；公司主页发帖要过 Community Management API 审核**（授权的人还得是主页管理员），多数小公司批不下来——批不下来时，到点那条已批准的帖子会变成一条「复制文案去 LinkedIn 发」的待办，不会悄悄没发。**不抓取、不自动加人、不自动私信**：LinkedIn 用户协议禁止任何自动化手段做这些事；找客户那一摊在 B2B 岗位，那边也只出本人去做的任务。',
+      steps: [
+        '到 LinkedIn 开发者后台建一个应用，关联你的公司主页',
+        '本人号：加上「Share on LinkedIn」产品（w_member_social）；公司主页：申请 Community Management API（审核制）',
+        '走 OAuth 换一把访问令牌',
+        '把令牌与作者 URN 填进下面的表单——只存在这台电脑上',
+      ],
+      links: [
+        {
+          label: 'Posts API 文档',
+          url: 'https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/posts-api',
+        },
+        {
+          label: '访问级别说明',
+          url: 'https://learn.microsoft.com/en-us/linkedin/marketing/increasing-access',
+        },
+      ],
+    },
+    data_note:
+      '没连、没批、或帖子带图 / 文档（这一版还不能代发）时，到点给持有 LinkedIn 那条职责的人开一条待办：文案已排好，复制去发、发完点完成。',
   },
   {
     service: 'tiktok_content',

@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import {
+  ACTIVE_SOCIAL_CHANNELS,
+  ACTIVE_SOCIAL_ROLE_IDS,
   KOL_CHANNELS,
   SOCIAL_CHANNEL_IDS,
   SOCIAL_CHANNELS,
   SOCIAL_ROLE_IDS,
+  socialChannelHeirs,
   socialChannelOfRole,
   socialChannelSpec,
   socialChannelsOfGroup,
@@ -16,6 +19,11 @@ describe('56 §1 / §2 九条渠道的常量表（WP72）', () => {
       'tiktok',
       'x',
       'youtube',
+      // WP191（docs/86）：内容账号组末尾加四条，只加不改
+      'facebook',
+      'instagram',
+      'threads',
+      'linkedin',
       'facebook_group',
       'reddit',
       'discord',
@@ -30,6 +38,10 @@ describe('56 §1 / §2 九条渠道的常量表（WP72）', () => {
       'tiktok',
       'x',
       'youtube',
+      'facebook',
+      'instagram',
+      'threads',
+      'linkedin',
     ])
     expect(socialChannelsOfGroup('community')).toHaveLength(5)
   })
@@ -68,5 +80,33 @@ describe('56 §1 / §2 九条渠道的常量表（WP72）', () => {
 
   it('不认识的渠道回 undefined，不编一条出来', () => {
     expect(socialChannelSpec('mastodon')).toBeUndefined()
+  })
+})
+
+describe('WP191（docs/86 §5 / §6）Meta 拆成三条、加 LinkedIn', () => {
+  it('meta 不删，标 superseded_by：FB 主页 + IG 接手；新建岗位只读还在用的那一份', () => {
+    expect(socialChannelHeirs('meta')).toEqual(['facebook', 'instagram'])
+    expect(socialChannelHeirs('facebook')).toBeUndefined()
+    expect(ACTIVE_SOCIAL_CHANNELS.map((c) => c.id)).not.toContain('meta')
+    expect(ACTIVE_SOCIAL_ROLE_IDS).not.toContain('social.meta')
+    expect(ACTIVE_SOCIAL_ROLE_IDS).toHaveLength(SOCIAL_CHANNELS.length - 1)
+    // 接手的渠道都在表里，而且自己不是老渠道
+    for (const heir of socialChannelHeirs('meta') ?? [])
+      expect(socialChannelSpec(heir)?.superseded_by).toBeUndefined()
+  })
+
+  it('FB 与 IG 共用一张 meta_graph（连一次、批一次）；Threads 与 LinkedIn 各一张新卡', () => {
+    expect(socialChannelSpec('facebook')?.connector_kind).toBe('meta_graph')
+    expect(socialChannelSpec('instagram')?.connector_kind).toBe('meta_graph')
+    expect(socialChannelSpec('meta')?.connector_kind).toBe('meta_graph')
+    expect(socialChannelSpec('threads')?.connector_kind).toBe('threads_api')
+    expect(socialChannelSpec('linkedin')?.connector_kind).toBe('linkedin_api')
+  })
+
+  it('LinkedIn：申请制 + 到点发不出去变待办；别的渠道没有这一格', () => {
+    expect(socialChannelSpec('linkedin')?.api_access).toBe('apply')
+    expect(socialChannelSpec('linkedin')?.publish_fallback).toBe('manual_task')
+    for (const c of SOCIAL_CHANNELS.filter((x) => x.id !== 'linkedin'))
+      expect(c.publish_fallback, c.id).toBeUndefined()
   })
 })

@@ -525,7 +525,7 @@ async function seedCardGallery(world: World): Promise<void> {
     ...base,
     kind: 'staged_change',
     subject: { object: { type: 'post', id: 'post_unbox' } },
-    ...routed(at('social.meta')), // IG 帖子归内容账号组
+    ...routed(at('social.instagram')), // IG 帖子归 IG 那条（WP191 之前是 `social.meta`）
     // 写类卡的 provenance 必查：target 没在 `seen` 里，precheck 当场判 blocked
     evidence: { ...base.evidence, provenance: { seen: [{ type: 'post', id: 'post_unbox' }] } },
     dedupe_key: `gallery_social_post:${world.workspace_id}:1`,
@@ -1167,7 +1167,9 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
     // 客服岗位四条（`dtc.support` / `dtc.community-support` 由 pack 挂）
     'dtc.live-chat',
     'amz.support',
-    'social.meta',
+    // WP191（docs/86 §5）：原来的 `social.meta` 拆成 FB 主页 + IG 两条
+    'social.facebook',
+    'social.instagram',
     'social.discord',
     'pr.monitoring',
     'pr.reddit',

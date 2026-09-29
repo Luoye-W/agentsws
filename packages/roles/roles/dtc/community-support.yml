@@ -73,6 +73,9 @@ connectors:
   - { kind: tiktok_content, required: false, grants: [manage_comments], ownership: workspace }
   - { kind: x_api, required: false, grants: [read_tweets, publish_tweets], ownership: workspace }
   - { kind: youtube_data, required: false, grants: [manage_comments], ownership: workspace }
+  # WP191（docs/86 §5）：Threads 自己一张卡（授权与 FB / IG 分开）。LinkedIn 那张不挂：
+  # 读写评论在 Community Management API 后面，这边回不了——转客服卡照样进得来
+  - { kind: threads_api, required: false, grants: [manage_replies], ownership: workspace }
   - { kind: reddit, required: false, grants: [read_posts, submit, privatemessages], ownership: workspace }
   - { kind: discord_bot, required: false, grants: [read_messages, send_messages], ownership: workspace }
   - { kind: telegram_bot, required: false, grants: [read_updates, send_messages], ownership: workspace }

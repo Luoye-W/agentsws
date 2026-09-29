@@ -81,6 +81,7 @@ import {
   KOL_LOOKUP_CAPABILITY,
   PR_ROLE_IDS,
   SOCIAL_ROLE_IDS,
+  socialChannelSpec,
 } from '@agentsws/contracts'
 import { evaluateGuardrail, extractFigures, resolveTimeZone, uncitedFigures } from '@agentsws/core'
 import { createDataStore, type SqliteDataStore } from '@agentsws/data'
@@ -132,7 +133,7 @@ import {
 import { siteDesignPrompt, themeDesignVariables } from '@agentsws/site-core'
 import { createSkills, readBundledSkill, type Skills } from '@agentsws/skills'
 // WP74（37 §2.5）：统一日历里社媒那一层的撞车说明，判据只有 social-core 这一份
-import { scheduleConflicts } from '@agentsws/social-core'
+import { scheduleConflicts, scheduleRulesFor } from '@agentsws/social-core'
 import { detectAnsweredBoundaries, SUPPORT_BOUNDARIES } from '@agentsws/support-core'
 import { createTxn, SqliteTxnStore, type Txn } from '@agentsws/txn'
 import { createWork, SqliteWorkStore, type Work } from '@agentsws/work'
@@ -398,7 +399,12 @@ import { claimRuleCard, createSeoService, pickRoleHolder } from './seo-service.j
 import type { BrokerFetch } from './shopify-broker.js'
 import { createShopifyDevMcp } from './shopify-devmcp.js'
 import { createConnectSiteFacts, createSiteService, createSiteStore, seedDemoSite } from './site.js'
-import { createSocialStore, seedDemoSocial, socialDeckData } from './social.js'
+import {
+  createSocialStore,
+  migrateSupersededChannels,
+  seedDemoSocial,
+  socialDeckData,
+} from './social.js'
 // WP73（56 §6）：九条渠道真打出去的那一跳 + 社媒库的 /v1 面
 import { createSocialChannels, type SocialFetch } from './social-channels.js'
 import { createSocialService } from './social-service.js'
@@ -546,10 +552,16 @@ export const BUNDLED_ROLES = [
   // WP72（56 §2）：社媒运营岗位的九条渠道职责 + 客服岗位新加的第四条。
   // 与红人那五条同一条理由：种岗位那一步会把解析不到的职责筛掉，
   // 少一条，首次设置向导里的"社媒运营"就少一个勾。
+  // WP191（docs/86 §6）：`social.meta` 留着——老工作区的分配启动时才迁走，迁之前得读得进来
   'social.meta',
   'social.tiktok',
   'social.x',
   'social.youtube',
+  // WP191（docs/86 §5）：Meta 拆成 FB 主页 + IG，另加 Threads 与 LinkedIn
+  'social.facebook',
+  'social.instagram',
+  'social.threads',
+  'social.linkedin',
   'social.facebook-group',
   'social.reddit',
   'social.discord',
@@ -1159,7 +1171,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   // 只在这里做，不在职责包里做：`packages/roles` 不认事件日志，而改名是一次变更，
   // 15 §1 的底线是"变更必须留痕"。迁移本身幂等（没有旧 id 的库跑一遍什么也不发生），
   // 所以每次起进程都跑得起，不需要一张"迁过没有"的标记表。
-  for (const migrated of roles.assignments.migrateRoleIds()) {
+  // WP191（docs/86 §6）：**一拆几**的旧职责（`social.meta` → FB 主页 + IG）先迁，再迁一对一改名的。
+  // 原分配就地改成第一条（id 不变：待办、卡、队列、定时任务、交接都跟着它），其余各复制一条；
+  // 复制那条的事件多一格 `split_from`。幂等，与下面那一段同一条理由每次起进程都跑得起。
+  const migrations = [...roles.assignments.splitRoleIds(), ...roles.assignments.migrateRoleIds()]
+  for (const migrated of migrations) {
     appendEvent({
       schema_version: 1,
       workspace_id: migrated.workspace_id,
@@ -1172,6 +1188,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         from: migrated.from,
         to: migrated.to,
         role_version: migrated.role_version,
+        ...(migrated.split_from === undefined ? {} : { split_from: migrated.split_from }),
       },
     })
   }
@@ -2108,6 +2125,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       workspace_id: ws,
       ...(dir === undefined ? {} : { dbDir: dir }),
     })
+    // WP191（docs/86 §6）：老库里 `channel: 'meta'` 的账号 / 帖子 / 线程迁到 FB 主页或 IG（按 URL 判）。
+    // 幂等，每次建这个品牌的模块都跑得起；与分配那一段迁移是同一次拆分的两个面。
+    migrateSupersededChannels(social)
     /**
      * WP78（60 §5 数据面）：这个品牌的公关库（四类对象，落在这个品牌自己的目录下）。
      * 与红人库、社媒库并排建，理由一样：品牌 A 的媒体名单、稿子与提及，
@@ -2297,6 +2317,31 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       owner: async () => (await identity.getWorkspace(ws))?.owner_id,
       appendEvent,
       random,
+      /*
+       * WP191（docs/86 §4）：LinkedIn 那条到点发不出去（没连 / 没批 / 带素材还不能代发）时，
+       * 开一条「复制文案去 LinkedIn 发」的待办，落在**持有这条职责的人**头上。
+       * `workRef` 晚绑定（它在下面才建出来，同 `work: () => workRef` 那一处）；定时发布那一跳
+       * 远在装配完成之后，那时它一定在了。没人持有这条职责就不开（照旧只记一句"没发"）。
+       */
+      manualPublishTask: ({ post, channel_label, reason }) => {
+        const spec = socialChannelSpec(post.channel)
+        const holder =
+          spec === undefined
+            ? undefined
+            : roles.assignments
+                .listByRole(spec.role_id)
+                .find((a) => a.workspace_id === ws && a.revoked_at === undefined)
+        if (workRef === undefined || holder === undefined) return undefined
+        const todo = workRef.createTodo({
+          title: `复制文案去 ${channel_label} 发`,
+          owner: holder.person_id,
+          note: `${post.body}\n\n——\n原定时间：${post.scheduled_at ?? '批了就发'}。没自动发出去的原因：${reason}`,
+          horizon: 'today',
+          source: 'card',
+          position_id: holder.id,
+        })
+        return { todo_id: todo.id }
+      },
     })
 
     /**
@@ -5684,7 +5729,12 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
                     body: p.body,
                   },
                   brand.social.posts(),
-                  { now: clock.now(), tz_offset_minutes: workData.tz_offset_minutes },
+                  {
+                    now: clock.now(),
+                    tz_offset_minutes: workData.tz_offset_minutes,
+                    // WP191：每日上限按渠道取（与卡面那一份同一个判据）
+                    rules: scheduleRulesFor(p.channel),
+                  },
                 ).map((h) => h.message),
               }),
         })),

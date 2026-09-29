@@ -31,6 +31,7 @@ export {
   parsePosition,
   parseRole,
   ROLE_ID_ALIASES,
+  ROLE_ID_SPLITS,
   resolveRoleId,
   SUPERSEDED_POSITION_IDS,
 } from './load.js'

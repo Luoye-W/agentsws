@@ -1,19 +1,27 @@
-# 56 §2 社媒运营的第 4 条职责：**YouTube 运营**（WP72）。
+# 56 §2 社媒运营的内容账号组：**YouTube 运营**（WP72；WP191 按 docs/86 充实）。
 #
-# 内容账号组四条职责的骨架**完全相同**（56 §2 上半行），不同的只有三样：
-# 渠道连接器、grounding 的意图词、还有下面那一段"这条渠道特有的部分"。
-# 骨架为什么长这样，写在 `social/meta.yml` 的文件头里，不在这里抄第二遍。
+# 内容账号组各条职责的骨架**完全相同**（56 §2 上半行）：动作 id、数据域、审批等级
+# 一个都不许改（54：同构的职责只靠意图词分得开）。不同的只有：渠道连接器、额度、
+# grounding 的意图词、persona、快捷提示，还有下面那一段"这条渠道特有的部分"。
+# 骨架为什么长这样，写在 `social/meta.yml` 的文件头里；每条渠道的定义怎么来的，
+# 写在 docs/86（WP191 调研：开源技能、职业标准、平台官方规则、行业数据）。
 #
-# 这条渠道特有的三件事：
+# 这条渠道特有的部分（docs/86 §3.2）：
 #
 # 1. **连接卡与红人岗位的 `kol.youtube` 是同一张**（56 §1）：一把 key 管两条职责。
-#    两边读写的东西不同——红人那条读**别人的**频道，这条读写**我们自己的**——
-#    但连接页上只有一张 YouTube，连一次就够了。
-# 2. **配额是全站的，不是我们的**。一天 10000 单位是账号级的数，一个进程里记不准，
-#    所以我们不自己算：上游说配额没了就照实说，并告诉用户明天重置。
-# 3. **上传视频不走这条路**。resumable upload 是多段 HTTP + 二进制，不是一次
-#    JSON 调用——所以这条职责上"发布"出的是一张排期卡与一句提醒，
-#    真正的上传在后台做。排期与审批照常，不假装能替你传。
+#    红人那条读**别人的**频道，这条读写**我们自己的**；连接页上只有一张 YouTube。
+# 2. **配额是全站的，不是我们的**。现在的模型（docs/86 §1.3）：上传每天 100 次单独一桶，
+#    其余接口共用每天 10,000 单位，回一条评论 50 单位，太平洋时间零点重置。
+#    我们不自己算：上游说配额没了就照实说，并告诉用户明天重置。
+# 3. **没过审计的 API 项目上传的视频只能私享**（2020-07-28 之后建的项目）。
+#    上传本身也不走这条路（resumable upload 在后台做），这条职责出的是排期卡与提醒。
+# 4. **警告 90 天内三次封频道，删视频不消警告**；AI 模板片、幻灯片合集算「不真实内容」，
+#    不能变现。Shorts ≤ 3 分钟且竖屏，否则算长视频。
+# 5. **先定标题与缩略图，再谈剪辑**；点击率、留存拿不到就说拿不到，不编。
+#    有一周不发，那一周的增长就掉到这个频道自己的基线以下——日历按「不断更」排。
+#
+# 「先定标题与缩略图」「不编点击率与留存」这两条做法参考了 social-media-skills/skills
+# 的 youtube-long-form（MIT）与 msitarzewski/agency-agents 的视频优化角色（MIT），用自己的话写，未搬原文。
 #
 # 边界（56 表头，Luoye 09-16 定）：内容、氛围、活动、群规归我；
 # **客户的问题不归我，转客服**（`dtc.community-support`）。下面 `description` 与
@@ -22,7 +30,7 @@ id: social.youtube
 version: 1.0.0
 domain: social
 name: { zh: YouTube 运营, en: YouTube }
-description: 我们自己的 YouTube 频道：视频与短片的排期、回评论、频道资料、近 30 天表现。内容、氛围、活动归我；客户的问题不归我，转客服
+description: YouTube 频道（我们自己的）：长视频与 Shorts 的排期、标题描述缩略图、回评论、频道资料、近 30 天表现。内容、氛围、活动归我；客户的问题不归我，转客服
 
 scopes:
   - { domain: social_account, ops: [read, stage], range: assigned, max_sensitivity: internal }
@@ -34,16 +42,19 @@ scopes:
 
 connectors:
   # `required: false`：没连也能排内容、写草稿、攒审批——真发出去那一跳才需要它。
+  # 与红人岗位的 `kol.youtube` 是同一张卡（56 §1）。
   - { kind: youtube_data, required: false, grants: [read_channel, read_videos, manage_comments], ownership: workspace }
 
 actions:
+  # 额度写在**动作**上不写在职责上（同 51 §2.3）。数从哪来见 docs/86 §3.1。
   - id: stage_post
     target: social_account
     kind: staged_change
     mandate:
-      caps: { max_posts_per_day: 3 }
+      # 一天 2 条（docs/86 §3.1：长视频一周 1 条 + Shorts；原来的 3 对一个频道太多了）。
+      caps: { max_posts_per_day: 2 }
       per_change_limits: { max_items: 1 }
-      window: { max_count: 3, per: day }
+      window: { max_count: 2, per: day }
     review_cannot_be_disabled: true
     route_to: scope_manager
   - id: reply_comment
@@ -60,6 +71,7 @@ actions:
       caps: {}
       per_change_limits: { max_items: 1 }
       window: { max_count: 5, per: week }
+    # 改 handle 连提都不许提（`@agentsws/core` 的 `PROTECTED_FIELDS`）
     protected_fields: [handle, username, account_id, external_id]
     review_cannot_be_disabled: true
     route_to: owner
@@ -136,14 +148,15 @@ home_blocks:
     }
 
 grounding:
-  # 54 §2：九条社媒职责的动作 id 与数据域完全一样，**意图词是唯一分得开它们的东西**。
+  # 54 §2：内容组各条的动作 id 与数据域完全一样，**意图词是唯一分得开它们的东西**。
   - {
       name: youtube_intent,
-      intent_terms: [YouTube, 油管, 频道, 视频, 短片, Shorts, 字幕, 播放列表, channel, video],
-      cue_terms: [发, 排期, 定时, 播放, 点赞, 评论, 订阅, 涨粉, 标题, 描述, 缩略图],
+      intent_terms: [YouTube, 油管, 频道, 长视频, 短片, Shorts, 缩略图, 封面图, 字幕, 播放列表, 章节, channel],
+      cue_terms: [发, 排期, 定时, 播放, 点击率, 留存, 观看时长, 点赞, 评论, 订阅, 涨粉, 标题, 描述],
       tool: list_social_posts,
       prefetch: false,
     }
+  # 19：文案里说到产品、价格、时效、政策之前先查事实卡
   - {
       name: facts_before_post,
       intent_terms: [文案, 发帖, 起草, 上新, 活动, post, caption, announce],
@@ -151,6 +164,7 @@ grounding:
       tool: search_policies,
       prefetch: true,
     }
+  # 56 的边界：客户的问题不归我。意图词写足，54 的路由才判得到"转客服"
   - {
       name: customer_question_goes_to_support,
       intent_terms: [订单, 发货, 物流, 退款, 退货, 保修, 怎么用, order, refund, shipping, warranty],
@@ -160,6 +174,7 @@ grounding:
     }
 
 notifications:
+  # 发布永远人审，卡压着不动 = 这条内容错过了它的时间点
   - {
       event: 'approval.created:stage_post',
       mode: immediate,
@@ -189,19 +204,23 @@ requires: []
 quick_prompts:
   - id: week_plan
     label: { zh: "排下周的视频", en: "Plan next week" }
-    prompt: "按这周的播放和手上的素材，给 YouTube 排下周的视频与短片，撞车的说清楚"
+    prompt: "按这周的播放和手上的素材，给 YouTube 排下周的长视频与 Shorts，一周至少一条长的，撞车的说清楚"
     kind: start_task
   - id: draft_post
     label: { zh: "起草标题和描述", en: "Draft title and description" }
-    prompt: "给这条视频起一个标题和一段描述，按品牌话术来，参数和时效只写事实卡里有的"
+    prompt: "给这条视频起三个标题和一段描述，按品牌话术来，参数和时效只写事实卡里有的"
     kind: start_task
   - id: comments_waiting
     label: { zh: "有哪些评论等着回", en: "Comments waiting" }
     prompt: "现在有哪些评论还没回？哪些是客户的问题该转客服、哪些我自己回，分开列"
     kind: ask
+  - id: retention_drop
+    label: { zh: "留存掉在哪", en: "Where viewers drop off" }
+    prompt: "最近三条长视频的观众大多在第几分钟走的？拿不到留存数就直说，不要估"
+    kind: ask
   - id: last_30d
     label: { zh: "这个月发得怎么样", en: "How did the last 30 days go" }
-    prompt: "近 30 天发的视频里，播放和点赞最好的三条是哪几条，它们有什么共同点"
+    prompt: "近 30 天发的视频里，点击率和平均观看时长最好的三条是哪几条，它们有什么共同点"
     kind: ask
 
 task_examples:
@@ -209,30 +228,30 @@ task_examples:
     title: { zh: "排一周的视频", en: "Fill a week of the calendar" }
     description: "下周有一条长片和两条短片，不知道怎么摊开。"
     expected_output: "一份按天排好的日历（每条写清什么时间发、标题与描述是什么），撞车的地方直接给下一个空档；每一条都要你点一下才真发出去。"
-  - id: comment_triage
-    title: { zh: "把评论分一分", en: "Sort the comments" }
-    description: "一条视频下面有几十条评论，来不及一条条看。"
-    expected_output: "按六类分好的一张表：客户的问题已经变成转客服卡，合作询问提示转红人营销，夸和投诉给出回复草稿。"
+  - id: title_thumbnail
+    title: { zh: "标题与缩略图三选一", en: "Pick a title and thumbnail" }
+    description: "视频剪好了，标题和封面还没定。"
+    expected_output: "三组「标题 + 缩略图方向」，每组说清想让谁点、点进来看到的和标题对不对得上；选哪组由你定。"
   - id: shared_key
     title: { zh: "和红人岗位共用一把 key", en: "One key, two duties" }
     description: "已经为红人营销连过 YouTube，社媒这边还要不要再连一次。"
     expected_output: "不用。连接页上只有一张 YouTube 卡，两条职责读同一把 key；这条职责能不能发，仍由它自己的额度与审批说了算。"
 
 # ── WP120（69 §2）：**角色定位**。提示里的「你是谁」，六段骨架一段不许少 ──────────
-# 第三段「你不负责」是防串岗的那一条：69 §0 那条亲测记录（红人岗位回出客服的话）
-# 就是因为提示里从头到尾没有这一句。改这一段之前先读 docs/69。
+# 第三段「你不负责」是防串岗的那一条。改这一段之前先读 docs/69；
+# 「怎么做」那一句的平台做法来自 docs/86 §2 / §3（出处与许可证在那里）。
 persona:
   zh: |
-    你是谁：社媒运营岗位里管我们自己 YouTube 频道 账号的人。
-    你负责：视频与短片的排期、回评论、频道资料、近 30 天表现。
-    你不负责：订单、退款、物流→客服（评论区冒出来的也转）；找红人→红人营销；买广告→投放；别人的版→公共关系。
-    怎么做：先看这账号最近发过什么、评论区在聊什么；和红人合作的那些视频不归你审（那是红人营销的验收）；拿不准的评论按客户问题转走。
+    你是谁：社媒运营岗位里管我们自己 YouTube 频道的人。
+    你负责：长视频与 Shorts 排期、标题描述缩略图、回评论、频道资料、近 30 天表现。
+    你不负责：订单、退款、物流→客服（评论区冒出来的也转）；找红人→红人营销；买广告→投放；别人的版→公共关系；红人合作视频的验收→红人营销。
+    怎么做：先看最近的点击率与留存；先定标题缩略图再谈剪辑；拿不到的数不编；别断更；拿不准的评论按客户问题转走。
     口气：像社区里的人，接地气、不官腔、不承诺。
     必须出卡：发布与排期、改账号资料、任何对外可见的回复。
   en: |
-    Who you are: the person running our own YouTube 频道 account, inside the social-media position.
-    You handle: scheduling videos and Shorts, replying to comments, the channel profile, the last 30 days of performance.
-    Not yours: orders, refunds and shipping → Customer Care, including the ones raised in the comments; creators → Creator Marketing; ads → Paid Ads; other people’s forums → Public Relations.
-    How you work: read what this account posted recently and what the comments are about. Videos made with creators are not yours to review — that verdict belongs to Creator Marketing. When a comment is borderline, treat it as a customer question and hand it over rather than answering it yourself.
+    Who you are: the person running our own YouTube channel, inside the social-media position.
+    You handle: scheduling long videos and Shorts, titles, descriptions and thumbnails, replying to comments, the channel profile, the last 30 days of performance.
+    Not yours: orders, refunds and shipping → Customer Care, including the ones raised in the comments; creators → Creator Marketing; ads → Paid Ads; other people’s forums → Public Relations; reviewing creator-made videos → Creator Marketing.
+    How you work: check recent click-through and retention first. Settle the title and thumbnail before the edit. Never invent a number you could not read — say it is unavailable. Do not let a week go by without an upload. When a comment is borderline, treat it as a customer question and hand it over.
     Tone: like a person in the community — human, no corporate voice, no promises.
     Always ask: publishing and scheduling, profile edits, every outward reply.

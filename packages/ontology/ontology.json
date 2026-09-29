@@ -96,15 +96,19 @@
     "packages/roles/roles/site/shopify-theme.yml",
     "packages/roles/roles/social/discord.yml",
     "packages/roles/roles/social/facebook-group.yml",
+    "packages/roles/roles/social/facebook.yml",
+    "packages/roles/roles/social/instagram.yml",
+    "packages/roles/roles/social/linkedin.yml",
     "packages/roles/roles/social/meta.yml",
     "packages/roles/roles/social/reddit.yml",
     "packages/roles/roles/social/telegram-group.yml",
+    "packages/roles/roles/social/threads.yml",
     "packages/roles/roles/social/tiktok.yml",
     "packages/roles/roles/social/whatsapp.yml",
     "packages/roles/roles/social/x.yml",
     "packages/roles/roles/social/youtube.yml"
   ],
-  "source_digest": "24798a8f006d8dc46bf64eff23b2df92",
+  "source_digest": "45d0f903630746124421276241f27f76",
   "objects": [
     {
       "id": "ad",
@@ -4882,7 +4886,7 @@
       "freshness": "cached:300",
       "read_ranges": ["assigned"],
       "properties": [],
-      "read_via": ["gmail.list_threads", "gmail.search_threads"]
+      "read_via": ["gmail.list_threads", "gmail.search_threads", "threads_api.list_threads"]
     },
     {
       "id": "todo",
@@ -9981,6 +9985,15 @@
       "what": "往主题里写文件。**只允许写未发布的副本**，写线上主题等于绕过发布门禁"
     },
     {
+      "id": "threads_api.list_threads",
+      "object": "thread",
+      "source": "connector",
+      "access": "read",
+      "risk_class": "low",
+      "requires_approval": false,
+      "what": "读 thread"
+    },
+    {
       "id": "whatsapp_business.list_messages",
       "object": "message",
       "source": "connector",
@@ -10191,7 +10204,16 @@
       "risk_class": "low",
       "requires_approval": true,
       "route_to": "role_holder",
-      "roles": ["social.meta", "social.tiktok", "social.x", "social.youtube"],
+      "roles": [
+        "social.facebook",
+        "social.instagram",
+        "social.linkedin",
+        "social.meta",
+        "social.threads",
+        "social.tiktok",
+        "social.x",
+        "social.youtube"
+      ],
       "tool": "draft_reply",
       "what": "reply comment"
     },
@@ -10235,7 +10257,14 @@
       "risk_class": "high",
       "requires_approval": true,
       "route_to": "role_holder",
-      "roles": ["b2b.exhibition", "dtc.store", "kol.youtube", "social.meta"],
+      "roles": [
+        "b2b.exhibition",
+        "dtc.store",
+        "kol.youtube",
+        "social.facebook",
+        "social.instagram",
+        "social.meta"
+      ],
       "what": "request design"
     },
     {
@@ -10736,7 +10765,16 @@
       "risk_class": "high",
       "requires_approval": true,
       "route_to": "scope_manager",
-      "roles": ["social.meta", "social.tiktok", "social.x", "social.youtube"],
+      "roles": [
+        "social.facebook",
+        "social.instagram",
+        "social.linkedin",
+        "social.meta",
+        "social.threads",
+        "social.tiktok",
+        "social.x",
+        "social.youtube"
+      ],
       "what": "stage post"
     },
     {
@@ -10759,7 +10797,16 @@
       "risk_class": "high",
       "requires_approval": true,
       "route_to": "owner",
-      "roles": ["social.meta", "social.tiktok", "social.x", "social.youtube"],
+      "roles": [
+        "social.facebook",
+        "social.instagram",
+        "social.linkedin",
+        "social.meta",
+        "social.threads",
+        "social.tiktok",
+        "social.x",
+        "social.youtube"
+      ],
       "what": "stage profile edit"
     },
     {

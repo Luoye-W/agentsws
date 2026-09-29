@@ -89,7 +89,8 @@ expected:
     - kol.youtube
     - dtc.support
     - dtc.store
-    - social.meta
+    # WP191（docs/86 §5）：Meta 拆开之后，这句 Instagram 的活落在 IG 那条上（之前是 `social.meta`）
+    - social.instagram
     - pr.monitoring
   event_types:
     - simulation.position_staffed

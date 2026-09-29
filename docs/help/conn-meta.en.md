@@ -1,13 +1,14 @@
-# The Meta connections (Facebook / Instagram / WhatsApp)
+# The Meta connections (Facebook / Instagram / Threads / WhatsApp)
 
-What each of the six Meta connections does and how to set it up. They all start in the Meta developer dashboard, and most permissions **need review** — if you're not in a hurry, connect them last.
+What each of the seven Meta connections does and how to set it up. They all start in the Meta developer dashboard, and most permissions **need review** — if you're not in a hurry, connect them last.
 
 | Connection | In one line | Review / cost |
 |---|---|---|
 | Meta Ads (Facebook / Instagram) | Lights up the ads tile (the "Authorize" route, like Google's) | Review takes longer than the Google ones |
 | Instagram Graph API | Creators: look up a business account by name for followers and engagement | Permissions need review |
 | Facebook Graph API | Creators: search Pages, read follower counts and categories | Page Public Content Access is review-based |
-| Meta Graph API (FB Page + IG) | Social media: read posts, publish and schedule, reply to comments | Reading works once connected; publishing needs App Review |
+| Meta Graph API (FB Page + IG) | Social media's Facebook Page and Instagram duties: read posts, publish and schedule, reply to comments | Reading works once connected; publishing needs App Review |
+| Threads API | Social media's Threads duty: posting and managing replies | Authorised separately from FB / IG; needs App Review |
 | Meta Marketing API (ads) | Ads: read performance, change budgets and bids, pause, swap creatives | Ads permissions need review |
 | WhatsApp Business API | Message customers with approved templates | Business verification required; templates need approval |
 
@@ -80,6 +81,10 @@ The job still works: finding people relies on imports and the public library, an
 
 One token covers your FB Page and IG business account: read posts and performance, publish and schedule, reply to comments.
 
+In Social Media, "Facebook Page" and "Instagram" are two separate duties that **share this one card** — connect once, approve once, and both light up.
+
+On the Instagram side we check the platform's hard limits while drafting: captions up to 2,200 characters, 30 hashtags and 20 @mentions; carousels up to 10 images, JPEG only; Reels must be 3 minutes or shorter to be recommended. Instagram's API has no scheduling, so we publish at the scheduled time ourselves.
+
 **Reading works as soon as you connect; publishing needs App Review** — two separate things, so don't read "not approved yet" as "connection failed". We handle scheduling the way Meta requires: if you only set a time without turning off "publish now", the post goes out immediately.
 
 **How**
@@ -98,6 +103,27 @@ One token covers your FB Page and IG business account: read posts and performanc
 **Without it**
 
 You can still plan content, write drafts and queue approvals — only the actual publishing step needs it. While publishing permission is under review, we remind you when it's time to post by hand in the dashboard; we never pretend it went out.
+
+## Threads API
+
+Threads is **authorised separately from the FB Page and Instagram**: in the same Meta app you add a separate "Threads use case" and get a separate token. That's why it has its own card — you're not connecting the same thing twice; Meta made it a separate authorisation. Long-lived tokens last 60 days and need renewing.
+
+A post is at most 500 characters, 5 links and one topic tag; we flag anything over the limit while drafting. Replies matter as much as posts on Threads, so this duty gets a larger daily reply allowance than the other channels.
+
+**How**
+
+1. In your Meta developer app, add the "Threads use case" (it can be the same app as FB / IG).
+2. Request `threads_basic` / `threads_content_publish` / `threads_manage_replies` (**needs review**).
+3. Go through the Threads authorisation to get a long-lived token, and note your Threads user ID.
+4. Paste the token and ID into the form. They stay on this computer only.
+
+**Links**
+
+- [Threads API docs](https://developers.facebook.com/docs/threads)
+
+**If it isn't connected**
+
+You can still plan, draft and queue approvals — only the final publish needs it. When the token expires we say "re-authorise", not "connection failed".
 
 ## Meta Marketing API (ads)
 
@@ -151,5 +177,6 @@ Bulk messages go out **one at a time** (the Cloud API has no batch endpoint), so
 
 - **Permissions are still under review — did the connection fail?** No. Meta Graph API can read as soon as it's connected; publishing waits for App Review. The ads card says "not approved yet" during review.
 - **Can one Meta app authorize all these cards?** You can grant them in one authorization, but social (posting) and ads (spending) are two cards with two keys — keep them separate.
+- **Why does Threads need a separate connection?** Meta made Threads a separate authorisation (its own use case and token), so the FB / IG Page token can't reach it. FB and IG are still connected once.
 - **Can I search Instagram creators by keyword?** No — Instagram simply doesn't offer that. Finding people relies on imports and the public library; this connection only adds followers and engagement.
 - **A WhatsApp bulk send stopped halfway**: when rate-limited or disconnected we stop and don't retry, so nobody receives the same message twice.

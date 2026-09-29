@@ -32,8 +32,8 @@ import {
   type SocialTransport,
 } from './types.js'
 
-const CHANNEL: SocialChannel = 'meta'
-const LABEL = 'Meta（FB 主页 + IG）'
+const META_CHANNEL: SocialChannel = 'meta'
+const META_LABEL = 'Meta（FB 主页 + IG）'
 
 /** 版本钉死：Graph API 每个版本活两年，不钉的话哪天悄悄换了行为没人知道。 */
 export const META_GRAPH_VERSION = 'v21.0'
@@ -97,6 +97,22 @@ const postOf = (raw: RawPost): ChannelPost => ({
 })
 
 export function createMetaAdapter(transport: SocialTransport): SocialChannelAdapter {
+  return createGraphPageAdapter(transport, { channel: META_CHANNEL, label: META_LABEL })
+}
+
+/**
+ * WP191（docs/86 §5）：**主页那一半**的适配器，按渠道名建。
+ *
+ * 老的 `meta` 与新的 `facebook` 打的是同一套 Pages API、用同一把 `meta_graph`
+ * 令牌——差的只是"这条算哪条渠道"（连没连、取哪条连接、面板记在谁名下）。
+ * 所以这里只有一份实现，两个名字；不复制第二份（复制的那份迟早各改各的）。
+ */
+export function createGraphPageAdapter(
+  transport: SocialTransport,
+  options: { channel: SocialChannel; label: string },
+): SocialChannelAdapter {
+  const CHANNEL = options.channel
+  const LABEL = options.label
   const off = () => guardConnected(transport, CHANNEL, LABEL)
   /** 每次现取现用；**不缓存**（凭据不在对象里留着）。 */
   const auth = async (): Promise<Record<string, string>> => {

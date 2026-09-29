@@ -67,6 +67,10 @@ export const ACTION_TERMS: Readonly<Record<string, readonly string[]>> = Object.
   stage_pause_ad: ['暂停广告', '关广告', 'pause'],
   stage_negative_keyword: ['否词', '否定关键词', 'negative'],
   stage_budget_change: ['预算', '加预算', 'budget'],
+  // WP191（docs/86 §5）：按 `_` 拆会拆出一个英文 `thread`——它是平台名 `Threads` 的子串，
+  // 社群组与公关那几条带 `reply_thread` 的职责会因此把"给 Threads 发一条"抢过去。
+  // 拆出来的另一个词 `reply` 照留，只把 `thread` 换成人话。
+  reply_thread: ['reply', '回帖'],
 })
 
 /**

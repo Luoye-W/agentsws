@@ -1,0 +1,255 @@
+# WP191（docs/86 §4）：社媒运营的内容账号组：**LinkedIn 运营**（新加的一条）。
+#
+# 内容账号组各条职责的骨架**完全相同**（56 §2 上半行）：动作 id、数据域、审批等级
+# 一个都不许改（54：同构的职责只靠意图词分得开）。不同的只有：渠道连接器、额度、
+# grounding 的意图词、persona、快捷提示，还有下面那一段"这条渠道特有的部分"。
+# 骨架为什么长这样，写在 `social/meta.yml` 的文件头里；每条渠道的定义怎么来的，
+# 写在 docs/86（WP191 调研：开源技能、职业标准、平台官方规则、行业数据）。
+#
+# 这条渠道特有的部分（docs/86 §3.2）：
+#
+# 1. **管公司主页（Company Page）与创始人 / 老板本人号的内容**。发帖走官方 Posts API：
+#    本人号 `w_member_social`（自助开通），公司主页 `w_organization_social`
+#    （要过 Community Management API 审核，授权人必须是主页管理员）。
+# 2. **批不下来是常态**：连接器 `required: false`——没连也能排、能起草、能攒审批；到点发不出去
+#    （没连、没批、带素材这一版还不能代发）时，**这条已批准的帖子变成一条「复制文案去
+#    LinkedIn 发」的待办**（契约 `SocialChannelSpec.publish_fallback: manual_task`）。
+# 3. **不抓取、不自动加人、不自动私信、不代点赞代转发**：LinkedIn 用户协议 §8.2 明令禁止
+#    任何自动化手段做这些事。找客户、加人、私信、InMail 归 B2B 岗位（`b2b.outbound`），
+#    那边也只出本人去发的任务。所以这条的适配器上根本没有 `reply` / `members`。
+# 4. **额度一天 1 条**：主页每个工作日一条是上沿，日历默认一周 2–5 条、一周最多一条产品帖；
+#    文档（PDF 翻页）帖在这个平台互动最高，正文放外链会被降权（docs/86 §2）。
+#
+# 「一周最多一条产品帖」「内容支柱配比」参考了 sergebulaev/linkedin-skills（MIT），「每条要有观点」
+# 参考了 msitarzewski/agency-agents 的 LinkedIn 角色（MIT），用自己的话写，未搬原文。
+#
+# 边界（56 表头，Luoye 09-16 定）：内容、氛围、活动、群规归我；
+# **客户的问题不归我，转客服**（`dtc.community-support`）。下面 `description` 与
+# `grounding` 的意图词就是 54 §2 岗位路由判这件事的依据——写不足 = 路由不到。
+id: social.linkedin
+version: 1.0.0
+domain: social
+name: { zh: LinkedIn 运营, en: LinkedIn }
+description: LinkedIn 公司主页与老板本人号（我们自己的）：观点帖与文档帖的起草排期、主页资料、近 30 天表现。内容归我；找客户加人私信不归我（转 B2B）；客户的问题不归我，转客服
+
+scopes:
+  - { domain: social_account, ops: [read, stage], range: assigned, max_sensitivity: internal }
+  - { domain: community_thread, ops: [read, stage], range: assigned, max_sensitivity: internal }
+  - { domain: knowledge, ops: [read], range: workspace, max_sensitivity: internal }
+  - { domain: skill, ops: [read], range: own, max_sensitivity: internal }
+  - { domain: product, ops: [read], range: assigned, max_sensitivity: internal }
+  - { domain: approval, ops: [read, approve], range: own, max_sensitivity: internal }
+
+connectors:
+  # `required: false`：没连也能排内容、写草稿、攒审批——真发出去那一跳才需要它。
+  # 新卡（docs/86 §4）：公司主页要过 Community Management API 审核；批不下来到点变待办。
+  - { kind: linkedin_api, required: false, grants: [read_posts, publish_posts], ownership: workspace }
+
+actions:
+  # 额度写在**动作**上不写在职责上（同 51 §2.3）。数从哪来见 docs/86 §3.1。
+  - id: stage_post
+    target: social_account
+    kind: staged_change
+    mandate:
+      # 一天 1 条（docs/86 §3.1：主页每个工作日一条是上沿；日历默认一周 2–5 条）。
+      caps: { max_posts_per_day: 1 }
+      per_change_limits: { max_items: 1 }
+      window: { max_count: 1, per: day }
+    review_cannot_be_disabled: true
+    route_to: scope_manager
+  - id: reply_comment
+    target: community_thread
+    kind: outbound_message
+    mandate:
+      # 回评论这一版只出草稿、人去贴（读写评论也在 CMA 审核后面）。
+      caps: { max_comment_replies_per_day: 50 }
+      window: { max_count: 50, per: day }
+    route_to: role_holder
+  - id: stage_profile_edit
+    target: social_account
+    kind: staged_change
+    mandate:
+      caps: {}
+      per_change_limits: { max_items: 1 }
+      window: { max_count: 5, per: week }
+    # 改 handle 连提都不许提（`@agentsws/core` 的 `PROTECTED_FIELDS`）
+    protected_fields: [handle, username, account_id, external_id]
+    review_cannot_be_disabled: true
+    route_to: owner
+
+automation:
+  # **发布永远 L1**（56 §2 / 15 §2 的 `HARD_L1`）。
+  stage_post:
+    ceiling: L1
+    initial: L1
+    hard_ceiling: true
+    promotion: { adoption_rate_min: 1, window_weeks: 0, min_samples: 0 }
+    demotion_triggers: [manual]
+  # 回评论 L2 → L3：能升是因为承诺扫描把"改得了钱"那一半直接拦死。
+  reply_comment:
+    ceiling: L3
+    initial: L2
+    promotion: { adoption_rate_min: 0.95, window_weeks: 4, min_samples: 50 }
+    demotion_triggers: [customer_complaint, guardrail_hit, manual]
+  stage_profile_edit:
+    ceiling: L1
+    initial: L1
+    hard_ceiling: true
+    promotion: { adoption_rate_min: 1, window_weeks: 0, min_samples: 0 }
+    demotion_triggers: [manual]
+
+skills:
+  - { name: brand-voice, tier: open, load: always }
+
+home_blocks:
+  - {
+      id: social.linkedin.calendar,
+      placement: focus,
+      component: table,
+      query: social.content_calendar,
+      default_order: 10,
+      pinnable: true,
+      adaptive: true,
+    }
+  - {
+      id: social.linkedin.queue,
+      placement: queue,
+      component: table,
+      query: social.publish_queue,
+      default_order: 20,
+      pinnable: true,
+      adaptive: true,
+    }
+  - {
+      id: social.linkedin.performance,
+      placement: role_view,
+      component: table,
+      query: social.performance_30d,
+      default_order: 30,
+      pinnable: true,
+      adaptive: false,
+    }
+  - {
+      id: social.linkedin.comments,
+      placement: queue,
+      component: table,
+      query: social.pending_comments,
+      default_order: 40,
+      pinnable: true,
+      adaptive: true,
+    }
+  - {
+      id: social.linkedin.handoffs,
+      placement: role_view,
+      component: table,
+      query: social.support_handoffs,
+      default_order: 50,
+      pinnable: true,
+      adaptive: false,
+    }
+
+grounding:
+  # 54 §2：内容组各条的动作 id 与数据域完全一样，**意图词是唯一分得开它们的东西**。
+  # B2B 那边（`b2b.outbound`）是「找客户 / 联系人 / 加好友 / 私信 / InMail」，这边是内容。
+  - {
+      name: linkedin_intent,
+      intent_terms: [LinkedIn, 领英, 公司主页, Company Page, 老板号, 创始人号, 文档帖, Newsletter, 观点帖],
+      cue_terms: [发, 排期, 定时, 起草, 观点, 行业, 曝光, 互动, 关注, 简介],
+      tool: list_social_posts,
+      prefetch: false,
+    }
+  # 19：文案里说到产品、价格、时效、政策之前先查事实卡
+  - {
+      name: facts_before_post,
+      intent_terms: [文案, 发帖, 起草, 上新, 活动, post, caption, announce],
+      cue_terms: [价格, 折扣, 包邮, 时效, 保修, 参数, 库存, price, discount, warranty],
+      tool: search_policies,
+      prefetch: true,
+    }
+  # 56 的边界：客户的问题不归我。意图词写足，54 的路由才判得到"转客服"
+  - {
+      name: customer_question_goes_to_support,
+      intent_terms: [订单, 发货, 物流, 退款, 退货, 保修, 怎么用, order, refund, shipping, warranty],
+      cue_terms: [我的, 什么时候, 还没, 坏了, my, when, not received, broken],
+      tool: route_to_community_support,
+      prefetch: false,
+    }
+
+notifications:
+  # 发布永远人审，卡压着不动 = 这条内容错过了它的时间点
+  - {
+      event: 'approval.created:stage_post',
+      mode: immediate,
+      recipients: [role_holder],
+      escalate_after_hours: 4,
+    }
+  - {
+      event: 'approval.created:reply_comment',
+      mode: queue,
+      recipients: [role_holder],
+      escalate_after_hours: 12,
+    }
+  - {
+      event: 'guardrail.hit:commitment_scan',
+      mode: immediate,
+      recipients: [role_holder, scope_manager],
+    }
+  - { event: 'social.schedule_conflict', mode: queue, recipients: [role_holder] }
+
+handover:
+  transfers: [open_work_items, context, home_blocks, queue_lane, scheduled_tasks]
+  fallback: scope_manager
+  revoke_context_on_removal: true
+
+requires: []
+
+quick_prompts:
+  - id: week_plan
+    label: { zh: "排下周的帖", en: "Plan next week" }
+    prompt: "给我们的 LinkedIn 公司主页排下周两到三条帖子：一条观点、一条幕后、最多一条产品，撞车的说清楚"
+    kind: start_task
+  - id: draft_post
+    label: { zh: "起草一条观点帖", en: "Draft a point-of-view post" }
+    prompt: "就这个行业话题写一条 LinkedIn 观点帖，开头两行要让人想点开，正文不放外链，价格和交期只写事实卡里有的"
+    kind: start_task
+  - id: document_post
+    label: { zh: "做一个文档帖", en: "Make a document post" }
+    prompt: "把这份产品介绍改成一个 8 页以内的 LinkedIn 文档帖大纲，每页一句话"
+    kind: start_task
+  - id: last_30d
+    label: { zh: "这个月发得怎么样", en: "How did the last 30 days go" }
+    prompt: "近 30 天主页发的帖里，曝光和互动率最好的三条是哪几条，它们有什么共同点"
+    kind: ask
+
+task_examples:
+  - id: weekly_calendar
+    title: { zh: "排一周的帖", en: "Fill a week of the calendar" }
+    description: "公司主页好几个月没更新了，想恢复起来。"
+    expected_output: "一份按天排好的日历（一周两到三条，每条写清是观点 / 幕后 / 产品、用哪种形式），每一条都要你点一下；接口没批下来的，到点给你一条「复制文案去 LinkedIn 发」的待办。"
+  - id: manual_post
+    title: { zh: "没批下来怎么发", en: "Posting before the review" }
+    description: "LinkedIn 的公司主页发帖权限一直没批下来。"
+    expected_output: "排期、起草、审批照常；到点那条变成一条待办：文案已经排好版，你复制去 LinkedIn 发，发完点一下完成。"
+  - id: not_prospecting
+    title: { zh: "找客户不在这里", en: "Prospecting lives elsewhere" }
+    description: "想在 LinkedIn 上找采购经理加好友。"
+    expected_output: "说清楚这是 B2B 岗位主动开发的事，而且那边也只出你本人去加、去发的任务；这条只管公司主页和老板号的内容。"
+
+# ── WP120（69 §2）：**角色定位**。提示里的「你是谁」，六段骨架一段不许少 ──────────
+# 第三段「你不负责」是防串岗的那一条。改这一段之前先读 docs/69；
+# 「怎么做」那一句的平台做法来自 docs/86 §2 / §3（出处与许可证在那里）。
+persona:
+  zh: |
+    你是谁：社媒运营岗位里管我们 LinkedIn 公司主页与老板本人号内容的人。
+    你负责：观点帖、文档帖与图视频的起草排期、主页资料、近 30 天表现。
+    你不负责：订单、退款、物流→客服（评论区冒出来的也转）；找红人→红人营销；买广告→投放；别人的版→公共关系；找客户、加人、私信→B2B。
+    怎么做：每条有观点、正文不放外链、一周最多一条产品帖；接口没批就出待办让人去发；不抓取、不自动加人私信点赞。
+    口气：像懂行的人在说话，具体、不喊口号、不承诺。
+    必须出卡：发布与排期、改账号资料、任何对外可见的回复。
+  en: |
+    Who you are: the person running the content of our LinkedIn Company Page and the founder’s own profile, inside the social-media position.
+    You handle: drafting and scheduling point-of-view posts, document posts, images and video, the Page profile, the last 30 days of performance.
+    Not yours: orders, refunds and shipping → Customer Care, including the ones raised in the comments; creators → Creator Marketing; ads → Paid Ads; other people’s forums → Public Relations; finding buyers, connection requests and messages → B2B.
+    How you work: every post takes a point of view; no outbound links in the body; at most one product post a week. When the API is not approved, the post becomes a to-do for a person to publish. Never scrape or automate invitations, messages or likes — LinkedIn forbids it.
+    Tone: like someone who knows the trade — specific, no slogans, no promises.
+    Always ask: publishing and scheduling, profile edits, every outward reply.
