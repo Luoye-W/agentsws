@@ -1,0 +1,223 @@
+/**
+ * WP194：公司统一充值、给成员 / 岗位分配积分。
+ *
+ * 一句话：**分配 = 在公司共用余额上给每个人 / 每个岗位设「每月上限」**，不是把积分划成
+ * 一个个小钱包（划拨会让积分卡在不用的人手里，退回又要一套流程）。默认**不设上限**
+ * ——和 WP194 之前一样，谁都能用到公司余额见底为止。
+ *
+ * 执行在云上（`WalletDO` 预扣那一刻判）：「组织余额够 + 这个人没超 + 这个岗位没超」三样
+ * 都过才扣。所以不管成员用哪台电脑、走 AI / 数据 / 任务哪一条，都算在同一本账上。
+ *
+ * **「谁」怎么带上去**：云上的工作区服务令牌是**工作区级**的（签给关联那个人，本版云上
+ * 一个组织只有 owner 一个账号），分不出本机公司里的哪个成员。所以「谁」「哪个岗位」
+ * 由持有令牌的本机服务在请求头里声明（{@link MEMBER_HEADER} / {@link POSITION_HEADER}），
+ * 值是**本机**的 `person_id` 与岗位 id——云上只把它当成一串标签按组织记账，不认人名、
+ * 不认邮箱。不带这两个头的调用（老客户端、别的产品还没接）只受组织余额限制，
+ * 报表里记在「没标注」那一格。
+ */
+import type { Iso8601 } from './common.js'
+
+/** 请求头：这一次是谁在用（本机公司成员的 `person_id`）。 */
+export const MEMBER_HEADER = 'X-Agentsws-Member'
+/** 请求头：这一次是哪个岗位在用（本机岗位 id，如 `web-ops`）。 */
+export const POSITION_HEADER = 'X-Agentsws-Position'
+/** 两个头的值最长多少（再长的一律当没带——不截断，截断会把两个人记成一个）。 */
+export const ATTRIBUTION_ID_MAX = 128
+
+/** 两个归属头（契约里挂在会扣积分的路由上）。 */
+export interface AttributionHeaders {
+  'X-Agentsws-Member'?: string
+  'X-Agentsws-Position'?: string
+}
+
+/** 一次调用算在谁头上（从请求头 / 内部调用的参数里来）。 */
+export interface Attribution {
+  member_id?: string
+  position_id?: string
+}
+
+/**
+ * 归属头的值合不合法：非空、不超长、只有字母数字与 `_ - . : @`。
+ * 不合法的**当没带**（不猜、不截断），于是这一次只受组织余额限制。
+ */
+export function attributionIdOk(raw: string | undefined | null): raw is string {
+  if (raw === undefined || raw === null) return false
+  if (raw === '' || raw.length > ATTRIBUTION_ID_MAX) return false
+  return /^[A-Za-z0-9_.:@-]+$/.test(raw)
+}
+
+/** 从请求头里取归属（大小写不敏感的取头函数）。 */
+export function attributionFromHeaders(
+  header: (name: string) => string | undefined | null,
+): Attribution {
+  const member = header(MEMBER_HEADER)?.trim()
+  const position = header(POSITION_HEADER)?.trim()
+  return {
+    ...(attributionIdOk(member) ? { member_id: member } : {}),
+    ...(attributionIdOk(position) ? { position_id: position } : {}),
+  }
+}
+
+/** 上限挂在谁身上。 */
+export type AllocationSubjectKind = 'member' | 'position'
+
+/** 按能力分的四格（报表「本月按能力分的花费」）。 */
+export type AllocationBucket = 'ai' | 'data' | 'task' | 'other'
+export const ALLOCATION_BUCKETS: readonly AllocationBucket[] = ['ai', 'data', 'task', 'other']
+
+/**
+ * 能力名 → 四格之一。调用方能给就给（异步任务那条明说自己是 `task`），给不了按名字判：
+ * `ai.*` 是 AI；`task.*` 是任务；月费（`*.service.monthly`、`standby.*`）归其它；余下都是数据。
+ */
+export function allocationBucketOf(capability: string): AllocationBucket {
+  if (capability.startsWith('ai.')) return 'ai'
+  if (capability.startsWith('task.')) return 'task'
+  if (capability.startsWith('standby.') || /\.service\.monthly$/.test(capability)) return 'other'
+  return 'data'
+}
+
+/** 用到上限的几成时提醒（各一次，本人与管理员都看得到）。 */
+export type AllocationNoticeLevel = 80 | 100
+export const ALLOCATION_NOTICE_LEVELS: readonly AllocationNoticeLevel[] = [80, 100]
+
+/** 自然月按哪个时区切（公司没设就用它：前期客户主要在中国）。 */
+export const DEFAULT_ALLOCATION_TIMEZONE = 'Asia/Shanghai'
+
+/** 402 时 `details.reason`：公司没钱了 / 你的额度到了 / 这个岗位的额度到了。 */
+export type InsufficientCreditsReason = 'org_balance' | 'member_limit' | 'position_limit'
+
+/** 「你的额度到了」那一句（云上 402 的 `message` 就是它；本机出错处原样显示）。 */
+export const ALLOCATION_EXHAUSTED_MESSAGE = '本月额度用完了，找管理员加。'
+/** 「这个岗位的额度到了」那一句。 */
+export const POSITION_ALLOCATION_EXHAUSTED_MESSAGE = '这个岗位本月的额度用完了，找管理员加。'
+/** 成员视角的「公司没钱了」那一句（云上原句说的是「去充值」，那是给管理员的）。 */
+export const ORG_BALANCE_EXHAUSTED_MESSAGE = '公司的积分用完了，找管理员充值。'
+
+/** 一个人 / 一个岗位本月的用量与上限。 */
+export interface AllocationRow {
+  kind: AllocationSubjectKind
+  subject_id: string
+  /** 本月已结算的积分。 */
+  used: number
+  /** 正在预扣中的（还没结算）。判上限时算在里面。 */
+  reserved: number
+  calls: number
+  /** 每月上限；没有这一格 = 不设上限。 */
+  monthly_limit?: number
+  /** `used / monthly_limit` 的百分数（取整）；没上限就没有。 */
+  percent?: number
+  /** 上限最近一次改的时间。 */
+  updated_at?: Iso8601
+}
+
+/** 本月按能力分的一格。 */
+export interface AllocationBucketRow {
+  bucket: AllocationBucket
+  credits: number
+  calls: number
+}
+
+/** 成员 × 岗位 × 能力的一格（本月）。没带归属的那一格没有 `member_id` / `position_id`。 */
+export interface AllocationCell {
+  member_id?: string
+  position_id?: string
+  bucket: AllocationBucket
+  credits: number
+  calls: number
+}
+
+/** 发过的一次提醒（80% / 100%，每人每月每档一次）。 */
+export interface AllocationNotice {
+  kind: AllocationSubjectKind
+  subject_id: string
+  level: AllocationNoticeLevel
+  month: string
+  at: Iso8601
+}
+
+/** `GET /v1/wallet/allocation`：管理员看的本月额度与用量（按人 / 按岗位 / 按能力）。 */
+export interface AllocationReport {
+  /** `YYYY-MM`（按 {@link timezone} 的自然月）。 */
+  month: string
+  timezone: string
+  from: Iso8601
+  to: Iso8601
+  members: AllocationRow[]
+  positions: AllocationRow[]
+  buckets: AllocationBucketRow[]
+  cells: AllocationCell[]
+  total_credits: number
+  /** 没带「谁」的那部分（老客户端、别的产品还没接归属头）。 */
+  unattributed_credits: number
+  notices: AllocationNotice[]
+}
+
+/** `GET /v1/wallet/allocation` 的查询参数。 */
+export interface AllocationReportQuery {
+  /** `YYYY-MM`；缺省本月。 */
+  month?: string
+}
+
+/** `POST /v1/wallet/allocation/limits`：设 / 清一个上限。`null` = 不设上限。 */
+export interface AllocationLimitRequest {
+  kind: AllocationSubjectKind
+  subject_id: string
+  monthly_limit: number | null
+}
+
+/** 改额度的一条审计（谁、从多少改到多少）。`from` / `to` 没有 = 不设上限。 */
+export interface AllocationAuditEntry {
+  id: string
+  at: Iso8601
+  /** 谁改的：本机声明的那个成员（`X-Agentsws-Member`）；没声明就是 `account:<云账号>`。 */
+  actor: string
+  action: 'set' | 'clear' | 'member_removed'
+  kind: AllocationSubjectKind
+  subject_id: string
+  from?: number
+  to?: number
+}
+
+/** `POST /v1/wallet/allocation/limits` 的结果。 */
+export interface AllocationLimitChanged {
+  row: AllocationRow
+  audit: AllocationAuditEntry
+}
+
+/** `GET /v1/wallet/allocation/audit`：最近的改额度记录（新的在前）。 */
+export interface AllocationAuditList {
+  entries: AllocationAuditEntry[]
+}
+
+/** `POST /v1/wallet/allocation/settings`：公司时区（自然月按它切）。 */
+export interface AllocationSettings {
+  /** IANA 时区名（`Asia/Shanghai`）。 */
+  timezone: string
+}
+
+/** `POST /v1/wallet/allocation/members/remove`：删成员时清掉他的额度行（历史用量保留）。 */
+export interface AllocationMemberRemoveRequest {
+  member_id: string
+}
+
+export interface AllocationMemberRemoved {
+  member_id: string
+  /** 清掉了几行上限（0 = 他本来就没设）。 */
+  cleared: number
+}
+
+/** `GET /v1/wallet/allocation/me`：成员自己的「本月额度：已用 X / 上限 Y」。 */
+export interface MyAllocation {
+  month: string
+  timezone: string
+  /** 这一次声明的是谁；没声明就没有这一格（也就没有个人上限）。 */
+  member_id?: string
+  used: number
+  reserved: number
+  monthly_limit?: number
+  percent?: number
+  /** 这一次声明的岗位（有才给）。 */
+  position?: AllocationRow
+  /** 本月到过的最高提醒档。 */
+  notice?: AllocationNoticeLevel
+}

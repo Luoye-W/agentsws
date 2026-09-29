@@ -1421,6 +1421,463 @@
         }
       }
     },
+    "/v1/wallet/allocation": {
+      "get": {
+        "operationId": "getV1WalletAllocation",
+        "summary": "本月额度与用量：按人、按岗位、按能力（AI / 数据 / 任务 / 其它），以及 80% / 100% 提醒",
+        "tags": ["wallet"],
+        "security": [
+          {
+            "workspace_token": []
+          }
+        ],
+        "x-scope": "wallet:read",
+        "parameters": [
+          {
+            "name": "month",
+            "in": "query",
+            "required": false,
+            "description": "`YYYY-MM`；缺省本月。",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/AllocationReport"
+                    }
+                  },
+                  "required": ["data"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "invalid_input",
+            "x-error-codes": ["invalid_input"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "unauthenticated",
+            "x-error-codes": ["unauthenticated"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "令牌没有这条路由要的动作（`details.required_scope`）",
+            "x-error-codes": ["forbidden"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/wallet/allocation/me": {
+      "get": {
+        "operationId": "getV1WalletAllocationMe",
+        "summary": "成员自己的「本月额度：已用 X / 上限 Y」（按 `X-Agentsws-Member` / `X-Agentsws-Position`）",
+        "tags": ["wallet"],
+        "security": [
+          {
+            "workspace_token": []
+          }
+        ],
+        "x-scope": "wallet:read",
+        "parameters": [
+          {
+            "name": "X-Agentsws-Member",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Agentsws-Position",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/MyAllocation"
+                    }
+                  },
+                  "required": ["data"]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "unauthenticated",
+            "x-error-codes": ["unauthenticated"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "令牌没有这条路由要的动作（`details.required_scope`）",
+            "x-error-codes": ["forbidden"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/wallet/allocation/limits": {
+      "post": {
+        "operationId": "postV1WalletAllocationLimits",
+        "summary": "设 / 清一个成员或岗位的每月上限（`null` = 不设上限）；每次改都记审计（谁、从多少改到多少）",
+        "tags": ["wallet"],
+        "security": [
+          {
+            "workspace_token": []
+          }
+        ],
+        "x-scope": "wallet:topup",
+        "parameters": [
+          {
+            "name": "X-Agentsws-Member",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Agentsws-Position",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AllocationLimitRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/AllocationLimitChanged"
+                    }
+                  },
+                  "required": ["data"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "invalid_input",
+            "x-error-codes": ["invalid_input"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "unauthenticated",
+            "x-error-codes": ["unauthenticated"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "令牌没有这条路由要的动作（`details.required_scope`）",
+            "x-error-codes": ["forbidden"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/wallet/allocation/settings": {
+      "post": {
+        "operationId": "postV1WalletAllocationSettings",
+        "summary": "公司时区（自然月按它切；缺省 Asia/Shanghai）",
+        "tags": ["wallet"],
+        "security": [
+          {
+            "workspace_token": []
+          }
+        ],
+        "x-scope": "wallet:topup",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AllocationSettings"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/AllocationSettings"
+                    }
+                  },
+                  "required": ["data"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "invalid_input",
+            "x-error-codes": ["invalid_input"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "unauthenticated",
+            "x-error-codes": ["unauthenticated"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "令牌没有这条路由要的动作（`details.required_scope`）",
+            "x-error-codes": ["forbidden"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/wallet/allocation/members/remove": {
+      "post": {
+        "operationId": "postV1WalletAllocationMembersRemove",
+        "summary": "删成员：清掉他的额度行（历史用量保留，账对得上）",
+        "tags": ["wallet"],
+        "security": [
+          {
+            "workspace_token": []
+          }
+        ],
+        "x-scope": "wallet:topup",
+        "parameters": [
+          {
+            "name": "X-Agentsws-Member",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Agentsws-Position",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AllocationMemberRemoveRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/AllocationMemberRemoved"
+                    }
+                  },
+                  "required": ["data"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "invalid_input",
+            "x-error-codes": ["invalid_input"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "unauthenticated",
+            "x-error-codes": ["unauthenticated"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "令牌没有这条路由要的动作（`details.required_scope`）",
+            "x-error-codes": ["forbidden"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/wallet/allocation/audit": {
+      "get": {
+        "operationId": "getV1WalletAllocationAudit",
+        "summary": "最近的改额度记录（新的在前，最多 100 条）",
+        "tags": ["wallet"],
+        "security": [
+          {
+            "workspace_token": []
+          }
+        ],
+        "x-scope": "wallet:read",
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/AllocationAuditList"
+                    }
+                  },
+                  "required": ["data"]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "unauthenticated",
+            "x-error-codes": ["unauthenticated"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "令牌没有这条路由要的动作（`details.required_scope`）",
+            "x-error-codes": ["forbidden"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/ai/chat/completions": {
       "post": {
         "operationId": "postV1AiChatCompletions",
@@ -1441,6 +1898,22 @@
             "schema": {
               "type": "string",
               "enum": ["cn", "global"]
+            }
+          },
+          {
+            "name": "X-Agentsws-Member",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Agentsws-Position",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
             }
           }
         ],
@@ -1496,7 +1969,7 @@
             }
           },
           "402": {
-            "description": "余额不够这一次的预扣（只拒这一次，不冻结）",
+            "description": "余额不够这一次的预扣（只拒这一次，不冻结）；或本人 / 岗位本月额度到了（WP194，`details.reason`）",
             "x-error-codes": ["insufficient_credits"],
             "content": {
               "application/json": {
@@ -1573,6 +2046,22 @@
               "type": "string",
               "enum": ["cn", "global"]
             }
+          },
+          {
+            "name": "X-Agentsws-Member",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Agentsws-Position",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "requestBody": {
@@ -1619,7 +2108,7 @@
             }
           },
           "402": {
-            "description": "余额不够这一次的预扣（只拒这一次，不冻结）",
+            "description": "余额不够这一次的预扣（只拒这一次，不冻结）；或本人 / 岗位本月额度到了（WP194，`details.reason`）",
             "x-error-codes": ["insufficient_credits"],
             "content": {
               "application/json": {
@@ -1696,6 +2185,22 @@
               "type": "string",
               "enum": ["cn", "global"]
             }
+          },
+          {
+            "name": "X-Agentsws-Member",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Agentsws-Position",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "requestBody": {
@@ -1742,7 +2247,7 @@
             }
           },
           "402": {
-            "description": "余额不够这一次的预扣（只拒这一次，不冻结）",
+            "description": "余额不够这一次的预扣（只拒这一次，不冻结）；或本人 / 岗位本月额度到了（WP194，`details.reason`）",
             "x-error-codes": ["insufficient_credits"],
             "content": {
               "application/json": {
@@ -1818,6 +2323,22 @@
             "schema": {
               "type": "string",
               "enum": ["cn", "global"]
+            }
+          },
+          {
+            "name": "X-Agentsws-Member",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Agentsws-Position",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
             }
           }
         ],
@@ -1915,6 +2436,24 @@
           }
         ],
         "x-scope": "data",
+        "parameters": [
+          {
+            "name": "X-Agentsws-Member",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Agentsws-Position",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -2016,6 +2555,24 @@
           }
         ],
         "x-scope": "data",
+        "parameters": [
+          {
+            "name": "X-Agentsws-Member",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Agentsws-Position",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -2167,6 +2724,22 @@
             "schema": {
               "type": "string",
               "enum": ["cn", "global"]
+            }
+          },
+          {
+            "name": "X-Agentsws-Member",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Agentsws-Position",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
             }
           }
         ],
@@ -2592,6 +3165,22 @@
             "schema": {
               "type": "string",
               "enum": ["cn", "global"]
+            }
+          },
+          {
+            "name": "X-Agentsws-Member",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Agentsws-Position",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
             }
           }
         ],
@@ -6420,6 +7009,302 @@
         "additionalProperties": {},
         "description": "OpenAI 兼容的 usage（结算按它）。"
       },
+      "AllocationAuditEntry": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "at": {
+            "type": "string"
+          },
+          "actor": {
+            "type": "string",
+            "description": "谁改的：本机声明的那个成员（`X-Agentsws-Member`）；没声明就是 `account:<云账号>`。"
+          },
+          "action": {
+            "type": "string",
+            "enum": ["set", "clear", "member_removed"]
+          },
+          "kind": {
+            "$ref": "#/components/schemas/AllocationSubjectKind"
+          },
+          "subject_id": {
+            "type": "string"
+          },
+          "from": {
+            "type": "number"
+          },
+          "to": {
+            "type": "number"
+          }
+        },
+        "required": ["id", "at", "actor", "action", "kind", "subject_id"],
+        "description": "改额度的一条审计（谁、从多少改到多少）。`from` / `to` 没有 = 不设上限。"
+      },
+      "AllocationAuditList": {
+        "type": "object",
+        "properties": {
+          "entries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AllocationAuditEntry"
+            }
+          }
+        },
+        "required": ["entries"],
+        "description": "`GET /v1/wallet/allocation/audit`：最近的改额度记录（新的在前）。"
+      },
+      "AllocationBucket": {
+        "type": "string",
+        "enum": ["ai", "data", "task", "other"],
+        "description": "按能力分的四格（报表「本月按能力分的花费」）。"
+      },
+      "AllocationBucketRow": {
+        "type": "object",
+        "properties": {
+          "bucket": {
+            "$ref": "#/components/schemas/AllocationBucket"
+          },
+          "credits": {
+            "type": "number"
+          },
+          "calls": {
+            "type": "number"
+          }
+        },
+        "required": ["bucket", "credits", "calls"],
+        "description": "本月按能力分的一格。"
+      },
+      "AllocationCell": {
+        "type": "object",
+        "properties": {
+          "member_id": {
+            "type": "string"
+          },
+          "position_id": {
+            "type": "string"
+          },
+          "bucket": {
+            "$ref": "#/components/schemas/AllocationBucket"
+          },
+          "credits": {
+            "type": "number"
+          },
+          "calls": {
+            "type": "number"
+          }
+        },
+        "required": ["bucket", "credits", "calls"],
+        "description": "成员 × 岗位 × 能力的一格（本月）。没带归属的那一格没有 `member_id` / `position_id`。"
+      },
+      "AllocationLimitChanged": {
+        "type": "object",
+        "properties": {
+          "row": {
+            "$ref": "#/components/schemas/AllocationRow"
+          },
+          "audit": {
+            "$ref": "#/components/schemas/AllocationAuditEntry"
+          }
+        },
+        "required": ["row", "audit"],
+        "description": "`POST /v1/wallet/allocation/limits` 的结果。"
+      },
+      "AllocationLimitRequest": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/AllocationSubjectKind"
+          },
+          "subject_id": {
+            "type": "string"
+          },
+          "monthly_limit": {
+            "anyOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "number"
+              }
+            ]
+          }
+        },
+        "required": ["kind", "subject_id", "monthly_limit"],
+        "description": "`POST /v1/wallet/allocation/limits`：设 / 清一个上限。`null` = 不设上限。"
+      },
+      "AllocationMemberRemoved": {
+        "type": "object",
+        "properties": {
+          "member_id": {
+            "type": "string"
+          },
+          "cleared": {
+            "type": "number",
+            "description": "清掉了几行上限（0 = 他本来就没设）。"
+          }
+        },
+        "required": ["member_id", "cleared"]
+      },
+      "AllocationMemberRemoveRequest": {
+        "type": "object",
+        "properties": {
+          "member_id": {
+            "type": "string"
+          }
+        },
+        "required": ["member_id"],
+        "description": "`POST /v1/wallet/allocation/members/remove`：删成员时清掉他的额度行（历史用量保留）。"
+      },
+      "AllocationNotice": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/AllocationSubjectKind"
+          },
+          "subject_id": {
+            "type": "string"
+          },
+          "level": {
+            "$ref": "#/components/schemas/AllocationNoticeLevel"
+          },
+          "month": {
+            "type": "string"
+          },
+          "at": {
+            "type": "string"
+          }
+        },
+        "required": ["kind", "subject_id", "level", "month", "at"],
+        "description": "发过的一次提醒（80% / 100%，每人每月每档一次）。"
+      },
+      "AllocationNoticeLevel": {
+        "type": "number",
+        "enum": [80, 100],
+        "description": "用到上限的几成时提醒（各一次，本人与管理员都看得到）。"
+      },
+      "AllocationReport": {
+        "type": "object",
+        "properties": {
+          "month": {
+            "type": "string",
+            "description": "`YYYY-MM`（按 {@link timezone} 的自然月）。"
+          },
+          "timezone": {
+            "type": "string"
+          },
+          "from": {
+            "type": "string"
+          },
+          "to": {
+            "type": "string"
+          },
+          "members": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AllocationRow"
+            }
+          },
+          "positions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AllocationRow"
+            }
+          },
+          "buckets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AllocationBucketRow"
+            }
+          },
+          "cells": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AllocationCell"
+            }
+          },
+          "total_credits": {
+            "type": "number"
+          },
+          "unattributed_credits": {
+            "type": "number",
+            "description": "没带「谁」的那部分（老客户端、别的产品还没接归属头）。"
+          },
+          "notices": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AllocationNotice"
+            }
+          }
+        },
+        "required": [
+          "month",
+          "timezone",
+          "from",
+          "to",
+          "members",
+          "positions",
+          "buckets",
+          "cells",
+          "total_credits",
+          "unattributed_credits",
+          "notices"
+        ],
+        "description": "`GET /v1/wallet/allocation`：管理员看的本月额度与用量（按人 / 按岗位 / 按能力）。"
+      },
+      "AllocationRow": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/AllocationSubjectKind"
+          },
+          "subject_id": {
+            "type": "string"
+          },
+          "used": {
+            "type": "number",
+            "description": "本月已结算的积分。"
+          },
+          "reserved": {
+            "type": "number",
+            "description": "正在预扣中的（还没结算）。判上限时算在里面。"
+          },
+          "calls": {
+            "type": "number"
+          },
+          "monthly_limit": {
+            "type": "number",
+            "description": "每月上限；没有这一格 = 不设上限。"
+          },
+          "percent": {
+            "type": "number",
+            "description": "`used / monthly_limit` 的百分数（取整）；没上限就没有。"
+          },
+          "updated_at": {
+            "type": "string",
+            "description": "上限最近一次改的时间。"
+          }
+        },
+        "required": ["kind", "subject_id", "used", "reserved", "calls"],
+        "description": "一个人 / 一个岗位本月的用量与上限。"
+      },
+      "AllocationSettings": {
+        "type": "object",
+        "properties": {
+          "timezone": {
+            "type": "string",
+            "description": "IANA 时区名（`Asia/Shanghai`）。"
+          }
+        },
+        "required": ["timezone"],
+        "description": "`POST /v1/wallet/allocation/settings`：公司时区（自然月按它切）。"
+      },
+      "AllocationSubjectKind": {
+        "type": "string",
+        "enum": ["member", "position"],
+        "description": "上限挂在谁身上。"
+      },
       "AuditReport": {
         "type": "object",
         "properties": {
@@ -7691,6 +8576,41 @@
         },
         "required": ["token"],
         "description": "`POST /v1/cloud/auth/verify` 的请求。"
+      },
+      "MyAllocation": {
+        "type": "object",
+        "properties": {
+          "month": {
+            "type": "string"
+          },
+          "timezone": {
+            "type": "string"
+          },
+          "member_id": {
+            "type": "string",
+            "description": "这一次声明的是谁；没声明就没有这一格（也就没有个人上限）。"
+          },
+          "used": {
+            "type": "number"
+          },
+          "reserved": {
+            "type": "number"
+          },
+          "monthly_limit": {
+            "type": "number"
+          },
+          "percent": {
+            "type": "number"
+          },
+          "position": {
+            "$ref": "#/components/schemas/AllocationRow"
+          },
+          "notice": {
+            "$ref": "#/components/schemas/AllocationNoticeLevel"
+          }
+        },
+        "required": ["month", "timezone", "used", "reserved"],
+        "description": "`GET /v1/wallet/allocation/me`：成员自己的「本月额度：已用 X / 上限 Y」。"
       },
       "PluginPairing": {
         "type": "object",

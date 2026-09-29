@@ -37,6 +37,18 @@ import type {
 } from './chat-relay.js'
 import type { CloudScope } from './cloud.js'
 import type {
+  AllocationAuditList,
+  AllocationLimitChanged,
+  AllocationLimitRequest,
+  AllocationMemberRemoved,
+  AllocationMemberRemoveRequest,
+  AllocationReport,
+  AllocationReportQuery,
+  AllocationSettings,
+  AttributionHeaders,
+  MyAllocation,
+} from './cloud-allocation.js'
+import type {
   Pricing,
   TopupOrder,
   TopupProvider,
@@ -337,7 +349,7 @@ export interface TopupRequest {
 /**
  * 我们加的请求头：数据驻留。`cn` = 只允许境内可用的模型，否则 422 `residency_blocked`。
  */
-export interface AiRegionHeaders {
+export interface AiRegionHeaders extends AttributionHeaders {
   'X-Agentsws-Region'?: 'cn' | 'global'
 }
 
@@ -685,7 +697,7 @@ export interface CloudWalletApi {
  */
 interface AiErrors extends EntryAuthErrors {
   400: 'invalid_input'
-  /** 余额不够这一次的预扣（只拒这一次，不冻结） */
+  /** 余额不够这一次的预扣（只拒这一次，不冻结）；或本人 / 岗位本月额度到了（WP194，`details.reason`） */
   402: 'insufficient_credits'
   /** 数据驻留：`X-Agentsws-Region: cn` 却点了境外模型 */
   422: 'residency_blocked'
@@ -771,6 +783,7 @@ export interface CloudSearchDataApi {
     auth: 'workspace_token'
     scope: 'data'
     tag: 'data-search'
+    headers: AttributionHeaders
     body: SerpQuery
     ok: { status: 200; body: SerpResult }
     errors: SearchErrors
@@ -781,6 +794,7 @@ export interface CloudSearchDataApi {
     auth: 'workspace_token'
     scope: 'data'
     tag: 'data-search'
+    headers: AttributionHeaders
     body: AiAnswerProbe
     ok: { status: 200; body: SearchDataAiAnswers }
     errors: SearchErrors
@@ -1547,6 +1561,81 @@ export interface CloudStandbyApi {
 }
 
 /* ------------------------------------------------------------------ */
+/* 路由表：成员 / 岗位额度（WP194）                                     */
+/* ------------------------------------------------------------------ */
+
+/**
+ * WP194：公司共用余额上的「每月上限」（按人 / 按岗位）。
+ *
+ * 谁能管由本机判（公司的 owner / admin 才看得到那一页、才会发这几条）；云上认的是
+ * 工作区令牌的动作集：看用 `wallet:read`，改用 `wallet:topup`（能管钱的那把）。
+ * 「谁」是本机在 {@link AttributionHeaders} 里声明的成员 / 岗位 id。
+ */
+export interface CloudAllocationApi {
+  /** 本月额度与用量：按人、按岗位、按能力（AI / 数据 / 任务 / 其它），以及 80% / 100% 提醒 */
+  'GET /v1/wallet/allocation': {
+    auth: 'workspace_token'
+    scope: 'wallet:read'
+    tag: 'wallet'
+    query: AllocationReportQuery
+    ok: { status: 200; body: CloudDataEnvelope<AllocationReport> }
+    errors: EntryAuthErrors & { 400: 'invalid_input' }
+    errorBody: CloudEntryErrorBody
+  }
+  /** 成员自己的「本月额度：已用 X / 上限 Y」（按 `X-Agentsws-Member` / `X-Agentsws-Position`） */
+  'GET /v1/wallet/allocation/me': {
+    auth: 'workspace_token'
+    scope: 'wallet:read'
+    tag: 'wallet'
+    headers: AttributionHeaders
+    ok: { status: 200; body: CloudDataEnvelope<MyAllocation> }
+    errors: EntryAuthErrors
+    errorBody: CloudEntryErrorBody
+  }
+  /** 设 / 清一个成员或岗位的每月上限（`null` = 不设上限）；每次改都记审计（谁、从多少改到多少） */
+  'POST /v1/wallet/allocation/limits': {
+    auth: 'workspace_token'
+    scope: 'wallet:topup'
+    tag: 'wallet'
+    headers: AttributionHeaders
+    body: AllocationLimitRequest
+    ok: { status: 200; body: CloudDataEnvelope<AllocationLimitChanged> }
+    errors: EntryAuthErrors & { 400: 'invalid_input' }
+    errorBody: CloudEntryErrorBody
+  }
+  /** 公司时区（自然月按它切；缺省 Asia/Shanghai） */
+  'POST /v1/wallet/allocation/settings': {
+    auth: 'workspace_token'
+    scope: 'wallet:topup'
+    tag: 'wallet'
+    body: AllocationSettings
+    ok: { status: 200; body: CloudDataEnvelope<AllocationSettings> }
+    errors: EntryAuthErrors & { 400: 'invalid_input' }
+    errorBody: CloudEntryErrorBody
+  }
+  /** 删成员：清掉他的额度行（历史用量保留，账对得上） */
+  'POST /v1/wallet/allocation/members/remove': {
+    auth: 'workspace_token'
+    scope: 'wallet:topup'
+    tag: 'wallet'
+    headers: AttributionHeaders
+    body: AllocationMemberRemoveRequest
+    ok: { status: 200; body: CloudDataEnvelope<AllocationMemberRemoved> }
+    errors: EntryAuthErrors & { 400: 'invalid_input' }
+    errorBody: CloudEntryErrorBody
+  }
+  /** 最近的改额度记录（新的在前，最多 100 条） */
+  'GET /v1/wallet/allocation/audit': {
+    auth: 'workspace_token'
+    scope: 'wallet:read'
+    tag: 'wallet'
+    ok: { status: 200; body: CloudDataEnvelope<AllocationAuditList> }
+    errors: EntryAuthErrors
+    errorBody: CloudEntryErrorBody
+  }
+}
+
+/* ------------------------------------------------------------------ */
 /* 总表                                                                 */
 /* ------------------------------------------------------------------ */
 
@@ -1563,6 +1652,7 @@ export interface CloudStandbyApi {
 export interface CloudApi
   extends CloudAccountApi,
     CloudWalletApi,
+    CloudAllocationApi,
     CloudAiApi,
     CloudSearchDataApi,
     CloudKolPublicApi,

@@ -19,6 +19,8 @@ export * from './chat-relay.js'
 export * from './cloud.js'
 // 65 云端运营后台（WP115）：角色、后台会话、封禁与黑名单、审计、会员 term / cycle、看板形状
 export * from './cloud-admin.js'
+// WP194：成员 / 岗位额度（公司共用余额上的每月上限）
+export * from './cloud-allocation.js'
 // WP164（docs/83 §2）：云端对外契约的路由表；`cloud-openapi.json` 由它生成
 export * from './cloud-api.js'
 // 49 服务入口与积分（WP59）。令牌验证那份契约在 WP58 的 cloud.ts 里，不在这里。
