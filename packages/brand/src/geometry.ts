@@ -212,3 +212,110 @@ export const BREATHE_PERIOD_MS = 2600
 export const BREATHE_PHASE_MS = 46
 export const BREATHE_SCALE = [0.94, 1] as const
 export const BREATHE_OPACITY = [0.55, 1] as const
+
+/**
+ * 一变一队两段各自的时长（§3.3 那段 CSS 里的数，WP195 提到这里）：领头 0.5s，五块各 0.55s。
+ * 工作台「悬停播一次一变一队再回待机」要知道整段多长，才知道什么时候回去。
+ */
+export const SPLIT_LEAD_DURATION_MS = 500
+export const SPLIT_BLOCK_DURATION_MS = 550
+
+/** 一变一队整段播完要多久：最后一块起步的延迟 + 它自己那 0.55s（领头那 0.5s 早就完了）。 */
+export const SPLIT_TOTAL_MS = Math.max(
+  SPLIT_LEAD_MS + SPLIT_LEAD_DURATION_MS,
+  SPLIT_FIRST_DELAY_MS + (BLOCKS.length - 1) * SPLIT_STEP_MS + SPLIT_BLOCK_DURATION_MS,
+)
+
+// ── 待机（WP195，Luoye 09-29「静态的 logo 其实不好看」）────────────────
+
+/**
+ * 待机：给**一直挂在屏幕上**的标记用（左栏顶部、登录页、空态……）。
+ *
+ * 母品牌规范里没有这一段——它是产品界面自己加的第五种姿态，所以参数只在这里，
+ * 不回规范对表。四条共同的规矩：
+ *
+ * 1. **一轮 ≥ 6 秒，大部分时间一动不动**：动的那一下不到一轮的五分之一；
+ * 2. **幅度小**：位移不超过方块间缝（7 个单位）的一半多一点，24px 时约 1.5px；
+ * 3. **只动 transform**：不动颜色、不动渐变、不动布局——GPU 合成层就能跑完；
+ * 4. **和呼吸分得开**：呼吸是一直在起伏（缩放 + 透明度，2.6s 一轮，说的是
+ *    「Agent 正在干活」）；待机是长时间静止里偶尔一下，说的只是「这个牌子是活的」。
+ *
+ * 位移的单位是标记自己的坐标（外框 65×65），CSS 里写成 `px` 就是这个单位。
+ */
+export type IdleStyle = 'wave' | 'sheen' | 'blink'
+
+/** 三个候选，预览页（`docs/design/brand-motion.html`）并排放着让 Luoye 挑。 */
+export const IDLE_STYLES: readonly IdleStyle[] = ['wave', 'sheen', 'blink']
+
+/** 默认那一个：波（理由写在 `docs/briefs/reports/WP195.md`）。 */
+export const DEFAULT_IDLE_STYLE: IdleStyle = 'wave'
+
+/** 挂上之后先静这么久才动第一下——一打开就动，像在抢注意力。 */
+export const IDLE_START_MS = 1600
+
+/**
+ * 波：六块沿渐变方向（左下 → 右上，领头最后）依次轻轻抬起再落回，一轮 7.2s。
+ *
+ * 每块抬起 4 个单位用 0.36s、落回用 0.54s，然后一直静到下一轮。
+ * 先后顺序按每块中心在渐变轴上的位置排——波走的就是那条渐变的方向。
+ */
+export const IDLE_WAVE = {
+  periodMs: 7200,
+  riseMs: 360,
+  fallMs: 540,
+  lift: 4,
+  /** 第一块到领头之间拉开多少毫秒。 */
+  spreadMs: 480,
+} as const
+
+/**
+ * 流光：一道很淡的亮带沿渐变方向从左下扫到右上，只落在方块上，一轮 8s，扫一次 1.4s。
+ *
+ * 亮带是一层叠在方块上的白色渐变（被六块裁出来），动的只是它的位置——
+ * 标记本身的颜色一个像素都不改。
+ */
+export const IDLE_SHEEN = {
+  periodMs: 8000,
+  sweepMs: 1400,
+  /** 亮带最亮处的不透明度。 */
+  peakOpacity: 0.5,
+  /** 亮带宽度占整条对角线的比例（两侧羽化各一半）。 */
+  bandWidth: 0.3,
+} as const
+
+/**
+ * 眨眼：隔 9s，领头那块往右上方探出一点再归位（回来时带一下回弹，缓动用 `EASING.lead`），
+ * 其余五块不动。
+ *
+ * 演的还是品牌故事：领头的那一个先动。
+ */
+export const IDLE_BLINK = {
+  periodMs: 9000,
+  outMs: 270,
+  backMs: 450,
+  /** 探出去的位移（右上，单位同上）。 */
+  dx: 3,
+  dy: -3,
+} as const
+
+/** 某块中心在渐变轴上的位置（0–1）。 */
+function blockAxis(b: Block): number {
+  return axisParam(b.x + BLOCK_SIZE / 2, b.y + BLOCK_SIZE / 2)
+}
+
+/**
+ * 波：六块（b1…b5 + 领头，顺序同 `ALL_BLOCKS`）各自的起步延迟，不含 `IDLE_START_MS`。
+ *
+ * 按中心在渐变轴上的位置线性排进 `0 … spreadMs`：最靠左下那块 0，领头 `spreadMs`。
+ */
+export const IDLE_WAVE_DELAYS_MS: readonly number[] = (() => {
+  const t = ALL_BLOCKS.map(blockAxis)
+  const lo = Math.min(...t)
+  const hi = Math.max(...t)
+  return t.map((v) => Math.round(((v - lo) / (hi - lo)) * IDLE_WAVE.spreadMs))
+})()
+
+/** 毫秒 → 一轮里的百分比（keyframes 用），保留三位小数。 */
+export function idlePercent(ms: number, periodMs: number): string {
+  return `${Number(((ms / periodMs) * 100).toFixed(3))}%`
+}
