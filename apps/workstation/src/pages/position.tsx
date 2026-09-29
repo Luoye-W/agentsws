@@ -10,6 +10,7 @@ import { Link2Off, ScanSearch } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { B2bOutboundPanel } from '@/components/b2b/outbound-panel'
+import { B2bSalesPanel } from '@/components/b2b/sales-panel'
 import { BlockCard } from '@/components/blocks/block-view'
 import { CalendarLink } from '@/components/calendar/calendar-link'
 import { connectPathFor } from '@/components/connections/links'
@@ -219,6 +220,7 @@ function ViewTab({ id }: { id: string }): React.ReactNode {
       {kolChannel === undefined ? null : <KolPanel assignment={id} channel={kolChannel} />}
       {/* WP173：主动开发那一条的开发信（发信邮箱与体检、公司地址、德奥确认、开一轮） */}
       {here?.role_id === 'b2b.outbound' ? <B2bOutboundPanel assignment={id} /> : null}
+      {here?.role_id === 'b2b.sales' ? <B2bSalesPanel assignment={id} /> : null}
       {noRange ? null : (
         <StoreSections id={id} range={range} setRange={setRange} view={view.data} />
       )}

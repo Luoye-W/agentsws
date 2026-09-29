@@ -20,6 +20,7 @@ import { Play } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { B2bOutboundPanel } from '@/components/b2b/outbound-panel'
+import { B2bSalesPanel } from '@/components/b2b/sales-panel'
 import { CalendarLink } from '@/components/calendar/calendar-link'
 import { WsTag } from '@/components/design'
 import { PanelError } from '@/components/rail/panel-error'
@@ -340,6 +341,12 @@ export function DutyPage(): React.ReactNode {
           {role_id === 'b2b.outbound' ? (
             <div className="mb-4">
               <B2bOutboundPanel assignment={here?.my_assignment_id ?? assignment} />
+            </div>
+          ) : null}
+          {/* WP182（docs/84 §3）：「业务」的事实卡、报价单（看 PDF / 发给客户）、样品往前走 */}
+          {role_id === 'b2b.sales' ? (
+            <div className="mb-4">
+              <B2bSalesPanel assignment={here?.my_assignment_id ?? assignment} />
             </div>
           ) : null}
           {role_id === 'dtc.content' ? (
