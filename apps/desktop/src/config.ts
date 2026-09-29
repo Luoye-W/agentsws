@@ -27,6 +27,11 @@ export interface DesktopConfig {
   mode: DesktopMode
   /** `remote` 时连哪：`https://nas.company.lan:4317`。空串 = 没设。 */
   serverUrl: string
+  /**
+   * WP184（docs/79 §3.1）：官方场景用系统浏览器打开。默认 `false` = 在我们自己的独立窗口里
+   * （体验接近官方桌面端）；托盘「切换场景 ▸ 在浏览器里打开场景」切换。
+   */
+  sceneInBrowser: boolean
 }
 
 export const DEFAULT_PORT = 4317
@@ -38,6 +43,7 @@ export const DEFAULT_CONFIG: DesktopConfig = {
   language: 'zh-CN',
   mode: 'local',
   serverUrl: '',
+  sceneInBrowser: false,
 }
 
 function isLanguage(value: unknown): value is Language {
@@ -67,6 +73,8 @@ export function parseConfig(raw: unknown): DesktopConfig {
     language: isLanguage(obj.language) ? obj.language : DEFAULT_CONFIG.language,
     mode: isMode(obj.mode) ? obj.mode : DEFAULT_CONFIG.mode,
     serverUrl: typeof obj.serverUrl === 'string' ? obj.serverUrl : DEFAULT_CONFIG.serverUrl,
+    sceneInBrowser:
+      typeof obj.sceneInBrowser === 'boolean' ? obj.sceneInBrowser : DEFAULT_CONFIG.sceneInBrowser,
   }
 }
 
@@ -79,6 +87,7 @@ export function serializeConfig(config: DesktopConfig): string {
     language: config.language,
     mode: config.mode,
     serverUrl: config.serverUrl,
+    sceneInBrowser: config.sceneInBrowser,
   }
   return `${JSON.stringify(clean, null, 2)}\n`
 }

@@ -32,6 +32,18 @@ export interface Strings {
   manageScenes: string
   /** 场景起不来时弹的那一句。 */
   sceneOpenFailed: string
+  /** WP184：用户自己装的官方桌面端那一行。 */
+  officialDesktop: string
+  officialDesktopFailed: string
+  /** WP184：官方场景改用系统浏览器打开（勾上 = 浏览器；默认在我们自己的窗口里）。 */
+  sceneInBrowser: string
+  /** WP184：退出前的确认（官方场景还开着）。 */
+  quitTitle: string
+  quitMessage: string
+  quitActiveTasks: string
+  quitScheduledTasks: string
+  quitActiveAndScheduledTasks: string
+  quitConfirm: string
   browserExtensionOk: string
   browserExtensionBad: string
   openLogs: string
@@ -102,6 +114,15 @@ const ZH: Strings = {
   sceneStarting: '启动中',
   manageScenes: '管理场景…',
   sceneOpenFailed: '场景「{name}」没打开：{detail}',
+  officialDesktop: '官方桌面端（你自己装的）',
+  officialDesktopFailed: '官方桌面端没打开：{detail}',
+  sceneInBrowser: '在浏览器里打开场景',
+  quitTitle: 'Agents 工坊',
+  quitMessage: '退出 Agents 工坊？',
+  quitActiveTasks: '官方场景还开着，里面可能有正在进行的任务。退出会把它一起关掉。',
+  quitScheduledTasks: '官方场景里有定好的提醒，退出后它们不会按时触发。',
+  quitActiveAndScheduledTasks: '官方场景里可能有正在进行的任务和定好的提醒。退出会把它一起关掉。',
+  quitConfirm: '退出',
   browserExtensionOk: '浏览器扩展已连上，可以用你正在用的浏览器干活了。',
   browserExtensionBad: '还没好：{detail}',
   openLogs: '打开日志目录',
@@ -161,6 +182,18 @@ const EN: Strings = {
   sceneStarting: 'starting',
   manageScenes: 'Manage scenes…',
   sceneOpenFailed: 'Scene "{name}" did not open: {detail}',
+  officialDesktop: 'Official desktop app (installed by you)',
+  officialDesktopFailed: 'The official desktop app did not open: {detail}',
+  sceneInBrowser: 'Open scenes in the browser',
+  quitTitle: 'Agents Workshop',
+  quitMessage: 'Quit Agents Workshop?',
+  quitActiveTasks:
+    'An official scene is still open and may have tasks running. Quitting closes it too.',
+  quitScheduledTasks:
+    'An official scene has scheduled reminders. They will not fire after you quit.',
+  quitActiveAndScheduledTasks:
+    'An official scene may have running tasks and scheduled reminders. Quitting closes it too.',
+  quitConfirm: 'Quit',
   browserExtensionOk:
     'The browser extension is connected — your everyday browser is ready to work.',
   browserExtensionBad: 'Not ready: {detail}',

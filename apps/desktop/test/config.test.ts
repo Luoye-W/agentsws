@@ -26,7 +26,14 @@ describe('parseConfig', () => {
       language: 'zh-CN',
       mode: 'local',
       serverUrl: '',
+      sceneInBrowser: false,
     })
+  })
+
+  // WP184：官方场景默认在我们自己的窗口里；勾上才用系统浏览器
+  it('sceneInBrowser 只认布尔，默认 false', () => {
+    expect(parseConfig({ sceneInBrowser: true }).sceneInBrowser).toBe(true)
+    expect(parseConfig({ sceneInBrowser: 'yes' }).sceneInBrowser).toBe(false)
   })
 
   // WP36 / 40 §1.3：模式与公司服务器地址
