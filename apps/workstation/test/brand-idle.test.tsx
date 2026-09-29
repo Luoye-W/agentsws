@@ -10,6 +10,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
   DEFAULT_IDLE_STYLE,
+  GRADIENT_AXIS,
   IDLE_BLINK,
   IDLE_SHEEN,
   IDLE_START_MS,
@@ -20,6 +21,9 @@ import {
   idlePercent,
   MIN_GRADIENT_PX,
   MIN_IDLE_PX,
+  SHEEN_BAND_BOX,
+  SHEEN_ON_DARK,
+  SHEEN_ON_LIGHT,
   SPLIT_TOTAL_MS,
 } from '@agentsws/brand'
 import { act, fireEvent, render, screen } from '@testing-library/react'
@@ -40,6 +44,9 @@ function mark(ui: React.ReactNode): SVGSVGElement {
   if (svg === null) throw new Error('没渲染出标记')
   return svg as SVGSVGElement
 }
+
+/** 方块用的整体渐变（排除亮带那一条——WP200 起它也是 userSpaceOnUse）。 */
+const BLOCK_USER_SPACE = 'linearGradient[gradientUnits="userSpaceOnUse"]:not([id$="-sheen"])'
 
 const rects = (svg: SVGSVGElement): SVGRectElement[] => [
   ...svg.querySelectorAll<SVGRectElement>(':scope > rect'),
@@ -100,7 +107,8 @@ describe('待机类名挂上', () => {
       expect(band?.parentElement?.getAttribute('clip-path')).toMatch(/^url\(#.+-clip\d\)$/)
     })
     expect(svg.querySelectorAll('clipPath')).toHaveLength(6)
-    expect(svg.querySelectorAll('linearGradient[gradientUnits="userSpaceOnUse"]')).toHaveLength(0)
+    // 块没有用整体那一条（亮带那条 WP200 起是 userSpaceOnUse，不算）
+    expect(svg.querySelectorAll(BLOCK_USER_SPACE)).toHaveLength(0)
   })
 
   it('波：六块都挂，延迟 = 1.6s + 沿渐变方向的错开', () => {
@@ -128,7 +136,7 @@ describe('待机类名挂上', () => {
   it('流光：方块不挂类、仍用整体渐变；亮带那一层挂类，并被六块裁出来', () => {
     const svg = mark(<BrandMark size={32} motion="idle" idleStyle="sheen" />)
     expect(rects(svg).every((r) => r.getAttribute('class') === null)).toBe(true)
-    expect(svg.querySelectorAll('linearGradient[gradientUnits="userSpaceOnUse"]')).toHaveLength(1)
+    expect(svg.querySelectorAll(BLOCK_USER_SPACE)).toHaveLength(1)
     const band = screen.getByTestId('brand-mark-sheen')
     expect(band.getAttribute('clip-path')).toMatch(/^url\(#.+-clip\)$/)
     expect(band.querySelector('rect')?.getAttribute('class')).toBe('ws-bm-idle-sheen')
@@ -385,4 +393,79 @@ describe('index.css：待机那几段与 @agentsws/brand 的数字一致', () =>
       expect(CSS).toContain(`:root[data-ws-motion="off"] .${cls}`)
     }
   })
+})
+
+describe('WP200：浅色主题那道光调淡，深色不变', () => {
+  /** `:root {` / `.dark {` 那一段（第一次出现的那个，花括号配对）。 */
+  function scope(selector: string): string {
+    const at = CSS.indexOf(`${selector} {`)
+    expect(at).toBeGreaterThan(-1)
+    let depth = 0
+    for (let i = CSS.indexOf('{', at); i < CSS.length; i += 1) {
+      if (CSS[i] === '{') depth += 1
+      if (CSS[i] === '}') {
+        depth -= 1
+        if (depth === 0) return CSS.slice(at, i + 1)
+      }
+    }
+    throw new Error(`${selector} 没闭合`)
+  }
+  const sheenVars = (selector: string): { color: string; strength: number } => {
+    const body = scope(selector)
+    const color = body.match(/--ws-brand-sheen:\s*(#[0-9a-f]{6});/)?.[1]
+    const strength = body.match(/--ws-brand-sheen-strength:\s*([\d.]+);/)?.[1]
+    if (color === undefined || strength === undefined) throw new Error(`${selector} 缺亮带变量`)
+    return { color: color.toUpperCase(), strength: Number(strength) }
+  }
+
+  it('浅色主题 = SHEEN_ON_LIGHT，深色主题 = SHEEN_ON_DARK（逐个相等）', () => {
+    expect(sheenVars(':root')).toEqual(SHEEN_ON_LIGHT)
+    expect(sheenVars('.dark')).toEqual(SHEEN_ON_DARK)
+  })
+
+  it('力度乘在两种亮带那一层的 opacity 上', () => {
+    for (const cls of ['ws-bm-idle-ws-band', 'ws-bm-idle-sheen']) {
+      const at = CSS.indexOf(`.${cls} {\n    opacity`)
+      expect(at).toBeGreaterThan(-1)
+      expect(CSS.slice(at, CSS.indexOf('}', at))).toContain(
+        'opacity: var(--ws-brand-sheen-strength, 1)',
+      )
+    }
+  })
+
+  it('组件里亮带的颜色走变量，不再写死纯白', () => {
+    for (const style of ['wave-sheen', 'sheen'] as const) {
+      const svg = mark(<BrandMark size={40} motion="idle" idleStyle={style} />)
+      const stops = [...svg.querySelectorAll('linearGradient[id$="-sheen"] stop')]
+      expect(stops).toHaveLength(3)
+      for (const st of stops) expect(st.getAttribute('stop-color')).toBe('var(--ws-brand-sheen)')
+    }
+  })
+})
+
+describe('WP200：亮带不在方块上被切断（块中间那条竖直分界）', () => {
+  it.each(['wave-sheen', 'sheen'] as const)(
+    '%s：亮带渐变 userSpaceOnUse、轴 = GRADIENT_AXIS；矩形 = SHEEN_BAND_BOX',
+    (style) => {
+      const svg = mark(<BrandMark size={96} motion="idle" idleStyle={style} />)
+      const g = svg.querySelector('linearGradient[id$="-sheen"]')
+      expect(g?.getAttribute('gradientUnits')).toBe('userSpaceOnUse')
+      expect(['x1', 'y1', 'x2', 'y2'].map((k) => Number(g?.getAttribute(k)))).toEqual([
+        GRADIENT_AXIS.x1,
+        GRADIENT_AXIS.y1,
+        GRADIENT_AXIS.x2,
+        GRADIENT_AXIS.y2,
+      ])
+      const bands = [...svg.querySelectorAll('rect.ws-bm-idle-ws-band, rect.ws-bm-idle-sheen')]
+      expect(bands.length).toBeGreaterThan(0)
+      for (const r of bands) {
+        expect(['x', 'y', 'width', 'height'].map((k) => Number(r.getAttribute(k)))).toEqual([
+          SHEEN_BAND_BOX.x,
+          SHEEN_BAND_BOX.y,
+          SHEEN_BAND_BOX.width,
+          SHEEN_BAND_BOX.height,
+        ])
+      }
+    },
+  )
 })

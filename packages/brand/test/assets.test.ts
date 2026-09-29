@@ -9,7 +9,13 @@ import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import { BRAND_MARK_SVG_DARK, BRAND_MARK_SVG_LIGHT, BRAND_MARK_SVG_MONO } from '../src/index.js'
+import {
+  BRAND_MARK_SVG_DARK,
+  BRAND_MARK_SVG_LIGHT,
+  BRAND_MARK_SVG_MONO,
+  BRAND_MARK_SVG_README_DARK,
+  BRAND_MARK_SVG_README_LIGHT,
+} from '../src/index.js'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..')
 const read = (rel: string): string => readFileSync(join(ROOT, rel), 'utf8')
@@ -21,6 +27,11 @@ describe('docs/assets/brand', () => {
     expect(read('docs/assets/brand/mark-mono.svg')).toBe(`${BRAND_MARK_SVG_MONO}\n`)
   })
 
+  it('WP200：README 那两张会动的也与包里的常量逐字节相同', () => {
+    expect(read('docs/assets/brand/mark-idle-dark.svg')).toBe(`${BRAND_MARK_SVG_README_DARK}\n`)
+    expect(read('docs/assets/brand/mark-idle-light.svg')).toBe(`${BRAND_MARK_SVG_README_LIGHT}\n`)
+  })
+
   it('说明文件把真源指回母品牌规范', () => {
     const doc = read('docs/assets/brand/README.md')
     expect(doc).toContain('品牌设计规范-v2.md')
@@ -30,12 +41,13 @@ describe('docs/assets/brand', () => {
 })
 
 describe('README 顶上那一张', () => {
-  it('深浅两版走 `<picture>`：GitHub 两种主题下各取各的', () => {
+  it('深浅两版走 `<picture>`：GitHub 两种主题下各取各的；WP200 起挂会动的那两张', () => {
     const readme = read('README.md')
     expect(readme).toContain('<picture>')
-    expect(readme).toContain('media="(prefers-color-scheme: dark)"')
-    expect(readme).toContain('docs/assets/brand/mark-dark.svg')
-    expect(readme).toContain('docs/assets/brand/mark-light.svg')
+    expect(readme).toContain(
+      '<source media="(prefers-color-scheme: dark)" srcset="docs/assets/brand/mark-idle-dark.svg">',
+    )
+    expect(readme).toContain('<img src="docs/assets/brand/mark-idle-light.svg"')
     // 标记出现在第一行之前——它是门面，不是正文里的插图
     expect(readme.indexOf('<picture>')).toBeLessThan(readme.indexOf('# agentsws'))
   })
