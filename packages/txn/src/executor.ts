@@ -8,6 +8,7 @@ import type {
 } from '@agentsws/contracts'
 import { evaluateGuardrail, Provenance, snapshotMatches } from '@agentsws/core'
 import { ApprovalBusImpl, finalPayload } from './approvals.js'
+import { boundRecipients, deciderIsLegitimate } from './escalation.js'
 import type { TxnRuntime } from './runtime.js'
 import type {
   ApplyOutcome,
@@ -244,6 +245,16 @@ export class Executor {
 
     // 步骤 5.5（31 §3.2）：重算执行快照，任一分量变化 → snapshot_mismatch
     const item = change.approval ? this.rt.store.getApproval(change.approval.item_id) : undefined
+    // WP199：拍板的人必须是合法审批人（快照绑定的名单或核对得上的升级追加者）
+    if (item !== undefined && !deciderIsLegitimate(item))
+      return this.fail(
+        { ...change, guardrail_rerun: rerun },
+        {
+          code: 'authorization_check_failed',
+          message: `批准人 ${String(item.decision?.by)} 不在这张卡的审批人里`,
+          retryable: false,
+        },
+      )
     const fresh = this.snapshotOf(change, item, read.record_version, rerun.effective_mandate_hash)
     if (change.execution_snapshot) {
       const cmp = snapshotMatches(change.execution_snapshot, fresh)
@@ -628,13 +639,16 @@ export class Executor {
     if (decidedAt && ms(now) - ms(decidedAt) < this.rt.policy.cancel_window_sec * 1000)
       throw new TxnError('conflict', '批准后的取消窗口尚未结束')
 
+    // WP199：拍板的人必须是合法审批人（快照绑定的名单或核对得上的升级追加者）
+    if (!deciderIsLegitimate(item))
+      throw new TxnError('authorization_check_failed', '批准人不在这张卡的审批人里')
     const ctx: ApprovalContext = this.rt.store.getContext(item.id) ?? {}
     const fresh = this.rt.snapshot({
       workspace: item.workspace_id,
       connection: ctx.connection_id ?? '',
       target: refKey(item.subject.object),
       record_version: ctx.record_version ?? '',
-      recipients: item.routing.recipients.map((r) => r.person).sort(),
+      recipients: boundRecipients(item),
       final_payload: finalPayload(item),
       attachments: [...(ctx.attachments ?? [])].sort(),
       executor_version: this.rt.policy.executor_version,
@@ -703,7 +717,7 @@ export class Executor {
       connection: ctx.connection_id ?? '',
       target: refKey(change.target),
       record_version: record_version ?? '',
-      recipients: item ? item.routing.recipients.map((r) => r.person).sort() : [],
+      recipients: item ? boundRecipients(item) : [],
       final_payload: item ? finalPayload(item) : change.after,
       attachments: [...(ctx.attachments ?? [])].sort(),
       executor_version: this.rt.policy.executor_version,

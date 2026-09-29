@@ -16,6 +16,7 @@ import type {
   StagedChange,
   WorkspaceId,
 } from '@agentsws/contracts'
+import { appendEscalationStep, boundRecipients, escalationTierHeldBy } from './escalation.js'
 import { isKnownKind, runPrecheck } from './precheck.js'
 import type { TxnRuntime } from './runtime.js'
 import type {
@@ -260,7 +261,8 @@ export class ApprovalBusImpl implements ApprovalBus {
       connection: ctx.connection_id ?? '',
       target: refKey({ type: String(target.type), id: String(target.id) }),
       record_version: ctx.record_version ?? '',
-      recipients: item.routing.recipients.map((r) => r.person).sort(),
+      // WP199：只绑出卡 / 改派时的名单；升级追加的人按升级链核对（./escalation.ts）
+      recipients: boundRecipients(item),
       final_payload: finalPayload(item),
       attachments: [...(ctx.attachments ?? [])].sort(),
       executor_version: this.rt.policy.executor_version,
@@ -709,13 +711,24 @@ export class ApprovalBusImpl implements ApprovalBus {
    * 与 redirect 同一条路：revision + 1、重算快照、旧 token 全废、按新的收件人重新投递——
    * 于是离职那个人手里那张旧 token 当场失效，新收件人拿到一张新的。
    * 已经定了（或在"稍后"里）的卡一个字不动，回 `undefined`。
+   *
+   * WP199：`from` 是被升级送到卡上的人（`via: 'escalation'`、升级链上核对得上他是那一级的
+   * 当前持有者）时，这一次改派是**那一级的交接**：在升级链上追加一步「从他交给 `to`」，
+   * 与上一步首尾相接，链不断；`to` 也按升级来的人记（`via: 'escalation'`）。
    */
   async reroute(id: string, input: RerouteInput): Promise<ApprovalItem | undefined> {
     const item = this.rt.store.getApproval(id)
     if (!item || (item.state !== 'pending' && item.state !== 'in_review')) return undefined
-    if (!item.routing.recipients.some((r) => r.person === input.from)) return undefined
+    const leaving = item.routing.recipients.find((r) => r.person === input.from)
+    if (leaving === undefined) return undefined
     const now = this.rt.now()
-    const next: Recipient = { person: input.to, via: input.via, reason: input.reason }
+    const tier = leaving.via === 'escalation' ? escalationTierHeldBy(item, input.from) : undefined
+    const next: Recipient = {
+      person: input.to,
+      via: tier === undefined ? input.via : 'escalation',
+      reason: input.reason,
+    }
+    const already = item.routing.recipients.some((r) => r.person === input.to)
     const kept = item.routing.recipients.filter(
       (r) => r.person !== input.from && r.person !== input.to,
     )
@@ -725,6 +738,14 @@ export class ApprovalBusImpl implements ApprovalBus {
       delete item.routing.assignee
       item.state = 'pending'
     }
+    if (tier !== undefined)
+      appendEscalationStep(item, {
+        tier,
+        to: input.to,
+        at: now,
+        added: !already,
+        handover_from: input.from,
+      })
     item.execution_snapshot = this.snapshotOf(item, this.contextOf(item))
     item.updated_at = now
     this.rt.tx(() => {
@@ -735,7 +756,13 @@ export class ApprovalBusImpl implements ApprovalBus {
       workspace_id: item.workspace_id,
       actor: { kind: 'system', id: 'txn' },
       subject: { type: 'approval_item', id: item.id },
-      payload: { from: input.from, to: input.to, via: input.via, reason: input.reason },
+      payload: {
+        from: input.from,
+        to: input.to,
+        via: next.via,
+        reason: input.reason,
+        ...(tier === undefined ? {} : { escalation_tier: tier }),
+      },
       item_id: item.id,
     })
     await this.route(item)
@@ -807,9 +834,11 @@ export class ApprovalBusImpl implements ApprovalBus {
         if (idx < already) continue
         const person = tier === 'scope_manager' ? dir?.scopeManager?.(item) : dir?.owner?.(item)
         if (!person) continue
-        if (!item.routing.recipients.some((r) => r.person === person))
-          item.routing.recipients.push({ person, via: 'escalation' })
+        const added = !item.routing.recipients.some((r) => r.person === person)
+        if (added) item.routing.recipients.push({ person, via: 'escalation' })
         item.routing.escalation.escalated_at.push(now)
+        // WP199：升级 = 在原审批链上追加一步并留痕；快照不动，施行前按这条链核对
+        appendEscalationStep(item, { tier, to: person, at: now, added })
         item.deliveries.push({
           channel: 'workstation',
           to: person,
@@ -825,7 +854,7 @@ export class ApprovalBusImpl implements ApprovalBus {
           workspace_id: item.workspace_id,
           actor: { kind: 'system', id: 'txn' },
           subject: { type: 'approval_item', id: item.id },
-          payload: { tier, to: person, business_hours: elapsed },
+          payload: { tier, to: person, business_hours: elapsed, added },
           item_id: item.id,
         })
       }

@@ -288,6 +288,7 @@ const EXPECTED_KEYS = [
   'lessons_pooled',
   'escalated_tiers',
   'escalated_to',
+  'escalation_trail',
   'sampled',
   'auto_approved',
   'judge_min_score',
@@ -2528,6 +2529,28 @@ function parseExpected(source: string, raw: unknown): ScenarioExpected {
   }
   const escalatedTo = optStrList(source, 'expected.escalated_to', raw.escalated_to)
   if (escalatedTo !== undefined) out.escalated_to = escalatedTo
+  if (raw.escalation_trail !== undefined) {
+    const t = raw.escalation_trail
+    const path = 'expected.escalation_trail'
+    if (!isRec(t)) fail(source, path, '必须是对象')
+    known(source, path, t, ['tiers', 'added', 'decided_by', 'could_not_decide', 'state'])
+    const tiers = optStrList(source, `${path}.tiers`, t.tiers)
+    if (tiers === undefined) fail(source, `${path}.tiers`, '必填')
+    for (const x of tiers)
+      if (!['scope_manager', 'owner'].includes(x))
+        fail(source, `${path}.tiers`, `升级链只有 scope_manager / owner：${x}`)
+    const added = optStrList(source, `${path}.added`, t.added)
+    const decided_by = optStr(source, `${path}.decided_by`, t.decided_by)
+    const could = optStrList(source, `${path}.could_not_decide`, t.could_not_decide)
+    const state = optStr(source, `${path}.state`, t.state)
+    out.escalation_trail = {
+      tiers,
+      ...(added === undefined ? {} : { added }),
+      ...(decided_by === undefined ? {} : { decided_by }),
+      ...(could === undefined ? {} : { could_not_decide: could }),
+      ...(state === undefined ? {} : { state }),
+    }
+  }
   if (raw.sampled !== undefined) out.sampled = numeric(source, 'expected.sampled', raw.sampled)
   if (raw.auto_approved !== undefined) {
     out.auto_approved = numeric(source, 'expected.auto_approved', raw.auto_approved)

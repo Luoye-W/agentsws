@@ -8,6 +8,7 @@
  * 4. 林峰被移出工作区 → 岗位上级清空、他手上那张卡改派给老板（写原因）、老板收到一张提醒。
  */
 import type { ApprovalItem } from '@agentsws/contracts'
+import { escalationDigest } from '@agentsws/txn'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createServer, type Server } from '../src/index.js'
 
@@ -255,5 +256,74 @@ describe('WP174 岗位上级：scope_manager 真的落到上级，没有才落�
     expect(created.routing.recipients).toEqual([
       { person: lin.id, via: 'scope_manager', reason: '转给了「负责人」岗位的上级林峰' },
     ])
+  })
+})
+
+describe('WP199 被升级送到卡上的人离职：他那一格交给老板，升级链接着往下记', () => {
+  it('升级进来的林峰被移出 → 卡改派老板、链上追加交接一步 → 老板批 → 施行成功；林峰再点被拒', async () => {
+    const lin = await colleague('lin@example.com', '林峰')
+    const mei = await colleague('mei@example.com', '梅青')
+    const he = await colleague('he@example.com', '何佳')
+    // 林峰也持「负责人」岗位（common.owner）→ 真服务进程里升级第一级就是他
+    const granted = await call('POST', '/v1/assignments', {
+      body: { person_id: lin.id, position_id: 'owner', ranges: [{ kind: 'brand', id: ws() }] },
+    })
+    expect(granted.status).toBe(201)
+    const heSales = await giveB2b(he.id)
+    await supervise(mei.id)
+    const card = await overMandateQuote(he, heSales)
+    expect(card.routing.recipients.map((r) => r.person)).toEqual([mei.id])
+
+    // 31 工作小时：只升到第一级（林峰）
+    const [escalated] = await server.txn.approvals.escalate('2026-10-01T06:00:00.000Z')
+    if (escalated === undefined) throw new Error('没升级')
+    expect(escalated.routing.recipients.map((r) => [r.person, r.via])).toEqual([
+      [mei.id, 'scope_manager'],
+      [lin.id, 'escalation'],
+    ])
+    const linToken = escalated.deliveries.find((d) => d.to === lin.id)?.decision_token ?? ''
+
+    expect((await call('DELETE', `/v1/workspaces/${ws()}/members/${lin.id}`)).status).toBe(200)
+
+    const moved = await server.txn.approvals.get(card.id)
+    if (moved === undefined) throw new Error('卡不见了')
+    expect(moved.state).toBe('pending')
+    expect(moved.routing.recipients.map((r) => r.person)).not.toContain(lin.id)
+    expect(moved.routing.recipients[0]).toEqual({
+      person: owner(),
+      via: 'escalation',
+      reason: expect.stringContaining('林峰已经离开工作区'),
+    })
+    const trail = moved.routing.escalation.trail ?? []
+    expect(trail.map((s) => [s.tier, s.to, s.handover_from ?? null])).toEqual([
+      ['scope_manager', lin.id, null],
+      ['scope_manager', owner(), lin.id],
+    ])
+    expect(trail[1]?.digest).toBe(
+      escalationDigest(card.id, trail[1] as never, trail[0]?.digest ?? ''),
+    )
+
+    // 林峰再点：他手里那张 token 已经作废
+    await expect(
+      server.txn.approvals.decide(card.id, lin.id, {
+        decision_token: linToken,
+        action: 'approve',
+        via: 'workstation',
+      }),
+    ).rejects.toMatchObject({ code: 'conflict' })
+
+    const ownerToken =
+      [...moved.deliveries].reverse().find((d) => d.to === owner() && d.status === 'sent')
+        ?.decision_token ?? ''
+    const approved = await server.txn.approvals.decide(card.id, owner(), {
+      decision_token: ownerToken,
+      action: 'approve',
+      via: 'workstation',
+    })
+    expect(approved.state).toBe('approved')
+    const change_id = (approved.payload as { change_id?: string }).change_id ?? ''
+    const out = await server.txn.executor.apply(change_id, { force: true })
+    expect(out.error?.code).toBeUndefined()
+    expect(out.status).toBe('applied')
   })
 })

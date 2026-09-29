@@ -144,6 +144,20 @@ export interface ScenarioPositionStaff {
   position: string
 }
 
+/** WP199：升级链留痕断言（`expected.escalation_trail`）。 */
+export interface ScenarioEscalationTrail {
+  /** 卡上 `routing.escalation.trail` 按顺序的级别。 */
+  tiers: string[]
+  /** 升级追加进名单的人（`added: true` 的那几步）。 */
+  added?: string[]
+  /** 最后拍板的人。 */
+  decided_by?: string
+  /** 卡在名单里、却没能做出决定的人（没有这条职责的批准权）。 */
+  could_not_decide?: string[]
+  /** 卡最后的状态（`applied` = 施行成功）。 */
+  state?: string
+}
+
 /** WP69：交给一个岗位一件事（岗位内路由挑职责 → 用那条职责的分配起 Run）。 */
 export interface ScenarioPositionOpen {
   who: string
@@ -1324,6 +1338,11 @@ export interface ScenarioExpected {
   escalated_tiers?: string[]
   /** WP32 扩展：升级把卡交到了谁手上（跨岗位交接看的是**人**换了没有）。 */
   escalated_to?: string[]
+  /**
+   * WP199 扩展：升级之后批了、施行了，而且卡上的留痕完整。
+   * 至少有一张卡同时满足下面给了的每一格。
+   */
+  escalation_trail?: ScenarioEscalationTrail
   /** WP32 扩展：被抽检选中的自动批项条数。 */
   sampled?: NumericAssertion
   /** WP32 扩展：自动批（`auto_approved`）的项数——"不解锁自动执行"的反证也靠它。 */

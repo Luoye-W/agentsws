@@ -465,6 +465,27 @@
             "tokens_per_item": 0,
             "tool_calls": 0
           }
+        },
+        "social/escalated-post-applies": {
+          "metrics": {
+            "adoption_rate": 1,
+            "applied_changes": 1,
+            "blocked_proposals": 0,
+            "cost_base": 0,
+            "escalations": 2,
+            "expired_approvals": 0,
+            "guardrail_hits": 2,
+            "intervention_rate": 0,
+            "judge_rule_score": 1,
+            "knowledge_gaps": 0,
+            "outbound_sent": 0,
+            "queue_latency_ms": 26700000,
+            "runs_failed": 0,
+            "sampling_reviews": 0,
+            "staged_changes": 1,
+            "tokens_per_item": 0,
+            "tool_calls": 0
+          }
         }
       }
     },
@@ -931,6 +952,27 @@
             "tokens_per_item": 0,
             "tool_calls": 0
           }
+        },
+        "social/escalated-post-applies": {
+          "metrics": {
+            "adoption_rate": 1,
+            "applied_changes": 1,
+            "blocked_proposals": 0,
+            "cost_base": 0,
+            "escalations": 2,
+            "expired_approvals": 0,
+            "guardrail_hits": 2,
+            "intervention_rate": 0,
+            "judge_rule_score": 1,
+            "knowledge_gaps": 0,
+            "outbound_sent": 0,
+            "queue_latency_ms": 26700000,
+            "runs_failed": 0,
+            "sampling_reviews": 0,
+            "staged_changes": 1,
+            "tokens_per_item": 0,
+            "tool_calls": 0
+          }
         }
       }
     },
@@ -1393,6 +1435,27 @@
             "queue_latency_ms": 0,
             "runs_failed": 0,
             "sampling_reviews": 1,
+            "staged_changes": 1,
+            "tokens_per_item": 0,
+            "tool_calls": 0
+          }
+        },
+        "social/escalated-post-applies": {
+          "metrics": {
+            "adoption_rate": 1,
+            "applied_changes": 1,
+            "blocked_proposals": 0,
+            "cost_base": 0,
+            "escalations": 2,
+            "expired_approvals": 0,
+            "guardrail_hits": 2,
+            "intervention_rate": 0,
+            "judge_rule_score": 1,
+            "knowledge_gaps": 0,
+            "outbound_sent": 0,
+            "queue_latency_ms": 26700000,
+            "runs_failed": 0,
+            "sampling_reviews": 0,
             "staged_changes": 1,
             "tokens_per_item": 0,
             "tool_calls": 0
