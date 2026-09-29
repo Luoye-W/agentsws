@@ -80,5 +80,9 @@ export function brandExtensionPort(options: BrandExtensionPortOptions): Extensio
       if (port.setAutoScore === undefined) throw new Error('auto-score not wired')
       return port.setAutoScore(session, input)
     },
+
+    /* ── WP202：这个品牌有没有人持有红人职责（按工作区取那一套） ── */
+    kolRoleHeld: async (workspace_id) =>
+      (await portOf(workspace_id as WorkspaceId)).kolRoleHeld?.(workspace_id),
   }
 }

@@ -309,6 +309,7 @@ export type {
 export {
   EXTENSION_BATCH_ID,
   extensionRoutes,
+  KOL_SETUP_PATH,
   REVEAL_FREE_WINDOW_DAYS,
 } from './routes/extension.js'
 // WP188：随便聊

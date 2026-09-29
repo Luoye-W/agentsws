@@ -9,6 +9,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { BrokerDeps } from '../src/lib/broker.js'
 import { flush, observe, pair, status, unpair } from '../src/lib/broker.js'
+import { kolRoleNote, NO_KOL_ROLE_LINE } from '../src/lib/messages.js'
 import type { KeyValueStore } from '../src/lib/storage.js'
 import { memoryStore, QUEUE_LIMIT, readQueue, readSettings } from '../src/lib/storage.js'
 import type { ExtensionObservationInput } from '../src/lib/wire.js'
@@ -257,5 +258,26 @@ describe('超时', () => {
     const out = await observe(deps, [obs('@a')])
     expect(hang).toHaveBeenCalled()
     expect(out.kind).toBe('queued')
+  })
+})
+
+describe('WP202：还没有红人营销岗位', () => {
+  it('本机说「没有」→ 面板那句话 + 去建岗位的深链；说「有」或不说 → 不出', async () => {
+    const store = memoryStore()
+    await pair(depsOf(store, fakeServer({}).fetchLike), '123456')
+    const url = 'http://127.0.0.1:4317/org?tab=positions&new=kol'
+    const none = await status(
+      depsOf(store, fakeServer({ hello: { kol_role_held: false, kol_setup_url: url } }).fetchLike),
+    )
+    expect(kolRoleNote(none)).toEqual({ text: NO_KOL_ROLE_LINE, url })
+    const held = await status(
+      depsOf(store, fakeServer({ hello: { kol_role_held: true } }).fetchLike),
+    )
+    expect(kolRoleNote(held)).toBeUndefined()
+    // 老版本本机服务不带这一格：不瞎说
+    expect(kolRoleNote(await status(depsOf(store, fakeServer({}).fetchLike)))).toBeUndefined()
+    // 应用没开：不知道，也不说
+    const off = await status(depsOf(store, fakeServer({ up: false }).fetchLike))
+    expect(kolRoleNote(off)).toBeUndefined()
   })
 })

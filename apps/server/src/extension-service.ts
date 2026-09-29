@@ -42,7 +42,7 @@ import type {
   ExtensionSetup,
   ExtensionStore,
 } from '@agentsws/api'
-import { REVEAL_FREE_WINDOW_DAYS } from '@agentsws/api'
+import { KOL_SETUP_PATH, REVEAL_FREE_WINDOW_DAYS } from '@agentsws/api'
 import type {
   Clock,
   Creator,
@@ -214,6 +214,11 @@ export interface ExtensionServiceOptions {
   forwardRetryDelaysMs?: readonly number[]
   /** WP201：每一轮公共库转发记一行（几条 2xx、几条待重试、几条云端不收）。不给就不记。 */
   log?: (line: string) => void
+  /**
+   * WP202：这个品牌里有没有人持有红人职责（`kol.*` 任一条的活分配）。hello 与工作台
+   * 「连接 → 浏览器插件」据此说「你还没有红人营销岗位」。不给就不出这一格。
+   */
+  kolRoleHeld?: () => boolean
 }
 
 /** WP201：插件那一跳为公共库最多等 4 秒（插件自己等 8 秒，留足本机写库的余量）。 */
@@ -800,6 +805,7 @@ export function createExtensionService(options: ExtensionServiceOptions): Extens
     hello: (): ExtensionHello => {
       const linked = options.publicLibrary?.linked() === true
       const workbench = options.workbenchUrl?.()
+      const held = options.kolRoleHeld?.()
       return {
         workspace_id: options.workspace_id,
         workspace_name: options.workspaceName(),
@@ -809,8 +815,15 @@ export function createExtensionService(options: ExtensionServiceOptions): Extens
         scopes: ['kol.observe', 'kol.capture', 'kol.read'],
         server_version: options.serverVersion,
         ...(workbench === undefined ? {} : { workbench_url: workbench }),
+        ...(held === undefined ? {} : { kol_role_held: held }),
+        // WP202：还没有红人岗位时给「去建岗位」的深链（要知道工作台在哪才给）
+        ...(held === false && workbench !== undefined
+          ? { kol_setup_url: `${workbench}${KOL_SETUP_PATH}` }
+          : {}),
       }
     },
+
+    ...(options.kolRoleHeld === undefined ? {} : { kolRoleHeld: () => options.kolRoleHeld?.() }),
 
     ingest: async (session, input): Promise<ExtensionIngestResult> => {
       const rows: ExtensionIngestRow[] = []

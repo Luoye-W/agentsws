@@ -6153,6 +6153,13 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         // WP131：「采集后自动评分」的体检那一半——这个品牌连公共库的客户端 + 体检的价
         auditor: brand.kolPublic,
         auditPriceCredits: () => pricingCatalog.creditsFor(KOL_AUDIT_CAPABILITY) ?? 0,
+        // WP202：这个品牌有没有人持有红人职责（没有 = 插件收进来的人在工作台看不到）
+        kolRoleHeld: () =>
+          KOL_CHANNEL_IDS.some((channel) =>
+            roles.assignments
+              .listByRole(`kol.${channel}`, { workspace_id: ws })
+              .some((a) => a.revoked_at === undefined),
+          ),
       }
     },
   })

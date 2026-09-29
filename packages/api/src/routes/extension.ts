@@ -134,7 +134,21 @@ export interface ExtensionHello {
    * 装配没给就回 `undefined`——插件回落到自己配的基址。
    */
   workbench_url?: string
+  /**
+   * WP202（只加）：这个工作区里**有没有人持有红人职责**（`kol.*` 任一条的活分配）。
+   * 没有时，插件收进来的人在工作台红人页上看不到（红人库的读要这个职责），面板上该说一句
+   * 「你还没有红人营销岗位，收进来的人暂时看不到」。装配不知道就不出这一格。
+   */
+  kol_role_held?: boolean
+  /**
+   * WP202（只加）：`kol_role_held === false` 时，「去建岗位」的深链（工作台 `/org`，
+   * 打开新建岗位并预填「红人营销」+ YouTube / Instagram 红人）。要 `workbench_url` 才有。
+   */
+  kol_setup_url?: string
 }
+
+/** WP202：工作台「去建红人岗位」的那一段路径（插件深链与工作台自己的按钮共用）。 */
+export const KOL_SETUP_PATH = '/org?tab=positions&new=kol'
 
 export interface ExtensionPort {
   store: ExtensionStore
@@ -216,6 +230,11 @@ export interface ExtensionPort {
     session: ExtensionSession,
     input: { enabled: boolean },
   ): MaybePromise<ExtensionAutoScoreView>
+
+  /* ── WP202（只加；可选——老装配不实现，就不出那一格）──────────────────── */
+
+  /** 这个工作区里有没有人持有红人职责（hello 与已配清单里那一格）。不知道回 `undefined`。 */
+  kolRoleHeld?(workspace_id: string): MaybePromise<boolean | undefined>
 }
 
 /* ── WP119c 的线上形状（与 docs/76 §10 一一对应）────────────────────────── */
@@ -747,9 +766,17 @@ export function extensionRoutes(): Route[] {
         auth: 'bearer',
         assignment: true,
         authz: READ,
-        returns: '{ tokens: ExtensionTokenView[] }',
+        returns: '{ tokens: ExtensionTokenView[]; kol_role_held?: boolean }',
       },
-      async (c, deps) => ok(c, { tokens: portOf(deps).store.list(principalOf(c).workspace_id) }),
+      async (c, deps) => {
+        const workspace_id = principalOf(c).workspace_id
+        // WP202（只加）：工作台那一节要说「你还没有红人营销岗位」时靠这一格
+        const held = await portOf(deps).kolRoleHeld?.(workspace_id)
+        return ok(c, {
+          tokens: portOf(deps).store.list(workspace_id),
+          ...(held === undefined ? {} : { kol_role_held: held }),
+        })
+      },
     ),
     route(
       {

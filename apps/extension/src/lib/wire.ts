@@ -56,6 +56,10 @@ export interface ExtensionHello {
   shares_to_public_library: boolean
   scopes: string[]
   server_version: string
+  /** WP202（可选）：这个品牌里有没有人持有红人职责。`false` = 收进来的人在工作台暂时看不到。 */
+  kol_role_held?: boolean
+  /** WP202（可选）：`kol_role_held === false` 时「去建岗位」的工作台深链。 */
+  kol_setup_url?: string
 }
 
 export interface RedeemedToken {
