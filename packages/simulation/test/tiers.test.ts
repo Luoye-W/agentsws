@@ -364,6 +364,8 @@ describe('15 / 50 人 pack（26 §2 / 27）', () => {
       'site/theme-publish-still-l1',
       // WP73（56 §6）：同渠道同一小时两条 → 撞车，而且那句话真的在卡面上
       'social/calendar-conflict-flagged',
+      // WP199：发布卡落到批不了的运营主管 → 升级给负责人 → 批了真能施行，升级链留痕完整
+      'social/escalated-post-applies',
       // WP63（51 §2.1 数据日报）：日报卡 L3 自动出、看完归档，一条变更都不提
       'store/daily-report-card',
     ])

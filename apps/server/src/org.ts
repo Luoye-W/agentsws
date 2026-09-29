@@ -949,6 +949,42 @@ export function createOrg(options: OrgOptions): OrgAssembly {
   }
 
   /**
+   * 离开工作区的人手上还没批的卡 → 各自工作区的老板。回改派了几张。
+   *
+   * 两种卡：以「上级」身份收到的（`via: 'scope_manager'`，WP174）；**被升级送到他手上的**
+   * （`via: 'escalation'`，WP199）——后一种由审批总线在升级链上追加一步「从他交给老板」，
+   * 留痕连续，老板批了照样能施行；离开的人手里那张旧 token 当场作废。
+   */
+  const handOverCards = async (left: PersonId): Promise<number> => {
+    if (approvals.reroute === undefined) return 0
+    const owner = (await identity.getWorkspace(workspace_id))?.owner_id
+    const leftName = await personName(left)
+    const spaces = (await options.workspaceIds?.()) ?? [workspace_id]
+    let moved = 0
+    for (const ws of spaces) {
+      const wsOwner = (await identity.getWorkspace(ws))?.owner_id ?? owner
+      if (wsOwner === undefined || wsOwner === left) continue
+      const ownerName = await personName(wsOwner)
+      const cards = await approvals.queue({ workspace_id: ws, person_id: left, lane: 'mine' })
+      for (const card of cards) {
+        const mine = card.routing.recipients.find((r) => r.person === left)
+        if (mine?.via !== 'scope_manager' && mine?.via !== 'escalation') continue
+        const done = await approvals.reroute(card.id, {
+          from: left,
+          to: wsOwner,
+          via: 'owner',
+          reason:
+            mine.via === 'scope_manager'
+              ? `上级${leftName}已经离开工作区，改派给老板${ownerName}`
+              : `${leftName}已经离开工作区，升级到他手上的这一级改由老板${ownerName}接手`,
+        })
+        if (done !== undefined) moved += 1
+      }
+    }
+    return moved
+  }
+
+  /**
    * WP174：上级离开了工作区——清空、提醒老板、改派他手上的卡。
    *
    * 三件事的顺序有讲究：先清空（之后新来的卡立刻按老板走），再改派旧卡，最后发提醒。
@@ -966,7 +1002,11 @@ export function createOrg(options: OrgOptions): OrgAssembly {
           (only === undefined || p.supervisor_person_id === only) &&
           !active.has(p.supervisor_person_id),
       )
-    if (stale.length === 0) return []
+    if (stale.length === 0) {
+      // WP199：他不是谁的上级，但可能是被升级送到卡上的人——那几张卡照样交接
+      if (only !== undefined && !active.has(only)) await handOverCards(only)
+      return []
+    }
     const workspace = await identity.getWorkspace(workspace_id)
     const owner = workspace?.owner_id
     const byLeft = new Map<PersonId, StoredPosition[]>()
@@ -984,25 +1024,8 @@ export function createOrg(options: OrgOptions): OrgAssembly {
     for (const [left, positions] of byLeft) {
       const leftName = await personName(left)
       const names = positions.map((p) => `「${p.name.zh}」`).join('、')
-      // 他手上还没批的「转上级」的卡 → 各自工作区的老板
-      const spaces = (await options.workspaceIds?.()) ?? [workspace_id]
-      let moved = 0
-      for (const ws of spaces) {
-        const wsOwner = (await identity.getWorkspace(ws))?.owner_id ?? owner
-        if (wsOwner === undefined || wsOwner === left || approvals.reroute === undefined) continue
-        const cards = await approvals.queue({ workspace_id: ws, person_id: left, lane: 'mine' })
-        for (const card of cards) {
-          const mine = card.routing.recipients.find((r) => r.person === left)
-          if (mine?.via !== 'scope_manager') continue
-          const done = await approvals.reroute(card.id, {
-            from: left,
-            to: wsOwner,
-            via: 'owner',
-            reason: `上级${leftName}已经离开工作区，改派给老板${await personName(wsOwner)}`,
-          })
-          if (done !== undefined) moved += 1
-        }
-      }
+      // 他手上还没批的「转上级」的卡、被升级送到他手上的卡 → 各自工作区的老板
+      const moved = await handOverCards(left)
       if (owner === undefined) continue
       const summary = `${leftName}离开了工作区，他是${names}岗位的上级。这几个岗位现在没有上级，超授权的审批先落到你；${moved === 0 ? '' : `他手上还没批的 ${moved} 张卡已经改派给你。`}想换人就去「公司 → 岗位」重设上级。`
       try {

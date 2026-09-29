@@ -343,6 +343,37 @@ expected:
     expect(s.expected.scope_disjoint).toEqual(['p_zhao', 'p_qian'])
   })
 
+  it('WP199：escalation_trail 解析得出来；级别写错、多写键都当场顶回来', () => {
+    const base = MINIMAL.replace('invariants: [prompt_replayable]', '')
+    const s = parseScenario(
+      `${base}expected:
+  escalation_trail:
+    tiers: [scope_manager, owner]
+    added: [p_wang]
+    decided_by: p_wang
+    could_not_decide: [p_li]
+    state: applied
+invariants: [prompt_replayable]
+`,
+      't.yml',
+    )
+    expect(s.expected.escalation_trail).toEqual({
+      tiers: ['scope_manager', 'owner'],
+      added: ['p_wang'],
+      decided_by: 'p_wang',
+      could_not_decide: ['p_li'],
+      state: 'applied',
+    })
+    const bad = (body: string) => () =>
+      parseScenario(
+        `${base}expected:\n  escalation_trail: ${body}\ninvariants: [prompt_replayable]\n`,
+        't.yml',
+      )
+    expect(bad('{ tiers: [boss] }')).toThrow(ScenarioSchemaError)
+    expect(bad('{ tiers: [owner], who: p_wang }')).toThrow(ScenarioSchemaError)
+    expect(bad('{ added: [p_wang] }')).toThrow(ScenarioSchemaError)
+  })
+
   it('matchNumeric', () => {
     expect(matchNumeric(0.7, '>=0.6')).toBe(true)
     expect(matchNumeric(0.5, '>=0.6')).toBe(false)

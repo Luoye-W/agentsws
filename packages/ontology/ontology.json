@@ -109,7 +109,7 @@
     "packages/roles/roles/social/x.yml",
     "packages/roles/roles/social/youtube.yml"
   ],
-  "source_digest": "3100c9379fb28b3465f97fb44f3e17c2",
+  "source_digest": "4793b7065a0c0c015f68082d62ecaddf",
   "objects": [
     {
       "id": "ad",
@@ -617,6 +617,12 @@
           "type": "Iso8601[]",
           "sensitivity": "internal",
           "optional": false
+        },
+        {
+          "name": "routing.escalation.trail",
+          "type": "EscalationStep[]",
+          "sensitivity": "internal",
+          "optional": true
         },
         {
           "name": "routing.separation_of_duties",
