@@ -160,7 +160,7 @@ function ScheduleRow({ row }: { row: ScheduledTaskRow }): ReactNode {
             {freq}
             {row.next_fire_at === undefined || awaiting || paused
               ? ''
-              : ` · ${t('rail.schedules.next', { at: formatDateTime(row.next_fire_at, lang) })}`}
+              : `${freq === '' ? '' : ' · '}${t('rail.schedules.next', { at: formatDateTime(row.next_fire_at, lang) })}`}
           </span>
         </span>
         {awaiting ? (
