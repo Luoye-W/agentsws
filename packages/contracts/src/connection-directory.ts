@@ -1109,6 +1109,38 @@ export const CONNECTION_DIRECTORY: readonly ConnectionDirectoryEntry[] = [
       en: 'The team channel: approval cards and @-mentions in group chats.',
     },
   },
+  // WP211：飞书 / 钉钉。与企业微信同一个定位（团队渠道、归工作区），都走长连接，
+  // 本机不需要公网回调地址。凭据在 `/im-channels` 的原生表单里填，不走这里的字段描述。
+  {
+    kind: 'feishu_bot',
+    name: { zh: '飞书机器人', en: 'Feishu / Lark bot' },
+    category: 'im',
+    auth: 'client_credentials',
+    mode: 'channel_adapter',
+    fields: OAUTH_NO_FIELDS,
+    side_effect: 'write_external',
+    docs_url: '/im-channels',
+    status: 'planned',
+    note: {
+      zh: '团队渠道：同事私聊它或在群里 @ 它，它按提问人的身份作答。',
+      en: 'The team channel: DM it or @ it in a group; it answers as the asker.',
+    },
+  },
+  {
+    kind: 'dingtalk_bot',
+    name: { zh: '钉钉机器人', en: 'DingTalk bot' },
+    category: 'im',
+    auth: 'client_credentials',
+    mode: 'channel_adapter',
+    fields: OAUTH_NO_FIELDS,
+    side_effect: 'write_external',
+    docs_url: '/im-channels',
+    status: 'planned',
+    note: {
+      zh: '团队渠道：同事私聊它或在群里 @ 它，它按提问人的身份作答。',
+      en: 'The team channel: DM it or @ it in a group; it answers as the asker.',
+    },
+  },
   // ── 开发 ────────────────────────────────────────────────────────────
   {
     kind: 'github',

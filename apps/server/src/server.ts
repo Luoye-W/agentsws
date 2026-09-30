@@ -278,6 +278,8 @@ import {
 } from './hosted-mode.js'
 import { createApprovalDirectory } from './housekeeping.js'
 import { createImChannels } from './im-channels.js'
+import { feishuSdkTransportFactory, fetchHttp, wsSocketFactory } from './im-sdk.js'
+import { createTeamBotManagerCheck } from './im-team-bots.js'
 import { createJoin, type JoinAssembly } from './join.js'
 // WP56（48 §4 #9）：知识包导入的落库那一步
 import { knowledgeSourceFile } from './knowledge-file.js'
@@ -6791,6 +6793,25 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     makePipeline: (input) => boot.channels.imPipeline(input),
     // 游标与会话上下文跟渠道库走：落盘档重启之后不从头拉
     clawbotState: boot.channels.clawbotState,
+    /*
+     * WP211：三条团队渠道的真连接。企业微信那条在 WP85 只做了注入口、真装配没接上
+     * （界面上填了也一直「连接中」），这里一并接上 `ws`。飞书走官方 SDK，选了才懒加载。
+     */
+    wecomSocket: wsSocketFactory,
+    // Fable 09-30：公司的应用凭据只给负责人（`common.owner`）与公司管理员填、改、断开
+    canManageTeamBots: createTeamBotManagerCheck({
+      isOwner: (person_id) =>
+        roles.assignments
+          .listByPerson(person_id, { workspace_id: workspace.id, role_id: 'common.owner' })
+          .some((a) => a.revoked_at === undefined),
+      organization: async () => {
+        const org_id = (await identity.getWorkspace(workspace.id))?.org_id
+        return org_id === undefined ? undefined : identity.getOrganization(org_id)
+      },
+    }),
+    feishuTransport: feishuSdkTransportFactory,
+    dingtalkSocket: wsSocketFactory,
+    dingtalkHttp: fetchHttp,
     appendEvent,
     newId: () => `im_${Math.floor(random() * 1e9).toString(36)}`,
     random,
