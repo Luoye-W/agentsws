@@ -7,7 +7,7 @@
  *   工作台退回英文 id）；
  * - `roles`：职责 yml 的 `skills:` 反查——哪几条职责在用它；
  * - `positions`：那几条职责挂在哪几个岗位下，并上 frontmatter 的 `positions`（只加的可选字段）。
- *   挂在 `common.*` 上的算「通用」（`common`）；只挂在没进任何岗位模板的职责上、或者谁都没挂的
+ *   挂在 `common.*` 上的算「通用」（`common`）；挂在超过一半岗位上的也只进「通用」；只挂在没进任何岗位模板的职责上、或者谁都没挂的
  *   → 也归「通用」；
  * - `in_use`：本人名下有没撤销的职责在用它（「只看我在用的」）；
  * - `sections[].body`：段落正文（搜索要搜到正文）。
@@ -101,6 +101,13 @@ export function enrichSkillSummaries(
       else for (const id of r.position_ids) ids.add(id)
     }
     for (const id of parsePositionsField(extra.positions)) ids.add(id)
+    // Fable 09-30：挂在**超过一半**岗位上的（「品牌话术」挂在 7 / 10 个岗位上）就是通用技能——
+    // 只进「通用」，不在每个岗位组里重复一遍。卡上的职责小标签照旧列全（`roles` 不动）。
+    const spread = [...ids].filter((id) => positions.some((p) => p.id === id)).length
+    if (positions.length > 0 && spread * 2 > positions.length) {
+      ids.clear()
+      ids.add(COMMON_POSITION_ID)
+    }
     if (ids.size === 0) ids.add(COMMON_POSITION_ID)
 
     // 岗位模板的顺序在前，frontmatter 里写了但模板里没有的（拼错 / 还没上线的岗位）按字母排后面，

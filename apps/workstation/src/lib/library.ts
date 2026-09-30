@@ -134,7 +134,7 @@ export function filterSkills(
 /**
  * 第三栏「设定 → 技能」：只列当前岗位 / 职责在用的那几个。
  *
- * - 岗位层：`positions` 里有这个岗位；
+ * - 岗位层：`positions` 里有这个岗位，或者它的某条职责挂在这个岗位下（只归了「通用」的那种）；
  * - 职责层：`roles` 里有这条职责。
  *
  * 服务端没回分组那几格（老进程）时一个都判不出来——那就原样全给，别让面板空着。
@@ -147,7 +147,9 @@ export function skillsForScope(
   if (!known) return [...skills]
   return skills.filter((s) =>
     scope.tier === 'position'
-      ? (s.positions ?? []).some((p) => p.id === scope.scope_id)
+      ? (s.positions ?? []).some((p) => p.id === scope.scope_id) ||
+        // 挂在大半岗位上、只归了「通用」的技能（如品牌话术）：这个岗位的职责在用它，就算这个岗位的
+        (s.roles ?? []).some((r) => r.position_ids.includes(scope.scope_id))
       : (s.roles ?? []).some((r) => r.role_id === scope.scope_id),
   )
 }

@@ -39,6 +39,9 @@ const POSITIONS = [
     roles: [{ role: 'social.x' }],
   },
   { id: 'dtc-ops', name: { zh: '独立站运营', en: 'DTC Ops' }, roles: [{ role: 'dtc.support' }] },
+  // 凑够四个岗位：品牌话术挂两个（正好一半）不算「超过一半」，照旧按岗位分
+  { id: 'b2b', name: { zh: 'B2B', en: 'B2B' }, roles: [{ role: 'b2b.sales' }] },
+  { id: 'pr', name: { zh: '公共关系', en: 'PR' }, roles: [{ role: 'pr.press' }] },
 ]
 
 const ROLES = [
@@ -115,6 +118,34 @@ describe('WP209 技能按岗位分组', () => {
     expect(care?.description).toContain('网站客服')
     expect(care?.sections[0]?.body).toBe('customer-care 的第一段正文')
     expect(orphan?.display_name).toBeUndefined()
+  })
+
+  it('挂在超过一半岗位上的只进「通用」，职责标签照旧列全', () => {
+    const many = ['a', 'b', 'c', 'd'].map((id) => ({
+      id,
+      name: { zh: id, en: id },
+      roles: [{ role: `${id}.x` }],
+    }))
+    const roles = many.map((p) => ({
+      id: `${p.id}.x`,
+      name: { zh: p.id, en: p.id },
+      skills: [
+        { name: p.id === 'd' ? 'narrow' : 'wide' },
+        ...(p.id === 'a' ? [{ name: 'half' }] : []),
+      ],
+    }))
+    roles[1]?.skills.push({ name: 'half' })
+    const [wide, half, narrow] = enrichSkillSummaries(['wide', 'half', 'narrow'].map(base), {
+      positions: many,
+      roles,
+      held_roles: [],
+      frontmatterOf: () => undefined,
+    })
+    // 3 / 4 个岗位 → 通用；2 / 4 正好一半不算「超过」→ 留在两个岗位里
+    expect(wide?.positions?.map((p) => p.id)).toEqual([COMMON_POSITION_ID])
+    expect(wide?.roles?.map((r) => r.role_id)).toEqual(['a.x', 'b.x', 'c.x'])
+    expect(half?.positions?.map((p) => p.id)).toEqual(['a', 'b'])
+    expect(narrow?.positions?.map((p) => p.id)).toEqual(['d'])
   })
 
   it('frontmatter 的 positions：逗号 / 空白都认', () => {
