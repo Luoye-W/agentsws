@@ -99,6 +99,8 @@
 | 74 | WP197 官网实现（`apps/site`，方向 A，只放公开页面；条款 / 隐私 / 退款起草；不部署） | `WP197-site-build.md` | `wp197-site` · `wp/197-site` | WP193 | 已合并（未上线） |
 | 75 | WP199 审批卡升级给上级后施行失败（修 bug，顺查转交 / 代批 / 交接） | `WP199-approval-escalation.md` | `wp199-escalation` · `wp/199-escalation` | WP191 | 已合并 |
 | 76 | WP200 品牌标记两处小调（浅色主题光调淡、README 标记动起来） | `WP200-brand-tweaks.md` | `wp200-brand-tweaks` · `wp/200-brand-tweaks` | WP195 | 已合并 |
+| 77 | WP204 消息页按钮逐个过一遍并修好（显示图片、删除等没反应） | `WP204-messages-buttons.md` | `wp204-msg-buttons` · `wp/204-msg-buttons` | WP63 | 进行中（Claude） |
+| 78 | WP205 以 AI 为核心的消息中心：调研 + 设计稿（统一入口、AI 标签与分拣、两个展示方向） | `WP205-ai-inbox-design.md` | `wp205-inbox-design` · `wp/205-inbox-design` | WP167 | 进行中（Claude） |
 
 WP117b 的补充要求（派工单里没有，写在这）：demo 服务的是 `apps/workstation/dist`，测界面前先 `pnpm -F @agentsws/workstation exec vite build`；交付一个真实点击的 playwright 脚本 `scripts/e2e-kol-sandbox.mjs`（playwright 库在 `node_modules/.pnpm/playwright@1.63.0/node_modules/playwright`），走完「选合成红人 → 起草开发信 → 批准发送 → 已发 ≥ 1 → 跳到 N 天后 → 回信 ≥ 1 → 分类 → 议价卡 → 阶段推进 → 交付物 → 追踪链接」，每步截图到 `docs/assets/workstation/kol-e2e-NN.png`，脚本里断言计数确实变了；演练数据从真实漏斗 / 归因里排除，单独显示「演练漏斗」。
 
