@@ -36,6 +36,53 @@ export interface DeadLetterRecord {
   attempts: number
   last_error?: string
   at_ms: number
+  /**
+   * WP210：自动重投的进度（`deadLetterRecords` 读出来时附上；存储层不存这一格，
+   * 它在单独的 `setDeadLetterRetry` 里）。
+   */
+  retry?: DeadLetterRetryState
+}
+
+/**
+ * WP210（Luoye 09-30）：一条死信**自动重投**到了哪一步。
+ *
+ * 单独存（不写在死信那一行上）：重投时死信行会被删掉，再死一次是新写的一行——
+ * 轮数要跨过这一删一写接着数。
+ */
+export interface DeadLetterRetryState {
+  /** 自动重投过几轮。 */
+  rounds: number
+  /** 上一轮自动重投的时刻（epoch ms）。 */
+  last_at_ms: number
+  /** 上一轮自动重投时的程序版本。换了版本 = 可能修好了，轮数从头数、立刻再投一次。 */
+  release?: string
+  /** 判定彻底投不进：不再自动重投（换了版本除外），只进后台日志。 */
+  gave_up?: boolean
+  /** 已经为它出过一张提醒卡（客户来信才出；换版本重来也不再出第二张）。 */
+  notified?: boolean
+}
+
+/**
+ * 自动重投的退避：第 n 轮等 `base * factor^(n-1)`，封顶 `max_ms`；投满 `max_rounds` 轮还死，
+ * 就算彻底投不进。缺省 30 分钟 → 2 小时 → 8 小时 → 24 小时，四轮之后放弃（换版本再来一遍）。
+ */
+export interface AutoRequeuePolicy {
+  max_rounds: number
+  base_ms: number
+  factor: number
+  max_ms: number
+}
+
+export const DEFAULT_AUTO_REQUEUE: AutoRequeuePolicy = {
+  max_rounds: 4,
+  base_ms: 30 * 60_000,
+  factor: 4,
+  max_ms: 24 * 60 * 60_000,
+}
+
+/** 已经自动重投过 `rounds` 轮之后，下一轮要在死信落地后等多久。 */
+export function autoRequeueDelayMs(rounds: number, policy: AutoRequeuePolicy): number {
+  return Math.min(policy.max_ms, Math.round(policy.base_ms * policy.factor ** Math.max(0, rounds)))
 }
 
 export interface QueueStore {
@@ -60,6 +107,12 @@ export interface QueueStore {
   deadLetter?(id: string): MaybePromise<DeadLetterRecord | undefined>
   /** WP55：删掉一条死信（重投成功之后）。 */
   removeDead?(id: string): MaybePromise<void>
+  /**
+   * WP210：自动重投的进度（按死信 id）。可选：不实现 = 这一档不自动重投（老行为）。
+   */
+  deadLetterRetry?(id: string): MaybePromise<DeadLetterRetryState | undefined>
+  /** WP210：写 / 清（`undefined`）一条死信的自动重投进度。 */
+  setDeadLetterRetry?(id: string, state: DeadLetterRetryState | undefined): MaybePromise<void>
 }
 
 /** 默认租约：一条入站消息的处理不该超过这么久。 */
@@ -68,6 +121,7 @@ export const DEFAULT_LEASE_MS = 60_000
 export class MemoryQueueStore implements QueueStore {
   private readonly items = new Map<string, QueueItem>()
   private readonly dead: DeadLetterRecord[] = []
+  private readonly retries = new Map<string, DeadLetterRetryState>()
 
   put(item: QueueItem): void {
     this.items.set(item.id, { ...item })
@@ -114,6 +168,16 @@ export class MemoryQueueStore implements QueueStore {
   removeDead(id: string): void {
     const idx = this.dead.findIndex((d) => d.id === id)
     if (idx >= 0) this.dead.splice(idx, 1)
+  }
+
+  deadLetterRetry(id: string): DeadLetterRetryState | undefined {
+    const found = this.retries.get(id)
+    return found === undefined ? undefined : { ...found }
+  }
+
+  setDeadLetterRetry(id: string, state: DeadLetterRetryState | undefined): void {
+    if (state === undefined) this.retries.delete(id)
+    else this.retries.set(id, { ...state })
   }
 
   get size(): number {

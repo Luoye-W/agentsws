@@ -13,9 +13,13 @@ import type {
   WorkspaceId,
 } from '@agentsws/contracts'
 import { EXTERNAL_FENCE, sha256 } from '@agentsws/core'
+import { isCustomerLetter } from './dead-letter-policy.js'
 import { ChannelError } from './errors.js'
 import {
+  type AutoRequeuePolicy,
+  autoRequeueDelayMs,
   backoffMs,
+  DEFAULT_AUTO_REQUEUE,
   DEFAULT_LEASE_MS,
   DEFAULT_RETRY,
   type DeadLetterRecord,
@@ -124,6 +128,8 @@ export interface ChannelInboundPipelineOptions {
   /** 领取一条入站消息的租约时长；领取方崩了，过了它这条自动回到可领取状态 */
   lease_ms?: number
   retry?: Partial<RetryPolicy>
+  /** WP210：死信自动重投的退避（缺省 30 分钟 → 2 小时 → 8 小时 → 24 小时，四轮后放弃）。 */
+  auto_requeue?: Partial<AutoRequeuePolicy>
   raw_secret_policy?: 'redact' | 'keep'
   /** 解析不到发件人身份就直接进死信（默认 false：陌生客户首封邮件是常态） */
   dead_letter_on_unresolved_actor?: boolean
@@ -159,6 +165,7 @@ export class ChannelInboundPipeline implements InboundPipeline {
   private readonly windowMs: number
   private readonly queue: QueueStore
   private readonly retry: RetryPolicy
+  private readonly autoRequeue: AutoRequeuePolicy
   private readonly leaseMs: number
   private readonly rawSecretPolicy: 'redact' | 'keep'
   private readonly deadLetterOnUnresolvedActor: boolean
@@ -180,6 +187,7 @@ export class ChannelInboundPipeline implements InboundPipeline {
     this.windowMs = opts.dedupe_window_ms ?? DAY_MS
     this.queue = opts.queue ?? new MemoryQueueStore()
     this.retry = { ...DEFAULT_RETRY, ...opts.retry }
+    this.autoRequeue = { ...DEFAULT_AUTO_REQUEUE, ...opts.auto_requeue }
     this.leaseMs = opts.lease_ms ?? DEFAULT_LEASE_MS
     this.rawSecretPolicy = opts.raw_secret_policy ?? 'redact'
     this.deadLetterOnUnresolvedActor = opts.dead_letter_on_unresolved_actor ?? false
@@ -325,7 +333,92 @@ export class ChannelInboundPipeline implements InboundPipeline {
 
   /** 死信的完整记录（原因 / 尝试次数 / 最后一次错误），工作台要展示的就是这个。 */
   async deadLetterRecords(workspace_id: WorkspaceId): Promise<DeadLetterRecord[]> {
-    return this.queue.deadLetters(workspace_id)
+    const records = await this.queue.deadLetters(workspace_id)
+    if (this.queue.deadLetterRetry === undefined) return records
+    const out: DeadLetterRecord[] = []
+    for (const record of records) {
+      const retry = await this.queue.deadLetterRetry(record.id)
+      out.push(retry === undefined ? record : { ...record, retry })
+    }
+    return out
+  }
+
+  /** WP210：这条死信下一次自动重投的时刻（epoch ms）；不会再自动重投了回 `undefined`。 */
+  nextAutoRequeueAt(record: DeadLetterRecord): number | undefined {
+    if (record.reason !== 'retries_exhausted') return undefined
+    const rounds = record.retry?.rounds ?? 0
+    if (record.retry?.gave_up === true || rounds >= this.autoRequeue.max_rounds) return undefined
+    return record.at_ms + autoRequeueDelayMs(rounds, this.autoRequeue)
+  }
+
+  /**
+   * WP210（Luoye 09-30）：失败的信**自动**重投，不再要人一封封点。
+   *
+   * 宿主每一拍（收信那一轮）调一次。只管这条管线认得的渠道；每条死信：
+   * - 原因是 `retries_exhausted`（触发那一跳一直抛错，多半是我们的 bug 或上游抽风）→
+   *   按退避自动重投：死了 30 分钟后第一轮，再死 2 小时后第二轮…… 四轮还死就**放弃**；
+   * - **换了版本**（`release` 与上一轮不同，多半是修好了）→ 轮数从头数、立刻再投一次，
+   *   放弃过的也再给一次机会；
+   * - 原因是 `no_route` / `actor_unresolved`（路由判定，重投不会重新路由）→ 直接放弃。
+   *
+   * 放弃的只进后台日志（`inbound.dead_letter_gave_up`，诊断页能翻、能手动重投）；
+   * 返回的 `gave_up` 里标了 `customer` 的，宿主给人出一张提醒卡——只有**客户来信**
+   * 才值得打扰人（`isCustomerLetter`）。存储层没实现重投进度的，什么都不做（老行为）。
+   */
+  async sweepDeadLetters(
+    opts: { release?: string } = {},
+  ): Promise<{ requeued: string[]; gave_up: Array<DeadLetterRecord & { customer: boolean }> }> {
+    const out = {
+      requeued: [] as string[],
+      gave_up: [] as Array<DeadLetterRecord & { customer: boolean }>,
+    }
+    const store = this.queue
+    if (store.deadLetterRetry === undefined || store.setDeadLetterRetry === undefined) return out
+    const now_ms = Date.parse(this.clock.now())
+    for (const record of await store.deadLetters(this.workspace)) {
+      if (!this.adapters.has(record.event.channel)) continue
+      const state = await store.deadLetterRetry(record.id)
+      const retriable = record.reason === 'retries_exhausted'
+      const newRelease =
+        opts.release !== undefined && state?.release !== undefined && state.release !== opts.release
+      if (retriable && (newRelease || state?.gave_up !== true)) {
+        const rounds = newRelease ? 0 : (state?.rounds ?? 0)
+        const due =
+          newRelease ||
+          (rounds < this.autoRequeue.max_rounds &&
+            now_ms >= record.at_ms + autoRequeueDelayMs(rounds, this.autoRequeue))
+        if (due) {
+          await store.setDeadLetterRetry(record.id, {
+            rounds: rounds + 1,
+            last_at_ms: now_ms,
+            ...(opts.release === undefined ? {} : { release: opts.release }),
+            ...(state?.notified === true ? { notified: true } : {}),
+          })
+          const done = await this.requeueDeadLetter(record.id, { auto: true, round: rounds + 1 })
+          if (done.requeued) out.requeued.push(record.id)
+          continue
+        }
+        if (rounds < this.autoRequeue.max_rounds) continue
+      }
+      if (state?.gave_up === true) continue
+      // 彻底投不进：记一笔、只给客户来信出卡（每条最多一张）
+      const customer = isCustomerLetter(record.event)
+      await store.setDeadLetterRetry(record.id, {
+        rounds: state?.rounds ?? 0,
+        last_at_ms: state?.last_at_ms ?? now_ms,
+        ...(state?.release === undefined ? {} : { release: state.release }),
+        gave_up: true,
+        ...(customer || state?.notified === true ? { notified: true } : {}),
+      })
+      await this.emit('inbound.dead_letter_gave_up', record.event, {
+        dead_letter_id: record.id,
+        reason: record.reason,
+        rounds: state?.rounds ?? 0,
+        customer,
+      })
+      if (state?.notified !== true) out.gave_up.push({ ...record, customer })
+    }
+    return out
   }
 
   /**
@@ -334,10 +427,15 @@ export class ChannelInboundPipeline implements InboundPipeline {
    * 09-12 的真账号验收里，三封信死在 `canonicalJson` 的 bug 上，修好之后只能手改
    * SQLite 把它们放回队列——这就是那次留下的后置项。
    *
-   * 重投是**人**的动作：它会让这条消息重新起一次 Run（会写、会发），所以不自动、
-   * 不批量、不定时。重投成功就把死信记录删掉（它已经不是死信了）。
+   * 重投会让这条消息重新起一次 Run（会写草稿；对外发送照旧要过审批）。WP55 时它只是人按的
+   * 按钮；WP210（Luoye 09-30「应该自动重投，不该由用户手动」）起系统按退避自己投
+   * （`sweepDeadLetters`），这个按钮只留在诊断页。重投成功就把死信记录删掉（它已经不是死信了）。
    */
-  async requeueDeadLetter(id: string): Promise<{ requeued: boolean }> {
+  async requeueDeadLetter(
+    id: string,
+    /** WP210：自动重投那一路带上 `auto` 与第几轮，事件里分得清是人按的还是系统投的。 */
+    opts: { auto?: boolean; round?: number } = {},
+  ): Promise<{ requeued: boolean }> {
     const record = await this.queue.deadLetter?.(id)
     if (record === undefined) return { requeued: false }
     const now_ms = Date.parse(this.clock.now())
@@ -358,6 +456,8 @@ export class ChannelInboundPipeline implements InboundPipeline {
       dead_letter_id: id,
       reason: record.reason,
       attempts: record.attempts,
+      ...(opts.auto === true ? { auto: true } : {}),
+      ...(opts.round === undefined ? {} : { round: opts.round }),
     })
     await this.attempt(item)
     return { requeued: true }

@@ -1,5 +1,6 @@
 export * from './blob-raw-store.js'
 export * from './chat/index.js'
+export * from './dead-letter-policy.js'
 export * from './delivery/email.js'
 export * from './email/adapter.js'
 export * from './email/cursors.js'
