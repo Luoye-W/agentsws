@@ -37,6 +37,7 @@ import type {
   SitePort,
   SocialPort,
   SubscriptionLoginInput,
+  WorkArchivePort,
   WorkPort,
   WorkstationPort,
 } from '@agentsws/api'
@@ -378,6 +379,14 @@ export function brandConnectionDirectoryPort(
   make: (workspace_id: WorkspaceId) => Promise<ConnectionDirectoryPort>,
 ): ConnectionDirectoryPort {
   return scopedPort<ConnectionDirectoryPort>(make, () => brands.bootstrap)
+}
+
+/** WP207：左栏职责下的对话 / 任务、归档与找回——与工作模型同一份 `Work`，所以也按品牌。 */
+export function brandWorkArchivePort(
+  brands: BrandModules,
+  make: (workspace_id: WorkspaceId) => Promise<WorkArchivePort>,
+): WorkArchivePort {
+  return scopedPort<WorkArchivePort>(make, () => brands.bootstrap)
 }
 
 /** 37 工作模型（事项 / 目标 / 待办 / 计划 / 复盘）：一个品牌一份 `Work`。 */

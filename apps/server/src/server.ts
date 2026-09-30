@@ -82,7 +82,13 @@ import {
   SOCIAL_ROLE_IDS,
   socialChannelSpec,
 } from '@agentsws/contracts'
-import { evaluateGuardrail, extractFigures, resolveTimeZone, uncitedFigures } from '@agentsws/core'
+import {
+  EXTERNAL_FENCE,
+  evaluateGuardrail,
+  extractFigures,
+  resolveTimeZone,
+  uncitedFigures,
+} from '@agentsws/core'
 import { createDataStore, type SqliteDataStore } from '@agentsws/data'
 import { withOwnSources } from '@agentsws/deck'
 import type { WebCredential } from '@agentsws/dsh-adapter'
@@ -190,6 +196,7 @@ import {
   brandPrPort,
   brandSitePort,
   brandSocialPort,
+  brandWorkArchivePort,
   brandWorkPort,
   brandWorkstationPort,
 } from './brand-ports.js'
@@ -429,6 +436,11 @@ import {
 // WP60（48 §4 L3 #11 的云端一半）：聊天窗的嵌入脚本与 CORS 预检
 import { CHAT_WIDGET_JS, mountChatWidget } from './widget.js'
 import { createWorkPort, periodQueryRunner } from './work.js'
+import {
+  createArchiveStateStore,
+  createWorkArchive,
+  type WorkArchiveAssembly,
+} from './work-archive.js'
 import {
   createWorkstationPort,
   emptyDataSource,
@@ -6017,6 +6029,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           }
         },
       },
+      // WP207：找回归档的对话 / 任务（只读；候选以卡片出现，人点了才恢复）
+      archive: {
+        has: async (actor) => (await workArchiveFor(ws)).hasArchived(actor),
+        recall: async (actor, input) => (await workArchiveFor(ws)).recall(actor, input),
+      },
       knowledge: async (actor, text) => {
         const config = roles.effectiveConfig(actor.assignment_id)
         const { hits } = await knowledge.retrieval.search({
@@ -6113,6 +6130,109 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     return port
   }
   const positionPortOf = brandPositionPort(brandModules, positionPortFor)
+
+  /**
+   * WP207：左栏职责下的对话 / 任务、自动归档与找回。一个品牌一份（事项落在这个品牌的 `Work` 里）；
+   * 天数与「看过了」存在品牌目录下的 `work-archive.json`（没有数据目录就是内存档）。
+   */
+  const workArchives = new Map<WorkspaceId, WorkArchiveAssembly>()
+  const workArchiveFor = async (ws: WorkspaceId): Promise<WorkArchiveAssembly> => {
+    const cached = workArchives.get(ws)
+    if (cached !== undefined) return cached
+    const brand = await brandModules.forWorkspace(ws)
+    const assembly = await positionsFor(ws)
+    const dir = brandDirOf(dbDir, ws, workspace.id)
+    const made = createWorkArchive({
+      clock,
+      work: brand.work,
+      state: createArchiveStateStore(
+        dir === undefined ? undefined : join(dir, 'work-archive.json'),
+      ),
+      positions: (person_id) => assembly.mine(person_id),
+      assignmentsOf: (person_id) =>
+        roles.assignments
+          .listByPerson(person_id, { workspace_id: ws })
+          .filter((a) => a.revoked_at === undefined)
+          .map((a) => a.id),
+      runningMatters: () => new Set((brand.runtime?.activeRuns() ?? []).map((r) => r.matter_id)),
+      pendingCards: async (person_id) => {
+        const items = (await approvals.queue({
+          workspace_id: ws,
+          person_id,
+          lane: 'mine',
+          state: ['pending', 'in_review'],
+        })) as ApprovalItem[]
+        const out = new Map<string, number>()
+        for (const i of items) {
+          const id = i.subject.matter_id ?? i.subject.work_item_id
+          if (id !== undefined) out.set(id, (out.get(id) ?? 0) + 1)
+        }
+        return out
+      },
+      personNames: async () => {
+        const out = new Map<string, string>()
+        for (const m of await identity.members(ws)) {
+          const p = await identity.getPerson(m.person_id)
+          if (p !== undefined && p.name !== '') out.set(p.id, p.name)
+        }
+        return out
+      },
+      roleName: (id) => roles.roles.get(id)?.name.zh,
+      positionName: (id) => org.positions().find((p) => p.id === id)?.name.zh,
+      rerank: (actor, query, pool) => rerankArchived(ws, actor, query, pool),
+    })
+    workArchives.set(ws, made)
+    return made
+  }
+  /**
+   * WP207：⌘K「让 AI 找回」的模型重排——用这个品牌的默认模型，只排序、不恢复。
+   * 没接模型（只有 stub）就回 `undefined`，按关键词的顺序给。
+   */
+  const rerankArchived = async (
+    ws: WorkspaceId,
+    actor: { assignment_id: string },
+    query: string,
+    pool: { id: string; title: string; summary: string; last_activity: string }[],
+  ): Promise<string[] | undefined> => {
+    const models = await brandModules.models(ws)
+    if (!models.configured()) return undefined
+    const ref = models.defaultRef()
+    if (ref.provider === 'stub') return undefined
+    const gateway = await brandModules.gateway(ws)
+    const lines = pool.map(
+      (c) =>
+        `${c.id} | ${c.last_activity.slice(0, 10)} | ${c.title.replace(/\s+/g, ' ')} | ${c.summary.replace(/\s+/g, ' ').slice(0, 160)}`,
+    )
+    const out = await gateway.complete({
+      model: ref,
+      messages: [
+        {
+          role: 'system',
+          content:
+            '你在帮用户从已归档的对话 / 任务里找回一件。下面每行一件：id | 最后活动日期 | 标题 | 摘要。' +
+            '按和用户描述像的程度从高到低排，只回一个 JSON 数组，元素是 id；完全不像的不要放。不要回别的字。',
+        },
+        {
+          role: 'user',
+          content: `用户的描述：${query}\n今天：${clock.now().slice(0, 10)}\n\n${EXTERNAL_FENCE.open}\n${EXTERNAL_FENCE.sanitizeText(lines.join('\n'), 8000)}\n${EXTERNAL_FENCE.close}`,
+        },
+      ],
+      meta: {
+        workspace_id: ws,
+        assignment_id: actor.assignment_id,
+        role_id: roles.assignments.get(actor.assignment_id)?.role_id ?? 'common.member',
+        run_id: `recall_${Math.floor(random() * 1e12).toString(36)}` as never,
+        purpose: 'judge',
+      },
+    })
+    const match = /\[[\s\S]*\]/.exec(out.text)
+    if (match === null) return undefined
+    const parsed = JSON.parse(match[0]) as unknown
+    return Array.isArray(parsed)
+      ? parsed.filter((x): x is string => typeof x === 'string')
+      : undefined
+  }
+  const workArchivePortOf = brandWorkArchivePort(brandModules, workArchiveFor)
 
   /**
    * WP120（69 §4）：角色定位端口。
@@ -6723,6 +6843,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     // WP66：面板与工作模型都按品牌——首页数字块读的是**这个品牌**的店铺数据
     workstation: workstationPortOf,
     work: workPortOf,
+    // WP207：左栏职责下的对话 / 任务、归档与找回（按品牌）
+    workArchive: workArchivePortOf,
     // WP69（54）：岗位实体、交给岗位一件事、换职责
     positions: positionPortOf,
     // WP120（69 §4）：角色定位——右栏「角色」面板看的与改的就是它

@@ -341,8 +341,9 @@ export function createPositions(options: PositionsOptions): PositionsAssembly {
       return undefined
     }
     const assignmentIds = new Set(view.roles.flatMap((r) => r.assignment_ids))
+    // WP207：归档的事不进岗位层上下文（它这阵子没人动，喂给模型只是噪音）
     const open_matters = work
-      .listMatters({ status: ['open', 'waiting'] })
+      .listMatters({ status: ['open', 'waiting'], archived: false })
       .filter((m) => matterInPosition(m, position_id, assignmentIds))
       .slice(0, MAX_POSITION_MATTERS)
       .map((m) => ({ title: m.title, status: m.status }))

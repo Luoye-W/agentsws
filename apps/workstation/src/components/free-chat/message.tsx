@@ -8,6 +8,7 @@
 import { Check, Copy, Forward, Globe, Library, Loader2, RotateCcw } from 'lucide-react'
 import { useState } from 'react'
 import { ChoiceIcon, modelNameOf } from '@/components/free-chat/model-picker'
+import { RecallCards } from '@/components/sidebar/recall-cards'
 import { Button } from '@/components/ui/button'
 import { SafeMarkdown } from '@/components/ui/safe-markdown'
 import { useApp } from '@/lib/app-context'
@@ -135,6 +136,13 @@ export function AssistantMessage({
         </p>
       )}
       <Sources sources={message.sources ?? []} />
+      {/* WP207：找回归档的候选卡——点一张放回左栏；不点什么都不恢复 */}
+      {(message.archived_candidates ?? []).length === 0 ? null : (
+        <div className="flex flex-col gap-1.5" data-testid="free-chat-recall">
+          <p className="text-xs text-muted-foreground">{t('free_chat.recall.title')}</p>
+          <RecallCards candidates={message.archived_candidates ?? []} />
+        </div>
+      )}
       {(message.citations ?? []).length === 0 ? null : (
         <ol
           className="flex flex-col gap-0.5 text-[11px] text-muted-foreground"
