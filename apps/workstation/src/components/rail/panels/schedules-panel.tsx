@@ -17,10 +17,10 @@ import { StatusPill } from '@/components/design'
 import { PanelError } from '@/components/rail/panel-error'
 import { parseMatterPath } from '@/components/rail/rail-layout'
 import type { RailPanelBodyProps } from '@/components/rail/registry'
+import { isListedSchedule, SCHEDULES_KEY, scheduleInScope } from '@/components/rail/schedule-count'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
-  AUTOMATION_HANDLER,
   deleteSchedule,
   getMySchedules,
   getOfficialPlugins,
@@ -43,10 +43,10 @@ import {
 } from '@/lib/schedule-rule'
 
 const SCHEDULE_BUNDLE = '@deepseek-ai/dsh-experimental-schedule-bundle'
-const LIVE = new Set(['active', 'paused', 'running', 'pending'])
-const KEY = ['schedules', 'mine'] as const
+/** WP208：与图标上那个数读同一份缓存（`schedule-count.ts`）。 */
+const KEY = SCHEDULES_KEY
 
-export function SchedulesPanel({ pathname }: RailPanelBodyProps): ReactNode {
+export function SchedulesPanel({ pathname, scope }: RailPanelBodyProps): ReactNode {
   const { t } = useApp()
   const matter_id = parseMatterPath(pathname)
   const list = useQuery({ queryKey: KEY, queryFn: getMySchedules })
@@ -60,7 +60,7 @@ export function SchedulesPanel({ pathname }: RailPanelBodyProps): ReactNode {
   if (list.isPending) return <Skeleton className="h-24 w-full" />
   if (list.error !== null) return <PanelError error={list.error} />
 
-  const rows = list.data.filter((r) => r.handler === AUTOMATION_HANDLER && LIVE.has(r.state))
+  const rows = list.data.filter(isListedSchedule)
   if (rows.length === 0) {
     const installed = plugins.data?.plugins.some(
       (p) => p.name === SCHEDULE_BUNDLE && p.state === 'installed',
@@ -75,8 +75,13 @@ export function SchedulesPanel({ pathname }: RailPanelBodyProps): ReactNode {
     )
   }
 
+  // 在事项页上：这件事的排前面；别处（WP208）：当前岗位 / 职责的排前面——与图标上那个数同一个范围
   const here =
-    matter_id === undefined ? [] : rows.filter((r) => r.origin?.conversation_id === matter_id)
+    matter_id !== undefined
+      ? rows.filter((r) => r.origin?.conversation_id === matter_id)
+      : scope === undefined
+        ? []
+        : rows.filter((r) => scheduleInScope(r, scope))
   const others = rows.filter((r) => !here.includes(r))
   const titled = here.length > 0 && others.length > 0
   return (
@@ -84,7 +89,11 @@ export function SchedulesPanel({ pathname }: RailPanelBodyProps): ReactNode {
       {here.length === 0 ? null : (
         <section className="space-y-2">
           {titled ? (
-            <h4 className="text-xs text-muted-foreground">{t('rail.schedules.this_matter')}</h4>
+            <h4 className="text-xs text-muted-foreground">
+              {matter_id !== undefined
+                ? t('rail.schedules.this_matter')
+                : t(`rail.schedules.this_${scope?.tier ?? 'position'}`)}
+            </h4>
           ) : null}
           {here.map((row) => (
             <ScheduleRow key={row.id} row={row} />

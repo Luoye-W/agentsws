@@ -26,9 +26,16 @@ import { useLocation } from 'react-router-dom'
 import { ensureBuiltinPanels } from '@/components/rail/builtin-panels'
 import { ComputerUseStrip } from '@/components/rail/computer-use-strip'
 import { RailPanel } from '@/components/rail/rail-panel'
-import { type RailTier, railContextOf } from '@/components/rail/rail-scope'
+import { type RailScope, type RailTier, railContextOf } from '@/components/rail/rail-scope'
 import { useRailState } from '@/components/rail/rail-state'
-import { panelBody, panelGroups, panelType } from '@/components/rail/registry'
+import {
+  type PanelTypeDefinition,
+  panelBody,
+  panelGroups,
+  panelType,
+  type RailPanelBodyProps,
+  resolvePanelId,
+} from '@/components/rail/registry'
 import type { PositionInstanceData } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 import { clampRailWidth } from '@/lib/ui-state'
@@ -60,9 +67,12 @@ export function RightRail({ instances }: { instances?: PositionInstanceData[] })
   const narrow = useNarrow()
   const rail = useRailState()
   const groups = panelGroups()
+  // WP208：旧 id（`memory` …）先落到它现在的去处与标签（「设定」的「记忆」）
+  const resolved = rail.open === null ? undefined : resolvePanelId(rail.open)
   // 存坏了 / 是上一版留下的名字 / 那个应用包被卸了：当成收起，
   // 不去渲染一个注册表里已经没有的面板
-  const definition = rail.open === null ? undefined : panelType(rail.open)
+  const definition = resolved === undefined ? undefined : panelType(resolved.id)
+  const sub = resolved?.sub
   const open = definition?.id ?? null
   const [tier, setTier] = useState<RailTier | null>(null)
   const dragging = useRef(false)
@@ -76,9 +86,9 @@ export function RightRail({ instances }: { instances?: PositionInstanceData[] })
   const show = rail.show
   const setRailWidth = rail.setWidth
   const width = rail.width
-  /** `]` 收起之后再按一次，开回刚才那个面板（不是永远回到"记忆"）。 */
-  const last = useRef<string>('memory')
-  if (open !== null) last.current = open
+  /** `]` 收起之后再按一次，开回刚才那个面板（连同标签；不是永远回到"设定"）。 */
+  const last = useRef<string>('settings')
+  if (open !== null && rail.open !== null) last.current = rail.open
 
   /** `]` 切换第三栏。在输入框 / 可编辑区里按到它算打字，不当快捷键。 */
   useEffect(() => {
@@ -152,6 +162,8 @@ export function RightRail({ instances }: { instances?: PositionInstanceData[] })
           pathname={location.pathname}
           // WP97：这一次是为哪个资源开的（人点图标轨开的那种没有它）
           {...(rail.address === null ? {} : { address: rail.address })}
+          // WP208：开到哪个标签（旧 id 带来的）
+          {...(sub === undefined ? {} : { sub })}
         />
       </Suspense>
     )
@@ -235,25 +247,19 @@ export function RightRail({ instances }: { instances?: PositionInstanceData[] })
             className={cn('flex flex-col items-center gap-1', i > 0 && 'mt-2 border-t pt-2')}
           >
             {group.panels.map((b) => (
-              <button
+              <RailIcon
                 key={b.id}
-                type="button"
-                aria-pressed={open === b.id}
-                aria-label={t(b.label)}
-                title={t(b.label)}
-                data-testid={`rail-icon-${b.id}`}
-                className={cn(
-                  'flex size-8 items-center justify-center rounded-md',
-                  open === b.id
-                    ? 'bg-sidebar-accent text-sidebar-accent-foreground'
-                    : 'text-muted-foreground hover:bg-sidebar-accent/60 hover:text-foreground',
-                )}
+                definition={b}
+                active={open === b.id}
+                context={{
+                  ...(scope === undefined ? {} : { scope }),
+                  tier: effectiveTier,
+                  pathname: location.pathname,
+                }}
                 onClick={() => {
                   show(open === b.id ? null : b.id)
                 }}
-              >
-                <b.icon aria-hidden className="size-4" />
-              </button>
+              />
             ))}
           </div>
         ))}
@@ -274,4 +280,67 @@ export function RightRail({ instances }: { instances?: PositionInstanceData[] })
       </nav>
     </>
   )
+}
+
+/**
+ * 图标轨上的一格。
+ *
+ * WP208：单独成一个组件，是因为注册表的 `useBadge` 是个 hook——每格各自挂载、各自调一次；
+ * `key` 是面板 id，同一格的定义不会中途换成另一个，hook 的调用顺序因此是稳的。
+ * 悬停那一句：有数的时候说数（「3 个定时任务在跑」），没有就说 `hint`，再没有就说名字。
+ */
+function RailIcon({
+  definition,
+  active,
+  context,
+  onClick,
+}: {
+  definition: PanelTypeDefinition
+  active: boolean
+  context: { scope?: RailScope; tier: RailTier; pathname: string }
+  onClick: () => void
+}): ReactNode {
+  const { t } = useApp()
+  const useBadge = definition.useBadge ?? noBadge
+  const badge = useBadge(context)
+  const count = badge === undefined || badge.count <= 0 ? undefined : badge.count
+  const label = t(definition.label)
+  const tip =
+    count !== undefined && badge !== undefined
+      ? `${label} · ${badge.label}`
+      : definition.hint === undefined
+        ? label
+        : `${label} · ${t(definition.hint)}`
+  return (
+    <button
+      type="button"
+      aria-pressed={active}
+      aria-label={tip}
+      title={tip}
+      data-testid={`rail-icon-${definition.id}`}
+      className={cn(
+        'relative flex size-8 items-center justify-center rounded-md',
+        active
+          ? 'bg-sidebar-accent text-sidebar-accent-foreground'
+          : 'text-muted-foreground hover:bg-sidebar-accent/60 hover:text-foreground',
+      )}
+      onClick={onClick}
+    >
+      <definition.icon aria-hidden className="size-4" />
+      {count === undefined ? null : (
+        <span
+          aria-hidden
+          data-testid={`rail-badge-${definition.id}`}
+          className="ws-num absolute -top-0.5 -right-0.5 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-ws-brand px-1 text-[9px] leading-none font-medium text-white"
+        >
+          {count > 99 ? '99+' : count}
+        </span>
+      )}
+    </button>
+  )
+}
+
+/** 没有徽标的面板走这一个（与有徽标的同样"调一次 hook"，调用顺序不因面板而变）。 */
+function noBadge(_props: RailPanelBodyProps): undefined {
+  return undefined
 }
