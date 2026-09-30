@@ -23,6 +23,8 @@ import type {
   AllocationBucket,
   AllocationNotice,
   AllocationReport,
+  AllocationRosterChange,
+  AllocationRosterRequest,
   AllocationRow,
   AllocationSubjectKind,
   Clock,
@@ -36,6 +38,7 @@ import {
   attributionIdOk,
   DEFAULT_ALLOCATION_TIMEZONE,
   MEMBER_HEADER,
+  MEMBER_LEFT_MESSAGE,
   POSITION_HEADER,
   PRICING_CATALOG_PATH,
   pricingBlockOf,
@@ -110,6 +113,8 @@ export interface CloudStandIn {
     usage?: CloudStandInUsageSeed[]
     limits?: { kind: AllocationSubjectKind; subject_id: string; monthly_limit: number | null }[]
   }): void
+  /** WP206：本机推上来的最近一份名册（没推过是 `undefined`）。测试与 demo 看一眼用。 */
+  roster(): AllocationRosterRequest | undefined
   /** 等替身那一下「点链接」做完（测试用）。没有在途的就立刻回。 */
   settled(): Promise<void>
 }
@@ -240,10 +245,63 @@ export function cloudStandIn(options: CloudStandInOptions = {}): CloudStandIn {
     )?.[1]
     return attributionIdOk(raw) ? raw : undefined
   }
+  /* ── WP206：名册（替身版：只记最近一份；名册里没了的成员 / 岗位停用）── */
+  let roster: AllocationRosterRequest | undefined
+  const gone = new Set<string>()
+  const syncRoster = (next: AllocationRosterRequest, actor: string) => {
+    const before = new Set<string>([
+      ...(roster?.members ?? []).map((m) => limitKey('member', m.id)),
+      ...(roster?.positions ?? []).map((p) => limitKey('position', p.id)),
+    ])
+    const after = new Set<string>([
+      ...next.members.map((m) => limitKey('member', m.id)),
+      ...next.positions.map((p) => limitKey('position', p.id)),
+    ])
+    const reclaimed: AllocationRosterChange[] = []
+    const returned: AllocationRosterChange[] = []
+    const change = (key: string): AllocationRosterChange => {
+      const [kind, id] = key.split(/:(.*)/s) as [AllocationSubjectKind, string]
+      return { kind, subject_id: id }
+    }
+    const log = (c: AllocationRosterChange, action: 'auto_reclaim' | 'returned') => {
+      audits.unshift({ id: mint('alc'), at: now(), actor, action, ...c })
+    }
+    for (const key of before)
+      if (!after.has(key) && !gone.has(key)) {
+        gone.add(key)
+        reclaimed.push(change(key))
+        log(change(key), 'auto_reclaim')
+      }
+    for (const key of after)
+      if (gone.delete(key)) {
+        returned.push(change(key))
+        log(change(key), 'returned')
+      }
+    roster = {
+      members: next.members.map((m) => ({ ...m, positions: [...(m.positions ?? [])] })),
+      positions: next.positions.map((p) => ({ ...p })),
+    }
+    return {
+      members: next.members.length,
+      positions: next.positions.length,
+      reclaimed,
+      returned,
+      synced_at: now(),
+    }
+  }
   const aiGate = (
     headers: Record<string, string> | undefined,
   ): { status: number; body: unknown } | undefined => {
     const member = headerOf(headers, MEMBER_HEADER)
+    if (member !== undefined && gone.has(limitKey('member', member)))
+      return {
+        status: 402,
+        body: {
+          code: 'insufficient_credits',
+          message: MEMBER_LEFT_MESSAGE,
+          details: { reason: 'member_left' },
+        },
+      }
     const row = member === undefined ? undefined : rowOf('member', member)
     if (row?.monthly_limit === undefined || row.used < row.monthly_limit) return undefined
     return {
@@ -508,7 +566,31 @@ export function cloudStandIn(options: CloudStandInOptions = {}): CloudStandIn {
       if (method === 'POST' && path === '/v1/wallet/allocation/members/remove') {
         const member = typeof body.member_id === 'string' ? body.member_id : ''
         const had = limits.delete(limitKey('member', member))
+        // WP206：从名册移除 + 停用（与真云同一条：之后带他的头的新预扣一律拒）
+        if (attributionIdOk(member)) gone.add(limitKey('member', member))
+        if (roster !== undefined)
+          roster = { ...roster, members: roster.members.filter((m) => m.id !== member) }
         return ok({ member_id: member, cleared: had ? 1 : 0 })
+      }
+      if (method === 'POST' && path === '/v1/wallet/allocation/roster') {
+        const members = Array.isArray(body.members) ? body.members : []
+        const positions = Array.isArray(body.positions) ? body.positions : []
+        const cleanMembers = members.flatMap((m) => {
+          const r = m as { id?: unknown; name?: unknown; positions?: unknown }
+          if (typeof r.id !== 'string' || !attributionIdOk(r.id)) return []
+          const held = Array.isArray(r.positions)
+            ? r.positions.filter((p): p is string => typeof p === 'string' && attributionIdOk(p))
+            : []
+          return [{ id: r.id, name: typeof r.name === 'string' ? r.name : r.id, positions: held }]
+        })
+        const cleanPositions = positions.flatMap((p) => {
+          const r = p as { id?: unknown; name?: unknown }
+          if (typeof r.id !== 'string' || !attributionIdOk(r.id)) return []
+          return [{ id: r.id, name: typeof r.name === 'string' ? r.name : r.id }]
+        })
+        if (cleanMembers.length === 0) return fail(400, 'invalid_input', '名册里至少要有一个成员')
+        const actor = headerOf(headers, MEMBER_HEADER) ?? 'account:acct_demo'
+        return ok(syncRoster({ members: cleanMembers, positions: cleanPositions }, actor))
       }
     }
     // WP194：官方模型口在 demo 里不真跑；只演「额度到了」那一句（其余照旧说演示里没有）
@@ -580,6 +662,7 @@ export function cloudStandIn(options: CloudStandInOptions = {}): CloudStandIn {
     },
     requests: () => [...seen],
     aiGate: (headers) => aiGate(headers),
+    roster: () => roster,
     seedAllocation(input) {
       for (const cell of input.usage ?? []) usageCells.push({ ...cell })
       for (const l of input.limits ?? [])
