@@ -1,6 +1,8 @@
 export * from './blob-raw-store.js'
 export * from './chat/index.js'
 export * from './delivery/email.js'
+// WP211：钉钉机器人（团队，归工作区；Stream 模式照官方 SDK 移植协议）
+export * from './dingtalk-bot/index.js'
 export * from './email/adapter.js'
 export * from './email/cursors.js'
 export * from './email/imap.js'
