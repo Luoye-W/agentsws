@@ -1,22 +1,21 @@
 #!/usr/bin/env node
 /**
- * WP194：公司统一充值、给成员 / 岗位分配积分的截图，可重跑。存到 `docs/assets/wp194/`。
+ * WP206：额度分配搬到网页版账号页之后工作台这一侧的截图，可重跑。存到 `docs/assets/wp206/`。
+ * （接替 WP194 的 `e2e-wp194-shots.mjs`：公司页的「积分」tab 拿掉了，那几张已经拍不出来。）
  *
- * 1. `org-credits-tab.png`：公司页「积分」tab（管理员）——公司余额、本月按能力四格、充值四档、
- *    成员表与岗位表（快到了 / 用完了），改动记录展开；
- * 2. `org-credits-edit.png`：在成员表里改一个人的上限（输入框那一刻）；
- * 3. `my-allowance.png`：设置 → 积分里的「我的本月额度：已用 X / 上限 Y」；
- * 4. `my-allowance-full.png`：额度到了——同一块变红，写着「本月额度用完了，找管理员加。」
- * 5. `org-credits-full.png`：回到公司页，成员表里那一行标红「用完了」。
- * 6. `free-chat-quota-error.png`：出错处——随便聊里用「Agents 工坊（用积分）」问一句，回「本月额度用完了，找管理员加。」
+ * 1. `org-no-credits-tab.png`：公司页——页签里已经没有「积分」；
+ * 2. `settings-credits-alloc-link.png`：设置 → 积分，owner 看得到「给同事分额度 → 在网页上」；
+ * 3. `my-allowance-full.png`：额度到了——「我的本月额度」变红，「本月额度用完了，找管理员加。」照旧；
+ * 4. `free-chat-quota-error.png`：出错处——随便聊里用「Agents 工坊（用积分）」问一句，回那句人话。
  *
- * 全走 demo 的真路由与真界面；云是替身（`cloud-stand-in`，数字是 demo 种的合成数，不真扣钱）。
+ * 全走 demo 的真路由与真界面；云是替身（`cloud-stand-in`，数字是合成的，不真扣钱）。给自己设上限走的是
+ * 本机 `POST /v1/cloud/allocation/limits`（工作台界面上已经没有这个入口，正式环境在网页上设）。
  *
  * ```
  * pnpm -F @agentsws/workstation exec vite build
  * pnpm exec tsc -b
  * node apps/cli/bin/agentsws.mjs demo --port 4399 &
- * node scripts/e2e-wp194-shots.mjs [--port 4399]
+ * node scripts/e2e-wp206-shots.mjs [--port 4399]
  * ```
  */
 import { mkdirSync } from 'node:fs'
@@ -26,7 +25,7 @@ import { fileURLToPath } from 'node:url'
 
 const require = createRequire(import.meta.url)
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
-const SHOTS = join(ROOT, 'docs/assets/wp194')
+const SHOTS = join(ROOT, 'docs/assets/wp206')
 
 const args = process.argv.slice(2)
 const i = args.indexOf('--port')
@@ -57,58 +56,52 @@ async function main() {
       await page.getByTestId('cloud-account-linked').waitFor({ timeout: 20_000 })
     }
 
-    // ① 公司页「积分」tab
-    await page.goto(`${BASE}/org?tab=credits`, { waitUntil: 'load' })
-    const tab = page.getByTestId('alloc-tab')
-    await tab.waitFor({ timeout: 20_000 })
-    await page.getByTestId('alloc-audit-toggle').click()
+    // ① 公司页：页签里没有「积分」了
+    await page.goto(`${BASE}/org`, { waitUntil: 'load' })
+    await page.getByRole('tablist').first().waitFor({ timeout: 20_000 })
+    if ((await page.getByTestId('org-tab-credits').count()) > 0)
+      throw new Error('公司页还有「积分」tab')
     await page.waitForTimeout(500)
-    await tab.screenshot({ path: join(SHOTS, 'org-credits-tab.png') })
-    console.log('  📷 org-credits-tab.png')
+    await page.screenshot({ path: join(SHOTS, 'org-no-credits-tab.png') })
+    console.log('  📷 org-no-credits-tab.png')
 
-    // ② 改一个人的上限（输入框那一刻），再保存
-    const firstRow = page.getByTestId('alloc-members').getByTestId('alloc-row').first()
-    const owner = await firstRow.getAttribute('data-subject')
-    await firstRow.getByTestId('alloc-edit').click()
-    await firstRow.getByTestId('alloc-input').fill('75')
-    await page
-      .getByTestId('alloc-members')
-      .screenshot({ path: join(SHOTS, 'org-credits-edit.png') })
-    console.log('  📷 org-credits-edit.png')
-    await firstRow.getByTestId('alloc-save').click()
-    await page.waitForTimeout(800)
-
-    // ③ 设置 → 积分：我的本月额度（上面刚给自己设了 75，已用过了八成）
+    // ② 设置 → 积分：owner 看得到「给同事分额度 → 在网页上」
     await page.goto(`${BASE}/settings/credits`, { waitUntil: 'load' })
-    const mine = page.getByTestId('credits-mine')
-    await mine.waitFor({ timeout: 20_000 })
-    await page.getByTestId('credits-panel').screenshot({ path: join(SHOTS, 'my-allowance.png') })
-    console.log(`  📷 my-allowance.png（${owner ?? '?'}）`)
+    await page.getByTestId('credits-alloc-web-link').waitFor({ timeout: 20_000 })
+    await page
+      .getByTestId('credits-panel')
+      .screenshot({ path: join(SHOTS, 'settings-credits-alloc-link.png') })
+    console.log('  📷 settings-credits-alloc-link.png')
 
-    // ④ 额度到了：回公司页把自己的上限改到比已用少，再看同一块
-    await page.goto(`${BASE}/org?tab=credits`, { waitUntil: 'load' })
-    const again = page.getByTestId('alloc-members').getByTestId('alloc-row').first()
-    await again.getByTestId('alloc-edit').click()
-    await again.getByTestId('alloc-input').fill('5')
-    await again.getByTestId('alloc-save').click()
-    await page.waitForTimeout(800)
+    // ③ 额度到了：经本机接口给自己设一个比已用少的上限，再看「我的本月额度」
+    const set = await page.evaluate(async () => {
+      const token = localStorage.getItem('agentsws.session_token')
+      const auth = { Authorization: `Bearer ${token}` }
+      const who = await (await fetch('/v1/me', { headers: auth })).json()
+      const owner = who.data.assignments.find((a) => a.role_id === 'common.owner')
+      const me = await (
+        await fetch('/v1/cloud/allocation/me', {
+          headers: { ...auth, 'X-Assignment': owner.id },
+        })
+      ).json()
+      const res = await fetch('/v1/cloud/allocation/limits', {
+        method: 'POST',
+        headers: { ...auth, 'X-Assignment': owner.id, 'content-type': 'application/json' },
+        body: JSON.stringify({
+          kind: 'member',
+          subject_id: (me.data ?? me).mine.member_id,
+          monthly_limit: 5,
+        }),
+      })
+      return res.status
+    })
+    if (set !== 200) throw new Error(`设上限：${set}`)
     await page.goto(`${BASE}/settings/credits`, { waitUntil: 'load' })
     await page.getByTestId('credits-mine-full').waitFor({ timeout: 20_000 })
     await page
       .getByTestId('credits-mine')
       .screenshot({ path: join(SHOTS, 'my-allowance-full.png') })
     console.log('  📷 my-allowance-full.png')
-
-    // ⑤ 回公司页：成员表里这一行是红的「用完了」
-    await page.goto(`${BASE}/org?tab=credits`, { waitUntil: 'load' })
-    await page
-      .locator('[data-testid="alloc-row"][data-state="full"]')
-      .first()
-      .waitFor({ timeout: 20_000 })
-    await page
-      .getByTestId('alloc-members')
-      .screenshot({ path: join(SHOTS, 'org-credits-full.png') })
-    console.log('  📷 org-credits-full.png')
 
     // ⑥ 出错处：随便聊里用「Agents 工坊（用积分）」问一句，额度到了回那句人话
     await page.goto(`${BASE}/settings`, { waitUntil: 'load' })
