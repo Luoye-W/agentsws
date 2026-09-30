@@ -4,6 +4,10 @@ description: 内容与搜索的判断方式：排名结论怎么查、拿不到�
 license: MIT
 tier: open
 version: 1.0.0
+display_name: 内容与搜索
+display_name_en: Content & SEO
+summary: 挑词、先修哪页、怎么写才答得出
+summary_en: Pick keywords, fix the right page first, write to be answered
 ---
 
 > 改编自 coreyhaines31/marketingskills（MIT，© 2025 Corey Haines）的 ai-seo、seo-audit、content-strategy、copy-editing 四个技能；部分判断规矩改编自 every-app/open-seo（MIT）。已按 Agents 工坊的规矩改写，冲突处以本文为准。

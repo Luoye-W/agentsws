@@ -4,6 +4,10 @@ description: B2B 开发信的写法：像同行不像推销、观察 → 问题 
 license: MIT
 tier: open
 version: 1.0.0
+display_name: 开发信
+display_name_en: Cold email
+summary: 像同行一样写开发信，一轮三封
+summary_en: Peer-style outreach, three emails per round
 ---
 
 > 改编自 coreyhaines31/marketingskills（MIT，© 2025 Corey Haines）的 cold-email 技能及其附录（写法框架、主题行、跟进序列、个性化）。已按 Agents 工坊的规矩改写：序列改成三封、证据只引事实卡、页脚由系统加，冲突处以本文为准。本文不是法律意见，发往新市场或量大时请法务确认。

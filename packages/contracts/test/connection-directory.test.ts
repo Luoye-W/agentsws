@@ -104,6 +104,12 @@ describe('54（将改号 55）§4 第一层：连接目录（WP83）', () => {
     // 两条都还没做：目录上要明着说，不许藏起来
     expect(connectionDirectoryEntry('wechat_clawbot')?.status).toBe('planned')
     expect(connectionDirectoryEntry('wecom_bot')?.mode).toBe('channel_adapter')
+    // WP211：飞书 / 钉钉与企业微信同一个定位，同样指向消息渠道页
+    for (const kind of ['feishu_bot', 'dingtalk_bot']) {
+      expect(connectionDirectoryEntry(kind)?.docs_url, kind).toBe('/im-channels')
+      expect(connectionDirectoryEntry(kind)?.mode, kind).toBe('channel_adapter')
+      expect(connectionDirectoryEntry(kind)?.category, kind).toBe('im')
+    }
   })
 
   it('覆盖①：仓库里每一条职责模板问的 kind，目录里都查得到', () => {

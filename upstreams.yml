@@ -690,6 +690,89 @@ upstreams:
     repo: xmanrui/dsh-im
     watch: [releases, stars, readme]
 
+  # ── WP211（docs/63 §M）：飞书 / 钉钉两条团队渠道 ─────────────────────────────
+  #
+  # 09-30 开工前逐个核过（`npm view` + `GET /repos/:owner/:name`）：DeepSeek Harness 官方
+  # 没有飞书 / 钉钉渠道包（npm `@deepseek-ai/*` 全表与仓库代码搜索零命中）。飞书用官方 SDK；
+  # 钉钉照官方 SDK 移植协议（理由见 dingtalk-stream 一条）；钉钉官方给 dsh 做的连接器与
+  # Proma 只作参考。
+
+  - id: larksuite-node-sdk
+    kind: runtime-dep
+    why: 飞书机器人的长连接（WSClient 收 im.message.receive_v1）与回复接口；apps/server/src/im-sdk.ts 选了飞书才懒加载
+    npm: '@larksuiteoapi/node-sdk'
+    repo: larksuite/node-sdk
+    locked_version: 1.74.0
+    pin: exact
+    watch: [versions, releases, wishlist]
+    locked_in:
+      - apps/server/package.json
+    we_depend_on:
+      - 'WSClient({ appId, appSecret, domain, logger, loggerLevel, autoReconnect, onReady, onReconnecting, onReconnected, onError }) + start({ eventDispatcher }) + close({ force })'
+      - 'WSClient.start 对不合 /^cli_[0-9a-fA-F]{16}$/ 的 appId 悄悄不连（我们在前面先校验：isFeishuAppId）'
+      - 'pullConnectConfig 的错误码：514 鉴权失败 / 403 / 1000040350 连接数超限 → onError(Error("pullConnectConfig failed: code=…"))'
+      - 'EventDispatcher.register({ "im.message.receive_v1": handler })；handler 返回之后 SDK 才回执'
+      - 'Client.im.v1.message.reply({ path: { message_id }, data: { msg_type, content } }) 与 Client.request GET /open-apis/bot/v3/info'
+    wishlist:
+      - WSClient 的 onError 带上结构化错误码（现在只能从 message 里抠 code=）
+      - 包体瘦身（1.74.0 解开 30 MB，其中类型声明 17 MB）或拆出只含长连接的小包
+    covered_by:
+      - apps/server/test/im-team-bots.test.ts
+      - packages/channels/test/feishu-bot.test.ts
+
+  - id: dingtalk-stream
+    kind: ported
+    # 没进 package.json：2.1.5 的 connect() 吞掉全部错误、固定每 1 秒重试（凭据错了既拿不到原因、
+    # 又每秒打一次网关），还往 console 打连接日志、关不掉。协议很小，照它移植成与企业微信同形。
+    why: 钉钉 Stream 模式的协议（换 ticket、SYSTEM ping / disconnect、CALLBACK 回执）照官方 Node SDK 2.1.5 移植进 packages/channels/src/dingtalk-bot（MIT，文件头注了出处）
+    npm: dingtalk-stream
+    repo: open-dingtalk/dingtalk-stream-sdk-nodejs
+    pinned_commit: c979c664099a3bd175ab2f810753db0fc9e3a515
+    watch: [versions, releases, wishlist]
+    watch_paths:
+      - src/client.ts
+      - src/constants.ts
+    we_depend_on:
+      - 'GATEWAY_URL = https://api.dingtalk.com/v1.0/gateway/connections/open；请求体 { clientId, clientSecret, ua, subscriptions }'
+      - 'TOPIC_ROBOT = /v1.0/im/bot/messages/get；回执 { code: 200, headers: { contentType, messageId }, message: "OK", data: "{\"response\":null}" }'
+      - 'SYSTEM ping 原样回 headers 与 data；SYSTEM disconnect 要换连接'
+      - 'RobotMessage：conversationType 1 单聊 / 2 群聊、isInAtList、senderStaffId、sessionWebhook(+ExpiredTime)'
+    wishlist:
+      - 2.1.7 转正（beta 里加了 1s→60s 指数退避、连接错误可见）——转正后重判是否改回直接依赖 SDK 本体
+    covered_by:
+      - packages/channels/test/dingtalk-bot.test.ts
+      - apps/server/test/im-team-bots.test.ts
+
+  - id: dsh-dingtalk
+    kind: reference
+    # 钉钉官方组织（DingTalk-Real-AI）做的「DeepSeek Harness 钉钉连接器」（MIT）。按 docs/42 红线 7 判 B（真冲突）：
+    # 它把钉钉消息接进 `dsh web` 的一条会话、默认所有人 / 所有群都能驱动 owner 的会话、敏感操作在钉钉卡片或文字码里批、
+    # 凭据写 $DSH_HOME/.credentials.yaml——与「按提问人身份答」「决策与凭据不经聊天软件」「凭据只进本机加密库」三条都撞。
+    why: 钉钉官方给 dsh 的连接器；它出了按发送人身份路由、审批不走钉钉的团队模式，就值得重判能不能直接包一层用
+    npm: '@dingtalk-real-ai/dsh-dingtalk'
+    repo: DingTalk-Real-AI/dsh-dingtalk
+    watch: [versions, releases, readme, wishlist]
+    wishlist:
+      - 按发送人身份路由到各自的会话 / 代理（不是都进 owner 的那一条）
+      - 审批能整块关掉、只给「去别处处理」的链接
+      - 凭据可以由宿主注入（不写 $DSH_HOME/.credentials.yaml）
+
+  - id: larksuite-channel
+    kind: reference
+    why: 飞书官方的 Channel SDK（给 Agent 接飞书消息用，MIT，底下仍是 node-sdk）；0.x 还在快速变，转正后可考虑替掉我们自己那层消息归一化
+    npm: '@larksuite/channel'
+    watch: [versions, wishlist]
+    wishlist:
+      - 1.0 正式版
+      - 能只用它的入站归一化、不带流式卡片与媒体上传
+
+  - id: proma
+    kind: reference
+    # AGPL-3.0：与本仓库 Apache-2.0 不兼容，只学思路、一行代码不拷。
+    why: 飞书 / 钉钉桥的思路参考（群里查机器人自己的 open_id 判 @、@所有人不算、钉钉经 sessionWebhook 回）；AGPL，只学不拷
+    repo: proma-ai/Proma
+    watch: [releases, stars]
+
   # ── WP122（docs/71）：DESIGN.md 格式与几个"从网站抽设计令牌"的实现 ─────────
   #
   # 09-19 开工前逐个核过许可证与活跃度（`GET /repos/:owner/:name`，见 docs/71 §8）。

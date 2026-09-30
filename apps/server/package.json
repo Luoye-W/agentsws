@@ -63,6 +63,7 @@
     "@agentsws/work": "workspace:*",
     "@deepseek-ai/cordis": "4.0.4",
     "@hono/node-server": "^2.1.1",
+    "@larksuiteoapi/node-sdk": "1.74.0",
     "@modelcontextprotocol/sdk": "1.30.0",
     "better-sqlite3": "^12.0.0",
     "bonjour-service": "1.4.4",

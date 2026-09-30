@@ -21,7 +21,7 @@ import { type Migration, migrate, schemaVersion } from './migrations.js'
 import type { ConfirmationSource, OutboxRecord, OutboxStore } from './outbox.js'
 import { ACCEPTED_RECONCILE_GRACE_MS, MAX_RECONCILE_ATTEMPTS } from './outbox.js'
 import type { DedupeStore, Seen } from './pipeline.js'
-import type { DeadLetterRecord, QueueItem, QueueStore } from './queue.js'
+import type { DeadLetterRecord, DeadLetterRetryState, QueueItem, QueueStore } from './queue.js'
 import type { CachedContextToken, ClawBotStateStore } from './wechat-clawbot/state.js'
 
 const MIGRATIONS: readonly Migration[] = [
@@ -164,6 +164,23 @@ CREATE TABLE IF NOT EXISTS im_context_tokens (
 CREATE TABLE IF NOT EXISTS support_intake (
   key TEXT PRIMARY KEY NOT NULL,
   at  TEXT NOT NULL
+) STRICT;
+`,
+  },
+  {
+    /*
+     * WP210：死信自动重投的进度。单独一张表而不是死信行上加列：重投时死信行被删掉，
+     * 再死一次是新写的一行——轮数要跨过这一删一写接着数。只有 id、轮数、时刻、版本号。
+     */
+    version: 6,
+    sql: `
+CREATE TABLE IF NOT EXISTS dead_letter_retries (
+  id         TEXT PRIMARY KEY NOT NULL,
+  rounds     INTEGER NOT NULL,
+  last_at_ms INTEGER NOT NULL,
+  release    TEXT,
+  gave_up    INTEGER NOT NULL DEFAULT 0,
+  notified   INTEGER NOT NULL DEFAULT 0
 ) STRICT;
 `,
   },
@@ -394,6 +411,57 @@ export class SqliteQueueStore implements QueueStore {
 
   removeDead(id: string): void {
     this.#db.prepare('DELETE FROM dead_letters WHERE id = ?').run(id)
+  }
+
+  deadLetterRetry(id: string): DeadLetterRetryState | undefined {
+    const row = this.#db
+      .prepare<
+        [string],
+        {
+          rounds: number
+          last_at_ms: number
+          release: string | null
+          gave_up: number
+          notified: number
+        }
+      >(
+        'SELECT rounds, last_at_ms, release, gave_up, notified FROM dead_letter_retries WHERE id = ?',
+      )
+      .get(id)
+    if (row === undefined) return undefined
+    return {
+      rounds: row.rounds,
+      last_at_ms: row.last_at_ms,
+      ...(row.release === null ? {} : { release: row.release }),
+      ...(row.gave_up === 1 ? { gave_up: true } : {}),
+      ...(row.notified === 1 ? { notified: true } : {}),
+    }
+  }
+
+  setDeadLetterRetry(id: string, state: DeadLetterRetryState | undefined): void {
+    if (state === undefined) {
+      this.#db.prepare('DELETE FROM dead_letter_retries WHERE id = ?').run(id)
+      return
+    }
+    this.#db
+      .prepare(
+        `INSERT INTO dead_letter_retries (id, rounds, last_at_ms, release, gave_up, notified)
+         VALUES (?,?,?,?,?,?)
+         ON CONFLICT(id) DO UPDATE SET
+           rounds     = excluded.rounds,
+           last_at_ms = excluded.last_at_ms,
+           release    = excluded.release,
+           gave_up    = excluded.gave_up,
+           notified   = excluded.notified`,
+      )
+      .run(
+        id,
+        state.rounds,
+        state.last_at_ms,
+        state.release ?? null,
+        state.gave_up === true ? 1 : 0,
+        state.notified === true ? 1 : 0,
+      )
   }
 
   get size(): number {

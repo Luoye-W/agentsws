@@ -37,6 +37,9 @@ export const HELP_SLUGS = [
   'browser-extension',
   // WP157：消息渠道与网站聊天窗
   'im-channels',
+  // WP211：飞书 / 钉钉建应用
+  'im-feishu',
+  'im-dingtalk',
   'chat-window',
   // WP173：开发信的发信域名（怎么买、怎么配、体检看什么）
   'b2b-sending-domain',
@@ -134,6 +137,9 @@ export const HELP_SCOPES: Readonly<Record<HelpSlug, HelpScope>> = {
     roles: ['kol.youtube', 'kol.instagram', 'kol.tiktok', 'kol.facebook', 'kol.x'],
   },
   'im-channels': { positions: [], roles: [] },
+  // WP211：飞书 / 钉钉建应用（团队渠道，谁都可能要看）
+  'im-feishu': { positions: [], roles: [] },
+  'im-dingtalk': { positions: [], roles: [] },
   'chat-window': { positions: ['customer-care'], roles: ['dtc.live-chat'] },
   'b2b-sending-domain': { positions: ['b2b'], roles: ['b2b.outbound'] },
   'dsh-scenes': { positions: [], roles: [] },

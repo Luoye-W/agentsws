@@ -48,6 +48,8 @@ const KNOWN_KINDS: ReadonlySet<string> = new Set<ApprovalKind>([
   'b2b_sender_choice',
   // WP180：官方插件的装 / 升级 / 卸载卡（只从审过的清单装、批了才做）
   'official_plugin',
+  // WP210：客户来信彻底投不进（再投一次 / 去邮箱回复）
+  'inbound_dead_letter',
 ])
 
 export function isKnownKind(kind: string): boolean {
