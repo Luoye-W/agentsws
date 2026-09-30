@@ -907,11 +907,13 @@ describe('死信重投（09-12 真账号验收留下的后置项）', () => {
     })
     assemblies.push(channels)
 
-    // 一路重试到死信（18 §2.2：退避 ≤ 5 次）
+    // 一路重试到死信（18 §2.2：退避 ≤ 5 次）。WP210 起死信过半小时会被自动再投，
+    // 所以一进死信就停下来——这条用例测的是诊断页上人按的那一下
     await channels.poll()
     for (let i = 0; i < 6; i += 1) {
       nowMs += 60 * 60_000
       await channels.poll()
+      if ((await channels.deadLetters()).length > 0) break
     }
     const dead = await channels.deadLetters()
     expect(dead).toHaveLength(1)
@@ -929,5 +931,96 @@ describe('死信重投（09-12 真账号验收留下的后置项）', () => {
 
     // 不存在的 id 只是没重投，不是报错
     expect(await channels.requeueDeadLetter('dl_nope')).toEqual({ requeued: false })
+  })
+})
+
+describe('死信自动重投（WP210，Luoye 09-30「应该自动重投，不该由用户手动」）', () => {
+  function rig(opts: { from?: string; release?: () => string }) {
+    const dir = mkdtempSync(join(tmpdir(), 'agentsws-channels-autorequeue-'))
+    cleanup.push(() => rmSync(dir, { recursive: true, force: true }))
+    const data = createDataStore({ dbPath: join(dir, 'data.db'), clock, collections: [] })
+    cleanup.push(() => data.close())
+    const state = { nowMs: Date.parse(T0), broken: true, runs: 0, release: '0.1.0' }
+    const ticking: Clock = {
+      now: () => new Date(state.nowMs).toISOString(),
+      sleep: async () => undefined,
+    }
+    const events: EventEnvelope[] = []
+    const cards: { dead_letter_id: string; rounds: number; from?: string }[] = []
+    const channels = createChannels({
+      clock: ticking,
+      workspace_id: WS,
+      dbDir: dir,
+      halt: new MemoryHalt({}),
+      appendEvent: (e) => {
+        events.push(e as EventEnvelope)
+      },
+      cipher: data.keyring,
+      accounts: () => [account()],
+      credentials: { password: () => PASS },
+      work: createWork({ workspace_id: WS, clock: ticking, random: () => 0.5 }),
+      position: () => ({ person_id: 'p_owner', assignment_id: 'asg_1', role_id: 'dtc.support' }),
+      startRun: () => {
+        if (state.broken) throw new Error('canonicalJson 炸了')
+        state.runs += 1
+        return { run_id: `run_${state.runs}` }
+      },
+      makeSource: () => new StubSource(mime(opts.from === undefined ? {} : { from: opts.from })),
+      makeMailer: () => new RecordingMailer(),
+      escalateDeadLetter: (input) => {
+        cards.push(input)
+      },
+      get release() {
+        return state.release
+      },
+    })
+    assemblies.push(channels)
+    const tick = async (ms: number): Promise<void> => {
+      state.nowMs += ms
+      await channels.poll()
+    }
+    return { channels, state, events, cards, tick }
+  }
+
+  const HOUR = 60 * 60_000
+
+  it('修好之后不用人按：下一轮收信时自己重投，死信清空', async () => {
+    const r = rig({})
+    await r.channels.poll()
+    for (let i = 0; i < 6 && (await r.channels.deadLetters()).length === 0; i += 1)
+      await r.tick(HOUR)
+    expect(await r.channels.deadLetters()).toHaveLength(1)
+    r.state.broken = false
+    await r.tick(HOUR)
+    expect(r.state.runs).toBe(1)
+    expect(await r.channels.deadLetters()).toHaveLength(0)
+    const auto = r.events.find((e) => e.type === 'inbound.requeued')
+    expect(auto?.payload).toMatchObject({ auto: true, round: 1 })
+    expect(r.cards).toEqual([])
+  })
+
+  it('客户来信一直投不进：投满四轮放弃，出一张卡（只一张）', async () => {
+    const r = rig({})
+    await r.channels.poll()
+    // 一天推一次：每一轮都足够等过退避，也足够把入站那 5 次重试推完
+    for (let i = 0; i < 40 && r.cards.length === 0; i += 1) await r.tick(HOUR * 6)
+    expect(r.cards).toHaveLength(1)
+    expect(r.cards[0]).toMatchObject({ rounds: 4 })
+    const views = await r.channels.deadLetters()
+    expect(views).toHaveLength(1)
+    expect(views[0]?.retry).toMatchObject({ gave_up: true, notified: true })
+    for (let i = 0; i < 5; i += 1) await r.tick(HOUR * 24)
+    expect(r.cards).toHaveLength(1)
+    expect(r.events.filter((e) => e.type === 'inbound.dead_letter_gave_up')).toHaveLength(1)
+  })
+
+  it('系统通知投不进：只进日志，不出卡', async () => {
+    const r = rig({ from: 'Shopify <no-reply@shopify.com>' })
+    await r.channels.poll()
+    for (let i = 0; i < 40; i += 1) await r.tick(HOUR * 6)
+    const gaveUp = r.events.filter((e) => e.type === 'inbound.dead_letter_gave_up')
+    expect(gaveUp).toHaveLength(1)
+    expect(gaveUp[0]?.payload).toMatchObject({ customer: false })
+    expect(r.cards).toEqual([])
   })
 })

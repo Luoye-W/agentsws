@@ -262,6 +262,16 @@ export interface ChannelsOptions {
    * 不装 = 只落事件不出卡（测试与最小装配）。真服务进程里它接到审批总线上。
    */
   escalateUnresolvedDelivery?(input: UnresolvedDelivery): MaybePromise<void>
+  /**
+   * WP210：一封**客户来信**自动重投用完还是投不进 → 一张提醒卡（系统 / 营销通知不出卡，
+   * 只进日志）。不装 = 只落事件不出卡。
+   */
+  escalateDeadLetter?(input: DeadLetterEscalation): MaybePromise<void>
+  /**
+   * WP210：当前程序版本（`AGENTSWS_VERSION`）。换了版本 = 可能修好了，放弃过的死信
+   * 再自动投一次。不给就只按退避投。
+   */
+  release?: string
   /** WP55 / 48 §4 L3 #5：归档文件夹名；`null` = 关掉归档。 */
   archive_folder?: string | null
   /** WP55：归档时顺手标已读（默认开）。 */
@@ -326,11 +336,25 @@ export interface SupportInboundVerdict {
   boundary_card_id?: string
 }
 
+/** WP210：一封客户来信彻底投不进时给提醒卡的材料（没有正文）。 */
+export interface DeadLetterEscalation {
+  dead_letter_id: string
+  channel: string
+  /** 发件人的展示身份（线程台账里的，不是正文）。 */
+  from?: string
+  reason: string
+  /** 自动重投过几轮。 */
+  rounds: number
+  last_error?: string
+}
+
 export interface MailPollReport {
   accounts: number
   messages: number
   /** 重试队列这一轮推动了几条。 */
   retried: number
+  /** WP210：这一轮自动重投了几封死信。 */
+  requeued?: number
   /** 拉不动的那几个账号（一个坏了不该拖垮别的）。 */
   failed: string[]
 }
@@ -485,8 +509,13 @@ export interface ChannelsAssembly {
   outbox: Outbox
   /** WP55 / 18 §2.2：进了死信的入站消息（正文不进列表）。 */
   deadLetters(): Promise<DeadLetterRecord[]>
-  /** WP55：把一条死信重投回队列（人按的按钮：会重新起一次 Run）。 */
+  /** WP55：把一条死信重投回队列（WP210 起只在诊断页按：平时系统自己按退避投）。 */
   requeueDeadLetter(id: string): Promise<{ requeued: boolean }>
+  /**
+   * WP210：自动重投一轮（收信那一拍顺手调）。彻底投不进的记日志；客户来信的
+   * 交给 `escalateDeadLetter` 出卡。
+   */
+  sweepDeadLetters(): Promise<{ requeued: number; gave_up: number; escalated: number }>
   /** WP55 / 48 §4 L3 #5：毒消息隔离表（哪几封被永久越过了）。 */
   folderFaults(): Promise<FolderSyncFault[]>
   /**
@@ -931,6 +960,50 @@ export function createChannels(options: ChannelsOptions): ChannelsAssembly {
   refresh()
   options.accounts().length // 触发一次求值，装配时就知道有没有邮箱
 
+  /**
+   * WP210：死信自动重投一轮。几只邮箱共用一张队列，所以只让**第一条**邮件管线扫
+   * （它认得 `email` 渠道，onEvent 也是同一个）；IM / 聊天那几条管线的死信不在这里扫。
+   */
+  const sweepDeadLetters = async (): Promise<{
+    requeued: number
+    gave_up: number
+    escalated: number
+  }> => {
+    const first = channels[0]
+    if (first === undefined) return { requeued: 0, gave_up: 0, escalated: 0 }
+    const out = await first.pipeline.sweepDeadLetters(
+      options.release === undefined ? {} : { release: options.release },
+    )
+    let escalated = 0
+    for (const record of out.gave_up) {
+      if (!record.customer || options.escalateDeadLetter === undefined) continue
+      try {
+        await options.escalateDeadLetter({
+          dead_letter_id: record.id,
+          channel: record.event.channel,
+          reason: record.reason,
+          rounds: record.retry?.rounds ?? 0,
+          ...(record.event.actor?.display === undefined
+            ? {}
+            : { from: record.event.actor.display }),
+          ...(record.last_error === undefined ? {} : { last_error: record.last_error }),
+        })
+        escalated += 1
+      } catch (e) {
+        // 出卡失败不该拖垮收信；日志里已经有 gave_up 那一条
+        options.appendEvent({
+          schema_version: 1,
+          workspace_id,
+          type: 'inbound.dead_letter',
+          actor: { kind: 'system', id: 'channel:email' },
+          correlation: { trace_id: `tr_dl_${record.id}` },
+          payload: { reason: 'escalate_failed', dead_letter_id: record.id, detail: String(e) },
+        })
+      }
+    }
+    return { requeued: out.requeued.length, gave_up: out.gave_up.length, escalated }
+  }
+
   return {
     raw,
     clawbotState,
@@ -986,8 +1059,12 @@ export function createChannels(options: ChannelsOptions): ChannelsAssembly {
         // 上一轮触发失败的那几条按退避重排（18 §2.2 重试 ≤ 5 次，之后死信）
         retried += await channel.pipeline.pump()
       }
-      return { accounts: channels.length, messages, retried, failed }
+      // WP210：进了死信的也按退避自动再投（修好之后的新版本一起来就会投一次）
+      const sweep = await sweepDeadLetters()
+      return { accounts: channels.length, messages, retried, failed, requeued: sweep.requeued }
     },
+
+    sweepDeadLetters: () => sweepDeadLetters(),
 
     async intakeSupportMail(input): Promise<SupportMailIntakeResult> {
       refresh()
@@ -1481,10 +1558,12 @@ export function createChannels(options: ChannelsOptions): ChannelsAssembly {
     },
 
     async deadLetters(): Promise<DeadLetterRecord[]> {
-      const out: DeadLetterRecord[] = []
+      // 几只邮箱共用一张队列：挨个问会把同一条问出好几遍（WP210 顺手修），按 id 去重
+      const out = new Map<string, DeadLetterRecord>()
       for (const channel of channels)
-        out.push(...(await channel.pipeline.deadLetterRecords(workspace_id)))
-      return out
+        for (const d of await channel.pipeline.deadLetterRecords(workspace_id))
+          if (!out.has(d.id)) out.set(d.id, d)
+      return [...out.values()]
     },
 
     /**

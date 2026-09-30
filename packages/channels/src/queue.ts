@@ -85,6 +85,20 @@ export function autoRequeueDelayMs(rounds: number, policy: AutoRequeuePolicy): n
   return Math.min(policy.max_ms, Math.round(policy.base_ms * policy.factor ** Math.max(0, rounds)))
 }
 
+/**
+ * WP210：这条死信下一次自动重投的时刻（epoch ms）；不会再自动投了回 `undefined`
+ * （路由类失败、已放弃、轮数用完）。`record.retry` 由 `deadLetterRecords` 附上。
+ */
+export function nextAutoRequeueAt(
+  record: Pick<DeadLetterRecord, 'reason' | 'at_ms' | 'retry'>,
+  policy: AutoRequeuePolicy = DEFAULT_AUTO_REQUEUE,
+): number | undefined {
+  if (record.reason !== 'retries_exhausted') return undefined
+  const rounds = record.retry?.rounds ?? 0
+  if (record.retry?.gave_up === true || rounds >= policy.max_rounds) return undefined
+  return record.at_ms + autoRequeueDelayMs(rounds, policy)
+}
+
 export interface QueueStore {
   put(item: QueueItem): MaybePromise<void>
   remove(id: string): MaybePromise<void>

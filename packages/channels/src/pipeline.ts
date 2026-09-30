@@ -23,8 +23,10 @@ import {
   DEFAULT_LEASE_MS,
   DEFAULT_RETRY,
   type DeadLetterRecord,
+  type DeadLetterRetryState,
   laneOf,
   MemoryQueueStore,
+  nextAutoRequeueAt,
   type QueueItem,
   type QueueStore,
   type RetryPolicy,
@@ -345,10 +347,7 @@ export class ChannelInboundPipeline implements InboundPipeline {
 
   /** WP210：这条死信下一次自动重投的时刻（epoch ms）；不会再自动重投了回 `undefined`。 */
   nextAutoRequeueAt(record: DeadLetterRecord): number | undefined {
-    if (record.reason !== 'retries_exhausted') return undefined
-    const rounds = record.retry?.rounds ?? 0
-    if (record.retry?.gave_up === true || rounds >= this.autoRequeue.max_rounds) return undefined
-    return record.at_ms + autoRequeueDelayMs(rounds, this.autoRequeue)
+    return nextAutoRequeueAt(record, this.autoRequeue)
   }
 
   /**
@@ -403,20 +402,21 @@ export class ChannelInboundPipeline implements InboundPipeline {
       if (state?.gave_up === true) continue
       // 彻底投不进：记一笔、只给客户来信出卡（每条最多一张）
       const customer = isCustomerLetter(record.event)
-      await store.setDeadLetterRetry(record.id, {
+      const final: DeadLetterRetryState = {
         rounds: state?.rounds ?? 0,
         last_at_ms: state?.last_at_ms ?? now_ms,
         ...(state?.release === undefined ? {} : { release: state.release }),
         gave_up: true,
         ...(customer || state?.notified === true ? { notified: true } : {}),
-      })
+      }
+      await store.setDeadLetterRetry(record.id, final)
       await this.emit('inbound.dead_letter_gave_up', record.event, {
         dead_letter_id: record.id,
         reason: record.reason,
-        rounds: state?.rounds ?? 0,
+        rounds: final.rounds,
         customer,
       })
-      if (state?.notified !== true) out.gave_up.push({ ...record, customer })
+      if (state?.notified !== true) out.gave_up.push({ ...record, retry: final, customer })
     }
     return out
   }

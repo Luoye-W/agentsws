@@ -3386,6 +3386,52 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           },
         })
       },
+      /*
+       * WP210（Luoye 09-30）：失败的信系统自己按退避重投；**客户来信**投满几轮还不行，
+       * 才给人一张卡（系统 / 营销通知只进日志）。与上面那张同理复用 `policy_change`：
+       * 通过之后要施行的是人的判断（去邮箱里亲自回这位客户，或到诊断页再投一次）。
+       */
+      escalateDeadLetter: async (input) => {
+        await approvals.create({
+          workspace_id: ws,
+          schema_version: 1,
+          kind: 'policy_change',
+          role_id: 'dtc.support',
+          proposer: { kind: 'agent', id: 'channel:inbound' },
+          automation: { level_at_creation: 'L1' },
+          priority: 'queue',
+          routing: {
+            recipients: [{ person: person.id, via: 'owner' }],
+            rule: 'owner',
+            escalation: {
+              after_hours: 24,
+              business_hours: true,
+              chain: ['owner'],
+              escalated_at: [],
+            },
+            separation_of_duties: false,
+          },
+          subject: { object: { type: 'message', id: input.dead_letter_id } },
+          dedupe_key: `${ws}:inbound_dead_letter:${input.dead_letter_id}`,
+          title: '有一封客户来信没能处理，请看一眼',
+          summary: `${input.from === undefined ? '一位客户' : input.from} 的来信，系统自动重试了 ${input.rounds} 轮还是没处理成。建议直接去邮箱回复这位客户；修好之后也可以在「设置 → 诊断」里再投一次。`,
+          payload: {
+            form: 'inbound_dead_letter',
+            dead_letter_id: input.dead_letter_id,
+            channel: input.channel,
+            reason: input.reason,
+            rounds: input.rounds,
+            ...(input.from === undefined ? {} : { from: input.from }),
+            ...(input.last_error === undefined ? {} : { last_error: input.last_error }),
+          },
+          evidence: {
+            source_events: [],
+            provenance: { seen: [] },
+            precheck: {},
+          },
+        })
+      },
+      release: env.AGENTSWS_VERSION ?? '0.1.0',
       ...(dir === undefined ? {} : { dbDir: dir }),
       ...(startRun === undefined ? {} : { startRun }),
       ...(options.mailSource === undefined ? {} : { makeSource: options.mailSource }),
