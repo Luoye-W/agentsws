@@ -25,6 +25,8 @@ import type {
   AllocationLimitRequest,
   AllocationMemberRemoved,
   AllocationReport,
+  AllocationRosterRequest,
+  AllocationRosterSynced,
   Attribution,
   CapabilitySource,
   CapabilitySourceSettings,
@@ -47,6 +49,7 @@ import type {
   WalletBalance,
 } from '@agentsws/contracts'
 import {
+  ALLOCATION_WEB_PATH,
   allocationTimezoneOf,
   attributionHeaders,
   DATA_CAPABILITY_ROUTE_LEVELS,
@@ -168,6 +171,11 @@ export interface CloudAssembly {
    * 不拦删人——本地这一刀已经切了，云上那一行留着也不会再被用到（他不再出现在请求头里）。
    */
   forgetMember(person_id: string, by: string): Promise<boolean>
+  /**
+   * WP206：把这个工作区的名册推上云（成员 id + 名字 + 持有的岗位、岗位 id + 名字；不带业务内容），
+   * 网页版账号页「成员额度」据此列人。没关联回 `false`；连不上 / 云上拒了也回 `false`（下一轮再推）。
+   */
+  syncRoster(roster: AllocationRosterRequest): Promise<boolean>
   /**
    * WP192：官方数据接口统一能力口那些能力（`maps.places`、`serp.google`……）的路由，
    * 键 `data.<能力>`。默认只有「Agents 工坊（用积分）」一级（`workshop`）。
@@ -492,16 +500,29 @@ export function createCloud(options: CloudOptions): CloudAssembly {
     }
   }
 
-  /** 「我的本月额度」（成员自己看）。 */
+  /**
+   * 「我的本月额度」（成员自己看）。WP206：看的人是公司的 owner / admin 时顺带给网页「成员额度」页的地址
+   * ——额度分配只在网页上做，设置 → 积分据此画「给同事分额度 → 在网页上」。
+   */
   const myAllocationView = async (actor: CloudActor): Promise<CloudMyAllocationView> => {
-    if (tokenOf() === undefined) return { linked: false, reason: NOT_LINKED }
+    let role: 'owner' | 'admin' | undefined
+    try {
+      const r = await options.canManage?.(actor)
+      role = r === 'admin' ? 'admin' : r === 'owner' || r === true ? 'owner' : undefined
+    } catch {
+      role = undefined
+    }
+    const manager =
+      role === undefined ? {} : { role, allocation_url: `${base}${ALLOCATION_WEB_PATH}` }
+    if (tokenOf() === undefined) return { linked: false, reason: NOT_LINKED, ...manager }
     const res = await cloudCall<MyAllocation>('/v1/wallet/allocation/me', {
       headers: headersOf(actor),
     })
-    if (res.ok && res.data !== undefined) return { linked: true, mine: res.data }
+    if (res.ok && res.data !== undefined) return { linked: true, mine: res.data, ...manager }
     return {
       linked: true,
       reason: res.status === 0 ? '暂时取不到（云上连不通）。' : (res.message ?? '暂时取不到。'),
+      ...manager,
     }
   }
 
@@ -759,6 +780,14 @@ export function createCloud(options: CloudOptions): CloudAssembly {
         method: 'POST',
         body: { member_id: person_id },
         headers: attributionHeaders({ member_id: by }),
+      })
+      return res.ok
+    },
+    syncRoster: async (roster) => {
+      if (tokenOf() === undefined) return false
+      const res = await cloudCall<AllocationRosterSynced>('/v1/wallet/allocation/roster', {
+        method: 'POST',
+        body: roster,
       })
       return res.ok
     },

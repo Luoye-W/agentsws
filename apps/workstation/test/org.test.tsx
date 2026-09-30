@@ -373,6 +373,13 @@ describe('公司页：岗位', () => {
     expect(screen.queryByRole('tab', { name: '职责' })).toBeNull()
   })
 
+  it('WP206：没有「积分」tab 了（额度分配只在网页版账号页做）', async () => {
+    renderWithProviders(<OrgPage />)
+    await screen.findAllByTestId('position-card')
+    expect(screen.queryByTestId('org-tab-credits')).toBeNull()
+    expect(screen.queryByRole('tab', { name: '积分' })).toBeNull()
+  })
+
   it('页面上没有 role_id / assignment_id 裸串', async () => {
     renderWithProviders(<OrgPage />)
     await screen.findAllByTestId('position-card')
@@ -812,5 +819,18 @@ describe('不是所有者', () => {
     state.ownerPositions = []
     renderWithProviders(<OrgPage />)
     expect(await screen.findByTestId('org-not-owner')).toBeTruthy()
+  })
+
+  it('WP206：公司的 admin 也不再单开「积分」页——公司页只给所有者', async () => {
+    state.ownerPositions = [
+      {
+        ...(state.ownerPositions[0] as (typeof state.ownerPositions)[number]),
+        position_id: 'asg_admin',
+        role_id: 'dtc.support',
+      },
+    ]
+    renderWithProviders(<OrgPage />)
+    expect(await screen.findByTestId('org-not-owner')).toBeTruthy()
+    expect(screen.queryByTestId('org-credits-only')).toBeNull()
   })
 })

@@ -240,6 +240,7 @@ import {
   createCloudAccount,
 } from './cloud-account.js'
 import { withCloudAttribution } from './cloud-attribution.js'
+import { createRosterSync, isRosterEvent, type RosterSync } from './cloud-roster.js'
 import { ComputerUseError, createComputerUse } from './computer-use.js'
 import { ComputerUseInstallError } from './computer-use-install.js'
 import { connectBaseUrl } from './connect-url.js'
@@ -1174,7 +1175,13 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         trace_id: traceScope.current() ?? rest.correlation.trace_id,
       },
     })
+    // WP206：名册变了（加人 / 删人 / 岗位 / 分配 / 刚关联上）→ 各品牌攒一下再把名册推上云
+    if (isRosterEvent(e.type))
+      for (const sync of rosterSyncs.values()) sync.poke(e.type === 'cloud.account_linked')
   }
+  /** WP206：每个品牌一份名册同步（品牌装好时建，`rosterReady` 之后才开始推）。 */
+  const rosterSyncs = new Map<WorkspaceId, RosterSync>()
+  let rosterReady = false
 
   const data = createDataStore({ dbPath: file('data.db'), clock, collections: [] })
 
@@ -1975,6 +1982,34 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     return { members, positions: creditsPositionNames(), notify_emails: [...notify] }
   }
 
+  /**
+   * WP206：这个品牌的名册（推上云给网页「成员额度」页列人）：成员 `person_id` + 名字 + 他持有的岗位、
+   * 岗位 id + 名字。**只有名字，不带业务内容。** 岗位 id 与打云时 `X-Agentsws-Position` 带的是同一套
+   * （`cloudPositionOf`）。公司页与岗位面没装好之前抛错（这一轮不推）——半份名册推上去，
+   * 云上会把没列进来的岗位当成删了、自动收回。
+   */
+  const cloudRoster = async (workspace_id: WorkspaceId) => {
+    if (!rosterReady || !positionAssemblies.has(workspace_id)) throw new Error('名册还没装好')
+    const names = creditsPositionNames()
+    const members: { id: string; name: string; positions: string[] }[] = []
+    for (const m of await identity.members(workspace_id)) {
+      if (m.left_at !== undefined) continue
+      const person = await identity.getPerson(m.person_id)
+      if (person === undefined) continue
+      const held = new Set<string>()
+      for (const a of roles.assignments.listByPerson(person.id, { workspace_id }))
+        if (a.revoked_at === undefined) {
+          const position = cloudPositionOf(workspace_id, a.role_id)
+          if (position !== undefined) held.add(position)
+        }
+      members.push({ id: person.id, name: person.name, positions: [...held].sort() })
+    }
+    return {
+      members,
+      positions: Object.entries(names).map(([id, name]) => ({ id, name })),
+    }
+  }
+
   /*
    * ── WP120（69）：**角色定位** ───────────────────────────────────────────
    *
@@ -2707,6 +2742,15 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       directory: () => creditsDirectory(ws),
       timeZone: async () => (await identity.getWorkspace(ws))?.tz,
     })
+    // WP206：名册推上云（网页「成员额度」页列人）。公司页装好之后（`rosterReady`）才开始推
+    const rosterSync = createRosterSync({
+      build: () => cloudRoster(ws),
+      push: (roster) => ownCloud.syncRoster(roster),
+      linked: () => ownCloud.linked(),
+    })
+    rosterSyncs.get(ws)?.close()
+    rosterSyncs.set(ws, rosterSync)
+    if (rosterReady) rosterSync.start()
     const ownModels = createModels({
       clock,
       pricing: pricingCatalog,
@@ -4150,6 +4194,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         b2b.close()
         // 云端红人库的同步账本也握着一个句柄（WP118）：跟着这个品牌一起关
         ownCloud.kolSync?.close()
+        rosterSync.close()
+        if (rosterSyncs.get(ws) === rosterSync) rosterSyncs.delete(ws)
         site.close()
         ads.close()
         pr.close()
@@ -4863,6 +4909,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   rangeExpandedSink = org.onRangeExpanded
   supervisorPositions = () => org.positions()
   creditsPositionNames = () => Object.fromEntries(org.positions().map((p) => [p.id, p.name.zh]))
+  // WP206：公司页与岗位名装好了：已装好的品牌现在推第一份名册（之后装的品牌自己推）
+  rosterReady = true
+  for (const sync of rosterSyncs.values()) sync.start()
 
   /**
    * WP51 首次设置与同事发现（46）。

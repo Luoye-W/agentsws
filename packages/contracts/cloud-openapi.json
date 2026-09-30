@@ -1881,6 +1881,99 @@
         }
       }
     },
+    "/v1/wallet/allocation/roster": {
+      "post": {
+        "operationId": "postV1WalletAllocationRoster",
+        "summary": "WP206：本机把这个工作区的名册推上来（成员 id + 名字 + 持有的岗位、岗位 id + 名字；不带业务内容）。",
+        "description": "名册里没了的成员 / 岗位云上自动收回（停用），见 {@link AllocationRosterRequest}",
+        "tags": ["wallet"],
+        "security": [
+          {
+            "workspace_token": []
+          }
+        ],
+        "x-scope": "wallet:topup",
+        "parameters": [
+          {
+            "name": "X-Agentsws-Member",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Agentsws-Position",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AllocationRosterRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/AllocationRosterSynced"
+                    }
+                  },
+                  "required": ["data"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "invalid_input",
+            "x-error-codes": ["invalid_input"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "unauthenticated",
+            "x-error-codes": ["unauthenticated"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "令牌没有这条路由要的动作（`details.required_scope`）",
+            "x-error-codes": ["forbidden"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/ai/chat/completions": {
       "post": {
         "operationId": "postV1AiChatCompletions",
@@ -7681,7 +7774,8 @@
           },
           "action": {
             "type": "string",
-            "enum": ["set", "clear", "member_removed"]
+            "enum": ["set", "clear", "member_removed", "reclaim", "auto_reclaim", "returned"],
+            "description": "`set` / `clear`：改上限；`member_removed`：删人清额度（WP194）。 WP206 加：`reclaim`（管理员在网页上点「收回」= 上限设成 0）；`auto_reclaim`（名册同步时这个人 / 岗位没了，云上自动停用）；`returned`（又出现在名册里，停用解除）。"
           },
           "kind": {
             "$ref": "#/components/schemas/AllocationSubjectKind"
@@ -7913,6 +8007,114 @@
           "notices"
         ],
         "description": "`GET /v1/wallet/allocation`：管理员看的本月额度与用量（按人 / 按岗位 / 按能力）。"
+      },
+      "AllocationRosterChange": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/AllocationSubjectKind"
+          },
+          "subject_id": {
+            "type": "string"
+          }
+        },
+        "required": ["kind", "subject_id"],
+        "description": "名册同步时变了状态的一个成员 / 岗位。"
+      },
+      "AllocationRosterMember": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "positions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "他持有的岗位 id（与打云时 `X-Agentsws-Position` 带的是同一套）。"
+          }
+        },
+        "required": ["id", "name"],
+        "description": "名册里的一个成员：本机 `person_id` + 显示名 + 他手上的岗位 id。**只有这些名字，不带任何业务内容。** 网页端要能给还没设过上限的人设上限，所以得知道公司里有谁。"
+      },
+      "AllocationRosterPosition": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": ["id", "name"],
+        "description": "名册里的一个岗位：岗位 id + 名字。"
+      },
+      "AllocationRosterRequest": {
+        "type": "object",
+        "properties": {
+          "members": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AllocationRosterMember"
+            }
+          },
+          "positions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AllocationRosterPosition"
+            }
+          }
+        },
+        "required": ["members", "positions"],
+        "description": "`POST /v1/wallet/allocation/roster`：本机服务把**这个工作区**的名册整张推上来（启动时一次、名册变了一次、 之后每天一次）。云上按「组织 × 工作区」存，网页页取同一组织下各工作区的并集。"
+      },
+      "AllocationRosterSynced": {
+        "type": "object",
+        "properties": {
+          "members": {
+            "type": "number"
+          },
+          "positions": {
+            "type": "number"
+          },
+          "reclaimed": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AllocationRosterChange"
+            },
+            "description": "这一次自动收回（停用）了谁。"
+          },
+          "returned": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AllocationRosterChange"
+            },
+            "description": "这一次解除停用的（之前没了、这次又回到名册里）。"
+          },
+          "synced_at": {
+            "type": "string"
+          },
+          "guarded": {
+            "type": "object",
+            "properties": {
+              "missing": {
+                "type": "number"
+              },
+              "of": {
+                "type": "number"
+              }
+            },
+            "required": ["missing", "of"],
+            "description": "这一次被保护拦下了：一下子没了的成员超过现有人数的一半、且至少 {@link ALLOCATION_ROSTER_GUARD_MIN} 人 （多半是本机名册读坏了）。这时**谁都不自动收回**，没了的那几个照旧留在名册里，只记一条日志、给公司的 owner / admin 发一封提醒信（同一件事一天一封）。真是一批人走了，在网页上逐个收回。"
+          }
+        },
+        "required": ["members", "positions", "reclaimed", "returned", "synced_at"],
+        "description": "`POST /v1/wallet/allocation/roster` 的结果。"
       },
       "AllocationRow": {
         "type": "object",

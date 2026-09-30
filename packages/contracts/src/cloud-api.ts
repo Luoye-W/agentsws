@@ -44,6 +44,8 @@ import type {
   AllocationMemberRemoveRequest,
   AllocationReport,
   AllocationReportQuery,
+  AllocationRosterRequest,
+  AllocationRosterSynced,
   AllocationSettings,
   AllocationSettingsView,
   AttributionHeaders,
@@ -1741,6 +1743,20 @@ export interface CloudAllocationApi {
     tag: 'wallet'
     ok: { status: 200; body: CloudDataEnvelope<AllocationAuditList> }
     errors: EntryAuthErrors
+    errorBody: CloudEntryErrorBody
+  }
+  /**
+   * WP206：本机把这个工作区的名册推上来（成员 id + 名字 + 持有的岗位、岗位 id + 名字；不带业务内容）。
+   * 名册里没了的成员 / 岗位云上自动收回（停用），见 {@link AllocationRosterRequest}
+   */
+  'POST /v1/wallet/allocation/roster': {
+    auth: 'workspace_token'
+    scope: 'wallet:topup'
+    tag: 'wallet'
+    headers: AttributionHeaders
+    body: AllocationRosterRequest
+    ok: { status: 200; body: CloudDataEnvelope<AllocationRosterSynced> }
+    errors: EntryAuthErrors & { 400: 'invalid_input' }
     errorBody: CloudEntryErrorBody
   }
 }
