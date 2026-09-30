@@ -1,6 +1,9 @@
 export * from './blob-raw-store.js'
 export * from './chat/index.js'
+export * from './dead-letter-policy.js'
 export * from './delivery/email.js'
+// WP211：钉钉机器人（团队，归工作区；Stream 模式照官方 SDK 移植协议）
+export * from './dingtalk-bot/index.js'
 export * from './email/adapter.js'
 export * from './email/cursors.js'
 export * from './email/imap.js'
@@ -11,6 +14,8 @@ export * from './email/smtp.js'
 export * from './email/support-mailbox.js'
 export * from './email/threads.js'
 export * from './errors.js'
+// WP211：飞书机器人（团队，归工作区；长连接交给注入的官方 SDK）
+export * from './feishu-bot/index.js'
 // WP85（54 §5）：卡片进 IM 只出「文本摘要 + 去工作台处理」的深链，审批动作不在 IM 里做
 export * from './im-cards.js'
 // WP113（63）：消息——统一收件处（消息库 / 分拣 / 标签 / 草稿 / IMAP 回写）

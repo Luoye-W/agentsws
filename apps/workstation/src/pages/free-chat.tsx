@@ -103,6 +103,9 @@ export function FreeChatPage(): React.ReactNode {
         if (f.type === 'searching')
           return { ...prev, status: t('free_chat.searching', { q: f.query }) }
         if (f.type === 'sources') return { ...prev, reply: { ...prev.reply, sources: f.sources } }
+        // WP207：找回的候选卡（边答边出现；人点了才恢复）
+        if (f.type === 'archived_candidates')
+          return { ...prev, reply: { ...prev.reply, archived_candidates: f.candidates } }
         if (f.type === 'notice') return { ...prev, status: f.text }
         if (f.type === 'error') return { ...prev, reply: { ...prev.reply, error: f.message } }
         return prev

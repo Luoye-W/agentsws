@@ -56,6 +56,8 @@ const BY_KIND: Partial<Record<DeckKind, DeckAction[]>> = {
   b2b_sender_choice: ['approve', 'snooze', 'open'],
   // WP180：装 / 不装；「指导」无从谈起（清单是审过的，问的只是要不要）
   official_plugin: ['approve', 'reject', 'snooze', 'open'],
+  // WP210：再投一次 / 去邮箱回复；「指导」无从谈起（问的只是这封信怎么办）
+  inbound_dead_letter: ['approve', 'reject', 'snooze', 'open'],
 }
 
 export function actionsFor(kind: DeckKind, state: ApprovalState): DeckAction[] {
@@ -82,6 +84,7 @@ const LABELS: Partial<Record<DeckKind, Partial<Record<DeckAction, string>>>> = {
   membership: { approve: '让他进来', reject: '不让', open: '看看是谁' },
   computer_use: { approve: '允许', reject: '不允许', snooze: '稍后' },
   official_plugin: { approve: '照做', reject: '不要', snooze: '稍后' },
+  inbound_dead_letter: { approve: '再投一次', reject: '去邮箱回复', snooze: '稍后' },
 }
 
 const DEFAULT_LABELS: Record<DeckAction, string> = {
@@ -117,6 +120,8 @@ const RISK_BY_KIND: Partial<Record<DeckKind, RiskClass>> = {
   // WP180：装进来的是会跟着运行一起跑的代码
   official_plugin: 'high',
   staged_change: 'medium',
+  // WP210：一位客户在等回复
+  inbound_dead_letter: 'medium',
   outbound_draft: 'medium',
   dev_handoff_result: 'medium',
   scheduled_task: 'medium',
@@ -157,6 +162,7 @@ const MINUTES_BY_KIND: Partial<Record<DeckKind, number>> = {
   membership: 2,
   computer_use: 1,
   official_plugin: 1,
+  inbound_dead_letter: 2,
   dev_handoff_result: 5,
   home_suggestion: 1,
   system_alert: 3,

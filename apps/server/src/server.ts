@@ -53,6 +53,7 @@ import { blobKey, blobUri, openBlobStore } from '@agentsws/blob'
 import { designRoleFamily } from '@agentsws/brand-design'
 import type { PageFetch as BrandIntakeFetch } from '@agentsws/brand-intake'
 import type { ResolveMx } from '@agentsws/channels'
+import { routeOfPosition } from '@agentsws/channels'
 import type {
   ApprovalBus,
   ApprovalItem,
@@ -82,7 +83,13 @@ import {
   SOCIAL_ROLE_IDS,
   socialChannelSpec,
 } from '@agentsws/contracts'
-import { evaluateGuardrail, extractFigures, resolveTimeZone, uncitedFigures } from '@agentsws/core'
+import {
+  EXTERNAL_FENCE,
+  evaluateGuardrail,
+  extractFigures,
+  resolveTimeZone,
+  uncitedFigures,
+} from '@agentsws/core'
 import { createDataStore, type SqliteDataStore } from '@agentsws/data'
 import { withOwnSources } from '@agentsws/deck'
 import type { WebCredential } from '@agentsws/dsh-adapter'
@@ -120,6 +127,7 @@ import {
   type RoleStore,
   rangeTargetOfProduct,
   renderBrandContext,
+  SUPERSEDED_POSITION_IDS,
   type SupervisedPosition,
 } from '@agentsws/roles'
 import type { SearchFetch } from '@agentsws/search-providers'
@@ -189,6 +197,7 @@ import {
   brandPrPort,
   brandSitePort,
   brandSocialPort,
+  brandWorkArchivePort,
   brandWorkPort,
   brandWorkstationPort,
 } from './brand-ports.js'
@@ -209,6 +218,7 @@ import {
   createChannels,
   type DirectMailInput,
   type DirectMailResult,
+  deadLetterToRequeue,
 } from './channels.js'
 // WP57（48 §4 L3 #11）：在线聊天的实时车道（会话 / 轮次 / 计划 / 求助超时）
 import {
@@ -230,6 +240,7 @@ import {
   createCloudAccount,
 } from './cloud-account.js'
 import { withCloudAttribution } from './cloud-attribution.js'
+import { createRosterSync, isRosterEvent, type RosterSync } from './cloud-roster.js'
 import { ComputerUseError, createComputerUse } from './computer-use.js'
 import { ComputerUseInstallError } from './computer-use-install.js'
 import { connectBaseUrl } from './connect-url.js'
@@ -276,6 +287,8 @@ import {
 } from './hosted-mode.js'
 import { createApprovalDirectory } from './housekeeping.js'
 import { createImChannels } from './im-channels.js'
+import { feishuSdkTransportFactory, fetchHttp, wsSocketFactory } from './im-sdk.js'
+import { createTeamBotManagerCheck } from './im-team-bots.js'
 import { createJoin, type JoinAssembly } from './join.js'
 // WP56（48 §4 #9）：知识包导入的落库那一步
 import { knowledgeSourceFile } from './knowledge-file.js'
@@ -400,6 +413,7 @@ import { claimRuleCard, createSeoService, pickRoleHolder } from './seo-service.j
 import type { BrokerFetch } from './shopify-broker.js'
 import { createShopifyDevMcp } from './shopify-devmcp.js'
 import { createConnectSiteFacts, createSiteService, createSiteStore, seedDemoSite } from './site.js'
+import { enrichSkillSummaries } from './skill-catalog.js'
 import {
   createSocialStore,
   migrateSupersededChannels,
@@ -425,12 +439,28 @@ import {
 import { CHAT_WIDGET_JS, mountChatWidget } from './widget.js'
 import { createWorkPort, periodQueryRunner } from './work.js'
 import {
+  createArchiveStateStore,
+  createWorkArchive,
+  type WorkArchiveAssembly,
+} from './work-archive.js'
+import {
   createWorkstationPort,
   emptyDataSource,
   type WorkstationDataSource,
 } from './workstation.js'
 
 /** 战报要数「今天处理掉的」，所以取队列时状态放全（等待类计数在 work 端自己过滤）。 */
+/** WP212：「交给 X ▾」里常驻的五个岗位（与消息相关；别的岗位开着才列）。 */
+const MESSAGE_POSITIONS: readonly string[] = [
+  'customer-care',
+  'kol-marketing',
+  'b2b',
+  'pr',
+  'social-media',
+]
+/** 排序用：常驻五个按上面的顺序，其余排在后面。 */
+const rank = (i: number): number => (i < 0 ? MESSAGE_POSITIONS.length : i)
+
 const QUEUE_STATES = [
   'pending',
   'in_review',
@@ -1145,7 +1175,13 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         trace_id: traceScope.current() ?? rest.correlation.trace_id,
       },
     })
+    // WP206：名册变了（加人 / 删人 / 岗位 / 分配 / 刚关联上）→ 各品牌攒一下再把名册推上云
+    if (isRosterEvent(e.type))
+      for (const sync of rosterSyncs.values()) sync.poke(e.type === 'cloud.account_linked')
   }
+  /** WP206：每个品牌一份名册同步（品牌装好时建，`rosterReady` 之后才开始推）。 */
+  const rosterSyncs = new Map<WorkspaceId, RosterSync>()
+  let rosterReady = false
 
   const data = createDataStore({ dbPath: file('data.db'), clock, collections: [] })
 
@@ -1946,6 +1982,34 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     return { members, positions: creditsPositionNames(), notify_emails: [...notify] }
   }
 
+  /**
+   * WP206：这个品牌的名册（推上云给网页「成员额度」页列人）：成员 `person_id` + 名字 + 他持有的岗位、
+   * 岗位 id + 名字。**只有名字，不带业务内容。** 岗位 id 与打云时 `X-Agentsws-Position` 带的是同一套
+   * （`cloudPositionOf`）。公司页与岗位面没装好之前抛错（这一轮不推）——半份名册推上去，
+   * 云上会把没列进来的岗位当成删了、自动收回。
+   */
+  const cloudRoster = async (workspace_id: WorkspaceId) => {
+    if (!rosterReady || !positionAssemblies.has(workspace_id)) throw new Error('名册还没装好')
+    const names = creditsPositionNames()
+    const members: { id: string; name: string; positions: string[] }[] = []
+    for (const m of await identity.members(workspace_id)) {
+      if (m.left_at !== undefined) continue
+      const person = await identity.getPerson(m.person_id)
+      if (person === undefined) continue
+      const held = new Set<string>()
+      for (const a of roles.assignments.listByPerson(person.id, { workspace_id }))
+        if (a.revoked_at === undefined) {
+          const position = cloudPositionOf(workspace_id, a.role_id)
+          if (position !== undefined) held.add(position)
+        }
+      members.push({ id: person.id, name: person.name, positions: [...held].sort() })
+    }
+    return {
+      members,
+      positions: Object.entries(names).map(([id, name]) => ({ id, name })),
+    }
+  }
+
   /*
    * ── WP120（69）：**角色定位** ───────────────────────────────────────────
    *
@@ -2678,6 +2742,15 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       directory: () => creditsDirectory(ws),
       timeZone: async () => (await identity.getWorkspace(ws))?.tz,
     })
+    // WP206：名册推上云（网页「成员额度」页列人）。公司页装好之后（`rosterReady`）才开始推
+    const rosterSync = createRosterSync({
+      build: () => cloudRoster(ws),
+      push: (roster) => ownCloud.syncRoster(roster),
+      linked: () => ownCloud.linked(),
+    })
+    rosterSyncs.get(ws)?.close()
+    rosterSyncs.set(ws, rosterSync)
+    if (rosterReady) rosterSync.start()
     const ownModels = createModels({
       clock,
       pricing: pricingCatalog,
@@ -3391,6 +3464,53 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           },
         })
       },
+      /*
+       * WP210（Luoye 09-30）：失败的信系统自己按退避重投；**客户来信**投满几轮还不行，
+       * 才给人一张卡（系统 / 营销通知只进日志）。Fable 09-30 定：卡上两个按钮——
+       * 「再投一次」（批准 → `seoDecided` 那层把死信重投回队列，主按钮）与
+       * 「去邮箱回复」（驳回 → 人自己回，工作台跳消息页）。
+       */
+      escalateDeadLetter: async (input) => {
+        await approvals.create({
+          workspace_id: ws,
+          schema_version: 1,
+          kind: 'inbound_dead_letter',
+          role_id: 'dtc.support',
+          proposer: { kind: 'agent', id: 'channel:inbound' },
+          automation: { level_at_creation: 'L1' },
+          priority: 'queue',
+          routing: {
+            recipients: [{ person: person.id, via: 'owner' }],
+            rule: 'owner',
+            escalation: {
+              after_hours: 24,
+              business_hours: true,
+              chain: ['owner'],
+              escalated_at: [],
+            },
+            separation_of_duties: false,
+          },
+          subject: { object: { type: 'message', id: input.dead_letter_id } },
+          dedupe_key: `${ws}:inbound_dead_letter:${input.dead_letter_id}`,
+          title: '有一封客户来信没能处理，请看一眼',
+          summary: `${input.from === undefined ? '一位客户' : input.from} 的来信，系统自动重试了 ${input.rounds} 轮还是没处理成。可以再投一次；不想等就直接去邮箱回复这位客户。`,
+          payload: {
+            form: 'inbound_dead_letter',
+            dead_letter_id: input.dead_letter_id,
+            channel: input.channel,
+            reason: input.reason,
+            rounds: input.rounds,
+            ...(input.from === undefined ? {} : { from: input.from }),
+            ...(input.last_error === undefined ? {} : { last_error: input.last_error }),
+          },
+          evidence: {
+            source_events: [],
+            provenance: { seen: [] },
+            precheck: {},
+          },
+        })
+      },
+      release: env.AGENTSWS_VERSION ?? '0.1.0',
       ...(dir === undefined ? {} : { dbDir: dir }),
       ...(startRun === undefined ? {} : { startRun }),
       ...(options.mailSource === undefined ? {} : { makeSource: options.mailSource }),
@@ -3738,6 +3858,96 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       ...(options.messageSource === undefined ? {} : { makeSource: options.messageSource }),
       ...(options.messageWriter === undefined ? {} : { makeWriter: options.messageWriter }),
       ...(options.messageImages === undefined ? {} : { loadRemoteImage: options.messageImages }),
+      /*
+       * WP212（docs/88 §3.2）：「交给 X ▾」那一列——这个品牌里的岗位（与消息相关的五个常驻，
+       * 别的岗位开着才列）；开没开按现查的分配算。客服 / 红人 / B2B 三个走 63 的老路。
+       */
+      positions: () => {
+        const active = new Set(
+          roles.assignments
+            .listByWorkspace(ws)
+            .filter((a) => a.revoked_at === undefined)
+            .map((a) => a.role_id),
+        )
+        return (
+          org
+            .positions()
+            .map((t) => {
+              const route = routeOfPosition(t.id)
+              return {
+                id: t.id,
+                name_zh: t.name.zh,
+                name_en: t.name.en,
+                open: t.roles.some((r) => active.has(r.role)),
+                ...(route === undefined ? {} : { route }),
+              }
+            })
+            // 负责人 / 普通成员这类通用岗位不接具体的事；与消息相关的五个排前面
+            .filter(
+              (p) =>
+                (p.open || MESSAGE_POSITIONS.includes(p.id)) &&
+                !org
+                  .positions()
+                  .find((t) => t.id === p.id)
+                  ?.roles.every((r) => r.role.startsWith('common.')),
+            )
+            .sort(
+              (a, b) =>
+                rank(MESSAGE_POSITIONS.indexOf(a.id)) - rank(MESSAGE_POSITIONS.indexOf(b.id)),
+            )
+        )
+      },
+      // 其余岗位走 54 的「交给这个岗位一件事」：开事项（钉着这条会话）、岗位内路由、起 Run
+      openAtPosition: async (input) => {
+        const out = await positionsAssembly.open({
+          position_id: input.position_id,
+          person_id: input.person_id,
+          title: input.title,
+          ...(input.summary === undefined ? {} : { summary: input.summary }),
+          pinned: [{ type: 'thread', id: input.thread_id }],
+        })
+        return { matter_id: out.matter.id }
+      },
+      // 「X 在办 · 有 N 张卡等你 →」：本人队列里的卡指着哪条会话 / 哪件事项（只报数）
+      openCards: async () => {
+        const who = firstPositionOf(ws)?.person_id ?? person.id
+        const items = (await approvals.queue({
+          workspace_id: ws,
+          person_id: who,
+          lane: 'mine',
+          state: [...QUEUE_STATES],
+        })) as ApprovalItem[]
+        return items.map((item) => {
+          const object = item.subject.object
+          const thread =
+            object.type === 'thread'
+              ? object.id
+              : item.evidence.provenance?.seen?.find((r) => r.type === 'thread')?.id
+          const matter = item.subject.matter_id ?? item.subject.work_item_id
+          return {
+            ...(thread === undefined ? {} : { thread_id: thread }),
+            ...(matter === undefined ? {} : { matter_id: matter }),
+          }
+        })
+      },
+      // 没勾「以后都这样」的改判进学习回路（24 §3 的 lesson 池；技能 `message-triage` 还没有可改的段落，
+      // 所以只攒不提——「你教过它」里看得见）
+      onCorrection: (c) => {
+        const asg = firstPositionOf(ws)
+        learning.learning.pool.pool({
+          workspace_id: ws,
+          assignment_id: asg?.assignment_id ?? 'asg_unknown',
+          run_id: 'run_message_triage',
+          applies_to: { skill: 'message-triage' },
+          kind: 'rule',
+          signal: 'redirect',
+          strength: 'weak',
+          text: `来自 ${c.sender_domain} 的这类信：${c.field === 'kind' ? '类型' : '岗位'}是「${c.to}」`,
+          confidence: 0.3,
+          evidence: [{ quote: `${c.from ?? '—'} → ${c.to}`, at: c.at }],
+          semantic_key: `message_${c.field}:${c.sender_domain}:${c.to}`,
+        })
+      },
     })
     lateMessages.current = messages
 
@@ -3984,6 +4194,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         b2b.close()
         // 云端红人库的同步账本也握着一个句柄（WP118）：跟着这个品牌一起关
         ownCloud.kolSync?.close()
+        rosterSync.close()
+        if (rosterSyncs.get(ws) === rosterSync) rosterSyncs.delete(ws)
         site.close()
         ads.close()
         pr.close()
@@ -4004,6 +4216,13 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     const brand = await brands?.forWorkspace(item.workspace_id)
     // WP173：「发信域名」那张选择卡选了 → 记下发信邮箱、体检、排着的首封往前推
     if (item.kind === B2B_SENDER_CHOICE_KIND) return brand?.b2bOutbound.onSenderChosen(item)
+    // WP210：客户来信投不进的那张卡批了（「再投一次」）→ 把那条死信重投回队列；
+    // 驳回（「去邮箱回复」）什么都不做——人自己回，死信留在「设置 → 诊断」里
+    if (item.kind === 'inbound_dead_letter') {
+      const id = deadLetterToRequeue(item)
+      if (id !== undefined) await brand?.channels.requeueDeadLetter(id)
+      return
+    }
     await brand?.seoService.onDecided(item)
   }
   brands = createBrandModules({
@@ -4690,6 +4909,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   rangeExpandedSink = org.onRangeExpanded
   supervisorPositions = () => org.positions()
   creditsPositionNames = () => Object.fromEntries(org.positions().map((p) => [p.id, p.name.zh]))
+  // WP206：公司页与岗位名装好了：已装好的品牌现在推第一份名册（之后装的品牌自己推）
+  rosterReady = true
+  for (const sync of rosterSyncs.values()) sync.start()
 
   /**
    * WP51 首次设置与同事发现（46）。
@@ -5311,7 +5533,16 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     // WP29：池的真源是学习回路那一份（`skills.lessons` 是 WP6 的内存池，只留给周合并的老接口）
     lessons: (filter) => learning.lessons(filter),
     // WP29 技能页与学习回路
-    list: (actor) => learning.summaries(actor),
+    // WP209：按岗位分组那几格（显示名 / 一句话 / 哪几条职责在用 / 归哪个岗位）只往上加
+    list: async (actor) =>
+      enrichSkillSummaries(await learning.summaries(actor), {
+        positions: org.positions(),
+        roles: roles.roles.list(),
+        held_roles: memoryFacts(actor).held_roles,
+        frontmatterOf: (name) => skills.registry.frontmatterOf(name),
+        sectionBody: (name, id) => skills.registry.sectionBody(name, id),
+        superseded: SUPERSEDED_POSITION_IDS,
+      }),
     exclude: (name, person_id, excluded) => skills.registry.exclude(name, person_id, excluded),
     proposals: () => learning.proposalSummaries(),
     promote: (input) =>
@@ -5949,6 +6180,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           }
         },
       },
+      // WP207：找回归档的对话 / 任务（只读；候选以卡片出现，人点了才恢复）
+      archive: {
+        has: async (actor) => (await workArchiveFor(ws)).hasArchived(actor),
+        recall: async (actor, input) => (await workArchiveFor(ws)).recall(actor, input),
+      },
       knowledge: async (actor, text) => {
         const config = roles.effectiveConfig(actor.assignment_id)
         const { hits } = await knowledge.retrieval.search({
@@ -6045,6 +6281,109 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     return port
   }
   const positionPortOf = brandPositionPort(brandModules, positionPortFor)
+
+  /**
+   * WP207：左栏职责下的对话 / 任务、自动归档与找回。一个品牌一份（事项落在这个品牌的 `Work` 里）；
+   * 天数与「看过了」存在品牌目录下的 `work-archive.json`（没有数据目录就是内存档）。
+   */
+  const workArchives = new Map<WorkspaceId, WorkArchiveAssembly>()
+  const workArchiveFor = async (ws: WorkspaceId): Promise<WorkArchiveAssembly> => {
+    const cached = workArchives.get(ws)
+    if (cached !== undefined) return cached
+    const brand = await brandModules.forWorkspace(ws)
+    const assembly = await positionsFor(ws)
+    const dir = brandDirOf(dbDir, ws, workspace.id)
+    const made = createWorkArchive({
+      clock,
+      work: brand.work,
+      state: createArchiveStateStore(
+        dir === undefined ? undefined : join(dir, 'work-archive.json'),
+      ),
+      positions: (person_id) => assembly.mine(person_id),
+      assignmentsOf: (person_id) =>
+        roles.assignments
+          .listByPerson(person_id, { workspace_id: ws })
+          .filter((a) => a.revoked_at === undefined)
+          .map((a) => a.id),
+      runningMatters: () => new Set((brand.runtime?.activeRuns() ?? []).map((r) => r.matter_id)),
+      pendingCards: async (person_id) => {
+        const items = (await approvals.queue({
+          workspace_id: ws,
+          person_id,
+          lane: 'mine',
+          state: ['pending', 'in_review'],
+        })) as ApprovalItem[]
+        const out = new Map<string, number>()
+        for (const i of items) {
+          const id = i.subject.matter_id ?? i.subject.work_item_id
+          if (id !== undefined) out.set(id, (out.get(id) ?? 0) + 1)
+        }
+        return out
+      },
+      personNames: async () => {
+        const out = new Map<string, string>()
+        for (const m of await identity.members(ws)) {
+          const p = await identity.getPerson(m.person_id)
+          if (p !== undefined && p.name !== '') out.set(p.id, p.name)
+        }
+        return out
+      },
+      roleName: (id) => roles.roles.get(id)?.name.zh,
+      positionName: (id) => org.positions().find((p) => p.id === id)?.name.zh,
+      rerank: (actor, query, pool) => rerankArchived(ws, actor, query, pool),
+    })
+    workArchives.set(ws, made)
+    return made
+  }
+  /**
+   * WP207：⌘K「让 AI 找回」的模型重排——用这个品牌的默认模型，只排序、不恢复。
+   * 没接模型（只有 stub）就回 `undefined`，按关键词的顺序给。
+   */
+  const rerankArchived = async (
+    ws: WorkspaceId,
+    actor: { assignment_id: string },
+    query: string,
+    pool: { id: string; title: string; summary: string; last_activity: string }[],
+  ): Promise<string[] | undefined> => {
+    const models = await brandModules.models(ws)
+    if (!models.configured()) return undefined
+    const ref = models.defaultRef()
+    if (ref.provider === 'stub') return undefined
+    const gateway = await brandModules.gateway(ws)
+    const lines = pool.map(
+      (c) =>
+        `${c.id} | ${c.last_activity.slice(0, 10)} | ${c.title.replace(/\s+/g, ' ')} | ${c.summary.replace(/\s+/g, ' ').slice(0, 160)}`,
+    )
+    const out = await gateway.complete({
+      model: ref,
+      messages: [
+        {
+          role: 'system',
+          content:
+            '你在帮用户从已归档的对话 / 任务里找回一件。下面每行一件：id | 最后活动日期 | 标题 | 摘要。' +
+            '按和用户描述像的程度从高到低排，只回一个 JSON 数组，元素是 id；完全不像的不要放。不要回别的字。',
+        },
+        {
+          role: 'user',
+          content: `用户的描述：${query}\n今天：${clock.now().slice(0, 10)}\n\n${EXTERNAL_FENCE.open}\n${EXTERNAL_FENCE.sanitizeText(lines.join('\n'), 8000)}\n${EXTERNAL_FENCE.close}`,
+        },
+      ],
+      meta: {
+        workspace_id: ws,
+        assignment_id: actor.assignment_id,
+        role_id: roles.assignments.get(actor.assignment_id)?.role_id ?? 'common.member',
+        run_id: `recall_${Math.floor(random() * 1e12).toString(36)}` as never,
+        purpose: 'judge',
+      },
+    })
+    const match = /\[[\s\S]*\]/.exec(out.text)
+    if (match === null) return undefined
+    const parsed = JSON.parse(match[0]) as unknown
+    return Array.isArray(parsed)
+      ? parsed.filter((x): x is string => typeof x === 'string')
+      : undefined
+  }
+  const workArchivePortOf = brandWorkArchivePort(brandModules, workArchiveFor)
 
   /**
    * WP120（69 §4）：角色定位端口。
@@ -6655,6 +6994,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     // WP66：面板与工作模型都按品牌——首页数字块读的是**这个品牌**的店铺数据
     workstation: workstationPortOf,
     work: workPortOf,
+    // WP207：左栏职责下的对话 / 任务、归档与找回（按品牌）
+    workArchive: workArchivePortOf,
     // WP69（54）：岗位实体、交给岗位一件事、换职责
     positions: positionPortOf,
     // WP120（69 §4）：角色定位——右栏「角色」面板看的与改的就是它
@@ -6725,6 +7066,25 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     makePipeline: (input) => boot.channels.imPipeline(input),
     // 游标与会话上下文跟渠道库走：落盘档重启之后不从头拉
     clawbotState: boot.channels.clawbotState,
+    /*
+     * WP211：三条团队渠道的真连接。企业微信那条在 WP85 只做了注入口、真装配没接上
+     * （界面上填了也一直「连接中」），这里一并接上 `ws`。飞书走官方 SDK，选了才懒加载。
+     */
+    wecomSocket: wsSocketFactory,
+    // Fable 09-30：公司的应用凭据只给负责人（`common.owner`）与公司管理员填、改、断开
+    canManageTeamBots: createTeamBotManagerCheck({
+      isOwner: (person_id) =>
+        roles.assignments
+          .listByPerson(person_id, { workspace_id: workspace.id, role_id: 'common.owner' })
+          .some((a) => a.revoked_at === undefined),
+      organization: async () => {
+        const org_id = (await identity.getWorkspace(workspace.id))?.org_id
+        return org_id === undefined ? undefined : identity.getOrganization(org_id)
+      },
+    }),
+    feishuTransport: feishuSdkTransportFactory,
+    dingtalkSocket: wsSocketFactory,
+    dingtalkHttp: fetchHttp,
     appendEvent,
     newId: () => `im_${Math.floor(random() * 1e9).toString(36)}`,
     random,
@@ -6973,7 +7333,11 @@ function seoDecided(bus: ApprovalBus, hook: SeoDecidedHook): ApprovalBus {
       }
       return async (...args: Parameters<ApprovalBus['decide']>): Promise<ApprovalItem> => {
         const out = await target.decide(...args)
-        if (out.kind === 'seo_topic' || out.kind === B2B_SENDER_CHOICE_KIND) {
+        if (
+          out.kind === 'seo_topic' ||
+          out.kind === B2B_SENDER_CHOICE_KIND ||
+          out.kind === 'inbound_dead_letter'
+        ) {
           try {
             await hook.current?.(out)
           } catch {

@@ -230,6 +230,19 @@ vi.mock('@/lib/api', async () => {
     getImStatus: async () => ({
       wechat: { bound: false, live: false, allowed: true },
       wecom: { configured: false, connected: false },
+      // 负责人视角（按钮与表单都在，量的是最多字的那一版）
+      can_manage: true,
+      // WP211：一张没配、一张配好了但凭据不对（最长的那种状态）
+      feishu: { configured: false, connected: false, state: 'idle', me_bound: false },
+      dingtalk: {
+        configured: true,
+        connected: false,
+        state: 'failed',
+        error:
+          'Client ID 或 Client Secret 不对，或者应用还没开「Stream 模式」。去钉钉开发者后台核一下再填。',
+        client_id: 'dingabc123',
+        me_bound: false,
+      },
     }),
     // 聊天窗
     getChatWidgetSettings: async () => ({ allowed_origins: ['https://shop.example.com'] }),
@@ -330,21 +343,38 @@ describe('连接页 · 值守向导（数据后端的托管档里）', () => {
 })
 
 describe('消息渠道', () => {
-  it('页头、微信卡、企业微信卡：不超；安全承诺各压一句；页头能开教程', async () => {
+  it('页头、微信卡、企业微信卡、飞书卡、钉钉卡：不超；安全承诺各压一句；页头能开教程', async () => {
     const { container } = renderWithProviders(<ImChannelsPage />)
     await screen.findByText('微信（你自己的）')
     const cards = [...container.querySelectorAll('[data-slot="card"]')]
-    expect(cards).toHaveLength(2)
+    expect(cards).toHaveLength(4)
     check('消息渠道 · 页头', container.querySelector('h1')?.parentElement as Element)
     check('消息渠道 · 微信', cards[0] as Element)
     check('消息渠道 · 企业微信', cards[1] as Element)
-    expect(screen.getByTestId('tutorial-link').getAttribute('data-slug')).toBe('im-channels')
+    // WP211：两张新卡照同一把尺子量；各自一篇教程
+    check('消息渠道 · 飞书', cards[2] as Element)
+    check('消息渠道 · 钉钉', cards[3] as Element)
+    const slugs = screen.getAllByTestId('tutorial-link').map((a) => a.getAttribute('data-slug'))
+    expect(slugs).toEqual(['im-channels', 'im-feishu', 'im-dingtalk'])
     // 从卡上拿下来的三条「它不做的事」都在安全承诺旁的问号里
     const hints = [...container.querySelectorAll('[data-slot="hint"]')]
       .map((h) => h.getAttribute('data-hint') ?? '')
       .join(' ')
     for (const key of ['im.wechat.not.colleagues', 'im.wechat.not.group', 'im.wechat.not.approve'])
       expect(hints).toContain(translate('zh', key))
+  })
+})
+
+describe('WP214：消息渠道的状态是小图标', () => {
+  it('没绑 / 没配：两张卡各一个「没测」图标，状态词在 tooltip 里', async () => {
+    renderWithProviders(<ImChannelsPage />)
+    await screen.findByText('微信（你自己的）')
+    const wechat = within(screen.getByTestId('im-wechat-state')).getByTestId('status-icon')
+    expect(wechat.dataset.state).toBe('unknown')
+    expect(wechat.getAttribute('data-hint')).toContain('没绑')
+    const wecom = within(screen.getByTestId('im-wecom-state')).getByTestId('status-icon')
+    expect(wecom.dataset.state).toBe('unknown')
+    expect(wecom.getAttribute('data-hint')).toContain('没配')
   })
 })
 

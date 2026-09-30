@@ -6,6 +6,21 @@
  * `buildCalendar`）给同样的输入永远出同样的输出。
  */
 export {
+  archiveVerdict,
+  keywordScore,
+  queryTerms,
+  type RankInput,
+  RECALL_DEFAULT_LIMIT,
+  RECALL_MAX_LIMIT,
+  RECALL_MIN_SCORE,
+  type RecallDoc,
+  rankArchived,
+  recallTokens,
+  type TimeWindow,
+  textMatches,
+  timeHint,
+} from './archive.js'
+export {
   buildCalendar,
   type CalendarInput,
   type DeliverableLike,

@@ -70,6 +70,7 @@ import { socialRoutes } from './routes/social.js'
 import { standbyRoutes } from './routes/standby.js'
 import { storageRoutes } from './routes/storage.js'
 import { workRoutes } from './routes/work.js'
+import { workArchiveRoutes } from './routes/work-archive.js'
 import { workstationRoutes } from './routes/workstation.js'
 import { wsRoutes } from './routes/ws.js'
 import type { GatewayDeps } from './types.js'
@@ -186,6 +187,8 @@ export function collectRoutes(): Route[] {
     ...positionEntryRoutes(),
     // 37 工作模型：事项 / 目标 / 待办 / 日历 / 计划 / 复盘
     ...workRoutes(),
+    // WP207：左栏职责下的对话 / 任务、归档与找回
+    ...workArchiveRoutes(),
     // 36 §3 对话入口之二：问 AI（单轮、只你可见）
     ...askRoutes(),
     // WP188：随便聊（不开事项、不起岗位运行；会话存本机，计量照常）

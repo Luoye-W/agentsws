@@ -1,3 +1,7 @@
+---
+positions: []
+roles: []
+---
 # 接阿里云百炼（三个方案怎么选）
 
 一把 key 同时调通义千问与 DeepSeek，账单也在一处——用过 DeepSeek 官方的人不用再去 platform.deepseek.com 办一把。

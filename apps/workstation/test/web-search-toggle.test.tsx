@@ -48,7 +48,11 @@ describe('WP179 用你的 DeepSeek 账号搜索', () => {
     renderWithProviders(<WebSearchToggle assignment="asg_owner" ready />)
     const sw = await screen.findByTestId('web-search-switch')
     expect(sw.getAttribute('data-state')).toBe('checked')
-    expect(screen.getByTestId('web-search-toggle').textContent).toContain('会上网搜索')
+    // WP214：开关已经说了开 / 关——状态那句进小图标的 tooltip，卡面上不再常显
+    const icon = screen.getByTestId('status-icon')
+    expect(icon.dataset.state).toBe('ok')
+    expect(icon.getAttribute('data-hint')).toContain('会上网搜索')
+    expect(screen.getByTestId('web-search-toggle').textContent).not.toContain('会上网搜索')
     expect(screen.getByTestId('web-search-toggle').textContent).toContain(
       '用你的 DeepSeek 账号搜索',
     )
@@ -62,7 +66,7 @@ describe('WP179 用你的 DeepSeek 账号搜索', () => {
       'web.search': { order: ['deepseek_native'], disabled: ['deepseek_native'] },
     })
     await waitFor(() =>
-      expect(screen.getByTestId('web-search-toggle').textContent).toContain('不上网搜索'),
+      expect(screen.getByTestId('status-icon').getAttribute('data-hint')).toContain('不上网搜索'),
     )
   })
 

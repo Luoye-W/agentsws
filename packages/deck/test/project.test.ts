@@ -30,6 +30,21 @@ describe('projectCard（36 §2 审批项 → 卡片）', () => {
     expect(card.position_id).toBe('asg_1')
   })
 
+  it('WP212：来自消息往来的卡带「看原件」的线程；聊天实时线程与没有线程的不带', () => {
+    expect(projectCard(item(), ctx).original).toEqual({ thread_id: 'thr_1' })
+    const viaSeen = item({
+      subject: { object: { type: 'order', id: 'ord_1001' } },
+    })
+    expect(projectCard(viaSeen, ctx).original).toEqual({ thread_id: 'thr_1' })
+    const chat = item({ subject: { object: { type: 'thread', id: 'chat-thread:s1' } } })
+    expect(projectCard(chat, ctx).original).toBeUndefined()
+    const plain = item({
+      subject: { object: { type: 'order', id: 'ord_1001' } },
+      evidence: { ...item().evidence, provenance: { seen: [{ type: 'order', id: 'ord_1001' }] } },
+    })
+    expect(projectCard(plain, ctx).original).toBeUndefined()
+  })
+
   it('快捷行取前三个，永远 ≤ 3（36 §2.1 FR-015）', () => {
     for (const kind of ['outbound_draft', 'staged_change', 'policy_change', 'claim'] as const) {
       const actions = actionsFor(kind, 'pending').filter((a) => a !== 'open')

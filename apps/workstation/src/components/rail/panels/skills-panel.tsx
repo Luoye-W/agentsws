@@ -11,6 +11,9 @@
  *     当前这一层——出的是一张待审卡，不是一次写入（24 §3）。个人层上什么都没改过时
  *     服务端会照实回一句"没有可以提上去的东西"，界面把那句话原样显示。
  *
+ * **WP209**：只列**这一层在用的**技能（岗位层 = 挂在这个岗位下的；职责层 = 这条职责在用的），
+ * 过滤与技能页同一套（`lib/library.ts` 的 `skillsForScope`），名字用中文显示名。
+ *
  * **面板里不做技能编辑器**：改正文是一件要看得见全文与 diff 的事，380 宽的抽屉里做不了，
  * 那件事在技能页（`/skills`）。这里给的是"这一层现在吃着什么、我要不要让它吃"。
  */
@@ -23,6 +26,7 @@ import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { getSkills, promoteSkillTo, type SkillSummary, setSkillExcluded } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
+import { skillLabel, skillsForScope } from '@/lib/library'
 import { cn } from '@/lib/utils'
 
 /** 真源是 `packages/skills` 的 `TIER_ORDER`；工作台不依赖那个包，这里抄的是顺序。 */
@@ -37,7 +41,7 @@ function SkillRow({
   scope: RailScope
   onChanged: () => void
 }): React.ReactNode {
-  const { t } = useApp()
+  const { t, lang } = useApp()
   const exclude = useMutation({
     mutationFn: (excluded: boolean) => setSkillExcluded(skill.name, excluded),
     onSettled: onChanged,
@@ -55,7 +59,7 @@ function SkillRow({
     <li className="rounded-md border p-2" data-testid="rail-skill" data-skill={skill.name}>
       <div className="flex items-baseline gap-1">
         <span className={cn('min-w-0 flex-1 truncate text-sm', skill.excluded && 'line-through')}>
-          {skill.name}
+          {skillLabel(skill, lang)}
         </span>
         <span className="shrink-0 font-mono text-[11px] text-muted-foreground">
           v{skill.version}
@@ -111,7 +115,7 @@ export function SkillsPanel({ scope }: { scope: RailScope }): React.ReactNode {
 
   if (skills.isPending) return <Skeleton className="h-40 w-full" />
   if (skills.error !== null || skills.data === undefined) return <PanelError error={skills.error} />
-  const rows = skills.data
+  const rows = skillsForScope(skills.data, scope)
 
   return (
     <div className="flex flex-col gap-3" data-testid="skills-panel" data-scope={scope.scope_id}>

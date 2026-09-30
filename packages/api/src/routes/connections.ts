@@ -331,6 +331,16 @@ export interface DeadLetterView {
   attempts: number
   last_error?: string
   at: string
+  /**
+   * WP210：是不是客户来信（系统 / 营销通知不算）。只有客户来信彻底投不进时才出卡。
+   * 可选：老服务端不给。
+   */
+  customer?: boolean
+  /**
+   * WP210：系统自动重投到哪一步。`next_at` = 下次自动再试的时刻；`gave_up` = 不再自动投
+   * （只在诊断页能手动再投）。可选：老服务端不给。
+   */
+  auto_retry?: { rounds: number; gave_up: boolean; next_at?: string }
 }
 
 // ── 校验 ───────────────────────────────────────────────────────────────

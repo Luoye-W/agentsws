@@ -111,6 +111,10 @@ Electron 壳（MIT，`apps/desktop` + `apps/desktop-host`），不在 npm 上、
 下面都有一句：「这个场景由 DeepSeek 官方维护，Agents 工坊不对它负责。」唯一的例外是**用户自己**在宿主环境里设了
 `DSH_TELEMETRY_DISABLED`，我们照样传下去（不替他打开）。
 
+> **WP214（09-30，Fable 定）**：这句边界按 docs/36 §7 第四档「同一信息只出现一次」收了——不再每行底下各说一遍，
+> 改为场景列表上面说一次（「官方与自建的场景都不归 Agents 工坊负责。」），每行「官方 / 自建」标签的 tooltip 里是那一行的原话
+> （官方的「由 DeepSeek 官方维护…」、自建的「是你自己建的…」）。边界本身不变，只是不重复。
+
 **我们的业务数据与密钥它们够不着**（`apps/server/test/dsh-scenes.test.ts` 的「边界」组，用假 dsh 把它看到的
 环境与工作目录原样写出来再断言）：
 

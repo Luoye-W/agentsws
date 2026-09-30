@@ -23,9 +23,16 @@
  * （22：模型只在网关后面），与 `@agentsws/support-core` 的 `classify.ts` 同一条纪律。
  */
 
-import type { MessagePriority, MessageRoute, MessageTriage, SenderRule } from '@agentsws/contracts'
-import { TRIAGE_CONFIDENCE_FLOOR } from '@agentsws/contracts'
+import type {
+  MessageKind,
+  MessagePriority,
+  MessageRoute,
+  MessageTriage,
+  SenderRule,
+} from '@agentsws/contracts'
+import { MESSAGE_KINDS, TRIAGE_CONFIDENCE_FLOOR } from '@agentsws/contracts'
 import { looksLikeB2bInquiry, platformInquiryOf } from './b2b-signals.js'
+import { isMessageKind, isNoticeKind, kindOfLabels, kindOfRoute } from './kind.js'
 
 /** 分拣要看的那几样（全是已解析的头与正文；判定方自己不碰 MIME）。 */
 export interface TriageInput {
@@ -80,6 +87,8 @@ export interface TriageModel {
     /** 现在能落哪几条路（岗位没开的那条不在列表里，模型也就选不出来）。 */
     allowed_routes: readonly MessageRoute[]
     allowed_labels: readonly string[]
+    /** WP212：能选的类型（docs/88 §3 的十种）。 */
+    allowed_kinds?: readonly MessageKind[]
   }): Promise<{
     route: MessageRoute
     labels: string[]
@@ -87,6 +96,8 @@ export interface TriageModel {
     priority: MessagePriority
     summary: string
     confidence: number
+    /** WP212：模型判的类型（可不给——不给就按路由与标签推一个）。 */
+    kind?: MessageKind | string
   }>
 }
 
@@ -256,6 +267,7 @@ export function triageByRules(input: TriageInput, ctx: TriageContext): MessageTr
       by: 'rule',
       reasons: ['In-Reply-To / References 命中客服已有线程'],
       at: ctx.at,
+      ...ruleKind('customer_question', 1),
     }
   }
   if (ctx.kol_enabled && ctx.isKolThread(input.thread_id, input.references)) {
@@ -269,6 +281,7 @@ export function triageByRules(input: TriageInput, ctx: TriageContext): MessageTr
       by: 'rule',
       reasons: ['In-Reply-To / References 命中红人合作线程'],
       at: ctx.at,
+      ...ruleKind('creator_reply', 1),
     }
   }
 
@@ -285,6 +298,7 @@ export function triageByRules(input: TriageInput, ctx: TriageContext): MessageTr
       by: 'rule',
       reasons: ['In-Reply-To / References 命中我们发出去的 B2B 信'],
       at: ctx.at,
+      ...ruleKind('inquiry', 1),
     }
   }
 
@@ -292,16 +306,26 @@ export function triageByRules(input: TriageInput, ctx: TriageContext): MessageTr
   const rule = matchSenderRule(ctx.senderRules, input.from_email)
   if (rule !== undefined) {
     const route = allowRoute(rule.route ?? 'inbox', ctx)
+    // WP212：规则教过类型就按它；只教过路由 / 标签的老规则按它们推（与回填同一张表）
+    const kind =
+      rule.kind ?? kindOfRoute(rule.route) ?? kindOfLabels(rule.labels) ?? 'personal_other'
     return {
       route,
       labels: [...rule.labels],
-      needs_reply: route !== 'inbox',
+      // 只教过类型的规则：要不要回按类型（通知类不用回，其余要）
+      needs_reply: route !== 'inbox' || (rule.kind !== undefined && !isNoticeKind(kind)),
       priority: 'normal',
-      summary: clip('按你教过的发件人规则'),
+      summary: clip(
+        rule.kind === undefined ? '按你教过的发件人规则' : input.subject || '按你教过的发件人规则',
+      ),
       confidence: 1,
       by: 'rule',
       reasons: [`发件人规则：${rule.sender}`],
       at: ctx.at,
+      kind,
+      kind_by: 'sender_rule',
+      kind_confidence: 1,
+      ...(rule.position === undefined ? {} : { suggested_position: rule.position }),
     }
   }
 
@@ -317,6 +341,7 @@ export function triageByRules(input: TriageInput, ctx: TriageContext): MessageTr
       by: 'rule',
       reasons: ['发件人在 B2B 客户 / 联系人库里'],
       at: ctx.at,
+      ...ruleKind('inquiry', 1),
     }
   }
   // WP172 B2B ③：平台询盘通知（要在"自动信头"之前：这些通知都是 noreply 发的）
@@ -332,6 +357,7 @@ export function triageByRules(input: TriageInput, ctx: TriageContext): MessageTr
       by: 'rule',
       reasons: [`B2B 平台询盘通知：${platform}`],
       at: ctx.at,
+      ...ruleKind('inquiry', 0.95),
     }
   }
 
@@ -357,6 +383,8 @@ export function triageByRules(input: TriageInput, ctx: TriageContext): MessageTr
       by: 'rule',
       reasons: [auto],
       at: ctx.at,
+      // WP212：自动信一律按标签定类型（账单 / 物流 / 营销），推不出就是营销订阅
+      ...ruleKind(kindOfLabels([...labels]) ?? 'marketing', 0.9),
     }
   }
   return undefined
@@ -397,6 +425,17 @@ export function triageFallback(input: TriageInput, ctx: TriageContext): MessageT
       : ['规则分不出来，也没有可用的模型'],
     ...(suggested === undefined ? {} : { suggested_route: suggested }),
     at: ctx.at,
+    // WP212：词面像什么就先写什么，把握照实写低（界面上是「像是售后 · 把握 N%」）
+    ...ruleKind(
+      supportHits.length > 0
+        ? 'after_sales'
+        : b2bHits.length > 0
+          ? 'inquiry'
+          : labels.includes('partnership')
+            ? 'partnership'
+            : 'personal_other',
+      supportHits.length > 0 || b2bHits.length > 0 ? 0.5 : 0.3,
+    ),
   }
 }
 
@@ -424,6 +463,7 @@ export async function triageMessage(
       body: input.text.slice(0, MODEL_BODY_LIMIT),
       allowed_routes: allowedRoutes(ctx),
       allowed_labels: BUILTIN_LABEL_ORDER,
+      allowed_kinds: MESSAGE_KINDS,
     })
     return normalizeVerdict(out, ctx)
   } catch {
@@ -469,6 +509,7 @@ export function normalizeVerdict(
     priority: MessagePriority
     summary: string
     confidence: number
+    kind?: MessageKind | string
   },
   ctx: TriageContext,
 ): MessageTriage {
@@ -490,6 +531,12 @@ export function normalizeVerdict(
     by: 'model',
     reasons,
     at: ctx.at,
+    // WP212：模型给了认得的类型就用；没给（或给了个不认得的）按路由与标签推
+    kind: isMessageKind(out.kind)
+      ? out.kind
+      : (kindOfRoute(shy ? wanted : out.route) ?? kindOfLabels(labels) ?? 'personal_other'),
+    kind_by: 'model',
+    kind_confidence: confidence,
   }
 }
 
@@ -515,6 +562,14 @@ export function userVerdict(route: MessageRoute, at: string, labels: string[] = 
     reasons: ['人工纠错'],
     at,
   }
+}
+
+/** 规则层给的类型（`kind_by: 'rule'`）。 */
+function ruleKind(
+  kind: MessageKind,
+  confidence: number,
+): Pick<MessageTriage, 'kind' | 'kind_by' | 'kind_confidence'> {
+  return { kind, kind_by: 'rule', kind_confidence: confidence }
 }
 
 function clip(s: string): string {

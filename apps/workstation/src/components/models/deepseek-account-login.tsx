@@ -23,11 +23,12 @@
  */
 import { modelFailureKind, VISION_MODEL_EXAMPLES } from '@agentsws/contracts'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Check, ExternalLink, Loader2, LogIn, LogOut } from 'lucide-react'
+import { Check, ExternalLink, Loader2, LogIn, LogOut, UserRound, Wallet } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { BrandIcon } from '@/components/brand-icons'
 import { openExternal } from '@/components/connections/bridge'
-import { ModelCheckSteps } from '@/components/models/model-check-steps'
+import { StatusIcons, type StatusItem, testedMs, useFresh } from '@/components/design'
+import { ModelStatusIcons } from '@/components/models/model-check-steps'
 import { QuotaNotice } from '@/components/models/quota-notice'
 import { Button } from '@/components/ui/button'
 import {
@@ -90,6 +91,48 @@ export function accountTestKey(result: ModelTestResult): string {
   return `onboarding.ai.own.err.${kind}`
 }
 
+/**
+ * WP214：已登录那一排的前两格——账号（名字跟在图标旁）与余额（数字跟在图标旁，赠送进 tooltip）。
+ * 余额查不到时不出这一格（那句人话照旧常显，不显示成 0）。
+ */
+export function accountItems(
+  data: DeepSeekAccountData,
+  t: (key: string, vars?: Record<string, string | number>) => string,
+): StatusItem[] {
+  const items: StatusItem[] = [
+    {
+      key: 'account',
+      label: t('dsa.cap.account'),
+      state: 'ok',
+      stateText: t('dsa.signed_in.unknown'),
+      icon: UserRound,
+      ...(data.account === undefined ? {} : { value: data.account }),
+      testId: 'dsa-account',
+    },
+  ]
+  const balance = data.balance
+  if (balance?.status === 'ready') {
+    const bonus = balance.bonus.filter((w) => !isZeroAmount(w.balance))
+    const low = data.quota_exceeded !== undefined
+    items.push({
+      key: 'balance',
+      label: t('dsa.cap.balance'),
+      state: low ? 'fail' : 'ok',
+      stateText: low ? t('models.quota.chip') : t('dsa.balance.ok'),
+      icon: Wallet,
+      value:
+        balance.wallets.map(formatWallet).join(' / ') ||
+        formatWallet({ currency: 'CNY', balance: '0' }),
+      // WP152：赠送为 0 的不列；全是 0 就不说「另有赠送」
+      ...(bonus.length === 0
+        ? {}
+        : { detail: t('dsa.bonus', { bonus: bonus.map(formatWallet).join(' / ') }) }),
+      testId: 'dsa-balance',
+    })
+  }
+  return items
+}
+
 export interface DeepSeekAccountLoginProps {
   assignment?: string
   /** 三步都过了（向导据此亮「下一步」）。 */
@@ -134,6 +177,8 @@ export function DeepSeekAccountLogin({
   const data = account.data
   const row = providers.data?.providers.find((p) => p.id === DEEPSEEK_ACCOUNT_PROVIDER_ID)
   const shown = test ?? row?.last_test
+  // WP214 / Fable 09-30：「通了」那句只在上次验证（服务端时间）两分钟内出
+  const fresh = useFresh(testedMs(shown))
 
   const refresh = (): void => {
     void client.invalidateQueries({ queryKey: ['deepseek-account'] })
@@ -288,30 +333,19 @@ export function DeepSeekAccountLogin({
         </p>
       ) : data?.signed_in === true ? (
         <div className="flex flex-col gap-1.5" data-testid="dsa-signed-in">
-          <p className="flex items-center gap-1.5">
-            <Check aria-hidden className="size-4 text-primary" />
-            {data.account === undefined
-              ? t('dsa.signed_in.unknown')
-              : t('dsa.signed_in', { account: data.account })}
-          </p>
-          {balance === undefined ? null : balance.status === 'ready' ? (
-            <p className="text-xs text-ws-muted-fg" data-testid="dsa-balance">
-              {t('dsa.balance', {
-                balance:
-                  balance.wallets.map(formatWallet).join(' / ') ||
-                  formatWallet({ currency: 'CNY', balance: '0' }),
-              })}
-              {/* WP152：赠送为 0 的不列；全是 0 就不说「另有赠送」那半句 */}
-              {balance.bonus.every((w) => isZeroAmount(w.balance))
-                ? null
-                : ` · ${t('dsa.bonus', {
-                    bonus: balance.bonus
-                      .filter((w) => !isZeroAmount(w.balance))
-                      .map(formatWallet)
-                      .join(' / '),
-                  })}`}
-            </p>
-          ) : (
+          {/*
+            WP214（36 §7 第四档）：已登录 · 余额 · 三步验证合成**一排图标**（账号名与余额数字跟在图标旁）；
+            赠送、上次测 · 耗时 · token 进 tooltip。「通了」那句只在刚验证完的两分钟内出。
+          */}
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+            <StatusIcons
+              items={accountItems(data, t)}
+              label={t('dsa.status.label')}
+              testId="dsa-status"
+            />
+            <ModelStatusIcons result={shown} pending={connect.isPending} />
+          </div>
+          {balance === undefined || balance.status === 'ready' ? null : (
             <p className="text-xs text-ws-muted-fg" data-testid="dsa-balance-failed">
               {balance.message}
             </p>
@@ -324,17 +358,17 @@ export function DeepSeekAccountLogin({
             <QuotaNotice account topUpUrl={data.top_up_url} />
           )}
           {connect.isPending ? (
-            <p className="flex items-center gap-1.5 text-ws-muted-fg" data-testid="dsa-testing">
-              <Loader2 aria-hidden className="size-3.5 animate-spin" />
+            <span role="status" className="sr-only" data-testid="dsa-testing">
               {t('dsa.testing')}
-            </p>
+            </span>
           ) : null}
-          {shown === undefined ? null : <ModelCheckSteps steps={shown.steps} />}
           {shown === undefined || connect.isPending ? null : shown.ok ? (
-            <p className="flex items-center gap-1.5 text-primary" data-testid="dsa-ok">
-              <Check aria-hidden className="size-4" />
-              {t('dsa.ok')}
-            </p>
+            fresh ? (
+              <p className="flex items-center gap-1.5 text-xs text-primary" data-testid="dsa-ok">
+                <Check aria-hidden className="size-3.5" />
+                {t('dsa.ok')}
+              </p>
+            ) : null
           ) : (
             <p
               role="alert"

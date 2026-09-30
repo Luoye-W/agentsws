@@ -31,7 +31,11 @@ import {
   type ClawBotTransport,
   clawBotPipelineAdapter,
   createHttpClawBotTransport,
+  type DingtalkHttp,
+  type DingtalkSocketFactory,
+  type FeishuTransportFactory,
   imCardDeepLink,
+  isFeishuAppId,
   MemoryClawBotStateStore,
   type RawStore,
   renderCardForIm,
@@ -56,6 +60,19 @@ import type {
 } from '@agentsws/contracts'
 import type { Context, Hono } from 'hono'
 import type { ImInboundPipeline } from './channels.js'
+import {
+  createTeamBots,
+  type DingtalkStatus,
+  dingtalkSecretId,
+  type FeishuStatus,
+  feishuSecretId,
+  IM_TEXT,
+  ImBindCodes,
+  ImBindings,
+  isTeamChannel,
+  parseBindCommand,
+  type TeamChannel,
+} from './im-team-bots.js'
 import type { SecretFields, SecretStore } from './secret-store.js'
 import { BLOB_URL_ENV, DATABASE_URL_ENV } from './storage.js'
 
@@ -157,6 +174,12 @@ export interface ImChannelsOptions {
   }): Promise<{ answer: string }>
   /** 本人的那条分配（问代理要带）。拿不到 = 这个人现在没有岗位，不问。 */
   assignmentOf(person_id: PersonId): string | undefined
+  /**
+   * WP211（Fable 09-30 定）：谁能填 / 改 / 断开**公司的**应用凭据（企业微信、飞书、钉钉三条）。
+   * 只给负责人（持有 `common.owner`）与公司管理员；不给 = 一律不许（fail-closed）。
+   * 每人自己的「绑定我的账号」不受它管。
+   */
+  canManageTeamBots?(person_id: PersonId): boolean | Promise<boolean>
   /** 企业微信 userid → 我们这边的人。认不出来就不答（不给陌生人代答）。 */
   personByWecomUser?(userid: string): PersonId | undefined
   /** 深链的根（工作台地址）。 */
@@ -167,6 +190,12 @@ export interface ImChannelsOptions {
   clawbotTransport?: ClawBotTransport
   wecomSocket?: WecomSocketFactory
   wecomUrl?: string
+  /** WP211：飞书官方 SDK 的包装（真装配接 `im-sdk.ts`；不给就不连飞书）。 */
+  feishuTransport?: FeishuTransportFactory
+  /** WP211：钉钉 Stream 的长连接与 HTTP（真装配接 `ws` 与 `fetch`；不给就不连钉钉）。 */
+  dingtalkSocket?: DingtalkSocketFactory
+  dingtalkHttp?: DingtalkHttp
+  dingtalkGatewayUrl?: string
   clawbotBaseUrl?: string
   sessionCookieName?: string
   /** 适配器循环里的异常出口。 */
@@ -195,7 +224,15 @@ export interface ImStatusView {
     connected: boolean
     /** BotID 不是秘密（Secret 才是）。 */
     bot_id?: string
+    /** WP211：当前这个人有没有把自己的企业微信账号绑上。 */
+    me_bound?: boolean
   }
+  /** WP211：飞书机器人（团队）。 */
+  feishu?: FeishuStatus
+  /** WP211：钉钉机器人（团队）。 */
+  dingtalk?: DingtalkStatus
+  /** WP211：当前这个人能不能填 / 改 / 断开公司的应用凭据（负责人与公司管理员）。 */
+  can_manage?: boolean
 }
 
 export interface ImChannelsAssembly {
@@ -248,7 +285,31 @@ export function createImChannels(options: ImChannelsOptions): ImChannelsAssembly
     confidence: 1,
   })
 
-  const emit = (type: 'im.bound' | 'im.unbound' | 'im.answered', payload: object): void => {
+  /* ── WP211：三条团队渠道共用的「这个聊天账号是谁」与飞书 / 钉钉 ──── */
+
+  const bindings = new ImBindings(options.secrets)
+  const bindCodes = new ImBindCodes(options.random)
+  const teamBots = createTeamBots({
+    clock: options.clock,
+    workspace_id: options.workspace_id,
+    secrets: options.secrets,
+    rawStore: options.rawStore,
+    makePipeline: options.makePipeline,
+    route: routeToAgent,
+    onEvent: (event) => answerInbound(event),
+    ...(options.onError === undefined ? {} : { onError: options.onError }),
+    ...(options.feishuTransport === undefined ? {} : { feishuTransport: options.feishuTransport }),
+    ...(options.dingtalkSocket === undefined ? {} : { dingtalkSocket: options.dingtalkSocket }),
+    ...(options.dingtalkHttp === undefined ? {} : { dingtalkHttp: options.dingtalkHttp }),
+    ...(options.dingtalkGatewayUrl === undefined
+      ? {}
+      : { dingtalkGatewayUrl: options.dingtalkGatewayUrl }),
+  })
+
+  const emit = (
+    type: 'im.bound' | 'im.unbound' | 'im.answered' | 'im.person_bound' | 'im.person_unbound',
+    payload: object,
+  ): void => {
     options.appendEvent({
       schema_version: 1,
       workspace_id: options.workspace_id,
@@ -390,25 +451,15 @@ export function createImChannels(options: ImChannelsOptions): ImChannelsAssembly
     if (question === '') return
     const external = event.actor?.external_id ?? ''
 
-    if (event.channel === WECOM_BOT_CHANNEL) {
-      const adapter = wecom
-      if (adapter === undefined) return
-      /*
-       * 41 §1.3：**按提问人身份**路由到他自己的代理。
-       *
-       * 认不出这个 userid 是我们这边的谁 → 不答。群里所有人都看得见这条回复，
-       * 给一个没绑定过的账号代答，等于把公司内部情况说给不认识的人听。
-       */
-      const person_id = options.personByWecomUser?.(external)
-      if (person_id === undefined) {
-        await adapter.reply(
-          event.dedupe_key,
-          '我还不认识你这个企业微信账号。先在工作台里把它和你的人对上，我才敢替你查。',
-        )
-        return
-      }
-      const answer = await askFor(person_id, question)
-      if (answer !== undefined) await adapter.reply(event.dedupe_key, answer)
+    // 三条团队渠道：认人（或当场绑定）→ 按提问人身份问他自己的代理 → 回原会话
+    if (
+      event.channel === WECOM_BOT_CHANNEL ||
+      event.channel === 'feishu' ||
+      event.channel === 'dingtalk'
+    ) {
+      const team = teamReplier(event)
+      // 那条通道已经停了（断开 / 进程在关）：不答，也不落到微信那一支去
+      if (team !== undefined) await answerTeam(team.channel, external, question, team.reply)
       return
     }
 
@@ -419,6 +470,70 @@ export function createImChannels(options: ImChannelsOptions): ImChannelsAssembly
     if (person_id === undefined || adapter === undefined) return
     const answer = await askFor(person_id, question)
     if (answer !== undefined) await adapter.sendText(external, answer)
+  }
+
+  /** 这条入站属于哪条团队渠道、怎么回（回复都按入站的去重键找回原消息）。 */
+  const teamReplier = (
+    event: InboundEvent,
+  ): { channel: TeamChannel; reply(text: string): Promise<unknown> } | undefined => {
+    if (event.channel === WECOM_BOT_CHANNEL) {
+      const adapter = wecom
+      return adapter === undefined
+        ? undefined
+        : { channel: 'wecom', reply: (text) => adapter.reply(event.dedupe_key, text) }
+    }
+    if (event.channel === 'feishu') {
+      const adapter = teamBots.feishu
+      return adapter === undefined
+        ? undefined
+        : { channel: 'feishu', reply: (text) => adapter.reply(event.dedupe_key, text) }
+    }
+    if (event.channel === 'dingtalk') {
+      const adapter = teamBots.dingtalk
+      return adapter === undefined
+        ? undefined
+        : { channel: 'dingtalk', reply: (text) => adapter.reply(event.dedupe_key, text) }
+    }
+    return undefined
+  }
+
+  /**
+   * 41 §1.3：**按提问人身份**路由到他自己的代理。
+   *
+   * 认不出这个账号是我们这边的谁 → 不答，只回一句怎么绑。群里所有人都看得见这条回复，
+   * 给一个没绑定过的账号代答，等于把公司内部情况说给不认识的人听。
+   * 「绑定 123456」是唯一不需要先认出人的一句：码只显示给登录了工作台的那个人。
+   */
+  const answerTeam = async (
+    channel: TeamChannel,
+    external: string,
+    question: string,
+    reply: (text: string) => Promise<unknown>,
+  ): Promise<void> => {
+    const code = parseBindCommand(question)
+    if (code !== undefined) {
+      const now_ms = Date.parse(options.clock.now())
+      const person_id =
+        external === '' ? undefined : bindCodes.consume(code, `${channel}:${external}`, now_ms)
+      if (person_id === undefined) {
+        await reply(IM_TEXT.badCode)
+        return
+      }
+      bindings.bind(channel, external, person_id)
+      // 21 §5：只记谁绑了哪条渠道，聊天账号 id 不进事件
+      emit('im.person_bound', { channel, person_id })
+      await reply(IM_TEXT.bound)
+      return
+    }
+    const person_id =
+      (channel === 'wecom' ? options.personByWecomUser?.(external) : undefined) ??
+      bindings.personOf(channel, external)
+    if (person_id === undefined) {
+      await reply(IM_TEXT.unknown)
+      return
+    }
+    const answer = await askFor(person_id, question)
+    if (answer !== undefined) await reply(answer)
   }
 
   const askFor = async (person_id: PersonId, question: string): Promise<string | undefined> => {
@@ -456,6 +571,15 @@ export function createImChannels(options: ImChannelsOptions): ImChannelsAssembly
 
   const ok = (c: Context<GatewayEnv>, data: unknown): Response =>
     c.json({ data, trace_id: c.get('rctx')?.trace_id ?? '' })
+
+  const canManage = async (person_id: PersonId): Promise<boolean> =>
+    (await options.canManageTeamBots?.(person_id)) === true
+
+  /** 公司应用凭据的写口：只给负责人与公司管理员（服务端拦，界面上也不给按钮）。 */
+  const requireManager = async (principal: Principal): Promise<void> => {
+    if (!(await canManage(principal.person_id)))
+      throw new ApiError('forbidden', '公司的应用凭据只有负责人或公司管理员能填、改、断开。')
+  }
 
   const tierGuard = (): void => {
     if (tier() !== 'local') throw new ApiError('forbidden', WECHAT_LOCAL_ONLY)
@@ -503,11 +627,15 @@ export function createImChannels(options: ImChannelsOptions): ImChannelsAssembly
 
     app.get('/v1/im/status', async (c) => {
       const principal = await principalOf(c)
-      return ok(c, status(principal.person_id))
+      return ok(c, {
+        ...status(principal.person_id),
+        can_manage: await canManage(principal.person_id),
+      })
     })
 
     app.put('/v1/im/wecom', async (c) => {
       const principal = await principalOf(c)
+      await requireManager(principal)
       const parsed: unknown = await c.req.json().catch(() => undefined)
       const input = parsed as { bot_id?: unknown; secret?: unknown } | undefined
       const bot_id = typeof input?.bot_id === 'string' ? input.bot_id.trim() : ''
@@ -524,6 +652,90 @@ export function createImChannels(options: ImChannelsOptions): ImChannelsAssembly
       emit('im.bound', { channel: 'wecom', by: principal.person_id })
       await startWecom()
       return ok(c, { configured: true, bot_id })
+    })
+
+    /* ── WP211：飞书 / 钉钉（公司的）与「绑定我的账号」 ──────────────── */
+
+    const requireSecrets = (): void => {
+      if (!options.secrets.available)
+        throw new ApiError(
+          'not_implemented',
+          '这台机器没有秘密库密钥，Secret 无处安全存放（见设置页的说明）。',
+        )
+    }
+    const field = (input: unknown, name: string): string => {
+      const v = (input as Record<string, unknown> | undefined)?.[name]
+      return typeof v === 'string' ? v.trim() : ''
+    }
+
+    app.put('/v1/im/feishu', async (c) => {
+      const principal = await principalOf(c)
+      await requireManager(principal)
+      const input: unknown = await c.req.json().catch(() => undefined)
+      const app_id = field(input, 'app_id')
+      const app_secret = field(input, 'app_secret')
+      const domain = field(input, 'domain') === 'lark' ? 'lark' : 'feishu'
+      if (app_id === '' || app_secret === '')
+        throw new ApiError('invalid_input', 'App ID 与 App Secret 都要填')
+      if (!isFeishuAppId(app_id))
+        throw new ApiError('invalid_input', 'App ID 应该是 cli_ 开头、后面 16 位字母数字')
+      requireSecrets()
+      // 13 §4：值只经这一条路进秘密库，不进事件、不进日志、不进响应体
+      options.secrets.put(feishuSecretId(options.workspace_id), { app_id, app_secret, domain })
+      emit('im.bound', { channel: 'feishu', by: principal.person_id })
+      await teamBots.startFeishu()
+      return ok(c, { configured: true, app_id })
+    })
+
+    app.delete('/v1/im/feishu', async (c) => {
+      const principal = await principalOf(c)
+      await requireManager(principal)
+      await teamBots.stopFeishu()
+      const removed = options.secrets.remove(feishuSecretId(options.workspace_id))
+      if (removed) emit('im.unbound', { channel: 'feishu', by: principal.person_id })
+      return ok(c, { removed })
+    })
+
+    app.put('/v1/im/dingtalk', async (c) => {
+      const principal = await principalOf(c)
+      await requireManager(principal)
+      const input: unknown = await c.req.json().catch(() => undefined)
+      const client_id = field(input, 'client_id')
+      const client_secret = field(input, 'client_secret')
+      if (client_id === '' || client_secret === '')
+        throw new ApiError('invalid_input', 'Client ID 与 Client Secret 都要填')
+      requireSecrets()
+      options.secrets.put(dingtalkSecretId(options.workspace_id), { client_id, client_secret })
+      emit('im.bound', { channel: 'dingtalk', by: principal.person_id })
+      await teamBots.startDingtalk()
+      return ok(c, { configured: true, client_id })
+    })
+
+    app.delete('/v1/im/dingtalk', async (c) => {
+      const principal = await principalOf(c)
+      await requireManager(principal)
+      await teamBots.stopDingtalk()
+      const removed = options.secrets.remove(dingtalkSecretId(options.workspace_id))
+      if (removed) emit('im.unbound', { channel: 'dingtalk', by: principal.person_id })
+      return ok(c, { removed })
+    })
+
+    /** 发一个 6 位绑定码：只给登录了工作台的这个人看，他私聊机器人发出去就绑上了。 */
+    app.post('/v1/im/bind-code', async (c) => {
+      const principal = await principalOf(c)
+      requireSecrets()
+      const out = bindCodes.issue(principal.person_id, Date.parse(options.clock.now()))
+      return ok(c, { code: out.code, expires_at: new Date(out.expires_at_ms).toISOString() })
+    })
+
+    /** 解绑我在这条渠道上的账号（之后它问什么都只会得到「先绑定」）。 */
+    app.delete('/v1/im/bind/:channel', async (c) => {
+      const principal = await principalOf(c)
+      const channel = c.req.param('channel')
+      if (!isTeamChannel(channel)) throw new ApiError('not_found', '没有这条渠道')
+      const removed = bindings.unbindPerson(channel, principal.person_id)
+      if (removed > 0) emit('im.person_unbound', { channel, person_id: principal.person_id })
+      return ok(c, { removed })
     })
   }
 
@@ -546,7 +758,10 @@ export function createImChannels(options: ImChannelsOptions): ImChannelsAssembly
         configured: wecomFields !== undefined,
         connected: wecom?.connected ?? false,
         ...(wecomFields?.bot_id === undefined ? {} : { bot_id: wecomFields.bot_id }),
+        me_bound: bindings.isBound('wecom', person_id),
       },
+      feishu: teamBots.feishuStatus(bindings.isBound('feishu', person_id)),
+      dingtalk: teamBots.dingtalkStatus(bindings.isBound('dingtalk', person_id)),
     }
   }
 
@@ -561,6 +776,8 @@ export function createImChannels(options: ImChannelsOptions): ImChannelsAssembly
         await startWechat(person_id)
       }
       await startWecom()
+      await teamBots.startFeishu()
+      await teamBots.startDingtalk()
     },
 
     status,
@@ -584,6 +801,7 @@ export function createImChannels(options: ImChannelsOptions): ImChannelsAssembly
       wechat.clear()
       await wecom?.stop()
       wecom = undefined
+      await teamBots.close()
     },
   }
 }

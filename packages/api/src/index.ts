@@ -624,6 +624,17 @@ export {
   type WorkPort,
   workRoutes,
 } from './routes/work.js'
+export {
+  type ArchivedListFilter,
+  type ArchivedMatterView,
+  type RailDutyView,
+  type RailMatterState,
+  type RailMatterView,
+  type RailPositionView,
+  type WorkArchivePort,
+  type WorkRailView,
+  workArchiveRoutes,
+} from './routes/work-archive.js'
 export { fromDeckError, workstationRoutes } from './routes/workstation.js'
 export {
   classify,
@@ -702,7 +713,9 @@ export type {
   SchedulePort,
   ScheduleRunOutcome,
   SkillOverlayView,
+  SkillPositionRef,
   SkillProposalSummary,
+  SkillRoleRef,
   SkillSummary,
   SkillsPort,
   TokenInfo,

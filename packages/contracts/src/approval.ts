@@ -113,6 +113,14 @@ export type ApprovalKind =
    * payload = `OfficialPluginCardPayload`。
    */
   | 'official_plugin'
+  /**
+   * WP210（Luoye / Fable 09-30）：**一封客户来信彻底投不进**。系统已经按退避自动重投了四轮
+   * （换版本还会再投一次），还是没处理成才出这一张。两个按钮：「再投一次」（批准 → 服务进程把
+   * 这条死信重投回队列）与「去邮箱回复」（驳回 → 人自己去回，工作台跳到消息页）。
+   * payload = `{ form: 'inbound_dead_letter', dead_letter_id, channel, reason, rounds, from?, last_error? }`，
+   * 没有正文。
+   */
+  | 'inbound_dead_letter'
 
 /** 14 §13.2 抽检复核：L2 自动批被抽中后，范围管理者看完说什么（WP32） */
 export interface SamplingReview {

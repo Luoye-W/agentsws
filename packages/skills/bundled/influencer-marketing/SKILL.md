@@ -4,6 +4,10 @@ description: 红人营销的做法：看受众不看粉丝数、一对一建联�
 license: MIT
 tier: open
 version: 1.0.0
+display_name: 红人合作
+display_name_en: Influencer marketing
+summary: 看受众找红人、谈合作、写简报、算回报
+summary_en: Find creators by audience, agree terms, brief, measure return
 ---
 
 > 改编自 coreyhaines31/marketingskills（MIT，© 2025 Corey Haines）的 influencer-marketing 技能及其 UGC 创作者计划附录（附录原文整理自公开资料并做过合规改写）。已按 Agents 工坊的规矩改写，冲突处以本文为准。本文不是法律意见，受监管品类或跨市场合作请法务确认。

@@ -953,6 +953,62 @@ async function seedJoin(world: World, server: Server): Promise<void> {
  * 加了段营销文案。措辞那部分产生不了指纹项，真正触发复核的是那个月数——
  * 走的是 `recheck.syncSource`，与模拟题 `knowledge/source-changed-recheck` 同一个函数。
  */
+/**
+ * WP209：知识库页按「品牌 / 范围」筛要有东西可筛。
+ *
+ * 一个品牌一个工作区（52），范围只在品牌**内部**切（44）：这里种两条只管某个站点的运费口径
+ * （`market` 范围，`账号:站点`），外加一条只管「品牌B」那个店铺组的（范围组 id）。
+ * 走的是同一个 `store.propose` / `activate`，数字只写政策页上本来就有的那种说法。
+ */
+async function seedScopedKnowledge(server: Server, world: World): Promise<void> {
+  const { knowledge } = server
+  const owner = world.roleHolder
+  const at = world.clock.now()
+  const rows: {
+    key: string
+    scope: { kind: 'market' | 'store'; id: string }
+    statement: string
+    status: 'active' | 'proposed'
+  }[] = [
+    {
+      key: 'policy:shipping.de',
+      scope: { kind: 'market', id: 'shopify_main:DE' },
+      statement: '德国站：除质量问题外，退货运费由买家承担。',
+      status: 'active',
+    },
+    {
+      key: 'policy:shipping.us',
+      scope: { kind: 'market', id: 'shopify_main:US' },
+      statement: '美国站：满额包邮，门槛以运费政策页为准。',
+      status: 'active',
+    },
+    {
+      key: 'policy:returns.brand_b',
+      scope: { kind: 'store', id: 'rg_brand_b' },
+      statement: '品牌B 的两家店：开封未损坏的配件也收退货，退回后人工验货。',
+      status: 'proposed',
+    },
+  ]
+  for (const row of rows) {
+    const card = await knowledge.store.propose({
+      schema_version: 1,
+      workspace_id: world.workspace_id,
+      layer: 'policy',
+      domain: 'company',
+      scope: [row.scope],
+      sensitivity: 'internal',
+      subject: { type: 'policy', key: row.key },
+      statement: row.statement,
+      provenance: [{ source: 'human', ref: `demo:${row.key}`, at }],
+      confidence: { value: 0.9, state: 'probable' },
+      valid: {},
+      owner,
+      created_by: { kind: 'person', id: owner },
+    })
+    if (row.status === 'active') await knowledge.store.activate(card.id, owner)
+  }
+}
+
 async function seedKnowledgeRecheck(server: Server, world: World, pack: Pack): Promise<void> {
   const { knowledge } = server
   const workspace_id = world.workspace_id
@@ -1457,6 +1513,8 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
 
   // 48 §4 #6（WP56）：知识页的复核卡要有东西可看
   await seedKnowledgeRecheck(server, world, pack)
+  // WP209：知识页的「品牌 / 范围」筛要有东西可筛
+  await seedScopedKnowledge(server, world)
 
   await seedWorkModel({
     work: server.work,
@@ -1765,6 +1823,123 @@ async function seedMessages(server: Server, world: World): Promise<void> {
         reasons: ['模型判成 B2B，但把握不够'],
       }),
     }),
+    /*
+     * WP212（docs/88 §4.1）：「没人接的」那一屏——拿不准的售后、媒体采访、要你本人动手的平台通知、
+     * 个人来信；外加一封物流通知（成捆）与一封已经交给公共关系的（「全部」里挂「公共关系在办」）。
+     */
+    base({
+      id: 'm112',
+      from: { email: 'tom.becker@buyer.example', name: 'Tom Becker' },
+      subject: 'Still no parcel',
+      text: 'Ordered 3 weeks ago, still nothing. I want my money back.',
+      minutes: 300,
+      triage: verdict({
+        suggested_route: 'support',
+        needs_reply: true,
+        priority: 'high',
+        summary: '说订单一直没到，想退款；没写订单号',
+        confidence: 0.52,
+        by: 'model',
+        reasons: ['模型判成客服，但把握不够'],
+        kind: 'after_sales',
+        kind_by: 'model',
+        kind_confidence: 0.52,
+      }),
+    }),
+    base({
+      id: 'm113',
+      from: { email: 'clara@outdoor-review.example', name: 'Clara Hoffmann' },
+      subject: 'Interview for our Thursday piece?',
+      text: 'Could we talk for 20 minutes on Thursday about portable power trends?',
+      minutes: 180,
+      triage: verdict({
+        needs_reply: true,
+        summary: '想周四采访你 20 分钟，谈便携储能趋势',
+        confidence: 0.88,
+        by: 'model',
+        reasons: ['模型分拣（便宜档，只送头与正文前 2000 字）'],
+        kind: 'media',
+        kind_by: 'model',
+        kind_confidence: 0.88,
+      }),
+    }),
+    base({
+      id: 'm114',
+      from: { email: 'payouts@shop-billing.example', name: 'Shopify 结算' },
+      subject: '结算已暂停：请补充营业执照',
+      text: '你的店铺结算已暂停。请在 3 天内上传一份有效的营业执照，否则本期款项将延后发放。',
+      minutes: 120,
+      labels: ['billing'],
+      triage: verdict({
+        labels: ['billing'],
+        needs_reply: true,
+        priority: 'high',
+        summary: '结算被暂停，要在 3 天内补一份营业执照',
+        confidence: 0.9,
+        by: 'model',
+        reasons: ['模型分拣（便宜档，只送头与正文前 2000 字）'],
+        kind: 'billing_system',
+        kind_by: 'model',
+        kind_confidence: 0.9,
+      }),
+    }),
+    base({
+      id: 'm115',
+      from: { email: 'lixiang@friends.example', name: '李想' },
+      subject: '周六晚上？',
+      text: '周六晚上有空吗？一起吃个饭，上次说的那家。',
+      minutes: 1300,
+      labels: ['personal'],
+      triage: verdict({
+        labels: ['personal'],
+        needs_reply: true,
+        summary: '问你周六晚上有没有空一起吃饭',
+        confidence: 0.93,
+        by: 'model',
+        reasons: ['模型分拣（便宜档，只送头与正文前 2000 字）'],
+        kind: 'personal_other',
+        kind_by: 'model',
+        kind_confidence: 0.93,
+      }),
+    }),
+    base({
+      id: 'm116',
+      from: { email: 'noreply@shipfast.example', name: 'ShipFast' },
+      subject: '3 单已签收 · 1 单延误',
+      text: '今天 3 单已签收，2 单清关中，1 单延误（已通知客服）。',
+      minutes: 90,
+      read: true,
+      labels: ['orders'],
+      triage: verdict({
+        labels: ['orders'],
+        summary: '物流更新：3 单签收、1 单延误',
+        by: 'rule',
+        reasons: ['noreply 发件人'],
+        kind: 'logistics',
+        kind_by: 'rule',
+      }),
+    }),
+    {
+      ...base({
+        id: 'm117',
+        from: { email: 'editor@gadget-weekly.example', name: 'Gadget Weekly' },
+        subject: '转载授权：你们的储能测评',
+        text: '我们想转载你们官网上那篇储能测评，能授权吗？会注明出处。',
+        minutes: 600,
+        read: true,
+        triage: verdict({
+          needs_reply: true,
+          summary: '想转载官网那篇储能测评，问能不能授权',
+          confidence: 0.86,
+          by: 'model',
+          reasons: ['模型分拣（便宜档，只送头与正文前 2000 字）'],
+          kind: 'media',
+          kind_by: 'model',
+          kind_confidence: 0.86,
+        }),
+      }),
+      handled: { as: 'position', position_id: 'pr', by: world.roleHolder, at: at(560) },
+    },
     base({
       id: 'm108',
       from: { email: 'ops@luminous-lab.example', name: '李默' },

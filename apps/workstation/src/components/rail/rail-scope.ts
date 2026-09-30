@@ -25,6 +25,11 @@ export interface RailScope {
   /** 请求要带的 `X-Assignment`：职责层是那条职责的分配，岗位层是本人在这个岗位下的第一条。 */
   assignment?: string
   /**
+   * WP208：本人在这一层下面的**全部**分配（岗位层 = 这个岗位里我持有的每一条职责的分配；
+   * 职责层 = 那一条）。「定时任务」的徽标按它数"这一层在跑几个"。
+   */
+  assignments?: readonly string[]
+  /**
    * 上面那一层（职责层的上面是它所属的岗位）。
    * 记忆面板下面折着的"上面继承的"要它——不然界面只知道自己这一层的 id。
    */
@@ -84,6 +89,7 @@ export function railContextOf(
           ...(myAssignments(owner)[0] === undefined
             ? {}
             : { assignment: myAssignments(owner)[0] as string }),
+          assignments: myAssignments(owner),
         }
 
   // 职责层：地址栏指着哪条就是哪条；不在职责页时用当前分配对应的那条职责
@@ -97,7 +103,9 @@ export function railContextOf(
           tier: 'role',
           scope_id: held.role_id,
           name: held.role_name,
-          ...(held.my_assignment_id === undefined ? {} : { assignment: held.my_assignment_id }),
+          ...(held.my_assignment_id === undefined
+            ? {}
+            : { assignment: held.my_assignment_id, assignments: [held.my_assignment_id] }),
           ...(position === undefined
             ? {}
             : {

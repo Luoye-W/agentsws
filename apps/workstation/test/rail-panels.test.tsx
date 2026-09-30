@@ -15,7 +15,7 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { LayerMemoryData, PositionInstanceData, RoleDetailView } from '@/lib/api'
-import { renderWithProviders } from './helpers'
+import { openSettingsTab, renderWithProviders } from './helpers'
 
 const INSTANCE: PositionInstanceData = {
   position_id: 'web-ops',
@@ -177,21 +177,55 @@ describe('第三栏骨架（36 §9）', () => {
     expect(screen.queryByTestId('rail-panel-frame')).toBeNull()
   })
 
-  it('一次只开一个：点记忆开记忆，点技能就换成技能，再点同一个收起', async () => {
+  it('一次只开一个：点「设定」开设定，点定时任务就换成定时任务，再点同一个收起', async () => {
     renderRail()
-    fireEvent.click(screen.getByTestId('rail-icon-memory'))
-    expect(await screen.findByTestId('rail-panel-memory')).toBeDefined()
+    fireEvent.click(screen.getByTestId('rail-icon-settings'))
+    expect(await screen.findByTestId('rail-panel-settings')).toBeDefined()
 
-    fireEvent.click(screen.getByTestId('rail-icon-skills'))
+    fireEvent.click(screen.getByTestId('rail-icon-schedules'))
     await waitFor(() => {
-      expect(screen.queryByTestId('rail-panel-memory')).toBeNull()
+      expect(screen.queryByTestId('rail-panel-settings')).toBeNull()
     })
-    expect(screen.getByTestId('rail-panel-skills')).toBeDefined()
+    expect(screen.getByTestId('rail-panel-schedules')).toBeDefined()
 
-    fireEvent.click(screen.getByTestId('rail-icon-skills'))
+    fireEvent.click(screen.getByTestId('rail-icon-schedules'))
     await waitFor(() => {
       expect(screen.queryByTestId('rail-panel-frame')).toBeNull()
     })
+  })
+
+  it('WP208：五个「这一层的设置」合成一个图标，旧的五个图标都不在了', () => {
+    renderRail()
+    expect(screen.getByTestId('rail-icon-settings').getAttribute('title')).toBe(
+      '设定 · 这个岗位 / 职责的角色、记忆、知识、技能与额度',
+    )
+    for (const id of [
+      'role',
+      'memory',
+      'knowledge',
+      'skills',
+      'caps',
+      'design-md',
+      'mail-assistant',
+    ])
+      expect(screen.queryByTestId(`rail-icon-${id}`)).toBeNull()
+  })
+
+  it('WP208：「设定」顶上五个标签，默认第一个（角色）；切一个标签换一份正文', async () => {
+    renderRail()
+    fireEvent.click(screen.getByTestId('rail-icon-settings'))
+    const panel = await screen.findByTestId('settings-panel')
+    expect(panel.getAttribute('data-tab')).toBe('role')
+    expect(
+      within(panel)
+        .getAllByRole('tab')
+        .map((b) => b.textContent),
+    ).toEqual(['角色', '记忆', '知识', '技能', '额度'])
+    fireEvent.click(screen.getByTestId('settings-tab-skills'))
+    await waitFor(() => {
+      expect(screen.getByTestId('settings-panel').getAttribute('data-tab')).toBe('skills')
+    })
+    expect(screen.getByTestId('settings-tab-skills').getAttribute('aria-selected')).toBe('true')
   })
 
   it('WP140：还没做的那几个内测期间不上图标轨（开关放出来的那一路见 rail-registry）', () => {
@@ -229,16 +263,16 @@ describe('面板跟着当前岗位 / 当前职责走（36 §9）', () => {
 
   it('面板头写着看的是哪一层、哪一个', async () => {
     renderRail('/positions/asg_store/duties/dtc.store', 'asg_store')
-    fireEvent.click(screen.getByTestId('rail-icon-memory'))
+    await openSettingsTab('memory')
     const title = await screen.findByTestId('rail-panel-title')
-    expect(title.textContent).toBe('记忆 · 店铺管理')
+    expect(title.textContent).toBe('设定 · 店铺管理')
   })
 })
 
 describe('记忆面板（36 §10）', () => {
   it('能改的时候：手动加一条走 POST /v1/memory', async () => {
     renderRail()
-    fireEvent.click(screen.getByTestId('rail-icon-memory'))
+    await openSettingsTab('memory')
     fireEvent.click(await screen.findByTestId('memory-add'))
     fireEvent.change(screen.getByTestId('memory-add-text'), {
       target: { value: '上架新品先留草稿。' },
@@ -257,7 +291,7 @@ describe('记忆面板（36 §10）', () => {
   it('改不动的时候：改 / 删 / 加一个按钮都不出（判据在服务端）', async () => {
     getLayerMemory.mockResolvedValue({ ...MEMORY, can_edit: false })
     renderRail()
-    fireEvent.click(screen.getByTestId('rail-icon-memory'))
+    await openSettingsTab('memory')
     expect(await screen.findByTestId('memory-readonly')).toBeDefined()
     expect(screen.queryByTestId('memory-add')).toBeNull()
     expect(screen.queryByTestId('memory-edit')).toBeNull()
@@ -266,7 +300,7 @@ describe('记忆面板（36 §10）', () => {
 
   it('每条写着来源；右边那张"六层怎么叠"把本层高亮', async () => {
     renderRail()
-    fireEvent.click(screen.getByTestId('rail-icon-memory'))
+    await openSettingsTab('memory')
     expect((await screen.findByTestId('memory-origin')).textContent).toBe('手动加')
     const card = screen.getByTestId('memory-tier-card')
     expect(within(card).getByTestId('memory-tier-position').getAttribute('aria-current')).toBe(
@@ -279,7 +313,7 @@ describe('记忆面板（36 §10）', () => {
 describe('额度面板：改额度走审批，不是直接改（14 §1 / 05 §0）', () => {
   it('职责层改一个数 → PUT /v1/roles/:id → "已提交审批"', async () => {
     renderRail('/positions/asg_store/duties/dtc.store', 'asg_store')
-    fireEvent.click(screen.getByTestId('rail-icon-caps'))
+    await openSettingsTab('caps')
     const input = await screen.findByTestId('caps-input')
     // 没改之前提交按钮是灰的——不让人提一张什么都没改的卡
     expect(screen.getByTestId('caps-submit').hasAttribute('disabled')).toBe(true)
@@ -298,7 +332,7 @@ describe('额度面板：改额度走审批，不是直接改（14 §1 / 05 §0�
   it('内置模板只读：出的是"复制一份再改"，没有输入框', async () => {
     getRoleDefinition.mockResolvedValue({ ...ROLE, source: 'bundled', editable: false })
     renderRail('/positions/asg_store/duties/dtc.store', 'asg_store')
-    fireEvent.click(screen.getByTestId('rail-icon-caps'))
+    await openSettingsTab('caps')
     expect(await screen.findByTestId('caps-readonly')).toBeDefined()
     expect(screen.getByTestId('caps-copy')).toBeDefined()
     expect(screen.queryByTestId('caps-input')).toBeNull()
@@ -307,7 +341,7 @@ describe('额度面板：改额度走审批，不是直接改（14 §1 / 05 §0�
 
   it('岗位层没有自己的额度：列的是这个岗位下的职责，点一条去改', async () => {
     renderRail()
-    fireEvent.click(screen.getByTestId('rail-icon-caps'))
+    await openSettingsTab('caps')
     expect(await screen.findByTestId('caps-position-hint')).toBeDefined()
     const links = screen.getAllByTestId('caps-duty-link')
     expect(links.map((a) => a.getAttribute('href'))).toEqual([
@@ -320,7 +354,7 @@ describe('额度面板：改额度走审批，不是直接改（14 §1 / 05 §0�
 describe('知识面板（19）', () => {
   it('列这条职责的适用范围与在用的事实卡数，不做编辑器', async () => {
     renderRail('/positions/asg_store/duties/dtc.store', 'asg_store')
-    fireEvent.click(screen.getByTestId('rail-icon-knowledge'))
+    await openSettingsTab('knowledge')
     expect(await screen.findByTestId('rail-knowledge-role')).toBeDefined()
     expect(screen.getByTestId('rail-knowledge-scope').textContent).toContain('store')
     expect(screen.getByTestId('rail-knowledge-cards').textContent).toContain('0')

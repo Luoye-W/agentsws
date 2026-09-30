@@ -68,6 +68,12 @@ const state = {
   installs: 0,
   checks: 0,
   status: NOT_INSTALLED as BrowserSkillStatus,
+  probe: { ok: false, endpoint: '', detail: '连不上' } as {
+    ok: boolean
+    endpoint: string
+    browser?: string
+    detail?: string
+  },
 }
 
 vi.mock('@/lib/api', async () => {
@@ -80,7 +86,7 @@ vi.mock('@/lib/api', async () => {
       state.view = { ...state.view, ...input }
       return state.view
     },
-    probeBrowser: async () => ({ ok: false, endpoint: '', detail: '连不上' }),
+    probeBrowser: async () => state.probe,
     installBrowserSkill: async () => {
       state.installs += 1
       state.status = INSTALLED
@@ -99,6 +105,7 @@ beforeEach(() => {
   state.installs = 0
   state.checks = 0
   state.status = NOT_INSTALLED
+  state.probe = { ok: false, endpoint: '', detail: '连不上' }
 })
 
 describe('设置页浏览器：两种方式并列', () => {
@@ -155,6 +162,23 @@ describe('设置页浏览器：两种方式并列', () => {
     // 保存写回去的是这一种方式
     await userEvent.click(screen.getByTestId('browser-save'))
     expect(state.saved.at(-1)).toEqual({ mode: 'browserskill' })
+  })
+
+  it('WP214：找到浏览器之后只说连上了哪个，地址（已经在输入框里）进 tooltip', async () => {
+    state.probe = { ok: true, endpoint: 'http://127.0.0.1:9222', browser: 'Chrome 140' }
+    renderWithProviders(<BrowserCard assignment="asg_1" />)
+    const attach = await screen.findByTestId('browser-mode-attach')
+    await userEvent.click(attach.querySelector('input') as HTMLInputElement)
+    await userEvent.click(await screen.findByTestId('browser-find'))
+    const result = await screen.findByTestId('browser-probe-result')
+    expect(result.textContent).toContain('连上了：Chrome 140')
+    expect(screen.getByTestId('browser-probe-endpoint').getAttribute('data-hint')).toBe(
+      'http://127.0.0.1:9222',
+    )
+    // 卡面上人要读的字里没有地址（读屏专用那份不算）
+    const clone = result.cloneNode(true) as Element
+    for (const el of [...clone.querySelectorAll('.sr-only')]) el.remove()
+    expect(clone.textContent).not.toContain('9222')
   })
 
   it('打开设置页不会自己去戳一下用户的浏览器（按了才查）', async () => {

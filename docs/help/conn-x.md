@@ -1,3 +1,7 @@
+---
+positions: [ads, social-media, kol-marketing]
+roles: [ads.x, social.x, kol.x]
+---
 # X（Twitter）的两个连接
 
 这篇讲 X 的两个连接：查账号、发推用的 X API，和投放用的 X Ads API。**两者是两套授权**，买了一个管不到另一个。

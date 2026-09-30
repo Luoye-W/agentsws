@@ -5,17 +5,22 @@
  * 不超过某个**敏感级**的东西。这一栏把那三样原样摆出来，加上一句"库里现在有多少张
  * 事实卡"，再给一个进知识库的口子。
  *
+ * **WP209**：再加一行「这一层常用的知识」——与知识库页同一套分组（`KnowledgeGroupCounts`），
+ * 按岗位挑类（职责层用它所属的岗位），每类几条。
+ *
  * **这里不做知识编辑器**。写事实卡要看得见出处、核对状态与复核队列（19 §1.1），
  * 380 宽的抽屉里做那件事只会做残；这一栏回答的是"我这一层看得见什么"。
  */
 import { useQuery } from '@tanstack/react-query'
 import { ExternalLink } from 'lucide-react'
 import { Link } from 'react-router-dom'
+import { KnowledgeGroupCounts } from '@/components/library/knowledge-groups'
 import { PanelError } from '@/components/rail/panel-error'
 import type { RailScope } from '@/components/rail/rail-scope'
 import { Skeleton } from '@/components/ui/skeleton'
 import { getPosition, getRoleDefinition, listKnowledgeCards, type RoleDetailView } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
+import { knowledgeGroupsForPosition } from '@/lib/library'
 
 export function KnowledgePanel({ scope }: { scope: RailScope }): React.ReactNode {
   const { t } = useApp()
@@ -70,6 +75,17 @@ export function KnowledgePanel({ scope }: { scope: RailScope }): React.ReactNode
           </ul>
         </section>
       ))}
+      {cards.data === undefined ? null : (
+        <section className="flex flex-col gap-1" data-testid="rail-knowledge-groups">
+          <p className="text-xs text-muted-foreground">{t('rail.knowledge.groups')}</p>
+          <KnowledgeGroupCounts
+            cards={cards.data.filter((c) => c.status !== 'retired')}
+            groups={knowledgeGroupsForPosition(
+              scope.tier === 'position' ? scope.scope_id : scope.parent?.scope_id,
+            )}
+          />
+        </section>
+      )}
       <p className="text-xs" data-testid="rail-knowledge-cards">
         {cards.error === null
           ? t('rail.knowledge.cards', { count: active })

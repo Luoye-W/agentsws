@@ -32,6 +32,17 @@ vi.mock('@/lib/api', async () => {
   const actual = await vi.importActual<typeof import('@/lib/api')>('@/lib/api')
   return {
     ...actual,
+    // WP212：「没人接的」总览（这几条用例看的是「全部」那一套）
+    getMessageOverview: async () => ({
+      unclaimed: 0,
+      notice: 0,
+      handed: 0,
+      handed_by_position: [],
+      cards_waiting: 0,
+      notice_groups: [],
+      positions: [],
+      taught: { rules: 0, saved: 0, recent: [] },
+    }),
     listMessageAccounts: async () => ({ accounts }),
     listMessageLabels: async () => ({ labels }),
     listMessageThreads: async () => ({ threads: [] }),
@@ -54,7 +65,7 @@ const folderKinds = (): string[] =>
 describe('消息页左栏：岗位文件夹（WP161）', () => {
   it('显示名走 i18n（不露真名）；没有 B2B 那只就不画它', async () => {
     accounts = [base]
-    renderWithProviders(<MessagesPage />)
+    renderWithProviders(<MessagesPage />, '/messages?view=all')
     expect(await screen.findByText('客服在处理')).toBeDefined()
     expect(screen.getByText('红人合作')).toBeDefined()
     expect(screen.queryByText('kefuagents')).toBeNull()
@@ -72,14 +83,14 @@ describe('消息页左栏：岗位文件夹（WP161）', () => {
         ],
       },
     ]
-    renderWithProviders(<MessagesPage />)
+    renderWithProviders(<MessagesPage />, '/messages?view=all')
     expect(await screen.findByText('B2B 往来')).toBeDefined()
     expect(folderKinds()).toContain('b2b')
   })
 
   it('WP172：B2B 岗位开着（有一只邮箱在收 B2B 信）→ 还没有一封 B2B 信也显示「B2B 往来」', async () => {
     accounts = [{ ...base, b2b: true }]
-    renderWithProviders(<MessagesPage />)
+    renderWithProviders(<MessagesPage />, '/messages?view=all')
     expect(await screen.findByText('B2B 往来')).toBeDefined()
     expect(folderKinds()).toContain('b2b')
   })

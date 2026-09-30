@@ -1,4 +1,4 @@
-# Message channels: WeChat and WeCom
+# Message channels: WeChat, WeCom, Feishu and DingTalk
 
 This covers the two channels on the “Message channels” page. They are two different things: **WeChat is a private chat between you and your own agent**; **the WeCom bot is the one for the team**.
 
@@ -44,6 +44,12 @@ The team channel: @ it in a group and it asks the asker’s own agent as that pe
 4. When the card says it is receiving, add the bot to a group and @ it to try.
 
 The Secret goes straight into the local encrypted vault — never sent to the AI, never logged, never shown again.
+
+## Feishu / DingTalk bots (company)
+
+Like WeCom, these are for your team: colleagues DM the bot or @ it in a group and it answers as the asker. Both use an outbound long connection (DingTalk calls it Stream mode), so no public URL is needed. Everyone clicks **Link my account** once and DMs the code to the bot — it only answers colleagues it knows. WeCom now uses the same linking step.
+
+Setup guides: [Feishu](help:im-feishu), [DingTalk](help:im-dingtalk).
 
 ## FAQ
 

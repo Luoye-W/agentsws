@@ -12,8 +12,9 @@
  * （令牌在本机加密库里，21 §5）。所以这个文件里没有一处 token 变量。
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Link2 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
-import { BrandMark } from '@/components/design'
+import { BrandMark, StatusIcons } from '@/components/design'
 import { TutorialLink } from '@/components/help/tutorial-link'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -119,18 +120,29 @@ export function CloudAccountCard({ assignment }: { assignment?: string }): React
         {account.isLoading ? <Skeleton className="h-16 w-full" /> : null}
         {view === undefined ? null : view.linked ? (
           <div className="flex flex-col gap-3" data-testid="cloud-account-linked">
-            <div className="flex items-center justify-between">
-              <span className="text-muted-foreground">{t('cloud.account.email')}</span>
-              <span className="font-mono text-xs">{view.email}</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-muted-foreground">{t('cloud.account.expires')}</span>
-              <span className="font-mono text-xs">{day(view.expires_at)}</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-muted-foreground">{t('cloud.account.scopes')}</span>
-              <span className="font-mono text-xs">{(view.scopes ?? []).join(' · ')}</span>
-            </div>
+            {/*
+              WP214（36 §7 第四档）：「邮箱 / 令牌到期 / 这把令牌能做」三行 → 一个「已关联」小图标 + 邮箱；
+              到期、权限、连到的云端地址都在 tooltip 里（技术信息不常显）
+            */}
+            <StatusIcons
+              testId="cloud-account-status"
+              items={[
+                {
+                  key: 'linked',
+                  label: t('cloud.account.title'),
+                  state: 'ok',
+                  stateText: t('cloud.account.linked'),
+                  icon: Link2,
+                  ...(view.email === undefined ? {} : { value: view.email }),
+                  testId: 'cloud-account-email',
+                  detail: [
+                    `${t('cloud.account.expires')} ${day(view.expires_at)}`,
+                    `${t('cloud.account.scopes')} ${(view.scopes ?? []).join(' · ')}`,
+                    `${t('cloud.account.endpoint')} ${view.cloud_base_url}`,
+                  ].join('\n'),
+                },
+              ]}
+            />
             <div>
               <Button
                 size="sm"
@@ -149,7 +161,9 @@ export function CloudAccountCard({ assignment }: { assignment?: string }): React
             {/* WP156：一句话留着，"不关联也照常用、一分不扣"那半句进问号 */}
             <p className="flex items-center gap-1 text-muted-foreground">
               {t('cloud.account.intro')}
-              <Hint text={t('cloud.account.intro.hint')} />
+              <Hint
+                text={`${t('cloud.account.intro.hint')} ${t('cloud.account.endpoint')} ${view.cloud_base_url}`}
+              />
             </p>
             <div className="flex items-center gap-2">
               <Input
@@ -196,11 +210,7 @@ export function CloudAccountCard({ assignment }: { assignment?: string }): React
             {error}
           </p>
         )}
-        {view === undefined ? null : (
-          <p className="text-xs text-muted-foreground" data-slot="status">
-            {t('cloud.account.endpoint')} <span className="font-mono">{view.cloud_base_url}</span>
-          </p>
-        )}
+        {/* WP214：「连到：云端地址」是技术信息——关联了在状态图标的 tooltip 里，没关联在那句话的问号里 */}
       </CardContent>
     </Card>
   )

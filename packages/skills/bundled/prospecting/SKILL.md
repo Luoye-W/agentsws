@@ -4,6 +4,10 @@ description: B2B 找客户与打分：先定目标客户画像（ICP），再找
 license: MIT
 tier: open
 version: 1.0.0
+display_name: 找客户
+display_name_en: Prospecting
+summary: 定客户画像、找人、核验、分四档打分
+summary_en: Define the ICP, find, verify and score leads
 ---
 
 > 改编自 coreyhaines31/marketingskills（MIT，© 2025 Corey Haines）的 prospecting 技能及其附录（B2B 找客户、合规、数据来源）。已按 Agents 工坊的规矩改写：花钱与导入出卡、打分和证据分级合成一套、LinkedIn 不抓，冲突处以本文为准。本文不是法律意见，名单涉及欧盟、英国、加拿大的人时请法务确认。

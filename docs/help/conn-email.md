@@ -1,3 +1,7 @@
+---
+positions: [customer-care, kol-marketing, b2b, pr]
+roles: [dtc.support, b2b.sales, b2b.outbound, pr.press]
+---
 # 连邮箱（任意邮箱 IMAP / SMTP）
 
 这篇讲怎么用一串「授权码」把任何一个邮箱接进来，让岗位能收信、发信。

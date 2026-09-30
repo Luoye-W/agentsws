@@ -321,6 +321,8 @@ export function CreditsPanel({ assignment }: { assignment?: string }): React.Rea
 
             {/* WP194：我的本月额度（公司给每个人 / 每个岗位设的每月上限；没设就是不限） */}
             <MyAllowance assignment={assignment} num={num} />
+            {/* WP206：给同事分额度只在网页上做（只 owner / admin 看得到这一句） */}
+            <AllocationWebLink assignment={assignment} />
 
             {/* ② 这个月钱花在哪：付费三块各一张小卡（67 §1） */}
             <section
@@ -711,6 +713,39 @@ function MyAllowance({
         </p>
       )}
     </section>
+  )
+}
+
+/**
+ * WP206：「给同事分额度 → 在网页上」。额度分配（成员 / 岗位的每月上限、收回）搬到了网页版账号页
+ * （Luoye 09-30：不属于公司的日常工作，不放工作台）。只有公司的 owner / admin 看得到——服务端在
+ * 「我的本月额度」那一份里给 `role` 与 `allocation_url`，别人拿不到地址就不画。
+ */
+function AllocationWebLink({ assignment }: { assignment: string | undefined }): React.ReactNode {
+  const { t } = useApp()
+  const mine = useQuery({
+    queryKey: ['cloud-allocation-me', assignment],
+    queryFn: () => getMyCloudAllocation(assignment),
+    retry: false,
+  })
+  const url = mine.data?.allocation_url
+  if (mine.data?.role === undefined || url === undefined || url === '') return null
+  const tip = t('credits.alloc_web.tip')
+  return (
+    <p className="text-xs">
+      <a
+        href={url}
+        target="_blank"
+        rel="noreferrer noopener"
+        className="inline-flex items-center gap-1 text-primary hover:underline"
+        data-slot="action"
+        data-testid="credits-alloc-web-link"
+        title={tip}
+      >
+        {t('credits.alloc_web')}
+        <ExternalLink className="size-3" aria-hidden />
+      </a>
+    </p>
   )
 }
 

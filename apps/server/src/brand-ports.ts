@@ -13,6 +13,7 @@
  * 品牌 B 的模块。没有 actor 的那几条（`runtime()` / `configured()`）在下面各自
  * 写清楚为什么走 bootstrap。
  */
+
 import type {
   AdsPort,
   AskPort,
@@ -36,10 +37,12 @@ import type {
   SitePort,
   SocialPort,
   SubscriptionLoginInput,
+  WorkArchivePort,
   WorkPort,
   WorkstationPort,
 } from '@agentsws/api'
 import { ApiError } from '@agentsws/api'
+import { isCustomerLetter, nextAutoRequeueAt } from '@agentsws/channels'
 import type { ObjectRef, WorkspaceId } from '@agentsws/contracts'
 import type { BrandModules } from './brand-modules.js'
 import type { SubscriptionPortLike } from './subscription.js'
@@ -106,16 +109,26 @@ export function brandConnectionsPort(brands: BrandModules): ConnectionsPort {
     runtime: async () => (await of(brands.bootstrap)).runtime(),
     deadLetters: async (actor: { workspace_id: WorkspaceId }) => {
       const brand = await brands.forWorkspace(actor.workspace_id)
-      return (await brand.channels.deadLetters()).map((d) => ({
-        id: d.id,
-        channel: d.event.channel,
-        reason: d.reason,
-        attempts: d.attempts,
-        at: new Date(d.at_ms).toISOString(),
-        // 列表里只有"是谁 / 何时 / 为什么"：正文永远不进这一层
-        ...(d.event.actor?.display === undefined ? {} : { from: d.event.actor.display }),
-        ...(d.last_error === undefined ? {} : { last_error: d.last_error }),
-      }))
+      return (await brand.channels.deadLetters()).map((d) => {
+        // WP210：自动重投到哪一步了（诊断页要说「下次几点再试」或「已放弃」）
+        const next = nextAutoRequeueAt(d)
+        return {
+          id: d.id,
+          channel: d.event.channel,
+          reason: d.reason,
+          attempts: d.attempts,
+          at: new Date(d.at_ms).toISOString(),
+          // 列表里只有"是谁 / 何时 / 为什么"：正文永远不进这一层
+          ...(d.event.actor?.display === undefined ? {} : { from: d.event.actor.display }),
+          ...(d.last_error === undefined ? {} : { last_error: d.last_error }),
+          customer: isCustomerLetter(d.event),
+          auto_retry: {
+            rounds: d.retry?.rounds ?? 0,
+            gave_up: next === undefined,
+            ...(next === undefined ? {} : { next_at: new Date(next).toISOString() }),
+          },
+        }
+      })
     },
     requeueDeadLetter: async (actor: { workspace_id: WorkspaceId }, id: string) =>
       (await brands.forWorkspace(actor.workspace_id)).channels.requeueDeadLetter(id),
@@ -366,6 +379,14 @@ export function brandConnectionDirectoryPort(
   make: (workspace_id: WorkspaceId) => Promise<ConnectionDirectoryPort>,
 ): ConnectionDirectoryPort {
   return scopedPort<ConnectionDirectoryPort>(make, () => brands.bootstrap)
+}
+
+/** WP207：左栏职责下的对话 / 任务、归档与找回——与工作模型同一份 `Work`，所以也按品牌。 */
+export function brandWorkArchivePort(
+  brands: BrandModules,
+  make: (workspace_id: WorkspaceId) => Promise<WorkArchivePort>,
+): WorkArchivePort {
+  return scopedPort<WorkArchivePort>(make, () => brands.bootstrap)
 }
 
 /** 37 工作模型（事项 / 目标 / 待办 / 计划 / 复盘）：一个品牌一份 `Work`。 */
