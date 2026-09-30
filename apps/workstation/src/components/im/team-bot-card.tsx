@@ -152,7 +152,8 @@ export function TeamBotCard({
     save.mutate(new FormData(e.currentTarget))
   }
 
-  const showForm = !configured || editing
+  // 少字：没配时卡上只有一个主按钮，点开才出表单
+  const showForm = editing
   return (
     <Card data-testid={`im-${channel}`}>
       <CardHeader className="flex flex-row items-center justify-between gap-2">
@@ -222,6 +223,12 @@ export function TeamBotCard({
               ) : null}
             </div>
           </form>
+        ) : !configured ? (
+          <div>
+            <Button size="sm" onClick={() => setEditing(true)}>
+              {t('im.team.setup')}
+            </Button>
+          </div>
         ) : (
           <div className="flex items-center gap-2">
             <Button variant="outline" size="sm" onClick={() => setEditing(true)}>

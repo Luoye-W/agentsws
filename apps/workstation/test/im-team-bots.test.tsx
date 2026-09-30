@@ -77,6 +77,9 @@ describe('飞书 / 钉钉两张卡', () => {
   it('飞书：原生表单提交，值原样交出去，提交完输入框清空', async () => {
     renderWithProviders(<ImChannelsPage />)
     const card = await screen.findByTestId('im-feishu')
+    // 没配时卡上只有一个主按钮，点开才出表单
+    expect(within(card).queryByRole('button', { name: '保存并连接' })).toBeNull()
+    fireEvent.click(within(card).getByRole('button', { name: '填应用凭据' }))
     const [appId, secret] = within(card).getAllByDisplayValue('') as HTMLInputElement[]
     fireEvent.change(appId as HTMLInputElement, { target: { value: 'cli_a1b2c3d4e5f60718' } })
     fireEvent.change(secret as HTMLInputElement, { target: { value: 'TOP-SECRET' } })
