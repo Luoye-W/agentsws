@@ -730,6 +730,92 @@ describe('消息：没人接的与交给岗位（WP212）', () => {
     expect(h.events.some((e) => e.type === 'messages.route_confirmed')).toBe(true)
   })
 
+  it('勾了「记住」交给岗位：同一发件人的下一封直接交出去、不调模型，照常计数、也能改判', async () => {
+    const opened: string[] = []
+    const inbox = letters([{ uid: 41, mime: mime({ uid: 41, from: 'clara@review.example' }) }])
+    const h = harness({
+      folders: { INBOX: inbox },
+      triage: mediaTriage,
+      extra: {
+        positions,
+        openAtPosition: async (input) => {
+          opened.push(input.thread_id)
+          return { matter_id: `mat_pr_${opened.length}` }
+        },
+      },
+    })
+    await h.messages.poll()
+    const first = (await h.messages.store.list({}))[0] as MessageRecord
+    const out = await h.messages.port.confirmRoute?.(ACTOR, first.id, {
+      route: 'position',
+      position_id: 'pr',
+      remember_sender: true,
+    })
+    expect(out?.rule).toMatchObject({ sender: 'clara@review.example', position: 'pr' })
+    // 同一个发件人又来一封（新会话）：规则层直达、不花模型，直接交给公共关系
+    inbox.push(...letters([{ uid: 42, mime: mime({ uid: 42, from: 'clara@review.example' }) }]))
+    await h.messages.poll()
+    expect(h.calls).toEqual(['triage'])
+    expect(opened).toHaveLength(2)
+    const second = (await h.messages.store.list({})).find((m) => m.uid === 42) as MessageRecord
+    expect(second.handled).toMatchObject({
+      as: 'position',
+      position_id: 'pr',
+      matter_id: 'mat_pr_2',
+    })
+    expect((await h.messages.port.threads(ACTOR, { claim: 'unclaimed' })).threads).toHaveLength(0)
+    const overview = await h.messages.port.overview?.(ACTOR)
+    expect(overview?.handed_by_position).toEqual([{ position_id: 'pr', count: 2 }])
+    // 自动交出去的也能改判
+    const changed = await h.messages.port.setKind?.(ACTOR, second.id, { kind: 'partnership' })
+    expect(changed?.message.triage?.kind).toBe('partnership')
+    expect(
+      h.events.some(
+        (e) =>
+          e.type === 'messages.route_confirmed' &&
+          (e.payload as { by?: string }).by === 'sender_rule',
+      ),
+    ).toBe(true)
+  })
+
+  it('没勾「记住」：下一封照旧只给建议（主按钮是那个岗位），不自动交', async () => {
+    const opened: string[] = []
+    const inbox = letters([{ uid: 43, mime: mime({ uid: 43, from: 'dan@review.example' }) }])
+    const h = harness({
+      folders: { INBOX: inbox },
+      triage: mediaTriage,
+      extra: {
+        positions,
+        openAtPosition: async (input) => {
+          opened.push(input.thread_id)
+          return { matter_id: 'mat_x' }
+        },
+      },
+    })
+    await h.messages.poll()
+    const first = (await h.messages.store.list({}))[0] as MessageRecord
+    await h.messages.port.confirmRoute?.(ACTOR, first.id, { route: 'position', position_id: 'pr' })
+    inbox.push(...letters([{ uid: 44, mime: mime({ uid: 44, from: 'dan@review.example' }) }]))
+    await h.messages.poll()
+    expect(opened).toHaveLength(1)
+    const { threads } = await h.messages.port.threads(ACTOR, { claim: 'unclaimed' })
+    expect(threads).toHaveLength(1)
+    expect(threads[0]?.suggest).toEqual({ action: 'hand', position: 'pr' })
+  })
+
+  it('「负责人」不进「交给 X ▾」', async () => {
+    const h = harness({
+      extra: {
+        positions: () => [
+          ...positions(),
+          { id: 'owner', name_zh: '负责人', name_en: 'Lead', open: true },
+        ],
+      },
+    })
+    const overview = await h.messages.port.overview?.(ACTOR)
+    expect(overview?.positions.map((p) => p.id)).toEqual(['customer-care', 'pr'])
+  })
+
   it('岗位没开：不交、说一句人话，信还在没人接的里', async () => {
     const h = harness({
       folders: { INBOX: letters([{ uid: 32, mime: mime({ uid: 32 }) }]) },

@@ -62,6 +62,7 @@ import {
   MemoryMailboxStateStore,
   MemoryMessageStore,
   mailboxFoldersFrom,
+  matchSenderRule,
   POSITION_OF_ROUTE,
   positionForKind,
   ReplySuggester,
@@ -259,6 +260,9 @@ export interface MessagesOptions {
   /** WP212：一次纠正（没勾「以后都这样」的改判 / 改岗位）进学习回路（24 §3 的 lesson 池）。 */
   onCorrection?(correction: MessageCorrection): void
 }
+
+/** WP212：不进「交给 X ▾」的岗位（负责人：自己处理用「我自己回」）。 */
+export const NOT_HANDABLE_POSITIONS: readonly string[] = ['owner']
 
 /** WP212：没给 {@link MessagesOptions.positions} 时那三个岗位的名字。 */
 const ROUTE_POSITION_NAMES: Record<'support' | 'kol' | 'b2b', { zh: string; en: string }> = {
@@ -704,6 +708,8 @@ export function createMessages(options: MessagesOptions): MessagesAssembly {
         return false
       }
     },
+    // WP212：「记住」过岗位的发件人——下一封直接交给那个岗位（63 那三条之外的岗位在这里交）
+    after_triage: (record, triage) => autoHand(record, triage),
     // WP163 / WP167：四个开关每封现查（按邮箱各一份）；每个动作一条事件 + 记住最近一次失败
     support_mailbox: (account) => switchesOf(account),
     on_mailbox_action: onMailboxAction,
@@ -859,7 +865,8 @@ export function createMessages(options: MessagesOptions): MessagesAssembly {
   /** 「交给 X ▾」那一列：装配方给了就用它，否则只有 63 那三条路对应的三个岗位。 */
   const positionOptions = (): MessagePositionOption[] => {
     const given = options.positions?.()
-    if (given !== undefined) return given
+    // Fable 09-30：「负责人」不进「交给 X ▾」——负责人自己处理用「我自己回」
+    if (given !== undefined) return given.filter((p) => !NOT_HANDABLE_POSITIONS.includes(p.id))
     const open = { support: supportEnabled(), kol: kolEnabled(), b2b: b2bEnabled() }
     return (['support', 'kol', 'b2b'] as const).map((route) => ({
       id: POSITION_OF_ROUTE[route],
@@ -950,6 +957,84 @@ export function createMessages(options: MessagesOptions): MessagesAssembly {
     const messages = await store.thread(thread_id)
     const summary = (await enrich(aggregateThreads(messages)))[0]
     return summary === undefined ? { messages } : { summary, messages }
+  }
+
+  /**
+   * 交给 63 那三条路之外的岗位（54 的「交给这个岗位一件事」）。岗位没开 / 没接装配口 / 那边不接
+   * → 不交，回一句人话。人点的「交给 X」与「记住」过的发件人自动交走同一条。
+   */
+  const handToPosition = async (
+    row: MessageRecord,
+    position_id: string,
+    person_id: PersonId,
+  ): Promise<{ accepted: boolean; matter_id?: string; refused?: string }> => {
+    const option = positionOptions().find((p) => p.id === position_id)
+    const open = options.openAtPosition
+    if (open === undefined || option === undefined || !option.open)
+      return { accepted: false, refused: `${option?.name_zh ?? position_id}岗位没开，开了才能交。` }
+    try {
+      const out = await open({
+        position_id,
+        person_id,
+        title: row.subject.trim() === '' ? `来自 ${row.from.email} 的信` : row.subject,
+        ...(row.triage?.summary === undefined || row.triage.summary === ''
+          ? {}
+          : { summary: row.triage.summary }),
+        thread_id: row.thread_id,
+      })
+      return { accepted: true, matter_id: out.matter_id }
+    } catch (e) {
+      return {
+        accepted: false,
+        refused: e instanceof Error && e.message !== '' ? e.message : '这个岗位没接住。',
+      }
+    }
+  }
+
+  /**
+   * WP212（Fable 09-30）：勾过「记住」的发件人，下一封**直接交给那个岗位**——所有岗位都一样，
+   * 「记住」就是人已经表过态了。63 那三条路由规则里的 `route` 管（分拣直接交）；其余岗位在这里交。
+   * 交不出去（岗位关了、那人名下没这个岗位的职责）就留在没人接的里，主按钮仍是那个岗位。
+   */
+  const autoHand = async (record: MessageRecord, triage: MessageTriage): Promise<void> => {
+    const position_id = triage.suggested_position
+    if (triage.kind_by !== 'sender_rule' || position_id === undefined) return
+    if (routeOfPosition(position_id) !== undefined) return
+    const rule = matchSenderRule(rulesCache, record.from.email)
+    const person = rule?.by ?? options.position?.()?.person_id
+    if (person === undefined) return
+    const out = await handToPosition(record, position_id, person)
+    if (!out.accepted) return
+    const at = clock.now()
+    await store.update(record.id, {
+      handled: {
+        as: 'position',
+        position_id,
+        ...(out.matter_id === undefined ? {} : { matter_id: out.matter_id }),
+        by: person,
+        at,
+      },
+      ...(out.matter_id === undefined
+        ? {}
+        : { linked: { type: 'matter' as const, id: out.matter_id } }),
+    })
+    options.appendEvent({
+      schema_version: 1,
+      workspace_id,
+      type: 'messages.route_confirmed',
+      actor: { kind: 'system', id: 'sender_rule' },
+      subject: { type: 'message', id: record.id },
+      correlation: { trace_id: `tr_msgauto_${record.id}_${at}` },
+      // 63 §10：没有正文、地址遮过
+      payload: {
+        route: 'position',
+        handed_off: true,
+        by: 'sender_rule',
+        position_id,
+        account: maskAddress(record.account),
+        ...(out.matter_id === undefined ? {} : { matter_id: out.matter_id }),
+      },
+    })
   }
 
   /** 一次纠正：存下来（「你教过它」），没勾「以后都这样」的进学习回路。 */
@@ -1463,37 +1548,11 @@ export function createMessages(options: MessagesOptions): MessagesAssembly {
       } else if (route !== 'inbox') {
         position_id = POSITION_OF_ROUTE[route]
       }
-      const option =
-        position_id === undefined ? undefined : positionOptions().find((p) => p.id === position_id)
       let handed: { accepted: boolean; matter_id?: string; refused?: string } = {
         accepted: false,
       }
       if (route === 'position') {
-        const open = options.openAtPosition
-        if (open === undefined || option === undefined || !option.open) {
-          handed = {
-            accepted: false,
-            refused: `${option?.name_zh ?? position_id}岗位没开，开了才能交。`,
-          }
-        } else {
-          try {
-            const out = await open({
-              position_id: position_id as string,
-              person_id: actor.person_id,
-              title: row.subject.trim() === '' ? `来自 ${row.from.email} 的信` : row.subject,
-              ...(row.triage?.summary === undefined || row.triage.summary === ''
-                ? {}
-                : { summary: row.triage.summary }),
-              thread_id: row.thread_id,
-            })
-            handed = { accepted: true, matter_id: out.matter_id }
-          } catch (e) {
-            handed = {
-              accepted: false,
-              refused: e instanceof Error && e.message !== '' ? e.message : '这个岗位没接住。',
-            }
-          }
-        }
+        handed = await handToPosition(row, position_id as string, actor.person_id)
       } else if (route !== 'inbox') {
         try {
           handed = await handOff(row, route, undefined, 'user')
