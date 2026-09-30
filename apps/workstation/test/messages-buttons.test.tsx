@@ -472,3 +472,13 @@ describe('WP204：列表、侧栏与键盘', () => {
     api.listMessageAccounts.mockImplementation(async () => ({ accounts: [account] }))
   })
 })
+
+describe('WP204：正文框的高度', () => {
+  it('不再停在浏览器缺省的 150px：按正文与图片粗估，夹在 120–900', async () => {
+    const { estimateHeight } = await import('@/components/messages/message-body')
+    expect(estimateHeight('<p>hi</p>')).toBeGreaterThanOrEqual(120)
+    const withBanner = estimateHeight('<p><img height="300" /></p><p>正文</p>')
+    expect(withBanner).toBeGreaterThan(estimateHeight('<p>正文</p>') + 250)
+    expect(estimateHeight('<p>x</p>'.repeat(500))).toBe(900)
+  })
+})
