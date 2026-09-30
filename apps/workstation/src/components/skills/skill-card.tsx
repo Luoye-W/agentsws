@@ -99,14 +99,17 @@ export function SkillDetails({
       <div>
         <div className="text-xs text-muted-foreground">{t('skills.sections')}</div>
         <ul className="mt-1 flex flex-wrap gap-1">
-          {skill.sections.map((s) => (
-            <li key={s.id} className="flex items-center gap-1">
-              <Badge variant="outline" className="text-[11px]">
-                {s.heading}
-              </Badge>
-              {s.origin === 'learned' ? <OriginBadge origin="learned" /> : null}
-            </li>
-          ))}
+          {/* 标题前那段引言（heading 为空）不画成一个空徽标 */}
+          {skill.sections
+            .filter((s) => s.heading.trim() !== '')
+            .map((s) => (
+              <li key={s.id} className="flex items-center gap-1">
+                <Badge variant="outline" className="text-[11px]">
+                  {s.heading}
+                </Badge>
+                {s.origin === 'learned' ? <OriginBadge origin="learned" /> : null}
+              </li>
+            ))}
         </ul>
       </div>
       <div>
