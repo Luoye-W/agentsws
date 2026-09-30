@@ -116,14 +116,15 @@ describe('WP127 验证三步：设置页那一行', () => {
     const user = userEvent.setup()
     renderWithProviders(<ModelsPanel assignment="asg_owner" />)
     await user.click(await screen.findByRole('button', { name: '测试' }))
-    const steps = await screen.findByTestId('model-check-steps')
-    const items = within(steps).getAllByRole('listitem')
-    expect(items.map((li) => [li.dataset.step, li.dataset.ok])).toEqual([
-      ['connect', 'true'],
-      ['text', 'true'],
-      ['vision', 'false'],
+    // WP214：三步是一排状态图标（四态），卡在「看图」那一格
+    await screen.findByTestId('model-test-result')
+    const items = within(screen.getByTestId('model-status')).getAllByTestId('status-icon')
+    expect(items.map((i) => [i.dataset.key, i.dataset.state])).toEqual([
+      ['connect', 'ok'],
+      ['text', 'ok'],
+      ['vision', 'fail'],
     ])
-    expect(steps.textContent).toContain('看得懂图')
+    expect(items[2]?.getAttribute('aria-label')).toContain('看图：不通')
     expect((await screen.findByTestId('model-test-result')).textContent).toContain('看不了图')
   })
 })

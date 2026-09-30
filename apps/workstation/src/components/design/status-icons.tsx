@@ -38,8 +38,10 @@ export interface StatusItem {
   stateText?: string
   /** tooltip 里的细节：上次测 · 耗时 · token、地址这类。 */
   detail?: string
-  /** 图标旁边常显的一个短数字（例如余额 ¥28.11）——数字不算说明字。 */
+  /** 图标旁边常显的一个短标签（余额 ¥28.11、账号名）——数字与名字不算说明字。 */
   value?: string
+  /** 这一格的 `data-testid`（老测试按它找的，挪到这一格上）。 */
+  testId?: string
 }
 
 /** 每一态的底色与前景（令牌，深浅各一套）。 */
@@ -105,7 +107,12 @@ function StatusIconItem({ item, stateWord }: { item: StatusItem; stateWord: stri
   const mark = MARK[item.state]
   const Mark = mark.icon
   return (
-    <li className="flex items-center gap-1" data-key={item.key} data-state={item.state}>
+    <li
+      className="flex min-w-0 items-center gap-1"
+      data-key={item.key}
+      data-state={item.state}
+      {...(item.testId === undefined ? {} : { 'data-testid': item.testId })}
+    >
       <Tooltip>
         <TooltipTrigger asChild>
           <span
@@ -138,7 +145,11 @@ function StatusIconItem({ item, stateWord }: { item: StatusItem; stateWord: stri
         <TooltipContent className="whitespace-pre-line">{text}</TooltipContent>
       </Tooltip>
       {item.value === undefined ? null : (
-        <span className="ws-num text-xs tabular-nums" data-slot="data" data-testid="status-value">
+        <span
+          className="max-w-48 truncate text-xs tabular-nums"
+          data-slot="data"
+          data-testid="status-value"
+        >
           {item.value}
         </span>
       )}

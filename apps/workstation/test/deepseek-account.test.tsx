@@ -241,11 +241,24 @@ describe('WP134 那一个件：登录 → 浏览器 → 账号与余额 → 三�
     renderWithProviders(<DeepSeekAccountLogin onConnected={connected} />)
     expect((await screen.findByTestId('dsa-signed-in')).textContent).toContain('替身账号')
     expect(screen.getByTestId('dsa-balance').textContent).toContain('¥42.50')
-    expect(screen.getByTestId('dsa-balance').textContent).toContain('另有赠送 ¥10.00')
+    // WP214：赠送进钱包图标的 tooltip
+    expect(
+      screen
+        .getByTestId('dsa-balance')
+        .querySelector('[data-testid="status-icon"]')
+        ?.getAttribute('data-hint'),
+    ).toContain('另有赠送 ¥10.00')
+    // 刚验证完：「通了」那句出一下（两分钟内）
     await screen.findByTestId('dsa-ok')
     expect(state.saves).toEqual(['deepseek-flash'])
     expect(state.tests).toBe(1)
-    expect(screen.getByTestId('model-check-steps')).toBeTruthy()
+    // 三步合成一排图标：连通 / 回文字 / 看图都通
+    const icons = within(screen.getByTestId('model-status')).getAllByTestId('status-icon')
+    expect(icons.map((i) => [i.dataset.key, i.dataset.state])).toEqual([
+      ['connect', 'ok'],
+      ['text', 'ok'],
+      ['vision', 'ok'],
+    ])
     expect(connected).toHaveBeenCalledTimes(1)
   })
 
@@ -409,7 +422,9 @@ describe('WP150 登录失效：卡片说人话、按钮变「重新登录」，"
       </>,
     )
     await screen.findByTestId('dsa-signed-in')
-    expect(screen.getByTestId('model-check-steps')).toBeTruthy()
+    expect(screen.getByTestId('model-status')).toBeTruthy()
+    // WP214：上次验证过的（不是这一次打开里刚测的）不再常显「通了」那句
+    expect(screen.queryByTestId('dsa-ok')).toBeNull()
     expect(screen.queryByTestId('no-model-chip')).toBeNull()
     expect(state.saves).toEqual([]) // 已经验证过的不重复存
 
@@ -419,7 +434,7 @@ describe('WP150 登录失效：卡片说人话、按钮变「重新登录」，"
     await push('model.account_signed_out')
     expect(await screen.findByTestId('dsa-expired')).toBeTruthy()
     expect(await screen.findByTestId('no-model-chip')).toBeTruthy()
-    expect(screen.queryByTestId('model-check-steps')).toBeNull()
+    expect(screen.queryByTestId('model-status')).toBeNull()
 
     // 点「重新登录」→ 登上 → 自己再存一次、再测一次（上一次的"存 + 测"已作废）
     state.afterLogin = SIGNED_IN
