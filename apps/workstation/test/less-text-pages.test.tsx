@@ -348,6 +348,19 @@ describe('消息渠道', () => {
   })
 })
 
+describe('WP214：消息渠道的状态是小图标', () => {
+  it('没绑 / 没配：两张卡各一个「没测」图标，状态词在 tooltip 里', async () => {
+    renderWithProviders(<ImChannelsPage />)
+    await screen.findByText('微信（你自己的）')
+    const wechat = within(screen.getByTestId('im-wechat-state')).getByTestId('status-icon')
+    expect(wechat.dataset.state).toBe('unknown')
+    expect(wechat.getAttribute('data-hint')).toContain('没绑')
+    const wecom = within(screen.getByTestId('im-wecom-state')).getByTestId('status-icon')
+    expect(wecom.dataset.state).toBe('unknown')
+    expect(wecom.getAttribute('data-hint')).toContain('没配')
+  })
+})
+
 describe('网站聊天窗', () => {
   it('外观、转发方式、预览、对话：每张卡都不超；扣钱的提示看得见', async () => {
     const { container } = renderWithProviders(<ChatWindowPage />)
