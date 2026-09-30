@@ -103,6 +103,8 @@ export const LAYOUT_BY_KIND: Record<Exclude<DeckKind, 'staged_change'>, DeckLayo
   b2b_sender_choice: 'choice',
   // WP180：装 / 升级 / 卸载一个官方插件——一道是非题（卡上写名字、版本、来源、许可证、工具、出不出网）
   official_plugin: 'policy',
+  // WP210：客户来信投不进——主「再投一次」、次「去邮箱回复」
+  inbound_dead_letter: 'policy',
 }
 
 /**

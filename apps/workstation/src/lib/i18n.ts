@@ -3119,6 +3119,12 @@ const zh: Table = {
   'kind.official_plugin': '官方插件',
   'category.official_plugin': '官方插件',
   'verb.policy.approve.official_plugin': '照做',
+  // WP210：客户来信彻底投不进的那张卡
+  'kind.inbound_dead_letter': '没进来的信',
+  'category.dead_letter': '没进来的信',
+  'verb.dead_letter.approve': '再投一次',
+  'verb.dead_letter.reject': '去邮箱回复',
+  'deck.dead_letter.reply_myself': '我自己去邮箱回复',
   // ── WP142：红人为主的朋友第一步 ──
   'onboarding.ai.official.pending': '正在连 Agents 工坊云…',
   'onboarding.ai.official.offline': '网络不通，这一下没连上 Agents 工坊云。',
@@ -6502,6 +6508,12 @@ const en: Table = {
   'kind.official_plugin': 'Official plugin',
   'category.official_plugin': 'Official plugin',
   'verb.policy.approve.official_plugin': 'Go ahead',
+  // WP210: a customer message that never made it in
+  'kind.inbound_dead_letter': 'Message not processed',
+  'category.dead_letter': 'Message not processed',
+  'verb.dead_letter.approve': 'Try again',
+  'verb.dead_letter.reject': 'Reply from mailbox',
+  'deck.dead_letter.reply_myself': 'I will reply from the mailbox myself',
   // ── WP142：红人为主的朋友第一步 ──
   'onboarding.ai.official.pending': 'Connecting to Agents Workshop cloud…',
   'onboarding.ai.official.offline':

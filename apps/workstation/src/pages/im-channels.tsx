@@ -13,8 +13,8 @@
  * 两格共同的一条：**审批动作不在 IM 里做**。卡片在微信 / 企业微信里只有一段
  * 文字摘要 + 一条「去工作台处理」的链接，按钮一个都没有（凭据与决策不经 IM）。
  *
- * WP210（Luoye 09-30 减字）：每张渠道卡只留名字 + 问号（一句话与来龙去脉、条款风险都在里面）
- * + 状态 + 主按钮；「只存本机、不经 AI」这类安全承诺和底部那句「只投摘要 + 链接」统一进页头
+ * WP210（Luoye 09-30 减字）：每张渠道卡只留名字 + 问号（一句话与来龙去脉）+ 状态 + 主按钮；
+ * 例外是微信的条款风险（牵连主微信号），一行留在卡上（Fable 09-30 定）；「只存本机、不经 AI」这类安全承诺和底部那句「只投摘要 + 链接」统一进页头
  * 的问号，说一次。
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -31,7 +31,7 @@ import { TutorialLink } from '@/components/help/tutorial-link'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Hint } from '@/components/ui/hint'
+import { Hint, SafetyNote } from '@/components/ui/hint'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -183,12 +183,11 @@ export function ImChannelsPage(): ReactNode {
         <CardHeader className="flex flex-row items-center justify-between gap-2">
           <CardTitle className="flex items-center gap-1.5 text-base">
             {t('im.wechat.title')}
-            {/* WP210：一句话 + 来龙去脉 + 条款风险（牵连主号）+ 它不做的三件事，都在这一个问号里 */}
+            {/* WP210：一句话 + 来龙去脉 + 它不做的三件事，都在这一个问号里 */}
             <Hint
               text={[
                 t('im.wechat.line'),
                 t('im.wechat.what'),
-                t('im.wechat.terms'),
                 t('im.wechat.not.colleagues'),
                 t('im.wechat.not.group'),
                 t('im.wechat.not.approve'),
@@ -205,6 +204,11 @@ export function ImChannelsPage(): ReactNode {
           )}
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
+          {/*
+            WP210 例外（Fable 09-30 定）：条款风险关系到用户的主微信号会不会被封，不能只藏在问号里——
+            原话一行留在卡上，条款出处在它旁边的问号里。
+          */}
+          <SafetyNote text={t('im.wechat.terms.short')} hint={t('im.wechat.terms')} />
           {wechat?.allowed === false ? (
             <p role="alert" className="text-sm text-destructive">
               {wechat.reason}

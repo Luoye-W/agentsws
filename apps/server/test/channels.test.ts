@@ -20,7 +20,13 @@ import {
   startFakeImapServer,
 } from '../../../packages/channels/test/fake-imap-server.js'
 import type { MailAccount } from '../src/index.js'
-import { type ChannelsAssembly, createChannels, forDisplay, OUTBOUND_HALTED } from '../src/index.js'
+import {
+  type ChannelsAssembly,
+  createChannels,
+  deadLetterToRequeue,
+  forDisplay,
+  OUTBOUND_HALTED,
+} from '../src/index.js'
 
 const USER = 'support@shop.example'
 const PASS = 'app-specific-password'
@@ -1022,5 +1028,22 @@ describe('死信自动重投（WP210，Luoye 09-30「应该自动重投，不该
     expect(gaveUp).toHaveLength(1)
     expect(gaveUp[0]?.payload).toMatchObject({ customer: false })
     expect(r.cards).toEqual([])
+  })
+})
+
+describe('WP210：客户来信投不进那张卡的两个按钮（Fable 09-30）', () => {
+  const card = (state: string, payload: unknown = { dead_letter_id: 'dl_in_1' }) => ({
+    kind: 'inbound_dead_letter',
+    state,
+    payload,
+  })
+
+  it('「再投一次」（批准）→ 重投那一条；「去邮箱回复」（驳回）/ 稍后 → 不动', () => {
+    expect(deadLetterToRequeue(card('approved'))).toBe('dl_in_1')
+    expect(deadLetterToRequeue(card('approved_edited'))).toBe('dl_in_1')
+    expect(deadLetterToRequeue(card('rejected'))).toBeUndefined()
+    expect(deadLetterToRequeue(card('snoozed'))).toBeUndefined()
+    expect(deadLetterToRequeue(card('approved', {}))).toBeUndefined()
+    expect(deadLetterToRequeue({ ...card('approved'), kind: 'policy_change' })).toBeUndefined()
   })
 })

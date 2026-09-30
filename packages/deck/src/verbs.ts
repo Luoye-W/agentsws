@@ -133,6 +133,11 @@ export function verbKey(layout: DeckLayout, action: DeckAction, kind?: string): 
  * 离职交接卡借了这个排版，问的却是「按这份清单转不转」。
  */
 const VERB_BY_KIND: Readonly<Record<string, Partial<Record<DeckAction, string>>>> = {
+  // WP210：客户来信投不进。「驳回」在这里不是否定什么，是「我自己去邮箱回」
+  inbound_dead_letter: {
+    approve: 'verb.dead_letter.approve',
+    reject: 'verb.dead_letter.reject',
+  },
   b2b_account_transfer: {
     approve: 'verb.handoff.approve.account_transfer',
     instruct: 'verb.handoff.instruct.account_transfer',
@@ -184,6 +189,8 @@ export const CATEGORY_BY_KIND: Partial<Record<DeckKind, string>> = {
   b2b_sender_choice: 'sender_choice',
   // WP180：官方插件的装 / 升级 / 卸载卡
   official_plugin: 'official_plugin',
+  // WP210
+  inbound_dead_letter: 'dead_letter',
 }
 
 /** `ChangeKind` → 类别人话（`staged_change` 专用；画布头一行写的就是这一列）。 */

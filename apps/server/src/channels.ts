@@ -348,6 +348,21 @@ export interface DeadLetterEscalation {
   last_error?: string
 }
 
+/**
+ * WP210（Fable 09-30）：客户来信投不进的那张卡（`inbound_dead_letter`）被决定了，要不要重投、
+ * 重投哪一条。批准（「再投一次」）回死信 id；驳回（「去邮箱回复」）、稍后、别的卡都回 `undefined`。
+ */
+export function deadLetterToRequeue(item: {
+  kind: string
+  state: string
+  payload?: unknown
+}): string | undefined {
+  if (item.kind !== 'inbound_dead_letter') return undefined
+  if (item.state !== 'approved' && item.state !== 'approved_edited') return undefined
+  const id = (item.payload as { dead_letter_id?: unknown } | undefined)?.dead_letter_id
+  return typeof id === 'string' && id !== '' ? id : undefined
+}
+
 export interface MailPollReport {
   accounts: number
   messages: number

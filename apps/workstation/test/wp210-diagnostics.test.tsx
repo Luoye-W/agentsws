@@ -86,16 +86,20 @@ describe('设置 → 诊断：没进来的信', () => {
 })
 
 describe('消息渠道页减字', () => {
-  it('卡上只有名字 + 问号 + 状态 + 主按钮；安全承诺与「只投摘要」进页头问号', async () => {
+  it('卡上只有名字 + 问号 + 状态 + 主按钮（微信条款风险例外）；安全承诺与「只投摘要」进页头问号', async () => {
     renderWithProviders(<ImChannelsPage />)
     const header = await screen.findByTestId('im-header-hint')
     const hint = header.getAttribute('data-hint') ?? ''
     expect(hint).toContain('不经 AI')
     expect(hint).toContain('Secret 直接进本机加密库')
     expect(hint).toContain('不放通过 / 驳回按钮')
-    expect(document.querySelector('[data-slot="safety-note"]')).toBeNull()
-    // 条款风险（牵连主号）没丢：在微信那张卡的问号里
-    expect(screen.getByTestId('im-wechat-what').getAttribute('data-hint') ?? '').toContain('6.1')
+    // 例外（Fable 09-30）：微信的条款风险一行留在卡上，原话照旧，条款出处在旁边问号里
+    const notes = [...document.querySelectorAll('[data-slot="safety-note"]')]
+    expect(notes).toHaveLength(1)
+    expect(notes[0]?.textContent).toContain('会牵连你的主微信号')
+    expect(notes[0]?.querySelector('[data-slot="hint"]')?.getAttribute('data-hint')).toContain(
+      '6.1',
+    )
     expect(screen.getByTestId('im-wechat-what').getAttribute('data-hint') ?? '').toContain(
       '扫一次码',
     )
@@ -111,5 +115,39 @@ describe('accountLabel', () => {
     )
     expect(accountLabel({ ...base, alias: '主店' })).toBe('主店')
     expect(accountLabel(base)).toBe('任意邮箱（IMAP / SMTP）')
+  })
+})
+
+describe('客户来信投不进的那张卡（Fable 09-30：两个按钮）', () => {
+  it('主按钮「再投一次」、次按钮「去邮箱回复」；后者直接记一笔并带人去消息页', async () => {
+    const { DeckCardView } = await import('@/components/deck/deck-card')
+    const { draftCard } = await import('./fixtures')
+    const decided: { action: string; reason?: string }[] = []
+    const user = userEvent.setup()
+    renderWithProviders(
+      <DeckCardView
+        card={draftCard({
+          kind: 'inbound_dead_letter',
+          layout: 'policy',
+          title: '有一封客户来信没能处理，请看一眼',
+          available_actions: ['approve', 'reject', 'snooze', 'open'],
+        })}
+        mode="zh_summary"
+        onDecide={(r) => {
+          decided.push(r)
+        }}
+        onOpen={() => {}}
+      />,
+      '/',
+    )
+    const bar = screen.getByTestId('deck-action-bar')
+    const primary = within(bar).getByRole('button', { name: '再投一次' })
+    expect(primary.getAttribute('data-rank')).toBe('primary')
+    const reply = within(bar).getByRole('button', { name: '去邮箱回复' })
+    expect(reply.getAttribute('data-rank')).toBe('secondary')
+    await user.click(reply)
+    // 不开写理由的面板，直接决定
+    expect(decided).toEqual([{ action: 'reject', reason: '我自己去邮箱回复', version: 1 }])
+    expect(screen.getByTestId('deck-card').getAttribute('data-go-messages')).toBe('true')
   })
 })
