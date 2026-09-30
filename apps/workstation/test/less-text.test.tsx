@@ -585,7 +585,7 @@ const LAST_OK = {
   model: 'deepseek/deepseek-flash',
   duration_ms: 2099,
   detail: '通了：连得上、文字能回、图也看得懂（用了 434 个 token）',
-  checked_at: '2026-09-30T06:00:00.000Z',
+  checked_at: '2026-09-01T06:00:00.000Z',
   steps: [
     { step: 'connect', ok: true },
     { step: 'text', ok: true },
@@ -634,6 +634,16 @@ describe('WP214 第四档：配好的卡上状态用图标', () => {
       expect(row.querySelector('[data-testid="model-status"]')?.getAttribute('data-slot')).toBe(
         'status',
       )
+    } finally {
+      fourth.providers = []
+    }
+  })
+
+  it('服务端的上次测试在两分钟内（刷新之后也算）：「通了」那句照样出；过了两分钟就只剩图标', async () => {
+    fourth.providers = [{ ...ROW, last_test: { ...LAST_OK, checked_at: new Date().toISOString() } }]
+    try {
+      renderWithProviders(<ModelsPanel assignment="asg_1" />)
+      expect((await screen.findByTestId('model-test-result')).textContent).toContain('通了')
     } finally {
       fourth.providers = []
     }

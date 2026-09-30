@@ -155,8 +155,10 @@ vi.mock('@/lib/api', async () => {
     },
     testModelProvider: async () => {
       state.tests += 1
-      state.providers = [{ ...ACCOUNT_ROW, last_test: state.test }]
-      return state.test
+      // 服务端在测的那一刻盖时间戳（WP214：「通了」那句只在这之后两分钟内出）
+      const result = { ...state.test, checked_at: new Date().toISOString() }
+      state.providers = [{ ...ACCOUNT_ROW, last_test: result }]
+      return result
     },
     signOutDeepSeekAccount: async () => {
       state.signOuts += 1

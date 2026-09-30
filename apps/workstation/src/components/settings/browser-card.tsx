@@ -28,6 +28,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Check, Globe, Loader2, Search, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
+import { InfoTip } from '@/components/design'
 import { TutorialLink } from '@/components/help/tutorial-link'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -437,12 +438,16 @@ export function BrowserCard({ assignment }: { assignment?: string }): React.Reac
             data-testid="browser-probe-result"
             data-ok={probe.ok}
           >
-            {probe.ok
-              ? t('settings.browser.probe.ok', {
-                  endpoint: probe.endpoint,
-                  browser: probe.browser ?? 'Chrome',
-                })
-              : t('settings.browser.probe.fail', { detail: probe.detail ?? '' })}
+            {/*
+              WP214（Fable 09-30）：地址和上面的输入框重复——卡面上只说连上了哪个浏览器，地址进 tooltip
+            */}
+            {probe.ok ? (
+              <InfoTip text={probe.endpoint} testId="browser-probe-endpoint">
+                {t('settings.browser.probe.ok.short', { browser: probe.browser ?? 'Chrome' })}
+              </InfoTip>
+            ) : (
+              t('settings.browser.probe.fail', { detail: probe.detail ?? '' })
+            )}
           </p>
         )}
 

@@ -197,12 +197,22 @@ export function InfoTip({
   )
 }
 
-/** 刚点完测试之后，结果小字显示多久（36 §7 第四档：两分钟）。 */
+/**
+ * 服务端给的上次测试时间（ISO）→ 毫秒；没有 / 认不出就是 undefined。
+ * Fable 09-30：「刚测完两分钟」统一按**服务端的上次测试时间**算，刷新后仍在两分钟内的照样显示。
+ */
+export function testedMs(result: { checked_at?: string } | undefined): number | undefined {
+  if (result?.checked_at === undefined) return undefined
+  const ms = Date.parse(result.checked_at)
+  return Number.isFinite(ms) ? ms : undefined
+}
+
+/** 刚测完之后，结果小字显示多久（36 §7 第四档：两分钟）。 */
 export const FRESH_MS = 120_000
 
 /**
- * 「刚发生」：`at`（毫秒时间戳）之后 {@link FRESH_MS} 以内为 true，到点自己翻成 false（重画一次）。
- * `at` 为 undefined（这一次打开页面没点过测试）一律 false——上次测的结果只在图标的 tooltip 里。
+ * 「刚发生」：`at`（毫秒时间戳，一般是服务端的上次测试时间，见 {@link testedMs}）之后 {@link FRESH_MS}
+ * 以内为 true，到点自己翻成 false（重画一次）。`at` 为 undefined 一律 false——结果只在图标的 tooltip 里。
  */
 export function useFresh(at: number | undefined, ms: number = FRESH_MS): boolean {
   const [now, setNow] = useState(() => Date.now())

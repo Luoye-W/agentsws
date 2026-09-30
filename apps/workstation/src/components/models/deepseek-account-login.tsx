@@ -27,7 +27,7 @@ import { Check, ExternalLink, Loader2, LogIn, LogOut, UserRound, Wallet } from '
 import { useEffect, useRef, useState } from 'react'
 import { BrandIcon } from '@/components/brand-icons'
 import { openExternal } from '@/components/connections/bridge'
-import { StatusIcons, type StatusItem, useFresh } from '@/components/design'
+import { StatusIcons, type StatusItem, testedMs, useFresh } from '@/components/design'
 import { ModelStatusIcons } from '@/components/models/model-check-steps'
 import { QuotaNotice } from '@/components/models/quota-notice'
 import { Button } from '@/components/ui/button'
@@ -150,9 +150,6 @@ export function DeepSeekAccountLogin({
   const client = useQueryClient()
   const [failure, setFailure] = useState<string | undefined>(undefined)
   const [test, setTest] = useState<ModelTestResult | undefined>(undefined)
-  /** WP214：这一次打开里刚验证完的时刻（「通了」那句只在两分钟内出）。 */
-  const [testedAt, setTestedAt] = useState<number | undefined>(undefined)
-  const fresh = useFresh(testedAt)
   /** 这一次登录的授权页开过没有（同一次尝试只自动开一次）。 */
   const opened = useRef<string | undefined>(undefined)
   /** 登上之后的"存 + 测"只自动跑一次。 */
@@ -180,6 +177,8 @@ export function DeepSeekAccountLogin({
   const data = account.data
   const row = providers.data?.providers.find((p) => p.id === DEEPSEEK_ACCOUNT_PROVIDER_ID)
   const shown = test ?? row?.last_test
+  // WP214 / Fable 09-30：「通了」那句只在上次验证（服务端时间）两分钟内出
+  const fresh = useFresh(testedMs(shown))
 
   const refresh = (): void => {
     void client.invalidateQueries({ queryKey: ['deepseek-account'] })
@@ -229,7 +228,6 @@ export function DeepSeekAccountLogin({
     },
     onSuccess: (result) => {
       setTest(result)
-      setTestedAt(Date.now())
       setFailure(undefined)
       refresh()
       if (result.ok) onConnected?.()

@@ -43,6 +43,7 @@ export {
   type StatusItem,
   type StatusState,
   statusText,
+  testedMs,
   useFresh,
 } from './status-icons'
 export { TONE_BADGE, TONE_FG, TONE_PILL, type Tone } from './tone'

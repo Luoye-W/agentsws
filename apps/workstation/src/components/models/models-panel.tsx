@@ -22,7 +22,7 @@ import { Brain, CheckCircle2, Plus, RefreshCw, Trash2, XCircle } from 'lucide-re
 import { useEffect, useRef, useState } from 'react'
 import { BrandIcon } from '@/components/brand-icons'
 import { BrandScopeNote } from '@/components/brand-scope-note'
-import { BrandMark, InfoTip, useFresh } from '@/components/design'
+import { BrandMark, InfoTip, testedMs, useFresh } from '@/components/design'
 import { InlineGuideLink, TutorialLink } from '@/components/help/tutorial-link'
 import { DeepSeekAccountLogin } from '@/components/models/deepseek-account-login'
 import { ImageModelSection } from '@/components/models/image-model-section'
@@ -98,8 +98,6 @@ export function ModelsPanel({ assignment }: { assignment?: string }): React.Reac
   const [adding, setAdding] = useState<string | null>(null)
   const [editing, setEditing] = useState<string | null>(null)
   const [tests, setTests] = useState<Record<string, ModelTestResult>>({})
-  /** WP214：哪一条刚点过测试、什么时候（两分钟内结果那行小字出一下）。 */
-  const [testedAt, setTestedAt] = useState<{ id: string; at: number } | undefined>(undefined)
   const [error, setError] = useState<string | null>(null)
   const [priceRefresh, setPriceRefresh] = useState<ModelPricingRefreshResult | null>(null)
 
@@ -150,7 +148,6 @@ export function ModelsPanel({ assignment }: { assignment?: string }): React.Reac
     mutationFn: (id: string) => testModelProvider(id, assignment),
     onSuccess: (result, id) => {
       setTests((prev) => ({ ...prev, [id]: result }))
-      setTestedAt({ id, at: Date.now() })
       refresh()
     },
     onError: (e: Error) => {
@@ -183,8 +180,6 @@ export function ModelsPanel({ assignment }: { assignment?: string }): React.Reac
   }
 
   /** WP42：去各家官网抓一次价。抓不到不算失败——内置价原样留着。 */
-  const fresh = useFresh(testedAt?.at)
-
   const refreshPrices = useMutation({
     mutationFn: () => refreshModelPricing(assignment),
     onSuccess: (result) => {
@@ -342,7 +337,6 @@ export function ModelsPanel({ assignment }: { assignment?: string }): React.Reac
                   <ProviderRow
                     provider={p}
                     result={tests[p.id] ?? p.last_test}
-                    fresh={fresh && testedAt?.id === p.id}
                     testing={runTest.isPending && runTest.variables === p.id}
                     busy={runTest.isPending || drop.isPending}
                     onTest={() => {
@@ -562,12 +556,11 @@ export function ModelsPanel({ assignment }: { assignment?: string }): React.Reac
  *
  * - 地址、境内外、完整模型 id 进模型标签的 tooltip，不在卡上常显；
  * - 三步（连通 / 回文字 / 看图）是一排小图标，上次测 · 耗时 · token 在 tooltip 里；
- * - 「通了：…」那一整行只在**刚点完测试的两分钟内**以小字出现；没通的原因常显一句人话。
+ * - 「通了：…」那一整行只在**上次测试（服务端时间）两分钟内**以小字出现；没通的原因常显一句人话。
  */
 function ProviderRow({
   provider,
   result,
-  fresh,
   testing,
   busy,
   onTest,
@@ -576,8 +569,6 @@ function ProviderRow({
 }: {
   provider: ModelProviderView
   result: ModelTestResult | undefined
-  /** 这一次打开页面里刚点过测试（两分钟内）：结果那一行小字出一下。 */
-  fresh: boolean
   /** 正在测这一条：三个图标转圈。 */
   testing: boolean
   busy: boolean
@@ -586,6 +577,8 @@ function ProviderRow({
   onRemove: () => void
 }): React.ReactNode {
   const { t } = useApp()
+  // Fable 09-30：「刚测完两分钟」按服务端的上次测试时间算——刷新后仍在两分钟内的照样显示
+  const fresh = useFresh(testedMs(result))
   const tech = `${provider.base_url} · ${t(`models.region.${provider.region}`)}`
   return (
     <div className="flex flex-col gap-1.5">
