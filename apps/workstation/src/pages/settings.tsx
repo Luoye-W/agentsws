@@ -19,6 +19,7 @@ import { BrowserCard } from '@/components/settings/browser-card'
 import { CloudAccountCard } from '@/components/settings/cloud-account'
 import { ComputerUseCard } from '@/components/settings/computer-use-card'
 import { CreditsPanel } from '@/components/settings/credits-panel'
+import { DiagnosticsCard } from '@/components/settings/diagnostics-card'
 import { OfficialPluginsPanel } from '@/components/settings/official-plugins'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -78,6 +79,11 @@ export function SettingsPage({
     if (hash !== '#company' || !companyReady) return
     document.getElementById('company')?.scrollIntoView?.({ block: 'start' })
   }, [hash, companyReady])
+  // WP210：客户来信彻底投不进的那张卡说「设置 → 诊断」，链接 `/settings#diagnostics` 落到这一张
+  useEffect(() => {
+    if (hash !== '#diagnostics' || ownerId === undefined) return
+    document.getElementById('diagnostics')?.scrollIntoView?.({ block: 'start' })
+  }, [hash, ownerId])
   const orgs = useQuery({ queryKey: ['orgs'], queryFn: () => listOrganizations(), retry: false })
   const org = orgs.data?.[0]
   const save = useMutation({
@@ -279,6 +285,11 @@ export function SettingsPage({
         不像模型 key 那样统一走所有者）。左栏还没选岗位时这一块不出。
       */}
         {position === null ? null : <DataMapPanel position={position} />}
+        {/*
+          WP210：诊断——没进来的信（系统自己按退避重投，放弃了的记在这里，手动「重投」只在这里）。
+          与连接同一档权限（所有者），放在最后：平时用不着，排查时才来。
+        */}
+        {ownerId === undefined ? null : <DiagnosticsCard assignment={ownerId} />}
       </TabsContent>
       <TabsContent value="account" className="flex flex-col gap-4">
         <CloudAccountCard {...(ownerId === undefined ? {} : { assignment: ownerId })} />

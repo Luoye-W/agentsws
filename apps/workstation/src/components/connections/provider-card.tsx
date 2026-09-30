@@ -1,5 +1,10 @@
 /**
- * 可连接的一张卡：图标 + 名字 + 问号 +「看教程」→ 一句话 → 状态 → 向导。
+ * 可连接的一张卡：图标 + 名字 + 问号 + 按钮 +「看教程」（WP210 按 Luoye 09-30 再减一轮）。
+ *
+ * WP210：卡面上那一句介绍（`connections.line.<service>`）也收进名字旁的问号——每张卡都重复
+ * 一句话，一页二十多张就是二十多句；「点下面的按钮会打开对方网站…我们看不到」这类安全说明
+ * 统一放到「可以连接」标题旁的问号里说一次（连接页），卡上一句不留。数据来源设置
+ * （用我的 / 用 Agents 工坊的、数据从哪里来）默认收起，点「数据来源」才展开。
  *
  * WP157（36 §7）：卡上不再铺「要准备什么」的步骤与外链，也不铺服务端那段成段介绍——
  * 它们在每类连接一篇的教程里（`docs/help/conn-*.md`，`HELP_BY_SERVICE`）；成段介绍与
@@ -13,12 +18,13 @@
  *   提交完立刻试连并把结果显示出来。
  */
 
-import { ExternalLink } from 'lucide-react'
+import { ChevronDown, ExternalLink } from 'lucide-react'
+import { useState } from 'react'
 import { BrandIcon } from '@/components/brand-icons'
 import { InlineGuideLink, TutorialLink } from '@/components/help/tutorial-link'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Hint, SafetyNote } from '@/components/ui/hint'
+import { Hint } from '@/components/ui/hint'
 import type { ConnectTestResult, ProviderFieldSpec, ProviderView } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 import { firstSentence, HELP_BY_SERVICE, shortReason, templateGuide } from '@/lib/help'
@@ -71,9 +77,12 @@ export function ProviderCard({
   /** 卡面上那一句：词条里压好的（中英都有）；认不得的退回服务端介绍的第一句。 */
   const lineKey = `connections.line.${provider.service}`
   const line = t(lineKey) === lineKey ? firstSentence(guide.summary) : t(lineKey)
-  const about = [guide.summary === line ? '' : guide.summary, provider.data_note ?? '']
+  // WP210：那一句 + 成段介绍 +「连上之后会怎样」都在名字旁这一个问号里（原话一字不少）
+  const about = [line, guide.summary === line ? '' : guide.summary, provider.data_note ?? '']
     .filter((x) => x !== '')
     .join(' ')
+  const capability = capabilityOf(provider.service)
+  const [sourcesOpen, setSourcesOpen] = useState(false)
   /** 点不动的原因压成一句；原话在旁边的问号里。还没做的那几张直说「还没做」。 */
   const reason =
     provider.unavailable_reason === undefined
@@ -94,7 +103,6 @@ export function ProviderCard({
           {/* WP45：卡上戴的是这家自己的标志（品牌色原样），认不出的才落通用插头 */}
           <BrandIcon provider={provider.service} />
           {provider.label}
-          {/* WP157：成段介绍 +「连上之后会怎样」合成一个问号（原话一字不少） */}
           {about === '' ? null : <Hint text={about} testId="provider-note" />}
           {tutorial !== undefined ? (
             <TutorialLink slug={tutorial} className="ml-auto font-normal" />
@@ -108,10 +116,6 @@ export function ProviderCard({
         </CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-2 text-sm">
-        <p className="text-muted-foreground" data-testid="provider-line">
-          {line}
-        </p>
-
         {provider.available ? null : (
           <p
             className="flex items-center gap-1 text-xs text-destructive"
@@ -132,6 +136,7 @@ export function ProviderCard({
             service={provider.service}
             fields={fields ?? provider.fields}
             busy={busy}
+            safetyNote={false}
             {...(assignment === undefined ? {} : { assignment })}
             onCancel={onCancel}
             onSubmit={onSubmit}
@@ -170,38 +175,51 @@ export function ProviderCard({
             >
               {oauth ? t('connections.authorize') : t('connections.connect')}
             </Button>
-            {/* 例外：密码输在哪儿是安全承诺，不藏 */}
-            {oauth ? <SafetyNote text={t('connections.oauth.hint')} /> : null}
           </div>
         )}
 
         {result === undefined ? null : <TestResultLine result={result} />}
 
         {/*
-          49 M2：每张**数据类**卡一个开关「用我的 / 用 agentsws 的」。
-          没有第二条路的卡（你自己店里的、你自己账号里的数据）不出这一行——
-          画一个灰着的开关等于在暗示"充钱就能用"。
+          49 M2 / WP126：数据类卡的「用我的 / 用 Agents 工坊的」开关，红人那五张再加「数据从哪里来」
+          与自带数据接口。WP210：默认收起，点「数据来源」才展开——绝大多数人连上就完了。
+          没有第二条路的卡（你自己店里的、你自己账号里的数据）连这个按钮都不出。
         */}
-        <CapabilitySourceSwitch
-          service={provider.service}
-          connected={connected}
-          {...(assignment === undefined ? {} : { assignment })}
-        />
-        {/*
-          WP126：红人那五张卡多两块——数据从哪里来（顺序/停用）与自带数据接口（高级）。
-          别的卡不出：它们要么没有第二条路，要么不是取数。
-        */}
-        {(() => {
-          const capability = capabilityOf(provider.service)
-          if (capability === undefined || !capability.startsWith('kol.')) return null
-          const channel = capability.slice(4)
-          return (
-            <>
-              <DataSourceRouteControl channel={channel} assignment={assignment} />
-              <ByoSourceCard channel={channel} />
-            </>
-          )
-        })()}
+        {capability === undefined ? null : (
+          <div className="flex flex-col gap-2" data-testid="provider-sources">
+            <Button
+              size="xs"
+              variant="ghost"
+              className="self-start px-1 text-muted-foreground"
+              aria-expanded={sourcesOpen}
+              data-testid="provider-sources-toggle"
+              onClick={() => {
+                setSourcesOpen((v) => !v)
+              }}
+            >
+              {t('connections.sources.toggle')}
+              <ChevronDown
+                aria-hidden
+                className={cn('transition-transform', sourcesOpen && 'rotate-180')}
+              />
+            </Button>
+            {sourcesOpen ? (
+              <>
+                <CapabilitySourceSwitch
+                  service={provider.service}
+                  connected={connected}
+                  {...(assignment === undefined ? {} : { assignment })}
+                />
+                {capability.startsWith('kol.') ? (
+                  <>
+                    <DataSourceRouteControl channel={capability.slice(4)} assignment={assignment} />
+                    <ByoSourceCard channel={capability.slice(4)} />
+                  </>
+                ) : null}
+              </>
+            ) : null}
+          </div>
+        )}
       </CardContent>
     </Card>
   )
