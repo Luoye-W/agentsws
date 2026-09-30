@@ -295,6 +295,12 @@ export const GLYPHS: Record<string, Glyph> = {
     ['rect', 13.5, 13.5, 7, 7, 1.5],
     ['path', 'M17 3.5v7M13.5 7h7', 1],
   ],
+  // 经营数据（`dtc.analytics`：负责人岗位种子里带着它，定义在 demo 与老工作区里）：坐标轴 + 柱 + 往上走的线
+  'dtc.analytics': [
+    ['path', 'M3.5 3.5v15a2 2 0 0 0 2 2h15'],
+    ['path', 'M8.5 16.5v-3M12.5 16.5v-5M16.5 16.5v-4'],
+    ['path', 'm7.5 9.5 3.5-3 3 2 5-4.5', 1],
+  ],
   // Facebook 主页运营：一张主页（封面 + 头像 + 几行字）
   'social.facebook': [
     ['rect', 2.5, 3.5, 19, 17, 2.5],

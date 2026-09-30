@@ -82,6 +82,8 @@ export const DUTY_ICONS: Record<string, DutyIconSpec> = {
   // ── 工作区底座 ───────────────────────────────────────────────────────
   'common.owner': { glyph: 'common.owner' },
   'common.member': { glyph: 'common.member' },
+  // 负责人岗位的种子里带着它（`org.ts`）；yml 不在本包里，定义在 demo 与老工作区里
+  'dtc.analytics': { glyph: 'dtc.analytics' },
 }
 
 /**

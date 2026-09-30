@@ -35,7 +35,14 @@ const BRAND_DIR = join(ROOT, 'apps/workstation/src/assets/brand')
 // ── 名单与名字：从 packages/roles 当场读 ────────────────────────────────
 const yml = (file) => readFileSync(join(ROOT, 'packages/roles', file), 'utf8')
 const zhOf = (text) => /^name:\s*\{\s*zh:\s*([^,]+),/m.exec(text)?.[1]?.trim() ?? '?'
-const dutyName = (id) => zhOf(yml(`roles/${id.replace('.', '/')}.yml`))
+/** 职责名；本包里没有 yml 的（`dtc.analytics` 只在 demo / 老工作区里）用 id 顶着。 */
+const dutyName = (id) => {
+  try {
+    return zhOf(yml(`roles/${id.replace('.', '/')}.yml`))
+  } catch {
+    return id === 'dtc.analytics' ? '经营数据' : id
+  }
+}
 
 const ORDER = [
   'customer-care',
