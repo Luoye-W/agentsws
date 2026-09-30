@@ -4,6 +4,8 @@
 id: dtc-ops
 version: 1.0.0
 name: { zh: 独立站运营, en: DTC Operations }
+# WP213（docs/36 §8.2）：左栏 / 公司页 / ⌘K 用的线描图标，值是工作台 `role-icons/glyphs.ts` 里的 id
+icon: dtc-ops
 roles:
   # WP54：`dtc.presales` + `dtc.support` 已合并成 `dtc.support`（48 v2 L1）
   - { role: dtc.support, default: true }

@@ -426,6 +426,11 @@ export interface Position {
    * 以后要按部门再扩，先按岗位。
    */
   supervisor_person_id?: PersonId
+  /**
+   * WP213（docs/36 §8.2）：**这个岗位的图标**——工作台 `role-icons/glyphs.ts` 里的一个 id。
+   * 只加字段：内置模板都填；工作区自建的岗位不填，界面按它的职责推一枚。
+   */
+  icon?: string
 }
 
 /**
@@ -492,6 +497,10 @@ export interface PositionInstance {
    * 界面上的「还原」按钮拿它来比。
    */
   persona?: PersonaText
+  /**
+   * WP213：岗位图标（同名内置模板的 `icon`；负责人 / 普通成员 / 自建岗位没有，界面自己推）。
+   */
+  icon?: string
 }
 
 /** 05 §4 有效配置（单个 Assignment，不并集） */

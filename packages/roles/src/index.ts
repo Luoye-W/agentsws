@@ -21,6 +21,7 @@ export { changeKindOf, effectiveConfig, riskClassOf, webOf } from './effective.j
 export {
   BUNDLED_POSITIONS_DIR,
   BUNDLED_ROLES_DIR,
+  bundledPositionIcon,
   bundledPositionOfRole,
   loadBundledPosition,
   loadBundledPositions,

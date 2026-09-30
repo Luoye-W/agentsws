@@ -22,6 +22,8 @@
 id: pr
 version: 1.0.0
 name: { zh: 公共关系, en: Public Relations }
+# WP213（docs/36 §8.2）：左栏 / 公司页 / ⌘K 用的线描图标，值是工作台 `role-icons/glyphs.ts` 里的 id
+icon: pr
 roles:
   - { role: pr.press, default: true }
   - { role: pr.reddit, default: true }

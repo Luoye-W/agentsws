@@ -72,6 +72,7 @@ import type {
 import { B2B_POSITION_ID, B2B_ROLES } from '@agentsws/contracts'
 import { canonicalJson, sha256 } from '@agentsws/core'
 import {
+  bundledPositionIcon,
   parseRole,
   type RangeExpanded,
   ROLE_ID_SPLITS,
@@ -923,6 +924,12 @@ export function createOrg(options: OrgOptions): OrgAssembly {
       .filter((m) => m.left_at === undefined)
       .map((m) => m.person_id)
 
+  /** WP213（docs/36 §8.2）：岗位图标——存的那份优先，没有就取同 id 内置模板 yml 里的。 */
+  const iconOf = (p: StoredPosition): { icon?: string } => {
+    const icon = p.icon ?? bundledPositionIcon(p.id)
+    return icon === undefined ? {} : { icon }
+  }
+
   const positionViews = async (): Promise<PositionView[]> => {
     const people = await memberIds()
     const out: PositionView[] = []
@@ -940,6 +947,8 @@ export function createOrg(options: OrgOptions): OrgAssembly {
           loaded: roles.roles.get(r.role) !== undefined,
         })),
         holders: await holdersOf(p, people),
+        // WP213：图标——存的那份优先，没有就取同 id 内置模板 yml 里的
+        ...iconOf(p),
         ...(p.supervisor_person_id === undefined
           ? {}
           : {

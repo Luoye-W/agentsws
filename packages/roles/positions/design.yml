@@ -25,6 +25,8 @@
 id: design
 version: 1.0.0
 name: { zh: 设计, en: Design }
+# WP213（docs/36 §8.2）：左栏 / 公司页 / ⌘K 用的线描图标，值是工作台 `role-icons/glyphs.ts` 里的 id
+icon: design
 roles:
   # 58 §1 五条，顺序 = 契约 `DESIGN_DUTIES`
   - { role: design.dtc, default: true }

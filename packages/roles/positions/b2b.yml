@@ -10,6 +10,8 @@
 id: b2b
 version: 1.0.0
 name: { zh: B2B, en: B2B }
+# WP213（docs/36 §8.2）：左栏 / 公司页 / ⌘K 用的线描图标，值是工作台 `role-icons/glyphs.ts` 里的 id
+icon: b2b
 roles:
   - { role: b2b.sales, default: true }
   - { role: b2b.outbound, default: true }
