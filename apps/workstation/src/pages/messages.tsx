@@ -859,6 +859,11 @@ export function MessagesPage(): ReactNode {
             <p role="alert" className="m-auto text-sm text-destructive">
               {apiErrorText(thread.error, t)}
             </p>
+          ) : (thread.data?.messages.length ?? 0) === 0 ? (
+            // WP212：卡片那头「看原件 →」指的会话不在消息库里（聊天 / 别的邮箱 / 过了保留期）——照实说
+            <p className="m-auto text-sm text-ws-muted-fg" data-testid="messages-thread-missing">
+              {t('messages.thread.missing')}
+            </p>
           ) : (
             <>
               <button

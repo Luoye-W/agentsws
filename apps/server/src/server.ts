@@ -440,6 +440,8 @@ const MESSAGE_POSITIONS: readonly string[] = [
   'pr',
   'social-media',
 ]
+/** 排序用：常驻五个按上面的顺序，其余排在后面。 */
+const rank = (i: number): number => (i < 0 ? MESSAGE_POSITIONS.length : i)
 
 const QUEUE_STATES = [
   'pending',
@@ -3759,19 +3761,33 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
             .filter((a) => a.revoked_at === undefined)
             .map((a) => a.role_id),
         )
-        return org
-          .positions()
-          .map((t) => {
-            const route = routeOfPosition(t.id)
-            return {
-              id: t.id,
-              name_zh: t.name.zh,
-              name_en: t.name.en,
-              open: t.roles.some((r) => active.has(r.role)),
-              ...(route === undefined ? {} : { route }),
-            }
-          })
-          .filter((p) => p.open || MESSAGE_POSITIONS.includes(p.id))
+        return (
+          org
+            .positions()
+            .map((t) => {
+              const route = routeOfPosition(t.id)
+              return {
+                id: t.id,
+                name_zh: t.name.zh,
+                name_en: t.name.en,
+                open: t.roles.some((r) => active.has(r.role)),
+                ...(route === undefined ? {} : { route }),
+              }
+            })
+            // 负责人 / 普通成员这类通用岗位不接具体的事；与消息相关的五个排前面
+            .filter(
+              (p) =>
+                (p.open || MESSAGE_POSITIONS.includes(p.id)) &&
+                !org
+                  .positions()
+                  .find((t) => t.id === p.id)
+                  ?.roles.every((r) => r.role.startsWith('common.')),
+            )
+            .sort(
+              (a, b) =>
+                rank(MESSAGE_POSITIONS.indexOf(a.id)) - rank(MESSAGE_POSITIONS.indexOf(b.id)),
+            )
+        )
       },
       // 其余岗位走 54 的「交给这个岗位一件事」：开事项（钉着这条会话）、岗位内路由、起 Run
       openAtPosition: async (input) => {

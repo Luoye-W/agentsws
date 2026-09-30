@@ -830,6 +830,9 @@ const zh: Table = {
   'messages.hand.done': '已交给{name}',
   'messages.hand.remember': '以后这个发件人都这样',
   'messages.hand.closed_short': '没开',
+  'messages.hand.note_generic': '交出去后这件事归那个岗位，有要你定的会出卡；这里不再催',
+  'messages.thread.missing':
+    '这段往来的原件不在消息库里（可能来自聊天窗、别的邮箱，或已过保留期）。',
   'messages.action.notice': '只是通知',
   'messages.action.self': '我自己回',
   'messages.action.self_handle': '我自己处理',
@@ -4228,6 +4231,10 @@ const en: Table = {
   'messages.hand.done': 'Handed to {name}',
   'messages.hand.remember': 'Always do this for this sender',
   'messages.hand.closed_short': 'Not set up',
+  'messages.hand.note_generic':
+    'After this it belongs to that position; anything needing you shows up as a card. No more nudges here.',
+  'messages.thread.missing':
+    'The original of this conversation isn’t in your messages (it may be from chat, another mailbox, or past retention).',
   'messages.action.notice': 'Just a notice',
   'messages.action.self': "I'll reply",
   'messages.action.self_handle': "I'll handle it",

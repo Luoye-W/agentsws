@@ -236,7 +236,7 @@ function HandMenu({
   const sorted = [...positions].sort(
     (a, b) => Number(b.id === ai) - Number(a.id === ai) || Number(b.open) - Number(a.open),
   )
-  const noteName = positionName(positions, ai ?? sorted.find((p) => p.open)?.id ?? '', lang)
+
   return (
     <div
       className="flex w-64 flex-col gap-0.5 p-1.5"
@@ -281,7 +281,9 @@ function HandMenu({
         )
       })}
       <p className="mt-1 border-t border-ws-line px-2 pt-2 text-[11px] leading-relaxed text-ws-muted-fg">
-        {t('messages.hand.note', { name: noteName })}
+        {ai === undefined
+          ? t('messages.hand.note_generic')
+          : t('messages.hand.note', { name: positionName(positions, ai, lang) })}
       </p>
     </div>
   )

@@ -181,6 +181,8 @@ type ThreadClaim = Pick<
  *    回过了（`\Answered` 或它之后有一封自己发的）→ 已交出去；
  * 3. AI 判了不用回（`needs_reply = false`）→ 只是通知；
  * 4. 其余 → 没人接（包括没分拣过的——宁可多问一句，不让一封信没人看）。
+ *
+ * 整条会话里一封来信都没有（只有自己发的）：不给 `claim`。
  */
 export function claimOfThread(sorted: readonly MessageRecord[]): ThreadClaim {
   const newestFirst = [...sorted].sort(byNewest)
@@ -201,7 +203,8 @@ export function claimOfThread(sorted: readonly MessageRecord[]): ThreadClaim {
   }
   const handedTo = newestFirst.map(handedPositionOf).find((p) => p !== undefined)
   if (handedTo !== undefined) return { claim: 'handed', handed_to: handedTo, ...describe(latest) }
-  if (latest === undefined) return { claim: 'handed', handed_to: 'me' }
+  // 只有自己发的（已发 / 草稿）：不是来信，不算进没人接 / 已交出去任何一格
+  if (latest === undefined) return {}
   const repliedAfter = newestFirst.some(
     (m) => !isInbound(m) && m.folder_kind !== 'drafts' && byNewest(m, latest) < 0,
   )
