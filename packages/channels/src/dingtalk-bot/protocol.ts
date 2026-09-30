@@ -7,7 +7,7 @@
  *   的 `client.mjs` / `constants.d.ts`，与官方 Python SDK（MIT）的 `stream.py` / `chatbot.py`。
  *
  * 出处（移植，MIT）：`open-dingtalk/dingtalk-stream-sdk-nodejs` `src/client.ts` + `src/constants.ts`
- * @ `c979c664099a3bd175ab2f810753db0fc9e3a515`（v2.1.5）。Copyright (c) DingTalk Open Platform。
+ * @ `c979c664099a3bd175ab2f810753db0fc9e3a515`（v2.1.5）。Copyright (c) 2023 钉钉开放平台团队。
  * 登记在 `upstreams.yml` 的 `dingtalk-stream` 一条（ported）。
  *
  * 为什么是**照官方 SDK 移植协议**而不是直接 `import` 它（评估见 docs/63 §M）：它的
