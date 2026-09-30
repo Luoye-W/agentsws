@@ -300,6 +300,15 @@ describe('技能页 API 与晋升', () => {
       await call('/v1/skills'),
     )
     expect(list.map((s) => s.name)).toContain(DEFAULT_SKILL_NAME)
+    // WP209：按岗位分组那几格接上了（显示名来自 frontmatter，岗位来自职责 yml 反查）
+    const care = list.find((s) => s.name === DEFAULT_SKILL_NAME) as unknown as {
+      display_name?: { zh: string }
+      positions?: { id: string }[]
+      roles?: { role_id: string }[]
+    }
+    expect(care.display_name?.zh).toBe('客服回信')
+    expect(care.positions?.map((p) => p.id)).toContain('customer-care')
+    expect(care.roles?.map((r) => r.role_id)).toContain('dtc.support')
 
     expect(await dataOf(await call('/v1/skills/proposals'))).toEqual([])
 
