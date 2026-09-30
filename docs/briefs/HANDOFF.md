@@ -100,7 +100,7 @@
 | 75 | WP199 审批卡升级给上级后施行失败（修 bug，顺查转交 / 代批 / 交接） | `WP199-approval-escalation.md` | `wp199-escalation` · `wp/199-escalation` | WP191 | 已合并 |
 | 76 | WP200 品牌标记两处小调（浅色主题光调淡、README 标记动起来） | `WP200-brand-tweaks.md` | `wp200-brand-tweaks` · `wp/200-brand-tweaks` | WP195 | 已合并 |
 | 77 | WP204 消息页按钮逐个过一遍并修好（显示图片、删除等没反应） | `WP204-messages-buttons.md` | `wp204-msg-buttons` · `wp/204-msg-buttons` | WP63 | 进行中（Claude） |
-| 78 | WP205 以 AI 为核心的消息中心：调研 + 设计稿（统一入口、AI 标签与分拣、两个展示方向） | `WP205-ai-inbox-design.md` | `wp205-inbox-design` · `wp/205-inbox-design` | WP167 | 进行中（Claude） |
+| 78 | WP205 以 AI 为核心的消息中心：调研 + 设计稿（统一入口、AI 标签与分拣、两个展示方向） | `WP205-ai-inbox-design.md` | `wp205-inbox-design` · `wp/205-inbox-design` | WP167 | 已合并（待定方向） |
 | 79 | WP207 左栏三级「+」（加岗位 / 加职责 / 开新对话）、职责下挂进行中对话、3 天自动归档、归档可搜可让 AI 找回 | `WP207-sidebar-plus-and-archive.md` | `wp207-sidebar` · `wp/207-sidebar` | WP202 | 进行中（Claude） |
 | 80 | WP208 右侧第三栏收拾：五个设定合一、邮件助手进消息页、设计规范进公司 → 品牌、教程跟上下文、定时任务带数字 | `WP208-right-rail-tidy.md` | `wp208-rail` · `wp/208-rail` | WP207 | 进行中（Claude） |
 | 81 | WP209 技能页按岗位分组、知识库按类型 / 品牌分组，小卡 + 点开看细节、搜索与筛选 | `WP209-skills-knowledge-grouping.md` | `wp209-library` · `wp/209-library` | WP208 | 进行中（Claude） |
