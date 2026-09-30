@@ -524,7 +524,8 @@ export function MessagesPage(): ReactNode {
               .flatMap((a) => a.folders)
               .filter((f) => f.kind === kind)
               .reduce((n, f) => n + f.unread, 0)
-            const active = filters.folder_kind === kind && filters.pending !== true
+            // 搜索时跨全部文件夹，不亮哪一只（亮着像是只在它里面搜）
+            const active = filters.folder_kind === kind && filters.pending !== true && !searching
             return (
               <button
                 key={kind}

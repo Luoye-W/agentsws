@@ -62,9 +62,9 @@ import { cardRefOf, DAY_MS, planSummary, planTitle, type Work } from '@agentsws/
 import { demoGoogleReads } from './demo-google.js'
 
 export const DEMO_PACK = 'packs/dtc-3c-3p'
-/** WP204：demo 里「显示图片」代取回来的那张题图（1×1 品牌绿 PNG）。 */
+/** WP204：demo 里「显示图片」代取回来的那张题图（10×2 品牌绿 PNG，与题图 5:1 同比例）。 */
 const DEMO_BANNER_PNG =
-  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGPQ788GAAIaASpaxKHUAAAAAElFTkSuQmCC'
+  'iVBORw0KGgoAAAANSUhEUgAAAAoAAAACCAIAAADuA9qHAAAAEUlEQVR4nGPQ78/GgxjwSwMAyvgXNS/YpuQAAAAASUVORK5CYII='
 export const DEMO_SCENARIO = 'scenarios/aftersales/return-within-window.yml'
 
 /**
@@ -1324,7 +1324,7 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
     mount,
     b2bStandIns,
     staticDir,
-    // WP204：「显示图片」的本机代取在 demo 里不出网——题图回一张 1×1 的品牌绿（按宽高撑开），
+    // WP204：「显示图片」的本机代取在 demo 里不出网——题图回一张 5:1 的品牌绿色块，
     // 其余（追踪像素）一律当取不到，界面照实说"有 N 张没取到"
     messageImages: async (url) =>
       url.endsWith('/banner.png')

@@ -3,7 +3,7 @@
  * WP204：消息页按钮逐个真点一遍的截图出处。存到 `docs/assets/wp204/`。
  *
  * 全走 demo 的真路由（`apps/cli/src/demo.ts` 种的信；「显示图片」的代取在 demo 里是替身，
- * 题图回一张 1×1 品牌绿、追踪像素当取不到）。唯一的浏览器侧替身是第 ⑧ 张：demo 没有真邮箱，
+ * 题图回一张 5:1 品牌绿色块、追踪像素当取不到）。唯一的浏览器侧替身是第 ⑧ 张：demo 没有真邮箱，
  * 影子模式开不起来，所以把 `/v1/messages/accounts` 的回包加一格 `shadow_mode: true`。
  * 页面头上套的是桌面壳那份 CSP（`apps/desktop/src/csp.ts`）——证明代取回来的 `data:` 图在壳里显示得出来。
  *
@@ -131,6 +131,7 @@ async function main() {
     await page.locator('[data-testid="messages-search"]').fill('')
     await page.getByText('恒昌纸品').first().click()
     const att = page.locator('[data-testid="messages-attachment"]').first()
+    await att.waitFor({ timeout: 10_000 }).catch(() => undefined)
     if ((await att.count()) > 0) {
       await att.click()
       console.log(`     附件：${await notice('附件')}`)
