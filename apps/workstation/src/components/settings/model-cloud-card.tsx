@@ -16,9 +16,9 @@
  * 3. **已经在用** → 显示"本月用了 N 积分 · 余额 M"，外加一个"停用"。
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Cloud, Loader2 } from 'lucide-react'
+import { Cloud, Coins, Loader2 } from 'lucide-react'
 import { Link } from 'react-router-dom'
-import { BrandMark } from '@/components/design'
+import { BrandMark, StatusIcons } from '@/components/design'
 import { TutorialLink } from '@/components/help/tutorial-link'
 import { Button } from '@/components/ui/button'
 import { Hint } from '@/components/ui/hint'
@@ -138,12 +138,33 @@ export function CloudPlanActions({ assignment }: { assignment?: string }): React
     <div data-testid="model-cloud-actions" data-linked={linked}>
       {/* 数字只在"已经在用"时出——没启用的时候摆一行 0 是噪音 */}
       {existing !== undefined && balance !== undefined ? (
-        <p className="mt-1.5 text-xs" data-slot="status" data-testid="model-cloud-numbers">
-          {t('models.cloud.numbers', {
-            month: num(month ?? 0),
-            balance: num(balance.available),
-          })}
-        </p>
+        /*
+          WP214（36 §7 第四档）：余额是「积分图标 + 数字」（余额不足时是「不通」那一态），
+          本月用了多少进 tooltip
+        */
+        <div className="mt-1.5" data-testid="model-cloud-numbers">
+          <StatusIcons
+            items={[
+              {
+                key: 'balance',
+                label: t('models.cloud.balance'),
+                state: balance.low_balance ? 'fail' : 'ok',
+                stateText: balance.low_balance
+                  ? t('credits.low', { n: num(balance.low_balance_threshold) })
+                  : t('models.cloud.balance.ok'),
+                icon: Coins,
+                value: num(balance.available),
+                detail: t('models.cloud.month', { month: num(month ?? 0) }),
+              },
+            ]}
+          />
+          {/* 余额不足是「会扣钱的提示」（36 §7）：一句常显 */}
+          {balance.low_balance ? (
+            <p className="mt-1 text-[11px] text-ws-warn" data-slot="status">
+              {t('credits.low', { n: num(balance.low_balance_threshold) })}
+            </p>
+          ) : null}
+        </div>
       ) : null}
 
       {credits.data?.reason === undefined || linked ? null : (

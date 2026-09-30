@@ -82,7 +82,10 @@ describe('WP180 官方插件', () => {
   it('列审过的那几个：状态 + 按钮；说明进问号；会出网的一眼看得见', async () => {
     renderWithProviders(<OfficialPluginsPanel assignment="asg_owner" />)
     const row = await screen.findByTestId(`plugin-${SCHEDULE}`)
-    expect(within(row).getByTestId('plugin-state').textContent).toBe('没装')
+    // WP214：状态是一个小图标（没装 = 「没测」那一态），状态词在读屏名与 tooltip 里
+    expect(within(row).getByTestId('plugin-state').getAttribute('aria-label')).toBe('没装')
+    expect(within(row).getByTestId('status-icon').dataset.state).toBe('unknown')
+    expect(within(row).getByTestId('status-icon').getAttribute('data-hint')).toContain('没装')
     expect(within(row).getByTestId('plugin-action').textContent).toBe('装')
     expect(within(row).queryByTestId('plugin-network')).toBeNull()
     const hint = row.querySelector('[data-slot="hint"]')?.getAttribute('data-hint') ?? ''
@@ -100,7 +103,9 @@ describe('WP180 官方插件', () => {
     await waitFor(() => expect(requests).toEqual([{ action: 'install', name: SCHEDULE }]))
     await waitFor(() =>
       expect(
-        within(screen.getByTestId(`plugin-${SCHEDULE}`)).getByTestId('plugin-state').textContent,
+        within(screen.getByTestId(`plugin-${SCHEDULE}`))
+          .getByTestId('plugin-state')
+          .getAttribute('aria-label'),
       ).toBe('等你批'),
     )
     expect(

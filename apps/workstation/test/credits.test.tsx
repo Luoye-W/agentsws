@@ -282,8 +282,11 @@ describe('第三张模型卡（49 M5）', () => {
     state.providers = [CLOUD_PROVIDER]
     renderWithProviders(<ModelCloudCard assignment="asg_owner" />)
     const numbers = await screen.findByTestId('model-cloud-numbers')
-    expect(numbers.textContent).toContain('37.5')
+    // WP214：余额是「积分图标 + 数字」常显；本月用了多少进 tooltip
     expect(numbers.textContent).toContain('920')
+    const hint = numbers.querySelector('[data-testid="status-icon"]')?.getAttribute('data-hint')
+    expect(hint).toContain('37.5')
+    expect(hint).toContain('920')
   })
 })
 

@@ -23,7 +23,7 @@ import {
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { StatusPill, WsTag } from '@/components/design'
+import { InfoTip, StatusIcons, type StatusState, WsTag } from '@/components/design'
 import { TutorialLink } from '@/components/help/tutorial-link'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -41,6 +41,14 @@ import {
 } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 import { cn } from '@/lib/utils'
+
+/** WP214：场景运行状态 → 四态。 */
+const SCENE_STATE: Record<DshSceneRow['state'], StatusState> = {
+  running: 'ok',
+  starting: 'pending',
+  failed: 'fail',
+  stopped: 'unknown',
+}
 
 /** 桌面壳的桥里场景用得着的那几样（形状同 `@agentsws/desktop/bridge` 的 `DesktopBridge`）。 */
 interface SceneBridge {
@@ -232,6 +240,15 @@ export function SceneSwitcher(): React.ReactNode {
           <p className="px-1 pb-2 text-xs text-muted-foreground">
             {t('scenes.hint')} <TutorialLink slug="dsh-scenes" className="align-middle" />
           </p>
+          {/*
+            WP214：「这个场景不归 Agents 工坊负责」原来每一行底下说一遍；同一信息只出现一次——
+            列表上面说一句，每行「官方 / 自建」标签的 tooltip 里是那一行的原话
+          */}
+          {launchable.some((s) => s.origin !== 'agentsws') ? (
+            <p className="px-1 pb-1.5 text-[11px] text-muted-foreground" data-testid="scene-notice">
+              {t('scenes.notice.once')}
+            </p>
+          ) : null}
           <ul className="flex flex-col gap-1">
             {launchable.map((s) => (
               <SceneRow
@@ -436,24 +453,33 @@ function SceneRow({
           </span>
         ) : (
           <>
-            <WsTag>{t(`scenes.origin.${scene.origin}`)}</WsTag>
-            {scene.state === 'stopped' ? null : (
-              <StatusPill
-                tone={
-                  scene.state === 'running' ? 'good' : scene.state === 'starting' ? 'info' : 'bad'
-                }
-              >
-                {t(`scenes.state.${scene.state}`)}
-              </StatusPill>
-            )}
+            {/*
+              WP214（36 §7 第四档）：「官方 / 自建」标签的 tooltip 里是那句边界（谁维护、我们不负责）；
+              运行状态是一个小图标（运行中 = 通、启动中 = 进行中、没起来 = 不通、关着 = 没测），状态词进 tooltip
+            */}
+            <InfoTip
+              text={t(scene.origin === 'custom' ? 'scenes.notice.custom' : 'scenes.notice')}
+              testId={`scene-origin-${scene.name}`}
+            >
+              <WsTag>{t(`scenes.origin.${scene.origin}`)}</WsTag>
+            </InfoTip>
+            <StatusIcons
+              testId={`scene-state-${scene.name}`}
+              items={[
+                {
+                  key: scene.state,
+                  label: scene.name,
+                  state: SCENE_STATE[scene.state],
+                  stateText: t(`scenes.state.${scene.state}`),
+                  icon: AppWindow,
+                },
+              ]}
+            />
           </>
         )}
       </div>
       {ours ? null : (
         <>
-          <p className="text-[11px] text-muted-foreground">
-            {t(scene.origin === 'custom' ? 'scenes.notice.custom' : 'scenes.notice')}
-          </p>
           {scene.error === undefined ? null : (
             <p className="text-[11px] text-ws-bad">{scene.error}</p>
           )}
