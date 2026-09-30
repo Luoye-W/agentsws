@@ -16,7 +16,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Hint } from '@/components/ui/hint'
 import { type DeadLetterView, listDeadLetters, requeueDeadLetter } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
-import { formatDate } from '@/lib/format'
+import { formatDate, formatDateTime } from '@/lib/format'
 
 export function DiagnosticsCard({ assignment }: { assignment: string }): React.ReactNode {
   const { t, lang } = useApp()
@@ -42,7 +42,7 @@ export function DiagnosticsCard({ assignment }: { assignment: string }): React.R
     if (d.auto_retry === undefined) return ''
     if (d.auto_retry.gave_up || d.auto_retry.next_at === undefined)
       return t('diagnostics.dead.gave_up')
-    return t('diagnostics.dead.next', { at: formatDate(d.auto_retry.next_at, lang) })
+    return t('diagnostics.dead.next', { at: formatDateTime(d.auto_retry.next_at, lang) })
   }
 
   return (
