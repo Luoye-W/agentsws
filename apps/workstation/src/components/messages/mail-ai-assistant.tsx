@@ -17,12 +17,31 @@
  */
 import type { MessageRecord } from '@agentsws/contracts'
 import { ChevronDown, Sparkles } from 'lucide-react'
-import { type ReactNode, useState } from 'react'
+import { Component, type ReactNode, useState } from 'react'
 import { StatusPill } from '@/components/design'
 import { MailAssistantPanel } from '@/components/rail/panels/mail-assistant-panel'
 import { Hint } from '@/components/ui/hint'
 import { useApp } from '@/lib/app-context'
 import { cn } from '@/lib/utils'
+
+/**
+ * WP208（与 WP204 接缝）：助手出了错**只折它自己这一块**。
+ *
+ * 它挂在阅读区里、和回复 / 归档 / 删除那排按钮同一棵树上——没有这一层，助手那边一个异常
+ * （接口回的形状不对、模型那头抽风）会把整个阅读区连同那排按钮一起卸掉。换一封信（`key`）就重试。
+ */
+class AssistantBoundary extends Component<
+  { fallback: ReactNode; children: ReactNode },
+  { failed: boolean }
+> {
+  override state = { failed: false }
+  static getDerivedStateFromError(): { failed: boolean } {
+    return { failed: true }
+  }
+  override render(): ReactNode {
+    return this.state.failed ? this.props.fallback : this.props.children
+  }
+}
 
 /** 分拣那一行：归谁 · 急不急（· 拿不准）；为什么放进问号。没分拣过的信不画这一行。 */
 function TriageLine({ message }: { message: MessageRecord }): ReactNode {
@@ -91,7 +110,18 @@ export function MailAiAssistant({ message }: { message: MessageRecord }): ReactN
         </button>
       </header>
       <TriageLine message={message} />
-      {open ? <MailAssistantPanel /> : null}
+      {open ? (
+        <AssistantBoundary
+          key={message.id}
+          fallback={
+            <p className="text-[12px] text-ws-muted-fg" data-testid="mail-ai-failed">
+              {t('messages.ai.failed')}
+            </p>
+          }
+        >
+          <MailAssistantPanel />
+        </AssistantBoundary>
+      ) : null}
     </section>
   )
 }

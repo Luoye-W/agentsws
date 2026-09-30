@@ -410,6 +410,22 @@ describe('WP208：邮件助手搬进消息页的阅读区', () => {
   })
 })
 
+describe('WP208 × WP204：助手出错不连累阅读区', () => {
+  it('助手那边回了个坏形状：只折它自己那一块，回复按钮照常能用', async () => {
+    const original = getMailAssistant.getMockImplementation()
+    getMailAssistant.mockImplementation(async () => ({ suggestions: [] }) as never)
+    const quiet = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const user = userEvent.setup()
+    renderWithProviders(<MessagesPage />)
+    await user.click(await screen.findByTestId('messages-thread'))
+    expect(await screen.findByTestId('mail-ai-failed')).toBeDefined()
+    await user.click(screen.getByTestId('messages-reply'))
+    expect(await screen.findByTestId('composer')).toBeDefined()
+    quiet.mockRestore()
+    if (original !== undefined) getMailAssistant.mockImplementation(original)
+  })
+})
+
 describe('WP167：「待确认」那一栏', () => {
   it('左栏有一格「待确认」（有信时亮一个点）；点开只列拿不准的信，「这是客服 / 不是」各打一次人工分拣', async () => {
     listMessageThreads.mockImplementation(async (query?: string) =>

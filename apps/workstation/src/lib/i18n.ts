@@ -800,6 +800,7 @@ const zh: Table = {
   'messages.ai.triage.by.model': '模型分的',
   'messages.ai.triage.by.halted': '模型停着，只跑了规则',
   'messages.ai.triage.by.user': '人手挪的',
+  'messages.ai.failed': 'AI 助手这会儿出不来，信照常能回、能归档。',
   'org.brands.design.title': '设计规范',
   'org.brands.design.hint':
     '这个品牌的颜色、字体与 logo 规矩，设计、建站、社媒、投放干活时照着它。每个品牌一份，切到哪个品牌看的就是哪个。',
@@ -4126,6 +4127,7 @@ const en: Table = {
   'messages.ai.triage.by.model': 'Sorted by the model',
   'messages.ai.triage.by.halted': 'Model paused: rules only',
   'messages.ai.triage.by.user': 'Moved by a person',
+  'messages.ai.failed': "The AI assistant can't load right now — you can still reply and archive.",
   'org.brands.design.title': 'Design spec',
   'org.brands.design.hint':
     "This brand's colors, fonts and logo rules — design, site, social and ads work follows it. One per brand: you see the one for the brand you're in.",
