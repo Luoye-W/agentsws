@@ -93,12 +93,23 @@ export const ALLOCATION_NOTICE_LEVELS: readonly AllocationNoticeLevel[] = [80, 1
 export const DEFAULT_ALLOCATION_TIMEZONE = 'Asia/Shanghai'
 
 /** 402 时 `details.reason`：公司没钱了 / 你的额度到了 / 这个岗位的额度到了。 */
-export type InsufficientCreditsReason = 'org_balance' | 'member_limit' | 'position_limit'
+export type InsufficientCreditsReason =
+  | 'org_balance'
+  | 'member_limit'
+  | 'position_limit'
+  /** WP206：这个人已经不在公司了（名册里没有他了 / 被移出），新的预扣一律拒。 */
+  | 'member_left'
+  /** WP206：这个岗位已经删了，新的预扣一律拒。 */
+  | 'position_removed'
 
 /** 「你的额度到了」那一句（云上 402 的 `message` 就是它；本机出错处原样显示）。 */
 export const ALLOCATION_EXHAUSTED_MESSAGE = '本月额度用完了，找管理员加。'
 /** 「这个岗位的额度到了」那一句。 */
 export const POSITION_ALLOCATION_EXHAUSTED_MESSAGE = '这个岗位本月的额度用完了，找管理员加。'
+/** WP206：这个人已经不在公司了（离职 / 被移出之后，名册同步上去就这么判）。 */
+export const MEMBER_LEFT_MESSAGE = '这个人已经不在公司了。'
+/** WP206：这个岗位已经删了。 */
+export const POSITION_REMOVED_MESSAGE = '这个岗位已经不在公司了。'
 /** 成员视角的「公司没钱了」那一句（云上原句说的是「去充值」，那是给管理员的）。 */
 export const ORG_BALANCE_EXHAUSTED_MESSAGE = '公司的积分用完了，找管理员充值。'
 
@@ -185,7 +196,12 @@ export interface AllocationAuditEntry {
   at: Iso8601
   /** 谁改的：本机声明的那个成员（`X-Agentsws-Member`）；没声明就是 `account:<云账号>`。 */
   actor: string
-  action: 'set' | 'clear' | 'member_removed'
+  /**
+   * `set` / `clear`：改上限；`member_removed`：删人清额度（WP194）。
+   * WP206 加：`reclaim`（管理员在网页上点「收回」= 上限设成 0）；`auto_reclaim`（名册同步时这个人 /
+   * 岗位没了，云上自动停用）；`returned`（又出现在名册里，停用解除）。
+   */
+  action: 'set' | 'clear' | 'member_removed' | 'reclaim' | 'auto_reclaim' | 'returned'
   kind: AllocationSubjectKind
   subject_id: string
   from?: number
@@ -267,6 +283,65 @@ export interface AllocationMemberRemoved {
   cleared: number
 }
 
+/* ------------------------------------------------------------------ */
+/* WP206：名册（网页版账号页「成员额度」要列人）                           */
+/* ------------------------------------------------------------------ */
+
+/**
+ * 名册里的一个成员：本机 `person_id` + 显示名 + 他手上的岗位 id。**只有这些名字，不带任何业务内容。**
+ * 网页端要能给还没设过上限的人设上限，所以得知道公司里有谁。
+ */
+export interface AllocationRosterMember {
+  id: string
+  name: string
+  /** 他持有的岗位 id（与打云时 `X-Agentsws-Position` 带的是同一套）。 */
+  positions?: string[]
+}
+
+/** 名册里的一个岗位：岗位 id + 名字。 */
+export interface AllocationRosterPosition {
+  id: string
+  name: string
+}
+
+/**
+ * `POST /v1/wallet/allocation/roster`：本机服务把**这个工作区**的名册整张推上来（启动时一次、名册变了一次、
+ * 之后每天一次）。云上按「组织 × 工作区」存，网页页取同一组织下各工作区的并集。
+ *
+ * 推上来以后，之前在名册里、这次不在了的成员 / 岗位（并集里也没了）→ 云上**自动收回**：标成停用，
+ * 新的预扣一律拒（402，`member_left` / `position_removed`）；正在预扣中的照常结算。又出现了就解除。
+ * 成员至少一个（一家公司至少有所有者；空名册多半是本机读坏了，一律拒，免得把全公司都停了）。
+ */
+export interface AllocationRosterRequest {
+  members: AllocationRosterMember[]
+  positions: AllocationRosterPosition[]
+}
+
+/** 名册最多多少人 / 多少岗位、名字最长多少字（再长的截断）。 */
+export const ALLOCATION_ROSTER_MAX_MEMBERS = 2000
+export const ALLOCATION_ROSTER_MAX_POSITIONS = 500
+export const ALLOCATION_ROSTER_NAME_MAX = 60
+
+/** 名册同步时变了状态的一个成员 / 岗位。 */
+export interface AllocationRosterChange {
+  kind: AllocationSubjectKind
+  subject_id: string
+}
+
+/** `POST /v1/wallet/allocation/roster` 的结果。 */
+export interface AllocationRosterSynced {
+  members: number
+  positions: number
+  /** 这一次自动收回（停用）了谁。 */
+  reclaimed: AllocationRosterChange[]
+  /** 这一次解除停用的（之前没了、这次又回到名册里）。 */
+  returned: AllocationRosterChange[]
+  synced_at: Iso8601
+}
+
+/** 网页版账号页上「成员额度」那一页的路径（工作台「设置 → 积分」链过去）。 */
+export const ALLOCATION_WEB_PATH = '/account/allocation'
+
 /** `GET /v1/wallet/allocation/me`：成员自己的「本月额度：已用 X / 上限 Y」。 */
 export interface MyAllocation {
   month: string
@@ -308,4 +383,11 @@ export interface CloudMyAllocationView {
   linked: boolean
   reason?: string
   mine?: MyAllocation
+  /**
+   * WP206：看这一块的人在公司里是 owner / admin 时才有——设置 → 积分据此画「给同事分额度 → 在网页上」。
+   * 额度分配只在网页版账号页做（Luoye 09-30 定：不属于公司的日常工作，不放工作台）。
+   */
+  role?: 'owner' | 'admin'
+  /** WP206：网页「成员额度」页的地址（`${云地址}/account/allocation`）；只 owner / admin 给。 */
+  allocation_url?: string
 }
