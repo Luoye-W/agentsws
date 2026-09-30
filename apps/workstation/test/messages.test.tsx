@@ -12,7 +12,7 @@
  * - 右栏那一格点一条建议 → **进编辑框**，不是发送。
  */
 import type { MessageLabel, MessageRecord, MessageThreadSummary } from '@agentsws/contracts'
-import { screen, waitFor } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import type { MailAssistantView, MessageAccountView, MessageThreadView } from '@/lib/api'
@@ -345,6 +345,64 @@ describe('第三栏 mail-assistant（63 §8）', () => {
     expect(seen).toEqual(['这就给你补发。'])
     expect(sendMessage).not.toHaveBeenCalled()
     resetMessageFocus()
+  })
+})
+
+describe('WP208：邮件助手搬进消息页的阅读区', () => {
+  it('没打开信时没有这一块；打开一封信就在阅读区里出「AI 助手」：分拣结果 + 摘要与建议，可收起', async () => {
+    // 标已读之后列表会重取一次：整条测试都回带分拣结果的那一份，结束时还原
+    const original = threadView.getMockImplementation()
+    threadView.mockImplementation(async () => ({
+      thread_id: '<t1@x>',
+      subject: '包裹破了',
+      messages: [
+        message({
+          triage: {
+            route: 'support',
+            labels: ['orders'],
+            needs_reply: true,
+            priority: 'high',
+            summary: '要退款',
+            confidence: 0.9,
+            by: 'rule',
+            reasons: ['In-Reply-To 命中客服线程'],
+            at: T0,
+          },
+        }),
+      ],
+    }))
+    const user = userEvent.setup()
+    renderWithProviders(<MessagesPage />)
+    await screen.findByTestId('messages-thread')
+    expect(screen.queryByTestId('mail-ai')).toBeNull()
+
+    await user.click(screen.getByTestId('messages-thread'))
+    const block = await screen.findByTestId('mail-ai')
+    // 在阅读区里（不在第三栏）
+    expect(screen.getByTestId('messages-reader').contains(block)).toBe(true)
+    const triage = within(block).getByTestId('mail-ai-triage')
+    expect(triage.getAttribute('data-route')).toBe('support')
+    expect(triage.textContent).toContain('归客服')
+    expect(triage.textContent).toContain('要紧')
+    // 为什么这么分进问号
+    expect(within(block).getByTestId('mail-ai-triage-why').getAttribute('data-hint')).toContain(
+      'In-Reply-To 命中客服线程',
+    )
+    expect(await within(block).findByText('客户说包裹破损要退款')).toBeDefined()
+
+    // 点一条建议 → 进写信框（不是发送）
+    await user.click(within(block).getAllByTestId('rail-mail-suggestion')[0] as HTMLElement)
+    expect(await screen.findByTestId('composer')).toBeDefined()
+    expect(sendMessage).not.toHaveBeenCalled()
+
+    // 收起：分拣那一行还在，摘要与建议那一段不在了
+    await user.click(within(block).getByTestId('mail-ai-toggle'))
+    expect(block.getAttribute('data-open')).toBe('false')
+    expect(within(block).queryByTestId('rail-mail-assistant')).toBeNull()
+    expect(within(block).getByTestId('mail-ai-triage')).toBeDefined()
+    await user.click(within(block).getByTestId('mail-ai-toggle'))
+    expect(block.getAttribute('data-open')).toBe('true')
+    if (original !== undefined) threadView.mockImplementation(original)
   })
 })
 

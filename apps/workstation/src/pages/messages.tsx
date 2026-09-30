@@ -40,6 +40,7 @@ import { type ReactNode, useCallback, useEffect, useMemo, useState } from 'react
 import { Link } from 'react-router-dom'
 import { StatusPill, WsAvatar, WsTag } from '@/components/design'
 import { Composer, type ComposeSeed, seedFrom } from '@/components/messages/composer'
+import { MailAiAssistant } from '@/components/messages/mail-ai-assistant'
 import { MessageBody } from '@/components/messages/message-body'
 import { PendingActions, PendingNavItem } from '@/components/messages/pending-confirm'
 import { focusMessage, USE_SUGGESTION_EVENT } from '@/components/rail/panels/mail-assistant-panel'
@@ -186,10 +187,10 @@ export function MessagesPage(): ReactNode {
   )
 
   /**
-   * 告诉第三栏"现在打开的是哪封信"。
+   * 告诉邮件助手"现在打开的是哪封信"。
    *
-   * 走那份内存真源而不是往面板注册接口上加一格——那份接口是所有面板共用的
-   * （WP100 `deck-focus.ts` 同一条路）。离开这一页时清空，面板照实说"没打开信"。
+   * 走那份内存真源（WP100 `deck-focus.ts` 同一条路）。WP208 起助手在阅读区里（不在第三栏了），
+   * 这条路原样留着：助手那一块与这一页之间仍然只靠它和下面那个事件。离开这一页时清空。
    */
   useEffect(() => {
     focusMessage(open?.id)
@@ -199,7 +200,7 @@ export function MessagesPage(): ReactNode {
   }, [open?.id])
 
   /**
-   * 右栏点了一条回复建议 → **进编辑框**（不是发送）。
+   * 邮件助手里点了一条回复建议 → **进编辑框**（不是发送）。
    *
    * 非岗位信件永不自动发（63 §6）：这条路的终点是一个装着建议正文的写信框，
    * 人改完自己按发送。客服 / 红人那条线程上只读，所以那时不接这个事件。
@@ -524,6 +525,9 @@ export function MessagesPage(): ReactNode {
                 }}
               />
             ))}
+
+            {/* WP208：邮件助手从第三栏搬进来——看信时才出现，一块可收起（Luoye 09-30） */}
+            {open === undefined ? null : <MailAiAssistant message={open} />}
 
             {readOnly ? (
               <p
