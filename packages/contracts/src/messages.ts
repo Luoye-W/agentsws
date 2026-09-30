@@ -84,6 +84,145 @@ export interface MessageTriage {
   /** 命中的判据（"In-Reply-To 命中客服线程"、"List-Unsubscribe"）。界面照实显示。 */
   reasons: string[]
   at: Iso8601
+  /**
+   * WP212（docs/88 §3）：**类型**——这件事是什么（十种内置，单选）。规则层先给，给不出才问模型。
+   * 老记录没有它：按 {@link MessageTriage.labels} 的对照表回填（`kindOfLegacy`，在 channels）。
+   */
+  kind?: MessageKind
+  /** WP212：类型是谁判的（层顶那一句「把握 91% · 模型」/「发件人规则」/「你改过」）。 */
+  kind_by?: MessageKindBy
+  /** WP212：类型的把握（0–1）。不给 = 与 {@link MessageTriage.confidence} 同值。 */
+  kind_confidence?: number
+  /**
+   * WP212：AI 建议交给哪个岗位（岗位模板 id：`customer-care` / `pr` …）。只是**建议**，
+   * 「没人接的」里那个主按钮「交给 X」就是它；发件人规则里记过岗位时由规则给（把握 1）。
+   */
+  suggested_position?: string
+}
+
+/* ── WP212：类型、没人接 / 已交出去（docs/88 §3、§7；只加不改）──────────── */
+
+/**
+ * docs/88 §3 的十种类型（可扩）：客户问题 · 售后 · 询盘 · 红人回复 · 合作 · 媒体 ·
+ * 账单与系统通知 · 物流 · 垃圾与营销 · 个人与其他。中英名在工作台 i18n（`messages.kind.*`）。
+ * 「可疑」不是类型，是旗标（标签 `suspicious`）。
+ */
+export const MESSAGE_KINDS = [
+  'customer_question',
+  'after_sales',
+  'inquiry',
+  'creator_reply',
+  'partnership',
+  'media',
+  'billing_system',
+  'logistics',
+  'marketing',
+  'personal_other',
+] as const
+
+export type MessageKind = (typeof MESSAGE_KINDS)[number]
+
+/** 类型是谁判的：规则层（自动信头 / 线程归并）、你教过的发件人规则、模型、你改的。 */
+export type MessageKindBy = 'rule' | 'sender_rule' | 'model' | 'user'
+
+/** 默认"只是通知"的那几类（AI 判了不用回时成捆）。 */
+export const NOTICE_KINDS: readonly MessageKind[] = ['billing_system', 'logistics', 'marketing']
+
+/**
+ * docs/88 §3.1：消息页上「要不要你」只有两种事实状态，外加 AI 判了不用回、还没点「知道了」的通知捆。
+ *
+ * - `unclaimed`：没人接——没岗位接、你也没处理（没点三个建议之一、没回、没归档），而且要回；
+ * - `notice`：只是通知——AI 判了不用回（`needs_reply = false`），在「只是通知」里成捆，**不算**没人接；
+ * - `handed`：已交出去——归了岗位（分拣自动交，或你点了「交给 X」），或你接了（回过 / 标通知 / 归档）。
+ *
+ * **服务端派生，不让模型猜**（63 §H：猜错的代价是人以为有人在管，其实那封信谁都没看）。
+ */
+export type MessageClaim = 'unclaimed' | 'notice' | 'handed'
+
+/** WP212：人在「没人接的」里点过的那一下（落在信上，派生 {@link MessageClaim} 时读它）。 */
+export interface MessageHandled {
+  /** `position` = 交给了某岗位；`notice` = 只是通知（知道了）；`me` = 我自己处理。 */
+  as: 'position' | 'notice' | 'me'
+  /** 交给了哪个岗位（岗位模板 id）。 */
+  position_id?: string
+  /** 交出去之后落到的事项。 */
+  matter_id?: string
+  by: PersonId
+  at: Iso8601
+}
+
+/** 「没人接的」每条那三个建议里 AI 挑的主按钮（docs/88 §3.2）。 */
+export interface MessageSuggest {
+  action: 'hand' | 'notice' | 'self'
+  /** `hand` 时：交给哪个岗位（岗位模板 id）。 */
+  position?: string
+}
+
+/** 「交给 X ▾」下拉里的一行：这个品牌里的一个岗位。 */
+export interface MessagePositionOption {
+  /** 岗位模板 id（`customer-care` / `pr` …）。 */
+  id: string
+  name_zh: string
+  name_en: string
+  /** 这个品牌里有人持着这个岗位的职责（没开的在下拉里是灰的：开了才能交，63 不挪信那条不许绕过）。 */
+  open: boolean
+  /** 这个岗位走的是 63 的哪条分拣路（客服 / 红人 / B2B）；其余岗位走 54 的「交给这个岗位一件事」。 */
+  route?: 'support' | 'kol' | 'b2b'
+}
+
+/** 「改判」那一下（类型胶囊上的 ✎）。 */
+export interface MessageKindInput {
+  kind: MessageKind
+  /** 「以后这个发件人都这样」：写 / 改一条发件人规则（模型之前跑，下次不花钱）。 */
+  remember_sender?: boolean | undefined
+}
+
+/** 「只是通知」/「我自己处理」/ 撤销（`none`）。 */
+export interface MessageClaimInput {
+  as: 'notice' | 'me' | 'none'
+}
+
+/** 「只是通知」整捆「知道了」：按类型一捆，或点名几条会话。 */
+export interface MessageNoticeAckInput {
+  kind?: MessageKind | undefined
+  /** 可疑那一捆（旗标，不是类型）。 */
+  suspicious?: boolean | undefined
+  thread_ids?: string[] | undefined
+}
+
+/** 一次纠正（改判、或交给了别的岗位）。进学习回路，也在「你教过它」里看得见。 */
+export interface MessageCorrection {
+  id: string
+  message_id: string
+  /** 发件人的域（只留域，不留完整地址——63 §10）。 */
+  sender_domain: string
+  field: 'kind' | 'position'
+  from?: string
+  to: string
+  /** 顺手写了发件人规则吗。 */
+  remembered: boolean
+  by: PersonId
+  at: Iso8601
+}
+
+/** 「没人接的」顶上那一行与右边「你教过它」要的数（一次取全）。 */
+export interface MessageOverview {
+  unclaimed: number
+  notice: number
+  handed: number
+  /** 已交给岗位的会话，按岗位数（「已交给岗位 21 · 客服 12 · …」）。 */
+  handed_by_position: { position_id: string; count: number }[]
+  /** 卡片流里与这些会话相关、等你批的卡（只报数，不列卡）。 */
+  cards_waiting: number
+  /** 「只是通知」按类型成捆（可疑单独一捆）；`senders` 是这一捆里的几个发件人显示名。 */
+  notice_groups: { kind: MessageKind | 'suspicious'; count: number; senders: string[] }[]
+  positions: MessagePositionOption[]
+  taught: {
+    rules: number
+    /** 按发件人规则直达、没花模型的信有几封（「少问你 N 次」）。 */
+    saved: number
+    recent: MessageCorrection[]
+  }
 }
 
 /** 低于这个把握就不挪信（63 §4）。 */
@@ -237,6 +376,8 @@ export interface MessageRecord {
   raw_ref?: string
   /** 归到了哪条客服 / 红人线程（`route` 不是 `inbox` 时才有）。 */
   linked?: ObjectRef
+  /** WP212：人在「没人接的」里点过的那一下（交给岗位 / 只是通知 / 我自己处理）。 */
+  handled?: MessageHandled
 }
 
 /**
@@ -270,6 +411,26 @@ export interface MessageThreadSummary {
   suggested_route?: MessageRoute
   /** WP167：等人确认的那封信的 id（点「这是客服」确认的就是它）。 */
   pending_message_id?: string
+  /** WP212：没人接 / 只是通知 / 已交出去（**服务端派生**，docs/88 §3.1）。 */
+  claim?: MessageClaim
+  /** WP212：「没人接的」里三个建议作用在哪一封上（这条会话里最新那封来信）。 */
+  claim_message_id?: string
+  /** WP212：类型（最新那封来信的；老记录按标签回填）。 */
+  kind?: MessageKind
+  kind_by?: MessageKindBy
+  kind_confidence?: number
+  /** WP212：AI 摘要（≤ 40 字，"这件事要你干什么"）。 */
+  summary?: string
+  /** WP212：急不急（最新那封来信的 `priority`）。 */
+  priority?: MessagePriority
+  /** WP212：三个建议里 AI 挑的主按钮（只在没人接时有）。 */
+  suggest?: MessageSuggest
+  /** WP212：交给了谁（岗位模板 id，或 `'me'`）。 */
+  handed_to?: string
+  /** WP212：这条会话在卡片流里还有几张卡等你批（「客服在办 · 有 1 张卡等你 →」）。 */
+  open_card_count?: number
+  /** WP212：跳到卡片那一头的链接（事项页，那里列着这件事的卡）。 */
+  card_link?: string
 }
 
 /* ── 标签 ─────────────────────────────────────────────────────────────── */
@@ -324,6 +485,10 @@ export interface SenderRule {
   /** 谁教的。 */
   by: PersonId
   created_at: Iso8601
+  /** WP212：教过的类型（下次同一发件人直接按它判，不花模型）。 */
+  kind?: MessageKind
+  /** WP212：教过的岗位（岗位模板 id）：下次同一发件人「交给 X」直接是主按钮。 */
+  position?: string
 }
 
 /* ── 草稿与回复建议 ───────────────────────────────────────────────────── */
@@ -378,6 +543,11 @@ export interface MessageListQuery {
    * 没挪信，留在收件箱里等人点一下「这是客服」。
    */
   pending_route?: boolean | undefined
+  /**
+   * WP212：`unclaimed` = 「没人接的」（消息页默认视图）；`notice` = 「只是通知」那几捆。
+   * 只看收件箱那一格里的来信（已发 / 草稿 / 垃圾箱 / 归档不算）。
+   */
+  claim?: 'unclaimed' | 'notice' | undefined
   limit?: number | undefined
   cursor?: string | undefined
 }
@@ -409,8 +579,16 @@ export interface MessageMoveInput {
  * - `inbox`：「不是」→ 只记人的判断，信留在收件箱，不再挂在「待确认」里。
  */
 export interface MessageConfirmRouteInput {
-  /** WP172：`b2b` =「这是 B2B」→ 交给 B2B 那一路（落成询盘 / 往来记录），再挪进 `BtoBAgents`。 */
-  route: 'support' | 'kol' | 'b2b' | 'inbox'
+  /**
+   * WP172：`b2b` =「这是 B2B」→ 交给 B2B 那一路（落成询盘 / 往来记录），再挪进 `BtoBAgents`。
+   * WP212：`position` =「交给 X」推广到所有岗位——带 `position_id`（岗位模板 id），走 54 的
+   * 「交给这个岗位一件事」（开事项、岗位内路由挑职责、起 Run；有要你定的出卡）。
+   */
+  route: 'support' | 'kol' | 'b2b' | 'inbox' | 'position'
+  /** WP212：`route: 'position'` 时交给哪个岗位（给了客服 / 红人 / B2B 那三个岗位就走对应的老路）。 */
+  position_id?: string | undefined
+  /** WP212：「以后这个发件人都这样」——写一条带岗位的发件人规则。 */
+  remember_sender?: boolean | undefined
 }
 
 /** 人工分拣的结果：交没交出去（客服岗位没开 / 客服那一路不接 = `false`，信不动）。 */
@@ -419,6 +597,12 @@ export interface MessageConfirmRouteResult {
   handed_off: boolean
   /** 交给客服 / 红人那一路之后落到的事项。 */
   matter_id?: string
+  /** WP212：交给了哪个岗位（岗位模板 id）。 */
+  position_id?: string
+  /** WP212：交不出去时的一句人话（岗位没开 / 你名下没有这个岗位的职责 / 原信取不回）。 */
+  refused?: string
+  /** WP212：勾了「以后都这样」时写下的那一条。 */
+  rule?: SenderRule
 }
 
 /** 写信框每隔几秒打一次的那一份（`id` 为空 = 新建）。 */
