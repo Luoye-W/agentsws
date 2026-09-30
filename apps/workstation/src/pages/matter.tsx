@@ -9,7 +9,16 @@
  */
 import type { MatterEvent } from '@agentsws/contracts'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Bot, CheckSquare, CreditCard, FileText, MessageSquare, Pin, User } from 'lucide-react'
+import {
+  Archive,
+  Bot,
+  CheckSquare,
+  CreditCard,
+  FileText,
+  MessageSquare,
+  Pin,
+  User,
+} from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { AskAiPanel } from '@/components/deck/ask-ai-panel'
@@ -31,6 +40,7 @@ import {
 } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 import { formatDateTime } from '@/lib/format'
+import { markMatterSeen, RAIL_KEY, unarchiveMatter } from '@/lib/work-archive'
 
 const EVENT_ICON = {
   human_message: MessageSquare,
@@ -171,6 +181,23 @@ export function MatterPage(): React.ReactNode {
     enabled: id !== '' && limit > 20,
   })
 
+  /*
+   * WP207：点开看过了——左栏这件事「做完待看」的小点灭掉。页面开着时 Agent 又答了一句
+   * （事项数据刷新），也算看过。失败不打扰人（它只管一个小点）。
+   */
+  const seenAt = matter.dataUpdatedAt
+  useEffect(() => {
+    if (id === '' || seenAt === 0) return
+    void markMatterSeen(id).then(() => client.invalidateQueries({ queryKey: RAIL_KEY }))
+  }, [id, seenAt, client])
+
+  const restore = useMutation({
+    mutationFn: () => unarchiveMatter(id, 'user'),
+    onSettled: () => {
+      void client.invalidateQueries({ queryKey: ['matter'] })
+    },
+  })
+
   // 锚点：从待办 / 卡片点进来时滚到那一条
   useEffect(() => {
     const hash = globalThis.location?.hash?.slice(1)
@@ -259,6 +286,27 @@ export function MatterPage(): React.ReactNode {
             positionId={view.matter.position_id}
             {...(view.matter.role_id === undefined ? {} : { roleId: view.matter.role_id })}
           />
+        )}
+        {/* WP207：归档的事照样能看；一句话 + 一个「放回左栏」 */}
+        {view.matter.archived_at === undefined ? null : (
+          <div
+            className="flex flex-wrap items-center gap-2 rounded-[10px] bg-ws-tint/60 px-3 py-2 text-[13px]"
+            data-testid="matter-archived"
+          >
+            <Archive aria-hidden className="size-3.5 text-ws-muted-fg" />
+            <span className="flex-1">{t('matter.archived')}</span>
+            <Button
+              size="xs"
+              variant="outline"
+              data-testid="matter-unarchive"
+              disabled={restore.isPending}
+              onClick={() => {
+                restore.mutate()
+              }}
+            >
+              {t('matter.unarchive')}
+            </Button>
+          </div>
         )}
         <p className="text-sm text-muted-foreground" data-testid="matter-summary">
           {view.matter.context.summary}

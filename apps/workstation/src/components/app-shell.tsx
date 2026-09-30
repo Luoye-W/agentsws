@@ -50,11 +50,21 @@ import { CommandPalette } from '@/components/command-palette'
 import { BrandMark } from '@/components/design'
 import { NoModelBanner } from '@/components/models/no-model-banner'
 import { QuotaChip } from '@/components/models/quota-notice'
-import { type Handoff, PaletteProvider } from '@/components/palette-context'
+import {
+  type ComposeTarget,
+  type Handoff,
+  PaletteProvider,
+  usePalette,
+} from '@/components/palette-context'
 import { RailStateProvider } from '@/components/rail/rail-state'
 import { RightRail } from '@/components/rail/right-rail'
 // WP60（48 L6）：值守中的角标。自带数据，顶栏这里只有一行
 import { SceneSwitcher } from '@/components/scene-switcher'
+import { AddDutyInline } from '@/components/sidebar/add-duty-inline'
+import { ArchivedDialog, type ArchivedScope } from '@/components/sidebar/archived-dialog'
+import { DutyThreads, RAIL_FETCH } from '@/components/sidebar/duty-threads'
+import { NewPositionInline } from '@/components/sidebar/new-position-inline'
+import { RailPlus } from '@/components/sidebar/rail-plus'
 import { StandbyBadge } from '@/components/standby-badge'
 import { CreditsChip, ModelChip } from '@/components/top-chips'
 import { DemoBadge } from '@/components/ui/demo-badge'
@@ -70,6 +80,7 @@ import { holdsDuty } from '@/lib/pick-assignment'
 import { myAssignments } from '@/lib/positions'
 import { RAIL_EXPANDED_KEY, readFlags, writeFlags } from '@/lib/ui-state'
 import { cn } from '@/lib/utils'
+import { getWorkRail, RAIL_KEY, type RailPosition } from '@/lib/work-archive'
 
 /**
  * 左栏一行。
@@ -118,24 +129,43 @@ export function dutyHref(assignment_id: string, role_id: string): string {
  *
  * 展开层里只列**本人持有**的职责：别人那条分配不能拿来开事（54 §2 / WP69），
  * 列出来只会让人点进一个进不去的页面。
+ *
+ * WP207（Luoye 09-30「像 Claude 一样」）：
+ * - 岗位行悬停出「+」= 给这个岗位加职责（只有所有者有）；职责行悬停出「+」= 在这条职责下开新事；
+ * - 每条职责下挂着它进行中的对话 / 任务（状态小点），默认 5 条 +「更多」，最底下「已归档（n）」；
+ * - 右边那个数改成「等你处理的」：等你批的卡 + 做完待你看的（取不到左栏那份时照旧是待审卡数）。
  */
 function PositionNav({
   instance,
   open,
   onToggle,
+  rail,
+  owner,
+  person_id,
+  onArchived,
 }: {
   instance: PositionInstanceData
   open: boolean
   onToggle: () => void
+  /** WP207：左栏那一份里这个岗位的（没有 = 老服务进程 / 还没取到）。 */
+  rail?: RailPosition
+  /** WP207：所有者那条分配；有它才出「加职责」的「+」。 */
+  owner?: string
+  person_id?: string
+  onArchived: (role_id: string) => void
 }): ReactNode {
   const { lang, t } = useApp()
+  const palette = usePalette()
+  const [adding, setAdding] = useState(false)
+  const [more, setMore] = useState<Record<string, boolean>>({})
   const first = myAssignments(instance)[0]
   if (first === undefined) return null
   const name = lang === 'en' ? instance.name.en : instance.name.zh
   const duties = instance.roles.filter((r) => r.my_assignment_id !== undefined)
+  const waiting = rail?.awaiting ?? instance.pending_cards
   return (
     <div data-testid="nav-position-row" data-position={instance.position_id}>
-      <div className="flex items-center">
+      <div className="group/row flex items-center gap-0.5">
         <button
           type="button"
           aria-expanded={open}
@@ -158,30 +188,88 @@ function PositionNav({
         >
           <NavIcon icon={positionIcon(instance.roles[0]?.role_id ?? '')} />
           <span className="truncate">{name}</span>
-          {instance.pending_cards === 0 ? null : (
+          {waiting === 0 ? null : (
             <span
               className="ml-auto shrink-0 rounded bg-muted px-1.5 py-0.5 text-[11px] tabular-nums"
               data-testid="nav-position-pending"
-              title={t('home.positions.cards', { count: instance.pending_cards })}
+              title={
+                rail === undefined
+                  ? t('home.positions.cards', { count: instance.pending_cards })
+                  : t('rail.awaiting.hint')
+              }
             >
-              {instance.pending_cards}
+              {waiting}
             </span>
           )}
         </NavLink>
+        {owner === undefined || person_id === undefined ? null : (
+          <RailPlus
+            hover
+            label={t('rail.add_duty', { name })}
+            testId="rail-add-duty-plus"
+            expanded={adding}
+            onClick={() => {
+              setAdding((v) => !v)
+            }}
+          />
+        )}
       </div>
+      {adding && owner !== undefined && person_id !== undefined ? (
+        <AddDutyInline
+          owner={owner}
+          person_id={person_id}
+          position_id={instance.position_id}
+          onCancel={() => {
+            setAdding(false)
+          }}
+          onDone={() => {
+            setAdding(false)
+            if (!open) onToggle()
+          }}
+        />
+      ) : null}
       {open && duties.length > 0 ? (
         <ul className="ml-5 flex flex-col gap-0.5 border-l pl-2" data-testid="nav-duties">
-          {duties.map((r) => (
-            <li key={r.role_id} data-duty={r.role_id}>
-              <NavLink
-                to={dutyHref(r.my_assignment_id ?? '', r.role_id)}
-                className={navClass}
-                data-testid="nav-duty"
-              >
-                <span className="truncate text-[13px]">{r.role_name}</span>
-              </NavLink>
-            </li>
-          ))}
+          {duties.map((r) => {
+            const threads = rail?.duties.find((d) => d.role_id === r.role_id)
+            return (
+              <li key={r.role_id} data-duty={r.role_id}>
+                <div className="group/row flex items-center gap-0.5">
+                  <NavLink
+                    to={dutyHref(r.my_assignment_id ?? '', r.role_id)}
+                    className={({ isActive }) => cn(navClass({ isActive }), 'min-w-0 flex-1')}
+                    data-testid="nav-duty"
+                  >
+                    <span className="truncate text-[13px]">{r.role_name}</span>
+                  </NavLink>
+                  <RailPlus
+                    hover
+                    label={t('rail.new_matter', { name: r.role_name })}
+                    testId="rail-new-matter"
+                    onClick={() => {
+                      palette.compose?.({
+                        assignment: r.my_assignment_id ?? first,
+                        role_id: r.role_id,
+                        label: `${name} › ${r.role_name}`,
+                      })
+                    }}
+                  />
+                </div>
+                {threads === undefined ? null : (
+                  <DutyThreads
+                    duty={threads}
+                    expanded={more[r.role_id] === true}
+                    onMore={() => {
+                      setMore((m) => ({ ...m, [r.role_id]: m[r.role_id] !== true }))
+                    }}
+                    onArchived={() => {
+                      onArchived(r.role_id)
+                    }}
+                  />
+                )}
+              </li>
+            )
+          })}
         </ul>
       ) : null}
     </div>
@@ -238,10 +326,18 @@ export function AppShell({
   const [paletteOpen, setPaletteOpen] = useState(false)
   /** WP188：「交给岗位去做」带过来的那件事（面板开着时只列岗位）。 */
   const [handoff, setHandoff] = useState<Handoff | undefined>(undefined)
+  /** WP207：职责行「+」预选好的岗位与职责（面板开着时只剩一格输入）。 */
+  const [compose, setCompose] = useState<ComposeTarget | undefined>(undefined)
   const palette = useMemo(
     () => ({
       open: (next?: Handoff) => {
+        setCompose(undefined)
         setHandoff(next)
+        setPaletteOpen(true)
+      },
+      compose: (target: ComposeTarget) => {
+        setHandoff(undefined)
+        setCompose(target)
         setPaletteOpen(true)
       },
     }),
@@ -254,6 +350,24 @@ export function AppShell({
   // WP71：只存"用户显式点过的那几个"，没点过的按"当前岗位默认展开"算
   const [flags, setFlags] = useState<Record<string, boolean>>(() => readFlags(RAIL_EXPANDED_KEY))
   const current = byPosition.find((p) => myAssignments(p).includes(position ?? ''))
+  /*
+   * WP207：左栏职责下的对话 / 任务。取不到（老服务进程 / 断网）就不画，岗位与职责照旧。
+   * 查询键在 `['matter']` 底下：事项 / 卡片 / 运行 / 归档的事件一来就重取；再兜一个一分钟的轮询。
+   */
+  const rail = useQuery({
+    queryKey: RAIL_KEY,
+    queryFn: () => getWorkRail(RAIL_FETCH),
+    enabled: byPosition.length > 0,
+    retry: false,
+    staleTime: 30_000,
+    refetchInterval: 60_000,
+  })
+  /** WP207：「+」只给所有者（公司页的写操作也只有所有者能做，05 §3）。 */
+  const owner = me?.assignments.find(
+    (a) => a.role_id === 'common.owner' && a.revoked_at === undefined,
+  )?.id
+  const [creating, setCreating] = useState(false)
+  const [archived, setArchived] = useState<ArchivedScope | undefined>(undefined)
 
   const toggle = useCallback((position_id: string, wasOpen: boolean) => {
     setFlags((prev) => {
@@ -344,12 +458,46 @@ export function AppShell({
                 <NavIcon icon={CalendarDays} />
                 {t('nav.calendar')}
               </NavLink>
-              <div className="px-2.5 pt-4 pb-1.5 text-[11px] tracking-wider text-ws-muted-fg uppercase">
-                {t('nav.positions')}
+              {/* WP207：标题右边一个常显的「+」= 新建岗位（照 Claude 的做法；只有所有者有） */}
+              <div className="flex items-center justify-between px-2.5 pt-4 pb-1.5">
+                <span className="text-[11px] tracking-wider text-ws-muted-fg uppercase">
+                  {t('nav.positions')}
+                </span>
+                {owner === undefined || me === undefined ? null : (
+                  <RailPlus
+                    label={t('rail.new_position')}
+                    testId="rail-new-position-plus"
+                    expanded={creating}
+                    onClick={() => {
+                      setCreating((v) => !v)
+                    }}
+                  />
+                )}
               </div>
+              {creating && owner !== undefined && me !== undefined ? (
+                <NewPositionInline
+                  owner={owner}
+                  person_id={me.person.id}
+                  onCancel={() => {
+                    setCreating(false)
+                  }}
+                  onDone={(position_id) => {
+                    setCreating(false)
+                    // 建完展开它（记成显式展开，下次进来还开着）
+                    setFlags((prev) => {
+                      const next = { ...prev, [position_id]: true }
+                      writeFlags(RAIL_EXPANDED_KEY, next)
+                      return next
+                    })
+                  }}
+                />
+              ) : null}
               {byPosition.length > 0
                 ? byPosition.map((p) => {
                     const open = flags[p.position_id] ?? p.position_id === current?.position_id
+                    const railPos = rail.data?.positions.find(
+                      (x) => x.position_id === p.position_id,
+                    )
                     return (
                       <PositionNav
                         key={p.position_id}
@@ -357,6 +505,13 @@ export function AppShell({
                         open={open}
                         onToggle={() => {
                           toggle(p.position_id, open)
+                        }}
+                        {...(railPos === undefined ? {} : { rail: railPos })}
+                        {...(owner === undefined || me === undefined
+                          ? {}
+                          : { owner, person_id: me.person.id })}
+                        onArchived={(role_id) => {
+                          setArchived({ position_id: p.position_id, role_id })
                         }}
                       />
                     )
@@ -469,13 +624,29 @@ export function AppShell({
           {/* 36 §9 第三栏：默认收成 44px 图标轨，一次开一个面板 */}
           <RightRail {...(instances === undefined ? {} : { instances })} />
 
+          {/* WP207：「已归档（n）」点开的列表（筛好那条职责；筛子都能改） */}
+          {archived === undefined ? null : (
+            <ArchivedDialog
+              open
+              onOpenChange={(next) => {
+                if (!next) setArchived(undefined)
+              }}
+              scope={archived}
+              instances={byPosition}
+            />
+          )}
+
           <CommandPalette
             open={paletteOpen}
             onOpenChange={(next) => {
               setPaletteOpen(next)
-              if (!next) setHandoff(undefined)
+              if (!next) {
+                setHandoff(undefined)
+                setCompose(undefined)
+              }
             }}
             {...(handoff === undefined ? {} : { handoff })}
+            {...(compose === undefined ? {} : { compose })}
             positions={positions}
             {...(instances === undefined ? {} : { instances })}
             cards={cards}

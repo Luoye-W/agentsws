@@ -11,14 +11,22 @@
  * WP157：**教程也搜得到**（「教程」一组）——搜"百炼""浏览器插件"，回车在右栏打开那一篇
  * （与卡片上的「看教程」同一条路：`openAddress('agentsws://help/<slug>')`）。
  * 中英两种标题都进搜索词，界面是英文也能用中文名搜到。
+ *
+ * WP207 三处：
+ * - **对话与任务也搜得到**（标题、摘要、正文，服务端全文搜），归档的标「已归档」；
+ * - 最后一项「让 AI 找回『…』」：拿这句模糊的话去找归档的，给几张候选卡，**点一张才放回来**；
+ * - 左栏职责行的「+」打开的是「写一句话」这一格（岗位与职责已经选好），回车就交出去。
+ *   这三处都是确定的动作——⌘K 仍然不是聊天框。
  */
 import type { DeckCard, TileSpec } from '@agentsws/deck'
-import { useMutation, useQuery } from '@tanstack/react-query'
-import { useEffect } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Archive, Sparkles } from 'lucide-react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useBrands } from '@/components/brand-switcher'
-import type { Handoff } from '@/components/palette-context'
+import type { ComposeTarget, Handoff } from '@/components/palette-context'
 import { useRailState } from '@/components/rail/rail-state'
+import { RecallCards } from '@/components/sidebar/recall-cards'
 import {
   Command,
   CommandDialog,
@@ -28,6 +36,7 @@ import {
   CommandItem,
   CommandList,
 } from '@/components/ui/command'
+import { Input } from '@/components/ui/input'
 import {
   listCatalog,
   openMatterAtPosition,
@@ -39,6 +48,7 @@ import { useApp } from '@/lib/app-context'
 import { HELP_SLUGS, helpAddress } from '@/lib/help'
 import { translate } from '@/lib/i18n'
 import { myAssignments } from '@/lib/positions'
+import { findArchivedWork, RAIL_KEY, searchWork } from '@/lib/work-archive'
 
 export function CommandPalette({
   open,
@@ -49,6 +59,7 @@ export function CommandPalette({
   tileLibrary,
   onAddTile,
   handoff,
+  compose,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -57,6 +68,8 @@ export function CommandPalette({
    * （与岗位页顶部「交给这个岗位一件事」同一条路），然后进事项页。
    */
   handoff?: Handoff
+  /** WP207：左栏职责行的「+」——岗位与职责已经选好，只剩写一句话。 */
+  compose?: ComposeTarget
   positions: PositionSummary[]
   /** WP70：按岗位聚合的那一份。有它就先列岗位、再列「岗位 › 职责」。 */
   instances?: PositionInstanceData[]
@@ -85,6 +98,40 @@ export function CommandPalette({
    * 进不去的品牌也不出（服务端已经筛过）。
    */
   const { org_id, brands, solo } = useBrands()
+  const client = useQueryClient()
+  /** WP207：面板里打的字（要拿去搜对话与任务、也要拿去让 AI 找回）。 */
+  const [search, setSearch] = useState('')
+  const [debounced, setDebounced] = useState('')
+  /** WP207：点了「让 AI 找回」之后，面板换成候选卡那一屏。 */
+  const [recall, setRecall] = useState<string | undefined>(undefined)
+  const [sentence, setSentence] = useState('')
+  useEffect(() => {
+    if (!open) {
+      setSearch('')
+      setRecall(undefined)
+      setSentence('')
+    }
+  }, [open])
+  useEffect(() => {
+    const h = setTimeout(() => {
+      setDebounced(search.trim())
+    }, 200)
+    return () => {
+      clearTimeout(h)
+    }
+  }, [search])
+  const works = useQuery({
+    queryKey: ['matter', 'search', debounced],
+    enabled: open && debounced.length >= 2,
+    queryFn: () => searchWork(debounced, 8),
+    retry: false,
+  })
+  const found = useQuery({
+    queryKey: ['matter', 'recall', recall],
+    enabled: open && recall !== undefined,
+    queryFn: () => findArchivedWork(recall ?? ''),
+    retry: false,
+  })
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
@@ -105,13 +152,100 @@ export function CommandPalette({
   }
 
   const handOver = useMutation({
-    mutationFn: (input: { assignment: string; handoff: Handoff }) =>
-      openMatterAtPosition(input.assignment, input.handoff),
+    mutationFn: (input: { assignment: string; handoff: Handoff; role_id?: string }) =>
+      openMatterAtPosition(input.assignment, {
+        title: input.handoff.title,
+        ...(input.handoff.summary === '' ? {} : { summary: input.handoff.summary }),
+        // WP207：从职责行的「+」来的，职责已经定了（跳过岗位内路由，与快捷提示同一条路）
+        ...(input.role_id === undefined ? {} : { role_id: input.role_id }),
+      }),
     onSuccess: (out, input) => {
       // 判准了直接进事项页；拿不准就去岗位页，让人在那儿点一下走哪条职责
       go(out.ambiguous ? `/positions/${input.assignment}` : `/matters/${out.matter.id}`)
     },
   })
+
+  if (compose !== undefined) {
+    return (
+      <CommandDialog
+        open={open}
+        onOpenChange={onOpenChange}
+        title={t('command.compose.title', { name: compose.label })}
+      >
+        <form
+          className="flex flex-col gap-2 p-3"
+          data-testid="command-compose"
+          onSubmit={(e) => {
+            e.preventDefault()
+            const title = sentence.trim()
+            if (title === '' || handOver.isPending) return
+            handOver.mutate(
+              {
+                assignment: compose.assignment,
+                handoff: { title: title.slice(0, 200), summary: '' },
+                role_id: compose.role_id,
+              },
+              {
+                onSuccess: () => {
+                  void client.invalidateQueries({ queryKey: RAIL_KEY })
+                },
+              },
+            )
+          }}
+        >
+          <span className="text-[12px] text-muted-foreground">
+            {t('command.compose.title', { name: compose.label })}
+          </span>
+          <Input
+            autoFocus
+            value={sentence}
+            maxLength={200}
+            placeholder={t('command.compose.placeholder')}
+            aria-label={t('command.compose.placeholder')}
+            data-testid="command-compose-input"
+            onChange={(e) => {
+              setSentence(e.target.value)
+            }}
+          />
+          {handOver.error === null ? null : (
+            <p className="text-xs text-destructive">{handOver.error.message}</p>
+          )}
+        </form>
+      </CommandDialog>
+    )
+  }
+
+  if (recall !== undefined) {
+    return (
+      <CommandDialog open={open} onOpenChange={onOpenChange} title={t('command.recall.title')}>
+        <div className="flex flex-col gap-2 p-3" data-testid="command-recall">
+          <span className="flex items-center gap-1.5 text-[12px] text-muted-foreground">
+            <Sparkles aria-hidden className="size-3.5" />
+            {t('command.recall', { q: recall })}
+          </span>
+          {found.data === undefined ? (
+            <p className="text-[13px] text-muted-foreground">{t('command.recall.loading')}</p>
+          ) : found.data.candidates.length === 0 ? (
+            <p className="text-[13px] text-muted-foreground">{t('archive.ai.none')}</p>
+          ) : (
+            <>
+              <p className="text-[12px] text-muted-foreground">
+                {t('archive.ai.pick')}
+                {found.data.semantic ? ` · ${t('archive.ai.semantic')}` : ''}
+              </p>
+              <RecallCards
+                compact
+                candidates={found.data.candidates}
+                onRestored={() => {
+                  onOpenChange(false)
+                }}
+              />
+            </>
+          )}
+        </div>
+      </CommandDialog>
+    )
+  }
 
   if (handoff !== undefined) {
     const targets =
@@ -159,9 +293,38 @@ export function CommandPalette({
   return (
     <CommandDialog open={open} onOpenChange={onOpenChange} title={t('command.placeholder')}>
       <Command>
-        <CommandInput placeholder={t('command.placeholder')} />
+        <CommandInput
+          placeholder={t('command.placeholder')}
+          value={search}
+          onValueChange={setSearch}
+        />
         <CommandList>
           <CommandEmpty>{t('command.empty')}</CommandEmpty>
+          {/* WP207：对话与任务（服务端全文搜；归档的也在，标出来） */}
+          {debounced.length < 2 || (works.data ?? []).length === 0 ? null : (
+            <CommandGroup heading={t('command.group.work')}>
+              {(works.data ?? []).map((m) => (
+                <CommandItem
+                  key={m.id}
+                  forceMount
+                  value={`work ${m.id} ${m.title}`}
+                  data-testid="command-work"
+                  data-archived={m.archived_at === undefined ? undefined : 'true'}
+                  onSelect={() => {
+                    go(`/matters/${encodeURIComponent(m.id)}`)
+                  }}
+                >
+                  <span className="truncate">{m.title}</span>
+                  {m.archived_at === undefined ? null : (
+                    <span className="ml-auto flex shrink-0 items-center gap-1 text-xs text-muted-foreground">
+                      <Archive aria-hidden className="size-3" />
+                      {t('archive.badge')}
+                    </span>
+                  )}
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          )}
           <CommandGroup heading={t('command.group.go')}>
             {/* WP188：⌘K 里开一段新的随便聊 */}
             <CommandItem
@@ -320,6 +483,22 @@ export function CommandPalette({
               </CommandItem>
             ))}
           </CommandGroup>
+          {/* WP207：让 AI 找回——只给候选，点一张才放回来 */}
+          {search.trim().length < 2 ? null : (
+            <CommandGroup heading={t('command.archived')}>
+              <CommandItem
+                forceMount
+                value={`recall ${search}`}
+                data-testid="command-recall-item"
+                onSelect={() => {
+                  setRecall(search.trim())
+                }}
+              >
+                <Sparkles aria-hidden className="size-3.5" />
+                {t('command.recall', { q: search.trim() })}
+              </CommandItem>
+            </CommandGroup>
+          )}
           {position === null ? null : (
             <CommandGroup heading={t('command.group.tiles')}>
               {tileLibrary.map((tile) => (

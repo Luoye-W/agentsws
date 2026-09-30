@@ -41,6 +41,8 @@ export const HELP_SLUGS = [
   'b2b-sending-domain',
   // WP184：切换 dsh 场景（官方场景开在哪、用户自己装的官方桌面端）
   'dsh-scenes',
+  // WP207：对话与任务的归档与找回（左栏三级「+」、状态小点、自动归档、AI 找回）
+  'archive',
 ] as const
 
 export type HelpSlug = (typeof HELP_SLUGS)[number]
