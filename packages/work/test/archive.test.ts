@@ -168,7 +168,8 @@ describe('找回：时间段 / 查询词 / 打分', () => {
       doc('m4', 'Instagram 帖子排期', { labels: ['红人营销'] }, lastWeek),
     ]
     const out = rankArchived(docs, { query: '把上周跟那个美国红人谈样品的对话找回来', now })
-    expect(out.map((c) => c.matter_id)).toEqual(['m1', 'm2', 'm4'])
+    // m4 只中了岗位名「红人营销」：同一个岗位下的事个个都带着它，不算像；m3 什么都没中
+    expect(out.map((c) => c.matter_id)).toEqual(['m1', 'm2'])
     expect(out[0]?.why).toContain('title:美国红人 样品')
     expect(out[0]?.why).toContain('time:上周')
     expect(out[0]?.score).toBeGreaterThan(out[1]?.score ?? 1)

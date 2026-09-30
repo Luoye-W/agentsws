@@ -161,8 +161,8 @@ export function queryTerms(text: string): string[] {
 export function keywordScore(
   terms: readonly string[],
   doc: RecallDoc,
-): { score: number; why: string[] } {
-  if (terms.length === 0) return { score: 0, why: [] }
+): { score: number; why: string[]; strong: boolean } {
+  if (terms.length === 0) return { score: 0, why: [], strong: false }
   const fields: { text: string; weight: number; name: string }[] = [
     { text: doc.matter.title.toLowerCase(), weight: 3, name: 'title' },
     { text: doc.matter.context.summary.toLowerCase(), weight: 2, name: 'summary' },
@@ -181,9 +181,11 @@ export function keywordScore(
   }
   const why: string[] = []
   for (const [name, words] of hitWords) why.push(`${name}:${mergeBigrams(words).join(' ')}`)
+  // 只中了岗位 / 职责名不算"像"：同一个岗位下的事个个都带着它
+  const strong = [...hitWords.keys()].some((k) => k !== 'labels')
   // 分母封顶 4 个词：模型常把同一件事的几种说法（中英、同义）一起给，
   // 命中其中一半就该是"很像"，不能被没命中的同义词摊薄
-  return { score: Math.min(1, got / (Math.min(terms.length, 4) * 3)), why }
+  return { score: Math.min(1, got / (Math.min(terms.length, 4) * 3)), why, strong }
 }
 
 /** 「美国 / 国红 / 红人」拼回「美国红人」，给人看的理由里不出现半截词。 */
@@ -258,7 +260,7 @@ export function rankArchived(
     // 只说了时间（「上周那个」）：窗口里的都算，窗口外的不算
     if (terms.length === 0) score = inWindow ? 0.5 : 0
     else score = sem === undefined ? kw.score : 0.65 * kw.score + 0.35 * sem
-    if (terms.length > 0 && kw.score === 0 && (sem === undefined || sem < 0.5)) return
+    if (terms.length > 0 && !kw.strong && (sem === undefined || sem < 0.5)) return
     if (sem !== undefined && sem >= 0.5) why.push('semantic')
     // 时间是模糊印象：窗口里的按比例加分，窗口外的按比例减分，不硬筛
     if (hasWindow && terms.length > 0) score = inWindow ? score * 1.3 + 0.05 : score * 0.75

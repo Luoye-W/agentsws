@@ -302,7 +302,7 @@ export function CommandPalette({
           <CommandEmpty>{t('command.empty')}</CommandEmpty>
           {/* WP207：对话与任务（服务端全文搜；归档的也在，标出来） */}
           {debounced.length < 2 || (works.data ?? []).length === 0 ? null : (
-            <CommandGroup heading={t('command.group.work')}>
+            <CommandGroup forceMount heading={t('command.group.work')}>
               {(works.data ?? []).map((m) => (
                 <CommandItem
                   key={m.id}
@@ -485,7 +485,7 @@ export function CommandPalette({
           </CommandGroup>
           {/* WP207：让 AI 找回——只给候选，点一张才放回来 */}
           {search.trim().length < 2 ? null : (
-            <CommandGroup heading={t('command.archived')}>
+            <CommandGroup forceMount heading={t('command.archived')}>
               <CommandItem
                 forceMount
                 value={`recall ${search}`}
