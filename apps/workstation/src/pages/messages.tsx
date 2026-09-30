@@ -16,9 +16,18 @@
  *   `move { to: 'trash' }`，没有第二种去处。
  * - **键盘**：`j`/`k` 上下、`e` 归档、`r` 回复、`a` 全部回复、`/` 搜索。
  *   跟主流邮箱一致——肌肉记忆比自创一套值钱。
+ * - **WP204：点了就有回音**。每个按钮要么立刻看得见变化，要么底下冒一句话（好消息几秒后
+ *   自己消失，错误留着）；归档 / 删除挪的是整条会话、挪完离开这条、带「撤销」；删除先问一句；
+ *   影子模式（只看不动）下归档 / 删除置灰、问号里说为什么；「显示图片」由本机代取、只对这一封。
  */
-import type { MessageFolderKind, MessageRecord, MessageThreadSummary } from '@agentsws/contracts'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import type {
+  MessageAttachmentMeta,
+  MessageFolderKind,
+  MessageRecord,
+  MessageThreadSummary,
+  MessageWriteback,
+} from '@agentsws/contracts'
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   AlertTriangle,
   Archive,
@@ -28,15 +37,18 @@ import {
   Image as ImageIcon,
   Inbox,
   ListFilter,
+  Loader2,
   Mail,
+  Paperclip,
   PenSquare,
   RefreshCw,
   ReplyAll,
   Search,
   Star,
   Trash2,
+  X,
 } from 'lucide-react'
-import { type ReactNode, useCallback, useEffect, useMemo, useState } from 'react'
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { StatusPill, WsAvatar, WsTag } from '@/components/design'
 import { Composer, type ComposeSeed, seedFrom } from '@/components/messages/composer'
@@ -50,13 +62,13 @@ import { Skeleton } from '@/components/ui/skeleton'
 import {
   backfillMessages,
   discardMessageDraft,
+  downloadMessageAttachment,
   getMessageThread,
   listMessageAccounts,
   listMessageLabels,
   listMessageThreads,
   type MessageAccountView,
   messageQuery,
-  messageToTodo,
   moveMessage,
   saveMessageDraft,
   sendMessage,
@@ -65,6 +77,7 @@ import {
   syncMessages,
 } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
+import { apiErrorText } from '@/lib/error-text'
 import { formatDateTime } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
@@ -100,28 +113,61 @@ interface Filters {
   pending?: boolean | undefined
 }
 
+/**
+ * WP204：点了之后的那一句话。好消息几秒后自己消失，错误留着直到人关掉或被下一句换掉；
+ * 归档 / 删除带「撤销」。
+ */
+interface Notice {
+  tone: 'ok' | 'warn' | 'error'
+  text: string
+  undo?: (() => void) | undefined
+}
+
+/** 「显示图片」只对这一封、这一次生效：代取回来的正文按信 id 记在这一页里，不写回库。 */
+type ShownImages = Record<string, { html: string; has_remote_images: boolean }>
+
+/** 挪信的一步（撤销 = 反着挪回去）。 */
+interface MoveStep {
+  id: string
+  from: MessageFolderKind
+  to: MessageFolderKind
+}
+
 export function MessagesPage(): ReactNode {
   const { t, lang } = useApp()
   const client = useQueryClient()
   const [filters, setFilters] = useState<Filters>({ folder_kind: 'inbox', q: '' })
   const [selected, setSelected] = useState<string | undefined>()
-  const [cursor, setCursor] = useState(0)
+  // -1 = 还没选过：`j` 打开第一条（以前从 0 起，第一条永远被跳过）
+  const [cursor, setCursor] = useState(-1)
   const [compose, setCompose] = useState<ComposeSeed | undefined>()
+  const [composeError, setComposeError] = useState<string | undefined>()
   const [draftId, setDraftId] = useState<string | undefined>()
+  const [notice, setNotice] = useState<Notice | undefined>()
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [shown, setShown] = useState<ShownImages>({})
 
   const accounts = useQuery({ queryKey: ['messages', 'accounts'], queryFn: listMessageAccounts })
   const labels = useQuery({ queryKey: ['messages', 'labels'], queryFn: listMessageLabels })
 
+  // WP204：搜索跨全部文件夹（63 §G「搜索：发件人、主题、正文、标签、文件夹」）
+  const searching = filters.q.trim() !== ''
   const query = messageQuery({
     // WP167：「待确认」那一栏不分文件夹（拿不准的信都还在收件箱那条路上）
-    ...(filters.pending === true ? { pending_route: true } : { folder_kind: filters.folder_kind }),
+    ...(filters.pending === true
+      ? { pending_route: true }
+      : searching
+        ? {}
+        : { folder_kind: filters.folder_kind }),
     ...(filters.account === undefined ? {} : { account: filters.account }),
     ...(filters.label === undefined ? {} : { label: filters.label }),
-    ...(filters.q === '' ? {} : { q: filters.q }),
+    ...(searching ? { q: filters.q } : {}),
   })
   const threads = useQuery({
     queryKey: ['messages', 'threads', query],
     queryFn: () => listMessageThreads(query),
+    // 边打字边搜时列表不闪成骨架
+    placeholderData: keepPreviousData,
   })
   const thread = useQuery({
     queryKey: ['messages', 'thread', selected],
@@ -133,56 +179,225 @@ export function MessagesPage(): ReactNode {
   const refresh = useCallback(() => {
     void client.invalidateQueries({ queryKey: ['messages'] })
   }, [client])
+  const fail = useCallback(
+    (e: unknown) => {
+      setNotice({ tone: 'error', text: apiErrorText(e, t) })
+    },
+    [t],
+  )
 
-  const me = accounts.data?.accounts[0]?.address ?? ''
+  // 换了文件夹 / 搜索 / 标签：从头数
+  // biome-ignore lint/correctness/useExhaustiveDependencies: 依赖就是"列表换了"这件事，不进闭包
+  useEffect(() => {
+    setCursor(-1)
+  }, [query])
+
+  useEffect(() => {
+    if (notice === undefined || notice.tone === 'error') return
+    const timer = setTimeout(
+      () => {
+        setNotice(undefined)
+      },
+      notice.undo === undefined ? 4000 : 8000,
+    )
+    return () => {
+      clearTimeout(timer)
+    }
+  }, [notice])
+
+  const list = accounts.data?.accounts ?? []
   const open = thread.data?.messages.at(-1)
+  // 自己的地址按**这封信所在的那只邮箱**算（多邮箱时「全部回复」不该把另一只自己抄进去）
+  const me = open?.account ?? list[0]?.address ?? ''
   /** 客服 / 红人那条线程上的信在这里**只读**（63 §9）。 */
   const readOnly = thread.data?.agent_status !== undefined
+  /** WP204：这封信所在的邮箱开着影子模式（只看不动）。 */
+  const shadow = list.some((a) => a.address === open?.account && a.shadow_mode === true)
+  const anyShadow = list.some((a) => a.shadow_mode === true)
 
-  const act = useMutation({
-    mutationFn: async (input: {
-      op: 'read' | 'star' | 'archive' | 'trash' | 'todo' | 'images'
-      id: string
-    }) => {
-      if (input.op === 'read') return setMessageFlags(input.id, { read: true })
-      if (input.op === 'star') {
-        const current = thread.data?.messages.find((m) => m.id === input.id)
-        return setMessageFlags(input.id, { starred: current?.flags.starred !== true })
-      }
-      if (input.op === 'archive') return moveMessage(input.id, { to: 'archive' })
-      // 界面上那个键叫"删除"，打出去的是"移到垃圾箱"——没有第二种去处
-      if (input.op === 'trash') return moveMessage(input.id, { to: 'trash' })
-      if (input.op === 'images') return showMessageImages(input.id, false)
-      return messageToTodo(input.id)
+  /** 回写没成（邮箱服务器没答应）要说一句；只在本机标（影子模式）左栏已经挂着标，不再每下都说。 */
+  const onWriteback = useCallback(
+    (writeback: MessageWriteback | undefined) => {
+      if (writeback === 'failed') setNotice({ tone: 'warn', text: t('messages.writeback.failed') })
     },
+    [t],
+  )
+
+  const { mutate: markRead } = useMutation({
+    mutationFn: (id: string) => setMessageFlags(id, { read: true }),
+    onSuccess: (r) => {
+      onWriteback(r.writeback)
+    },
+    onError: fail,
     onSettled: refresh,
+  })
+
+  const star = useMutation({
+    mutationFn: (m: MessageRecord) => setMessageFlags(m.id, { starred: !m.flags.starred }),
+    onSuccess: (r) => {
+      onWriteback(r.writeback)
+    },
+    onError: fail,
+    onSettled: refresh,
+  })
+
+  const move = useMutation({
+    mutationFn: async (input: {
+      kind: 'archive' | 'trash' | 'restore' | 'undo'
+      steps: MoveStep[]
+    }) => {
+      let failed = false
+      for (const s of input.steps) {
+        const r = await moveMessage(s.id, { to: s.to })
+        if (r.writeback === 'failed') failed = true
+      }
+      return { ...input, failed }
+    },
+    onSuccess: (out) => {
+      setConfirmDelete(false)
+      if (out.kind === 'undo') {
+        setNotice({ tone: 'ok', text: t('messages.undone') })
+        return
+      }
+      // 挪走了就离开这条会话：阅读区还停在一封已经不在这里的信上，看起来就像"没反应"
+      setSelected(undefined)
+      setCompose(undefined)
+      const text = t(
+        out.kind === 'trash'
+          ? 'messages.trashed'
+          : out.kind === 'archive'
+            ? 'messages.archived'
+            : 'messages.restored',
+      )
+      const back = out.steps.map((s) => ({ id: s.id, from: s.to, to: s.from }))
+      setNotice({
+        tone: out.failed ? 'warn' : 'ok',
+        text: out.failed ? `${text}。${t('messages.writeback.failed')}` : text,
+        undo: () => {
+          move.mutate({ kind: 'undo', steps: back })
+        },
+      })
+    },
+    onError: fail,
+    onSettled: refresh,
+  })
+
+  /**
+   * 归档 / 删除 / 移回收件箱挪的是**整条会话里在眼前这个文件夹的那几封**——以前只挪最后一封，
+   * 一条会话里有两封收件箱的信时，挪完那一行还在列表里，看起来就是"没反应"。
+   */
+  const moveThread = (kind: 'archive' | 'trash' | 'restore'): void => {
+    if (open === undefined) return
+    if (shadow) {
+      setNotice({ tone: 'warn', text: t('messages.shadow.hint') })
+      return
+    }
+    if (readOnly) {
+      setNotice({ tone: 'warn', text: t('messages.readonly') })
+      return
+    }
+    const to: MessageFolderKind = kind === 'restore' ? 'inbox' : kind
+    const view =
+      filters.pending === true ? 'inbox' : searching ? open.folder_kind : filters.folder_kind
+    const all = thread.data?.messages ?? []
+    const inView = all.filter((m) => m.folder_kind === view)
+    const steps = (inView.length > 0 ? inView : [open])
+      .filter((m) => m.folder_kind !== to)
+      .map((m) => ({ id: m.id, from: m.folder_kind, to }))
+    if (steps.length > 0) move.mutate({ kind, steps })
+  }
+  /** 键盘 `e` 走同一条路（监听器只挂一次，读的是这一拍的那一份）。 */
+  const moveThreadRef = useRef(moveThread)
+  moveThreadRef.current = moveThread
+
+  const images = useMutation({
+    mutationFn: (id: string) => showMessageImages(id, false),
+    onSuccess: (r) => {
+      const html = r.message.html
+      if (html !== undefined)
+        setShown((s) => ({
+          ...s,
+          [r.message.id]: { html, has_remote_images: r.message.has_remote_images },
+        }))
+      const got = r.images
+      if (got !== undefined && got.failed > 0)
+        setNotice({
+          tone: 'warn',
+          text:
+            got.shown === 0
+              ? t('messages.images.none')
+              : t('messages.images.partial', { n: got.failed }),
+        })
+    },
+    onError: fail,
   })
 
   const send = useMutation({
     mutationFn: sendMessage,
+    onMutate: () => {
+      setComposeError(undefined)
+    },
     onSuccess: async () => {
       if (draftId !== undefined) await discardMessageDraft(draftId).catch(() => undefined)
       setDraftId(undefined)
       setCompose(undefined)
+      setNotice({ tone: 'ok', text: t('messages.sent') })
+    },
+    // 没发出去：写信框留着、话说在框里（以前 500 被吞掉，人以为发了）
+    onError: (e) => {
+      setComposeError(t('messages.compose.failed', { reason: apiErrorText(e, t) }))
     },
     onSettled: refresh,
   })
 
-  const sync = useMutation({ mutationFn: syncMessages, onSettled: refresh })
+  const sync = useMutation({
+    mutationFn: syncMessages,
+    onSuccess: (r) => {
+      if (r.accounts === 0) setNotice({ tone: 'warn', text: t('messages.sync.no_account') })
+      else if (r.failed.length > 0)
+        setNotice({
+          tone: 'warn',
+          text: t('messages.sync.failed', { n: r.failed.length, list: r.failed.join('、') }),
+        })
+      else
+        setNotice({
+          tone: 'ok',
+          text:
+            r.fetched > 0 ? t('messages.sync.done', { n: r.fetched }) : t('messages.sync.fresh'),
+        })
+    },
+    onError: fail,
+    onSettled: refresh,
+  })
   const backfill = useMutation({
     mutationFn: () =>
       backfillMessages(filters.account === undefined ? {} : { account: filters.account }),
+    onSuccess: (r) => {
+      setNotice({
+        tone: 'ok',
+        text: t('messages.backfill.done', { date: formatDateTime(r.floor, lang) }),
+      })
+    },
+    onError: fail,
     onSettled: refresh,
   })
 
-  /** 打开一条会话就把最后一封标成已读（回写 IMAP 由服务端做）。 */
+  const download = useMutation({
+    mutationFn: (input: { id: string; attachment: string; name: string }) =>
+      downloadMessageAttachment(input.id, input.attachment, input.name),
+    onError: fail,
+  })
+
+  /** 打开一条会话就把最后一封标成已读（回写 IMAP 由服务端做；影子模式下只在本机标）。 */
   const openThread = useCallback(
     (row: MessageThreadSummary, index: number) => {
       setSelected(row.thread_id)
       setCursor(index)
-      if (row.unread > 0) act.mutate({ op: 'read', id: row.last_message_id })
+      setConfirmDelete(false)
+      setComposeError(undefined)
+      if (row.unread > 0) markRead(row.last_message_id)
     },
-    [act],
+    [markRead],
   )
 
   /**
@@ -232,24 +447,26 @@ export function MessagesPage(): ReactNode {
         return
       }
       if (typing) return
-      const row = rows[cursor]
       if (e.key === 'j' && cursor < rows.length - 1) {
         const next = rows[cursor + 1]
         if (next !== undefined) openThread(next, cursor + 1)
       } else if (e.key === 'k' && cursor > 0) {
         const prev = rows[cursor - 1]
         if (prev !== undefined) openThread(prev, cursor - 1)
-      } else if (e.key === 'e' && row !== undefined) {
-        act.mutate({ op: 'archive', id: row.last_message_id })
-      } else if ((e.key === 'r' || e.key === 'a') && open !== undefined && !readOnly) {
-        setCompose(seedFrom(e.key === 'r' ? 'reply' : 'reply_all', open, me))
+      } else if (e.key === 'e' && open !== undefined && !move.isPending) {
+        // 与「归档」键同一条路：整条会话、影子模式与只读都照样拦、带撤销
+        moveThreadRef.current('archive')
+      } else if ((e.key === 'r' || e.key === 'a') && open !== undefined && compose === undefined) {
+        // 写信框开着时不重开（以前按一下 r 就把写了一半的回信冲掉）
+        if (readOnly) setNotice({ tone: 'warn', text: t('messages.readonly') })
+        else setCompose(seedFrom(e.key === 'r' ? 'reply' : 'reply_all', open, me))
       }
     }
     window.addEventListener('keydown', onKey)
     return () => {
       window.removeEventListener('keydown', onKey)
     }
-  }, [rows, cursor, open, me, readOnly, act, openThread])
+  }, [rows, cursor, open, me, readOnly, compose, move.isPending, openThread, t])
 
   if (accounts.isPending) return <Skeleton className="h-96 w-full" />
   if (accounts.error !== null)
@@ -259,11 +476,10 @@ export function MessagesPage(): ReactNode {
       </p>
     )
 
-  const list = accounts.data.accounts
   if (list.length === 0) return <NoMailbox />
 
   return (
-    <div className="flex h-[calc(100vh-7.5rem)] gap-3" data-testid="messages-page">
+    <div className="relative flex h-[calc(100vh-7.5rem)] gap-3" data-testid="messages-page">
       {/* ── 文件夹 / 标签 / 多邮箱 ──────────────────────────────────── */}
       <aside
         className="hidden w-48 shrink-0 flex-col gap-3 overflow-y-auto lg:flex"
@@ -323,7 +539,8 @@ export function MessagesPage(): ReactNode {
                     : 'text-ws-body hover:bg-sidebar-accent/60',
                 )}
                 onClick={() => {
-                  setFilters((f) => ({ ...f, folder_kind: kind, pending: false }))
+                  // WP204：点文件夹就退出搜索（搜索跨全部文件夹，不清掉的话点了像没反应）
+                  setFilters((f) => ({ ...f, folder_kind: kind, pending: false, q: '' }))
                   setSelected(undefined)
                 }}
               >
@@ -344,7 +561,7 @@ export function MessagesPage(): ReactNode {
           <PendingNavItem
             active={filters.pending === true}
             onSelect={() => {
-              setFilters((f) => ({ ...f, pending: true }))
+              setFilters((f) => ({ ...f, pending: true, q: '' }))
               setSelected(undefined)
             }}
           />
@@ -390,11 +607,18 @@ export function MessagesPage(): ReactNode {
         ) : null}
 
         <div className="mt-auto flex flex-col gap-1 pt-2">
+          {anyShadow ? (
+            <div className="flex items-center gap-1 px-2.5" data-testid="messages-shadow">
+              <StatusPill tone="warn">{t('messages.shadow.tag')}</StatusPill>
+              <Hint text={t('messages.shadow.hint')} />
+            </div>
+          ) : null}
           <MailboxFailure accounts={list} />
           <button
             type="button"
             data-testid="messages-backfill"
-            className="px-2.5 text-left text-[12px] text-ws-muted-fg hover:text-foreground"
+            disabled={backfill.isPending}
+            className="px-2.5 text-left text-[12px] text-ws-muted-fg hover:text-foreground disabled:opacity-60"
             onClick={() => {
               backfill.mutate()
             }}
@@ -438,7 +662,8 @@ export function MessagesPage(): ReactNode {
             type="button"
             aria-label={t('messages.sync')}
             data-testid="messages-sync"
-            className="rounded-[10px] p-2 text-ws-muted-fg hover:bg-ws-surface"
+            disabled={sync.isPending}
+            className="rounded-[10px] p-2 text-ws-muted-fg hover:bg-ws-surface disabled:opacity-60"
             onClick={() => {
               sync.mutate()
             }}
@@ -447,8 +672,18 @@ export function MessagesPage(): ReactNode {
           </button>
         </div>
 
+        {searching && filters.pending !== true ? (
+          <span className="px-1 text-[11px] text-ws-muted-fg" data-testid="messages-search-all">
+            {t('messages.search.all')}
+          </span>
+        ) : null}
+
         <div className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto">
-          {threads.isPending ? (
+          {threads.error !== null && threads.data === undefined ? (
+            <p role="alert" className="px-2 py-6 text-center text-sm text-destructive">
+              {apiErrorText(threads.error, t)}
+            </p>
+          ) : threads.isPending ? (
             <Skeleton className="h-40 w-full" />
           ) : rows.length === 0 ? (
             <p className="px-2 py-6 text-center text-sm text-ws-muted-fg">{t('messages.empty')}</p>
@@ -463,7 +698,7 @@ export function MessagesPage(): ReactNode {
                       openThread(row, i)
                     }}
                   />
-                  <PendingActions row={row} onDone={refresh} />
+                  <PendingActions row={row} onDone={refresh} onError={fail} />
                 </div>
               ) : (
                 <ThreadRow
@@ -492,6 +727,10 @@ export function MessagesPage(): ReactNode {
           <p className="m-auto text-sm text-ws-muted-fg">{t('messages.pick')}</p>
         ) : thread.isPending ? (
           <Skeleton className="h-64 w-full" />
+        ) : thread.error !== null ? (
+          <p role="alert" className="m-auto text-sm text-destructive">
+            {apiErrorText(thread.error, t)}
+          </p>
         ) : (
           <>
             <button
@@ -515,12 +754,19 @@ export function MessagesPage(): ReactNode {
             {(thread.data?.messages ?? []).map((m) => (
               <MessageCard
                 key={m.id}
-                message={m}
+                message={
+                  shown[m.id] === undefined ? m : { ...m, ...(shown[m.id] as ShownImages[string]) }
+                }
+                starring={star.isPending && star.variables?.id === m.id}
+                imagesBusy={images.isPending && images.variables === m.id}
                 onStar={() => {
-                  act.mutate({ op: 'star', id: m.id })
+                  star.mutate(m)
                 }}
                 onImages={() => {
-                  act.mutate({ op: 'images', id: m.id })
+                  images.mutate(m.id)
+                }}
+                onDownload={(a) => {
+                  download.mutate({ id: m.id, attachment: a.id, name: a.name })
                 }}
               />
             ))}
@@ -534,7 +780,7 @@ export function MessagesPage(): ReactNode {
                 {t('messages.readonly')}
               </p>
             ) : compose === undefined ? (
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap items-center gap-2" data-testid="messages-actions">
                 <Button
                   size="sm"
                   variant="outline"
@@ -568,59 +814,165 @@ export function MessagesPage(): ReactNode {
                   <Forward aria-hidden className="mr-1 size-3.5" />
                   {t('messages.forward')}
                 </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  data-testid="messages-archive"
-                  onClick={() => {
-                    if (open !== undefined) act.mutate({ op: 'archive', id: open.id })
-                  }}
-                >
-                  <Archive aria-hidden className="mr-1 size-3.5" />
-                  {t('messages.archive')}
-                </Button>
-                {/* 「删除」= 移到垃圾箱。绝不永久删除（63 §7） */}
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  data-testid="messages-delete"
-                  onClick={() => {
-                    if (open !== undefined) act.mutate({ op: 'trash', id: open.id })
-                  }}
-                >
-                  <Trash2 aria-hidden className="mr-1 size-3.5" />
-                  {t('messages.delete')}
-                </Button>
+                {/* WP204：影子模式下归档 / 删除会动邮箱，所以置灰，问号里说为什么 */}
+                {open === undefined ||
+                open.folder_kind === 'archive' ||
+                open.folder_kind === 'trash' ? null : (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    data-testid="messages-archive"
+                    disabled={shadow || move.isPending}
+                    title={shadow ? t('messages.shadow.hint') : undefined}
+                    onClick={() => {
+                      moveThread('archive')
+                    }}
+                  >
+                    <Archive aria-hidden className="mr-1 size-3.5" />
+                    {t('messages.archive')}
+                  </Button>
+                )}
+                {open?.folder_kind === 'trash' ? (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    data-testid="messages-restore"
+                    disabled={shadow || move.isPending}
+                    title={shadow ? t('messages.shadow.hint') : undefined}
+                    onClick={() => {
+                      moveThread('restore')
+                    }}
+                  >
+                    <Inbox aria-hidden className="mr-1 size-3.5" />
+                    {t('messages.restore')}
+                  </Button>
+                ) : confirmDelete ? (
+                  // 「删除」= 移到垃圾箱，绝不永久删除（63 §G）；先问一句，之后还能撤销
+                  <span className="flex items-center gap-1.5" data-testid="messages-delete-confirm">
+                    <span className="text-[12px] text-ws-muted-fg">
+                      {t('messages.delete.confirm')}
+                    </span>
+                    <Button
+                      size="xs"
+                      variant="destructive"
+                      data-testid="messages-delete-yes"
+                      disabled={move.isPending}
+                      onClick={() => {
+                        moveThread('trash')
+                      }}
+                    >
+                      {t('messages.delete.yes')}
+                    </Button>
+                    <Button
+                      size="xs"
+                      variant="ghost"
+                      data-testid="messages-delete-no"
+                      onClick={() => {
+                        setConfirmDelete(false)
+                      }}
+                    >
+                      {t('messages.delete.no')}
+                    </Button>
+                  </span>
+                ) : (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    data-testid="messages-delete"
+                    disabled={shadow || move.isPending}
+                    title={shadow ? t('messages.shadow.hint') : undefined}
+                    onClick={() => {
+                      setConfirmDelete(true)
+                    }}
+                  >
+                    <Trash2 aria-hidden className="mr-1 size-3.5" />
+                    {t('messages.delete')}
+                  </Button>
+                )}
+                {shadow ? (
+                  <Hint text={t('messages.shadow.hint')} testId="messages-shadow-hint" />
+                ) : null}
               </div>
             ) : (
               <Composer
                 key={`${compose.mode}|${compose.thread_id ?? 'new'}|${compose.text.length}`}
                 seed={compose}
                 busy={send.isPending}
+                {...(composeError === undefined ? {} : { error: composeError })}
                 onSend={(input) => {
                   send.mutate(input)
                 }}
                 onSaveDraft={(input) => {
-                  void saveMessageDraft({
+                  saveMessageDraft({
                     ...(draftId === undefined ? {} : { id: draftId }),
+                    ...(compose.account === undefined ? {} : { account: compose.account }),
                     ...(compose.thread_id === undefined ? {} : { thread_id: compose.thread_id }),
+                    ...(compose.in_reply_to === undefined
+                      ? {}
+                      : { in_reply_to: compose.in_reply_to }),
                     ...input,
-                  }).then((r) => {
-                    setDraftId(r.draft.id)
                   })
+                    .then((r) => {
+                      setDraftId(r.draft.id)
+                    })
+                    // 草稿没存上也要说（以前这里的失败没人接，写了半天的信可能没存）
+                    .catch(fail)
                 }}
                 onClose={() => {
                   setCompose(undefined)
+                  setComposeError(undefined)
                 }}
               />
             )}
           </>
         )}
       </section>
+
+      {notice === undefined ? null : (
+        <div
+          role={notice.tone === 'error' ? 'alert' : 'status'}
+          data-testid="messages-notice"
+          data-tone={notice.tone}
+          className="absolute bottom-3 left-1/2 z-20 flex max-w-[92%] -translate-x-1/2 items-center gap-3 rounded-[12px] border border-ws-line bg-ws-card px-3 py-2 text-[13px] shadow-ws"
+        >
+          <span
+            className={cn(
+              notice.tone === 'error' && 'text-destructive',
+              notice.tone === 'warn' && 'text-ws-warn',
+            )}
+          >
+            {notice.text}
+          </span>
+          {notice.undo === undefined ? null : (
+            <button
+              type="button"
+              data-testid="messages-undo"
+              className="shrink-0 font-medium text-ws-brand hover:underline"
+              onClick={() => {
+                const undo = notice.undo
+                setNotice(undefined)
+                undo?.()
+              }}
+            >
+              {t('messages.undo')}
+            </button>
+          )}
+          <button
+            type="button"
+            aria-label={t('messages.notice.close')}
+            data-testid="messages-notice-close"
+            className="shrink-0 rounded p-0.5 text-ws-muted-fg hover:bg-ws-surface"
+            onClick={() => {
+              setNotice(undefined)
+            }}
+          >
+            <X aria-hidden className="size-3.5" />
+          </button>
+        </div>
+      )}
     </div>
   )
 }
-
 /** 一条会话（列表上的一行）。未读是一个点，不是一个红数字。 */
 function ThreadRow({
   row,
@@ -683,12 +1035,18 @@ function ThreadRow({
 /** 一封信（阅读区里的一块）。 */
 function MessageCard({
   message,
+  starring,
+  imagesBusy,
   onStar,
   onImages,
+  onDownload,
 }: {
   message: MessageRecord
+  starring: boolean
+  imagesBusy: boolean
   onStar(): void
   onImages(): void
+  onDownload(attachment: MessageAttachmentMeta): void
 }): ReactNode {
   const { t, lang } = useApp()
   return (
@@ -711,8 +1069,11 @@ function MessageCard({
         <button
           type="button"
           aria-label={t('messages.star')}
+          aria-pressed={message.flags.starred}
           data-testid="messages-star"
-          className="shrink-0 rounded p-1 text-ws-muted-fg hover:bg-ws-surface"
+          data-starred={message.flags.starred ? 'true' : undefined}
+          disabled={starring}
+          className="shrink-0 rounded p-1 text-ws-muted-fg hover:bg-ws-surface disabled:opacity-60"
           onClick={onStar}
         >
           <Star
@@ -730,13 +1091,16 @@ function MessageCard({
         >
           <ImageIcon aria-hidden className="size-3.5 text-ws-muted-fg" />
           <span className="text-ws-muted-fg">{t('messages.images.blocked')}</span>
+          <Hint text={t('messages.images.proxy_hint')} />
           <button
             type="button"
-            className="ml-auto text-ws-brand hover:underline"
+            className="ml-auto flex items-center gap-1 text-ws-brand hover:underline disabled:opacity-60"
             data-testid="messages-show-images"
+            disabled={imagesBusy}
             onClick={onImages}
           >
-            {t('messages.images.show')}
+            {imagesBusy ? <Loader2 aria-hidden className="size-3.5 animate-spin" /> : null}
+            {t(imagesBusy ? 'messages.images.loading' : 'messages.images.show')}
           </button>
         </div>
       ) : null}
@@ -745,9 +1109,25 @@ function MessageCard({
 
       {message.attachments.length === 0 ? null : (
         <div className="flex flex-wrap gap-1" data-testid="messages-attachments">
-          {message.attachments.map((a) => (
-            <WsTag key={a.id}>{a.name}</WsTag>
-          ))}
+          {message.attachments
+            .filter((a) => a.inline !== true)
+            .map((a) => (
+              <button
+                key={a.id}
+                type="button"
+                data-testid="messages-attachment"
+                data-attachment={a.id}
+                aria-label={t('messages.attachment.download', { name: a.name })}
+                onClick={() => {
+                  onDownload(a)
+                }}
+              >
+                <WsTag className="gap-1 hover:bg-ws-tint">
+                  <Paperclip aria-hidden className="size-3" />
+                  {a.name}
+                </WsTag>
+              </button>
+            ))}
         </div>
       )}
     </article>
