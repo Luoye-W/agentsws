@@ -106,6 +106,32 @@
       "source_page": "https://api-docs.deepseek.com/",
       "note": "DeepSeek 官方 API 文档站的 <link rel=icon>（矢量）",
       "fetched_at": "2026-09-17"
+    },
+    "feishu_bot": {
+      "brand": "飞书",
+      "file": "feishu_bot.svg",
+      "format": "svg",
+      "width": null,
+      "height": null,
+      "bytes": 5511,
+      "sha256": "247c4e35716c3263d04b697ad19ff1868cb8ed321a12454e27224d34ee11f1eb",
+      "source_url": "https://lf-package-cn.feishucdn.com/obj/feishu-static/lark/open/website/favicon-logo.svg",
+      "source_page": "https://open.feishu.cn",
+      "note": "飞书开放平台 <link rel=icon>（官网首页是前端渲染，没有 <link>）",
+      "fetched_at": "2026-09-30"
+    },
+    "dingtalk_bot": {
+      "brand": "钉钉",
+      "file": "dingtalk_bot.png",
+      "format": "png",
+      "width": 444,
+      "height": 444,
+      "bytes": 11431,
+      "sha256": "b3fb0715857df5d23213b5265166fabcb7f7b4b290890d7b5682a027cf39c85d",
+      "source_url": "https://gw.alicdn.com/imgextra/i3/O1CN014ZbI6ZTEhdC0ttN2_!!6000000003783-2-tps-444-444.png",
+      "source_page": "https://www.dingtalk.com",
+      "note": "钉钉官网首页 <link rel=icon>",
+      "fetched_at": "2026-09-30"
     }
   },
   "fallbacks": {

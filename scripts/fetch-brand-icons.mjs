@@ -23,12 +23,14 @@
  * 用法：
  *   pnpm icons:fetch            # 抓，写 apps/workstation/src/assets/brand/
  *   pnpm icons:fetch --dry-run  # 只打印挑中了什么，不落盘
+ *   pnpm icons:fetch --only feishu_bot,dingtalk_bot
+ *                               # WP211：只抓这几家，并进现有 MANIFEST（别家的文件一个不动）
  *
  * 抓完**人要自己看一眼**（图对不对、是不是那家现在的标志），再 `git add` 提交。
  */
 
 import { createHash } from 'node:crypto'
-import { mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -154,6 +156,27 @@ const SOURCES = {
       },
       { page: 'https://platform.deepseek.com/', note: 'DeepSeek 开放平台' },
       { page: 'https://www.deepseek.com', note: '官网首页（ICO，收不了）' },
+    ],
+  },
+  /*
+   * WP211：消息渠道页的两张团队渠道卡。id = 连接目录的 kind（`feishu_bot` / `dingtalk_bot`）。
+   * 飞书官网首页是前端渲染的，页面里没有 `<link rel=icon>`，退到飞书开放平台（同一家的官方站）。
+   */
+  feishu_bot: {
+    brand: '飞书',
+    sources: [
+      { page: 'https://www.feishu.cn', note: '飞书官网首页 <link rel=icon>' },
+      {
+        page: 'https://open.feishu.cn',
+        note: '飞书开放平台 <link rel=icon>（官网首页是前端渲染，没有 <link>）',
+      },
+    ],
+  },
+  dingtalk_bot: {
+    brand: '钉钉',
+    sources: [
+      { page: 'https://www.dingtalk.com', note: '钉钉官网首页 <link rel=icon>' },
+      { page: 'https://open.dingtalk.com', note: '兜底：钉钉开放平台 <link rel=icon>' },
     ],
   },
 }
@@ -290,9 +313,13 @@ async function resolveProvider(id, spec) {
 }
 
 const dryRun = process.argv.includes('--dry-run')
+const onlyArg = process.argv[process.argv.indexOf('--only') + 1]
+const only =
+  process.argv.includes('--only') && onlyArg !== undefined ? onlyArg.split(',') : undefined
+for (const id of only ?? []) if (!(id in SOURCES)) throw new Error(`没有这个 provider：${id}`)
 
 mkdirSync(OUT_DIR, { recursive: true })
-if (!dryRun) {
+if (!dryRun && only === undefined) {
   // 每次重抓都从干净的目录开始：上一轮抓到、这一轮退回兜底的，文件不能留在仓库里
   for (const name of readdirSync(OUT_DIR)) {
     if (name === 'MANIFEST.json' || /\.(png|svg)$/.test(name)) rmSync(join(OUT_DIR, name))
@@ -300,10 +327,20 @@ if (!dryRun) {
 }
 
 const fetchedAt = new Date().toISOString().slice(0, 10)
-const icons = {}
-const fallbacks = {}
+// `--only`：从现有 MANIFEST 出发，只改点名的那几家
+const previous =
+  only !== undefined && existsSync(join(OUT_DIR, 'MANIFEST.json'))
+    ? JSON.parse(readFileSync(join(OUT_DIR, 'MANIFEST.json'), 'utf8'))
+    : undefined
+const icons = { ...(previous?.icons ?? {}) }
+const fallbacks = { ...(previous?.fallbacks ?? {}) }
+for (const id of only ?? []) {
+  delete icons[id]
+  delete fallbacks[id]
+}
 
 for (const [id, spec] of Object.entries(SOURCES)) {
+  if (only !== undefined && !only.includes(id)) continue
   const result = await resolveProvider(id, spec)
   if (result.picked === undefined) {
     fallbacks[id] = {
@@ -338,7 +375,7 @@ for (const [id, spec] of Object.entries(SOURCES)) {
 const manifest = {
   $comment:
     '构建期抓一次入库的第三方品牌图标（WP48）。手动跑 `pnpm icons:fetch` 更新，跑完人自己看一眼再提交。运行时不联网。规矩见 docs/36 §8。',
-  fetched_at: fetchedAt,
+  fetched_at: previous?.fetched_at ?? fetchedAt,
   min_png: MIN_PNG,
   icons,
   fallbacks,
