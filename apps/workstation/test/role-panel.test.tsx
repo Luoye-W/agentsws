@@ -120,7 +120,8 @@ function renderRail(route = '/', position = 'asg_store'): void {
 /** 开出「角色」面板，回它那个框。 */
 async function openRolePanel(route = '/', position = 'asg_store'): Promise<HTMLElement> {
   renderRail(route, position)
-  fireEvent.click(screen.getByTestId('rail-icon-role'))
+  // WP208：角色是「设定」的第一个标签——点开「设定」默认就在这一格
+  fireEvent.click(screen.getByTestId('rail-icon-settings'))
   // 面板体是 `lazy()` 的：第一次要现加载那个 chunk，机器忙的时候 1 秒不够
   const panel = await screen.findByTestId('role-panel', undefined, { timeout: 8000 })
   await screen.findAllByTestId('role-persona', undefined, { timeout: 8000 })

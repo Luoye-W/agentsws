@@ -1,20 +1,19 @@
 /**
- * 第三方品牌图标（WP45 起，WP48 改来源）。
+ * 第三方品牌图标（WP45 起，WP48 改来源，WP210 改成每一家都用官网 favicon）。
  *
  * Luoye 看连接页截图提的：六张卡都戴同一个插头，认不出哪张是哪家。这里按 provider id
- * 给每家换上它自己的标志。
+ * 给每家换上它自己的标志。顺序：
  *
- * **WP48 改了第一条**：Luoye 看完 WP45 说「有几个已经不是这些平台现在在用的图标了」。
- * 现在的顺序是——
- *
- * 1. **先用官网当前在用的那张图**：`../assets/brand/<provider>.png|svg`，由
- *    `scripts/fetch-brand-icons.mjs`（`pnpm icons:fetch`，**手动跑**）在构建期抓一次
- *    提进仓库，来源 URL / 抓取日期 / 尺寸 / sha256 都记在同目录的 `MANIFEST.json` 里。
- *    **运行时不联网**——工作台本地优先，用户打开连接页时不该有请求偷偷发去 shopify.com。
- * 2. **抓不到就退回 Simple Icons 的矢量图**（CC0-1.0，v16.30.0，抄进来一个点都不改）。
- *    眼下退回的只有 Meta：官网只给 32px 的 ICO，business.facebook.com 的也才 60px，
- *    两个都进不了 `<img>`——好在 Meta 那个无限符号本来也没变过。
- * 3. 都没有就落 lucide 的 `Plug`。
+ * 1. **官网自己的 favicon**：`../assets/brand/<provider>.png|svg`，由
+ *    `scripts/fetch-provider-favicons.mjs`（`pnpm icons:fetch`，**手动跑**）去各家官方域名
+ *    抓一次提进仓库，来源 URL / 抓取日期 / 尺寸 / sha256 都记在同目录的 `MANIFEST.json` 里。
+ *    **运行时不联网**——工作台本地优先，用户打开连接页时不该有请求偷偷发去 youtube.com。
+ *    WP210（Luoye 09-30）起连接目录里**每一家**都这样取（17TRACK、YouTube 之前还是字母占位），
+ *    缺一家 `test/brand-icons.test.tsx` 当场红；同一个标志的几张卡（Meta 三张、TikTok 三张…）
+ *    走下面的 `ALIAS`，不重复存图。
+ * 2. **抓不到就退回 Simple Icons 的矢量图**（CC0-1.0，v16.30.0，抄进来一个点都不改）或首字母徽标。
+ *    眼下没有哪家落到这一层——它留着是为了重抓失败、断网清空目录时界面不碎。
+ * 3. 都没有就落 lucide 的 `Plug`（「待增加」那几家故意落这里：还没做的不借人家的标志）。
  *
  * 商标三条不变（同步写在 `docs/36` §8，以后加新家照这个来）：
  *
@@ -27,6 +26,7 @@
  *
  * 「OpenAI 兼容」那张模型卡用中性的首字母徽标——它指的是"任何 OpenAI 兼容网关"
  * （Moonshot / 通义 / 智谱 / 本地 Ollama 都从这张卡进来），不是 OpenAI 这家公司。
+ * 「任意邮箱（IMAP / SMTP）」是协议不是一家公司，用 lucide 的 `Mail`。
  */
 
 import { Mail, Plug } from 'lucide-react'
@@ -207,6 +207,15 @@ const ICONS: Record<string, IconChoice> = {
  */
 const ALIAS: Record<string, string> = {
   'openai-codex': 'openai',
+  // WP210：同一家的几张卡戴同一张官网图（`MANIFEST.json` 的 `aliases` 与这里一一对应，测试对表）
+  shopify_email: 'shopify_admin',
+  meta_graph: 'meta_ads',
+  meta_marketing: 'meta_ads',
+  x_ads: 'x_api',
+  tiktok_content: 'tiktok_research',
+  tiktok_ads: 'tiktok_research',
+  // 「用我的 DeepSeek 账号登录」还是 DeepSeek 这一家
+  deepseek_account: 'deepseek',
 }
 
 /** 这个 id 有没有专属图标（`false` = 会落到通用插头）。 */

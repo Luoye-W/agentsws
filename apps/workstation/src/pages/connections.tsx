@@ -2,10 +2,11 @@
  * 连接页（WP20）：左栏「连接」指向这里。
  *
  * 三块，从上到下：
- * 1. **连接器状态条**——没装 / 没加固 / 就绪，先说清楚这台机器能不能连；
- * 2. **已连接**——身份展示名、状态、上次测试，两个动作：测试、断开；
- * 3. **可以连接**——每个 provider 一张卡，说明要准备什么（≤ 5 步 + 外链），
- *    OAuth 类走授权页，表单类走**不经模型的原生表单**。
+ * 1. **连接器状态**——WP210 起平时就一行「✓ 连接器就绪」，细节在问号里，要动手时才多一条；
+ * 2. **已连接**——标题是账号本身（邮箱、店名），状态 + 测试 / 断开；没进来的信不在这里
+ *    （系统自己按退避重投，放弃的进「设置 → 诊断」）；
+ * 3. **可以连接**——每个 provider 一张卡：图标 + 名字 + 问号 + 按钮 + 看教程；安全承诺在
+ *    这一节标题旁的问号里说一次。OAuth 类走授权页，表单类走**不经模型的原生表单**。
  * 4. **数据后端**（WP40 / 41 §2.4）——本地 / 接我的云 / 托管三个按钮 + 迁移向导。
  * 5. **搜索数据**（WP155 / docs/81）——官方（用积分）/ 自带 key / 不接。
  *
@@ -22,13 +23,13 @@ import { openExternal } from '@/components/connections/bridge'
 import { BrowserExtensionSection } from '@/components/connections/browser-extension'
 import { ConnectedRow } from '@/components/connections/connected-row'
 import { DataBackend } from '@/components/connections/data-backend'
-import { deadLettersFor } from '@/components/connections/dead-letters'
 // WP83（54（将改号 55）§4 第一层）：按分类 + 搜索的「添加连接」，默认收起
 import { ConnectionDirectorySection } from '@/components/connections/directory'
 import { ProviderCard, type WizardPhase } from '@/components/connections/provider-card'
 import { RuntimeBar } from '@/components/connections/runtime-bar'
 // WP155（docs/81）：「搜索数据」一行（官方用积分 / 自带 key / 不接）
 import { SearchDataSection } from '@/components/connections/search-data'
+import { Hint } from '@/components/ui/hint'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { ConnectTestResult, ProviderFieldSpec } from '@/lib/api'
 import {
@@ -36,11 +37,9 @@ import {
   getConnectRuntime,
   getPositions,
   listConnections,
-  listDeadLetters,
   listProviders,
   pollConnectRequest,
   removeConnection,
-  requeueDeadLetter,
   submitConnection,
   testConnection,
 } from '@/lib/api'
@@ -92,27 +91,6 @@ export function ConnectionsPage(): React.ReactNode {
     queryKey: ['connections', ownerId],
     enabled: ready,
     queryFn: () => listConnections(ownerId),
-  })
-
-  /**
-   * WP55 / 18 §2.2：没进来的那几封信。
-   *
-   * 放在连接页而不是单开一页：用户会想起「我的邮箱是不是漏信了」的地方就是这里，
-   * 而且能不能重投本来就取决于这条连接还在不在。
-   */
-  const deadLetters = useQuery({
-    queryKey: ['dead-letters', ownerId],
-    enabled: ready,
-    queryFn: () => listDeadLetters(ownerId),
-  })
-  const [requeueing, setRequeueing] = useState<string | undefined>(undefined)
-  const requeue = useMutation({
-    mutationFn: (id: string) => requeueDeadLetter(id, ownerId),
-    onSettled: () => {
-      setRequeueing(undefined)
-      void client.invalidateQueries({ queryKey: ['dead-letters'] })
-      void client.invalidateQueries({ queryKey: ['view'] })
-    },
   })
 
   const refresh = useCallback((): void => {
@@ -311,13 +289,7 @@ export function ConnectionsPage(): React.ReactNode {
                   setBusyId({ id: c.id, kind: 'remove' })
                   disconnect.mutate(c.id)
                 }}
-                deadLetters={deadLettersFor(c, deadLetters.data?.dead_letters ?? [])}
                 assignment={ownerId}
-                {...(requeueing === undefined ? {} : { requeueing })}
-                onRequeue={(id) => {
-                  setRequeueing(id)
-                  requeue.mutate(id)
-                }}
               />
             ))}
           </ul>
@@ -331,7 +303,11 @@ export function ConnectionsPage(): React.ReactNode {
       <ConnectionDirectorySection {...(ownerId === undefined ? {} : { assignment: ownerId })} />
 
       <section className="flex flex-col gap-2">
-        <h3 className="text-sm font-medium">{t('connections.available')}</h3>
+        {/* WP210：安全承诺（密码只输在对方网站上 / 表单不经 AI）在这里说一次，卡上一句不留 */}
+        <h3 className="flex items-center gap-1.5 text-sm font-medium">
+          {t('connections.available')}
+          <Hint text={t('connections.available.hint')} testId="connections-available-hint" />
+        </h3>
         <div className="grid gap-3 lg:grid-cols-2">
           {catalog.map((p) => (
             <ProviderCard

@@ -179,6 +179,35 @@ export function runQueueConformance(h: QueueHarness): void {
       expect(await s.deadLetters('ws_none')).toEqual([])
     })
 
+    it('WP210 自动重投进度：按死信 id 存取，删死信不丢轮数，可清空', async () => {
+      const s = make()
+      if (s.deadLetterRetry === undefined || s.setDeadLetterRetry === undefined) return
+      expect(await s.deadLetterRetry('dl_1')).toBeUndefined()
+      await s.putDead(dead())
+      await s.setDeadLetterRetry('dl_1', { rounds: 2, last_at_ms: T0, release: '1.2.0' })
+      // 重投时死信行被删掉：轮数得跨过这一删接着数
+      await s.removeDead?.('dl_1')
+      expect(await s.deadLetterRetry('dl_1')).toEqual({
+        rounds: 2,
+        last_at_ms: T0,
+        release: '1.2.0',
+      })
+      await s.setDeadLetterRetry('dl_1', {
+        rounds: 4,
+        last_at_ms: T0 + 5,
+        gave_up: true,
+        notified: true,
+      })
+      expect(await s.deadLetterRetry('dl_1')).toEqual({
+        rounds: 4,
+        last_at_ms: T0 + 5,
+        gave_up: true,
+        notified: true,
+      })
+      await s.setDeadLetterRetry('dl_1', undefined)
+      expect(await s.deadLetterRetry('dl_1')).toBeUndefined()
+    })
+
     it('死信与队列是两张账：进死信不影响队列', async () => {
       const s = make()
       await s.put(queueItem())
