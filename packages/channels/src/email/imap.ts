@@ -480,16 +480,23 @@ export class ImapMailSource implements MailSource {
  * 而"哪个包认识 imapflow"这件事应该只有一个答案。
  */
 export function defaultImapClient(config: ImapConfig, password: string): ImapClientLike {
-  return fromImapFlow(
-    new ImapFlow({
-      host: config.host,
-      port: config.port,
-      secure: config.secure,
-      auth: { user: config.user, pass: password },
-      logger: false,
-      emitLogs: false,
-    }),
-  )
+  const client = new ImapFlow({
+    host: config.host,
+    port: config.port,
+    secure: config.secure,
+    auth: { user: config.user, pass: password },
+    logger: false,
+    emitLogs: false,
+  })
+  /*
+   * WP203：imapflow 连接出错（口令被改、服务器踢人、断网）时会发一个 `error` 事件。
+   * 没人听的 `error` 事件在 Node 里等于直接抛到进程顶层——整个本机服务跟着一起退出
+   * （09-30 实测：客服邮箱口令失效，4317 一启动就崩）。错误本身照样会从 connect /
+   * 各条命令的 Promise 里抛出来，由调用方按 `asChannelError` 归类（认证失败 → 去重新授权），
+   * 所以这里只接住、不再往上扔。
+   */
+  client.on('error', () => undefined)
+  return fromImapFlow(client)
 }
 
 /** imapflow 的 flags 是 Set；替身可能给数组，也可能一个都不给。 */
