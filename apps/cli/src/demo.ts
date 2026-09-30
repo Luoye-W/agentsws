@@ -950,6 +950,62 @@ async function seedJoin(world: World, server: Server): Promise<void> {
  * 加了段营销文案。措辞那部分产生不了指纹项，真正触发复核的是那个月数——
  * 走的是 `recheck.syncSource`，与模拟题 `knowledge/source-changed-recheck` 同一个函数。
  */
+/**
+ * WP209：知识库页按「品牌 / 范围」筛要有东西可筛。
+ *
+ * 一个品牌一个工作区（52），范围只在品牌**内部**切（44）：这里种两条只管某个站点的运费口径
+ * （`market` 范围，`账号:站点`），外加一条只管「品牌B」那个店铺组的（范围组 id）。
+ * 走的是同一个 `store.propose` / `activate`，数字只写政策页上本来就有的那种说法。
+ */
+async function seedScopedKnowledge(server: Server, world: World): Promise<void> {
+  const { knowledge } = server
+  const owner = world.roleHolder
+  const at = world.clock.now()
+  const rows: {
+    key: string
+    scope: { kind: 'market' | 'store'; id: string }
+    statement: string
+    status: 'active' | 'proposed'
+  }[] = [
+    {
+      key: 'policy:shipping.de',
+      scope: { kind: 'market', id: 'shopify_main:DE' },
+      statement: '德国站：除质量问题外，退货运费由买家承担。',
+      status: 'active',
+    },
+    {
+      key: 'policy:shipping.us',
+      scope: { kind: 'market', id: 'shopify_main:US' },
+      statement: '美国站：满额包邮，门槛以运费政策页为准。',
+      status: 'active',
+    },
+    {
+      key: 'policy:returns.brand_b',
+      scope: { kind: 'store', id: 'rg_brand_b' },
+      statement: '品牌B 的两家店：开封未损坏的配件也收退货，退回后人工验货。',
+      status: 'proposed',
+    },
+  ]
+  for (const row of rows) {
+    const card = await knowledge.store.propose({
+      schema_version: 1,
+      workspace_id: world.workspace_id,
+      layer: 'policy',
+      domain: 'company',
+      scope: [row.scope],
+      sensitivity: 'internal',
+      subject: { type: 'policy', key: row.key },
+      statement: row.statement,
+      provenance: [{ source: 'human', ref: `demo:${row.key}`, at }],
+      confidence: { value: 0.9, state: 'probable' },
+      valid: {},
+      owner,
+      created_by: { kind: 'person', id: owner },
+    })
+    if (row.status === 'active') await knowledge.store.activate(card.id, owner)
+  }
+}
+
 async function seedKnowledgeRecheck(server: Server, world: World, pack: Pack): Promise<void> {
   const { knowledge } = server
   const workspace_id = world.workspace_id
@@ -1448,6 +1504,8 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
 
   // 48 §4 #6（WP56）：知识页的复核卡要有东西可看
   await seedKnowledgeRecheck(server, world, pack)
+  // WP209：知识页的「品牌 / 范围」筛要有东西可筛
+  await seedScopedKnowledge(server, world)
 
   await seedWorkModel({
     work: server.work,

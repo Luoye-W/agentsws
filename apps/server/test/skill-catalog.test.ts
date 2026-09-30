@@ -91,7 +91,7 @@ describe('WP209 技能按岗位分组', () => {
     expect(voice?.positions?.map((p) => p.id)).toEqual(['customer-care', 'social-media'])
   })
 
-  it('只挂在 common.* 上 / frontmatter 写了 common / 谁都没挂 → 通用', () => {
+  it('只挂在 common.* 上（哪怕岗位模板里带着它）/ frontmatter 写了 common / 谁都没挂 → 通用', () => {
     const [policy, basics, orphan] = run(['policy-review', 'workspace-basics', 'no-one-uses-me'])
     expect(policy?.positions?.map((p) => p.id)).toEqual([COMMON_POSITION_ID])
     expect(basics?.positions?.map((p) => p.id)).toEqual([COMMON_POSITION_ID])

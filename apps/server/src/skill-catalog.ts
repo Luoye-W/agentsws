@@ -7,7 +7,8 @@
  *   工作台退回英文 id）；
  * - `roles`：职责 yml 的 `skills:` 反查——哪几条职责在用它；
  * - `positions`：那几条职责挂在哪几个岗位下，并上 frontmatter 的 `positions`（只加的可选字段）。
- *   只挂在 `common.*` 这类不属于任何岗位的职责上的、或者谁都没挂的 → `common`（通用）；
+ *   挂在 `common.*` 上的算「通用」（`common`）；只挂在没进任何岗位模板的职责上、或者谁都没挂的
+ *   → 也归「通用」；
  * - `in_use`：本人名下有没撤销的职责在用它（「只看我在用的」）；
  * - `sections[].body`：段落正文（搜索要搜到正文）。
  *
@@ -40,6 +41,11 @@ export interface SkillCatalogFacts {
   sectionBody?(name: string, section_id: string): string | undefined
   /** 已经拆掉的岗位模板（`SUPERSEDED_POSITION_IDS`）：反查时跳过。 */
   superseded?: readonly string[]
+}
+
+/** `common.owner` / `common.member`：每个岗位都带的公共职责，不算任何一个岗位的。 */
+export function isCommonRole(role_id: string): boolean {
+  return role_id.startsWith('common.')
 }
 
 /** frontmatter `positions: b2b, ads` → `['b2b', 'ads']`（逗号或空白分隔）。 */
@@ -89,8 +95,10 @@ export function enrichSkillSummaries(
 
     const ids = new Set<string>()
     for (const r of roles) {
-      if (r.position_ids.length === 0) ids.add(COMMON_POSITION_ID)
-      for (const id of r.position_ids) ids.add(id)
+      // `common.*`（公司设置与授权、工作区成员）每个岗位都带着一份——算它们的岗位，
+      // 「工作台入门」就会出现在全部十个岗位里。它们一律归「通用」。
+      if (isCommonRole(r.role_id)) ids.add(COMMON_POSITION_ID)
+      else for (const id of r.position_ids) ids.add(id)
     }
     for (const id of parsePositionsField(extra.positions)) ids.add(id)
     if (ids.size === 0) ids.add(COMMON_POSITION_ID)
