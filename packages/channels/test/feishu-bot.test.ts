@@ -87,7 +87,10 @@ function msg(over: {
 }
 
 function rig(
-  creds: { app_id: string; app_secret: string } | null = { app_id: 'cli_a1b2c3d4e5f60718', app_secret: 'SEC-1' },
+  creds: { app_id: string; app_secret: string } | null = {
+    app_id: 'cli_a1b2c3d4e5f60718',
+    app_secret: 'SEC-1',
+  },
 ) {
   const clock = new FakeClock()
   const fake = new FakeFeishu()
@@ -117,7 +120,11 @@ describe('飞书：收什么、不收什么', () => {
     const r = rig()
     await r.start()
     expect(r.calls()).toBe(1)
-    expect(r.fake.started[0]).toEqual({ app_id: 'cli_a1b2c3d4e5f60718', app_secret: 'SEC-1', domain: 'feishu' })
+    expect(r.fake.started[0]).toEqual({
+      app_id: 'cli_a1b2c3d4e5f60718',
+      app_secret: 'SEC-1',
+      domain: 'feishu',
+    })
     expect(JSON.stringify(r.adapter)).not.toContain('SEC-1')
     r.fake.state('connected')
     r.fake.push(msg({}))
