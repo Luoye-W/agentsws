@@ -2,7 +2,7 @@
  * 消息渠道页上的飞书 / 钉钉两张卡（WP211）。
  *
  * 照 WP210 的少字规矩：卡上只有 **图标 + 名字 + 问号 + 状态 + 主按钮**；一句话介绍进问号，
- * 「凭据只存本机、不经 AI」进 Secret 那一格的问号，步骤进教程（`docs/help/im-feishu.md` /
+ * 「凭据只存本机、不经 AI」在页头问号里说一次（与企业微信卡一致），步骤进教程（`docs/help/im-feishu.md` /
  * `im-dingtalk.md`）。图标是各自官网的 favicon（构建期抓进仓库，运行时不联网）。
  *
  * 两件事在卡上：
@@ -160,7 +160,7 @@ export function TeamBotCard({
   return (
     <Card data-testid={`im-${channel}`}>
       <CardHeader className="flex flex-row items-center justify-between gap-2">
-        <CardTitle className="flex items-center gap-2 text-base">
+        <CardTitle className="flex items-center gap-1.5 text-base">
           <BrandIcon provider={spec.icon} size={20} className="rounded" />
           {t(spec.title)}
           <Hint text={t(spec.what)} testId={`im-${channel}-what`} />
@@ -195,10 +195,8 @@ export function TeamBotCard({
               />
             </div>
             <div>
-              <Label htmlFor={secretInput} className="gap-1.5">
-                {t(spec.secretField.label)}
-                <Hint text={t('im.team.secret.hint')} />
-              </Label>
+              {/* WP210：「凭据只存本机、不经 AI」统一在页头问号里说一次 */}
+              <Label htmlFor={secretInput}>{t(spec.secretField.label)}</Label>
               <Input
                 id={secretInput}
                 name={spec.secretField.name}

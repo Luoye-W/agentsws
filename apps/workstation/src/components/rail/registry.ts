@@ -57,6 +57,12 @@ export interface RailPanelBodyProps {
   /** 当前地址（事项页的面板要从它里面认 `matter_id`）。 */
   pathname: string
   /**
+   * WP208：一个面板里有几个标签时（「设定」的角色 / 记忆 / 知识 / 技能 / 额度），
+   * 这一次开到哪一个。由 {@link registerPanelAlias} 的旧 id 带来（`show('memory')` →
+   * 「设定」面板的「记忆」标签）；人点图标轨开的没有它，面板用自己的第一个标签。
+   */
+  sub?: string
+  /**
    * WP97：这一次是**为哪个资源**打开的（`agentsws://file/src_1/报价单.xlsx`）。
    *
    * 人点图标轨打开的面板没有它（那是"开一个页"，不是"开一份资源"）。
@@ -71,6 +77,11 @@ export interface PanelTypeDefinition {
   id: string
   /** i18n 键（`rail.panel.memory`）；图标轨的 title 与面板头都用它。 */
   label: string
+  /**
+   * WP208：图标轨上悬停时的那一句（i18n 键）。不给就用 `label`。
+   * 一个图标里装了几样东西时（「设定」），名字说不全，这一句说全。
+   */
+  hint?: string
   icon: LucideIcon
   priority: PanelPriority
   /** 图标轨上的哪一组；不给算 `tools`（第三方面板默认落在工具那一组）。 */
@@ -87,6 +98,35 @@ export interface PanelTypeDefinition {
    * 工具类面板（问 AI、浏览器）不跟层走——它们看的不是"这一层的设置"。
    */
   scoped?: boolean
+  /**
+   * WP208：图标右上角的**数字徽标**（「定时任务」在跑几个、「运行中」有几个）。
+   *
+   * 是一个 hook：图标轨每个格子各自一个组件，挂载时调一次，拿到的是与面板身体
+   * 同一份上下文（当前岗位 / 职责、地址）。回 `undefined` 或 `count` 为 0 就不画——
+   * **0 不显示**（36 §7：没事的时候图标轨上一个多余的点都不要有）。
+   * 它是静态那一段的一部分，所以要**轻**：只读缓存或一个小请求，别把面板身体拉下来。
+   */
+  useBadge?(props: RailPanelBodyProps): PanelBadge | undefined
+}
+
+/** WP208：图标右上角那个数，和悬停时替换 tooltip 的那一句（「3 个定时任务在跑」）。 */
+export interface PanelBadge {
+  count: number
+  /** 已经翻译好的一句话（hook 里有 `t`）。 */
+  label: string
+}
+
+/**
+ * WP208：**旧 id 的去处**。几个面板合成一个之后（记忆 / 技能 / 知识 / 额度 / 角色 →「设定」），
+ * 本机存着的布局、别处写死的 `show('memory')` 仍然要能开——开到新面板的对应标签。
+ */
+export interface PanelAlias {
+  /** 旧 id（`memory`）。 */
+  id: string
+  /** 现在归哪个面板（`settings`）。 */
+  panel: string
+  /** 开到那个面板的哪个标签（`memory`）。 */
+  sub?: string
 }
 
 export type PanelBody = ComponentType<RailPanelBodyProps>
@@ -101,6 +141,7 @@ interface TypeEntry {
 
 const types = new Map<string, TypeEntry>()
 const bodies = new Map<string, PanelBody>()
+const aliases = new Map<string, PanelAlias>()
 let counter = 0
 
 /**
@@ -138,6 +179,34 @@ export function registerPanelBody(id: string, Body: PanelBody): Disposer {
   return () => {
     if (bodies.get(id) === Body) bodies.delete(id)
   }
+}
+
+/**
+ * WP208：登记一个旧 id → 新面板（+ 标签）。
+ *
+ * 别名不上图标轨、不进 {@link listPanelTypes}；它只在"按 id 开"那一刻被 {@link resolvePanelId} 认出来。
+ *
+ * @throws 旧 id 已经是一个活着的面板类型，或者已经登记过别名（同一个名字两种去处，开出来总有一个是错的）。
+ */
+export function registerPanelAlias(alias: PanelAlias): Disposer {
+  if (types.has(alias.id) || aliases.has(alias.id))
+    throw new Error(`第三栏面板别名撞名：${alias.id}`)
+  aliases.set(alias.id, alias)
+  return () => {
+    if (aliases.get(alias.id) === alias) aliases.delete(alias.id)
+  }
+}
+
+/**
+ * WP208：按 id 开面板之前先过这一道——是旧 id 就换成它现在的去处与标签，不是就原样回。
+ *
+ * 活着的类型优先于别名（第三方以后真注册了一个叫 `memory` 的面板，它赢）。
+ */
+export function resolvePanelId(id: string): { id: string; sub?: string } {
+  if (types.has(id)) return { id }
+  const alias = aliases.get(id)
+  if (alias === undefined) return { id }
+  return alias.sub === undefined ? { id: alias.panel } : { id: alias.panel, sub: alias.sub }
 }
 
 /** 有类型、还没有身体的面板照样出现在图标轨上（点开显示"还没做"）。 */
@@ -227,5 +296,6 @@ export function resolvePanel(scope: PanelOpenScope): PanelTypeDefinition | undef
 export function resetPanelRegistry(): void {
   types.clear()
   bodies.clear()
+  aliases.clear()
   counter = 0
 }

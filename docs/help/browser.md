@@ -1,3 +1,7 @@
+---
+positions: [kol-marketing]
+roles: [kol.youtube, kol.instagram, kol.tiktok, kol.facebook, kol.x, amz.support]
+---
 # 让 AI 用浏览器（四种方式）
 
 有些活只能在网页上干（YouTube 的频道页、Amazon 卖家后台）。「设置 → 浏览器」决定工作台用哪个浏览器去干。**不配 = 谁都开不了浏览器。**

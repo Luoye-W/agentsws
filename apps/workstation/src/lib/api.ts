@@ -733,6 +733,9 @@ export interface ScheduledTaskRow {
   created_by?: 'user' | 'agent'
   /** WP181：从哪件事建的（事项 id） */
   origin?: { conversation_id?: string }
+  /** WP208：挂在哪条分配 / 哪条职责上（服务端一直在回，界面现在才用：右栏徽标按它数） */
+  assignment_id?: string
+  role_id?: string
   /** WP181：官方记录（`official`）、等不等批（`awaiting_approval`） */
   params?: Record<string, unknown>
 }
@@ -1395,12 +1398,16 @@ export interface DeadLetterView {
   attempts: number
   last_error?: string
   at: string
+  /** WP210：是不是客户来信（系统 / 营销通知不算）。老服务端不给。 */
+  customer?: boolean
+  /** WP210：系统自动重投到哪一步（`next_at` 下次再试；`gave_up` 不再自动投）。老服务端不给。 */
+  auto_retry?: { rounds: number; gave_up: boolean; next_at?: string }
 }
 
 export const listDeadLetters = (assignment?: string): Promise<{ dead_letters: DeadLetterView[] }> =>
   api<{ dead_letters: DeadLetterView[] }>('/v1/channels/dead-letters', withAssignment(assignment))
 
-/** WP55：重投一条死信。会让这条消息重新起一次 Run，所以是人按的按钮。 */
+/** WP55：重投一条死信（WP210 起平时系统自己按退避投，这个只在诊断页按）。 */
 export const requeueDeadLetter = (
   id: string,
   assignment?: string,

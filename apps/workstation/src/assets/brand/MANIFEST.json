@@ -1,20 +1,21 @@
 {
-  "$comment": "构建期抓一次入库的第三方品牌图标（WP48）。手动跑 `pnpm icons:fetch` 更新，跑完人自己看一眼再提交。运行时不联网。规矩见 docs/36 §8。",
-  "fetched_at": "2026-09-17",
-  "min_png": 64,
+  "$comment": "各家官网的 favicon，构建期抓一次入库（WP48 起；WP210 改成连接目录每一家都取）。手动跑 `pnpm icons:fetch` 更新，跑完人自己看一眼再提交。运行时不联网。规矩见 docs/36 §8。",
+  "fetched_at": "2026-09-30",
+  "min_bitmap": 32,
   "icons": {
     "shopify_admin": {
       "brand": "Shopify",
       "file": "shopify_admin.png",
       "format": "png",
-      "width": 144,
-      "height": 144,
-      "bytes": 11295,
-      "sha256": "1982bc10f6fc11f535e084435b72ee8debc56631b15d8d1500e9b872577ab87d",
-      "source_url": "https://cdn.shopify.com/b/shopify-brochure2-assets/b13486e5693b246af63c66ab047a6b6b.png",
+      "width": 256,
+      "height": 256,
+      "bytes": 14367,
+      "sha256": "e97d3e72e2d60bc4bda60620944381ac84e676e894e275b851a6dcea8be25b62",
+      "source_url": "https://www.shopify.com/favicon.ico",
       "source_page": "https://www.shopify.com",
+      "converted_from": "ico",
       "note": "官网首页的 apple-touch-icon",
-      "fetched_at": "2026-09-17"
+      "fetched_at": "2026-09-30"
     },
     "gmail": {
       "brand": "Gmail",
@@ -26,8 +27,8 @@
       "sha256": "860f3d32b1733bf7ca01c827b3e032ca0e55c8d4fa0d8482395e333f4e42ef9c",
       "source_url": "https://www.gstatic.com/images/branding/product/2x/gmail_2020q4_64dp.png",
       "source_page": "https://mail.google.com",
-      "note": "Google 品牌资源目录 gstatic branding/product（2020 版多色 M）；mail.google.com 本身是登录墙",
-      "fetched_at": "2026-09-17"
+      "note": "Google 自己的品牌资源目录（gstatic branding/product）；mail.google.com 是登录墙",
+      "fetched_at": "2026-09-30"
     },
     "ga4": {
       "brand": "Google Analytics",
@@ -39,8 +40,8 @@
       "sha256": "c3992b01343ced9cd279f81ac15ac04618edd6188e6c5b40bb7c04b3e8325660",
       "source_url": "https://www.gstatic.com/images/branding/product/2x/google_analytics_64dp.png",
       "source_page": "https://analytics.google.com",
-      "note": "Google 品牌资源目录 gstatic branding/product（GA4 的黄橙柱状图标）；analytics.google.com 是登录墙",
-      "fetched_at": "2026-09-17"
+      "note": "Google 品牌资源目录；analytics.google.com 是登录墙",
+      "fetched_at": "2026-09-30"
     },
     "gsc": {
       "brand": "Google Search Console",
@@ -52,8 +53,234 @@
       "sha256": "97db2ff60097307843a6f9bfc5b936735873d3cde4262cb0283f327d3040fa46",
       "source_url": "https://www.gstatic.com/images/branding/product/2x/search_console_64dp.png",
       "source_page": "https://search.google.com/search-console",
-      "note": "Google 品牌资源目录 gstatic branding/product；与 search-console/about 页上那张 logo_search_console.svg 是同一个标志的方形版",
-      "fetched_at": "2026-09-17"
+      "note": "Google 品牌资源目录；与 search-console/about 页上那张是同一个标志",
+      "fetched_at": "2026-09-30"
+    },
+    "google_ads": {
+      "brand": "Google Ads",
+      "file": "google_ads.png",
+      "format": "png",
+      "width": 128,
+      "height": 128,
+      "bytes": 2804,
+      "sha256": "097370bc94c01852403872d5eaa6523f39b985be7205ce45488a142d00383a70",
+      "source_url": "https://www.gstatic.com/images/branding/product/2x/ads_64dp.png",
+      "source_page": "https://ads.google.com",
+      "note": "Google 品牌资源目录（gstatic branding/product）",
+      "fetched_at": "2026-09-30"
+    },
+    "google_alerts": {
+      "brand": "Google 快讯",
+      "file": "google_alerts.png",
+      "format": "png",
+      "width": 128,
+      "height": 128,
+      "bytes": 3428,
+      "sha256": "5b95eed86b7603081f22edd5da01de4c028b118b20885793b9b3ad5f6cbe1e71",
+      "source_url": "https://www.gstatic.com/images/branding/googleg/1x/googleg_standard_color_128dp.png",
+      "source_page": "https://www.google.com/alerts",
+      "note": "Alerts 页面 favicon 那个 G 的 128px 版（Google 品牌资源目录 gstatic branding/googleg）",
+      "fetched_at": "2026-09-30"
+    },
+    "meta_ads": {
+      "brand": "Meta",
+      "file": "meta_ads.svg",
+      "format": "svg",
+      "width": null,
+      "height": null,
+      "bytes": 8912,
+      "sha256": "9c354dc7d40f7862df2dfb34df05ae08c3e956d55a450379803d6cac6878a63e",
+      "source_url": "https://static.xx.fbcdn.net/rsrc.php/yf/r/-7pQO6hUGK_.svg",
+      "source_page": "https://www.meta.com",
+      "note": "官网首页",
+      "fetched_at": "2026-09-30"
+    },
+    "facebook_graph": {
+      "brand": "Facebook",
+      "file": "facebook_graph.png",
+      "format": "png",
+      "width": 180,
+      "height": 180,
+      "bytes": 8548,
+      "sha256": "0b022ff390dd4dc450893c46f78a0607a7a637145704a1e2a4b696f9cd59f6cb",
+      "source_url": "https://www.facebook.com/apple-touch-icon.png",
+      "source_page": "https://www.facebook.com",
+      "converted_from": "webp",
+      "note": "官网首页",
+      "fetched_at": "2026-09-30"
+    },
+    "instagram_graph": {
+      "brand": "Instagram",
+      "file": "instagram_graph.png",
+      "format": "png",
+      "width": 180,
+      "height": 180,
+      "bytes": 48088,
+      "sha256": "c3738b32153ab005cc7490d19694d3092c9a4a01f0bd6a58c68e85143be4d7e4",
+      "source_url": "https://static.cdninstagram.com/rsrc.php/yw/r/icwX0xAk0pz.webp",
+      "source_page": "https://www.instagram.com",
+      "converted_from": "webp",
+      "note": "官网首页",
+      "fetched_at": "2026-09-30"
+    },
+    "threads_api": {
+      "brand": "Threads",
+      "file": "threads_api.png",
+      "format": "png",
+      "width": 256,
+      "height": 256,
+      "bytes": 37287,
+      "sha256": "db4afbbed0db8961e4ae3f2b7ecaa48a6327018c20275c82ac4daf840543f144",
+      "source_url": "https://static.cdninstagram.com/rsrc.php/yn/r/fFvbm7ecCaM.webp",
+      "source_page": "https://www.threads.com",
+      "converted_from": "webp",
+      "note": "官网首页",
+      "fetched_at": "2026-09-30"
+    },
+    "whatsapp_business": {
+      "brand": "WhatsApp",
+      "file": "whatsapp_business.png",
+      "format": "png",
+      "width": 192,
+      "height": 192,
+      "bytes": 5230,
+      "sha256": "bcc20635647ab557c88a091674957581a04888ff8501ef11850c2807867be26b",
+      "source_url": "https://whatsappbusiness.com/wp-content/uploads/2026/03/cropped-Digital_Glyph_Green_RGB_2026.png?w=192",
+      "source_page": "https://business.whatsapp.com",
+      "note": "WhatsApp Business 官网",
+      "fetched_at": "2026-09-30"
+    },
+    "youtube_data": {
+      "brand": "YouTube",
+      "file": "youtube_data.png",
+      "format": "png",
+      "width": 144,
+      "height": 144,
+      "bytes": 5020,
+      "sha256": "e39dc3d8c2f82ad2375132a8efcf521c232d5e2cf08abeb9bebe1ad94afb2157",
+      "source_url": "https://www.youtube.com/s/desktop/d57c41d2/img/favicon_144x144.png",
+      "source_page": "https://www.youtube.com",
+      "note": "官网首页",
+      "fetched_at": "2026-09-30"
+    },
+    "x_api": {
+      "brand": "X",
+      "file": "x_api.png",
+      "format": "png",
+      "width": 1024,
+      "height": 1024,
+      "bytes": 13160,
+      "sha256": "a83542eb0563242949d7dbde720014fb7ab48ae14ed59f43eec34907cb90c477",
+      "source_url": "https://x.com/apple-touch-icon.png",
+      "source_page": "https://x.com",
+      "note": "官网首页",
+      "fetched_at": "2026-09-30"
+    },
+    "tiktok_research": {
+      "brand": "TikTok",
+      "file": "tiktok_research.png",
+      "format": "png",
+      "width": 400,
+      "height": 400,
+      "bytes": 27829,
+      "sha256": "5e9c735171956561f39711ea2c6b593ad1d288e53cad060237d0f986202ffb36",
+      "source_url": "https://www.tiktok.com/apple-touch-icon.png",
+      "source_page": "https://www.tiktok.com",
+      "note": "官网首页",
+      "fetched_at": "2026-09-30"
+    },
+    "linkedin_api": {
+      "brand": "LinkedIn",
+      "file": "linkedin_api.png",
+      "format": "png",
+      "width": 64,
+      "height": 64,
+      "bytes": 528,
+      "sha256": "eef1f0c43ee07691adad5372b7f4c7832ee80817db28c3a37d6f2dd5049cec19",
+      "source_url": "https://static.licdn.com/aero-v1/sc/h/al2o9zrvru7aqj8e1x2rzsrca",
+      "source_page": "https://www.linkedin.com",
+      "converted_from": "ico",
+      "note": "官网首页",
+      "fetched_at": "2026-09-30"
+    },
+    "reddit": {
+      "brand": "Reddit",
+      "file": "reddit.png",
+      "format": "png",
+      "width": 192,
+      "height": 192,
+      "bytes": 16744,
+      "sha256": "925fe993dba774b69b734410aad20f58a2c95eccaf7f0662abcc2e61530e105c",
+      "source_url": "https://www.redditstatic.com/shreddit/assets/favicon/192x192.png",
+      "source_page": "https://www.reddit.com",
+      "note": "Reddit 官方静态资源域 redditstatic.com 上的站点图标（192px）",
+      "fetched_at": "2026-09-30"
+    },
+    "discord_bot": {
+      "brand": "Discord",
+      "file": "discord_bot.png",
+      "format": "png",
+      "width": 256,
+      "height": 256,
+      "bytes": 6600,
+      "sha256": "96bb6027baeeb7a4b936c77d1dc39c5852d9acecc4e147216ba49a1f86019244",
+      "source_url": "https://cdn.prod.website-files.com/6257adef93867e50d84d30e2/6266bc493fb42d4e27bb8393_847541504914fd33810e70a0ea73177e.ico",
+      "source_page": "https://discord.com",
+      "converted_from": "ico",
+      "note": "官网首页 <link rel=icon>",
+      "fetched_at": "2026-09-30"
+    },
+    "telegram_bot": {
+      "brand": "Telegram",
+      "file": "telegram_bot.svg",
+      "format": "svg",
+      "width": null,
+      "height": null,
+      "bytes": 1896,
+      "sha256": "0019255c610cb0843c524d7995905fa5201651fcc393846bee8414f0610097f5",
+      "source_url": "https://telegram.org/img/website_icon.svg?4",
+      "source_page": "https://telegram.org",
+      "note": "官网首页",
+      "fetched_at": "2026-09-30"
+    },
+    "klaviyo": {
+      "brand": "Klaviyo",
+      "file": "klaviyo.png",
+      "format": "png",
+      "width": 512,
+      "height": 512,
+      "bytes": 16865,
+      "sha256": "03be517d341f8f1422f42ffbe226fa8fb1b4345531b330f74c915290db826bb6",
+      "source_url": "https://www.klaviyo.com/icons/icon-512x512.png",
+      "source_page": "https://www.klaviyo.com",
+      "note": "官网首页",
+      "fetched_at": "2026-09-30"
+    },
+    "aftership": {
+      "brand": "AfterShip",
+      "file": "aftership.svg",
+      "format": "svg",
+      "width": null,
+      "height": null,
+      "bytes": 4570,
+      "sha256": "dfdfac7ee2fc29e868a52da8c1958eb7054d23db54ce603aa627a3133c77ae9f",
+      "source_url": "https://websites.am-static.com/assets/brands/glyph/aftership-colored.svg",
+      "source_page": "https://admin.aftership.com/",
+      "note": "AfterShip 后台入口页（公开、不登录）的 <link rel=icon>",
+      "fetched_at": "2026-09-30"
+    },
+    "track17": {
+      "brand": "17TRACK",
+      "file": "track17.png",
+      "format": "png",
+      "width": 152,
+      "height": 152,
+      "bytes": 4390,
+      "sha256": "e2c8d14c166a3df4b97e32d69df94fc56933c981f01f6f6fe5fab395f32fbc59",
+      "source_url": "https://res.17track.net/global-v2/imgs/oauth_image/apple_touch_152x152.png",
+      "source_page": "https://www.17track.net/en",
+      "note": "官网首页",
+      "fetched_at": "2026-09-30"
     },
     "bailian": {
       "brand": "阿里云百炼",
@@ -66,7 +293,7 @@
       "source_url": "https://img.alicdn.com/imgextra/i1/O1CN01Es0c28049TL083Vo_!!6000000002263-2-tps-64-64.png",
       "source_page": "https://bailian.console.aliyun.com/",
       "note": "百炼控制台 <link rel=icon>",
-      "fetched_at": "2026-09-17"
+      "fetched_at": "2026-09-30"
     },
     "openai": {
       "brand": "OpenAI / ChatGPT",
@@ -79,7 +306,7 @@
       "source_url": "https://openai.com/favicon.svg",
       "source_page": "https://openai.com",
       "note": "官网首页 <link rel=icon>",
-      "fetched_at": "2026-09-17"
+      "fetched_at": "2026-09-30"
     },
     "anthropic": {
       "brand": "Anthropic / Claude",
@@ -92,7 +319,7 @@
       "source_url": "https://cdn.prod.website-files.com/67ce28cfec624e2b733f8a52/67d31dd7aa394792257596c5_webclip.png",
       "source_page": "https://www.anthropic.com",
       "note": "官网首页 <link rel=icon>",
-      "fetched_at": "2026-09-17"
+      "fetched_at": "2026-09-30"
     },
     "deepseek": {
       "brand": "DeepSeek",
@@ -104,8 +331,8 @@
       "sha256": "0bf5e13ce954f13423a692f083f5cb0f4bcfde35c8b812f64efe89dabfdaed20",
       "source_url": "https://api-docs.deepseek.com/img/favicon.svg",
       "source_page": "https://api-docs.deepseek.com/",
-      "note": "DeepSeek 官方 API 文档站的 <link rel=icon>（矢量）",
-      "fetched_at": "2026-09-17"
+      "note": "DeepSeek 官方 API 文档站（矢量）",
+      "fetched_at": "2026-09-30"
     },
     "feishu_bot": {
       "brand": "飞书",
@@ -134,20 +361,13 @@
       "fetched_at": "2026-09-30"
     }
   },
-  "fallbacks": {
-    "meta_ads": {
-      "brand": "Meta 广告",
-      "reason": "官方来源都没给出能用的 PNG / SVG，界面退回 Simple Icons 的矢量图（见 brand-icons.tsx）",
-      "tried": [
-        {
-          "source": "https://static.xx.fbcdn.net/rsrc.php/y5/r/m4nf26cLQxS.ico",
-          "why": "返回的是 ICO（最大 32px），不收"
-        },
-        {
-          "source": "https://business.facebook.com/favicon.ico",
-          "why": "返回的是 ICO（最大 60px），不收"
-        }
-      ]
-    }
-  }
+  "aliases": {
+    "shopify_email": "shopify_admin",
+    "meta_graph": "meta_ads",
+    "meta_marketing": "meta_ads",
+    "x_ads": "x_api",
+    "tiktok_content": "tiktok_research",
+    "tiktok_ads": "tiktok_research"
+  },
+  "fallbacks": {}
 }
