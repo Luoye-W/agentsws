@@ -79,6 +79,10 @@ class FakeArchive implements WorkArchivePort {
     this.calls.push({ method: 'unarchive', args: [actor, id, by] })
     return { matter }
   }
+  seen(actor: WorkActor, id: string) {
+    this.calls.push({ method: 'seen', args: [actor, id] })
+    return { ok: true as const }
+  }
   settings() {
     return { idle_days: this.idle }
   }

@@ -1,13 +1,14 @@
 /**
  * WP207：左栏的「职责下正在进行的对话 / 任务」、自动归档、找回。
  *
- * 七条路由：
+ * 八条路由：
  * - `GET  /v1/work/rail`：左栏那一份——每条本人持有的职责下进行中的事项（带状态小点）、
  *   已归档条数、岗位右侧「等你处理的数」。读它的时候顺手把超过 N 天没动的归档（懒扫，没有定时器）。
  * - `GET  /v1/work/archived`：已归档列表（按时间 / 岗位 / 职责筛，可带搜索词）。
  * - `GET  /v1/work/search`：全文搜（标题、摘要、正文），进行中与归档的都给，归档的标出来（⌘K 用）。
  * - `POST /v1/work/archived/find`：「让 AI 找回」——**只读**，给候选，不恢复。
  * - `POST /v1/matters/:id/unarchive`：放回来（人点了恢复 / 点选了 AI 的候选）。**一次一件**。
+ * - `POST /v1/matters/:id/seen`：本人点开看过了（「做完待看」的小点灭掉）。
  * - `GET / PUT /v1/settings/work-archive`：自动归档天数（1–30 或不自动归档）。
  *
  * 权限与工作模型同一档（能读自己的队列就能看自己的事项）：归档只是"移出左栏"，
@@ -109,6 +110,8 @@ export interface WorkArchivePort {
     id: string,
     by: 'user' | 'ai_suggested',
   ): MaybePromise<{ matter: Matter }>
+  /** 本人点开看过这件事了（「做完待看」那个小点就灭）。 */
+  seen(actor: WorkActor, id: string): MaybePromise<{ ok: true }>
   settings(actor: WorkActor): MaybePromise<WorkArchiveSettings>
   setSettings(actor: WorkActor, input: WorkArchiveSettings): MaybePromise<WorkArchiveSettings>
 }
@@ -304,6 +307,21 @@ export function workArchiveRoutes(): Route[] {
         const input = await body(c, UnarchiveBody)
         return ok(c, await portOf(deps).unarchive(actorOf(c), param(c, 'id'), input.by ?? 'user'))
       },
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/matters/:id/seen',
+        operationId: 'markMatterSeen',
+        summary: 'WP207 本人点开看过这件事了（左栏「做完待看」的小点就灭；不改事项本身）',
+        tag: TAG,
+        auth: 'bearer',
+        assignment: true,
+        authz: READ,
+        params: [{ name: 'id', in: 'path', required: true, description: 'matter_id' }],
+        returns: '{ ok: true }',
+      },
+      async (c, deps) => ok(c, await portOf(deps).seen(actorOf(c), param(c, 'id'))),
     ),
     route(
       {

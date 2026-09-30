@@ -157,7 +157,7 @@ export function queryTerms(text: string): string[] {
   return recallTokens(stripped.replace(CJK_FILLER, ' ')).filter((t) => !RECALL_STOP.has(t))
 }
 
-/** 一件事和这组词有多像：标题 3、摘要 2、人与岗位名 2、正文 1，按命中的权重占比归一到 0..1。 */
+/** 一件事和这组词有多像：标题 3、摘要 2、参与人 2、岗位 / 职责名 1、正文 1，按命中的权重归一到 0..1。 */
 export function keywordScore(
   terms: readonly string[],
   doc: RecallDoc,
@@ -166,7 +166,9 @@ export function keywordScore(
   const fields: { text: string; weight: number; name: string }[] = [
     { text: doc.matter.title.toLowerCase(), weight: 3, name: 'title' },
     { text: doc.matter.context.summary.toLowerCase(), weight: 2, name: 'summary' },
-    { text: [...doc.people, ...doc.labels].join(' ').toLowerCase(), weight: 2, name: 'people' },
+    { text: doc.people.join(' ').toLowerCase(), weight: 2, name: 'people' },
+    // 岗位 / 职责名是弱信号：同一个岗位下的事个个都带着它，不能光凭它进候选
+    { text: doc.labels.join(' ').toLowerCase(), weight: 1, name: 'labels' },
     { text: doc.body.toLowerCase(), weight: 1, name: 'body' },
   ]
   let got = 0
@@ -179,7 +181,9 @@ export function keywordScore(
   }
   const why: string[] = []
   for (const [name, words] of hitWords) why.push(`${name}:${mergeBigrams(words).join(' ')}`)
-  return { score: got / (terms.length * 3), why }
+  // 分母封顶 4 个词：模型常把同一件事的几种说法（中英、同义）一起给，
+  // 命中其中一半就该是"很像"，不能被没命中的同义词摊薄
+  return { score: Math.min(1, got / (Math.min(terms.length, 4) * 3)), why }
 }
 
 /** 「美国 / 国红 / 红人」拼回「美国红人」，给人看的理由里不出现半截词。 */

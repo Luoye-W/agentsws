@@ -588,7 +588,13 @@ export class Work {
   unarchive(id: MatterId, by: UnarchiveBy, person?: PersonId): Matter {
     const matter = this.requireMatter(id)
     if (matter.archived_at === undefined) return matter
-    const next: Matter = { ...withoutArchive(matter), updated_at: this.now() }
+    // 放回来算一次活动：空闲天数从现在重新数（否则下一次扫又把它归档了），它也排到左栏最上面
+    const at = this.now()
+    const next: Matter = {
+      ...withoutArchive(matter),
+      updated_at: at,
+      context: { ...matter.context, last_activity: at },
+    }
     this.store.putMatter(next)
     this.emitUnarchived(
       matter,
@@ -1115,7 +1121,8 @@ export class Work {
       })
       if (todo.matter_id !== undefined) covered.add(todo.matter_id)
     }
-    for (const matter of this.listMatters({ status: ['open', 'waiting'] })) {
+    // WP207：归档的事不算「正在进行」（它这阵子没人动；一动就自动放回来）
+    for (const matter of this.listMatters({ status: ['open', 'waiting'], archived: false })) {
       if (covered.has(matter.id)) continue
       const owner = matter.context.participants[0]
       if (owner === undefined || !mine(matter.position_id)) continue

@@ -182,7 +182,7 @@ export interface ArchivedWorkCandidate {
   /** 0..1，越大越像。 */
   score: number
   /**
-   * 为什么像：`种类:词` 的短串——`title:红人` / `summary:样品` / `people:Alice` / `body:报价` /
+   * 为什么像：`种类:词` 的短串——`title:红人` / `summary:样品` / `people:Alice` / `labels:红人营销` / `body:报价` /
    * `time:上周` / `semantic`。界面按种类翻成人话（「标题里有 红人」），不把这一格原样摆出来。
    */
   why: string[]
