@@ -4,6 +4,8 @@
  * 不上重库：一张 key 表 + 一个 `t()`。key 的命名与服务端给的 `label_key` 对齐
  * （证据芯片只出 key，不出裸枚举——36 §2.3）。
  */
+import { LIBRARY_EN, LIBRARY_ZH } from './i18n-library'
+
 export type Lang = 'zh' | 'en'
 
 type Table = Record<string, string>
@@ -773,6 +775,38 @@ const zh: Table = {
   'rail.schedules.delete': '删除',
   'rail.schedules.delete_confirm': '删掉这条？',
   'rail.schedules.readonly': '这条的时间写法面板改不了，让 AI 改。',
+  // ── WP208：第三栏收拾（设定合一 / 定时徽标 / 教程跟上下文 / 邮件助手进消息 / 设计规范进公司）──
+  'rail.panel.settings': '设定',
+  'rail.panel.settings.hint': '这个岗位 / 职责的角色、记忆、知识、技能与额度',
+  'rail.schedules.badge': '{count} 个定时任务在跑',
+  'rail.schedules.this_position': '这个岗位的',
+  'rail.schedules.this_role': '这条职责的',
+  'help.ctx.role': '这条职责的',
+  'help.ctx.position': '这个岗位的',
+  'help.ctx.general': '通用',
+  'help.search': '搜教程',
+  'help.search.empty': '没搜到。',
+  'help.show_all': '全部 {count} 篇',
+  'messages.ai.title': 'AI 助手',
+  'messages.ai.toggle': '收起 / 展开 AI 助手',
+  'messages.ai.triage': '分拣',
+  'messages.ai.triage.route.inbox': '留在收件箱',
+  'messages.ai.triage.route.support': '归客服',
+  'messages.ai.triage.route.kol': '归红人营销',
+  'messages.ai.triage.route.b2b': '归 B2B',
+  'messages.ai.triage.priority.high': '要紧',
+  'messages.ai.triage.priority.normal': '一般',
+  'messages.ai.triage.priority.low': '不急',
+  'messages.ai.triage.unsure': '拿不准',
+  'messages.ai.triage.by.rule': '按规则分的',
+  'messages.ai.triage.by.model': '模型分的',
+  'messages.ai.triage.by.halted': '模型停着，只跑了规则',
+  'messages.ai.triage.by.user': '人手挪的',
+  'messages.ai.failed': 'AI 助手这会儿出不来，信照常能回、能归档。',
+  'org.brands.design.title': '设计规范',
+  'org.brands.design.hint':
+    '这个品牌的颜色、字体与 logo 规矩，设计、建站、社媒、投放干活时照着它。每个品牌一份，切到哪个品牌看的就是哪个。',
+  'org.brands.design.open': '查看 / 编辑',
   'position.cards.empty': '这个岗位现在没有待办。',
   'view.not_connected': '还没连接{source}',
   'view.no_range': '这个岗位还没分配店铺 / 品牌 / 产品线',
@@ -1299,6 +1333,24 @@ const zh: Table = {
   'connections.runtime.stand_in.detail':
     '这台机器没配连接器地址，现在连出来的都是假连接，只能用来看界面。',
   'connections.runtime.install': '怎么装',
+  // WP210：状态缩成一行，细节进问号；要动手时才多一条
+  'connections.runtime.at': '连接器地址：{url}。',
+  'connections.runtime.absent.action': '装好连接器才能连店铺与数据后台，邮箱现在就能连。',
+  'connections.runtime.unhardened.action': '先把下面这几条修好再连：',
+  'connections.runtime.more': '还有 {n} 条',
+  'connections.runtime.less': '收起',
+  'connections.available.hint':
+    '授权类的按钮会打开对方网站让你登录，密码只输在对方网站上，我们看不到；要填表的是网页原生表单，内容直接存进这台电脑的加密库，不经过 AI，也不进日志。',
+  'connections.sources.toggle': '数据来源',
+  'diagnostics.title': '诊断',
+  'diagnostics.hint': '系统自己处理不了的事记在这里。平时用不着，排查问题时再来看。',
+  'diagnostics.dead.title': '没进来的信',
+  'diagnostics.dead.hint':
+    '处理时出错的信，系统会自己隔一阵再试（半小时、2 小时、8 小时、24 小时），装了新版本也会再试一次；试完还不行就停在这里。客户来信停下时会另外给你一张卡。',
+  'diagnostics.dead.empty': '没有。所有的信都进来了。',
+  'diagnostics.dead.next': '{at} 自动再试',
+  'diagnostics.dead.gave_up': '已停止自动重试',
+  'diagnostics.dead.customer': '客户来信',
   'connections.vault.missing': '这台电脑还没有秘密库密钥，邮箱账号密码暂时存不了。',
   // WP44：老办法接的连接（Shopify 的 shpat_ 直填令牌）
   'connections.legacy': '老办法接的',
@@ -2627,8 +2679,7 @@ const zh: Table = {
   'nav.im': '消息渠道',
   'im.title': '消息渠道',
   'im.intro': '把代理接到聊天软件上。',
-  'im.intro.hint':
-    '两条通道是两件事：微信那条是「你和你自己的代理的私聊」，企业微信那条才是团队用的。',
+  'im.intro.hint': '微信那条是「你和你自己的代理的私聊」；企业微信、飞书、钉钉三条是团队用的。',
   'im.wechat.line': '扫一次码，就能在微信里问你自己的代理。',
   'im.wechat.terms.short': '只用来问你自己的代理；拿去做客服或群发会牵连你的主微信号。',
   'im.wechat.local': '登录凭据只存在这台机器上，不经 AI、不进日志。',
@@ -2668,7 +2719,39 @@ const zh: Table = {
   'im.wecom.saved': '已配好（BotID {bot}）。',
   'im.wecom.done': '存好了，正在连。',
   'im.cards.note':
-    '两条通道都只投「摘要 + 去工作台处理」的链接，不放通过 / 驳回按钮——决策和凭据不经聊天软件。',
+    '每条通道都只投「摘要 + 去工作台处理」的链接，不放通过 / 驳回按钮——决策和凭据不经聊天软件。',
+  // ── WP211：飞书 / 钉钉（团队）与「绑定我的账号」 ─────────────────
+  'im.feishu.title': '飞书机器人（公司的）',
+  'im.feishu.what':
+    '团队用：同事私聊它或在群里 @ 它，它按提问人的身份作答。走长连接，本机不需要公网地址。',
+  'im.feishu.app_id': 'App ID',
+  'im.feishu.app_secret': 'App Secret',
+  'im.feishu.where': '飞书开放平台 → 你的应用 → 凭证与基础信息。',
+  'im.feishu.lark': '国际版 Lark',
+  'im.feishu.saved': '已配好（App ID {id}）。',
+  'im.dingtalk.title': '钉钉机器人（公司的）',
+  'im.dingtalk.what':
+    '团队用：同事私聊它或在群里 @ 它，它按提问人的身份作答。走 Stream 模式，本机不需要公网地址。',
+  'im.dingtalk.client_id': 'Client ID',
+  'im.dingtalk.client_secret': 'Client Secret',
+  'im.dingtalk.where': '钉钉开发者后台 → 你的应用 → 凭证与基础信息（旧名 AppKey / AppSecret）。',
+  'im.dingtalk.saved': '已配好（Client ID {id}）。',
+  'im.team.secret.hint': '直接进本机加密库，不经 AI、不进日志、不会再显示出来。',
+  'im.team.setup': '填应用凭据',
+  'im.team.save': '保存并连接',
+  'im.team.refill': '重填凭据',
+  'im.team.remove': '断开',
+  'im.team.remove.why': '断开会把这台机器上的应用凭据直接销毁。',
+  'im.team.done': '存好了，正在连。',
+  'im.team.bind': '绑定我的账号',
+  'im.team.bind.why':
+    '第一次要对一下人：它只替认得的同事作答。点一下拿一个绑定码，私聊机器人发出去就绑上了。',
+  'im.team.bind.send': '私聊机器人发：',
+  'im.team.bind.cmd': '绑定 {code}',
+  'im.team.bind.expires': '10 分钟内有效，只能用一次。',
+  'im.team.bound': '我的账号已绑上',
+  'im.team.unbind': '解绑',
+  'im.state.failed': '连不上',
   // ── WP57（48 §4 L3 #11）：网站在线客服的聊天沙盒 ─────────────────
   'nav.chat': '聊天沙盒',
   'chat.title': '聊天沙盒',
@@ -3092,8 +3175,10 @@ const zh: Table = {
   'help.conn-community.title': '社群机器人：Reddit / Discord / Telegram',
   'help.conn-marketing-logistics.title': '邮件营销与物流追踪',
   'help.browser-extension.title': '浏览器插件「红人助手」',
-  'help.im-channels.title': '消息渠道：微信与企业微信',
+  'help.im-channels.title': '消息渠道：微信、企业微信、飞书与钉钉',
   'help.chat-window.title': '网站在线客服（聊天窗）',
+  'help.im-feishu.title': '飞书机器人：建应用、开长连接、拿凭据',
+  'help.im-dingtalk.title': '钉钉机器人：建应用、开 Stream、拿凭据',
   'kind.computer_use': '操作电脑',
   'category.computer_use': '操作电脑',
   'verb.policy.approve.computer_use': '允许',
@@ -3101,6 +3186,12 @@ const zh: Table = {
   'kind.official_plugin': '官方插件',
   'category.official_plugin': '官方插件',
   'verb.policy.approve.official_plugin': '照做',
+  // WP210：客户来信彻底投不进的那张卡
+  'kind.inbound_dead_letter': '没进来的信',
+  'category.dead_letter': '没进来的信',
+  'verb.dead_letter.approve': '再投一次',
+  'verb.dead_letter.reject': '去邮箱回复',
+  'deck.dead_letter.reply_myself': '我自己去邮箱回复',
   // ── WP142：红人为主的朋友第一步 ──
   'onboarding.ai.official.pending': '正在连 Agents 工坊云…',
   'onboarding.ai.official.offline': '网络不通，这一下没连上 Agents 工坊云。',
@@ -4136,6 +4227,39 @@ const en: Table = {
   'rail.schedules.delete': 'Delete',
   'rail.schedules.delete_confirm': 'Delete this one?',
   'rail.schedules.readonly': "This rule can't be edited here; ask the AI.",
+  // ── WP208: right rail tidy-up ──
+  'rail.panel.settings': 'Setup',
+  'rail.panel.settings.hint':
+    "This position's or duty's role, memory, knowledge, skills and limits",
+  'rail.schedules.badge': '{count} scheduled tasks running',
+  'rail.schedules.this_position': 'This position',
+  'rail.schedules.this_role': 'This duty',
+  'help.ctx.role': 'For this duty',
+  'help.ctx.position': 'For this position',
+  'help.ctx.general': 'General',
+  'help.search': 'Search tutorials',
+  'help.search.empty': 'Nothing found.',
+  'help.show_all': 'All {count}',
+  'messages.ai.title': 'AI assistant',
+  'messages.ai.toggle': 'Collapse / expand the AI assistant',
+  'messages.ai.triage': 'Sorted',
+  'messages.ai.triage.route.inbox': 'Stays in inbox',
+  'messages.ai.triage.route.support': 'To support',
+  'messages.ai.triage.route.kol': 'To creator marketing',
+  'messages.ai.triage.route.b2b': 'To B2B',
+  'messages.ai.triage.priority.high': 'Urgent',
+  'messages.ai.triage.priority.normal': 'Normal',
+  'messages.ai.triage.priority.low': 'Not urgent',
+  'messages.ai.triage.unsure': 'Unsure',
+  'messages.ai.triage.by.rule': 'Sorted by rules',
+  'messages.ai.triage.by.model': 'Sorted by the model',
+  'messages.ai.triage.by.halted': 'Model paused: rules only',
+  'messages.ai.triage.by.user': 'Moved by a person',
+  'messages.ai.failed': "The AI assistant can't load right now — you can still reply and archive.",
+  'org.brands.design.title': 'Design spec',
+  'org.brands.design.hint':
+    "This brand's colors, fonts and logo rules — design, site, social and ads work follows it. One per brand: you see the one for the brand you're in.",
+  'org.brands.design.open': 'View / edit',
   'position.cards.empty': 'Nothing waiting for this position.',
   'view.not_connected': '{source} is not connected',
   'view.no_range': 'No store, brand or product line assigned to this position yet',
@@ -4682,6 +4806,26 @@ const en: Table = {
   'connections.runtime.stand_in.detail':
     'No connector configured on this machine; connections made here are fake and only good for looking at the UI.',
   'connections.runtime.install': 'How to install',
+  // WP210: status is one line, details in the hint; an extra line only when you must act
+  'connections.runtime.at': 'Connector at {url}.',
+  'connections.runtime.absent.action':
+    'Install the connector to link stores and data sources; mailboxes work already.',
+  'connections.runtime.unhardened.action': 'Fix these before connecting:',
+  'connections.runtime.more': '{n} more',
+  'connections.runtime.less': 'Show less',
+  'connections.available.hint':
+    'Sign-in buttons open the provider’s own site — your password is typed only there and we never see it. Forms are plain browser forms: what you type goes straight into this machine’s encrypted store, never to the AI, never into logs.',
+  'connections.sources.toggle': 'Data source',
+  'diagnostics.title': 'Diagnostics',
+  'diagnostics.hint':
+    'Things the system could not sort out by itself. Only needed when troubleshooting.',
+  'diagnostics.dead.title': 'Messages that never made it in',
+  'diagnostics.dead.hint':
+    'Messages that errored while being processed. The system retries by itself (30 min, 2 h, 8 h, 24 h) and once more after an update; if they still fail they stop here. You get a card when a customer’s message stops.',
+  'diagnostics.dead.empty': 'None. Everything made it in.',
+  'diagnostics.dead.next': 'retrying at {at}',
+  'diagnostics.dead.gave_up': 'automatic retries stopped',
+  'diagnostics.dead.customer': 'Customer',
   'connections.vault.missing':
     'This machine has no vault key yet, so mailbox passwords cannot be stored.',
   'connections.legacy': 'connected the old way',
@@ -6024,7 +6168,7 @@ const en: Table = {
   'im.title': 'Messaging channels',
   'im.intro': 'Put your agent inside a chat app.',
   'im.intro.hint':
-    'The two are different things: WeChat is a private chat between you and your own agent; WeCom is the one your team uses.',
+    'WeChat is a private chat between you and your own agent; WeCom, Feishu and DingTalk are for your team.',
   'im.wechat.line': 'Scan once and ask your own agent from WeChat.',
   'im.wechat.terms.short':
     'Only for asking your own agent; support or broadcasts can get your main WeChat banned.',
@@ -6069,7 +6213,41 @@ const en: Table = {
   'im.wecom.saved': 'Configured (BotID {bot}).',
   'im.wecom.done': 'Saved, connecting.',
   'im.cards.note':
-    'Both channels only carry a summary plus a link back to the workstation — no approve/reject buttons, because decisions and credentials do not travel through chat apps.',
+    'Every channel only carries a summary plus a link back to the workstation — no approve/reject buttons, because decisions and credentials do not travel through chat apps.',
+  // ── WP211: Feishu / DingTalk (team) and "link my account" ─────────
+  'im.feishu.title': 'Feishu / Lark bot (company)',
+  'im.feishu.what':
+    'For the team: DM it or @ it in a group and it answers as the asker. Uses a long connection — no public URL needed.',
+  'im.feishu.app_id': 'App ID',
+  'im.feishu.app_secret': 'App Secret',
+  'im.feishu.where': 'Feishu Open Platform → your app → Credentials & Basic Info.',
+  'im.feishu.lark': 'Lark (international)',
+  'im.feishu.saved': 'Configured (App ID {id}).',
+  'im.dingtalk.title': 'DingTalk bot (company)',
+  'im.dingtalk.what':
+    'For the team: DM it or @ it in a group and it answers as the asker. Uses Stream mode — no public URL needed.',
+  'im.dingtalk.client_id': 'Client ID',
+  'im.dingtalk.client_secret': 'Client Secret',
+  'im.dingtalk.where':
+    'DingTalk developer console → your app → Credentials & Basic Info (formerly AppKey / AppSecret).',
+  'im.dingtalk.saved': 'Configured (Client ID {id}).',
+  'im.team.secret.hint':
+    'Goes straight into the encrypted store on this machine — never sent to the AI, never logged, never shown again.',
+  'im.team.setup': 'Enter app credentials',
+  'im.team.save': 'Save and connect',
+  'im.team.refill': 'Re-enter credentials',
+  'im.team.remove': 'Disconnect',
+  'im.team.remove.why': 'Disconnecting destroys the app credentials stored on this machine.',
+  'im.team.done': 'Saved, connecting.',
+  'im.team.bind': 'Link my account',
+  'im.team.bind.why':
+    'The bot only answers colleagues it knows. Get a code here and send it to the bot in a private chat.',
+  'im.team.bind.send': 'Send the bot privately:',
+  'im.team.bind.cmd': 'bind {code}',
+  'im.team.bind.expires': 'Valid for 10 minutes, single use.',
+  'im.team.bound': 'My account is linked',
+  'im.team.unbind': 'Unlink',
+  'im.state.failed': 'Cannot connect',
   // ── WP57 (48 §4 L3 #11): live chat sandbox ───────────────────────
   'nav.chat': 'Chat sandbox',
   'chat.title': 'Chat sandbox',
@@ -6525,14 +6703,22 @@ const en: Table = {
   'help.conn-community.title': 'Community bots: Reddit / Discord / Telegram',
   'help.conn-marketing-logistics.title': 'Email marketing and shipment tracking',
   'help.browser-extension.title': 'The “Creator helper” browser extension',
-  'help.im-channels.title': 'Message channels: WeChat and WeCom',
+  'help.im-channels.title': 'Message channels: WeChat, WeCom, Feishu and DingTalk',
   'help.chat-window.title': 'Website live chat (the chat window)',
+  'help.im-feishu.title': 'Feishu bot: create the app, turn on long connection, get credentials',
+  'help.im-dingtalk.title': 'DingTalk bot: create the app, turn on Stream, get credentials',
   'kind.computer_use': 'Use the computer',
   'category.computer_use': 'Use the computer',
   'verb.policy.approve.computer_use': 'Allow',
   'kind.official_plugin': 'Official plugin',
   'category.official_plugin': 'Official plugin',
   'verb.policy.approve.official_plugin': 'Go ahead',
+  // WP210: a customer message that never made it in
+  'kind.inbound_dead_letter': 'Message not processed',
+  'category.dead_letter': 'Message not processed',
+  'verb.dead_letter.approve': 'Try again',
+  'verb.dead_letter.reject': 'Reply from mailbox',
+  'deck.dead_letter.reply_myself': 'I will reply from the mailbox myself',
   // ── WP142：红人为主的朋友第一步 ──
   'onboarding.ai.official.pending': 'Connecting to Agents Workshop cloud…',
   'onboarding.ai.official.offline':
@@ -6805,7 +6991,11 @@ const en: Table = {
   'help.archive.title': 'Archiving and finding chats and tasks',
 }
 
-const TABLES: Record<Lang, Table> = { zh, en }
+// WP209：技能 / 知识分组的词条在自己的文件里（`i18n-library.ts`），这里并进来
+const TABLES: Record<Lang, Table> = {
+  zh: { ...zh, ...LIBRARY_ZH },
+  en: { ...en, ...LIBRARY_EN },
+}
 
 export function translate(lang: Lang, key: string, vars?: Record<string, string | number>): string {
   const raw = TABLES[lang][key] ?? TABLES.zh[key] ?? key

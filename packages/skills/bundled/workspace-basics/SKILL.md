@@ -4,6 +4,11 @@ description: 工作台基础：有人问「这个怎么用」「这件事该找�
 license: Apache-2.0
 tier: open
 version: 1.0.0
+display_name: 工作台入门
+display_name_en: Workspace basics
+summary: 用人话讲清工作台里的各样东西
+summary_en: Explain the workspace in plain words
+positions: common
 ---
 
 > Agents 工坊自带的基础版。这家公司在公司层写了自己的内部约定，以公司层为准。

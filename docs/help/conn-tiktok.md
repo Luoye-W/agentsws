@@ -1,3 +1,7 @@
+---
+positions: [ads, social-media, kol-marketing]
+roles: [ads.tiktok, social.tiktok, kol.tiktok]
+---
 # TikTok 的三个连接
 
 这篇讲 TikTok 的三个连接：红人用的 Research API、社媒发视频用的 Content Posting API、投放用的 Business API。三个都是**申请制**，而且**要分别申请**。

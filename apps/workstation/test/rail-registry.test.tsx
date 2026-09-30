@@ -17,8 +17,8 @@ import { fireEvent, screen, waitFor } from '@testing-library/react'
 import { Brain, Gauge, Globe } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { PositionInstanceData } from '@/lib/api'
-import { renderWithProviders } from './helpers'
+import type { PositionInstanceData, ScheduledTaskRow } from '@/lib/api'
+import { openSettingsTab, renderWithProviders } from './helpers'
 
 const INSTANCE: PositionInstanceData = {
   position_id: 'web-ops',
@@ -61,11 +61,14 @@ const getLayerMemory = vi.fn(async () => ({
   ],
 }))
 const getPosition = vi.fn(async () => INSTANCE)
+/** WP208：「定时任务」徽标数的那一份（默认一条都没有 → 不画数）。 */
+const getMySchedules = vi.fn(async (): Promise<ScheduledTaskRow[]> => [])
 
 vi.mock('@/lib/api', async () => {
   const actual = await vi.importActual<typeof import('@/lib/api')>('@/lib/api')
   return {
     ...actual,
+    getMySchedules: () => getMySchedules(),
     getPosition: (...a: unknown[]) => getPosition(...(a as [])),
     getLayerMemory: (...a: unknown[]) => getLayerMemory(...(a as [])),
   }
@@ -120,6 +123,7 @@ beforeEach(() => {
   vi.stubGlobal('localStorage', fakeStorage())
   getLayerMemory.mockClear()
   getPosition.mockClear()
+  getMySchedules.mockClear()
 })
 
 afterEach(() => {
@@ -255,13 +259,37 @@ describe('内置四个面板走的就是那条公开路（#4）', () => {
     ensureBuiltinPanels()
   })
 
-  it('记忆 / 技能 / 知识 / 额度都在注册表里，没有第二条内部通道', () => {
-    for (const id of ['memory', 'skills', 'knowledge', 'caps']) {
-      const def = registry.panelType(id)
-      expect(def?.priority).toBe('builtin')
-      expect(def?.scoped).toBe(true)
-      expect(registry.panelBody(id)).toBeDefined()
+  it('WP208：「设定」在注册表里（跟层走、有身体）；旧的五个 id 是别名，落到它的对应标签', () => {
+    const def = registry.panelType('settings')
+    expect(def?.priority).toBe('builtin')
+    expect(def?.scoped).toBe(true)
+    expect(def?.group).toBe('layer')
+    expect(def?.hint).toBe('rail.panel.settings.hint')
+    expect(registry.panelBody('settings')).toBeDefined()
+    for (const id of ['role', 'memory', 'knowledge', 'skills', 'caps']) {
+      // 不再是图标轨上的一格
+      expect(registry.panelType(id)).toBeUndefined()
+      expect(registry.resolvePanelId(id)).toEqual({ id: 'settings', sub: id })
     }
+    // 不是别名的原样回
+    expect(registry.resolvePanelId('evidence')).toEqual({ id: 'evidence' })
+    // 搬走的两个（邮件助手进消息页、设计规范进公司 → 品牌）不在第三栏了
+    expect(registry.panelType('mail-assistant')).toBeUndefined()
+    expect(registry.panelType('design-md')).toBeUndefined()
+  })
+
+  it('WP208：别名撞名直接抛；以后真有人注册了同名面板，活着的类型赢', () => {
+    expect(() => registry.registerPanelAlias({ id: 'memory', panel: 'x' })).toThrow()
+    expect(() => registry.registerPanelAlias({ id: 'evidence', panel: 'x' })).toThrow()
+    const off = registry.registerPanelType({
+      id: 'memory',
+      label: 'rail.panel.memory',
+      icon: Brain,
+      priority: 'extension',
+    })
+    expect(registry.resolvePanelId('memory')).toEqual({ id: 'memory' })
+    off()
+    expect(registry.resolvePanelId('memory')).toEqual({ id: 'settings', sub: 'memory' })
   })
 
   it('WP140：还没做的占位面板内测期间藏起来（注册表里没有，图标轨上也没有）', () => {
@@ -284,8 +312,9 @@ describe('内置四个面板走的就是那条公开路（#4）', () => {
     expect(await screen.findByTestId('rail-placeholder')).toBeDefined()
   })
 
-  it('WP181：「定时任务」做好了，原位放出来——有类型也有身体', () => {
-    expect(registry.panelType('schedules')?.group).toBe('context')
+  it('WP181：「定时任务」做好了，原位放出来——有类型也有身体（WP208 挪进中组、带徽标）', () => {
+    expect(registry.panelType('schedules')?.group).toBe('layer')
+    expect(registry.panelType('schedules')?.useBadge).toBeDefined()
     expect(registry.panelBody('schedules')).toBeDefined()
   })
 
@@ -315,9 +344,9 @@ describe('布局只存结构、按作用域分桶（#5）', () => {
 
   it('本机那一份里只有 open_panel_id 与 width，面板内容一个字都没有', async () => {
     renderRail()
-    fireEvent.click(screen.getByTestId('rail-icon-memory'))
+    await openSettingsTab('memory')
     // 等面板真把内容取回来（这时候本机那一份是最容易被写脏的）
-    expect(await screen.findByTestId('rail-panel-memory')).toBeDefined()
+    expect(await screen.findByTestId('settings-panel-memory')).toBeDefined()
     await waitFor(() => {
       expect(getLayerMemory).toHaveBeenCalled()
     })
@@ -330,6 +359,7 @@ describe('布局只存结构、按作用域分桶（#5）', () => {
       'open_panel_id',
       'width',
     ])
+    // WP208：标签也是结构（存的是旧 id，别名把它落回「设定」的「记忆」标签）
     expect(parsed['position:asg_store']?.open_panel_id).toBe('memory')
     // 面板正文、条目 id、岗位名一个都没进来
     expect(raw).not.toContain('面板内容')
@@ -339,8 +369,8 @@ describe('布局只存结构、按作用域分桶（#5）', () => {
 
   it('换一个作用域就是换一份布局：事项页开的那个不会跑到岗位页上', async () => {
     renderRail('/matters/mat_1', 'asg_store')
-    fireEvent.click(screen.getByTestId('rail-icon-memory'))
-    await screen.findByTestId('rail-panel-memory')
+    await openSettingsTab('memory')
+    await screen.findByTestId('settings-panel-memory')
     const parsed = JSON.parse(
       globalThis.localStorage.getItem(RIGHT_RAIL_LAYOUT_KEY) ?? '{}',
     ) as Record<string, { open_panel_id: string | null }>
@@ -371,7 +401,9 @@ describe('启动不激活（#6）', () => {
     renderRail()
     // 布局恢复了（面板框在，宽度也是记下来那个）
     const frame = await screen.findByTestId('rail-panel-frame')
-    expect(frame.getAttribute('data-panel')).toBe('caps')
+    // WP208：旧布局里的 `caps` 落到「设定」的「额度」标签（旧 id 兼容）
+    expect(frame.getAttribute('data-panel')).toBe('settings')
+    expect((await screen.findByTestId('settings-panel')).getAttribute('data-tab')).toBe('caps')
     expect(frame.getAttribute('style')).toContain('400px')
     // 而记忆面板**没有**被挂起来，所以它那条接口一次都没打
     expect(getLayerMemory).not.toHaveBeenCalled()
@@ -384,14 +416,68 @@ describe('启动不激活（#6）', () => {
   // WP140：内测期间藏起四个还没做的占位面板（数据 / 运行中 / 定时任务 / 文件），于是十二个
   // WP156：工具组最后加了「教程」，于是十三个
   // WP181：「定时任务」做好了原位放出来，于是十四个
-  it('一个都没开的时候：十四个图标都在，但没有任何面板发请求', () => {
+  // WP208：角色 / 记忆 / 知识 / 技能 / 额度合成「设定」，邮件助手与设计规范搬走，于是八个
+  it('一个都没开的时候：八个图标都在，但没有任何面板发请求', () => {
     renderRail()
-    expect(screen.getAllByTestId(/^rail-icon-/)).toHaveLength(14)
+    expect(screen.getAllByTestId(/^rail-icon-/).map((b) => b.dataset.testid)).toEqual([
+      'rail-icon-evidence',
+      'rail-icon-changes',
+      'rail-icon-settings',
+      'rail-icon-schedules',
+      'rail-icon-browser',
+      'rail-icon-office-preview',
+      'rail-icon-ask',
+      'rail-icon-help',
+    ])
     expect(screen.getByTestId('rail-icon-schedules')).toBeTruthy()
     expect(screen.getByTestId('rail-icon-help')).toBeTruthy()
     expect(screen.queryByTestId('rail-icon-data')).toBeNull()
     expect(getLayerMemory).not.toHaveBeenCalled()
     expect(screen.queryByTestId('rail-panel-frame')).toBeNull()
+  })
+})
+
+describe('WP208：「定时任务」图标带在跑的数', () => {
+  const row = (over: Partial<ScheduledTaskRow>): ScheduledTaskRow => ({
+    id: `sch_${Math.random().toString(36).slice(2)}`,
+    handler: 'automation.reminder',
+    trigger: { kind: 'cron', expr: '0 9 * * *' },
+    state: 'active',
+    fire_count: 0,
+    assignment_id: 'asg_store',
+    role_id: 'dtc.store',
+    ...over,
+  })
+
+  it('只数这一层在跑的：暂停的、等批的、别的岗位的、别的种类的都不算；悬停说几个在跑', async () => {
+    getMySchedules.mockResolvedValueOnce([
+      row({}),
+      row({ state: 'running' }),
+      row({ state: 'paused' }),
+      row({ state: 'pending', params: { awaiting_approval: true } }),
+      row({ params: { awaiting_approval: true } }),
+      row({ assignment_id: 'asg_other', role_id: 'dtc.support' }),
+      row({ handler: 'mail.poll' }),
+      row({ state: 'done' }),
+    ])
+    renderRail()
+    const badge = await screen.findByTestId('rail-badge-schedules')
+    expect(badge.textContent).toBe('2')
+    expect(screen.getByTestId('rail-icon-schedules').getAttribute('title')).toBe(
+      '定时任务 · 2 个定时任务在跑',
+    )
+  })
+
+  it('这一层一个在跑的都没有：0 不显示，悬停只说名字', async () => {
+    getMySchedules.mockResolvedValueOnce([
+      row({ assignment_id: 'asg_content', role_id: 'dtc.content' }),
+    ])
+    renderRail('/positions/asg_store/duties/dtc.store', 'asg_store')
+    await waitFor(() => {
+      expect(getMySchedules).toHaveBeenCalled()
+    })
+    expect(screen.queryByTestId('rail-badge-schedules')).toBeNull()
+    expect(screen.getByTestId('rail-icon-schedules').getAttribute('title')).toBe('定时任务')
   })
 })
 

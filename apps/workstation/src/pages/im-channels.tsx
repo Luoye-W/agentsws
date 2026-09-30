@@ -12,6 +12,14 @@
  *
  * 两格共同的一条：**审批动作不在 IM 里做**。卡片在微信 / 企业微信里只有一段
  * 文字摘要 + 一条「去工作台处理」的链接，按钮一个都没有（凭据与决策不经 IM）。
+ *
+ * WP210（Luoye 09-30 减字）：每张渠道卡只留名字 + 问号（一句话与来龙去脉）+ 状态 + 主按钮；
+ * 例外是微信的条款风险（牵连主微信号），一行留在卡上（Fable 09-30 定）；「只存本机、不经 AI」这类安全承诺和底部那句「只投摘要 + 链接」统一进页头
+ * 的问号，说一次。
+ *
+ * WP211：再加飞书 / 钉钉两张团队卡（`components/im/team-bot-card.tsx`，同一套少字样式，图标用官网
+ * favicon）。三条团队渠道的公司应用凭据只给负责人与公司管理员填 / 改 / 断开（Fable 09-30），别人只看
+ * 状态；每人自己的「绑定我的账号」人人可用。
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
@@ -24,6 +32,7 @@ import {
   useState,
 } from 'react'
 import { TutorialLink } from '@/components/help/tutorial-link'
+import { BindRow, TeamBotCard } from '@/components/im/team-bot-card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -47,7 +56,18 @@ const POLL_MS = 1200
 export function ImChannelsPage(): ReactNode {
   const { t } = useApp()
   const client = useQueryClient()
-  const status = useQuery({ queryKey: ['im', 'status'], queryFn: getImStatus })
+  const status = useQuery({
+    queryKey: ['im', 'status'],
+    queryFn: getImStatus,
+    // WP211：飞书 / 钉钉存好之后在后台连，连上 / 连不上之前隔一会儿问一次
+    refetchInterval: (q) => {
+      const d = q.state.data
+      const busy = [d?.feishu, d?.dingtalk].some(
+        (b) => b?.configured === true && (b.state === 'connecting' || b.state === 'reconnecting'),
+      )
+      return busy ? 1500 : false
+    },
+  })
   const [login, setLogin] = useState<{ id: string; qrcode_url: string } | null>(null)
   const [poll, setPoll] = useState<ImLoginPoll | null>(null)
   const [verify, setVerify] = useState('')
@@ -139,6 +159,8 @@ export function ImChannelsPage(): ReactNode {
 
   const wechat = status.data?.wechat
   const wecom = status.data?.wecom
+  // WP211（Fable 09-30）：公司的应用凭据只给负责人与公司管理员；别人只看状态
+  const canManage = status.data?.can_manage === true
 
   const submitWecom = (e: FormEvent<HTMLFormElement>): void => {
     e.preventDefault()
@@ -156,17 +178,41 @@ export function ImChannelsPage(): ReactNode {
           {t('im.title')}
           <TutorialLink slug="im-channels" className="font-normal" />
         </h1>
-        {/* WP157：页头一句；「两条通道是两件事」进问号 */}
+        {/*
+          WP157：页头一句；WP210：「两条通道是两件事」+ 安全承诺（凭据只存本机、不经 AI）+
+          「只投摘要 + 链接」都在这一个问号里说一次，卡上不再各说一遍
+        */}
         <p className="mt-1 flex max-w-3xl items-center gap-1 text-sm text-muted-foreground">
           {t('im.intro')}
-          <Hint text={t('im.intro.hint')} />
+          <Hint
+            text={[
+              t('im.intro.hint'),
+              t('im.wechat.local'),
+              t('im.wecom.safety'),
+              t('im.cards.note'),
+            ].join(' ')}
+            testId="im-header-hint"
+          />
         </p>
       </div>
 
       {/* ── 微信：我和我自己的代理 ─────────────────────────────── */}
       <Card>
         <CardHeader className="flex flex-row items-center justify-between gap-2">
-          <CardTitle className="text-base">{t('im.wechat.title')}</CardTitle>
+          <CardTitle className="flex items-center gap-1.5 text-base">
+            {t('im.wechat.title')}
+            {/* WP210：一句话 + 来龙去脉 + 它不做的三件事，都在这一个问号里 */}
+            <Hint
+              text={[
+                t('im.wechat.line'),
+                t('im.wechat.what'),
+                t('im.wechat.not.colleagues'),
+                t('im.wechat.not.group'),
+                t('im.wechat.not.approve'),
+              ].join(' ')}
+              testId="im-wechat-what"
+            />
+          </CardTitle>
           {wechat?.bound === true ? (
             <Badge variant={wechat.live ? 'default' : 'secondary'}>
               {wechat.live ? t('im.state.live') : t('im.state.paused')}
@@ -176,22 +222,11 @@ export function ImChannelsPage(): ReactNode {
           )}
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
-          {/* WP157：一句话 + 问号（原来那段介绍）；「它不做的三件事」与条款原话进安全承诺旁的问号 */}
-          <p className="flex items-center gap-1 text-sm text-muted-foreground">
-            {t('im.wechat.line')}
-            <Hint text={t('im.wechat.what')} testId="im-wechat-what" />
-          </p>
-          <SafetyNote
-            text={t('im.wechat.terms.short')}
-            hint={[
-              t('im.wechat.terms'),
-              t('im.wechat.not.colleagues'),
-              t('im.wechat.not.group'),
-              t('im.wechat.not.approve'),
-            ].join(' ')}
-          />
-          <SafetyNote text={t('im.wechat.local')} />
-
+          {/*
+            WP210 例外（Fable 09-30 定）：条款风险关系到用户的主微信号会不会被封，不能只藏在问号里——
+            原话一行留在卡上，条款出处在它旁边的问号里。
+          */}
+          <SafetyNote text={t('im.wechat.terms.short')} hint={t('im.wechat.terms')} />
           {wechat?.allowed === false ? (
             <p role="alert" className="text-sm text-destructive">
               {wechat.reason}
@@ -289,7 +324,10 @@ export function ImChannelsPage(): ReactNode {
       {/* ── 企业微信：团队那一条 ───────────────────────────────── */}
       <Card>
         <CardHeader className="flex flex-row items-center justify-between gap-2">
-          <CardTitle className="text-base">{t('im.wecom.title')}</CardTitle>
+          <CardTitle className="flex items-center gap-1.5 text-base">
+            {t('im.wecom.title')}
+            <Hint text={`${t('im.wecom.line')} ${t('im.wecom.what')}`} testId="im-wecom-what" />
+          </CardTitle>
           {wecom?.configured === true ? (
             <Badge variant={wecom.connected ? 'default' : 'secondary'}>
               {wecom.connected ? t('im.state.live') : t('im.state.connecting')}
@@ -299,10 +337,6 @@ export function ImChannelsPage(): ReactNode {
           )}
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
-          <p className="flex items-center gap-1 text-sm text-muted-foreground">
-            {t('im.wecom.line')}
-            <Hint text={t('im.wecom.what')} testId="im-wecom-what" />
-          </p>
           {wecom?.configured === true ? (
             <p className="text-sm" data-slot="status">
               {t('im.wecom.saved', { bot: wecom.bot_id ?? '' })}
@@ -312,33 +346,35 @@ export function ImChannelsPage(): ReactNode {
             13 §4.3 的原生表单：值用 FormData 收，不进 React state、不进任何全局变量，
             提交完立刻 reset()。全程没有一次 console.*。
           */}
-          <form ref={formRef} onSubmit={submitWecom} className="flex max-w-md flex-col gap-3">
-            <div>
-              <Label htmlFor={botIdId} className="gap-1.5">
-                {t('im.wecom.bot_id')}
-                <Hint text={t('im.wecom.where')} />
-              </Label>
-              <Input id={botIdId} name="bot_id" autoComplete="off" spellCheck={false} required />
-            </div>
-            <div>
-              <Label htmlFor={secretId}>{t('im.wecom.secret')}</Label>
-              <Input
-                id={secretId}
-                name="secret"
-                type="password"
-                autoComplete="off"
-                spellCheck={false}
-                data-1p-ignore
-                required
-              />
-            </div>
-            <SafetyNote text={t('im.wecom.safety')} />
-            <div>
-              <Button type="submit" size="sm" disabled={saveWecom.isPending}>
-                {t('im.wecom.save')}
-              </Button>
-            </div>
-          </form>
+          {/* WP211（Fable 09-30）：公司的凭据只有负责人 / 公司管理员能填，别人只看状态 */}
+          {canManage ? (
+            <form ref={formRef} onSubmit={submitWecom} className="flex max-w-md flex-col gap-3">
+              <div>
+                <Label htmlFor={botIdId} className="gap-1.5">
+                  {t('im.wecom.bot_id')}
+                  <Hint text={t('im.wecom.where')} />
+                </Label>
+                <Input id={botIdId} name="bot_id" autoComplete="off" spellCheck={false} required />
+              </div>
+              <div>
+                <Label htmlFor={secretId}>{t('im.wecom.secret')}</Label>
+                <Input
+                  id={secretId}
+                  name="secret"
+                  type="password"
+                  autoComplete="off"
+                  spellCheck={false}
+                  data-1p-ignore
+                  required
+                />
+              </div>
+              <div>
+                <Button type="submit" size="sm" disabled={saveWecom.isPending}>
+                  {t('im.wecom.save')}
+                </Button>
+              </div>
+            </form>
+          ) : null}
           {wecomError !== null ? (
             <p role="alert" className="text-sm text-destructive">
               {wecomError}
@@ -349,10 +385,26 @@ export function ImChannelsPage(): ReactNode {
               {t('im.wecom.done')}
             </p>
           ) : null}
+          {/* WP211：企业微信也走同一套「绑定我的账号」 */}
+          {wecom?.configured === true ? (
+            <BindRow channel="wecom" bound={wecom.me_bound === true} />
+          ) : null}
         </CardContent>
       </Card>
 
-      <SafetyNote text={t('im.cards.note')} />
+      {/* ── WP211：飞书 / 钉钉（团队的）──────────────────────────── */}
+      <TeamBotCard
+        channel="feishu"
+        view={status.data?.feishu}
+        accountId={status.data?.feishu?.app_id}
+        canManage={canManage}
+      />
+      <TeamBotCard
+        channel="dingtalk"
+        view={status.data?.dingtalk}
+        accountId={status.data?.dingtalk?.client_id}
+        canManage={canManage}
+      />
     </div>
   )
 }

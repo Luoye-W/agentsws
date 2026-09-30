@@ -336,8 +336,13 @@ export type KnownEventType =
    * payload 只有原因码、文件夹与 uid，地址遮掉，没有正文。
    */
   | 'inbound.mailbox_action'
-  /** 死信被人重投回队列。 */
+  /** 死信被人重投回队列（WP210 起也可能是系统按退避自动投的，payload 带 `auto: true`）。 */
   | 'inbound.requeued'
+  /**
+   * WP210：一条死信判定为彻底投不进（自动重投用完 / 路由类失败），不再自动重投。
+   * payload 只有死信 id、原因、轮数、是不是客户来信——没有正文。
+   */
+  | 'inbound.dead_letter_gave_up'
 
 export interface EventLog {
   append<T extends string, P>(

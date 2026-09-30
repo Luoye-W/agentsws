@@ -1,3 +1,7 @@
+---
+positions: [social-media, pr]
+roles: [social.reddit, social.discord, social.telegram-group, pr.reddit, pr.forums]
+---
 # 社群机器人：Reddit / Discord / Telegram
 
 这篇讲社群运营用的三个连接：Reddit 版块、Discord 服务器、Telegram 群。三家规矩差别很大，先看表。

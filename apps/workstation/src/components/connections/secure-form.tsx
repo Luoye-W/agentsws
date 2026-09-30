@@ -25,10 +25,16 @@ export function SecureForm({
   assignment,
   onCancel,
   onSubmit,
+  safetyNote = true,
 }: {
   service: string
   fields: ProviderFieldSpec[]
   busy: boolean
+  /**
+   * WP210：表单顶上那句「不经 AI、不进日志」。连接页把安全承诺统一收到「可以连接」标题旁的
+   * 问号里说一次（Luoye 09-30），所以那里传 `false`；模型卡等别处照旧显示。
+   */
+  safetyNote?: boolean
   /** 识别请求要带的岗位（连接是所有者的事）。 */
   assignment?: string
   onCancel: () => void
@@ -108,7 +114,7 @@ export function SecureForm({
       autoComplete="off"
       noValidate={false}
     >
-      <SafetyNote text={t('connections.never_ai')} className="text-xs" />
+      {safetyNote ? <SafetyNote text={t('connections.never_ai')} className="text-xs" /> : null}
       {preset === null ? null : (
         <p
           className={

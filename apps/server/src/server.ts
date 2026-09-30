@@ -126,6 +126,7 @@ import {
   type RoleStore,
   rangeTargetOfProduct,
   renderBrandContext,
+  SUPERSEDED_POSITION_IDS,
   type SupervisedPosition,
 } from '@agentsws/roles'
 import type { SearchFetch } from '@agentsws/search-providers'
@@ -216,6 +217,7 @@ import {
   createChannels,
   type DirectMailInput,
   type DirectMailResult,
+  deadLetterToRequeue,
 } from './channels.js'
 // WP57（48 §4 L3 #11）：在线聊天的实时车道（会话 / 轮次 / 计划 / 求助超时）
 import {
@@ -283,6 +285,8 @@ import {
 } from './hosted-mode.js'
 import { createApprovalDirectory } from './housekeeping.js'
 import { createImChannels } from './im-channels.js'
+import { feishuSdkTransportFactory, fetchHttp, wsSocketFactory } from './im-sdk.js'
+import { createTeamBotManagerCheck } from './im-team-bots.js'
 import { createJoin, type JoinAssembly } from './join.js'
 // WP56（48 §4 #9）：知识包导入的落库那一步
 import { knowledgeSourceFile } from './knowledge-file.js'
@@ -407,6 +411,7 @@ import { claimRuleCard, createSeoService, pickRoleHolder } from './seo-service.j
 import type { BrokerFetch } from './shopify-broker.js'
 import { createShopifyDevMcp } from './shopify-devmcp.js'
 import { createConnectSiteFacts, createSiteService, createSiteStore, seedDemoSite } from './site.js'
+import { enrichSkillSummaries } from './skill-catalog.js'
 import {
   createSocialStore,
   migrateSupersededChannels,
@@ -3403,6 +3408,53 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           },
         })
       },
+      /*
+       * WP210（Luoye 09-30）：失败的信系统自己按退避重投；**客户来信**投满几轮还不行，
+       * 才给人一张卡（系统 / 营销通知只进日志）。Fable 09-30 定：卡上两个按钮——
+       * 「再投一次」（批准 → `seoDecided` 那层把死信重投回队列，主按钮）与
+       * 「去邮箱回复」（驳回 → 人自己回，工作台跳消息页）。
+       */
+      escalateDeadLetter: async (input) => {
+        await approvals.create({
+          workspace_id: ws,
+          schema_version: 1,
+          kind: 'inbound_dead_letter',
+          role_id: 'dtc.support',
+          proposer: { kind: 'agent', id: 'channel:inbound' },
+          automation: { level_at_creation: 'L1' },
+          priority: 'queue',
+          routing: {
+            recipients: [{ person: person.id, via: 'owner' }],
+            rule: 'owner',
+            escalation: {
+              after_hours: 24,
+              business_hours: true,
+              chain: ['owner'],
+              escalated_at: [],
+            },
+            separation_of_duties: false,
+          },
+          subject: { object: { type: 'message', id: input.dead_letter_id } },
+          dedupe_key: `${ws}:inbound_dead_letter:${input.dead_letter_id}`,
+          title: '有一封客户来信没能处理，请看一眼',
+          summary: `${input.from === undefined ? '一位客户' : input.from} 的来信，系统自动重试了 ${input.rounds} 轮还是没处理成。可以再投一次；不想等就直接去邮箱回复这位客户。`,
+          payload: {
+            form: 'inbound_dead_letter',
+            dead_letter_id: input.dead_letter_id,
+            channel: input.channel,
+            reason: input.reason,
+            rounds: input.rounds,
+            ...(input.from === undefined ? {} : { from: input.from }),
+            ...(input.last_error === undefined ? {} : { last_error: input.last_error }),
+          },
+          evidence: {
+            source_events: [],
+            provenance: { seen: [] },
+            precheck: {},
+          },
+        })
+      },
+      release: env.AGENTSWS_VERSION ?? '0.1.0',
       ...(dir === undefined ? {} : { dbDir: dir }),
       ...(startRun === undefined ? {} : { startRun }),
       ...(options.mailSource === undefined ? {} : { makeSource: options.mailSource }),
@@ -4016,6 +4068,13 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     const brand = await brands?.forWorkspace(item.workspace_id)
     // WP173：「发信域名」那张选择卡选了 → 记下发信邮箱、体检、排着的首封往前推
     if (item.kind === B2B_SENDER_CHOICE_KIND) return brand?.b2bOutbound.onSenderChosen(item)
+    // WP210：客户来信投不进的那张卡批了（「再投一次」）→ 把那条死信重投回队列；
+    // 驳回（「去邮箱回复」）什么都不做——人自己回，死信留在「设置 → 诊断」里
+    if (item.kind === 'inbound_dead_letter') {
+      const id = deadLetterToRequeue(item)
+      if (id !== undefined) await brand?.channels.requeueDeadLetter(id)
+      return
+    }
     await brand?.seoService.onDecided(item)
   }
   brands = createBrandModules({
@@ -5323,7 +5382,16 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     // WP29：池的真源是学习回路那一份（`skills.lessons` 是 WP6 的内存池，只留给周合并的老接口）
     lessons: (filter) => learning.lessons(filter),
     // WP29 技能页与学习回路
-    list: (actor) => learning.summaries(actor),
+    // WP209：按岗位分组那几格（显示名 / 一句话 / 哪几条职责在用 / 归哪个岗位）只往上加
+    list: async (actor) =>
+      enrichSkillSummaries(await learning.summaries(actor), {
+        positions: org.positions(),
+        roles: roles.roles.list(),
+        held_roles: memoryFacts(actor).held_roles,
+        frontmatterOf: (name) => skills.registry.frontmatterOf(name),
+        sectionBody: (name, id) => skills.registry.sectionBody(name, id),
+        superseded: SUPERSEDED_POSITION_IDS,
+      }),
     exclude: (name, person_id, excluded) => skills.registry.exclude(name, person_id, excluded),
     proposals: () => learning.proposalSummaries(),
     promote: (input) =>
@@ -6847,6 +6915,25 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     makePipeline: (input) => boot.channels.imPipeline(input),
     // 游标与会话上下文跟渠道库走：落盘档重启之后不从头拉
     clawbotState: boot.channels.clawbotState,
+    /*
+     * WP211：三条团队渠道的真连接。企业微信那条在 WP85 只做了注入口、真装配没接上
+     * （界面上填了也一直「连接中」），这里一并接上 `ws`。飞书走官方 SDK，选了才懒加载。
+     */
+    wecomSocket: wsSocketFactory,
+    // Fable 09-30：公司的应用凭据只给负责人（`common.owner`）与公司管理员填、改、断开
+    canManageTeamBots: createTeamBotManagerCheck({
+      isOwner: (person_id) =>
+        roles.assignments
+          .listByPerson(person_id, { workspace_id: workspace.id, role_id: 'common.owner' })
+          .some((a) => a.revoked_at === undefined),
+      organization: async () => {
+        const org_id = (await identity.getWorkspace(workspace.id))?.org_id
+        return org_id === undefined ? undefined : identity.getOrganization(org_id)
+      },
+    }),
+    feishuTransport: feishuSdkTransportFactory,
+    dingtalkSocket: wsSocketFactory,
+    dingtalkHttp: fetchHttp,
     appendEvent,
     newId: () => `im_${Math.floor(random() * 1e9).toString(36)}`,
     random,
@@ -7095,7 +7182,11 @@ function seoDecided(bus: ApprovalBus, hook: SeoDecidedHook): ApprovalBus {
       }
       return async (...args: Parameters<ApprovalBus['decide']>): Promise<ApprovalItem> => {
         const out = await target.decide(...args)
-        if (out.kind === 'seo_topic' || out.kind === B2B_SENDER_CHOICE_KIND) {
+        if (
+          out.kind === 'seo_topic' ||
+          out.kind === B2B_SENDER_CHOICE_KIND ||
+          out.kind === 'inbound_dead_letter'
+        ) {
           try {
             await hook.current?.(out)
           } catch {

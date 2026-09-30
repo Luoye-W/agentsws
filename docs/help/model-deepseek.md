@@ -1,3 +1,7 @@
+---
+positions: []
+roles: []
+---
 # 接 DeepSeek（账户登录 / API key）
 
 国内直连、便宜、够用，没别的偏好就选它。数据在境内。DeepSeek 有两种连法，二选一：
