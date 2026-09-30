@@ -337,6 +337,20 @@ export interface AllocationRosterSynced {
   /** 这一次解除停用的（之前没了、这次又回到名册里）。 */
   returned: AllocationRosterChange[]
   synced_at: Iso8601
+  /**
+   * 这一次被保护拦下了：一下子没了的成员超过现有人数的一半、且至少 {@link ALLOCATION_ROSTER_GUARD_MIN} 人
+   * （多半是本机名册读坏了）。这时**谁都不自动收回**，没了的那几个照旧留在名册里，只记一条日志、给公司的
+   * owner / admin 发一封提醒信（同一件事一天一封）。真是一批人走了，在网页上逐个收回。
+   */
+  guarded?: { missing: number; of: number }
+}
+
+/** 名册保护：一次同步里至少没了这么多人、且超过一半，才算「可疑」。 */
+export const ALLOCATION_ROSTER_GUARD_MIN = 3
+
+/** 这一次同步是不是该被保护拦下（没了的成员数 vs 同步前的成员数）。 */
+export function allocationRosterGuarded(missing: number, before: number): boolean {
+  return missing >= ALLOCATION_ROSTER_GUARD_MIN && missing * 2 > before
 }
 
 /** 网页版账号页上「成员额度」那一页的路径（工作台「设置 → 积分」链过去）。 */

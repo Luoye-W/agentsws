@@ -204,6 +204,15 @@ export type AuditAction =
   | 'account.token_revoke'
   | 'account.logout'
   | 'account.topup_checkout'
+  /**
+   * WP206 额度分配（网页版账号页「成员额度」）。`target_kind` 是 `org`，`target_id` 是组织号；
+   * `details` 只有对象（`member:<本机 id>` / `position:<岗位 id>`）与上限数——**没有名字、没有邮箱**。
+   * `allocation_limit` = 在网页上改上限；`allocation_reclaim` = 在网页上点「收回」（上限立刻 0）；
+   * `allocation_auto_reclaim` = 名册同步时有人 / 岗位没了、云上自动停用（actor 是 `system`，details 只有收回了几个）。
+   */
+  | 'account.allocation_limit'
+  | 'account.allocation_reclaim'
+  | 'account.allocation_auto_reclaim'
 
 /**
  * 一条审计。**只增不改**：没有 update，没有 delete，主键是自增号。

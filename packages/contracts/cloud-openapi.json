@@ -8098,6 +8098,19 @@
           },
           "synced_at": {
             "type": "string"
+          },
+          "guarded": {
+            "type": "object",
+            "properties": {
+              "missing": {
+                "type": "number"
+              },
+              "of": {
+                "type": "number"
+              }
+            },
+            "required": ["missing", "of"],
+            "description": "这一次被保护拦下了：一下子没了的成员超过现有人数的一半、且至少 {@link ALLOCATION_ROSTER_GUARD_MIN} 人 （多半是本机名册读坏了）。这时**谁都不自动收回**，没了的那几个照旧留在名册里，只记一条日志、给公司的 owner / admin 发一封提醒信（同一件事一天一封）。真是一批人走了，在网页上逐个收回。"
           }
         },
         "required": ["members", "positions", "reclaimed", "returned", "synced_at"],

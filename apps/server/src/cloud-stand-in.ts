@@ -248,7 +248,8 @@ export function cloudStandIn(options: CloudStandInOptions = {}): CloudStandIn {
   /* ── WP206：名册（替身版：只记最近一份；名册里没了的成员 / 岗位停用）── */
   let roster: AllocationRosterRequest | undefined
   const gone = new Set<string>()
-  const syncRoster = (next: AllocationRosterRequest, actor: string) => {
+  const syncRoster = (incoming: AllocationRosterRequest, actor: string) => {
+    let next = incoming
     const before = new Set<string>([
       ...(roster?.members ?? []).map((m) => limitKey('member', m.id)),
       ...(roster?.positions ?? []).map((p) => limitKey('position', p.id)),
@@ -257,6 +258,20 @@ export function cloudStandIn(options: CloudStandInOptions = {}): CloudStandIn {
       ...next.members.map((m) => limitKey('member', m.id)),
       ...next.positions.map((p) => limitKey('position', p.id)),
     ])
+    // 与真云同一道保护：一下子没了一半以上（且至少 3 人）→ 这次谁都不收回，没了的照旧留着
+    const beforeMembers = (roster?.members ?? []).map((m) => m.id)
+    const missingMembers = beforeMembers.filter((id) => !after.has(limitKey('member', id)))
+    const guarded = allocationRosterGuarded(missingMembers.length, beforeMembers.length)
+    if (guarded) {
+      const kept = (roster?.members ?? []).filter((m) => missingMembers.includes(m.id))
+      next = { ...next, members: [...next.members, ...kept] }
+      for (const m of kept) after.add(limitKey('member', m.id))
+      for (const p of roster?.positions ?? [])
+        if (!after.has(limitKey('position', p.id))) {
+          next = { ...next, positions: [...next.positions, p] }
+          after.add(limitKey('position', p.id))
+        }
+    }
     const reclaimed: AllocationRosterChange[] = []
     const returned: AllocationRosterChange[] = []
     const change = (key: string): AllocationRosterChange => {
@@ -287,6 +302,7 @@ export function cloudStandIn(options: CloudStandInOptions = {}): CloudStandIn {
       reclaimed,
       returned,
       synced_at: now(),
+      ...(guarded ? { guarded: { missing: missingMembers.length, of: beforeMembers.length } } : {}),
     }
   }
   const aiGate = (
