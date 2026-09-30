@@ -66,9 +66,12 @@ export function PendingNavItem({
 export function PendingActions({
   row,
   onDone,
+  onError,
 }: {
   row: MessageThreadSummary
   onDone(): void
+  /** WP204：交不出去以外的失败（网断了、服务报错）也要说一句，不吞。 */
+  onError?(e: unknown): void
 }): React.ReactNode {
   const { t } = useApp()
   const [refused, setRefused] = useState(false)
@@ -81,6 +84,9 @@ export function PendingActions({
     onSuccess: (out, route) => {
       setRefused(route !== 'inbox' && !out.handed_off)
       onDone()
+    },
+    onError: (e) => {
+      onError?.(e)
     },
   })
   if (id === undefined) return null

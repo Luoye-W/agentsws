@@ -276,6 +276,15 @@ class FakeMessages implements MessagesPort {
     this.record('backfill', actor, input)
     return { floor: T0 }
   }
+  attachment(
+    actor: MessageActor,
+    id: string,
+    attachment_id: string,
+  ): { name: string; mime: string; bytes: Uint8Array } | undefined {
+    this.record('attachment', actor, id, attachment_id)
+    if (attachment_id !== 'a1') return undefined
+    return { name: '外箱 "照片".html', mime: 'text/html', bytes: new Uint8Array([60, 98, 62]) }
+  }
 }
 
 async function messageHarness(): Promise<{
@@ -496,5 +505,27 @@ describe('WP167：「待确认」那一栏', () => {
     const spec = t.h.gateway.specs.find((s) => s.path === '/v1/messages/:id/confirm-route')
     expect(spec?.authz).toMatchObject({ op: 'stage' })
     expect(spec?.outbound).not.toBe(true)
+  })
+})
+
+describe('WP204：附件下载', () => {
+  it('取附件字节：一律按下载给（octet-stream + nosniff），文件名去掉引号；没有就 404', async () => {
+    const t = await messageHarness()
+    const res = await t.get('/v1/messages/msg_1/attachments/a1')
+    expect(res.status).toBe(200)
+    // HTML 附件也不许在工作台同源里被当页面打开
+    expect(res.headers.get('content-type')).toBe('application/octet-stream')
+    expect(res.headers.get('x-content-type-options')).toBe('nosniff')
+    const disposition = res.headers.get('content-disposition') ?? ''
+    expect(disposition.startsWith('attachment;')).toBe(true)
+    expect(disposition).not.toContain('"照片"')
+    expect(new Uint8Array(await res.arrayBuffer())).toEqual(new Uint8Array([60, 98, 62]))
+    expect(t.messages.last('attachment')).toEqual(['msg_1', 'a1'])
+    const missing = await t.get('/v1/messages/msg_1/attachments/nope')
+    expect(missing.status).toBe(404)
+    const spec = t.h.gateway.specs.find(
+      (s) => s.path === '/v1/messages/:id/attachments/:attachment',
+    )
+    expect(spec?.authz).toMatchObject({ op: 'read' })
   })
 })
