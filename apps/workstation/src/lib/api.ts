@@ -4560,8 +4560,24 @@ export interface ImStatusView {
     allowed: boolean
     reason?: string
   }
-  wecom: { configured: boolean; connected: boolean; bot_id?: string }
+  wecom: { configured: boolean; connected: boolean; bot_id?: string; me_bound?: boolean }
+  /** WP211：飞书 / 钉钉机器人（团队）。老服务端没有这两格。 */
+  feishu?: ImTeamBotView & { app_id?: string; domain?: 'feishu' | 'lark' }
+  dingtalk?: ImTeamBotView & { client_id?: string }
 }
+
+/** WP211：一条团队渠道的状态（不含任何凭据）。 */
+export interface ImTeamBotView {
+  configured: boolean
+  connected: boolean
+  state: 'idle' | 'connecting' | 'connected' | 'reconnecting' | 'failed'
+  /** 连不上时的那句人话。 */
+  error?: string
+  /** 我自己在这条渠道上的账号绑上没有。 */
+  me_bound: boolean
+}
+
+export type ImTeamChannel = 'wecom' | 'feishu' | 'dingtalk'
 
 export interface ImLoginStart {
   login_id: string
@@ -4615,6 +4631,38 @@ export const saveWecomBot = (values: {
   secret: string
 }): Promise<{ configured: boolean; bot_id: string }> =>
   api('/v1/im/wecom', { method: 'PUT', body: values })
+
+/* ── WP211：飞书 / 钉钉（公司的）与「绑定我的账号」 ─────────────────────── */
+
+/** 飞书应用的 App ID + App Secret（同上：原生表单收，提交完 reset，不进 state）。 */
+export const saveFeishuBot = (values: {
+  app_id: string
+  app_secret: string
+  domain?: 'feishu' | 'lark'
+}): Promise<{ configured: boolean; app_id: string }> =>
+  api('/v1/im/feishu', { method: 'PUT', body: values })
+
+/** 断开 = 销毁本机那份 App Secret。 */
+export const removeFeishuBot = (): Promise<{ removed: boolean }> =>
+  api('/v1/im/feishu', { method: 'DELETE' })
+
+/** 钉钉应用的 Client ID + Client Secret。 */
+export const saveDingtalkBot = (values: {
+  client_id: string
+  client_secret: string
+}): Promise<{ configured: boolean; client_id: string }> =>
+  api('/v1/im/dingtalk', { method: 'PUT', body: values })
+
+export const removeDingtalkBot = (): Promise<{ removed: boolean }> =>
+  api('/v1/im/dingtalk', { method: 'DELETE' })
+
+/** 拿一个 6 位绑定码（10 分钟有效、只能用一次），私聊机器人发「绑定 123456」。 */
+export const issueImBindCode = (): Promise<{ code: string; expires_at: string }> =>
+  api('/v1/im/bind-code', { method: 'POST' })
+
+/** 解绑我在这条渠道上的聊天账号。 */
+export const unbindImAccount = (channel: ImTeamChannel): Promise<{ removed: number }> =>
+  api(`/v1/im/bind/${channel}`, { method: 'DELETE' })
 
 /* ── WP73（56 §6）：社媒库 `/v1/social/*` ───────────────────────────────── */
 

@@ -24,6 +24,7 @@ import {
   useState,
 } from 'react'
 import { TutorialLink } from '@/components/help/tutorial-link'
+import { BindRow, TeamBotCard } from '@/components/im/team-bot-card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -47,7 +48,18 @@ const POLL_MS = 1200
 export function ImChannelsPage(): ReactNode {
   const { t } = useApp()
   const client = useQueryClient()
-  const status = useQuery({ queryKey: ['im', 'status'], queryFn: getImStatus })
+  const status = useQuery({
+    queryKey: ['im', 'status'],
+    queryFn: getImStatus,
+    // WP211：飞书 / 钉钉存好之后在后台连，连上 / 连不上之前隔一会儿问一次
+    refetchInterval: (q) => {
+      const d = q.state.data
+      const busy = [d?.feishu, d?.dingtalk].some(
+        (b) => b?.configured === true && (b.state === 'connecting' || b.state === 'reconnecting'),
+      )
+      return busy ? 1500 : false
+    },
+  })
   const [login, setLogin] = useState<{ id: string; qrcode_url: string } | null>(null)
   const [poll, setPoll] = useState<ImLoginPoll | null>(null)
   const [verify, setVerify] = useState('')
@@ -349,8 +361,24 @@ export function ImChannelsPage(): ReactNode {
               {t('im.wecom.done')}
             </p>
           ) : null}
+          {/* WP211：企业微信也走同一套「绑定我的账号」 */}
+          {wecom?.configured === true ? (
+            <BindRow channel="wecom" bound={wecom.me_bound === true} />
+          ) : null}
         </CardContent>
       </Card>
+
+      {/* ── WP211：飞书 / 钉钉（团队的）──────────────────────────── */}
+      <TeamBotCard
+        channel="feishu"
+        view={status.data?.feishu}
+        accountId={status.data?.feishu?.app_id}
+      />
+      <TeamBotCard
+        channel="dingtalk"
+        view={status.data?.dingtalk}
+        accountId={status.data?.dingtalk?.client_id}
+      />
 
       <SafetyNote text={t('im.cards.note')} />
     </div>

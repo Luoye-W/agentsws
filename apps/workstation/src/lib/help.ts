@@ -36,6 +36,9 @@ export const HELP_SLUGS = [
   'browser-extension',
   // WP157：消息渠道与网站聊天窗
   'im-channels',
+  // WP211：飞书 / 钉钉建应用
+  'im-feishu',
+  'im-dingtalk',
   'chat-window',
   // WP173：开发信的发信域名（怎么买、怎么配、体检看什么）
   'b2b-sending-domain',
