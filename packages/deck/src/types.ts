@@ -317,6 +317,12 @@ export interface DeckCard {
   merged?: { id: string; version: number }[]
   /** 乐观并发：decide 带 version（= ApprovalItem.revision） */
   version: number
+  /**
+   * WP212（docs/88 §2.3 / §5.1）：这张卡**来自一段消息往来**——证据层多一条「看原件 →」，
+   * 跳回消息页「全部」里这条会话。取自审批项自己钉着的线程（`subject.object` 或
+   * `provenance.seen` 里的 `thread`），投影层不查库、不猜。
+   */
+  original?: { thread_id: string }
 }
 
 /** 按 kind 的详情 payload；结构化字段原样带出，前端只渲染。 */
