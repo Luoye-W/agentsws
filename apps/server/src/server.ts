@@ -833,6 +833,11 @@ export interface ServerOptions {
   messageSource?: MessagesOptions['makeSource']
   messageWriter?: MessagesOptions['makeWriter']
   /**
+   * WP204：「显示图片」的本机代取替身（demo 与测试不出网）。生产路径不传，走真代取
+   * （只取公网 http(s)、只收图片、限大小）。
+   */
+  messageImages?: MessagesOptions['loadRemoteImage']
+  /**
    * 15 §5.8 对账时的「这条到底写进去没有」回查。
    *
    * 缺省问后端自己（`MemoryBackend.verify`）。真接了平台之后这里换成按
@@ -3776,6 +3781,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       ...(dir === undefined ? {} : { dbDir: dir }),
       ...(options.messageSource === undefined ? {} : { makeSource: options.messageSource }),
       ...(options.messageWriter === undefined ? {} : { makeWriter: options.messageWriter }),
+      ...(options.messageImages === undefined ? {} : { loadRemoteImage: options.messageImages }),
     })
     lateMessages.current = messages
 

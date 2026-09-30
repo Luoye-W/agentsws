@@ -212,6 +212,8 @@ describe('消息页（63 §8）', () => {
     renderWithProviders(<MessagesPage />)
     await user.click(await screen.findByTestId('messages-thread'))
     await user.click(await screen.findByTestId('messages-delete'))
+    // WP204：删除先问一句
+    await user.click(await screen.findByTestId('messages-delete-yes'))
     await waitFor(() => {
       expect(moveMessage).toHaveBeenCalledWith('msg_1', { to: 'trash' })
     })
@@ -310,6 +312,8 @@ describe('消息页（63 §8）', () => {
     await waitFor(() => {
       expect(listMessageThreads.mock.calls.at(-1)?.[0]).toContain('q=')
     })
+    // WP204：搜索跨全部文件夹（不带 folder_kind）；点文件夹退出搜索
+    expect(listMessageThreads.mock.calls.at(-1)?.[0]).not.toContain('folder_kind')
     await user.click(screen.getAllByTestId('messages-folder')[6] as HTMLElement)
     await waitFor(() => {
       expect(listMessageThreads.mock.calls.at(-1)?.[0]).toContain('folder_kind=trash')
