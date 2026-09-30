@@ -201,3 +201,28 @@ describe('找回：时间段 / 查询词 / 打分', () => {
     expect(textMatches('', d)).toBe(true)
   })
 })
+
+describe('手动归档（Fable 09-30）', () => {
+  it('人点「归档」：只动这一件，审计 by=user；撤销 = 恢复；已关的不动', () => {
+    const { work, events } = setup()
+    const a = work.createMatter({ kind: 'adhoc', title: 'A' })
+    const b = work.createMatter({ kind: 'adhoc', title: 'B' })
+    work.archive(a.id, 'per_1')
+    expect(work.getMatter(a.id)?.archived_at).toBeDefined()
+    expect(work.getMatter(b.id)?.archived_at).toBeUndefined()
+    const ev = events.filter((e) => e.type === 'work.archived')
+    expect(ev.map((e) => [e.payload, e.actor])).toEqual([
+      [
+        { by: 'user', count: 1 },
+        { kind: 'person', id: 'per_1' },
+      ],
+    ])
+    // 再点一次不重复发
+    work.archive(a.id, 'per_1')
+    expect(events.filter((e) => e.type === 'work.archived')).toHaveLength(1)
+    work.unarchive(a.id, 'user', 'per_1')
+    expect(work.getMatter(a.id)?.archived_at).toBeUndefined()
+    work.closeMatter(b.id, { unfinished: 'keep' })
+    expect(work.archive(b.id, 'per_1').archived_at).toBeUndefined()
+  })
+})

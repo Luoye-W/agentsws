@@ -394,6 +394,26 @@ export function createWorkArchive(options: WorkArchiveOptions): WorkArchiveAssem
       return { candidates, semantic: true }
     },
 
+    /**
+     * 人手动归档一件。在跑的、有卡等他批的不许（界面上按钮本来就灰着，这里兜底）；
+     * 别人的事与不存在的事回同一句 not_found。
+     */
+    async archive(actor, id) {
+      const m = work.getMatter(id)
+      if (m === undefined || !visibleTo(actor.person_id)(m))
+        throw new ApiError('not_found', '没有这件事（可能已经删了）')
+      if (options.runningMatters().has(id))
+        throw new ApiError('conflict', 'Agent 还在跑这件事，跑完再归档', {
+          details: { reason: 'running' },
+        })
+      const cards = await options.pendingCards(actor.person_id)
+      if ((cards.get(id) ?? 0) > 0)
+        throw new ApiError('conflict', '这件事还有卡等你批，批完再归档', {
+          details: { reason: 'awaiting' },
+        })
+      return { matter: work.archive(id, actor.person_id) }
+    },
+
     unarchive(actor, id, by) {
       const m = work.getMatter(id)
       // 别人的事与不存在的事回同一句话：不给探测别人事项 id 的口

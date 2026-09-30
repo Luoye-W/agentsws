@@ -16,7 +16,7 @@
  * 3. **右边多一条 44px 图标轨**（第三栏，36 §9）。
  */
 import type { DeckCard, TileSpec } from '@agentsws/deck'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   BookOpen,
   Bot,
@@ -42,7 +42,7 @@ import {
   Store,
   Users,
 } from 'lucide-react'
-import { type ReactNode, useCallback, useMemo, useState } from 'react'
+import { type ReactNode, useCallback, useEffect, useMemo, useState } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import { AccountBlock } from '@/components/account-block'
 import { BrandSwitcher } from '@/components/brand-switcher'
@@ -80,7 +80,14 @@ import { holdsDuty } from '@/lib/pick-assignment'
 import { myAssignments } from '@/lib/positions'
 import { RAIL_EXPANDED_KEY, readFlags, writeFlags } from '@/lib/ui-state'
 import { cn } from '@/lib/utils'
-import { getWorkRail, RAIL_KEY, type RailPosition } from '@/lib/work-archive'
+import {
+  archiveMatter,
+  getWorkRail,
+  RAIL_KEY,
+  type RailMatter,
+  type RailPosition,
+  unarchiveMatter,
+} from '@/lib/work-archive'
 
 /**
  * 左栏一行。
@@ -143,6 +150,7 @@ function PositionNav({
   owner,
   person_id,
   onArchived,
+  onArchiveMatter,
 }: {
   instance: PositionInstanceData
   open: boolean
@@ -153,6 +161,8 @@ function PositionNav({
   owner?: string
   person_id?: string
   onArchived: (role_id: string) => void
+  /** Fable 09-30：左栏每件事悬停菜单里的「归档」。 */
+  onArchiveMatter?: (matter: RailMatter) => void
 }): ReactNode {
   const { lang, t } = useApp()
   const palette = usePalette()
@@ -265,6 +275,7 @@ function PositionNav({
                     onArchived={() => {
                       onArchived(r.role_id)
                     }}
+                    {...(onArchiveMatter === undefined ? {} : { onArchive: onArchiveMatter })}
                   />
                 )}
               </li>
@@ -368,6 +379,41 @@ export function AppShell({
   )?.id
   const [creating, setCreating] = useState(false)
   const [archived, setArchived] = useState<ArchivedScope | undefined>(undefined)
+  /*
+   * Fable 09-30：手动归档一件，左栏底部出一条「已归档『…』· 撤销」，八秒后自己收。
+   * 撤销 = 恢复（`by: user`），两下都只动这一件。
+   */
+  const client = useQueryClient()
+  const [undo, setUndo] = useState<{ id: string; title: string } | undefined>(undefined)
+  const [undoError, setUndoError] = useState<string | undefined>(undefined)
+  useEffect(() => {
+    if (undo === undefined && undoError === undefined) return
+    const h = setTimeout(() => {
+      setUndo(undefined)
+      setUndoError(undefined)
+    }, 8000)
+    return () => {
+      clearTimeout(h)
+    }
+  }, [undo, undoError])
+  const archiveOne = useMutation({
+    mutationFn: (m: RailMatter) => archiveMatter(m.id),
+    onSuccess: async (_out, m) => {
+      setUndoError(undefined)
+      setUndo({ id: m.id, title: m.title })
+      await client.invalidateQueries({ queryKey: ['matter'] })
+    },
+    onError: (err) => {
+      setUndoError(err instanceof Error ? err.message : String(err))
+    },
+  })
+  const restoreOne = useMutation({
+    mutationFn: (id: string) => unarchiveMatter(id, 'user'),
+    onSuccess: async () => {
+      setUndo(undefined)
+      await client.invalidateQueries({ queryKey: ['matter'] })
+    },
+  })
 
   const toggle = useCallback((position_id: string, wasOpen: boolean) => {
     setFlags((prev) => {
@@ -513,6 +559,9 @@ export function AppShell({
                         onArchived={(role_id) => {
                           setArchived({ position_id: p.position_id, role_id })
                         }}
+                        onArchiveMatter={(m) => {
+                          archiveOne.mutate(m)
+                        }}
                       />
                     )
                   })
@@ -568,6 +617,30 @@ export function AppShell({
           WP71（36 §10）：品牌与账号在**最下面**。
           个人用户（一个人一个品牌）看不到品牌切换器，那一块自己不渲染（52 O1）。
         */}
+            {undo === undefined && undoError === undefined ? null : (
+              <div
+                role="status"
+                className="mt-2 flex items-center gap-2 rounded-[10px] bg-ws-ink px-2.5 py-1.5 text-[12px] text-ws-paper"
+                data-testid="rail-undo"
+              >
+                <span className="min-w-0 flex-1 truncate">
+                  {undo === undefined ? undoError : t('archive.done', { title: undo.title })}
+                </span>
+                {undo === undefined ? null : (
+                  <button
+                    type="button"
+                    data-testid="rail-undo-button"
+                    disabled={restoreOne.isPending}
+                    className="shrink-0 font-medium underline-offset-2 hover:underline"
+                    onClick={() => {
+                      restoreOne.mutate(undo.id)
+                    }}
+                  >
+                    {t('archive.undo')}
+                  </button>
+                )}
+              </div>
+            )}
             <div
               className="mt-2 flex flex-col gap-1 border-t border-ws-line pt-2"
               data-testid="rail-bottom"

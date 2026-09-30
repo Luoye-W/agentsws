@@ -252,3 +252,33 @@ describe('WP207 已归档列表、搜索与找回', () => {
     expect(rail.positions[0]?.duties[0]?.matters.map((m) => m.id)).toEqual([t.a.id])
   })
 })
+
+describe('WP207 手动归档（Fable 09-30）', () => {
+  it('一件一件归；在跑 / 有卡等你批的回 conflict；别人的回 not_found；撤销 = 恢复', async () => {
+    const t = setup()
+    const a = t.open('随手的一件')
+    const run = t.open('在跑的')
+    const card = t.open('等你批的')
+    const theirs = t.open('别人的', 'kol.youtube', 'per_other')
+    t.running.add(run.id)
+    t.cards.set(card.id, 1)
+    const { matter } = await t.archive.archive(me, a.id)
+    expect(matter.archived_at).toBeDefined()
+    await expect(t.archive.archive(me, run.id)).rejects.toMatchObject({
+      code: 'conflict',
+      details: { reason: 'running' },
+    })
+    await expect(t.archive.archive(me, card.id)).rejects.toMatchObject({
+      code: 'conflict',
+      details: { reason: 'awaiting' },
+    })
+    await expect(t.archive.archive(me, theirs.id)).rejects.toMatchObject({ code: 'not_found' })
+    const rail = await t.archive.rail(me, {})
+    expect(rail.positions[0]?.duties[0]?.archived).toBe(1)
+    await t.archive.unarchive(me, a.id, 'user')
+    expect(t.work.getMatter(a.id)?.archived_at).toBeUndefined()
+    expect(t.events.filter((e) => e.type === 'work.archived').map((e) => e.payload.by)).toEqual([
+      'user',
+    ])
+  })
+})

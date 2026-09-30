@@ -97,6 +97,7 @@ vi.mock('@/lib/work-archive', async () => {
     ]),
     findArchivedWork: h.record('findArchivedWork', { candidates: [h.candidate], semantic: false }),
     unarchiveMatter: h.record('unarchiveMatter', { matter: { id: 'mat_old' } }),
+    archiveMatter: h.record('archiveMatter', { matter: { id: 'mat_4' } }),
     getWorkArchiveSettings: async () => ({ idle_days: h.days.value }),
     setWorkArchiveSettings: async (idle_days: number | null) => {
       h.calls.push({ fn: 'setWorkArchiveSettings', args: [idle_days] })
@@ -114,6 +115,7 @@ vi.mock('@/lib/api', async () => {
     listRoleDefinitions: async () => [
       { id: 'kol.youtube', name: 'YouTube 红人', name_en: 'YouTube', superseded_by: undefined },
       { id: 'kol.tiktok', name: 'TikTok 红人', name_en: 'TikTok' },
+      { id: 'common.owner', name: '公司设置与授权', name_en: 'Owner' },
       { id: 'social.meta', name: 'Meta 社媒运营', name_en: 'Meta', superseded_by: ['x'] },
     ],
     listOrgPositions: async () => [
@@ -424,5 +426,48 @@ describe('WP207 随便聊里的候选卡与设置', () => {
     await waitFor(() => {
       expect(called('setWorkArchiveSettings')[0]?.args).toEqual([null])
     })
+  })
+})
+
+describe('WP207 手动归档（Fable 09-30）', () => {
+  it('悬停菜单「归档」→ 底部「已归档…· 撤销」；撤销 = 恢复这一件', async () => {
+    renderShell(true)
+    const rows = await screen.findAllByTestId('rail-matter')
+    const fourth = rows[3]?.closest('li') as HTMLElement
+    fireEvent.click(within(fourth).getByTestId('rail-matter-menu'))
+    fireEvent.click(within(fourth).getByTestId('rail-matter-archive'))
+    await waitFor(() => {
+      expect(called('archiveMatter')[0]?.args).toEqual(['mat_4'])
+    })
+    const bar = await screen.findByTestId('rail-undo')
+    expect(bar.textContent).toContain('已归档「第四件」')
+    fireEvent.click(within(bar).getByTestId('rail-undo-button'))
+    await waitFor(() => {
+      expect(called('unarchiveMatter')[0]?.args).toEqual(['mat_4', 'user'])
+    })
+  })
+
+  it('在跑的、有卡等你批的：「归档」置灰，问号里说为什么', async () => {
+    renderShell(true)
+    const rows = await screen.findAllByTestId('rail-matter')
+    for (const [i, why] of [
+      [0, 'Agent 还在跑这件事，跑完才能归档'],
+      [1, '这件事还有卡等你批，批完才能归档'],
+    ] as const) {
+      const li = rows[i]?.closest('li') as HTMLElement
+      fireEvent.click(within(li).getByTestId('rail-matter-menu'))
+      expect((within(li).getByTestId('rail-matter-archive') as HTMLButtonElement).disabled).toBe(
+        true,
+      )
+      expect(within(li).getByTestId('rail-matter-archive-why').getAttribute('aria-label')).toBe(why)
+    }
+    expect(called('archiveMatter')).toHaveLength(0)
+  })
+
+  it('左栏新建岗位 / 加职责不列底座职责（common.*）', async () => {
+    renderShell(true)
+    fireEvent.click(screen.getByTestId('rail-new-position-plus'))
+    const roles = await screen.findAllByTestId('rail-new-position-role')
+    expect(roles.map((r) => r.getAttribute('data-role'))).not.toContain('common.owner')
   })
 })

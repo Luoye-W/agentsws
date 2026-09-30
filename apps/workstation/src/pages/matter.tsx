@@ -23,8 +23,11 @@ import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { AskAiPanel } from '@/components/deck/ask-ai-panel'
 import { StatusPill } from '@/components/design'
+import { RAIL_FETCH } from '@/components/sidebar/duty-threads'
+import { archiveBlock } from '@/components/sidebar/matter-menu'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Hint } from '@/components/ui/hint'
 import { LinkedText } from '@/components/ui/linked-text'
 import { ReplyMarkdown } from '@/components/ui/reply-markdown'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -40,7 +43,13 @@ import {
 } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 import { formatDateTime } from '@/lib/format'
-import { markMatterSeen, RAIL_KEY, unarchiveMatter } from '@/lib/work-archive'
+import {
+  archiveMatter,
+  getWorkRail,
+  markMatterSeen,
+  RAIL_KEY,
+  unarchiveMatter,
+} from '@/lib/work-archive'
 
 const EVENT_ICON = {
   human_message: MessageSquare,
@@ -191,6 +200,26 @@ export function MatterPage(): React.ReactNode {
     void markMatterSeen(id).then(() => client.invalidateQueries({ queryKey: RAIL_KEY }))
   }, [id, seenAt, client])
 
+  /*
+   * Fable 09-30：事项页顶上也能手动归档。在跑的、有卡等你批的置灰（问号里说为什么）——
+   * 状态取左栏那一份（同一个查询键，不多打一次）；这件事不在左栏里时按本页的未决卡判。
+   */
+  const rail = useQuery({
+    queryKey: RAIL_KEY,
+    queryFn: () => getWorkRail(RAIL_FETCH),
+    retry: false,
+    staleTime: 30_000,
+  })
+  const railState = rail.data?.positions
+    .flatMap((p) => p.duties.flatMap((d) => d.matters))
+    .find((m) => m.id === id)?.state
+  const archive = useMutation({
+    mutationFn: () => archiveMatter(id),
+    onSettled: () => {
+      void client.invalidateQueries({ queryKey: ['matter'] })
+    },
+  })
+
   const restore = useMutation({
     mutationFn: () => unarchiveMatter(id, 'user'),
     onSettled: () => {
@@ -264,6 +293,32 @@ export function MatterPage(): React.ReactNode {
                 {t('matter.cards', { count: view.open_card_ids.length })}
               </StatusPill>
             )}
+            {view.matter.status === 'closed' || view.matter.archived_at !== undefined
+              ? null
+              : (() => {
+                  const blocked = archiveBlock(
+                    railState ?? (view.open_card_ids.length > 0 ? 'awaiting' : undefined),
+                  )
+                  return (
+                    <span className="flex items-center gap-1">
+                      <Button
+                        size="xs"
+                        variant="ghost"
+                        data-testid="matter-archive"
+                        disabled={blocked !== undefined || archive.isPending}
+                        onClick={() => {
+                          archive.mutate()
+                        }}
+                      >
+                        <Archive aria-hidden />
+                        {t('archive.action')}
+                      </Button>
+                      {blocked === undefined ? null : (
+                        <Hint text={t(blocked)} testId="matter-archive-why" />
+                      )}
+                    </span>
+                  )
+                })()}
             {view.matter.status === 'closed' ? (
               <span className="text-xs text-ws-muted-fg">{t('matter.closed')}</span>
             ) : (

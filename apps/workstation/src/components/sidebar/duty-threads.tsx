@@ -11,8 +11,9 @@ import { cn } from 'cn'
 import { Archive } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { NavLink } from 'react-router-dom'
+import { MatterMenu } from '@/components/sidebar/matter-menu'
 import { useApp } from '@/lib/app-context'
-import type { RailDuty, RailMatterState } from '@/lib/work-archive'
+import type { RailDuty, RailMatter, RailMatterState } from '@/lib/work-archive'
 
 const DOT: Record<Exclude<RailMatterState, 'idle'>, string> = {
   running: 'bg-ws-brand animate-pulse motion-reduce:animate-none',
@@ -46,12 +47,15 @@ export function DutyThreads({
   expanded,
   onMore,
   onArchived,
+  onArchive,
 }: {
   duty: RailDuty
   /** 「更多」点开了没有。 */
   expanded: boolean
   onMore: () => void
   onArchived: () => void
+  /** Fable 09-30：悬停菜单里的「归档」（不给就不出菜单）。 */
+  onArchive?: (matter: RailMatter) => void
 }): ReactNode {
   const { t } = useApp()
   if (duty.matters.length === 0 && duty.archived === 0) return null
@@ -63,14 +67,14 @@ export function DutyThreads({
       data-testid="rail-threads"
     >
       {shown.map((m) => (
-        <li key={m.id}>
+        <li key={m.id} className="group/thread flex items-center gap-0.5">
           <NavLink
             to={`/matters/${encodeURIComponent(m.id)}`}
             data-testid="rail-matter"
             data-state={m.state}
             className={({ isActive }) =>
               cn(
-                'flex items-center gap-1.5 rounded-[8px] px-1.5 py-1 text-[12.5px] transition-colors',
+                'flex min-w-0 flex-1 items-center gap-1.5 rounded-[8px] px-1.5 py-1 text-[12.5px] transition-colors',
                 isActive
                   ? 'bg-sidebar-accent font-medium text-sidebar-accent-foreground'
                   : 'text-ws-body hover:bg-sidebar-accent/60',
@@ -80,6 +84,15 @@ export function DutyThreads({
             <StateDot state={m.state} />
             <span className="truncate">{m.title}</span>
           </NavLink>
+          {onArchive === undefined ? null : (
+            <MatterMenu
+              title={m.title}
+              state={m.state}
+              onArchive={() => {
+                onArchive(m)
+              }}
+            />
+          )}
         </li>
       ))}
       {hidden === 0 && !expanded ? null : (

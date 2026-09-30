@@ -89,6 +89,10 @@ export const findArchivedWork = (
 ): Promise<{ candidates: ArchivedWorkCandidate[]; semantic: boolean }> =>
   api('/v1/work/archived/find', { method: 'POST', body: { query } })
 
+/** 手动归档一件（在跑的、有卡等你批的服务端回 409；界面上按钮本来就灰着）。 */
+export const archiveMatter = (id: string): Promise<{ matter: Matter }> =>
+  api(`/v1/matters/${encodeURIComponent(id)}/archive`, { method: 'POST' })
+
 /** 放回来（一次一件）。`ai_suggested` = 人点选了 AI 给的候选。 */
 export const unarchiveMatter = (
   id: string,

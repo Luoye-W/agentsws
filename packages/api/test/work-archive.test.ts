@@ -75,6 +75,10 @@ class FakeArchive implements WorkArchivePort {
     }
     return { candidates: [c], semantic: false }
   }
+  archive(actor: WorkActor, id: string) {
+    this.calls.push({ method: 'archive', args: [actor, id] })
+    return { matter: { ...matter, archived_at: T0 } }
+  }
   unarchive(actor: WorkActor, id: string, by: 'user' | 'ai_suggested') {
     this.calls.push({ method: 'unarchive', args: [actor, id, by] })
     return { matter }
@@ -177,6 +181,13 @@ describe('WP207 归档与找回路由', () => {
     expect((await t.call('POST', '/v1/matters/mat_1/unarchive', { by: 'activity' })).status).toBe(
       400,
     )
+  })
+
+  it('手动归档一件', async () => {
+    const t = await setup()
+    const res = await t.call('POST', '/v1/matters/mat_1/archive')
+    expect(res.status).toBe(200)
+    expect(t.port.last('archive')?.[1]).toBe('mat_1')
   })
 
   it('设置：1–30 天或 null', async () => {

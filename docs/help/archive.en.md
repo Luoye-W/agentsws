@@ -27,6 +27,12 @@ The number on a position counts what is **waiting on you**: cards to approve plu
 - **Never** archived automatically: anything running, anything with a card waiting for you.
 - Any new activity — you reply, a schedule fires, the agent runs again — brings it **back to the sidebar by itself**.
 
+## Archiving by hand
+
+Don’t want to wait three days? Hover the item in the sidebar, click “⋯” → “Archive”; the item page has an “Archive” button at the top too. A bar “Archived … · Undo” appears at the bottom of the sidebar — click Undo to bring it back.
+
+Anything running, or with a card waiting for your approval, can’t be archived; the button is greyed out and the question mark next to it says why.
+
 ## Finding something again
 
 1. **By duty**: the last line under a duty, “Archived (n)”, opens a list you can filter by time, position and duty. Each row has “Restore”.

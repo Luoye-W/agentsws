@@ -582,6 +582,24 @@ export class Work {
   }
 
   /**
+   * WP207（Fable 09-30）：人手动归档**一件**。已关的、已归档的原样返回，不发事件；
+   * 「在跑 / 有卡等你批」不许归档由宿主先判（本包不认识运行与卡）。
+   */
+  archive(id: MatterId, person: PersonId): Matter {
+    const matter = this.requireMatter(id)
+    if (matter.archived_at !== undefined || matter.status === 'closed') return matter
+    const next: Matter = { ...matter, archived_at: this.now() }
+    this.store.putMatter(next)
+    this.emit(
+      'work.archived',
+      { type: 'matter', id },
+      { kind: 'person', id: person },
+      { by: 'user', count: 1 },
+    )
+    return next
+  }
+
+  /**
    * 放回来（人点了恢复，或 AI 给了候选、人点选了）。没归档的事原样返回，不发事件。
    * **只动这一件**——批量恢复不在这里开口子（AI 不许不经点选直接批量放回）。
    */

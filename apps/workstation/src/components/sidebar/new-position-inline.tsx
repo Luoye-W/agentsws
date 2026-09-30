@@ -7,7 +7,7 @@
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { type ReactNode, useEffect, useRef, useState } from 'react'
-import { pickableRoles } from '@/components/org/positions-tab'
+import { railPickable } from '@/components/sidebar/add-duty-inline'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -93,7 +93,7 @@ export function NewPositionInline({
       />
       <fieldset className="flex max-h-40 flex-wrap gap-1 overflow-y-auto">
         <legend className="mb-1 text-[11px] text-ws-muted-fg">{t('rail.position.pick')}</legend>
-        {pickableRoles(roles.data ?? []).map((r) => {
+        {railPickable(roles.data ?? []).map((r) => {
           const on = picked.includes(r.id)
           return (
             <button

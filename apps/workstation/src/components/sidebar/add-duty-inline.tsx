@@ -14,11 +14,21 @@ import {
   createAssignments,
   listOrgPositions,
   listRoleDefinitions,
+  type RoleSummaryView,
   updateOrgPosition,
 } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 import { cn } from '@/lib/utils'
 import { RAIL_KEY } from '@/lib/work-archive'
+
+/**
+ * 左栏「新建岗位 / 加职责」能勾哪几条：在公司页那套过滤（`pickableRoles`，拆过的老职责不列）之上，
+ * **再滤掉工作区底座职责**（`common.*`：公司设置与授权、工作区成员……）——它们说的是
+ * "这个人在这个工作区里是谁"，不是岗位里的一条活（Fable 09-30）。公司页照旧。
+ */
+export function railPickable(roles: RoleSummaryView[]): RoleSummaryView[] {
+  return pickableRoles(roles).filter((r) => !r.id.startsWith('common.'))
+}
 
 export function AddDutyInline({
   owner,
@@ -48,7 +58,7 @@ export function AddDutyInline({
   })
   const template = positions.data?.find((p) => p.id === position_id)
   const held = template?.roles.map((r) => r.role_id) ?? []
-  const choices = pickableRoles(roles.data ?? []).filter((r) => !held.includes(r.id))
+  const choices = railPickable(roles.data ?? []).filter((r) => !held.includes(r.id))
   // 打开、清单到了就把焦点给第一项：从「+」键盘进来的人接着能挑
   const ready = choices.length > 0
   useEffect(() => {
