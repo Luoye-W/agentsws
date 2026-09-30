@@ -12,7 +12,8 @@
  * - 日志里没有正文，也没有完整邮箱地址。
  */
 
-import type { MailboxWriter, MailSource, RawEmailMessage } from '@agentsws/channels'
+import type { MailboxWriter, MailSource, RawEmailMessage, RawStore } from '@agentsws/channels'
+import { MemoryRawStore } from '@agentsws/channels'
 import type { Clock, EventEnvelope, MessageRecord, ModelGateway, RoleId } from '@agentsws/contracts'
 import { MemoryHalt } from '@agentsws/kernel'
 import { createWork, type Work } from '@agentsws/work'
@@ -75,6 +76,8 @@ class RecordingWriter implements MailboxWriter {
   readonly moves: { folder: string; uid: number; to: string }[] = []
   readonly flags: { folder: string; uid: number; add: string[]; remove: string[] }[] = []
   keywords = false
+  /** WP204：模拟邮箱服务器不答应（回写端永不抛，回 false）。 */
+  refuse = false
   setFlags(
     folder: string,
     uid: number,
@@ -82,11 +85,11 @@ class RecordingWriter implements MailboxWriter {
     remove: readonly string[],
   ): boolean {
     this.flags.push({ folder, uid, add: [...add], remove: [...remove] })
-    return true
+    return !this.refuse
   }
   move(folder: string, uid: number, to: string): boolean {
     this.moves.push({ folder, uid, to })
-    return true
+    return !this.refuse
   }
   keywordsSupported(): boolean {
     return this.keywords
@@ -161,6 +164,9 @@ function harness(
     models?: boolean
     triage?: unknown
     halt?: MemoryHalt
+    shadow?: boolean
+    send?: DirectMailResult
+    rawStore?: RawStore
   } = {},
 ): Harness {
   const events: EventEnvelope[] = []
@@ -186,8 +192,15 @@ function harness(
     makeWriter: () => writer,
     sendMail: async (input): Promise<DirectMailResult> => {
       sent.push(input)
-      return { ok: true, outbox_id: 'obx_1', message_id: '<sent@x>', account: ME }
+      return over.send ?? { ok: true, outbox_id: 'obx_1', message_id: '<sent@x>', account: ME }
     },
+    // WP204：「显示图片」的代取替身（不联网）：`ok` 结尾的地址回一张图，其余取不到
+    loadRemoteImage: async (url) =>
+      url.includes('ok')
+        ? { ok: true, data_uri: 'data:image/png;base64,iVBORw==' }
+        : { ok: false, reason: 'http_error' },
+    ...(over.shadow === true ? { supportMailbox: () => ({ shadow_mode: true }) } : {}),
+    ...(over.rawStore === undefined ? {} : { rawStore: over.rawStore }),
   })
   return { messages, writer, work, events, sent, calls: stub.calls }
 }
@@ -399,7 +412,8 @@ describe('消息：普通邮箱该有的（63 §7）', () => {
         INBOX: letters([
           {
             uid: 9,
-            mime: mime({ uid: 9, html: '<p>hi</p><img src="https://track.example/p.gif" />' }),
+            // WP204：代取替身只认带 ok 的地址（取得到）——这一条测的是"总是信任"
+            mime: mime({ uid: 9, html: '<p>hi</p><img src="https://cdn.example/ok.gif" />' }),
           },
         ]),
       },
@@ -497,5 +511,136 @@ describe('消息：回复建议与隐私（63 §6 / §10）', () => {
   it('模型把 JSON 裹在 ``` 里也读得出来', () => {
     expect(parseJsonObject('```json\n{"route":"inbox"}\n```').route).toBe('inbox')
     expect(parseJsonObject('完全不是 JSON')).toEqual({})
+  })
+})
+
+describe('WP204：消息页按钮背后的那几条（回执、影子模式、代取图片、附件、发送失败说人话）', () => {
+  const one = async (over: Parameters<typeof harness>[0] = {}, html?: string) => {
+    const h = harness({
+      folders: {
+        INBOX: letters([
+          { uid: 31, mime: mime(html === undefined ? { uid: 31 } : { uid: 31, html }) },
+        ]),
+      },
+      ...over,
+    })
+    await h.messages.poll()
+    const row = (await h.messages.store.list({}))[0] as MessageRecord
+    return { h, row }
+  }
+
+  it('星标 / 已读：回执说邮箱里动成了没有；服务器不答应时是 failed（不再静默）', async () => {
+    const { h, row } = await one()
+    expect((await h.messages.port.setFlags(ACTOR, row.id, { starred: true })).writeback).toBe(
+      'written',
+    )
+    h.writer.refuse = true
+    const out = await h.messages.port.setFlags(ACTOR, row.id, { starred: false })
+    expect(out.writeback).toBe('failed')
+    // 本机照改（信照样看得见、状态照样对）
+    expect(out.message.flags.starred).toBe(false)
+  })
+
+  it('归档 / 删除只换文件夹：分拣摘要、要不要回、路由都不动；撤销（挪回收件箱）原样回来', async () => {
+    const { h, row } = await one()
+    const before = row.triage
+    const archived = await h.messages.port.move(ACTOR, row.id, { to: 'archive' })
+    expect(archived.writeback).toBe('written')
+    expect(archived.message.folder_kind).toBe('archive')
+    expect(archived.message.triage).toEqual(before)
+    expect(archived.message.route).toBe(row.route)
+    const undone = await h.messages.port.move(ACTOR, row.id, { to: 'inbox' })
+    expect(undone.message.folder_kind).toBe('inbox')
+    expect(undone.message.triage).toEqual(before)
+    expect(h.writer.moves.map((m) => m.to)).toEqual(['Archive', 'INBOX'])
+    // 纠错那条路照旧：移到客服 = 人判的
+    const corrected = await h.messages.port.move(ACTOR, row.id, { to: 'support' })
+    expect(corrected.message.triage?.by).toBe('user')
+  })
+
+  it('影子模式（只看不动）：已读 / 星标只在本机标；归档 / 删除拒绝并说为什么；邮箱一下都没动', async () => {
+    const { h, row } = await one({ shadow: true })
+    const movesBefore = h.writer.moves.length
+    const flagsBefore = h.writer.flags.length
+    const flagged = await h.messages.port.setFlags(ACTOR, row.id, { read: true })
+    expect(flagged.writeback).toBe('local_only')
+    expect(flagged.message.flags.read).toBe(true)
+    await expect(h.messages.port.move(ACTOR, row.id, { to: 'trash' })).rejects.toMatchObject({
+      code: 'conflict',
+      message: expect.stringContaining('影子模式'),
+    })
+    expect((await h.messages.store.get(row.id))?.folder_kind).toBe('inbox')
+    expect(h.writer.moves.length).toBe(movesBefore)
+    expect(h.writer.flags.length).toBe(flagsBefore)
+    const { accounts } = await h.messages.port.accounts(ACTOR)
+    expect(accounts[0]?.shadow_mode).toBe(true)
+  })
+
+  it('显示图片：本机代取、内联成 data:，只对这一封这一次生效；取不到的照旧挡着并报数', async () => {
+    const { h, row } = await one(
+      {},
+      '<p>hi</p><img src="https://cdn.example/ok.png" /><img src="https://track.example/p.gif" />',
+    )
+    const out = await h.messages.port.showImages(ACTOR, row.id, false)
+    expect(out.images).toEqual({ shown: 1, failed: 1 })
+    expect(out.message.html).toContain('src="data:image/png;base64,')
+    expect(out.message.html).toContain('data-ws-remote-src="https://track.example/p.gif"')
+    // 浏览器不直连：正文里没有任何一个 http(s) 的 src
+    expect(/\ssrc="https?:/.test(out.message.html ?? '')).toBe(false)
+    // 库里那一份没被改：下次打开还是先挡着
+    expect((await h.messages.store.get(row.id))?.html).not.toContain('data:image')
+  })
+
+  it('附件：从受控原始材料区取回字节；没有这个附件回 undefined（路由 404）', async () => {
+    const rawStore = new MemoryRawStore()
+    const { h, row } = await one({ rawStore })
+    const ref = rawStore.put({
+      channel: 'email',
+      kind: 'attachment',
+      stored_at: T0,
+      payload: new Uint8Array([1, 2, 3]),
+      subject_ref: row.from.email,
+      name: 'a.pdf',
+    })
+    await h.messages.store.update(row.id, {
+      attachments: [{ id: 'att_1', name: 'a.pdf', mime: 'application/pdf', size: 3, ref }],
+    })
+    const got = await h.messages.port.attachment?.(ACTOR, row.id, 'att_1')
+    expect(got?.name).toBe('a.pdf')
+    expect([...(got?.bytes ?? [])]).toEqual([1, 2, 3])
+    expect(await h.messages.port.attachment?.(ACTOR, row.id, 'nope')).toBeUndefined()
+  })
+
+  it('发送失败说人话：急停是 halted、没连邮箱是 provider_unavailable（不再是 500 internal）', async () => {
+    const halted = await one({
+      send: {
+        ok: false,
+        outbox_id: '',
+        message_id: '<x@y>',
+        account: ME,
+        error: '出站已急停（AGENTSWS_HALT=outbound 或对账未完成），这封信没有发出',
+      },
+    })
+    await expect(
+      halted.h.messages.port.send(ACTOR, { to: [{ email: 'a@b.example' }], text: 'hi' }),
+    ).rejects.toMatchObject({ code: 'halted', status: 503 })
+    const none = await one({
+      send: {
+        ok: false,
+        outbox_id: '',
+        message_id: '<x@y>',
+        account: '',
+        error: '这台机器上没有连上的邮箱，发不出去',
+      },
+    })
+    await expect(
+      none.h.messages.port.send(ACTOR, { to: [{ email: 'a@b.example' }], text: 'hi' }),
+    ).rejects.toMatchObject({
+      code: 'provider_unavailable',
+      message: expect.stringContaining('没有连上的邮箱'),
+    })
+    await expect(
+      none.h.messages.port.move(ACTOR, 'msg_gone', { to: 'trash' }),
+    ).rejects.toMatchObject({ code: 'not_found' })
   })
 })

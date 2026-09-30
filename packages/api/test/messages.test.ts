@@ -523,7 +523,9 @@ describe('WP204：附件下载', () => {
     expect(t.messages.last('attachment')).toEqual(['msg_1', 'a1'])
     const missing = await t.get('/v1/messages/msg_1/attachments/nope')
     expect(missing.status).toBe(404)
-    const spec = t.h.gateway.specs.find((s) => s.path === '/v1/messages/:id/attachments/:attachment')
+    const spec = t.h.gateway.specs.find(
+      (s) => s.path === '/v1/messages/:id/attachments/:attachment',
+    )
     expect(spec?.authz).toMatchObject({ op: 'read' })
   })
 })

@@ -701,8 +701,7 @@ export function messageRoutes(): Route[] {
         method: 'get',
         path: '/v1/messages/:id/attachments/:attachment',
         operationId: 'getMessageAttachment',
-        summary:
-          '取一个附件的字节（WP204；从受控原始材料区取，一律按「下载」给，不在页面里打开）',
+        summary: '取一个附件的字节（WP204；从受控原始材料区取，一律按「下载」给，不在页面里打开）',
         tag: 'messages',
         auth: 'bearer',
         assignment: true,
