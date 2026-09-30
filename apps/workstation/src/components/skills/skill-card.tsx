@@ -59,6 +59,72 @@ function OverlayRow({ overlay }: { overlay: SkillOverlayView }): React.ReactNode
   )
 }
 
+/**
+ * WP209：一张技能卡**点开之后**的那一块——版本、段落、三层改动、「不用这个技能」。
+ *
+ * 原来这些整块摊在技能页上（每个技能一张大卡）；现在技能页先按岗位分组列小卡，
+ * 点开一张才看这些（`components/library/skill-tile.tsx`）。`SkillCard` 留着（只加不删）。
+ */
+export function SkillDetails({
+  skill,
+  onToggleExcluded,
+}: {
+  skill: SkillSummary
+  onToggleExcluded(next: boolean): void
+}): React.ReactNode {
+  const { t } = useApp()
+  return (
+    <div className="space-y-3 text-sm" data-testid="skill-details" data-skill={skill.name}>
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-xs text-muted-foreground">
+          <span className="font-mono">{skill.name}</span> · {t('skills.version')} {skill.version} ·{' '}
+          {t('skills.base_tier')} {t(`skills.tier.${skill.tier}`)}
+        </span>
+        {skill.excluded ? (
+          <Badge variant="outline" className="text-[11px]">
+            {t('skills.excluded')}
+          </Badge>
+        ) : null}
+        <Button
+          variant="ghost"
+          size="sm"
+          className="ml-auto"
+          onClick={() => {
+            onToggleExcluded(!skill.excluded)
+          }}
+        >
+          {skill.excluded ? t('skills.include') : t('skills.exclude')}
+        </Button>
+      </div>
+      <div>
+        <div className="text-xs text-muted-foreground">{t('skills.sections')}</div>
+        <ul className="mt-1 flex flex-wrap gap-1">
+          {skill.sections.map((s) => (
+            <li key={s.id} className="flex items-center gap-1">
+              <Badge variant="outline" className="text-[11px]">
+                {s.heading}
+              </Badge>
+              {s.origin === 'learned' ? <OriginBadge origin="learned" /> : null}
+            </li>
+          ))}
+        </ul>
+      </div>
+      <div>
+        <div className="text-xs text-muted-foreground">{t('skills.overlays')}</div>
+        {skill.overlays.length === 0 ? (
+          <p className="mt-1 text-xs text-muted-foreground">{t('skills.overlay.none')}</p>
+        ) : (
+          <div className="mt-1 space-y-2">
+            {skill.overlays.map((o) => (
+              <OverlayRow key={`${o.tier}-${o.owner}`} overlay={o} />
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 export function SkillCard({
   skill,
   onToggleExcluded,
