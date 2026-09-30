@@ -12,27 +12,25 @@
  * 图标轨照样画得出十三个格子（WP97 加了 Office 预览）——它读的是第一段（类型），那一段是静态的。
  * WP100 给「证据」补了身体，WP181 给「定时任务」补了身体，于是还占着位的只剩上组那两个（数据面板 / 运行中）。
  *
+ * **WP208（Luoye 09-30）收拾一遍**：五个「这一层的设置」合成一个「设定」（旧 id 留作别名）；
+ * 邮件助手搬进消息页、设计规范搬进「公司 → 品牌」；定时任务挪到中组、图标上带在跑的数。
+ * 现在的顺序与每格在哪出现见 docs/36 §9.6 那张表。
+ *
  * **占位面板只注册类型不注册身体**：点开显示"还没做"（`right-rail.tsx` 兜的），
  * 位置先占住——图标轨的位置定了就不该再挪（肌肉记忆）。
  */
 import {
   Activity,
   BarChart3,
-  BookOpen,
-  Brain,
   Clock,
   FileDiff,
   FileSearch,
   FileText,
   FolderOpen,
-  Gauge,
   Globe,
   GraduationCap,
-  Mail,
   MessagesSquare,
-  Palette,
-  Sparkles,
-  UserSquare,
+  SlidersHorizontal,
 } from 'lucide-react'
 import { lazy } from 'react'
 import { canOpenOfficeFile, FILE_ADDRESS_PATTERN } from '@/components/rail/panels/office/address'
@@ -40,55 +38,23 @@ import { parseMatterPath } from '@/components/rail/rail-layout'
 import {
   panelType,
   type RailPanelBodyProps,
+  registerPanelAlias,
   registerPanelBody,
   registerPanelType,
 } from '@/components/rail/registry'
+import { useSchedulesBadge } from '@/components/rail/schedule-count'
 import { HELP_ADDRESS_PATTERN } from '@/lib/help'
 
 /**
- * 四个"这一层的设置"面板的身体：形状都是 `{ scope }`，所以包一层就够。
+ * WP208（Luoye 09-30）：**「设定」**——角色 / 记忆 / 知识 / 技能 / 额度五个图标合成一个。
  *
- * `scope` 为空时回 `null` 而不是一句话——"这一页定位不到岗位"那句话由
- * `right-rail.tsx` 统一说（每个面板各说一遍只会四份文案慢慢长歪）。
+ * 五个旧面板的正文原样搬进 `settings-panel.tsx` 的五个标签（每个标签的身体仍然 `lazy()`）。
+ * 旧 id 不删：下面 `registerPanelAlias` 把 `memory` / `skills` / … 落到这个面板的对应标签，
+ * 职责页头部的按钮、本机存着的旧布局、别处写死的 `show('memory')` 都照旧开得到。
  */
-const MemoryBody = lazy(async () => {
-  const m = await import('@/components/rail/panels/memory-panel')
-  return {
-    default: ({ scope }: RailPanelBodyProps) =>
-      scope === undefined ? null : <m.MemoryPanel scope={scope} />,
-  }
-})
-
-const RoleBody = lazy(async () => {
-  const m = await import('@/components/rail/panels/role-panel')
-  return {
-    default: ({ scope }: RailPanelBodyProps) =>
-      scope === undefined ? null : <m.RolePanel scope={scope} />,
-  }
-})
-
-const SkillsBody = lazy(async () => {
-  const m = await import('@/components/rail/panels/skills-panel')
-  return {
-    default: ({ scope }: RailPanelBodyProps) =>
-      scope === undefined ? null : <m.SkillsPanel scope={scope} />,
-  }
-})
-
-const KnowledgeBody = lazy(async () => {
-  const m = await import('@/components/rail/panels/knowledge-panel')
-  return {
-    default: ({ scope }: RailPanelBodyProps) =>
-      scope === undefined ? null : <m.KnowledgePanel scope={scope} />,
-  }
-})
-
-const CapsBody = lazy(async () => {
-  const m = await import('@/components/rail/panels/caps-panel')
-  return {
-    default: ({ scope }: RailPanelBodyProps) =>
-      scope === undefined ? null : <m.CapsPanel scope={scope} />,
-  }
+const SettingsBody = lazy(async () => {
+  const m = await import('@/components/rail/panels/settings-panel')
+  return { default: m.SettingsPanel }
 })
 
 /** 问 AI 是搬进来的已有件；它的边界是"某个事项"，从地址里认。 */
@@ -143,17 +109,6 @@ const ChangesBody = lazy(async () => {
  * 判"这个地址归谁开"不需要把库先拉下来——两段式注册要的就是这个（#6）。
  */
 /**
- * WP113（63 §8）新增：**邮件助手**（本封摘要 / 回复建议 / 发件人是谁 / 相关待办）。
- *
- * 与其余十三个走的是**逐字相同的两句**（`registerPanelType` + `registerPanelBody`）——
- * `registry.ts` 一个字没改。身体照旧 `lazy()`：没人打开消息页之前它一个字节都不下载。
- */
-const MailAssistantBody = lazy(async () => {
-  const m = await import('@/components/rail/panels/mail-assistant-panel')
-  return { default: m.MailAssistantPanel }
-})
-
-/**
  * WP156（36 §7 第三档）：**教程**。卡片上的「看教程」为 `agentsws://help/<slug>` 开它；
  * 人点图标轨开的是目录。身体照旧 `lazy()`，文章本身也是各自一个 chunk（`lib/help.ts`）。
  */
@@ -173,12 +128,6 @@ const OfficePreviewBody = lazy(async () => {
  * 幂等而不是"模块加载时跑一次"：单测会 `resetPanelRegistry()` 之后再渲染右栏，
  * 那时模块早就加载过了，副作用式的注册补不回来。
  */
-/** WP122（71）：右栏的设计规范速查表（只读）。 */
-const DesignMdBody = lazy(async () => {
-  const m = await import('@/components/rail/panels/design-md-panel')
-  return { default: () => <m.DesignMdPanel /> }
-})
-
 /**
  * WP140（docs/78 §2 通用，Fable 定）：**内测期间把还没做的占位面板藏起来**。
  *
@@ -196,7 +145,7 @@ export const SHOW_UNBUILT_PANELS = false
 export const UNBUILT_PANELS: readonly string[] = ['data', 'runs', 'files']
 
 export function ensureBuiltinPanels(options: { showUnbuilt?: boolean } = {}): void {
-  if (panelType('memory') !== undefined) return
+  if (panelType('settings') !== undefined) return
   const showUnbuilt = options.showUnbuilt ?? SHOW_UNBUILT_PANELS
   /** 占位面板走这一句：开关关着就不上图标轨（注册表里也没有它，⌘K 搜不到、布局恢复当收起）。 */
   const registerUnbuilt = (definition: Parameters<typeof registerPanelType>[0]): void => {
@@ -219,14 +168,6 @@ export function ensureBuiltinPanels(options: { showUnbuilt?: boolean } = {}): vo
     group: 'context',
   })
   registerPanelType({
-    id: 'schedules',
-    label: 'rail.panel.schedules',
-    icon: Clock,
-    priority: 'builtin',
-    group: 'context',
-  })
-  registerPanelBody('schedules', SchedulesBody)
-  registerPanelType({
     id: 'evidence',
     label: 'rail.panel.evidence',
     icon: FileSearch,
@@ -246,57 +187,32 @@ export function ensureBuiltinPanels(options: { showUnbuilt?: boolean } = {}): vo
   registerPanelBody('changes', ChangesBody)
 
   // ── 中组：这个岗位或职责的 ───────────────────────────────────────
+  // WP208：角色 / 记忆 / 知识 / 技能 / 额度合成一个「设定」（Luoye 09-30：图标太多）
   registerPanelType({
-    id: 'memory',
-    label: 'rail.panel.memory',
-    icon: Brain,
+    id: 'settings',
+    label: 'rail.panel.settings',
+    hint: 'rail.panel.settings.hint',
+    icon: SlidersHorizontal,
     priority: 'builtin',
     group: 'layer',
     scoped: true,
   })
-  registerPanelBody('memory', MemoryBody)
-  registerPanelType({
-    id: 'skills',
-    label: 'rail.panel.skills',
-    icon: Sparkles,
-    priority: 'builtin',
-    group: 'layer',
-    scoped: true,
-  })
-  registerPanelBody('skills', SkillsBody)
-  registerPanelType({
-    id: 'knowledge',
-    label: 'rail.panel.knowledge',
-    icon: BookOpen,
-    priority: 'builtin',
-    group: 'layer',
-    scoped: true,
-  })
-  registerPanelBody('knowledge', KnowledgeBody)
-  registerPanelType({
-    id: 'caps',
-    label: 'rail.panel.caps',
-    icon: Gauge,
-    priority: 'builtin',
-    group: 'layer',
-    scoped: true,
-  })
-  registerPanelBody('caps', CapsBody)
+  registerPanelBody('settings', SettingsBody)
+  for (const sub of ['role', 'memory', 'knowledge', 'skills', 'caps'])
+    registerPanelAlias({ id: sub, panel: 'settings', sub })
   /*
-   * WP120（69 §4）：**角色定位**。与上面四个同一组、同两句注册——
-   * 它回答的是"这个岗位 / 这条职责是谁"，与记忆 / 技能 / 知识 / 额度是同一类
-   * "当前这一层的设置"（36 §10）。放在额度后面：前四个是它**会**什么，
-   * 这一个是它**是**谁，读下来最后一句才收得住。
+   * WP181：**定时任务**。WP208 从「这件事的」挪到这一组：它的数（图标右上角）跟着当前岗位 /
+   * 职责走——职责层数这条职责、岗位层数整个岗位在跑的（`schedule-count.ts`）。
    */
   registerPanelType({
-    id: 'role',
-    label: 'rail.panel.role',
-    icon: UserSquare,
+    id: 'schedules',
+    label: 'rail.panel.schedules',
+    icon: Clock,
     priority: 'builtin',
     group: 'layer',
-    scoped: true,
+    useBadge: useSchedulesBadge,
   })
-  registerPanelBody('role', RoleBody)
+  registerPanelBody('schedules', SchedulesBody)
 
   // ── 下组：工具 ───────────────────────────────────────────────────
   registerPanelType({
@@ -314,19 +230,10 @@ export function ensureBuiltinPanels(options: { showUnbuilt?: boolean } = {}): vo
     priority: 'builtin',
     group: 'tools',
   })
+  // WP208：设计规范不在第三栏了——搬到「公司 → 品牌」（每个品牌一份，Luoye 09-30）
   // WP97（#13）：第一个真被 `resolvePanel()` 挑中的面板——知识库里点一份文件，
   // 地址 `agentsws://file/<源 id>/<文件名>` 交给注册表排序，排到它这儿，
   // `canOpen` 再看一眼扩展名（只认 docx / xlsx / xls / csv / pptx，别的交给下载）
-  // WP122（71）：设计规范。归「这一层的」那一组——它答的是"这个品牌长什么样"，
-  // 与当前打开的是哪张卡无关。四个出活的岗位（设计 / 建站 / 社媒 / 投放）随手可查。
-  registerPanelType({
-    id: 'design-md',
-    label: 'rail.panel.design-md',
-    icon: Palette,
-    priority: 'builtin',
-    group: 'layer',
-  })
-  registerPanelBody('design-md', DesignMdBody)
   registerPanelType({
     id: 'office-preview',
     label: 'rail.panel.office',
@@ -337,17 +244,7 @@ export function ensureBuiltinPanels(options: { showUnbuilt?: boolean } = {}): vo
     canOpen: canOpenOfficeFile,
   })
   registerPanelBody('office-preview', OfficePreviewBody)
-  // WP113（63）：邮件助手。归「这件事的」那一组——它看的是**当前这封信**，
-  // 不是这一层的设置，所以不 `scoped`。
-  registerPanelType({
-    id: 'mail-assistant',
-    label: 'rail.panel.mail',
-    icon: Mail,
-    priority: 'builtin',
-    group: 'context',
-    matches: ['agentsws://message/**'],
-  })
-  registerPanelBody('mail-assistant', MailAssistantBody)
+  // WP208：邮件助手不在第三栏了——搬进「消息」页的阅读区（看信时才出现，Luoye 09-30）
   registerPanelType({
     id: 'ask',
     label: 'rail.panel.ask',

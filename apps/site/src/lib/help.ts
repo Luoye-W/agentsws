@@ -7,7 +7,7 @@
  */
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { type Lang, type RenderedDoc, renderDoc } from './markdown.js'
+import { type Lang, type RenderedDoc, renderDoc, splitFrontmatter } from './markdown.js'
 import { repoRoot } from './paths.js'
 
 export const HELP_SOURCE = 'apps/workstation/src/lib/help.ts'
@@ -33,7 +33,8 @@ export interface HelpDoc extends RenderedDoc {
 }
 
 export function loadHelp(slug: string, lang: Lang, root: string = repoRoot()): HelpDoc {
-  const text = readFileSync(helpFile(slug, lang, root), 'utf8')
+  // WP208：中文那份开头有 `positions` / `roles`（工作台右栏按岗位排目录用），不是正文
+  const text = splitFrontmatter(readFileSync(helpFile(slug, lang, root), 'utf8')).body
   return { slug, ...renderDoc(text, { lang, helpSlugs: helpSlugs(root) }) }
 }
 

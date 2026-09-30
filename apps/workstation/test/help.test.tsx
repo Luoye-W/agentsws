@@ -19,6 +19,7 @@ import {
   bundledHelpFiles,
   HELP_BY_VENDOR,
   HELP_SLUGS,
+  helpForContext,
   helpSlugOf,
   loadHelpArticle,
 } from '@/lib/help'
@@ -94,7 +95,8 @@ describe('右栏「教程」面板', () => {
 
     fireEvent.click(within(panel).getByTestId('help-back'))
     const items = await screen.findAllByTestId('help-index-item')
-    expect(items.map((i) => i.getAttribute('data-slug'))).toEqual([...HELP_SLUGS])
+    // WP208：目录跟着上下文走——这里没有岗位，列的是通用那几篇（别的在「全部 N 篇」与搜索里）
+    expect(items.map((i) => i.getAttribute('data-slug'))).toEqual(helpForContext({}).general)
     fireEvent.click(
       items.find((i) => i.getAttribute('data-slug') === 'computer-use') as HTMLElement,
     )
@@ -110,7 +112,12 @@ describe('右栏「教程」面板', () => {
       </RailStateProvider>,
     )
     fireEvent.click(screen.getByTestId('rail-icon-help'))
-    expect(await screen.findAllByTestId('help-index-item')).toHaveLength(HELP_SLUGS.length)
+    // WP208：不在岗位上 → 只列通用；「全部 N 篇」一下全摊开
+    expect(await screen.findAllByTestId('help-index-item')).toHaveLength(
+      helpForContext({}).general.length,
+    )
+    fireEvent.click(screen.getByTestId('help-show-all'))
+    expect(screen.getAllByTestId('help-index-item')).toHaveLength(HELP_SLUGS.length)
   })
 })
 

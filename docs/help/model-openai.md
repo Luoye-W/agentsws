@@ -1,3 +1,7 @@
+---
+positions: []
+roles: []
+---
 # 接 OpenAI / ChatGPT 订阅
 
 两条路：用你已经在付的 ChatGPT 订阅登录，或者去 platform.openai.com 建一把 API key 按量付费。两笔钱互不相干——已经在付 ChatGPT 的钱就不用再买 API 额度。

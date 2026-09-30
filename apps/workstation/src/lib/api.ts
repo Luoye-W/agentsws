@@ -733,6 +733,9 @@ export interface ScheduledTaskRow {
   created_by?: 'user' | 'agent'
   /** WP181：从哪件事建的（事项 id） */
   origin?: { conversation_id?: string }
+  /** WP208：挂在哪条分配 / 哪条职责上（服务端一直在回，界面现在才用：右栏徽标按它数） */
+  assignment_id?: string
+  role_id?: string
   /** WP181：官方记录（`official`）、等不等批（`awaiting_approval`） */
   params?: Record<string, unknown>
 }

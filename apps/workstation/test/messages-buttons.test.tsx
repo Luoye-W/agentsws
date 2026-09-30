@@ -146,7 +146,16 @@ vi.mock('@/lib/api', async () => {
       api.downloadMessageAttachment(id, a, n),
     saveMessageDraft: async () => ({ draft: { id: 'dft_1' } }),
     discardMessageDraft: async () => ({ deleted: true }),
-    getMailAssistant: async () => ({ suggestions: [] }),
+    // WP208：邮件助手搬进了阅读区（看信就挂载），替身要给全形状——半个对象会让整页渲染炸掉
+    getMailAssistant: async (id: string) => ({
+      message_id: id,
+      summary: '',
+      needs_reply: false,
+      suggestions: [],
+      sender: { address: 'someone@example.test', history_count: 0, linked: [] },
+      todos: [],
+      model_available: false,
+    }),
   }
 })
 
