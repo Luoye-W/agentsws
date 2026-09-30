@@ -11,6 +11,8 @@ export * from './email/smtp.js'
 export * from './email/support-mailbox.js'
 export * from './email/threads.js'
 export * from './errors.js'
+// WP211：飞书机器人（团队，归工作区；长连接交给注入的官方 SDK）
+export * from './feishu-bot/index.js'
 // WP85（54 §5）：卡片进 IM 只出「文本摘要 + 去工作台处理」的深链，审批动作不在 IM 里做
 export * from './im-cards.js'
 // WP113（63）：消息——统一收件处（消息库 / 分拣 / 标签 / 草稿 / IMAP 回写）

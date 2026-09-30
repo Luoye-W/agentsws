@@ -15,6 +15,8 @@ export type ChannelName =
   | 'meta_dm'
   | 'feishu'
   | 'wecom'
+  // WP211：钉钉企业内部应用机器人（Stream 模式）。飞书那一条用上面已有的 `'feishu'`
+  | 'dingtalk'
   | 'shopify_webhook'
   | 'meta_webhook'
   | 'tiktok_webhook'
