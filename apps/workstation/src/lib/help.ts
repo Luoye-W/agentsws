@@ -10,7 +10,8 @@ import type { Lang } from '@/lib/i18n'
 /**
  * 这一轮写了的教程（顺序 = 右栏「教程」目录的顺序）。
  *
- * 加一篇：`docs/help/` 里放中英两份 md，这里加一个 slug，i18n 加 `help.<slug>.title`。
+ * 加一篇：`docs/help/` 里放中英两份 md（WP208：中文那份开头写 `positions` / `roles`，都空 = 通用），
+ * 这里加一个 slug、`HELP_SCOPES` 照抄一行，i18n 加 `help.<slug>.title`。
  */
 export const HELP_SLUGS = [
   'agentsws-credits',
