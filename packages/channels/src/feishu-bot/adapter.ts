@@ -34,6 +34,7 @@ import {
   feishuErrorToHuman,
   feishuSenderId,
   isAddressedToFeishuBot,
+  isFeishuAppId,
   isFromApp,
   isGroupChat,
   textOfFeishu,
@@ -169,6 +170,12 @@ export class FeishuBotAdapter {
     if (make === undefined) throw new ChannelError('not_implemented', '没有给飞书长连接的建连方式')
     const creds = await this.#options.credentials()
     if (creds === undefined) return
+    if (!isFeishuAppId(creds.app_id)) {
+      // SDK 对不合形状的 App ID 是悄悄不连；这里先拦下来给一句人话
+      this.#state = 'failed'
+      this.#error = feishuErrorToHuman('code=514 invalid app_id')
+      return
+    }
     this.#running = true
     this.#error = undefined
     this.#state = 'connecting'

@@ -73,6 +73,14 @@ export interface FeishuMessageEvent {
   [key: string]: unknown
 }
 
+/**
+ * App ID 的形状：`cli_` + 16 位十六进制（官方 SDK `WSClient.start` 原文校验，**已核实**）。
+ * SDK 遇到不合形状的会**悄悄不连、也不报错**，所以我们在它前面先查一遍。
+ */
+export function isFeishuAppId(id: string): boolean {
+  return /^cli_[0-9a-fA-F]{16}$/.test(id.trim())
+}
+
 /* ── 纯函数 ─────────────────────────────────────────────────────── */
 
 /** 提问人是谁：用 `open_id`（应用内稳定、不需要额外权限，**已核实**）。 */

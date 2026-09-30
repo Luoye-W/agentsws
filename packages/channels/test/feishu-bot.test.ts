@@ -87,7 +87,7 @@ function msg(over: {
 }
 
 function rig(
-  creds: { app_id: string; app_secret: string } | null = { app_id: 'cli_a', app_secret: 'SEC-1' },
+  creds: { app_id: string; app_secret: string } | null = { app_id: 'cli_a1b2c3d4e5f60718', app_secret: 'SEC-1' },
 ) {
   const clock = new FakeClock()
   const fake = new FakeFeishu()
@@ -117,7 +117,7 @@ describe('飞书：收什么、不收什么', () => {
     const r = rig()
     await r.start()
     expect(r.calls()).toBe(1)
-    expect(r.fake.started[0]).toEqual({ app_id: 'cli_a', app_secret: 'SEC-1', domain: 'feishu' })
+    expect(r.fake.started[0]).toEqual({ app_id: 'cli_a1b2c3d4e5f60718', app_secret: 'SEC-1', domain: 'feishu' })
     expect(JSON.stringify(r.adapter)).not.toContain('SEC-1')
     r.fake.state('connected')
     r.fake.push(msg({}))
@@ -247,6 +247,14 @@ describe('飞书：回复、重连、凭据错误', () => {
     expect(feishuErrorToHuman('pullConnectConfig failed: code=403, msg=x').code).toBe('not_enabled')
     expect(feishuErrorToHuman('code=1000040350').code).toBe('too_many_connections')
     expect(feishuErrorToHuman('ECONNRESET').code).toBe('unreachable')
+  })
+
+  it('App ID 形状不对：官方 SDK 会悄悄不连，我们先拦下给人话', async () => {
+    const r = rig({ app_id: 'wrong', app_secret: 'x' })
+    await r.start()
+    expect(r.fake.started).toHaveLength(0)
+    expect(r.adapter.state).toBe('failed')
+    expect(r.adapter.lastError?.code).toBe('bad_credentials')
   })
 
   it('没配凭据就不连', async () => {
