@@ -1,3 +1,7 @@
+---
+positions: [kol-marketing]
+roles: [kol.youtube, kol.instagram, kol.tiktok, kol.facebook, kol.x]
+---
 # 浏览器插件「红人助手」
 
 这篇讲 Chrome 插件「Agents 工坊 · 红人助手」：它在 YouTube / Instagram / TikTok 的页面上给红人做即时体检，你点一下就把这个人收进当前品牌的红人库。
