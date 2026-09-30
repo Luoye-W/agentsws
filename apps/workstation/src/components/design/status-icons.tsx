@@ -87,7 +87,7 @@ export function StatusIcons({
   return (
     <TooltipProvider>
       <ul
-        className={cn('flex flex-wrap items-center gap-1.5', className)}
+        className={cn('flex flex-wrap items-center gap-x-2 gap-y-1.5 py-1', className)}
         // 36 §7：这是状态，不是说明——减字守卫按状态算
         data-slot="status"
         data-testid={testId}
@@ -108,7 +108,7 @@ function StatusIconItem({ item, stateWord }: { item: StatusItem; stateWord: stri
   const Mark = mark.icon
   return (
     <li
-      className="flex min-w-0 items-center gap-1"
+      className="flex min-w-0 items-center gap-1.5"
       data-key={item.key}
       data-state={item.state}
       {...(item.testId === undefined ? {} : { 'data-testid': item.testId })}

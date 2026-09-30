@@ -191,6 +191,26 @@ async function main() {
 
     const configured = page.locator('[data-testid="model-row"]').first().locator('xpath=../..')
     await shot(configured, 'models-configured')
+    // tooltip：键盘聚焦第一个状态图标（hover / focus 都出）
+    if (TAG === 'after') {
+      await page.locator('[data-testid="model-row"] [data-testid="status-icon"]').first().focus()
+      await page.waitForTimeout(400)
+      const box = await configured.boundingBox()
+      if (box !== null)
+        await page.screenshot({
+          path: join(SHOTS, `${TAG}-models-tooltip.png`),
+          clip: { x: box.x, y: Math.max(0, box.y - 90), width: box.width, height: box.height + 90 },
+        })
+      console.log(`  📷 ${TAG}-models-tooltip.png`)
+      await page.locator('body').click({ position: { x: 5, y: 5 } })
+      // 深色一张
+      await page.emulateMedia({ colorScheme: 'dark' })
+      await page.evaluate(() => document.documentElement.classList.add('dark'))
+      await page.waitForTimeout(300)
+      await shot(configured, 'models-configured-dark')
+      await page.evaluate(() => document.documentElement.classList.remove('dark'))
+      await page.emulateMedia({ colorScheme: 'light' })
+    }
     await shot(page.locator('[data-testid="model-template"][data-vendor="deepseek"]'), 'models-deepseek-card')
     await shot(page.locator('[data-testid="web-search-toggle"]'), 'web-search')
     const openai = page.locator('[data-testid="model-template"][data-vendor="openai"]')
