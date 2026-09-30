@@ -30,11 +30,13 @@ import type {
   MessageDraft,
   MessageFolder,
   MessageFolderKind,
+  MessageImagesReport,
   MessageLabel,
   MessageRecord,
   MessageSendResult,
   MessageSyncReport,
   MessageThreadSummary,
+  MessageWriteback,
   ReplySuggestion,
   Review,
   SenderRule,
@@ -5136,6 +5138,8 @@ export interface MessageAccountView {
   }
   /** WP172：这只邮箱收 B2B 信（B2B 岗位开着 + 邮箱卡上「收 B2B 信」开着）——左栏据此画「B2B 往来」。 */
   b2b?: boolean
+  /** WP204：影子模式开着（只看不动）——归档 / 删除置灰，已读 / 星标只在本机标。 */
+  shadow_mode?: boolean
 }
 
 /** 打开一条会话时一次拿全（正文 + 状态带）。 */
@@ -5214,14 +5218,14 @@ export const getMailAssistant = (id: string): Promise<MailAssistantView> =>
 export const setMessageFlags = (
   id: string,
   input: { read?: boolean; starred?: boolean; answered?: boolean },
-): Promise<{ message: MessageRecord }> =>
+): Promise<{ message: MessageRecord; writeback?: MessageWriteback }> =>
   api(`/v1/messages/${encodeURIComponent(id)}/flags`, { method: 'POST', body: input })
 
 /** 挪一封信。**删除 = `to: 'trash'`**，没有第二种去处（63 §7）。 */
 export const moveMessage = (
   id: string,
   input: { to: MessageFolderKind; remember_sender?: boolean },
-): Promise<{ message: MessageRecord; rule?: SenderRule }> =>
+): Promise<{ message: MessageRecord; rule?: SenderRule; writeback?: MessageWriteback }> =>
   api(`/v1/messages/${encodeURIComponent(id)}/move`, { method: 'POST', body: input })
 
 /**
@@ -5246,8 +5250,36 @@ export const setMessageLabels = (
 export const showMessageImages = (
   id: string,
   always: boolean,
-): Promise<{ message: MessageRecord }> =>
+): Promise<{ message: MessageRecord; images?: MessageImagesReport }> =>
   api(`/v1/messages/${encodeURIComponent(id)}/images`, { method: 'POST', body: { always } })
+
+/**
+ * WP204：下载一个附件。字节这一条不走 `api()`（那个只解 JSON），与知识库原件同形：
+ * 自己拼 `Authorization` / `X-Assignment`，拿到字节后让浏览器存成文件——不在页面里打开。
+ */
+export async function downloadMessageAttachment(
+  id: string,
+  attachment_id: string,
+  name: string,
+): Promise<void> {
+  const headers = new Headers()
+  const token = readStoredToken()
+  if (token !== null) headers.set('Authorization', `Bearer ${token}`)
+  if (currentAssignment !== null) headers.set('X-Assignment', currentAssignment)
+  const res = await fetch(
+    `/v1/messages/${encodeURIComponent(id)}/attachments/${encodeURIComponent(attachment_id)}`,
+    { headers },
+  )
+  if (!res.ok) throw new ApiClientError(res.status, (await res.json()) as ApiErrorBody)
+  const url = URL.createObjectURL(await res.blob())
+  const a = document.createElement('a')
+  a.href = url
+  a.download = name
+  a.click()
+  setTimeout(() => {
+    URL.revokeObjectURL(url)
+  }, 1000)
+}
 
 export const listMessageLabels = (): Promise<{ labels: MessageLabel[] }> =>
   api('/v1/messages/labels')

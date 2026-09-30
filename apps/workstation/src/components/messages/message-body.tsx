@@ -32,6 +32,21 @@ function documentOf(html: string): string {
   ].join('')
 }
 
+/**
+ * WP204：正文大概多高（像素）。块级标签与字数算行数，图片按标的高度算，没标的按 200；
+ * 夹在 120–900 之间。只是估计——估少了框里能滚，估多了留点白。
+ */
+export function estimateHeight(html: string): number {
+  const blocks = (html.match(/<(p|br|div|tr|li|h[1-6]|blockquote)\b/gi) ?? []).length
+  const text = html.replace(/<[^>]*>/g, '').length
+  let images = 0
+  for (const m of html.matchAll(/<img\b[^>]*>/gi)) {
+    const h = /height="(\d+)"/.exec(m[0])?.[1]
+    images += h === undefined ? 200 : Math.min(Number(h), 600)
+  }
+  return Math.max(120, Math.min(900, 24 + blocks * 26 + Math.ceil(text / 70) * 22 + images))
+}
+
 export function MessageBody({ message }: { message: MessageRecord }): ReactNode {
   const { t } = useApp()
   const frame = useRef<HTMLIFrameElement>(null)
@@ -71,7 +86,11 @@ export function MessageBody({ message }: { message: MessageRecord }): ReactNode 
       // 无脚本、无同源：净化那一层将来漏了一条规则，这一层仍然兜得住
       sandbox=""
       srcDoc={documentOf(message.html)}
-      className="w-full border-0 bg-white"
+      // WP204：无同源的 iframe 里量不到内容高度（上面那个 fit 读 contentDocument 永远是 null），
+      // 以前就停在浏览器缺省的 150px——「显示图片」之后题图一撑，正文就被挤到框外看不见了。
+      // 现在按正文粗估一个高度（估少了在框里滚）。要真贴合得放开同源（仍无脚本），留给 Luoye 定。
+      style={{ height: `${estimateHeight(message.html)}px` }}
+      className="max-h-[70vh] w-full border-0 bg-white"
     />
   )
 }
