@@ -4,6 +4,10 @@ description: 拒付举证：客户向银行发起争议之后，按争议原因�
 license: Apache-2.0
 tier: open
 version: 1.0.0
+display_name: 拒付举证
+display_name_en: Chargeback evidence
+summary: 客户拒付后整理证据包，人批了再交
+summary_en: Build the evidence pack after a dispute, filed after approval
 ---
 
 > Agents 工坊自带的基础版。这家店在公司层写了自己的举证口径，以公司层为准。本文不是法律意见，金额大或拿不准时请人确认。
