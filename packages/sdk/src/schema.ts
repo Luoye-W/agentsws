@@ -6450,6 +6450,23 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/v1/messages/{id}/attachments/{attachment}': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** 取一个附件的字节（WP204；从受控原始材料区取，一律按「下载」给，不在页面里打开） */
+    get: operations['getMessageAttachment']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/v1/messages/{id}/todo': {
     parameters: {
       query?: never
@@ -49329,7 +49346,7 @@ export interface operations {
       }
     }
     responses: {
-      /** @description { message: MessageRecord } */
+      /** @description { message: MessageRecord; writeback?: MessageWriteback } */
       200: {
         headers: {
           [name: string]: unknown
@@ -49446,7 +49463,7 @@ export interface operations {
       }
     }
     responses: {
-      /** @description { message: MessageRecord; rule?: SenderRule } */
+      /** @description { message: MessageRecord; rule?: SenderRule; writeback?: MessageWriteback } */
       200: {
         headers: {
           [name: string]: unknown
@@ -49765,7 +49782,7 @@ export interface operations {
       }
     }
     responses: {
-      /** @description { message: MessageRecord } */
+      /** @description { message: MessageRecord; images?: MessageImagesReport } */
       200: {
         headers: {
           [name: string]: unknown
@@ -49812,6 +49829,97 @@ export interface operations {
       }
       /** @description 统一错误信封（28 §2） */
       409: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      429: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      500: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      503: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+    }
+  }
+  getMessageAttachment: {
+    parameters: {
+      query?: never
+      header: {
+        /** @description 本次请求绑定的 Assignment（31 §3.1：一次请求一个 Assignment） */
+        'X-Assignment': string
+      }
+      path: {
+        /** @description id */
+        id: string
+        /** @description attachment */
+        attachment: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description 附件字节（Content-Disposition 带文件名；没有 / 过了保留期 → 404） */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Envelope']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      400: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      401: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      403: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      404: {
         headers: {
           [name: string]: unknown
         }

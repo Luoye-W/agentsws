@@ -57,8 +57,10 @@ export function seedFrom(
     ...(message.message_id === undefined ? {} : { in_reply_to: message.message_id }),
   }
   if (mode === 'forward') {
+    // WP204：转发不是回复——不带 In-Reply-To，于是发出去之后原信不会被标成「已回」
+    const { in_reply_to: _skip, ...rest } = base
     return {
-      ...base,
+      ...rest,
       mode,
       to: '',
       cc: '',
@@ -93,9 +95,12 @@ export function Composer({
   onSend,
   onSaveDraft,
   onClose,
+  error,
 }: {
   seed: ComposeSeed
   busy: boolean
+  /** WP204：没发出去的那句人话（写信框留着，话说在框里）。 */
+  error?: string
   onSend(input: {
     account?: string
     thread_id?: string
@@ -217,6 +222,11 @@ export function Composer({
           setText(e.target.value)
         }}
       />
+      {error === undefined ? null : (
+        <p role="alert" data-testid="composer-error" className="text-[12px] text-destructive">
+          {error}
+        </p>
+      )}
       <div className="flex items-center gap-2">
         <Button
           size="sm"

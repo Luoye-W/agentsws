@@ -62232,7 +62232,7 @@
         ],
         "responses": {
           "200": {
-            "description": "{ message: MessageRecord }",
+            "description": "{ message: MessageRecord; writeback?: MessageWriteback }",
             "content": {
               "application/json": {
                 "schema": {
@@ -62333,7 +62333,7 @@
           "range": "own",
           "sensitivity": "internal"
         },
-        "x-returns": "{ message: MessageRecord }",
+        "x-returns": "{ message: MessageRecord; writeback?: MessageWriteback }",
         "requestBody": {
           "required": true,
           "content": {
@@ -62394,7 +62394,7 @@
         ],
         "responses": {
           "200": {
-            "description": "{ message: MessageRecord; rule?: SenderRule }",
+            "description": "{ message: MessageRecord; rule?: SenderRule; writeback?: MessageWriteback }",
             "content": {
               "application/json": {
                 "schema": {
@@ -62495,7 +62495,7 @@
           "range": "own",
           "sensitivity": "internal"
         },
-        "x-returns": "{ message: MessageRecord; rule?: SenderRule }",
+        "x-returns": "{ message: MessageRecord; rule?: SenderRule; writeback?: MessageWriteback }",
         "requestBody": {
           "required": true,
           "content": {
@@ -62886,7 +62886,7 @@
         ],
         "responses": {
           "200": {
-            "description": "{ message: MessageRecord }",
+            "description": "{ message: MessageRecord; images?: MessageImagesReport }",
             "content": {
               "application/json": {
                 "schema": {
@@ -62987,7 +62987,7 @@
           "range": "own",
           "sensitivity": "internal"
         },
-        "x-returns": "{ message: MessageRecord }",
+        "x-returns": "{ message: MessageRecord; images?: MessageImagesReport }",
         "requestBody": {
           "required": true,
           "content": {
@@ -63004,6 +63004,136 @@
             }
           }
         }
+      }
+    },
+    "/v1/messages/{id}/attachments/{attachment}": {
+      "get": {
+        "operationId": "getMessageAttachment",
+        "summary": "取一个附件的字节（WP204；从受控原始材料区取，一律按「下载」给，不在页面里打开）",
+        "tags": ["messages"],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "id",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "attachment",
+            "in": "path",
+            "required": true,
+            "description": "attachment",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Assignment",
+            "in": "header",
+            "required": true,
+            "description": "本次请求绑定的 Assignment（31 §3.1：一次请求一个 Assignment）",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "附件字节（Content-Disposition 带文件名；没有 / 过了保留期 → 404）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-authz": {
+          "domain": "approval",
+          "op": "read",
+          "range": "own",
+          "sensitivity": "internal"
+        },
+        "x-returns": "附件字节（Content-Disposition 带文件名；没有 / 过了保留期 → 404）"
       }
     },
     "/v1/messages/{id}/todo": {

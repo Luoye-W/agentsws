@@ -62,6 +62,9 @@ import { cardRefOf, DAY_MS, planSummary, planTitle, type Work } from '@agentsws/
 import { demoGoogleReads } from './demo-google.js'
 
 export const DEMO_PACK = 'packs/dtc-3c-3p'
+/** WP204：demo 里「显示图片」代取回来的那张题图（10×2 品牌绿 PNG，与题图 5:1 同比例）。 */
+const DEMO_BANNER_PNG =
+  'iVBORw0KGgoAAAANSUhEUgAAAAoAAAACCAIAAADuA9qHAAAAEUlEQVR4nGPQ78/GgxjwSwMAyvgXNS/YpuQAAAAASUVORK5CYII='
 export const DEMO_SCENARIO = 'scenarios/aftersales/return-within-window.yml'
 
 /**
@@ -1321,6 +1324,12 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
     mount,
     b2bStandIns,
     staticDir,
+    // WP204：「显示图片」的本机代取在 demo 里不出网——题图回一张 5:1 的品牌绿色块，
+    // 其余（追踪像素）一律当取不到，界面照实说"有 N 张没取到"
+    messageImages: async (url) =>
+      url.endsWith('/banner.png')
+        ? { ok: true, data_uri: `data:image/png;base64,${DEMO_BANNER_PNG}` }
+        : { ok: false, reason: 'http_error' },
     brandData: (ws) => extraBrandData.get(ws),
     // WP154：「现在读一遍 Search Console」在 demo 里读的是替身那一周（不连真 Google）
     searchConsoleFor: () => standInSearchConsole({ rows: DEMO_GSC_ROWS, pages: DEMO_PAGES }),
@@ -1657,7 +1666,8 @@ async function seedMessages(server: Server, world: World): Promise<void> {
       from: { email: 'news@packaging-weekly.example', name: 'Packaging Weekly' },
       subject: '本周包装行业速览',
       text: '本期：可降解内衬的三种做法、欧盟新规时间表、一张对比表。',
-      html: '<p>本期：可降解内衬的三种做法、欧盟新规时间表、一张对比表。</p><img data-ws-remote-src="https://packaging-weekly.example/pixel.gif" width="1" height="1" />',
+      // WP204：一张题图 + 一个追踪像素——「显示图片」之后题图由本机代取（demo 里是替身）
+      html: '<p><img data-ws-remote-src="https://packaging-weekly.example/banner.png" width="480" height="96" alt="Packaging Weekly" /></p><p>本期：可降解内衬的三种做法、欧盟新规时间表、一张对比表。</p><img data-ws-remote-src="https://packaging-weekly.example/pixel.gif" width="1" height="1" />',
       remote: true,
       minutes: 520,
       read: true,
