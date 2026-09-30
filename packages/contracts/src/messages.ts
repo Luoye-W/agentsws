@@ -473,3 +473,24 @@ export interface MessageSyncReport {
   /** 拉不动的那几只（一只坏了不该拖垮别的）。 */
   failed: string[]
 }
+
+/* ── WP204：消息页按钮的回执（只加不改）───────────────────────────────── */
+
+/**
+ * WP204：人按的这一下（已读 / 星标 / 归档 / 删除）在**邮箱里**动成了没有。
+ *
+ * - `written`：本机改了，邮箱里也改了；
+ * - `local_only`：只在这里标了——这只邮箱开着影子模式（只看不动），邮箱一下都没动；
+ * - `failed`：本机改了，邮箱服务器没答应 / 连不上（信照样看得见，界面说一句）；
+ * - `no_mailbox`：这封信不在一只连着的邮箱里（聊天留言、demo 里种的信），无从回写。
+ */
+export type MessageWriteback = 'written' | 'local_only' | 'failed' | 'no_mailbox'
+
+/**
+ * WP204：「显示图片」那一下的结果。图片由本机服务**代取**（不让浏览器直连对方服务器），
+ * 取到的内联进正文；取不到的（对方不回、不是图片、太大、指向内网）照旧挡着。
+ */
+export interface MessageImagesReport {
+  shown: number
+  failed: number
+}

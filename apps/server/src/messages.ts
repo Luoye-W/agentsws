@@ -29,6 +29,7 @@ import type {
   MessagesPort,
   MessageThreadView,
 } from '@agentsws/api'
+import { ApiError } from '@agentsws/api'
 import type {
   CredentialSource,
   MailboxAccount,
@@ -39,6 +40,7 @@ import type {
   MessageStore,
   RawEmailMessage,
   RawStore,
+  RemoteImageLoader,
   SuggestModel,
   SuggestRequest,
   SupportMailboxSwitches,
@@ -47,10 +49,12 @@ import type {
 } from '@agentsws/channels'
 import {
   applySupportMailboxActions,
+  createRemoteImageLoader,
   folderKindOf,
   folderPathFor,
   ImapMailboxWriter,
   ImapMailSource,
+  inlineRemoteImages,
   isAgentFolderKind,
   MailboxSync,
   MemoryMailboxStateStore,
@@ -77,6 +81,7 @@ import type {
   MessageDraftInput,
   MessageFlagsInput,
   MessageFolderKind,
+  MessageImagesReport,
   MessageLabel,
   MessageListQuery,
   MessageMoveInput,
@@ -87,6 +92,7 @@ import type {
   MessageSyncReport,
   MessageThreadSummary,
   MessageTriage,
+  MessageWriteback,
   ModelGateway,
   PersonId,
   ReplySuggestion,
@@ -106,6 +112,7 @@ import type {
   SupportMailIntake,
   SupportMailIntakeResult,
 } from './channels.js'
+import { OUTBOUND_HALTED } from './channels.js'
 import type { MailAccount } from './connections.js'
 import { MailboxActionFailures, mailboxActionEvent, maskAddress } from './mailbox-actions.js'
 import {
@@ -209,7 +216,16 @@ export interface MessagesOptions {
    * 每封都过一遍（进抑制名单）。不给 = 老行为（一封 B2B 都不产出）。
    */
   b2b?: B2bMail
+  /**
+   * WP204：「显示图片」的本机代取（{@link createRemoteImageLoader}：只取公网 http(s)、
+   * 只收图片、限大小）。测试与 demo 注入替身；不给 = 真代取。
+   */
+  loadRemoteImage?: RemoteImageLoader
 }
+
+/** WP204：影子模式下归档 / 删除 / 挪信那一句（界面也按它置灰，这里是兜底）。 */
+export const SHADOW_MODE_REFUSAL =
+  '这只邮箱开着影子模式（只看不动），归档 / 删除不会动邮箱。要动，先在连接页把影子模式关掉。'
 
 /**
  * 缺省要扫的文件夹真名。
@@ -657,13 +673,24 @@ export function createMessages(options: MessagesOptions): MessagesAssembly {
   const accountOf = (address: string): MailAccount | undefined =>
     options.accounts().find((a) => a.address === address)
 
-  /** 旗标回写：本机先改，IMAP 尽力（写不动只 log）。 */
-  const writeFlags = async (record: MessageRecord, input: MessageFlagsInput): Promise<void> => {
+  /** WP204：这只邮箱开着影子模式（只看不动）——人按的已读 / 星标只在本机标，归档 / 删除不做。 */
+  const shadowOf = (address: string): boolean =>
+    supportMailboxSwitches(switchesOf(address)).shadow_mode
+
+  /**
+   * 旗标回写：本机先改，IMAP 尽力（写不动只 log）。WP204：回一句"邮箱里动成了没有"，
+   * 界面据此说人话（以前写不动就静默，人以为邮箱里也改了）。
+   */
+  const writeFlags = async (
+    record: MessageRecord,
+    input: MessageFlagsInput,
+  ): Promise<MessageWriteback> => {
     const account = accountOf(record.account)
     const uid = record.uid
-    if (account === undefined || uid === undefined) return
+    if (account === undefined || uid === undefined) return 'no_mailbox'
+    if (shadowOf(record.account)) return 'local_only'
     const writer = writerFor(account)
-    if (writer === undefined) return
+    if (writer === undefined) return 'no_mailbox'
     const add: string[] = []
     const remove: string[] = []
     const flag = (on: boolean | undefined, name: string): void => {
@@ -673,8 +700,8 @@ export function createMessages(options: MessagesOptions): MessagesAssembly {
     flag(input.read, '\\Seen')
     flag(input.starred, '\\Flagged')
     flag(input.answered, '\\Answered')
-    if (add.length === 0 && remove.length === 0) return
-    await writer.setFlags(record.folder, uid, add, remove)
+    if (add.length === 0 && remove.length === 0) return 'written'
+    return (await writer.setFlags(record.folder, uid, add, remove)) ? 'written' : 'failed'
   }
 
   /**
@@ -751,9 +778,14 @@ export function createMessages(options: MessagesOptions): MessagesAssembly {
       : record
   }
 
+  /** WP204：「显示图片」的本机代取（测试 / demo 注入替身）。 */
+  const loadImage: RemoteImageLoader = options.loadRemoteImage ?? createRemoteImageLoader()
+
   const requireMessage = async (id: string): Promise<MessageRecord> => {
     const row = await store.get(id)
-    if (row === undefined) throw new Error(`没有这封信：${id}`)
+    // WP204：以前抛裸 Error → 500「internal error」，界面只能说"出错了"
+    if (row === undefined)
+      throw new ApiError('not_found', '这封信不在了（可能刚被别处挪走），刷新一下列表。')
     return row
   }
 
@@ -773,6 +805,8 @@ export function createMessages(options: MessagesOptions): MessagesAssembly {
           backfill_floor: sync.backfillFloor(address),
           ...(failure === undefined ? {} : { last_mailbox_failure: failure }),
           ...(b2bEnabledFor(address) ? { b2b: true } : {}),
+          // WP204：影子模式开着——消息页把归档 / 删除置灰并说为什么
+          ...(accountOf(address) !== undefined && shadowOf(address) ? { shadow_mode: true } : {}),
         })
       }
       return { accounts: out }
@@ -827,7 +861,7 @@ export function createMessages(options: MessagesOptions): MessagesAssembly {
       _actor: MessageActor,
       id: string,
       input: MessageFlagsInput,
-    ): Promise<{ message: MessageRecord }> {
+    ): Promise<{ message: MessageRecord; writeback: MessageWriteback }> {
       const row = await requireMessage(id)
       const flags = {
         ...row.flags,
@@ -836,16 +870,17 @@ export function createMessages(options: MessagesOptions): MessagesAssembly {
         ...(input.answered === undefined ? {} : { answered: input.answered }),
       }
       const next = await store.update(id, { flags })
-      // 回写 IMAP：用户回到自己的邮箱软件看到的必须是同一个状态（63 §7）
-      await writeFlags(row, input)
-      return { message: next ?? row }
+      // 回写 IMAP：用户回到自己的邮箱软件看到的必须是同一个状态（63 §7）。
+      // WP204：影子模式开着就只在本机标（`local_only`），邮箱一下都不动
+      const writeback = await writeFlags(row, input)
+      return { message: next ?? row, writeback }
     },
 
     async move(
       actor: MessageActor,
       id: string,
       input: MessageMoveInput,
-    ): Promise<{ message: MessageRecord; rule?: SenderRule }> {
+    ): Promise<{ message: MessageRecord; rule?: SenderRule; writeback: MessageWriteback }> {
       const row = await requireMessage(id)
       const account = accountOf(row.account)
       // WP161：按这只邮箱上已有的真名走（`kefuagents` 在就沿用，不另建 `KefuAgents`）
@@ -853,19 +888,33 @@ export function createMessages(options: MessagesOptions): MessagesAssembly {
       const to = folderPathFor(input.to, known)
       const route: MessageRoute =
         input.to === 'support' || input.to === 'kol' || input.to === 'b2b' ? input.to : 'inbox'
+      /*
+       * WP204：分两种挪。
+       * - **纠错**（移到客服 / 红人 / B2B、从岗位文件夹移回收件箱、或勾了"以后都这样"）：
+       *   改路由、分拣结论记"人"（63 §D「纠错」）；
+       * - **收拾**（归档、删除 = 移到垃圾箱、以及撤销它们）：只换文件夹，**路由与分拣结论不动**——
+       *   以前归档一下摘要就变成"你挪过这封信"、要不要回也被清掉，撤销回来也找不回。
+       */
+      const correcting =
+        isAgentFolderKind(input.to) ||
+        (input.to === 'inbox' && row.route !== 'inbox') ||
+        input.remember_sender === true
+      const shadow = account !== undefined && shadowOf(row.account)
+      // 影子模式 = 这只邮箱一下都不动：收拾类的挪不做（界面已置灰，这里兜底）；纠错只改本机的路由
+      if (shadow && !correcting) throw new ApiError('conflict', SHADOW_MODE_REFUSAL)
       const next =
         (await store.update(id, {
-          folder: to,
-          folder_kind: folderKindOf(to),
-          route,
-          triage: userVerdict(route, clock.now(), row.labels),
+          ...(shadow ? {} : { folder: to, folder_kind: folderKindOf(to) }),
+          ...(correcting ? { route, triage: userVerdict(route, clock.now(), row.labels) } : {}),
         })) ?? row
       suggester.invalidate(id)
-      if (account !== undefined && row.uid !== undefined) {
+      let writeback: MessageWriteback = shadow ? 'local_only' : 'no_mailbox'
+      if (!shadow && account !== undefined && row.uid !== undefined) {
         const moved = await writerFor(account)?.move(row.folder, row.uid, to)
         if (moved === true) noteFolder(account, to)
+        writeback = moved === true ? 'written' : moved === false ? 'failed' : 'no_mailbox'
       }
-      if (input.remember_sender !== true) return { message: next }
+      if (input.remember_sender !== true) return { message: next, writeback }
       // 「以后这个发件人都这样？」——教一次，下一封直达，不再花模型（63 §4 ②）
       const rule: SenderRule = {
         id: `rule_${sha256(`${workspace_id}|${row.from.email}`).slice(0, 16)}`,
@@ -877,7 +926,7 @@ export function createMessages(options: MessagesOptions): MessagesAssembly {
       }
       await store.putSenderRule(rule)
       rulesCache = await store.senderRules()
-      return { message: next, rule }
+      return { message: next, rule, writeback }
     },
 
     async setLabels(
@@ -905,13 +954,36 @@ export function createMessages(options: MessagesOptions): MessagesAssembly {
       _actor: MessageActor,
       id: string,
       always: boolean,
-    ): Promise<{ message: MessageRecord }> {
+    ): Promise<{ message: MessageRecord; images: MessageImagesReport }> {
       const row = await requireMessage(id)
       if (always) await store.trustSender(row.from.email)
-      if (row.html === undefined) return { message: row }
+      if (row.html === undefined || !row.has_remote_images)
+        return { message: row, images: { shown: 0, failed: 0 } }
+      // WP204：本机代取、内联成 data:——浏览器不直连对方服务器（桌面壳的 CSP 也只认 data:）。
+      // 只对这一封、这一次生效：库里那一份照旧挡着，下次打开还是先不加载。
+      const out = await inlineRemoteImages(row.html, loadImage)
       return {
-        message: { ...row, html: restoreRemoteImages(row.html), has_remote_images: false },
+        message: { ...row, html: out.html, has_remote_images: out.failed > 0 },
+        images: { shown: out.shown, failed: out.failed },
       }
+    },
+
+    async attachment(
+      _actor: MessageActor,
+      id: string,
+      attachment_id: string,
+    ): Promise<{ name: string; mime: string; bytes: Uint8Array } | undefined> {
+      const row = await requireMessage(id)
+      const meta = row.attachments.find((a) => a.id === attachment_id)
+      if (meta?.ref === undefined || options.rawStore === undefined) return undefined
+      const payload = (await options.rawStore.get(meta.ref))?.payload
+      const bytes =
+        payload instanceof Uint8Array
+          ? payload
+          : typeof payload === 'string'
+            ? new TextEncoder().encode(payload)
+            : undefined
+      return bytes === undefined ? undefined : { name: meta.name, mime: meta.mime, bytes }
     },
 
     async labels(): Promise<{ labels: MessageLabel[] }> {
@@ -1012,7 +1084,8 @@ export function createMessages(options: MessagesOptions): MessagesAssembly {
               m.message_id === undefined ? [] : [m.message_id],
             )
       const send = options.sendMail
-      if (send === undefined) throw new Error('这个服务进程没接出站（channels.sendMail）')
+      if (send === undefined)
+        throw new ApiError('not_implemented', '这台机器上没接发信，这封没发出去。')
       const result = await send({
         ...(account === undefined ? {} : { account }),
         to,
@@ -1025,7 +1098,11 @@ export function createMessages(options: MessagesOptions): MessagesAssembly {
         ...(thread_id === undefined ? {} : { thread_ref: thread_id }),
         idempotency_key,
       })
-      if (!result.ok) throw new Error(result.error ?? '发送失败')
+      // WP204：以前抛裸 Error → 500「internal error」，人只看到"出错了"，信还以为发了
+      if (!result.ok) {
+        const why = result.error ?? '发送失败，这封没发出去。'
+        throw new ApiError(why === OUTBOUND_HALTED ? 'halted' : 'provider_unavailable', why)
+      }
       if (input.draft_id !== undefined) await store.deleteDraft(input.draft_id)
       // 回信之后把被回的那封标成"已回"（也回写 IMAP）
       if (thread_id !== undefined) {
