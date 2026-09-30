@@ -270,4 +270,40 @@ describe('WP206 真装配线 + 替身云', () => {
     expect(chat.status).toBe(402)
     expect(((await chat.json()) as { message: string }).message).toBe(MEMBER_LEFT_MESSAGE)
   })
+
+  it('替身也有同一道保护：一下子没了一半以上（且 ≥3 人）→ 不收回，没了的照旧留在名册里', async () => {
+    await api('/v1/cloud/account/link', {
+      method: 'POST',
+      body: JSON.stringify({ email: 'boss@example.com' }),
+    })
+    await standIn.settled()
+    await vi.waitFor(() => expect(standIn.roster()).toBeDefined(), {
+      timeout: 10_000,
+      interval: 100,
+    })
+    const token = seen.find((s) => s.url.endsWith('/v1/wallet/allocation/roster'))?.headers
+      .Authorization
+    const push = async (ids: string[]) =>
+      (await (
+        await standIn.fetch(`${CLOUD_STAND_IN_BASE_URL}/v1/wallet/allocation/roster`, {
+          method: 'POST',
+          headers: { Authorization: token ?? '', 'content-type': 'application/json' },
+          body: JSON.stringify({ members: ids.map((id) => ({ id, name: id })), positions: [] }),
+        })
+      ).json()) as { data: { reclaimed: unknown[]; guarded?: { missing: number; of: number } } }
+    await push(['p_a', 'p_b', 'p_c', 'p_d'])
+    const held = await push(['p_a'])
+    expect(held.data.guarded).toEqual({ missing: 3, of: 4 })
+    expect(held.data.reclaimed).toEqual([])
+    expect(
+      standIn
+        .roster()
+        ?.members.map((m) => m.id)
+        .sort(),
+    ).toEqual(['p_a', 'p_b', 'p_c', 'p_d'])
+    // 少了一两个照常收回
+    const one = await push(['p_a', 'p_b', 'p_c'])
+    expect(one.data.guarded).toBeUndefined()
+    expect(one.data.reclaimed).toEqual([{ kind: 'member', subject_id: 'p_d' }])
+  })
 })

@@ -35,6 +35,7 @@ import type {
 import {
   ALLOCATION_BUCKETS,
   ALLOCATION_EXHAUSTED_MESSAGE,
+  allocationRosterGuarded,
   attributionIdOk,
   DEFAULT_ALLOCATION_TIMEZONE,
   MEMBER_HEADER,
