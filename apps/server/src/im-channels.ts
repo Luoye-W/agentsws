@@ -444,9 +444,14 @@ export function createImChannels(options: ImChannelsOptions): ImChannelsAssembly
     const external = event.actor?.external_id ?? ''
 
     // 三条团队渠道：认人（或当场绑定）→ 按提问人身份问他自己的代理 → 回原会话
-    const team = teamReplier(event)
-    if (team !== undefined) {
-      await answerTeam(team.channel, external, question, team.reply)
+    if (
+      event.channel === WECOM_BOT_CHANNEL ||
+      event.channel === 'feishu' ||
+      event.channel === 'dingtalk'
+    ) {
+      const team = teamReplier(event)
+      // 那条通道已经停了（断开 / 进程在关）：不答，也不落到微信那一支去
+      if (team !== undefined) await answerTeam(team.channel, external, question, team.reply)
       return
     }
 
