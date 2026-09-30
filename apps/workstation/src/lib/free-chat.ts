@@ -4,6 +4,7 @@
  *
  * 前端仍然不引任何模型 SDK：模型只在服务端的模型网关里。
  */
+import type { ArchivedWorkCandidate } from '@agentsws/contracts'
 import { ApiClientError, type ApiErrorBody, api, assignmentId, storedToken } from '@/lib/api'
 
 export interface FreeChatSession {
@@ -45,6 +46,8 @@ export interface FreeChatMessage {
   knowledge?: boolean
   stopped?: boolean
   error?: string
+  /** WP207：模型找回归档时给出的候选（卡片；人点了才恢复）。 */
+  archived_candidates?: ArchivedWorkCandidate[]
 }
 
 export interface FreeChatModelChoice {
@@ -67,6 +70,7 @@ export type FreeChatFrame =
   | { type: 'searching'; query: string }
   | { type: 'sources'; sources: FreeChatSource[] }
   | { type: 'notice'; text: string }
+  | { type: 'archived_candidates'; candidates: ArchivedWorkCandidate[] }
   | { type: 'done'; message: FreeChatMessage; session: FreeChatSession }
   | { type: 'error'; message: string }
 

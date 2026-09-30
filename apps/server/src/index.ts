@@ -47,6 +47,7 @@ export {
   type ChannelsAssembly,
   type ChannelsOptions,
   createChannels,
+  deadLetterToRequeue,
   forDisplay,
   type MailPollReport,
   OUTBOUND_HALTED,

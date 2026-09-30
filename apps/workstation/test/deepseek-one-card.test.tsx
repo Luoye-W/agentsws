@@ -392,8 +392,11 @@ describe('WP152 余额金额格式：只在界面上格式化', () => {
     state.providers = [{ ...ACCOUNT_ROW, last_test: OK_TEST }]
     renderWithProviders(<DeepSeekAccountLogin />)
     const balance = await screen.findByTestId('dsa-balance')
-    expect(balance.textContent).toBe('余额 ¥28.11')
-    expect(balance.textContent).not.toContain('赠送')
+    // WP214：余额是「钱包图标 + 数字」，赠送在 tooltip（`data-hint`）里
+    expect(balance.textContent).toBe('¥28.11')
+    const hint = balance.querySelector('[data-testid="status-icon"]')?.getAttribute('data-hint')
+    expect(hint).toContain('余额')
+    expect(hint).not.toContain('赠送')
   })
 
   it('赠送不为 0：照常列出（也是两位小数），为 0 的那个币种不列', async () => {
@@ -414,6 +417,9 @@ describe('WP152 余额金额格式：只在界面上格式化', () => {
     state.providers = [{ ...ACCOUNT_ROW, last_test: OK_TEST }]
     renderWithProviders(<DeepSeekAccountLogin />)
     const balance = await screen.findByTestId('dsa-balance')
-    expect(balance.textContent).toBe('余额 ¥5.00 · 另有赠送 ¥10.00')
+    expect(balance.textContent).toBe('¥5.00')
+    expect(
+      balance.querySelector('[data-testid="status-icon"]')?.getAttribute('data-hint'),
+    ).toContain('另有赠送 ¥10.00')
   })
 })

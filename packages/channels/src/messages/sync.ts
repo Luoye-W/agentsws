@@ -138,6 +138,11 @@ export interface MailboxSyncOptions {
    * 不在这里另写一份。老调用方不看它也照常工作。
    */
   handoff?(record: MessageRecord, triage: MessageTriage, raw?: RawEmailMessage): Promise<boolean>
+  /**
+   * WP212：留在收件箱（`route: 'inbox'`）的信分拣完之后再递一次——「记住」过岗位的发件人
+   * （63 那三条路之外的岗位）由宿主直接交给那个岗位。出错只 log，不让这封信变成毒消息。
+   */
+  after_triage?(record: MessageRecord, triage: MessageTriage): Promise<void>
   /** 原始 MIME 落受控原始材料区；不给就不落（测试）。 */
   rawStore?: RawStore
   backfill_days?: number
@@ -337,7 +342,14 @@ export class MailboxSync {
     report.triaged += 1
     await store.update(parsed.id, { triage, route: triage.route, labels: triage.labels })
 
-    if (triage.route === 'inbox') return true
+    if (triage.route === 'inbox') {
+      try {
+        await this.opts.after_triage?.(parsed, triage)
+      } catch (e) {
+        this.opts.on_error?.(e)
+      }
+      return true
+    }
     const record = (r: MailboxActionRecord): void => this.opts.on_mailbox_action?.(r)
     // 交接给客服 / 红人那一侧；那边不接就**不挪信**（信留在 INBOX 仍然看得见）
     const accepted = (await this.opts.handoff?.(parsed, triage, raw)) ?? false

@@ -12,7 +12,7 @@
  * - 右栏那一格点一条建议 → **进编辑框**，不是发送。
  */
 import type { MessageLabel, MessageRecord, MessageThreadSummary } from '@agentsws/contracts'
-import { screen, waitFor } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import type { MailAssistantView, MessageAccountView, MessageThreadView } from '@/lib/api'
@@ -153,6 +153,17 @@ vi.mock('@/lib/api', async () => {
   const actual = await vi.importActual<typeof import('@/lib/api')>('@/lib/api')
   return {
     ...actual,
+    // WP212：「没人接的」总览（这几条用例看的是「全部」那一套）
+    getMessageOverview: async () => ({
+      unclaimed: 0,
+      notice: 0,
+      handed: 0,
+      handed_by_position: [],
+      cards_waiting: 0,
+      notice_groups: [],
+      positions: [],
+      taught: { rules: 0, saved: 0, recent: [] },
+    }),
     listMessageAccounts: () => listMessageAccounts(),
     listMessageLabels: () => listMessageLabels(),
     listMessageThreads: (...a: unknown[]) => listMessageThreads(...(a as [])),
@@ -178,7 +189,7 @@ const { MailAssistantPanel, focusMessage, resetMessageFocus } = await import(
 
 describe('消息页（63 §8）', () => {
   it('会话列表：未读是一个点，不是一个红数字', async () => {
-    renderWithProviders(<MessagesPage />)
+    renderWithProviders(<MessagesPage />, '/messages?view=all')
     const row = await screen.findByTestId('messages-thread')
     expect(row.getAttribute('data-unread')).toBe('true')
     expect(screen.getByTestId('messages-unread-dot')).toBeDefined()
@@ -188,7 +199,7 @@ describe('消息页（63 §8）', () => {
 
   it('打开一条会话就标已读；正文进 sandbox iframe，远程图片默认不加载', async () => {
     const user = userEvent.setup()
-    renderWithProviders(<MessagesPage />)
+    renderWithProviders(<MessagesPage />, '/messages?view=all')
     await user.click(await screen.findByTestId('messages-thread'))
     await waitFor(() => {
       expect(setMessageFlags).toHaveBeenCalledWith('msg_1', { read: true })
@@ -209,7 +220,7 @@ describe('消息页（63 §8）', () => {
 
   it('「删除」打出去的是"移到垃圾箱"——没有第二种去处（63 §7）', async () => {
     const user = userEvent.setup()
-    renderWithProviders(<MessagesPage />)
+    renderWithProviders(<MessagesPage />, '/messages?view=all')
     await user.click(await screen.findByTestId('messages-thread'))
     await user.click(await screen.findByTestId('messages-delete'))
     // WP204：删除先问一句
@@ -221,7 +232,7 @@ describe('消息页（63 §8）', () => {
 
   it('回复框里收件人来自被回的那封，发送打的是 /v1/messages/send（不出卡）', async () => {
     const user = userEvent.setup()
-    renderWithProviders(<MessagesPage />)
+    renderWithProviders(<MessagesPage />, '/messages?view=all')
     await user.click(await screen.findByTestId('messages-thread'))
     await user.click(await screen.findByTestId('messages-reply'))
     const to = await screen.findByTestId('composer-to')
@@ -252,7 +263,7 @@ describe('消息页（63 §8）', () => {
       },
     })
     const user = userEvent.setup()
-    renderWithProviders(<MessagesPage />)
+    renderWithProviders(<MessagesPage />, '/messages?view=all')
     await user.click(await screen.findByTestId('messages-thread'))
     const band = await screen.findByTestId('messages-agent-band')
     expect(band.getAttribute('data-state')).toBe('working')
@@ -270,13 +281,13 @@ describe('消息页（63 §8）', () => {
 
   it('一只邮箱都没连：照实说，并指向连接页（不新增凭据入口）', async () => {
     listMessageAccounts.mockResolvedValueOnce({ accounts: [] })
-    renderWithProviders(<MessagesPage />)
+    renderWithProviders(<MessagesPage />, '/messages?view=all')
     expect(await screen.findByTestId('messages-no-mailbox')).toBeDefined()
     expect(screen.getByTestId('messages-connect').getAttribute('href')).toContain('/connections')
   })
 
   it('WP163：没邮箱动作失败时不出那一行；有就一眼看见，问号里说是哪只邮箱、为什么', async () => {
-    const { unmount } = renderWithProviders(<MessagesPage />)
+    const { unmount } = renderWithProviders(<MessagesPage />, '/messages?view=all')
     await screen.findByTestId('messages-thread')
     expect(screen.queryByTestId('messages-mailbox-failure')).toBeNull()
     unmount()
@@ -294,7 +305,7 @@ describe('消息页（63 §8）', () => {
         },
       ],
     })
-    renderWithProviders(<MessagesPage />)
+    renderWithProviders(<MessagesPage />, '/messages?view=all')
     const line = await screen.findByTestId('messages-mailbox-failure')
     expect(line.textContent).toContain('客服信没挪进客服文件夹')
     expect(line.getAttribute('data-reason')).toBe('server_refused')
@@ -305,7 +316,7 @@ describe('消息页（63 §8）', () => {
 
   it('搜索与文件夹切换都打到同一条列表接口上', async () => {
     const user = userEvent.setup()
-    renderWithProviders(<MessagesPage />)
+    renderWithProviders(<MessagesPage />, '/messages?view=all')
     await screen.findByTestId('messages-thread')
     await user.click(screen.getByTestId('messages-search'))
     await user.keyboard('包裹')
@@ -352,6 +363,80 @@ describe('第三栏 mail-assistant（63 §8）', () => {
   })
 })
 
+describe('WP208：邮件助手搬进消息页的阅读区', () => {
+  it('没打开信时没有这一块；打开一封信就在阅读区里出「AI 助手」：分拣结果 + 摘要与建议，可收起', async () => {
+    // 标已读之后列表会重取一次：整条测试都回带分拣结果的那一份，结束时还原
+    const original = threadView.getMockImplementation()
+    threadView.mockImplementation(async () => ({
+      thread_id: '<t1@x>',
+      subject: '包裹破了',
+      messages: [
+        message({
+          triage: {
+            route: 'support',
+            labels: ['orders'],
+            needs_reply: true,
+            priority: 'high',
+            summary: '要退款',
+            confidence: 0.9,
+            by: 'rule',
+            reasons: ['In-Reply-To 命中客服线程'],
+            at: T0,
+          },
+        }),
+      ],
+    }))
+    const user = userEvent.setup()
+    renderWithProviders(<MessagesPage />, '/messages?view=all')
+    await screen.findByTestId('messages-thread')
+    expect(screen.queryByTestId('mail-ai')).toBeNull()
+
+    await user.click(screen.getByTestId('messages-thread'))
+    const block = await screen.findByTestId('mail-ai')
+    // 在阅读区里（不在第三栏）
+    expect(screen.getByTestId('messages-reader').contains(block)).toBe(true)
+    const triage = within(block).getByTestId('mail-ai-triage')
+    expect(triage.getAttribute('data-route')).toBe('support')
+    expect(triage.textContent).toContain('归客服')
+    expect(triage.textContent).toContain('要紧')
+    // 为什么这么分进问号
+    expect(within(block).getByTestId('mail-ai-triage-why').getAttribute('data-hint')).toContain(
+      'In-Reply-To 命中客服线程',
+    )
+    expect(await within(block).findByText('客户说包裹破损要退款')).toBeDefined()
+
+    // 点一条建议 → 进写信框（不是发送）
+    await user.click(within(block).getAllByTestId('rail-mail-suggestion')[0] as HTMLElement)
+    expect(await screen.findByTestId('composer')).toBeDefined()
+    expect(sendMessage).not.toHaveBeenCalled()
+
+    // 收起：分拣那一行还在，摘要与建议那一段不在了
+    await user.click(within(block).getByTestId('mail-ai-toggle'))
+    expect(block.getAttribute('data-open')).toBe('false')
+    expect(within(block).queryByTestId('rail-mail-assistant')).toBeNull()
+    expect(within(block).getByTestId('mail-ai-triage')).toBeDefined()
+    await user.click(within(block).getByTestId('mail-ai-toggle'))
+    expect(block.getAttribute('data-open')).toBe('true')
+    if (original !== undefined) threadView.mockImplementation(original)
+  })
+})
+
+describe('WP208 × WP204：助手出错不连累阅读区', () => {
+  it('助手那边回了个坏形状：只折它自己那一块，回复按钮照常能用', async () => {
+    const original = getMailAssistant.getMockImplementation()
+    getMailAssistant.mockImplementation(async () => ({ suggestions: [] }) as never)
+    const quiet = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const user = userEvent.setup()
+    renderWithProviders(<MessagesPage />, '/messages?view=all')
+    await user.click(await screen.findByTestId('messages-thread'))
+    expect(await screen.findByTestId('mail-ai-failed')).toBeDefined()
+    await user.click(screen.getByTestId('messages-reply'))
+    expect(await screen.findByTestId('composer')).toBeDefined()
+    quiet.mockRestore()
+    if (original !== undefined) getMailAssistant.mockImplementation(original)
+  })
+})
+
 describe('WP167：「待确认」那一栏', () => {
   it('左栏有一格「待确认」（有信时亮一个点）；点开只列拿不准的信，「这是客服 / 不是」各打一次人工分拣', async () => {
     listMessageThreads.mockImplementation(async (query?: string) =>
@@ -364,7 +449,7 @@ describe('WP167：「待确认」那一栏', () => {
         : { threads: [summary()] },
     )
     const user = userEvent.setup()
-    renderWithProviders(<MessagesPage />)
+    renderWithProviders(<MessagesPage />, '/messages?view=all')
     await user.click(await screen.findByTestId('messages-pending'))
     expect(await screen.findByTestId('messages-pending-dot')).toBeDefined()
     // 列表那一条请求带的是 pending_route，不带文件夹
@@ -406,7 +491,7 @@ describe('WP172：「待确认」里的「这是 B2B」', () => {
       handed_off: false,
     }))
     const user = userEvent.setup()
-    renderWithProviders(<MessagesPage />)
+    renderWithProviders(<MessagesPage />, '/messages?view=all')
     await user.click(await screen.findByTestId('messages-pending'))
     const yes = await screen.findByTestId('messages-pending-yes')
     expect(yes.textContent).toBe('这是 B2B')

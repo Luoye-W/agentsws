@@ -287,7 +287,8 @@ vi.mock('@/lib/api', async () => {
     },
     testModelProvider: async (id: string) => {
       tested.push(id)
-      return state.testResult
+      // 服务端在测的那一刻盖时间戳（WP214：「刚测完两分钟」按它算）
+      return { ...state.testResult, checked_at: new Date().toISOString() }
     },
     discoverModelProviderModels: async (id: string, input: Record<string, unknown>) => {
       discovered.push({ id, input })

@@ -109,7 +109,7 @@
     "packages/roles/roles/social/x.yml",
     "packages/roles/roles/social/youtube.yml"
   ],
-  "source_digest": "dc53a50921aef0935483e8d25b805edb",
+  "source_digest": "817aba3709373a4381d957240a649064",
   "objects": [
     {
       "id": "ad",
@@ -2955,6 +2955,12 @@
           "type": "Iso8601",
           "sensitivity": "internal",
           "optional": true
+        },
+        {
+          "name": "archived_at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": true
         }
       ],
       "read_via": [],
@@ -5414,6 +5420,12 @@
         },
         {
           "name": "closed_at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "archived_at",
           "type": "Iso8601",
           "sensitivity": "internal",
           "optional": true

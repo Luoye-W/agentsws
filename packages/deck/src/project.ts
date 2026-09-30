@@ -786,7 +786,22 @@ export function projectCard(item: ApprovalItem, ctx: ProjectContext): DeckCard {
     snooze_count: ctx.snoozeCount?.(item) ?? (item.state === 'deferred' ? 1 : 0),
     merge_count: 1,
     version: item.revision,
+    ...originalOf(item),
   }
+}
+
+/**
+ * WP212：卡来自哪段消息往来（「看原件 →」）。聊天窗实时会话的线程（`chat-thread:`）不在消息库里，
+ * 不给——给了只会跳到一个"这封信不在了"。
+ */
+function originalOf(item: ApprovalItem): { original?: { thread_id: string } } {
+  const object = item.subject.object
+  const thread =
+    object.type === 'thread'
+      ? object.id
+      : item.evidence.provenance?.seen?.find((r) => r.type === 'thread')?.id
+  if (thread === undefined || thread === '' || thread.startsWith('chat-thread:')) return {}
+  return { original: { thread_id: thread } }
 }
 
 /** 14 §8「今天队列预计 X 分钟」。 */

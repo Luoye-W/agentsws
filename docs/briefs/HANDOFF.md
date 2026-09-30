@@ -101,12 +101,14 @@
 | 76 | WP200 品牌标记两处小调（浅色主题光调淡、README 标记动起来） | `WP200-brand-tweaks.md` | `wp200-brand-tweaks` · `wp/200-brand-tweaks` | WP195 | 已合并 |
 | 77 | WP204 消息页按钮逐个过一遍并修好（显示图片、删除等没反应） | `WP204-messages-buttons.md` | `wp204-msg-buttons` · `wp/204-msg-buttons` | WP63 | 已合并 |
 | 78 | WP205 以 AI 为核心的消息中心：调研 + 设计稿（统一入口、AI 标签与分拣、两个展示方向） | `WP205-ai-inbox-design.md` | `wp205-inbox-design` · `wp/205-inbox-design` | WP167 | 已合并（待定方向） |
-| 79 | WP207 左栏三级「+」（加岗位 / 加职责 / 开新对话）、职责下挂进行中对话、3 天自动归档、归档可搜可让 AI 找回 | `WP207-sidebar-plus-and-archive.md` | `wp207-sidebar` · `wp/207-sidebar` | WP202 | 进行中（Claude） |
-| 80 | WP208 右侧第三栏收拾：五个设定合一、邮件助手进消息页、设计规范进公司 → 品牌、教程跟上下文、定时任务带数字 | `WP208-right-rail-tidy.md` | `wp208-rail` · `wp/208-rail` | WP207 | 进行中（Claude） |
-| 81 | WP209 技能页按岗位分组、知识库按类型 / 品牌分组，小卡 + 点开看细节、搜索与筛选 | `WP209-skills-knowledge-grouping.md` | `wp209-library` · `wp/209-library` | WP208 | 进行中（Claude） |
-| 82 | WP210 连接页 / 消息渠道页收拾：少字、已连上卡以账号为标题、失败邮件自动重投、图标取各官网 favicon | `WP210-connections-tidy.md` | `wp210-connections` · `wp/210-connections` | WP157 | 进行中（Claude） |
+| 79 | WP207 左栏三级「+」（加岗位 / 加职责 / 开新对话）、职责下挂进行中对话、3 天自动归档、归档可搜可让 AI 找回 | `WP207-sidebar-plus-and-archive.md` | `wp207-sidebar` · `wp/207-sidebar` | WP202 | 已合并 |
+| 80 | WP208 右侧第三栏收拾：五个设定合一、邮件助手进消息页、设计规范进公司 → 品牌、教程跟上下文、定时任务带数字 | `WP208-right-rail-tidy.md` | `wp208-rail` · `wp/208-rail` | WP207 | 已合并 |
+| 81 | WP209 技能页按岗位分组、知识库按类型 / 品牌分组，小卡 + 点开看细节、搜索与筛选 | `WP209-skills-knowledge-grouping.md` | `wp209-library` · `wp/209-library` | WP208 | 已合并 |
+| 82 | WP210 连接页 / 消息渠道页收拾：少字、已连上卡以账号为标题、失败邮件自动重投、图标取各官网 favicon | `WP210-connections-tidy.md` | `wp210-connections` · `wp/210-connections` | WP157 | 已合并 |
 | 83 | WP211 消息渠道接入飞书与钉钉（官方优先，长连接 / Stream，不需公网回调） | `WP211-feishu-dingtalk.md` | `wp211-feishu-dingtalk` · `wp/211-feishu-dingtalk` | WP63 | 已合并 |
-| 84 | WP213 岗位与职责图标专门画一套（先出两种画风预览：线描 / 品牌块面；渠道类职责加平台 favicon 角标） | `WP213-position-duty-icons.md` | `wp213-icons` · `wp/213-icons` | WP210 | 进行中（Claude） |
+| 84 | WP213 岗位与职责图标专门画一套（先出两种画风预览：线描 / 品牌块面；渠道类职责加平台 favicon 角标） | `WP213-position-duty-icons.md` | `wp213-icons` · `wp/213-icons` | WP210 | 已合并 |
+| 85 | WP212 消息页第 1、2 步：分拣加「类型」与改判；「没人接的」主视图 + 交给岗位；AI 助手改兜底 | `WP212-inbox-step1-2.md` | `wp212-inbox` · `wp/212-inbox` | WP205b | 已合并 |
+| 86 | WP214 状态用图标、说明只在第一次：模型设置页先改，全工作台状态文字扫一遍（StatusIcons 组件） | `WP214-status-icons.md` | `wp214-status-icons` · `wp/214-status-icons` | WP210 | 已合并 |
 
 WP117b 的补充要求（派工单里没有，写在这）：demo 服务的是 `apps/workstation/dist`，测界面前先 `pnpm -F @agentsws/workstation exec vite build`；交付一个真实点击的 playwright 脚本 `scripts/e2e-kol-sandbox.mjs`（playwright 库在 `node_modules/.pnpm/playwright@1.63.0/node_modules/playwright`），走完「选合成红人 → 起草开发信 → 批准发送 → 已发 ≥ 1 → 跳到 N 天后 → 回信 ≥ 1 → 分类 → 议价卡 → 阶段推进 → 交付物 → 追踪链接」，每步截图到 `docs/assets/workstation/kol-e2e-NN.png`，脚本里断言计数确实变了；演练数据从真实漏斗 / 归因里排除，单独显示「演练漏斗」。
 

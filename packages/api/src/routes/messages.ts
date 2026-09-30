@@ -20,6 +20,8 @@
 import type {
   MaybePromise,
   MessageBackfillInput,
+  MessageClaim,
+  MessageClaimInput,
   MessageConfirmRouteInput,
   MessageConfirmRouteResult,
   MessageDraft,
@@ -27,12 +29,17 @@ import type {
   MessageFlagsInput,
   MessageFolder,
   MessageImagesReport,
+  MessageKind,
+  MessageKindInput,
   MessageLabel,
   MessageListQuery,
   MessageMoveInput,
+  MessageNoticeAckInput,
+  MessageOverview,
   MessageRecord,
   MessageSendInput,
   MessageSendResult,
+  MessageSuggest,
   MessageSyncReport,
   MessageThreadSummary,
   MessageWriteback,
@@ -112,6 +119,18 @@ export interface MessageThreadView {
     /** "我来接手"要打给谁（现有 takeover 那条路）。 */
     takeover_matter_id?: string
   }
+  /** WP212：这条会话现在归谁（没人接 / 只是通知 / 已交出去；服务端派生，docs/88 §3.1）。 */
+  claim?: MessageClaim
+  /** WP212：三个建议作用在哪一封上。 */
+  claim_message_id?: string
+  /** WP212：交给了谁（岗位模板 id，或 `'me'` / `'notice'`）。 */
+  handed_to?: string
+  /** WP212：卡片流里还有几张卡等你批、跳过去的链接（「X 在办 · 有 N 张卡等你 →」）。 */
+  open_card_count?: number
+  card_link?: string
+  /** WP212：没人接时 AI 挑的主按钮。 */
+  suggest?: MessageSuggest
+  kind?: MessageKind
 }
 
 /** 右栏 `mail-assistant` 那一格要的东西（一次取全，前端不发第二个请求）。 */
@@ -140,6 +159,14 @@ export interface MailAssistantView {
   todos: { id: string; title: string; status: string }[]
   /** 这台机器上有没有可用的模型（没有时界面照实说，而不是显示"生成失败"）。 */
   model_available: boolean
+  /**
+   * WP212（docs/88 §5.1b）：助手是**兜底处理的助手**——只在没人接的信上生成回复建议；
+   * 岗位在办的信（`handed`）不生成（不花 token），界面只挂「X 在办 · 有 N 张卡等你 →」。
+   */
+  claim?: MessageClaim
+  handed_to?: string
+  open_card_count?: number
+  card_link?: string
 }
 
 export interface MessagesPort {
@@ -218,6 +245,26 @@ export interface MessagesPort {
   /** 「转成待办」。 */
   toTodo(actor: MessageActor, id: string): MaybePromise<{ todo: Todo }>
 
+  /** WP212：「没人接的」顶上那一行、「只是通知」几捆、「你教过它」（一次取全）。 */
+  overview?(actor: MessageActor): MaybePromise<MessageOverview>
+  /** WP212：改判类型；勾「以后都这样」写发件人规则，不勾进学习回路。 */
+  setKind?(
+    actor: MessageActor,
+    id: string,
+    input: MessageKindInput,
+  ): MaybePromise<{ message: MessageRecord; rule?: SenderRule }>
+  /** WP212：「只是通知」/「我自己处理」/ 撤销（`none`）。 */
+  claim?(
+    actor: MessageActor,
+    id: string,
+    input: MessageClaimInput,
+  ): MaybePromise<{ message: MessageRecord; writeback?: MessageWriteback }>
+  /** WP212：「只是通知」整捆「知道了」。 */
+  ackNotices?(
+    actor: MessageActor,
+    input: MessageNoticeAckInput,
+  ): MaybePromise<{ acked: number; writeback?: MessageWriteback }>
+
   /** 立刻收一次。 */
   sync(actor: MessageActor): MaybePromise<MessageSyncReport>
   /** 「再往前取」。 */
@@ -257,7 +304,35 @@ const MoveBody = z.object({
   remember_sender: z.boolean().optional(),
 })
 
-const ConfirmRouteBody = z.object({ route: z.enum(['support', 'kol', 'b2b', 'inbox']) })
+const ConfirmRouteBody = z.object({
+  route: z.enum(['support', 'kol', 'b2b', 'inbox', 'position']),
+  // WP212：「交给 X」推广到所有岗位（岗位模板 id）+「以后这个发件人都这样」
+  position_id: z.string().min(1).max(80).optional(),
+  remember_sender: z.boolean().optional(),
+})
+
+const KINDS = [
+  'customer_question',
+  'after_sales',
+  'inquiry',
+  'creator_reply',
+  'partnership',
+  'media',
+  'billing_system',
+  'logistics',
+  'marketing',
+  'personal_other',
+] as const satisfies readonly MessageKind[]
+
+const KindBody = z.object({ kind: z.enum(KINDS), remember_sender: z.boolean().optional() })
+
+const ClaimBody = z.object({ as: z.enum(['notice', 'me', 'none']) })
+
+const NoticeAckBody = z.object({
+  kind: z.enum(KINDS).optional(),
+  suspicious: z.boolean().optional(),
+  thread_ids: z.array(z.string().min(1).max(400)).max(500).optional(),
+})
 
 const LabelsBody = z.object({ labels: z.array(z.string().min(1).max(64)).max(20) })
 
@@ -324,6 +399,9 @@ function queryOf(c: Parameters<typeof principalOf>[0]): MessageListQuery {
     ...(q('starred') === 'true' ? { starred: true } : {}),
     ...(q('q') === undefined ? {} : { q: q('q') as string }),
     ...(q('pending_route') === 'true' ? { pending_route: true } : {}),
+    ...(q('claim') === 'unclaimed' || q('claim') === 'notice'
+      ? { claim: q('claim') as 'unclaimed' | 'notice' }
+      : {}),
     ...(intParam(c, 'limit') === undefined ? {} : { limit: intParam(c, 'limit') as number }),
   }
 }
@@ -345,6 +423,12 @@ const LIST_PARAMS = [
     name: 'pending_route',
     in: 'query' as const,
     description: '`true` = 只看「待确认」：分拣判不准、没开事项、等人点「这是客服」的那几封',
+  },
+  {
+    name: 'claim',
+    in: 'query' as const,
+    description:
+      '`unclaimed` = 只看「没人接的」（消息页默认视图）；`notice` = 只看「只是通知」那几捆（WP212）',
   },
   {
     name: 'limit',
@@ -369,6 +453,53 @@ export function messageRoutes(): Route[] {
         returns: '{ accounts: MessageAccountView[] }',
       },
       async (c, deps) => ok(c, await portOf(deps).accounts(actorOf(c))),
+    ),
+    route(
+      {
+        method: 'get',
+        path: '/v1/messages/overview',
+        operationId: 'getMessageOverview',
+        summary:
+          '「没人接的」顶上那一行（已交给岗位 N · 卡片流里 N 张等你批）、「只是通知」几捆、「你教过它」（WP212）',
+        tag: 'messages',
+        auth: 'bearer',
+        assignment: true,
+        authz: READ,
+        returns: 'MessageOverview',
+      },
+      async (c, deps) => {
+        const port = portOf(deps)
+        if (port.overview === undefined)
+          throw new ApiError('not_implemented', '这个服务进程的消息面还没有「没人接的」总览')
+        return ok(c, await port.overview(actorOf(c)))
+      },
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/messages/notices/ack',
+        operationId: 'ackMessageNotices',
+        summary:
+          '「只是通知」整捆「知道了」：按类型一捆（或可疑那一捆、或点名几条）；标已读跟随「客信怎么动邮箱」开关（WP212）',
+        tag: 'messages',
+        auth: 'bearer',
+        assignment: true,
+        authz: WRITE,
+        body: NoticeAckBody,
+        returns: '{ acked: number; writeback?: MessageWriteback }',
+      },
+      async (c, deps) => {
+        const port = portOf(deps)
+        if (port.ackNotices === undefined)
+          throw new ApiError('not_implemented', '这个服务进程的消息面还没有「只是通知」')
+        return ok(
+          c,
+          await port.ackNotices(
+            actorOf(c),
+            (await body(c, NoticeAckBody)) as MessageNoticeAckInput,
+          ),
+        )
+      },
     ),
     route(
       {
@@ -627,7 +758,7 @@ export function messageRoutes(): Route[] {
         path: '/v1/messages/:id/confirm-route',
         operationId: 'confirmMessageRoute',
         summary:
-          '「待确认」里人点的那一下（人工分拣，写事件）：「这是客服」交给客服那一路（开事项、起 Run），「不是」只记人的判断',
+          '人工分拣（写事件）：「这是客服」交给客服那一路（开事项、起 Run），「不是」只记人的判断；WP212 起「交给 X」推广到所有岗位（`route: position` + `position_id`）',
         tag: 'messages',
         auth: 'bearer',
         assignment: true,
@@ -645,6 +776,61 @@ export function messageRoutes(): Route[] {
             actorOf(c),
             param(c, 'id'),
             (await body(c, ConfirmRouteBody)) as MessageConfirmRouteInput,
+          ),
+        )
+      },
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/messages/:id/kind',
+        operationId: 'setMessageKind',
+        summary:
+          '改判类型（类型胶囊上的 ✎）；`remember_sender` = 以后这个发件人都这样（写发件人规则，下次不花模型）（WP212）',
+        tag: 'messages',
+        auth: 'bearer',
+        assignment: true,
+        authz: WRITE,
+        body: KindBody,
+        returns: '{ message: MessageRecord; rule?: SenderRule }',
+      },
+      async (c, deps) => {
+        const port = portOf(deps)
+        if (port.setKind === undefined)
+          throw new ApiError('not_implemented', '这个服务进程的消息面还不能改判类型')
+        return ok(
+          c,
+          await port.setKind(
+            actorOf(c),
+            param(c, 'id'),
+            (await body(c, KindBody)) as MessageKindInput,
+          ),
+        )
+      },
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/messages/:id/claim',
+        operationId: 'claimMessage',
+        summary: '「只是通知」/「我自己处理」/ 撤销（`none`）——从「没人接的」里拿掉或放回（WP212）',
+        tag: 'messages',
+        auth: 'bearer',
+        assignment: true,
+        authz: WRITE,
+        body: ClaimBody,
+        returns: '{ message: MessageRecord; writeback?: MessageWriteback }',
+      },
+      async (c, deps) => {
+        const port = portOf(deps)
+        if (port.claim === undefined)
+          throw new ApiError('not_implemented', '这个服务进程的消息面还没有「没人接的」')
+        return ok(
+          c,
+          await port.claim(
+            actorOf(c),
+            param(c, 'id'),
+            (await body(c, ClaimBody)) as MessageClaimInput,
           ),
         )
       },

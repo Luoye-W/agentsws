@@ -19,6 +19,7 @@ import type { DeckAction, DeckCard, DeckContentMode, InstructionScope } from '@a
 import { categoryKey } from '@agentsws/deck'
 import { useQuery } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
+import { Link, Navigate, useInRouterContext } from 'react-router-dom'
 import { FactChip } from '@/components/chips'
 import { DeckActionBar } from '@/components/deck/deck-action-bar'
 import { DeckCardBody } from '@/components/deck/deck-card-body'
@@ -247,9 +248,19 @@ export function DeckCardView({
   // WP100：头一行那个类别写人话（"网站运营 · 改价"）；表里没登记的退回枚举名那一版
   const category = categoryOf(card, t)
 
+  /** WP210：按了「去邮箱回复」→ 跳消息页（不在路由里渲染时——例如独立的聊天窗——只记决定）。 */
+  const [goMessages, setGoMessages] = useState(false)
+  const inRouter = useInRouterContext()
   const act = (action: DeckAction): void => {
     if (action === 'open') {
       onOpen(card)
+      return
+    }
+    // WP210：客户来信投不进那张卡上的「去邮箱回复」——不是否定什么，不开写理由的面板：
+    // 直接记一笔「人自己回」，再带人去消息页
+    if (card.kind === 'inbound_dead_letter' && action === 'reject') {
+      onDecide({ action, reason: t('deck.dead_letter.reply_myself'), version: card.version })
+      setGoMessages(true)
       return
     }
     // 不对 / 指导都先就地开面板——卡只有在人真说了句话之后才离开。
@@ -268,6 +279,7 @@ export function DeckCardView({
     <div
       data-testid="deck-card"
       data-kind={card.kind}
+      data-go-messages={goMessages ? 'true' : undefined}
       data-layout={card.layout}
       data-band={card.priority_band}
       className={[
@@ -276,6 +288,7 @@ export function DeckCardView({
         exiting == null ? '' : EXIT_CLASS[exiting],
       ].join(' ')}
     >
+      {goMessages && inRouter ? <Navigate to="/messages" /> : null}
       {/* 37 §2.2b：卡片是指向事项的指针。点它 = 进入那个工作现场。 */}
       {card.matter_id === undefined ? null : (
         <button
@@ -307,6 +320,19 @@ export function DeckCardView({
         </StatusPill>
         <WaitPill card={card} />
         <span className="ml-auto flex items-center gap-2">
+          {/*
+            WP212（docs/88 §2.3）：来自消息往来的卡，证据旁边一个「看原件 →」——跳回消息页
+            「全部」里这条会话。消息页那头只挂「有卡等你 →」，批还是在这里批。
+          */}
+          {card.original === undefined || !inRouter ? null : (
+            <Link
+              to={`/messages?view=all&thread=${encodeURIComponent(card.original.thread_id)}`}
+              data-testid="deck-original-link"
+              className="text-muted-foreground hover:text-foreground hover:underline"
+            >
+              {t('deck.original')} →
+            </Link>
+          )}
           {/*
             右上角那个「证据 N」：点它在第三栏的证据面板里看（WP71 就有那一格）。
             走 WP95 的公开注册路 `show('evidence')`，注册层一个字不碰。

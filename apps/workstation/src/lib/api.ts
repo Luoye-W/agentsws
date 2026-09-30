@@ -27,13 +27,17 @@ import type {
   MeetingOutputs,
   MeetingRecord,
   MeetingRecordSourceKind,
+  MessageClaim,
   MessageDraft,
   MessageFolder,
   MessageFolderKind,
   MessageImagesReport,
+  MessageKind,
   MessageLabel,
+  MessageOverview,
   MessageRecord,
   MessageSendResult,
+  MessageSuggest,
   MessageSyncReport,
   MessageThreadSummary,
   MessageWriteback,
@@ -733,6 +737,9 @@ export interface ScheduledTaskRow {
   created_by?: 'user' | 'agent'
   /** WP181：从哪件事建的（事项 id） */
   origin?: { conversation_id?: string }
+  /** WP208：挂在哪条分配 / 哪条职责上（服务端一直在回，界面现在才用：右栏徽标按它数） */
+  assignment_id?: string
+  role_id?: string
   /** WP181：官方记录（`official`）、等不等批（`awaiting_approval`） */
   params?: Record<string, unknown>
 }
@@ -1395,12 +1402,16 @@ export interface DeadLetterView {
   attempts: number
   last_error?: string
   at: string
+  /** WP210：是不是客户来信（系统 / 营销通知不算）。老服务端不给。 */
+  customer?: boolean
+  /** WP210：系统自动重投到哪一步（`next_at` 下次再试；`gave_up` 不再自动投）。老服务端不给。 */
+  auto_retry?: { rounds: number; gave_up: boolean; next_at?: string }
 }
 
 export const listDeadLetters = (assignment?: string): Promise<{ dead_letters: DeadLetterView[] }> =>
   api<{ dead_letters: DeadLetterView[] }>('/v1/channels/dead-letters', withAssignment(assignment))
 
-/** WP55：重投一条死信。会让这条消息重新起一次 Run，所以是人按的按钮。 */
+/** WP55：重投一条死信（WP210 起平时系统自己按退避投，这个只在诊断页按）。 */
 export const requeueDeadLetter = (
   id: string,
   assignment?: string,
@@ -2878,9 +2889,32 @@ export interface SkillSummary {
   tier: string
   version: string
   excluded: boolean
-  sections: { id: string; heading: string; origin: 'authored' | 'learned' }[]
+  /** WP209：`body` = 这一段现在的正文（搜索用）。 */
+  sections: { id: string; heading: string; origin: 'authored' | 'learned'; body?: string }[]
   overlays: SkillOverlayView[]
   pending_proposals: number
+  /* ── WP209：按岗位分组那几格（只加；老服务进程不回时退回英文 id、归「通用」）── */
+  display_name?: { zh: string; en: string }
+  summary?: { zh: string; en: string }
+  description?: string
+  positions?: SkillPositionRef[]
+  roles?: SkillRoleRef[]
+  in_use?: boolean
+}
+
+/** WP209：技能归属的一个岗位（`common` = 通用）。 */
+export interface SkillPositionRef {
+  id: string
+  name: { zh: string; en: string }
+  mine: boolean
+}
+
+/** WP209：在用这个技能的一条职责。 */
+export interface SkillRoleRef {
+  role_id: string
+  name: { zh: string; en: string }
+  position_ids: string[]
+  mine: boolean
 }
 
 export interface SkillProposalSummary {
@@ -3500,6 +3534,16 @@ export interface KnowledgeCardRow {
   last_verified_at?: string
   media?: string[]
   updated_at: string
+  /* ── WP209：知识库按类型 / 品牌 / 状态 / 来源分组要的几格——服务端本来就回（整张 FactCard），
+     这里只是把它们认下来（只加）。 */
+  domain?: string
+  /** 适用范围：空 = 整个品牌通用；`brand` / `store` / `product_line` / `market` 一格一条。 */
+  scope?: { kind: string; id: string }[]
+  provenance?: { source: string; ref: string; locator?: string }[]
+  created_by?: { kind: 'agent' | 'person'; id: string }
+  conflicts?: { with: string; note: string }[]
+  valid?: { from?: string; until?: string }
+  structured?: Record<string, unknown>
 }
 
 /** 48 §4 #6：源页 / 文档改了、受管辖数值也变了，等人答的那一张。 */
@@ -4562,8 +4606,26 @@ export interface ImStatusView {
     allowed: boolean
     reason?: string
   }
-  wecom: { configured: boolean; connected: boolean; bot_id?: string }
+  wecom: { configured: boolean; connected: boolean; bot_id?: string; me_bound?: boolean }
+  /** WP211：飞书 / 钉钉机器人（团队）。老服务端没有这两格。 */
+  feishu?: ImTeamBotView & { app_id?: string; domain?: 'feishu' | 'lark' }
+  dingtalk?: ImTeamBotView & { client_id?: string }
+  /** WP211：能不能填 / 改 / 断开公司的应用凭据（负责人与公司管理员）。没有这一格按「不能」算。 */
+  can_manage?: boolean
 }
+
+/** WP211：一条团队渠道的状态（不含任何凭据）。 */
+export interface ImTeamBotView {
+  configured: boolean
+  connected: boolean
+  state: 'idle' | 'connecting' | 'connected' | 'reconnecting' | 'failed'
+  /** 连不上时的那句人话。 */
+  error?: string
+  /** 我自己在这条渠道上的账号绑上没有。 */
+  me_bound: boolean
+}
+
+export type ImTeamChannel = 'wecom' | 'feishu' | 'dingtalk'
 
 export interface ImLoginStart {
   login_id: string
@@ -4617,6 +4679,38 @@ export const saveWecomBot = (values: {
   secret: string
 }): Promise<{ configured: boolean; bot_id: string }> =>
   api('/v1/im/wecom', { method: 'PUT', body: values })
+
+/* ── WP211：飞书 / 钉钉（公司的）与「绑定我的账号」 ─────────────────────── */
+
+/** 飞书应用的 App ID + App Secret（同上：原生表单收，提交完 reset，不进 state）。 */
+export const saveFeishuBot = (values: {
+  app_id: string
+  app_secret: string
+  domain?: 'feishu' | 'lark'
+}): Promise<{ configured: boolean; app_id: string }> =>
+  api('/v1/im/feishu', { method: 'PUT', body: values })
+
+/** 断开 = 销毁本机那份 App Secret。 */
+export const removeFeishuBot = (): Promise<{ removed: boolean }> =>
+  api('/v1/im/feishu', { method: 'DELETE' })
+
+/** 钉钉应用的 Client ID + Client Secret。 */
+export const saveDingtalkBot = (values: {
+  client_id: string
+  client_secret: string
+}): Promise<{ configured: boolean; client_id: string }> =>
+  api('/v1/im/dingtalk', { method: 'PUT', body: values })
+
+export const removeDingtalkBot = (): Promise<{ removed: boolean }> =>
+  api('/v1/im/dingtalk', { method: 'DELETE' })
+
+/** 拿一个 6 位绑定码（10 分钟有效、只能用一次），私聊机器人发「绑定 123456」。 */
+export const issueImBindCode = (): Promise<{ code: string; expires_at: string }> =>
+  api('/v1/im/bind-code', { method: 'POST' })
+
+/** 解绑我在这条渠道上的聊天账号。 */
+export const unbindImAccount = (channel: ImTeamChannel): Promise<{ removed: number }> =>
+  api(`/v1/im/bind/${channel}`, { method: 'DELETE' })
 
 /* ── WP73（56 §6）：社媒库 `/v1/social/*` ───────────────────────────────── */
 
@@ -5109,6 +5203,16 @@ export interface MessageThreadView {
     href?: string
     takeover_matter_id?: string
   }
+  /** WP212：这条会话归谁（没人接 / 只是通知 / 已交出去；服务端派生）。 */
+  claim?: MessageClaim
+  claim_message_id?: string
+  /** WP212：交给了谁（岗位模板 id，或 `me` / `notice`）。 */
+  handed_to?: string
+  /** WP212：卡片流里还有几张卡等你批、跳过去的链接。 */
+  open_card_count?: number
+  card_link?: string
+  suggest?: MessageSuggest
+  kind?: MessageKind
 }
 
 /** 右栏 `mail-assistant` 那一格（一次取全，前端不发第二个请求）。 */
@@ -5131,6 +5235,11 @@ export interface MailAssistantView {
   }
   todos: { id: string; title: string; status: string }[]
   model_available: boolean
+  /** WP212：兜底助手——岗位在办的（`handed`）不生成建议，只挂「X 在办 · 有 N 张卡等你 →」。 */
+  claim?: MessageClaim
+  handed_to?: string
+  open_card_count?: number
+  card_link?: string
 }
 
 /** 会话列表的查询串（筛选、搜索、多邮箱都走它）。 */
@@ -5144,6 +5253,8 @@ export function messageQuery(q: {
   q?: string
   /** WP167：只看「待确认」。 */
   pending_route?: boolean
+  /** WP212：只看「没人接的」/「只是通知」。 */
+  claim?: 'unclaimed' | 'notice'
   limit?: number
 }): string {
   const params = new URLSearchParams()
@@ -5192,6 +5303,56 @@ export const confirmMessageRoute = (
     method: 'POST',
     body: { route },
   })
+
+/**
+ * WP212：「交给 X」——推广到所有岗位（岗位模板 id）。客服 / 红人 / B2B 走 63 的老路，
+ * 其余走 54 的「交给这个岗位一件事」。交不出去时 `handed_off: false` + 一句人话。
+ */
+export const handMessageToPosition = (
+  id: string,
+  position_id: string,
+  remember_sender: boolean,
+): Promise<{
+  message: MessageRecord
+  handed_off: boolean
+  matter_id?: string
+  position_id?: string
+  refused?: string
+  rule?: SenderRule
+}> =>
+  api(`/v1/messages/${encodeURIComponent(id)}/confirm-route`, {
+    method: 'POST',
+    body: { route: 'position', position_id, remember_sender },
+  })
+
+/** WP212：改判类型（✎）；`remember_sender` = 以后这个发件人都这样。 */
+export const setMessageKind = (
+  id: string,
+  kind: MessageKind,
+  remember_sender: boolean,
+): Promise<{ message: MessageRecord; rule?: SenderRule }> =>
+  api(`/v1/messages/${encodeURIComponent(id)}/kind`, {
+    method: 'POST',
+    body: { kind, remember_sender },
+  })
+
+/** WP212：「只是通知」/「我自己处理」/ 撤销。 */
+export const claimMessage = (
+  id: string,
+  as: 'notice' | 'me' | 'none',
+): Promise<{ message: MessageRecord; writeback?: MessageWriteback }> =>
+  api(`/v1/messages/${encodeURIComponent(id)}/claim`, { method: 'POST', body: { as } })
+
+/** WP212：「只是通知」整捆「知道了」。 */
+export const ackMessageNotices = (input: {
+  kind?: MessageKind
+  suspicious?: boolean
+  thread_ids?: string[]
+}): Promise<{ acked: number; writeback?: MessageWriteback }> =>
+  api('/v1/messages/notices/ack', { method: 'POST', body: input })
+
+/** WP212：「没人接的」顶上那一行、只是通知几捆、你教过它。 */
+export const getMessageOverview = (): Promise<MessageOverview> => api('/v1/messages/overview')
 
 export const setMessageLabels = (
   id: string,

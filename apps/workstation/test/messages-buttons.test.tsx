@@ -132,6 +132,17 @@ vi.mock('@/lib/api', async () => {
   const actual = await vi.importActual<typeof import('@/lib/api')>('@/lib/api')
   return {
     ...actual,
+    // WP212：「没人接的」总览（这几条用例看的是「全部」那一套）
+    getMessageOverview: async () => ({
+      unclaimed: 0,
+      notice: 0,
+      handed: 0,
+      handed_by_position: [],
+      cards_waiting: 0,
+      notice_groups: [],
+      positions: [],
+      taught: { rules: 0, saved: 0, recent: [] },
+    }),
     listMessageAccounts: () => api.listMessageAccounts(),
     listMessageLabels: async () => ({ labels: [] }),
     listMessageThreads: (q?: string) => api.listMessageThreads(q),
@@ -146,7 +157,16 @@ vi.mock('@/lib/api', async () => {
       api.downloadMessageAttachment(id, a, n),
     saveMessageDraft: async () => ({ draft: { id: 'dft_1' } }),
     discardMessageDraft: async () => ({ deleted: true }),
-    getMailAssistant: async () => ({ suggestions: [] }),
+    // WP208：邮件助手搬进了阅读区（看信就挂载），替身要给全形状——半个对象会让整页渲染炸掉
+    getMailAssistant: async (id: string) => ({
+      message_id: id,
+      summary: '',
+      needs_reply: false,
+      suggestions: [],
+      sender: { address: 'someone@example.test', history_count: 0, linked: [] },
+      todos: [],
+      model_available: false,
+    }),
   }
 })
 
@@ -154,7 +174,7 @@ const { MessagesPage } = await import('@/pages/messages')
 
 const openFirst = async (): Promise<ReturnType<typeof userEvent.setup>> => {
   const user = userEvent.setup()
-  renderWithProviders(<MessagesPage />)
+  renderWithProviders(<MessagesPage />, '/messages?view=all')
   await user.click((await screen.findAllByTestId('messages-thread'))[0] as HTMLElement)
   await screen.findAllByTestId('messages-message')
   return user
@@ -354,7 +374,7 @@ describe('WP204：阅读区的按钮', () => {
 describe('WP204：列表、侧栏与键盘', () => {
   it('刷新：收到几封说几封；没新信说已是最新；有邮箱没收成说是哪只；失败说人话', async () => {
     const user = userEvent.setup()
-    renderWithProviders(<MessagesPage />)
+    renderWithProviders(<MessagesPage />, '/messages?view=all')
     await screen.findAllByTestId('messages-thread')
     await user.click(screen.getByTestId('messages-sync'))
     expect((await notice()).textContent).toContain('收到 3 封新信')
@@ -391,7 +411,7 @@ describe('WP204：列表、侧栏与键盘', () => {
 
   it('搜索：跨全部文件夹（不带 folder_kind），标一句"在全部文件夹里搜"；点文件夹退出搜索', async () => {
     const user = userEvent.setup()
-    renderWithProviders(<MessagesPage />)
+    renderWithProviders(<MessagesPage />, '/messages?view=all')
     await screen.findAllByTestId('messages-thread')
     await user.type(screen.getByTestId('messages-search'), '发票')
     await waitFor(() => {
@@ -411,7 +431,7 @@ describe('WP204：列表、侧栏与键盘', () => {
 
   it('列表项切换：点第二条打开第二条；已读的不再标一次', async () => {
     const user = userEvent.setup()
-    renderWithProviders(<MessagesPage />)
+    renderWithProviders(<MessagesPage />, '/messages?view=all')
     const rows = await screen.findAllByTestId('messages-thread')
     await user.click(rows[1] as HTMLElement)
     await waitFor(() => {
@@ -423,14 +443,14 @@ describe('WP204：列表、侧栏与键盘', () => {
 
   it('再往前取：说取到了哪一天', async () => {
     const user = userEvent.setup()
-    renderWithProviders(<MessagesPage />)
+    renderWithProviders(<MessagesPage />, '/messages?view=all')
     await screen.findAllByTestId('messages-thread')
     await user.click(screen.getByTestId('messages-backfill'))
     expect((await notice()).textContent).toContain('已往前取到')
   })
 
   it('键盘：j 打开第一条（不再跳过）、e 归档、r 回复（写信框开着时不重开）、/ 聚焦搜索', async () => {
-    renderWithProviders(<MessagesPage />)
+    renderWithProviders(<MessagesPage />, '/messages?view=all')
     await screen.findAllByTestId('messages-thread')
     fireEvent.keyDown(window, { key: 'j' })
     await waitFor(() => {

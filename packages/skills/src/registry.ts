@@ -514,6 +514,23 @@ export class MemorySkillRegistry {
     return []
   }
 
+  /**
+   * WP209：这个技能的 frontmatter（按层从近到远取第一份有记录的）。
+   *
+   * 技能页要的是「给人看的名字 / 一句话 / 归哪个岗位」这几格（`display_name`、`summary`、
+   * `positions`），它们只在 frontmatter 里；没从 markdown 入库过的（直接 `put` 的）回 undefined。
+   */
+  frontmatterOf(name: string): Frontmatter | undefined {
+    for (const tier of [...TIER_ORDER].reverse()) {
+      for (const [key, skill] of this.#skills) {
+        if (skill.name !== name || skill.tier !== tier) continue
+        const fm = this.#frontmatter.get(key)
+        if (fm !== undefined) return { ...fm, extra: { ...fm.extra }, order: [...fm.order] }
+      }
+    }
+    return undefined
+  }
+
   /** 库里有哪些技能（跨层去重）。工作台技能页要列它们。 */
   listSkillNames(): string[] {
     return [...new Set([...this.#skills.values()].map((s) => s.name))].sort()

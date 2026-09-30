@@ -17,6 +17,7 @@
 
 import type {
   Clock,
+  MessageCorrection,
   MessageDraft,
   MessageFolder,
   MessageLabel,
@@ -29,7 +30,7 @@ import type { Database as Db } from 'better-sqlite3'
 import Database from 'better-sqlite3'
 import { type Migration, migrate, schemaVersion } from '../migrations.js'
 import { BUILTIN_LABELS } from './labels.js'
-import { aggregateThreads, byNewest, matchesQuery } from './query.js'
+import { aggregateThreads, byNewest, matchesClaim, matchesQuery } from './query.js'
 import type { MessagePatch, MessageStore } from './store.js'
 
 export const MESSAGE_MIGRATIONS: readonly Migration[] = [
@@ -80,6 +81,18 @@ CREATE TABLE IF NOT EXISTS message_drafts (
 CREATE TABLE IF NOT EXISTS message_trusted_senders (
   email TEXT PRIMARY KEY NOT NULL
 ) STRICT;
+`,
+  },
+  {
+    // WP212：改判 / 交给别的岗位——「你教过它」里看得见，也进学习回路
+    version: 2,
+    sql: `
+CREATE TABLE IF NOT EXISTS message_corrections (
+  id    TEXT PRIMARY KEY NOT NULL,
+  at_ms INTEGER NOT NULL,
+  json  TEXT NOT NULL
+) STRICT;
+CREATE INDEX IF NOT EXISTS message_corrections_by_at ON message_corrections (at_ms DESC);
 `,
   },
 ]
@@ -222,7 +235,9 @@ export class SqliteMessageStore implements MessageStore {
       .prepare<string[], Row>(`SELECT json FROM messages WHERE thread_id IN (${placeholders})`)
       .all(...ids)
       .map((r) => JSON.parse(r.json) as MessageRecord)
-    return aggregateThreads(full).slice(0, query.limit ?? 100)
+    return aggregateThreads(full)
+      .filter((t) => matchesClaim(t, query))
+      .slice(0, query.limit ?? 100)
   }
 
   thread(thread_id: string): MessageRecord[] {
@@ -352,6 +367,22 @@ export class SqliteMessageStore implements MessageStore {
 
   deleteDraft(id: string): boolean {
     return this.#db.prepare('DELETE FROM message_drafts WHERE id = ?').run(id).changes > 0
+  }
+
+  corrections(limit = 20): MessageCorrection[] {
+    return this.#db
+      .prepare<[number], Row>('SELECT json FROM message_corrections ORDER BY at_ms DESC LIMIT ?')
+      .all(limit)
+      .map((r) => JSON.parse(r.json) as MessageCorrection)
+  }
+
+  putCorrection(correction: MessageCorrection): void {
+    this.#db
+      .prepare(
+        `INSERT INTO message_corrections (id, at_ms, json) VALUES (?,?,?)
+         ON CONFLICT(id) DO UPDATE SET at_ms = excluded.at_ms, json = excluded.json`,
+      )
+      .run(correction.id, Date.parse(correction.at), JSON.stringify(correction))
   }
 
   trustedSenders(): string[] {

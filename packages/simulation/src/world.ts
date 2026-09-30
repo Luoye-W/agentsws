@@ -812,6 +812,11 @@ export interface MailTriageResult {
   /** WP172：这一封是退订回信 / 硬退信，发件人（或退回的收件人）进了抑制名单。 */
   suppressed: boolean
   suppression_reason?: 'unsubscribe' | 'hard_bounce'
+  /**
+   * WP212（docs/88 §3）：分拣多判的那一格「类型」（规则层先给、模型兜底）。进事件日志与报告的
+   * 那一份，不是指标——基线只比指标，所以这一格不产生漂移。
+   */
+  kind?: string
 }
 
 export interface MailOps {
@@ -5917,6 +5922,7 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
         started_run,
         suppressed: suppression_reason !== undefined,
         ...(suppression_reason === undefined ? {} : { suppression_reason }),
+        ...(verdict.kind === undefined ? {} : { kind: verdict.kind }),
       }
       appendEnvelope({
         schema_version: 1,
@@ -5943,6 +5949,7 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
           started_run: result.started_run,
           suppressed: result.suppressed,
           ...(suppression_reason === undefined ? {} : { suppression_reason }),
+          ...(result.kind === undefined ? {} : { kind: result.kind }),
         },
       })
       return result

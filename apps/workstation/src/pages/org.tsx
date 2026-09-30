@@ -19,6 +19,7 @@ import { useSearchParams } from 'react-router-dom'
 import { BrandMark } from '@/components/design'
 import { JoinPanel } from '@/components/onboarding/join-panel'
 import { AssignWizard } from '@/components/org/assign-wizard'
+import { BrandDesignCard } from '@/components/org/brand-design-card'
 import { BrandsTab } from '@/components/org/brands-tab'
 import { InprogressTab } from '@/components/org/inprogress-tab'
 import { type JoinChoice, JoinTab } from '@/components/org/join-tab'
@@ -556,6 +557,10 @@ export function OrgPage(): React.ReactNode {
             {...(orgId === undefined ? {} : { org_id: orgId })}
             {...(owner === undefined ? {} : { assignment: owner })}
           />
+          {/* WP208：设计规范从第三栏搬来——每个品牌一份，看的是当前品牌那一份 */}
+          <div className="pt-4">
+            <BrandDesignCard />
+          </div>
         </TabsContent>
 
         <TabsContent value="positions" className="pt-3">

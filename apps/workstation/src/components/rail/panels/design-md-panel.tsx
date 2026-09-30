@@ -1,5 +1,6 @@
 /**
- * 右栏「设计规范」面板（71 §4，WP122）。
+ * 「设计规范」速查表（71 §4，WP122）。WP208 起不在右栏了，挂在「公司 → 品牌」那张卡里
+ * （`components/org/brand-design-card.tsx`）；下面说"右栏 / 抽屉"的地方读作"那张卡"。
  *
  * 设计 / 建站 / 社媒 / 投放四个岗位干活时**随手能查**：这个品牌的色板是哪几个、
  * 字体是哪两种、logo 最小多大。
@@ -20,7 +21,15 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { getBrandDesign } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 
-export function DesignMdPanel(): React.ReactElement {
+export function DesignMdPanel({
+  hideLink = false,
+}: {
+  /**
+   * WP208：速查表搬进「公司 → 品牌」之后，那张卡的头上已经有「查看 / 编辑」，
+   * 底下这一行就不再重复。
+   */
+  hideLink?: boolean
+} = {}): React.ReactElement {
   const { t } = useApp()
   const doc = useQuery({ queryKey: ['brand-design'], queryFn: getBrandDesign })
 
@@ -31,9 +40,11 @@ export function DesignMdPanel(): React.ReactElement {
     return (
       <div className="flex flex-col gap-2 p-3" data-testid="design-md-panel-empty">
         <p className="text-sm text-ws-muted-fg">{t('design.md.empty')}</p>
-        <Link className="text-sm text-ws-brand underline" to="/brand-design">
-          {t('design.md.title')}
-        </Link>
+        {hideLink ? null : (
+          <Link className="text-sm text-ws-brand underline" to="/brand-design">
+            {t('design.md.title')}
+          </Link>
+        )}
       </div>
     )
 
@@ -89,9 +100,11 @@ export function DesignMdPanel(): React.ReactElement {
         </section>
       )}
 
-      <Link className="text-sm text-ws-brand underline" to="/brand-design">
-        {t('design.md.title')}
-      </Link>
+      {hideLink ? null : (
+        <Link className="text-sm text-ws-brand underline" to="/brand-design">
+          {t('design.md.title')}
+        </Link>
+      )}
     </div>
   )
 }

@@ -6,8 +6,17 @@
  * 少字（36 §7）：说明、许可证、工具清单都进问号；卡面上只有"出网"这一项必须一眼看见（安全相关）。
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Globe, Loader2, Puzzle } from 'lucide-react'
+import {
+  ArrowUpCircle,
+  Download,
+  Globe,
+  Hourglass,
+  Loader2,
+  type LucideIcon,
+  Puzzle,
+} from 'lucide-react'
 import { useState } from 'react'
+import { StatusIcons, type StatusState } from '@/components/design'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -21,6 +30,24 @@ import {
   requestOfficialPluginChange,
 } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
+
+/** WP214：插件状态 → 四态（颜色 + 角标形状）。 */
+const PLUGIN_STATE: Record<OfficialPluginView['state'], StatusState> = {
+  installed: 'ok',
+  upgradable: 'ok',
+  available: 'unknown',
+  pending: 'pending',
+  unreviewed: 'pending',
+}
+
+/** 每种状态一个图标：装着 = 拼图、有新版 = 向上箭头、没装 = 下载、等批 / 待审 = 沙漏。 */
+const PLUGIN_ICON: Record<OfficialPluginView['state'], LucideIcon> = {
+  installed: Puzzle,
+  upgradable: ArrowUpCircle,
+  available: Download,
+  pending: Hourglass,
+  unreviewed: Hourglass,
+}
 
 /** 这一行的按钮做什么（没有按钮 = `undefined`）。 */
 function actionOf(p: OfficialPluginView): OfficialPluginAction | undefined {
@@ -70,9 +97,28 @@ function Row({
         ) : null}
       </div>
       <div className="flex shrink-0 items-center gap-2">
-        <span className="text-xs text-muted-foreground" data-testid="plugin-state">
-          {t(`plugins.state.${plugin.state}`)}
-        </span>
+        {/*
+          WP214（36 §7 第四档）：状态一个小图标（已装 = 通、没装 = 没测、等批 / 待审 = 进行中），
+          状态词与版本进 tooltip；按钮上的字（装 / 升级 / 卸载）已经说了下一步。
+        */}
+        <StatusIcons
+          testId="plugin-state"
+          label={t(`plugins.state.${plugin.state}`)}
+          items={[
+            {
+              key: plugin.state,
+              label: plugin.title,
+              state: PLUGIN_STATE[plugin.state],
+              stateText: t(`plugins.state.${plugin.state}`),
+              icon: PLUGIN_ICON[plugin.state],
+              ...(plugin.installed_version === undefined
+                ? {}
+                : {
+                    detail: t('plugins.installed_version', { version: plugin.installed_version }),
+                  }),
+            },
+          ]}
+        />
         {action === undefined ? null : (
           <Button
             size="sm"

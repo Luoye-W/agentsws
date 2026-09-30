@@ -97,6 +97,8 @@ export const WS_DEFAULT_PREFIXES = [
   // 37 工作模型（WP35 起 packages/work 真发这几条）
   'todo.',
   'matter.',
+  // WP207：归档 / 取消归档（左栏职责下的列表跟着刷新）
+  'work.',
   // 25 定时与流程
   'schedule.',
   'workflow.',

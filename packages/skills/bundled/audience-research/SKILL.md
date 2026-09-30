@@ -4,6 +4,10 @@ description: 受众研究的做法：去评论区、Reddit、论坛挖买家原�
 license: MIT
 tier: open
 version: 1.0.0
+display_name: 受众研究
+display_name_en: Audience research
+summary: 挖买家原话，整理成原话库和人群画像
+summary_en: Mine buyer quotes into a quote bank and personas
 ---
 
 > 改编自 coreyhaines31/marketingskills（MIT，© 2025 Corey Haines）的 customer-research 技能及其来源指南。已按 Agents 工坊的规矩改写，冲突处以本文为准。

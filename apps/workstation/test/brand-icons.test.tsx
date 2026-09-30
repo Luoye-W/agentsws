@@ -32,7 +32,11 @@ function read(relative: string): string {
 
 /** 构建期抓回来的官方图清单（`scripts/fetch-brand-icons.mjs` 写的）。 */
 function manifest(): {
-  icons: Record<string, { file: string; format: string; width: number | null; bytes: number }>
+  icons: Record<
+    string,
+    { file: string; format: string; width: number | null; bytes: number; source_url: string }
+  >
+  aliases: Record<string, string>
   fallbacks: Record<string, { reason: string }>
 } {
   return JSON.parse(readFileSync(join(brandDir, 'MANIFEST.json'), 'utf8'))
@@ -169,20 +173,45 @@ describe('BrandIcon', () => {
     }
   })
 
-  it('没抓到官方图的退回 Simple Icons 的矢量图（眼下是 Meta）', () => {
-    const { icons, fallbacks } = manifest()
-    expect(Object.keys(fallbacks)).toContain('meta_ads')
-    expect(fallbacks.meta_ads?.reason ?? '').not.toBe('')
-    expect(Object.keys(icons)).not.toContain('meta_ads')
+  /*
+   * WP210（Luoye 09-30）：「去对应网站取它们网站的 favicon」。连接目录里**每一家**都得有
+   * 官网图——17TRACK、YouTube 那时还是字母占位。目录里加了一家却没去抓，这条当场红。
+   * 唯一的例外是「任意邮箱」：它是协议不是一家公司，没有官网可取（docs/36 §8）。
+   */
+  it('连接目录里每一家都戴官网 favicon（缺一家就红）', () => {
+    const missing = catalogServices().filter(
+      (service) => service !== 'imap_smtp' && !hasOfficialIcon(service),
+    )
+    expect(missing, `这几家还没有官网图标，跑 pnpm icons:fetch：${missing.join('、')}`).toEqual([])
+    expect(hasOfficialIcon('track17')).toBe(true)
+    expect(hasOfficialIcon('youtube_data')).toBe(true)
+  })
 
-    expect(hasOfficialIcon('meta_ads')).toBe(false)
-    expect(hasBrandIcon('meta_ads')).toBe(true)
-    render(<BrandIcon provider="meta_ads" />)
+  it('MANIFEST：来源都是 https、没有第三方 favicon 服务；别名指向真有的图', () => {
+    const { icons, aliases, fallbacks } = manifest()
+    for (const [provider, entry] of Object.entries(icons)) {
+      expect(entry.source_url.startsWith('https://'), provider).toBe(true)
+      // 只从各家官方域名取：这些「给个域名就回图标」的第三方服务一个都不许出现
+      expect(entry.source_url, provider).not.toMatch(
+        /google\.com\/s2\/favicons|icon\.horse|favicone|duckduckgo\.com\/ip3|besticon|clearbit/,
+      )
+    }
+    expect(Object.keys(aliases).length).toBeGreaterThan(0)
+    for (const [alias, target] of Object.entries(aliases)) {
+      expect(Object.keys(icons), `${alias} 借的 ${target} 没有图`).toContain(target)
+      expect(hasOfficialIcon(alias), `${alias} 没被组件认成 ${target}`).toBe(true)
+    }
+    // 这一轮每一家都抓到了；以后真有抓不到的，这里要人来看一眼
+    expect(fallbacks).toEqual({})
+  })
+
+  it('Meta 也戴上官网图了（WP48 时只有 32px ICO，退回过矢量）', () => {
+    expect(hasOfficialIcon('meta_ads')).toBe(true)
+    expect(hasOfficialIcon('meta_marketing')).toBe(true)
+    render(<BrandIcon provider="meta_marketing" />)
     const icon = screen.getByTestId('brand-icon')
-    expect(icon.tagName).toBe('svg')
-    expect(icon.getAttribute('data-icon')).toBe('meta')
-    // Simple Icons 给 Meta 的品牌色，写死不走 currentColor
-    expect(icon.querySelector('path')?.getAttribute('fill')).toBe('#0467DF')
+    expect(icon.tagName).toBe('IMG')
+    expect(icon.getAttribute('data-provider')).toBe('meta_marketing')
   })
 
   it('认不出的 id 回落到通用插头', () => {

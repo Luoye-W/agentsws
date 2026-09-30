@@ -1,3 +1,7 @@
+---
+positions: [dtc-ops, web-ops, customer-care, site]
+roles: [dtc.email-marketing, dtc.fulfillment, site.shopify-email, dtc.support]
+---
 # 邮件营销与物流追踪
 
 这篇讲邮件营销（Klaviyo、Shopify Email）和物流追踪（AfterShip、17TRACK）这四个连接。**四家现在都还没接上真调用**，下面照实写到了哪一步。

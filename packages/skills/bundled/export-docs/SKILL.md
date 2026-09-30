@@ -4,6 +4,10 @@ description: 外贸跟单与单证：下单后的跟单节点、订舱与出运�
 license: Apache-2.0
 tier: open
 version: 1.0.0
+display_name: 跟单与单证
+display_name_en: Export documents
+summary: 跟单节点、单证核对、收款跟进
+summary_en: Order follow-up, document checks, payment follow-up
 ---
 
 > Agents 工坊自带的基础版。这家公司在公司层写了自己的跟单口径（常用货代、验货标准、单证模板、放单规矩），以公司层为准。本文不是法律或银行意见，信用证条款拿不准请银行单证部确认。

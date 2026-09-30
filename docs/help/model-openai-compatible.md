@@ -1,3 +1,7 @@
+---
+positions: []
+roles: []
+---
 # 接 OpenAI 兼容服务（Kimi、智谱、Ollama…）
 
 任何「OpenAI 格式」的服务都能接：Moonshot（Kimi）、通义千问、智谱，以及这台电脑上跑的 Ollama。Agents 工坊要求模型**能看图**，选模型时挑带 vision / VL 的那一款。

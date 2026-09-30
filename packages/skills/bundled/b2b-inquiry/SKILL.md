@@ -4,6 +4,10 @@ description: B2B 询盘怎么接：先分级（真买家、在比价、骗样嫌
 license: Apache-2.0
 tier: open
 version: 1.0.0
+display_name: 询盘接待
+display_name_en: B2B inquiries
+summary: 给询盘分级、写首回、把需求问齐
+summary_en: Grade inquiries, reply first, gather what is missing
 ---
 
 > Agents 工坊自带的基础版。这家公司在公司层写了自己的询盘口径（客户分级、回复模板、哪些市场不做），以公司层为准。

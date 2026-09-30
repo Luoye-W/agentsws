@@ -4,6 +4,11 @@ description: 政策核对：帮负责人把退换货、运费、隐私、服务�
 license: Apache-2.0
 tier: open
 version: 1.0.0
+display_name: 政策核对
+display_name_en: Policy review
+summary: 把退换、运费、隐私、条款几份政策过一遍
+summary_en: Check returns, shipping, privacy and terms for gaps
+positions: common
 ---
 
 > Agents 工坊自带的基础版。本文不是法律意见；卖到哪个国家、按哪条法规，拿不准时请法务确认。
