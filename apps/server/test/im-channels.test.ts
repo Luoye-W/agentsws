@@ -161,6 +161,8 @@ function makeRig(
       return { answer }
     },
     assignmentOf: (p) => (p === ME || p === OTHER ? `asg_${p}` : undefined),
+    // WP211：公司应用凭据只给负责人 / 公司管理员——这里 ME 是负责人
+    canManageTeamBots: (p) => p === ME,
     deepLinkBase: () => 'http://127.0.0.1:7777',
     clawbotState: new MemoryClawBotStateStore(),
     clawbotTransport: fakeTransport({

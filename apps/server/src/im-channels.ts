@@ -174,6 +174,12 @@ export interface ImChannelsOptions {
   }): Promise<{ answer: string }>
   /** 本人的那条分配（问代理要带）。拿不到 = 这个人现在没有岗位，不问。 */
   assignmentOf(person_id: PersonId): string | undefined
+  /**
+   * WP211（Fable 09-30 定）：谁能填 / 改 / 断开**公司的**应用凭据（企业微信、飞书、钉钉三条）。
+   * 只给负责人（持有 `common.owner`）与公司管理员；不给 = 一律不许（fail-closed）。
+   * 每人自己的「绑定我的账号」不受它管。
+   */
+  canManageTeamBots?(person_id: PersonId): boolean | Promise<boolean>
   /** 企业微信 userid → 我们这边的人。认不出来就不答（不给陌生人代答）。 */
   personByWecomUser?(userid: string): PersonId | undefined
   /** 深链的根（工作台地址）。 */
@@ -225,6 +231,8 @@ export interface ImStatusView {
   feishu?: FeishuStatus
   /** WP211：钉钉机器人（团队）。 */
   dingtalk?: DingtalkStatus
+  /** WP211：当前这个人能不能填 / 改 / 断开公司的应用凭据（负责人与公司管理员）。 */
+  can_manage?: boolean
 }
 
 export interface ImChannelsAssembly {
@@ -564,6 +572,15 @@ export function createImChannels(options: ImChannelsOptions): ImChannelsAssembly
   const ok = (c: Context<GatewayEnv>, data: unknown): Response =>
     c.json({ data, trace_id: c.get('rctx')?.trace_id ?? '' })
 
+  const canManage = async (person_id: PersonId): Promise<boolean> =>
+    (await options.canManageTeamBots?.(person_id)) === true
+
+  /** 公司应用凭据的写口：只给负责人与公司管理员（服务端拦，界面上也不给按钮）。 */
+  const requireManager = async (principal: Principal): Promise<void> => {
+    if (!(await canManage(principal.person_id)))
+      throw new ApiError('forbidden', '公司的应用凭据只有负责人或公司管理员能填、改、断开。')
+  }
+
   const tierGuard = (): void => {
     if (tier() !== 'local') throw new ApiError('forbidden', WECHAT_LOCAL_ONLY)
   }
@@ -610,11 +627,15 @@ export function createImChannels(options: ImChannelsOptions): ImChannelsAssembly
 
     app.get('/v1/im/status', async (c) => {
       const principal = await principalOf(c)
-      return ok(c, status(principal.person_id))
+      return ok(c, {
+        ...status(principal.person_id),
+        can_manage: await canManage(principal.person_id),
+      })
     })
 
     app.put('/v1/im/wecom', async (c) => {
       const principal = await principalOf(c)
+      await requireManager(principal)
       const parsed: unknown = await c.req.json().catch(() => undefined)
       const input = parsed as { bot_id?: unknown; secret?: unknown } | undefined
       const bot_id = typeof input?.bot_id === 'string' ? input.bot_id.trim() : ''
@@ -649,6 +670,7 @@ export function createImChannels(options: ImChannelsOptions): ImChannelsAssembly
 
     app.put('/v1/im/feishu', async (c) => {
       const principal = await principalOf(c)
+      await requireManager(principal)
       const input: unknown = await c.req.json().catch(() => undefined)
       const app_id = field(input, 'app_id')
       const app_secret = field(input, 'app_secret')
@@ -667,6 +689,7 @@ export function createImChannels(options: ImChannelsOptions): ImChannelsAssembly
 
     app.delete('/v1/im/feishu', async (c) => {
       const principal = await principalOf(c)
+      await requireManager(principal)
       await teamBots.stopFeishu()
       const removed = options.secrets.remove(feishuSecretId(options.workspace_id))
       if (removed) emit('im.unbound', { channel: 'feishu', by: principal.person_id })
@@ -675,6 +698,7 @@ export function createImChannels(options: ImChannelsOptions): ImChannelsAssembly
 
     app.put('/v1/im/dingtalk', async (c) => {
       const principal = await principalOf(c)
+      await requireManager(principal)
       const input: unknown = await c.req.json().catch(() => undefined)
       const client_id = field(input, 'client_id')
       const client_secret = field(input, 'client_secret')
@@ -689,6 +713,7 @@ export function createImChannels(options: ImChannelsOptions): ImChannelsAssembly
 
     app.delete('/v1/im/dingtalk', async (c) => {
       const principal = await principalOf(c)
+      await requireManager(principal)
       await teamBots.stopDingtalk()
       const removed = options.secrets.remove(dingtalkSecretId(options.workspace_id))
       if (removed) emit('im.unbound', { channel: 'dingtalk', by: principal.person_id })

@@ -35,6 +35,7 @@ import { createImChannels, type ImChannelsAssembly, type ImStatusView } from '..
 import { createFeishuSdkTransport, loadLarkSdk } from '../src/im-sdk.js'
 import {
   BIND_MAX_MISSES,
+  createTeamBotManagerCheck,
   feishuSecretId,
   IM_TEXT,
   ImBindCodes,
@@ -44,6 +45,7 @@ import { createSecretStore, type SecretStore } from '../src/secret-store.js'
 
 const WS_ID = 'ws_1'
 const ME: PersonId = 'per_me'
+const MEMBER: PersonId = 'per_member'
 const APP_ID = 'cli_a1b2c3d4e5f60718'
 const HOOK = 'https://oapi.dingtalk.com/robot/sendBySession?session=s1'
 
@@ -162,7 +164,9 @@ function makeRig(): Rig {
       authenticate: async (bearer) =>
         bearer === 'tok_me'
           ? { person_id: ME, workspace_id: WS_ID, kind: 'session' as const }
-          : undefined,
+          : bearer === 'tok_member'
+            ? { person_id: MEMBER, workspace_id: WS_ID, kind: 'session' as const }
+            : undefined,
     },
     rawStore: raw,
     makePipeline: (input) =>
@@ -188,7 +192,9 @@ function makeRig(): Rig {
       asked.push({ viewer, question })
       return { answer: `代理答：${question}` }
     },
-    assignmentOf: (p) => (p === ME ? 'asg_me' : undefined),
+    assignmentOf: (p) => (p === ME || p === MEMBER ? `asg_${p}` : undefined),
+    // ME 是负责人；MEMBER 是普通成员
+    canManageTeamBots: (p) => p === ME,
     deepLinkBase: () => 'http://127.0.0.1:7777',
     feishuTransport: () => feishu,
     dingtalkSocket: () => {
@@ -402,6 +408,73 @@ describe('钉钉：认人、绑定、群 @、凭据错误', () => {
     expect(view?.state).toBe('failed')
     expect(view?.error).toContain('Client Secret')
     expect(r.ding).toHaveLength(0)
+  })
+})
+
+describe('谁能管公司的应用凭据（Fable 09-30）', () => {
+  it('普通成员：三条渠道的填 / 改 / 断开一律 403，状态里 can_manage=false；自己的绑定照旧能用', async () => {
+    const r = makeRig()
+    for (const [m, path, body] of [
+      ['PUT', '/v1/im/wecom', { bot_id: 'B', secret: 'S' }],
+      ['PUT', '/v1/im/feishu', { app_id: APP_ID, app_secret: 'S' }],
+      ['DELETE', '/v1/im/feishu', undefined],
+      ['PUT', '/v1/im/dingtalk', { client_id: 'd', client_secret: 'S' }],
+      ['DELETE', '/v1/im/dingtalk', undefined],
+    ] as const) {
+      const res = await call(r, m, path, body, 'tok_member')
+      expect(res.status, `${m} ${path}`).toBe(403)
+      expect(await res.text()).toContain('负责人或公司管理员')
+    }
+    expect(r.secrets.list()).toHaveLength(0)
+    const view = await dataOf<ImStatusView>(
+      await call(r, 'GET', '/v1/im/status', undefined, 'tok_member'),
+    )
+    expect(view.can_manage).toBe(false)
+    expect((await call(r, 'POST', '/v1/im/bind-code', undefined, 'tok_member')).status).toBe(200)
+    expect((await call(r, 'DELETE', '/v1/im/bind/feishu', undefined, 'tok_member')).status).toBe(
+      200,
+    )
+  })
+
+  it('负责人：能填能断；状态里 can_manage=true；普通成员断不开负责人配好的', async () => {
+    const r = makeRig()
+    expect(
+      (await call(r, 'PUT', '/v1/im/feishu', { app_id: APP_ID, app_secret: 'S' })).status,
+    ).toBe(200)
+    expect((await dataOf<ImStatusView>(await call(r, 'GET', '/v1/im/status'))).can_manage).toBe(
+      true,
+    )
+    expect((await call(r, 'DELETE', '/v1/im/feishu', undefined, 'tok_member')).status).toBe(403)
+    expect(r.secrets.get(feishuSecretId(WS_ID))).toBeDefined()
+  })
+
+  it('判定：持有 common.owner 的负责人，或公司的所有者 / 管理员；普通成员与外人都不行', async () => {
+    const org = {
+      id: 'org_1',
+      owner_id: 'per_boss',
+      members: [
+        { person_id: 'per_boss', role: 'owner' },
+        { person_id: 'per_admin', role: 'admin' },
+        { person_id: 'per_member', role: 'member' },
+        { person_id: 'per_left', role: 'admin', left_at: '2026-09-01T00:00:00.000Z' },
+      ],
+    } as never
+    const check = createTeamBotManagerCheck({
+      isOwner: (p) => p === 'per_role_owner',
+      organization: async () => org,
+    })
+    expect(await check('per_role_owner')).toBe(true)
+    expect(await check('per_boss')).toBe(true)
+    expect(await check('per_admin')).toBe(true)
+    expect(await check('per_member')).toBe(false)
+    expect(await check('per_left')).toBe(false)
+    expect(await check('per_stranger')).toBe(false)
+    // 取不到公司：只认负责人
+    const noOrg = createTeamBotManagerCheck({
+      isOwner: () => false,
+      organization: async () => undefined,
+    })
+    expect(await noOrg('per_admin')).toBe(false)
   })
 })
 

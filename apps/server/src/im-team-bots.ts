@@ -16,6 +16,7 @@
  * - **凭据只经原生表单进本机加密库**：不经 AI、不进日志、不进响应体，填完不回显。
  */
 
+import { canAdministerOrganization } from '@agentsws/api'
 import {
   DINGTALK_BOT_CHANNEL,
   DingtalkBotAdapter,
@@ -37,6 +38,7 @@ import type {
   ChannelAdapter,
   Clock,
   InboundEvent,
+  Organization,
   PersonId,
   WorkspaceId,
 } from '@agentsws/contracts'
@@ -374,5 +376,26 @@ export function createTeamBots(deps: TeamBotsDeps): TeamBots {
       feishu = undefined
       dingtalk = undefined
     },
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* 谁能管公司的应用凭据（Fable 09-30 定）                               */
+/* ------------------------------------------------------------------ */
+
+/**
+ * 企业微信 / 飞书 / 钉钉三条的**公司应用凭据**（填、改、断开）只给两种人：
+ * 这个工作区里持有 `common.owner` 的负责人，与这家公司的所有者 / 管理员。
+ * 其他人在卡上只看得到状态；每人自己的「绑定我的账号」不受这条管。
+ */
+export function createTeamBotManagerCheck(deps: {
+  isOwner(person_id: PersonId): boolean
+  /** 这个工作区挂在哪家公司下（取不到 = 只认负责人）。 */
+  organization(): Promise<Organization | undefined>
+}): (person_id: PersonId) => Promise<boolean> {
+  return async (person_id) => {
+    if (deps.isOwner(person_id)) return true
+    const org = await deps.organization()
+    return org !== undefined && canAdministerOrganization(org, person_id)
   }
 }
