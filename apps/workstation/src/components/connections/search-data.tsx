@@ -17,6 +17,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Search } from 'lucide-react'
 import { type FormEvent, useId, useRef, useState } from 'react'
+import { StatusIcons } from '@/components/design'
 import { TutorialLink } from '@/components/help/tutorial-link'
 import { Button } from '@/components/ui/button'
 import { SafetyNote } from '@/components/ui/hint'
@@ -146,6 +147,22 @@ export function SearchDataSection({ assignment }: { assignment?: string }): Reac
           {t('search_data.title')}
         </h3>
         <span className="text-xs text-muted-foreground">{t('search_data.subtitle')}</span>
+        {status === undefined ? null : (
+          <StatusIcons
+            testId="search-data-state"
+            items={[
+              {
+                key: 'search-data',
+                label: t('search_data.title'),
+                state: status.configured ? 'ok' : 'unknown',
+                stateText: status.configured
+                  ? t('search_data.status.ready')
+                  : (status.reason ?? t('search_data.status.none')),
+                icon: Search,
+              },
+            ]}
+          />
+        )}
         {/* WP156：三档怎么选、三家服务商有什么不同，在教程「搜索数据接口」里 */}
         <TutorialLink slug="search-data" className="ml-auto" />
       </div>
@@ -179,15 +196,19 @@ export function SearchDataSection({ assignment }: { assignment?: string }): Reac
             ))}
           </div>
 
-          <p
-            className="text-xs text-muted-foreground"
-            data-slot="status"
-            data-testid="search-data-status"
-          >
-            {status?.configured === true
-              ? t('search_data.status.ready')
-              : (status?.reason ?? t('search_data.status.none'))}
-          </p>
+          {/*
+            WP214（36 §7 第四档）：能用了 → 标题旁一个「通」图标（不再一行「能用了。」）；
+            还没接 / 用不了 → 原因常显一句人话
+          */}
+          {status?.configured === true ? null : (
+            <p
+              className="text-xs text-muted-foreground"
+              data-slot="status"
+              data-testid="search-data-status"
+            >
+              {status?.reason ?? t('search_data.status.none')}
+            </p>
+          )}
 
           {active === 'official' ? (
             <p

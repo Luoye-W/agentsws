@@ -45,6 +45,8 @@ export const HELP_SLUGS = [
   'b2b-sending-domain',
   // WP184：切换 dsh 场景（官方场景开在哪、用户自己装的官方桌面端）
   'dsh-scenes',
+  // WP207：对话与任务的归档与找回（左栏三级「+」、状态小点、自动归档、AI 找回）
+  'archive',
 ] as const
 
 export type HelpSlug = (typeof HELP_SLUGS)[number]
@@ -143,6 +145,8 @@ export const HELP_SCOPES: Readonly<Record<HelpSlug, HelpScope>> = {
   'chat-window': { positions: ['customer-care'], roles: ['dtc.live-chat'] },
   'b2b-sending-domain': { positions: ['b2b'], roles: ['b2b.outbound'] },
   'dsh-scenes': { positions: [], roles: [] },
+  // WP207：通用（谁都看得到）
+  archive: { positions: [], roles: [] },
 }
 
 /**

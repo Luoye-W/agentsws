@@ -22,11 +22,11 @@ import { Brain, CheckCircle2, Plus, RefreshCw, Trash2, XCircle } from 'lucide-re
 import { useEffect, useRef, useState } from 'react'
 import { BrandIcon } from '@/components/brand-icons'
 import { BrandScopeNote } from '@/components/brand-scope-note'
-import { BrandMark } from '@/components/design'
+import { BrandMark, InfoTip, testedMs, useFresh } from '@/components/design'
 import { InlineGuideLink, TutorialLink } from '@/components/help/tutorial-link'
 import { DeepSeekAccountLogin } from '@/components/models/deepseek-account-login'
 import { ImageModelSection } from '@/components/models/image-model-section'
-import { ModelCheckSteps } from '@/components/models/model-check-steps'
+import { ModelStatusIcons } from '@/components/models/model-check-steps'
 import { ModelForm, type ModelFormValues, suggestProviderId } from '@/components/models/model-form'
 import { QuotaNotice } from '@/components/models/quota-notice'
 import { SubscriptionPlan } from '@/components/models/subscription-plan'
@@ -337,6 +337,7 @@ export function ModelsPanel({ assignment }: { assignment?: string }): React.Reac
                   <ProviderRow
                     provider={p}
                     result={tests[p.id] ?? p.last_test}
+                    testing={runTest.isPending && runTest.variables === p.id}
                     busy={runTest.isPending || drop.isPending}
                     onTest={() => {
                       runTest.mutate(p.id)
@@ -550,9 +551,17 @@ export function ModelsPanel({ assignment }: { assignment?: string }): React.Reac
   )
 }
 
+/**
+ * 已配的一张卡（WP214，36 §7 第四档）：图标 + 名字 + 模型短标签 + 一排状态图标 + 测试 / 改 / 删。
+ *
+ * - 地址、境内外、完整模型 id 进模型标签的 tooltip，不在卡上常显；
+ * - 三步（连通 / 回文字 / 看图）是一排小图标，上次测 · 耗时 · token 在 tooltip 里；
+ * - 「通了：…」那一整行只在**上次测试（服务端时间）两分钟内**以小字出现；没通的原因常显一句人话。
+ */
 function ProviderRow({
   provider,
   result,
+  testing,
   busy,
   onTest,
   onEdit,
@@ -560,86 +569,93 @@ function ProviderRow({
 }: {
   provider: ModelProviderView
   result: ModelTestResult | undefined
+  /** 正在测这一条：三个图标转圈。 */
+  testing: boolean
   busy: boolean
   onTest: () => void
   onEdit: () => void
   onRemove: () => void
 }): React.ReactNode {
   const { t } = useApp()
+  // Fable 09-30：「刚测完两分钟」按服务端的上次测试时间算——刷新后仍在两分钟内的照样显示
+  const fresh = useFresh(testedMs(result))
+  const tech = `${provider.base_url} · ${t(`models.region.${provider.region}`)}`
   return (
     <div className="flex flex-col gap-1.5">
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <p className="truncate text-sm font-medium">
-            <BrandIcon
-              provider={provider.kind}
-              size={16}
-              className="mr-1.5 inline-block align-text-bottom"
-            />
-            {provider.label}
-            <span className="ml-1.5 text-xs font-normal text-muted-foreground">
-              {provider.model}
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5">
+        <p className="flex min-w-0 items-center gap-1.5 text-sm font-medium">
+          <BrandIcon provider={provider.kind} size={16} className="shrink-0" />
+          <span className="truncate">{provider.label}</span>
+          <InfoTip
+            text={tech}
+            testId="model-row-model"
+            className="shrink-0 rounded bg-muted px-1.5 py-px text-[11px] font-normal text-muted-foreground"
+          >
+            {provider.model}
+          </InfoTip>
+          {provider.from_env === true ? (
+            <span
+              className="shrink-0 rounded bg-muted px-1 py-px text-[10px] font-normal text-muted-foreground"
+              data-slot="badge"
+              data-testid="model-from-env"
+            >
+              {t('models.from_env')}
             </span>
-            {provider.from_env === true ? (
-              <span
-                className="ml-1.5 rounded bg-muted px-1 py-px text-[10px] text-muted-foreground"
-                data-testid="model-from-env"
-              >
-                {t('models.from_env')}
-              </span>
-            ) : null}
-          </p>
-          <p className="truncate text-[11px] text-muted-foreground">
-            {provider.base_url} · {t(`models.region.${provider.region}`)}
-          </p>
-          {provider.active ? null : (
-            <p className="text-[11px] text-destructive" data-testid="model-inactive">
-              {provider.inactive_reason ?? t('models.inactive')}
-            </p>
-          )}
-        </div>
-        <div className="flex shrink-0 items-center gap-1">
-          <Button size="xs" variant="outline" disabled={busy} onClick={onTest}>
-            {t('models.test')}
-          </Button>
-          {/* WP134：账号登录那一条没什么可改的（没有 key、地址是官方的）；登出在它自己那张卡上 */}
-          {isDeepSeekAccountKind(provider.kind) ? null : (
-            <Button size="xs" variant="ghost" onClick={onEdit}>
-              {t('models.edit')}
+          ) : null}
+        </p>
+        <div className="flex shrink-0 items-center gap-2">
+          <ModelStatusIcons result={result} pending={testing} />
+          <div className="flex items-center gap-1">
+            <Button size="xs" variant="outline" disabled={busy} onClick={onTest}>
+              {t('models.test')}
             </Button>
-          )}
-          {provider.from_env === true ? null : (
-            <Button size="xs" variant="ghost" disabled={busy} onClick={onRemove}>
-              <Trash2 aria-hidden />
-              <span className="sr-only">{t('models.remove')}</span>
-            </Button>
-          )}
+            {/* WP134：账号登录那一条没什么可改的（没有 key、地址是官方的）；登出在它自己那张卡上 */}
+            {isDeepSeekAccountKind(provider.kind) ? null : (
+              <Button size="xs" variant="ghost" onClick={onEdit}>
+                {t('models.edit')}
+              </Button>
+            )}
+            {provider.from_env === true ? null : (
+              <Button size="xs" variant="ghost" disabled={busy} onClick={onRemove}>
+                <Trash2 aria-hidden />
+                <span className="sr-only">{t('models.remove')}</span>
+              </Button>
+            )}
+          </div>
         </div>
       </div>
-      {result === undefined ? null : (
+      {provider.active ? null : (
+        <p className="text-[11px] text-destructive" data-testid="model-inactive">
+          {provider.inactive_reason ?? t('models.inactive')}
+        </p>
+      )}
+      {/*
+        结果那一行：没通 → 常显一句人话（错误必须一眼可见）；通了 → 只在刚点完测试的两分钟内出。
+      */}
+      {result === undefined || testing || (result.ok && !fresh) ? null : (
         <p
           className={
             result.ok
               ? 'flex items-center gap-1 text-[11px] text-emerald-600 dark:text-emerald-400'
               : 'flex items-center gap-1 text-[11px] text-destructive'
           }
+          data-slot="status"
           data-testid="model-test-result"
           data-ok={result.ok ? 'true' : 'false'}
         >
           {result.ok ? (
-            <CheckCircle2 className="size-3" aria-hidden />
+            <CheckCircle2 className="size-3 shrink-0" aria-hidden />
           ) : (
-            <XCircle className="size-3" aria-hidden />
+            <XCircle className="size-3 shrink-0" aria-hidden />
           )}
           <span>
             {result.detail ?? (result.ok ? t('models.test.ok') : t('models.test.failed'))}
-            {result.model === undefined ? '' : ` · ${result.model}`}
-            {result.duration_ms === undefined ? '' : ` · ${result.duration_ms}ms`}
+            {/* 模型 id 与耗时只在刚测完那一下跟着说；常显的失败那句只留人话 */}
+            {!fresh || result.model === undefined ? '' : ` · ${result.model}`}
+            {!fresh || result.duration_ms === undefined ? '' : ` · ${result.duration_ms}ms`}
           </span>
         </p>
       )}
-      {/* WP127：三步小清单（与向导第 ① 步同一个件） */}
-      {result === undefined ? null : <ModelCheckSteps steps={result.steps} />}
       {/* WP151：DeepSeek 余额不足——一行醒目提示 +「去充值」（账号 / API key 各去各的充值页） */}
       {provider.quota_exceeded === undefined ? null : (
         <QuotaNotice

@@ -123,10 +123,15 @@ describe('49 M1 设置页账号卡', () => {
     renderWithProviders(<CloudAccountCard assignment="asg_1" />)
     await screen.findByTestId('cloud-account-linked')
     const text = screen.getByTestId('cloud-account').textContent ?? ''
+    // WP214：卡面上是「已关联」图标 + 邮箱；到期、动作集、云端地址进这个图标的 tooltip
     expect(text).toContain('luoye@example.com')
-    expect(text).toContain('2026-12-14')
-    expect(text).toContain('ai · wallet:read')
+    expect(text).not.toContain('2026-12-14')
+    const hint = screen.getByTestId('status-icon').getAttribute('data-hint') ?? ''
+    expect(hint).toContain('已关联')
+    expect(hint).toContain('2026-12-14')
+    expect(hint).toContain('ai · wallet:read')
     expect(text).not.toMatch(/wst_/)
+    expect(hint).not.toMatch(/wst_/)
   })
 
   it('解除关联之后回到未关联那一档', async () => {

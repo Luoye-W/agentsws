@@ -294,6 +294,12 @@ export type KnownEventType =
   | 'matter.routed'
   /** WP69：人手动换了职责（`POST /v1/matters/:id/reroute`）；payload 只有前后两个 role_id。 */
   | 'matter.rerouted'
+  /**
+   * WP207：事项归档 / 取消归档。payload 只有 `by`（`auto` / `user` / `ai_suggested` /
+   * `activity`）、空闲天数与条数——标题与正文不进日志。
+   */
+  | 'work.archived'
+  | 'work.unarchived'
   // 恢复先对账（WP34 B）：payload 只有条数与结论
   | 'reconcile.started'
   | 'reconcile.finished'

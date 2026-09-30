@@ -15,6 +15,7 @@ import { MOTION_PREFS, setMotionPref, useMotionPref } from '@/components/design'
 import { ModelsPanel } from '@/components/models/models-panel'
 import { NoModelBanner } from '@/components/models/no-model-banner'
 import { type ProfileDraft, ProfileForm } from '@/components/onboarding/profile-form'
+import { ArchiveSetting } from '@/components/settings/archive-setting'
 import { BrowserCard } from '@/components/settings/browser-card'
 import { CloudAccountCard } from '@/components/settings/cloud-account'
 import { ComputerUseCard } from '@/components/settings/computer-use-card'
@@ -190,6 +191,8 @@ export function SettingsPage({
                 ))}
               </fieldset>
             </div>
+            {/* WP207：对话 / 任务多少天没动就自动归档（1–30 天或不自动归档） */}
+            <ArchiveSetting />
             {identity === undefined ? null : (
               <div className="flex items-center justify-between">
                 <span>{t('settings.identity')}</span>

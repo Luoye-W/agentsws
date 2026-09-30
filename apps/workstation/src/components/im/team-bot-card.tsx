@@ -12,10 +12,11 @@
  *    认得的同事作答——认人靠这一步，不靠管理员手工对表。
  */
 import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { UserRound, Users } from 'lucide-react'
 import { type FormEvent, type ReactNode, useId, useRef, useState } from 'react'
 import { BrandIcon } from '@/components/brand-icons'
+import { StatusIcons, type StatusState } from '@/components/design'
 import { TutorialLink } from '@/components/help/tutorial-link'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Hint } from '@/components/ui/hint'
@@ -90,14 +91,51 @@ const SPECS: Record<Channel, Spec> = {
   },
 }
 
-/** 状态徽章：在收信 / 连接中 / 连不上 / 没配。 */
-function StateBadge({ view }: { view: ImTeamBotView | undefined }): ReactNode {
+/**
+ * 状态：在收信 / 连接中 / 连不上 / 没配（WP214，36 §7 第四档：一个状态小图标，状态词与 App ID / Client ID
+ * 在 tooltip 里；连不上的原因另在卡上常显一句）。
+ */
+function StateIcon({
+  channel,
+  view,
+  saved,
+}: {
+  channel: Channel
+  view: ImTeamBotView | undefined
+  saved: string | undefined
+}): ReactNode {
   const { t } = useApp()
-  if (view?.configured !== true)
-    return <Badge variant="outline">{t('im.state.unconfigured')}</Badge>
-  if (view.state === 'connected') return <Badge variant="default">{t('im.state.live')}</Badge>
-  if (view.state === 'failed') return <Badge variant="destructive">{t('im.state.failed')}</Badge>
-  return <Badge variant="secondary">{t('im.state.connecting')}</Badge>
+  const state: StatusState =
+    view?.configured !== true
+      ? 'unknown'
+      : view.state === 'connected'
+        ? 'ok'
+        : view.state === 'failed'
+          ? 'fail'
+          : 'pending'
+  const word =
+    view?.configured !== true
+      ? t('im.state.unconfigured')
+      : view.state === 'connected'
+        ? t('im.state.live')
+        : view.state === 'failed'
+          ? t('im.state.failed')
+          : t('im.state.connecting')
+  return (
+    <StatusIcons
+      testId={`im-${channel}-state`}
+      items={[
+        {
+          key: channel,
+          label: t(SPECS[channel].title),
+          state,
+          stateText: word,
+          icon: Users,
+          ...(saved === undefined ? {} : { detail: saved }),
+        },
+      ]}
+    />
+  )
 }
 
 export function TeamBotCard({
@@ -166,14 +204,15 @@ export function TeamBotCard({
           <Hint text={t(spec.what)} testId={`im-${channel}-what`} />
           <TutorialLink slug={spec.slug} className="font-normal" />
         </CardTitle>
-        <StateBadge view={view} />
+        <StateIcon
+          channel={channel}
+          view={view}
+          saved={
+            configured && accountId !== undefined ? t(spec.saved, { id: accountId }) : undefined
+          }
+        />
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
-        {configured && accountId !== undefined ? (
-          <p className="text-sm" data-slot="status">
-            {t(spec.saved, { id: accountId })}
-          </p>
-        ) : null}
         {view?.error !== undefined ? (
           <p role="alert" className="text-sm text-destructive">
             {view.error}
@@ -282,9 +321,19 @@ export function BindRow({ channel, bound }: { channel: ImTeamChannel; bound: boo
   if (bound)
     return (
       <div className="flex items-center gap-2 border-t pt-3" data-testid={`im-${channel}-bound`}>
-        <span className="text-sm" data-slot="status">
-          {t('im.team.bound')}
-        </span>
+        {/* WP214：「我的账号已绑上」→ 一个账号小图标，那句话在 tooltip 里 */}
+        <StatusIcons
+          testId={`im-${channel}-me`}
+          items={[
+            {
+              key: 'me',
+              label: t('im.team.me'),
+              state: 'ok',
+              stateText: t('im.team.bound'),
+              icon: UserRound,
+            },
+          ]}
+        />
         <Button
           variant="ghost"
           size="sm"

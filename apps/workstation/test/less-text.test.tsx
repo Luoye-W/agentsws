@@ -35,7 +35,7 @@ import type {
 } from '@/lib/api'
 import { SettingsPage } from '@/pages/settings'
 import { renderWithProviders } from './helpers'
-import { CARD_TEXT_LIMIT, type CardReport, reportCard } from './less-text-guard'
+import { CARD_TEXT_LIMIT, type CardReport, reportCard, visibleProse } from './less-text-guard'
 
 // ── 夹具：服务端模板的真文案 ─────────────────────────────────────────
 
@@ -276,6 +276,9 @@ const PLAN: OnboardingPlanView = {
 
 vi.mock('@/components/connections/bridge', () => ({ openExternal: () => undefined }))
 
+/** WP214 第四档用：「已配的」那几条（别的用例保持空）。 */
+const fourth = vi.hoisted(() => ({ providers: [] as unknown[] }))
+
 vi.mock('@/lib/api', async () => {
   const actual = await vi.importActual<typeof import('@/lib/api')>('@/lib/api')
   const credits = {
@@ -297,7 +300,7 @@ vi.mock('@/lib/api', async () => {
   return {
     ...actual,
     // 模型
-    listModelProviders: async () => ({ providers: [], templates: TEMPLATES }),
+    listModelProviders: async () => ({ providers: fourth.providers, templates: TEMPLATES }),
     getModelDefaults: async () => ({
       default: '',
       by_purpose: {},
@@ -571,6 +574,123 @@ describe('初始化向导', () => {
     ])
       for (const [i, row] of screen.getAllByTestId(id).entries())
         check(`向导 ④ · ${id} ${String(i + 1)}`, row)
+  })
+})
+
+// ── WP214（36 §7 第四档）：状态用图标、说明只在第一次 ─────────────────────
+
+const LAST_OK = {
+  ok: true,
+  reason: 'ok',
+  model: 'deepseek/deepseek-flash',
+  duration_ms: 2099,
+  detail: '通了：连得上、文字能回、图也看得懂（用了 434 个 token）',
+  checked_at: '2026-09-01T06:00:00.000Z',
+  steps: [
+    { step: 'connect', ok: true },
+    { step: 'text', ok: true },
+    { step: 'vision', ok: true },
+  ],
+}
+
+const ROW = {
+  id: 'deepseek',
+  kind: 'deepseek',
+  label: 'DeepSeek 官方 · 官方 API 接口连接',
+  base_url: 'https://api.deepseek.com',
+  model: 'deepseek-flash',
+  region: 'cn',
+  has_key: true,
+  active: true,
+}
+
+describe('WP214 第四档：配好的卡上状态用图标', () => {
+  it('上次测通了：一排三个「通」图标；「通了」整行、地址、模型 id、耗时都不在卡面上（在 tooltip 里）', async () => {
+    fourth.providers = [{ ...ROW, last_test: LAST_OK }]
+    try {
+      renderWithProviders(<ModelsPanel assignment="asg_1" />)
+      const row = await screen.findByTestId('model-row')
+      const icons = [...row.querySelectorAll('[data-testid="status-icon"]')]
+      expect(icons.map((i) => [i.getAttribute('data-key'), i.getAttribute('data-state')])).toEqual([
+        ['connect', 'ok'],
+        ['text', 'ok'],
+        ['vision', 'ok'],
+      ])
+      // 细节（上次测 · 耗时 · token）在每个图标的 tooltip 里
+      const hint = icons[0]?.getAttribute('data-hint') ?? ''
+      expect(hint).toContain('2099ms')
+      expect(hint).toContain('434 个 token')
+      // 地址进模型短标签的 tooltip
+      expect(
+        row.querySelector('[data-testid="model-row-model"]')?.getAttribute('data-hint'),
+      ).toContain('https://api.deepseek.com')
+      // 卡面上人要读的字（去掉 tooltip、读屏专用、标签）里不再有这几样
+      const shown = visibleProse(row)
+      expect(shown).toContain('DeepSeek 官方')
+      for (const gone of ['通了', 'https://', '2099ms', 'deepseek/deepseek-flash', '境内'])
+        expect(shown, gone).not.toContain(gone)
+      expect(screen.queryByTestId('model-test-result')).toBeNull()
+      // 状态那一排是「状态」，不算说明字
+      expect(row.querySelector('[data-testid="model-status"]')?.getAttribute('data-slot')).toBe(
+        'status',
+      )
+    } finally {
+      fourth.providers = []
+    }
+  })
+
+  it('服务端的上次测试在两分钟内（刷新之后也算）：「通了」那句照样出；过了两分钟就只剩图标', async () => {
+    fourth.providers = [{ ...ROW, last_test: { ...LAST_OK, checked_at: new Date().toISOString() } }]
+    try {
+      renderWithProviders(<ModelsPanel assignment="asg_1" />)
+      expect((await screen.findByTestId('model-test-result')).textContent).toContain('通了')
+    } finally {
+      fourth.providers = []
+    }
+  })
+
+  it('没通：原因常显一句人话；三个图标卡在哪一格一眼看出', async () => {
+    fourth.providers = [
+      {
+        ...ROW,
+        last_test: {
+          ok: false,
+          reason: 'provider_error',
+          detail: 'API key 不对或者已经失效',
+          checked_at: '2026-09-30T06:00:00.000Z',
+          steps: [
+            { step: 'connect', ok: false },
+            { step: 'text', ok: false, skipped: true },
+            { step: 'vision', ok: false, skipped: true },
+          ],
+        },
+      },
+    ]
+    try {
+      renderWithProviders(<ModelsPanel assignment="asg_1" />)
+      const failed = await screen.findByTestId('model-test-result')
+      expect(failed.textContent).toContain('API key 不对')
+      const states = [...screen.getAllByTestId('status-icon')].map((i) =>
+        i.getAttribute('data-state'),
+      )
+      expect(states).toEqual(['fail', 'unknown', 'unknown'])
+    } finally {
+      fourth.providers = []
+    }
+  })
+
+  it('从没测过：三个「没测」', async () => {
+    fourth.providers = [ROW]
+    try {
+      renderWithProviders(<ModelsPanel assignment="asg_1" />)
+      await screen.findByTestId('model-row')
+      const states = [...screen.getAllByTestId('status-icon')].map((i) =>
+        i.getAttribute('data-state'),
+      )
+      expect(states).toEqual(['unknown', 'unknown', 'unknown'])
+    } finally {
+      fourth.providers = []
+    }
   })
 })
 

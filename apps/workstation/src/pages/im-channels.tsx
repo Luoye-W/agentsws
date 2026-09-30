@@ -22,6 +22,7 @@
  * 状态；每人自己的「绑定我的账号」人人可用。
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { MessageCircle, Users } from 'lucide-react'
 import {
   type FormEvent,
   type ReactNode,
@@ -31,9 +32,9 @@ import {
   useRef,
   useState,
 } from 'react'
+import { StatusIcons, useFresh } from '@/components/design'
 import { TutorialLink } from '@/components/help/tutorial-link'
 import { BindRow, TeamBotCard } from '@/components/im/team-bot-card'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Hint, SafetyNote } from '@/components/ui/hint'
@@ -73,6 +74,9 @@ export function ImChannelsPage(): ReactNode {
   const [verify, setVerify] = useState('')
   const [wecomSaved, setWecomSaved] = useState(false)
   const [wecomError, setWecomError] = useState<string | null>(null)
+  /** WP214：这一次打开里刚扫码连上的时刻——「已连上，去微信里说句话试试」只在两分钟内说。 */
+  const [boundAt, setBoundAt] = useState<number | undefined>(undefined)
+  const justBound = useFresh(boundAt)
   const formRef = useRef<HTMLFormElement>(null)
   const botIdId = useId()
   const secretId = useId()
@@ -128,6 +132,7 @@ export function ImChannelsPage(): ReactNode {
           setLogin((prev) => (prev === null ? prev : { ...prev, qrcode_url: out.qrcode_url ?? '' }))
         if (out.status === 'confirmed' || out.status === 'already_connected') {
           setLogin(null)
+          setBoundAt(Date.now())
           await refresh()
           return
         }
@@ -213,13 +218,29 @@ export function ImChannelsPage(): ReactNode {
               testId="im-wechat-what"
             />
           </CardTitle>
-          {wechat?.bound === true ? (
-            <Badge variant={wechat.live ? 'default' : 'secondary'}>
-              {wechat.live ? t('im.state.live') : t('im.state.paused')}
-            </Badge>
-          ) : (
-            <Badge variant="outline">{t('im.state.unbound')}</Badge>
-          )}
+          {/*
+            WP214（36 §7 第四档）：在收信 / 要重连 / 没绑 → 一个状态小图标，连的是哪个微信账号在 tooltip 里
+          */}
+          <StatusIcons
+            testId="im-wechat-state"
+            items={[
+              {
+                key: 'wechat',
+                label: t('im.wechat.title'),
+                state: wechat?.bound !== true ? 'unknown' : wechat.live ? 'ok' : 'fail',
+                stateText:
+                  wechat?.bound !== true
+                    ? t('im.state.unbound')
+                    : wechat.live
+                      ? t('im.state.live')
+                      : t('im.state.paused'),
+                icon: MessageCircle,
+                ...(wechat?.bound === true && wechat.account_id !== undefined
+                  ? { detail: t('im.wechat.account', { account: wechat.account_id }) }
+                  : {}),
+              },
+            ]}
+          />
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
           {/*
@@ -233,9 +254,12 @@ export function ImChannelsPage(): ReactNode {
             </p>
           ) : wechat?.bound === true ? (
             <div className="flex flex-col gap-2">
-              <p className="text-sm">
-                {t('im.wechat.bound', { account: wechat.account_id ?? '' })}
-              </p>
+              {/* 「已连上（微信账号 …）。去微信里跟它说句话试试」只在刚扫完码的两分钟内说 */}
+              {justBound ? (
+                <p className="text-sm" data-slot="status" data-testid="im-wechat-bound">
+                  {t('im.wechat.bound', { account: wechat.account_id ?? '' })}
+                </p>
+              ) : null}
               {wechat.paused_until !== undefined ? (
                 <p role="alert" className="text-sm text-destructive">
                   {t('im.wechat.stale')}
@@ -262,8 +286,13 @@ export function ImChannelsPage(): ReactNode {
                 >
                   {t('im.wechat.unbind')}
                 </Button>
+                {/* WP214：原来这个问号单独一行、孤零零挂在卡底；挪到它说的「解绑」旁边 */}
+                <Hint
+                  text={t('im.wechat.unbind.why')}
+                  className="self-center"
+                  testId="im-wechat-unbind-why"
+                />
               </div>
-              <Hint text={t('im.wechat.unbind.why')} />
             </div>
           ) : login === null ? (
             <div>
@@ -328,20 +357,29 @@ export function ImChannelsPage(): ReactNode {
             {t('im.wecom.title')}
             <Hint text={`${t('im.wecom.line')} ${t('im.wecom.what')}`} testId="im-wecom-what" />
           </CardTitle>
-          {wecom?.configured === true ? (
-            <Badge variant={wecom.connected ? 'default' : 'secondary'}>
-              {wecom.connected ? t('im.state.live') : t('im.state.connecting')}
-            </Badge>
-          ) : (
-            <Badge variant="outline">{t('im.state.unconfigured')}</Badge>
-          )}
+          {/* WP214：在收信 / 连接中 / 没配 → 一个状态小图标；BotID 在 tooltip 里 */}
+          <StatusIcons
+            testId="im-wecom-state"
+            items={[
+              {
+                key: 'wecom',
+                label: t('im.wecom.title'),
+                state: wecom?.configured !== true ? 'unknown' : wecom.connected ? 'ok' : 'pending',
+                stateText:
+                  wecom?.configured !== true
+                    ? t('im.state.unconfigured')
+                    : wecom.connected
+                      ? t('im.state.live')
+                      : t('im.state.connecting'),
+                icon: Users,
+                ...(wecom?.configured === true
+                  ? { detail: t('im.wecom.saved', { bot: wecom.bot_id ?? '' }) }
+                  : {}),
+              },
+            ]}
+          />
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
-          {wecom?.configured === true ? (
-            <p className="text-sm" data-slot="status">
-              {t('im.wecom.saved', { bot: wecom.bot_id ?? '' })}
-            </p>
-          ) : null}
           {/*
             13 §4.3 的原生表单：值用 FormData 收，不进 React state、不进任何全局变量，
             提交完立刻 reset()。全程没有一次 console.*。

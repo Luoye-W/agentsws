@@ -10,6 +10,8 @@
  * （以后多一级再画，存的形状已经是 `order` + `disabled`）。
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Search } from 'lucide-react'
+import { StatusIcons } from '@/components/design'
 import { Hint } from '@/components/ui/hint'
 import { Switch } from '@/components/ui/switch'
 import { getCapabilitySources, setCapabilitySources } from '@/lib/api'
@@ -52,17 +54,37 @@ export function WebSearchToggle({
           {t('web.search.title')}
           <Hint text={t('web.search.hint')} testId="web-search-hint" />
         </span>
-        <Switch
-          checked={on}
-          disabled={save.isPending || sources.isPending}
-          data-testid="web-search-switch"
-          aria-label={t('web.search.title')}
-          onCheckedChange={(checked) => save.mutate(checked)}
-        />
+        <span className="flex items-center gap-2">
+          <StatusIcons
+            testId="web-search-state"
+            items={[
+              {
+                key: 'search',
+                label: t('web.search.title'),
+                state: !on ? 'unknown' : ready ? 'ok' : 'fail',
+                stateText: status,
+                icon: Search,
+              },
+            ]}
+          />
+          <Switch
+            checked={on}
+            disabled={save.isPending || sources.isPending}
+            data-testid="web-search-switch"
+            aria-label={t('web.search.title')}
+            onCheckedChange={(checked) => save.mutate(checked)}
+          />
+        </span>
       </div>
-      <p className="text-[11px] text-muted-foreground" data-slot="status">
-        {status}
-      </p>
+      {/*
+        WP214（36 §7 第四档）：开关本身已经说了开 / 关，那一整句不再常显——
+        开着能搜 / 关着：一个小图标（状态那句在 tooltip）；开着但搜不了：原因常显一句人话。
+      */}
+      {on && !ready ? (
+        <p className="text-[11px] text-ws-warn" data-slot="status" data-testid="web-search-reason">
+          {status}
+        </p>
+      ) : null}
       {save.error === null || save.error === undefined ? null : (
         <p className="text-[11px] text-destructive">{save.error.message}</p>
       )}

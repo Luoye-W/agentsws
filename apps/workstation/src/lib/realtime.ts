@@ -36,6 +36,9 @@ const INVALIDATIONS: { prefix: string; keys: string[][] }[] = [
   // 37 工作模型（契约里还没有这两类事件，先接上：一旦服务端开始发就自动生效）
   { prefix: 'todo.', keys: [['todos'], ['home'], ['calendar'], ['matter']] },
   { prefix: 'matter.', keys: [['matter'], ['home'], ['todos']] },
+  // WP207：归档 / 取消归档，左栏职责下那几行跟着变；开跑那一下左栏的「在跑」小点要亮
+  { prefix: 'work.', keys: [['matter']] },
+  { prefix: 'run.started', keys: [['matter', 'rail']] },
   // 25 定时与流程
   { prefix: 'schedule.', keys: [['schedules'], ['home']] },
   { prefix: 'workflow.', keys: [['schedules'], ['matter']] },

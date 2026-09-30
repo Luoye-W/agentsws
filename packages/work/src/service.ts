@@ -47,9 +47,11 @@ import type {
   TodoId,
   TodoSource,
   TodoStatus,
+  UnarchiveBy,
   WorkStore,
   WorkspaceId,
 } from '@agentsws/contracts'
+import { archiveVerdict } from './archive.js'
 import {
   buildCalendar,
   type CalendarInput,
@@ -307,6 +309,13 @@ function defaultRandom(): () => number {
   }
 }
 
+/** WP207：拿掉归档标记（新活动 / 人点了恢复）。 */
+function withoutArchive(matter: Matter): Matter {
+  if (matter.archived_at === undefined) return matter
+  const { archived_at: _drop, ...rest } = matter
+  return rest
+}
+
 export class Work {
   readonly store: WorkStore
   readonly workspace_id: WorkspaceId
@@ -475,10 +484,12 @@ export class Work {
     }
     this.store.appendMatterEvent(event)
     this.store.putMatter({
-      ...matter,
+      ...withoutArchive(matter),
       updated_at: at,
       context: { ...matter.context, last_activity: at },
     })
+    // WP207：有新活动就自动放回来（归档只是"这阵子没动"，一动就不是了）
+    if (matter.archived_at !== undefined) this.emitUnarchived(matter, 'activity', input.actor)
     return event
   }
 
@@ -526,7 +537,7 @@ export class Work {
     const matter = this.requireMatter(matter_id)
     const at = this.now()
     const next: Matter = {
-      ...matter,
+      ...withoutArchive(matter),
       updated_at: at,
       context: {
         ...matter.context,
@@ -536,7 +547,91 @@ export class Work {
       },
     }
     this.store.putMatter(next)
+    if (matter.archived_at !== undefined)
+      this.emitUnarchived(matter, 'activity', { kind: 'system', id: 'runtime' })
     return next
+  }
+
+  // ── WP207 归档 ──────────────────────────────────────────────────────
+
+  /**
+   * 自动归档：开着的事超过 `idle_days` 天没新活动就归档（`null` = 不自动归档）。
+   *
+   * `busy` 由宿主判：**在跑的运行、等你批的卡**所在的事项回 `true`，它们不归档。
+   * 一次扫完只发一条 `work.archived` 摘要（条数与天数，没有标题）。返回这次归档的那几件。
+   */
+  archiveIdle(input: { idle_days: number | null; busy?: (matter: Matter) => boolean }): Matter[] {
+    if (input.idle_days === null) return []
+    const now = this.now()
+    const done: Matter[] = []
+    for (const matter of this.listMatters({ status: ['open', 'waiting'], archived: false })) {
+      const busy = input.busy?.(matter) === true
+      if (!archiveVerdict(matter, { now, idle_days: input.idle_days, busy })) continue
+      const next: Matter = { ...matter, archived_at: now }
+      this.store.putMatter(next)
+      done.push(next)
+    }
+    if (done.length > 0)
+      this.emit(
+        'work.archived',
+        undefined,
+        { kind: 'system', id: 'archive' },
+        { by: 'auto', idle_days: input.idle_days, count: done.length },
+      )
+    return done
+  }
+
+  /**
+   * WP207（Fable 09-30）：人手动归档**一件**。已关的、已归档的原样返回，不发事件；
+   * 「在跑 / 有卡等你批」不许归档由宿主先判（本包不认识运行与卡）。
+   */
+  archive(id: MatterId, person: PersonId): Matter {
+    const matter = this.requireMatter(id)
+    if (matter.archived_at !== undefined || matter.status === 'closed') return matter
+    const next: Matter = { ...matter, archived_at: this.now() }
+    this.store.putMatter(next)
+    this.emit(
+      'work.archived',
+      { type: 'matter', id },
+      { kind: 'person', id: person },
+      { by: 'user', count: 1 },
+    )
+    return next
+  }
+
+  /**
+   * 放回来（人点了恢复，或 AI 给了候选、人点选了）。没归档的事原样返回，不发事件。
+   * **只动这一件**——批量恢复不在这里开口子（AI 不许不经点选直接批量放回）。
+   */
+  unarchive(id: MatterId, by: UnarchiveBy, person?: PersonId): Matter {
+    const matter = this.requireMatter(id)
+    if (matter.archived_at === undefined) return matter
+    // 放回来算一次活动：空闲天数从现在重新数（否则下一次扫又把它归档了），它也排到左栏最上面
+    const at = this.now()
+    const next: Matter = {
+      ...withoutArchive(matter),
+      updated_at: at,
+      context: { ...matter.context, last_activity: at },
+    }
+    this.store.putMatter(next)
+    this.emitUnarchived(
+      matter,
+      by,
+      person === undefined ? { kind: 'system', id: 'archive' } : { kind: 'person', id: person },
+    )
+    return next
+  }
+
+  private emitUnarchived(
+    matter: Matter,
+    by: UnarchiveBy,
+    actor: { kind: 'person' | 'agent' | 'system'; id: string },
+  ): void {
+    const days = Math.floor((ms(this.now()) - ms(matter.archived_at ?? this.now())) / DAY_MS)
+    this.emit('work.unarchived', { type: 'matter', id: matter.id }, actor, {
+      by,
+      archived_days: days,
+    })
   }
 
   /** 固定记录（pinned）：加 / 去。 */
@@ -1044,7 +1139,8 @@ export class Work {
       })
       if (todo.matter_id !== undefined) covered.add(todo.matter_id)
     }
-    for (const matter of this.listMatters({ status: ['open', 'waiting'] })) {
+    // WP207：归档的事不算「正在进行」（它这阵子没人动；一动就自动放回来）
+    for (const matter of this.listMatters({ status: ['open', 'waiting'], archived: false })) {
       if (covered.has(matter.id)) continue
       const owner = matter.context.participants[0]
       if (owner === undefined || !mine(matter.position_id)) continue

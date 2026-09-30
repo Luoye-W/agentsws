@@ -133,6 +133,17 @@ describe('左下角「场景」', () => {
     expect(rows[2]?.textContent).toContain(
       '这是你自己建的场景（从官方模板起步），Agents 工坊不对它负责。',
     )
+    // WP214：那句边界在「官方 / 自建」标签的 tooltip 里；列表上面只说一次
+    expect(screen.getByTestId('scene-origin-web').getAttribute('data-hint')).toBe(
+      '这个场景由 DeepSeek 官方维护，Agents 工坊不对它负责。',
+    )
+    expect(screen.getAllByTestId('scene-notice')).toHaveLength(1)
+    // 运行状态是一个小图标：运行中 = 通、关着 = 没测
+    const stateOf = (name: string) =>
+      screen.getByTestId(`scene-state-${name}`).querySelector('[data-testid="status-icon"]')
+    expect(stateOf('web')?.getAttribute('data-state')).toBe('ok')
+    expect(stateOf('web')?.getAttribute('data-hint')).toContain('运行中')
+    expect(stateOf('coding')?.getAttribute('data-state')).toBe('unknown')
     expect(screen.getByTestId('scene-cli')?.textContent).toContain('headless、acp')
     // 官方场景没有删除；自建的有
     expect(screen.queryByTestId('scene-delete-web')).toBeNull()

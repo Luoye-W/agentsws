@@ -601,6 +601,27 @@ describe('WP167：邮箱卡上的三个开关', () => {
   })
 })
 
+describe('WP214：已连上的卡，状态是一个小图标', () => {
+  it('正常：一个「通」图标，上次测试在它的 tooltip 里；卡面上没有「正常」两个字', async () => {
+    state.connections = [MAIL_CONNECTION]
+    renderWithProviders(<ConnectionsPage />, '/connections')
+    const row = await screen.findByTestId('connection-row')
+    const icon = within(within(row).getByTestId('connection-status')).getByTestId('status-icon')
+    expect(icon.dataset.state).toBe('ok')
+    expect(icon.getAttribute('data-hint')).toContain('正常')
+    expect(icon.getAttribute('data-hint')).toContain('上次测试')
+    expect(row.textContent).not.toContain('正常')
+  })
+
+  it('要重新授权：图标是「不通」，那句要人动手的话照旧常显', async () => {
+    state.connections = [{ ...MAIL_CONNECTION, status: 'reauth_required' }]
+    renderWithProviders(<ConnectionsPage />, '/connections')
+    const row = await screen.findByTestId('connection-row')
+    expect(within(row).getByTestId('status-icon').dataset.state).toBe('fail')
+    expect(row.textContent).toContain('要重新授权')
+  })
+})
+
 describe('WP210：连接页收拾（Luoye 09-30）', () => {
   it('已连上的卡：大标题是账号本身，类型名降成小字；凭据存哪 / 上次测试进问号', async () => {
     state.connections = [MAIL_CONNECTION]

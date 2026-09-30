@@ -264,7 +264,15 @@ export function createWorkPort(options: WorkPortOptions): WorkPort {
       }
     },
 
-    matters: (_actor, filter) => work.listMatters(filter),
+    /**
+     * WP207：**归档的事移出默认列表**（`archived` 不给 = exclude）；要看归档的带 `only` / `all`。
+     * 老数据里一件归档的都没有，所以老调用方看到的一条不少。
+     */
+    matters: (_actor, { archived, ...filter }) =>
+      work.listMatters({
+        ...filter,
+        ...(archived === 'all' ? {} : { archived: archived === 'only' }),
+      }),
     matter: (_actor, id) => {
       const view = work.matterView(id, { label: (ref) => options.label(ref) })
       return {

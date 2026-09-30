@@ -35,6 +35,8 @@ export function matchMatter(m: Matter, f: MatterFilter): boolean {
   if (f.status !== undefined && !f.status.includes(m.status)) return false
   if (f.goal_id !== undefined && m.goal_id !== f.goal_id) return false
   if (f.participant !== undefined && !m.context.participants.includes(f.participant)) return false
+  // WP207：`archived` 不给 = 都要（老调用方一个字不变）
+  if (f.archived !== undefined && (m.archived_at !== undefined) !== f.archived) return false
   return true
 }
 

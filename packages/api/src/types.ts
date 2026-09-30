@@ -95,6 +95,7 @@ import type { SocialPort } from './routes/social.js'
 import type { StandbyPort } from './routes/standby.js'
 import type { StoragePort } from './routes/storage.js'
 import type { WorkPort } from './routes/work.js'
+import type { WorkArchivePort } from './routes/work-archive.js'
 import type { WsOptions } from './routes/ws.js'
 
 /** 一次请求解析出的主体（28 §2「每请求解析 { person, workspace, assignment?, kind }」）。 */
@@ -846,6 +847,11 @@ export interface GatewayDeps {
   seo?: SeoPort
   /** 37 工作模型（事项 / 目标 / 待办 / 日历 / 计划 / 复盘）；没装配时那几条路由回 not_implemented。 */
   work?: WorkPort
+  /**
+   * WP207：左栏职责下的对话 / 任务、自动归档与找回。没装配时 `/v1/work/rail|archived|search`、
+   * `/v1/matters/:id/unarchive`、`/v1/settings/work-archive` 回 not_implemented——左栏照常列岗位与职责。
+   */
+  workArchive?: WorkArchivePort
   /** 37 §4 会议内核；没装配时 `/v1/meetings/*` 回 not_implemented。 */
   meetings?: MeetingsPort
   /**
