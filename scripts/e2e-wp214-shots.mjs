@@ -211,10 +211,16 @@ async function main() {
       await page.evaluate(() => document.documentElement.classList.remove('dark'))
       await page.emulateMedia({ colorScheme: 'light' })
     }
-    await shot(page.locator('[data-testid="model-template"][data-vendor="deepseek"]'), 'models-deepseek-card')
+    await shot(
+      page.locator('[data-testid="model-template"][data-vendor="deepseek"]'),
+      'models-deepseek-card',
+    )
     await shot(page.locator('[data-testid="web-search-toggle"]'), 'web-search')
     const openai = page.locator('[data-testid="model-template"][data-vendor="openai"]')
-    await openai.locator('[data-testid="subscription-signed-in"]').waitFor({ timeout: 10_000 }).catch(() => {})
+    await openai
+      .locator('[data-testid="subscription-signed-in"]')
+      .waitFor({ timeout: 10_000 })
+      .catch(() => {})
     await shot(openai, 'subscription')
 
     // 官方插件：三种状态（替身）
