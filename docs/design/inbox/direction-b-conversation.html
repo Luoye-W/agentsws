@@ -1,0 +1,422 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>消息 · 方向 B 对话为中心</title>
+<!-- WP205 设计稿（静态、合成数据）。?theme=dark 看暗色；窄于 700px 自动切手机排法。真源令牌见 apps/workstation/src/index.css -->
+<script>(function(){var t=new URLSearchParams(location.search).get("theme");if(t)document.documentElement.dataset.theme=t;if(new URLSearchParams(location.search).get("pop"))document.documentElement.classList.add("pop-on");})();</script>
+<style>
+/* 设计稿共用底：--ws-* 令牌照 apps/workstation/src/index.css（docs/36 §1.1），明暗两套 */
+:root{
+  --paper:#F3F5F2;--card:#FFFFFF;--line:#ECEFEA;--ink:#263331;--body:#4B5550;--muted:#6B746F;
+  --brand:#007B67;--brand-ink:#045246;--brand-fg:#fff;--tint:#E8F3F0;--surface:#F7F9F6;
+  --good:#158A4B;--good-bg:#E3F5EA;--warn:#B26E0B;--warn-bg:#FFF4DB;--bad:#C93B30;--bad-bg:#FDE9E7;--info:#2F63C8;--info-bg:#E9F0FB;
+  --shadow:0 1px 2px rgba(20,40,30,.04),0 8px 24px rgba(20,40,30,.05);
+  --glow:0 0 0 1px rgba(0,123,103,.32),0 0 12px 2px rgba(0,123,103,.14);
+  --mk0:#2E86D8;--mk1:#1FB8A4;--mk2:#D9A82E;
+  /* 账号色：与状态色分开的一套，只出现在小圆点与头像角标上 */
+  --ac1:#4F5BD5;--ac2:#0E8C9B;--ac3:#C0841A;--ac4:#8E5BC7;--ac5:#C2477A;--ac6:#3B8C3E;
+  --font:"Outfit",-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Noto Sans SC","Microsoft YaHei",sans-serif;
+  color-scheme:light;
+}
+html[data-theme="dark"]{
+  --paper:#0E100F;--card:#171A18;--line:#242825;--ink:#F1F4F0;--body:#C9D2CC;--muted:#98A29B;
+  --brand:#76FB91;--brand-ink:#B9FFC9;--brand-fg:#0E100F;--tint:#173C24;--surface:#1C201D;
+  --good:#76FB91;--good-bg:#173C24;--warn:#F5C451;--warn-bg:#3A2E10;--bad:#FF7A6B;--bad-bg:#3D1D19;--info:#8BB8FF;--info-bg:#1A2436;
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px rgba(0,0,0,.32);
+  --glow:0 0 0 1px rgba(118,251,145,.32),0 0 12px 2px rgba(118,251,145,.14);
+  --mk0:#4EA8FF;--mk1:#2FE0C8;--mk2:#FFD84D;
+  --ac1:#8C95FF;--ac2:#3FC7D6;--ac3:#F0B04A;--ac4:#B994F2;--ac5:#F07BAA;--ac6:#7CCB6E;
+  color-scheme:dark;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:var(--paper);color:var(--ink);font-family:var(--font);font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+svg{flex:none}
+.ico{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.ico.sm{width:14px;height:14px}
+.muted{color:var(--muted)}
+.card{background:var(--card);border-radius:16px;box-shadow:var(--shadow)}
+
+/* ── 应用外壳：左栏（与现工作台同构，缩写）+ 右侧图标轨 ── */
+.app{display:grid;grid-template-columns:232px 1fr 44px;min-height:100vh}
+.nav{padding:18px 12px;display:flex;flex-direction:column;gap:2px;border-right:1px solid var(--line);position:sticky;top:0;height:100vh}
+.nav .logo{display:flex;align-items:center;gap:8px;font-weight:600;font-size:15px;padding:4px 8px 16px}
+.nav a{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:10px;color:var(--body);text-decoration:none;font-size:14px}
+.nav a.on{background:var(--tint);color:var(--brand-ink);font-weight:600}
+html[data-theme="dark"] .nav a.on{color:var(--brand)}
+.nav .sec{font-size:12px;color:var(--muted);padding:14px 10px 4px}
+.nav .n{margin-left:auto;font-size:12px;color:var(--muted)}
+.nav .dot{margin-left:auto;width:6px;height:6px;border-radius:50%;background:var(--brand)}
+.nav .me{margin-top:auto;display:flex;align-items:center;gap:10px;padding:10px;border-top:1px solid var(--line)}
+.av{width:32px;height:32px;border-radius:50%;display:grid;place-items:center;font-size:13px;font-weight:600;background:var(--surface);color:var(--body);position:relative;flex:none}
+.demo{font-size:11px;color:var(--muted);padding:2px 10px}
+.rail{border-left:1px solid var(--line);display:flex;flex-direction:column;align-items:center;gap:14px;padding-top:18px;color:var(--muted);position:sticky;top:0;height:100vh}
+.topbar{display:flex;justify-content:flex-end;align-items:center;gap:10px;padding:14px 28px 0}
+.kbar{display:flex;align-items:center;gap:8px;width:340px;padding:8px 12px;border-radius:12px;background:var(--card);box-shadow:var(--shadow);color:var(--muted);font-size:13px}
+.kbar kbd{margin-left:auto;font-family:inherit;font-size:11px}
+
+/* ── 通用件 ── */
+.chip{display:inline-flex;align-items:center;gap:5px;height:22px;padding:0 8px;border-radius:999px;font-size:12px;white-space:nowrap;background:var(--surface);color:var(--body)}
+.chip.k{background:var(--surface)}               /* 类型 */
+.chip.p{background:transparent;box-shadow:inset 0 0 0 1px var(--line)} /* 岗位 */
+.chip.u0{background:var(--bad-bg);color:var(--bad)} /* 客户在等 */
+.chip.u1{background:var(--warn-bg);color:var(--warn)} /* 今天 */
+.chip.s-ap{background:var(--tint);color:var(--brand-ink)}
+html[data-theme="dark"] .chip.s-ap{color:var(--brand)}
+.chip.s-lk{background:var(--warn-bg);color:var(--warn)}
+.chip.s-ok{background:var(--good-bg);color:var(--good)}
+.chip.s-fy{background:var(--surface);color:var(--muted)}
+.chip .edit{opacity:.45;margin-left:1px}
+.acc{width:8px;height:8px;border-radius:50%;display:inline-block;flex:none}
+.a1{background:var(--ac1)}.a2{background:var(--ac2)}.a3{background:var(--ac3)}.a4{background:var(--ac4)}.a5{background:var(--ac5)}.a6{background:var(--ac6)}
+/* 头像右下角的渠道角标：底色 = 账号色 */
+.ch{position:absolute;right:-3px;bottom:-3px;width:16px;height:16px;border-radius:50%;display:grid;place-items:center;border:2px solid var(--card);color:#fff}
+.ch svg{width:9px;height:9px;stroke:#fff;fill:none;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round}
+.btn{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 14px;border-radius:10px;font-size:13px;font-weight:600;white-space:nowrap}
+.btn.pri{background:var(--brand);color:var(--brand-fg)}
+.btn.sec{box-shadow:inset 0 0 0 1px var(--line);color:var(--ink);background:var(--card)}
+.btn.ghost{color:var(--muted);font-weight:500;padding:0 8px}
+.btn.sm{height:28px;padding:0 10px;font-size:12px}
+.go{margin-left:auto;width:30px;height:30px;border-radius:50%;display:grid;place-items:center;box-shadow:inset 0 0 0 1px var(--line);color:var(--muted)}
+.seg{display:inline-flex;padding:3px;border-radius:10px;background:var(--surface);gap:2px}
+.seg b{font-weight:500;font-size:13px;padding:4px 12px;border-radius:8px;color:var(--muted)}
+.seg b.on{background:var(--card);color:var(--ink);box-shadow:var(--shadow);font-weight:600}
+.hint{display:inline-grid;place-items:center;width:14px;height:14px;border-radius:50%;box-shadow:inset 0 0 0 1px var(--muted);font-size:10px;color:var(--muted);font-weight:600}
+.tabbar{display:none}
+.theme-toggle{font-size:12px;color:var(--muted);background:var(--card);box-shadow:var(--shadow);border-radius:999px;padding:6px 12px}
+.app>main{min-width:0}
+.mtop{display:none}
+@media (max-width:700px){
+  .app{grid-template-columns:1fr}
+  .nav,.rail,.topbar{display:none}
+  .tabbar{display:flex;position:sticky;left:0;right:0;bottom:0;height:62px;background:var(--card);border-top:1px solid var(--line);justify-content:space-around;align-items:center;padding-bottom:8px;z-index:5}
+  .tabbar span{display:flex;flex-direction:column;align-items:center;gap:2px;font-size:11px;color:var(--muted)}
+  .tabbar span.on{color:var(--brand)}
+  .theme-toggle{display:none}
+  .mtop{display:flex;align-items:center;gap:10px;padding:12px 14px 0;color:var(--muted)}
+  .mtop .sp{margin-left:auto}
+}
+/* ── 方向 B：对话为中心 ── */
+.app.b{grid-template-columns:64px 1fr 44px}
+.nav.slim{padding:18px 10px;align-items:center}
+.nav.slim .logo{padding:4px 0 16px}
+.nav.slim a{padding:9px;justify-content:center}
+.nav.slim .sec{padding:12px 0 4px;font-size:11px}
+.nav.slim .me{border-top:0;padding:10px 0}
+.b main{display:grid;grid-template-columns:340px minmax(0,1fr);min-height:100vh}
+
+/* 左：窄栏，按岗位 / 类型分组 */
+.list{border-right:1px solid var(--line);padding:18px 12px 30px;display:flex;flex-direction:column;gap:10px}
+.list .lh{display:flex;align-items:center;gap:8px;padding:0 4px}
+.list .lh h1{font-size:20px;font-weight:600}
+.list .lh .n{color:var(--muted);font-size:13px}
+.list .lh .ic{margin-left:auto;display:flex;gap:10px;color:var(--muted)}
+.list .seg{align-self:flex-start;margin:0 4px}
+.dots{display:flex;gap:6px;align-items:center;padding:0 6px;font-size:12px;color:var(--muted)}
+.dots .acc{width:10px;height:10px}
+.grp{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);padding:8px 8px 2px;font-weight:600}
+.grp .c{font-weight:500}
+.grp svg{margin-left:auto}
+.li{display:flex;gap:10px;padding:10px;border-radius:12px;align-items:flex-start}
+.li.sel{background:var(--card);box-shadow:var(--glow),var(--shadow)}
+.li .av{width:30px;height:30px;font-size:11px}
+.li .bd{min-width:0;flex:1}
+.li .t1{display:flex;gap:6px;align-items:baseline;font-size:13.5px}
+.li .t1 b{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.li .t1 span{margin-left:auto;font-size:11.5px;color:var(--muted);white-space:nowrap}
+.li .t2{font-size:12.5px;color:var(--body);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin:1px 0 5px}
+.li .t3{display:flex;gap:5px;align-items:center}
+.li .chip{height:19px;font-size:11px;padding:0 6px}
+.li.done .t2{color:var(--muted)}
+.fold{margin:2px 4px;padding:10px 12px;border-radius:12px;background:var(--surface);font-size:12.5px;color:var(--body);display:flex;flex-direction:column;gap:4px}
+.fold b{color:var(--ink);font-size:13px}
+
+/* 右：整宽对话 */
+.conv{padding:18px 26px 0;display:flex;flex-direction:column;min-width:0}
+.ch-top{display:flex;gap:14px;align-items:flex-start}
+.ch-top .av{width:44px;height:44px;font-size:15px}
+.ch-top .ch{width:18px;height:18px}
+.ch-top h2{font-size:20px;font-weight:600;line-height:1.2}
+.ids{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:6px;font-size:12px;color:var(--muted)}
+.ids .chip{height:22px}
+.ids .ok{display:inline-flex;gap:4px;align-items:center}
+.ids u{text-decoration:none;color:var(--muted);box-shadow:inset 0 -1px 0 var(--line)}
+.ch-top .acts{margin-left:auto;display:flex;gap:4px;align-items:center}
+.ch-top .acts .btn{height:30px;padding:0 10px;font-weight:500}
+.judg{display:flex;gap:6px;align-items:center;margin:14px 0 14px;position:relative;flex-wrap:wrap}
+.judg .lb{font-size:12px;color:var(--muted);margin-right:2px}
+.judg .chip{height:26px;padding:0 10px;font-size:12.5px}
+.judg .chip.open{box-shadow:var(--glow);background:var(--card)}
+.pop{display:none;position:absolute;top:34px;left:44px;width:300px;padding:12px;z-index:3;border-radius:14px;background:var(--card);box-shadow:0 18px 40px rgba(20,40,30,.18),0 0 0 1px var(--line)}
+html[data-theme="dark"] .pop{box-shadow:0 18px 40px rgba(0,0,0,.6),0 0 0 1px var(--line)}
+.pop .ph{font-size:12px;color:var(--muted);margin-bottom:8px;display:flex;justify-content:space-between}
+.pop .opts{display:grid;grid-template-columns:1fr 1fr;gap:4px}
+.pop .opts span{font-size:12.5px;padding:6px 8px;border-radius:8px;background:var(--surface);display:flex;gap:6px;align-items:center}
+.pop .opts span.on{background:var(--tint);color:var(--brand-ink);font-weight:600}
+html[data-theme="dark"] .pop .opts span.on{color:var(--brand)}
+.pop .rm{font-size:12px;color:var(--body);margin-top:10px;display:flex;gap:6px;align-items:flex-start;padding-top:8px;border-top:1px dashed var(--line)}
+.pop .pf{display:flex;gap:6px;margin-top:10px;justify-content:flex-end}
+
+.body2{display:grid;grid-template-columns:minmax(0,1fr) 270px;gap:18px;flex:1}
+.pin{padding:14px 16px;margin-bottom:14px;background:var(--card);border-radius:16px;box-shadow:var(--shadow);display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px 18px;align-items:start}
+.pin .ph{font-size:12px;color:var(--brand);display:flex;gap:6px;align-items:center;font-weight:600;grid-column:1/-1}
+html:not([data-theme="dark"]) .pin .ph{color:var(--brand-ink)}
+.pin ul{list-style:none;display:flex;flex-direction:column;gap:4px;font-size:13.5px}
+.pin li{display:flex;gap:8px}
+.pin li::before{content:"";width:5px;height:5px;border-radius:50%;background:var(--muted);margin-top:8px;flex:none}
+.pin .next{background:var(--tint);border-radius:12px;padding:10px 12px;font-size:13px;min-width:200px}
+.pin .next small{display:block;font-size:11.5px;color:var(--muted)}
+.pin .next b{display:block;font-size:14px;margin:2px 0 6px}
+.day{display:flex;align-items:center;gap:10px;font-size:12px;color:var(--muted);margin:10px 0}
+.day::before,.day::after{content:"";height:1px;flex:1;background:var(--line)}
+.msg{display:flex;gap:10px;margin-bottom:10px}
+.msg .bub{background:var(--card);border-radius:4px 14px 14px 14px;box-shadow:var(--shadow);padding:10px 12px;font-size:13.5px;max-width:560px}
+.msg .meta{font-size:11.5px;color:var(--muted);display:flex;gap:6px;align-items:center;margin-bottom:4px}
+.msg.col .bub{padding:7px 12px;color:var(--body);font-size:13px}
+.msg.col .bub .more{color:var(--muted);font-size:12px;margin-left:6px}
+.msg.agent{justify-content:flex-end}
+.msg.agent .bub{background:var(--surface);box-shadow:none;border-radius:14px 4px 14px 14px}
+.msg .av{width:28px;height:28px;font-size:10px}
+.msg .zh{color:var(--muted);font-size:12.5px;margin-top:4px}
+.photos{display:flex;gap:6px;margin-top:6px}
+.photos span{width:88px;height:66px;border-radius:8px;background:linear-gradient(135deg,var(--line),var(--surface));display:grid;place-items:center;color:var(--muted)}
+.dcard{margin:6px 0 14px 38px;padding:14px 16px;border-radius:16px;background:var(--card);box-shadow:var(--glow),var(--shadow)}
+.dcard .dh{display:flex;gap:8px;align-items:center;font-size:12px;color:var(--muted);margin-bottom:8px}
+.dcard .dh b{color:var(--ink);font-size:13px}
+.dcard .en{font-size:13.5px;line-height:1.55}
+.dcard .zh{font-size:12.5px;color:var(--muted);margin-top:6px;padding-top:6px;border-top:1px dashed var(--line)}
+.facts{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+.facts .chip{background:var(--info-bg);color:var(--info)}
+.facts .chip.money{background:var(--warn-bg);color:var(--warn);font-weight:600}
+.dfoot{display:flex;gap:8px;align-items:center;margin-top:12px}
+.teach{padding:6px 0 24px}
+.teach .in{display:flex;align-items:center;gap:10px;background:var(--card);border-radius:14px;box-shadow:var(--shadow);padding:10px 12px;color:var(--muted);font-size:13.5px}
+.teach .in .btn{margin-left:auto}
+.ctx{display:flex;flex-direction:column;gap:12px}
+.ctx .card{padding:12px 14px}
+.ctx h4{font-size:12px;color:var(--muted);font-weight:600;margin-bottom:8px;display:flex;gap:6px;align-items:center}
+.ctx .kv{display:flex;justify-content:space-between;font-size:12.5px;padding:2px 0;gap:8px}
+.ctx .kv span:first-child{color:var(--muted)}
+.ctx .fc{font-size:12.5px;padding:5px 0;border-top:1px dashed var(--line);display:flex;gap:6px}
+.ctx .fc:first-of-type{border-top:0}
+.back{display:none}
+
+@media (max-width:700px){
+  .app.b{grid-template-columns:1fr}
+  .b main{grid-template-columns:1fr}
+  .list{display:none}
+  .conv{padding:12px 14px 0}
+  .back{display:flex;align-items:center;gap:4px;color:var(--muted);font-size:13px;margin-bottom:10px}
+  .ch-top .acts{display:none}
+  .ch-top h2{font-size:18px}
+  .ids .m-hide,.pop{display:none}
+  .judg .lb{display:none}
+  .body2{grid-template-columns:1fr}
+  .ctx{display:none}
+  .pin{grid-template-columns:1fr}
+  .pin ul{font-size:13px}
+  .msg .bub{max-width:100%}
+  .dcard{margin-left:0}
+  .dfoot{flex-wrap:wrap}
+}
+
+html.pop-on .pop{display:block}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+<defs><linearGradient id="mk" gradientUnits="userSpaceOnUse" x1="14" y1="77" x2="79" y2="12"><stop offset="0" style="stop-color:var(--mk0)"/><stop offset=".52" style="stop-color:var(--mk1)"/><stop offset="1" style="stop-color:var(--mk2)"/></linearGradient></defs>
+<symbol id="i-home" viewBox="0 0 24 24"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/></symbol>
+<symbol id="i-inbox" viewBox="0 0 24 24"><path d="M3 13h5l1.5 3h5L16 13h5"/><path d="M5 5h14l2 8v6a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-6z"/></symbol>
+<symbol id="i-todo" viewBox="0 0 24 24"><path d="M10 6h11M10 12h11M10 18h11"/><path d="m3 6 1.5 1.5L7 5M3 12l1.5 1.5L7 11"/><circle cx="5" cy="18" r="1.3"/></symbol>
+<symbol id="i-cal" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></symbol>
+<symbol id="i-crown" viewBox="0 0 24 24"><path d="m3 8 4.5 4L12 5l4.5 7L21 8l-2 11H5z"/></symbol>
+<symbol id="i-head" viewBox="0 0 24 24"><path d="M4 14v-2a8 8 0 0 1 16 0v2"/><rect x="3" y="13" width="4" height="6" rx="1.5"/><rect x="17" y="13" width="4" height="6" rx="1.5"/><path d="M19 19c0 1.5-2 2.5-5 2.5"/></symbol>
+<symbol id="i-kol" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/><path d="m18 3 .7 1.5L20 5l-1.3.5L18 7l-.7-1.5L16 5l1.3-.5z"/></symbol>
+<symbol id="i-case" viewBox="0 0 24 24"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M3 13h18"/></symbol>
+<symbol id="i-mega" viewBox="0 0 24 24"><path d="M3 10v4a1 1 0 0 0 1 1h3l6 4V5L7 9H4a1 1 0 0 0-1 1z"/><path d="M17 8a5 5 0 0 1 0 8"/></symbol>
+<symbol id="i-mic" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></symbol>
+<symbol id="i-mail" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></symbol>
+<symbol id="i-chat" viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/></symbol>
+<symbol id="i-wa" viewBox="0 0 24 24"><path d="M4 20l1.3-4A8 8 0 1 1 8 18.7z"/><path d="M9 9.5c.5 2 2 3.5 4.5 4.5"/></symbol>
+<symbol id="i-ig" viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="17" height="17" rx="5"/><circle cx="12" cy="12" r="4"/></symbol>
+<symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></symbol>
+<symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
+<symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 5 5 9-10"/></symbol>
+<symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+<symbol id="i-archive" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="5" rx="1"/><path d="M5 9v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9M10 13h4"/></symbol>
+<symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></symbol>
+<symbol id="i-more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></symbol>
+<symbol id="i-ai" viewBox="0 0 24 24"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/><path d="M19 16l.7 1.8L21.5 18.5l-1.8.7L19 21l-.7-1.8-1.8-.7 1.8-.7z"/></symbol>
+<symbol id="i-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+<symbol id="i-right" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></symbol>
+<symbol id="i-left" viewBox="0 0 24 24"><path d="m15 6-6 6 6 6"/></symbol>
+<symbol id="i-pen" viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z"/></symbol>
+<symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+<symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6z"/></symbol>
+<symbol id="i-bolt" viewBox="0 0 24 24"><path d="M13 3 5 14h6l-1 7 8-11h-6z"/></symbol>
+<symbol id="i-link" viewBox="0 0 24 24"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></symbol>
+<symbol id="i-book" viewBox="0 0 24 24"><path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z"/><path d="M4 19V5"/></symbol>
+<symbol id="i-chart" viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></symbol>
+<symbol id="i-run" viewBox="0 0 24 24"><path d="M3 12h4l3-8 4 16 3-8h4"/></symbol>
+<symbol id="i-file" viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4"/></symbol>
+<symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3.5 3 14.5 0 18M12 3c-3 3.5-3 14.5 0 18"/></symbol>
+<symbol id="i-img" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 16-5-5-9 9"/></symbol>
+<symbol id="i-lang" viewBox="0 0 24 24"><path d="M4 5h9M8.5 3v2M6 5c.5 3 2.5 5.5 5 7M11 5c-.8 3.5-3 6-6 7.5"/><path d="m13 21 4-10 4 10M14.5 17.5h5"/></symbol>
+</svg>
+<div class="app b">
+<aside class="nav slim">
+  <div class="logo"><svg width="24" height="24" viewBox="14 12 65 65" aria-hidden="true"><g fill="url(#mk)"><rect x="14" y="44" width="17" height="17" rx="2.5"/><rect x="38" y="52" width="17" height="17" rx="2.5"/><rect x="38" y="28" width="17" height="17" rx="2.5"/><rect x="62" y="60" width="17" height="17" rx="2.5"/><rect x="62" y="36" width="17" height="17" rx="2.5"/><rect x="62" y="12" width="17" height="17" rx="2.5"/></g></svg></div>
+  <a title="首页"><svg class="ico"><use href="#i-home"/></svg></a>
+  <a class="on" title="消息"><svg class="ico"><use href="#i-inbox"/></svg></a>
+  <a title="待办"><svg class="ico"><use href="#i-todo"/></svg></a>
+  <a title="日历"><svg class="ico"><use href="#i-cal"/></svg></a>
+  <div class="sec">岗位</div>
+  <a title="负责人"><svg class="ico"><use href="#i-crown"/></svg></a>
+  <a title="客服"><svg class="ico"><use href="#i-head"/></svg></a>
+  <a title="红人营销"><svg class="ico"><use href="#i-kol"/></svg></a>
+  <a title="B2B 业务"><svg class="ico"><use href="#i-case"/></svg></a>
+  <a title="社媒运营"><svg class="ico"><use href="#i-mega"/></svg></a>
+  <a title="公共关系"><svg class="ico"><use href="#i-mic"/></svg></a>
+  <div class="me"><span class="av">岚</span></div>
+</aside>
+<main>
+<section class="list" aria-label="对话列表">
+  <div class="lh"><h1>消息</h1><span class="n">6 件要你</span><span class="ic"><svg class="ico"><use href="#i-search"/></svg><button class="theme-toggle" onclick="var d=document.documentElement;d.dataset.theme=d.dataset.theme==='dark'?'light':'dark'">明 / 暗</button></span></div>
+  <div class="seg"><b>要你做</b><b class="on">按岗位</b><b>按类型</b></div>
+  <div class="dots" title="账号筛选：点圆点只看这个账号">
+    <span class="acc a1 on"></span><span class="acc a3 on"></span><span class="acc a4 on"></span><span class="acc a2 on"></span><span class="acc a6 on"></span><span class="acc a5 on"></span><span style="margin-left:4px">全部 6 个来源</span>
+  </div>
+
+  <div class="grp"><svg class="ico sm" style="margin:0"><use href="#i-head"/></svg>客服<span class="c">5</span><svg class="ico sm"><use href="#i-down"/></svg></div>
+  <div class="li sel"><span class="av">MG<span class="ch a6"><svg><use href="#i-wa"/></svg></span></span><div class="bd"><div class="t1"><b>Maria Gomez</b><span>4 分钟</span></div><div class="t2">充电宝鼓包要换新，在保修内</div><div class="t3"><span class="chip u0">2:48</span><span class="chip s-ap">等你批</span><span class="chip k">售后</span></div></div></div>
+  <div class="li done"><span class="av">AL<span class="ch a2"><svg><use href="#i-chat"/></svg></span></span><div class="bd"><div class="t1"><b>访客 · Anna L.</b><span>12 分钟</span></div><div class="t2">欧规插头能不能用 → 已答，附转换头链接</div><div class="t3"><span class="chip s-ok">Agent 已答</span><span class="chip k">客户问题</span></div></div></div>
+  <div class="li done"><span class="av">PN<span class="ch a6"><svg><use href="#i-wa"/></svg></span></span><div class="bd"><div class="t1"><b>Priya Nair</b><span>1 小时</span></div><div class="t2">退货地址已发，等她寄回</div><div class="t3"><span class="chip s-fy">在办</span><span class="chip k">售后</span></div></div></div>
+  <div class="li done"><span class="av">RS<span class="ch a1"><svg><use href="#i-mail"/></svg></span></span><div class="bd"><div class="t1"><b>Raj Singh</b><span>2 小时</span></div><div class="t2">问物流 → 已答：昨天已签收</div><div class="t3"><span class="chip s-ok">Agent 已答</span><span class="chip k">客户问题</span></div></div></div>
+
+  <div class="grp"><svg class="ico sm" style="margin:0"><use href="#i-kol"/></svg>红人营销<span class="c">2</span><svg class="ico sm"><use href="#i-down"/></svg></div>
+  <div class="li"><span class="av">TJ<span class="ch a5"><svg><use href="#i-ig"/></svg></span></span><div class="bd"><div class="t1"><b>@trailwithjess</b><span>1 小时</span></div><div class="t2">愿意测评，要 $300；提议送 1 台 + 10% 佣金</div><div class="t3"><span class="chip s-ap">等你批</span><span class="chip k">红人回复</span></div></div></div>
+  <div class="li done"><span class="av">DV<span class="ch a5"><svg><use href="#i-ig"/></svg></span></span><div class="bd"><div class="t1"><b>Diego Vargas</b><span>3 小时</span></div><div class="t2">交付视频下周一 → 已归进合作线程</div><div class="t3"><span class="chip s-ok">已归线程</span></div></div></div>
+
+  <div class="grp"><svg class="ico sm" style="margin:0"><use href="#i-case"/></svg>B2B 业务<span class="c">2</span><svg class="ico sm"><use href="#i-down"/></svg></div>
+  <div class="li"><span class="av">KW<span class="ch a3"><svg><use href="#i-mail"/></svg></span></span><div class="bd"><div class="t1"><b>Kenji Watanabe</b><span>38 分钟</span></div><div class="t2">500 台 PowerCell 20K 报价，FOB 深圳</div><div class="t3"><span class="chip s-ap">等你批</span><span class="chip s-ok">真买家</span></div></div></div>
+
+  <div class="grp"><svg class="ico sm" style="margin:0"><use href="#i-mic"/></svg>公共关系<span class="c">1</span><svg class="ico sm"><use href="#i-down"/></svg></div>
+  <div class="li"><span class="av">CH<span class="ch a4"><svg><use href="#i-mail"/></svg></span></span><div class="bd"><div class="t1"><b>Clara Hoffmann</b><span>3 小时</span></div><div class="t2">想周四采访 20 分钟</div><div class="t3"><span class="chip s-lk">要你看</span><span class="chip k">媒体</span></div></div></div>
+  <div class="grp"><svg class="ico sm" style="margin:0"><use href="#i-inbox"/></svg>待确认<span class="c">1</span><svg class="ico sm"><use href="#i-down"/></svg></div>
+  <div class="li"><span class="av">TB<span class="ch a1"><svg><use href="#i-mail"/></svg></span></span><div class="bd"><div class="t1"><b>Tom Becker</b><span>5 小时</span></div><div class="t2">订单没到，想退款（没写单号）</div><div class="t3"><span class="chip s-lk">像是售后？52%</span></div></div></div>
+
+  <div class="fold"><b>不归岗位 · 31</b>账单与系统通知 7 · 物流 6 · 营销 14 · 可疑 1 · 其他 3<span class="muted">折起，信没挪</span></div>
+</section>
+
+<section class="conv" aria-label="对话">
+  <div class="back"><svg class="ico sm"><use href="#i-left"/></svg>客服 · 5</div>
+  <div class="ch-top">
+    <span class="av">MG<span class="ch a6"><svg><use href="#i-wa"/></svg></span></span>
+    <div>
+      <h2>Maria Gomez</h2>
+      <div class="ids">
+        <span class="chip"><span class="acc a6"></span>WhatsApp +1 555-0142</span>
+        <span class="chip"><span class="acc a1"></span>maria.g@mail.example</span>
+        <span class="ok m-hide"><svg class="ico sm"><use href="#i-link"/></svg>同一个人 · 依据订单 NV-10482</span>
+        <u class="m-hide">拆开</u>
+      </div>
+    </div>
+    <div class="acts">
+      <span class="btn ghost"><svg class="ico sm"><use href="#i-archive"/></svg>归档</span>
+      <span class="btn ghost"><svg class="ico sm"><use href="#i-clock"/></svg>稍后</span>
+      <span class="btn ghost"><svg class="ico sm"><use href="#i-arrow"/></svg>转岗位</span>
+      <span class="btn ghost"><svg class="ico sm"><use href="#i-more"/></svg></span>
+    </div>
+  </div>
+
+  <div class="judg">
+    <span class="lb">AI 判断</span>
+    <span class="chip k open">售后<svg class="ico sm edit"><use href="#i-down"/></svg></span>
+    <span class="chip p">客服 › 社群管理<svg class="ico sm edit"><use href="#i-down"/></svg></span>
+    <span class="chip u0"><svg class="ico sm"><use href="#i-clock"/></svg>客户在等 · 窗口剩 2:48</span>
+    <span class="chip s-ap">等你批</span>
+    <div class="pop" role="dialog" aria-label="改判类型">
+      <div class="ph"><span>这件事是什么</span><span>把握 91% · 模型</span></div>
+      <div class="opts">
+        <span>客户问题</span><span class="on"><svg class="ico sm"><use href="#i-check"/></svg>售后</span>
+        <span>询盘</span><span>红人回复</span>
+        <span>合作</span><span>媒体</span>
+        <span>账单与系统通知</span><span>物流</span>
+        <span>垃圾与营销</span><span>个人与其他</span>
+      </div>
+      <div class="rm"><input type="checkbox" checked style="margin-top:2px"> 记住：这个人以后都按我改的来</div>
+      <div class="pf"><span class="btn ghost sm">取消</span><span class="btn pri sm">改</span></div>
+    </div>
+  </div>
+
+  <div class="body2">
+    <div>
+      <div class="pin">
+        <div class="ph"><svg class="ico sm"><use href="#i-ai"/></svg>AI 摘要</div>
+        <ul>
+          <li>9 月 28 日发邮件问物流，Agent 已答：27 日已签收</li>
+          <li>今天在 WhatsApp 说充电宝一侧鼓包，发了 2 张图</li>
+          <li>订单在 12 个月保修内，按规则可免费补发、旧的不寄回</li>
+        </ul>
+        <div class="next"><small>下一步</small><b>批准补发并回复</b><span class="muted" style="font-size:12px">窗口关了就只能发模板消息</span></div>
+      </div>
+
+      <div class="day">9 月 28 日 · support@</div>
+      <div class="msg col"><span class="av">MG</span><div class="bub"><div class="meta"><span class="acc a1"></span>邮件</div>Hi, my order NV-10482 shows delivered but I can't find it…<span class="more">原文 ▸</span></div></div>
+      <div class="msg agent col"><div class="bub"><div class="meta"><svg class="ico sm" style="color:var(--brand)"><use href="#i-ai"/></svg>客服 Agent · 自动已发 <svg class="ico sm" style="color:var(--good)"><use href="#i-check"/></svg></div>It was delivered to your building's mailroom on 9/27…<span class="more">全文 ▸</span></div></div>
+
+      <div class="day">今天 · WhatsApp 业务号</div>
+      <div class="msg"><span class="av">MG</span><div class="bub"><div class="meta"><span class="acc a6"></span>WhatsApp · 10:12</div>The power bank I got 2 weeks ago is swelling on one side. Is it safe? Can I get a new one?<div class="zh">两周前买的充电宝一侧鼓起来了，安全吗？能换个新的吗？</div><div class="photos"><span><svg class="ico"><use href="#i-img"/></svg></span><span><svg class="ico"><use href="#i-img"/></svg></span></div></div></div>
+
+      <div class="dcard">
+        <div class="dh"><svg class="ico sm" style="color:var(--brand)"><use href="#i-ai"/></svg><b>客服 Agent 起草</b>回复 + 补发<span style="margin-left:auto">英语 · 下面是译文</span></div>
+        <div class="en">Hi Maria, I'm so sorry. A swelling battery can be unsafe, so please stop using it and keep it away from heat. Your order NV-10482 is within the 12-month warranty, so we'll ship a new PowerCell 20K today at no cost. No need to send the old one back.</div>
+        <div class="zh">Maria 你好，很抱歉。电池鼓包有安全风险，请先停用、远离热源。订单在 12 个月保修内，今天免费补发一台新的，旧的不用寄回。</div>
+        <div class="facts"><span class="chip">订单 NV-10482</span><span class="chip">保修 12 个月</span><span class="chip money">补发 1 台 · $39 · 额度内</span></div>
+        <div class="dfoot"><span class="btn pri">发送并补发</span><span class="btn sec">改一下</span><span class="btn ghost">不发</span><span class="go" title="证据 4"><svg class="ico sm"><use href="#i-file"/></svg></span></div>
+      </div>
+
+      <div class="teach"><div class="in"><svg class="ico sm"><use href="#i-pen"/></svg>教 AI 怎么答…（客户看不到这句话）<span class="hint" title="岗位对话里人只教不直接回（docs/36 §13.3）">?</span><span class="btn pri sm">交给 AI</span></div></div>
+    </div>
+
+    <aside class="ctx">
+      <div class="card"><h4><svg class="ico sm"><use href="#i-file"/></svg>订单 NV-10482</h4>
+        <div class="kv"><span>商品</span><span>PowerCell 20K</span></div>
+        <div class="kv"><span>金额</span><span>$39</span></div>
+        <div class="kv"><span>签收</span><span>9 月 27 日</span></div>
+        <div class="kv"><span>保修到</span><span>2027-09-16</span></div>
+      </div>
+      <div class="card"><h4><svg class="ico sm"><use href="#i-link"/></svg>这个人</h4>
+        <div class="kv"><span>第几单</span><span>第 2 单 · 共 $128</span></div>
+        <div class="kv"><span>来过的渠道</span><span><span class="acc a1"></span> <span class="acc a6"></span></span></div>
+        <div class="kv"><span>偏好</span><span>WhatsApp</span></div>
+      </div>
+      <div class="card"><h4><svg class="ico sm"><use href="#i-book"/></svg>引用的事实卡</h4>
+        <div class="fc"><svg class="ico sm" style="color:var(--good)"><use href="#i-check"/></svg>保修 12 个月，电池类故障免费换新</div>
+        <div class="fc"><svg class="ico sm" style="color:var(--good)"><use href="#i-check"/></svg>鼓包电池不寄回，给回收指引</div>
+      </div>
+    </aside>
+  </div>
+</section>
+</main>
+<div class="rail" aria-label="第三栏图标轨">
+  <svg class="ico"><use href="#i-chart"/></svg>
+  <svg class="ico"><use href="#i-run"/></svg>
+  <svg class="ico"><use href="#i-clock"/></svg>
+  <svg class="ico"><use href="#i-file"/></svg>
+  <svg class="ico"><use href="#i-book"/></svg>
+  <svg class="ico"><use href="#i-globe"/></svg>
+  <svg class="ico"><use href="#i-ai"/></svg>
+</div>
+<nav class="tabbar">
+  <span><svg class="ico"><use href="#i-home"/></svg>首页</span>
+  <span class="on"><svg class="ico"><use href="#i-inbox"/></svg>消息</span>
+  <span><svg class="ico"><use href="#i-todo"/></svg>待办</span>
+  <span><svg class="ico"><use href="#i-cal"/></svg>日历</span>
+</nav>
+</div>
+</body>
+</html>
