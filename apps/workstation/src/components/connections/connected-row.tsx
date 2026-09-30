@@ -13,8 +13,9 @@
  * 所以这个组件不可能把凭据画出来。
  */
 
-import { AlertTriangle, Link2Off, RefreshCw } from 'lucide-react'
+import { AlertTriangle, Link2Off, Plug, RefreshCw } from 'lucide-react'
 import { BrandIcon } from '@/components/brand-icons'
+import { StatusIcons, type StatusState } from '@/components/design'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Hint } from '@/components/ui/hint'
@@ -70,12 +71,33 @@ export function ConnectedRow({
             </span>
           )}
         </div>
-        <Badge
-          data-slot="badge"
-          variant={connection.status === 'active' ? 'secondary' : 'destructive'}
-        >
-          {t(`connections.status.${connection.status}`)}
-        </Badge>
+        {/*
+          WP214（36 §7 第四档）：「正常」那枚徽章换成一个状态小图标（上次测试在 tooltip 里）；
+          要人动手的（要重新授权 / 已停用）徽章照旧常显那句
+        */}
+        <StatusIcons
+          testId="connection-status"
+          items={[
+            {
+              key: 'connection',
+              label: t('models.cap.connect'),
+              state: connectionState(connection, busy === 'test'),
+              stateText: t(`connections.status.${connection.status}`),
+              icon: Plug,
+              detail:
+                connection.last_tested_at === undefined
+                  ? t('connections.never_tested')
+                  : t('connections.last_tested', {
+                      at: formatDate(connection.last_tested_at, lang),
+                    }),
+            },
+          ]}
+        />
+        {connection.status === 'active' ? null : (
+          <Badge data-slot="badge" variant="destructive">
+            {t(`connections.status.${connection.status}`)}
+          </Badge>
+        )}
         <div className="ml-auto flex items-center gap-1">
           <Button size="xs" variant="outline" onClick={onTest} disabled={busy !== undefined}>
             <RefreshCw aria-hidden />
@@ -121,6 +143,16 @@ export function ConnectedRow({
       ) : null}
     </li>
   )
+}
+
+/** WP214：这条连接的四态——在测 = 测试中；不正常或上次没测通 = 不通；测试不支持 = 没测；否则通。 */
+function connectionState(connection: ConnectionView, testing: boolean): StatusState {
+  if (testing) return 'pending'
+  if (connection.status !== 'active') return 'fail'
+  const last = connection.last_test
+  if (last === undefined) return 'ok'
+  if (last.ok) return 'ok'
+  return last.reason === 'test_unavailable' ? 'unknown' : 'fail'
 }
 
 /** 刚测过（两分钟内）：按完「测试」要有一句回音。 */

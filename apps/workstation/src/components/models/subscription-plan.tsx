@@ -18,9 +18,10 @@
  * 前端不重写一遍，改一处就够。
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { CheckCircle2, ExternalLink, Loader2, LogOut, TriangleAlert } from 'lucide-react'
+import { ExternalLink, Loader2, LogOut, TriangleAlert, UserRound } from 'lucide-react'
 import { useState } from 'react'
 import { openExternal } from '@/components/connections/bridge'
+import { StatusIcons } from '@/components/design'
 import { Button } from '@/components/ui/button'
 import { Hint } from '@/components/ui/hint'
 import type { SubscriptionData, SubscriptionMethod, SubscriptionProviderId } from '@/lib/api'
@@ -145,19 +146,31 @@ export function SubscriptionPlan({
 
       {!data.available ? null : data.signed_in ? (
         <div className="flex flex-col gap-2" data-testid="subscription-signed-in">
-          <p className="flex items-center gap-1.5 text-xs">
-            <CheckCircle2 className="size-3.5 text-emerald-600" aria-hidden />
-            <span data-testid="subscription-account">
-              {t('models.subscription.signed_in', { account: data.account ?? '—' })}
-            </span>
-            {data.expires_at === undefined ? null : (
-              <span className="text-muted-foreground">
-                {t('models.subscription.expires', {
-                  at: new Date(data.expires_at).toLocaleString(),
-                })}
-              </span>
-            )}
-          </p>
+          {/*
+            WP214（36 §7 第四档）：「已登录（账号 x）· 令牌某天到期、到期前自动续」→ 一个小图标 + 账号名；
+            到期时间进 tooltip
+          */}
+          <StatusIcons
+            testId="subscription-status"
+            items={[
+              {
+                key: 'account',
+                label: data.label,
+                state: 'ok',
+                stateText: t('dsa.signed_in.unknown'),
+                icon: UserRound,
+                value: data.account ?? '—',
+                testId: 'subscription-account',
+                ...(data.expires_at === undefined
+                  ? {}
+                  : {
+                      detail: t('models.subscription.expires', {
+                        at: new Date(data.expires_at).toLocaleString(),
+                      }).replace(/^·\s*/, ''),
+                    }),
+              },
+            ]}
+          />
           {data.models.length === 0 ? null : (
             <label className="flex flex-col gap-1 text-xs">
               <span className="text-muted-foreground">
