@@ -2876,9 +2876,32 @@ export interface SkillSummary {
   tier: string
   version: string
   excluded: boolean
-  sections: { id: string; heading: string; origin: 'authored' | 'learned' }[]
+  /** WP209：`body` = 这一段现在的正文（搜索用）。 */
+  sections: { id: string; heading: string; origin: 'authored' | 'learned'; body?: string }[]
   overlays: SkillOverlayView[]
   pending_proposals: number
+  /* ── WP209：按岗位分组那几格（只加；老服务进程不回时退回英文 id、归「通用」）── */
+  display_name?: { zh: string; en: string }
+  summary?: { zh: string; en: string }
+  description?: string
+  positions?: SkillPositionRef[]
+  roles?: SkillRoleRef[]
+  in_use?: boolean
+}
+
+/** WP209：技能归属的一个岗位（`common` = 通用）。 */
+export interface SkillPositionRef {
+  id: string
+  name: { zh: string; en: string }
+  mine: boolean
+}
+
+/** WP209：在用这个技能的一条职责。 */
+export interface SkillRoleRef {
+  role_id: string
+  name: { zh: string; en: string }
+  position_ids: string[]
+  mine: boolean
 }
 
 export interface SkillProposalSummary {
@@ -3498,6 +3521,16 @@ export interface KnowledgeCardRow {
   last_verified_at?: string
   media?: string[]
   updated_at: string
+  /* ── WP209：知识库按类型 / 品牌 / 状态 / 来源分组要的几格——服务端本来就回（整张 FactCard），
+     这里只是把它们认下来（只加）。 */
+  domain?: string
+  /** 适用范围：空 = 整个品牌通用；`brand` / `store` / `product_line` / `market` 一格一条。 */
+  scope?: { kind: string; id: string }[]
+  provenance?: { source: string; ref: string; locator?: string }[]
+  created_by?: { kind: 'agent' | 'person'; id: string }
+  conflicts?: { with: string; note: string }[]
+  valid?: { from?: string; until?: string }
+  structured?: Record<string, unknown>
 }
 
 /** 48 §4 #6：源页 / 文档改了、受管辖数值也变了，等人答的那一张。 */
