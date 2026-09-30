@@ -153,6 +153,17 @@ vi.mock('@/lib/api', async () => {
   const actual = await vi.importActual<typeof import('@/lib/api')>('@/lib/api')
   return {
     ...actual,
+    // WP212：「没人接的」总览（这几条用例看的是「全部」那一套）
+    getMessageOverview: async () => ({
+      unclaimed: 0,
+      notice: 0,
+      handed: 0,
+      handed_by_position: [],
+      cards_waiting: 0,
+      notice_groups: [],
+      positions: [],
+      taught: { rules: 0, saved: 0, recent: [] },
+    }),
     listMessageAccounts: () => listMessageAccounts(),
     listMessageLabels: () => listMessageLabels(),
     listMessageThreads: (...a: unknown[]) => listMessageThreads(...(a as [])),
@@ -178,7 +189,7 @@ const { MailAssistantPanel, focusMessage, resetMessageFocus } = await import(
 
 describe('消息页（63 §8）', () => {
   it('会话列表：未读是一个点，不是一个红数字', async () => {
-    renderWithProviders(<MessagesPage />)
+    renderWithProviders(<MessagesPage />, '/messages?view=all')
     const row = await screen.findByTestId('messages-thread')
     expect(row.getAttribute('data-unread')).toBe('true')
     expect(screen.getByTestId('messages-unread-dot')).toBeDefined()
@@ -188,7 +199,7 @@ describe('消息页（63 §8）', () => {
 
   it('打开一条会话就标已读；正文进 sandbox iframe，远程图片默认不加载', async () => {
     const user = userEvent.setup()
-    renderWithProviders(<MessagesPage />)
+    renderWithProviders(<MessagesPage />, '/messages?view=all')
     await user.click(await screen.findByTestId('messages-thread'))
     await waitFor(() => {
       expect(setMessageFlags).toHaveBeenCalledWith('msg_1', { read: true })
@@ -209,7 +220,7 @@ describe('消息页（63 §8）', () => {
 
   it('「删除」打出去的是"移到垃圾箱"——没有第二种去处（63 §7）', async () => {
     const user = userEvent.setup()
-    renderWithProviders(<MessagesPage />)
+    renderWithProviders(<MessagesPage />, '/messages?view=all')
     await user.click(await screen.findByTestId('messages-thread'))
     await user.click(await screen.findByTestId('messages-delete'))
     // WP204：删除先问一句
@@ -221,7 +232,7 @@ describe('消息页（63 §8）', () => {
 
   it('回复框里收件人来自被回的那封，发送打的是 /v1/messages/send（不出卡）', async () => {
     const user = userEvent.setup()
-    renderWithProviders(<MessagesPage />)
+    renderWithProviders(<MessagesPage />, '/messages?view=all')
     await user.click(await screen.findByTestId('messages-thread'))
     await user.click(await screen.findByTestId('messages-reply'))
     const to = await screen.findByTestId('composer-to')
@@ -252,7 +263,7 @@ describe('消息页（63 §8）', () => {
       },
     })
     const user = userEvent.setup()
-    renderWithProviders(<MessagesPage />)
+    renderWithProviders(<MessagesPage />, '/messages?view=all')
     await user.click(await screen.findByTestId('messages-thread'))
     const band = await screen.findByTestId('messages-agent-band')
     expect(band.getAttribute('data-state')).toBe('working')
@@ -270,13 +281,13 @@ describe('消息页（63 §8）', () => {
 
   it('一只邮箱都没连：照实说，并指向连接页（不新增凭据入口）', async () => {
     listMessageAccounts.mockResolvedValueOnce({ accounts: [] })
-    renderWithProviders(<MessagesPage />)
+    renderWithProviders(<MessagesPage />, '/messages?view=all')
     expect(await screen.findByTestId('messages-no-mailbox')).toBeDefined()
     expect(screen.getByTestId('messages-connect').getAttribute('href')).toContain('/connections')
   })
 
   it('WP163：没邮箱动作失败时不出那一行；有就一眼看见，问号里说是哪只邮箱、为什么', async () => {
-    const { unmount } = renderWithProviders(<MessagesPage />)
+    const { unmount } = renderWithProviders(<MessagesPage />, '/messages?view=all')
     await screen.findByTestId('messages-thread')
     expect(screen.queryByTestId('messages-mailbox-failure')).toBeNull()
     unmount()
@@ -294,7 +305,7 @@ describe('消息页（63 §8）', () => {
         },
       ],
     })
-    renderWithProviders(<MessagesPage />)
+    renderWithProviders(<MessagesPage />, '/messages?view=all')
     const line = await screen.findByTestId('messages-mailbox-failure')
     expect(line.textContent).toContain('客服信没挪进客服文件夹')
     expect(line.getAttribute('data-reason')).toBe('server_refused')
@@ -305,7 +316,7 @@ describe('消息页（63 §8）', () => {
 
   it('搜索与文件夹切换都打到同一条列表接口上', async () => {
     const user = userEvent.setup()
-    renderWithProviders(<MessagesPage />)
+    renderWithProviders(<MessagesPage />, '/messages?view=all')
     await screen.findByTestId('messages-thread')
     await user.click(screen.getByTestId('messages-search'))
     await user.keyboard('包裹')
@@ -376,7 +387,7 @@ describe('WP208：邮件助手搬进消息页的阅读区', () => {
       ],
     }))
     const user = userEvent.setup()
-    renderWithProviders(<MessagesPage />)
+    renderWithProviders(<MessagesPage />, '/messages?view=all')
     await screen.findByTestId('messages-thread')
     expect(screen.queryByTestId('mail-ai')).toBeNull()
 
@@ -416,7 +427,7 @@ describe('WP208 × WP204：助手出错不连累阅读区', () => {
     getMailAssistant.mockImplementation(async () => ({ suggestions: [] }) as never)
     const quiet = vi.spyOn(console, 'error').mockImplementation(() => {})
     const user = userEvent.setup()
-    renderWithProviders(<MessagesPage />)
+    renderWithProviders(<MessagesPage />, '/messages?view=all')
     await user.click(await screen.findByTestId('messages-thread'))
     expect(await screen.findByTestId('mail-ai-failed')).toBeDefined()
     await user.click(screen.getByTestId('messages-reply'))
@@ -438,7 +449,7 @@ describe('WP167：「待确认」那一栏', () => {
         : { threads: [summary()] },
     )
     const user = userEvent.setup()
-    renderWithProviders(<MessagesPage />)
+    renderWithProviders(<MessagesPage />, '/messages?view=all')
     await user.click(await screen.findByTestId('messages-pending'))
     expect(await screen.findByTestId('messages-pending-dot')).toBeDefined()
     // 列表那一条请求带的是 pending_route，不带文件夹
@@ -480,7 +491,7 @@ describe('WP172：「待确认」里的「这是 B2B」', () => {
       handed_off: false,
     }))
     const user = userEvent.setup()
-    renderWithProviders(<MessagesPage />)
+    renderWithProviders(<MessagesPage />, '/messages?view=all')
     await user.click(await screen.findByTestId('messages-pending'))
     const yes = await screen.findByTestId('messages-pending-yes')
     expect(yes.textContent).toBe('这是 B2B')

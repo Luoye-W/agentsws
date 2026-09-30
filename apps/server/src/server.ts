@@ -53,6 +53,7 @@ import { blobKey, blobUri, openBlobStore } from '@agentsws/blob'
 import { designRoleFamily } from '@agentsws/brand-design'
 import type { PageFetch as BrandIntakeFetch } from '@agentsws/brand-intake'
 import type { ResolveMx } from '@agentsws/channels'
+import { routeOfPosition } from '@agentsws/channels'
 import type {
   ApprovalBus,
   ApprovalItem,
@@ -448,6 +449,17 @@ import {
 } from './workstation.js'
 
 /** 战报要数「今天处理掉的」，所以取队列时状态放全（等待类计数在 work 端自己过滤）。 */
+/** WP212：「交给 X ▾」里常驻的五个岗位（与消息相关；别的岗位开着才列）。 */
+const MESSAGE_POSITIONS: readonly string[] = [
+  'customer-care',
+  'kol-marketing',
+  'b2b',
+  'pr',
+  'social-media',
+]
+/** 排序用：常驻五个按上面的顺序，其余排在后面。 */
+const rank = (i: number): number => (i < 0 ? MESSAGE_POSITIONS.length : i)
+
 const QUEUE_STATES = [
   'pending',
   'in_review',
@@ -3802,6 +3814,96 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       ...(options.messageSource === undefined ? {} : { makeSource: options.messageSource }),
       ...(options.messageWriter === undefined ? {} : { makeWriter: options.messageWriter }),
       ...(options.messageImages === undefined ? {} : { loadRemoteImage: options.messageImages }),
+      /*
+       * WP212（docs/88 §3.2）：「交给 X ▾」那一列——这个品牌里的岗位（与消息相关的五个常驻，
+       * 别的岗位开着才列）；开没开按现查的分配算。客服 / 红人 / B2B 三个走 63 的老路。
+       */
+      positions: () => {
+        const active = new Set(
+          roles.assignments
+            .listByWorkspace(ws)
+            .filter((a) => a.revoked_at === undefined)
+            .map((a) => a.role_id),
+        )
+        return (
+          org
+            .positions()
+            .map((t) => {
+              const route = routeOfPosition(t.id)
+              return {
+                id: t.id,
+                name_zh: t.name.zh,
+                name_en: t.name.en,
+                open: t.roles.some((r) => active.has(r.role)),
+                ...(route === undefined ? {} : { route }),
+              }
+            })
+            // 负责人 / 普通成员这类通用岗位不接具体的事；与消息相关的五个排前面
+            .filter(
+              (p) =>
+                (p.open || MESSAGE_POSITIONS.includes(p.id)) &&
+                !org
+                  .positions()
+                  .find((t) => t.id === p.id)
+                  ?.roles.every((r) => r.role.startsWith('common.')),
+            )
+            .sort(
+              (a, b) =>
+                rank(MESSAGE_POSITIONS.indexOf(a.id)) - rank(MESSAGE_POSITIONS.indexOf(b.id)),
+            )
+        )
+      },
+      // 其余岗位走 54 的「交给这个岗位一件事」：开事项（钉着这条会话）、岗位内路由、起 Run
+      openAtPosition: async (input) => {
+        const out = await positionsAssembly.open({
+          position_id: input.position_id,
+          person_id: input.person_id,
+          title: input.title,
+          ...(input.summary === undefined ? {} : { summary: input.summary }),
+          pinned: [{ type: 'thread', id: input.thread_id }],
+        })
+        return { matter_id: out.matter.id }
+      },
+      // 「X 在办 · 有 N 张卡等你 →」：本人队列里的卡指着哪条会话 / 哪件事项（只报数）
+      openCards: async () => {
+        const who = firstPositionOf(ws)?.person_id ?? person.id
+        const items = (await approvals.queue({
+          workspace_id: ws,
+          person_id: who,
+          lane: 'mine',
+          state: [...QUEUE_STATES],
+        })) as ApprovalItem[]
+        return items.map((item) => {
+          const object = item.subject.object
+          const thread =
+            object.type === 'thread'
+              ? object.id
+              : item.evidence.provenance?.seen?.find((r) => r.type === 'thread')?.id
+          const matter = item.subject.matter_id ?? item.subject.work_item_id
+          return {
+            ...(thread === undefined ? {} : { thread_id: thread }),
+            ...(matter === undefined ? {} : { matter_id: matter }),
+          }
+        })
+      },
+      // 没勾「以后都这样」的改判进学习回路（24 §3 的 lesson 池；技能 `message-triage` 还没有可改的段落，
+      // 所以只攒不提——「你教过它」里看得见）
+      onCorrection: (c) => {
+        const asg = firstPositionOf(ws)
+        learning.learning.pool.pool({
+          workspace_id: ws,
+          assignment_id: asg?.assignment_id ?? 'asg_unknown',
+          run_id: 'run_message_triage',
+          applies_to: { skill: 'message-triage' },
+          kind: 'rule',
+          signal: 'redirect',
+          strength: 'weak',
+          text: `来自 ${c.sender_domain} 的这类信：${c.field === 'kind' ? '类型' : '岗位'}是「${c.to}」`,
+          confidence: 0.3,
+          evidence: [{ quote: `${c.from ?? '—'} → ${c.to}`, at: c.at }],
+          semantic_key: `message_${c.field}:${c.sender_domain}:${c.to}`,
+        })
+      },
     })
     lateMessages.current = messages
 

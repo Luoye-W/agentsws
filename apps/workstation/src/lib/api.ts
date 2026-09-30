@@ -27,13 +27,17 @@ import type {
   MeetingOutputs,
   MeetingRecord,
   MeetingRecordSourceKind,
+  MessageClaim,
   MessageDraft,
   MessageFolder,
   MessageFolderKind,
   MessageImagesReport,
+  MessageKind,
   MessageLabel,
+  MessageOverview,
   MessageRecord,
   MessageSendResult,
+  MessageSuggest,
   MessageSyncReport,
   MessageThreadSummary,
   MessageWriteback,
@@ -5199,6 +5203,16 @@ export interface MessageThreadView {
     href?: string
     takeover_matter_id?: string
   }
+  /** WP212：这条会话归谁（没人接 / 只是通知 / 已交出去；服务端派生）。 */
+  claim?: MessageClaim
+  claim_message_id?: string
+  /** WP212：交给了谁（岗位模板 id，或 `me` / `notice`）。 */
+  handed_to?: string
+  /** WP212：卡片流里还有几张卡等你批、跳过去的链接。 */
+  open_card_count?: number
+  card_link?: string
+  suggest?: MessageSuggest
+  kind?: MessageKind
 }
 
 /** 右栏 `mail-assistant` 那一格（一次取全，前端不发第二个请求）。 */
@@ -5221,6 +5235,11 @@ export interface MailAssistantView {
   }
   todos: { id: string; title: string; status: string }[]
   model_available: boolean
+  /** WP212：兜底助手——岗位在办的（`handed`）不生成建议，只挂「X 在办 · 有 N 张卡等你 →」。 */
+  claim?: MessageClaim
+  handed_to?: string
+  open_card_count?: number
+  card_link?: string
 }
 
 /** 会话列表的查询串（筛选、搜索、多邮箱都走它）。 */
@@ -5234,6 +5253,8 @@ export function messageQuery(q: {
   q?: string
   /** WP167：只看「待确认」。 */
   pending_route?: boolean
+  /** WP212：只看「没人接的」/「只是通知」。 */
+  claim?: 'unclaimed' | 'notice'
   limit?: number
 }): string {
   const params = new URLSearchParams()
@@ -5282,6 +5303,56 @@ export const confirmMessageRoute = (
     method: 'POST',
     body: { route },
   })
+
+/**
+ * WP212：「交给 X」——推广到所有岗位（岗位模板 id）。客服 / 红人 / B2B 走 63 的老路，
+ * 其余走 54 的「交给这个岗位一件事」。交不出去时 `handed_off: false` + 一句人话。
+ */
+export const handMessageToPosition = (
+  id: string,
+  position_id: string,
+  remember_sender: boolean,
+): Promise<{
+  message: MessageRecord
+  handed_off: boolean
+  matter_id?: string
+  position_id?: string
+  refused?: string
+  rule?: SenderRule
+}> =>
+  api(`/v1/messages/${encodeURIComponent(id)}/confirm-route`, {
+    method: 'POST',
+    body: { route: 'position', position_id, remember_sender },
+  })
+
+/** WP212：改判类型（✎）；`remember_sender` = 以后这个发件人都这样。 */
+export const setMessageKind = (
+  id: string,
+  kind: MessageKind,
+  remember_sender: boolean,
+): Promise<{ message: MessageRecord; rule?: SenderRule }> =>
+  api(`/v1/messages/${encodeURIComponent(id)}/kind`, {
+    method: 'POST',
+    body: { kind, remember_sender },
+  })
+
+/** WP212：「只是通知」/「我自己处理」/ 撤销。 */
+export const claimMessage = (
+  id: string,
+  as: 'notice' | 'me' | 'none',
+): Promise<{ message: MessageRecord; writeback?: MessageWriteback }> =>
+  api(`/v1/messages/${encodeURIComponent(id)}/claim`, { method: 'POST', body: { as } })
+
+/** WP212：「只是通知」整捆「知道了」。 */
+export const ackMessageNotices = (input: {
+  kind?: MessageKind
+  suspicious?: boolean
+  thread_ids?: string[]
+}): Promise<{ acked: number; writeback?: MessageWriteback }> =>
+  api('/v1/messages/notices/ack', { method: 'POST', body: input })
+
+/** WP212：「没人接的」顶上那一行、只是通知几捆、你教过它。 */
+export const getMessageOverview = (): Promise<MessageOverview> => api('/v1/messages/overview')
 
 export const setMessageLabels = (
   id: string,

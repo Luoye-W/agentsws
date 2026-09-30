@@ -11,6 +11,7 @@
 
 import type {
   MaybePromise,
+  MessageCorrection,
   MessageDraft,
   MessageFolder,
   MessageFolderKind,
@@ -22,13 +23,22 @@ import type {
 } from '@agentsws/contracts'
 import { isAgentFolderKind, resolveAgentFolder } from './folders.js'
 import { BUILTIN_LABELS } from './labels.js'
-import { aggregateThreads, byNewest, matchesQuery } from './query.js'
+import { aggregateThreads, byNewest, matchesClaim, matchesQuery } from './query.js'
 
 /** 一次局部改（旗标 / 标签 / 文件夹 / 路由 / 分拣结论）。 */
 export type MessagePatch = Partial<
   Pick<
     MessageRecord,
-    'flags' | 'labels' | 'folder' | 'folder_kind' | 'route' | 'triage' | 'uid' | 'linked' | 'html'
+    | 'flags'
+    | 'labels'
+    | 'folder'
+    | 'folder_kind'
+    | 'route'
+    | 'triage'
+    | 'uid'
+    | 'linked'
+    | 'html'
+    | 'handled'
   >
 >
 
@@ -66,6 +76,10 @@ export interface MessageStore {
   /** 「总是信任这个发件人」的名单（远程图片默认不加载，63 §7）。 */
   trustedSenders(): MaybePromise<string[]>
   trustSender(email: string): MaybePromise<void>
+
+  /** WP212：最近的改判 / 改岗位（新的在前）。可选：老实现没有就是"还没教过"。 */
+  corrections?(limit?: number): MaybePromise<MessageCorrection[]>
+  putCorrection?(correction: MessageCorrection): MaybePromise<void>
 
   close?(): MaybePromise<void>
 }
@@ -122,6 +136,7 @@ export class MemoryMessageStore implements MessageStore {
   private readonly rules = new Map<string, SenderRule>()
   private readonly draftRows = new Map<string, MessageDraft>()
   private readonly trusted = new Set<string>()
+  private readonly correctionRows = new Map<string, MessageCorrection>()
 
   put(record: MessageRecord): void {
     this.rows.set(record.id, clone(record))
@@ -149,7 +164,9 @@ export class MemoryMessageStore implements MessageStore {
     const matched = [...this.rows.values()].filter((m) => matchesQuery(m, query))
     const threadIds = new Set(matched.map((m) => m.thread_id))
     const full = [...this.rows.values()].filter((m) => threadIds.has(m.thread_id))
-    return aggregateThreads(full).slice(0, query.limit ?? 100)
+    return aggregateThreads(full)
+      .filter((t) => matchesClaim(t, query))
+      .slice(0, query.limit ?? 100)
   }
 
   thread(thread_id: string): MessageRecord[] {
@@ -243,6 +260,17 @@ export class MemoryMessageStore implements MessageStore {
     return [...this.trusted].sort()
   }
 
+  corrections(limit = 20): MessageCorrection[] {
+    return [...this.correctionRows.values()]
+      .sort((a, b) => Date.parse(b.at) - Date.parse(a.at) || (a.id < b.id ? 1 : -1))
+      .slice(0, limit)
+      .map((c) => ({ ...c }))
+  }
+
+  putCorrection(correction: MessageCorrection): void {
+    this.correctionRows.set(correction.id, { ...correction })
+  }
+
   trustSender(email: string): void {
     this.trusted.add(email.trim().toLowerCase())
   }
@@ -259,6 +287,7 @@ function clone(m: MessageRecord): MessageRecord {
     attachments: m.attachments.map((a) => ({ ...a })),
     flags: { ...m.flags },
     ...(m.triage === undefined ? {} : { triage: { ...m.triage, labels: [...m.triage.labels] } }),
+    ...(m.handled === undefined ? {} : { handled: { ...m.handled } }),
   }
 }
 

@@ -8,6 +8,7 @@
 export * from './b2b-signals.js'
 export * from './folders.js'
 export * from './intake.js'
+export * from './kind.js'
 export * from './labels.js'
 export * from './parse.js'
 export * from './query.js'

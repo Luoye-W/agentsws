@@ -19,7 +19,7 @@ import type { DeckAction, DeckCard, DeckContentMode, InstructionScope } from '@a
 import { categoryKey } from '@agentsws/deck'
 import { useQuery } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
-import { Navigate, useInRouterContext } from 'react-router-dom'
+import { Link, Navigate, useInRouterContext } from 'react-router-dom'
 import { FactChip } from '@/components/chips'
 import { DeckActionBar } from '@/components/deck/deck-action-bar'
 import { DeckCardBody } from '@/components/deck/deck-card-body'
@@ -320,6 +320,19 @@ export function DeckCardView({
         </StatusPill>
         <WaitPill card={card} />
         <span className="ml-auto flex items-center gap-2">
+          {/*
+            WP212（docs/88 §2.3）：来自消息往来的卡，证据旁边一个「看原件 →」——跳回消息页
+            「全部」里这条会话。消息页那头只挂「有卡等你 →」，批还是在这里批。
+          */}
+          {card.original === undefined || !inRouter ? null : (
+            <Link
+              to={`/messages?view=all&thread=${encodeURIComponent(card.original.thread_id)}`}
+              data-testid="deck-original-link"
+              className="text-muted-foreground hover:text-foreground hover:underline"
+            >
+              {t('deck.original')} →
+            </Link>
+          )}
           {/*
             右上角那个「证据 N」：点它在第三栏的证据面板里看（WP71 就有那一格）。
             走 WP95 的公开注册路 `show('evidence')`，注册层一个字不碰。
