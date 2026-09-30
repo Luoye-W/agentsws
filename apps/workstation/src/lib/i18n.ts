@@ -1331,6 +1331,24 @@ const zh: Table = {
   'connections.runtime.stand_in.detail':
     '这台机器没配连接器地址，现在连出来的都是假连接，只能用来看界面。',
   'connections.runtime.install': '怎么装',
+  // WP210：状态缩成一行，细节进问号；要动手时才多一条
+  'connections.runtime.at': '连接器地址：{url}。',
+  'connections.runtime.absent.action': '装好连接器才能连店铺与数据后台，邮箱现在就能连。',
+  'connections.runtime.unhardened.action': '先把下面这几条修好再连：',
+  'connections.runtime.more': '还有 {n} 条',
+  'connections.runtime.less': '收起',
+  'connections.available.hint':
+    '授权类的按钮会打开对方网站让你登录，密码只输在对方网站上，我们看不到；要填表的是网页原生表单，内容直接存进这台电脑的加密库，不经过 AI，也不进日志。',
+  'connections.sources.toggle': '数据来源',
+  'diagnostics.title': '诊断',
+  'diagnostics.hint': '系统自己处理不了的事记在这里。平时用不着，排查问题时再来看。',
+  'diagnostics.dead.title': '没进来的信',
+  'diagnostics.dead.hint':
+    '处理时出错的信，系统会自己隔一阵再试（半小时、2 小时、8 小时、24 小时），装了新版本也会再试一次；试完还不行就停在这里。客户来信停下时会另外给你一张卡。',
+  'diagnostics.dead.empty': '没有。所有的信都进来了。',
+  'diagnostics.dead.next': '{at} 自动再试',
+  'diagnostics.dead.gave_up': '已停止自动重试',
+  'diagnostics.dead.customer': '客户来信',
   'connections.vault.missing': '这台电脑还没有秘密库密钥，邮箱账号密码暂时存不了。',
   // WP44：老办法接的连接（Shopify 的 shpat_ 直填令牌）
   'connections.legacy': '老办法接的',
@@ -3133,6 +3151,12 @@ const zh: Table = {
   'kind.official_plugin': '官方插件',
   'category.official_plugin': '官方插件',
   'verb.policy.approve.official_plugin': '照做',
+  // WP210：客户来信彻底投不进的那张卡
+  'kind.inbound_dead_letter': '没进来的信',
+  'category.dead_letter': '没进来的信',
+  'verb.dead_letter.approve': '再投一次',
+  'verb.dead_letter.reject': '去邮箱回复',
+  'deck.dead_letter.reply_myself': '我自己去邮箱回复',
   // ── WP142：红人为主的朋友第一步 ──
   'onboarding.ai.official.pending': '正在连 Agents 工坊云…',
   'onboarding.ai.official.offline': '网络不通，这一下没连上 Agents 工坊云。',
@@ -4678,6 +4702,26 @@ const en: Table = {
   'connections.runtime.stand_in.detail':
     'No connector configured on this machine; connections made here are fake and only good for looking at the UI.',
   'connections.runtime.install': 'How to install',
+  // WP210: status is one line, details in the hint; an extra line only when you must act
+  'connections.runtime.at': 'Connector at {url}.',
+  'connections.runtime.absent.action':
+    'Install the connector to link stores and data sources; mailboxes work already.',
+  'connections.runtime.unhardened.action': 'Fix these before connecting:',
+  'connections.runtime.more': '{n} more',
+  'connections.runtime.less': 'Show less',
+  'connections.available.hint':
+    'Sign-in buttons open the provider’s own site — your password is typed only there and we never see it. Forms are plain browser forms: what you type goes straight into this machine’s encrypted store, never to the AI, never into logs.',
+  'connections.sources.toggle': 'Data source',
+  'diagnostics.title': 'Diagnostics',
+  'diagnostics.hint':
+    'Things the system could not sort out by itself. Only needed when troubleshooting.',
+  'diagnostics.dead.title': 'Messages that never made it in',
+  'diagnostics.dead.hint':
+    'Messages that errored while being processed. The system retries by itself (30 min, 2 h, 8 h, 24 h) and once more after an update; if they still fail they stop here. You get a card when a customer’s message stops.',
+  'diagnostics.dead.empty': 'None. Everything made it in.',
+  'diagnostics.dead.next': 'retrying at {at}',
+  'diagnostics.dead.gave_up': 'automatic retries stopped',
+  'diagnostics.dead.customer': 'Customer',
   'connections.vault.missing':
     'This machine has no vault key yet, so mailbox passwords cannot be stored.',
   'connections.legacy': 'connected the old way',
@@ -6529,6 +6573,12 @@ const en: Table = {
   'kind.official_plugin': 'Official plugin',
   'category.official_plugin': 'Official plugin',
   'verb.policy.approve.official_plugin': 'Go ahead',
+  // WP210: a customer message that never made it in
+  'kind.inbound_dead_letter': 'Message not processed',
+  'category.dead_letter': 'Message not processed',
+  'verb.dead_letter.approve': 'Try again',
+  'verb.dead_letter.reject': 'Reply from mailbox',
+  'deck.dead_letter.reply_myself': 'I will reply from the mailbox myself',
   // ── WP142：红人为主的朋友第一步 ──
   'onboarding.ai.official.pending': 'Connecting to Agents Workshop cloud…',
   'onboarding.ai.official.offline':

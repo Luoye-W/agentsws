@@ -164,7 +164,7 @@ evals/        eval 用例
 docs/         38 份中文设计文档 + 英文 ARCHITECTURE
 upstreams.yml 上游登记表：我们在盯谁、盯它的什么、锁在哪一版（见下）
 scripts/      review-wp.sh（审核一个任务包分支）· dev-real.sh（真账号环境）· release.sh
-              fetch-brand-icons.mjs（`pnpm icons:fetch`：手动抓一次各官网当前的图标入库）
+              fetch-provider-favicons.mjs（`pnpm icons:fetch`：手动去各家官网抓一次 favicon 入库）
               check-upstreams.mjs / upstream-watch.mjs / scan-default-flips.sh（上游哨兵）
 ```
 

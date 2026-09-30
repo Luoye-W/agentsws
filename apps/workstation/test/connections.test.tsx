@@ -236,18 +236,21 @@ describe('连接页：目录与状态条', () => {
     expect(screen.getByTestId('runtime-bar').getAttribute('data-state')).toBe('ready')
   })
 
-  it('卡上不铺步骤与外链：一句话 + 问号 +「看教程」（WP157，步骤与外链在教程里）', async () => {
+  it('卡上只有图标 + 名字 + 问号 + 按钮 +「看教程」（WP210：那一句介绍也进问号）', async () => {
     renderWithProviders(<ConnectionsPage />, '/connections')
     const card = (await screen.findAllByTestId('provider-card'))[0] as HTMLElement
     expect(within(card).queryByTestId('setup-steps')).toBeNull()
     expect(within(card).queryAllByRole('link')).toHaveLength(0)
-    expect(within(card).getByTestId('provider-line').textContent).toBe(
-      '最省事：填邮箱地址和一个授权码，不用向谁申请。',
-    )
-    // 服务端那段介绍原话进了标题旁的问号
-    expect(within(card).getByTestId('provider-note').getAttribute('data-hint')).toContain(
-      '开一个应用专用密码就能收发信',
-    )
+    // WP210：卡面上不再有那一句；它和服务端那段介绍原话都在标题旁的问号里
+    expect(within(card).queryByTestId('provider-line')).toBeNull()
+    const note = within(card).getByTestId('provider-note').getAttribute('data-hint') ?? ''
+    expect(note).toContain('最省事：填邮箱地址和一个授权码，不用向谁申请。')
+    expect(note).toContain('开一个应用专用密码就能收发信')
+    // 安全说明卡上一句不留，统一在「可以连接」标题旁的问号里说一次
+    expect(card.querySelector('[data-slot="safety-note"]')).toBeNull()
+    expect(
+      screen.getByTestId('connections-available-hint').getAttribute('data-hint') ?? '',
+    ).toContain('密码只输在对方网站上')
     expect(within(card).getByTestId('tutorial-link').getAttribute('data-slug')).toBe('conn-email')
   })
 
@@ -256,9 +259,9 @@ describe('连接页：目录与状态条', () => {
     state.providers = [{ ...MAIL_PROVIDER, service: 'brand_new_mail', label: '新邮箱' }]
     renderWithProviders(<ConnectionsPage />, '/connections')
     const card = (await screen.findAllByTestId('provider-card'))[0] as HTMLElement
-    // 没有词条：卡面上是服务端介绍的第一句
-    expect(within(card).getByTestId('provider-line').textContent).toBe(
-      '开一个应用专用密码就能收发信。',
+    // 没有词条：问号里打头的是服务端介绍的第一句
+    expect(within(card).getByTestId('provider-note').getAttribute('data-hint') ?? '').toMatch(
+      /^开一个应用专用密码就能收发信。/,
     )
     await user.click(within(card).getByTestId('tutorial-link'))
     const dialog = await screen.findByRole('dialog')
@@ -365,7 +368,8 @@ describe('连接页：原生表单直填（凭据零泄漏）', () => {
     // 4. 连上之后的清单里也没有
     const row = await screen.findByTestId('connection-row')
     expect(row.textContent ?? '').not.toContain(PASSWORD)
-    expect(screen.getByTestId('connection-identity').textContent).toBe('support@yourbrand.com')
+    // WP210：大标题就是账号本身，类型名降成小字
+    expect(screen.getByTestId('connection-title').textContent).toBe('support@yourbrand.com')
   })
 
   it('必填项空着不会发出请求（交给浏览器自己拦）', async () => {
@@ -432,7 +436,8 @@ describe('连接页：已连接的两个动作', () => {
     const row = await screen.findByTestId('connection-row')
     // 报错是人话，不是 EAUTH
     expect(within(row).getByTestId('test-result').textContent).toContain('密码不对')
-    await user.click(within(row).getByRole('button', { name: /测试/ }))
+    // 标题旁的问号里也有「上次测试」几个字，所以按按钮的全名找
+    await user.click(within(row).getByRole('button', { name: '测试' }))
     await waitFor(() => {
       expect(tested).toEqual(['conn_mail_1'])
     })
@@ -490,24 +495,27 @@ describe('WP44 Shopify：只有一条接法 + 老连接提示', () => {
 })
 
 describe('WP44 状态条：代理 fake-IP 说人话', () => {
-  it('fake_ip_detected → 黄条压成一句并念出信任名单；两条修法与探测原话在问号里（WP157）', async () => {
+  it('fake_ip_detected → 不再铺一块黄条：状态还是一行，fake-IP、两条修法、信任名单都在问号里（WP210）', async () => {
     state.runtime = {
       ...READY,
       egress: {
         fake_ip_detected: true,
-        trusted_hosts: ['admin.shopify.com'],
+        trusted_hosts: ['admin.shopify.com', 'api.deepseek.com', 'a-very-long-host.example.com'],
         detail: 'api.deepseek.com 解析到了保留网段地址 198.18.0.7',
       },
     }
     renderWithProviders(<ConnectionsPage />)
-    const bar = await screen.findByTestId('egress-fake-ip')
-    const text = bar.textContent ?? ''
-    expect(text).toContain('fake-IP')
-    expect(text).toContain('公共 DNS')
-    expect(text).toContain('admin.shopify.com')
-    const why = within(bar).getByTestId('egress-fake-ip-why').getAttribute('data-hint') ?? ''
+    const bar = await screen.findByTestId('runtime-bar')
+    // 连接器已经自己改用公共 DNS 了——不用人动手，所以不出提示条，也就不会溢出
+    expect(screen.queryByTestId('egress-fake-ip')).toBeNull()
+    expect(within(bar).queryByTestId('runtime-action')).toBeNull()
+    expect(bar.textContent).toBe('连接器就绪')
+    const why = within(bar).getByTestId('runtime-detail').getAttribute('data-hint') ?? ''
+    expect(why).toContain('fake-IP')
+    expect(why).toContain('公共 DNS')
     expect(why).toContain('AGENTSWS_CONNECT_TRUSTED_HOSTS')
     expect(why).toContain('198.18.0.7')
+    expect(why).toContain('admin.shopify.com')
   })
 
   it('没检测到就不出这条黄条（别吓人）', async () => {
@@ -590,5 +598,80 @@ describe('WP167：邮箱卡上的三个开关', () => {
     renderWithProviders(<ConnectionsPage />, '/connections')
     await screen.findByTestId('connection-row')
     expect(screen.queryByTestId('mailbox-switches')).toBeNull()
+  })
+})
+
+describe('WP210：连接页收拾（Luoye 09-30）', () => {
+  it('已连上的卡：大标题是账号本身，类型名降成小字；凭据存哪 / 上次测试进问号', async () => {
+    state.connections = [MAIL_CONNECTION]
+    renderWithProviders(<ConnectionsPage />, '/connections')
+    const row = await screen.findByTestId('connection-row')
+    expect(within(row).getByTestId('connection-title').textContent).toBe('support@yourbrand.com')
+    expect(within(row).getByTestId('connection-kind').textContent).toBe('任意邮箱（IMAP / SMTP）')
+    const meta = within(row).getByTestId('connection-meta').getAttribute('data-hint') ?? ''
+    expect(meta).toContain('凭据存在本机加密库里')
+    expect(meta).toContain('上次测试')
+    // 卡面上不再铺这两句
+    const visible = (row.textContent ?? '').replace(meta, '')
+    expect(visible).not.toContain('凭据存在本机加密库里')
+    expect(visible).not.toContain('上次测试')
+    // 很早以前测通过的：状态徽章说了就够，不再多一行绿字
+    expect(within(row).queryByTestId('test-result')).toBeNull()
+  })
+
+  it('Shopify 那类没有身份展示名的：标题退到别名，类型名在小字里', async () => {
+    state.connections = [LEGACY_SHOP_CONNECTION]
+    renderWithProviders(<ConnectionsPage />, '/connections')
+    const row = await screen.findByTestId('connection-row')
+    expect(within(row).getByTestId('connection-title').textContent).toBe('主店')
+    expect(within(row).getByTestId('connection-kind').textContent).toBe('Shopify 店铺')
+  })
+
+  it('没进来的信不再挂在连接卡上（系统自己重投，手动重投在诊断页）', async () => {
+    state.connections = [MAIL_CONNECTION]
+    renderWithProviders(<ConnectionsPage />, '/connections')
+    const row = await screen.findByTestId('connection-row')
+    expect(within(row).queryByTestId('connection-dead-letters')).toBeNull()
+    expect(within(row).queryByRole('button', { name: /重投/ })).toBeNull()
+  })
+
+  it('没加固的原因很多：只露两条，其余点开看（不溢出）', async () => {
+    const user = userEvent.setup()
+    state.runtime = {
+      state: 'unhardened',
+      reasons: ['encryption_disabled', 'admin_auth_disabled', 'tls_disabled', 'open_port'],
+      checks: [],
+      checked_at: T0,
+      secrets_vault: { available: true },
+    }
+    renderWithProviders(<ConnectionsPage />, '/connections')
+    const reasons = await screen.findByTestId('runtime-reasons')
+    expect(reasons.querySelectorAll('li')).toHaveLength(2)
+    await user.click(screen.getByTestId('runtime-reasons-toggle'))
+    expect(screen.getByTestId('runtime-reasons').querySelectorAll('li')).toHaveLength(4)
+  })
+
+  it('数据来源设置默认收起，点开才看', async () => {
+    const user = userEvent.setup()
+    state.providers = [
+      {
+        ...GA4_PROVIDER,
+        service: 'youtube_data',
+        label: 'YouTube',
+        auth: 'api_key',
+        data_sources: [],
+      },
+    ]
+    renderWithProviders(<ConnectionsPage />, '/connections')
+    const card = (await screen.findAllByTestId('provider-card'))[0] as HTMLElement
+    expect(within(card).queryByTestId('capability-source')).toBeNull()
+    await user.click(within(card).getByTestId('provider-sources-toggle'))
+    expect(await within(card).findByTestId('capability-source')).toBeDefined()
+  })
+
+  it('没有第二条路的卡连「数据来源」按钮都不出', async () => {
+    renderWithProviders(<ConnectionsPage />, '/connections')
+    const card = (await screen.findAllByTestId('provider-card'))[0] as HTMLElement
+    expect(within(card).queryByTestId('provider-sources-toggle')).toBeNull()
   })
 })
