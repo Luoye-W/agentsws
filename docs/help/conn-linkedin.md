@@ -1,3 +1,7 @@
+---
+positions: [social-media]
+roles: [social.linkedin]
+---
 # LinkedIn：公司主页与老板本人号
 
 这篇讲社媒运营里「LinkedIn」那条职责用的连接：怎么接、接不上的时候怎么办、它**不做**什么。

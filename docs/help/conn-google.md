@@ -1,3 +1,7 @@
+---
+positions: [web-ops, dtc-ops, ads, pr]
+roles: [ads.google, kol.youtube, social.youtube, dtc.analytics, dtc.content, pr.monitoring]
+---
 # Google 家的几个连接
 
 这篇讲 Google 的六个连接各管什么、怎么接。前四个要用你自己的 Google Cloud 项目，最后一个 Google Alerts 什么都不用申请。

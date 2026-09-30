@@ -1,3 +1,7 @@
+---
+positions: [ads, social-media, kol-marketing]
+roles: [ads.meta, kol.instagram, kol.facebook, social.facebook, social.instagram, social.threads, social.whatsapp, social.facebook-group]
+---
 # Meta 家的几个连接（Facebook / Instagram / Threads / WhatsApp）
 
 这篇讲 Meta 的七个连接各管什么、怎么接。它们都从 Meta 开发者后台起步，大多数权限**要过审核**，不急的可以最后接。
