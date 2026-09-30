@@ -120,6 +120,7 @@ import {
   type RoleStore,
   rangeTargetOfProduct,
   renderBrandContext,
+  SUPERSEDED_POSITION_IDS,
   type SupervisedPosition,
 } from '@agentsws/roles'
 import type { SearchFetch } from '@agentsws/search-providers'
@@ -401,6 +402,7 @@ import { claimRuleCard, createSeoService, pickRoleHolder } from './seo-service.j
 import type { BrokerFetch } from './shopify-broker.js'
 import { createShopifyDevMcp } from './shopify-devmcp.js'
 import { createConnectSiteFacts, createSiteService, createSiteStore, seedDemoSite } from './site.js'
+import { enrichSkillSummaries } from './skill-catalog.js'
 import {
   createSocialStore,
   migrateSupersededChannels,
@@ -5366,7 +5368,16 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     // WP29：池的真源是学习回路那一份（`skills.lessons` 是 WP6 的内存池，只留给周合并的老接口）
     lessons: (filter) => learning.lessons(filter),
     // WP29 技能页与学习回路
-    list: (actor) => learning.summaries(actor),
+    // WP209：按岗位分组那几格（显示名 / 一句话 / 哪几条职责在用 / 归哪个岗位）只往上加
+    list: async (actor) =>
+      enrichSkillSummaries(await learning.summaries(actor), {
+        positions: org.positions(),
+        roles: roles.roles.list(),
+        held_roles: memoryFacts(actor).held_roles,
+        frontmatterOf: (name) => skills.registry.frontmatterOf(name),
+        sectionBody: (name, id) => skills.registry.sectionBody(name, id),
+        superseded: SUPERSEDED_POSITION_IDS,
+      }),
     exclude: (name, person_id, excluded) => skills.registry.exclude(name, person_id, excluded),
     proposals: () => learning.proposalSummaries(),
     promote: (input) =>

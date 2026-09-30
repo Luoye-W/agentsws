@@ -343,3 +343,37 @@ describe('自带技能：B2B 岗位的六个（WP170，docs/84 §2.5 / §3 / §1
     }
   })
 })
+
+/**
+ * WP209：技能页「先分类、再展开」要的几格，**只加在 frontmatter 里**（正文不动）。
+ *
+ * - `display_name` / `display_name_en`：卡上的标题（不再拿英文 id 当标题）；
+ * - `summary` / `summary_en`：卡上那一句（36 §7：一行以内）；
+ * - `positions`（可选）：职责 yml 反查不到岗位的，写 `common` 归「通用」。
+ */
+describe('WP209 frontmatter：中文显示名与一句话说明', () => {
+  it.each(names)('%s 有中英显示名与一句话', (name) => {
+    const { frontmatter } = splitFrontmatter(readBundledSkill(name).markdown)
+    for (const key of ['display_name', 'display_name_en', 'summary', 'summary_en']) {
+      expect(frontmatter.extra[key]?.trim() ?? '', `${name} 缺 ${key}`).not.toBe('')
+    }
+    // 一句话就是一句话：中文 30 字以内，英文 12 个词以内
+    expect([...(frontmatter.extra.summary ?? '')].length).toBeLessThanOrEqual(30)
+    expect((frontmatter.extra.summary_en ?? '').split(/\s+/).length).toBeLessThanOrEqual(12)
+  })
+
+  it('入库后 frontmatterOf 读得到这几格（技能页从这里取）', async () => {
+    const { skills } = makeSkills()
+    const md = readBundledSkill('policy-review').markdown
+    await skills.registry.putFromMarkdown({
+      markdown: md,
+      tier: 'package',
+      owner: 'package',
+      version: '1.0.0',
+    })
+    const fm = skills.registry.frontmatterOf('policy-review')
+    expect(fm?.extra.display_name).toBe('政策核对')
+    expect(fm?.extra.positions).toBe('common')
+    expect(skills.registry.frontmatterOf('nope')).toBeUndefined()
+  })
+})

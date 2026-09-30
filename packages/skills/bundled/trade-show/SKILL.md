@@ -4,6 +4,10 @@ description: B2B 展会怎么做：选展判断、报名截止与材料清单、
 license: Apache-2.0
 tier: open
 version: 1.0.0
+display_name: 展会
+display_name_en: Trade shows
+summary: 选展、展前邀约、现场记录、会后跟进
+summary_en: Choose shows, invite, log leads, follow up
 ---
 
 > Agents 工坊自带的基础版。这家公司在公司层写了自己的展会口径（常去哪几个展、预算线、意向分级的叫法），以公司层为准。

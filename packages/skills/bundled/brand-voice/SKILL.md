@@ -4,6 +4,10 @@ description: 品牌话术：对外写的每一句话都按这家店自己的口�
 license: Apache-2.0
 tier: open
 version: 1.0.0
+display_name: 品牌话术
+display_name_en: Brand voice
+summary: 对外每句话都按这家店的口吻写
+summary_en: Every outgoing line in the store's own voice
 ---
 
 > Agents 工坊自带的基础版。这家店在公司层写了自己的话术，以公司层为准；本文只管公司层没写到的地方。
