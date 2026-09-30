@@ -590,6 +590,8 @@ export interface PositionInstanceData {
   open_matters: number
   pending_cards: number
   memory_summary: string
+  /** WP213（docs/36 §8.3）：岗位图标（`role-icons/glyphs.ts` 的 id）；负责人 / 自建岗位没有。 */
+  icon?: string
 }
 
 export interface RouteCandidateData {
@@ -2299,6 +2301,8 @@ export interface OrgPositionView {
   holders: { person_id: string; name: string; ranges: { kind: string; id: string }[] }[]
   /** WP174：这个岗位的上级（超授权的审批先转他）；没设 = 转老板。 */
   supervisor?: { person_id: string; name: string }
+  /** WP213：岗位图标（`role-icons/glyphs.ts` 的 id）；自建岗位没有。 */
+  icon?: string
 }
 
 export interface OrgAssignmentView {
@@ -3320,6 +3324,8 @@ export interface OnboardingStateView {
 export interface OnboardingPositionView {
   id: string
   name: string
+  /** WP213：岗位图标（`role-icons/glyphs.ts` 的 id）。 */
+  icon?: string
   roles: {
     id: string
     name: string

@@ -25,6 +25,7 @@ import { CalendarLink } from '@/components/calendar/calendar-link'
 import { WsTag } from '@/components/design'
 import { PanelError } from '@/components/rail/panel-error'
 import { useRailState } from '@/components/rail/rail-state'
+import { DutyIcon } from '@/components/role-icons/role-icon'
 // WP73（56 §6）：社媒运营九条渠道职责的内容日历（周视图）与群发向导
 import { GeoQuestions } from '@/components/seo/geo-questions'
 import { GoogleSourcePicker } from '@/components/seo/google-source-picker'
@@ -273,6 +274,8 @@ export function DutyPage(): React.ReactNode {
 
       <header className="flex flex-col gap-2">
         <div className="flex flex-wrap items-baseline gap-2">
+          {/* WP213：职责页头的图标（渠道类带平台角标），点睛那一笔是品牌色 */}
+          <DutyIcon role_id={role_id} size={24} selected className="self-center" />
           <h1 className="ws-display text-[26px]" data-testid="duty-name">
             {role.data?.name ?? here?.role_name ?? role_id}
           </h1>

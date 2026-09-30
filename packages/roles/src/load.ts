@@ -176,6 +176,23 @@ export function loadBundledPositions(): Position[] {
     .map((f) => loadPosition(`${BUNDLED_POSITIONS_DIR}${f}`))
 }
 
+let bundledIcons: Map<string, string> | undefined
+
+/**
+ * WP213（docs/36 §8.3）：本包自带的岗位模板里写的图标（`icon` 字段）。
+ *
+ * 工作区里存下来的岗位是从 `org.ts` 种出来的那一份，不带图标；视图（岗位实体、公司页）按
+ * **同 id 的内置模板**补上这一格。没有（负责人 / 普通成员没有 yml、用户自己建的岗位）→ `undefined`，
+ * 界面再按模板 id / 职责推。读一次缓存住：yml 在进程里不会变。
+ */
+export function bundledPositionIcon(id: string): string | undefined {
+  if (bundledIcons === undefined) {
+    bundledIcons = new Map()
+    for (const p of loadBundledPositions()) if (p.icon !== undefined) bundledIcons.set(p.id, p.icon)
+  }
+  return bundledIcons.get(id)
+}
+
 /** WP120：本包自带的**全部**职责定义（按 `<domain>/<slug>` 排序）。同上，给"数一遍"用。 */
 export function loadBundledRoles(): RoleDefinitionFull[] {
   const out: RoleDefinitionFull[] = []

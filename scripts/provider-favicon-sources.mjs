@@ -244,4 +244,17 @@ export const SOURCES = {
       { page: 'https://open.dingtalk.com', note: '兜底：钉钉开放平台 <link rel=icon>' },
     ],
   },
+  // ── 职责角标（WP213）：还没有连接卡、但有职责要挂它的那几家 ─────────────────
+  // `amazon` = 职责 yml 里 `kind: amazon` 那条连接（SP-API，还没接）。左栏「Amazon 客服」的角标要它；
+  // 连接卡本身还在「待增加」，所以它不进 catalog 那条「每一家都戴官网图」的断言，只进职责对照表。
+  amazon: {
+    brand: 'Amazon',
+    // 只认 Amazon 自己的域：零售站、卖家中心，以及它们 <link> 里声明的 Amazon 自家静态资源域
+    domains: ['amazon.com', 'media-amazon.com', 'ssl-images-amazon.com', 'aboutamazon.com'],
+    sources: [
+      { page: 'https://www.amazon.com', note: 'Amazon 零售站首页' },
+      { page: 'https://sellercentral.amazon.com', note: '卖家中心（买家消息在这里）' },
+      { page: 'https://www.aboutamazon.com', note: 'Amazon 官方公司站' },
+    ],
+  },
 }

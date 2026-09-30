@@ -26,6 +26,7 @@ import { useNavigate } from 'react-router-dom'
 import { useBrands } from '@/components/brand-switcher'
 import type { ComposeTarget, Handoff } from '@/components/palette-context'
 import { useRailState } from '@/components/rail/rail-state'
+import { DutyIcon, PositionIcon } from '@/components/role-icons/role-icon'
 import { RecallCards } from '@/components/sidebar/recall-cards'
 import {
   Command,
@@ -49,6 +50,9 @@ import { HELP_SLUGS, helpAddress } from '@/lib/help'
 import { translate } from '@/lib/i18n'
 import { myAssignments } from '@/lib/positions'
 import { findArchivedWork, RAIL_KEY, searchWork } from '@/lib/work-archive'
+
+/** WP213：⌘K 里高亮的那一项，岗位 / 职责图标的点睛那一笔换品牌色（docs/36 §8.3）。 */
+const SELECTED_ACCENT = 'data-[selected=true]:[--ia:var(--ws-brand)]'
 
 export function CommandPalette({
   open,
@@ -254,11 +258,19 @@ export function CommandPalette({
             key: p.position_id,
             assignment: myAssignments(p)[0] as string,
             name: lang === 'en' ? p.name.en : p.name.zh,
+            icon: (
+              <PositionIcon
+                position_id={p.position_id}
+                icon={p.icon}
+                role_ids={p.roles.map((r) => r.role_id)}
+              />
+            ),
           }))
         : positions.map((p) => ({
             key: p.position_id,
             assignment: p.position_id,
             name: p.role_name,
+            icon: <PositionIcon position_id={p.position_id} role_ids={[p.role_id]} />,
           }))
     return (
       <CommandDialog open={open} onOpenChange={onOpenChange} title={t('command.handoff.title')}>
@@ -272,11 +284,13 @@ export function CommandPalette({
                   key={target.key}
                   value={`${target.name} ${target.key}`}
                   data-testid="command-handoff"
+                  className={SELECTED_ACCENT}
                   disabled={handOver.isPending}
                   onSelect={() => {
                     handOver.mutate({ assignment: target.assignment, handoff })
                   }}
                 >
+                  {target.icon}
                   {target.name}
                 </CommandItem>
               ))}
@@ -351,10 +365,16 @@ export function CommandPalette({
                   key={p.position_id}
                   value={`${lang === 'en' ? p.name.en : p.name.zh} ${p.position_id}`}
                   data-testid="command-position"
+                  className={SELECTED_ACCENT}
                   onSelect={() => {
                     go(`/positions/${first}`)
                   }}
                 >
+                  <PositionIcon
+                    position_id={p.position_id}
+                    icon={p.icon}
+                    role_ids={p.roles.map((r) => r.role_id)}
+                  />
                   {lang === 'en' ? p.name.en : p.name.zh}
                 </CommandItem>
               )
@@ -367,10 +387,12 @@ export function CommandPalette({
                     key={`${p.position_id}/${r.role_id}`}
                     value={`${r.role_name} ${r.role_id}`}
                     data-testid="command-duty"
+                    className={SELECTED_ACCENT}
                     onSelect={() => {
                       go(`/positions/${r.my_assignment_id as string}`)
                     }}
                   >
+                    <DutyIcon role_id={r.role_id} />
                     {t('duty.of_position', {
                       position: lang === 'en' ? p.name.en : p.name.zh,
                       duty: r.role_name,
@@ -385,10 +407,12 @@ export function CommandPalette({
                     key={p.position_id}
                     value={`${p.role_name} ${p.role_id}`}
                     data-testid="command-position"
+                    className={SELECTED_ACCENT}
                     onSelect={() => {
                       go(`/positions/${p.position_id}`)
                     }}
                   >
+                    <PositionIcon position_id={p.position_id} role_ids={[p.role_id]} />
                     {p.role_name}
                   </CommandItem>
                 ))}

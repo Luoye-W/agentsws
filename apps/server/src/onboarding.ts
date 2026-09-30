@@ -61,7 +61,7 @@ import {
   storefrontUsableService,
 } from '@agentsws/contracts'
 import { companyKey, normalizeDomain } from '@agentsws/core'
-import type { RoleStore } from '@agentsws/roles'
+import { bundledPositionIcon, type RoleStore } from '@agentsws/roles'
 import { normalizeVertical, verticalChoices } from '@agentsws/support-core'
 import type BetterSqlite3 from 'better-sqlite3'
 import { catalogEntry, ROLE_CONNECTOR_KIND } from './catalog.js'
@@ -803,6 +803,10 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
       return options.positions().map((p) => ({
         id: p.id,
         name: p.name.zh,
+        // WP213：向导里岗位前面的图标（同 id 内置模板 yml 里的）
+        ...(bundledPositionIcon(p.id) === undefined
+          ? {}
+          : { icon: bundledPositionIcon(p.id) as string }),
         roles: wizardRoles(p.roles).flatMap((r) => {
           const def = roles.roles.get(r.role)
           return def === undefined

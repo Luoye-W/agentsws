@@ -179,6 +179,8 @@ export interface OnboardingStateView {
 export interface OnboardingPositionView {
   id: string
   name: string
+  /** WP213：岗位图标（工作台 `role-icons/glyphs.ts` 里的 id）。 */
+  icon?: string
   roles: {
     id: string
     name: string

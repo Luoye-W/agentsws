@@ -32,6 +32,7 @@ import type {
 } from '@agentsws/contracts'
 import { isQueueCard } from '@agentsws/deck'
 import {
+  bundledPositionIcon,
   RoleError,
   type RoleStore,
   type RouteCandidate,
@@ -237,6 +238,12 @@ export function createPositions(options: PositionsOptions): PositionsAssembly {
     return kept.length === 0 ? template.roles : kept
   }
 
+  /** WP213（docs/36 §8.3）：岗位图标——存的那份优先，没有就取同 id 内置模板 yml 里的。 */
+  const iconOf = (template: Position): { icon?: string } => {
+    const icon = template.icon ?? bundledPositionIcon(template.id)
+    return icon === undefined ? {} : { icon }
+  }
+
   const instance = async (position_id: string, person_id: PersonId): Promise<PositionInstance> => {
     const template = templateOf(position_id)
     // 谁在做：默认包里的职责都在他名下才算（05 §2；与 org.ts 的 holdersOf 同一条规则）
@@ -305,6 +312,8 @@ export function createPositions(options: PositionsOptions): PositionsAssembly {
       open_matters,
       pending_cards,
       memory_summary: options.memorySummary?.(template.id) ?? '',
+      // WP213：存下来的那份没写就按同 id 的内置模板补（负责人 / 自建岗位没有，界面自己推）
+      ...iconOf(template),
     }
   }
 

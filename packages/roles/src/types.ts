@@ -75,6 +75,8 @@ export interface Position {
   roles: { role: RoleId; default: boolean }[]
   /** WP120（69 §1）：这个岗位的角色定位，装配时排在职责 persona 前面。 */
   persona?: PersonaText
+  /** WP213：岗位图标（工作台 `role-icons/glyphs.ts` 里的 id）。 */
+  icon?: string
 }
 
 /** 按 role_id（可选按版本）解析职责定义。 */

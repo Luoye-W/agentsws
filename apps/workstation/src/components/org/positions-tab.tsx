@@ -14,6 +14,7 @@
 import { Pencil } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { type RoleChangePatch, RoleDetail } from '@/components/org/roles-tab'
+import { DutyIcon, PositionIcon } from '@/components/role-icons/role-icon'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -190,6 +191,13 @@ export function PositionsTab({
           <Card key={p.id} data-testid="position-card" data-position={p.id}>
             <CardHeader className="flex-row flex-wrap items-center justify-between gap-2">
               <CardTitle className="flex items-center gap-2 text-sm">
+                <PositionIcon
+                  position_id={p.id}
+                  icon={p.icon}
+                  role_ids={p.roles.map((r) => r.role_id)}
+                  size={20}
+                  className="text-ws-muted-fg"
+                />
                 <span data-testid="position-name">
                   {lang === 'en' && p.name_en !== '' ? p.name_en : p.name}
                 </span>
@@ -331,6 +339,7 @@ export function PositionsTab({
                     <div className="rounded-md border" data-testid="position-duty">
                       <div className="flex flex-wrap items-center justify-between gap-2 px-2 py-1.5">
                         <span className="flex items-center gap-1.5">
+                          <DutyIcon role_id={duty.id} className="text-ws-muted-fg" />
                           {duty.name}
                           {inPosition?.default === false ? (
                             <Badge variant="outline">{t('org.positions.role.optional')}</Badge>
@@ -383,13 +392,15 @@ export function PositionsTab({
                         type="button"
                         data-testid="position-role-toggle"
                         className={cn(
-                          'rounded-md border px-2 py-1 text-xs transition-colors hover:bg-muted',
-                          draft.includes(r.id) && 'border-primary bg-primary/10',
+                          'inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs transition-colors hover:bg-muted',
+                          draft.includes(r.id) &&
+                            'border-primary bg-primary/10 [--ia:var(--ws-brand)]',
                         )}
                         onClick={() => {
                           setDraft((current) => toggle(current, r.id))
                         }}
                       >
+                        <DutyIcon role_id={r.id} size={14} className="text-ws-muted-fg" />
                         {r.name}
                       </button>
                     ))}
@@ -493,13 +504,15 @@ export function PositionsTab({
                     type="button"
                     data-testid="new-position-role"
                     className={cn(
-                      'rounded-md border px-2 py-1 text-xs transition-colors hover:bg-muted',
-                      newRoles.includes(r.id) && 'border-primary bg-primary/10',
+                      'inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs transition-colors hover:bg-muted',
+                      newRoles.includes(r.id) &&
+                        'border-primary bg-primary/10 [--ia:var(--ws-brand)]',
                     )}
                     onClick={() => {
                       setNewRoles((current) => toggle(current, r.id))
                     }}
                   >
+                    <DutyIcon role_id={r.id} size={14} className="text-ws-muted-fg" />
                     {r.name}
                   </button>
                 ))}

@@ -109,7 +109,7 @@
     "packages/roles/roles/social/x.yml",
     "packages/roles/roles/social/youtube.yml"
   ],
-  "source_digest": "25adbd173e74629a103cc04ee7b07669",
+  "source_digest": "4c8cffc71951b4998e15fb54ae9d6906",
   "objects": [
     {
       "id": "ad",
@@ -3838,6 +3838,12 @@
           "name": "supervisor_person_id",
           "type": "PersonId",
           "sensitivity": "confidential",
+          "optional": true
+        },
+        {
+          "name": "icon",
+          "type": "string",
+          "sensitivity": "internal",
           "optional": true
         }
       ],

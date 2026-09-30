@@ -18,6 +18,8 @@
 id: customer-care
 version: 1.0.0
 name: { zh: 客服, en: Customer Care }
+# WP213（docs/36 §8.3）：左栏 / 公司页 / ⌘K 用的线描图标，值是工作台 `role-icons/glyphs.ts` 里的 id
+icon: customer-care
 roles:
   - { role: dtc.support, default: true }
   - { role: dtc.live-chat, default: true }

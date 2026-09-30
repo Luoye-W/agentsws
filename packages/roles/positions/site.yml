@@ -17,6 +17,8 @@
 id: site
 version: 1.0.0
 name: { zh: 建站, en: Site Building }
+# WP213（docs/36 §8.3）：左栏 / 公司页 / ⌘K 用的线描图标，值是工作台 `role-icons/glyphs.ts` 里的 id
+icon: site
 roles:
   - { role: site.shopify-build, default: true }
   - { role: site.shopify-theme, default: true }
