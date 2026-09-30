@@ -34,4 +34,15 @@ export {
 } from './primitives'
 export { StatRow } from './stat-row'
 export { StatTile } from './stat-tile'
+// WP214（36 §7 第四档）：状态用图标——四态、tooltip、可键盘聚焦、明暗两套
+export {
+  FRESH_MS,
+  InfoTip,
+  STATUS_STATES,
+  StatusIcons,
+  type StatusItem,
+  type StatusState,
+  statusText,
+  useFresh,
+} from './status-icons'
 export { TONE_BADGE, TONE_FG, TONE_PILL, type Tone } from './tone'

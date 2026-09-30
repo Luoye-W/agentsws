@@ -2889,6 +2889,11 @@ const zh: Table = {
   'models.check.text': '文字能回',
   'models.check.vision': '看得懂图',
   'models.check.skipped': '没跑到这一步',
+  // WP214（36 §7 第四档）：状态用图标——四态的通用词（tooltip / 读屏里那半句）
+  'status.ok': '通',
+  'status.fail': '不通',
+  'status.unknown': '没测',
+  'status.pending': '测试中',
   'models.text.title': '文字与看图',
   'models.text.hint': 'Agent 干活用的模型。Agents 工坊要求它能看图——读品牌手册、看图片风格都靠它。',
   'models.vision.banner.no':
@@ -6240,6 +6245,11 @@ const en: Table = {
   'models.check.text': 'Answers text',
   'models.check.vision': 'Reads images',
   'models.check.skipped': 'Not reached',
+  // WP214 (36 §7, tier four): status as icons — the four generic state words (tooltip / screen reader)
+  'status.ok': 'OK',
+  'status.fail': 'Failed',
+  'status.unknown': 'Not tested',
+  'status.pending': 'Testing',
   'models.text.title': 'Text & vision',
   'models.text.hint':
     'The model agents work with. Agents Workshop needs it to see images — reading brand books and judging image style depend on it.',
