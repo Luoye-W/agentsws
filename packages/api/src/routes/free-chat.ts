@@ -10,6 +10,7 @@
  * 发一句（与重新生成）回的是 **SSE**（`text/event-stream`），不是统一信封——与聊天沙盒同一种写法
  * （`fetch` + `ReadableStream`，凭据在头里，不进 URL）。客户端断开 = 停；另有一条 `stop` 兜底。
  */
+import type { ArchivedWorkCandidate } from '@agentsws/contracts'
 import { z } from 'zod'
 import { ApiError } from '../errors.js'
 import { assignmentOf, body, ok, param, principalOf } from '../helpers.js'
@@ -69,6 +70,11 @@ export interface FreeChatMessageView {
   stopped?: boolean
   /** 这一轮没答出来（人话）。 */
   error?: string
+  /**
+   * WP207：这一轮模型调了只读的 `find_archived_work`，找到的候选（最像的 3–5 个）。
+   * 界面上是一排卡片，**人点了哪张才恢复哪张**；模型自己恢复不了任何东西。
+   */
+  archived_candidates?: ArchivedWorkCandidate[]
 }
 
 export interface FreeChatModelChoice {
@@ -103,6 +109,8 @@ export type FreeChatFrame =
   | { type: 'searching'; query: string }
   | { type: 'sources'; sources: FreeChatSource[] }
   | { type: 'notice'; text: string }
+  /** WP207：找回归档的候选（卡片，人点选才恢复）。 */
+  | { type: 'archived_candidates'; candidates: ArchivedWorkCandidate[] }
   | { type: 'done'; message: FreeChatMessageView; session: FreeChatSessionView }
   | { type: 'error'; message: string }
 

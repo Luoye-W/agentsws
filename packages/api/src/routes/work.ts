@@ -116,6 +116,8 @@ export interface WorkHome {
 
 const MATTER_KIND = ['conversation', 'project', 'meeting', 'incident', 'adhoc'] as const
 const MATTER_STATUS = ['open', 'waiting', 'closed'] as const
+/** WP207：事项列表里归档的怎么算（缺省 = exclude：归档只是移出默认列表）。 */
+const ARCHIVED_MODE = ['exclude', 'only', 'all'] as const
 const HORIZON = ['backlog', 'week', 'today'] as const
 const TODO_STATUS = ['open', 'doing', 'blocked', 'done', 'dropped'] as const
 const REVIEW_KIND = ['day', 'week', 'month'] as const
@@ -258,6 +260,8 @@ function parseSources(raw: string | undefined): CalendarSource[] | undefined {
 }
 
 export interface MatterListFilter {
+  /** WP207：不给 = 宿主按 `exclude` 算（归档的移出默认列表）。 */
+  archived?: 'exclude' | 'only' | 'all'
   kind?: MatterKind
   status?: Matter['status'][]
   position_id?: string
@@ -438,6 +442,11 @@ export function workRoutes(): Route[] {
           { name: 'status', in: 'query', description: `${MATTER_STATUS.join(' / ')}，逗号分隔` },
           { name: 'position_id', in: 'query', description: '按岗位筛' },
           { name: 'limit', in: 'query', description: '最多几条' },
+          {
+            name: 'archived',
+            in: 'query',
+            description: 'WP207：exclude（缺省，归档的不列）/ only（只列归档的）/ all（都列）',
+          },
         ],
         returns: '{ matters: Matter[] }',
       },
@@ -447,7 +456,9 @@ export function workRoutes(): Route[] {
         const status = listQuery(c, 'status', MATTER_STATUS)
         const position_id = c.req.query('position_id')
         const limit = positiveInt(c, 'limit')
+        const archived = listQuery(c, 'archived', ARCHIVED_MODE)?.[0]
         const matters = await workOf(deps).matters(actor, {
+          ...(archived === undefined ? {} : { archived: archived as 'exclude' | 'only' | 'all' }),
           ...(kind === undefined ? {} : { kind: kind as MatterKind }),
           ...(status === undefined ? {} : { status: status as Matter['status'][] }),
           ...(position_id === undefined || position_id === '' ? {} : { position_id }),
