@@ -4,6 +4,10 @@ description: 退换货规则怎么算：退货窗口从哪天起算、这一单�
 license: Apache-2.0
 tier: open
 version: 1.0.0
+display_name: 退换货计算
+display_name_en: Returns calculation
+summary: 算窗口、能退多少、运费谁出
+summary_en: Work out the window, the refund and who pays shipping
 ---
 
 > Agents 工坊自带的基础版。这家店在公司层写了自己的退换货口径，以公司层为准。

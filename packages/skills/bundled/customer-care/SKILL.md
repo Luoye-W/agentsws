@@ -4,6 +4,10 @@ description: 网站客服的做事方式：怎么读一封来信、怎么判断�
 license: Apache-2.0
 tier: open
 version: 1.1.0
+display_name: 客服回信
+display_name_en: Customer care
+summary: 读来信、判断能不能办、写回信
+summary_en: Read the message, judge what can be done, draft the reply
 ---
 
 > 移植自 KefuAgent 的客服技能（`packages/support-core/skills/customer-care/SKILL.md`，提交 c3ea1ad5；其中部分规矩改编自 anthropics/commerce-agents，Apache-2.0，见仓库根 NOTICE）。这家店在公司层写了自己的口径，以公司层为准。

@@ -473,9 +473,44 @@ export interface SkillSummary {
   tier: string
   version: string
   excluded: boolean
-  sections: { id: string; heading: string; origin: 'authored' | 'learned' }[]
+  /** WP209：`body` 是这一段现在的正文（技能页的搜索要搜到正文）。 */
+  sections: { id: string; heading: string; origin: 'authored' | 'learned'; body?: string }[]
   overlays: SkillOverlayView[]
   pending_proposals: number
+  /* ── WP209 技能页「先分类、再展开」：以下几格**只加**，老服务进程不回也照样能看 ── */
+  /** 给人看的名字（SKILL.md frontmatter 的 `display_name` / `display_name_en`）。 */
+  display_name?: { zh: string; en: string }
+  /** 一句话说明（frontmatter 的 `summary` / `summary_en`）。 */
+  summary?: { zh: string; en: string }
+  /** frontmatter 的 `description` 原文（问号里放它）。 */
+  description?: string
+  /**
+   * 归在哪几个岗位下：职责 yml 的 `skills:` 反查 + frontmatter 的 `positions`。
+   * `common` = 通用（不属于哪个岗位，或者只挂在 `common.*` 职责上）。
+   */
+  positions?: SkillPositionRef[]
+  /** 哪几条职责在用它（职责 yml 的 `skills:` 反查）。 */
+  roles?: SkillRoleRef[]
+  /** 本人名下有没撤销的职责在用它。 */
+  in_use?: boolean
+}
+
+/** WP209：技能归属的一个岗位。 */
+export interface SkillPositionRef {
+  id: string
+  name: { zh: string; en: string }
+  /** 本人在这个岗位下有职责（技能页把这些组排前面）。 */
+  mine: boolean
+}
+
+/** WP209：在用这个技能的一条职责。 */
+export interface SkillRoleRef {
+  role_id: string
+  name: { zh: string; en: string }
+  /** 这条职责挂在哪几个岗位下（没有 = 通用职责）。 */
+  position_ids: string[]
+  /** 本人持有这条职责。 */
+  mine: boolean
 }
 
 export interface SkillProposalSummary {

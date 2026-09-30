@@ -4,6 +4,10 @@ description: 广告文案的写法：先定角度再写变体、只从真实素�
 license: MIT
 tier: open
 version: 1.0.0
+display_name: 广告文案
+display_name_en: Ad copy
+summary: 先定角度，再从真实素材里写变体
+summary_en: Pick an angle, then write variants from real material
 ---
 
 > 改编自 coreyhaines31/marketingskills（MIT，© 2025 Corey Haines）的 ad-creative、ads 两个技能。已按 Agents 工坊的规矩改写，冲突处以本文为准。
