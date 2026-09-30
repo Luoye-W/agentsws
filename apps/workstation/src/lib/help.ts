@@ -145,6 +145,8 @@ export const HELP_SCOPES: Readonly<Record<HelpSlug, HelpScope>> = {
   'chat-window': { positions: ['customer-care'], roles: ['dtc.live-chat'] },
   'b2b-sending-domain': { positions: ['b2b'], roles: ['b2b.outbound'] },
   'dsh-scenes': { positions: [], roles: [] },
+  // WP207：通用（谁都看得到）
+  archive: { positions: [], roles: [] },
 }
 
 /**
