@@ -238,7 +238,7 @@ export function createPositions(options: PositionsOptions): PositionsAssembly {
     return kept.length === 0 ? template.roles : kept
   }
 
-  /** WP213（docs/36 §8.2）：岗位图标——存的那份优先，没有就取同 id 内置模板 yml 里的。 */
+  /** WP213（docs/36 §8.3）：岗位图标——存的那份优先，没有就取同 id 内置模板 yml 里的。 */
   const iconOf = (template: Position): { icon?: string } => {
     const icon = template.icon ?? bundledPositionIcon(template.id)
     return icon === undefined ? {} : { icon }

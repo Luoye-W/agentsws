@@ -8,6 +8,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { type ReactNode, useEffect, useRef, useState } from 'react'
 import { pickableRoles } from '@/components/org/positions-tab'
+import { DutyIcon } from '@/components/role-icons/role-icon'
 import { Button } from '@/components/ui/button'
 import {
   ApiClientError,
@@ -116,13 +117,15 @@ export function AddDutyInline({
                 data-testid="rail-add-duty-role"
                 data-role={r.id}
                 className={cn(
-                  'rounded-md border px-1.5 py-0.5 text-[11.5px] transition-colors hover:bg-muted',
-                  on && 'border-primary bg-primary/10',
+                  'inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[11.5px] transition-colors hover:bg-muted',
+                  on && 'border-primary bg-primary/10 [--ia:var(--ws-brand)]',
                 )}
                 onClick={() => {
                   setPicked((list) => (on ? list.filter((x) => x !== r.id) : [...list, r.id]))
                 }}
               >
+                <DutyIcon role_id={r.id} size={14} className="text-ws-muted-fg" />
+                <DutyIcon role_id={r.id} size={14} className="text-ws-muted-fg" />
                 {lang === 'en' && r.name_en !== '' ? r.name_en : r.name}
               </button>
             )

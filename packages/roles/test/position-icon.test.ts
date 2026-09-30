@@ -1,5 +1,5 @@
 /**
- * WP213（docs/36 §8.2）：岗位模板的 `icon` 字段。
+ * WP213（docs/36 §8.3）：岗位模板的 `icon` 字段。
  *
  * - 内置的每一个岗位模板都写了图标（目录就是名单，加一个 yml 忘了写这一格当场红）；
  * - `icon` 是只加的可选字段：外部写的岗位不填照样读得进来；
@@ -27,7 +27,8 @@ describe('岗位图标（WP213）', () => {
   })
 
   it('icon 是可选的：不填照样读得进来；填了必须是字符串', () => {
-    const base = 'id: x\nversion: 1.0.0\nname: { zh: 甲, en: A }\nroles:\n  - { role: dtc.support, default: true }\n'
+    const base =
+      'id: x\nversion: 1.0.0\nname: { zh: 甲, en: A }\nroles:\n  - { role: dtc.support, default: true }\n'
     expect(parsePosition(base).icon).toBeUndefined()
     expect(parsePosition(`${base}icon: customer-care\n`).icon).toBe('customer-care')
     expect(() => parsePosition(`${base}icon: [1, 2]\n`)).toThrow()

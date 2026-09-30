@@ -89,6 +89,13 @@
    */
   --ws-brand-sheen: #e0faf4;
   --ws-brand-sheen-strength: 0.55;
+  /*
+   * WP213（docs/36 §8.3）：岗位 / 职责图标右下角平台角标下面垫的那块浅色圆底。
+   * X / Threads / TikTok 的官方图本身是黑底，深色左栏里会看不见——官方图不改，垫一块底。
+   * 浅色主题底色本来就浅，加一圈极淡的描边把圆底从纸底上分出来。
+   */
+  --ws-badge-plate: #ffffff;
+  --ws-badge-ring: rgba(38, 51, 49, 0.14);
 
   /* ── shadcn token 指到上面那套值上 ───────────────────────────────── */
   --background: var(--ws-paper);
@@ -172,6 +179,9 @@
   /* WP200：深底那道光原样（纯白、力度 1 = `SHEEN_ON_DARK`） */
   --ws-brand-sheen: #ffffff;
   --ws-brand-sheen-strength: 1;
+  /* WP213：深色下角标底也是浅的（不跟主题变暗，否则黑底的官方图又看不见了） */
+  --ws-badge-plate: #f1f4f0;
+  --ws-badge-ring: transparent;
 
   --background: var(--ws-paper);
   --foreground: var(--ws-ink);

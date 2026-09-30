@@ -20,26 +20,21 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   BookOpen,
   Bot,
-  Briefcase,
   Building2,
   CalendarDays,
   ChevronDown,
   ChevronRight,
   Command as CommandIcon,
-  Crown,
-  Headset,
   Home,
   Inbox,
   ListTodo,
   type LucideIcon,
-  Megaphone,
   MessageCircle,
   MessageSquare,
   MessagesSquare,
   Plug,
   Settings,
   Sparkles,
-  Store,
   Users,
 } from 'lucide-react'
 import { type ReactNode, useCallback, useEffect, useMemo, useState } from 'react'
@@ -58,6 +53,7 @@ import {
 } from '@/components/palette-context'
 import { RailStateProvider } from '@/components/rail/rail-state'
 import { RightRail } from '@/components/rail/right-rail'
+import { DutyIcon, PositionIcon } from '@/components/role-icons/role-icon'
 // WP60（48 L6）：值守中的角标。自带数据，顶栏这里只有一行
 import { SceneSwitcher } from '@/components/scene-switcher'
 import { AddDutyInline } from '@/components/sidebar/add-duty-inline'
@@ -100,22 +96,11 @@ function navClass({ isActive }: { isActive: boolean }): string {
   return cn(
     'flex items-center gap-2.5 rounded-[10px] px-2.5 py-2 text-[13.5px] transition-colors',
     // 选中态图标跟文字同色（`[&_svg]:text-current`），未选中时图标压成 muted。
+    // WP213：选中行设 `--ia`，岗位 / 职责图标的点睛那一笔换品牌色（docs/36 §8.3）
     isActive
-      ? 'bg-sidebar-accent text-sidebar-accent-foreground font-medium [&_svg]:text-current'
+      ? 'bg-sidebar-accent text-sidebar-accent-foreground font-medium [&_svg]:text-current [--ia:var(--ws-brand)]'
       : 'hover:bg-sidebar-accent/60 [&_svg]:text-ws-muted-fg',
   )
-}
-
-/**
- * 岗位图标按职责挑：客服 / 运营 / 投放 / 所有者各有专属，其余落到 Briefcase。
- * 认不出的 role_id 一律 Briefcase——图标是提示，不是分类学。
- */
-function positionIcon(role_id: string): LucideIcon {
-  if (role_id.endsWith('.aftersales')) return Headset
-  if (role_id.endsWith('.ops')) return Store
-  if (role_id.startsWith('ads.')) return Megaphone
-  if (role_id === 'common.owner') return Crown
-  return Briefcase
 }
 
 /** 侧栏图标统一 16px；颜色交给 `navClass` 里的 `[&_svg]` 规则。 */
@@ -196,7 +181,11 @@ function PositionNav({
           data-testid="nav-position"
           data-position={instance.position_id}
         >
-          <NavIcon icon={positionIcon(instance.roles[0]?.role_id ?? '')} />
+          <PositionIcon
+            position_id={instance.position_id}
+            icon={instance.icon}
+            role_ids={instance.roles.map((r) => r.role_id)}
+          />
           <span className="truncate">{name}</span>
           {waiting === 0 ? null : (
             <span
@@ -250,6 +239,7 @@ function PositionNav({
                     className={({ isActive }) => cn(navClass({ isActive }), 'min-w-0 flex-1')}
                     data-testid="nav-duty"
                   >
+                    <DutyIcon role_id={r.role_id} />
                     <span className="truncate text-[13px]">{r.role_name}</span>
                   </NavLink>
                   <RailPlus
@@ -572,7 +562,7 @@ export function AppShell({
                       className={navClass}
                       data-testid="nav-position"
                     >
-                      <NavIcon icon={positionIcon(p.role_id)} />
+                      <PositionIcon position_id={p.position_id} role_ids={[p.role_id]} />
                       <span className="truncate">{p.role_name}</span>
                     </NavLink>
                   ))}

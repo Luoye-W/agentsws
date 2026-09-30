@@ -7,6 +7,7 @@
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { type ReactNode, useEffect, useRef, useState } from 'react'
+import { DutyIcon } from '@/components/role-icons/role-icon'
 import { railPickable } from '@/components/sidebar/add-duty-inline'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -103,13 +104,14 @@ export function NewPositionInline({
               data-testid="rail-new-position-role"
               data-role={r.id}
               className={cn(
-                'rounded-md border px-1.5 py-0.5 text-[11.5px] transition-colors hover:bg-muted',
-                on && 'border-primary bg-primary/10',
+                'inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[11.5px] transition-colors hover:bg-muted',
+                on && 'border-primary bg-primary/10 [--ia:var(--ws-brand)]',
               )}
               onClick={() => {
                 setPicked((list) => (on ? list.filter((x) => x !== r.id) : [...list, r.id]))
               }}
             >
+              <DutyIcon role_id={r.id} size={14} className="text-ws-muted-fg" />
               {lang === 'en' && r.name_en !== '' ? r.name_en : r.name}
             </button>
           )

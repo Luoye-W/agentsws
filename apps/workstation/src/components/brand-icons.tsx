@@ -224,6 +224,14 @@ export function hasBrandIcon(provider: string): boolean {
   return id in OFFICIAL || id in ICONS
 }
 
+/**
+ * WP213：这一家官网 favicon 的本地 URL（构建期打进产物的，不是外站地址）；没有 = `undefined`。
+ * 岗位 / 职责图标右下角的平台角标用它（`role-icons/role-icon.tsx`）。
+ */
+export function officialIconUrl(provider: string): string | undefined {
+  return OFFICIAL[ALIAS[provider] ?? provider]
+}
+
 /** 这个 id 用的是抓回来的官方图（`false` = 走矢量兜底或通用图标）。测试与排查用。 */
 export function hasOfficialIcon(provider: string): boolean {
   return (ALIAS[provider] ?? provider) in OFFICIAL

@@ -8,6 +8,7 @@
 import { X } from 'lucide-react'
 import type { ReactNode } from 'react'
 import type { RailScope, RailTier } from '@/components/rail/rail-scope'
+import { DutyIcon, PositionIcon } from '@/components/role-icons/role-icon'
 import { useApp } from '@/lib/app-context'
 import { cn } from '@/lib/utils'
 
@@ -38,6 +39,12 @@ export function RailPanel({
   return (
     <section className="flex h-full min-h-0 flex-col" data-testid={testId} data-tier={tier}>
       <header className="flex items-center gap-2 border-b px-3 py-2">
+        {/* WP213：这一格说的是哪个岗位 / 哪条职责，先用图标认（docs/36 §8.3） */}
+        {scope === undefined ? null : scope.tier === 'role' ? (
+          <DutyIcon role_id={scope.scope_id} className="text-ws-muted-fg" />
+        ) : (
+          <PositionIcon position_id={scope.scope_id} className="text-ws-muted-fg" />
+        )}
         <h2 className="min-w-0 flex-1 truncate text-sm font-medium" data-testid="rail-panel-title">
           {scope === undefined ? title : `${title} · ${scope.name}`}
         </h2>

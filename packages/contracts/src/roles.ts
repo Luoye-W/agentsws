@@ -427,7 +427,7 @@ export interface Position {
    */
   supervisor_person_id?: PersonId
   /**
-   * WP213（docs/36 §8.2）：**这个岗位的图标**——工作台 `role-icons/glyphs.ts` 里的一个 id。
+   * WP213（docs/36 §8.3）：**这个岗位的图标**——工作台 `role-icons/glyphs.ts` 里的一个 id。
    * 只加字段：内置模板都填；工作区自建的岗位不填，界面按它的职责推一枚。
    */
   icon?: string

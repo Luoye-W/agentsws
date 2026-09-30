@@ -11,6 +11,7 @@
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { useState } from 'react'
 import { PickToggle } from '@/components/onboarding/pick-toggle'
+import { DutyIcon, PositionIcon } from '@/components/role-icons/role-icon'
 import { Hint } from '@/components/ui/hint'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -100,10 +101,17 @@ export function RolePicker({
                 <PickToggle
                   checked={value.position_ids.includes(p.id)}
                   testId="onboarding-position"
+                  className="inline-flex items-center gap-1.5"
                   onToggle={() => {
                     togglePosition(p.id)
                   }}
                 >
+                  <PositionIcon
+                    position_id={p.id}
+                    icon={p.icon}
+                    role_ids={p.roles.map((r) => r.id)}
+                    className="text-ws-muted-fg"
+                  />
                   {p.name}
                   <span className="ml-1 text-xs text-muted-foreground">{p.roles.length}</span>
                 </PickToggle>
@@ -135,10 +143,12 @@ export function RolePicker({
                         // 第二批的那条不跟岗位走，岗位勾着也能单独勾
                         disabled={value.position_ids.includes(p.id) && r.planned !== true}
                         testId="onboarding-role"
+                        className="inline-flex items-center gap-1"
                         onToggle={() => {
                           toggleRole(r.id)
                         }}
                       >
+                        <DutyIcon role_id={r.id} size={14} className="text-ws-muted-fg" />
                         {r.name}
                       </PickToggle>
                       <Hint text={r.what_it_does} testId="onboarding-role-hint" />

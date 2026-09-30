@@ -4,7 +4,7 @@
  *
  *     node scripts/shot-position-icons-preview.mjs
  *
- * 只开本地文件（file://），不起服务、不联网。2 倍像素，按节裁：总览、左栏、三张逐枚表、构造。
+ * 只开本地文件（file://），不起服务、不联网。2 倍像素，按节裁：总览、左栏、两张逐枚表、构造。
  */
 import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
@@ -25,7 +25,6 @@ const SECTIONS = [
   ['rail', 'rail-mockups'],
   ['positions', 'positions-matrix'],
   ['duties', 'duties-matrix'],
-  ['channels', 'channels-matrix'],
   ['construction', 'construction'],
 ]
 
@@ -45,13 +44,11 @@ for (const [id, name] of SECTIONS) {
   }, id)
   await page.screenshot({ path: join(OUT, `${name}.png`), clip: box, fullPage: true })
 }
-// 左栏单张：每种风格一张（浅色），方便直接贴
+// 左栏单张：明暗各一张，方便直接贴
 const rails = await page.$$('.rails > div')
 for (const [i, name] of [
   [0, 'rail-line-light'],
   [1, 'rail-line-dark'],
-  [2, 'rail-block-light'],
-  [3, 'rail-block-dark'],
 ]) {
   await rails[i].screenshot({ path: join(OUT, `${name}.png`) })
 }

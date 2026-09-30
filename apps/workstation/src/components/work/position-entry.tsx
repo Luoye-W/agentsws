@@ -10,6 +10,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Send, Split } from 'lucide-react'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { DutyIcon, PositionIcon } from '@/components/role-icons/role-icon'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { DutyFold } from '@/components/ui/duty-fold'
@@ -112,7 +113,17 @@ export function PositionEntry({ id }: { id: string }): React.ReactNode {
     <Card data-testid="position-entry" data-position={view.position_id}>
       <CardHeader className="pb-2">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <CardTitle className="text-sm">{view.name.zh}</CardTitle>
+          <CardTitle className="flex items-center gap-2 text-sm">
+            {/* WP213：岗位页头的图标 = 「你在这儿」，点睛那一笔是品牌色 */}
+            <PositionIcon
+              position_id={view.position_id}
+              icon={view.icon}
+              role_ids={view.roles.map((r) => r.role_id)}
+              size={20}
+              selected
+            />
+            {view.name.zh}
+          </CardTitle>
           {/* 54 §4：计数按岗位聚合（"网站运营：3 张待审"），点开才看是哪条职责的 */}
           <span className="text-xs text-muted-foreground" data-testid="position-counts">
             {t('position.counts', {
@@ -199,6 +210,7 @@ export function PositionEntry({ id }: { id: string }): React.ReactNode {
                     pick.mutate({ matter_id: choice.matter.id, role_id: c.role_id })
                   }}
                 >
+                  <DutyIcon role_id={c.role_id} size={14} />
                   {c.role_name}
                 </Button>
               ))}
@@ -218,7 +230,8 @@ export function PositionEntry({ id }: { id: string }): React.ReactNode {
                 className="flex items-center justify-between gap-2 rounded-md border px-2 py-1.5 text-sm"
                 data-role={duty.id}
               >
-                <span className="flex min-w-0 items-center gap-1">
+                <span className="flex min-w-0 items-center gap-1.5">
+                  <DutyIcon role_id={duty.id} className="text-ws-muted-fg" />
                   <span className="truncate">{duty.name}</span>
                   {role?.planned === true ? <PlannedTag testId="position-role-planned" /> : null}
                 </span>

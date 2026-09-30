@@ -114,7 +114,7 @@ export interface PositionView {
    * WP174：这个岗位的上级（`scope_manager` 的审批先落到他）。没设 = 没有这一格，落老板。
    */
   supervisor?: { person_id: string; name: string }
-  /** WP213（docs/36 §8.2）：岗位图标（工作台 `role-icons/glyphs.ts` 里的 id）；自建岗位没有。 */
+  /** WP213（docs/36 §8.3）：岗位图标（工作台 `role-icons/glyphs.ts` 里的 id）；自建岗位没有。 */
   icon?: string
 }
 

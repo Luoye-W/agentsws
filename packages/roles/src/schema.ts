@@ -337,7 +337,7 @@ export const POSITION_SCHEMA: Node = Schema.object({
    */
   persona: PERSONA,
   /**
-   * WP213（docs/36 §8.2）：这个岗位的图标——工作台 `role-icons/glyphs.ts` 里的一个 id。
+   * WP213（docs/36 §8.3）：这个岗位的图标——工作台 `role-icons/glyphs.ts` 里的一个 id。
    * 只加字段：不填的岗位由界面按模板 id / 职责推一枚。内置的十个都填了（测试核）。
    */
   icon: Schema.string(),

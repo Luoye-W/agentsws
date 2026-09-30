@@ -924,7 +924,7 @@ export function createOrg(options: OrgOptions): OrgAssembly {
       .filter((m) => m.left_at === undefined)
       .map((m) => m.person_id)
 
-  /** WP213（docs/36 §8.2）：岗位图标——存的那份优先，没有就取同 id 内置模板 yml 里的。 */
+  /** WP213（docs/36 §8.3）：岗位图标——存的那份优先，没有就取同 id 内置模板 yml 里的。 */
   const iconOf = (p: StoredPosition): { icon?: string } => {
     const icon = p.icon ?? bundledPositionIcon(p.id)
     return icon === undefined ? {} : { icon }
