@@ -71,6 +71,7 @@ import {
   type KnowledgeStatus,
   SCOPE_ALL,
   SCOPE_GENERAL,
+  scopeLabel,
   scopeOptions,
 } from '@/lib/library'
 import { cn } from '@/lib/utils'
@@ -279,10 +280,8 @@ export function KnowledgePage(): React.ReactNode {
   const shownCards = filterKnowledge(allCards, { query, scope, status })
   const statusCounts = countByStatus(filterKnowledge(allCards, { query, scope }))
   const scopes = scopeOptions(allCards)
-  const scopeName = (ref: { kind: string; id: string }): string => {
-    const named = (rangeGroups.data ?? []).find((g) => g.id === ref.id)?.name
-    return named ?? `${t(`knowledge.scope.kind.${ref.kind}`)} · ${ref.id}`
-  }
+  const scopeName = (ref: { kind: string; id: string }): string =>
+    scopeLabel(ref, rangeGroups.data ?? [], t)
   // 上传的文件没有状态、没有范围：按状态 / 范围筛的时候不列它们，只按名字搜
   const shownUploads =
     status !== 'all' || scope !== SCOPE_ALL

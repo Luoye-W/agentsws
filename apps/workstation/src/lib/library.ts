@@ -355,3 +355,45 @@ export function knowledgeGroupsForPosition(position_id: string | undefined): Kno
   const hit = position_id === undefined ? undefined : POSITION_KNOWLEDGE[position_id]
   return hit === undefined ? [...KNOWLEDGE_GROUPS] : [...hit]
 }
+
+/**
+ * 一条适用范围在屏幕上怎么说（与 `lib/ranges.ts` 的 `rangeText` 同一条规矩：内部 id 不上屏）。
+ *
+ * - `brand`：id 是工作区 id → 「整个品牌」；
+ * - 范围组（店铺组）认得的 id → 组名；
+ * - `market`：`账号:站点` → 站点（`amz_na:US` → `US`）；
+ * - 其余原样（店铺 / 账号的 id 本来就是用户认得的店名）。
+ */
+export function scopeLabel(
+  ref: { kind: string; id: string },
+  groups: readonly { id: string; name: string }[],
+  t: (key: string) => string,
+): string {
+  if (ref.kind === 'brand') return t('range.kind.brand')
+  const named = groups.find((g) => g.id === ref.id)?.name
+  if (named !== undefined) return named
+  if (ref.kind === 'market') {
+    const at = ref.id.indexOf(':')
+    if (at > 0 && at < ref.id.length - 1) return ref.id.slice(at + 1)
+  }
+  return ref.id
+}
+
+/**
+ * 事实卡正文在屏幕上的样子：从文档导进来的常以 `# 标题` 开头——标题单拎出来，
+ * 其余并成一行（列表里只看个大概，全文在导出 / 第三栏里看）。
+ */
+export function statementParts(statement: string): { title?: string; body: string } {
+  const lines = statement
+    .split('\n')
+    .map((l) => l.trim())
+    .filter((l) => l !== '')
+  const first = lines[0] ?? ''
+  if (/^#{1,6}\s/.test(first)) {
+    return {
+      title: first.replace(/^#{1,6}\s+/, ''),
+      body: lines.slice(1).join(' ').replace(/\*\*/g, ''),
+    }
+  }
+  return { body: lines.join(' ').replace(/\*\*/g, '') }
+}

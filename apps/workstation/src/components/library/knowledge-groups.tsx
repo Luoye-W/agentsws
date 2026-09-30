@@ -21,6 +21,8 @@ import {
   knowledgeOriginOf,
   knowledgeStatusOf,
   policyKindOf,
+  scopeLabel,
+  statementParts,
 } from '@/lib/library'
 import { LibraryGroup } from './library-group'
 
@@ -48,6 +50,7 @@ export function KnowledgeRow({
   const origin = knowledgeOriginOf(card)
   const policy = policyKindOf(card)
   const b2b = b2bCategoryOf(card)
+  const parts = statementParts(card.statement)
   const kind =
     b2b !== undefined
       ? t(`knowledge.b2b.${b2b}`)
@@ -62,14 +65,25 @@ export function KnowledgeRow({
       data-status={status}
       data-origin={origin}
     >
-      <p className="line-clamp-2 min-w-0 flex-1 text-sm text-ws-ink">{card.statement}</p>
+      <div className="min-w-0 flex-1 text-sm">
+        {parts.title === undefined ? null : (
+          <p className="truncate font-medium text-ws-ink">{parts.title}</p>
+        )}
+        <p
+          className={
+            parts.title === undefined
+              ? 'line-clamp-2 text-ws-ink'
+              : 'truncate text-xs text-ws-muted-fg'
+          }
+        >
+          {parts.body}
+        </p>
+      </div>
       <div className="flex shrink-0 flex-wrap items-center gap-1 sm:max-w-[55%] sm:justify-end">
         {kind === undefined ? null : <WsTag>{kind}</WsTag>}
         {(card.scope ?? []).map((s) => (
           <WsTag key={`${s.kind}:${s.id}`} data-testid="knowledge-row-scope">
-            {scopeName === undefined
-              ? `${t(`knowledge.scope.kind.${s.kind}`)} · ${s.id}`
-              : scopeName(s)}
+            {scopeName === undefined ? scopeLabel(s, [], t) : scopeName(s)}
           </WsTag>
         ))}
         {card.stage === undefined || card.stage === 'both' ? null : (

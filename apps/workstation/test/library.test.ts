@@ -15,10 +15,12 @@ import {
   knowledgeStatusOf,
   policyKindOf,
   SCOPE_GENERAL,
+  scopeLabel,
   scopeOptions,
   sharedAcross,
   skillLabel,
   skillsForScope,
+  statementParts,
 } from '@/lib/library'
 
 const pos = (id: string, zh: string, mine = false) => ({ id, name: { zh, en: id }, mine })
@@ -193,5 +195,26 @@ describe('知识按类型分组', () => {
   it('第三栏：岗位挑自己先看的几类，认不出的给全部', () => {
     expect(knowledgeGroupsForPosition('b2b')[0]).toBe('b2b')
     expect(knowledgeGroupsForPosition('nope')).toHaveLength(7)
+  })
+})
+
+describe('屏上怎么说', () => {
+  const t = (k: string): string => (k === 'range.kind.brand' ? '整个品牌' : k)
+  it('适用范围：内部 id 不上屏', () => {
+    const groups = [{ id: 'rg_brand_b', name: '北美店铺组' }]
+    expect(scopeLabel({ kind: 'brand', id: 'ws_dtc3c' }, groups, t)).toBe('整个品牌')
+    expect(scopeLabel({ kind: 'store', id: 'rg_brand_b' }, groups, t)).toBe('北美店铺组')
+    expect(scopeLabel({ kind: 'market', id: 'amz_na:US' }, groups, t)).toBe('US')
+    expect(scopeLabel({ kind: 'store', id: 'nordvolt.myshopify.com' }, groups, t)).toBe(
+      'nordvolt.myshopify.com',
+    )
+  })
+
+  it('文档导进来的 `# 标题` 单拎出来', () => {
+    expect(statementParts('# 保修期\n\n充电类产品的保修期是 **24 个月**。')).toEqual({
+      title: '保修期',
+      body: '充电类产品的保修期是 24 个月。',
+    })
+    expect(statementParts('MOQ 1000 个')).toEqual({ body: 'MOQ 1000 个' })
   })
 })
