@@ -45,10 +45,7 @@ function bundledPositions(): Map<string, Set<string>> {
     const text = readFileSync(join(dir, f), 'utf8')
     const id = /^id:\s*(\S+)/m.exec(text)?.[1]
     if (id === undefined) continue
-    out.set(
-      id,
-      new Set([...text.matchAll(/\brole:\s*([a-z0-9._-]+)/g)].map((m) => m[1] ?? '')),
-    )
+    out.set(id, new Set([...text.matchAll(/\brole:\s*([a-z0-9._-]+)/g)].map((m) => m[1] ?? '')))
   }
   return out
 }
