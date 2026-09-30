@@ -26,6 +26,7 @@ import type {
   MessageDraftInput,
   MessageFlagsInput,
   MessageFolder,
+  MessageImagesReport,
   MessageLabel,
   MessageListQuery,
   MessageMoveInput,
@@ -34,6 +35,7 @@ import type {
   MessageSendResult,
   MessageSyncReport,
   MessageThreadSummary,
+  MessageWriteback,
   PersonId,
   ReplySuggestion,
   SenderRule,
@@ -45,6 +47,7 @@ import { ApiError } from '../errors.js'
 import { assignmentOf, body, intParam, ok, param, principalOf } from '../helpers.js'
 import { type Route, route } from '../route-spec.js'
 import type { GatewayDeps } from '../types.js'
+import { contentDisposition } from './knowledge.js'
 
 const READ = { domain: 'approval', op: 'read', range: 'own', sensitivity: 'internal' } as const
 const WRITE = { ...READ, op: 'stage' } as const
@@ -76,6 +79,18 @@ export interface MessageAccountView {
   }
   /** WP172：这只邮箱收 B2B 信（B2B 岗位开着 + 邮箱卡上「收 B2B 信」开着）——左栏据此画「B2B 往来」。 */
   b2b?: boolean
+  /**
+   * WP204：这只邮箱开着影子模式（「只看不动」）——消息页据此把归档 / 删除置灰并说明为什么，
+   * 已读 / 星标只在本机标。只在开着时给。
+   */
+  shadow_mode?: boolean
+}
+
+/** WP204：一封信的一个附件（字节从受控原始材料区取）。 */
+export interface MessageAttachmentFile {
+  name: string
+  mime: string
+  bytes: Uint8Array
 }
 
 /** 打开一封信时一次拿全（正文 + 这条会话 + 右栏那一格要的东西）。 */
@@ -139,13 +154,13 @@ export interface MessagesPort {
     actor: MessageActor,
     id: string,
     input: MessageFlagsInput,
-  ): MaybePromise<{ message: MessageRecord }>
+  ): MaybePromise<{ message: MessageRecord; writeback?: MessageWriteback }>
   /** 挪一封信（也是纠错的落点）。删除 = `to: 'trash'`。 */
   move(
     actor: MessageActor,
     id: string,
     input: MessageMoveInput,
-  ): MaybePromise<{ message: MessageRecord; rule?: SenderRule }>
+  ): MaybePromise<{ message: MessageRecord; rule?: SenderRule; writeback?: MessageWriteback }>
   setLabels(
     actor: MessageActor,
     id: string,
@@ -160,12 +175,24 @@ export interface MessagesPort {
     id: string,
     input: MessageConfirmRouteInput,
   ): MaybePromise<MessageConfirmRouteResult>
-  /** 「显示图片」/「总是信任这个发件人」。 */
+  /**
+   * 「显示图片」/「总是信任这个发件人」。WP204：图片由本机代取、内联（`images` 说取到几张、
+   * 几张没取到）；只对这一封生效，不改库里那一份。
+   */
   showImages(
     actor: MessageActor,
     id: string,
     always: boolean,
-  ): MaybePromise<{ message: MessageRecord }>
+  ): MaybePromise<{ message: MessageRecord; images?: MessageImagesReport }>
+  /**
+   * WP204：取一个附件的字节（受控原始材料区）。不实现 = 这台机器看不了附件（路由回 501）；
+   * 回 `undefined` = 没有这个附件 / 原件过了保留期（404）。
+   */
+  attachment?(
+    actor: MessageActor,
+    id: string,
+    attachment_id: string,
+  ): MaybePromise<MessageAttachmentFile | undefined>
 
   labels(actor: MessageActor): MaybePromise<{ labels: MessageLabel[] }>
   putLabel(actor: MessageActor, label: MessageLabel): MaybePromise<{ label: MessageLabel }>
@@ -565,7 +592,7 @@ export function messageRoutes(): Route[] {
         assignment: true,
         authz: WRITE,
         body: FlagsBody,
-        returns: '{ message: MessageRecord }',
+        returns: '{ message: MessageRecord; writeback?: MessageWriteback }',
       },
       async (c, deps) =>
         ok(c, await portOf(deps).setFlags(actorOf(c), param(c, 'id'), await body(c, FlagsBody))),
@@ -582,7 +609,7 @@ export function messageRoutes(): Route[] {
         assignment: true,
         authz: WRITE,
         body: MoveBody,
-        returns: '{ message: MessageRecord; rule?: SenderRule }',
+        returns: '{ message: MessageRecord; rule?: SenderRule; writeback?: MessageWriteback }',
       },
       async (c, deps) =>
         ok(
@@ -657,7 +684,7 @@ export function messageRoutes(): Route[] {
         assignment: true,
         authz: WRITE,
         body: ImagesBody,
-        returns: '{ message: MessageRecord }',
+        returns: '{ message: MessageRecord; images?: MessageImagesReport }',
       },
       async (c, deps) =>
         ok(
@@ -668,6 +695,35 @@ export function messageRoutes(): Route[] {
             (await body(c, ImagesBody)).always === true,
           ),
         ),
+    ),
+    route(
+      {
+        method: 'get',
+        path: '/v1/messages/:id/attachments/:attachment',
+        operationId: 'getMessageAttachment',
+        summary:
+          '取一个附件的字节（WP204；从受控原始材料区取，一律按「下载」给，不在页面里打开）',
+        tag: 'messages',
+        auth: 'bearer',
+        assignment: true,
+        authz: READ,
+        returns: '附件字节（Content-Disposition 带文件名；没有 / 过了保留期 → 404）',
+      },
+      async (c, deps) => {
+        const port = portOf(deps)
+        if (port.attachment === undefined)
+          throw new ApiError('not_implemented', '这个服务进程的消息面还取不了附件')
+        const out = await port.attachment(actorOf(c), param(c, 'id'), param(c, 'attachment'))
+        if (out === undefined)
+          throw new ApiError('not_found', '这个附件取不到了（原件可能已过保留期）')
+        return c.body(out.bytes as unknown as ArrayBuffer, 200, {
+          // 一律当下载：外来文件不在工作台同源里打开（HTML / SVG 附件就是一段脚本）
+          'content-type': 'application/octet-stream',
+          'content-disposition': contentDisposition(out.name),
+          'content-length': String(out.bytes.byteLength),
+          'x-content-type-options': 'nosniff',
+        })
+      },
     ),
     route(
       {
