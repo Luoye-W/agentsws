@@ -13,14 +13,27 @@
  */
 
 import type { MailboxWriter, MailSource, RawEmailMessage, RawStore } from '@agentsws/channels'
-import { MemoryRawStore } from '@agentsws/channels'
-import type { Clock, EventEnvelope, MessageRecord, ModelGateway, RoleId } from '@agentsws/contracts'
+import { MemoryRawStore, triageMessage } from '@agentsws/channels'
+import type {
+  Clock,
+  EventEnvelope,
+  MessageRecord,
+  MessageThreadSummary,
+  ModelGateway,
+  RoleId,
+} from '@agentsws/contracts'
 import { MemoryHalt } from '@agentsws/kernel'
 import { createWork, type Work } from '@agentsws/work'
 import { describe, expect, it } from 'vitest'
 import type { DirectMailInput, DirectMailResult } from '../src/channels.js'
 import type { MailAccount } from '../src/index.js'
-import { createMessages, keywordOf, maskAddress, parseJsonObject } from '../src/messages.js'
+import {
+  createMessages,
+  keywordOf,
+  type MessagesOptions,
+  maskAddress,
+  parseJsonObject,
+} from '../src/messages.js'
 
 const WS = 'ws_1'
 const ME = 'hello@shop.example'
@@ -167,6 +180,8 @@ function harness(
     shadow?: boolean
     send?: DirectMailResult
     rawStore?: RawStore
+    /** WP212：岗位清单、交给岗位、卡片数等装配口。 */
+    extra?: Partial<MessagesOptions>
   } = {},
 ): Harness {
   const events: EventEnvelope[] = []
@@ -201,6 +216,7 @@ function harness(
         : { ok: false, reason: 'http_error' },
     ...(over.shadow === true ? { supportMailbox: () => ({ shadow_mode: true }) } : {}),
     ...(over.rawStore === undefined ? {} : { rawStore: over.rawStore }),
+    ...(over.extra ?? {}),
   })
   return { messages, writer, work, events, sent, calls: stub.calls }
 }
@@ -474,9 +490,9 @@ describe('消息：普通邮箱该有的（63 §7）', () => {
 
 describe('消息：回复建议与隐私（63 §6 / §10）', () => {
   it('needs_reply 的信打开时才生成三条有差别的建议，并缓存', async () => {
+    // WP212：助手只对没人接的信生成建议——这里不开客服岗位，信留在收件箱没人接
     const h = harness({
       folders: { INBOX: letters([{ uid: 21, mime: mime({ uid: 21 }) }]) },
-      roles: ['dtc.support'],
     })
     await h.messages.poll()
     const row = (await h.messages.store.list({}))[0] as MessageRecord
@@ -642,5 +658,222 @@ describe('WP204：消息页按钮背后的那几条（回执、影子模式、�
     await expect(
       none.h.messages.port.move(ACTOR, 'msg_gone', { to: 'trash' }),
     ).rejects.toMatchObject({ code: 'not_found' })
+  })
+})
+
+/* ── WP212：没人接的 + 交给岗位（docs/88 §3、§8.2 第 1、2 步）──────────────── */
+
+describe('消息：没人接的与交给岗位（WP212）', () => {
+  /** 一个判成「媒体」的来信：模型给类型，不归任何分拣路（留在收件箱没人接）。 */
+  const mediaTriage = {
+    route: 'inbox',
+    labels: [],
+    needs_reply: true,
+    priority: 'normal',
+    summary: '想周四采访你 20 分钟',
+    confidence: 0.88,
+    kind: 'media',
+  }
+  const positions = (): ReturnType<NonNullable<MessagesOptions['positions']>> => [
+    {
+      id: 'customer-care',
+      name_zh: '客服',
+      name_en: 'Customer Care',
+      open: false,
+      route: 'support',
+    },
+    { id: 'pr', name_zh: '公共关系', name_en: 'PR', open: true },
+  ]
+
+  it('类型进列表；没人接的主按钮是对口的开着的岗位；交给岗位后进事项、消息页不再列', async () => {
+    const opened: { position_id: string; thread_id: string }[] = []
+    const h = harness({
+      folders: { INBOX: letters([{ uid: 31, mime: mime({ uid: 31, subject: 'Interview' }) }]) },
+      triage: mediaTriage,
+      extra: {
+        positions,
+        openAtPosition: async (input) => {
+          opened.push({ position_id: input.position_id, thread_id: input.thread_id })
+          return { matter_id: 'mat_pr_1' }
+        },
+        openCards: async () => [{ matter_id: 'mat_pr_1' }],
+      },
+    })
+    await h.messages.poll()
+    const { threads } = await h.messages.port.threads(ACTOR, { claim: 'unclaimed' })
+    expect(threads).toHaveLength(1)
+    const row = threads[0] as MessageThreadSummary
+    expect(row.kind).toBe('media')
+    expect(row.summary).toBe('想周四采访你 20 分钟')
+    expect(row.suggest).toEqual({ action: 'hand', position: 'pr' })
+
+    const out = await h.messages.port.confirmRoute?.(ACTOR, row.claim_message_id as string, {
+      route: 'position',
+      position_id: 'pr',
+    })
+    expect(out?.handed_off).toBe(true)
+    expect(out?.matter_id).toBe('mat_pr_1')
+    expect(opened).toEqual([{ position_id: 'pr', thread_id: row.thread_id }])
+    // 交出去之后：「没人接的」不再列；「全部」里挂「公共关系在办 · 有 1 张卡等你 →」
+    expect((await h.messages.port.threads(ACTOR, { claim: 'unclaimed' })).threads).toHaveLength(0)
+    const all = (await h.messages.port.threads(ACTOR, {})).threads[0]
+    expect(all).toMatchObject({
+      claim: 'handed',
+      handed_to: 'pr',
+      open_card_count: 1,
+      card_link: '/matters/mat_pr_1',
+    })
+    const overview = await h.messages.port.overview?.(ACTOR)
+    expect(overview?.handed_by_position).toEqual([{ position_id: 'pr', count: 1 }])
+    expect(overview?.cards_waiting).toBe(1)
+    expect(overview?.unclaimed).toBe(0)
+    expect(h.events.some((e) => e.type === 'messages.route_confirmed')).toBe(true)
+  })
+
+  it('岗位没开：不交、说一句人话，信还在没人接的里', async () => {
+    const h = harness({
+      folders: { INBOX: letters([{ uid: 32, mime: mime({ uid: 32 }) }]) },
+      triage: mediaTriage,
+      extra: { positions, openAtPosition: async () => ({ matter_id: 'x' }) },
+    })
+    await h.messages.poll()
+    const row = (await h.messages.store.list({}))[0] as MessageRecord
+    const out = await h.messages.port.confirmRoute?.(ACTOR, row.id, {
+      route: 'position',
+      position_id: 'customer-care',
+    })
+    expect(out?.handed_off).toBe(false)
+    expect(out?.refused).toContain('没开')
+    expect((await h.messages.port.threads(ACTOR, { claim: 'unclaimed' })).threads).toHaveLength(1)
+  })
+
+  it('改判 + 记住：写发件人规则，下一封同一发件人直接按规则、不再调模型', async () => {
+    const h = harness({
+      folders: {
+        INBOX: letters([{ uid: 33, mime: mime({ uid: 33, subject: 'first' }) }]),
+      },
+      triage: mediaTriage,
+    })
+    await h.messages.poll()
+    expect(h.calls).toEqual(['triage'])
+    const row = (await h.messages.store.list({}))[0] as MessageRecord
+    const out = await h.messages.port.setKind?.(ACTOR, row.id, {
+      kind: 'partnership',
+      remember_sender: true,
+    })
+    expect(out?.message.triage?.kind).toBe('partnership')
+    expect(out?.message.triage?.kind_by).toBe('user')
+    expect(out?.rule?.kind).toBe('partnership')
+    // 下一封：同一个发件人，规则层直达
+    const verdict = await triageMessage(
+      {
+        from_email: row.from.email,
+        subject: 'second',
+        text: 'hi again',
+        thread_id: '<n@x>',
+        references: [],
+        headers: {},
+        has_attachments: false,
+      },
+      {
+        support_enabled: false,
+        kol_enabled: false,
+        isSupportThread: () => false,
+        isKolThread: () => false,
+        senderRules: (await h.messages.port.senderRules(ACTOR)).rules,
+        model_halted: false,
+        at: T0,
+      },
+      {
+        classify: async () => {
+          throw new Error('不该调模型')
+        },
+      },
+    )
+    expect(verdict.kind).toBe('partnership')
+    expect(verdict.kind_by).toBe('sender_rule')
+    // 「你教过它」里看得见
+    const overview = await h.messages.port.overview?.(ACTOR)
+    expect(overview?.taught.rules).toBe(1)
+    expect(overview?.taught.recent[0]).toMatchObject({ field: 'kind', to: 'partnership' })
+  })
+
+  it('不勾「记住」的改判进学习回路（onCorrection），不写规则', async () => {
+    const lessons: string[] = []
+    const h = harness({
+      folders: { INBOX: letters([{ uid: 34, mime: mime({ uid: 34 }) }]) },
+      triage: mediaTriage,
+      extra: { onCorrection: (c) => lessons.push(`${c.field}:${c.from}->${c.to}`) },
+    })
+    await h.messages.poll()
+    const row = (await h.messages.store.list({}))[0] as MessageRecord
+    await h.messages.port.setKind?.(ACTOR, row.id, { kind: 'personal_other' })
+    expect(lessons).toEqual(['kind:media->personal_other'])
+    expect((await h.messages.port.senderRules(ACTOR)).rules).toHaveLength(0)
+    expect(h.events.some((e) => e.type === 'messages.triage_corrected')).toBe(true)
+  })
+
+  it('只是通知成捆：整捆「知道了」；邮箱里标不标已读跟随「客信怎么动邮箱」开关', async () => {
+    const notice = { ...mediaTriage, needs_reply: false, kind: 'billing_system', summary: '账单' }
+    const h = harness({
+      folders: {
+        INBOX: letters([
+          { uid: 35, mime: mime({ uid: 35, subject: 'Invoice 1' }) },
+          { uid: 36, mime: mime({ uid: 36, subject: 'Invoice 2' }) },
+        ]),
+      },
+      triage: notice,
+    })
+    await h.messages.poll()
+    const before = await h.messages.port.overview?.(ACTOR)
+    expect(before?.notice).toBe(2)
+    expect(before?.unclaimed).toBe(0)
+    expect(before?.notice_groups).toEqual([
+      expect.objectContaining({ kind: 'billing_system', count: 2 }),
+    ])
+    const out = await h.messages.port.ackNotices?.(ACTOR, { kind: 'billing_system' })
+    expect(out?.acked).toBe(2)
+    expect(out?.writeback).toBe('written')
+    expect(h.writer.flags.filter((f) => f.add.includes('\\Seen'))).toHaveLength(2)
+    expect((await h.messages.port.overview?.(ACTOR))?.notice).toBe(0)
+    // 影子模式开着：只在本机标，邮箱一下都不动
+    const shadow = harness({
+      folders: { INBOX: letters([{ uid: 37, mime: mime({ uid: 37 }) }]) },
+      triage: notice,
+      shadow: true,
+    })
+    await shadow.messages.poll()
+    const r = await shadow.messages.port.ackNotices?.(ACTOR, {})
+    expect(r?.writeback).toBe('local_only')
+    expect(shadow.writer.flags).toHaveLength(0)
+  })
+
+  it('AI 助手只对没人接的信生成建议；岗位在办的只挂「在办 · 有卡等你」，不花 token', async () => {
+    const h = harness({
+      folders: { INBOX: letters([{ uid: 38, mime: mime({ uid: 38 }) }]) },
+      roles: ['dtc.support'],
+      extra: { openCards: async () => [] },
+    })
+    await h.messages.poll()
+    const row = (await h.messages.store.list({}))[0] as MessageRecord
+    expect(row.route).toBe('support')
+    const view = await h.messages.port.assistant(ACTOR, row.id)
+    expect(view.claim).toBe('handed')
+    expect(view.handed_to).toBe('customer-care')
+    expect(view.suggestions).toEqual([])
+    expect(h.calls).toEqual(['triage'])
+  })
+
+  it('我自己处理 / 撤销：从没人接的拿掉，再放回来', async () => {
+    const h = harness({
+      folders: { INBOX: letters([{ uid: 39, mime: mime({ uid: 39 }) }]) },
+      triage: mediaTriage,
+    })
+    await h.messages.poll()
+    const row = (await h.messages.store.list({}))[0] as MessageRecord
+    await h.messages.port.claim?.(ACTOR, row.id, { as: 'me' })
+    expect((await h.messages.port.threads(ACTOR, { claim: 'unclaimed' })).threads).toHaveLength(0)
+    await h.messages.port.claim?.(ACTOR, row.id, { as: 'none' })
+    expect((await h.messages.port.threads(ACTOR, { claim: 'unclaimed' })).threads).toHaveLength(1)
   })
 })

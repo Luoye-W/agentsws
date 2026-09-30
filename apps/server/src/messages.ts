@@ -48,6 +48,7 @@ import type {
   TriageModel,
 } from '@agentsws/channels'
 import {
+  aggregateThreads,
   applySupportMailboxActions,
   createRemoteImageLoader,
   folderKindOf,
@@ -56,14 +57,19 @@ import {
   ImapMailSource,
   inlineRemoteImages,
   isAgentFolderKind,
+  kindOfLegacy,
   MailboxSync,
   MemoryMailboxStateStore,
   MemoryMessageStore,
   mailboxFoldersFrom,
+  POSITION_OF_ROUTE,
+  positionForKind,
   ReplySuggester,
   restoreRemoteImages,
+  routeOfPosition,
   SqliteMailboxStateStore,
   SqliteMessageStore,
+  suggestFor,
   supportIntakeKey,
   supportMailboxSwitches,
   triageMessage,
@@ -75,16 +81,23 @@ import type {
   Halt,
   Iso8601,
   MessageBackfillInput,
+  MessageClaimInput,
   MessageConfirmRouteInput,
   MessageConfirmRouteResult,
+  MessageCorrection,
   MessageDraft,
   MessageDraftInput,
   MessageFlagsInput,
   MessageFolderKind,
   MessageImagesReport,
+  MessageKind,
+  MessageKindInput,
   MessageLabel,
   MessageListQuery,
   MessageMoveInput,
+  MessageNoticeAckInput,
+  MessageOverview,
+  MessagePositionOption,
   MessageRecord,
   MessageRoute,
   MessageSendInput,
@@ -221,6 +234,58 @@ export interface MessagesOptions {
    * 只收图片、限大小）。测试与 demo 注入替身；不给 = 真代取。
    */
   loadRemoteImage?: RemoteImageLoader
+  /**
+   * WP212：这个品牌里有哪些岗位、开没开（「交给 X ▾」那一列）。不给 = 只有 63 那三条路对应的
+   * 三个岗位（客服 / 红人营销 / B2B），开没开按现查的职责算。
+   */
+  positions?(): MessagePositionOption[]
+  /**
+   * WP212：「交给 X」推广到所有岗位——客服 / 红人 / B2B 之外的岗位走 54 的「交给这个岗位一件事」
+   * （`positions.open`：开事项、岗位内路由挑职责、起 Run；拿不准出选择卡）。事项上钉着这条会话。
+   * 交不出去（你名下没有这个岗位的职责）就抛错，界面照实说。不给 = 只能交给那三条路。
+   */
+  openAtPosition?(input: {
+    position_id: string
+    person_id: PersonId
+    title: string
+    summary?: string
+    thread_id: string
+  }): Promise<{ matter_id: string }>
+  /**
+   * WP212：卡片流里等你批的卡指着哪条会话 / 哪件事项（「X 在办 · 有 N 张卡等你 →」只报数，不列卡）。
+   * 不给 = 数不出，界面不挂这句。
+   */
+  openCards?(): Promise<readonly { thread_id?: string; matter_id?: string }[]>
+  /** WP212：一次纠正（没勾「以后都这样」的改判 / 改岗位）进学习回路（24 §3 的 lesson 池）。 */
+  onCorrection?(correction: MessageCorrection): void
+}
+
+/** WP212：没给 {@link MessagesOptions.positions} 时那三个岗位的名字。 */
+const ROUTE_POSITION_NAMES: Record<'support' | 'kol' | 'b2b', { zh: string; en: string }> = {
+  support: { zh: '客服', en: 'Customer Care' },
+  kol: { zh: '红人营销', en: 'Creator Marketing' },
+  b2b: { zh: 'B2B', en: 'B2B' },
+}
+
+/** WP212：分拣结论上关于「类型」的那几格（挪信 / 人工分拣重写结论时要带着走，不许冲掉）。 */
+function kindFieldsOf(
+  triage: MessageTriage | undefined,
+): Pick<MessageTriage, 'kind' | 'kind_by' | 'kind_confidence' | 'suggested_position'> {
+  if (triage === undefined) return {}
+  return {
+    ...(triage.kind === undefined ? {} : { kind: triage.kind }),
+    ...(triage.kind_by === undefined ? {} : { kind_by: triage.kind_by }),
+    ...(triage.kind_confidence === undefined ? {} : { kind_confidence: triage.kind_confidence }),
+    ...(triage.suggested_position === undefined
+      ? {}
+      : { suggested_position: triage.suggested_position }),
+  }
+}
+
+/** 发件人的域（纠正记录里只留域，63 §10）。 */
+function domainOf(email: string): string {
+  const at = email.lastIndexOf('@')
+  return at < 0 ? '' : email.slice(at + 1).toLowerCase()
 }
 
 /** WP204：影子模式下归档 / 删除 / 挪信那一句（界面也按它置灰，这里是兜底）。 */
@@ -789,6 +854,175 @@ export function createMessages(options: MessagesOptions): MessagesAssembly {
     return row
   }
 
+  /* ── WP212：岗位、归属、卡片数 ─────────────────────────────────────── */
+
+  /** 「交给 X ▾」那一列：装配方给了就用它，否则只有 63 那三条路对应的三个岗位。 */
+  const positionOptions = (): MessagePositionOption[] => {
+    const given = options.positions?.()
+    if (given !== undefined) return given
+    const open = { support: supportEnabled(), kol: kolEnabled(), b2b: b2bEnabled() }
+    return (['support', 'kol', 'b2b'] as const).map((route) => ({
+      id: POSITION_OF_ROUTE[route],
+      name_zh: ROUTE_POSITION_NAMES[route].zh,
+      name_en: ROUTE_POSITION_NAMES[route].en,
+      open: open[route],
+      route,
+    }))
+  }
+
+  /** 卡片流里等你批的卡（数不出就是空）。 */
+  const waitingCards = async (): Promise<readonly { thread_id?: string; matter_id?: string }[]> => {
+    try {
+      return (await options.openCards?.()) ?? []
+    } catch (e) {
+      logQuiet('open_cards_failed', '', e)
+      return []
+    }
+  }
+
+  /** 一条会话在卡片流里还有几张卡等你批、跳到哪（事项页列着这件事的卡）。 */
+  const cardsOf = (
+    messages: readonly MessageRecord[],
+    cards: readonly { thread_id?: string; matter_id?: string }[],
+  ): { open_card_count: number; card_link?: string } => {
+    const threads = new Set(messages.map((m) => m.thread_id))
+    const matters = new Set(
+      messages.flatMap((m) => [
+        ...(m.linked?.type === 'matter' ? [m.linked.id] : []),
+        ...(m.handled?.matter_id === undefined ? [] : [m.handled.matter_id]),
+      ]),
+    )
+    const hit = cards.filter(
+      (c) =>
+        (c.thread_id !== undefined && threads.has(c.thread_id)) ||
+        (c.matter_id !== undefined && matters.has(c.matter_id)),
+    )
+    const matter = hit.find((c) => c.matter_id !== undefined)?.matter_id ?? [...matters][0]
+    return {
+      open_card_count: hit.length,
+      ...(matter === undefined ? {} : { card_link: `/matters/${matter}` }),
+    }
+  }
+
+  /**
+   * 列表上的一行补上三样只有服务进程知道的：AI 挑的主按钮（要知道哪些岗位开着）、
+   * 卡片流里还有几张卡、跳过去的链接。
+   */
+  const enrich = async (rows: MessageThreadSummary[]): Promise<MessageThreadSummary[]> => {
+    const positions = positionOptions()
+    const cards = await waitingCards()
+    const out: MessageThreadSummary[] = []
+    for (const row of rows) {
+      let next = row
+      if (
+        row.claim === 'unclaimed' &&
+        row.kind !== undefined &&
+        row.claim_message_id !== undefined
+      ) {
+        const m = await store.get(row.claim_message_id)
+        next = {
+          ...next,
+          suggest: suggestFor(
+            {
+              kind: row.kind,
+              needs_reply: m?.triage?.needs_reply !== false,
+              suggested_position: m?.triage?.suggested_position,
+              suggested_route: m?.triage?.suggested_route,
+            },
+            positions,
+          ),
+        }
+      }
+      if (row.claim === 'handed' && cards.length > 0) {
+        const c = cardsOf(await store.thread(row.thread_id), cards)
+        next = { ...next, open_card_count: c.open_card_count }
+        if (c.card_link !== undefined) next = { ...next, card_link: c.card_link }
+      }
+      out.push(next)
+    }
+    return out
+  }
+
+  /** 一条会话现在归谁（同 {@link aggregateThreads} 的派生），外加卡片数。 */
+  const claimOfThreadId = async (
+    thread_id: string,
+  ): Promise<{ summary?: MessageThreadSummary; messages: MessageRecord[] }> => {
+    const messages = await store.thread(thread_id)
+    const summary = (await enrich(aggregateThreads(messages)))[0]
+    return summary === undefined ? { messages } : { summary, messages }
+  }
+
+  /** 一次纠正：存下来（「你教过它」），没勾「以后都这样」的进学习回路。 */
+  const correct = async (
+    row: MessageRecord,
+    input: Omit<MessageCorrection, 'id' | 'message_id' | 'sender_domain' | 'at'>,
+  ): Promise<void> => {
+    const at = clock.now()
+    const correction: MessageCorrection = {
+      id: `corr_${sha256(`${workspace_id}|${row.id}|${input.field}|${at}`).slice(0, 16)}`,
+      message_id: row.id,
+      sender_domain: domainOf(row.from.email),
+      at,
+      ...input,
+    }
+    await store.putCorrection?.(correction)
+    options.appendEvent({
+      schema_version: 1,
+      workspace_id,
+      type: 'messages.triage_corrected',
+      actor: { kind: 'person', id: input.by },
+      subject: { type: 'message', id: row.id },
+      correlation: { trace_id: `tr_msgcorr_${row.id}_${at}` },
+      // 63 §10：只有域与改前改后，没有正文与完整地址
+      payload: {
+        field: input.field,
+        ...(input.from === undefined ? {} : { from: input.from }),
+        to: input.to,
+        sender_domain: correction.sender_domain,
+        remembered: input.remembered,
+      },
+    })
+    if (!input.remembered) {
+      try {
+        options.onCorrection?.(correction)
+      } catch (e) {
+        logQuiet('lesson_pool_failed', row.account, e)
+      }
+    }
+  }
+
+  /** 「以后这个发件人都这样」：一个发件人一条规则，新教的几格盖在老规则上（路由 / 标签 / 类型 / 岗位）。 */
+  const rememberSender = async (
+    row: MessageRecord,
+    patch: Partial<Pick<SenderRule, 'route' | 'kind' | 'position'>>,
+    by: PersonId,
+  ): Promise<SenderRule> => {
+    const id = `rule_${sha256(`${workspace_id}|${row.from.email}`).slice(0, 16)}`
+    const prior = (await store.senderRules()).find((r) => r.id === id)
+    const rule: SenderRule = {
+      ...(prior ?? {}),
+      id,
+      sender: row.from.email,
+      labels: prior?.labels ?? [...row.labels],
+      by,
+      created_at: clock.now(),
+      ...patch,
+    }
+    await store.putSenderRule(rule)
+    rulesCache = await store.senderRules()
+    return rule
+  }
+
+  /** 「只是通知」那一下顺手标已读：本机一定标；邮箱里标不标跟随「客信怎么动邮箱」开关。 */
+  const readForNotice = async (row: MessageRecord): Promise<MessageWriteback> => {
+    if (row.flags.read) return 'written'
+    await store.update(row.id, { flags: { ...row.flags, read: true } })
+    const switches = supportMailboxSwitches(switchesOf(row.account))
+    if (accountOf(row.account) === undefined) return 'no_mailbox'
+    if (switches.shadow_mode || !switches.mark_read) return 'local_only'
+    return writeFlags(row, { read: true })
+  }
+
   const port: MessagesPort = {
     async accounts(): Promise<{ accounts: MessageAccountView[] }> {
       const known = options.accounts().map((a) => a.address)
@@ -816,7 +1050,8 @@ export function createMessages(options: MessagesOptions): MessagesAssembly {
       _actor: MessageActor,
       query: MessageListQuery,
     ): Promise<{ threads: MessageThreadSummary[] }> {
-      return { threads: await store.threads(query) }
+      // WP212：补上主按钮与卡片数（只有服务进程知道哪些岗位开着、卡片流里有几张）
+      return { threads: await enrich(await store.threads(query)) }
     },
 
     async thread(_actor: MessageActor, thread_id: string): Promise<MessageThreadView> {
@@ -827,10 +1062,23 @@ export function createMessages(options: MessagesOptions): MessagesAssembly {
         .map((m) => m.route)
         .find((r): r is 'support' | 'kol' | 'b2b' => r === 'support' || r === 'kol' || r === 'b2b')
       const linked = messages.find((m) => m.linked !== undefined)?.linked
+      // WP212：这条会话归谁（与列表同一份派生）+ 卡片流里还有几张卡
+      const summary = (await enrich(aggregateThreads(messages)))[0]
       return {
         thread_id,
         subject: last?.subject ?? '',
         messages,
+        ...(summary?.claim === undefined ? {} : { claim: summary.claim }),
+        ...(summary?.claim_message_id === undefined
+          ? {}
+          : { claim_message_id: summary.claim_message_id }),
+        ...(summary?.handed_to === undefined ? {} : { handed_to: summary.handed_to }),
+        ...(summary?.open_card_count === undefined
+          ? {}
+          : { open_card_count: summary.open_card_count }),
+        ...(summary?.card_link === undefined ? {} : { card_link: summary.card_link }),
+        ...(summary?.suggest === undefined ? {} : { suggest: summary.suggest }),
+        ...(summary?.kind === undefined ? {} : { kind: summary.kind }),
         ...(agentRoute === undefined
           ? {}
           : {
@@ -905,7 +1153,16 @@ export function createMessages(options: MessagesOptions): MessagesAssembly {
       const next =
         (await store.update(id, {
           ...(shadow ? {} : { folder: to, folder_kind: folderKindOf(to) }),
-          ...(correcting ? { route, triage: userVerdict(route, clock.now(), row.labels) } : {}),
+          ...(correcting
+            ? {
+                route,
+                // WP212：纠错改的是路由，类型那几格带着走（不许冲掉）
+                triage: {
+                  ...userVerdict(route, clock.now(), row.labels),
+                  ...kindFieldsOf(row.triage),
+                },
+              }
+            : {}),
         })) ?? row
       suggester.invalidate(id)
       let writeback: MessageWriteback = shadow ? 'local_only' : 'no_mailbox'
@@ -1118,7 +1375,13 @@ export function createMessages(options: MessagesOptions): MessagesAssembly {
     async assistant(_actor: MessageActor, id: string): Promise<MailAssistantView> {
       const row = await requireMessage(id)
       const history = await store.list({ q: row.from.email, limit: 200 })
-      const needsReply = row.triage?.needs_reply === true
+      /*
+       * WP212（docs/88 §5.1b）：助手是**兜底处理的助手**——只在没人接的信上生成回复建议（花 token）；
+       * 岗位在办的信只挂「X 在办 · 有 N 张卡等你 →」，一条建议都不生成。
+       */
+      const { summary: owner } = await claimOfThreadId(row.thread_id)
+      const handed = owner?.claim === 'handed'
+      const needsReply = row.triage?.needs_reply === true && !handed
       const knowledge =
         needsReply && options.searchKnowledge !== undefined
           ? await options.searchKnowledge(`${row.subject}\n${row.text.slice(0, 500)}`, 3)
@@ -1164,6 +1427,10 @@ export function createMessages(options: MessagesOptions): MessagesAssembly {
         },
         todos,
         model_available: options.models !== undefined,
+        ...(owner?.claim === undefined ? {} : { claim: owner.claim }),
+        ...(owner?.handed_to === undefined ? {} : { handed_to: owner.handed_to }),
+        ...(owner?.open_card_count === undefined ? {} : { open_card_count: owner.open_card_count }),
+        ...(owner?.card_link === undefined ? {} : { card_link: owner.card_link }),
       }
     },
 
@@ -1173,6 +1440,10 @@ export function createMessages(options: MessagesOptions): MessagesAssembly {
      * 「这是客服」= 交给客服那一路（开事项、判断层、起 Run），再按这只邮箱的开关动邮箱；
      * 交不出去（客服岗位没开、原信取不回）就什么都不改，信还挂在待确认里，界面照实说。
      * 「不是」= 只记人的判断，信留在收件箱，从待确认里消失。
+     *
+     * WP212：「交给 X」推广到所有岗位（`route: 'position'` + 岗位模板 id）。客服 / 红人 / B2B
+     * 那三个岗位仍走 63 的老路；其余岗位走 54 的「交给这个岗位一件事」（开事项、岗位内路由、
+     * 起 Run，有要你定的出卡——卡在卡片流里，消息页不再催）。交出去的信记 `handled`。
      */
     async confirmRoute(
       actor: MessageActor,
@@ -1182,14 +1453,65 @@ export function createMessages(options: MessagesOptions): MessagesAssembly {
       await ensureSeeded()
       const row = await requireMessage(id)
       const at = clock.now()
-      const route = input.route
-      let handed: { accepted: boolean; matter_id?: string } = { accepted: false }
-      if (route !== 'inbox') {
+      // WP212：给的是那三个岗位之一就走对应的老路；给的是老路就补上岗位 id
+      let route: MessageConfirmRouteInput['route'] = input.route
+      let position_id = input.position_id
+      if (route === 'position') {
+        if (position_id === undefined)
+          throw new ApiError('invalid_input', '要交给哪个岗位？没给岗位。')
+        route = routeOfPosition(position_id) ?? 'position'
+      } else if (route !== 'inbox') {
+        position_id = POSITION_OF_ROUTE[route]
+      }
+      const option =
+        position_id === undefined ? undefined : positionOptions().find((p) => p.id === position_id)
+      let handed: { accepted: boolean; matter_id?: string; refused?: string } = {
+        accepted: false,
+      }
+      if (route === 'position') {
+        const open = options.openAtPosition
+        if (open === undefined || option === undefined || !option.open) {
+          handed = {
+            accepted: false,
+            refused: `${option?.name_zh ?? position_id}岗位没开，开了才能交。`,
+          }
+        } else {
+          try {
+            const out = await open({
+              position_id: position_id as string,
+              person_id: actor.person_id,
+              title: row.subject.trim() === '' ? `来自 ${row.from.email} 的信` : row.subject,
+              ...(row.triage?.summary === undefined || row.triage.summary === ''
+                ? {}
+                : { summary: row.triage.summary }),
+              thread_id: row.thread_id,
+            })
+            handed = { accepted: true, matter_id: out.matter_id }
+          } catch (e) {
+            handed = {
+              accepted: false,
+              refused: e instanceof Error && e.message !== '' ? e.message : '这个岗位没接住。',
+            }
+          }
+        }
+      } else if (route !== 'inbox') {
         try {
           handed = await handOff(row, route, undefined, 'user')
         } catch (e) {
           logQuiet('support_intake_failed', row.account, e)
         }
+        if (!handed.accepted)
+          handed = {
+            ...handed,
+            refused:
+              route === 'support' && !supportEnabled()
+                ? '客服岗位没开，开了才能交。'
+                : route === 'kol' && !kolEnabled()
+                  ? '红人营销岗位没开，开了才能交。'
+                  : route === 'b2b' && !b2bEnabledFor(row.account)
+                    ? 'B2B 岗位没开（或这只邮箱不收 B2B 信），开了才能交。'
+                    : '这封信没交出去（原信取不回，或那一路没接住）。',
+          }
       }
       const event = (handed_off: boolean): void =>
         options.appendEvent({
@@ -1204,6 +1526,7 @@ export function createMessages(options: MessagesOptions): MessagesAssembly {
             route,
             handed_off,
             account: maskAddress(row.account),
+            ...(position_id === undefined ? {} : { position_id }),
             ...(row.triage?.suggested_route === undefined
               ? {}
               : { suggested_route: row.triage.suggested_route }),
@@ -1212,28 +1535,228 @@ export function createMessages(options: MessagesOptions): MessagesAssembly {
         })
       if (route !== 'inbox' && !handed.accepted) {
         event(false)
-        return { message: row, handed_off: false }
+        return {
+          message: row,
+          handed_off: false,
+          ...(handed.refused === undefined ? {} : { refused: handed.refused }),
+        }
       }
+      const storedRoute: MessageRoute = route === 'position' ? 'inbox' : route
       const triage: MessageTriage = {
-        ...userVerdict(route, at, row.labels),
+        ...userVerdict(storedRoute, at, row.labels),
+        ...kindFieldsOf(row.triage),
         summary: row.triage?.summary ?? '',
-        reasons: ['人工分拣：在「待确认」里点的'],
+        reasons: [
+          route === 'position' || input.position_id !== undefined
+            ? '人工分拣：在「没人接的」里点的「交给 X」'
+            : '人工分拣：在「待确认」里点的',
+        ],
       }
       let next =
         (await store.update(row.id, {
-          route,
+          route: storedRoute,
           triage,
           ...(handed.matter_id === undefined
             ? {}
             : { linked: { type: 'matter' as const, id: handed.matter_id } }),
+          ...(route === 'inbox' || position_id === undefined
+            ? {}
+            : {
+                handled: {
+                  as: 'position' as const,
+                  position_id,
+                  ...(handed.matter_id === undefined ? {} : { matter_id: handed.matter_id }),
+                  by: actor.person_id,
+                  at,
+                },
+              }),
         })) ?? row
       suggester.invalidate(row.id)
-      if (route !== 'inbox') next = await moveAfterHandoff(next, route)
+      if (route === 'support' || route === 'kol' || route === 'b2b')
+        next = await moveAfterHandoff(next, route)
       event(route !== 'inbox')
+      // WP212：交给的不是 AI 建议的那个岗位 → 一次纠正（进学习回路、「你教过它」里看得见）
+      if (position_id !== undefined) {
+        const kind = kindOfLegacy(row.triage, row.labels, row.route).kind
+        const suggested = row.triage?.suggested_position ?? positionForKind(kind)
+        if (suggested !== position_id)
+          await correct(row, {
+            field: 'position',
+            ...(suggested === undefined ? {} : { from: suggested }),
+            to: position_id,
+            remembered: input.remember_sender === true,
+            by: actor.person_id,
+          })
+      }
+      const rule =
+        input.remember_sender === true && position_id !== undefined
+          ? await rememberSender(
+              row,
+              {
+                position: position_id,
+                ...(route === 'support' || route === 'kol' || route === 'b2b' ? { route } : {}),
+                kind: kindOfLegacy(row.triage, row.labels, row.route).kind,
+              },
+              actor.person_id,
+            )
+          : undefined
       return {
         message: next,
         handed_off: route !== 'inbox',
         ...(handed.matter_id === undefined ? {} : { matter_id: handed.matter_id }),
+        ...(position_id === undefined || route === 'inbox' ? {} : { position_id }),
+        ...(rule === undefined ? {} : { rule }),
+      }
+    },
+
+    /** WP212：改判类型。勾「以后都这样」写发件人规则（下次不花模型），不勾进学习回路。 */
+    async setKind(
+      actor: MessageActor,
+      id: string,
+      input: MessageKindInput,
+    ): Promise<{ message: MessageRecord; rule?: SenderRule }> {
+      const row = await requireMessage(id)
+      const before = kindOfLegacy(row.triage, row.labels, row.route).kind
+      const at = clock.now()
+      const base: MessageTriage = row.triage ?? {
+        route: row.route,
+        labels: [...row.labels],
+        needs_reply: true,
+        priority: 'normal',
+        summary: '',
+        confidence: 1,
+        by: 'user',
+        reasons: [],
+        at,
+      }
+      const next =
+        (await store.update(id, {
+          triage: { ...base, kind: input.kind, kind_by: 'user', kind_confidence: 1 },
+        })) ?? row
+      suggester.invalidate(id)
+      const remembered = input.remember_sender === true
+      if (before !== input.kind)
+        await correct(row, {
+          field: 'kind',
+          from: before,
+          to: input.kind,
+          remembered,
+          by: actor.person_id,
+        })
+      if (!remembered) return { message: next }
+      const rule = await rememberSender(row, { kind: input.kind }, actor.person_id)
+      return { message: next, rule }
+    },
+
+    /** WP212：「只是通知」/「我自己处理」/ 撤销。 */
+    async claim(
+      actor: MessageActor,
+      id: string,
+      input: MessageClaimInput,
+    ): Promise<{ message: MessageRecord; writeback?: MessageWriteback }> {
+      const row = await requireMessage(id)
+      if (input.as === 'none') {
+        const { handled: _dropped, ...rest } = row
+        await store.put(rest)
+        return { message: rest }
+      }
+      const next =
+        (await store.update(id, {
+          handled: { as: input.as, by: actor.person_id, at: clock.now() },
+        })) ?? row
+      if (input.as !== 'notice') return { message: next }
+      const writeback = await readForNotice(next)
+      return { message: (await store.get(id)) ?? next, writeback }
+    },
+
+    /** WP212：「只是通知」整捆「知道了」。 */
+    async ackNotices(
+      actor: MessageActor,
+      input: MessageNoticeAckInput,
+    ): Promise<{ acked: number; writeback?: MessageWriteback }> {
+      const rows = await store.threads({ claim: 'notice', limit: 5000 })
+      const wanted = new Set(input.thread_ids ?? [])
+      let acked = 0
+      let failed = false
+      let local = false
+      for (const row of rows) {
+        const suspicious = row.labels.includes('suspicious')
+        if (input.suspicious === true && !suspicious) continue
+        if (input.kind !== undefined && (suspicious || row.kind !== input.kind)) continue
+        if (wanted.size > 0 && !wanted.has(row.thread_id)) continue
+        if (row.claim_message_id === undefined) continue
+        const m = await store.update(row.claim_message_id, {
+          handled: { as: 'notice', by: actor.person_id, at: clock.now() },
+        })
+        if (m === undefined) continue
+        const wb = await readForNotice(m)
+        if (wb === 'failed') failed = true
+        if (wb === 'local_only') local = true
+        acked += 1
+      }
+      return {
+        acked,
+        ...(acked === 0 ? {} : { writeback: failed ? 'failed' : local ? 'local_only' : 'written' }),
+      }
+    },
+
+    /** WP212：「没人接的」顶上那一行、「只是通知」几捆、「你教过它」。 */
+    async overview(): Promise<MessageOverview> {
+      const all = await store.list({ limit: 100_000 })
+      const threads = aggregateThreads(all)
+      const byPosition = new Map<string, number>()
+      const groups = new Map<MessageKind | 'suspicious', { count: number; senders: Set<string> }>()
+      let unclaimed = 0
+      let notice = 0
+      let handed = 0
+      for (const t of threads) {
+        if (t.claim === 'unclaimed') unclaimed += 1
+        if (t.claim === 'handed') {
+          handed += 1
+          const to = t.handed_to
+          if (to !== undefined && to !== 'me' && to !== 'notice')
+            byPosition.set(to, (byPosition.get(to) ?? 0) + 1)
+        }
+        if (t.claim === 'notice') {
+          notice += 1
+          const key = t.labels.includes('suspicious') ? 'suspicious' : (t.kind ?? 'marketing')
+          const g = groups.get(key) ?? { count: 0, senders: new Set<string>() }
+          g.count += 1
+          const who = t.participants[0]
+          if (who !== undefined && g.senders.size < 4) g.senders.add(who.name ?? who.email)
+          groups.set(key, g)
+        }
+      }
+      const cards = await waitingCards()
+      const cards_waiting =
+        cards.length === 0
+          ? 0
+          : cardsOf(
+              all.filter((m) => m.route !== 'inbox' || m.handled?.as === 'position'),
+              cards,
+            ).open_card_count
+      const rules = await store.senderRules()
+      return {
+        unclaimed,
+        notice,
+        handed,
+        handed_by_position: [...byPosition.entries()]
+          .map(([position_id, count]) => ({ position_id, count }))
+          .sort((a, b) => b.count - a.count),
+        cards_waiting,
+        notice_groups: [...groups.entries()].map(([kind, g]) => ({
+          kind,
+          count: g.count,
+          senders: [...g.senders],
+        })),
+        positions: positionOptions(),
+        taught: {
+          rules: rules.length,
+          // 按发件人规则直达的信——每一封都是"少问你一次"、少花一次模型
+          saved: all.filter((m) => m.triage?.reasons.some((r) => r.startsWith('发件人规则')))
+            .length,
+          recent: (await store.corrections?.(5)) ?? [],
+        },
       }
     },
 
@@ -1410,7 +1933,10 @@ const TRIAGE_SYSTEM = [
   '只输出一个 JSON 对象，不要任何解释文字。字段：',
   'route（只能是给定 allowed_routes 里的一个）、labels（给定 allowed_labels 的子集）、',
   'needs_reply（布尔）、priority（high/normal/low）、summary（≤40 个字的中文一句话，',
-  '说的是"这封信要你干什么"）、confidence（0–1）。',
+  '说的是"这封信要你干什么"）、confidence（0–1）、',
+  'kind（这件事是什么，只能是给定 allowed_kinds 里的一个：customer_question 客户问题 / after_sales 售后 /',
+  'inquiry 询盘 / creator_reply 红人回复 / partnership 合作 / media 媒体 / billing_system 账单与系统通知 /',
+  'logistics 物流 / marketing 垃圾与营销 / personal_other 个人与其他）。',
   '拿不准就把 confidence 写低——写低不会有人骂你，猜高了信会被挪错地方。',
 ].join('\n')
 
@@ -1435,6 +1961,7 @@ async function classifyWithGateway(
           body: input.body,
           allowed_routes: input.allowed_routes,
           allowed_labels: input.allowed_labels,
+          ...(input.allowed_kinds === undefined ? {} : { allowed_kinds: input.allowed_kinds }),
         }),
       },
     ],
@@ -1458,6 +1985,8 @@ async function classifyWithGateway(
         : 'normal',
     summary: typeof parsed.summary === 'string' ? parsed.summary : '',
     confidence: typeof parsed.confidence === 'number' ? parsed.confidence : 0.5,
+    // WP212：认不认得由分拣那一侧判（`normalizeVerdict`），这里原样递过去
+    ...(typeof parsed.kind === 'string' ? { kind: parsed.kind } : {}),
   }
 }
 
