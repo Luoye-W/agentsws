@@ -104,9 +104,12 @@ export function TeamBotCard({
   channel,
   view,
   accountId,
+  canManage,
 }: {
   channel: Channel
   view: ImTeamBotView | undefined
+  /** 负责人与公司管理员才看得到填 / 改 / 断开；别人只看状态。 */
+  canManage: boolean
   /** 存好的 App ID / Client ID（不是秘密）。 */
   accountId: string | undefined
 }): ReactNode {
@@ -153,7 +156,7 @@ export function TeamBotCard({
   }
 
   // 少字：没配时卡上只有一个主按钮，点开才出表单
-  const showForm = editing
+  const showForm = editing && canManage
   return (
     <Card data-testid={`im-${channel}`}>
       <CardHeader className="flex flex-row items-center justify-between gap-2">
@@ -223,7 +226,7 @@ export function TeamBotCard({
               ) : null}
             </div>
           </form>
-        ) : !configured ? (
+        ) : !canManage ? null : !configured ? (
           <div>
             <Button size="sm" onClick={() => setEditing(true)}>
               {t('im.team.setup')}

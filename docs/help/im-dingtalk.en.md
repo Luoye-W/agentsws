@@ -16,6 +16,8 @@ It uses DingTalk's "Stream mode": your computer connects out to DingTalk, so the
 
 ## 2. Enter them in Agents Workshop
 
+Only **the owner or a company admin** can do this; everyone else only sees the status on the card.
+
 5. On the Messaging channels page, in the **DingTalk bot** card, enter the Client ID and Client Secret and click **Save and connect**.
 6. When the card says "Receiving", you're good.
 

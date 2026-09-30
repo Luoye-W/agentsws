@@ -4566,6 +4566,8 @@ export interface ImStatusView {
   /** WP211：飞书 / 钉钉机器人（团队）。老服务端没有这两格。 */
   feishu?: ImTeamBotView & { app_id?: string; domain?: 'feishu' | 'lark' }
   dingtalk?: ImTeamBotView & { client_id?: string }
+  /** WP211：能不能填 / 改 / 断开公司的应用凭据（负责人与公司管理员）。没有这一格按「不能」算。 */
+  can_manage?: boolean
 }
 
 /** WP211：一条团队渠道的状态（不含任何凭据）。 */

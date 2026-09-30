@@ -50,6 +50,7 @@ const base: ImStatusView = {
   wecom: { configured: false, connected: false },
   feishu: { configured: false, connected: false, state: 'idle', me_bound: false },
   dingtalk: { configured: false, connected: false, state: 'idle', me_bound: false },
+  can_manage: true,
 }
 
 beforeEach(() => {
@@ -146,5 +147,33 @@ describe('飞书 / 钉钉两张卡', () => {
     const ding = await screen.findByTestId('im-dingtalk-bound')
     fireEvent.click(within(ding).getByRole('button', { name: '解绑' }))
     await waitFor(() => expect(calls.unbind).toEqual(['dingtalk']))
+  })
+
+  it('不是负责人 / 公司管理员：三张团队卡只看状态，没有填 / 改 / 断开；自己的绑定照旧能点', async () => {
+    calls.status = {
+      ...base,
+      can_manage: false,
+      wecom: { configured: true, connected: true, bot_id: 'B1', me_bound: false },
+      feishu: {
+        configured: true,
+        connected: true,
+        state: 'connected',
+        app_id: 'cli_x',
+        me_bound: false,
+      },
+      dingtalk: { configured: false, connected: false, state: 'idle', me_bound: false },
+    }
+    renderWithProviders(<ImChannelsPage />)
+    const feishu = await screen.findByTestId('im-feishu')
+    await within(feishu).findByText('在收信')
+    for (const name of ['填应用凭据', '重填凭据', '断开', '保存并连接'])
+      expect(screen.queryByRole('button', { name }), name).toBeNull()
+    expect(document.querySelector('input[type="password"]')).toBeNull()
+    expect(within(screen.getByTestId('im-dingtalk')).getByText('没配')).toBeTruthy()
+    // 每人自己的「绑定我的账号」不受这条管
+    const bind = await screen.findByTestId('im-feishu-bind')
+    fireEvent.click(within(bind).getByRole('button', { name: '绑定我的账号' }))
+    await within(bind).findByText('绑定 246810')
+    expect(screen.getByTestId('im-wecom-bind')).toBeTruthy()
   })
 })

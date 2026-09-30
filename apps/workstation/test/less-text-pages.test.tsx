@@ -230,6 +230,8 @@ vi.mock('@/lib/api', async () => {
     getImStatus: async () => ({
       wechat: { bound: false, live: false, allowed: true },
       wecom: { configured: false, connected: false },
+      // 负责人视角（按钮与表单都在，量的是最多字的那一版）
+      can_manage: true,
       // WP211：一张没配、一张配好了但凭据不对（最长的那种状态）
       feishu: { configured: false, connected: false, state: 'idle', me_bound: false },
       dingtalk: {

@@ -151,6 +151,8 @@ export function ImChannelsPage(): ReactNode {
 
   const wechat = status.data?.wechat
   const wecom = status.data?.wecom
+  // WP211（Fable 09-30）：公司的应用凭据只给负责人与公司管理员；别人只看状态
+  const canManage = status.data?.can_manage === true
 
   const submitWecom = (e: FormEvent<HTMLFormElement>): void => {
     e.preventDefault()
@@ -324,33 +326,36 @@ export function ImChannelsPage(): ReactNode {
             13 §4.3 的原生表单：值用 FormData 收，不进 React state、不进任何全局变量，
             提交完立刻 reset()。全程没有一次 console.*。
           */}
-          <form ref={formRef} onSubmit={submitWecom} className="flex max-w-md flex-col gap-3">
-            <div>
-              <Label htmlFor={botIdId} className="gap-1.5">
-                {t('im.wecom.bot_id')}
-                <Hint text={t('im.wecom.where')} />
-              </Label>
-              <Input id={botIdId} name="bot_id" autoComplete="off" spellCheck={false} required />
-            </div>
-            <div>
-              <Label htmlFor={secretId}>{t('im.wecom.secret')}</Label>
-              <Input
-                id={secretId}
-                name="secret"
-                type="password"
-                autoComplete="off"
-                spellCheck={false}
-                data-1p-ignore
-                required
-              />
-            </div>
-            <SafetyNote text={t('im.wecom.safety')} />
-            <div>
-              <Button type="submit" size="sm" disabled={saveWecom.isPending}>
-                {t('im.wecom.save')}
-              </Button>
-            </div>
-          </form>
+          {/* WP211（Fable 09-30）：公司的凭据只有负责人 / 公司管理员能填，别人只看状态 */}
+          {canManage ? (
+            <form ref={formRef} onSubmit={submitWecom} className="flex max-w-md flex-col gap-3">
+              <div>
+                <Label htmlFor={botIdId} className="gap-1.5">
+                  {t('im.wecom.bot_id')}
+                  <Hint text={t('im.wecom.where')} />
+                </Label>
+                <Input id={botIdId} name="bot_id" autoComplete="off" spellCheck={false} required />
+              </div>
+              <div>
+                <Label htmlFor={secretId}>{t('im.wecom.secret')}</Label>
+                <Input
+                  id={secretId}
+                  name="secret"
+                  type="password"
+                  autoComplete="off"
+                  spellCheck={false}
+                  data-1p-ignore
+                  required
+                />
+              </div>
+              <SafetyNote text={t('im.wecom.safety')} />
+              <div>
+                <Button type="submit" size="sm" disabled={saveWecom.isPending}>
+                  {t('im.wecom.save')}
+                </Button>
+              </div>
+            </form>
+          ) : null}
           {wecomError !== null ? (
             <p role="alert" className="text-sm text-destructive">
               {wecomError}
@@ -373,11 +378,13 @@ export function ImChannelsPage(): ReactNode {
         channel="feishu"
         view={status.data?.feishu}
         accountId={status.data?.feishu?.app_id}
+        canManage={canManage}
       />
       <TeamBotCard
         channel="dingtalk"
         view={status.data?.dingtalk}
         accountId={status.data?.dingtalk?.client_id}
+        canManage={canManage}
       />
 
       <SafetyNote text={t('im.cards.note')} />
