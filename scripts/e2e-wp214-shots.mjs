@@ -242,6 +242,39 @@ async function main() {
     await page.goto(`${BASE}/settings/credits`, { waitUntil: 'networkidle' })
     await shot(page.locator('[data-testid="cloud-account"]'), 'account')
 
+    // 连接页：已连上的一条（替身）+ 消息渠道页（替身：微信在收信、企业微信已配）
+    await patchGet(page, '**/v1/connections', (data) => ({
+      ...data,
+      connections: [
+        {
+          id: 'conn_mail_1',
+          service: 'imap_smtp',
+          service_label: '任意邮箱（IMAP / SMTP）',
+          alias: 'default',
+          ownership: 'workspace',
+          status: 'active',
+          identity: { display_name: 'support@nordvolt.example' },
+          credential_store: 'local_vault',
+          data_sources: [],
+          last_tested_at: '2026-09-29T08:00:00.000Z',
+          last_test: { ok: true, reason: 'ok', checked_at: '2026-09-29T08:00:00.000Z' },
+        },
+      ],
+    }))
+    await page.goto(`${BASE}/connections`, { waitUntil: 'networkidle' })
+    const connRow = page.locator('[data-testid="connection-row"]').first()
+    if (await connRow.count()) await shot(connRow, 'connection-row')
+    const search = page.locator('[data-testid="search-data"]')
+    if (await search.count()) await shot(search, 'search-data')
+    await patchGet(page, '**/v1/im/status', (data) => ({
+      ...data,
+      wechat: { bound: true, live: true, allowed: true, account_id: 'wxid_nordvolt' },
+      wecom: { configured: true, connected: true, bot_id: 'aibot_demo' },
+    }))
+    await page.goto(`${BASE}/im-channels`, { waitUntil: 'networkidle' })
+    const im = page.locator('main').first()
+    if (await im.count()) await shot(im, 'im-channels')
+
     // 场景面板（替身：一个运行中、一个起不来）
     await patchGet(page, '**/v1/dsh-scenes', () => ({
       available: true,
