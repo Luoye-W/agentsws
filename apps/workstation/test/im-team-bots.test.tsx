@@ -111,9 +111,15 @@ describe('飞书 / 钉钉两张卡', () => {
     }
     renderWithProviders(<ImChannelsPage />)
     const card = await screen.findByTestId('im-dingtalk')
-    await within(card).findByText('已配好（Client ID dingabc）。')
+    // WP214：状态是一个小图标，「连不上」与 Client ID 在它的 tooltip 里；连不上的原因常显
+    const icon = within(await within(card).findByTestId('im-dingtalk-state')).getByTestId(
+      'status-icon',
+    )
+    expect(icon.dataset.state).toBe('fail')
+    expect(icon.getAttribute('data-hint')).toContain('连不上')
+    expect(icon.getAttribute('data-hint')).toContain('已配好（Client ID dingabc）。')
+    expect(card.textContent).not.toContain('已配好（Client ID dingabc）。')
     expect(within(card).getByRole('alert').textContent).toContain('Stream 模式')
-    expect(within(card).getByText('连不上')).toBeTruthy()
     expect(within(card).queryByRole('button', { name: '保存并连接' })).toBeNull()
     expect(within(card).getByRole('button', { name: '断开' })).toBeTruthy()
     fireEvent.click(within(card).getByRole('button', { name: '重填凭据' }))
@@ -145,6 +151,10 @@ describe('飞书 / 钉钉两张卡', () => {
     expect(calls.bind).toBe(1)
 
     const ding = await screen.findByTestId('im-dingtalk-bound')
+    // WP214：「我的账号已绑上」是一个账号小图标
+    expect(within(ding).getByTestId('status-icon').getAttribute('data-hint')).toContain(
+      '我的账号已绑上',
+    )
     fireEvent.click(within(ding).getByRole('button', { name: '解绑' }))
     await waitFor(() => expect(calls.unbind).toEqual(['dingtalk']))
   })
@@ -165,11 +175,19 @@ describe('飞书 / 钉钉两张卡', () => {
     }
     renderWithProviders(<ImChannelsPage />)
     const feishu = await screen.findByTestId('im-feishu')
-    await within(feishu).findByText('在收信')
+    await waitFor(() =>
+      expect(
+        within(within(feishu).getByTestId('im-feishu-state'))
+          .getByTestId('status-icon')
+          .getAttribute('data-hint'),
+      ).toContain('在收信'),
+    )
     for (const name of ['填应用凭据', '重填凭据', '断开', '保存并连接'])
       expect(screen.queryByRole('button', { name }), name).toBeNull()
     expect(document.querySelector('input[type="password"]')).toBeNull()
-    expect(within(screen.getByTestId('im-dingtalk')).getByText('没配')).toBeTruthy()
+    expect(
+      within(screen.getByTestId('im-dingtalk-state')).getByTestId('status-icon').dataset.state,
+    ).toBe('unknown')
     // 每人自己的「绑定我的账号」不受这条管
     const bind = await screen.findByTestId('im-feishu-bind')
     fireEvent.click(within(bind).getByRole('button', { name: '绑定我的账号' }))
