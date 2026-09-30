@@ -222,4 +222,26 @@ export const SOURCES = {
       { page: 'https://www.deepseek.com', note: '官网首页' },
     ],
   },
+  // ── 消息渠道页（WP211）：id = 连接目录的 kind ────────────────────────
+  feishu_bot: {
+    brand: '飞书',
+    // 官网首页是前端渲染、没有 <link rel=icon>；开放平台的图放在飞书自己的 CDN（feishucdn.com）
+    domains: ['feishu.cn', 'feishucdn.com'],
+    sources: [
+      { page: 'https://www.feishu.cn', note: '飞书官网首页 <link rel=icon>' },
+      {
+        page: 'https://open.feishu.cn',
+        note: '飞书开放平台 <link rel=icon>（官网首页是前端渲染，没有 <link>）',
+      },
+    ],
+  },
+  dingtalk_bot: {
+    brand: '钉钉',
+    // 钉钉官网的图放在阿里自己的 CDN（alicdn.com）
+    domains: ['dingtalk.com', 'alicdn.com'],
+    sources: [
+      { page: 'https://www.dingtalk.com', note: '钉钉官网首页 <link rel=icon>' },
+      { page: 'https://open.dingtalk.com', note: '兜底：钉钉开放平台 <link rel=icon>' },
+    ],
+  },
 }

@@ -4,6 +4,10 @@ description: 邮件与短信营销的做法：先过合规（TCPA、10DLC、GDPR
 license: MIT
 tier: open
 version: 1.0.0
+display_name: 邮件短信营销
+display_name_en: Email & SMS
+summary: 先过合规，再写流程和文案，群发要人批
+summary_en: Compliance first, then flows and copy; every send needs approval
 ---
 
 > 改编自 coreyhaines31/marketingskills（MIT，© 2025 Corey Haines）的 sms、emails 两个技能及其附录。已按 Agents 工坊的规矩改写，冲突处以本文为准。本文不是法律意见，量大或拿不准时请法务确认。

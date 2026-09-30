@@ -4,6 +4,8 @@
  * 不上重库：一张 key 表 + 一个 `t()`。key 的命名与服务端给的 `label_key` 对齐
  * （证据芯片只出 key，不出裸枚举——36 §2.3）。
  */
+import { LIBRARY_EN, LIBRARY_ZH } from './i18n-library'
+
 export type Lang = 'zh' | 'en'
 
 type Table = Record<string, string>
@@ -2677,8 +2679,7 @@ const zh: Table = {
   'nav.im': '消息渠道',
   'im.title': '消息渠道',
   'im.intro': '把代理接到聊天软件上。',
-  'im.intro.hint':
-    '两条通道是两件事：微信那条是「你和你自己的代理的私聊」，企业微信那条才是团队用的。',
+  'im.intro.hint': '微信那条是「你和你自己的代理的私聊」；企业微信、飞书、钉钉三条是团队用的。',
   'im.wechat.line': '扫一次码，就能在微信里问你自己的代理。',
   'im.wechat.terms.short': '只用来问你自己的代理；拿去做客服或群发会牵连你的主微信号。',
   'im.wechat.local': '登录凭据只存在这台机器上，不经 AI、不进日志。',
@@ -2718,7 +2719,39 @@ const zh: Table = {
   'im.wecom.saved': '已配好（BotID {bot}）。',
   'im.wecom.done': '存好了，正在连。',
   'im.cards.note':
-    '两条通道都只投「摘要 + 去工作台处理」的链接，不放通过 / 驳回按钮——决策和凭据不经聊天软件。',
+    '每条通道都只投「摘要 + 去工作台处理」的链接，不放通过 / 驳回按钮——决策和凭据不经聊天软件。',
+  // ── WP211：飞书 / 钉钉（团队）与「绑定我的账号」 ─────────────────
+  'im.feishu.title': '飞书机器人（公司的）',
+  'im.feishu.what':
+    '团队用：同事私聊它或在群里 @ 它，它按提问人的身份作答。走长连接，本机不需要公网地址。',
+  'im.feishu.app_id': 'App ID',
+  'im.feishu.app_secret': 'App Secret',
+  'im.feishu.where': '飞书开放平台 → 你的应用 → 凭证与基础信息。',
+  'im.feishu.lark': '国际版 Lark',
+  'im.feishu.saved': '已配好（App ID {id}）。',
+  'im.dingtalk.title': '钉钉机器人（公司的）',
+  'im.dingtalk.what':
+    '团队用：同事私聊它或在群里 @ 它，它按提问人的身份作答。走 Stream 模式，本机不需要公网地址。',
+  'im.dingtalk.client_id': 'Client ID',
+  'im.dingtalk.client_secret': 'Client Secret',
+  'im.dingtalk.where': '钉钉开发者后台 → 你的应用 → 凭证与基础信息（旧名 AppKey / AppSecret）。',
+  'im.dingtalk.saved': '已配好（Client ID {id}）。',
+  'im.team.secret.hint': '直接进本机加密库，不经 AI、不进日志、不会再显示出来。',
+  'im.team.setup': '填应用凭据',
+  'im.team.save': '保存并连接',
+  'im.team.refill': '重填凭据',
+  'im.team.remove': '断开',
+  'im.team.remove.why': '断开会把这台机器上的应用凭据直接销毁。',
+  'im.team.done': '存好了，正在连。',
+  'im.team.bind': '绑定我的账号',
+  'im.team.bind.why':
+    '第一次要对一下人：它只替认得的同事作答。点一下拿一个绑定码，私聊机器人发出去就绑上了。',
+  'im.team.bind.send': '私聊机器人发：',
+  'im.team.bind.cmd': '绑定 {code}',
+  'im.team.bind.expires': '10 分钟内有效，只能用一次。',
+  'im.team.bound': '我的账号已绑上',
+  'im.team.unbind': '解绑',
+  'im.state.failed': '连不上',
   // ── WP57（48 §4 L3 #11）：网站在线客服的聊天沙盒 ─────────────────
   'nav.chat': '聊天沙盒',
   'chat.title': '聊天沙盒',
@@ -3164,8 +3197,10 @@ const zh: Table = {
   'help.conn-community.title': '社群机器人：Reddit / Discord / Telegram',
   'help.conn-marketing-logistics.title': '邮件营销与物流追踪',
   'help.browser-extension.title': '浏览器插件「红人助手」',
-  'help.im-channels.title': '消息渠道：微信与企业微信',
+  'help.im-channels.title': '消息渠道：微信、企业微信、飞书与钉钉',
   'help.chat-window.title': '网站在线客服（聊天窗）',
+  'help.im-feishu.title': '飞书机器人：建应用、开长连接、拿凭据',
+  'help.im-dingtalk.title': '钉钉机器人：建应用、开 Stream、拿凭据',
   'kind.computer_use': '操作电脑',
   'category.computer_use': '操作电脑',
   'verb.policy.approve.computer_use': '允许',
@@ -6086,7 +6121,7 @@ const en: Table = {
   'im.title': 'Messaging channels',
   'im.intro': 'Put your agent inside a chat app.',
   'im.intro.hint':
-    'The two are different things: WeChat is a private chat between you and your own agent; WeCom is the one your team uses.',
+    'WeChat is a private chat between you and your own agent; WeCom, Feishu and DingTalk are for your team.',
   'im.wechat.line': 'Scan once and ask your own agent from WeChat.',
   'im.wechat.terms.short':
     'Only for asking your own agent; support or broadcasts can get your main WeChat banned.',
@@ -6131,7 +6166,41 @@ const en: Table = {
   'im.wecom.saved': 'Configured (BotID {bot}).',
   'im.wecom.done': 'Saved, connecting.',
   'im.cards.note':
-    'Both channels only carry a summary plus a link back to the workstation — no approve/reject buttons, because decisions and credentials do not travel through chat apps.',
+    'Every channel only carries a summary plus a link back to the workstation — no approve/reject buttons, because decisions and credentials do not travel through chat apps.',
+  // ── WP211: Feishu / DingTalk (team) and "link my account" ─────────
+  'im.feishu.title': 'Feishu / Lark bot (company)',
+  'im.feishu.what':
+    'For the team: DM it or @ it in a group and it answers as the asker. Uses a long connection — no public URL needed.',
+  'im.feishu.app_id': 'App ID',
+  'im.feishu.app_secret': 'App Secret',
+  'im.feishu.where': 'Feishu Open Platform → your app → Credentials & Basic Info.',
+  'im.feishu.lark': 'Lark (international)',
+  'im.feishu.saved': 'Configured (App ID {id}).',
+  'im.dingtalk.title': 'DingTalk bot (company)',
+  'im.dingtalk.what':
+    'For the team: DM it or @ it in a group and it answers as the asker. Uses Stream mode — no public URL needed.',
+  'im.dingtalk.client_id': 'Client ID',
+  'im.dingtalk.client_secret': 'Client Secret',
+  'im.dingtalk.where':
+    'DingTalk developer console → your app → Credentials & Basic Info (formerly AppKey / AppSecret).',
+  'im.dingtalk.saved': 'Configured (Client ID {id}).',
+  'im.team.secret.hint':
+    'Goes straight into the encrypted store on this machine — never sent to the AI, never logged, never shown again.',
+  'im.team.setup': 'Enter app credentials',
+  'im.team.save': 'Save and connect',
+  'im.team.refill': 'Re-enter credentials',
+  'im.team.remove': 'Disconnect',
+  'im.team.remove.why': 'Disconnecting destroys the app credentials stored on this machine.',
+  'im.team.done': 'Saved, connecting.',
+  'im.team.bind': 'Link my account',
+  'im.team.bind.why':
+    'The bot only answers colleagues it knows. Get a code here and send it to the bot in a private chat.',
+  'im.team.bind.send': 'Send the bot privately:',
+  'im.team.bind.cmd': 'bind {code}',
+  'im.team.bind.expires': 'Valid for 10 minutes, single use.',
+  'im.team.bound': 'My account is linked',
+  'im.team.unbind': 'Unlink',
+  'im.state.failed': 'Cannot connect',
   // ── WP57 (48 §4 L3 #11): live chat sandbox ───────────────────────
   'nav.chat': 'Chat sandbox',
   'chat.title': 'Chat sandbox',
@@ -6609,8 +6678,10 @@ const en: Table = {
   'help.conn-community.title': 'Community bots: Reddit / Discord / Telegram',
   'help.conn-marketing-logistics.title': 'Email marketing and shipment tracking',
   'help.browser-extension.title': 'The “Creator helper” browser extension',
-  'help.im-channels.title': 'Message channels: WeChat and WeCom',
+  'help.im-channels.title': 'Message channels: WeChat, WeCom, Feishu and DingTalk',
   'help.chat-window.title': 'Website live chat (the chat window)',
+  'help.im-feishu.title': 'Feishu bot: create the app, turn on long connection, get credentials',
+  'help.im-dingtalk.title': 'DingTalk bot: create the app, turn on Stream, get credentials',
   'kind.computer_use': 'Use the computer',
   'category.computer_use': 'Use the computer',
   'verb.policy.approve.computer_use': 'Allow',
@@ -6826,7 +6897,11 @@ const en: Table = {
   'models.purpose.free_chat': 'Chat',
 }
 
-const TABLES: Record<Lang, Table> = { zh, en }
+// WP209：技能 / 知识分组的词条在自己的文件里（`i18n-library.ts`），这里并进来
+const TABLES: Record<Lang, Table> = {
+  zh: { ...zh, ...LIBRARY_ZH },
+  en: { ...en, ...LIBRARY_EN },
+}
 
 export function translate(lang: Lang, key: string, vars?: Record<string, string | number>): string {
   const raw = TABLES[lang][key] ?? TABLES.zh[key] ?? key

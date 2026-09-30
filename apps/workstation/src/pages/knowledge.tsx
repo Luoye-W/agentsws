@@ -9,6 +9,11 @@
  * 4. **缺口**——Agent 答不上来的问题，两种补法：贴链接 / 粘文字；
  * 5. **知识清单**——层、适用范围、时效一眼看完。
  *
+ * **WP209（Luoye 09-30「全部随机地堆在一起」）**：3 与 5 合成一块「知识」——按**类型**分组
+ * （产品事实 / 政策 / 物流与时效 / B2B 事实卡 / 品牌话术 / 上传的文档 / 其它，空组不显示），
+ * 顶上搜索、按品牌（适用范围）筛、按状态筛；每条标状态与来源。上传区留着，传上去的文件
+ * 进「上传的文档」那一组。分组判定在 `lib/library.ts`，组件在 `components/library/`。
+ *
  * 这一页不做编辑器：19 §4「写只经审批项」——改一条知识是一张卡的事，不是一个输入框的事。
  *
  * **上传那一块的三条**（WP99）：
@@ -25,6 +30,8 @@ import { WsCard, WsTag } from '@/components/design'
 import { ClaimRulesSection } from '@/components/knowledge/claim-rules'
 import { GapRow } from '@/components/knowledge/gap-row'
 import { RecheckCard } from '@/components/knowledge/recheck-card'
+import { KnowledgeGroups } from '@/components/library/knowledge-groups'
+import { FilterChip, LibrarySearch } from '@/components/library/library-group'
 import {
   fileAddress,
   isLegacyOfficeFile,
@@ -34,6 +41,7 @@ import { useRailState } from '@/components/rail/rail-state'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Hint } from '@/components/ui/hint'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
   answerKnowledgeGap,
@@ -48,6 +56,7 @@ import {
   listKnowledgeGaps,
   listKnowledgeRechecks,
   listKnowledgeSources,
+  listRangeGroups,
   resolveKnowledgeRecheck,
   UPLOAD_ACCEPT,
   UPLOAD_EXTENSIONS,
@@ -55,6 +64,16 @@ import {
   uploadKnowledgeSource,
 } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
+import {
+  countByStatus,
+  filterKnowledge,
+  KNOWLEDGE_STATUSES,
+  type KnowledgeStatus,
+  SCOPE_ALL,
+  SCOPE_GENERAL,
+  scopeLabel,
+  scopeOptions,
+} from '@/lib/library'
 import { cn } from '@/lib/utils'
 
 /**
@@ -89,6 +108,10 @@ export function KnowledgePage(): React.ReactNode {
   const [queue, setQueue] = useState<UploadItem[]>([])
   const [dragging, setDragging] = useState(false)
   const [busy, setBusy] = useState(false)
+  // WP209：知识那一块的三样筛选
+  const [query, setQuery] = useState('')
+  const [scope, setScope] = useState<string>(SCOPE_ALL)
+  const [status, setStatus] = useState<KnowledgeStatus | 'all'>('all')
 
   const cards = useQuery({ queryKey: ['knowledge-cards'], queryFn: () => listKnowledgeCards() })
   const rechecks = useQuery({
@@ -104,6 +127,12 @@ export function KnowledgePage(): React.ReactNode {
   const sources = useQuery({
     queryKey: ['knowledge-sources'],
     queryFn: () => listKnowledgeSources(),
+  })
+  // WP209：适用范围的名字（范围组 id → 名字）。拿不到（没权限 / 老进程）就显示 id，不拦页面
+  const rangeGroups = useQuery({
+    queryKey: ['knowledge-range-groups'],
+    queryFn: () => listRangeGroups(),
+    retry: false,
   })
 
   const refresh = (): void => {
@@ -245,6 +274,72 @@ export function KnowledgePage(): React.ReactNode {
   // 列出来只会点进一个永远 404 的预览
   const uploads = (sources.data ?? []).filter((s) => s.kind === 'upload')
 
+  // ── WP209：知识那一块 ─────────────────────────────────────────
+  const allCards = cards.data ?? []
+  const filtering = query.trim() !== '' || scope !== SCOPE_ALL || status !== 'all'
+  const shownCards = filterKnowledge(allCards, { query, scope, status })
+  const statusCounts = countByStatus(filterKnowledge(allCards, { query, scope }))
+  const scopes = scopeOptions(allCards)
+  const scopeName = (ref: { kind: string; id: string }): string =>
+    scopeLabel(ref, rangeGroups.data ?? [], t)
+  // 上传的文件没有状态、没有范围：按状态 / 范围筛的时候不列它们，只按名字搜
+  const shownUploads =
+    status !== 'all' || scope !== SCOPE_ALL
+      ? []
+      : uploads.filter((u) => nameOfSource(u).toLowerCase().includes(query.trim().toLowerCase()))
+  const uploadList = (
+    <ul className="flex flex-col gap-2 text-sm">
+      {shownUploads.map((source) => {
+        const name = nameOfSource(source)
+        const previewable = officeKindOf(name) !== undefined
+        // WP99：`.xls` / `.doc` / `.ppt` 换库之后解不动了，那一行要说清是
+        // **格式太老**，不是"这一栏不管这种文件"（两句话对应的下一步不一样）
+        const legacy = !previewable && isLegacyOfficeFile(name)
+        return (
+          <li key={source.id}>
+            {/* 一份文件一张卡（WP96 的 `WsCard`）；卡可点，删除是卡右边一个单独的钮 */}
+            <WsCard className="flex items-center gap-1 p-0">
+              <button
+                type="button"
+                className="flex min-w-0 flex-1 items-center gap-2 px-4 py-3 text-left"
+                data-testid={`knowledge-source-${source.id}`}
+                onClick={() => {
+                  openFile(source.id, name)
+                }}
+              >
+                <FileText aria-hidden className="size-4 shrink-0 text-ws-muted-fg" />
+                <span className="min-w-0 flex-1 truncate">{name}</span>
+                <WsTag>
+                  {previewable
+                    ? t('knowledge.sources.preview')
+                    : legacy
+                      ? t('knowledge.sources.legacy_only')
+                      : t('knowledge.sources.download_only')}
+                </WsTag>
+              </button>
+              {/*
+                        删除不做二次确认弹窗：21 的擦除是**软删 + 字节真删**，
+                        而同一份文件再传一次就回来了（key 是内容 hash）。
+                        为一个可复原的动作弹一个模态，只会让人下次闭着眼点确定。
+                      */}
+              <Button
+                size="sm"
+                variant="ghost"
+                className="mr-2 shrink-0"
+                disabled={remove.isPending}
+                aria-label={t('knowledge.sources.remove')}
+                data-testid={`knowledge-source-remove-${source.id}`}
+                onClick={() => remove.mutate(source.id)}
+              >
+                <Trash2 aria-hidden className="size-4" />
+              </Button>
+            </WsCard>
+          </li>
+        )
+      })}
+    </ul>
+  )
+
   const statementOf = (cardId: string): string | undefined =>
     cards.data?.find((c) => c.id === cardId)?.statement
 
@@ -318,6 +413,74 @@ export function KnowledgePage(): React.ReactNode {
           )
         })
       )}
+
+      <section className="flex flex-col gap-3" data-testid="knowledge-library">
+        <div className="flex flex-wrap items-center gap-2" data-testid="knowledge-toolbar">
+          <LibrarySearch value={query} onChange={setQuery} testId="knowledge-search" />
+          {scopes.length === 0 ? null : (
+            <span className="inline-flex items-center gap-1">
+              <select
+                value={scope}
+                data-testid="knowledge-scope"
+                aria-label={t('knowledge.scope.label')}
+                className="h-8 rounded-lg border border-input bg-ws-card px-2 text-sm text-ws-ink"
+                onChange={(e) => {
+                  setScope(e.target.value)
+                }}
+              >
+                <option value={SCOPE_ALL}>{t('knowledge.scope.all')}</option>
+                <option value={SCOPE_GENERAL}>{t('knowledge.scope.general')}</option>
+                {scopes.map((ref) => (
+                  <option key={`${ref.kind}:${ref.id}`} value={`${ref.kind}:${ref.id}`}>
+                    {scopeName(ref)}
+                  </option>
+                ))}
+              </select>
+              <Hint text={t('knowledge.scope.hint')} />
+            </span>
+          )}
+        </div>
+        <div className="flex flex-wrap gap-1.5" data-testid="knowledge-status-filter">
+          <FilterChip
+            active={status === 'all'}
+            testId="knowledge-status-all"
+            onClick={() => {
+              setStatus('all')
+            }}
+          >
+            {t('knowledge.status.all')}
+          </FilterChip>
+          {KNOWLEDGE_STATUSES.map((s) => (
+            <FilterChip
+              key={s}
+              active={status === s}
+              count={statusCounts[s]}
+              testId={`knowledge-status-${s}`}
+              onClick={() => {
+                setStatus(status === s ? 'all' : s)
+              }}
+            >
+              {t(`knowledge.status.${s}`)}
+            </FilterChip>
+          ))}
+        </div>
+        {cards.isLoading ? (
+          <Skeleton className="h-24 w-full" />
+        ) : shownCards.length === 0 && shownUploads.length === 0 ? (
+          filtering ? (
+            <p className="text-sm text-ws-muted-fg" data-testid="knowledge-no-match">
+              {t('library.no_match')}
+            </p>
+          ) : null
+        ) : (
+          <KnowledgeGroups
+            cards={shownCards}
+            forceOpen={filtering}
+            scopeName={scopeName}
+            uploads={{ count: shownUploads.length, node: uploadList }}
+          />
+        )}
+      </section>
 
       <ClaimRulesSection />
 
@@ -409,58 +572,7 @@ export function KnowledgePage(): React.ReactNode {
             <p className="text-sm text-ws-muted-fg" data-testid="knowledge-sources-empty">
               {t('knowledge.sources.empty')}
             </p>
-          ) : (
-            <ul className="flex flex-col gap-2 text-sm">
-              {uploads.map((source) => {
-                const name = nameOfSource(source)
-                const previewable = officeKindOf(name) !== undefined
-                // WP99：`.xls` / `.doc` / `.ppt` 换库之后解不动了，那一行要说清是
-                // **格式太老**，不是"这一栏不管这种文件"（两句话对应的下一步不一样）
-                const legacy = !previewable && isLegacyOfficeFile(name)
-                return (
-                  <li key={source.id}>
-                    {/* 一份文件一张卡（WP96 的 `WsCard`）；卡可点，删除是卡右边一个单独的钮 */}
-                    <WsCard className="flex items-center gap-1 p-0">
-                      <button
-                        type="button"
-                        className="flex min-w-0 flex-1 items-center gap-2 px-4 py-3 text-left"
-                        data-testid={`knowledge-source-${source.id}`}
-                        onClick={() => {
-                          openFile(source.id, name)
-                        }}
-                      >
-                        <FileText aria-hidden className="size-4 shrink-0 text-ws-muted-fg" />
-                        <span className="min-w-0 flex-1 truncate">{name}</span>
-                        <WsTag>
-                          {previewable
-                            ? t('knowledge.sources.preview')
-                            : legacy
-                              ? t('knowledge.sources.legacy_only')
-                              : t('knowledge.sources.download_only')}
-                        </WsTag>
-                      </button>
-                      {/*
-                        删除不做二次确认弹窗：21 的擦除是**软删 + 字节真删**，
-                        而同一份文件再传一次就回来了（key 是内容 hash）。
-                        为一个可复原的动作弹一个模态，只会让人下次闭着眼点确定。
-                      */}
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="mr-2 shrink-0"
-                        disabled={remove.isPending}
-                        aria-label={t('knowledge.sources.remove')}
-                        data-testid={`knowledge-source-remove-${source.id}`}
-                        onClick={() => remove.mutate(source.id)}
-                      >
-                        <Trash2 aria-hidden className="size-4" />
-                      </Button>
-                    </WsCard>
-                  </li>
-                )
-              })}
-            </ul>
-          )}
+          ) : null}
         </CardContent>
       </Card>
 
@@ -502,38 +614,6 @@ export function KnowledgePage(): React.ReactNode {
               </li>
             ))}
           </ul>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm">{t('knowledge.cards')}</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {cards.isLoading ? (
-            <Skeleton className="h-24 w-full" />
-          ) : (
-            <ul className="divide-y text-sm">
-              {(cards.data ?? []).map((card) => (
-                <li key={card.id} className="flex items-start gap-2 py-2">
-                  <Badge variant="outline">{t(`knowledge.layer.${card.layer}`)}</Badge>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate">{card.subject.key}</p>
-                    <p className="truncate text-xs text-muted-foreground">{card.statement}</p>
-                  </div>
-                  {card.stage === undefined || card.stage === 'both' ? null : (
-                    <Badge variant="secondary">{t(`knowledge.stage.${card.stage}`)}</Badge>
-                  )}
-                  {card.verification_state === undefined ||
-                  card.verification_state === 'fresh' ? null : (
-                    <Badge variant="outline">
-                      {t(`knowledge.verification.${card.verification_state}`)}
-                    </Badge>
-                  )}
-                </li>
-              ))}
-            </ul>
-          )}
         </CardContent>
       </Card>
     </div>

@@ -4,6 +4,10 @@ description: B2B 报价单怎么做：报价单结构、价格条款（EXW / FOB
 license: Apache-2.0
 tier: open
 version: 1.0.0
+display_name: 报价
+display_name_en: Quotation
+summary: 报价单结构、价格条款、MOQ 与阶梯价
+summary_en: Quote structure, trade terms, MOQ and tiered prices
 ---
 
 > Agents 工坊自带的基础版。这家公司在公司层写了自己的报价口径（报价单模板、默认贸易术语、有效期、阶梯档位），以公司层为准。

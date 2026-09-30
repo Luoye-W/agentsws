@@ -120,6 +120,7 @@ import {
   type RoleStore,
   rangeTargetOfProduct,
   renderBrandContext,
+  SUPERSEDED_POSITION_IDS,
   type SupervisedPosition,
 } from '@agentsws/roles'
 import type { SearchFetch } from '@agentsws/search-providers'
@@ -277,6 +278,8 @@ import {
 } from './hosted-mode.js'
 import { createApprovalDirectory } from './housekeeping.js'
 import { createImChannels } from './im-channels.js'
+import { feishuSdkTransportFactory, fetchHttp, wsSocketFactory } from './im-sdk.js'
+import { createTeamBotManagerCheck } from './im-team-bots.js'
 import { createJoin, type JoinAssembly } from './join.js'
 // WP56（48 §4 #9）：知识包导入的落库那一步
 import { knowledgeSourceFile } from './knowledge-file.js'
@@ -401,6 +404,7 @@ import { claimRuleCard, createSeoService, pickRoleHolder } from './seo-service.j
 import type { BrokerFetch } from './shopify-broker.js'
 import { createShopifyDevMcp } from './shopify-devmcp.js'
 import { createConnectSiteFacts, createSiteService, createSiteStore, seedDemoSite } from './site.js'
+import { enrichSkillSummaries } from './skill-catalog.js'
 import {
   createSocialStore,
   migrateSupersededChannels,
@@ -5366,7 +5370,16 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     // WP29：池的真源是学习回路那一份（`skills.lessons` 是 WP6 的内存池，只留给周合并的老接口）
     lessons: (filter) => learning.lessons(filter),
     // WP29 技能页与学习回路
-    list: (actor) => learning.summaries(actor),
+    // WP209：按岗位分组那几格（显示名 / 一句话 / 哪几条职责在用 / 归哪个岗位）只往上加
+    list: async (actor) =>
+      enrichSkillSummaries(await learning.summaries(actor), {
+        positions: org.positions(),
+        roles: roles.roles.list(),
+        held_roles: memoryFacts(actor).held_roles,
+        frontmatterOf: (name) => skills.registry.frontmatterOf(name),
+        sectionBody: (name, id) => skills.registry.sectionBody(name, id),
+        superseded: SUPERSEDED_POSITION_IDS,
+      }),
     exclude: (name, person_id, excluded) => skills.registry.exclude(name, person_id, excluded),
     proposals: () => learning.proposalSummaries(),
     promote: (input) =>
@@ -6780,6 +6793,25 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     makePipeline: (input) => boot.channels.imPipeline(input),
     // 游标与会话上下文跟渠道库走：落盘档重启之后不从头拉
     clawbotState: boot.channels.clawbotState,
+    /*
+     * WP211：三条团队渠道的真连接。企业微信那条在 WP85 只做了注入口、真装配没接上
+     * （界面上填了也一直「连接中」），这里一并接上 `ws`。飞书走官方 SDK，选了才懒加载。
+     */
+    wecomSocket: wsSocketFactory,
+    // Fable 09-30：公司的应用凭据只给负责人（`common.owner`）与公司管理员填、改、断开
+    canManageTeamBots: createTeamBotManagerCheck({
+      isOwner: (person_id) =>
+        roles.assignments
+          .listByPerson(person_id, { workspace_id: workspace.id, role_id: 'common.owner' })
+          .some((a) => a.revoked_at === undefined),
+      organization: async () => {
+        const org_id = (await identity.getWorkspace(workspace.id))?.org_id
+        return org_id === undefined ? undefined : identity.getOrganization(org_id)
+      },
+    }),
+    feishuTransport: feishuSdkTransportFactory,
+    dingtalkSocket: wsSocketFactory,
+    dingtalkHttp: fetchHttp,
     appendEvent,
     newId: () => `im_${Math.floor(random() * 1e9).toString(36)}`,
     random,
