@@ -125,6 +125,67 @@ export interface Matter {
   created_at: Iso8601
   updated_at: Iso8601
   closed_at?: Iso8601
+  /**
+   * WP207：**归档**的时刻。有它 = 移出左栏与默认列表；内容、记忆、卡片历史都还在。
+   *
+   * 归档不是状态（`status` 不动）：一件还开着的事超过 N 天没新活动就归档，
+   * 新活动（新消息、运行、定时触发、人回话）自动取消归档——那时这个字段被拿掉。
+   * 缺省（老事项）= 没归档。
+   */
+  archived_at?: Iso8601
+}
+
+/** WP207：自动归档的默认天数（「设置 → 通用」可调 1–30 天或不自动归档）。 */
+export const DEFAULT_ARCHIVE_IDLE_DAYS = 3
+export const MIN_ARCHIVE_IDLE_DAYS = 1
+export const MAX_ARCHIVE_IDLE_DAYS = 30
+
+/** WP207：自动归档设置。`idle_days: null` = 不自动归档。 */
+export interface WorkArchiveSettings {
+  idle_days: number | null
+}
+
+/**
+ * WP207：谁把一件归档的事放回来的（审计 `work.unarchived{by}`）。
+ * `user` 人在列表里点了恢复；`ai_suggested` AI 给出候选、人点选了；`activity` 有新活动自动放回。
+ */
+export type UnarchiveBy = 'user' | 'ai_suggested' | 'activity'
+
+/** WP207：随便聊与 ⌘K 里「让 AI 找回」用的那个**只读**工具名。 */
+export const FIND_ARCHIVED_WORK_TOOL = 'find_archived_work'
+
+/** WP207：`find_archived_work` 的入参（模型给；⌘K 那一路由服务端从一句话里拆）。 */
+export interface FindArchivedWorkInput {
+  /** 用户的模糊描述（原话或模型提炼过的关键词）。 */
+  query: string
+  /** 时间段（ISO8601），按事项最后活动时间筛。 */
+  since?: Iso8601
+  until?: Iso8601
+  /** 岗位模板 id 或岗位名。 */
+  position?: string
+  /** 参与人（名字或 person_id）。 */
+  participant?: string
+  /** 最多几个候选，默认 5，最多 8。 */
+  limit?: number
+}
+
+/** WP207：找回的一个候选（卡片上的一张；人点了才恢复）。 */
+export interface ArchivedWorkCandidate {
+  matter_id: MatterId
+  title: string
+  /** 「到哪了」的一句摘要（可能是空串）。 */
+  summary: string
+  position_template_id?: PositionTemplateId
+  role_id?: RoleId
+  archived_at: Iso8601
+  last_activity: Iso8601
+  /** 0..1，越大越像。 */
+  score: number
+  /**
+   * 为什么像：`种类:词` 的短串——`title:红人` / `summary:样品` / `people:Alice` / `body:报价` /
+   * `time:上周` / `semantic`。界面按种类翻成人话（「标题里有 红人」），不把这一格原样摆出来。
+   */
+  why: string[]
 }
 
 /**
@@ -433,6 +494,10 @@ export interface MatterFilter {
   goal_id?: GoalId
   /** 参与者里有这个人 */
   participant?: PersonId
+  /**
+   * WP207：`true` 只要归档的，`false` 只要没归档的；不给 = 都要（老调用方行为不变）。
+   */
+  archived?: boolean
   limit?: number
 }
 
