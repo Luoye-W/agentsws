@@ -359,6 +359,19 @@
       "source_page": "https://www.dingtalk.com",
       "note": "钉钉官网首页 <link rel=icon>",
       "fetched_at": "2026-09-30"
+    },
+    "amazon": {
+      "brand": "Amazon",
+      "file": "amazon.png",
+      "format": "png",
+      "width": 180,
+      "height": 180,
+      "bytes": 4366,
+      "sha256": "f8184c36ab5439a22007f105d0366f10bbb782ab1d379e38759e452965c18805",
+      "source_url": "https://www.aboutamazon.com/_next/static/media/apple-touch-icon.706b1b87.png",
+      "source_page": "https://www.aboutamazon.com",
+      "note": "Amazon 官方公司站",
+      "fetched_at": "2026-09-30"
     }
   },
   "aliases": {
