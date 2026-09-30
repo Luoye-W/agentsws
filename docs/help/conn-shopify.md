@@ -1,3 +1,7 @@
+---
+positions: [dtc-ops, web-ops, customer-care, site]
+roles: [dtc.store, dtc.store-config, dtc.catalog, dtc.support, site.shopify-build, site.shopify-theme, site.shopify-apps]
+---
 # 连 Shopify 店铺
 
 这篇讲怎么把你的 Shopify 店接进 Agents 工坊：订单、退货、客户、商品都从这条连接读。

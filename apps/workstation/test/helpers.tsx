@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { type RenderResult, render } from '@testing-library/react'
+import { fireEvent, type RenderResult, render, screen } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { MemoryRouter } from 'react-router-dom'
 import { AppProvider } from '@/lib/app-context'
@@ -20,4 +20,13 @@ export function renderWithProviders(
       </AppProvider>
     </QueryClientProvider>,
   )
+}
+
+/**
+ * WP208：角色 / 记忆 / 知识 / 技能 / 额度合进了第三栏的「设定」——点图标开「设定」，再点那一个标签。
+ * （标签就是旧 id：`role` / `memory` / `knowledge` / `skills` / `caps`。）
+ */
+export async function openSettingsTab(tab: string): Promise<void> {
+  fireEvent.click(screen.getByTestId('rail-icon-settings'))
+  fireEvent.click(await screen.findByTestId(`settings-tab-${tab}`))
 }
