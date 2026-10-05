@@ -864,6 +864,9 @@ const zh: Table = {
   'messages.claim.me': '你处理过',
   'messages.claim.notice': '通知',
   'messages.claim.unclaimed': '没人接',
+  // WP227：营销信折成一捆 + 小标签（只在这里折起，邮箱里不动）
+  'messages.promo.tag': '营销',
+  'messages.promo.hint': '营销邮件：只在这里折起，邮箱里一封不动',
   'messages.flow.title': '去了哪',
   'messages.flow.handed': '已交给岗位',
   'messages.flow.notice': '只是通知',
@@ -4453,6 +4456,8 @@ const en: Table = {
   'messages.claim.me': 'You handled it',
   'messages.claim.notice': 'Notice',
   'messages.claim.unclaimed': 'Unclaimed',
+  'messages.promo.tag': 'Promo',
+  'messages.promo.hint': 'Marketing mail: folded here only; nothing changes in your mailbox',
   'messages.flow.title': 'Where they went',
   'messages.flow.handed': 'With a position',
   'messages.flow.notice': 'Just notices',
