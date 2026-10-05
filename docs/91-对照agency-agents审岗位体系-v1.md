@@ -334,7 +334,7 @@ MIT 允许改写、商用、再分发，条件只有一条：**保留版权声�
 | # | 来源（`agency-agents/` 下） | 取哪段 | 进哪 | 不要的部分 |
 |---|---|---|---|---|
 | 1 | `marketing/marketing-cross-border-ecommerce.md` | 跨境选品打分表的**三维结构**（市场 / 毛利 / 合规）、毛利纪律的**成本项清单**、合规红线、本地化四原则、listing 标题公式、亚马逊广告分阶段的**结构** | `unit-economics`（成本项、盈亏线）、`market-compliance`（红线）、`localization`（四原则）、将来 Amazon 运营的技能（标题公式、广告分阶段） | 所有门槛数（月搜索 > 1 万、首页评论 < 500、售价 $15–50、佣金 15%、ACOS 25%、各平台毛利区间）；收汇工具、东南亚平台段 |
-| 2 | `specialized/specialized-pricing-analyst.md` | 硬规矩六条（没有算式不报价、先保毛利、折扣要理由与到期日、按人群不按平均、定期复看）、折扣替代手段（捆绑、赠品、分期而非直降） | `unit-economics`；`dtc.store` 改价卡上要附的算式 | 收入提升 10–25% 之类目标；SaaS 定价模型段 |
+| 2 | `specialized/specialized-pricing-analyst.md` | 硬规矩六条（没有算式不报价、先保毛利、折扣要理由与到期日、按人群不按平均、定期复看）；折扣分级审批（幅度越大、批的人越高——与 `quotation`「授权内业务员自己批、超出转上级」同构）与折扣替代手段（账期、加送服务、按量给价，偏 B2B） | `unit-economics`；`dtc.store` 改价卡上要附的算式；`quotation` 一节 | 收入提升 10–25% 之类目标；各级审批的具体百分比（进公司额度）；SaaS 定价模型段 |
 | 3 | `specialized/retail-customer-returns.md` | 退货原因码、例外留痕、「同一政策对每个客户一样执行」、不当面指控 | `returns-policy-calc`（§3.5 示例 2）、`customer-care` 一句 | 门店验货 / 收银 / 现金退款 / 处置流程；「欺诈嫌疑」只留内部标记 |
 | 4 | `marketing/marketing-email-strategist.md` | 每条自动流程写**退出条件**（买了、退订、硬退信、投诉、长期不活跃）；看点击与转化、不拿打开率当成绩（苹果邮件隐私保护让打开率虚高）；交易邮件里不夹营销；同意留记录（日期、方式、来源、范围）；流程设计单格式 | `email-sms` 加一节「流程设计单」与「退出条件」 | 「2025 年平均打开率 43.46%」等无出处数；CRM 字段映射模板 |
 | 5 | `marketing/marketing-ai-citation-strategist.md` | 硬规矩六条（多平台都查、永不保证被引用、AEO 与 SEO 分开、先测基线再改、按影响排、各平台分开看）；「丢失问法分析」与「修复包」两个格式 | `seo-judgment` 的 AI 可见度一节 | 「30 天引用率 +20%」等目标 |
