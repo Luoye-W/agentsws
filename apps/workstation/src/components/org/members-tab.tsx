@@ -8,6 +8,7 @@
  * 邀请在本地档是**一条链接**：这台机器没有邮箱通道时不假装"已发送"，
  * 而是把链接摆出来让你自己转发给同事（20 §5）。链接里那把 token 只出现这一次。
  */
+import { isPlaceholderOwnerEmail } from '@agentsws/contracts'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
@@ -331,7 +332,13 @@ export function MembersTab({
                 >
                   {m.name}
                 </Link>
-                <span className="ml-2 font-normal text-muted-foreground text-xs">{m.email}</span>
+                {/* WP233：本机占位邮箱（没关联云账号的本机负责人）不露出来，说「你（本机）」 */}
+                <span
+                  className="ml-2 font-normal text-muted-foreground text-xs"
+                  data-testid="member-email"
+                >
+                  {isPlaceholderOwnerEmail(m.email) ? t('identity.local_self') : m.email}
+                </span>
               </CardTitle>
               <div className="flex items-center gap-2">
                 {m.role === 'owner' ? null : (

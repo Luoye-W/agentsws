@@ -1954,7 +1954,7 @@ describe('WP233 第 ② 步「你的账号」与「公司邮箱后缀」', () =>
     expect(screen.getByText('公司邮箱后缀')).toBeTruthy()
     expect(input.placeholder).toBe('例如 inmoxr.com')
     expect(screen.getByTestId('company-domain-hint').getAttribute('data-hint')).toBe(
-      '同事用这个后缀的邮箱加入时，自动认作同一家公司；可不填',
+      '同事用这个后缀的邮箱申请加入时，更容易认出是同一家公司；进来仍要你同意。可不填',
     )
     expect(input.value).toBe('inmoxr.com')
   })

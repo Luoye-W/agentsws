@@ -249,6 +249,21 @@ describe('52 O1 设置页那张"公司"卡', () => {
   })
 })
 
+describe('WP233 设置页「身份」那一行', () => {
+  it('本机占位邮箱不露出来，说「你（本机）」；真邮箱照常显示', async () => {
+    state.orgs = [SOLO]
+    state.brands = [BRAND_A]
+    const { unmount } = renderWithProviders(<SettingsPage identity="owner@localhost" />)
+    expect((await screen.findByTestId('settings-identity')).textContent).toBe('你（本机）')
+    expect(document.body.textContent).not.toContain('owner@localhost')
+    unmount()
+    renderWithProviders(<SettingsPage identity="boss@nordvolt.example" />)
+    expect((await screen.findByTestId('settings-identity')).textContent).toBe(
+      'boss@nordvolt.example',
+    )
+  })
+})
+
 describe('52 O4 第 ① 步拆两块', () => {
   it('上半块是公司（进组织），下半块是品牌（进这个工作区）', async () => {
     const saved: unknown[] = []

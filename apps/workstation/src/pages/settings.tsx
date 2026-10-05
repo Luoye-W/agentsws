@@ -7,6 +7,7 @@
  * 模型留在这里而不是另开一页：接模型是**一次性的**（填一把 key 就完了），
  * 之后只会偶尔来看一眼花了多少；连接是要长期管的（试连、重新授权、断开）。
  */
+import { isPlaceholderOwnerEmail } from '@agentsws/contracts'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
@@ -220,7 +221,13 @@ export function SettingsPage({
             {identity === undefined ? null : (
               <div className="flex items-center justify-between">
                 <span>{t('settings.identity')}</span>
-                <span className="font-mono text-xs text-muted-foreground">{identity}</span>
+                {/* WP233：本机占位邮箱不露出来 */}
+                <span
+                  className="font-mono text-xs text-muted-foreground"
+                  data-testid="settings-identity"
+                >
+                  {isPlaceholderOwnerEmail(identity) ? t('identity.local_self') : identity}
+                </span>
               </div>
             )}
             <Separator />

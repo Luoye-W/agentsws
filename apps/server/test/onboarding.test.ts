@@ -1091,3 +1091,30 @@ describe('46 §2 邀请码与申请加入', () => {
     ).toBe(409)
   })
 })
+
+describe('WP233 申请卡上不露对方本机的占位邮箱', () => {
+  it('申请人是 owner@localhost：卡面只说名字；真邮箱照常带上', async () => {
+    const a = await machine({
+      lan: createLanBus(),
+      host: '10.0.0.1',
+      ownerEmail: 'wang@nordvolt.cn',
+      clock: makeClock(),
+    })
+    const invite = await data<{ code: string }>(await a.call('POST', '/v1/invites'))
+    const local = await data<RequestView>(
+      await a.call('POST', '/v1/memberships/requests', {
+        body: { code: invite.code, name: '李默', email: 'owner@localhost' },
+      }),
+    )
+    const card = await membershipCard(a, local.id)
+    expect(card?.summary).toContain('李默贴了你发的邀请码')
+    expect(`${card?.title ?? ''}${card?.summary ?? ''}`).not.toContain('owner@localhost')
+
+    const real = await data<RequestView>(
+      await a.call('POST', '/v1/memberships/requests', {
+        body: { code: invite.code, name: '陈一', email: 'chen@nordvolt.cn' },
+      }),
+    )
+    expect((await membershipCard(a, real.id))?.summary).toContain('陈一（chen@nordvolt.cn）')
+  })
+})
