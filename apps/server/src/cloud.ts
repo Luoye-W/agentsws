@@ -42,6 +42,7 @@ import type {
   LocalPricing,
   LocalTopupTiers,
   MyAllocation,
+  ReadonlyBrowserStatus,
   RedditBrowserReadLimits,
   ServiceSubscription,
   TopupOrder,
@@ -105,6 +106,8 @@ export interface CloudOptions {
   env: Record<string, string | undefined>
   /** `capability-sources.json` 的目录；不给就全内存（测试与一次性任务）。 */
   dbDir?: string
+  /** WP228：本机只读浏览器的状态（连接页 Reddit 卡那一格）；不给 = 这个进程没装。 */
+  readonlyBrowserStatus?: () => ReadonlyBrowserStatus
   /** 测试注入；不给就用全局 `fetch`。 */
   fetch?: CloudFetch
   /**
@@ -665,6 +668,7 @@ export function createCloud(options: CloudOptions): CloudAssembly {
     )
   }
 
+  const readonlyBrowserStatus = options.readonlyBrowserStatus
   const port: CloudPort = {
     // WP194：成员 / 岗位额度（谁能看公司那一页在路由那一层判：公司的 owner / admin）
     allocation: async (actor, filter) => {
@@ -745,6 +749,9 @@ export function createCloud(options: CloudOptions): CloudAssembly {
       )
     },
     capabilitySources: (actor) => settingsOf(actor),
+    ...(readonlyBrowserStatus === undefined
+      ? {}
+      : { readonlyBrowserStatus: () => readonlyBrowserStatus() }),
     setCapabilitySources(actor, input) {
       /*
        * **只存显式改过的那几项**：值是 `mine` 的一律不落盘。

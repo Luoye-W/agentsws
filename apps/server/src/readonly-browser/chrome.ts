@@ -95,6 +95,24 @@ export function chromeArgs(profileDir: string, platform: NodeJS.Platform): strin
 
 const PID_FILE = 'agentsws-browser.pid'
 
+/**
+ * mac / Linux：浏览器按**进程组**起（`detached`），结束时整组一起杀——主进程被强杀后，
+ * 网络 / 渲染那几个辅助进程有时要好几秒才自己退（本机满负载实测抓到过），按组杀不等它们。
+ */
+function killGroup(pid: number): void {
+  try {
+    process.kill(-pid, 'SIGKILL')
+    return
+  } catch {
+    // 不是组长（不是我们按组起的）：退回只杀它自己
+  }
+  try {
+    process.kill(pid, 'SIGKILL')
+  } catch {
+    // 已经没了
+  }
+}
+
 const alive = (pid: number): boolean => {
   try {
     process.kill(pid, 0)
@@ -145,11 +163,7 @@ export function killOrphan(
     return undefined
   }
   if (!Number.isInteger(pid) || pid <= 0 || pid === process.pid || !alive(pid)) return undefined
-  try {
-    process.kill(pid, 'SIGKILL')
-  } catch {
-    return undefined
-  }
+  killGroup(pid)
   return pid
 }
 
@@ -180,6 +194,8 @@ export async function spawnChrome(input: {
   const child = spawn(executable, chromeArgs(profileDir, platform), {
     stdio: 'ignore',
     windowsHide: true,
+    // mac / Linux 自成一个进程组（见 killGroup）；Windows 用 taskkill /T 按树结束
+    detached: platform !== 'win32',
     env: browserEnv(env),
   })
   let exited = false
@@ -194,13 +210,17 @@ export async function spawnChrome(input: {
   const pidFile = join(profileDir, PID_FILE)
   if (platform === 'win32' && child.pid !== undefined) writeFileSync(pidFile, String(child.pid))
   const killNow = (): void => {
-    if (child.pid === undefined || child.exitCode !== null) return
-    if (platform === 'win32')
-      spawnSync(taskkillPath(env), ['/PID', String(child.pid), '/T', '/F'], {
-        windowsHide: true,
-        stdio: 'ignore',
-      })
-    else child.kill('SIGKILL')
+    if (child.pid === undefined) return
+    if (platform !== 'win32') {
+      // 主进程退了也扫一遍这一组（辅助进程可能还在）
+      killGroup(child.pid)
+      return
+    }
+    if (child.exitCode !== null) return
+    spawnSync(taskkillPath(env), ['/PID', String(child.pid), '/T', '/F'], {
+      windowsHide: true,
+      stdio: 'ignore',
+    })
   }
   const deadline = Date.now() + (input.readyTimeoutMs ?? 20_000)
   while (Date.now() < deadline && !exited) {
@@ -211,7 +231,10 @@ export async function spawnChrome(input: {
           child,
           endpoint: `http://127.0.0.1:${port}`,
           killNow,
-          kill: () => killTree(child, { platform, env, signal: 'SIGKILL' }),
+          kill: () =>
+            platform === 'win32'
+              ? killTree(child, { platform, env, signal: 'SIGKILL' })
+              : killNow(),
           forgetPid: () => {
             if (existsSync(pidFile)) unlinkSync(pidFile)
           },

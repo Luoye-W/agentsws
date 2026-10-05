@@ -2,8 +2,8 @@
  * WP220（Luoye 10-05）：**只读 Reddit** 这个工具真去取数——走 `@agentsws/social-core` 的 Reddit 两路路由：
  *
  * 1. 接口中台（`social.reddit.*` 三项能力，积分）：本机数据能力口（`createDataService`）转给云上；
- * 2. 浏览器只读：要一个**单独的只读会话**的执行器（`browser` 那一格）。这一版服务进程还没有
- *    能程序化开页面的只读浏览器执行器，不给 = 这一路「没配」，照实说，不拿 Agent 的浏览器凑。
+ * 2. 浏览器只读：要一个**单独的只读会话**的执行器（`browser` 那一格）。WP228 起由本机只读浏览器
+ *    （`readonly-browser/`）提供；不给 = 这一路「没配」，照实说，不拿 Agent 的浏览器凑。
  *
  * 顺序与停用来自设置（`reddit.read`），限速来自设置（默认保守）。两路都不行回 `status: 'ok'`
  * 加一句人话（「没取到，这不等于没人在聊」），不当错误抛——研究那一边要把它写进报告的「从哪取的」。
@@ -21,6 +21,7 @@ import {
   createRedditReadRouter,
   type RedditHubPort,
   type RedditReadBrowser,
+  type RedditReadLimiter,
   type RedditReadRequest,
 } from '@agentsws/social-core'
 import type { ToolExecution, ToolExecutor } from '@agentsws/stand-ins'
@@ -31,6 +32,8 @@ export interface ResearchToolsOptions {
   route(): DataSourceRoute
   /** 浏览器只读的限速（设置里来，默认保守）。 */
   limits(): RedditBrowserReadLimits
+  /** WP228：外面给的限速器（本机只读浏览器那本落盘的账）；不给 = 内存版。 */
+  limiter?: RedditReadLimiter
   /** 接口中台那一跳（本机数据能力口的 `call`）；没关联 / 没开通时它自己抛。 */
   callData?(capability: string, input: Record<string, unknown>): Promise<DataCallResult>
   /** 浏览器只读执行器（单独的只读会话）。不给 = 这一路没配。 */
@@ -98,6 +101,7 @@ export function createResearchToolExecutor(options: ResearchToolsOptions): ToolE
   const router = createRedditReadRouter({
     route: options.route,
     limits: options.limits,
+    ...(options.limiter === undefined ? {} : { limiter: options.limiter }),
     ...(options.callData === undefined ? {} : { hub: hubOf(options.callData) }),
     ...(browserOf === undefined ? {} : { browser: () => browserOf() }),
     nowMs: options.nowMs,

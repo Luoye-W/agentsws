@@ -8,8 +8,9 @@
  * 白名单 → 找浏览器 → 限速 / 被拦暂停 → 记一页 → 起浏览器（没起就起）→ 只读打开 →
  * 认拦截（被拦就记暂停）→ 解析 → 认不出任何条目也照实说（不当「0 条」）。
  */
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { hostAllowed } from '@agentsws/contracts'
+import { hostAllowed, type ReadonlyBrowserStatus } from '@agentsws/contracts'
 import type { ExtractArgs } from './extract.js'
 import { type Env, findBrowser } from './find-browser.js'
 import { detectWall, hostOf, type WallKind } from './guard.js'
@@ -20,19 +21,8 @@ export { findBrowser, NO_BROWSER_MESSAGE } from './find-browser.js'
 export type { ReadLimits, ReadUsage } from './usage.js'
 
 /** 连接页那一格显示的四种状态（docs/36 §7：图标 + 少字，原话进提示）。 */
-export type ReadonlyBrowserState = 'ready' | 'no_browser' | 'quota_used_up' | 'blocked'
-
-export interface ReadonlyBrowserStatus {
-  state: ReadonlyBrowserState
-  /** 一句人话（进提示）。 */
-  message?: string
-  /** 被拦暂停到几点（ISO）。 */
-  until?: string
-  pages_last_day: number
-  max_pages_per_day: number
-  /** 找到的浏览器叫什么（`Chrome` / `Edge` / `Chromium`）。 */
-  browser?: string
-}
+export type ReadonlyBrowserState = ReadonlyBrowserStatus['state']
+export type { ReadonlyBrowserStatus }
 
 export type ReadFailure =
   | 'not_allowed'
@@ -88,10 +78,7 @@ export function createReadonlyBrowser(options: ReadonlyBrowserOptions): Readonly
     ...(options.dir === undefined ? {} : { file: join(options.dir, 'usage.json') }),
     limits: options.limits,
   })
-  const profileDir = join(
-    options.dir ?? join(env.TMPDIR ?? env.TEMP ?? '.', 'agentsws-ro'),
-    'profile',
-  )
+  const profileDir = join(options.dir ?? join(tmpdir(), 'agentsws-readonly-browser'), 'profile')
   let session: BrowserSession | undefined
   let starting: Promise<BrowserSession> | undefined
   let idle: NodeJS.Timeout | undefined

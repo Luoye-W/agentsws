@@ -135,6 +135,8 @@ export const launchChromeSession: SessionLauncher = async (input) => {
         await Promise.race([exited, new Promise((r) => setTimeout(r, CLOSE_GRACE_MS))])
       }
       await browser.close().catch(() => undefined)
+      // mac / Linux：主进程退了再扫一遍这一组，辅助进程一个不留
+      if (input.platform !== 'win32') chrome.killNow()
       chrome.forgetPid()
     },
     killNow: () => chrome.killNow(),

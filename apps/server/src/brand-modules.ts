@@ -49,6 +49,7 @@ import type { MessagesAssembly } from './messages.js'
 import type { ModelsAssembly } from './models.js'
 import type { PrStore } from './pr.js'
 import type { PrServiceAssembly } from './pr-service.js'
+import type { ReadonlyBrowser } from './readonly-browser/index.js'
 import type { MatterRecordSource, RuntimeAssembly } from './runtime.js'
 import type { SearchDataService } from './search-data.js'
 import type { SecretStore } from './secret-store.js'
@@ -294,6 +295,8 @@ export interface BrandModuleSet {
   ownModels: ModelsAssembly
   ownGateway: ModelGatewayApi
   ownCloud: CloudAssembly
+  /** WP228：这个品牌的本机只读浏览器（Reddit「浏览器只读」那一路）；没装就没有。 */
+  readonlyBrowser?: ReadonlyBrowser
   dispose(): Promise<void>
 }
 

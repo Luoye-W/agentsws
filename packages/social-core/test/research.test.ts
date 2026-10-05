@@ -300,6 +300,44 @@ describe('Reddit 两路取数', () => {
     expect((await r.read(SEARCH)).ok).toBe(true)
     expect(browser.opened).toHaveLength(3)
   })
+
+  it('WP228：外面给的限速器（落盘那本账）；被拦暂停记 blocked；执行器拿到要几条', async () => {
+    const hints: unknown[] = []
+    let blocked = false
+    const r = createRedditReadRouter({
+      route: () => ({ order: ['browser_readonly'], disabled: [] }),
+      limits: () => DEFAULT_REDDIT_BROWSER_READ_LIMITS,
+      limiter: {
+        check: () =>
+          blocked
+            ? { ok: false, reason: 'blocked', message: '页面要做人机验证（停到 16:00）' }
+            : { ok: true },
+        take: () => undefined,
+      },
+      browser: {
+        session: () => ({ kind: 'readonly_isolated', id: 'ro' }),
+        async run(_action, hint) {
+          hints.push(hint)
+          blocked = true
+          return { status: 'handover', message: '页面要做人机验证，我们不绕，已停下。' }
+        },
+      },
+      nowMs: () => NOW_MS,
+    })
+    const first = await r.read({ ...SEARCH, input: { ...SEARCH.input, limit: 7 } })
+    expect(first.ok).toBe(false)
+    expect(first.record.attempts).toEqual([
+      {
+        route: 'browser_readonly',
+        outcome: 'blocked',
+        message: '页面要做人机验证，我们不绕，已停下。',
+      },
+    ])
+    expect(hints).toEqual([{ capability: 'social.reddit.search', limit: 7 }])
+    const second = await r.read(SEARCH)
+    expect(second.record.attempts.at(-1)).toMatchObject({ outcome: 'blocked' })
+    expect(hints).toHaveLength(1)
+  })
 })
 
 function item(p: Partial<ResearchItem> & { url: string }): ResearchItem {

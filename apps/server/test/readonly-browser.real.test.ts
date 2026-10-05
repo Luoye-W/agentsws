@@ -14,7 +14,9 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { spawnChrome } from '../src/readonly-browser/chrome.js'
 import { findBrowser } from '../src/readonly-browser/find-browser.js'
 import { createReadonlyBrowser, type ReadonlyBrowser } from '../src/readonly-browser/index.js'
+import { redditReadBrowserOf, redditReadLimiterOf } from '../src/readonly-browser/reddit.js'
 import { type BrowserSession, launchChromeSession } from '../src/readonly-browser/session.js'
+import { createResearchToolExecutor } from '../src/research-tools.js'
 import { type SeenRequest, startFakeReddit } from './fake-reddit-site.js'
 
 const RUN = process.env.AGENTSWS_REAL_CHROME === '1' && findBrowser().ok
@@ -35,6 +37,14 @@ const leftovers = (dir: string): string => {
   } catch {
     return ''
   }
+}
+/** 等一小会儿（满负载的机器上进程退出要时间），还在就算残留。 */
+const settledLeftovers = async (dir: string): Promise<string> => {
+  for (let i = 0; i < 20; i += 1) {
+    if (leftovers(dir) === '') return ''
+    await new Promise((r) => setTimeout(r, 100))
+  }
+  return leftovers(dir)
 }
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
@@ -174,7 +184,7 @@ describe.skipIf(!RUN)('只读浏览器 × 本机 Chrome × 本地假 Reddit', ()
     await rb.close()
     await sleep(500)
     expect(pids.some((p) => alive(p))).toBe(false)
-    expect(leftovers(root)).toBe('')
+    expect(await settledLeftovers(root)).toBe('')
   }, 30_000)
 
   it('闲着自动关；上次没关干净（服务被强杀）留下的浏览器，下次起之前先结束它', async () => {
@@ -208,6 +218,56 @@ describe.skipIf(!RUN)('只读浏览器 × 本机 Chrome × 本地假 Reddit', ()
     await sleep(4_500)
     expect(b.running()).toBe(false)
     expect(alive(started?.pid)).toBe(false)
-    expect(leftovers(dir)).toBe('')
+    expect(await settledLeftovers(dir)).toBe('')
+  }, 60_000)
+
+  it('接上 WP220 路由：read_reddit 走「浏览器只读」那一路真取回来，与接口中台同一个结构', async () => {
+    const limits = { min_interval_seconds: 20, max_pages_per_hour: 30, max_pages_per_day: 200 }
+    const rb2 = createReadonlyBrowser({
+      dir: join(root, 'brand-c', 'readonly-browser'),
+      allowedHosts: () => ['localhost'],
+      limits: () => limits,
+      nowMs: () => now,
+    })
+    // 路由拼的是 https://www.reddit.com/…；测试把它换成本地假站点（不访问真的 reddit.com）
+    const inner = redditReadBrowserOf(rb2)
+    const exec = createResearchToolExecutor({
+      route: () => ({ order: ['workshop', 'browser_readonly'], disabled: [] }),
+      limits: () => limits,
+      browser: () => ({
+        session: inner.session,
+        run: (a, h) =>
+          inner.run({ ...a, url: a.url.replace('https://www.reddit.com', site.origin) }, h),
+      }),
+      limiter: redditReadLimiterOf(rb2),
+      nowMs: () => now,
+    })
+    try {
+      const got = await exec({
+        id: 'c1',
+        name: 'read_reddit',
+        input: { action: 'posts', subreddit: 'inmo', sort: 'new', limit: 2 },
+      })
+      expect(got).toMatchObject({
+        status: 'ok',
+        data: {
+          rows: 2,
+          items: [
+            {
+              kind: 'post',
+              url: 'https://www.reddit.com/r/inmo/comments/a1/inmo_air3_first_impressions/',
+              title: 'INMO Air3 first impressions',
+              subreddit: 'inmo',
+              score: 120,
+              comments: 34,
+            },
+            { title: 'Battery life question' },
+          ],
+          source: { route: 'browser_readonly', cached: false, items: 2 },
+        },
+      })
+    } finally {
+      await rb2.close()
+    }
   }, 60_000)
 })
