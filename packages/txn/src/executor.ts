@@ -9,6 +9,7 @@ import type {
 import { evaluateGuardrail, Provenance, snapshotMatches } from '@agentsws/core'
 import { ApprovalBusImpl, finalPayload } from './approvals.js'
 import { boundRecipients, deciderIsLegitimate } from './escalation.js'
+import { isManualSendDraft } from './precheck.js'
 import type { TxnRuntime } from './runtime.js'
 import type {
   ApplyOutcome,
@@ -667,7 +668,10 @@ export class Executor {
     })
     const attempts: NonNullable<ApprovalItem['apply']>['attempts'] = []
     let result: BackendResult = { status: 'failed', error: { message: '未接入 deliverOutbound' } }
-    const maxAttempts = this.rt.policy.retry_max + 1
+    // WP232：收件人待定的草稿卡**系统不发**——批了只记「人自己发」，一个渠道都不碰
+    const manual = isManualSendDraft(item.payload)
+    if (manual) result = { status: 'ok', outcome_ref: { type: 'manual_send', id: item.id } }
+    const maxAttempts = manual ? 0 : this.rt.policy.retry_max + 1
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       result = this.rt.opts.deliverOutbound
         ? await this.rt.opts.deliverOutbound(item, {

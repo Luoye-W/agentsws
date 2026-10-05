@@ -9,6 +9,7 @@ import type { ApprovalItem, Iso8601, ObjectRef, RiskClass } from '@agentsws/cont
 import { layoutFor } from './layout.js'
 import { actionsFor, labelsFor, minutesFor, riskClassFor } from './matrix.js'
 import type {
+  DeckAction,
   DeckCard,
   DeckContentVariants,
   DeckEntityChip,
@@ -718,6 +719,14 @@ function routedNoteOf(item: ApprovalItem): { routed_note?: string } {
   return reason === undefined || reason === '' ? {} : { routed_note: reason }
 }
 
+/** WP232：收件人待定的草稿卡上，按钮不能写「发送」——批了不会发出去。 */
+function manualSendLabels(actions: DeckAction[]): Partial<Record<DeckAction, string>> {
+  const out = labelsFor('outbound_draft', actions)
+  if (out.approve !== undefined) out.approve = '我来发'
+  if (out.reject !== undefined) out.reject = '不用'
+  return out
+}
+
 export function projectCard(item: ApprovalItem, ctx: ProjectContext): DeckCard {
   const kind = item.kind as DeckKind
   const risk = ctx.riskClass?.(item) ?? riskClassFor(kind)
@@ -739,6 +748,9 @@ export function projectCard(item: ApprovalItem, ctx: ProjectContext): DeckCard {
   const todo_id = item.subject.todo_id
   const matter_label =
     matter_id === undefined ? undefined : ctx.label?.({ type: 'work_item', id: matter_id })
+  // WP232：收件人待定的草稿（系统不发，人复制去发）——与 txn 的 `isManualSendDraft` 同一判据
+  const manualSend =
+    kind === 'outbound_draft' && payload.manual_send === true && payload.to === undefined
 
   return {
     id: item.id,
@@ -749,6 +761,7 @@ export function projectCard(item: ApprovalItem, ctx: ProjectContext): DeckCard {
     ...(kind === 'staged_change' && str(payload.kind) !== undefined
       ? { change_kind: str(payload.kind) as string }
       : {}),
+    ...(manualSend ? { manual_send: true as const } : {}),
     status: item.state,
     priority_band: priorityBandOf(item, risk, ctx.now),
     priority: item.priority,
@@ -770,7 +783,7 @@ export function projectCard(item: ApprovalItem, ctx: ProjectContext): DeckCard {
     evidence_chips: evidenceChipsOf(item, ctx),
     entity_chips: entities.chips,
     available_actions: actions,
-    action_labels: labelsFor(kind, actions),
+    action_labels: manualSend ? manualSendLabels(actions) : labelsFor(kind, actions),
     ...(options === undefined ? {} : { options }),
     detail: {
       payload: item.payload,

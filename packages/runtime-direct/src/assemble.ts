@@ -4,7 +4,10 @@ import { orderTools } from '@agentsws/ontology'
 import {
   assemblePrompt,
   assemblePromptHash,
+  DRAFT_BODY_DESCRIPTION,
   DRAFT_REPLY_TOOL,
+  DRAFT_SUBJECT_DESCRIPTION,
+  DRAFT_TOOL_DESCRIPTION,
   MCP_TOOL_DEF_BY_NAME,
   outputToolNames,
   STAGE_REFUND_TOOL,
@@ -37,15 +40,19 @@ export function outputToolDefs(req: RunRequest): ToolDef[] {
   if (wants.has(DRAFT_REPLY_TOOL)) {
     defs.push({
       name: DRAFT_REPLY_TOOL,
-      description:
-        'Draft a reply to the customer. The draft goes to a colleague for approval; it is never sent directly.',
+      // WP232：与 dsh 同一句描述；收件人不知道可以不填（宿主出收件人待定的卡，绝不丢草稿）
+      description: DRAFT_TOOL_DESCRIPTION,
       input_schema: {
         type: 'object',
-        required: ['to', 'subject', 'body'],
+        required: ['subject', 'body'],
         properties: {
-          to: { type: 'array', items: { type: 'string' } },
-          subject: { type: 'string' },
-          body: { type: 'string' },
+          to: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Recipient address(es) from the thread; leave out if unknown.',
+          },
+          subject: { type: 'string', description: DRAFT_SUBJECT_DESCRIPTION },
+          body: { type: 'string', description: DRAFT_BODY_DESCRIPTION },
           citations: {
             type: 'array',
             items: {

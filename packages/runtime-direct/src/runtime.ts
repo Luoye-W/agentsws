@@ -30,8 +30,10 @@ import type {
   ToolExecutor,
 } from '@agentsws/stand-ins'
 import {
+  boundariesToAsk,
   boundaryGate,
   contextItemHash,
+  DRAFT_NOT_CREATED,
   describeRun,
   looksLikeToolCallText,
   renderTrustedToolResult,
@@ -424,16 +426,19 @@ export function createDirectRuntime(options: DirectRuntimeOptions): RuntimeAdapt
         if (options.createDraft === undefined) {
           return { status: 'error', reason: 'no_draft_callback' }
         }
-        const to = Array.isArray(input.to)
+        const given = Array.isArray(input.to)
           ? input.to.filter((t): t is string => typeof t === 'string')
           : typeof input.to === 'string'
             ? [input.to]
             : []
         const body = typeof input.body === 'string' ? input.body : ''
-        if (to.length === 0 || body.length === 0) {
-          return { status: 'error', reason: 'draft_needs_to_and_body' }
+        // WP232：只缺正文才算没写成。收件人不知道就不填——与 dsh 同一条退路：先用线程上的
+        // 来信人，还没有就交给宿主（宿主出「收件人待定」的卡，人复制去发），绝不因此丢草稿。
+        if (body.length === 0) {
+          return { status: 'error', reason: 'draft_needs_body' }
         }
         const threadItem = itemsOfKind(effective, 'thread')[0]
+        const to = given.length > 0 ? given : threadParticipantsOf(threadItem)
         const citations = Array.isArray(input.citations)
           ? input.citations.flatMap((c) => {
               const o = asRecord(c)
@@ -470,7 +475,7 @@ export function createDirectRuntime(options: DirectRuntimeOptions): RuntimeAdapt
           res = await options.createDraft({ ...payload, body: rewriteForChannelGuard(body) })
         }
         if (res === undefined || !('approval_item_id' in res)) {
-          return { status: 'blocked', reason: 'draft_rejected' }
+          return { status: 'blocked', reason: DRAFT_NOT_CREATED }
         }
         drafted = true
         sink({
@@ -703,12 +708,14 @@ export function createDirectRuntime(options: DirectRuntimeOptions): RuntimeAdapt
       const orderName = [...orders.values()][0]?.name
 
       // ── 边界选择题卡：第一次碰到就问一次，问完这一辈子不再问（宿主按 dedupe_key 去重）──
+      // WP232：只有这件事真在要一笔变更才问（`boundariesToAsk`，三个运行时同一份）
+      const toAsk = boundariesToAsk(boundary)
       if (
         exhausted === undefined &&
-        boundary.missing.length > 0 &&
+        toAsk.length > 0 &&
         options.createPolicyQuestion !== undefined
       ) {
-        for (const item of boundary.missing) {
+        for (const item of toAsk) {
           const asked = await options.createPolicyQuestion({ request: effective, boundary: item })
           if (asked === undefined) continue
           askedBoundaries.push(item.label)
@@ -802,4 +809,16 @@ function toolResultContent(name: string, input: Record<string, unknown>, data: u
   const trusted = renderTrustedToolResult(name, input, data)
   if (trusted !== undefined) return redactOutboundText('tool_result', trusted)
   return EXTERNAL_FENCE.fencePayload(redactOutbound('tool_result', data))
+}
+
+/**
+ * WP232：线程上的来信人（`participants`，没有就 `from`）——模型没给收件人时的退路，
+ * 与 dsh（`reading.ts` 的 `threadParticipants`）、stub 同一个读法。
+ */
+function threadParticipantsOf(item: ContextItem | undefined): string[] {
+  const o = item === undefined ? undefined : asRecord(item.content)
+  const p = o?.participants
+  if (Array.isArray(p)) return p.filter((x): x is string => typeof x === 'string')
+  const from = o?.from
+  return typeof from === 'string' ? [from] : []
 }

@@ -1,6 +1,6 @@
 import type { ContextItem, RunEvent, RunRequest } from '@agentsws/contracts'
 import { canonicalJson } from '@agentsws/core'
-import { assemblePromptHash, contextItemHash } from '@agentsws/stand-ins'
+import { assemblePromptHash, contextItemHash, DRAFT_NOT_CREATED } from '@agentsws/stand-ins'
 import { describe, expect, it } from 'vitest'
 import type { ScriptedTurn } from '../src/index.js'
 import { eventsOf, harness, makeRequest, types } from './helpers.js'
@@ -191,7 +191,7 @@ describe('17 §6 一致性用例', () => {
     expect(injected.map((e) => e.item_id)).toContain('cost_price')
     const draftResult = eventsOf(h.events, 'tool.result').at(-1)
     expect(draftResult?.status).toBe('blocked')
-    expect(draftResult?.reason).toBe('draft_rejected')
+    expect(draftResult?.reason).toBe(DRAFT_NOT_CREATED)
     expect(result.outputs).toEqual([])
     expect(types(h.events)).not.toContain('proposal.created')
   })

@@ -15,6 +15,7 @@ import {
   CATEGORY_BY_KIND,
   categoryKey,
   LAYOUT_VERBS,
+  MANUAL_SEND_VERB_KIND,
   verbKey,
   verbRank,
 } from '../src/verbs.js'
@@ -132,5 +133,14 @@ describe('头一行的类别写人话', () => {
       ),
     )
     expect(covered.size).toBe(Object.keys(LAYOUT_BY_CHANGE).length)
+  })
+})
+
+describe('WP232：收件人待定的草稿卡', () => {
+  it('主次动词换成「我来发 / 不用」的键（批了不发出去，不能写「发送」）', () => {
+    expect(verbKey('outbound', 'approve', MANUAL_SEND_VERB_KIND)).toBe('verb.manual_send.approve')
+    expect(verbKey('outbound', 'reject', MANUAL_SEND_VERB_KIND)).toBe('verb.manual_send.reject')
+    // 「改一下」照旧（人可以改稿再自己发）
+    expect(verbKey('outbound', 'instruct', MANUAL_SEND_VERB_KIND)).toBe('verb.outbound.instruct')
   })
 })

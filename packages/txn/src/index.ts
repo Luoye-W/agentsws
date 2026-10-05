@@ -17,7 +17,7 @@ export {
 export { Executor, type ReconcileOutcome } from './executor.js'
 export { ChangeLedgerImpl } from './ledger.js'
 export { type Migration, migrate, schemaVersion } from './migrations.js'
-export { isKnownKind, type PrecheckOutcome, runPrecheck } from './precheck.js'
+export { isKnownKind, isManualSendDraft, type PrecheckOutcome, runPrecheck } from './precheck.js'
 export { TxnRuntime } from './runtime.js'
 export { MIGRATIONS } from './schema.js'
 export {

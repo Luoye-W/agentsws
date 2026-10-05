@@ -61,9 +61,9 @@
         "work_item_id": "mat_1"
       },
       "payload": {
-        "hash": "374de6ab470d6ce41eb5c1c32c6c968d1cd71a14c070e5a2b309c41d89b92fc6",
-        "static_prefix_hash": "bea6da89fb6a66fbebc956f5d75150c59a7b263765a4ed7704b380d15571617e",
-        "total_tokens": 305
+        "hash": "e0bfe22825d8f83d8c4cb02f975e2bd857eca0685af7a9c2cda381bd9aec8a45",
+        "static_prefix_hash": "0010873c3d09517f62187c601fe80184ff33f3804851eccd66c214401beb3cd3",
+        "total_tokens": 444
       }
     },
     {
@@ -221,9 +221,9 @@
         "work_item_id": "mat_1"
       },
       "payload": {
-        "hash": "374de6ab470d6ce41eb5c1c32c6c968d1cd71a14c070e5a2b309c41d89b92fc6",
-        "static_prefix_hash": "bea6da89fb6a66fbebc956f5d75150c59a7b263765a4ed7704b380d15571617e",
-        "total_tokens": 305
+        "hash": "e0bfe22825d8f83d8c4cb02f975e2bd857eca0685af7a9c2cda381bd9aec8a45",
+        "static_prefix_hash": "0010873c3d09517f62187c601fe80184ff33f3804851eccd66c214401beb3cd3",
+        "total_tokens": 444
       }
     },
     {

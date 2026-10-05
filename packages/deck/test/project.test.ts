@@ -18,6 +18,25 @@ import { item, NOW, policyItem, refundItem } from './fixtures.js'
 const ctx: ProjectContext = { now: NOW, position_id: 'asg_1' }
 
 describe('projectCard（36 §2 审批项 → 卡片）', () => {
+  it('WP232 收件人待定的草稿卡：标出 manual_send，按钮是「我来发 / 不用」不是「发送」', () => {
+    const manual = item({
+      payload: { channel: 'email', manual_send: true, body: { subject: 'Re', text: 'Hi' } },
+    })
+    const card = projectCard(manual, ctx)
+    expect(card.manual_send).toBe(true)
+    expect(card.action_labels?.approve).toBe('我来发')
+    expect(card.action_labels?.reject).toBe('不用')
+    expect(card.layout).toBe('outbound')
+    expect(card.content_variants.original).toBe('Hi')
+    // 带了收件人的就是普通回信卡（标记绕不过收件人那一层）
+    const normal = projectCard(
+      item({ payload: { ...(manual.payload as object), to: { type: 'customer', id: 'c' } } }),
+      ctx,
+    )
+    expect(normal.manual_send).toBeUndefined()
+    expect(normal.action_labels?.approve).toBe('发送')
+  })
+
   it('回复草稿卡：动词是「发送 / 不发 / 指导」，不是「批准」', () => {
     const card = projectCard(item(), ctx)
     expect(card.kind).toBe('outbound_draft')

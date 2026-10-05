@@ -196,7 +196,7 @@ describe('工具循环的两道门（17 §6.3、16 §3）', () => {
     expect(eventsOf(h.events, 'proposal.created')[0]?.kind).toBe('outbound_draft')
   })
 
-  it('draft：缺收件人或正文 → error，不建审批项', async () => {
+  it('draft：缺正文 → error，不建审批项', async () => {
     const h = harness({
       script: [
         { tool_calls: [{ name: 'draft_reply', input: { subject: 'Re: #1001' } }] },
@@ -206,8 +206,27 @@ describe('工具循环的两道门（17 §6.3、16 §3）', () => {
     await h.run(makeRequest({ grounding: [] }))
     const res = eventsOf(h.events, 'tool.result')[0]
     expect(res?.status).toBe('error')
-    expect(res?.reason).toBe('draft_needs_to_and_body')
+    expect(res?.reason).toBe('draft_needs_body')
     expect(h.drafts).toEqual([])
+  })
+
+  it('WP232 draft：模型没给收件人 → 不报错，交给宿主（先用线程上的来信人）', async () => {
+    const h = harness({
+      script: [
+        {
+          tool_calls: [
+            { name: 'draft_reply', input: { subject: 'Re: #1001', body: 'Hi Anna, thanks.' } },
+          ],
+        },
+        { text: 'done' },
+      ],
+    })
+    await h.run(makeRequest({ grounding: [] }))
+    const res = eventsOf(h.events, 'tool.result')[0]
+    expect(res?.status).toBe('ok')
+    expect(h.drafts).toHaveLength(1)
+    // 线程上没有来信人时就是空的——宿主出「收件人待定」的卡，运行时不替它猜
+    expect(Array.isArray(h.drafts[0]?.to)).toBe(true)
   })
 
   it('stage：金额为 0（已经退过了）→ error，不进账本', async () => {
