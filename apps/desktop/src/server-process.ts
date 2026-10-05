@@ -105,6 +105,11 @@ export function serverSpawnRequest(input: ServerSpawnInput): SpawnRequest {
     AGENTSWS_PORT: String(input.port),
     AGENTSWS_DB_DIR: input.dataDir,
     AGENTSWS_VERSION: input.version,
+    /*
+     * WP219（docs/90 §6）：桌面版的服务进程查「已审的内容更新」（每 6 小时 + 启动时）。
+     * 外面显式给了 `off` 就关（排查 / 内网用），别的一律开；没有内置公钥时服务进程自己会说「通道关着」。
+     */
+    AGENTSWS_CONTENT_UPDATES: input.baseEnv.AGENTSWS_CONTENT_UPDATES === 'off' ? 'off' : 'on',
     ...(input.haltFile === undefined ? {} : { AGENTSWS_HALT_FILE: input.haltFile }),
     ...(input.connectUrl === undefined ? {} : { AGENTSWS_CONNECT_URL: input.connectUrl }),
     ...(input.dshHome === undefined

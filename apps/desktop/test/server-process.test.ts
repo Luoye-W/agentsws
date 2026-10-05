@@ -69,6 +69,12 @@ describe('serverSpawnRequest', () => {
     expect(request.env.AGENTSWS_PORT).toBe('0')
     expect(request.env.AGENTSWS_DB_DIR).toBe('/data')
     expect(request.env.AGENTSWS_VERSION).toBe('0.1.0')
+    // WP219：桌面版的服务进程查已审的内容更新（外面给了 off 才关）
+    expect(request.env.AGENTSWS_CONTENT_UPDATES).toBe('on')
+    expect(
+      serverSpawnRequest(input({ baseEnv: { PATH: '/usr/bin', AGENTSWS_CONTENT_UPDATES: 'off' } }))
+        .env.AGENTSWS_CONTENT_UPDATES,
+    ).toBe('off')
   })
 
   it('密钥只走环境变量，且默认封死 proxy', () => {
