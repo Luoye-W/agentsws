@@ -12,10 +12,53 @@
  *
  * 没有 HTML 的信（纯文本）照原样用 `<pre>` 显示，不走 iframe——那一条路上没有
  * 任何可执行的东西，多套一层只会让选中复制变难。
+
+ * **正文里的链接（WP227，Luoye 10-05 #9）**：点了用系统浏览器 / 新窗口打开。沙箱只为这一步
+ * 开最小的口子 `allow-popups allow-popups-to-escape-sandbox`（仍然无脚本、无同源、无表单、
+ * 不许动顶层窗口）：开出去的是一个独立的新窗口，不是这个沙箱。放行前在这里再筛一遍链接：
+ * 只有 http / https / mailto 留着 `href` 且一律 `target=_blank rel="noopener noreferrer"`，
+ * 其它协议（`tel:` `file:` `javascript:` 相对地址……）一律拿掉 `href`，点了什么都不发生。
+ * 桌面壳那一侧 `setWindowOpenHandler` 再按同一份白名单交给 `shell.openExternal`
+ * （`apps/desktop/src/navigation.ts`），永远不在壳里开新窗口。
  */
 import type { MessageRecord } from '@agentsws/contracts'
 import { type ReactNode, useEffect, useRef } from 'react'
 import { useApp } from '@/lib/app-context'
+
+/** 正文链接只放行这三种协议（和桌面壳 `navigation.ts` 的外链白名单一致）。 */
+export const LINK_PROTOCOLS: ReadonlySet<string> = new Set(['http:', 'https:', 'mailto:'])
+
+/** 沙箱：只为「点链接新开窗口」开口子；脚本、同源、表单、顶层导航一个都不给。 */
+export const BODY_SANDBOX = 'allow-popups allow-popups-to-escape-sandbox'
+
+/**
+ * WP227：把正文里的链接筛一遍。白名单协议 → 新窗口 + 断 opener / referrer；
+ * 页内锚点（`#xx`）留着、只在框里跳；其余拿掉 `href`（字照留）。
+ */
+export function guardLinks(html: string): string {
+  const doc = new DOMParser().parseFromString(html, 'text/html')
+  for (const a of Array.from(doc.querySelectorAll('a[href], area[href]'))) {
+    const href = (a.getAttribute('href') ?? '').trim()
+    if (href.startsWith('#')) {
+      a.removeAttribute('target')
+      continue
+    }
+    let ok = false
+    try {
+      ok = LINK_PROTOCOLS.has(new URL(href).protocol)
+    } catch {
+      ok = false
+    }
+    if (ok) {
+      a.setAttribute('target', '_blank')
+      a.setAttribute('rel', 'noopener noreferrer')
+    } else {
+      a.removeAttribute('href')
+      a.removeAttribute('target')
+    }
+  }
+  return doc.body.innerHTML
+}
 
 /** iframe 里那份文档的壳：只给最基本的排版，不引任何外部资源。 */
 function documentOf(html: string): string {
@@ -83,9 +126,10 @@ export function MessageBody({ message }: { message: MessageRecord }): ReactNode 
       ref={frame}
       data-testid="message-html"
       title={t('messages.body')}
-      // 无脚本、无同源：净化那一层将来漏了一条规则，这一层仍然兜得住
-      sandbox=""
-      srcDoc={documentOf(message.html)}
+      // 无脚本、无同源：净化那一层将来漏了一条规则，这一层仍然兜得住。
+      // WP227：只多开「点链接新开窗口」这一个口子（见文件头）
+      sandbox={BODY_SANDBOX}
+      srcDoc={documentOf(guardLinks(message.html))}
       // WP204：无同源的 iframe 里量不到内容高度（上面那个 fit 读 contentDocument 永远是 null），
       // 以前就停在浏览器缺省的 150px——「显示图片」之后题图一撑，正文就被挤到框外看不见了。
       // 现在按正文粗估一个高度（估少了在框里滚）。要真贴合得放开同源（仍无脚本），留给 Luoye 定。
