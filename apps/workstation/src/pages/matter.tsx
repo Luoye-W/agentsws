@@ -38,6 +38,7 @@ import {
   getMatter,
   getMatterTimeline,
   getPosition,
+  getPositionByTemplate,
   postMatterMessage,
   rerouteMatter,
 } from '@/lib/api'
@@ -72,10 +73,14 @@ const EVENT_ICON = {
 function RoutedLine({
   matterId,
   positionId,
+  templateId,
   roleId,
 }: {
   matterId: string
-  positionId: string
+  /** 事项钉着的那条分配（定了职责才有） */
+  positionId?: string
+  /** WP237：事项所属的岗位模板（还没定职责时只有它） */
+  templateId?: string
   roleId?: string
 }): React.ReactNode {
   const { t } = useApp()
@@ -86,9 +91,10 @@ function RoutedLine({
    * 之后才取，于是那一行先显示的是职责 id（`common.owner`），内部值上了屏。
    */
   const position = useQuery({
-    queryKey: ['position-instance', positionId],
-    queryFn: () => getPosition(positionId),
-    enabled: positionId !== '',
+    queryKey: ['position-instance', positionId ?? templateId ?? ''],
+    queryFn: () =>
+      positionId === undefined ? getPositionByTemplate(templateId ?? '') : getPosition(positionId),
+    enabled: (positionId ?? templateId ?? '') !== '',
   })
   const reroute = useMutation({
     mutationFn: (next: string) => rerouteMatter(matterId, next),
@@ -97,7 +103,41 @@ function RoutedLine({
       void client.invalidateQueries({ queryKey: ['matter', matterId] })
     },
   })
+  // WP237：还没定职责 → 本人在这个岗位下的那几条直接摆成按钮，点了就钉到它并开跑
+  const choose = useMutation({
+    mutationFn: (next: string) => rerouteMatter(matterId, next, { run: true }),
+    onSettled: () => {
+      void client.invalidateQueries({ queryKey: ['matter', matterId] })
+    },
+  })
   const current = position.data?.roles.find((r) => r.role_id === roleId)
+  if (roleId === undefined)
+    return (
+      <div
+        className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground"
+        data-testid="matter-routed"
+        data-role=""
+      >
+        <span>{t('matter.routed.none')}</span>
+        {(position.data?.roles ?? [])
+          .filter((r) => r.my_assignment_id !== undefined)
+          .map((r) => (
+            <Button
+              key={r.role_id}
+              size="xs"
+              variant="outline"
+              data-testid="matter-route-go"
+              data-role={r.role_id}
+              disabled={choose.isPending}
+              onClick={() => {
+                choose.mutate(r.role_id)
+              }}
+            >
+              {t('matter.route.go', { role: r.role_name })}
+            </Button>
+          ))}
+      </div>
+    )
   return (
     <div className="flex flex-col gap-1" data-testid="matter-routed" data-role={roleId ?? ''}>
       <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
@@ -159,11 +199,19 @@ function TimelineEvent({
   event,
   onResume,
   resuming,
+  onRoute,
+  routing,
+  currentRole,
 }: {
   event: MatterEvent
   /** WP236：这一条是被停下来的运行，点了接着跑同一件事。 */
   onResume?: () => void
   resuming?: boolean
+  /** WP237：路由那一条下面的「走 X / 换成 X」——钉到那条职责并开跑。 */
+  onRoute?: (role_id: string) => void
+  routing?: boolean
+  /** 事项现在走的那条职责（已经是它的按钮不再出） */
+  currentRole?: string
 }): React.ReactNode {
   const { lang, t } = useApp()
   const Icon = EVENT_ICON[event.kind]
@@ -187,6 +235,34 @@ function TimelineEvent({
             <LinkedText text={event.text} />
           </p>
         )}
+        {(() => {
+          const route = event.route
+          if (route === undefined || onRoute === undefined) return null
+          // 还没定的那一条：定了之后就不再出（选择已经做过了）
+          if (route.picked === undefined && currentRole !== undefined) return null
+          const options = route.options.filter((o) => o.role_id !== currentRole)
+          if (options.length === 0) return null
+          return (
+            <div className="mt-1 flex flex-wrap gap-1.5" data-testid="matter-route-options">
+              {options.map((o) => (
+                <Button
+                  key={o.role_id}
+                  size="xs"
+                  variant="outline"
+                  data-role={o.role_id}
+                  disabled={routing === true}
+                  onClick={() => {
+                    onRoute(o.role_id)
+                  }}
+                >
+                  {t(route.picked === undefined ? 'matter.route.go' : 'matter.route.switch', {
+                    role: o.role_name,
+                  })}
+                </Button>
+              ))}
+            </div>
+          )
+        })()}
         {onResume === undefined ? null : (
           <Button
             size="xs"
@@ -275,6 +351,14 @@ export function MatterPage(): React.ReactNode {
     onSuccess: () => {
       setText('')
     },
+    onSettled: () => {
+      void client.invalidateQueries({ queryKey: ['matter', id] })
+    },
+  })
+
+  // WP237：时间线上「走 X / 换成 X」——改派并重跑
+  const route = useMutation({
+    mutationFn: (role_id: string) => rerouteMatter(id, role_id, { run: true }),
     onSettled: () => {
       void client.invalidateQueries({ queryKey: ['matter', id] })
     },
@@ -372,10 +456,16 @@ export function MatterPage(): React.ReactNode {
           </div>
         </div>
         {/* WP69（54 §2）：这件事归哪条职责做，可以换 */}
-        {view.matter.position_id === undefined ? null : (
+        {view.matter.position_id === undefined &&
+        view.matter.position_template_id === undefined ? null : (
           <RoutedLine
             matterId={view.matter.id}
-            positionId={view.matter.position_id}
+            {...(view.matter.position_id === undefined
+              ? {}
+              : { positionId: view.matter.position_id })}
+            {...(view.matter.position_template_id === undefined
+              ? {}
+              : { templateId: view.matter.position_template_id })}
             {...(view.matter.role_id === undefined ? {} : { roleId: view.matter.role_id })}
           />
         )}
@@ -534,6 +624,15 @@ export function MatterPage(): React.ReactNode {
               <TimelineEvent
                 key={event.id}
                 event={event}
+                {...(view.matter.status === 'closed'
+                  ? {}
+                  : {
+                      onRoute: (role_id: string) => {
+                        route.mutate(role_id)
+                      },
+                      routing: route.isPending,
+                    })}
+                {...(view.matter.role_id === undefined ? {} : { currentRole: view.matter.role_id })}
                 {...(event.id === resumableId
                   ? {
                       onResume: () => {
