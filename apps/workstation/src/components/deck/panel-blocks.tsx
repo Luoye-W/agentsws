@@ -32,7 +32,8 @@ function figuresOf(card: DeckCard, lang: Lang): [string, string][] {
   const out: [string, string][] = []
   for (const [k, v] of Object.entries(payload)) {
     // WP154：`variant` 是搜索报告卡的分支名（daily / weekly_*），不是给人看的数
-    if (k === 'kind' || k === 'variant') continue
+    // WP224：`length` 是一页纸的字数（给校验用），不是给人看的数
+    if (k === 'kind' || k === 'variant' || k === 'length') continue
     if (typeof v === 'number' || (typeof v === 'string' && v.length <= 24))
       out.push([fieldLabel(k, lang), fieldValue(k, v, lang)])
     if (out.length === 4) break

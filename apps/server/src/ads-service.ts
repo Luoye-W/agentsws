@@ -437,7 +437,8 @@ export function createAdsService(options: AdsServiceOptions): AdsServiceAssembly
           '停了不是删了——历史数据还在，随时能再开。',
         ].filter((s) => s !== ''),
         title: `暂停：${campaign.name}`,
-        summary: `${input.reason}｜${verdict.reason}`,
+        // WP224：摘要里判据后面并排盈亏线那一句（只显示）
+        summary: `${input.reason}｜${verdict.reason}${breakEven === undefined ? '' : `｜${breakEven.note}`}`,
         seen: [{ type: 'campaign', id: campaign.id }],
         rule: 'role_holder',
         // 停掉只会少花钱

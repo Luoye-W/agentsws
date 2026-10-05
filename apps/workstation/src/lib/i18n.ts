@@ -874,6 +874,24 @@ const zh: Table = {
   'messages.taught.empty': '改判时勾「以后都这样」，同一发件人下次就不再问。',
   'messages.ai.handed': '{name}在办，这里不生成建议',
   'org.brands.design.title': '设计规范',
+  // WP224：公司 → 品牌 · 毛利率（盈亏线 ROAS = 1 / 毛利率）
+  'org.margin.title': '毛利率',
+  'org.margin.hint':
+    '品牌事实里的一格（知识库事实卡）。投放面板 ROAS 旁边的「盈亏线」= 1 / 毛利率；只并排显示，不改自动止损。没填就是没填，面板上写「没填毛利率」。',
+  'org.margin.brand': '整个品牌',
+  'org.margin.unset': '没填',
+  'org.margin.save': '保存',
+  'org.margin.line': '盈亏线 ROAS {line}',
+  'org.margin.overrides': '按品类 / SKU 覆盖',
+  'org.margin.overrides.hint':
+    '小的盖大的：SKU 盖品类、品类盖品牌。改价、折扣、止损卡上用的是最细那一格。',
+  'org.margin.category': '品类',
+  'org.margin.sku': 'SKU',
+  'org.margin.scope': '按什么覆盖',
+  'org.margin.key': '品类名或 SKU',
+  'org.margin.pct': '毛利率',
+  'org.margin.add': '加一格',
+  'org.margin.clear': '清掉这一格',
   'org.brands.design.hint':
     '这个品牌的颜色、字体与 logo 规矩，设计、建站、社媒、投放干活时照着它。每个品牌一份，切到哪个品牌看的就是哪个。',
   'org.brands.design.open': '查看 / 编辑',
@@ -995,6 +1013,9 @@ const zh: Table = {
   'highlight.platform': '平台',
   'highlight.spend_gate': '总闸',
   'highlight.stop_loss': '止损判据',
+  // WP224：止损卡判据旁边并排的盈亏线（只显示）
+  'highlight.break_even': '盈亏线',
+  'highlight.break_even.fill': '去填毛利率',
   // WP78（60 §1 / §3）：公关那五张卡上的三个芯片。
   //
   // 「版规」是外部发帖卡上第一眼要看的东西——我们在别人的地盘上，版主说了算。
@@ -1464,6 +1485,7 @@ const zh: Table = {
   // WP63（51 §2.1 数据日报）：店铺日报卡
   'kind.daily_report': '店铺日报',
   'kind.seo_report': '搜索报告',
+  'kind.weekly_review': '经营一页纸',
   'kind.seo_topic': '新页面选题',
   'kind.b2b_sender_choice': '发信邮箱',
   'seo.geo.title': '买家会问的问题（每周拿去问各 AI 平台）',
@@ -1608,6 +1630,15 @@ const zh: Table = {
   'category.page_section': '加小节',
   'category.internal_links': '调内链',
   'category.seo_report': '搜索报告',
+  'category.weekly_review': '经营一页纸',
+  // WP224：一页纸卡的五段
+  'weekly.situation': '情况',
+  'weekly.findings': '发现',
+  'weekly.impact': '影响',
+  'weekly.recommendations': '建议',
+  'weekly.next_steps': '下一步',
+  'weekly.not_connected': '没接',
+  'weekly.source': '出处：{source}',
   'category.seo_topic': '新页面选题',
   // WP171（docs/84）：B2B 那十四种卡的类别
   'category.inquiry_reply': '回询盘',
@@ -3320,6 +3351,9 @@ const zh: Table = {
   'skill.name.prospecting': '找客户与打分',
   'skill.name.quotation': '报价单',
   'skill.name.trade-show': '展会',
+  // WP224
+  'skill.name.unit-economics': '单位经济',
+  'skill.name.weekly-review': '经营一页纸',
   'kol.campaign.already': '已在合作里',
   'kol.campaign.all_existing':
     '清单上这 {n} 位都已经在合作里了，所以没有新建。去合作线程接着谈，或者先找更多人。',
@@ -4419,6 +4453,23 @@ const en: Table = {
     'Tick “always” when you change a type and it won’t ask again for that sender.',
   'messages.ai.handed': '{name} is on it — no suggestions here',
   'org.brands.design.title': 'Design spec',
+  'org.margin.title': 'Gross margin',
+  'org.margin.hint':
+    'A brand fact (a knowledge fact card). The "break-even" next to ROAS on the ads panel = 1 / gross margin; shown side by side only, the automatic stop-loss is unchanged. Not filled means not filled — the panel says so.',
+  'org.margin.brand': 'Whole brand',
+  'org.margin.unset': 'Not set',
+  'org.margin.save': 'Save',
+  'org.margin.line': 'Break-even ROAS {line}',
+  'org.margin.overrides': 'Overrides by category / SKU',
+  'org.margin.overrides.hint':
+    'Smaller wins: SKU over category, category over brand. Price changes, discounts and stop-loss cards use the most specific one.',
+  'org.margin.category': 'Category',
+  'org.margin.sku': 'SKU',
+  'org.margin.scope': 'Override by',
+  'org.margin.key': 'Category or SKU',
+  'org.margin.pct': 'Gross margin',
+  'org.margin.add': 'Add',
+  'org.margin.clear': 'Clear this one',
   'org.brands.design.hint':
     "This brand's colors, fonts and logo rules — design, site, social and ads work follows it. One per brand: you see the one for the brand you're in.",
   'org.brands.design.open': 'View / edit',
@@ -4528,6 +4579,8 @@ const en: Table = {
   'highlight.platform': 'Platform',
   'highlight.spend_gate': 'Daily cap',
   'highlight.stop_loss': 'Stop-loss check',
+  'highlight.break_even': 'Break-even',
+  'highlight.break_even.fill': 'Fill in gross margin',
   'highlight.venue_rules': 'Venue rules',
   'highlight.facts_cited': 'Sourced figures',
   'highlight.sentiment': 'Sentiment',
@@ -5030,6 +5083,7 @@ const en: Table = {
   'kind.review': 'Review',
   'kind.daily_report': 'Store daily report',
   'kind.seo_report': 'Search report',
+  'kind.weekly_review': 'Weekly one-pager',
   'kind.seo_topic': 'New page topic',
   'kind.b2b_sender_choice': 'Sending mailbox',
   'seo.geo.title': 'Questions buyers ask (asked to AI platforms weekly)',
@@ -5169,6 +5223,14 @@ const en: Table = {
   'category.page_section': 'Add a section',
   'category.internal_links': 'Internal links',
   'category.seo_report': 'Search report',
+  'category.weekly_review': 'Weekly one-pager',
+  'weekly.situation': 'Situation',
+  'weekly.findings': 'Findings',
+  'weekly.impact': 'Impact',
+  'weekly.recommendations': 'Recommendations',
+  'weekly.next_steps': 'Next steps',
+  'weekly.not_connected': 'Not connected',
+  'weekly.source': 'Source: {source}',
   'category.seo_topic': 'New page topic',
   // WP171（docs/84）
   'category.inquiry_reply': 'Inquiry reply',
@@ -6944,6 +7006,8 @@ const en: Table = {
   'skill.name.prospecting': 'Prospecting',
   'skill.name.quotation': 'Quotations',
   'skill.name.trade-show': 'Trade shows',
+  'skill.name.unit-economics': 'Unit economics',
+  'skill.name.weekly-review': 'Weekly one-pager',
   'kol.campaign.already': 'already working together',
   'kol.campaign.all_existing':
     'All {n} people on this list are already in a collaboration, so nothing new was created. Continue in the threads, or find more people first.',
