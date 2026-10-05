@@ -24,9 +24,9 @@
 
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import type { StartRun, WorkspaceId } from '@agentsws/contracts'
+import type { Halt, StartRun, WorkspaceId } from '@agentsws/contracts'
 import type { PublicLibraryClient } from '@agentsws/kol-core'
-import type { ModelGatewayApi } from '@agentsws/model-gateway'
+import { GatewayError, type ModelGatewayApi } from '@agentsws/model-gateway'
 import type { Work } from '@agentsws/work'
 import type { AdsStore } from './ads.js'
 import type { AdsServiceAssembly } from './ads-service.js'
@@ -308,6 +308,38 @@ export interface BrandModulesOptions {
   dbDir?: string
   /** 现在这个组织下有哪些品牌（`all()` 要用它）。缺省只有 bootstrap。 */
   brands?(): WorkspaceId[]
+  /**
+   * WP215：这个品牌自己的急停视图。跟随公司默认的品牌用的是公司默认那一个网关（网关上挂的是
+   * 那个品牌的急停）——给了这一项，`gateway(ws)` 回的那一份会先按**这个品牌**的急停判一次，
+   * 品牌 B 按了急停，B 借来的网关也打不出去，公司默认品牌照常。
+   */
+  haltOf?(workspace_id: WorkspaceId): Halt | undefined
+}
+
+/** 账目与配置类的读写不算"调模型"，急停时照样能用（设置页、用量页要看）。 */
+const GATEWAY_BOOKKEEPING = new Set([
+  'usage',
+  'records',
+  'providers',
+  'reconfigure',
+  'recordExternal',
+])
+
+/** 借来的网关外面再套一层这个品牌的急停（见 `BrandModulesOptions.haltOf`）。 */
+function haltGuarded(gateway: ModelGatewayApi, halt: Halt): ModelGatewayApi {
+  return new Proxy(gateway, {
+    get(target, prop, receiver) {
+      const value = Reflect.get(target, prop, receiver)
+      if (typeof value !== 'function') return value
+      const fn = (value as (...a: unknown[]) => unknown).bind(target)
+      if (typeof prop !== 'string' || GATEWAY_BOOKKEEPING.has(prop)) return fn
+      return (...args: unknown[]) => {
+        if (halt.isHalted('model'))
+          throw new GatewayError('halted', 'model calls halted', { by: 'halt', scope: 'model' })
+        return fn(...args)
+      }
+    },
+  })
 }
 
 export interface BrandModules {
@@ -433,7 +465,11 @@ export function createBrandModules(options: BrandModulesOptions): BrandModules {
     },
     models: async (workspace_id) => (await resolved(workspace_id)).ownModels,
     cloud: async (workspace_id) => (await resolved(workspace_id)).ownCloud,
-    gateway: async (workspace_id) => (await resolved(workspace_id)).ownGateway,
+    gateway: async (workspace_id) => {
+      const gateway = (await resolved(workspace_id)).ownGateway
+      const halt = inheritsOrg(workspace_id) ? options.haltOf?.(workspace_id) : undefined
+      return halt === undefined ? gateway : haltGuarded(gateway, halt)
+    },
     inheritsOrg,
     isOrgDefault,
     orgDefaultOf,

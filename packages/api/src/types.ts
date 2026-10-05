@@ -55,6 +55,7 @@ import type { IdempotencyStore } from './idempotency.js'
 import type { AdsPort } from './routes/ads.js'
 import type { AskPort } from './routes/ask.js'
 import type { B2bOutboundPort, B2bPort, B2bSalesPort } from './routes/b2b.js'
+import type { BackgroundPort } from './routes/background.js'
 import type { BackupPort } from './routes/backup.js'
 import type { BrandDesignPort } from './routes/brand-design.js'
 import type { BrandIntakePort } from './routes/brand-intake.js'
@@ -755,6 +756,12 @@ export interface GatewayDeps {
     next: () => Promise<void>,
   ) => Promise<void>
   halt: Halt
+  /**
+   * WP215（只加）：**这个品牌自己的**急停视图（全局急停 + 品牌急停合起来）。给了就在
+   * 标了 `outbound` 的路由上按主体所在品牌再判一次——品牌 B 按了急停，B 的施行与发送被拦，
+   * A 照常。不给 = 只看全局那一份（老行为）。
+   */
+  brandHalt?: (workspace_id: string) => Halt | undefined
   trace: Trace
   clock: Clock
   eventLog: EventLogPort
@@ -1010,6 +1017,11 @@ export interface GatewayDeps {
    * 按品牌；没装配时 `/v1/settings/content-updates*` 回 not_implemented（设置页那一行不出）。
    */
   contentUpdates?: ContentUpdatesPort
+  /**
+   * WP215（52 §4 收口）：每个品牌一套后台——状态、全进程并发上限、品牌急停。
+   * 没装配时 `/v1/settings/background*` 回 not_implemented。
+   */
+  background?: BackgroundPort
 }
 
 /**

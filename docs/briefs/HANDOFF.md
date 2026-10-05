@@ -114,6 +114,8 @@
 | 89 | WP217 Reddit 运营技能调研（开源技能、官方规则与 API 条款、对照现有四条 Reddit 职责、建议引进与自写大纲） | `WP217-reddit-skills-research.md` | `wp217-reddit` · `wp/217-reddit` | WP191 | 进行中（Claude） |
 | 90 | WP218 Windows 安装包真打真跑（CI windows 装起来跑一遍）+ 应用内一键更新（左下角更新按钮、差分下载、重启安装；更新源可配，不发布） | `WP218-windows-and-autoupdate.md` | `wp218-desktop` · `wp/218-desktop` | WP111 | 进行中（Claude） |
 | 91 | WP219 第三方内容更新：规范 docs/90 + 第一类「随软件带的」走已审内容更新通道（签名内容包、出卡、可自动、可退回、三方合并） | `WP219-content-update-channel.md` | `wp219-content-updates` · `wp/219-content-updates` | WP216 / WP218 | 进行中（Claude） |
+| 92 | WP220 融合 last30days（→ 公共关系）与 social-media-research（→ 社媒运营）：保留方法论与产出，取数换成我们的合规口 | `WP220-research-skills-pr-social.md` | `wp220-research-skills` · `wp/220-research-skills` | WP217 | 进行中（Claude） |
+| 93 | WP221 对照 agency-agents 审整个岗位体系（只出结论 docs/91） | `WP221-agency-agents-review.md` | `wp221-agency-review` · `wp/221-agency-review` | WP217 | 进行中（Claude） |
 
 WP117b 的补充要求（派工单里没有，写在这）：demo 服务的是 `apps/workstation/dist`，测界面前先 `pnpm -F @agentsws/workstation exec vite build`；交付一个真实点击的 playwright 脚本 `scripts/e2e-kol-sandbox.mjs`（playwright 库在 `node_modules/.pnpm/playwright@1.63.0/node_modules/playwright`），走完「选合成红人 → 起草开发信 → 批准发送 → 已发 ≥ 1 → 跳到 N 天后 → 回信 ≥ 1 → 分类 → 议价卡 → 阶段推进 → 交付物 → 追踪链接」，每步截图到 `docs/assets/workstation/kol-e2e-NN.png`，脚本里断言计数确实变了；演练数据从真实漏斗 / 归因里排除，单独显示「演练漏斗」。
 

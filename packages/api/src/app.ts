@@ -16,6 +16,8 @@ import { approvalRoutes } from './routes/approvals.js'
 import { askRoutes } from './routes/ask.js'
 import { assignmentRoutes } from './routes/assignments.js'
 import { b2bRoutes } from './routes/b2b.js'
+// WP215：每个品牌一套后台（状态 / 全进程并发上限 / 品牌急停）
+import { backgroundRoutes } from './routes/background.js'
 import { backupRoutes } from './routes/backup.js'
 import { brandDesignRoutes } from './routes/brand-design.js'
 import { brandIntakeRoutes } from './routes/brand-intake.js'
@@ -244,6 +246,8 @@ export function collectRoutes(): Route[] {
     ...b2bRoutes(),
     // WP219（docs/90）：已审的内容更新。`/v1/settings/content-updates*` 是新路径（放最后：生成物的顺序不动别人）
     ...contentUpdatesRoutes(),
+    // WP215：每个品牌一套后台。`/v1/settings/background*` 是新路径（放在最后：生成物的顺序不动别人）
+    ...backgroundRoutes(),
   ]
 }
 
@@ -277,10 +281,17 @@ export function createGateway(deps: GatewayDeps): Gateway {
     await next()
   }
 
-  const haltOutbound: MiddlewareHandler<GatewayEnv> = async (_c, next) => {
+  const haltOutbound: MiddlewareHandler<GatewayEnv> = async (c, next) => {
     if (deps.halt.isHalted('outbound'))
       throw new ApiError('halted', '对外发送与施行已急停（AGENTSWS_HALT=outbound）；读照常', {
         details: deps.halt.state().outbound,
+      })
+    // WP215：品牌急停只拦这个品牌（主体在鉴权之后才有，所以这一道排在 auth 之后）
+    const ws = c.get('rctx')?.principal?.workspace_id
+    const brand = ws === undefined ? undefined : deps.brandHalt?.(ws)
+    if (brand?.isHalted('outbound') === true)
+      throw new ApiError('halted', '这个品牌的后台与对外发送已急停；读照常，别的品牌不受影响', {
+        details: brand.state().outbound,
       })
     await next()
   }
