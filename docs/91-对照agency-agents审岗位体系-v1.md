@@ -109,3 +109,45 @@ agency-agents 是一套**写得很用心的「人设 + 做法」提示词库**�
 7. **自动重试回路**：开发 ↔ 质检最多 3 次自动来回。对外发东西的活（帖子、开发信）自动来回改到通过 = 没人看就发了第三版；我们只借它「退回时写清具体问题和改法」的格式（§4.2）。
 
 另有一类「不相关但不是坏」的：13 个中国国内平台角色（抖音、小红书……）、医疗营销合规（只讲中国法规）、所有工程 / 游戏 / GIS 角色。不进对照。
+
+## 2. 覆盖对照
+
+### 2.1 和出海营销 / 跨境电商相关的角色，逐个落到我们这边
+
+判断四档：**覆盖**（我们有、且不比它浅）/ **部分**（有落点，它有一块我们没有）/ **缺** / **不需要**。「落成什么」按 50 §0 判：中小公司里是不是同一个人在干。
+
+| 它的角色（文件） | 一句话 | 我们的落点 | 判断 | 落成什么 |
+|---|---|---|---|---|
+| `marketing-content-creator`、`-seo-specialist`、`-aeo-foundations` | 内容、SEO、答案引擎 | `dtc.content` + `seo-judgment` | 覆盖 | — |
+| `marketing-ai-citation-strategist` | 查品牌在 ChatGPT / Claude / Gemini / Perplexity 里被不被引用 | `dtc.content` 的 `ai_visibility`（WP154 / 155） | 部分 | 技能补「丢失问法 + 修复包」格式 |
+| `marketing-email-strategist` | 生命周期邮件、分群、送达 | `dtc.email-marketing` + `email-sms` | 部分 | 技能补三条（§5 #4） |
+| `specialized-pricing-analyst` | 定价模型、折扣纪律 | `dtc.store` 有改价 / 折扣**动作**，没有**算法** | 缺做法 | 技能（§2.2 #3） |
+| `marketing-growth-hacker`、`project-management-experiment-tracker` | 增长实验、A/B 测试 | 无 | 缺 | 技能（§2.2 #5） |
+| `specialized-customer-service`、`support-support-responder` | 通用客服 | 客服岗四条 + `customer-care` | 覆盖（我们更严） | 不学（§1.5 #3） |
+| `specialized-retail-customer-returns` | 退货、换货、欺诈防范、退货分析 | `returns-policy-calc` | 部分 | 技能补原因码与例外留痕（§5 #3） |
+| `paid-media-ppc-strategist`、`-paid-social-strategist`、`-creative-strategist`、`-search-query-analyst` | 搜索 / 社交广告、素材、搜索词 | 投放四条 + `ad-copywriting` / `audience-research` | 覆盖 | — |
+| `paid-media-auditor`、`-tracking-specialist` | 账户 200 项体检、像素 / CAPI / GA4 追踪 | 投放四条有「像素健康」面板与归因对账 | 部分 | 技能 `ads-audit`（§5 #6） |
+| `paid-media-programmatic-buyer` | 程序化购买 | — | 不需要 | 中小跨境卖家基本不碰 |
+| （无红人经理角色；内容创作者、TikTok 策略师各一句「KOL 合作」） | — | 红人营销岗五条 + `influencer-marketing` | 我们远深于它 | — |
+| `marketing-social-media-strategist`、`-tiktok-strategist`、`-instagram-curator`、`-twitter-engager`、`-linkedin-content-creator`、`-reddit-community-builder`、`-video-optimization-specialist`、`-x-twitter-intelligence-analyst` | 各平台运营 | 社媒岗十二条（86 / 89 已逐条评过） | 部分 | 社媒职责只挂 `brand-voice`，做法技能见 86 §8、89 §5、WP220 |
+| `marketing-short-video-editing-coach`、`-carousel-growth-engine` | 短视频剪辑、轮播图生成 | 设计岗五条**只做图**；`social.tiktok` 有钩子与脚本 | 缺（视频） | 待定（§7 #4） |
+| `marketing-livestream-commerce-coach` | 直播带货（讲的是抖音 / 快手） | 无 | 缺 | 等 TikTok Shop 排上再说；合规那几条先进宣称合规技能 |
+| `marketing-pr-communications-manager` | 新闻稿、媒体、危机 | `pr.press`、`pr.monitoring` | 部分 | 危机「先出一份站得住的声明」格式进 PR 技能（与 WP220 合） |
+| `design-brand-guardian` | 品牌基础、一致性 | 品牌档案（70）、`DESIGN.md`（71）、`brand-voice`、`brand-system` | 覆盖 | — |
+| `design-image-prompt-engineer` | AI 出图提示词结构 | 设计岗 `generate_variants`（`design-core`） | 部分 | 提示词骨架（主体 / 环境 / 光 / 风格 / 技术参数 / 反向词）进 `design-core` |
+| `design-inclusive-visuals-specialist` | 出人像图时避开刻板印象 | 无 | 缺 | 一小段进设计技能：多市场人像不千人一面、反向词禁生成乱码文字与假标识 |
+| `sales-outbound-strategist`、`-discovery-coach` | 信号驱动外拓、需求挖掘 | `b2b.outbound` / `b2b.sales` + `prospecting` / `cold-email` / `b2b-inquiry` | 覆盖 | 意向信号分级可补进 `prospecting` |
+| `sales-proposal-strategist` | 大单方案书 | `quotation` | 部分 | 低优先 |
+| `sales-account-strategist`、`-pipeline-analyst` | 老客户扩单、管道复盘 | `b2b.sales` 的 `wake_dormant` | 部分 | 低优先：「客户不健康时别推加单」一条进 `b2b-inquiry` / `quotation` |
+| `marketing-cross-border-ecommerce` | 六平台运营 + 物流 + 税务合规 + 多语种 listing + 亚马逊广告 + 收汇 + 选品 + 客服 | Amazon 运营岗（50 §4 ⬜）+ 网站运营 + 投放 | 缺（岗位未建） | 拆成几份技能的种子（§5 #1） |
+| `support-analytics-reporter`、`-executive-summary-generator`、`specialized/data-consolidation-agent`、`report-distribution-agent` | 数据报表、高管摘要、汇数、分发 | 各职责各有自己的日报 / 近 30 天 / 归因；**没有跨岗位的经营周报** | 缺 | §2.2 #1 |
+| `support-legal-compliance-checker`、`specialized/data-privacy-officer` + 跨境通才的合规段 | 合规审查 | `policy-review`（只管退换货 / 运费 / 隐私 / 条款四份政策） | 缺 | §2.2 #2 |
+| `product-feedback-synthesizer` | 多渠道反馈汇成产品洞察 | 无 | 缺 | §2.2 #4 |
+| `product-trend-researcher` + 跨境通才的选品段 | 趋势、选品 | 无 | 缺 | 要不要做选品：§7 #3 |
+| `specialized-language-translator`（只有西语）、`-cultural-intelligence-strategist` | 翻译、文化 | `brand-voice` 只说「对外用客户的语言」 | 缺 | §2.2 #6 |
+| `finance/*`、`support-finance-tracker`、`specialized/accounts-payable-agent` | 记账、财务 | `amz.finance`（50 §4 ⬜） | 缺 | 不在本轮 |
+| `specialized/supply-chain-strategist` | 采购、供应商、库存模型 | `dtc.store` 有补货清单 | 不需要 | 采购不在我们「营销与运营」的范围 |
+| `specialized/agents-orchestrator` | 编排整条流水线 | 秘书路由（41）+ 岗位内路由（54） | 我们有，做法不同 | §4 |
+| `specialized/specialized-chief-of-staff` | 幕僚长：什么该打扰老板 | 秘书 Agent（41） | 部分 | 一条判据可借（§4.2 #4） |
+| `testing-reality-checker`、`-evidence-collector` | 默认判不合格、要证据 | `dtc.content` 发布前质检、`pr.press` 的 `check_numbers`、guardrail 的数字出处 | 部分 | 质检立场进「发布前质检」（§5 #11） |
+| `marketing-agentic-search-optimizer` | 查 AI 代理能不能在你站上完成下单（WebMCP） | 建站 | 不急 | 观察项 |
