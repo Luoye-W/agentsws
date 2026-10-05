@@ -18,10 +18,10 @@
  *
  * 用法：node apps/desktop/scripts/win-install-smoke.mjs --installer <Setup.exe> --out <目录>
  */
-import { spawn, spawnSync } from 'node:child_process'
+import { spawnSync } from 'node:child_process'
 import {
   appendFileSync,
-  cpSync,
+  copyFileSync,
   existsSync,
   mkdirSync,
   readdirSync,
@@ -121,6 +121,28 @@ export function descendantsOf(rows, root) {
     frontier = next
   }
   return out
+}
+
+/**
+ * 递归拷一个目录（拷日志用）。**不用 `fs.cpSync`**：CI（Windows、Node 22）上它碰到带中文的路径
+ * （`agentsws-smoke-数据`）整个进程以 0xC0000409（fail-fast）崩掉、一行字都不留——WP218 第一次真跑的
+ * exit 127、WP225 第一次跑卸载前那次崩，都在这一步。这里一层层 readdir + copyFileSync，走的是普通的宽字符 API。
+ * 源目录不在就什么都不做；回拷了几个文件。
+ */
+export function copyDirSync(from, to) {
+  if (!existsSync(from)) return 0
+  let n = 0
+  mkdirSync(to, { recursive: true })
+  for (const entry of readdirSync(from, { withFileTypes: true })) {
+    const a = join(from, entry.name)
+    const b = join(to, entry.name)
+    if (entry.isDirectory()) n += copyDirSync(a, b)
+    else if (entry.isFile()) {
+      copyFileSync(a, b)
+      n += 1
+    }
+  }
+  return n
 }
 
 /** NSIS 静默安装的参数：`/D=` 必须在最后、不能带引号（所以调用时用 windowsVerbatimArguments）。 */
@@ -424,12 +446,16 @@ async function main() {
     // 收拾掉，后面的卸载才查得下去（结果照样算失败）
     for (const p of left) spawnSync('taskkill.exe', ['/PID', String(p.ProcessId), '/T', '/F'])
   }
-  cpSync(join(userData, 'logs'), join(out, 'logs'), { recursive: true, force: true })
+  step(`日志拷出来了：${copyDirSync(join(userData, 'logs'), join(out, 'logs'))} 个文件`)
 
   // 5. 静默卸载：文件没被占用、用户数据还在
   const uninstaller = readdirSync(dir).find((f) => /^Uninstall .*\.exe$/i.test(f))
   if (uninstaller === undefined) throw new Error('安装目录里没有卸载程序')
-  spawn(join(dir, uninstaller), ['/S'], { detached: true, stdio: 'ignore' }).unref()
+  step(`开始静默卸载：${uninstaller}`)
+  // 等它自己回来（NSIS 卸载程序会把自己抄到临时目录再起一份、随即返回，所以下面照样等 exe 消失）；
+  // 不用 detached + unref：父进程不再留一个没人管的子进程句柄
+  const un = spawnSync(join(dir, uninstaller), ['/S'], { windowsHide: true, timeout: 120_000 })
+  step(`卸载程序返回：${describeExit(un.status, un.signal)}`)
   for (let i = 0; i < 60 && existsSync(exe); i += 1) await sleep(1000)
   if (existsSync(exe)) throw new Error('静默卸载 60 秒后程序还在')
   if (!existsSync(join(userData, 'config.json'))) throw new Error('卸载把用户数据也删了')

@@ -1,6 +1,10 @@
 /** WP218：Windows 装起来真跑那个脚本里的纯函数（真跑只在 CI 的 windows-latest 上）。 */
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
+  copyDirSync,
   descendantsOf,
   describeExit,
   exposedListeners,
@@ -125,5 +129,23 @@ describe('win-install-smoke 纯函数', () => {
 
   it('NSIS 静默安装：/D= 在最后、不带引号', () => {
     expect(installerArgs('C:\\P\\智能体 工坊')).toEqual(['/S', '/D=C:\\P\\智能体 工坊'])
+  })
+})
+
+describe('WP225：拷日志不用 fs.cpSync（Windows 上带中文路径会 fail-fast）', () => {
+  it('一层层拷：子目录、中文名都在；源目录不在就什么都不做', () => {
+    const root = mkdtempSync(join(tmpdir(), 'wp225-copy-数据 '))
+    try {
+      const from = join(root, '日志')
+      mkdirSync(join(from, '场景 一'), { recursive: true })
+      writeFileSync(join(from, 'desktop.log'), 'a')
+      writeFileSync(join(from, '场景 一', 'server.log'), '中文')
+      const to = join(root, 'out', 'logs')
+      expect(copyDirSync(from, to)).toBe(2)
+      expect(readFileSync(join(to, '场景 一', 'server.log'), 'utf8')).toBe('中文')
+      expect(copyDirSync(join(root, '没有'), join(root, 'x'))).toBe(0)
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
   })
 })

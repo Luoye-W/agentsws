@@ -17,7 +17,6 @@
  */
 import { spawnSync } from 'node:child_process'
 import {
-  cpSync,
   createReadStream,
   existsSync,
   mkdirSync,
@@ -31,6 +30,7 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
+  copyDirSync,
   describeExit,
   dirAliases,
   freePort,
@@ -219,7 +219,7 @@ async function main() {
   // 7. 收拾：新版本是安装程序起的（没有 Playwright 的把手），按目录结束进程
   for (const p of processesUnder(processTable(), dirAliases(dir)))
     spawnSync('taskkill.exe', ['/PID', String(p.ProcessId), '/T', '/F'])
-  cpSync(join(userData, 'logs'), join(out, 'logs'), { recursive: true, force: true })
+  copyDirSync(join(userData, 'logs'), join(out, 'logs'))
   feed.close()
   step('全部通过')
 }
@@ -235,7 +235,7 @@ if (process.argv[1] !== undefined && resolve(process.argv[1]).toLowerCase() === 
       writeFileSync(join(out, 'error.txt'), `${text}\n`)
       // 失败也把日志带出来（N 或 N+1 写的都在默认用户数据目录里）
       const ud = join(process.env.APPDATA ?? tmpdir(), '@agentsws', 'desktop', 'logs')
-      if (existsSync(ud)) cpSync(ud, join(out, 'logs'), { recursive: true, force: true })
+      copyDirSync(ud, join(out, 'logs'))
     } catch {
       // 尽力而为
     }
