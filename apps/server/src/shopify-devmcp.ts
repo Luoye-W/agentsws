@@ -24,7 +24,9 @@
  */
 import { spawn } from 'node:child_process'
 import type { ToolDef } from '@agentsws/contracts'
+import { killTree } from './kill-tree.js'
 import { PASSTHROUGH_ENV } from './shopify-theme.js'
+import { cliSpawnSpec } from './win-cli.js'
 
 /** 对模型暴露的三个名字（**我们的**，不是上游的）。 */
 export const DOCS_TOOL = 'shopify.docs.search'
@@ -170,10 +172,13 @@ const TOOL_DEFS: readonly ToolDef[] = [
 
 function defaultSpawn(): SpawnMcp {
   return (command, args, opts) => {
-    const child = spawn(command, [...args], {
+    // WP225：Windows 上 `npx` 是 `npx.cmd`，经 cmd.exe 起（见 win-cli.ts）
+    const spec = cliSpawnSpec(command, args, { env: opts.env })
+    const child = spawn(spec.command, spec.args, {
       env: opts.env,
       stdio: ['pipe', 'pipe', 'pipe'],
       windowsHide: true,
+      ...(spec.windowsVerbatimArguments === true ? { windowsVerbatimArguments: true } : {}),
     })
     const listeners: ((line: string) => void)[] = []
     let buffer = ''
@@ -187,7 +192,7 @@ function defaultSpawn(): SpawnMcp {
     return {
       send: (line) => child.stdin?.write(`${line}\n`),
       onLine: (cb) => listeners.push(cb),
-      close: () => child.kill(),
+      close: () => killTree(child),
       exited: new Promise<number>((resolve) => {
         child.on('close', (code) => resolve(code ?? 0))
         child.on('error', () => resolve(-1))
