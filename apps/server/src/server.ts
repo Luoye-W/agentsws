@@ -96,6 +96,7 @@ import {
   PLACEHOLDER_OWNER_EMAIL,
   PR_ROLE_IDS,
   REDDIT_READ_HOSTS,
+  resolveDataCreditBudget,
   SOCIAL_ROLE_IDS,
   skillOnPlatform,
   socialChannelSpec,
@@ -3289,6 +3290,13 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
                     limiter: redditReadLimiterOf(readonlyBrowser),
                   }),
               nowMs: () => Date.parse(clock.now()),
+              /*
+               * WP236 ⑨：每次运行的取数积分预算（职责阈值 `data_credits_per_run`，缺省 3）；
+               * 按价目表把条数收进剩下的预算（取不到价就不收，只按实花的记账）。
+               */
+              creditBudget: (req) =>
+                resolveDataCreditBudget(roles.roles.get(req.actor.role_id)?.thresholds),
+              priceOf: async (capability) => (await ownCloud.priceOf(capability))?.credits,
             }),
             /*
              * WP153（09-26 真账号冒烟 §3）：店主的「列岗位 / 列连接」两个只读工具。

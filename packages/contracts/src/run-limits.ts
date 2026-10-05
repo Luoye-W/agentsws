@@ -152,3 +152,19 @@ export function cancelledEvent(signal: AbortSignal | undefined): {
     ? { type: 'run.cancelled', reason: r as RunCancelReason }
     : { type: 'run.cancelled' }
 }
+
+/* ── WP236 ⑨：每次运行的数据接口积分预算 ───────────────────────────────── */
+
+/**
+ * 每次运行给数据接口（接口中台）的积分预算。缺省 3 积分；职责阈值 `data_credits_per_run` 可调。
+ * 用到 {@link DATA_CREDIT_WARN_RATIO} 提示模型收尾；用完就停止取数、照实说「这次取数预算用完了」。
+ */
+export const DEFAULT_DATA_CREDITS_PER_RUN = 3
+export const DATA_CREDITS_THRESHOLD = 'data_credits_per_run'
+export const DATA_CREDIT_WARN_RATIO = 0.8
+
+/** 职责阈值里的预算（正数才算数，小数可以），否则缺省 3。 */
+export function resolveDataCreditBudget(thresholds?: Record<string, number> | undefined): number {
+  const v = thresholds?.[DATA_CREDITS_THRESHOLD]
+  return typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : DEFAULT_DATA_CREDITS_PER_RUN
+}

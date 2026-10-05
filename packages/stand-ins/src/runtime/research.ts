@@ -14,17 +14,30 @@ export const READ_REDDIT_TOOL = 'read_reddit'
 
 export const RESEARCH_TOOL_NAMES: readonly string[] = [READ_REDDIT_TOOL]
 
+/**
+ * WP236：不给 `limit` 时取几条。原来不给就走接口中台的缺省（25 条）——10-06 真机一次「看一眼」
+ * 五次搜索花了约 6.7 积分。先少取、看清了再加大。
+ */
+export const READ_REDDIT_DEFAULT_LIMIT = 10
+
 export const RESEARCH_TOOL_DEFS: readonly ToolDef[] = [
   {
     name: READ_REDDIT_TOOL,
     description:
       '只读 Reddit：按关键词搜帖子（action=search）、读一个版最近的帖子（posts）、读一条帖子和它的评论（comments）。' +
+      'action 可以不填：给了 query 就是 search，给了 subreddit 就是 posts，给了 post_url 就是 comments。' +
+      `走接口中台按条计积分（约 0.05 积分一条；不填 limit 就取 ${READ_REDDIT_DEFAULT_LIMIT} 条，约 0.5 积分）——先少取，看清了再按需加大；` +
+      '同一个问题换词搜别超过 3 次，这次运行的取数预算快用完时会提醒你收尾。' +
       '走这个品牌设置的 Reddit 取数路由（接口中台 → 浏览器只读），每条带链接与时间，另附一条「从哪一路取的、命中缓存没有」。' +
       '两路都没取到会照实说原因——那不是「0 条」。不发帖、不回帖、不点赞。',
     input_schema: {
       type: 'object',
       properties: {
-        action: { type: 'string', enum: ['search', 'posts', 'comments'] },
+        action: {
+          type: 'string',
+          enum: ['search', 'posts', 'comments'],
+          description: '可不填：有 query → search，有 subreddit → posts，有 post_url → comments',
+        },
         query: { type: 'string', description: '搜什么（search 必填）' },
         subreddit: {
           type: 'string',
@@ -32,10 +45,14 @@ export const RESEARCH_TOOL_DEFS: readonly ToolDef[] = [
         },
         time_window: { type: 'string', enum: ['day', 'week', 'month', 'year', 'all'] },
         sort: { type: 'string' },
-        limit: { type: 'number', minimum: 1, maximum: 100 },
+        limit: {
+          type: 'number',
+          minimum: 1,
+          maximum: 100,
+          description: `取几条，缺省 ${READ_REDDIT_DEFAULT_LIMIT}；按条计积分，先少取`,
+        },
         post_url: { type: 'string', description: '帖子地址（comments 必填）' },
       },
-      required: ['action'],
     },
   },
 ]
