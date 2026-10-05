@@ -3366,6 +3366,8 @@ export interface OnboardingPlanView {
   /** 真时清单第一条固定是"接模型"：平台连得再全也没人替你干活。 */
   model_first: boolean
   role_ids: string[]
+  /** WP216：品牌的平台有官方 CLI、勾的职责里有要用它的——向导最后问一句「要现在装吗？」。 */
+  platform_cli?: { id: string; label: string; position_id: string; tutorial: string }
 }
 
 export interface OnboardingApplyView {
@@ -6389,3 +6391,75 @@ export async function fetchB2bQuotePdf(
   if (!res.ok) throw new ApiClientError(res.status, (await res.json()) as ApiErrorBody)
   return res.blob()
 }
+
+// ── WP216：平台专属那一套（官方技能 / 官方 MCP / 官方 CLI）────────────────────
+
+/** CLI 卡的四档：没装 / Node 不够 / 没登录 / 好了。 */
+export type PlatformCliState = 'missing' | 'node_old' | 'needs_login' | 'ready'
+
+export interface PlatformCliView {
+  spec: import('@agentsws/contracts').PlatformCliSpec
+  probe?: {
+    installed: boolean
+    version?: string
+    node_version?: string
+    node_ok: boolean
+    min_node_major: number
+    checked_at: string
+  }
+  login_confirmed_at?: string
+  state: PlatformCliState
+  /** CLI 不在 / 没登录时退回 Admin API 那条路的职责。 */
+  degraded_roles: string[]
+}
+
+export interface PlatformKitView {
+  /** 品牌的平台；没设（也推断不出）= 没有这一格。 */
+  platform?: string
+  /** 平台没设、又是建站岗位页：出一行「先选一下你的建站平台」。 */
+  choose_platform?: { choices: { key: string; label: string; supported: boolean }[] }
+  /** 平台那一行没有专属的东西 = null（界面上什么都不出）。 */
+  kit: null | {
+    skills: { name: string; display_name?: { zh: string; en: string } }[]
+    skill_source?: import('@agentsws/contracts').PlatformSkillSource
+    mcp?: import('@agentsws/contracts').PlatformMcpSpec & {
+      enabled: boolean
+      /** 官方工具包下载并起来了没（首次使用才下载）。 */
+      downloaded: boolean
+      tools: string[]
+    }
+    cli?: PlatformCliView
+  }
+}
+
+/** 在岗位页上选建站平台（负责人；用负责人那条分配）。 */
+export const setPlatformKitPlatform = (
+  input: { storefront_platform: string; position_id?: string },
+  assignment?: string,
+): Promise<PlatformKitView> =>
+  api('/v1/platform-kit/platform', { method: 'PUT', body: input, ...withAssignment(assignment) })
+
+/** 看这个品牌的平台套件；带 `position_id` 时 CLI 卡只在那一行写的岗位页上才检测。 */
+export const getPlatformKit = (
+  input: { position_id?: string } = {},
+  assignment?: string,
+): Promise<PlatformKitView> =>
+  api(
+    `/v1/platform-kit${input.position_id === undefined ? '' : `?position_id=${encodeURIComponent(input.position_id)}`}`,
+    withAssignment(assignment),
+  )
+
+/** 「再查一次」：装好 CLI 之后点它（不走缓存）。 */
+export const checkPlatformCli = (assignment?: string): Promise<PlatformKitView> =>
+  api('/v1/platform-kit/cli/check', { method: 'POST', ...withAssignment(assignment) })
+
+/** 「我登好了」/ 撤回：只记一个时间，不碰任何凭据。 */
+export const confirmPlatformCliLogin = (
+  confirmed: boolean,
+  assignment?: string,
+): Promise<PlatformKitView> =>
+  api('/v1/platform-kit/cli/login', {
+    method: 'PUT',
+    body: { confirmed },
+    ...withAssignment(assignment),
+  })

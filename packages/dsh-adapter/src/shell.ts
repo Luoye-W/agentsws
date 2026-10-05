@@ -21,6 +21,7 @@
  */
 import { isAbsolute, join, relative, resolve } from 'node:path'
 import type { RunRequest, RunShell } from '@agentsws/contracts'
+import { platformCliTelemetryOffEnv } from '@agentsws/contracts'
 import type { Context } from '@deepseek-ai/cordis'
 import SandboxBashExecutor from '@deepseek-ai/dsh-bash-sandbox'
 import {
@@ -611,8 +612,13 @@ export interface ShellCredentialPlan {
  */
 export function shellCredentialPlan(shell: RunShell): ShellCredentialPlan {
   return {
-    literals:
-      shell.store === undefined || shell.store === '' ? {} : { [THEME_STORE_ENV]: shell.store },
+    literals: {
+      // WP216：平台官方 CLI 的使用统计一律关掉（`PLATFORM_KITS` 里每个 CLI 写的那几个变量）
+      ...platformCliTelemetryOffEnv(),
+      ...(shell.store === undefined || shell.store === ''
+        ? {}
+        : { [THEME_STORE_ENV]: shell.store }),
+    },
     refs: { ...(shell.env_refs ?? {}) },
     records:
       shell.token_record === undefined || shell.token_record === ''

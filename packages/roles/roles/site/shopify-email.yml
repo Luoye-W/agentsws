@@ -72,7 +72,10 @@ grounding:
       prefetch: false,
     }
 
-skills: []
+skills:
+  # WP216：Shopify 官方技能——通知邮件模板就是 Liquid，写之前读它的 liquid 那一段。按需（理由同网页模板）；
+  # 只在品牌平台是 Shopify 时加载（`PLATFORM_KITS`）。
+  - { name: shopify, tier: open, load: on_demand }
 
 home_blocks:
   - {

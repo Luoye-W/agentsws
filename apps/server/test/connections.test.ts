@@ -1098,3 +1098,34 @@ describe('WP44 出站防护给人话（代理 fake-IP）', () => {
     }
   })
 })
+
+describe('WP216（Fable 10-05）：没设建站平台、但连了 Shopify 店铺 → 推断为 Shopify 并写回档案', () => {
+  it('没设也没连：平台套件什么都没有；连上 Shopify：启用、写回档案、事件记「推断」', async () => {
+    // 档案建好但不写平台
+    const put = await api('/v1/workspace/profile', {
+      method: 'PUT',
+      body: JSON.stringify({ legal_name: '一家还没选平台的店' }),
+    })
+    expect(put.status, await put.clone().text()).toBe(200)
+    const before = await data<{ platform?: string; kit: unknown }>(await api('/v1/platform-kit'))
+    expect(before).toEqual({ kit: null })
+
+    await post('/v1/connections/shopify_admin/submit', DEV_APP)
+    const after = await data<{ platform?: string; kit: { skills: { name: string }[] } | null }>(
+      await api('/v1/platform-kit'),
+    )
+    expect(after.platform).toBe('shopify')
+    expect(after.kit?.skills.map((s) => s.name)).toEqual(['shopify'])
+    const events = await allEvents()
+    const set = events.filter((e) => e.type === 'workspace.storefront_platform_set')
+    expect(set.at(-1)?.payload).toEqual({
+      storefront_platform: 'shopify',
+      source: 'inferred_from_connection',
+    })
+    // 写回之后档案里就有了：下一次读不再推断（不会再记一笔）
+    await api('/v1/platform-kit')
+    expect(
+      (await allEvents()).filter((e) => e.type === 'workspace.storefront_platform_set'),
+    ).toHaveLength(set.length)
+  })
+})
