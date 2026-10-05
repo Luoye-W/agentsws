@@ -145,7 +145,7 @@ CLI 没装不是错误：`status()` 回 `installed: false` 加一条能直接复
 | 成立 | 放行 | |
 | Dev MCP 起不来 / 结果读不懂 | **放行但记 `shopify.graphql_unvalidated`**，审批卡上标明"没经过官方校验" | 校验是加固，不是门禁；真门禁在 15 的账本那一侧。但读不懂**绝不判成"通过"**——那等于把幻觉洗成官方背书 |
 
-默认**不起**（要联网 `npx` 拉包），`AGENTSWS_SHOPIFY_DEVMCP=1` 打开。
+默认**不起**（要联网 `npx` 拉包），`AGENTSWS_SHOPIFY_DEVMCP=1` 打开。**WP216 起改为默认开、首次使用才下载、只给平台是 Shopify 的品牌；`AGENTSWS_SHOPIFY_DEVMCP=0` 关**（见 docs/59 §7）。
 起不来时 `toolDefs()` 回空数组——模型不该看见一个它调不了的工具。
 
 ---

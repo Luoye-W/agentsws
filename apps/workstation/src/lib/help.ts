@@ -25,6 +25,8 @@ export const HELP_SLUGS = [
   'search-data',
   // WP157：连接页（每类连接一篇，能合并的合并）
   'conn-shopify',
+  // WP216：建站平台的官方 CLI（只给 Shopify 品牌；卡在连接页与建站岗位页）
+  'shopify-cli',
   'conn-email',
   'conn-google',
   'conn-meta',
@@ -77,6 +79,7 @@ export const HELP_SCOPES: Readonly<Record<HelpSlug, HelpScope>> = {
   },
   'computer-use': { positions: [], roles: [] },
   'search-data': { positions: ['web-ops', 'dtc-ops'], roles: ['dtc.content'] },
+  'shopify-cli': { positions: ['site'], roles: ['site.shopify-theme'] },
   'conn-shopify': {
     positions: ['dtc-ops', 'web-ops', 'customer-care', 'site'],
     roles: [

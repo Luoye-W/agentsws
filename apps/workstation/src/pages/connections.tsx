@@ -25,6 +25,8 @@ import { ConnectedRow } from '@/components/connections/connected-row'
 import { DataBackend } from '@/components/connections/data-backend'
 // WP83（54（将改号 55）§4 第一层）：按分类 + 搜索的「添加连接」，默认收起
 import { ConnectionDirectorySection } from '@/components/connections/directory'
+// WP216：建站平台的官方 CLI 卡（平台没有 CLI 就不出）
+import { PlatformCliCard } from '@/components/connections/platform-cli-card'
 import { ProviderCard, type WizardPhase } from '@/components/connections/provider-card'
 import { RuntimeBar } from '@/components/connections/runtime-bar'
 // WP155（docs/81）：「搜索数据」一行（官方用积分 / 自带 key / 不接）
@@ -295,6 +297,12 @@ export function ConnectionsPage(): React.ReactNode {
           </ul>
         )}
       </section>
+
+      {/*
+        WP216：建站平台的官方 CLI（Shopify 品牌才有；别的平台服务端回 kit: null，这里什么都不画）。
+        排在已连接下面：它和「已连接」是同一类问题——这台电脑上的工具接好了没有。
+      */}
+      <PlatformCliCard {...(ownerId === undefined ? {} : { assignment: ownerId })} />
 
       {/*
         WP83（54 §4）：目录二十多条，多数人一辈子只连三四个——所以它默认收起、

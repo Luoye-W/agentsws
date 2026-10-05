@@ -85,6 +85,8 @@ grounding:
       prefetch: false,
     }
 
+# WP216：Shopify 官方技能**不挂**这一条——它讲的是自己开发 App（Functions / Polaris / 扩展），
+# 这条职责管的是装 / 配别人家的 App，用不上。
 skills: []
 
 home_blocks:
