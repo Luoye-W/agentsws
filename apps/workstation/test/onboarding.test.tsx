@@ -885,13 +885,13 @@ describe('70 §3 第 ② 步：贴一个网址', () => {
     await user.click(screen.getByTestId('intake-no-site'))
 
     const person = await screen.findByTestId('onboarding-person')
-    // 名字与登录邮箱直接带出来，不用再填一遍
+    // 名字直接带出来，不用再填一遍；账号是一行只读字（WP233：不再是一格输入框）
     expect((within(person).getByTestId('person-name') as HTMLInputElement).value).toBe('王岚')
-    expect((within(person).getByTestId('person-email') as HTMLInputElement).value).toBe(
-      'wang@nordvolt.cn',
+    expect(within(person).getByTestId('person-account').textContent).toBe(
+      '你的账号：wang@nordvolt.cn',
     )
-    // 登录邮箱是身份，只读；名字是展示名，能改
-    expect((within(person).getByTestId('person-email') as HTMLInputElement).readOnly).toBe(true)
+    expect(within(person).queryByTestId('person-email')).toBeNull()
+    // 名字是展示名，能改
     expect((within(person).getByTestId('person-name') as HTMLInputElement).readOnly).toBe(false)
 
     const name = within(person).getByTestId('person-name')
@@ -1897,5 +1897,90 @@ describe('WP142 第 ④ 步：只列必需的，可选的折起来；技能包�
       .map((el) => el.querySelector('p')?.textContent)
     expect(names).toEqual(['品牌话术', '工作台基础', '一个专用技能包'])
     expect(screen.getByTestId('onboarding-plan').textContent).not.toMatch(/[a-z]+-[a-z]+/)
+  })
+})
+
+describe('WP233 第 ② 步「你的账号」与「公司邮箱后缀」', () => {
+  it('关联了云账号：显示「你的账号：<云账号邮箱>」，不出 owner@localhost', async () => {
+    state.state = { ...STATE, person: { name: 'owner', email: 'owner@localhost' } }
+    // 局域网上没人：「加入一家公司」折成那一行「已有邀请码？」
+    state.peers = { ...PEERS, peers: [] }
+    state.account = {
+      linked: true,
+      email: 'boss@inmoxr.com',
+      org_name: 'inmoxr',
+      expires_at: T0,
+      scopes: ['ai'],
+      linked_at: T0,
+      cloud_base_url: 'https://cloud.agentsws.dev',
+    }
+    const user = userEvent.setup()
+    renderWithProviders(<OnboardingPage />)
+    await passAi()
+    await user.click(screen.getByTestId('intake-no-site'))
+    const person = await screen.findByTestId('onboarding-person')
+    await waitFor(() => {
+      expect(within(person).getByTestId('person-account').textContent).toBe(
+        '你的账号：boss@inmoxr.com',
+      )
+    })
+    expect(person.textContent).not.toContain('owner@localhost')
+    // 「已有邀请码？」那一行还在
+    expect(screen.getByTestId('join-toggle').textContent).toContain('已有邀请码？')
+  })
+
+  it('没有云账号、本机还是占位邮箱：整行不出', async () => {
+    state.state = { ...STATE, person: { name: 'owner', email: 'owner@localhost' } }
+    const user = userEvent.setup()
+    renderWithProviders(<OnboardingPage />)
+    await passAi()
+    await user.click(screen.getByTestId('intake-no-site'))
+    const person = await screen.findByTestId('onboarding-person')
+    expect(within(person).queryByTestId('person-account')).toBeNull()
+    expect(document.body.textContent).not.toContain('owner@localhost')
+  })
+
+  it('后缀：叫「公司邮箱后缀」、占位与问号说清楚；从云账号 / 客服邮箱带出，公共邮箱不带', async () => {
+    renderWithProviders(
+      <ProfileForm
+        emailHint="owner@localhost"
+        suggestFrom={['me@gmail.com', 'support@inmoxr.com']}
+        busy={false}
+        saved={false}
+        onSave={() => undefined}
+      />,
+    )
+    const input = (await screen.findByTestId('company-domain')) as HTMLInputElement
+    expect(screen.getByText('公司邮箱后缀')).toBeTruthy()
+    expect(input.placeholder).toBe('例如 inmoxr.com')
+    expect(screen.getByTestId('company-domain-hint').getAttribute('data-hint')).toBe(
+      '同事用这个后缀的邮箱申请加入时，更容易认出是同一家公司；进来仍要你同意。可不填',
+    )
+    expect(input.value).toBe('inmoxr.com')
+  })
+
+  it('后缀：只有公共邮箱 / 占位时那一格空着', async () => {
+    renderWithProviders(
+      <ProfileForm
+        emailHint="owner@localhost"
+        suggestFrom={['me@qq.com', 'x@163.com', 'y@outlook.com']}
+        busy={false}
+        saved={false}
+        onSave={() => undefined}
+      />,
+    )
+    expect(((await screen.findByTestId('company-domain')) as HTMLInputElement).value).toBe('')
+  })
+
+  it('后缀：误填整个邮箱时只留 @ 后面那段，存的也是后缀', async () => {
+    const user = userEvent.setup()
+    const saved: { domain: string }[] = []
+    renderWithProviders(<ProfileForm busy={false} saved={false} onSave={(d) => saved.push(d)} />)
+    const input = (await screen.findByTestId('company-domain')) as HTMLInputElement
+    await user.type(input, 'wang@InmoXR.com')
+    expect(input.value).toBe('inmoxr.com')
+    await user.type(screen.getByTestId('company-legal-name'), '深圳映墨科技')
+    await user.click(screen.getByTestId('company-save'))
+    expect(saved.at(-1)?.domain).toBe('inmoxr.com')
   })
 })

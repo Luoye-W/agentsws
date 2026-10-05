@@ -287,6 +287,11 @@ export type KnownEventType =
    */
   | 'cloud.account_linked'
   | 'cloud.account_unlinked'
+  /**
+   * WP233：本机负责人的登录邮箱从占位改成了云账号邮箱（`PersonEmailChangedPayload`）。
+   * 同上一条纪律：payload 只有两头的**域名**与 person_id。
+   */
+  | 'person.email_changed'
   // privacy (21)
   | 'privacy.erased'
   // meetings (37 §4)：payload 只有摘要与条数，转写与音频永不进日志

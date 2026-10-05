@@ -145,6 +145,12 @@ export interface LocalIdentityService extends IdentityService, Organizations {
     brand_name?: string
   }): Promise<Workspace>
   personByEmail(email: string): Person | undefined
+  /** WP233：见契约 `IdentityService.changePersonEmail`；本地两档都实现。 */
+  changePersonEmail(
+    id: PersonId,
+    email: string,
+    options?: { keep_old_as_alias?: boolean },
+  ): Promise<Person>
   workspacesOf(person_id: PersonId): Workspace[]
   issue(
     kind: TokenKind,
@@ -227,6 +233,20 @@ export const DEFAULT_INVITE_TTL = 24 * 60 * 60 * 1000
 
 const normalizeEmail = (email: string): string => email.trim().toLowerCase()
 
+/**
+ * WP233：换了邮箱的那个人——`email` 与 `local` 那条身份的 `external_id` 一起换，
+ * 其余（id、名字、别的 provider、建档时间）一个不动。两档身份服务共用。
+ */
+export function changedEmail(person: Person, email: string): Person {
+  return {
+    ...person,
+    email,
+    identities: person.identities.map((i) =>
+      i.provider === 'local' && i.external_id === person.email ? { ...i, external_id: email } : i,
+    ),
+  }
+}
+
 /** 邮箱 → 一个能看的名字（没填名字时的兜底，不猜真名）。 */
 export function nameFromEmail(email: string): string {
   return normalizeEmail(email).split('@')[0] ?? 'member'
@@ -246,6 +266,8 @@ export class MemoryIdentityService implements LocalIdentityService {
   readonly #sessionTtl: number
   readonly #people = new Map<PersonId, Person>()
   readonly #byEmail = new Map<string, PersonId>()
+  /** WP233：改过邮箱的人，旧地址（`keep_old_as_alias`）仍指回他。 */
+  readonly #aliases = new Map<string, PersonId>()
   readonly #workspaces = new Map<WorkspaceId, Workspace>()
   readonly #members = new Map<WorkspaceId, Membership[]>()
   readonly #tokens = new Map<string, TokenRow>()
@@ -334,11 +356,9 @@ export class MemoryIdentityService implements LocalIdentityService {
   async createPerson(input: { email: string; name: string; id?: PersonId }): Promise<Person> {
     const email = input.email.trim().toLowerCase()
     if (email === '' || !email.includes('@')) throw new ApiError('invalid_input', 'email 不合法')
-    const existing = this.#byEmail.get(email)
-    if (existing !== undefined) {
-      const person = this.#people.get(existing)
-      if (person) return person
-    }
+    // WP233：按旧地址（别名）来认也算同一个人——启动时按占位邮箱认 owner 就靠这一条
+    const existing = this.personByEmail(email)
+    if (existing !== undefined) return existing
     const person: Person = {
       id: input.id ?? this.#id('per'),
       email,
@@ -364,8 +384,31 @@ export class MemoryIdentityService implements LocalIdentityService {
   }
 
   personByEmail(email: string): Person | undefined {
-    const id = this.#byEmail.get(email.trim().toLowerCase())
+    const key = email.trim().toLowerCase()
+    const id = this.#byEmail.get(key) ?? this.#aliases.get(key)
     return id === undefined ? undefined : this.#people.get(id)
+  }
+
+  async changePersonEmail(
+    id: PersonId,
+    email: string,
+    options?: { keep_old_as_alias?: boolean },
+  ): Promise<Person> {
+    const person = this.#people.get(id)
+    if (person === undefined) throw new ApiError('not_found', `人不存在：${id}`)
+    const next = normalizeEmail(email)
+    if (next === '' || !next.includes('@')) throw new ApiError('invalid_input', 'email 不合法')
+    if (next === person.email) return person
+    const holder = this.personByEmail(next)
+    if (holder !== undefined && holder.id !== id)
+      throw new ApiError('conflict', '这个邮箱已经是别人的了')
+    const changed = changedEmail(person, next)
+    this.#people.set(id, changed)
+    this.#byEmail.delete(person.email)
+    this.#byEmail.set(next, id)
+    this.#aliases.delete(next)
+    if (options?.keep_old_as_alias === true) this.#aliases.set(person.email, id)
+    return changed
   }
 
   async createWorkspace(input: {

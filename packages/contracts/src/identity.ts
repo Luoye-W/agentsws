@@ -164,6 +164,20 @@ export interface IdentityService {
    * 展示名（不是登录邮箱），本人可改；只改 `name`，其余字段一个不碰。空名或超长由路由层拒。
    */
   renamePerson(id: PersonId, name: string): Promise<Person>
+  /**
+   * WP233：改一个人的登录邮箱（目前只有一处用：本机负责人从占位邮箱改成云账号邮箱）。
+   *
+   * **可选**：只实现最小面的身份服务没有它，调用方探测不到就不改。
+   * 人的 id 不变，所以成员、分配、会话、审计（都按 `person_id` 记）一条都不断；
+   * `keep_old_as_alias` 为真时旧地址仍能找到这个人（`personByEmail` / 登录），
+   * 于是还在用旧地址的地方（启动时按邮箱认 owner、桌面壳换会话）照常工作。
+   * 新邮箱已经是**别人**的 → `conflict`；不合法 → `invalid_input`。
+   */
+  changePersonEmail?(
+    id: PersonId,
+    email: string,
+    options?: { keep_old_as_alias?: boolean },
+  ): Promise<Person>
   createWorkspace(input: {
     name: string
     owner_id: PersonId
@@ -464,4 +478,105 @@ export interface MembershipRequest {
   person_id?: PersonId
   /** 46 I3：两边互相申请时后批的那一条为什么自动失效。 */
   superseded_reason?: string
+}
+
+// ── WP233：本机负责人的占位邮箱、与云账号对齐、公司邮箱后缀 ─────────────────
+
+/**
+ * 本机模式没给 `AGENTSWS_OWNER_EMAIL` 时，服务进程给负责人（owner）起的**占位**登录邮箱。
+ *
+ * 它只是一个内部键，不是谁的真邮箱——界面上一律不出现（WP233，Luoye 10-05 真机：
+ * 第 ② 步看见「登录邮箱：owner@localhost」，以为第 ① 步填的没生效）。
+ * 关联了云账号之后，本机负责人的邮箱改成那个云账号邮箱（见 {@link PersonEmailChangedPayload}）。
+ */
+export const PLACEHOLDER_OWNER_EMAIL = 'owner@localhost'
+
+/** 这是不是那个占位邮箱（大小写、首尾空白不敏感）。 */
+export function isPlaceholderOwnerEmail(email: string | undefined): boolean {
+  return email !== undefined && email.trim().toLowerCase() === PLACEHOLDER_OWNER_EMAIL
+}
+
+/**
+ * WP233：本机负责人的登录邮箱改了（目前只有一种：占位邮箱 → 刚关联上的云账号邮箱）。
+ *
+ * 与 `cloud.account_linked` 同一条纪律：**只记域名**，邮箱本地部分一个字节都不进日志（21 §1）。
+ * `reason`：`cloud_account_linked` = 第 ① 步刚关联上；`cloud_account_backfill` = 老工作区
+ * 启动时补的那一次（早就关联了，但邮箱还是占位）。
+ */
+export interface PersonEmailChangedPayload {
+  person_id: PersonId
+  from_domain: string
+  to_domain: string
+  reason: 'cloud_account_linked' | 'cloud_account_backfill'
+}
+
+/**
+ * 公共邮箱的后缀：用这些邮箱的人不等于"一家公司"，所以「公司邮箱后缀」**不从它们带出**。
+ * 只是一张常见表，不求全——漏掉的那几个用户自己清空那一格就是。
+ */
+export const PUBLIC_EMAIL_DOMAINS: readonly string[] = [
+  'gmail.com',
+  'googlemail.com',
+  'outlook.com',
+  'hotmail.com',
+  'live.com',
+  'msn.com',
+  'yahoo.com',
+  'icloud.com',
+  'me.com',
+  'aol.com',
+  'proton.me',
+  'protonmail.com',
+  'gmx.de',
+  'web.de',
+  'mail.ru',
+  'yandex.ru',
+  'qq.com',
+  'foxmail.com',
+  '163.com',
+  '126.com',
+  'yeah.net',
+  'sina.com',
+  'sina.cn',
+  'sohu.com',
+  'aliyun.com',
+  '139.com',
+  '189.cn',
+]
+
+/**
+ * 「公司邮箱后缀」那一格**只收域名**：用户误填整个邮箱时截 `@` 后面那段，
+ * 顺手去掉首尾空白、开头的 `@`、`http(s)://`、`www.` 与路径，统一小写。
+ * 与服务端归一化（`normalizeDomain`）同一套规矩，这一份是给界面用的（不依赖 Node）。
+ */
+export function companyEmailSuffix(raw: string): string {
+  let s = raw.trim().toLowerCase()
+  s = s.replace(/^[a-z]+:\/\//, '')
+  s = s.replace(/^.*@/, '')
+  s = s.replace(/^www\./, '')
+  s = s.replace(/[/?#].*$/, '')
+  return s.trim()
+}
+
+/** 这个后缀能不能当「公司」的后缀带出来：不是公共邮箱、不是占位、像一个真域名。 */
+export function isCompanyEmailSuffix(domain: string): boolean {
+  const d = companyEmailSuffix(domain)
+  if (d === '' || !d.includes('.') || d.endsWith('.')) return false
+  if (d === 'localhost' || d.endsWith('.localhost') || d.endsWith('.local')) return false
+  return !PUBLIC_EMAIL_DOMAINS.includes(d)
+}
+
+/**
+ * 从几个邮箱里挑第一个能当公司后缀的（WP233：云账号邮箱在前，品牌客服邮箱在后）。
+ * 全是公共邮箱 / 占位 / 空的时候返回 `undefined`——那一格就空着，不瞎带。
+ */
+export function suggestCompanyEmailSuffix(
+  emails: readonly (string | undefined)[],
+): string | undefined {
+  for (const email of emails) {
+    if (email === undefined || !email.includes('@')) continue
+    const d = companyEmailSuffix(email)
+    if (isCompanyEmailSuffix(d)) return d
+  }
+  return undefined
 }

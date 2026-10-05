@@ -99,6 +99,21 @@ describe('SQLite 档 · 落盘特性', () => {
     expect(await second.authenticate(dead.token)).toBeUndefined()
   })
 
+  it('WP233 身份表：改过的邮箱与旧地址别名重启后都在（按占位邮箱建人仍是同一个）', async () => {
+    const dbPath = join(dir, 'identity.sqlite')
+    const clock = testClock()
+    const first = new SqliteIdentityService({ dbPath, clock, random: seeded(7) })
+    const owner = await first.createPerson({ email: 'owner@localhost', name: 'owner' })
+    await first.changePersonEmail(owner.id, 'boss@corp.cn', { keep_old_as_alias: true })
+    first.close()
+
+    const second = track(new SqliteIdentityService({ dbPath, clock, random: seeded(7) }))
+    expect((await second.getPerson(owner.id))?.email).toBe('boss@corp.cn')
+    const again = await second.createPerson({ email: 'owner@localhost', name: 'owner' })
+    expect(again.id).toBe(owner.id)
+    expect(again.email).toBe('boss@corp.cn')
+  })
+
   it('身份表：重启后 id 序号不撞号（序号也落盘）', async () => {
     const dbPath = join(dir, 'identity.sqlite')
     const clock = testClock()
