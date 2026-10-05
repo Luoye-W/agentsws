@@ -164,7 +164,7 @@ agency-agents 是一套**写得很用心的「人设 + 做法」提示词库**�
 | 4 | **客户声音**：把评价、客服来信、评论区、退货原因汇成「这个月客户在抱怨什么、夸什么」，回给 listing、详情页、广告文案和产品 | 我们客服、社媒、店铺评价各自处理单条，没有人看「同一个问题来了 40 次」；`audience-research` 是去外面挖原话，不看自己家的 | `product-feedback-synthesizer`（收集 → 归类 → 打分 → 交付）、退货角色的原因码表 | 技能 `voice-of-customer` + `dtc.store` 一个每月动作；退货原因码先在 `returns-policy-calc` 里统一，后面才汇得起来 |
 | 5 | **实验与转化率**：一次只改一处、改之前算样本量、不中途偷看就停、写清假设与回滚 | 改价、换主图、换邮件主题、换广告素材都是实验，现在没有任何「怎么判这次改得好不好」的规矩，容易一两天的波动就下结论 | `project-management-experiment-tracker`（硬规矩 8 条、实验设计单）、增长黑客的漏斗拆法 | 技能 `experiments`，挂 `dtc.store`、`dtc.content`、`dtc.email-marketing`、投放四条 |
 | 6 | **本地化**：listing / 详情页 / 邮件 / 广告的多语种，母语审校，按市场改单位、尺码、节日、禁忌 | 机翻 listing 转化差是行业共识；我们 `brand-voice` 只管「用客户的语言回」 | 跨境通才的「本地化原则」四条、翻译角色的「按意思不按字」「标出正式 / 非正式」「医疗法律不猜」 | 技能 `localization`，挂内容、店铺、邮件、投放、社媒；**出卡时标「机翻未审」**，这条进卡片而不是只进提示 |
-| 7 | **广告账户体检**：结构、追踪、出价、素材、商品 feed、落地页逐项打分，按严重度排 | 投放职责现在会止损、会对账，但没有「新接手一个账户先体检一遍」这件事 | `paid-media-auditor`（六大块、严重度四级、每条带影响与改法）、`paid-media-tracking-specialist` | 技能 `ads-audit`，挂投放四条；体检结果是一张只读报告卡 |
+| 7 | **广告账户体检**：结构、追踪、出价、素材、商品 feed、落地页逐项打分，按严重度排 | 投放职责现在会止损、会对账，但没有「新接手一个账户先体检一遍」这件事 | `paid-media-auditor`（八块、严重度四级、每条带影响与改法）、`paid-media-tracking-specialist` | 技能 `ads-audit`，挂投放四条；体检结果是一张只读报告卡 |
 
 排在后面、本轮不建议做的：**短视频成片**（设计岗只做图，§7 #4）、**直播带货**（等 TikTok Shop 排上）、**选品与趋势**（产品范围问题，§7 #3）、**财务对账**（等 Amazon 运营与 SP-API）、**B2B 大客户健康分**（B2B 岗位先把询盘到报价跑通）。
 
@@ -338,7 +338,7 @@ MIT 允许改写、商用、再分发，条件只有一条：**保留版权声�
 | 3 | `specialized/retail-customer-returns.md` | 退货原因码、例外留痕、「同一政策对每个客户一样执行」、不当面指控 | `returns-policy-calc`（§3.5 示例 2）、`customer-care` 一句 | 门店验货 / 收银 / 现金退款 / 处置流程；「欺诈嫌疑」只留内部标记 |
 | 4 | `marketing/marketing-email-strategist.md` | 每条自动流程写**退出条件**（买了、退订、硬退信、投诉、长期不活跃）；看点击与转化、不拿打开率当成绩（苹果邮件隐私保护让打开率虚高）；交易邮件里不夹营销；同意留记录（日期、方式、来源、范围）；流程设计单格式 | `email-sms` 加一节「流程设计单」与「退出条件」 | 「2025 年平均打开率 43.46%」等无出处数；CRM 字段映射模板 |
 | 5 | `marketing/marketing-ai-citation-strategist.md` | 硬规矩六条（多平台都查、永不保证被引用、AEO 与 SEO 分开、先测基线再改、按影响排、各平台分开看）；「丢失问法分析」与「修复包」两个格式 | `seo-judgment` 的 AI 可见度一节 | 「30 天引用率 +20%」等目标 |
-| 6 | `paid-media/paid-media-auditor.md`、`paid-media-tracking-specialist.md` | 体检六大块（结构 / 追踪 / 出价预算 / 关键词与受众 / 素材 / 商品 feed 与落地页）、严重度四级、每条写影响与改法；追踪那几项（转化动作、归因窗口、服务端事件） | 新技能 `ads-audit`，挂投放四条 | 「200+ 检查点」的说法（原文没有列全）；Google Ads MCP 的工具段 |
+| 6 | `paid-media/paid-media-auditor.md`、`paid-media-tracking-specialist.md` | 体检八块（结构 / 追踪 / 出价预算 / 关键词与受众 / 素材 / 商品 feed / 竞争位置 / 落地页）、严重度四级、每条写影响与改法；追踪那几项（转化动作、归因窗口、服务端事件） | 新技能 `ads-audit`，挂投放四条 | 「200+ 检查点」的说法（原文没有列全）；Google Ads MCP 的工具段 |
 | 7 | `project-management/project-management-experiment-tracker.md`（+ `marketing-growth-hacker.md` 的漏斗拆法） | 硬规矩八条（先算样本量、随机分组、不中途偷看就停、多组比较要校正、写回滚）、实验设计单 | 新技能 `experiments` | 「每月 10 个实验」「30% 胜率」等 |
 | 8 | `product/product-feedback-synthesizer.md` | 收集 → 归类 → 打分 → 交付四步、按主题聚而不是按单条 | 新技能 `voice-of-customer` | 这份正文很薄（118 行），主要只借结构；所有准确率目标 |
 | 9 | `support/support-executive-summary-generator.md`（+ `support-analytics-reporter.md` 的硬规矩） | 五段格式（情况 / 发现 / 影响 / 建议 / 下一步）与每段字数、「每条发现带一个数」「不越过给定数据做假设」；报表那份的「先验数据、写来源与假设」 | 新技能 `weekly-review`（老板一页纸）；复盘卡的格式 | 麦肯锡 / BCG / 贝恩的名头；「≤ 500 词」改成中文字数 |
