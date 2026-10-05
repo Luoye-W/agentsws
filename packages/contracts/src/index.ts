@@ -31,6 +31,8 @@ export * from './computer-use.js'
 export * from './connect.js'
 // 54（将改号 55）§4 第一层：连接目录（按职责模板的 `kind` 登记的总表，WP83）
 export * from './connection-directory.js'
+// WP219（docs/90）：第三方内容更新（内容包格式、签名常量、卡与设置）
+export * from './content-updates.js'
 export * from './data.js'
 // WP192（docs/83 §4）：官方数据接口的统一能力口（同步调用 + 异步任务）
 export * from './data-service.js'
@@ -60,7 +62,6 @@ export * from './messages.js'
 export * from './model.js'
 // WP180：官方插件（装 / 升级 / 卸载出卡、只从审过的清单装）与配置写回
 export * from './official-plugins.js'
-export * from './content-updates.js'
 export * from './packages.js'
 // 60 §1 / §2 公共关系的四条职责与四个对象（WP78）。与 social.ts 一条都不共用：
 // `social.reddit` 是**我们自己的** subreddit，`pr.reddit` 是**别人的**。
