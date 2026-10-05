@@ -9,7 +9,12 @@
  */
 import { readdirSync } from 'node:fs'
 import { join } from 'node:path'
-import { DESIGN_CAPS, DESIGN_ROLE_IDS, designDutyOfRole } from '@agentsws/contracts'
+import {
+  DESIGN_CAPS,
+  DESIGN_ROLE_IDS,
+  designDutyForSource,
+  designDutyOfRole,
+} from '@agentsws/contracts'
 import { describe, expect, it } from 'vitest'
 import {
   BUNDLED_ROLES_DIR,
@@ -147,6 +152,11 @@ describe('三条「向设计岗下需求单」是独立段落', () => {
     'b2b.exhibition',
     'social.facebook',
     'social.instagram',
+    // WP222（91 §3.3 第 3 条）：投放四条要新素材 / 改素材时向设计岗下单（→ `design.ads`）
+    'ads.meta',
+    'ads.google',
+    'ads.tiktok',
+    'ads.x',
   ]
 
   it('三条都加上了，动作与自动化等级一致', () => {
@@ -163,6 +173,8 @@ describe('三条「向设计岗下需求单」是独立段落', () => {
     expect(designDutyOfRole('design.dtc')?.request_sources).toContain('dtc.store')
     expect(designDutyOfRole('design.social')?.request_sources).toContain('social.meta')
     expect(designDutyOfRole('design.social')?.request_sources).toContain('kol.youtube')
+    for (const id of ['ads.meta', 'ads.google', 'ads.tiktok', 'ads.x'])
+      expect(designDutyForSource(id)?.role_id, id).toBe('design.ads')
   })
 
   it('只动了这三个文件——别的职责一条 request_design 都没有', () => {

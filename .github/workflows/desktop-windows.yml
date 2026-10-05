@@ -93,7 +93,8 @@ jobs:
           node apps/desktop/scripts/win-install-smoke.mjs --installer "$installer" --out win-smoke
 
       - name: 上传安装包（只是这次运行的 artifact，不是发布）
-        if: success()
+        # 冒烟没过也传：安装包本身打出来了，拿去真机上查问题（10-05 Fable）
+        if: always() && hashFiles('apps/desktop/release/Agents-Workshop-Setup-*.exe') != ''
         uses: actions/upload-artifact@v4
         with:
           name: agentsws-windows-x64
