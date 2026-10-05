@@ -98,7 +98,9 @@ describe('WP220 两份研究技能：格式与出处', () => {
         expect(skill.markdown).toContain('接口中台')
         expect(skill.markdown).toContain('浏览器只读')
         expect(skill.markdown).toContain('绝不用品牌发帖账号的会话')
-        expect(skill.markdown).toContain('网页抓取不开 Reddit、X 的页面')
+        // Luoye 10-05：官方网页抓取可以打开 Reddit / X 的公开页面（不用品牌账号）
+        expect(skill.markdown).toMatch(/Reddit、X 的(单条)?公开页面/)
+        expect(skill.markdown).toContain('不用任何品牌账号')
         expect(skill.markdown).toContain('还没接')
       })
 

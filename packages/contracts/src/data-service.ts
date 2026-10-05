@@ -21,7 +21,6 @@
 
 import type { DataSourceLevel, RedditBrowserReadLimits } from './cloud-entry.js'
 import type { Iso8601 } from './common.js'
-import { hostAllowed } from './run.js'
 
 /** 令牌要带的动作集：与公共红人库、搜索数据同一个 `data`。 */
 export const DATA_SERVICE_SCOPE = 'data' as const
@@ -855,28 +854,4 @@ export interface ResearchFetchRecord {
   /** 花了多少积分（接口中台那一路才有）。 */
   credits?: number
   attempts: ResearchFetchAttempt[]
-}
-
-/**
- * 官方网页抓取（`web_fetch`）**不许直接打开**的平台：它们的内容要走各自的取数路由
- * （Reddit 走 {@link REDDIT_READ_ROUTE_KEY} 那两路；X 只认官方接口与搜索结果摘要），
- * 不能拿网页抓取绕过去。搜索结果里出现这些站的链接照样可以引用（那是搜索引擎给的摘要）。
- */
-export const WEB_FETCH_PLATFORM_HOSTS: Readonly<Record<string, readonly string[]>> = {
-  reddit: ['*.reddit.com', '*.redd.it'],
-  x: ['*.x.com', '*.twitter.com', 't.co'],
-}
-
-/** 这个地址是不是上面那几个平台的（是就回平台名，`web_fetch` 那一跳要拒）。 */
-export function webFetchPlatformOf(url: string): string | undefined {
-  let host: string
-  try {
-    host = new URL(url).hostname
-  } catch {
-    return undefined
-  }
-  for (const [platform, hosts] of Object.entries(WEB_FETCH_PLATFORM_HOSTS)) {
-    if (hostAllowed(host, hosts)) return platform
-  }
-  return undefined
 }

@@ -14,7 +14,6 @@ import {
   REDDIT_READ_ROUTE_KEY,
   REDDIT_READ_ROUTE_LEVELS,
   RESEARCH_FETCH_ROUTES,
-  webFetchPlatformOf,
 } from '../src/index.js'
 
 describe('WP220 Reddit 取数路由', () => {
@@ -86,17 +85,5 @@ describe('WP220 研究取数白名单', () => {
       'browser_readonly',
       'official_api',
     ])
-  })
-
-  it('网页抓取不许直接打开 Reddit / X（含子域与短链），别的站不管', () => {
-    expect(webFetchPlatformOf('https://www.reddit.com/r/foo/comments/1')).toBe('reddit')
-    expect(webFetchPlatformOf('https://old.reddit.com/r/foo')).toBe('reddit')
-    expect(webFetchPlatformOf('https://redd.it/abc')).toBe('reddit')
-    expect(webFetchPlatformOf('https://x.com/inmo/status/1')).toBe('x')
-    expect(webFetchPlatformOf('https://mobile.twitter.com/a')).toBe('x')
-    expect(webFetchPlatformOf('https://t.co/abc')).toBe('x')
-    expect(webFetchPlatformOf('https://www.theverge.com/a')).toBeUndefined()
-    expect(webFetchPlatformOf('https://notreddit.com/a')).toBeUndefined()
-    expect(webFetchPlatformOf('不是网址')).toBeUndefined()
   })
 })

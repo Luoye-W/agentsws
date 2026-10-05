@@ -98,6 +98,20 @@ export const RESEARCH_SOURCES: readonly ResearchSource[] = [
   },
   {
     platform: 'reddit',
+    route: 'web_fetch',
+    capability: 'web.fetch',
+    what: '官方网页抓取打开一条公开帖子细看（普通读网页，不用任何品牌账号；Luoye 10-05 放开）',
+    status: 'ready',
+  },
+  {
+    platform: 'x',
+    route: 'web_fetch',
+    capability: 'web.fetch',
+    what: '官方网页抓取打开一条公开的 X 页面（普通读网页，不用任何品牌账号；Luoye 10-05 放开）',
+    status: 'ready',
+  },
+  {
+    platform: 'reddit',
     route: 'browser_readonly',
     capability: 'reddit.read',
     what: '本机浏览器只读打开 Reddit 页面（单独的只读会话、限速）',
