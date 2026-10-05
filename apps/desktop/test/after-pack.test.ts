@@ -8,9 +8,11 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import ts from 'typescript'
 import { afterAll, describe, expect, it } from 'vitest'
 import {
   ARCH_NAMES,
+  copyLockFiles,
   fillMissingDependencies,
   findNativeModules,
   installedNames,
@@ -19,9 +21,12 @@ import {
   PROFILE_DIR,
   PROFILE_FILES,
   planNativeSwap,
+  probeBundled,
+  repoLockFiles,
   resourcesDirOf,
   runtimeDependencyNames,
   targetOf,
+  unreachableLockFiles,
   WORKSTATION_DIR,
 } from '../scripts/after-pack.mjs'
 
@@ -285,5 +290,111 @@ describe('WP181：审过的官方插件清单与锁定 patch 在包里', () => {
     for (const name of PROFILE_FILES) {
       expect(existsSync(join(desktop, '..', '..', 'profiles', 'agentsws', name)), name).toBe(true)
     }
+  })
+})
+
+describe('WP225：钉版本表齐', () => {
+  const repo = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..')
+
+  it('仓库根上按名字规矩收（computer-use / browserskill 两份都在，别的 json 不收）', () => {
+    const names = repoLockFiles(repo)
+    expect(names).toContain('computer-use.lock.json')
+    expect(names).toContain('browserskill.lock.json')
+    expect(names.every((n: string) => n.endsWith('.lock.json'))).toBe(true)
+    const fake = scratch()
+    writeFileSync(join(fake, 'a.lock.json'), '{}')
+    writeFileSync(join(fake, 'package.json'), '{}')
+    writeFileSync(join(fake, 'pnpm-lock.yaml'), '')
+    writeFileSync(join(fake, 'Weird.lock.json'), '{}')
+    expect(repoLockFiles(fake)).toEqual(['a.lock.json'])
+  })
+
+  it('抄进 <resources>/ 之后，照服务进程的找法从包里 dist 往上找得到；没抄就报出来', () => {
+    const resources = scratch()
+    const appDir = join(resources, 'app')
+    mkdirSync(join(appDir, 'node_modules', '@agentsws', 'server', 'dist'), { recursive: true })
+    const names = ['computer-use.lock.json', 'browserskill.lock.json']
+    expect(unreachableLockFiles(appDir, resources, names)).toEqual(names)
+    copyLockFiles(repo, resources, names)
+    expect(unreachableLockFiles(appDir, resources, names)).toEqual([])
+    expect(readFileSync(join(resources, names[0] as string), 'utf8')).toBe(
+      readFileSync(join(repo, names[0] as string), 'utf8'),
+    )
+  })
+
+  it('找到的不在安装包里（打包机上往上找到了别处那份）也算没带', () => {
+    const outer = scratch()
+    const resources = join(outer, 'resources')
+    const appDir = join(resources, 'app')
+    mkdirSync(join(appDir, 'node_modules', '@agentsws', 'server', 'dist'), { recursive: true })
+    writeFileSync(join(outer, 'x.lock.json'), '{}')
+    expect(unreachableLockFiles(appDir, resources, ['x.lock.json'])).toEqual(['x.lock.json'])
+  })
+})
+
+describe('WP225：冒烟用包里那份代码取 autoUpdater、找钉版本表', () => {
+  const desktop = join(dirname(fileURLToPath(import.meta.url)), '..')
+
+  /** 摆一个最小的「安装包」：app/dist 里放主进程那份取 autoUpdater 的代码（现转译）、两个假依赖。 */
+  function fakePackage(updaterSource: string): { resources: string; appDir: string } {
+    const resources = scratch()
+    const appDir = join(resources, 'app')
+    writePackage(appDir, { name: 'app', type: 'module' })
+    const src = readFileSync(join(desktop, 'src', 'electron-updater-module.ts'), 'utf8')
+    const js = ts.transpileModule(src, {
+      compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
+    }).outputText
+    mkdirSync(join(appDir, 'dist'), { recursive: true })
+    writeFileSync(join(appDir, 'dist', 'electron-updater-module.js'), js)
+    const eu = join(appDir, 'node_modules', 'electron-updater')
+    writePackage(eu, { name: 'electron-updater', main: 'main.js' })
+    writeFileSync(join(eu, 'main.js'), updaterSource)
+    const server = join(appDir, 'node_modules', '@agentsws', 'server')
+    writePackage(server, { name: '@agentsws/server', type: 'module', main: './dist/index.js' })
+    mkdirSync(join(server, 'dist'), { recursive: true })
+    writeFileSync(join(server, 'dist', 'index.js'), 'export function createServer() {}\n')
+    writeFileSync(
+      join(server, 'dist', 'computer-use-install.js'),
+      [
+        "import { existsSync } from 'node:fs'",
+        "import { dirname, join } from 'node:path'",
+        "import { fileURLToPath } from 'node:url'",
+        'export function defaultLockPath() {',
+        '  let dir = dirname(fileURLToPath(import.meta.url))',
+        '  for (let i = 0; i < 8; i += 1) {',
+        "    const c = join(dir, 'computer-use.lock.json')",
+        '    if (existsSync(c)) return c',
+        '    dir = dirname(dir)',
+        '  }',
+        '}',
+      ].join('\n'),
+    )
+    return { resources, appDir }
+  }
+
+  // 照 electron-updater 的 main.js：getter 一读就要 electron（捆绑 Node 里没有）
+  const realShape = [
+    "Object.defineProperty(exports, '__esModule', { value: true })",
+    "Object.defineProperty(exports, 'autoUpdater', { enumerable: true, get: () => require('electron') })",
+  ].join('\n')
+
+  it('取得到、钉版本表在包里：updater ok / locks ok / probe ok', () => {
+    const { resources, appDir } = fakePackage(realShape)
+    writeFileSync(join(resources, 'computer-use.lock.json'), '{}')
+    const out = probeBundled(process.execPath, appDir, [])
+    expect(out).toContain('updater ok')
+    expect(out).toContain('locks ok')
+    expect(out).toContain('probe ok')
+  })
+
+  it('包里那份 electron-updater 没有 autoUpdater：冒烟失败（打包随之失败）', () => {
+    const { resources, appDir } = fakePackage('exports.NsisUpdater = class {}\n')
+    writeFileSync(join(resources, 'computer-use.lock.json'), '{}')
+    expect(() => probeBundled(process.execPath, appDir, [])).toThrow(/取不到 autoUpdater/)
+  })
+
+  it('钉版本表没进包：冒烟失败', () => {
+    const { appDir } = fakePackage(realShape)
+    expect(() => probeBundled(process.execPath, appDir, [])).toThrow(/找不到钉版本表/)
   })
 })
