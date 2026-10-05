@@ -15,7 +15,8 @@
  * 那句"只交换一串哈希"是 36 §7 的**可见**档（安全承诺不许藏进 tooltip）：
  * 用户凭它决定要不要把开关打开。
  */
-import { useState } from 'react'
+import { companyEmailSuffix, suggestCompanyEmailSuffix } from '@agentsws/contracts'
+import { useEffect, useState } from 'react'
 import { MarketsPicker } from '@/components/onboarding/markets-picker'
 import { Button } from '@/components/ui/button'
 import { Hint, SafetyNote } from '@/components/ui/hint'
@@ -49,6 +50,7 @@ export interface ProfileDraft {
 export function ProfileForm({
   profile,
   emailHint,
+  suggestFrom,
   verticals,
   storefrontPlatforms,
   allowUnsupported = false,
@@ -59,8 +61,13 @@ export function ProfileForm({
   onSave,
 }: {
   profile?: WorkspaceProfileView
-  /** 登录邮箱——域名那一格从它带出来（46 §1 表 ①）。 */
+  /** 登录邮箱——后缀那一格从它带出来（46 §1 表 ①）。占位邮箱与公共邮箱不带。 */
   emailHint?: string
+  /**
+   * WP233：更多可以带出后缀的邮箱，按先后挑第一个公司邮箱（云账号邮箱、品牌客服邮箱）。
+   * 排在 `emailHint` 前面。gmail / qq / 163 / outlook 这类公共邮箱一律不带。
+   */
+  suggestFrom?: readonly (string | undefined)[]
   /**
    * 48 v2 L2「你卖的是」的两个选项与各自一句人话。
    * **从服务端来**（真源是客服共享包的垂直包），界面不自己写一份文案——
@@ -89,7 +96,7 @@ export function ProfileForm({
   onSave(draft: ProfileDraft): void
 }): React.ReactNode {
   const { t } = useApp()
-  const suggested = emailHint?.split('@')[1] ?? ''
+  const suggested = suggestCompanyEmailSuffix([...(suggestFrom ?? []), emailHint]) ?? ''
   const [draft, setDraft] = useState<ProfileDraft>({
     legal_name: profile?.legal_name ?? '',
     domain: profile?.domain ?? suggested,
@@ -100,6 +107,15 @@ export function ProfileForm({
     markets: profile?.markets ?? [],
     postal_address: profile?.postal_address ?? '',
   })
+  /**
+   * WP233：建议值可能晚到（云账号、品牌分析是各自查回来的）。用户没动过、档案里也没存过、
+   * 那一格还空着的时候，补上晚到的建议值；动过一次就再也不替他改。
+   */
+  const [domainTouched, setDomainTouched] = useState(false)
+  useEffect(() => {
+    if (domainTouched || profile?.domain !== undefined || suggested === '') return
+    setDraft((prev) => (prev.domain === '' ? { ...prev, domain: suggested } : prev))
+  }, [domainTouched, profile?.domain, suggested])
   /** 选中的那一条「你卖的是」——它那一句人话是这一栏**唯一**出的解释（WP79 ⑤）。 */
   const pickedVertical = verticals?.find((v) => v.key === draft.vertical)
 
@@ -137,15 +153,24 @@ export function ProfileForm({
         <div className="flex flex-col gap-1">
           <Label htmlFor="company-domain" className="flex items-center gap-1">
             {t('onboarding.company.domain')}
-            <Hint text={t('onboarding.company.domain.hint')} />
+            <Hint text={t('onboarding.company.domain.hint')} testId="company-domain-hint" />
           </Label>
           <Input
             id="company-domain"
             data-testid="company-domain"
             value={draft.domain}
-            placeholder="nordvolt.cn"
+            placeholder={t('onboarding.company.domain.placeholder')}
             onChange={(e) => {
-              setDraft({ ...draft, domain: e.target.value })
+              // WP233：只收后缀——误填整个邮箱时当场截 @ 后面那段
+              const raw = e.target.value
+              setDomainTouched(true)
+              setDraft({
+                ...draft,
+                domain: raw.includes('@') ? companyEmailSuffix(raw) : raw.toLowerCase(),
+              })
+            }}
+            onBlur={() => {
+              setDraft((prev) => ({ ...prev, domain: companyEmailSuffix(prev.domain) }))
             }}
           />
         </div>
@@ -400,7 +425,7 @@ export function ProfileForm({
           data-testid="company-save"
           disabled={busy || draft.legal_name.trim() === ''}
           onClick={() => {
-            onSave(draft)
+            onSave({ ...draft, domain: companyEmailSuffix(draft.domain) })
           }}
         >
           {/* WP79 ⑥：向导里保存完就进下一步，所以按钮说的是「保存并继续」 */}

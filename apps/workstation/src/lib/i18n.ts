@@ -4,6 +4,7 @@
  * 不上重库：一张 key 表 + 一个 `t()`。key 的命名与服务端给的 `label_key` 对齐
  * （证据芯片只出 key，不出裸枚举——36 §2.3）。
  */
+import { CLOUD_AUTH_EN, CLOUD_AUTH_ZH } from './i18n-cloud-auth'
 import { LIBRARY_EN, LIBRARY_ZH } from './i18n-library'
 
 export type Lang = 'zh' | 'en'
@@ -1155,6 +1156,7 @@ const zh: Table = {
   'settings.motion.on': '开',
   'settings.motion.off': '关',
   'settings.identity': '身份',
+  'identity.local_self': '你（本机）',
   'settings.placeholder': '这台机器上的偏好；连接在左栏的「连接」里。',
   // ── WP20 连接向导 ──────────────────────────────────────────────
   'nav.connections': '连接',
@@ -2625,9 +2627,10 @@ const zh: Table = {
   'onboarding.company.legal_name.placeholder': '深圳诺伏特科技有限公司',
   'onboarding.company.legal_name.hint':
     '写营业执照上的全称，别写简称。同事那边写法稍有出入没关系——多打的空格、大小写、"有限公司"这类尾缀都会自动对齐。',
-  'onboarding.company.domain': '公司邮箱域名',
+  'onboarding.company.domain': '公司邮箱后缀',
+  'onboarding.company.domain.placeholder': '例如 inmoxr.com',
   'onboarding.company.domain.hint':
-    '可以不填。填了的话"同一家公司"认得更准（名字对上、域名也对上才算强匹配）。',
+    '同事用这个后缀的邮箱申请加入时，更容易认出是同一家公司；进来仍要你同意。可不填',
   'onboarding.company.vertical': '你卖的是',
   'onboarding.company.vertical.hint':
     '选错了 AI 会说外行话：实物那一套会张口就问订单号、背退货窗口；虚拟产品那一套问的是注册邮箱、讲的是套餐与扣费。随时能在设置页改。',
@@ -2647,6 +2650,7 @@ const zh: Table = {
   'onboarding.company.empty': '公司全称还没填。',
   'onboarding.person.name': '你的名字',
   'onboarding.person.email': '登录邮箱',
+  'onboarding.person.account': '你的账号：{email}',
   'onboarding.person.hint': '名字是给同事和 AI 看的，可以直接改；登录邮箱是你的身份，改不了。',
   'onboarding.roles.pick_position': '勾一个岗位 = 它包含的职责全勾上',
   'onboarding.roles.expand': '展开，只勾其中几条',
@@ -4840,6 +4844,7 @@ const en: Table = {
   'settings.motion.on': 'On',
   'settings.motion.off': 'Off',
   'settings.identity': 'Identity',
+  'identity.local_self': 'You (this computer)',
   'settings.placeholder': 'Preferences on this machine. Connections live under “Connections”.',
   'nav.connections': 'Connections',
   'connections.dead_letters': '{n} message(s) never made it in',
@@ -6348,9 +6353,10 @@ const en: Table = {
   'onboarding.company.legal_name.placeholder': 'NordVolt Technology Co., Ltd.',
   'onboarding.company.legal_name.hint':
     'Use the name on the business licence, not a short form. It is fine if a colleague types it slightly differently — extra spaces, casing and suffixes like "Co., Ltd." are lined up automatically.',
-  'onboarding.company.domain': 'Company email domain',
+  'onboarding.company.domain': 'Company email suffix',
+  'onboarding.company.domain.placeholder': 'e.g. inmoxr.com',
   'onboarding.company.domain.hint':
-    'Optional. With it, "same company" is judged more precisely — name and domain both matching is a strong match.',
+    'When colleagues ask to join with an email on this suffix, they are easier to recognise as the same company; they still need your approval. Optional.',
   'onboarding.company.platform': 'What your site is built with',
   'onboarding.company.platform.hint':
     'Only Shopify works today — every read and write for the store goes through its admin API. The others are greyed out and marked "coming": WooCommerce is next, and Magento has no connector yet. Picking "Something else" means no store connection at all, so this position keeps only the parts that do not need the platform. You can change it later under Settings.',
@@ -6366,6 +6372,7 @@ const en: Table = {
   'onboarding.company.empty': 'The company name is still empty.',
   'onboarding.person.name': 'Your name',
   'onboarding.person.email': 'Sign-in email',
+  'onboarding.person.account': 'Your account: {email}',
   'onboarding.person.hint':
     'Your display name — edit it here. The sign-in email is your identity and cannot be changed.',
   'onboarding.roles.pick_position': 'Ticking a position ticks all of its duties',
@@ -7487,8 +7494,8 @@ const en: Table = {
 
 // WP209：技能 / 知识分组的词条在自己的文件里（`i18n-library.ts`），这里并进来
 const TABLES: Record<Lang, Table> = {
-  zh: { ...zh, ...LIBRARY_ZH },
-  en: { ...en, ...LIBRARY_EN },
+  zh: { ...zh, ...LIBRARY_ZH, ...CLOUD_AUTH_ZH },
+  en: { ...en, ...LIBRARY_EN, ...CLOUD_AUTH_EN },
 }
 
 export function translate(lang: Lang, key: string, vars?: Record<string, string | number>): string {

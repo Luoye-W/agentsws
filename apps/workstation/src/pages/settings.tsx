@@ -7,6 +7,7 @@
  * 模型留在这里而不是另开一页：接模型是**一次性的**（填一把 key 就完了），
  * 之后只会偶尔来看一眼花了多少；连接是要长期管的（试连、重新授权、断开）。
  */
+import { isPlaceholderOwnerEmail } from '@agentsws/contracts'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
@@ -32,8 +33,10 @@ import { Separator } from '@/components/ui/separator'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   ApiClientError,
+  getCloudAccount,
   getOnboardingState,
   getPositions,
+  latestBrandIntake,
   listOrganizations,
   setWorkspaceProfile,
 } from '@/lib/api'
@@ -88,6 +91,23 @@ export function SettingsPage({
     if (hash !== '#diagnostics' || ownerId === undefined) return
     document.getElementById('diagnostics')?.scrollIntoView?.({ block: 'start' })
   }, [hash, ownerId])
+  /*
+   * WP233：「公司邮箱后缀」的建议值从云账号邮箱 / 品牌客服邮箱带出（公共邮箱不带）。
+   * 两样都是顺手查一下，查不到就不带——不挡这一页。
+   */
+  const cloudAccount = useQuery({
+    queryKey: ['cloud-account', ownerId],
+    queryFn: () => getCloudAccount(ownerId),
+    enabled: ownerId !== undefined,
+    retry: false,
+  })
+  const intake = useQuery({
+    queryKey: ['brand-intake', 'latest', ownerId],
+    queryFn: () => latestBrandIntake(ownerId),
+    enabled: ownerId !== undefined,
+    retry: false,
+  })
+  const supportEmail = intake.data?.profile.support_email?.value
   const orgs = useQuery({ queryKey: ['orgs'], queryFn: () => listOrganizations(), retry: false })
   const org = orgs.data?.[0]
   const save = useMutation({
@@ -201,7 +221,13 @@ export function SettingsPage({
             {identity === undefined ? null : (
               <div className="flex items-center justify-between">
                 <span>{t('settings.identity')}</span>
-                <span className="font-mono text-xs text-muted-foreground">{identity}</span>
+                {/* WP233：本机占位邮箱不露出来 */}
+                <span
+                  className="font-mono text-xs text-muted-foreground"
+                  data-testid="settings-identity"
+                >
+                  {isPlaceholderOwnerEmail(identity) ? t('identity.local_self') : identity}
+                </span>
               </div>
             )}
             <Separator />
@@ -232,6 +258,10 @@ export function SettingsPage({
                   ? {}
                   : { profile: onboarding.data.profile })}
                 emailHint={onboarding.data.person.email}
+                suggestFrom={[
+                  cloudAccount.data?.linked === true ? cloudAccount.data.email : undefined,
+                  supportEmail,
+                ]}
                 verticals={onboarding.data.verticals}
                 storefrontPlatforms={onboarding.data.storefront_platforms}
                 allowUnsupported

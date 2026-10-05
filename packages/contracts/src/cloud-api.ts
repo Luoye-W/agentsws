@@ -242,6 +242,147 @@ export interface MagicLinkSent {
   delivered: 'email'
 }
 
+/* ── WP231：注册与登录分开（密码 + 邮箱验证码；老的 magic-link 照旧，老客户端不坏）──── */
+
+/**
+ * 条款版本 = 官网条款三页的生效日期（`apps/site/src/config.ts` 的 `LEGAL_EFFECTIVE_DATE`；
+ * `packages/contracts/test/wp231-signup.test.ts` 钉着两边一致）。改条款就两处一起改。
+ */
+export const LEGAL_TERMS_VERSION = '2026-10-05'
+
+/** 官网根地址（条款与隐私页在这里）。 */
+export const SITE_BASE_URL = 'https://agentsws.com'
+
+/** 注册时要同意的两页。 */
+export type LegalDocument = 'terms' | 'privacy'
+
+/** 界面与信用哪种语言。 */
+export type CloudAuthLocale = 'zh' | 'en'
+
+/** 官网条款页的地址：中文在根下，英文在 `/en/` 下。 */
+export function legalDocumentUrl(doc: LegalDocument, locale: CloudAuthLocale): string {
+  return `${SITE_BASE_URL}${locale === 'en' ? '/en' : ''}/${doc}/`
+}
+
+/** 密码最短几位。 */
+export const CLOUD_PASSWORD_MIN = 8
+/** 密码最长几位（挡超长输入把哈希拖慢）。 */
+export const CLOUD_PASSWORD_MAX = 128
+/** 邮箱验证码几位。 */
+export const CLOUD_OTP_LENGTH = 6
+/** 验证码多久有效（秒）。 */
+export const CLOUD_OTP_TTL_SECONDS = 300
+/** 一条验证码最多试几次（试满作废，要重发）。 */
+export const CLOUD_OTP_MAX_ATTEMPTS = 5
+
+/**
+ * 密码强度 0–4（界面上那根条；**只算分，不存密码**）。
+ * 0 = 不够 8 位；之后按「长度 ≥ 12」「大小写都有」「有数字」「有符号」各加一档，封顶 4。
+ */
+export function passwordStrength(password: string): 0 | 1 | 2 | 3 | 4 {
+  if (password.length < CLOUD_PASSWORD_MIN) return 0
+  let score = 1
+  if (password.length >= 12) score += 1
+  if (/[a-z]/u.test(password) && /[A-Z]/u.test(password)) score += 1
+  if (/\d/u.test(password)) score += 1
+  if (/[^A-Za-z0-9]/u.test(password)) score += 1
+  return Math.min(score, 4) as 0 | 1 | 2 | 3 | 4
+}
+
+/** 注册从哪儿来的（留证用）。 */
+export type CloudSignupSource = 'workstation' | 'web'
+
+/** 注册时勾的那一下。`accepted` 只能是 `true`——没勾就不该发请求。 */
+export interface CloudSignupConsent {
+  accepted: true
+  /** 同意的是哪一版条款（{@link LEGAL_TERMS_VERSION}）。 */
+  terms_version: string
+}
+
+/**
+ * `POST /v1/cloud/auth/signup`：名字 + 邮箱 + 密码 + 同意条款 → 发一封 6 位**注册验证码**。
+ * 邮箱已注册 → 409 `conflict`，`details.reason = 'already_registered'`，不发信。
+ * 验证码过了（`/signup/verify`）才真正建号并送注册积分；同意记录在那一刻落库。
+ */
+export interface CloudSignupRequest {
+  /** 名字或公司名（当组织名）。 */
+  name: string
+  email: string
+  /** 明文只在这一跳里（HTTPS），云上只存 PBKDF2 哈希；不进日志、事件、审计。 */
+  password: string
+  consent: CloudSignupConsent
+  source: CloudSignupSource
+  locale?: CloudAuthLocale
+  /** 人机验证（云上配了 Turnstile 且 `source = web` 时必填）。 */
+  turnstile_token?: string
+}
+
+/** 验证码发出去了（或者——登录 / 忘记密码对没注册的邮箱——**静默不发**，回包一样）。 */
+export interface CloudCodeSent {
+  expires_at: Iso8601
+  delivered: 'email'
+}
+
+/** `POST /v1/cloud/auth/signup/verify` 与 `/otp/verify`：邮箱 + 6 位码。 */
+export interface CloudCodeVerifyRequest {
+  email: string
+  code: string
+}
+
+/** `POST /v1/cloud/auth/otp`：发一封登录验证码（没注册的邮箱静默成功、不发信、不建号）。 */
+export interface CloudOtpRequest {
+  email: string
+  locale?: CloudAuthLocale
+}
+
+/** `POST /v1/cloud/auth/password`：密码登录。 */
+export interface CloudPasswordLoginRequest {
+  email: string
+  password: string
+}
+
+/** `POST /v1/cloud/auth/password/forgot`：发一封重置密码验证码（没注册的邮箱静默成功）。 */
+export interface CloudPasswordForgotRequest {
+  email: string
+  locale?: CloudAuthLocale
+}
+
+/** `POST /v1/cloud/auth/password/reset`：验证码 + 新密码。成功后这个账号别的会话全部失效。 */
+export interface CloudPasswordResetRequest {
+  email: string
+  code: string
+  new_password: string
+}
+
+/** `GET /v1/cloud/auth/config`：界面要知道的几样（没有任何密钥）。 */
+export interface CloudAuthConfig {
+  password_min: number
+  otp_length: number
+  otp_ttl_seconds: number
+  terms_version: string
+  /** 配了 Turnstile 才有（公开的 site key，不是 secret）。 */
+  turnstile_site_key?: string
+}
+
+/** 被拒时 `details.reason` 的几种值（界面据此给「一键切到登录 / 注册」等）。 */
+export type CloudAuthReason =
+  | 'already_registered'
+  | 'invalid_code'
+  | 'code_expired'
+  | 'too_many_attempts'
+  | 'bad_credentials'
+  | 'locked'
+  | 'weak_password'
+  | 'consent_required'
+  | 'captcha_required'
+
+/** 被拒时的 `details`。 */
+export interface CloudAuthReasonDetails {
+  reason: CloudAuthReason
+  /** `locked` / 限流时：还要等多少秒。 */
+  retry_after?: number
+}
+
 /** `POST /v1/cloud/auth/verify` 的请求。 */
 export interface MagicLinkVerifyRequest {
   /** 信里链接上的那串一次性 token。 */
@@ -266,6 +407,8 @@ export interface CloudSessionIssued {
   expires_at: Iso8601
   /** 第一次点开登录信才有（注册赠送）。 */
   bonus?: SignupBonusView
+  /** WP231：这一下是不是刚注册（注册验证码过了、账号是这一刻建的）。老云不回这一格。 */
+  registered?: boolean
 }
 
 /** `GET /v1/cloud/me`。 */
@@ -512,6 +655,112 @@ export interface CloudAccountApi {
       /** 信没发出去（照实说，不假装发出去了） */
       503: 'provider_unavailable'
     }
+    errorBody: CloudErrorBody
+  }
+  /** WP231：注册 / 登录界面要知道的几样（密码最短几位、验证码几位、条款版本、Turnstile 公开 key） */
+  'GET /v1/cloud/auth/config': {
+    auth: 'public'
+    tag: 'account'
+    ok: { status: 200; body: CloudOkEnvelope<CloudAuthConfig> }
+    errorBody: CloudErrorBody
+  }
+  /**
+   * WP231：注册——名字 + 邮箱 + 密码 + 同意条款，发一封 6 位注册验证码（5 分钟、最多试 5 次）
+   * 邮箱已注册 → 409 conflict（details.reason = already_registered），不发信。按邮箱 + IP 限流。
+   */
+  'POST /v1/cloud/auth/signup': {
+    auth: 'public'
+    tag: 'account'
+    headers: CloudIdempotencyHeaders
+    body: CloudSignupRequest
+    ok: { status: 200; body: CloudOkEnvelope<CloudCodeSent> }
+    errors: {
+      /** `details` 是 {@link CloudAuthReasonDetails}（weak_password / consent_required / captcha_required） */
+      400: 'invalid_input'
+      /** `conflict` 时 details.reason = already_registered */
+      409: 'conflict' | 'idempotency_conflict'
+      429: 'rate_limited'
+      503: 'provider_unavailable'
+    }
+    errorBody: CloudErrorBody
+  }
+  /** WP231：注册验证码过了 → 建号、送注册积分、记同意，回一张云账号会话（registered = true） */
+  'POST /v1/cloud/auth/signup/verify': {
+    auth: 'public'
+    tag: 'account'
+    headers: CloudIdempotencyHeaders
+    body: CloudCodeVerifyRequest
+    ok: { status: 200; body: CloudOkEnvelope<CloudSessionIssued> }
+    errors: {
+      400: 'invalid_input'
+      /** details.reason = invalid_code / code_expired / too_many_attempts */
+      401: 'unauthenticated'
+      409: 'conflict' | 'idempotency_conflict'
+      429: 'rate_limited'
+    }
+    errorBody: CloudErrorBody
+  }
+  /** WP231：发一封登录验证码。没注册的邮箱**静默成功**（不发信、不建号，回包一模一样）。按邮箱 + IP 限流 */
+  'POST /v1/cloud/auth/otp': {
+    auth: 'public'
+    tag: 'account'
+    headers: CloudIdempotencyHeaders
+    body: CloudOtpRequest
+    ok: { status: 200; body: CloudOkEnvelope<CloudCodeSent> }
+    errors: {
+      400: 'invalid_input'
+      409: 'idempotency_conflict'
+      429: 'rate_limited'
+      503: 'provider_unavailable'
+    }
+    errorBody: CloudErrorBody
+  }
+  /** WP231：登录验证码过了 → 一张云账号会话 */
+  'POST /v1/cloud/auth/otp/verify': {
+    auth: 'public'
+    tag: 'account'
+    headers: CloudIdempotencyHeaders
+    body: CloudCodeVerifyRequest
+    ok: { status: 200; body: CloudOkEnvelope<CloudSessionIssued> }
+    errors: CloudAccountErrors & { 409: 'idempotency_conflict' }
+    errorBody: CloudErrorBody
+  }
+  /**
+   * WP231：密码登录。邮箱没注册 / 密码不对 / 没设过密码一律同一句（details.reason = bad_credentials）；
+   * 连错多次临时锁定（429，details.reason = locked）
+   */
+  'POST /v1/cloud/auth/password': {
+    auth: 'public'
+    tag: 'account'
+    headers: CloudIdempotencyHeaders
+    body: CloudPasswordLoginRequest
+    ok: { status: 200; body: CloudOkEnvelope<CloudSessionIssued> }
+    errors: CloudAccountErrors & { 409: 'idempotency_conflict' }
+    errorBody: CloudErrorBody
+  }
+  /** WP231：忘记密码——发一封重置验证码（没注册的邮箱静默成功） */
+  'POST /v1/cloud/auth/password/forgot': {
+    auth: 'public'
+    tag: 'account'
+    headers: CloudIdempotencyHeaders
+    body: CloudPasswordForgotRequest
+    ok: { status: 200; body: CloudOkEnvelope<CloudCodeSent> }
+    errors: {
+      400: 'invalid_input'
+      409: 'idempotency_conflict'
+      429: 'rate_limited'
+      503: 'provider_unavailable'
+    }
+    errorBody: CloudErrorBody
+  }
+  /** WP231：验证码 + 新密码 → 设好新密码，这个账号别的会话全部失效，回一张新会话 */
+  'POST /v1/cloud/auth/password/reset': {
+    auth: 'public'
+    tag: 'account'
+    headers: CloudIdempotencyHeaders
+    body: CloudPasswordResetRequest
+    ok: { status: 200; body: CloudOkEnvelope<CloudSessionIssued> }
+    errors: CloudAccountErrors & { 409: 'idempotency_conflict' }
     errorBody: CloudErrorBody
   }
   /** 验一次性 token，换云账号会话（用过 / 过期 / 不存在一律 401 同一句话） */

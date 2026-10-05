@@ -295,6 +295,10 @@ const state = {
   /** 云账号：测试里靠改它模拟"用户去邮箱点了那条链接"。 */
   account: { linked: false, cloud_base_url: 'https://cloud.agentsws.dev' } as CloudAccountView,
   links: [] as string[],
+  /** WP231：注册那一跳收到的（名字、邮箱、密码）与验码。 */
+  signups: [] as { name: string; email: string; password: string }[],
+  signupVerifies: [] as { email: string; code: string }[],
+  signupConflict: false,
   credits: { linked: false } as CloudCreditsView,
   providers: [] as ModelProviderView[],
   savedProviders: [] as { id: string; input: { kind: string; model: string; api_key?: string } }[],
@@ -368,6 +372,36 @@ vi.mock('@/lib/api', async () => {
     }),
     getCloudAccount: async () => state.account,
     getCloudCredits: async () => state.credits,
+    // WP231：注册 / 登录（登录验证码那一跳沿用 WP142 的「挂着 / 连不上」开关）
+    cloudSignup: async (input: { name: string; email: string; password: string }) => {
+      state.signups.push({ name: input.name, email: input.email, password: input.password })
+      if (state.signupConflict)
+        throw new actual.ApiClientError(409, {
+          code: 'conflict',
+          message: '这个邮箱注册过了，直接登录。',
+          details: { reason: 'already_registered' },
+        })
+      return { expires_at: T0, delivered: 'email' as const }
+    },
+    cloudSignupVerify: async (input: { email: string; code: string }) => {
+      state.signupVerifies.push(input)
+      state.account = {
+        linked: true,
+        email: input.email,
+        cloud_base_url: 'https://cloud.agentsws.dev',
+      }
+      return { ...state.account, registered: true, bonus_credits: 10 }
+    },
+    cloudLoginCode: async (input: { email: string }) => {
+      state.links.push(input.email)
+      if (state.linkHold !== undefined) await state.linkHold
+      if (state.linkFail)
+        throw new actual.ApiClientError(503, {
+          code: 'provider_unavailable',
+          message: '网络不通，这一下没连上 Agents 工坊云。检查一下网络再试一次。',
+        })
+      return { expires_at: T0, delivered: 'email' as const }
+    },
     linkCloudAccount: async (email: string) => {
       state.links.push(email)
       if (state.linkHold !== undefined) await state.linkHold
@@ -437,6 +471,9 @@ beforeEach(() => {
   state.state = STATE
   state.account = { linked: false, cloud_base_url: 'https://cloud.agentsws.dev' }
   state.links = []
+  state.signups = []
+  state.signupVerifies = []
+  state.signupConflict = false
   state.credits = { linked: false }
   state.providers = []
   state.savedProviders = []
@@ -559,21 +596,65 @@ describe('70 §2 第 ① 步：接上 AI', () => {
     expect(screen.queryByTestId('ai-official-email')).toBeNull()
   })
 
-  it('官方接口：发登录信之后说"去邮箱点那条链接"，不跳转也不弹窗', async () => {
+  it('WP231 官方接口：默认是「注册新账号」；不勾条款按不动；注册 → 验证码 → 关联上', async () => {
     const user = userEvent.setup()
     renderWithProviders(<OnboardingPage />)
     await user.click(await screen.findByTestId('ai-pick-official'))
+    expect(screen.getByTestId('ai-official-auth').getAttribute('data-tab')).toBe('signup')
+    await user.type(screen.getByTestId('ai-official-name'), '北风电器')
     await user.type(screen.getByTestId('ai-official-email'), 'wang@nordvolt.cn')
-    await user.click(screen.getByTestId('ai-official-send'))
+    await user.type(screen.getByTestId('ai-official-password'), 'Sunflower-77')
+    // 强度条只看分数
+    expect(screen.getByTestId('ai-official-strength').getAttribute('data-score')).toBe('4')
+    const send = screen.getByTestId('ai-official-send') as HTMLButtonElement
+    expect(send.disabled).toBe(true)
+    await user.click(screen.getByTestId('ai-official-agree'))
+    expect(send.disabled).toBe(false)
+    await user.click(send)
 
     await waitFor(() => {
-      expect(state.links).toEqual(['wang@nordvolt.cn'])
+      expect(state.signups).toEqual([
+        { name: '北风电器', email: 'wang@nordvolt.cn', password: 'Sunflower-77' },
+      ])
     })
-    expect((await screen.findByTestId('ai-official-sent')).textContent).toContain(
-      '去邮箱点那条链接',
-    )
-    // 真正的下一步在用户的邮箱里：这一页这时还没接上
+    expect((await screen.findByTestId('ai-official-sent')).textContent).toContain('验证码')
+    // 密码一个字节都不留在页面上
+    expect(document.body.innerHTML).not.toContain('Sunflower-77')
+    // 真正的下一步在邮箱里：这时还没接上
     expect((screen.getByTestId('onboarding-next') as HTMLButtonElement).disabled).toBe(true)
+
+    await user.type(screen.getByTestId('ai-official-code'), '135790')
+    await user.click(screen.getByTestId('ai-official-verify'))
+    await waitFor(() => {
+      expect(state.signupVerifies).toEqual([{ email: 'wang@nordvolt.cn', code: '135790' }])
+    })
+    await waitFor(() => {
+      expect(state.savedProviders.map((p) => p.input.kind)).toContain('agentsws_cloud')
+    })
+  })
+
+  it('WP231 注册时邮箱已注册：说「注册过了」+ 一键切到登录（邮箱带过去）', async () => {
+    const user = userEvent.setup()
+    state.signupConflict = true
+    renderWithProviders(<OnboardingPage />)
+    await user.click(await screen.findByTestId('ai-pick-official'))
+    await user.type(screen.getByTestId('ai-official-name'), '北风电器')
+    await user.type(screen.getByTestId('ai-official-email'), 'wang@nordvolt.cn')
+    await user.type(screen.getByTestId('ai-official-password'), 'Sunflower-77')
+    await user.click(screen.getByTestId('ai-official-agree'))
+    await user.click(screen.getByTestId('ai-official-send'))
+    const failed = await screen.findByTestId('ai-official-failed')
+    expect(failed.getAttribute('data-reason')).toBe('already_registered')
+    expect(failed.textContent).toContain('注册过了')
+    await user.click(within(failed).getByTestId('ai-official-switch-login'))
+    expect(screen.getByTestId('ai-official-auth').getAttribute('data-tab')).toBe('login')
+    expect((screen.getByTestId('ai-official-email') as HTMLInputElement).value).toBe(
+      'wang@nordvolt.cn',
+    )
+    // 登录：发码之后统一一句「如果已注册……」+「去注册」
+    await user.click(screen.getByTestId('ai-official-send'))
+    expect((await screen.findByTestId('ai-official-sent')).textContent).toContain('如果')
+    expect(screen.getByTestId('ai-official-go-signup')).toBeTruthy()
   })
 
   it('官方接口：点开登录信回来 → 自动启用云模型、各能力开关切过去、显示到账 10 积分', async () => {
@@ -885,13 +966,13 @@ describe('70 §3 第 ② 步：贴一个网址', () => {
     await user.click(screen.getByTestId('intake-no-site'))
 
     const person = await screen.findByTestId('onboarding-person')
-    // 名字与登录邮箱直接带出来，不用再填一遍
+    // 名字直接带出来，不用再填一遍；账号是一行只读字（WP233：不再是一格输入框）
     expect((within(person).getByTestId('person-name') as HTMLInputElement).value).toBe('王岚')
-    expect((within(person).getByTestId('person-email') as HTMLInputElement).value).toBe(
-      'wang@nordvolt.cn',
+    expect(within(person).getByTestId('person-account').textContent).toBe(
+      '你的账号：wang@nordvolt.cn',
     )
-    // 登录邮箱是身份，只读；名字是展示名，能改
-    expect((within(person).getByTestId('person-email') as HTMLInputElement).readOnly).toBe(true)
+    expect(within(person).queryByTestId('person-email')).toBeNull()
+    // 名字是展示名，能改
     expect((within(person).getByTestId('person-name') as HTMLInputElement).readOnly).toBe(false)
 
     const name = within(person).getByTestId('person-name')
@@ -1394,6 +1475,7 @@ describe('WP142 第 ① 步：官方云那一跳有反馈；模板不重名', ()
     })
     renderWithProviders(<OnboardingPage />)
     await user.click(await screen.findByTestId('ai-pick-official'))
+    await user.click(screen.getByTestId('ai-official-tab-login'))
     await user.type(screen.getByTestId('ai-official-email'), 'wang@nordvolt.cn')
     await user.click(screen.getByTestId('ai-official-send'))
     expect((await screen.findByTestId('ai-official-pending')).textContent).toContain(
@@ -1409,11 +1491,12 @@ describe('WP142 第 ① 步：官方云那一跳有反馈；模板不重名', ()
     state.linkFail = true
     renderWithProviders(<OnboardingPage />)
     await user.click(await screen.findByTestId('ai-pick-official'))
+    await user.click(screen.getByTestId('ai-official-tab-login'))
     await user.type(screen.getByTestId('ai-official-email'), 'wang@nordvolt.cn')
     await user.click(screen.getByTestId('ai-official-send'))
 
     const failed = await screen.findByTestId('ai-official-failed')
-    expect(within(failed).getByTestId('ai-error').textContent).toContain('网络不通')
+    expect(within(failed).getByTestId('ai-official-error').textContent).toContain('网络不通')
     expect(failed.textContent).not.toMatch(/https?:\/\//)
 
     // 再试一次：同一个邮箱再发一遍，这回通了
@@ -1428,6 +1511,7 @@ describe('WP142 第 ① 步：官方云那一跳有反馈；模板不重名', ()
     state.linkFail = true
     renderWithProviders(<OnboardingPage />)
     await user.click(await screen.findByTestId('ai-pick-official'))
+    await user.click(screen.getByTestId('ai-official-tab-login'))
     await user.type(screen.getByTestId('ai-official-email'), 'wang@nordvolt.cn')
     await user.click(screen.getByTestId('ai-official-send'))
     await user.click(await screen.findByTestId('ai-official-demo'))
@@ -1897,5 +1981,90 @@ describe('WP142 第 ④ 步：只列必需的，可选的折起来；技能包�
       .map((el) => el.querySelector('p')?.textContent)
     expect(names).toEqual(['品牌话术', '工作台基础', '一个专用技能包'])
     expect(screen.getByTestId('onboarding-plan').textContent).not.toMatch(/[a-z]+-[a-z]+/)
+  })
+})
+
+describe('WP233 第 ② 步「你的账号」与「公司邮箱后缀」', () => {
+  it('关联了云账号：显示「你的账号：<云账号邮箱>」，不出 owner@localhost', async () => {
+    state.state = { ...STATE, person: { name: 'owner', email: 'owner@localhost' } }
+    // 局域网上没人：「加入一家公司」折成那一行「已有邀请码？」
+    state.peers = { ...PEERS, peers: [] }
+    state.account = {
+      linked: true,
+      email: 'boss@inmoxr.com',
+      org_name: 'inmoxr',
+      expires_at: T0,
+      scopes: ['ai'],
+      linked_at: T0,
+      cloud_base_url: 'https://cloud.agentsws.dev',
+    }
+    const user = userEvent.setup()
+    renderWithProviders(<OnboardingPage />)
+    await passAi()
+    await user.click(screen.getByTestId('intake-no-site'))
+    const person = await screen.findByTestId('onboarding-person')
+    await waitFor(() => {
+      expect(within(person).getByTestId('person-account').textContent).toBe(
+        '你的账号：boss@inmoxr.com',
+      )
+    })
+    expect(person.textContent).not.toContain('owner@localhost')
+    // 「已有邀请码？」那一行还在
+    expect(screen.getByTestId('join-toggle').textContent).toContain('已有邀请码？')
+  })
+
+  it('没有云账号、本机还是占位邮箱：整行不出', async () => {
+    state.state = { ...STATE, person: { name: 'owner', email: 'owner@localhost' } }
+    const user = userEvent.setup()
+    renderWithProviders(<OnboardingPage />)
+    await passAi()
+    await user.click(screen.getByTestId('intake-no-site'))
+    const person = await screen.findByTestId('onboarding-person')
+    expect(within(person).queryByTestId('person-account')).toBeNull()
+    expect(document.body.textContent).not.toContain('owner@localhost')
+  })
+
+  it('后缀：叫「公司邮箱后缀」、占位与问号说清楚；从云账号 / 客服邮箱带出，公共邮箱不带', async () => {
+    renderWithProviders(
+      <ProfileForm
+        emailHint="owner@localhost"
+        suggestFrom={['me@gmail.com', 'support@inmoxr.com']}
+        busy={false}
+        saved={false}
+        onSave={() => undefined}
+      />,
+    )
+    const input = (await screen.findByTestId('company-domain')) as HTMLInputElement
+    expect(screen.getByText('公司邮箱后缀')).toBeTruthy()
+    expect(input.placeholder).toBe('例如 inmoxr.com')
+    expect(screen.getByTestId('company-domain-hint').getAttribute('data-hint')).toBe(
+      '同事用这个后缀的邮箱申请加入时，更容易认出是同一家公司；进来仍要你同意。可不填',
+    )
+    expect(input.value).toBe('inmoxr.com')
+  })
+
+  it('后缀：只有公共邮箱 / 占位时那一格空着', async () => {
+    renderWithProviders(
+      <ProfileForm
+        emailHint="owner@localhost"
+        suggestFrom={['me@qq.com', 'x@163.com', 'y@outlook.com']}
+        busy={false}
+        saved={false}
+        onSave={() => undefined}
+      />,
+    )
+    expect(((await screen.findByTestId('company-domain')) as HTMLInputElement).value).toBe('')
+  })
+
+  it('后缀：误填整个邮箱时只留 @ 后面那段，存的也是后缀', async () => {
+    const user = userEvent.setup()
+    const saved: { domain: string }[] = []
+    renderWithProviders(<ProfileForm busy={false} saved={false} onSave={(d) => saved.push(d)} />)
+    const input = (await screen.findByTestId('company-domain')) as HTMLInputElement
+    await user.type(input, 'wang@InmoXR.com')
+    expect(input.value).toBe('inmoxr.com')
+    await user.type(screen.getByTestId('company-legal-name'), '深圳映墨科技')
+    await user.click(screen.getByTestId('company-save'))
+    expect(saved.at(-1)?.domain).toBe('inmoxr.com')
   })
 })
