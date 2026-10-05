@@ -41,7 +41,8 @@ Welcome to Agents Workshop. These terms explain your rights and ours when you us
 5. **Your own keys cost nothing**: requests the open-source software sends with your own model or platform keys go direct from your computer, never through us, and use no credits.
 6. **Add-on services** are charged monthly in credits. You can cancel anytime; cancellation takes effect at the end of the current period, which is not refunded. If your balance runs short the service pauses, and your data is not deleted; it resumes when you top up.
 7. **Running out of credits** only declines that one request; your account is not frozen.
-8. Refunds, partial refunds and chargebacks are covered by the [Refund Policy](/refund/).
+8. **Credits are non-refundable once purchased and can't be exchanged for cash**, with only three exceptions: duplicate charges, overcharges caused by a system error, and refunds the law where you live requires. The exceptions and chargebacks are covered by the [Refund Policy](/refund/).
+9. Credits are delivered the moment you pay. If the law where you live gives you a right of withdrawal (such as the EU 14-day right), the checkout page asks you before payment to expressly agree to immediate delivery and to confirm you understand that you thereby lose that right.
 
 ## 5. How you use it
 
@@ -73,7 +74,7 @@ Welcome to Agents Workshop. These terms explain your rights and ours when you us
 1. We keep improving the cloud services and may add, change or retire features. We will announce changes that noticeably affect you in advance, on this site or in the app.
 2. We may temporarily suspend parts of the service for maintenance, upgrades or security incidents, with advance notice where possible.
 3. If you seriously or repeatedly break these terms, we may restrict or end your use of the cloud services, and will tell you why first where we can.
-4. You may stop using the service and close your account at any time. Export anything you need first. Unused purchased credits can be refunded under the [Refund Policy](/refund/).
+4. You may stop using the service and close your account at any time. Export anything you need first. Any credit balance left when you close your account isn't refunded or exchanged for cash (except for the exceptions in the [Refund Policy](/refund/)).
 5. The open-source software is not affected by closing your account: the software and data on your computer remain yours.
 
 ## 9. Limitation of liability

@@ -50,4 +50,4 @@ export const OPERATOR_LEGAL_NAME = '深圳卢耶科技有限公司'
 export const CONTACT_EMAIL = 'support@agentsws.com'
 
 /** 条款三页的生效日期（改条款就改这里）。 */
-export const LEGAL_EFFECTIVE_DATE = '2026-10-01'
+export const LEGAL_EFFECTIVE_DATE = '2026-10-05'

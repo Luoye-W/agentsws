@@ -82,7 +82,7 @@ const zh = {
         '不删。同步先暂停，云上和本地的数据一条不动，充上值自己接上。',
       ],
       ['团队怎么付？', '一个公司一份余额，负责人来付；可以给每位成员、每个岗位设每月上限。'],
-      ['能退款吗？', '没用掉的积分可以申请退，已经用掉的不退；细则见退款政策。'],
+      ['能退款吗？', '不退。积分买了就不退、不折现；重复扣款、系统多扣这类错误，查实后退回。细则见退款政策。'],
     ],
   },
   final: {
@@ -197,7 +197,7 @@ const en: PricingCopy = {
       ],
       [
         'Can I get a refund?',
-        'Unused credits can be refunded; credits already spent can’t. See the Refund Policy for details.',
+        'No. Credits aren’t refundable or cashable once bought. Duplicate charges and system overcharges are put right once confirmed. See the Refund Policy.',
       ],
     ],
   },
