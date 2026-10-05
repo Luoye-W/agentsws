@@ -88,8 +88,59 @@ export interface PlatformKit {
 
 /** 这一单只填 Shopify 一行。 */
 export const PLATFORM_KITS: readonly PlatformKit[] = [
-  // TODO(WP216)：Shopify 一行（技能名单 / Dev MCP / CLI）
+  {
+    platform: 'shopify',
+    /*
+     * 官方 Shopify-AI-Toolkit 2.0（2026-09-25）起把 22 本分题技能合成了**一本 `shopify`**，
+     * `shopify-liquid` 等旧名已退役（官方 CHANGELOG 标 Breaking）。所以我们装的是这一本，
+     * 原样放在 `packages/skills/bundled/shopify/`（MIT，允许原样分发），只带与建站相关的三份参考。
+     */
+    skills: ['shopify'],
+    skill_source: {
+      publisher: 'Shopify',
+      repo: 'Shopify/Shopify-AI-Toolkit',
+      license: 'MIT',
+      install: 'bundled',
+    },
+    mcp: {
+      id: 'shopify-dev-mcp',
+      label: 'Shopify Dev MCP',
+      npm: '@shopify/dev-mcp',
+      // 与 `apps/server/src/shopify-devmcp.ts` 的 DEV_MCP_ARGS 同一个版本（测试钉住两边一致）
+      version: '1.15.0',
+      license: 'ISC',
+      egress: ['shopify.dev', 'raw.githubusercontent.com', 'registry.npmjs.org'],
+      telemetry_off_env: { OPT_OUT_INSTRUMENTATION: 'true', DO_NOT_TRACK: '1' },
+    },
+    cli: {
+      id: 'shopify-cli',
+      label: 'Shopify CLI',
+      bin: 'shopify',
+      version_args: ['version'],
+      npm: '@shopify/cli',
+      license: 'MIT',
+      // `@shopify/cli` 4.x 的 engines.node 是 >=22.12.0；这里只比主版本，22.0–22.11 由 CLI 自己报
+      min_node_major: 22,
+      install: [
+        { method: 'npm', command: 'npm install -g @shopify/cli@latest' },
+        { method: 'homebrew', command: 'brew tap shopify/shopify && brew install shopify-cli' },
+      ],
+      login_command: 'shopify auth login',
+      tutorial: 'shopify-cli',
+      positions: ['site'],
+      // 主题工作流（拉主题 / 推未发布副本 / theme check）只在网页模板这一条上；邮件模板在店铺后台改，不经 CLI
+      roles: ['site.shopify-theme'],
+      telemetry_off_env: { SHOPIFY_CLI_NO_ANALYTICS: '1', OPT_OUT_INSTRUMENTATION: 'true' },
+    },
+  },
 ]
+
+/** 所有平台 CLI 的关遥测变量并在一起（终端沙箱里跑 CLI 时一律带上）。 */
+export function platformCliTelemetryOffEnv(): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const kit of PLATFORM_KITS) Object.assign(out, kit.cli?.telemetry_off_env ?? {})
+  return out
+}
 
 /** 这个平台那一行；没有 = 这个平台没有专属的官方技能 / 工具 / CLI。缺省按 Shopify（与档案同一口径）。 */
 export function platformKitOf(platform: StorefrontPlatform | undefined): PlatformKit | undefined {
