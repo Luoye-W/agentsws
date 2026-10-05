@@ -345,3 +345,81 @@ export function routeWithinPosition(
     reason: `路由到「${first.role_name}」${why === '' ? '' : `，因为你说了${why}`}`,
   }
 }
+
+/* ── WP237 同一个人的几条职责打平：不问人，取分高的那条 ─────────────────── */
+
+export interface SettledRouteResult extends RouteWithinPositionResult {
+  /**
+   * 是「打平后按分取的」——岗位里前两名太接近，但都是**请求人自己名下**的职责
+   * （54 §4：路由只在本人持有的分配里挑），于是不出选择卡，按分高的那条直接做，
+   * 时间线上给一句「要换成 B 点这里」。
+   */
+  settled?: true
+  /** 打平时没被选上的那几条（界面上一键「换成它」用） */
+  alternatives?: RouteCandidate[]
+}
+
+/**
+ * WP237（Fable 10-06 真机）：**同一个人、同一个岗位里几条职责打平时不问人**。
+ *
+ * 只收「打平」这一种拿不准：第一名本身够像（份额 ≥ {@link MIN_PICKED_SCORE}），只是和
+ * 第二名分不开（差 < {@link MIN_SEPARATION}）。「谁都不太像」（四条各 0.25）与
+ * 「一个判据词都没命中」仍然是拿不准——那时候替人选就是瞎猜，照旧出卡问一句。
+ *
+ * 分数完全相同时按 `order`（岗位模板里职责的先后，合并岗位时并入的那条在后）取，
+ * 不再按 id 字典序——字典序与人没关系（`pr.reddit` 排在 `social.reddit` 前面纯属巧合）。
+ *
+ * 纯函数；调用方负责先确认候选都是同一个人的（岗位入口天然如此）。
+ */
+export function settleCloseCall(
+  result: RouteWithinPositionResult,
+  order: readonly RoleId[] = [],
+): SettledRouteResult {
+  if (!result.ambiguous || result.picked !== undefined) return result
+  const first = result.candidates[0]
+  const second = result.candidates[1]
+  if (first === undefined || second === undefined) return result
+  if (first.score < MIN_PICKED_SCORE) return result
+  const rank = (id: RoleId): number => {
+    const i = order.indexOf(id)
+    return i < 0 ? Number.MAX_SAFE_INTEGER : i
+  }
+  const top = result.candidates
+    .filter((c) => c.score === first.score)
+    .reduce((a, c) => (rank(c.role_id) < rank(a.role_id) ? c : a))
+  const alternatives = result.candidates.filter(
+    (c) => c.role_id !== top.role_id && top.score - c.score < MIN_SEPARATION,
+  )
+  const names = alternatives.map((c) => `「${c.role_name}」`).join('、')
+  return {
+    picked: top.role_id,
+    candidates: [top, ...result.candidates.filter((c) => c.role_id !== top.role_id)],
+    ambiguous: false,
+    reason: `这件事像「${top.role_name}」也像${names}，按「${top.role_name}」来做的；要换成${names}点这里`,
+    settled: true,
+    alternatives,
+  }
+}
+
+/**
+ * WP237：一句话里有没有**点名**某条职责（「按 Reddit 运营这条来」）。
+ *
+ * 比对职责名（中英文），忽略大小写与空白；点到好几条时取名字最长的那条
+ * （「Reddit 运营」与「运营」都点到时是前者）。没点名回 `undefined`。
+ */
+export function namedRole(
+  text: string,
+  roles: readonly { role_id: RoleId; names: readonly string[] }[],
+): RoleId | undefined {
+  const squash = (s: string): string => s.toLowerCase().replace(/\s+/g, '')
+  const said = squash(text)
+  let best: { role_id: RoleId; len: number } | undefined
+  for (const r of roles) {
+    for (const name of r.names) {
+      const n = squash(name)
+      if (n.length < 2 || !said.includes(n)) continue
+      if (best === undefined || n.length > best.len) best = { role_id: r.role_id, len: n.length }
+    }
+  }
+  return best?.role_id
+}

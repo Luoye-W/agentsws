@@ -104,6 +104,7 @@ export type {
   RouteRoleScore,
   RouteTerm,
   RouteWithinPositionResult,
+  SettledRouteResult,
 } from './route.js'
 export {
   ACTION_TERMS,
@@ -112,12 +113,14 @@ export {
   GENERIC_ROLES,
   MIN_PICKED_SCORE,
   MIN_SEPARATION,
+  namedRole,
   normalizeRouteText,
   ROUTE_WEIGHT,
   roleRouteTerms,
   routeWithinPosition,
   SHORT_TERM_PENALTY,
   scoreRouteRoles,
+  settleCloseCall,
   splitRoutePhrases,
 } from './route.js'
 export { collectUnknownKeys, POSITION_SCHEMA, ROLE_SCHEMA } from './schema.js'

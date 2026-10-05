@@ -13,10 +13,12 @@
 import { describe, expect, it } from 'vitest'
 import { loadBundledPosition, loadBundledRole } from '../src/load.js'
 import {
+  namedRole,
   type RouteRoleProfile,
   roleRouteTerms,
   routeWithinPosition,
   scoreRouteRoles,
+  settleCloseCall,
 } from '../src/route.js'
 
 /** 一个岗位模板展开成参赛的职责清单（每条都有人在做）。 */
@@ -195,5 +197,59 @@ describe('WP153：问工作区本身的事，交给「公司设置与授权」',
   it('本人没持有公司设置与授权时不走这条', () => {
     const out = routeWithinPosition('有哪些岗位和连接', [analytics])
     expect(out.picked).toBe('dtc.analytics')
+  })
+})
+
+describe('WP237 同一个人的几条职责打平：不问人，按分高的那条做', () => {
+  const REDDIT = ['social.reddit', 'pr.reddit'].map((id) => {
+    const def = loadBundledRole(id)
+    return {
+      role_id: def.id,
+      role_name: def.name.zh,
+      terms: roleRouteTerms(def),
+      positions: [{ position_id: `asg_${def.id}`, person_id: 'p_li' }],
+    }
+  })
+
+  it('Reddit 运营 + Reddit 营销 合并成一个岗位：「Reddit 调研」打平 → 按模板顺序取第一条，另一条留作「换成」', () => {
+    const raw = routeWithinPosition('帮我做一份 Reddit 调研', REDDIT)
+    expect(raw.ambiguous).toBe(true)
+    const out = settleCloseCall(raw, ['social.reddit', 'pr.reddit'])
+    expect(out.ambiguous).toBe(false)
+    expect(out.settled).toBe(true)
+    // 分数一样时不按 id 字典序（那会落到 pr.reddit），按岗位里职责的先后
+    expect(out.picked).toBe('social.reddit')
+    expect(out.alternatives?.map((c) => c.role_id)).toEqual(['pr.reddit'])
+    expect(out.reason).toContain('按「Reddit 运营」来做的')
+    expect(out.reason).toContain('要换成「Reddit 营销」点这里')
+  })
+
+  it('谁都不太像（四条各沾一点）照旧拿不准——那时替人选就是瞎猜', () => {
+    const raw = routeWithinPosition('把 A 商品降价 10%', CUSTOMER_CARE)
+    expect(raw.ambiguous).toBe(true)
+    const out = settleCloseCall(
+      raw,
+      CUSTOMER_CARE.map((r) => r.role_id),
+    )
+    expect(out.ambiguous).toBe(true)
+    expect(out.picked).toBeUndefined()
+    expect(out.settled).toBeUndefined()
+  })
+
+  it('一个判据词都没命中也照旧拿不准；判得准的原样返回', () => {
+    const none = settleCloseCall(routeWithinPosition('嗯', REDDIT))
+    expect(none.ambiguous).toBe(true)
+    const clear = routeWithinPosition('把 A 商品降价 10%', WEB_OPS)
+    expect(settleCloseCall(clear)).toBe(clear)
+  })
+
+  it('一句话里点名了某条职责就认它（取最长的名字）', () => {
+    const roles = [
+      { role_id: 'social.reddit', names: ['Reddit 运营', 'Reddit Ops'] },
+      { role_id: 'pr.reddit', names: ['Reddit 营销'] },
+    ]
+    expect(namedRole('按 Reddit 运营这条来，开始吧。', roles)).toBe('social.reddit')
+    expect(namedRole('按reddit营销做', roles)).toBe('pr.reddit')
+    expect(namedRole('开始吧', roles)).toBeUndefined()
   })
 })
