@@ -406,6 +406,53 @@ export interface ScenarioOrgBrandCheck {
   who: string
 }
 
+/** WP215：工作台上把"眼前品牌"切到这个品牌（**只是视图**，后台不读它）。 */
+export interface ScenarioOrgBrandView {
+  brand: string
+  who: string
+}
+
+/**
+ * WP215（52 §4）：给一个品牌装一条后台巡检（共享调度器 + 品牌路由）。
+ * 到点在**这个品牌自己的**队列里出一张卡，事件记这个品牌的 `workspace_id`。
+ */
+export interface ScenarioOrgBrandBackground {
+  brand: string
+  /** 巡检卡交给谁（他在这个品牌里得有岗位）。 */
+  who: string
+  /** 巡检间隔（`15m` 之类，默认 15 分钟）。 */
+  every?: string
+  /** 装上时品牌急停就按着。 */
+  halted?: boolean
+}
+
+/** WP215：品牌急停按下 / 放开（只停这一个品牌）。 */
+export interface ScenarioOrgBrandHalt {
+  brand: string
+  on: boolean
+}
+
+/** WP215：记一笔"这个品牌的后台跑了几次、队列里巡检卡各是谁的"。 */
+export interface ScenarioOrgBrandBackgroundCheck {
+  brand: string
+  who: string
+}
+
+/**
+ * WP215 断言（`expected.brand_background`）：视图停在 `viewing` 时，`brand` 的后台照常巡检，
+ * 结果只进 `brand` 自己的队列。
+ */
+export interface ScenarioBrandBackgroundExpect {
+  /** 后台照跑的那个品牌。 */
+  brand: string
+  /** 眼前停着的那个品牌。 */
+  viewing: string
+  /** 视图停在 `viewing` 时 `brand` 至少巡检了几次。 */
+  min_patrols: number
+  /** `brand` 急停那几段：`brand` 一次不跑、`viewing` 照跑（场景里得真有一段急停）。 */
+  halt_isolated?: boolean
+}
+
 /**
  * WP121b（70 §1–§3）：一个新用户走一遍**初始化设置**。
  *
@@ -1106,6 +1153,18 @@ export type ScenarioEvent =
   | { at: string; type: 'org.brand'; brand: ScenarioOrgBrand }
   /** WP65：记一笔"这个人在这个品牌里看得到什么"（52 O2）。 */
   | { at: string; type: 'org.brand_check'; brand_check: ScenarioOrgBrandCheck }
+  /** WP215：把眼前品牌切到这个品牌（只是视图）。 */
+  | { at: string; type: 'org.brand_view'; brand_view: ScenarioOrgBrandView }
+  /** WP215：给一个品牌装一条后台巡检。 */
+  | { at: string; type: 'org.brand_background'; brand_background: ScenarioOrgBrandBackground }
+  /** WP215：品牌急停按下 / 放开。 */
+  | { at: string; type: 'org.brand_halt'; brand_halt: ScenarioOrgBrandHalt }
+  /** WP215：记一笔这个品牌后台的数。 */
+  | {
+      at: string
+      type: 'org.brand_background_check'
+      brand_background_check: ScenarioOrgBrandBackgroundCheck
+    }
   /** WP121b：一个新用户走一遍初始化设置（70 §1–§3）。 */
   | { at: string; type: 'org.onboarding'; onboarding: ScenarioOrgOnboarding }
   /** WP56：一个知识源（网页 / 文档）同步了一次新正文（48 §4 #6）。 */
@@ -1343,6 +1402,8 @@ export interface ScenarioExpected {
    * 至少有一张卡同时满足下面给了的每一格。
    */
   escalation_trail?: ScenarioEscalationTrail
+  /** WP215 扩展：视图停在一个品牌时，另一个品牌的后台照常巡检、结果只进它自己。 */
+  brand_background?: ScenarioBrandBackgroundExpect
   /** WP32 扩展：被抽检选中的自动批项条数。 */
   sampled?: NumericAssertion
   /** WP32 扩展：自动批（`auto_approved`）的项数——"不解锁自动执行"的反证也靠它。 */

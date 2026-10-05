@@ -342,6 +342,8 @@ describe('15 / 50 人 pack（26 §2 / 27）', () => {
       'ops/two-desks-no-union',
       // WP47 范围模型（44 G1 / G5）：品牌新开一家店，挂它的岗位自动扩范围并留痕
       'org/brand-adds-store',
+      // WP215（52 §4）：眼前切在甲品牌，乙品牌的后台照常巡检、结果只进乙；乙急停只停乙
+      'org/brand-b-patrols-while-viewing-a',
       // WP69 岗位是任务主入口（54）：同一句话交给不同岗位落到不同职责；
       // 起 Run 用的是被路由到的那条职责的分配（不并集）；拿不准出选择卡
       'org/task-opened-at-position-routes-to-duty',

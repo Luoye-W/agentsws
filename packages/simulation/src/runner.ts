@@ -262,6 +262,9 @@ async function execute(
       await routine.scheduler.runDue(clock.now())
       await routine.workflows.tick(clock.now())
     }
+    // WP215：每个品牌一套后台、共用一个调度循环。装了才驱动；没装的世界一拍空转
+    const brandBackground = world.brandBackground
+    if (brandBackground !== undefined) await brandBackground.scheduler.runDue(clock.now())
     // 22 §2 降级：provider 挂了 → **冻结队列**。冻结的不只是"不起新草稿"，
     // 施行与投递也一起停——半冻结的系统正是 `freeze_on_model_outage` 要挡的东西：
     // 模型不可用时谁也说不清这条草稿还该不该发。恢复后照常出队，
@@ -2001,6 +2004,42 @@ async function execute(
       }
       case 'chat.human_takeover': {
         await chatLoop().takeover(event.chat_takeover)
+        return
+      }
+      // ── WP215 每个品牌的后台同时跑（52 §4）──────────────────────────
+      case 'org.brand_view': {
+        // 只换视图：后台一个字节都不读它
+        world.viewBrand(event.brand_view.brand, event.brand_view.who)
+        await tick()
+        return
+      }
+      case 'org.brand_background': {
+        const bg = world.startBrandBackground()
+        const input = event.brand_background
+        const task = await bg.add({
+          brand: input.brand,
+          who: input.who,
+          every_ms: parseDuration(input.every ?? '15m'),
+          ...(input.halted === undefined ? {} : { halted: input.halted }),
+        })
+        world.appendEvent(
+          'simulation.brand_background_started',
+          { brand: input.brand, task_id: task.id, handler: task.handler ?? null },
+          { workspace_id: input.brand },
+        )
+        await tick()
+        return
+      }
+      case 'org.brand_halt': {
+        world.startBrandBackground().halt(event.brand_halt.brand, event.brand_halt.on)
+        await tick()
+        return
+      }
+      case 'org.brand_background_check': {
+        const { brand, who } = event.brand_background_check
+        const report = await world.startBrandBackground().check(brand, who)
+        // 报告里出的是**数**：跑了几次、自己的卡几张、别人的卡几张（应当一张没有）
+        world.appendEvent('simulation.brand_background_check', report, { workspace_id: brand })
         return
       }
       default: {
