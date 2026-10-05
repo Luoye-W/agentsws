@@ -16,6 +16,7 @@ import { ModelsPanel } from '@/components/models/models-panel'
 import { NoModelBanner } from '@/components/models/no-model-banner'
 import { type ProfileDraft, ProfileForm } from '@/components/onboarding/profile-form'
 import { ArchiveSetting } from '@/components/settings/archive-setting'
+import { BackgroundCard } from '@/components/settings/background-card'
 import { BrowserCard } from '@/components/settings/browser-card'
 import { CloudAccountCard } from '@/components/settings/cloud-account'
 import { ComputerUseCard } from '@/components/settings/computer-use-card'
@@ -266,6 +267,11 @@ export function SettingsPage({
             </CardContent>
           </Card>
         )}
+        {/*
+          WP215：后台——每个品牌一套、跟着这台电脑走；这里只改「同时最多跑几件」。
+          紧跟「公司」：它管的是这台电脑上所有品牌一起的事。所有者那一档权限。
+        */}
+        {ownerId === undefined ? null : <BackgroundCard assignment={ownerId} />}
         {/*
           WP82（55 §3 末段）：浏览器。与模型 key 同一档权限（05 owner）——
           配浏览器是所有者的事，客服岗位看不到也改不了。放在模型前面：

@@ -13,11 +13,15 @@
  *
  * **没有跨品牌的合并视图**：这里不显示"两个品牌一共多少张待审卡"那种数。
  * 想看全公司只有公司页的那张品牌一览（52 §3）。
+ *
+ * WP215：每一行名字旁边一个后台状态小件（{@link BrandBackgroundBadge}）——后台按品牌常驻，
+ * 切到哪个品牌都不影响别的品牌的巡检与定时任务，这一格让人一眼看到"它们都还在跑"。
  */
 import { useQuery } from '@tanstack/react-query'
 import { Check, ChevronsUpDown, Store } from 'lucide-react'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { BrandBackgroundBadge } from '@/components/brand-background-badge'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 import { type BrandView, listBrands, listOrganizations, switchBrand } from '@/lib/api'
@@ -130,6 +134,11 @@ export function BrandSwitcher(): React.ReactNode {
                 <span aria-hidden className="size-4" />
               )}
               <span className="truncate">{b.name}</span>
+              <BrandBackgroundBadge
+                background={b.background}
+                focusable={false}
+                testId={`brand-bg-${b.workspace_id}`}
+              />
               {b.pending_approvals > 0 ? (
                 <span className="ml-auto text-xs text-muted-foreground">{b.pending_approvals}</span>
               ) : null}

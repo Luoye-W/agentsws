@@ -16,10 +16,14 @@
  *    那是这个品牌自己的凭据与自己的事实。
  * 3. **一个品牌的时候也要在**。个人用户看到的是一句"要做第二个品牌就在这里加"，
  *    而不是一张空表。
+ * 4. **WP215 每行一格后台状态**（与顶栏切换器同一个件），行尾一个「停后台 / 放开」——
+ *    品牌急停，只停这一个品牌；全局急停照旧在别处。只有能改策略层的人用得了：这一页本来就只给
+ *    所有者（拿所有者那条岗位发请求），服务端回 403 时按钮整个收起。
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AlertTriangle, Check, Inbox, Plus } from 'lucide-react'
+import { AlertTriangle, Check, Inbox, Pause, Play, Plus } from 'lucide-react'
 import { useState } from 'react'
+import { BrandBackgroundBadge } from '@/components/brand-background-badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Hint } from '@/components/ui/hint'
@@ -32,6 +36,7 @@ import {
   copyBrandSettings,
   createBrand,
   listBrands,
+  setBrandBackgroundHalt,
   switchBrand,
 } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
@@ -59,10 +64,15 @@ function BrandRow({
   brand,
   onOpen,
   busy,
+  onHalt,
+  halting,
 }: {
   brand: BrandView
   onOpen(workspace_id: string): void
   busy: boolean
+  /** 不给 = 这个人改不了后台（没有所有者岗位 / 服务端回过 403），按钮不出。 */
+  onHalt?: (workspace_id: string, halted: boolean) => void
+  halting: boolean
 }): React.ReactNode {
   const { t } = useApp()
   return (
@@ -90,11 +100,38 @@ function BrandRow({
           ? t('org.brands.sales_elsewhere')
           : `${brand.sales_today.amount.toFixed(2)} ${brand.sales_today.currency}`}
       </span>
+      <BrandBackgroundBadge
+        background={brand.background}
+        testId={`brand-row-bg-${brand.workspace_id}`}
+      />
+      {onHalt === undefined ||
+      brand.background === undefined ||
+      brand.background.state === 'stopped' ? null : (
+        <Button
+          size="sm"
+          variant="ghost"
+          className="ml-auto h-7 px-2 text-xs"
+          disabled={halting}
+          data-testid={`brand-bg-toggle-${brand.workspace_id}`}
+          onClick={() => {
+            onHalt(brand.workspace_id, !(brand.background?.halted ?? false))
+          }}
+        >
+          {brand.background.halted ? (
+            <Play aria-hidden className="size-3.5" />
+          ) : (
+            <Pause aria-hidden className="size-3.5" />
+          )}
+          {brand.background.halted ? t('org.brands.bg.resume') : t('org.brands.bg.halt')}
+        </Button>
+      )}
       {brand.current ? null : (
         <Button
           size="sm"
           variant="outline"
-          className="ml-auto"
+          className={cn(
+            onHalt === undefined || brand.background === undefined ? 'ml-auto' : undefined,
+          )}
           disabled={busy}
           data-testid={`brand-open-${brand.workspace_id}`}
           onClick={() => {
@@ -124,6 +161,9 @@ export function BrandsTab({
   const [failure, setFailure] = useState<string | undefined>(undefined)
   const [receipt, setReceipt] = useState<string | undefined>(undefined)
   const [switching, setSwitching] = useState(false)
+  // WP215：服务端说过一次 403 就把「停后台 / 放开」整个收起
+  const [haltDenied, setHaltDenied] = useState(false)
+  const [haltFailure, setHaltFailure] = useState<string | undefined>(undefined)
 
   const brands = useQuery({
     queryKey: ['orgs', org_id, 'brands'],
@@ -162,6 +202,29 @@ export function BrandsTab({
     },
   })
 
+  /** WP215 品牌急停：只停 / 放开这一个品牌的后台。 */
+  const halt = useMutation({
+    mutationFn: (input: { workspace_id: string; halted: boolean }) =>
+      setBrandBackgroundHalt(input.workspace_id, { halted: input.halted }, assignment),
+    onSuccess: async () => {
+      setHaltFailure(undefined)
+      await client.invalidateQueries({ queryKey: ['orgs'] })
+    },
+    onError: (err: unknown) => {
+      if (err instanceof ApiClientError && err.status === 403) {
+        setHaltDenied(true)
+        return
+      }
+      setHaltFailure(err instanceof ApiClientError ? err.message : t('error.generic'))
+    },
+  })
+  const onHalt =
+    assignment === undefined || haltDenied
+      ? undefined
+      : (workspace_id: string, halted: boolean): void => {
+          halt.mutate({ workspace_id, halted })
+        }
+
   if (org_id === undefined) return null
   if (brands.data === undefined) return <Skeleton className="h-40 w-full" />
 
@@ -195,9 +258,21 @@ export function BrandsTab({
           ) : null}
           <ul className="flex flex-col gap-2">
             {brands.data.map((b) => (
-              <BrandRow key={b.workspace_id} brand={b} onOpen={open} busy={switching} />
+              <BrandRow
+                key={b.workspace_id}
+                brand={b}
+                onOpen={open}
+                busy={switching}
+                {...(onHalt === undefined ? {} : { onHalt })}
+                halting={halt.isPending}
+              />
             ))}
           </ul>
+          {haltFailure === undefined ? null : (
+            <p role="alert" className="text-xs text-destructive" data-testid="brand-bg-error">
+              {haltFailure}
+            </p>
+          )}
         </CardContent>
       </Card>
 
