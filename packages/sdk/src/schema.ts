@@ -1207,6 +1207,142 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/v1/cloud/account/auth-config': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** 注册 / 登录界面要知道的几样（密码最短几位、验证码几位、条款版本） */
+    get: operations['getCloudAuthConfig']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/v1/cloud/account/signup': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /** 注册：名字 + 邮箱 + 密码 + 同意条款 → 云发一封 6 位注册验证码 */
+    post: operations['cloudSignup']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/v1/cloud/account/signup/verify': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /** 注册验证码 → 建号、送注册积分、关联这台机器 */
+    post: operations['cloudSignupVerify']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/v1/cloud/account/code': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /** 登录：发一封 6 位登录验证码（没注册的邮箱云上静默不发） */
+    post: operations['cloudLoginCode']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/v1/cloud/account/code/verify': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /** 登录验证码 → 关联这台机器 */
+    post: operations['cloudLoginCodeVerify']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/v1/cloud/account/password-login': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /** 密码登录 → 关联这台机器 */
+    post: operations['cloudPasswordLogin']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/v1/cloud/account/password/forgot': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /** 忘记密码：发一封重置验证码 */
+    post: operations['cloudPasswordForgot']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/v1/cloud/account/password/reset': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /** 验证码 + 新密码 → 设好新密码（别的会话全部失效）并关联这台机器 */
+    post: operations['cloudPasswordReset']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/v1/cloud/credits': {
     parameters: {
       query?: never
@@ -15342,6 +15478,767 @@ export interface operations {
     requestBody?: never
     responses: {
       /** @description { unlinked, revoked_on_cloud, reason? } */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Envelope']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      400: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      401: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      403: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      409: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      429: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      500: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      503: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+    }
+  }
+  getCloudAuthConfig: {
+    parameters: {
+      query?: never
+      header: {
+        /** @description 本次请求绑定的 Assignment（31 §3.1：一次请求一个 Assignment） */
+        'X-Assignment': string
+      }
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description CloudAuthConfig */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Envelope']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      400: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      401: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      403: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      429: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      500: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      503: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+    }
+  }
+  cloudSignup: {
+    parameters: {
+      query?: never
+      header: {
+        /** @description 本次请求绑定的 Assignment（31 §3.1：一次请求一个 Assignment） */
+        'X-Assignment': string
+        /** @description 幂等键；24h 内同键重放原响应（28 §2） */
+        'Idempotency-Key'?: string
+      }
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': {
+          name: string
+          email: string
+          password: string
+          /** @constant */
+          accept_terms: true
+          /** @default 2026-10-05 */
+          terms_version?: string
+          /**
+           * @default zh
+           * @enum {string}
+           */
+          locale?: 'zh' | 'en'
+        }
+      }
+    }
+    responses: {
+      /** @description { expires_at, delivered: "email" } */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Envelope']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      400: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      401: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      403: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      409: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      429: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      500: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      503: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+    }
+  }
+  cloudSignupVerify: {
+    parameters: {
+      query?: never
+      header: {
+        /** @description 本次请求绑定的 Assignment（31 §3.1：一次请求一个 Assignment） */
+        'X-Assignment': string
+        /** @description 幂等键；24h 内同键重放原响应（28 §2） */
+        'Idempotency-Key'?: string
+      }
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': {
+          email: string
+          code: string
+        }
+      }
+    }
+    responses: {
+      /** @description CloudAuthDoneView */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Envelope']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      400: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      401: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      403: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      409: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      429: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      500: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      503: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+    }
+  }
+  cloudLoginCode: {
+    parameters: {
+      query?: never
+      header: {
+        /** @description 本次请求绑定的 Assignment（31 §3.1：一次请求一个 Assignment） */
+        'X-Assignment': string
+        /** @description 幂等键；24h 内同键重放原响应（28 §2） */
+        'Idempotency-Key'?: string
+      }
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': {
+          email: string
+          /**
+           * @default zh
+           * @enum {string}
+           */
+          locale?: 'zh' | 'en'
+        }
+      }
+    }
+    responses: {
+      /** @description { expires_at, delivered: "email" } */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Envelope']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      400: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      401: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      403: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      409: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      429: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      500: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      503: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+    }
+  }
+  cloudLoginCodeVerify: {
+    parameters: {
+      query?: never
+      header: {
+        /** @description 本次请求绑定的 Assignment（31 §3.1：一次请求一个 Assignment） */
+        'X-Assignment': string
+        /** @description 幂等键；24h 内同键重放原响应（28 §2） */
+        'Idempotency-Key'?: string
+      }
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': {
+          email: string
+          code: string
+        }
+      }
+    }
+    responses: {
+      /** @description CloudAuthDoneView */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Envelope']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      400: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      401: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      403: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      409: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      429: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      500: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      503: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+    }
+  }
+  cloudPasswordLogin: {
+    parameters: {
+      query?: never
+      header: {
+        /** @description 本次请求绑定的 Assignment（31 §3.1：一次请求一个 Assignment） */
+        'X-Assignment': string
+        /** @description 幂等键；24h 内同键重放原响应（28 §2） */
+        'Idempotency-Key'?: string
+      }
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': {
+          email: string
+          password: string
+        }
+      }
+    }
+    responses: {
+      /** @description CloudAuthDoneView */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Envelope']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      400: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      401: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      403: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      409: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      429: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      500: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      503: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+    }
+  }
+  cloudPasswordForgot: {
+    parameters: {
+      query?: never
+      header: {
+        /** @description 本次请求绑定的 Assignment（31 §3.1：一次请求一个 Assignment） */
+        'X-Assignment': string
+        /** @description 幂等键；24h 内同键重放原响应（28 §2） */
+        'Idempotency-Key'?: string
+      }
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': {
+          email: string
+          /**
+           * @default zh
+           * @enum {string}
+           */
+          locale?: 'zh' | 'en'
+        }
+      }
+    }
+    responses: {
+      /** @description { expires_at, delivered: "email" } */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Envelope']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      400: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      401: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      403: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      409: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      429: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      500: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      503: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+    }
+  }
+  cloudPasswordReset: {
+    parameters: {
+      query?: never
+      header: {
+        /** @description 本次请求绑定的 Assignment（31 §3.1：一次请求一个 Assignment） */
+        'X-Assignment': string
+        /** @description 幂等键；24h 内同键重放原响应（28 §2） */
+        'Idempotency-Key'?: string
+      }
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': {
+          email: string
+          code: string
+          new_password: string
+        }
+      }
+    }
+    responses: {
+      /** @description CloudAuthDoneView */
       200: {
         headers: {
           [name: string]: unknown

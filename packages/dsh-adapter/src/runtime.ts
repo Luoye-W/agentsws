@@ -31,6 +31,7 @@ import { staticPrefixHash } from '@agentsws/model-gateway'
 import type { DraftPayload, StageIntent } from '@agentsws/stand-ins'
 import {
   assemblePrompt,
+  boundariesToAsk,
   describeRun,
   promptHash,
   TOOL_CALL_TEXT_FAILURE,
@@ -469,8 +470,12 @@ export function createInProcessDshRuntime(options: DshRuntimeOptions): RuntimeAd
         }
 
         // ── 边界选择题卡（36 §2.2）：模型压根没提变更那条路也要问一次 ────────
+        // WP232：只有这件事真在要一笔变更（或模型自己去提了变更、被拦下时已经问过）才问
         const askedBoundaries: string[] = []
-        if (exhausted === undefined) {
+        if (
+          exhausted === undefined &&
+          (harness.gate.boundariesAsked() || boundariesToAsk(harness.gate.boundary).length > 0)
+        ) {
           for (const asked of await harness.gate.askBoundaries()) askedBoundaries.push(asked.label)
         }
 

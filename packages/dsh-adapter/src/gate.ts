@@ -157,6 +157,8 @@ export interface GateApi {
    * `tools/pre-execute` 拒掉 stage 时调它；运行时也调它（模型压根没提变更那条路）。
    */
   askBoundaries(): Promise<AskedBoundary[]>
+  /** WP232：这次运行已经问过边界了（模型去提变更被拦下那一刻问的）。 */
+  boundariesAsked(): boolean
   /** 供契约测试直接驱动 answerer waterfall。 */
   requestApproval(req: {
     toolName: string
@@ -328,6 +330,7 @@ export function installGate(ctx: Context, input: GateInput): GateApi {
       if (askedOnce === undefined) askedOnce = askAll()
       return askedOnce
     },
+    boundariesAsked: () => askedOnce !== undefined,
     async requestApproval(req) {
       try {
         // 17 §4 的 answerer waterfall：任一 answerer 认领即返回；没人认领 → `unavailable`（fail-closed）

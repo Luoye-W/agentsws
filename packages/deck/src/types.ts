@@ -280,6 +280,14 @@ export interface DeckCard {
    * 别的卡没有它。
    */
   change_kind?: string
+  /**
+   * WP232：**收件人待定的回信草稿**（`outbound_draft` 的 `payload.manual_send`）。
+   *
+   * 起草时找不到能替人发的收件人，草稿照样进待批，但系统不发——批了只记「人自己发」。
+   * 按钮上的字因此不能是「发送」（`verbKey(…, MANUAL_SEND_VERB_KIND)` 换成「我来发 / 不用」）。
+   * 别的卡没有它。
+   */
+  manual_send?: true
   status: ApprovalState
   /** 由 risk_class + expires_at + 14 §8 排序算出 */
   priority_band: PriorityBand

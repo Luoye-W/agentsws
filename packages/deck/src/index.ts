@@ -135,6 +135,7 @@ export {
   type DeckVerb,
   LAYOUT_VERBS,
   type LayoutVerbs,
+  MANUAL_SEND_VERB_KIND,
   verbKey,
   verbRank,
 } from './verbs.js'

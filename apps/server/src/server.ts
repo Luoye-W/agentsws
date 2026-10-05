@@ -3224,6 +3224,16 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
             env,
             models: gatewayProxy,
             approvals,
+            // WP232：边界选择题已经有一张在等人答就指给它（不 bump、不改挂到别的事项上）
+            activeApproval: (dedupe_key, kind) =>
+              txn.runtime.store
+                .listApprovals({
+                  workspace_id: ws,
+                  kind,
+                  dedupe_key,
+                  state: ['pending', 'in_review', 'deferred'],
+                })
+                .at(-1),
             roles,
             appendEvent,
             // WP25：有没有模型问模型面（加密库里的配置 + 环境变量兜底）

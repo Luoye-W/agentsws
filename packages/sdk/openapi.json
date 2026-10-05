@@ -10324,6 +10324,1153 @@
         "x-returns": "{ unlinked, revoked_on_cloud, reason? }"
       }
     },
+    "/v1/cloud/account/auth-config": {
+      "get": {
+        "operationId": "getCloudAuthConfig",
+        "summary": "注册 / 登录界面要知道的几样（密码最短几位、验证码几位、条款版本）",
+        "tags": ["cloud-account"],
+        "parameters": [
+          {
+            "name": "X-Assignment",
+            "in": "header",
+            "required": true,
+            "description": "本次请求绑定的 Assignment（31 §3.1：一次请求一个 Assignment）",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "CloudAuthConfig",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-authz": {
+          "domain": "store_config",
+          "op": "read",
+          "range": "workspace",
+          "sensitivity": "internal"
+        },
+        "x-halt-scope": "outbound",
+        "x-returns": "CloudAuthConfig"
+      }
+    },
+    "/v1/cloud/account/signup": {
+      "post": {
+        "operationId": "cloudSignup",
+        "summary": "注册：名字 + 邮箱 + 密码 + 同意条款 → 云发一封 6 位注册验证码",
+        "tags": ["cloud-account"],
+        "parameters": [
+          {
+            "name": "X-Assignment",
+            "in": "header",
+            "required": true,
+            "description": "本次请求绑定的 Assignment（31 §3.1：一次请求一个 Assignment）",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "幂等键；24h 内同键重放原响应（28 §2）",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "{ expires_at, delivered: \"email\" }",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-authz": {
+          "domain": "policy",
+          "op": "stage",
+          "range": "workspace",
+          "sensitivity": "restricted"
+        },
+        "x-halt-scope": "outbound",
+        "x-returns": "{ expires_at, delivered: \"email\" }",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120
+                  },
+                  "email": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 320
+                  },
+                  "password": {
+                    "type": "string",
+                    "minLength": 8,
+                    "maxLength": 128
+                  },
+                  "accept_terms": {
+                    "type": "boolean",
+                    "const": true
+                  },
+                  "terms_version": {
+                    "default": "2026-10-05",
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 40
+                  },
+                  "locale": {
+                    "default": "zh",
+                    "type": "string",
+                    "enum": ["zh", "en"]
+                  }
+                },
+                "required": ["name", "email", "password", "accept_terms"]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/cloud/account/signup/verify": {
+      "post": {
+        "operationId": "cloudSignupVerify",
+        "summary": "注册验证码 → 建号、送注册积分、关联这台机器",
+        "tags": ["cloud-account"],
+        "parameters": [
+          {
+            "name": "X-Assignment",
+            "in": "header",
+            "required": true,
+            "description": "本次请求绑定的 Assignment（31 §3.1：一次请求一个 Assignment）",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "幂等键；24h 内同键重放原响应（28 §2）",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "CloudAuthDoneView",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-authz": {
+          "domain": "policy",
+          "op": "stage",
+          "range": "workspace",
+          "sensitivity": "restricted"
+        },
+        "x-halt-scope": "outbound",
+        "x-returns": "CloudAuthDoneView",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 320
+                  },
+                  "code": {
+                    "type": "string",
+                    "pattern": "^\\d{6}$"
+                  }
+                },
+                "required": ["email", "code"]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/cloud/account/code": {
+      "post": {
+        "operationId": "cloudLoginCode",
+        "summary": "登录：发一封 6 位登录验证码（没注册的邮箱云上静默不发）",
+        "tags": ["cloud-account"],
+        "parameters": [
+          {
+            "name": "X-Assignment",
+            "in": "header",
+            "required": true,
+            "description": "本次请求绑定的 Assignment（31 §3.1：一次请求一个 Assignment）",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "幂等键；24h 内同键重放原响应（28 §2）",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "{ expires_at, delivered: \"email\" }",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-authz": {
+          "domain": "policy",
+          "op": "stage",
+          "range": "workspace",
+          "sensitivity": "restricted"
+        },
+        "x-halt-scope": "outbound",
+        "x-returns": "{ expires_at, delivered: \"email\" }",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 320
+                  },
+                  "locale": {
+                    "default": "zh",
+                    "type": "string",
+                    "enum": ["zh", "en"]
+                  }
+                },
+                "required": ["email"]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/cloud/account/code/verify": {
+      "post": {
+        "operationId": "cloudLoginCodeVerify",
+        "summary": "登录验证码 → 关联这台机器",
+        "tags": ["cloud-account"],
+        "parameters": [
+          {
+            "name": "X-Assignment",
+            "in": "header",
+            "required": true,
+            "description": "本次请求绑定的 Assignment（31 §3.1：一次请求一个 Assignment）",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "幂等键；24h 内同键重放原响应（28 §2）",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "CloudAuthDoneView",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-authz": {
+          "domain": "policy",
+          "op": "stage",
+          "range": "workspace",
+          "sensitivity": "restricted"
+        },
+        "x-halt-scope": "outbound",
+        "x-returns": "CloudAuthDoneView",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 320
+                  },
+                  "code": {
+                    "type": "string",
+                    "pattern": "^\\d{6}$"
+                  }
+                },
+                "required": ["email", "code"]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/cloud/account/password-login": {
+      "post": {
+        "operationId": "cloudPasswordLogin",
+        "summary": "密码登录 → 关联这台机器",
+        "tags": ["cloud-account"],
+        "parameters": [
+          {
+            "name": "X-Assignment",
+            "in": "header",
+            "required": true,
+            "description": "本次请求绑定的 Assignment（31 §3.1：一次请求一个 Assignment）",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "幂等键；24h 内同键重放原响应（28 §2）",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "CloudAuthDoneView",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-authz": {
+          "domain": "policy",
+          "op": "stage",
+          "range": "workspace",
+          "sensitivity": "restricted"
+        },
+        "x-halt-scope": "outbound",
+        "x-returns": "CloudAuthDoneView",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 320
+                  },
+                  "password": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  }
+                },
+                "required": ["email", "password"]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/cloud/account/password/forgot": {
+      "post": {
+        "operationId": "cloudPasswordForgot",
+        "summary": "忘记密码：发一封重置验证码",
+        "tags": ["cloud-account"],
+        "parameters": [
+          {
+            "name": "X-Assignment",
+            "in": "header",
+            "required": true,
+            "description": "本次请求绑定的 Assignment（31 §3.1：一次请求一个 Assignment）",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "幂等键；24h 内同键重放原响应（28 §2）",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "{ expires_at, delivered: \"email\" }",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-authz": {
+          "domain": "policy",
+          "op": "stage",
+          "range": "workspace",
+          "sensitivity": "restricted"
+        },
+        "x-halt-scope": "outbound",
+        "x-returns": "{ expires_at, delivered: \"email\" }",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 320
+                  },
+                  "locale": {
+                    "default": "zh",
+                    "type": "string",
+                    "enum": ["zh", "en"]
+                  }
+                },
+                "required": ["email"]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/cloud/account/password/reset": {
+      "post": {
+        "operationId": "cloudPasswordReset",
+        "summary": "验证码 + 新密码 → 设好新密码（别的会话全部失效）并关联这台机器",
+        "tags": ["cloud-account"],
+        "parameters": [
+          {
+            "name": "X-Assignment",
+            "in": "header",
+            "required": true,
+            "description": "本次请求绑定的 Assignment（31 §3.1：一次请求一个 Assignment）",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "幂等键；24h 内同键重放原响应（28 §2）",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "CloudAuthDoneView",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-authz": {
+          "domain": "policy",
+          "op": "stage",
+          "range": "workspace",
+          "sensitivity": "restricted"
+        },
+        "x-halt-scope": "outbound",
+        "x-returns": "CloudAuthDoneView",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 320
+                  },
+                  "code": {
+                    "type": "string",
+                    "pattern": "^\\d{6}$"
+                  },
+                  "new_password": {
+                    "type": "string",
+                    "minLength": 8,
+                    "maxLength": 128
+                  }
+                },
+                "required": ["email", "code", "new_password"]
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/cloud/credits": {
       "get": {
         "operationId": "getCloudCredits",

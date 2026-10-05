@@ -276,9 +276,7 @@ describe('WP226：回复语言规则', () => {
     expect(REPLY_LANGUAGE_ORDER).toBeGreaterThan(PERSONA_ORDER.role)
     expect(REPLY_LANGUAGE_ORDER).toBeLessThan(HOUSE_RULES_ORDER)
     expect(zh.text).toContain('对方来信的语言')
-    expect(zh.text).toContain('对内')
     expect(en.text).toContain('language of the message you are answering')
-    expect(en.text).toContain('Anything for the user')
     expect(hasChineseText(en.text)).toBe(false)
     expect(zh.text).toBe(REPLY_LANGUAGE_RULE.zh)
   })
@@ -292,5 +290,20 @@ describe('WP153：所有职责的提示词公共段', () => {
     expect(HOUSE_RULES_ORDER).toBeGreaterThan(PERSONA_ORDER.role)
     expect(HOUSE_RULES_ORDER).toBeLessThan(40)
     expect(houseRulesSection('en').text).toContain('never mention tool names')
+  })
+})
+
+describe('WP232：过程话用界面语言，只有外发稿跟来信语言', () => {
+  it('先说对内（点名边做边说的过程话），再把「跟来信语言」收窄到起草工具里的正文和主题', () => {
+    const zh = REPLY_LANGUAGE_RULE.zh
+    expect(zh).toContain('边做边说的过程话')
+    expect(zh).toContain('哪怕来信、资料、工具结果是英文')
+    expect(zh).toContain('起草工具里的正文和主题')
+    expect(zh.indexOf('都用中文')).toBeLessThan(zh.indexOf('对方来信的语言'))
+    const en = REPLY_LANGUAGE_RULE.en
+    expect(en).toContain('progress notes while you work')
+    expect(en).toContain('the body and subject in the drafting tool')
+    expect(en.indexOf('is in English')).toBeLessThan(en.indexOf('language of the message'))
+    expect(hasChineseText(en)).toBe(false)
   })
 })

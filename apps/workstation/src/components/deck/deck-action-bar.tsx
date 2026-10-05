@@ -20,7 +20,7 @@
  *   的安静动作**，让出来的位置给了"这一下会发生什么"。
  */
 import type { DeckAction, DeckCard } from '@agentsws/deck'
-import { LAYOUT_VERBS, verbKey, verbRank } from '@agentsws/deck'
+import { LAYOUT_VERBS, MANUAL_SEND_VERB_KIND, verbKey, verbRank } from '@agentsws/deck'
 import { MoreHorizontal } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
@@ -54,7 +54,12 @@ export function quickActions(card: DeckCard): DeckAction[] {
  * 两张表都没有的（`open`）才退回服务端那份与通用动词。
  */
 export function deckActionLabel(card: DeckCard, a: DeckAction, t: (key: string) => string): string {
-  const key = verbKey(card.layout, a, card.change_kind ?? card.kind)
+  // WP232：收件人待定的草稿批了不发出去——按钮不能写「发送」
+  const key = verbKey(
+    card.layout,
+    a,
+    card.manual_send === true ? MANUAL_SEND_VERB_KIND : (card.change_kind ?? card.kind),
+  )
   if (key !== undefined) return t(key)
   return card.action_labels?.[a] ?? t(`action.${a}`)
 }

@@ -71,6 +71,18 @@ function asRef(v: unknown): ObjectRef | undefined {
     : undefined
 }
 
+/**
+ * WP232：**收件人待定的回信草稿卡**（`payload.manual_send === true` 且没有 `payload.to`）。
+ *
+ * 起草回复时找不到一个能替人发出去的收件人（人在任务里贴了一封信、事项上没有来信人）时，
+ * 草稿照样进待批——但这张卡**系统不发**：批了只记「人自己发」，执行器不碰任何渠道。
+ * 两格缺一不可：带了 `to` 就还是普通回信卡，照旧过收件人门禁（防止有人拿这个标记绕门）。
+ */
+export function isManualSendDraft(payload: unknown): boolean {
+  const p = rec(payload)
+  return p.manual_send === true && p.to === undefined
+}
+
 function textOf(payload: unknown): string {
   const p = rec(payload)
   const body = rec(p.body)
@@ -136,7 +148,11 @@ export function runPrecheck<P>(
   if (input.kind === 'outbound_draft') {
     const to = asRef(p.to)
     const allowed = new Set([...(ctx.thread_participants ?? []), ...(ctx.verified_contacts ?? [])])
-    if (!to || !allowed.has(to.id)) {
+    if (isManualSendDraft(payload)) {
+      // WP232：收件人待定的草稿卡——**系统不发**（执行器不碰任何渠道），人复制去发。
+      // 收件人门禁管的是「系统替你发给谁」；这张卡没有收件人，也就没有「发错人」这回事。
+      notes.push('收件人待定：这张卡不由系统发出，人复制正文自己发')
+    } else if (!to || !allowed.has(to.id)) {
       blocked.push('recipient_gate')
       notes.push('收件人不是线程原参与者，也不是已验证联系方式（31 §3.3）')
     }

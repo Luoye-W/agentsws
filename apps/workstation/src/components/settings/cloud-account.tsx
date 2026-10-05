@@ -4,8 +4,8 @@
  * 两个状态，各一句人话：
  *
  * - **没关联**：一句"关联之后能一键用 agentsws 的模型和数据服务（按积分）" +
- *   邮箱框 + 「发登录邮件」。按完不跳转、不弹窗——只提示"去邮箱点那条链接"，
- *   因为真正的下一步发生在用户的邮箱里，不在这一页。
+ *   WP231 的注册 / 登录表单（`CloudAuthForm`，与向导第 ① 步同一个件）：注册新账号（默认）/
+ *   已有账号登录（邮箱验证码或密码）。验过就关联上，不跳转、不弹窗。
  * - **已关联**：邮箱、令牌到期、动作集、「解除关联」。
  *
  * 这一页**永远看不到令牌**：服务端的 `GET /v1/cloud/account` 就不回它
@@ -14,18 +14,17 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link2 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
+import { CloudAuthForm } from '@/components/cloud/cloud-auth-form'
 import { BrandMark, StatusIcons } from '@/components/design'
 import { TutorialLink } from '@/components/help/tutorial-link'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Hint } from '@/components/ui/hint'
-import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
   ApiClientError,
   type CloudAccountView,
   getCloudAccount,
-  linkCloudAccount,
   unlinkCloudAccount,
 } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
@@ -40,16 +39,12 @@ function day(iso: string | undefined): string {
 export function CloudAccountCard({ assignment }: { assignment?: string }): React.ReactNode {
   const { t } = useApp()
   const client = useQueryClient()
-  const [email, setEmail] = useState('')
-  const [sent, setSent] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const account = useQuery({
     queryKey: ['cloud-account', assignment],
     queryFn: () => getCloudAccount(assignment),
     retry: false,
-    // WP140：信发出去之后每隔几秒问一次（与向导第 ① 步同一个口径），点开了就停
-    refetchInterval: (q) => (sent && q.state.data?.linked !== true ? 3000 : false),
   })
 
   /*
@@ -67,7 +62,6 @@ export function CloudAccountCard({ assignment }: { assignment?: string }): React
     if (account.data === undefined) return
     const before = seen.current
     seen.current = linkedNow
-    if (linkedNow) setSent(false)
     if (before === undefined && !linkedNow) return
     if (before === linkedNow) return
     for (const key of [
@@ -80,23 +74,10 @@ export function CloudAccountCard({ assignment }: { assignment?: string }): React
       void client.invalidateQueries({ queryKey: [key] })
   }, [linkedNow, account.data, client])
 
-  const link = useMutation({
-    mutationFn: (value: string) => linkCloudAccount(value, assignment),
-    onSuccess: () => {
-      setError(null)
-      setSent(true)
-    },
-    onError: (err: unknown) => {
-      setSent(false)
-      setError(err instanceof ApiClientError ? err.message : t('error.generic'))
-    },
-  })
-
   const unlink = useMutation({
     mutationFn: () => unlinkCloudAccount(assignment),
     onSuccess: async (result) => {
       setError(result.reason ?? null)
-      setSent(false)
       await client.invalidateQueries({ queryKey: ['cloud-account'] })
     },
     onError: (err: unknown) => {
@@ -165,39 +146,15 @@ export function CloudAccountCard({ assignment }: { assignment?: string }): React
                 text={`${t('cloud.account.intro.hint')} ${t('cloud.account.endpoint')} ${view.cloud_base_url}`}
               />
             </p>
-            <div className="flex items-center gap-2">
-              <Input
-                type="email"
-                aria-label={t('cloud.account.email')}
-                placeholder={t('cloud.account.email.placeholder')}
-                value={email}
-                disabled={view.blocked_reason !== undefined}
-                onChange={(e) => {
-                  setEmail(e.target.value)
-                  setSent(false)
-                }}
-              />
-              <Button
-                size="sm"
-                disabled={
-                  link.isPending || email.trim() === '' || view.blocked_reason !== undefined
-                }
-                onClick={() => {
-                  link.mutate(email.trim())
-                }}
-              >
-                {t('cloud.account.send')}
-              </Button>
-            </div>
-            {sent ? (
-              <p
-                className="text-muted-foreground"
-                data-slot="status"
-                data-testid="cloud-account-sent"
-              >
-                {t('cloud.account.sent')}
-              </p>
-            ) : null}
+            <CloudAuthForm
+              {...(assignment === undefined ? {} : { assignment })}
+              testPrefix="cloud-account"
+              disabled={view.blocked_reason !== undefined}
+              onDone={() => {
+                setError(null)
+                void client.invalidateQueries({ queryKey: ['cloud-account'] })
+              }}
+            />
             {view.blocked_reason === undefined ? null : (
               <p className="text-muted-foreground" data-slot="status">
                 {view.blocked_reason}

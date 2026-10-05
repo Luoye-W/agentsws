@@ -159,6 +159,22 @@ export function boundaryGate(input: {
   }
 }
 
+/**
+ * WP232：这次运行**该不该**把没答过的边界发成选择题卡（三个运行时同一份判定）。
+ *
+ * 只有这件事真在要一笔变更（来信意图落在管着它的那条边界的触发面上）才问。
+ * 以前是「`missing` 非空就问」——而 `missing` 只看"管着退款的边界答没答过"、不看这件事
+ * 跟退款有没有关系，于是虚拟产品工作区里**每一次运行**（红人回信、开发信……）都把
+ * 「订阅费的退款口径是什么？」那张卡再提一遍（10-05 dev-real：revision 1 → 2 → 3，
+ * 每次都挂到当次运行上）。模型自己去提退款被拦下的那条路（dsh 的 `tools/pre-execute`）
+ * 不经这里——那时候这件事显然跟退款有关，照旧问。
+ */
+export function boundariesToAsk(
+  gate: Pick<BoundaryGate, 'wantsChange' | 'missing'>,
+): BoundaryItem[] {
+  return gate.wantsChange ? [...gate.missing] : []
+}
+
 /** 哪些意图算"客户在要一笔退款"——从管着退款的那条边界的触发面读，不写死。 */
 function refundIntents(vertical: Vertical | undefined): readonly string[] {
   const pack = getVerticalPack(vertical)

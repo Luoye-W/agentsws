@@ -287,6 +287,21 @@ describe('37 §1 第 6 行 + WP100：动作行 = 主次动词 + 一个 ··· �
     expect(within(bar).getByText('改一下').closest('button')?.dataset.rank).toBe('secondary')
   })
 
+  it('WP232 收件人待定的草稿卡：主动词是「我来发」、次动词「不用」，没有「发送」', () => {
+    renderWithProviders(
+      <DeckCardView
+        card={draftCard({ manual_send: true })}
+        mode="zh_summary"
+        onDecide={noop}
+        onOpen={noop}
+      />,
+    )
+    const bar = screen.getByTestId('deck-action-bar')
+    expect(within(bar).queryByText('发送')).toBeNull()
+    expect(within(bar).getByText('我来发').closest('button')?.dataset.rank).toBe('primary')
+    expect(within(bar).getByText('不用')).toBeDefined()
+  })
+
   it('安静区收进 ···：点开才有「需要补素材」与「稍后」，收着时按钮行上没有它们', async () => {
     renderWithProviders(
       <DeckCardView card={draftCard()} mode="zh_summary" onDecide={noop} onOpen={noop} />,
