@@ -165,3 +165,17 @@ export interface WeeklyReviewPayload {
 
 /** 一页纸的长度上限（docs/91 §5 #9：≤ 500，中文按字数）。 */
 export const WEEKLY_REVIEW_MAX_LENGTH = 500
+
+/**
+ * 一页纸什么时候推（设置里那一行）：每周几、几点（工作区时区）。默认周一 08:00。
+ * `weekday` 用 cron 的写法：0 = 周日、1 = 周一 … 6 = 周六。
+ */
+export interface WeeklyReviewScheduleView {
+  weekday: number
+  /** `HH:MM`（24 小时）。 */
+  time: string
+  /** 这条定时现在停着没有（没人担「公司设置与授权」时自动停）。 */
+  paused: boolean
+  /** 还没建（这个品牌还没有能挂的岗位）。 */
+  missing?: boolean
+}

@@ -876,6 +876,20 @@ const zh: Table = {
   'org.brands.design.title': '设计规范',
   // WP224：公司 → 品牌 · 毛利率（盈亏线 ROAS = 1 / 毛利率）
   'org.margin.title': '毛利率',
+  // WP224：设置 → 通用 · 经营一页纸什么时候推
+  'settings.weekly_review': '经营一页纸',
+  'settings.weekly_review.hint':
+    '秘书按这个时间把「本周经营一页纸」推给你（工作区时区）。多个品牌各推各的，在哪个品牌改就只改那个品牌。',
+  'settings.weekly_review.every': '每',
+  'settings.weekly_review.weekday': '星期几',
+  'settings.weekly_review.time': '几点',
+  'settings.weekly_review.day.0': '周日',
+  'settings.weekly_review.day.1': '周一',
+  'settings.weekly_review.day.2': '周二',
+  'settings.weekly_review.day.3': '周三',
+  'settings.weekly_review.day.4': '周四',
+  'settings.weekly_review.day.5': '周五',
+  'settings.weekly_review.day.6': '周六',
   'org.margin.hint':
     '品牌事实里的一格（知识库事实卡）。投放面板 ROAS 旁边的「盈亏线」= 1 / 毛利率；只并排显示，不改自动止损。没填就是没填，面板上写「没填毛利率」。',
   'org.margin.brand': '整个品牌',
@@ -4499,6 +4513,19 @@ const en: Table = {
   'messages.ai.handed': '{name} is on it — no suggestions here',
   'org.brands.design.title': 'Design spec',
   'org.margin.title': 'Gross margin',
+  'settings.weekly_review': 'Weekly one-pager',
+  'settings.weekly_review.hint':
+    'When the secretary sends you this week on one page (workspace time zone). Each brand has its own; changing it here changes only this brand.',
+  'settings.weekly_review.every': 'Every',
+  'settings.weekly_review.weekday': 'Day',
+  'settings.weekly_review.time': 'Time',
+  'settings.weekly_review.day.0': 'Sunday',
+  'settings.weekly_review.day.1': 'Monday',
+  'settings.weekly_review.day.2': 'Tuesday',
+  'settings.weekly_review.day.3': 'Wednesday',
+  'settings.weekly_review.day.4': 'Thursday',
+  'settings.weekly_review.day.5': 'Friday',
+  'settings.weekly_review.day.6': 'Saturday',
   'org.margin.hint':
     'A brand fact (a knowledge fact card). The "break-even" next to ROAS on the ads panel = 1 / gross margin; shown side by side only, the automatic stop-loss is unchanged. Not filled means not filled — the panel says so.',
   'org.margin.brand': 'Whole brand',

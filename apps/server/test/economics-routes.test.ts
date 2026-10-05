@@ -233,10 +233,31 @@ describe('本周经营一页纸', () => {
     expect(newer?.revision).toBe(2)
   })
 
-  it('每周一早上那条定时在（时间在定时任务里可改）；有人担投放就记对照', async () => {
+  it('每周一早上那条定时在；设置里改成周三 09:30 就改的是这一条', async () => {
     expect(server.schedule.scheduler.get('sched_weekly_review')?.trigger).toMatchObject({
       kind: 'cron',
       expr: '0 8 * * 1',
     })
+    expect(await data(await api('/v1/economics/weekly-review/schedule'))).toEqual({
+      weekday: 1,
+      time: '08:00',
+      paused: false,
+    })
+    const next = await data(
+      await put('/v1/economics/weekly-review/schedule', { weekday: 3, time: '09:30' }),
+    )
+    expect(next).toEqual({ weekday: 3, time: '09:30', paused: false })
+    expect(server.schedule.scheduler.get('sched_weekly_review')?.trigger).toMatchObject({
+      kind: 'cron',
+      expr: '30 9 * * 3',
+    })
+    // 写错当场 400；投放那条职责改不了
+    expect(
+      (await put('/v1/economics/weekly-review/schedule', { weekday: 3, time: '9:30' })).status,
+    ).toBe(400)
+    expect(
+      (await put('/v1/economics/weekly-review/schedule', { weekday: 1, time: '08:00' }, meta.id))
+        .status,
+    ).toBe(403)
   })
 })

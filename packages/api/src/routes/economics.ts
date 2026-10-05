@@ -7,6 +7,7 @@
  * | `PUT /v1/economics/margins` | 填 / 改 / 清一格（就是一张事实卡；清 = 退役，留痕不删） | 改策略层的人（负责人） |
  * | `GET /v1/economics/line-compare` | 两条止损线逐日对照（现在的线 vs 盈亏线），两周后给人定 | 读策略层的人 |
  * | `GET /v1/economics/weekly-review` | 现在拼一份本周经营一页纸（只看，不出卡） | 读策略层的人 |
+ * | `GET` / `PUT /v1/economics/weekly-review/schedule` | 一页纸每周几、几点推（设置里那一行） | 读 / 改策略层的人 |
  * | `POST /v1/economics/weekly-review/run` | 现在就推一张一页纸卡（同一周再推一次 = 同一张的新一版） | 读策略层的人 |
  *
  * 自动止损线（`stop_loss_roas_below`）这一组路由一个都不碰：盈亏线只并排显示（Luoye 10-05）。
@@ -17,6 +18,7 @@ import type {
   GrossMarginsView,
   MaybePromise,
   WeeklyReviewPayload,
+  WeeklyReviewScheduleView,
 } from '@agentsws/contracts'
 import { z } from 'zod'
 import { ApiError } from '../errors.js'
@@ -61,7 +63,18 @@ export interface EconomicsPort {
   /** 没有老板岗位 / 面板读不到 = `null`。 */
   weeklyReview(actor: EconomicsActor): MaybePromise<WeeklyReviewPayload | null>
   runWeeklyReview(actor: EconomicsActor): MaybePromise<WeeklyReviewRunView>
+  /** 一页纸每周几、几点推（设置里那一行）。 */
+  weeklyReviewSchedule(actor: EconomicsActor): MaybePromise<WeeklyReviewScheduleView>
+  setWeeklyReviewSchedule(
+    actor: EconomicsActor,
+    input: { weekday: number; time: string },
+  ): MaybePromise<WeeklyReviewScheduleView>
 }
+
+const ScheduleBody = z.object({
+  weekday: z.number().int().min(0).max(6),
+  time: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, '时间写成 HH:MM（24 小时）'),
+})
 
 const MarginBody = z.object({
   scope: z.enum(['brand', 'category', 'sku']),
@@ -172,6 +185,38 @@ export function economicsRoutes(): Route[] {
         returns: 'WeeklyReviewRunView',
       },
       async (c, deps) => ok(c, await portOf(deps).runWeeklyReview(actorOf(c))),
+    ),
+    route(
+      {
+        method: 'get',
+        path: '/v1/economics/weekly-review/schedule',
+        operationId: 'getWeeklyReviewSchedule',
+        summary: '一页纸每周几、几点推（工作区时区；默认周一 08:00）',
+        tag: TAG,
+        auth: 'bearer',
+        assignment: true,
+        authz: READ,
+        returns: 'WeeklyReviewScheduleView',
+      },
+      async (c, deps) => ok(c, await portOf(deps).weeklyReviewSchedule(actorOf(c))),
+    ),
+    route(
+      {
+        method: 'put',
+        path: '/v1/economics/weekly-review/schedule',
+        operationId: 'setWeeklyReviewSchedule',
+        summary: '改一页纸每周几、几点推（只改这个品牌那一条定时）',
+        tag: TAG,
+        auth: 'bearer',
+        assignment: true,
+        authz: WRITE,
+        body: ScheduleBody,
+        returns: 'WeeklyReviewScheduleView',
+      },
+      async (c, deps) => {
+        const input = await body(c, ScheduleBody)
+        return ok(c, await portOf(deps).setWeeklyReviewSchedule(actorOf(c), input))
+      },
     ),
   ]
 }

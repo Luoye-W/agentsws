@@ -6503,3 +6503,21 @@ export const runWeeklyReview = (
     '/v1/economics/weekly-review/run',
     { method: 'POST', body: {}, ...withAssignment(assignment) },
   )
+
+import type { WeeklyReviewScheduleView } from '@agentsws/contracts'
+
+export type { WeeklyReviewScheduleView }
+
+/** WP224：一页纸每周几、几点推（设置 → 通用那一行）。 */
+export const getWeeklyReviewSchedule = (assignment?: string): Promise<WeeklyReviewScheduleView> =>
+  api<WeeklyReviewScheduleView>('/v1/economics/weekly-review/schedule', withAssignment(assignment))
+
+export const setWeeklyReviewSchedule = (
+  input: { weekday: number; time: string },
+  assignment?: string,
+): Promise<WeeklyReviewScheduleView> =>
+  api<WeeklyReviewScheduleView>('/v1/economics/weekly-review/schedule', {
+    method: 'PUT',
+    body: input,
+    ...withAssignment(assignment),
+  })

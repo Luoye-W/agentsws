@@ -23,6 +23,7 @@ import { ComputerUseCard } from '@/components/settings/computer-use-card'
 import { CreditsPanel } from '@/components/settings/credits-panel'
 import { DiagnosticsCard } from '@/components/settings/diagnostics-card'
 import { OfficialPluginsPanel } from '@/components/settings/official-plugins'
+import { WeeklyReviewCard } from '@/components/settings/weekly-review-card'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Hint } from '@/components/ui/hint'
@@ -272,6 +273,8 @@ export function SettingsPage({
           紧跟「公司」：它管的是这台电脑上所有品牌一起的事。所有者那一档权限。
         */}
         {ownerId === undefined ? null : <BackgroundCard assignment={ownerId} />}
+        {/* WP224：秘书每周几、几点推「本周经营一页纸」 */}
+        {ownerId === undefined ? null : <WeeklyReviewCard assignment={ownerId} />}
         {/*
           WP82（55 §3 末段）：浏览器。与模型 key 同一档权限（05 owner）——
           配浏览器是所有者的事，客服岗位看不到也改不了。放在模型前面：

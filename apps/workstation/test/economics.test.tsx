@@ -9,9 +9,15 @@ import { renderWithProviders } from './helpers'
 
 let entries: { scope: 'brand' | 'category' | 'sku'; key?: string; margin_pct: number }[] = []
 const saved: unknown[] = []
+let schedule = { weekday: 1, time: '08:00', paused: false }
 
 vi.mock('@/lib/api', async () => ({
   ...(await vi.importActual<typeof import('@/lib/api')>('@/lib/api')),
+  getWeeklyReviewSchedule: async () => schedule,
+  setWeeklyReviewSchedule: async (input: { weekday: number; time: string }) => {
+    schedule = { ...input, paused: false }
+    return schedule
+  },
   getGrossMargins: async () => ({ entries }),
   saveGrossMargin: async (input: { scope: 'brand'; margin_pct: number | null }) => {
     saved.push(input)
@@ -25,6 +31,7 @@ const { BlockBody } = await import('@/components/blocks/block-view')
 const { CardChips } = await import('@/components/deck/evidence-chips')
 const { WeeklyReviewBody } = await import('@/components/deck/weekly-review-body')
 const { ReportBlocks } = await import('@/components/deck/panel-blocks')
+const { WeeklyReviewCard } = await import('@/components/settings/weekly-review-card')
 
 describe('公司 → 品牌 · 毛利率', () => {
   it('没填：写「没填」；填 40 保存 → 盈亏线 ROAS 2.5', async () => {
@@ -184,5 +191,20 @@ describe('一页纸在岗位页上整张摊开（它不属于任何事项，没�
     renderWithProviders(<ReportBlocks reports={[card]} onOpen={() => {}} />)
     expect(screen.getByTestId('weekly-review')).toBeDefined()
     expect(screen.queryByTestId('report-figures')).toBeNull()
+  })
+})
+
+describe('设置 → 经营一页纸什么时候推', () => {
+  it('默认周一 08:00；改成周三就存周三（只改这个品牌那一条）', async () => {
+    renderWithProviders(<WeeklyReviewCard assignment="asg_owner" />)
+    const day = (await screen.findByTestId('settings-weekly-review-weekday')) as HTMLSelectElement
+    expect(day.value).toBe('1')
+    expect((screen.getByTestId('settings-weekly-review-time') as HTMLInputElement).value).toBe(
+      '08:00',
+    )
+    fireEvent.change(day, { target: { value: '3' } })
+    await waitFor(() => {
+      expect(schedule).toEqual({ weekday: 3, time: '08:00', paused: false })
+    })
   })
 })

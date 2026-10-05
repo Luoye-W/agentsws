@@ -292,7 +292,7 @@ export function composeWeeklyReview(input: WeeklyReviewInput): WeeklyReviewPaylo
 
   const next_steps = [
     ...(recommendations[0] === undefined ? [] : [`这周先做：${recommendations[0]}`]),
-    '下周一自动再出一份（时间在定时任务里可改）。',
+    '下一份到点自动出（时间在「设置 → 经营一页纸」里改）。',
   ]
 
   // ≤ 500：发现最多 6 条、建议最多 4 条；还超就从后往前砍发现（出处那一行不算正文）

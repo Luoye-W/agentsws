@@ -142,7 +142,7 @@ import {
   SUPERSEDED_POSITION_IDS,
   type SupervisedPosition,
 } from '@agentsws/roles'
-import { createBrandRouter } from '@agentsws/schedule'
+import { createBrandRouter, type ScheduleTask } from '@agentsws/schedule'
 import type { SearchFetch } from '@agentsws/search-providers'
 import {
   disconnectedSearchConsole,
@@ -1583,6 +1583,21 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
    * 走 `workspacesOf` 是因为本地档只有它是**同步**的——首次设置那一面要在
    * 组装视图的时候就拿到名字，不该为一个名字把整条路由改成异步。
    */
+  /** WP224：一页纸那条定时的 id（第一个品牌不带后缀，别的品牌 `__<ws>`，同 `ensureBrandTasks`）。 */
+  const weeklyReviewTaskId = (ws: string): string =>
+    ws === workspace.id ? 'sched_weekly_review' : `sched_weekly_review__${ws}`
+  /** WP224：一页纸那条定时 → 设置里那一行（每周几、几点）。 */
+  const weeklyReviewScheduleView = (task: ScheduleTask | undefined) => {
+    if (task === undefined)
+      return { weekday: 1, time: '08:00', paused: false, missing: true as const }
+    const parts = task.trigger.kind === 'cron' ? task.trigger.expr.split(/\s+/) : []
+    const pad = (n: string | undefined) => String(Number(n ?? 0)).padStart(2, '0')
+    return {
+      weekday: Number(parts[4] ?? 1) % 7,
+      time: `${pad(parts[1])}:${pad(parts[0])}`,
+      paused: task.state === 'paused',
+    }
+  }
   /** WP224：读写毛利率事实卡用的身份（这条分配自己的授权，05：不做跨分配并集）。 */
   const economicsReader = (actor: {
     workspace_id: string
@@ -7299,6 +7314,24 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         (await (await brandModules.forWorkspace(actor.workspace_id)).weeklyReview.build()) ?? null,
       runWeeklyReview: async (actor) =>
         (await brandModules.forWorkspace(actor.workspace_id)).weeklyReview.run(),
+      weeklyReviewSchedule: (actor) =>
+        weeklyReviewScheduleView(schedule.scheduler.get(weeklyReviewTaskId(actor.workspace_id))),
+      setWeeklyReviewSchedule: async (actor, input) => {
+        const id = weeklyReviewTaskId(actor.workspace_id)
+        const task = schedule.scheduler.get(id)
+        if (task === undefined)
+          throw new ApiError(
+            'conflict',
+            '这个品牌还没有一页纸那条定时（先有「公司设置与授权」岗位）',
+          )
+        const [hh, mm] = input.time.split(':').map(Number)
+        const tz = task.trigger.kind === 'cron' ? task.trigger.tz : 'UTC'
+        return weeklyReviewScheduleView(
+          await schedule.scheduler.update(id, {
+            trigger: { kind: 'cron', expr: `${mm} ${hh} * * ${input.weekday}`, tz },
+          }),
+        )
+      },
     },
     // WP215：每个品牌一套后台——状态、全进程并发上限、品牌急停
     background: {

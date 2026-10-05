@@ -156,9 +156,15 @@ describe('40 §2.2 疑似重复与一键合并（真进程）', () => {
       }),
     )
 
-    const pairs = await data<{ a: CatalogEntryRow; b: CatalogEntryRow; both_in_use: boolean }[]>(
-      await api('/v1/catalog/duplicates'),
-    )
+    /*
+     * 只看定时任务那几对：WP224 起自带技能里有 `policy-review` 与 `weekly-review` 两个名字
+     * 共用「review」、摘要一样，词袋判它们「像」——那是技能这一类自己的事，不是这条用例要钉的。
+     */
+    const pairs = (
+      await data<{ a: CatalogEntryRow; b: CatalogEntryRow; both_in_use: boolean }[]>(
+        await api('/v1/catalog/duplicates'),
+      )
+    ).filter((p) => p.a.kind === 'schedule')
     expect(pairs).toHaveLength(1)
     // 两条都挂在岗位上 → 都算"在用"
     expect(pairs[0]?.both_in_use).toBe(true)
@@ -183,7 +189,9 @@ describe('40 §2.2 疑似重复与一键合并（真进程）', () => {
     expect(after).toHaveLength(1)
     expect(after[0]?.id).toBe(`schedule:${a.id}`)
     expect(after[0]?.layer).toBe('dept')
-    const withHidden = await data<CatalogEntryRow[]>(await api('/v1/catalog/duplicates'))
+    const withHidden = (
+      await data<{ a: CatalogEntryRow }[]>(await api('/v1/catalog/duplicates'))
+    ).filter((p) => p.a.kind === 'schedule')
     expect(withHidden).toEqual([])
   })
 
