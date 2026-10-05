@@ -16,6 +16,7 @@ import { pathToFileURL } from 'node:url'
 import type { ChatMessage, Completion, ModelMeta, RunEvent, ToolDef } from '@agentsws/contracts'
 import { chatContentText } from '@agentsws/contracts'
 import { canonicalJson, sha256 } from '@agentsws/core'
+import { looksLikeToolCallText } from '@agentsws/stand-ins'
 import { Context } from '@deepseek-ai/cordis'
 import Include from '@deepseek-ai/cordis-plugin-include'
 import Loader from '@deepseek-ai/cordis-plugin-loader'
@@ -156,7 +157,11 @@ export interface DshHarness {
    * 投一轮：`followup(createUserMessage(...))` → `whenIdle()`。
    * 返回这一轮 Agent 最后说的那段文本与终止原因。
    */
-  runTurn(text: string): Promise<{ text: string; reason: string }>
+  /**
+   * 跑一轮。`tool_call_text`（WP230）：这一轮最后一条 assistant 消息把工具调用写成了文字
+   * ——`text` 不含那段假文字，由运行时决定重试还是报格式异常。
+   */
+  runTurn(text: string): Promise<{ text: string; reason: string; tool_call_text?: true }>
   /** 中断这一轮（17 §5.6）。 */
   cancel(): void
   dispose(): Promise<void>
@@ -795,25 +800,48 @@ export async function createHarness(input: HarnessInput): Promise<DshHarness> {
 export class TurnSummary {
   private text = ''
   private reason = 'unknown'
+  /** WP230：最后一条 assistant 消息是不是「没有真工具调用、文字却像在调工具」。 */
+  private callText = false
 
   observe(event: SessionEvent): void {
     if (event.type === 'assistant/message') {
-      const joined = (
+      const content = (
         event.data as { message: { content: readonly { type: string; text?: string }[] } }
       ).message.content
+      const joined = content
         .filter((b) => b.type === 'text')
         .map((b) => b.text ?? '')
         .join('')
-      if (joined !== '') this.text = joined
+      this.callText = isToolCallText(content)
+      // 假调用文字不当这一轮的话（WP230）：摘要 / 答案都不取它
+      if (joined !== '' && !this.callText) this.text = joined
     }
     if (event.type === 'turn/end') {
       this.reason = (event.data as { reason: { kind: string } }).reason.kind
     }
   }
 
-  result(): { text: string; reason: string } {
-    return { text: this.text, reason: this.reason }
+  result(): { text: string; reason: string; tool_call_text?: true } {
+    return {
+      text: this.text,
+      reason: this.reason,
+      ...(this.callText ? { tool_call_text: true as const } : {}),
+    }
   }
+}
+
+/**
+ * WP230：一条 assistant 消息是不是「把工具调用写成了文字」——没有真 `tool-call` 块，
+ * 文字里却有 `[calling …]` / `<tool_call>` 一类伪格式（判定是 stand-ins 那一份，direct 同读）。
+ */
+export function isToolCallText(content: readonly { type: string; text?: string }[]): boolean {
+  if (content.some((b) => b.type === 'tool-call')) return false
+  return looksLikeToolCallText(
+    content
+      .filter((b) => b.type === 'text')
+      .map((b) => b.text ?? '')
+      .join(''),
+  )
 }
 
 /** 一段模型可见内容的指纹（事件里只记哈希，正文不重复进日志）。 */
