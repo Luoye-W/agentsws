@@ -141,6 +141,8 @@ automation:
 
 skills:
   - { name: brand-voice, tier: open, load: always }
+  # WP220：社媒研究：版里哪些帖子火、评论在问什么（读 Reddit 走 read_reddit）
+  - { name: social-research, tier: open, load: on_demand }
 
 home_blocks:
   # 56 §2 社群组五块：待审入群 / 活跃度 / 待处理帖子 / 群发队列 / 转客服计数。
@@ -219,6 +221,17 @@ grounding:
       tool: route_to_community_support,
       prefetch: false,
     }
+  # WP220（Luoye 10-05）：Reddit 取数只走一条路由——①接口中台（积分）→ ②浏览器只读（单独的只读会话、
+  # 限速，绝不用品牌发帖账号的会话），每品牌在连接页 Reddit 卡上调顺序与停用。发帖 / 回帖不经这条，
+  # 永远走品牌号 + 人批。工具 `read_reddit` 只读；两路都不行它照实说「没取到」，不是 0 条。
+  # 意图词故意写窄（整句短语）：这一行只为把工具挂上，不该改变岗位路由。
+  - {
+      name: reddit_research,
+      intent_terms: [Reddit 上在聊, Reddit 口碑, what people say on reddit],
+      cue_terms: [这周, 最近, this week],
+      tool: read_reddit,
+      prefetch: false,
+    }
 
 notifications:
   # 群发永远人审，卡压着不动 = 这条公告错过了它的时间点
@@ -274,6 +287,10 @@ quick_prompts:
     label: { zh: "这个版还活着吗", en: "How is the sub doing" }
     prompt: "近 30 天这个版的发帖数、回帖数、活跃人数怎么样，比上个月是涨是跌"
     kind: ask
+  - id: month_top
+    label: { zh: "这个月哪些帖子最火", en: "Top posts this month" }
+    prompt: "我们版里这个月哪些帖子最火、评论区在问什么？跟版里平时比算倍数，每条带链接；问到订单的转客服"
+    kind: ask
 
 task_examples:
   - id: join_requests
@@ -288,6 +305,11 @@ task_examples:
     title: { zh: "群里刷起了广告", en: "A wave of spam" }
     description: "有几个号在版里连发外链广告。"
     expected_output: "按版规分好级的一张表：删帖与禁言你点一下就生效，封禁单独出一张卡（把人从版里永久赶出去这件事只能人点）。"
+
+# WP179（Luoye 09-29「官方功能优先」）：官方网页搜索（用 DeepSeek 账号 / key 搜）与抓公开网页。
+# WP220：研究技能要上网查新闻、帖子、话题；reddit.com / x.com 的公开页面也能抓（Luoye 10-05，不用品牌账号）。
+# 每条运行上限走 thresholds.web_search_per_run / web_fetch_per_run（不写 = 5 / 10）。
+web_tools: [web_search, web_fetch]
 
 # ── WP120（69 §2）：**角色定位**。提示里的「你是谁」，六段骨架一段不许少 ──────────
 # 第三段「你不负责」是防串岗的那一条：69 §0 那条亲测记录（红人岗位回出客服的话）

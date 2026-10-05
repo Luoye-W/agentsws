@@ -52,6 +52,7 @@ import {
   renderOwnerAnswer,
 } from './owner.js'
 import { noPlaybookAnswer, noPlaybookSummary, playbookOf } from './playbook.js'
+import { RESEARCH_TOOL_DEF_BY_NAME } from './research.js'
 import {
   renderScheduleAnswer,
   SCHEDULE_CREATE_TOOL,
@@ -279,6 +280,8 @@ function toolDefs(req: RunRequest): ToolDef[] {
       B2B_OUTBOUND_TOOL_DEF_BY_NAME.get(name) ??
       // WP179：官方网页工具（只有开了网页工具的运行，工具面里才有这两个名字）
       WEB_TOOL_DEF_BY_NAME.get(name) ??
+      // WP220：只读 Reddit（只有 grounding 里挂了它的那几条职责，工具面里才有这个名字）
+      RESEARCH_TOOL_DEF_BY_NAME.get(name) ??
       // WP181：官方「自动化任务」的四个工具（只有装了那个官方插件的运行才有）
       SCHEDULE_TOOL_DEF_BY_NAME.get(name) ?? {
         name,

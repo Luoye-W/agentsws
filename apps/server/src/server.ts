@@ -274,7 +274,7 @@ import {
   contentFeedSources,
   createContentUpdates,
 } from './content-updates.js'
-import { dataServiceApiPort } from './data-service.js'
+import { createDataService, dataServiceApiPort } from './data-service.js'
 import {
   createDeepSeekAccount,
   DEEPSEEK_ACCOUNT_PROVIDER_ID,
@@ -388,6 +388,7 @@ import {
   type ReconcileGuardOptions,
 } from './reconcile.js'
 import { createConnectRecordSource } from './records.js'
+import { createResearchToolExecutor } from './research-tools.js'
 import { readRunBrowser } from './run-browser.js'
 import { createRuntime, type MatterRecordSource, type RuntimeAssembly } from './runtime.js'
 import {
@@ -3055,6 +3056,18 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
               workspace_id: ws,
               port: () => kolService.port,
               now: () => clock.now(),
+            }),
+            /*
+             * WP220（Luoye 10-05）：只读 Reddit。两路：接口中台（这个品牌的数据能力口）→ 浏览器只读。
+             * 顺序、停用、限速每次取数现读这个品牌的设置。浏览器只读要一个单独的只读会话的执行器，
+             * 这个进程还没有——那一路照实是「没配」，不拿 Agent 的浏览器（可能登着品牌号）凑。
+             */
+            researchTools: createResearchToolExecutor({
+              route: () => ownCloud.redditReadRoute(),
+              limits: () => ownCloud.redditBrowserReadLimits(),
+              callData: (capability, input) =>
+                createDataService(ownCloud).call(capability, { input }),
+              nowMs: () => Date.parse(clock.now()),
             }),
             /*
              * WP153（09-26 真账号冒烟 §3）：店主的「列岗位 / 列连接」两个只读工具。

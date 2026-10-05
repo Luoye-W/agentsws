@@ -583,6 +583,71 @@ upstreams:
       - packages/skills/test/bundled.test.ts
       - packages/skills/bundled/THIRD-PARTY-NOTICES
 
+  # WP220（Luoye 10-05）：两份研究技能改编自这两家（MIT）。**只留方法论与产出，取数层整个换掉**
+  # （上游直接抓 Reddit 公开页面 / JSON、用浏览器 cookie 调 X 内部接口、调第三方抓取服务——一条都没进来；
+  # 我们只走官方网页工具、接口中台、Reddit 两路、品牌连上的官方接口，见 social-core/src/research/sources.ts）。
+  # 上游改了只**对照**，不自动同步；随软件带的技能更新走 WP219（docs/90）的已审内容更新通道，审核照 docs/42。
+  - id: last30days-skill
+    kind: ported
+    why: trend-research（公共关系的话题与舆情研究）的方法改编自它（MIT）：硬时间窗、按地址去重、主体对不上重罚、对数互动、每作者上限、取不到不等于安静、没有站得住的就说没有；social-core 的 trend.ts 用自己的代码重写了打分
+    repo: mvanhorn/last30days-skill
+    pinned_commit: 5103ba478b380552207a3754b74c7655d64208cd
+    watch: [releases, readme, wishlist]
+    watch_paths:
+      - skills/last30days/SKILL.md
+      - CONCEPTS.md
+      - skills/last30days/scripts/lib/fusion.py
+      - skills/last30days/scripts/lib/signals.py
+      - skills/last30days/scripts/lib/rerank.py
+    we_depend_on:
+      - 'skills/last30days/SKILL.md 的研究流程与输出契约（改写成我们的报告格式与出卡规矩）→ packages/skills/bundled/trend-research/SKILL.md'
+      - 'CONCEPTS.md 的 Entity grounding / Nothing-solid / Engagement keeper、scripts/lib/{fusion,signals,dedupe}.py 的排序思路 → packages/social-core/src/research/trend.ts（自己的代码，没搬 Python）'
+    wishlist:
+      - 新的排序或去重规矩（比如主体判定、扩散速度）
+      - Reddit / X 官方取数口径有变化（只看思路，取数照旧走我们的口）
+    covered_by:
+      - packages/skills/test/research-skills.test.ts
+      - packages/social-core/test/research.test.ts
+      - packages/skills/bundled/THIRD-PARTY-NOTICES
+
+  - id: social-media-research-skills
+    kind: ported
+    why: social-research（社媒运营的研究）改编自它的六个技能（MIT）：爆款帖按账号自己的中位数算倍数、评论九类与主题、竞品拆解、广告库「在投不等于效果好」、两个来源才叫趋势；取数层（第三方抓取接口）整个换掉
+    repo: ScrapeCreators/social-media-research-skills
+    pinned_commit: 64ba7b4dea71e130d2712ffb6c1c1024b3b7c4b2
+    watch: [releases, readme, wishlist]
+    watch_paths:
+      - skills/outlier-post-finder
+      - skills/comment-mining
+      - skills/competitor-social-research
+      - skills/ad-library-teardown
+      - skills/trend-discovery
+      - skills/social-listening-brief
+    we_depend_on:
+      - 'skills/{outlier-post-finder,comment-mining,competitor-social-research,ad-library-teardown,trend-discovery,social-listening-brief} → packages/skills/bundled/social-research/SKILL.md'
+      - 'outlier-post-finder 的中位数基线与 5 / 2 / 1.5 倍三档 → packages/social-core/src/research/outliers.ts'
+    wishlist:
+      - 新的研究工作流（新技能目录）
+      - 爆款判定或评论分类的规矩有变化
+    covered_by:
+      - packages/skills/test/research-skills.test.ts
+      - packages/social-core/test/research.test.ts
+      - packages/skills/bundled/THIRD-PARTY-NOTICES
+
+  # WP220 + WP221（docs/91 §5 #15）：危机说明的固定格式从这一份改写（只从英文原仓、钉 83294689）。
+  # docs/91 §5 其余各条（交接单、活动模板……）以后各单引进时，往这一条的 watch_paths / we_depend_on 里加。
+  - id: agency-agents
+    kind: ported
+    why: trend-research 的「危机说明的固定格式」改编自它的 PR & Communications Manager（MIT）：先出站得住的说明、不说无可奉告、对记者不说假话、一次最多三条主信息；承诺式话术没搬（我们不承诺、不写完成式）
+    repo: msitarzewski/agency-agents
+    pinned_commit: 83294689da3832c0a9f223221148c411fd3eacc0
+    watch: [releases, readme]
+    watch_paths:
+      - marketing/marketing-pr-communications-manager.md
+    we_depend_on:
+      - 'marketing/marketing-pr-communications-manager.md 的 Crisis Communications Framework → packages/skills/bundled/trend-research/SKILL.md「危机说明的固定格式」一节'
+    covered_by:
+      - packages/skills/test/research-skills.test.ts
   # WP216（Luoye 10-05）：Shopify 官方发布的 agent skills。2.0（09-25）起 22 本分题技能合成一本 `shopify`，
   # `shopify-liquid` 等旧名退役。我们**原样收录**（MIT）SKILL.md 与 liquid / custom-data / admin 三份参考，
   # 不带 scripts/（它们向 shopify.dev 上报查询、代码与用户原话）与 hooks/；我们这一侧的话在旁注里。

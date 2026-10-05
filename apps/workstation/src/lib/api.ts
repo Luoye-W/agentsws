@@ -1576,6 +1576,8 @@ export type DataSourceLevel =
   | 'workshop'
   /** WP179：「用你的 DeepSeek 账号搜索」——只属于 `web.search` 这一项 */
   | 'deepseek_native'
+  /** WP220：浏览器只读——只属于 Reddit 取数（`reddit.read`）那一项 */
+  | 'browser_readonly'
 
 export interface DataSourceRoute {
   order: DataSourceLevel[]

@@ -2278,6 +2278,8 @@ const zh: Table = {
   'data.route.official_key': '我的平台 key',
   'data.route.byo_source': '我的数据接口',
   'data.route.workshop': '工坊官方数据接口（积分）',
+  'data.route.browser_readonly': '浏览器只读（不扣积分，限速）',
+  'data.route.reddit_note': '只用来读。发帖、回帖永远用品牌号、你批了才发。',
   'data.route.up': '上移',
   'data.route.down': '下移',
   'data.route.disable': '停用',
@@ -5950,6 +5952,9 @@ const en: Table = {
   'data.route.official_key': 'My platform key',
   'data.route.byo_source': 'My data service',
   'data.route.workshop': 'Workshop official data service (credits)',
+  'data.route.browser_readonly': 'Read-only browser (no credits, rate-limited)',
+  'data.route.reddit_note':
+    'Reading only. Posts and replies always go out from the brand account after you approve.',
   'data.route.up': 'Move up',
   'data.route.down': 'Move down',
   'data.route.disable': 'Disable',
