@@ -23,7 +23,6 @@
     "packages/contracts/src/computer-use.ts",
     "packages/contracts/src/connect.ts",
     "packages/contracts/src/connection-directory.ts",
-    "packages/contracts/src/content-updates.ts",
     "packages/contracts/src/data-service.ts",
     "packages/contracts/src/data.ts",
     "packages/contracts/src/design.ts",
@@ -111,7 +110,7 @@
     "packages/roles/roles/social/x.yml",
     "packages/roles/roles/social/youtube.yml"
   ],
-  "source_digest": "6e0056dddd17ab211cac4ff723563238",
+  "source_digest": "3e901b05df65b5ab600d8651dd719993",
   "objects": [
     {
       "id": "ad",
@@ -10285,6 +10284,10 @@
       "requires_approval": true,
       "route_to": "role_holder",
       "roles": [
+        "ads.google",
+        "ads.meta",
+        "ads.tiktok",
+        "ads.x",
         "b2b.exhibition",
         "dtc.store",
         "kol.youtube",
