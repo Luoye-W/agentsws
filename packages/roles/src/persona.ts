@@ -73,34 +73,89 @@ export const PERSONA_SECTIONS_EN = [
  * 69 §2：一段 persona 的字数上限。**短是刻意的**——长了模型读不进去，
  * 而 persona 的作用恰恰是"进了系统提示之后还被记住"。
  *
- * 派工单写的是「每段 ≤ 200 字」。那是**正文**的目标，机器上限要留出两样开销：
- * 六个小标题本身（约 30 字），以及英文——实测同一段话的英文字符数是中文的 3.5 倍
- * （中文一个字顶英文三四个字母），一个数卡不住两种语言，卡了只会逼着英文那份
- * 写得比中文少说一件事。所以两种语言各一个上限，目标仍是 200 字的中文正文。
+ * 派工单写的是「每段 ≤ 200 字」。那是**正文**的目标，机器上限要留出六个小标题本身
+ * （约 30 字）的开销，所以中文卡 260。
+ *
+ * WP226（69 §1.1）：**只卡中文**。英文那份现在由 `scripts/gen-persona-en.mjs` 从中文翻出来，
+ * 长短跟着中文走——再卡一遍英文，只会逼着翻译去删一件中文里写了的事。`en` 这一格留着
+ * （契约只加不删），`checkPersona` 不再读它。
  */
 export const MAX_PERSONA_CHARS = { zh: 260, en: 950 } as const
 
 /**
+ * 英文正文里不许出现的字：汉字，以及全角标点（`（` `：` `，` `「` …）。
+ *
+ * 全角标点也算：docs/91 §3.3 那 14 条混中文的英文 persona，露馅的除了汉字还有一对全角括号。
+ * `→` 与弯引号是英文里也用的符号，不在里面。
+ */
+const CHINESE_IN_TEXT = /[\p{Script=Han}\u3000-\u303F\uFF01-\uFF60]/u
+
+/** 这段文字里有没有汉字或全角标点（英文那份不许有）。 */
+export function hasChineseText(text: string): boolean {
+  return CHINESE_IN_TEXT.test(text)
+}
+
+/** 第一处汉字前后几个字（报错时指给人看在哪儿）。 */
+function chineseSnippet(text: string): string {
+  const at = text.search(CHINESE_IN_TEXT)
+  return at < 0 ? '' : text.slice(Math.max(0, at - 12), at + 12).replace(/\s+/g, ' ')
+}
+
+/** 中文那份：六段都在、没超长。 */
+function checkZhPersona(text: string): string | undefined {
+  if (text.length > MAX_PERSONA_CHARS.zh)
+    return `persona（zh）${text.length} 字，超过 ${MAX_PERSONA_CHARS.zh} 字上限`
+  const missing = PERSONA_SECTIONS_ZH.filter((h) => !text.includes(h))
+  return missing.length > 0
+    ? `persona（zh）少了这几段：${missing.join(' / ')}（69 §2 的固定骨架）`
+    : undefined
+}
+
+/** 英文那份：只查「没有汉字」（WP226：不卡字数，见 `MAX_PERSONA_CHARS`）。 */
+function checkEnPersona(text: string): string | undefined {
+  return hasChineseText(text)
+    ? `persona（en）里混着中文：「${chineseSnippet(text)}」（英文那份不许有汉字与全角标点，69 §1.1）`
+    : undefined
+}
+
+/**
  * 一段 persona 写全了没有。回 `undefined` = 没问题，回一句中文 = 哪儿不对。
  *
- * 查三样，一样都不能少：
  * 1. **不是空的**（`gen-ontology --check` 把空判成失败，69 §2 最后一句）；
- * 2. **六段都在**——尤其是「你不负责」那一段，它是防串岗的那一条；
- * 3. **没超长**。
+ * 2. **中文那份**：六段都在（尤其是防串岗的「你不负责」）、不超过 260 字；
+ * 3. **英文那份**（填了才查）：不许混汉字。WP226 起英文由脚本从中文生成，不再卡字数；
+ *    它的「六段小标题都在」由生成脚本自己查（`checkGeneratedPersonaEn`）。
+ *
+ * 老的纯字符串写法（"只有一份"）：有汉字就按中文那份查，否则按英文那份查。
  */
 export function checkPersona(persona: PersonaText | undefined): string | undefined {
   if (personaIsEmpty(persona)) return 'persona 是空的（69 §2：全部职责与岗位都要写，不许留空）'
-  for (const lang of ['zh', 'en'] as const) {
-    const text = personaTextIn(persona, lang)
-    if (text === '') continue
-    const cap = MAX_PERSONA_CHARS[lang]
-    if (text.length > cap) return `persona（${lang}）${text.length} 字，超过 ${cap} 字上限`
-    const heads = lang === 'zh' ? PERSONA_SECTIONS_ZH : PERSONA_SECTIONS_EN
-    const missing = heads.filter((h) => !text.includes(h))
-    if (missing.length > 0)
-      return `persona（${lang}）少了这几段：${missing.join(' / ')}（69 §2 的固定骨架）`
+  if (typeof persona === 'string') {
+    const text = persona.trim()
+    return hasChineseText(text) ? checkZhPersona(text) : checkEnPersona(text)
   }
-  return undefined
+  const zh = (persona?.zh ?? '').trim()
+  if (zh !== '') {
+    const bad = checkZhPersona(zh)
+    if (bad !== undefined) return bad
+  }
+  const en = (persona?.en ?? '').trim()
+  return en === '' ? undefined : checkEnPersona(en)
+}
+
+/**
+ * 生成出来的那一份英文合不合格（`scripts/gen-persona-en.mjs` 写盘前、`--check` 与单测都用它）。
+ *
+ * 比 `checkPersona` 的英文那一刀多查两样：**不为空**、**六个英文小标题都在**——
+ * 后者是给机器读的（串岗测试按 `Not yours` 找那一段），翻译把小标题意译掉就红在这里。
+ */
+export function checkGeneratedPersonaEn(en: string): string | undefined {
+  const text = en.trim()
+  if (text === '') return '英文是空的'
+  const bad = checkEnPersona(text)
+  if (bad !== undefined) return bad
+  const missing = PERSONA_SECTIONS_EN.filter((h) => !text.includes(h))
+  return missing.length > 0 ? `英文少了这几段小标题：${missing.join(' / ')}` : undefined
 }
 
 /* ── 69 §4：公司层覆盖 ──────────────────────────────────────────────────── */
@@ -118,8 +173,14 @@ export function personaKey(subject: PersonaSubject): string {
 /**
  * 包里的原文 + 公司层覆盖 → 现在生效的那一份。
  *
- * 覆盖里空着的那一边**回落原文**：公司只改了中文那份时，英文界面仍该拿到包里的英文，
- * 而不是一段空白（69 §4「包里的原文保留可还原」的另一半——它也随时可用）。
+ * WP226（69 §4.1）：**公司只改中文**。英文跟着中文走：
+ * - 覆盖后的中文与包里的一样（或者覆盖只给了英文）→ 英文用包里那份（生成的）；
+ * - 覆盖后的中文变了、覆盖里又没有英文 → 英文那一格**留空**（= 还没翻译）。
+ *   取英文时 `personaTextIn` 回落中文，面板据 `personaUntranslated` 标「未翻译」。
+ *
+ * 不再"另一边从原文补齐"：那样拼出来的是两份不同来历的文字——中文是公司刚改的，
+ * 英文还是包里说的那一套，英文界面上看着通顺，其实说的不是同一件事。
+ * 老的覆盖里两边都填了的（WP226 之前存下的），照原样认。
  */
 export function applyPersonaOverride(
   packaged: PersonaText | undefined,
@@ -131,11 +192,12 @@ export function applyPersonaOverride(
    * 这里读的是**原始格子**（`rawIn`），不是 `personaTextIn`。
    *
    * `personaTextIn` 那一层带回落（英文空了就给中文），在别处正是要的行为——
-   * 宁可语言不对也别给一段空白。但在这儿用它，公司只改了中文的那一次就会把
-   * 中文抄进英文那一格，包里原本写好的英文从此再也回不来了。
+   * 宁可语言不对也别给一段空白。但在这儿用它，就会把中文抄进英文那一格，
+   * 于是"还没翻译"这件事再也看不出来。
    */
   const zh = rawIn(override, 'zh') || personaTextIn(packaged, 'zh')
-  const en = rawIn(override, 'en') || personaTextIn(packaged, 'en')
+  const en =
+    rawIn(override, 'en') || (zh === personaTextIn(packaged, 'zh') ? rawIn(packaged, 'en') : '')
   return { zh, en }
 }
 
@@ -143,6 +205,17 @@ export function applyPersonaOverride(
 function rawIn(persona: PersonaText, lang: PersonaLang): string {
   if (typeof persona === 'string') return persona.trim()
   return ((lang === 'zh' ? persona.zh : persona.en) ?? '').trim()
+}
+
+/**
+ * WP226：这一份有中文、却还没有对应的英文（公司改了中文之后、或者包里生成的英文过期了）。
+ *
+ * 英文界面据此显示中文原文 + 一个「未翻译」标记（69 §4.1）。老的纯字符串写法是
+ * "只有一份"，不算没翻译。
+ */
+export function personaUntranslated(persona: PersonaText | undefined): boolean {
+  if (persona === undefined || typeof persona === 'string') return false
+  return rawIn(persona, 'zh') !== '' && rawIn(persona, 'en') === ''
 }
 
 /** 面板要的那一份（现在生效的 + 包里的原文 + 改没改过）。 */
@@ -163,6 +236,7 @@ export function personaView(input: {
     effective,
     packaged: input.packaged,
     overridden,
+    ...(personaUntranslated(effective) ? { untranslated: true } : {}),
     ...(input.override?.updated_at === undefined ? {} : { updated_at: input.override.updated_at }),
     ...(input.override?.updated_by === undefined ? {} : { updated_by: input.override.updated_by }),
   }
@@ -252,6 +326,40 @@ export function houseRulesSection(lang: PersonaLang = 'zh'): PromptSection {
     name: lang === 'zh' ? '说话规矩' : 'house rules',
     order: HOUSE_RULES_ORDER,
     text: HOUSE_RULES[lang],
+  }
+}
+
+/**
+ * WP226（69 §3.3）：**回复语言**——紧跟在职责那一节后面（22），公共段（25）前面。
+ *
+ * 系统提示里的 persona 一律是中文那份（只有中文是手写的真源，英文是翻出来的）；
+ * 模型读中文说明、照这一句用对方的语言回，比送一份机翻英文更稳。这一句本身按**界面语言**
+ * 二选一：它说的"对内用哪种语言"就是界面语言，所以中文界面送中文那句、英文界面送英文那句。
+ *
+ * 三个运行时拿到的是同一份字节：stub / direct 走 `assemblePrompt`，dsh 写进唯一那个
+ * `complete` 段（69 §3 那张表）。
+ */
+export const REPLY_LANGUAGE_ORDER = 22
+
+export const REPLY_LANGUAGE_RULE: Readonly<Record<PersonaLang, string>> = {
+  zh:
+    '对外的回复（给客户、红人、媒体、平台上的人）用对方来信的语言写：对方写英文就回英文，' +
+    '哪怕上面的说明是中文；没有来信可对照时（主动开发信、发帖），用目标市场的语言。' +
+    '对内的东西（给用户看的卡片、摘要、说明）用中文。',
+  en:
+    'Anything going out (to customers, creators, press, people on a platform) is written in the ' +
+    'language of the message you are answering: if they wrote in English, reply in English, even ' +
+    'though the instructions above are in Chinese. With no message to match (cold outreach, posts), ' +
+    'use the language of the target market. Anything for the user (cards, summaries, notes) is in English.',
+}
+
+/** 回复语言那一节（每条职责、每个运行时都带同一份；`lang` = 界面语言）。 */
+export function replyLanguageSection(lang: PersonaLang = 'zh'): PromptSection {
+  return {
+    id: 'reply_language',
+    name: lang === 'zh' ? '回复语言' : 'reply language',
+    order: REPLY_LANGUAGE_ORDER,
+    text: REPLY_LANGUAGE_RULE[lang],
   }
 }
 

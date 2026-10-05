@@ -80,6 +80,12 @@ jobs:
       - name: gen-ontology（零漂移）
         run: node scripts/gen-ontology.mjs --check
 
+      # WP226（docs/69 §1.1）：英文 persona 是从中文翻出来的产物（带来源中文的哈希）。
+      # 中文改了、英文没重出 → 只打警告、不卡合并（运行时送的是中文，英文只给英文界面看）。
+      # 只比哈希、不调模型、不要 key。
+      - name: gen-persona-en（英文 persona 过期只警告）
+        run: node scripts/gen-persona-en.mjs --check
+
       # WP164（docs/83 §2）：云端对外契约 packages/contracts/cloud-openapi.json 由
       # packages/contracts/src/cloud-api.ts 的 TS 类型生成并签进仓库。云端搬进私有仓之后，
       # 两边唯一的约定就是这份；改了类型忘了重出（或者手改了 JSON）都红在这里。
