@@ -12,6 +12,7 @@ import type {
   RuntimeAdapter,
   ToolDef,
 } from '@agentsws/contracts'
+import { cancelledEvent } from '@agentsws/contracts'
 import { canonicalJson, Provenance, sha256 } from '@agentsws/core'
 import { staticPrefixHash } from '@agentsws/model-gateway'
 import { orderTools, runOntologyBrief } from '@agentsws/ontology'
@@ -444,7 +445,7 @@ export function createStubRuntime(options: StubRuntimeOptions): RuntimeAdapter {
 
       sink({ type: 'run.started', request_id: req.id, runtime: 'stub', model: req.runtime.model })
       if (signal.aborted) {
-        sink({ type: 'run.cancelled' })
+        sink(cancelledEvent(signal))
         return finish('cancelled', '运行开始前即被中断')
       }
 
@@ -522,7 +523,7 @@ export function createStubRuntime(options: StubRuntimeOptions): RuntimeAdapter {
         for (let i = 0; i < calls.length; i += 1) {
           const call = calls[i] as { tool: string; input: Record<string, unknown> }
           if (signal.aborted) {
-            sink({ type: 'run.cancelled' })
+            sink(cancelledEvent(signal))
             return finish('cancelled', '运行被中断')
           }
           const call_id = `call_${toolCalls + 1}`
@@ -607,7 +608,7 @@ export function createStubRuntime(options: StubRuntimeOptions): RuntimeAdapter {
         const findings: KolFinding[] = []
         for (const call of kol.calls) {
           if (signal.aborted) {
-            sink({ type: 'run.cancelled' })
+            sink(cancelledEvent(signal))
             return finish('cancelled', '运行被中断')
           }
           const call_id = `call_${toolCalls + 1}`
@@ -729,7 +730,7 @@ export function createStubRuntime(options: StubRuntimeOptions): RuntimeAdapter {
         const failed: Record<string, string> = {}
         for (const tool of ownerCalls) {
           if (signal.aborted) {
-            sink({ type: 'run.cancelled' })
+            sink(cancelledEvent(signal))
             return finish('cancelled', '运行被中断')
           }
           const call_id = `call_${toolCalls + 1}`
@@ -856,7 +857,7 @@ export function createStubRuntime(options: StubRuntimeOptions): RuntimeAdapter {
         const failed: Record<string, string> = {}
         for (const tool of b2bCalls) {
           if (signal.aborted) {
-            sink({ type: 'run.cancelled' })
+            sink(cancelledEvent(signal))
             return finish('cancelled', '运行被中断')
           }
           const call_id = `call_${toolCalls + 1}`
@@ -959,7 +960,7 @@ export function createStubRuntime(options: StubRuntimeOptions): RuntimeAdapter {
 
       for (const tool of plannedTools) {
         if (signal.aborted) {
-          sink({ type: 'run.cancelled' })
+          sink(cancelledEvent(signal))
           return finish('cancelled', '运行被中断')
         }
         const call_id = `call_${toolCalls + 1}`

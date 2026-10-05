@@ -49,6 +49,23 @@ export interface PlatformMcpSpec {
   egress: readonly string[]
   /** 遥测怎么关（我们起子进程时一律关掉）。 */
   telemetry_off_env: Readonly<Record<string, string>>
+  /**
+   * WP236：哪几条职责要它（`site.*` 这种前缀通配也认）。只有这些职责第一次运行时才启动 / 下载；
+   * 别的职责（Reddit 研究之类）跑起来一个字节都不碰它。不填 = 谁都不要。
+   */
+  roles?: readonly string[]
+}
+
+/**
+ * WP236：这条职责要不要这个平台的 Dev MCP（`roles` 里写了它，或写了覆盖它的 `前缀.*`）。
+ * 10-06 真机：Shopify 品牌跑 Reddit 研究触发了 `shopify.devmcp_started`（后台去下官方工具包）。
+ */
+export function platformMcpNeededBy(spec: PlatformMcpSpec | undefined, role_id: string): boolean {
+  for (const pattern of spec?.roles ?? []) {
+    if (pattern === role_id) return true
+    if (pattern.endsWith('.*') && role_id.startsWith(pattern.slice(0, -1))) return true
+  }
+  return false
 }
 
 /** 官方命令行工具（不进安装包，用户按需装；登录永远是用户本人在浏览器里完成）。 */
@@ -113,6 +130,8 @@ export const PLATFORM_KITS: readonly PlatformKit[] = [
       license: 'ISC',
       egress: ['shopify.dev', 'raw.githubusercontent.com', 'registry.npmjs.org'],
       telemetry_off_env: { OPT_OUT_INSTRUMENTATION: 'true', DO_NOT_TRACK: '1' },
+      // WP236：建站类职责才要它（查官方文档 / 接口说明 / 校验）
+      roles: ['site.*'],
     },
     cli: {
       id: 'shopify-cli',

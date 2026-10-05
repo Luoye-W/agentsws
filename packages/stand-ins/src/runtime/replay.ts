@@ -7,6 +7,7 @@ import type {
   RunResult,
   RuntimeAdapter,
 } from '@agentsws/contracts'
+import { cancelledEvent } from '@agentsws/contracts'
 import { canonicalJson, sha256 } from '@agentsws/core'
 import { StandInError } from '../errors.js'
 
@@ -191,7 +192,7 @@ export function createReplayRuntime(options: ReplayRuntimeOptions): ReplayRuntim
       }
       for (const e of entry.events) {
         if (signal.aborted) {
-          sink({ type: 'run.cancelled' })
+          sink(cancelledEvent(signal))
           return { ...entry.result, request_id: req.id, status: 'cancelled' }
         }
         sink(e)

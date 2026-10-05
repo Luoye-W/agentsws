@@ -140,8 +140,32 @@ function RoutedLine({
   )
 }
 
-function TimelineEvent({ event }: { event: MatterEvent }): React.ReactNode {
-  const { lang } = useApp()
+/**
+ * WP236：最近那次「被停下来」的运行之后，还没有人接着做（没有新的人话 / 新的运行），
+ * 就在那一条下面出「接着跑」。只给最近那一条——更早的停下来已经被后面的运行接上了。
+ */
+function resumableOf(timeline: readonly MatterEvent[]): string | undefined {
+  const stopped = timeline
+    .filter((e) => e.stopped !== undefined)
+    .reduce<MatterEvent | undefined>((a, e) => (a === undefined || e.at >= a.at ? e : a), undefined)
+  if (stopped === undefined) return undefined
+  const later = timeline.some(
+    (e) => e.at > stopped.at && (e.kind === 'human_message' || e.kind === 'run'),
+  )
+  return later ? undefined : stopped.id
+}
+
+function TimelineEvent({
+  event,
+  onResume,
+  resuming,
+}: {
+  event: MatterEvent
+  /** WP236：这一条是被停下来的运行，点了接着跑同一件事。 */
+  onResume?: () => void
+  resuming?: boolean
+}): React.ReactNode {
+  const { lang, t } = useApp()
   const Icon = EVENT_ICON[event.kind]
   return (
     <li
@@ -162,6 +186,18 @@ function TimelineEvent({ event }: { event: MatterEvent }): React.ReactNode {
           <p className="whitespace-pre-wrap break-words">
             <LinkedText text={event.text} />
           </p>
+        )}
+        {onResume === undefined ? null : (
+          <Button
+            size="xs"
+            variant="outline"
+            className="mt-1"
+            data-testid="matter-resume"
+            disabled={resuming === true}
+            onClick={onResume}
+          >
+            {t('matter.resume')}
+          </Button>
         )}
         <p className="text-[11px] text-muted-foreground">{formatDateTime(event.at, lang)}</p>
       </div>
@@ -272,6 +308,7 @@ export function MatterPage(): React.ReactNode {
   const view = matter.data
   const timeline = more.data?.events ?? view.timeline
   const hasMore = more.data?.has_more ?? view.has_more
+  const resumableId = view.matter.status === 'closed' ? undefined : resumableOf(timeline)
 
   return (
     <div
@@ -494,7 +531,18 @@ export function MatterPage(): React.ReactNode {
           ) : null}
           <ul className="flex flex-col gap-2">
             {timeline.map((event) => (
-              <TimelineEvent key={event.id} event={event} />
+              <TimelineEvent
+                key={event.id}
+                event={event}
+                {...(event.id === resumableId
+                  ? {
+                      onResume: () => {
+                        say.mutate(t('matter.resume.brief'))
+                      },
+                      resuming: say.isPending,
+                    }
+                  : {})}
+              />
             ))}
           </ul>
         </CardContent>

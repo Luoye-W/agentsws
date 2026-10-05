@@ -49,6 +49,8 @@ export const TOOL_WORDS_ZH: Readonly<Record<string, string>> = {
   // WP179：官方网页工具（对外叫「用你的 DeepSeek 账号搜索」；名词口径：「我用「网页搜索」查了两轮」）
   web_search: '网页搜索',
   web_fetch: '网页抓取',
+  // WP236：WP220 的只读 Reddit（停下来时「已经取回的数据」那一段要叫得出名字）
+  read_reddit: 'Reddit 只读取数',
 }
 
 /** 去掉 `service.` 前缀（`shopify.get_order` → `get_order`）；点在中间的 MCP 全名原样。 */

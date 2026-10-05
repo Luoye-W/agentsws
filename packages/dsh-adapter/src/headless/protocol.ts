@@ -141,6 +141,8 @@ export interface RunParams {
   now: string
   /** 宿主的 AbortSignal 在发起时就已经是 aborted。 */
   aborted?: boolean
+  /** WP236：发起时就已经停了的话，停的原因（`RunCancelReason`）。 */
+  abortReason?: string
 }
 
 /** 每一条子进程 → 宿主的应答都带宿主此刻的时间，子进程据此对表（合成时钟可能被回调推进）。 */

@@ -57,7 +57,8 @@ describe('WP220 read_reddit 执行器', () => {
     const run = exec({
       callData: async (capability, input) => {
         expect(capability).toBe('social.reddit.search')
-        expect(input).toEqual({ query: 'INMO', time_window: 'week' })
+        // WP236：不给条数就取 10 条
+        expect(input).toEqual({ query: 'INMO', time_window: 'week', limit: 10 })
         return {
           capability,
           items: [{ url: 'https://www.reddit.com/r/a/comments/9/y/', title: 'INMO Air3' }],

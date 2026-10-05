@@ -41,6 +41,7 @@ import type {
   WorkspaceId,
 } from '@agentsws/contracts'
 import {
+  SOCIAL_CHANNELS,
   storefrontConnectorService,
   storefrontServiceMatches,
   storefrontUnsupportedNote,
@@ -76,6 +77,11 @@ export const TOOL_ACTIONS: Readonly<Record<string, string>> = {
 }
 /** 走知识层、不走连接器的那一个。 */
 export const POLICY_TOOL = 'search_policies'
+/**
+ * WP236：社群线程（群里 / 评论区 / 私信里还没处理完的那些）。社媒五条群聊类职责与社群客服的
+ * grounding 一直写着它，但以前没有执行器——模型一调就是 `unsupported_tool`。读本品牌社媒库。
+ */
+export const COMMUNITY_THREADS_TOOL = 'list_community_threads'
 
 /** `list_orders` / `list_products` 一次最多给模型几条（它是来答一封信的，不是来导数据的）。 */
 export const LIST_LIMIT = 20
@@ -208,19 +214,25 @@ export interface RecordSocialPort {
         observed_at: string
       }
     | undefined
-  thread(id: string):
-    | {
-        id: string
-        account_id: string
-        channel: string
-        surface: string
-        author_handle: string
-        text: string
-        created_at: string
-        status: string
-        triage?: string
-      }
-    | undefined
+  thread(id: string): RecordSocialThread | undefined
+  /**
+   * WP236：列这个品牌的社群线程（`list_community_threads`）。不给 = 这个工具没接，
+   * 工具面里也就不摆它（运行时只摆真接上了的工具）。
+   */
+  threads?(filter?: { channel?: string; open?: boolean }): RecordSocialThread[]
+}
+
+/** 记录源看得到的一条社群线程（正文是外部文本）。 */
+export interface RecordSocialThread {
+  id: string
+  account_id: string
+  channel: string
+  surface: string
+  author_handle: string
+  text: string
+  created_at: string
+  status: string
+  triage?: unknown
 }
 
 /**
@@ -952,6 +964,52 @@ export function createConnectRecordSource(
     }
   }
 
+  /** WP236：这个记录源真能执行哪些工具（运行时只把这些摆给模型）。 */
+  const executes = (tool: string): boolean => {
+    const bare = bareToolName(tool)
+    if (bare === POLICY_TOOL || TOOL_ACTIONS[bare] !== undefined) return true
+    if (bare === COMMUNITY_THREADS_TOOL) return options.social?.()?.threads !== undefined
+    return false
+  }
+
+  /** WP236：`list_community_threads`——缺省只列还没处理完的、按这条职责的渠道筛，最多 20 条。 */
+  const listCommunityThreads = (
+    request: Parameters<ToolExecutor>[0]['request'],
+    input: Record<string, unknown>,
+  ): ToolExecution => {
+    const port = options.social?.()
+    if (port?.threads === undefined)
+      return {
+        status: 'error',
+        reason: `unsupported_tool：这个进程没接「${COMMUNITY_THREADS_TOOL}」。`,
+      }
+    const channel =
+      stringOf(input.channel) ??
+      SOCIAL_CHANNELS.find((c) => c.role_id === request.actor.role_id)?.id
+    const open = input.open !== false
+    const asked = typeof input.limit === 'number' ? Math.floor(input.limit) : LIST_LIMIT
+    const limit = Math.max(1, Math.min(LIST_LIMIT, asked))
+    const rows = port
+      .threads({ ...(channel === undefined ? {} : { channel }), ...(open ? { open: true } : {}) })
+      .slice(0, limit)
+    return {
+      status: 'ok',
+      data: {
+        threads: rows.map((r) => ({
+          id: r.id,
+          channel: r.channel,
+          surface: r.surface,
+          author: r.author_handle,
+          // 外部文本：截短，围栏在运行时那一跳
+          text: r.text.length > 500 ? `${r.text.slice(0, 500)}…` : r.text,
+          created_at: r.created_at,
+          status: r.status,
+        })),
+      },
+      provenance: rows.map((r) => ({ type: 'community_thread', id: r.id }) satisfies ObjectRef),
+    }
+  }
+
   const executeTool: ToolExecutor = async ({ name, input, request }) => {
     const bare = bareToolName(name)
     // 17 §6.3：不在 allowlist 的工具不到达工具（与替身执行器同一道门）
@@ -978,6 +1036,7 @@ export function createConnectRecordSource(
           await searchPolicies(request, stringOf(input.query) ?? request.work_item?.id ?? ''),
         )
       }
+      if (bare === COMMUNITY_THREADS_TOOL) return finish(listCommunityThreads(request, input))
       if (TOOL_ACTIONS[bare] === undefined) {
         return finish({ status: 'error', reason: `unsupported_tool：这个进程没接「${bare}」。` })
       }
@@ -1251,6 +1310,7 @@ export function createConnectRecordSource(
     contactOf,
     readToken,
     executeTool,
+    executes,
     contacts: () => [...contacts.values()],
     noteContact: (email, opts = {}) => noteContact(email, opts),
   }

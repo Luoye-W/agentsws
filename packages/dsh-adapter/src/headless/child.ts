@@ -122,7 +122,9 @@ export function startChildBridge(io: {
     }
     if (method === M_CANCEL) {
       checkToken(params)
-      controller?.abort()
+      // WP236：宿主带上停的原因（空闲超时 / 总时长 / 人点了停），子进程的 run.cancelled 照实写
+      const reason = (params as { reason?: unknown } | undefined)?.reason
+      controller?.abort(typeof reason === 'string' ? reason : undefined)
       return {}
     }
     if (method === M_SHUTDOWN) {
@@ -141,7 +143,8 @@ export function startChildBridge(io: {
     const clock = new MirrorClock(run.now as Iso8601)
     controller = new AbortController()
     // 宿主那边进来时就已经中断了 → 子进程照样走同一条路径（17 §5.6），事件序列一致
-    if (run.aborted === true) controller.abort()
+    if (run.aborted === true)
+      controller.abort(typeof run.abortReason === 'string' ? run.abortReason : undefined)
     const request: RunRequest = run.request
     const wire = run.options
 

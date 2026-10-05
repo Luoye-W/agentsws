@@ -96,6 +96,7 @@ import {
   PLACEHOLDER_OWNER_EMAIL,
   PR_ROLE_IDS,
   REDDIT_READ_HOSTS,
+  resolveDataCreditBudget,
   SOCIAL_ROLE_IDS,
   skillOnPlatform,
   socialChannelSpec,
@@ -411,6 +412,7 @@ import {
 import { createConnectRecordSource } from './records.js'
 import { createResearchToolExecutor } from './research-tools.js'
 import { readRunBrowser } from './run-browser.js'
+import { createRunLimitsSettings } from './run-limits-settings.js'
 import { createRuntime, type MatterRecordSource, type RuntimeAssembly } from './runtime.js'
 import {
   createScheduleAssembly,
@@ -1431,6 +1433,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       throw new ApiError('not_implemented', dshScenesSetup.reason)
     return dshScenesSetup.manager
   }
+  /** WP236：运行时长线（这台机器一份，`run-limits.json`）。 */
+  const runLimitsSettings = createRunLimitsSettings(dbDir === undefined ? {} : { dir: dbDir })
   const browserSettings = createBrowserSettings({
     ...(dbDir === undefined ? {} : { dir: dbDir }),
     runtimeMode,
@@ -3216,6 +3220,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         ? undefined
         : createRuntime({
             workspace_id: ws,
+            // WP236：「设置 → 通用」的运行时长线（每次运行现读；职责阈值优先）
+            runLimits: () => runLimitsSettings.get(),
             // WP194：运行里打云的数据接口带上「谁 / 哪个岗位」
             aroundRun: (actor, fn) =>
               withCloudAttribution(cloudAttributionOf(actor.assignment_id, actor.role_id), fn),
@@ -3284,6 +3290,13 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
                     limiter: redditReadLimiterOf(readonlyBrowser),
                   }),
               nowMs: () => Date.parse(clock.now()),
+              /*
+               * WP236 ⑨：每次运行的取数积分预算（职责阈值 `data_credits_per_run`，缺省 3）；
+               * 按价目表把条数收进剩下的预算（取不到价就不收，只按实花的记账）。
+               */
+              creditBudget: (req) =>
+                resolveDataCreditBudget(roles.roles.get(req.actor.role_id)?.thresholds),
+              priceOf: async (capability) => (await ownCloud.priceOf(capability))?.credits,
             }),
             /*
              * WP153（09-26 真账号冒烟 §3）：店主的「列岗位 / 列连接」两个只读工具。
@@ -7798,6 +7811,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     work: workPortOf,
     // WP207：左栏职责下的对话 / 任务、归档与找回（按品牌）
     workArchive: workArchivePortOf,
+    // WP236：运行时长线（这台机器一份）
+    runLimits: { get: () => runLimitsSettings.get(), set: (input) => runLimitsSettings.set(input) },
     // WP69（54）：岗位实体、交给岗位一件事、换职责
     positions: positionPortOf,
     // WP120（69 §4）：角色定位——右栏「角色」面板看的与改的就是它

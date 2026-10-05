@@ -2045,6 +2045,9 @@ const zh: Table = {
   'matter.more': '看更早的',
   'matter.say': '在这个事项里说一句',
   'matter.send': '发',
+  'matter.resume': '接着跑',
+  'matter.resume.brief':
+    '接着上次没跑完的继续：已经查到的在上面，别重复取同样的数据，补齐剩下的再给结论。',
   'matter.close': '关闭事项',
   'matter.close.question': '还有没做完的待办，一并关掉还是留着？',
   'matter.close.all': '一并关掉',
@@ -3741,6 +3744,13 @@ const zh: Table = {
   'command.compose.title': '交给「{name}」一件事',
   'command.compose.placeholder': '一句话说要做什么，回车交出去',
   'command.archived': '已归档的对话与任务',
+  'settings.run_limits': '运行时长',
+  'settings.run_limits.hint':
+    '一次任务连续多久没有任何动静就算卡住、停掉；再忙也最多跑多久。停下来时已经查到的会留在事项里，可以点「接着跑」。研究类职责可以单独放长。',
+  'settings.run_limits.idle': '没动静多久算卡住',
+  'settings.run_limits.max': '最多跑多久',
+  'settings.run_limits.idle_n': '没动静 {n} 分钟',
+  'settings.run_limits.max_n': '最多 {n} 分钟',
   'settings.archive': '自动归档',
   'settings.archive.hint':
     '对话或任务超过这么多天没有新动静，就移出左栏（在跑的、等你批的不算）。内容都还在，随时能找回。',
@@ -5822,6 +5832,9 @@ const en: Table = {
   'matter.more': 'Load earlier',
   'matter.say': 'Say something in this matter',
   'matter.send': 'Send',
+  'matter.resume': 'Keep going',
+  'matter.resume.brief':
+    'Pick up where the last run stopped: what was already found is above, do not re-fetch the same data, fill in the rest and give the conclusion.',
   'matter.close': 'Close matter',
   'matter.close.question': 'Some to-dos are unfinished. Close them too, or keep them?',
   'matter.close.all': 'Close them too',
@@ -7589,6 +7602,13 @@ const en: Table = {
   'command.compose.title': 'Hand “{name}” a task',
   'command.compose.placeholder': 'Say what to do in one line, Enter to hand it over',
   'command.archived': 'Archived chats and tasks',
+  'settings.run_limits': 'Run time',
+  'settings.run_limits.hint':
+    'How long a task can go without any activity before it counts as stuck and is stopped, and the longest it may run. What was found so far stays in the matter; click "Keep going" to continue. Research duties can be given longer limits.',
+  'settings.run_limits.idle': 'Stop when idle for',
+  'settings.run_limits.max': 'Longest run',
+  'settings.run_limits.idle_n': 'Idle {n} min',
+  'settings.run_limits.max_n': 'At most {n} min',
   'settings.archive': 'Auto-archive',
   'settings.archive.hint':
     'Chats and tasks with no new activity for this many days leave the sidebar (running ones and ones waiting for your approval stay). Nothing is deleted; you can find them any time.',

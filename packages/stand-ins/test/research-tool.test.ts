@@ -17,7 +17,9 @@ describe('WP220 read_reddit 的工具定义', () => {
     expect(def?.description).toContain('接口中台 → 浏览器只读')
     expect(def?.description).toContain('不发帖、不回帖')
     expect(def?.description).toContain('不是「0 条」')
-    expect(def?.input_schema).toMatchObject({ required: ['action'] })
+    // WP236：action 不再必填（服务端按 query / subreddit / post_url 推断），描述写清
+    expect((def?.input_schema ?? {}) as { required?: string[] }).not.toHaveProperty('required')
+    expect(def?.description).toContain('action 可以不填')
     const none = makeRequest({ roleId: 'dtc.support', allow: [], outputs: ['answer'] })
     expect(assemblePrompt(none).tools.find((t) => t.name === READ_REDDIT_TOOL)).toBeUndefined()
     expect(RESEARCH_TOOL_NAMES).toEqual(['read_reddit'])

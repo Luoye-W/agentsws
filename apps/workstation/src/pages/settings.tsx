@@ -25,6 +25,7 @@ import { ContentUpdatesSetting } from '@/components/settings/content-updates-set
 import { CreditsPanel } from '@/components/settings/credits-panel'
 import { DiagnosticsCard } from '@/components/settings/diagnostics-card'
 import { OfficialPluginsPanel } from '@/components/settings/official-plugins'
+import { RunLimitsSetting } from '@/components/settings/run-limits-setting'
 import { WeeklyReviewCard } from '@/components/settings/weekly-review-card'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -216,6 +217,8 @@ export function SettingsPage({
             </div>
             {/* WP207：对话 / 任务多少天没动就自动归档（1–30 天或不自动归档） */}
             <ArchiveSetting />
+            {/* WP236：一次运行多久没动静算卡死、最多跑多久 */}
+            <RunLimitsSetting />
             {/* WP219：已审的内容更新——自动 / 每次问我（默认），更新过的条目可一键退回 */}
             <ContentUpdatesSetting />
             {identity === undefined ? null : (

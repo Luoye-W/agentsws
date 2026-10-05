@@ -33,6 +33,7 @@ import type {
   WorkspaceId,
 } from './common.js'
 import type { RunResult } from './run.js'
+import type { RunCancelReason } from './run-limits.js'
 
 export type MatterId = string
 export type GoalId = string
@@ -84,6 +85,11 @@ export interface MatterEvent {
   run_id?: RunId
   approval_item_id?: string
   todo_id?: TodoId
+  /**
+   * WP236：这条是「一次运行被停下来」的那一条（停的原因）——界面在它下面出「接着跑」按钮。
+   * 老事件没有这一格。
+   */
+  stopped?: { reason: RunCancelReason }
 }
 
 export interface MatterContext {

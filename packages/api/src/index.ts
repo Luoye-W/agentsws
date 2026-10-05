@@ -563,6 +563,8 @@ export {
   type PrivacyPort,
   privacyRoutes,
 } from './routes/privacy.js'
+// WP236：运行时长线
+export { type RunLimitsPort, runLimitsRoutes } from './routes/run-limits.js'
 export { scheduleRoutes } from './routes/schedules.js'
 export {
   type SearchDataActor,

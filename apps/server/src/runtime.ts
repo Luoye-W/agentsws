@@ -38,6 +38,7 @@ import type {
   RunConnection,
   RunEvent,
   RunRequest,
+  RunTimeLimits,
   RuntimeAdapter,
   RunWeb,
   StartRun,
@@ -45,7 +46,20 @@ import type {
   TodoId,
   WorkspaceVertical,
 } from '@agentsws/contracts'
-import { platformKitOf, skillOnPlatform } from '@agentsws/contracts'
+import {
+  cancelReasonOf,
+  createRunWatchdog,
+  PLATFORM_KITS,
+  platformKitOf,
+  platformMcpNeededBy,
+  RUN_IDLE_TIMEOUT_RANGE,
+  RUN_MAX_DURATION_RANGE,
+  type RunCancelReason,
+  type RunWatchdog,
+  resolveRunTimeLimits,
+  skillOnPlatform,
+  WEB_TOOL_NAMES,
+} from '@agentsws/contracts'
 import { canonicalJson, timeContextItem } from '@agentsws/core'
 import {
   classifySideEffect,
@@ -90,6 +104,7 @@ import {
 
 import { cardRefOf, type Work } from '@agentsws/work'
 import type { ComputerUseAssembly } from './computer-use.js'
+import { PartialRunLog, stoppedLine } from './run-stop.js'
 import { createSkillToolExecutor, isReadSkillTool } from './skill-tools.js'
 
 /**
@@ -168,6 +183,11 @@ export interface MatterRecordSource {
   readToken?(assignment_id: AssignmentId): Promise<string> | string
   /** 工具执行器；不给的话运行时的工具调用一律 `no_tool_executor` */
   executeTool?: ToolExecutor
+  /**
+   * WP236：这个记录源**真能执行**哪些工具。给了，工具面里就只摆它认的（加上别的执行器真接上的）；
+   * 不给 = 老行为（不筛，替身 / 模拟世界的记录源都这样）。
+   */
+  executes?(tool: string): boolean
 }
 
 export interface RuntimeOptions {
@@ -189,6 +209,11 @@ export interface RuntimeOptions {
   roles: RoleStore
   appendEvent(e: Omit<EventEnvelope, 'id' | 'at'> & { at?: string }): void
   source?: MatterRecordSource
+  /**
+   * WP236：「设置 → 通用」里的运行时长线（空闲超时 / 总时长上限，秒）。每次运行现问；
+   * 职责阈值 `run_idle_timeout_seconds` / `run_max_duration_seconds` 优先，都没有走缺省（3 / 20 分钟）。
+   */
+  runLimits?(): Partial<RunTimeLimits> | undefined
   /** seed 化的随机（运行时的确定性）；不给按 `random` 起一个 */
   seed?: number
   /** 运行时的名字；缺省按有没有模型 provider 配置自动选 */
@@ -540,6 +565,19 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
    */
   const skillActors = new Map<string, SkillPromptActor>()
 
+  /**
+   * WP236：每次运行的看门狗与现场记录（开跑登记、收尾摘掉，与 `active` 同一个生命周期）。
+   * 宿主执行器每调一次工具都给看门狗续命、把回来的数据记一笔——停下来时拼「已经查到的部分」。
+   */
+  const runWatch = new Map<string, { watchdog: RunWatchdog; log: PartialRunLog }>()
+
+  /** WP236：这条职责这一次的时长线（职责阈值 → 设置 → 缺省）。 */
+  const timeLimitsFor = (role_id: string): RunTimeLimits =>
+    resolveRunTimeLimits({
+      thresholds: options.roles.roles?.get(role_id)?.thresholds,
+      settings: options.runLimits?.(),
+    })
+
   const appendRunEvent = (req: RunRequest, e: RunEvent): void => {
     const { type, ...payload } = e
     options.appendEvent({
@@ -874,12 +912,19 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
   // WP216：Dev MCP 是平台专属的官方工具——品牌的平台那一行没有 `mcp`，工具面里就一个都没有
   // 接了 `storefrontPlatform` 才有这道闸（没接 = 老行为，回放与老单测一个字节不变）；
   // 接了而平台没设 = 没有（不按 Shopify 兜底）
-  const devToolNames = (): readonly string[] =>
-    options.storefrontPlatform !== undefined &&
-    platformKitOf(options.storefrontPlatform())?.mcp === undefined
-      ? []
-      : (options.devTools?.toolNames() ?? [])
-  const executeTool: ToolExecutor | undefined = (() => {
+  /*
+   * WP236：再加一道——**这条职责要不要它**（平台那一行 `mcp.roles`，建站类 `site.*`）。不要的职责
+   * 连 `toolNames()` 都不问：那一问会在后台起 Dev MCP（首次就去下官方工具包）。
+   * 平台没接（老装配）时按所有平台那一行的并集判。
+   */
+  const devMcpWanted = (role_id: string): boolean => {
+    if (options.storefrontPlatform === undefined)
+      return PLATFORM_KITS.some((k) => platformMcpNeededBy(k.mcp, role_id))
+    return platformMcpNeededBy(platformKitOf(options.storefrontPlatform())?.mcp, role_id)
+  }
+  const devToolNames = (role_id: string): readonly string[] =>
+    !devMcpWanted(role_id) ? [] : (options.devTools?.toolNames() ?? [])
+  const executeToolRaw: ToolExecutor | undefined = (() => {
     /*
      * WP117（66 断点 #1）：**三级链**——红人工具 → dev MCP → 记录源。
      *
@@ -942,7 +987,7 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       if (b2bOut !== undefined && B2B_OUTBOUND_TOOL_NAMES.includes(bareOf(call.name))) {
         return b2bOut(call)
       }
-      if (dev !== undefined && devToolNames().includes(call.name)) {
+      if (dev !== undefined && devToolNames(call.request.actor.role_id).includes(call.name)) {
         try {
           const { text } = await dev.call(call.name, call.input)
           return { status: 'ok', data: { text } }
@@ -956,6 +1001,49 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       return source.executeTool(call)
     }
   })()
+  /*
+   * WP236：所有宿主工具调用都过这一层——调用本身就是「有动静」（取一次 Reddit 要 8–12 秒，
+   * 开始和结束各续一次命），回来的数据记进这次运行的现场（停下来时拼部分结果）。
+   */
+  /**
+   * WP236：**给模型的工具只放这个进程真接上了的**。10-06 真机：社媒 Reddit 的工具面里摆着
+   * `list_community_threads`（职责 grounding 写的），一调就是「这个进程没接」，白花一轮。
+   *
+   * 判据与上面执行链同一张表：哪个执行器接了、名字归它；剩下的问记录源（`executes`）。
+   * 记录源没声明 `executes`（替身 / 模拟世界）= 老行为，不筛。
+   */
+  const offerable = (name: string, role_id: string): boolean => {
+    if (source.executes === undefined) return true
+    const bare = bareOf(name)
+    if (options.kolTools !== undefined && KOL_TOOL_NAMES.includes(bare)) return true
+    if (options.skills !== undefined && isReadSkillTool(name)) return true
+    if (options.researchTools !== undefined && RESEARCH_TOOL_NAMES.includes(bare)) return true
+    if (options.automation !== undefined && isScheduleTool(name)) return true
+    if (options.ownerTools !== undefined && OWNER_TOOL_NAMES.includes(bare)) return true
+    if (options.b2bOutboundTools !== undefined && B2B_OUTBOUND_TOOL_NAMES.includes(bare))
+      return true
+    // 官方网页工具由 dsh 那棵树自己挂（`dsh-tool-web`），不经宿主执行器
+    if (WEB_TOOL_NAMES.includes(name)) return true
+    if (options.devTools !== undefined && devToolNames(role_id).includes(name)) return true
+    return source.executes(name)
+  }
+
+  const executeTool: ToolExecutor | undefined =
+    executeToolRaw === undefined
+      ? undefined
+      : async (call) => {
+          const watch = runWatch.get(call.request.id)
+          watch?.watchdog.touch()
+          const res = await executeToolRaw(call)
+          watch?.watchdog.touch()
+          watch?.log.hostTool({
+            tool: bareOf(call.name),
+            input: call.input,
+            status: res.status,
+            ...(res.data === undefined ? {} : { data: res.data }),
+          })
+          return res
+        }
 
   const directAdapter = (): RuntimeAdapter =>
     createDirectRuntime({
@@ -1089,6 +1177,12 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
             clock,
             seed,
             ...(options.dshMode === undefined ? {} : { mode: options.dshMode }),
+            /*
+             * WP236：子进程档自己的看门狗只当兜底（取设置页允许的最大值）——每次运行真正的线
+             * 由 `startRun` 里的看门狗按职责阈值 / 设置管，经 `signal` 带原因停。
+             */
+            idleTimeoutMs: RUN_IDLE_TIMEOUT_RANGE.max * 1000,
+            maxDurationMs: RUN_MAX_DURATION_RANGE.max * 1000,
             createDraft,
             createPolicyQuestion,
             requestComputerUse,
@@ -1283,7 +1377,7 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
         // WP162：有按需技能可读，才有读技能的工具
         ...(skillIndex.length > 0 ? [READ_SKILL_TOOL] : []),
         ...DEFAULT_TOOLS,
-        ...devToolNames(),
+        ...devToolNames(config.role_id),
         ...(isKolRole(config.role_id) ? KOL_TOOL_NAMES : []),
         // WP153：店主才有「列岗位 / 列连接」这两个只读工具
         ...(isOwnerRole(config.role_id) && options.ownerTools !== undefined
@@ -1298,7 +1392,9 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
         ...(web?.fetch === true ? [WEB_FETCH_TOOL] : []),
         ...(automationOn ? SCHEDULE_TOOL_NAMES : []),
       ]),
-    ].sort()
+    ]
+      .filter((name) => offerable(name, config.role_id))
+      .sort()
     const connect_token = (await source.readToken?.(input.assignment_id)) ?? ''
     const vertical = options.vertical?.()
     // WP82：这条职责的域名白名单（职责模板的 `browser_scope`）。岗位路由已经把
@@ -1346,7 +1442,8 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
           ? []
           : [timeContextItem({ now: clock.now(), companyTz: await options.timeZone() })]),
       ],
-      grounding: config.grounding,
+      // WP236：没接上的工具，grounding 提示里也不提
+      grounding: config.grounding.filter((g) => offerable(g.tool, config.role_id)),
       // 16 §3：公司端 write_external 一律经执行器，运行时拿不到写口
       tools: { allow, connect_token, side_effect_policy: 'executor' },
       skills: config.skills,
@@ -1444,7 +1541,8 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
           : (browser !== undefined && allowed_hosts.length > 0) || web !== undefined
             ? 30
             : 12,
-        max_seconds: 120,
+        // WP236：与看门狗的总时长线对齐（原来固定 120 秒，direct 档跑满就收）
+        max_seconds: timeLimitsFor(config.role_id).max_duration_seconds,
         max_cost_base: 5,
       },
       // 变更仍走各自的管线（渠道 / 执行器）；事项里的一次运行只出草稿与提案
@@ -1546,7 +1644,24 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       answers.push(text)
     }
     let summary = ''
+    /*
+     * WP236：**没动静才停**。三个运行时档都认 `signal`，所以看门狗放在这一层统一管：每个事件、
+     * 每次宿主工具调用都续命；连续空闲到线、或跑满总时长，就带着原因 abort（`run.cancelled.reason`）。
+     */
+    const limits = timeLimitsFor(request.actor.role_id)
+    const runLog = new PartialRunLog()
+    const watchdog = createRunWatchdog({
+      idleMs: limits.idle_timeout_seconds * 1000,
+      maxMs: limits.max_duration_seconds * 1000,
+      onFire: (reason) => controller.abort(reason),
+    })
+    runWatch.set(run_id, { watchdog, log: runLog })
+    let cancelledReason: RunCancelReason | undefined
     const sink = (e: RunEvent): void => {
+      watchdog.touch()
+      if (e.type === 'text.delta') runLog.text(e.text)
+      if (e.type === 'run.cancelled')
+        cancelledReason = e.reason ?? cancelReasonOf(controller.signal)
       appendRunEvent(request, e)
       // 15 §6 provenance：只证明「读过」——注入的记录与工具真回来的实体
       if (e.type === 'context.injected') {
@@ -1588,7 +1703,7 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
             until: cu.granted_until,
             ...(cu.grant_id === undefined ? {} : { grant_id: cu.grant_id }),
           },
-          () => controller.abort(),
+          () => controller.abort('user' satisfies RunCancelReason),
         )
         work?.appendEvent(input.matter.id, {
           kind: 'status',
@@ -1607,9 +1722,65 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
               )
       } finally {
         options.computerUse?.deactivate(run_id)
+        watchdog.stop()
       }
       summary = result.summary
       for (const out of result.outputs) if (out.kind === 'answer') addAnswer(out.text)
+      /*
+       * WP236：**停下来要让人看见、已经干的不丢**。原因按看门狗 → 运行时报的 → signal 的顺序认；
+       * 时间线先一句人话，再把模型说过的话 + 已经取回的数据摘要作为部分结果挂上（带「接着跑」）。
+       * 摘要也写进事项（下一次「接着跑」的上下文里就有已经查到的东西）。
+       */
+      // 运行时自己报「做完了」（停的信号到之前最后一跳刚好收完）就照做完算
+      const stoppedReason =
+        result.status === 'cancelled' ||
+        (controller.signal.aborted && result.status !== 'completed')
+          ? (watchdog.fired() ?? cancelledReason ?? cancelReasonOf(controller.signal))
+          : undefined
+      if (stoppedReason !== undefined) {
+        // 过程话已经在 `text.delta` 里攒着；答复只在它没覆盖到时补上（不说两遍）
+        const said = runLog.said()
+        const extra = answers
+          .filter((a) => !said.includes(a.trim()))
+          .join('\n')
+          .trim()
+        const digest = runLog.digest()
+        const partial =
+          digest === undefined
+            ? extra === ''
+              ? undefined
+              : extra
+            : extra === ''
+              ? digest
+              : `${extra}\n\n${digest}`
+        const line = stoppedLine(stoppedReason, limits, partial !== undefined)
+        work?.appendEvent(input.matter.id, {
+          kind: 'status',
+          text: line,
+          actor: { kind: 'system', id: 'runtime' },
+          run_id,
+          ...(partial === undefined ? { stopped: { reason: stoppedReason } } : {}),
+        })
+        if (partial !== undefined) {
+          work?.appendEvent(input.matter.id, {
+            kind: 'agent_message',
+            text: humanizeToolNames(partial, request.tools.allow),
+            actor: { kind: 'agent', id: input.actor.assignment_id },
+            run_id,
+            stopped: { reason: stoppedReason },
+          })
+        }
+        work?.onRunCompleted({
+          matter_id: input.matter.id,
+          run_id,
+          summary:
+            partial === undefined
+              ? line
+              : `${line}\n${humanizeToolNames(partial, request.tools.allow).slice(0, 1200)}`,
+          session_ref: result.session_ref,
+        })
+        return { run_id }
+      }
       // 37 §2.2b：Agent 说的话进时间线；摘要与会话引用由 onRunCompleted 落到事项上
       if (answers.length > 0) {
         work?.appendEvent(input.matter.id, {
@@ -1638,9 +1809,11 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
         run_id,
       })
     } finally {
+      watchdog.stop()
       scope = undefined
       active.delete(run_id)
       skillActors.delete(run_id)
+      runWatch.delete(run_id)
       settle()
     }
     return { run_id }
@@ -1658,7 +1831,7 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
         actor: { kind: 'system', id: 'runtime' },
         run_id,
       })
-      hit.controller.abort()
+      hit.controller.abort('user' satisfies RunCancelReason)
       let timer: NodeJS.Timeout | undefined
       await Promise.race([
         hit.settled,

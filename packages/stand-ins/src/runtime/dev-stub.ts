@@ -6,6 +6,7 @@ import type {
   RunResult,
   RuntimeAdapter,
 } from '@agentsws/contracts'
+import { cancelledEvent } from '@agentsws/contracts'
 import { canonicalJson, sha256 } from '@agentsws/core'
 
 /** 17 §4 `dev-executor` 的产物；契约的 `RunOutput{kind:'dev_result'}` 只带 id，明细放这里。 */
@@ -109,7 +110,7 @@ export function createDevStubRuntime(options: DevStubOptions): DevStubRuntime {
       const dev_task_id = req.work_item?.id ?? req.id
       for (const step of ['plan', 'implement', 'test', 'open_pr']) {
         if (signal.aborted) {
-          sink({ type: 'run.cancelled' })
+          sink(cancelledEvent(signal))
           return {
             request_id: req.id,
             status: 'cancelled',

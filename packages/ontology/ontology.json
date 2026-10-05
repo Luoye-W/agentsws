@@ -50,6 +50,7 @@
     "packages/contracts/src/pr.ts",
     "packages/contracts/src/pricing-catalog.ts",
     "packages/contracts/src/roles.ts",
+    "packages/contracts/src/run-limits.ts",
     "packages/contracts/src/run.ts",
     "packages/contracts/src/schedule.ts",
     "packages/contracts/src/search-data.ts",
@@ -113,7 +114,7 @@
     "packages/roles/roles/social/x.yml",
     "packages/roles/roles/social/youtube.yml"
   ],
-  "source_digest": "9579297176f14b6f66a93fef13e5c6a0",
+  "source_digest": "07ff6a589a8bcdf3e8fc466b8205ca4a",
   "objects": [
     {
       "id": "ad",
