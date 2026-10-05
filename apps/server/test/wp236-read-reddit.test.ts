@@ -96,7 +96,8 @@ describe('WP236 ③ action 缺省推断', () => {
     expect(def?.description).toContain('不填 limit 就取 10 条')
     expect(def?.description).toContain('先少取')
     expect(def?.description).toContain('换词搜别超过 3 次')
-    expect((def?.input_schema as { required?: string[] }).required ?? []).not.toContain('action')
+    const schema = (def?.input_schema ?? {}) as { required?: string[] }
+    expect(schema.required ?? []).not.toContain('action')
   })
 })
 
