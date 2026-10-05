@@ -153,6 +153,42 @@ describe('毛利率事实卡', () => {
   })
 })
 
+describe('毛利率事实卡只给负责人、店铺、投放看（Luoye 10-05）', () => {
+  it('客服检索不到；投放检索得到（按各自分配的真实授权）', async () => {
+    const ws = server.bootstrap.workspace.id
+    await put('/v1/economics/margins', { scope: 'brand', margin_pct: 40 })
+    const support = server.roles.assignments.create({
+      person_id: server.bootstrap.person.id,
+      workspace_id: ws,
+      granted_by: server.bootstrap.person.id,
+      ranges: [{ kind: 'store' as const, id: 'store_1' }],
+      role_id: 'dtc.support',
+    })
+    const actorOf = (a: Assignment) => {
+      const config = server.roles.effectiveConfig(a.id)
+      return {
+        person_id: a.person_id,
+        workspace_id: ws,
+        assignment_id: a.id,
+        role_id: a.role_id,
+        grants: config.scopes,
+        ranges: config.ranges,
+      }
+    }
+    const typesFor = async (a: Assignment) =>
+      (await server.knowledge.store.list({ workspace_id: ws }, actorOf(a) as never)).map(
+        (c) => c.subject.type,
+      )
+    expect(await typesFor(support)).not.toContain('gross_margin')
+    expect(await typesFor(meta)).toContain('gross_margin')
+    const hits = async (a: Assignment) =>
+      (await server.knowledge.retrieval.search({ text: '毛利率', actor: actorOf(a) as never })).hits
+        .length
+    expect(await hits(support)).toBe(0)
+    expect(await hits(meta)).toBeGreaterThan(0)
+  })
+})
+
 describe('止损卡上并排一格盈亏线；自动止损线不动', () => {
   it('填了毛利率 40%：卡上写「盈亏线 ROAS 2.5」；ROAS 1.8 照旧不是止损（转人审）', async () => {
     await seedCampaign(1.8)

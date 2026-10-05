@@ -10,6 +10,7 @@ import type {
   Sensitivity,
   WorkspaceId,
 } from './common.js'
+import { GROSS_MARGIN_SUBJECT_TYPE, GROSS_MARGIN_VISIBLE_ROLES } from './economics.js'
 
 /**
  * 19 §1 事实卡的层。
@@ -392,4 +393,15 @@ export interface MemoryStore {
     opts?: { cap?: number; workspace_id?: WorkspaceId },
   ): Promise<MemoryFactRecord[]>
   forget(subject: ObjectRef, key: string, opts?: { workspace_id?: WorkspaceId }): Promise<void>
+}
+
+/**
+ * WP224（Luoye 10-05）：**按职责白名单才看得到**的那几类事实卡（`subject.type` → 职责 id）。
+ *
+ * 19 §3 的过滤下推原来只按数据域 / 敏感度 / 范围切；这里加最小的一刀：在表里的
+ * `subject.type`，只有白名单里的职责检索得到、`get` / `list` 得到（过滤下推，不是命中后脱敏）。
+ * 不在表里的照旧。只加不删。
+ */
+export const ROLE_SCOPED_FACT_SUBJECTS: Readonly<Record<string, readonly string[]>> = {
+  [GROSS_MARGIN_SUBJECT_TYPE]: GROSS_MARGIN_VISIBLE_ROLES,
 }

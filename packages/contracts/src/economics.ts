@@ -51,6 +51,22 @@ export function grossMarginKey(scope: GrossMarginScope, key?: string): string {
   return scope === 'brand' ? 'gross_margin:brand' : `gross_margin:${scope}:${(key ?? '').trim()}`
 }
 
+/**
+ * 谁检索得到 / 看得到毛利率事实卡（Luoye 10-05 定）：负责人、店铺管理、投放四条。
+ *
+ * 客服、社媒、公关、红人这些**对外说话**的岗位一律检索不到——毛利率是公司内部的账，
+ * 模型拿到了就有可能写进一封回信、一条评论里。按职责白名单做（知识可见范围本来按
+ * 数据域 / 敏感度 / 范围过滤，没有按职责的那一刀，这里加最小的一刀，见 `ROLE_SCOPED_FACT_SUBJECTS`）。
+ */
+export const GROSS_MARGIN_VISIBLE_ROLES: readonly string[] = [
+  'common.owner',
+  'dtc.store',
+  'ads.meta',
+  'ads.google',
+  'ads.tiktok',
+  'ads.x',
+]
+
 /** 「没填毛利率」那一格的去填入口（公司 → 品牌）。 */
 export const GROSS_MARGIN_FILL_PATH = '/org?tab=brands&focus=gross-margin'
 
