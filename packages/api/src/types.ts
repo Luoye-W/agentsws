@@ -83,6 +83,7 @@ import type { OnboardingPort } from './routes/onboarding.js'
 import type { OffboardPort, OrgPort } from './routes/org.js'
 import type { OrganizationsPort } from './routes/organizations.js'
 import type { PersonaPort } from './routes/personas.js'
+import type { PlatformKitPort } from './routes/platform-kit.js'
 import type { PositionEntryPort } from './routes/positions.js'
 import type { PrPort } from './routes/pr.js'
 import type { PrivacyPort } from './routes/privacy.js'
@@ -1004,6 +1005,11 @@ export interface GatewayDeps {
    * 一台机器一份；没装配时 `/v1/settings/official-plugins*` 回 not_implemented。
    */
   officialPlugins?: OfficialPluginsPort
+  /**
+   * WP216：这个品牌的平台专属那一套（官方技能 / 官方 MCP / 官方 CLI）。按品牌档案判断；
+   * 没装配时 `/v1/platform-kit*` 回 not_implemented。
+   */
+  platformKit?: PlatformKitPort
 }
 
 /**
