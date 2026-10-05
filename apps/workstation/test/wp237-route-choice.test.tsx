@@ -132,6 +132,7 @@ describe('WP237 卡上的按钮就是候选职责', () => {
         onOpen={() => {}}
       />,
     )
+    expect(screen.getByTestId('deck-band').textContent).toBe('走哪条职责')
     const bar = screen.getByTestId('deck-route-choice')
     expect(bar.textContent).not.toContain('认领')
     expect(bar.textContent).not.toContain('不是客户问题')
