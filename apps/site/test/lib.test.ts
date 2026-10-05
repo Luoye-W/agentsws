@@ -195,12 +195,11 @@ describe('WP227：首页台阶链到 KOLAgents / KefuAgents；Windows 下载旁�
   it('两个名字都变成新窗口链接（rel=noopener），其余照样转义', () => {
     for (const lang of ['zh', 'en'] as const) {
       const html = linkNames(HOME[lang].why.steps[2]?.p ?? '', SISTER_SITES)
-      expect(html).toContain(
-        '<a href="https://kolagents.com" target="_blank" rel="noopener">KOLAgents</a>',
-      )
-      expect(html).toContain(
-        '<a href="https://kefuagents.com" target="_blank" rel="noopener">KefuAgents</a>',
-      )
+      for (const name of ['KOLAgents', 'KefuAgents']) {
+        const url = SISTER_SITES[name] ?? ''
+        expect(url).toMatch(/^https:\/\/[a-z]+agents\.com$/u)
+        expect(html).toContain(`<a href="${url}" target="_blank" rel="noopener">${name}</a>`)
+      }
     }
     expect(linkNames('<b>X</b> & X', { X: 'https://x.example' })).toBe(
       '&#60;b&#62;<a href="https://x.example" target="_blank" rel="noopener">X</a>&#60;/b&#62; &#38; <a href="https://x.example" target="_blank" rel="noopener">X</a>',

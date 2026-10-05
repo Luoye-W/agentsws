@@ -19,7 +19,7 @@ export function emph(s: string): string {
 
 /**
  * 正文里点名的外站名字 → 链接（新窗口、`rel="noopener"`），其余转义。只认 http(s) 链接。
- * 例：`linkNames('KOLAgents 很好', { KOLAgents: 'https://kolagents.com' })`。
+ * 例：`linkNames('Foo 很好', { Foo: 'https://foo.example' })`。
  */
 export function linkNames(s: string, links: Readonly<Record<string, string>>): string {
   const esc = (x: string) => x.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`)
