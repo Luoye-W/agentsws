@@ -113,6 +113,7 @@ import { tintBitmap } from './tray-tint.js'
 import {
   busyBeforeRestart,
   createUpdateController,
+  electronUpdaterLogger,
   publicStatus,
   type UpdateBackend,
   type UpdateStatus,
@@ -1580,6 +1581,12 @@ async function bootstrap(): Promise<void> {
   let updateAvailable: string | undefined
   let updateUrl = DOWNLOAD_PAGE
 
+  /** 主源与 GitHub 共用同一个 autoUpdater，所以「正在查」这面旗也只有一面。 */
+  let updaterChecking = false
+  const updaterLogger = electronUpdaterLogger(
+    logger.child('electron-updater'),
+    () => updaterChecking,
+  )
   /** Windows：包一层 electron-updater。主源与 GitHub 共用同一个 autoUpdater，查之前先指好源。 */
   const electronBackend = async (feed: FeedConfig): Promise<UpdateBackend> => {
     // 动态 import：notify 档一次都用不上它，没必要拖进每一次冷启动。
@@ -1591,12 +1598,9 @@ async function bootstrap(): Promise<void> {
     real.autoInstallOnAppQuit = false
     // 渠道靠目录分（不设 `channel`——设了会顺手打开 allowDowngrade）；GitHub 那路靠它认预发布
     real.allowPrerelease = feed.channel === 'beta'
-    real.logger = {
-      info: (m: unknown) => logger.child('electron-updater').info(String(m)),
-      warn: (m: unknown) => logger.child('electron-updater').warn(String(m)),
-      error: (m: unknown) => logger.child('electron-updater').error(String(m)),
-      debug: () => undefined,
-    } as never
+    // WP235：electron-updater 查失败时自己会 logger.error 一段堆栈；源还不存在（域名没绑、GitHub 没发布）
+    // 那一类在「查」的时候不写，结论交给状态机记一行 info（见 update-controller.ts 的 electronUpdaterLogger）
+    real.logger = updaterLogger
     return {
       async check() {
         real.setFeedURL(
@@ -1604,9 +1608,14 @@ async function bootstrap(): Promise<void> {
             ? { provider: 'generic', url: feed.url }
             : { provider: 'github', owner: feed.owner, repo: feed.repo },
         )
-        const result = await real.checkForUpdates()
-        const found = result?.updateInfo.version
-        return found !== undefined && isNewer(version, found) ? { version: found } : undefined
+        updaterChecking = true
+        try {
+          const result = await real.checkForUpdates()
+          const found = result?.updateInfo.version
+          return found !== undefined && isNewer(version, found) ? { version: found } : undefined
+        } finally {
+          updaterChecking = false
+        }
       },
       async download(onProgress) {
         const listener = (p: { percent: number }): void => {

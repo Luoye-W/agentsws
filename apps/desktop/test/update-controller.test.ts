@@ -3,19 +3,22 @@
  * 外加主源连不上退到 GitHub、notify 档（mac 未签名）只开下载页、定时查。
  */
 import { describe, expect, it, vi } from 'vitest'
-import { silentLogger } from '../src/logging.js'
+import { type Logger, type LogLevel, silentLogger } from '../src/logging.js'
 import {
   busyBeforeRestart,
   classifyUpdateError,
   createUpdateController,
   DEFAULT_FIRST_CHECK_MS,
   DEFAULT_INTERVAL_MS,
+  electronUpdaterLogger,
   publicStatus,
+  sourceMissing,
   type UpdateBackend,
   type UpdateControllerOptions,
   type UpdateStatus,
 } from '../src/update-controller.js'
-import { fakeTimers } from './fakes.js'
+import { createFeedChecker } from '../src/updater.js'
+import { fakeFetch, fakeTimers, response } from './fakes.js'
 
 /** 替身更新源：`latest` 为 undefined = 没新版。 */
 function backend(
@@ -421,5 +424,292 @@ describe('WP225：重启并更新前要不要问', () => {
     expect(
       busyBeforeRestart({ officialScenes: false, computerUse: false, aiRuns: undefined }),
     ).toBe(false)
+  })
+})
+
+// ── WP235：更新源还不存在（下载站没绑定、GitHub 没发布）──────────────────────
+
+interface LogEntry {
+  level: LogLevel
+  message: string
+  fields?: Readonly<Record<string, unknown>>
+}
+
+/** 记下每一行的 logger（看级别与条数）。 */
+function recordingLogger(): Logger & { entries: LogEntry[] } {
+  const entries: LogEntry[] = []
+  const make = (): Logger => ({
+    info: (message, fields) => {
+      entries.push({ level: 'info', message, ...(fields === undefined ? {} : { fields }) })
+    },
+    warn: (message, fields) => {
+      entries.push({ level: 'warn', message, ...(fields === undefined ? {} : { fields }) })
+    },
+    error: (message, fields) => {
+      entries.push({ level: 'error', message, ...(fields === undefined ? {} : { fields }) })
+    },
+    raw: () => undefined,
+    child: () => make(),
+    setRedactor: () => undefined,
+  })
+  return Object.assign(make(), { entries })
+}
+
+const failing = (err: unknown): UpdateBackend => backend({ check: () => Promise.reject(err) })
+const coded = (message: string, code: string): Error => Object.assign(new Error(message), { code })
+/** Node fetch 解析不到域名的样子：外面一句 fetch failed，原因在 cause 里。 */
+const fetchDnsFail = (): Error =>
+  new TypeError('fetch failed', {
+    cause: Object.assign(new Error('getaddrinfo ENOTFOUND dl.agentsws.com'), { code: 'ENOTFOUND' }),
+  })
+
+describe('WP235：两个源都还不存在 → 暂无新版本，不算出错', () => {
+  it.each([
+    [
+      '下载站域名没绑（Electron）+ GitHub 一个发布都没有',
+      new Error('net::ERR_NAME_NOT_RESOLVED'),
+      coded('No published versions on GitHub', 'ERR_XML_MISSED_ELEMENT'),
+    ],
+    ['下载站域名没绑（Node fetch）+ GitHub 仓库 404', fetchDnsFail(), new Error('HTTP 404')],
+    [
+      '下载站连接被拒 + GitHub 没有已发布版本',
+      new Error('connect ECONNREFUSED 1.2.3.4:443'),
+      coded('No published versions on GitHub', 'ERR_UPDATER_NO_PUBLISHED_VERSIONS'),
+    ],
+  ])('%s：按钮是 idle（已是最新），日志只有一行 info', async (_name, primaryErr, githubErr) => {
+    const logger = recordingLogger()
+    const { c, seen } = controller({
+      logger,
+      primary: failing(primaryErr),
+      fallback: () => failing(githubErr),
+    })
+    expect(await c.check()).toEqual({ state: 'idle' })
+    expect(seen.some((s) => s.state === 'error')).toBe(false)
+    expect(logger.entries).toHaveLength(1)
+    expect(logger.entries[0]).toMatchObject({
+      level: 'info',
+      message: '还没有可用的更新源，暂无新版本',
+    })
+    // 不带堆栈
+    expect(JSON.stringify(logger.entries[0])).not.toMatch(/\n\s+at /)
+  })
+
+  it('GitHub 的 releases 列表是空的（查得到、只是没东西）：同样一行 info', async () => {
+    const logger = recordingLogger()
+    const { c } = controller({
+      logger,
+      primary: failing(new Error('net::ERR_NAME_NOT_RESOLVED')),
+      fallback: () => backend({ latest: undefined }),
+    })
+    expect(await c.check()).toEqual({ state: 'idle' })
+    expect(logger.entries).toEqual([
+      { level: 'info', message: '暂无新版本', fields: { primary: 'dns', github: 'no-newer' } },
+    ])
+  })
+
+  it('notify 档真源（自有下载站 DNS 不通 + GitHub releases 为 []）：idle、一行 info', async () => {
+    const logger = recordingLogger()
+    const feed = (provider: 'generic' | 'github') =>
+      createFeedChecker({
+        fetchImpl: fakeFetch(async (url) => {
+          if (url.startsWith('https://dl.agentsws.com/')) throw fetchDnsFail()
+          return response(200, '[]')
+        }),
+        currentVersion: '0.1.0-beta.1',
+        feed:
+          provider === 'generic'
+            ? { provider, url: 'https://dl.agentsws.com/beta', channel: 'beta' }
+            : { provider, owner: 'Luoye-W', repo: 'agentsws', channel: 'beta' },
+        platform: 'darwin',
+      })
+    const { c } = controller({
+      mode: 'notify',
+      logger,
+      primary: feed('generic'),
+      fallback: () => feed('github'),
+    })
+    expect(await c.check()).toEqual({ state: 'idle' })
+    expect(logger.entries.map((e) => e.level)).toEqual(['info'])
+  })
+
+  it('之前挂着「有新版本」，源没了：按钮收起来', async () => {
+    let gone = false
+    const primary = backend({
+      check: () =>
+        gone
+          ? Promise.reject(new Error('net::ERR_NAME_NOT_RESOLVED'))
+          : Promise.resolve({ version: '0.2.0' }),
+    })
+    const { c } = controller({
+      primary,
+      fallback: () => failing(coded('No published versions on GitHub', 'ERR_XML_MISSED_ELEMENT')),
+    })
+    expect((await c.check()).state).toBe('available')
+    gone = true
+    expect(await c.check()).toEqual({ state: 'idle' })
+  })
+
+  it('主源 404（按规则不退 GitHub）：这一轮只查了主源，也算暂无新版本', async () => {
+    const logger = recordingLogger()
+    const fallback = vi.fn(() => backend())
+    const { c } = controller({
+      logger,
+      primary: failing(
+        coded('Cannot find channel "latest.yml"', 'ERR_UPDATER_CHANNEL_FILE_NOT_FOUND'),
+      ),
+      fallback,
+    })
+    expect(await c.check()).toEqual({ state: 'idle' })
+    expect(fallback).not.toHaveBeenCalled()
+    expect(logger.entries).toEqual([
+      {
+        level: 'info',
+        message: '还没有可用的更新源，暂无新版本',
+        fields: { primary: 'http-404' },
+      },
+    ])
+  })
+})
+
+describe('WP235：真错误照旧记', () => {
+  it('主源 500：warn，不说「暂无更新源」', async () => {
+    const logger = recordingLogger()
+    const { c } = controller({
+      logger,
+      primary: failing(new Error('HttpError: 500 Internal Server Error')),
+      fallback: () => failing(new Error('HTTP 404')),
+    })
+    expect(await c.check()).toEqual({ state: 'idle' })
+    expect(logger.entries.map((e) => e.level)).toEqual(['warn'])
+    expect(logger.entries[0]?.message).toBe('主源查更新失败')
+  })
+
+  it('主源解析坏了（哪怕夹着 404 字样）：warn', async () => {
+    const logger = recordingLogger()
+    const { c } = controller({
+      logger,
+      primary: failing(
+        coded('Cannot parse releases feed: HttpError: 404 ...', 'ERR_UPDATER_INVALID_RELEASE_FEED'),
+      ),
+    })
+    await c.check()
+    expect(logger.entries.map((e) => e.level)).toEqual(['warn'])
+  })
+
+  it('主源超时（真网络问题）+ GitHub 没发布：主源 warn，GitHub 那一半只是 info', async () => {
+    const logger = recordingLogger()
+    const { c } = controller({
+      logger,
+      primary: failing(new Error('connect ETIMEDOUT 1.2.3.4:443')),
+      fallback: () => failing(coded('No published versions on GitHub', 'ERR_XML_MISSED_ELEMENT')),
+    })
+    await c.check()
+    expect(logger.entries.map((e) => [e.level, e.message])).toEqual([
+      ['warn', '主源查更新失败'],
+      ['info', '备用源（GitHub）上还没有发布'],
+    ])
+  })
+
+  it('主源不存在 + GitHub 真坏了（解析错）：GitHub 那条 warn', async () => {
+    const logger = recordingLogger()
+    const { c } = controller({
+      logger,
+      primary: failing(new Error('net::ERR_NAME_NOT_RESOLVED')),
+      fallback: () => failing(new SyntaxError('Unexpected token < in JSON')),
+    })
+    await c.check()
+    expect(logger.entries).toHaveLength(1)
+    expect(logger.entries[0]).toMatchObject({
+      level: 'warn',
+      message: '备用源（GitHub）查更新也失败',
+      fields: { primary: 'dns' },
+    })
+  })
+
+  it('下载失败照旧 warn + error 态', async () => {
+    const logger = recordingLogger()
+    const { c } = controller({
+      logger,
+      primary: backend({
+        download: () => Promise.reject(new Error('HttpError: 404 Not Found')),
+      }),
+    })
+    await c.check()
+    expect(await c.download()).toMatchObject({ state: 'error', stage: 'download' })
+    expect(logger.entries.some((e) => e.level === 'warn' && e.message === '下载更新失败')).toBe(
+      true,
+    )
+  })
+})
+
+describe('sourceMissing（「源还不存在」的口径）', () => {
+  it.each([
+    [new Error('net::ERR_NAME_NOT_RESOLVED'), 'dns'],
+    [fetchDnsFail(), 'dns'],
+    [new Error('getaddrinfo ENOTFOUND dl.agentsws.com'), 'dns'],
+    [new Error('connect ECONNREFUSED 127.0.0.1:443'), 'refused'],
+    [new Error('net::ERR_CONNECTION_REFUSED'), 'refused'],
+    [coded('x', 'ERR_UPDATER_CHANNEL_FILE_NOT_FOUND'), 'http-404'],
+    [Object.assign(new Error('404 Not Found'), { statusCode: 404 }), 'http-404'],
+    [new Error('HTTP 404'), 'http-404'],
+    [
+      coded(
+        'Unable to find latest version on GitHub (...), please ensure a production release exists: HttpError: 404',
+        'ERR_UPDATER_LATEST_VERSION_NOT_FOUND',
+      ),
+      'http-404',
+    ],
+    [coded('No published versions on GitHub', 'ERR_XML_MISSED_ELEMENT'), 'no-releases'],
+    [coded('x', 'ERR_UPDATER_NO_PUBLISHED_VERSIONS'), 'no-releases'],
+    // electron-updater 自己 logger.error 的那一串（字符串）
+    ['Error: net::ERR_NAME_NOT_RESOLVED\n    at SimpleURLLoaderWrapper.<anonymous>', 'dns'],
+  ])('%s → %s', (err, reason) => {
+    expect(sourceMissing(err)).toBe(reason)
+  })
+
+  it.each([
+    [new Error('connect ETIMEDOUT 1.2.3.4:443')],
+    [new Error('net::ERR_INTERNET_DISCONNECTED')],
+    [new Error('read ECONNRESET')],
+    [new Error('HttpError: 500 Internal Server Error')],
+    [new Error('HTTP 503')],
+    [coded('Cannot parse releases feed: HttpError: 404', 'ERR_UPDATER_INVALID_RELEASE_FEED')],
+    [
+      coded(
+        'Unable to find latest version on GitHub: HttpError: 500',
+        'ERR_UPDATER_LATEST_VERSION_NOT_FOUND',
+      ),
+    ],
+    [new Error('sha512 checksum mismatch')],
+    [null],
+  ])('%s → 不算（真错误）', (err) => {
+    expect(sourceMissing(err)).toBeUndefined()
+  })
+})
+
+describe('electronUpdaterLogger（electron-updater 自己的 error 堆栈）', () => {
+  it('正在查、源还不存在：那段 ERROR 堆栈不写', () => {
+    const logger = recordingLogger()
+    const log = electronUpdaterLogger(logger, () => true)
+    log.info('Checking for update')
+    log.error('Error: net::ERR_NAME_NOT_RESOLVED\n    at SimpleURLLoaderWrapper.<anonymous>')
+    log.error('Error: No published versions on GitHub\n    at XElement.element')
+    expect(logger.entries.map((e) => e.level)).toEqual(['info'])
+  })
+
+  it('正在查、真错误：照旧 error', () => {
+    const logger = recordingLogger()
+    const log = electronUpdaterLogger(logger, () => true)
+    log.error('Error: HttpError: 500 Internal Server Error')
+    expect(logger.entries.map((e) => e.level)).toEqual(['error'])
+  })
+
+  it('不在查（下载 / 安装时）：哪怕是 404 也照旧 error', () => {
+    const logger = recordingLogger()
+    const log = electronUpdaterLogger(logger, () => false)
+    log.error('Error: HttpError: 404 Not Found')
+    log.warn('something')
+    log.debug('noise')
+    expect(logger.entries.map((e) => e.level)).toEqual(['error', 'warn'])
   })
 })
