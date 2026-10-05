@@ -15,7 +15,7 @@ import { pickContent } from '@agentsws/deck'
 import { Label } from '@/components/ui/label'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { useApp } from '@/lib/app-context'
-import { channelLabel, fieldLabel, fieldValue } from '@/lib/humanize'
+import { channelLabel, fieldLabel, fieldValue, tOr } from '@/lib/humanize'
 import type { Lang } from '@/lib/i18n'
 
 const isRecord = (v: unknown): v is Record<string, unknown> =>
@@ -186,15 +186,22 @@ function OptionList({
   options,
   option,
   onOption,
+  kind,
 }: {
   options: { id: string; label: string }[]
   option: string
   onOption: (id: string) => void
+  /** WP219：按卡种换那一句提示（`card.options.hint.<kind>`，没有就用通用那句）。 */
+  kind?: string
 }): React.ReactNode {
   const { t } = useApp()
+  const hint =
+    kind === undefined
+      ? t('card.options.hint')
+      : tOr(t, `card.options.hint.${kind}`, t('card.options.hint'))
   return (
     <fieldset className="rounded-[10px] bg-ws-surface p-3" data-testid="deck-card-options">
-      <legend className="px-1 text-xs text-ws-muted-fg">{t('card.options.hint')}</legend>
+      <legend className="px-1 text-xs text-ws-muted-fg">{hint}</legend>
       <RadioGroup value={option} onValueChange={onOption}>
         {options.map((o) => (
           <Label key={o.id} className="flex items-center gap-2 font-normal">
@@ -257,7 +264,7 @@ export function DeckCardBody({
             {options.length === 0 ? (
               <OutboundBody card={card} mode={mode} />
             ) : (
-              <OptionList options={options} option={option} onOption={onOption} />
+              <OptionList options={options} option={option} onOption={onOption} kind={card.kind} />
             )}
           </div>
         )
@@ -481,7 +488,7 @@ export function DeckCardBody({
       {main}
       {needsOptions ? (
         <div className="mt-2.5">
-          <OptionList options={options} option={option} onOption={onOption} />
+          <OptionList options={options} option={option} onOption={onOption} kind={card.kind} />
         </div>
       ) : null}
     </>
