@@ -118,8 +118,13 @@ describe('只有要人决定的才是卡', () => {
     expect(isQueueCard('outbound_draft')).toBe(true)
   })
 
-  it('清单本身就四条，改它要同时改文档（WP154 加了搜索报告）', () => {
-    expect([...NOT_A_CARD.kinds]).toEqual(['daily_report', 'system_alert', 'seo_report'])
+  it('清单本身就五条，改它要同时改文档（WP154 加了搜索报告，WP224 加了经营一页纸）', () => {
+    expect([...NOT_A_CARD.kinds]).toEqual([
+      'daily_report',
+      'system_alert',
+      'seo_report',
+      'weekly_review',
+    ])
     expect([...NOT_A_CARD.changeKinds]).toEqual(['launch_check'])
   })
 })

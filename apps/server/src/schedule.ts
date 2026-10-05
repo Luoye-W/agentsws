@@ -134,6 +134,10 @@ export const HANDLERS = {
   seoDaily: 'seo.daily_read',
   /** WP154：每周一：按页面收入小结 + AI 平台可见度（按品牌各一轮）。 */
   seoWeekly: 'seo.weekly_review',
+  /** WP224（docs/91 §2.2 #1）：秘书每周一早上推「本周经营一页纸」（按品牌各一份）。 */
+  weeklyReview: 'owner.weekly_review',
+  /** WP224（docs/91 §7 #2）：每天夜里记一行两条止损线的对照（只记账，不改止损）。 */
+  adsLineCompare: 'ads.line_compare',
 } as const
 
 /** 审批家务的节奏：一分钟一拍（模拟回路是每个 tick 一拍，真机器按分钟）。 */
@@ -965,6 +969,31 @@ export interface SeoDeps {
   weekly(): Promise<{ brands: number; skipped: unknown[] }>
 }
 
+/**
+ * WP224：本周经营一页纸——每周一 08:00（工作区时区；在定时任务里可改）。
+ *
+ * 错过了**补跑一次**（`run_once_now`）：周一开机晚了，这周那一份照样该出；关机三周再开机
+ * 也只出一份（同一周同一个 dedupe_key，新的取代旧的）。
+ */
+export const WEEKLY_REVIEW_CRON = '0 8 * * 1'
+/**
+ * WP224：两条止损线的对照——每天 23:30 记一次（一天的花费与 ROAS 基本定了）。
+ * 错过不补跑：那一天的数已经变了，补记一个不是那天的数比空着更糟。
+ */
+export const ADS_LINE_COMPARE_CRON = '30 23 * * *'
+
+export interface EconomicsScheduleDeps {
+  /** 这个品牌出一份一页纸并推给老板。 */
+  weeklyReview(): Promise<unknown>
+  /** 这个品牌记一行两条线的对照。 */
+  lineCompare(): Promise<unknown>
+}
+
+export function registerEconomics(scheduler: Scheduler, deps: EconomicsScheduleDeps): void {
+  scheduler.register(HANDLERS.weeklyReview, () => deps.weeklyReview())
+  scheduler.register(HANDLERS.adsLineCompare, () => deps.lineCompare())
+}
+
 export function registerSeo(scheduler: Scheduler, deps: SeoDeps): void {
   scheduler.register(HANDLERS.seoDaily, () => deps.daily())
   scheduler.register(HANDLERS.seoWeekly, () => deps.weekly())
@@ -1152,6 +1181,10 @@ export interface SchedulePlanOptions {
     social?: boolean
     /** WP154：有人持有「内容与搜索」（`dtc.content`）才建每日读与每周小结那两条。 */
     seo?: boolean
+    /** WP224：有人持有「公司设置与授权」（`common.owner`）才建每周一页纸那一条。 */
+    weeklyReview?: boolean
+    /** WP224：有人持有投放四条之一才建两条止损线对照那一条。 */
+    adsLineCompare?: boolean
   }
 }
 
@@ -1423,6 +1456,29 @@ export async function ensureSystemTasks(
         title: '每周一看一眼：哪些页带来订单、AI 回答里有没有我们',
         handler: HANDLERS.seoWeekly,
         trigger: { kind: 'cron', expr: SEO_WEEKLY_CRON, tz },
+        misfire_policy: 'skip',
+      }),
+    )
+  }
+  // WP224：本周经营一页纸（秘书每周一推）、两条止损线对照（每天夜里记一行）
+  if (options.has.weeklyReview === true) {
+    await add(
+      'sched_weekly_review',
+      systemTask(base, {
+        title: '每周一早上推一份本周经营一页纸',
+        handler: HANDLERS.weeklyReview,
+        trigger: { kind: 'cron', expr: WEEKLY_REVIEW_CRON, tz },
+        misfire_policy: 'run_once_now',
+      }),
+    )
+  }
+  if (options.has.adsLineCompare === true) {
+    await add(
+      'sched_ads_line_compare',
+      systemTask(base, {
+        title: '每天夜里记一行：两条止损线各会不会停（只记账）',
+        handler: HANDLERS.adsLineCompare,
+        trigger: { kind: 'cron', expr: ADS_LINE_COMPARE_CRON, tz },
         misfire_policy: 'skip',
       }),
     )

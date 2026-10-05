@@ -327,6 +327,12 @@ function adsHighlights(item: ApprovalItem): DeckHighlight[] {
   if (kind === 'pause_ad') {
     const why = str(after.stop_loss_reason) ?? str(after.reason_label) ?? str(after.reason)
     if (why !== undefined) out.push({ type: 'stop_loss', text: why })
+    /*
+     * WP224：判据旁边并排一格**盈亏线**（「盈亏线 ROAS 2.5（毛利率 40%）」/「没填毛利率」）。
+     * 只是给人看的第二条线；这张卡停不停仍按上面那条判据（先并排两周再定）。
+     */
+    const breakEven = str(after.break_even_note)
+    if (breakEven !== undefined) out.push({ type: 'break_even', text: breakEven })
   }
 
   return out

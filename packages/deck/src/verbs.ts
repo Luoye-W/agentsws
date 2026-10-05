@@ -190,6 +190,8 @@ export const CATEGORY_BY_KIND: Partial<Record<DeckKind, string>> = {
   computer_use: 'computer_use',
   // WP154：搜索报告（每日 5 件事 / 每周收入 / 每周 AI 可见度）
   seo_report: 'seo_report',
+  // WP224：本周经营一页纸
+  weekly_review: 'weekly_review',
   seo_topic: 'seo_topic',
   digest: 'digest',
   // WP171（docs/84 §11.3）：改收款账户红卡

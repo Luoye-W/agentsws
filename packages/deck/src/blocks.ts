@@ -513,6 +513,15 @@ const VIEW_BY_ROLE: Record<RoleId, () => BlockDef[]> = {
   // 售后客服的职责里没有 analytics 域（05 §5），所以它的面板只有店铺后台——
   // 无权的数据源连「去连接」都不该出（19 §3 过滤下推：不是先给再脱敏）。
   'dtc.support': () => SHOP_BLOCKS(),
+  /*
+   * WP224（docs/91 §7 #2）：老板那一面多一块「两条止损线对照」——从合并那天起逐日记，
+   * 两周后照这张表定止损线（现在的固定线 vs 按毛利率算的盈亏线）。只看、不改止损。
+   * 「本周经营一页纸」不是积木：它是一张报表卡（`weekly_review`，见 `NOT_A_CARD`）。
+   */
+  'common.owner': () => [
+    ...SHOP_BLOCKS(),
+    block('owner.line_compare', 'table', '两条止损线对照', 'ads.line_compare'),
+  ],
   'dtc.analytics': () => [...SHOP_BLOCKS(), ...GA4_BLOCKS(), ...GSC_BLOCKS()],
   /*
    * WP75（57 §3）：四条平台职责，面板骨架相同（四个数字块 + 五个分块）。
