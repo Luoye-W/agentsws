@@ -115,6 +115,12 @@ export function dutyHref(assignment_id: string, role_id: string): string {
 }
 
 /**
+ * WP234（docs/54 §6.1 / §6.5）：工作区底座职责——`common.owner`（负责人身份）与 `common.member`
+ * 不算任何岗位的活，左栏「岗位」里不出。负责人的入口在「公司」页。
+ */
+const WORKSPACE_BASE_ROLES: ReadonlySet<string> = new Set(['common.owner', 'common.member'])
+
+/**
  * 左栏「岗位」那一栏的一行：一个岗位（WP70），行首一个展开箭头（WP71）。
  *
  * 待审数按岗位聚合（"网站运营 3"）——点进去才看得到是哪条职责的（54 §4）。
@@ -556,17 +562,20 @@ export function AppShell({
                       />
                     )
                   })
-                : positions.map((p) => (
-                    <NavLink
-                      key={p.position_id}
-                      to={`/positions/${p.position_id}`}
-                      className={navClass}
-                      data-testid="nav-position"
-                    >
-                      <PositionIcon position_id={p.position_id} role_ids={[p.role_id]} />
-                      <span className="truncate">{p.role_name}</span>
-                    </NavLink>
-                  ))}
+                : // WP234（docs/54 §6.5）：「负责人」是身份不是岗位——底座职责不进左栏「岗位」
+                  positions
+                    .filter((p) => !WORKSPACE_BASE_ROLES.has(p.role_id))
+                    .map((p) => (
+                      <NavLink
+                        key={p.position_id}
+                        to={`/positions/${p.position_id}`}
+                        className={navClass}
+                        data-testid="nav-position"
+                      >
+                        <PositionIcon position_id={p.position_id} role_ids={[p.role_id]} />
+                        <span className="truncate">{p.role_name}</span>
+                      </NavLink>
+                    ))}
               <Separator className="my-2" />
               {/* 41 §1：每人自带的个人代理——问别人的代理、管自己的 profile 与日程 */}
               <NavLink to="/secretary" className={navClass}>

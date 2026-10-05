@@ -25,7 +25,8 @@ import { GrossMarginCard } from '@/components/org/gross-margin-card'
 import { InprogressTab } from '@/components/org/inprogress-tab'
 import { type JoinChoice, JoinTab } from '@/components/org/join-tab'
 import { MembersTab } from '@/components/org/members-tab'
-import { type PositionDraft, PositionsTab } from '@/components/org/positions-tab'
+import { OwnerCard } from '@/components/org/owner-card'
+import { OWNER_POSITION, type PositionDraft, PositionsTab } from '@/components/org/positions-tab'
 import { type ProductLineDraft, type RangeGroupDraft, RangesTab } from '@/components/org/ranges-tab'
 import { ToolboxTab } from '@/components/org/toolbox-tab'
 import { Button } from '@/components/ui/button'
@@ -63,12 +64,17 @@ import {
   listRangeGroups,
   listRangeOptions,
   listRoleDefinitions,
+  mergeOrgPosition,
+  moveOrgPositionDuty,
+  type PositionReshapeView,
   proposeRangeChange,
   proposeRoleChange,
   removeMember,
   requestMembership,
   revokeAssignment,
   setOrgPositionSupervisor,
+  splitOrgPosition,
+  transferOwner,
   updateOrgPosition,
   updateRangeGroup,
 } from '@/lib/api'
@@ -275,6 +281,57 @@ export function OrgPage(): React.ReactNode {
     onError: say,
   })
 
+  /**
+   * WP234（docs/54 §6.4）：合并 / 移动职责 / 拆出。服务端回动了几条分配、几件事、并了几条
+   * 岗位记忆——照实说一句，人知道「我的东西跟过去了」。
+   */
+  const [reshaped, setReshaped] = useState<string | undefined>(undefined)
+  const sayReshaped = async (out: PositionReshapeView): Promise<void> => {
+    setFailure(undefined)
+    setReshaped(
+      t('org.positions.reshaped', {
+        n: String(out.moved_assignments),
+        m: String(out.moved_matters),
+      }) +
+        (out.memory === undefined || out.memory.moved + out.memory.kept_both === 0
+          ? ''
+          : t('org.positions.reshaped.memory', {
+              k: String(out.memory.moved + out.memory.kept_both),
+              b: String(out.memory.kept_both),
+            })),
+    )
+    await refresh()
+  }
+  const merge = useMutation({
+    mutationFn: (input: { id: string; into: string }) =>
+      mergeOrgPosition(input.id, input.into, owner),
+    onSuccess: sayReshaped,
+    onError: say,
+  })
+  const moveDuty = useMutation({
+    mutationFn: (input: { id: string; role_id: string; to: string }) =>
+      moveOrgPositionDuty(input.id, { role_id: input.role_id, to: input.to }, owner),
+    onSuccess: sayReshaped,
+    onError: say,
+  })
+  const split = useMutation({
+    mutationFn: (input: { id: string; name: string; role_ids: string[] }) =>
+      splitOrgPosition(input.id, { name: input.name, role_ids: input.role_ids }, owner),
+    onSuccess: sayReshaped,
+    onError: say,
+  })
+  /** WP234（docs/54 §6.5）：负责人转交（自己那条不收回）。 */
+  const [handedTo, setHandedTo] = useState<string | undefined>(undefined)
+  const handOver = useMutation({
+    mutationFn: (person_id: string) => transferOwner(person_id, owner),
+    onSuccess: async (out) => {
+      setFailure(undefined)
+      setHandedTo(out.person_name)
+      await refresh()
+    },
+    onError: say,
+  })
+
   const drop = useMutation({
     mutationFn: (id: string) => deleteOrgPosition(id, owner),
     onSuccess: async () => {
@@ -470,7 +527,11 @@ export function OrgPage(): React.ReactNode {
     revoke.isPending ||
     remove.isPending ||
     copy.isPending ||
-    propose.isPending
+    propose.isPending ||
+    merge.isPending ||
+    moveDuty.isPending ||
+    split.isPending ||
+    handOver.isPending
 
   /** WP202：某张岗位卡下面就地展开的那一块——正在分的向导，或刚分完的回执。 */
   const below = (position_id: string): React.ReactNode => {
@@ -544,6 +605,28 @@ export function OrgPage(): React.ReactNode {
         <h1 className="text-sm font-semibold">{t('org.title')}</h1>
         <p className="text-xs text-muted-foreground">{t('org.subtitle')}</p>
       </div>
+
+      {/* WP234（docs/54 §6.5）：负责人是身份——在公司页顶上，不在左栏「岗位」里 */}
+      {(() => {
+        const ownerRow = positions.data?.find((p) => p.id === OWNER_POSITION)
+        const holders = ownerRow?.holders ?? []
+        const live = (members.data ?? []).filter((m) => m.left_at === undefined)
+        return (
+          <OwnerCard
+            title={ownerRow?.name ?? t('org.owner.title')}
+            holders={holders.map((h) => ({ person_id: h.person_id, name: h.name }))}
+            candidates={live
+              .filter((m) => !holders.some((h) => h.person_id === m.person_id))
+              .map((m) => ({ person_id: m.person_id, name: m.name }))}
+            {...(owner === undefined ? {} : { settingsHref: `/positions/${owner}` })}
+            busy={busy}
+            {...(handedTo === undefined ? {} : { transferred: handedTo })}
+            onTransfer={(person_id) => {
+              handOver.mutate(person_id)
+            }}
+          />
+        )
+      })()}
 
       <Tabs value={tab} onValueChange={setTab}>
         <TabsList>
@@ -626,6 +709,17 @@ export function OrgPage(): React.ReactNode {
               onProposeRole={(id, patch) => {
                 propose.mutate({ id, patch })
               }}
+              // WP234（docs/54 §6.4）：合并到… / 移动职责 / 拆出…
+              onMerge={(id, into) => {
+                merge.mutate({ id, into })
+              }}
+              onMoveDuty={(id, role_id, to) => {
+                moveDuty.mutate({ id, role_id, to })
+              }}
+              onSplit={(id, input) => {
+                split.mutate({ id, ...input })
+              }}
+              {...(reshaped === undefined ? {} : { notice: reshaped })}
             />
           )}
         </TabsContent>
