@@ -99,7 +99,8 @@ export interface RedditReadRouterOptions {
   /** 浏览器只读那一路的限速（设置里来，默认保守）。 */
   limits(): RedditBrowserReadLimits
   hub?: RedditHubPort
-  browser?: RedditReadBrowser
+  /** 只读浏览器；给函数就每次取数现问（服务进程那一侧可能晚建）。 */
+  browser?: RedditReadBrowser | (() => RedditReadBrowser | undefined)
   /** 现在几点（毫秒），限速按它算。 */
   nowMs(): number
   /** 每取一次数记一条（审计 / 报告的出处都从这里来）。 */
@@ -266,7 +267,7 @@ export function createRedditReadRouter(options: RedditReadRouterOptions) {
   }
 
   async function viaBrowser(req: RedditReadRequest) {
-    const browser = options.browser
+    const browser = typeof options.browser === 'function' ? options.browser() : options.browser
     if (browser === undefined)
       return {
         attempt: {
