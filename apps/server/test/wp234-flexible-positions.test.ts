@@ -139,6 +139,22 @@ describe('docs/54 §6.2 第 ③ 步交岗位清单', () => {
     expect(list.map((p) => [p.position_id, p.name.zh])).toEqual([['customer-care', '客服小组']])
   })
 
+  it('已经持有、还没安放的老分配：按这一行安放，不在模板岗位里再出一份', async () => {
+    // 老分配：没走向导、没安放（按老规则同时算在「客服」与任何含它的岗位里）
+    const old = server.roles.assignments.create({
+      person_id: server.bootstrap.person.id,
+      workspace_id: server.bootstrap.workspace.id,
+      role_id: 'dtc.support',
+      granted_by: server.bootstrap.person.id,
+      ranges: [],
+    })
+    const out = await apply([{ name: '售后与 Reddit', role_ids: ['dtc.support', 'pr.reddit'] }])
+    expect(out.created_assignments.map((a) => a.role_id)).toEqual(['pr.reddit'])
+    const id = out.positions?.[0]?.id ?? ''
+    expect(server.org.placementOf(old.id)).toBe(id)
+    expect((await mine()).map((p) => p.position_id)).toEqual([id])
+  })
+
   it('「负责人」不进我的岗位，`common.owner` 那条分配原样在', async () => {
     await apply([{ name: '网站运营', role_ids: ['dtc.store'], template_id: 'web-ops' }])
     const list = await mine()

@@ -5463,6 +5463,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       place: (assignment_id, position_id) => {
         org.place(assignment_id, position_id)
       },
+      placementOf: (assignment_id) => org.placementOf(assignment_id),
     },
     suggester: () => {
       const ref = boot.ownModels.configured() ? boot.ownModels.defaultRef() : undefined

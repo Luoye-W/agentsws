@@ -1796,8 +1796,18 @@ export function createOrg(options: OrgOptions): OrgAssembly {
       })
       // WP234（docs/54 §6.1）：按岗位分的，新建的那几条就安放在这个岗位上——
       // 这条职责同时挂在别的岗位里时，界面与岗位层记忆都不会再分不清它算哪个岗位的
-      if (input.position_id !== undefined)
+      if (input.position_id !== undefined) {
         for (const a of created) backend.placements.set(a.id, input.position_id)
+        // 这个人本来就有、但还没安放的那几条（老分配）：按这次说的岗位安放，左栏才不会出两份。
+        // 已经安放在别处的不挪——挪职责走「移动职责」（§6.4），那里会把事项一起带过去。
+        for (const a of activeAssignments(input.person_id))
+          if (
+            roleIds.includes(a.role_id) &&
+            !created.some((c) => c.id === a.id) &&
+            placementOf(a.id) === undefined
+          )
+            backend.placements.set(a.id, input.position_id)
+      }
       for (const a of created)
         emit('assignment.granted', actor.person_id, {
           assignment_id: a.id,

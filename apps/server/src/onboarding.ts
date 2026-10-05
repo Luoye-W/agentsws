@@ -281,6 +281,8 @@ export interface OnboardingOptions {
   positionStore?: {
     ensure(input: { name: string; role_ids: RoleId[]; template_id?: string }, by: PersonId): string
     place(assignment_id: string, position_id: string): void
+    /** 这条分配安放在哪（没安放 = `undefined`）。不给就当一条都没安放。 */
+    placementOf?(assignment_id: string): string | undefined
   }
   /**
    * WP234：「说说你要做什么工作」用的推荐引擎。**每次现取**——第 ① 步之后模型才接上。
@@ -946,6 +948,15 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
       if (input.positions !== undefined && options.positionStore !== undefined) {
         const store = options.positionStore
         const fresh = new Map(created.map((c) => [c.role_id, c.id]))
+        /*
+         * 已经持有、但**还没安放**的那几条（老分配）：用户在第 ③ 步明说了它归这个岗位，就按他说的
+         * 安放——不然它按老规则同时算在模板岗位和这个新岗位里，左栏出两份。已经安放过的不挪。
+         */
+        const looseHeld = new Map(
+          [...held.values()]
+            .filter((a) => store.placementOf?.(a.id) === undefined)
+            .map((a) => [a.role_id, a.id]),
+        )
         for (const item of plan.positions) {
           const source = input.positions.find(
             (p, i) => (p.template_id ?? `custom:${String(i)}`) === item.position_id,
@@ -959,7 +970,7 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
             actor.person_id,
           )
           for (const role_id of item.role_ids) {
-            const aid = fresh.get(role_id)
+            const aid = fresh.get(role_id) ?? looseHeld.get(role_id)
             if (aid !== undefined) store.place(aid, id)
           }
           builtPositions.push({ id, name: item.name, role_ids: item.role_ids })

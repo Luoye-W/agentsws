@@ -50,6 +50,9 @@ import { belongsTo, holdersByPlacement, WORKSPACE_BASE_ROLES } from './position-
  */
 const BASE_ROLE: RoleId = 'common.member'
 
+/** WP234（docs/54 §6.5）：「负责人」那个岗位行的 id——身份，不是干活的岗位。 */
+const OWNER_POSITION_ID = 'owner'
+
 const POSITION_ERROR = (
   code: 'not_found' | 'conflict' | 'invalid_input' | 'forbidden',
   msg: string,
@@ -347,6 +350,8 @@ export function createPositions(options: PositionsOptions): PositionsAssembly {
     const held = activeOf(person_id).filter((a) => !WORKSPACE_BASE_ROLES.has(a.role_id))
     const out: PositionInstance[] = []
     for (const template of options.positions()) {
+      // 「负责人」那一行是身份（docs/54 §6.5）：它下面就算还挂着别的职责也不进「我的岗位」
+      if (template.id === OWNER_POSITION_ID) continue
       if (!held.some((a) => belongs(a, template))) continue
       out.push(await instance(template.id, person_id))
     }
