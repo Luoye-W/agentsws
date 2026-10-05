@@ -50,6 +50,8 @@ const KNOWN_KINDS: ReadonlySet<string> = new Set<ApprovalKind>([
   'official_plugin',
   // WP210：客户来信彻底投不进（再投一次 / 去邮箱回复）
   'inbound_dead_letter',
+  // WP224：本周经营一页纸（L3 自动出、看完归档）
+  'weekly_review',
 ])
 
 export function isKnownKind(kind: string): boolean {

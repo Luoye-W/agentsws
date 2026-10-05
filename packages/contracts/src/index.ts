@@ -38,6 +38,7 @@ export * from './data-service.js'
 export * from './design.js'
 // WP136（docs/79）：dsh 的「场景」（Profile）——Agents 工坊是其中一个，其余由 DeepSeek 官方维护
 export * from './dsh-scenes.js'
+export * from './economics.js'
 export * from './events.js'
 // WP164：托管实例对外的状态形状（从 packages/hosted 挪来）
 export * from './hosted.js'
