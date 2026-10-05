@@ -67,7 +67,7 @@ function documentOf(html: string): string {
     '<meta name="referrer" content="no-referrer">',
     '<style>',
     'body{margin:0;font:14px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#1a1a1a;word-break:break-word}',
-    'img{max-width:100%;height:auto}table{max-width:100%}a{color:#2563eb}',
+    'img{max-width:100%;height:auto}table{max-width:100%}a{color:#2563eb}a:not([href]){color:inherit;text-decoration:none}',
     'blockquote{margin:8px 0;padding-left:10px;border-left:2px solid #e5e5e5;color:#666}',
     '</style></head><body>',
     html,
