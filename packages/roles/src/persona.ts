@@ -338,19 +338,28 @@ export function houseRulesSection(lang: PersonaLang = 'zh'): PromptSection {
  *
  * 三个运行时拿到的是同一份字节：stub / direct 走 `assemblePrompt`，dsh 写进唯一那个
  * `complete` 段（69 §3 那张表）。
+ *
+ * WP232（10-05 真模型实测）：草稿跟来信语言写对了，可**过程中对用户说的话**也跟着成了英文
+ * （「I'll pull the playbook…」）。旧句子先讲「对方写英文就回英文」、最后才半句「对内用中文」，
+ * 而且「说明」没点到"边做边说的那几句"。改成**先说对内**、点名过程话，再把"跟来信语言"
+ * 收窄到「要发出去的那份稿子（起草工具的正文与主题）」；起草工具的参数描述里另有同一句
+ * （`@agentsws/stand-ins` 的 `DRAFT_BODY_DESCRIPTION`）。
  */
 export const REPLY_LANGUAGE_ORDER = 22
 
 export const REPLY_LANGUAGE_RULE: Readonly<Record<PersonaLang, string>> = {
   zh:
-    '对外的回复（给客户、红人、媒体、平台上的人）用对方来信的语言写：对方写英文就回英文，' +
-    '哪怕上面的说明是中文；没有来信可对照时（主动开发信、发帖），用目标市场的语言。' +
-    '对内的东西（给用户看的卡片、摘要、说明）用中文。',
+    '你对用户说的每一句话都用中文：边做边说的过程话（比如"我先查一下……"）、给用户的回复、' +
+    '摘要和卡片，哪怕来信、资料、工具结果是英文。只有要发出去的那份稿子（起草工具里的正文和主题，' +
+    '给客户、红人、媒体、平台上的人）用对方来信的语言：对方写英文就写英文；没有来信可对照时' +
+    '（主动开发信、发帖），用目标市场的语言。',
   en:
-    'Anything going out (to customers, creators, press, people on a platform) is written in the ' +
-    'language of the message you are answering: if they wrote in English, reply in English, even ' +
-    'though the instructions above are in Chinese. With no message to match (cold outreach, posts), ' +
-    'use the language of the target market. Anything for the user (cards, summaries, notes) is in English.',
+    'Everything you say to the user is in English: progress notes while you work ("let me check…"), ' +
+    'replies to the user, summaries and cards, even when the message, the material or tool results ' +
+    'are in another language. Only the text going out (the body and subject in the drafting tool, to ' +
+    'customers, creators, press, people on a platform) follows the language of the message you are ' +
+    'answering: if they wrote in German, write in German; with no message to match (cold outreach, ' +
+    'posts), use the language of the target market.',
 }
 
 /** 回复语言那一节（每条职责、每个运行时都带同一份；`lang` = 界面语言）。 */

@@ -139,3 +139,19 @@ describe('WP226：回复语言规则 + 只送中文 persona', () => {
     }
   })
 })
+
+describe('WP232：过程话用中文，只有外发稿跟来信语言', () => {
+  it('系统提示里那一句先说「对用户说的每一句话都用中文」（点名过程话），再说外发稿', async () => {
+    for (const role of ['kol.youtube', 'dtc.support']) {
+      const { gateway } = await runOnce(role, '好的。')
+      const system = (gateway.seen[0] ?? [])
+        .filter((m) => m.role === 'system')
+        .map((m) => m.content)
+        .join('\n')
+      const inner = system.indexOf('你对用户说的每一句话都用中文')
+      expect(inner, role).toBeGreaterThan(-1)
+      expect(system, role).toContain('边做边说的过程话')
+      expect(inner, role).toBeLessThan(system.indexOf('对方来信的语言'))
+    }
+  })
+})

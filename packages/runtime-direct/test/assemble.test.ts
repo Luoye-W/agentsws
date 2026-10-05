@@ -1,4 +1,8 @@
-import { assemblePromptHash } from '@agentsws/stand-ins'
+import {
+  assemblePromptHash,
+  DRAFT_BODY_DESCRIPTION,
+  DRAFT_TOOL_DESCRIPTION,
+} from '@agentsws/stand-ins'
 import { describe, expect, it } from 'vitest'
 import {
   assembleDirect,
@@ -111,5 +115,18 @@ describe('装配（17 §1）', () => {
     expect(policyIdx).toBeLessThan(appIdx)
     expect(appIdx).toBeLessThan(threadIdx)
     expect(messages[threadIdx]?.role).toBe('user')
+  })
+})
+
+describe('WP232：direct 的起草工具与 dsh 同一句', () => {
+  it('描述同一份；收件人可不填；正文的参数说明写明跟来信语言、对用户的话不跟', () => {
+    const draft = outputToolDefs(makeRequest()).find((d) => d.name === 'draft_reply')
+    expect(draft?.description).toBe(DRAFT_TOOL_DESCRIPTION)
+    const schema = draft?.input_schema as {
+      required: string[]
+      properties: Record<string, { description?: string }>
+    }
+    expect(schema.required).toEqual(['subject', 'body'])
+    expect(schema.properties.body?.description).toBe(DRAFT_BODY_DESCRIPTION)
   })
 })
