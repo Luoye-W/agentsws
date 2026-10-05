@@ -225,3 +225,76 @@ agency-agents 是一套**写得很用心的「人设 + 做法」提示词库**�
    影响：英文界面右栏「角色」面板直接看得见；运行时现在一律送中文那份（69 §3.3），所以模型那一侧暂时不受影响，但 69 §3.3 说的「接上工作区语言」那一行一通就会露出来。建议在 `checkPersona` 里加一刀「英文那份不许有汉字与全角括号」，连同 14 处一起修（S）。
 2. **约 23 条职责没有任何做法技能**：社媒十二条只挂 `brand-voice`；公共关系四条只挂 `brand-voice`；建站四条、`dtc.store`、`dtc.fulfillment` 什么都没挂；`b2b.marketplace` 只挂 `brand-voice`。社媒与公关已经在 86 §8、89 §5、WP220 排着；**建站、店铺、履约、B2B 平台这 8 条还没人排**。
 3. **设计岗说「需求单从投放来」，投放却下不了需求单**：`design/ads.yml` 的描述与 58 §1（「网站运营 / 社媒 / 投放 / 红人各加一条 `request_design`」）都这么写，但 `ads/*.yml` 四条**都没有** `request_design` 动作；红人只有 `kol.youtube` 有，社媒只有 Facebook / Instagram / Meta 三条有。于是投放要新素材只能靠人手动去设计岗开一件事，而投放的 persona 里连「出图→设计」都没写（红人岗位写了）。这正是 §4 说的「persona 里写了转给谁、却没有动作接住」的一个具体例子。
+
+### 3.4 改进建议：persona 不动，补三处
+
+| # | 补什么 | 放哪 | 怎么钉住 |
+|---|---|---|---|
+| W1 | **产出长什么样**：每份技能末尾一节，给 1–2 个不出卡的产出的格式（报表几列、简报几段、每段多少字、哪一格取不到要写「取不到」） | 技能（按需加载，只在做那件事时进提示） | 与 persona 同一个办法：固定小标题「产出长什么样」，`packages/skills/test/bundled.test.ts` 查在不在 |
+| W2 | **交出去之前查**：3–6 条模型自己要查的（能机器查的已在 guardrail，不重复） | 同上，固定小标题「交出去之前查」 | 同上 |
+| W3 | **上下游**：谁会把活交给我、交来时带什么；我交出去给谁、用哪个动作、对方要什么格式 | 职责 yml 新加一格结构化的 `handoffs`（不进 persona 正文） | 串岗测试多一条：A 的 `handoffs.delivers` 指向 B 岗位时，A 必须真有那个动作（§3.3 第 3 条那种「写了转给设计、却没有 `request_design`」就会红）；B 的 persona「你负责」里要能找到那件事 |
+
+W1、W2 是「技能写法规范」的事，在 24 里加一节就够；W3 动契约（只加不删），和 §4 的通用转交动作一起做。
+
+### 3.5 改写示例（只示范，不批量改）
+
+**示例 1：`ads.meta` 的 persona**——修掉英文里的中文、补上「出图→设计」、把「赚没赚」从固定 ROAS 换成盈亏线。中文 248 字、英文 911 字，用 `packages/roles/src/persona.ts` 的 `checkPersona` 跑过（六段齐、没超长）。改动的地方加了粗体说明：
+
+```yaml
+persona:
+  zh: |
+    你是谁：投放岗位里管 Meta（Facebook / Instagram）广告的人。
+    你负责：账户与 campaign 表现、预算与出价、受众与素材、像素健康。
+    你不负责：自家账号发帖→社媒运营；红人合作→红人营销；商品价与促销→网站运营；出图→设计；客户问题→客服。
+    怎么做：先看花了多少、带回多少；像素坏了先说像素坏了，脏数据不算 ROAS；赚没赚按事实卡里的毛利率算盈亏线，拿不到就说拿不到。
+    口气：像盯盘的人，直说数字，不夸效果。
+    必须出卡：建活动、改预算与出价、换素材；只有止损可自动。
+  en: |
+    Who you are: the person running Meta (Facebook / Instagram) ads inside the paid-ads position.
+    You handle: account and campaign performance, budgets and bids, audiences and creative, pixel health.
+    Not yours: posting on our own accounts → Social Media; creator deals → Creator Marketing; product prices and promotions → Web Operations; artwork → Design; customer questions → Customer Care.
+    How you work: look at what this account spent and what it brought back first. If the pixel is broken, say the pixel is broken — never compute ROAS from dirty data. Judge profit against the break-even line from the gross-margin fact card; if that card is missing, say so — never adjust a budget on impression.
+    Tone: like someone watching a dashboard — plain numbers, no claims about results.
+    Always ask: creating a campaign, changing budget or bid, swapping creative. Only stopping the bleeding (pausing) may run on its own.
+```
+
+- 「Who you are」去掉了「广告」两个汉字与全角括号（§3.3 第 1 条）。
+- 「你不负责」加「出图→设计」——但**只改这一句是不够的**：没有 `request_design` 动作，模型知道该转、却转不出去（§3.3 第 3 条）。这一句要和动作、`handoffs` 一起上。
+- 「怎么做」那句盈亏线来自跨境通才的「广告费率不许超过毛利率」。它只是**判断口径**，不改自动止损那条线（`stop_loss_roas_below` 改不改是 §7 #2）。
+- 配套的 `handoffs`（W3，示意，字段名待定）：
+
+```yaml
+handoffs:
+  receives:
+    - from: web-ops            # 新品上架、大促开始 → 开一条新 campaign
+      bring: [商品链接, 活动起止, 预算上限]
+  delivers:
+    - to: design               # 要新素材
+      via: request_design      # 动作必须真存在
+      format: design_brief     # 平台、尺寸、文案安全区、要几版
+    - to: web-ops              # 落地页转化掉了（广告没变、站上掉了）
+      via: hand_to_position    # §4.2 的通用转交
+```
+
+**示例 2：给 `returns-policy-calc` 补「原因码」「例外留痕」与「交出去之前查」三节**——素材来自 `specialized/retail-customer-returns.md`（MIT），按我们的规矩改写：门店场景（验货、收银、现金退款）全删；「欺诈嫌疑」只留成内部标记、并且**不许出现在给客户的回信里**；例外不许 Agent 自己批，只许写进卡上等人批。
+
+```markdown
+> 「退货原因码」「例外留痕」两节改编自 msitarzewski/agency-agents
+> `specialized/retail-customer-returns.md`（MIT，© 2025 AgentLand Contributors，提交 83294689），
+> 已按 Agents 工坊的规矩改写，冲突处以本文为准。
+
+## 退货原因码
+每一笔退款提议都标一个原因码，写在卡上，不写进给客户的回信。原因码是给月底「客户在抱怨什么」用的，标错了那张汇总就是错的。
+- 商品问题：坏了 / 运输破损 / 少件 / 和描述不符 / 发错货 / 尺码不合 / 颜色款式不符 / 质量不如预期
+- 客户原因：不想要了 / 别处更便宜 / 买重了 / 自己下错了
+- 内部标记（**只给同事看**）：退货次数异常、退回的不是原物——只标记、只转人，**回信里一个字不提**，也不因为这个标记拒绝
+
+## 例外留痕
+窗口外、品类不退、无凭证还要退——这些都是例外。例外不由你批：卡上写清是哪一条规矩的例外、客户给的理由、这位客户以前有没有拿过例外。同一种例外批过三次，提议把它写成政策（走 `policy-review`）。
+
+## 交出去之前查
+- 原因码标了，且和客户说的情况对得上
+- 金额按实付算、已退过的扣掉了、币种和订单一致
+- 窗口起算日是送达日（除非政策另写）
+- 回信里没有「已为您退款」这类完成式、没有内部标记的任何字眼
+```
