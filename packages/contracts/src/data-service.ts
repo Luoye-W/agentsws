@@ -19,7 +19,7 @@
  * **只加不删**（契约纪律）。
  */
 
-import type { DataSourceLevel } from './cloud-entry.js'
+import type { DataSourceLevel, RedditBrowserReadLimits } from './cloud-entry.js'
 import type { Iso8601 } from './common.js'
 
 /** 令牌要带的动作集：与公共红人库、搜索数据同一个 `data`。 */
@@ -296,8 +296,22 @@ const AI_QUESTION: DataInputField[] = [
   COUNTRY,
   LANGUAGE,
 ]
+/** WP220：Reddit 取数的时间窗（与 Reddit 自己的 `t` 参数同名同义）。 */
+const REDDIT_TIME_WINDOW: DataInputField = {
+  name: 'time_window',
+  type: 'string',
+  enum: ['day', 'week', 'month', 'year', 'all'],
+  label_zh: '时间范围',
+}
+const REDDIT_LIMIT: DataInputField = {
+  name: 'limit',
+  type: 'number',
+  min: 1,
+  max: 100,
+  label_zh: '最多几条',
+}
 
-/** WP192 第一批能力。 */
+/** WP192 第一批能力（WP220 追加 Reddit 三项）。 */
 export const DATA_CAPABILITY_CATALOG: readonly DataCapabilitySpec[] = [
   {
     id: 'serp.google',
@@ -551,6 +565,59 @@ export const DATA_CAPABILITY_CATALOG: readonly DataCapabilitySpec[] = [
       },
     ],
   },
+  /*
+   * WP220（Luoye 10-05）：Reddit 取数的接口中台那一路。本机只加**能力名与输入白名单**；
+   * 云上走哪条渠道由云端接口管理另接（没接上之前云上没有价 = 不可用，路由落到浏览器只读那一路）。
+   */
+  {
+    id: 'social.reddit.search',
+    label_zh: 'Reddit 帖子搜索',
+    label_en: 'Reddit post search',
+    group: 'social',
+    mode: 'sync',
+    unit: 'row',
+    max_items: 100,
+    input: [
+      { name: 'query', type: 'string', required: true, max: 300, label_zh: '搜索词' },
+      { name: 'subreddit', type: 'string', max: 50, label_zh: '版名（不带 r/，不填 = 全站）' },
+      REDDIT_TIME_WINDOW,
+      {
+        name: 'sort',
+        type: 'string',
+        enum: ['relevance', 'new', 'top', 'comments'],
+        label_zh: '排序',
+      },
+      REDDIT_LIMIT,
+    ],
+  },
+  {
+    id: 'social.reddit.posts',
+    label_zh: 'Reddit 版内帖子',
+    label_en: 'Reddit subreddit posts',
+    group: 'social',
+    mode: 'sync',
+    unit: 'row',
+    max_items: 100,
+    input: [
+      { name: 'subreddit', type: 'string', required: true, max: 50, label_zh: '版名（不带 r/）' },
+      { name: 'sort', type: 'string', enum: ['new', 'hot', 'top'], label_zh: '排序' },
+      REDDIT_TIME_WINDOW,
+      REDDIT_LIMIT,
+    ],
+  },
+  {
+    id: 'social.reddit.comments',
+    label_zh: 'Reddit 帖子评论',
+    label_en: 'Reddit post comments',
+    group: 'social',
+    mode: 'sync',
+    unit: 'row',
+    max_items: 500,
+    input: [
+      { name: 'post_url', type: 'string', required: true, max: 300, label_zh: '帖子地址' },
+      { name: 'limit', type: 'number', min: 1, max: 500, label_zh: '最多几条' },
+    ],
+  },
 ]
 
 /** 按 id 找一项能力的规格（认不出回 `undefined`）。 */
@@ -571,6 +638,8 @@ const UPPERCASE_FIELDS = new Set(['asin', 'asins'])
 function tidy(name: string, value: string): string {
   let v = value.trim()
   if (name === 'usernames') v = v.replace(/^@+/u, '')
+  // WP220：版名大小写不敏感，`r/Foo`、`/r/foo` 都归成 `foo`
+  if (name === 'subreddit') v = v.replace(/^\/?r\//iu, '').toLowerCase()
   if (LOWERCASE_FIELDS.has(name)) v = v.toLowerCase()
   if (UPPERCASE_FIELDS.has(name)) v = v.toUpperCase()
   return v
@@ -646,4 +715,143 @@ export function normalizeDataInput(spec: DataCapabilitySpec, raw: unknown): Data
     }
   }
   return { ok: true, input: out }
+}
+
+/* ------------------------------------------------------------------ */
+/* WP220：Reddit 取数路由（Luoye 10-05 定）                              */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Reddit 数据从哪来：**两路**，按顺序试、某一路失败自动试下一路，三种结果都照实记。
+ *
+ * | 级 | 来源 | 谁付钱 |
+ * |---|---|---|
+ * | `workshop` | 接口中台（云端接口管理里的 `social.reddit.*` 三项能力） | 积分 |
+ * | `browser_readonly` | 本机浏览器**只读**打开 Reddit 页面（单独的只读会话、限速） | 不扣积分 |
+ *
+ * 默认 ①→②，每个品牌可调顺序、可关某一路（`data_source_routing` 的键 {@link REDDIT_READ_ROUTE_KEY}）。
+ * 回退方向是「花钱 → 不花钱」，所以失败自动落下一路不违反 docs/75「不静默回退到花钱的那一级」。
+ *
+ * 护栏（Luoye 10-05，风险已知悉：取数账号可能被封、条款风险）：取数会话与品牌发帖账号分离；
+ * 浏览器那一路只读、限速；发帖 / 回帖永远走品牌号 + 人批，**不经这条路由**。
+ */
+export const REDDIT_READ_ROUTE_KEY = 'reddit.read'
+
+/** 默认顺序：接口中台 → 浏览器只读。 */
+export const DEFAULT_REDDIT_READ_ORDER: readonly DataSourceLevel[] = [
+  'workshop',
+  'browser_readonly',
+]
+
+/** Reddit 取数认哪几级（别的级写进来，服务端洗掉）。 */
+export const REDDIT_READ_ROUTE_LEVELS: readonly DataSourceLevel[] = ['workshop', 'browser_readonly']
+
+/** 接口中台那一路的三项能力（在 {@link DATA_CAPABILITY_CATALOG} 里）。 */
+export const REDDIT_READ_CAPABILITIES = [
+  'social.reddit.search',
+  'social.reddit.posts',
+  'social.reddit.comments',
+] as const
+export type RedditReadCapability = (typeof REDDIT_READ_CAPABILITIES)[number]
+
+/**
+ * 浏览器只读那一路的默认限速：**保守**。两页之间隔 20 秒、一小时 30 页、一天 200 页。
+ * 一次「这周大家在聊什么」大约 5–15 页，够用；要更快由人去设置里调。
+ */
+export const DEFAULT_REDDIT_BROWSER_READ_LIMITS: Readonly<RedditBrowserReadLimits> = {
+  min_interval_seconds: 20,
+  max_pages_per_hour: 30,
+  max_pages_per_day: 200,
+}
+
+/** 设置里能调的范围（调出界的按边界收）。下限不许低于 5 秒一页。 */
+export const REDDIT_BROWSER_READ_LIMIT_BOUNDS: Readonly<
+  Record<keyof RedditBrowserReadLimits, { min: number; max: number }>
+> = {
+  min_interval_seconds: { min: 5, max: 600 },
+  max_pages_per_hour: { min: 1, max: 120 },
+  max_pages_per_day: { min: 1, max: 1000 },
+}
+
+/** 把设置里给的限速收进范围（缺的格用默认值；不是数字的当没给）。 */
+export function clampRedditBrowserReadLimits(raw: unknown): RedditBrowserReadLimits {
+  const src =
+    typeof raw === 'object' && raw !== null ? (raw as Partial<Record<string, unknown>>) : {}
+  const out = { ...DEFAULT_REDDIT_BROWSER_READ_LIMITS }
+  for (const key of Object.keys(
+    REDDIT_BROWSER_READ_LIMIT_BOUNDS,
+  ) as (keyof RedditBrowserReadLimits)[]) {
+    const v = src[key]
+    if (typeof v !== 'number' || !Number.isFinite(v)) continue
+    const { min, max } = REDDIT_BROWSER_READ_LIMIT_BOUNDS[key]
+    out[key] = Math.min(max, Math.max(min, Math.floor(v)))
+  }
+  return out
+}
+
+/** 浏览器只读那一路能开的站（`pr.forums` 的 `browser_scope` 里那条 `*.reddit.com` 同一个意思）。 */
+export const REDDIT_READ_HOSTS: readonly string[] = ['*.reddit.com', '*.redd.it']
+
+/* ------------------------------------------------------------------ */
+/* WP220：研究取数的来源记录与白名单                                      */
+/* ------------------------------------------------------------------ */
+
+/**
+ * 研究技能（`trend-research` / `social-research`）每取一次数走的是哪一路。
+ * 只有这几种——**不在表里的取数方式不存在**（不直接抓平台、不调未授权的第三方抓取服务）。
+ *
+ * - `web_search` / `web_fetch`：官方网页工具（WP179，DeepSeek 原生搜索 + 抓公开网页）；
+ * - `workshop`：接口中台（WP192 的能力目录，积分）；
+ * - `browser_readonly`：本机浏览器只读（只给 Reddit，见上）；
+ * - `official_api`：品牌自己连上的平台官方接口（连接页那张卡，有授权时）。
+ */
+export const RESEARCH_FETCH_ROUTES = [
+  'web_search',
+  'web_fetch',
+  'workshop',
+  'browser_readonly',
+  'official_api',
+] as const
+export type ResearchFetchRoute = (typeof RESEARCH_FETCH_ROUTES)[number]
+
+/** 一路没走通的原因（报告里照实写）。 */
+export type ResearchFetchOutcome =
+  | 'ok'
+  /** 这一路被品牌关掉了。 */
+  | 'disabled'
+  /** 这一路没配（没关联账号、云上这项能力还没开通、没有只读浏览器）。 */
+  | 'not_configured'
+  /** 限速到了（浏览器只读那一路）。 */
+  | 'rate_limited'
+  /** 给的浏览器会话不是单独的只读会话（品牌发帖会话 / 用户自己的浏览器），拒用。 */
+  | 'session_refused'
+  /** 走了但失败了（超时、对方报错、页面打不开）。 */
+  | 'failed'
+
+export interface ResearchFetchAttempt {
+  route: ResearchFetchRoute
+  outcome: ResearchFetchOutcome
+  /** 一句人话（失败原因原样带回，不编）。 */
+  message?: string
+}
+
+/**
+ * **每次取数记一条**：哪一路、是否命中缓存、什么时候取的、拿回几条、一路路试过什么。
+ * 报告里每条出处都指得回一条记录（「这条来自接口中台，命中缓存」「这条来自浏览器只读」）。
+ */
+export interface ResearchFetchRecord {
+  /** `reddit` / `x` / `youtube` / `tiktok` / `instagram` / `web` …… */
+  platform: string
+  /** 干的是什么（能力名，如 `social.reddit.search`；网页工具就是 `web.search` / `web.fetch`）。 */
+  capability: string
+  /** 最后成了的那一路；三路都不行就是 `none`。 */
+  route: ResearchFetchRoute | 'none'
+  /** 命中共享缓存（只有接口中台那一路会有）。 */
+  cached: boolean
+  fetched_at: Iso8601
+  /** 拿回几条（0 条 ≠ 没取到：没取到看 `route === 'none'`）。 */
+  items: number
+  /** 花了多少积分（接口中台那一路才有）。 */
+  credits?: number
+  attempts: ResearchFetchAttempt[]
 }

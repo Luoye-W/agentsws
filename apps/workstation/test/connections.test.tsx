@@ -690,6 +690,28 @@ describe('WP210：连接页收拾（Luoye 09-30）', () => {
     expect(await within(card).findByTestId('capability-source')).toBeDefined()
   })
 
+  it('WP220：Reddit 卡上「数据从哪里来」是两路：接口中台 → 浏览器只读，并说清只用来读', async () => {
+    const user = userEvent.setup()
+    state.providers = [
+      {
+        ...GA4_PROVIDER,
+        service: 'reddit',
+        label: 'Reddit',
+        auth: 'api_key',
+        data_sources: [],
+      },
+    ]
+    renderWithProviders(<ConnectionsPage />, '/connections')
+    const card = (await screen.findAllByTestId('provider-card'))[0] as HTMLElement
+    await user.click(within(card).getByTestId('provider-sources-toggle'))
+    const route = await within(card).findByTestId('data-source-route')
+    expect(route.getAttribute('data-channel')).toBe('reddit')
+    expect(route.textContent).toContain('1. 工坊官方数据接口（积分）')
+    expect(route.textContent).toContain('2. 浏览器只读（不扣积分，限速）')
+    expect(route.textContent).toContain('发帖、回帖永远用品牌号')
+    expect(route.textContent).not.toContain('我的平台 key')
+  })
+
   it('没有第二条路的卡连「数据来源」按钮都不出', async () => {
     renderWithProviders(<ConnectionsPage />, '/connections')
     const card = (await screen.findAllByTestId('provider-card'))[0] as HTMLElement
