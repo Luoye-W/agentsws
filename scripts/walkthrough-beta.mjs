@@ -359,9 +359,7 @@ async function sectionA() {
             () => true,
             () => false,
           )
-        return ok(
-          `${secs}s 后：${said}${linked ? '；填了验证码之后显示「已关联」' : ''}`,
-        )
+        return ok(`${secs}s 后：${said}${linked ? '；填了验证码之后显示「已关联」' : ''}`)
       }
       if (await err.count())
         return part(
