@@ -17,6 +17,7 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { useApp } from '@/lib/app-context'
 import { channelLabel, fieldLabel, fieldValue, tOr } from '@/lib/humanize'
 import type { Lang } from '@/lib/i18n'
+import { isWeeklyReview, WeeklyReviewBody } from './weekly-review-body'
 
 const isRecord = (v: unknown): v is Record<string, unknown> =>
   typeof v === 'object' && v !== null && !Array.isArray(v)
@@ -382,6 +383,8 @@ export function DeckCardBody({
 
       // ⑦ 事后决定：系统已经做了一件事，判据键值对是主体，问的是"要不要改回来"
       case 'aftermath': {
+        // WP224：本周经营一页纸是一张五段的卡（数带出处 tooltip），不是一排键值
+        if (isWeeklyReview(payload)) return <WeeklyReviewBody payload={payload} />
         const rows = pairs(payload.facts, lang).concat(pairs(payload.after, lang))
         return (
           <div className="mt-2.5 flex flex-col gap-2.5" data-testid="deck-layout-aftermath">

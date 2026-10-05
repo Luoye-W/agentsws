@@ -5,10 +5,12 @@
  * （14 §2「数字不经模型手」）；模型写的只有 `title` / `summary` 两行人话。
  */
 import type {
+  AdsLineCompareView,
   ApprovalItem,
   ApprovalKind,
   ApprovalState,
   AssignmentId,
+  BreakEvenView,
   Iso8601,
   ObjectRef,
   RiskClass,
@@ -198,6 +200,13 @@ export type HighlightType =
    * 人只会想办法关掉它。
    */
   | 'design_note'
+  /**
+   * WP224（docs/91 §2.2 #3）：止损卡上 ROAS 旁边那一格**盈亏线**（1 / 毛利率）。
+   *
+   * 「盈亏线 ROAS 2.5（毛利率 40%）」或「没填毛利率」。只是并排显示——自动止损仍按
+   * `stop_loss_roas_below`（Luoye 10-05：先并排两周再定），这一格永远不会让一张卡批不下去。
+   */
+  | 'break_even'
 
 export interface DeckHighlight {
   type: HighlightType
@@ -834,6 +843,15 @@ export interface AdsDeckData {
   conversions_today?: number
   /** 今天止损了几次。 */
   stop_loss_count?: number
+  /**
+   * WP224：盈亏线那一格（品牌那一格毛利率算的，`BreakEvenView`）+ 现在那条固定止损线。
+   *
+   * 不给 = 宿主没装毛利率那一层（老的测试、模拟世界）；给了但 `break_even_roas` 缺 =
+   * 没填毛利率，面板上那一格写「没填毛利率」带去填的入口。
+   */
+  break_even?: BreakEvenView & { fixed_line: number }
+  /** WP224：两条线的对照（从合并那天起逐日记的那张表，两周后给人定）。 */
+  line_compare?: AdsLineCompareView
 }
 
 export interface SocialDeckData {
@@ -1276,10 +1294,18 @@ export interface TableResult {
      * 不给 = 按金额（前端一直是这么干的，老积木一个字不用改）。库存件数、
      * 评分、条数这些**不是钱**——把 2 件货渲染成 `US$2.00` 不是小瑕疵，
      * 是把一句真话说成了假话。
+     *
+     * WP224：`ratio` 是倍数（ROAS 1.8，不是 US$1.80）；`flag` 是提示图标——
+     * 格子里非空就画一个小三角，字进 tooltip（不是一列字）。
      */
-    format?: 'money' | 'count' | 'percent'
+    format?: 'money' | 'count' | 'percent' | 'ratio' | 'flag'
   }[]
   rows: Record<string, string | number>[]
+  /**
+   * WP224：表下面一行小字（可带一个去处）。「没填毛利率 · 去填」就放在这里——
+   * 表格里每一行都写一遍「没填」是噪声。
+   */
+  footer?: { text: string; href?: string; link_label?: string }
 }
 
 export interface SeriesResult {

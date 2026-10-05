@@ -71,7 +71,28 @@ export type ReadBrowserSessionKind = 'readonly_isolated' | 'brand_posting' | 'us
 
 export interface RedditReadBrowser {
   session(): { kind: ReadBrowserSessionKind; id: string }
-  run(action: BrowserAction): Promise<BrowserRunResult>
+  /**
+   * WP228：第二个参数是这次要几条、读的是哪一项（脚本描述里只有人话，真执行器要个数）。
+   * `handover` = 被站点拦了（登录墙 / 验证码 / 429），这一路记 `blocked`。
+   */
+  run(action: BrowserAction, hint?: RedditReadHint): Promise<BrowserRunResult>
+}
+
+/** WP228：给执行器的提示（要几条、哪一项）。 */
+export interface RedditReadHint {
+  capability: RedditReadCapability
+  limit: number
+}
+
+/**
+ * WP228：限速器的形状（{@link createReadRateLimiter} 是内存版；服务进程给一本落盘的账，
+ * 与连接页的「今天额度用完 / 被拦了」同一本）。`reason: 'blocked'` = 被站点拦了、暂停中。
+ */
+export interface RedditReadLimiter {
+  check(
+    nowMs: number,
+  ): { ok: true } | { ok: false; message: string; reason?: 'interval' | 'hour' | 'day' | 'blocked' }
+  take(nowMs: number): void
 }
 
 /**
@@ -98,6 +119,8 @@ export interface RedditReadRouterOptions {
   route(): DataSourceRoute
   /** 浏览器只读那一路的限速（设置里来，默认保守）。 */
   limits(): RedditBrowserReadLimits
+  /** WP228：外面给的限速器（不给 = 内存版，按 `limits` 数）。 */
+  limiter?: RedditReadLimiter
   hub?: RedditHubPort
   /** 只读浏览器；给函数就每次取数现问（服务进程那一侧可能晚建）。 */
   browser?: RedditReadBrowser | (() => RedditReadBrowser | undefined)
@@ -233,7 +256,7 @@ function urlHostAllowed(url: string): boolean {
 
 /** 建一个 Reddit 取数路由。 */
 export function createRedditReadRouter(options: RedditReadRouterOptions) {
-  const limiter = createReadRateLimiter(options.limits)
+  const limiter: RedditReadLimiter = options.limiter ?? createReadRateLimiter(options.limits)
   const fallbackKind = (c: RedditReadCapability): RedditItem['kind'] =>
     c === 'social.reddit.comments' ? 'comment' : 'post'
   const toItems = (
@@ -303,15 +326,20 @@ export function createRedditReadRouter(options: RedditReadRouterOptions) {
       return {
         attempt: {
           route: 'browser_readonly',
-          outcome: 'rate_limited',
+          outcome: gate.reason === 'blocked' ? 'blocked' : 'rate_limited',
           message: gate.message,
         } as const,
       }
     limiter.take(now)
-    const res = await browser.run(script)
+    const limit = Math.min(100, Math.max(1, num(req.input.limit) ?? 25))
+    const res = await browser.run(script, { capability: req.capability, limit })
     if (res.status !== 'ok')
       return {
-        attempt: { route: 'browser_readonly', outcome: 'failed', message: res.message } as const,
+        attempt: {
+          route: 'browser_readonly',
+          outcome: res.status === 'handover' ? 'blocked' : 'failed',
+          message: res.message,
+        } as const,
       }
     return {
       attempt: { route: 'browser_readonly', outcome: 'ok' } as const,

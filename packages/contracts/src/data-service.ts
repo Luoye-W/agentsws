@@ -827,6 +827,8 @@ export type ResearchFetchOutcome =
   | 'session_refused'
   /** 走了但失败了（超时、对方报错、页面打不开）。 */
   | 'failed'
+  /** WP228：被站点拦了（登录墙 / 验证码 / 429 / 拦截页）——停下照实说，这一路暂停一阵，不重试。 */
+  | 'blocked'
 
 export interface ResearchFetchAttempt {
   route: ResearchFetchRoute
