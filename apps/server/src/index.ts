@@ -102,6 +102,15 @@ export {
   type MailProbe,
   smokeDetail,
 } from './connections.js'
+// WP219（docs/90）：已审的第三方内容更新（demo / 测试用本地替身更新源）
+export {
+  CONTENT_UPDATES_ENV,
+  type ContentFeedSource,
+  type ContentFetch,
+  type ContentUpdates,
+  contentFeedSources,
+  createContentUpdates,
+} from './content-updates.js'
 // WP134：「用我的 DeepSeek 账号登录」的 demo / 截图替身（不出网）
 export { deepseekAccountStandIn } from './deepseek-account.js'
 // WP136（docs/79）：dsh 场景切换

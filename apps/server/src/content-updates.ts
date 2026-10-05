@@ -162,7 +162,7 @@ export interface ContentUpdates {
 }
 
 export class ContentUpdateError extends Error {
-  readonly code: 'not_found' | 'not_available' | 'off'
+  readonly code: 'not_found' | 'conflict'
   constructor(code: ContentUpdateError['code'], message: string) {
     super(message)
     this.name = 'ContentUpdateError'
@@ -764,11 +764,11 @@ export function createContentUpdates(options: ContentUpdatesOptions): ContentUpd
     },
 
     async apply(ws, itemId, by) {
-      if (options.off !== undefined) throw new ContentUpdateError('off', options.off)
+      if (options.off !== undefined) throw new ContentUpdateError('conflict', options.off)
       const item = itemOf(itemId)
       if (item === undefined) throw new ContentUpdateError('not_found', `没有这条内容：${itemId}`)
       if (!supported(item) || !enabledFor(item, ws) || !isNewer(ws, item))
-        throw new ContentUpdateError('not_available', '这条内容现在没有能更新的新版')
+        throw new ContentUpdateError('conflict', '这条内容现在没有能更新的新版')
       await applyItem(ws, item, by)
       return view(ws)
     },
