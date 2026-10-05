@@ -165,7 +165,11 @@ export function CommandPalette({
       }),
     onSuccess: (out, input) => {
       // 判准了直接进事项页；拿不准就去岗位页，让人在那儿点一下走哪条职责
-      go(out.ambiguous ? `/positions/${input.assignment}` : `/matters/${out.matter.id}`)
+      go(
+        out.ambiguous && out.approval_item_id !== undefined
+          ? `/positions/${input.assignment}`
+          : `/matters/${out.matter.id}`,
+      )
     },
   })
 

@@ -3739,6 +3739,14 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       // WP234（docs/54 §6.1）：一条分配安放在哪个岗位（制度层那张表，跨品牌共用一份）
       placementOf: (assignment_id) => org.placementOf(assignment_id),
       appendEvent,
+      // WP237：「换成 X」重跑之前先停掉这件事上还在跑的那次（取消原因 user，原因进时间线）
+      stopRuns: async (matter_id, reason) => {
+        let stopped = 0
+        for (const r of runtime?.activeRuns() ?? [])
+          if (r.matter_id === matter_id && (await runtime?.stopRun(r.run_id, reason, 5_000)))
+            stopped += 1
+        return stopped
+      },
     })
     positionAssemblies.set(ws, positionsAssembly)
     // 六层技能里的 `position` 那一层、以及岗位层上下文那三样，都从这里来

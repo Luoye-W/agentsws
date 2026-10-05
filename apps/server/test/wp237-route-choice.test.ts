@@ -18,6 +18,7 @@ import type { ApprovalItem, Matter, MatterEvent } from '@agentsws/contracts'
 import { projectCard } from '@agentsws/deck'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createServer, type Server } from '../src/index.js'
+import { createPositions } from '../src/positions.js'
 
 const T0 = '2026-10-06T12:00:00.000Z'
 
@@ -164,66 +165,115 @@ describe('WP237 ① 同一个人的两条职责打平：不问人，按分高的
   })
 })
 
-describe('WP237 ②③ 真拿不准才出卡；卡上按钮是候选职责；选了就开跑', () => {
-  it('一个判据词都没命中 → 出卡（按钮「走 X」、选择题排版），不起运行', async () => {
+describe('WP237（Fable 代定）一个判据词都没命中：按岗位里职责的先后取第一条开跑', () => {
+  it('「整理一下」→ 走「Reddit 运营」并起运行，时间线挂「换成 Reddit 营销」，不出卡', async () => {
+    const out = await open('整理一下')
+    expect(out.ambiguous).toBe(false)
+    expect(out.approval_item_id).toBeUndefined()
+    expect(out.picked?.role_id).toBe('social.reddit')
+    expect(out.run_id).toBeDefined()
+    const routed = timeline(out.matter.id).find((e) => e.actor.id === 'position_router')
+    expect(routed?.text).toContain('看不出更像哪条，先按「Reddit 运营」来做的')
+    expect(routed?.route).toEqual({
+      picked: 'social.reddit',
+      options: [{ role_id: 'pr.reddit', role_name: 'Reddit 营销' }],
+    })
+    expect((await startedRuns()).length).toBe(1)
+  })
+
+  it('「你好」这种不是交活的话：不起运行、不出卡，只回一句问要做什么', async () => {
     const out = await open('你好')
+    expect(out.run_id).toBeUndefined()
+    expect(out.approval_item_id).toBeUndefined()
+    expect(server.work.getMatter(out.matter.id)?.role_id).toBeUndefined()
+    const ask = timeline(out.matter.id).find((e) => e.kind === 'agent_message')
+    expect(ask?.text).toContain('想让我做什么')
+    expect(await startedRuns()).toEqual([])
+  })
+})
+
+describe('WP237 ②③ 几条都沾一点、谁都不像才出卡；卡上按钮是候选职责；选了就开跑', () => {
+  const CARE = ['amz.support', 'dtc.community-support', 'dtc.live-chat', 'dtc.support']
+  const care = new Map<string, string>()
+  const openCare = async (title: string): Promise<OpenView> =>
+    dataOf<OpenView>(await call('POST', '/v1/positions/customer-care/matters', { title }))
+
+  beforeEach(() => {
+    care.clear()
+    for (const role_id of CARE) {
+      const a = server.roles.assignments.create({
+        person_id: server.bootstrap.person.id,
+        workspace_id: server.bootstrap.workspace.id,
+        role_id,
+        granted_by: server.bootstrap.person.id,
+        ranges: [],
+      })
+      care.set(role_id, a.id)
+    }
+  })
+
+  it('客服岗位四条各 0.25 → 出卡（选择题、按钮「走 X」），不起运行；事项页同样给这几个选项', async () => {
+    const out = await openCare('把 A 商品降价 10%')
     expect(out.ambiguous).toBe(true)
     expect(out.run_id).toBeUndefined()
     const item = (await server.txn.approvals.get(out.approval_item_id as string)) as ApprovalItem
     const card = projectCard(item, { now: T0, position_id: '' })
     expect(card.layout).toBe('choice')
-    expect(card.options?.map((o) => o.label).sort()).toEqual([
-      '走「Reddit 营销」',
-      '走「Reddit 运营」',
-    ])
-    // 事项页上同样给这几个选项（路由那一条下面）
+    expect(card.options?.map((o) => o.label)).toContain('走「网站客服」')
+    expect(card.options?.length).toBe(4)
     const routed = timeline(out.matter.id).find((e) => e.actor.id === 'position_router')
     expect(routed?.route?.picked).toBeUndefined()
-    expect(routed?.route?.options.map((o) => o.role_id).sort()).toEqual([
-      'pr.reddit',
-      'social.reddit',
-    ])
+    expect(routed?.route?.options.length).toBe(4)
     expect(routed?.approval_item_id).toBe(out.approval_item_id)
     expect(await startedRuns()).toEqual([])
   })
 
-  it('在卡上选「走 Reddit 营销」→ 事项钉到那条，立刻 run.started（用原话）', async () => {
-    const out = await open('你好')
+  it('在卡上选「走 网站客服」→ 事项钉到那条，立刻 run.started', async () => {
+    const out = await openCare('把 A 商品降价 10%')
     const res = await call('POST', `/v1/approvals/${out.approval_item_id}/decide`, {
       action: 'approve',
-      selected_option_id: 'pr.reddit',
+      selected_option_id: 'dtc.support',
     })
     expect(res.status).toBe(200)
     const matter = server.work.getMatter(out.matter.id) as Matter
-    expect(matter.role_id).toBe('pr.reddit')
-    expect(matter.position_id).toBe(held.get('pr.reddit'))
-    expect(runs(out.matter.id).map((e) => e.actor.id)).toEqual([held.get('pr.reddit')])
-    const started = await startedRuns()
-    expect(started.length).toBe(1)
+    expect(matter.role_id).toBe('dtc.support')
+    expect(matter.position_id).toBe(care.get('dtc.support'))
+    expect(runs(out.matter.id).map((e) => e.actor.id)).toEqual([care.get('dtc.support')])
+    expect((await startedRuns()).length).toBe(1)
   })
 
   it('卡上不选就按「认领」（老按钮）→ 被拒（要选一条），事项不会卡在「批了没反应」', async () => {
-    const out = await open('你好')
+    const out = await openCare('把 A 商品降价 10%')
     const res = await call('POST', `/v1/approvals/${out.approval_item_id}/decide`, {
       action: 'approve',
     })
     expect(res.status).toBe(400)
   })
 
-  it('事项页上点「走 Reddit 运营」→ 钉到那条、开跑，那张卡跟着定掉', async () => {
-    const out = await open('你好')
+  it('事项页上点「走 网站客服」→ 钉到那条、开跑，那张卡跟着定掉、不重跑', async () => {
+    const out = await openCare('把 A 商品降价 10%')
     const res = await dataOf<{ run_id?: string }>(
       await call('POST', `/v1/matters/${out.matter.id}/reroute`, {
-        role_id: 'social.reddit',
+        role_id: 'dtc.support',
         run: true,
       }),
     )
     expect(res.run_id).toBeDefined()
     const item = await server.txn.approvals.get(out.approval_item_id as string)
     expect(item?.state).not.toBe('pending')
-    // 卡定掉时没有再跑第二次
     expect(runs(out.matter.id).length).toBe(1)
     expect((await startedRuns()).length).toBe(1)
+  })
+
+  it('还没定时续一句点了名的话 → 钉到那条开跑，卡跟着定掉', async () => {
+    const out = await openCare('把 A 商品降价 10%')
+    const said = await dataOf<{ run_id?: string }>(
+      await call('POST', `/v1/matters/${out.matter.id}/messages`, { text: '按网站客服来，开始吧' }),
+    )
+    expect(said.run_id).toBeDefined()
+    expect(runs(out.matter.id).map((e) => e.actor.id)).toEqual([care.get('dtc.support')])
+    const item = await server.txn.approvals.get(out.approval_item_id as string)
+    expect(item?.state).not.toBe('pending')
   })
 })
 
@@ -241,9 +291,6 @@ describe('WP237 还没定职责时续一句话：绝不落到负责人的通用�
     const actors = runs(out.matter.id).map((e) => e.actor.id)
     expect(actors).toEqual([held.get('social.reddit')])
     expect(actors).not.toContain(server.bootstrap.ownerAssignment.id)
-    // 卡也定掉了
-    const item = await server.txn.approvals.get(out.approval_item_id as string)
-    expect(item?.state).not.toBe('pending')
   })
 
   it('没点名但这句话带出了方向 → 按原话 + 这句再路由，打平按分取', async () => {
@@ -258,7 +305,16 @@ describe('WP237 还没定职责时续一句话：绝不落到负责人的通用�
     expect(runs(out.matter.id).map((e) => e.actor.id)).toEqual([held.get('social.reddit')])
   })
 
-  it('还是看不出 → 只记下这句、再问一次，不起运行', async () => {
+  it('一个都没命中 → 按先后取第一条开跑', async () => {
+    const out = await open('你好')
+    const said = await dataOf<{ run_id?: string }>(
+      await call('POST', `/v1/matters/${out.matter.id}/messages`, { text: '整理一下' }),
+    )
+    expect(said.run_id).toBeDefined()
+    expect(runs(out.matter.id).map((e) => e.actor.id)).toEqual([held.get('social.reddit')])
+  })
+
+  it('又只是应一声（「嗯」）→ 只记下这句、再问一句要做什么，不起运行', async () => {
     const out = await open('你好')
     const said = await dataOf<{ run_id?: string }>(
       await call('POST', `/v1/matters/${out.matter.id}/messages`, { text: '嗯' }),
@@ -267,8 +323,7 @@ describe('WP237 还没定职责时续一句话：绝不落到负责人的通用�
     expect(server.work.getMatter(out.matter.id)?.role_id).toBeUndefined()
     expect(runs(out.matter.id)).toEqual([])
     expect(await startedRuns()).toEqual([])
-    const last = timeline(out.matter.id).at(-1)
-    expect(last?.route?.options.length).toBe(2)
+    expect(timeline(out.matter.id).at(-1)?.text).toContain('想让我做什么')
   })
 
   it('已经定了职责的事项：续话用那条分配，不用请求头上负责人那条', async () => {
@@ -278,5 +333,39 @@ describe('WP237 还没定职责时续一句话：绝不落到负责人的通用�
       held.get('social.reddit'),
       held.get('social.reddit'),
     ])
+  })
+})
+
+describe('WP237（Fable 代定）「换成 X」重跑之前先停掉还在跑的那次', () => {
+  it('先停（原因写「已换成「X」重跑」）再起新的；不带 run 的换职责不停', async () => {
+    const calls: string[] = []
+    const positions = createPositions({
+      workspace_id: server.bootstrap.workspace.id,
+      clock: makeClock(),
+      roles: server.roles,
+      work: server.work,
+      approvals: server.txn.approvals,
+      positions: () => server.org.positions(),
+      placementOf: (id) => server.org.placementOf(id),
+      appendEvent: () => {},
+      stopRuns: async (matter_id, reason) => {
+        calls.push(`stop ${matter_id} ${reason} runs=${runs(matter_id).length}`)
+        return 1
+      },
+    })
+    const out = await open('帮我做一份 Reddit 调研，看看大家怎么评价我们')
+    const person_id = server.bootstrap.person.id
+    await positions.reroute({ matter_id: out.matter.id, role_id: 'pr.reddit', person_id })
+    expect(calls).toEqual([])
+    const res = await positions.reroute({
+      matter_id: out.matter.id,
+      role_id: 'social.reddit',
+      person_id,
+      run: true,
+    })
+    // 停在新运行之前（那一刻只有开事项时那一次）
+    expect(calls).toEqual([`stop ${out.matter.id} 已换成「Reddit 运营」重跑 runs=1`])
+    expect(res.run_id).toBeDefined()
+    expect(runs(out.matter.id).length).toBe(2)
   })
 })

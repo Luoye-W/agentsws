@@ -111,6 +111,7 @@ export {
   containsRouteTerm,
   DOMAIN_TERMS,
   GENERIC_ROLES,
+  looksLikeSmallTalk,
   MIN_PICKED_SCORE,
   MIN_SEPARATION,
   namedRole,
@@ -121,6 +122,7 @@ export {
   SHORT_TERM_PENALTY,
   scoreRouteRoles,
   settleCloseCall,
+  settleNoHit,
   splitRoutePhrases,
 } from './route.js'
 export { collectUnknownKeys, POSITION_SCHEMA, ROLE_SCHEMA } from './schema.js'

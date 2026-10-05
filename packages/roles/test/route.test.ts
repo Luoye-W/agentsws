@@ -13,12 +13,14 @@
 import { describe, expect, it } from 'vitest'
 import { loadBundledPosition, loadBundledRole } from '../src/load.js'
 import {
+  looksLikeSmallTalk,
   namedRole,
   type RouteRoleProfile,
   roleRouteTerms,
   routeWithinPosition,
   scoreRouteRoles,
   settleCloseCall,
+  settleNoHit,
 } from '../src/route.js'
 
 /** 一个岗位模板展开成参赛的职责清单（每条都有人在做）。 */
@@ -251,5 +253,34 @@ describe('WP237 同一个人的几条职责打平：不问人，按分高的那�
     expect(namedRole('按 Reddit 运营这条来，开始吧。', roles)).toBe('social.reddit')
     expect(namedRole('按reddit营销做', roles)).toBe('pr.reddit')
     expect(namedRole('开始吧', roles)).toBeUndefined()
+  })
+})
+
+describe('WP237（Fable 代定）一个都没命中：按岗位里职责的先后取第一条；打招呼不算交活', () => {
+  const duties = [
+    { role_id: 'social.reddit', role_name: 'Reddit 运营' },
+    { role_id: 'pr.reddit', role_name: 'Reddit 营销' },
+  ]
+
+  it('没命中 → 第一条，其余留作「换成」', () => {
+    const out = settleNoHit({ candidates: [], ambiguous: true, reason: '' }, duties)
+    expect(out.picked).toBe('social.reddit')
+    expect(out.ambiguous).toBe(false)
+    expect(out.alternatives?.map((c) => c.role_id)).toEqual(['pr.reddit'])
+    expect(out.reason).toContain(
+      '看不出更像哪条，先按「Reddit 运营」来做的；要换成「Reddit 营销」点这里',
+    )
+  })
+
+  it('谁都不太像（有候选但都弱）不归它管，原样返回', () => {
+    const raw = routeWithinPosition('把 A 商品降价 10%', CUSTOMER_CARE)
+    expect(settleNoHit(raw, duties)).toBe(raw)
+  })
+
+  it('打招呼 / 客套 / 应一声是 small talk；正经话不是', () => {
+    for (const t of ['你好', '您好！', 'hi', 'Hello~', '在吗？', '谢谢', '嗯嗯', '好的。', ''])
+      expect(looksLikeSmallTalk(t)).toBe(true)
+    for (const t of ['整理一下', '看看这周', '你好，帮我查下订单', '开始吧'])
+      expect(looksLikeSmallTalk(t)).toBe(false)
   })
 })

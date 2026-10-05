@@ -423,3 +423,52 @@ export function namedRole(
   }
   return best?.role_id
 }
+
+/**
+ * WP237（Fable 10-06 代定）：**一个判据词都没命中**时，在同一个人的岗位里按岗位里职责的先后
+ * 取第一条直接做（不问人），其余几条留作「换成」。`roles` 按岗位模板里的先后排好。
+ *
+ * 只收「一个都没命中」（`candidates` 为空）；判得准、打平、谁都不太像的结果原样返回。
+ * 打招呼这类不是交活的话由调用方先用 {@link looksLikeSmallTalk} 挡掉。
+ */
+export function settleNoHit(
+  result: RouteWithinPositionResult,
+  roles: readonly { role_id: RoleId; role_name: string }[],
+): SettledRouteResult {
+  if (!result.ambiguous || result.picked !== undefined || result.candidates.length > 0)
+    return result
+  const eligible = roles.filter((r) => !GENERIC_ROLES.includes(r.role_id))
+  const first = eligible[0]
+  if (first === undefined) return result
+  const alternatives: RouteCandidate[] = eligible
+    .slice(1)
+    .map((r) => ({ role_id: r.role_id, role_name: r.role_name, score: 0, why: [] }))
+  const names = alternatives.map((c) => `「${c.role_name}」`).join('、')
+  return {
+    picked: first.role_id,
+    candidates: [{ role_id: first.role_id, role_name: first.role_name, score: 0, why: [] }],
+    ambiguous: false,
+    reason:
+      alternatives.length === 0
+        ? `看不出更像哪条，先按「${first.role_name}」来做的`
+        : `看不出更像哪条，先按「${first.role_name}」来做的；要换成${names}点这里`,
+    settled: true,
+    alternatives,
+  }
+}
+
+/** 打招呼 / 客套 / 只应一声——不是在交活（「你好」「在吗」「谢谢」「好的」「hi」）。 */
+const SMALL_TALK =
+  /^(你好|您好|你好呀|你好啊|嗨|哈喽|哈啰|在吗|在不在|在么|早|早上好|下午好|晚上好|谢谢|多谢|感谢|辛苦了|好的|好|行|收到|嗯+|哦+|ok|okay|hi|hello|hey|thanks|thank you|yo)$/iu
+
+/**
+ * WP237：这句话明显不是交活（打招呼、客套、只应一声）。是的话不起运行，只回一句问要做什么。
+ * 去掉标点、空白、表情后比对；拿不准一律当成是在交活（宁可做，也不把正经话当客套）。
+ */
+export function looksLikeSmallTalk(text: string): boolean {
+  const bare = text
+    .normalize('NFKC')
+    .replace(/[\s\p{P}\p{S}]+/gu, '')
+    .trim()
+  return bare === '' || SMALL_TALK.test(bare)
+}

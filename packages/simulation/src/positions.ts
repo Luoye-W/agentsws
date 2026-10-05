@@ -23,6 +23,7 @@ import {
   roleRouteTerms,
   routeWithinPosition,
   settleCloseCall,
+  settleNoHit,
 } from '@agentsws/roles'
 import type { World } from './world.js'
 
@@ -112,9 +113,16 @@ export function installPositions(world: World): PositionsLoop {
       .filter((p) => p !== undefined)
     // WP237：参赛的全是这个人自己的职责——打平（前两名都够像、只是分不开）按分取，不问人；
     // 谁都不太像 / 一个都没命中才出选择卡（与服务进程同一个判据，`@agentsws/roles`）
-    const verdict = settleCloseCall(
-      routeWithinPosition(text, profiles),
-      template.roles.map((r) => r.role),
+    // WP237（Fable 代定）：一个都没命中也按岗位里职责的先后取第一条
+    const ordered = template.roles
+      .map((r) => profiles.find((p) => p.role_id === r.role))
+      .filter((p) => p !== undefined)
+    const verdict = settleNoHit(
+      settleCloseCall(
+        routeWithinPosition(text, profiles),
+        template.roles.map((r) => r.role),
+      ),
+      ordered,
     )
     const picked =
       verdict.picked === undefined ? undefined : held.find((a) => a.role_id === verdict.picked)
