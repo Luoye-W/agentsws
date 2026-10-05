@@ -395,10 +395,10 @@ export interface WorkspacePolicy {
  * 一份中文 + 一份英文（`{ zh, en }`），或者**只有一份**的老写法（纯字符串）。
  * 契约只加不删，所以纯字符串永远认——老的职责 yml 不用改就还能读。
  *
- * 为什么不像 `RoleDefinition.description` 那样「只写中文、界面不双份维护」：
- * description 是给**人**看的一行字，persona 是**进系统提示的正文**。英文界面下
- * 送一段中文 persona 进去，模型十有八九拿中文回英文客户——这正是 persona 要防的
- * 那种串味。所以这一格双份，而且两份要说同一件事。
+ * WP226（69 §1.1，Luoye 10-05）：**真源只有中文**。yml 里只写 `zh`；`en` 由
+ * `scripts/gen-persona-en.mjs` 翻译生成（`packages/roles/persona-en.generated.json`，
+ * 带来源中文的哈希），读进来时补进这一格。英文还没有（没生成 / 中文改过还没重出）时
+ * `en` 是空串，取英文回落中文。进系统提示的一律是中文那份 + 一条「回复语言」规则。
  */
 export type PersonaText = string | { zh: string; en: string }
 
@@ -612,6 +612,11 @@ export interface PersonaView {
   packaged: PersonaText
   /** 公司改写过吗（= 有覆盖且与原文不同）。 */
   overridden: boolean
+  /**
+   * WP226（69 §4.1）：现在生效的中文**还没有对应的英文**（公司改了中文、或者包里生成的英文过期了）。
+   * 英文界面据此显示中文原文 + 一个「未翻译」标记。不出现 = 有英文。
+   */
+  untranslated?: boolean
   updated_at?: Iso8601
   updated_by?: PersonId
 }

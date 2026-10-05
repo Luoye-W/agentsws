@@ -6922,18 +6922,16 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     set: (actor, subject, text) => {
       try {
         /*
-         * 只改一边时另一边**先从现在生效的那一份补齐**，再整份存下去。
-         * 不补的话 `{ zh: '新的' }` 存进去就是"英文那份空着"，而空着的那一份
-         * 在 `applyPersonaOverride` 里会回落包里的原文——看着对，其实是两份
-         * 不同来历的文字拼在一起，公司改了中文却不知道英文没跟着改。
+         * WP226（69 §4.1）：**公司只改中文**。英文那一格不再"从现在生效的那一份补齐"——
+         * 补进去的是包里按旧中文翻的英文，与公司刚写的中文说的不是同一件事。
+         * 没给英文就存空串：`applyPersonaOverride` 据此判断——中文没变就照用包里的英文，
+         * 变了就是「未翻译」（英文界面显示中文 + 标记）。中文没给（老客户端只改英文）
+         * 才从现在生效的那一份补中文。
          */
         const current = personas.view(subject).effective
         return personas.set({
           subject,
-          text: {
-            zh: text.zh ?? personaTextIn(current, 'zh'),
-            en: text.en ?? personaTextIn(current, 'en'),
-          },
+          text: { zh: text.zh ?? personaTextIn(current, 'zh'), en: text.en ?? '' },
           by: actor.person_id,
         })
       } catch (error) {

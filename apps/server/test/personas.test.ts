@@ -134,22 +134,25 @@ describe('69 §4 改：公司层覆盖，包里的原文留着', () => {
     expect(after.updated_by).toBe(server.bootstrap.person.id)
   })
 
-  it('只改中文那一边时，英文那一份从原文补齐（不是留空）', async () => {
+  it('WP226：只改中文 → 英文那一格留空、标「未翻译」（不再拿包里按旧中文翻的英文去配）', async () => {
     const before = await dataOf<PersonaView>(await get(ROLE))
+    expect(before.untranslated).toBeUndefined()
     await call('PUT', '/v1/personas', { body: { ...ROLE, zh: '你是谁：改写过的中文版。' } })
     const after = await dataOf<PersonaView>(await get(ROLE))
-    /*
-     * 两边都 trim 再比：`packaged` 是包里的原文（yml 的块标量带一个尾换行），
-     * `effective` 是叠完覆盖、trim 过的那一份。差的就是那个换行，不是文字。
-     */
-    const en = (
-      typeof after.effective === 'string' ? after.effective : (after.effective.en ?? '')
-    ).trim()
-    const packagedEn = (
+    expect(after.untranslated).toBe(true)
+    const en = typeof after.effective === 'string' ? after.effective : (after.effective.en ?? '')
+    expect(en).toBe('')
+    // 包里的英文（生成的那一份）一个字没动，「还原」之后就回来
+    const packagedEn =
       typeof before.packaged === 'string' ? before.packaged : (before.packaged.en ?? '')
-    ).trim()
-    expect(en).toBe(packagedEn)
-    expect(en).not.toBe('')
+    expect(packagedEn).toContain('Who you are')
+  })
+
+  it('WP226：英文那一格混中文 → 400（docs/91 §3.3 那种毛病覆盖层也不许犯）', async () => {
+    const res = await call('PUT', '/v1/personas', {
+      body: { ...ROLE, en: 'Who you are: 红人 person.' },
+    })
+    expect(res.status).toBe(400)
   })
 
   it('两份都空 → 400（要恢复原文请用「还原」，不是清空）', async () => {

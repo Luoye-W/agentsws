@@ -98,10 +98,13 @@ const NAME = Schema.object({ zh: str(), en: str() }).required()
 /**
  * WP120（69 §1）：persona 正文。中英各一份，或者老的"只有一份"纯字符串。
  *
+ * WP226（69 §1.1）：**`en` 可以不写**——真源只有中文，英文由 `scripts/gen-persona-en.mjs`
+ * 生成、读进来时补上（`load.ts`）。老的 `{ zh, en }` 写法照样读得进（契约只加不删）。
+ *
  * 顺序要紧：`Schema.union` 按顺序试分支，字符串在前的话 `{ zh, en }` 也会被
  * 某些实现先当对象试——这里把对象放前面，两种写法各走各的分支。
  */
-const PERSONA = Schema.union([Schema.object({ zh: str(), en: str() }), Schema.string()])
+const PERSONA = Schema.union([Schema.object({ zh: str(), en: Schema.string() }), Schema.string()])
 
 const SCOPE = Schema.object({
   domain: DATA_DOMAIN.required(),

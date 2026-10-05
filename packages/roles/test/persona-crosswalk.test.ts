@@ -123,7 +123,7 @@ describe('跨岗位禁语：每条职责都写死了转给谁（69 §2 第三段
     expect(notYours('kol.x')).toContain('社媒运营')
   })
 
-  it('英文那份也有「Not yours」那一段（英文界面下送进去的是它）', () => {
+  it('英文那份（生成的）也有「Not yours」那一段（英文界面里显示的是它）', () => {
     for (const role of loadBundledRoles()) {
       expect(enOf(role.id), role.id).toContain('Not yours')
     }

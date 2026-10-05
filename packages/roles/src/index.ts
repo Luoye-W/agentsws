@@ -46,9 +46,11 @@ export type {
 export {
   applyPersonaOverride,
   checkAllPersonas,
+  checkGeneratedPersonaEn,
   checkPersona,
   HOUSE_RULES,
   HOUSE_RULES_ORDER,
+  hasChineseText,
   houseRulesSection,
   MAX_PERSONA_CHARS,
   PERSONA_ORDER,
@@ -58,10 +60,23 @@ export {
   personaKey,
   personaSections,
   personaTextIn,
+  personaUntranslated,
   personaView,
+  REPLY_LANGUAGE_ORDER,
+  REPLY_LANGUAGE_RULE,
   renderBrandContext,
+  replyLanguageSection,
   sameSubject,
 } from './persona.js'
+export type { GeneratedPersonaEn, PersonaEnFile, PersonaEnProblem } from './persona-en.js'
+export {
+  checkPersonaEn,
+  loadGeneratedPersonaEn,
+  PERSONA_EN_FILE,
+  personaZhHash,
+  personaZhSource,
+  withGeneratedEn,
+} from './persona-en.js'
 export type { PolicyEngine } from './policy.js'
 export { compilePolicies, createPolicyEngine, rangeCovers, sensAtMost } from './policy.js'
 export type {

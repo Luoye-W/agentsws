@@ -63,7 +63,12 @@ import {
   skillPromptSections,
 } from '@agentsws/learning'
 import type { ModelGatewayApi } from '@agentsws/model-gateway'
-import { houseRulesSection, personaTextIn, type RoleStore } from '@agentsws/roles'
+import {
+  houseRulesSection,
+  personaTextIn,
+  type RoleStore,
+  replyLanguageSection,
+} from '@agentsws/roles'
 import { createDirectRuntime, withToolChoice } from '@agentsws/runtime-direct'
 import type { CreatePolicyQuestionFn, DraftPayload, ToolExecutor } from '@agentsws/stand-ins'
 import {
@@ -1348,6 +1353,13 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
                     text: personaTextIn(config.persona, 'zh'),
                   },
                 ]),
+          /*
+           * WP226（69 §3.3）：**回复语言**——persona 一律送中文那份（中文是唯一手写的真源），
+           * 紧跟一句「对外用对方来信的语言、对内用界面语言」（order 22）。服务端还没有
+           * "工作区界面语言"这一格（69 §3.3），所以按中文界面送中文那句。
+           * 三个运行时拿到同一份字节：stub / direct 走 `assemblePrompt`，dsh 写进唯一的 complete 段。
+           */
+          replyLanguageSection('zh'),
           /*
            * WP153（09-26 真账号冒烟）：**所有职责的公共段**——对人说话不提工具名、函数名、内部 id。
            * 排在职责那一节后面、技能前面（order 25）。三个运行时拿到的是同一份字节。

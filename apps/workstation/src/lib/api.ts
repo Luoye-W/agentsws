@@ -5706,6 +5706,8 @@ export interface PersonaViewData {
   packaged: PersonaTextData
   /** 公司改写过吗。 */
   overridden: boolean
+  /** WP226：现在生效的中文还没有对应的英文（英文界面显示中文 + 「未翻译」）。 */
+  untranslated?: boolean
   updated_at?: string
   updated_by?: string
 }
@@ -5721,8 +5723,8 @@ export const getPersona = (
   )
 
 /**
- * 公司层改写。只传改动的那一边——另一边由服务端从现在生效的那一份补齐，
- * 免得"改了中文、英文悄悄退回包里的原文"。
+ * 公司层改写。WP226（69 §4.1）：**只改中文**——英文由中文翻译生成；改完还没翻的那段时间，
+ * 视图上 `untranslated` 为真，英文界面显示中文原文 + 「未翻译」。`en` 留着是契约只加不删。
  */
 export const setPersona = (
   input: { kind: 'position' | 'role'; id: string; zh?: string; en?: string },
