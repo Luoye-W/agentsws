@@ -61,7 +61,7 @@ describe('WP216 Shopify 官方技能：原样收录', () => {
       license: 'MIT',
       tier: 'open',
       version: '1.17.1',
-      display_name: 'Shopify 官方（Liquid）',
+      display_name: 'Shopify 官方技能',
       positions: 'site',
     })
     expect(frontmatter.extra.hooks).toBeUndefined()
@@ -120,9 +120,7 @@ describe('WP216 Shopify 官方技能：原样收录', () => {
     })
     expect(resolved?.layers_applied).toEqual(['package'])
     expect(resolved?.markdown).toContain('## 官方参考：liquid')
-    expect(skills.registry.frontmatterOf('shopify')?.extra.display_name).toBe(
-      'Shopify 官方（Liquid）',
-    )
+    expect(skills.registry.frontmatterOf('shopify')?.extra.display_name).toBe('Shopify 官方技能')
   })
 })
 

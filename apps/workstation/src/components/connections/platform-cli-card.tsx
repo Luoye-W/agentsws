@@ -15,7 +15,7 @@
  * 4. **没好之前照实说降级**：网页模板先走店铺后台接口（不能本地预览）。
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Copy, Cpu, LogIn, RefreshCw, SquareTerminal } from 'lucide-react'
+import { Copy, Cpu, LogIn, PackageOpen, RefreshCw, SquareTerminal, Store } from 'lucide-react'
 import { useState } from 'react'
 import { StatusIcons, type StatusItem } from '@/components/design/status-icons'
 import { TutorialLink } from '@/components/help/tutorial-link'
@@ -26,8 +26,10 @@ import {
   checkPlatformCli,
   confirmPlatformCliLogin,
   getPlatformKit,
+  getPositions,
   type PlatformCliView,
   type PlatformKitView,
+  setPlatformKitPlatform,
 } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 import { HELP_SLUGS, type HelpSlug } from '@/lib/help'
@@ -62,9 +64,24 @@ function CommandLine({ command, testId }: { command: string; testId: string }): 
 export function cliStatusItems(
   cli: PlatformCliView,
   t: (key: string, vars?: Record<string, string>) => string,
+  mcp?: NonNullable<PlatformKitView['kit']>['mcp'],
 ): StatusItem[] {
   const probe = cli.probe
   const installed = probe?.installed === true
+  // WP216：官方工具包（Dev MCP）——首次使用才下载；这台机器关了就不画这一格
+  const toolkit: StatusItem[] =
+    mcp === undefined || !mcp.enabled
+      ? []
+      : [
+          {
+            key: 'toolkit',
+            label: t('platform_cli.item.toolkit'),
+            icon: PackageOpen,
+            state: mcp.downloaded ? 'ok' : 'unknown',
+            ...(mcp.downloaded ? {} : { stateText: t('platform_cli.toolkit_first_use') }),
+            detail: `${mcp.label} ${mcp.version}`,
+          },
+        ]
   return [
     {
       key: 'installed',
@@ -87,7 +104,79 @@ export function cliStatusItems(
       icon: LogIn,
       state: cli.login_confirmed_at !== undefined ? 'ok' : 'unknown',
     },
+    ...toolkit,
   ]
+}
+
+/**
+ * WP216（Fable 10-05）：品牌还没设建站平台时，建站岗位页上那一行「先选一下你的建站平台」+ 下拉。
+ * 选平台是改品牌档案，只有负责人能改——用负责人那条分配发；不是负责人就只说一句、不给下拉。
+ */
+function ChoosePlatformRow({
+  choices,
+  positionId,
+  onSaved,
+}: {
+  choices: NonNullable<PlatformKitView['choose_platform']>['choices']
+  positionId?: string
+  onSaved: (next: PlatformKitView) => void
+}): React.ReactNode {
+  const { t } = useApp()
+  const client = useQueryClient()
+  const positions = useQuery({ queryKey: ['positions'], queryFn: getPositions })
+  const owner = positions.data?.positions.find((p) => p.role_id === 'common.owner')?.position_id
+  const save = useMutation({
+    mutationFn: (storefront_platform: string) =>
+      setPlatformKitPlatform(
+        { storefront_platform, ...(positionId === undefined ? {} : { position_id: positionId }) },
+        owner,
+      ),
+    onSuccess: (next) => {
+      onSaved(next)
+      // 技能页、连接页都跟着平台变
+      void client.invalidateQueries({ queryKey: ['skills'] })
+      void client.invalidateQueries({ queryKey: ['platform-kit'] })
+    },
+  })
+  return (
+    <div
+      className="flex flex-wrap items-center gap-2 rounded-md border px-3 py-2 text-sm"
+      data-testid="platform-choose"
+    >
+      <Store className="size-4" aria-hidden />
+      <span>{t('platform_choose.title')}</span>
+      {owner === undefined ? (
+        <span className="text-xs text-muted-foreground" data-testid="platform-choose-ask-owner">
+          {t('platform_choose.ask_owner')}
+        </span>
+      ) : (
+        <select
+          className="h-8 rounded-md border bg-background px-2 text-sm"
+          defaultValue=""
+          disabled={save.isPending}
+          data-testid="platform-choose-select"
+          aria-label={t('platform_choose.title')}
+          onChange={(e) => {
+            if (e.target.value !== '') save.mutate(e.target.value)
+          }}
+        >
+          <option value="" disabled>
+            {t('platform_choose.placeholder')}
+          </option>
+          {choices.map((c) => (
+            <option key={c.key} value={c.key} disabled={!c.supported}>
+              {c.label}
+            </option>
+          ))}
+        </select>
+      )}
+      {save.error === null ? null : (
+        <span role="alert" className="text-xs text-destructive">
+          {save.error.message}
+        </span>
+      )}
+    </div>
+  )
 }
 
 export function PlatformCliCard({
@@ -115,6 +204,15 @@ export function PlatformCliCard({
     mutationFn: (confirmed: boolean) => confirmPlatformCliLogin(confirmed, assignment),
     onSuccess: set,
   })
+  const choose = view.data?.choose_platform
+  if (choose !== undefined)
+    return (
+      <ChoosePlatformRow
+        choices={choose.choices}
+        {...(positionId === undefined ? {} : { positionId })}
+        onSaved={set}
+      />
+    )
   const cli = view.data?.kit?.cli
   // 平台没有 CLI / 不是这个岗位 / 还在查 / 查失败：都不出卡
   if (cli === undefined) return null
@@ -133,7 +231,7 @@ export function PlatformCliCard({
       </CardHeader>
       <CardContent className="flex flex-col gap-2">
         <StatusIcons
-          items={cliStatusItems(cli, t)}
+          items={cliStatusItems(cli, t, view.data?.kit?.mcp)}
           label={spec.label}
           testId="platform-cli-status"
         />

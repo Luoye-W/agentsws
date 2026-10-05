@@ -12,8 +12,8 @@
     "license": "MIT",
     "tier": "open",
     "version": "1.17.1",
-    "display_name": "Shopify 官方（Liquid）",
-    "display_name_en": "Shopify official (Liquid)",
+    "display_name": "Shopify 官方技能",
+    "display_name_en": "Shopify official skill",
     "summary": "官方写法：Liquid 主题、元字段、后台接口",
     "summary_en": "Official Shopify: Liquid themes, metafields, Admin API",
     "positions": "site"

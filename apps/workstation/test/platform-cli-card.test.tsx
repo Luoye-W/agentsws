@@ -57,6 +57,8 @@ const api = {
   views: [] as { position_id?: string }[],
   logins: [] as boolean[],
   checks: 0,
+  owner: true,
+  picks: [] as { input: { storefront_platform: string }; assignment?: string }[],
 }
 
 vi.mock('@/lib/api', async () => {
@@ -71,6 +73,18 @@ vi.mock('@/lib/api', async () => {
       api.checks += 1
       return api.view
     },
+    getPositions: async () => ({
+      positions: api.owner
+        ? [{ position_id: 'asg_owner', role_id: 'common.owner' }]
+        : [{ position_id: 'asg_site', role_id: 'site.shopify-theme' }],
+      instances: [],
+    }),
+    setPlatformKitPlatform: async (input: { storefront_platform: string }, assignment?: string) => {
+      api.picks.push({ input, ...(assignment === undefined ? {} : { assignment }) })
+      // 服务端那一侧：档案改了，之后再取就是 Shopify 那一套
+      api.view = kitWith('needs_login')
+      return api.view
+    },
     confirmPlatformCliLogin: async (confirmed: boolean) => {
       api.logins.push(confirmed)
       return kitWith(confirmed ? 'ready' : 'needs_login')
@@ -83,6 +97,8 @@ beforeEach(() => {
   api.views = []
   api.logins = []
   api.checks = 0
+  api.owner = true
+  api.picks = []
 })
 
 const icon = (key: string) =>
@@ -147,5 +163,73 @@ describe('WP216 平台 CLI 卡', () => {
     expect(icon('login')).toBe('ok')
     expect(screen.queryByTestId('platform-cli-step')).toBeNull()
     expect(screen.queryByTestId('platform-cli-degraded')).toBeNull()
+  })
+
+  it('官方工具包那一格：开着没下载 = 「首次使用会下载官方工具包」', async () => {
+    const base = kitWith('ready')
+    api.view = {
+      ...base,
+      kit: {
+        ...(base.kit as NonNullable<PlatformKitView['kit']>),
+        mcp: {
+          id: 'shopify-dev-mcp',
+          label: 'Shopify Dev MCP',
+          npm: '@shopify/dev-mcp',
+          version: '1.15.0',
+          license: 'ISC',
+          egress: ['shopify.dev'],
+          telemetry_off_env: {},
+          enabled: true,
+          downloaded: false,
+          tools: [],
+        },
+      },
+    }
+    renderWithProviders(<PlatformCliCard positionId="site" />)
+    await screen.findByTestId('platform-cli-card')
+    expect(icon('toolkit')).toBe('unknown')
+    const el = screen
+      .getAllByTestId('status-icon')
+      .find((e) => e.getAttribute('data-key') === 'toolkit')
+    expect(el?.getAttribute('data-hint')).toContain('首次使用会下载官方工具包')
+  })
+})
+
+describe('WP216（Fable 10-05）：没设建站平台——建站岗位页一行「先选一下你的建站平台」', () => {
+  const choose: PlatformKitView = {
+    kit: null,
+    choose_platform: {
+      choices: [
+        { key: 'shopify', label: 'Shopify', supported: true },
+        { key: 'none', label: '还没开始搭建', supported: true },
+        { key: 'woocommerce', label: 'WooCommerce', supported: false },
+      ],
+    },
+  }
+
+  it('负责人：一行 + 下拉（灰显的选不了），选了用负责人那条分配发，之后出 CLI 卡', async () => {
+    const user = userEvent.setup()
+    api.view = choose
+    renderWithProviders(<PlatformCliCard positionId="site" assignment="asg_site" />)
+    expect((await screen.findByTestId('platform-choose')).textContent).toContain(
+      '先选一下你的建站平台',
+    )
+    const select = (await screen.findByTestId('platform-choose-select')) as HTMLSelectElement
+    expect([...select.options].find((o) => o.value === 'woocommerce')?.disabled).toBe(true)
+    await user.selectOptions(select, 'shopify')
+    await waitFor(() => expect(api.picks).toHaveLength(1))
+    expect(api.picks[0]).toEqual({
+      input: { storefront_platform: 'shopify', position_id: 'site' },
+      assignment: 'asg_owner',
+    })
+    await screen.findByTestId('platform-cli-card')
+  })
+
+  it('不是负责人：只说一句，不给下拉', async () => {
+    api.owner = false
+    api.view = choose
+    renderWithProviders(<PlatformCliCard positionId="site" />)
+    await screen.findByTestId('platform-choose-ask-owner')
+    expect(screen.queryByTestId('platform-choose-select')).toBeNull()
   })
 })
