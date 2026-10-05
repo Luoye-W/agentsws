@@ -84,6 +84,15 @@ describe('登记表', () => {
     ).toEqual([])
   })
 
+  it('每条的 upstream_id 都在 upstreams.yml 里（还在别的分支上的那条除外）', () => {
+    const ledger = JSON.parse(readFileSync(join(REPO_ROOT, 'content-reviews.json'), 'utf8'))
+    const upstreams = readFileSync(join(REPO_ROOT, 'upstreams.yml'), 'utf8')
+    for (const it of ledger.items) {
+      if (it.pending_merge !== undefined) continue
+      expect(upstreams, it.id).toContain(`- id: ${it.upstream_id}\n`)
+    }
+  })
+
   it('缺字段 / 许可证变了没写说明 / 放行没写理由 → 报出来', () => {
     const { ledger } = fakeRepo()
     const r = ledger.items[0].reviews[0]
