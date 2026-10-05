@@ -240,6 +240,8 @@ describe('签名与整包拒收', () => {
       ['content_update', 'ws_b'],
     ])
     expect(cards[0]?.title).toBe('demo 官方技能 有新版 · 官方 2026-10-01 更新 · 已审')
+    // deck 按去重键第一段合并同族卡：内容更新卡一条内容一族，不和别的条目合成一张
+    expect(cards[0]?.dedupe_key.split(':')[0]).toBe('content_update@skill/demo@1.1.0')
     // 没点之前谁都没换
     expect(await resolved(r, 'ws_a')).not.toContain('周日不发')
     // 6 小时后再查一次：不重复出卡

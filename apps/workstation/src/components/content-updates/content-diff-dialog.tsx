@@ -58,7 +58,7 @@ export function ContentDiffDialog({
   const d = diff.data
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl" data-testid="content-diff-dialog">
+      <DialogContent className="sm:max-w-2xl" data-testid="content-diff-dialog">
         <DialogHeader>
           <DialogTitle>
             {d === undefined
@@ -124,7 +124,7 @@ export function ContentConflictDialog({
   const { t, lang } = useApp()
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl" data-testid="content-conflict-dialog">
+      <DialogContent className="sm:max-w-3xl" data-testid="content-conflict-dialog">
         <DialogHeader>
           <DialogTitle>
             {`${payload.title?.[lang] ?? payload.name ?? ''} · ${payload.heading ?? ''}`}

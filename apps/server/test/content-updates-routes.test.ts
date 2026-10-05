@@ -53,6 +53,10 @@ function standIn(): {
     file,
     `${readFileSync(file, 'utf8')
       .replace(`version: ${was}`, `version: ${version}`)
+      .replace(
+        '主题行只负责让人打开，不负责推销。',
+        '主题行只负责让人打开，不负责推销；一轮三封不换主题。',
+      )
       .trimEnd()}\n\n## 官方新加的一段\n\n回信超过 14 天没动静的，这一轮就收尾。\n`,
   )
   const pack = buildContentPack({
@@ -175,8 +179,9 @@ describe('WP219 设置 → 通用「已审的内容更新」', () => {
     const diff = await data<ContentDiffView>(
       await api(`/v1/settings/content-updates/items/${ITEM}/diff`),
     )
-    expect(diff.sections).toEqual([
-      expect.objectContaining({ change: 'added', heading: '官方新加的一段' }),
+    expect(diff.sections.map((x) => `${x.change}:${x.heading}`)).toEqual([
+      'changed:主题行',
+      'added:官方新加的一段',
     ])
 
     expect((await send(`/v1/approvals/${cards[0]?.id}/decide`, { action: 'approve' })).status).toBe(
@@ -202,6 +207,48 @@ describe('WP219 设置 → 通用「已审的内容更新」', () => {
     // 设置里点「更新」也行（退回过的那一版不会自己再换上）
     await send(`/v1/settings/content-updates/items/${ITEM}/apply`)
     expect(await resolved()).toContain('官方新加的一段')
+  })
+
+  it('你改过「主题行」→ 批了更新出冲突卡（用新版 / 保留我的）；选「用新版」走真的批卡路', async () => {
+    const { api, send, resolved, s } = await boot()
+    const ws = s.bootstrap.workspace.id
+    const base = s.skills.registry.peek(NAME, 'package')
+    const subject = base?.sections.find((x) => x.heading === '主题行')
+    if (base === undefined || subject === undefined) throw new Error('没有「主题行」那一段')
+    await s.skills.registry.setOverlay({
+      skill: NAME,
+      tier: 'company',
+      owner: ws,
+      base_version: base.version,
+      version: 0,
+      ops: [
+        {
+          op: 'replace',
+          section_id: subject.id,
+          body: '我们家：主题行带品类词。',
+          origin: 'learned',
+        },
+      ],
+    })
+    await send('/v1/settings/content-updates/check')
+    const [update] = await data<ApprovalItem[]>(await api('/v1/approvals?kind=content_update'))
+    await send(`/v1/approvals/${update?.id}/decide`, { action: 'approve' })
+    const [conflict] = await data<ApprovalItem[]>(await api('/v1/approvals?kind=content_conflict'))
+    expect(conflict?.title).toBe('开发信「主题行」这一段：新版和你的改动不一样')
+    expect(await resolved()).toContain('我们家：主题行带品类词。')
+    // 选择题卡：不带选项批会被拒；带上「用新版」才算
+    expect((await send(`/v1/approvals/${conflict?.id}/decide`, { action: 'approve' })).status).toBe(
+      400,
+    )
+    const ok = await send(`/v1/approvals/${conflict?.id}/decide`, {
+      action: 'approve',
+      selected_option_id: 'use_new',
+    })
+    expect(ok.status).toBe(200)
+    expect(await resolved()).toContain('一轮三封不换主题')
+    expect(await resolved()).not.toContain('我们家：主题行带品类词。')
+    const v = await data<ContentUpdatesView>(await api('/v1/settings/content-updates'))
+    expect(v.items[0]?.state).toBe('current')
   })
 
   it('没开（桌面安装包才开）→ 设置里照实说关着、不查', async () => {

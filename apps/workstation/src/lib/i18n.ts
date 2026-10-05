@@ -897,6 +897,7 @@ const zh: Table = {
   'card.evidence': '证据',
   'card.detail': '详情',
   'card.options.hint': '选一个，答案会沉淀成策略',
+  'card.options.hint.content_conflict': '选一个：新版的这一段，还是你改过的那一段',
   'card.instruct.title': '指导',
   // WP84：指导抽屉顶部的示例任务（选择题优先，36 §1）
   'card.examples.title': '示例任务',
@@ -4464,6 +4465,8 @@ const en: Table = {
   'card.evidence': 'Evidence',
   'card.detail': 'Details',
   'card.options.hint': 'Pick one; the answer becomes policy',
+  'card.options.hint.content_conflict':
+    'Pick one: the new version of this section, or the one you changed',
   'card.instruct.title': 'Instruct',
   // WP84: example tasks at the top of the instruct panel (pick one, do not type from scratch)
   'card.examples.title': 'Example tasks',

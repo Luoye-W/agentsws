@@ -171,6 +171,10 @@ export class ContentUpdateError extends Error {
 }
 
 const OWNER_ROLE = 'common.owner'
+const CONFLICT_OPTIONS = [
+  { id: 'use_new', label: '用新版' },
+  { id: 'keep_mine', label: '保留我的' },
+]
 const ACTIVE_CARD = new Set([
   'proposed',
   'pending',
@@ -409,7 +413,8 @@ export function createContentUpdates(options: ContentUpdatesOptions): ContentUpd
       reviewer: item.review.reviewer,
       serial,
     }
-    const key = `${ws}:content_update:${item.id}:${item.version}`
+    // 去重键的第一段（`:` 之前）是 deck 的合并族：每条内容、每一版各成一族，不和别的条目合成一张
+    const key = `content_update@${item.id.replace(':', '/')}@${item.version}:${ws}`
     return ensureCard(ws, key, (approvals) =>
       approvals.create({
         workspace_id: ws,
@@ -578,14 +583,13 @@ export function createContentUpdates(options: ContentUpdatesOptions): ContentUpd
           kind: 'content_conflict',
           role_id: OWNER_ROLE,
           subject: { object: { type: 'content_item', id: item.id } },
-          dedupe_key: key,
+          // 合并族（`:` 之前）一处冲突一族：每张冲突卡各问各的
+          dedupe_key: `content_conflict@${key.replace(/:/g, '/')}:${ws}`,
           title: `${item.title.zh}「${c.heading}」这一段：新版和你的改动不一样`,
           summary: '新版改了这一段，你（或学习回路）也改过。选一个：用新版，还是保留你的。',
-          payload,
-          options: [
-            { id: 'use_new', label: '用新版' },
-            { id: 'keep_mine', label: '保留我的' },
-          ],
+          // 选项两处都写：卡片投影读 payload.options（36 §2.2），审批项本身也留一份
+          payload: { ...payload, options: CONFLICT_OPTIONS },
+          options: CONFLICT_OPTIONS,
           evidence: {
             source_events: [],
             provenance: { seen: [{ type: 'content_item', id: item.id }] },
@@ -635,7 +639,11 @@ export function createContentUpdates(options: ContentUpdatesOptions): ContentUpd
 
   async function resolveConflict(item: ApprovalItem): Promise<void> {
     const p = item.payload as Partial<ContentConflictCardPayload> | undefined
-    const choice = item.decision?.selected_option_id
+    // 选择题卡批下来是 `approve_edited`，选的那一项在 edited_payload 里（deck 的 resolveDecision）
+    const edited = item.decision?.edited_payload as { selected_option_id?: unknown } | undefined
+    const choice =
+      item.decision?.selected_option_id ??
+      (typeof edited?.selected_option_id === 'string' ? edited.selected_option_id : undefined)
     if (p?.form !== 'content_conflict' || p.item_id === undefined || p.name === undefined) return
     if (choice !== 'use_new' && choice !== 'keep_mine') return
     const ws = item.workspace_id

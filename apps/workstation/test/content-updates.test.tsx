@@ -153,7 +153,7 @@ describe('内容更新卡 / 冲突选择卡', () => {
         card={draftCard({
           id: 'ap_cu',
           kind: 'content_update',
-          layout: 'policy',
+          layout: 'change',
           title: 'Shopify 官方技能 有新版 · 官方 2026-10-01 更新 · 已审',
           summary: '官方参考里 Liquid 的写法更新了',
           content_variants: { zh_summary: '官方参考里 Liquid 的写法更新了' },
