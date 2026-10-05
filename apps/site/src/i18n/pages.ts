@@ -44,7 +44,10 @@ const zh = {
       title: '隐私政策',
       description: 'Agents 工坊收集什么、存在哪、给谁用、你能怎么管。',
     },
-    refund: { title: '退款政策', description: '积分充值的退款怎么算：没用掉的退，已用掉的不追。' },
+    refund: {
+      title: '退款政策',
+      description: '积分一经购买不退款、不折现；只有重复扣款、系统多扣、法律强制三种例外。',
+    },
   },
   notFound: {
     meta: { title: '找不到这一页 · Agents 工坊', description: '这一页不存在或已经搬走了。' },
@@ -105,7 +108,7 @@ const en: PagesCopy = {
     refund: {
       title: 'Refund Policy',
       description:
-        'How credit refunds work: unused credits are refunded; credits already spent are not.',
+        'Credits are non-refundable once purchased, except for duplicate charges, system overcharges and where the law requires.',
     },
   },
   notFound: {

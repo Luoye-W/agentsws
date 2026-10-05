@@ -1739,7 +1739,8 @@ async function seedMessages(server: Server, world: World): Promise<void> {
       subject: '本周包装行业速览',
       text: '本期：可降解内衬的三种做法、欧盟新规时间表、一张对比表。',
       // WP204：一张题图 + 一个追踪像素——「显示图片」之后题图由本机代取（demo 里是替身）
-      html: '<p><img data-ws-remote-src="https://packaging-weekly.example/banner.png" width="480" height="96" alt="Packaging Weekly" /></p><p>本期：可降解内衬的三种做法、欧盟新规时间表、一张对比表。</p><img data-ws-remote-src="https://packaging-weekly.example/pixel.gif" width="1" height="1" />',
+      html: '<p><img data-ws-remote-src="https://packaging-weekly.example/banner.png" width="480" height="96" alt="Packaging Weekly" /></p><p>本期：可降解内衬的三种做法、欧盟新规时间表、一张对比表。</p><p><a href="https://packaging-weekly.example/issue/42">阅读全文</a> · <a href="mailto:unsubscribe@packaging-weekly.example">退订</a> · <a href="tel:+10000000000">热线</a></p><img data-ws-remote-src="https://packaging-weekly.example/pixel.gif" width="1" height="1" />',
+      // WP227：正文里的链接——http(s) / mailto 点了新窗口（桌面壳交系统浏览器），tel: 拿掉 href
       remote: true,
       minutes: 520,
       read: true,

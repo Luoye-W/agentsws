@@ -18,7 +18,7 @@
 import { type ChildProcess, execFile, spawn } from 'node:child_process'
 import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, rmSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { join, resolve } from 'node:path'
+import { join, posix, resolve, win32 } from 'node:path'
 import { promisify } from 'node:util'
 import { ApiError } from '@agentsws/api'
 import type {
@@ -75,8 +75,12 @@ function oemCodePage(): Promise<number | undefined> {
 export const DSH_HOME_ENV = 'AGENTSWS_DSH_HOME'
 /** 桌面壳的应用数据目录（`<userData>`：`secrets.bin` / `config.json` 所在）；其他场景的工作目录不许碰它。 */
 export const DSH_APP_DATA_ENV = 'AGENTSWS_APP_DATA_DIR'
-/** 其他场景的工作目录；不给就是 `~/dsh-workspace`。 */
+/** 其他场景的工作目录；不给就是「文稿/Agents 工坊」（老用户已有的 `~/dsh-workspace` 照用）。 */
 export const DSH_WORKSPACE_ENV = 'AGENTSWS_DSH_WORKSPACE'
+/** WP227（Luoye 10-05 #16）：新装默认的工作文件夹名，放在「文稿」下面。 */
+export const DEFAULT_WORKSPACE_NAME = 'Agents 工坊'
+/** WP136 起的老默认（用户目录下）。已经有它的老用户不搬，继续用。 */
+export const LEGACY_WORKSPACE_NAME = 'dsh-workspace'
 
 /**
  * 我们的 `DSH_HOME` 放哪：显式给了用给的；否则放在数据目录**旁边**（`<数据目录>/../dsh`，
@@ -93,12 +97,39 @@ export function dshHomeOf(
   return resolve(dbDir, '..', 'dsh')
 }
 
-/** 其他场景的默认工作区根。 */
-export function workspaceRootOf(env: Readonly<Record<string, string | undefined>>): string {
+/** {@link workspaceRootOf} 的可替换部分（测试用；不给就取这台电脑的）。 */
+export interface WorkspaceRootProbe {
+  platform?: string
+  /** 用户目录（mac `~`；Windows 优先 `%USERPROFILE%`）。 */
+  home?: string
+  exists?(path: string): boolean
+}
+
+/**
+ * 其他场景的默认工作区根。
+ *
+ * 1. 设置了 `AGENTSWS_DSH_WORKSPACE` 就用它；
+ * 2. 老用户已经有 `~/dsh-workspace`（WP136 起的老默认）：**不搬、继续用**——里面是他们的文件；
+ * 3. 否则（新装）：「文稿/Agents 工坊」——mac `~/Documents/Agents 工坊`，
+ *    Windows `%USERPROFILE%\Documents\Agents 工坊`（WP227，Luoye 10-05 #16）。
+ *    路径里有中文和空格：只当 `cwd` 用、从不拼进命令行，所以不用转义。
+ */
+export function workspaceRootOf(
+  env: Readonly<Record<string, string | undefined>>,
+  probe: WorkspaceRootProbe = {},
+): string {
   const explicit = env[DSH_WORKSPACE_ENV]?.trim()
-  return explicit !== undefined && explicit !== ''
-    ? resolve(explicit)
-    : join(homedir(), 'dsh-workspace')
+  if (explicit !== undefined && explicit !== '') return resolve(explicit)
+  const platform = probe.platform ?? process.platform
+  const p = platform === 'win32' ? win32 : posix
+  const profile = env.USERPROFILE?.trim()
+  const home =
+    probe.home ??
+    (platform === 'win32' && profile !== undefined && profile !== '' ? profile : homedir())
+  const exists = probe.exists ?? existsSync
+  const legacy = p.join(home, LEGACY_WORKSPACE_NAME)
+  if (exists(legacy)) return legacy
+  return p.join(home, 'Documents', DEFAULT_WORKSPACE_NAME)
 }
 
 /**

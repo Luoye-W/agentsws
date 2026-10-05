@@ -36,6 +36,14 @@ const FORBIDDEN = [
   'collectSocialListCreators',
 ]
 
+/**
+ * 点名放行：这几个文件提到嫌疑名单里的某一项是**正当的**，不是移植代码。只放行写明的那一项。
+ * - 官网首页「四级台阶」把 KOLAgents 链到它的官网（WP227，Luoye 10-05 #4）——一条公开链接，不是插件调用。
+ */
+const ALLOWED: Readonly<Record<string, readonly string[]>> = {
+  'apps/site/src/config.ts': ['kolagents.com'],
+}
+
 function walk(dir: string, out: string[] = []): string[] {
   for (const name of readdirSync(dir)) {
     if (name === 'node_modules' || name === 'dist' || name === 'build' || name.startsWith('.git')) {
@@ -68,7 +76,12 @@ describe('开源仓库守卫：私有插件的代码一个字节都不许进来'
       if (!SOURCE_EXT.test(f)) continue
       if (f.includes('guard-proprietary-extension.test.ts')) continue
       const body = readFileSync(f, 'utf8')
-      const hit = FORBIDDEN.find((needle) => body.includes(needle))
+      const rel = f
+        .slice(ROOT.length + 1)
+        .split('\\')
+        .join('/')
+      const allowed = ALLOWED[rel] ?? []
+      const hit = FORBIDDEN.find((needle) => !allowed.includes(needle) && body.includes(needle))
       if (hit !== undefined) offenders.push(`${f}（命中「${hit}」）`)
     }
     expect(offenders, `这些源码文件提到了私有插件的内部标识：\n${offenders.join('\n')}`).toEqual([])

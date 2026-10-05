@@ -67,7 +67,7 @@ test('官方 web 场景开在壳自己的窗口里：网址不带 token、凭据
       AGENTSWS_DESKTOP_USER_DATA: userData,
       AGENTSWS_CONNECT_URL: `http://127.0.0.1:${port + 1}`,
       AGENTSWS_DESKTOP_BROWSER_EXECUTABLE: join(userData, 'no-such-chrome'),
-      // 其他场景的工作目录放临时目录，不去碰 ~/dsh-workspace
+      // 其他场景的工作目录放临时目录，不去碰用户的「文稿/Agents 工坊」或老的 ~/dsh-workspace
       AGENTSWS_DSH_WORKSPACE: workspace,
       // 把一个空目录当作「用户自己装的官方桌面端」——只看托盘上有没有那一行，不去点它
       AGENTSWS_OFFICIAL_DESKTOP_APP: fakeOfficialApp,

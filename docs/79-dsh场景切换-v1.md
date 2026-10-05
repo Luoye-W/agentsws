@@ -40,7 +40,7 @@
 | 我们的 `DSH_HOME` | `<userData>/dsh`：macOS `~/Library/Application Support/@agentsws/desktop/dsh`，Windows `%APPDATA%\@agentsws\desktop\dsh`。与 `data/` **平级**，不在它里面（备份 / 导出不把 dsh 的凭据库和插件打进去） |
 | 各场景 | `<userData>/dsh/profiles/<名>/`（官方场景第一次打开时由 dsh 自己初始化） |
 | dsh 本机凭据库 | `<userData>/dsh/.credentials.yaml`（`dsh-credentials-local` 的默认位置）——所有场景共用 |
-| 其他场景的默认工作目录 | `~/dsh-workspace`（`AGENTSWS_DSH_WORKSPACE` 可改；网页里还能再加别的工作区） |
+| 其他场景的默认工作目录 | 新装：「文稿/Agents 工坊」——macOS `~/Documents/Agents 工坊`，Windows `%USERPROFILE%\Documents\Agents 工坊`（WP227，Luoye 10-05 #16）；已有 `~/dsh-workspace` 的老用户照用、不搬。`AGENTSWS_DSH_WORKSPACE` 可改；网页里还能再加别的工作区 |
 
 **用户已有另一份 dsh（`npm i -g @deepseek-ai/dsh`、`~/.dsh`）时**：两边**完全不相干**。
 
@@ -174,7 +174,7 @@ gzip 约 7.6 MB**（最大的是 `dsh-client-ui-sidebar-documentpreview` 13.8 MB
 
 1. 其他场景「按 dsh 默认」意味着**会话日志上报与匿名遥测是开的**（那是 DeepSeek 官方的默认）。要不要在我们起它们时默认带上
    `DSH_TELEMETRY_DISABLED=1`？（单子写的是按默认，这一版没带。）
-2. 默认工作目录 `~/dsh-workspace` 这个名字 / 位置行不行（非技术用户可能更习惯「文稿」下面）。
+2. ~~默认工作目录 `~/dsh-workspace` 这个名字 / 位置行不行~~ → Luoye 10-05 定：改到「文稿/Agents 工坊」，老用户不搬（WP227）。
 3. 第 5 节的积分接口作为其他场景模型来源，做不做、什么时候做。
 4. （WP184）退出确认：我们问不到官方场景里有没有任务（没有官方 Host 那条进程内查询口），所以**只要官方场景在跑，退出都会问一句**。
    嫌烦的话可以改成「只有窗口开着才问」或加「不再提示」。

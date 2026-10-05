@@ -206,7 +206,8 @@ describe('消息页（63 §8）', () => {
     })
     const frame = await screen.findByTestId('message-html')
     // 无脚本、无同源——净化那一层将来漏一条规则，这一层仍然兜得住
-    expect(frame.getAttribute('sandbox')).toBe('')
+    // WP227：只多开「点链接新开窗口」那一个口子，仍无脚本、无同源
+    expect(frame.getAttribute('sandbox')).toBe('allow-popups allow-popups-to-escape-sandbox')
     expect(frame.getAttribute('srcdoc')).toContain('data-ws-remote-src')
     // 判的是**属性边界**：`data-ws-remote-src=` 里也含 `src=` 那几个字
     expect(/(?:^|\s)src="https:/.test(frame.getAttribute('srcdoc') ?? '')).toBe(false)
