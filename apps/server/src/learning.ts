@@ -31,6 +31,7 @@ import type {
   RunEvent,
   RunId,
   RunResult,
+  SkillSection,
   SkillTier,
   WorkspaceId,
 } from '@agentsws/contracts'
@@ -377,6 +378,18 @@ export interface LearningAssembly {
   updateMemory(id: string, input: { text: string; heading?: string }): Promise<MemoryEntry>
   /** WP71：删一条。手动加的从这一层的技能记录里删；提升来的从 overlay 的 ops 里摘掉。 */
   removeMemory(id: string): Promise<void>
+  /**
+   * WP234（docs/54 §6.4）：岗位合并时，A 那一层岗位记忆并进 B。
+   *
+   * 手动加的（A 自己技能记录里的段）与提升批下来的（A 那一层 overlay 上的 op）各搬到 B 的
+   * 同一种里：B 没有的整段搬；一样的留一份；不一样的 **B 的不动、A 那一版作为新的一段加进 B**，
+   * 标题带「（原「A」）」——一个字都不丢，也不替人二选一（24 §1）。搬完 A 那一层清空。
+   */
+  mergePositionMemory(input: {
+    from: string
+    into: string
+    from_name: string
+  }): Promise<{ moved: number; kept_both: number }>
   close(): void
 }
 
@@ -1195,6 +1208,114 @@ export function createLearningAssembly(options: LearningOptions): LearningAssemb
     emit('memory.removed', { tier: ref.tier, scope_id: ref.owner, skill: ref.skill })
   }
 
+  const mergePositionMemory: LearningAssembly['mergePositionMemory'] = async (input) => {
+    let moved = 0
+    let kept_both = 0
+    if (input.from === input.into) return { moved, kept_both }
+    const fromScope = scopeRefOf({ tier: 'position', scope_id: input.from })
+    const intoScope = scopeRefOf({ tier: 'position', scope_id: input.into })
+    const suffix = `（原「${input.from_name}」）`
+    for (const name of skills.registry.listSkillNames()) {
+      /** A 那一版与 B 打架的那几段：最后都作为新段加进 B 自己的记录里。 */
+      const extra: SkillSection[] = []
+      const src = skills.registry.peek(name, 'position', fromScope)
+      const ownSections = [...(skills.registry.peek(name, 'position', intoScope)?.sections ?? [])]
+      if (src !== undefined) {
+        for (const section of src.sections) {
+          const same = ownSections.find((x) => x.id === section.id)
+          if (same === undefined) {
+            ownSections.push({ ...section })
+            moved += 1
+          } else if (same.body.trim() === section.body.trim()) {
+            moved += 1
+          } else {
+            extra.push({ ...section, id: skills.nextId(), heading: `${section.heading}${suffix}` })
+            kept_both += 1
+          }
+          // 手动加的那条是谁加的：跟着搬（id 里带着层与 owner，换了 owner 就是新 id）
+          const oldId = memoryRefId({
+            source: 'manual',
+            tier: 'position',
+            owner: input.from,
+            skill: name,
+            section_id: section.id,
+          })
+          const meta = manualMeta.get(oldId)
+          if (meta !== undefined && same === undefined) {
+            manualMeta.delete(oldId)
+            manualMeta.set(
+              memoryRefId({
+                source: 'manual',
+                tier: 'position',
+                owner: input.into,
+                skill: name,
+                section_id: section.id,
+              }),
+              meta,
+            )
+          }
+        }
+        skills.registry.drop(name, 'position', fromScope)
+      }
+      const overlay = skills.registry.getOverlay(name, 'position', input.from)
+      if (overlay !== undefined && overlay.ops.length > 0) {
+        const target = skills.registry.getOverlay(name, 'position', input.into)
+        const ops = (target?.ops ?? []).map((o) => ({ ...o }))
+        for (const op of overlay.ops) {
+          const hit = ops.find((o) => o.section_id === op.section_id)
+          if (hit === undefined) {
+            ops.push({ ...op })
+            moved += 1
+          } else if (hit.op === op.op && (hit.body ?? '') === (op.body ?? '')) {
+            moved += 1
+          } else {
+            const heading = skills.registry.sectionHeading(name, op.section_id) ?? '记忆'
+            extra.push({
+              id: skills.nextId(),
+              heading: `${heading}${suffix}`,
+              body: op.body ?? '',
+              origin: op.origin ?? 'learned',
+              ...(op.learned_from === undefined ? {} : { learned_from: op.learned_from }),
+            })
+            kept_both += 1
+          }
+        }
+        await skills.registry.setOverlay({
+          skill: name,
+          tier: 'position',
+          owner: input.into,
+          ops,
+          base_version: target?.base_version ?? overlay.base_version,
+          version: target?.version ?? 0,
+        })
+        await skills.registry.setOverlay({ ...overlay, ops: [] })
+      }
+      const sections = [...ownSections, ...extra]
+      if (src === undefined && extra.length === 0) continue
+      const dst = skills.registry.peek(name, 'position', intoScope)
+      const base = dst?.base ?? src?.base
+      await skills.registry.put({
+        name,
+        tier: 'position',
+        owner: input.into,
+        version: dst?.version ?? src?.version ?? '1.0.0',
+        evals: dst?.evals ?? src?.evals ?? [],
+        sections,
+        ...(base === undefined ? {} : { base }),
+        workspace_id,
+        scope_id: input.into,
+      })
+    }
+    emit('memory.merged', {
+      tier: 'position',
+      scope_id: input.into,
+      from: input.from,
+      moved,
+      kept_both,
+    })
+    return { moved, kept_both }
+  }
+
   const memorySummary: LearningAssembly['memorySummary'] = (target) => {
     const entries = memoryAt(target)
     if (entries.length === 0) return `${TIER_LABEL[target.tier]}层还没有攒下东西`
@@ -1212,6 +1333,7 @@ export function createLearningAssembly(options: LearningOptions): LearningAssemb
     memoryAt,
     memorySummary,
     addMemory,
+    mergePositionMemory,
     updateMemory,
     removeMemory,
     summaries,

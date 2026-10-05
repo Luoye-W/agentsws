@@ -82,6 +82,14 @@ import {
   shopifyLineQuery,
 } from '@agentsws/roles'
 import type BetterSqlite3 from 'better-sqlite3'
+import {
+  belongsTo,
+  createMemoryPlacements,
+  createSqlitePlacements,
+  holdersByPlacement,
+  type PlacementStore,
+  WORKSPACE_BASE_ROLES,
+} from './position-placements.js'
 
 /** 岗位模板的存储形状（契约 `Position` + 从哪来）。 */
 interface StoredPosition extends Position {
@@ -120,6 +128,8 @@ interface OrgBackend {
   putCustomRole(id: string, json: string): void
   pending(): PendingChange[]
   putPending(row: PendingChange): void
+  /** WP234（docs/54 §6.1）：安放——一条分配归哪个岗位。 */
+  placements: PlacementStore
   close(): void
 }
 
@@ -128,6 +138,7 @@ function createMemoryBackend(): OrgBackend {
   const roles = new Map<string, string>()
   const pending = new Map<string, PendingChange>()
   return {
+    placements: createMemoryPlacements(),
     positions: () => [...positions.values()].map((p) => structuredClone(p)),
     putPosition: (p) => {
       positions.set(p.id, structuredClone(p))
@@ -180,6 +191,7 @@ function createSqliteBackend(dbPath: string): OrgBackend {
      ON CONFLICT(id) DO UPDATE SET status = excluded.status, doc = excluded.doc`,
   )
   return {
+    placements: createSqlitePlacements(db as never),
     positions: () =>
       (db.prepare('SELECT json FROM org_positions ORDER BY id').all() as { json: string }[]).map(
         (r) => JSON.parse(r.json) as StoredPosition,
@@ -442,6 +454,38 @@ export interface OrgOptions {
    * 出一张交接卡给老板。出错不拦移出本身（交接卡可以事后再出，人已经走了）。
    */
   afterMemberLeft?: (person_id: PersonId, by: PersonId) => Promise<unknown>
+  /**
+   * WP234（docs/54 §6.4）：岗位合并 / 移动之后，事项与岗位层记忆跟着走。
+   * 事项在各品牌的工作模型里、记忆在学习回路里，制度层够不着，所以由装配方给。
+   * 不给就只动制度层（岗位行 + 安放），事项与记忆原地不动。
+   */
+  reshape?: PositionReshapeHooks
+}
+
+/** WP234：岗位合并 / 移动时制度层以外要跟着走的两样。 */
+export interface PositionReshapeHooks {
+  /** `position_template_id === from` 的事项改到 `to`；给了 `role_id` 只动走那条职责的。回改了几件。 */
+  retargetMatters(input: { from: string; to: string; role_id?: RoleId }): number | Promise<number>
+  /** 岗位层记忆 A 并进 B（docs/54 §6.4：没有的搬、一样的留一份、不一样的两版都留）。 */
+  mergeMemory(input: {
+    from: string
+    into: string
+    from_name: string
+  }): Promise<{ moved: number; kept_both: number }>
+}
+
+/** WP234：一次合并 / 移动 / 拆出的回执。 */
+export interface PositionReshapeResult {
+  /** 动过的岗位（合并后被删的那个不在里面）。 */
+  positions: PositionView[]
+  /** 改了安放的分配条数。 */
+  moved_assignments: number
+  /** 跟着改了岗位的事项件数。 */
+  moved_matters: number
+  /** 合并时：岗位层记忆搬了几条、两版都留的几条。 */
+  memory?: { moved: number; kept_both: number }
+  /** 合并后被删掉的自建岗位。 */
+  deleted?: string
 }
 
 export interface OrgAssembly {
@@ -466,6 +510,39 @@ export interface OrgAssembly {
    * 回清掉了哪几个岗位。
    */
   onMemberLeft(person_id: PersonId, by?: PersonId): Promise<string[]>
+  /**
+   * WP234（docs/54 §6.1）：这条分配安放在哪个岗位（安放的岗位已经不在了 = 没安放）。
+   * 岗位面（`positions.ts`）按它算「我的岗位」与起 Run 的岗位层。
+   */
+  placementOf(assignment_id: string): string | undefined
+  /**
+   * WP234（docs/54 §6.2）：首次设置第 ③ 步的一行岗位清单落成一个岗位行——
+   * 带 `template_id` 且职责全在那个模板里就复用它（名字不同就改名），否则新建一个自建岗位。
+   * 回岗位 id。
+   */
+  ensurePosition(
+    input: { name: string; role_ids: RoleId[]; template_id?: string },
+    by: PersonId,
+  ): string
+  /** WP234：把一条分配安放到一个岗位（首次设置建完分配之后调）。 */
+  place(assignment_id: string, position_id: string): void
+  /** WP234：类别目录（随软件带的岗位模板，按出厂的样子；不含「负责人」与底座职责）。 */
+  catalog(): Position[]
+  /** WP234：岗位合并 / 移动 / 拆出（与端口上那三个同一份实现，测试与模拟直接调）。 */
+  reshape: {
+    merge(by: PersonId, from: string, into: string): Promise<PositionReshapeResult>
+    moveDuty(
+      by: PersonId,
+      from: string,
+      role_id: RoleId,
+      to: string,
+    ): Promise<PositionReshapeResult>
+    split(
+      by: PersonId,
+      from: string,
+      input: { name: string; role_ids: RoleId[] },
+    ): Promise<PositionReshapeResult>
+  }
   close(): void
 }
 
@@ -900,20 +977,32 @@ export function createOrg(options: OrgOptions): OrgAssembly {
     return flushing
   }
 
-  /** 谁在做这个岗位：默认包里的职责都在他名下才算（05 §2 岗位只是模板）。 */
+  /** WP234（docs/54 §6.1）：安放表的读口——安放的岗位已经不在了就当没安放。 */
+  const placementOf = (assignment_id: string): string | undefined => {
+    const placed = backend.placements.get(assignment_id)
+    return placed !== undefined && positionOf(placed) !== undefined ? placed : undefined
+  }
+
+  /**
+   * 谁在做这个岗位（WP234 起按安放算，docs/54 §6.1）：有分配**安放**在这里的人，
+   * 加上老规则——未安放的分配凑齐默认包的人（05 §2）。老工作区一行安放都没有，结果与以前逐字相同。
+   */
   const holdersOf = async (
     position: StoredPosition,
     people: PersonId[],
   ): Promise<PositionView['holders']> => {
-    const wanted = position.roles.filter((r) => r.default).map((r) => r.role)
-    if (wanted.length === 0) return []
+    const ids = new Set(backend.positions().map((p) => p.id))
+    const exists = (id: string): boolean => ids.has(id)
+    const rawPlacement = (aid: string): string | undefined => backend.placements.get(aid)
+    const rows = people.map((person_id) => ({ person_id, held: activeAssignments(person_id) }))
+    const who = holdersByPlacement(position, rows, rawPlacement, exists)
     const out: PositionView['holders'] = []
-    for (const person of people) {
-      const held = activeAssignments(person)
-      if (!wanted.every((role) => held.some((a) => a.role_id === role))) continue
+    for (const person of who) {
+      const held = (rows.find((r) => r.person_id === person)?.held ?? []).filter(
+        (a) => !WORKSPACE_BASE_ROLES.has(a.role_id) && belongsTo(a, position, rawPlacement, exists),
+      )
       const ranges = new Map<string, RangeRef>()
-      for (const a of held)
-        if (wanted.includes(a.role_id)) for (const r of a.ranges) ranges.set(`${r.kind}:${r.id}`, r)
+      for (const a of held) for (const r of a.ranges) ranges.set(`${r.kind}:${r.id}`, r)
       out.push({ person_id: person, name: await personName(person), ranges: [...ranges.values()] })
     }
     return out
@@ -961,6 +1050,225 @@ export function createOrg(options: OrgOptions): OrgAssembly {
     }
     return out
   }
+
+  // ── WP234（docs/54 §6.4）：岗位合并 / 移动 / 拆出 ───────────────────────
+
+  /** 「负责人」是身份不是岗位（§6.5）：它不参与合并 / 移动 / 拆出。 */
+  const OWNER_POSITION_ID = 'owner'
+
+  const reshapeTarget = (id: string): StoredPosition => {
+    const found = positionOf(id)
+    if (found === undefined) throw ORG_ERROR('not_found', `没有这个岗位：${id}`)
+    if (id === OWNER_POSITION_ID)
+      throw ORG_ERROR('invalid_input', '「负责人」是身份，不是干活的岗位，不能合并或拆分')
+    return found
+  }
+
+  /** 改岗位行的职责清单：与 `updatePosition` 同一条版本规则（改了职责 = 改模板，随软件带的变自建）。 */
+  const putRoles = (existing: StoredPosition, roleList: StoredPosition['roles']): void => {
+    if (canonicalJson(roleList) === canonicalJson(existing.roles)) return
+    const [major = '1', minor = '0'] = existing.version.split('.')
+    backend.putPosition({
+      ...existing,
+      roles: roleList,
+      version: `${major}.${String(Number(minor) + 1)}.0`,
+      source: existing.source === 'bundled' ? ('custom' as const) : existing.source,
+    })
+  }
+
+  /**
+   * 归属于 `from` 的分配（按 §6.1 归属规则）改安放到 `to`；给了 `only` 只动这几条职责。
+   * 回改了几条。权限一点不动——安放不带权限。
+   */
+  const movePlacements = (from: StoredPosition, to: string, only?: ReadonlySet<RoleId>): number => {
+    const ids = new Set(backend.positions().map((p) => p.id))
+    const exists = (id: string): boolean => ids.has(id)
+    const raw = (aid: string): string | undefined => backend.placements.get(aid)
+    let moved = 0
+    for (const a of roles.assignments.listByWorkspace(workspace_id)) {
+      if (a.revoked_at !== undefined || WORKSPACE_BASE_ROLES.has(a.role_id)) continue
+      if (only !== undefined && !only.has(a.role_id)) continue
+      if (!belongsTo(a, from, raw, exists)) continue
+      backend.placements.set(a.id, to)
+      moved += 1
+    }
+    return moved
+  }
+
+  const viewsOf = async (ids: string[]): Promise<PositionView[]> =>
+    (await positionViews()).filter((p) => ids.includes(p.id))
+
+  const mergePositions = async (
+    by: PersonId,
+    fromId: string,
+    intoId: string,
+  ): Promise<PositionReshapeResult> => {
+    await reconcile()
+    if (fromId === intoId) throw ORG_ERROR('invalid_input', '不能把一个岗位合并到它自己')
+    const from = reshapeTarget(fromId)
+    const into = reshapeTarget(intoId)
+    // 1. 职责清单：B ∪= A（底座职责不带过去；B 原有的在前）
+    const roleList = [...into.roles]
+    for (const r of from.roles)
+      if (!WORKSPACE_BASE_ROLES.has(r.role) && !roleList.some((x) => x.role === r.role))
+        roleList.push({ ...r })
+    putRoles(into, roleList)
+    // 2. 安放：归属于 A 的全部改到 B
+    const moved_assignments = movePlacements(from, into.id)
+    // 3. 事项 4. 岗位层记忆（职责层记忆与卡按职责 / 分配挂，本来就跟着走）
+    const moved_matters =
+      (await options.reshape?.retargetMatters({ from: from.id, to: into.id })) ?? 0
+    const memory = await options.reshape?.mergeMemory({
+      from: from.id,
+      into: into.id,
+      from_name: from.name.zh,
+    })
+    // 5. A：自建的删掉；随软件带的留着当类别目录（没人安放在它上面就不出现在任何人的左栏）
+    const deleted = from.source === 'custom' ? from.id : undefined
+    if (deleted !== undefined) backend.deletePosition(deleted)
+    emit('position.merged', by, {
+      from: from.id,
+      into: into.id,
+      role_ids: from.roles.map((r) => r.role).filter((r) => !WORKSPACE_BASE_ROLES.has(r)),
+      moved_assignments,
+      moved_matters,
+      ...(memory === undefined ? {} : { memory }),
+      ...(deleted === undefined ? {} : { deleted }),
+    })
+    return {
+      positions: await viewsOf([into.id, ...(deleted === undefined ? [from.id] : [])]),
+      moved_assignments,
+      moved_matters,
+      ...(memory === undefined ? {} : { memory }),
+      ...(deleted === undefined ? {} : { deleted }),
+    }
+  }
+
+  const moveDuty = async (
+    by: PersonId,
+    fromId: string,
+    role_id: RoleId,
+    toId: string,
+    event: 'position.duty_moved' | 'none' = 'position.duty_moved',
+  ): Promise<PositionReshapeResult> => {
+    await reconcile()
+    if (fromId === toId) throw ORG_ERROR('invalid_input', '移到的还是同一个岗位')
+    const from = reshapeTarget(fromId)
+    const to = reshapeTarget(toId)
+    if (!from.roles.some((r) => r.role === role_id))
+      throw ORG_ERROR('invalid_input', `「${roleName(role_id)}」不在「${from.name.zh}」里`)
+    if (WORKSPACE_BASE_ROLES.has(role_id))
+      throw ORG_ERROR('invalid_input', '工作区底座职责不归任何岗位，挪不动')
+    const entry = from.roles.find((r) => r.role === role_id) ?? { role: role_id, default: true }
+    // 先挪安放（要按挪之前的 A 判归属），再改两边的职责清单
+    const moved_assignments = movePlacements(from, to.id, new Set([role_id]))
+    if (!to.roles.some((r) => r.role === role_id)) putRoles(to, [...to.roles, { ...entry }])
+    putRoles(
+      from,
+      from.roles.filter((r) => r.role !== role_id),
+    )
+    // 事项：A 下面走 R 的那几件跟过去；岗位层记忆留在 A（那是 A 的做事方式）
+    const moved_matters =
+      (await options.reshape?.retargetMatters({ from: from.id, to: to.id, role_id })) ?? 0
+    if (event !== 'none')
+      emit(event, by, { from: from.id, to: to.id, role_id, moved_assignments, moved_matters })
+    return {
+      positions: await viewsOf([from.id, to.id]),
+      moved_assignments,
+      moved_matters,
+    }
+  }
+
+  const splitPosition = async (
+    by: PersonId,
+    fromId: string,
+    input: { name: string; role_ids: RoleId[] },
+  ): Promise<PositionReshapeResult> => {
+    await reconcile()
+    const from = reshapeTarget(fromId)
+    const name = input.name.trim()
+    if (name === '') throw ORG_ERROR('invalid_input', '新岗位要有个名字')
+    const picked = [...new Set(input.role_ids)]
+    if (picked.length === 0) throw ORG_ERROR('invalid_input', '至少拆出一条职责')
+    const missing = picked.filter((r) => !from.roles.some((x) => x.role === r))
+    if (missing.length > 0)
+      throw ORG_ERROR(
+        'invalid_input',
+        `「${from.name.zh}」里没有：${missing.map(roleName).join('、')}`,
+      )
+    const id = `pos-${sha256(canonicalJson({ name, from: from.id, at: now() })).slice(0, 8)}`
+    backend.putPosition({
+      id,
+      version: '1.0.0',
+      name: { zh: name, en: name },
+      roles: [],
+      source: 'custom',
+    })
+    emit('position.created', by, { position_id: id })
+    let moved_assignments = 0
+    let moved_matters = 0
+    for (const role_id of picked) {
+      const out = await moveDuty(by, from.id, role_id, id, 'none')
+      moved_assignments += out.moved_assignments
+      moved_matters += out.moved_matters
+    }
+    emit('position.split', by, {
+      from: from.id,
+      to: id,
+      role_ids: picked,
+      moved_assignments,
+      moved_matters,
+    })
+    return { positions: await viewsOf([from.id, id]), moved_assignments, moved_matters }
+  }
+
+  /** WP234（§6.2）：第 ③ 步一行岗位清单 → 一个岗位行。 */
+  const ensurePosition = (
+    input: { name: string; role_ids: RoleId[]; template_id?: string },
+    by: PersonId,
+  ): string => {
+    const name = input.name.trim() === '' ? '我的岗位' : input.name.trim()
+    const template = input.template_id === undefined ? undefined : positionOf(input.template_id)
+    if (
+      template !== undefined &&
+      template.id !== OWNER_POSITION_ID &&
+      input.role_ids.every((r) => template.roles.some((x) => x.role === r))
+    ) {
+      // 复用：名字不同就改名（WP196 那条路——只改名不算改模板，版本与来源都不动）
+      if (template.name.zh !== name) {
+        backend.putPosition({ ...template, name: { zh: name, en: template.name.en } })
+        emit('position.renamed', by, {
+          position_id: template.id,
+          from: { ...template.name },
+          to: { zh: name, en: template.name.en },
+        })
+      }
+      return template.id
+    }
+    const id = `pos-${sha256(canonicalJson({ name, roles: input.role_ids, at: now() })).slice(0, 8)}`
+    backend.putPosition({
+      id,
+      version: '1.0.0',
+      name: { zh: name, en: name },
+      roles: input.role_ids.map((role) => ({ role, default: true })),
+      source: 'custom',
+    })
+    emit('position.created', by, { position_id: id, via: 'onboarding' })
+    return id
+  }
+
+  /** WP234：类别目录——出厂的那几个模板（不含「负责人」与底座职责）。 */
+  const catalog = (): Position[] =>
+    SEED_POSITIONS.filter((seed) => seed.id !== OWNER_POSITION_ID)
+      .map((seed) => ({
+        id: seed.id,
+        version: '1.0.0',
+        name: { zh: seed.zh, en: seed.en },
+        roles: seed.roles
+          .filter(([id]) => !WORKSPACE_BASE_ROLES.has(id) && roles.roles.get(id) !== undefined)
+          .map(([role, isDefault]) => ({ role, default: isDefault })),
+      }))
+      .filter((p) => p.roles.length > 0)
 
   /**
    * 离开工作区的人手上还没批的卡 → 各自工作区的老板。回改派了几张。
@@ -1420,6 +1728,45 @@ export function createOrg(options: OrgOptions): OrgAssembly {
       emit('position.deleted', actor.person_id, { position_id: id })
     },
 
+    // WP234（docs/54 §6.4）：公司页岗位卡上的三个动作
+    mergePosition: (actor, id, input) => mergePositions(actor.person_id, id, input.into),
+    movePositionDuty: (actor, id, input) => moveDuty(actor.person_id, id, input.role_id, input.to),
+    splitPosition: (actor, id, input) => splitPosition(actor.person_id, id, input),
+
+    /**
+     * WP234（docs/54 §6.5）：负责人转交 = 把 `common.owner` 分给另一位成员。
+     * 第一版**不收回自己那一条**（理由见 §6.5）；对方已经是负责人就原样回。
+     */
+    async transferOwner(actor, input) {
+      await reconcile()
+      const members = await memberIds()
+      if (!members.includes(input.person_id))
+        throw ORG_ERROR('not_found', '这个人还不是本工作区的成员，先邀请他加入')
+      const existing = activeAssignments(input.person_id).find((a) => a.role_id === 'common.owner')
+      const assignment =
+        existing ??
+        grant({
+          person_id: input.person_id,
+          granted_by: actor.person_id,
+          roleIds: ['common.owner'],
+          ranges: [],
+        })[0]
+      if (assignment === undefined) throw ORG_ERROR('conflict', '负责人身份没交出去')
+      if (existing === undefined)
+        emit('owner.transferred', actor.person_id, {
+          from: actor.person_id,
+          to: input.person_id,
+          assignment_id: assignment.id,
+          kept_own: true,
+        })
+      return {
+        person_id: input.person_id,
+        person_name: await personName(input.person_id),
+        assignment_id: assignment.id,
+        already: existing !== undefined,
+      }
+    },
+
     async assign(actor, input: AssignInput) {
       await reconcile()
       const members = await identity.members(workspace_id)
@@ -1447,12 +1794,17 @@ export function createOrg(options: OrgOptions): OrgAssembly {
         ranges: input.ranges,
         ...(input.range_groups === undefined ? {} : { range_groups: input.range_groups }),
       })
+      // WP234（docs/54 §6.1）：按岗位分的，新建的那几条就安放在这个岗位上——
+      // 这条职责同时挂在别的岗位里时，界面与岗位层记忆都不会再分不清它算哪个岗位的
+      if (input.position_id !== undefined)
+        for (const a of created) backend.placements.set(a.id, input.position_id)
       for (const a of created)
         emit('assignment.granted', actor.person_id, {
           assignment_id: a.id,
           person_id: a.person_id,
           role_id: a.role_id,
           ranges: a.ranges,
+          ...(input.position_id === undefined ? {} : { position_id: input.position_id }),
         })
       return Promise.all(created.map(viewOf))
     },
@@ -1851,6 +2203,17 @@ export function createOrg(options: OrgOptions): OrgAssembly {
   return {
     port,
     positions: () => backend.positions(),
+    placementOf,
+    ensurePosition,
+    place: (assignment_id, position_id) => {
+      backend.placements.set(assignment_id, position_id)
+    },
+    catalog,
+    reshape: {
+      merge: mergePositions,
+      moveDuty: (by, from, role_id, to) => moveDuty(by, from, role_id, to),
+      split: splitPosition,
+    },
     onRangeExpanded,
     onMemberLeft: async (person_id, by) => {
       const out = await clearLeftSupervisors(by ?? 'system', person_id)

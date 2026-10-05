@@ -175,6 +175,6 @@ export function checkSuggestedPositions(
 }
 
 /** 一份岗位清单展开后的全部职责（去重、顺序稳定）——第 ④ 步清单与「完成」按它算。 */
-export function rolesOfPlan(positions: readonly PlannedPosition[]): string[] {
+export function rolesOfPlan(positions: readonly { role_ids: readonly string[] }[]): string[] {
   return [...new Set(positions.flatMap((p) => p.role_ids))]
 }

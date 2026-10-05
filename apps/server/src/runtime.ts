@@ -429,7 +429,7 @@ export interface PositionLayerSource {
    * 这条职责属于哪个岗位。挂在多个岗位里、或者一个都没有时回 `{ note }`——
    * 54 §3：**跳过 `position` 层并在时间线说明**，不猜一个。
    */
-  positionOf(role_id: string): { position_id?: string; note?: string }
+  positionOf(role_id: string, assignment_id?: string): { position_id?: string; note?: string }
   /** 岗位层上下文的三样：面板数字与告警摘要、岗位下进行中事项摘要、持有人可用时段。 */
   layerContext(
     position_id: string,
@@ -1193,7 +1193,8 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
     const positionHit =
       input.matter.position_template_id !== undefined
         ? { position_id: input.matter.position_template_id }
-        : (positions?.positionOf(config.role_id) ?? {})
+        : // WP234：带上分配 id——安放了就按安放算（docs/54 §6.1）
+          (positions?.positionOf(config.role_id, input.assignment_id) ?? {})
     if (positionHit.position_id === undefined && positionHit.note !== undefined) {
       work?.appendEvent(input.matter.id, {
         kind: 'status',
