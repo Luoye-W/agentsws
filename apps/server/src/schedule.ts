@@ -213,6 +213,10 @@ export interface ScheduleAssemblyOptions {
   tz?: string
   /** 真实进程里巡检的间隔；`0` = 不起定时器（测试与模拟回路自己驱动 `runDue`）。 */
   intervalMs?: number
+  /** WP215：这条任务现在先别触发（品牌停用 / 品牌急停），见 `SchedulerOptions.hold`。 */
+  hold?(task: ScheduleTask): boolean
+  /** WP215：一拍里最多同时跑几条（品牌之间并行、同品牌串行），见 `SchedulerOptions.concurrency`。 */
+  concurrency?: () => number
 }
 
 export interface ScheduleAssembly {
@@ -260,6 +264,8 @@ export function createScheduleAssembly(options: ScheduleAssemblyOptions): Schedu
     rules: officialRuleResolver,
     ...(options.random === undefined ? {} : { random: options.random }),
     ...(options.intervalMs === undefined ? {} : { intervalMs: options.intervalMs }),
+    ...(options.hold === undefined ? {} : { hold: options.hold }),
+    ...(options.concurrency === undefined ? {} : { concurrency: options.concurrency }),
   })
   const workflows = createWorkflowEngine({
     clock,
@@ -1096,6 +1102,11 @@ export interface SchedulePlanOptions {
   tz: string
   /** 每个岗位一条计划任务与一条复盘任务 */
   positions: SchedulePosition[]
+  /**
+   * WP215：别的品牌那一套系统任务的 id 后缀（`sched_mail_poll` → `sched_mail_poll__<ws>`）。
+   * 第一个品牌不给——它的老任务一条不动（用户改过的时间、停过的开关都还在）。
+   */
+  idSuffix?: string
   /** 装了哪些消费者：没装的不建任务（列表上不会出现一条永远失败的东西） */
   has: {
     work?: boolean
@@ -1158,7 +1169,7 @@ export async function ensureSystemTasks(
   }
   const out: ScheduleTask[] = []
   const add = async (id: string, input: Omit<ScheduleInput, 'id'>): Promise<void> => {
-    out.push(await ensureTask(scheduler, id, input))
+    out.push(await ensureTask(scheduler, `${id}${options.idSuffix ?? ''}`, input))
   }
 
   if (options.has.work === true) {
@@ -1515,7 +1526,9 @@ export interface SchedulePortOptions {
   workflows: WorkflowEngine
   approvals: ApprovalBus
   /** 判断一条任务是不是本人自己的岗位（25 §5：给别人建的要那边点头）。 */
-  assignmentOf(id: string): { person_id: PersonId; role_id: RoleId } | undefined
+  assignmentOf(
+    id: string,
+  ): { person_id: PersonId; role_id: RoleId; workspace_id?: WorkspaceId } | undefined
   /**
    * WP181：按官方「自动化任务」的时间写法改时间（`automation.ts` 的 `retime`：官方校验、官方算下一次）。
    * 不给就不支持 `rule`（回 `not_implemented`）。
@@ -1655,7 +1668,12 @@ export function createSchedulePort(options: SchedulePortOptions): SchedulePort {
 
     async create(input) {
       const target_id = input.target_assignment_id ?? input.assignment_id
-      const target = options.assignmentOf(target_id)
+      const found = options.assignmentOf(target_id)
+      // WP215：岗位必须在**这次请求所在的品牌**里（每个品牌都能建自己的定时，但不能替别的品牌建）
+      const target =
+        found?.workspace_id === undefined || found.workspace_id === input.workspace_id
+          ? found
+          : undefined
       if (target === undefined) {
         throw new ServerScheduleError('not_found', `岗位不存在：${target_id}`)
       }

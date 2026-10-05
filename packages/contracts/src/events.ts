@@ -208,6 +208,11 @@ export type KnownEventType =
   // WP24：问 AI 只记哈希；急停变更
   | 'ask.answered'
   | 'halt.changed'
+  /**
+   * WP215：全进程「后台同时最多跑几件」改了（payload：`from` / `to`）。品牌急停照旧记
+   * `halt.changed`，只是记在那个品牌名下、payload 多一位 `brand`。
+   */
+  | 'background.concurrency_changed'
   // WP28：成员与邀请（token 只记指纹）
   | 'invitation.created'
   | 'invitation.accepted'

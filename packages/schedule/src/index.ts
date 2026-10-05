@@ -10,6 +10,7 @@
 export {
   type BrandBackgroundStatus,
   type BrandRouter,
+  type BrandRouterOptions,
   brandBackgroundStatus,
   createBrandRouter,
 } from './brands.js'

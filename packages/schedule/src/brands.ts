@@ -33,15 +33,27 @@ export interface BrandRouter {
   handlersOf(workspace_id: WorkspaceId): string[]
 }
 
-export function createBrandRouter(scheduler: Scheduler): BrandRouter {
+export interface BrandRouterOptions {
+  /**
+   * 每次分发之前先做的事（服务端：确保这个品牌的模块已经装好——品牌模块可能被换掉重建过）。
+   * 只对**认识的品牌**做；抛了就当这次失败。
+   */
+  prepare?(workspace_id: WorkspaceId): Promise<void> | void
+}
+
+export function createBrandRouter(
+  scheduler: Scheduler,
+  options: BrandRouterOptions = {},
+): BrandRouter {
   /** 处理器名 → 品牌 → 处理器。 */
   const table = new Map<string, Map<WorkspaceId, ScheduleHandler>>()
   const facades = new Map<WorkspaceId, Scheduler>()
 
   const dispatcher =
     (name: string): ScheduleHandler =>
-    (ctx) => {
+    async (ctx) => {
       const ws = ctx.task.workspace_id
+      if (table.get(name)?.has(ws) === true) await options.prepare?.(ws)
       const handler = table.get(name)?.get(ws)
       if (handler === undefined) {
         // 不退回别的品牌那一份：宁可这一次失败（列表上看得见），也不能用 A 的东西做 B 的事

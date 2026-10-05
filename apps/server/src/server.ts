@@ -60,6 +60,7 @@ import type {
   Assignment,
   Clock,
   EventEnvelope,
+  Halt,
   KolChannel,
   Person,
   PersonId,
@@ -113,6 +114,7 @@ import {
   type AccountFetch,
   createModelGateway,
   type FetchLike,
+  GatewayError,
   type ModelGatewayApi,
   type PageFetch,
   stubImageProvider,
@@ -130,6 +132,7 @@ import {
   SUPERSEDED_POSITION_IDS,
   type SupervisedPosition,
 } from '@agentsws/roles'
+import { createBrandRouter } from '@agentsws/schedule'
 import type { SearchFetch } from '@agentsws/search-providers'
 import {
   disconnectedSearchConsole,
@@ -161,6 +164,9 @@ import { type B2bServiceAssembly, createB2bService } from './b2b-service.js'
 import { type B2bStore, createB2bStore } from './b2b-store.js'
 import { MemoryBackend } from './backend.js'
 import { type BackupRunResult, backupDirOf, backupKeepOf, runBackup } from './backup.js'
+// WP121b（70 §3.5）：确认档案卡那一刻建的首批知识条目（政策要点 + 商品卡，一律 proposed）
+// WP215：每个品牌一套后台（品牌急停、全进程并发上限、切换器那一格）
+import { type BrandBackground, createBrandBackground } from './brand-background.js'
 import {
   type BrandDesignAssembly,
   createBrandDesign,
@@ -168,7 +174,6 @@ import {
   shopifyThemeSettings,
 } from './brand-design.js'
 import { createBrandIntake } from './brand-intake.js'
-// WP121b（70 §3.5）：确认档案卡那一刻建的首批知识条目（政策要点 + 商品卡，一律 proposed）
 import { brandKnowledgeCards } from './brand-knowledge.js'
 // WP66（52 O1）：一个进程装多套品牌模块——落盘目录、凭据前缀与容器都在这里
 import {
@@ -195,6 +200,7 @@ import {
   brandModelsPort,
   brandPositionPort,
   brandPrPort,
+  brandSecretaryPort,
   brandSitePort,
   brandSocialPort,
   brandWorkArchivePort,
@@ -286,7 +292,7 @@ import {
   seedHostedSecrets,
 } from './hosted-mode.js'
 import { createApprovalDirectory } from './housekeeping.js'
-import { createImChannels } from './im-channels.js'
+import { createImChannels, type ImChannelsAssembly, mountBrandImRoutes } from './im-channels.js'
 import { feishuSdkTransportFactory, fetchHttp, wsSocketFactory } from './im-sdk.js'
 import { createTeamBotManagerCheck } from './im-team-bots.js'
 import { createJoin, type JoinAssembly } from './join.js'
@@ -947,6 +953,11 @@ export interface Server {
    */
   brands: BrandModules
   /**
+   * WP215（52 §4 收口）：每个品牌一套后台——哪些品牌在跑、品牌急停、全进程并发上限、
+   * 切换器那一格的状态。调度循环共用 `schedule`，任务按自己的 `workspace_id` 用自己品牌的东西。
+   */
+  background: BrandBackground
+  /**
    * WP117b（66 复测 #19）：把服务进程这本账上「批准了、等取消窗口」的卡施行掉。
    * 返回**还在等**的张数（取消窗口 / 父子顺序没到的也算）。demo 的 drain 每两秒
    * 调一次（与模拟世界那一本同一个节奏），见 `apps/cli/src/demo.ts` 的注释。
@@ -1495,7 +1506,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
    * 清单，两个品牌各填各的 key 就会互相把对方顶掉。账（预算、并发预留、usage）
    * 随网关走，于是 52 O3「每个品牌的积分消耗分开记」也就是自然的。
    */
-  const makeGateway = (): ModelGatewayApi =>
+  const makeGateway = (halt: Halt = kernel.halt): ModelGatewayApi =>
     createModelGateway({
       providers: [stubProvider({ seed: 7 })],
       /*
@@ -1514,7 +1525,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       policy: { default: STUB_REF, data_residency: 'cn', prices: priceTable },
       clock,
       env,
-      halt: kernel.halt,
+      // WP215：品牌那一份急停视图（全局急停 + 这个品牌自己的急停）
+      halt,
       trace: kernel.trace,
       eventSink: (e) => {
         appendEvent(e)
@@ -1574,6 +1586,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
    * `item.workspace_id` 取模块的函数，而不是一个装配期就定死的对象。
    */
   let brands: BrandModules | undefined
+  /** WP215：调度器比品牌后台晚建，后台状态那一格惰性取它。 */
+  let scheduleRef: ScheduleAssembly | undefined
 
   const backend = new MemoryBackend()
   // WP18：给了数据目录就整套落盘（审批项 / 账本 / 预占 / unknown 与对账游标）
@@ -1737,6 +1751,26 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   // WP29 学习回路：技能库空着的话先铺一份自带技能（学到的东西得有段落可落），
   // 再把审批总线包一层——每张卡被决定之后抽 lesson，技能 / 知识类卡批了就施行。
   await seedDefaultSkill(skills, workspace.id)
+  /**
+   * WP215：一个品牌里替它收卡、挂系统任务的那个人与那条分配。
+   *
+   * 第一个品牌就是装配时的那一对（与之前逐字相同）；别的品牌依次找：本机这个人在那里的
+   * owner 分配 → 那个品牌任意一位 owner → 本机这个人在那里的任意一条分配。都没有就是
+   * `undefined`——那个品牌的学习卡、系统任务先不出，**绝不挂到别的品牌的人头上**。
+   * 用函数声明（会提升）：学习回路比这里早建，回调里要用它。
+   */
+  function brandAnchor(ws: WorkspaceId): { owner: PersonId; assignment: Assignment } | undefined {
+    if (ws === workspace.id) return { owner: person.id, assignment: ownerAssignment }
+    const live = (a: Assignment): boolean => a.revoked_at === undefined
+    const mine = roles.assignments
+      .listByPerson(person.id, { workspace_id: ws, role_id: 'common.owner' })
+      .find(live)
+    if (mine !== undefined) return { owner: person.id, assignment: mine }
+    const anyOwner = roles.assignments.listByRole('common.owner', { workspace_id: ws }).find(live)
+    if (anyOwner !== undefined) return { owner: anyOwner.person_id, assignment: anyOwner }
+    const first = roles.assignments.listByPerson(person.id, { workspace_id: ws }).find(live)
+    return first === undefined ? undefined : { owner: person.id, assignment: first }
+  }
   const learning = createLearningAssembly({
     workspace_id: workspace.id,
     clock,
@@ -1747,6 +1781,13 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     approvals: rawApprovals,
     owner: person.id,
     ownerAssignment,
+    // WP215：别的品牌的学习卡发给那个品牌的负责人、挂在他那条分配上
+    ownerOf: (ws) => {
+      const anchor = brandAnchor(ws)
+      return anchor === undefined
+        ? undefined
+        : { owner: anchor.owner, ownerAssignment: anchor.assignment }
+    },
     appendEvent,
     ...(dbDir === undefined ? {} : { dbDir }),
   })
@@ -1762,11 +1803,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     ...(dbDir === undefined ? {} : { dbDir }),
     scheduler: () => schedule.scheduler,
     workflows: () => schedule.workflows,
-    // 整个工作区的岗位（不是本人那几个）：算"哪些岗位在用"要全的
-    positions: () =>
+    // 整个工作区的岗位（不是本人那几个）：算"哪些岗位在用"要全的。WP215：问哪个品牌就数哪个品牌的
+    positions: (ws) =>
       roles.roles
         .list()
-        .flatMap((r) => roles.assignments.listByRole(r.id, { workspace_id: workspace.id }))
+        .flatMap((r) => roles.assignments.listByRole(r.id, { workspace_id: ws }))
         .filter((a) => a.revoked_at === undefined)
         .map((a) => ({
           id: a.id,
@@ -2726,7 +2767,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       })
 
     // ── 模型面：一个品牌一个网关、一份 provider 配置、一份能力开关（52 O3）
-    const ownGateway = makeGateway()
+    // WP215：这个品牌的急停视图——品牌急停只停这个品牌的模型调用与对外发送，全局急停照旧压过一切
+    const brandHalt = background.haltOf(ws)
+    const ownGateway = makeGateway(brandHalt)
     const ownCloud = createCloud({
       clock,
       secrets: brandSecrets,
@@ -2758,7 +2801,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       secrets: brandSecrets,
       env,
       // WP42：价目刷新是一次普通出站 HTTP GET，照 28 §1 的 outbound 档管
-      halt: kernel.halt,
+      halt: brandHalt,
       appendEvent: (e) => {
         appendEvent(e)
       },
@@ -2796,9 +2839,23 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       brands?.inheritsOrg(ws) === true
         ? (brands.peek(orgDefaultBrandOf(ws))?.ownModels ?? ownModels)
         : ownModels
+    /*
+     * WP215：跟随公司默认时借的是公司默认那一个网关（它挂的是那个品牌的急停）——
+     * 这里先按**这个品牌**的急停判一次：B 按了急停，B 的运行与聊天就打不出模型，A 照常。
+     */
+    const assertModelOpen = (): void => {
+      if (brandHalt.isHalted('model'))
+        throw new GatewayError('halted', 'model calls halted', { by: 'halt', scope: 'model' })
+    }
     const gatewayProxy: ModelGatewayApi = {
-      complete: (req) => effectiveGateway().complete(req),
-      transcribe: (req, meta, model) => effectiveGateway().transcribe(req, meta, model),
+      complete: async (req) => {
+        assertModelOpen()
+        return effectiveGateway().complete(req)
+      },
+      transcribe: async (req, meta, model) => {
+        assertModelOpen()
+        return effectiveGateway().transcribe(req, meta, model)
+      },
       usage: (filter) => effectiveGateway().usage(filter),
       records: () => effectiveGateway().records(),
       // WP179：官方网页搜索不经网关，补记那一笔也记在跟随的那一份账上
@@ -2808,7 +2865,10 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       },
       providers: () => effectiveGateway().providers(),
       budget: (filter) => effectiveGateway().budget(filter),
-      embed: (req, meta) => effectiveGateway().embed(req, meta),
+      embed: async (req, meta) => {
+        assertModelOpen()
+        return effectiveGateway().embed(req, meta)
+      },
     }
 
     // 17 §4：换运行时只换这一处。`startRun: false` = 这个进程不跑运行时（老行为）。
@@ -3391,7 +3451,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       clock,
       workspace_id: ws,
       appendEvent,
-      halt: kernel.halt,
+      halt: brandHalt,
       // 18 §2.1 第一条纪律：受控原始材料区加密。与会议档共用同一个密钥环，
       // **但不共用它的表**（35 §2）。漏了这一行，邮件原文就是明文落盘。
       cipher: data.keyring,
@@ -3537,7 +3597,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       workspace_id: ws,
       assistWaitSeconds: () => lateWidget.current?.config().assist_wait_seconds,
       appendEvent,
-      halt: kernel.halt,
+      halt: brandHalt,
       raw: channels.raw,
       work,
       approvals,
@@ -3813,7 +3873,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       workspace_id: ws,
       b2b: b2bMail,
       appendEvent,
-      halt: kernel.halt,
+      halt: brandHalt,
       accounts: () => connections.mailAccounts(),
       credentials: connections.credentialSource(),
       work,
@@ -4225,11 +4285,31 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     }
     await brand?.seoService.onDecided(item)
   }
+  /*
+   * WP215（52 §4 收口）：每个品牌一套后台。装在品牌容器**之前**——每个品牌装配时就要拿到
+   * 自己那一份急停视图（模型网关、渠道、聊天、消息同步都按它判）。调度器比这里晚建，所以惰性取。
+   */
+  const background = createBrandBackground({
+    clock,
+    bootstrap: workspace.id,
+    globalHalt: kernel.halt,
+    brands: () => {
+      const org = identity
+        .listOrganizations()
+        .find((o) => identity.brandsOf(o.id).some((w) => w.id === workspace.id))
+      return org === undefined ? [] : identity.brandsOf(org.id)
+    },
+    scheduler: () => scheduleRef?.scheduler,
+    appendEvent,
+    ...(dbDir === undefined ? {} : { dbDir }),
+  })
   brands = createBrandModules({
     bootstrap: workspace.id,
     create: (ws) => assembleBrand(ws),
     orgDefault: (ws) => orgDefaultBrandOf(ws),
     brands: () => brandsOfThisOrg(),
+    // WP215：跟随公司默认的品牌借的是公司默认那个网关——外面再按它自己的急停判一次
+    haltOf: (ws) => background.haltOf(ws),
     ...(dbDir === undefined ? {} : { dbDir }),
   })
   const brandModules: BrandModules = brands
@@ -4270,6 +4350,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   })
   // 37 §2.2b：会议处理完开一个 `meeting` 类事项，产出挂它的时间线上（要先有工作模型）
   meetings.bind(boot.work)
+  // WP215：会议属于哪个品牌，事项与待认领池就开在哪个品牌的工作模型里
+  meetings.bindBrands((ws) => brandModules.peek(ws as WorkspaceId)?.work)
 
   /*
    * WP67（48 §5.1）：demo 里给红人库放几行。
@@ -4418,139 +4500,346 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     appendEvent,
     ...(dbDir === undefined ? {} : { dbDir }),
     ...(options.scheduleIntervalMs === undefined ? {} : { intervalMs: options.scheduleIntervalMs }),
+    // WP215：停用 / 急停的品牌到点不跑；品牌之间并行、同品牌串行，全进程最多 N 件（设置里改）
+    hold: (task) => background.hold(task),
+    concurrency: () => background.maxConcurrent(),
   })
-  // 计划 / 复盘 / 战报这几条仍按 bootstrap 品牌那一套跑（52 O5：值守子进程一个品牌一个）
+  scheduleRef = schedule
+  // 下面几处（秘书、首次设置……）仍按第一个品牌那一套取（52 O5：值守子进程一个品牌一个）
   const workData = boot.workData
   const work = boot.work
-  const scheduleTz = offsetToTz(workData.tz_offset_minutes)
-  const positionsOf = (): SchedulePosition[] =>
-    roles.assignments
-      .listByPerson(person.id, { workspace_id: workspace.id })
-      .filter((a) => a.revoked_at === undefined)
-      .map((a) => ({ assignment_id: a.id, person_id: a.person_id, role_id: a.role_id }))
-  const cardsOfPosition = async (p: SchedulePosition): Promise<ApprovalItem[]> =>
-    (await approvals.queue({
-      workspace_id: workspace.id,
-      person_id: p.person_id,
-      lane: 'mine',
-      state: [...QUEUE_STATES],
-    })) as ApprovalItem[]
-  const planDeps = {
-    workspace_id: workspace.id,
-    work,
-    approvals,
-    positions: positionsOf,
-    tz: scheduleTz,
-    goals: async (p: SchedulePosition) =>
-      work.progress(
-        periodQueryRunner(
-          () => workData.orders({ assignment_id: p.assignment_id }),
-          () => [],
-          'USD',
-        ),
-        { position_id: p.assignment_id, status: ['active'] },
-      ),
-    cardsWaiting: async (p: SchedulePosition) =>
-      (await cardsOfPosition(p)).filter((i) => WAITING_QUEUE_STATES.has(i.state)).length,
-  }
-  // WP181：官方「自动化任务」到点接着原来那件事跑一次（开关与上限在 `automation.ts`）
+  // WP181：官方「自动化任务」到点接着原来那件事跑一次（开关与上限在 `automation.ts`）。
+  // 它本来就按任务上的 `workspace_id` 取那个品牌的事项与运行入口，所以是进程级登记。
   automation.register()
   // WP181（Fable 终审）：老库里等批却建成 `pending`（到点照跑）的那几条，改成停着、批了再开始
   await parkPendingApprovals(schedule.scheduler)
-  // ① 每日计划、② 复盘（day / week / month）、⑦ 复盘 → 次日计划草案的接力
-  registerDailyPlan(schedule.scheduler, planDeps)
-  const relay = registerPlanRelay({
-    workspace_id: workspace.id,
-    scheduler: schedule.scheduler,
-    work,
-    tz: scheduleTz,
-  })
-  registerReview(schedule.scheduler, {
-    ...planDeps,
-    cards: cardsOfPosition,
-    lessons: () =>
-      skills.lessons
-        .list({ workspace_id: workspace.id, status: 'pooled' })
-        .map((l) => ({ id: l.id, text: l.text })),
-    relay: (review) => relay(review),
-    // 40 §2.2：周复盘报"疑似重复"，并把过了 Wilson 门槛的好东西往上浮
-    catalog: {
-      duplicates: (limit) => catalog.duplicates(limit),
-      proposePromotions: (deps, named) => catalog.proposePromotions(deps, named),
+
+  /*
+   * ── WP215（52 §4 收口）：**每个品牌一套后台，共用一个调度循环** ─────────────
+   *
+   * 之前这一段的消费者只按第一个品牌装配（计划 / 复盘 / 会议轮询 / 学习夜扫 / 周合并 / 查重），
+   * 收信那几条虽然"按品牌各跑一轮"，却挂在第一个品牌的一条任务上——第二个品牌没有自己的
+   * 任务、没有自己的状态、也停不了它一个。现在：
+   *
+   * - 每个品牌各一套系统任务（任务上带着它的 `workspace_id`；第一个品牌的老任务 id 一条不动，
+   *   别的品牌 id 带 `__<ws>` 后缀）；
+   * - 处理器经品牌路由登记：到点按**任务自己的** `workspace_id` 找那个品牌的那一份——用的是
+   *   那个品牌的工作模型、连接、模型、凭据、岗位、卡片队列；找不到就失败，绝不借别的品牌；
+   * - 进程级的家务（审批过期、幂等清理、原始区保留期、备份、价目）照旧挂在第一个品牌名下。
+   */
+  const brandRouter = createBrandRouter(schedule.scheduler, {
+    // 品牌模块可能被换掉重建过（关掉「跟随公司默认」会重建）：分发前确保它在
+    prepare: async (ws) => {
+      if (background.isBrand(ws)) await brandModules.forWorkspace(ws)
     },
   })
-  // ③ 会议记录源轮询
-  registerMeetingPoll(schedule.scheduler, {
+  /**
+   * 一个品牌那一套里的某个对象，**每次用时现取**（品牌模块重建之后拿到的是新的那一份）。
+   * 分发前品牌路由已经 `prepare` 过，所以这里 `peek` 一定拿得到。
+   */
+  const liveBrand = <T extends object>(ws: WorkspaceId, pick: (b: BrandModuleSet) => T): T =>
+    new Proxy({} as T, {
+      get(_target, prop) {
+        const set = brandModules.peek(ws)
+        if (set === undefined) throw new Error(`品牌 ${ws} 的模块还没装好`)
+        const target = pick(set) as unknown as Record<string | symbol, unknown>
+        const value = target[prop]
+        return typeof value === 'function'
+          ? (value as (...a: unknown[]) => unknown).bind(target)
+          : value
+      },
+    })
+  /** 这个品牌里**本机这个人**持有的岗位：每日计划与复盘按它一条一条来。 */
+  const positionsIn = (ws: WorkspaceId): SchedulePosition[] =>
+    roles.assignments
+      .listByPerson(person.id, { workspace_id: ws })
+      .filter((a) => a.revoked_at === undefined)
+      .map((a) => ({ assignment_id: a.id, person_id: a.person_id, role_id: a.role_id }))
+  /** 一个品牌一轮收信（邮箱轮询 + 整只邮箱同步），一个账号坏了不拖垮别的。 */
+  const pollMailOf = async (
+    brand: BrandModuleSet,
+  ): Promise<{ accounts: number; messages: number; retried: number; failed: string[] }> => {
+    const one = await brand.channels.poll()
+    const out = {
+      accounts: one.accounts,
+      messages: one.messages,
+      retried: one.retried,
+      failed: one.failed.map((f) => `${brand.workspace_id}:${f}`),
+    }
+    /*
+     * WP113（63 §3）：同一拍里把**整只邮箱**也拉一轮（六个文件夹各一个游标）。
+     * WP167 起收信只有这一个入口——落消息库、分拣，判成客服的信再经 `channels.intakeSupportMail`
+     * 递回渠道那条管线开事项、起 Run。消息同步炸了不该拖垮收信，所以单独 catch。
+     */
+    try {
+      const mail = await brand.messages.poll()
+      out.failed.push(...mail.failed.map((f) => `${brand.workspace_id}:messages:${f}`))
+    } catch (e) {
+      out.failed.push(
+        `${brand.workspace_id}:messages: ${e instanceof Error ? e.message : String(e)}`,
+      )
+    }
+    return out
+  }
+
+  // WP50 45 H4：夜里扫一遍重复的品牌 / 产品线 / 店铺范围。WP215：**每个品牌各一份**
+  // （第一个品牌的那一份还在原来的目录，别的品牌落各自的品牌目录）。
+  const orgDuplicates = createOrgDuplicateScan({
     workspace_id: workspace.id,
     clock,
-    meetings,
-    actor: person.id,
+    roles,
+    approvals,
+    appendEvent,
+    owner: async () => (await identity.getWorkspace(workspace.id))?.owner_id,
+    ...(dbDir === undefined ? {} : { dbDir }),
   })
+  const orgDuplicatesByBrand = new Map<WorkspaceId, OrgDuplicateScan>([
+    [workspace.id, orgDuplicates],
+  ])
+  const orgDuplicatesOf = (ws: WorkspaceId): OrgDuplicateScan => {
+    const known = orgDuplicatesByBrand.get(ws)
+    if (known !== undefined) return known
+    const dir = brandDirOf(dbDir, ws, workspace.id)
+    if (dir !== undefined) mkdirSync(dir, { recursive: true })
+    const scan = createOrgDuplicateScan({
+      workspace_id: ws,
+      clock,
+      roles,
+      approvals,
+      appendEvent,
+      owner: async () => (await identity.getWorkspace(ws))?.owner_id,
+      ...(dir === undefined ? {} : { dbDir: dir }),
+    })
+    orgDuplicatesByBrand.set(ws, scan)
+    return scan
+  }
+
+  /** 给一个品牌登记它那一套处理器（只登记一次；品牌模块重建后经 `liveBrand` 自然换新）。 */
+  const wiredBrands = new Set<WorkspaceId>()
+  const wireBrand = async (ws: WorkspaceId): Promise<void> => {
+    if (wiredBrands.has(ws)) return
+    const brand = await brandModules.forWorkspace(ws)
+    wiredBrands.add(ws)
+    const s = brandRouter.for(ws)
+    const of = (): Promise<BrandModuleSet> => brandModules.forWorkspace(ws)
+    const tz = offsetToTz(brand.workData.tz_offset_minutes)
+    const brandWork = liveBrand(ws, (b) => b.work)
+    const brandData = liveBrand(ws, (b) => b.workData)
+    const cardsOf = async (p: SchedulePosition): Promise<ApprovalItem[]> =>
+      (await approvals.queue({
+        workspace_id: ws,
+        person_id: p.person_id,
+        lane: 'mine',
+        state: [...QUEUE_STATES],
+      })) as ApprovalItem[]
+    const planDeps = {
+      workspace_id: ws,
+      work: brandWork,
+      approvals,
+      positions: () => positionsIn(ws),
+      tz,
+      goals: async (p: SchedulePosition) =>
+        brandWork.progress(
+          periodQueryRunner(
+            () => brandData.orders({ assignment_id: p.assignment_id }),
+            () => [],
+            'USD',
+          ),
+          { position_id: p.assignment_id, status: ['active'] },
+        ),
+      cardsWaiting: async (p: SchedulePosition) =>
+        (await cardsOf(p)).filter((i) => WAITING_QUEUE_STATES.has(i.state)).length,
+    }
+    // ① 每日计划、② 复盘（day / week / month）、⑦ 复盘 → 次日计划草案的接力
+    registerDailyPlan(s, planDeps)
+    const relay = registerPlanRelay({ workspace_id: ws, scheduler: s, work: brandWork, tz })
+    registerReview(s, {
+      ...planDeps,
+      cards: cardsOf,
+      lessons: () =>
+        skills.lessons
+          .list({ workspace_id: ws, status: 'pooled' })
+          .map((l) => ({ id: l.id, text: l.text })),
+      relay: (review) => relay(review),
+      // 40 §2.2：周复盘报"疑似重复"，并把过了 Wilson 门槛的好东西往上浮——都只看这个品牌
+      catalog: {
+        duplicates: (limit) => catalog.duplicatesFor(ws, limit),
+        proposePromotions: (deps, named) => catalog.proposePromotionsFor(ws, deps, named),
+      },
+    })
+    // ③ 会议记录源轮询（拉到的会议记在这个品牌名下）
+    registerMeetingPoll(s, {
+      workspace_id: ws,
+      clock,
+      meetings,
+      actor: brandAnchor(ws)?.owner ?? person.id,
+    })
+    // ⑤ Shopify 令牌刷新：这个品牌自己那套客户端凭据
+    registerTokenRefresh({
+      clock,
+      scheduler: s,
+      refreshTokens: async () => (await of()).connections.refreshTokens(),
+      expiries: () =>
+        brandModules
+          .peek(ws)
+          ?.connections.shopify.list()
+          .map((r) => r.expires_at) ?? [],
+    })
+    // ⑥ 技能周合并、⑧ 学习回路夜扫：只看这个品牌的池，卡只出在这个品牌
+    registerSkillsWeekly(s, {
+      workspace_id: ws,
+      clock,
+      weeklyConsolidate: (w, now) => learning.weeklyConsolidate(w, now),
+    })
+    registerLearning(s, { clock, proposeDaily: (now) => learning.proposeDailyFor(ws, now) })
+    // ⑭ 重复的组织对象
+    registerOrgDuplicateScan(s, { scan: () => orgDuplicatesOf(ws).run() })
+    // ⑨ 收信：这个品牌的信只从这个品牌的邮箱进这个品牌的队列
+    registerMailPoll(s, { poll: async () => pollMailOf(await of()) })
+    // WP55：Amazon 24h 响应线、出站对账
+    registerAmazonSla(s, { sweep: async () => (await of()).channels.amazonSlaSweep() })
+    registerReconcileDeliveries(s, {
+      reconcile: async () => (await of()).channels.reconcileDeliveries(),
+    })
+    // WP173 / WP182：B2B 开发信序列 + 样品提醒（发信邮箱与配额是品牌自己的）
+    registerB2bSequence(s, {
+      sweep: async () => {
+        const b = await of()
+        const one = await b.b2bOutbound.sweep()
+        await b.b2bSales.sweep().catch(() => undefined)
+        return one
+      },
+    })
+    // WP68：红人开发信序列跟进（这个品牌的红人库与额度）
+    registerKolSequence(s, {
+      sweep: async () => {
+        const one = await (await of()).kolService.sweepSequences()
+        return { ...one, skipped: one.skipped.map((x) => ({ ...x, workspace_id: ws })) }
+      },
+    })
+    // WP154：内容与搜索（这个品牌的 Search Console、订单与问题清单）
+    registerSeo(s, {
+      daily: async () => {
+        const one = await (await of()).seoService.daily()
+        return {
+          brands: 1,
+          picks: one.picks,
+          skipped: one.skipped === undefined ? [] : [{ workspace_id: ws, reason: one.skipped }],
+        }
+      },
+      weekly: async () => {
+        const b = await of()
+        const revenue = await b.seoService.weeklyRevenue()
+        const geo = await b.seoService.weeklyGeo()
+        const skipped: unknown[] = []
+        for (const reason of [revenue.skipped, geo.skipped])
+          if (reason !== undefined) skipped.push({ workspace_id: ws, reason })
+        return { brands: 1, skipped }
+      },
+    })
+    // WP78：品牌监控（这个品牌的提及只进这个品牌的库）
+    registerPrMonitor(s, { sweep: async () => (await of()).prService.monitorSweep() })
+    // WP73：社媒定时发布与群发（这个品牌的号发这个品牌的内容）
+    registerSocialPublish(s, {
+      sweep: async () => {
+        const one = await (await of()).socialService.publishDue()
+        return { ...one, skipped: one.skipped.map((x) => ({ ...x, workspace_id: ws })) }
+      },
+    })
+    registerSocialBroadcast(s, {
+      sweep: async () => {
+        const one = await (await of()).socialService.broadcastDue()
+        return { ...one, skipped: one.skipped.map((x) => ({ ...x, workspace_id: ws })) }
+      },
+    })
+    // WP57：聊天求助超时；WP125：首响 SLA
+    s.register(CHAT_ASSIST_TIMEOUT_HANDLER, async () => (await of()).chat.sweepAssistTimeouts())
+    s.register(SUPPORT_SLA_HANDLER, async () => (await of()).supportJudgment.sweepSla())
+  }
+
+  /**
+   * 给一个品牌建齐它那一套系统任务（已经有的不动——用户改过时间、停过的都还在）。
+   *
+   * 进程级的家务只挂在第一个品牌名下；按职责才建的那几条（红人 / 社媒 / 公关 / B2B / 内容）
+   * 看的是**这个品牌里**有没有人持有那条职责。
+   */
+  const ensureBrandTasks = async (ws: WorkspaceId): Promise<void> => {
+    const anchor = brandAnchor(ws)
+    // 这个品牌里一条能挂的岗位都没有：没有人可以替它收卡，先不建（有了岗位再建）
+    if (anchor === undefined) return
+    const isBoot = ws === workspace.id
+    const suffix = isBoot ? '' : `__${ws}`
+    const brand = await brandModules.forWorkspace(ws)
+    const base = {
+      workspace_id: ws,
+      owner: anchor.owner,
+      role_id: anchor.assignment.role_id,
+      assignment_id: anchor.assignment.id,
+    }
+    const held = (role_id: string): boolean =>
+      roles.assignments.listByRole(role_id, { workspace_id: ws }).length > 0
+    await ensureTask(schedule.scheduler, `${CHAT_ASSIST_TASK_ID}${suffix}`, chatAssistTask(base))
+    await ensureTask(schedule.scheduler, `${SUPPORT_SLA_TASK_ID}${suffix}`, supportSlaTask(base))
+    await ensureSystemTasks(schedule.scheduler, {
+      ...base,
+      tz: offsetToTz(brand.workData.tz_offset_minutes),
+      positions: positionsIn(ws),
+      ...(isBoot ? {} : { idSuffix: suffix }),
+      has: {
+        work: true,
+        meetings: true,
+        shopify: true,
+        skills: true,
+        learning: true,
+        mail: true,
+        orgDuplicates: true,
+        // 进程级的家务：只在第一个品牌名下建一份
+        idempotency: isBoot && idempotencyStore !== undefined,
+        approvals: isBoot,
+        raw: isBoot,
+        backup: isBoot && dbDir !== undefined,
+        pricing: isBoot,
+        /*
+         * WP68：有人持有红人那几条渠道职责时才建这一条。
+         *
+         * 没人做红人营销的品牌上建一条每天都跑一遍空库的任务，只是给 25 §3 的
+         * "机器在替你定时做哪几件事"那张清单添一行看不懂的东西。
+         */
+        kol: KOL_CHANNEL_IDS.some((channel) => held(`kol.${channel}`)),
+        // WP73：有人持有社媒那九条渠道职责之一时才建那条巡检
+        social: SOCIAL_ROLE_IDS.some((role_id) => held(role_id)),
+        // WP78（60 §5）：有人持有公关那四条职责之一才建品牌监控那条定时
+        pr: PR_ROLE_IDS.some((role_id) => held(role_id)),
+        // WP173：有人持有「主动开发」才建开发信序列那条定时
+        b2b: held('b2b.outbound'),
+        // WP154：有人持有「内容与搜索」才建每日读 Search Console 与每周小结那两条
+        seo: held('dtc.content'),
+      },
+    })
+  }
+
+  /**
+   * 一个品牌的后台常驻起来：登记处理器 + 建齐任务。启动时对每个在跑的品牌做一次，
+   * 新建品牌时（`onBrandCreated`）立刻再做一次——不用等重启。
+   */
+  const startBrandBackground = async (ws: WorkspaceId): Promise<void> => {
+    if (!background.isBrand(ws) || background.stopped(ws)) return
+    await wireBrand(ws)
+    await ensureBrandTasks(ws)
+  }
+  // 第一个品牌先来（它那几条老任务的建法与之前逐字相同），再是这家公司的其余品牌
+  await startBrandBackground(workspace.id)
+  for (const ws of background.activeBrands())
+    if (ws !== workspace.id) await startBrandBackground(ws)
+
+  // ── 进程级的家务：不属于哪个品牌，挂在第一个品牌名下（品牌急停不停它们）────────
+  // ⑧ 审批过期与升级（39 待办 A）：模拟回路每 tick 调一次，真机器每分钟调一次。
+  //    预占的「过期释放」也挂在这条上——15 §3.2 (d) 的释放是跟着审批项过期走的。
+  registerApprovalHousekeeping(schedule.scheduler, { approvals })
   // ④ 幂等表清理（内存档的那份归网关自己管，这里只扫落盘那份）
   if (idempotencyStore !== undefined) {
     registerIdempotencySweep(schedule.scheduler, { clock, store: idempotencyStore })
   }
-  // ⑤ Shopify 令牌刷新：到期前一小时
-  // WP66：每个品牌各有一套 Shopify 客户端凭据，所以换令牌要一个品牌一个品牌地换
-  registerTokenRefresh({
-    clock,
-    scheduler: schedule.scheduler,
-    refreshTokens: async () => {
-      for (const brand of await brandModules.all()) await brand.connections.refreshTokens()
-    },
-    expiries: () =>
-      brandModules.loaded().flatMap((b) => b.connections.shopify.list().map((r) => r.expires_at)),
-  })
-  // ⑥ 技能周合并
-  registerSkillsWeekly(schedule.scheduler, {
-    workspace_id: workspace.id,
-    clock,
-    weeklyConsolidate: (ws, now) => learning.weeklyConsolidate(ws, now),
-  })
-  // ⑧ 学习回路：每天 07:30 把昨天学到的整理成一张选择题卡
-  registerLearning(schedule.scheduler, { clock, proposeDaily: (now) => learning.proposeDaily(now) })
-  // ⑧ 审批过期与升级（39 待办 A）：模拟回路每 tick 调一次，真机器每分钟调一次。
-  //    预占的「过期释放」也挂在这条上——15 §3.2 (d) 的释放是跟着审批项过期走的。
-  registerApprovalHousekeeping(schedule.scheduler, { approvals })
-  /*
-   * ⑨ 邮箱轮询 + 入站管线的重试推进（39 待办 C）。
-   *
-   * WP66（52 O1）：调度器本体共享，**任务按品牌各跑一轮**——品牌 A 的信只能从 A 的
-   * 邮箱进 A 的队列。走 `all()` 而不是 `loaded()`：一个今天没人点开过的品牌
-   * 照样要收信，不能等到有人切过去才开始收。
-   */
-  registerMailPoll(schedule.scheduler, {
-    poll: async () => {
-      const out = { accounts: 0, messages: 0, retried: 0, failed: [] as string[] }
-      for (const brand of await brandModules.all()) {
-        const one = await brand.channels.poll()
-        out.accounts += one.accounts
-        out.messages += one.messages
-        out.retried += one.retried
-        // 哪个品牌的哪个账号拉不动要看得出来（一个坏了不该拖垮别的）
-        out.failed.push(...one.failed.map((f) => `${brand.workspace_id}:${f}`))
-        /*
-         * WP113（63 §3）：同一拍里把**整只邮箱**也拉一轮（六个文件夹各一个游标）。
-         *
-         * 挂在同一条任务上而不是另起一条定时器：两条路看的是同一只邮箱，
-         * 分开跑只会让"现在到底收到哪儿了"有两个答案。WP167 起上面那一轮不再扫 INBOX
-         * （`inbox_intake: 'message_sync'`，只推重试队列）；收信只有这一个入口——落消息库、
-         * 分拣，判成客服的信再经 `channels.intakeSupportMail` 递回渠道那条管线开事项、起 Run。
-         *
-         * 一个品牌的消息同步炸了不该拖垮别的品牌的收信，所以单独 catch。
-         */
-        try {
-          const mail = await brand.messages.poll()
-          out.failed.push(...mail.failed.map((f) => `${brand.workspace_id}:messages:${f}`))
-        } catch (e) {
-          out.failed.push(
-            `${brand.workspace_id}:messages: ${e instanceof Error ? e.message : String(e)}`,
-          )
-        }
-      }
-      return out
-    },
-  })
   // ⑩ 受控原始材料区的保留期（39 待办 H）：两个库各清各的，表不共享（35 §2）
   registerRawPrune(schedule.scheduler, {
     clock,
@@ -4572,155 +4861,6 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     },
     meetings: (retentionMs, now) => meetings.raw.prune(retentionMs, now),
   })
-  // WP55 / 48 §4 L3 #2：Amazon 24h 响应线三档 sweep（每 5 分钟，幂等三字段）
-  registerAmazonSla(schedule.scheduler, {
-    sweep: async () => {
-      const out = { scanned: 0, reminders: 0, criticals: 0, accounted: 0 }
-      for (const brand of await brandModules.all()) {
-        const one = await brand.channels.amazonSlaSweep()
-        out.scanned += one.scanned
-        out.reminders += one.reminders
-        out.criticals += one.criticals
-        out.accounted += one.accounted
-      }
-      return out
-    },
-  })
-  /*
-   * WP68 / 48 §5.2：红人开发信的序列跟进，每天一轮，**按品牌各跑一轮**
-   * （照 WP66 的写法）。一个品牌的跟进信只能用那个品牌的红人库与那个品牌的额度。
-   */
-  /*
-   * WP173（docs/84 §2）：B2B 开发信序列，每天一轮，**按品牌各跑一轮**（发信邮箱与配额都是品牌自己的）。
-   */
-  registerB2bSequence(schedule.scheduler, {
-    sweep: async () => {
-      const out = { staged: 0, queued: 0, stopped: 0 }
-      for (const brand of await brandModules.all()) {
-        const one = await brand.b2bOutbound.sweep()
-        // WP182：样品超期不寄 / 没反馈的提醒也在这一拍
-        await brand.b2bSales.sweep().catch(() => undefined)
-        out.staged += one.staged
-        out.queued += one.queued
-        out.stopped += one.stopped
-      }
-      return out
-    },
-  })
-  registerKolSequence(schedule.scheduler, {
-    sweep: async () => {
-      const out = { scanned: 0, staged: 0, skipped: [] as unknown[] }
-      for (const brand of await brandModules.all()) {
-        const one = await brand.kolService.sweepSequences()
-        out.scanned += one.scanned
-        out.staged += one.staged
-        // 哪个品牌的哪一条没提要看得出来（一个坏了不该拖垮别的）
-        out.skipped.push(...one.skipped.map((x) => ({ ...x, workspace_id: brand.workspace_id })))
-      }
-      return out
-    },
-  })
-  /*
-   * WP73 / 56 §6：社媒定时发布，每 5 分钟一轮，**按品牌各跑一轮**。
-   *
-   * 一个品牌的内容只能用那个品牌的连接与那个品牌的号发出去——串了品牌
-   * 等于用 B 的号发 A 的东西，而那件事在平台那边是收不回来的。
-   */
-  /*
-   * WP78 / 60 §5：品牌监控，每 15 分钟一轮，**按品牌各跑一轮**。
-   *
-   * 一个品牌的提及只能进那个品牌的库——媒体名单与舆情记录串了品牌，
-   * 等于把一家公司攒了很多年的东西端给另一家。
-   */
-  /*
-   * WP154：内容与搜索，每天早上一轮、每周一一轮，**按品牌各跑一轮**。
-   * 一个品牌的 Search Console、订单与问题清单只能进那个品牌自己的卡。
-   */
-  registerSeo(schedule.scheduler, {
-    daily: async () => {
-      const out = { brands: 0, picks: 0, skipped: [] as unknown[] }
-      for (const brand of await brandModules.all()) {
-        const one = await brand.seoService.daily()
-        out.brands += 1
-        out.picks += one.picks
-        if (one.skipped !== undefined)
-          out.skipped.push({ workspace_id: brand.workspace_id, reason: one.skipped })
-      }
-      return out
-    },
-    weekly: async () => {
-      const out = { brands: 0, skipped: [] as unknown[] }
-      for (const brand of await brandModules.all()) {
-        const revenue = await brand.seoService.weeklyRevenue()
-        const geo = await brand.seoService.weeklyGeo()
-        out.brands += 1
-        for (const s of [revenue.skipped, geo.skipped])
-          if (s !== undefined) out.skipped.push({ workspace_id: brand.workspace_id, reason: s })
-      }
-      return out
-    },
-  })
-  registerPrMonitor(schedule.scheduler, {
-    sweep: async () => {
-      const out = { pulled: 0, created: 0, carded: 0, routed: 0, skipped: [] as unknown[] }
-      for (const brand of await brandModules.all()) {
-        const one = await brand.prService.monitorSweep()
-        out.pulled += one.pulled
-        out.created += one.created
-        out.carded += one.carded
-        out.routed += one.routed
-        // 哪个品牌的哪个源没拉到要看得出来（一个坏了不该拖垮别的，
-        // 而且"没拉到"这句话要一路走到面板上）
-        out.skipped.push(...one.skipped)
-      }
-      return out
-    },
-  })
-  registerSocialPublish(schedule.scheduler, {
-    sweep: async () => {
-      const out = { due: 0, published: 0, failed: 0, skipped: [] as unknown[] }
-      for (const brand of await brandModules.all()) {
-        const one = await brand.socialService.publishDue()
-        out.due += one.due
-        out.published += one.published
-        out.failed += one.failed
-        // 哪个品牌的哪一条没发要看得出来（一个坏了不该拖垮别的）
-        out.skipped.push(...one.skipped.map((x) => ({ ...x, workspace_id: brand.workspace_id })))
-      }
-      return out
-    },
-  })
-  /*
-   * WP73 / 56 §6：批过的群发分批发出去，每分钟一轮，**按品牌各跑一轮**。
-   */
-  registerSocialBroadcast(schedule.scheduler, {
-    sweep: async () => {
-      const out = { due: 0, sent: 0, failed: 0, recipients: 0, skipped: [] as unknown[] }
-      for (const brand of await brandModules.all()) {
-        const one = await brand.socialService.broadcastDue()
-        out.due += one.due
-        out.sent += one.sent
-        out.failed += one.failed
-        out.recipients += one.recipients
-        out.skipped.push(...one.skipped.map((x) => ({ ...x, workspace_id: brand.workspace_id })))
-      }
-      return out
-    },
-  })
-  // WP55 / 48 §4 L3 #4：出站对账（每分钟）。`sent_unknown` 绝不自动重发
-  registerReconcileDeliveries(schedule.scheduler, {
-    reconcile: async () => {
-      const out = { scanned: 0, confirmed: 0, still_unknown: 0, escalated: 0 }
-      for (const brand of await brandModules.all()) {
-        const one = await brand.channels.reconcileDeliveries()
-        out.scanned += one.scanned
-        out.confirmed += one.confirmed
-        out.still_unknown += one.still_unknown
-        out.escalated += one.escalated
-      }
-      return out
-    },
-  })
   // ⑫ WP36 40 §1.3：每天一份备份。**只有落盘档有**——内存档没有可导的库文件。
   const runWorkspaceBackup = (): BackupRunResult => {
     if (dbDir === undefined) throw new Error('这个服务进程没有数据目录，没有可导的东西')
@@ -4735,19 +4875,6 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   }
   if (dbDir !== undefined) registerBackup(schedule.scheduler, { run: runWorkspaceBackup })
 
-  // WP50 45 H4：夜里扫一遍重复的品牌 / 产品线 / 店铺范围。装在这儿而不是 `createOrg`
-  // 旁边，是因为它只认识职责层与审批总线——制度面那一套（岗位、成员、邀请）与它无关。
-  const orgDuplicates = createOrgDuplicateScan({
-    workspace_id: workspace.id,
-    clock,
-    roles,
-    approvals,
-    appendEvent,
-    owner: async () => (await identity.getWorkspace(workspace.id))?.owner_id,
-    ...(dbDir === undefined ? {} : { dbDir }),
-  })
-  registerOrgDuplicateScan(schedule.scheduler, { scan: () => orgDuplicates.run() })
-
   // WP42：每周一 05:00 去各家官网看一眼模型价（抓不到就保留内置价，不算失败）
   registerPricingRefresh(schedule.scheduler, {
     run: async () => {
@@ -4758,104 +4885,6 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         role_id: ownerAssignment.role_id,
       })
       return { vendors: result.vendors, updated_providers: result.updated_providers }
-    },
-  })
-
-  /*
-   * WP57：求助超时巡检（`support.chat_assist_timeout`，30 秒一拍）。
-   *
-   * 登记与排期放在一起，是为了不让调度装配那边多认识一个业务概念——
-   * `createScheduleAssembly` 的消费者清单是注册表，注册表只追加（35 §2）。
-   */
-  schedule.scheduler.register(CHAT_ASSIST_TIMEOUT_HANDLER, async () => {
-    const out = { scanned: 0, reminded: 0, demoted: 0 }
-    for (const brand of await brandModules.all()) {
-      const one = await brand.chat.sweepAssistTimeouts()
-      out.scanned += one.scanned
-      out.reminded += one.reminded
-      out.demoted += one.demoted
-    }
-    return out
-  })
-  await ensureTask(
-    schedule.scheduler,
-    CHAT_ASSIST_TASK_ID,
-    chatAssistTask({
-      workspace_id: workspace.id,
-      owner: person.id,
-      role_id: ownerAssignment.role_id,
-      assignment_id: ownerAssignment.id,
-    }),
-  )
-
-  /*
-   * WP125（72 §P0-1 ②）：**首响 SLA 巡检**（`support.sla_sweep`，一刻钟一拍）。
-   *
-   * 超时没回的来信进**岗位面板与通知，不出卡**（36 §2.2b：只有要人拍板的才是卡；
-   * 一封信超时了要的是"去看一眼"，不是"在两个选项里挑一个"）。
-   * 登记与排期放在一起，理由同上面那条聊天求助巡检。
-   */
-  schedule.scheduler.register(SUPPORT_SLA_HANDLER, async () => {
-    const out = { scanned: 0, reminded: 0, breached: 0 }
-    for (const brand of await brandModules.all()) {
-      const one = await brand.supportJudgment.sweepSla()
-      out.scanned += one.scanned
-      out.reminded += one.reminded
-      out.breached += one.breached
-    }
-    return out
-  })
-  await ensureTask(
-    schedule.scheduler,
-    SUPPORT_SLA_TASK_ID,
-    supportSlaTask({
-      workspace_id: workspace.id,
-      owner: person.id,
-      role_id: ownerAssignment.role_id,
-      assignment_id: ownerAssignment.id,
-    }),
-  )
-
-  await ensureSystemTasks(schedule.scheduler, {
-    workspace_id: workspace.id,
-    owner: person.id,
-    role_id: ownerAssignment.role_id,
-    assignment_id: ownerAssignment.id,
-    tz: scheduleTz,
-    positions: positionsOf(),
-    has: {
-      work: true,
-      meetings: true,
-      idempotency: idempotencyStore !== undefined,
-      shopify: true,
-      skills: true,
-      learning: true,
-      approvals: true,
-      mail: true,
-      raw: true,
-      backup: dbDir !== undefined,
-      pricing: true,
-      orgDuplicates: true,
-      /*
-       * WP68：有人持有红人那几条渠道职责时才建这一条。
-       *
-       * 没人做红人营销的机器上建一条每天都跑一遍空库的任务，只是给 25 §3 的
-       * "机器在替你定时做哪几件事"那张清单添一行看不懂的东西。
-       */
-      kol: KOL_CHANNEL_IDS.some(
-        (channel) => roles.assignments.listByRole(`kol.${channel}`).length > 0,
-      ),
-      /*
-       * WP73：有人持有社媒那九条渠道职责之一时才建那条巡检。
-       * 与红人那一条同理——没人做社媒的机器上不该有这一行。
-       */
-      social: SOCIAL_ROLE_IDS.some((role_id) => roles.assignments.listByRole(role_id).length > 0),
-      // WP78（60 §5）：有人持有公关那四条职责之一才建品牌监控那条定时
-      pr: PR_ROLE_IDS.some((role_id) => roles.assignments.listByRole(role_id).length > 0),
-      // WP173：有人持有「主动开发」才建开发信序列那条定时
-      b2b: roles.assignments.listByRole('b2b.outbound').length > 0,
-      // WP154：有人持有「内容与搜索」才建每日读 Search Console 与每周小结那两条
-      seo: roles.assignments.listByRole('dtc.content').length > 0,
     },
   })
 
@@ -5228,8 +5257,13 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     inheritsOrg: (ws) => brandModules.inheritsOrg(ws),
     // WP66：新品牌建完补签一把云令牌（这家公司关联过账号才有得签）
     onBrandCreated: async (ws) => {
+      // WP215：新品牌的后台**立刻**常驻起来（处理器 + 系统任务），不用等重启；
+      // 放在补签云令牌之前——云连不上不该拖住它收信、巡检
+      await startBrandBackground(ws)
       await cloudAccount.ensureBrandToken(ws)
     },
+    // WP215：品牌一览 / 切换器每一行那一格
+    backgroundOf: (ws) => background.status(ws),
     // 发现开关的真源在组织上，但"开 / 关"这个动作在首次设置那一面——两边改都得生效
     onCompanyChanged: ({ by, discoverable, key_changed }) => {
       if (!discoverable) {
@@ -5660,47 +5694,71 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
    * 41 §1 秘书 Agent。装在最后：它要用到工作模型、会议、工具箱、审批总线与调度器，
    * 自己不被任何人依赖——秘书是**加分项**，拆掉它工作台照常能用。
    */
-  const secretary = createSecretaryAssembly({
-    workspace_id: workspace.id,
-    clock,
-    random,
-    appendEvent,
-    tz_offset_minutes: workData.tz_offset_minutes,
-    // WP181：代答也带「现在时间 + 公司时区」（与运行时同一条 ContextItem）
-    timeZone: async () => (await identity.getWorkspace(workspace.id))?.tz,
-    ...(dbDir === undefined ? {} : { dbDir }),
-    identity: {
-      members: (ws) => identity.members(ws),
-      getPerson: (id) => identity.getPerson(id),
-    },
-    roles,
-    work,
-    approvals,
-    meetings: {
-      list: (filter) => meetings.store.listMeetings(filter),
-      get: (id) => meetings.store.getMeeting(id),
-      create: (input) => meetings.store.createMeeting(input),
-    },
-    catalog: catalog.port,
-    // 25：本人的定时任务也占日程（37 §2 表第四行）
-    scheduledTasks: (person_id) =>
-      schedule.scheduler
-        .list({ workspace_id: workspace.id, owner: person_id })
-        // 还没算出下一次触发时刻的（暂停 / 一次性已跑完）不占日程
-        .flatMap((t) =>
-          t.next_fire_at === undefined
-            ? []
-            : [
-                {
-                  id: t.id,
-                  state: t.state,
-                  next_fire_at: t.next_fire_at,
-                  ...(t.title === undefined ? {} : { title: t.title }),
-                  assignment_id: t.assignment_id,
-                },
-              ],
-        ),
-  })
+  /*
+   * WP215：**每个品牌各一份**（工作区、工作模型、定时任务、出的卡都是那个品牌的）。第一个品牌
+   * 那一份就是原来那个（落盘还在原来的目录）；别的品牌第一次被问到时建，落各自的品牌目录。
+   */
+  const secretaryFor = (ws: WorkspaceId, brandWork: Work, tz_offset_minutes: number) =>
+    createSecretaryAssembly({
+      workspace_id: ws,
+      clock,
+      random,
+      appendEvent,
+      tz_offset_minutes,
+      // WP181：代答也带「现在时间 + 公司时区」（与运行时同一条 ContextItem）
+      timeZone: async () => (await identity.getWorkspace(ws))?.tz,
+      ...(brandDirOf(dbDir, ws, workspace.id) === undefined
+        ? {}
+        : { dbDir: brandDirOf(dbDir, ws, workspace.id) as string }),
+      identity: {
+        members: (ws) => identity.members(ws),
+        getPerson: (id) => identity.getPerson(id),
+      },
+      roles,
+      work: brandWork,
+      approvals,
+      meetings: {
+        list: (filter) => meetings.store.listMeetings(filter),
+        get: (id) => meetings.store.getMeeting(id),
+        create: (input) => meetings.store.createMeeting(input),
+      },
+      catalog: catalog.port,
+      // 25：本人的定时任务也占日程（37 §2 表第四行）
+      scheduledTasks: (person_id) =>
+        schedule.scheduler
+          .list({ workspace_id: ws, owner: person_id })
+          // 还没算出下一次触发时刻的（暂停 / 一次性已跑完）不占日程
+          .flatMap((t) =>
+            t.next_fire_at === undefined
+              ? []
+              : [
+                  {
+                    id: t.id,
+                    state: t.state,
+                    next_fire_at: t.next_fire_at,
+                    ...(t.title === undefined ? {} : { title: t.title }),
+                    assignment_id: t.assignment_id,
+                  },
+                ],
+          ),
+    })
+  const secretary = secretaryFor(workspace.id, work, workData.tz_offset_minutes)
+  const secretaries = new Map<WorkspaceId, SecretaryAssembly>([[workspace.id, secretary]])
+  const secretaryOf = async (ws: WorkspaceId): Promise<SecretaryAssembly> => {
+    const known = secretaries.get(ws)
+    if (known !== undefined) return known
+    if (!background.isBrand(ws)) return secretary
+    const brand = await brandModules.forWorkspace(ws)
+    const made =
+      secretaries.get(ws) ??
+      secretaryFor(
+        ws,
+        liveBrand(ws, (b) => b.work),
+        brand.workData.tz_offset_minutes,
+      )
+    secretaries.set(ws, made)
+    return made
+  }
 
   /*
    * WP57：在线客服面。`ChatPort` 只做投影——判定、卡片、模型都在 `./chat.ts` 里，
@@ -6667,12 +6725,37 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   const askPortOf = brandAskPort(brandModules, askPortFor)
   const freeChatPortOf = brandFreeChatPort(brandModules, freeChatPortFor)
 
+  /** WP215：设置页「后台」那一张的行——本人有成员资格的这家公司的品牌。 */
+  const backgroundRowsOf = (actor: {
+    workspace_id: string
+    person_id: string
+  }): { workspace_id: WorkspaceId; name: string; current: boolean }[] => {
+    const org = identity
+      .listOrganizations()
+      .find((o) => identity.brandsOf(o.id).some((w) => w.id === actor.workspace_id))
+    const mine = org === undefined ? [] : identity.brandsOf(org.id, actor.person_id as PersonId)
+    const rows = mine.map((w) => ({
+      workspace_id: w.id,
+      name: brandNameOf(w),
+      current: w.id === actor.workspace_id,
+    }))
+    if (rows.length === 0)
+      rows.push({
+        workspace_id: actor.workspace_id as WorkspaceId,
+        name: brandNameOfWorkspace(actor.workspace_id as WorkspaceId),
+        current: true,
+      })
+    return rows
+  }
   const deps: GatewayDeps = {
     identity,
     // WP194：一次请求绑好分配之后，开一个「算在谁头上」的作用域（打云时带归属头）
     requestScope: (scope, next) =>
       withCloudAttribution(cloudAttributionOf(scope.assignment.id), next),
     halt: kernel.halt,
+    // WP215：品牌急停只拦这个品牌的施行与发送（全局急停照旧在上面那一份）
+    brandHalt: (ws) =>
+      background.isBrand(ws as WorkspaceId) ? background.haltOf(ws as WorkspaceId) : undefined,
     trace: kernel.trace,
     clock,
     eventLog: eventLogPort,
@@ -6877,6 +6960,33 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     storage: storage.port,
     // WP60（49 §6 / 48 L7）：在线值守的切档向导与"接回本机"
     standby: standby.port,
+    // WP215：每个品牌一套后台——状态、全进程并发上限、品牌急停
+    background: {
+      settings: async (actor) => background.settings(backgroundRowsOf(actor)),
+      setConcurrency: async (actor, n) => {
+        background.setMaxConcurrent(
+          n,
+          actor.person_id as PersonId,
+          actor.workspace_id as WorkspaceId,
+        )
+        return background.settings(backgroundRowsOf(actor))
+      },
+      setBrandHalt: async (actor, ws, input) => {
+        const target = ws as WorkspaceId
+        if (!backgroundRowsOf(actor).some((r) => r.workspace_id === target))
+          throw new ApiError('not_found', '没有这个品牌，或者你不在这个品牌里')
+        // 停 / 放开一个品牌的后台是那个品牌负责人的事（与 `/v1/halt` 只给 owner 同一条线）
+        const owns = roles.assignments
+          .listByPerson(actor.person_id as PersonId, {
+            workspace_id: target,
+            role_id: 'common.owner',
+          })
+          .some((a) => a.revoked_at === undefined)
+        if (!owns) throw new ApiError('forbidden', '只有这个品牌的负责人能停 / 放开它的后台')
+        background.setHalted(target, input.halted, actor.person_id as PersonId, input.reason)
+        return background.status(target)
+      },
+    },
     // WP58（49 M1）：云账号关联（状态 / 起关联 / 回调 / 解除）
     cloudAccount: cloudAccount.port,
     org: org.port,
@@ -6889,7 +6999,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     organizations: organizations.port,
     join: joinAssembly.port,
     // 41 §1 秘书面：`/v1/me/profile`、`/v1/people/:id/ask`、`/v1/people/:id/meet`、`/v1/me/secretary/route`
-    secretary: secretary.port,
+    // WP215：按主体所在品牌取那个品牌的秘书
+    secretary: brandSecretaryPort(brandModules, async (ws) => (await secretaryOf(ws)).port),
     // 36 §3 问 AI：单轮、只回给本人、不落任何对客户可见的地方
     // WP57 / WP66：在线客服面（按品牌各一份，见 `chatPortOf`）
     chat: chatPortOf(boot),
@@ -6903,11 +7014,17 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       scheduler: schedule.scheduler,
       workflows: schedule.workflows,
       approvals,
+      // WP215：这家公司的每个品牌都能建自己的定时（之前只认第一个品牌的岗位）；
+      // 跨品牌替别人建由端口那一侧拦（岗位必须在请求所在的品牌里）
       assignmentOf: (id) => {
         const found = roles.assignments.get(id)
-        return found === undefined || found.workspace_id !== workspace.id
+        return found === undefined || !background.isBrand(found.workspace_id)
           ? undefined
-          : { person_id: found.person_id, role_id: found.role_id }
+          : {
+              person_id: found.person_id,
+              role_id: found.role_id,
+              workspace_id: found.workspace_id,
+            }
       },
       // WP181：右栏定时任务面板的「每天 / 每周几点」——官方校验、官方算下一次
       retime: (task, rule) => automation.retime(task, rule as OfficialSelector),
@@ -7057,68 +7174,87 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
    *
    * 走 bootstrap 品牌：个人微信是**这台机器上这个人**的事，与品牌无关。
    */
-  const imChannels = createImChannels({
-    clock,
-    workspace_id: workspace.id,
-    secrets,
-    identity,
-    rawStore: boot.channels.raw,
-    makePipeline: (input) => boot.channels.imPipeline(input),
-    // 游标与会话上下文跟渠道库走：落盘档重启之后不从头拉
-    clawbotState: boot.channels.clawbotState,
-    /*
-     * WP211：三条团队渠道的真连接。企业微信那条在 WP85 只做了注入口、真装配没接上
-     * （界面上填了也一直「连接中」），这里一并接上 `ws`。飞书走官方 SDK，选了才懒加载。
-     */
-    wecomSocket: wsSocketFactory,
-    // Fable 09-30：公司的应用凭据只给负责人（`common.owner`）与公司管理员填、改、断开
-    canManageTeamBots: createTeamBotManagerCheck({
-      isOwner: (person_id) =>
-        roles.assignments
-          .listByPerson(person_id, { workspace_id: workspace.id, role_id: 'common.owner' })
-          .some((a) => a.revoked_at === undefined),
-      organization: async () => {
-        const org_id = (await identity.getWorkspace(workspace.id))?.org_id
-        return org_id === undefined ? undefined : identity.getOrganization(org_id)
+  /*
+   * WP215：**每个品牌各一套**。团队那三条（企业微信 / 飞书 / 钉钉）是公司的应用凭据，按品牌
+   * 各存各的（加密库 key 带品牌前缀）、各进各的入站管线、问各自品牌的秘书；个人微信跟人走，
+   * 只在第一个品牌那一套上开（同一个微信号两条长轮询会互相顶掉）。
+   */
+  const imFor = (ws: WorkspaceId, brand: BrandModuleSet): ImChannelsAssembly =>
+    createImChannels({
+      clock,
+      workspace_id: ws,
+      secrets: brand.secrets,
+      identity,
+      rawStore: brand.channels.raw,
+      makePipeline: (input) => brand.channels.imPipeline(input),
+      personalWechat: ws === workspace.id,
+      // 游标与会话上下文跟渠道库走：落盘档重启之后不从头拉
+      clawbotState: brand.channels.clawbotState,
+      /*
+       * WP211：三条团队渠道的真连接。企业微信那条在 WP85 只做了注入口、真装配没接上
+       * （界面上填了也一直「连接中」），这里一并接上 `ws`。飞书走官方 SDK，选了才懒加载。
+       */
+      wecomSocket: wsSocketFactory,
+      // Fable 09-30：公司的应用凭据只给负责人（`common.owner`）与公司管理员填、改、断开
+      canManageTeamBots: createTeamBotManagerCheck({
+        isOwner: (person_id) =>
+          roles.assignments
+            .listByPerson(person_id, { workspace_id: ws, role_id: 'common.owner' })
+            .some((a) => a.revoked_at === undefined),
+        organization: async () => {
+          const org_id = (await identity.getWorkspace(ws))?.org_id
+          return org_id === undefined ? undefined : identity.getOrganization(org_id)
+        },
+      }),
+      feishuTransport: feishuSdkTransportFactory,
+      dingtalkSocket: wsSocketFactory,
+      dingtalkHttp: fetchHttp,
+      appendEvent,
+      newId: () => `im_${Math.floor(random() * 1e9).toString(36)}`,
+      random,
+      askAgent: async (input) => {
+        // 本人问**自己的**代理：41 §1.3 的公开级别在 secretary 那一层照常生效，
+        // 这里不放大任何权限（viewer === person_id 时他本来就看得见自己那一份）。
+        const out = await (await secretaryOf(ws)).secretary.ask({
+          viewer: input.viewer,
+          person_id: input.viewer,
+          question: input.question,
+          assignment_id: input.assignment_id,
+        })
+        return { answer: out.answer }
       },
-    }),
-    feishuTransport: feishuSdkTransportFactory,
-    dingtalkSocket: wsSocketFactory,
-    dingtalkHttp: fetchHttp,
-    appendEvent,
-    newId: () => `im_${Math.floor(random() * 1e9).toString(36)}`,
-    random,
-    askAgent: async (input) => {
-      // 本人问**自己的**代理：41 §1.3 的公开级别在 secretary 那一层照常生效，
-      // 这里不放大任何权限（viewer === person_id 时他本来就看得见自己那一份）。
-      const out = await secretary.secretary.ask({
-        viewer: input.viewer,
-        person_id: input.viewer,
-        question: input.question,
-        assignment_id: input.assignment_id,
-      })
-      return { answer: out.answer }
-    },
-    assignmentOf: (person_id) =>
-      roles.assignments
-        .listByPerson(person_id, { workspace_id: workspace.id })
-        .find((a) => a.revoked_at === undefined)?.id,
-    deepLinkBase: () =>
-      env.AGENTSWS_SERVER_URL ??
-      (boundPort === undefined ? 'http://127.0.0.1:7777' : `http://127.0.0.1:${boundPort}`),
-    onError: (e) => {
-      appendEvent({
-        schema_version: 1,
-        workspace_id: workspace.id,
-        type: 'connection.changed',
-        actor: { kind: 'system', id: 'im-channels' },
-        correlation: { trace_id: 'trc_im_error' },
-        // 只有原因，没有凭据、没有正文
-        payload: { im_event: 'im.error', detail: String(e) },
-      })
-    },
-  })
-  imChannels.mount(gateway.app)
+      assignmentOf: (person_id) =>
+        roles.assignments
+          .listByPerson(person_id, { workspace_id: ws })
+          .find((a) => a.revoked_at === undefined)?.id,
+      deepLinkBase: () =>
+        env.AGENTSWS_SERVER_URL ??
+        (boundPort === undefined ? 'http://127.0.0.1:7777' : `http://127.0.0.1:${boundPort}`),
+      onError: (e) => {
+        appendEvent({
+          schema_version: 1,
+          workspace_id: ws,
+          type: 'connection.changed',
+          actor: { kind: 'system', id: 'im-channels' },
+          correlation: { trace_id: 'trc_im_error' },
+          // 只有原因，没有凭据、没有正文
+          payload: { im_event: 'im.error', detail: String(e) },
+        })
+      },
+    })
+  const imChannels = imFor(workspace.id, boot)
+  const imByBrand = new Map<WorkspaceId, ImChannelsAssembly>([[workspace.id, imChannels]])
+  const imOf = async (ws: WorkspaceId): Promise<ImChannelsAssembly | undefined> => {
+    const known = imByBrand.get(ws)
+    if (known !== undefined) return known
+    if (!background.isBrand(ws) || background.stopped(ws)) return undefined
+    const brand = await brandModules.forWorkspace(ws)
+    const made = imByBrand.get(ws) ?? imFor(ws, brand)
+    imByBrand.set(ws, made)
+    return made
+  }
+  // WP215：路由只挂一次，按主体所在品牌转给那个品牌那一套
+  mountBrandImRoutes(gateway.app, { identity, primary: imChannels, of: imOf })
 
   // 静态托管必须在网关路由之后挂（Hono 按注册顺序匹配，`*` 放最后）
   if (options.staticDir !== undefined) {
@@ -7163,6 +7299,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     modelSettings: boot.ownModels,
     // WP66（52 O1）：一个进程里的多套品牌模块
     brands: brandModules,
+    background,
     org,
     // WP120（69 §4）：运行时装 persona 段与右栏「角色」面板走的是同一份
     personas,
@@ -7251,6 +7388,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
        * 起不来不拦住整个进程——一条 IM 通道不是服务的前提，界面上会显示成「没连上」。
        */
       await imChannels.resume().catch(() => undefined)
+      // WP215：其余品牌的团队渠道也各自接着跑（每个品牌自己的应用凭据、自己的入站管线）
+      for (const ws of background.activeBrands()) {
+        if (ws === workspace.id) continue
+        await (await imOf(ws).catch(() => undefined))?.resume().catch(() => undefined)
+      }
       const address = started.address()
       const bound = typeof address === 'object' && address !== null ? address.port : wanted
       boundPort = bound
@@ -7282,7 +7424,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         httpServer = undefined
       }
       // WP85：先把两条 IM 长连接收掉（长轮询与 WebSocket 都会拦着进程退出）
-      await imChannels.close()
+      for (const im of imByBrand.values()) await im.close()
       // WP136：起过的其他场景一并关掉（它们是这个进程的子进程，不留孤儿占着端口）
       await dshScenesSetup.manager?.close()
       learning.close()
@@ -7294,7 +7436,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       schedule.close()
       automationFires?.close?.()
       catalog.close()
-      secretary.close()
+      for (const one of secretaries.values()) one.close()
       // WP188：随便聊的会话库（每个品牌一个）
       for (const store of freeChatStores) store.close()
       // WP66：每个品牌那一套各关各的（聊天车道 / 渠道 / 活数据源 / 连接面）
@@ -7303,7 +7445,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       org.close()
       onboarding.close()
       joinAssembly.close()
-      orgDuplicates.close()
+      for (const scan of orgDuplicatesByBrand.values()) scan.close()
       offboard.close()
       await subscription.close()
       await deepseekAccount.close()
