@@ -16,11 +16,13 @@
  * 职责逻辑、运行时、技能页、卡片组件一行都不用改——它们只读这张表，没有一处写死 `'shopify'`。
  * 平台专属的话（卡上叫什么、教程是哪篇、命令是什么）都在这一行里。
  *
+ * **平台没设 = 一样都不启用**；连了某个平台的店铺就按它推断（服务端做，写回档案、界面上可改）。
+ *
  * 品牌改了平台：所有读法都是**每次现取**档案（运行时、技能页、卡片都不缓存），
  * 下一次运行 / 下一次刷新就跟着变；从 Shopify 改走时卡隐藏、技能停用，
  * **用户本机装好的 CLI 我们不碰**（不卸、不删它的登录状态）。
  */
-import { DEFAULT_STOREFRONT_PLATFORM, type StorefrontPlatform } from './identity.js'
+import type { StorefrontPlatform } from './identity.js'
 
 /** 官方技能从哪来（写进技能页与报告；`bundled` = 许可证允许原样随包分发）。 */
 export interface PlatformSkillSource {
@@ -142,10 +144,22 @@ export function platformCliTelemetryOffEnv(): Record<string, string> {
   return out
 }
 
-/** 这个平台那一行；没有 = 这个平台没有专属的官方技能 / 工具 / CLI。缺省按 Shopify（与档案同一口径）。 */
+/**
+ * 这个平台那一行；没有 = 这个平台没有专属的官方技能 / 工具 / CLI。
+ *
+ * **平台没设（`undefined`）就是没有**——不按 Shopify 兜底（Fable 10-05：「不要不管什么建站都默认装」）。
+ * 这与店铺连接那张表（`storefrontConnectorService`）缺省按 Shopify 不是一个口径：那一张管的是
+ * "存量工作区的店铺读写不许变"，这一张管的是"装不装平台专属的东西"，后者宁缺。
+ * 没设平台的品牌由服务端按已连的店铺推断（连了 Shopify 店 → Shopify，并写回档案）。
+ */
 export function platformKitOf(platform: StorefrontPlatform | undefined): PlatformKit | undefined {
-  const id = platform ?? DEFAULT_STOREFRONT_PLATFORM
-  return PLATFORM_KITS.find((k) => k.platform === id)
+  if (platform === undefined) return undefined
+  return PLATFORM_KITS.find((k) => k.platform === platform)
+}
+
+/** 平台专属 CLI 会出现在哪些岗位页上（所有平台那一行的并集；没设平台时用它判断要不要提示「先选平台」）。 */
+export function platformPositions(): string[] {
+  return [...new Set(PLATFORM_KITS.flatMap((k) => k.cli?.positions ?? []))]
 }
 
 /** 名字出现在任何一行里的技能 = 平台专属技能。 */

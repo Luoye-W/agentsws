@@ -20,7 +20,7 @@ import type {
 } from '@agentsws/contracts'
 import { z } from 'zod'
 import { ApiError } from '../errors.js'
-import { assignmentOf, body, ok, principalOf } from '../helpers.js'
+import { assignmentOf, body, OWNER_WRITE, ok, principalOf } from '../helpers.js'
 import { type Route, route } from '../route-spec.js'
 import type { GatewayDeps } from '../types.js'
 
@@ -61,13 +61,22 @@ export interface PlatformCliView {
 }
 
 export interface PlatformKitView {
-  platform: string
+  /** 这个品牌的平台；没设（也推断不出）= 没有这一格。 */
+  platform?: string
+  /**
+   * WP216：平台没设、而这个岗位页正是平台专属工具会出现的那一页（建站）——提示「先选一下你的建站平台」。
+   * 带上可选的平台（与首次设置同一份清单，灰显的照样给）。
+   */
+  choose_platform?: { choices: { key: string; label: string; supported: boolean }[] }
   kit: null | {
     /** 平台专属的官方技能（目录名 + 给人看的名字）。 */
     skills: { name: string; display_name?: { zh: string; en: string } }[]
     skill_source?: PlatformSkillSource
-    /** 官方 MCP 工具源（`enabled` = 这台机器上开着、并且起来了）。 */
-    mcp?: PlatformMcpSpec & { enabled: boolean; tools: string[] }
+    /**
+     * 官方 MCP 工具源。`enabled` = 这台机器上没关（默认开）；`downloaded` = 官方工具包已经下载并起来了
+     * （首次使用才下载）；`tools` = 现在真能调的。
+     */
+    mcp?: PlatformMcpSpec & { enabled: boolean; downloaded: boolean; tools: string[] }
     cli?: PlatformCliView
   }
 }
@@ -79,9 +88,21 @@ export interface PlatformKitPort {
     actor: PlatformKitActor,
     input: { confirmed: boolean },
   ): MaybePromise<PlatformKitView>
+  /** 选建站平台（岗位页那一行下拉）。档案还没建过 → 409（先走首次设置）。 */
+  setPlatform(
+    actor: PlatformKitActor,
+    input: { storefront_platform: string; position_id?: string },
+  ): MaybePromise<PlatformKitView>
 }
 
 const LoginBody = z.object({ confirmed: z.boolean() })
+const PlatformBody = z.object({
+  storefront_platform: z.string().min(1).max(40),
+  position_id: z.string().min(1).max(100).optional(),
+})
+
+/** 选平台是改品牌档案：与 `PUT /v1/workspace/profile` 同一把闸（负责人）。 */
+const WRITE_PROFILE = OWNER_WRITE
 
 function portOf(deps: GatewayDeps): PlatformKitPort {
   const p = deps.platformKit
@@ -162,6 +183,31 @@ export function platformKitRoutes(): Route[] {
       },
       async (c, deps) =>
         ok(c, await portOf(deps).confirmLogin(actorOf(c), await body(c, LoginBody))),
+    ),
+    route(
+      {
+        method: 'put',
+        path: '/v1/platform-kit/platform',
+        operationId: 'setPlatformKitPlatform',
+        summary:
+          'WP216：在岗位页上选建站平台（只改品牌档案的这一格；平台专属的技能 / 工具 / CLI 卡跟着变）',
+        tag: 'site',
+        auth: 'bearer',
+        assignment: true,
+        authz: WRITE_PROFILE,
+        body: PlatformBody,
+        returns: 'PlatformKitView',
+      },
+      async (c, deps) => {
+        const input = await body(c, PlatformBody)
+        return ok(
+          c,
+          await portOf(deps).setPlatform(actorOf(c), {
+            storefront_platform: input.storefront_platform,
+            ...(input.position_id === undefined ? {} : { position_id: input.position_id }),
+          }),
+        )
+      },
     ),
   ]
 }
