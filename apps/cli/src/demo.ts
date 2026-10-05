@@ -1417,6 +1417,12 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
      * demo 不该为了演示去敲 DeepSeek 的服务器，也不该在没网的机器上演不出这张卡。
      */
     deepseekAccount: deepseekAccountStandIn(),
+    /*
+     * WP216：「Shopify CLI」卡的本机检测在 demo 里是替身——不跑这台机器上真的 `shopify`：
+     * CLI 当作还没装、Node 当作 22.12.0，卡上演的是「第一步：装」那一档。
+     */
+    platformCliExec: async (bin) =>
+      bin === 'node' ? { ok: true, stdout: 'v22.12.0' } : { ok: false, stdout: '', missing: true },
     cloudFetch: cloud.fetch,
     /*
      * WP188：关联了替身云之后，「Agents 工坊（用积分）」那条模型来源打的是替身的 `/v1/ai`
