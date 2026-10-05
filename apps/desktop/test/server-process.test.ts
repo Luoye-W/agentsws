@@ -64,6 +64,32 @@ describe('serverSpawnRequest', () => {
     expect(serverSpawnRequest(input()).env.AGENTSWS_PROFILE_DIR).toBeUndefined()
   })
 
+  it('WP218：工作台产物经 AGENTSWS_STATIC_DIR 给；Windows 收尾靠关 stdin', () => {
+    const dir = 'C:\\Users\\张三\\AppData\\Local\\Programs\\agentsws\\resources\\workstation'
+    const request = serverSpawnRequest(input({ staticDir: dir }))
+    expect(request.env.AGENTSWS_STATIC_DIR).toBe(dir)
+    expect(request.env.AGENTSWS_STOP_ON_STDIN_END).toBe('1')
+    expect(request.stopViaStdin).toBe(true)
+    expect(serverSpawnRequest(input()).env.AGENTSWS_STATIC_DIR).toBeUndefined()
+  })
+
+  it('WP218：Windows 系统变量与代理往下传，别的照样不传', () => {
+    const request = serverSpawnRequest(
+      input({
+        baseEnv: {
+          PATHEXT: '.COM;.EXE;.BAT;.CMD',
+          ProgramFiles: 'C:\\Program Files',
+          HTTPS_PROXY: 'http://127.0.0.1:7890',
+          DEEPSEEK_API_KEY: 'sk-should-not-leak',
+        },
+      }),
+    )
+    expect(request.env.PATHEXT).toBe('.COM;.EXE;.BAT;.CMD')
+    expect(request.env.ProgramFiles).toBe('C:\\Program Files')
+    expect(request.env.HTTPS_PROXY).toBe('http://127.0.0.1:7890')
+    expect(request.env.DEEPSEEK_API_KEY).toBeUndefined()
+  })
+
   it('端口、数据目录、版本号都经环境变量给（apps/server 就读这几个）', () => {
     const request = serverSpawnRequest(input({ port: 0 }))
     expect(request.env.AGENTSWS_PORT).toBe('0')

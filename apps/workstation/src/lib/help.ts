@@ -49,6 +49,8 @@ export const HELP_SLUGS = [
   'dsh-scenes',
   // WP207：对话与任务的归档与找回（左栏三级「+」、状态小点、自动归档、AI 找回）
   'archive',
+  // WP218：桌面版安装（Windows SmartScreen / Mac 右键打开）与应用内一键更新
+  'install-update',
 ] as const
 
 export type HelpSlug = (typeof HELP_SLUGS)[number]
@@ -150,6 +152,8 @@ export const HELP_SCOPES: Readonly<Record<HelpSlug, HelpScope>> = {
   'dsh-scenes': { positions: [], roles: [] },
   // WP207：通用（谁都看得到）
   archive: { positions: [], roles: [] },
+  // WP218：通用
+  'install-update': { positions: [], roles: [] },
 }
 
 /**
