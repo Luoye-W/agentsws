@@ -108,6 +108,11 @@ export interface CloudOptions {
   dbDir?: string
   /** WP228：本机只读浏览器的状态（连接页 Reddit 卡那一格）；不给 = 这个进程没装。 */
   readonlyBrowserStatus?: () => ReadonlyBrowserStatus
+  /**
+   * WP228（Luoye 10-05）：托管实例——Reddit「浏览器只读」那一路一律停用（存过的设置也压住），
+   * 取数只走接口中台。
+   */
+  hosted?: boolean
   /** 测试注入；不给就用全局 `fetch`。 */
   fetch?: CloudFetch
   /**
@@ -848,11 +853,16 @@ export function createCloud(options: CloudOptions): CloudAssembly {
         order: [...DEFAULT_DATA_CAPABILITY_ORDER],
         disabled: [],
       },
-    redditReadRoute: () =>
-      state.data_source_routing?.[REDDIT_READ_ROUTE_KEY] ?? {
+    redditReadRoute: () => {
+      const saved = state.data_source_routing?.[REDDIT_READ_ROUTE_KEY] ?? {
         order: [...DEFAULT_REDDIT_READ_ORDER],
         disabled: [],
-      },
+      }
+      // WP228：托管实例没有浏览器，这一路一律停用
+      return options.hosted === true && !saved.disabled.includes('browser_readonly')
+        ? { order: [...saved.order], disabled: [...saved.disabled, 'browser_readonly'] }
+        : saved
+    },
     redditBrowserReadLimits: () => ({
       ...(state.reddit_browser_read ?? DEFAULT_REDDIT_BROWSER_READ_LIMITS),
     }),

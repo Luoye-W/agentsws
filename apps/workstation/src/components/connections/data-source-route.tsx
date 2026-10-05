@@ -105,6 +105,17 @@ export function DataSourceRouteControl({
   })
 
   const current = effectiveOrder(sources.data?.data_source_routing, capability, levels)
+  // WP228（Luoye 10-05）：托管实例（云上那份）没有浏览器——「浏览器只读」那一行整行不显示
+  const roStatus = useQuery({
+    queryKey: ['reddit-browser-read-status', assignment],
+    queryFn: () => getRedditBrowserReadStatus(assignment),
+    retry: false,
+    refetchInterval: 60_000,
+    enabled: levels.includes('browser_readonly'),
+  })
+  const shown = current.order.filter(
+    (l) => !(l === 'browser_readonly' && roStatus.data?.hosted === true),
+  )
 
   const move = (level: DataSourceLevel, delta: -1 | 1): void => {
     const order = [...current.order]
@@ -128,7 +139,7 @@ export function DataSourceRouteControl({
       <p className="text-xs font-medium" data-slot="title">
         {t('data.route.title')}
       </p>
-      {current.order.map((level, i) => {
+      {shown.map((level, i) => {
         const disabled = current.disabled.includes(level)
         return (
           <div key={level} className="flex items-center gap-1 text-xs">
@@ -152,7 +163,7 @@ export function DataSourceRouteControl({
               size="xs"
               variant="ghost"
               aria-label={t('data.route.down')}
-              disabled={i === current.order.length - 1 || save.isPending}
+              disabled={i === shown.length - 1 || save.isPending}
               onClick={() => move(level, 1)}
             >
               ↓

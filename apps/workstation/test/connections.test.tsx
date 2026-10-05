@@ -157,6 +157,7 @@ const roStatus = {
     pages_last_day: number
     max_pages_per_day: number
     browser?: string
+    hosted?: boolean
   },
 }
 
@@ -752,6 +753,21 @@ describe('WP210：连接页收拾（Luoye 09-30）', () => {
     card = (await screen.findAllByTestId('provider-card'))[0] as HTMLElement
     await user.click(within(card).getByTestId('provider-sources-toggle'))
     await within(card).findByTestId('data-source-route')
+    expect(within(card).queryByTestId('readonly-browser-status')).toBeNull()
+  })
+
+  it('WP228：托管实例（云上那份）上「浏览器只读」那一行整行不显示', async () => {
+    const user = userEvent.setup()
+    state.providers = [
+      { ...GA4_PROVIDER, service: 'reddit', label: 'Reddit', auth: 'api_key', data_sources: [] },
+    ]
+    roStatus.view = { state: 'no_browser', hosted: true, pages_last_day: 0, max_pages_per_day: 200 }
+    renderWithProviders(<ConnectionsPage />, '/connections')
+    const card = (await screen.findAllByTestId('provider-card'))[0] as HTMLElement
+    await user.click(within(card).getByTestId('provider-sources-toggle'))
+    const route = await within(card).findByTestId('data-source-route')
+    await waitFor(() => expect(route.textContent).not.toContain('浏览器只读'))
+    expect(route.textContent).toContain('1. 工坊官方数据接口（积分）')
     expect(within(card).queryByTestId('readonly-browser-status')).toBeNull()
   })
 

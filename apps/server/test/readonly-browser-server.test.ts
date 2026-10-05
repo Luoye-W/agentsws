@@ -12,12 +12,13 @@ import { join } from 'node:path'
 import type { ReadonlyBrowserStatus, ResearchFetchRecord } from '@agentsws/contracts'
 import { DEFAULT_REDDIT_BROWSER_READ_LIMITS, REDDIT_READ_HOSTS } from '@agentsws/contracts'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { createCloud } from '../src/cloud.js'
 import { createServer, type Server } from '../src/index.js'
 import { createReadonlyBrowser } from '../src/readonly-browser/index.js'
 import { redditReadBrowserOf, redditReadLimiterOf } from '../src/readonly-browser/reddit.js'
 import type { BrowserSession, PageRead } from '../src/readonly-browser/session.js'
 import { createResearchToolExecutor } from '../src/research-tools.js'
-import { SECRETS_KEY_ENV } from '../src/secret-store.js'
+import { SECRETS_KEY_ENV, type SecretStore } from '../src/secret-store.js'
 
 const listing = (items: Record<string, unknown>[], text = ''): PageRead => ({
   status: 200,
@@ -194,5 +195,55 @@ describe('连接页那一格：GET /v1/settings/reddit-browser-read/status', () 
     await server?.close()
     server = undefined
     expect(session.close).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('托管实例（Luoye 10-05）：浏览器只读那一路停用，取数只走接口中台', () => {
+  const vault = {
+    available: true,
+    get: () => undefined,
+    record: () => undefined,
+  } as unknown as SecretStore
+  const cloudOf = (hosted: boolean) =>
+    createCloud({
+      clock: { now: () => '2026-10-05T10:00:00.000Z' },
+      secrets: vault,
+      env: {},
+      ...(hosted ? { hosted: true } : {}),
+    })
+  it('默认路由里这一路是停用的；存过的设置也压住', async () => {
+    expect(cloudOf(false).redditReadRoute().disabled).toEqual([])
+    const hosted = cloudOf(true)
+    expect(hosted.redditReadRoute()).toEqual({
+      order: ['workshop', 'browser_readonly'],
+      disabled: ['browser_readonly'],
+    })
+    const actor = { workspace_id: 'ws_1', person_id: 'p_1' } as never
+    await hosted.port.setCapabilitySources(actor, {
+      capability_sources: {},
+      data_source_routing: {
+        'reddit.read': { order: ['browser_readonly', 'workshop'], disabled: [] },
+      },
+    })
+    expect(hosted.redditReadRoute().disabled).toContain('browser_readonly')
+  })
+  it('read_reddit 在托管实例上只试接口中台，浏览器那一路记「停用」', async () => {
+    const hosted = cloudOf(true)
+    const exec = createResearchToolExecutor({
+      route: () => hosted.redditReadRoute(),
+      limits: () => hosted.redditBrowserReadLimits(),
+      nowMs: () => 0,
+    })
+    const got = await exec({
+      id: 'c1',
+      name: 'read_reddit',
+      input: { action: 'search', query: 'x' },
+    })
+    expect(got).toMatchObject({ status: 'ok', data: { rows: 0 } })
+    const source = (got as { data: { source: ResearchFetchRecord } }).data.source
+    expect(source.attempts.map((a) => [a.route, a.outcome])).toEqual([
+      ['workshop', 'not_configured'],
+      ['browser_readonly', 'disabled'],
+    ])
   })
 })

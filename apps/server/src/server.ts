@@ -2927,8 +2927,10 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
      * 只开 Reddit 的页面、只读、限速从这个品牌的设置来；要用时才起无头浏览器，闲了自己关。
      */
     const rbOptions = options.readonlyBrowser
+    // WP228（Luoye 10-05）：托管实例（云上那份）不装——没有浏览器，这一路停用、连接页那一行不显示
+    const hostedInstance = hostedBoot !== undefined
     const readonlyBrowser =
-      rbOptions === undefined || rbOptions === false
+      rbOptions === undefined || rbOptions === false || hostedInstance
         ? undefined
         : createReadonlyBrowser({
             ...(dir === undefined ? {} : { dir: join(dir, 'readonly-browser') }),
@@ -2939,9 +2941,20 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
             ...(rbOptions ?? {}),
           })
     const ownCloud = createCloud({
-      ...(readonlyBrowser === undefined
-        ? {}
-        : { readonlyBrowserStatus: () => readonlyBrowser.status() }),
+      ...(readonlyBrowser !== undefined
+        ? { readonlyBrowserStatus: () => readonlyBrowser.status() }
+        : hostedInstance
+          ? {
+              hosted: true,
+              readonlyBrowserStatus: () => ({
+                state: 'no_browser' as const,
+                hosted: true,
+                message: '云上托管实例没有浏览器，Reddit 只走接口中台。',
+                pages_last_day: 0,
+                max_pages_per_day: ownCloud.redditBrowserReadLimits().max_pages_per_day,
+              }),
+            }
+          : {}),
       clock,
       secrets: brandSecrets,
       env,

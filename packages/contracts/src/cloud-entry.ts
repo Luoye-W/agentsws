@@ -94,6 +94,11 @@ export interface ReadonlyBrowserStatus {
   max_pages_per_day: number
   /** 找到的浏览器（`Chrome` / `Edge` / `Chromium`）。 */
   browser?: string
+  /**
+   * WP228（Luoye 10-05）：托管实例（云上那份）——没有浏览器，这一路默认停用、取数只走接口中台，
+   * 连接页 Reddit 卡上「浏览器只读」那一行整行不显示。
+   */
+  hosted?: boolean
 }
 
 /* ------------------------------------------------------------------ */

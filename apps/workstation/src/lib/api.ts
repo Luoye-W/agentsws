@@ -1870,6 +1870,8 @@ export interface ReadonlyBrowserStatus {
   pages_last_day: number
   max_pages_per_day: number
   browser?: string
+  /** WP228：托管实例——「浏览器只读」那一行整行不显示。 */
+  hosted?: boolean
 }
 
 export const getRedditBrowserReadStatus = (assignment?: string): Promise<ReadonlyBrowserStatus> =>
