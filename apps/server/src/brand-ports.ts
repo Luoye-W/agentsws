@@ -34,6 +34,7 @@ import type {
   ModelsPort,
   PositionEntryPort,
   PrPort,
+  SecretaryPort,
   SitePort,
   SocialPort,
   SubscriptionLoginInput,
@@ -495,4 +496,16 @@ export function brandKolPort(
   make: (workspace_id: WorkspaceId) => Promise<KolPort>,
 ): KolPort {
   return scopedPort<KolPort>(make, () => brands.bootstrap)
+}
+
+/**
+ * WP215：秘书（41 §1）按品牌各一份——代答、日程、约时间、任务路由出的卡都落在**这个品牌**里，
+ * 读的是这个品牌的工作模型与成员名单。之前全进程一份、工作区定死在第一个品牌，
+ * 在第二个品牌里问秘书，看到的是第一个品牌的事项。
+ */
+export function brandSecretaryPort(
+  brands: BrandModules,
+  make: (workspace_id: WorkspaceId) => Promise<SecretaryPort>,
+): SecretaryPort {
+  return scopedPort<SecretaryPort>(make, () => brands.bootstrap)
 }

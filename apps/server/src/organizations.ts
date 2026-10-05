@@ -14,6 +14,7 @@
  *    不改任何数据、不发内核事件（52 §4）；本人在目标品牌没有成员资格一律 403。
  */
 import type {
+  BrandBackgroundView,
   BrandCopyView,
   BrandSwitchView,
   BrandView,
@@ -102,6 +103,11 @@ export interface OrganizationsAssemblyOptions {
    * 令牌却是按工作区签的）。做不成不算建品牌失败——补签依赖云侧在不在。
    */
   onBrandCreated?(workspace_id: WorkspaceId): Promise<void> | void
+  /**
+   * WP215：这个品牌的后台状态（按品牌常驻，与眼前切在哪个品牌无关）。不给 = 品牌一览上
+   * 不出那一格（老进程）。
+   */
+  backgroundOf?(workspace_id: WorkspaceId): BrandBackgroundView | undefined
 }
 
 export interface OrganizationsAssembly {
@@ -210,6 +216,7 @@ export function createOrganizations(options: OrganizationsAssemblyOptions): Orga
     })
     // WP66：每个品牌都算得出来（各有各的活数据源），不再是"切过去才看得到"
     const sales = await options.salesToday?.(workspace.id)
+    const background = options.backgroundOf?.(workspace.id)
     return {
       workspace_id: workspace.id,
       name: brandNameOf(workspace),
@@ -222,6 +229,7 @@ export function createOrganizations(options: OrganizationsAssemblyOptions): Orga
       pending_approvals: open.length,
       alerts: alerts.length,
       ...(sales === undefined ? {} : { sales_today: sales }),
+      ...(background === undefined ? {} : { background }),
     }
   }
 

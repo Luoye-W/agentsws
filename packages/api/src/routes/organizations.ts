@@ -27,6 +27,7 @@ import { ApiError } from '../errors.js'
 import { assignmentOf, body, ok, param, principalOf } from '../helpers.js'
 import { type Route, route } from '../route-spec.js'
 import type { GatewayDeps } from '../types.js'
+import type { BrandBackgroundView } from './background.js'
 
 /** 改公司档案 / 建品牌 / 邀请 / 离职：05 owner 的策略层写权限。 */
 const WRITE = {
@@ -97,6 +98,12 @@ export interface BrandView {
    * 那时候照 36 §3 不给这个字段（没有就明说没有，不画一个 0）。
    */
   sales_today?: { amount: number; currency: string }
+  /**
+   * WP215：这个品牌的后台（按品牌常驻，与眼前切在哪个品牌无关）。切换器每一行、
+   * 组织页「品牌一览」那一列读它：在跑几条定时、最近一次巡检、出错红点、停没停。
+   * 没装配品牌后台的进程不给这个字段。
+   */
+  background?: BrandBackgroundView
 }
 
 export interface OrganizationMemberView {

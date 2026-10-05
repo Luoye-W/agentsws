@@ -54,6 +54,19 @@ export interface SchedulerOptions {
   holder?: string
   /** WP181：`rule` 触发器（官方「自动化任务」的时间规则）怎么算；不给就拒建这类任务。 */
   rules?: RuleResolver
+  /**
+   * WP215：这条任务现在**先别触发**（品牌停用 / 品牌急停）。到点了也不动它：不记触发、
+   * 不挪排期；放开之后按 `misfire_policy` 处理停着那段时间错过的（与关机错过同一条规矩）。
+   * 不给 = 谁都不拦（行为与这一版之前一模一样）。
+   */
+  hold?(task: ScheduleTask): boolean
+  /**
+   * WP215：一拍里**最多同时跑几条**。同一个工作区（品牌）的任务永远一条接一条跑，
+   * 只有不同品牌之间才并行——两个品牌的巡检可以同时跑，但不会超过这个数，
+   * 免得一台电脑被几个品牌一起拖慢。默认 1（一条接一条，与这一版之前一模一样）。
+   * 给函数是因为它进设置、运行期能改。
+   */
+  concurrency?: number | (() => number)
 }
 
 export interface TickResult {
@@ -343,12 +356,20 @@ export function createScheduler(options: SchedulerOptions): Scheduler {
   let timer: ReturnType<typeof setInterval> | undefined
   let running = false
 
+  const concurrencyOf = (): number => {
+    const raw =
+      typeof options.concurrency === 'function' ? options.concurrency() : options.concurrency
+    return raw === undefined || !Number.isFinite(raw) ? 1 : Math.max(1, Math.floor(raw))
+  }
+
   const tick = async (now: Iso8601): Promise<TickResult> => {
     const nowMs = Date.parse(now)
     if (!Number.isFinite(nowMs)) throw invalid(`tick 的 now 不是 ISO-8601：${now}`)
     const fired: ScheduleTask[] = []
     const misfired: ScheduleTask[] = []
     for (const candidate of store.dueTasks(now)) {
+      // WP215：品牌停着 → 这一拍不碰它（不记触发、不挪排期）
+      if (options.hold?.(candidate) === true) continue
       // 上一次还在跑且租约没过 → 这一拍跳过（同一任务不重入）
       if (candidate.state === 'running') {
         const until = candidate.lease?.until
@@ -483,15 +504,22 @@ export function createScheduler(options: SchedulerOptions): Scheduler {
     async runDue(now) {
       const { fired, misfired } = await tick(now)
       const missed = new Set(misfired.map((t) => t.id))
-      const out: FireOutcome[] = []
-      for (const task of fired) out.push(await dispatch(task, now, missed.has(task.id)))
-      return out
+      const limit = concurrencyOf()
+      if (limit <= 1) {
+        const out: FireOutcome[] = []
+        for (const task of fired) out.push(await dispatch(task, now, missed.has(task.id)))
+        return out
+      }
+      return runByWorkspace(fired, limit, (task) => dispatch(task, now, missed.has(task.id)))
     },
 
     async runNow(id) {
       const task = load(id)
       if (task.state === 'cancelled') {
         throw new ScheduleError('conflict', `已取消的定时任务跑不了：${id}`, { id })
+      }
+      if (options.hold?.(task) === true) {
+        throw new ScheduleError('conflict', `这条定时任务所在的品牌后台停着：${id}`, { id })
       }
       const now = clock.now()
       const nowMs = Date.parse(now)
@@ -519,6 +547,7 @@ export function createScheduler(options: SchedulerOptions): Scheduler {
       const now = clock.now()
       // 信号是系统级的（「签收了」「付款了」），跨工作区找一遍
       for (const task of collectAfterEvent(store, event)) {
+        if (options.hold?.(task) === true) continue
         const firing = markFiring(
           { ...task, params: { ...(task.params ?? {}), ...(payload ?? {}) } },
           now,
@@ -556,6 +585,35 @@ export function createScheduler(options: SchedulerOptions): Scheduler {
       store.close?.()
     },
   }
+}
+
+/**
+ * WP215：一拍里到点的任务按工作区（品牌）分组——**组内一条接一条，组间最多 `limit` 组同时跑**。
+ *
+ * 结果按原来的顺序回（调用方看到的与一条接一条跑时一样）。一个组里某条炸了不影响别的
+ * （`dispatch` 自己兜住了错误，这里不会抛）。
+ */
+export async function runByWorkspace<T>(
+  fired: readonly ScheduleTask[],
+  limit: number,
+  run: (task: ScheduleTask) => Promise<T>,
+): Promise<T[]> {
+  const groups = new Map<string, number[]>()
+  fired.forEach((task, i) => {
+    const list = groups.get(task.workspace_id)
+    if (list === undefined) groups.set(task.workspace_id, [i])
+    else list.push(i)
+  })
+  const queue = [...groups.values()]
+  const out: T[] = new Array(fired.length)
+  const worker = async (): Promise<void> => {
+    for (let group = queue.shift(); group !== undefined; group = queue.shift()) {
+      for (const i of group) out[i] = await run(fired[i] as ScheduleTask)
+    }
+  }
+  const lanes = Math.max(1, Math.min(limit, queue.length))
+  await Promise.all(Array.from({ length: lanes }, () => worker()))
+  return out
 }
 
 /**

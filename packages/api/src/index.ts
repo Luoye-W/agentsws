@@ -156,6 +156,15 @@ export type {
   B2bStagedView,
 } from './routes/b2b.js'
 export { B2B_COLLECTION_ROUTES, b2bRoutes } from './routes/b2b.js'
+export {
+  BACKGROUND_CONCURRENCY_MAX,
+  BACKGROUND_CONCURRENCY_MIN,
+  type BackgroundActor,
+  type BackgroundPort,
+  type BackgroundSettingsView,
+  type BrandBackgroundView,
+  backgroundRoutes,
+} from './routes/background.js'
 export type { BackupExportView, BackupPort } from './routes/backup.js'
 export { backupRoutes } from './routes/backup.js'
 // WP122（71）：每个品牌一份 DESIGN.md
