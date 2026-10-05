@@ -32,6 +32,7 @@ import { cloudAccountRoutes } from './routes/cloud-account.js'
 import { computerUseRoutes } from './routes/computer-use.js'
 import { connectionDirectoryRoutes } from './routes/connection-directory.js'
 import { connectionRoutes } from './routes/connections.js'
+import { contentUpdatesRoutes } from './routes/content-updates.js'
 import { dataServiceRoutes } from './routes/data-service.js'
 import { designRoutes } from './routes/design.js'
 // WP136（docs/79）：dsh 场景切换
@@ -246,6 +247,8 @@ export function collectRoutes(): Route[] {
     ...platformKitRoutes(),
     // WP172（docs/84）：B2B 库。`/v1/b2b/*` 是新前缀，与别处都不撞（放在最后：生成物的顺序不动别人）
     ...b2bRoutes(),
+    // WP219（docs/90）：已审的内容更新。`/v1/settings/content-updates*` 是新路径（放最后：生成物的顺序不动别人）
+    ...contentUpdatesRoutes(),
     // WP215：每个品牌一套后台。`/v1/settings/background*` 是新路径（放在最后：生成物的顺序不动别人）
     ...backgroundRoutes(),
   ]
