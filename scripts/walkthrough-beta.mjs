@@ -324,16 +324,18 @@ async function sectionA() {
   await step(
     'A',
     'ob-ai-official',
-    '① 官方接口：填邮箱发登录信',
+    '① 官方接口：注册（名字 + 邮箱 + 密码 + 同意条款）发验证码',
     '10 秒内有明确反馈（已发 / 看得懂的错误和下一步）',
     async () => {
       await T('ai-card-official').click()
-      await T('ai-official-email').fill('tester@example.com')
       /*
-       * WP140：demo 的云账号那一跳是替身（`cloudStandIn`，云地址是 `.invalid` 保留域），
-       * 点「发登录信」不会打生产云——所以默认就点。替身过一小会儿替用户点信里的链接，
-       * 向导每 3 秒问一次，于是能看到「已关联」。
+       * WP231：默认是「注册新账号」。demo 的云账号那一跳是替身（`cloudStandIn`，云地址是
+       * `.invalid` 保留域），不会打生产云；替身的验证码任意 6 位都过（只有 000000 算不对）。
        */
+      await T('ai-official-name').fill('演示用户')
+      await T('ai-official-email').fill('tester@example.com')
+      await T('ai-official-password').fill('Walkthrough-2026')
+      await T('ai-official-agree').check()
       const t0 = Date.now()
       await T('ai-official-send').click()
       await settle(1500)
@@ -341,7 +343,7 @@ async function sectionA() {
         path: join(SHOTS, `${String(shotNo).padStart(2, '0')}b-ob-ai-official-pending.png`),
       })
       const sent = T('ai-official-sent')
-      const err = T('ai-error')
+      const err = T('ai-official-error')
       await Promise.race([
         sent.waitFor({ timeout: 25_000 }),
         err.waitFor({ timeout: 25_000 }),
@@ -349,6 +351,8 @@ async function sectionA() {
       const secs = ((Date.now() - t0) / 1000).toFixed(1)
       if (await sent.count()) {
         const said = oneLine(await sent.innerText())
+        await T('ai-official-code').fill('246810')
+        await T('ai-official-verify').click()
         const linked = await T('ai-official-linked')
           .waitFor({ timeout: 8000 })
           .then(
@@ -356,7 +360,7 @@ async function sectionA() {
             () => false,
           )
         return ok(
-          `${secs}s 后：${said}${linked ? '；替身点了信里的链接，几秒后显示「已关联」' : ''}`,
+          `${secs}s 后：${said}${linked ? '；填了验证码之后显示「已关联」' : ''}`,
         )
       }
       if (await err.count())
