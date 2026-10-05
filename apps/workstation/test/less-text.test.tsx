@@ -20,7 +20,7 @@ import { ImageModelSection } from '@/components/models/image-model-section'
 import { ModelsPanel } from '@/components/models/models-panel'
 import { AiStep } from '@/components/onboarding/ai-step'
 import { PlanList } from '@/components/onboarding/plan-list'
-import { RolePicker } from '@/components/onboarding/role-picker'
+import { PositionPlanner } from '@/components/onboarding/position-planner'
 import { BrowserCard } from '@/components/settings/browser-card'
 import { CloudAccountCard } from '@/components/settings/cloud-account'
 import { ComputerUseCard } from '@/components/settings/computer-use-card'
@@ -553,15 +553,30 @@ describe('初始化向导', () => {
     check('三步小勾叉', container)
   })
 
-  it('第 ③ 步：挑岗位', () => {
+  it('第 ③ 步：说说你要做什么 → 推荐 → 你的岗位（WP234）', () => {
     const { container } = renderWithProviders(
-      <RolePicker
-        positions={POSITIONS}
-        value={{ position_ids: ['customer-care'], role_ids: [], custom_position_name: '' }}
-        onChange={() => {}}
+      <PositionPlanner
+        catalog={POSITIONS}
+        text=""
+        onText={() => {}}
+        onSuggest={() => {}}
+        suggesting={false}
+        recommendations={[]}
+        board={{
+          selected: ['dtc.support'],
+          rows: [
+            { key: 'row-1', name: '客服', role_ids: ['dtc.support'], template_id: 'customer-care' },
+          ],
+          customized: false,
+          seq: 1,
+        }}
+        onToggleDuty={() => {}}
+        onAdopt={() => {}}
+        onRegroup={() => {}}
+        onBoard={() => {}}
       />,
     )
-    check('向导 ③ · 挑岗位', container)
+    check('向导 ③ · 你的岗位', container)
   })
 
   it('第 ④ 步：连接与开工（每一行各量一次）', () => {

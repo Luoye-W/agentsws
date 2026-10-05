@@ -2681,6 +2681,62 @@ export const updateOrgPosition = (
     ...withAssignment(assignment),
   })
 
+/** WP234（docs/54 §6.4）：合并 / 移动职责 / 拆出的回执。 */
+export interface PositionReshapeView {
+  positions: OrgPositionView[]
+  moved_assignments: number
+  moved_matters: number
+  memory?: { moved: number; kept_both: number }
+  deleted?: string
+}
+
+/** WP234：把岗位 `id` 合并到 `into`（职责、事项、岗位层记忆都跟过去）。 */
+export const mergeOrgPosition = (
+  id: string,
+  into: string,
+  assignment?: string,
+): Promise<PositionReshapeView> =>
+  api<PositionReshapeView>(`/v1/org/positions/${encodeURIComponent(id)}/merge`, {
+    method: 'POST',
+    body: { into },
+    ...withAssignment(assignment),
+  })
+
+/** WP234：把岗位 `id` 里的一条职责移到岗位 `to`。 */
+export const moveOrgPositionDuty = (
+  id: string,
+  input: { role_id: string; to: string },
+  assignment?: string,
+): Promise<PositionReshapeView> =>
+  api<PositionReshapeView>(`/v1/org/positions/${encodeURIComponent(id)}/move-duty`, {
+    method: 'POST',
+    body: input,
+    ...withAssignment(assignment),
+  })
+
+/** WP234：从岗位 `id` 拆出几条职责成一个新岗位。 */
+export const splitOrgPosition = (
+  id: string,
+  input: { name: string; role_ids: string[] },
+  assignment?: string,
+): Promise<PositionReshapeView> =>
+  api<PositionReshapeView>(`/v1/org/positions/${encodeURIComponent(id)}/split`, {
+    method: 'POST',
+    body: input,
+    ...withAssignment(assignment),
+  })
+
+/** WP234（docs/54 §6.5）：把负责人身份交给另一位成员（自己那条不收回）。 */
+export const transferOwner = (
+  person_id: string,
+  assignment?: string,
+): Promise<{ person_id: string; person_name: string; assignment_id: string; already: boolean }> =>
+  api('/v1/org/owner/transfer', {
+    method: 'POST',
+    body: { person_id },
+    ...withAssignment(assignment),
+  })
+
 /** WP174：设 / 清岗位上级（`null` = 清掉，落回老板）。 */
 export const setOrgPositionSupervisor = (
   id: string,
@@ -3432,7 +3488,36 @@ export interface OnboardingPlanInput {
   position_ids: string[]
   role_ids: string[]
   custom_position_name?: string
+  /** WP234（docs/54 §6.2）：第 ③ 步的岗位清单（给了就按它建）。 */
+  positions?: OnboardingPlannedPosition[]
 }
+
+/** WP234：第 ③ 步岗位清单里的一行。 */
+export interface OnboardingPlannedPosition {
+  name: string
+  role_ids: string[]
+  /** 从哪个类别（岗位模板）来的；职责全在那个模板里时服务端复用它。 */
+  template_id?: string
+}
+
+/** WP234（docs/70 §5）：「说说你要做什么工作」的回执——只推荐，不选中。 */
+export interface OnboardingSuggestView {
+  /** `unavailable` = 这次没能让 AI 推荐；`stub` = 演示环境按词对的替身。 */
+  source: 'ai' | 'stub' | 'unavailable'
+  note?: string
+  roles: { role_id: string; reason: string; quote?: string }[]
+  positions: OnboardingPlannedPosition[]
+}
+
+export const suggestOnboarding = (
+  text: string,
+  assignment?: string,
+): Promise<OnboardingSuggestView> =>
+  api<OnboardingSuggestView>('/v1/onboarding/suggest', {
+    method: 'POST',
+    body: { text },
+    ...(assignment === undefined ? {} : { assignment }),
+  })
 
 export const getOnboardingState = (assignment?: string): Promise<OnboardingStateView> =>
   api<OnboardingStateView>('/v1/onboarding/state', {
