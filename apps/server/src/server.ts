@@ -159,7 +159,13 @@ import { createWork, SqliteWorkStore, type Work } from '@agentsws/work'
 import { type HttpBindings, type ServerType, serve } from '@hono/node-server'
 import { RESPONSE_ALREADY_SENT } from '@hono/node-server/utils/response'
 import { WebSocketServer } from 'ws'
-import { adsDeckData, createAdsStore, seedDemoAds, snapshotLineCompare } from './ads.js'
+import {
+  adsAttribution,
+  adsDeckData,
+  createAdsStore,
+  seedDemoAds,
+  snapshotLineCompare,
+} from './ads.js'
 import { createAdsService } from './ads-service.js'
 import { compositeApprovals } from './approvals-composite.js'
 import { createAskPort } from './ask.js'
@@ -2306,12 +2312,22 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
        * 一个平台都没连也照样在那儿摆着。四个平台那四个源才是"连没连"的事。
        */
       // WP224：ROAS 旁边并排盈亏线 + 两条止损线的对照表（只显示，不改止损）
-      ads: () =>
-        adsDeckData(ads, {
-          now: clock.now(),
+      ads: () => {
+        const now = clock.now()
+        // WP224：日报那张表（归因两列）原来没递，真环境里永远是空表——补上，盈亏线才有处并排
+        const attribution = adsAttribution(ads, {
+          orders: baseWorkData.orders(),
+          now,
+          tz_offset_minutes: baseWorkData.tz_offset_minutes,
+        })
+        return adsDeckData(ads, {
+          now,
+          attribution: attribution.rows,
+          unmatched_orders: attribution.unmatched_orders,
           break_even: breakEvenNow(),
           line_compare: summarizeLineCompare(ads.lineCompareRows()),
-        }),
+        })
+      },
       // WP78（60 §3）：公关那五块同理——待发的稿子、自己攒的媒体名单是
       // **我们自己写的**，与连没连 Google Alerts 无关。外面那一侧（提及流 /
       // 负面预警）走 `google_alerts` 那个源，没连就照 36 §3 明说。

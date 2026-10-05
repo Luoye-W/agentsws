@@ -23,7 +23,7 @@
  */
 import { createRequire } from 'node:module'
 import { join } from 'node:path'
-import { compareLines } from '@agentsws/ads-core'
+import { attributeAds, attributionGapPct, compareLines, roasBothViews } from '@agentsws/ads-core'
 import type {
   Ad,
   AdAccount,
@@ -795,4 +795,67 @@ export function seedDemoAds(store: AdsStore, now: string): void {
     reason:
       '两条判据都成立，止损：ROAS 0.6（线是 1），今天花了 400，占日预算 1000 的 40%（线是 30%）。',
   })
+}
+
+/**
+ * WP224：归因两列那几行（投放日报那张表的数据）——原来宿主一直没递，日报在真环境里永远是空表，
+ * 盈亏线那一格也就无处并排。判据只有 `ads-core` 那一份（`attributeAds` / `roasBothViews`），
+ * 与模拟世界同一套：平台那一侧取 campaign 表上的表现数，订单那一侧取**今天**（工作区时区）
+ * 下的单、按落地页 UTM 认平台。两列各算各的，不合并；归不上的单不分摊。
+ */
+export function adsAttribution(
+  store: Pick<AdsStore, 'campaigns'>,
+  input: {
+    orders: readonly {
+      id: string
+      created_at: string
+      total_price: number
+      landing_site?: string
+    }[]
+    now: string
+    tz_offset_minutes: number
+  },
+): { rows: AdsDeckData['attribution']; unmatched_orders: number } {
+  const campaigns = store.campaigns().filter((c) => c.metrics !== undefined)
+  if (campaigns.length === 0) return { rows: [], unmatched_orders: 0 }
+  const nowMs = Date.parse(input.now)
+  const offset = input.tz_offset_minutes * 60_000
+  const dayStart = Math.floor((nowMs + offset) / 86_400_000) * 86_400_000 - offset
+  const result = attributeAds({
+    platform_rows: campaigns.map((c) => ({
+      platform: c.platform,
+      campaign: c.name,
+      ...(c.metrics?.spend === undefined ? {} : { spend: c.metrics.spend }),
+      ...(c.metrics?.conversions === undefined ? {} : { conversions: c.metrics.conversions }),
+      ...(c.metrics?.conversion_value === undefined
+        ? {}
+        : { conversion_value: c.metrics.conversion_value }),
+    })),
+    orders: input.orders
+      .filter((o) => Date.parse(o.created_at) >= dayStart && Date.parse(o.created_at) <= nowMs)
+      .map((o) => ({
+        order_id: o.id,
+        ...(o.landing_site === undefined ? {} : { landing_url: o.landing_site }),
+        amount: o.total_price,
+        created_at: o.created_at,
+      })),
+    observed_at: input.now,
+  })
+  const rows = result.rows.slice(0, MAX_ROWS).map((row) => {
+    const roas = roasBothViews(row)
+    const gap = attributionGapPct(row)
+    return {
+      platform: row.platform as string,
+      campaign: row.campaign,
+      ...(row.platform_conversions === undefined
+        ? {}
+        : { platform_conversions: row.platform_conversions }),
+      ...(row.order_conversions === undefined ? {} : { order_conversions: row.order_conversions }),
+      ...(roas.platform === undefined ? {} : { platform_roas: roas.platform }),
+      ...(roas.order === undefined ? {} : { order_roas: roas.order }),
+      ...(gap === undefined || !Number.isFinite(gap) ? {} : { gap_pct: gap }),
+      observed_at: row.observed_at,
+    }
+  })
+  return { rows, unmatched_orders: result.unmatched.length }
 }
