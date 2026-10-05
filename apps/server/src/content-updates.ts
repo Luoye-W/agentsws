@@ -419,7 +419,10 @@ export function createContentUpdates(options: ContentUpdatesOptions): ContentUpd
         subject: { object: { type: 'content_item', id: item.id } },
         dedupe_key: key,
         title: `${item.title.zh} 有新版 · 官方 ${item.upstream.published_at} 更新 · 已审`,
-        summary: item.summary.zh,
+        summary:
+          item.review.scan_hits > 0
+            ? `${item.summary.zh}（审核时有 ${item.review.scan_hits} 处要留意，已逐条看过放行，所以不自动更新）`
+            : item.summary.zh,
         payload: {
           ...payload,
           before: { 版本: from ?? '—' },

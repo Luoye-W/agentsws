@@ -3,19 +3,14 @@
  *
  * 条目 id 形如 `skill:shopify`，进路径前一律 `encodeURIComponent`。
  */
-import type {
-  ContentDiffView,
-  ContentUpdateMode,
-  ContentUpdatesView,
-} from '@agentsws/contracts'
+import type { ContentDiffView, ContentUpdateMode, ContentUpdatesView } from '@agentsws/contracts'
 import { api } from '@/lib/api'
 
 export type { ContentDiffView, ContentUpdateMode, ContentUpdatesView }
 
 export const CONTENT_UPDATES_KEY = ['settings', 'content-updates'] as const
 
-const item = (id: string): string =>
-  `/v1/settings/content-updates/items/${encodeURIComponent(id)}`
+const item = (id: string): string => `/v1/settings/content-updates/items/${encodeURIComponent(id)}`
 
 export const getContentUpdates = (): Promise<ContentUpdatesView> =>
   api('/v1/settings/content-updates')

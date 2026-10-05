@@ -19,6 +19,7 @@ import { ArchiveSetting } from '@/components/settings/archive-setting'
 import { BrowserCard } from '@/components/settings/browser-card'
 import { CloudAccountCard } from '@/components/settings/cloud-account'
 import { ComputerUseCard } from '@/components/settings/computer-use-card'
+import { ContentUpdatesSetting } from '@/components/settings/content-updates-setting'
 import { CreditsPanel } from '@/components/settings/credits-panel'
 import { DiagnosticsCard } from '@/components/settings/diagnostics-card'
 import { OfficialPluginsPanel } from '@/components/settings/official-plugins'
@@ -193,6 +194,8 @@ export function SettingsPage({
             </div>
             {/* WP207：对话 / 任务多少天没动就自动归档（1–30 天或不自动归档） */}
             <ArchiveSetting />
+            {/* WP219：已审的内容更新——自动 / 每次问我（默认），更新过的条目可一键退回 */}
+            <ContentUpdatesSetting />
             {identity === undefined ? null : (
               <div className="flex items-center justify-between">
                 <span>{t('settings.identity')}</span>

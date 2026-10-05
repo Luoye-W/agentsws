@@ -70,6 +70,7 @@ export function DeckActionBar({
   optionMissing,
   onAction,
   onSupplement,
+  extra,
 }: {
   card: DeckCard
   disabled?: boolean
@@ -77,6 +78,8 @@ export function DeckActionBar({
   optionMissing?: boolean
   onAction: (action: DeckAction) => void
   onSupplement: () => void
+  /** WP219：主次按钮后面再放一个（内容更新卡的「查看改动」）。不是第四个决定，只是看。 */
+  extra?: React.ReactNode
 }): React.ReactNode {
   const { t } = useApp()
   const [open, setOpen] = useState(false)
@@ -122,6 +125,7 @@ export function DeckActionBar({
           {labelOf(action)}
         </Button>
       ))}
+      {extra}
       {optionMissing === true ? (
         <span className="text-xs text-muted-foreground">{t('deck.option_required')}</span>
       ) : null}
