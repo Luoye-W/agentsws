@@ -169,7 +169,9 @@ export function boundaryGate(input: {
  * 每次都挂到当次运行上）。模型自己去提退款被拦下的那条路（dsh 的 `tools/pre-execute`）
  * 不经这里——那时候这件事显然跟退款有关，照旧问。
  */
-export function boundariesToAsk(gate: Pick<BoundaryGate, 'wantsChange' | 'missing'>): BoundaryItem[] {
+export function boundariesToAsk(
+  gate: Pick<BoundaryGate, 'wantsChange' | 'missing'>,
+): BoundaryItem[] {
   return gate.wantsChange ? [...gate.missing] : []
 }
 

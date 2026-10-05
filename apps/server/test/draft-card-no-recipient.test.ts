@@ -183,7 +183,7 @@ describe('WP232：起草回复没人在线、没有收件地址，也出一张�
     expect(card?.title).toBe(`回复草稿（收件人待定）：${SUBJECT}`)
     expect(card?.summary).toBe(MANUAL_SEND_SUMMARY)
     expect(card?.payload).toMatchObject({ manual_send: true, body: { text: BODY } })
-    expect((card?.payload as { to?: unknown }).to).toBeUndefined()
+    expect((card?.payload as { to?: unknown } | undefined)?.to).toBeUndefined()
     const proposals = events.filter((e) => e.type === 'proposal.created')
     expect(proposals.map((e) => (e.payload as { kind: string }).kind)).toEqual(['outbound_draft'])
   })

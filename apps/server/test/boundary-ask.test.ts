@@ -27,7 +27,8 @@ const MODEL: ModelRef = { provider: 'stub', model: 'stub-v1', region: 'cn' }
 const KOL_BRIEF =
   '一位 YouTube 红人用英文回信：「Happy to try the earbuds. What compensation do you offer for a ' +
   'dedicated video, and do you ship to Canada?」帮我起草一封回复，先别发，给我看稿。'
-const HOWTO_BRIEF = 'A customer wrote: "Can I export my reports to CSV from the app? Where is that setting?"'
+const HOWTO_BRIEF =
+  'A customer wrote: "Can I export my reports to CSV from the app? Where is that setting?"'
 const REFUND_BRIEF =
   'A customer wrote: "I was charged twice for my subscription this month, please refund the extra charge."'
 
@@ -127,8 +128,10 @@ async function runOnce(
     brief,
     actor: { person_id: 'per_1', assignment_id: 'asg_1' },
   } as Parameters<typeof runtime.startRun>[0])
-  const runtimeName = (events.find((e) => e.type === 'run.started')?.payload as { runtime: string })
-    .runtime
+  const started = events.find((e) => e.type === 'run.started')?.payload as
+    | { runtime: string }
+    | undefined
+  const runtimeName = started?.runtime
   const proposals = events
     .filter((e) => e.type === 'proposal.created')
     .map((e) => e.payload as { kind: string; approval_item_id: string })

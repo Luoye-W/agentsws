@@ -3,7 +3,11 @@
  * 起草工具的描述与参数说明（模型填参数那一刻读它）把「只有这份外发稿跟来信语言」写死，
  * dsh 与 direct 同一份字节；没建成卡的原因不再写「未获批准（fail-closed）」。
  */
-import { DRAFT_BODY_DESCRIPTION, DRAFT_NOT_CREATED, DRAFT_TOOL_DESCRIPTION } from '@agentsws/stand-ins'
+import {
+  DRAFT_BODY_DESCRIPTION,
+  DRAFT_NOT_CREATED,
+  DRAFT_TOOL_DESCRIPTION,
+} from '@agentsws/stand-ins'
 import { describe, expect, it } from 'vitest'
 import { buildToolDefinitions, DRAFT_TOOL } from '../src/index.js'
 import { makeRequest } from './helpers.js'

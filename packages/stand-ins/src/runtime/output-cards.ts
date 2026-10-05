@@ -32,5 +32,4 @@ export const DRAFT_BODY_DESCRIPTION =
   'user interface language.'
 
 /** 起草工具 `subject` 参数的描述（同上）。 */
-export const DRAFT_SUBJECT_DESCRIPTION =
-  'Reply subject, in the same language as the body.'
+export const DRAFT_SUBJECT_DESCRIPTION = 'Reply subject, in the same language as the body.'
