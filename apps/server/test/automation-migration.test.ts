@@ -119,6 +119,8 @@ describe('系统巡检：两边的时间算法（金样）', () => {
       for (const { id, expr } of await systemCrons()) {
         expect(official(expr, tz, 40), `${id} ${expr}`).toEqual(ours(expr, tz, 40))
       }
-    })
+      // WP224 多了两条 cron（一页纸 / 止损线对照），IANA 时区那几组本机单跑就要 4 秒多，
+      // 默认 5 秒在并行负载下会超时——放宽到 30 秒（算的东西没变）
+    }, 30_000)
   }
 })
