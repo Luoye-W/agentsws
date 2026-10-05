@@ -111,7 +111,7 @@
     "packages/roles/roles/social/x.yml",
     "packages/roles/roles/social/youtube.yml"
   ],
-  "source_digest": "a4f09bb4d75628f3cbf43757491ec0f7",
+  "source_digest": "7c31bb974a0f46b7014552bdadf7caf4",
   "objects": [
     {
       "id": "ad",
@@ -10286,6 +10286,10 @@
       "requires_approval": true,
       "route_to": "role_holder",
       "roles": [
+        "ads.google",
+        "ads.meta",
+        "ads.tiktok",
+        "ads.x",
         "b2b.exhibition",
         "dtc.store",
         "kol.youtube",

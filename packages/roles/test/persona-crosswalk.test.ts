@@ -66,6 +66,17 @@ describe('跨岗位禁语：每条职责都写死了转给谁（69 §2 第三段
     }
   })
 
+  it('WP222：投放那四条写了「出图→设计岗」，也真有 request_design 接得住', () => {
+    for (const id of ['ads.meta', 'ads.google', 'ads.tiktok', 'ads.x']) {
+      expect(notYours(id), id).toContain('设计岗')
+      expect(enOf(id), id).toContain('design request to Design')
+      expect(
+        loadBundledRole(id).actions.some((a) => a.id === 'request_design'),
+        id,
+      ).toBe(true)
+    }
+  })
+
   it('社媒那九条：客户问题一律转客服，哪怕它出现在评论区 / 群里', () => {
     const social = loadBundledRoles().filter((r) => r.domain === 'social')
     // WP191：九条 + FB 主页 / IG / Threads / LinkedIn（老的 `social.meta` 文件还在）
