@@ -171,8 +171,9 @@ export function createResearchToolExecutor(options: ResearchToolsOptions): ToolE
      * WP236 ⑨：每次运行的取数预算。用完了就不再取（两路都不走）、照实说；按价把这一次的条数收进
      * 剩下的预算里（一条都放不下就当用完）。10-06 真机：一次「看一眼」五次各 25 条，花了约 6.7 积分。
      */
-    const budget = options.creditBudget?.(call.request)
-    const run = call.request.id
+    // 老调用方（测试里直接调执行器）可能不带 request：那就没有预算可言
+    const budget = call.request === undefined ? undefined : options.creditBudget?.(call.request)
+    const run = call.request?.id ?? ''
     const before = spent.get(run) ?? 0
     let clamped: number | undefined
     if (budget !== undefined) {
