@@ -10,6 +10,7 @@ import type {
   WorkspaceId,
 } from './common.js'
 import type { WorkspaceVertical } from './identity.js'
+import type { RunCancelReason } from './run-limits.js'
 
 /** 17 §1 RunRequest：协同服务 → 运行时适配器。无状态：运行自带全部上下文。 */
 export type RunKind =
@@ -549,7 +550,11 @@ export type RunEvent =
       no_stage?: boolean
     }
   | { type: 'run.failed'; error: { code: string; message: string; retryable: boolean } }
-  | { type: 'run.cancelled' }
+  /**
+   * WP236：`reason` 说清是怎么停的（没动静太久 / 跑满总时长 / 人点了停）。老事件没有这一格，
+   * 读的一方缺省当「人点了停」。
+   */
+  | { type: 'run.cancelled'; reason?: RunCancelReason }
 
 export interface RunUsage {
   input_tokens: number

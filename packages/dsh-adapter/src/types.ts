@@ -82,8 +82,20 @@ export interface DshRuntimeOptions {
    * - `auto`（缺省）：探测得到子进程入口就用 `subprocess`，否则回退 `in-process`
    */
   mode?: DshRuntimeMode
-  /** 子进程档：一次运行的真实时间上限（毫秒）；超时 → `run.cancelled`。缺省 60_000。 */
+  /**
+   * 子进程档：一次运行的真实时间**总上限**（毫秒）；到了 → `run.cancelled{reason:'max_duration'}`。
+   *
+   * WP236：老名字留着（模拟 realistic 档在用），语义 = {@link maxDurationMs}；两个都给时取 `maxDurationMs`。
+   * 原来缺省 60 秒、而且是唯一一条线——研究任务正干着活就被掐了；现在缺省 20 分钟，另有空闲线。
+   */
   subprocessTimeoutMs?: number
+  /**
+   * WP236：空闲超时（毫秒）——连续这么久**一个事件都没有**才算卡死、停掉（`reason:'idle_timeout'`）。
+   * 缺省 3 分钟（`DEFAULT_RUN_TIME_LIMITS`）。子进程档自己看；进程内档由宿主的看门狗经 `signal` 停。
+   */
+  idleTimeoutMs?: number
+  /** WP236：总时长上限（毫秒），缺省 20 分钟。语义同 {@link subprocessTimeoutMs}。 */
+  maxDurationMs?: number
   /** 子进程档：显式指定子进程入口（测试用；缺省按 `dist/headless/child.js` 探测）。 */
   childEntry?: string
   /**

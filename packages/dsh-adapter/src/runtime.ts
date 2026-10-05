@@ -26,6 +26,7 @@ import type {
   RuntimeAdapter,
   ToolDef,
 } from '@agentsws/contracts'
+import { cancelledEvent } from '@agentsws/contracts'
 import { canonicalJson, Provenance, sha256 } from '@agentsws/core'
 import { staticPrefixHash } from '@agentsws/model-gateway'
 import type { DraftPayload, StageIntent } from '@agentsws/stand-ins'
@@ -206,7 +207,7 @@ export function createInProcessDshRuntime(options: DshRuntimeOptions): RuntimeAd
         }`,
       })
       if (signal.aborted) {
-        emit({ type: 'run.cancelled' })
+        emit(cancelledEvent(signal))
         return finish('cancelled', '运行开始前即被中断')
       }
 
@@ -441,7 +442,7 @@ export function createInProcessDshRuntime(options: DshRuntimeOptions): RuntimeAd
         toolCalls = harness.gate.toolCalls
 
         if (signal.aborted) {
-          emit({ type: 'run.cancelled' })
+          emit(cancelledEvent(signal))
           return finish('cancelled', '运行被中断：未闭合的工具调用已补齐')
         }
         if (modelError !== undefined) {

@@ -13,6 +13,7 @@ import type {
   RunUsage,
   ToolDef,
 } from '@agentsws/contracts'
+import { cancelledEvent } from '@agentsws/contracts'
 import {
   canonicalJson,
   EXTERNAL_FENCE,
@@ -232,7 +233,7 @@ export function createDirectRuntime(options: DirectRuntimeOptions): RuntimeAdapt
         model: req.runtime.model,
       })
       if (signal.aborted) {
-        sink({ type: 'run.cancelled' })
+        sink(cancelledEvent(signal))
         return finish('cancelled', '运行开始前即被中断')
       }
 
@@ -491,7 +492,7 @@ export function createDirectRuntime(options: DirectRuntimeOptions): RuntimeAdapt
       for (let turn = 0; turn < maxTurns; turn += 1) {
         if (signal.aborted) {
           closeOpenToolUses('cancelled')
-          sink({ type: 'run.cancelled' })
+          sink(cancelledEvent(signal))
           return finish('cancelled', '运行被中断：未闭合的工具调用已补齐')
         }
         if (secondsSoFar() > req.budget.max_seconds) {
@@ -684,7 +685,7 @@ export function createDirectRuntime(options: DirectRuntimeOptions): RuntimeAdapt
 
           if (signal.aborted) {
             closeOpenToolUses('cancelled')
-            sink({ type: 'run.cancelled' })
+            sink(cancelledEvent(signal))
             return finish('cancelled', '运行被中断：未闭合的工具调用已补齐')
           }
         }

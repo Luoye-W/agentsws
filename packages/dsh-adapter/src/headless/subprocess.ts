@@ -17,7 +17,16 @@ import { randomBytes } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import type { RunEvent, RunRequest, RunResult, RuntimeAdapter } from '@agentsws/contracts'
+import {
+  cancelReasonOf,
+  createRunWatchdog,
+  DEFAULT_RUN_TIME_LIMITS,
+  type RunCancelReason,
+  type RunEvent,
+  type RunRequest,
+  type RunResult,
+  type RuntimeAdapter,
+} from '@agentsws/contracts'
 import { JsonRpcLineTransport } from '@deepseek-ai/dsh-sdk-protocol'
 import type { DshRuntimeOptions } from '../types.js'
 import type { WebUse } from '../web.js'
@@ -52,7 +61,18 @@ import {
 } from './protocol.js'
 
 const RUNTIME_NAME = 'dsh'
-const DEFAULT_TIMEOUT_MS = 60_000
+/**
+ * WP236：不再是「60 秒总时长」——空闲 3 分钟才算卡死、总时长 20 分钟封顶（与宿主看门狗同一套缺省）。
+ */
+const DEFAULT_IDLE_MS = DEFAULT_RUN_TIME_LIMITS.idle_timeout_seconds * 1000
+const DEFAULT_MAX_MS = DEFAULT_RUN_TIME_LIMITS.max_duration_seconds * 1000
+
+/** WP236：停下来时给人看的那句话（`summary`）。 */
+export function cancelledSummary(reason: RunCancelReason): string {
+  if (reason === 'idle_timeout') return '这次被停了：太久没有动静，已经把它收掉。'
+  if (reason === 'max_duration') return '这次被停了：跑满了这次运行的时长上限，已经把它收掉。'
+  return '这次被中断了：已经把它收掉。'
+}
 /** 子进程装好并答上 hello 的上限。 */
 const HELLO_TIMEOUT_MS = 20_000
 /** 请求 shutdown 之后等它自己退的宽限。 */
@@ -174,6 +194,8 @@ interface Child {
   stderr: () => string
   exited: Promise<number | null>
   kill(): void
+  /** WP236：子进程这边有动静（事件、回调宿主）就叫一下——看门狗按它续命。 */
+  activity: () => void
 }
 
 function spawnChild(entry: string): Child {
@@ -207,6 +229,7 @@ function spawnChild(entry: string): Child {
     token,
     stderr: () => tail,
     exited,
+    activity: () => undefined,
     kill() {
       if (proc.exitCode === null && proc.signalCode === null) proc.kill('SIGKILL')
     },
@@ -240,12 +263,22 @@ async function closeChild(child: Child): Promise<void> {
  */
 export function createSubprocessDshRuntime(options: DshRuntimeOptions): RuntimeAdapter {
   const entry = options.childEntry ?? defaultChildEntry()
-  const timeoutMs = options.subprocessTimeoutMs ?? DEFAULT_TIMEOUT_MS
+  const maxMs = options.maxDurationMs ?? options.subprocessTimeoutMs ?? DEFAULT_MAX_MS
+  const idleMs = Math.min(options.idleTimeoutMs ?? DEFAULT_IDLE_MS, maxMs)
 
   /** 起子进程、握手、装好宿主侧的回调路由。 */
   const connect = async (req: RunRequest | undefined): Promise<Child> => {
     const child = spawnChild(entry)
     child.transport.onRequest(async (method, params) => {
+      // WP236：回调宿主（模型、工具、出卡）本身就是动静；结束时再叫一次
+      child.activity()
+      try {
+        return await hostCall(method, params)
+      } finally {
+        child.activity()
+      }
+    })
+    const hostCall = async (method: string, params: unknown): Promise<unknown> => {
       const now = options.clock.now()
       const body = (params ?? {}) as Record<string, unknown>
       if (body.token !== child.token) throw new Error('bad_run_token')
@@ -334,7 +367,7 @@ export function createSubprocessDshRuntime(options: DshRuntimeOptions): RuntimeA
         }
       }
       throw new Error(`unknown_method: ${method}`)
-    })
+    }
     child.transport.start()
     try {
       await Promise.race([
@@ -443,6 +476,7 @@ export function createSubprocessDshRuntime(options: DshRuntimeOptions): RuntimeA
       }
 
       child.transport.onNotification((method, params) => {
+        child.activity()
         if (method === M_WEB_USE) {
           // WP179：一次网页使用（审计 + 用量）——宿主照 `web.onUse` 处理
           const p = params as unknown as WebUseParams
@@ -456,14 +490,37 @@ export function createSubprocessDshRuntime(options: DshRuntimeOptions): RuntimeA
         emit(p.event)
       })
 
-      let timer: NodeJS.Timeout | undefined
       let cancelled = false
-      const cancel = (): void => {
+      const cancel = (reason: RunCancelReason): void => {
         cancelled = true
-        child.transport.request(M_CANCEL, { token: child.token }).catch(() => {})
+        child.transport.request(M_CANCEL, { token: child.token, reason }).catch(() => {})
       }
-      const onAbort = (): void => cancel()
+      const onAbort = (): void => cancel(cancelReasonOf(signal))
       signal.addEventListener('abort', onAbort, { once: true })
+      /*
+       * WP236：**没动静才停**。每一个事件（模型说话、工具调用 / 结果、进度）都给看门狗续命；
+       * 连续 `idleMs` 没有任何事件才算卡死，再忙也不超过 `maxMs`。原来是固定 60 秒总时长，
+       * 研究任务（每次取数 8–12 秒、六七次）正干着活就被静默掐掉。
+       */
+      let fireTimeout: (reason: RunCancelReason) => void = () => undefined
+      const timedOut = new Promise<RunResponse>((resolve) => {
+        fireTimeout = (reason) =>
+          resolve({
+            ok: false,
+            code: 'timeout',
+            message: reason,
+            retryable: true,
+          })
+      })
+      const watchdog = createRunWatchdog({
+        idleMs,
+        maxMs,
+        onFire: (reason) => {
+          cancel(reason)
+          fireTimeout(reason)
+        },
+      })
+      child.activity = () => watchdog.touch()
 
       try {
         const response = await Promise.race([
@@ -472,19 +529,9 @@ export function createSubprocessDshRuntime(options: DshRuntimeOptions): RuntimeA
             request: req,
             options: wireOptions(options, req),
             now: options.clock.now(),
-            ...(signal.aborted ? { aborted: true } : {}),
+            ...(signal.aborted ? { aborted: true, abortReason: cancelReasonOf(signal) } : {}),
           }) as Promise<RunResponse>,
-          new Promise<RunResponse>((resolve) => {
-            timer = setTimeout(() => {
-              cancel()
-              resolve({
-                ok: false,
-                code: 'timeout',
-                message: `子进程超时（${timeoutMs}ms）`,
-                retryable: true,
-              })
-            }, timeoutMs)
-          }),
+          timedOut,
           child.exited.then<RunResponse>((code) => ({
             ok: false,
             code: 'runtime_crashed',
@@ -495,8 +542,9 @@ export function createSubprocessDshRuntime(options: DshRuntimeOptions): RuntimeA
 
         if (response.ok) return response.result
         if (response.code === 'timeout') {
-          // 17 §5.6：超时与中断同一处理——补齐、发 run.cancelled
-          emit({ type: 'run.cancelled' })
+          const reason = watchdog.fired() ?? 'max_duration'
+          // 17 §5.6：超时与中断同一处理——补齐、发 run.cancelled（WP236：带原因）
+          emit({ type: 'run.cancelled', reason })
           return {
             request_id: req.id,
             status: 'cancelled',
@@ -518,13 +566,13 @@ export function createSubprocessDshRuntime(options: DshRuntimeOptions): RuntimeA
               cost_base: 0,
             },
             session_ref: { runtime: RUNTIME_NAME, session_id: `sub_${req.id}` },
-            summary: '这次被中断了：子进程超时，已经把它收掉。',
+            summary: cancelledSummary(reason),
           }
         }
         return failed(response.code, response.message, response.retryable)
       } catch (e) {
         if (cancelled) {
-          emit({ type: 'run.cancelled' })
+          emit({ type: 'run.cancelled', reason: watchdog.fired() ?? cancelReasonOf(signal) })
           return failed('cancelled', '运行被中断', false)
         }
         return failed(
@@ -533,7 +581,7 @@ export function createSubprocessDshRuntime(options: DshRuntimeOptions): RuntimeA
           true,
         )
       } finally {
-        if (timer !== undefined) clearTimeout(timer)
+        watchdog.stop()
         signal.removeEventListener('abort', onAbort)
         await closeChild(child)
       }
