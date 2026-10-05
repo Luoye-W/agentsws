@@ -3093,6 +3093,24 @@ const zh: Table = {
   'dsa.sign_out.tasks_hint': '停下的事不会丢，换个模型或重新登录后可以让它重做。',
   'dsa.sign_out.stop_and_leave': '停掉并登出',
   'dsa.sign_out.keep': '先不登出',
+  // WP218：左下角「有新版本」按钮（桌面壳里才有）
+  'update.available': '有新版本',
+  'update.available.tip': '新版本 {version}，点一下在后台下载',
+  'update.available.notify': '新版本 {version}，点一下去下载页（这台 Mac 不能自动更新）',
+  'update.downloading': '正在下载',
+  'update.downloading.tip': '正在后台下载 {version}，下完会变成「重启并更新」',
+  'update.ready': '重启并更新',
+  'update.ready.tip': '{version} 已下载好。点一下退出、更新、自动重新打开；你的数据和设置都在',
+  'update.installing': '正在重启…',
+  'update.failed.download': '下载没成功',
+  'update.failed.install': '没装上',
+  'update.error.network': '连不上下载站。检查网络后点这里重试',
+  'update.error.not_found': '下载站上暂时没有这个版本。过一会儿点这里重试',
+  'update.error.checksum': '下下来的文件校验没过，已丢弃。点这里重新下载',
+  'update.error.disk': '磁盘空间不够。清出一些空间后点这里重试',
+  'update.error.smoke': '更新前自检没过，先不更新，旧版本照常用。点这里重试',
+  'update.error.install': '安装程序没起来。点这里重试',
+  'update.error.unknown': '没成功。点这里重试',
   // WP136（docs/79）：dsh 场景切换（左下角账户块上方那一行 + 它的面板）
   'scenes.entry': '场景',
   'scenes.title': '切换场景',
@@ -6681,6 +6699,29 @@ const en: Table = {
     'Your DeepSeek API balance has run out. Top up on the DeepSeek Platform, then try again.',
   'models.quota.top_up': 'Top up',
   'models.quota.chip': 'DeepSeek out of balance',
+  // WP218: the "update available" button bottom-left (desktop app only)
+  'update.available': 'Update available',
+  'update.available.tip': 'Version {version} is out. Click to download it in the background',
+  'update.available.notify':
+    'Version {version} is out. Click to open the download page (this Mac cannot update itself)',
+  'update.downloading': 'Downloading',
+  'update.downloading.tip':
+    'Downloading {version} in the background. It turns into “Restart to update” when done',
+  'update.ready': 'Restart to update',
+  'update.ready.tip':
+    '{version} is ready. Click to quit, update and reopen by itself. Your data and settings stay',
+  'update.installing': 'Restarting…',
+  'update.failed.download': 'Download failed',
+  'update.failed.install': 'Update not installed',
+  'update.error.network':
+    'Cannot reach the download server. Check your network, then click to retry',
+  'update.error.not_found': 'This version is not on the download server yet. Click to retry later',
+  'update.error.checksum':
+    'The download failed its integrity check and was discarded. Click to download again',
+  'update.error.disk': 'Not enough disk space. Free some up, then click to retry',
+  'update.error.smoke': 'The pre-update self-check failed, so nothing changed. Click to retry',
+  'update.error.install': 'The installer did not start. Click to retry',
+  'update.error.unknown': 'That did not work. Click to retry',
   // WP136 (docs/79): switching dsh scenes
   'scenes.entry': 'Scenes',
   'scenes.title': 'Switch scene',
