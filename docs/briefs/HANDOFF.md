@@ -110,6 +110,8 @@
 | 85 | WP212 消息页第 1、2 步：分拣加「类型」与改判；「没人接的」主视图 + 交给岗位；AI 助手改兜底 | `WP212-inbox-step1-2.md` | `wp212-inbox` · `wp/212-inbox` | WP205b | 已合并 |
 | 86 | WP214 状态用图标、说明只在第一次：模型设置页先改，全工作台状态文字扫一遍（StatusIcons 组件） | `WP214-status-icons.md` | `wp214-status-icons` · `wp/214-status-icons` | WP210 | 已合并 |
 | 87 | WP215 每个品牌的后台活同时跑（调度 / 巡检 / 收信 / IM / 夜扫按品牌常驻，与眼前品牌解耦；切换器显示各品牌后台状态） | `WP215-all-brands-background.md` | `wp215-brands-bg` · `wp/215-brands-bg` | WP66 | 进行中（Claude） |
+| 88 | WP216 建站岗位装 Shopify 官方 Liquid 技能（同批官方技能逐个评估）+ 评估官方 Dev MCP | `WP216-shopify-official-skills.md` | `wp216-shopify-skills` · `wp/216-shopify-skills` | WP209 | 进行中（Claude） |
+| 89 | WP217 Reddit 运营技能调研（开源技能、官方规则与 API 条款、对照现有四条 Reddit 职责、建议引进与自写大纲） | `WP217-reddit-skills-research.md` | `wp217-reddit` · `wp/217-reddit` | WP191 | 进行中（Claude） |
 
 WP117b 的补充要求（派工单里没有，写在这）：demo 服务的是 `apps/workstation/dist`，测界面前先 `pnpm -F @agentsws/workstation exec vite build`；交付一个真实点击的 playwright 脚本 `scripts/e2e-kol-sandbox.mjs`（playwright 库在 `node_modules/.pnpm/playwright@1.63.0/node_modules/playwright`），走完「选合成红人 → 起草开发信 → 批准发送 → 已发 ≥ 1 → 跳到 N 天后 → 回信 ≥ 1 → 分类 → 议价卡 → 阶段推进 → 交付物 → 追踪链接」，每步截图到 `docs/assets/workstation/kol-e2e-NN.png`，脚本里断言计数确实变了；演练数据从真实漏斗 / 归因里排除，单独显示「演练漏斗」。
 
