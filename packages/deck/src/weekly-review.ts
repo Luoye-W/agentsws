@@ -133,7 +133,7 @@ function readAds(input: WeeklyReviewInput): Reading[] {
     const s = r.data as ScalarResult
     if (s.spark.length === 0) continue
     parts.push(`${p.zh} 订单口径 ${s.value}（平台说 ${s.previous}）`)
-    first ??= `${s.value}`
+    first ??= `ROAS ${s.value}`
   }
   out.push(
     parts.length === 0

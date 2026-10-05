@@ -24,6 +24,7 @@ const { GrossMarginCard } = await import('@/components/org/gross-margin-card')
 const { BlockBody } = await import('@/components/blocks/block-view')
 const { CardChips } = await import('@/components/deck/evidence-chips')
 const { WeeklyReviewBody } = await import('@/components/deck/weekly-review-body')
+const { ReportBlocks } = await import('@/components/deck/panel-blocks')
 
 describe('公司 → 品牌 · 毛利率', () => {
   it('没填：写「没填」；填 40 保存 → 盈亏线 ROAS 2.5', async () => {
@@ -149,5 +150,39 @@ describe('本周经营一页纸那张卡', () => {
     expect(screen.getByTestId('weekly-not-connected').textContent).toContain(
       '红人归因（没人担红人营销）',
     )
+  })
+})
+
+describe('一页纸在岗位页上整张摊开（它不属于任何事项，没有「进详情」）', () => {
+  it('报表区里这一张直接是五段，不是一行摘要 + →', () => {
+    const card = {
+      id: 'apr_1',
+      kind: 'weekly_review',
+      title: '本周经营一页纸 · 2026-10-05',
+      summary: '测试品牌：1 块面板有数，0 块没接。',
+      detail: {
+        payload: {
+          kind: 'weekly_review',
+          week_of: '2026-10-05',
+          situation: '测试品牌：1 块面板有数，0 块没接。',
+          findings: [
+            {
+              panel: 'store_sales',
+              text: '销售额 USD 10',
+              value: 'USD 10',
+              source: '网站运营 · 销售额',
+            },
+          ],
+          impact: [],
+          recommendations: [],
+          next_steps: ['下周一自动再出一份。'],
+          not_connected: [],
+          length: 20,
+        },
+      },
+    } as unknown as Parameters<typeof ReportBlocks>[0]['reports'][number]
+    renderWithProviders(<ReportBlocks reports={[card]} onOpen={() => {}} />)
+    expect(screen.getByTestId('weekly-review')).toBeDefined()
+    expect(screen.queryByTestId('report-figures')).toBeNull()
   })
 })

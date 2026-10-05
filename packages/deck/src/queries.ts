@@ -1216,7 +1216,8 @@ const ADS_QUERIES: QueryDef[] = [
       columns: [
         { key: 'at', label: '什么时候停的' },
         { key: 'name', label: 'campaign' },
-        { key: 'roas', label: 'ROAS', align: 'right' as const },
+        // WP224：倍数不是钱（原来没写 format，会被念成 US$0.60）
+        { key: 'roas', label: 'ROAS', align: 'right' as const, format: 'ratio' as const },
         { key: 'spend', label: '停之前花了', align: 'right' as const, format: 'money' as const },
         // 判据那句话原样端出去：人要看的是"为什么停"，不是"停了"
         { key: 'reason', label: '判据' },
