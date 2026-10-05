@@ -1451,6 +1451,11 @@ async function bootstrap(): Promise<void> {
     quitApproved = true
     quitConfirmation.dispose()
   })
+  /** 服务进程（连同它起的场景）退干净没有；最多等 15 秒（Windows 上 8 秒没退壳会按进程树强杀）。 */
+  const waitServerGone = async (): Promise<void> => {
+    for (let i = 0; i < 60 && server.snapshot().pid !== undefined; i += 1) await sleep(250)
+  }
+  let serverDrained = false
   app.on('before-quit', (event) => {
     if (!quitApproved && !quitting && officialRunning()) {
       event.preventDefault()
@@ -1462,6 +1467,20 @@ async function bootstrap(): Promise<void> {
       return
     }
     quitting = true
+    /*
+     * WP225：等服务进程停干净再让壳退。Windows 上停服务进程是「关 stdin 请它收尾，8 秒没退按树强杀」，
+     * 强杀那个计时器在壳里——壳先走了，收尾卡住的服务进程就成了孤儿，锁着安装目录里的 node.exe，
+     * 下一次更新 / 卸载「文件被占用」。
+     */
+    if (!serverDrained && server.snapshot().pid !== undefined) {
+      event.preventDefault()
+      server.stop()
+      void waitServerGone().then(() => {
+        serverDrained = true
+        app.quit()
+      })
+      return
+    }
     server.stop()
   })
 
@@ -1628,7 +1647,7 @@ async function bootstrap(): Promise<void> {
     quitting = true
     for (const w of liveSceneWindows()) w.window.destroy()
     server.stop()
-    for (let i = 0; i < 60 && server.snapshot().pid !== undefined; i += 1) await sleep(250)
+    await waitServerGone()
   }
 
   /** 「有任务在跑，确定现在重启？」——照 WP184 退出确认：没东西在跑就不问。 */

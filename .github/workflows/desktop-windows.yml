@@ -85,12 +85,16 @@ jobs:
           "
           cd apps/desktop && node scripts/dist.mjs --win --x64
 
+      # WP225：用 pwsh 跑——Git Bash 把 node 崩溃时的 Windows 退出码（NTSTATUS）一律报成 127，
+      # 这里把原始退出码按十六进制打出来（0xC0000409 / 0xC0000005 …）
       - name: 装起来真跑（静默安装 → 启动 → health → 工作台首页 → 退出 → 卸载）
-        shell: bash
+        shell: pwsh
         run: |
-          installer="$(ls apps/desktop/release/Agents-Workshop-Setup-*.exe | head -n 1)"
-          echo "安装包：$installer"
-          node apps/desktop/scripts/win-install-smoke.mjs --installer "$installer" --out win-smoke
+          $installer = Get-ChildItem apps/desktop/release/Agents-Workshop-Setup-*.exe | Select-Object -First 1
+          Write-Host "安装包：$($installer.FullName)"
+          node apps/desktop/scripts/win-install-smoke.mjs --installer $installer.FullName --out win-smoke
+          $code = $LASTEXITCODE
+          if ($code -ne 0) { Write-Host ("冒烟没过，退出码 {0}（0x{0:X8}）" -f $code); exit 1 }
 
       - name: 上传安装包（只是这次运行的 artifact，不是发布）
         # 冒烟没过也传：安装包本身打出来了，拿去真机上查问题（10-05 Fable）
