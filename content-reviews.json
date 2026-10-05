@@ -1,0 +1,97 @@
+{
+  "$comment": "WP219（docs/90 §4、docs/42「内容更新」）：内容更新登记表——哪些随软件带的第三方内容走内容更新通道、每一版谁审的。发版流水线只把『当前目录的条目摘要 = 最新一条审核记录的 sha256』的条目打进内容包；没审过、审完又改过、扫描命中没逐条放行的，一律不打。审核记录由审核人（Fable）照 docs/42 写，格式见 docs/90 §4.3；pending_merge 表示那一条还在别的工作单的分支上（合进主干前打包时跳过）。",
+  "schema": "agentsws.content-reviews/1",
+  "min_app_version": "0.1.0",
+  "items": [
+    {
+      "id": "skill:seo-judgment",
+      "kind": "skill",
+      "path": "packages/skills/bundled/seo-judgment",
+      "upstream_id": "marketingskills",
+      "title": {
+        "zh": "搜索判断",
+        "en": "SEO judgment"
+      },
+      "reviews": []
+    },
+    {
+      "id": "skill:ad-copywriting",
+      "kind": "skill",
+      "path": "packages/skills/bundled/ad-copywriting",
+      "upstream_id": "marketingskills",
+      "title": {
+        "zh": "广告文案",
+        "en": "Ad copywriting"
+      },
+      "reviews": []
+    },
+    {
+      "id": "skill:audience-research",
+      "kind": "skill",
+      "path": "packages/skills/bundled/audience-research",
+      "upstream_id": "marketingskills",
+      "title": {
+        "zh": "人群研究",
+        "en": "Audience research"
+      },
+      "reviews": []
+    },
+    {
+      "id": "skill:email-sms",
+      "kind": "skill",
+      "path": "packages/skills/bundled/email-sms",
+      "upstream_id": "marketingskills",
+      "title": {
+        "zh": "邮件与短信",
+        "en": "Email & SMS"
+      },
+      "reviews": []
+    },
+    {
+      "id": "skill:influencer-marketing",
+      "kind": "skill",
+      "path": "packages/skills/bundled/influencer-marketing",
+      "upstream_id": "marketingskills",
+      "title": {
+        "zh": "红人营销",
+        "en": "Influencer marketing"
+      },
+      "reviews": []
+    },
+    {
+      "id": "skill:cold-email",
+      "kind": "skill",
+      "path": "packages/skills/bundled/cold-email",
+      "upstream_id": "marketingskills",
+      "title": {
+        "zh": "开发信",
+        "en": "Cold email"
+      },
+      "reviews": []
+    },
+    {
+      "id": "skill:prospecting",
+      "kind": "skill",
+      "path": "packages/skills/bundled/prospecting",
+      "upstream_id": "marketingskills",
+      "title": {
+        "zh": "找客户",
+        "en": "Prospecting"
+      },
+      "reviews": []
+    },
+    {
+      "id": "skill:shopify",
+      "kind": "skill",
+      "path": "packages/skills/bundled/shopify",
+      "upstream_id": "shopify-ai-toolkit",
+      "title": {
+        "zh": "Shopify 官方技能",
+        "en": "Shopify official skill"
+      },
+      "platforms": ["shopify"],
+      "pending_merge": "WP216",
+      "reviews": []
+    }
+  ]
+}
