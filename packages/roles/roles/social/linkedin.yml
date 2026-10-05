@@ -100,6 +100,8 @@ automation:
 
 skills:
   - { name: brand-voice, tier: open, load: always }
+  # WP220：社媒研究（爆款帖、评论、竞品拆解；改编自 social-media-research-skills，取数只走许可的口）
+  - { name: social-research, tier: open, load: on_demand }
 
 home_blocks:
   - {
@@ -234,6 +236,11 @@ task_examples:
     title: { zh: "找客户不在这里", en: "Prospecting lives elsewhere" }
     description: "想在 LinkedIn 上找采购经理加好友。"
     expected_output: "说清楚这是 B2B 岗位主动开发的事，而且那边也只出你本人去加、去发的任务；这条只管公司主页和老板号的内容。"
+
+# WP179（Luoye 09-29「官方功能优先」）：官方网页搜索（用 DeepSeek 账号 / key 搜）与抓公开网页。
+# WP220：研究技能要上网查新闻、帖子、话题；网页抓取不开 Reddit / X 的页面（门禁里拦）。
+# 每条运行上限走 thresholds.web_search_per_run / web_fetch_per_run（不写 = 5 / 10）。
+web_tools: [web_search, web_fetch]
 
 # ── WP120（69 §2）：**角色定位**。提示里的「你是谁」，六段骨架一段不许少 ──────────
 # 第三段「你不负责」是防串岗的那一条。改这一段之前先读 docs/69；

@@ -102,6 +102,8 @@ automation:
 
 skills:
   - { name: brand-voice, tier: open, load: always }
+  # WP220：话题研究：先看别人的版里在聊什么、哪些问题值得去答（只读，读 Reddit 走 read_reddit）
+  - { name: trend-research, tier: open, load: on_demand }
 
 home_blocks:
   - {
@@ -161,6 +163,17 @@ grounding:
       tool: route_to_support,
       prefetch: false,
     }
+  # WP220（Luoye 10-05）：Reddit 取数只走一条路由——①接口中台（积分）→ ②浏览器只读（单独的只读会话、
+  # 限速，绝不用品牌发帖账号的会话），每品牌在连接页 Reddit 卡上调顺序与停用。发帖 / 回帖不经这条，
+  # 永远走品牌号 + 人批。工具 `read_reddit` 只读；两路都不行它照实说「没取到」，不是 0 条。
+  # 意图词故意写窄（整句短语）：这一行只为把工具挂上，不该改变岗位路由。
+  - {
+      name: reddit_research,
+      intent_terms: [Reddit 上在聊, Reddit 口碑, what people say on reddit],
+      cue_terms: [这周, 最近, this week],
+      tool: read_reddit,
+      prefetch: false,
+    }
 
 notifications:
   # 外部发帖永远人审，而且卡上要带着版规检查结果
@@ -217,6 +230,11 @@ task_examples:
     title: { zh: "有人在问我们这类产品", en: "Someone is asking about this category" }
     description: "有个帖子在问「哪个户外电源耐用」。"
     expected_output: "一份回帖草稿：先答问题再提我们，价格与参数只写事实卡里有的；带承诺词的第一稿会被打回重写。"
+
+# WP179（Luoye 09-29「官方功能优先」）：官方网页搜索（用 DeepSeek 账号 / key 搜）与抓公开网页。
+# WP220：研究技能要上网查新闻、帖子、话题；网页抓取不开 Reddit / X 的页面（门禁里拦）。
+# 每条运行上限走 thresholds.web_search_per_run / web_fetch_per_run（不写 = 5 / 10）。
+web_tools: [web_search, web_fetch]
 
 # ── WP120（69 §2）：**角色定位**。提示里的「你是谁」，六段骨架一段不许少 ──────────
 # 第三段「你不负责」是防串岗的那一条：69 §0 那条亲测记录（红人岗位回出客服的话）
