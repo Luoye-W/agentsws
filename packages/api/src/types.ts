@@ -52,6 +52,7 @@ import type {
 } from '@agentsws/contracts'
 import type { DeckCard, QueryContext as DeckQueryContext } from '@agentsws/deck'
 import type { IdempotencyStore } from './idempotency.js'
+import type { ActivityPort } from './routes/activity.js'
 import type { AdsPort } from './routes/ads.js'
 import type { AskPort } from './routes/ask.js'
 import type { B2bOutboundPort, B2bPort, B2bSalesPort } from './routes/b2b.js'
@@ -1028,6 +1029,11 @@ export interface GatewayDeps {
    * 没装配时 `/v1/settings/background*` 回 not_implemented。
    */
   background?: BackgroundPort
+  /**
+   * WP225（WP218 决定 ③）：岗位 AI 正在干活没有（跨品牌，只回数量）。桌面壳「重启并更新」前问它；
+   * 没装配时 `GET /v1/activity` 回 not_implemented（壳当「不知道」，不拦）。
+   */
+  activity?: ActivityPort
 }
 
 /**
