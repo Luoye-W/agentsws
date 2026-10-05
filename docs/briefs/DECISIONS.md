@@ -211,3 +211,4 @@
 |---|---|---|---|
 | 50 | 数据目录名现在是 `@agentsws\desktop`（不好认），要不要改成好认的名字 | 趁现在只有测试机有数据，改成 `AgentsWorkshop`（英文避开编码坑），自动迁移老目录；另开一单 | 低 |
 | 51 | Windows 上 AI 跑命令时，PowerShell 只对那一个进程带 `-ExecutionPolicy Bypass`（不改系统设置） | 同意（不带的话系统自带 PowerShell 跑不了 npm 装的命令；命令白名单和沙箱照旧拦） | 中 |
+- **10-05 Luoye 定 46–51 全部同意**：Reddit 价 0.0534 / 0.064 积分每条、最少 5 条；先对所有有数据权限的公司开着，正式招用户前加「按公司放行」；用 fatihtahta actor；自用先做、对外卖 Reddit 数据等官方接口或正式对外前再定；数据目录改 `AgentsWorkshop`（自动迁移，另开单）；PowerShell 进程级 Bypass 保留。
