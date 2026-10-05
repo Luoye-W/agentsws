@@ -2922,7 +2922,7 @@ export interface paths {
     }
     get?: never
     put?: never
-    /** 把这个岗位合并到另一个（职责、安放、事项、岗位层记忆都跟过去） */
+    /** 把这个岗位合并到另一个（职责、安放、事项、岗位层记忆都跟过去；目标是模板时另建自建岗位，模板不变） */
     post: operations['mergePosition']
     delete?: never
     options?: never
@@ -26709,6 +26709,7 @@ export interface operations {
       content: {
         'application/json': {
           into: string
+          name?: string
         }
       }
     }

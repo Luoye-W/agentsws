@@ -140,6 +140,100 @@ function unreachable(err: unknown): boolean {
   return classifyUpdateError(err) === 'network'
 }
 
+/** 「这个源还不存在」的几种样子（进日志的短标签）。 */
+export type SourceMissingReason = 'dns' | 'refused' | 'http-404' | 'no-releases'
+
+/** 错误连同它的 `cause` 链摊平：code / statusCode / 文本。Node fetch 的「fetch failed」真正原因在 cause 里。 */
+function errorFacts(err: unknown): { codes: string[]; statuses: number[]; text: string } {
+  const codes: string[] = []
+  const statuses: number[] = []
+  const texts: string[] = []
+  let cur: unknown = err
+  for (let depth = 0; depth < 4 && cur !== undefined && cur !== null; depth += 1) {
+    texts.push(String(cur))
+    if (typeof cur !== 'object') break
+    const e = cur as { code?: unknown; statusCode?: unknown; message?: unknown; cause?: unknown }
+    if (typeof e.code === 'string') codes.push(e.code)
+    if (typeof e.statusCode === 'number') statuses.push(e.statusCode)
+    if (typeof e.message === 'string') texts.push(e.message)
+    cur = e.cause
+  }
+  return { codes, statuses, text: texts.join(' ') }
+}
+
+/**
+ * WP235：这次查更新失败，是不是因为**这个源还不存在**（还没开张），而不是坏了。
+ * 自有下载站 `dl.agentsws.com` 还没绑定、GitHub 上还一个发布都没有的这段日子，每次查都会失败——
+ * 那不是错误，不该在日志里打 ERROR 堆栈、也不该让按钮显示出错。
+ *
+ * 口径（只认这几种，其余一律按真错误照原级别记）：
+ * - `dns`：域名解析不到——Node 的 `ENOTFOUND`、Electron 的 `net::ERR_NAME_NOT_RESOLVED`（域名还没绑）
+ * - `refused`：连接被拒——`ECONNREFUSED`、`net::ERR_CONNECTION_REFUSED`（域名在、上面没服务）
+ * - `http-404`：版本信息文件不存在——electron-updater 的 `ERR_UPDATER_CHANNEL_FILE_NOT_FOUND`、
+ *   `HttpError` 的 statusCode 404、我们自己抛的 `HTTP 404`（GitHub 仓库 / releases 列表 404 也是它）
+ * - `no-releases`：GitHub 上一个发布都没有——`ERR_UPDATER_NO_PUBLISHED_VERSIONS`、
+ *   atom 里没有 entry 时的「No published versions on GitHub」
+ *
+ * **不算**的（照旧 warn / error）：超时、连接被重置、断网（`net::ERR_INTERNET_DISCONNECTED`）、
+ * 5xx、证书错、源回了内容但解析坏了（`ERR_UPDATER_INVALID_RELEASE_FEED`，哪怕里面夹着 404 字样）。
+ *
+ * 状态机怎么用它：**这一轮查过的源全都「不存在」**才算「暂无更新源」——主源连不上会退到 GitHub
+ * （见 `unreachable`），那就要两个源都是这样；主源 404 按原规则不退 GitHub、或者 GitHub 开关关着，
+ * 那这一轮只查了主源，主源不存在就算。
+ */
+export function sourceMissing(err: unknown): SourceMissingReason | undefined {
+  const { codes, statuses, text } = errorFacts(err)
+  if (codes.includes('ERR_UPDATER_INVALID_RELEASE_FEED')) return undefined
+  if (/\bENOTFOUND\b|net::ERR_NAME_NOT_RESOLVED\b/.test(text)) return 'dns'
+  if (/\bECONNREFUSED\b|net::ERR_CONNECTION_REFUSED\b/.test(text)) return 'refused'
+  if (codes.includes('ERR_UPDATER_NO_PUBLISHED_VERSIONS') || /No published versions/i.test(text))
+    return 'no-releases'
+  if (
+    codes.includes('ERR_UPDATER_CHANNEL_FILE_NOT_FOUND') ||
+    statuses.includes(404) ||
+    /\bHttp(?:Error:)?\s*404\b/i.test(text)
+  )
+    return 'http-404'
+  return undefined
+}
+
+/** electron-updater 的 `autoUpdater.logger` 要的形状。 */
+export interface ElectronUpdaterLogger {
+  info(message?: unknown): void
+  warn(message?: unknown): void
+  error(message?: unknown): void
+  debug(message: string): void
+}
+
+/**
+ * WP235：交给 electron-updater 的 logger。
+ *
+ * 根因：`AppUpdater` 构造时自己挂了 `on('error', e => logger.error('Error: ' + e.stack))`，
+ * `checkForUpdates()` 失败时先 `emit('error')` 再把错抛出来——所以源还不存在时，
+ * 日志里先来一段 ERROR 级的堆栈，然后状态机才拿到错。
+ *
+ * 这里：**正在查**（`checking()` 为真）且是「源还不存在」那一类的 error，不写（查的结论由状态机统一记一行 info）；
+ * 其余照旧 error——下载失败、差分下载回退、安装出错都不在「查」里，一个不漏。debug 不写。
+ */
+export function electronUpdaterLogger(
+  logger: Logger,
+  checking: () => boolean,
+): ElectronUpdaterLogger {
+  return {
+    info: (m) => {
+      logger.info(String(m))
+    },
+    warn: (m) => {
+      logger.warn(String(m))
+    },
+    error: (m) => {
+      if (checking() && sourceMissing(m) !== undefined) return
+      logger.error(String(m))
+    },
+    debug: () => undefined,
+  }
+}
+
 export function createUpdateController(options: UpdateControllerOptions): UpdateController {
   const log = options.logger.child('update')
   const listeners = new Set<(status: UpdateStatus) => void>()
@@ -179,16 +273,34 @@ export function createUpdateController(options: UpdateControllerOptions): Update
     })
   }
 
+  /**
+   * WP235：这一轮查过的源都还不存在（口径见 `sourceMissing`）——不是出错，就是「暂无新版本」。
+   * 只记一行 info（不带堆栈），按钮回到 idle（= 已是最新，左下角那颗按钮不出现）。
+   * 已经是 idle 就不再广播（省得订阅方每 4 小时再记一行「更新状态 idle」）。
+   */
+  const nothingYet = (message: string, fields: Readonly<Record<string, unknown>>): UpdateStatus => {
+    log.info(message, fields)
+    return busy() || current.state === 'idle' ? current : set({ state: 'idle' })
+  }
+
   const runCheck = async (): Promise<UpdateStatus> => {
     if (options.mode === 'off' || busy()) return current
+    /** 主源「还不存在」的样子；是真错误时为 undefined（那就已经 warn 过了）。 */
+    let primaryMissing: SourceMissingReason | undefined
     try {
       const info = await options.primary.check()
       active = options.primary
       activeSource = 'primary'
       return found(info, 'primary')
     } catch (err) {
-      log.warn('主源查更新失败', { error: String(err) })
-      if (options.fallback === undefined || !unreachable(err)) return current
+      primaryMissing = sourceMissing(err)
+      if (primaryMissing === undefined) log.warn('主源查更新失败', { error: String(err) })
+      if (options.fallback === undefined || !unreachable(err)) {
+        // 这一轮只查了主源（GitHub 开关关着，或主源 404 按规则不退）
+        return primaryMissing === undefined
+          ? current
+          : nothingYet('还没有可用的更新源，暂无新版本', { primary: primaryMissing })
+      }
     }
     // 主源连不上：退到 GitHub 查一次（开关在 `update-feed.ts` 的 githubFallbackEnabled）
     try {
@@ -196,9 +308,23 @@ export function createUpdateController(options: UpdateControllerOptions): Update
       const info = await backend.check()
       active = backend
       activeSource = 'github'
+      if (info === undefined && primaryMissing !== undefined)
+        return nothingYet('暂无新版本', { primary: primaryMissing, github: 'no-newer' })
       return found(info, 'github')
     } catch (err) {
-      log.warn('备用源（GitHub）查更新也失败', { error: String(err) })
+      const githubMissing = sourceMissing(err)
+      if (primaryMissing !== undefined && githubMissing !== undefined)
+        return nothingYet('还没有可用的更新源，暂无新版本', {
+          primary: primaryMissing,
+          github: githubMissing,
+        })
+      if (githubMissing === undefined)
+        log.warn('备用源（GitHub）查更新也失败', {
+          error: String(err),
+          ...(primaryMissing === undefined ? {} : { primary: primaryMissing }),
+        })
+      // 主源是真错误（上面已 warn），GitHub 只是还没发布：这一半不是错
+      else log.info('备用源（GitHub）上还没有发布', { github: githubMissing })
       return current
     }
   }

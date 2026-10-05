@@ -47,9 +47,17 @@ export function belongsTo(
   return position.roles.some((r) => r.role === assignment.role_id)
 }
 
+/** 「负责人」那一行：身份，不是干活的岗位（docs/54 §6.5）。 */
+export const OWNER_POSITION_ID = 'owner'
+
 /**
- * 持有人（docs/54 §6.1）：有分配**安放**在这里的人，加上老规则——未安放的分配凑齐
- * 这个岗位默认包的人（05 §2）。
+ * 持有人（docs/54 §6.1）：有分配**安放**在这里的人，加上老规则——未安放的分配**归属于**这里的人。
+ *
+ * WP235（Fable 10-06 Windows 真机）：老规则以前要「凑齐这个岗位的默认包」（05 §2）。WP234 之后
+ * 左栏已经按 `belongsTo` 算（持有模板里一条职责就算在这个岗位里），持有人却还要整包——于是
+ * 只做 `pr.reddit` 的 Luoye，左栏里有「公共关系」，公司页却写「还没人做这个岗位」。现在两边同一条：
+ * 未安放的分配里**有一条干活的职责**（底座职责不算）在这个岗位的清单里，就算持有人。
+ * 只有底座职责的岗位（「普通成员」）与「负责人」那一行照旧按默认包算（它们本来就是身份）。
  */
 export function holdersByPlacement(
   position: PositionRolesLike,
@@ -58,6 +66,10 @@ export function holdersByPlacement(
   exists: (position_id: string) => boolean,
 ): PersonId[] {
   const wanted = position.roles.filter((r) => r.default === true).map((r) => r.role)
+  const duties = new Set(
+    position.roles.map((r) => r.role).filter((r) => !WORKSPACE_BASE_ROLES.has(r)),
+  )
+  const identityOnly = position.id === OWNER_POSITION_ID || duties.size === 0
   const out: PersonId[] = []
   for (const person of people) {
     const placedHere = person.held.some((a) => {
@@ -73,8 +85,10 @@ export function holdersByPlacement(
       const p = placementOf?.(a.id)
       return p === undefined || !exists(p)
     })
-    if (wanted.length > 0 && wanted.every((r) => loose.some((a) => a.role_id === r)))
-      out.push(person.person_id)
+    const holds = identityOnly
+      ? wanted.length > 0 && wanted.every((r) => loose.some((a) => a.role_id === r))
+      : loose.some((a) => duties.has(a.role_id))
+    if (holds) out.push(person.person_id)
   }
   return out
 }
