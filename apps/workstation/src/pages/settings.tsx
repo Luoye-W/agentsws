@@ -32,8 +32,10 @@ import { Separator } from '@/components/ui/separator'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   ApiClientError,
+  getCloudAccount,
   getOnboardingState,
   getPositions,
+  latestBrandIntake,
   listOrganizations,
   setWorkspaceProfile,
 } from '@/lib/api'
@@ -88,6 +90,23 @@ export function SettingsPage({
     if (hash !== '#diagnostics' || ownerId === undefined) return
     document.getElementById('diagnostics')?.scrollIntoView?.({ block: 'start' })
   }, [hash, ownerId])
+  /*
+   * WP233：「公司邮箱后缀」的建议值从云账号邮箱 / 品牌客服邮箱带出（公共邮箱不带）。
+   * 两样都是顺手查一下，查不到就不带——不挡这一页。
+   */
+  const cloudAccount = useQuery({
+    queryKey: ['cloud-account', ownerId],
+    queryFn: () => getCloudAccount(ownerId),
+    enabled: ownerId !== undefined,
+    retry: false,
+  })
+  const intake = useQuery({
+    queryKey: ['brand-intake', 'latest', ownerId],
+    queryFn: () => latestBrandIntake(ownerId),
+    enabled: ownerId !== undefined,
+    retry: false,
+  })
+  const supportEmail = intake.data?.profile.support_email?.value
   const orgs = useQuery({ queryKey: ['orgs'], queryFn: () => listOrganizations(), retry: false })
   const org = orgs.data?.[0]
   const save = useMutation({
@@ -232,6 +251,10 @@ export function SettingsPage({
                   ? {}
                   : { profile: onboarding.data.profile })}
                 emailHint={onboarding.data.person.email}
+                suggestFrom={[
+                  cloudAccount.data?.linked === true ? cloudAccount.data.email : undefined,
+                  supportEmail,
+                ]}
                 verticals={onboarding.data.verticals}
                 storefrontPlatforms={onboarding.data.storefront_platforms}
                 allowUnsupported
