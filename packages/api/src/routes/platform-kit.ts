@@ -24,11 +24,12 @@ import { assignmentOf, body, ok, principalOf } from '../helpers.js'
 import { type Route, route } from '../route-spec.js'
 import type { GatewayDeps } from '../types.js'
 
-/** 看一眼这个品牌的平台套件：只读，谁在店铺设置上有读权都能看（店主、建站四条）。 */
+/** 看一眼这个品牌的平台套件：只读。 */
 const READ = {
-  domain: 'store_config',
+  // 平台套件说的是「这个品牌的 AI 手边有哪几样官方工具」——与技能页同一把闸（店主与建站四条都有）
+  domain: 'skill',
   op: 'read',
-  range: 'assigned',
+  range: 'own',
   sensitivity: 'internal',
 } as const
 

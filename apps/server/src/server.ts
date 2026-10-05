@@ -352,7 +352,7 @@ import {
   type PersonasAssembly,
   personaFileIn,
 } from './personas.js'
-import { createPlatformCliProber, PlatformCliLoginStore } from './platform-cli.js'
+import { createPlatformCliProber, PlatformCliLoginStore, type ProbeExec } from './platform-cli.js'
 import { createPlatformKitPort } from './platform-kit.js'
 import { createPositions, type PositionsAssembly } from './positions.js'
 import { createPrStore, prDeckData, seedDemoPr } from './pr.js'
@@ -755,6 +755,11 @@ export interface ServerOptions {
     profilePatchPath?: string
     backend?: OfficialPluginBackend
   }
+  /**
+   * WP216：检测本机平台 CLI 用的子进程（测试 / demo 换成替身，不跑真的 `shopify`）。
+   * 生产不传：照 PATH 真跑 `<cli> version` 与 `node --version`。
+   */
+  platformCliExec?: ProbeExec
   /**
    * WP134：「用我的 DeepSeek 账号登录」的注入点（测试 / demo 用替身 → 全程不联网）。
    * 生产不传：第一次有人点"用 DeepSeek 账号登录"时才 `import()` 官方模块。
@@ -6682,7 +6687,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   const platformKitPort = createPlatformKitPort({
     now: () => clock.now(),
     platformOf: (ws) => brandProfileOf(ws).storefront_platform,
-    prober: createPlatformCliProber({ now: () => clock.now(), env }),
+    prober: createPlatformCliProber({
+      now: () => clock.now(),
+      env,
+      ...(options.platformCliExec === undefined ? {} : { exec: options.platformCliExec }),
+    }),
     loginStoreOf: (ws) => {
       let store = platformCliLogins.get(ws)
       if (store === undefined) {
