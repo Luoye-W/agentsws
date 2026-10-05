@@ -47,6 +47,8 @@ summary_en: What people said lately, every line sourced
 | YouTube | 品牌连上的 YouTube 官方接口 | 没连就用网页搜索找视频，标明「只看到标题与摘要」 |
 | TikTok、Instagram | 接口中台（按账号取） | 按关键词搜还没接，照实说 |
 
+读 Reddit 用只读工具 `read_reddit`：它按品牌设置的顺序走这两路，回来的每条带链接与时间，另附「从哪一路取的」。
+
 几条规矩：
 
 - **每次取数都记来源**：哪一路、命中缓存没有、几条。报告里每一条都写「来自接口中台 / 浏览器只读 / 官方网页搜索 / 官方接口」。
