@@ -60,6 +60,7 @@ import type {
   ApprovalItem,
   Assignment,
   Clock,
+  ContentPublicKey,
   EventEnvelope,
   Halt,
   KolChannel,
@@ -78,6 +79,9 @@ import {
   B2B_FACT_SUBJECT_TYPE,
   B2B_SENDER_CHOICE_KIND,
   brandNameOf,
+  CONTENT_CHECK_INTERVAL_MS,
+  CONTENT_SIGNING_PUBLIC_KEYS,
+  contentChannelOf,
   KOL_AUDIT_CAPABILITY,
   KOL_CHANNEL_IDS,
   KOL_FOLDER,
@@ -143,7 +147,7 @@ import {
   type SearchConsolePort,
 } from '@agentsws/seo-core'
 import { siteDesignPrompt, themeDesignVariables } from '@agentsws/site-core'
-import { createSkills, readBundledSkill, type Skills } from '@agentsws/skills'
+import { CONTENT_REJECT_TEXT, createSkills, readBundledSkill, type Skills } from '@agentsws/skills'
 // WP74（37 §2.5）：统一日历里社媒那一层的撞车说明，判据只有 social-core 这一份
 import { scheduleConflicts, scheduleRulesFor } from '@agentsws/social-core'
 import { detectAnsweredBoundaries, SUPPORT_BOUNDARIES } from '@agentsws/support-core'
@@ -261,6 +265,15 @@ import {
   createConnections,
   createMailProbe,
 } from './connections.js'
+// WP219（docs/90）：已审的第三方内容更新（按品牌出卡 / 自动更新、原子换基础层、退回、三方合并）
+import {
+  CONTENT_UPDATES_ENV,
+  type ContentFeedSource,
+  type ContentFetch,
+  type ContentUpdates,
+  contentFeedSources,
+  createContentUpdates,
+} from './content-updates.js'
 import { dataServiceApiPort } from './data-service.js'
 import {
   createDeepSeekAccount,
@@ -767,6 +780,21 @@ export interface ServerOptions {
     backend?: OfficialPluginBackend
   }
   /**
+   * WP219：内容更新的注入点（测试 / demo 用：本地替身更新源、现生成的钥匙、临时存放处）。
+   * 生产不传：开关看 `AGENTSWS_CONTENT_UPDATES=on`（桌面安装包启动服务时给），钥匙用内置公钥
+   * `CONTENT_SIGNING_PUBLIC_KEYS`（空 = 通道关着），存放处在数据目录下 `content-updates/`。
+   */
+  contentUpdates?: {
+    enabled?: boolean
+    root?: string
+    keys?: readonly ContentPublicKey[]
+    sources?: readonly ContentFeedSource[]
+    fetch?: ContentFetch
+    appVersion?: string
+    /** 起来就查、之后每 6 小时查（缺省：开着就查；测试关掉自己调 `check()`）。 */
+    schedule?: boolean
+  }
+  /**
    * WP216：检测本机平台 CLI 用的子进程（测试 / demo 换成替身，不跑真的 `shopify`）。
    * 生产不传：照 PATH 真跑 `<cli> version` 与 `node --version`。
    */
@@ -993,6 +1021,11 @@ export interface Server {
    * 调一次 `refresh()`；demo 也可以。测试不调就一个字节都不出机器。
    */
   pricingCatalog: PricingCatalogSource
+  /**
+   * WP219（docs/90）：已审的内容更新。没有存放处（不落盘的进程、又没注入）时不装配——
+   * 设置里那一行不出，卡也不会出。
+   */
+  contentUpdates?: ContentUpdates
   /** 25 定时与流程：调度器 + 流程引擎 + 各个消费者的登记。 */
   schedule: ScheduleAssembly
   /** WP181：官方「自动化任务」包的那一层（四个工具的执行器、到点的处理器、`scheduled_task` 卡）。 */
@@ -1844,13 +1877,81 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   // WP144：最外一层——`computer_use` 授权卡批了就记一次授权、带着它重跑这件事
   // WP154：选题卡批了 → 按卡片所属品牌开事项（钩子在品牌模块建好之后才挂上）
   const seoDecidedHook: SeoDecidedHook = {}
+
+  /*
+   * WP219（docs/90 §6）：已审的第三方内容更新。只在**开着**（桌面安装包给 `AGENTSWS_CONTENT_UPDATES=on`，
+   * 或测试 / demo 注入）且**有存放处**时装配；内置公钥是空的就照样装配、但通道关着（设置里照实说）。
+   * 出卡走同一条审批总线：内容更新卡批了 / 冲突卡选了，在 `contentUpdates.wrap` 里接住。
+   */
+  const contentOpts = options.contentUpdates
+  const contentRoot =
+    contentOpts?.root ?? (dbDir === undefined ? undefined : join(dbDir, 'content-updates'))
+  const contentEnabled = contentOpts?.enabled ?? env[CONTENT_UPDATES_ENV] === 'on'
+  const contentKeys = contentOpts?.keys ?? CONTENT_SIGNING_PUBLIC_KEYS
+  const contentAppVersion = contentOpts?.appVersion ?? env.AGENTSWS_VERSION ?? '0.0.0-dev'
+  const contentChannel = contentChannelOf(contentAppVersion)
+  const contentOff = !contentEnabled
+    ? '这台没开内容更新（装好的桌面版才开）。'
+    : contentKeys.length === 0
+      ? CONTENT_REJECT_TEXT.no_keys
+      : undefined
+  const contentBrands = async (): Promise<{ id: WorkspaceId; owner_id?: PersonId }[]> => {
+    const ids = new Set<WorkspaceId>([workspace.id])
+    for (const org of identity.listOrganizations())
+      for (const w of identity.brandsOf(org.id)) ids.add(w.id)
+    const out: { id: WorkspaceId; owner_id?: PersonId }[] = []
+    for (const id of ids) {
+      const owner = (await identity.getWorkspace(id))?.owner_id
+      out.push(owner === undefined ? { id } : { id, owner_id: owner })
+    }
+    return out
+  }
+  let approvalsForContent: ApprovalBus | undefined
+  const contentUpdates: ContentUpdates | undefined =
+    contentRoot === undefined
+      ? undefined
+      : createContentUpdates({
+          root: contentRoot,
+          appVersion: contentAppVersion,
+          channel: contentChannel,
+          keys: contentKeys,
+          sources: contentOpts?.sources ?? contentFeedSources(contentChannel),
+          fetch: contentOpts?.fetch ?? ((url, init) => fetch(url, init)),
+          clock,
+          registry: skills.registry,
+          brands: contentBrands,
+          platformOf: (ws) => brandProfileOf(ws).storefront_platform,
+          approvals: () => approvalsForContent,
+          appendEvent,
+          ...(contentOff === undefined ? {} : { off: contentOff }),
+        })
+  // 启动：各品牌更新过的基础层装回技能库（软件自带版追上了就丢掉覆盖）
+  await contentUpdates?.restore()
+  const contentWrap = <B extends ApprovalBus>(bus: B): B =>
+    contentUpdates === undefined ? bus : contentUpdates.wrap(bus)
+
   const approvals = seoDecided(
     // WP181：最外一层——`scheduled_task` 卡批了就让那条自动化任务开始、拒了就取消
     automation.wrap(
-      officialPlugins.wrap(computerUse.wrap(catalog.wrap(learning.wrap(rawApprovals)))),
+      officialPlugins.wrap(
+        contentWrap(computerUse.wrap(catalog.wrap(learning.wrap(rawApprovals)))),
+      ),
     ),
     seoDecidedHook,
   )
+  approvalsForContent = approvals
+  // 每 6 小时查一次（起来 30 秒后先查一次，不拖慢启动）；关着就不起定时器
+  const contentTimers: ReturnType<typeof setTimeout>[] = []
+  if (contentUpdates !== undefined && contentOff === undefined && contentOpts?.schedule !== false) {
+    const run = (): void => {
+      void contentUpdates.check().catch(() => undefined)
+    }
+    const first = setTimeout(run, 30_000)
+    const every = setInterval(run, CONTENT_CHECK_INTERVAL_MS)
+    first.unref?.()
+    every.unref?.()
+    contentTimers.push(first, every)
+  }
   // ── WP66（52 O1「每个品牌的所有东西都单独设置」）：一个进程装多套品牌模块 ──
   //
   // 从这里开始，连接、活数据源、记录源、工作模型、运行时、渠道、聊天车道与聊天窗、
@@ -6989,6 +7090,26 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
      * WP180：官方插件。**不按品牌**（同电脑操控）。出卡走同一条审批总线（批卡在 `officialPlugins.wrap` 里接住）。
      */
     /*
+     * WP219（docs/90）：已审的内容更新。**按品牌**（设置、当前版、退回都是这个品牌的）。
+     */
+    ...(contentUpdates === undefined
+      ? {}
+      : {
+          contentUpdates: {
+            view: (actor) => contentUpdates.view(actor.workspace_id as WorkspaceId),
+            setMode: (actor, mode) =>
+              contentUpdates.setMode(actor.workspace_id as WorkspaceId, mode),
+            check: async (actor) => {
+              await contentUpdates.check()
+              return contentUpdates.view(actor.workspace_id as WorkspaceId)
+            },
+            apply: (actor, id) =>
+              contentUpdates.apply(actor.workspace_id as WorkspaceId, id, 'person'),
+            rollback: (actor, id) => contentUpdates.rollback(actor.workspace_id as WorkspaceId, id),
+            diff: (actor, id) => contentUpdates.diff(actor.workspace_id as WorkspaceId, id),
+          },
+        }),
+    /*
      * WP216：平台专属那一套（官方技能 / Dev MCP / 官方 CLI 卡）。**按品牌档案**判断平台；
      * 「我登好了」按品牌的数据目录记一笔（不存凭据）；本机 CLI 检测是这台机器的事，一台一份缓存。
      */
@@ -7525,6 +7646,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     secrets,
     cloudAccount,
     pricingCatalog,
+    ...(contentUpdates === undefined ? {} : { contentUpdates }),
     schedule,
     automation,
     reconcile,
@@ -7599,6 +7721,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     async close() {
       if (closed) return
       closed = true
+      for (const t of contentTimers) clearTimeout(t)
       // WP215：分配一变就即时对一遍定时——还在做的那几件先做完，别在关库之后再写
       await background.settled()
       if (unmountWs) {

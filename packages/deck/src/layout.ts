@@ -105,6 +105,10 @@ export const LAYOUT_BY_KIND: Record<Exclude<DeckKind, 'staged_change'>, DeckLayo
   official_plugin: 'policy',
   // WP210：客户来信投不进——主「再投一次」、次「去邮箱回复」
   inbound_dead_letter: 'policy',
+  // WP219：随软件带的第三方内容有了已审的新版——更新 / 稍后 / 查看改动
+  content_update: 'change',
+  // WP219：新版改了你也改过的段——用新版 / 保留我的（看对比）
+  content_conflict: 'choice',
 }
 
 /**

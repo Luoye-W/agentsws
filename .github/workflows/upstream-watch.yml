@@ -121,6 +121,49 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+  # ── WP219（docs/90 §7、docs/42「内容更新」）：随软件带的第三方内容的「待审升级」提案 ──────────
+  # 只在周报那一趟跑。登记表（content-reviews.json）里**官方原样收录**的条目（目录里有 agentsws.json，
+  # 例如 WP216 的 Shopify 官方技能），上游出了新 release 就各出一份提案：文件 diff + 正文按段 diff +
+  # 许可证对比 + 可疑指令扫描（命中就标红、不自动通过）+ 分界线检查 + 审核记录草稿。
+  # 改写类的技能（marketingskills 那几份）要人先把上游改动移植进来，再本机跑
+  # `node scripts/content-proposal.mjs --item <id> --to <候选目录>`。
+  # 和别的步骤一样：**只出提案（artifact + 作业摘要），不改仓库、不开 PR、不打包、不发布**。
+  content-proposals:
+    name: 内容更新 · 待审升级提案
+    needs: observe
+    if: needs.observe.outputs.scope == 'weekly'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+      - name: install
+        run: pnpm install --frozen-lockfile
+      - name: tsc -b（skills：扫描与 diff 在那里）
+        run: pnpm exec tsc -b packages/skills
+      - name: 官方原样收录的条目 → 提案
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set +e
+          node scripts/content-proposal.mjs --all-official --out-dir out/content-proposals
+          code=$?
+          for f in out/content-proposals/*.md; do [ -f "$f" ] && cat "$f" >> "$GITHUB_STEP_SUMMARY"; done
+          # 3 = 有标红（命中 / 许可证变了 / 有脚本）：照样出提案，但不让它被当成「可直接合」
+          if [ "$code" = 3 ]; then echo "::warning::内容更新提案里有标红的条目，要人逐条看"; exit 0; fi
+          exit $code
+      - uses: actions/upload-artifact@v4
+        with:
+          name: content-proposals
+          path: out/content-proposals/
+          if-no-files-found: ignore
+          retention-days: 30
+
   # ── ④bis 默认值扫描：`.d.ts` 的 diff 看不见的那一半（docs/42）──────────────
   # 这一步是 docs/42 §3 定的**启用前提**：没有它，一条"把整条会话日志上报给模型厂商"
   # 的开关从 false 翻成 true，类型不变、行为指纹也不变，全绿的自动报告会整条漏掉（WP70 实例）。
