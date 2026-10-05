@@ -128,21 +128,35 @@ export {
   WEB_APP_BUNDLE,
   webSceneArgs,
 } from './scenes.js'
-export type { ShellCheck, ShellCredentialPlan, ShellEffect, ShellPolicyInput } from './shell.js'
+export type {
+  CommandEnvExecutor,
+  ShellCheck,
+  ShellCredentialPlan,
+  ShellEffect,
+  ShellFlavor,
+  ShellPolicyInput,
+} from './shell.js'
 export {
   AgentswsBashExecutor,
+  AgentswsPwshExecutor,
   BASH_TOOL,
   checkShellCommand,
+  commandHead,
   insideRoot,
+  isShellTool,
+  PWSH_TOOL,
   resolveShellEnv,
   runShell,
   SHELL_ROLE_IDS,
   shellBrief,
   shellCredentialPlan,
+  shellFlavor,
   shellRoleAllowed,
+  shellToolName,
   THEME_STORE_ENV,
   THEME_TOKEN_ENV,
   themeWorkspaceRoot,
+  withExecutionPolicyBypass,
 } from './shell.js'
 export type {
   SubscriptionBeginRequest,

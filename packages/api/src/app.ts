@@ -11,6 +11,7 @@ import { readCookie, SESSION_COOKIE } from './identity.js'
 import { buildOpenApi, type OpenApiDocument } from './openapi.js'
 import { TokenBucketLimiter } from './rate-limit.js'
 import type { GatewayEnv, Route, RouteSpec } from './route-spec.js'
+import { activityRoutes } from './routes/activity.js'
 import { adsRoutes } from './routes/ads.js'
 import { approvalRoutes } from './routes/approvals.js'
 import { askRoutes } from './routes/ask.js'
@@ -252,6 +253,8 @@ export function collectRoutes(): Route[] {
     ...contentUpdatesRoutes(),
     // WP215：每个品牌一套后台。`/v1/settings/background*` 是新路径（放在最后：生成物的顺序不动别人）
     ...backgroundRoutes(),
+    // WP225：岗位 AI 正在干活没有（桌面壳重启并更新前问）。`/v1/activity` 是新路径（放在最后：生成物的顺序不动别人）
+    ...activityRoutes(),
     // WP224：毛利率事实卡、两条止损线对照、本周经营一页纸。`/v1/economics/*` 是新前缀（放在最后）
     ...economicsRoutes(),
   ]

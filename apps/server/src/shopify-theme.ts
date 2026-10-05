@@ -49,6 +49,8 @@ import { execFile, spawn } from 'node:child_process'
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import type { Clock, Iso8601, ObjectRef } from '@agentsws/contracts'
+import { killTree } from './kill-tree.js'
+import { CliArgumentError, cliSpawnSpec } from './win-cli.js'
 
 /** 装 CLI 的那条命令（界面上原样显示，用户复制粘贴）。 */
 export const THEME_CLI_INSTALL = 'npm i -g @shopify/cli'
@@ -79,7 +81,19 @@ export const PASSTHROUGH_ENV: readonly string[] = [
   'APPDATA',
   'LOCALAPPDATA',
   'USERPROFILE',
+  // WP225：Windows 上按 PATH 找 `shopify.cmd` 要它（不是秘密；npm 的 .cmd 壳里也要改它）
+  'PATHEXT',
 ]
+
+/** WP225：Windows 上参数转不准（含 `"` / `%`）——不起进程，按「输入不对」报。 */
+function argumentRefused(err: unknown): ShopifyThemeError | undefined {
+  return err instanceof CliArgumentError
+    ? new ShopifyThemeError(
+        'invalid_input',
+        '名字或路径里有 Windows 命令行转不准的字符（" 或 %），换一个再试',
+      )
+    : undefined
+}
 
 export type ShopifyThemeErrorCode =
   | 'cli_missing'
@@ -236,15 +250,24 @@ export function scrubCliOutput(text: string): string {
 function defaultRun(): RunCli {
   return (args, opts) =>
     new Promise<CliResult>((resolve, reject) => {
+      // WP225：Windows 上 `shopify` 是 `shopify.cmd`，经 cmd.exe 起（见 win-cli.ts）
+      let spec: ReturnType<typeof cliSpawnSpec>
+      try {
+        spec = cliSpawnSpec('shopify', args, { env: opts.env })
+      } catch (err) {
+        reject(argumentRefused(err) ?? err)
+        return
+      }
       execFile(
-        'shopify',
-        [...args],
+        spec.command,
+        spec.args,
         {
           cwd: opts.cwd,
           env: opts.env,
           timeout: opts.timeoutMs,
           maxBuffer: 16 * 1024 * 1024,
           windowsHide: true,
+          ...(spec.windowsVerbatimArguments === true ? { windowsVerbatimArguments: true } : {}),
         },
         (err, stdout, stderr) => {
           if (err === null) {
@@ -273,10 +296,12 @@ function defaultRun(): RunCli {
 
 function defaultSpawn(): SpawnCli {
   return (args, opts) => {
-    const child = spawn('shopify', [...args], {
+    const spec = cliSpawnSpec('shopify', args, { env: opts.env })
+    const child = spawn(spec.command, spec.args, {
       cwd: opts.cwd,
       env: opts.env,
       windowsHide: true,
+      ...(spec.windowsVerbatimArguments === true ? { windowsVerbatimArguments: true } : {}),
     })
     const listeners: ((line: string) => void)[] = []
     let buffer = ''
@@ -290,7 +315,8 @@ function defaultSpawn(): SpawnCli {
     child.stderr?.on('data', feed)
     return {
       onLine: (cb) => listeners.push(cb),
-      stop: () => child.kill(),
+      // WP225：Windows 上起的是 cmd.exe → node.exe，只杀 cmd 那一层会留下孤儿，按进程树结束
+      stop: () => killTree(child),
       done: new Promise<number>((resolve) => {
         child.on('close', (code) => resolve(code ?? 0))
         child.on('error', () => resolve(-1))

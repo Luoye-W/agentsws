@@ -104,7 +104,7 @@ handle.dispose()                                                            // 1
 | 注 JS | 同上，公司端（`executor`）对 `browser_evaluate` / `browser_run_code_unsafe` 硬拒 | 上游 0.0.80 新增了 `browser_run_code_unsafe`（自称 "RCE-equivalent"），一起拒 |
 | 人接管 | `browser.ts` 的 `browserBrief` 写进 persona 的 `complete` 段 | 官方自己那段 `mcp:playwright-mcp` 被 `complete` 段遮掉，所以"能开哪些站 / 登录页怎么办"**只能由我们写**，不写模型就不知道 |
 | 一 Session 一浏览器 | provider 的 `exclusive: mode === 'attach'`，随 `handle.dispose()` 一起走 | 与 17 §5.1 天然一致 |
-| 个人端单独 Profile | 桌面壳托盘「打开工作用的浏览器」→ `~/Library/Application Support/agentsws/browser-profile` + `--remote-debugging-port=9333` → 地址 `PUT /v1/settings/browser` | 已实现（`apps/desktop/src/work-browser.ts`） |
+| 个人端单独 Profile | 桌面壳托盘「打开工作用的浏览器」→ `~/Library/Application Support/@agentsws/desktop/browser-profile` + `--remote-debugging-port=9333` → 地址 `PUT /v1/settings/browser` | 已实现（`apps/desktop/src/work-browser.ts`） |
 
 三件与预判不同的事：
 

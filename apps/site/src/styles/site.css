@@ -988,3 +988,13 @@ h1 em {
     width: 220px;
   }
 }
+
+/* WP225：首页「下载」按钮旁边的 Windows 首次打开提示（只在 Windows 访客那里露出来） */
+.dl-win-note {
+  margin: 10px 0 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+.final .dl-win-note {
+  text-align: center;
+}

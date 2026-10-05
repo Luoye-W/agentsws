@@ -5,6 +5,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { silentLogger } from '../src/logging.js'
 import {
+  busyBeforeRestart,
   classifyUpdateError,
   createUpdateController,
   DEFAULT_FIRST_CHECK_MS,
@@ -404,5 +405,21 @@ describe('publicStatus', () => {
       }),
     ).toEqual({ state: 'error', stage: 'download', code: 'network', version: '0.2.0' })
     expect(publicStatus({ state: 'idle' })).toEqual({ state: 'idle' })
+  })
+})
+
+describe('WP225：重启并更新前要不要问', () => {
+  it('官方场景、AI 正在操作电脑、岗位 AI 正在干活，有一样就问；都没有不问', () => {
+    const idle = { officialScenes: false, computerUse: false, aiRuns: 0 }
+    expect(busyBeforeRestart(idle)).toBe(false)
+    expect(busyBeforeRestart({ ...idle, aiRuns: 1 })).toBe(true)
+    expect(busyBeforeRestart({ ...idle, officialScenes: true })).toBe(true)
+    expect(busyBeforeRestart({ ...idle, computerUse: true })).toBe(true)
+  })
+
+  it('岗位 AI 那一项问不到：按没有算（不能因为问不到就永远装不上）', () => {
+    expect(
+      busyBeforeRestart({ officialScenes: false, computerUse: false, aiRuns: undefined }),
+    ).toBe(false)
   })
 })

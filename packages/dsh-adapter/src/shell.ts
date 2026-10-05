@@ -19,7 +19,7 @@
  * 沙箱那一道判的是"跑起来之后碰不碰得到"。allowlist 判得出意图、判不出 symlink；
  * 沙箱判得出真实路径、判不出"这是一次发布"。少哪一道都不行。
  */
-import { isAbsolute, join, relative, resolve } from 'node:path'
+import { isAbsolute, join, posix, win32 } from 'node:path'
 import type { RunRequest, RunShell } from '@agentsws/contracts'
 import { platformCliTelemetryOffEnv } from '@agentsws/contracts'
 import type { Context } from '@deepseek-ai/cordis'
@@ -29,10 +29,36 @@ import {
   isCredentialRefName,
   parseCredentialKey,
 } from '@deepseek-ai/dsh-credentials'
+import SandboxPwshExecutor from '@deepseek-ai/dsh-pwsh-sandbox'
 import type { ShellExecRequest, ShellExecSpec } from '@deepseek-ai/dsh-shell'
 
 /** 官方 `dsh-tool-bash` 注册的那个工具名。 */
 export const BASH_TOOL = 'bash'
+
+/** WP225：官方 `dsh-tool-pwsh` 注册的那个工具名（Windows 上跑命令用它）。 */
+export const PWSH_TOOL = 'pwsh'
+
+/** 跑命令用哪种壳。 */
+export type ShellFlavor = 'bash' | 'pwsh'
+
+/**
+ * WP225（WP218 决定 ④）：**Windows 上 AI 跑命令走 PowerShell**，不要求用户装 Git Bash / WSL；
+ * mac / Linux 照旧 bash。用哪个 PowerShell 由官方执行器自己挑（`dsh-pwsh-local` 的 `resolvePwshPath`：
+ * PowerShell 7 的安装位置 → PATH 上的 `pwsh.exe` → 系统自带的 Windows PowerShell 5.1）。
+ */
+export function shellFlavor(platform: string = process.platform): ShellFlavor {
+  return platform === 'win32' ? 'pwsh' : 'bash'
+}
+
+/** 这种壳在模型面上叫什么工具。 */
+export function shellToolName(flavor: ShellFlavor): string {
+  return flavor === 'pwsh' ? PWSH_TOOL : BASH_TOOL
+}
+
+/** 这个工具名是不是「跑命令」那一个（两种壳都算）。 */
+export function isShellTool(name: string): boolean {
+  return name === BASH_TOOL || name === PWSH_TOOL
+}
 
 /**
  * 有终端的职责（55 §8「谁需要」那一行）。
@@ -114,6 +140,8 @@ export interface ShellPolicyInput {
   sandboxPermissions?: string
   /** 模型给的 `run_in_background`；给了就一律拒（17 §5.1 一次运行一棵树）。 */
   background?: boolean
+  /** WP225：这条命令交给哪种壳（Windows 上是 `pwsh`）；不给按 `bash`。 */
+  flavor?: ShellFlavor
 }
 
 // ── allowlist 表 ───────────────────────────────────────────────────────
@@ -214,6 +242,46 @@ const SYNTAX_DENIALS: readonly { test: RegExp; reason: string }[] = [
   },
 ]
 
+/**
+ * WP225：PowerShell 另外几种「能把别的东西带进来」的写法（`bash` 那一组照样判，这里是多出来的）。
+ *
+ * - 子表达式 / 数组 / 哈希表（`$(…)` `@(…)` `@{…}` `${…}`）：括号里的东西先被当成代码跑一遍；
+ * - 脚本块（`{…}`）：配上调用运算符就是一段任意代码；
+ * - 变量（`$env:USERPROFILE` 这类）：展开成什么我们事先看不见，路径越界那一关就判不准。
+ *
+ * `` ` ``（PowerShell 的转义符）在 bash 那一组里已经整类拒了。
+ */
+const PWSH_SYNTAX_DENIALS: readonly { test: RegExp; reason: string }[] = [
+  {
+    test: /[$@][({]/,
+    reason:
+      'shell_substitution_forbidden: 这里不支持子表达式（`$(…)` `@(…)` `@{…}`）。' +
+      '括号里的东西会先被当成代码跑一遍，那一遍绕过了命令白名单。',
+  },
+  {
+    test: /[{}]/,
+    reason:
+      'shell_script_block_forbidden: 这里不支持脚本块（`{…}`）。一段脚本块就是一段任意代码，整类不放行。',
+  },
+  {
+    test: /\$/,
+    reason:
+      'shell_variable_forbidden: 这里不支持变量（`$…`）。变量展开成什么事先看不见，' +
+      '判不准它会不会碰到工作副本以外的地方；请直接写出路径或值。',
+  },
+]
+
+/** WP225：PowerShell 里「删东西」的几种写法（与 `rm` 同一句人话）。 */
+const DESTRUCTIVE_HEADS: readonly string[] = [
+  'rm',
+  'rmdir',
+  'del',
+  'erase',
+  'rd',
+  'ri',
+  'remove-item',
+]
+
 /** 切成一条一条（`;` / `&&` / `||` / 换行）。 */
 function segments(command: string): string[] {
   return command
@@ -256,16 +324,23 @@ function tokenize(segment: string): string[] | undefined {
 /** 一个路径在不在沙箱根里面（**不解 symlink**：那一层由沙箱的内核规则兜底）。 */
 export function insideRoot(root: string, path: string): boolean {
   if (path.startsWith('~')) return false
-  const abs = isAbsolute(path) ? path : resolve(root, path)
-  const rel = relative(root, abs)
-  return rel === '' || (!rel.startsWith('..') && !isAbsolute(rel))
+  // WP225：根是 Windows 路径就按 Windows 的规矩算（盘符、反斜杠、不分大小写）——在 Windows 上本来就是，
+  // 这样在 mac 上跑的单测也判得准
+  const p = /^[A-Za-z]:[\\/]/.test(root) || root.startsWith('\\\\') ? win32 : posix
+  const abs = p.isAbsolute(path) ? path : p.resolve(root, path)
+  const rel = p.relative(root, abs)
+  return rel === '' || (!rel.startsWith('..') && !p.isAbsolute(rel))
 }
 
-/** 这个词看着像不像一个路径（像才去判越界；`--theme` `123` 这种不判）。 */
+/**
+ * 这个词看着像不像一个路径（像才去判越界；`--theme` `123` 这种不判）。
+ * WP225：Windows 的写法也算——盘符（`C:\…` / `C:/…`）、UNC（`\\server\…`）、用反斜杠的 `..\`。
+ */
 function looksLikePath(token: string): boolean {
   if (token.startsWith('-')) return false
-  if (token.startsWith('/') || token.startsWith('~')) return true
-  return token.split('/').includes('..')
+  if (token.startsWith('/') || token.startsWith('~') || token.startsWith('\\')) return true
+  if (/^[A-Za-z]:/.test(token)) return true
+  return token.split(/[\\/]/).includes('..')
 }
 
 /**
@@ -280,7 +355,8 @@ function stripRedirects(
   const targets: string[] = []
   for (let i = 0; i < tokens.length; i += 1) {
     const token = tokens[i] as string
-    const m = /^(\d*)(>>|>|<)(.*)$/.exec(token)
+    // WP225：PowerShell 还有 `*>`（所有输出流一起重定向）
+    const m = /^(\d*|\*)(>>|>|<)(.*)$/.exec(token)
     if (m === null) {
       argv.push(token)
       continue
@@ -336,6 +412,12 @@ export function checkShellCommand(input: ShellPolicyInput): ShellCheck {
   for (const rule of SYNTAX_DENIALS) {
     if (rule.test.test(command)) return { verdict: 'deny', reason: rule.reason }
   }
+  const flavor = input.flavor ?? 'bash'
+  if (flavor === 'pwsh') {
+    for (const rule of PWSH_SYNTAX_DENIALS) {
+      if (rule.test.test(command)) return { verdict: 'deny', reason: rule.reason }
+    }
+  }
   if (input.workdir !== undefined && !insideRoot(input.root, input.workdir)) {
     return {
       verdict: 'deny',
@@ -350,7 +432,7 @@ export function checkShellCommand(input: ShellPolicyInput): ShellCheck {
   let note = ''
   let publish: { reason: string; theme_id?: string } | undefined
   for (const part of parts) {
-    const one = checkSegment(part, input.root)
+    const one = checkSegment(part, input.root, flavor)
     if (one.verdict === 'deny') return one
     if (one.verdict === 'publish') {
       // 一段是发布，整条就是发布（不允许把 publish 藏在一串正经命令后面）
@@ -367,8 +449,16 @@ export function checkShellCommand(input: ShellPolicyInput): ShellCheck {
   return { verdict: 'allow', effect, note }
 }
 
+/**
+ * 命令名归一。PowerShell 不分大小写、`git.exe` / `shopify.cmd` 与 `git` / `shopify` 是同一条，
+ * 所以 pwsh 那一档先归成小写、去掉 `.exe` / `.cmd`（`.ps1` / `.bat` 不去：那是在跑脚本，照样不在表里）。
+ */
+export function commandHead(raw: string, flavor: ShellFlavor): string {
+  return flavor === 'pwsh' ? raw.toLowerCase().replace(/\.(exe|cmd)$/, '') : raw
+}
+
 /** 一段（`;` / `&&` 切出来的一条）过不过。 */
-function checkSegment(segment: string, root: string): ShellCheck {
+function checkSegment(segment: string, root: string, flavor: ShellFlavor): ShellCheck {
   const tokens = tokenize(segment)
   if (tokens === undefined) {
     return {
@@ -386,7 +476,7 @@ function checkSegment(segment: string, root: string): ShellCheck {
     }
   }
   const argv = stripped.argv
-  const head = argv[0]
+  const head = argv[0] === undefined ? undefined : commandHead(argv[0], flavor)
   if (head === undefined || head === '') {
     return { verdict: 'deny', reason: 'shell_empty_command: 有一段是空的' }
   }
@@ -401,7 +491,7 @@ function checkSegment(segment: string, root: string): ShellCheck {
       }
     }
   }
-  if (head === 'rm' || head === 'rmdir') {
+  if (DESTRUCTIVE_HEADS.includes(head)) {
     return {
       verdict: 'deny',
       reason:
@@ -641,10 +731,13 @@ export function shellBrief(input: {
   root: string
   store?: string
   mode: RunShell['mode']
+  /** WP225：Windows 上是 `pwsh`（工具名与「哪些写法跑不了」那一句跟着变）。不给按 `bash`。 */
+  flavor?: ShellFlavor
 }): string {
+  const flavor = input.flavor ?? 'bash'
   const lines = [
     '## 终端（主题工作副本）',
-    `你可以用 \`bash\` 工具在这个目录里干活：\`${input.root}\`。${
+    `你可以用 \`${shellToolName(flavor)}\` 工具在这个目录里干活：\`${input.root}\`。${
       input.mode === 'read-only'
         ? '现在是只读档，写不了东西。'
         : '只有这个目录能写，别的地方一律写不进去。'
@@ -657,8 +750,12 @@ export function shellBrief(input: {
     '- `node <副本里的脚本>` / `npx shopify …` / `pnpm install`。',
     '**发布是人的事**：`shopify theme publish`、任何带 `--live` 的命令，你按不下去——' +
       '你提一次，它会变成一张"发布主题"的卡进待办，由人点头之后才真的换线上那一份。',
-    '管道（`|`）、命令替换（`` ` ``、`$(…)`）、后台（`&`）、`rm` 都跑不了；' +
-      '要写文件就写在上面那个目录里。',
+    flavor === 'pwsh'
+      ? '这是 PowerShell：管道（`|`）、子表达式（`$(…)` `@(…)`）、脚本块（`{…}`）、变量（`$…`）、' +
+        '`&`、`` ` ``、删除（`Remove-Item` / `del` / `rm`）都跑不了；路径用 Windows 写法，' +
+        '要写文件就写在上面那个目录里。'
+      : '管道（`|`）、命令替换（`` ` ``、`$(…)`）、后台（`&`）、`rm` 都跑不了；' +
+        '要写文件就写在上面那个目录里。',
   ]
   if (input.store !== undefined && input.store !== '') {
     lines.push(`这次操作的店铺是 ${input.store}（CLI 已经知道，命令里不用再带 \`--store\`）。`)
@@ -702,6 +799,53 @@ export class AgentswsBashExecutor extends SandboxBashExecutor {
     // 调用方自己给的 env 优先（上游的合并顺序：显式 env 压 ENV_OVERRIDES）
     return { ...spec, env: { ...this.commandEnv, ...spec.env } }
   }
+}
+
+/**
+ * WP225：Windows 上的那一个执行器——官方 `dsh-pwsh-sandbox`（`dsh-bash-sandbox` 的 PowerShell 孪生，
+ * 同一个 `ctx.sandbox` 笼子：Windows 上是受限令牌 + ACL 那一档）。多出来的两点：
+ *
+ * 1. 凭据只在这一条命令里活着——与 {@link AgentswsBashExecutor} 一字不差（理由见那边）；
+ * 2. 起 PowerShell 时加 `-ExecutionPolicy Bypass`（**只对这一个进程**）：npm 装的命令在 Windows 上
+ *    有 `.ps1` 与 `.cmd` 两份壳，PowerShell 先认 `.ps1`，而 Windows 自带的 PowerShell 5.1 默认策略是
+ *    Restricted——`npx` / `pnpm` / `shopify` 一跑就是「此系统上禁止运行脚本」。执行策略不是安全边界
+ *    （微软原话），我们的两道墙是命令白名单与沙箱，这里放开不降低它们。
+ */
+export class AgentswsPwshExecutor extends SandboxPwshExecutor {
+  /** 这一条命令要用的环境变量（**值**）。命令之间它是空的。 */
+  private commandEnv: Record<string, string> = {}
+
+  setCommandEnv(env: Record<string, string>): void {
+    this.commandEnv = env
+  }
+
+  clearCommandEnv(): void {
+    this.commandEnv = {}
+  }
+
+  override resolve(request: ShellExecRequest): ShellExecSpec {
+    const spec = super.resolve(request)
+    if (Object.keys(this.commandEnv).length === 0) return spec
+    return { ...spec, env: { ...this.commandEnv, ...spec.env } }
+  }
+
+  protected override argv(spec: ShellExecSpec): string[] {
+    return withExecutionPolicyBypass(super.argv(spec))
+  }
+}
+
+/** 在 `-Command` 之前插 `-ExecutionPolicy Bypass`（已经有就不重复；没有 `-Command` 就原样）。 */
+export function withExecutionPolicyBypass(argv: readonly string[]): string[] {
+  if (argv.some((a) => a.toLowerCase() === '-executionpolicy')) return [...argv]
+  const at = argv.indexOf('-Command')
+  if (at < 0) return [...argv]
+  return [...argv.slice(0, at), '-ExecutionPolicy', 'Bypass', ...argv.slice(at)]
+}
+
+/** 门禁要的那两件事（两种执行器都有）。 */
+export interface CommandEnvExecutor {
+  setCommandEnv(env: Record<string, string>): void
+  clearCommandEnv(): void
 }
 
 /**

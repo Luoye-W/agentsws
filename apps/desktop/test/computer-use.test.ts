@@ -110,6 +110,20 @@ describe('api-client：active / stop', () => {
     expect(await off.api.computerUseActive(session, 'asg')).toEqual({ ok: true, value: undefined })
   })
 
+  it('WP225：岗位 AI 正在跑几次（GET /v1/activity）；没装配 / 形状不对是失败（调用方按「没有」算）', async () => {
+    const on = clientOf({ '/v1/activity': res(200, { data: { busy: true, runs: 2 } }) })
+    expect(await on.api.activeRuns(session, 'asg')).toEqual({ ok: true, value: 2 })
+    expect(on.calls).toEqual([{ url: 'http://127.0.0.1:4317/v1/activity', method: 'GET' }])
+    const idle = clientOf({ '/v1/activity': res(200, { data: { busy: false, runs: 0 } }) })
+    expect(await idle.api.activeRuns(session, 'asg')).toEqual({ ok: true, value: 0 })
+    expect((await clientOf({}).api.activeRuns(session, 'asg')).ok).toBe(false)
+    const odd = clientOf({ '/v1/activity': res(200, { data: { busy: true, runs: -1 } }) })
+    expect(await odd.api.activeRuns(session, 'asg')).toEqual({
+      ok: false,
+      reason: '响应里没有 runs',
+    })
+  })
+
   it('停止走 POST /v1/computer-use/stop', async () => {
     const c = clientOf({ '/v1/computer-use/stop': res(200, { data: { stopped: 1 } }) })
     expect(await c.api.stopComputerUse(session, 'asg')).toEqual({ ok: true, value: 1 })

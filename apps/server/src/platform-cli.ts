@@ -20,6 +20,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import type { PlatformCliSpec } from '@agentsws/contracts'
 import { PASSTHROUGH_ENV } from './shopify-theme.js'
+import { cliSpawnSpec } from './win-cli.js'
 
 /** 跑一条命令（测试注入假 CLI / 假 node）。`ENOENT` = 没装。 */
 export type ProbeExec = (
@@ -71,10 +72,18 @@ export function probeEnv(
 export function defaultProbeExec(): ProbeExec {
   return (bin, args, opts) =>
     new Promise((resolve) => {
+      // WP225：Windows 上 npm 装的 CLI 是 `.cmd` 壳，经 cmd.exe 起（见 win-cli.ts）；版本参数里没有转不准的字符
+      const spec = cliSpawnSpec(bin, args, { env: opts.env })
       execFile(
-        bin,
-        [...args],
-        { env: opts.env, timeout: opts.timeoutMs, maxBuffer: 1024 * 1024 },
+        spec.command,
+        spec.args,
+        {
+          env: opts.env,
+          timeout: opts.timeoutMs,
+          maxBuffer: 1024 * 1024,
+          windowsHide: true,
+          ...(spec.windowsVerbatimArguments === true ? { windowsVerbatimArguments: true } : {}),
+        },
         (err, stdout) => {
           if (err === null) {
             resolve({ ok: true, stdout: String(stdout) })

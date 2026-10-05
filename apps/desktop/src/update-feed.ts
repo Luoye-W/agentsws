@@ -48,7 +48,17 @@ function isChannel(value: string | undefined): value is UpdateChannel {
   return value !== undefined && (UPDATE_CHANNELS as readonly string[]).includes(value)
 }
 
-/** 根地址规范化：只认 https、去掉尾斜杠。不对就抛——打包阶段宁可红，不发一个查不到更新的包。 */
+/** 本机回环（`127.0.0.1` / `localhost` / `[::1]`）。 */
+function isLoopbackHost(hostname: string): boolean {
+  return hostname === 'localhost' || hostname === '[::1]' || /^127\.\d+\.\d+\.\d+$/.test(hostname)
+}
+
+/**
+ * 根地址规范化：只认 https、去掉尾斜杠。不对就抛——打包阶段宁可红，不发一个查不到更新的包。
+ *
+ * WP225 一个例外：**本机回环**上的 http（`http://127.0.0.1:<端口>`）。只给 CI 的「两个版本之间点更新」
+ * 端到端用（本地起一个更新源喂 N+1）；回环上的东西出不了这台机器，没有被中间人换包的问题。
+ */
 export function normalizeBaseUrl(raw: string): string {
   let url: URL
   try {
@@ -56,7 +66,8 @@ export function normalizeBaseUrl(raw: string): string {
   } catch {
     throw new Error(`更新源地址不是合法网址：${raw}`)
   }
-  if (url.protocol !== 'https:') throw new Error(`更新源只认 https：${raw}`)
+  const loopbackHttp = url.protocol === 'http:' && isLoopbackHost(url.hostname)
+  if (url.protocol !== 'https:' && !loopbackHttp) throw new Error(`更新源只认 https：${raw}`)
   if (url.search !== '' || url.hash !== '') throw new Error(`更新源地址不要带 ? 或 #：${raw}`)
   return `${url.origin}${url.pathname}`.replace(/\/+$/, '')
 }

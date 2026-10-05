@@ -62,4 +62,4 @@ A version with `beta` in it (like `0.2.0-beta.3`) is a **beta**: you get new fea
 - **Windows**: Settings → Apps → find Agents Workshop → Uninstall.
 - **Mac**: drag Agents Workshop from Applications to the Trash.
 
-Uninstalling does not delete your data. It lives in `%APPDATA%\agentsws` on Windows and in "~/Library/Application Support/agentsws" on a Mac. Delete it yourself if you are sure you no longer need it.
+Uninstalling does not delete your data. It lives in `%APPDATA%\@agentsws\desktop` on Windows and in "~/Library/Application Support/@agentsws/desktop" on a Mac. Delete it yourself if you are sure you no longer need it.
