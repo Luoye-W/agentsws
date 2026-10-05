@@ -77,6 +77,11 @@ export interface WorkBrowserPorts {
   now(): number
   /** 用户在设置里指了路径就用它（不猜）。 */
   executablePath?: string
+  /**
+   * WP218：给浏览器的环境变量。以前是 `{}`——Windows 上 Chrome 拿不到 SystemRoot / LOCALAPPDATA /
+   * TEMP 就会网络、加密、Profile 一起出毛病。壳传 `inheritEnv(process.env)`（同一份白名单，不带密钥）。
+   */
+  env?: Readonly<Record<string, string>>
 }
 
 export type WorkBrowserResult =
@@ -151,7 +156,9 @@ export async function openWorkBrowser(ports: WorkBrowserPorts): Promise<WorkBrow
       '--no-default-browser-check',
       'about:blank',
     ],
-    env: {},
+    env: { ...(ports.env ?? {}) },
+    // WP218：它是有窗口的程序，别让 Windows 把第一个窗口按「隐藏」起
+    gui: true,
   })
 
   // 4. 等它把调试口开起来

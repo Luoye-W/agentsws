@@ -80,7 +80,7 @@ export type RunGit = (
 
 const defaultRunGit: RunGit = (args, opts) =>
   new Promise((resolve) => {
-    execFile('git', [...args], { ...opts, encoding: 'utf8' }, (err, stdout) => {
+    execFile('git', [...args], { ...opts, encoding: 'utf8', windowsHide: true }, (err, stdout) => {
       const killed = (err as { killed?: boolean } | null)?.killed === true
       const signal = (err as { signal?: string } | null)?.signal
       resolve({

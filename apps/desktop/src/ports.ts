@@ -49,6 +49,13 @@ export interface SpawnRequest {
   args: readonly string[]
   env: Readonly<Record<string, string>>
   cwd?: string
+  /**
+   * WP218：子进程认「stdin 被关掉 = 请收尾退出」（服务进程设了 `AGENTSWS_STOP_ON_STDIN_END=1`）。
+   * Windows 上没有 SIGTERM，`kill()` 就靠它先礼后兵：关 stdin → 等一会儿 → 按进程树强杀。
+   */
+  stopViaStdin?: boolean
+  /** WP218：有窗口的程序（浏览器）。Windows 上不加 `windowsHide`，否则第一个窗口可能被藏起来。 */
+  gui?: boolean
 }
 
 export interface Spawner {
