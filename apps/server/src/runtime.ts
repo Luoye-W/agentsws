@@ -1699,7 +1699,10 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       if (stoppedReason !== undefined) {
         // 过程话已经在 `text.delta` 里攒着；答复只在它没覆盖到时补上（不说两遍）
         const said = runLog.said()
-        const extra = answers.filter((a) => !said.includes(a.trim())).join('\n').trim()
+        const extra = answers
+          .filter((a) => !said.includes(a.trim()))
+          .join('\n')
+          .trim()
         const digest = runLog.digest()
         const partial =
           digest === undefined
