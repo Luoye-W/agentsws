@@ -123,3 +123,76 @@ jobs:
         if: failure()
         shell: bash
         run: ls -laR apps/desktop/release || true
+
+  # WP225（WP218 遗留）：两个真实版本之间点一次「更新」。打 N 与 N+1 两个包（更新源都指到本机回环端口），
+  # 装 N → 本机起更新源只喂 N+1 → 左下角按钮「有新版」→ 下载 → 重启并更新 → 新版本起来、数据还在。
+  # 与上面那个作业并行跑；同样不发布、不上传到任何下载站。
+  update-e2e:
+    name: 两个版本之间点更新（N → N+1，本机更新源）
+    runs-on: windows-latest
+    timeout-minutes: 75
+    env:
+      FEED_PORT: '47613'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+
+      - name: install
+        run: pnpm install --frozen-lockfile
+
+      - name: 取捆绑的 Node 与原生模块（win32-x64）
+        run: node apps/desktop/scripts/fetch-node.mjs --target win32-x64
+
+      - name: tsc -b
+        run: pnpm exec tsc -b
+
+      - name: 工作台构建
+        run: pnpm --filter @agentsws/workstation build
+
+      # 回环上的 http 更新源只为这个测试放行（src/update-feed.ts 的 normalizeBaseUrl）
+      - name: 打 N 与 N+1（更新源指到 http://127.0.0.1:${{ env.FEED_PORT }}）
+        shell: bash
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+          AGENTSWS_UPDATE_BASE_URL: http://127.0.0.1:${{ env.FEED_PORT }}
+        run: |
+          set_version() {
+            node -e "
+              const fs = require('node:fs')
+              const p = 'apps/desktop/package.json'
+              const pkg = JSON.parse(fs.readFileSync(p, 'utf8'))
+              pkg.version = process.argv[1]
+              fs.writeFileSync(p, JSON.stringify(pkg, null, 2) + '\n')
+            " "$1"
+          }
+          set_version "0.0.0-ci.${{ github.run_number }}"
+          (cd apps/desktop && node scripts/dist.mjs --win --x64)
+          mkdir -p update-e2e/n update-e2e/n1
+          cp apps/desktop/release/Agents-Workshop-Setup-0.0.0-ci.*-x64.exe update-e2e/n/
+          set_version "0.0.1-ci.${{ github.run_number }}"
+          (cd apps/desktop && node scripts/dist.mjs --win --x64)
+          cp apps/desktop/release/latest.yml apps/desktop/release/Agents-Workshop-Setup-0.0.1-ci.*-x64.exe* update-e2e/n1/
+          ls -la update-e2e/n update-e2e/n1
+
+      - name: 两个版本之间点更新（装 N → 下载 → 重启并更新 → N+1 起来、数据还在）
+        shell: pwsh
+        run: |
+          $old = Get-ChildItem update-e2e/n/Agents-Workshop-Setup-*.exe | Select-Object -First 1
+          node apps/desktop/scripts/win-update-e2e.mjs --old $old.FullName --new-dir update-e2e/n1 --port $env:FEED_PORT --out win-update
+          $code = $LASTEXITCODE
+          if ($code -ne 0) { Write-Host ("更新端到端没过，退出码 {0}（0x{0:X8}）" -f $code); exit 1 }
+
+      - name: 上传端到端日志
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: win-update
+          retention-days: 14
+          if-no-files-found: ignore
+          path: win-update/
