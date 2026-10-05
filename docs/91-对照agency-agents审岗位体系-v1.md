@@ -159,7 +159,7 @@ agency-agents 是一套**写得很用心的「人设 + 做法」提示词库**�
 | # | 缺什么 | 为什么对出海公司要紧 | 它那边的素材 | 建议放哪 |
 |---|---|---|---|---|
 | 1 | **经营周报**：把各岗位的数（店铺日报、广告两口径、内容按页收入、社媒近 30 天、红人归因、客服量）汇成一页给老板 | 现在每个岗位各说各的数，老板要自己拼；agency 的高管摘要格式（情况 / 发现 / 影响 / 建议 / 下一步，每条发现带一个数、总长 ≤ 500 词）正好是这一页的骨架 | `support-executive-summary-generator`、`support-analytics-reporter`（「先验数据再分析」「每个结论写来源与假设」） | `common.owner` 加一个只读动作「本周经营一页纸」+ 技能 `weekly-review`；秘书每周一推。数字只从各岗位已有的面板取，**取不到就写取不到**，不估 |
-| 2 | **合规**：宣称合规（「最便宜」「治愈」「环保」「前后对比」）、产品认证与市场准入（CE / FCC / UKCA、德国包装法、EPR、电池 / 电子垃圾）、广告与红人披露 | 跨境卖家被平台下架、被罚，多半出在这里；我们现在只有四份政策的 `policy-review`，以及散在 `email-sms`（TCPA / GDPR）、`influencer-marketing`（FTC）里的几段 | 跨境通才的「合规红线」段、`support-legal-compliance-checker`（每条合规决定写依据与法规出处、审计留痕）、直播带货的宣称禁令 | 拆两份技能：`claims-check`（宣称合规，挂在所有对外出稿的职责上，和 `brand-voice` 一样 always）；`market-compliance`（产品与市场准入清单，挂 `common.owner` 与将来的 Amazon 运营）。**法规条目进事实卡、带日期，不写死在技能里** |
+| 2 | **合规**：① 宣称合规（「最便宜」「治愈」「环保」「前后对比」）**接到所有对外出稿上**；② 产品认证与市场准入（CE / FCC / UKCA、德国包装法、EPR、电池与电子垃圾）；③ 广告与红人披露 | ① 已经有一半：违规宣称规则表按市场分组、每条带出处（WP159，`seo-core/src/claim-rules.ts`，知识库可改），但**只接在内容那条的发布前质检**（guardrail 的 `content_quality_gate` 只挂 `publish_post`）；邮件、广告、红人三份技能的正文让模型「先过规则表」，服务端没接；社媒发帖、公关稿没提。② 完全没有：`policy-review` 只管四份对外政策。跨境卖家被平台下架、被罚，多半出在这两处 | 跨境通才的「合规红线」段、`support-legal-compliance-checker`（每条合规决定写依据与出处、留痕）、直播带货的宣称禁令 | ① 不新写技能，把现成的规则表**接到社媒发帖、广告素材 / 文案、群发、红人 brief、新闻稿的出卡前**（与 `content_quality_gate` 同一个口子）；② 新技能 `market-compliance`（产品与市场准入清单），挂 `common.owner` 与将来的 Amazon 运营。**法规条目进事实卡、带日期，不写死在技能里** |
 | 3 | **定价与单位经济**：一件货的落地成本、毛利瀑布（采购 + 头程 + 仓储 + 平台佣金 + 广告 + 尾程 + 退货损耗 + 汇率）、盈亏线 ROAS | 我们改价有额度、投放有止损，但**止损线是固定的 ROAS < 1**（57 §1 / §6，`ads/*.yml` 的 `stop_loss_roas_below: 1`）——毛利 40% 的货 ROAS 要到 2.5 才不亏，按 1 止损等于一直在亏钱的那段不报警 | 跨境通才的「毛利纪律」（广告费率超过毛利率就关）、`specialized-pricing-analyst`（没有算式不报价、按人群定价不按平均、折扣要理由与到期日、优先用替代折扣的手段） | 技能 `unit-economics`，挂 `dtc.store`、投放四条、将来的 Amazon 运营；毛利率是公司事实卡里的一格。止损线怎么改要 Luoye 定（§7 #2） |
 | 4 | **客户声音**：把评价、客服来信、评论区、退货原因汇成「这个月客户在抱怨什么、夸什么」，回给 listing、详情页、广告文案和产品 | 我们客服、社媒、店铺评价各自处理单条，没有人看「同一个问题来了 40 次」；`audience-research` 是去外面挖原话，不看自己家的 | `product-feedback-synthesizer`（收集 → 归类 → 打分 → 交付）、退货角色的原因码表 | 技能 `voice-of-customer` + `dtc.store` 一个每月动作；退货原因码先在 `returns-policy-calc` 里统一，后面才汇得起来 |
 | 5 | **实验与转化率**：一次只改一处、改之前算样本量、不中途偷看就停、写清假设与回滚 | 改价、换主图、换邮件主题、换广告素材都是实验，现在没有任何「怎么判这次改得好不好」的规矩，容易一两天的波动就下结论 | `project-management-experiment-tracker`（硬规矩 8 条、实验设计单）、增长黑客的漏斗拆法 | 技能 `experiments`，挂 `dtc.store`、`dtc.content`、`dtc.email-marketing`、投放四条 |
@@ -212,7 +212,7 @@ agency-agents 是一套**写得很用心的「人设 + 做法」提示词库**�
 
 ### 3.2 为什么不往 persona 里加段
 
-1. **没地方了**：60 段 persona 的中文长度中位数约 245 字，上限 260（69 §2 的 `MAX_PERSONA_CHARS`）；`ads/google`、`kol/youtube`、`social/facebook` 已经顶到 260。加一段就得删别的。
+1. **没地方了**：60 段 persona 的中文长度中位数约 245 字，上限 260（69 §2 的 `MAX_PERSONA_CHARS`）；`ads/google`、`kol/youtube`、`social/facebook` 都是 259 字，离上限只差 1 字。加一段就得删别的。
 2. **persona 每次都进提示、技能按需加载**。交付物模板、自检清单都是「做那件事时才用」的东西，常驻在提示里是浪费，而且会被模型当成「每次都要输出这个格式」。
 3. **六段是机器按小标题查的**（69 §2）。改骨架要动 `checkPersona`、`gen-ontology --check`、串岗测试与 60 段原文，收益不抵。
 
