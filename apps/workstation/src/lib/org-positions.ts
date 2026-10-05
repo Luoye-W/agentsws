@@ -56,3 +56,14 @@ export function suggestMergedName(
     lang,
   )
 }
+
+/**
+ * 「在做 N / 共 M」（Fable 10-06 代定）：M = 岗位里干活的职责（不算「工作区成员」等底座职责），
+ * N = 其中有人在做的那几条。老服务端没给 `role_ids` 时回 `undefined`（界面退回「M 条职责」）。
+ */
+export function inUseCount(p: OrgPositionView): { n: number; m: number } | undefined {
+  if (p.holders.some((h) => h.role_ids === undefined)) return undefined
+  const duties = p.roles.filter((r) => !isBase(r.role_id))
+  const held = new Set(p.holders.flatMap((h) => h.role_ids ?? []))
+  return { n: duties.filter((r) => held.has(r.role_id)).length, m: duties.length }
+}

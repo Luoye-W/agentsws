@@ -1169,8 +1169,9 @@ export function createOrg(options: OrgOptions): OrgAssembly {
   /**
    * WP235：「你们的岗位」落在一个**随软件带的模板**上时，要往里加职责就**不改模板**——另建一个
    * 自建岗位接住它：名字（默认同名）、图标、上级照抄；职责 = 模板里真在做的那几条；在模板里做的人
-   * 全部安放过去，事项与岗位层记忆跟着搬。模板本身原样留在库里当类别目录（没人在做，就落到
-   * 公司页「可以加的岗位」那一块）。自建岗位原样回它自己。
+   * 全部安放过去，事项跟着搬；岗位层记忆**复制**一份过去（Fable 10-06 代定：模板那份留着，以后有人
+   * 再领这个模板不从空开始），见 {@link copyTemplateMemory}。模板本身原样留在库里当类别目录
+   * （没人在做，就落到公司页「可以加的岗位」那一块）。自建岗位原样回它自己。
    */
   const ownPosition = async (
     by: PersonId,
@@ -1180,10 +1181,10 @@ export function createOrg(options: OrgOptions): OrgAssembly {
     row: StoredPosition
     moved_assignments: number
     moved_matters: number
-    memory?: { moved: number; kept_both: number }
+    memory_copied: number
   }> => {
     if (position.source === 'custom')
-      return { row: position, moved_assignments: 0, moved_matters: 0 }
+      return { row: position, moved_assignments: 0, moved_matters: 0, memory_copied: 0 }
     const zh = name ?? position.name.zh
     const id = newPositionId({ fork: position.id, name: zh })
     const icon = position.icon ?? bundledPositionIcon(position.id)
@@ -1203,13 +1204,20 @@ export function createOrg(options: OrgOptions): OrgAssembly {
     const moved_assignments = movePlacements(position, id)
     const moved_matters =
       (await options.reshape?.retargetMatters({ from: position.id, to: id })) ?? 0
-    const memory = await options.reshape?.mergeMemory({
-      from: position.id,
-      into: id,
-      from_name: position.name.zh,
-    })
-    return { row, moved_assignments, moved_matters, ...(memory === undefined ? {} : { memory }) }
+    const memory_copied = await copyTemplateMemory(position, id)
+    return { row, moved_assignments, moved_matters, memory_copied }
   }
+
+  /**
+   * WP235（Fable 10-06 代定）：从**模板**往外带岗位层记忆时是复制不是搬——新岗位拿一份（每段标
+   * 「（复制自「模板名」）」），模板留一份。自建岗位之间的合并照旧并过去（A 随后就删了）。回复制了几条。
+   */
+  const copyTemplateMemory = async (template: StoredPosition, into: string): Promise<number> =>
+    (await options.reshape?.copyMemory?.({
+      from: template.id,
+      into,
+      from_name: template.name.zh,
+    })) ?? 0
 
   const viewsOf = async (ids: string[]): Promise<PositionView[]> =>
     (await positionViews()).filter((p) => ids.includes(p.id))
@@ -1267,18 +1275,17 @@ export function createOrg(options: OrgOptions): OrgAssembly {
     const moved_matters =
       own.moved_matters +
       ((await options.reshape?.retargetMatters({ from: from.id, to: target.id })) ?? 0)
-    const merged = await options.reshape?.mergeMemory({
-      from: from.id,
-      into: target.id,
-      from_name: from.name.zh,
-    })
+    // 自建的 A 并过去（随后删掉）；模板 A 复制一份过去、模板留一份
     const memory =
-      merged === undefined
-        ? own.memory
-        : {
-            moved: merged.moved + (own.memory?.moved ?? 0),
-            kept_both: merged.kept_both + (own.memory?.kept_both ?? 0),
-          }
+      from.source === 'custom'
+        ? await options.reshape?.mergeMemory({
+            from: from.id,
+            into: target.id,
+            from_name: from.name.zh,
+          })
+        : undefined
+    const memory_copied =
+      own.memory_copied + (from.source === 'custom' ? 0 : await copyTemplateMemory(from, target.id))
     // 5. A：自建的删掉；随软件带的留着当类别目录（没人安放在它上面就不出现在任何人的左栏）
     const deleted = from.source === 'custom' ? from.id : undefined
     if (deleted !== undefined) backend.deletePosition(deleted)
@@ -1291,6 +1298,7 @@ export function createOrg(options: OrgOptions): OrgAssembly {
       moved_assignments,
       moved_matters,
       ...(memory === undefined ? {} : { memory }),
+      ...(memory_copied === 0 ? {} : { memory_copied }),
       ...(deleted === undefined ? {} : { deleted }),
     })
     return {
@@ -1302,6 +1310,7 @@ export function createOrg(options: OrgOptions): OrgAssembly {
       moved_assignments,
       moved_matters,
       ...(memory === undefined ? {} : { memory }),
+      ...(memory_copied === 0 ? {} : { memory_copied }),
       ...(deleted === undefined ? {} : { deleted }),
       ...(created === undefined ? {} : { created }),
     }
@@ -1357,6 +1366,7 @@ export function createOrg(options: OrgOptions): OrgAssembly {
       positions: await viewsOf([from.id, target.id, ...(created === undefined ? [] : [to.id])]),
       moved_assignments,
       moved_matters,
+      ...(own.memory_copied === 0 ? {} : { memory_copied: own.memory_copied }),
       ...(created === undefined ? {} : { created }),
     }
   }

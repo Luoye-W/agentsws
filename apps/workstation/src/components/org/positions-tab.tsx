@@ -28,7 +28,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import type { OrgPositionView, RoleSummaryView } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
-import { splitPositions } from '@/lib/org-positions'
+import { inUseCount, splitPositions } from '@/lib/org-positions'
 import { rangeText } from '@/lib/ranges'
 import { cn } from '@/lib/utils'
 
@@ -224,7 +224,16 @@ export function PositionsTab({
             {lang === 'en' && p.name_en !== '' ? p.name_en : p.name}
           </span>
           <Badge variant="outline" data-testid="position-duty-count">
-            {t('org.positions.duties', { count: p.roles.length })}
+            {/* WP235（Fable 10-06）：你们的岗位上写「在做 N / 共 M」（M 不算「工作区成员」那条） */}
+            {(() => {
+              const count = isOurs ? inUseCount(p) : undefined
+              return count === undefined
+                ? t('org.positions.duties', { count: p.roles.length })
+                : t('org.positions.duties.inuse', {
+                    n: String(count.n),
+                    m: String(count.m),
+                  })
+            })()}
           </Badge>
           {onRename === undefined || renaming === p.id ? null : (
             <Button

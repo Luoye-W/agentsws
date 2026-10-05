@@ -538,6 +538,7 @@ const zh: Table = {
   'duty.none_position': '未归岗位 · {count} 条职责',
   'duty.of_position': '{position} › {duty}',
   'org.positions.duties': '{count} 条职责',
+  'org.positions.duties.inuse': '在做 {n} / 共 {m}',
   'org.positions.duty.detail': '这条职责的规矩',
   'org.positions.duty.close': '收起规矩',
   // WP196：岗位改名（只改显示名；中英各一）
@@ -4280,6 +4281,7 @@ const en: Table = {
   'duty.none_position': 'No position · {count} duties',
   'duty.of_position': '{position} › {duty}',
   'org.positions.duties': '{count} duties',
+  'org.positions.duties.inuse': 'Doing {n} of {m}',
   'org.positions.duty.detail': 'How this duty is set up',
   'org.positions.duty.close': 'Hide the setup',
   'org.positions.rename': 'Rename',

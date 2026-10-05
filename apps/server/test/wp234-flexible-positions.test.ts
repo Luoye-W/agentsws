@@ -231,12 +231,15 @@ describe('docs/70 §5 推荐：没接上真模型就退回按词对并明说', (
 })
 
 describe('docs/54 §6.4 合并 / 移动 / 拆出', () => {
-  it('合并：职责、安放、事项、岗位层记忆都跟过去；两版打架的都留；自建的删掉；记审计（WP235：目标是模板时另建自建岗位，模板不变）', async () => {
+  it('合并：职责、安放、事项、岗位层记忆都跟过去；两版打架的都留；自建的删掉；记审计', async () => {
+    // WP235：合并到模板会另建自建岗位（见 wp235 那份测试）；这里两边都是自建岗位，钉记忆怎么并
     const out = await apply([
       { name: 'Reddit 运营', role_ids: ['pr.reddit', 'social.reddit'] },
-      { name: '社媒', role_ids: ['social.tiktok'], template_id: 'social-media' },
+      { name: '社媒', role_ids: ['social.tiktok'] },
     ])
     const reddit = out.positions?.find((p) => p.name === 'Reddit 运营')?.id ?? ''
+    const social = out.positions?.find((p) => p.name === '社媒')?.id ?? ''
+    expect(social).toMatch(/^pos-/)
     const matter = matterAt(reddit, 'pr.reddit', '这周 Reddit 上的差评')
     const by = server.bootstrap.person.id
     await server.learning.addMemory({
@@ -249,7 +252,7 @@ describe('docs/54 §6.4 合并 / 移动 / 拆出', () => {
     const skill = server.skills.registry.listSkillNames()[0] ?? 'customer-care'
     for (const [owner, body] of [
       [reddit, 'Reddit 那边的说法'],
-      ['social-media', '社媒这边的说法'],
+      [social, '社媒这边的说法'],
     ] as const)
       await server.skills.registry.setOverlay({
         skill,
@@ -260,35 +263,28 @@ describe('docs/54 §6.4 合并 / 移动 / 拆出', () => {
         version: 0,
       })
 
-    const templateBefore = server.org.positions().find((p) => p.id === 'social-media')
     const res = await dataOf<{
       moved_assignments: number
       moved_matters: number
       memory?: { moved: number; kept_both: number }
       deleted?: string
       created?: string
-    }>(await call('POST', `/v1/org/positions/${reddit}/merge`, { into: 'social-media' }))
-    // WP235：目标「社媒运营」是模板 → 另建一个自建岗位接住（Luoye 在模板里的 TikTok 一起搬过去）
-    const merged = res.created ?? ''
-    expect(merged).toMatch(/^pos-/)
-    expect(res).toMatchObject({ moved_assignments: 3, moved_matters: 1, deleted: reddit })
-    // 社媒那一层的一段搬过去（1）+ Reddit 那一层手动加的一段（1）；同一段两版都留（1）
-    expect(res.memory).toEqual({ moved: 2, kept_both: 1 })
-    expect(server.org.positions().find((p) => p.id === 'social-media')).toEqual(templateBefore)
-    // 职责混了渠道：名字沿用目标现在的名字（第 ③ 步改成了「社媒」）
-    expect(server.org.positions().find((p) => p.id === merged)?.name.zh).toBe('社媒')
+    }>(await call('POST', `/v1/org/positions/${reddit}/merge`, { into: social }))
+    expect(res).toMatchObject({ moved_assignments: 2, moved_matters: 1, deleted: reddit })
+    expect(res.created).toBeUndefined()
+    expect(res.memory).toEqual({ moved: 1, kept_both: 1 })
 
     const list = await mine()
-    expect(list.map((p) => p.position_id)).toEqual([merged])
+    expect(list.map((p) => p.position_id)).toEqual([social])
     expect(
       list[0]?.roles
         .filter((r) => r.my_assignment_id !== undefined)
         .map((r) => r.role_id)
         .sort(),
     ).toEqual(['pr.reddit', 'social.reddit', 'social.tiktok'])
-    expect(server.work.getMatter(matter.id)?.position_template_id).toBe(merged)
+    expect(server.work.getMatter(matter.id)?.position_template_id).toBe(social)
 
-    const memory = server.learning.memoryAt({ tier: 'position', scope_id: merged })
+    const memory = server.learning.memoryAt({ tier: 'position', scope_id: social })
     const bodies = memory.map((m) => m.body)
     expect(bodies).toContain('发帖先看版规')
     expect(bodies).toContain('社媒这边的说法')
@@ -300,12 +296,7 @@ describe('docs/54 §6.4 合并 / 移动 / 拆出', () => {
     expect(server.org.positions().some((p) => p.id === reddit)).toBe(false)
 
     const audit = await events('position.merged')
-    expect(audit[0]).toMatchObject({
-      from: reddit,
-      into: merged,
-      template: 'social-media',
-      moved_matters: 1,
-    })
+    expect(audit[0]).toMatchObject({ from: reddit, into: social, moved_matters: 1 })
     expect(JSON.stringify(audit)).not.toContain('发帖先看版规')
   })
 

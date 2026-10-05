@@ -147,7 +147,7 @@ export interface PositionReshapeView {
    * （原来在模板里做的人、事项、岗位层记忆都搬到它上面，模板本身不变）。
    */
   created?: string
-  /** 拆出时：岗位层记忆复制给新岗位几条（Luoye 10-06：两边都留）。 */
+  /** 拆出时 / WP235 从模板带出去时：岗位层记忆复制给新岗位几条（两边都留）。 */
   memory_copied?: number
 }
 

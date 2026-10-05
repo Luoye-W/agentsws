@@ -6,7 +6,7 @@
  * - 老工作区（两条跨模板分配、没有安放行）：持有模板里一条职责就算这个岗位的持有人，
  *   卡上带他手上是哪几条；「普通成员」「负责人」仍按默认包算；
  * - 合并「公共关系（只做 pr.reddit）」到「社媒运营（只做 social.reddit）」→ 一个自建岗位
- *   「Reddit 运营」装这两条，左栏只剩它；两个模板一个字不变；事项与岗位层记忆跟过去；
+ *   「Reddit 运营」装这两条，左栏只剩它；两个模板一个字不变；事项跟过去，岗位层记忆复制一份过去、模板留一份；
  * - 合并时可以给名字；没人做的模板不能当被合并的那一个；
  * - 移动职责到一个模板：同名自建岗位接住，模板不变。
  */
@@ -159,7 +159,9 @@ describe('WP235 合并作用在「你们的岗位」上', () => {
     expect(id).toMatch(/^pos-/)
     expect(res).toMatchObject({ moved_assignments: 2, moved_matters: 2 })
     expect(res.deleted).toBeUndefined()
-    expect(res.memory).toEqual({ moved: 2, kept_both: 0 })
+    // Fable 10-06 代定：从模板带出去的岗位记忆是复制——新岗位一份、模板留一份
+    expect(res.memory).toBeUndefined()
+    expect((res as { memory_copied?: number }).memory_copied).toBe(2)
 
     // 新岗位：建议名「Reddit 运营」，装这两条，Luoye 是持有人
     const merged = res.positions.find((p) => p.id === id)
@@ -191,12 +193,21 @@ describe('WP235 合并作用在「你们的岗位」上', () => {
     // 事项与岗位层记忆跟过去
     expect(server.work.getMatter(prMatter.id)?.position_template_id).toBe(id)
     expect(server.work.getMatter(socialMatter.id)?.position_template_id).toBe(id)
-    const bodies = server.learning
-      .memoryAt({ tier: 'position', scope_id: id })
-      .map((m) => m.body)
-      .sort()
-    expect(bodies).toEqual(['发帖前看版规', '回帖不甩链接'].sort())
-    expect(server.learning.memoryAt({ tier: 'position', scope_id: 'pr' })).toEqual([])
+    const copied = server.learning.memoryAt({ tier: 'position', scope_id: id })
+    expect(copied.map((m) => m.body).sort()).toEqual(['发帖前看版规', '回帖不甩链接'].sort())
+    expect(copied.find((m) => m.body === '回帖不甩链接')?.heading).toContain(
+      '（复制自「公共关系」）',
+    )
+    expect(copied.find((m) => m.body === '发帖前看版规')?.heading).toContain(
+      '（复制自「社媒运营」）',
+    )
+    // 模板那份留着：以后有人再领这个模板，不从空开始
+    expect(
+      server.learning.memoryAt({ tier: 'position', scope_id: 'pr' }).map((m) => m.body),
+    ).toEqual(['回帖不甩链接'])
+    expect(
+      server.learning.memoryAt({ tier: 'position', scope_id: 'social-media' }).map((m) => m.body),
+    ).toEqual(['发帖前看版规'])
   })
 
   it('合并时给了名字就用它；再合一个进自建岗位不再另建', async () => {

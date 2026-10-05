@@ -179,6 +179,7 @@ describe('WP235 公司页：你们的岗位 / 可以加的岗位（模板）', (
         ['pr.press', '新闻稿'],
         ['pr.reddit', 'Reddit 口碑'],
         ['pr.monitoring', '舆情'],
+        ['common.member', '工作区成员'],
       ],
       [{ ...ME, role_ids: ['pr.reddit'] }],
     ),
@@ -227,9 +228,13 @@ describe('WP235 公司页：你们的岗位 / 可以加的岗位（模板）', (
     expect(within(templates).queryByTestId('position-reshape')).toBeNull()
   })
 
-  it('卡上写谁在做、他手上是哪几条', () => {
+  it('卡上写谁在做、他手上是哪几条；计数是「在做 N / 共 M」（不算工作区成员），模板卡照旧', () => {
     renderOld()
     const pr = within(card('pr'))
+    expect(pr.getByTestId('position-duty-count').textContent).toBe('在做 1 / 共 3')
+    expect(within(card('customer-care')).getByTestId('position-duty-count').textContent).toBe(
+      '1 条职责',
+    )
     expect(pr.getByTestId('position-holders').textContent).toContain('Luoye')
     const duties = pr.getByTestId('position-holder-duties').textContent ?? ''
     expect(duties).toContain('Reddit 口碑')
