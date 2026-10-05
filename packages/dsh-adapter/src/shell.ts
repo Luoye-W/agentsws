@@ -837,7 +837,7 @@ export class AgentswsPwshExecutor extends SandboxPwshExecutor {
 /** 在 `-Command` 之前插 `-ExecutionPolicy Bypass`（已经有就不重复；没有 `-Command` 就原样）。 */
 export function withExecutionPolicyBypass(argv: readonly string[]): string[] {
   if (argv.some((a) => a.toLowerCase() === '-executionpolicy')) return [...argv]
-  const at = argv.findIndex((a) => a === '-Command')
+  const at = argv.indexOf('-Command')
   if (at < 0) return [...argv]
   return [...argv.slice(0, at), '-ExecutionPolicy', 'Bypass', ...argv.slice(at)]
 }

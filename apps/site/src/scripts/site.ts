@@ -124,5 +124,6 @@ if (/Windows/i.test(navigator.userAgent)) {
     if (url) a.href = url
   }
   // WP225（WP218 决定 ⑤）：直链跳过了下载页上那句「蓝框：更多信息 → 仍要运行」，按钮旁边补一行
-  for (const note of document.querySelectorAll<HTMLElement>('[data-dl-win-note]')) note.hidden = false
+  for (const note of document.querySelectorAll<HTMLElement>('[data-dl-win-note]'))
+    note.hidden = false
 }
