@@ -3386,6 +3386,9 @@ const zh: Table = {
   'category.dead_letter': '没进来的信',
   'verb.dead_letter.approve': '再投一次',
   'verb.dead_letter.reject': '去邮箱回复',
+  // WP232：收件人待定的回信草稿——批了不发出去，人复制正文自己发
+  'verb.manual_send.approve': '我来发',
+  'verb.manual_send.reject': '不用',
   'deck.dead_letter.reply_myself': '我自己去邮箱回复',
   // ── WP219：已审的内容更新（docs/90）──
   'kind.content_update': '内容更新',
@@ -7162,6 +7165,8 @@ const en: Table = {
   'category.dead_letter': 'Message not processed',
   'verb.dead_letter.approve': 'Try again',
   'verb.dead_letter.reject': 'Reply from mailbox',
+  'verb.manual_send.approve': "I'll send it",
+  'verb.manual_send.reject': 'Discard',
   'deck.dead_letter.reply_myself': 'I will reply from the mailbox myself',
   // ── WP219: reviewed content updates (docs/90) ──
   'kind.content_update': 'Content update',

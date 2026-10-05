@@ -15,6 +15,10 @@ import {
   B2B_CLASSIFY_REPLY_TOOL,
   B2B_OUTBOUND_TOOL_DEF_BY_NAME,
   B2B_START_ROUND_TOOL,
+  DRAFT_BODY_DESCRIPTION,
+  DRAFT_NOT_CREATED,
+  DRAFT_SUBJECT_DESCRIPTION,
+  DRAFT_TOOL_DESCRIPTION,
   isMcpReadTool,
   isScheduleTool,
   isWebTool,
@@ -22,6 +26,7 @@ import {
   READ_SKILL_TOOL,
   renderTrustedToolResult,
   SKILL_TOOL_DEF_BY_NAME,
+  STAGE_NOT_CREATED,
 } from '@agentsws/stand-ins'
 import type { ToolDefinition } from '@deepseek-ai/dsh-tools'
 import { defineTool } from '@deepseek-ai/dsh-tools'
@@ -331,8 +336,9 @@ const STAGE_PARAMS = {
  * （`runtime.ts` 的 `buildDraftPayload`）。模型多给的键 dsh 会忽略（对象根是开放的）。
  */
 const DRAFT_PARAMS = {
-  subject: { type: 'string', description: 'Reply subject.', required: true },
-  body: { type: 'string', description: 'Reply body.', required: true },
+  // WP232：正文跟来信语言写在参数描述里（模型填参数那一刻读它）；与 direct 同一份
+  subject: { type: 'string', description: DRAFT_SUBJECT_DESCRIPTION, required: true },
+  body: { type: 'string', description: DRAFT_BODY_DESCRIPTION, required: true },
 } as const
 
 export interface ReadToolHooks {
@@ -434,7 +440,7 @@ function stageTool(hooks: StageToolHooks): ToolDefinition {
           : {}),
       })
       if (res === undefined) {
-        throw new DshAdapterError('not_approved', 'stage_refund 未获批准（fail-closed）')
+        throw new DshAdapterError('not_approved', STAGE_NOT_CREATED)
       }
       return res as unknown as JsonValue
     },
@@ -447,9 +453,8 @@ function draftTool(hooks: StageToolHooks): ToolDefinition {
     // WP87：realistic 档里模型常把回信写在自己的正文里就收工（`model.jsonl` 的
     // `stop: "text"`，`tools_called` 里没有 draft_reply），于是一封信都没发出去。
     // 补的这半句是事实，不是迎合模型：不经这个工具写的字确实到不了任何人手上。
-    description:
-      'Propose an outbound reply. Nothing is sent: it creates an approval item. ' +
-      'A reply you write outside this tool reaches nobody.',
+    // WP232：补「当场建卡、不用有人在线；没有收件地址时卡上会写明、人自己发」（三个运行时同一句）
+    description: DRAFT_TOOL_DESCRIPTION,
     parameters: DRAFT_PARAMS,
     output: {
       schema: { type: 'json' },
@@ -461,7 +466,7 @@ function draftTool(hooks: StageToolHooks): ToolDefinition {
         body: args.body,
       })
       if (res === undefined) {
-        throw new DshAdapterError('not_approved', 'draft_reply 未获批准（fail-closed）')
+        throw new DshAdapterError('not_approved', DRAFT_NOT_CREATED)
       }
       return res as unknown as JsonValue
     },

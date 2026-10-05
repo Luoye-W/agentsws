@@ -128,11 +128,19 @@ export function verbKey(layout: DeckLayout, action: DeckAction, kind?: string): 
   return `verb.${layout}.${action}`
 }
 
+/** WP232：收件人待定的回信草稿在 {@link verbKey} 里用的那个 kind 名（卡上 `manual_send` 为真时传它）。 */
+export const MANUAL_SEND_VERB_KIND = 'outbound_manual_send'
+
 /**
  * WP182：按 kind 整排换说法的那几种（主动词与次动词都换）。转交排版原来只有「客服转交」一种用法，
  * 离职交接卡借了这个排版，问的却是「按这份清单转不转」。
  */
 const VERB_BY_KIND: Readonly<Record<string, Partial<Record<DeckAction, string>>>> = {
+  // WP232：收件人待定的草稿——批了不会发出去，所以不能写「发送」（「我来发 / 不用」）
+  [MANUAL_SEND_VERB_KIND]: {
+    approve: 'verb.manual_send.approve',
+    reject: 'verb.manual_send.reject',
+  },
   // WP210：客户来信投不进。「驳回」在这里不是否定什么，是「我自己去邮箱回」
   inbound_dead_letter: {
     approve: 'verb.dead_letter.approve',

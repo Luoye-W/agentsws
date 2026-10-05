@@ -13,7 +13,8 @@
  *
  * 纪律：
  * - 卡片一律经审批总线（14 §1「所有改变都以一条审批项进同一条队列」），这里不绕过预检；
- * - 收件人只从「这次运行读过的」里取（31 §3.3），拿不到 ObjectRef 就不建卡；
+ * - 收件人只从「这次运行读过的」里取（31 §3.3）；拿不到 ObjectRef 就出「收件人待定」的卡
+ *   （系统不发，人复制去发——WP232），绝不替人猜一个收件人，也绝不丢草稿；
  * - 时间经 `Clock`、随机经注入的 `random`，没有一处 `Date.now()` / `Math.random()`；
  * - 秘密只从环境变量读，且不进事件日志。
  */
@@ -498,6 +499,9 @@ export function pickDraftRecipient(input: {
   return input.resolved
 }
 
+/** WP232：收件人待定那张卡上的一句话（系统不发，人复制正文自己发）。 */
+export const MANUAL_SEND_SUMMARY = '没有能替你发的收件地址：批了也不会自动发出，复制正文自己发。'
+
 export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
   const { clock, workspace_id, roles, approvals } = options
   const source = options.source ?? {}
@@ -552,7 +556,12 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
 
   /**
    * 起草回复 → `outbound_draft` 审批项。
-   * 收件人必须解析成一个 ObjectRef 且是这次运行读过的，否则宁可不建卡（31 §3.3）。
+   *
+   * 收件人必须解析成一个 ObjectRef 且是这次运行读过的（31 §3.3），系统才会替人发。
+   * WP232：解析不出来（人在任务里贴了一封信、事项上没有来信人）时**草稿照样进待批**——
+   * 出一张「收件人待定」的卡（`manual_send`，系统不发，人复制正文自己发），绝不把草稿丢掉。
+   * 以前这里回 `undefined`，三个运行时都把它当成「没批下来」，dsh 那一档还报成
+   * 「未获批准（fail-closed）」，真模型据此编出了「审批闸没人应答」。
    */
   const createDraft = async (
     payload: DraftPayload,
@@ -560,15 +569,17 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
     const s = scope
     if (s === undefined || work === undefined) return undefined
     const email = payload.to[0]
-    if (email === undefined) return undefined
-    const resolved = source.contactOf?.(email)
+    const resolved = email === undefined ? undefined : source.contactOf?.(email)
     // 31 §3.3 + 09-14 真店实测：模型会把订单上的客户邮箱当收件人，而来信人可能是另一个地址
     // （代下单、家人、测试账号）。回信只能回给**来信人**——事项上钉着的那个联系人；
     // 模型给的地址不一致就改指过去并在时间线上说一句，绝不按模型给的发。
     const pinnedContact = s.matter.context.pinned.find((p) => p.type === 'contact')
-    const to = pickDraftRecipient({ pinnedContact, resolved })
-    if (to === undefined) return undefined
-    if (resolved !== undefined && refKey(resolved) !== refKey(to)) {
+    const picked = pickDraftRecipient({ pinnedContact, resolved })
+    const seen = [...s.seen]
+    // 这次运行没读过的收件人同样不替人发（15 §6）：改出收件人待定的卡
+    const to =
+      picked !== undefined && seen.some((r) => refKey(r) === refKey(picked)) ? picked : undefined
+    if (to !== undefined && resolved !== undefined && refKey(resolved) !== refKey(to)) {
       work.appendEvent(s.matter.id, {
         kind: 'status',
         text: `回信收件人改为来信人：模型给的地址（${email}）与来信人不一致，已按来信人处理。`,
@@ -576,8 +587,6 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
         run_id: s.run_id,
       })
     }
-    const seen = [...s.seen]
-    if (!seen.some((r) => refKey(r) === refKey(to))) return undefined
     /*
      * WP125（72 §P0-1 / §P0-2）：**建卡之前过判断层**。
      *
@@ -618,26 +627,39 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       })
       return { rewrite: verdict.rewrite_instruction ?? '重写一版，不要引用内部指导的原文。' }
     }
-    const subject = seen.find((r) => r.type === 'thread') ?? seen.find((r) => r.type === 'order')
+    const subject =
+      seen.find((r) => r.type === 'thread') ??
+      seen.find((r) => r.type === 'order') ??
+      to ??
+      // 收件人待定：卡挂在这件事上（任务说明那一段注入时就记进了 seen）
+      ({ type: 'matter', id: s.matter.id } satisfies ObjectRef)
     const assignment = roles.assignments.get(s.assignment_id)
+    const who =
+      to === undefined
+        ? undefined
+        : (source.label?.(to) ??
+          (resolved !== undefined && refKey(resolved) === refKey(to) ? email : '来信人'))
     const item = await approvals.create({
       workspace_id,
       schema_version: 1,
       kind: 'outbound_draft',
       role_id: assignment?.role_id ?? 'common.member',
       subject: {
-        object: subject ?? to,
+        object: subject,
         matter_id: s.matter.id,
         work_item_id: s.matter.id,
         ...(s.todo_id === undefined ? {} : { todo_id: s.todo_id }),
         conversation_id: s.matter.id,
       },
       dedupe_key: `${workspace_id}:outbound_draft:${s.matter.id}:${s.run_id}`,
-      title: `回复 ${source.label?.(to) ?? (resolved !== undefined && refKey(resolved) === refKey(to) ? email : '来信人')}：${payload.subject}`,
-      summary: payload.subject,
+      title:
+        who === undefined
+          ? `回复草稿（收件人待定）：${payload.subject}`
+          : `回复 ${who}：${payload.subject}`,
+      summary: to === undefined ? MANUAL_SEND_SUMMARY : payload.subject,
       payload: {
         channel: payload.channel,
-        to,
+        ...(to === undefined ? { manual_send: true } : { to }),
         body: { subject: payload.subject, text: payload.body },
         ...(payload.thread_external_id === undefined
           ? {}
@@ -670,8 +692,8 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       },
       priority: 'queue',
       context: {
-        thread_participants: [to.id],
-        verified_contacts: [to.id],
+        thread_participants: to === undefined ? [] : [to.id],
+        verified_contacts: to === undefined ? [] : [to.id],
         // WP125：三道门的结论进前置（只有门名、结论、规则集哈希；被扫的文本一个字不进）
         ...(verdict === undefined || verdict.gate_context.length === 0
           ? {}
