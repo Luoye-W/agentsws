@@ -16,6 +16,7 @@ import { Hint } from '@/components/ui/hint'
 import { useApp } from '@/lib/app-context'
 import { fieldLabel, fieldValue } from '@/lib/humanize'
 import type { Lang } from '@/lib/i18n'
+import { isWeeklyReview, WeeklyReviewBody } from './weekly-review-body'
 
 const isRecord = (v: unknown): v is Record<string, unknown> =>
   typeof v === 'object' && v !== null && !Array.isArray(v)
@@ -32,7 +33,8 @@ function figuresOf(card: DeckCard, lang: Lang): [string, string][] {
   const out: [string, string][] = []
   for (const [k, v] of Object.entries(payload)) {
     // WP154：`variant` 是搜索报告卡的分支名（daily / weekly_*），不是给人看的数
-    if (k === 'kind' || k === 'variant') continue
+    // WP224：`length` 是一页纸的字数（给校验用），不是给人看的数
+    if (k === 'kind' || k === 'variant' || k === 'length') continue
     if (typeof v === 'number' || (typeof v === 'string' && v.length <= 24))
       out.push([fieldLabel(k, lang), fieldValue(k, v, lang)])
     if (out.length === 4) break
@@ -57,33 +59,52 @@ export function ReportBlocks({
         <Hint text={t('panel.reports.hint')} testId="panel-reports-hint" />
       </div>
       <div className="flex flex-col gap-2">
-        {reports.map((r) => (
-          <WsCard
-            key={r.id}
-            data-testid="report-block"
-            data-kind={r.kind}
-            className="flex items-center gap-3 px-4 py-3"
-          >
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium">{r.title}</p>
-              <p className="truncate text-xs text-ws-muted-fg">{r.summary}</p>
-            </div>
-            <dl className="hidden shrink-0 items-center gap-4 sm:flex" data-testid="report-figures">
-              {figuresOf(r, lang).map(([k, v]) => (
-                <div key={k} className="text-right">
-                  <dt className="text-[11px] text-ws-muted-fg">{k}</dt>
-                  <dd className="ws-display ws-num text-base">{v}</dd>
-                </div>
-              ))}
-            </dl>
-            <GoButton
-              label={t('deck.go')}
-              onClick={() => {
-                onOpen(r)
-              }}
-            />
-          </WsCard>
-        ))}
+        {reports.map((r) =>
+          /*
+           * WP224：本周经营一页纸**整张摊开**——它就是那一页，没有「进详情」可言
+           * （它不属于任何事项，点进去只会回到这一页）。数带出处 tooltip。
+           */
+          isWeeklyReview(r.detail.payload) ? (
+            <WsCard
+              key={r.id}
+              data-testid="report-block"
+              data-kind={r.kind}
+              className="flex flex-col gap-1 px-4 py-3"
+            >
+              <p className="text-sm font-medium">{r.title}</p>
+              <WeeklyReviewBody payload={r.detail.payload} />
+            </WsCard>
+          ) : (
+            <WsCard
+              key={r.id}
+              data-testid="report-block"
+              data-kind={r.kind}
+              className="flex items-center gap-3 px-4 py-3"
+            >
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-medium">{r.title}</p>
+                <p className="truncate text-xs text-ws-muted-fg">{r.summary}</p>
+              </div>
+              <dl
+                className="hidden shrink-0 items-center gap-4 sm:flex"
+                data-testid="report-figures"
+              >
+                {figuresOf(r, lang).map(([k, v]) => (
+                  <div key={k} className="text-right">
+                    <dt className="text-[11px] text-ws-muted-fg">{k}</dt>
+                    <dd className="ws-display ws-num text-base">{v}</dd>
+                  </div>
+                ))}
+              </dl>
+              <GoButton
+                label={t('deck.go')}
+                onClick={() => {
+                  onOpen(r)
+                }}
+              />
+            </WsCard>
+          ),
+        )}
       </div>
     </section>
   )

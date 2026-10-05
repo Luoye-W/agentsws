@@ -63,7 +63,12 @@ import {
   skillPromptSections,
 } from '@agentsws/learning'
 import type { ModelGatewayApi } from '@agentsws/model-gateway'
-import { houseRulesSection, personaTextIn, type RoleStore } from '@agentsws/roles'
+import {
+  houseRulesSection,
+  personaTextIn,
+  type RoleStore,
+  replyLanguageSection,
+} from '@agentsws/roles'
 import { createDirectRuntime, withToolChoice } from '@agentsws/runtime-direct'
 import type { CreatePolicyQuestionFn, DraftPayload, ToolExecutor } from '@agentsws/stand-ins'
 import {
@@ -75,6 +80,7 @@ import {
   isScheduleTool,
   OWNER_TOOL_NAMES,
   READ_SKILL_TOOL,
+  RESEARCH_TOOL_NAMES,
   SCHEDULE_TOOL_NAMES,
   WEB_FETCH_TOOL,
   WEB_SEARCH_TOOL,
@@ -111,6 +117,8 @@ const HOST_TOOL_EFFECTS: Readonly<Record<string, ToolSideEffect>> = Object.fromE
     ...B2B_OUTBOUND_TOOL_NAMES,
     ...OWNER_TOOL_NAMES,
     READ_SKILL_TOOL,
+    // WP220：只读 Reddit（`read_` 开头，本来就判得出「读外部」；列进来是为了表上看得见）
+    ...RESEARCH_TOOL_NAMES,
     // WP181：官方「自动化任务」的四个工具——只动本机调度器、会往外发的出卡
     ...SCHEDULE_TOOL_NAMES,
   ].map((name) => [name, classifySideEffect(name) === 'read_external' ? 'read_external' : 'local']),
@@ -241,6 +249,12 @@ export interface RuntimeOptions {
    * 那一摊」，界面上照实显示，而不是假装成功。
    */
   kolTools?: ToolExecutor
+  /**
+   * WP220（Luoye 10-05）：只读 Reddit（`read_reddit`，`research-tools.ts` 建的那一份）。
+   * 工具面按职责 yml 的 grounding 给（`pr.monitoring` / `pr.reddit` / `pr.forums` / `social.reddit`）；
+   * 不给的话这些职责调它会回「这个进程没装 Reddit 取数」，照实显示。
+   */
+  researchTools?: ToolExecutor
   /**
    * WP153（09-26 真账号冒烟 §3）：店主的两个只读工具（`list_positions` / `list_connections`，
    * `owner-tools.ts` 建的那一份）。给了才进 `common.owner` 的工具面——别的职责一律没有；
@@ -839,6 +853,7 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
      * 让界面显示一个空结果（66 断点 #6 的病根）。
      */
     const kol = options.kolTools
+    const research = options.researchTools
     const owner = options.ownerTools
     const b2bOut = options.b2bOutboundTools
     const dev = options.devTools
@@ -861,6 +876,7 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
           })
     if (
       kol === undefined &&
+      research === undefined &&
       owner === undefined &&
       b2bOut === undefined &&
       dev === undefined &&
@@ -874,6 +890,10 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       }
       if (readSkill !== undefined && isReadSkillTool(call.name)) {
         return readSkill(call)
+      }
+      // WP220：只读 Reddit（名字与别处不重名）
+      if (research !== undefined && RESEARCH_TOOL_NAMES.includes(bareOf(call.name))) {
+        return research(call)
       }
       // WP181：官方「自动化任务」的四个工具（名字与别处不重名；装没装插件在执行器里再判一次）
       if (automation !== undefined && isScheduleTool(call.name)) {
@@ -1333,6 +1353,13 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
                     text: personaTextIn(config.persona, 'zh'),
                   },
                 ]),
+          /*
+           * WP226（69 §3.3）：**回复语言**——persona 一律送中文那份（中文是唯一手写的真源），
+           * 紧跟一句「对外用对方来信的语言、对内用界面语言」（order 22）。服务端还没有
+           * "工作区界面语言"这一格（69 §3.3），所以按中文界面送中文那句。
+           * 三个运行时拿到同一份字节：stub / direct 走 `assemblePrompt`，dsh 写进唯一的 complete 段。
+           */
+          replyLanguageSection('zh'),
           /*
            * WP153（09-26 真账号冒烟）：**所有职责的公共段**——对人说话不提工具名、函数名、内部 id。
            * 排在职责那一节后面、技能前面（order 25）。三个运行时拿到的是同一份字节。

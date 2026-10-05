@@ -147,6 +147,11 @@ export interface ApiClient {
   ): Promise<ApiResult<{ until: string } | undefined>>
   /** WP144：托盘「停止」（`POST /v1/computer-use/stop`）：撤销授权 + 中断那次运行。 */
   stopComputerUse(session: DesktopSession, assignment: string): Promise<ApiResult<number>>
+  /**
+   * WP225（WP218 决定 ③）：岗位 AI 正在跑的运行有几次（`GET /v1/activity`，跨品牌、只回数量）。
+   * 「重启并更新」前问一句用。问不到（服务没装配 / 连不上）就是失败——由调用方决定当几。
+   */
+  activeRuns(session: DesktopSession, assignment: string): Promise<ApiResult<number>>
 }
 
 export function createApiClient(options: ApiClientOptions): ApiClient {
@@ -373,6 +378,18 @@ export function createApiClient(options: ApiClientOptions): ApiClient {
       if (!out.ok) return out
       const stopped = out.value.value.stopped
       return { ok: true, value: typeof stopped === 'number' ? stopped : 0 }
+    },
+
+    async activeRuns(session, assignment) {
+      const out = await call<{ busy?: unknown; runs?: unknown }>('/v1/activity', {
+        method: 'GET',
+        headers: { cookie: session.cookie, 'X-Assignment': assignment },
+      })
+      if (!out.ok) return out
+      const runs = out.value.value.runs
+      return typeof runs === 'number' && Number.isFinite(runs) && runs >= 0
+        ? { ok: true, value: Math.floor(runs) }
+        : { ok: false, reason: '响应里没有 runs' }
     },
 
     async setBrowserEndpoint(session, assignment, endpoint) {

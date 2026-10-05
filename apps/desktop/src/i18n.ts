@@ -149,7 +149,8 @@ const ZH: Strings = {
   updateDownloading: '正在下载新版本… {percent}%',
   updateReady: '重启并更新到 {version}',
   updateRestartMessage: '有任务在跑，确定现在重启？',
-  updateRestartDetail: '重启会把官方场景和正在操作电脑的 AI 一起停下，更新完自动重新打开。',
+  updateRestartDetail:
+    '重启会打断岗位 AI 手上的活、官方场景和正在操作电脑的 AI，更新完自动重新打开。',
   updateRestartConfirm: '重启并更新',
   updateRestartLater: '再等等',
   upgradeFailedIntact: '升级没成功，你的数据一个字节都没动。',
@@ -230,7 +231,7 @@ const EN: Strings = {
   updateReady: 'Restart to update to {version}',
   updateRestartMessage: 'Something is still running. Restart now?',
   updateRestartDetail:
-    'Restarting stops the official scenes and any AI using the computer. The app reopens by itself after the update.',
+    'Restarting interrupts what your AI teammates are working on, the official scenes and any AI using the computer. The app reopens by itself after the update.',
   updateRestartConfirm: 'Restart and update',
   updateRestartLater: 'Not now',
   upgradeFailedIntact: 'The upgrade did not go through. Not one byte of your data was touched.',

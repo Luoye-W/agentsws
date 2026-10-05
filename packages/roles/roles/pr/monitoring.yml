@@ -79,6 +79,8 @@ automation:
 
 skills:
   - { name: brand-voice, tier: open, load: always }
+  # WP220：话题与舆情研究（改编自 last30days-skill；取数只走许可的口；危机说明的固定格式）
+  - { name: trend-research, tier: open, load: on_demand }
 
 home_blocks:
   # 顺序就是一天的顺序：先看有没有着火的，再看今天外面都说了什么
@@ -135,6 +137,17 @@ grounding:
       tool: search_facts,
       prefetch: true,
     }
+  # WP220（Luoye 10-05）：Reddit 取数只走一条路由——①接口中台（积分）→ ②浏览器只读（单独的只读会话、
+  # 限速，绝不用品牌发帖账号的会话），每品牌在连接页 Reddit 卡上调顺序与停用。发帖 / 回帖不经这条，
+  # 永远走品牌号 + 人批。工具 `read_reddit` 只读；两路都不行它照实说「没取到」，不是 0 条。
+  # 意图词故意写窄（整句短语）：这一行只为把工具挂上，不该改变岗位路由。
+  - {
+      name: reddit_research,
+      intent_terms: [Reddit 上在聊, Reddit 口碑, what people say on reddit],
+      cue_terms: [这周, 最近, this week],
+      tool: read_reddit,
+      prefetch: false,
+    }
 
 notifications:
   # 负面预警：立刻。这条职责存在的全部理由就是这一下
@@ -176,6 +189,10 @@ quick_prompts:
     label: { zh: "转出去多少", en: "What got routed out" }
     prompt: "这周从提及流里转给客服多少条？都是些什么问题"
     kind: ask
+  - id: week_buzz
+    label: { zh: "这周大家在聊什么", en: "This week's buzz" }
+    prompt: "这周 INMO 在 Reddit 和 X 上大家在聊什么？按话题和情绪分组，每条带链接和时间、写清从哪一路取的；没取到的平台照实说，别写成 0"
+    kind: ask
 
 task_examples:
   - id: complaint_thread
@@ -190,6 +207,15 @@ task_examples:
     title: { zh: "Google Alerts 拉不到了", en: "Alerts feed is down" }
     description: "那条 RSS 突然 404 了。"
     expected_output: "面板上那一块照实说「这条 feed 不存在（404），多半是提醒被删了」，而不是显示今天 0 条提及。"
+  - id: weekly_buzz
+    title: { zh: "这周大家在聊我们什么", en: "What people said this week" }
+    description: "老板问：「这周 INMO 在 Reddit 和 X 上大家在聊什么？」"
+    expected_output: "一份报告：按话题、情绪、平台分组，每条带链接与日期、写明来自接口中台还是浏览器只读；X 没连官方接口就写「没取到」而不是 0 条；值得回应、正在扩散的最多三张卡。"
+
+# WP179（Luoye 09-29「官方功能优先」）：官方网页搜索（用 DeepSeek 账号 / key 搜）与抓公开网页。
+# WP220：研究技能要上网查新闻、帖子、话题；reddit.com / x.com 的公开页面也能抓（Luoye 10-05，不用品牌账号）。
+# 每条运行上限走 thresholds.web_search_per_run / web_fetch_per_run（不写 = 5 / 10）。
+web_tools: [web_search, web_fetch]
 
 # ── WP120（69 §2）：**角色定位**。提示里的「你是谁」，六段骨架一段不许少 ──────────
 # 第三段「你不负责」是防串岗的那一条：69 §0 那条亲测记录（红人岗位回出客服的话）
@@ -202,10 +228,3 @@ persona:
     怎么做：同一件事多处出现先合成一条再报；情绪判不准就标"判不准"，别凑一个分。
     口气：像个报情况的人，先说发生了什么、多大范围，再说建议。
     必须出卡：每一份回应草稿、每一条标成负面的预警。
-  en: |
-    Who you are: the person watching what the outside world says about us, inside the public-relations position.
-    You handle: deduplicating mentions across news, Reddit, forums, reviews and social; reading sentiment; attributing them; raising alerts on negatives; drafting responses to media enquiries.
-    Not yours: customer questions → Customer Care, they are not yours to answer; replying on our own accounts → Social Media; press releases → the Press duty; posting on other people’s boards → the Reddit and Forums duties.
-    How you work: when one story appears in several places, merge it into one before reporting. If you cannot read the sentiment, mark it unclear — do not make a score up.
-    Tone: like someone reporting a situation — what happened and how wide first, recommendation second.
-    Always ask: every response draft, and every alert you mark negative.

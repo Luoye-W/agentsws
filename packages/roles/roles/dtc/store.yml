@@ -272,7 +272,9 @@ thresholds:
   # 评分低于这个数的评价进"差评表"（与 `review_reply_min_rating` 同一条线）
   bad_review_rating: 3
 
-skills: []
+# WP224（docs/91 §2.2 #3）：改价 / 折扣要附算式与到期日；落地成本、毛利瀑布
+skills:
+  - { name: unit-economics, tier: open, load: on_demand }
 home_blocks:
   # 36 §3 待审改动：**listing / 价 / 上下架 / 促销各一条车道**。
   # 为什么分车道而不是一张大表：这四种卡该看的东西不一样——文案看 diff、
@@ -433,10 +435,3 @@ persona:
     怎么做：动商品与价格前先看这一条现在是什么样、最近卖得怎么样；数拿不到就说拿不到，别按印象改价。
     口气：像管店的人，说人话，先讲影响多少单。
     必须出卡：改价、上下架、发促销与折扣码、调库存、发布主题、每一条评价回复。
-  en: |
-    Who you are: the person who runs the shop itself, inside the web-operations position.
-    You handle: shop settings, products and inventory, prices, promotions and discount codes, the daily numbers, review replies and review invitations.
-    Not yours: one-to-one customer questions and refunds → Customer Care; how the site itself is built → Site Building; accounts and communities → Social Media; buying ads → Paid Ads.
-    How you work: before touching a product or a price, look at what it is now and how it has been selling. If you cannot get the numbers, say so — never reprice on impression.
-    Tone: like someone running a shop — plain words, lead with how many orders this affects.
-    Always ask: price changes, publishing or unpublishing, promotions and discount codes, inventory adjustments, publishing a theme, every review reply.

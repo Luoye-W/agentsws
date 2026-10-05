@@ -8,8 +8,10 @@ import { describe, expect, it } from 'vitest'
 import {
   applyPersonaOverride,
   checkAllPersonas,
+  checkGeneratedPersonaEn,
   checkPersona,
   HOUSE_RULES_ORDER,
+  hasChineseText,
   houseRulesSection,
   loadBundledPositions,
   loadBundledRoles,
@@ -21,7 +23,12 @@ import {
   personaKey,
   personaSections,
   personaTextIn,
+  personaUntranslated,
+  personaView,
+  REPLY_LANGUAGE_ORDER,
+  REPLY_LANGUAGE_RULE,
   renderBrandContext,
+  replyLanguageSection,
 } from '../src/index.js'
 
 /** 一段过得了体检的中文 persona（六段齐全）。 */
@@ -83,17 +90,46 @@ describe('六段骨架（69 §2）', () => {
     expect(checkPersona({ zh: missing, en: OK_EN })).toContain('你不负责')
   })
 
-  it('英文那份少一段也失败（两份说的要是同一件事）', () => {
+  it('WP226：英文那份只查「没有汉字」——混一个中文词就失败（docs/91 §3.3 那 14 条的样子）', () => {
+    const mixed = OK_EN.replace('a duty used in tests', 'the person doing 广告素材')
+    expect(checkPersona({ zh: OK_ZH, en: mixed })).toContain('混着中文')
+    // 全角标点也算露馅
+    expect(checkPersona({ zh: OK_ZH, en: `${OK_EN} (x)` })).toBeUndefined()
+    expect(checkPersona({ zh: OK_ZH, en: `${OK_EN}（x）` })).toContain('混着中文')
+  })
+
+  it('WP226：英文不再卡字数、也不在这一刀查小标题（那由生成脚本查）', () => {
+    const long = `${OK_EN}\n${'word '.repeat(MAX_PERSONA_CHARS.en)}`
+    expect(checkPersona({ zh: OK_ZH, en: long })).toBeUndefined()
     const missing = OK_EN.split('\n')
       .filter((l) => !l.startsWith('Not yours'))
       .join('\n')
-    expect(checkPersona({ zh: OK_ZH, en: missing })).toContain('Not yours')
+    expect(checkPersona({ zh: OK_ZH, en: missing })).toBeUndefined()
+    expect(checkGeneratedPersonaEn(missing)).toContain('Not yours')
+    expect(checkGeneratedPersonaEn('  ')).toContain('空')
+    expect(checkGeneratedPersonaEn(OK_EN)).toBeUndefined()
   })
 
-  it('超长失败；中英各一个上限（英文同义表达天然长一倍）', () => {
+  it('WP226：yml 里只写中文（`en` 空着）照样过——英文是生成的', () => {
+    expect(checkPersona({ zh: OK_ZH, en: '' })).toBeUndefined()
+  })
+
+  it('中文超长失败（上限 260 不变）', () => {
     const long = `${OK_ZH}\n${'长'.repeat(MAX_PERSONA_CHARS.zh)}`
     expect(checkPersona({ zh: long, en: OK_EN })).toContain('上限')
-    expect(MAX_PERSONA_CHARS.en).toBeGreaterThan(MAX_PERSONA_CHARS.zh)
+    expect(MAX_PERSONA_CHARS.zh).toBe(260)
+  })
+
+  it('老的纯字符串：有汉字按中文查，没有按英文查', () => {
+    expect(checkPersona(OK_ZH)).toBeUndefined()
+    expect(checkPersona('只有一句')).toContain('少了这几段')
+    expect(checkPersona(OK_EN)).toBeUndefined()
+  })
+
+  it('汉字与全角标点都算中文；箭头与弯引号不算', () => {
+    expect(hasChineseText('a → b “c”')).toBe(false)
+    expect(hasChineseText('a：b')).toBe(true)
+    expect(hasChineseText('广告')).toBe(true)
   })
 
   it('六个小标题中英一一对应', () => {
@@ -117,10 +153,44 @@ describe('全部职责与全部岗位一条都不许空（69 §2）', () => {
 })
 
 describe('公司层覆盖（69 §4）', () => {
-  it('覆盖里空着的那一边回落包里的原文', () => {
+  it('WP226：公司改了中文、没给英文 → 英文那一格留空（未翻译），取英文时回落中文', () => {
     const merged = applyPersonaOverride({ zh: '原中', en: 'orig-en' }, { zh: '新中', en: '' })
     expect(personaTextIn(merged, 'zh')).toBe('新中')
-    expect(personaTextIn(merged, 'en')).toBe('orig-en')
+    // 不再拿包里的英文去配公司新写的中文——那两份说的不是同一件事
+    expect(personaTextIn(merged, 'en')).toBe('新中')
+    expect(personaUntranslated(merged)).toBe(true)
+  })
+
+  it('覆盖后的中文与包里一样（或只覆盖了英文）→ 英文照用包里那份', () => {
+    const same = applyPersonaOverride({ zh: '原中', en: 'orig-en' }, { zh: '原中', en: '' })
+    expect(personaTextIn(same, 'en')).toBe('orig-en')
+    expect(personaUntranslated(same)).toBe(false)
+    const enOnly = applyPersonaOverride({ zh: '原中', en: 'orig-en' }, { zh: '', en: 'new-en' })
+    expect(personaTextIn(enOnly, 'zh')).toBe('原中')
+    expect(personaTextIn(enOnly, 'en')).toBe('new-en')
+  })
+
+  it('老的覆盖两边都填了的，照原样认', () => {
+    const merged = applyPersonaOverride({ zh: '原中', en: 'orig-en' }, { zh: '新中', en: 'new-en' })
+    expect(personaTextIn(merged, 'en')).toBe('new-en')
+  })
+
+  it('面板那一份带「未翻译」标记；纯字符串不算没翻译', () => {
+    const view = personaView({
+      subject: { kind: 'role', id: 'r' },
+      name: { zh: 'R', en: 'R' },
+      packaged: { zh: '原中', en: 'orig-en' },
+      override: {
+        workspace_id: 'ws_1',
+        subject: { kind: 'role', id: 'r' },
+        text: { zh: '新中', en: '' },
+        updated_at: '2026-10-05T00:00:00.000Z',
+        updated_by: 'p_1',
+      },
+    })
+    expect(view.untranslated).toBe(true)
+    expect(view.overridden).toBe(true)
+    expect(personaUntranslated('只有一份')).toBe(false)
   })
 
   it('没有覆盖就是原文（包里的那一份一个字不动）', () => {
@@ -195,6 +265,22 @@ describe('品牌上下文：取不到就不写那一句（69 §5「别编」）'
     const text = renderBrandContext({ brand_name: '甲', tone_samples: ['我们不催单。'] })
     expect(text).toContain('别照抄')
     expect(text).toContain('- 我们不催单。')
+  })
+})
+
+describe('WP226：回复语言规则', () => {
+  it('排在职责（20）后面、公共段（25）前面；中英各一句，按界面语言选', () => {
+    const zh = replyLanguageSection('zh')
+    const en = replyLanguageSection('en')
+    expect(zh.order).toBe(REPLY_LANGUAGE_ORDER)
+    expect(REPLY_LANGUAGE_ORDER).toBeGreaterThan(PERSONA_ORDER.role)
+    expect(REPLY_LANGUAGE_ORDER).toBeLessThan(HOUSE_RULES_ORDER)
+    expect(zh.text).toContain('对方来信的语言')
+    expect(zh.text).toContain('对内')
+    expect(en.text).toContain('language of the message you are answering')
+    expect(en.text).toContain('Anything for the user')
+    expect(hasChineseText(en.text)).toBe(false)
+    expect(zh.text).toBe(REPLY_LANGUAGE_RULE.zh)
   })
 })
 

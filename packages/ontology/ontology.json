@@ -28,6 +28,7 @@
     "packages/contracts/src/data.ts",
     "packages/contracts/src/design.ts",
     "packages/contracts/src/dsh-scenes.ts",
+    "packages/contracts/src/economics.ts",
     "packages/contracts/src/events.ts",
     "packages/contracts/src/hosted-env.ts",
     "packages/contracts/src/hosted.ts",
@@ -111,7 +112,7 @@
     "packages/roles/roles/social/x.yml",
     "packages/roles/roles/social/youtube.yml"
   ],
-  "source_digest": "a2ba33803ad6c19a17653806bba67e26",
+  "source_digest": "dc0f116c48b6c8bc73560f3cff7ef49a",
   "objects": [
     {
       "id": "ad",
@@ -204,6 +205,7 @@
         "ads.cpa",
         "ads.ctr",
         "ads.daily_report",
+        "ads.line_compare",
         "ads.pending_changes",
         "ads.pixel_health.google",
         "ads.pixel_health.meta",

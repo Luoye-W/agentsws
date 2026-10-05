@@ -12,8 +12,9 @@ import type {
   TableResult,
 } from '@agentsws/deck'
 import { useQuery } from '@tanstack/react-query'
-import { ExternalLink } from 'lucide-react'
+import { AlertTriangle, ExternalLink } from 'lucide-react'
 import { useMemo } from 'react'
+import { Link } from 'react-router-dom'
 import {
   CartesianGrid,
   Line,
@@ -25,6 +26,7 @@ import {
 } from 'recharts'
 import { DualBarChart, DualBarLegend, WsCard } from '@/components/design'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { getBlockData } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 import { formatDate, formatValue } from '@/lib/format'
@@ -55,9 +57,58 @@ function rowKey(row: Record<string, string | number>, columns: TableResult['colu
   return columns.map((c) => String(row[c.key] ?? '')).join('|')
 }
 
+/**
+ * WP224：`flag` 列——格子里非空就画一个小三角，那句话进 tooltip（盈亏线那一格的提示图标）。
+ * 同 `Hint`：文案也写进 `aria-label`，读屏与测试不靠 tooltip 打开。
+ */
+function FlagCell({ text }: { text: string }): React.ReactNode {
+  if (text === '') return null
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            aria-label={text}
+            data-testid="table-flag"
+            data-hint={text}
+            className="inline-flex text-ws-warn"
+          >
+            <AlertTriangle aria-hidden className="size-3.5" />
+          </button>
+        </TooltipTrigger>
+        <TooltipContent>{text}</TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  )
+}
+
+/** WP224：表下面那一行小字（「没填毛利率 · 去填」）。 */
+function TableFooter({ footer }: { footer: NonNullable<TableResult['footer']> }): React.ReactNode {
+  return (
+    <p className="px-4 pt-2 text-xs text-ws-muted-fg" data-testid="table-footer">
+      {footer.text}
+      {footer.href === undefined ? null : (
+        <>
+          {' · '}
+          <Link className="font-medium text-ws-brand hover:underline" to={footer.href}>
+            {footer.link_label ?? footer.href}
+          </Link>
+        </>
+      )}
+    </p>
+  )
+}
+
 function TableBlock({ payload }: { payload: TableResult }): React.ReactNode {
   const { lang } = useApp()
-  if (payload.rows.length === 0) return <p className="text-sm text-ws-muted-fg">—</p>
+  if (payload.rows.length === 0)
+    return (
+      <>
+        <p className="text-sm text-ws-muted-fg">—</p>
+        {payload.footer === undefined ? null : <TableFooter footer={payload.footer} />}
+      </>
+    )
   return (
     <div className="-mx-4 overflow-x-auto">
       <table className="w-full text-[13.5px]" data-testid="block-table">
@@ -83,6 +134,12 @@ function TableBlock({ payload }: { payload: TableResult }): React.ReactNode {
             >
               {payload.columns.map((c) => {
                 const value = row[c.key]
+                if (c.format === 'flag')
+                  return (
+                    <td key={c.key} className="px-2 py-3.5">
+                      <FlagCell text={String(value ?? '')} />
+                    </td>
+                  )
                 // WP63：列自己说它是什么（不说就按金额——老积木的行为一个字不变）。
                 // 件数 / 评分不是钱，渲染成 `US$2.00` 是把真话说成了假话。
                 const text =
@@ -105,6 +162,7 @@ function TableBlock({ payload }: { payload: TableResult }): React.ReactNode {
           ))}
         </tbody>
       </table>
+      {payload.footer === undefined ? null : <TableFooter footer={payload.footer} />}
     </div>
   )
 }

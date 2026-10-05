@@ -123,3 +123,19 @@ describe('WP153：回复不露工具名', () => {
     expect(summaries).toEqual(['我用「规矩与政策库」查了三轮，没找到岗位清单。'])
   })
 })
+
+describe('WP226：回复语言规则 + 只送中文 persona', () => {
+  it('每条职责都带「用对方来信的语言回」那一句，排在职责之后、公共段之前；persona 送的是中文', async () => {
+    for (const role of ['dtc.support', 'kol.youtube', 'ads.google']) {
+      const { gateway } = await runOnce(role, '好的。')
+      const system = (gateway.seen[0] ?? [])
+        .filter((m) => m.role === 'system')
+        .map((m) => m.content)
+        .join('\n')
+      const rule = system.indexOf('对方来信的语言')
+      expect(rule, role).toBeGreaterThan(system.indexOf('你不负责'))
+      expect(rule, role).toBeLessThan(system.indexOf('不提工具名、函数名、内部 id'))
+      expect(system, role).not.toContain('Who you are')
+    }
+  })
+})

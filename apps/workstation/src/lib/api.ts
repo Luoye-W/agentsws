@@ -1576,6 +1576,8 @@ export type DataSourceLevel =
   | 'workshop'
   /** WP179：「用你的 DeepSeek 账号搜索」——只属于 `web.search` 这一项 */
   | 'deepseek_native'
+  /** WP220：浏览器只读——只属于 Reddit 取数（`reddit.read`）那一项 */
+  | 'browser_readonly'
 
 export interface DataSourceRoute {
   order: DataSourceLevel[]
@@ -1859,6 +1861,21 @@ export const deleteKolCloud = (assignment?: string): Promise<KolCloudDeleteView>
 
 export const getCapabilitySources = (assignment?: string): Promise<CapabilitySourceSettings> =>
   api('/v1/settings/capability-sources', withAssignment(assignment))
+
+/** WP228：Reddit「浏览器只读」那一路（本机只读浏览器）现在能不能用。 */
+export interface ReadonlyBrowserStatus {
+  state: 'ready' | 'no_browser' | 'quota_used_up' | 'blocked'
+  message?: string
+  until?: string
+  pages_last_day: number
+  max_pages_per_day: number
+  browser?: string
+  /** WP228：托管实例——「浏览器只读」那一行整行不显示。 */
+  hosted?: boolean
+}
+
+export const getRedditBrowserReadStatus = (assignment?: string): Promise<ReadonlyBrowserStatus> =>
+  api('/v1/settings/reddit-browser-read/status', withAssignment(assignment))
 
 /** 整张表一次给全——两个标签页各改一项就不会互相覆盖。路由表（WP126）一并对齐。 */
 export const setCapabilitySources = (
@@ -5689,6 +5706,8 @@ export interface PersonaViewData {
   packaged: PersonaTextData
   /** 公司改写过吗。 */
   overridden: boolean
+  /** WP226：现在生效的中文还没有对应的英文（英文界面显示中文 + 「未翻译」）。 */
+  untranslated?: boolean
   updated_at?: string
   updated_by?: string
 }
@@ -5704,8 +5723,8 @@ export const getPersona = (
   )
 
 /**
- * 公司层改写。只传改动的那一边——另一边由服务端从现在生效的那一份补齐，
- * 免得"改了中文、英文悄悄退回包里的原文"。
+ * 公司层改写。WP226（69 §4.1）：**只改中文**——英文由中文翻译生成；改完还没翻的那段时间，
+ * 视图上 `untranslated` 为真，英文界面显示中文原文 + 「未翻译」。`en` 留着是契约只加不删。
  */
 export const setPersona = (
   input: { kind: 'position' | 'role'; id: string; zh?: string; en?: string },
@@ -6461,5 +6480,63 @@ export const confirmPlatformCliLogin = (
   api('/v1/platform-kit/cli/login', {
     method: 'PUT',
     body: { confirmed },
+    ...withAssignment(assignment),
+  })
+
+/* ── WP224（docs/91 §2.2 #1 / #3）：毛利率事实卡、两条止损线对照、本周经营一页纸 ── */
+
+import type {
+  AdsLineCompareView,
+  GrossMarginInput,
+  GrossMarginsView,
+  WeeklyReviewPayload,
+} from '@agentsws/contracts'
+
+export type { GrossMarginInput, GrossMarginsView, WeeklyReviewPayload }
+
+/** 这个品牌的毛利率（品牌一格 + 按品类 / SKU 覆盖）。用负责人那条分配。 */
+export const getGrossMargins = (assignment?: string): Promise<GrossMarginsView> =>
+  api<GrossMarginsView>('/v1/economics/margins', withAssignment(assignment))
+
+/** 填 / 改 / 清一格（`margin_pct: null` = 清）。 */
+export const saveGrossMargin = (
+  input: GrossMarginInput,
+  assignment?: string,
+): Promise<GrossMarginsView> =>
+  api<GrossMarginsView>('/v1/economics/margins', {
+    method: 'PUT',
+    body: input,
+    ...withAssignment(assignment),
+  })
+
+export const getLineCompare = (assignment?: string): Promise<AdsLineCompareView> =>
+  api<AdsLineCompareView>('/v1/economics/line-compare', withAssignment(assignment))
+
+export const previewWeeklyReview = (assignment?: string): Promise<WeeklyReviewPayload | null> =>
+  api<WeeklyReviewPayload | null>('/v1/economics/weekly-review', withAssignment(assignment))
+
+export const runWeeklyReview = (
+  assignment?: string,
+): Promise<{ approval_item_id?: string; skipped?: string; week_of?: string }> =>
+  api<{ approval_item_id?: string; skipped?: string; week_of?: string }>(
+    '/v1/economics/weekly-review/run',
+    { method: 'POST', body: {}, ...withAssignment(assignment) },
+  )
+
+import type { WeeklyReviewScheduleView } from '@agentsws/contracts'
+
+export type { WeeklyReviewScheduleView }
+
+/** WP224：一页纸每周几、几点推（设置 → 通用那一行）。 */
+export const getWeeklyReviewSchedule = (assignment?: string): Promise<WeeklyReviewScheduleView> =>
+  api<WeeklyReviewScheduleView>('/v1/economics/weekly-review/schedule', withAssignment(assignment))
+
+export const setWeeklyReviewSchedule = (
+  input: { weekday: number; time: string },
+  assignment?: string,
+): Promise<WeeklyReviewScheduleView> =>
+  api<WeeklyReviewScheduleView>('/v1/economics/weekly-review/schedule', {
+    method: 'PUT',
+    body: input,
     ...withAssignment(assignment),
   })

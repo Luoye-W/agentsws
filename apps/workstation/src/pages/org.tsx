@@ -21,6 +21,7 @@ import { JoinPanel } from '@/components/onboarding/join-panel'
 import { AssignWizard } from '@/components/org/assign-wizard'
 import { BrandDesignCard } from '@/components/org/brand-design-card'
 import { BrandsTab } from '@/components/org/brands-tab'
+import { GrossMarginCard } from '@/components/org/gross-margin-card'
 import { InprogressTab } from '@/components/org/inprogress-tab'
 import { type JoinChoice, JoinTab } from '@/components/org/join-tab'
 import { MembersTab } from '@/components/org/members-tab'
@@ -566,6 +567,10 @@ export function OrgPage(): React.ReactNode {
           {/* WP208：设计规范从第三栏搬来——每个品牌一份，看的是当前品牌那一份 */}
           <div className="pt-4">
             <BrandDesignCard />
+          </div>
+          {/* WP224：毛利率（品牌事实里的一格）——投放面板的盈亏线从这里算 */}
+          <div className="pt-4">
+            <GrossMarginCard {...(owner === undefined ? {} : { assignment: owner })} />
           </div>
         </TabsContent>
 

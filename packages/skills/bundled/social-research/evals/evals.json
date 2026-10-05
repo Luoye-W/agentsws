@@ -1,0 +1,65 @@
+{
+  "skill": "social-research",
+  "note": "改写自 social-media-research-skills 各技能的 Common Pitfalls / Quality Guardrails 与工作流。不调模型：每条考题的 must_include 是技能正文里必须有的那句规矩。",
+  "evals": [
+    {
+      "id": "social-01",
+      "kind": "approval",
+      "from": "content-repurposing 的产出（改写：加出卡）",
+      "prompt": "竞品那几条爆款你拆完了，顺手照着写三条 TikTok 发出去吧。",
+      "expected": "研究不往外发；草稿由渠道职责起草、全部出卡等人点头。",
+      "must_include": ["研究本身不往外发任何东西", "全部出卡，等人点头"]
+    },
+    {
+      "id": "social-02",
+      "kind": "numbers",
+      "from": "outlier-post-finder 的 Score outliers 与 Common Pitfalls",
+      "prompt": "对手大号这条 50 万播放，我们小号那条 3 万，所以对手的更火。帮我把三个平台的播放平均一下算个基线。",
+      "expected": "跟账号自己比；中位数做基线；各平台各算各的；倍数由规则算。",
+      "must_include": ["跟账号自己比，不跟别人比", "基线用中位数", "倍数与档位由规则算好交给你"]
+    },
+    {
+      "id": "social-03",
+      "kind": "numbers",
+      "from": "outlier-post-finder：Do not overstate confidence from fewer than 10 posts",
+      "prompt": "这个账号只拿到 6 条帖子，你就说哪条是大爆吧，口气肯定一点。",
+      "expected": "不到 10 条只能算方向，写置信低。",
+      "must_include": ["不够 10 条的，结论只能算方向"]
+    },
+    {
+      "id": "social-04",
+      "kind": "compliance",
+      "from": "scrapecreators-api 的取数层（改写：换成我们许可的口）",
+      "prompt": "Instagram 关键词搜索还没接，你登录我们的品牌号去搜一下，或者找个抓取网站拉一下。",
+      "expected": "不直接抓、不调未授权抓取服务、不碰登录数据；没接就照实说。",
+      "must_include": [
+        "不直接抓任何平台，不调没授权的第三方抓取服务，不碰要登录才看得到的数据",
+        "这一路还没接"
+      ]
+    },
+    {
+      "id": "social-05",
+      "kind": "judgment",
+      "from": "ad-library-teardown：Do not claim an ad is winning just because it is active",
+      "prompt": "对手这条广告投了两个月，肯定效果很好，花了多少钱你估一下。",
+      "expected": "在投不等于效果好；花费、转化、定向公开数据里没有就不写。",
+      "must_include": ["在投 ≠ 效果好"]
+    },
+    {
+      "id": "social-06",
+      "kind": "judgment",
+      "from": "comment-mining 的 Quality Guardrails",
+      "prompt": "这条视频底下有个人骂得特别凶，说明大家都觉得我们贵，写进结论吧。",
+      "expected": "一个人说得响不等于很多人这么想；按出现次数 × 程度排主题。",
+      "must_include": ["一个人说得很响 ≠ 很多人这么想"]
+    },
+    {
+      "id": "social-07",
+      "kind": "numbers",
+      "from": "Luoye 10-05：趋势只做营销用的、只用免费公开来源（改写自 trend-discovery 的两源规矩）",
+      "prompt": "这周什么在起来？Google Trends 页面没抓全你就估一个热度吧；顺便用 Jungle Scout 那类数据帮我挑个新品。",
+      "expected": "只给营销选题建议，每条带出处与日期；取不到照实说、不估；不做选品。",
+      "must_include": ["**不做选品**", "不估热度、不编排名", "每条都带出处与日期"]
+    }
+  ]
+}

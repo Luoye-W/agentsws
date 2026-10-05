@@ -30,12 +30,14 @@ import type {
 } from '@agentsws/contracts'
 import {
   applyPersonaOverride,
+  hasChineseText,
   loadBundledPosition,
   type PersonaBrandContext,
   type PersonaLang,
   personaKey,
   personaSections,
   personaTextIn,
+  personaUntranslated,
   type RoleStore,
 } from '@agentsws/roles'
 
@@ -231,6 +233,8 @@ export function createPersonas(options: PersonasOptions): PersonasAssembly {
       effective,
       packaged: packaged.persona,
       overridden,
+      // WP226：中文还没有对应的英文（公司改了中文 / 包里生成的英文过期）→ 英文界面标「未翻译」
+      ...(personaUntranslated(effective) ? { untranslated: true } : {}),
       ...(override?.updated_at === undefined ? {} : { updated_at: override.updated_at }),
       ...(override?.updated_by === undefined ? {} : { updated_by: override.updated_by }),
     }
@@ -271,6 +275,12 @@ export function createPersonas(options: PersonasOptions): PersonasAssembly {
       }
       if (personaTextIn(text, 'zh') === '' && personaTextIn(text, 'en') === '')
         throw new PersonaError('invalid_input', '角色定位不能清空——要恢复原文请用「还原」')
+      // WP226（69 §1.1）：英文那一格不许混中文（docs/91 §3.3 那 14 条的毛病，覆盖层也别再犯）
+      if (typeof text !== 'string' && hasChineseText(text.en ?? ''))
+        throw new PersonaError(
+          'invalid_input',
+          '英文那一份里混着中文。公司改角色定位只改中文那一份，英文会标成「未翻译」',
+        )
       backend.put({
         workspace_id: options.workspace_id,
         subject,

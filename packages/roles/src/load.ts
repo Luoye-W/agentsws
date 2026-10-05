@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url'
 import type { RoleId } from '@agentsws/contracts'
 import Schema from '@deepseek-ai/schemastery'
 import { parse as parseYaml } from 'yaml'
+import { withGeneratedEn } from './persona-en.js'
 import {
   checkPositionExtras,
   checkRoleExtras,
@@ -120,7 +121,32 @@ export function parseRole(text: string, source = '<string>'): RoleDefinitionFull
   // WP84：条数上限归 schemastery，id 重名归这一刀（schemastery 看不见"这几条之间"）
   const dup = checkRoleExtras(role)
   if (dup !== undefined) throw new RoleSchemaError(source, dup.field, dup.message)
-  return role
+  return withPersonaEnSlot(role)
+}
+
+/**
+ * WP226（69 §1.1）：yml 里只写了 `zh` 的 persona，补一个空的 `en`——契约上那一格是
+ * `{ zh: string; en: string }`，空串 = "还没有英文"，取英文时回落中文。
+ */
+function withPersonaEnSlot<T extends { persona?: RoleDefinitionFull['persona'] }>(def: T): T {
+  const persona = def.persona
+  if (persona === undefined || typeof persona === 'string') return def
+  return { ...def, persona: { zh: persona.zh ?? '', en: persona.en ?? '' } }
+}
+
+/**
+ * WP226：**包里自带的**那几条补上生成的英文（`persona-en.generated.json`，哈希对得上才用）。
+ *
+ * 只在读包里的文件时补：外部 / 公司自建的职责 yml 不在生成产物里，补了也是张冠李戴。
+ */
+function bundledRole(role: RoleDefinitionFull): RoleDefinitionFull {
+  const persona = withGeneratedEn({ kind: 'role', id: role.id }, role.persona)
+  return persona === undefined ? role : { ...role, persona }
+}
+
+function bundledPosition(position: Position): Position {
+  const persona = withGeneratedEn({ kind: 'position', id: position.id }, position.persona)
+  return persona === undefined ? position : { ...position, persona }
 }
 
 /** 从 YAML 文件读取一个职责定义。 */
@@ -135,7 +161,7 @@ export function loadRole(file: string): RoleDefinitionFull {
 export function loadBundledRole(id: RoleId): RoleDefinitionFull {
   const [domain, slug] = resolveRoleId(id).split('.')
   if (!domain || !slug) throw new RoleSchemaError(id, 'id', 'role id must be `<domain>.<slug>`')
-  return loadRole(`${BUNDLED_ROLES_DIR}${domain}/${slug}.yml`)
+  return bundledRole(loadRole(`${BUNDLED_ROLES_DIR}${domain}/${slug}.yml`))
 }
 
 /** 从 YAML 文本解析一个岗位模板。 */
@@ -149,7 +175,7 @@ export function parsePosition(text: string, source = '<string>'): Position {
   // WP120（69 §2）：填了 persona 就得填对（六段骨架、不超长、不是空的）
   const bad = checkPositionExtras(position)
   if (bad !== undefined) throw new RoleSchemaError(source, bad.field, bad.message)
-  return position
+  return withPersonaEnSlot(position)
 }
 
 /** 从 YAML 文件读取一个岗位模板。 */
@@ -159,7 +185,7 @@ export function loadPosition(file: string): Position {
 
 /** 读本包自带的岗位模板：`dtc-ops` → `positions/dtc-ops.yml`。 */
 export function loadBundledPosition(id: string): Position {
-  return loadPosition(`${BUNDLED_POSITIONS_DIR}${id}.yml`)
+  return bundledPosition(loadPosition(`${BUNDLED_POSITIONS_DIR}${id}.yml`))
 }
 
 /**
@@ -173,7 +199,7 @@ export function loadBundledPositions(): Position[] {
   return readdirSync(BUNDLED_POSITIONS_DIR)
     .filter((f) => f.endsWith('.yml'))
     .sort()
-    .map((f) => loadPosition(`${BUNDLED_POSITIONS_DIR}${f}`))
+    .map((f) => bundledPosition(loadPosition(`${BUNDLED_POSITIONS_DIR}${f}`)))
 }
 
 let bundledIcons: Map<string, string> | undefined
@@ -203,7 +229,7 @@ export function loadBundledRoles(): RoleDefinitionFull[] {
     for (const file of readdirSync(`${BUNDLED_ROLES_DIR}${domain}`)
       .filter((f) => f.endsWith('.yml'))
       .sort()) {
-      out.push(loadRole(`${BUNDLED_ROLES_DIR}${domain}/${file}`))
+      out.push(bundledRole(loadRole(`${BUNDLED_ROLES_DIR}${domain}/${file}`)))
     }
   }
   return out

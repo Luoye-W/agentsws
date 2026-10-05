@@ -17,8 +17,11 @@
  * - 实体芯片**只渲染 `label`**（服务端 enrichment 查出来的展示名），`id` 只用来跳转，
  *   一个字都不印在卡面上——WP15 截图里的 `fact_775c…` / `cus_anna` 就是这么漏出去的。
  */
+
+import { GROSS_MARGIN_FILL_PATH } from '@agentsws/contracts'
 import type { DeckCard, DeckEntityChip, DeckHighlight } from '@agentsws/deck'
 import { FileSearch } from 'lucide-react'
+import { Link } from 'react-router-dom'
 import { FactChip, ObjectChip } from '@/components/chips'
 import { Badge } from '@/components/ui/badge'
 import { useApp } from '@/lib/app-context'
@@ -33,12 +36,42 @@ export const MAX_CARD_CHIPS = 3
  * 「额度 / 总闸」那一家：**这次决定花不花得起**。
  *
  * 只有这两种进外围——它们是按下"批准"之前必须看清的一格（57 §1 总闸、14 §2 额度）。
+ * WP224：止损卡上的**盈亏线**（`break_even`）也进外围——它就是 ROAS 旁边那一格，
+ * 与判据并排看（只显示，不改止损）。没填毛利率时这颗芯片是一个「去填」的入口。
+ *
  * 期限、渠道、排期、版规那些要么已经在主体里（`deck-card-body` 按 layout 各取各的），
  * 要么属于证据层，都进右上角那个胶囊。
  */
-const GATE_TYPES: readonly DeckHighlight['type'][] = ['amount', 'spend_gate']
+const GATE_TYPES: readonly DeckHighlight['type'][] = ['amount', 'spend_gate', 'break_even']
 
 const isGate = (h: DeckHighlight): boolean => GATE_TYPES.includes(h.type)
+
+/** WP224：盈亏线那颗芯片。「没填毛利率」时整颗是去公司页填的入口。 */
+function BreakEvenChip({ text }: { text: string }): React.ReactNode {
+  const { t } = useApp()
+  const unset = text === '没填毛利率'
+  return (
+    <Badge
+      variant="outline"
+      data-testid="break-even-chip"
+      className="border-ws-warn/50 font-normal text-foreground"
+      {...(unset ? { asChild: true } : {})}
+    >
+      {unset ? (
+        <Link
+          to={GROSS_MARGIN_FILL_PATH}
+          onClick={(e) => {
+            e.stopPropagation()
+          }}
+        >
+          {text} · {t('highlight.break_even.fill')}
+        </Link>
+      ) : (
+        text
+      )}
+    </Badge>
+  )
+}
 
 /**
  * 外围芯片：与这次决定**直接相关**的那几个，按"对象 → 额度 → 依据"取，满三个就停。
@@ -66,7 +99,12 @@ export function CardChips({
   return (
     <div className="mt-2.5 flex flex-wrap items-center gap-1.5" data-testid="card-chips">
       {picked.map((item) =>
-        item.kind === 'gate' ? (
+        item.kind === 'gate' && item.highlight.type === 'break_even' ? (
+          <BreakEvenChip
+            key={`gate:break_even:${item.highlight.text}`}
+            text={item.highlight.text}
+          />
+        ) : item.kind === 'gate' ? (
           <Badge
             key={`gate:${item.highlight.type}:${item.highlight.text}`}
             variant="outline"

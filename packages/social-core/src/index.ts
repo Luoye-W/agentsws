@@ -17,6 +17,7 @@
  * | `moderation` | 群规匹配与分级（封禁要人点） |
  * | `channels` | 各渠道适配器（WP191 起加了 FB 主页 / IG / Threads / LinkedIn 四条，老的 `meta` 留着） |
  * | `platform` | WP191：各平台的硬限制一张表（字数、标签、@、链接、轮播张数、每日上限） |
+ * | `research` | WP220：研究技能的取数白名单、Reddit 两路取数、趋势排序、爆款帖、报告与卡 |
  *
  * **不在这里的东西**（各有去处，免得有人在这里找）：
  *
@@ -30,5 +31,6 @@ export * from './calendar.js'
 export * from './channels/index.js'
 export * from './moderation.js'
 export * from './platform.js'
+export * from './research/index.js'
 export * from './triage.js'
 export * from './voice.js'

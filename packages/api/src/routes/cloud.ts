@@ -29,6 +29,8 @@ import type {
   LocalPricing,
   LocalTopupTiers,
   MaybePromise,
+  ReadonlyBrowserStatus,
+  RedditBrowserReadLimits,
   ServiceSubscription,
   TopupOrder,
   UsageGroup,
@@ -137,12 +139,19 @@ export interface CloudPort {
   /** WP194：最近的改额度记录（谁、从多少改到多少）。只有 owner / admin。 */
   allocationAudit?(actor: CloudActor): MaybePromise<AllocationAuditList>
   capabilitySources(actor: CloudActor): MaybePromise<CapabilitySourceSettings>
+  /**
+   * WP228：本机只读浏览器（Reddit「浏览器只读」那一路）现在能不能用：可用 / 没找到浏览器 /
+   * 额度用完 / 被拦了。连接页 Reddit 卡上那一格读它。
+   */
+  readonlyBrowserStatus?(actor: CloudActor): MaybePromise<ReadonlyBrowserStatus>
   setCapabilitySources(
     actor: CloudActor,
     input: {
       capability_sources: Record<string, 'mine' | 'agentsws'>
       /** WP126：数据接口路由（键 `kol.<channel>`）。不给就不改这一块。 */
       data_source_routing?: Record<string, DataSourceRoute> | undefined
+      /** WP220：Reddit 浏览器只读的限速。不给就不改。 */
+      reddit_browser_read?: RedditBrowserReadLimits | undefined
     },
   ): MaybePromise<CapabilitySourceSettings>
 }
@@ -182,6 +191,14 @@ const AllocationLimitBody = z.object({
   monthly_limit: z.number().min(0).max(10_000_000).nullable(),
 })
 
+const ROUTE_LEVELS = [
+  'official_key',
+  'byo_source',
+  'workshop',
+  'deepseek_native',
+  'browser_readonly',
+] as const
+
 const SourcesBody = z.object({
   capability_sources: z.record(z.string().min(1).max(64), z.enum(['mine', 'agentsws'])),
   // WP126：数据接口路由。等级枚举在服务端再洗一遍（zod 这一层只管形状）
@@ -190,14 +207,19 @@ const SourcesBody = z.object({
       z.string().min(1).max(64),
       z.object({
         // WP179：`deepseek_native` 只属于 `web.search` 这一项（服务端按键再洗一遍）
-        order: z
-          .array(z.enum(['official_key', 'byo_source', 'workshop', 'deepseek_native']))
-          .max(4),
-        disabled: z
-          .array(z.enum(['official_key', 'byo_source', 'workshop', 'deepseek_native']))
-          .max(4),
+        // WP220：`browser_readonly` 只属于 `reddit.read` 这一项（同上，服务端按键再洗）
+        order: z.array(z.enum(ROUTE_LEVELS)).max(5),
+        disabled: z.array(z.enum(ROUTE_LEVELS)).max(5),
       }),
     )
+    .optional(),
+  // WP220：Reddit 浏览器只读的限速。范围在服务端收（`clampRedditBrowserReadLimits`）
+  reddit_browser_read: z
+    .object({
+      min_interval_seconds: z.number().int().min(1).max(3600),
+      max_pages_per_hour: z.number().int().min(1).max(10_000),
+      max_pages_per_day: z.number().int().min(1).max(100_000),
+    })
     .optional(),
 })
 
@@ -530,6 +552,26 @@ export function cloudRoutes(): Route[] {
         returns: 'CapabilitySourceSettings',
       },
       async (c, deps) => ok(c, await portOf(deps).capabilitySources(actorOf(c))),
+    ),
+    route(
+      {
+        method: 'get',
+        path: '/v1/settings/reddit-browser-read/status',
+        operationId: 'getRedditBrowserReadStatus',
+        summary:
+          'Reddit「浏览器只读」那一路现在能不能用：可用 / 没找到 Chrome、Edge / 额度用完 / 被拦了（WP228）',
+        tag: TAG,
+        auth: 'bearer',
+        assignment: true,
+        authz: READ,
+        returns: 'ReadonlyBrowserStatus',
+      },
+      async (c, deps) => {
+        const port = portOf(deps)
+        if (port.readonlyBrowserStatus === undefined)
+          throw new ApiError('not_implemented', '这个服务进程没有装本机只读浏览器')
+        return ok(c, await port.readonlyBrowserStatus(actorOf(c)))
+      },
     ),
     route(
       {

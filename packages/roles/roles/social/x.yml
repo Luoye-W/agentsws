@@ -97,6 +97,8 @@ automation:
 
 skills:
   - { name: brand-voice, tier: open, load: always }
+  # WP220：社媒研究（爆款帖、评论、竞品拆解；改编自 social-media-research-skills，取数只走许可的口）
+  - { name: social-research, tier: open, load: on_demand }
 
 home_blocks:
   - {
@@ -236,6 +238,11 @@ task_examples:
     description: "一条推下面有几十条回复，来不及一条条看。"
     expected_output: "按六类分好的一张表：客户的问题已经变成转客服卡，合作询问提示转红人营销，夸和投诉给出回复草稿；不会去搜关键词回陌生人。"
 
+# WP179（Luoye 09-29「官方功能优先」）：官方网页搜索（用 DeepSeek 账号 / key 搜）与抓公开网页。
+# WP220：研究技能要上网查新闻、帖子、话题；reddit.com / x.com 的公开页面也能抓（Luoye 10-05，不用品牌账号）。
+# 每条运行上限走 thresholds.web_search_per_run / web_fetch_per_run（不写 = 5 / 10）。
+web_tools: [web_search, web_fetch]
+
 # ── WP120（69 §2）：**角色定位**。提示里的「你是谁」，六段骨架一段不许少 ──────────
 # 第三段「你不负责」是防串岗的那一条。改这一段之前先读 docs/69；
 # 「怎么做」那一句的平台做法来自 docs/86 §2 / §3（出处与许可证在那里）。
@@ -247,10 +254,3 @@ persona:
     怎么做：发完一小时内守着回；只回我们帖子下与 @ 我们的，不搜关键词去回；同一段话一周不发两次；拿不准的评论按客户问题转走。
     口气：像社区里的人，接地气、不官腔、不承诺。
     必须出卡：发布与排期、改账号资料、任何对外可见的回复。
-  en: |
-    Who you are: the person running our own X account, inside the social-media position.
-    You handle: posts and threads, scheduling, replies, the account profile, the last 30 days of performance.
-    Not yours: orders, refunds and shipping → Customer Care, including the ones raised in the comments; creators → Creator Marketing; ads → Paid Ads; other people’s forums → Public Relations.
-    How you work: stay for the first hour after posting and reply. Only answer replies to our posts and direct mentions — never search keywords to reply to strangers. Never post the same text twice in a week. Replies get screenshotted: read yours once more imagining it quoted out of context. When a comment is borderline, treat it as a customer question and hand it over.
-    Tone: like a person in the community — human, no corporate voice, no promises.
-    Always ask: publishing and scheduling, profile edits, every outward reply.

@@ -50,8 +50,26 @@ import {
   webSceneArgs,
 } from '@agentsws/dsh-adapter'
 import { killTree } from './kill-tree.js'
+import { decodeConsoleText, oemCodePageOf } from './win-cli.js'
 
 const execFileAsync = promisify(execFile)
+
+/**
+ * WP225：这台 Windows 的 OEM 代码页（控制台程序往管道写字用的那一个；简体中文系统是 936）。
+ * 问一次注册表（这一条的输出全是 ASCII），记住；问不到回 undefined（解码时退回 latin1）。
+ */
+let oemCodePageCache: Promise<number | undefined> | undefined
+function oemCodePage(): Promise<number | undefined> {
+  oemCodePageCache ??= execFileAsync(
+    'reg',
+    ['query', 'HKLM\\SYSTEM\\CurrentControlSet\\Control\\Nls\\CodePage', '/v', 'OEMCP'],
+    { timeout: 5000, windowsHide: true },
+  ).then(
+    (out) => oemCodePageOf(out.stdout),
+    () => undefined,
+  )
+  return oemCodePageCache
+}
 
 /** 桌面壳传进来的 `DSH_HOME`（`<userData>/dsh`）。 */
 export const DSH_HOME_ENV = 'AGENTSWS_DSH_HOME'
@@ -158,11 +176,13 @@ export function systemOfficialDesktop(
           }
         },
         queryRegistry: async (key) => {
+          // WP225：reg.exe 往管道写的是系统 OEM 代码页（简体中文是 GBK），按 UTF-8 读中文路径是乱码
           const out = await execFileAsync('reg', ['query', key, '/ve'], {
             timeout: 5000,
             windowsHide: true,
+            encoding: 'buffer',
           })
-          return out.stdout
+          return decodeConsoleText(out.stdout, await oemCodePage())
         },
       })
     },

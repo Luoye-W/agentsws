@@ -53,6 +53,8 @@ const KNOWN_KINDS: ReadonlySet<string> = new Set<ApprovalKind>([
   // WP219：内容更新卡与冲突选择卡（docs/90）
   'content_update',
   'content_conflict',
+  // WP224：本周经营一页纸（L3 自动出、看完归档）
+  'weekly_review',
 ])
 
 export function isKnownKind(kind: string): boolean {

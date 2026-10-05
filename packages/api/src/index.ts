@@ -122,6 +122,8 @@ export {
   type RouteSpec,
   route,
 } from './route-spec.js'
+// WP225：岗位 AI 正在干活没有（桌面壳重启并更新前问）
+export { type ActivityPort, type ActivityView, activityRoutes } from './routes/activity.js'
 // WP75（57 §5）：广告库那一面
 export type { AdsAccountRow, AdsCampaignRow, AdsPort, AdsStagedView } from './routes/ads.js'
 export { adsRoutes } from './routes/ads.js'
@@ -280,6 +282,13 @@ export { designRoutes } from './routes/design.js'
 export type { DesignActor } from './routes/design-types.js'
 // WP136（docs/79）：dsh 场景切换
 export { type DshScenesActor, type DshScenesPort, dshScenesRoutes } from './routes/dsh-scenes.js'
+// WP224：毛利率事实卡、两条止损线对照、本周经营一页纸
+export {
+  type EconomicsActor,
+  type EconomicsPort,
+  economicsRoutes,
+  type WeeklyReviewRunView,
+} from './routes/economics.js'
 export {
   AssignmentVisibility,
   canReadAll,

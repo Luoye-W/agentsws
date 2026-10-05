@@ -6,15 +6,19 @@
  * - 职责页开的是**这条职责**那一份，并且**同时给出它所属岗位**那一段
  *   （69 §3：运行时先装岗位再装职责，界面上也按这个顺序给人看）；
  * - 岗位页开的是岗位那一份 + 下属职责清单（点一条跳到它自己的定位）；
- * - 改写走 `PUT /v1/personas`，**只带改动的那一边语言**（另一边由服务端补齐）；
+ * - 改写走 `PUT /v1/personas`，**只带中文**（WP226：公司只改中文，英文跟着中文走）；
+ * - 英文界面下中文还没有对应的英文 → 显示中文原文 + 「未翻译」；
  * - 改过之后：标出「公司改写过」、**包里的原文折叠着仍在**、「还原」按钮才出现
  *   ——不显示原文，「还原」就是一个看不见结果的按钮；
  * - 非 owner 点保存 → `role="alert"` 一句人话（界面不自己预判能不能改，36 §10.1）；
  * - 反查不出唯一岗位时说清"所以运行时不带岗位那一段"，不画一个空框。
  */
-import { fireEvent, screen, waitFor, within } from '@testing-library/react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiClientError, type PersonaViewData, type PositionInstanceData } from '@/lib/api'
+import { AppProvider } from '@/lib/app-context'
 import { renderWithProviders } from './helpers'
 
 const INSTANCE: PositionInstanceData = {
@@ -216,7 +220,7 @@ describe('角色面板：改与还原（69 §4）', () => {
     await waitFor(() => {
       expect(setPersona).toHaveBeenCalledTimes(1)
     })
-    // 只带中文那一边——英文由服务端从现在生效的那一份补齐（不留空）
+    // WP226：只带中文——英文跟着中文走，改完没翻译的那段时间英文界面标「未翻译」
     expect(setPersona.mock.calls[0]?.[0]).toEqual({
       kind: 'role',
       id: 'dtc.store',
@@ -280,5 +284,70 @@ describe('角色面板：改与还原（69 §4）', () => {
     const save = within(panel).getAllByTestId('role-save')[0] as HTMLButtonElement
     expect(save.disabled).toBe(true)
     expect(setPersona).not.toHaveBeenCalled()
+  })
+})
+
+describe('WP226：英文界面——只改中文，没翻译的标出来', () => {
+  /** 公司改了中文、英文还没跟上的那一份（服务端回 `untranslated: true`，英文那格空着）。 */
+  const UNTRANSLATED_ROLE: PersonaViewData = {
+    ...BUNDLED_ROLE,
+    effective: { zh: '你是谁：我们公司自己的店铺管理打法。', en: '' },
+    overridden: true,
+    untranslated: true,
+  }
+
+  /** 英文界面下单独挂一个职责作用域的面板（`renderWithProviders` 固定中文界面）。 */
+  async function openEnglishRolePanel(): Promise<HTMLElement> {
+    const { RolePanel } = await import('@/components/rail/panels/role-panel')
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })
+    render(
+      <QueryClientProvider client={client}>
+        <AppProvider initialTheme="light" initialLang="en" initialPosition="asg_store">
+          <MemoryRouter>
+            <RolePanel scope={{ tier: 'role', scope_id: 'dtc.store', name: 'Store ops' }} />
+          </MemoryRouter>
+        </AppProvider>
+      </QueryClientProvider>,
+    )
+    const panel = await screen.findByTestId('role-panel')
+    await within(panel).findAllByTestId('role-persona')
+    return panel
+  }
+
+  it('没翻译 → 显示中文原文 + 「未翻译」；改写的文本框里是中文、保存只带中文', async () => {
+    getPersona.mockImplementation(async (_kind, id) =>
+      id === 'web-ops' ? POSITION_VIEW : UNTRANSLATED_ROLE,
+    )
+    const panel = await openEnglishRolePanel()
+    expect(within(panel).getAllByTestId('role-untranslated')).toHaveLength(1)
+    expect(within(panel).getByTestId('role-effective').textContent).toContain(
+      '我们公司自己的店铺管理打法',
+    )
+
+    fireEvent.click(within(panel).getByTestId('role-edit'))
+    const editor = (await within(panel).findByTestId('role-editor')) as HTMLTextAreaElement
+    expect(editor.value).toContain('我们公司自己的店铺管理打法')
+    expect(within(panel).getByTestId('role-edit-source')).toBeDefined()
+    fireEvent.change(editor, { target: { value: '你是谁：再改一次。' } })
+    fireEvent.click(within(panel).getByTestId('role-save'))
+    await waitFor(() => {
+      expect(setPersona).toHaveBeenCalledTimes(1)
+    })
+    expect(setPersona.mock.calls[0]?.[0]).toEqual({
+      kind: 'role',
+      id: 'dtc.store',
+      zh: '你是谁：再改一次。',
+    })
+  })
+
+  it('有英文（包里生成的那一份）→ 显示英文，不标「未翻译」；改写框里仍是中文', async () => {
+    const panel = await openEnglishRolePanel()
+    expect(within(panel).queryAllByTestId('role-untranslated')).toHaveLength(0)
+    expect(within(panel).getByTestId('role-effective').textContent).toContain(
+      'Who you are: store ops.',
+    )
+    fireEvent.click(within(panel).getByTestId('role-edit'))
+    const editor = (await within(panel).findByTestId('role-editor')) as HTMLTextAreaElement
+    expect(editor.value).toContain('这家店的店铺管理')
   })
 })

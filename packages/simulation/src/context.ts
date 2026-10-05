@@ -14,7 +14,7 @@ import type {
   RunRequest,
 } from '@agentsws/contracts'
 import { canonicalJson, timeContextItem } from '@agentsws/core'
-import { bundledPositionOfRole, personaTextIn } from '@agentsws/roles'
+import { bundledPositionOfRole, personaTextIn, replyLanguageSection } from '@agentsws/roles'
 import { MemoryInboundPipeline } from '@agentsws/stand-ins'
 import type { RunContext, World } from './world.js'
 
@@ -93,6 +93,11 @@ async function personaSections(world: World): Promise<PromptSection[]> {
         `你是 ${world.pack.workspace.name} 的${role.name.zh}。职责：${role.description}。` +
           `对外语言 ${world.pack.workspace.locales.customers}，对内语言 ${world.pack.workspace.locales.operators}。`,
     },
+    /*
+     * WP226（69 §3.3）：**回复语言**——与服务端同一句（`replyLanguageSection`）。
+     * 模拟世界里"界面语言"就是 pack 的对内语言（`locales.operators`）。
+     */
+    replyLanguageSection(world.pack.workspace.locales.operators.startsWith('en') ? 'en' : 'zh'),
     {
       id: 'fence',
       name: 'external data',

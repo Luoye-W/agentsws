@@ -114,6 +114,8 @@ automation:
 
 skills:
   - { name: brand-voice, tier: open, load: always }
+  # WP220：社媒研究（爆款帖、评论、竞品拆解；改编自 social-media-research-skills，取数只走许可的口）
+  - { name: social-research, tier: open, load: on_demand }
 
 home_blocks:
   - {
@@ -249,6 +251,11 @@ task_examples:
     description: "想在 Facebook 群组里发一条公告。"
     expected_output: "说清楚这是 Facebook 群组那条职责的事（走受控浏览器、群发永远人审），这条只管主页。"
 
+# WP179（Luoye 09-29「官方功能优先」）：官方网页搜索（用 DeepSeek 账号 / key 搜）与抓公开网页。
+# WP220：研究技能要上网查新闻、帖子、话题；reddit.com / x.com 的公开页面也能抓（Luoye 10-05，不用品牌账号）。
+# 每条运行上限走 thresholds.web_search_per_run / web_fetch_per_run（不写 = 5 / 10）。
+web_tools: [web_search, web_fetch]
+
 # ── WP120（69 §2）：**角色定位**。提示里的「你是谁」，六段骨架一段不许少 ──────────
 # 第三段「你不负责」是防串岗的那一条。改这一段之前先读 docs/69；
 # 「怎么做」那一句的平台做法来自 docs/86 §2 / §3（出处与许可证在那里）。
@@ -260,10 +267,3 @@ persona:
     怎么做：先看主页最近发过什么、评论在聊什么；配文短、不堆标签不诱导互动；不把 IG 那条原样搬来；拿不准的按客户问题转走。
     口气：像社区里的人，接地气、不官腔、不承诺。
     必须出卡：发布与排期、改账号资料、任何对外可见的回复。
-  en: |
-    Who you are: the person running our own Facebook Page, inside the social-media position.
-    You handle: scheduling and publishing Page posts, Reels and Stories, replying to comments, the Page profile, the last 30 days of performance.
-    Not yours: orders, refunds and shipping → Customer Care, including the ones raised in the comments; creators → Creator Marketing; ads → Paid Ads; other people’s forums → Public Relations; Facebook Groups → the Facebook Group duty.
-    How you work: read what the Page posted recently and what the comments are about. Keep captions short, no hashtag stuffing, no engagement bait. Never copy the Instagram post across unchanged — each platform demotes reposts. When a comment is borderline, treat it as a customer question and hand it over.
-    Tone: like a person in the community — human, no corporate voice, no promises.
-    Always ask: publishing and scheduling, profile edits, every outward reply.

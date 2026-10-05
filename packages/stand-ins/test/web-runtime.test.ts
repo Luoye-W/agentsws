@@ -64,6 +64,18 @@ describe('WP179 网页工具的判定', () => {
     expect(webQueriesOf({ queries: [' a ', 'a', ''] })).toEqual(['a'])
   })
 
+  it('WP220（Luoye 10-05）：reddit.com / x.com 的公开页面照常能抓，与别的站同一个次数上限', () => {
+    const counter = new WebUsageCounter(withWeb(ASK, { max_fetches: 2 }))
+    expect(
+      counter.take(WEB_FETCH_TOOL, { url: 'https://www.reddit.com/r/a/comments/1/' }),
+    ).toBeUndefined()
+    expect(counter.take(WEB_FETCH_TOOL, { url: 'https://x.com/inmo/status/1' })).toBeUndefined()
+    expect(counter.fetches).toBe(2)
+    expect(counter.take(WEB_FETCH_TOOL, { url: 'https://www.theverge.com/a' })).toMatch(
+      /^web_fetch_limit/,
+    )
+  })
+
   it('没开就拒，理由说得清', () => {
     const req = withWeb(ASK, { search: false })
     expect(new WebUsageCounter(req).take(WEB_SEARCH_TOOL, { queries: ['x'] })).toMatch(

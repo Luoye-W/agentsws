@@ -15,13 +15,14 @@
  *    拖动排序"——persona 是内容，内容归数据；这里给的是「预览 + 改一段」。
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { RotateCcw } from 'lucide-react'
+import { Languages, RotateCcw } from 'lucide-react'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { dutyHref } from '@/components/app-shell'
 import { PanelError } from '@/components/rail/panel-error'
 import type { RailScope } from '@/components/rail/rail-scope'
 import { Button } from '@/components/ui/button'
+import { Hint } from '@/components/ui/hint'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Textarea } from '@/components/ui/textarea'
 import {
@@ -71,7 +72,9 @@ function PersonaBody({
       setPersona({
         kind: view.subject.kind,
         id: view.subject.id,
-        ...(lang === 'zh' ? { zh: text } : { en: text }),
+        // WP226（69 §4.1）：公司只改中文那一份（Agent 读的就是它）；英文跟着中文走，
+        // 改完还没翻译的那段时间英文界面显示中文 + 「未翻译」
+        zh: text,
       }),
     onSuccess: () => {
       setEditing(false)
@@ -93,6 +96,8 @@ function PersonaBody({
 
   const effective = textIn(view.effective, lang)
   const packaged = textIn(view.packaged, lang)
+  // WP226：英文界面下这段还没有英文（公司改了中文 / 生成的英文过期）→ 显示的是中文原文
+  const untranslated = lang !== 'zh' && view.untranslated === true
 
   return (
     <div className="flex flex-col gap-2" data-testid="role-persona" data-subject={view.subject.id}>
@@ -104,10 +109,25 @@ function PersonaBody({
         >
           {view.overridden ? t('rail.role.overridden') : t('rail.role.bundled')}
         </span>
+        {untranslated ? (
+          <span
+            className="inline-flex items-center gap-1 rounded border px-1 py-0.5 text-[11px] text-muted-foreground"
+            data-testid="role-untranslated"
+          >
+            <Languages aria-hidden className="size-3" />
+            {t('rail.role.untranslated')}
+            <Hint text={t('rail.role.untranslated_tip')} />
+          </span>
+        ) : null}
       </div>
 
       {editing ? (
         <div className="flex flex-col gap-1">
+          {lang === 'zh' ? null : (
+            <p className="text-[11px] text-muted-foreground" data-testid="role-edit-source">
+              {t('rail.role.edit_source')}
+            </p>
+          )}
           <Textarea
             rows={12}
             className="text-xs"
@@ -177,7 +197,8 @@ function PersonaBody({
               variant="outline"
               data-testid="role-edit"
               onClick={() => {
-                setDraft(effective)
+                // 改的永远是中文那一份（WP226）——英文界面下也是
+                setDraft(textIn(view.effective, 'zh'))
                 setEditing(true)
               }}
             >

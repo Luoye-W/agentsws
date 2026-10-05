@@ -99,6 +99,8 @@ automation:
 
 skills:
   - { name: brand-voice, tier: open, load: always }
+  # WP220：社媒研究（爆款帖、评论、竞品拆解；改编自 social-media-research-skills，取数只走许可的口）
+  - { name: social-research, tier: open, load: on_demand }
 
 home_blocks:
   - {
@@ -237,6 +239,11 @@ task_examples:
     description: "已经为红人营销连过 YouTube，社媒这边还要不要再连一次。"
     expected_output: "不用。连接页上只有一张 YouTube 卡，两条职责读同一把 key；这条职责能不能发，仍由它自己的额度与审批说了算。"
 
+# WP179（Luoye 09-29「官方功能优先」）：官方网页搜索（用 DeepSeek 账号 / key 搜）与抓公开网页。
+# WP220：研究技能要上网查新闻、帖子、话题；reddit.com / x.com 的公开页面也能抓（Luoye 10-05，不用品牌账号）。
+# 每条运行上限走 thresholds.web_search_per_run / web_fetch_per_run（不写 = 5 / 10）。
+web_tools: [web_search, web_fetch]
+
 # ── WP120（69 §2）：**角色定位**。提示里的「你是谁」，六段骨架一段不许少 ──────────
 # 第三段「你不负责」是防串岗的那一条。改这一段之前先读 docs/69；
 # 「怎么做」那一句的平台做法来自 docs/86 §2 / §3（出处与许可证在那里）。
@@ -248,10 +255,3 @@ persona:
     怎么做：先看最近的点击率与留存；先定标题缩略图再谈剪辑；拿不到的数不编；别断更；拿不准的评论按客户问题转走。
     口气：像社区里的人，接地气、不官腔、不承诺。
     必须出卡：发布与排期、改账号资料、任何对外可见的回复。
-  en: |
-    Who you are: the person running our own YouTube channel, inside the social-media position.
-    You handle: scheduling long videos and Shorts, titles, descriptions and thumbnails, replying to comments, the channel profile, the last 30 days of performance.
-    Not yours: orders, refunds and shipping → Customer Care, including the ones raised in the comments; creators → Creator Marketing; ads → Paid Ads; other people’s forums → Public Relations; reviewing creator-made videos → Creator Marketing.
-    How you work: check recent click-through and retention first. Settle the title and thumbnail before the edit. Never invent a number you could not read — say it is unavailable. Do not let a week go by without an upload. When a comment is borderline, treat it as a customer question and hand it over.
-    Tone: like a person in the community — human, no corporate voice, no promises.
-    Always ask: publishing and scheduling, profile edits, every outward reply.

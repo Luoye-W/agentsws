@@ -352,7 +352,11 @@ export function createContentUpdates(options: ContentUpdatesOptions): ContentUpd
       const state = store.readWorkspace(ws)
       if (state.items[item.id]?.skipped_version === item.version) continue
       const tag = `${ws}:${item.id}@${item.version}`
-      if (state.mode === 'auto' && scanClean(item)) {
+      if (
+        state.mode === 'auto' &&
+        sameMajorLine(currentVersionOf(ws, item), item.version) &&
+        scanClean(item)
+      ) {
         await applyItem(ws, item, 'auto')
         out.applied.push(tag)
         continue
@@ -877,4 +881,28 @@ export function createContentUpdates(options: ContentUpdatesOptions): ContentUpd
       })
     },
   }
+}
+
+/**
+ * WP225（Luoye #23）：选了「自动」时，**只自动装同一主版本里的更新**，大版本仍出卡问人。
+ *
+ * 「主版本」按 semver 的规矩、照 npm `^` 的算法：第一个不是 0 的那一段算主版本——
+ * `1.2.3 → 1.9.0` 自动、`1.9.0 → 2.0.0` 问人；`0.3.1 → 0.3.4` 自动、`0.3.4 → 0.4.0` 问人
+ * （0.x 时次版本号就是「可能不兼容」的那一位）；`0.0.3 → 0.0.4` 也问人。
+ * 当前版本不知道（这个品牌第一次收这一条、随软件也没带）或版本号认不出：问人。
+ */
+export function sameMajorLine(from: string | undefined, to: string): boolean {
+  if (from === undefined) return false
+  const parse = (v: string): number[] | undefined => {
+    const m = /^v?(\d+)\.(\d+)\.(\d+)/.exec(v.trim())
+    return m === null ? undefined : [Number(m[1]), Number(m[2]), Number(m[3])]
+  }
+  const a = parse(from)
+  const b = parse(to)
+  if (a === undefined || b === undefined) return false
+  // 第一个不是 0 的那一段（全是 0 就看最后一段）：它以及它前面的段都要一样
+  const lead = a.findIndex((n) => n !== 0)
+  const upTo = lead < 0 ? 2 : lead
+  for (let i = 0; i <= upTo; i += 1) if (a[i] !== b[i]) return false
+  return true
 }

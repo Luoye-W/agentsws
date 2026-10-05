@@ -13,5 +13,7 @@ export * from './attribution.js'
 export * from './brand-design.js'
 export * from './budget.js'
 export * from './channels/index.js'
+// WP224（docs/91 §2.2 #3）：盈亏线 ROAS = 1 / 毛利率，只并排显示、不改止损；毛利瀑布
+export * from './economics.js'
 export * from './spec.js'
 export * from './variants.js'

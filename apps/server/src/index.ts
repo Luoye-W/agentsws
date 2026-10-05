@@ -497,6 +497,8 @@ export async function main(): Promise<void> {
   try {
     server = await createServer({
       ...(dbDir === undefined ? {} : { dbDir }),
+      // WP228：本机只读浏览器（Reddit「浏览器只读」那一路）只在真正的服务进程里装
+      readonlyBrowser: {},
       ...(staticDir === undefined ? {} : { staticDir }),
       ...(profileDir === undefined || profileDir === ''
         ? {}

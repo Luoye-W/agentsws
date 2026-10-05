@@ -24,6 +24,7 @@ import {
   systemPreferences,
   Tray,
 } from 'electron'
+import type { AppUpdater } from 'electron-updater'
 import { type ApiClient, createApiClient, type DesktopSession } from './api-client.js'
 import { BRIDGE_CHANNELS, type BridgeInfo, type SceneOpenOutcome } from './bridge-types.js'
 import { createConfigStore, type DesktopConfig, type Language } from './config.js'
@@ -43,6 +44,7 @@ import {
   diagnosticsListing,
   humanBytes,
 } from './diagnostics.js'
+import { loadAutoUpdater } from './electron-updater-module.js'
 import { shouldOpenOnFirstRun } from './first-run.js'
 import { createHaltControl } from './halt.js'
 import { type HealthSnapshot, probeHealth } from './health.js'
@@ -109,6 +111,7 @@ import {
 } from './tray-icon.js'
 import { tintBitmap } from './tray-tint.js'
 import {
+  busyBeforeRestart,
   createUpdateController,
   publicStatus,
   type UpdateBackend,
@@ -1449,6 +1452,11 @@ async function bootstrap(): Promise<void> {
     quitApproved = true
     quitConfirmation.dispose()
   })
+  /** 服务进程（连同它起的场景）退干净没有；最多等 15 秒（Windows 上 8 秒没退壳会按进程树强杀）。 */
+  const waitServerGone = async (): Promise<void> => {
+    for (let i = 0; i < 60 && server.snapshot().pid !== undefined; i += 1) await sleep(250)
+  }
+  let serverDrained = false
   app.on('before-quit', (event) => {
     if (!quitApproved && !quitting && officialRunning()) {
       event.preventDefault()
@@ -1460,6 +1468,20 @@ async function bootstrap(): Promise<void> {
       return
     }
     quitting = true
+    /*
+     * WP225：等服务进程停干净再让壳退。Windows 上停服务进程是「关 stdin 请它收尾，8 秒没退按树强杀」，
+     * 强杀那个计时器在壳里——壳先走了，收尾卡住的服务进程就成了孤儿，锁着安装目录里的 node.exe，
+     * 下一次更新 / 卸载「文件被占用」。
+     */
+    if (!serverDrained && server.snapshot().pid !== undefined) {
+      event.preventDefault()
+      server.stop()
+      void waitServerGone().then(() => {
+        serverDrained = true
+        app.quit()
+      })
+      return
+    }
     server.stop()
   })
 
@@ -1560,8 +1582,10 @@ async function bootstrap(): Promise<void> {
 
   /** Windows：包一层 electron-updater。主源与 GitHub 共用同一个 autoUpdater，查之前先指好源。 */
   const electronBackend = async (feed: FeedConfig): Promise<UpdateBackend> => {
-    // 动态 import：notify 档一次都用不上它，没必要拖进每一次冷启动
-    const { autoUpdater: real } = await import('electron-updater')
+    // 动态 import：notify 档一次都用不上它，没必要拖进每一次冷启动。
+    // WP225：不能写 `const { autoUpdater } = await import(...)`——CJS 的惰性 getter 认不成具名导出，
+    // 打包后拿到 undefined（见 electron-updater-module.ts）
+    const real = await loadAutoUpdater<AppUpdater>(() => import('electron-updater'))
     real.autoDownload = false
     // 只在用户点了「重启并更新」时装：退出时偷偷装会绕开装之前的自检
     real.autoInstallOnAppQuit = false
@@ -1624,12 +1648,36 @@ async function bootstrap(): Promise<void> {
     quitting = true
     for (const w of liveSceneWindows()) w.window.destroy()
     server.stop()
-    for (let i = 0; i < 60 && server.snapshot().pid !== undefined; i += 1) await sleep(250)
+    await waitServerGone()
   }
 
-  /** 「有任务在跑，确定现在重启？」——照 WP184 退出确认：没东西在跑就不问。 */
+  /** WP225：岗位 AI 正在跑的运行有几次（问服务进程；问不到回 undefined，按「没有」算）。 */
+  const aiRunsNow = async (): Promise<number | undefined> => {
+    if (remote || health?.ok !== true) return undefined
+    const s = await ensureSession()
+    const assignment = s === undefined ? undefined : await ensureAssignment(s)
+    if (s === undefined || assignment === undefined) return undefined
+    const out = await api.activeRuns(s, assignment)
+    if (!out.ok) logger.warn('问不到岗位 AI 在不在干活（按没有算）', { reason: out.reason })
+    return out.ok ? out.value : undefined
+  }
+
+  /** 「有任务在跑，确定现在重启？」——照 WP184 退出确认：没东西在跑就不问（WP225 加上岗位 AI 正在干活）。 */
   const confirmRestart = async (): Promise<boolean> => {
-    if (!officialRunning() && computerUseActive === undefined) return true
+    const aiRuns = await aiRunsNow()
+    logger.info('重启并更新前看一眼', {
+      officialScenes: officialRunning(),
+      computerUse: computerUseActive !== undefined,
+      aiRuns: aiRuns ?? 'unknown',
+    })
+    if (
+      !busyBeforeRestart({
+        officialScenes: officialRunning(),
+        computerUse: computerUseActive !== undefined,
+        aiRuns,
+      })
+    )
+      return true
     const t = strings(config.language)
     const result = await dialog.showMessageBox({
       type: process.platform === 'win32' ? 'none' : 'warning',

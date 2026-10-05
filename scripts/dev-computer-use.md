@@ -38,7 +38,7 @@
    `<数据目录>/computer-use/cua-driver-0.28.0/cua-driver`，**不在 PATH 上**：
 
    ```sh
-   ls "$HOME/Library/Application Support/agentsws/data/computer-use/cua-driver-0.28.0/"
+   ls "$HOME/Library/Application Support/@agentsws/desktop/data/computer-use/cua-driver-0.28.0/"
    which cua-driver   # 应当什么都没有
    ```
 

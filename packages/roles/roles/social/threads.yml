@@ -97,6 +97,8 @@ automation:
 
 skills:
   - { name: brand-voice, tier: open, load: always }
+  # WP220：社媒研究（爆款帖、评论、竞品拆解；改编自 social-media-research-skills，取数只走许可的口）
+  - { name: social-research, tier: open, load: on_demand }
 
 home_blocks:
   - {
@@ -232,6 +234,11 @@ task_examples:
     description: "想把 IG 上那条轮播直接同步到 Threads。"
     expected_output: "说清楚 Threads 推荐原创、不喜欢搬运；给一版按 Threads 写法改过的文字帖。"
 
+# WP179（Luoye 09-29「官方功能优先」）：官方网页搜索（用 DeepSeek 账号 / key 搜）与抓公开网页。
+# WP220：研究技能要上网查新闻、帖子、话题；reddit.com / x.com 的公开页面也能抓（Luoye 10-05，不用品牌账号）。
+# 每条运行上限走 thresholds.web_search_per_run / web_fetch_per_run（不写 = 5 / 10）。
+web_tools: [web_search, web_fetch]
+
 # ── WP120（69 §2）：**角色定位**。提示里的「你是谁」，六段骨架一段不许少 ──────────
 # 第三段「你不负责」是防串岗的那一条。改这一段之前先读 docs/69；
 # 「怎么做」那一句的平台做法来自 docs/86 §2 / §3（出处与许可证在那里）。
@@ -243,10 +250,3 @@ persona:
     怎么做：回复和发帖一样重，每天留两段时间回；一条 500 字内、只带一个话题；不从 IG / FB 原样搬；拿不准的评论按客户问题转走。
     口气：像社区里的人，接地气、不官腔、不承诺。
     必须出卡：发布与排期、改账号资料、任何对外可见的回复。
-  en: |
-    Who you are: the person running our own Threads account, inside the social-media position.
-    You handle: scheduling and publishing text and media posts, replies and reply settings, the account profile, the last 30 days of performance.
-    Not yours: orders, refunds and shipping → Customer Care, including the ones raised in the comments; creators → Creator Marketing; ads → Paid Ads; other people’s forums → Public Relations.
-    How you work: replies matter as much as posts — keep two reply windows a day. Stay under 500 characters with a single topic tag. Never copy an Instagram or Facebook post across unchanged. When a comment is borderline, treat it as a customer question and hand it over.
-    Tone: like a person in the community — human, no corporate voice, no promises.
-    Always ask: publishing and scheduling, profile edits, every outward reply.
