@@ -169,6 +169,688 @@
         }
       }
     },
+    "/v1/cloud/auth/config": {
+      "get": {
+        "operationId": "getV1CloudAuthConfig",
+        "summary": "WP231：注册 / 登录界面要知道的几样（密码最短几位、验证码几位、条款版本、Turnstile 公开 key）",
+        "tags": ["account"],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/CloudAuthConfig"
+                    },
+                    "trace_id": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["data", "trace_id"]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/cloud/auth/signup": {
+      "post": {
+        "operationId": "postV1CloudAuthSignup",
+        "summary": "WP231：注册——名字 + 邮箱 + 密码 + 同意条款，发一封 6 位注册验证码（5 分钟、最多试 5 次）",
+        "description": "邮箱已注册 → 409 conflict（details.reason = already_registered），不发信。按邮箱 + IP 限流。",
+        "tags": ["account"],
+        "security": [],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CloudSignupRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/CloudCodeSent"
+                    },
+                    "trace_id": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["data", "trace_id"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`details` 是 {@link CloudAuthReasonDetails}（weak_password / consent_required / captcha_required）",
+            "x-error-codes": ["invalid_input"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`conflict` 时 details.reason = already_registered",
+            "x-error-codes": ["conflict", "idempotency_conflict"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudErrorBody"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "rate_limited",
+            "x-error-codes": ["rate_limited"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudErrorBody"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "provider_unavailable",
+            "x-error-codes": ["provider_unavailable"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/cloud/auth/signup/verify": {
+      "post": {
+        "operationId": "postV1CloudAuthSignupVerify",
+        "summary": "WP231：注册验证码过了 → 建号、送注册积分、记同意，回一张云账号会话（registered = true）",
+        "tags": ["account"],
+        "security": [],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CloudCodeVerifyRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/CloudSessionIssued"
+                    },
+                    "trace_id": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["data", "trace_id"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "invalid_input",
+            "x-error-codes": ["invalid_input"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "details.reason = invalid_code / code_expired / too_many_attempts",
+            "x-error-codes": ["unauthenticated"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "conflict / idempotency_conflict",
+            "x-error-codes": ["conflict", "idempotency_conflict"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudErrorBody"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "rate_limited",
+            "x-error-codes": ["rate_limited"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/cloud/auth/otp": {
+      "post": {
+        "operationId": "postV1CloudAuthOtp",
+        "summary": "WP231：发一封登录验证码。没注册的邮箱**静默成功**（不发信、不建号，回包一模一样）。按邮箱 + IP 限流",
+        "tags": ["account"],
+        "security": [],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CloudOtpRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/CloudCodeSent"
+                    },
+                    "trace_id": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["data", "trace_id"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "invalid_input",
+            "x-error-codes": ["invalid_input"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "idempotency_conflict",
+            "x-error-codes": ["idempotency_conflict"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudErrorBody"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "rate_limited",
+            "x-error-codes": ["rate_limited"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudErrorBody"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "provider_unavailable",
+            "x-error-codes": ["provider_unavailable"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/cloud/auth/otp/verify": {
+      "post": {
+        "operationId": "postV1CloudAuthOtpVerify",
+        "summary": "WP231：登录验证码过了 → 一张云账号会话",
+        "tags": ["account"],
+        "security": [],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CloudCodeVerifyRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/CloudSessionIssued"
+                    },
+                    "trace_id": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["data", "trace_id"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "invalid_input",
+            "x-error-codes": ["invalid_input"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "unauthenticated",
+            "x-error-codes": ["unauthenticated"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "idempotency_conflict",
+            "x-error-codes": ["idempotency_conflict"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudErrorBody"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "rate_limited",
+            "x-error-codes": ["rate_limited"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/cloud/auth/password": {
+      "post": {
+        "operationId": "postV1CloudAuthPassword",
+        "summary": "WP231：密码登录。邮箱没注册 / 密码不对 / 没设过密码一律同一句（details.reason = bad_credentials）；",
+        "description": "连错多次临时锁定（429，details.reason = locked）",
+        "tags": ["account"],
+        "security": [],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CloudPasswordLoginRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/CloudSessionIssued"
+                    },
+                    "trace_id": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["data", "trace_id"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "invalid_input",
+            "x-error-codes": ["invalid_input"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "unauthenticated",
+            "x-error-codes": ["unauthenticated"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "idempotency_conflict",
+            "x-error-codes": ["idempotency_conflict"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudErrorBody"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "rate_limited",
+            "x-error-codes": ["rate_limited"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/cloud/auth/password/forgot": {
+      "post": {
+        "operationId": "postV1CloudAuthPasswordForgot",
+        "summary": "WP231：忘记密码——发一封重置验证码（没注册的邮箱静默成功）",
+        "tags": ["account"],
+        "security": [],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CloudPasswordForgotRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/CloudCodeSent"
+                    },
+                    "trace_id": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["data", "trace_id"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "invalid_input",
+            "x-error-codes": ["invalid_input"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "idempotency_conflict",
+            "x-error-codes": ["idempotency_conflict"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudErrorBody"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "rate_limited",
+            "x-error-codes": ["rate_limited"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudErrorBody"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "provider_unavailable",
+            "x-error-codes": ["provider_unavailable"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/cloud/auth/password/reset": {
+      "post": {
+        "operationId": "postV1CloudAuthPasswordReset",
+        "summary": "WP231：验证码 + 新密码 → 设好新密码，这个账号别的会话全部失效，回一张新会话",
+        "tags": ["account"],
+        "security": [],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CloudPasswordResetRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/CloudSessionIssued"
+                    },
+                    "trace_id": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["data", "trace_id"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "invalid_input",
+            "x-error-codes": ["invalid_input"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "unauthenticated",
+            "x-error-codes": ["unauthenticated"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "idempotency_conflict",
+            "x-error-codes": ["idempotency_conflict"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudErrorBody"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "rate_limited",
+            "x-error-codes": ["rate_limited"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/cloud/auth/verify": {
       "post": {
         "operationId": "postV1CloudAuthVerify",
@@ -8327,6 +9009,61 @@
         ],
         "description": "k-匿名基准（21）。"
       },
+      "CloudAuthConfig": {
+        "type": "object",
+        "properties": {
+          "password_min": {
+            "type": "number"
+          },
+          "otp_length": {
+            "type": "number"
+          },
+          "otp_ttl_seconds": {
+            "type": "number"
+          },
+          "terms_version": {
+            "type": "string"
+          },
+          "turnstile_site_key": {
+            "type": "string",
+            "description": "配了 Turnstile 才有（公开的 site key，不是 secret）。"
+          }
+        },
+        "required": ["password_min", "otp_length", "otp_ttl_seconds", "terms_version"],
+        "description": "`GET /v1/cloud/auth/config`：界面要知道的几样（没有任何密钥）。"
+      },
+      "CloudAuthLocale": {
+        "type": "string",
+        "enum": ["zh", "en"],
+        "description": "界面与信用哪种语言。"
+      },
+      "CloudCodeSent": {
+        "type": "object",
+        "properties": {
+          "expires_at": {
+            "type": "string"
+          },
+          "delivered": {
+            "type": "string",
+            "const": "email"
+          }
+        },
+        "required": ["expires_at", "delivered"],
+        "description": "验证码发出去了（或者——登录 / 忘记密码对没注册的邮箱——**静默不发**，回包一样）。"
+      },
+      "CloudCodeVerifyRequest": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string"
+          }
+        },
+        "required": ["email", "code"],
+        "description": "`POST /v1/cloud/auth/signup/verify` 与 `/otp/verify`：邮箱 + 6 位码。"
+      },
       "CloudEntryErrorBody": {
         "type": "object",
         "properties": {
@@ -8454,6 +9191,61 @@
         "required": ["account", "org"],
         "description": "`GET /v1/cloud/me`。"
       },
+      "CloudOtpRequest": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string"
+          },
+          "locale": {
+            "$ref": "#/components/schemas/CloudAuthLocale"
+          }
+        },
+        "required": ["email"],
+        "description": "`POST /v1/cloud/auth/otp`：发一封登录验证码（没注册的邮箱静默成功、不发信、不建号）。"
+      },
+      "CloudPasswordForgotRequest": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string"
+          },
+          "locale": {
+            "$ref": "#/components/schemas/CloudAuthLocale"
+          }
+        },
+        "required": ["email"],
+        "description": "`POST /v1/cloud/auth/password/forgot`：发一封重置密码验证码（没注册的邮箱静默成功）。"
+      },
+      "CloudPasswordLoginRequest": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string"
+          },
+          "password": {
+            "type": "string"
+          }
+        },
+        "required": ["email", "password"],
+        "description": "`POST /v1/cloud/auth/password`：密码登录。"
+      },
+      "CloudPasswordResetRequest": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string"
+          },
+          "new_password": {
+            "type": "string"
+          }
+        },
+        "required": ["email", "code", "new_password"],
+        "description": "`POST /v1/cloud/auth/password/reset`：验证码 + 新密码。成功后这个账号别的会话全部失效。"
+      },
       "CloudScope": {
         "type": "string",
         "enum": ["ai", "wallet:read", "wallet:topup", "wallet:admin", "standby", "data", "kol"],
@@ -8495,10 +9287,65 @@
           },
           "bonus": {
             "$ref": "#/components/schemas/SignupBonusView"
+          },
+          "registered": {
+            "type": "boolean",
+            "description": "WP231：这一下是不是刚注册（注册验证码过了、账号是这一刻建的）。老云不回这一格。"
           }
         },
         "required": ["account", "org", "session_token", "expires_at"],
         "description": "验过 magic link：换到一张云账号会话。"
+      },
+      "CloudSignupConsent": {
+        "type": "object",
+        "properties": {
+          "accepted": {
+            "type": "boolean",
+            "const": true
+          },
+          "terms_version": {
+            "type": "string",
+            "description": "同意的是哪一版条款（{@link LEGAL_TERMS_VERSION}）。"
+          }
+        },
+        "required": ["accepted", "terms_version"],
+        "description": "注册时勾的那一下。`accepted` 只能是 `true`——没勾就不该发请求。"
+      },
+      "CloudSignupRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "名字或公司名（当组织名）。"
+          },
+          "email": {
+            "type": "string"
+          },
+          "password": {
+            "type": "string",
+            "description": "明文只在这一跳里（HTTPS），云上只存 PBKDF2 哈希；不进日志、事件、审计。"
+          },
+          "consent": {
+            "$ref": "#/components/schemas/CloudSignupConsent"
+          },
+          "source": {
+            "$ref": "#/components/schemas/CloudSignupSource"
+          },
+          "locale": {
+            "$ref": "#/components/schemas/CloudAuthLocale"
+          },
+          "turnstile_token": {
+            "type": "string",
+            "description": "人机验证（云上配了 Turnstile 且 `source = web` 时必填）。"
+          }
+        },
+        "required": ["name", "email", "password", "consent", "source"],
+        "description": "`POST /v1/cloud/auth/signup`：名字 + 邮箱 + 密码 + 同意条款 → 发一封 6 位**注册验证码**。 邮箱已注册 → 409 `conflict`，`details.reason = 'already_registered'`，不发信。 验证码过了（`/signup/verify`）才真正建号并送注册积分；同意记录在那一刻落库。"
+      },
+      "CloudSignupSource": {
+        "type": "string",
+        "enum": ["workstation", "web"],
+        "description": "注册从哪儿来的（留证用）。"
       },
       "ContributionEvent": {
         "type": "object",
