@@ -240,3 +240,57 @@ Luoye 的红线：**刷票、开小号、隐藏身份去推广，一律排除**�
 - 没有许可证、NOASSERTION、AGPL 或商业许可的仓库只看了思路，一个字没搬；§1.2 排除的仓库不引任何内容。
 - Reddit 的条款、帮助中心与商业帮助中心页面（redditinc.com、support.reddithelp.com、business.reddithelp.com、ads-api.reddit.com、business.reddit.com）只取事实、用自己的话写；FTC 页面是美国政府作品。
 - 本文不是法律意见。§2 里标「推断」的几条（RSS / `.json` 不豁免、代运营做版务的灰区、医疗器械广告只在讲功效时相关）是我们读条款得出的，拿不准的应向 Reddit 或律师确认。
+
+## 附录：Reddit 相关开源技能 / 工具全量清单（按 star 排序，2026-10-05 GitHub 现查）
+
+> Luoye 10-05 要求：不先按 Reddit 规则筛，全部列出按 star 排序。star 为仓库数；第二张表是大仓库整体的 star。
+
+### 一、专门做 Reddit 的
+| ⭐ | 仓库 | 许可证 | 类别 | 说明 |
+|---|---|---|---|---|
+| 63,534 | mvanhorn/last30days-skill | MIT | 调研 | 跨 Reddit / X / YouTube / HN 等调研近 30 天讨论 |
+| 3,187 | ScrapeCreators/social-media-research-skills | MIT | 调研 | 爆款帖、评论挖掘、竞品拆解 |
+| 1,220 | lignertys/reddit-research-skills | MIT | 调研 | Reddit 调研技能集 |
+| 844 | karanb192/reddit-mcp-buddy | MIT | MCP（只读） | 浏览、搜索、用户分析 |
+| 301 | Arindam200/reddit-mcp | MIT | MCP | — |
+| 281 | jordanburke/reddit-mcp-server | MIT | MCP（读写） | 取帖、发帖 / 评论 |
+| 156 | eliasbiondo/reddit-mcp-server | MIT | MCP | 免配置；搜帖、版块、用户 |
+| 156 | oh-ashen-one/reddit-growth-skill | 无 | 养号 / 增长 | 拟人互动、意向挖掘、预热 |
+| 151 | shawnla90/gtm-coding-agent（reddit-engage） | MIT | 运营 | 发现→起草→人批→发出 |
+| 60 | skainguyen1412/social-media-research-skill | MIT | 调研 | Reddit + X 舆情 |
+| 43 | PHY041/claude-skill-reddit | 无 | 自动化 / 养号 | AppleScript + Chrome 刷 karma、发帖 |
+| 37 | liangdabiao/reddit-business-idea-validator | 无 | 调研 | 创业点子验证 |
+| 36 | ismailsaoulaj/reddit-mcp-server | MIT | MCP | — |
+| 28 | lishehao/reddit-karma-warmup | MIT | 养号 | 已登录 Chrome 预热 |
+| 26 | openslow/reddit-skill | 无 | 调研 | 官方 OAuth 读 |
+| 19 | GridfireAI/reddit-mcp | MIT | MCP | — |
+| 19 | SaintNerona/pi-reddit-research | MIT | 调研 | — |
+| 17 | mikefutia/reddit-research-agent | 无 | 调研 | — |
+| 15 | 1146345502/reddit-skills | MIT | 自动化 | 浏览器插件用真号点赞 / 评论 / 发帖 |
+| 15 | Ritik-bhaiya/reddit-research-skills | MIT | 调研 | 找线索 + 打分 + 人工反馈 |
+| 12 | wrxck/reddit-mcp | MIT | MCP（读写投票） | — |
+| 10 | WaytoAIC/reddit-market-monitor | other | 监控 | 表格报告、VOC 归档 |
+| 8 | hereisSwapnil/reddit-mcp | MIT | MCP | — |
+| 5 | RaiAnsar/reddit-mcp | MIT | MCP（含刷 karma） | — |
+| 4 | 8TrafficAI/reddit-skills | MIT | 自动化 | 登录浏览器发帖、查被吞 |
+| 4 | achetronic/reddit-mcp | Apache-2.0 | MCP | 趋势分析 |
+| 4 | beggarticksarthurtatum121/reddit-skills | MIT | 自动化 | 真浏览器真号 |
+| 3 | Houseofmvps/reddit-intel-agent-mcp | MIT | 调研 | 创业点子与购买意向 |
+| 2 | kevin-vaghasiya/reddit-marketing-skill | MIT | 运营 | 写不像 AI 的帖子 / 回复 |
+| 2 | cskwork/reddit-skill | MIT | 运营 / 自动化 | 拟人发帖、flair |
+| 2 | jorgen-k/reddit-mcp | MIT | MCP（只读） | 免 key 读 |
+| 1 | LingoWise/reddit-skills | MIT | 自动化 | Rustwright 浏览器 + 反检测 |
+| 0 | redditapis/redditapis-skills | MIT | 调研 | 经 redditapis.com 只读 |
+| 0 | ubermensch1218/reddit-campaign-cli | MIT | 自动化 | 30 天营销 |
+| 0 | quantumbyte31/reddit-skills | MIT | 自动化 | 浏览器插件 |
+| 0 | zicojiao/reddit-skill | MIT | 调研 | PRAW 抓版块 |
+
+### 二、大仓库里附带的 Reddit 技能（⭐ 为整仓）
+| ⭐ | 仓库 → Reddit 部分 | 许可证 | 说明 |
+|---|---|---|---|
+| 156,865 | msitarzewski/agency-agents → Reddit 社区运营角色 | MIT | 角色设定 |
+| 53,222 | coreyhaines31/marketingskills → social/listening Reddit 段 | MIT | 每日监听流程 |
+| 9,718 | AgriciDaniel/claude-ads → Reddit Ads | MIT | 投放运营 |
+| 129 | liangdabiao/tikhub_api_skill | 无 | TikHub 多平台数据 |
+| 114 | social-media-skills/skills → reddit-marketing 等 | MIT | Reddit 营销 / 社区管理 / 危机 |
+| 43 | simonlin1212/FactReach | MIT | 23 渠道搜索含 Reddit |
