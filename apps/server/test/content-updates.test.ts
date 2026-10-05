@@ -163,7 +163,11 @@ async function rig(opts: {
   writeSkill(bundled, 'demo', SKILL('demo', '1.0.0', '出卡等人批。'))
   const clock = { now: () => '2026-10-05T08:00:00.000Z' }
   let seq = 0
-  const skills = createSkills({ clock, random: () => ((seq += 1) % 97) / 97 })
+  const random = (): number => {
+    seq += 1
+    return (seq % 97) / 97
+  }
+  const skills = createSkills({ clock, random })
   await seedBundledSkills(skills.registry, { dir: bundled })
   const bus = fakeBus()
   const events: Rig['events'] = []
