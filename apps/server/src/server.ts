@@ -81,6 +81,7 @@ import {
   KOL_FOLDER,
   PR_ROLE_IDS,
   SOCIAL_ROLE_IDS,
+  skillOnPlatform,
   socialChannelSpec,
 } from '@agentsws/contracts'
 import {
@@ -351,6 +352,8 @@ import {
   type PersonasAssembly,
   personaFileIn,
 } from './personas.js'
+import { createPlatformCliProber, PlatformCliLoginStore } from './platform-cli.js'
+import { createPlatformKitPort } from './platform-kit.js'
 import { createPositions, type PositionsAssembly } from './positions.js'
 import { createPrStore, prDeckData, seedDemoPr } from './pr.js'
 import { createPrService } from './pr-service.js'
@@ -2899,6 +2902,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
               port: () => b2bOutboundLate.current?.port,
             }),
             vertical: () => brandProfileOf(ws).vertical,
+            // WP216：平台专属的官方技能 / Dev MCP 工具只给平台对得上的品牌（每次现取档案）
+            storefrontPlatform: () => brandProfileOf(ws).storefront_platform,
             // WP180：公司时区（工作区档案的 tz，每次现取）——每次运行的上下文里写一次「现在时间 + 公司时区」
             timeZone: async () => (await identity.getWorkspace(ws))?.tz,
             // WP181：官方「自动化任务」的四个工具（装了那个官方插件才挂；执行器是进程那一份）
@@ -5534,15 +5539,21 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     lessons: (filter) => learning.lessons(filter),
     // WP29 技能页与学习回路
     // WP209：按岗位分组那几格（显示名 / 一句话 / 哪几条职责在用 / 归哪个岗位）只往上加
+    // WP216：平台专属的官方技能（Shopify 那几本）只在这个品牌的平台对得上时列出来
     list: async (actor) =>
-      enrichSkillSummaries(await learning.summaries(actor), {
-        positions: org.positions(),
-        roles: roles.roles.list(),
-        held_roles: memoryFacts(actor).held_roles,
-        frontmatterOf: (name) => skills.registry.frontmatterOf(name),
-        sectionBody: (name, id) => skills.registry.sectionBody(name, id),
-        superseded: SUPERSEDED_POSITION_IDS,
-      }),
+      enrichSkillSummaries(
+        (await learning.summaries(actor)).filter((s) =>
+          skillOnPlatform(s.name, brandProfileOf(actor.workspace_id).storefront_platform),
+        ),
+        {
+          positions: org.positions(),
+          roles: roles.roles.list(),
+          held_roles: memoryFacts(actor).held_roles,
+          frontmatterOf: (name) => skills.registry.frontmatterOf(name),
+          sectionBody: (name, id) => skills.registry.sectionBody(name, id),
+          superseded: SUPERSEDED_POSITION_IDS,
+        },
+      ),
     exclude: (name, person_id, excluded) => skills.registry.exclude(name, person_id, excluded),
     proposals: () => learning.proposalSummaries(),
     promote: (input) =>
@@ -6667,6 +6678,40 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   const askPortOf = brandAskPort(brandModules, askPortFor)
   const freeChatPortOf = brandFreeChatPort(brandModules, freeChatPortFor)
 
+  const platformCliLogins = new Map<string, PlatformCliLoginStore>()
+  const platformKitPort = createPlatformKitPort({
+    now: () => clock.now(),
+    platformOf: (ws) => brandProfileOf(ws).storefront_platform,
+    prober: createPlatformCliProber({ now: () => clock.now(), env }),
+    loginStoreOf: (ws) => {
+      let store = platformCliLogins.get(ws)
+      if (store === undefined) {
+        store = new PlatformCliLoginStore(brandDirOf(dbDir, ws, workspace.id))
+        platformCliLogins.set(ws, store)
+      }
+      return store
+    },
+    displayNameOf: (name) => {
+      const extra = skills.registry.frontmatterOf(name)?.extra
+      const zh = extra?.display_name?.trim() ?? ''
+      const en = extra?.display_name_en?.trim() ?? ''
+      return zh === '' && en === '' ? undefined : { zh: zh || en, en: en || zh }
+    },
+    mcpStatus: () => ({
+      enabled: devMcp?.status().available === true,
+      tools: devMcp === undefined ? [] : Object.keys(devMcp.status().mapped),
+    }),
+    appendEvent: (ws, type, payload) =>
+      appendEvent({
+        schema_version: 1,
+        workspace_id: ws,
+        type,
+        actor: { kind: 'system', id: 'platform.kit' },
+        correlation: { trace_id: `trc_pkit_${Date.parse(clock.now()).toString(36)}` },
+        payload,
+      }),
+  })
+
   const deps: GatewayDeps = {
     identity,
     // WP194：一次请求绑好分配之后，开一个「算在谁头上」的作用域（打云时带归属头）
@@ -6736,6 +6781,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     /*
      * WP180：官方插件。**不按品牌**（同电脑操控）。出卡走同一条审批总线（批卡在 `officialPlugins.wrap` 里接住）。
      */
+    /*
+     * WP216：平台专属那一套（官方技能 / Dev MCP / 官方 CLI 卡）。**按品牌档案**判断平台；
+     * 「我登好了」按品牌的数据目录记一笔（不存凭据）；本机 CLI 检测是这台机器的事，一台一份缓存。
+     */
+    platformKit: platformKitPort,
     officialPlugins: {
       view: () => officialPlugins.view(),
       request: (actor, input) =>

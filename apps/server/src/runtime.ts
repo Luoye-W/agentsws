@@ -39,9 +39,11 @@ import type {
   RuntimeAdapter,
   RunWeb,
   StartRun,
+  StorefrontPlatform,
   TodoId,
   WorkspaceVertical,
 } from '@agentsws/contracts'
+import { platformKitOf, skillOnPlatform } from '@agentsws/contracts'
 import { canonicalJson, timeContextItem } from '@agentsws/core'
 import {
   classifySideEffect,
@@ -209,6 +211,15 @@ export interface RuntimeOptions {
    * 下一次运行就该用新的那一套，不该等重启。不给就实物。
    */
   vertical?: () => WorkspaceVertical | undefined
+  /**
+   * WP216（Luoye 10-05）：这个品牌的网站是用什么搭的（品牌档案的 `storefront_platform`）。
+   *
+   * 平台专属的官方技能与官方 MCP 工具（`@agentsws/contracts` 的 `PLATFORM_KITS`）只在平台对得上时
+   * 进这次运行：技能不进提示词也不进按需索引、`read_skill` 读不到，Dev MCP 的工具不进工具面。
+   * 晚绑定、每次现取（同 `vertical`：品牌改了平台，下一次运行就跟着变）。
+   * 不给 = 按档案缺省（Shopify）——存量的单测与回放一个字节不变。
+   */
+  storefrontPlatform?: () => StorefrontPlatform | undefined
   /**
    * WP180：公司时区（工作区档案里的 `tz`）。给了，每次运行的上下文里就写一次「现在时间 + 公司时区」
    * （`timeContextItem`：按小时取整、三个运行时同一份字节）；档案里没有 / 认不出用本机时区。
@@ -810,7 +821,11 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
    * 它们不经连接器，也就没有 provenance 可言——查一段文档不等于"读过某个订单"，
    * 所以这条路**不往 provenance 里加任何 ref**（15 §6：seen 只证明读过业务对象）。
    */
-  const devToolNames = (): readonly string[] => options.devTools?.toolNames() ?? []
+  // WP216：Dev MCP 是平台专属的官方工具——品牌的平台那一行没有 `mcp`，工具面里就一个都没有
+  const devToolNames = (): readonly string[] =>
+    platformKitOf(options.storefrontPlatform?.())?.mcp === undefined
+      ? []
+      : (options.devTools?.toolNames() ?? [])
   const executeTool: ToolExecutor | undefined = (() => {
     /*
      * WP117（66 断点 #1）：**三级链**——红人工具 → dev MCP → 记录源。
@@ -1128,7 +1143,17 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
     person_id: PersonId
     assignment_id: AssignmentId
   }): Promise<RunRequest> => {
-    const config = roles.effectiveConfig(input.assignment_id)
+    const effective = roles.effectiveConfig(input.assignment_id)
+    /*
+     * WP216：平台专属的官方技能只在品牌平台对得上时留下（每次现取档案）。
+     * 一本都没被滤掉时 `config` 就是原来那一份——非平台技能的职责字节一个不变。
+     */
+    const platform = options.storefrontPlatform?.()
+    const skillsHere = effective.skills.filter((s) => skillOnPlatform(s.name, platform))
+    const config =
+      skillsHere.length === effective.skills.length
+        ? effective
+        : { ...effective, skills: skillsHere }
     /*
      * WP69（54 §1 / §3）：这次运行属于哪个岗位。
      *
