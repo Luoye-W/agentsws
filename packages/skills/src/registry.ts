@@ -271,6 +271,16 @@ export class MemorySkillRegistry {
   }
 
   /**
+   * WP219：去掉某一层的一条技能记录（历史留着）。内容更新退回到随软件带的那一版时，
+   * 把这个品牌自己的那份基础层去掉，`resolve` 就退回全局那一份。回去掉没有。
+   */
+  drop(name: string, tier: SkillTier, scope: SkillScopeRef = {}): boolean {
+    const key = this.#keyOf(name, tier, scope)
+    this.#frontmatter.delete(key)
+    return this.#skills.delete(key)
+  }
+
+  /**
    * WP219：这个技能在这个品牌里叠在基础层上面的东西——上层记录（只取这个品牌的）与 overlay
    * （公司层按 owner = 工作区筛；岗位 / 职责 / 部门 / 个人层的 overlay 不带工作区，全给，调用方再筛）。
    * 内容更新拿它判「新版会不会冲掉你的改动」。

@@ -52,6 +52,8 @@ export interface WorkspaceContentItemState {
   previous?: AppliedContent
   /** 退回过的那一版：不再自动提这一版（更高的版本照常提）。 */
   skipped_version?: string
+  /** 还没选的冲突（`contentConflictKey`）。 */
+  open_conflicts?: string[]
 }
 
 export interface WorkspaceContentState {
@@ -59,6 +61,8 @@ export interface WorkspaceContentState {
   items: Record<string, WorkspaceContentItemState>
   /** 冲突已选过的键（`contentConflictKey`）。 */
   resolved_conflicts: string[]
+  /** 出过的卡：去重键 → 卡 id（同一版只出一张，6 小时一查不重复出）。 */
+  cards?: Record<string, string>
 }
 
 export interface GlobalContentState {
