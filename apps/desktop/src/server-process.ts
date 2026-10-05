@@ -33,6 +33,30 @@ export const INHERITED_ENV = [
   'LOCALAPPDATA',
   'USERPROFILE',
   'ComSpec',
+  // WP218：Windows 上另外几样系统变量——少了它们，场景里 AI 的终端找不到命令（PATHEXT）、
+  // 认不出装在 Program Files 里的官方桌面端、字体与临时目录退化
+  'PATHEXT',
+  'SystemDrive',
+  'ProgramFiles',
+  'ProgramFiles(x86)',
+  'ProgramW6432',
+  'ProgramData',
+  'HOMEDRIVE',
+  'HOMEPATH',
+  'USERNAME',
+  'COMPUTERNAME',
+  'NUMBER_OF_PROCESSORS',
+  'PROCESSOR_ARCHITECTURE',
+  'PSModulePath',
+  // WP218：系统代理（国内网络常见）。服务进程与 dsh 场景各有自己的白名单，壳不传下去它们就收不到
+  'HTTP_PROXY',
+  'HTTPS_PROXY',
+  'NO_PROXY',
+  'ALL_PROXY',
+  'http_proxy',
+  'https_proxy',
+  'no_proxy',
+  'all_proxy',
   'NODE_EXTRA_CA_CERTS',
   // WP184（docs/79）：两个不含机密的场景开关——其他场景的工作目录、把哪里当作用户自己装的官方桌面端
   // （`off` = 不找）。docs/79 说工作目录能改，但以前桌面壳没把它传下去。
@@ -95,6 +119,11 @@ export interface ServerSpawnInput {
    * 经 `AGENTSWS_PROFILE_DIR` 给服务进程；开发期不给（服务进程按仓库里的那一份读）。
    */
   profileDir?: string
+  /**
+   * WP218：工作台的构建产物（`<resources>/workstation`）。经 `AGENTSWS_STATIC_DIR` 交给服务进程在 `/` 托管——
+   * WP111 起的安装包一直漏了这一项：装好打开工作台是一张 404。
+   */
+  staticDir?: string
 }
 
 export function serverSpawnRequest(input: ServerSpawnInput): SpawnRequest {
@@ -112,6 +141,9 @@ export function serverSpawnRequest(input: ServerSpawnInput): SpawnRequest {
       : { AGENTSWS_DSH_HOME: input.dshHome, DSH_HOME: input.dshHome }),
     ...(input.appDataDir === undefined ? {} : { AGENTSWS_APP_DATA_DIR: input.appDataDir }),
     ...(input.profileDir === undefined ? {} : { AGENTSWS_PROFILE_DIR: input.profileDir }),
+    ...(input.staticDir === undefined ? {} : { AGENTSWS_STATIC_DIR: input.staticDir }),
+    // WP218：Windows 上没有 SIGTERM，壳靠关 stdin 请它收尾（见 node-runtime 的 kill）
+    AGENTSWS_STOP_ON_STDIN_END: '1',
     ...haltEnv(input.halt),
     ...secretsToEnv(input.secrets),
   }
@@ -120,6 +152,7 @@ export function serverSpawnRequest(input: ServerSpawnInput): SpawnRequest {
     args: [input.entry],
     env,
     ...(input.cwd === undefined ? {} : { cwd: input.cwd }),
+    stopViaStdin: true,
   }
 }
 

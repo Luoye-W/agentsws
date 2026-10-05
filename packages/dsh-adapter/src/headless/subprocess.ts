@@ -72,6 +72,12 @@ const ENV_ALLOWLIST = [
   'NODE_ENV',
   'SystemRoot',
   'ComSpec',
+  // WP218：Windows 上子进程里的 dsh 还要这几样（用户目录、应用数据目录、可执行扩展名）
+  'windir',
+  'APPDATA',
+  'LOCALAPPDATA',
+  'USERPROFILE',
+  'PATHEXT',
 ] as const
 
 /** 一次性 run token：只用于宿主与自己那个子进程之间对暗号，不进任何持久化。 */
@@ -177,6 +183,8 @@ function spawnChild(entry: string): Child {
     stdio: ['pipe', 'pipe', 'pipe'],
     // 子进程不继承宿主的工作目录以外的东西；cwd 用宿主的（preset / 会话日志按绝对路径给）
     cwd: process.cwd(),
+    // WP218：Windows 上服务进程自己没有控制台，不加这一条每跑一次就弹一个黑窗口
+    windowsHide: true,
   }) as ChildProcessWithoutNullStreams
   // 子进程已经死了还往它 stdin 写 → EPIPE。桥自己会把请求 reject，管道错误吞掉即可。
   proc.stdin.on('error', () => {})

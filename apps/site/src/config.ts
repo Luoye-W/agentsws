@@ -25,6 +25,12 @@ export function accountUrl(page: AccountPage, lang: 'zh' | 'en'): string {
   return `${CLOUD_URL}${ACCOUNT_PATHS[page]}${lang === 'en' ? '?lang=en' : ''}`
 }
 
+/**
+ * WP218：下载清单。发版流水线（release.yml）每次发版把它更新到自有下载站根目录；
+ * 官网构建时取一次（取不到用仓库里的 `src/data/downloads.json`），下载页与首页「下载」按钮都读它。
+ */
+export const DOWNLOADS_URL = 'https://dl.agentsws.com/downloads.json'
+
 /** 公开价目（WP165）：构建时取一次，取不到用仓库里的样例并标「以控制台为准」。 */
 export const PRICING_URL = `${CLOUD_URL}/v1/pricing`
 

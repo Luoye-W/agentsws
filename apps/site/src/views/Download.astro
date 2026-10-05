@@ -1,11 +1,11 @@
 ---
-/** 下载页：读 `src/data/downloads.json`（版本、平台、链接、sha256、大小）。链接没定的显示「即将提供」。 */
+/** 下载页：读下载清单（WP218：构建时取下载站上最新那份，取不到用 `src/data/downloads.json`）。链接没定的显示「即将提供」。 */
 import { Image } from 'astro:assets'
 import rolesShot from '../../../../docs/assets/walkthrough/07-ob-roles.png'
 import Hint from '../components/Hint.astro'
 import Icon from '../components/Icon.astro'
 import { GITHUB_URL } from '../config.js'
-import manifestJson from '../data/downloads.json'
+import { buildDownloads } from '../data/downloads-build.js'
 import { type Lang, localePath } from '../i18n/common.js'
 import { DOWNLOAD } from '../i18n/download.js'
 import Base from '../layouts/Base.astro'
@@ -25,7 +25,7 @@ interface Props {
 const { lang } = Astro.props
 const t = DOWNLOAD[lang]
 const p = (x: string) => localePath(x, lang)
-const m = manifestJson as unknown as DownloadManifest
+const m: DownloadManifest = (await buildDownloads()).manifest
 const problems = manifestProblems(m)
 if (problems.length > 0) throw new Error(`downloads.json 有问题：\n${problems.join('\n')}`)
 const byId = (id: string) => m.desktop.find((d) => d.id === id) as DesktopItem

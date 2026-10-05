@@ -15,12 +15,14 @@ import {
   findNativeModules,
   installedNames,
   missingProfileFiles,
+  missingWorkstation,
   PROFILE_DIR,
   PROFILE_FILES,
   planNativeSwap,
   resourcesDirOf,
   runtimeDependencyNames,
   targetOf,
+  WORKSTATION_DIR,
 } from '../scripts/after-pack.mjs'
 
 const root = mkdtempSync(join(tmpdir(), 'agentsws-after-pack-'))
@@ -223,11 +225,40 @@ describe('runtimeDependencyNames', () => {
     ).toEqual(['a'])
   })
 
+  it('WP218：optionalDependencies 也算（sharp 按平台装的二进制包挂在这里）', () => {
+    expect(
+      runtimeDependencyNames({
+        dependencies: { 'detect-libc': '*' },
+        optionalDependencies: { '@img/sharp-win32-x64': '*', 'detect-libc': '*' },
+      }),
+    ).toEqual(['detect-libc', '@img/sharp-win32-x64'])
+  })
+
   it('两边都写了的只算一次；没有 package.json 也不炸', () => {
     expect(
       runtimeDependencyNames({ dependencies: { a: '*' }, peerDependencies: { a: '*' } }),
     ).toEqual(['a'])
     expect(runtimeDependencyNames(undefined)).toEqual([])
+  })
+})
+
+describe('WP218：工作台产物在包里', () => {
+  const desktop = join(dirname(fileURLToPath(import.meta.url)), '..')
+
+  it('没有 index.html 就报出来（afterPack 据此让打包失败）', () => {
+    const resources = scratch()
+    expect(missingWorkstation(resources)).toBe(true)
+    mkdirSync(join(resources, WORKSTATION_DIR), { recursive: true })
+    writeFileSync(join(resources, WORKSTATION_DIR, 'index.html'), '<!doctype html>')
+    expect(missingWorkstation(resources)).toBe(false)
+  })
+
+  it('打包配置把 apps/workstation/dist 摆进 <resources>/workstation', () => {
+    const yml = readFileSync(join(desktop, 'electron-builder.yml'), 'utf8')
+    expect(yml).toMatch(/- from: \.\.\/workstation\/dist\n\s+to: workstation\n/)
+    // 更新源：默认 generic → 自有下载站；文件名不随渠道变
+    expect(yml).toMatch(/publish:\n\s+provider: generic\n\s+url: https:\/\/dl\.agentsws\.com\/beta/)
+    expect(yml).toContain('detectUpdateChannel: false')
   })
 })
 
