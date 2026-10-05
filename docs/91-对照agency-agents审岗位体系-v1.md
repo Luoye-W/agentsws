@@ -121,10 +121,10 @@ agency-agents 是一套**写得很用心的「人设 + 做法」提示词库**�
 | `marketing-content-creator`、`-seo-specialist`、`-aeo-foundations` | 内容、SEO、答案引擎 | `dtc.content` + `seo-judgment` | 覆盖 | — |
 | `marketing-ai-citation-strategist` | 查品牌在 ChatGPT / Claude / Gemini / Perplexity 里被不被引用 | `dtc.content` 的 `ai_visibility`（WP154 / 155） | 部分 | 技能补「丢失问法 + 修复包」格式 |
 | `marketing-email-strategist` | 生命周期邮件、分群、送达 | `dtc.email-marketing` + `email-sms` | 部分 | 技能补三条（§5 #4） |
-| `specialized-pricing-analyst` | 定价模型、折扣纪律 | `dtc.store` 有改价 / 折扣**动作**，没有**算法** | 缺做法 | 技能（§2.2 #3） |
+| `specialized/specialized-pricing-analyst` | 定价模型、折扣纪律 | `dtc.store` 有改价 / 折扣**动作**，没有**算法** | 缺做法 | 技能（§2.2 #3） |
 | `marketing-growth-hacker`、`project-management-experiment-tracker` | 增长实验、A/B 测试 | 无 | 缺 | 技能（§2.2 #5） |
-| `specialized-customer-service`、`support-support-responder` | 通用客服 | 客服岗四条 + `customer-care` | 覆盖（我们更严） | 不学（§1.5 #3） |
-| `specialized-retail-customer-returns` | 退货、换货、欺诈防范、退货分析 | `returns-policy-calc` | 部分 | 技能补原因码与例外留痕（§5 #3） |
+| `specialized/customer-service`、`support/support-support-responder` | 通用客服 | 客服岗四条 + `customer-care` | 覆盖（我们更严） | 不学（§1.5 #3） |
+| `specialized/retail-customer-returns` | 退货、换货、欺诈防范、退货分析 | `returns-policy-calc` | 部分 | 技能补原因码与例外留痕（§5 #3） |
 | `paid-media-ppc-strategist`、`-paid-social-strategist`、`-creative-strategist`、`-search-query-analyst` | 搜索 / 社交广告、素材、搜索词 | 投放四条 + `ad-copywriting` / `audience-research` | 覆盖 | — |
 | `paid-media-auditor`、`-tracking-specialist` | 账户 200 项体检、像素 / CAPI / GA4 追踪 | 投放四条有「像素健康」面板与归因对账 | 部分 | 技能 `ads-audit`（§5 #6） |
 | `paid-media-programmatic-buyer` | 程序化购买 | — | 不需要 | 中小跨境卖家基本不碰 |
@@ -144,10 +144,48 @@ agency-agents 是一套**写得很用心的「人设 + 做法」提示词库**�
 | `support-legal-compliance-checker`、`specialized/data-privacy-officer` + 跨境通才的合规段 | 合规审查 | `policy-review`（只管退换货 / 运费 / 隐私 / 条款四份政策） | 缺 | §2.2 #2 |
 | `product-feedback-synthesizer` | 多渠道反馈汇成产品洞察 | 无 | 缺 | §2.2 #4 |
 | `product-trend-researcher` + 跨境通才的选品段 | 趋势、选品 | 无 | 缺 | 要不要做选品：§7 #3 |
-| `specialized-language-translator`（只有西语）、`-cultural-intelligence-strategist` | 翻译、文化 | `brand-voice` 只说「对外用客户的语言」 | 缺 | §2.2 #6 |
+| `specialized/language-translator`（只有西语）、`specialized/specialized-cultural-intelligence-strategist` | 翻译、文化 | `brand-voice` 只说「对外用客户的语言」 | 缺 | §2.2 #6 |
 | `finance/*`、`support-finance-tracker`、`specialized/accounts-payable-agent` | 记账、财务 | `amz.finance`（50 §4 ⬜） | 缺 | 不在本轮 |
 | `specialized/supply-chain-strategist` | 采购、供应商、库存模型 | `dtc.store` 有补货清单 | 不需要 | 采购不在我们「营销与运营」的范围 |
 | `specialized/agents-orchestrator` | 编排整条流水线 | 秘书路由（41）+ 岗位内路由（54） | 我们有，做法不同 | §4 |
 | `specialized/specialized-chief-of-staff` | 幕僚长：什么该打扰老板 | 秘书 Agent（41） | 部分 | 一条判据可借（§4.2 #4） |
 | `testing-reality-checker`、`-evidence-collector` | 默认判不合格、要证据 | `dtc.content` 发布前质检、`pr.press` 的 `check_numbers`、guardrail 的数字出处 | 部分 | 质检立场进「发布前质检」（§5 #11） |
 | `marketing-agentic-search-optimizer` | 查 AI 代理能不能在你站上完成下单（WebMCP） | 建站 | 不急 | 观察项 |
+
+### 2.2 它有、我们缺、对跨境电商公司有用的——按价值排
+
+都先按 50 §0 过一遍「中小公司里是不是同一个人在干」。结论是**一个都不必新开岗位**：这几样在中小跨境公司里要么是老板自己看（数据、合规、定价），要么是现有某个岗位顺手做（客户声音、实验、本地化）。所以落点是**技能 + 少量动作**，挂到现有职责上。
+
+| # | 缺什么 | 为什么对出海公司要紧 | 它那边的素材 | 建议放哪 |
+|---|---|---|---|---|
+| 1 | **经营周报**：把各岗位的数（店铺日报、广告两口径、内容按页收入、社媒近 30 天、红人归因、客服量）汇成一页给老板 | 现在每个岗位各说各的数，老板要自己拼；agency 的高管摘要格式（情况 / 发现 / 影响 / 建议 / 下一步，每条发现带一个数、总长 ≤ 500 词）正好是这一页的骨架 | `support-executive-summary-generator`、`support-analytics-reporter`（「先验数据再分析」「每个结论写来源与假设」） | `common.owner` 加一个只读动作「本周经营一页纸」+ 技能 `weekly-review`；秘书每周一推。数字只从各岗位已有的面板取，**取不到就写取不到**，不估 |
+| 2 | **合规**：宣称合规（「最便宜」「治愈」「环保」「前后对比」）、产品认证与市场准入（CE / FCC / UKCA、德国包装法、EPR、电池 / 电子垃圾）、广告与红人披露 | 跨境卖家被平台下架、被罚，多半出在这里；我们现在只有四份政策的 `policy-review`，以及散在 `email-sms`（TCPA / GDPR）、`influencer-marketing`（FTC）里的几段 | 跨境通才的「合规红线」段、`support-legal-compliance-checker`（每条合规决定写依据与法规出处、审计留痕）、直播带货的宣称禁令 | 拆两份技能：`claims-check`（宣称合规，挂在所有对外出稿的职责上，和 `brand-voice` 一样 always）；`market-compliance`（产品与市场准入清单，挂 `common.owner` 与将来的 Amazon 运营）。**法规条目进事实卡、带日期，不写死在技能里** |
+| 3 | **定价与单位经济**：一件货的落地成本、毛利瀑布（采购 + 头程 + 仓储 + 平台佣金 + 广告 + 尾程 + 退货损耗 + 汇率）、盈亏线 ROAS | 我们改价有额度、投放有止损，但**止损线是固定的 ROAS < 1**（57 §3）——毛利 40% 的货 ROAS 要到 2.5 才不亏，按 1 止损等于一直在亏钱的那段不报警 | 跨境通才的「毛利纪律」（广告费率超过毛利率就关）、`specialized-pricing-analyst`（没有算式不报价、按人群定价不按平均、折扣要理由与到期日、优先用替代折扣的手段） | 技能 `unit-economics`，挂 `dtc.store`、投放四条、将来的 Amazon 运营；毛利率是公司事实卡里的一格。止损线怎么改要 Luoye 定（§7 #2） |
+| 4 | **客户声音**：把评价、客服来信、评论区、退货原因汇成「这个月客户在抱怨什么、夸什么」，回给 listing、详情页、广告文案和产品 | 我们客服、社媒、店铺评价各自处理单条，没有人看「同一个问题来了 40 次」；`audience-research` 是去外面挖原话，不看自己家的 | `product-feedback-synthesizer`（收集 → 归类 → 打分 → 交付）、退货角色的原因码表 | 技能 `voice-of-customer` + `dtc.store` 一个每月动作；退货原因码先在 `returns-policy-calc` 里统一，后面才汇得起来 |
+| 5 | **实验与转化率**：一次只改一处、改之前算样本量、不中途偷看就停、写清假设与回滚 | 改价、换主图、换邮件主题、换广告素材都是实验，现在没有任何「怎么判这次改得好不好」的规矩，容易一两天的波动就下结论 | `project-management-experiment-tracker`（硬规矩 8 条、实验设计单）、增长黑客的漏斗拆法 | 技能 `experiments`，挂 `dtc.store`、`dtc.content`、`dtc.email-marketing`、投放四条 |
+| 6 | **本地化**：listing / 详情页 / 邮件 / 广告的多语种，母语审校，按市场改单位、尺码、节日、禁忌 | 机翻 listing 转化差是行业共识；我们 `brand-voice` 只管「用客户的语言回」 | 跨境通才的「本地化原则」四条、翻译角色的「按意思不按字」「标出正式 / 非正式」「医疗法律不猜」 | 技能 `localization`，挂内容、店铺、邮件、投放、社媒；**出卡时标「机翻未审」**，这条进卡片而不是只进提示 |
+| 7 | **广告账户体检**：结构、追踪、出价、素材、商品 feed、落地页逐项打分，按严重度排 | 投放职责现在会止损、会对账，但没有「新接手一个账户先体检一遍」这件事 | `paid-media-auditor`（六大块、严重度四级、每条带影响与改法）、`paid-media-tracking-specialist` | 技能 `ads-audit`，挂投放四条；体检结果是一张只读报告卡 |
+
+排在后面、本轮不建议做的：**短视频成片**（设计岗只做图，§7 #4）、**直播带货**（等 TikTok Shop 排上）、**选品与趋势**（产品范围问题，§7 #3）、**财务对账**（等 Amazon 运营与 SP-API）、**B2B 大客户健康分**（B2B 岗位先把询盘到报价跑通）。
+
+### 2.3 我们有、它没有的（我们的长处，别丢）
+
+| 我们 | 它 |
+|---|---|
+| **权限、额度、自动化级别**：每条职责有数据域 × 操作 × 范围、每个动作有额度与窗口、L1 / L2 / L3 与硬顶（04 §0、15） | 只有正文里的「硬规矩」，模型守不守全看自觉；只有 6 个文件声明了依赖的外部服务 |
+| **对外动作一律出卡**：发帖、发信、改价、退款、投预算都是提议，人批了执行器才做 | 营销 37 个里只有 10 个提到草稿或人审；轮播图引擎直接发 |
+| **数字只从记录和事实卡来**（`customer-care`「数字不由你产生」、69 §5.1、guardrail 数字出处） | 197 个文件带数字目标、0 个有出处；模板里的默认数会被当成事实 |
+| **防串岗**：persona 第三段「你不负责→转给哪个岗位」+ 串岗测试（69 §5） | 4 个文件写了上下游；角色之间的边界靠用户自己选对角色 |
+| **一个入口、岗位内路由、拿不准就问**（54） | 用户自己说「激活 X 角色」；编排器只管软件开发流水线 |
+| **记忆分层 + 提升要批**（54 §3、24） | 外挂 MCP 记忆，由模型自己决定记什么 |
+| **外部内容当数据不当指令**（`customer-care` 的围栏一段、`core/fencing.ts`） | 282 个里 11 个提到提示注入或不可信输入；通用客服角色没有 |
+| **出海执行的深度**：红人五渠道、社媒十二渠道、投放四平台、B2B 询盘 → 报价 → 跟单单证 → 展会、拒付举证、退款计算 | 没有红人经理、没有评价管理、没有展会、没有外贸单证、没有拒付；跨境只有一个通才 |
+| **真连接与真动作**：Shopify、Meta、Google、邮箱、各社媒适配器、受控浏览器 | 纯提示词 |
+| **冷启动给人看的**：每条职责的 `quick_prompts`（点一下就开干）与 `task_examples`（典型活 + 你会拿到什么） | 36 个文件有「什么时候用我」 |
+| **自动化级别靠实测采纳率升降**（`automation.*.promotion.adoption_rate_min`，例：连续 4 周采纳率 ≥ 95% 才升） | 成功指标只写目标、不量 |
+
+最后一行值得单说：它的「成功指标」是写给模型看的愿望；我们真正在量的指标只有一个——**人批不批 Agent 的提议**——而且它直接决定这条活能不能升到自动。这比 243 段目标数字有用。**不建议往职责里加「成功指标」段**；要加，加的是「这条职责看哪几个数」（不写目标），而这些数已经是各职责面板上的数字块（36 §3）。
+
+### 2.4 不建议补的
+
+13 个中国国内平台角色（我们做出海）；医疗营销合规（只讲中国法规）；程序化购买；供应链与采购（不在「营销与运营」的范围）；所有工程、游戏、GIS、安全、学术角色。
