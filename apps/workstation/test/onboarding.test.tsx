@@ -455,8 +455,8 @@ beforeEach(() => {
   state.applyResult = { created_assignments: [], skipped: [] }
   state.suggests = []
   state.suggestion = {
-    source: 'unavailable',
-    note: '这次没能让 AI 帮你推荐。',
+    source: 'keyword',
+    note: '这次没用 AI，是按你话里的词对的。',
     roles: [],
     positions: [],
   }
@@ -1062,13 +1062,15 @@ describe('WP234 第 ③ 步：说说你要做什么 → 推荐（不预勾）→
     ])
   })
 
-  it('AI 这次推荐不了：照实说一句，下面照样能手选', async () => {
+  it('这次没用 AI（按词对、也没对上）：照实说一句，下面照样能手选', async () => {
     const user = userEvent.setup()
     renderWithProviders(<OnboardingPage />)
     await noSiteAndGo()
     await user.type(screen.getByTestId('onboarding-intent-text'), '做客服')
     await user.click(screen.getByTestId('onboarding-intent-go'))
-    expect((await screen.findByTestId('onboarding-intent-note')).textContent).toContain('没能让 AI')
+    expect((await screen.findByTestId('onboarding-intent-note')).textContent).toContain(
+      '这次没用 AI',
+    )
     expect(screen.queryByTestId('onboarding-recs')).toBeNull()
     await pickCare(user)
     expect(rows().map(({ name, duties }) => ({ name, duties }))).toEqual([
@@ -1152,6 +1154,29 @@ describe('WP234 第 ③ 步：说说你要做什么 → 推荐（不预勾）→
       true,
     )
     expect(screen.queryByText('看退款与投诉邮件，拟一份回复给你定。')).toBeNull()
+  })
+
+  it('Luoye 10-06：类别显示公司改过的名字，出厂名小字附后', () => {
+    renderWithProviders(
+      <PositionPlanner
+        catalog={[
+          { ...(POSITIONS[1] as OnboardingPositionView), name: '售后', factory_name: '客服' },
+        ]}
+        text=""
+        onText={() => {}}
+        onSuggest={() => {}}
+        suggesting={false}
+        recommendations={[]}
+        board={{ selected: [], rows: [], customized: false, seq: 0 }}
+        onToggleDuty={() => {}}
+        onAdopt={() => {}}
+        onRegroup={() => {}}
+        onBoard={() => {}}
+      />,
+    )
+    const toggle = screen.getByTestId('onboarding-category-toggle')
+    expect(toggle.textContent).toContain('售后')
+    expect(screen.getByTestId('onboarding-category-factory').textContent).toBe('（客服）')
   })
 
   it('第二批的职责在目录里标「第二批」，说明进问号；照样能点上', async () => {

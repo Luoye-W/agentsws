@@ -760,11 +760,27 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
     }
   }
 
-  /** WP234：类别目录（不含「负责人」与底座职责；一条职责都不剩的类别不出）。 */
-  const catalogOf = (): PositionLike[] =>
-    (options.catalog?.() ?? options.positions().filter((p) => p.id !== 'owner'))
-      .map((p) => ({ ...p, roles: p.roles.filter((r) => !WORKSPACE_BASE_ROLES.has(r.role)) }))
+  /**
+   * WP234：类别目录（不含「负责人」与底座职责；一条职责都不剩的类别不出）。
+   *
+   * Luoye 10-06：**显示公司改过的名字**——公司把「客服」改名成「售后」，目录里就叫「售后」，
+   * 出厂名记在 `factory` 里（界面上小字附后）。职责清单仍按出厂模板（目录不随公司的合并变形）。
+   */
+  const catalogOf = (): (PositionLike & { factory?: string })[] => {
+    const rows = options.positions()
+    return (options.catalog?.() ?? rows.filter((p) => p.id !== 'owner'))
+      .map((p) => {
+        const renamed = rows.find((r) => r.id === p.id)?.name
+        const changed =
+          renamed !== undefined && renamed.zh.trim() !== '' && renamed.zh !== p.name.zh
+        return {
+          ...p,
+          ...(changed ? { name: { ...p.name, zh: renamed.zh }, factory: p.name.zh } : {}),
+          roles: p.roles.filter((r) => !WORKSPACE_BASE_ROLES.has(r.role)),
+        }
+      })
       .filter((p) => p.roles.length > 0)
+  }
 
   const port: OnboardingPort = {
     async state(actor) {
@@ -887,6 +903,8 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
       return catalogOf().map((p) => ({
         id: p.id,
         name: p.name.zh,
+        // Luoye 10-06：公司改过名就显示改过的，出厂名小字附后
+        ...(p.factory === undefined ? {} : { factory_name: p.factory }),
         // WP213：向导里岗位前面的图标（同 id 内置模板 yml 里的）
         ...(bundledPositionIcon(p.id) === undefined
           ? {}

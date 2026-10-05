@@ -219,6 +219,22 @@ describe('职责按岗位归堆（WP70）', () => {
     ])
   })
 
+  it('WP234：服务端说了归哪个岗位就按它归（自建岗位不在对照表里也补一堆）', () => {
+    const groups = groupDutiesByPosition(
+      [
+        { role_id: 'dtc.support', position: { id: 'pos-reddit', name: 'Reddit 与售后' } },
+        { role_id: 'dtc.store' },
+        { role_id: 'dtc.email', position: { id: 'customer-care', name: '客服' } },
+      ],
+      positions,
+    )
+    expect(groups.map((g) => [g.position_id, g.name, g.duties.map((d) => d.role_id)])).toEqual([
+      ['web-ops', '网站运营', ['dtc.store']],
+      ['customer-care', '客服', ['dtc.email']],
+      ['pos-reddit', 'Reddit 与售后', ['dtc.support']],
+    ])
+  })
+
   it('一条职责都归不进去（历史数据）：只剩未归岗位那一堆', () => {
     const groups = groupDutiesByPosition([{ role_id: 'ads.meta' }], [])
     expect(groups).toEqual([{ duties: [{ role_id: 'ads.meta' }] }])

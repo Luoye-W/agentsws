@@ -148,6 +148,8 @@ export interface ProfilePosition {
   role_id: RoleId
   role_name: string
   ranges: RangeRef[]
+  /** WP234（docs/54 §6.1）：这条活儿归哪个岗位（安放了就是安放的那个；没安放、只挂在一个岗位里就是它；分不清就没有）。只管展示归堆，不带权限。 */
+  position?: { id: string; name: string }
 }
 
 /** 完整 profile = 存下来的那半份 + 从制度层算出来的那半份。 */

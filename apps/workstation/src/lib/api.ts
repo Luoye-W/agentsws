@@ -2335,6 +2335,8 @@ export interface OrgAssignmentView {
   granted_at: string
   revoked_at?: string
   unassigned_range: boolean
+  /** WP234（docs/54 §6.1）：这条活儿归哪个岗位（安放了就是安放的那个；没安放、只挂在一个岗位里就是它；分不清就没有）。只管展示归堆，不带权限。 */
+  position?: { id: string; name: string }
 }
 
 export interface OrgMemberView {
@@ -2688,6 +2690,8 @@ export interface PositionReshapeView {
   moved_matters: number
   memory?: { moved: number; kept_both: number }
   deleted?: string
+  /** 拆出时：岗位层记忆复制给新岗位几条（Luoye 10-06）。 */
+  memory_copied?: number
 }
 
 /** WP234：把岗位 `id` 合并到 `into`（职责、事项、岗位层记忆都跟过去）。 */
@@ -3147,6 +3151,8 @@ export interface ProfilePosition {
   role_id: string
   role_name: string
   ranges: { kind: string; id: string }[]
+  /** WP234（docs/54 §6.1）：这条活儿归哪个岗位（安放了就是安放的那个；没安放、只挂在一个岗位里就是它；分不清就没有）。只管展示归堆，不带权限。 */
+  position?: { id: string; name: string }
 }
 
 export interface MyProfile {
@@ -3178,7 +3184,7 @@ export interface VisibleProfile {
 export interface PersonCard {
   person_id: string
   name: string
-  positions: { role_id: string; role_name: string }[]
+  positions: { role_id: string; role_name: string; position?: { id: string; name: string } }[]
   in_progress?: number
 }
 
@@ -3397,6 +3403,8 @@ export interface OnboardingStateView {
 export interface OnboardingPositionView {
   id: string
   name: string
+  /** WP234（Luoye 10-06）：公司改过这个类别的名字时，出厂名（界面小字附后）；没改过就没有。 */
+  factory_name?: string
   /** WP213：岗位图标（`role-icons/glyphs.ts` 的 id）。 */
   icon?: string
   roles: {
@@ -3502,8 +3510,8 @@ export interface OnboardingPlannedPosition {
 
 /** WP234（docs/70 §5）：「说说你要做什么工作」的回执——只推荐，不选中。 */
 export interface OnboardingSuggestView {
-  /** `unavailable` = 这次没能让 AI 推荐；`stub` = 演示环境按词对的替身。 */
-  source: 'ai' | 'stub' | 'unavailable'
+  /** `keyword` = 这次没用 AI、按原话对词（Luoye 10-06）；`unavailable` = 原话是空的。 */
+  source: 'ai' | 'keyword' | 'stub' | 'unavailable'
   note?: string
   roles: { role_id: string; reason: string; quote?: string }[]
   positions: OnboardingPlannedPosition[]

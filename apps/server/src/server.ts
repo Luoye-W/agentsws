@@ -378,7 +378,7 @@ import {
   type OnboardingAssembly,
   storefrontPlatformChoices,
 } from './onboarding.js'
-import { keywordSuggester, modelSuggester, sha256 as suggestSha } from './onboarding-suggest.js'
+import { modelSuggester, sha256 as suggestSha } from './onboarding-suggest.js'
 import { createOrg, type OrgAssembly } from './org.js'
 import { createOrgDuplicateScan, type OrgDuplicateScan } from './org-duplicates.js'
 import {
@@ -5414,6 +5414,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         return moved
       },
       mergeMemory: (input) => learning.mergePositionMemory(input),
+      copyMemory: (input) => learning.copyPositionMemory(input),
     },
   })
   rangeExpandedSink = org.onRangeExpanded
@@ -5490,9 +5491,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           })
           return completion.text
         })
-      // 模拟 / 演示世界：按原话对词的替身（回执上标 stub，界面明说不是 AI）
-      if (mount !== undefined) return keywordSuggester
-      // 只有 stub、又不是演示：照实说「没接上能用的模型」，不拿假话当推荐
+      // 没接上真模型（只有 stub / 演示）：回 undefined，推荐那一层退回按原话对词并明说（Luoye 10-06）
       return undefined
     },
     // WP66：首次设置这一面仍然只问 bootstrap 品牌那一套（52 O5：一个值守子进程
@@ -6247,6 +6246,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   const secretaryFor = (ws: WorkspaceId, brandWork: Work, tz_offset_minutes: number) =>
     createSecretaryAssembly({
       workspace_id: ws,
+      // WP234：人员页岗位徽章按安放归堆（制度层那张表；org 晚一步装好，这里现查）
+      positionOfAssignment: (a) => org.positionLabelOf(a),
       clock,
       random,
       appendEvent,

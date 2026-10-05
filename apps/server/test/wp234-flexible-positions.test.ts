@@ -7,7 +7,7 @@
  * - 「负责人」不进「我的岗位」，`common.owner` 那条分配原样在；
  * - 合并：职责、安放、事项、岗位层记忆都跟过去，两版打架的记忆两版都留；自建的那个删掉；记审计；
  * - 移动 / 拆出：只动走那条职责的事项；岗位层记忆留在原岗位；
- * - 推荐：没接上真模型就照实说（`unavailable`），不拿假话当推荐；
+ * - 推荐：没接上真模型就退回按原话对词，并明说没用 AI（Luoye 10-06）；
  * - 负责人转交：对方拿到 `common.owner`，自己那条不收回。
  */
 import type { Matter, PositionInstance } from '@agentsws/contracts'
@@ -165,6 +165,44 @@ describe('docs/54 §6.2 第 ③ 步交岗位清单', () => {
     expect(live.some((a) => a.role_id === 'common.owner')).toBe(true)
   })
 
+  it('Luoye 10-06：类别目录显示公司改过的名字，出厂名附后；没改过只有出厂名', async () => {
+    await apply([{ name: '售后', role_ids: ['dtc.support'], template_id: 'customer-care' }])
+    const cats = await dataOf<{ id: string; name: string; factory_name?: string }[]>(
+      await call('GET', '/v1/onboarding/positions'),
+    )
+    expect(cats.find((c) => c.id === 'customer-care')).toMatchObject({
+      name: '售后',
+      factory_name: '客服',
+    })
+    expect(cats.find((c) => c.id === 'web-ops')?.factory_name).toBeUndefined()
+  })
+
+  it('成员页 / 人员页的岗位徽章按安放归：分配带上它归的那个岗位', async () => {
+    const out = await apply([{ name: 'Reddit 运营', role_ids: ['pr.reddit', 'social.reddit'] }])
+    const id = out.positions?.[0]?.id ?? ''
+    const members = await dataOf<
+      {
+        person_id: string
+        assignments: { role_id: string; position?: { id: string; name: string } }[]
+      }[]
+    >(await call('GET', `/v1/workspaces/${server.bootstrap.workspace.id}/members`))
+    const mineRow = members.find((m) => m.person_id === server.bootstrap.person.id)
+    expect(mineRow?.assignments.find((a) => a.role_id === 'social.reddit')?.position).toEqual({
+      id,
+      name: 'Reddit 运营',
+    })
+    // 负责人身份那条不归任何岗位
+    expect(mineRow?.assignments.find((a) => a.role_id === 'common.owner')?.position).toBeUndefined()
+    const people = await dataOf<
+      { person_id: string; positions: { role_id: string; position?: { id: string } }[] }[]
+    >(await call('GET', '/v1/people'))
+    expect(
+      people
+        .find((p) => p.person_id === server.bootstrap.person.id)
+        ?.positions.find((x) => x.role_id === 'pr.reddit')?.position?.id,
+    ).toBe(id)
+  })
+
   it('类别目录不含「负责人」与底座职责', async () => {
     const cats = await dataOf<{ id: string; roles: { id: string }[] }[]>(
       await call('GET', '/v1/onboarding/positions'),
@@ -176,14 +214,16 @@ describe('docs/54 §6.2 第 ③ 步交岗位清单', () => {
   })
 })
 
-describe('docs/70 §5 推荐：没接上真模型就照实说', () => {
-  it('只有 stub、又不是演示世界：unavailable + 一句人话，一条推荐都不编', async () => {
-    const out = await dataOf<{ source: string; note?: string; roles: unknown[] }>(
+describe('docs/70 §5 推荐：没接上真模型就退回按词对并明说', () => {
+  it('只有 stub：退回按原话对词，明说「这次没用 AI」；不拿 stub 的假话当推荐', async () => {
+    const out = await dataOf<{ source: string; note?: string; roles: { role_id: string }[] }>(
       await call('POST', '/v1/onboarding/suggest', { text: '我们只做 Reddit，盯口碑也自己发帖' }),
     )
-    expect(out.source).toBe('unavailable')
-    expect(out.roles).toEqual([])
-    expect(out.note).toContain('手选')
+    expect(out.source).toBe('keyword')
+    expect(out.note).toBe('这次没用 AI，是按你话里的词对的。')
+    expect(out.roles.map((r) => r.role_id)).toEqual(
+      expect.arrayContaining(['pr.reddit', 'social.reddit']),
+    )
     // 原话不进日志
     const logged = await events('onboarding.suggested')
     expect(JSON.stringify(logged)).not.toContain('Reddit')
@@ -255,7 +295,7 @@ describe('docs/54 §6.4 合并 / 移动 / 拆出', () => {
     expect(JSON.stringify(audit)).not.toContain('发帖先看版规')
   })
 
-  it('拆出 + 移动：只动走那条职责的事项；岗位层记忆留在原岗位', async () => {
+  it('拆出 + 移动：只动走那条职责的事项；拆出时岗位层记忆复制一份，移动时留在原岗位', async () => {
     await apply([
       {
         name: '社媒运营',
@@ -283,9 +323,13 @@ describe('docs/54 §6.4 合并 / 移动 / 拆出', () => {
     )
     const shorts = split.positions.find((p) => p.name === '短视频')?.id ?? ''
     expect(split.moved_matters).toBe(1)
+    expect((split as { memory_copied?: number }).memory_copied).toBe(1)
     expect(server.work.getMatter(tiktokMatter.id)?.position_template_id).toBe(shorts)
     expect(server.work.getMatter(youtubeMatter.id)?.position_template_id).toBe('social-media')
-    expect(server.learning.memoryAt({ tier: 'position', scope_id: shorts })).toEqual([])
+    // Luoye 10-06：拆出时岗位层记忆复制一份给新岗位，两边都留
+    expect(
+      server.learning.memoryAt({ tier: 'position', scope_id: shorts }).map((m) => m.heading),
+    ).toEqual([expect.stringContaining('（复制自「社媒运营」）')])
     expect(
       server.learning.memoryAt({ tier: 'position', scope_id: 'social-media' }).map((m) => m.body),
     ).toEqual(['发布前都要过一遍品牌口吻'])

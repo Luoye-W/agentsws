@@ -221,6 +221,14 @@ export function PositionPlanner({
                     className="text-ws-muted-fg"
                   />
                   {c.name}
+                  {c.factory_name === undefined ? null : (
+                    <span
+                      className="text-[11px] text-muted-foreground"
+                      data-testid="onboarding-category-factory"
+                    >
+                      （{c.factory_name}）
+                    </span>
+                  )}
                   <span className="text-xs text-muted-foreground">
                     {count > 0 ? `${String(count)}/${String(c.roles.length)}` : c.roles.length}
                   </span>

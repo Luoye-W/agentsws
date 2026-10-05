@@ -138,6 +138,8 @@ export interface PositionReshapeView {
   memory?: { moved: number; kept_both: number }
   /** 合并后被删掉的自建岗位 id。 */
   deleted?: string
+  /** 拆出时：岗位层记忆复制给新岗位几条（Luoye 10-06：两边都留）。 */
+  memory_copied?: number
 }
 
 /** WP234（docs/54 §6.5）：负责人转交的回执。 */
@@ -165,6 +167,8 @@ export interface AssignmentView {
   revoked_at?: string
   /** 05 §4：范围为空且职责按 assigned 取数 → 这条分配现在查不到任何东西 */
   unassigned_range: boolean
+  /** WP234（docs/54 §6.1）：这条活儿归哪个岗位（安放了就是安放的那个；没安放、只挂在一个岗位里就是它；分不清就没有）。只管展示归堆，不带权限。 */
+  position?: { id: string; name: string }
 }
 
 export interface MemberView {

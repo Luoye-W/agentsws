@@ -107,7 +107,7 @@ describe('WP234 推荐校验', () => {
     ])
   })
 
-  it('模型回了一串不是 JSON 的话 / 抛错 / 没有引擎：unavailable，照实说', async () => {
+  it('模型回了一串不是 JSON 的话 / 抛错 / 没有引擎：退回按词对，明说没用 AI', async () => {
     for (const suggester of [
       fake('order refund ticket draft policy'),
       modelSuggester(async () => {
@@ -116,21 +116,20 @@ describe('WP234 推荐校验', () => {
       undefined,
     ]) {
       const out = await suggestPositions({ text: TEXT, catalog: CATALOG, roles: ROLES, suggester })
-      expect(out.source).toBe('unavailable')
-      expect(out.roles).toEqual([])
-      expect(out.note).toBeDefined()
+      expect(out.source).toBe('keyword')
+      expect(out.note).toBe('这次没用 AI，是按你话里的词对的。')
+      expect(out.roles.map((r) => r.role_id)).toEqual(['social.reddit', 'pr.reddit'])
     }
   })
 
-  it('替身（演示 / 模拟）：按原话里的词对，回执标 stub', async () => {
+  it('按词对：引用的都是原话里的一段；一个都没对上照实说；原话是空的不推', async () => {
     const out = await suggestPositions({
       text: '想做 Reddit，再顺手把建站也弄了',
       catalog: CATALOG,
       roles: ROLES,
       suggester: keywordSuggester,
     })
-    expect(out.source).toBe('stub')
-    expect(out.note).toContain('演示')
+    expect(out.source).toBe('keyword')
     expect(out.roles.map((r) => r.role_id)).toEqual([
       'social.reddit',
       'pr.reddit',
@@ -142,6 +141,21 @@ describe('WP234 推荐校验', () => {
       ),
     ).toBe(true)
     expect(out.positions.map((p) => p.name)).toEqual(['Reddit 运营', '建站'])
+    const none = await suggestPositions({
+      text: '还没想好',
+      catalog: CATALOG,
+      roles: ROLES,
+      suggester: undefined,
+    })
+    expect(none).toMatchObject({ source: 'keyword', roles: [] })
+    expect(none.note).toContain('没对上')
+    const blank = await suggestPositions({
+      text: '  ',
+      catalog: CATALOG,
+      roles: ROLES,
+      suggester: undefined,
+    })
+    expect(blank.source).toBe('unavailable')
   })
 
   it('提示词：原话包在围栏里，目录逐条列出', () => {

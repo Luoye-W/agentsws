@@ -370,7 +370,8 @@ const zh: Table = {
   'org.positions.move.to': '移到哪个岗位',
   'org.positions.move.go': '移过去',
   'org.positions.reshape.hint':
-    '合并：职责、事项、岗位记忆都跟过去。移动 / 拆出：只带走那条职责的事项，岗位记忆留在原岗位。',
+    '合并：职责、事项、岗位记忆都跟过去。拆出：岗位记忆复制一份给新岗位。移动：只带走那条职责的事项。',
+  'org.positions.reshaped.copied': '；岗位记忆复制了 {k} 条给新岗位',
   'org.positions.reshaped': '调好了：{n} 条分配、{m} 件事跟着走了',
   'org.positions.reshaped.memory': '；岗位记忆并过去 {k} 条（两版都留的 {b} 条）',
   'org.owner.hint': '负责人是身份，不是岗位：审批默认交给他，公司的授权与额度归他。',
@@ -4096,7 +4097,8 @@ const en: Table = {
   'org.positions.move.to': 'Move to which position',
   'org.positions.move.go': 'Move',
   'org.positions.reshape.hint':
-    'Merge: duties, matters and position memory all come along. Move / split: only that duty’s matters move; position memory stays.',
+    'Merge: duties, matters and position memory all come along. Split: position memory is copied to the new position. Move: only that duty’s matters move.',
+  'org.positions.reshaped.copied': '; {k} position memories copied to the new position',
   'org.positions.reshaped': 'Done: {n} assignments and {m} matters moved',
   'org.positions.reshaped.memory': '; {k} position memories merged ({b} kept in both versions)',
   'org.owner.hint':

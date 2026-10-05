@@ -472,6 +472,8 @@ export interface PositionReshapeHooks {
     into: string
     from_name: string
   }): Promise<{ moved: number; kept_both: number }>
+  /** 拆出时 A 那一层岗位记忆复制一份给新岗位（Luoye 10-06：两边都留）。回复制了几条。 */
+  copyMemory?(input: { from: string; into: string; from_name: string }): Promise<number>
 }
 
 /** WP234：一次合并 / 移动 / 拆出的回执。 */
@@ -486,6 +488,8 @@ export interface PositionReshapeResult {
   memory?: { moved: number; kept_both: number }
   /** 合并后被删掉的自建岗位。 */
   deleted?: string
+  /** 拆出时：岗位层记忆复制给新岗位几条。 */
+  memory_copied?: number
 }
 
 export interface OrgAssembly {
@@ -515,6 +519,8 @@ export interface OrgAssembly {
    * 岗位面（`positions.ts`）按它算「我的岗位」与起 Run 的岗位层。
    */
   placementOf(assignment_id: string): string | undefined
+  /** WP234：一条分配展示上归哪个岗位（成员页 / 人员页岗位徽章按它归堆）。 */
+  positionLabelOf(a: { id: string; role_id: RoleId }): { id: string; name: string } | undefined
   /**
    * WP234（docs/54 §6.2）：首次设置第 ③ 步的一行岗位清单落成一个岗位行——
    * 带 `template_id` 且职责全在那个模板里就复用它（名字不同就改名），否则新建一个自建岗位。
@@ -824,7 +830,9 @@ export function createOrg(options: OrgOptions): OrgAssembly {
   const viewOf = async (a: Assignment): Promise<AssignmentView> => {
     const role = roles.roles.get(a.role_id)
     const needsRanges = role?.scopes.some((s) => s.range === 'assigned') ?? false
+    const position = positionLabelOf(a)
     return {
+      ...(position === undefined ? {} : { position }),
       assignment_id: a.id,
       person_id: a.person_id,
       person_name: await personName(a.person_id),
@@ -975,6 +983,28 @@ export function createOrg(options: OrgOptions): OrgAssembly {
       if (pendingExpanded.length > 0) void flushExpanded()
     })
     return flushing
+  }
+
+  /**
+   * WP234（docs/54 §6.1）：一条分配**展示上**归哪个岗位——安放了就是那个；没安放、职责只挂在一个
+   * 岗位里（「负责人」那一行不算）就是它；挂在好几个里分不清就不给（界面退回老的归堆）。
+   */
+  const positionLabelOf = (a: {
+    id: string
+    role_id: RoleId
+  }): { id: string; name: string } | undefined => {
+    if (WORKSPACE_BASE_ROLES.has(a.role_id)) return undefined
+    const rows = backend.positions()
+    const placed = backend.placements.get(a.id)
+    const hit =
+      rows.find((p) => p.id === placed) ??
+      (() => {
+        const hits = rows.filter(
+          (p) => p.id !== 'owner' && p.roles.some((r) => r.role === a.role_id),
+        )
+        return hits.length === 1 ? hits[0] : undefined
+      })()
+    return hit === undefined ? undefined : { id: hit.id, name: hit.name.zh }
   }
 
   /** WP234（docs/54 §6.1）：安放表的读口——安放的岗位已经不在了就当没安放。 */
@@ -1212,14 +1242,27 @@ export function createOrg(options: OrgOptions): OrgAssembly {
       moved_assignments += out.moved_assignments
       moved_matters += out.moved_matters
     }
+    // Luoye 10-06：岗位层记忆复制一份给新岗位（两边都留，标「（复制自「A」）」）
+    const memory_copied =
+      (await options.reshape?.copyMemory?.({
+        from: from.id,
+        into: id,
+        from_name: from.name.zh,
+      })) ?? 0
     emit('position.split', by, {
       from: from.id,
       to: id,
       role_ids: picked,
       moved_assignments,
       moved_matters,
+      memory_copied,
     })
-    return { positions: await viewsOf([from.id, id]), moved_assignments, moved_matters }
+    return {
+      positions: await viewsOf([from.id, id]),
+      moved_assignments,
+      moved_matters,
+      memory_copied,
+    }
   }
 
   /** WP234（§6.2）：第 ③ 步一行岗位清单 → 一个岗位行。 */
@@ -2222,6 +2265,7 @@ export function createOrg(options: OrgOptions): OrgAssembly {
     port,
     positions: () => backend.positions(),
     placementOf,
+    positionLabelOf,
     ensurePosition,
     place: (assignment_id, position_id) => {
       backend.placements.set(assignment_id, position_id)

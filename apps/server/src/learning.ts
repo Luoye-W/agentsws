@@ -390,6 +390,12 @@ export interface LearningAssembly {
     into: string
     from_name: string
   }): Promise<{ moved: number; kept_both: number }>
+  /**
+   * WP234（Luoye 10-06，docs/54 §6.4）：拆出时 A 那一层岗位记忆**复制一份**给新岗位 N。
+   * 两边都留；N 里每一段标题带「（复制自「A」）」。提升批下来的那几条（overlay）在 N 里
+   * 落成手动段（N 没有对应的上游段可以打补丁）。回复制了几条。
+   */
+  copyPositionMemory(input: { from: string; into: string; from_name: string }): Promise<number>
   close(): void
 }
 
@@ -1316,6 +1322,38 @@ export function createLearningAssembly(options: LearningOptions): LearningAssemb
     return { moved, kept_both }
   }
 
+  const copyPositionMemory: LearningAssembly['copyPositionMemory'] = async (input) => {
+    if (input.from === input.into) return 0
+    let copied = 0
+    const suffix = `（复制自「${input.from_name}」）`
+    const intoScope = scopeRefOf({ tier: 'position', scope_id: input.into })
+    for (const entry of memoryAt({ tier: 'position', scope_id: input.from })) {
+      const dst = skills.registry.peek(entry.skill, 'position', intoScope)
+      const section: SkillSection = {
+        id: skills.nextId(),
+        heading: `${entry.heading ?? '记忆'}${suffix}`,
+        body: entry.body,
+        origin: entry.origin,
+        ...(entry.learned_from === undefined ? {} : { learned_from: entry.learned_from }),
+      }
+      await skills.registry.put({
+        name: entry.skill,
+        tier: 'position',
+        owner: input.into,
+        version: dst?.version ?? '1.0.0',
+        evals: dst?.evals ?? [],
+        sections: [...(dst?.sections ?? []), section],
+        ...(dst?.base === undefined ? {} : { base: dst.base }),
+        workspace_id,
+        scope_id: input.into,
+      })
+      copied += 1
+    }
+    if (copied > 0)
+      emit('memory.copied', { tier: 'position', scope_id: input.into, from: input.from, copied })
+    return copied
+  }
+
   const memorySummary: LearningAssembly['memorySummary'] = (target) => {
     const entries = memoryAt(target)
     if (entries.length === 0) return `${TIER_LABEL[target.tier]}层还没有攒下东西`
@@ -1334,6 +1372,7 @@ export function createLearningAssembly(options: LearningOptions): LearningAssemb
     memorySummary,
     addMemory,
     mergePositionMemory,
+    copyPositionMemory,
     updateMemory,
     removeMemory,
     summaries,

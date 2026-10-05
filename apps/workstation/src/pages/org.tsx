@@ -298,7 +298,10 @@ export function OrgPage(): React.ReactNode {
           : t('org.positions.reshaped.memory', {
               k: String(out.memory.moved + out.memory.kept_both),
               b: String(out.memory.kept_both),
-            })),
+            })) +
+        (out.memory_copied === undefined || out.memory_copied === 0
+          ? ''
+          : t('org.positions.reshaped.copied', { k: String(out.memory_copied) })),
     )
     await refresh()
   }

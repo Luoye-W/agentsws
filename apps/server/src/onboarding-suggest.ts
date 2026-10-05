@@ -8,8 +8,9 @@
  * 2. **AI 回来的东西先过校验**：职责 id 必须在目录里；「原话依据」必须真是他原话里的一段，
  *    对不上就把那段引用去掉（理由留着）；岗位划分过不了 `checkSuggestedPositions` 就整份换成
  *    `proposePositions` 的算法版。
- * 3. **没接上真模型就照实说**：不拿 stub 的确定性假话当推荐。唯一的例外是模拟 / 演示世界
- *    （`mount`）——那里用 {@link keywordSuggester} 这个**替身**，回执上标 `source: 'stub'`，
+ * 3. **AI 不在就照实说并退回按词对**（Luoye 10-06）：没接上真模型、模型抛错或没按格式回话，
+ *    一律改用 {@link keywordSuggester}（按用户原话对词），回执上标 `source: 'keyword'`，
+ *    界面明说「这次没用 AI，是按你话里的词对的」。演示与真环境同一套。不拿 stub 的假话当推荐。
  *    界面上明说「演示：按你原话里的词对的，没用 AI」。
  */
 import { createHash } from 'node:crypto'
@@ -44,7 +45,8 @@ export interface RawSuggestion {
 
 /** 校验过、交给界面的那一份。 */
 export interface SuggestResult {
-  source: 'ai' | 'stub' | 'unavailable'
+  /** `stub` 已不再产出（WP234 第一版用过），留着只为契约只加不删。 */
+  source: 'ai' | 'keyword' | 'stub' | 'unavailable'
   note?: string
   roles: { role_id: string; reason: string; quote?: string }[]
   positions: PlannedPosition[]
@@ -52,7 +54,7 @@ export interface SuggestResult {
 
 /** 一次推荐用的引擎：给原话与目录，回原始结果（拿不到回 `undefined`，抛错也算拿不到）。 */
 export interface Suggester {
-  source: 'ai' | 'stub'
+  source: 'ai' | 'keyword'
   run(input: { text: string; catalog: SuggestCatalogRole[] }): Promise<RawSuggestion | undefined>
 }
 
@@ -156,12 +158,12 @@ export function modelSuggester(complete: (prompt: string) => Promise<string>): S
 /* ------------------------------------------------------------------ */
 
 /**
- * **替身**：按原话里出现的词对职责（职责名、渠道名、类别名）。只在模拟 / 演示世界与测试里用，
- * 回执上标 `stub`。说到类别名（「客服」）推那个类别里的全部；说到渠道（「Reddit」）推那个渠道的
+ * **按词对**：按原话里出现的词对职责（职责名、渠道名、类别名）。AI 不在时的退路（真环境与演示同一套），
+ * 回执上标 `keyword`。说到类别名（「客服」）推那个类别里的全部；说到渠道（「Reddit」）推那个渠道的
  * 每一条；说到职责名推那一条。
  */
 export const keywordSuggester: Suggester = {
-  source: 'stub',
+  source: 'keyword',
   run: async ({ text, catalog }) => {
     const lower = text.toLowerCase()
     const hit = (term: string | undefined): string | undefined => {
@@ -197,10 +199,11 @@ export const keywordSuggester: Suggester = {
 /* 校验                                                                 */
 /* ------------------------------------------------------------------ */
 
-const NOTE_UNAVAILABLE =
-  '这次没能让 AI 帮你推荐（还没接上能用的模型，或者模型没按格式回话）。下面按类别手选就行。'
+const NOTE_UNAVAILABLE = '先说一句你要做什么，再让它推荐。'
 const NOTE_EMPTY = 'AI 从你这段话里没读出对得上的职责。换个说法再试，或者在下面按类别手选。'
-const NOTE_STUB = '演示环境：没有接真模型，下面的推荐是按你原话里的词对出来的。'
+const NOTE_KEYWORD = '这次没用 AI，是按你话里的词对的。'
+const NOTE_KEYWORD_EMPTY =
+  '这次没用 AI，按你话里的词也没对上职责。换个说法再试，或者在下面按类别手选。'
 
 /** 跑一次推荐并校验（docs/54 §6.3 那一道）。 */
 export async function suggestPositions(input: {
@@ -216,12 +219,18 @@ export async function suggestPositions(input: {
     roles: [],
     positions: [],
   }
-  if (text === '' || input.suggester === undefined) return unavailable
+  if (text === '') return unavailable
+  let engine: Suggester = input.suggester ?? keywordSuggester
   let raw: RawSuggestion | undefined
   try {
-    raw = await input.suggester.run({ text, catalog: [...input.roles] })
+    raw = await engine.run({ text, catalog: [...input.roles] })
   } catch {
     raw = undefined
+  }
+  // AI 不在 / 抛错 / 没按格式回话 → 退回按词对（Luoye 10-06）
+  if (raw === undefined && engine !== keywordSuggester) {
+    engine = keywordSuggester
+    raw = await keywordSuggester.run({ text, catalog: [...input.roles] })
   }
   if (raw === undefined) return unavailable
   const known = new Set(input.roles.map((r) => r.id))
@@ -250,9 +259,9 @@ export async function suggestPositions(input: {
       })
     : proposePositions(ids, input.catalog)
   return {
-    source: input.suggester.source,
-    ...(input.suggester.source === 'stub'
-      ? { note: NOTE_STUB }
+    source: engine.source,
+    ...(engine.source === 'keyword'
+      ? { note: roles.length === 0 ? NOTE_KEYWORD_EMPTY : NOTE_KEYWORD }
       : roles.length === 0
         ? { note: NOTE_EMPTY }
         : {}),

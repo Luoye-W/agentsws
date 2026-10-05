@@ -179,6 +179,8 @@ export interface OnboardingStateView {
 export interface OnboardingPositionView {
   id: string
   name: string
+  /** WP234（Luoye 10-06）：公司改过这个类别的名字时，出厂名（界面小字附后）；没改过就没有。 */
+  factory_name?: string
   /** WP213：岗位图标（工作台 `role-icons/glyphs.ts` 里的 id）。 */
   icon?: string
   roles: {
@@ -249,12 +251,12 @@ export interface OnboardingSuggestInput {
 /**
  * WP234：AI 推荐的职责（每条一句理由，引用原话里的依据）+ 岗位划分建议。
  *
- * **推荐不是选中**：界面上一条都不预勾。`source: 'unavailable'` = 这次没能让 AI 推荐
- * （没接上能用的模型 / 模型没按格式回话），`note` 照实说，界面退回只手选。
- * `source: 'stub'` 只出现在模拟 / 演示世界：那是按原话对词的替身，不是 AI。
+ * **推荐不是选中**：界面上一条都不预勾。`source: 'keyword'` = 这次没用 AI（没接上能用的模型 /
+ * 模型没按格式回话），按原话对词，`note` 照实说（Luoye 10-06：演示与真环境同一套）。
+ * `unavailable` = 原话是空的。`stub` 已不再产出，留着只为契约只加不删。
  */
 export interface OnboardingSuggestView {
-  source: 'ai' | 'stub' | 'unavailable'
+  source: 'ai' | 'keyword' | 'stub' | 'unavailable'
   note?: string
   roles: { role_id: string; reason: string; quote?: string }[]
   positions: OnboardingPlannedPosition[]

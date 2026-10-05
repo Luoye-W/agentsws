@@ -92,6 +92,8 @@ export interface ProfilePositionView {
   role_id: string
   role_name: string
   ranges: { kind: string; id: string }[]
+  /** WP234（docs/54 §6.1）：这条活儿归哪个岗位（安放了就是安放的那个；没安放、只挂在一个岗位里就是它；分不清就没有）。只管展示归堆，不带权限。 */
+  position?: { id: string; name: string }
 }
 
 /** 本人那一份（设置页照着它画）。 */
@@ -124,7 +126,7 @@ export interface VisibleProfileView {
 export interface PersonCardView {
   person_id: PersonId
   name: string
-  positions: { role_id: string; role_name: string }[]
+  positions: { role_id: string; role_name: string; position?: { id: string; name: string } }[]
   /** 手上进行中的条数（同事可见级；藏了就没有这个键） */
   in_progress?: number
 }
