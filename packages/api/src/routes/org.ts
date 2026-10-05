@@ -108,8 +108,12 @@ export interface PositionView {
   version: string
   source: 'bundled' | 'custom'
   roles: { role_id: string; name: string; default: boolean; loaded: boolean }[]
-  /** 持有这个岗位的人：默认包里的职责都在他名下才算（岗位不落库，看的是分配）。 */
-  holders: { person_id: string; name: string; ranges: RangeRef[] }[]
+  /**
+   * 谁在做这个岗位（docs/54 §6.1）：有分配安放在这里的人，加上老规则——没安放的分配里有一条
+   * 干活的职责在这个岗位里（WP235 起不再要求凑齐默认包；「普通成员」「负责人」仍按默认包）。
+   * `role_ids`（WP235，只加）：他在**这个岗位里**手上的那几条职责。
+   */
+  holders: { person_id: string; name: string; ranges: RangeRef[]; role_ids: string[] }[]
   /**
    * WP174：这个岗位的上级（`scope_manager` 的审批先落到他）。没设 = 没有这一格，落老板。
    */
@@ -138,6 +142,11 @@ export interface PositionReshapeView {
   memory?: { moved: number; kept_both: number }
   /** 合并后被删掉的自建岗位 id。 */
   deleted?: string
+  /**
+   * WP235：目标是随软件带的模板时，为了不改模板另建的那个自建岗位 id
+   * （原来在模板里做的人、事项、岗位层记忆都搬到它上面，模板本身不变）。
+   */
+  created?: string
   /** 拆出时：岗位层记忆复制给新岗位几条（Luoye 10-06：两边都留）。 */
   memory_copied?: number
 }
@@ -524,11 +533,14 @@ export interface OrgPort {
     id: string,
     input: PositionSupervisorInput,
   ): MaybePromise<PositionView>
-  /** WP234（docs/54 §6.4）：岗位 `id` 合并到 `into`。可选：没装的宿主回 501。 */
+  /**
+   * WP234（docs/54 §6.4）：岗位 `id` 合并到 `into`。可选：没装的宿主回 501。
+   * WP235：`into` 是随软件带的模板时不改模板，另建一个自建岗位（名字 `name`，不给按职责建议）。
+   */
   mergePosition?(
     actor: OrgActor,
     id: string,
-    input: { into: string },
+    input: { into: string; name?: string | undefined },
   ): MaybePromise<PositionReshapeView>
   /** WP234：把岗位 `id` 里的一条职责移到岗位 `to`。 */
   movePositionDuty?(
@@ -741,7 +753,11 @@ const PositionSupervisorBody = z.object({
   person_id: z.string().min(1).max(128).nullable(),
 })
 
-const MergePositionBody = z.object({ into: z.string().min(1).max(64) })
+const MergePositionBody = z.object({
+  into: z.string().min(1).max(64),
+  /** WP235：合并后那个岗位的名字（不给：自建的照旧，模板按职责建议，如「Reddit 运营」）。 */
+  name: z.string().trim().min(1).max(64).optional(),
+})
 const MoveDutyBody = z.object({
   role_id: z.string().min(1).max(128),
   to: z.string().min(1).max(64),
@@ -1073,7 +1089,8 @@ export function orgRoutes(): Route[] {
         method: 'post',
         path: '/v1/org/positions/:id/merge',
         operationId: 'mergePosition',
-        summary: '把这个岗位合并到另一个（职责、安放、事项、岗位层记忆都跟过去）',
+        summary:
+          '把这个岗位合并到另一个（职责、安放、事项、岗位层记忆都跟过去；目标是模板时另建自建岗位，模板不变）',
         tag: TAG,
         auth: 'bearer',
         assignment: true,

@@ -9,7 +9,10 @@
  * 改名与额度 / 已提交审批）就是原「职责」tab 那一套（`RoleDetail`）。
  *
  * "岗位"在这里是 05 §2 的模板：它只在分配那一刻展开成一组职责，
- * 所以"分给了谁"是算出来的（谁名下有这个岗位的全部默认职责），不是另存一张表。
+ * 所以"分给了谁"是算出来的（安放在这里的，加上没安放、手上有这个岗位里一条职责的），不是另存一张表。
+ *
+ * WP235：分两块——上面「你们的岗位」（有人在做的 + 自建的；卡上写谁在做、他手上是哪几条；
+ * 合并 / 移动 / 拆出只在这一块），下面折叠的「可以加的岗位（模板）」（没人做的出厂模板）。
  */
 import { Pencil } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
@@ -25,16 +28,19 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import type { OrgPositionView, RoleSummaryView } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
+import { splitPositions } from '@/lib/org-positions'
 import { rangeText } from '@/lib/ranges'
 import { cn } from '@/lib/utils'
 
-/** 持有人一枚：一个首字的圆头像 + 名字（+ 他管的范围）。 */
+/** 持有人一枚：一个首字的圆头像 + 名字（+ 他管的范围）（+ WP235：他在这个岗位里做的那几条）。 */
 function Holder({
   name,
   ranges,
+  duties = [],
 }: {
   name: string
   ranges: { kind: string; id: string }[]
+  duties?: string[]
 }): React.ReactNode {
   const { t } = useApp()
   return (
@@ -51,6 +57,11 @@ function Holder({
           （{ranges.map((r) => rangeText(r, t)).join('、')}）
         </span>
       )}
+      {duties.length === 0 ? null : (
+        <span className="text-muted-foreground" data-testid="position-holder-duties">
+          · {duties.join('、')}
+        </span>
+      )}
     </span>
   )
 }
@@ -64,7 +75,7 @@ export function pickableRoles(roles: RoleSummaryView[], held: string[] = []): Ro
 }
 
 /** WP234：「负责人」那个岗位行的 id（身份，不在岗位清单里列）。 */
-export const OWNER_POSITION = 'owner'
+export { OWNER_POSITION } from '@/lib/org-positions'
 
 /** 新建岗位时的预填（WP202：从「连接 → 浏览器插件」那句提示跳来，预填红人营销）。 */
 export interface PositionDraft {
@@ -130,8 +141,8 @@ export function PositionsTab({
   below?(position_id: string): React.ReactNode
   /** WP202：一进来就打开「新建岗位」并预填（名字 + 勾好的职责）。 */
   draft?: PositionDraft
-  /** WP234（docs/54 §6.4）：合并到… / 移动职责 / 拆出…。三个都给了才出那一排。 */
-  onMerge?(id: string, into: string): void
+  /** WP234（docs/54 §6.4）：合并到… / 移动职责 / 拆出…。三个都给了才出那一排。`name`：合并后叫什么（WP235）。 */
+  onMerge?(id: string, into: string, name: string): void
   onMoveDuty?(id: string, role_id: string, to: string): void
   onSplit?(id: string, input: { name: string; role_ids: string[] }): void
   /** WP234：刚调整完的一句回执。 */
@@ -193,6 +204,325 @@ export function PositionsTab({
   const toggle = (list: string[], id: string): string[] =>
     list.includes(id) ? list.filter((x) => x !== id) : [...list, id]
 
+  const { ours, templates } = splitPositions(positions)
+  /** 职责显示名：岗位视图里带的名字优先，其次职责清单，都没有才用 id。 */
+  const roleNameOf = (p: OrgPositionView, id: string): string =>
+    p.roles.find((r) => r.role_id === id)?.name ?? roles.find((r) => r.id === id)?.name ?? id
+
+  const renderCard = (p: OrgPositionView, isOurs: boolean): React.ReactNode => (
+    <Card key={p.id} data-testid="position-card" data-position={p.id}>
+      <CardHeader className="flex-row flex-wrap items-center justify-between gap-2">
+        <CardTitle className="flex items-center gap-2 text-sm">
+          <PositionIcon
+            position_id={p.id}
+            icon={p.icon}
+            role_ids={p.roles.map((r) => r.role_id)}
+            size={20}
+            className="text-ws-muted-fg"
+          />
+          <span data-testid="position-name">
+            {lang === 'en' && p.name_en !== '' ? p.name_en : p.name}
+          </span>
+          <Badge variant="outline" data-testid="position-duty-count">
+            {t('org.positions.duties', { count: p.roles.length })}
+          </Badge>
+          {onRename === undefined || renaming === p.id ? null : (
+            <Button
+              size="xs"
+              variant="ghost"
+              data-testid="position-rename"
+              disabled={busy}
+              onClick={() => {
+                setRenaming(p.id)
+                setRenameZh(p.name)
+                setRenameEn(p.name_en)
+              }}
+            >
+              <Pencil aria-hidden className="size-3" />
+              {t('org.positions.rename')}
+            </Button>
+          )}
+        </CardTitle>
+        {p.holders.length === 0 ? (
+          <span className="text-muted-foreground text-xs">{t('org.positions.nobody')}</span>
+        ) : (
+          <div className="flex flex-wrap items-center gap-1.5" data-testid="position-holders">
+            {p.holders.map((h) => (
+              <Holder
+                key={h.person_id}
+                name={h.name}
+                ranges={h.ranges}
+                duties={(h.role_ids ?? []).map((id) => roleNameOf(p, id))}
+              />
+            ))}
+          </div>
+        )}
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3 text-sm">
+        {/* WP196：改名——只改显示名，中英各一格；说明进问号（界面少字） */}
+        {onRename === undefined || renaming !== p.id ? null : (
+          <div
+            className="flex flex-wrap items-end gap-2 rounded-md border p-2"
+            data-testid="position-rename-form"
+          >
+            <div className="flex min-w-40 flex-1 flex-col gap-1">
+              <Label htmlFor={`rename-zh-${p.id}`} className="text-xs">
+                {t('org.positions.rename.zh')}
+              </Label>
+              <Input
+                id={`rename-zh-${p.id}`}
+                data-testid="position-rename-zh"
+                value={renameZh}
+                maxLength={64}
+                onChange={(e) => {
+                  setRenameZh(e.target.value)
+                }}
+              />
+            </div>
+            <div className="flex min-w-40 flex-1 flex-col gap-1">
+              <Label htmlFor={`rename-en-${p.id}`} className="text-xs">
+                {t('org.positions.rename.en')}
+              </Label>
+              <Input
+                id={`rename-en-${p.id}`}
+                data-testid="position-rename-en"
+                value={renameEn}
+                maxLength={64}
+                onChange={(e) => {
+                  setRenameEn(e.target.value)
+                }}
+              />
+            </div>
+            <div className="flex items-center gap-1">
+              <Hint text={t('org.positions.rename.hint')} />
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setRenaming(null)
+                }}
+              >
+                {t('org.cancel')}
+              </Button>
+              <Button
+                size="sm"
+                data-testid="position-rename-save"
+                disabled={renameZh.trim() === '' || busy}
+                onClick={() => {
+                  const en = renameEn.trim()
+                  onRename(p.id, {
+                    name: renameZh.trim(),
+                    ...(en === '' ? {} : { name_en: en }),
+                  })
+                  setRenaming(null)
+                }}
+              >
+                {t('org.save')}
+              </Button>
+            </div>
+          </div>
+        )}
+        {/* WP174：上级——超授权的审批先转他，没设就转老板。说明进问号（界面少字） */}
+        {onSupervisor === undefined ? null : (
+          <div className="flex items-center gap-2" data-testid="position-supervisor">
+            <label htmlFor={`supervisor-${p.id}`} className="text-xs text-muted-foreground">
+              {t('org.positions.supervisor')}
+            </label>
+            <select
+              id={`supervisor-${p.id}`}
+              data-testid="position-supervisor-select"
+              className="h-8 rounded-md border bg-background px-2 text-sm"
+              disabled={busy}
+              value={p.supervisor?.person_id ?? ''}
+              onChange={(e) => {
+                onSupervisor(p.id, e.target.value === '' ? null : e.target.value)
+              }}
+            >
+              <option value="">{t('org.positions.supervisor.none')}</option>
+              {people.map((m) => (
+                <option key={m.person_id} value={m.person_id}>
+                  {m.name}
+                </option>
+              ))}
+              {/* 上级不在候选里（刚走、名单还没刷新）也照实显示他，不悄悄换成「没设」 */}
+              {p.supervisor === undefined ||
+              people.some((m) => m.person_id === p.supervisor?.person_id) ? null : (
+                <option value={p.supervisor.person_id}>{p.supervisor.name}</option>
+              )}
+            </select>
+            <Hint text={t('org.positions.supervisor.hint')} />
+          </div>
+        )}
+        {/* WP70：职责是第二层，默认折叠；点开才看得到这个岗位含哪几条 */}
+        <DutyFold
+          testId="position-duties"
+          duties={p.roles.map((r) => ({ id: r.role_id, name: r.name }))}
+          renderDuty={(duty) => {
+            const inPosition = p.roles.find((r) => r.role_id === duty.id)
+            const full = roles.find((r) => r.id === duty.id)
+            const key = `${p.id}/${duty.id}`
+            const open = detail === key
+            return (
+              <div className="rounded-md border" data-testid="position-duty">
+                <div className="flex flex-wrap items-center justify-between gap-2 px-2 py-1.5">
+                  <span className="flex items-center gap-1.5">
+                    <DutyIcon role_id={duty.id} className="text-ws-muted-fg" />
+                    {duty.name}
+                    {inPosition?.default === false ? (
+                      <Badge variant="outline">{t('org.positions.role.optional')}</Badge>
+                    ) : null}
+                    {inPosition?.loaded === false ? (
+                      <Badge variant="destructive">{t('org.positions.role.missing')}</Badge>
+                    ) : null}
+                  </span>
+                  {full === undefined ? null : (
+                    <Button
+                      size="xs"
+                      variant="ghost"
+                      data-testid="position-duty-detail"
+                      onClick={() => {
+                        setDetail(open ? null : key)
+                      }}
+                    >
+                      {open ? t('org.positions.duty.close') : t('org.positions.duty.detail')}
+                    </Button>
+                  )}
+                </div>
+                {/* 原「职责」tab 的那张说明卡：复制一份 / 改名与额度 / 已提交审批 */}
+                {open && full !== undefined ? (
+                  <div className="border-t p-2">
+                    <RoleDetail
+                      key={full.id}
+                      role={full}
+                      {...(submitted === undefined ? {} : { submitted })}
+                      busy={busy}
+                      onCopy={onCopyRole}
+                      onPropose={onProposeRole}
+                    />
+                  </div>
+                ) : null}
+              </div>
+            )
+          }}
+        />
+
+        {editing === p.id ? (
+          <div className="flex flex-col gap-2 rounded-md border p-2">
+            <span className="text-xs text-muted-foreground">{t('org.positions.pick')}</span>
+            <div className="flex flex-wrap gap-1">
+              {pickableRoles(
+                roles,
+                p.roles.map((r) => r.role_id),
+              ).map((r) => (
+                <button
+                  key={r.id}
+                  type="button"
+                  data-testid="position-role-toggle"
+                  className={cn(
+                    'inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs transition-colors hover:bg-muted',
+                    draft.includes(r.id) && 'border-primary bg-primary/10 [--ia:var(--ws-brand)]',
+                  )}
+                  onClick={() => {
+                    setDraft((current) => toggle(current, r.id))
+                  }}
+                >
+                  <DutyIcon role_id={r.id} size={14} className="text-ws-muted-fg" />
+                  {r.name}
+                </button>
+              ))}
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setEditing(null)
+                }}
+              >
+                {t('org.cancel')}
+              </Button>
+              <Button
+                size="sm"
+                disabled={draft.length === 0 || busy}
+                data-testid="position-save"
+                onClick={() => {
+                  onSaveRoles(p.id, {
+                    name: p.name,
+                    roles: draft.map((role_id) => ({ role_id, default: true })),
+                  })
+                  setEditing(null)
+                }}
+              >
+                {t('org.save')}
+              </Button>
+            </div>
+          </div>
+        ) : null}
+
+        <div className="flex flex-wrap gap-2">
+          <Button
+            size="sm"
+            data-testid="position-assign"
+            aria-expanded={assigning === p.id}
+            onClick={() => {
+              onAssign(p.id)
+            }}
+          >
+            {t('org.positions.assign')}
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              setEditing(p.id)
+              setDraft(p.roles.filter((r) => r.default).map((r) => r.role_id))
+            }}
+          >
+            {t('org.positions.edit')}
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            data-testid="position-delete"
+            disabled={busy}
+            onClick={() => {
+              onDelete(p.id)
+            }}
+          >
+            {t('org.positions.delete')}
+          </Button>
+        </div>
+        {/* WP235：合并 / 移动 / 拆出只在「你们的岗位」上，目标也只列这一块 */}
+        {!isOurs ||
+        onMerge === undefined ||
+        onMoveDuty === undefined ||
+        onSplit === undefined ? null : (
+          <PositionReshape
+            position={p}
+            others={ours.filter((o) => o.id !== p.id)}
+            busy={busy}
+            onMerge={(into, name) => {
+              onMerge(p.id, into, name)
+            }}
+            onMoveDuty={(role_id, to) => {
+              onMoveDuty(p.id, role_id, to)
+            }}
+            onSplit={(input) => {
+              onSplit(p.id, input)
+            }}
+          />
+        )}
+        {/* WP202：分配向导 / 上岗回执就地展开在这张卡里，不在页顶 */}
+        {(() => {
+          const node = below?.(p.id)
+          return node === null || node === undefined ? null : (
+            <div data-testid="position-below">{node}</div>
+          )
+        })()}
+      </CardContent>
+    </Card>
+  )
+
   return (
     <div className="flex flex-col gap-3">
       {error === undefined ? null : (
@@ -206,321 +536,28 @@ export function PositionsTab({
         </p>
       )}
       <div className="flex flex-col gap-3" ref={listRef}>
-        {/* WP234（docs/54 §6.5）：「负责人」是身份，在页顶那一块，不在岗位清单里 */}
-        {positions
-          .filter((p) => p.id !== OWNER_POSITION)
-          .map((p) => (
-            <Card key={p.id} data-testid="position-card" data-position={p.id}>
-              <CardHeader className="flex-row flex-wrap items-center justify-between gap-2">
-                <CardTitle className="flex items-center gap-2 text-sm">
-                  <PositionIcon
-                    position_id={p.id}
-                    icon={p.icon}
-                    role_ids={p.roles.map((r) => r.role_id)}
-                    size={20}
-                    className="text-ws-muted-fg"
-                  />
-                  <span data-testid="position-name">
-                    {lang === 'en' && p.name_en !== '' ? p.name_en : p.name}
-                  </span>
-                  <Badge variant="outline" data-testid="position-duty-count">
-                    {t('org.positions.duties', { count: p.roles.length })}
-                  </Badge>
-                  {onRename === undefined || renaming === p.id ? null : (
-                    <Button
-                      size="xs"
-                      variant="ghost"
-                      data-testid="position-rename"
-                      disabled={busy}
-                      onClick={() => {
-                        setRenaming(p.id)
-                        setRenameZh(p.name)
-                        setRenameEn(p.name_en)
-                      }}
-                    >
-                      <Pencil aria-hidden className="size-3" />
-                      {t('org.positions.rename')}
-                    </Button>
-                  )}
-                </CardTitle>
-                {p.holders.length === 0 ? (
-                  <span className="text-muted-foreground text-xs">{t('org.positions.nobody')}</span>
-                ) : (
-                  <div
-                    className="flex flex-wrap items-center gap-1.5"
-                    data-testid="position-holders"
-                  >
-                    {p.holders.map((h) => (
-                      <Holder key={h.person_id} name={h.name} ranges={h.ranges} />
-                    ))}
-                  </div>
-                )}
-              </CardHeader>
-              <CardContent className="flex flex-col gap-3 text-sm">
-                {/* WP196：改名——只改显示名，中英各一格；说明进问号（界面少字） */}
-                {onRename === undefined || renaming !== p.id ? null : (
-                  <div
-                    className="flex flex-wrap items-end gap-2 rounded-md border p-2"
-                    data-testid="position-rename-form"
-                  >
-                    <div className="flex min-w-40 flex-1 flex-col gap-1">
-                      <Label htmlFor={`rename-zh-${p.id}`} className="text-xs">
-                        {t('org.positions.rename.zh')}
-                      </Label>
-                      <Input
-                        id={`rename-zh-${p.id}`}
-                        data-testid="position-rename-zh"
-                        value={renameZh}
-                        maxLength={64}
-                        onChange={(e) => {
-                          setRenameZh(e.target.value)
-                        }}
-                      />
-                    </div>
-                    <div className="flex min-w-40 flex-1 flex-col gap-1">
-                      <Label htmlFor={`rename-en-${p.id}`} className="text-xs">
-                        {t('org.positions.rename.en')}
-                      </Label>
-                      <Input
-                        id={`rename-en-${p.id}`}
-                        data-testid="position-rename-en"
-                        value={renameEn}
-                        maxLength={64}
-                        onChange={(e) => {
-                          setRenameEn(e.target.value)
-                        }}
-                      />
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <Hint text={t('org.positions.rename.hint')} />
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => {
-                          setRenaming(null)
-                        }}
-                      >
-                        {t('org.cancel')}
-                      </Button>
-                      <Button
-                        size="sm"
-                        data-testid="position-rename-save"
-                        disabled={renameZh.trim() === '' || busy}
-                        onClick={() => {
-                          const en = renameEn.trim()
-                          onRename(p.id, {
-                            name: renameZh.trim(),
-                            ...(en === '' ? {} : { name_en: en }),
-                          })
-                          setRenaming(null)
-                        }}
-                      >
-                        {t('org.save')}
-                      </Button>
-                    </div>
-                  </div>
-                )}
-                {/* WP174：上级——超授权的审批先转他，没设就转老板。说明进问号（界面少字） */}
-                {onSupervisor === undefined ? null : (
-                  <div className="flex items-center gap-2" data-testid="position-supervisor">
-                    <label htmlFor={`supervisor-${p.id}`} className="text-xs text-muted-foreground">
-                      {t('org.positions.supervisor')}
-                    </label>
-                    <select
-                      id={`supervisor-${p.id}`}
-                      data-testid="position-supervisor-select"
-                      className="h-8 rounded-md border bg-background px-2 text-sm"
-                      disabled={busy}
-                      value={p.supervisor?.person_id ?? ''}
-                      onChange={(e) => {
-                        onSupervisor(p.id, e.target.value === '' ? null : e.target.value)
-                      }}
-                    >
-                      <option value="">{t('org.positions.supervisor.none')}</option>
-                      {people.map((m) => (
-                        <option key={m.person_id} value={m.person_id}>
-                          {m.name}
-                        </option>
-                      ))}
-                      {/* 上级不在候选里（刚走、名单还没刷新）也照实显示他，不悄悄换成「没设」 */}
-                      {p.supervisor === undefined ||
-                      people.some((m) => m.person_id === p.supervisor?.person_id) ? null : (
-                        <option value={p.supervisor.person_id}>{p.supervisor.name}</option>
-                      )}
-                    </select>
-                    <Hint text={t('org.positions.supervisor.hint')} />
-                  </div>
-                )}
-                {/* WP70：职责是第二层，默认折叠；点开才看得到这个岗位含哪几条 */}
-                <DutyFold
-                  testId="position-duties"
-                  duties={p.roles.map((r) => ({ id: r.role_id, name: r.name }))}
-                  renderDuty={(duty) => {
-                    const inPosition = p.roles.find((r) => r.role_id === duty.id)
-                    const full = roles.find((r) => r.id === duty.id)
-                    const key = `${p.id}/${duty.id}`
-                    const open = detail === key
-                    return (
-                      <div className="rounded-md border" data-testid="position-duty">
-                        <div className="flex flex-wrap items-center justify-between gap-2 px-2 py-1.5">
-                          <span className="flex items-center gap-1.5">
-                            <DutyIcon role_id={duty.id} className="text-ws-muted-fg" />
-                            {duty.name}
-                            {inPosition?.default === false ? (
-                              <Badge variant="outline">{t('org.positions.role.optional')}</Badge>
-                            ) : null}
-                            {inPosition?.loaded === false ? (
-                              <Badge variant="destructive">{t('org.positions.role.missing')}</Badge>
-                            ) : null}
-                          </span>
-                          {full === undefined ? null : (
-                            <Button
-                              size="xs"
-                              variant="ghost"
-                              data-testid="position-duty-detail"
-                              onClick={() => {
-                                setDetail(open ? null : key)
-                              }}
-                            >
-                              {open
-                                ? t('org.positions.duty.close')
-                                : t('org.positions.duty.detail')}
-                            </Button>
-                          )}
-                        </div>
-                        {/* 原「职责」tab 的那张说明卡：复制一份 / 改名与额度 / 已提交审批 */}
-                        {open && full !== undefined ? (
-                          <div className="border-t p-2">
-                            <RoleDetail
-                              key={full.id}
-                              role={full}
-                              {...(submitted === undefined ? {} : { submitted })}
-                              busy={busy}
-                              onCopy={onCopyRole}
-                              onPropose={onProposeRole}
-                            />
-                          </div>
-                        ) : null}
-                      </div>
-                    )
-                  }}
-                />
-
-                {editing === p.id ? (
-                  <div className="flex flex-col gap-2 rounded-md border p-2">
-                    <span className="text-xs text-muted-foreground">{t('org.positions.pick')}</span>
-                    <div className="flex flex-wrap gap-1">
-                      {pickableRoles(
-                        roles,
-                        p.roles.map((r) => r.role_id),
-                      ).map((r) => (
-                        <button
-                          key={r.id}
-                          type="button"
-                          data-testid="position-role-toggle"
-                          className={cn(
-                            'inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs transition-colors hover:bg-muted',
-                            draft.includes(r.id) &&
-                              'border-primary bg-primary/10 [--ia:var(--ws-brand)]',
-                          )}
-                          onClick={() => {
-                            setDraft((current) => toggle(current, r.id))
-                          }}
-                        >
-                          <DutyIcon role_id={r.id} size={14} className="text-ws-muted-fg" />
-                          {r.name}
-                        </button>
-                      ))}
-                    </div>
-                    <div className="flex justify-end gap-2">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => {
-                          setEditing(null)
-                        }}
-                      >
-                        {t('org.cancel')}
-                      </Button>
-                      <Button
-                        size="sm"
-                        disabled={draft.length === 0 || busy}
-                        data-testid="position-save"
-                        onClick={() => {
-                          onSaveRoles(p.id, {
-                            name: p.name,
-                            roles: draft.map((role_id) => ({ role_id, default: true })),
-                          })
-                          setEditing(null)
-                        }}
-                      >
-                        {t('org.save')}
-                      </Button>
-                    </div>
-                  </div>
-                ) : null}
-
-                <div className="flex flex-wrap gap-2">
-                  <Button
-                    size="sm"
-                    data-testid="position-assign"
-                    aria-expanded={assigning === p.id}
-                    onClick={() => {
-                      onAssign(p.id)
-                    }}
-                  >
-                    {t('org.positions.assign')}
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => {
-                      setEditing(p.id)
-                      setDraft(p.roles.filter((r) => r.default).map((r) => r.role_id))
-                    }}
-                  >
-                    {t('org.positions.edit')}
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    data-testid="position-delete"
-                    disabled={busy}
-                    onClick={() => {
-                      onDelete(p.id)
-                    }}
-                  >
-                    {t('org.positions.delete')}
-                  </Button>
-                </div>
-                {onMerge === undefined ||
-                onMoveDuty === undefined ||
-                onSplit === undefined ? null : (
-                  <PositionReshape
-                    position={p}
-                    others={positions.filter((o) => o.id !== p.id && o.id !== OWNER_POSITION)}
-                    busy={busy}
-                    onMerge={(into) => {
-                      onMerge(p.id, into)
-                    }}
-                    onMoveDuty={(role_id, to) => {
-                      onMoveDuty(p.id, role_id, to)
-                    }}
-                    onSplit={(input) => {
-                      onSplit(p.id, input)
-                    }}
-                  />
-                )}
-                {/* WP202：分配向导 / 上岗回执就地展开在这张卡里，不在页顶 */}
-                {(() => {
-                  const node = below?.(p.id)
-                  return node === null || node === undefined ? null : (
-                    <div data-testid="position-below">{node}</div>
-                  )
-                })()}
-              </CardContent>
-            </Card>
-          ))}
+        {/* WP235：上面「你们的岗位」（有人在做的 + 自建的），下面折叠的「可以加的岗位（模板）」。
+            「负责人」在页顶身份卡、「普通成员」是底座身份，都不进岗位清单 */}
+        <section className="flex flex-col gap-3" data-testid="positions-ours">
+          <h3 className="font-medium text-sm">{t('org.positions.ours')}</h3>
+          {ours.length === 0 ? (
+            <p className="text-muted-foreground text-sm">{t('org.positions.ours.empty')}</p>
+          ) : (
+            ours.map((p) => renderCard(p, true))
+          )}
+        </section>
+        {templates.length === 0 ? null : (
+          <details className="group flex flex-col gap-3" data-testid="positions-templates">
+            <summary className="flex cursor-pointer items-center gap-2 font-medium text-sm">
+              {t('org.positions.templates')}
+              <Badge variant="outline">{templates.length}</Badge>
+              <Hint text={t('org.positions.templates.hint')} />
+            </summary>
+            <div className="mt-3 flex flex-col gap-3">
+              {templates.map((p) => renderCard(p, false))}
+            </div>
+          </details>
+        )}
       </div>
 
       {creating ? (

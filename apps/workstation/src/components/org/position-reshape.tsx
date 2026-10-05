@@ -3,6 +3,9 @@
  *
  * 与首次设置第 ③ 步同一套规则（服务端 `org` 端口里做）：合并时职责、事项、岗位层记忆都跟过去；
  * 移动 / 拆出时只动走那条职责的事项，岗位层记忆留在原岗位。说明进问号（界面少字）。
+ *
+ * WP235：只出现在「你们的岗位」上，作用在**真在做的那几条职责**上（模板只算有人做的），
+ * 目标也只列「你们的岗位」。合并时可以给合并后的岗位起名（预填按职责建议，如「Reddit 运营」）。
  */
 import { useState } from 'react'
 import { PickToggle } from '@/components/onboarding/pick-toggle'
@@ -12,6 +15,7 @@ import { Hint } from '@/components/ui/hint'
 import { Input } from '@/components/ui/input'
 import type { OrgPositionView } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
+import { dutiesInUse, suggestMergedName } from '@/lib/org-positions'
 
 type Mode = 'merge' | 'split' | 'move'
 
@@ -26,25 +30,31 @@ export function PositionReshape({
   onSplit,
 }: {
   position: OrgPositionView
-  /** 能合并 / 移过去的别的岗位（不含「负责人」与它自己）。 */
+  /** 能合并 / 移过去的别的岗位（WP235：只是「你们的岗位」，不含它自己）。 */
   others: OrgPositionView[]
   busy: boolean
-  onMerge(into: string): void
+  /** `name`：合并后那个岗位叫什么。 */
+  onMerge(into: string, name: string): void
   onMoveDuty(role_id: string, to: string): void
   onSplit(input: { name: string; role_ids: string[] }): void
 }): React.ReactNode {
-  const { t } = useApp()
+  const { t, lang } = useApp()
   const [mode, setMode] = useState<Mode | undefined>(undefined)
   const [target, setTarget] = useState('')
   const [duty, setDuty] = useState('')
   const [name, setName] = useState('')
   const [picked, setPicked] = useState<string[]>([])
-  const duties = position.roles.filter((r) => !r.role_id.startsWith('common.'))
+  const duties = dutiesInUse(position)
+  const suggest = (id: string): string => {
+    const into = others.find((o) => o.id === id)
+    return into === undefined ? '' : suggestMergedName(position, into, lang === 'en' ? 'en' : 'zh')
+  }
   const open = (next: Mode): void => {
     setMode(mode === next ? undefined : next)
-    setTarget(others[0]?.id ?? '')
+    const first = others[0]?.id ?? ''
+    setTarget(first)
     setDuty(duties[0]?.role_id ?? '')
-    setName('')
+    setName(next === 'merge' ? suggest(first) : '')
     setPicked([])
   }
   const done = (): void => {
@@ -110,6 +120,7 @@ export function PositionReshape({
             value={target}
             onChange={(e) => {
               setTarget(e.target.value)
+              setName(suggest(e.target.value))
             }}
           >
             {others.map((o) => (
@@ -118,12 +129,23 @@ export function PositionReshape({
               </option>
             ))}
           </select>
+          <Input
+            aria-label={t('org.positions.merge.name')}
+            placeholder={t('org.positions.merge.name')}
+            data-testid="position-merge-name"
+            className="h-8 max-w-48"
+            maxLength={64}
+            value={name}
+            onChange={(e) => {
+              setName(e.target.value)
+            }}
+          />
           <Button
             size="sm"
             data-testid="position-merge-go"
-            disabled={busy || target === ''}
+            disabled={busy || target === '' || name.trim() === ''}
             onClick={() => {
-              onMerge(target)
+              onMerge(target, name.trim())
               done()
             }}
           >

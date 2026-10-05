@@ -26864,7 +26864,7 @@
     "/v1/org/positions/{id}/merge": {
       "post": {
         "operationId": "mergePosition",
-        "summary": "把这个岗位合并到另一个（职责、安放、事项、岗位层记忆都跟过去）",
+        "summary": "把这个岗位合并到另一个（职责、安放、事项、岗位层记忆都跟过去；目标是模板时另建自建岗位，模板不变）",
         "tags": ["org"],
         "parameters": [
           {
@@ -27008,6 +27008,11 @@
                 "type": "object",
                 "properties": {
                   "into": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64
+                  },
+                  "name": {
                     "type": "string",
                     "minLength": 1,
                     "maxLength": 64

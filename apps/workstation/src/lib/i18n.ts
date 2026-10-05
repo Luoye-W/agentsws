@@ -363,6 +363,14 @@ const zh: Table = {
   'org.positions.merge': '合并到…',
   'org.positions.merge.into': '合并到',
   'org.positions.merge.go': '合并',
+  // WP235：公司页岗位分两块；合并后的名字
+  'org.positions.ours': '你们的岗位',
+  'org.positions.ours.empty': '还没有人在做哪个岗位。从下面的模板里分一个给同事，或新建一个。',
+  'org.positions.templates': '可以加的岗位（模板）',
+  'org.positions.templates.hint':
+    '随软件带的岗位模板，还没人在做。分给同事就用上了；模板本身不会被合并、移动改掉。',
+  'org.positions.merge.name': '合并后叫什么',
+  'org.positions.reshaped.created': '；另建了岗位「{name}」，模板没动',
   'org.positions.split': '拆出…',
   'org.positions.split.name': '新岗位叫什么',
   'org.positions.split.go': '拆出',
@@ -4093,6 +4101,14 @@ const en: Table = {
   'org.positions.merge': 'Merge into…',
   'org.positions.merge.into': 'Merge into',
   'org.positions.merge.go': 'Merge',
+  'org.positions.ours': 'Your positions',
+  'org.positions.ours.empty':
+    'Nobody holds a position yet. Give one of the templates below to a colleague, or create one.',
+  'org.positions.templates': 'Positions you can add (templates)',
+  'org.positions.templates.hint':
+    'Templates that ship with the app and nobody holds yet. Give one to a colleague to start using it; merging or moving never changes a template.',
+  'org.positions.merge.name': 'Name after merging',
+  'org.positions.reshaped.created': '; created the position “{name}”, the template is unchanged',
   'org.positions.split': 'Split out…',
   'org.positions.split.name': 'Name of the new position',
   'org.positions.split.go': 'Split out',

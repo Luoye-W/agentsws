@@ -77,13 +77,14 @@ const POSITIONS: OrgPositionView[] = [
       { person_id: 'per_wang', name: '王岚', ranges: [{ kind: 'store', id: 'store_main' }] },
     ],
   },
+  // WP235：「普通成员」不进岗位清单了；第二张卡换成一个没人做的单职责模板（落在「可以加的岗位」里）
   {
-    id: 'member',
-    name: '普通成员',
-    name_en: 'Member',
+    id: 'brand-design',
+    name: '品牌设计',
+    name_en: 'Brand Design',
     version: '1.0.0',
     source: 'bundled',
-    roles: [{ role_id: 'common.member', name: '工作区成员', default: true, loaded: true }],
+    roles: [{ role_id: 'design.dtc', name: '独立站设计', default: true, loaded: true }],
     holders: [],
   },
 ]
@@ -364,7 +365,7 @@ describe('公司页：岗位', () => {
     const member = cards[1] as HTMLElement
     expect(within(member).queryByTestId('position-duties-toggle')).toBeNull()
     expect(within(member).getByTestId('position-duties-single')).toBeDefined()
-    expect(within(member).getByText('工作区成员')).toBeDefined()
+    expect(within(member).getByText('独立站设计')).toBeDefined()
   })
 
   it('顶层没有「职责」tab 了（职责一律归在岗位下面）', async () => {
@@ -468,8 +469,8 @@ describe('公司页：岗位改名（WP196）', () => {
     await waitFor(() => {
       expect(updated).toEqual([
         {
-          id: 'member',
-          input: { name: '普通成员', roles: [{ role_id: 'common.member', default: true }] },
+          id: 'brand-design',
+          input: { name: '品牌设计', roles: [{ role_id: 'design.dtc', default: true }] },
         },
       ])
     })
