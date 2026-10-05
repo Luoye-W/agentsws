@@ -47,6 +47,19 @@ export function bundledProfileDir(resourcesPath: string | undefined): string | u
   return resourcesPath === undefined ? undefined : join(resourcesPath, 'profiles', 'agentsws')
 }
 
+/**
+ * WP218：安装包里的工作台构建产物（`electron-builder.yml` 的 extraResources 把 `apps/workstation/dist`
+ * 摆进 `<resources>/workstation`）。开发期给仓库里那一份（构建过才有，没有就不托管）。
+ */
+export function workstationDir(
+  resourcesPath: string | undefined,
+  devCandidate: string,
+  exists: (path: string) => boolean,
+): string | undefined {
+  const dir = resourcesPath === undefined ? devCandidate : join(resourcesPath, 'workstation')
+  return exists(join(dir, 'index.html')) ? dir : undefined
+}
+
 export function desktopPaths(userData: string): DesktopPaths {
   const logDir = join(userData, 'logs')
   return {

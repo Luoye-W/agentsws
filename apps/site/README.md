@@ -18,7 +18,7 @@ Agents 工坊的官网（WP197）。**只放公开页面**：首页、岗位、�
 | `src/lib/markdown.ts` | 安全 markdown → HTML（移植自工作台 `SafeMarkdown`：不解析 HTML、不加载图片、链接只认三种） |
 | `src/lib/help.ts` | 文档区：直接读仓库的 `docs/help/*.md`，目录顺序照工作台 `HELP_SLUGS` |
 | `src/lib/pricing.ts` · `src/data/pricing-build.ts` | 价目：构建时取 `GET https://cloud.agentsws.com/v1/pricing`，取不到用 `packages/stand-ins` 的样例并标「以控制台为准」 |
-| `src/data/downloads.json` | 下载清单：版本、平台、链接、sha256、大小（链接为 `null` 时页面显示「即将提供」） |
+| `src/data/downloads.json` | 下载清单的**兜底**那份：版本、平台、链接、sha256、大小（链接为 `null` 时页面显示「即将提供」）。WP218 起构建时先取 `https://dl.agentsws.com/downloads.json`（发版流水线每次发版更新它，`src/data/downloads-build.ts`），取不到 / 不合格才用这份；首页「下载」按钮对 Windows 访客直接给最新安装包 |
 | `src/content/changelog/` | 更新日志，一条一个文件（`<日期>-<名字>.md` + `.en.md`），从 docs/35 挑对外能说的写成人话 |
 | `src/content/legal/` | 条款三页（中英）。源文件顶部的 HTML 注释只给改稿的人看，不上页面 |
 | `public/og/` | 分享图（`scripts/og.mjs` 用品牌标记生成，签进仓库） |
@@ -36,7 +36,7 @@ node apps/site/scripts/shots.mjs        # 审稿截图 → docs/assets/wp197/
 node apps/site/scripts/og.mjs           # 重出分享图（改了 OG 标题或标记之后）
 ```
 
-Astro 默认的两处出网都关掉了（`scripts/astro.mjs`：匿名遥测 `ASTRO_TELEMETRY_DISABLED=1`、dev 查新版本 `ASTRO_DISABLE_UPDATE_CHECK=true`）。构建唯一的出网是取一次公开价目。
+Astro 默认的两处出网都关掉了（`scripts/astro.mjs`：匿名遥测 `ASTRO_TELEMETRY_DISABLED=1`、dev 查新版本 `ASTRO_DISABLE_UPDATE_CHECK=true`）。构建的出网只有两次：取一次公开价目、取一次下载清单（`AGENTSWS_SITE_OFFLINE=1` 两样都不取）。
 
 ## 部署（Cloudflare Workers 静态资源）
 

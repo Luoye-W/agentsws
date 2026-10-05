@@ -28,6 +28,9 @@ export type MenuAction =
   | 'export-diagnostics'
   /** WP111：mac / linux 只提示那一档，点它开 Releases 下载页。 */
   | 'open-download-page'
+  /** WP218：Windows 应用内更新——下载 / 重启并更新（与工作台左下角那颗按钮同一个状态机）。 */
+  | 'download-update'
+  | 'install-update'
   /** WP136（docs/79）：切到某个 dsh 场景（`MenuItemModel.scene` 说是哪一个）。 */
   | 'switch-scene'
   /** WP136：打开工作台里的场景面板（新建 / 关闭 / 删除都在那儿）。 */
@@ -94,6 +97,14 @@ export interface TrayModelInput {
    * 让用户多做一件本来不用做的事。
    */
   updateAvailable?: string
+  /**
+   * WP218：应用内更新那一档的状态（Windows）。工作台左下角有同一颗按钮；托盘上也挂一项，
+   * 因为这个应用平时没有窗口——不开工作台的人也该看得见、点得到。
+   */
+  appUpdate?:
+    | { state: 'available'; version: string }
+    | { state: 'downloading'; version: string; percent: number }
+    | { state: 'ready'; version: string }
   /**
    * WP60：这台电脑是不是"值守中的远程窗口"（服务地址是 `https://<云>/w/<ws>`）。
    *
@@ -195,6 +206,9 @@ export function computerUseItems(input: TrayModelInput): MenuItemModel[] {
   ]
 }
 
+/** WP218：托盘上那一项更新的样子。 */
+export type TrayAppUpdate = NonNullable<TrayModelInput['appUpdate']>
+
 export function buildTrayMenu(input: TrayModelInput): MenuItemModel[] {
   const t = strings(input.language)
   const openable = canOpenWorkstation(input)
@@ -275,6 +289,29 @@ export function buildTrayMenu(input: TrayModelInput): MenuItemModel[] {
       id: 'open-download-page',
       type: 'normal',
       label: t.updateAvailable.replace('{version}', input.updateAvailable),
+      enabled: true,
+    })
+  // WP218：Windows 应用内更新，三种样子：下载 / 下载中（灰） / 重启并更新
+  const up = input.appUpdate
+  if (up?.state === 'available')
+    items.push({
+      id: 'download-update',
+      type: 'normal',
+      label: t.updateDownload.replace('{version}', up.version),
+      enabled: true,
+    })
+  else if (up?.state === 'downloading')
+    items.push({
+      id: 'download-update',
+      type: 'normal',
+      label: t.updateDownloading.replace('{percent}', String(up.percent)),
+      enabled: false,
+    })
+  else if (up?.state === 'ready')
+    items.push({
+      id: 'install-update',
+      type: 'normal',
+      label: t.updateReady.replace('{version}', up.version),
       enabled: true,
     })
   items.push(

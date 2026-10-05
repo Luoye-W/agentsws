@@ -13,6 +13,7 @@
  * - **不打进安装包**：用户在设置页打开「电脑操控」、点第 ① 步时才下；
  * - **装好了才挂**：设置页、`forRun()`、`dsh-adapter` 的 `cuaDriverUsable()` 三处都问这一句。
  */
+
 import { execFile, spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import {
@@ -28,6 +29,7 @@ import {
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
+import { systemTar } from './system-tools.js'
 
 const execFileAsync = promisify(execFile)
 
@@ -195,7 +197,7 @@ export async function installCuaDriver(input: InstallInput): Promise<InstallResu
     const staged = join(tmp, 'x')
     mkdirSync(staged)
     try {
-      await execFileAsync('tar', ['-xf', archive, '-C', staged])
+      await execFileAsync(systemTar(), ['-xf', archive, '-C', staged], { windowsHide: true })
     } catch (e) {
       throw new ComputerUseInstallError(
         'provider_error',
@@ -307,6 +309,7 @@ export async function runSelfCheck(input: SelfCheckInput): Promise<SelfCheckOutc
   const child = spawn(input.driverPath, input.args ?? driverArgs(platform), {
     env: input.env ?? selfCheckEnv(),
     stdio: ['pipe', 'pipe', 'pipe'],
+    windowsHide: true,
   })
   let stderr = ''
   child.stderr.on('data', (c: Buffer) => {

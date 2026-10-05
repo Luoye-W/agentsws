@@ -3,11 +3,14 @@ import { silentLogger } from '../src/logging.js'
 import { buildTrayMenu, type TrayModelInput } from '../src/menu.js'
 import {
   compareVersions,
+  createFeedChecker,
   createReleaseChecker,
   createUpdateGate,
+  DOWNLOAD_PAGE,
   isNewer,
   MAC_AUTOUPDATE_ENV,
   pickLatestBeta,
+  pickLatestRelease,
   RELEASES_PAGE,
   UPDATES_ENV,
   type UpdaterPort,
@@ -347,5 +350,107 @@ describe('托盘：只提示那一档', () => {
     expect(buildTrayMenu({ ...base, updateAvailable: '' }).map((i) => i.id)).not.toContain(
       'open-download-page',
     )
+  })
+
+  it('WP218 应用内更新三种样子：下载 / 下载中（灰） / 重启并更新', () => {
+    const find = (input: TrayModelInput) =>
+      buildTrayMenu(input).find((i) => i.id === 'download-update' || i.id === 'install-update')
+    expect(find(base)).toBeUndefined()
+    expect(find({ ...base, appUpdate: { state: 'available', version: '0.2.0' } })).toMatchObject({
+      id: 'download-update',
+      label: '下载新版本 0.2.0',
+      enabled: true,
+    })
+    expect(
+      find({ ...base, appUpdate: { state: 'downloading', version: '0.2.0', percent: 42 } }),
+    ).toMatchObject({ id: 'download-update', label: '正在下载新版本… 42%', enabled: false })
+    expect(
+      find({ ...base, language: 'en-US', appUpdate: { state: 'ready', version: '0.2.0' } }),
+    ).toMatchObject({ id: 'install-update', label: 'Restart to update to 0.2.0', enabled: true })
+  })
+})
+
+describe('WP218 pickLatestRelease（按渠道）', () => {
+  const body = [
+    { tag_name: 'v0.2.0-beta.1', html_url: 'https://x/b1' },
+    { tag_name: 'v0.2.0', html_url: 'https://x/s' },
+    { tag_name: 'v0.3.0-beta.1', html_url: 'https://x/b3' },
+    { tag_name: 'v0.3.0-rc.1' },
+  ]
+  it('stable 只认正式版', () => {
+    expect(pickLatestRelease(body, '0.1.0', 'stable')).toEqual({
+      version: '0.2.0',
+      url: 'https://x/s',
+    })
+  })
+  it('beta 认 beta 与正式版，取最新', () => {
+    expect(pickLatestRelease(body, '0.1.0', 'beta')).toMatchObject({ version: '0.3.0-beta.1' })
+    expect(pickLatestRelease(body, '0.3.0-beta.1', 'beta')).toBeUndefined()
+  })
+})
+
+describe('WP218 createFeedChecker（notify 档）', () => {
+  const generic = {
+    provider: 'generic' as const,
+    url: 'https://dl.agentsws.com/beta',
+    channel: 'beta' as const,
+  }
+
+  it('自有下载站：读渠道目录里的 latest-mac.yml，新版本就送去官网下载页', async () => {
+    const fetchImpl = fakeFetch(() => response(200, 'version: 0.2.0-beta.2\nfiles: []\n'))
+    const c = createFeedChecker({
+      fetchImpl,
+      currentVersion: '0.2.0-beta.1',
+      feed: generic,
+      platform: 'darwin',
+    })
+    expect(await c.check()).toEqual({ version: '0.2.0-beta.2', url: DOWNLOAD_PAGE })
+    expect(fetchImpl.calls).toEqual(['https://dl.agentsws.com/beta/latest-mac.yml'])
+    await expect(c.download(() => undefined)).rejects.toThrow(/不做应用内下载/)
+    expect(c.install()).toBeUndefined()
+  })
+
+  it('一样新 / 读不出版本：没有新版', async () => {
+    for (const body of ['version: 0.2.0-beta.1\n', 'garbage']) {
+      const c = createFeedChecker({
+        fetchImpl: fakeFetch(() => response(200, body)),
+        currentVersion: '0.2.0-beta.1',
+        feed: generic,
+        platform: 'linux',
+      })
+      expect(await c.check()).toBeUndefined()
+    }
+  })
+
+  it('HTTP 错误抛出去（由状态机决定退不退到 GitHub）；超时守卫一定收尾', async () => {
+    const done = vi.fn()
+    const c = createFeedChecker({
+      fetchImpl: fakeFetch(() => response(503, '')),
+      currentVersion: '0.2.0-beta.1',
+      feed: generic,
+      platform: 'darwin',
+      timeoutMs: 100,
+      abort: () => ({ signal: new AbortController().signal, done }),
+    })
+    await expect(c.check()).rejects.toThrow('HTTP 503')
+    expect(done).toHaveBeenCalledOnce()
+  })
+
+  it('GitHub 源：走 releases 列表、按渠道挑', async () => {
+    const fetchImpl = fakeFetch(() =>
+      response(200, JSON.stringify([{ tag_name: 'v0.2.0', html_url: 'https://x/s' }])),
+    )
+    const c = createFeedChecker({
+      fetchImpl,
+      currentVersion: '0.1.0',
+      feed: { provider: 'github', owner: 'Luoye-W', repo: 'agentsws', channel: 'stable' },
+      platform: 'darwin',
+      timeoutMs: 100,
+      abort: () => ({ signal: new AbortController().signal, done: () => undefined }),
+    })
+    expect(await c.check()).toEqual({ version: '0.2.0', url: 'https://x/s' })
+    expect(fetchImpl.calls[0]).toBe('https://api.github.com/repos/Luoye-W/agentsws/releases')
+    await expect(c.download(() => undefined)).rejects.toThrow()
+    expect(c.install()).toBeUndefined()
   })
 })

@@ -15,7 +15,12 @@ import { createApiClient } from '../src/api-client.js'
 import type { HealthSnapshot } from '../src/health.js'
 import { strings } from '../src/i18n.js'
 import { buildTrayMenu, sceneSubmenu, type TrayModelInput } from '../src/menu.js'
-import { bundledProfileDir, desktopPaths, thirdPartyLicensesFile } from '../src/paths.js'
+import {
+  bundledProfileDir,
+  desktopPaths,
+  thirdPartyLicensesFile,
+  workstationDir,
+} from '../src/paths.js'
 import type { ApiFetchLike, ApiResponseLike } from '../src/ports.js'
 import { serverSpawnRequest } from '../src/server-process.js'
 
@@ -228,5 +233,12 @@ describe('WP148：安装包里的第三方许可证说明在哪', () => {
       '/Applications/agentsws.app/Contents/Resources/profiles/agentsws',
     )
     expect(bundledProfileDir(undefined)).toBeUndefined()
+    // WP218：工作台产物——安装包里在 <resources>/workstation，开发期用仓库那份；没有 index.html 就不托管
+    const has = (p: string): boolean => p.endsWith('index.html') && !p.includes('missing')
+    expect(workstationDir('/R', '/repo/apps/workstation/dist', has)).toBe('/R/workstation')
+    expect(workstationDir(undefined, '/repo/apps/workstation/dist', has)).toBe(
+      '/repo/apps/workstation/dist',
+    )
+    expect(workstationDir(undefined, '/missing/dist', has)).toBeUndefined()
   })
 })
