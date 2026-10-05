@@ -103,7 +103,11 @@ describe('WP220 浏览器只读的限速', () => {
       method: 'PUT',
       body: JSON.stringify({
         capability_sources: {},
-        reddit_browser_read: { min_interval_seconds: 2, max_pages_per_hour: 60, max_pages_per_day: 5000 },
+        reddit_browser_read: {
+          min_interval_seconds: 2,
+          max_pages_per_hour: 60,
+          max_pages_per_day: 5000,
+        },
       }),
     })
     expect(res.status).toBe(200)
