@@ -132,6 +132,23 @@ describe('persona 段进 dsh 的系统提示（69 §3）', () => {
     expect(renderPrompt(assembly)).not.toContain('DeepSeek Harness')
   })
 
+  it('WP226：回复语言那一句跟在职责后面、也在这唯一一段里', async () => {
+    /*
+     * 文字与 `@agentsws/roles` 的 `replyLanguageSection('zh')` 同形（这个包不依赖职责包，
+     * 所以照抄一份形状；那一句的原文由 `packages/roles/test/persona.test.ts` 钉着、
+     * 服务端真装配由 `apps/server/test/reply-words.test.ts` 钉着）。
+     */
+    const REPLY = {
+      id: 'reply_language',
+      name: '回复语言',
+      order: 22,
+      text: '对外的回复用对方来信的语言写；对内的东西用中文。',
+    }
+    const text = await systemText([POSITION, ROLE, REPLY])
+    expect(text.indexOf('## reply_language')).toBeGreaterThan(text.indexOf('## role'))
+    expect(text).toContain('对方来信的语言')
+  })
+
   it('反查不出岗位时整段不出，职责那一段照旧在（54 §3「不猜一个」）', async () => {
     const text = await systemText([ROLE])
     expect(text).not.toContain('## position')
