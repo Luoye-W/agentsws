@@ -352,6 +352,35 @@ describe('WP215 每个品牌的后台都在跑，与眼前品牌无关', () => {
     expect(saved.max_concurrent).toBe(3)
   })
 
+  it('学习回路不串品牌：B 里批的口径卡写进 B 的知识库，A 一条都看不到', async () => {
+    const { server } = await boot()
+    const a = bootstrapWho(server)
+    const b = await addBrand(server, '变形金刚耳机独立站')
+    const gap = await call<{ id: string }>(server, b, 'POST', '/v1/knowledge/gaps', {
+      question: '耳机保修几个月？',
+      subject: { type: 'policy', key: 'tws_warranty' },
+    })
+    expect(gap.status).toBe(201)
+    const answered = await call<{ approval_item_id: string }>(
+      server,
+      b,
+      'POST',
+      `/v1/knowledge/gaps/${gap.data?.id}/answer`,
+      { answer: '整机保修 12 个月。', layer: 'policy' },
+    )
+    const cardId = answered.data?.approval_item_id as string
+    const card = await server.txn.approvals.get(cardId)
+    expect(card?.workspace_id).toBe(b.workspace_id)
+    const decided = await call(server, b, 'POST', `/v1/approvals/${cardId}/decide`, {
+      action: 'approve',
+    })
+    expect(decided.status, JSON.stringify(decided)).toBe(200)
+    const healthB = await call<{ total: number }>(server, b, 'GET', '/v1/knowledge/health')
+    const healthA = await call<{ total: number }>(server, a, 'GET', '/v1/knowledge/health')
+    expect(healthB.data?.total).toBe(1)
+    expect(healthA.data?.total).toBe(0)
+  })
+
   it('不是这个品牌负责人的人停不了它；不认识的工作区回 404', async () => {
     const { server } = await boot()
     const a = bootstrapWho(server)
