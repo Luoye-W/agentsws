@@ -13,10 +13,16 @@ This product includes software developed by third parties under their own licens
    license text in packages/skills/bundled/THIRD-PARTY-NOTICES)
 - Portions adapted from every-app/open-seo (MIT, Copyright (c) 2026 Ben Senescu) - https://github.com/every-app/open-seo
   (SEO judgment rules in packages/skills/bundled/seo-judgment/SKILL.md)
+- Portions adapted from mvanhorn/last30days-skill (MIT, Copyright (c) 2026 Matt Van Horn) - https://github.com/mvanhorn/last30days-skill
+  (research method rewritten into packages/skills/bundled/trend-research/SKILL.md and packages/social-core/src/research/trend.ts)
+- Portions adapted from ScrapeCreators/social-media-research-skills (MIT, Copyright (c) 2026 ScrapeCreators) -
+  https://github.com/ScrapeCreators/social-media-research-skills
+  (research workflows rewritten into packages/skills/bundled/social-research/SKILL.md and packages/social-core/src/research/outliers.ts)
+- Portions adapted from msitarzewski/agency-agents (MIT, Copyright (c) 2025 AgentLand Contributors) - https://github.com/msitarzewski/agency-agents
+  (crisis statement format in packages/skills/bundled/trend-research/SKILL.md; unit economics and weekly one-pager
+   rewritten into packages/skills/bundled/{unit-economics,weekly-review}/SKILL.md; pinned at commit 83294689;
+   license text in packages/skills/bundled/THIRD-PARTY-NOTICES)
 - Portions adapted from open-dingtalk/dingtalk-stream-sdk-nodejs (MIT, Copyright (c) 2023 DingTalk Open Platform team) -
   https://github.com/open-dingtalk/dingtalk-stream-sdk-nodejs (Stream-mode protocol in packages/channels/src/dingtalk-bot)
-- Portions adapted from msitarzewski/agency-agents (MIT, Copyright (c) 2025 AgentLand Contributors) - https://github.com/msitarzewski/agency-agents
-  (rewritten into packages/skills/bundled/{unit-economics,weekly-review}/SKILL.md at commit 83294689;
-   license text in packages/skills/bundled/THIRD-PARTY-NOTICES)
 - @larksuiteoapi/node-sdk (MIT) - https://github.com/larksuite/node-sdk (Feishu/Lark long connection, loaded on demand)
 See each package's LICENSE for details.

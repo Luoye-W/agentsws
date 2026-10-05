@@ -3,7 +3,7 @@
  *
  * 钉四件事：
  * - 字段可选，不写 = 没有网页工具（老 yml 一个字不改）；拼错名字在加载时就拒；
- * - 派工单点名的那十四条职责挂了、客服类一条都没挂；
+ * - 派工单点名的那十四条职责挂了（WP220 又加了公关四条、社媒内容渠道八条）、客服类一条都没挂；
  * - 每条运行的上限从 `thresholds.web_*_per_run` 读，不写 / 写歪退回缺省 5 / 10；
  * - `effectiveConfig` 把它带出来（没挂的职责没有 `web` 这一格）。
  */
@@ -51,6 +51,19 @@ const WITH_WEB = [
   'kol.tiktok',
   'kol.x',
   'kol.youtube',
+  // WP220：两份研究技能要上网查（公关四条、社媒内容渠道八条）
+  'pr.forums',
+  'pr.monitoring',
+  'pr.press',
+  'pr.reddit',
+  'social.facebook',
+  'social.instagram',
+  'social.linkedin',
+  'social.reddit',
+  'social.threads',
+  'social.tiktok',
+  'social.x',
+  'social.youtube',
 ]
 
 /** 客服类：不让客服回复夹网页内容。 */
@@ -72,13 +85,13 @@ describe('WP179 web_tools 的 schema', () => {
 })
 
 describe('WP179 哪些职责挂了网页工具', () => {
-  it('派工单点名的十四条都挂了两样', () => {
+  it('名单上的职责都挂了两样', () => {
     for (const id of WITH_WEB) {
       expect(loadBundledRole(id).web_tools, id).toEqual(['web_search', 'web_fetch'])
     }
   })
 
-  it('除这十四条以外一条都没挂——客服类尤其不挂', () => {
+  it('名单以外一条都没挂——客服类尤其不挂', () => {
     const others = bundledRoleIds().filter((id) => !WITH_WEB.includes(id))
     for (const id of [...others, ...SUPPORT_ROLES]) {
       expect(loadBundledRole(id).web_tools ?? [], id).toEqual([])

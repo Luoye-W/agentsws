@@ -12345,24 +12345,57 @@
                       "type": "object",
                       "properties": {
                         "order": {
-                          "maxItems": 4,
+                          "maxItems": 5,
                           "type": "array",
                           "items": {
                             "type": "string",
-                            "enum": ["official_key", "byo_source", "workshop", "deepseek_native"]
+                            "enum": [
+                              "official_key",
+                              "byo_source",
+                              "workshop",
+                              "deepseek_native",
+                              "browser_readonly"
+                            ]
                           }
                         },
                         "disabled": {
-                          "maxItems": 4,
+                          "maxItems": 5,
                           "type": "array",
                           "items": {
                             "type": "string",
-                            "enum": ["official_key", "byo_source", "workshop", "deepseek_native"]
+                            "enum": [
+                              "official_key",
+                              "byo_source",
+                              "workshop",
+                              "deepseek_native",
+                              "browser_readonly"
+                            ]
                           }
                         }
                       },
                       "required": ["order", "disabled"]
                     }
+                  },
+                  "reddit_browser_read": {
+                    "type": "object",
+                    "properties": {
+                      "min_interval_seconds": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 3600
+                      },
+                      "max_pages_per_hour": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 10000
+                      },
+                      "max_pages_per_day": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 100000
+                      }
+                    },
+                    "required": ["min_interval_seconds", "max_pages_per_hour", "max_pages_per_day"]
                   }
                 },
                 "required": ["capability_sources"]

@@ -97,6 +97,8 @@ automation:
 
 skills:
   - { name: brand-voice, tier: open, load: always }
+  # WP220：社媒研究（爆款帖、评论、竞品拆解；改编自 social-media-research-skills，取数只走许可的口）
+  - { name: social-research, tier: open, load: on_demand }
 
 home_blocks:
   - {
@@ -234,6 +236,15 @@ task_examples:
     title: { zh: "没过审计时发出去看得见吗", en: "Before the audit" }
     description: "发布接口批了，但应用还没过 TikTok 的审计。"
     expected_output: "说清楚：没过审计时经接口发出去的只有自己看得见；在此之前建议把视频放进草稿箱、你在 App 里点发布。"
+  - id: rival_outliers
+    title: { zh: "拆一下竞品这个月的爆款", en: "Break down a rival's top posts" }
+    description: "老板说：「拆一下竞品这个月的爆款帖。」"
+    expected_output: "一张表：每条帖子的播放、跟它自己中位数比的倍数（大爆 / 明显 / 小爆）、为什么火；样本不到 10 条就写置信低；最后几条我们能拍的想法。照着写的草稿另出卡等你批。"
+
+# WP179（Luoye 09-29「官方功能优先」）：官方网页搜索（用 DeepSeek 账号 / key 搜）与抓公开网页。
+# WP220：研究技能要上网查新闻、帖子、话题；reddit.com / x.com 的公开页面也能抓（Luoye 10-05，不用品牌账号）。
+# 每条运行上限走 thresholds.web_search_per_run / web_fetch_per_run（不写 = 5 / 10）。
+web_tools: [web_search, web_fetch]
 
 # ── WP120（69 §2）：**角色定位**。提示里的「你是谁」，六段骨架一段不许少 ──────────
 # 第三段「你不负责」是防串岗的那一条。改这一段之前先读 docs/69；

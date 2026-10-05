@@ -16687,9 +16687,26 @@ export interface operations {
           }
           data_source_routing?: {
             [key: string]: {
-              order: ('official_key' | 'byo_source' | 'workshop' | 'deepseek_native')[]
-              disabled: ('official_key' | 'byo_source' | 'workshop' | 'deepseek_native')[]
+              order: (
+                | 'official_key'
+                | 'byo_source'
+                | 'workshop'
+                | 'deepseek_native'
+                | 'browser_readonly'
+              )[]
+              disabled: (
+                | 'official_key'
+                | 'byo_source'
+                | 'workshop'
+                | 'deepseek_native'
+                | 'browser_readonly'
+              )[]
             }
+          }
+          reddit_browser_read?: {
+            min_interval_seconds: number
+            max_pages_per_hour: number
+            max_pages_per_day: number
           }
         }
       }

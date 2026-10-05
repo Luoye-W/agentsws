@@ -40,6 +40,11 @@ const OWN = [
  * 取代 WP29 起服务端那份三段的默认正文；版本 1.1.0（高于旧的 1.0，已有工作区的包层会被换掉）。
  */
 const PORTED = ['customer-care']
+/**
+ * WP220：两份研究技能，改编自 last30days-skill 与 social-media-research-skills（MIT），格式另在
+ * `research-skills.test.ts` 查（出处不是 marketingskills）。
+ */
+const RESEARCH = ['social-research', 'trend-research']
 /** WP216：平台官方技能，原样收录（文件一个字节不改，旁注另放）。 */
 const OFFICIAL = ['shopify']
 const PORTED_FROM = join(
@@ -58,7 +63,9 @@ const OPEN_SEO = '部分判断规矩改编自 every-app/open-seo（MIT）'
 
 describe('自带技能：格式（24 §1 Agent Skills）', () => {
   it('WP160 的五个 + WP162 的六个 + WP170 的 B2B 六个都在，目录名即技能名', () => {
-    expect(names).toEqual([...THIRD_PARTY, ...AGENCY, ...OWN, ...PORTED, ...OFFICIAL].sort())
+    expect(names).toEqual(
+      [...THIRD_PARTY, ...AGENCY, ...OWN, ...PORTED, ...RESEARCH, ...OFFICIAL].sort(),
+    )
   })
 
   // WP224：agency-agents 改写来的两个——同一套格式检查，出处那一行换成它的
@@ -245,7 +252,7 @@ describe('自带技能：守卫（WP160 改写规矩第一条）', () => {
 })
 
 describe('自带技能：考题（改写自上游 evals；WP162 自己写的那几个照同一格式出题）', () => {
-  for (const name of [...THIRD_PARTY, ...AGENCY, ...OWN]) {
+  for (const name of [...THIRD_PARTY, ...AGENCY, ...OWN, ...RESEARCH]) {
     it(`${name}：至少 3 条，覆盖出卡 / 数字不编 / 合规，每条的规矩都在正文里`, () => {
       const { markdown, evals } = readBundledSkill(name)
       expect(evals.length).toBeGreaterThanOrEqual(3)
@@ -266,14 +273,19 @@ describe('自带技能：考题（改写自上游 evals；WP162 自己写的那�
     expect(readBundledSkill('seo-judgment').markdown).toContain(OPEN_SEO)
   })
 
-  it('四家 MIT 许可证全文随技能一起放着（WP216 加上 Shopify、WP224 加 agency-agents）', () => {
+  it('每家 MIT 许可证全文随技能一起放着（WP160 两家 + WP216 Shopify + WP220 三家；agency-agents 是 WP220 与 WP224 共用的一份）', () => {
     const notices = readFileSync(join(BUNDLED_SKILLS_DIR, 'THIRD-PARTY-NOTICES'), 'utf8')
     expect(notices).toContain('Copyright (c) 2025 Corey Haines')
     expect(notices).toContain('Copyright (c) 2026 Ben Senescu')
     expect(notices).toContain('Copyright 2025-present, Shopify Inc.')
+    expect(notices).toContain('Copyright (c) 2026 Matt Van Horn')
+    expect(notices).toContain('Copyright (c) 2026 ScrapeCreators')
     expect(notices).toContain('Copyright (c) 2025 AgentLand Contributors')
     expect(notices).toContain('83294689da3832c0a9f223221148c411fd3eacc0')
-    expect(notices.match(/Permission is hereby granted/g)?.length).toBe(4)
+    // agency-agents 只登记一份（一段许可证全文，Used in 里列 trend-research / unit-economics / weekly-review）
+    expect(notices.match(/AgentLand Contributors/g)?.length).toBe(1)
+    expect(notices).toMatch(/Used in: trend-research[^\n]*\n\s+unit-economics, weekly-review/)
+    expect(notices.match(/Permission is hereby granted/g)?.length).toBe(6)
   })
 
   it('读不存在的技能报 not_found，非法名报 invalid_input', () => {
