@@ -1862,6 +1862,21 @@ export const deleteKolCloud = (assignment?: string): Promise<KolCloudDeleteView>
 export const getCapabilitySources = (assignment?: string): Promise<CapabilitySourceSettings> =>
   api('/v1/settings/capability-sources', withAssignment(assignment))
 
+/** WP228：Reddit「浏览器只读」那一路（本机只读浏览器）现在能不能用。 */
+export interface ReadonlyBrowserStatus {
+  state: 'ready' | 'no_browser' | 'quota_used_up' | 'blocked'
+  message?: string
+  until?: string
+  pages_last_day: number
+  max_pages_per_day: number
+  browser?: string
+  /** WP228：托管实例——「浏览器只读」那一行整行不显示。 */
+  hosted?: boolean
+}
+
+export const getRedditBrowserReadStatus = (assignment?: string): Promise<ReadonlyBrowserStatus> =>
+  api('/v1/settings/reddit-browser-read/status', withAssignment(assignment))
+
 /** 整张表一次给全——两个标签页各改一项就不会互相覆盖。路由表（WP126）一并对齐。 */
 export const setCapabilitySources = (
   capability_sources: Record<string, CapabilitySource>,

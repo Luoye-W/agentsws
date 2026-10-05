@@ -94,6 +94,7 @@ import {
   KOL_CHANNEL_IDS,
   KOL_FOLDER,
   PR_ROLE_IDS,
+  REDDIT_READ_HOSTS,
   SOCIAL_ROLE_IDS,
   skillOnPlatform,
   socialChannelSpec,
@@ -397,6 +398,8 @@ import { createPositions, type PositionsAssembly } from './positions.js'
 import { createPrStore, prDeckData, seedDemoPr } from './pr.js'
 import { createPrService } from './pr-service.js'
 import { createPricingCatalog, type PricingCatalogSource } from './pricing-catalog.js'
+import { createReadonlyBrowser, type ReadonlyBrowserOptions } from './readonly-browser/index.js'
+import { redditReadBrowserOf, redditReadLimiterOf } from './readonly-browser/reddit.js'
 import {
   createReconcileGuard,
   type ReconcileGuard,
@@ -836,6 +839,15 @@ export interface ServerOptions {
    * 两边各自只用到 Response 的一小面（`text()` / `json()`），所以这里收一个交集。
    */
   cloudFetch?: CloudFetch & CloudEntryFetch
+  /**
+   * WP228：本机只读浏览器（Reddit「浏览器只读」那一路）。**给了才装**：生产入口（`index.ts`）给 `{}`，
+   * 每个品牌各一份、要用时才起无头浏览器；测试塞替身会话 / 假的「文件在不在」。
+   * 不给（或 `false`）= 不装，这一路照实「没配」——测试、模拟、演示里 stub 运行时命中 Reddit 的
+   * grounding 也不会去起真浏览器、开真 reddit.com。
+   */
+  readonlyBrowser?:
+    | Partial<Pick<ReadonlyBrowserOptions, 'launch' | 'exists' | 'platform' | 'env' | 'nowMs'>>
+    | false
   /**
    * WP68（48 §5.4）：五条渠道适配器打出去用的 fetch。
    *
@@ -3053,7 +3065,39 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     // WP215：这个品牌的急停视图——品牌急停只停这个品牌的模型调用与对外发送，全局急停照旧压过一切
     const brandHalt = background.haltOf(ws)
     const ownGateway = makeGateway(brandHalt)
+    /*
+     * WP228：本机只读浏览器（每品牌一份：用户数据目录、限速账本在 `<品牌目录>/readonly-browser/`）。
+     * 只开 Reddit 的页面、只读、限速从这个品牌的设置来；要用时才起无头浏览器，闲了自己关。
+     */
+    const rbOptions = options.readonlyBrowser
+    // WP228（Luoye 10-05）：托管实例（云上那份）不装——没有浏览器，这一路停用、连接页那一行不显示
+    const hostedInstance = hostedBoot !== undefined
+    const readonlyBrowser =
+      rbOptions === undefined || rbOptions === false || hostedInstance
+        ? undefined
+        : createReadonlyBrowser({
+            ...(dir === undefined ? {} : { dir: join(dir, 'readonly-browser') }),
+            allowedHosts: () => REDDIT_READ_HOSTS,
+            limits: () => ownCloud.redditBrowserReadLimits(),
+            nowMs: () => Date.parse(clock.now()),
+            executable: () => browserSettings.get().executable_path,
+            ...(rbOptions ?? {}),
+          })
     const ownCloud = createCloud({
+      ...(readonlyBrowser !== undefined
+        ? { readonlyBrowserStatus: () => readonlyBrowser.status() }
+        : hostedInstance
+          ? {
+              hosted: true,
+              readonlyBrowserStatus: () => ({
+                state: 'no_browser' as const,
+                hosted: true,
+                message: '云上托管实例没有浏览器，Reddit 只走接口中台。',
+                pages_last_day: 0,
+                max_pages_per_day: ownCloud.redditBrowserReadLimits().max_pages_per_day,
+              }),
+            }
+          : {}),
       clock,
       secrets: brandSecrets,
       env,
@@ -3202,14 +3246,21 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
             }),
             /*
              * WP220（Luoye 10-05）：只读 Reddit。两路：接口中台（这个品牌的数据能力口）→ 浏览器只读。
-             * 顺序、停用、限速每次取数现读这个品牌的设置。浏览器只读要一个单独的只读会话的执行器，
-             * 这个进程还没有——那一路照实是「没配」，不拿 Agent 的浏览器（可能登着品牌号）凑。
+             * 顺序、停用、限速每次取数现读这个品牌的设置。浏览器只读那一路 WP228 接上本机只读浏览器
+             * （单独的只读会话）；没装（测试 / 模拟 / 演示）就照实「没配」，不拿 Agent 的浏览器凑。
              */
             researchTools: createResearchToolExecutor({
               route: () => ownCloud.redditReadRoute(),
               limits: () => ownCloud.redditBrowserReadLimits(),
               callData: (capability, input) =>
                 createDataService(ownCloud).call(capability, { input }),
+              // WP228：浏览器只读那一路接上本机只读浏览器（单独的只读会话）；限速与它同一本账
+              ...(readonlyBrowser === undefined
+                ? {}
+                : {
+                    browser: () => redditReadBrowserOf(readonlyBrowser),
+                    limiter: redditReadLimiterOf(readonlyBrowser),
+                  }),
               nowMs: () => Date.parse(clock.now()),
             }),
             /*
@@ -4545,6 +4596,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       ownModels,
       ownGateway,
       ownCloud,
+      ...(readonlyBrowser === undefined ? {} : { readonlyBrowser }),
       async dispose() {
         await chat.close()
         messages.close()
@@ -4555,6 +4607,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         b2b.close()
         // 云端红人库的同步账本也握着一个句柄（WP118）：跟着这个品牌一起关
         ownCloud.kolSync?.close()
+        // WP228：只读浏览器开着就关掉（按进程树结束，不留孤儿）
+        await readonlyBrowser?.close()
         rosterSync.close()
         if (rosterSyncs.get(ws) === rosterSync) rosterSyncs.delete(ws)
         site.close()

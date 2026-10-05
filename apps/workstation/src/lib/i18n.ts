@@ -2325,6 +2325,14 @@ const zh: Table = {
   'data.route.workshop': '工坊官方数据接口（积分）',
   'data.route.browser_readonly': '浏览器只读（不扣积分，限速）',
   'data.route.reddit_note': '只用来读。发帖、回帖永远用品牌号、你批了才发。',
+  // WP228：本机只读浏览器那一格（状态图标 + 少字，原话进问号）
+  'data.route.ro.ready': '可用',
+  'data.route.ro.no_browser': '没找到浏览器',
+  'data.route.ro.quota_used_up': '今天额度用完',
+  'data.route.ro.blocked': '被拦了',
+  'data.route.ro.until': '（停到 {time}）',
+  'data.route.ro.ready_hint':
+    '用这台电脑上的 {browser}，无头、只读、不登录。最近 24 小时开了 {used} / {max} 页。',
   'data.route.up': '上移',
   'data.route.down': '下移',
   'data.route.disable': '停用',
@@ -6044,6 +6052,13 @@ const en: Table = {
   'data.route.browser_readonly': 'Read-only browser (no credits, rate-limited)',
   'data.route.reddit_note':
     'Reading only. Posts and replies always go out from the brand account after you approve.',
+  'data.route.ro.ready': 'Ready',
+  'data.route.ro.no_browser': 'No browser found',
+  'data.route.ro.quota_used_up': 'Daily limit reached',
+  'data.route.ro.blocked': 'Blocked',
+  'data.route.ro.until': ' (paused until {time})',
+  'data.route.ro.ready_hint':
+    'Uses {browser} on this computer: headless, read-only, never signed in. {used} / {max} pages in the last 24 hours.',
   'data.route.up': 'Move up',
   'data.route.down': 'Move down',
   'data.route.disable': 'Disable',

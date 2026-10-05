@@ -75,6 +75,32 @@ export interface RedditBrowserReadLimits {
   max_pages_per_day: number
 }
 
+/**
+ * WP228：本机只读浏览器（Reddit「浏览器只读」那一路）现在能不能用——连接页 Reddit 卡上那一格。
+ *
+ * - `ready`：找到了 Chrome / Edge，额度够，没被拦；
+ * - `no_browser`：这台电脑上没找到 Chrome / Edge（不替你下载）；
+ * - `quota_used_up`：最近 24 小时的页数用完了（设置里的上限）；
+ * - `blocked`：站点拦了（登录墙 / 验证码 / 429），暂停到 `until`。
+ */
+export interface ReadonlyBrowserStatus {
+  state: 'ready' | 'no_browser' | 'quota_used_up' | 'blocked'
+  /** 一句人话（进提示）。 */
+  message?: string
+  /** 被拦暂停到几点。 */
+  until?: Iso8601
+  /** 最近 24 小时开了几页 / 上限。 */
+  pages_last_day: number
+  max_pages_per_day: number
+  /** 找到的浏览器（`Chrome` / `Edge` / `Chromium`）。 */
+  browser?: string
+  /**
+   * WP228（Luoye 10-05）：托管实例（云上那份）——没有浏览器，这一路默认停用、取数只走接口中台，
+   * 连接页 Reddit 卡上「浏览器只读」那一行整行不显示。
+   */
+  hosted?: boolean
+}
+
 /* ------------------------------------------------------------------ */
 /* M4 价目表（数据不是代码）                                            */
 /* ------------------------------------------------------------------ */

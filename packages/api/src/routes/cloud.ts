@@ -29,6 +29,7 @@ import type {
   LocalPricing,
   LocalTopupTiers,
   MaybePromise,
+  ReadonlyBrowserStatus,
   RedditBrowserReadLimits,
   ServiceSubscription,
   TopupOrder,
@@ -138,6 +139,11 @@ export interface CloudPort {
   /** WP194：最近的改额度记录（谁、从多少改到多少）。只有 owner / admin。 */
   allocationAudit?(actor: CloudActor): MaybePromise<AllocationAuditList>
   capabilitySources(actor: CloudActor): MaybePromise<CapabilitySourceSettings>
+  /**
+   * WP228：本机只读浏览器（Reddit「浏览器只读」那一路）现在能不能用：可用 / 没找到浏览器 /
+   * 额度用完 / 被拦了。连接页 Reddit 卡上那一格读它。
+   */
+  readonlyBrowserStatus?(actor: CloudActor): MaybePromise<ReadonlyBrowserStatus>
   setCapabilitySources(
     actor: CloudActor,
     input: {
@@ -546,6 +552,26 @@ export function cloudRoutes(): Route[] {
         returns: 'CapabilitySourceSettings',
       },
       async (c, deps) => ok(c, await portOf(deps).capabilitySources(actorOf(c))),
+    ),
+    route(
+      {
+        method: 'get',
+        path: '/v1/settings/reddit-browser-read/status',
+        operationId: 'getRedditBrowserReadStatus',
+        summary:
+          'Reddit「浏览器只读」那一路现在能不能用：可用 / 没找到 Chrome、Edge / 额度用完 / 被拦了（WP228）',
+        tag: TAG,
+        auth: 'bearer',
+        assignment: true,
+        authz: READ,
+        returns: 'ReadonlyBrowserStatus',
+      },
+      async (c, deps) => {
+        const port = portOf(deps)
+        if (port.readonlyBrowserStatus === undefined)
+          throw new ApiError('not_implemented', '这个服务进程没有装本机只读浏览器')
+        return ok(c, await port.readonlyBrowserStatus(actorOf(c)))
+      },
     ),
     route(
       {
