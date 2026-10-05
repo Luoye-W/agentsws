@@ -707,6 +707,27 @@ describe('公司页：成员与邀请', () => {
     expect(invited[0]).toEqual({ email: 'chen@nordvolt.example' })
   })
 
+  it('WP233：本机占位邮箱不露出来，那一行说「你（本机）」', async () => {
+    const owner = MEMBERS[0] as OrgMemberView
+    const real = owner.email
+    owner.email = 'owner@localhost'
+    try {
+      const user = userEvent.setup()
+      renderWithProviders(<OrgPage />)
+      await user.click(await screen.findByRole('tab', { name: '成员' }))
+      const rows = await screen.findAllByTestId('member-row')
+      expect(within(rows[0] as HTMLElement).getByTestId('member-email').textContent).toBe(
+        '你（本机）',
+      )
+      expect(within(rows[1] as HTMLElement).getByTestId('member-email').textContent).toBe(
+        'li@nordvolt.example',
+      )
+      expect(document.body.textContent).not.toContain('owner@localhost')
+    } finally {
+      owner.email = real
+    }
+  })
+
   it('空范围的分配标出「没给范围，现在什么都查不到」（31 §3.1 c / 39 待办 M）', async () => {
     const user = userEvent.setup()
     renderWithProviders(<OrgPage />)

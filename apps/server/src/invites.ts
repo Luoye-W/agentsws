@@ -40,6 +40,7 @@ import type {
   RoleId,
   WorkspaceId,
 } from '@agentsws/contracts'
+import { isPlaceholderOwnerEmail } from '@agentsws/contracts'
 import { sha256 } from '@agentsws/core'
 import type { RoleStore } from '@agentsws/roles'
 import type BetterSqlite3 from 'better-sqlite3'
@@ -314,6 +315,9 @@ export function createInvites(options: InvitesOptions): InvitesAssembly {
     }
     // 14：目标工作区的 owner 收一张 membership 卡。**不是通知，是审批项**——
     // 通过后有明确的施行（建成员 + 交给 Join），失败就回到 pending。
+    const who = isPlaceholderOwnerEmail(input.email)
+      ? input.name
+      : `${input.name}（${input.email}）`
     const item = await approvals.create({
       workspace_id,
       schema_version: 1,
@@ -322,10 +326,11 @@ export function createInvites(options: InvitesOptions): InvitesAssembly {
       subject: { object: { type: 'membership_request', id: row.id } },
       dedupe_key: `${workspace_id}:membership:${sha256(input.email.trim().toLowerCase()).slice(0, 16)}`,
       title: `${input.name} 想加入`,
+      // WP233：对方本机的占位邮箱（owner@localhost）不进卡面，只说名字
       summary:
         input.via === 'lan'
-          ? `${input.name}（${input.email}）在同一个局域网里，公司名算出来和你们一样。同意他就成为成员，之后走一遍合并向导。`
-          : `${input.name}（${input.email}）贴了你发的邀请码。同意他就成为成员，之后走一遍合并向导。`,
+          ? `${who}在同一个局域网里，公司名算出来和你们一样。同意他就成为成员，之后走一遍合并向导。`
+          : `${who}贴了你发的邀请码。同意他就成为成员，之后走一遍合并向导。`,
       payload: {
         request_id: row.id,
         person: { name: input.name, email: input.email },

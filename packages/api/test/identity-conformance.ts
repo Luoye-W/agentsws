@@ -103,6 +103,50 @@ export function runIdentityConformance(h: IdentityHarness): void {
       expect(svc.personByEmail('nobody@example.com')).toBeUndefined()
     })
 
+    // ── WP233 改邮箱
+    it('changePersonEmail：id 不变、local 身份跟着换；成员与登录照常', async () => {
+      const { svc, person, workspace } = await seed()
+      const changed = await svc.changePersonEmail(person.id, ' New@Corp.CN ')
+      expect(changed.id).toBe(person.id)
+      expect(changed.email).toBe('new@corp.cn')
+      expect(changed.identities[0]).toMatchObject({ provider: 'local', external_id: 'new@corp.cn' })
+      expect((await svc.getPerson(person.id))?.email).toBe('new@corp.cn')
+      expect(svc.personByEmail('new@corp.cn')?.id).toBe(person.id)
+      // 不留别名时旧地址就找不到了
+      expect(svc.personByEmail('owner@example.com')).toBeUndefined()
+      expect((await svc.members(workspace.id)).map((m) => m.person_id)).toContain(person.id)
+      const login = await svc.issueLogin('new@corp.cn')
+      expect((await svc.verifyLogin(login.token))?.person.id).toBe(person.id)
+    })
+
+    it('changePersonEmail：留别名时旧地址仍认得这个人（按旧地址建人 = 同一个，可登录）', async () => {
+      const { svc, person } = await seed()
+      await svc.changePersonEmail(person.id, 'new@corp.cn', { keep_old_as_alias: true })
+      expect(svc.personByEmail('OWNER@example.com')?.id).toBe(person.id)
+      const again = await svc.createPerson({ email: 'owner@example.com', name: 'x' })
+      expect(again.id).toBe(person.id)
+      expect(again.email).toBe('new@corp.cn')
+      const login = await svc.issueLogin('owner@example.com')
+      expect((await svc.verifyLogin(login.token))?.person.id).toBe(person.id)
+      // 改回同一个地址：什么都不变（可重复跑）
+      expect((await svc.changePersonEmail(person.id, 'new@corp.cn')).email).toBe('new@corp.cn')
+    })
+
+    it('changePersonEmail：别人的邮箱拒（conflict）、不合法拒、人不存在拒', async () => {
+      const { svc, person } = await seed()
+      await svc.createPerson({ email: 'b@example.com', name: 'B' })
+      await expect(svc.changePersonEmail(person.id, 'b@example.com')).rejects.toMatchObject({
+        code: 'conflict',
+      })
+      await expect(svc.changePersonEmail(person.id, 'nope')).rejects.toMatchObject({
+        code: 'invalid_input',
+      })
+      await expect(svc.changePersonEmail('per_missing', 'x@corp.cn')).rejects.toMatchObject({
+        code: 'not_found',
+      })
+      expect((await svc.getPerson(person.id))?.email).toBe('owner@example.com')
+    })
+
     // ── 工作区与成员
     it('createWorkspace：默认 tz / 币种 / 策略，owner 自动进成员表', async () => {
       const { svc, person, workspace } = await seed()
