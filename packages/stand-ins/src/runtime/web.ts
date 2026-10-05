@@ -14,7 +14,7 @@
  * （模拟里是替身、服务端带网页工具的运行本来就走 dsh）。理由见 `docs/briefs/reports/WP179.md`。
  */
 import type { RunRequest, ToolDef } from '@agentsws/contracts'
-import { WEB_FETCH_TOOL, WEB_SEARCH_TOOL } from '@agentsws/contracts'
+import { WEB_FETCH_TOOL, WEB_SEARCH_TOOL, webFetchPlatformOf } from '@agentsws/contracts'
 
 export { WEB_FETCH_TOOL, WEB_SEARCH_TOOL }
 
@@ -123,6 +123,13 @@ export class WebUsageCounter {
       }
       this.searches += n
       return undefined
+    }
+    // WP220：Reddit / X 的页面不走网页抓取（Reddit 有自己的两路取数，X 只认官方接口），不占次数
+    const platform = webFetchPlatformOf(webUrlOf(args))
+    if (platform !== undefined) {
+      return platform === 'reddit'
+        ? 'web_fetch_platform: Reddit 的页面不用网页抓取打开——走 Reddit 取数（接口中台，或浏览器只读）'
+        : 'web_fetch_platform: X 的页面不用网页抓取打开——用搜索结果里的摘要，或品牌连上的 X 官方接口'
     }
     if (this.fetches + 1 > web.max_fetches) {
       return `web_fetch_limit: 这次运行最多抓 ${web.max_fetches} 个网页（已经抓了 ${this.fetches} 个），先用手上的内容`
