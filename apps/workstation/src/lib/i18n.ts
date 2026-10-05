@@ -572,6 +572,10 @@ const zh: Table = {
   'rail.role.duties': '这个岗位下的职责（点一条看它自己的定位）',
   'rail.role.lang.zh': '中文',
   'rail.role.lang.en': '英文',
+  'rail.role.untranslated': '未翻译',
+  'rail.role.untranslated_tip':
+    '中文改过了，英文还没跟上，这里先显示中文。Agent 读的一直是中文那一份。',
+  'rail.role.edit_source': '改的是中文那一份（Agent 读的就是它）',
   'rail.panel.changes': '变更审阅',
   'rail.panel.browser': '浏览器',
   'rail.panel.files': '文件',
@@ -4129,6 +4133,10 @@ const en: Table = {
   'rail.role.duties': 'Duties under this position (open one to see its own persona)',
   'rail.role.lang.zh': 'Chinese',
   'rail.role.lang.en': 'English',
+  'rail.role.untranslated': 'Not translated yet',
+  'rail.role.untranslated_tip':
+    'The Chinese text changed and the English has not caught up, so the Chinese is shown for now. The agent always reads the Chinese.',
+  'rail.role.edit_source': 'You are editing the Chinese text — the one the agent reads.',
   'rail.panel.changes': 'Change review',
   'rail.panel.browser': 'Browser',
   'rail.loading': 'Loading this panel…',

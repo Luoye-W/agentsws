@@ -66,7 +66,10 @@ const SUBJECT_KIND = z.enum(['position', 'role'])
 const SetBody = z.object({
   kind: SUBJECT_KIND,
   id: z.string().min(1).max(200),
-  /** 中英各一份；只给一边时另一边回落包里的原文。 */
+  /**
+   * WP226（69 §4.1）：**公司只改中文**。`en` 留着是契约只加不删（老客户端）；
+   * 只给中文时英文那一格留空——中文没变照用包里的英文，变了就标「未翻译」。
+   */
   zh: z.string().max(1200).optional(),
   en: z.string().max(1200).optional(),
 })
