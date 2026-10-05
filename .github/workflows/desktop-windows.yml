@@ -1,0 +1,120 @@
+name: Desktop · Windows（打包 + 装起来真跑）
+
+# WP218：Windows 安装包在 windows-latest 上真打、真装、真跑一遍。**不发布、不上传到任何下载站**，
+# 产物只作为这次运行的 artifact（14 天后自动过期）。
+#
+#   取 win32-x64 的捆绑 Node 与原生模块 → tsc -b → 工作台 vite build → electron-builder（NSIS x64，
+#   afterPack 用捆绑 Node 冒烟 import 一遍）→ 静默安装到带中文和空格的目录 → Playwright 起装好的 exe
+#   → /v1/health 200 → 打开工作台首页（截图）→ 单实例 → 只听 127.0.0.1 → 退出不留孤儿进程 → 静默卸载
+#
+# 为什么不在 mac 上交叉打：原生模块与捆绑的 Node 都按平台取，交叉打出来的包我们验不了。
+# 里面没有任何密钥；不签名（CSC_IDENTITY_AUTO_DISCOVERY=false）。
+
+on:
+  pull_request:
+    paths:
+      - apps/desktop/**
+      - apps/server/**
+      - apps/workstation/**
+      - packages/dsh-adapter/**
+      - profiles/agentsws/**
+      - pnpm-lock.yaml
+      - .github/workflows/desktop-windows.yml
+  push:
+    branches: ['wp/**']
+    paths:
+      - apps/desktop/**
+      - apps/server/**
+      - apps/workstation/**
+      - packages/dsh-adapter/**
+      - profiles/agentsws/**
+      - pnpm-lock.yaml
+      - .github/workflows/desktop-windows.yml
+  workflow_dispatch:
+
+concurrency:
+  group: desktop-windows-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  npm_config_update_notifier: 'false'
+
+jobs:
+  nsis:
+    name: NSIS x64 · 打包 + 装起来真跑
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      # 与捆绑的 Node 同一个大版本（仓库里装出来的原生模块按它的 ABI 编）
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+
+      - name: install
+        run: pnpm install --frozen-lockfile
+
+      - name: 取捆绑的 Node 与原生模块（win32-x64，sha256 对 node-runtime.lock.json）
+        run: node apps/desktop/scripts/fetch-node.mjs --target win32-x64
+
+      - name: tsc -b
+        run: pnpm exec tsc -b
+
+      - name: 工作台构建（装进安装包的 <resources>/workstation）
+        run: pnpm --filter @agentsws/workstation build
+
+      # 版本号：CI 包标成 0.0.0-ci.<运行号>，和真发版的号不会撞
+      - name: electron-builder（NSIS x64，不上传）
+        shell: bash
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: |
+          node -e "
+            const fs = require('node:fs')
+            const p = 'apps/desktop/package.json'
+            const pkg = JSON.parse(fs.readFileSync(p, 'utf8'))
+            pkg.version = '0.0.0-ci.${{ github.run_number }}'
+            fs.writeFileSync(p, JSON.stringify(pkg, null, 2) + '\n')
+          "
+          cd apps/desktop && node scripts/dist.mjs --win --x64
+
+      - name: 装起来真跑（静默安装 → 启动 → health → 工作台首页 → 退出 → 卸载）
+        shell: bash
+        run: |
+          installer="$(ls apps/desktop/release/Agents-Workshop-Setup-*.exe | head -n 1)"
+          echo "安装包：$installer"
+          node apps/desktop/scripts/win-install-smoke.mjs --installer "$installer" --out win-smoke
+
+      - name: 上传安装包（只是这次运行的 artifact，不是发布）
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: agentsws-windows-x64
+          retention-days: 14
+          path: |
+            apps/desktop/release/Agents-Workshop-Setup-*.exe
+            apps/desktop/release/Agents-Workshop-Setup-*.exe.blockmap
+            apps/desktop/release/latest.yml
+
+      - name: 上传冒烟日志与截图
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: win-smoke
+          retention-days: 14
+          if-no-files-found: ignore
+          path: |
+            win-smoke/
+            apps/desktop/release/builder-debug.yml
+
+      - name: 失败时留下 release 目录的清单
+        if: failure()
+        shell: bash
+        run: ls -laR apps/desktop/release || true

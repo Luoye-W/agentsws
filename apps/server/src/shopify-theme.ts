@@ -239,7 +239,13 @@ function defaultRun(): RunCli {
       execFile(
         'shopify',
         [...args],
-        { cwd: opts.cwd, env: opts.env, timeout: opts.timeoutMs, maxBuffer: 16 * 1024 * 1024 },
+        {
+          cwd: opts.cwd,
+          env: opts.env,
+          timeout: opts.timeoutMs,
+          maxBuffer: 16 * 1024 * 1024,
+          windowsHide: true,
+        },
         (err, stdout, stderr) => {
           if (err === null) {
             resolve({ code: 0, stdout, stderr })
@@ -267,7 +273,11 @@ function defaultRun(): RunCli {
 
 function defaultSpawn(): SpawnCli {
   return (args, opts) => {
-    const child = spawn('shopify', [...args], { cwd: opts.cwd, env: opts.env })
+    const child = spawn('shopify', [...args], {
+      cwd: opts.cwd,
+      env: opts.env,
+      windowsHide: true,
+    })
     const listeners: ((line: string) => void)[] = []
     let buffer = ''
     const feed = (chunk: Buffer): void => {

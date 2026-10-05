@@ -10,11 +10,13 @@ import Hint from '../components/Hint.astro'
 import Icon from '../components/Icon.astro'
 import Mark from '../components/Mark.astro'
 import { ARCHITECTURE_URL, GITHUB_URL } from '../config.js'
+import { buildDownloads } from '../data/downloads-build.js'
 import { type Lang, localePath } from '../i18n/common.js'
 import { HOME } from '../i18n/home.js'
 import { ROLES } from '../i18n/roles.js'
 import Base from '../layouts/Base.astro'
 import { loadChangelog } from '../lib/changelog.js'
+import { directWindowsUrl } from '../lib/downloads.js'
 import { emph } from '../lib/locales.js'
 import '../styles/home.css'
 
@@ -27,6 +29,8 @@ const roles = ROLES[lang]
 const p = (x: string) => localePath(x, lang)
 const logs = loadChangelog(lang).slice(0, 3)
 const shotSizes = '(max-width: 900px) calc(100vw - 40px), 680px'
+// WP218：「下载」按钮——Windows 访客直接拿最新安装包（site.ts 按系统换 href），其余去下载页
+const winUrl = directWindowsUrl((await buildDownloads()).manifest)
 ---
 <Base lang={lang} path="/" title={t.meta.title} description={t.meta.description} og="home" announce>
   <section class="hero">
@@ -36,7 +40,7 @@ const shotSizes = '(max-width: 900px) calc(100vw - 40px), 680px'
         <h1>{t.hero.title.map((line) => <span set:html={emph(line)} />)}</h1>
         <p class="lede">{t.hero.lede}</p>
         <div class="cta-row">
-          <a class="btn btn-primary" href={p('/download/')}><Icon name="download" />{t.hero.download}</a>
+          <a class="btn btn-primary" href={p('/download/')} data-dl-win={winUrl}><Icon name="download" />{t.hero.download}</a>
           <a class="btn btn-ghost" href={GITHUB_URL} rel="noopener"><Icon name="github" />{t.hero.github}</a>
         </div>
         <ul class="checks">
@@ -305,7 +309,7 @@ const shotSizes = '(max-width: 900px) calc(100vw - 40px), 680px'
       <h2>{t.final.title}</h2>
       <p class="sub" style="margin:0 auto">{t.final.sub}</p>
       <div class="cta-row">
-        <a class="btn btn-primary" href={p('/download/')}><Icon name="download" />{t.final.download}</a>
+        <a class="btn btn-primary" href={p('/download/')} data-dl-win={winUrl}><Icon name="download" />{t.final.download}</a>
         <a class="btn btn-ghost" href={p('/docs/')}>{t.final.docs}</a>
       </div>
     </div>
