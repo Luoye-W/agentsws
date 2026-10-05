@@ -144,6 +144,18 @@ export interface ArchivedOverlay {
 
 const SEP = '::'
 
+/**
+ * WP219：内容更新换上来的基础层记录的 `source.package`。这种记录**只属于那一个品牌**——
+ * 别的品牌查包基础层时不会兜底扫到它（docs/90 §6.4「只落到启用了它的品牌」）。
+ */
+export const CONTENT_UPDATE_SOURCE = 'content-update'
+
+/** WP219：某个技能在一个品牌里的上层（公司 / 部门 / 岗位 / 职责 / 个人）记录与 overlay。 */
+export interface SkillUpperLayers {
+  records: Skill[]
+  overlays: OverlayEx[]
+}
+
 export class MemorySkillRegistry {
   readonly #skills = new Map<string, Skill>()
   readonly #history = new Map<string, Skill[]>()
@@ -256,6 +268,26 @@ export class MemorySkillRegistry {
   getOverlay(skill: string, tier: SkillTier, owner: string): OverlayEx | undefined {
     const o = this.#overlays.get(this.#overlayKey(skill, tier, owner))
     return o === undefined ? undefined : { ...o, ops: o.ops.map((op) => ({ ...op })) }
+  }
+
+  /**
+   * WP219：这个技能在这个品牌里叠在基础层上面的东西——上层记录（只取这个品牌的）与 overlay
+   * （公司层按 owner = 工作区筛；岗位 / 职责 / 部门 / 个人层的 overlay 不带工作区，全给，调用方再筛）。
+   * 内容更新拿它判「新版会不会冲掉你的改动」。
+   */
+  listUpperLayers(name: string, workspace_id: string): SkillUpperLayers {
+    const records = [...this.#skills.values()]
+      .filter((s) => s.name === name && s.tier !== 'package' && s.workspace_id === workspace_id)
+      .map((s) => ({ ...s, sections: s.sections.map((x) => ({ ...x })) }))
+    const overlays = [...this.#overlays.values()]
+      .filter(
+        (o) =>
+          o.skill === name &&
+          o.tier !== 'package' &&
+          (o.tier !== 'company' || o.owner === workspace_id),
+      )
+      .map((o) => ({ ...o, ops: o.ops.map((op) => ({ ...op })) }))
+    return { records, overlays }
   }
 
   listOverlays(skill: string): OverlayEx[] {
@@ -508,6 +540,8 @@ export class MemorySkillRegistry {
       for (const skill of this.#skills.values()) {
         if (skill.name !== name || skill.tier !== tier) continue
         if (skill.sections.length === 0) continue
+        // WP219：某个品牌内容更新来的基础层不当全局底稿（段 id 与全局那份对齐，取哪份都一样）
+        if (skill.source?.package === CONTENT_UPDATE_SOURCE) continue
         return skill.sections.map((s) => ({ ...s }))
       }
     }
@@ -524,6 +558,7 @@ export class MemorySkillRegistry {
     for (const tier of [...TIER_ORDER].reverse()) {
       for (const [key, skill] of this.#skills) {
         if (skill.name !== name || skill.tier !== tier) continue
+        if (skill.source?.package === CONTENT_UPDATE_SOURCE) continue
         const fm = this.#frontmatter.get(key)
         if (fm !== undefined) return { ...fm, extra: { ...fm.extra }, order: [...fm.order] }
       }
@@ -571,8 +606,10 @@ export class MemorySkillRegistry {
 
   #scopeFor(tier: SkillTier, actor: Actor): SkillScopeRef {
     switch (tier) {
+      // WP219：包基础层也带上工作区——内容更新按品牌换基础层（docs/90 §6.4）；
+      // 这个品牌没有自己的那一份时，`#lookup` 退回全局那一份（随软件带的）。
       case 'package':
-        return {}
+        return { workspace_id: actor.workspace_id }
       case 'company':
         return { workspace_id: actor.workspace_id }
       case 'department':
@@ -625,7 +662,14 @@ export class MemorySkillRegistry {
     const exact = this.#skills.get(this.#keyOf(name, tier, scope))
     if (exact !== undefined) return exact
     if (tier === 'package') {
-      for (const s of this.#skills.values()) if (s.name === name && s.tier === tier) return s
+      if (scope.workspace_id !== undefined) {
+        const global = this.#skills.get(this.#keyOf(name, tier, {}))
+        if (global !== undefined) return global
+      }
+      // 兜底扫：WP29 按工作区种过的那一份照旧认得；但别的品牌**内容更新**来的那一份不算（docs/90 §6.4）
+      for (const s of this.#skills.values())
+        if (s.name === name && s.tier === tier && s.source?.package !== CONTENT_UPDATE_SOURCE)
+          return s
       return undefined
     }
     const { workspace_id: _drop, ...rest } = scope
