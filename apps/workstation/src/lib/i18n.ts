@@ -4,6 +4,7 @@
  * 不上重库：一张 key 表 + 一个 `t()`。key 的命名与服务端给的 `label_key` 对齐
  * （证据芯片只出 key，不出裸枚举——36 §2.3）。
  */
+import { CLOUD_AUTH_EN, CLOUD_AUTH_ZH } from './i18n-cloud-auth'
 import { LIBRARY_EN, LIBRARY_ZH } from './i18n-library'
 
 export type Lang = 'zh' | 'en'
@@ -7482,8 +7483,8 @@ const en: Table = {
 
 // WP209：技能 / 知识分组的词条在自己的文件里（`i18n-library.ts`），这里并进来
 const TABLES: Record<Lang, Table> = {
-  zh: { ...zh, ...LIBRARY_ZH },
-  en: { ...en, ...LIBRARY_EN },
+  zh: { ...zh, ...LIBRARY_ZH, ...CLOUD_AUTH_ZH },
+  en: { ...en, ...LIBRARY_EN, ...CLOUD_AUTH_EN },
 }
 
 export function translate(lang: Lang, key: string, vars?: Record<string, string | number>): string {
