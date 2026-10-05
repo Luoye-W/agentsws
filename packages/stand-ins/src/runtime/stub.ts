@@ -61,6 +61,7 @@ import {
 } from './schedule.js'
 import { SKILL_TOOL_DEF_BY_NAME } from './skills.js'
 import {
+  boundariesToAsk,
   boundaryGate,
   describeRun,
   marketplaceLinkSlip,
@@ -1064,8 +1065,10 @@ export function createStubRuntime(options: StubRuntimeOptions): RuntimeAdapter {
       }
 
       const askedBoundaries: string[] = []
-      if (!exhausted && gate.missing.length > 0 && options.createPolicyQuestion) {
-        for (const boundary of gate.missing) {
+      // WP232：只有这件事真在要一笔变更才问（`boundariesToAsk`，三个运行时同一份）
+      const toAsk = boundariesToAsk(gate)
+      if (!exhausted && toAsk.length > 0 && options.createPolicyQuestion) {
+        for (const boundary of toAsk) {
           const asked = await options.createPolicyQuestion({ request: req, boundary })
           if (asked === undefined) continue
           askedBoundaries.push(boundary.label)

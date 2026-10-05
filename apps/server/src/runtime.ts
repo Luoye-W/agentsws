@@ -20,6 +20,7 @@
  */
 import type {
   ApprovalItem,
+  ApprovalKind,
   AssignmentId,
   Clock,
   ComputerUseGrantPayload,
@@ -199,6 +200,14 @@ export interface RuntimeOptions {
    * 现在由模型面回答（本机加密库里的配置 + 环境变量兜底）；不给就退回看环境变量。
    */
   hasModel?: () => boolean
+  /**
+   * WP232：按去重键查一张**还在等人答**的卡（pending / in_review / deferred）。
+   *
+   * 边界选择题「一辈子只问一次」：同一条边界已经有一张在等人答的卡时，**不再**交给审批总线
+   * ——总线的去重是「更新原项」（revision +1、改挂到这一次的事项上），一个没变的问题被反复
+   * bump，还被挂到毫不相关的运行上（10-05 dev-real）。不给就退回老行为。
+   */
+  activeApproval?: (dedupe_key: string, kind: ApprovalKind) => { id: string } | undefined
   /** WP25：现在生效的默认模型（进 `RunRequest.runtime.model`）。 */
   modelRef?: () => ModelRef
   /**
@@ -711,6 +720,10 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
   const createPolicyQuestion: CreatePolicyQuestionFn = async ({ boundary }) => {
     const s = scope
     if (s === undefined) return undefined
+    const dedupe_key = `${workspace_id}:policy_change:${boundary.id}`
+    // WP232：已经有一张在等人答 → 指给它，不 bump、不改挂（问题没变，再问一遍只是噪声）
+    const waiting = options.activeApproval?.(dedupe_key, 'policy_change')
+    if (waiting !== undefined) return { approval_item_id: waiting.id }
     const assignment = roles.assignments.get(s.assignment_id)
     const item = await approvals.create({
       workspace_id,
@@ -723,7 +736,7 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
         work_item_id: s.matter.id,
         ...(s.todo_id === undefined ? {} : { todo_id: s.todo_id }),
       },
-      dedupe_key: `${workspace_id}:policy_change:${boundary.id}`,
+      dedupe_key,
       title: boundary.question,
       summary: `定一个答案，以后 Agent 自己按它走，不再问你（${boundary.label}）`,
       payload: {
@@ -955,6 +968,8 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       clock,
       seed,
       createDraft,
+      // WP232：边界选择题三条运行时一致（以前 direct 这一档没接，服务端 direct 从来不问）
+      createPolicyQuestion,
       ...(executeTool === undefined ? {} : { executeTool }),
     })
   const stubAdapter = (): RuntimeAdapter =>

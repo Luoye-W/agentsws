@@ -30,6 +30,7 @@ import type {
   ToolExecutor,
 } from '@agentsws/stand-ins'
 import {
+  boundariesToAsk,
   boundaryGate,
   contextItemHash,
   DRAFT_NOT_CREATED,
@@ -707,12 +708,14 @@ export function createDirectRuntime(options: DirectRuntimeOptions): RuntimeAdapt
       const orderName = [...orders.values()][0]?.name
 
       // ── 边界选择题卡：第一次碰到就问一次，问完这一辈子不再问（宿主按 dedupe_key 去重）──
+      // WP232：只有这件事真在要一笔变更才问（`boundariesToAsk`，三个运行时同一份）
+      const toAsk = boundariesToAsk(boundary)
       if (
         exhausted === undefined &&
-        boundary.missing.length > 0 &&
+        toAsk.length > 0 &&
         options.createPolicyQuestion !== undefined
       ) {
-        for (const item of boundary.missing) {
+        for (const item of toAsk) {
           const asked = await options.createPolicyQuestion({ request: effective, boundary: item })
           if (asked === undefined) continue
           askedBoundaries.push(item.label)
