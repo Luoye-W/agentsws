@@ -90,6 +90,12 @@ export interface MatterEvent {
    * 老事件没有这一格。
    */
   stopped?: { reason: RunCancelReason }
+  /**
+   * WP237：岗位内路由的那一条上，**能一键选 / 换的职责**（界面在这条下面出按钮）。
+   * `picked` 有值 = 已经按它在做，`options` 是「换成它」；没有 = 还没定，`options` 是「走它」。
+   * 老事件没有这一格。
+   */
+  route?: { picked?: RoleId; options: { role_id: RoleId; role_name: string }[] }
 }
 
 export interface MatterContext {

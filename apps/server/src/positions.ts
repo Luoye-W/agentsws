@@ -23,6 +23,7 @@ import type {
   Clock,
   EventEnvelope,
   Matter,
+  MatterEvent,
   MatterId,
   PersonId,
   Position,
@@ -30,15 +31,19 @@ import type {
   RoleId,
   WorkspaceId,
 } from '@agentsws/contracts'
-import { isQueueCard } from '@agentsws/deck'
+import { isQueueCard, isRouteChoiceItem } from '@agentsws/deck'
 import {
   bundledPositionIcon,
+  looksLikeSmallTalk,
+  namedRole,
   RoleError,
   type RoleStore,
   type RouteCandidate,
   type RouteRoleProfile,
   roleRouteTerms,
   routeWithinPosition,
+  settleCloseCall,
+  settleNoHit,
 } from '@agentsws/roles'
 import type { Work } from '@agentsws/work'
 import { belongsTo, holdersByPlacement, WORKSPACE_BASE_ROLES } from './position-placements.js'
@@ -89,6 +94,11 @@ export interface PositionsOptions {
    */
   placementOf?(assignment_id: AssignmentId): string | undefined
   appendEvent(e: Omit<EventEnvelope, 'id' | 'at'> & { at?: string }): void
+  /**
+   * WP237（Fable 10-06 代定）：停掉这件事上还在跑的运行（取消原因 `user`，`reason` 进时间线）。
+   * 「换成 X」重跑之前先停，不让两次并行花钱。回停了几次；不给 = 这个进程没有运行时。
+   */
+  stopRuns?(matter_id: MatterId, reason: string): Promise<number>
 }
 
 export interface OpenAtPositionInput {
@@ -131,12 +141,36 @@ export interface PositionsAssembly {
   mine(person_id: PersonId): Promise<PositionInstance[]>
   /** 交给这个岗位一件事（54 §2 主入口）。 */
   open(input: OpenAtPositionInput): Promise<OpenAtPositionResult>
-  /** 手动换职责：换后新的 Run 走新职责，旧 Run 不动。 */
+  /**
+   * 手动换职责：换后新的 Run 走新职责，旧 Run 不动。
+   *
+   * WP237：`run: true` = 换完立刻按这件事原来那段话起一次运行（时间线上「换成 B」、
+   * 事项页上「走 A」都是它）；这件事还挂着一张没定的选择卡时顺手把卡按同一个选项定掉。
+   */
   reroute(input: {
     matter_id: MatterId
     role_id: RoleId
     person_id: PersonId
-  }): Promise<{ matter: Matter; assignment_id: AssignmentId }>
+    run?: boolean
+  }): Promise<{ matter: Matter; assignment_id: AssignmentId; run_id?: string }>
+  /**
+   * WP237：「这件事该走哪条职责」那张卡定了 → 事项钉到选的那条、立刻起一次运行。
+   * 不是那张卡、没批、或者事项已经在那条上了 → 什么都不做。
+   */
+  onChoiceDecided(item: ApprovalItem): Promise<void>
+  /**
+   * WP237（Fable 10-06 真机补充）：在**从岗位开的**事项里说一句话。
+   *
+   * - 不是从岗位开的 → `undefined`（调用方走老路）；
+   * - 已经定了职责、而那条分配是本人的 → 用**那条**分配起运行（不是请求头上带的那条）；
+   * - 还没定职责 → 话里点名了哪条就钉哪条；没点名就把原话加这句一起再路由一次（打平按分取）；
+   *   还是看不出 → 只记下这句话、再问一次，**绝不落到负责人的通用助手上**。
+   */
+  sayAt(input: {
+    matter_id: MatterId
+    person_id: PersonId
+    text: string
+  }): Promise<{ event: MatterEvent; run_id?: string } | undefined>
   /**
    * 一条职责属于哪个岗位（起 Run 拼 `position` 技能层时要它）。
    * 挂在多个岗位里、或者一个都没有时回 `undefined` 并给一句话——由调用方写进时间线。
@@ -460,6 +494,8 @@ export function createPositions(options: PositionsOptions): PositionsAssembly {
           score: c.score,
           why: c.why,
         })),
+        // WP237：卡上的按钮就是这几条职责（工作台按 `payload.options` 出选项，36 §2）
+        options: choiceOptions(input.candidates),
       },
       evidence: {
         source_events: [],
@@ -482,10 +518,24 @@ export function createPositions(options: PositionsOptions): PositionsAssembly {
       },
       priority: 'queue',
       // 选了哪条职责就用哪条起 Run（`POST /v1/matters/:id/reroute` 也走同一条路）
-      options: input.candidates.map((c) => ({ id: c.role_id, label: c.role_name })),
+      options: choiceOptions(input.candidates),
     })
     return item.state === 'blocked' ? undefined : item.id
   }
+
+  /** WP237：不是交活的话（「你好」）——只回一句问要做什么，不起运行、不出卡。 */
+  const askWhat = (
+    matter_id: MatterId,
+    duties: readonly { role_id: RoleId; role_name: string }[],
+  ): MatterEvent =>
+    work.appendEvent(matter_id, {
+      kind: 'agent_message',
+      text:
+        duties.length === 0
+          ? '想让我做什么？说一句要办的事，我就开始做。'
+          : `想让我做什么？说一句要办的事，我就开始做（这个岗位能做：${duties.map((d) => `「${d.role_name}」`).join('、')}）。`,
+      actor: { kind: 'agent', id: 'position_router' },
+    })
 
   const open = async (input: OpenAtPositionInput): Promise<OpenAtPositionResult> => {
     const template = templateOf(input.position_id)
@@ -512,18 +562,42 @@ export function createPositions(options: PositionsOptions): PositionsAssembly {
       if (!held.some((h) => h.role_id === pinned))
         throw POSITION_ERROR('forbidden', `你名下没有「${roleName(pinned)}」这条职责，开不了`)
     }
+    const order = held.map((h) => h.role_id)
+    const named = held.map((h) => ({ role_id: h.role_id, role_name: roleName(h.role_id) }))
+    // WP237（Fable 代定）：「你好」这类明显不是交活的话——不起运行、不出卡，只回一句问要做什么
+    const smallTalk = pinned === undefined && looksLikeSmallTalk(text)
     const routed =
-      pinned === undefined
-        ? // WP117b（66 复测 #17）：路由那句话要与岗位页标题上的数字对得上。
-          // 递进去的是 WP125 那份滤掉 `common.member` 的清单（`dutyRolesOf`），
-          // 也就是岗位页「N 条职责」读的同一份——两处一个来源，不会再打架。
-          routeWithinPosition(text, profilesOf(held), { duty_count: dutyRolesOf(template).length })
-        : {
-            picked: pinned,
+      pinned === undefined && smallTalk
+        ? {
             candidates: [],
-            ambiguous: false,
-            reason: `按「${roleName(pinned)}」这条职责的快捷提示开的，没走岗位内路由`,
+            ambiguous: true,
+            reason: '像是打个招呼，还没说要做什么',
           }
+        : pinned === undefined
+          ? settleNoHit(
+              // WP117b（66 复测 #17）：路由那句话要与岗位页标题上的数字对得上。
+              // 递进去的是 WP125 那份滤掉 `common.member` 的清单（`dutyRolesOf`），
+              // 也就是岗位页「N 条职责」读的同一份——两处一个来源，不会再打架。
+              //
+              // WP237：参赛的全是**请求人自己名下**的职责（54 §4），所以候选永远是同一个人的——
+              // 打平（前两名都够像、只是分不开）不再问人，按分高的那条直接做（`settleCloseCall`）。
+              //
+              // WP237（Fable 代定）：一个判据词都没命中（「看看这周」）也不问人——按岗位里职责的先后
+              // 取第一条直接做，其余几条留作「换成」（`settleNoHit`）。
+              settleCloseCall(
+                routeWithinPosition(text, profilesOf(held), {
+                  duty_count: dutyRolesOf(template).length,
+                }),
+                order,
+              ),
+              named,
+            )
+          : {
+              picked: pinned,
+              candidates: [],
+              ambiguous: false,
+              reason: `按「${roleName(pinned)}」这条职责的快捷提示开的，没走岗位内路由`,
+            }
     const pickedEntry =
       routed.picked === undefined ? undefined : held.find((h) => h.role_id === routed.picked)
 
@@ -541,38 +615,63 @@ export function createPositions(options: PositionsOptions): PositionsAssembly {
         : { position_id: pickedEntry.assignment_id, role_id: pickedEntry.role_id }),
     })
 
-    // 路由结果进事项时间线（候选与判据都在这一条上，界面直接拿来显示"路由到 X · 换"）
-    work.appendEvent(matter.id, {
-      kind: 'status',
-      text: routed.reason,
-      actor: { kind: 'agent', id: 'position_router' },
-      ref: { type: 'position', id: template.id },
-    })
+    const settled = 'settled' in routed && routed.settled === true
+    const alternatives = 'alternatives' in routed ? (routed.alternatives ?? []) : []
     emit('matter.routed', matter.id, input.person_id, {
       position_id: template.id,
       ...(routed.picked === undefined ? {} : { picked: routed.picked }),
       ambiguous: routed.ambiguous,
+      // WP237：没问人、自己定的——打平按分取（top_score）或一个都没命中按先后取（first_duty）
+      ...(settled
+        ? { settled: routed.candidates.every((c) => c.score === 0) ? 'first_duty' : 'top_score' }
+        : {}),
       // 判据词与原话不进日志（21 §1）：只有 id 与分数
       candidates: routed.candidates.map((c) => ({ role_id: c.role_id, score: c.score })),
     })
 
+    if (pickedEntry === undefined && smallTalk) {
+      work.appendEvent(matter.id, {
+        kind: 'human_message',
+        text,
+        actor: { kind: 'person', id: input.person_id },
+      })
+      askWhat(matter.id, named)
+      return { matter, candidates: [], ambiguous: true, reason: routed.reason }
+    }
+
     if (pickedEntry === undefined) {
       const first = held[0]
+      const candidates =
+        routed.candidates.length > 0
+          ? routed.candidates
+          : held.map((h) => ({
+              role_id: h.role_id,
+              role_name: roleName(h.role_id),
+              score: 0,
+              why: [],
+            }))
+      // WP237：没定职责时，原话也进时间线（事后在事项页选、或者续一句话时，按它起运行）
+      work.appendEvent(matter.id, {
+        kind: 'human_message',
+        text,
+        actor: { kind: 'person', id: input.person_id },
+      })
       const approval_item_id = await choiceCard({
         matter,
         person_id: input.person_id,
         position: template,
-        candidates:
-          routed.candidates.length > 0
-            ? routed.candidates
-            : held.map((h) => ({
-                role_id: h.role_id,
-                role_name: roleName(h.role_id),
-                score: 0,
-                why: [],
-              })),
+        candidates,
         reason: routed.reason,
         role_id: first?.role_id ?? 'common.member',
+      })
+      // 路由结果进事项时间线；还没定时这一条下面就是那几条职责的按钮（WP237：事项页上也能选）
+      work.appendEvent(matter.id, {
+        kind: 'status',
+        text: routed.reason,
+        actor: { kind: 'agent', id: 'position_router' },
+        ref: { type: 'position', id: template.id },
+        route: { options: candidates.map((c) => ({ role_id: c.role_id, role_name: c.role_name })) },
+        ...(approval_item_id === undefined ? {} : { approval_item_id }),
       })
       return {
         matter,
@@ -582,6 +681,23 @@ export function createPositions(options: PositionsOptions): PositionsAssembly {
         ...(approval_item_id === undefined ? {} : { approval_item_id }),
       }
     }
+
+    // 路由结果进事项时间线（候选与判据都在这一条上，界面直接拿来显示"路由到 X · 换"）。
+    // WP237：打平按分取的那一条下面挂「换成 B」（一键改派并重跑）
+    work.appendEvent(matter.id, {
+      kind: 'status',
+      text: routed.reason,
+      actor: { kind: 'agent', id: 'position_router' },
+      ref: { type: 'position', id: template.id },
+      ...(alternatives.length === 0
+        ? {}
+        : {
+            route: {
+              picked: pickedEntry.role_id,
+              options: alternatives.map((c) => ({ role_id: c.role_id, role_name: c.role_name })),
+            },
+          }),
+    })
 
     // 起 Run：用的是**被路由到的那条职责**的 Assignment（权限 / 额度 / 技能全是它的）
     const said = await work.say(matter.id, {
@@ -603,11 +719,65 @@ export function createPositions(options: PositionsOptions): PositionsAssembly {
     }
   }
 
+  /**
+   * 这件事原来那段话：岗位入口开事项时记下的那句人话（以标题打头的那一句），没有就用标题
+   * （WP237 之前开的、还没定职责的事项没记原话）。
+   */
+  const briefOf = (matter: Matter): string =>
+    work.store
+      .listMatterEvents(matter.id)
+      .find((e) => e.kind === 'human_message' && e.text.startsWith(matter.title))?.text ??
+    matter.title
+
+  /** 这件事上还没定的那张「走哪条职责」卡（时间线上路由那一条记着卡号）。 */
+  const pendingChoiceOf = async (matter_id: MatterId): Promise<ApprovalItem | undefined> => {
+    const ids = work.store
+      .listMatterEvents(matter_id, { limit: 500 })
+      .filter((e) => e.actor.id === 'position_router' && e.approval_item_id !== undefined)
+      .map((e) => e.approval_item_id as string)
+    for (const id of ids.reverse()) {
+      const item = await options.approvals.get(id)
+      if (item !== undefined && isRouteChoice(item) && WAITING_STATES.has(item.state)) return item
+    }
+    return undefined
+  }
+
+  /**
+   * 别处已经选定了（事项页按钮 / 续的那句话点了名）→ 那张卡按同一个选项定掉，
+   * 不留一张「还等你定」的卡。定卡会回到 `onChoiceDecided`，那时事项已经在那条上，什么都不做。
+   */
+  const settleCard = async (
+    matter_id: MatterId,
+    role_id: RoleId,
+    person_id: PersonId,
+  ): Promise<void> => {
+    const card = await pendingChoiceOf(matter_id)
+    if (card === undefined) return
+    const token = [...card.deliveries]
+      .reverse()
+      .find(
+        (d) => d.to === person_id && d.status !== 'expired' && d.status !== 'acted',
+      )?.decision_token
+    if (token === undefined) return
+    try {
+      await options.approvals.decide(card.id, person_id, {
+        decision_token: token,
+        action: 'approve_edited',
+        edited_payload: { ...asRecord(card.payload), selected_option_id: role_id },
+        selected_option_id: role_id,
+        via: 'workstation',
+      })
+    } catch {
+      // 卡定不掉不影响这件事已经开跑；它会按 24 小时规则升级 / 过期
+    }
+  }
+
   const reroute = async (input: {
     matter_id: MatterId
     role_id: RoleId
     person_id: PersonId
-  }): Promise<{ matter: Matter; assignment_id: AssignmentId }> => {
+    run?: boolean
+  }): Promise<{ matter: Matter; assignment_id: AssignmentId; run_id?: string }> => {
     const matter = work.getMatter(input.matter_id)
     if (matter === undefined) throw POSITION_ERROR('not_found', `没有这个事项：${input.matter_id}`)
     const position_id = matter.position_template_id ?? positionOf(input.role_id).position_id
@@ -627,6 +797,9 @@ export function createPositions(options: PositionsOptions): PositionsAssembly {
         `你名下没有「${roleName(input.role_id)}」这条职责，换不过去`,
       )
     const before = matter.role_id
+    // WP237（Fable 代定）：「换成 X」重跑之前先停掉这件事上还在跑的那次（不两次并行花钱）
+    if (input.run === true)
+      await options.stopRuns?.(matter.id, `已换成「${roleName(input.role_id)}」重跑`)
     const next: Matter = {
       ...matter,
       role_id: input.role_id,
@@ -649,10 +822,143 @@ export function createPositions(options: PositionsOptions): PositionsAssembly {
       ...(before === undefined ? {} : { from: before }),
       to: input.role_id,
     })
-    return { matter: next, assignment_id: hit.assignment_id }
+    // WP237：别处定了，那张还挂着的选择卡跟着定掉（先钉再定卡：回调看到已在这条上就不重跑）
+    await settleCard(matter.id, input.role_id, input.person_id)
+    if (input.run !== true) return { matter: next, assignment_id: hit.assignment_id }
+    const ran = await work.run(matter.id, {
+      person_id: input.person_id,
+      assignment_id: hit.assignment_id,
+      brief: briefOf(next),
+      text: `按「${roleName(input.role_id)}」开始做了`,
+    })
+    return {
+      matter: work.getMatter(matter.id) ?? next,
+      assignment_id: hit.assignment_id,
+      ...(ran.run_id === undefined ? {} : { run_id: ran.run_id }),
+    }
   }
 
-  return { instance, mine, open, reroute, positionOf, layerContext }
+  const onChoiceDecided = async (item: ApprovalItem): Promise<void> => {
+    if (!isRouteChoice(item) || item.workspace_id !== workspace_id) return
+    if (item.state !== 'approved' && item.state !== 'approved_edited' && item.state !== 'applied')
+      return
+    const payload = asRecord(item.payload)
+    const matter_id = typeof payload.matter_id === 'string' ? payload.matter_id : undefined
+    const matter = matter_id === undefined ? undefined : work.getMatter(matter_id)
+    if (matter === undefined) return
+    // 工作台那一路把选项放在 edited_payload 里（`deck/decide.ts`：选择题 = approve_edited）；
+    // 老卡（按钮还是「认领」时）批了没带选项 → 按分最高的那条（卡上排第一的就是它）
+    const edited = asRecord(item.decision?.edited_payload)
+    const candidates = Array.isArray(payload.candidates) ? payload.candidates : []
+    const top = asRecord(candidates[0]).role_id
+    const option =
+      item.decision?.selected_option_id ??
+      (typeof edited.selected_option_id === 'string' ? edited.selected_option_id : undefined) ??
+      (typeof top === 'string' ? top : undefined)
+    if (option === undefined || matter.role_id === option) return
+    const by = item.decision?.by
+    const person_id =
+      by !== undefined && by !== 'mandate'
+        ? by
+        : (item.routing.explicit ?? matter.context.participants[0])
+    if (person_id === undefined) return
+    await reroute({ matter_id: matter.id, role_id: option, person_id, run: true })
+  }
+
+  const sayAt = async (input: {
+    matter_id: MatterId
+    person_id: PersonId
+    text: string
+  }): Promise<{ event: MatterEvent; run_id?: string } | undefined> => {
+    const matter = work.getMatter(input.matter_id)
+    if (matter === undefined || matter.entry !== 'position') return undefined
+    const template_id = matter.position_template_id
+    if (template_id === undefined) return undefined
+    // 已经定了职责：用**那条**分配接着做（请求头上带的可能是负责人那条）
+    if (matter.role_id !== undefined) {
+      const own =
+        matter.position_id === undefined
+          ? undefined
+          : activeOf(input.person_id).find((a) => a.id === matter.position_id)
+      if (own === undefined) return undefined
+      const said = await work.say(matter.id, {
+        person_id: input.person_id,
+        assignment_id: own.id,
+        text: input.text,
+      })
+      return said.run_id === undefined ? { event: said.event } : said
+    }
+    const template = options.positions().find((p) => p.id === template_id)
+    if (template === undefined) return undefined
+    const held = minePerRole(template, input.person_id)
+    if (held.length === 0) return undefined
+    const original = briefOf(matter)
+    // ① 话里点名了哪条（「按 Reddit 运营这条来」）就是哪条
+    const named = namedRole(
+      input.text,
+      held.map((h) => {
+        const def = roles.roles.get(h.role_id)
+        return {
+          role_id: h.role_id,
+          names: [def?.name.zh, def?.name.en].filter((n): n is string => n !== undefined),
+        }
+      }),
+    )
+    const duties = held.map((h) => ({ role_id: h.role_id, role_name: roleName(h.role_id) }))
+    // ② 没点名、又只是打个招呼：记下这句话，回一句问要做什么（不起运行）
+    if (named === undefined && looksLikeSmallTalk(input.text)) {
+      const event = work.appendEvent(matter.id, {
+        kind: 'human_message',
+        text: input.text,
+        actor: { kind: 'person', id: input.person_id },
+      })
+      askWhat(matter.id, duties)
+      return { event }
+    }
+    // ③ 没点名：原话加这一句再路由一次；打平按分取、一个都没命中按先后取（同一个人的职责）
+    const routed =
+      named === undefined
+        ? settleNoHit(
+            settleCloseCall(
+              routeWithinPosition(`${original} ${input.text}`, profilesOf(held), {
+                duty_count: dutyRolesOf(template).length,
+              }),
+              held.map((h) => h.role_id),
+            ),
+            duties,
+          )
+        : undefined
+    const role_id = named ?? routed?.picked
+    if (role_id === undefined) {
+      // ④ 还是看不出（几条都沾一点、谁都不像）：只记下这句话，再问一次。不起运行——更不落到负责人的通用助手上
+      const event = work.appendEvent(matter.id, {
+        kind: 'human_message',
+        text: input.text,
+        actor: { kind: 'person', id: input.person_id },
+      })
+      work.appendEvent(matter.id, {
+        kind: 'status',
+        text: '还没定这件事走哪条职责，先在下面选一条，选了就开始做',
+        actor: { kind: 'agent', id: 'position_router' },
+        ref: { type: 'position', id: template.id },
+        route: {
+          options: held.map((h) => ({ role_id: h.role_id, role_name: roleName(h.role_id) })),
+        },
+      })
+      return { event }
+    }
+    const pinned = await reroute({ matter_id: matter.id, role_id, person_id: input.person_id })
+    const said = await work.say(matter.id, {
+      person_id: input.person_id,
+      assignment_id: pinned.assignment_id,
+      text: input.text,
+      // 刚定下职责的头一次运行：把原来那件事一起带上（「开始吧」本身不是任务）
+      brief: `${original}\n\n${input.text}`,
+    })
+    return said.run_id === undefined ? { event: said.event } : said
+  }
+
+  return { instance, mine, open, reroute, onChoiceDecided, sayAt, positionOf, layerContext }
 }
 
 /**
@@ -700,4 +1006,18 @@ export function retargetPositionMatters(
     moved += 1
   }
   return moved
+}
+
+/** WP237：「这件事该走哪条职责」那张卡（判据在 deck 层，投影与回调同一个）。 */
+export const isRouteChoice = isRouteChoiceItem
+
+/** 选择卡上的选项：按钮就是候选职责（「走「Reddit 运营」」）。 */
+function choiceOptions(candidates: readonly RouteCandidate[]): { id: string; label: string }[] {
+  return candidates.map((c) => ({ id: c.role_id, label: `走「${c.role_name}」` }))
+}
+
+function asRecord(v: unknown): Record<string, unknown> {
+  return typeof v === 'object' && v !== null && !Array.isArray(v)
+    ? (v as Record<string, unknown>)
+    : {}
 }

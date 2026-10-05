@@ -162,7 +162,8 @@ describe('54 §2 / §4 岗位页顶部：交给这个岗位一件事', () => {
     expect(options).toHaveLength(2)
     fireEvent.click(options[1] as HTMLElement)
     await waitFor(() => {
-      expect(rerouteMatter).toHaveBeenCalledWith('mat_2', 'dtc.store')
+      // WP237：选了就钉上并立刻开跑
+      expect(rerouteMatter).toHaveBeenCalledWith('mat_2', 'dtc.store', { run: true })
     })
     expect(navigate).toHaveBeenCalledWith('/matters/mat_2')
   })

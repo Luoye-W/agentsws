@@ -184,6 +184,8 @@ const BAND_TONE: Record<DeckCard['priority_band'], Tone> = {
  * 第十二种 kind 出现那天，卡面上说的是一句不好看的实话，而不是一句好看的错话。
  */
 export function categoryOf(card: DeckCard, t: (key: string) => string): string {
+  // WP237：「走哪条职责」借的是认领卡的 kind，但它不是转交
+  if (card.kind === 'claim' && card.layout === 'choice') return t('category.route_choice')
   const key = categoryKey(card.kind, card.change_kind)
   return t(key ?? `kind.${card.kind}`)
 }
@@ -246,6 +248,11 @@ export function DeckCardView({
   }, [card.id])
 
   const isQuestion = card.options !== undefined && card.options.length > 0
+  /**
+   * WP237：「这件事该走哪条职责」——按钮就是候选职责（「走 Reddit 运营」「走 Reddit 营销」），
+   * 点哪个就是选哪条、立刻开跑；不是「认领 / 不是客户问题」，也不先单选再按一个通用的「接」。
+   */
+  const routeChoice = card.kind === 'claim' && isQuestion
   const examples = useTaskExamples(card.role_id)
   const positionName = usePositionName(card.role_id)
   const rail = useRailState()
@@ -456,6 +463,23 @@ export function DeckCardView({
                 onDecide({ action: 'snooze', version: card.version })
               }}
             />
+          ) : panel === null && routeChoice ? (
+            <div className="flex flex-wrap items-center gap-2" data-testid="deck-route-choice">
+              {(card.options ?? []).map((o, i) => (
+                <Button
+                  key={o.id}
+                  size="sm"
+                  variant={i === 0 ? 'default' : 'outline'}
+                  disabled={busy === true}
+                  data-option={o.id}
+                  onClick={() => {
+                    onDecide({ action: 'approve', selected_option_id: o.id, version: card.version })
+                  }}
+                >
+                  {o.label}
+                </Button>
+              ))}
+            </div>
           ) : panel === null ? (
             <DeckActionBar
               card={card}

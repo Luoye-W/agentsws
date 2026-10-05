@@ -71,7 +71,11 @@ const OpenBody = z.object({
   role_id: z.string().min(1).optional(),
 })
 
-const RerouteBody = z.object({ role_id: z.string().min(1) })
+const RerouteBody = z.object({
+  role_id: z.string().min(1),
+  /** WP237：换完立刻按这件事原来那段话起一次运行（「换成 B」「走 A」按钮） */
+  run: z.boolean().optional(),
+})
 
 /**
  * 37 / 54 岗位面端口。网关只做装配与校验，逻辑在 `apps/server/src/positions.ts`。
@@ -87,12 +91,20 @@ export interface PositionEntryPort {
     id: string,
     input: z.infer<typeof OpenBody>,
   ): MaybePromise<OpenAtPositionView>
-  /** 手动换职责（换后新的 Run 走新职责，旧 Run 不动）。 */
+  /**
+   * 手动换职责（换后新的 Run 走新职责，旧 Run 不动）。
+   * WP237：`options.run` = 换完立刻起一次运行（回 `run_id`）；还挂着的选择卡跟着定掉。
+   */
   reroute(
     actor: PositionActor,
     matter_id: string,
     role_id: string,
-  ): MaybePromise<{ matter: { id: string; role_id?: string }; assignment_id: string }>
+    options?: { run?: boolean },
+  ): MaybePromise<{
+    matter: { id: string; role_id?: string }
+    assignment_id: string
+    run_id?: string
+  }>
 }
 
 function portOf(deps: GatewayDeps): PositionEntryPort {
@@ -166,18 +178,27 @@ export function positionEntryRoutes(): Route[] {
         method: 'post',
         path: '/v1/matters/:id/reroute',
         operationId: 'rerouteMatter',
-        summary: '换一条职责来做这件事（54 §2）：换后新的 Run 走新职责，旧 Run 不动',
+        summary:
+          '换一条职责来做这件事（54 §2）：换后新的 Run 走新职责，旧 Run 不动；`run: true` 换完立刻按原话起一次运行（WP237）',
         tag: 'work',
         auth: 'bearer',
         assignment: true,
         authz: READ,
         params: [{ name: 'id', in: 'path', required: true, description: 'matter_id' }],
         body: RerouteBody,
-        returns: '{ matter, assignment_id }',
+        returns: '{ matter, assignment_id, run_id? }',
       },
       async (c, deps) => {
         const input = await body(c, RerouteBody)
-        return ok(c, await portOf(deps).reroute(actorOf(c), param(c, 'id'), input.role_id))
+        return ok(
+          c,
+          await portOf(deps).reroute(
+            actorOf(c),
+            param(c, 'id'),
+            input.role_id,
+            input.run === true ? { run: true } : undefined,
+          ),
+        )
       },
     ),
   ]

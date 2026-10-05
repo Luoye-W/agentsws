@@ -345,3 +345,130 @@ export function routeWithinPosition(
     reason: `路由到「${first.role_name}」${why === '' ? '' : `，因为你说了${why}`}`,
   }
 }
+
+/* ── WP237 同一个人的几条职责打平：不问人，取分高的那条 ─────────────────── */
+
+export interface SettledRouteResult extends RouteWithinPositionResult {
+  /**
+   * 是「打平后按分取的」——岗位里前两名太接近，但都是**请求人自己名下**的职责
+   * （54 §4：路由只在本人持有的分配里挑），于是不出选择卡，按分高的那条直接做，
+   * 时间线上给一句「要换成 B 点这里」。
+   */
+  settled?: true
+  /** 打平时没被选上的那几条（界面上一键「换成它」用） */
+  alternatives?: RouteCandidate[]
+}
+
+/**
+ * WP237（Fable 10-06 真机）：**同一个人、同一个岗位里几条职责打平时不问人**。
+ *
+ * 只收「打平」这一种拿不准：第一名本身够像（份额 ≥ {@link MIN_PICKED_SCORE}），只是和
+ * 第二名分不开（差 < {@link MIN_SEPARATION}）。「谁都不太像」（四条各 0.25）与
+ * 「一个判据词都没命中」仍然是拿不准——那时候替人选就是瞎猜，照旧出卡问一句。
+ *
+ * 分数完全相同时按 `order`（岗位模板里职责的先后，合并岗位时并入的那条在后）取，
+ * 不再按 id 字典序——字典序与人没关系（`pr.reddit` 排在 `social.reddit` 前面纯属巧合）。
+ *
+ * 纯函数；调用方负责先确认候选都是同一个人的（岗位入口天然如此）。
+ */
+export function settleCloseCall(
+  result: RouteWithinPositionResult,
+  order: readonly RoleId[] = [],
+): SettledRouteResult {
+  if (!result.ambiguous || result.picked !== undefined) return result
+  const first = result.candidates[0]
+  const second = result.candidates[1]
+  if (first === undefined || second === undefined) return result
+  if (first.score < MIN_PICKED_SCORE) return result
+  const rank = (id: RoleId): number => {
+    const i = order.indexOf(id)
+    return i < 0 ? Number.MAX_SAFE_INTEGER : i
+  }
+  const top = result.candidates
+    .filter((c) => c.score === first.score)
+    .reduce((a, c) => (rank(c.role_id) < rank(a.role_id) ? c : a))
+  const alternatives = result.candidates.filter(
+    (c) => c.role_id !== top.role_id && top.score - c.score < MIN_SEPARATION,
+  )
+  const names = alternatives.map((c) => `「${c.role_name}」`).join('、')
+  return {
+    picked: top.role_id,
+    candidates: [top, ...result.candidates.filter((c) => c.role_id !== top.role_id)],
+    ambiguous: false,
+    reason: `这件事像「${top.role_name}」也像${names}，按「${top.role_name}」来做的；要换成${names}点这里`,
+    settled: true,
+    alternatives,
+  }
+}
+
+/**
+ * WP237：一句话里有没有**点名**某条职责（「按 Reddit 运营这条来」）。
+ *
+ * 比对职责名（中英文），忽略大小写与空白；点到好几条时取名字最长的那条
+ * （「Reddit 运营」与「运营」都点到时是前者）。没点名回 `undefined`。
+ */
+export function namedRole(
+  text: string,
+  roles: readonly { role_id: RoleId; names: readonly string[] }[],
+): RoleId | undefined {
+  const squash = (s: string): string => s.toLowerCase().replace(/\s+/g, '')
+  const said = squash(text)
+  let best: { role_id: RoleId; len: number } | undefined
+  for (const r of roles) {
+    for (const name of r.names) {
+      const n = squash(name)
+      if (n.length < 2 || !said.includes(n)) continue
+      if (best === undefined || n.length > best.len) best = { role_id: r.role_id, len: n.length }
+    }
+  }
+  return best?.role_id
+}
+
+/**
+ * WP237（Fable 10-06 代定）：**一个判据词都没命中**时，在同一个人的岗位里按岗位里职责的先后
+ * 取第一条直接做（不问人），其余几条留作「换成」。`roles` 按岗位模板里的先后排好。
+ *
+ * 只收「一个都没命中」（`candidates` 为空）；判得准、打平、谁都不太像的结果原样返回。
+ * 打招呼这类不是交活的话由调用方先用 {@link looksLikeSmallTalk} 挡掉。
+ */
+export function settleNoHit(
+  result: RouteWithinPositionResult,
+  roles: readonly { role_id: RoleId; role_name: string }[],
+): SettledRouteResult {
+  if (!result.ambiguous || result.picked !== undefined || result.candidates.length > 0)
+    return result
+  const eligible = roles.filter((r) => !GENERIC_ROLES.includes(r.role_id))
+  const first = eligible[0]
+  if (first === undefined) return result
+  const alternatives: RouteCandidate[] = eligible
+    .slice(1)
+    .map((r) => ({ role_id: r.role_id, role_name: r.role_name, score: 0, why: [] }))
+  const names = alternatives.map((c) => `「${c.role_name}」`).join('、')
+  return {
+    picked: first.role_id,
+    candidates: [{ role_id: first.role_id, role_name: first.role_name, score: 0, why: [] }],
+    ambiguous: false,
+    reason:
+      alternatives.length === 0
+        ? `看不出更像哪条，先按「${first.role_name}」来做的`
+        : `看不出更像哪条，先按「${first.role_name}」来做的；要换成${names}点这里`,
+    settled: true,
+    alternatives,
+  }
+}
+
+/** 打招呼 / 客套 / 只应一声——不是在交活（「你好」「在吗」「谢谢」「好的」「hi」）。 */
+const SMALL_TALK =
+  /^(你好|您好|你好呀|你好啊|嗨|哈喽|哈啰|在吗|在不在|在么|早|早上好|下午好|晚上好|谢谢|多谢|感谢|辛苦了|好的|好|行|收到|嗯+|哦+|ok|okay|hi|hello|hey|thanks|thank you|yo)$/iu
+
+/**
+ * WP237：这句话明显不是交活（打招呼、客套、只应一声）。是的话不起运行，只回一句问要做什么。
+ * 去掉标点、空白、表情后比对；拿不准一律当成是在交活（宁可做，也不把正经话当客套）。
+ */
+export function looksLikeSmallTalk(text: string): boolean {
+  const bare = text
+    .normalize('NFKC')
+    .replace(/[\s\p{P}\p{S}]+/gu, '')
+    .trim()
+  return bare === '' || SMALL_TALK.test(bare)
+}

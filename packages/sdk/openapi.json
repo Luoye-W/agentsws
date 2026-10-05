@@ -39478,7 +39478,7 @@
     "/v1/matters/{id}/reroute": {
       "post": {
         "operationId": "rerouteMatter",
-        "summary": "换一条职责来做这件事（54 §2）：换后新的 Run 走新职责，旧 Run 不动",
+        "summary": "换一条职责来做这件事（54 §2）：换后新的 Run 走新职责，旧 Run 不动；`run: true` 换完立刻按原话起一次运行（WP237）",
         "tags": ["work"],
         "parameters": [
           {
@@ -39511,7 +39511,7 @@
         ],
         "responses": {
           "200": {
-            "description": "{ matter, assignment_id }",
+            "description": "{ matter, assignment_id, run_id? }",
             "content": {
               "application/json": {
                 "schema": {
@@ -39612,7 +39612,7 @@
           "range": "own",
           "sensitivity": "internal"
         },
-        "x-returns": "{ matter, assignment_id }",
+        "x-returns": "{ matter, assignment_id, run_id? }",
         "requestBody": {
           "required": true,
           "content": {
@@ -39624,6 +39624,9 @@
                   "role_id": {
                     "type": "string",
                     "minLength": 1
+                  },
+                  "run": {
+                    "type": "boolean"
                   }
                 },
                 "required": ["role_id"]

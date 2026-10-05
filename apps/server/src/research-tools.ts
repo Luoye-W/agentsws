@@ -226,3 +226,24 @@ export function createResearchToolExecutor(options: ResearchToolsOptions): ToolE
         }
   }
 }
+
+/**
+ * WP237（#67，Fable 定）：给模型看的 `read_reddit` 描述里写的那个单价，每次运行按价目表现查。
+ *
+ * 一个工具背后是三项能力（搜帖 / 读版 / 读评论）：三项都查得到且同价才回那个数；
+ * 价不一样（一句「约 N 积分一条」说不准）或者有一项查不到，就回 `undefined`——描述里只写「按条计积分」。
+ */
+export async function redditReadPrice(
+  tool: string,
+  priceOf: (capability: string) => Promise<{ credits: number } | undefined>,
+): Promise<number | undefined> {
+  if (tool !== READ_REDDIT_TOOL) return undefined
+  const prices = await Promise.all(
+    ['social.reddit.search', 'social.reddit.posts', 'social.reddit.comments'].map(
+      async (c) => (await priceOf(c).catch(() => undefined))?.credits,
+    ),
+  )
+  const first = prices[0]
+  if (first === undefined || prices.some((p) => p !== first)) return undefined
+  return first
+}

@@ -467,6 +467,8 @@ export class Work {
       todo_id?: TodoId
       /** WP236：一次运行被停下来的那一条（界面据此出「接着跑」）。 */
       stopped?: MatterEvent['stopped']
+      /** WP237：岗位内路由那一条上能一键选 / 换的职责。 */
+      route?: MatterEvent['route']
       at?: Iso8601
     },
   ): MatterEvent {
@@ -484,6 +486,14 @@ export class Work {
       ...(input.approval_item_id === undefined ? {} : { approval_item_id: input.approval_item_id }),
       ...(input.todo_id === undefined ? {} : { todo_id: input.todo_id }),
       ...(input.stopped === undefined ? {} : { stopped: { reason: input.stopped.reason } }),
+      ...(input.route === undefined
+        ? {}
+        : {
+            route: {
+              ...(input.route.picked === undefined ? {} : { picked: input.route.picked }),
+              options: input.route.options.map((o) => ({ ...o })),
+            },
+          }),
     }
     this.store.appendMatterEvent(event)
     this.store.putMatter({
@@ -502,7 +512,13 @@ export class Work {
    */
   async say(
     matter_id: MatterId,
-    input: { person_id: PersonId; assignment_id: AssignmentId; text: string },
+    input: {
+      person_id: PersonId
+      assignment_id: AssignmentId
+      text: string
+      /** WP237：交给运行的那段话（不给 = 就是 `text`）。刚定下职责时要把原来那件事一起带上。 */
+      brief?: string
+    },
   ): Promise<{ event: MatterEvent; run_id?: RunId }> {
     const matter = this.requireMatter(matter_id)
     const event = this.appendEvent(matter_id, {
@@ -520,7 +536,7 @@ export class Work {
     if (this.startRunFn === undefined) return { event }
     const { run_id } = await this.startRunFn({
       matter,
-      brief: input.text,
+      brief: input.brief ?? input.text,
       actor: { person_id: input.person_id, assignment_id: input.assignment_id },
     })
     this.appendEvent(matter_id, {
@@ -530,6 +546,30 @@ export class Work {
       run_id,
     })
     return { event, run_id }
+  }
+
+  /**
+   * WP237：不经人话、直接按这件事原来那段话再起一次运行（人在卡上 / 事项页选定了职责，
+   * 或者一键「换成另一条并重跑」）。时间线只记一条「开始做了」，不伪造一条人话。
+   */
+  async run(
+    matter_id: MatterId,
+    input: { person_id: PersonId; assignment_id: AssignmentId; brief: string; text?: string },
+  ): Promise<{ run_id?: RunId }> {
+    const matter = this.requireMatter(matter_id)
+    if (this.startRunFn === undefined) return {}
+    const { run_id } = await this.startRunFn({
+      matter,
+      brief: input.brief,
+      actor: { person_id: input.person_id, assignment_id: input.assignment_id },
+    })
+    this.appendEvent(matter_id, {
+      kind: 'run',
+      text: input.text ?? 'Agent 开始做这件事了',
+      actor: { kind: 'agent', id: input.assignment_id },
+      run_id,
+    })
+    return { run_id }
   }
 
   /** 事项摘要由运行结束事件触发（24 记忆纪律：摘要是「到哪了」，不是流水账）。 */

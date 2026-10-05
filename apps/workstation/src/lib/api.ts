@@ -631,15 +631,26 @@ export const openMatterAtPosition = (
     assignment: id,
   })
 
-/** 54 §2：换一条职责来做这件事（换后新的 Run 走新职责，旧 Run 不动）。 */
+/**
+ * 54 §2：换一条职责来做这件事（换后新的 Run 走新职责，旧 Run 不动）。
+ * WP237：`run: true` = 换完立刻按原话起一次运行（「走 X」「换成 X」按钮）。
+ */
 export const rerouteMatter = (
   matter_id: string,
   role_id: string,
-): Promise<{ matter: { id: string; role_id?: string }; assignment_id: string }> =>
+  options: { run?: boolean } = {},
+): Promise<{ matter: { id: string; role_id?: string }; assignment_id: string; run_id?: string }> =>
   api(`/v1/matters/${encodeURIComponent(matter_id)}/reroute`, {
     method: 'POST',
-    body: { role_id },
+    body: options.run === true ? { role_id, run: true } : { role_id },
   })
+
+/**
+ * WP237：按岗位模板 id 取岗位实体（还没定职责的事项只有模板 id，没有分配可以当请求头）。
+ * 请求头用当前那条分配；服务端照样只回本人名下的那几条。
+ */
+export const getPositionByTemplate = (id: string): Promise<PositionInstanceData> =>
+  api<PositionInstanceData>(`/v1/positions/${encodeURIComponent(id)}`)
 
 /** 54 §3 / WP71：某一层的记忆（第三栏「记忆」面板读的就是它）。 */
 export interface MemoryEntryData {

@@ -398,7 +398,12 @@ import {
 } from './personas.js'
 import { createPlatformCliProber, PlatformCliLoginStore, type ProbeExec } from './platform-cli.js'
 import { createPlatformKitPort, resolveBrandPlatform } from './platform-kit.js'
-import { createPositions, type PositionsAssembly, retargetPositionMatters } from './positions.js'
+import {
+  createPositions,
+  isRouteChoice,
+  type PositionsAssembly,
+  retargetPositionMatters,
+} from './positions.js'
 import { createPrStore, prDeckData, seedDemoPr } from './pr.js'
 import { createPrService } from './pr-service.js'
 import { createPricingCatalog, type PricingCatalogSource } from './pricing-catalog.js'
@@ -410,7 +415,7 @@ import {
   type ReconcileGuardOptions,
 } from './reconcile.js'
 import { createConnectRecordSource } from './records.js'
-import { createResearchToolExecutor } from './research-tools.js'
+import { createResearchToolExecutor, redditReadPrice } from './research-tools.js'
 import { readRunBrowser } from './run-browser.js'
 import { createRunLimitsSettings } from './run-limits-settings.js'
 import { createRuntime, type MatterRecordSource, type RuntimeAssembly } from './runtime.js'
@@ -3298,6 +3303,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
                 resolveDataCreditBudget(roles.roles.get(req.actor.role_id)?.thresholds),
               priceOf: async (capability) => (await ownCloud.priceOf(capability))?.credits,
             }),
+            // WP237（#67）：read_reddit 的描述里写现价（价目表现查；三项单价不一样或取不到就不写数）
+            toolPrice: (tool) => redditReadPrice(tool, (c) => ownCloud.priceOf(c)),
             /*
              * WP153（09-26 真账号冒烟 §3）：店主的「列岗位 / 列连接」两个只读工具。
              *
@@ -3732,6 +3739,14 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       // WP234（docs/54 §6.1）：一条分配安放在哪个岗位（制度层那张表，跨品牌共用一份）
       placementOf: (assignment_id) => org.placementOf(assignment_id),
       appendEvent,
+      // WP237：「换成 X」重跑之前先停掉这件事上还在跑的那次（取消原因 user，原因进时间线）
+      stopRuns: async (matter_id, reason) => {
+        let stopped = 0
+        for (const r of runtime?.activeRuns() ?? [])
+          if (r.matter_id === matter_id && (await runtime?.stopRun(r.run_id, reason, 5_000)))
+            stopped += 1
+        return stopped
+      },
     })
     positionAssemblies.set(ws, positionsAssembly)
     // 六层技能里的 `position` 那一层、以及岗位层上下文那三样，都从这里来
@@ -4665,6 +4680,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
 
   // WP154：选题卡批了 → 按卡片所属品牌开事项（品牌模块到这里才建得出来）
   seoDecidedHook.current = async (item) => {
+    // WP237：选择卡选了（或者老卡点了「认领」）→ 事项钉到那条职责、按原话起一次运行
+    if (isRouteChoice(item)) return (await positionsFor(item.workspace_id)).onChoiceDecided(item)
     const brand = await brands?.forWorkspace(item.workspace_id)
     // WP173：「发信域名」那张选择卡选了 → 记下发信邮箱、体检、排着的首封往前推
     if (item.kind === B2B_SENDER_CHOICE_KIND) return brand?.b2bOutbound.onSenderChosen(item)
@@ -6582,6 +6599,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     const port = createWorkPort({
       clock,
       work: brand.work,
+      // WP237：从岗位开的事项里说话，用那条职责的分配接着做（还没定就先定，不落到负责人那条上）
+      sayAt: async (actor, matter_id, text) =>
+        (await positionsFor(ws)).sayAt({ matter_id, person_id: actor.person_id, text }),
       // 37 §2 表第三行：会议一定有时间，一定上日历
       meetings: (actor, range) => meetings.calendarItems(range, actor.workspace_id),
       /**
@@ -6894,14 +6914,20 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           ...(out.run_id === undefined ? {} : { run_id: out.run_id }),
         }
       },
-      reroute: async (actor, matter_id, role_id) => {
-        const out = await assembly.reroute({ matter_id, role_id, person_id: actor.person_id })
+      reroute: async (actor, matter_id, role_id, opts) => {
+        const out = await assembly.reroute({
+          matter_id,
+          role_id,
+          person_id: actor.person_id,
+          ...(opts?.run === true ? { run: true } : {}),
+        })
         return {
           matter: {
             id: out.matter.id,
             ...(out.matter.role_id === undefined ? {} : { role_id: out.matter.role_id }),
           },
           assignment_id: out.assignment_id,
+          ...(out.run_id === undefined ? {} : { run_id: out.run_id }),
         }
       },
     }
@@ -8182,7 +8208,9 @@ function seoDecided(bus: ApprovalBus, hook: SeoDecidedHook): ApprovalBus {
         if (
           out.kind === 'seo_topic' ||
           out.kind === B2B_SENDER_CHOICE_KIND ||
-          out.kind === 'inbound_dead_letter'
+          out.kind === 'inbound_dead_letter' ||
+          // WP237：「这件事该走哪条职责」选定了 → 钉到那条、立刻开跑
+          isRouteChoice(out)
         ) {
           try {
             await hook.current?.(out)

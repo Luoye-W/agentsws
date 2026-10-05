@@ -18,6 +18,7 @@ import type {
   Goal,
   GoalProgress,
   Iso8601,
+  MatterEvent,
   PersonId,
   StartRun,
   Todo,
@@ -86,6 +87,15 @@ export interface WorkPortOptions {
   work: Work
   /** 本人可见的审批项（已按 recipient 过滤）——卡片到期叠层与战报四格都从它数 */
   approvals(actor: WorkActor): Promise<ApprovalItem[]> | ApprovalItem[]
+  /**
+   * WP237：在事项里说话时先问一句岗位面——从岗位开的事项要用**那条职责**的分配接着做
+   * （还没定职责时先定）。回 `undefined` = 不归它管，走老路（请求头上那条分配）。
+   */
+  sayAt?(
+    actor: WorkActor,
+    matter_id: string,
+    text: string,
+  ): Promise<{ event: MatterEvent; run_id?: string } | undefined>
   /** 店铺侧订单行；目标指标从它算 */
   orders(): OrderRow[]
   /** ObjectRef → 人话 */
@@ -307,7 +317,8 @@ export function createWorkPort(options: WorkPortOptions): WorkPort {
       const events = work.store.listMatterEvents(id, opts)
       return { events, has_more: work.store.countMatterEvents(id) > events.length }
     },
-    say: (actor, id, text) =>
+    say: async (actor, id, text) =>
+      (await options.sayAt?.(actor, id, text)) ??
       work.say(id, { person_id: actor.person_id, assignment_id: actor.assignment_id, text }),
 
     async goals(actor, filter) {

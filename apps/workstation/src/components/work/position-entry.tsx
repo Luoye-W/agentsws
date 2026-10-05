@@ -55,7 +55,8 @@ export function PositionEntry({ id }: { id: string }): React.ReactNode {
       setText('')
       void client.invalidateQueries({ queryKey: ['position-instance', id] })
       // 判准了就直接进事项页；拿不准就停在这儿，把候选摆出来让人点一下
-      if (out.ambiguous) setChoice(out)
+      // WP237：只有出了选择卡才停在这儿；「你好」这类（没出卡、事项里回了一句问要做什么）进事项页
+      if (out.ambiguous && out.approval_item_id !== undefined) setChoice(out)
       else navigate(`/matters/${out.matter.id}`)
     },
   })
@@ -76,7 +77,8 @@ export function PositionEntry({ id }: { id: string }): React.ReactNode {
   /** 选择卡上点了一条：把这件事定给那条职责，然后进事项页（新的 Run 走它）。 */
   const pick = useMutation({
     mutationFn: (input: { matter_id: string; role_id: string }) =>
-      rerouteMatter(input.matter_id, input.role_id),
+      // WP237：选了就钉到那条并立刻开跑（原来只钉不跑，事项停在那儿）
+      rerouteMatter(input.matter_id, input.role_id, { run: true }),
     onSuccess: (_out, input) => {
       setChoice(undefined)
       navigate(`/matters/${input.matter_id}`)

@@ -681,6 +681,14 @@ export function priorityBandOf(
   return 'P3'
 }
 
+/**
+ * WP237：岗位内路由拿不准时出的那张「这件事该走哪条职责」卡（`claim` 类、`form: 'route_choice'`）。
+ * 它借的是认领卡的 kind，但问的是选择题——按钮是候选职责，不是「认领 / 不是客户问题」。
+ */
+export function isRouteChoiceItem(item: Pick<ApprovalItem, 'kind' | 'payload'>): boolean {
+  return item.kind === 'claim' && isRecord(item.payload) && item.payload.form === 'route_choice'
+}
+
 /** 选择题卡的选项（36 §2.2：`policy_change` 是问句形态）。 */
 export function optionsOf(item: ApprovalItem): DeckOption[] | undefined {
   const payload = item.payload
@@ -693,6 +701,16 @@ export function optionsOf(item: ApprovalItem): DeckOption[] | undefined {
       if (id !== undefined && label !== undefined) parsed.push({ id, label })
     }
     if (parsed.length > 0) return parsed
+  }
+  // WP237：WP237 之前出的「走哪条职责」卡把选项放在卡本身（`item.options`）而不是载荷里，
+  // 于是投影不出选项、按钮成了「认领 / 不是客户问题」。老卡也按候选职责出选项。
+  if (isRouteChoiceItem(item)) {
+    const own = (item.options ?? []).filter((o) => o.id !== '' && o.label !== '')
+    if (own.length > 0)
+      return own.map((o) => ({
+        id: o.id,
+        label: o.label.startsWith('走「') ? o.label : `走「${o.label}」`,
+      }))
   }
   if (item.kind !== 'policy_change') return undefined
   // 没写 options 的 policy_change 仍然是问句：把 before / after 变成两个选项，
@@ -755,8 +773,12 @@ export function projectCard(item: ApprovalItem, ctx: ProjectContext): DeckCard {
   return {
     id: item.id,
     kind,
-    // WP96：排版跟着 kind（`staged_change` 再看账本条目类型）一起下发，见 layout.ts
-    layout: layoutFor(kind, str(payload.kind)),
+    // WP96：排版跟着 kind（`staged_change` 再看账本条目类型）一起下发，见 layout.ts。
+    // WP237：「这件事该走哪条职责」是选择题（按钮就是候选职责），不是转交卡
+    layout:
+      isRouteChoiceItem(item) && options !== undefined
+        ? 'choice'
+        : layoutFor(kind, str(payload.kind)),
     // WP100：算 layout 时已经读过这一格，顺手带出来给类别人话与主动词用（见 verbs.ts）
     ...(kind === 'staged_change' && str(payload.kind) !== undefined
       ? { change_kind: str(payload.kind) as string }

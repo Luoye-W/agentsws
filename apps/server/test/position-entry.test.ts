@@ -6,7 +6,7 @@
  * - 岗位实体：谁在做、展开了哪几条职责（各自的分配）、下面有多少事项
  * - 一句话交给网站运营 → 路由到店铺管理 → 起 Run，**用的是那条职责的分配**
  * - **权限不并集**：同一个人也持有客服职责，但这次 Run 那条分配上没有退款动作
- * - 拿不准 → 出选择卡，不起 Run，事项上没有职责
+ * - 拿不准 → 出选择卡，不起 Run，事项上没有职责（WP237：同一个人的职责打平按分取、一个都没命中按先后取；「你好」只问一句）
  * - 换职责 → 新的分配；旧 Run 一条都没动
  * - 不是自己名下的职责换不过去（换职责不是扩权的口子）
  */
@@ -247,24 +247,39 @@ describe('54 §2 从岗位开一件事', () => {
     expect(out.picked?.assignment_id).toBe(idOf('dtc.support'))
   })
 
-  it('拿不准不猜：出一张选择卡，不起 Run，事项上还没有职责', async () => {
+  it('WP237：同一个人的两条职责打平 → 不问人，按分高的那条开跑', async () => {
     const out = await dataOf<OpenView>(
       await call('POST', '/v1/positions/web-ops/matters', {
         body: { title: '客户问退货' },
       }),
     )
+    expect(out.ambiguous).toBe(false)
+    expect(out.approval_item_id).toBeUndefined()
+    expect(out.run_id).toBeDefined()
+    expect(out.reason).toContain('要换成')
+  })
+
+  it('WP237：一个判据词都没命中 → 按岗位里职责的先后取第一条开跑（不问人）', async () => {
+    const out = await dataOf<OpenView>(
+      await call('POST', '/v1/positions/web-ops/matters', { body: { title: '整理一下' } }),
+    )
+    expect(out.ambiguous).toBe(false)
+    expect(out.approval_item_id).toBeUndefined()
+    expect(out.picked?.role_id).toBe('dtc.store')
+    expect(out.run_id).toBeDefined()
+  })
+
+  it('WP237：「你好」不是交活 → 不起 Run、不出卡，事项上还没有职责（没有职责就没有权限）', async () => {
+    const out = await dataOf<OpenView>(
+      await call('POST', '/v1/positions/web-ops/matters', { body: { title: '你好' } }),
+    )
     expect(out.ambiguous).toBe(true)
     expect(out.picked).toBeUndefined()
     expect(out.run_id).toBeUndefined()
-    expect(out.approval_item_id).toBeDefined()
-    expect(out.candidates.length).toBeGreaterThanOrEqual(2)
+    expect(out.approval_item_id).toBeUndefined()
     const matter = server.work.getMatter(out.matter.id) as Matter
-    // 没有职责就没有权限，这一点不含糊
     expect(matter.role_id).toBeUndefined()
     expect(matter.position_id).toBeUndefined()
-    const card = await server.txn.approvals.get(out.approval_item_id as string)
-    expect(card?.kind).toBe('claim')
-    expect((card?.options ?? []).map((o) => o.id).length).toBeGreaterThanOrEqual(2)
   })
 
   it('名下没有这个岗位下任何一条职责 → 开不了这里的事', async () => {

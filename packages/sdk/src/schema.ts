@@ -4127,7 +4127,7 @@ export interface paths {
     }
     get?: never
     put?: never
-    /** 换一条职责来做这件事（54 §2）：换后新的 Run 走新职责，旧 Run 不动 */
+    /** 换一条职责来做这件事（54 §2）：换后新的 Run 走新职责，旧 Run 不动；`run: true` 换完立刻按原话起一次运行（WP237） */
     post: operations['rerouteMatter']
     delete?: never
     options?: never
@@ -34734,11 +34734,12 @@ export interface operations {
       content: {
         'application/json': {
           role_id: string
+          run?: boolean
         }
       }
     }
     responses: {
-      /** @description { matter, assignment_id } */
+      /** @description { matter, assignment_id, run_id? } */
       200: {
         headers: {
           [name: string]: unknown

@@ -262,7 +262,8 @@ export function DeckCardBody({
       case 'choice':
         return (
           <div className="mt-2.5" data-testid="deck-layout-choice">
-            {options.length === 0 ? (
+            {/* WP237：「走哪条职责」的选项就是下面那排按钮，这里只放那一句为什么 */}
+            {options.length === 0 || card.kind === 'claim' ? (
               <OutboundBody card={card} mode={mode} />
             ) : (
               <OptionList options={options} option={option} onOption={onOption} kind={card.kind} />

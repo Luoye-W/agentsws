@@ -12,7 +12,8 @@
  *    `routeWithinPosition`（与服务进程、与秘书是同一份）。这里只负责把"这个人在这个
  *    岗位下持有哪几条职责"递进去。
  * 3. **起 Run 或出选择卡**：判准了就用**被路由到的那条职责的分配**起 Run（05 §4 不并集——
- *    不是岗位的权限，是那一条的）；拿不准就出一张选择卡，不猜。
+ *    不是岗位的权限，是那一条的）；拿不准就出一张选择卡，不猜。WP237：同一个人的几条职责
+ *    打平按分取（`settleCloseCall`），不算拿不准。
  */
 import type { ApprovalItem, Assignment, PersonId, RoleId } from '@agentsws/contracts'
 import {
@@ -21,6 +22,8 @@ import {
   type RouteCandidate,
   roleRouteTerms,
   routeWithinPosition,
+  settleCloseCall,
+  settleNoHit,
 } from '@agentsws/roles'
 import type { World } from './world.js'
 
@@ -108,7 +111,19 @@ export function installPositions(world: World): PositionsLoop {
             }
       })
       .filter((p) => p !== undefined)
-    const verdict = routeWithinPosition(text, profiles)
+    // WP237：参赛的全是这个人自己的职责——打平（前两名都够像、只是分不开）按分取，不问人；
+    // 谁都不太像 / 一个都没命中才出选择卡（与服务进程同一个判据，`@agentsws/roles`）
+    // WP237（Fable 代定）：一个都没命中也按岗位里职责的先后取第一条
+    const ordered = template.roles
+      .map((r) => profiles.find((p) => p.role_id === r.role))
+      .filter((p) => p !== undefined)
+    const verdict = settleNoHit(
+      settleCloseCall(
+        routeWithinPosition(text, profiles),
+        template.roles.map((r) => r.role),
+      ),
+      ordered,
+    )
     const picked =
       verdict.picked === undefined ? undefined : held.find((a) => a.role_id === verdict.picked)
 
@@ -191,6 +206,10 @@ export function installPositions(world: World): PositionsLoop {
         matter_id: input.matter_id,
         position_id: input.position,
         candidates: input.verdict.candidates,
+        options: input.verdict.candidates.map((c) => ({
+          id: c.role_id,
+          label: `走「${c.role_name}」`,
+        })),
       },
       evidence: {
         source_events: [],
@@ -212,7 +231,10 @@ export function installPositions(world: World): PositionsLoop {
         separation_of_duties: false,
       },
       priority: 'queue',
-      options: input.verdict.candidates.map((c) => ({ id: c.role_id, label: c.role_name })),
+      options: input.verdict.candidates.map((c) => ({
+        id: c.role_id,
+        label: `走「${c.role_name}」`,
+      })),
     })
     return item.state === 'blocked' ? undefined : item
   }
