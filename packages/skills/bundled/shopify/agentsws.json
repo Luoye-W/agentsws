@@ -1,0 +1,30 @@
+{
+  "kind": "official",
+  "upstream": {
+    "publisher": "Shopify",
+    "repo": "Shopify/Shopify-AI-Toolkit",
+    "tag": "v2.1.0",
+    "commit": "8692e6a449ff7f088a0c3883a357688aba9a3235",
+    "path": "skills/shopify",
+    "license": "MIT"
+  },
+  "frontmatter": {
+    "license": "MIT",
+    "tier": "open",
+    "version": "1.17.1",
+    "display_name": "Shopify 官方技能",
+    "display_name_en": "Shopify official skill",
+    "summary": "官方写法：Liquid 主题、元字段、后台接口",
+    "summary_en": "Official Shopify: Liquid themes, metafields, Admin API",
+    "positions": "site"
+  },
+  "preamble": "AGENTSWS.md",
+  "references": ["references/liquid.md", "references/custom-data.md", "references/admin.md"],
+  "sha256": {
+    "SKILL.md": "5d4a180b8bd93b0b3417feefa40b387382d04b88db494f5fee992942be25a4ea",
+    "references/liquid.md": "1de831bb45e3535c1d2c403015a38c69c3912d59a7dbae84b36ba6b7fe7b0595",
+    "references/custom-data.md": "253d8bf7c9ff44c1b5fd67b4883a520806fe4b1117ea0471a417d54498f531da",
+    "references/admin.md": "712fdc7b07b876f647babab99ebf87ef491ea6d7dd66befa8c964594cbb63606",
+    "LICENSE": "75c4e0e960d7639e5974c0b10a420f738b8011ac08742d3bbb13cca849fda9f4"
+  }
+}

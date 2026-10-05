@@ -63,6 +63,8 @@ export * from './model.js'
 // WP180：官方插件（装 / 升级 / 卸载出卡、只从审过的清单装）与配置写回
 export * from './official-plugins.js'
 export * from './packages.js'
+// WP216：建站平台 → 官方技能 / 官方工具 / 官方 CLI（平台专属那一套的唯一真源）
+export * from './platform-kits.js'
 // 60 §1 / §2 公共关系的四条职责与四个对象（WP78）。与 social.ts 一条都不共用：
 // `social.reddit` 是**我们自己的** subreddit，`pr.reddit` 是**别人的**。
 export * from './pr.js'

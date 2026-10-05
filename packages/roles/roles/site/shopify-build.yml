@@ -96,7 +96,10 @@ grounding:
       prefetch: false,
     }
 
-skills: []
+skills:
+  # WP216：Shopify 官方技能——搭店时要写导航 / 页面 / 元字段的 Admin GraphQL（admin、custom-data 两段）。
+  # 按需；只在品牌平台是 Shopify 时加载（`PLATFORM_KITS`）。
+  - { name: shopify, tier: open, load: on_demand }
 
 home_blocks:
   - {

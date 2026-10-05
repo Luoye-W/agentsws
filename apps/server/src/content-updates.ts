@@ -28,7 +28,11 @@ import type {
   StorefrontPlatform,
   WorkspaceId,
 } from '@agentsws/contracts'
-import { CONTENT_MIRROR_REPO, CONTENT_FEED_BASE as DEFAULT_BASE } from '@agentsws/contracts'
+import {
+  CONTENT_MIRROR_REPO,
+  CONTENT_FEED_BASE as DEFAULT_BASE,
+  skillOnPlatform,
+} from '@agentsws/contracts'
 import {
   type AppliedContent,
   BUNDLED_SKILLS_DIR,
@@ -208,10 +212,16 @@ export function createContentUpdates(options: ContentUpdatesOptions): ContentUpd
   const itemOf = (id: string): ContentItem | undefined => manifest()?.items.find((i) => i.id === id)
   const supported = (item: ContentItem): boolean =>
     SUPPORTED_CONTENT_KINDS.includes(item.kind) && contentItemFitsApp(item, options.appVersion)
-  const enabledFor = (item: ContentItem, ws: WorkspaceId): boolean =>
-    item.platforms === undefined ||
-    item.platforms.length === 0 ||
-    item.platforms.includes(options.platformOf(ws) ?? 'shopify')
+  /**
+   * 这个品牌启用了这条内容没有。与 WP216 同一口径：平台专属的（清单写了 `platforms`，或技能名在
+   * `PLATFORM_KITS` 里）只落到建站平台**正是**那一个的品牌；品牌没设平台就不落（不按 Shopify 兜底）。
+   */
+  const enabledFor = (item: ContentItem, ws: WorkspaceId): boolean => {
+    const platform = options.platformOf(ws)
+    if (item.kind === 'skill' && !skillOnPlatform(item.name, platform)) return false
+    if (item.platforms === undefined || item.platforms.length === 0) return true
+    return platform !== undefined && item.platforms.includes(platform)
+  }
 
   /** 随软件带的那一版的版本号（没带这一条就 `undefined`）。 */
   const bundledVersionOf = (item: Pick<ContentItem, 'kind' | 'name'>): string | undefined => {

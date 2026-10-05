@@ -369,6 +369,22 @@ describe('自动 / 每次问我、只落启用品牌', () => {
     })
   })
 
+  it('平台专属的：没设建站平台的品牌不落（与 WP216 同口径，不按 Shopify 兜底）', async () => {
+    const k = key()
+    const r = await rig({
+      pack: makePack(k, [
+        {
+          meta: meta('demo', '1.1.0', { platforms: ['shopify'] }),
+          md: SKILL('demo', '1.1.0', NEW_RULES),
+        },
+      ]),
+      keys: [contentPublicKeyOf(k)],
+      platforms: { ws_a: 'shopify', ws_none: undefined as unknown as StorefrontPlatform },
+    })
+    await r.updates.check()
+    expect([...r.bus.items.values()].map((c) => c.workspace_id)).toEqual(['ws_a'])
+  })
+
   it('设成「自动」→ 不出卡直接换；审核记录里有命中的 → 照样出卡', async () => {
     const k = key()
     const r = await rig({
