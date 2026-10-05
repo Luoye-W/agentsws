@@ -21,6 +21,10 @@ import { useQuery } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
 import { Link, Navigate, useInRouterContext } from 'react-router-dom'
 import { FactChip } from '@/components/chips'
+import {
+  ContentConflictDialog,
+  ContentDiffDialog,
+} from '@/components/content-updates/content-diff-dialog'
 import { DeckActionBar } from '@/components/deck/deck-action-bar'
 import { DeckCardBody } from '@/components/deck/deck-card-body'
 import { focusEvidenceCard } from '@/components/deck/deck-focus'
@@ -37,6 +41,7 @@ import { DeckNotePanel, DeckSupplementPanel, type NoteMode } from '@/components/
 import { CardChips, EvidencePill, evidenceLines } from '@/components/deck/evidence-chips'
 import { GoButton, StatusPill, type Tone, WsAvatar } from '@/components/design'
 import { useRailState } from '@/components/rail/rail-state'
+import { Button } from '@/components/ui/button'
 import { getPositions, type RoleTaskExampleData } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 import { formatDateTime } from '@/lib/format'
@@ -251,7 +256,19 @@ export function DeckCardView({
   /** WP210：按了「去邮箱回复」→ 跳消息页（不在路由里渲染时——例如独立的聊天窗——只记决定）。 */
   const [goMessages, setGoMessages] = useState(false)
   const inRouter = useInRouterContext()
+  /** WP219：内容更新卡的「查看改动」/ 冲突卡的「看对比」就地开弹窗（这两种卡没有事项可进）。 */
+  const [compare, setCompare] = useState(false)
+  const contentPayload = (card.detail.payload ?? {}) as {
+    item_id?: string
+  } & Record<string, unknown>
+  const isContentCard =
+    (card.kind === 'content_update' || card.kind === 'content_conflict') &&
+    typeof contentPayload.item_id === 'string'
   const act = (action: DeckAction): void => {
+    if (action === 'open' && isContentCard) {
+      setCompare(true)
+      return
+    }
     if (action === 'open') {
       onOpen(card)
       return
@@ -289,6 +306,12 @@ export function DeckCardView({
       ].join(' ')}
     >
       {goMessages && inRouter ? <Navigate to="/messages" /> : null}
+      {compare && card.kind === 'content_update' && typeof contentPayload.item_id === 'string' ? (
+        <ContentDiffDialog itemId={contentPayload.item_id} open onOpenChange={setCompare} />
+      ) : null}
+      {compare && card.kind === 'content_conflict' ? (
+        <ContentConflictDialog payload={contentPayload} open onOpenChange={setCompare} />
+      ) : null}
       {/* 37 §2.2b：卡片是指向事项的指针。点它 = 进入那个工作现场。 */}
       {card.matter_id === undefined ? null : (
         <button
@@ -442,6 +465,22 @@ export function DeckCardView({
               onSupplement={() => {
                 setPanel('supplement')
               }}
+              {...(isContentCard
+                ? {
+                    extra: (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        data-testid="deck-content-compare"
+                        onClick={() => {
+                          setCompare(true)
+                        }}
+                      >
+                        {t(`verb.${card.kind}.open`)}
+                      </Button>
+                    ),
+                  }
+                : {})}
             />
           ) : (
             <DeckNotePanel
@@ -472,7 +511,7 @@ export function DeckCardView({
         <GoButton
           label={t('deck.go')}
           onClick={() => {
-            onOpen(card)
+            act('open')
           }}
         />
       </div>

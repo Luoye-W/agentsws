@@ -144,6 +144,11 @@ export interface DemoOptions {
    * 装上「自动化任务」拍右栏定时任务面板）；demo 默认全内存、没有插件层（设置页照实说「装不了」）。
    */
   officialPlugins?: ServerOptions['officialPlugins']
+  /**
+   * WP219：已审的内容更新（本地替身更新源 + 现生成的钥匙）。**只给截图脚本用**（`scripts/e2e-wp219-shots.mjs`）；
+   * demo 默认不装配内容更新（设置里没有那一行，deck 里也不会多出卡）。
+   */
+  contentUpdates?: ServerOptions['contentUpdates']
 }
 
 export interface Demo {
@@ -1391,6 +1396,7 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
     searchConsoleFor: () => standInSearchConsole({ rows: DEMO_GSC_ROWS, pages: DEMO_PAGES }),
     ...(options.searchDataFor === undefined ? {} : { searchDataFor: options.searchDataFor }),
     ...(options.officialPlugins === undefined ? {} : { officialPlugins: options.officialPlugins }),
+    ...(options.contentUpdates === undefined ? {} : { contentUpdates: options.contentUpdates }),
     // WP158：Search Console 读数层配替身连接器（两个站点 → 先出「选一下」那张小卡）
     googleReadsFor: (ws) => {
       const hit = demoGoogle.get(ws) ?? demoGoogleReads({ workspace_id: ws, clock: world.clock })

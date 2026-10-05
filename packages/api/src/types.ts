@@ -68,6 +68,7 @@ import type { CloudAccountPort } from './routes/cloud-account.js'
 import type { ComputerUsePort } from './routes/computer-use.js'
 import type { ConnectionDirectoryPort } from './routes/connection-directory.js'
 import type { ConnectionsPort } from './routes/connections.js'
+import type { ContentUpdatesPort } from './routes/content-updates.js'
 import type { DataServiceApiPort } from './routes/data-service.js'
 import type { DesignPort } from './routes/design.js'
 import type { DshScenesPort } from './routes/dsh-scenes.js'
@@ -1013,6 +1014,11 @@ export interface GatewayDeps {
    * 一台机器一份；没装配时 `/v1/settings/official-plugins*` 回 not_implemented。
    */
   officialPlugins?: OfficialPluginsPort
+  /**
+   * WP219（docs/90）：设置 → 通用「已审的内容更新」——自动 / 每次问我、现在查一次、更新、退回、查看改动。
+   * 按品牌；没装配时 `/v1/settings/content-updates*` 回 not_implemented（设置页那一行不出）。
+   */
+  contentUpdates?: ContentUpdatesPort
   /**
    * WP216：这个品牌的平台专属那一套（官方技能 / 官方 MCP / 官方 CLI）。按品牌档案判断；
    * 没装配时 `/v1/platform-kit*` 回 not_implemented。

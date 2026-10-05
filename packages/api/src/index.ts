@@ -253,6 +253,11 @@ export type {
 } from './routes/connections.js'
 export { connectionRoutes } from './routes/connections.js'
 export {
+  type ContentUpdatesActor,
+  type ContentUpdatesPort,
+  contentUpdatesRoutes,
+} from './routes/content-updates.js'
+export {
   type DataServiceActor,
   type DataServiceApiPort,
   dataServiceRoutes,

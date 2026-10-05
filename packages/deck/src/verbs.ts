@@ -138,6 +138,15 @@ const VERB_BY_KIND: Readonly<Record<string, Partial<Record<DeckAction, string>>>
     approve: 'verb.dead_letter.approve',
     reject: 'verb.dead_letter.reject',
   },
+  // WP219：内容更新卡「更新 / 稍后 / 查看改动」，冲突卡「就这样 / 稍后 / 看对比」
+  content_update: {
+    approve: 'verb.content_update.approve',
+    open: 'verb.content_update.open',
+  },
+  content_conflict: {
+    approve: 'verb.content_conflict.approve',
+    open: 'verb.content_conflict.open',
+  },
   b2b_account_transfer: {
     approve: 'verb.handoff.approve.account_transfer',
     instruct: 'verb.handoff.instruct.account_transfer',
@@ -193,6 +202,9 @@ export const CATEGORY_BY_KIND: Partial<Record<DeckKind, string>> = {
   official_plugin: 'official_plugin',
   // WP210
   inbound_dead_letter: 'dead_letter',
+  // WP219
+  content_update: 'content_update',
+  content_conflict: 'content_conflict',
 }
 
 /** `ChangeKind` → 类别人话（`staged_change` 专用；画布头一行写的就是这一列）。 */

@@ -50,6 +50,9 @@ const KNOWN_KINDS: ReadonlySet<string> = new Set<ApprovalKind>([
   'official_plugin',
   // WP210：客户来信彻底投不进（再投一次 / 去邮箱回复）
   'inbound_dead_letter',
+  // WP219：内容更新卡与冲突选择卡（docs/90）
+  'content_update',
+  'content_conflict',
   // WP224：本周经营一页纸（L3 自动出、看完归档）
   'weekly_review',
 ])
