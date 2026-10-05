@@ -59,3 +59,55 @@ export function formatSize(bytes: number | null): string {
     return `${(bytes / 1024 / 1024).toFixed(bytes >= 100 * 1024 * 1024 ? 0 : 1)} MB`
   return `${Math.max(1, Math.round(bytes / 1024))} KB`
 }
+
+export type DownloadsSource = 'feed' | 'repo'
+
+export interface LoadDownloadsOptions {
+  url: string
+  /** 仓库里那份（`src/data/downloads.json`）：取不到、不合格时用它。 */
+  fallback: DownloadManifest
+  fetchImpl?: typeof fetch
+  timeoutMs?: number
+  /** 不打网（离线构建、测试）。 */
+  offline?: boolean
+}
+
+function looksLikeManifest(v: unknown): v is DownloadManifest {
+  if (typeof v !== 'object' || v === null) return false
+  const m = v as Partial<DownloadManifest>
+  return (
+    typeof m.version === 'string' &&
+    typeof m.channel === 'string' &&
+    Array.isArray(m.desktop) &&
+    typeof m.extension === 'object' &&
+    m.extension !== null
+  )
+}
+
+/**
+ * WP218：构建时取下载站上的最新清单。取到了还要过一遍 `manifestProblems`——
+ * 下载站上一份写坏的清单不该让官网挂掉，也不该把坏链接发出去：不合格就退回仓库那份。
+ */
+export async function loadDownloads(
+  o: LoadDownloadsOptions,
+): Promise<{ source: DownloadsSource; manifest: DownloadManifest }> {
+  const fallback = { source: 'repo' as const, manifest: o.fallback }
+  if (o.offline === true) return fallback
+  try {
+    const res = await (o.fetchImpl ?? fetch)(o.url, {
+      headers: { accept: 'application/json' },
+      signal: AbortSignal.timeout(o.timeoutMs ?? 8000),
+    })
+    if (!res.ok) return fallback
+    const body: unknown = await res.json()
+    if (!looksLikeManifest(body) || manifestProblems(body).length > 0) return fallback
+    return { source: 'feed', manifest: body }
+  } catch {
+    return fallback
+  }
+}
+
+/** 首页「下载」按钮：Windows 访客直接拿最新安装包（有链接时），其余去下载页挑（mac 分不清芯片）。 */
+export function directWindowsUrl(m: DownloadManifest): string | null {
+  return m.desktop.find((d) => d.id === 'win-x64')?.url ?? null
+}

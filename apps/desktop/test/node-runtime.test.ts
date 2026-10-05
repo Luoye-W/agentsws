@@ -2,7 +2,7 @@
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterAll, describe, expect, it } from 'vitest'
+import { afterAll, describe, expect, it, vi } from 'vitest'
 import { nodeFileStore } from '../src/node-files.js'
 import {
   cryptoRandomBytes,
@@ -11,6 +11,7 @@ import {
   nodeTimers,
   sleep,
   systemClock,
+  windowsKillTree,
 } from '../src/node-runtime.js'
 import { desktopPaths } from '../src/paths.js'
 import type { FileStore } from '../src/ports.js'
@@ -105,6 +106,82 @@ describe('nodeSpawner', () => {
     })
     child.kill()
     expect(await exited).toBe('SIGTERM')
+  })
+
+  // WP218：Windows 那条路（在任何平台上都能模拟：platform 注入 + 假的按树强杀）
+  it('Windows：先关 stdin 请它自己收尾，收尾了就不强杀', async () => {
+    const polite = join(root, 'polite.mjs')
+    writeFileSync(polite, "process.stdin.on('end', () => process.exit(0)); process.stdin.resume()")
+    const killTree = vi.fn()
+    const child = nodeSpawner({ platform: 'win32', killTree, forceKillAfterMs: 5000 }).spawn({
+      command: process.execPath,
+      args: [polite],
+      env: { PATH: process.env.PATH ?? '' },
+      stopViaStdin: true,
+    })
+    const exited = new Promise<number | null>((resolve) => {
+      child.onExit((code) => resolve(code))
+    })
+    child.kill()
+    expect(await exited).toBe(0)
+    expect(killTree).not.toHaveBeenCalled()
+    child.kill() // 已经退了：什么都不做
+    expect(killTree).not.toHaveBeenCalled()
+  })
+
+  it('Windows：关了 stdin 还赖着不走，到点按进程树强杀；SIGKILL / 没 stdin 直接强杀', async () => {
+    const stubborn = join(root, 'stubborn.mjs')
+    writeFileSync(stubborn, 'process.stdin.resume(); setInterval(() => {}, 1000)')
+    const killTree = vi.fn((pid: number) => {
+      process.kill(pid, 'SIGKILL')
+    })
+    const spawner = nodeSpawner({ platform: 'win32', killTree, forceKillAfterMs: 50 })
+    const a = spawner.spawn({
+      command: process.execPath,
+      args: [stubborn],
+      env: { PATH: process.env.PATH ?? '' },
+      stopViaStdin: true,
+    })
+    const aExit = new Promise<void>((resolve) => {
+      a.onExit(() => resolve())
+    })
+    a.kill()
+    await aExit
+    expect(killTree).toHaveBeenCalledTimes(1)
+
+    for (const [stopViaStdin, signal] of [
+      [true, 'SIGKILL'],
+      [false, undefined],
+    ] as const) {
+      const b = spawner.spawn({
+        command: process.execPath,
+        args: [stubborn],
+        env: { PATH: process.env.PATH ?? '' },
+        stopViaStdin,
+      })
+      const bExit = new Promise<void>((resolve) => {
+        b.onExit(() => resolve())
+      })
+      b.kill(signal)
+      await bExit
+    }
+    expect(killTree).toHaveBeenCalledTimes(3)
+  })
+
+  it('windowsKillTree：taskkill 全路径 + /T /F', () => {
+    const run = vi.fn()
+    windowsKillTree(7, { SystemRoot: 'D:\\Win' }, run)
+    windowsKillTree(8, { windir: 'E:\\W' }, run)
+    windowsKillTree(9, {}, run)
+    expect(run.mock.calls).toEqual([
+      ['D:\\Win\\System32\\taskkill.exe', ['/PID', '7', '/T', '/F']],
+      ['E:\\W\\System32\\taskkill.exe', ['/PID', '8', '/T', '/F']],
+      ['C:\\Windows\\System32\\taskkill.exe', ['/PID', '9', '/T', '/F']],
+    ])
+    // 默认的 run 起不来也不抛（这台机器上没有 taskkill）
+    expect(() => {
+      windowsKillTree(999_999, { SystemRoot: '/nonexistent' })
+    }).not.toThrow()
   })
 
   it('可执行文件不存在时报一次 exit（不是两次）', async () => {

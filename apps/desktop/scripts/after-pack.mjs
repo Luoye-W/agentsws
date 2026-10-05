@@ -118,7 +118,15 @@ export function runtimeDependencyNames(meta) {
   const peers = Object.keys(meta?.peerDependencies ?? {}).filter(
     (name) => optional[name]?.optional !== true,
   )
-  return [...new Set([...Object.keys(meta?.dependencies ?? {}), ...peers])]
+  // WP218：optionalDependencies 也算——sharp 的 `@img/sharp-win32-x64` 这类按平台装的二进制包就挂在这里，
+  // 收集器漏了它，Windows 上一用图片就 "Could not load the sharp module"。没装（别的平台的）补齐时自然跳过。
+  return [
+    ...new Set([
+      ...Object.keys(meta?.dependencies ?? {}),
+      ...peers,
+      ...Object.keys(meta?.optionalDependencies ?? {}),
+    ]),
+  ]
 }
 
 /**
@@ -245,6 +253,17 @@ for (const dir of pkgDirs) {
   db.close()
 }
 const req = createRequire(appDir + '/package.json')
+// WP218：N-API 的原生依赖（不按 ABI 换，但要确认这个平台那一份真在包里）：图片、Windows 进程控制、终端
+for (const name of ['sharp', 'koffi', 'node-pty']) {
+  let resolved
+  try {
+    resolved = req.resolve(name)
+  } catch {
+    continue
+  }
+  req(resolved)
+  process.stdout.write('native ok: ' + name + '\\n')
+}
 import(pathToFileURL(req.resolve('@agentsws/server')).href).then(
   (m) => {
     if (typeof m.createServer !== 'function') throw new Error('@agentsws/server 里没有 createServer')
@@ -306,6 +325,16 @@ export function copyElectronLicenses(searchDirs, licensesDir) {
 /** 安装包里放 profile 的目录（`<resources>/profiles/agentsws`）。桌面壳按同一个相对路径给服务进程。 */
 export const PROFILE_DIR = join('profiles', 'agentsws')
 
+/**
+ * WP218：工作台的构建产物（`<resources>/workstation`）。WP111 起的安装包一直没带它，
+ * 装好点「打开工作台」是一张 404——这里缺了就打包失败。
+ */
+export const WORKSTATION_DIR = 'workstation'
+
+export function missingWorkstation(resources) {
+  return !existsSync(join(resources, WORKSTATION_DIR, 'index.html'))
+}
+
 /** 必须在包里的两份（`electron-builder.yml` 的 extraResources 带进来）。 */
 export const PROFILE_FILES = ['cordis.patch.yml', 'plugin-allowlist.yml']
 
@@ -333,6 +362,9 @@ export default async function afterPack(context) {
     join(REPO_ROOT, 'apps', 'server'),
     join(REPO_ROOT, 'apps', 'desktop'),
     REPO_ROOT,
+    // WP218：pnpm 把所有间接依赖提升在 `.pnpm/node_modules` 里——sharp 按平台装的 `@img/sharp-<平台>`
+    // 只在这里解析得到（从上面几个根解析不到，WP111 起的包里一直没有它，一用图片就炸）
+    join(REPO_ROOT, 'node_modules', '.pnpm'),
   ])
   log(`补齐依赖 ${added.length} 个${added.length === 0 ? '' : `：${added.join(', ')}`}`)
 
@@ -384,6 +416,13 @@ export default async function afterPack(context) {
       `安装包里没有 ${PROFILE_DIR} 下的 ${missingProfile.join('、')}（extraResources 没生效？）`,
     )
   log(`官方插件清单与锁定 patch：${PROFILE_FILES.join('、')}`)
+
+  // ⑥ WP218：工作台产物在不在（先 `pnpm --filter @agentsws/workstation build`）
+  if (missingWorkstation(resources))
+    throw new Error(
+      `安装包里没有 ${WORKSTATION_DIR}/index.html：先 \`pnpm --filter @agentsws/workstation build\``,
+    )
+  log('工作台产物：在')
 
   const nodeExec =
     platformName === 'win32'

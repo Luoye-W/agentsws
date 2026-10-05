@@ -32,6 +32,13 @@ extraResources:
     filter:
       - cordis.patch.yml
       - plugin-allowlist.yml
+  # WP218：工作台的构建产物（vite build 出的 dist）。服务进程经 `AGENTSWS_STATIC_DIR` 在 `/` 托管它；
+  # WP111 起一直漏了这一项，装好打开工作台是 404。afterPack 查 index.html 在不在，不在就打包失败。
+  - from: ../workstation/dist
+    to: workstation
+    filter:
+      - '**/*'
+      - '!**/*.map'
 # 打完包再做四件事（见 scripts/after-pack.mjs）：补齐 electron-builder 漏收的 pnpm 依赖、
 # 把原生模块换成捆绑 Node 的 ABI 那份、用捆绑的 Node 冒烟一次 import、放第三方许可证。
 # WP148：Electron 发行包刚解出来时先存下它自带的两份许可证（mac 上之后会被丢掉），
@@ -45,11 +52,18 @@ mac:
   extendInfo:
     LSUIElement: 1
   identity: null
+  # WP218：架构不写在这里——写了的话 `--mac --arm64` 也会顺手打 x64（那台机器上没有 x64 的捆绑 Node，
+  # afterPack 直接失败）。架构由命令行给：release.yml 里两台 mac 各打自己那一个。
+  # zip 也要：electron-builder 只在有 zip 时才写 latest-mac.yml（mac 提示「有新版」读它），
+  # 将来签了名切自动更新，Squirrel.Mac 吃的也是 zip。
   target:
     - target: dmg
-      arch:
-        - arm64
-        - x64
+    - target: zip
+  artifactName: Agents-Workshop-${version}-${arch}-mac.${ext}
+# WP218：产物名不带空格（下载站 / GitHub 的网址与 latest*.yml 里的文件名就是它）。
+# 官网 downloads.json 的 `file` 与 scripts/release-manifest.mjs 按同一套名字认。
+dmg:
+  artifactName: Agents-Workshop-${version}-${arch}.${ext}
 win:
   icon: build/icon.png
   target:
@@ -57,14 +71,18 @@ win:
       arch:
         - x64
 nsis:
+  artifactName: Agents-Workshop-Setup-${version}-${arch}.${ext}
   oneClick: false
   perMachine: false
   allowToChangeInstallationDirectory: true
   shortcutName: Agents 工坊
   uninstallDisplayName: Agents 工坊
-  # WP111：未签名的 NSIS 照样能做应用内自动更新。差分包关掉——每次下整包，
-  # 比「更新到一半起不来」强；内测量小，带宽不是问题。
-  differentialPackage: false
+  # WP111：未签名的 NSIS 照样能做应用内自动更新。
+  # WP218：差分下载打开（出 `.exe.blockmap`，只下变了的块）。electron-updater 差分失败会自己退回整包下载，
+  # 下完照样校 sha512——「更新到一半起不来」靠的是那道校验与装前自检，不靠整包。
+  differentialPackage: true
+  # 装 / 更新完自动打开（应用内「重启并更新」那一步也靠它重开）
+  runAfterFinish: true
 linux:
   target:
     - AppImage
@@ -74,11 +92,14 @@ linux:
 # 那份 .node 覆盖掉。
 npmRebuild: false
 nodeGypRebuild: false
-# WP111：发布源 = GitHub Releases，渠道 beta。
-# CI 里**不放任何密钥**——`--publish` 用的是 workflow 默认的 `GITHUB_TOKEN`。
+# WP218：更新源（写进安装包里的 `app-update.yml`，应用内更新查的就是它）。
+# 主源 = 自有下载站 `https://dl.agentsws.com/<渠道>/`（R2 公开桶，按 stable / beta 分目录）；
+# GitHub Releases 只做镜像与备用（客户端主源连不上时退过去查一次，见 src/update-feed.ts）。
+# 这里写的是默认那一份；**真正打包走 `scripts/dist.mjs`**，它按 AGENTSWS_UPDATE_PROVIDER /
+# AGENTSWS_UPDATE_BASE_URL / AGENTSWS_UPDATE_CHANNEL 与版本号用 `-c.publish.*` 覆盖。
+# 渠道靠目录分：文件名始终是 latest*.yml（detectUpdateChannel: false）。
+# electron-builder 自己**从不上传**（一律 `--publish never`）：上传由 release.yml 做（R2 + GitHub 同一套产物）。
+detectUpdateChannel: false
 publish:
-  - provider: github
-    owner: Luoye-W
-    repo: agentsws
-    channel: beta
-    releaseType: prerelease
+  provider: generic
+  url: https://dl.agentsws.com/beta

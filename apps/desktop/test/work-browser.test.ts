@@ -89,6 +89,19 @@ describe('打开工作用的浏览器', () => {
     expect(spawned?.args).toContain(`--remote-debugging-port=${WORK_BROWSER_PORT}`)
     // 没有这一条时 Chrome 会把窗口交给已经在跑的实例，user-data-dir 与调试口双双失效
     expect(spawned?.args).toContain('--no-first-run')
+    // WP218：有窗口的程序；没给环境就是空的
+    expect(spawned?.gui).toBe(true)
+    expect(spawned?.env).toEqual({})
+  })
+
+  it('WP218：壳给的环境（Windows 上的 SystemRoot / LOCALAPPDATA）原样交给浏览器', async () => {
+    const env = { SystemRoot: 'C:\\Windows', LOCALAPPDATA: 'C:\\Users\\张三\\AppData\\Local' }
+    const p = { ...ports({ fetch: probe(new Set([WORK_BROWSER_PORT + 999])) }), env }
+    let calls = 0
+    const live = probe(new Set([WORK_BROWSER_PORT]))
+    p.fetch = (url, init) => (calls++ === 0 ? probe(new Set())(url, init) : live(url, init))
+    await openWorkBrowser(p)
+    expect(p.spawner.requests[0]?.env).toEqual(env)
   })
 
   it('已经有一个开着就复用，不再起第二个窗口（attach 一次一个 Session）', async () => {

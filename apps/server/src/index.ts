@@ -395,13 +395,13 @@ export {
   type WorkstationPortOptions,
 } from './workstation.js'
 
-import { pathToFileURL } from 'node:url'
 import {
   hostedModeOf,
   pushHostedSnapshot,
   restoreHostedSnapshot,
   startHostedSnapshotLoop,
 } from './hosted-mode.js'
+import { isEntry } from './kill-tree.js'
 import { officialPluginPathsIn, PROFILE_DIR_ENV } from './official-plugins.js'
 import { createServer } from './server.js'
 import {
@@ -540,10 +540,22 @@ export async function main(): Promise<void> {
   process.on('SIGINT', () => {
     shutdown('SIGINT')
   })
+  /*
+   * WP218：Windows 上没有 SIGTERM（`kill()` = 直接结束进程，上面两个监听永远等不到），
+   * 桌面壳因此改成「关掉我们的 stdin」来请求收尾：关场景、关库、再退出。
+   * 只在壳明确要求时才听 stdin（命令行里直接跑的服务进程不受影响）。
+   */
+  if (process.env.AGENTSWS_STOP_ON_STDIN_END === '1') {
+    process.stdin.on('end', () => {
+      shutdown('stdin closed')
+    })
+    process.stdin.on('error', () => undefined)
+    process.stdin.resume()
+  }
 }
 
 // 只有被当作进程入口执行时才监听；被 import（测试、CLI 内嵌）时什么都不做。
 const entry = process.argv[1]
-if (entry !== undefined && import.meta.url === pathToFileURL(entry).href) {
+if (entry !== undefined && isEntry(entry, import.meta.url)) {
   await main()
 }
