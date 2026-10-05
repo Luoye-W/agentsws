@@ -24,6 +24,7 @@ import {
   systemPreferences,
   Tray,
 } from 'electron'
+import type { AppUpdater } from 'electron-updater'
 import { type ApiClient, createApiClient, type DesktopSession } from './api-client.js'
 import { BRIDGE_CHANNELS, type BridgeInfo, type SceneOpenOutcome } from './bridge-types.js'
 import { createConfigStore, type DesktopConfig, type Language } from './config.js'
@@ -43,6 +44,7 @@ import {
   diagnosticsListing,
   humanBytes,
 } from './diagnostics.js'
+import { loadAutoUpdater } from './electron-updater-module.js'
 import { shouldOpenOnFirstRun } from './first-run.js'
 import { createHaltControl } from './halt.js'
 import { type HealthSnapshot, probeHealth } from './health.js'
@@ -1560,8 +1562,10 @@ async function bootstrap(): Promise<void> {
 
   /** Windows：包一层 electron-updater。主源与 GitHub 共用同一个 autoUpdater，查之前先指好源。 */
   const electronBackend = async (feed: FeedConfig): Promise<UpdateBackend> => {
-    // 动态 import：notify 档一次都用不上它，没必要拖进每一次冷启动
-    const { autoUpdater: real } = await import('electron-updater')
+    // 动态 import：notify 档一次都用不上它，没必要拖进每一次冷启动。
+    // WP225：不能写 `const { autoUpdater } = await import(...)`——CJS 的惰性 getter 认不成具名导出，
+    // 打包后拿到 undefined（见 electron-updater-module.ts）
+    const real = await loadAutoUpdater<AppUpdater>(() => import('electron-updater'))
     real.autoDownload = false
     // 只在用户点了「重启并更新」时装：退出时偷偷装会绕开装之前的自检
     real.autoInstallOnAppQuit = false
