@@ -240,6 +240,23 @@ export interface OnboardingPlanView {
   model_first: boolean
   /** 展开后一共几条职责（勾岗位 = 该岗位职责全勾，前后端同一套算法）。 */
   role_ids: string[]
+  /**
+   * WP216（Luoye 10-05）：这个品牌的平台有官方 CLI、并且勾的职责里有要用它的——向导最后问一句
+   * 「建站岗位会用到 Shopify CLI，要现在装吗？」。平台不对 / 没勾那几条职责就没有这一格。
+   */
+  platform_cli?: OnboardingPlatformCliItem
+}
+
+/** WP216：向导最后那一句提示要的几格（来自 `PLATFORM_KITS` 那一行，界面不写平台名）。 */
+export interface OnboardingPlatformCliItem {
+  /** CLI 的 id（`shopify-cli`）。 */
+  id: string
+  /** 卡上的名字（「Shopify CLI」）。 */
+  label: string
+  /** 入口：哪个岗位页上有那张卡。 */
+  position_id: string
+  /** 教程 slug。 */
+  tutorial: string
 }
 
 /** `POST /v1/onboarding/apply` 的回执。 */

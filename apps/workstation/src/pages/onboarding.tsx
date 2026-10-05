@@ -227,9 +227,25 @@ export function OnboardingPage(): React.ReactNode {
   const [applied, setApplied] = useState<{ created: number; skipped: number } | undefined>(
     undefined,
   )
+  /**
+   * WP216：品牌平台有官方 CLI、勾的职责里有要用它的——完成屏问一句「要现在装吗？」。
+   * 入口是那个岗位页（卡在那里）；本人没拿到那个岗位的分配就退回连接页（那里也有同一张卡）。
+   */
+  const [platformCli, setPlatformCli] = useState<{ label: string; href: string } | undefined>(
+    undefined,
+  )
   const apply = useMutation({
     mutationFn: () => applyOnboarding(planInput()),
     onSuccess: async (out) => {
+      const cli = out.plan.platform_cli
+      if (cli !== undefined) {
+        const roles = out.plan.positions.find((p) => p.position_id === cli.position_id)?.role_ids
+        const asg = out.created_assignments.find((a) => roles?.includes(a.role_id) === true)?.id
+        setPlatformCli({
+          label: cli.label,
+          href: asg === undefined ? '/connections' : `/positions/${asg}`,
+        })
+      }
       // 服务端一条都没回（老服务端 / 职责定义没装）就退回按勾选数说
       if (out.created_assignments.length + out.skipped.length > 0)
         setApplied({ created: out.created_assignments.length, skipped: out.skipped.length })
@@ -378,6 +394,27 @@ export function OnboardingPage(): React.ReactNode {
                   ? null
                   : ` ${t('onboarding.done.skipped', { n: applied.skipped })}`}
               </p>
+              {platformCli === undefined ? null : (
+                <div
+                  className="flex max-w-sm flex-col items-center gap-2 rounded-md border p-3"
+                  data-testid="onboarding-platform-cli"
+                >
+                  <p className="text-sm">
+                    {t('onboarding.platform_cli.ask', { label: platformCli.label })}
+                  </p>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    data-testid="onboarding-platform-cli-go"
+                    onClick={() => {
+                      navigate(platformCli.href)
+                    }}
+                  >
+                    {t('onboarding.platform_cli.go')}
+                  </Button>
+                  <p className="text-xs text-ws-muted-fg">{t('onboarding.platform_cli.later')}</p>
+                </div>
+              )}
               <Button
                 size="sm"
                 data-testid="onboarding-enter"

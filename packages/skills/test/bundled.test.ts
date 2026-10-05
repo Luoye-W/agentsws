@@ -45,6 +45,8 @@ const PORTED = ['customer-care']
  * `research-skills.test.ts` 查（出处不是 marketingskills）。
  */
 const RESEARCH = ['social-research', 'trend-research']
+/** WP216：平台官方技能，原样收录（文件一个字节不改，旁注另放）。 */
+const OFFICIAL = ['shopify']
 const PORTED_FROM = join(
   fileURLToPath(new URL('../../support-core/skills/', import.meta.url)),
   'customer-care',
@@ -57,7 +59,7 @@ const OPEN_SEO = '部分判断规矩改编自 every-app/open-seo（MIT）'
 
 describe('自带技能：格式（24 §1 Agent Skills）', () => {
   it('WP160 的五个 + WP162 的六个 + WP170 的 B2B 六个都在，目录名即技能名', () => {
-    expect(names).toEqual([...THIRD_PARTY, ...OWN, ...PORTED, ...RESEARCH].sort())
+    expect(names).toEqual([...THIRD_PARTY, ...OWN, ...PORTED, ...RESEARCH, ...OFFICIAL].sort())
   })
 
   for (const name of THIRD_PARTY) {
@@ -226,14 +228,15 @@ describe('自带技能：考题（改写自上游 evals；WP162 自己写的那�
     expect(readBundledSkill('seo-judgment').markdown).toContain(OPEN_SEO)
   })
 
-  it('每家 MIT 许可证全文随技能一起放着（WP160 两家 + WP220 三家）', () => {
+  it('每家 MIT 许可证全文随技能一起放着（WP160 两家 + WP216 Shopify + WP220 三家）', () => {
     const notices = readFileSync(join(BUNDLED_SKILLS_DIR, 'THIRD-PARTY-NOTICES'), 'utf8')
     expect(notices).toContain('Copyright (c) 2025 Corey Haines')
     expect(notices).toContain('Copyright (c) 2026 Ben Senescu')
+    expect(notices).toContain('Copyright 2025-present, Shopify Inc.')
     expect(notices).toContain('Copyright (c) 2026 Matt Van Horn')
     expect(notices).toContain('Copyright (c) 2026 ScrapeCreators')
     expect(notices).toContain('Copyright (c) 2025 AgentLand Contributors')
-    expect(notices.match(/Permission is hereby granted/g)?.length).toBe(5)
+    expect(notices.match(/Permission is hereby granted/g)?.length).toBe(6)
   })
 
   it('读不存在的技能报 not_found，非法名报 invalid_input', () => {

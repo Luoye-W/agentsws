@@ -83,6 +83,7 @@ import {
   KOL_FOLDER,
   PR_ROLE_IDS,
   SOCIAL_ROLE_IDS,
+  skillOnPlatform,
   socialChannelSpec,
 } from '@agentsws/contracts'
 import {
@@ -342,7 +343,11 @@ import {
 } from './models.js'
 import { createOffboard, type Offboard } from './offboard.js'
 import { createOfficialPlugins, officialPluginsDirIn } from './official-plugins.js'
-import { createOnboarding, type OnboardingAssembly } from './onboarding.js'
+import {
+  createOnboarding,
+  type OnboardingAssembly,
+  storefrontPlatformChoices,
+} from './onboarding.js'
 import { createOrg, type OrgAssembly } from './org.js'
 import { createOrgDuplicateScan, type OrgDuplicateScan } from './org-duplicates.js'
 import {
@@ -358,6 +363,8 @@ import {
   type PersonasAssembly,
   personaFileIn,
 } from './personas.js'
+import { createPlatformCliProber, PlatformCliLoginStore, type ProbeExec } from './platform-cli.js'
+import { createPlatformKitPort, resolveBrandPlatform } from './platform-kit.js'
 import { createPositions, type PositionsAssembly } from './positions.js'
 import { createPrStore, prDeckData, seedDemoPr } from './pr.js'
 import { createPrService } from './pr-service.js'
@@ -760,6 +767,11 @@ export interface ServerOptions {
     profilePatchPath?: string
     backend?: OfficialPluginBackend
   }
+  /**
+   * WP216：检测本机平台 CLI 用的子进程（测试 / demo 换成替身，不跑真的 `shopify`）。
+   * 生产不传：照 PATH 真跑 `<cli> version` 与 `node --version`。
+   */
+  platformCliExec?: ProbeExec
   /**
    * WP134：「用我的 DeepSeek 账号登录」的注入点（测试 / demo 用替身 → 全程不联网）。
    * 生产不传：第一次有人点"用 DeepSeek 账号登录"时才 `import()` 官方模块。
@@ -1893,6 +1905,22 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     onboardingRef?.brandProfile(ws) ?? {}
 
   /**
+   * WP216（Fable 10-05）：这个品牌的建站平台，**给平台专属那一套用**（官方技能 / Dev MCP / CLI 卡）。
+   * 档案有就用档案；没设而连了某个平台的店铺就按它推断并写回档案；都没有 = undefined（一样都不启用）。
+   * 店铺连接那张表（缺省按 Shopify）不走这里。
+   */
+  const brandPlatformOf = (ws: WorkspaceId): StorefrontPlatform | undefined =>
+    resolveBrandPlatform(
+      {
+        profile: (w) => brandProfileOf(w).storefront_platform,
+        connectedServices: (w) => brands?.peek(w)?.connections.connectedServices() ?? [],
+        writeBack: (w, p) =>
+          onboardingRef?.setStorefrontPlatform(w, p, 'inferred_from_connection') ?? false,
+      },
+      ws,
+    )
+
+  /**
    * 52 O3「跟随公司默认」读的是哪个品牌那一份。
    *
    * 这个进程 bootstrap 出来的品牌只要还在这家公司里，它就是公司默认——存量机器上
@@ -1923,29 +1951,38 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
 
   // WP44：Shopify 官方 Dev MCP 作为**只读**工具源（查文档 / 看 schema / 校验 GraphQL）。
   //
-  // 默认**不起**：它要 `npx` 去网上拉一个包，装在别人机器上的进程不该悄悄这么干。
-  // `AGENTSWS_SHOPIFY_DEVMCP=1` 打开。起不来就是空工具面（`toolNames()` 回空数组），
-  // 写类变更照常能 stage——校验是加固，不是门禁。
+  // WP216（Fable 10-05「官方功能优先」）：**默认开**，`AGENTSWS_SHOPIFY_DEVMCP=0` 关。
+  // 但**首次使用才下载**：启动时不起它；平台是 Shopify 的品牌第一次跑一条职责（运行时来问
+  // `toolNames()`）时才在后台 `npx` 拉官方包——非 Shopify 的品牌永远不触发（运行时那道平台闸先挡）。
+  // 下载完成之前工具面是空的（模型不该看见调不动的工具），下一次运行就有了。
+  // 测试进程里（vitest）缺省不开，要开显式写 `=1`——单测不该去网上拉包。
   //
   // 它是**全进程一个**：一个只读的文档 / schema 工具源，与是哪个品牌无关。
-  const devMcp =
-    env.AGENTSWS_SHOPIFY_DEVMCP === '1'
-      ? createShopifyDevMcp({
-          env,
-          appendEvent: (type, payload) => {
-            appendEvent({
-              schema_version: 1,
-              workspace_id: workspace.id,
-              type,
-              actor: { kind: 'system', id: 'shopify.devmcp' },
-              correlation: { trace_id: `trc_devmcp_${Date.parse(clock.now()).toString(36)}` },
-              payload,
-            })
-          },
-        })
-      : undefined
-  // 起它这件事不该拦着服务进程启动：后台起，起好之前 `toolNames()` 就是空的
-  if (devMcp !== undefined) void devMcp.start()
+  const devMcpSwitch = env.AGENTSWS_SHOPIFY_DEVMCP
+  const devMcpOn =
+    devMcpSwitch === '0' ? false : devMcpSwitch === '1' || process.env.VITEST === undefined
+  const devMcp = devMcpOn
+    ? createShopifyDevMcp({
+        env,
+        appendEvent: (type, payload) => {
+          appendEvent({
+            schema_version: 1,
+            workspace_id: workspace.id,
+            type,
+            actor: { kind: 'system', id: 'shopify.devmcp' },
+            correlation: { trace_id: `trc_devmcp_${Date.parse(clock.now()).toString(36)}` },
+            payload,
+          })
+        },
+      })
+    : undefined
+  /** 运行时问「现在能调哪几个」：没起过就借这一问在后台起（首次使用才下载），这一次先回空。 */
+  const devMcpToolNames = (): string[] => {
+    if (devMcp === undefined) return []
+    const st = devMcp.status()
+    if (!st.available) void devMcp.start()
+    return Object.keys(st.mapped)
+  }
 
   /**
    * 装一个品牌的那一套。**这个函数里没有一个 `workspace.id`**——全部走参数 `ws`；
@@ -2902,7 +2939,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
               ? {}
               : {
                   devTools: {
-                    toolNames: () => Object.keys(devMcp.status().mapped),
+                    toolNames: devMcpToolNames,
                     call: (name: string, input: Record<string, unknown>) =>
                       devMcp.call(name, input),
                   },
@@ -2973,6 +3010,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
               port: () => b2bOutboundLate.current?.port,
             }),
             vertical: () => brandProfileOf(ws).vertical,
+            // WP216：平台专属的官方技能 / Dev MCP 工具只给平台对得上的品牌（每次现取档案）
+            storefrontPlatform: () => brandPlatformOf(ws),
             // WP180：公司时区（工作区档案的 tz，每次现取）——每次运行的上下文里写一次「现在时间 + 公司时区」
             timeZone: async () => (await identity.getWorkspace(ws))?.tz,
             // WP181：官方「自动化任务」的四个工具（装了那个官方插件才挂；执行器是进程那一份）
@@ -5662,15 +5701,21 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     lessons: (filter) => learning.lessons(filter),
     // WP29 技能页与学习回路
     // WP209：按岗位分组那几格（显示名 / 一句话 / 哪几条职责在用 / 归哪个岗位）只往上加
+    // WP216：平台专属的官方技能（Shopify 那几本）只在这个品牌的平台对得上时列出来
     list: async (actor) =>
-      enrichSkillSummaries(await learning.summaries(actor), {
-        positions: org.positions(),
-        roles: roles.roles.list(),
-        held_roles: memoryFacts(actor).held_roles,
-        frontmatterOf: (name) => skills.registry.frontmatterOf(name),
-        sectionBody: (name, id) => skills.registry.sectionBody(name, id),
-        superseded: SUPERSEDED_POSITION_IDS,
-      }),
+      enrichSkillSummaries(
+        (await learning.summaries(actor)).filter((s) =>
+          skillOnPlatform(s.name, brandPlatformOf(actor.workspace_id)),
+        ),
+        {
+          positions: org.positions(),
+          roles: roles.roles.list(),
+          held_roles: memoryFacts(actor).held_roles,
+          frontmatterOf: (name) => skills.registry.frontmatterOf(name),
+          sectionBody: (name, id) => skills.registry.sectionBody(name, id),
+          superseded: SUPERSEDED_POSITION_IDS,
+        },
+      ),
     exclude: (name, person_id, excluded) => skills.registry.exclude(name, person_id, excluded),
     proposals: () => learning.proposalSummaries(),
     promote: (input) =>
@@ -6819,6 +6864,49 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   const askPortOf = brandAskPort(brandModules, askPortFor)
   const freeChatPortOf = brandFreeChatPort(brandModules, freeChatPortFor)
 
+  const platformCliLogins = new Map<string, PlatformCliLoginStore>()
+  const platformKitPort = createPlatformKitPort({
+    now: () => clock.now(),
+    platformOf: (ws) => brandPlatformOf(ws),
+    setPlatform: (ws, p) => onboardingRef?.setStorefrontPlatform(ws, p, 'human') ?? false,
+    hasRoles: (ws, role_ids) =>
+      role_ids.some((r) => roles.assignments.listByRole(r, { workspace_id: ws }).length > 0),
+    platformChoices: () => storefrontPlatformChoices(),
+    prober: createPlatformCliProber({
+      now: () => clock.now(),
+      env,
+      ...(options.platformCliExec === undefined ? {} : { exec: options.platformCliExec }),
+    }),
+    loginStoreOf: (ws) => {
+      let store = platformCliLogins.get(ws)
+      if (store === undefined) {
+        store = new PlatformCliLoginStore(brandDirOf(dbDir, ws, workspace.id))
+        platformCliLogins.set(ws, store)
+      }
+      return store
+    },
+    displayNameOf: (name) => {
+      const extra = skills.registry.frontmatterOf(name)?.extra
+      const zh = extra?.display_name?.trim() ?? ''
+      const en = extra?.display_name_en?.trim() ?? ''
+      return zh === '' && en === '' ? undefined : { zh: zh || en, en: en || zh }
+    },
+    mcpStatus: () => ({
+      enabled: devMcp !== undefined,
+      downloaded: devMcp?.status().available === true,
+      tools: devMcp === undefined ? [] : Object.keys(devMcp.status().mapped),
+    }),
+    appendEvent: (ws, type, payload) =>
+      appendEvent({
+        schema_version: 1,
+        workspace_id: ws,
+        type,
+        actor: { kind: 'system', id: 'platform.kit' },
+        correlation: { trace_id: `trc_pkit_${Date.parse(clock.now()).toString(36)}` },
+        payload,
+      }),
+  })
+
   /** WP215：设置页「后台」那一张的行——本人有成员资格的这家公司的品牌。 */
   const backgroundRowsOf = (actor: {
     workspace_id: string
@@ -6913,6 +7001,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     /*
      * WP180：官方插件。**不按品牌**（同电脑操控）。出卡走同一条审批总线（批卡在 `officialPlugins.wrap` 里接住）。
      */
+    /*
+     * WP216：平台专属那一套（官方技能 / Dev MCP / 官方 CLI 卡）。**按品牌档案**判断平台；
+     * 「我登好了」按品牌的数据目录记一笔（不存凭据）；本机 CLI 检测是这台机器的事，一台一份缓存。
+     */
+    platformKit: platformKitPort,
     officialPlugins: {
       view: () => officialPlugins.view(),
       request: (actor, input) =>
