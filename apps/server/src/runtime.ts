@@ -291,6 +291,11 @@ export interface RuntimeOptions {
    */
   researchTools?: ToolExecutor
   /**
+   * WP237（#67）：工具每条多少积分（价目表，云上那一份）。工具面里有按条计费的工具时每次运行现问，
+   * 填进 `RunRequest.tool_prices`，给模型看的描述据此写现价；取不到回 `undefined`（描述里就不写数）。
+   */
+  toolPrice?(tool: string): Promise<number | undefined>
+  /**
    * WP153（09-26 真账号冒烟 §3）：店主的两个只读工具（`list_positions` / `list_connections`，
    * `owner-tools.ts` 建的那一份）。给了才进 `common.owner` 的工具面——别的职责一律没有；
    * 执行器里还会再判一次职责。
@@ -1409,6 +1414,13 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       matter_id: input.matter.id,
     })
     const granted = computer_use?.granted_until !== undefined
+    // WP237（#67）：按条计费的工具（现在只有 read_reddit）每次运行按价目现填单价
+    const tool_prices: Record<string, number> = {}
+    if (options.toolPrice !== undefined)
+      for (const name of allow.filter((n) => RESEARCH_TOOL_NAMES.includes(n))) {
+        const price = await options.toolPrice(name).catch(() => undefined)
+        if (price !== undefined && Number.isFinite(price) && price > 0) tool_prices[name] = price
+      }
     return {
       id: input.run_id,
       schema_version: 1,
@@ -1578,6 +1590,8 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       ...(computer_use === undefined ? {} : { computer_use }),
       // WP179：同上——不给就不写，没挂网页工具的运行 RunRequest 一个字节不变
       ...(web === undefined ? {} : { web }),
+      // WP237：取不到价就不写这个字段（描述里只说「按条计积分」），老运行的请求一个字节不变
+      ...(Object.keys(tool_prices).length === 0 ? {} : { tool_prices }),
       idempotency_key: `idem_${input.run_id}`,
     }
   }

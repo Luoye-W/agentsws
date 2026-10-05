@@ -415,7 +415,7 @@ import {
   type ReconcileGuardOptions,
 } from './reconcile.js'
 import { createConnectRecordSource } from './records.js'
-import { createResearchToolExecutor } from './research-tools.js'
+import { createResearchToolExecutor, redditReadPrice } from './research-tools.js'
 import { readRunBrowser } from './run-browser.js'
 import { createRunLimitsSettings } from './run-limits-settings.js'
 import { createRuntime, type MatterRecordSource, type RuntimeAssembly } from './runtime.js'
@@ -3303,6 +3303,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
                 resolveDataCreditBudget(roles.roles.get(req.actor.role_id)?.thresholds),
               priceOf: async (capability) => (await ownCloud.priceOf(capability))?.credits,
             }),
+            // WP237（#67）：read_reddit 的描述里写现价（价目表现查；三项单价不一样或取不到就不写数）
+            toolPrice: (tool) => redditReadPrice(tool, (c) => ownCloud.priceOf(c)),
             /*
              * WP153（09-26 真账号冒烟 §3）：店主的「列岗位 / 列连接」两个只读工具。
              *
