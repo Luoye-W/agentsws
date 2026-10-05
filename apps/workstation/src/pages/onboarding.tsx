@@ -41,6 +41,7 @@ import {
   ApiClientError,
   applyOnboarding,
   type BrandIntakeRun,
+  getCloudAccount,
   getOnboardingState,
   listDiscoveryPeers,
   listOnboardingPositions,
@@ -146,6 +147,21 @@ export function OnboardingPage(): React.ReactNode {
   const [companyDraft, setCompanyDraft] = useState<string | undefined>(undefined)
 
   const state = useQuery({ queryKey: ['onboarding', 'state'], queryFn: () => getOnboardingState() })
+  /**
+   * WP233：第 ② 步那一行「你的账号」就是第 ① 步关联的那个云账号（与 `AiStep` 同一个 queryKey，
+   * 共用缓存）。没关联 / 查不到就不给，那一行按本机身份决定出不出（`shownAccountEmail`）。
+   */
+  const cloudAccount = useQuery({
+    queryKey: ['cloud-account', undefined],
+    queryFn: () => getCloudAccount(undefined),
+    retry: false,
+  })
+  const cloudEmail = cloudAccount.data?.linked === true ? cloudAccount.data.email : undefined
+  // WP233：刚关联上云账号 → 服务端把本机负责人的占位邮箱改了，身份那一份重取一次
+  useEffect(() => {
+    if (cloudEmail !== undefined)
+      void client.invalidateQueries({ queryKey: ['onboarding', 'state'] })
+  }, [cloudEmail, client])
   const positions = useQuery({
     queryKey: ['onboarding', 'positions'],
     queryFn: () => listOnboardingPositions(),
@@ -213,7 +229,7 @@ export function OnboardingPage(): React.ReactNode {
       requestMembership({
         ...input,
         name: state.data?.person.name ?? '',
-        email: state.data?.person.email ?? '',
+        email: cloudEmail ?? state.data?.person.email ?? '',
       }),
     onSuccess: () => {
       setFailure(undefined)
@@ -343,6 +359,7 @@ export function OnboardingPage(): React.ReactNode {
                   name: nameDraft ?? state.data.person.name,
                   email: state.data.person.email,
                 }}
+                {...(cloudEmail === undefined ? {} : { cloudEmail })}
                 companyName={companyName}
                 companyEdited={companyDraft !== undefined}
                 onRename={setNameDraft}

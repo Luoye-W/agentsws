@@ -15,7 +15,7 @@
  * 4. **用官方接口跑的时候明说一句**：网页内容会经过 Agents 工坊的云来分析
  *    （70 §4 末段）。用自己的模型接口时这句话不出现——那时它不经我们的云。
  */
-import { DEFAULT_BRAND_INTAKE_CAP_CREDITS } from '@agentsws/contracts'
+import { DEFAULT_BRAND_INTAKE_CAP_CREDITS, isPlaceholderOwnerEmail } from '@agentsws/contracts'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { BrandMark } from '@/components/design'
@@ -39,6 +39,23 @@ export function isRunning(run: BrandIntakeRun | undefined): boolean {
   return run?.status === 'queued' || run?.status === 'running'
 }
 
+/**
+ * WP233：第 ② 步「你的账号」那一行显示哪个邮箱；`undefined` = 整格不显示。
+ *
+ * 有云账号 → 就是第 ① 步那一个（与本机负责人的邮箱已经对齐，见服务端 `alignOwnerEmail`）；
+ * 没有云账号、本机身份还是占位 `owner@localhost` → 不显示（本机一个人用不需要它）；
+ * 没有云账号但本机身份是一个真邮箱（自己配过的、公司档登录的）→ 显示它。
+ */
+export function shownAccountEmail(
+  cloudEmail: string | undefined,
+  personEmail: string,
+): string | undefined {
+  const cloud = cloudEmail?.trim()
+  if (cloud !== undefined && cloud !== '') return cloud
+  if (personEmail.trim() === '' || isPlaceholderOwnerEmail(personEmail)) return undefined
+  return personEmail
+}
+
 export interface BusinessStepProps {
   assignment?: string
   /** 这台机器上现在用的是官方接口吗（决定要不要说那一句"内容会经过我们的云"）。 */
@@ -47,6 +64,8 @@ export interface BusinessStepProps {
   onSettled: (run: BrandIntakeRun | undefined) => void
   /** 公司名与称呼那一小块：确认后存下去。 */
   person: { name: string; email: string }
+  /** WP233：第 ① 步关联上的云账号邮箱（没关联就不给）。见 {@link shownAccountEmail}。 */
+  cloudEmail?: string
   onRename: (name: string) => void
   onCompanyName: (name: string) => void
   companyName: string
@@ -62,6 +81,7 @@ export function BusinessStep({
   official,
   onSettled,
   person,
+  cloudEmail,
   onRename,
   onCompanyName,
   companyName,
@@ -144,6 +164,7 @@ export function BusinessStep({
       ? analyzedLegal
       : companyName
   const failedPages = (current?.pages ?? []).filter((p) => !p.ok)
+  const account = shownAccountEmail(cloudEmail, person.email)
 
   return (
     <div className="flex flex-col gap-4 text-sm" data-testid="onboarding-business">
@@ -284,11 +305,16 @@ export function BusinessStep({
               }}
             />
           </div>
-          {/* 登录邮箱是身份，只读（09-18 Luoye 真机那一条） */}
-          <div className="flex flex-col gap-1">
-            <Label htmlFor="person-email">{t('onboarding.person.email')}</Label>
-            <Input id="person-email" data-testid="person-email" readOnly value={person.email} />
-          </div>
+          {/*
+            WP233（Luoye 10-05 真机）：原来这里是一格只读的「登录邮箱：owner@localhost」——
+            那是本机的内部占位，看着像第 ① 步填的没生效。现在只剩一行「你的账号」，
+            就是第 ① 步那一个；没有云账号、本机还是占位时整行不出。
+          */}
+          {account === undefined ? null : (
+            <p className="text-xs text-ws-muted-fg" data-testid="person-account">
+              {t('onboarding.person.account', { email: account })}
+            </p>
+          )}
         </div>
       )}
 

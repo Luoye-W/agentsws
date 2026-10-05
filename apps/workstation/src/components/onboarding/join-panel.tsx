@@ -11,6 +11,7 @@
  *
  * 界面上一个内部 id 都不出：同伴报的是"王岚的工作区 · 3 人"，申请人只有名字与邮箱。
  */
+import { isPlaceholderOwnerEmail } from '@agentsws/contracts'
 import { useState } from 'react'
 import { PickToggle } from '@/components/onboarding/pick-toggle'
 import { Button } from '@/components/ui/button'
@@ -250,7 +251,12 @@ export function JoinPanel({
                     <div>
                       <p>
                         {r.person.name}
-                        <span className="ml-2 text-xs text-muted-foreground">{r.person.email}</span>
+                        {/* WP233：对方本机的占位邮箱不露出来，只留名字 */}
+                        {isPlaceholderOwnerEmail(r.person.email) ? null : (
+                          <span className="ml-2 text-xs text-muted-foreground">
+                            {r.person.email}
+                          </span>
+                        )}
                       </p>
                       <p className="text-xs text-muted-foreground">
                         {t(`onboarding.requests.via.${r.via}`)} · {statusText(r)}

@@ -93,6 +93,7 @@ import {
   KOL_AUDIT_CAPABILITY,
   KOL_CHANNEL_IDS,
   KOL_FOLDER,
+  PLACEHOLDER_OWNER_EMAIL,
   PR_ROLE_IDS,
   REDDIT_READ_HOSTS,
   SOCIAL_ROLE_IDS,
@@ -384,6 +385,7 @@ import {
   createOrganizations as createOrganizationsAssembly,
   type OrganizationsAssembly,
 } from './organizations.js'
+import { alignOwnerEmail } from './owner-email.js'
 import { createOwnerToolExecutor } from './owner-tools.js'
 import { createPageBodyReader } from './page-body.js'
 import {
@@ -1266,7 +1268,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     // WP206：名册变了（加人 / 删人 / 岗位 / 分配 / 刚关联上）→ 各品牌攒一下再把名册推上云
     if (isRosterEvent(e.type))
       for (const sync of rosterSyncs.values()) sync.poke(e.type === 'cloud.account_linked')
+    // WP233：刚关联上云账号 → 本机负责人的占位邮箱改成云账号邮箱（不管是哪条关联路走过来的）
+    if (e.type === 'cloud.account_linked') cloudLinkedSink?.()
   }
+  /** WP233：晚绑定——云账号那一套装好之后才挂上（见 `alignOwnerEmail`）。 */
+  let cloudLinkedSink: (() => void) | undefined
   /** WP206：每个品牌一份名册同步（品牌装好时建，`rosterReady` 之后才开始推）。 */
   const rosterSyncs = new Map<WorkspaceId, RosterSync>()
   let rosterReady = false
@@ -1818,7 +1824,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
 
   // ── 首次启动：owner + 默认工作区 + 内部凭据（28 §3「内部服务凭据」）
   const mount = options.mount
-  const ownerEmail = mount?.owner.email ?? (env.AGENTSWS_OWNER_EMAIL?.trim() || 'owner@localhost')
+  const ownerEmail =
+    mount?.owner.email ?? (env.AGENTSWS_OWNER_EMAIL?.trim() || PLACEHOLDER_OWNER_EMAIL)
   const person = await identity.createPerson({
     email: ownerEmail,
     name: mount?.owner.name ?? ownerEmail.split('@')[0] ?? 'owner',
@@ -6201,6 +6208,33 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     localBaseUrl: () => (boundPort === undefined ? undefined : `http://127.0.0.1:${boundPort}`),
     ...(options.cloudFetch === undefined ? {} : { fetch: options.cloudFetch }),
   })
+
+  /*
+   * WP233：本机负责人的登录邮箱跟云账号对齐（只改占位 `owner@localhost`，可重复跑）。
+   * 两个时机：刚关联上（事件钩子），以及**启动时补一次**——老工作区早就关联了云账号，
+   * 邮箱却还是占位。改不成（云不在、邮箱被别人占了）不影响启动与关联本身。
+   */
+  const ownerEmailAlign = {
+    identity,
+    owner_id: person.id,
+    workspace_id: workspace.id,
+    cloudEmail: async () => {
+      const view = await cloudAccount.port.status(workspace.id)
+      return view.linked ? view.email : undefined
+    },
+    appendEvent,
+  }
+  let ownerEmailQueue: Promise<unknown> = Promise.resolve()
+  cloudLinkedSink = () => {
+    ownerEmailQueue = ownerEmailQueue
+      .then(() => alignOwnerEmail(ownerEmailAlign, 'cloud_account_linked'))
+      .catch(() => undefined)
+  }
+  try {
+    await alignOwnerEmail(ownerEmailAlign, 'cloud_account_backfill')
+  } catch {
+    // 补不上就下次启动再补；不挡启动
+  }
 
   /**
    * 41 §1 秘书 Agent。装在最后：它要用到工作模型、会议、工具箱、审批总线与调度器，
