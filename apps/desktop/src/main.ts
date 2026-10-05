@@ -52,6 +52,7 @@ import {
   buildTrayMenu,
   type MenuAction,
   type MenuItemModel,
+  type TrayAppUpdate,
   type TrayScene,
   trayTooltip,
 } from './menu.js'
@@ -72,9 +73,10 @@ import {
   nodeAbort,
   nodeSpawner,
   nodeTimers,
+  sleep,
   systemClock,
 } from './node-runtime.js'
-import { bundledProfileDir, desktopPaths, thirdPartyLicensesFile } from './paths.js'
+import { bundledProfileDir, desktopPaths, thirdPartyLicensesFile, workstationDir } from './paths.js'
 import type { FetchLike } from './ports.js'
 import { DesktopQuitConfirmation } from './quit-confirmation.js'
 import { createRedactor } from './redact.js'
@@ -92,6 +94,7 @@ import {
 } from './scene-window.js'
 import { createSecretVault, type DesktopSecrets, secretLiterals, toHex } from './secrets.js'
 import {
+  inheritEnv,
   resolveServerEntry,
   resolveServerRuntime,
   type ServerRuntime,
@@ -104,15 +107,21 @@ import {
   TRAY_ICON_ACTIVE_DATA_URL,
   TRAY_ICON_DATA_URL,
 } from './tray-icon.js'
+import { tintBitmap } from './tray-tint.js'
 import {
-  createReleaseChecker,
-  createUpdateGate,
-  isNewer,
-  RELEASES_PAGE,
-  type UpdateInfo,
-  type UpdaterPort,
-  updatePolicy,
-} from './updater.js'
+  createUpdateController,
+  publicStatus,
+  type UpdateBackend,
+  type UpdateStatus,
+} from './update-controller.js'
+import {
+  type FeedConfig,
+  feedFromEnv,
+  githubFallbackEnabled,
+  githubFallbackFeed,
+  parseAppUpdateYml,
+} from './update-feed.js'
+import { createFeedChecker, DOWNLOAD_PAGE, isNewer, updatePolicy } from './updater.js'
 import {
   canRestore,
   failureMessage,
@@ -154,6 +163,11 @@ function trayImage(): Electron.NativeImage {
     scaleFactor: 2,
     dataURL: TRAY_ICON_2X_DATA_URL,
   })
+  // WP218：Windows 不认 template 图，黑色图标在深色任务栏上看不见——染成品牌青绿
+  if (process.platform === 'win32') {
+    const size = image.getSize()
+    return nativeImage.createFromBitmap(Buffer.from(tintBitmap(image.toBitmap())), size)
+  }
   image.setTemplateImage(true)
   return image
 }
@@ -359,6 +373,11 @@ async function bootstrap(): Promise<void> {
   })
 
   const profileDir = bundledProfileDir(app.isPackaged ? process.resourcesPath : undefined)
+  const staticDir = workstationDir(
+    app.isPackaged ? process.resourcesPath : undefined,
+    join(here, '..', '..', 'workstation', 'dist'),
+    (p) => files.exists(p),
+  )
   let boundPort = config.port
   const serverUrl = (): string => runtimeMode.serverUrl ?? `http://127.0.0.1:${boundPort}`
 
@@ -400,6 +419,10 @@ async function bootstrap(): Promise<void> {
         appDataDir: paths.userData,
         // WP181：审过的官方插件清单与锁定 patch 随安装包带（开发期不给，服务进程读仓库那一份）
         ...(profileDir === undefined ? {} : { profileDir }),
+        // WP218：工作台产物（以前安装包里没有，装好打开是 404）
+        ...(staticDir === undefined ? {} : { staticDir }),
+        // WP218：不继承 Electron 的工作目录（Windows 开机自启时是 C:\Windows\System32）
+        cwd: paths.userData,
         secrets: secrets ?? EMPTY_SECRETS,
         version,
         baseEnv: process.env,
@@ -838,6 +861,10 @@ async function bootstrap(): Promise<void> {
   // WP148：安装包里的第三方许可证说明（没打包就没有，托盘上那一项不出现）
   const licensesFile = thirdPartyLicensesFile(app.isPackaged ? process.resourcesPath : undefined)
   const licenses = licensesFile !== undefined && existsSync(licensesFile)
+  const appUpdateField = (): { appUpdate?: TrayAppUpdate } => {
+    const up = trayUpdate()
+    return up === undefined ? {} : { appUpdate: up }
+  }
   const trayInput = () => ({
     language: config.language,
     serverUrl: serverUrl(),
@@ -854,6 +881,7 @@ async function bootstrap(): Promise<void> {
     upgradeFailed: upgradeNote() !== undefined,
     restorable: canRestore(upgradeNote()),
     ...(updateAvailable === undefined ? {} : { updateAvailable }),
+    ...appUpdateField(),
     ...(scenes === undefined ? {} : { scenes }),
     officialDesktop,
     sceneInBrowser: config.sceneInBrowser,
@@ -998,6 +1026,7 @@ async function bootstrap(): Promise<void> {
       fetch: (url, init) => fetch(url, init) as ReturnType<FetchLike>,
       userDataDir: paths.userData,
       platform: process.platform,
+      env: inheritEnv(process.env),
       sleep: (ms) => new Promise<void>((r) => setTimeout(r, ms)),
       now: () => Date.now(),
       /*
@@ -1343,6 +1372,12 @@ async function bootstrap(): Promise<void> {
       case 'open-download-page':
         void shell.openExternal(updateUrl)
         break
+      case 'download-update':
+        void updates.download()
+        break
+      case 'install-update':
+        void updates.install()
+        break
       case 'open-logs':
         void shell.openPath(paths.logDir)
         break
@@ -1490,33 +1525,48 @@ async function bootstrap(): Promise<void> {
   }
 
   /*
-   * ── 更新（WP111）。两条路，由签名决定走哪条（见 `updater.ts` 顶上那张表）：
+   * ── 更新（WP111 → WP218）。左下角那颗「有新版本」按钮与托盘上那一项是同一个状态机
+   * （`update-controller.ts`）：查到 → 点了后台下载 → 下好变「重启并更新」→ 点了问一句、自检、退出装、自动重开。
    *
-   * - Windows：`electron-updater` 应用内自动更新。**冒烟不过不切换**那条纪律没变。
-   * - macOS / Linux：只查、只提示、把人送到 Releases 下载页——mac 未签名时
-   *   Squirrel 连 `checkForUpdates()` 都过不去，硬接只会得到一个每次都报错的更新器。
-   *
-   * 两条路都不带任何凭据：一边是 electron-updater 读公开的 `latest*.yml`，
-   * 一边是一次匿名的 GitHub API GET。
+   * 源（`update-feed.ts`）：主源是自有下载站（generic，按渠道分目录），读安装包里 electron-builder
+   * 写的 `app-update.yml`；连不上时（开关默认开）退到 GitHub Releases 查一次。
+   * 平台（`updater.ts` 的 updatePolicy，签名定的）：Windows 应用内更新；mac 未签名只提示、点了去下载页。
+   * 两条路都不带任何凭据。
    */
   const policy = updatePolicy({
     platform: process.platform,
     env: process.env,
     packaged: app.isPackaged,
   })
-  logger.info('更新策略', { mode: policy.mode, reason: policy.reason })
+  const appUpdateYml = app.isPackaged
+    ? files.readText(join(process.resourcesPath, 'app-update.yml'))
+    : undefined
+  const primaryFeed: FeedConfig =
+    (appUpdateYml === undefined ? undefined : parseAppUpdateYml(appUpdateYml, version)) ??
+    feedFromEnv(process.env, version)
+  const fallbackFeed = githubFallbackEnabled(process.env, config.updateGithubFallback)
+    ? githubFallbackFeed(primaryFeed)
+    : undefined
+  logger.info('更新策略', {
+    mode: policy.mode,
+    reason: policy.reason,
+    feed: primaryFeed.provider === 'generic' ? primaryFeed.url : 'github',
+    githubFallback: fallbackFeed !== undefined,
+  })
 
-  /** mac / linux 查到的新版本（托盘上挂那一项用）。 */
+  /** mac / linux 查到的新版本（托盘上「去下载」那一项用）。 */
   let updateAvailable: string | undefined
-  let updateUrl = RELEASES_PAGE
+  let updateUrl = DOWNLOAD_PAGE
 
-  const autoUpdater = async (): Promise<UpdaterPort> => {
-    // 动态 import：`electron-updater` 在 notify 档一次都用不上，
-    // 没必要把它拖进每一次冷启动。
+  /** Windows：包一层 electron-updater。主源与 GitHub 共用同一个 autoUpdater，查之前先指好源。 */
+  const electronBackend = async (feed: FeedConfig): Promise<UpdateBackend> => {
+    // 动态 import：notify 档一次都用不上它，没必要拖进每一次冷启动
     const { autoUpdater: real } = await import('electron-updater')
     real.autoDownload = false
-    real.allowPrerelease = true
-    real.channel = 'beta'
+    // 只在用户点了「重启并更新」时装：退出时偷偷装会绕开装之前的自检
+    real.autoInstallOnAppQuit = false
+    // 渠道靠目录分（不设 `channel`——设了会顺手打开 allowDowngrade）；GitHub 那路靠它认预发布
+    real.allowPrerelease = feed.channel === 'beta'
     real.logger = {
       info: (m: unknown) => logger.child('electron-updater').info(String(m)),
       warn: (m: unknown) => logger.child('electron-updater').warn(String(m)),
@@ -1524,65 +1574,160 @@ async function bootstrap(): Promise<void> {
       debug: () => undefined,
     } as never
     return {
-      async checkForUpdates() {
+      async check() {
+        real.setFeedURL(
+          feed.provider === 'generic'
+            ? { provider: 'generic', url: feed.url }
+            : { provider: 'github', owner: feed.owner, repo: feed.repo },
+        )
         const result = await real.checkForUpdates()
         const found = result?.updateInfo.version
-        // `checkForUpdates()` 在"已经是最新"时也可能回一个对象，所以自己比一次
-        // （`isNewer` 认得 `0.1.0-beta.2 > 0.1.0-beta.1`）。
         return found !== undefined && isNewer(version, found) ? { version: found } : undefined
       },
-      downloadUpdate: async () => {
-        await real.downloadUpdate()
+      async download(onProgress) {
+        const listener = (p: { percent: number }): void => {
+          onProgress(p.percent)
+        }
+        real.on('download-progress', listener)
+        try {
+          await real.downloadUpdate()
+        } finally {
+          real.removeListener('download-progress', listener)
+        }
       },
-      quitAndInstall: () => {
-        real.quitAndInstall()
+      install() {
+        // 静默装、装完自动重开（NSIS 的 /S + --force-run）
+        real.quitAndInstall(true, true)
       },
     }
   }
+  const feedBackend = (feed: FeedConfig): Promise<UpdateBackend> | UpdateBackend =>
+    policy.mode === 'auto'
+      ? electronBackend(feed)
+      : createFeedChecker({
+          fetchImpl: globalThis.fetch as never,
+          currentVersion: version,
+          feed,
+          platform: process.platform,
+          abort: nodeAbort,
+        })
+  /** 主源懒加载：off 档一次都不建。 */
+  let primaryBackend: Promise<UpdateBackend> | undefined
+  const primary = (): Promise<UpdateBackend> => {
+    primaryBackend ??= Promise.resolve(feedBackend(primaryFeed))
+    return primaryBackend
+  }
 
-  const notify = (info: UpdateInfo): void => {
-    updateAvailable = info.version
-    updateUrl = info.url ?? RELEASES_PAGE
-    refreshTray()
-    if (Notification.isSupported())
+  /** 装之前：服务进程（连同它起的场景）先停干净——Windows 上还开着的 node.exe 会让安装程序写不进文件。 */
+  const stopEverythingForInstall = async (): Promise<void> => {
+    quitApproved = true
+    quitting = true
+    for (const w of liveSceneWindows()) w.window.destroy()
+    server.stop()
+    for (let i = 0; i < 60 && server.snapshot().pid !== undefined; i += 1) await sleep(250)
+  }
+
+  /** 「有任务在跑，确定现在重启？」——照 WP184 退出确认：没东西在跑就不问。 */
+  const confirmRestart = async (): Promise<boolean> => {
+    if (!officialRunning() && computerUseActive === undefined) return true
+    const t = strings(config.language)
+    const result = await dialog.showMessageBox({
+      type: process.platform === 'win32' ? 'none' : 'warning',
+      title: t.quitTitle,
+      message: t.updateRestartMessage,
+      detail: t.updateRestartDetail,
+      buttons: [t.updateRestartConfirm, t.updateRestartLater],
+      defaultId: 0,
+      cancelId: 1,
+      noLink: true,
+    })
+    return result.response === 0
+  }
+
+  const updates = createUpdateController({
+    mode: policy.mode,
+    primary: {
+      check: async () => (await primary()).check(),
+      download: async (onProgress) => (await primary()).download(onProgress),
+      install: () => {
+        void primary().then(async (b) => {
+          await stopEverythingForInstall()
+          b.install()
+        })
+      },
+    },
+    ...(fallbackFeed === undefined ? {} : { fallback: () => feedBackend(fallbackFeed) }),
+    smoke: async () =>
+      (await probeHealth(serverUrl(), { fetchImpl: globalThis.fetch as never, abort: nodeAbort }))
+        .ok,
+    confirmRestart,
+    openDownloadPage: (url) => {
+      void shell.openExternal(url)
+    },
+    downloadPage: DOWNLOAD_PAGE,
+    logger,
+    timers: nodeTimers(),
+  })
+
+  /** 托盘上那一项（Windows 应用内更新那一档）。 */
+  const trayUpdate = (): TrayAppUpdate | undefined => {
+    const s: UpdateStatus = updates.status()
+    if (s.state === 'available' && s.mode === 'auto')
+      return { state: 'available', version: s.version }
+    if (s.state === 'downloading')
+      return { state: 'downloading', version: s.version, percent: s.percent }
+    if (s.state === 'ready') return { state: 'ready', version: s.version }
+    return undefined
+  }
+
+  let notifiedVersion: string | undefined
+  updates.subscribe((s) => {
+    // 工作台里那颗按钮跟着变
+    for (const w of BrowserWindow.getAllWindows())
+      if (!w.isDestroyed() && isLocalOrigin(w.webContents.getURL(), allowedOrigins()))
+        w.webContents.send(BRIDGE_CHANNELS.updateChanged, publicStatus(s))
+    if (s.state === 'available' && s.mode === 'notify') {
+      updateAvailable = s.version
+      updateUrl = s.url ?? DOWNLOAD_PAGE
+    }
+    // 同一个版本只弹一次系统通知（每 4 小时查一次，别反复打扰）
+    if (s.state === 'available' && notifiedVersion !== s.version && Notification.isSupported()) {
+      notifiedVersion = s.version
       new Notification({
         title: strings(config.language).updateAvailableTitle,
-        body: strings(config.language).updateAvailable.replace('{version}', info.version),
+        body: (s.mode === 'notify'
+          ? strings(config.language).updateAvailable
+          : strings(config.language).updateDownload
+        ).replace('{version}', s.version),
       }).show()
-  }
-
-  const runUpdateCheck = async (): Promise<void> => {
-    if (policy.mode === 'off') return
-    const updater: UpdaterPort =
-      policy.mode === 'auto'
-        ? await autoUpdater()
-        : createReleaseChecker({
-            fetchImpl: globalThis.fetch as never,
-            currentVersion: version,
-            abort: nodeAbort,
-          })
-    const gate = createUpdateGate({
-      updater,
-      logger,
-      mode: policy.mode,
-      notify,
-      smoke: async () =>
-        (await probeHealth(serverUrl(), { fetchImpl: globalThis.fetch as never, abort: nodeAbort }))
-          .ok,
+    }
+    logger.info('更新状态', {
+      state: s.state,
+      ...('version' in s ? { version: s.version } : {}),
+      ...(s.state === 'error' ? { code: s.code, detail: s.detail } : {}),
     })
-    const outcome = await gate.run()
-    logger.info('更新检查', {
-      state: outcome.state,
-      ...(outcome.version === undefined ? {} : { version: outcome.version }),
-      ...(outcome.reason === undefined ? {} : { reason: outcome.reason }),
-    })
-  }
-  void runUpdateCheck().catch((err: unknown) => {
-    logger.warn('更新检查抛错', { error: String(err) })
+    refreshTray()
   })
+
+  // 桥：页面只看、只点；只接本地源窗口发来的
+  ipcMain.handle(BRIDGE_CHANNELS.updateStatus, (event) =>
+    fromLocalWindow(event) ? publicStatus(updates.status()) : { state: 'idle' },
+  )
+  ipcMain.handle(BRIDGE_CHANNELS.updateDownload, async (event) =>
+    fromLocalWindow(event) ? publicStatus(await updates.download()) : { state: 'idle' },
+  )
+  ipcMain.handle(BRIDGE_CHANNELS.updateInstall, async (event) =>
+    fromLocalWindow(event) ? updates.install() : 'not-ready',
+  )
+  updates.start()
 
   // ── 托盘常驻、无主窗口启动（13 §5）。
   tray = new Tray(trayImage())
+  // WP218：Windows 上左键点托盘图标习惯是「弹菜单」（不加这一句左键什么都不发生）
+  if (process.platform === 'win32')
+    tray.on('click', () => {
+      tray?.popUpContextMenu()
+    })
   refreshTray()
   app.dock?.hide()
   setLoginItem(config.launchAtLogin)
@@ -1635,6 +1780,10 @@ function tryResolve(specifier: string): string | undefined {
   }
 }
 
+// WP218：Windows 的系统通知认 AppUserModelId（与 NSIS 快捷方式、electron-builder 的 appId 同一个），
+// 不设的话通知归不到「Agents 工坊」名下，有的系统上干脆不弹
+if (process.platform === 'win32') app.setAppUserModelId('com.agentsws.desktop')
+
 if (!app.requestSingleInstanceLock()) {
   app.quit()
 } else {
@@ -1644,7 +1793,11 @@ if (!app.requestSingleInstanceLock()) {
   })
   app
     .whenReady()
-    .then(() => bootstrap())
+    .then(() => {
+      // WP218：Windows / Linux 的窗口不挂 Electron 默认的 File / Edit / View 菜单（那是开发者用的）
+      if (process.platform !== 'darwin') Menu.setApplicationMenu(null)
+      return bootstrap()
+    })
     .catch((err: unknown) => {
       process.stderr.write(`agentsws desktop 启动失败：${String(err)}\n`)
       app.exit(1)

@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 /** 桶文件与桥接契约：前端只 `import type` 这些东西，改名会立刻在这里露出来。 */
 import { describe, expect, it } from 'vitest'
 import { BRIDGE_CHANNELS, BRIDGE_KEY, type DesktopBridge } from '../src/bridge-types.js'
@@ -7,19 +8,26 @@ import { memoryFileStore } from '../src/node-files.js'
 import * as ports from '../src/ports.js'
 
 describe('bridge-types', () => {
-  it('桥面只有这几件能力（13 §5：桥接层要小；WP184 加了可选的「打开场景」）', () => {
+  it('桥面只有这几件能力（13 §5：桥接层要小；WP184 加了可选的「打开场景」，WP218 加了可选的「更新」）', () => {
     const bridge: Required<DesktopBridge> = {
       platform: 'darwin',
       version: '0.1.0',
       notify: async () => true,
       openExternal: async () => true,
       openScene: async () => ({ ok: true, where: 'window' }),
+      update: {
+        status: async () => ({ state: 'idle' }),
+        onChange: () => () => undefined,
+        download: async () => ({ state: 'idle' }),
+        install: async () => 'not-ready',
+      },
     }
     expect(Object.keys(bridge).sort()).toEqual([
       'notify',
       'openExternal',
       'openScene',
       'platform',
+      'update',
       'version',
     ])
   })
@@ -31,7 +39,16 @@ describe('bridge-types', () => {
       notify: 'agentsws:notify',
       openExternal: 'agentsws:open-external',
       openScene: 'agentsws:open-scene',
+      updateStatus: 'agentsws:update-status',
+      updateChanged: 'agentsws:update-changed',
+      updateDownload: 'agentsws:update-download',
+      updateInstall: 'agentsws:update-install',
     })
+  })
+
+  it('WP218：preload 里抄的通道名与这里逐字一致（preload 是 CJS，引不了这份常量）', () => {
+    const preload = readFileSync(new URL('../src/preload.cts', import.meta.url), 'utf8')
+    for (const channel of Object.values(BRIDGE_CHANNELS)) expect(preload).toContain(`'${channel}'`)
   })
 
   it('特性检测：普通浏览器里 window.agentsws 不存在，UI 必须能退化', () => {

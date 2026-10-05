@@ -27,7 +27,14 @@ describe('parseConfig', () => {
       mode: 'local',
       serverUrl: '',
       sceneInBrowser: false,
+      updateGithubFallback: true,
     })
+  })
+
+  // WP218：主源连不上退 GitHub 的开关，默认开
+  it('updateGithubFallback 只认布尔，默认 true', () => {
+    expect(parseConfig({ updateGithubFallback: false }).updateGithubFallback).toBe(false)
+    expect(parseConfig({ updateGithubFallback: 'no' }).updateGithubFallback).toBe(true)
   })
 
   // WP184：官方场景默认在我们自己的窗口里；勾上才用系统浏览器

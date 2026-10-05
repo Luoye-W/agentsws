@@ -9,6 +9,7 @@ import {
   createUpdateController,
   DEFAULT_FIRST_CHECK_MS,
   DEFAULT_INTERVAL_MS,
+  publicStatus,
   type UpdateBackend,
   type UpdateControllerOptions,
   type UpdateStatus,
@@ -388,5 +389,20 @@ describe('classifyUpdateError', () => {
     [null, 'unknown'],
   ])('%s → %s', (err, code) => {
     expect(classifyUpdateError(err)).toBe(code)
+  })
+})
+
+describe('publicStatus', () => {
+  it('错误原文不进页面，其余原样', () => {
+    expect(
+      publicStatus({
+        state: 'error',
+        stage: 'download',
+        code: 'network',
+        version: '0.2.0',
+        detail: 'C:\\Users\\张三\\AppData\\x',
+      }),
+    ).toEqual({ state: 'error', stage: 'download', code: 'network', version: '0.2.0' })
+    expect(publicStatus({ state: 'idle' })).toEqual({ state: 'idle' })
   })
 })

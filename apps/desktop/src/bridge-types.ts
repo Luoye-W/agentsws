@@ -12,7 +12,7 @@
  * else new Notification('有 3 条待审批')       // 普通浏览器里的退化路径
  * ```
  *
- * 桥面只有这几件能力（WP184 加了「打开场景」），多一件都不给：给得越少，"同一份 UI 在普通浏览器里完整可用"
+ * 桥面只有这几件能力（WP184 加了「打开场景」，WP218 加了「更新」），多一件都不给：给得越少，"同一份 UI 在普通浏览器里完整可用"
  * 这条就越站得住。凭据类的东西一概不走这里（13 §4.3：原生表单直填，不经渲染进程）。
  */
 
@@ -36,6 +36,45 @@ export interface DesktopBridge {
    * 用户在托盘勾了「在浏览器里打开场景」就交给系统浏览器。旧壳没有这一项：先判空。
    */
   openScene?(name: string, options?: { restart?: boolean }): Promise<SceneOpenOutcome>
+  /**
+   * WP218：应用内一键更新（左下角那颗「有新版本」按钮）。旧壳没有这一项：先判空。
+   * 状态由主进程的状态机说了算，页面只看、只点；下载与安装都在主进程里做。
+   */
+  update?: DesktopUpdateBridge
+}
+
+/** WP218：更新状态（主进程 `update-controller.ts` 的 `UpdateStatus` 去掉原始错误文本）。 */
+export type DesktopUpdateStatus =
+  | { state: 'idle' }
+  | {
+      state: 'available'
+      version: string
+      /** `auto` = 点了在应用里下；`notify` = 这台电脑只能去下载页（mac 未签名）。 */
+      mode: 'auto' | 'notify'
+      source: 'primary' | 'github'
+      url?: string
+    }
+  | { state: 'downloading'; version: string; percent: number; source: 'primary' | 'github' }
+  | { state: 'ready'; version: string; source: 'primary' | 'github' }
+  | { state: 'installing'; version: string }
+  | {
+      state: 'error'
+      stage: 'download' | 'install'
+      /** 人话分类，界面按它挑文案。 */
+      code: 'network' | 'not_found' | 'checksum' | 'disk' | 'smoke' | 'install' | 'unknown'
+      version: string
+    }
+
+export type DesktopInstallOutcome = 'installing' | 'cancelled' | 'blocked' | 'not-ready'
+
+export interface DesktopUpdateBridge {
+  status(): Promise<DesktopUpdateStatus>
+  /** 状态一变就回调；返回取消订阅。 */
+  onChange(listener: (status: DesktopUpdateStatus) => void): () => void
+  /** 点「更新」/「重试」：auto 档后台下载，notify 档打开下载页。 */
+  download(): Promise<DesktopUpdateStatus>
+  /** 点「重启并更新」：有任务在跑会先弹原生确认框。 */
+  install(): Promise<DesktopInstallOutcome>
 }
 
 /** WP184：`openScene` 的结果。`where` 说开在了哪（界面据此说一句「已在窗口 / 浏览器里打开」）。 */
@@ -60,6 +99,11 @@ export const BRIDGE_CHANNELS = {
   openExternal: 'agentsws:open-external',
   /** WP184 */
   openScene: 'agentsws:open-scene',
+  /** WP218 */
+  updateStatus: 'agentsws:update-status',
+  updateChanged: 'agentsws:update-changed',
+  updateDownload: 'agentsws:update-download',
+  updateInstall: 'agentsws:update-install',
 } as const
 
 export interface BridgeInfo {

@@ -15,6 +15,7 @@
  * 不 import electron：`UpdateBackend` 是注入的（真的那份在 `main.ts` 包 electron-updater），
  * 所以有新版 / 无新版 / 下载失败 / 安装前确认四条路都能在 vitest 里用替身更新源跑满。
  */
+import type { DesktopUpdateStatus } from './bridge-types.js'
 import type { Logger } from './logging.js'
 import type { TimerHandle, TimerPort } from './ports.js'
 import type { UpdateInfo, UpdateMode } from './updater.js'
@@ -125,6 +126,13 @@ export function classifyUpdateError(err: unknown): UpdateErrorCode {
   )
     return 'network'
   return 'unknown'
+}
+
+/** 交给页面的那一份：原始错误文本（可能带路径、网址）只进日志，不进渲染进程。 */
+export function publicStatus(status: UpdateStatus): DesktopUpdateStatus {
+  if (status.state !== 'error') return status
+  const { detail: _detail, ...rest } = status
+  return rest
 }
 
 /** 主源这次失败算不算「连不上」——只有连不上才退到 GitHub（404 = 源在、只是没这版，不退）。 */

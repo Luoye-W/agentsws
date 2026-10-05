@@ -1,9 +1,9 @@
 /**
  * 自动更新（13 §5「按顺序更新 sidecar，更新前跑一次冒烟；失败回滚」）。
  *
- * WP111 起接了真更新源：**GitHub Releases，渠道 `beta`**（`electron-builder.yml` 的
- * `publish: github`）。但两个平台走的不是同一条路，而这个差别是**签名**定的，
- * 不是我们挑的：
+ * WP111 起接了真更新源；WP218 起主源换成**自有下载站**（generic，`https://dl.agentsws.com/<渠道>/`），
+ * GitHub Releases 只做镜像与备用（见 `update-feed.ts`），按钮流程在 `update-controller.ts`。
+ * 两个平台走的不是同一条路，而这个差别是**签名**定的，不是我们挑的：
  *
  * | 平台 | 走哪条 | 为什么 |
  * |---|---|---|
@@ -19,6 +19,13 @@
  */
 import type { Logger } from './logging.js'
 import type { FetchLike } from './ports.js'
+import type { UpdateBackend } from './update-controller.js'
+import {
+  type FeedConfig,
+  type UpdateChannel,
+  updateInfoFile,
+  versionFromUpdateInfo,
+} from './update-feed.js'
 
 export interface UpdateInfo {
   version: string
@@ -136,7 +143,7 @@ export function isNewer(current: string, candidate: string): boolean {
 
 // ── notify 档的"查一下有没有新版本" ─────────────────────────────────────
 
-/** 发布源。与 `electron-builder.yml` 的 `publish` 是同一个仓库（两处改要一起改）。 */
+/** GitHub 镜像（WP218 起是备用源；与 `update-feed.ts` 的 GITHUB_OWNER / GITHUB_REPO 同一个仓库）。 */
 export const RELEASE_REPO = 'Luoye-W/agentsws'
 export const RELEASES_PAGE = `https://github.com/${RELEASE_REPO}/releases`
 
@@ -154,12 +161,34 @@ interface GithubRelease {
  * 这里只是一次匿名 GET + 一次版本比较，**没有任何凭据，也不下载任何东西**。
  */
 export function pickLatestBeta(body: unknown, current: string): UpdateInfo | undefined {
+  return pickLatest(body, current, (tag) => tag.includes('-beta.'))
+}
+
+/**
+ * WP218：按渠道挑。stable 只认正式版（tag 不带 `-`）；beta 认 beta **和**正式版——
+ * beta 用户等到同号正式版发出来，也该被提示升上去。
+ */
+export function pickLatestRelease(
+  body: unknown,
+  current: string,
+  channel: UpdateChannel,
+): UpdateInfo | undefined {
+  return pickLatest(body, current, (tag) =>
+    channel === 'stable' ? !tag.includes('-') : !tag.includes('-') || tag.includes('-beta.'),
+  )
+}
+
+function pickLatest(
+  body: unknown,
+  current: string,
+  accept: (tag: string) => boolean,
+): UpdateInfo | undefined {
   if (!Array.isArray(body)) return undefined
   let best: UpdateInfo | undefined
   for (const raw of body as GithubRelease[]) {
     if (raw?.draft === true) continue
     const tag = typeof raw?.tag_name === 'string' ? raw.tag_name : undefined
-    if (tag === undefined || !tag.includes('-beta.')) continue
+    if (tag === undefined || !accept(tag)) continue
     const version = tag.replace(/^v/, '')
     if (!isNewer(current, version)) continue
     if (best !== undefined && !isNewer(best.version, version)) continue
@@ -175,6 +204,8 @@ export interface ReleaseCheckerOptions {
   fetchImpl: FetchLike
   currentVersion: string
   repo?: string
+  /** WP218：按渠道挑；不给 = 旧行为（只认 beta）。 */
+  channel?: UpdateChannel
   timeoutMs?: number
   abort?: (timeoutMs: number) => { signal: AbortSignal; done: () => void }
 }
@@ -192,7 +223,10 @@ export function createReleaseChecker(options: ReleaseCheckerOptions): UpdaterPor
           ...(guard === undefined ? {} : { signal: guard.signal }),
         })
         if (!res.ok) throw new Error(`HTTP ${res.status}`)
-        return pickLatestBeta(JSON.parse(await res.text()), options.currentVersion)
+        const body: unknown = JSON.parse(await res.text())
+        return options.channel === undefined
+          ? pickLatestBeta(body, options.currentVersion)
+          : pickLatestRelease(body, options.currentVersion, options.channel)
       } finally {
         guard?.done()
       }
@@ -273,5 +307,60 @@ export function createUpdateGate(options: UpdateGateOptions): UpdateGate {
       options.updater.quitAndInstall()
       return outcome('installing', info.version)
     },
+  }
+}
+
+// ── WP218：notify 档（mac 未签名）的「查」，按更新源走 ──────────────────────
+
+/** 官网下载页：自有下载站那一路查到新版本时把人送到这里（下载页读的也是同一个站）。 */
+export const DOWNLOAD_PAGE = 'https://agentsws.com/download/'
+
+export interface FeedCheckerOptions {
+  fetchImpl: FetchLike
+  currentVersion: string
+  feed: FeedConfig
+  /** `process.platform`：决定读 `latest.yml` 还是 `latest-mac.yml`。 */
+  platform: string
+  timeoutMs?: number
+  abort?: (timeoutMs: number) => { signal: AbortSignal; done: () => void }
+}
+
+/**
+ * 只会「查」的更新源（notify 档用）：自有下载站读 `<渠道目录>/latest-mac.yml` 的 `version:`，
+ * GitHub 走 releases 列表。一次匿名 GET，不带任何凭据、不下载任何安装包。
+ * 下载 / 安装明确不做——这台电脑只能去下载页。
+ */
+export function createFeedChecker(options: FeedCheckerOptions): UpdateBackend {
+  const { feed } = options
+  const refuse = (): Promise<never> => Promise.reject(new Error('这个平台不做应用内下载'))
+  if (feed.provider === 'github') {
+    const checker = createReleaseChecker({
+      fetchImpl: options.fetchImpl,
+      currentVersion: options.currentVersion,
+      repo: `${feed.owner}/${feed.repo}`,
+      channel: feed.channel,
+      ...(options.timeoutMs === undefined ? {} : { timeoutMs: options.timeoutMs }),
+      ...(options.abort === undefined ? {} : { abort: options.abort }),
+    })
+    return { check: () => checker.checkForUpdates(), download: refuse, install: () => undefined }
+  }
+  return {
+    async check() {
+      const guard = options.abort?.(options.timeoutMs ?? 8000)
+      try {
+        const res = await options.fetchImpl(`${feed.url}/${updateInfoFile(options.platform)}`, {
+          method: 'GET',
+          ...(guard === undefined ? {} : { signal: guard.signal }),
+        })
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+        const latest = versionFromUpdateInfo(await res.text())
+        if (latest === undefined || !isNewer(options.currentVersion, latest)) return undefined
+        return { version: latest, url: DOWNLOAD_PAGE }
+      } finally {
+        guard?.done()
+      }
+    },
+    download: refuse,
+    install: () => undefined,
   }
 }
