@@ -64,6 +64,27 @@
   height: 15px;
   color: var(--brand);
 }
+/* WP227：Windows 下载按钮旁那行「第一次打开若被拦…」，只在 Windows 访客那里亮出来 */
+.dl-hint {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--muted);
+  margin: -10px 0 18px;
+}
+.dl-hint[hidden] {
+  display: none;
+}
+.center .dl-hint,
+.final .dl-hint {
+  justify-content: center;
+}
+.dl-hint .ico {
+  width: 14px;
+  height: 14px;
+  flex: none;
+}
 .shot {
   position: relative;
   margin-top: 72px;
@@ -168,6 +189,16 @@
   font-size: 14px;
   line-height: 1.6;
   color: var(--muted);
+}
+.stair p a {
+  color: var(--ink);
+  text-decoration: underline;
+  text-decoration-color: var(--line);
+  text-underline-offset: 3px;
+}
+.stair p a:hover {
+  color: var(--brand);
+  text-decoration-color: currentColor;
 }
 .scene {
   position: relative;

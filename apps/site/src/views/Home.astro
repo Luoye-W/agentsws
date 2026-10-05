@@ -9,7 +9,7 @@ import darkShot from '../../../../docs/assets/walkthrough/48b-dark-kol.png'
 import Hint from '../components/Hint.astro'
 import Icon from '../components/Icon.astro'
 import Mark from '../components/Mark.astro'
-import { ARCHITECTURE_URL, GITHUB_URL } from '../config.js'
+import { ARCHITECTURE_URL, GITHUB_URL, SISTER_SITES } from '../config.js'
 import { buildDownloads } from '../data/downloads-build.js'
 import { type Lang, localePath } from '../i18n/common.js'
 import { HOME } from '../i18n/home.js'
@@ -17,7 +17,7 @@ import { ROLES } from '../i18n/roles.js'
 import Base from '../layouts/Base.astro'
 import { loadChangelog } from '../lib/changelog.js'
 import { directWindowsUrl } from '../lib/downloads.js'
-import { emph } from '../lib/locales.js'
+import { emph, linkNames } from '../lib/locales.js'
 import '../styles/home.css'
 
 interface Props {
@@ -43,6 +43,7 @@ const winUrl = directWindowsUrl((await buildDownloads()).manifest)
           <a class="btn btn-primary" href={p('/download/')} data-dl-win={winUrl}><Icon name="download" />{t.hero.download}</a>
           <a class="btn btn-ghost" href={GITHUB_URL} rel="noopener"><Icon name="github" />{t.hero.github}</a>
         </div>
+        {winUrl && <p class="dl-hint" data-win-hint hidden><Icon name="shield" />{t.hero.winHint}</p>}
         <ul class="checks">
           {t.hero.checks.map((c) => <li><Icon name="check" />{c}</li>)}
         </ul>
@@ -116,7 +117,7 @@ const winUrl = directWindowsUrl((await buildDownloads()).manifest)
             </div>
             <div class="learn"><span class="lbadge">{t.why.s3.learn}</span><p>{t.why.s3.note}</p></div>
           </div>
-          <div class="stair-txt"><span class="lv">03</span><h3>{t.why.steps[2]?.h}</h3><p>{t.why.steps[2]?.p}</p></div>
+          <div class="stair-txt"><span class="lv">03</span><h3>{t.why.steps[2]?.h}</h3><p set:html={linkNames(t.why.steps[2]?.p ?? '', SISTER_SITES)} /></div>
         </li>
         <li class="stair">
           <div class="scene s4" aria-hidden="true">
@@ -312,6 +313,7 @@ const winUrl = directWindowsUrl((await buildDownloads()).manifest)
         <a class="btn btn-primary" href={p('/download/')} data-dl-win={winUrl}><Icon name="download" />{t.final.download}</a>
         <a class="btn btn-ghost" href={p('/docs/')}>{t.final.docs}</a>
       </div>
+      {winUrl && <p class="dl-hint" data-win-hint hidden><Icon name="shield" />{t.hero.winHint}</p>}
     </div>
   </section>
 </Base>

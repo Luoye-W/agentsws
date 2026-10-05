@@ -49,5 +49,13 @@ export const CONTRIBUTING_URL = `${GITHUB_URL}/blob/main/CONTRIBUTING.md`
 export const OPERATOR_LEGAL_NAME = '深圳卢耶科技有限公司'
 export const CONTACT_EMAIL = 'support@agentsws.com'
 
+/**
+ * 首页「四级台阶」第三级提到的两款前作（WP227，Luoye 10-05 #4）：名字点了去它们的官网，新窗口打开。
+ */
+export const SISTER_SITES: Readonly<Record<string, string>> = {
+  KOLAgents: 'https://kolagents.com',
+  KefuAgents: 'https://kefuagents.com',
+}
+
 /** 条款三页的生效日期（改条款就改这里）。 */
 export const LEGAL_EFFECTIVE_DATE = '2026-10-05'

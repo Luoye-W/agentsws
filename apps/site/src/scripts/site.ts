@@ -118,8 +118,11 @@ if (primary) {
 
 // WP218：首页「下载」按钮——Windows 访客直接拿下载站上最新的安装包（构建时取的清单里有链接才换），
 // mac 分不清 Apple 芯片还是 Intel，照旧去下载页挑
-if (/Windows/i.test(navigator.userAgent))
+// WP227：换了直链的同时亮出旁边那行「第一次打开若被拦…」（安装包还没签名，SmartScreen 会拦）
+if (/Windows/i.test(navigator.userAgent)) {
   for (const a of document.querySelectorAll<HTMLAnchorElement>('a[data-dl-win]')) {
     const url = a.getAttribute('data-dl-win')
     if (url) a.href = url
   }
+  for (const hint of document.querySelectorAll<HTMLElement>('[data-win-hint]')) hint.hidden = false
+}
