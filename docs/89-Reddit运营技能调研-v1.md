@@ -9,7 +9,7 @@
 
 ## 0. 一句话
 
-TODO（§1–§6 写完再收）
+开源里**没有一份能原样装上就用的 Reddit 代运营技能**：最好的是 social-media-skills 的 `reddit-marketing`（MIT），它把刷票、小号、隐藏身份写成硬拒绝；再加 marketingskills 的监听循环（MIT）和 gtm-coding-agent 的人审队列（MIT）。建议把这三份**一起改编成我们自己的一份 `reddit-ops` 技能**，四条职责都挂上（§4、§5）。比技能更要紧的是官方规则这两年变了：**用 API 取 Reddit 数据现在要先拿 Reddit 批准，替企业做监控算商业用途、要书面批准**；自动化账号要挂「App」标签；Reddit 上删了的我们也得删；官方版要标 official；代运营方拿钱做版务落在版主守则的灰区（§2）。所以 INMO 这单真正卡脖子的是**取数许可和版主位**，不是缺技能——这两件要 Luoye 定（§6）。另有 8 份开源做法因为刷票、养号、装成普通用户、绕过检测抓取被排除（§1.2）。
 
 ## 1. 开源技能与 Agent 角色
 
@@ -226,8 +226,17 @@ Luoye 的红线：**刷票、开小号、隐藏身份去推广，一律排除**�
 
 ## 6. 要 Luoye 定的事（少而准）
 
-TODO
+1. **Reddit 取数许可谁去申请、怎么申请**。替 INMO 的监控与代发都是商业用途，按条款要 Reddit 书面批准（§2.4）。建议：由我们（Agents 工坊 / 代运营方）以一个应用、一个用途（「替品牌做官方版运营与品牌监控，所有发出去的内容人工审批」）去申请；批下来之前，`pr.monitoring` 的 Reddit 那一路**不跑**、面板说「要先拿到批准」，人用 Reddit Pro 的 Trends 先看着（免费、官方，只是接不进我们系统）。要不要这样做？客户若已有 Sprinklr / Meltwater / Talkwalker / Sprout Social 这类官方数据合作方的账号，要不要优先接它们？
+2. **INMO 官方版的版主位给谁**。版主守则第 5 条不许「因第三方报酬做版务」，但允许「公司管自己的版」（§2.3）。代运营方的人拿钱删帖封人在灰区。建议：INMO 自己的员工账号做头号版主，品牌官方号由我们代操作、每个封禁都人点；或者先用版主守则的表单问 Reddit。选哪条？
+3. **别人的版里回帖改成「每条都要人批」，永远不升自动**（`pr.reddit` 与 `pr.forums` 的 `reply_thread` 改 `hard_ceiling` 停在 L2，§3.2）。这样会多一些卡，但升上去就是 Reddit 明禁的「自动回陌生人」。同意吗？
+4. **`pr.forums` 的浏览器白名单删掉 `*.reddit.com`**（§3.3）。删了以后浏览器读到 Reddit 链接就交给 Reddit 营销那条走官方接口。同意吗？
+5. **技能怎么引**：按 §4 把三份改编成一份 `reddit-ops`（另开一单，连同 §3 四条职责的改动、连接卡说明、「删了跟着删」的回查一起做）。还是先只改职责、技能后放？
+
+（§3 里额度数字一个没改：官方没有给任何数字比例，现有的数都是我们自己「别刷屏」的线，看不出要动的理由。）
 
 ## 7. 署名与声明
 
-TODO
+- §1 里 MIT / Apache / BSD 仓库的条目都是用我们自己的话转述的，没有搬原文。真正改编进仓库时（§4、§5 的 `reddit-ops`），在 SKILL.md 文件头写「改编自 …（许可证，© …）」，并在 `packages/skills/bundled/THIRD-PARTY-NOTICES` 登记 social-media-skills（MIT，© 2026 Frank Heijdenrijk）与 gtm-coding-agent（MIT，© 2026 Shawn Villaron）的许可证全文；marketingskills 已登记。
+- 没有许可证、NOASSERTION、AGPL 或商业许可的仓库只看了思路，一个字没搬；§1.2 排除的仓库不引任何内容。
+- Reddit 的条款、帮助中心与商业帮助中心页面（redditinc.com、support.reddithelp.com、business.reddithelp.com、ads-api.reddit.com、business.reddit.com）只取事实、用自己的话写；FTC 页面是美国政府作品。
+- 本文不是法律意见。§2 里标「推断」的几条（RSS / `.json` 不豁免、代运营做版务的灰区、医疗器械广告只在讲功效时相关）是我们读条款得出的，拿不准的应向 Reddit 或律师确认。
