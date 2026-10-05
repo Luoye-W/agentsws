@@ -9,6 +9,7 @@
  * CONTENT_SIGNING_KEY="$(cat key.pem)" \
  *   node scripts/content-pack.mjs build --channel beta --out out/content [--serial N]
  * node scripts/content-pack.mjs verify --dir out/content/r2/beta --public-key <base64>
+ * node scripts/content-pack.mjs verify --dir out/content/r2/beta --builtin   # 用应用里内置的公钥验
  * ```
  *
  * - 私钥只从环境变量 `CONTENT_SIGNING_KEY` 读（GitHub Actions secret，值由 Luoye 填），**不打印、不落盘**；
@@ -122,15 +123,19 @@ export async function run(argv = process.argv.slice(2), env = process.env, root 
   if (cmd === 'verify') {
     const dir = resolve(arg(args, '--dir', ''))
     const pub = arg(args, '--public-key', '')
-    const keyId = arg(args, '--key-id', '')
     const bytes = readFileSync(join(dir, 'content-manifest.json'))
     const sig = readFileSync(join(dir, 'content-manifest.json.sig'), 'utf8')
-    const keys = [
-      {
-        key_id: keyId !== '' ? keyId : skills.contentKeyId(Buffer.from(pub, 'base64')),
-        public_key: pub,
-      },
-    ]
+    // `--builtin`：用**应用里内置的**公钥验（发版流水线用它确认 secret 里的私钥与发出去的应用对得上）
+    const keys = args.includes('--builtin')
+      ? (await import(join(REPO_ROOT, 'packages/contracts/dist/index.js')))
+          .CONTENT_SIGNING_PUBLIC_KEYS
+      : [{ key_id: skills.contentKeyId(Buffer.from(pub, 'base64')), public_key: pub }]
+    if (keys.length === 0) {
+      log(
+        '✗ 应用里还没有内置公钥（CONTENT_SIGNING_PUBLIC_KEYS 是空的）：用户端一份都不会收，先别传',
+      )
+      return 1
+    }
     const m = skills.verifyContentManifest(bytes, sig, {
       keys,
       appVersion: '999.0.0',

@@ -25,6 +25,20 @@ on:
       tag:
         description: 手动重跑某个已经打好的 tag（例如 v0.1.0-beta.1）
         required: true
+      # WP219（docs/90 §4）：只打内容包（已审的第三方内容），不打桌面壳 / 插件。tag 随便填（例如 main），不用它
+      content_only:
+        description: 只打内容包（已审的第三方内容），不打软件安装包
+        type: boolean
+        default: false
+      content_channel:
+        description: 内容包发到哪个渠道（只打内容包时用；推 tag 时按 tag 自动定）
+        type: choice
+        options: [beta, stable]
+        default: beta
+      content_publish:
+        description: 手动触发时把内容包真传上去（默认只打包自检、留 artifact）
+        type: boolean
+        default: false
 
 permissions:
   # 只为了往 Release 上传产物。没有别的权限。
@@ -36,6 +50,8 @@ env:
 jobs:
   build:
     name: ${{ matrix.label }}
+    # WP219：只打内容包的那一趟不打安装包
+    if: github.event.inputs.content_only != 'true'
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     strategy:
@@ -132,6 +148,7 @@ jobs:
   extension:
     name: 浏览器插件参考实现（开源版 zip；官方完整版见私有 Release）
     needs: build
+    if: github.event.inputs.content_only != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -178,3 +195,131 @@ jobs:
           zip="$(ls apps/extension/build/*.zip | head -n 1)"
           echo "上传 $zip → $tag"
           gh release upload "$tag" "$zip" --clobber
+
+  # ── WP219（docs/90 §4）：内容包——已审的第三方内容，打包、签名、传到下载站与 GitHub Release ──
+  #
+  # 与上面两个作业**互不依赖**：内容包不等安装包，安装包打挂了内容包照样发（反之亦然）。
+  #
+  # 纪律：
+  # 1. **签名私钥只在这里用**：GitHub Actions secret `CONTENT_SIGNING_KEY`（ed25519，PKCS#8 PEM），
+  #    仓库里只有这个名字，值由 Luoye 填（`node scripts/content-keygen.mjs` 生成，docs/90 §4.2）。
+  # 2. **签出去的就是审过的那一份**：`content-reviews.json` 里摘要对得上最新审核记录的条目才打；
+  #    没审过 / 审完又改过 / 扫描命中没逐条放行的不打（列进作业摘要），没有可打的就不出包、作业照样绿。
+  # 3. **上传前用应用里内置的公钥再验一遍**（`verify --builtin`）：secret 里的私钥与发出去的应用对不上，
+  #    用户端一份都不会收——那就别传。
+  # 4. **先传文件、再传签名、最后传清单**：客户端看到新清单时，它指的文件已经都在了。
+  # 5. 推 tag 才真传；手动触发默认只打包自检（`content_publish` 打勾才传）。R2 凭据与 WP218 同三样 secret。
+  content:
+    name: 内容包（已审的第三方内容）
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    env:
+      CONTENT_UPLOAD: ${{ github.event_name == 'push' || github.event.inputs.content_publish == 'true' }}
+    steps:
+      # 推 tag：打那个 tag 的内容；手动：打主干上（当前分支）审过的内容
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'push' && github.ref || '' }}
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+
+      - name: install
+        run: pnpm install --frozen-lockfile
+
+      # 打包 / 签名 / 扫描都在 packages/skills（它引用的 contracts 一起编）
+      - name: tsc -b（skills 与 contracts）
+        run: pnpm exec tsc -b packages/skills
+
+      - name: 渠道
+        id: channel
+        shell: bash
+        env:
+          INPUT_CHANNEL: ${{ github.event.inputs.content_channel }}
+          TAG: ${{ github.event.inputs.tag || github.ref_name }}
+          ONLY: ${{ github.event.inputs.content_only }}
+        run: |
+          if [ "$ONLY" = "true" ] && [ -n "$INPUT_CHANNEL" ]; then ch="$INPUT_CHANNEL"
+          elif [[ "$TAG" == *-* ]]; then ch=beta
+          else ch=stable
+          fi
+          echo "channel=$ch" >> "$GITHUB_OUTPUT"
+          echo "内容包渠道：$ch" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: 打包 + 签名（只打审过的）
+        id: pack
+        env:
+          CONTENT_SIGNING_KEY: ${{ secrets.CONTENT_SIGNING_KEY }}
+        run: node scripts/content-pack.mjs build --channel "${{ steps.channel.outputs.channel }}" --out out/content
+
+      - name: 用应用里内置的公钥再验一遍
+        if: steps.pack.outputs.published == 'true'
+        run: node scripts/content-pack.mjs verify --dir "out/content/r2/${{ steps.channel.outputs.channel }}" --builtin
+
+      - uses: actions/upload-artifact@v4
+        if: steps.pack.outputs.published == 'true'
+        with:
+          name: content-pack
+          path: out/content/
+          retention-days: 14
+
+      - name: 检查 R2 凭据都填了（只看有没有，不打印值）
+        if: steps.pack.outputs.published == 'true' && env.CONTENT_UPLOAD == 'true'
+        shell: bash
+        env:
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+        run: |
+          missing=""
+          [ -z "$R2_ACCESS_KEY_ID" ] && missing="$missing R2_ACCESS_KEY_ID"
+          [ -z "$R2_SECRET_ACCESS_KEY" ] && missing="$missing R2_SECRET_ACCESS_KEY"
+          [ -z "$R2_ACCOUNT_ID" ] && missing="$missing R2_ACCOUNT_ID"
+          if [ -n "$missing" ]; then echo "缺 Actions secrets：$missing"; exit 1; fi
+
+      # 与 WP218 同一个桶（`agentsws-downloads`，仓库变量 R2_BUCKET 可改），`content/<渠道>/` 前缀
+      - name: 传到下载站（dl.agentsws.com/content/<渠道>/：先文件、再签名、最后清单）
+        if: steps.pack.outputs.published == 'true' && env.CONTENT_UPLOAD == 'true'
+        shell: bash
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_BUCKET: ${{ vars.R2_BUCKET || 'agentsws-downloads' }}
+          AWS_DEFAULT_REGION: auto
+          AWS_REQUEST_CHECKSUM_CALCULATION: when_required
+          AWS_RESPONSE_CHECKSUM_VALIDATION: when_required
+          CH: ${{ steps.channel.outputs.channel }}
+        run: |
+          endpoint="https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
+          put() { aws s3 cp "$1" "s3://${R2_BUCKET}/content/$2" --endpoint-url "$endpoint" \
+            --content-type "$3" --cache-control "$4" --only-show-errors; }
+          for f in out/content/r2/"$CH"/blobs/*; do
+            put "$f" "$CH/blobs/$(basename "$f")" application/octet-stream 'public, max-age=31536000, immutable'
+          done
+          put "out/content/r2/$CH/content-manifest.json.sig" "$CH/content-manifest.json.sig" text/plain 'no-cache, max-age=0'
+          put "out/content/r2/$CH/content-manifest.json" "$CH/content-manifest.json" application/json 'no-cache, max-age=0'
+
+      # 镜像：每个渠道一条滚动的 Release（tag `content-<渠道>`，第一次由这一步建），文件平铺（blob-<sha256>）
+      - name: 镜像到 GitHub Release content-<渠道>
+        if: steps.pack.outputs.published == 'true' && env.CONTENT_UPLOAD == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CH: ${{ steps.channel.outputs.channel }}
+        run: |
+          rel="content-$CH"
+          if ! gh release view "$rel" >/dev/null 2>&1; then
+            gh release create "$rel" --target "$GITHUB_SHA" --prerelease \
+              --title "内容更新（$CH）" \
+              --notes "已审的第三方内容（技能等）的内容包，Agents 工坊的应用会自己取，不用手动下载。docs/90。"
+          fi
+          gh release upload "$rel" out/content/github/blob-* --clobber
+          gh release upload "$rel" out/content/github/content-manifest.json.sig --clobber
+          gh release upload "$rel" out/content/github/content-manifest.json --clobber

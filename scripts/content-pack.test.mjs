@@ -172,6 +172,8 @@ describe('打包 / 签名 / 自检（CLI）', () => {
         root,
       ),
     ).toBe(0)
+    // 应用里还没有内置公钥：用内置公钥验一定不过（流水线据此不上传）
+    expect(await runPack(['verify', '--dir', join(out, 'r2/beta'), '--builtin'], {}, root)).toBe(1)
     const m = JSON.parse(readFileSync(join(out, 'r2/beta/content-manifest.json'), 'utf8'))
     expect(m.serial).toBe(42)
     expect(m.items[0].upstream).toMatchObject({ id: 'marketingskills', license: 'MIT' })
