@@ -193,12 +193,12 @@
 .stair p a {
   color: var(--ink);
   text-decoration: underline;
-  text-decoration-color: var(--line);
+  text-decoration-color: var(--brand);
+  text-decoration-thickness: 1px;
   text-underline-offset: 3px;
 }
 .stair p a:hover {
   color: var(--brand);
-  text-decoration-color: currentColor;
 }
 .scene {
   position: relative;

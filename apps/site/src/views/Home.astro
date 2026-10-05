@@ -43,7 +43,7 @@ const winUrl = directWindowsUrl((await buildDownloads()).manifest)
           <a class="btn btn-primary" href={p('/download/')} data-dl-win={winUrl}><Icon name="download" />{t.hero.download}</a>
           <a class="btn btn-ghost" href={GITHUB_URL} rel="noopener"><Icon name="github" />{t.hero.github}</a>
         </div>
-        {winUrl && <p class="dl-hint" data-win-hint hidden><Icon name="shield" />{t.hero.winHint}</p>}
+        <p class="dl-hint" data-win-hint hidden><Icon name="shield" />{t.hero.winHint}</p>
         <ul class="checks">
           {t.hero.checks.map((c) => <li><Icon name="check" />{c}</li>)}
         </ul>
@@ -313,7 +313,7 @@ const winUrl = directWindowsUrl((await buildDownloads()).manifest)
         <a class="btn btn-primary" href={p('/download/')} data-dl-win={winUrl}><Icon name="download" />{t.final.download}</a>
         <a class="btn btn-ghost" href={p('/docs/')}>{t.final.docs}</a>
       </div>
-      {winUrl && <p class="dl-hint" data-win-hint hidden><Icon name="shield" />{t.hero.winHint}</p>}
+      <p class="dl-hint" data-win-hint hidden><Icon name="shield" />{t.hero.winHint}</p>
     </div>
   </section>
 </Base>
