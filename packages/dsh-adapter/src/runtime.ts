@@ -29,11 +29,19 @@ import type {
 import { canonicalJson, Provenance, sha256 } from '@agentsws/core'
 import { staticPrefixHash } from '@agentsws/model-gateway'
 import type { DraftPayload, StageIntent } from '@agentsws/stand-ins'
-import { assemblePrompt, describeRun, promptHash } from '@agentsws/stand-ins'
+import {
+  assemblePrompt,
+  describeRun,
+  promptHash,
+  TOOL_CALL_TEXT_FAILURE,
+  TOOL_CALL_TEXT_NUDGE,
+  TOOL_CALL_TEXT_RETRIES,
+  TOOL_CALL_TEXT_STEP,
+} from '@agentsws/stand-ins'
 import { replySubject } from '@agentsws/support-core'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
 import type { DraftArgs, StageArgs } from './gate.js'
-import { createHarness } from './harness.js'
+import { createHarness, isToolCallText } from './harness.js'
 import { presetDigest, writePreset } from './preset.js'
 import {
   DAY_MS,
@@ -411,7 +419,23 @@ export function createInProcessDshRuntime(options: DshRuntimeOptions): RuntimeAd
         signal.addEventListener('abort', onAbort, { once: true })
         stopCancel = () => signal.removeEventListener('abort', onAbort)
 
-        const turn = await harness.runTurn(TASK_MESSAGE)
+        let turn = await harness.runTurn(TASK_MESSAGE)
+        /*
+         * WP230：这一轮以「把工具调用写成了文字」结束——追加一句提示再跑一轮（只重试一次，
+         * 与 direct 同一句、同一个 progress 留痕）。中断 / 预算 / 模型出错时不重试，照原路收尾。
+         */
+        for (
+          let retry = 0;
+          retry < TOOL_CALL_TEXT_RETRIES &&
+          turn.tool_call_text === true &&
+          !signal.aborted &&
+          exhausted === undefined &&
+          modelError === undefined;
+          retry += 1
+        ) {
+          emit({ type: 'progress', step: TOOL_CALL_TEXT_STEP, note: 'retry' })
+          turn = await harness.runTurn(TOOL_CALL_TEXT_NUDGE)
+        }
         offProjection()
         toolCalls = harness.gate.toolCalls
 
@@ -425,6 +449,23 @@ export function createInProcessDshRuntime(options: DshRuntimeOptions): RuntimeAd
             error: { code: 'provider_unavailable', message: modelError, retryable: true },
           })
           return finish('failed', `模型不可用：${modelError}`)
+        }
+
+        // WP230：重试过还是「用文字调工具」——照实报格式异常：假文字不当答案、不出卡
+        if (turn.tool_call_text === true && exhausted === undefined) {
+          emit({
+            type: 'run.failed',
+            error: { code: 'provider_error', message: TOOL_CALL_TEXT_FAILURE, retryable: true },
+          })
+          outputs = harness.gate.outputs
+          return finish(
+            'failed',
+            describeRun({
+              readTools: harness.gate.readTools,
+              drafted: harness.gate.drafted,
+              failed: TOOL_CALL_TEXT_FAILURE,
+            }),
+          )
         }
 
         // ── 边界选择题卡（36 §2.2）：模型压根没提变更那条路也要问一次 ────────
@@ -498,6 +539,8 @@ function project(event: SessionEvent, emit: (e: RunEvent) => void): void {
       const message = (
         event.data as { message: { content: readonly { type: string; text?: string }[] } }
       ).message
+      // WP230：把工具调用写成了文字的那一条不当模型的话（运行时另发 progress 留痕，与 direct 一致）
+      if (isToolCallText(message.content)) return
       const text = message.content
         .filter((b) => b.type === 'text')
         .map((b) => b.text ?? '')

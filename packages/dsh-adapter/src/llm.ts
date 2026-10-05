@@ -224,10 +224,13 @@ export function toChatMessages(
     if (m.role === 'assistant') {
       const calls = m.content.filter((b) => b.type === 'tool-call')
       for (const c of calls) toolNames.set(String(c.id), c.name)
-      const content = m.content
-        .map((b) => (b.type === 'tool-call' ? `[calling ${b.name} ${b.arguments}]` : blockText(b)))
-        .filter((s) => s.length > 0)
-        .join('\n')
+      /*
+       * WP230：content 只留模型自己说的话；工具调用**只**走结构化的 `tool_calls`。
+       * 以前这里同时写一行 `[calling 名字 参数]`，真模型（deepseek-chat 10-05 实测）看多了
+       * 就学着用文字调工具，回合以三行假调用结束。没话说就是空字符串——出线那一跳
+       * （OpenAI 兼容口发 `null`、Messages 口不发 text 块）按各家规矩处理。
+       */
+      const content = messageText(m)
       const reasoning =
         calls[0] === undefined ? undefined : reasoningByCallId?.get(String(calls[0].id))
       const replay = calls[0] === undefined ? undefined : replayByCallId?.get(String(calls[0].id))
