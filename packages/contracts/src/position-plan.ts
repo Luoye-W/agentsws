@@ -54,6 +54,22 @@ export function channelPositionName(channel: string, lang: 'zh' | 'en' = 'zh'): 
   return lang === 'en' ? `${label} Ops` : `${label} 运营`
 }
 
+/**
+ * WP235：合并后那个岗位的建议名——几条职责都是同一个渠道（`pr.reddit` + `social.reddit`）就叫
+ * 「Reddit 运营」；否则用 `fallback`（合并目标原来的名字）。公司页合并对话框预填它，服务端不给名字时也用它。
+ */
+export function mergedPositionName(
+  role_ids: readonly string[],
+  fallback: string,
+  lang: 'zh' | 'en' = 'zh',
+): string {
+  const channels = new Set(role_ids.map(channelOfRole))
+  const only = [...channels][0]
+  return role_ids.length > 0 && channels.size === 1 && only !== undefined
+    ? channelPositionName(only, lang)
+    : fallback
+}
+
 /** 一条职责归哪个类别（挂在几个模板里时归第一个）。 */
 export function categoryOfRole(
   role_id: string,

@@ -301,13 +301,18 @@ export function OrgPage(): React.ReactNode {
             })) +
         (out.memory_copied === undefined || out.memory_copied === 0
           ? ''
-          : t('org.positions.reshaped.copied', { k: String(out.memory_copied) })),
+          : t('org.positions.reshaped.copied', { k: String(out.memory_copied) })) +
+        // WP235：目标是模板时另建了一个自建岗位，模板没动
+        (() => {
+          const made = out.positions.find((p) => p.id === out.created)
+          return made === undefined ? '' : t('org.positions.reshaped.created', { name: made.name })
+        })(),
     )
     await refresh()
   }
   const merge = useMutation({
-    mutationFn: (input: { id: string; into: string }) =>
-      mergeOrgPosition(input.id, input.into, owner),
+    mutationFn: (input: { id: string; into: string; name: string }) =>
+      mergeOrgPosition(input.id, input.into, owner, input.name),
     onSuccess: sayReshaped,
     onError: say,
   })
@@ -713,8 +718,8 @@ export function OrgPage(): React.ReactNode {
                 propose.mutate({ id, patch })
               }}
               // WP234（docs/54 §6.4）：合并到… / 移动职责 / 拆出…
-              onMerge={(id, into) => {
-                merge.mutate({ id, into })
+              onMerge={(id, into, name) => {
+                merge.mutate({ id, into, name })
               }}
               onMoveDuty={(id, role_id, to) => {
                 moveDuty.mutate({ id, role_id, to })

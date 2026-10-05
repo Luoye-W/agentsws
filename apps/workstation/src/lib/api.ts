@@ -2315,7 +2315,13 @@ export interface OrgPositionView {
   version: string
   source: 'bundled' | 'custom'
   roles: { role_id: string; name: string; default: boolean; loaded: boolean }[]
-  holders: { person_id: string; name: string; ranges: { kind: string; id: string }[] }[]
+  /** WP235：`role_ids` = 他在这个岗位里手上的那几条职责（老服务端没有）。 */
+  holders: {
+    person_id: string
+    name: string
+    ranges: { kind: string; id: string }[]
+    role_ids?: string[]
+  }[]
   /** WP174：这个岗位的上级（超授权的审批先转他）；没设 = 转老板。 */
   supervisor?: { person_id: string; name: string }
   /** WP213：岗位图标（`role-icons/glyphs.ts` 的 id）；自建岗位没有。 */
@@ -2690,19 +2696,25 @@ export interface PositionReshapeView {
   moved_matters: number
   memory?: { moved: number; kept_both: number }
   deleted?: string
+  /** WP235：目标是模板时为了不改模板另建的自建岗位 id。 */
+  created?: string
   /** 拆出时：岗位层记忆复制给新岗位几条（Luoye 10-06）。 */
   memory_copied?: number
 }
 
-/** WP234：把岗位 `id` 合并到 `into`（职责、事项、岗位层记忆都跟过去）。 */
+/**
+ * WP234：把岗位 `id` 合并到 `into`（职责、事项、岗位层记忆都跟过去）。
+ * WP235：`name` = 合并后那个岗位叫什么（`into` 是模板时另建自建岗位，模板不变）。
+ */
 export const mergeOrgPosition = (
   id: string,
   into: string,
   assignment?: string,
+  name?: string,
 ): Promise<PositionReshapeView> =>
   api<PositionReshapeView>(`/v1/org/positions/${encodeURIComponent(id)}/merge`, {
     method: 'POST',
-    body: { into },
+    body: name === undefined ? { into } : { into, name },
     ...withAssignment(assignment),
   })
 
