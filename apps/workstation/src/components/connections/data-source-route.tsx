@@ -37,41 +37,57 @@ import { DutyNeeded } from '../duty-needed'
 /** 界面上三级的顺序（默认顺序；用户可在其中调整）。 */
 const LEVELS: readonly DataSourceLevel[] = ['official_key', 'byo_source', 'workshop']
 
+/** WP220（Luoye 10-05）：Reddit 取数那一项的键与两路（接口中台 → 浏览器只读）。 */
+export const REDDIT_READ_ROUTE_KEY = 'reddit.read'
+export const REDDIT_READ_LEVELS: readonly DataSourceLevel[] = ['workshop', 'browser_readonly']
+
 const LEVEL_LABEL_KEYS: Record<DataSourceLevel, string> = {
   official_key: 'data.route.official_key',
   byo_source: 'data.route.byo_source',
   workshop: 'data.route.workshop',
   // WP179：只属于网页搜索那一项（红人渠道的表里不会出现），开关在模型页
   deepseek_native: 'web.search.title',
+  // WP220：只属于 Reddit 取数那一项
+  browser_readonly: 'data.route.browser_readonly',
 }
 
 /** 当前生效的顺序（没配过的渠道用默认）。 */
 function effectiveOrder(
   routing: Record<string, { order: DataSourceLevel[]; disabled: DataSourceLevel[] }> | undefined,
   capability: string,
+  levels: readonly DataSourceLevel[] = LEVELS,
 ): { order: DataSourceLevel[]; disabled: DataSourceLevel[] } {
   const saved = routing?.[capability]
-  if (saved === undefined || saved.order.length === 0) return { order: [...LEVELS], disabled: [] }
-  // 只认三级以内、无重复的顺序；坏了就回默认（设置文件是手改不过来的，但防一手）
-  const order = saved.order.filter((l, i) => LEVELS.includes(l) && saved.order.indexOf(l) === i)
-  const missing = LEVELS.filter((l) => !order.includes(l))
+  if (saved === undefined || saved.order.length === 0) return { order: [...levels], disabled: [] }
+  // 只认这一项自己的几级、无重复的顺序；坏了就回默认（设置文件是手改不过来的，但防一手）
+  const order = saved.order.filter((l, i) => levels.includes(l) && saved.order.indexOf(l) === i)
+  const missing = levels.filter((l) => !order.includes(l))
   return {
     order: [...order, ...missing],
-    disabled: saved.disabled.filter((l) => LEVELS.includes(l)),
+    disabled: saved.disabled.filter((l) => levels.includes(l)),
   }
 }
 
 export function DataSourceRouteControl({
   channel,
   assignment,
+  routeKey,
+  levels = LEVELS,
+  note,
 }: {
   channel: string
   /** 所有者那条（工作区设置）；没传 = 全局当前岗位 */
   assignment?: string | undefined
+  /** WP220：路由键（不给 = 红人那条 `kol.<渠道>`；Reddit 卡给 `reddit.read`） */
+  routeKey?: string
+  /** WP220：这一项认哪几级（默认红人那三级） */
+  levels?: readonly DataSourceLevel[]
+  /** WP220：表下面那一句（i18n 键） */
+  note?: string
 }): React.ReactNode {
   const { t } = useApp()
   const client = useQueryClient()
-  const capability = `kol.${channel}`
+  const capability = routeKey ?? `kol.${channel}`
   const sources = useQuery({
     queryKey: ['capability-sources', assignment],
     queryFn: () => getCapabilitySources(assignment),
@@ -86,7 +102,7 @@ export function DataSourceRouteControl({
     onSuccess: () => void client.invalidateQueries({ queryKey: ['capability-sources'] }),
   })
 
-  const current = effectiveOrder(sources.data?.data_source_routing, capability)
+  const current = effectiveOrder(sources.data?.data_source_routing, capability, levels)
 
   const move = (level: DataSourceLevel, delta: -1 | 1): void => {
     const order = [...current.order]
@@ -147,6 +163,7 @@ export function DataSourceRouteControl({
           </div>
         )
       })}
+      {note === undefined ? null : <p className="text-[11px] text-muted-foreground">{t(note)}</p>}
       {save.error === null || save.error === undefined ? null : (
         <p className="text-[11px] text-destructive">{save.error.message}</p>
       )}

@@ -30,7 +30,12 @@ import { useApp } from '@/lib/app-context'
 import { firstSentence, HELP_BY_SERVICE, shortReason, templateGuide } from '@/lib/help'
 import { cn } from '@/lib/utils'
 import { CapabilitySourceSwitch, capabilityOf } from './capability-source-switch'
-import { ByoSourceCard, DataSourceRouteControl } from './data-source-route'
+import {
+  ByoSourceCard,
+  DataSourceRouteControl,
+  REDDIT_READ_LEVELS,
+  REDDIT_READ_ROUTE_KEY,
+} from './data-source-route'
 import { SecureForm } from './secure-form'
 import { TestResultLine } from './test-result'
 
@@ -82,6 +87,8 @@ export function ProviderCard({
     .filter((x) => x !== '')
     .join(' ')
   const capability = capabilityOf(provider.service)
+  // WP220（Luoye 10-05）：Reddit 卡上也有「数据从哪里来」——接口中台 → 浏览器只读，可调顺序、可停用
+  const redditRoute = provider.service === 'reddit'
   const [sourcesOpen, setSourcesOpen] = useState(false)
   /** 点不动的原因压成一句；原话在旁边的问号里。还没做的那几张直说「还没做」。 */
   const reason =
@@ -185,7 +192,7 @@ export function ProviderCard({
           与自带数据接口。WP210：默认收起，点「数据来源」才展开——绝大多数人连上就完了。
           没有第二条路的卡（你自己店里的、你自己账号里的数据）连这个按钮都不出。
         */}
-        {capability === undefined ? null : (
+        {capability === undefined && !redditRoute ? null : (
           <div className="flex flex-col gap-2" data-testid="provider-sources">
             <Button
               size="xs"
@@ -210,7 +217,16 @@ export function ProviderCard({
                   connected={connected}
                   {...(assignment === undefined ? {} : { assignment })}
                 />
-                {capability.startsWith('kol.') ? (
+                {redditRoute ? (
+                  <DataSourceRouteControl
+                    channel="reddit"
+                    assignment={assignment}
+                    routeKey={REDDIT_READ_ROUTE_KEY}
+                    levels={REDDIT_READ_LEVELS}
+                    note="data.route.reddit_note"
+                  />
+                ) : null}
+                {capability?.startsWith('kol.') === true ? (
                   <>
                     <DataSourceRouteControl channel={capability.slice(4)} assignment={assignment} />
                     <ByoSourceCard channel={capability.slice(4)} />
