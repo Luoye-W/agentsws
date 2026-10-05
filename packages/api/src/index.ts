@@ -215,6 +215,9 @@ export type {
   BeginCloudLinkResult,
   CloudAccountPort,
   CloudAccountView,
+  CloudAuthDoneView,
+  CloudAuthPort,
+  CloudCodeSentView,
   CloudUnlinkResult,
 } from './routes/cloud-account.js'
 export { cloudAccountRoutes } from './routes/cloud-account.js'

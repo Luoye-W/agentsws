@@ -139,8 +139,26 @@ function respond(status: number, body: unknown): CloudStandInResponse {
 }
 
 const ok = (data: unknown): CloudStandInResponse => respond(200, { data })
-const fail = (status: number, code: string, message: string): CloudStandInResponse =>
-  respond(status, { code, message })
+const fail = (
+  status: number,
+  code: string,
+  message: string,
+  details?: Record<string, unknown>,
+): CloudStandInResponse =>
+  respond(status, { code, message, ...(details === undefined ? {} : { details }) })
+
+/**
+ * WP231：demo 里「已经注册过」的那个邮箱（拿它点「注册」就看得到「这个邮箱注册过了」）。
+ * 合成的地址，`example.com` 保留域。
+ */
+export const CLOUD_STAND_IN_REGISTERED_EMAIL = 'demo@example.com'
+/** WP231：demo 里那个已注册邮箱的密码（演示「密码登录」用；合成的，不是谁的真密码）。 */
+export const CLOUD_STAND_IN_PASSWORD = 'demo-pass-2026'
+/**
+ * WP231：demo 没有真邮箱，验证码**任意 6 位都过**；只有这一串故意算「不对」，
+ * 好让人看到「验证码不对」长什么样。
+ */
+export const CLOUD_STAND_IN_WRONG_CODE = '000000'
 
 /** 替身账号的样子（邮箱用信里填的那个；公司名是合成的）。 */
 const STAND_IN_ORG = { id: 'org_demo', name: '演示公司' }
@@ -165,6 +183,44 @@ export function cloudStandIn(options: CloudStandInOptions = {}): CloudStandIn {
   const sessions = new Map<string, string>()
   const workspaceTokens = new Set<string>()
   const mint = (prefix: string): string => `${prefix}_${randomBytes(12).toString('hex')}`
+  /** WP231：已注册的邮箱 → 密码（替身只在内存里，demo 一关就没了）。 */
+  const registered = new Map<string, string>([
+    [CLOUD_STAND_IN_REGISTERED_EMAIL, CLOUD_STAND_IN_PASSWORD],
+  ])
+  /** WP231：发过验证码、还没验的（邮箱 → 用途 + 注册时填的密码）。 */
+  const codes = new Map<string, { purpose: 'signup' | 'login' | 'reset'; password?: string }>()
+  const lower = (v: unknown): string => (typeof v === 'string' ? v.trim().toLowerCase() : '')
+  const codeSent = (): CloudStandInResponse =>
+    ok({
+      expires_at: new Date(Date.parse(now()) + 5 * 60_000).toISOString(),
+      delivered: 'email',
+    })
+  const sessionFor = (email: string, extra: Record<string, unknown> = {}): CloudStandInResponse => {
+    const session = mint('cst')
+    sessions.set(session, email)
+    return ok({
+      account: { id: 'acct_demo', email },
+      org: STAND_IN_ORG,
+      session_token: session,
+      expires_at: new Date(Date.parse(now()) + 12 * 3600_000).toISOString(),
+      ...extra,
+    })
+  }
+  const badCode = (): CloudStandInResponse =>
+    fail(401, 'unauthenticated', '验证码不对，再看一眼邮件。', { reason: 'invalid_code' })
+  /** 验一次码：任意 6 位都过，只有 {@link CLOUD_STAND_IN_WRONG_CODE} 不过。 */
+  const takeCode = (
+    email: string,
+    code: unknown,
+    purpose: 'signup' | 'login' | 'reset',
+  ): { password?: string } | undefined => {
+    const row = codes.get(email)
+    if (row === undefined || row.purpose !== purpose) return undefined
+    if (typeof code !== 'string' || !/^\d{6}$/u.test(code) || code === CLOUD_STAND_IN_WRONG_CODE)
+      return undefined
+    codes.delete(email)
+    return row.password === undefined ? {} : { password: row.password }
+  }
 
   /* ── WP194：成员 / 岗位额度（替身版：内存里一张表，数字是合成的）── */
   const usageCells: CloudStandInUsageSeed[] = []
@@ -474,6 +530,70 @@ export function cloudStandIn(options: CloudStandInOptions = {}): CloudStandIn {
     const token = bearer(headers)
     // ── WP165：公开价目（不要令牌；价目表 + 充值四档，固定样例）
     if (method === 'GET' && path === PRICING_CATALOG_PATH) return ok(SAMPLE_PRICING_CATALOG)
+    // ── WP231：注册与登录（密码 + 邮箱验证码）
+    if (method === 'GET' && path === '/v1/cloud/auth/config')
+      return ok({
+        password_min: 8,
+        otp_length: 6,
+        otp_ttl_seconds: 300,
+        terms_version: '2026-10-05',
+      })
+    if (method === 'POST' && path === '/v1/cloud/auth/signup') {
+      const email = lower(body.email)
+      const password = typeof body.password === 'string' ? body.password : ''
+      if (!email.includes('@') || password.length < 8)
+        return fail(400, 'invalid_input', '邮箱或密码不对')
+      if (registered.has(email))
+        return fail(409, 'conflict', '这个邮箱注册过了，直接登录。', {
+          reason: 'already_registered',
+        })
+      codes.set(email, { purpose: 'signup', password })
+      return codeSent()
+    }
+    if (method === 'POST' && path === '/v1/cloud/auth/signup/verify') {
+      const email = lower(body.email)
+      const got = takeCode(email, body.code, 'signup')
+      if (got === undefined) return badCode()
+      registered.set(email, got.password ?? '')
+      return sessionFor(email, {
+        registered: true,
+        bonus: { granted: true, credits: GRANTED },
+      })
+    }
+    if (
+      method === 'POST' &&
+      (path === '/v1/cloud/auth/otp' || path === '/v1/cloud/auth/password/forgot')
+    ) {
+      const email = lower(body.email)
+      if (!email.includes('@')) return fail(400, 'invalid_input', '邮箱不对')
+      // 没注册的邮箱：静默成功、不发（与真云同一条）
+      if (registered.has(email))
+        codes.set(email, { purpose: path.endsWith('/otp') ? 'login' : 'reset' })
+      return codeSent()
+    }
+    if (method === 'POST' && path === '/v1/cloud/auth/otp/verify') {
+      const email = lower(body.email)
+      if (takeCode(email, body.code, 'login') === undefined) return badCode()
+      return sessionFor(email)
+    }
+    if (method === 'POST' && path === '/v1/cloud/auth/password') {
+      const email = lower(body.email)
+      const known = registered.get(email)
+      if (known === undefined || known === '' || known !== body.password)
+        return fail(401, 'unauthenticated', '邮箱或密码不对。没设过密码的话用验证码登录。', {
+          reason: 'bad_credentials',
+        })
+      return sessionFor(email)
+    }
+    if (method === 'POST' && path === '/v1/cloud/auth/password/reset') {
+      const email = lower(body.email)
+      const next = typeof body.new_password === 'string' ? body.new_password : ''
+      if (next.length < 8)
+        return fail(400, 'invalid_input', '新密码至少 8 位', { reason: 'weak_password' })
+      if (takeCode(email, body.code, 'reset') === undefined) return badCode()
+      registered.set(email, next)
+      return sessionFor(email)
+    }
     // ── 账号那一跳（49 M1）
     if (method === 'POST' && path === '/v1/cloud/auth/magic-link') {
       const email = typeof body.email === 'string' ? body.email : ''
