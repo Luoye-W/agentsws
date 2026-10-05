@@ -107,6 +107,18 @@ export type KnownEventType =
    */
   | 'profile.config_rejected'
   /**
+   * WP219：内容更新通道。`checked`（查了一次清单：序号、几条新的）/ `applied`（一个品牌换上新版：
+   * 条目、版本、自动还是人点的）/ `rolled_back`（退回上一版）/ `rejected`（整包拒收：原因码与一句人话）/
+   * `conflict`（新版与你的改动冲突、出了卡）/ `resolved`（冲突选了用新版或保留我的）。
+   * payload 只有条目 id、版本、原因码——**技能正文不进事件**。
+   */
+  | 'content_update.checked'
+  | 'content_update.applied'
+  | 'content_update.rolled_back'
+  | 'content_update.rejected'
+  | 'content_update.conflict'
+  | 'content_update.resolved'
+  /**
    * WP181：模型调了官方「自动化任务」的一个工具（建 / 查 / 改 / 删提醒）。payload 只有工具名、这次运行、
    * 任务 id、结果（建了 / 等批 / 改了 / 删了 / 被拒）与原因码——**提醒正文不进**。
    */
