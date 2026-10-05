@@ -35,6 +35,7 @@ import {
   researchCards,
   researchSourceAllowed,
   researchSourceReady,
+  researchSourcesOf,
   scoreOutliers,
 } from '../src/index.js'
 
@@ -117,6 +118,16 @@ describe('研究取数白名单', () => {
     expect(
       RESEARCH_SOURCES.filter((s) => s.route === 'browser_readonly').map((s) => s.platform),
     ).toEqual(['reddit'])
+  })
+
+  it('「这周什么在起来」只用营销用的免费公开来源：Google Trends、TikTok Creative Center、Reddit 两路；不做选品', () => {
+    for (const p of ['google_trends', 'tiktok_creative_center'] as const) {
+      expect(
+        researchSourcesOf(p).some((s) => s.route === 'web_fetch' && s.status === 'ready'),
+      ).toBe(true)
+    }
+    expect(researchSourcesOf('reddit').map((s) => s.route)).toContain('browser_readonly')
+    expect(JSON.stringify(RESEARCH_SOURCES)).not.toMatch(/jungle|helium|选品|keepa/i)
   })
 
   it('待接清单：接口中台那几项里，除了 Reddit 三项（契约已加、云端待接），都还不在能力目录里', () => {

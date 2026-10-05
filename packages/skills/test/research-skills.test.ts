@@ -110,6 +110,21 @@ describe('WP220 两份研究技能：格式与出处', () => {
         expect(skill.markdown).toContain('最多三张')
       })
 
+      it('这周什么在起来：营销用、三个免费公开来源、取不到照实说、选题带出处与日期、不做选品', () => {
+        const section = splitSections(body).find((x) => x.heading === '这周什么在起来')
+        const text = section?.body ?? ''
+        for (const piece of [
+          'Google Trends',
+          'TikTok Creative Center',
+          '`read_reddit`',
+          '**不做选品**',
+          '取不到照实说',
+          '每条都带出处与日期',
+        ])
+          expect(text).toContain(piece)
+        expect(text).not.toMatch(/jungle|helium/i)
+      })
+
       it('出处登记：upstreams.yml 写了这份技能的路径', () => {
         expect(UPSTREAMS).toContain(`packages/skills/bundled/${name}/SKILL.md`)
       })

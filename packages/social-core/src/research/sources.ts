@@ -30,6 +30,9 @@ export type ResearchPlatform =
   | 'threads'
   | 'hacker_news'
   | 'ad_library'
+  /** WP220（Luoye 10-05）：「这周什么在起来」只做营销用的两样免费公开来源（不做选品）。 */
+  | 'google_trends'
+  | 'tiktok_creative_center'
 
 export interface ResearchSource {
   platform: ResearchPlatform
@@ -99,6 +102,36 @@ export const RESEARCH_SOURCES: readonly ResearchSource[] = [
     capability: 'reddit.read',
     what: '本机浏览器只读打开 Reddit 页面（单独的只读会话、限速）',
     status: 'ready',
+  },
+  // ── 「这周什么在起来」（Luoye 10-05：只做营销用的；免费公开来源；选品类付费数据不做）──
+  {
+    platform: 'google_trends',
+    route: 'web_fetch',
+    capability: 'web.fetch',
+    what: '打开 Google Trends 的公开页面看热度走势与上升的相关搜索（页面靠脚本渲染，常常抓不全）',
+    status: 'ready',
+  },
+  {
+    platform: 'tiktok_creative_center',
+    route: 'web_fetch',
+    capability: 'web.fetch',
+    what: '打开 TikTok Creative Center 的公开榜单（热门话题、声音、标签）',
+    status: 'ready',
+  },
+  {
+    platform: 'google_trends',
+    route: 'workshop',
+    capability: 'trends.google',
+    what: 'Google Trends 结构化数据（关键词热度、上升的相关搜索，按国家 / 时间）',
+    status: 'pending',
+    note: '网页抓取常抓不全，结构化的走接口中台更稳',
+  },
+  {
+    platform: 'tiktok_creative_center',
+    route: 'workshop',
+    capability: 'trends.tiktok_creative_center',
+    what: 'TikTok Creative Center 榜单结构化数据（话题 / 声音 / 标签，按国家、行业、时间）',
+    status: 'pending',
   },
   // ── 已在能力目录里的社媒 ──
   {
