@@ -283,6 +283,7 @@ import {
 import type { Txn } from '@agentsws/txn'
 import { createTxn, dedupeKey } from '@agentsws/txn'
 import { createWork, type Work } from '@agentsws/work'
+import { type BrandBackground, installBrandBackground } from './brand-background.js'
 import type { DesignLoop } from './design.js'
 import type { ModelTrace } from './diagnostics.js'
 import { traceGateway } from './diagnostics.js'
@@ -508,6 +509,19 @@ export interface World {
    */
   work: Work
   startRoutine(options?: RoutineOptions): Routine
+  /**
+   * WP215（52 §4）：每个品牌一套后台、共用一个调度循环。
+   * 场景里出现 `org.brand_background` 才装；不装的世界没有这个调度器，
+   * runner 每一拍也不碰它——原有场景的指标一个不变。
+   */
+  brandBackground?: BrandBackground
+  startBrandBackground(): BrandBackground
+  /**
+   * WP215：眼前切在哪个品牌（工作台的视图状态，`org.brand_view` 改它）。
+   * **只是视图**：后台一个字节都不读它来决定写哪儿，只把它记进巡检事件里给断言看。
+   */
+  viewingBrand?: string
+  viewBrand(brand: string, who: PersonId): void
   /**
    * WP29 学习回路（lesson 池 / 次日提案 / 采纳落 overlay）。
    * 场景里出现 `learning.start` 才装；不装的世界一条 lesson 都不收，
@@ -1840,6 +1854,8 @@ export interface TickApprovalsResult {
 }
 
 export interface AppendOpts {
+  /** WP215：记在哪个工作区（品牌后台的事件记**任务自己的**品牌）；不给 = 世界的那一个。 */
+  workspace_id?: string
   run_id?: string
   change_id?: string
   work_item_id?: string
@@ -3095,6 +3111,16 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
       world.routine = routine
       return routine
     },
+    startBrandBackground() {
+      if (world.brandBackground !== undefined) return world.brandBackground
+      const bg = installBrandBackground(world)
+      world.brandBackground = bg
+      return bg
+    },
+    viewBrand(brand, who) {
+      world.viewingBrand = brand
+      world.appendEvent('simulation.brand_viewed', { brand, who }, { workspace_id: brand })
+    },
     startLearning(learningOptions) {
       if (world.learning !== undefined) return world.learning
       const loop = installLearningLoop(world, learningOptions)
@@ -3330,7 +3356,7 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
     appendEvent(type, payload, o) {
       appendEnvelope({
         schema_version: 1,
-        workspace_id,
+        workspace_id: o?.workspace_id ?? workspace_id,
         type,
         actor: o?.actor ?? { kind: 'system', id: 'simulation' },
         ...(o?.subject === undefined ? {} : { subject: o.subject }),

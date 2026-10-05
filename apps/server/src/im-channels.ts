@@ -125,6 +125,13 @@ export const WECHAT_LOCAL_ONLY =
 /* ------------------------------------------------------------------ */
 
 /** 本模块只用得上身份服务的这一个方法。 */
+/**
+ * WP215：个人微信跟**人**走、绑在第一个品牌那一套上；别的品牌那一套不开这条（同一个微信号
+ * 两条长轮询会互相顶掉）。团队那三条（企业微信 / 飞书 / 钉钉）是公司的应用凭据，按品牌各一套。
+ */
+export const WECHAT_FIRST_BRAND_ONLY =
+  '个人微信跟人走，不按品牌分：切回第一个品牌绑一次就行，所有品牌都用它跟你的代理说话。'
+
 export interface ImIdentity {
   authenticate(bearer: string): Promise<Principal | undefined>
 }
@@ -202,6 +209,11 @@ export interface ImChannelsOptions {
   onError?(e: unknown): void
   /** 适配器的节奏（测试调快）。 */
   pace?: { idle_delay_ms?: number; retry_delay_ms?: number; backoff_delay_ms?: number }
+  /**
+   * WP215：这一套开不开个人微信（默认开）。品牌各一套 IM 之后，只有第一个品牌那一套开——
+   * 见 {@link WECHAT_FIRST_BRAND_ONLY}。
+   */
+  personalWechat?: boolean
 }
 
 /** `GET /v1/im/status` 的形状。**不含任何凭据**。 */
@@ -240,6 +252,11 @@ export interface ImChannelsAssembly {
   mount(app: Hono<GatewayEnv>): void
   /** 进程起来时把已经绑好的两条通道拉起来。 */
   resume(): Promise<void>
+  /**
+   * WP215：这一套的路由处理器（`"METHOD /path"` → 处理器），不挂到任何 app 上。
+   * 品牌各一套 IM 之后，路由只挂一次（{@link mountBrandImRoutes}），按主体所在品牌转给那一套。
+   */
+  handlers(): Map<string, (c: Context<GatewayEnv>) => Promise<Response>>
   status(person_id: PersonId): ImStatusView
   /**
    * 把一张卡投到这个人的 IM 上（文本摘要 + 深链；**没有按钮**）。
@@ -582,6 +599,7 @@ export function createImChannels(options: ImChannelsOptions): ImChannelsAssembly
   }
 
   const tierGuard = (): void => {
+    if (options.personalWechat === false) throw new ApiError('forbidden', WECHAT_FIRST_BRAND_ONLY)
     if (tier() !== 'local') throw new ApiError('forbidden', WECHAT_LOCAL_ONLY)
   }
 
@@ -739,10 +757,13 @@ export function createImChannels(options: ImChannelsOptions): ImChannelsAssembly
     })
   }
 
+  let routeTable: Map<string, (c: Context<GatewayEnv>) => Promise<Response>> | undefined
+
   const status = (person_id: PersonId): ImStatusView => {
     const fields = wechatBinding(person_id)
     const adapter = wechat.get(person_id)
-    const allowed = tier() === 'local'
+    const firstBrand = options.personalWechat !== false
+    const allowed = firstBrand && tier() === 'local'
     const wecomFields = wecomBinding()
     const paused = adapter?.pausedUntil()
     return {
@@ -752,7 +773,7 @@ export function createImChannels(options: ImChannelsOptions): ImChannelsAssembly
         live: adapter?.health().ok ?? false,
         ...(paused === undefined ? {} : { paused_until: paused }),
         allowed,
-        ...(allowed ? {} : { reason: WECHAT_LOCAL_ONLY }),
+        ...(allowed ? {} : { reason: firstBrand ? WECHAT_LOCAL_ONLY : WECHAT_FIRST_BRAND_ONLY }),
       },
       wecom: {
         configured: wecomFields !== undefined,
@@ -768,8 +789,28 @@ export function createImChannels(options: ImChannelsOptions): ImChannelsAssembly
   return {
     mount,
 
+    handlers() {
+      if (routeTable !== undefined) return routeTable
+      const table = new Map<string, (c: Context<GatewayEnv>) => Promise<Response>>()
+      const record =
+        (method: string) =>
+        (path: string, handler: (c: Context<GatewayEnv>) => Promise<Response>): void => {
+          table.set(`${method} ${path}`, handler)
+        }
+      // 只收集，不挂：同一套 `mount` 走一遍，路由表与真挂上去的那份逐字相同
+      mount({
+        get: record('GET'),
+        post: record('POST'),
+        put: record('PUT'),
+        delete: record('DELETE'),
+      } as unknown as Hono<GatewayEnv>)
+      routeTable = table
+      return table
+    },
+
     async resume(): Promise<void> {
       for (const record of options.secrets.list()) {
+        if (options.personalWechat === false) break
         if (!record.connection_id.startsWith('im:wechat:')) continue
         const person_id = record.connection_id.slice('im:wechat:'.length)
         if (tier() !== 'local') continue
@@ -821,4 +862,41 @@ export function persistWechatBinding(
     base_url: handoff.base_url,
     ...(handoff.user_id === undefined ? {} : { user_id: handoff.user_id }),
   })
+}
+
+/**
+ * WP215：IM 路由只挂一次，**按主体所在品牌**转给那个品牌那一套（企业微信 / 飞书 / 钉钉的应用凭据、
+ * 绑定、入站管线都是品牌自己的）。认不出主体的请求交给第一个品牌那一套——它自己会回 401。
+ */
+export function mountBrandImRoutes(
+  app: Hono<GatewayEnv>,
+  options: {
+    identity: ImIdentity
+    sessionCookieName?: string
+    primary: ImChannelsAssembly
+    /** 这个品牌那一套（没有 / 不是这家公司的品牌 = `undefined`，交给第一个品牌那一套去拒）。 */
+    of(workspace_id: WorkspaceId): Promise<ImChannelsAssembly | undefined>
+  },
+): void {
+  const workspaceOf = async (c: Context<GatewayEnv>): Promise<WorkspaceId | undefined> => {
+    const header = c.req.header('Authorization')
+    const cookie =
+      header === undefined || header.trim() === ''
+        ? readCookie(c.req.header('Cookie'), options.sessionCookieName ?? SESSION_COOKIE)
+        : undefined
+    const raw = header ?? cookie
+    if (raw === undefined || raw.trim() === '') return undefined
+    const value = raw.startsWith('Bearer ') ? raw.slice('Bearer '.length).trim() : raw.trim()
+    return (await options.identity.authenticate(value))?.workspace_id
+  }
+  for (const key of options.primary.handlers().keys()) {
+    const [method, path] = key.split(' ') as [string, string]
+    app.on(method, [path], async (c) => {
+      const ws = await workspaceOf(c)
+      const target = (ws === undefined ? undefined : await options.of(ws)) ?? options.primary
+      const handler = target.handlers().get(key) ?? options.primary.handlers().get(key)
+      if (handler === undefined) throw new ApiError('not_found', '没有这个入口')
+      return handler(c)
+    })
+  }
 }

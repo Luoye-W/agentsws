@@ -277,6 +277,12 @@ export interface PolicyApi {
 export interface RoleStore {
   roles: RoleRegistry
   assignments: AssignmentApi
+  /**
+   * WP215（只加）：分配建了 / 改了 / 撤了之后喊一声（同步、在写库之后）。服务端拿它即时建 / 停
+   * "有人担这条职责才建"的定时——先建品牌、再分配职责的流程不用重启。回一个退订函数。
+   * 可选：别的实现不用改。
+   */
+  onAssignmentChanged?(listener: (assignment: Assignment) => void): () => void
   policies: PolicyApi
   /** 44 G1 品牌 = 范围组。 */
   rangeGroups: RangeGroupApi
@@ -362,10 +368,23 @@ export function createRoleStore(options: RoleStoreOptions): RoleStore {
   }
 
   const hydrated = new Set<AssignmentId>()
+  /** WP215：分配变了的订阅者（一个坏了不拖垮写库，也不拖垮别的订阅者）。 */
+  const changeListeners = new Set<(assignment: Assignment) => void>()
+  const notifyChanged = (assignment: Assignment): void => {
+    for (const listener of changeListeners) {
+      try {
+        listener(assignment)
+      } catch {
+        // 订阅者自己的事
+      }
+    }
+  }
+
   const persist = (assignment: Assignment): Assignment => {
     backend.putAssignment(assignment)
     syncPolicies(assignment)
     hydrated.add(assignment.id)
+    notifyChanged(assignment)
     return assignment
   }
 
@@ -751,6 +770,7 @@ export function createRoleStore(options: RoleStoreOptions): RoleStore {
       backend.putAssignment(revoked)
       engine.remove(id)
       hydrated.delete(id)
+      notifyChanged(revoked)
       return revoked
     },
     listByPerson(person, filter) {
@@ -869,6 +889,12 @@ export function createRoleStore(options: RoleStoreOptions): RoleStore {
   return {
     roles,
     assignments,
+    onAssignmentChanged(listener) {
+      changeListeners.add(listener)
+      return () => {
+        changeListeners.delete(listener)
+      }
+    },
     policies,
     rangeGroups,
     productLines,

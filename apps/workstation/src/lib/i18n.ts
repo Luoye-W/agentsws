@@ -2502,6 +2502,17 @@ const zh: Table = {
     '换一个品牌 = 整个工作台换一套：首页、岗位、连接、知识、设置。两边的数据互相看不见。',
   'brand.switch.manage': '管理品牌…',
   'brand.switch.failed': '切不过去：你可能不在这个品牌里。',
+  // WP215：每个品牌一套后台——切换器与「品牌一览」那一格的 tooltip（36 §7 第四档）
+  'brand.bg.label': '后台',
+  'brand.bg.running': '后台在跑 · {n} 条定时任务',
+  'brand.bg.halted': '这个品牌的后台停了',
+  'brand.bg.global_halted': '全部品牌急停中，后台没在跑',
+  'brand.bg.stopped': '品牌停用了，后台不跑',
+  'brand.bg.last': '最近一次巡检 {at}',
+  'brand.bg.never': '还没跑过',
+  'brand.bg.next': '下一次 {at}',
+  'brand.bg.errors': '{n} 条出错：{title}——{message}',
+  'brand.bg.errors_bare': '{n} 条出错',
   // WP66（52 O1）：连接页与设置页只管当前这个品牌
   'brand.scope': '这一页只管当前品牌「{brand}」。别的品牌各有各的一套，切过去再设。',
   'command.group.brands': '品牌',
@@ -2536,6 +2547,17 @@ const zh: Table = {
   'settings.org.brands': '{n} 个品牌',
   'settings.org.members': '{n} 个人',
   'settings.org.manage': '去公司页管品牌',
+  // WP215：品牌一览的急停小按钮与设置页「后台」那一张
+  'org.brands.bg.halt': '停后台',
+  'org.brands.bg.resume': '放开',
+  'settings.background': '后台',
+  'settings.background.hint':
+    '巡检、收信、每日计划、自动化任务按品牌各跑各的，跟你眼前切在哪个品牌无关。同一个品牌的活永远一件接一件。',
+  'settings.background.device': '后台跟着这台电脑：关机、睡眠、断网时所有品牌都停。',
+  'settings.background.concurrency': '同时最多跑几件',
+  'settings.background.concurrency.hint':
+    '几个品牌同时有活时，最多并排跑几件。调高更快，但更占这台电脑。',
+  'settings.background.concurrency.n': '{n} 件',
   'onboarding.company.legal_name': '公司全称',
   'onboarding.company.legal_name.placeholder': '深圳诺伏特科技有限公司',
   'onboarding.company.legal_name.hint':
@@ -6046,6 +6068,17 @@ const en: Table = {
     'Switching swaps the whole workstation: home, positions, connections, knowledge, settings. Neither side can see the other brand\u2019s data.',
   'brand.switch.manage': 'Manage brands…',
   'brand.switch.failed': 'Could not switch: you may not be in that brand.',
+  // WP215: every brand runs its own background — tooltip on the switcher / brand list (doc 36 §7 tier 4)
+  'brand.bg.label': 'Background',
+  'brand.bg.running': 'Background running · {n} scheduled tasks',
+  'brand.bg.halted': 'This brand\u2019s background is stopped',
+  'brand.bg.global_halted': 'Emergency stop is on for every brand',
+  'brand.bg.stopped': 'Brand disabled; background not running',
+  'brand.bg.last': 'Last check {at}',
+  'brand.bg.never': 'Has not run yet',
+  'brand.bg.next': 'Next {at}',
+  'brand.bg.errors': '{n} failing: {title} \u2014 {message}',
+  'brand.bg.errors_bare': '{n} failing',
   // WP66 (doc 52 O1): connections and settings belong to the current brand only
   'brand.scope':
     'This page covers the current brand, \u201c{brand}\u201d, only. Every brand has its own set \u2014 switch over to set those up.',
@@ -6083,6 +6116,18 @@ const en: Table = {
   'settings.org.brands': '{n} brands',
   'settings.org.members': '{n} people',
   'settings.org.manage': 'Manage brands on the Company page',
+  // WP215: brand-list halt button and the Settings "Background" card
+  'org.brands.bg.halt': 'Stop background',
+  'org.brands.bg.resume': 'Resume',
+  'settings.background': 'Background',
+  'settings.background.hint':
+    'Checks, mail sync, daily plans and automations run per brand, whichever brand you are looking at. Within one brand, tasks always run one at a time.',
+  'settings.background.device':
+    'Runs on this computer: shut down, sleep or offline stops every brand.',
+  'settings.background.concurrency': 'Max tasks at once',
+  'settings.background.concurrency.hint':
+    'When several brands have work due, how many may run side by side. Higher is faster but takes more of this computer.',
+  'settings.background.concurrency.n': '{n}',
   'onboarding.company.legal_name': 'Registered company name',
   'onboarding.company.legal_name.placeholder': 'NordVolt Technology Co., Ltd.',
   'onboarding.company.legal_name.hint':

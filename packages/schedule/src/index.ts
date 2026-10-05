@@ -8,6 +8,13 @@
  * 都不认识业务：到点或到步喊一声登记过的处理器，业务在宿主那边。
  */
 export {
+  type BrandBackgroundStatus,
+  type BrandRouter,
+  type BrandRouterOptions,
+  brandBackgroundStatus,
+  createBrandRouter,
+} from './brands.js'
+export {
   type CronExpr,
   DAY_MS,
   HOUR_MS,
@@ -40,6 +47,7 @@ export {
   type FireOutcome,
   firstFireAt,
   nextFireAfter,
+  runByWorkspace,
   type Scheduler,
   type SchedulerOptions,
   type TickResult,
