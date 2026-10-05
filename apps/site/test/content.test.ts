@@ -4,9 +4,9 @@
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { PRICING } from '../src/i18n/pricing.js'
 import { CHANGELOG_DIR, changelogIds, loadChangelog } from '../src/lib/changelog.js'
 import { HELP_DIR, helpFile, helpSlugs, loadHelp, parseHelpSlugs } from '../src/lib/help.js'
-import { PRICING } from '../src/i18n/pricing.js'
 import { fillPlaceholders, LEGAL_PAGES, legalSource, loadLegal } from '../src/lib/legal.js'
 import { stripSourceComments } from '../src/lib/markdown.js'
 import { repoRoot } from '../src/lib/paths.js'
@@ -160,7 +160,13 @@ describe('条款三页', () => {
         expect(faq).toContain('aren’t refundable')
       }
       // 旧口径（没用掉的可以退 / 按比例退）一个字都不留
-      for (const old of ['可以申请退', '按比例', 'credits can be refunded', 'pro rata', 'proportion'])
+      for (const old of [
+        '可以申请退',
+        '按比例',
+        'credits can be refunded',
+        'pro rata',
+        'proportion',
+      ])
         expect(refund + terms + faq).not.toContain(old)
     }
   })
