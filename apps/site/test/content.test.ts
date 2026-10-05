@@ -150,6 +150,9 @@ describe('条款三页', () => {
         expect(refund).toContain('暂停这个账号的付费功能')
         expect(refund).toContain('开源软件不受影响')
         expect(terms).toContain('积分一经购买不退款、不折现')
+        // Luoye 10-05：例外情形发现后 60 天内联系
+        expect(refund).toContain('发现后 60 天内')
+        expect(terms).toContain('发现后 60 天内')
         // 责任上限是另一回事，保留
         expect(terms).toContain('十二个月内实际向我们支付的金额为上限')
         expect(faq).toContain('积分买了就不退')
@@ -157,6 +160,8 @@ describe('条款三页', () => {
         expect(refund).toContain('non-refundable once purchased')
         expect(refund).toContain('14-day right of withdrawal')
         expect(terms).toContain('non-refundable once purchased')
+        expect(refund).toContain('within 60 days of noticing it')
+        expect(terms).toContain('within 60 days of noticing it')
         expect(faq).toContain('aren’t refundable')
       }
       // 旧口径（没用掉的可以退 / 按比例退）一个字都不留

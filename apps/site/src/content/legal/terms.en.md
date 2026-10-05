@@ -41,7 +41,7 @@ Welcome to Agents Workshop. These terms explain your rights and ours when you us
 5. **Your own keys cost nothing**: requests the open-source software sends with your own model or platform keys go direct from your computer, never through us, and use no credits.
 6. **Add-on services** are charged monthly in credits. You can cancel anytime; cancellation takes effect at the end of the current period, which is not refunded. If your balance runs short the service pauses, and your data is not deleted; it resumes when you top up.
 7. **Running out of credits** only declines that one request; your account is not frozen.
-8. **Credits are non-refundable once purchased and can't be exchanged for cash**, with only three exceptions: duplicate charges, overcharges caused by a system error, and refunds the law where you live requires. The exceptions and chargebacks are covered by the [Refund Policy](/refund/).
+8. **Credits are non-refundable once purchased and can't be exchanged for cash**, with only three exceptions: duplicate charges, overcharges caused by a system error, and refunds the law where you live requires; contact us within 60 days of noticing it. The exceptions and chargebacks are covered by the [Refund Policy](/refund/).
 9. Credits are delivered the moment you pay. If the law where you live gives you a right of withdrawal (such as the EU 14-day right), the checkout page asks you before payment to expressly agree to immediate delivery and to confirm you understand that you thereby lose that right.
 
 ## 5. How you use it

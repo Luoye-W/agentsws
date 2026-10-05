@@ -23,7 +23,7 @@ Credits land in your account the moment you pay, and you can use them right away
 2. **Overcharge caused by a system error**: our system took more credits than the price list says, or you paid and the credits never arrived. Once confirmed, we restore the extra credits to your balance or refund the matching amount.
 3. **Where the law where you live requires a refund**: we follow the law.
 
-In any of these cases, email {{CONTACT_EMAIL}} with your account email, the order ID (or date and amount) and what you saw. We usually reply within a few working days. How long a refund takes to arrive depends on the payment provider and your card issuer.
+In any of these cases, email {{CONTACT_EMAIL}} **within 60 days of noticing it**, with your account email, the order ID (or date and amount) and what you saw. Requests after 60 days are not accepted, unless the law says otherwise. We usually reply within a few working days. How long a refund takes to arrive depends on the payment provider and your card issuer.
 
 ## 3. The 14-day right of withdrawal (EU and elsewhere)
 
