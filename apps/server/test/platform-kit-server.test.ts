@@ -163,4 +163,19 @@ describe('WP216 按品牌的建站平台走', () => {
     expect(picked.kit?.cli?.spec.label).toBe('Shopify CLI')
     expect(skillNames(await m.call<SkillsView>('GET', '/v1/skills'))).toContain('shopify')
   })
+
+  it('跳过了首次设置（品牌档案没建过）：岗位页上选平台用公司名起一份最小档案，不报错', async () => {
+    const m = await machine()
+    await m.takeSite()
+    const ask = await m.call<{ choose_platform?: unknown }>(
+      'GET',
+      '/v1/platform-kit?position_id=site',
+    )
+    expect(ask.choose_platform).toBeDefined()
+    const picked = await m.call<KitView>('PUT', '/v1/platform-kit/platform', {
+      storefront_platform: 'shopify',
+      position_id: 'site',
+    })
+    expect(picked.kit?.cli?.spec.label).toBe('Shopify CLI')
+  })
 })

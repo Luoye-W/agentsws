@@ -358,7 +358,7 @@ export interface OnboardingAssembly {
   setPostalAddress(workspace_id: WorkspaceId, address: string | undefined): boolean
   /**
    * WP216：只改某个品牌档案上的「网站是用什么搭的」。`source` 记是人选的还是按已连的店铺推断的
-   * （进事件，不进档案）。档案还没建过回 `false`（不替人建档案——那会让首次设置不再弹）。
+   * （进事件，不进档案）。档案还没建过：公司已有名字就用它起一份最小档案；公司也没名字回 `false`。
    */
   setStorefrontPlatform(
     workspace_id: WorkspaceId,
@@ -977,11 +977,26 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
       }
     },
     setStorefrontPlatform(ws, platform, source) {
-      const previous = profileOf(ws)
-      if (previous === undefined) return false
       const next = normalizeStorefrontPlatform(platform)
       if (next === undefined) return false
-      backend.put(ws, { ...previous, storefront_platform: next })
+      const previous = profileOf(ws)
+      if (previous !== undefined) {
+        backend.put(ws, { ...previous, storefront_platform: next })
+      } else {
+        // 品牌档案还没建过（跳过了首次设置的品牌）：公司已经有名字就用它起一份最小档案，
+        // 只多这一格平台；公司还没名字就不替人建（回 false，界面让人先去设置里填公司信息）。
+        // 能走到这里的人已经有岗位了（`needs_setup` 本来就是 false），不会把首次设置挡掉。
+        const company = companyOf()
+        const legal_name = company?.legal_name?.trim() ?? ''
+        if (legal_name === '') return false
+        backend.put(ws, {
+          legal_name,
+          ...(company?.domain === undefined ? {} : { domain: company.domain }),
+          discoverable: company?.discoverable ?? false,
+          storefront_platform: next,
+          set_at: clock.now(),
+        })
+      }
       appendEvent({
         schema_version: 1,
         workspace_id: ws,
