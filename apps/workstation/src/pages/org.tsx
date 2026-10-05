@@ -121,6 +121,11 @@ export function OrgPage(): React.ReactNode {
   const mine = useQuery({ queryKey: ['positions'], queryFn: getPositions })
   // 05：制度这一层是所有者的事；这一页不跟着左栏当前岗位走
   const owner = mine.data?.positions.find((p) => p.role_id === 'common.owner')?.position_id
+  // WP215（Fable 10-05）：品牌急停公司管理员也能按——没有所有者岗位的管理员拿自己任意一条岗位去按
+  const orgRole = orgs.data?.[0]?.role
+  const haltAs =
+    owner ??
+    (orgRole === 'owner' || orgRole === 'admin' ? mine.data?.positions[0]?.position_id : undefined)
   const workspace = session.data?.workspace.id
 
   const enabled = owner !== undefined && workspace !== undefined
@@ -556,6 +561,7 @@ export function OrgPage(): React.ReactNode {
           <BrandsTab
             {...(orgId === undefined ? {} : { org_id: orgId })}
             {...(owner === undefined ? {} : { assignment: owner })}
+            {...(haltAs === undefined ? {} : { haltAssignment: haltAs })}
           />
           {/* WP208：设计规范从第三栏搬来——每个品牌一份，看的是当前品牌那一份 */}
           <div className="pt-4">

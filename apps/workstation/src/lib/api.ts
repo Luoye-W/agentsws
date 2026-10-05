@@ -3965,6 +3965,45 @@ export interface BrandView {
    * 还没连店 / 今天还没有单时仍然没有这个字段——没有就明说没有，不画一个 0（36 §3）。
    */
   sales_today?: { amount: number; currency: string }
+  /**
+   * WP215：这个品牌的后台（定时巡检、收信、每日计划 / 复盘、自动化任务……）。
+   * 后台按品牌常驻，与眼前切在哪个品牌无关；老服务进程没有这个字段——没有就不画那一格。
+   */
+  background?: BrandBackgroundView
+}
+
+/**
+ * WP215：一个品牌的后台状态（品牌切换器与「品牌一览」那一格：图标 + 数字，细节进 tooltip）。
+ * 契约：`packages/api/src/routes/background.ts`。
+ */
+export interface BrandBackgroundView {
+  workspace_id: string
+  /** running 照常在跑；halted 急停了（品牌的或全局的）；stopped 品牌停用了。 */
+  state: 'running' | 'halted' | 'stopped'
+  /** 在跑的定时任务条数。 */
+  scheduled: number
+  /** 最近一次有任务跑起来的时刻。 */
+  last_run_at?: string
+  /** 最近一条要跑的时刻。 */
+  next_run_at?: string
+  /** 上一次跑失败、还没跑好的条数（> 0 出红点）。 */
+  errors: number
+  last_error?: { task_id: string; title: string; message: string; at?: string }
+  /** 这个品牌自己的急停开着没有。 */
+  halted: boolean
+  /** 全局急停开着没有。 */
+  global_halted: boolean
+}
+
+/** WP215：设置页「后台」那一张。 */
+export interface BackgroundSettingsView {
+  /** 全进程同时最多跑几件（品牌之间并行，同一品牌永远一件接一件）。 */
+  max_concurrent: number
+  limits: { min: number; max: number }
+  global_halted: boolean
+  brands: (BrandBackgroundView & { name: string; current: boolean })[]
+  /** 现在只有「这台电脑」：关机、睡眠、断网时所有品牌都停。 */
+  runs_on: 'this_device'
 }
 
 export interface OrganizationMemberView {
@@ -4082,6 +4121,36 @@ export async function switchBrand(
   clearAssignment()
   return switched
 }
+
+// ── WP215 每个品牌一套后台 ────────────────────────────────────────────
+
+export const getBackgroundSettings = (assignment?: string): Promise<BackgroundSettingsView> =>
+  api<BackgroundSettingsView>('/v1/settings/background', {
+    ...(assignment === undefined ? {} : { assignment }),
+  })
+
+/** 改「同时最多跑几件」（全进程一个数，1–4）。 */
+export const setBackgroundSettings = (
+  input: { max_concurrent: number },
+  assignment?: string,
+): Promise<BackgroundSettingsView> =>
+  api<BackgroundSettingsView>('/v1/settings/background', {
+    method: 'PUT',
+    body: input,
+    ...(assignment === undefined ? {} : { assignment }),
+  })
+
+/** 品牌急停：只停 / 放开这一个品牌的后台（全局急停照旧在 `/v1/halt`）。 */
+export const setBrandBackgroundHalt = (
+  workspace_id: string,
+  input: { halted: boolean; reason?: string },
+  assignment?: string,
+): Promise<BrandBackgroundView> =>
+  api<BrandBackgroundView>(`/v1/settings/background/brands/${encodeURIComponent(workspace_id)}`, {
+    method: 'PUT',
+    body: input,
+    ...(assignment === undefined ? {} : { assignment }),
+  })
 
 /* ------------------------------------------------------------------ */
 /* WP60（49 §6 / 48 L7 / 41 §2.4）在线值守                             */
