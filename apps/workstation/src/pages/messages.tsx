@@ -52,7 +52,7 @@ import {
   Trash2,
   X,
 } from 'lucide-react'
-import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { StatusPill, WsAvatar, WsTag } from '@/components/design'
 import { Composer, type ComposeSeed, seedFrom } from '@/components/messages/composer'
@@ -62,6 +62,12 @@ import {
   useMessageOverview,
 } from '@/components/messages/hand-actions'
 import { MailAiAssistant } from '@/components/messages/mail-ai-assistant'
+import {
+  isMarketing,
+  MarketingFold,
+  MarketingTag,
+  splitMarketing,
+} from '@/components/messages/marketing'
 import { MessageBody } from '@/components/messages/message-body'
 import { PendingActions, PendingNavItem } from '@/components/messages/pending-confirm'
 import { UnclaimedView } from '@/components/messages/unclaimed-view'
@@ -193,7 +199,23 @@ export function MessagesPage(): ReactNode {
     queryFn: () => getMessageThread(selected as string),
   })
 
-  const rows = useMemo(() => threads.data?.threads ?? [], [threads.data])
+  const allRows = useMemo(() => threads.data?.threads ?? [], [threads.data])
+  // WP227：营销信在列表里折成一捆（只是界面上折起，邮箱里不动）；搜索、「待确认」时不折
+  const foldPromo = !searching && filters.pending !== true
+  const [promoOpen, setPromoOpen] = useState(false)
+  const { listed, folded } = useMemo(
+    () => (foldPromo ? splitMarketing(allRows) : { listed: allRows, folded: [] }),
+    [allRows, foldPromo],
+  )
+  /** 看得见的那几行（键盘 j / k 只在它们之间走）：照常列出的 + 展开时那一捆。 */
+  const rows = useMemo(
+    () => (promoOpen ? [...listed, ...folded] : listed),
+    [listed, folded, promoOpen],
+  )
+  // 卡片那头的「看原件 →」/ 刷新后选中的会话落在那一捆里：替人展开
+  useEffect(() => {
+    if (selected !== undefined && folded.some((r) => r.thread_id === selected)) setPromoOpen(true)
+  }, [selected, folded])
   // 卡片那头的「看原件 →」、没人接的「→」都靠 `?thread=` 落到这条会话（人已经在这一页时也要跟上）
   useEffect(() => {
     if (threadParam !== undefined) setSelected(threadParam)
@@ -811,14 +833,34 @@ export function MessagesPage(): ReactNode {
               </p>
             ) : threads.isPending ? (
               <Skeleton className="h-40 w-full" />
-            ) : rows.length === 0 ? (
+            ) : allRows.length === 0 ? (
               <p className="px-2 py-6 text-center text-sm text-ws-muted-fg">
                 {t('messages.empty')}
               </p>
             ) : (
-              rows.map((row, i) =>
-                filters.pending === true ? (
-                  <div key={row.thread_id} className="flex flex-col">
+              rows.map((row, i) => (
+                <Fragment key={row.thread_id}>
+                  {i === listed.length && folded.length > 0 ? (
+                    <MarketingFold
+                      count={folded.length}
+                      open={promoOpen}
+                      onToggle={() => {
+                        setPromoOpen((v) => !v)
+                      }}
+                    />
+                  ) : null}
+                  {filters.pending === true ? (
+                    <div key={row.thread_id} className="flex flex-col">
+                      <ThreadRow
+                        row={row}
+                        selected={row.thread_id === selected}
+                        onOpen={() => {
+                          openThread(row, i)
+                        }}
+                      />
+                      <PendingActions row={row} onDone={refresh} onError={fail} />
+                    </div>
+                  ) : (
                     <ThreadRow
                       row={row}
                       selected={row.thread_id === selected}
@@ -826,20 +868,20 @@ export function MessagesPage(): ReactNode {
                         openThread(row, i)
                       }}
                     />
-                    <PendingActions row={row} onDone={refresh} onError={fail} />
-                  </div>
-                ) : (
-                  <ThreadRow
-                    key={row.thread_id}
-                    row={row}
-                    selected={row.thread_id === selected}
-                    onOpen={() => {
-                      openThread(row, i)
-                    }}
-                  />
-                ),
-              )
+                  )}
+                </Fragment>
+              ))
             )}
+            {/* 那一捆收着时它不在 rows 里，头单独画在最后 */}
+            {!promoOpen && folded.length > 0 ? (
+              <MarketingFold
+                count={folded.length}
+                open={false}
+                onToggle={() => {
+                  setPromoOpen(true)
+                }}
+              />
+            ) : null}
           </div>
         </section>
 
@@ -1180,7 +1222,14 @@ function ThreadRow({
           {row.subject}
         </span>
         <span className="truncate text-[12px] text-ws-muted-fg">{row.snippet}</span>
-        <ClaimTag row={row} />
+        {isMarketing(row) ? (
+          <span className="flex min-w-0 items-center gap-1.5">
+            <MarketingTag />
+            <ClaimTag row={row} />
+          </span>
+        ) : (
+          <ClaimTag row={row} />
+        )}
       </span>
       <span className="mt-1.5 flex shrink-0 flex-col items-center gap-1">
         {row.unread > 0 ? (

@@ -8,7 +8,15 @@
  * 3. **真的 dsh**（`@deepseek-ai/dsh@0.2.0-rc.1`，不联网）：建一个自建场景、起官方 `web`、
  *    拿带 token 的网址真的 GET 到 200，再关掉；外加 `/v1/dsh-scenes` 走一遍 HTTP。
  */
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs'
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  statSync,
+} from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -125,6 +133,20 @@ describe('列表：Agents 工坊第一个、默认；官方模板都在；自建
 })
 
 describe('起 / 停 / 重启', () => {
+  it('WP227：工作目录带中文和空格（「文稿/Agents 工坊」）——建、起都在这个目录里跑', async () => {
+    const docs = join(temp('agentsws-用户 目录-'), 'Documents', 'Agents 工坊')
+    const { scenes, dshHome } = fakeScenes({ workspaceRoot: docs })
+    expect(scenes.workspaceRoot).toBe(docs)
+    await scenes.create({ name: 'coding', template: 'web' })
+    const opened = await scenes.open('coding')
+    expect((await fetch(opened.url)).status).toBe(200)
+    const seen = JSON.parse(readFileSync(join(dshHome, 'seen-coding.json'), 'utf8')) as {
+      cwd: string
+    }
+    expect(realpathSync(seen.cwd)).toBe(realpathSync(docs))
+    expect(statSync(docs).isDirectory()).toBe(true)
+  })
+
   it('网页场景：起来拿到带 token 的网址，真能访问；停了就访问不到', async () => {
     const { scenes } = fakeScenes()
     await scenes.create({ name: 'coding', template: 'web' })
@@ -234,8 +256,50 @@ describe('边界（交付 3）：其他场景够不着我们的数据与密钥',
     expect(dshHomeOf({}, undefined)).toBeUndefined()
     // 宿主环境里的 DSH_HOME（用户另装的那份 dsh）不算数
     expect(dshHomeOf({ DSH_HOME: join(homedir(), '.dsh') }, '/app/data')).toBe('/app/dsh')
-    expect(workspaceRootOf({})).toBe(join(homedir(), 'dsh-workspace'))
     expect(workspaceRootOf({ AGENTSWS_DSH_WORKSPACE: '/w' })).toBe('/w')
+  })
+
+  it('WP227：默认工作文件夹——新装放「文稿/Agents 工坊」，老用户已有的 ~/dsh-workspace 照用', () => {
+    const none = (): boolean => false
+    // mac：新装
+    expect(workspaceRootOf({}, { platform: 'darwin', home: '/Users/an', exists: none })).toBe(
+      '/Users/an/Documents/Agents 工坊',
+    )
+    // mac：老用户已经有 ~/dsh-workspace——不搬、继续用
+    const seen: string[] = []
+    expect(
+      workspaceRootOf(
+        {},
+        {
+          platform: 'darwin',
+          home: '/Users/an',
+          exists: (p) => {
+            seen.push(p)
+            return p === '/Users/an/dsh-workspace'
+          },
+        },
+      ),
+    ).toBe('/Users/an/dsh-workspace')
+    expect(seen).toEqual(['/Users/an/dsh-workspace'])
+    // Windows：%USERPROFILE%\Documents\Agents 工坊（中文用户名 + 空格）
+    expect(
+      workspaceRootOf({ USERPROFILE: 'C:\\Users\\张 三' }, { platform: 'win32', exists: none }),
+    ).toBe('C:\\Users\\张 三\\Documents\\Agents 工坊')
+    expect(
+      workspaceRootOf(
+        { USERPROFILE: 'C:\\Users\\张 三' },
+        { platform: 'win32', exists: (p) => p === 'C:\\Users\\张 三\\dsh-workspace' },
+      ),
+    ).toBe('C:\\Users\\张 三\\dsh-workspace')
+    // 显式设置永远优先
+    expect(
+      workspaceRootOf({ AGENTSWS_DSH_WORKSPACE: '/w' }, { platform: 'darwin', exists: () => true }),
+    ).toBe('/w')
+    // 不给探针：取这台电脑的，结果一定是这两个之一
+    expect([
+      join(homedir(), 'dsh-workspace'),
+      join(homedir(), 'Documents', 'Agents 工坊'),
+    ]).toContain(workspaceRootOf({}))
   })
 })
 

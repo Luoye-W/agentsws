@@ -4,9 +4,11 @@
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { PRICING } from '../src/i18n/pricing.js'
 import { CHANGELOG_DIR, changelogIds, loadChangelog } from '../src/lib/changelog.js'
 import { HELP_DIR, helpFile, helpSlugs, loadHelp, parseHelpSlugs } from '../src/lib/help.js'
 import { fillPlaceholders, LEGAL_PAGES, legalSource, loadLegal } from '../src/lib/legal.js'
+import { stripSourceComments } from '../src/lib/markdown.js'
 import { repoRoot } from '../src/lib/paths.js'
 
 const root = repoRoot()
@@ -132,8 +134,45 @@ describe('条款三页', () => {
     for (const who of ['Cloudflare', 'Waffo', '模型提供方', '数据接口提供方'])
       expect(privacy).toContain(who)
     expect(privacy).toContain('不设任何 Cookie')
-    expect(refund).toContain('按比例')
     expect(refund).toContain('拒付')
     expect(refund).toContain('不向你追讨')
+  })
+
+  it('WP227：退款政策是「不退」+ 三种例外，条款与定价页口径一致', () => {
+    for (const lang of ['zh', 'en'] as const) {
+      const refund = stripSourceComments(legalSource('refund', lang, root))
+      const terms = stripSourceComments(legalSource('terms', lang, root))
+      const faq = JSON.stringify(PRICING[lang])
+      if (lang === 'zh') {
+        expect(refund).toContain('积分一经购买，不退款、不折现')
+        for (const ex of ['重复扣款', '系统错误多扣', '法律强制要求']) expect(refund).toContain(ex)
+        expect(refund).toContain('14 天撤销权')
+        expect(refund).toContain('暂停这个账号的付费功能')
+        expect(refund).toContain('开源软件不受影响')
+        expect(terms).toContain('积分一经购买不退款、不折现')
+        // Luoye 10-05：例外情形发现后 60 天内联系
+        expect(refund).toContain('发现后 60 天内')
+        expect(terms).toContain('发现后 60 天内')
+        // 责任上限是另一回事，保留
+        expect(terms).toContain('十二个月内实际向我们支付的金额为上限')
+        expect(faq).toContain('积分买了就不退')
+      } else {
+        expect(refund).toContain('non-refundable once purchased')
+        expect(refund).toContain('14-day right of withdrawal')
+        expect(terms).toContain('non-refundable once purchased')
+        expect(refund).toContain('within 60 days of noticing it')
+        expect(terms).toContain('within 60 days of noticing it')
+        expect(faq).toContain('aren’t refundable')
+      }
+      // 旧口径（没用掉的可以退 / 按比例退）一个字都不留
+      for (const old of [
+        '可以申请退',
+        '按比例',
+        'credits can be refunded',
+        'pro rata',
+        'proportion',
+      ])
+        expect(refund + terms + faq).not.toContain(old)
+    }
   })
 })

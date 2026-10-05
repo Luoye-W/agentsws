@@ -15,7 +15,8 @@ const zh = {
     lede: '客服、红人、社媒、B2B……给出海公司按岗位配齐。活它们干完，出一张卡，你点头才算数。',
     download: '免费下载',
     // WP225（WP218 决定 ⑤）：Windows 访客点了直接下安装包，旁边一行首次打开提示（只在 Windows 上露出来）
-    winFirstOpen: '第一次打开有蓝框：点「更多信息 → 仍要运行」',
+    // WP227 合一份：文案用 WP227 那句（Luoye 10-05 #⑤ 原话「第一次打开点『更多信息 → 仍要运行』」）
+    winFirstOpen: '第一次打开若被拦，点「更多信息 → 仍要运行」',
     github: '在 GitHub 上看',
     checks: ['Mac / Windows', '自带 key 一分不扣', '基于 DeepSeek Harness'],
     frameBar: '127.0.0.1 · 今天',
@@ -259,7 +260,7 @@ const en: HomeCopy = {
     title: ['Dashboards gather dust.', 'This *AI team*', 'shows up every day.'],
     lede: 'Support, influencers, social, B2B: a full set of roles for your cross-border business. They do the work, then hand you a card. Nothing counts until you say yes.',
     download: 'Download free',
-    winFirstOpen: 'First launch shows a blue box: More info → Run anyway',
+    winFirstOpen: 'If Windows blocks it the first time, click “More info → Run anyway”',
     github: 'View on GitHub',
     checks: ['Mac & Windows', 'Your own API key costs nothing', 'Built on DeepSeek Harness'],
     frameBar: '127.0.0.1 · Today',

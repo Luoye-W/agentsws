@@ -175,3 +175,19 @@ describe('withCsp', () => {
     ])
   })
 })
+
+describe('WP227：邮件正文里的链接（沙箱 iframe 新开窗口）', () => {
+  it('http / https / mailto 交系统浏览器；其它协议拒绝，永不在壳里开窗', () => {
+    for (const url of ['https://shop.example/a?b=1', 'http://x.example/', 'mailto:hi@x.example'])
+      expect(decideWindowOpen(url, LOCAL)).toEqual({ action: 'external', url })
+    for (const url of [
+      'tel:+123',
+      'javascript:alert(1)',
+      'file:///etc/passwd',
+      'ms-msdt:/id',
+      'smb://host/share',
+      'about:srcdoc',
+    ])
+      expect(decideWindowOpen(url, LOCAL)).toMatchObject({ action: 'deny' })
+  })
+})

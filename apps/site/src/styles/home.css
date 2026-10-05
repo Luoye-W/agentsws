@@ -169,6 +169,16 @@
   line-height: 1.6;
   color: var(--muted);
 }
+.stair p a {
+  color: var(--ink);
+  text-decoration: underline;
+  text-decoration-color: var(--brand);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+.stair p a:hover {
+  color: var(--brand);
+}
 .scene {
   position: relative;
   height: 280px;

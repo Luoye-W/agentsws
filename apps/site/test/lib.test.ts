@@ -2,9 +2,10 @@
  * 价目（构建时取云上、取不到用样例）、下载清单、SEO、文案中英同形。
  */
 
+import { readFileSync } from 'node:fs'
 import type { PricingCatalog } from '@agentsws/contracts'
 import { describe, expect, it } from 'vitest'
-import { accountUrl } from '../src/config.js'
+import { accountUrl, SISTER_SITES } from '../src/config.js'
 import manifest from '../src/data/downloads.json'
 import { COMMON, localePath } from '../src/i18n/common.js'
 import { DOWNLOAD } from '../src/i18n/download.js'
@@ -13,6 +14,7 @@ import { PAGES } from '../src/i18n/pages.js'
 import { PRICING } from '../src/i18n/pricing.js'
 import { ROLES, ROLES_PAGE } from '../src/i18n/roles.js'
 import { type DownloadManifest, formatSize, manifestProblems } from '../src/lib/downloads.js'
+import { linkNames } from '../src/lib/locales.js'
 import {
   blockOf,
   entryLabel,
@@ -186,5 +188,35 @@ describe('账号页链接（WP198 的路径；英文站带 ?lang=en）', () => {
     expect(accountUrl('topup', 'zh')).toBe('https://cloud.agentsws.com/account/topup')
     expect(accountUrl('login', 'en')).toBe('https://cloud.agentsws.com/account/login?lang=en')
     expect(accountUrl('topup', 'en')).toBe('https://cloud.agentsws.com/account/topup?lang=en')
+  })
+})
+
+describe('WP227：首页台阶链到 KOLAgents / KefuAgents；Windows 下载旁的小字', () => {
+  it('两个名字都变成新窗口链接（rel=noopener），其余照样转义', () => {
+    for (const lang of ['zh', 'en'] as const) {
+      const html = linkNames(HOME[lang].why.steps[2]?.p ?? '', SISTER_SITES)
+      for (const name of ['KOLAgents', 'KefuAgents']) {
+        const url = SISTER_SITES[name] ?? ''
+        expect(url).toMatch(/^https:\/\/[a-z]+agents\.com$/u)
+        expect(html).toContain(`<a href="${url}" target="_blank" rel="noopener">${name}</a>`)
+      }
+    }
+    expect(linkNames('<b>X</b> & X', { X: 'https://x.example' })).toBe(
+      '&#60;b&#62;<a href="https://x.example" target="_blank" rel="noopener">X</a>&#60;/b&#62; &#38; <a href="https://x.example" target="_blank" rel="noopener">X</a>',
+    )
+    // 不是 http(s) 的链接不认
+    expect(linkNames('X', { X: 'javascript:alert(1)' })).toBe('X')
+  })
+
+  it('「第一次打开若被拦」只有一行（与 WP225 合并），中英都有、默认藏着等 Windows 访客', () => {
+    // 和 WP225 合成一份：只剩一行（WP225 的显示条件：有直链、Windows 访客），文案用 WP227 那句
+    expect(HOME.zh.hero.winFirstOpen).toBe('第一次打开若被拦，点「更多信息 → 仍要运行」')
+    expect(HOME.en.hero.winFirstOpen).toContain('More info → Run anyway')
+    expect('winHint' in HOME.zh.hero).toBe(false)
+    const home = readFileSync(new URL('../src/views/Home.astro', import.meta.url), 'utf8')
+    expect(home.match(/data-dl-win-note hidden/gu)?.length).toBe(2)
+    expect(home).not.toContain('data-win-hint')
+    const script = readFileSync(new URL('../src/scripts/site.ts', import.meta.url), 'utf8')
+    expect(script).toContain("querySelectorAll<HTMLElement>('[data-dl-win-note]')")
   })
 })
