@@ -42,6 +42,7 @@ import type {
   LocalPricing,
   LocalTopupTiers,
   MyAllocation,
+  RedditBrowserReadLimits,
   ServiceSubscription,
   TopupOrder,
   UsageGroup,
@@ -52,13 +53,18 @@ import {
   ALLOCATION_WEB_PATH,
   allocationTimezoneOf,
   attributionHeaders,
+  clampRedditBrowserReadLimits,
   DATA_CAPABILITY_ROUTE_LEVELS,
   DATA_CAPABILITY_ROUTE_PREFIX,
   DEFAULT_ALLOCATION_TIMEZONE,
   DEFAULT_DATA_CAPABILITY_ORDER,
   DEFAULT_DATA_SOURCE_ORDER,
+  DEFAULT_REDDIT_BROWSER_READ_LIMITS,
+  DEFAULT_REDDIT_READ_ORDER,
   DEFAULT_WEB_SEARCH_ORDER,
   dataCapabilityRouteKey,
+  REDDIT_READ_ROUTE_KEY,
+  REDDIT_READ_ROUTE_LEVELS,
   WEB_SEARCH_ROUTE_KEY,
 } from '@agentsws/contracts'
 import { currentCloudHeaders } from './cloud-attribution.js'
@@ -88,6 +94,8 @@ interface CapabilitySourcesFile {
    * （没存的渠道用 `DEFAULT_DATA_SOURCE_ORDER`）。
    */
   data_source_routing?: Record<string, DataSourceRoute>
+  /** WP220：Reddit 浏览器只读的限速（只存改过的；没存用默认）。 */
+  reddit_browser_read?: RedditBrowserReadLimits
   updated_at?: string
 }
 
@@ -182,6 +190,13 @@ export interface CloudAssembly {
    */
   dataRouteOf(capability: string): DataSourceRoute
   /**
+   * WP220（Luoye 10-05）：Reddit 取数的路由（键 `reddit.read`）。默认 ①接口中台（`workshop`）
+   * → ②浏览器只读（`browser_readonly`）；每个品牌可调顺序、可关某一路。
+   */
+  redditReadRoute(): DataSourceRoute
+  /** WP220：Reddit 浏览器只读那一路的限速（没改过就是保守的默认值）。 */
+  redditBrowserReadLimits(): RedditBrowserReadLimits
+  /**
    * WP192：打云侧一跳、把状态码与那句人话一起带回来（与红人云同步那一组同一个函数）。
    * 数据能力口（`/v1/data/capabilities`、`/v1/data/call/*`、`/v1/data/tasks*`）经它走。
    */
@@ -252,6 +267,9 @@ export function createCloud(options: CloudOptions): CloudAssembly {
         ...(parsed.data_source_routing === undefined
           ? {}
           : { data_source_routing: parsed.data_source_routing }),
+        ...(parsed.reddit_browser_read === undefined
+          ? {}
+          : { reddit_browser_read: clampRedditBrowserReadLimits(parsed.reddit_browser_read) }),
         ...(parsed.updated_at === undefined ? {} : { updated_at: parsed.updated_at }),
       }
     } catch {
@@ -586,6 +604,9 @@ export function createCloud(options: CloudOptions): CloudAssembly {
     ...(state.data_source_routing === undefined
       ? {}
       : { data_source_routing: state.data_source_routing }),
+    ...(state.reddit_browser_read === undefined
+      ? {}
+      : { reddit_browser_read: { ...state.reddit_browser_read } }),
     ...(state.updated_at === undefined ? {} : { updated_at: state.updated_at }),
   })
 
@@ -749,19 +770,28 @@ export function createCloud(options: CloudOptions): CloudAssembly {
           const levelOk = (l: DataSourceLevel): boolean =>
             channel === WEB_SEARCH_ROUTE_KEY
               ? l === 'deepseek_native'
-              : // WP192：数据能力口那些能力只认「自带数据接口」与「Agents 工坊（用积分）」两级
-                channel.startsWith(DATA_CAPABILITY_ROUTE_PREFIX)
-                ? DATA_CAPABILITY_ROUTE_LEVELS.includes(l)
-                : l === 'official_key' || l === 'byo_source' || l === 'workshop'
+              : // WP220：Reddit 取数只认「接口中台」与「浏览器只读」两路
+                channel === REDDIT_READ_ROUTE_KEY
+                ? REDDIT_READ_ROUTE_LEVELS.includes(l)
+                : // WP192：数据能力口那些能力只认「自带数据接口」与「Agents 工坊（用积分）」两级
+                  channel.startsWith(DATA_CAPABILITY_ROUTE_PREFIX)
+                  ? DATA_CAPABILITY_ROUTE_LEVELS.includes(l)
+                  : l === 'official_key' || l === 'byo_source' || l === 'workshop'
           const order = entry.order.filter((l): l is DataSourceLevel => levelOk(l))
           const disabled = entry.disabled.filter((l): l is DataSourceLevel => levelOk(l))
           if (order.length === 0 && disabled.length === 0) delete routing[channel]
           else routing[channel] = { order, disabled }
         }
+      // WP220：限速不给就不改；给了就收进范围再存（出界的按边界收，不报错）
+      const limits =
+        input.reddit_browser_read === undefined
+          ? state.reddit_browser_read
+          : clampRedditBrowserReadLimits(input.reddit_browser_read)
       state = {
         version: 1,
         capability_sources: next,
         ...(routing === undefined ? {} : { data_source_routing: routing }),
+        ...(limits === undefined ? {} : { reddit_browser_read: limits }),
         updated_at: clock.now(),
       }
       flush()
@@ -811,6 +841,14 @@ export function createCloud(options: CloudOptions): CloudAssembly {
         order: [...DEFAULT_DATA_CAPABILITY_ORDER],
         disabled: [],
       },
+    redditReadRoute: () =>
+      state.data_source_routing?.[REDDIT_READ_ROUTE_KEY] ?? {
+        order: [...DEFAULT_REDDIT_READ_ORDER],
+        disabled: [],
+      },
+    redditBrowserReadLimits: () => ({
+      ...(state.reddit_browser_read ?? DEFAULT_REDDIT_BROWSER_READ_LIMITS),
+    }),
     call: cloudCall,
     priceOf: async (capability) => {
       /*

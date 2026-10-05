@@ -117,7 +117,8 @@ describe('quick_prompts / task_examples 的 schema（05 §1，WP84）', () => {
 describe('内置职责都写了内容（WP84 §2）', () => {
   const files = bundledRoleFiles()
 
-  it('一条都不落下，条数在 3–5 / 2–3 之间', () => {
+  // WP220：示例任务上限 3 → 4（品牌监控与 TikTok 各加了一条研究的例子，派工单要的）
+  it('一条都不落下，条数在 3–5 / 2–4 之间', () => {
     expect(files.length).toBeGreaterThanOrEqual(14)
     for (const file of files) {
       const role = loadRole(file)
@@ -126,7 +127,7 @@ describe('内置职责都写了内容（WP84 §2）', () => {
       expect(prompts.length, `${role.id} quick_prompts`).toBeGreaterThanOrEqual(3)
       expect(prompts.length, `${role.id} quick_prompts`).toBeLessThanOrEqual(5)
       expect(examples.length, `${role.id} task_examples`).toBeGreaterThanOrEqual(2)
-      expect(examples.length, `${role.id} task_examples`).toBeLessThanOrEqual(3)
+      expect(examples.length, `${role.id} task_examples`).toBeLessThanOrEqual(4)
     }
   })
 
