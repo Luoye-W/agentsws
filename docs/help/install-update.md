@@ -66,4 +66,4 @@ Agents 工坊打开后会自己检查新版本，之后大约每 4 小时再查�
 - **Windows**：设置 → 应用 → 找到 Agents 工坊 → 卸载。
 - **Mac**：把「应用程序」里的 Agents 工坊拖到废纸篓。
 
-卸载不会删你的数据。数据在 Windows 的 `%APPDATA%\agentsws`、Mac 的「~/资源库/Application Support/agentsws」，确定不要了再自己删。
+卸载不会删你的数据。数据在 Windows 的 `%APPDATA%\@agentsws\desktop`、Mac 的「~/资源库/Application Support/@agentsws/desktop」，确定不要了再自己删。

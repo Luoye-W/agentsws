@@ -33,7 +33,7 @@ URL 判定、菜单模型都能在 vitest 里跑满 100% 行覆盖；`main.ts` �
 
 ## 用户数据目录
 
-`app.getPath('userData')`（macOS `~/Library/Application Support/agentsws`）：
+`app.getPath('userData')`（macOS `~/Library/Application Support/@agentsws/desktop`）：
 
 ```
 config.json     端口 / 是否浏览器打开 / 开机自启 / 语言 / 模式与公司服务器地址 —— 不含任何密钥
@@ -158,8 +158,18 @@ WP218 在 Windows 上查出并修掉的（CI 作业 `desktop-windows.yml` 装起
   用户数据放 `agentsws-smoke-数据`，并打印安装目录里最长的路径（≥260 就失败）。
 - **连接器不需要 Docker**：桌面版不起 OpenConnector；本机凭据库那 23 张卡（邮箱等）照常用，
   只有标「需要 Docker（可选）」的那 6 张要用户自己装 Docker Desktop（与 mac 一样）。
+- **AI 跑命令走 PowerShell**（WP225）：建站与主题那条职责的终端在 Windows 上是官方 `dsh-pwsh-sandbox` +
+  `dsh-tool-pwsh`（PowerShell 7 优先，没有就用系统自带的 5.1），不要求装 Git Bash；同一张命令白名单，
+  PowerShell 的子表达式 / 脚本块 / 变量整类拒。
+- **npm 装的命令行工具**（WP225）：`shopify` / `npx` 是 `.cmd` 壳，服务进程按 PATH + PATHEXT 找到后经
+  `cmd.exe /d /s /c` 起（`apps/server/src/win-cli.ts`）；`reg query` 的输出按 OEM 代码页解（中文路径不乱码）。
+- **退出等服务进程停干净**（WP225）：壳在 `before-quit` 里等服务进程退（最多 15 秒，8 秒没退按树强杀），
+  不先走——强杀的计时器在壳里。
+- **CI**（`.github/workflows/desktop-windows.yml`）：`nsis` 作业装起来真跑（WP225 起按进程树 + 目录多种写法认进程、
+  原始退出码按十六进制打出来）；`update-e2e` 作业打 N 与 N+1、本机起更新源，真点一次「下载 → 重启并更新」，
+  看新版本起来、数据还在。
 - **dsh 与官方场景**：用捆绑的 `node.exe` 直接跑 dsh 的 `bin.js`，不经 `.cmd`、不靠 PATH；
-  `DSH_HOME` 是 `%APPDATA%\agentsws\dsh`。
+  `DSH_HOME` 是 `%APPDATA%\@agentsws\desktop\dsh`。
 
 ## 打包
 
@@ -253,12 +263,13 @@ exe（用户数据目录也带中文）→ `/v1/health` 200 → 打开工作台�
 
 - **每一步都等人点**：查到不自动下，下完不自动装，退出时也不偷偷装（`autoInstallOnAppQuit = false`）——
   否则会绕开装前自检。
-- **装前确认**照 WP184 退出确认：官方场景在跑、或者 AI 正在操作电脑，先问「有任务在跑，确定现在重启？」；
-  选「再等等」按钮留着。（工坊自己的 AI 运行还没有统一的「正在跑」信号，见报告。）
+- **装前确认**照 WP184 退出确认：官方场景在跑、AI 正在操作电脑、或者**岗位 AI 正在干活**
+  （WP225：问服务进程 `GET /v1/activity`，跨品牌只回数量；问不到按没有算），先问「有任务在跑，确定现在重启？」；
+  选「再等等」按钮留着。
 - **装前自检**（WP111 那道闸）：`GET /v1/health` 不 ok 就不装，旧版继续跑。
 - **装之前先把服务进程和场景停干净**：Windows 上还开着的 `node.exe` 会让安装程序「文件被占用」。
 - **差分下载**：NSIS 出 `.exe.blockmap`，只下变了的块；差分失败 electron-updater 自己退回整包，下完一律校 sha512。
-- **数据都在**：用户数据在 `%APPDATA%\agentsws`（mac `~/Library/Application Support/agentsws`），
+- **数据都在**：用户数据在 `%APPDATA%\@agentsws\desktop`（mac `~/Library/Application Support/@agentsws/desktop`），
   不在安装目录里；NSIS 升级与卸载都不碰它（`deleteAppDataOnUninstall` 默认关）。
 
 ### 更新源（Luoye 10-05 定）

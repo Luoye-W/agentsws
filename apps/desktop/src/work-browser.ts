@@ -5,7 +5,7 @@
  *
  * 三条纪律，每一条都有代价在后面：
  *
- * 1. **单独一个 Profile**（`~/Library/Application Support/agentsws/browser-profile`），
+ * 1. **单独一个 Profile**（`~/Library/Application Support/@agentsws/desktop/browser-profile`），
  *    不碰用户日常那个。理由是 55 §3 末段点名的那类事故（ego-lite #319 的跨 Profile
  *    泄漏）：AI 用的浏览器和你收私人邮件的浏览器共用一份 cookie，一次越界就什么
  *    都拿到了。代价是用户要在这个 Profile 里**再登一次**那几个平台——值得。
