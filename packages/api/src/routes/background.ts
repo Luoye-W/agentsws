@@ -8,7 +8,7 @@
  * |---|---|---|
  * | `GET /v1/settings/background` | 每个品牌一行：在跑几条、最近一次、红点、停没停；全进程同时最多跑几件 | 读策略层的人（owner / 管理员） |
  * | `PUT /v1/settings/background` | 改「同时最多跑几件」（全进程一个数，不是每个品牌一个） | 改策略层的人 |
- * | `PUT /v1/settings/background/brands/:ws` | 只停 / 放开**这一个品牌**的后台（品牌急停）；全局急停照旧在 `/v1/halt` | 改策略层的人 |
+ * | `PUT /v1/settings/background/brands/:ws` | 只停 / 放开**这一个品牌**的后台（品牌急停）；全局急停照旧在 `/v1/halt` | 那个品牌的负责人，或公司的所有者 / 管理员 |
  *
  * 品牌急停停的是这个品牌的：到点的定时任务、对外发送、模型调用。别的品牌一概不动。
  */
@@ -165,6 +165,9 @@ export function backgroundRoutes(): Route[] {
         auth: 'bearer',
         assignment: true,
         authz: WRITE,
+        // Fable 10-05：那个品牌的负责人**或公司的所有者 / 管理员**都能按——公司管理员在这个品牌里
+        // 未必有能写策略层的岗位，所以门不在这一层，真正的判定在实现里（不满足一律 403）
+        authzBypass: () => true,
         params: [{ name: 'ws', in: 'path', required: true, description: '品牌的 workspace_id' }],
         body: BrandHaltBody,
         returns: 'BrandBackgroundView',

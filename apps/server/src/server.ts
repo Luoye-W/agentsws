@@ -21,6 +21,7 @@ import type {
 } from '@agentsws/api'
 import {
   ApiError,
+  canAdministerOrganization,
   createAsyncTraceScope,
   createGateway,
   createMemoryExtensionStore,
@@ -4555,6 +4556,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       .listByPerson(person.id, { workspace_id: ws })
       .filter((a) => a.revoked_at === undefined)
       .map((a) => ({ assignment_id: a.id, person_id: a.person_id, role_id: a.role_id }))
+  /** 这个品牌里有没有人**还**担着这条职责（撤了的不算）。 */
+  const roleHeldIn = (ws: WorkspaceId, role_id: string): boolean =>
+    roles.assignments
+      .listByRole(role_id, { workspace_id: ws })
+      .some((a) => a.revoked_at === undefined)
   /** 一个品牌一轮收信（邮箱轮询 + 整只邮箱同步），一个账号坏了不拖垮别的。 */
   const pollMailOf = async (
     brand: BrandModuleSet,
@@ -4776,8 +4782,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       role_id: anchor.assignment.role_id,
       assignment_id: anchor.assignment.id,
     }
-    const held = (role_id: string): boolean =>
-      roles.assignments.listByRole(role_id, { workspace_id: ws }).length > 0
+    const held = (role_id: string): boolean => roleHeldIn(ws, role_id)
     await ensureTask(schedule.scheduler, `${CHAT_ASSIST_TASK_ID}${suffix}`, chatAssistTask(base))
     await ensureTask(schedule.scheduler, `${SUPPORT_SLA_TASK_ID}${suffix}`, supportSlaTask(base))
     await ensureSystemTasks(schedule.scheduler, {
@@ -4826,11 +4831,87 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     if (!background.isBrand(ws) || background.stopped(ws)) return
     await wireBrand(ws)
     await ensureBrandTasks(ws)
+    await applyRoleGates(ws)
   }
+
+  /*
+   * WP215（Fable 10-05）：**"有人担这条职责才建"的定时跟着分配即时建 / 停**——先建品牌、再分配
+   * 职责的流程不用重启。建：`ensureBrandTasks` 补上缺的；停：没人担了就暂停并打个记号
+   * （`params.auto_stopped`），又有人担了只放开**带记号**的那几条——人自己按的暂停不碰。
+   * 岗位那几条（每日计划 / 复盘）同理：分配撤了就停，那条分配回来就放开。
+   */
+  const AUTO_STOPPED = 'role_released'
+  const ROLE_GATED: { ids: string[]; held: (ws: WorkspaceId) => boolean }[] = [
+    {
+      ids: ['sched_kol_sequence'],
+      held: (ws) => KOL_CHANNEL_IDS.some((c) => roleHeldIn(ws, `kol.${c}`)),
+    },
+    {
+      ids: ['sched_social_publish', 'sched_social_broadcast'],
+      held: (ws) => SOCIAL_ROLE_IDS.some((r) => roleHeldIn(ws, r)),
+    },
+    { ids: ['sched_pr_monitor'], held: (ws) => PR_ROLE_IDS.some((r) => roleHeldIn(ws, r)) },
+    { ids: ['sched_b2b_sequence'], held: (ws) => roleHeldIn(ws, 'b2b.outbound') },
+    { ids: ['sched_seo_daily', 'sched_seo_weekly'], held: (ws) => roleHeldIn(ws, 'dtc.content') },
+  ]
+  const POSITION_TASK = /^sched_(daily_plan|review_day|review_week|review_month)_/
+  const gate = async (id: string, on: boolean): Promise<void> => {
+    const task = schedule.scheduler.get(id)
+    if (task === undefined) return
+    const marked = task.params?.auto_stopped === AUTO_STOPPED
+    if (!on && (task.state === 'active' || task.state === 'pending')) {
+      await schedule.scheduler.update(id, {
+        params: { ...(task.params ?? {}), auto_stopped: AUTO_STOPPED },
+      })
+      await schedule.scheduler.pause(id)
+    } else if (on && marked && task.state === 'paused') {
+      const { auto_stopped: _drop, ...rest } = task.params ?? {}
+      await schedule.scheduler.update(id, { params: rest })
+      await schedule.scheduler.resume(id)
+    }
+  }
+  async function applyRoleGates(ws: WorkspaceId): Promise<void> {
+    const suffix = ws === workspace.id ? '' : `__${ws}`
+    for (const g of ROLE_GATED) {
+      const on = g.held(ws)
+      for (const id of g.ids) await gate(`${id}${suffix}`, on)
+    }
+    for (const task of schedule.scheduler.list({ workspace_id: ws })) {
+      if (!POSITION_TASK.test(task.id)) continue
+      const live = roles.assignments.get(task.assignment_id)?.revoked_at === undefined
+      await gate(task.id, live)
+    }
+  }
+  /** 分配一变：这个品牌的定时即时对一遍（同一品牌排队、合并成一次，不并发）。 */
+  const syncing = new Set<WorkspaceId>()
+  const dirty = new Set<WorkspaceId>()
+  const requestBrandSync = (ws: WorkspaceId): void => {
+    if (!background.isBrand(ws) || background.stopped(ws)) return
+    if (syncing.has(ws)) {
+      dirty.add(ws)
+      return
+    }
+    syncing.add(ws)
+    const run = async (): Promise<void> => {
+      try {
+        do {
+          dirty.delete(ws)
+          await startBrandBackground(ws)
+        } while (dirty.has(ws))
+      } finally {
+        syncing.delete(ws)
+      }
+    }
+    background.track(run())
+  }
+
   // 第一个品牌先来（它那几条老任务的建法与之前逐字相同），再是这家公司的其余品牌
   await startBrandBackground(workspace.id)
   for (const ws of background.activeBrands())
     if (ws !== workspace.id) await startBrandBackground(ws)
+  roles.onAssignmentChanged?.((a) => {
+    requestBrandSync(a.workspace_id)
+  })
 
   // ── 进程级的家务：不属于哪个品牌，挂在第一个品牌名下（品牌急停不停它们）────────
   // ⑧ 审批过期与升级（39 待办 A）：模拟回路每 tick 调一次，真机器每分钟调一次。
@@ -6973,16 +7054,29 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       },
       setBrandHalt: async (actor, ws, input) => {
         const target = ws as WorkspaceId
-        if (!backgroundRowsOf(actor).some((r) => r.workspace_id === target))
-          throw new ApiError('not_found', '没有这个品牌，或者你不在这个品牌里')
-        // 停 / 放开一个品牌的后台是那个品牌负责人的事（与 `/v1/halt` 只给 owner 同一条线）
+        // 只认**同一家公司**的品牌（公司管理员不一定是每个品牌的成员，但只能管自己公司的）
+        const home = identity
+          .listOrganizations()
+          .find((o) => identity.brandsOf(o.id).some((w) => w.id === actor.workspace_id))
+        const sameOrg =
+          home === undefined
+            ? target === actor.workspace_id
+            : identity.brandsOf(home.id).some((w) => w.id === target)
+        if (!sameOrg) throw new ApiError('not_found', '这家公司下没有这个品牌')
+        // 停 / 放开一个品牌的后台：那个品牌的负责人，或者公司的所有者 / 管理员（Fable 10-05）
         const owns = roles.assignments
           .listByPerson(actor.person_id as PersonId, {
             workspace_id: target,
             role_id: 'common.owner',
           })
           .some((a) => a.revoked_at === undefined)
-        if (!owns) throw new ApiError('forbidden', '只有这个品牌的负责人能停 / 放开它的后台')
+        const org = identity
+          .listOrganizations()
+          .find((o) => identity.brandsOf(o.id).some((w) => w.id === target))
+        const admin =
+          org !== undefined && canAdministerOrganization(org, actor.person_id as PersonId)
+        if (!owns && !admin)
+          throw new ApiError('forbidden', '只有这个品牌的负责人或公司管理员能停 / 放开它的后台')
         background.setHalted(target, input.halted, actor.person_id as PersonId, input.reason)
         return background.status(target)
       },
@@ -7412,6 +7506,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     async close() {
       if (closed) return
       closed = true
+      // WP215：分配一变就即时对一遍定时——还在做的那几件先做完，别在关库之后再写
+      await background.settled()
       if (unmountWs) {
         // 先把 WS 收掉：否则还开着的连接会让 http.Server 的 close 一直挂着
         await unmountWs()

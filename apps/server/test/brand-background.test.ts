@@ -381,6 +381,120 @@ describe('WP215 每个品牌的后台都在跑，与眼前品牌无关', () => {
     expect(healthA.data?.total).toBe(0)
   })
 
+  it('公司管理员（不是 B 的负责人、也不在 B 里）也能停 B；普通成员不行（Fable 10-05）', async () => {
+    const { server } = await boot()
+    const b = await addBrand(server, '变形金刚耳机独立站')
+    const org = await orgOf(server)
+    const a = server.bootstrap.workspace.id
+    const join = async (email: string, role: 'admin' | 'member'): Promise<Who> => {
+      const p = await server.identity.createPerson({ email, name: email })
+      await server.identity.addOrganizationMember({ org_id: org, person_id: p.id, role })
+      await server.identity.addMember({
+        workspace_id: a,
+        person_id: p.id,
+        role: 'member',
+        ranges: [],
+      })
+      const asg = server.roles.assignments.create({
+        person_id: p.id,
+        workspace_id: a,
+        role_id: 'common.member',
+        granted_by: server.bootstrap.person.id,
+        ranges: [],
+      })
+      return {
+        workspace_id: a,
+        token: server.identity.issue('session', p.id, a).token,
+        assignment: asg.id,
+      }
+    }
+    const admin = await join('ops-admin@example.com', 'admin')
+    const member = await join('ops-member@example.com', 'member')
+    const path = `/v1/settings/background/brands/${b.workspace_id}`
+    const denied = await call(server, member, 'PUT', path, { halted: true })
+    expect(denied.status).toBe(403)
+    expect(server.background.brandHalted(b.workspace_id)).toBe(false)
+    const ok = await call<BrandBackgroundView>(server, admin, 'PUT', path, { halted: true })
+    expect(ok.status).toBe(200)
+    expect(ok.data?.state).toBe('halted')
+    expect(server.background.brandHalted(a)).toBe(false)
+  })
+
+  it('先建品牌、再分配 Reddit 职责：监控任务立即出现并按时触发；撤销后停，再分配又放开（不用重启）', async () => {
+    const { server, clock } = await boot()
+    const b = await addBrand(server, 'INMO Reddit 代运营')
+    const id = `sched_pr_monitor__${b.workspace_id}`
+    // 还没人担公关职责：没有这一条
+    expect(server.schedule.scheduler.get(id)).toBeUndefined()
+
+    const asg = server.roles.assignments.create({
+      person_id: server.bootstrap.person.id,
+      workspace_id: b.workspace_id,
+      role_id: 'pr.reddit',
+      granted_by: server.bootstrap.person.id,
+      ranges: [],
+    })
+    await server.background.settled()
+    const task = server.schedule.scheduler.get(id)
+    expect(task?.state).toBe('active')
+    expect(task?.workspace_id).toBe(b.workspace_id)
+    // 视图在第一个品牌，B 的监控照样按时跑（15 分钟一轮）
+    clock.advance(16 * 60_000)
+    const fired = await server.schedule.scheduler.runDue(clock.now())
+    const mine = fired.find((o) => o.task.id === id)
+    expect(mine?.ok, JSON.stringify(mine?.error)).toBe(true)
+    // 第一个品牌没人担这条职责，也就没有它的监控
+    expect(server.schedule.scheduler.get('sched_pr_monitor')).toBeUndefined()
+
+    // 撤销：停下（暂停，带记号），到点不再跑
+    server.roles.assignments.revoke(asg.id)
+    await server.background.settled()
+    expect(server.schedule.scheduler.get(id)?.state).toBe('paused')
+    clock.advance(16 * 60_000)
+    const after = await server.schedule.scheduler.runDue(clock.now())
+    expect(after.some((o) => o.task.id === id)).toBe(false)
+
+    // 人自己按的暂停不碰：再分配只放开带记号的那几条
+    server.roles.assignments.create({
+      person_id: server.bootstrap.person.id,
+      workspace_id: b.workspace_id,
+      role_id: 'pr.reddit',
+      granted_by: server.bootstrap.person.id,
+      ranges: [],
+    })
+    await server.background.settled()
+    expect(server.schedule.scheduler.get(id)?.state).toBe('active')
+    expect(server.schedule.scheduler.get(id)?.params?.auto_stopped).toBeUndefined()
+    await server.schedule.scheduler.pause(id)
+    server.roles.assignments.create({
+      person_id: server.bootstrap.person.id,
+      workspace_id: b.workspace_id,
+      role_id: 'pr.monitoring',
+      granted_by: server.bootstrap.person.id,
+      ranges: [],
+    })
+    await server.background.settled()
+    expect(server.schedule.scheduler.get(id)?.state).toBe('paused')
+  })
+
+  it('分配一条新岗位：这个人在 B 的每日计划 / 复盘立即建上；撤了就停', async () => {
+    const { server } = await boot()
+    const b = await addBrand(server, '变形金刚耳机独立站')
+    const asg = server.roles.assignments.create({
+      person_id: server.bootstrap.person.id,
+      workspace_id: b.workspace_id,
+      role_id: 'dtc.support',
+      granted_by: server.bootstrap.person.id,
+      ranges: [],
+    })
+    await server.background.settled()
+    const plan = `sched_daily_plan_${asg.id}__${b.workspace_id}`
+    expect(server.schedule.scheduler.get(plan)?.state).toBe('active')
+    server.roles.assignments.revoke(asg.id)
+    await server.background.settled()
+    expect(server.schedule.scheduler.get(plan)?.state).toBe('paused')
+  })
+
   it('不是这个品牌负责人的人停不了它；不认识的工作区回 404', async () => {
     const { server } = await boot()
     const a = bootstrapWho(server)

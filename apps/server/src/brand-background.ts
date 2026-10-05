@@ -100,6 +100,12 @@ export interface BrandBackground {
   setMaxConcurrent(n: number, by: PersonId, workspace_id: WorkspaceId): number
   /** 切换器与品牌一览那一格。 */
   status(workspace_id: WorkspaceId): BrandBackgroundView
+  /**
+   * 记下一件正在后台做的装配（分配一变就即时建 / 停定时那一步是异步的）。
+   * `settled()` 等它们都做完——测试与 demo 要"分配完立刻看得到任务"。
+   */
+  track(work: Promise<unknown>): void
+  settled(): Promise<void>
   /** 设置页那一张（`names` / `current` 由调用方按人给）。 */
   settings(
     rows: { workspace_id: WorkspaceId; name: string; current: boolean }[],
@@ -164,7 +170,20 @@ export function createBrandBackground(options: BrandBackgroundOptions): BrandBac
     return { ...view, halted: brandHalted(ws), global_halted: globalAll() }
   }
 
+  const pending = new Set<Promise<unknown>>()
+
   return {
+    track(work) {
+      const p = work
+        .catch(() => undefined)
+        .finally(() => {
+          pending.delete(p)
+        })
+      pending.add(p)
+    },
+    async settled() {
+      while (pending.size > 0) await Promise.all([...pending])
+    },
     isBrand,
     activeBrands: () => {
       const ids = new Set<WorkspaceId>([options.bootstrap])

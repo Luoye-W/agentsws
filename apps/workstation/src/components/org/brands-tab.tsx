@@ -17,8 +17,8 @@
  * 3. **一个品牌的时候也要在**。个人用户看到的是一句"要做第二个品牌就在这里加"，
  *    而不是一张空表。
  * 4. **WP215 每行一格后台状态**（与顶栏切换器同一个件），行尾一个「停后台 / 放开」——
- *    品牌急停，只停这一个品牌；全局急停照旧在别处。只有能改策略层的人用得了：这一页本来就只给
- *    所有者（拿所有者那条岗位发请求），服务端回 403 时按钮整个收起。
+ *    品牌急停，只停这一个品牌；全局急停照旧在别处。那个品牌的负责人或公司的所有者 / 管理员
+ *    用得了（服务端判），服务端回 403 时按钮整个收起。
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, Check, Inbox, Pause, Play, Plus } from 'lucide-react'
@@ -148,11 +148,17 @@ function BrandRow({
 export function BrandsTab({
   org_id,
   assignment,
+  haltAssignment,
 }: {
   /** 没有公司（还没迁 / 装配里没有组织面）时整块不渲染。 */
   org_id?: string
   /** 制度这一层一律走所有者那条岗位（05 §3、31 §3.1）。 */
   assignment?: string
+  /**
+   * WP215（Fable 10-05）：品牌急停那个按钮用哪条岗位发请求。品牌负责人**或公司管理员**都能按——
+   * 管理员在这个品牌里未必有所有者岗位，所以单给一格；不给就用 `assignment`。
+   */
+  haltAssignment?: string
 }): React.ReactNode {
   const { t } = useApp()
   const client = useQueryClient()
@@ -161,6 +167,7 @@ export function BrandsTab({
   const [failure, setFailure] = useState<string | undefined>(undefined)
   const [receipt, setReceipt] = useState<string | undefined>(undefined)
   const [switching, setSwitching] = useState(false)
+  const haltAs = haltAssignment ?? assignment
   // WP215：服务端说过一次 403 就把「停后台 / 放开」整个收起
   const [haltDenied, setHaltDenied] = useState(false)
   const [haltFailure, setHaltFailure] = useState<string | undefined>(undefined)
@@ -205,7 +212,7 @@ export function BrandsTab({
   /** WP215 品牌急停：只停 / 放开这一个品牌的后台。 */
   const halt = useMutation({
     mutationFn: (input: { workspace_id: string; halted: boolean }) =>
-      setBrandBackgroundHalt(input.workspace_id, { halted: input.halted }, assignment),
+      setBrandBackgroundHalt(input.workspace_id, { halted: input.halted }, haltAs),
     onSuccess: async () => {
       setHaltFailure(undefined)
       await client.invalidateQueries({ queryKey: ['orgs'] })
@@ -219,7 +226,7 @@ export function BrandsTab({
     },
   })
   const onHalt =
-    assignment === undefined || haltDenied
+    haltAs === undefined || haltDenied
       ? undefined
       : (workspace_id: string, halted: boolean): void => {
           halt.mutate({ workspace_id, halted })

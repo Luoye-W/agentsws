@@ -230,6 +230,14 @@ describe('公司页「品牌一览」', () => {
     expect(screen.getByTestId('brand-row-bg-ws_b')).toBeTruthy()
   })
 
+  it('公司管理员（没有所有者岗位）也能按：拿他自己那条岗位发（Fable 10-05）', async () => {
+    renderWithProviders(<BrandsTab org_id="org_1" haltAssignment="asg_admin_ops" />)
+    fireEvent.click(await screen.findByTestId('brand-bg-toggle-ws_b'))
+    await waitFor(() => {
+      expect(halts).toEqual([{ ws: 'ws_b', input: { halted: true }, assignment: 'asg_admin_ops' }])
+    })
+  })
+
   it('没有所有者岗位：只看状态，不出按钮', async () => {
     renderWithProviders(<BrandsTab org_id="org_1" />)
     await screen.findByTestId('brand-row-bg-ws_b')
