@@ -1,0 +1,158 @@
+/**
+ * WP234（docs/54 §6.4 / §6.5）：公司页岗位卡上的合并 / 拆出 / 移动职责；负责人是身份。
+ */
+import { screen, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { describe, expect, it, vi } from 'vitest'
+import { OwnerCard } from '@/components/org/owner-card'
+import { PositionsTab } from '@/components/org/positions-tab'
+import type { OrgPositionView } from '@/lib/api'
+import { renderWithProviders } from './helpers'
+
+const row = (id: string, name: string, roles: [string, string][]): OrgPositionView => ({
+  id,
+  name,
+  name_en: name,
+  version: '1.0.0',
+  source: 'custom',
+  roles: roles.map(([role_id, n]) => ({ role_id, name: n, default: true, loaded: true })),
+  holders: [{ person_id: 'p_wang', name: '王岚', ranges: [] }],
+})
+
+const POSITIONS: OrgPositionView[] = [
+  row('owner', '负责人', [['common.owner', '公司设置与授权']]),
+  row('pos-reddit', 'Reddit 运营', [
+    ['pr.reddit', 'Reddit 口碑'],
+    ['social.reddit', 'Reddit 社区'],
+  ]),
+  row('social-media', '社媒运营', [
+    ['social.tiktok', 'TikTok'],
+    ['social.youtube', 'YouTube'],
+  ]),
+]
+
+function renderTab(handlers: {
+  onMerge?: (id: string, into: string) => void
+  onMoveDuty?: (id: string, role_id: string, to: string) => void
+  onSplit?: (id: string, input: { name: string; role_ids: string[] }) => void
+}) {
+  renderWithProviders(
+    <PositionsTab
+      positions={POSITIONS}
+      roles={[]}
+      busy={false}
+      onAssign={() => {}}
+      onCreate={() => {}}
+      onSaveRoles={() => {}}
+      onDelete={() => {}}
+      onCopyRole={() => {}}
+      onProposeRole={() => {}}
+      onMerge={handlers.onMerge ?? (() => {})}
+      onMoveDuty={handlers.onMoveDuty ?? (() => {})}
+      onSplit={handlers.onSplit ?? (() => {})}
+      notice="调好了：2 条分配、1 件事跟着走了"
+    />,
+  )
+}
+
+const card = (id: string): HTMLElement =>
+  screen
+    .getAllByTestId('position-card')
+    .find((c) => c.getAttribute('data-position') === id) as HTMLElement
+
+describe('WP234 公司页：岗位合并 / 拆出 / 移动职责', () => {
+  it('「负责人」不在岗位清单里；回执照实说动了几条', () => {
+    renderTab({})
+    expect(
+      screen.getAllByTestId('position-card').map((c) => c.getAttribute('data-position')),
+    ).toEqual(['pos-reddit', 'social-media'])
+    expect(screen.getByTestId('positions-reshaped').textContent).toContain('1 件事')
+  })
+
+  it('合并到…：只能选别的岗位（不含负责人），点了才发', async () => {
+    const user = userEvent.setup()
+    const onMerge = vi.fn()
+    renderTab({ onMerge })
+    const reddit = within(card('pos-reddit'))
+    await user.click(reddit.getByTestId('position-merge'))
+    const target = reddit.getByTestId('position-merge-target') as HTMLSelectElement
+    expect([...target.options].map((o) => o.value)).toEqual(['social-media'])
+    await user.click(reddit.getByTestId('position-merge-go'))
+    expect(onMerge).toHaveBeenCalledWith('pos-reddit', 'social-media')
+  })
+
+  it('拆出…：要名字、要挑职责，全拆走不叫拆', async () => {
+    const user = userEvent.setup()
+    const onSplit = vi.fn()
+    renderTab({ onSplit })
+    const social = within(card('social-media'))
+    await user.click(social.getByTestId('position-split'))
+    const go = social.getByTestId('position-split-go') as HTMLButtonElement
+    expect(go.disabled).toBe(true)
+    await user.type(social.getByTestId('position-split-name'), '短视频')
+    const duties = social.getAllByTestId('position-split-duty')
+    await user.click(duties[0] as HTMLElement)
+    await user.click(duties[1] as HTMLElement)
+    expect(go.disabled).toBe(true)
+    await user.click(duties[1] as HTMLElement)
+    await user.click(go)
+    expect(onSplit).toHaveBeenCalledWith('social-media', {
+      name: '短视频',
+      role_ids: ['social.tiktok'],
+    })
+  })
+
+  it('移动职责：挑一条、挑去处', async () => {
+    const user = userEvent.setup()
+    const onMoveDuty = vi.fn()
+    renderTab({ onMoveDuty })
+    const reddit = within(card('pos-reddit'))
+    await user.click(reddit.getByTestId('position-move'))
+    await user.selectOptions(reddit.getByTestId('position-move-duty'), 'social.reddit')
+    await user.click(reddit.getByTestId('position-move-go'))
+    expect(onMoveDuty).toHaveBeenCalledWith('pos-reddit', 'social.reddit', 'social-media')
+  })
+})
+
+describe('WP234 公司页：负责人是身份', () => {
+  it('谁是负责人、「公司设置与授权」入口、转交给还不是负责人的人', async () => {
+    const user = userEvent.setup()
+    const onTransfer = vi.fn()
+    const first = renderWithProviders(
+      <OwnerCard
+        title="负责人"
+        holders={[{ person_id: 'p_wang', name: '王岚' }]}
+        candidates={[{ person_id: 'p_li', name: '李默' }]}
+        settingsHref="/positions/asg_owner"
+        busy={false}
+        onTransfer={onTransfer}
+      />,
+    )
+    const box = screen.getByTestId('org-owner')
+    expect(within(box).getByTestId('org-owner-holders').textContent).toContain('王岚')
+    expect(within(box).getByText('公司设置与授权').closest('a')?.getAttribute('href')).toBe(
+      '/positions/asg_owner',
+    )
+    const go = screen.getByTestId('org-owner-transfer-go') as HTMLButtonElement
+    expect(go.disabled).toBe(true)
+    await user.selectOptions(screen.getByTestId('org-owner-transfer-to'), 'p_li')
+    await user.click(go)
+    expect(onTransfer).toHaveBeenCalledWith('p_li')
+    first.unmount()
+    renderWithProviders(
+      <OwnerCard
+        title="负责人"
+        holders={[
+          { person_id: 'p_wang', name: '王岚' },
+          { person_id: 'p_li', name: '李默' },
+        ]}
+        candidates={[]}
+        busy={false}
+        transferred="李默"
+        onTransfer={onTransfer}
+      />,
+    )
+    expect(screen.getByTestId('org-owner-transferred').textContent).toContain('你的负责人身份还在')
+    expect(screen.queryByTestId('org-owner-transfer-to')).toBeNull()
+  })
+})

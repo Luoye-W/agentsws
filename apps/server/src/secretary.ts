@@ -92,6 +92,11 @@ export interface SecretaryAssemblyOptions {
   role_id?: RoleId
   /** WP181：公司时区（工作区档案的 `tz`，每次现取）——代答 / 路由的运行也写一条「现在时间 + 公司时区」。 */
   timeZone?(): string | undefined | Promise<string | undefined>
+  /** WP234（docs/54 §6.1）：一条分配归哪个岗位（`org.positionLabelOf`）；人员页岗位徽章按它归堆。 */
+  positionOfAssignment?(a: {
+    id: string
+    role_id: RoleId
+  }): { id: string; name: string } | undefined
 }
 
 export interface SecretaryAssembly {
@@ -135,12 +140,16 @@ export function createSecretaryAssembly(options: SecretaryAssemblyOptions): Secr
     roles.assignments
       .listByPerson(person_id, { workspace_id })
       .filter((a) => a.revoked_at === undefined)
-      .map((a) => ({
-        position_id: a.id,
-        role_id: a.role_id,
-        role_name: roles.roles.get(a.role_id)?.name.zh ?? a.role_id,
-        ranges: [...a.ranges],
-      }))
+      .map((a) => {
+        const position = options.positionOfAssignment?.(a)
+        return {
+          position_id: a.id,
+          role_id: a.role_id,
+          role_name: roles.roles.get(a.role_id)?.name.zh ?? a.role_id,
+          ranges: [...a.ranges],
+          ...(position === undefined ? {} : { position }),
+        }
+      })
 
   const roleProfiles = (): RoleProfile[] =>
     roles.roles.list().map((role) => ({
@@ -515,7 +524,11 @@ export function createSecretaryAssembly(options: SecretaryAssemblyOptions): Secr
           person_id,
           name: profile.name,
           positions: visible.has('positions')
-            ? profile.positions.map((p) => ({ role_id: p.role_id, role_name: p.role_name }))
+            ? profile.positions.map((p) => ({
+                role_id: p.role_id,
+                role_name: p.role_name,
+                ...(p.position === undefined ? {} : { position: p.position }),
+              }))
             : [],
           ...(visible.has('in_progress') ? { in_progress: inProgress } : {}),
         })

@@ -179,6 +179,8 @@ export interface OnboardingStateView {
 export interface OnboardingPositionView {
   id: string
   name: string
+  /** WP234（Luoye 10-06）：公司改过这个类别的名字时，出厂名（界面小字附后）；没改过就没有。 */
+  factory_name?: string
   /** WP213：岗位图标（工作台 `role-icons/glyphs.ts` 里的 id）。 */
   icon?: string
   roles: {
@@ -224,6 +226,40 @@ export interface OnboardingPlanInput {
   role_ids: string[]
   /** 只勾职责时这个自定义岗位叫什么；不给就是"我的岗位"。 */
   custom_position_name?: string | undefined
+  /**
+   * WP234（docs/54 §6.2）：第 ③ 步的产出——**岗位清单**（名字 + 职责）。
+   * 给了它，上面三格就不看了：岗位按这份建（带 `template_id` 且职责全在那个模板里就复用它），
+   * 每条新分配安放在它所在的那个岗位上。不给 = 老算法，结果与以前逐字相同。
+   */
+  positions?: OnboardingPlannedPosition[] | undefined
+}
+
+/** WP234：第 ③ 步岗位清单里的一行。 */
+export interface OnboardingPlannedPosition {
+  name: string
+  role_ids: string[]
+  /** 从哪个类别（岗位模板）来的；职责全在那个模板里时复用它。 */
+  template_id?: string | undefined
+}
+
+/** WP234（docs/70 §5）：「说说你要做什么工作」。 */
+export interface OnboardingSuggestInput {
+  /** 他自己写的那段话（经验、接下来要做的事都行），最多 2000 字。 */
+  text: string
+}
+
+/**
+ * WP234：AI 推荐的职责（每条一句理由，引用原话里的依据）+ 岗位划分建议。
+ *
+ * **推荐不是选中**：界面上一条都不预勾。`source: 'keyword'` = 这次没用 AI（没接上能用的模型 /
+ * 模型没按格式回话），按原话对词，`note` 照实说（Luoye 10-06：演示与真环境同一套）。
+ * `unavailable` = 原话是空的。`stub` 已不再产出，留着只为契约只加不删。
+ */
+export interface OnboardingSuggestView {
+  source: 'ai' | 'keyword' | 'stub' | 'unavailable'
+  note?: string
+  roles: { role_id: string; reason: string; quote?: string }[]
+  positions: OnboardingPlannedPosition[]
 }
 
 /**
@@ -268,6 +304,8 @@ export interface OnboardingApplyView {
   /** 挂上的范围；连上 Shopify 就是那家店，没连就是空（46 I6 要在面板明说）。 */
   ranges: { kind: string; id: string; label: string }[]
   plan: OnboardingPlanView
+  /** WP234：按岗位清单建（或复用）的岗位。只有给了 `positions` 时才有。 */
+  positions?: { id: string; name: string; role_ids: string[] }[]
 }
 
 /** 46 §2 I3：局域网上看见的一位同伴。 */
@@ -348,6 +386,11 @@ export interface OnboardingPort {
   positions(actor: OnboardingActor): MaybePromise<OnboardingPositionView[]>
   plan(actor: OnboardingActor, input: OnboardingPlanInput): MaybePromise<OnboardingPlanView>
   apply(actor: OnboardingActor, input: OnboardingPlanInput): MaybePromise<OnboardingApplyView>
+  /** WP234：「说说你要做什么工作」→ 推荐 + 岗位划分建议。可选：没装的宿主回 501。 */
+  suggest?(
+    actor: OnboardingActor,
+    input: OnboardingSuggestInput,
+  ): MaybePromise<OnboardingSuggestView>
   /** 46 §2 I2：局域网同伴。开关关着时 `peers` 是空的，且不发一个包。 */
   peers(actor: OnboardingActor): MaybePromise<DiscoveryStateView>
   /** 同伴打过来问"你是谁"。**公开**——对方这会儿在我们这里还什么都不是。 */
@@ -397,11 +440,21 @@ const ProfileBody = z.object({
   postal_address: z.string().max(500).optional(),
 })
 
+const PlannedPositionBody = z.object({
+  name: z.string().min(1).max(64),
+  role_ids: z.array(z.string().min(1).max(64)).min(1).max(30),
+  template_id: z.string().min(1).max(64).optional(),
+})
+
 const PlanBody = z.object({
   position_ids: z.array(z.string().min(1).max(64)).max(50).default([]),
   role_ids: z.array(z.string().min(1).max(64)).max(200).default([]),
   custom_position_name: z.string().min(1).max(64).optional(),
+  // WP234：岗位清单（给了就按它建）
+  positions: z.array(PlannedPositionBody).max(30).optional(),
 })
+
+const SuggestBody = z.object({ text: z.string().min(1).max(2000) })
 
 const InviteBody = z.object({ uses: z.number().int().min(1).max(50).optional() })
 
@@ -544,6 +597,29 @@ export function onboardingRoutes(): Route[] {
       async (c, deps) => {
         const input = await body(c, PlanBody)
         return ok(c, await portOf(deps).plan(actorOf(c), planInput(input)))
+      },
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/onboarding/suggest',
+        operationId: 'suggestOnboarding',
+        summary:
+          '「说说你要做什么工作」→ AI 推荐职责（每条带理由）+ 岗位划分建议（只推荐，不选中）',
+        tag: TAG,
+        auth: 'bearer',
+        assignment: true,
+        authz: READ,
+        authzBypass: () => true,
+        body: SuggestBody,
+        returns: 'OnboardingSuggestView',
+      },
+      async (c, deps) => {
+        const input = await body(c, SuggestBody)
+        const port = portOf(deps)
+        if (port.suggest === undefined)
+          throw new ApiError('not_implemented', '这个服务进程不支持 AI 推荐职责')
+        return ok(c, await port.suggest(actorOf(c), input))
       },
     ),
     route(
@@ -731,5 +807,14 @@ function planInput(input: z.infer<typeof PlanBody>): OnboardingPlanInput {
     ...(input.custom_position_name === undefined
       ? {}
       : { custom_position_name: input.custom_position_name }),
+    ...(input.positions === undefined
+      ? {}
+      : {
+          positions: input.positions.map((p) => ({
+            name: p.name,
+            role_ids: p.role_ids,
+            ...(p.template_id === undefined ? {} : { template_id: p.template_id }),
+          })),
+        }),
   }
 }

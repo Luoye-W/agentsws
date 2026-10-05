@@ -1,153 +1,99 @@
 /**
- * 按第 ② 步分析出来的东西，**预勾**第 ③ 步的岗位（70 §5，WP121b）。
+ * 第 ② 步分析出来的东西 → 第 ③ 步的**推荐**（70 §5；WP234 起只推荐、不预勾）。
  *
- * 纯函数，与界面分开：这张对照表是一条产品判断，值得单独钉一组用例——
- * 它错了的后果不是"少画一个勾"，是新用户第一次进工作台时面对的是别人的岗位。
+ * WP121b 时这里叫「预勾」：官网 → 勾上网站运营与客服，社媒链接 → 勾上对应渠道。
+ * Luoye 10-05 定：分析出来的、AI 推荐的，**都只是「推荐」小标签，用户点了才算选上**；
+ * 什么信息都没有就一条不推。于是这张对照表原样留着，产出从「勾选」改成「推荐 + 理由」：
  *
- * | ② 里看到 | 预勾 |
+ * | ② 里看到 | 推荐 |
  * |---|---|
- * | 官网（尤其 Shopify） | 网站运营、客服 |
- * | Amazon listing / 店铺 | 客服（里面含 Amazon 客服那条职责） |
- * | 社媒链接 | 社媒运营里**对应那几条渠道**职责 |
+ * | 官网 | 网站运营那几条（Shopify 说得更确定）+ 网站客服、网站在线客服 |
+ * | Amazon listing / 店铺 | Amazon 客服 |
+ * | 社媒链接 | 社媒运营里**对应那几条渠道**（认不出来的平台一条都不推） |
  *
- * 两条判断写在这里：
- *
- * 1. **社媒勾的是职责不是岗位。** 「社媒运营」整岗是九条渠道；一个首页上挂着
- *    Instagram 与 TikTok 的品牌，不该因此被塞进 Reddit、Discord、微博。
- *    （以前还顺手把"自定义岗位叫什么"预填成「社媒运营」，WP142 去掉了，见下。）
- * 2. **预勾不是替用户决定**，只是把最可能的那几个先摆上。每一条都能去掉，
- *    岗位列表照常全列。
+ * 纯函数，与界面分开：它错了的后果是新用户第一眼看到的推荐是别人的活。
  */
-import type { RolePick } from '@/components/onboarding/role-picker'
-import type { BrandIntakeProfile, BrandIntakeRun, OnboardingPositionView } from '@/lib/api'
+import type { BrandIntakeRun, OnboardingPositionView } from '@/lib/api'
 
-/** 社媒平台 → 社媒运营里的哪条渠道职责。认不出来的平台一条都不勾。 */
+/** 一条推荐：哪条职责、为什么（引用的原话依据，没有就不带）。 */
+export interface DutyRecommendation {
+  role_id: string
+  reason: string
+  quote?: string
+}
+
+/** 社媒平台 → 社媒运营里的哪条渠道职责。认不出来的平台一条都不推。 */
 const SOCIAL_ROLE: Record<string, string> = {
-  // WP191（docs/86 §5）：Meta 拆成两条，各勾各的（以前两个平台都落到 `social.meta`）
+  // WP191（docs/86 §5）：Meta 拆成两条，各推各的
   instagram: 'social.instagram',
   facebook: 'social.facebook',
   threads: 'social.threads',
   tiktok: 'social.tiktok',
   youtube: 'social.youtube',
   x: 'social.x',
-  // 首页上挂着 LinkedIn 公司主页 → 预勾 LinkedIn 那条（岗位模板里默认不勾，这里按证据勾）
   linkedin: 'social.linkedin',
 }
 
-/** 网站运营 / 客服 / 社媒运营 / 红人营销这几个岗位在种子表里的 id（`apps/server/src/org.ts`）。 */
-const WEB_OPS = 'web-ops'
-const CUSTOMER_CARE = 'customer-care'
-const SOCIAL_MEDIA = 'social-media'
-const KOL_MARKETING = 'kol-marketing'
-/** WP171（docs/84 §11）：B2B 岗位（契约 `B2B_POSITION_ID`）。 */
-const B2B = 'b2b'
-
-function has(positions: OnboardingPositionView[], id: string): boolean {
-  return positions.some((p) => p.id === id)
+const PLATFORM_LABEL: Record<string, string> = {
+  instagram: 'Instagram',
+  facebook: 'Facebook',
+  threads: 'Threads',
+  tiktok: 'TikTok',
+  youtube: 'YouTube',
+  x: 'X',
+  linkedin: 'LinkedIn',
 }
 
-export interface PresetInput {
+/** 网站运营 / 客服在种子表里的 id（`apps/server/src/org.ts`）。 */
+const WEB_OPS = 'web-ops'
+const SITE_CARE = ['dtc.support', 'dtc.live-chat']
+const AMAZON_CARE = 'amz.support'
+
+export interface RecommendInput {
   run?: BrandIntakeRun
+  /** 类别目录（第 ③ 步「按类别浏览」那一份）——目录里没有的职责不推。 */
   positions: OnboardingPositionView[]
 }
 
 /**
- * 预勾。没有分析结果（走了「还没有网站」旁路）就**一条都不勾**——
- * 凭空勾几个岗位比不勾更糟：用户会以为那是系统知道点什么。
+ * 按第 ② 步的结果出推荐。没有分析结果（走了「还没有网站」旁路）就**一条都不推**——
+ * 凭空推几条比不推更糟：用户会以为那是系统知道点什么。
  */
-export function presetPick({ run, positions }: PresetInput): RolePick {
-  const empty: RolePick = { position_ids: [], role_ids: [], custom_position_name: '' }
-  if (run === undefined) return empty
-
-  const profile: BrandIntakeProfile = run.profile
+export function recommendFromIntake({ run, positions }: RecommendInput): DutyRecommendation[] {
+  if (run === undefined) return []
+  const known = new Set(
+    positions.flatMap((p) => p.roles.filter((r) => r.planned !== true).map((r) => r.id)),
+  )
+  const out: DutyRecommendation[] = []
+  const push = (role_id: string, reason: string): void => {
+    if (known.has(role_id) && !out.some((r) => r.role_id === role_id)) out.push({ role_id, reason })
+  }
   const kinds = new Set(run.inputs.map((i) => i.kind))
-  const position_ids: string[] = []
-
   const website = kinds.has('website')
   const amazon = kinds.has('amazon_listing') || kinds.has('amazon_storefront')
-
   // 官网 = 有一个自己的店要运营；Shopify 只是让这一条更确定，不是它的前提
-  if (website && has(positions, WEB_OPS)) position_ids.push(WEB_OPS)
-  // 官网或 Amazon 都要有人答客户的问题（Amazon 客服是客服岗里的一条职责）
-  if ((website || amazon) && has(positions, CUSTOMER_CARE)) position_ids.push(CUSTOMER_CARE)
-
-  const social = positions.find((p) => p.id === SOCIAL_MEDIA)
-  const role_ids = [
-    ...new Set(
-      (profile.social_links?.value ?? [])
-        .map((link) => SOCIAL_ROLE[link.platform])
-        .filter((id): id is string => id !== undefined)
-        .filter((id) => (social?.roles ?? []).some((r) => r.id === id)),
-    ),
-  ]
-
-  return {
-    position_ids,
-    role_ids,
-    /*
-     * WP142（docs/78 第 7 步）：**不再预填「社媒运营」**。那一格问的是"你自己勾的这几条
-     * 合成的岗位叫什么"，而预勾是我们替他勾的——他还没开口，框里已经有个名字了，
-     * 看着像系统替他起好了一个他没要的岗位。空着，占位字写「我的岗位」。
-     */
-    custom_position_name: '',
+  if (website) {
+    const shopify = run.profile.storefront_platform?.value === 'shopify'
+    const reason = shopify ? '官网分析：店是 Shopify 搭的' : '官网分析：你有自己的网站'
+    for (const p of positions)
+      if (p.id === WEB_OPS) for (const r of p.roles) if (r.planned !== true) push(r.id, reason)
+    for (const id of SITE_CARE) push(id, '官网分析：网站上的客户要有人答')
   }
+  if (amazon) push(AMAZON_CARE, '分析到你在 Amazon 上卖')
+  for (const link of run.profile.social_links?.value ?? []) {
+    const id = SOCIAL_ROLE[link.platform]
+    const label = PLATFORM_LABEL[link.platform]
+    if (id !== undefined && label !== undefined) push(id, `官网上挂着你的 ${label}`)
+  }
+  return out
 }
 
-/**
- * WP142（Fable 定，docs/78 §1 #7）：第 ③ 步之前问一句「你这次主要想让它干什么」。
- *
- * 网址只看得出"有官网 / 有 Amazon / 有社媒"，看不出"这个人是来找红人的"——
- * 于是红人营销从来不会被预勾，而来内测的朋友一大半是冲红人来的。所以直接问，
- * 按答案勾岗位。可多选；默认就是网址预勾出来的那个样子（勾了客服就是「客服」）。
- */
-export type Purpose = 'kol' | 'care' | 'b2b'
-
-export const PURPOSE_POSITION: Readonly<Record<Purpose, string>> = {
-  kol: KOL_MARKETING,
-  care: CUSTOMER_CARE,
-  // WP171：做外贸的工厂 / 贸易公司是冲 B2B 来的——网址同样看不出来，所以也直接问
-  b2b: B2B,
-}
-
-export const PURPOSES: readonly Purpose[] = ['kol', 'care', 'b2b']
-
-/**
- * WP171（Fable 终审）：「都要」只按齐**红人营销与客服**。B2B 只有用户明确按了那一项才勾——
- * 做独立站的人按「都要」不该多出一个 B2B 岗位。
- */
-export const BOTH_PURPOSES: readonly Purpose[] = ['kol', 'care']
-
-/** 按下 / 松开「都要」：只动红人与客服那两项，B2B 选没选原样留着。 */
-export function toggleBoth(value: readonly Purpose[], available: readonly Purpose[]): Purpose[] {
-  const both = BOTH_PURPOSES.filter((p) => available.includes(p))
-  const on = both.length > 0 && both.every((p) => value.includes(p))
-  const rest = value.filter((p) => !both.includes(p))
-  return on ? rest : PURPOSES.filter((p) => rest.includes(p) || both.includes(p))
-}
-
-/** 这台机器上问得出哪几个（岗位没装就不问那一项）。 */
-export function availablePurposes(positions: OnboardingPositionView[]): Purpose[] {
-  return PURPOSES.filter((p) => has(positions, PURPOSE_POSITION[p]))
-}
-
-/** 现在的勾选对应哪几个目的（默认值就从预勾读出来）。 */
-export function purposesOf(pick: RolePick): Purpose[] {
-  return PURPOSES.filter((p) => pick.position_ids.includes(PURPOSE_POSITION[p]))
-}
-
-/**
- * 按目的改勾选：选中的目的对应的岗位勾上，没选的去掉；**别的岗位与单勾的职责不动**
- * （网站运营、社媒渠道那几条是网址预勾的，与这一问无关）。
- */
-export function applyPurposes(
-  pick: RolePick,
-  purposes: readonly Purpose[],
-  positions: OnboardingPositionView[],
-): RolePick {
-  const managed = new Set(PURPOSES.map((p) => PURPOSE_POSITION[p]))
-  const kept = pick.position_ids.filter((id) => !managed.has(id))
-  const wanted = PURPOSES.filter((p) => purposes.includes(p))
-    .map((p) => PURPOSE_POSITION[p])
-    .filter((id) => has(positions, id))
-  return { ...pick, position_ids: [...kept, ...wanted] }
+/** AI 的推荐排在前面；两边都推了同一条就留 AI 那句（它引的是用户原话）。 */
+export function mergeRecommendations(
+  ai: readonly DutyRecommendation[],
+  intake: readonly DutyRecommendation[],
+): DutyRecommendation[] {
+  const out = [...ai]
+  for (const r of intake) if (!out.some((x) => x.role_id === r.role_id)) out.push(r)
+  return out
 }

@@ -123,6 +123,35 @@ export interface PositionSupervisorInput {
   person_id: string | null
 }
 
+/**
+ * WP234（docs/54 §6.4）：一次岗位合并 / 移动职责 / 拆出的回执。
+ * 安放不带权限：动的只是「这条活儿算哪个岗位的」，分配本身一条不碰。
+ */
+export interface PositionReshapeView {
+  /** 动过的岗位（合并后被删掉的那个不在里面）。 */
+  positions: PositionView[]
+  /** 改了安放的分配条数。 */
+  moved_assignments: number
+  /** 跟着改了岗位的事项件数。 */
+  moved_matters: number
+  /** 合并时：岗位层记忆搬了几条、两版都留的几条。 */
+  memory?: { moved: number; kept_both: number }
+  /** 合并后被删掉的自建岗位 id。 */
+  deleted?: string
+  /** 拆出时：岗位层记忆复制给新岗位几条（Luoye 10-06：两边都留）。 */
+  memory_copied?: number
+}
+
+/** WP234（docs/54 §6.5）：负责人转交的回执。 */
+export interface OwnerTransferView {
+  person_id: string
+  person_name: string
+  /** 对方那条 `common.owner` 分配。 */
+  assignment_id: string
+  /** 对方本来就是负责人（这次什么都没建）。 */
+  already: boolean
+}
+
 export interface AssignmentView {
   assignment_id: string
   person_id: string
@@ -138,6 +167,8 @@ export interface AssignmentView {
   revoked_at?: string
   /** 05 §4：范围为空且职责按 assigned 取数 → 这条分配现在查不到任何东西 */
   unassigned_range: boolean
+  /** WP234（docs/54 §6.1）：这条活儿归哪个岗位（安放了就是安放的那个；没安放、只挂在一个岗位里就是它；分不清就没有）。只管展示归堆，不带权限。 */
+  position?: { id: string; name: string }
 }
 
 export interface MemberView {
@@ -493,6 +524,26 @@ export interface OrgPort {
     id: string,
     input: PositionSupervisorInput,
   ): MaybePromise<PositionView>
+  /** WP234（docs/54 §6.4）：岗位 `id` 合并到 `into`。可选：没装的宿主回 501。 */
+  mergePosition?(
+    actor: OrgActor,
+    id: string,
+    input: { into: string },
+  ): MaybePromise<PositionReshapeView>
+  /** WP234：把岗位 `id` 里的一条职责移到岗位 `to`。 */
+  movePositionDuty?(
+    actor: OrgActor,
+    id: string,
+    input: { role_id: string; to: string },
+  ): MaybePromise<PositionReshapeView>
+  /** WP234：从岗位 `id` 拆出几条职责成一个新岗位。 */
+  splitPosition?(
+    actor: OrgActor,
+    id: string,
+    input: { name: string; role_ids: string[] },
+  ): MaybePromise<PositionReshapeView>
+  /** WP234（docs/54 §6.5）：把负责人身份交给另一位成员（第一版不收回自己那一条）。 */
+  transferOwner?(actor: OrgActor, input: { person_id: string }): MaybePromise<OwnerTransferView>
   assign(actor: OrgActor, input: AssignInput): MaybePromise<AssignmentView[]>
   updateAssignment(
     actor: OrgActor,
@@ -689,6 +740,17 @@ const PositionBody = z.object({
 const PositionSupervisorBody = z.object({
   person_id: z.string().min(1).max(128).nullable(),
 })
+
+const MergePositionBody = z.object({ into: z.string().min(1).max(64) })
+const MoveDutyBody = z.object({
+  role_id: z.string().min(1).max(128),
+  to: z.string().min(1).max(64),
+})
+const SplitPositionBody = z.object({
+  name: z.string().min(1).max(64),
+  role_ids: z.array(z.string().min(1).max(128)).min(1).max(30),
+})
+const TransferOwnerBody = z.object({ person_id: z.string().min(1).max(128) })
 
 const AssignBody = z.object({
   person_id: z.string().min(1).max(128),
@@ -1003,6 +1065,94 @@ export function orgRoutes(): Route[] {
         if (port.setPositionSupervisor === undefined)
           throw new ApiError('not_implemented', '这个服务进程不支持设岗位上级')
         return ok(c, await port.setPositionSupervisor(actorOf(c), param(c, 'id'), input))
+      },
+    ),
+    // ── WP234（docs/54 §6.4 / §6.5）：岗位合并 / 移动职责 / 拆出；负责人转交 ──
+    route(
+      {
+        method: 'post',
+        path: '/v1/org/positions/:id/merge',
+        operationId: 'mergePosition',
+        summary: '把这个岗位合并到另一个（职责、安放、事项、岗位层记忆都跟过去）',
+        tag: TAG,
+        auth: 'bearer',
+        assignment: true,
+        authz: WRITE,
+        params: [{ name: 'id', in: 'path', required: true, description: '被合并的岗位 id' }],
+        body: MergePositionBody,
+        returns: 'PositionReshapeView',
+      },
+      async (c, deps) => {
+        const input = await body(c, MergePositionBody)
+        const port = portOf(deps)
+        if (port.mergePosition === undefined)
+          throw new ApiError('not_implemented', '这个服务进程不支持合并岗位')
+        return ok(c, await port.mergePosition(actorOf(c), param(c, 'id'), input))
+      },
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/org/positions/:id/move-duty',
+        operationId: 'movePositionDuty',
+        summary: '把这个岗位里的一条职责移到另一个岗位（岗位层记忆留在原岗位）',
+        tag: TAG,
+        auth: 'bearer',
+        assignment: true,
+        authz: WRITE,
+        params: [{ name: 'id', in: 'path', required: true, description: '职责现在所在的岗位 id' }],
+        body: MoveDutyBody,
+        returns: 'PositionReshapeView',
+      },
+      async (c, deps) => {
+        const input = await body(c, MoveDutyBody)
+        const port = portOf(deps)
+        if (port.movePositionDuty === undefined)
+          throw new ApiError('not_implemented', '这个服务进程不支持移动职责')
+        return ok(c, await port.movePositionDuty(actorOf(c), param(c, 'id'), input))
+      },
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/org/positions/:id/split',
+        operationId: 'splitPosition',
+        summary: '从这个岗位拆出几条职责成一个新岗位',
+        tag: TAG,
+        auth: 'bearer',
+        assignment: true,
+        authz: WRITE,
+        params: [{ name: 'id', in: 'path', required: true, description: '被拆的岗位 id' }],
+        body: SplitPositionBody,
+        returns: 'PositionReshapeView',
+      },
+      async (c, deps) => {
+        const input = await body(c, SplitPositionBody)
+        const port = portOf(deps)
+        if (port.splitPosition === undefined)
+          throw new ApiError('not_implemented', '这个服务进程不支持拆分岗位')
+        return ok(c, await port.splitPosition(actorOf(c), param(c, 'id'), input), 201)
+      },
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/org/owner/transfer',
+        operationId: 'transferOwner',
+        summary: '把负责人身份交给另一位成员（第一版不收回自己那一条）',
+        tag: TAG,
+        auth: 'bearer',
+        assignment: true,
+        authz: WRITE,
+        body: TransferOwnerBody,
+        returns: 'OwnerTransferView',
+      },
+      async (c, deps) => {
+        const input = await body(c, TransferOwnerBody)
+        const port = portOf(deps)
+        if (port.transferOwner === undefined)
+          throw new ApiError('not_implemented', '这个服务进程不支持转交负责人')
+        return ok(c, await port.transferOwner(actorOf(c), input))
       },
     ),
     route(

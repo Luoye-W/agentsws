@@ -59,6 +59,7 @@ import {
   normalizeMarketLanguages,
   normalizeMarkets,
   platformKitOf,
+  rolesOfPlan,
   STOREFRONT_PLATFORMS,
   skillOnPlatform,
   storefrontUsableService,
@@ -75,6 +76,8 @@ import {
   type InvitesIdentity,
   OnboardingError,
 } from './invites.js'
+import { catalogRoles, type Suggester, suggestPositions } from './onboarding-suggest.js'
+import { WORKSPACE_BASE_ROLES } from './position-placements.js'
 
 export { OnboardingError } from './invites.js'
 
@@ -266,6 +269,26 @@ export interface OnboardingOptions {
   members(): Promise<{ person_id: PersonId; name: string; email: string }[]>
   /** 岗位模板（27）——`org.ts` 的那一份。 */
   positions(): PositionLike[]
+  /**
+   * WP234（docs/54 §6.1）：第 ③ 步「按类别浏览」的类别目录（`org.catalog()`：出厂的那几个模板）。
+   * 不给就退回岗位行（去掉「负责人」与底座职责）。
+   */
+  catalog?(): PositionLike[]
+  /**
+   * WP234（docs/54 §6.2）：岗位清单落成岗位行、新分配安放上去（`org.ensurePosition` / `org.place`）。
+   * 不给就只建分配、不建岗位行（老行为）。
+   */
+  positionStore?: {
+    ensure(input: { name: string; role_ids: RoleId[]; template_id?: string }, by: PersonId): string
+    place(assignment_id: string, position_id: string): void
+    /** 这条分配安放在哪（没安放 = `undefined`）。不给就当一条都没安放。 */
+    placementOf?(assignment_id: string): string | undefined
+  }
+  /**
+   * WP234：「说说你要做什么工作」用的推荐引擎。**每次现取**——第 ① 步之后模型才接上。
+   * 回 `undefined` = 这会儿没有能用的（界面照实说，退回只手选）。
+   */
+  suggester?(): Suggester | undefined
   /** 现在接上了哪些职责连接器 kind（email / shopify / ga4 …）。 */
   connectedKinds(): string[]
   /** 装了哪些技能包。 */
@@ -572,6 +595,11 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
   }
 
   function expandRoles(input: OnboardingPlanInput, positions: PositionLike[]): RoleId[] {
+    // WP234（docs/54 §6.2）：给了岗位清单就按它展开（老三格不看）；职责定义没装的不进清单
+    if (input.positions !== undefined)
+      return rolesOfPlan(input.positions).filter(
+        (id) => roles.roles.get(id) !== undefined && !WORKSPACE_BASE_ROLES.has(id),
+      )
     const out: RoleId[] = []
     const seen = new Set<RoleId>()
     const push = (id: RoleId): void => {
@@ -676,7 +704,21 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
     }
 
     const held = new Set(activeOf(options.owner).map((a) => a.role_id))
-    const plannedPositions: OnboardingPositionPlanItem[] = input.position_ids.map((id) => {
+    const fromList = (input.positions ?? []).flatMap((p, i): OnboardingPositionPlanItem[] => {
+      const ids = p.role_ids.filter((r) => roleIds.includes(r))
+      if (ids.length === 0) return []
+      return [
+        {
+          // 复用模板的那一行就是模板 id；自建的按顺序编号（界面拿它当 key）
+          position_id: p.template_id ?? `custom:${String(i)}`,
+          name: p.name.trim() === '' ? '我的岗位' : p.name.trim(),
+          role_ids: ids,
+          already_held: ids.every((r) => held.has(r)),
+        },
+      ]
+    })
+    const legacyIds = input.positions === undefined ? input.position_ids : []
+    const plannedPositions: OnboardingPositionPlanItem[] = legacyIds.map((id) => {
       const position = positions.find((p) => p.id === id)
       const ids = tickedRoles(position?.roles ?? [], input.role_ids)
         .map((r) => r.role)
@@ -688,8 +730,9 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
         already_held: ids.length > 0 && ids.every((r) => held.has(r)),
       }
     })
+    plannedPositions.push(...fromList)
     // 46 §3 I6：只勾职责不勾岗位 → 一个"自定义岗位"，名字用户填，默认"我的岗位"
-    const extras = input.role_ids.filter(
+    const extras = (input.positions === undefined ? input.role_ids : []).filter(
       (r) => !plannedPositions.some((p) => p.role_ids.includes(r)) && roles.roles.get(r),
     )
     if (extras.length > 0) {
@@ -715,6 +758,28 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
       role_ids: roleIds,
       ...(platform_cli === undefined ? {} : { platform_cli }),
     }
+  }
+
+  /**
+   * WP234：类别目录（不含「负责人」与底座职责；一条职责都不剩的类别不出）。
+   *
+   * Luoye 10-06：**显示公司改过的名字**——公司把「客服」改名成「售后」，目录里就叫「售后」，
+   * 出厂名记在 `factory` 里（界面上小字附后）。职责清单仍按出厂模板（目录不随公司的合并变形）。
+   */
+  const catalogOf = (): (PositionLike & { factory?: string })[] => {
+    const rows = options.positions()
+    return (options.catalog?.() ?? rows.filter((p) => p.id !== 'owner'))
+      .map((p) => {
+        const renamed = rows.find((r) => r.id === p.id)?.name
+        const changed =
+          renamed !== undefined && renamed.zh.trim() !== '' && renamed.zh !== p.name.zh
+        return {
+          ...p,
+          ...(changed ? { name: { ...p.name, zh: renamed.zh }, factory: p.name.zh } : {}),
+          roles: p.roles.filter((r) => !WORKSPACE_BASE_ROLES.has(r.role)),
+        }
+      })
+      .filter((p) => p.roles.length > 0)
   }
 
   const port: OnboardingPort = {
@@ -833,9 +898,13 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
     },
 
     positions(): OnboardingPositionView[] {
-      return options.positions().map((p) => ({
+      // WP234（docs/54 §6.1）：这里列的是**类别目录**——「负责人」与底座职责不在里面
+      // （负责人是身份不是岗位；`common.*` 不算任何岗位的活）
+      return catalogOf().map((p) => ({
         id: p.id,
         name: p.name.zh,
+        // Luoye 10-06：公司改过名就显示改过的，出厂名小字附后
+        ...(p.factory === undefined ? {} : { factory_name: p.factory }),
         // WP213：向导里岗位前面的图标（同 id 内置模板 yml 里的）
         ...(bundledPositionIcon(p.id) === undefined
           ? {}
@@ -889,17 +958,85 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
         })
       }
       // WP138：留一条痕——以后要分「向导建的」与「手动分配的」，靠的就是它
+      /*
+       * WP234（docs/54 §6.2）：给了岗位清单——每一行落成一个岗位行（复用模板或新建自建岗位），
+       * 这一次新建的分配安放在它那一行的岗位上。已经持有的跳过、**不挪**它原来的安放。
+       */
+      const builtPositions: NonNullable<OnboardingApplyView['positions']> = []
+      if (input.positions !== undefined && options.positionStore !== undefined) {
+        const store = options.positionStore
+        const fresh = new Map(created.map((c) => [c.role_id, c.id]))
+        /*
+         * 已经持有、但**还没安放**的那几条（老分配）：用户在第 ③ 步明说了它归这个岗位，就按他说的
+         * 安放——不然它按老规则同时算在模板岗位和这个新岗位里，左栏出两份。已经安放过的不挪。
+         */
+        const looseHeld = new Map(
+          [...held.values()]
+            .filter((a) => store.placementOf?.(a.id) === undefined)
+            .map((a) => [a.role_id, a.id]),
+        )
+        for (const item of plan.positions) {
+          const source = input.positions.find(
+            (p, i) => (p.template_id ?? `custom:${String(i)}`) === item.position_id,
+          )
+          const id = store.ensure(
+            {
+              name: item.name,
+              role_ids: item.role_ids,
+              ...(source?.template_id === undefined ? {} : { template_id: source.template_id }),
+            },
+            actor.person_id,
+          )
+          for (const role_id of item.role_ids) {
+            const aid = fresh.get(role_id) ?? looseHeld.get(role_id)
+            if (aid !== undefined) store.place(aid, id)
+          }
+          builtPositions.push({ id, name: item.name, role_ids: item.role_ids })
+        }
+      }
       if (created.length > 0)
         emit('onboarding.applied', actor.person_id, {
           assignment_ids: created.map((c) => c.id),
           ranges,
+          // WP234：建了哪几个岗位（id 与职责；不带他那段原话）
+          ...(builtPositions.length === 0
+            ? {}
+            : { positions: builtPositions.map((p) => ({ id: p.id, role_ids: p.role_ids })) }),
         })
       return {
         created_assignments: created,
         skipped,
         ranges: ranges.map((r) => ({ kind: r.kind, id: r.id, label: rangeLabel(r) })),
         plan,
+        ...(builtPositions.length === 0 ? {} : { positions: builtPositions }),
       } satisfies OnboardingApplyView
+    },
+
+    async suggest(_actor, input) {
+      const catalog = catalogOf().map((p) => ({
+        id: p.id,
+        name: p.name.zh,
+        roles: p.roles.map((r) => ({ id: r.role })),
+      }))
+      const list = catalogRoles(catalog, (id) => {
+        const def = roles.roles.get(id)
+        // 第二批（planned）的职责不推荐：推荐了也用不上
+        if (def === undefined || def.status === 'planned') return undefined
+        return { name: def.name.zh, name_en: def.name.en, what_it_does: def.description }
+      })
+      const out = await suggestPositions({
+        text: input.text,
+        catalog,
+        roles: list,
+        suggester: options.suggester?.(),
+      })
+      // 原话不进日志（21 §5）：只记来源与条数
+      emit('onboarding.suggested', _actor.person_id, {
+        source: out.source,
+        roles: out.roles.length,
+        positions: out.positions.length,
+      })
+      return out
     },
 
     async peers(_actor): Promise<DiscoveryStateView> {

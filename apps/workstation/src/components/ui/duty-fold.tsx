@@ -8,7 +8,7 @@
  *   不再出第二层（多一层折叠去看一条，纯属白花认知成本）。
  *
  * 首次设置第 ③ 步（46）那个"岗位在外、职责折叠"的样子就是这件的原型
- * （`components/onboarding/role-picker.tsx`）。
+ * （WP234 起向导第 ③ 步换成了 `components/onboarding/position-planner.tsx`）。
  */
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { type ReactNode, useState } from 'react'

@@ -13,27 +13,21 @@
  * 5. 第 ② 步：贴网址 → 后台跑（呼吸标记）→ 可以先去第 ③ 步再回来 → 档案卡 →
  *    只把改过的那几格发上去；超预算停下来也照样给卡；「还没有网站」旁路；
  *    用官方接口时明说一句"内容会经过我们的云"；
- * 6. 第 ③ 步按分析结果**预勾**（70 §5），用户动过手之后不再覆盖；
+ * 6. 第 ③ 步（WP234）：分析结果与 AI 只是**推荐**，一条不预勾；选上的职责按建议分成岗位，
+ *    用户改完以他为准，交给服务端的是岗位清单；
  * 7. 第 ④ 步那张清单与完成屏（WP51 / WP112 原有的那几条，一条没删）；
  * 8. 「加入一家公司」跟着"公司"这件事挪到第 ② 步——挪了位置不等于换了行为。
  *
  * 末尾那一组是**从旧文件整组搬过来的** `ProfileForm`：它不在向导里了（问的东西
  * 并进了第 ② 步那一轮分析），但设置页还在用它，那一页的行为一条都没变。
  */
-import { screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { modelTestKey } from '@/components/onboarding/ai-step'
-import {
-  applyPurposes,
-  availablePurposes,
-  presetPick,
-  purposesOf,
-  toggleBoth,
-} from '@/components/onboarding/preset-roles'
+import { PositionPlanner } from '@/components/onboarding/position-planner'
+import { mergeRecommendations, recommendFromIntake } from '@/components/onboarding/preset-roles'
 import { ProfileForm } from '@/components/onboarding/profile-form'
-import { PurposePicker } from '@/components/onboarding/purpose-picker'
-import { expandPick, RolePicker } from '@/components/onboarding/role-picker'
 import type {
   BrandIntakeRun,
   CapabilitySourceSettings,
@@ -47,6 +41,7 @@ import type {
   OnboardingPlanView,
   OnboardingPositionView,
   OnboardingStateView,
+  OnboardingSuggestView,
 } from '@/lib/api'
 import { OnboardingPage } from '@/pages/onboarding'
 import { renderWithProviders } from './helpers'
@@ -324,6 +319,9 @@ const state = {
     created_assignments: { id: string; role_id: string; role_name: string }[]
     skipped: string[]
   },
+  /** WP234：「帮我推荐」发出去的原话与回的那一份。 */
+  suggests: [] as string[],
+  suggestion: { source: 'unavailable', roles: [], positions: [] } as OnboardingSuggestView,
 }
 
 vi.mock('@/lib/api', async () => {
@@ -332,6 +330,10 @@ vi.mock('@/lib/api', async () => {
     ...actual,
     getOnboardingState: async () => state.state,
     listOnboardingPositions: async () => POSITIONS,
+    suggestOnboarding: async (text: string) => {
+      state.suggests.push(text)
+      return state.suggestion
+    },
     listDiscoveryPeers: async () => state.peers,
     renameMe: async (name: string) => {
       state.renames.push(name)
@@ -488,6 +490,13 @@ beforeEach(() => {
   state.linkHold = undefined
   state.templates = undefined
   state.applyResult = { created_assignments: [], skipped: [] }
+  state.suggests = []
+  state.suggestion = {
+    source: 'keyword',
+    note: '这次没用 AI，是按你话里的词对的。',
+    roles: [],
+    positions: [],
+  }
   state.plan = undefined
   state.applyPlan = undefined
 })
@@ -497,6 +506,27 @@ async function passAi(): Promise<void> {
   const user = userEvent.setup()
   await user.click(await screen.findByTestId('ai-demo'))
   await screen.findByTestId('onboarding-business')
+}
+
+/** WP234：第 ③ 步交上去的「客服」那一行（从类别「客服」里点上两条）。 */
+const CARE_ROW = {
+  name: '客服',
+  role_ids: ['dtc.support', 'amz.support'],
+  template_id: 'customer-care',
+}
+
+/** WP234：第 ③ 步从「按类别浏览」里把客服那两条点上。 */
+async function pickCare(user: ReturnType<typeof userEvent.setup>): Promise<void> {
+  const toggles = await screen.findAllByTestId('onboarding-category-toggle')
+  await user.click(
+    toggles.find((t) => t.getAttribute('data-category') === 'customer-care') as HTMLElement,
+  )
+  for (const id of ['dtc.support', 'amz.support'])
+    await user.click(
+      screen
+        .getAllByTestId('onboarding-role')
+        .find((b) => b.getAttribute('data-role') === id) as HTMLElement,
+    )
 }
 
 describe('70 §1 新四步', () => {
@@ -1004,7 +1034,7 @@ describe('70 §3 第 ② 步：贴一个网址', () => {
   })
 })
 
-describe('70 §5 第 ③ 步：按分析结果预勾', () => {
+describe('WP234 第 ③ 步：说说你要做什么 → 推荐（不预勾）→ 你的岗位', () => {
   /** 确认档案卡 → 进第 ③ 步。 */
   async function confirmAndGo(): Promise<void> {
     const user = userEvent.setup()
@@ -1016,50 +1046,269 @@ describe('70 §5 第 ③ 步：按分析结果预勾', () => {
     await user.click(screen.getByTestId('onboarding-next'))
     await screen.findByTestId('onboarding-roles')
   }
-
-  it('Shopify 官网 → 预勾网站运营与客服；社媒链接 → 只勾对应那几条渠道', async () => {
-    state.run = websiteRun()
-    renderWithProviders(<OnboardingPage />)
-    await confirmAndGo()
-
-    // 网站运营 2 条 + 客服 2 条 + Meta（instagram）+ TikTok = 6
-    await waitFor(() => {
-      expect(screen.getByTestId('onboarding-role-count').textContent).toContain('已勾 6 条')
-    })
-    // 社媒勾的是**渠道职责**，不是整个九条的岗位：Reddit 一条没勾上
-    expect(screen.getByTestId('onboarding-role-count').textContent).not.toContain('已勾 7 条')
-  })
-
-  it('预勾都可改：去掉一个岗位，勾数跟着少', async () => {
+  /** 「还没有网站」旁路 → 进第 ③ 步。 */
+  async function noSiteAndGo(): Promise<void> {
     const user = userEvent.setup()
-    state.run = websiteRun()
-    renderWithProviders(<OnboardingPage />)
-    await confirmAndGo()
-    await waitFor(() => {
-      expect(screen.getByTestId('onboarding-role-count').textContent).toContain('已勾 6 条')
-    })
-
-    const positions = await screen.findAllByTestId('onboarding-position')
-    await user.click(positions[0] as HTMLElement)
-    await waitFor(() => {
-      expect(screen.getByTestId('onboarding-role-count').textContent).toContain('已勾 4 条')
-    })
-  })
-
-  it('走了「还没有网站」旁路：一条都不预勾（凭空勾几个比不勾更糟）', async () => {
-    const user = userEvent.setup()
-    renderWithProviders(<OnboardingPage />)
     await passAi()
     await user.click(screen.getByTestId('intake-no-site'))
     await user.click(screen.getByTestId('onboarding-next'))
     await screen.findByTestId('onboarding-roles')
+  }
+  const rows = () =>
+    screen.getAllByTestId('onboarding-board-row').map((row) => ({
+      key: row.getAttribute('data-row') ?? '',
+      name: (within(row).getByTestId('onboarding-board-name') as HTMLInputElement).value,
+      duties: within(row)
+        .queryAllByTestId('onboarding-board-duty')
+        .map((d) => d.getAttribute('data-role')),
+    }))
+
+  it('Shopify 官网分析：只出「推荐」，一条都不预勾；一条没选不让往下走', async () => {
+    state.run = websiteRun()
+    renderWithProviders(<OnboardingPage />)
+    await confirmAndGo()
+    const recs = await screen.findAllByTestId('onboarding-rec-duty')
+    // 网站运营 2 条 + 网站客服 + 官网上挂着的 Instagram 与 TikTok = 5；Reddit 不推
+    expect(recs.map((r) => r.getAttribute('data-role'))).toEqual([
+      'dtc.store',
+      'dtc.content',
+      'dtc.support',
+      'social.instagram',
+      'social.tiktok',
+    ])
+    expect(recs.every((r) => r.getAttribute('aria-pressed') === 'false')).toBe(true)
+    expect(screen.getAllByTestId('onboarding-rec-reason')[0]?.textContent).toContain('Shopify')
+    expect(screen.getByTestId('onboarding-board-empty')).toBeTruthy()
     expect(screen.getByTestId('onboarding-role-count').textContent).toContain('至少勾一条')
     expect((screen.getByTestId('onboarding-next') as HTMLButtonElement).disabled).toBe(true)
   })
 
-  // 纯函数那一层：这张对照表值得单独钉（70 §5）
-  it('对照表：Amazon 链接 → 客服；没有官网就不勾网站运营', () => {
-    const amazon = presetPick({
+  it('点一条推荐才算选上；它进「你的岗位」，按类别成一个岗位', async () => {
+    const user = userEvent.setup()
+    state.run = websiteRun()
+    renderWithProviders(<OnboardingPage />)
+    await confirmAndGo()
+    const store = (await screen.findAllByTestId('onboarding-rec-duty')).find(
+      (r) => r.getAttribute('data-role') === 'dtc.store',
+    ) as HTMLElement
+    await user.click(store)
+    expect(store.getAttribute('aria-pressed')).toBe('true')
+    expect(rows()).toEqual([{ key: expect.any(String), name: '网站运营', duties: ['dtc.store'] }])
+    expect(screen.getByTestId('onboarding-role-count').textContent).toBe('1 个岗位 · 1 条职责')
+    expect((screen.getByTestId('onboarding-next') as HTMLButtonElement).disabled).toBe(false)
+  })
+
+  it('说说你要做什么 → 推荐带理由与原话、给划分建议；「按推荐来」才选上并按建议分', async () => {
+    const user = userEvent.setup()
+    state.suggestion = {
+      source: 'ai',
+      roles: [
+        { role_id: 'social.reddit', reason: '要自己发帖', quote: '自己发帖' },
+        { role_id: 'kol.youtube', reason: '要找红人', quote: '找 YouTube 红人' },
+      ],
+      positions: [{ name: 'Reddit 与红人', role_ids: ['social.reddit', 'kol.youtube'] }],
+    }
+    renderWithProviders(<OnboardingPage />)
+    await noSiteAndGo()
+    await user.type(
+      screen.getByTestId('onboarding-intent-text'),
+      '在 Reddit 上自己发帖，再找 YouTube 红人',
+    )
+    await user.click(screen.getByTestId('onboarding-intent-go'))
+    await screen.findByTestId('onboarding-recs')
+    expect(state.suggests).toEqual(['在 Reddit 上自己发帖，再找 YouTube 红人'])
+    const reasons = screen.getAllByTestId('onboarding-rec-reason').map((r) => r.textContent)
+    expect(reasons[0]).toBe('要自己发帖「自己发帖」')
+    expect(screen.getByTestId('onboarding-recs-split').textContent).toContain('「Reddit 与红人」2')
+    // 推荐不是选中
+    expect(
+      screen.getAllByTestId('onboarding-rec-duty').map((r) => r.getAttribute('aria-pressed')),
+    ).toEqual(['false', 'false'])
+    expect(screen.getByTestId('onboarding-board-empty')).toBeTruthy()
+    // 类别目录里也带「推荐」小标签
+    await user.click(
+      screen
+        .getAllByTestId('onboarding-category-toggle')
+        .find((t) => t.getAttribute('data-category') === 'social-media') as HTMLElement,
+    )
+    const reddit = screen
+      .getAllByTestId('onboarding-role')
+      .find((b) => b.getAttribute('data-role') === 'social.reddit') as HTMLElement
+    expect(reddit.getAttribute('data-recommended')).toBe('true')
+    expect(reddit.getAttribute('aria-pressed')).toBe('false')
+
+    await user.click(screen.getByTestId('onboarding-recs-adopt'))
+    expect(rows().map(({ name, duties }) => ({ name, duties }))).toEqual([
+      { name: 'Reddit 与红人', duties: ['social.reddit', 'kol.youtube'] },
+    ])
+  })
+
+  it('这次没用 AI（按词对、也没对上）：照实说一句，下面照样能手选', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(<OnboardingPage />)
+    await noSiteAndGo()
+    await user.type(screen.getByTestId('onboarding-intent-text'), '做客服')
+    await user.click(screen.getByTestId('onboarding-intent-go'))
+    expect((await screen.findByTestId('onboarding-intent-note')).textContent).toContain(
+      '这次没用 AI',
+    )
+    expect(screen.queryByTestId('onboarding-recs')).toBeNull()
+    await pickCare(user)
+    expect(rows().map(({ name, duties }) => ({ name, duties }))).toEqual([
+      { name: '客服', duties: ['dtc.support', 'amz.support'] },
+    ])
+  })
+
+  it('改岗位：「移到…」、拖动、改名、新建、删空——交上去的是改完的样子', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(<OnboardingPage />)
+    await noSiteAndGo()
+    await pickCare(user)
+    await user.click(
+      screen
+        .getAllByTestId('onboarding-category-toggle')
+        .find((t) => t.getAttribute('data-category') === 'web-ops') as HTMLElement,
+    )
+    await user.click(
+      screen
+        .getAllByTestId('onboarding-role')
+        .find((b) => b.getAttribute('data-role') === 'dtc.store') as HTMLElement,
+    )
+    const webKey = rows().find((r) => r.name === '网站运营')?.key ?? ''
+    // 「移到…」：Amazon 客服挪进网站运营那一行
+    const amz = screen
+      .getAllByTestId('onboarding-board-duty')
+      .find((d) => d.getAttribute('data-role') === 'amz.support') as HTMLElement
+    await user.selectOptions(within(amz).getByTestId('onboarding-board-move'), webKey)
+    // 改名
+    const webName = within(
+      screen
+        .getAllByTestId('onboarding-board-row')
+        .find((r) => r.getAttribute('data-row') === webKey) as HTMLElement,
+    ).getByTestId('onboarding-board-name')
+    await user.clear(webName)
+    await user.type(webName, '店长')
+    // 新建一个空岗位，把网站客服拖进去，再把变空的「客服」删掉
+    await user.click(screen.getByTestId('onboarding-board-add'))
+    const fresh = rows().at(-1)
+    expect(fresh?.name).toBe('新岗位')
+    const support = screen
+      .getAllByTestId('onboarding-board-duty')
+      .find((d) => d.getAttribute('data-role') === 'dtc.support') as HTMLElement
+    const target = screen
+      .getAllByTestId('onboarding-board-row')
+      .find((r) => r.getAttribute('data-row') === fresh?.key) as HTMLElement
+    const data = {
+      types: ['application/x-agentsws-duty'],
+      getData: () => 'dtc.support',
+      setData: () => {},
+    }
+    fireEvent.dragStart(support, { dataTransfer: data })
+    fireEvent.dragOver(target, { dataTransfer: data })
+    fireEvent.drop(target, { dataTransfer: data })
+    const careRow = screen
+      .getAllByTestId('onboarding-board-row')
+      .find(
+        (r) =>
+          (within(r).getByTestId('onboarding-board-name') as HTMLInputElement).value === '客服',
+      ) as HTMLElement
+    await user.click(within(careRow).getByTestId('onboarding-board-remove'))
+    expect(rows().map(({ name, duties }) => ({ name, duties }))).toEqual([
+      { name: '店长', duties: ['dtc.store', 'amz.support'] },
+      { name: '新岗位', duties: ['dtc.support'] },
+    ])
+    await user.click(screen.getByTestId('onboarding-next'))
+    await screen.findByTestId('onboarding-plan')
+    expect(state.plans.at(-1)?.positions).toEqual([
+      { name: '店长', role_ids: ['dtc.store', 'amz.support'], template_id: 'web-ops' },
+      { name: '新岗位', role_ids: ['dtc.support'] },
+    ])
+  })
+
+  it('每条职责的解释进 tooltip，不铺成灰字', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(<OnboardingPage />)
+    await noSiteAndGo()
+    await pickCare(user)
+    const hints = screen.getAllByTestId('onboarding-role-hint')
+    expect(hints.some((h) => (h.getAttribute('data-hint') ?? '').includes('退款与投诉邮件'))).toBe(
+      true,
+    )
+    expect(screen.queryByText('看退款与投诉邮件，拟一份回复给你定。')).toBeNull()
+  })
+
+  it('Luoye 10-06：类别显示公司改过的名字，出厂名小字附后', () => {
+    renderWithProviders(
+      <PositionPlanner
+        catalog={[
+          { ...(POSITIONS[1] as OnboardingPositionView), name: '售后', factory_name: '客服' },
+        ]}
+        text=""
+        onText={() => {}}
+        onSuggest={() => {}}
+        suggesting={false}
+        recommendations={[]}
+        board={{ selected: [], rows: [], customized: false, seq: 0 }}
+        onToggleDuty={() => {}}
+        onAdopt={() => {}}
+        onRegroup={() => {}}
+        onBoard={() => {}}
+      />,
+    )
+    const toggle = screen.getByTestId('onboarding-category-toggle')
+    expect(toggle.textContent).toContain('售后')
+    expect(screen.getByTestId('onboarding-category-factory').textContent).toBe('（客服）')
+  })
+
+  it('第二批的职责在目录里标「第二批」，说明进问号；照样能点上', async () => {
+    const user = userEvent.setup()
+    const WITH_B2B: OnboardingPositionView[] = [
+      {
+        id: 'b2b',
+        name: 'B2B',
+        roles: [
+          { id: 'b2b.sales', name: '业务', default: true, what_it_does: '回询盘。' },
+          {
+            id: 'b2b.marketplace',
+            name: 'B2B 平台运营',
+            default: false,
+            what_it_does: '管平台店铺。',
+            planned: true,
+          },
+        ],
+      },
+    ]
+    const onToggle = vi.fn()
+    renderWithProviders(
+      <PositionPlanner
+        catalog={WITH_B2B}
+        text=""
+        onText={() => {}}
+        onSuggest={() => {}}
+        suggesting={false}
+        recommendations={[]}
+        board={{ selected: [], rows: [], customized: false, seq: 0 }}
+        onToggleDuty={onToggle}
+        onAdopt={() => {}}
+        onRegroup={() => {}}
+        onBoard={() => {}}
+      />,
+    )
+    await user.click(screen.getByTestId('onboarding-category-toggle'))
+    const tags = screen.getAllByTestId('onboarding-role-planned')
+    expect(tags).toHaveLength(1)
+    expect(tags[0]?.textContent).toContain('第二批')
+    const planned = screen
+      .getAllByTestId('onboarding-role')
+      .find((b) => b.getAttribute('data-role') === 'b2b.marketplace') as HTMLElement
+    expect(planned.getAttribute('aria-pressed')).toBe('false')
+    await user.click(planned)
+    expect(onToggle).toHaveBeenLastCalledWith('b2b.marketplace')
+  })
+
+  // 纯函数那一层：这张对照表值得单独钉（70 §5，WP234 起产出推荐 + 理由）
+  it('对照表：Amazon 链接 → 只推 Amazon 客服；没有官网就不推网站运营', () => {
+    const amazon = recommendFromIntake({
       run: {
         ...websiteRun(),
         inputs: [{ url: 'https://www.amazon.com/dp/B0TEST', kind: 'amazon_listing' }],
@@ -1067,21 +1316,14 @@ describe('70 §5 第 ③ 步：按分析结果预勾', () => {
       },
       positions: POSITIONS,
     })
-    expect(amazon.position_ids).toEqual(['customer-care'])
-    expect(amazon.role_ids).toEqual([])
+    expect(amazon).toEqual([{ role_id: 'amz.support', reason: '分析到你在 Amazon 上卖' }])
   })
 
-  it('对照表：社媒勾到渠道；自定义岗位名不预填（WP142：不替他起名）', () => {
-    const pick = presetPick({ run: websiteRun(), positions: POSITIONS })
-    expect(pick.position_ids).toEqual(['web-ops', 'customer-care'])
-    expect(pick.role_ids).toEqual(['social.instagram', 'social.tiktok'])
-    expect(pick.custom_position_name).toBe('')
-  })
-
-  it('对照表：认不出来的平台一条都不勾；没有结果就整个空着', () => {
-    const unknown = presetPick({
+  it('对照表：认不出来的平台一条都不推；没有结果就一条不推；AI 的排前面', () => {
+    const unknown = recommendFromIntake({
       run: {
         ...websiteRun(),
+        inputs: [],
         profile: {
           social_links: {
             value: [{ platform: 'pinterest', url: 'https://pinterest.com/x' }],
@@ -1092,71 +1334,17 @@ describe('70 §5 第 ③ 步：按分析结果预勾', () => {
       },
       positions: POSITIONS,
     })
-    expect(unknown.role_ids).toEqual([])
-    expect(unknown.custom_position_name).toBe('')
-    expect(presetPick({ positions: POSITIONS })).toEqual({
-      position_ids: [],
-      role_ids: [],
-      custom_position_name: '',
-    })
-  })
-
-  it('对照表：这台机器上没装的岗位一个都不勾（装了几条显示几条）', () => {
-    const only = presetPick({ run: websiteRun(), positions: [POSITIONS[1] as never] })
-    expect(only.position_ids).toEqual(['customer-care'])
-    expect(only.role_ids).toEqual([])
-  })
-
-  it('勾一个岗位 = 它的职责全勾上；一条都没勾不让往下走', async () => {
-    const user = userEvent.setup()
-    renderWithProviders(<OnboardingPage />)
-    await passAi()
-    await user.click(screen.getByTestId('intake-no-site'))
-    await user.click(screen.getByTestId('onboarding-next'))
-
-    expect((await screen.findByTestId('onboarding-role-count')).textContent).toContain('至少勾一条')
-    expect((screen.getByTestId('onboarding-next') as HTMLButtonElement).disabled).toBe(true)
-
-    const positions = await screen.findAllByTestId('onboarding-position')
-    await user.click(positions[1] as HTMLElement)
-    await waitFor(() => {
-      expect(screen.getByTestId('onboarding-role-count').textContent).toContain('已勾 2 条')
-    })
-    expect((screen.getByTestId('onboarding-next') as HTMLButtonElement).disabled).toBe(false)
-  })
-
-  it('展开只勾一条职责 → 问它叫什么，默认"我的岗位"；每条职责的解释进 tooltip', async () => {
-    const user = userEvent.setup()
-    renderWithProviders(<OnboardingPage />)
-    await passAi()
-    await user.click(screen.getByTestId('intake-no-site'))
-    await user.click(screen.getByTestId('onboarding-next'))
-
-    await user.click((await screen.findAllByTestId('onboarding-expand'))[1] as HTMLElement)
-    const roles = await screen.findAllByTestId('onboarding-role')
-    await user.click(roles[0] as HTMLElement)
-
-    await waitFor(() => {
-      expect(screen.getByTestId('onboarding-role-count').textContent).toContain('已勾 1 条')
-    })
-    const custom = screen.getByTestId('onboarding-custom') as HTMLInputElement
-    expect(custom.placeholder).toBe('我的岗位')
-    // 36 §7：那句"它会干什么"在 tooltip 里，不铺成灰字
-    const hints = screen.getAllByTestId('onboarding-role-hint')
-    expect(hints.some((h) => (h.getAttribute('data-hint') ?? '').includes('退款与投诉邮件'))).toBe(
-      true,
-    )
-    expect(screen.queryByText('看退款与投诉邮件，拟一份回复给你定。')).toBeNull()
-  })
-
-  it('第 ③ 步铺在外面的只有一行说明', async () => {
-    const user = userEvent.setup()
-    renderWithProviders(<OnboardingPage />)
-    await passAi()
-    await user.click(screen.getByTestId('intake-no-site'))
-    await user.click(screen.getByTestId('onboarding-next'))
-    const roles = await screen.findByTestId('onboarding-roles')
-    expect(within(roles).getByText('勾一个岗位 = 它包含的职责全勾上')).toBeTruthy()
+    expect(unknown).toEqual([])
+    expect(recommendFromIntake({ positions: POSITIONS })).toEqual([])
+    expect(
+      mergeRecommendations(
+        [{ role_id: 'dtc.store', reason: 'AI', quote: '开店' }],
+        [
+          { role_id: 'dtc.store', reason: '官网' },
+          { role_id: 'dtc.support', reason: '官网' },
+        ],
+      ).map((r) => r.reason),
+    ).toEqual(['AI', '官网'])
   })
 })
 
@@ -1167,7 +1355,7 @@ describe('第 ④ 步与完成屏', () => {
     await passAi()
     await user.click(screen.getByTestId('intake-no-site'))
     await user.click(screen.getByTestId('onboarding-next'))
-    await user.click((await screen.findAllByTestId('onboarding-position'))[1] as HTMLElement)
+    await pickCare(user)
     await user.click(screen.getByTestId('onboarding-next'))
     await screen.findByTestId('onboarding-plan')
   }
@@ -1194,8 +1382,8 @@ describe('第 ④ 步与完成屏', () => {
     const skill = within(plan).getByTestId('onboarding-plan-skill')
     expect(within(skill).getByText('去装').closest('a')?.getAttribute('href')).toBe('/skills')
 
-    // 清单是按同一份勾选算的：发给服务端的就是界面上勾的那个岗位
-    expect(state.plans.at(-1)).toMatchObject({ position_ids: ['customer-care'], role_ids: [] })
+    // 清单是按同一份岗位清单算的：发给服务端的就是界面上分好的那个岗位
+    expect(state.plans.at(-1)).toMatchObject({ positions: [CARE_ROW] })
   })
 
   it('「完成」才真建分配；最后那个按钮说「完成」', async () => {
@@ -1209,7 +1397,11 @@ describe('第 ④ 步与完成屏', () => {
     await waitFor(() => {
       expect(state.applies).toHaveLength(1)
     })
-    expect(state.applies[0]).toMatchObject({ position_ids: ['customer-care'] })
+    expect(state.applies[0]).toMatchObject({
+      position_ids: [],
+      role_ids: [],
+      positions: [CARE_ROW],
+    })
   })
 
   it('「完成」之后是一屏回执（「一变一队」），按了按钮才进工作台', async () => {
@@ -1641,196 +1833,13 @@ describe('WP142 第 ② 步：档案卡说人话、公司全称只有一个来�
   })
 })
 
-describe('WP142 第 ③ 步：先问「这次主要想让它干什么」，按答案预勾', () => {
-  /** 确认档案卡 → 进第 ③ 步。 */
-  async function toRoles(): Promise<void> {
-    const user = userEvent.setup()
-    await passAi()
-    await user.click(await screen.findByTestId('intake-confirm'))
-    await waitFor(() => {
-      expect(state.confirms).toHaveLength(1)
-    })
-    await user.click(screen.getByTestId('onboarding-next'))
-    await screen.findByTestId('onboarding-roles')
-  }
-  const pressed = (id: string): string | null => screen.getByTestId(id).getAttribute('aria-pressed')
-  const positionPressed = (name: string): string | null | undefined =>
-    screen
-      .getAllByTestId('onboarding-position')
-      .find((b) => b.textContent?.startsWith(name))
-      ?.getAttribute('aria-pressed')
-
-  it('默认按网址预勾的结果：官网 → 客服已按下，红人营销没按', async () => {
-    state.run = websiteRun()
-    renderWithProviders(<OnboardingPage />)
-    await toRoles()
-    const purpose = await screen.findByTestId('onboarding-purpose')
-    expect(purpose.textContent).toContain('你这次主要想让它干什么')
-    await waitFor(() => {
-      expect(pressed('onboarding-purpose-care')).toBe('true')
-    })
-    expect(pressed('onboarding-purpose-kol')).toBe('false')
-    expect(pressed('onboarding-purpose-both')).toBe('false')
-  })
-
-  it('选「红人营销」→ 红人营销岗位被勾上（红人从此能被预勾）；网站运营与社媒渠道不动', async () => {
-    const user = userEvent.setup()
-    state.run = websiteRun()
-    renderWithProviders(<OnboardingPage />)
-    await toRoles()
-    await waitFor(() => {
-      expect(screen.getByTestId('onboarding-role-count').textContent).toContain('已勾 6 条')
-    })
-    await user.click(screen.getByTestId('onboarding-purpose-kol'))
-    expect(positionPressed('红人营销')).toBe('true')
-    expect(positionPressed('网站运营')).toBe('true')
-    // 6 + 红人三条 = 9
-    expect(screen.getByTestId('onboarding-role-count').textContent).toContain('已勾 9 条')
-    // 两个都按着 =「都要」亮
-    expect(pressed('onboarding-purpose-both')).toBe('true')
-
-    // 只要红人：把客服按掉，客服岗位跟着去掉
-    await user.click(screen.getByTestId('onboarding-purpose-care'))
-    expect(positionPressed('客服')).toBe('false')
-    expect(positionPressed('红人营销')).toBe('true')
-    expect(screen.getByTestId('onboarding-role-count').textContent).toContain('已勾 7 条')
-    // 「自定义岗位叫什么」不预填（WP142）
-    expect((screen.getByTestId('onboarding-custom') as HTMLInputElement).value).toBe('')
-  })
-
-  it('「还没有网站」也能一下勾齐：按「都要」= 红人营销 + 客服', async () => {
-    const user = userEvent.setup()
-    renderWithProviders(<OnboardingPage />)
-    await passAi()
-    await user.click(screen.getByTestId('intake-no-site'))
-    await user.click(screen.getByTestId('onboarding-next'))
-    await screen.findByTestId('onboarding-purpose')
-    expect(pressed('onboarding-purpose-kol')).toBe('false')
-    await user.click(screen.getByTestId('onboarding-purpose-both'))
-    expect(positionPressed('红人营销')).toBe('true')
-    expect(positionPressed('客服')).toBe('true')
-    expect(screen.getByTestId('onboarding-role-count').textContent).toContain('已勾 5 条')
-    await user.click(screen.getByTestId('onboarding-next'))
-    await screen.findByTestId('onboarding-plan')
-    expect(state.plans.at(-1)?.position_ids).toEqual(['kol-marketing', 'customer-care'])
-  })
-
-  it('对照表：目的只管红人营销与客服两个岗位，别的勾选原样留着', () => {
-    const base = {
-      position_ids: ['web-ops', 'customer-care'],
-      role_ids: ['social.meta'],
-      custom_position_name: '',
-    }
-    expect(purposesOf(base)).toEqual(['care'])
-    expect(applyPurposes(base, ['kol'], POSITIONS)).toEqual({
-      position_ids: ['web-ops', 'kol-marketing'],
-      role_ids: ['social.meta'],
-      custom_position_name: '',
-    })
-    // 这台机器上没装红人营销：不问红人那一项
-    expect(availablePurposes(POSITIONS.slice(0, 3))).toEqual(['care'])
-    expect(applyPurposes(base, ['kol', 'care'], POSITIONS.slice(0, 3)).position_ids).toEqual([
-      'web-ops',
-      'customer-care',
-    ])
-  })
-})
-
-describe('WP171 第 ③ 步多问一项「B2B」', () => {
-  const WITH_B2B: OnboardingPositionView[] = [
-    ...POSITIONS,
-    {
-      id: 'b2b',
-      name: 'B2B',
-      roles: [
-        { id: 'b2b.sales', name: '业务', default: true, what_it_does: '回询盘、出报价。' },
-        { id: 'b2b.outbound', name: '主动开发', default: true, what_it_does: '找客户、发开发信。' },
-        {
-          id: 'b2b.marketplace',
-          name: 'B2B 平台运营',
-          default: false,
-          what_it_does: '国际站后台。',
-          planned: true,
-        },
-      ],
-    },
-  ]
-  const base = { position_ids: ['web-ops'], role_ids: [], custom_position_name: '' }
-
-  it('装了 B2B 岗位才问这一项；按下去勾的是 B2B 岗位，别的不动', () => {
-    expect(availablePurposes(POSITIONS)).toEqual(['kol', 'care'])
-    expect(availablePurposes(WITH_B2B)).toEqual(['kol', 'care', 'b2b'])
-    const picked = applyPurposes(base, ['b2b'], WITH_B2B)
-    expect(picked.position_ids).toEqual(['web-ops', 'b2b'])
-    expect(purposesOf(picked)).toEqual(['b2b'])
-    // 再把 B2B 按掉：只去掉 B2B，网站运营原样
-    expect(applyPurposes(picked, [], WITH_B2B).position_ids).toEqual(['web-ops'])
-  })
-
-  it('Fable 终审：「都要」只按齐红人与客服，不勾 B2B；B2B 选没选原样留着', () => {
-    const all = ['kol', 'care', 'b2b'] as const
-    expect(toggleBoth([], all)).toEqual(['kol', 'care'])
-    expect(applyPurposes(base, toggleBoth([], all), WITH_B2B).position_ids).not.toContain('b2b')
-    // 用户明确按了 B2B，再按「都要」：B2B 留着
-    expect(toggleBoth(['b2b'], all)).toEqual(['kol', 'care', 'b2b'])
-    // 松开「都要」：只去掉红人与客服
-    expect(toggleBoth(['kol', 'care', 'b2b'], all)).toEqual(['b2b'])
-  })
-
-  it('界面上按「都要」：发出去的是红人 + 客服；只按 B2B 时「都要」不亮', async () => {
-    const user = userEvent.setup()
-    const onChange = vi.fn()
-    const first = renderWithProviders(
-      <PurposePicker available={['kol', 'care', 'b2b']} value={[]} onChange={onChange} />,
-    )
-    await user.click(screen.getByTestId('onboarding-purpose-both'))
-    expect(onChange).toHaveBeenLastCalledWith(['kol', 'care'])
-    first.unmount()
-    renderWithProviders(
-      <PurposePicker available={['kol', 'care', 'b2b']} value={['b2b']} onChange={onChange} />,
-    )
-    expect(screen.getByTestId('onboarding-purpose-both').getAttribute('aria-pressed')).toBe('false')
-    expect(screen.getByTestId('onboarding-purpose-b2b').getAttribute('aria-pressed')).toBe('true')
-  })
-
-  it('第二批的职责标「第二批」，说明进问号；仍默认不勾', async () => {
-    const user = userEvent.setup()
-    const onChange = vi.fn()
-    const picked = { position_ids: ['b2b'], role_ids: [], custom_position_name: '' }
-    // 勾岗位不带上第二批那条（与服务端 expandRoles 同一条规矩）
-    expect(expandPick(picked, WITH_B2B)).toEqual(['b2b.sales', 'b2b.outbound'])
-    renderWithProviders(<RolePicker positions={WITH_B2B} value={picked} onChange={onChange} />)
-    const expands = screen.getAllByTestId('onboarding-expand')
-    // 岗位按出场顺序摆，B2B 是最后一个
-    await user.click(expands[expands.length - 1] as HTMLElement)
-    const tags = screen.getAllByTestId('onboarding-role-planned')
-    expect(tags).toHaveLength(1)
-    expect(tags[0]?.textContent).toContain('第二批')
-    expect(tags[0]?.querySelector('[data-hint]')?.getAttribute('data-hint')).toContain(
-      '第一版还不做',
-    )
-    expect(WITH_B2B.find((p) => p.id === 'b2b')?.roles.find((r) => r.planned)?.default).toBe(false)
-    // 岗位勾着时别的职责点不动，第二批那条能单独勾（归到这个岗位下，不另起自定义岗位）
-    const toggles = screen.getAllByTestId('onboarding-role')
-    const planned = toggles.find((b) => b.textContent === 'B2B 平台运营') as HTMLElement
-    expect(planned.getAttribute('aria-pressed')).toBe('false')
-    expect(toggles.find((b) => b.textContent === '业务')?.hasAttribute('disabled')).toBe(true)
-    await user.click(planned)
-    expect(onChange).toHaveBeenLastCalledWith({ ...picked, role_ids: ['b2b.marketplace'] })
-    expect(expandPick({ ...picked, role_ids: ['b2b.marketplace'] }, WITH_B2B)).toContain(
-      'b2b.marketplace',
-    )
-    expect(screen.queryByTestId('onboarding-custom')).toBeNull()
-  })
-})
-
 describe('WP142 完成屏：数字与第 ④ 步同口径，已有的被跳过要说', () => {
   async function finish(): Promise<void> {
     const user = userEvent.setup()
     await passAi()
     await user.click(screen.getByTestId('intake-no-site'))
     await user.click(screen.getByTestId('onboarding-next'))
-    await user.click((await screen.findAllByTestId('onboarding-position'))[1] as HTMLElement)
+    await pickCare(user)
     await user.click(screen.getByTestId('onboarding-next'))
     await screen.findByTestId('onboarding-plan')
     await user.click(screen.getByTestId('onboarding-finish'))
@@ -1864,7 +1873,7 @@ describe('WP216 完成屏：品牌是 Shopify、勾了建站，问一句「要�
     await passAi()
     await user.click(screen.getByTestId('intake-no-site'))
     await user.click(screen.getByTestId('onboarding-next'))
-    await user.click((await screen.findAllByTestId('onboarding-position'))[1] as HTMLElement)
+    await pickCare(user)
     await user.click(screen.getByTestId('onboarding-next'))
     await screen.findByTestId('onboarding-plan')
     await user.click(screen.getByTestId('onboarding-finish'))
@@ -1925,7 +1934,7 @@ describe('WP142 第 ④ 步：只列必需的，可选的折起来；技能包�
     await passAi()
     await user.click(screen.getByTestId('intake-no-site'))
     await user.click(screen.getByTestId('onboarding-next'))
-    await user.click((await screen.findAllByTestId('onboarding-position'))[1] as HTMLElement)
+    await pickCare(user)
     await user.click(screen.getByTestId('onboarding-next'))
     await screen.findByTestId('onboarding-plan')
   }

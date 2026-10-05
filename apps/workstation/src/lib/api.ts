@@ -2335,6 +2335,8 @@ export interface OrgAssignmentView {
   granted_at: string
   revoked_at?: string
   unassigned_range: boolean
+  /** WP234（docs/54 §6.1）：这条活儿归哪个岗位（安放了就是安放的那个；没安放、只挂在一个岗位里就是它；分不清就没有）。只管展示归堆，不带权限。 */
+  position?: { id: string; name: string }
 }
 
 export interface OrgMemberView {
@@ -2678,6 +2680,64 @@ export const updateOrgPosition = (
   api<OrgPositionView>(`/v1/org/positions/${encodeURIComponent(id)}`, {
     method: 'PUT',
     body: input,
+    ...withAssignment(assignment),
+  })
+
+/** WP234（docs/54 §6.4）：合并 / 移动职责 / 拆出的回执。 */
+export interface PositionReshapeView {
+  positions: OrgPositionView[]
+  moved_assignments: number
+  moved_matters: number
+  memory?: { moved: number; kept_both: number }
+  deleted?: string
+  /** 拆出时：岗位层记忆复制给新岗位几条（Luoye 10-06）。 */
+  memory_copied?: number
+}
+
+/** WP234：把岗位 `id` 合并到 `into`（职责、事项、岗位层记忆都跟过去）。 */
+export const mergeOrgPosition = (
+  id: string,
+  into: string,
+  assignment?: string,
+): Promise<PositionReshapeView> =>
+  api<PositionReshapeView>(`/v1/org/positions/${encodeURIComponent(id)}/merge`, {
+    method: 'POST',
+    body: { into },
+    ...withAssignment(assignment),
+  })
+
+/** WP234：把岗位 `id` 里的一条职责移到岗位 `to`。 */
+export const moveOrgPositionDuty = (
+  id: string,
+  input: { role_id: string; to: string },
+  assignment?: string,
+): Promise<PositionReshapeView> =>
+  api<PositionReshapeView>(`/v1/org/positions/${encodeURIComponent(id)}/move-duty`, {
+    method: 'POST',
+    body: input,
+    ...withAssignment(assignment),
+  })
+
+/** WP234：从岗位 `id` 拆出几条职责成一个新岗位。 */
+export const splitOrgPosition = (
+  id: string,
+  input: { name: string; role_ids: string[] },
+  assignment?: string,
+): Promise<PositionReshapeView> =>
+  api<PositionReshapeView>(`/v1/org/positions/${encodeURIComponent(id)}/split`, {
+    method: 'POST',
+    body: input,
+    ...withAssignment(assignment),
+  })
+
+/** WP234（docs/54 §6.5）：把负责人身份交给另一位成员（自己那条不收回）。 */
+export const transferOwner = (
+  person_id: string,
+  assignment?: string,
+): Promise<{ person_id: string; person_name: string; assignment_id: string; already: boolean }> =>
+  api('/v1/org/owner/transfer', {
+    method: 'POST',
+    body: { person_id },
     ...withAssignment(assignment),
   })
 
@@ -3091,6 +3151,8 @@ export interface ProfilePosition {
   role_id: string
   role_name: string
   ranges: { kind: string; id: string }[]
+  /** WP234（docs/54 §6.1）：这条活儿归哪个岗位（安放了就是安放的那个；没安放、只挂在一个岗位里就是它；分不清就没有）。只管展示归堆，不带权限。 */
+  position?: { id: string; name: string }
 }
 
 export interface MyProfile {
@@ -3122,7 +3184,7 @@ export interface VisibleProfile {
 export interface PersonCard {
   person_id: string
   name: string
-  positions: { role_id: string; role_name: string }[]
+  positions: { role_id: string; role_name: string; position?: { id: string; name: string } }[]
   in_progress?: number
 }
 
@@ -3341,6 +3403,8 @@ export interface OnboardingStateView {
 export interface OnboardingPositionView {
   id: string
   name: string
+  /** WP234（Luoye 10-06）：公司改过这个类别的名字时，出厂名（界面小字附后）；没改过就没有。 */
+  factory_name?: string
   /** WP213：岗位图标（`role-icons/glyphs.ts` 的 id）。 */
   icon?: string
   roles: {
@@ -3432,7 +3496,36 @@ export interface OnboardingPlanInput {
   position_ids: string[]
   role_ids: string[]
   custom_position_name?: string
+  /** WP234（docs/54 §6.2）：第 ③ 步的岗位清单（给了就按它建）。 */
+  positions?: OnboardingPlannedPosition[]
 }
+
+/** WP234：第 ③ 步岗位清单里的一行。 */
+export interface OnboardingPlannedPosition {
+  name: string
+  role_ids: string[]
+  /** 从哪个类别（岗位模板）来的；职责全在那个模板里时服务端复用它。 */
+  template_id?: string
+}
+
+/** WP234（docs/70 §5）：「说说你要做什么工作」的回执——只推荐，不选中。 */
+export interface OnboardingSuggestView {
+  /** `keyword` = 这次没用 AI、按原话对词（Luoye 10-06）；`unavailable` = 原话是空的。 */
+  source: 'ai' | 'keyword' | 'stub' | 'unavailable'
+  note?: string
+  roles: { role_id: string; reason: string; quote?: string }[]
+  positions: OnboardingPlannedPosition[]
+}
+
+export const suggestOnboarding = (
+  text: string,
+  assignment?: string,
+): Promise<OnboardingSuggestView> =>
+  api<OnboardingSuggestView>('/v1/onboarding/suggest', {
+    method: 'POST',
+    body: { text },
+    ...(assignment === undefined ? {} : { assignment }),
+  })
 
 export const getOnboardingState = (assignment?: string): Promise<OnboardingStateView> =>
   api<OnboardingStateView>('/v1/onboarding/state', {

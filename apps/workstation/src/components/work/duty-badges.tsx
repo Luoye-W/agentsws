@@ -35,7 +35,7 @@ export function DutyBadges({
   duties,
   testId = 'duty-badges',
 }: {
-  duties: { role_id: string; role_name: string }[]
+  duties: { role_id: string; role_name: string; position?: { id: string; name: string } }[]
   testId?: string
 }): ReactNode {
   const { t } = useApp()

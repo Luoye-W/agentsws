@@ -48,8 +48,10 @@ describe('左栏（WP43 §1 图标）', () => {
     renderShell()
     const nav = screen.getByTestId('main-nav')
     const links = Array.from(nav.querySelectorAll('a'))
-    // 固定 13 条（WP85 加了「消息渠道」，WP188 加了「随便聊」）+ 岗位 2 条
-    expect(links).toHaveLength(15)
+    // 固定 13 条（WP85 加了「消息渠道」，WP188 加了「随便聊」）+ 岗位 1 条
+    // （WP234：「公司设置与授权」是负责人身份，不在左栏「岗位」里）
+    expect(links).toHaveLength(14)
+    expect(nav.textContent).not.toContain('公司设置与授权')
     for (const link of links) {
       expect(link.querySelector('svg'), `「${link.textContent ?? ''}」少了图标`).not.toBeNull()
     }

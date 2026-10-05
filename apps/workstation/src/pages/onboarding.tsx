@@ -13,7 +13,8 @@
  * 1. **随时能走**。右上角"先跳过"一直在；跳过不留痕、不落任何东西。
  * 2. **一屏一件事**（36 §3）。四步在同一张卡里换内容，不弹窗、不换页。
  * 3. **一个内部 id 都不出**。
- * 4. **勾岗位 = 该岗位职责全勾**，与服务端 `expandRoles` 同一套算法（`expandPick`）。
+ * 4. **第 ③ 步交岗位清单**（WP234，docs/54 §6.2）：推荐只是标签、一条不预勾；选上的职责
+ *    按建议分成几个岗位，用户随便改，改完以用户为准（`lib/position-board.ts`）。
  * 5. **第 ① 步不能跳过**（70 §2）：没接上 AI 就不往下走——但「先逛逛演示数据」
  *    那条旁路算接上了这一步（它是"我还没决定"，不是"我不用这个产品"）。
  *    走了旁路的人向导完成后才看得见顶栏那条「还没接模型」（70 §2.2 末段）。
@@ -26,14 +27,12 @@ import { AiStep } from '@/components/onboarding/ai-step'
 import { BusinessStep } from '@/components/onboarding/business-step'
 import { JoinPanel } from '@/components/onboarding/join-panel'
 import { PlanList } from '@/components/onboarding/plan-list'
+import { PositionPlanner } from '@/components/onboarding/position-planner'
 import {
-  applyPurposes,
-  availablePurposes,
-  presetPick,
-  purposesOf,
+  type DutyRecommendation,
+  mergeRecommendations,
+  recommendFromIntake,
 } from '@/components/onboarding/preset-roles'
-import { PurposePicker } from '@/components/onboarding/purpose-picker'
-import { expandPick, type RolePick, RolePicker } from '@/components/onboarding/role-picker'
 import { StepProgress } from '@/components/onboarding/step-progress'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -47,12 +46,22 @@ import {
   listDiscoveryPeers,
   listOnboardingPositions,
   type OnboardingPlanInput,
+  type OnboardingSuggestView,
   planOnboarding,
   renameMe,
   requestMembership,
   setWorkspaceProfile,
+  suggestOnboarding,
 } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
+import {
+  type Board,
+  deselectDuty,
+  EMPTY_BOARD,
+  planOf,
+  rearrange,
+  selectDuty,
+} from '@/lib/position-board'
 
 /**
  * "先跳过"只活在**这一个标签页的内存里**（46 §1：随时可退出）。
@@ -126,15 +135,12 @@ export function OnboardingPage(): React.ReactNode {
   const navigate = useNavigate()
   const [step, setStep] = useState(0)
   const [ai, setAi] = useState<AiState>(undefined)
-  const [pick, setPick] = useState<RolePick>({
-    position_ids: [],
-    role_ids: [],
-    custom_position_name: '',
-  })
-  /** 用户在第 ③ 步动过手没有。动过就不再让预勾覆盖他的勾选。 */
-  const [touched, setTouched] = useState(false)
+  /** WP234：第 ③ 步「你的岗位」那块板（选了哪些职责、分成哪几个岗位）。 */
+  const [board, setBoard] = useState<Board>(EMPTY_BOARD)
+  /** WP234：「说说你要做什么工作」那段话与 AI 回的推荐。 */
+  const [intent, setIntent] = useState('')
+  const [suggestion, setSuggestion] = useState<OnboardingSuggestView | undefined>(undefined)
   const [intake, setIntake] = useState<BrandIntakeRun | undefined>(undefined)
-  const [settled, setSettled] = useState(false)
   const [sent, setSent] = useState(false)
   const [failure, setFailure] = useState<string | undefined>(undefined)
   const [nameDraft, setNameDraft] = useState<string | undefined>(undefined)
@@ -167,37 +173,56 @@ export function OnboardingPage(): React.ReactNode {
     refetchInterval: step === 1 ? 5000 : false,
   })
 
+  // WP234（docs/54 §6.2）：交的是岗位清单；老三格留空（服务端给了清单就不看它们）
+  const planned = planOf(board)
   const planInput = (): OnboardingPlanInput => ({
-    position_ids: pick.position_ids,
-    role_ids: pick.role_ids,
-    ...(pick.custom_position_name.trim() === ''
-      ? {}
-      : { custom_position_name: pick.custom_position_name.trim() }),
+    position_ids: [],
+    role_ids: [],
+    positions: planned,
   })
 
   const say = (err: unknown): void => {
     setFailure(err instanceof ApiClientError ? err.message : t('error.generic'))
   }
 
-  const expanded = expandPick(pick, positions.data ?? [])
+  const expanded = planned.flatMap((p) => p.role_ids)
 
-  // 第 ④ 步那张清单：服务端按同一份勾选算，所以它与界面上勾的永远对得上
+  // 第 ④ 步那张清单：服务端按同一份岗位清单算，所以它与界面上分的永远对得上
   const plan = useQuery({
-    queryKey: ['onboarding', 'plan', expanded.join(','), pick.position_ids.join(',')],
+    queryKey: ['onboarding', 'plan', JSON.stringify(planned)],
     enabled: step === 3 && expanded.length > 0,
     queryFn: () => planOnboarding(planInput()),
   })
 
+  /** 类别目录（= 岗位模板，只当目录用）：划分建议的算法要它。 */
+  const catalog = (positions.data ?? []).map((p) => ({
+    id: p.id,
+    name: p.name,
+    roles: p.roles.map((r) => ({ id: r.id })),
+  }))
   /**
-   * 第 ② 步结束（确认了档案，或走了「还没有网站」旁路）：
-   * 按结果预勾第 ③ 步（70 §5）。**用户自己动过手就不再覆盖**。
+   * WP234（Luoye 10-05）：第 ② 步分析出来的、AI 推荐的，**都只是推荐**——一条不预勾，
+   * 点了才算选上；什么信息都没有就一条不推（70 §5）。
    */
-  useEffect(() => {
-    if (!settled || touched || positions.data === undefined) return
-    setPick(
-      presetPick({ ...(intake === undefined ? {} : { run: intake }), positions: positions.data }),
-    )
-  }, [settled, touched, intake, positions.data])
+  const recommendations: DutyRecommendation[] = mergeRecommendations(
+    (suggestion?.roles ?? []).map((r) => ({
+      role_id: r.role_id,
+      reason: r.reason,
+      ...(r.quote === undefined ? {} : { quote: r.quote }),
+    })),
+    recommendFromIntake({
+      ...(intake === undefined ? {} : { run: intake }),
+      positions: positions.data ?? [],
+    }),
+  )
+  const suggested = suggestion?.positions ?? []
+  const suggest = useMutation({
+    mutationFn: () => suggestOnboarding(intent.trim()),
+    onSuccess: (out) => {
+      setSuggestion(out)
+    },
+    onError: say,
+  })
 
   const join = useMutation({
     mutationFn: (input: { code?: string; peer_id?: string }) =>
@@ -341,7 +366,6 @@ export function OnboardingPage(): React.ReactNode {
                 onCompanyName={setCompanyDraft}
                 onSettled={(run) => {
                   setIntake(run)
-                  setSettled(true)
                 }}
               />
               {/* 46 §2 I2 I3：已经有同事在用的话，这一步就是"加入他们"而不是"再开一家" */}
@@ -362,25 +386,46 @@ export function OnboardingPage(): React.ReactNode {
             positions.data === undefined ? (
               <Skeleton className="h-40 w-full" />
             ) : (
-              <div className="flex flex-col gap-4">
-                {/* WP142：先问「这次主要想让它干什么」，按答案勾岗位（红人营销从此能被预勾） */}
-                <PurposePicker
-                  available={availablePurposes(positions.data)}
-                  value={purposesOf(pick)}
-                  onChange={(next) => {
-                    setTouched(true)
-                    setPick(applyPurposes(pick, next, positions.data ?? []))
-                  }}
-                />
-                <RolePicker
-                  positions={positions.data}
-                  value={pick}
-                  onChange={(next) => {
-                    setTouched(true)
-                    setPick(next)
-                  }}
-                />
-              </div>
+              <PositionPlanner
+                catalog={positions.data}
+                text={intent}
+                onText={setIntent}
+                onSuggest={() => {
+                  suggest.mutate()
+                }}
+                suggesting={suggest.isPending}
+                {...(suggestion === undefined ? {} : { suggestion })}
+                recommendations={recommendations}
+                board={board}
+                onToggleDuty={(id) => {
+                  setBoard((b) =>
+                    b.selected.includes(id)
+                      ? deselectDuty(b, id, catalog, suggested)
+                      : selectDuty(b, id, catalog, suggested),
+                  )
+                }}
+                onAdopt={() => {
+                  setBoard((b) =>
+                    rearrange(
+                      {
+                        ...b,
+                        selected: [
+                          ...b.selected,
+                          ...recommendations
+                            .map((r) => r.role_id)
+                            .filter((id) => !b.selected.includes(id)),
+                        ],
+                      },
+                      catalog,
+                      suggested,
+                    ),
+                  )
+                }}
+                onRegroup={() => {
+                  setBoard((b) => rearrange(b, catalog, suggested))
+                }}
+                onBoard={setBoard}
+              />
             )
           ) : null}
 

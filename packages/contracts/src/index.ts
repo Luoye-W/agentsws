@@ -66,6 +66,8 @@ export * from './official-plugins.js'
 export * from './packages.js'
 // WP216：建站平台 → 官方技能 / 官方工具 / 官方 CLI（平台专属那一套的唯一真源）
 export * from './platform-kits.js'
+// WP234（docs/54 §6.3）：岗位划分建议——一份算法，工作台第 ③ 步与服务端同用
+export * from './position-plan.js'
 // 60 §1 / §2 公共关系的四条职责与四个对象（WP78）。与 social.ts 一条都不共用：
 // `social.reddit` 是**我们自己的** subreddit，`pr.reddit` 是**别人的**。
 export * from './pr.js'

@@ -378,6 +378,7 @@ import {
   type OnboardingAssembly,
   storefrontPlatformChoices,
 } from './onboarding.js'
+import { modelSuggester, sha256 as suggestSha } from './onboarding-suggest.js'
 import { createOrg, type OrgAssembly } from './org.js'
 import { createOrgDuplicateScan, type OrgDuplicateScan } from './org-duplicates.js'
 import {
@@ -396,7 +397,7 @@ import {
 } from './personas.js'
 import { createPlatformCliProber, PlatformCliLoginStore, type ProbeExec } from './platform-cli.js'
 import { createPlatformKitPort, resolveBrandPlatform } from './platform-kit.js'
-import { createPositions, type PositionsAssembly } from './positions.js'
+import { createPositions, type PositionsAssembly, retargetPositionMatters } from './positions.js'
 import { createPrStore, prDeckData, seedDemoPr } from './pr.js'
 import { createPrService } from './pr-service.js'
 import { createPricingCatalog, type PricingCatalogSource } from './pricing-catalog.js'
@@ -2168,13 +2169,17 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
    * WP194：一条分配（或一条职责）归哪个岗位——打云时带 `X-Agentsws-Position`。
    * 岗位面按品牌晚装，所以每次现查；查不到就不带（只受个人上限与公司余额限制）。
    */
-  const cloudPositionOf = (workspace_id: WorkspaceId, role_id: string): string | undefined =>
-    positionAssemblies.get(workspace_id)?.positionOf(role_id).position_id
+  const cloudPositionOf = (
+    workspace_id: WorkspaceId,
+    role_id: string,
+    assignment_id?: string,
+  ): string | undefined =>
+    positionAssemblies.get(workspace_id)?.positionOf(role_id, assignment_id).position_id
   /** WP194：一次调用算在谁头上（本机公司成员 + 岗位）。 */
   const cloudAttributionOf = (assignment_id: string, fallback_role?: string) => {
     const a = roles.assignments.get(assignment_id)
     if (a === undefined) return {}
-    const position = cloudPositionOf(a.workspace_id, a.role_id ?? fallback_role)
+    const position = cloudPositionOf(a.workspace_id, a.role_id ?? fallback_role, a.id)
     return { member_id: a.person_id, ...(position === undefined ? {} : { position_id: position }) }
   }
   /**
@@ -2248,7 +2253,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       const held = new Set<string>()
       for (const a of roles.assignments.listByPerson(person.id, { workspace_id }))
         if (a.revoked_at === undefined) {
-          const position = cloudPositionOf(workspace_id, a.role_id)
+          const position = cloudPositionOf(workspace_id, a.role_id, a.id)
           if (position !== undefined) held.add(position)
         }
       members.push({ id: person.id, name: person.name, positions: [...held].sort() })
@@ -3711,12 +3716,14 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       // 54 §3：岗位层记忆一句话（这一层攒下几段、其中几段是学来的）
       memorySummary: (position_id) =>
         learning.memorySummary({ tier: 'position', scope_id: position_id }),
+      // WP234（docs/54 §6.1）：一条分配安放在哪个岗位（制度层那张表，跨品牌共用一份）
+      placementOf: (assignment_id) => org.placementOf(assignment_id),
       appendEvent,
     })
     positionAssemblies.set(ws, positionsAssembly)
     // 六层技能里的 `position` 那一层、以及岗位层上下文那三样，都从这里来
     runtime?.bindPositions({
-      positionOf: (role_id) => positionsAssembly.positionOf(role_id),
+      positionOf: (role_id, assignment_id) => positionsAssembly.positionOf(role_id, assignment_id),
       layerContext: (position_id, person_id) =>
         positionsAssembly.layerContext(position_id, person_id) as Promise<
           Record<string, unknown> | undefined
@@ -5400,6 +5407,25 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         if (await brand.ownCloud.forgetMember(person_id, by).catch(() => false)) break
       }
     },
+    /*
+     * WP234（docs/54 §6.4）：岗位合并 / 移动之后，事项（各品牌的工作模型里）与岗位层记忆
+     * （学习回路里）跟着走。制度层够不着它们，所以在这里接上。
+     */
+    reshape: {
+      retargetMatters: async (input) => {
+        const to_name = org.positions().find((p) => p.id === input.to)?.name.zh
+        let moved = 0
+        for (const brand of await brandModules.all())
+          moved += retargetPositionMatters(
+            brand.work,
+            { ...input, ...(to_name === undefined ? {} : { to_name }) },
+            clock.now(),
+          )
+        return moved
+      },
+      mergeMemory: (input) => learning.mergePositionMemory(input),
+      copyMemory: (input) => learning.copyPositionMemory(input),
+    },
   })
   rangeExpandedSink = org.onRangeExpanded
   supervisorPositions = () => org.positions()
@@ -5448,6 +5474,36 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       return people
     },
     positions: () => org.positions(),
+    // WP234（docs/54 §6.1 / §6.2）：类别目录、岗位清单落库、「说说你要做什么」的推荐引擎
+    catalog: () => org.catalog(),
+    positionStore: {
+      ensure: (input, by) => org.ensurePosition(input, by),
+      place: (assignment_id, position_id) => {
+        org.place(assignment_id, position_id)
+      },
+      placementOf: (assignment_id) => org.placementOf(assignment_id),
+    },
+    suggester: () => {
+      const ref = boot.ownModels.configured() ? boot.ownModels.defaultRef() : undefined
+      // 真模型：走现有模型口（记在本机负责人那条分配上，`extraction` 档）
+      if (ref !== undefined && ref.provider !== 'stub')
+        return modelSuggester(async (prompt) => {
+          const completion = await boot.ownGateway.complete({
+            messages: [{ role: 'user', content: prompt }],
+            meta: {
+              workspace_id: workspace.id,
+              assignment_id: ownerAssignment.id,
+              role_id: ownerAssignment.role_id,
+              run_id: `onb_suggest_${suggestSha(prompt).slice(0, 16)}` as never,
+              purpose: 'extraction',
+            },
+            model: ref,
+          })
+          return completion.text
+        })
+      // 没接上真模型（只有 stub / 演示）：回 undefined，推荐那一层退回按原话对词并明说（Luoye 10-06）
+      return undefined
+    },
     // WP66：首次设置这一面仍然只问 bootstrap 品牌那一套（52 O5：一个值守子进程
     // 一个品牌；向导本来就是"把当前这台机器上的这个品牌设起来"）
     connectedKinds: () => boot.connections.connectedKinds(),
@@ -6200,6 +6256,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   const secretaryFor = (ws: WorkspaceId, brandWork: Work, tz_offset_minutes: number) =>
     createSecretaryAssembly({
       workspace_id: ws,
+      // WP234：人员页岗位徽章按安放归堆（制度层那张表；org 晚一步装好，这里现查）
+      positionOfAssignment: (a) => org.positionLabelOf(a),
       clock,
       random,
       appendEvent,
@@ -6790,7 +6848,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       const assignment = roles.assignments.get(id)
       if (assignment === undefined || assignment.person_id !== actor.person_id)
         throw new ApiError('not_found', `没有这个岗位：${id}`)
-      const found = assembly.positionOf(assignment.role_id)
+      const found = assembly.positionOf(assignment.role_id, assignment.id)
       if (found.position_id === undefined)
         throw new ApiError('not_found', found.note ?? `没有这个岗位：${id}`)
       return found.position_id

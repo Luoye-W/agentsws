@@ -55,16 +55,29 @@ export interface DutyGroup<T> {
 /**
  * 一串职责按岗位归堆。一条职责挂在多个岗位里时归**第一个**含它的岗位——
  * 这里是展示用的归堆，不是权限判定（权限永远看那条分配本身，05 §4 不变）。
+ *
+ * WP234（docs/54 §6.1）：服务端给了 `position`（安放 / 唯一归属）就**按它归**，不再猜第一个；
+ * 没给的照老办法。
  */
-export function groupDutiesByPosition<T extends { role_id: string }>(
-  duties: T[],
-  positions: PositionRoleSet[],
-): DutyGroup<T>[] {
+export function groupDutiesByPosition<
+  T extends { role_id: string; position?: { id: string; name: string } },
+>(duties: T[], positions: PositionRoleSet[]): DutyGroup<T>[] {
   const groups: DutyGroup<T>[] = []
   const loose: T[] = []
   const bucket = new Map<string, T[]>()
 
+  /** 服务端说了归哪个、但对照表里没有的岗位（自建的）：按服务端给的名字补一堆。 */
+  const extra: PositionRoleSet[] = []
   for (const duty of duties) {
+    const told = duty.position
+    if (told !== undefined) {
+      if (!positions.some((p) => p.id === told.id) && !extra.some((p) => p.id === told.id))
+        extra.push({ id: told.id, name: told.name, roles: [] })
+      const list = bucket.get(told.id)
+      if (list === undefined) bucket.set(told.id, [duty])
+      else list.push(duty)
+      continue
+    }
     const owner = positions.find((p) => p.roles.some((r) => r.role_id === duty.role_id))
     if (owner === undefined) {
       loose.push(duty)
@@ -75,7 +88,7 @@ export function groupDutiesByPosition<T extends { role_id: string }>(
     else list.push(duty)
   }
 
-  for (const position of positions) {
+  for (const position of [...positions, ...extra]) {
     const list = bucket.get(position.id)
     if (list === undefined || list.length === 0) continue
     groups.push({ position_id: position.id, name: position.name, duties: list })

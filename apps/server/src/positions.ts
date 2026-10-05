@@ -41,6 +41,7 @@ import {
   routeWithinPosition,
 } from '@agentsws/roles'
 import type { Work } from '@agentsws/work'
+import { belongsTo, holdersByPlacement, WORKSPACE_BASE_ROLES } from './position-placements.js'
 
 /**
  * 工作区的底座职责。每个岗位模板都带着它（`org.ts` 的 `SEED_POSITIONS`），
@@ -48,6 +49,9 @@ import type { Work } from '@agentsws/work'
  * 岗位视图里的职责清单与计数都把它滤掉（见 `dutyRolesOf`）。
  */
 const BASE_ROLE: RoleId = 'common.member'
+
+/** WP234（docs/54 §6.5）：「负责人」那个岗位行的 id——身份，不是干活的岗位。 */
+const OWNER_POSITION_ID = 'owner'
 
 const POSITION_ERROR = (
   code: 'not_found' | 'conflict' | 'invalid_input' | 'forbidden',
@@ -79,6 +83,11 @@ export interface PositionsOptions {
   cards?(person_id: PersonId): Promise<ApprovalItem[]> | ApprovalItem[]
   /** 岗位层记忆的一句话（技能层条数 + 提到岗位层的教训条数）；不给就是空。 */
   memorySummary?(position_id: string): string
+  /**
+   * WP234（docs/54 §6.1）：这条分配安放在哪个岗位（`org.placementOf`）。不给 = 一条都没安放，
+   * 全部按老规则算（与 WP69 逐字相同）。
+   */
+  placementOf?(assignment_id: AssignmentId): string | undefined
   appendEvent(e: Omit<EventEnvelope, 'id' | 'at'> & { at?: string }): void
 }
 
@@ -131,8 +140,10 @@ export interface PositionsAssembly {
   /**
    * 一条职责属于哪个岗位（起 Run 拼 `position` 技能层时要它）。
    * 挂在多个岗位里、或者一个都没有时回 `undefined` 并给一句话——由调用方写进时间线。
+   *
+   * WP234：给了分配 id 且那条分配已安放 → 就是安放的那个岗位（docs/54 §6.1）。
    */
-  positionOf(role_id: RoleId): { position_id?: string; note?: string }
+  positionOf(role_id: RoleId, assignment_id?: AssignmentId): { position_id?: string; note?: string }
   /** 岗位层上下文的三样（54 §3）。 */
   layerContext(position_id: string, person_id: PersonId): Promise<PositionLayerContext | undefined>
 }
@@ -169,12 +180,19 @@ export function createPositions(options: PositionsOptions): PositionsAssembly {
 
   const roleName = (id: RoleId): string => roles.roles.get(id)?.name.zh ?? id
 
+  /**
+   * WP234（docs/54 §6.1）：这条分配属不属于这个岗位——安放了就只属于安放的那个，
+   * 没安放按老规则（职责清单里有它就算）。`org.placementOf` 已经把「安放的岗位不在了」滤掉。
+   */
+  const belongs = (a: { id: string; role_id: RoleId }, position: Position): boolean =>
+    belongsTo(a, position, options.placementOf, () => true)
+
   /** 这个岗位下、**这个人**持有的那几条分配（路由只在它们里面挑）。 */
   const minePerRole = (
     position: Position,
     person_id: PersonId,
   ): { role_id: RoleId; assignment_id: AssignmentId }[] => {
-    const held = activeOf(person_id)
+    const held = activeOf(person_id).filter((a) => belongs(a, position))
     const out: { role_id: RoleId; assignment_id: AssignmentId }[] = []
     for (const entry of position.roles) {
       const hit = held.find((a) => a.role_id === entry.role)
@@ -246,24 +264,28 @@ export function createPositions(options: PositionsOptions): PositionsAssembly {
 
   const instance = async (position_id: string, person_id: PersonId): Promise<PositionInstance> => {
     const template = templateOf(position_id)
-    // 谁在做：默认包里的职责都在他名下才算（05 §2；与 org.ts 的 holdersOf 同一条规则）
-    const wanted = template.roles.filter((r) => r.default).map((r) => r.role)
+    // 谁在做：WP234 起按安放算（docs/54 §6.1；与 org.ts 的 holdersOf 同一条规则——
+    // 安放在这里的人，加上老规则：未安放的分配凑齐默认包的人）
     const byRole = new Map<RoleId, AssignmentId[]>()
-    const holders = new Set<PersonId>()
+    const people = new Set<PersonId>()
     for (const entry of template.roles) {
       const rows = roles.assignments
         .listByRole(entry.role, { workspace_id })
-        .filter((a) => a.revoked_at === undefined)
+        .filter((a) => a.revoked_at === undefined && belongs(a, template))
       byRole.set(
         entry.role,
         rows.map((a) => a.id),
       )
-      for (const a of rows) {
-        const held = activeOf(a.person_id)
-        if (wanted.length > 0 && wanted.every((r) => held.some((h) => h.role_id === r)))
-          holders.add(a.person_id)
-      }
+      for (const a of rows) people.add(a.person_id)
     }
+    const holders = new Set(
+      holdersByPlacement(
+        template,
+        [...people].map((p) => ({ person_id: p, held: activeOf(p) })),
+        options.placementOf,
+        () => true,
+      ),
+    )
     // 本人在这个岗位下持有的那几条：界面上的每一个入口都只能用它们
     const mine = new Map(minePerRole(template, person_id).map((m) => [m.role_id, m.assignment_id]))
     const assignmentIds = new Set([...byRole.values()].flat())
@@ -317,21 +339,45 @@ export function createPositions(options: PositionsOptions): PositionsAssembly {
     }
   }
 
+  /**
+   * 本人的岗位：有分配**归属于**它的那些（WP234 按安放算，docs/54 §6.1）。
+   *
+   * WP234（§6.5）：工作区底座职责（`common.member` / `common.owner`）不算岗位的活——
+   * 一个岗位对这个人来说只剩它们，就不出现在这里。「负责人」于是从左栏与首页隐去，
+   * 而 `common.owner` 那条分配原样在（审批默认收件、brandAnchor 都还靠它）。
+   */
   const mine = async (person_id: PersonId): Promise<PositionInstance[]> => {
-    const held = new Set(activeOf(person_id).map((a) => a.role_id))
+    const held = activeOf(person_id).filter((a) => !WORKSPACE_BASE_ROLES.has(a.role_id))
     const out: PositionInstance[] = []
     for (const template of options.positions()) {
-      if (!template.roles.some((r) => held.has(r.role))) continue
+      // 「负责人」那一行是身份（docs/54 §6.5）：它下面就算还挂着别的职责也不进「我的岗位」
+      if (template.id === OWNER_POSITION_ID) continue
+      if (!held.some((a) => belongs(a, template))) continue
       out.push(await instance(template.id, person_id))
     }
     return out
   }
 
-  const positionOf = (role_id: RoleId): { position_id?: string; note?: string } => {
+  const positionOf = (
+    role_id: RoleId,
+    assignment_id?: AssignmentId,
+  ): { position_id?: string; note?: string } => {
+    // WP234：分配已安放 → 就是那个岗位（docs/54 §6.1），不用再猜
+    const placed = assignment_id === undefined ? undefined : options.placementOf?.(assignment_id)
+    if (placed !== undefined) return { position_id: placed }
     const hits = options.positions().filter((p) => p.roles.some((r) => r.role === role_id))
     const only = hits[0]
     if (only === undefined || hits.length === 0)
       return { note: `「${roleName(role_id)}」不在任何岗位模板里，这次运行跳过岗位层` }
+    if (hits.length > 1) {
+      // WP234：这条职责所有还在的分配都安放在同一个岗位 → 就是它
+      const live = roles.assignments
+        .listByRole(role_id, { workspace_id })
+        .filter((a) => a.revoked_at === undefined)
+      const where = new Set(live.map((a) => options.placementOf?.(a.id)))
+      const sole = [...where][0]
+      if (live.length > 0 && where.size === 1 && sole !== undefined) return { position_id: sole }
+    }
     if (hits.length > 1)
       return {
         note: `「${roleName(role_id)}」同时挂在 ${hits.length} 个岗位里，分配上没记是哪一个，这次运行跳过岗位层`,
@@ -622,4 +668,36 @@ function matterInPosition(
 ): boolean {
   if (matter.position_template_id !== undefined) return matter.position_template_id === position_id
   return matter.position_id !== undefined && assignmentIds.has(matter.position_id)
+}
+
+/**
+ * WP234（docs/54 §6.4）：岗位合并 / 移动之后，事项跟着改岗位。
+ *
+ * 只改 `position_template_id`（「这件事属于哪个岗位」）；`position_id`（用谁的哪条分配在做）
+ * 一个字不动——分配没变，权限与额度也就没变（§5.2 第 1 条那两格各管各的）。
+ * 给了 `role_id` 只动走那条职责的（移动职责：A 下面别的事留在 A）。归档的也改：
+ * 它们翻出来时也该在新岗位下。回改了几件。
+ */
+export function retargetPositionMatters(
+  work: Work,
+  input: { from: string; to: string; role_id?: RoleId; to_name?: string },
+  now: string,
+): number {
+  let moved = 0
+  for (const m of work.listMatters({})) {
+    if (m.position_template_id !== input.from) continue
+    if (input.role_id !== undefined && m.role_id !== input.role_id) continue
+    work.store.putMatter({ ...m, position_template_id: input.to, updated_at: now })
+    work.appendEvent(m.id, {
+      kind: 'status',
+      text:
+        input.to_name === undefined
+          ? '岗位调整：这件事跟着改归了新的岗位'
+          : `岗位调整：这件事改归「${input.to_name}」`,
+      actor: { kind: 'system', id: 'org' },
+      ref: { type: 'position', id: input.to },
+    })
+    moved += 1
+  }
+  return moved
 }

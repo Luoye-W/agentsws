@@ -46,6 +46,7 @@
     "packages/contracts/src/official-plugins.ts",
     "packages/contracts/src/packages.ts",
     "packages/contracts/src/platform-kits.ts",
+    "packages/contracts/src/position-plan.ts",
     "packages/contracts/src/pr.ts",
     "packages/contracts/src/pricing-catalog.ts",
     "packages/contracts/src/roles.ts",
@@ -112,7 +113,7 @@
     "packages/roles/roles/social/x.yml",
     "packages/roles/roles/social/youtube.yml"
   ],
-  "source_digest": "5b5a7db67efe4c48afe655ce21cb5f65",
+  "source_digest": "1dc0a9ac2e708afce35cea8dcc015e6d",
   "objects": [
     {
       "id": "ad",
