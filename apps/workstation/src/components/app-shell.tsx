@@ -65,6 +65,7 @@ import { StandbyBadge } from '@/components/standby-badge'
 import { CreditsChip, ModelChip } from '@/components/top-chips'
 import { DemoBadge } from '@/components/ui/demo-badge'
 import { Separator } from '@/components/ui/separator'
+import { UpdateButton } from '@/components/update-button'
 import {
   listMessageAccounts,
   type Me,
@@ -638,6 +639,8 @@ export function AppShell({
               <BrandSwitcher />
               {/* WP136（docs/79）：账户块上方一行「场景」——切到 dsh 的其他场景（只有所有者看得到） */}
               <SceneSwitcher />
+              {/* WP218：账号区正上方——有新版本时才出现（桌面壳里），点一下就更新 */}
+              <UpdateButton />
               <AccountBlock {...(me === undefined ? {} : { me })} />
             </div>
           </aside>

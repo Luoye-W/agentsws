@@ -26,6 +26,8 @@ import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 import type { BrowserSkillCheck, BrowserSkillStatus } from '@agentsws/contracts'
 
+import { systemTar } from './system-tools.js'
+
 const execFileAsync = promisify(execFile)
 
 /** 一个平台的产物（url + sha256），逐字来自上游 release 的 version.json。 */
@@ -167,7 +169,7 @@ export async function installBrowserSkillCli(input: InstallInput): Promise<Insta
   const archive = join(tmp, 'bsk.tar.gz')
   writeFileSync(archive, bytes)
   try {
-    await execFileAsync('tar', ['-xzf', archive, '-C', tmp])
+    await execFileAsync(systemTar(), ['-xzf', archive, '-C', tmp], { windowsHide: true })
   } catch (e) {
     throw new BrowserSkillInstallError(
       'provider_error',
@@ -209,6 +211,7 @@ async function runBsk(
         BSK_UPDATE_MANIFEST_URL: NO_UPDATE_MANIFEST,
       },
       maxBuffer: 4 * 1024 * 1024,
+      windowsHide: true,
     })
     return { stdout, code: 0 }
   } catch (e) {

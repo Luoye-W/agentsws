@@ -58,6 +58,7 @@ import { ontologyRoutes } from './routes/ontology.js'
 import { orgRoutes } from './routes/org.js'
 import { organizationRoutes } from './routes/organizations.js'
 import { personaRoutes } from './routes/personas.js'
+import { platformKitRoutes } from './routes/platform-kit.js'
 import { positionEntryRoutes } from './routes/positions.js'
 import { prRoutes } from './routes/pr.js'
 import { privacyRoutes } from './routes/privacy.js'
@@ -242,6 +243,8 @@ export function collectRoutes(): Route[] {
     ...computerUseRoutes(),
     // WP180：官方插件（装 / 升级 / 卸载出卡、只从审过的清单装、配置写回只许写非锁定行）。`/v1/settings/official-plugins*` 是新路径
     ...officialPluginsRoutes(),
+    // WP216：平台专属那一套（官方技能 / MCP / CLI 卡）
+    ...platformKitRoutes(),
     // WP172（docs/84）：B2B 库。`/v1/b2b/*` 是新前缀，与别处都不撞（放在最后：生成物的顺序不动别人）
     ...b2bRoutes(),
     // WP215：每个品牌一套后台。`/v1/settings/background*` 是新路径（放在最后：生成物的顺序不动别人）

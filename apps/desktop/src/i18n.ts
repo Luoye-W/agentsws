@@ -59,6 +59,17 @@ export interface Strings {
   updateAvailable: string
   /** 弹通知的标题。 */
   updateAvailableTitle: string
+  /** WP218：Windows 应用内更新——查到新版、还没下。 */
+  updateDownload: string
+  /** WP218：正在后台下载（灰着）。 */
+  updateDownloading: string
+  /** WP218：下好了。 */
+  updateReady: string
+  /** WP218：「重启并更新」前，有任务在跑时那个确认框。 */
+  updateRestartMessage: string
+  updateRestartDetail: string
+  updateRestartConfirm: string
+  updateRestartLater: string
   /** 升级没成功，但数据一个字节都没动（迁移在事务里，失败整条回滚）。 */
   upgradeFailedIntact: string
   /** 万一真动了（理论上不该出现，出现了就得说实话）。 */
@@ -134,6 +145,13 @@ const ZH: Strings = {
   restoreBackup: '还原上一份备份',
   updateAvailable: '有新版本 {version}，去下载…',
   updateAvailableTitle: 'Agents 工坊有新版本',
+  updateDownload: '下载新版本 {version}',
+  updateDownloading: '正在下载新版本… {percent}%',
+  updateReady: '重启并更新到 {version}',
+  updateRestartMessage: '有任务在跑，确定现在重启？',
+  updateRestartDetail: '重启会把官方场景和正在操作电脑的 AI 一起停下，更新完自动重新打开。',
+  updateRestartConfirm: '重启并更新',
+  updateRestartLater: '再等等',
   upgradeFailedIntact: '升级没成功，你的数据一个字节都没动。',
   upgradeFailedTouched: '升级中断了，数据可能只改了一半——先还原备份，别继续用。',
   upgradeBackupAt: '升级前的备份在：{path}',
@@ -207,6 +225,14 @@ const EN: Strings = {
   restoreBackup: 'Restore the last backup',
   updateAvailable: 'Version {version} is out — open the download page…',
   updateAvailableTitle: 'A new Agents Workshop is available',
+  updateDownload: 'Download version {version}',
+  updateDownloading: 'Downloading the update… {percent}%',
+  updateReady: 'Restart to update to {version}',
+  updateRestartMessage: 'Something is still running. Restart now?',
+  updateRestartDetail:
+    'Restarting stops the official scenes and any AI using the computer. The app reopens by itself after the update.',
+  updateRestartConfirm: 'Restart and update',
+  updateRestartLater: 'Not now',
   upgradeFailedIntact: 'The upgrade did not go through. Not one byte of your data was touched.',
   upgradeFailedTouched:
     'The upgrade stopped halfway and your data may be half-changed. Restore the backup before using it again.',

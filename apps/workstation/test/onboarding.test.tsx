@@ -313,6 +313,8 @@ const state = {
   templates: undefined as ModelProviderTemplate[] | undefined,
   /** WP142：第 ④ 步那张清单（不给就是 PLAN）。 */
   plan: undefined as OnboardingPlanView | undefined,
+  /** WP216：「完成」回执里带的那份清单（不给就是 PLAN）。 */
+  applyPlan: undefined as OnboardingPlanView | undefined,
   /** WP142：「完成」那一发服务端回的（完成屏按它说数）。 */
   applyResult: { created_assignments: [], skipped: [] } as {
     created_assignments: { id: string; role_id: string; role_name: string }[]
@@ -342,7 +344,7 @@ vi.mock('@/lib/api', async () => {
     },
     applyOnboarding: async (input: OnboardingPlanInput) => {
       state.applies.push(input)
-      return { ...state.applyResult, ranges: [], plan: PLAN }
+      return { ...state.applyResult, ranges: [], plan: state.applyPlan ?? PLAN }
     },
     requestMembership: async (input: {
       code?: string
@@ -450,6 +452,7 @@ beforeEach(() => {
   state.templates = undefined
   state.applyResult = { created_assignments: [], skipped: [] }
   state.plan = undefined
+  state.applyPlan = undefined
 })
 
 /** 走完第 ① 步（走演示旁路——四条路里最短的那条，而且不落任何东西）。 */
@@ -1768,6 +1771,59 @@ describe('WP142 完成屏：数字与第 ④ 步同口径，已有的被跳过�
     const line = (await screen.findByTestId('onboarding-done-line')).textContent ?? ''
     expect(line).not.toContain('0 条')
     expect(line).toContain('2 条职责本来就都有了')
+  })
+})
+
+describe('WP216 完成屏：品牌是 Shopify、勾了建站，问一句「要现在装 Shopify CLI 吗」', () => {
+  async function finish(): Promise<void> {
+    const user = userEvent.setup()
+    await passAi()
+    await user.click(screen.getByTestId('intake-no-site'))
+    await user.click(screen.getByTestId('onboarding-next'))
+    await user.click((await screen.findAllByTestId('onboarding-position'))[1] as HTMLElement)
+    await user.click(screen.getByTestId('onboarding-next'))
+    await screen.findByTestId('onboarding-plan')
+    await user.click(screen.getByTestId('onboarding-finish'))
+  }
+
+  it('服务端清单带 platform_cli：完成屏有提示与「现在装」，能跳过（进工作台照样在）', async () => {
+    state.applyPlan = {
+      ...PLAN,
+      positions: [
+        {
+          position_id: 'site',
+          name: '建站',
+          role_ids: ['site.shopify-theme'],
+          already_held: false,
+        },
+      ],
+      platform_cli: {
+        id: 'shopify-cli',
+        label: 'Shopify CLI',
+        position_id: 'site',
+        tutorial: 'shopify-cli',
+      },
+    }
+    state.applyResult = {
+      created_assignments: [
+        { id: 'asg_site', role_id: 'site.shopify-theme', role_name: 'Shopify 网页模板' },
+      ],
+      skipped: [],
+    }
+    renderWithProviders(<OnboardingPage />)
+    await finish()
+    const box = await screen.findByTestId('onboarding-platform-cli')
+    expect(box.textContent).toContain('建站岗位会用到 Shopify CLI，要现在装吗？')
+    expect(box.textContent).toContain('之后在建站岗位页也能装')
+    expect(screen.getByTestId('onboarding-platform-cli-go').textContent).toBe('现在装')
+    expect(screen.getByTestId('onboarding-enter')).toBeTruthy()
+  })
+
+  it('没有 platform_cli（不是 Shopify / 没勾建站）：完成屏一个字都不提', async () => {
+    renderWithProviders(<OnboardingPage />)
+    await finish()
+    await screen.findByTestId('onboarding-done')
+    expect(screen.queryByTestId('onboarding-platform-cli')).toBeNull()
   })
 })
 

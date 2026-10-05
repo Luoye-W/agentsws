@@ -32,6 +32,11 @@ export interface DesktopConfig {
    * （体验接近官方桌面端）；托盘「切换场景 ▸ 在浏览器里打开场景」切换。
    */
   sceneInBrowser: boolean
+  /**
+   * WP218：自有下载站（主源）连不上时，退到 GitHub Releases 查一次更新。默认开；
+   * 环境变量 `AGENTSWS_UPDATE_GITHUB_FALLBACK=0/1` 优先于它（见 `update-feed.ts`）。
+   */
+  updateGithubFallback: boolean
 }
 
 export const DEFAULT_PORT = 4317
@@ -44,6 +49,7 @@ export const DEFAULT_CONFIG: DesktopConfig = {
   mode: 'local',
   serverUrl: '',
   sceneInBrowser: false,
+  updateGithubFallback: true,
 }
 
 function isLanguage(value: unknown): value is Language {
@@ -75,6 +81,10 @@ export function parseConfig(raw: unknown): DesktopConfig {
     serverUrl: typeof obj.serverUrl === 'string' ? obj.serverUrl : DEFAULT_CONFIG.serverUrl,
     sceneInBrowser:
       typeof obj.sceneInBrowser === 'boolean' ? obj.sceneInBrowser : DEFAULT_CONFIG.sceneInBrowser,
+    updateGithubFallback:
+      typeof obj.updateGithubFallback === 'boolean'
+        ? obj.updateGithubFallback
+        : DEFAULT_CONFIG.updateGithubFallback,
   }
 }
 
@@ -88,6 +98,7 @@ export function serializeConfig(config: DesktopConfig): string {
     mode: config.mode,
     serverUrl: config.serverUrl,
     sceneInBrowser: config.sceneInBrowser,
+    updateGithubFallback: config.updateGithubFallback,
   }
   return `${JSON.stringify(clean, null, 2)}\n`
 }

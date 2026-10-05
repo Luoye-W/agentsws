@@ -25,6 +25,8 @@ export const HELP_SLUGS = [
   'search-data',
   // WP157：连接页（每类连接一篇，能合并的合并）
   'conn-shopify',
+  // WP216：建站平台的官方 CLI（只给 Shopify 品牌；卡在连接页与建站岗位页）
+  'shopify-cli',
   'conn-email',
   'conn-google',
   'conn-meta',
@@ -47,6 +49,8 @@ export const HELP_SLUGS = [
   'dsh-scenes',
   // WP207：对话与任务的归档与找回（左栏三级「+」、状态小点、自动归档、AI 找回）
   'archive',
+  // WP218：桌面版安装（Windows SmartScreen / Mac 右键打开）与应用内一键更新
+  'install-update',
 ] as const
 
 export type HelpSlug = (typeof HELP_SLUGS)[number]
@@ -77,6 +81,7 @@ export const HELP_SCOPES: Readonly<Record<HelpSlug, HelpScope>> = {
   },
   'computer-use': { positions: [], roles: [] },
   'search-data': { positions: ['web-ops', 'dtc-ops'], roles: ['dtc.content'] },
+  'shopify-cli': { positions: ['site'], roles: ['site.shopify-theme'] },
   'conn-shopify': {
     positions: ['dtc-ops', 'web-ops', 'customer-care', 'site'],
     roles: [
@@ -147,6 +152,8 @@ export const HELP_SCOPES: Readonly<Record<HelpSlug, HelpScope>> = {
   'dsh-scenes': { positions: [], roles: [] },
   // WP207：通用（谁都看得到）
   archive: { positions: [], roles: [] },
+  // WP218：通用
+  'install-update': { positions: [], roles: [] },
 }
 
 /**

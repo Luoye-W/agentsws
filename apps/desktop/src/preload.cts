@@ -5,7 +5,14 @@
  * `sandbox: true` 的 preload 必须是 CommonJS，所以这个文件是 `.cts`（编译成 `preload.cjs`）。
  * 这里不 require 除 electron 以外的任何东西，也不碰 fs / 密钥。
  */
-import type { BridgeInfo, DesktopBridge, NotifyInput, SceneOpenOutcome } from './bridge-types.js'
+import type {
+  BridgeInfo,
+  DesktopBridge,
+  DesktopInstallOutcome,
+  DesktopUpdateStatus,
+  NotifyInput,
+  SceneOpenOutcome,
+} from './bridge-types.js'
 
 import electron = require('electron')
 
@@ -16,6 +23,10 @@ const CHANNELS = {
   notify: 'agentsws:notify',
   openExternal: 'agentsws:open-external',
   openScene: 'agentsws:open-scene',
+  updateStatus: 'agentsws:update-status',
+  updateChanged: 'agentsws:update-changed',
+  updateDownload: 'agentsws:update-download',
+  updateInstall: 'agentsws:update-install',
 } as const
 
 const info = ipcRenderer.sendSync(CHANNELS.info) as BridgeInfo
@@ -35,6 +46,24 @@ const bridge: DesktopBridge = {
     ipcRenderer.invoke(CHANNELS.openScene, name, {
       restart: options?.restart === true,
     }) as Promise<SceneOpenOutcome>,
+  // WP218：一键更新。状态在主进程，这里只转话；监听函数不把 IPC 事件对象交给页面
+  update: {
+    status: (): Promise<DesktopUpdateStatus> =>
+      ipcRenderer.invoke(CHANNELS.updateStatus) as Promise<DesktopUpdateStatus>,
+    onChange: (listener: (status: DesktopUpdateStatus) => void): (() => void) => {
+      const handler = (_event: unknown, status: DesktopUpdateStatus): void => {
+        listener(status)
+      }
+      ipcRenderer.on(CHANNELS.updateChanged, handler)
+      return () => {
+        ipcRenderer.removeListener(CHANNELS.updateChanged, handler)
+      }
+    },
+    download: (): Promise<DesktopUpdateStatus> =>
+      ipcRenderer.invoke(CHANNELS.updateDownload) as Promise<DesktopUpdateStatus>,
+    install: (): Promise<DesktopInstallOutcome> =>
+      ipcRenderer.invoke(CHANNELS.updateInstall) as Promise<DesktopInstallOutcome>,
+  },
 }
 
 contextBridge.exposeInMainWorld('agentsws', Object.freeze(bridge))

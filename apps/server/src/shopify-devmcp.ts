@@ -173,6 +173,7 @@ function defaultSpawn(): SpawnMcp {
     const child = spawn(command, [...args], {
       env: opts.env,
       stdio: ['pipe', 'pipe', 'pipe'],
+      windowsHide: true,
     })
     const listeners: ((line: string) => void)[] = []
     let buffer = ''

@@ -14,6 +14,7 @@
  * 4. **我们的业务数据它们够不着**：工作区根不在（也不包含）我们的数据目录；环境变量白名单继承，
  *    我们的密钥一个都不带（`sceneEnv`）。
  */
+
 import { type ChildProcess, execFile, spawn } from 'node:child_process'
 import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, rmSync } from 'node:fs'
 import { homedir } from 'node:os'
@@ -48,6 +49,7 @@ import {
   surfaceOfBundles,
   webSceneArgs,
 } from '@agentsws/dsh-adapter'
+import { killTree } from './kill-tree.js'
 
 const execFileAsync = promisify(execFile)
 
@@ -485,12 +487,13 @@ export function createDshScenes(options: DshScenesOptions): DshScenesManager {
       if (proc.child.exitCode !== null || proc.child.signalCode !== null) res()
       else proc.child.once('exit', () => res())
     })
-    proc.child.kill('SIGTERM')
+    // WP218：Windows 上按进程树结束（场景里的终端 / 工具进程不留孤儿）
+    killTree(proc.child)
     const timeout = new Promise<'timeout'>((res) => {
       setTimeout(() => res('timeout'), stopTimeoutMs).unref?.()
     })
     if ((await Promise.race([exited, timeout])) === 'timeout') {
-      proc.child.kill('SIGKILL')
+      killTree(proc.child, { signal: 'SIGKILL' })
       await exited
     }
     running.delete(name)

@@ -443,6 +443,7 @@ export type {
   OnboardingConnectorItem,
   OnboardingPlanInput,
   OnboardingPlanView,
+  OnboardingPlatformCliItem,
   OnboardingPort,
   OnboardingPositionPlanItem,
   OnboardingPositionView,
@@ -510,6 +511,14 @@ export type {
 export { organizationRoutes } from './routes/organizations.js'
 export type { PersonaActor, PersonaPort } from './routes/personas.js'
 export { personaRoutes } from './routes/personas.js'
+export {
+  type PlatformCliState,
+  type PlatformCliView,
+  type PlatformKitActor,
+  type PlatformKitPort,
+  type PlatformKitView,
+  platformKitRoutes,
+} from './routes/platform-kit.js'
 export type {
   OpenAtPositionView,
   PositionActor,

@@ -31,6 +31,7 @@ import type {
   OnboardingConnectorItem,
   OnboardingPlanInput,
   OnboardingPlanView,
+  OnboardingPlatformCliItem,
   OnboardingPort,
   OnboardingPositionPlanItem,
   OnboardingPositionView,
@@ -57,7 +58,9 @@ import {
   DEFAULT_STOREFRONT_PLATFORM,
   normalizeMarketLanguages,
   normalizeMarkets,
+  platformKitOf,
   STOREFRONT_PLATFORMS,
+  skillOnPlatform,
   storefrontUsableService,
 } from '@agentsws/contracts'
 import { companyKey, normalizeDomain } from '@agentsws/core'
@@ -354,6 +357,15 @@ export interface OnboardingAssembly {
    */
   setPostalAddress(workspace_id: WorkspaceId, address: string | undefined): boolean
   /**
+   * WP216：只改某个品牌档案上的「网站是用什么搭的」。`source` 记是人选的还是按已连的店铺推断的
+   * （进事件，不进档案）。档案还没建过：公司已有名字就用它起一份最小档案；公司也没名字回 `false`。
+   */
+  setStorefrontPlatform(
+    workspace_id: WorkspaceId,
+    platform: StorefrontPlatform,
+    source: 'human' | 'inferred_from_connection',
+  ): boolean
+  /**
    * WP166：直接改某个品牌的目标市场（店铺连上后按店里配的市场 / 配送区域校正那一次用）。
    * 人改过的（`markets_source.from === 'human'`）**不动**，回 `false`；改了回 `true`。
    */
@@ -601,8 +613,25 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
     return hits
   }
 
-  function planOf(input: OnboardingPlanInput): OnboardingPlanView {
+  /**
+   * WP216：向导最后那句「要现在装 CLI 吗？」——平台那一行有 CLI、而且勾的职责里有要用它的才问。
+   * 判据全在 `PLATFORM_KITS` 里，这里没有一个平台名。
+   */
+  function platformCliOf(
+    platform: StorefrontPlatform | undefined,
+    roleIds: readonly string[],
+  ): OnboardingPlatformCliItem | undefined {
+    const cli = platformKitOf(platform)?.cli
+    if (cli === undefined || !roleIds.some((r) => cli.roles.includes(r))) return undefined
+    const position_id = cli.positions[0]
+    if (position_id === undefined) return undefined
+    return { id: cli.id, label: cli.label, position_id, tutorial: cli.tutorial }
+  }
+
+  function planOf(input: OnboardingPlanInput, ws?: WorkspaceId): OnboardingPlanView {
     const positions = options.positions()
+    // WP216：平台专属的官方技能 / CLI 按**这个品牌**的档案判断（不是进程默认那个品牌）
+    const platform = profileOf(ws)?.storefront_platform
     const roleIds = expandRoles(input, positions)
     const connected = new Set(options.connectedKinds())
     const installed = new Set(options.installedSkills())
@@ -633,6 +662,8 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
         }
       }
       for (const s of def.skills) {
+        // WP216：平台对不上的官方技能（非 Shopify 品牌上的 Shopify 技能）不进清单
+        if (!skillOnPlatform(s.name, platform)) continue
         const existing = skills.get(s.name)
         if (existing === undefined)
           skills.set(s.name, {
@@ -671,6 +702,7 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
     }
 
     const model_configured = options.modelConfigured()
+    const platform_cli = platformCliOf(platform, roleIds)
     return {
       connectors: [...connectors.values()].sort(
         (a, b) => Number(b.required) - Number(a.required) || a.service.localeCompare(b.service),
@@ -681,6 +713,7 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
       // 模型没接的话清单第一条固定是"接模型"：平台连得再全也没人替你干活
       model_first: !model_configured,
       role_ids: roleIds,
+      ...(platform_cli === undefined ? {} : { platform_cli }),
     }
   }
 
@@ -826,12 +859,12 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
       }))
     },
 
-    plan(_actor, input) {
-      return planOf(input)
+    plan(actor, input) {
+      return planOf(input, actor.workspace_id)
     },
 
     apply(actor, input) {
-      const plan = planOf(input)
+      const plan = planOf(input, actor.workspace_id)
       // 46 §3 I6：连上 Shopify 的店自动挂上；WP138：一家没连就挂整个品牌（不再挂空）
       const ranges = wizardRanges()
       const held = new Map(activeOf(actor.person_id).map((a) => [a.role_id, a]))
@@ -942,6 +975,37 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
           : { market_languages: { ...p.market_languages } }),
         ...(p?.postal_address === undefined ? {} : { postal_address: p.postal_address }),
       }
+    },
+    setStorefrontPlatform(ws, platform, source) {
+      const next = normalizeStorefrontPlatform(platform)
+      if (next === undefined) return false
+      const previous = profileOf(ws)
+      if (previous !== undefined) {
+        backend.put(ws, { ...previous, storefront_platform: next })
+      } else {
+        // 品牌档案还没建过（跳过了首次设置的品牌）：公司已经有名字就用它起一份最小档案，
+        // 只多这一格平台；公司还没名字就不替人建（回 false，界面让人先去设置里填公司信息）。
+        // 能走到这里的人已经有岗位了（`needs_setup` 本来就是 false），不会把首次设置挡掉。
+        const company = companyOf()
+        const legal_name = company?.legal_name?.trim() ?? ''
+        if (legal_name === '') return false
+        backend.put(ws, {
+          legal_name,
+          ...(company?.domain === undefined ? {} : { domain: company.domain }),
+          discoverable: company?.discoverable ?? false,
+          storefront_platform: next,
+          set_at: clock.now(),
+        })
+      }
+      appendEvent({
+        schema_version: 1,
+        workspace_id: ws,
+        type: 'workspace.storefront_platform_set',
+        actor: { kind: 'system', id: 'onboarding' },
+        correlation: { trace_id: `tr_onboarding_${clock.now()}` },
+        payload: { storefront_platform: next, source },
+      })
+      return true
     },
     setPostalAddress(ws, address) {
       const previous = profileOf(ws)
