@@ -18,3 +18,12 @@ worktree `../agentsws-wt/wp216-shopify-skills` · 分支 `wp/216-shopify-skills`
 
 ## 验证
 `scripts/verify-changed.sh` + fast 模拟三包 stub（零漂移）+ `gen-ontology --check` + `check-upstreams --check` + `open-repo-boundary`；报告 `docs/briefs/reports/WP216.md`（含来源 / 许可证 / 评估）。
+
+## 追加（Luoye 10-05）：引导用户装好并登录 Shopify CLI
+「然后也要引导用户设置 Shopify CLI 啥的。」
+7. **Shopify CLI 引导**（官方 `@shopify/cli`，照「不打包重型本机运行时」：不进安装包，用户按需装）：
+   - 连接页 / 建站岗位页加一张「Shopify CLI」卡：自动检测本机有没有装、版本多少（`shopify version`）、Node 版本够不够；没装就给**一步步的引导**（教程一篇中英：用官方推荐方式安装、`shopify auth login` 在浏览器里**由用户自己登录**、选店铺）；装好、登好后状态用图标表示（docs/36 第四档）。
+   - **登录永远是用户本人在浏览器里完成**，我们不碰账号密码、不代登录；CLI 自己存的会话凭据留在 CLI 自己的位置，不进我们的日志。
+   - 网页模板职责用官方 CLI 做主题工作流：拉主题、只推到**未发布副本**（`theme push --unpublished` 或现行等价命令）、本地预览链接作审批材料、官方 `theme check` 做 Liquid 校验；**发布永远人审**（照 shopify-theme.yml 的现有规矩）。命令白名单只放这几类，不许任意 shell。
+   - CLI 不在 / 没登录时，职责降级到现有 Admin API 路径并在卡上说清。
+   - 测试用替身（假 CLI 可执行 / 记录调用），不连真店铺。
