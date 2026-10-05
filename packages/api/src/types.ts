@@ -72,6 +72,7 @@ import type { ContentUpdatesPort } from './routes/content-updates.js'
 import type { DataServiceApiPort } from './routes/data-service.js'
 import type { DesignPort } from './routes/design.js'
 import type { DshScenesPort } from './routes/dsh-scenes.js'
+import type { EconomicsPort } from './routes/economics.js'
 import type { ExtensionPort } from './routes/extension.js'
 import type { FreeChatPort } from './routes/free-chat.js'
 import type { ReconcilePort } from './routes/health.js'
@@ -1028,6 +1029,11 @@ export interface GatewayDeps {
    * 没装配时 `/v1/settings/background*` 回 not_implemented。
    */
   background?: BackgroundPort
+  /**
+   * WP224（docs/91 §2.2 #1 / #3）：毛利率事实卡、两条止损线对照、本周经营一页纸。
+   * 没装配时 `/v1/economics/*` 回 not_implemented。
+   */
+  economics?: EconomicsPort
 }
 
 /**

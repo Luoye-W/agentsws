@@ -23,11 +23,14 @@
  */
 import { createRequire } from 'node:module'
 import { join } from 'node:path'
+import { attributeAds, attributionGapPct, compareLines, roasBothViews } from '@agentsws/ads-core'
 import type {
   Ad,
   AdAccount,
   AdCampaign,
   AdSet,
+  AdsCaps,
+  AdsLineCompareRow,
   AdsPlatform,
   PixelEvent,
   PixelHealth,
@@ -37,8 +40,20 @@ import { ADS_PLATFORM_IDS } from '@agentsws/contracts'
 import type { AdsDeckData } from '@agentsws/deck'
 import type BetterSqlite3 from 'better-sqlite3'
 
-/** 库里的五张表。名字与对象类型一一对应，不另起别名。 */
-export type AdsTable = 'ad_account' | 'ad_campaign' | 'ad_set' | 'ad' | 'pixel_event'
+/**
+ * 库里的五张表。名字与对象类型一一对应，不另起别名。
+ *
+ * WP224 加第六张 `line_compare`：两条止损线的逐日对照（一天一个 campaign 一行）。
+ * 它不是对象，是账——两周后照它定止损线（docs/91 §7 #2）。`CREATE TABLE IF NOT EXISTS`，
+ * 老库开起来自动多一张空表。
+ */
+export type AdsTable =
+  | 'ad_account'
+  | 'ad_campaign'
+  | 'ad_set'
+  | 'ad'
+  | 'pixel_event'
+  | 'line_compare'
 
 export const ADS_TABLES: readonly AdsTable[] = [
   'ad_account',
@@ -46,6 +61,7 @@ export const ADS_TABLES: readonly AdsTable[] = [
   'ad_set',
   'ad',
   'pixel_event',
+  'line_compare',
 ]
 
 interface AdsBackend {
@@ -160,6 +176,13 @@ export interface AdsStore {
    */
   recordMetrics(input: { campaign_id: string; metrics: NonNullable<AdCampaign['metrics']> }): void
 
+  /**
+   * WP224：记一行两条止损线的对照（同一天同一条 campaign 只留最后那一次）。
+   * 只是记账——**不据此停任何东西**。
+   */
+  recordLineCompare(row: AdsLineCompareRow): void
+  lineCompareRows(): AdsLineCompareRow[]
+
   /** 记一次止损（自动停掉一条之后）。 */
   recordStopLoss(row: AdsStopLoss): void
   stopLosses(filter?: { platform?: AdsPlatform; since?: string }): AdsStopLoss[]
@@ -235,6 +258,11 @@ export function createAdsStore(options: AdsStoreOptions): AdsStore {
       if (campaign === undefined) return
       backend.put('ad_campaign', campaign.id, { ...campaign, metrics })
     },
+
+    recordLineCompare: (row) => {
+      backend.put('line_compare', `${row.date}:${row.campaign_id}`, row)
+    },
+    lineCompareRows: () => backend.all<AdsLineCompareRow>('line_compare'),
 
     recordStopLoss: (row) => {
       backend.put('ad_campaign', stopLossId(row), { ...row, id: stopLossId(row) })
@@ -346,6 +374,10 @@ export function adsDeckData(
     unmatched_orders?: number
     /** 待审改动四车道（从审批总线读出来递进来——库里不存审批）。 */
     pending?: AdsDeckData['pending']
+    /** WP224：盈亏线那一格（品牌那一格毛利率 + 现在那条固定止损线）。不给 = 不显示这一层。 */
+    break_even?: AdsDeckData['break_even']
+    /** WP224：两条止损线的对照表（`summarizeLineCompare` 算好递进来）。 */
+    line_compare?: AdsDeckData['line_compare']
     now?: string
   } = {},
 ): AdsDeckData {
@@ -425,7 +457,57 @@ export function adsDeckData(
       ? {}
       : { conversions_today: conversions.reduce((a, b) => a + b, 0) }),
     stop_loss_count: stop_losses.length,
+    ...(options.break_even === undefined ? {} : { break_even: options.break_even }),
+    ...(options.line_compare === undefined ? {} : { line_compare: options.line_compare }),
   }
+}
+
+/**
+ * WP224：给今天拍一张两条止损线的对照（每条有表现数的 campaign 一行）。
+ *
+ * 判据只有 `ads-core` 那一份（`compareLines`）：现在那条线照 `caps` 算，盈亏线把 ROAS
+ * 那条换成 1 / 毛利率、花费那条不变。停着的 campaign 也记——它停着是因为谁停的，
+ * 对照表要看的是「按这两条线它会不会被停」。
+ */
+export function snapshotLineCompare(
+  store: Pick<AdsStore, 'campaigns' | 'recordLineCompare'>,
+  input: {
+    date: string
+    now: string
+    caps?: Partial<AdsCaps>
+    /** 这条 campaign 该用哪一格毛利率（没填 → `undefined`）。 */
+    marginFor(campaign: AdCampaign): number | undefined
+  },
+): AdsLineCompareRow[] {
+  const out: AdsLineCompareRow[] = []
+  for (const c of store.campaigns()) {
+    if (c.metrics === undefined) continue
+    const margin_pct = input.marginFor(c)
+    const v = compareLines({
+      ...(c.metrics.roas === undefined ? {} : { roas: c.metrics.roas }),
+      ...(c.metrics.spend === undefined ? {} : { spend: c.metrics.spend }),
+      ...(c.daily_budget === undefined ? {} : { daily_budget: c.daily_budget }),
+      ...(input.caps === undefined ? {} : { caps: input.caps }),
+      ...(margin_pct === undefined ? {} : { margin_pct }),
+    })
+    const row: AdsLineCompareRow = {
+      date: input.date,
+      campaign_id: c.id,
+      platform: c.platform,
+      name: c.name,
+      ...(c.metrics.roas === undefined ? {} : { roas: c.metrics.roas }),
+      ...(c.metrics.spend === undefined ? {} : { spend: c.metrics.spend }),
+      ...(c.daily_budget === undefined ? {} : { daily_budget: c.daily_budget }),
+      ...(margin_pct === undefined ? {} : { margin_pct }),
+      ...(v.break_even_roas === undefined ? {} : { break_even_roas: v.break_even_roas }),
+      fixed: v.fixed,
+      break_even: v.break_even,
+      recorded_at: input.now,
+    }
+    store.recordLineCompare(row)
+    out.push(row)
+  }
+  return out
 }
 
 /**
@@ -713,4 +795,67 @@ export function seedDemoAds(store: AdsStore, now: string): void {
     reason:
       '两条判据都成立，止损：ROAS 0.6（线是 1），今天花了 400，占日预算 1000 的 40%（线是 30%）。',
   })
+}
+
+/**
+ * WP224：归因两列那几行（投放日报那张表的数据）——原来宿主一直没递，日报在真环境里永远是空表，
+ * 盈亏线那一格也就无处并排。判据只有 `ads-core` 那一份（`attributeAds` / `roasBothViews`），
+ * 与模拟世界同一套：平台那一侧取 campaign 表上的表现数，订单那一侧取**今天**（工作区时区）
+ * 下的单、按落地页 UTM 认平台。两列各算各的，不合并；归不上的单不分摊。
+ */
+export function adsAttribution(
+  store: Pick<AdsStore, 'campaigns'>,
+  input: {
+    orders: readonly {
+      id: string
+      created_at: string
+      total_price: number
+      landing_site?: string
+    }[]
+    now: string
+    tz_offset_minutes: number
+  },
+): { rows: AdsDeckData['attribution']; unmatched_orders: number } {
+  const campaigns = store.campaigns().filter((c) => c.metrics !== undefined)
+  if (campaigns.length === 0) return { rows: [], unmatched_orders: 0 }
+  const nowMs = Date.parse(input.now)
+  const offset = input.tz_offset_minutes * 60_000
+  const dayStart = Math.floor((nowMs + offset) / 86_400_000) * 86_400_000 - offset
+  const result = attributeAds({
+    platform_rows: campaigns.map((c) => ({
+      platform: c.platform,
+      campaign: c.name,
+      ...(c.metrics?.spend === undefined ? {} : { spend: c.metrics.spend }),
+      ...(c.metrics?.conversions === undefined ? {} : { conversions: c.metrics.conversions }),
+      ...(c.metrics?.conversion_value === undefined
+        ? {}
+        : { conversion_value: c.metrics.conversion_value }),
+    })),
+    orders: input.orders
+      .filter((o) => Date.parse(o.created_at) >= dayStart && Date.parse(o.created_at) <= nowMs)
+      .map((o) => ({
+        order_id: o.id,
+        ...(o.landing_site === undefined ? {} : { landing_url: o.landing_site }),
+        amount: o.total_price,
+        created_at: o.created_at,
+      })),
+    observed_at: input.now,
+  })
+  const rows = result.rows.slice(0, MAX_ROWS).map((row) => {
+    const roas = roasBothViews(row)
+    const gap = attributionGapPct(row)
+    return {
+      platform: row.platform as string,
+      campaign: row.campaign,
+      ...(row.platform_conversions === undefined
+        ? {}
+        : { platform_conversions: row.platform_conversions }),
+      ...(row.order_conversions === undefined ? {} : { order_conversions: row.order_conversions }),
+      ...(roas.platform === undefined ? {} : { platform_roas: roas.platform }),
+      ...(roas.order === undefined ? {} : { order_roas: roas.order }),
+      ...(gap === undefined || !Number.isFinite(gap) ? {} : { gap_pct: gap }),
+      observed_at: row.observed_at,
+    }
+  })
+  return { rows, unmatched_orders: result.unmatched.length }
 }

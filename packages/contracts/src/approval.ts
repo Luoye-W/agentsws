@@ -132,6 +132,14 @@ export type ApprovalKind =
    * 「看对比」= 打开三栏对比。payload = `ContentConflictCardPayload`。
    */
   | 'content_conflict'
+  /**
+   * WP224（docs/91 §2.2 #1）：**本周经营一页纸**。
+   *
+   * 「公司设置与授权」（`common.owner`）每周一由秘书推一张：情况 / 发现 / 影响 / 建议 / 下一步，
+   * 每条发现带一个数和出处，数字只从各岗位已有面板取，取不到写「没接」。与 `daily_report`
+   * 同一类：L3 自动出、看完归档，**不进审批队列**。payload = `WeeklyReviewPayload`。
+   */
+  | 'weekly_review'
 
 /** 14 §13.2 抽检复核：L2 自动批被抽中后，范围管理者看完说什么（WP32） */
 export interface SamplingReview {

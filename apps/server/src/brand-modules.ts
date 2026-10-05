@@ -40,6 +40,7 @@ import type { ChatWidgetAssembly } from './chat-widget.js'
 import type { CloudAssembly } from './cloud.js'
 import type { ConnectionsAssembly } from './connections.js'
 import type { DesignServiceAssembly, DesignStore } from './design.js'
+import type { EconomicsService } from './economics.js'
 import type { GoogleReads } from './google-reads.js'
 import type { KolStore } from './kol.js'
 import type { KolSandboxAssembly } from './kol-sandbox.js'
@@ -59,6 +60,7 @@ import type { SocialStore } from './social.js'
 import type { SocialChannelsAssembly } from './social-channels.js'
 import type { SocialServiceAssembly } from './social-service.js'
 import type { SupportJudgment } from './support-judgment.js'
+import type { WeeklyReviewService } from './weekly-review.js'
 import type { WorkstationDataSource } from './workstation.js'
 
 /** 品牌落盘目录在 `dbDir` 下的那一级。 */
@@ -264,6 +266,14 @@ export interface BrandModuleSet {
    * 额度内 L2、开花钱口子永远 L1）在服务进程里的落点就是它。
    */
   adsService: AdsServiceAssembly
+  /**
+   * WP224（docs/91 §2.2 #3）：这个品牌的毛利率事实卡（公司页填）——盈亏线那一格从它算。
+   */
+  economics: EconomicsService
+  /** WP224（docs/91 §2.2 #1）：这个品牌的本周经营一页纸（秘书每周一推给老板）。 */
+  weeklyReview: WeeklyReviewService
+  /** WP224（docs/91 §7 #2）：今天记一行两条止损线的对照（只记账，不改止损）。 */
+  lineCompareSnapshot(): Promise<{ rows: number; date: string }>
   work: Work
   runtime?: RuntimeAssembly
   startRun?: StartRun

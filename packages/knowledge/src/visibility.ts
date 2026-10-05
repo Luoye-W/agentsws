@@ -1,5 +1,5 @@
 import type { PermissionScope, RangeRef, RetrievalActor } from '@agentsws/contracts'
-import { SENSITIVITY_ORDER } from '@agentsws/contracts'
+import { ROLE_SCOPED_FACT_SUBJECTS, SENSITIVITY_ORDER } from '@agentsws/contracts'
 
 /**
  * 19 §3 过滤下推。契约里的 `RetrievalActor` 只带身份，不带授权；本包用**交叉类型**
@@ -72,5 +72,20 @@ export function visibilityWhere(actor: GrantedActor, alias = 'c'): SqlFragment {
   }
 
   const grantSql = clauses.length > 0 ? `(${clauses.join(' OR ')})` : '0'
-  return { sql: `${alias}.workspace_id = ? AND ${grantSql}`, params }
+  /*
+   * WP224（Luoye 10-05）：按职责白名单的那几类卡（毛利率……）。这个职责不在白名单里，
+   * 那一类卡就整类不进候选（零命中），与上面数据域那一刀同样是过滤下推。
+   */
+  const hidden = Object.entries(ROLE_SCOPED_FACT_SUBJECTS)
+    .filter(([, roles]) => !roles.includes(actor.role_id))
+    .map(([type]) => type)
+  // 已经恒假（一条 read 都没有）就不必再加这一刀
+  const roleSql =
+    hidden.length === 0 || clauses.length === 0
+      ? ''
+      : ` AND ${alias}.subject_type NOT IN (${hidden.map(() => '?').join(', ')})`
+  return {
+    sql: `${alias}.workspace_id = ? AND ${grantSql}${roleSql}`,
+    params: roleSql === '' ? params : [...params, ...hidden],
+  }
 }
