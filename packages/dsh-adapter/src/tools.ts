@@ -58,8 +58,8 @@ function renderReadResult(
   return [{ type: 'text', text: redactOutboundText('tool_result', trusted) }]
 }
 
-/** WP89：官方 `dsh-tool-bash` 的工具名（分类由 `gate.ts` 那一关先给出，见下）。 */
-const SHELL_TOOL = 'bash'
+/** WP89：官方 `dsh-tool-bash` 的工具名（分类由 `gate.ts` 那一关先给出，见下）；WP225：Windows 上是 `dsh-tool-pwsh` 的 `pwsh`。 */
+const SHELL_TOOLS: readonly string[] = ['bash', 'pwsh']
 
 /** 我们自己的 staging 工具：不写外部，只提审批项。 */
 export const STAGE_TOOL = 'stage_refund'
@@ -251,7 +251,7 @@ export function classifySideEffect(
    * 有人绕过门禁直接调了这个函数。那就按最严的兜底走（`write_external`），
    * 于是公司端一调就拒——这正是我们要的方向。
    */
-  if (bare === SHELL_TOOL) return 'write_external'
+  if (SHELL_TOOLS.includes(bare)) return 'write_external'
   // WP44：Shopify 官方 Dev MCP 的三个工具**永远只读**（查文档 / 看 schema / 校验 GraphQL，
   // 碰不到任何店铺数据）。要显式列出来：它们既不是 `get_` 也不是 `list_` 开头，
   // 落到下面的兜底就会被当成"写外部"，在 executor 策略下一调就拒。
