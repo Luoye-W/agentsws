@@ -1,6 +1,6 @@
 /**
  * 用户数据目录布局。真实路径由 Electron `app.getPath('userData')` 给
- * （macOS `~/Library/Application Support/agentsws`、Windows `%APPDATA%\agentsws`）；
+ * （macOS `~/Library/Application Support/@agentsws/desktop`、Windows `%APPDATA%\@agentsws\desktop`）；
  * 这里只做纯粹的路径拼装，测试里传一个临时目录即可。
  */
 import { join } from 'node:path'

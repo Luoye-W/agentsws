@@ -17,6 +17,8 @@
  *    Electron 自己的 LICENSE 与 Chromium 的 `LICENSES.chromium.html`。托盘「开源软件许可」
  *    打开的就是这个目录里的那份 txt。**包里带原生二进制、却不在清单里**的包有一个就失败。
  * 5. **审过的官方插件清单与锁定 patch 在包里**（WP181，`<resources>/profiles/agentsws/` 的两份）。
+ * 6. **钉版本表齐**（WP225，仓库根的 `*.lock.json` 抄进 `<resources>/`，包里服务进程找得到）；
+ *    冒烟里还用**包里那份**主进程代码取一次 `autoUpdater`（WP218 的包在 Windows 上就坏在这一步）。
  */
 import { execFileSync } from 'node:child_process'
 import {
@@ -31,7 +33,7 @@ import {
   statSync,
 } from 'node:fs'
 import { createRequire } from 'node:module'
-import { dirname, join, resolve } from 'node:path'
+import { dirname, join, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { stashDirOf } from './after-extract.mjs'
 import { findNativeBinaries, NOTICE_FILE, writeNotice } from './third-party-licenses.mjs'
@@ -264,16 +266,41 @@ for (const name of ['sharp', 'koffi', 'node-pty']) {
   req(resolved)
   process.stdout.write('native ok: ' + name + '\\n')
 }
-import(pathToFileURL(req.resolve('@agentsws/server')).href).then(
-  (m) => {
-    if (typeof m.createServer !== 'function') throw new Error('@agentsws/server 里没有 createServer')
-    process.stdout.write('probe ok\\n')
-  },
-  (err) => {
-    process.stderr.write(String(err && err.stack ? err.stack : err) + '\\n')
-    process.exit(1)
-  },
-)
+;(async () => {
+  // WP225：应用内更新。用**包里那份** electron-updater 与**包里那份**主进程代码
+  // （dist/electron-updater-module.js）走一遍主进程取 autoUpdater 的路——WP218 的包就是这一步拿到 undefined。
+  // 只认「有」不去读：读 getter 要 require('electron')，捆绑的 Node 里没有。
+  const updaterMod = await import(pathToFileURL(req.resolve('electron-updater')).href)
+  const helper = await import(pathToFileURL(appDir + '/dist/electron-updater-module.js').href)
+  if (helper.autoUpdaterHolder(updaterMod) === undefined)
+    throw new Error('包里的 electron-updater 取不到 autoUpdater（应用内更新会坏）')
+  process.stdout.write('updater ok\\n')
+  // WP225：钉版本表——用包里服务进程**自己的** defaultLockPath() 找，找到的必须在安装包里
+  // （在打包机上往上找可能找到仓库里那份，那不算）
+  const path = require('node:path')
+  const fs = require('node:fs')
+  const serverDist = path.dirname(req.resolve('@agentsws/server'))
+  // 比真实路径（mac 的临时目录 /var → /private/var；Windows 8.3 短名与大小写）
+  const norm = (p) => {
+    const real = fs.realpathSync.native(p)
+    return process.platform === 'win32' ? real.toLowerCase() : real
+  }
+  const resourcesDir = path.dirname(appDir)
+  for (const file of ['computer-use-install.js', 'browserskill-install.js']) {
+    const modPath = path.join(serverDist, file)
+    if (!fs.existsSync(modPath)) continue
+    const found = (await import(pathToFileURL(modPath).href)).defaultLockPath()
+    if (found === undefined || !norm(found).startsWith(norm(resourcesDir + path.sep)))
+      throw new Error(file + ' 在安装包里找不到钉版本表（找到的是 ' + found + '）')
+  }
+  process.stdout.write('locks ok\\n')
+  const m = await import(pathToFileURL(req.resolve('@agentsws/server')).href)
+  if (typeof m.createServer !== 'function') throw new Error('@agentsws/server 里没有 createServer')
+  process.stdout.write('probe ok\\n')
+})().catch((err) => {
+  process.stderr.write(String(err && err.stack ? err.stack : err) + '\\n')
+  process.exit(1)
+})
 `
 
 export function probeBundled(nodeExec, appDir, pkgDirs) {
@@ -344,6 +371,47 @@ export const PROFILE_FILES = ['cordis.patch.yml', 'plugin-allowlist.yml']
  */
 export function missingProfileFiles(resources) {
   return PROFILE_FILES.filter((name) => !existsSync(join(resources, PROFILE_DIR, name)))
+}
+
+// ── ⑦ 钉版本表（WP225）──────────────────────────────────────────────────
+
+/**
+ * 仓库根上的钉版本表（`computer-use.lock.json`、`browserskill.lock.json`，以后同类的也按这个名字规矩放）。
+ * 服务进程按「从自己所在目录往上找」读它们（`defaultLockPath`）；WP218 的包里一份都没带，
+ * 「下载电脑操控驱动」「装 bsk」在装好的桌面版上直接报「这个发行版里没有 …lock.json」。
+ * 按名字规矩收、不写死清单：以后再加一份锁表不用回来改这里。
+ */
+export const LOCK_FILE_PATTERN = /^[a-z0-9][a-z0-9-]*\.lock\.json$/
+
+export function repoLockFiles(repoRoot) {
+  return readdirSync(repoRoot)
+    .filter((name) => LOCK_FILE_PATTERN.test(name))
+    .sort()
+}
+
+/** 抄到 `<resources>/`：包里服务进程在 `<resources>/app/node_modules/@agentsws/server/dist`，往上 5 层就到。 */
+export function copyLockFiles(repoRoot, resources, names) {
+  for (const name of names) copyFileSync(join(repoRoot, name), join(resources, name))
+}
+
+/**
+ * 照服务进程 `defaultLockPath` 的找法（从 dist 往上最多 8 层，先找到的算）把每一份找一遍，
+ * 回**找不到、或找到的不在安装包里**的那些（空 = 齐了）。
+ */
+export function unreachableLockFiles(appDir, resources, names) {
+  const start = join(appDir, 'node_modules', '@agentsws', 'server', 'dist')
+  const inside = resolve(resources) + sep
+  return names.filter((name) => {
+    let dir = resolve(start)
+    for (let i = 0; i < 8; i += 1) {
+      const candidate = join(dir, name)
+      if (existsSync(candidate)) return !candidate.startsWith(inside)
+      const parent = dirname(dir)
+      if (parent === dir) break
+      dir = parent
+    }
+    return true
+  })
 }
 
 // ── 钩子本体 ────────────────────────────────────────────────────────────
@@ -423,6 +491,14 @@ export default async function afterPack(context) {
       `安装包里没有 ${WORKSTATION_DIR}/index.html：先 \`pnpm --filter @agentsws/workstation build\``,
     )
   log('工作台产物：在')
+
+  // ⑦ WP225：钉版本表（每个平台都要有，放在冒烟之前；冒烟里再用包里服务进程自己的找法验一次）
+  const locks = repoLockFiles(REPO_ROOT)
+  copyLockFiles(REPO_ROOT, resources, locks)
+  const unreachable = unreachableLockFiles(appDir, resources, locks)
+  if (unreachable.length > 0)
+    throw new Error(`安装包里的服务进程找不到这些钉版本表：${unreachable.join('、')}`)
+  log(`钉版本表：${locks.join('、')}`)
 
   const nodeExec =
     platformName === 'win32'

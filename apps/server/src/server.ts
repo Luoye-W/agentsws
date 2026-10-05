@@ -7481,6 +7481,17 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     storage: storage.port,
     // WP60（49 §6 / 48 L7）：在线值守的切档向导与"接回本机"
     standby: standby.port,
+    // WP225（WP218 决定 ③）：岗位 AI 正在干活没有——跨所有已装起来的品牌数正在跑的运行（含后台定时任务起的）；
+    // 没建起来的品牌不会有在跑的运行。只回数量：桌面壳「重启并更新」前问它
+    activity: {
+      snapshot: () => {
+        const runs = (brands?.loaded() ?? []).reduce(
+          (n, brand) => n + (brand.runtime?.activeRuns().length ?? 0),
+          0,
+        )
+        return { busy: runs > 0, runs }
+      },
+    },
     // WP224：毛利率事实卡、两条止损线对照、本周经营一页纸（按主体所在品牌）
     economics: {
       margins: async (actor) =>

@@ -47,6 +47,7 @@ import * as ShellEnv from '@deepseek-ai/dsh-shell-env'
 import SubprocessLocal from '@deepseek-ai/dsh-subprocess-local'
 import SystemPrompt, { renderContextSections, renderPrompt } from '@deepseek-ai/dsh-system-prompt'
 import * as ToolBash from '@deepseek-ai/dsh-tool-bash'
+import * as ToolPwsh from '@deepseek-ai/dsh-tool-pwsh'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
 import ApprovalService from '@deepseek-ai/dsh-user-approval'
 import * as BrowserSkillPlugin from '@wxg-prc-cpg/browser-skill-dsh-plugin'
@@ -64,7 +65,7 @@ import { installGate } from './gate.js'
 import type { GatewayBudget } from './llm.js'
 import { GATEWAY_PROVIDER, GatewayLlmAdapter } from './llm.js'
 import { presetCredentialRefs, presetDefinition } from './preset.js'
-import { AgentswsBashExecutor, runShell } from './shell.js'
+import { AgentswsBashExecutor, AgentswsPwshExecutor, runShell, shellFlavor } from './shell.js'
 import {
   installSubscriptionLlm,
   subscriptionProviderOf,
@@ -421,6 +422,9 @@ export async function createHarness(input: HarnessInput): Promise<DshHarness> {
    * "谁有终端"仍然是职责说了算（`runShell()`），只是挂的地方在宿主。
    */
   const shell = runShell(input.request)
+  // WP225（WP218 决定 ④）：Windows 上跑命令走 PowerShell（官方 `dsh-pwsh-sandbox` + `dsh-tool-pwsh`，
+  // 同一个沙箱笼子），不要求装 Git Bash；mac / Linux 照旧 bash
+  const flavor = input.options.shellFlavor ?? shellFlavor()
   if (shell !== undefined) {
     // 副本目录不存在就建出来：沙箱要 canonicalize 这个根，不存在会当场 fail-closed
     mkdirSync(shell.workspace_root, { recursive: true })
@@ -430,7 +434,9 @@ export async function createHarness(input: HarnessInput): Promise<DshHarness> {
       mode: shell.mode,
       workspaceRoot: shell.workspace_root,
     } as never)
-    root.plugin(AgentswsBashExecutor, { cwd: shell.workspace_root } as never)
+    root.plugin(flavor === 'pwsh' ? AgentswsPwshExecutor : AgentswsBashExecutor, {
+      cwd: shell.workspace_root,
+    } as never)
     root.plugin(ShellEnv, {} as never)
   }
   /*
@@ -493,7 +499,10 @@ export async function createHarness(input: HarnessInput): Promise<DshHarness> {
    * 而"超时的命令不杀、转后台接着跑"与 17 §5.1「一次运行一棵树、跑完即销毁」正面冲突。
    */
   if (shell !== undefined) {
-    await ctx.plugin(ToolBash, { enableRunInBackground: false, promoteOnTimeout: false } as never)
+    await ctx.plugin(flavor === 'pwsh' ? ToolPwsh : ToolBash, {
+      enableRunInBackground: false,
+      promoteOnTimeout: false,
+    } as never)
   }
   /*
    * WP179：官方网页后端 + `web_search` / `web_fetch` 两个工具。同 `bash`：**必须在 `agents.create`

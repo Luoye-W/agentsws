@@ -20,7 +20,7 @@
 "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" \
   --remote-debugging-port=9333 \
   --remote-debugging-address=127.0.0.1 \
-  --user-data-dir="$HOME/Library/Application Support/agentsws/browser-profile" \
+  --user-data-dir="$HOME/Library/Application Support/@agentsws/desktop/browser-profile" \
   --no-first-run --no-default-browser-check about:blank
 ```
 

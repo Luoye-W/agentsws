@@ -68,6 +68,11 @@ export interface DshRuntimeOptions {
   credentials?: unknown
   /** 会话日志根；`session_ref.log_uri` 指向它。 */
   sessionLogRoot?: string
+  /**
+   * WP225：跑命令用哪种壳（`bash` / `pwsh`）。缺省按这台机器：Windows 是 `pwsh`，别的是 `bash`
+   * （`shell.ts` 的 `shellFlavor`）。只给测试用——在 mac 上验 Windows 那一套挂得对不对。
+   */
+  shellFlavor?: 'bash' | 'pwsh'
   /** 覆盖工具的副作用分类（16 §3 未标的按最严处理）。 */
   sideEffects?: Record<string, ToolSideEffect>
   /**

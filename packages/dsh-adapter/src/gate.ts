@@ -54,13 +54,15 @@ import { presetToolNames } from './preset.js'
 import { inferRefs, plainText } from './reading.js'
 import type { ShellCheck } from './shell.js'
 import {
-  type AgentswsBashExecutor,
-  BASH_TOOL,
+  type CommandEnvExecutor,
   checkShellCommand,
+  isShellTool,
   resolveShellEnv,
   runShell,
   shellBrief,
   shellCredentialPlan,
+  shellFlavor,
+  shellToolName,
 } from './shell.js'
 import {
   buildToolDefinitions,
@@ -246,6 +248,9 @@ export function installGate(ctx: Context, input: GateInput): GateApi {
    * 真正管着它的是 {@link checkShellCommand} 那张命令表。
    */
   const shell = runShell(request)
+  /** WP225：Windows 上那个工具叫 `pwsh`（命令交给 PowerShell），别处叫 `bash`。 */
+  const flavor = options.shellFlavor ?? shellFlavor()
+  const shellTool = shellToolName(flavor)
   /*
    * WP144（docs/80）：电脑操控。与浏览器同一条纪律——**在不在只取决于这次运行给没给
    * `computer_use`**，不在职责的 `tools.allow` 里。给了还分两步：没授权时只有
@@ -268,7 +273,7 @@ export function installGate(ctx: Context, input: GateInput): GateApi {
     allow.has(name) ||
     presetTools.has(name) ||
     (browserOn && anyBrowserToolName(name) !== undefined) ||
-    (shell !== undefined && name === BASH_TOOL) ||
+    (shell !== undefined && name === shellTool) ||
     (computerUse !== undefined && isComputerUseOwnTool(name)) ||
     (cuGranted && cuaToolName(name) !== undefined)
 
@@ -292,8 +297,8 @@ export function installGate(ctx: Context, input: GateInput): GateApi {
    * 两处都会调它，保证凭据活不过"这一条命令"。
    */
   const shellPlan = shell === undefined ? undefined : shellCredentialPlan(shell)
-  const bashExecutor = (): AgentswsBashExecutor | undefined =>
-    shell === undefined ? undefined : (ctx.get('shell') as AgentswsBashExecutor | undefined)
+  const bashExecutor = (): CommandEnvExecutor | undefined =>
+    shell === undefined ? undefined : (ctx.get('shell') as CommandEnvExecutor | undefined)
   const clearShellEnv = (): void => {
     bashExecutor()?.clearCommandEnv()
   }
@@ -539,7 +544,7 @@ export function installGate(ctx: Context, input: GateInput): GateApi {
     ...[...presetTools].filter((n) => registered.has(n)),
     // WP89：`bash` 与 preset 的工具同类——它是 `harness.ts` 在 `agents.create` 之前
     // 全局注册的，所以 `restrict` 认得它，不列就被职责白名单挡掉。
-    ...(shell !== undefined && registered.has(BASH_TOOL) ? [BASH_TOOL] : []),
+    ...(shell !== undefined && registered.has(shellTool) ? [shellTool] : []),
     // WP144：自有的那一个电脑操控工具是全局注册的（同 stage / draft），不列就被白名单挡掉。
     // 驱动那一整组是提供方在 Agent scope 里注册的（与浏览器 provider 同类），不列、也不能列。
     ...computerUseTools.map((d) => d.name),
@@ -627,7 +632,7 @@ export function installGate(ctx: Context, input: GateInput): GateApi {
      * 的兜底会把它整个当成写外部，那样公司端连 `shopify theme list` 都跑不了）。
      * 所以这一关先把命令拆开判，判完直接给出副作用分类，不再走下面那一关。
      */
-    if (exec.name === BASH_TOOL) {
+    if (isShellTool(exec.name)) {
       if (shell === undefined) {
         return deny('shell_not_enabled: 这个岗位没有终端，跑不了命令')
       }
@@ -639,6 +644,7 @@ export function installGate(ctx: Context, input: GateInput): GateApi {
           ? { sandboxPermissions: args.sandbox_permissions }
           : {}),
         ...(args.run_in_background === true ? { background: true } : {}),
+        flavor,
       })
       if (check.verdict === 'deny') return deny(check.reason)
       if (check.verdict === 'publish') {
@@ -692,7 +698,7 @@ export function installGate(ctx: Context, input: GateInput): GateApi {
   ctx.on('tools/post-execute', async (exec, result, next): Promise<PostToolDecision> => {
     const call_id = String(exec.callId)
     // WP89：命令跑完了，CLI 凭据立刻从执行器上撤掉（13 §4：窗口越窄越好）
-    if (exec.name === BASH_TOOL) clearShellEnv()
+    if (isShellTool(exec.name)) clearShellEnv()
     const decision = await next()
     if (decision.kind === 'block') {
       note(api, {
@@ -881,6 +887,7 @@ export function installGate(ctx: Context, input: GateInput): GateApi {
           shellBrief({
             root: shell.workspace_root,
             mode: shell.mode,
+            flavor,
             ...(shell.store === undefined ? {} : { store: shell.store }),
           }),
         ]),

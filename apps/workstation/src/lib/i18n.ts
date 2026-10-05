@@ -3395,7 +3395,7 @@ const zh: Table = {
   'verb.content_conflict.open': '看对比',
   'content_updates.title': '已审的内容更新',
   'content_updates.hint':
-    '随软件带的第三方技能（例如 Shopify 官方技能）上游更新后，我们审过、签过名才发到这里，不用等软件发新版。「自动」= 审过的直接换上；「每次问我」= 出一张卡你点了才换。随时可以一键退回上一版。审核时有要留意的地方的，就算选了自动也会先问你。你自己（或学习回路）改过的段不会被冲掉，真冲突时出卡让你选。',
+    '随软件带的第三方技能（例如 Shopify 官方技能）上游更新后，我们审过、签过名才发到这里，不用等软件发新版。「自动」= 审过的小版本直接换上（大版本仍会问你）；「每次问我」= 出一张卡你点了才换。随时可以一键退回上一版。审核时有要留意的地方的，就算选了自动也会先问你。你自己（或学习回路）改过的段不会被冲掉，真冲突时出卡让你选。',
   'content_updates.channel': '内容更新通道',
   'content_updates.state.ok': '通',
   'content_updates.state.error': '这次没收',
@@ -7169,7 +7169,7 @@ const en: Table = {
   'verb.content_conflict.open': 'Compare',
   'content_updates.title': 'Reviewed content updates',
   'content_updates.hint':
-    'Third-party skills that ship with the app (e.g. the official Shopify skill) are reviewed and signed by us when upstream updates them, then delivered here without waiting for an app release. Auto = reviewed updates go straight in; Ask me = a card, nothing changes until you tap it. You can roll back any time. Anything flagged in review always asks first. Sections you (or the learning loop) changed are kept; real conflicts ask you to choose.',
+    'Third-party skills that ship with the app (e.g. the official Shopify skill) are reviewed and signed by us when upstream updates them, then delivered here without waiting for an app release. Auto = reviewed minor updates go straight in (major versions still ask); Ask me = a card, nothing changes until you tap it. You can roll back any time. Anything flagged in review always asks first. Sections you (or the learning loop) changed are kept; real conflicts ask you to choose.',
   'content_updates.channel': 'Content update channel',
   'content_updates.state.ok': 'OK',
   'content_updates.state.error': 'Not accepted this time',

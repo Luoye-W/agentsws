@@ -37,7 +37,7 @@
 
 | 东西 | 位置 |
 |---|---|
-| 我们的 `DSH_HOME` | `<userData>/dsh`：macOS `~/Library/Application Support/agentsws/dsh`，Windows `%APPDATA%\agentsws\dsh`。与 `data/` **平级**，不在它里面（备份 / 导出不把 dsh 的凭据库和插件打进去） |
+| 我们的 `DSH_HOME` | `<userData>/dsh`：macOS `~/Library/Application Support/@agentsws/desktop/dsh`，Windows `%APPDATA%\@agentsws\desktop\dsh`。与 `data/` **平级**，不在它里面（备份 / 导出不把 dsh 的凭据库和插件打进去） |
 | 各场景 | `<userData>/dsh/profiles/<名>/`（官方场景第一次打开时由 dsh 自己初始化） |
 | dsh 本机凭据库 | `<userData>/dsh/.credentials.yaml`（`dsh-credentials-local` 的默认位置）——所有场景共用 |
 | 其他场景的默认工作目录 | `~/dsh-workspace`（`AGENTSWS_DSH_WORKSPACE` 可改；网页里还能再加别的工作区） |
@@ -125,7 +125,7 @@ Electron 壳（MIT，`apps/desktop` + `apps/desktop-host`），不在 npm 上、
 - 客户、红人、积分、密钥在 `data/` 与加密库（`secrets.bin` 是 safeStorage 密文，秘密库整库加密）。
 
 **做不到的**（说在前面）：官方网页里用户可以**自己**再添加任意工作区目录；他要是亲手把
-`~/Library/Application Support/agentsws/data` 加进去，那个场景就读得到我们没加密的 SQLite 文件。
+`~/Library/Application Support/@agentsws/desktop/data` 加进去，那个场景就读得到我们没加密的 SQLite 文件。
 我们保证的是「默认不指向、不给钥匙」，不是「操作系统层隔离」。
 
 ## 5. 共享：DeepSeek 账号登录一次，所有场景都能用（交付 4）

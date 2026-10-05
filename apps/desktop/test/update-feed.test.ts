@@ -94,6 +94,16 @@ describe('地址', () => {
     expect(() => normalizeBaseUrl('not a url')).toThrow(/合法/)
     expect(() => normalizeBaseUrl('https://dl.agentsws.com/?x=1')).toThrow(/\?/)
   })
+
+  it('WP225：本机回环上的 http 放行（CI 端到端的本地更新源），别的 http 照样不认', () => {
+    expect(normalizeBaseUrl('http://127.0.0.1:47613/')).toBe('http://127.0.0.1:47613')
+    expect(normalizeBaseUrl('http://localhost:8080')).toBe('http://localhost:8080')
+    expect(normalizeBaseUrl('http://[::1]:9/x')).toBe('http://[::1]:9/x')
+    expect(() => normalizeBaseUrl('http://127.0.0.1.evil.com')).toThrow(/https/)
+    expect(() => normalizeBaseUrl('http://10.0.0.1')).toThrow(/https/)
+    expect(() => normalizeBaseUrl('ftp://127.0.0.1')).toThrow(/https/)
+    expect(channelUrl('http://127.0.0.1:47613', 'beta')).toBe('http://127.0.0.1:47613/beta')
+  })
 })
 
 describe('运行时读 app-update.yml', () => {
