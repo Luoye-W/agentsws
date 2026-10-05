@@ -138,3 +138,10 @@ export {
   verbKey,
   verbRank,
 } from './verbs.js'
+// WP224（docs/91 §2.2 #1）：本周经营一页纸——各岗位面板上已有的数汇成一页，取不到写「没接」
+export {
+  composeWeeklyReview,
+  mondayOf,
+  reviewLength,
+  type WeeklyReviewInput,
+} from './weekly-review.js'
