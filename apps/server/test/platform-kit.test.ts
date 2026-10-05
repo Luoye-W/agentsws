@@ -15,7 +15,7 @@ import {
   type ProbeExec,
   parseVersion,
 } from '../src/platform-cli.js'
-import { cliStateOf, createPlatformKitPort } from '../src/platform-kit.js'
+import { cliStateOf, createPlatformKitPort, resolveBrandPlatform } from '../src/platform-kit.js'
 import { DEV_MCP_ARGS } from '../src/shopify-devmcp.js'
 
 const NOW = '2026-10-05T10:00:00.000Z'
@@ -36,6 +36,9 @@ function fakeExec(state: { cli?: string; node?: string }): ProbeExec & {
   return exec
 }
 
+/** 哪些品牌有人在做建站（网页模板）这条职责；缺省都有。 */
+const ROLE_HOLDERS: Record<string, readonly string[]> = {}
+
 function makePort(
   platforms: Record<string, StorefrontPlatform | undefined>,
   exec: ProbeExec,
@@ -44,6 +47,18 @@ function makePort(
   return createPlatformKitPort({
     now: () => NOW,
     platformOf: (ws) => platforms[ws],
+    setPlatform: (ws, p) => {
+      if (ws === 'ws_noprofile') return false
+      platforms[ws] = p
+      return true
+    },
+    hasRoles: (ws, role_ids) =>
+      role_ids.some((r) => (ROLE_HOLDERS[ws] ?? ['site.shopify-theme']).includes(r)),
+    platformChoices: () => [
+      { key: 'shopify', label: 'Shopify', supported: true },
+      { key: 'none', label: '还没开始搭建', supported: true },
+      { key: 'woocommerce', label: 'WooCommerce', supported: false },
+    ],
     prober: createPlatformCliProber({ now: () => NOW, env: {}, exec }),
     loginStoreOf: (ws) => {
       let s = stores.get(ws)
@@ -53,7 +68,7 @@ function makePort(
       }
       return s
     },
-    mcpStatus: () => ({ enabled: false, tools: [] }),
+    mcpStatus: () => ({ enabled: true, downloaded: false, tools: [] }),
   })
 }
 
@@ -69,7 +84,12 @@ describe('WP216 平台套件：按品牌档案', () => {
       repo: 'Shopify/Shopify-AI-Toolkit',
       license: 'MIT',
     })
-    expect(view.kit?.mcp).toMatchObject({ npm: '@shopify/dev-mcp', license: 'ISC', enabled: false })
+    expect(view.kit?.mcp).toMatchObject({
+      npm: '@shopify/dev-mcp',
+      license: 'ISC',
+      enabled: true,
+      downloaded: false,
+    })
     expect(view.kit?.cli?.state).toBe('missing')
     expect(view.kit?.cli?.degraded_roles).toEqual(['site.shopify-theme'])
     expect(view.kit?.cli?.spec.login_command).toBe('shopify auth login')
@@ -228,5 +248,85 @@ describe('WP216 假 CLI 可执行文件（真子进程，PATH 指向替身）', 
     const probe = await prober.probe(SHOPIFY_CLI)
     expect(probe.installed).toBe(false)
     expect(probe.node_ok).toBe(false)
+  })
+})
+
+describe('WP216（Fable 10-05）：平台没设 = 一样都不启用；连了店铺才推断', () => {
+  const facts = (profile: StorefrontPlatform | undefined, services: string[]) => {
+    const written: StorefrontPlatform[] = []
+    return {
+      written,
+      facts: {
+        profile: () => profile,
+        connectedServices: () => services,
+        writeBack: (_ws: string, p: StorefrontPlatform) => {
+          written.push(p)
+          return true
+        },
+      },
+    }
+  }
+
+  it('没设、也没连 Shopify：undefined，不写回', () => {
+    const f = facts(undefined, ['gmail'])
+    expect(resolveBrandPlatform(f.facts, 'ws_a')).toBeUndefined()
+    expect(f.written).toEqual([])
+  })
+
+  it('没设、但连了 Shopify 店铺：推断为 Shopify 并写回档案', () => {
+    const f = facts(undefined, ['gmail', 'shopify_admin'])
+    expect(resolveBrandPlatform(f.facts, 'ws_a')).toBe('shopify')
+    expect(f.written).toEqual(['shopify'])
+  })
+
+  it('档案设了就以档案为准（连着 Shopify 也不改）', () => {
+    const f = facts('woocommerce', ['shopify_admin'])
+    expect(resolveBrandPlatform(f.facts, 'ws_a')).toBe('woocommerce')
+    expect(f.written).toEqual([])
+  })
+
+  it('没设：岗位页（建站）提示「先选平台」，别的岗位页 / 连接页什么都没有，本机零检测', async () => {
+    const exec = fakeExec({ cli: '4.8.4', node: 'v22.12.0' })
+    const port = makePort({ ws_u: undefined }, exec)
+    const site = await port.view(actor('ws_u'), { position_id: 'site' })
+    expect(site.kit).toBeNull()
+    expect(site.choose_platform?.choices.map((c) => c.key)).toEqual([
+      'shopify',
+      'none',
+      'woocommerce',
+    ])
+    expect(await port.view(actor('ws_u'), { position_id: 'customer-care' })).toEqual({ kit: null })
+    expect(await port.view(actor('ws_u'), {})).toEqual({ kit: null })
+    expect(exec.calls).toEqual([])
+  })
+
+  it('在岗位页上选了 Shopify：提示消失、卡出来；选不了的平台 400；档案没建过 409', async () => {
+    const exec = fakeExec({ cli: '4.8.4', node: 'v22.12.0' })
+    const platforms: Record<string, StorefrontPlatform | undefined> = { ws_u: undefined }
+    const port = makePort(platforms, exec)
+    const next = await port.setPlatform(actor('ws_u'), {
+      storefront_platform: 'shopify',
+      position_id: 'site',
+    })
+    expect(next.choose_platform).toBeUndefined()
+    expect(next.kit?.cli?.state).toBe('needs_login')
+    await expect(
+      port.setPlatform(actor('ws_u'), { storefront_platform: 'woocommerce' }),
+    ).rejects.toMatchObject({ code: 'invalid_input' })
+    await expect(
+      port.setPlatform(actor('ws_noprofile'), { storefront_platform: 'shopify' }),
+    ).rejects.toMatchObject({ code: 'conflict' })
+  })
+
+  it('Reddit 类品牌（没有建站岗位的职责）：平台是 Shopify 也永远不出 CLI 卡、不检测本机', async () => {
+    ROLE_HOLDERS.ws_reddit = ['social.reddit']
+    const exec = fakeExec({ cli: '4.8.4', node: 'v22.12.0' })
+    const port = makePort({ ws_reddit: 'shopify' }, exec)
+    expect((await port.view(actor('ws_reddit'), {})).kit?.cli).toBeUndefined()
+    expect((await port.view(actor('ws_reddit'), { position_id: 'site' })).kit?.cli).toBeUndefined()
+    expect(exec.calls).toEqual([])
+    // 平台也没设的 Reddit 品牌：更是什么都没有
+    const port2 = makePort({ ws_reddit: undefined }, exec)
+    expect(await port2.view(actor('ws_reddit'), {})).toEqual({ kit: null })
   })
 })

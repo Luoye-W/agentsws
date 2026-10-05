@@ -217,7 +217,8 @@ export interface RuntimeOptions {
    * 平台专属的官方技能与官方 MCP 工具（`@agentsws/contracts` 的 `PLATFORM_KITS`）只在平台对得上时
    * 进这次运行：技能不进提示词也不进按需索引、`read_skill` 读不到，Dev MCP 的工具不进工具面。
    * 晚绑定、每次现取（同 `vertical`：品牌改了平台，下一次运行就跟着变）。
-   * 不给 = 按档案缺省（Shopify）——存量的单测与回放一个字节不变。
+   * 回 `undefined`（平台没设、也推断不出）= 平台专属的一样都没有。
+   * 不接这个选项 = 不设闸（老行为）——存量的单测与回放一个字节不变。
    */
   storefrontPlatform?: () => StorefrontPlatform | undefined
   /**
@@ -822,8 +823,11 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
    * 所以这条路**不往 provenance 里加任何 ref**（15 §6：seen 只证明读过业务对象）。
    */
   // WP216：Dev MCP 是平台专属的官方工具——品牌的平台那一行没有 `mcp`，工具面里就一个都没有
+  // 接了 `storefrontPlatform` 才有这道闸（没接 = 老行为，回放与老单测一个字节不变）；
+  // 接了而平台没设 = 没有（不按 Shopify 兜底）
   const devToolNames = (): readonly string[] =>
-    platformKitOf(options.storefrontPlatform?.())?.mcp === undefined
+    options.storefrontPlatform !== undefined &&
+    platformKitOf(options.storefrontPlatform())?.mcp === undefined
       ? []
       : (options.devTools?.toolNames() ?? [])
   const executeTool: ToolExecutor | undefined = (() => {
@@ -1148,8 +1152,12 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
      * WP216：平台专属的官方技能只在品牌平台对得上时留下（每次现取档案）。
      * 一本都没被滤掉时 `config` 就是原来那一份——非平台技能的职责字节一个不变。
      */
-    const platform = options.storefrontPlatform?.()
-    const skillsHere = effective.skills.filter((s) => skillOnPlatform(s.name, platform))
+    const gatePlatform = options.storefrontPlatform
+    const platform = gatePlatform?.()
+    const skillsHere =
+      gatePlatform === undefined
+        ? effective.skills
+        : effective.skills.filter((s) => skillOnPlatform(s.name, platform))
     const config =
       skillsHere.length === effective.skills.length
         ? effective

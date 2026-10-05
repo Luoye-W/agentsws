@@ -69,9 +69,11 @@ async function machine() {
     if (!res.ok) throw new Error(`${method} ${path} → ${res.status} ${JSON.stringify(parsed)}`)
     return parsed.data as T
   }
+  /** 给自己上建站岗位（CLI 卡只给真有那条职责的品牌）。 */
+  const takeSite = () => call('POST', '/v1/onboarding/apply', { position_ids: ['site'] })
   const setPlatform = (storefront_platform: string) =>
     call('PUT', '/v1/workspace/profile', { legal_name: '一家耳机店', storefront_platform })
-  return { call, setPlatform, calls }
+  return { call, setPlatform, takeSite, calls }
 }
 
 type KitView = {
@@ -89,6 +91,9 @@ describe('WP216 按品牌的建站平台走', () => {
   it('Shopify：CLI 卡在、技能页有官方技能、向导最后问「要现在装 CLI 吗」', async () => {
     const m = await machine()
     await m.setPlatform('shopify')
+    // 还没人做建站：CLI 卡不出（技能与工具照样按平台启用）
+    expect((await m.call<KitView>('GET', '/v1/platform-kit')).kit?.cli).toBeUndefined()
+    await m.takeSite()
     const kit = await m.call<KitView>('GET', '/v1/platform-kit?position_id=site')
     expect(kit.kit?.cli?.spec.label).toBe('Shopify CLI')
     expect(kit.kit?.cli?.state).toBe('needs_login')
@@ -111,6 +116,7 @@ describe('WP216 按品牌的建站平台走', () => {
   it('非 Shopify：卡没有、技能页没有、向导不问、本机一次都没检测', async () => {
     const m = await machine()
     await m.setPlatform('woocommerce')
+    await m.takeSite()
     expect(await m.call<KitView>('GET', '/v1/platform-kit?position_id=site')).toEqual({
       platform: 'woocommerce',
       kit: null,
@@ -125,6 +131,7 @@ describe('WP216 按品牌的建站平台走', () => {
   it('改平台即时切换：Shopify → 还没建站 → Shopify；「我登好了」跟着品牌留着', async () => {
     const m = await machine()
     await m.setPlatform('shopify')
+    await m.takeSite()
     const done = await m.call<KitView>('PUT', '/v1/platform-kit/cli/login', { confirmed: true })
     expect(done.kit?.cli?.state).toBe('ready')
     await m.setPlatform('none')
@@ -135,5 +142,25 @@ describe('WP216 按品牌的建站平台走', () => {
     expect(skillNames(await m.call<SkillsView>('GET', '/v1/skills'))).toContain('shopify')
     // 检测只跑过报版本的两条
     expect(new Set(m.calls)).toEqual(new Set(['shopify version', 'node --version']))
+  })
+
+  it('没设平台（档案里没写、也没连店铺）：什么都没有；建站岗位页提示先选，负责人选了 Shopify 就启用', async () => {
+    const m = await machine()
+    await m.call('PUT', '/v1/workspace/profile', { legal_name: '一家还没选平台的店' })
+    await m.takeSite()
+    expect(skillNames(await m.call<SkillsView>('GET', '/v1/skills'))).not.toContain('shopify')
+    expect(await m.call<KitView>('GET', '/v1/platform-kit')).toEqual({ kit: null })
+    const ask = await m.call<{ choose_platform?: { choices: { key: string }[] } }>(
+      'GET',
+      '/v1/platform-kit?position_id=site',
+    )
+    expect(ask.choose_platform?.choices.map((c) => c.key)).toContain('shopify')
+    expect(m.calls).toEqual([])
+    const picked = await m.call<KitView>('PUT', '/v1/platform-kit/platform', {
+      storefront_platform: 'shopify',
+      position_id: 'site',
+    })
+    expect(picked.kit?.cli?.spec.label).toBe('Shopify CLI')
+    expect(skillNames(await m.call<SkillsView>('GET', '/v1/skills'))).toContain('shopify')
   })
 })

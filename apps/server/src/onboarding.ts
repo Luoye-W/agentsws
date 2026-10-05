@@ -357,6 +357,15 @@ export interface OnboardingAssembly {
    */
   setPostalAddress(workspace_id: WorkspaceId, address: string | undefined): boolean
   /**
+   * WP216：只改某个品牌档案上的「网站是用什么搭的」。`source` 记是人选的还是按已连的店铺推断的
+   * （进事件，不进档案）。档案还没建过回 `false`（不替人建档案——那会让首次设置不再弹）。
+   */
+  setStorefrontPlatform(
+    workspace_id: WorkspaceId,
+    platform: StorefrontPlatform,
+    source: 'human' | 'inferred_from_connection',
+  ): boolean
+  /**
    * WP166：直接改某个品牌的目标市场（店铺连上后按店里配的市场 / 配送区域校正那一次用）。
    * 人改过的（`markets_source.from === 'human'`）**不动**，回 `false`；改了回 `true`。
    */
@@ -966,6 +975,22 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
           : { market_languages: { ...p.market_languages } }),
         ...(p?.postal_address === undefined ? {} : { postal_address: p.postal_address }),
       }
+    },
+    setStorefrontPlatform(ws, platform, source) {
+      const previous = profileOf(ws)
+      if (previous === undefined) return false
+      const next = normalizeStorefrontPlatform(platform)
+      if (next === undefined) return false
+      backend.put(ws, { ...previous, storefront_platform: next })
+      appendEvent({
+        schema_version: 1,
+        workspace_id: ws,
+        type: 'workspace.storefront_platform_set',
+        actor: { kind: 'system', id: 'onboarding' },
+        correlation: { trace_id: `tr_onboarding_${clock.now()}` },
+        payload: { storefront_platform: next, source },
+      })
+      return true
     },
     setPostalAddress(ws, address) {
       const previous = profileOf(ws)

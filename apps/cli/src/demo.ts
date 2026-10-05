@@ -1436,6 +1436,8 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
       ...process.env,
       // demo 一律 stub 运行时：即使机器上配了 DEEPSEEK_API_KEY 也不叫模型
       DEEPSEEK_API_KEY: '',
+      // WP216：Shopify 官方 Dev MCP 默认开、首次使用才下载——demo 不去网上拉包
+      AGENTSWS_SHOPIFY_DEVMCP: '0',
       AGENTSWS_PORT: String(options.port ?? 4317),
       // WP140：云地址一律是替身那个（覆盖外面环境变量里的，demo 不连任何真云）
       AGENTSWS_CLOUD_BASE_URL: CLOUD_STAND_IN_BASE_URL,

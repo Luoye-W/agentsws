@@ -145,11 +145,11 @@ describe('WP216 平台专属：网页模板这条职责', () => {
     expect(gateway.seen[1]?.messages.map(textOf).join('\n')).toContain('## 官方参考：liquid')
   })
 
-  it('没设过平台的老品牌按档案缺省（Shopify）——存量行为不变', async () => {
+  it('Fable 10-05：没设平台（也推断不出）= 一样都没有，不按 Shopify 兜底', async () => {
     const run = await brandRuntime('ws_old', () => undefined)
     const { persona, tools } = await run([])
-    expect(persona).toMatch(/- shopify：/)
-    expect(tools).toContain(DOCS_TOOL)
+    expect(persona).not.toMatch(/- shopify：/)
+    expect(tools).not.toContain(DOCS_TOOL)
   })
 
   for (const platform of ['woocommerce', 'other', 'none'] as const) {
