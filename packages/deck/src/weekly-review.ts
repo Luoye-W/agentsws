@@ -269,7 +269,9 @@ export function composeWeeklyReview(input: WeeklyReviewInput): WeeklyReviewPaylo
   const impact: string[] = []
   const recommendations: string[] = []
   const store = signal('store_sales')
-  if (typeof store?.change === 'number' && store.change <= -20)
+  // 「销售比前 7 天少多少才算一条影响」是公司层阈值（`common.owner` 的 `thresholds`），不写死
+  const drop = input.base.thresholds?.weekly_sales_drop_pct
+  if (typeof store?.change === 'number' && drop !== undefined && store.change <= -drop)
     impact.push(`销售额比前 7 天少了 ${Math.round(Math.abs(store.change))}%。`)
   const be = signal('ads_break_even')
   if (typeof be?.below === 'number' && be.below > 0) {

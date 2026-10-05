@@ -15,7 +15,7 @@ import {
   runQuery,
   type TableResult,
 } from '../src/index.js'
-import { item, NOW, queryContext, SOURCES } from './fixtures.js'
+import { item, NOW, ORDERS, queryContext, SOURCES } from './fixtures.js'
 
 const withAds = SOURCES.map((s) => (s.id === 'ads' ? { ...s, connected: true } : s))
 
@@ -293,6 +293,27 @@ describe('本周经营一页纸', () => {
     })
     expect(p.findings.find((f) => f.panel === 'store_sales')).toBeUndefined()
     expect(p.not_connected.find((g) => g.panel === 'store_sales')?.reason).toBe('店铺没连')
+  })
+
+  it('「影响」里的销售下滑门槛从公司层阈值来；没配阈值就不写这一条', () => {
+    const orders = [
+      { ...ORDERS[0], id: 'o_now', created_at: '2026-09-06T02:00:00.000Z', total_price: 50 },
+      { ...ORDERS[0], id: 'o_before', created_at: '2026-08-29T02:00:00.000Z', total_price: 200 },
+    ] as typeof ORDERS
+    const base = (thresholds?: Record<string, number>) =>
+      queryContext({
+        role_id: 'common.owner',
+        orders,
+        ...(thresholds === undefined ? {} : { thresholds }),
+      })
+    const withLine = composeWeeklyReview({
+      now: NOW,
+      base: base({ weekly_sales_drop_pct: 20 }),
+      held: ['common.owner'],
+    })
+    expect(withLine.impact.join('')).toContain('销售额比前 7 天少了 75%')
+    const without = composeWeeklyReview({ now: NOW, base: base(), held: ['common.owner'] })
+    expect(without.impact.join('')).not.toContain('销售额')
   })
 
   it('长度：汉字按字、英文按词；周一按工作区时区算', () => {

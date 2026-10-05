@@ -58,6 +58,11 @@ automation:
     promotion: { adoption_rate_min: 1, window_weeks: 0, min_samples: 0 }
     demotion_triggers: [manual]
 
+# WP224：本周经营一页纸的「影响」那一段——销售额比前 7 天少了多少（%）才写一条。
+# 门槛数进公司层阈值，不写进技能正文与代码（docs/91 §1.5）；公司可改
+thresholds:
+  weekly_sales_drop_pct: 20
+
 skills:
   - { name: workspace-basics, tier: open, load: on_demand }
   - { name: policy-review, tier: open, load: on_demand }
