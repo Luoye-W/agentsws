@@ -52,11 +52,14 @@ mac:
   extendInfo:
     LSUIElement: 1
   identity: null
+  # WP218：架构不写在这里——写了的话 `--mac --arm64` 也会顺手打 x64（那台机器上没有 x64 的捆绑 Node，
+  # afterPack 直接失败）。架构由命令行给：release.yml 里两台 mac 各打自己那一个。
+  # zip 也要：electron-builder 只在有 zip 时才写 latest-mac.yml（mac 提示「有新版」读它），
+  # 将来签了名切自动更新，Squirrel.Mac 吃的也是 zip。
   target:
     - target: dmg
-      arch:
-        - arm64
-        - x64
+    - target: zip
+  artifactName: Agents-Workshop-${version}-${arch}-mac.${ext}
 # WP218：产物名不带空格（下载站 / GitHub 的网址与 latest*.yml 里的文件名就是它）。
 # 官网 downloads.json 的 `file` 与 scripts/release-manifest.mjs 按同一套名字认。
 dmg:

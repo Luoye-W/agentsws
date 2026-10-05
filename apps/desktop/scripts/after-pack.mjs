@@ -362,6 +362,9 @@ export default async function afterPack(context) {
     join(REPO_ROOT, 'apps', 'server'),
     join(REPO_ROOT, 'apps', 'desktop'),
     REPO_ROOT,
+    // WP218：pnpm 把所有间接依赖提升在 `.pnpm/node_modules` 里——sharp 按平台装的 `@img/sharp-<平台>`
+    // 只在这里解析得到（从上面几个根解析不到，WP111 起的包里一直没有它，一用图片就炸）
+    join(REPO_ROOT, 'node_modules', '.pnpm'),
   ])
   log(`补齐依赖 ${added.length} 个${added.length === 0 ? '' : `：${added.join(', ')}`}`)
 

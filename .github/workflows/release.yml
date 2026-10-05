@@ -135,7 +135,7 @@ jobs:
         run: |
           mkdir -p out
           for f in apps/desktop/release/Agents-Workshop-* apps/desktop/release/latest.yml; do
-            case "$f" in *.exe|*.dmg|*.blockmap|*/latest.yml) [ -f "$f" ] && cp "$f" out/ ;; esac
+            case "$f" in *.exe|*.dmg|*.zip|*.blockmap|*/latest.yml) [ -f "$f" ] && cp "$f" out/ ;; esac
           done
           if [ -f apps/desktop/release/latest-mac.yml ]; then
             cp apps/desktop/release/latest-mac.yml "out/latest-mac-${{ matrix.target }}.yml"
