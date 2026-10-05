@@ -9,7 +9,12 @@ import { mkdirSync } from 'node:fs'
 import type { IncomingMessage } from 'node:http'
 import { join } from 'node:path'
 import type { Duplex } from 'node:stream'
-import { adDesignPrompt } from '@agentsws/ads-core'
+import {
+  adDesignPrompt,
+  breakEvenView,
+  resolveGrossMargin,
+  summarizeLineCompare,
+} from '@agentsws/ads-core'
 import type {
   AskPort,
   ChatPort,
@@ -56,6 +61,7 @@ import type { PageFetch as BrandIntakeFetch } from '@agentsws/brand-intake'
 import type { ResolveMx } from '@agentsws/channels'
 import { routeOfPosition } from '@agentsws/channels'
 import type {
+  AdsCaps,
   ApprovalBus,
   ApprovalItem,
   Assignment,
@@ -75,6 +81,8 @@ import type {
   WorkspaceVertical,
 } from '@agentsws/contracts'
 import {
+  ADS_DEFAULT_CAPS,
+  ADS_PLATFORMS,
   B2B_FACT_SUBJECT_TYPE,
   B2B_SENDER_CHOICE_KIND,
   brandNameOf,
@@ -151,7 +159,7 @@ import { createWork, SqliteWorkStore, type Work } from '@agentsws/work'
 import { type HttpBindings, type ServerType, serve } from '@hono/node-server'
 import { RESPONSE_ALREADY_SENT } from '@hono/node-server/utils/response'
 import { WebSocketServer } from 'ws'
-import { adsDeckData, createAdsStore, seedDemoAds } from './ads.js'
+import { adsDeckData, createAdsStore, seedDemoAds, snapshotLineCompare } from './ads.js'
 import { createAdsService } from './ads-service.js'
 import { compositeApprovals } from './approvals-composite.js'
 import { createAskPort } from './ask.js'
@@ -276,6 +284,7 @@ import {
   unavailableScenes,
   workspaceRootOf,
 } from './dsh-scenes.js'
+import { createEconomicsService } from './economics.js'
 import { createPrivacyErase, type PrivacyErase } from './erase.js'
 // WP119（68）：浏览器插件的本地一面（配对表按机器、写库按品牌、转发由本机做）
 import { createExtensionContributor } from './extension-contribute.js'
@@ -383,6 +392,7 @@ import {
   registerB2bSequence,
   registerBackup,
   registerDailyPlan,
+  registerEconomics,
   registerIdempotencySweep,
   registerKolSequence,
   registerLearning,
@@ -442,6 +452,7 @@ import {
   type SupportJudgment,
   supportSlaTask,
 } from './support-judgment.js'
+import { createWeeklyReviewService } from './weekly-review.js'
 // WP60（48 §4 L3 #11 的云端一半）：聊天窗的嵌入脚本与 CORS 预检
 import { CHAT_WIDGET_JS, mountChatWidget } from './widget.js'
 import { createWorkPort, periodQueryRunner } from './work.js'
@@ -1554,6 +1565,23 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
    * 走 `workspacesOf` 是因为本地档只有它是**同步**的——首次设置那一面要在
    * 组装视图的时候就拿到名字，不该为一个名字把整条路由改成异步。
    */
+  /** WP224：读写毛利率事实卡用的身份（这条分配自己的授权，05：不做跨分配并集）。 */
+  const economicsReader = (actor: {
+    workspace_id: string
+    person_id: string
+    assignment_id: string
+    role_id: string
+  }) => {
+    const config = roles.effectiveConfig(actor.assignment_id as Assignment['id'])
+    return {
+      person_id: actor.person_id as PersonId,
+      workspace_id: actor.workspace_id as WorkspaceId,
+      assignment_id: actor.assignment_id,
+      role_id: actor.role_id,
+      grants: [...config.scopes],
+      ranges: [...config.ranges],
+    }
+  }
   const brandNameOfWorkspace = (id: WorkspaceId): string => {
     const owner = bootstrapOwner
     const found =
@@ -2194,6 +2222,54 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       now: () => clock.now(),
       ...(dir === undefined ? {} : { dir }),
     })
+    /*
+     * WP224（docs/91 §2.2 #3）：毛利率事实卡（知识库里的事实卡，公司页填）+ 盈亏线。
+     * 投放面板读缓存（同步），读之前 `ensureFresh` 刷一遍。
+     */
+    const fixedStopLossCaps = (): Partial<AdsCaps> => {
+      const a = roles.assignments
+        .listByWorkspace(ws)
+        .find((x) => x.revoked_at === undefined && x.role_id.startsWith('ads.'))
+      if (a === undefined) return {}
+      try {
+        const caps = roles.effectiveConfig(a.id).actions.find((x) => x.id === 'pause_ads')
+          ?.mandate.caps
+        const out: Partial<AdsCaps> = {}
+        for (const k of ['stop_loss_roas_below', 'stop_loss_spend_pct'] as const) {
+          const v = caps?.[k]
+          if (typeof v === 'number') out[k] = v
+        }
+        return out
+      } catch {
+        return {}
+      }
+    }
+    const economics = createEconomicsService({
+      workspace_id: ws,
+      clock,
+      knowledge: knowledge.store as never,
+      systemReader: async () => {
+        const owner = (await identity.getWorkspace(ws))?.owner_id
+        if (owner === undefined) return undefined
+        const a = roles.assignments
+          .listByWorkspace(ws)
+          .find((x) => x.revoked_at === undefined && x.role_id === 'common.owner')
+        return {
+          person_id: owner,
+          workspace_id: ws,
+          assignment_id: a?.id ?? '',
+          role_id: a?.role_id ?? 'common.owner',
+          grants: [
+            { domain: 'knowledge', ops: ['read'], range: 'workspace', max_sensitivity: 'internal' },
+          ],
+        }
+      },
+    })
+    /** 品牌那一格毛利率算的盈亏线 + 现在那条固定止损线（只显示，不改止损）。 */
+    const breakEvenNow = () => ({
+      ...breakEvenView(resolveGrossMargin(economics.margins())?.margin_pct),
+      fixed_line: fixedStopLossCaps().stop_loss_roas_below ?? ADS_DEFAULT_CAPS.stop_loss_roas_below,
+    })
     const workData: WorkstationDataSource = {
       ...baseWorkData,
       systemCards: (actor) => ({
@@ -2206,6 +2282,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       ensureFresh: async () => {
         await baseWorkData.ensureFresh?.()
         await googleReads.ensureFresh()
+        // WP224：毛利率缓存（盈亏线那一格读它）
+        await economics.refresh()
       },
       search: () => googleReads.deckData(),
       kol: () => kolDeckData(kol, { now: clock.now() }),
@@ -2227,7 +2305,13 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
        * WP75（57 §3）：投放那几块同理——campaign 表与止损记录是**我们自己库里**的行，
        * 一个平台都没连也照样在那儿摆着。四个平台那四个源才是"连没连"的事。
        */
-      ads: () => adsDeckData(ads, { now: clock.now() }),
+      // WP224：ROAS 旁边并排盈亏线 + 两条止损线的对照表（只显示，不改止损）
+      ads: () =>
+        adsDeckData(ads, {
+          now: clock.now(),
+          break_even: breakEvenNow(),
+          line_compare: summarizeLineCompare(ads.lineCompareRows()),
+        }),
       // WP78（60 §3）：公关那五块同理——待发的稿子、自己攒的媒体名单是
       // **我们自己写的**，与连没连 Google Alerts 无关。外面那一侧（提及流 /
       // 负面预警）走 `google_alerts` 那个源，没连就照 36 §3 明说。
@@ -2562,6 +2646,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     const adsService = createAdsService({
       workspace_id: ws,
       routeScopeManager,
+      // WP224：止损卡上判据旁边并排一格盈亏线（只显示）
+      breakEven: breakEvenNow,
       store: ads,
       clock,
       ledger: txn.ledger,
@@ -2569,6 +2655,32 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       appendEvent,
       random,
     })
+    /**
+     * WP224（docs/91 §2.2 #1）：本周经营一页纸。面板上下文用的就是工作台那一份端口
+     * （同 `workstationPortFor` 的装法，这里直接建一份，免得引用一个还没走到的定义）。
+     */
+    const weeklyReview = createWeeklyReviewService({
+      workspace_id: ws,
+      clock,
+      assignments: () => roles.assignments.listByWorkspace(ws),
+      approvals,
+      port: async () => createWorkstationPort({ clock, roles, approvals, data: workData }),
+      brandName: () => brandNameOfWorkspace(ws),
+    })
+    /** WP224：今天记一行两条止损线的对照（每天夜里那条定时调；只记账，不改止损）。 */
+    const lineCompareSnapshot = async () => {
+      await economics.refresh()
+      const now = clock.now()
+      const tz = workData.tz_offset_minutes
+      const date = new Date(Date.parse(now) + tz * 60_000).toISOString().slice(0, 10)
+      const rows = snapshotLineCompare(ads, {
+        date,
+        now,
+        caps: fixedStopLossCaps(),
+        marginFor: () => resolveGrossMargin(economics.margins())?.margin_pct,
+      })
+      return { rows: rows.length, date }
+    }
 
     /**
      * WP77（59 §2）：建站库的 `/v1` 面。
@@ -4234,6 +4346,10 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       siteService,
       ads,
       adsService,
+      // WP224：毛利率事实卡、本周经营一页纸、两条止损线对照
+      economics,
+      weeklyReview,
+      lineCompareSnapshot,
       work,
       ...(runtime === undefined ? {} : { runtime }),
       ...(startRun === undefined ? {} : { startRun }),
@@ -4743,6 +4859,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         return { brands: 1, skipped }
       },
     })
+    // WP224：本周经营一页纸（秘书每周一推给这个品牌的老板）、两条止损线对照（每天夜里记一行）
+    registerEconomics(s, {
+      weeklyReview: async () => (await of()).weeklyReview.run(),
+      lineCompare: async () => (await of()).lineCompareSnapshot(),
+    })
     // WP78：品牌监控（这个品牌的提及只进这个品牌的库）
     registerPrMonitor(s, { sweep: async () => (await of()).prService.monitorSweep() })
     // WP73：社媒定时发布与群发（这个品牌的号发这个品牌的内容）
@@ -4819,6 +4940,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         b2b: held('b2b.outbound'),
         // WP154：有人持有「内容与搜索」才建每日读 Search Console 与每周小结那两条
         seo: held('dtc.content'),
+        // WP224：有老板岗位才推一页纸；有人担投放才记两条止损线的对照
+        weeklyReview: held('common.owner'),
+        adsLineCompare: ADS_PLATFORMS.some((p) => held(`ads.${p.id}`)),
       },
     })
   }
@@ -4853,6 +4977,12 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     { ids: ['sched_pr_monitor'], held: (ws) => PR_ROLE_IDS.some((r) => roleHeldIn(ws, r)) },
     { ids: ['sched_b2b_sequence'], held: (ws) => roleHeldIn(ws, 'b2b.outbound') },
     { ids: ['sched_seo_daily', 'sched_seo_weekly'], held: (ws) => roleHeldIn(ws, 'dtc.content') },
+    // WP224
+    { ids: ['sched_weekly_review'], held: (ws) => roleHeldIn(ws, 'common.owner') },
+    {
+      ids: ['sched_ads_line_compare'],
+      held: (ws) => ADS_PLATFORMS.some((p) => roleHeldIn(ws, `ads.${p.id}`)),
+    },
   ]
   const POSITION_TASK = /^sched_(daily_plan|review_day|review_week|review_month)_/
   const gate = async (id: string, on: boolean): Promise<void> => {
@@ -7041,6 +7171,26 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     storage: storage.port,
     // WP60（49 §6 / 48 L7）：在线值守的切档向导与"接回本机"
     standby: standby.port,
+    // WP224：毛利率事实卡、两条止损线对照、本周经营一页纸（按主体所在品牌）
+    economics: {
+      margins: async (actor) =>
+        (await brandModules.forWorkspace(actor.workspace_id)).economics.list(
+          economicsReader(actor),
+        ),
+      saveMargin: async (actor, input) =>
+        (await brandModules.forWorkspace(actor.workspace_id)).economics.save(
+          economicsReader(actor),
+          input,
+        ),
+      lineCompare: async (actor) =>
+        summarizeLineCompare(
+          (await brandModules.forWorkspace(actor.workspace_id)).ads.lineCompareRows(),
+        ),
+      weeklyReview: async (actor) =>
+        (await (await brandModules.forWorkspace(actor.workspace_id)).weeklyReview.build()) ?? null,
+      runWeeklyReview: async (actor) =>
+        (await brandModules.forWorkspace(actor.workspace_id)).weeklyReview.run(),
+    },
     // WP215：每个品牌一套后台——状态、全进程并发上限、品牌急停
     background: {
       settings: async (actor) => background.settings(backgroundRowsOf(actor)),

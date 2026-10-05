@@ -26,6 +26,7 @@ import type {
   AdsCaps,
   AdsPlatform,
   AssignmentId,
+  BreakEvenView,
   ChangeKind,
   Clock,
   EffectiveConfig,
@@ -56,6 +57,12 @@ export interface AdsServiceOptions {
    * 不给就照旧落在提的人自己身上（单测与没装公司页的进程）。
    */
   routeScopeManager?: ScopeManagerRouter
+  /**
+   * WP224（docs/91 §2.2 #3）：盈亏线那一格（品牌那一格毛利率算的）。止损卡上判据旁边
+   * 并排写一句——**只是显示**，这张卡停不停仍按 `stop_loss_roas_below`（先并排两周再定）。
+   * 不给就不写（单测与没装毛利率那一层的进程）。
+   */
+  breakEven?: () => BreakEvenView
 }
 
 export interface AdsServiceAssembly {
@@ -391,6 +398,7 @@ export function createAdsService(options: AdsServiceOptions): AdsServiceAssembly
        * guardrail 会拿 `after` 里那三格再判一遍：报了 `stop_loss` 但判据不成立的
        * 转人审。两处都判**不是重复**——这一处是给人看的话，那一处是门。
        */
+      const breakEven = options.breakEven?.()
       const verdict = stopLossVerdict({
         ...(campaign.metrics?.roas === undefined ? {} : { roas: campaign.metrics.roas }),
         ...(campaign.metrics?.spend === undefined ? {} : { spend: campaign.metrics.spend }),
@@ -410,10 +418,22 @@ export function createAdsService(options: AdsServiceOptions): AdsServiceAssembly
           ...(campaign.daily_budget === undefined ? {} : { daily_budget: campaign.daily_budget }),
           // 卡面上那一格放的是**判据**不是"止损"两个字（`HighlightType.stop_loss`）
           stop_loss_reason: verdict.reason,
+          // WP224：判据旁边并排一格盈亏线（「盈亏线 ROAS 2.5（毛利率 40%）」/「没填毛利率」）
+          ...(breakEven === undefined
+            ? {}
+            : {
+                break_even_note: breakEven.note,
+                ...(breakEven.break_even_roas === undefined
+                  ? {}
+                  : { break_even_roas: breakEven.break_even_roas }),
+              }),
         },
         notes: [
           input.note ?? '',
           verdict.reason,
+          ...(breakEven === undefined
+            ? []
+            : [`${breakEven.note}——只并排显示，停不停仍按上面那条判据。`]),
           '停了不是删了——历史数据还在，随时能再开。',
         ].filter((s) => s !== ''),
         title: `暂停：${campaign.name}`,

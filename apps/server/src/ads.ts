@@ -23,11 +23,14 @@
  */
 import { createRequire } from 'node:module'
 import { join } from 'node:path'
+import { compareLines } from '@agentsws/ads-core'
 import type {
   Ad,
   AdAccount,
   AdCampaign,
   AdSet,
+  AdsCaps,
+  AdsLineCompareRow,
   AdsPlatform,
   PixelEvent,
   PixelHealth,
@@ -37,8 +40,20 @@ import { ADS_PLATFORM_IDS } from '@agentsws/contracts'
 import type { AdsDeckData } from '@agentsws/deck'
 import type BetterSqlite3 from 'better-sqlite3'
 
-/** 库里的五张表。名字与对象类型一一对应，不另起别名。 */
-export type AdsTable = 'ad_account' | 'ad_campaign' | 'ad_set' | 'ad' | 'pixel_event'
+/**
+ * 库里的五张表。名字与对象类型一一对应，不另起别名。
+ *
+ * WP224 加第六张 `line_compare`：两条止损线的逐日对照（一天一个 campaign 一行）。
+ * 它不是对象，是账——两周后照它定止损线（docs/91 §7 #2）。`CREATE TABLE IF NOT EXISTS`，
+ * 老库开起来自动多一张空表。
+ */
+export type AdsTable =
+  | 'ad_account'
+  | 'ad_campaign'
+  | 'ad_set'
+  | 'ad'
+  | 'pixel_event'
+  | 'line_compare'
 
 export const ADS_TABLES: readonly AdsTable[] = [
   'ad_account',
@@ -46,6 +61,7 @@ export const ADS_TABLES: readonly AdsTable[] = [
   'ad_set',
   'ad',
   'pixel_event',
+  'line_compare',
 ]
 
 interface AdsBackend {
@@ -160,6 +176,13 @@ export interface AdsStore {
    */
   recordMetrics(input: { campaign_id: string; metrics: NonNullable<AdCampaign['metrics']> }): void
 
+  /**
+   * WP224：记一行两条止损线的对照（同一天同一条 campaign 只留最后那一次）。
+   * 只是记账——**不据此停任何东西**。
+   */
+  recordLineCompare(row: AdsLineCompareRow): void
+  lineCompareRows(): AdsLineCompareRow[]
+
   /** 记一次止损（自动停掉一条之后）。 */
   recordStopLoss(row: AdsStopLoss): void
   stopLosses(filter?: { platform?: AdsPlatform; since?: string }): AdsStopLoss[]
@@ -235,6 +258,11 @@ export function createAdsStore(options: AdsStoreOptions): AdsStore {
       if (campaign === undefined) return
       backend.put('ad_campaign', campaign.id, { ...campaign, metrics })
     },
+
+    recordLineCompare: (row) => {
+      backend.put('line_compare', `${row.date}:${row.campaign_id}`, row)
+    },
+    lineCompareRows: () => backend.all<AdsLineCompareRow>('line_compare'),
 
     recordStopLoss: (row) => {
       backend.put('ad_campaign', stopLossId(row), { ...row, id: stopLossId(row) })
@@ -346,6 +374,10 @@ export function adsDeckData(
     unmatched_orders?: number
     /** 待审改动四车道（从审批总线读出来递进来——库里不存审批）。 */
     pending?: AdsDeckData['pending']
+    /** WP224：盈亏线那一格（品牌那一格毛利率 + 现在那条固定止损线）。不给 = 不显示这一层。 */
+    break_even?: AdsDeckData['break_even']
+    /** WP224：两条止损线的对照表（`summarizeLineCompare` 算好递进来）。 */
+    line_compare?: AdsDeckData['line_compare']
     now?: string
   } = {},
 ): AdsDeckData {
@@ -425,7 +457,57 @@ export function adsDeckData(
       ? {}
       : { conversions_today: conversions.reduce((a, b) => a + b, 0) }),
     stop_loss_count: stop_losses.length,
+    ...(options.break_even === undefined ? {} : { break_even: options.break_even }),
+    ...(options.line_compare === undefined ? {} : { line_compare: options.line_compare }),
   }
+}
+
+/**
+ * WP224：给今天拍一张两条止损线的对照（每条有表现数的 campaign 一行）。
+ *
+ * 判据只有 `ads-core` 那一份（`compareLines`）：现在那条线照 `caps` 算，盈亏线把 ROAS
+ * 那条换成 1 / 毛利率、花费那条不变。停着的 campaign 也记——它停着是因为谁停的，
+ * 对照表要看的是「按这两条线它会不会被停」。
+ */
+export function snapshotLineCompare(
+  store: Pick<AdsStore, 'campaigns' | 'recordLineCompare'>,
+  input: {
+    date: string
+    now: string
+    caps?: Partial<AdsCaps>
+    /** 这条 campaign 该用哪一格毛利率（没填 → `undefined`）。 */
+    marginFor(campaign: AdCampaign): number | undefined
+  },
+): AdsLineCompareRow[] {
+  const out: AdsLineCompareRow[] = []
+  for (const c of store.campaigns()) {
+    if (c.metrics === undefined) continue
+    const margin_pct = input.marginFor(c)
+    const v = compareLines({
+      ...(c.metrics.roas === undefined ? {} : { roas: c.metrics.roas }),
+      ...(c.metrics.spend === undefined ? {} : { spend: c.metrics.spend }),
+      ...(c.daily_budget === undefined ? {} : { daily_budget: c.daily_budget }),
+      ...(input.caps === undefined ? {} : { caps: input.caps }),
+      ...(margin_pct === undefined ? {} : { margin_pct }),
+    })
+    const row: AdsLineCompareRow = {
+      date: input.date,
+      campaign_id: c.id,
+      platform: c.platform,
+      name: c.name,
+      ...(c.metrics.roas === undefined ? {} : { roas: c.metrics.roas }),
+      ...(c.metrics.spend === undefined ? {} : { spend: c.metrics.spend }),
+      ...(c.daily_budget === undefined ? {} : { daily_budget: c.daily_budget }),
+      ...(margin_pct === undefined ? {} : { margin_pct }),
+      ...(v.break_even_roas === undefined ? {} : { break_even_roas: v.break_even_roas }),
+      fixed: v.fixed,
+      break_even: v.break_even,
+      recorded_at: input.now,
+    }
+    store.recordLineCompare(row)
+    out.push(row)
+  }
+  return out
 }
 
 /**
