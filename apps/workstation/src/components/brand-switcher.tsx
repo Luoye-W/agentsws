@@ -107,10 +107,11 @@ export function BrandSwitcher(): React.ReactNode {
       {open ? (
         // 一个最朴素的下拉：一个按钮 + 一张列表。不用带浮层引擎的那一套——
         // 顶栏这一个下拉只有"列几个名字、点一个"这一件事，多一层机制就多一层会坏的东西。
+        // WP215：切换器现在在左栏最底下（账户块上面），往下开会被屏幕底边裁掉——往上开
         <div
           role="menu"
           data-testid="brand-menu"
-          className="absolute top-full left-0 z-50 mt-1 w-64 rounded-md border bg-popover p-1 shadow-md"
+          className="absolute bottom-full left-0 z-50 mb-1 w-64 rounded-md border bg-popover p-1 shadow-md"
         >
           <p className="px-2 py-1.5 text-xs text-muted-foreground">{t('brand.switch.hint')}</p>
           <Separator className="my-1" />
