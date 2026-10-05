@@ -131,7 +131,7 @@ agency-agents 是一套**写得很用心的「人设 + 做法」提示词库**�
 | （无红人经理角色；内容创作者、TikTok 策略师各一句「KOL 合作」） | — | 红人营销岗五条 + `influencer-marketing` | 我们远深于它 | — |
 | `marketing-social-media-strategist`、`-tiktok-strategist`、`-instagram-curator`、`-twitter-engager`、`-linkedin-content-creator`、`-reddit-community-builder`、`-video-optimization-specialist`、`-x-twitter-intelligence-analyst` | 各平台运营 | 社媒岗十二条（86 / 89 已逐条评过） | 部分 | 社媒职责只挂 `brand-voice`，做法技能见 86 §8、89 §5、WP220 |
 | `marketing-short-video-editing-coach`、`-carousel-growth-engine` | 短视频剪辑、轮播图生成 | 设计岗五条**只做图**；`social.tiktok` 有钩子与脚本 | 缺（视频） | 待定（§7 #4） |
-| `marketing-livestream-commerce-coach` | 直播带货（讲的是抖音 / 快手） | 无 | 缺 | 等 TikTok Shop 排上再说；合规那几条先进宣称合规技能 |
+| `marketing-livestream-commerce-coach` | 直播带货（讲的是抖音 / 快手） | 无 | 缺 | 等 TikTok Shop 排上再说；它那几条宣称禁令先进违规宣称规则表 |
 | `marketing-pr-communications-manager` | 新闻稿、媒体、危机 | `pr.press`、`pr.monitoring` | 部分 | 危机「先出一份站得住的声明」格式进 PR 技能（与 WP220 合） |
 | `design-brand-guardian` | 品牌基础、一致性 | 品牌档案（70）、`DESIGN.md`（71）、`brand-voice`、`brand-system` | 覆盖 | — |
 | `design-image-prompt-engineer` | AI 出图提示词结构 | 设计岗 `generate_variants`（`design-core`） | 部分 | 提示词骨架（主体 / 环境 / 光 / 风格 / 技术参数 / 反向词）进 `design-core` |
@@ -205,9 +205,9 @@ agency-agents 是一套**写得很用心的「人设 + 做法」提示词库**�
 | 学习与记忆 | 六层技能 + 教训提升（24、54 §3） | 我们更好 |
 | 进阶能力 | 技能按需加载 | 覆盖 |
 | 成功指标 | 自动化采纳率 + 面板数字块 | 不补（§2.3 最后一段） |
-| **交付物** | `task_examples.expected_output`（**给人看**的一句话）+ 卡片结构（代码）+ 少数技能（退款「附上算式」、开发信三封） | **缺**：给模型看的、**不出卡的那些产出**的格式——日报、周报、体检报告、选题清单、复盘、brief。现在这些格式写在 `quick_prompts` 的一句 prompt 里（例：「两条判据分开说」），换一个人开同一件事就没了 |
+| **交付物** | `task_examples.expected_output`（**给人看**的一句话）+ 卡片结构（代码）+ 少数技能（17 份里 3 份有讲产出格式的小节：`ad-copywriting`、`quotation`、`trade-show`） | **缺**：给模型看的、**不出卡的那些产出**的格式——日报、周报、体检报告、选题清单、复盘、brief。现在这些格式写在 `quick_prompts` 的一句 prompt 里（例：「两条判据分开说」），换一个人开同一件事就没了 |
 | **工作流** | persona「怎么做」（一两句）+ 技能 | 有做法技能的职责覆盖；**约 23 条职责没有做法技能**（§3.3），它们的「怎么做」就只有 persona 里那一两句 |
-| **自检清单** | 少数动作（`pre_send_check`、`check_numbers`、`compliance_check`）+ guardrail | **缺**：技能里「交出去之前查这几条」。能机器查的我们已经进了 guardrail（这比它强）；剩下要模型自己查的（例：主题行有没有承诺折扣、引用的价格是不是今天的）没有固定地方写 |
+| **自检清单** | 少数动作（`pre_send_check`、`check_numbers`、`compliance_check`）+ guardrail | **大半缺**：17 份技能里只有 4 份有「发之前对一遍」这类小节（`email-sms`、`cold-email`、`export-docs`、`quotation`）。能机器查的我们已经进了 guardrail（这比它强）；剩下要模型自己查的（例：主题行有没有承诺折扣、引用的价格是不是今天的）没有固定地方写 |
 | **协作对象** | persona「你不负责→转给 X」（只写**出去**那一半）+ 个别领域的转交（§4.1） | **缺另一半**：谁会把活交给我、交来时该带什么；我交出去的东西给谁用、要什么格式 |
 
 ### 3.2 为什么不往 persona 里加段
