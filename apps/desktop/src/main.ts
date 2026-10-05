@@ -111,6 +111,7 @@ import {
 } from './tray-icon.js'
 import { tintBitmap } from './tray-tint.js'
 import {
+  busyBeforeRestart,
   createUpdateController,
   publicStatus,
   type UpdateBackend,
@@ -1650,9 +1651,33 @@ async function bootstrap(): Promise<void> {
     await waitServerGone()
   }
 
-  /** 「有任务在跑，确定现在重启？」——照 WP184 退出确认：没东西在跑就不问。 */
+  /** WP225：岗位 AI 正在跑的运行有几次（问服务进程；问不到回 undefined，按「没有」算）。 */
+  const aiRunsNow = async (): Promise<number | undefined> => {
+    if (remote || health?.ok !== true) return undefined
+    const s = await ensureSession()
+    const assignment = s === undefined ? undefined : await ensureAssignment(s)
+    if (s === undefined || assignment === undefined) return undefined
+    const out = await api.activeRuns(s, assignment)
+    if (!out.ok) logger.warn('问不到岗位 AI 在不在干活（按没有算）', { reason: out.reason })
+    return out.ok ? out.value : undefined
+  }
+
+  /** 「有任务在跑，确定现在重启？」——照 WP184 退出确认：没东西在跑就不问（WP225 加上岗位 AI 正在干活）。 */
   const confirmRestart = async (): Promise<boolean> => {
-    if (!officialRunning() && computerUseActive === undefined) return true
+    const aiRuns = await aiRunsNow()
+    logger.info('重启并更新前看一眼', {
+      officialScenes: officialRunning(),
+      computerUse: computerUseActive !== undefined,
+      aiRuns: aiRuns ?? 'unknown',
+    })
+    if (
+      !busyBeforeRestart({
+        officialScenes: officialRunning(),
+        computerUse: computerUseActive !== undefined,
+        aiRuns,
+      })
+    )
+      return true
     const t = strings(config.language)
     const result = await dialog.showMessageBox({
       type: process.platform === 'win32' ? 'none' : 'warning',

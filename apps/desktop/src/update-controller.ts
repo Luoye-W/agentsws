@@ -312,3 +312,16 @@ export function createUpdateController(options: UpdateControllerOptions): Update
     },
   }
 }
+
+/**
+ * WP225（WP218 决定 ③）：「重启并更新」前要不要问一句「有任务在跑，确定现在重启？」——
+ * 官方场景在跑、AI 正在操作电脑、岗位 AI 正在干活（`GET /v1/activity`），有一样就问；都没有就直接装。
+ * 岗位 AI 那一项问不到（服务没起来、旧服务进程）按「没有」算：不能因为问不到就永远装不上。
+ */
+export function busyBeforeRestart(input: {
+  officialScenes: boolean
+  computerUse: boolean
+  aiRuns: number | undefined
+}): boolean {
+  return input.officialScenes || input.computerUse || (input.aiRuns ?? 0) > 0
+}
