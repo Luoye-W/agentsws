@@ -465,6 +465,8 @@ export class Work {
       run_id?: RunId
       approval_item_id?: string
       todo_id?: TodoId
+      /** WP236：一次运行被停下来的那一条（界面据此出「接着跑」）。 */
+      stopped?: MatterEvent['stopped']
       at?: Iso8601
     },
   ): MatterEvent {
@@ -481,6 +483,7 @@ export class Work {
       ...(input.run_id === undefined ? {} : { run_id: input.run_id }),
       ...(input.approval_item_id === undefined ? {} : { approval_item_id: input.approval_item_id }),
       ...(input.todo_id === undefined ? {} : { todo_id: input.todo_id }),
+      ...(input.stopped === undefined ? {} : { stopped: { reason: input.stopped.reason } }),
     }
     this.store.appendMatterEvent(event)
     this.store.putMatter({

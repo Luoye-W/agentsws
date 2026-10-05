@@ -569,6 +569,16 @@ export function createDirectRuntime(options: DirectRuntimeOptions): RuntimeAdapt
         usage.cached_tokens += completion.usage.cached_tokens
         usage.cost_base += completion.usage.cost_base
 
+        /*
+         * WP236：模型这一跳回来时这次运行已经被停了（空闲超时 / 总时长 / 人点了停）——不再接着用它的结果，
+         * 照中断收尾（与 dsh 两档同一口径：停了就是停了，不因为最后一跳刚好回来就当「做完了」）。
+         */
+        if (signal.aborted) {
+          closeOpenToolUses('cancelled')
+          sink(cancelledEvent(signal))
+          return finish('cancelled', '运行被中断：未闭合的工具调用已补齐')
+        }
+
         const calls = completion.tool_calls ?? []
         // WP230：这一轮没有真工具调用、文字却像在「用文字调工具」——不当答案（见下面的重试）
         callText = calls.length === 0 && looksLikeToolCallText(completion.text)

@@ -63,9 +63,14 @@ export function resolveRunTimeLimits(input: {
     if (typeof s === 'number' && Number.isInteger(s) && s > 0) return s
     return DEFAULT_RUN_TIME_LIMITS[key]
   }
-  const max_duration_seconds = pick('max_duration_seconds', RUN_MAX_DURATION_THRESHOLD)
+  // 不超过设置页的上限（子进程档拿这两个上限当兜底线，宿主的看门狗永远先到）
+  const max_duration_seconds = Math.min(
+    pick('max_duration_seconds', RUN_MAX_DURATION_THRESHOLD),
+    RUN_MAX_DURATION_RANGE.max,
+  )
   const idle_timeout_seconds = Math.min(
     pick('idle_timeout_seconds', RUN_IDLE_TIMEOUT_THRESHOLD),
+    RUN_IDLE_TIMEOUT_RANGE.max,
     max_duration_seconds,
   )
   return { idle_timeout_seconds, max_duration_seconds }

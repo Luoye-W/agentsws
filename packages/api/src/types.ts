@@ -91,6 +91,7 @@ import type { PlatformKitPort } from './routes/platform-kit.js'
 import type { PositionEntryPort } from './routes/positions.js'
 import type { PrPort } from './routes/pr.js'
 import type { PrivacyPort } from './routes/privacy.js'
+import type { RunLimitsPort } from './routes/run-limits.js'
 import type { SearchDataApiPort } from './routes/search-data.js'
 import type { SecretaryPort } from './routes/secretary.js'
 import type { SecretsPort } from './routes/secrets.js'
@@ -885,6 +886,11 @@ export interface GatewayDeps {
    * 只是没有哪条职责开得了浏览器（`RunRequest.browser` 一直是空的）。
    */
   browser?: BrowserPort
+  /**
+   * WP236：运行时长线（空闲超时 / 总时长上限）。没装配时 `/v1/settings/run-limits` 回 not_implemented，
+   * 运行照缺省（空闲 3 分钟、总时长 20 分钟）。
+   */
+  runLimits?: RunLimitsPort
   /**
    * WP136（docs/79）：dsh 场景切换（列 / 建 / 删自建 / 起停网页场景）。
    * 只有本机档装配；没装配时 `/v1/dsh-scenes*` 回 not_implemented。

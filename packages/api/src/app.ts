@@ -64,6 +64,7 @@ import { platformKitRoutes } from './routes/platform-kit.js'
 import { positionEntryRoutes } from './routes/positions.js'
 import { prRoutes } from './routes/pr.js'
 import { privacyRoutes } from './routes/privacy.js'
+import { runLimitsRoutes } from './routes/run-limits.js'
 import { scheduleRoutes } from './routes/schedules.js'
 import { searchDataRoutes } from './routes/search-data.js'
 import { secretaryRoutes } from './routes/secretary.js'
@@ -195,6 +196,8 @@ export function collectRoutes(): Route[] {
     ...workRoutes(),
     // WP207：左栏职责下的对话 / 任务、归档与找回
     ...workArchiveRoutes(),
+    // WP236：运行时长线（空闲超时 / 总时长上限）
+    ...runLimitsRoutes(),
     // 36 §3 对话入口之二：问 AI（单轮、只你可见）
     ...askRoutes(),
     // WP188：随便聊（不开事项、不起岗位运行；会话存本机，计量照常）
