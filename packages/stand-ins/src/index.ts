@@ -57,6 +57,7 @@ export * from './runtime/schedule.js'
 export * from './runtime/skills.js'
 export * from './runtime/stub.js'
 export * from './runtime/support.js'
+export * from './runtime/tool-call-text.js'
 export * from './runtime/tool-words.js'
 export * from './runtime/web.js'
 

@@ -157,9 +157,19 @@ const toWireContent = (content: string | ChatContentPart[]): string | Record<str
   )
 }
 
+/**
+ * WP230：assistant 只带工具调用、自己没说话时 content 发 `null`（OpenAI 规范：
+ * 「Required unless tool_calls is specified」，DeepSeek 文档同样标 nullable；各家回这种消息时
+ * 自己也是 `content: null`）。空字符串有的兼容口会当「空内容」拒掉，`null` 是各家都认的那一种。
+ */
+const isCallOnly = (m: ChatMessage): boolean =>
+  m.role === 'assistant' &&
+  (m.tool_calls?.length ?? 0) > 0 &&
+  (typeof m.content === 'string' ? m.content === '' : m.content.length === 0)
+
 const toWireMessage = (m: ChatMessage): Record<string, unknown> => ({
   role: m.role,
-  content: toWireContent(m.content),
+  content: isCallOnly(m) ? null : toWireContent(m.content),
   ...(m.name === undefined ? {} : { name: m.role === 'tool' ? wireToolName(m.name) : m.name }),
   ...(m.tool_call_id === undefined ? {} : { tool_call_id: m.tool_call_id }),
   // 思考模型（DeepSeek thinking 模式）多轮时要把上一轮的推理原样带回，否则 400

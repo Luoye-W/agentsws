@@ -33,8 +33,13 @@ import {
   boundaryGate,
   contextItemHash,
   describeRun,
+  looksLikeToolCallText,
   renderTrustedToolResult,
   rewriteForChannelGuard,
+  TOOL_CALL_TEXT_FAILURE,
+  TOOL_CALL_TEXT_NUDGE,
+  TOOL_CALL_TEXT_RETRIES,
+  TOOL_CALL_TEXT_STEP,
   WebUsageCounter,
 } from '@agentsws/stand-ins'
 import { assembleDirect, DRAFT_REPLY_TOOL, STAGE_REFUND_TOOL } from './assemble.js'
@@ -150,6 +155,9 @@ export function createDirectRuntime(options: DirectRuntimeOptions): RuntimeAdapt
       const webCounter = new WebUsageCounter(req)
       let staged = false
       let finalText = ''
+      /** WP230：最近一轮是不是「把工具调用写成了文字」；重试过几次。 */
+      let callText = false
+      let callTextRetries = 0
       let exhausted: { which: keyof RunRequest['budget']; used: number; cap: number } | undefined
 
       const messages: ChatMessage[] = []
@@ -556,7 +564,9 @@ export function createDirectRuntime(options: DirectRuntimeOptions): RuntimeAdapt
         usage.cost_base += completion.usage.cost_base
 
         const calls = completion.tool_calls ?? []
-        if (completion.text.length > 0) {
+        // WP230：这一轮没有真工具调用、文字却像在「用文字调工具」——不当答案（见下面的重试）
+        callText = calls.length === 0 && looksLikeToolCallText(completion.text)
+        if (completion.text.length > 0 && !callText) {
           sink({ type: 'text.delta', text: completion.text })
           finalText = completion.text
         }
@@ -565,12 +575,9 @@ export function createDirectRuntime(options: DirectRuntimeOptions): RuntimeAdapt
         const callIds = calls.map((c, i) => (c.id.length > 0 ? c.id : `call_${toolCalls + 1 + i}`))
         messages.push({
           role: 'assistant',
-          content: [
-            completion.text,
-            ...calls.map((c) => `[calling ${c.name} ${canonicalJson(c.input)}]`),
-          ]
-            .filter((s) => s.length > 0)
-            .join('\n'),
+          // WP230：content 只留模型自己说的话，工具调用只走结构化的 `tool_calls`
+          // （以前同时写一行 `[calling …]`，真模型看多了就学着用文字调工具）
+          content: completion.text,
           ...(calls.length === 0
             ? {}
             : {
@@ -586,6 +593,14 @@ export function createDirectRuntime(options: DirectRuntimeOptions): RuntimeAdapt
             ? {}
             : { reasoning_replay: completion.reasoning_replay }),
         })
+        if (callText) {
+          // WP230：追加一句提示再跑一轮（只重试一次）；还这样就在循环外照实报格式异常
+          if (callTextRetries >= TOOL_CALL_TEXT_RETRIES) break
+          callTextRetries += 1
+          sink({ type: 'progress', step: TOOL_CALL_TEXT_STEP, note: 'retry' })
+          messages.push({ role: 'user', content: TOOL_CALL_TEXT_NUDGE })
+          continue
+        }
         if (calls.length === 0) break
 
         let stop = false
@@ -672,6 +687,18 @@ export function createDirectRuntime(options: DirectRuntimeOptions): RuntimeAdapt
       }
 
       closeOpenToolUses('turn_limit')
+
+      // WP230：重试过还是「用文字调工具」——照实报格式异常：假文字不当答案、不出卡
+      if (callText && exhausted === undefined) {
+        sink({
+          type: 'run.failed',
+          error: { code: 'provider_error', message: TOOL_CALL_TEXT_FAILURE, retryable: true },
+        })
+        return finish(
+          'failed',
+          describeRun({ readTools, drafted, askedBoundaries, failed: TOOL_CALL_TEXT_FAILURE }),
+        )
+      }
 
       const orderName = [...orders.values()][0]?.name
 

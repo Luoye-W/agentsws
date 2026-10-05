@@ -110,9 +110,10 @@ describe('openaiCompatibleProvider（DeepSeek 形态，注入 fetch，不联网�
     const sent = JSON.parse(String(calls[0]?.init.body ?? '{}')) as {
       messages: Record<string, unknown>[]
     }
+    // WP230：只带工具调用、没说话的 assistant 出线是 `content: null`（OpenAI 规范与 DeepSeek 都认）
     expect(sent.messages[1]).toEqual({
       role: 'assistant',
-      content: '',
+      content: null,
       tool_calls: [
         {
           id: 'call_1',
