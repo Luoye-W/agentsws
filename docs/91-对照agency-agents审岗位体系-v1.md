@@ -359,4 +359,4 @@ MIT 允许改写、商用、再分发，条件只有一条：**保留版权声�
 3. **仓库根 `NOTICE`** 加一行「Portions adapted from msitarzewski/agency-agents (MIT, Copyright (c) 2025 AgentLand Contributors)」。
 4. **`upstreams.yml`** 加一条 `id: agency-agents`、`kind: ported`、`pinned_commit: 83294689da3832c0a9f223221148c411fd3eacc0`，`watch_paths` 只列真引了的那几个文件，`we_depend_on` 写清「哪个文件 → 哪份技能」。上游改了只对照、不自动同步（理由同 `marketingskills`：我们改写过，冲突条款以我们为准）。
 5. 随软件带出去的技能更新，走 90（WP219）定的「已审内容更新通道」，不另开路。
-6. 交接单、活动模板、退回格式这类**只借了栏目结构**的（#12、#13），栏目本身不构成可受保护的表达，不强制署名；仍在设计文档里写一句来历，方便以后对照。
+6. 交接单、活动模板、退回格式这类**只借了栏目结构**的（#12、#13），也照 1–4 登记。署名成本很低，不值得去判「栏目算不算受保护的表达」。
