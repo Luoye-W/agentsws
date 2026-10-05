@@ -49,13 +49,16 @@ import type {
 import {
   cancelReasonOf,
   createRunWatchdog,
+  PLATFORM_KITS,
   platformKitOf,
+  platformMcpNeededBy,
   RUN_IDLE_TIMEOUT_RANGE,
   RUN_MAX_DURATION_RANGE,
   type RunCancelReason,
   type RunWatchdog,
   resolveRunTimeLimits,
   skillOnPlatform,
+  WEB_TOOL_NAMES,
 } from '@agentsws/contracts'
 import { canonicalJson, timeContextItem } from '@agentsws/core'
 import {
@@ -180,6 +183,11 @@ export interface MatterRecordSource {
   readToken?(assignment_id: AssignmentId): Promise<string> | string
   /** 工具执行器；不给的话运行时的工具调用一律 `no_tool_executor` */
   executeTool?: ToolExecutor
+  /**
+   * WP236：这个记录源**真能执行**哪些工具。给了，工具面里就只摆它认的（加上别的执行器真接上的）；
+   * 不给 = 老行为（不筛，替身 / 模拟世界的记录源都这样）。
+   */
+  executes?(tool: string): boolean
 }
 
 export interface RuntimeOptions {
@@ -904,11 +912,18 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
   // WP216：Dev MCP 是平台专属的官方工具——品牌的平台那一行没有 `mcp`，工具面里就一个都没有
   // 接了 `storefrontPlatform` 才有这道闸（没接 = 老行为，回放与老单测一个字节不变）；
   // 接了而平台没设 = 没有（不按 Shopify 兜底）
-  const devToolNames = (): readonly string[] =>
-    options.storefrontPlatform !== undefined &&
-    platformKitOf(options.storefrontPlatform())?.mcp === undefined
-      ? []
-      : (options.devTools?.toolNames() ?? [])
+  /*
+   * WP236：再加一道——**这条职责要不要它**（平台那一行 `mcp.roles`，建站类 `site.*`）。不要的职责
+   * 连 `toolNames()` 都不问：那一问会在后台起 Dev MCP（首次就去下官方工具包）。
+   * 平台没接（老装配）时按所有平台那一行的并集判。
+   */
+  const devMcpWanted = (role_id: string): boolean => {
+    if (options.storefrontPlatform === undefined)
+      return PLATFORM_KITS.some((k) => platformMcpNeededBy(k.mcp, role_id))
+    return platformMcpNeededBy(platformKitOf(options.storefrontPlatform())?.mcp, role_id)
+  }
+  const devToolNames = (role_id: string): readonly string[] =>
+    !devMcpWanted(role_id) ? [] : (options.devTools?.toolNames() ?? [])
   const executeToolRaw: ToolExecutor | undefined = (() => {
     /*
      * WP117（66 断点 #1）：**三级链**——红人工具 → dev MCP → 记录源。
@@ -972,7 +987,7 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       if (b2bOut !== undefined && B2B_OUTBOUND_TOOL_NAMES.includes(bareOf(call.name))) {
         return b2bOut(call)
       }
-      if (dev !== undefined && devToolNames().includes(call.name)) {
+      if (dev !== undefined && devToolNames(call.request.actor.role_id).includes(call.name)) {
         try {
           const { text } = await dev.call(call.name, call.input)
           return { status: 'ok', data: { text } }
@@ -990,6 +1005,29 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
    * WP236：所有宿主工具调用都过这一层——调用本身就是「有动静」（取一次 Reddit 要 8–12 秒，
    * 开始和结束各续一次命），回来的数据记进这次运行的现场（停下来时拼部分结果）。
    */
+  /**
+   * WP236：**给模型的工具只放这个进程真接上了的**。10-06 真机：社媒 Reddit 的工具面里摆着
+   * `list_community_threads`（职责 grounding 写的），一调就是「这个进程没接」，白花一轮。
+   *
+   * 判据与上面执行链同一张表：哪个执行器接了、名字归它；剩下的问记录源（`executes`）。
+   * 记录源没声明 `executes`（替身 / 模拟世界）= 老行为，不筛。
+   */
+  const offerable = (name: string, role_id: string): boolean => {
+    if (source.executes === undefined) return true
+    const bare = bareOf(name)
+    if (options.kolTools !== undefined && KOL_TOOL_NAMES.includes(bare)) return true
+    if (options.skills !== undefined && isReadSkillTool(name)) return true
+    if (options.researchTools !== undefined && RESEARCH_TOOL_NAMES.includes(bare)) return true
+    if (options.automation !== undefined && isScheduleTool(name)) return true
+    if (options.ownerTools !== undefined && OWNER_TOOL_NAMES.includes(bare)) return true
+    if (options.b2bOutboundTools !== undefined && B2B_OUTBOUND_TOOL_NAMES.includes(bare))
+      return true
+    // 官方网页工具由 dsh 那棵树自己挂（`dsh-tool-web`），不经宿主执行器
+    if (WEB_TOOL_NAMES.includes(name)) return true
+    if (options.devTools !== undefined && devToolNames(role_id).includes(name)) return true
+    return source.executes(name)
+  }
+
   const executeTool: ToolExecutor | undefined =
     executeToolRaw === undefined
       ? undefined
@@ -1339,7 +1377,7 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
         // WP162：有按需技能可读，才有读技能的工具
         ...(skillIndex.length > 0 ? [READ_SKILL_TOOL] : []),
         ...DEFAULT_TOOLS,
-        ...devToolNames(),
+        ...devToolNames(config.role_id),
         ...(isKolRole(config.role_id) ? KOL_TOOL_NAMES : []),
         // WP153：店主才有「列岗位 / 列连接」这两个只读工具
         ...(isOwnerRole(config.role_id) && options.ownerTools !== undefined
@@ -1354,7 +1392,9 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
         ...(web?.fetch === true ? [WEB_FETCH_TOOL] : []),
         ...(automationOn ? SCHEDULE_TOOL_NAMES : []),
       ]),
-    ].sort()
+    ]
+      .filter((name) => offerable(name, config.role_id))
+      .sort()
     const connect_token = (await source.readToken?.(input.assignment_id)) ?? ''
     const vertical = options.vertical?.()
     // WP82：这条职责的域名白名单（职责模板的 `browser_scope`）。岗位路由已经把
@@ -1402,7 +1442,8 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
           ? []
           : [timeContextItem({ now: clock.now(), companyTz: await options.timeZone() })]),
       ],
-      grounding: config.grounding,
+      // WP236：没接上的工具，grounding 提示里也不提
+      grounding: config.grounding.filter((g) => offerable(g.tool, config.role_id)),
       // 16 §3：公司端 write_external 一律经执行器，运行时拿不到写口
       tools: { allow, connect_token, side_effect_policy: 'executor' },
       skills: config.skills,

@@ -163,14 +163,16 @@ describe('WP162 端到端：挂了 email-sms 的职责（direct 替身上游）'
       skills: EMAIL.skills,
       calls: [
         { name: 'read_skill', input: { name: 'email-sms' } },
-        { name: 'shopify.docs.search', input: { query: 'email' } },
+        { name: 'search_policies', input: { query: 'email' } },
         { name: 'read_skill', input: { name: 'seo-judgment' } },
       ],
-      // 一个真能回 ok 的普通只读工具（Dev MCP 文档查询），拿来对照围栏
+      /*
+       * 一个真能回 ok 的普通只读工具，拿来对照围栏。原来借的是 Dev MCP 文档查询；WP236 起 Dev MCP
+       * 只给建站类职责（`site.*`），邮件营销的工具面里没有它，换成记录源的「规矩与政策库」。
+       */
       extra: {
-        devTools: {
-          toolNames: () => ['shopify.docs.search'],
-          call: async () => ({ text: 'Shopify Email 文档一段' }),
+        source: {
+          executeTool: async () => ({ status: 'ok', data: { text: 'Shopify Email 文档一段' } }),
         },
       },
     })
