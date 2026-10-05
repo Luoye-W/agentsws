@@ -337,5 +337,12 @@ describe('docs/54 §6.5 负责人转交', () => {
     )
     expect(again.already).toBe(true)
     expect(await events('owner.transferred')).toHaveLength(1)
+    // 卸下：有另一位负责人在才卸得下；最后一位卸不下
+    const liOwner = server.roles.assignments
+      .listByPerson(li.id, { workspace_id: server.bootstrap.workspace.id, role_id: 'common.owner' })
+      .find((a) => a.revoked_at === undefined)
+    expect((await call('DELETE', `/v1/assignments/${liOwner?.id ?? ''}`)).status).toBe(200)
+    const last = await call('DELETE', `/v1/assignments/${server.bootstrap.ownerAssignment.id}`)
+    expect(last.status).toBe(409)
   })
 })

@@ -1831,6 +1831,14 @@ export function createOrg(options: OrgOptions): OrgAssembly {
       const found = roles.assignments.get(id)
       if (found === undefined || found.workspace_id !== workspace_id)
         throw ORG_ERROR('not_found', `没有这条分配：${id}`)
+      // WP234（docs/54 §6.5）：最后一位负责人卸不下——先转交给别人（审批默认收件、授权都靠它）
+      if (found.role_id === 'common.owner' && found.revoked_at === undefined) {
+        const others = roles.assignments
+          .listByRole('common.owner', { workspace_id })
+          .filter((a) => a.revoked_at === undefined && a.id !== id)
+        if (others.length === 0)
+          throw ORG_ERROR('conflict', '这是最后一位负责人，先在「公司」页转交给别人，再卸下自己的')
+      }
       const revoked = roles.assignments.revoke(id, {
         ...(input.handover_to === undefined ? {} : { handover_to: input.handover_to }),
       })
