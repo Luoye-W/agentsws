@@ -44,4 +44,6 @@ Agents Workshop never changes the official desktop app's settings, and never dow
 
 **I clicked "Open" and nothing happened?** The first open prepares the scene folder and starts its service, which can take a dozen seconds. If it has not opened after a minute, the scene row shows why; try "Restart".
 
+**Which folder do other scenes work in?** On a new install, the `Agents 工坊` folder inside your Documents folder. If you installed an earlier version and already have a `dsh-workspace` folder in your home folder, that one keeps being used; nothing is moved.
+
 **Can other scenes see my customer data or keys?** Not by default: their working folder is outside Agents Workshop's data folder, and none of our keys are passed to them. The official interface does let you add working folders yourself — do not add Agents Workshop's data folder.

@@ -4,6 +4,7 @@
  *
  *   静默安装（装到带中文和空格的目录）→ 看最长路径 → Playwright 起装好的 exe（用户数据目录也带中文）
  *   → 等服务 /v1/health 200 → 打开工作台首页（真的是工作台，不是 404）→ 再起一次验单实例
+ *   → 开一次官方 web 场景（默认工作文件夹「文稿\Agents 工坊」，中文 + 空格；WP227）
  *   → 查我们的进程只听 127.0.0.1（不会弹防火墙）→ 退出 → 查没有留下孤儿 node.exe → 静默卸载
  *
  * 任何一步不过就非 0 退出；日志、截图、桌面壳与服务进程的日志都放进 `--out` 目录，CI 作为 artifact 上传。
@@ -193,6 +194,31 @@ async function main() {
     })
     step(`单实例：第二个进程退出码 ${second.status}`)
     if (second.status === null) throw new Error('第二个实例 30 秒没退出（单实例锁没生效？）')
+
+    // 5b. WP227：官方场景的默认工作文件夹是「文稿\Agents 工坊」（中文 + 空格）。开一次官方 web 场景：
+    //     文件夹建出来、场景在这个目录里起得来、窗口出来（下面第 6 / 8 步顺带查它只听回环、退出不留孤儿）
+    const profile = process.env.USERPROFILE ?? ''
+    const workspace = join(profile, 'Documents', 'Agents 工坊')
+    if (existsSync(join(profile, 'dsh-workspace')))
+      step(`这台机器上已有老的 ${join(profile, 'dsh-workspace')}，会照用它（不查新默认）`)
+    await handle(() => {
+      globalThis.__agentsws__?.invoke('switch-scene', 'web')
+    })
+    let scene
+    for (let i = 0; i < 240 && scene === undefined; i += 1) {
+      const wins = await handle(() => globalThis.__agentsws__?.sceneWindows() ?? [])
+      scene = wins.find((w) => w.name === 'web' && w.visible)
+      if (scene === undefined) await sleep(500)
+    }
+    if (scene === undefined) throw new Error('官方 web 场景 2 分钟内没开出窗口（看 server.log）')
+    const sceneWin = app.windows().find((w) => w.url() === scene.url)
+    if (sceneWin !== undefined) await sceneWin.screenshot({ path: join(out, 'official-scene.png') })
+    step(`官方场景开了：${scene.title}（截图 official-scene.png）`)
+    if (!existsSync(join(profile, 'dsh-workspace'))) {
+      if (!existsSync(workspace) || !statSync(workspace).isDirectory())
+        throw new Error(`默认工作文件夹没建出来：${workspace}`)
+      step(`默认工作文件夹：${workspace}`)
+    }
 
     // 6. 只听 127.0.0.1（不弹防火墙）
     const procs = processesUnder(
