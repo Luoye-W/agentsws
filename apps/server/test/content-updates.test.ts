@@ -27,6 +27,7 @@ import {
   type ContentFetch,
   contentFeedSources,
   createContentUpdates,
+  sameMajorLine,
 } from '../src/content-updates.js'
 
 const tmp = (p: string): string => mkdtempSync(join(tmpdir(), `wp219-${p}-`))
@@ -408,6 +409,52 @@ describe('自动 / 每次问我、只落启用品牌', () => {
     expect(r.events.find((e) => e.type === 'content_update.applied')?.payload).toMatchObject({
       by: 'auto',
     })
+  })
+})
+
+describe('WP225（Luoye #23）：「自动」只管同一主版本，大版本仍出卡', () => {
+  it('同一主版本（1.0.0 → 1.4.2）自动换上；大版本（1.0.0 → 2.0.0）出卡等人点', async () => {
+    for (const [to, auto] of [
+      ['1.4.2', true],
+      ['2.0.0', false],
+    ] as const) {
+      const k = key()
+      const r = await rig({
+        pack: makePack(k, [{ meta: meta('demo', to), md: SKILL('demo', to, NEW_RULES) }]),
+        keys: [contentPublicKeyOf(k)],
+        platforms: { ws_a: 'shopify' },
+      })
+      r.updates.setMode('ws_a', 'auto')
+      const report = await r.updates.check()
+      if (auto) {
+        expect(report.applied, to).toEqual([`ws_a:skill:demo@${to}`])
+        expect(report.carded, to).toEqual([])
+        expect(await resolved(r, 'ws_a')).toContain('周日不发')
+      } else {
+        expect(report.applied, to).toEqual([])
+        expect(report.carded, to).toEqual([`ws_a:skill:demo@${to}`])
+        expect(await resolved(r, 'ws_a')).not.toContain('周日不发')
+        // 卡批了照样换上（大版本只是不自动，不是不让换）
+        const card = [...r.bus.items.values()].find((c) => c.kind === 'content_update')
+        if (card === undefined) throw new Error('没出卡')
+        await r.decide(card.id, {})
+        expect(await resolved(r, 'ws_a')).toContain('周日不发')
+      }
+    }
+  })
+
+  it('sameMajorLine：照 npm ^ 的算法——第一个不是 0 的那一段算主版本', () => {
+    expect(sameMajorLine('1.2.3', '1.9.0')).toBe(true)
+    expect(sameMajorLine('1.2.3', '1.2.3.1')).toBe(true)
+    expect(sameMajorLine('1.9.0', '2.0.0')).toBe(false)
+    expect(sameMajorLine('0.3.1', '0.3.4')).toBe(true)
+    expect(sameMajorLine('0.3.4', '0.4.0')).toBe(false)
+    expect(sameMajorLine('0.0.3', '0.0.4')).toBe(false)
+    expect(sameMajorLine('v1.0.0', '1.1.0')).toBe(true)
+    // 不知道当前是哪一版 / 认不出：问人
+    expect(sameMajorLine(undefined, '1.0.0')).toBe(false)
+    expect(sameMajorLine('1.0', '1.1')).toBe(false)
+    expect(sameMajorLine('latest', '1.1.0')).toBe(false)
   })
 })
 
