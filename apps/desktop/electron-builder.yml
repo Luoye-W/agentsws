@@ -57,6 +57,10 @@ mac:
       arch:
         - arm64
         - x64
+# WP218：产物名不带空格（下载站 / GitHub 的网址与 latest*.yml 里的文件名就是它）。
+# 官网 downloads.json 的 `file` 与 scripts/release-manifest.mjs 按同一套名字认。
+dmg:
+  artifactName: Agents-Workshop-${version}-${arch}.${ext}
 win:
   icon: build/icon.png
   target:
@@ -64,6 +68,7 @@ win:
       arch:
         - x64
 nsis:
+  artifactName: Agents-Workshop-Setup-${version}-${arch}.${ext}
   oneClick: false
   perMachine: false
   allowToChangeInstallationDirectory: true
