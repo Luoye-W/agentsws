@@ -32,10 +32,12 @@ import { cloudAccountRoutes } from './routes/cloud-account.js'
 import { computerUseRoutes } from './routes/computer-use.js'
 import { connectionDirectoryRoutes } from './routes/connection-directory.js'
 import { connectionRoutes } from './routes/connections.js'
+import { contentUpdatesRoutes } from './routes/content-updates.js'
 import { dataServiceRoutes } from './routes/data-service.js'
 import { designRoutes } from './routes/design.js'
 // WP136（docs/79）：dsh 场景切换
 import { dshScenesRoutes } from './routes/dsh-scenes.js'
+import { economicsRoutes } from './routes/economics.js'
 import { eventRoutes } from './routes/events.js'
 // WP119（68）：浏览器插件的本地一面 `/v1/extension/*`（配对、观测、状态）
 import { extensionRoutes } from './routes/extension.js'
@@ -246,8 +248,12 @@ export function collectRoutes(): Route[] {
     ...platformKitRoutes(),
     // WP172（docs/84）：B2B 库。`/v1/b2b/*` 是新前缀，与别处都不撞（放在最后：生成物的顺序不动别人）
     ...b2bRoutes(),
+    // WP219（docs/90）：已审的内容更新。`/v1/settings/content-updates*` 是新路径（放最后：生成物的顺序不动别人）
+    ...contentUpdatesRoutes(),
     // WP215：每个品牌一套后台。`/v1/settings/background*` 是新路径（放在最后：生成物的顺序不动别人）
     ...backgroundRoutes(),
+    // WP224：毛利率事实卡、两条止损线对照、本周经营一页纸。`/v1/economics/*` 是新前缀（放在最后）
+    ...economicsRoutes(),
   ]
 }
 

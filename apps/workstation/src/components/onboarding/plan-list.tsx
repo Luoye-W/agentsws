@@ -104,6 +104,9 @@ const SKILL_NAMES = new Set([
   'prospecting',
   'quotation',
   'trade-show',
+  // WP224（docs/91 §2.2 #1 / #3）
+  'unit-economics',
+  'weekly-review',
 ])
 
 export function skillLabel(name: string, t: (key: string) => string): string {

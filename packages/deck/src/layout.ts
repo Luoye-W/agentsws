@@ -93,6 +93,8 @@ export const LAYOUT_BY_KIND: Record<Exclude<DeckKind, 'staged_change'>, DeckLayo
   computer_use: 'policy',
   // WP154：搜索报告（每日 5 件事 / 每周收入 / 每周 AI 可见度）同日报，不进队列（`NOT_A_CARD`）
   seo_report: 'aftermath',
+  // WP224：本周经营一页纸同日报，不进队列（`NOT_A_CARD`）
+  weekly_review: 'aftermath',
   // WP154：这个词写不写一页——一道是非题
   seo_topic: 'choice',
   system_alert: 'aftermath',
@@ -105,6 +107,10 @@ export const LAYOUT_BY_KIND: Record<Exclude<DeckKind, 'staged_change'>, DeckLayo
   official_plugin: 'policy',
   // WP210：客户来信投不进——主「再投一次」、次「去邮箱回复」
   inbound_dead_letter: 'policy',
+  // WP219：随软件带的第三方内容有了已审的新版——更新 / 稍后 / 查看改动
+  content_update: 'change',
+  // WP219：新版改了你也改过的段——用新版 / 保留我的（看对比）
+  content_conflict: 'choice',
 }
 
 /**
@@ -249,7 +255,8 @@ export function layoutFor(kind: DeckKind, changeKind?: string): DeckLayout {
  * 判断写在 deck 层（而不是各服务各写一遍）的理由与 `layoutFor` 一样：六端同一份。
  */
 export const NOT_A_CARD = {
-  kinds: ['daily_report', 'system_alert', 'seo_report'] as const,
+  // WP224：本周经营一页纸（老板看一眼就过；它引出的事各自出卡）
+  kinds: ['daily_report', 'system_alert', 'seo_report', 'weekly_review'] as const,
   changeKinds: ['launch_check'] as const,
 }
 

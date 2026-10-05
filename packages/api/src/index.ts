@@ -253,6 +253,11 @@ export type {
 } from './routes/connections.js'
 export { connectionRoutes } from './routes/connections.js'
 export {
+  type ContentUpdatesActor,
+  type ContentUpdatesPort,
+  contentUpdatesRoutes,
+} from './routes/content-updates.js'
+export {
   type DataServiceActor,
   type DataServiceApiPort,
   dataServiceRoutes,
@@ -275,6 +280,13 @@ export { designRoutes } from './routes/design.js'
 export type { DesignActor } from './routes/design-types.js'
 // WP136（docs/79）：dsh 场景切换
 export { type DshScenesActor, type DshScenesPort, dshScenesRoutes } from './routes/dsh-scenes.js'
+// WP224：毛利率事实卡、两条止损线对照、本周经营一页纸
+export {
+  type EconomicsActor,
+  type EconomicsPort,
+  economicsRoutes,
+  type WeeklyReviewRunView,
+} from './routes/economics.js'
 export {
   AssignmentVisibility,
   canReadAll,

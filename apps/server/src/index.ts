@@ -102,6 +102,15 @@ export {
   type MailProbe,
   smokeDetail,
 } from './connections.js'
+// WP219（docs/90）：已审的第三方内容更新（demo / 测试用本地替身更新源）
+export {
+  CONTENT_UPDATES_ENV,
+  type ContentFeedSource,
+  type ContentFetch,
+  type ContentUpdates,
+  contentFeedSources,
+  createContentUpdates,
+} from './content-updates.js'
 // WP134：「用我的 DeepSeek 账号登录」的 demo / 截图替身（不出网）
 export { deepseekAccountStandIn } from './deepseek-account.js'
 // WP136（docs/79）：dsh 场景切换
@@ -488,6 +497,8 @@ export async function main(): Promise<void> {
   try {
     server = await createServer({
       ...(dbDir === undefined ? {} : { dbDir }),
+      // WP228：本机只读浏览器（Reddit「浏览器只读」那一路）只在真正的服务进程里装
+      readonlyBrowser: {},
       ...(staticDir === undefined ? {} : { staticDir }),
       ...(profileDir === undefined || profileDir === ''
         ? {}

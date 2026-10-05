@@ -53,8 +53,52 @@ export interface CapabilitySourceSettings {
    * 没存的渠道用 `DEFAULT_DATA_SOURCE_ORDER`。
    */
   data_source_routing?: Record<string, DataSourceRoute>
+  /**
+   * WP220：Reddit 浏览器只读取数的限速（只含显式改过的；没存用
+   * `DEFAULT_REDDIT_BROWSER_READ_LIMITS`，默认保守）。
+   */
+  reddit_browser_read?: RedditBrowserReadLimits
   /** 上次改是什么时候（没改过就没有）。 */
   updated_at?: Iso8601
+}
+
+/**
+ * WP220（Luoye 10-05）：Reddit 浏览器只读那一路的限速。三格都要满足才开下一页。
+ * 写进设置、每个品牌各一份；默认值见 `DEFAULT_REDDIT_BROWSER_READ_LIMITS`（`data-service.ts`）。
+ */
+export interface RedditBrowserReadLimits {
+  /** 两次开页面之间至少隔几秒。 */
+  min_interval_seconds: number
+  /** 一小时最多开几个页面。 */
+  max_pages_per_hour: number
+  /** 一天最多开几个页面。 */
+  max_pages_per_day: number
+}
+
+/**
+ * WP228：本机只读浏览器（Reddit「浏览器只读」那一路）现在能不能用——连接页 Reddit 卡上那一格。
+ *
+ * - `ready`：找到了 Chrome / Edge，额度够，没被拦；
+ * - `no_browser`：这台电脑上没找到 Chrome / Edge（不替你下载）；
+ * - `quota_used_up`：最近 24 小时的页数用完了（设置里的上限）；
+ * - `blocked`：站点拦了（登录墙 / 验证码 / 429），暂停到 `until`。
+ */
+export interface ReadonlyBrowserStatus {
+  state: 'ready' | 'no_browser' | 'quota_used_up' | 'blocked'
+  /** 一句人话（进提示）。 */
+  message?: string
+  /** 被拦暂停到几点。 */
+  until?: Iso8601
+  /** 最近 24 小时开了几页 / 上限。 */
+  pages_last_day: number
+  max_pages_per_day: number
+  /** 找到的浏览器（`Chrome` / `Edge` / `Chromium`）。 */
+  browser?: string
+  /**
+   * WP228（Luoye 10-05）：托管实例（云上那份）——没有浏览器，这一路默认停用、取数只走接口中台，
+   * 连接页 Reddit 卡上「浏览器只读」那一行整行不显示。
+   */
+  hosted?: boolean
 }
 
 /* ------------------------------------------------------------------ */
@@ -417,6 +461,12 @@ export type DataSourceLevel =
    * 红人那几条（`kol.<渠道>`）不认它。用户付的是 DeepSeek 的 token，工坊不扣积分。
    */
   | 'deepseek_native'
+  /**
+   * WP220（Luoye 10-05）：**浏览器只读取数**——本机兜底那一路，只属于 Reddit 取数
+   * （键 `reddit.read`，见 `data-service.ts` 的 `REDDIT_READ_ROUTE_KEY`）。
+   * 用单独的只读浏览器会话、限速，绝不用品牌发帖账号的会话；不扣积分。
+   */
+  | 'browser_readonly'
 
 /** WP179：网页搜索这一项能力在 `data_source_routing` 里的键。 */
 export const WEB_SEARCH_ROUTE_KEY = 'web.search'

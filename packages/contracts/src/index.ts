@@ -31,6 +31,8 @@ export * from './computer-use.js'
 export * from './connect.js'
 // 54（将改号 55）§4 第一层：连接目录（按职责模板的 `kind` 登记的总表，WP83）
 export * from './connection-directory.js'
+// WP219（docs/90）：第三方内容更新（内容包格式、签名常量、卡与设置）
+export * from './content-updates.js'
 export * from './data.js'
 // WP192（docs/83 §4）：官方数据接口的统一能力口（同步调用 + 异步任务）
 export * from './data-service.js'
@@ -38,6 +40,7 @@ export * from './data-service.js'
 export * from './design.js'
 // WP136（docs/79）：dsh 的「场景」（Profile）——Agents 工坊是其中一个，其余由 DeepSeek 官方维护
 export * from './dsh-scenes.js'
+export * from './economics.js'
 export * from './events.js'
 // WP164：托管实例对外的状态形状（从 packages/hosted 挪来）
 export * from './hosted.js'

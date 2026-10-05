@@ -45,6 +45,8 @@ const BY_KIND: Partial<Record<DeckKind, DeckAction[]>> = {
   daily_report: ['open', 'snooze'],
   // WP154：搜索报告同日报——看完归档，它引出的决定各自出卡
   seo_report: ['open', 'snooze'],
+  // WP224：经营一页纸同日报——看完归档
+  weekly_review: ['open', 'snooze'],
   // WP154：写 / 不写；「指导」无从谈起（要改写法等写的时候在事项里说）
   seo_topic: ['approve', 'reject', 'snooze', 'open'],
   // 46 I3：同意 / 拒绝，没有第三条路——「指导」在这里无从谈起（对方要么进来要么不进来）。
@@ -58,6 +60,10 @@ const BY_KIND: Partial<Record<DeckKind, DeckAction[]>> = {
   official_plugin: ['approve', 'reject', 'snooze', 'open'],
   // WP210：再投一次 / 去邮箱回复；「指导」无从谈起（问的只是这封信怎么办）
   inbound_dead_letter: ['approve', 'reject', 'snooze', 'open'],
+  // WP219：更新 / 稍后 / 查看改动（docs/90 §6）。没有「不要」：不点就一直是旧版，稍后再说
+  content_update: ['approve', 'snooze', 'open'],
+  // WP219：选一个（用新版 / 保留我的）再批；「看对比」= open
+  content_conflict: ['approve', 'snooze', 'open'],
 }
 
 export function actionsFor(kind: DeckKind, state: ApprovalState): DeckAction[] {
@@ -85,6 +91,8 @@ const LABELS: Partial<Record<DeckKind, Partial<Record<DeckAction, string>>>> = {
   computer_use: { approve: '允许', reject: '不允许', snooze: '稍后' },
   official_plugin: { approve: '照做', reject: '不要', snooze: '稍后' },
   inbound_dead_letter: { approve: '再投一次', reject: '去邮箱回复', snooze: '稍后' },
+  content_update: { approve: '更新', snooze: '稍后', open: '查看改动' },
+  content_conflict: { approve: '就这样', snooze: '稍后', open: '看对比' },
 }
 
 const DEFAULT_LABELS: Record<DeckAction, string> = {
@@ -122,6 +130,9 @@ const RISK_BY_KIND: Partial<Record<DeckKind, RiskClass>> = {
   staged_change: 'medium',
   // WP210：一位客户在等回复
   inbound_dead_letter: 'medium',
+  // WP219：审过、可一键退回；只换技能这类声明式内容，不碰程序
+  content_update: 'low',
+  content_conflict: 'medium',
   outbound_draft: 'medium',
   dev_handoff_result: 'medium',
   scheduled_task: 'medium',
@@ -136,6 +147,7 @@ const RISK_BY_KIND: Partial<Record<DeckKind, RiskClass>> = {
   review: 'low',
   daily_report: 'low',
   seo_report: 'low',
+  weekly_review: 'low',
   seo_topic: 'low',
 }
 
@@ -163,6 +175,8 @@ const MINUTES_BY_KIND: Partial<Record<DeckKind, number>> = {
   computer_use: 1,
   official_plugin: 1,
   inbound_dead_letter: 2,
+  content_update: 1,
+  content_conflict: 2,
   dev_handoff_result: 5,
   home_suggestion: 1,
   system_alert: 3,
@@ -172,6 +186,8 @@ const MINUTES_BY_KIND: Partial<Record<DeckKind, number>> = {
   // 看一眼就归档
   daily_report: 1,
   seo_report: 1,
+  // WP224：一页纸 ≤ 500 字，三分钟内读完
+  weekly_review: 3,
   seo_topic: 1,
 }
 

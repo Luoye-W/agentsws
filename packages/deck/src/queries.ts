@@ -1041,6 +1041,56 @@ function ofPlatform<T extends { platform: string }>(rows: readonly T[], ctx: Que
 /** 数字块拿不到数就空着（**不补 0**：没拉到数与真的是 0 要分得开）。 */
 const numOrBlank = (v: number | undefined): number | string => v ?? ''
 
+/*
+ * WP224（docs/91 §2.2 #3）：**盈亏线并排显示**。
+ *
+ * ROAS 旁边加一格「盈亏线 ROAS」（1 / 毛利率），高于现在那条止损线、低于盈亏线的
+ * campaign 标一个提示图标——**不自动停、不出新卡**（Luoye 10-05：先并排两周再定）。
+ * 没填毛利率：那一格空着，表下面一行「没填毛利率 · 去填」（每一行都写一遍是噪声）。
+ */
+const BREAK_EVEN_COLUMNS = [
+  { key: 'break_even', label: '盈亏线 ROAS', align: 'right' as const, format: 'ratio' as const },
+  { key: 'below_break_even', label: '', format: 'flag' as const },
+]
+
+function breakEvenCells(
+  roas: number | undefined,
+  ctx: QueryContext,
+): { break_even: number | string; below_break_even: string } {
+  const be = ctx.ads?.break_even
+  const line = be?.break_even_roas
+  const below =
+    be !== undefined &&
+    line !== undefined &&
+    roas !== undefined &&
+    roas >= be.fixed_line &&
+    roas < line
+  return {
+    break_even: numOrBlank(line),
+    below_break_even: below
+      ? `ROAS ${roas} 高于止损线 ${be.fixed_line}、低于盈亏线 ${line}：按毛利算在亏（只提示，不自动停）`
+      : '',
+  }
+}
+
+function breakEvenFooter(
+  ctx: QueryContext,
+): { footer: NonNullable<TableResult['footer']> } | object {
+  const be = ctx.ads?.break_even
+  if (be === undefined) return {}
+  if (be.break_even_roas === undefined)
+    return {
+      footer: {
+        text: '没填毛利率，算不出盈亏线',
+        ...(be.fill_url === undefined ? {} : { href: be.fill_url }),
+        link_label: '去填',
+      },
+    }
+  return {
+    footer: { text: `${be.note}；只并排显示，自动止损仍按 ROAS < ${be.fixed_line}` },
+  }
+}
+
 const ADS_QUERIES: QueryDef[] = [
   {
     /*
@@ -1109,7 +1159,14 @@ const ADS_QUERIES: QueryDef[] = [
         { key: 'status', label: '状态' },
         { key: 'daily_budget', label: '日预算', align: 'right' as const, format: 'money' as const },
         { key: 'spend', label: '今天花了', align: 'right' as const, format: 'money' as const },
-        { key: 'roas', label: 'ROAS（平台口径）', align: 'right' as const },
+        // WP224：ROAS 是倍数不是钱（原来没写 format，会被念成 US$1.80）
+        {
+          key: 'roas',
+          label: 'ROAS（平台口径）',
+          align: 'right' as const,
+          format: 'ratio' as const,
+        },
+        ...BREAK_EVEN_COLUMNS,
         { key: 'observed_at', label: '看到于' },
       ],
       rows: ofPlatform(ctx.ads?.campaigns ?? [], ctx).map((r) => ({
@@ -1119,8 +1176,10 @@ const ADS_QUERIES: QueryDef[] = [
         daily_budget: numOrBlank(r.daily_budget),
         spend: numOrBlank(r.spend),
         roas: numOrBlank(r.roas),
+        ...breakEvenCells(r.roas, ctx),
         observed_at: r.observed_at ?? '',
       })),
+      ...breakEvenFooter(ctx),
     }),
   },
   {
@@ -1157,7 +1216,8 @@ const ADS_QUERIES: QueryDef[] = [
       columns: [
         { key: 'at', label: '什么时候停的' },
         { key: 'name', label: 'campaign' },
-        { key: 'roas', label: 'ROAS', align: 'right' as const },
+        // WP224：倍数不是钱（原来没写 format，会被念成 US$0.60）
+        { key: 'roas', label: 'ROAS', align: 'right' as const, format: 'ratio' as const },
         { key: 'spend', label: '停之前花了', align: 'right' as const, format: 'money' as const },
         // 判据那句话原样端出去：人要看的是"为什么停"，不是"停了"
         { key: 'reason', label: '判据' },
@@ -1196,6 +1256,20 @@ const ADS_QUERIES: QueryDef[] = [
           format: 'count' as const,
         },
         { key: 'gap_pct', label: '差多少', align: 'right' as const },
+        // WP224：ROAS 旁边并排一格盈亏线（两口径各一列，照旧不合并）
+        {
+          key: 'platform_roas',
+          label: 'ROAS（平台口径）',
+          align: 'right' as const,
+          format: 'ratio' as const,
+        },
+        {
+          key: 'order_roas',
+          label: 'ROAS（订单口径）',
+          align: 'right' as const,
+          format: 'ratio' as const,
+        },
+        ...BREAK_EVEN_COLUMNS,
         { key: 'observed_at', label: '看到于' },
       ],
       rows: ofPlatform(ctx.ads?.attribution ?? [], ctx).map((r) => ({
@@ -1203,9 +1277,78 @@ const ADS_QUERIES: QueryDef[] = [
         platform_conversions: numOrBlank(r.platform_conversions),
         order_conversions: numOrBlank(r.order_conversions),
         gap_pct: r.gap_pct === undefined ? '' : `${r.gap_pct}%`,
+        platform_roas: numOrBlank(r.platform_roas),
+        order_roas: numOrBlank(r.order_roas),
+        // 提示图标按订单口径判（钱是订单里来的）；订单口径没有才看平台口径
+        ...breakEvenCells(r.order_roas ?? r.platform_roas, ctx),
         observed_at: r.observed_at ?? '',
       })),
+      ...breakEvenFooter(ctx),
     }),
+  },
+  {
+    /*
+     * WP224：**两条止损线的对照表**（给 Luoye 定止损线用）。
+     *
+     * 从合并那天起每天记一次：每条 campaign 按现在的线（ROAS < 1）会不会停、
+     * 按盈亏线（ROAS < 1 / 毛利率）会不会停。「只有盈亏线会停」的天数就是
+     * 「一直在亏钱那段不报警」的量。**不按平台筛**——挂在老板那一面，四个平台一张表。
+     */
+    name: 'ads.line_compare',
+    source: 'ads',
+    returns: 'table',
+    run: (ctx) => {
+      const view = ctx.ads?.line_compare
+      return {
+        columns: [
+          { key: 'name', label: 'campaign' },
+          { key: 'platform', label: '平台' },
+          { key: 'days', label: '记了几天', align: 'right' as const, format: 'count' as const },
+          {
+            key: 'fixed_stop_days',
+            label: '现在的线会停',
+            align: 'right' as const,
+            format: 'count' as const,
+          },
+          {
+            key: 'break_even_stop_days',
+            label: '盈亏线会停',
+            align: 'right' as const,
+            format: 'count' as const,
+          },
+          {
+            key: 'only_break_even_days',
+            label: '只有盈亏线会停',
+            align: 'right' as const,
+            format: 'count' as const,
+          },
+          {
+            key: 'no_margin_days',
+            label: '没填毛利率',
+            align: 'right' as const,
+            format: 'count' as const,
+          },
+        ],
+        rows: (view?.summary ?? []).map((r) => ({
+          name: r.name,
+          platform: adsPlatformOfRole(`ads.${r.platform}`)?.zh ?? r.platform,
+          days: r.days,
+          fixed_stop_days: r.fixed_stop_days,
+          break_even_stop_days: r.break_even_stop_days,
+          only_break_even_days: r.only_break_even_days,
+          no_margin_days: r.no_margin_days,
+        })),
+        ...(view?.started_on === undefined
+          ? {}
+          : {
+              footer: {
+                text: `从 ${view.started_on} 起记了 ${view.days} 天${
+                  view.complete ? '，够两周了，可以定止损线' : '（满 14 天出结论）'
+                }；只记账，不改止损`,
+              },
+            }),
+      }
+    },
   },
 ]
 

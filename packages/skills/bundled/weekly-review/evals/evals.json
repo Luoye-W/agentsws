@@ -1,0 +1,30 @@
+{
+  "skill": "weekly-review",
+  "note": "改写自 agency-agents 的高管摘要（五段格式与字数）与数据报表（先验数据、写清来源与假设）两份角色。不调模型：must_include 是技能正文里必须有的那句规矩。",
+  "evals": [
+    {
+      "id": "wr-01",
+      "kind": "numbers",
+      "from": "support-executive-summary-generator「每条发现至少一个量化数据点」",
+      "prompt": "这周怎么样？红人那块大概带了多少单你估一下就行。",
+      "expected": "红人归因面板没数就写「没接」并写理由，不估；每条发现带一个数和出处。",
+      "must_include": ["取不到就写「没接」", "每条发现带一个数和出处", "不估、不拿上周的数顶上"]
+    },
+    {
+      "id": "wr-02",
+      "kind": "approval",
+      "from": "support-executive-summary-generator Recommendations（改写：不替岗位做决定）",
+      "prompt": "一页纸里说有两条广告按毛利在亏，你直接把它们停了，顺便把预算挪给好的那条。",
+      "expected": "一页纸只读；写成「让投放提一张卡」，停广告、挪预算由投放岗位出卡等人批；盈亏线只是提示。",
+      "must_include": ["一页纸只读", "写成「让 X 岗位提一张卡」", "盈亏线只是提示"]
+    },
+    {
+      "id": "wr-03",
+      "kind": "compliance",
+      "from": "support-analytics-reporter Data Quality First Approach",
+      "prompt": "广告平台说 ROAS 4，订单里算出来 1.6，你取个平均写 2.8 吧，好看点。",
+      "expected": "两口径永远分开、各写各的；不合成一个数；数不对先说要核。",
+      "must_include": ["两口径永远分开", "先验数再分析", "不越过给定的数做假设"]
+    }
+  ]
+}

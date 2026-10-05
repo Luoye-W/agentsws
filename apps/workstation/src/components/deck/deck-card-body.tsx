@@ -15,8 +15,9 @@ import { pickContent } from '@agentsws/deck'
 import { Label } from '@/components/ui/label'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { useApp } from '@/lib/app-context'
-import { channelLabel, fieldLabel, fieldValue } from '@/lib/humanize'
+import { channelLabel, fieldLabel, fieldValue, tOr } from '@/lib/humanize'
 import type { Lang } from '@/lib/i18n'
+import { isWeeklyReview, WeeklyReviewBody } from './weekly-review-body'
 
 const isRecord = (v: unknown): v is Record<string, unknown> =>
   typeof v === 'object' && v !== null && !Array.isArray(v)
@@ -186,15 +187,22 @@ function OptionList({
   options,
   option,
   onOption,
+  kind,
 }: {
   options: { id: string; label: string }[]
   option: string
   onOption: (id: string) => void
+  /** WP219：按卡种换那一句提示（`card.options.hint.<kind>`，没有就用通用那句）。 */
+  kind?: string
 }): React.ReactNode {
   const { t } = useApp()
+  const hint =
+    kind === undefined
+      ? t('card.options.hint')
+      : tOr(t, `card.options.hint.${kind}`, t('card.options.hint'))
   return (
     <fieldset className="rounded-[10px] bg-ws-surface p-3" data-testid="deck-card-options">
-      <legend className="px-1 text-xs text-ws-muted-fg">{t('card.options.hint')}</legend>
+      <legend className="px-1 text-xs text-ws-muted-fg">{hint}</legend>
       <RadioGroup value={option} onValueChange={onOption}>
         {options.map((o) => (
           <Label key={o.id} className="flex items-center gap-2 font-normal">
@@ -257,7 +265,7 @@ export function DeckCardBody({
             {options.length === 0 ? (
               <OutboundBody card={card} mode={mode} />
             ) : (
-              <OptionList options={options} option={option} onOption={onOption} />
+              <OptionList options={options} option={option} onOption={onOption} kind={card.kind} />
             )}
           </div>
         )
@@ -375,6 +383,8 @@ export function DeckCardBody({
 
       // ⑦ 事后决定：系统已经做了一件事，判据键值对是主体，问的是"要不要改回来"
       case 'aftermath': {
+        // WP224：本周经营一页纸是一张五段的卡（数带出处 tooltip），不是一排键值
+        if (isWeeklyReview(payload)) return <WeeklyReviewBody payload={payload} />
         const rows = pairs(payload.facts, lang).concat(pairs(payload.after, lang))
         return (
           <div className="mt-2.5 flex flex-col gap-2.5" data-testid="deck-layout-aftermath">
@@ -481,7 +491,7 @@ export function DeckCardBody({
       {main}
       {needsOptions ? (
         <div className="mt-2.5">
-          <OptionList options={options} option={option} onOption={onOption} />
+          <OptionList options={options} option={option} onOption={onOption} kind={card.kind} />
         </div>
       ) : null}
     </>

@@ -36,6 +36,9 @@ async function systemCrons(): Promise<{ id: string; expr: string }[]> {
       'pr',
       'social',
       'seo',
+      // WP224：每周一页纸、两条止损线对照
+      'weeklyReview',
+      'adsLineCompare',
     ].map((k) => [k, true]),
   )
   const tasks = await ensureSystemTasks(scheduler, {
@@ -83,6 +86,7 @@ describe('系统巡检：两边的时间算法（金样）', () => {
   it('巡检里的 cron 一条不少（改之前录下来的清单）', async () => {
     const crons = await systemCrons()
     expect(crons.map((c) => `${c.id} ${c.expr}`).sort()).toEqual([
+      'sched_ads_line_compare 30 23 * * *',
       'sched_b2b_sequence 0 9 * * *',
       'sched_backup 0 4 * * *',
       'sched_daily_plan_asg_1 0 8 * * *',
@@ -99,6 +103,7 @@ describe('系统巡检：两边的时间算法（金样）', () => {
       'sched_seo_daily 0 8 * * *',
       'sched_seo_weekly 30 8 * * 1',
       'sched_skills_weekly 0 6 * * 1',
+      'sched_weekly_review 0 8 * * 1',
     ])
   })
 
@@ -114,6 +119,8 @@ describe('系统巡检：两边的时间算法（金样）', () => {
       for (const { id, expr } of await systemCrons()) {
         expect(official(expr, tz, 40), `${id} ${expr}`).toEqual(ours(expr, tz, 40))
       }
-    })
+      // WP224 多了两条 cron（一页纸 / 止损线对照），IANA 时区那几组本机单跑就要 4 秒多，
+      // 默认 5 秒在并行负载下会超时——放宽到 30 秒（算的东西没变）
+    }, 30_000)
   }
 })

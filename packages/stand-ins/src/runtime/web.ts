@@ -124,6 +124,8 @@ export class WebUsageCounter {
       this.searches += n
       return undefined
     }
+    // WP220（Luoye 10-05）：reddit.com / x.com 的公开页面照常能抓（普通读网页，不用任何品牌账号），
+    // 与别的站同一个次数上限；Reddit 的「接口中台 → 浏览器只读」路由另走 `read_reddit`
     if (this.fetches + 1 > web.max_fetches) {
       return `web_fetch_limit: 这次运行最多抓 ${web.max_fetches} 个网页（已经抓了 ${this.fetches} 个），先用手上的内容`
     }

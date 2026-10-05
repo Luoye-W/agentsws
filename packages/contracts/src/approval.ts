@@ -121,6 +121,25 @@ export type ApprovalKind =
    * 没有正文。
    */
   | 'inbound_dead_letter'
+  /**
+   * WP219（docs/90）：**随软件带的第三方内容有了已审的新版**（「X 有新版 · 官方某日更新 · 已审」）。
+   * 三个按钮：更新（批准 → 服务进程原子替换这个品牌的基础层、保留旧版一份）/ 稍后 / 查看改动。
+   * 设置里选了「已审的自动更新」的品牌不出这张卡、直接更新。payload = `ContentUpdateCardPayload`。
+   */
+  | 'content_update'
+  /**
+   * WP219：内容更新后，新版改了**你（或学习回路）也改过的那一段**。选择卡：用新版 / 保留我的；
+   * 「看对比」= 打开三栏对比。payload = `ContentConflictCardPayload`。
+   */
+  | 'content_conflict'
+  /**
+   * WP224（docs/91 §2.2 #1）：**本周经营一页纸**。
+   *
+   * 「公司设置与授权」（`common.owner`）每周一由秘书推一张：情况 / 发现 / 影响 / 建议 / 下一步，
+   * 每条发现带一个数和出处，数字只从各岗位已有面板取，取不到写「没接」。与 `daily_report`
+   * 同一类：L3 自动出、看完归档，**不进审批队列**。payload = `WeeklyReviewPayload`。
+   */
+  | 'weekly_review'
 
 /** 14 §13.2 抽检复核：L2 自动批被抽中后，范围管理者看完说什么（WP32） */
 export interface SamplingReview {

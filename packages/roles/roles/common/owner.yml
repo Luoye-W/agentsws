@@ -58,9 +58,16 @@ automation:
     promotion: { adoption_rate_min: 1, window_weeks: 0, min_samples: 0 }
     demotion_triggers: [manual]
 
+# WP224：本周经营一页纸的「影响」那一段——销售额比前 7 天少了多少（%）才写一条。
+# 门槛数进公司层阈值，不写进技能正文与代码（docs/91 §1.5）；公司可改
+thresholds:
+  weekly_sales_drop_pct: 20
+
 skills:
   - { name: workspace-basics, tier: open, load: on_demand }
   - { name: policy-review, tier: open, load: on_demand }
+  # WP224（docs/91 §2.2 #1、§7 #1）：本周经营一页纸的写法（后台六样不开新岗位，落成技能挂这里）
+  - { name: weekly-review, tier: open, load: on_demand }
 
 home_blocks:
   - {
@@ -126,12 +133,22 @@ quick_prompts:
     label: { zh: "还差哪些连接", en: "What is still not connected" }
     prompt: "现在勾着的岗位里，还有哪些必需的连接没接上"
     kind: ask
+  # WP224：只读动作「本周经营一页纸」——各岗位面板上的数汇成一页，取不到写「没接」。
+  # 秘书每周一早上也会推一张同样的卡（定时任务 `sched_weekly_review`，时间可改）
+  - id: weekly_review
+    label: { zh: "本周经营一页纸", en: "This week on one page" }
+    prompt: "按「情况 / 发现 / 影响 / 建议 / 下一步」给我这周的经营一页纸：每条发现带一个数和出处，数只从各岗位面板取，取不到就写没接"
+    kind: review
 
 task_examples:
   - id: weekly_governance
     title: { zh: "每周看一眼授权", en: "The weekly look at permissions" }
     description: "想知道这周有没有谁被放开了不该放开的口子。"
     expected_output: "一份按职责列的额度与自动化等级清单，标出和上周的差异；改动本身永远走待批卡。"
+  - id: weekly_one_pager
+    title: { zh: "这周店里怎么样", en: "How did the business do this week" }
+    description: "不想挨个岗位去看数，要一页能看完的。"
+    expected_output: "一页纸：情况 / 发现 / 影响 / 建议 / 下一步，每条发现带一个数和出处（店铺日报、广告两口径、内容按页收入、社媒近 30 天、红人归因、客服量）；没接上的那几块写「没接」和为什么，不估。"
   - id: onboard_teammate
     title: { zh: "新人进来要开岗位", en: "A new teammate joins" }
     description: "招了一个人，要给他开客服岗位。"

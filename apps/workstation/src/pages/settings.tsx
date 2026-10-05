@@ -20,9 +20,11 @@ import { BackgroundCard } from '@/components/settings/background-card'
 import { BrowserCard } from '@/components/settings/browser-card'
 import { CloudAccountCard } from '@/components/settings/cloud-account'
 import { ComputerUseCard } from '@/components/settings/computer-use-card'
+import { ContentUpdatesSetting } from '@/components/settings/content-updates-setting'
 import { CreditsPanel } from '@/components/settings/credits-panel'
 import { DiagnosticsCard } from '@/components/settings/diagnostics-card'
 import { OfficialPluginsPanel } from '@/components/settings/official-plugins'
+import { WeeklyReviewCard } from '@/components/settings/weekly-review-card'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Hint } from '@/components/ui/hint'
@@ -194,6 +196,8 @@ export function SettingsPage({
             </div>
             {/* WP207：对话 / 任务多少天没动就自动归档（1–30 天或不自动归档） */}
             <ArchiveSetting />
+            {/* WP219：已审的内容更新——自动 / 每次问我（默认），更新过的条目可一键退回 */}
+            <ContentUpdatesSetting />
             {identity === undefined ? null : (
               <div className="flex items-center justify-between">
                 <span>{t('settings.identity')}</span>
@@ -272,6 +276,8 @@ export function SettingsPage({
           紧跟「公司」：它管的是这台电脑上所有品牌一起的事。所有者那一档权限。
         */}
         {ownerId === undefined ? null : <BackgroundCard assignment={ownerId} />}
+        {/* WP224：秘书每周几、几点推「本周经营一页纸」 */}
+        {ownerId === undefined ? null : <WeeklyReviewCard assignment={ownerId} />}
         {/*
           WP82（55 §3 末段）：浏览器。与模型 key 同一档权限（05 owner）——
           配浏览器是所有者的事，客服岗位看不到也改不了。放在模型前面：

@@ -15,6 +15,7 @@
  * 按「要红人职责」挑自己名下任一条红人职责（`lib/pick-assignment.ts`）。挑不到就说清楚，不发必 403 的请求。
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { CircleAlert, CircleCheck, Hourglass, ShieldAlert } from 'lucide-react'
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Hint } from '@/components/ui/hint'
@@ -24,6 +25,7 @@ import {
   clearKolByoSource,
   getCapabilitySources,
   getKolByoSources,
+  getRedditBrowserReadStatus,
   setCapabilitySources,
   setKolByoSource,
   testKolByoSource,
@@ -37,41 +39,57 @@ import { DutyNeeded } from '../duty-needed'
 /** 界面上三级的顺序（默认顺序；用户可在其中调整）。 */
 const LEVELS: readonly DataSourceLevel[] = ['official_key', 'byo_source', 'workshop']
 
+/** WP220（Luoye 10-05）：Reddit 取数那一项的键与两路（接口中台 → 浏览器只读）。 */
+export const REDDIT_READ_ROUTE_KEY = 'reddit.read'
+export const REDDIT_READ_LEVELS: readonly DataSourceLevel[] = ['workshop', 'browser_readonly']
+
 const LEVEL_LABEL_KEYS: Record<DataSourceLevel, string> = {
   official_key: 'data.route.official_key',
   byo_source: 'data.route.byo_source',
   workshop: 'data.route.workshop',
   // WP179：只属于网页搜索那一项（红人渠道的表里不会出现），开关在模型页
   deepseek_native: 'web.search.title',
+  // WP220：只属于 Reddit 取数那一项
+  browser_readonly: 'data.route.browser_readonly',
 }
 
 /** 当前生效的顺序（没配过的渠道用默认）。 */
 function effectiveOrder(
   routing: Record<string, { order: DataSourceLevel[]; disabled: DataSourceLevel[] }> | undefined,
   capability: string,
+  levels: readonly DataSourceLevel[] = LEVELS,
 ): { order: DataSourceLevel[]; disabled: DataSourceLevel[] } {
   const saved = routing?.[capability]
-  if (saved === undefined || saved.order.length === 0) return { order: [...LEVELS], disabled: [] }
-  // 只认三级以内、无重复的顺序；坏了就回默认（设置文件是手改不过来的，但防一手）
-  const order = saved.order.filter((l, i) => LEVELS.includes(l) && saved.order.indexOf(l) === i)
-  const missing = LEVELS.filter((l) => !order.includes(l))
+  if (saved === undefined || saved.order.length === 0) return { order: [...levels], disabled: [] }
+  // 只认这一项自己的几级、无重复的顺序；坏了就回默认（设置文件是手改不过来的，但防一手）
+  const order = saved.order.filter((l, i) => levels.includes(l) && saved.order.indexOf(l) === i)
+  const missing = levels.filter((l) => !order.includes(l))
   return {
     order: [...order, ...missing],
-    disabled: saved.disabled.filter((l) => LEVELS.includes(l)),
+    disabled: saved.disabled.filter((l) => levels.includes(l)),
   }
 }
 
 export function DataSourceRouteControl({
   channel,
   assignment,
+  routeKey,
+  levels = LEVELS,
+  note,
 }: {
   channel: string
   /** 所有者那条（工作区设置）；没传 = 全局当前岗位 */
   assignment?: string | undefined
+  /** WP220：路由键（不给 = 红人那条 `kol.<渠道>`；Reddit 卡给 `reddit.read`） */
+  routeKey?: string
+  /** WP220：这一项认哪几级（默认红人那三级） */
+  levels?: readonly DataSourceLevel[]
+  /** WP220：表下面那一句（i18n 键） */
+  note?: string
 }): React.ReactNode {
   const { t } = useApp()
   const client = useQueryClient()
-  const capability = `kol.${channel}`
+  const capability = routeKey ?? `kol.${channel}`
   const sources = useQuery({
     queryKey: ['capability-sources', assignment],
     queryFn: () => getCapabilitySources(assignment),
@@ -86,7 +104,18 @@ export function DataSourceRouteControl({
     onSuccess: () => void client.invalidateQueries({ queryKey: ['capability-sources'] }),
   })
 
-  const current = effectiveOrder(sources.data?.data_source_routing, capability)
+  const current = effectiveOrder(sources.data?.data_source_routing, capability, levels)
+  // WP228（Luoye 10-05）：托管实例（云上那份）没有浏览器——「浏览器只读」那一行整行不显示
+  const roStatus = useQuery({
+    queryKey: ['reddit-browser-read-status', assignment],
+    queryFn: () => getRedditBrowserReadStatus(assignment),
+    retry: false,
+    refetchInterval: 60_000,
+    enabled: levels.includes('browser_readonly'),
+  })
+  const shown = current.order.filter(
+    (l) => !(l === 'browser_readonly' && roStatus.data?.hosted === true),
+  )
 
   const move = (level: DataSourceLevel, delta: -1 | 1): void => {
     const order = [...current.order]
@@ -110,13 +139,16 @@ export function DataSourceRouteControl({
       <p className="text-xs font-medium" data-slot="title">
         {t('data.route.title')}
       </p>
-      {current.order.map((level, i) => {
+      {shown.map((level, i) => {
         const disabled = current.disabled.includes(level)
         return (
           <div key={level} className="flex items-center gap-1 text-xs">
             <span className={disabled ? 'text-muted-foreground line-through' : ''}>
               {i + 1}. {t(LEVEL_LABEL_KEYS[level])}
             </span>
+            {level === 'browser_readonly' && !disabled ? (
+              <ReadonlyBrowserBadge assignment={assignment} />
+            ) : null}
             <span className="flex-1" />
             <Button
               size="xs"
@@ -131,7 +163,7 @@ export function DataSourceRouteControl({
               size="xs"
               variant="ghost"
               aria-label={t('data.route.down')}
-              disabled={i === current.order.length - 1 || save.isPending}
+              disabled={i === shown.length - 1 || save.isPending}
               onClick={() => move(level, 1)}
             >
               ↓
@@ -147,10 +179,61 @@ export function DataSourceRouteControl({
           </div>
         )
       })}
+      {note === undefined ? null : <p className="text-[11px] text-muted-foreground">{t(note)}</p>}
       {save.error === null || save.error === undefined ? null : (
         <p className="text-[11px] text-destructive">{save.error.message}</p>
       )}
     </div>
+  )
+}
+
+const RO_ICON = {
+  ready: <CircleCheck className="size-3.5 text-primary" aria-hidden />,
+  no_browser: <CircleAlert className="size-3.5 text-muted-foreground" aria-hidden />,
+  quota_used_up: <Hourglass className="size-3.5 text-muted-foreground" aria-hidden />,
+  blocked: <ShieldAlert className="size-3.5 text-destructive" aria-hidden />,
+} as const
+
+/**
+ * WP228：「浏览器只读」那一路现在能不能用（本机只读浏览器）——图标 + 两三个字，原话进问号（36 §7）。
+ * 服务进程没装这一面（演示 / 托管）就什么都不画。
+ */
+export function ReadonlyBrowserBadge({
+  assignment,
+}: {
+  assignment?: string | undefined
+}): React.ReactNode {
+  const { t } = useApp()
+  const status = useQuery({
+    queryKey: ['reddit-browser-read-status', assignment],
+    queryFn: () => getRedditBrowserReadStatus(assignment),
+    retry: false,
+    refetchInterval: 60_000,
+  })
+  const s = status.data
+  if (s === undefined) return null
+  const hint =
+    s.state === 'ready'
+      ? t('data.route.ro.ready_hint', {
+          browser: s.browser ?? 'Chrome',
+          used: s.pages_last_day,
+          max: s.max_pages_per_day,
+        })
+      : s.until === undefined
+        ? (s.message ?? '')
+        : `${s.message ?? ''}${t('data.route.ro.until', {
+            time: new Date(s.until).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          })}`
+  return (
+    <span
+      className="flex items-center gap-1 text-[11px] text-muted-foreground"
+      data-testid="readonly-browser-status"
+      data-state={s.state}
+    >
+      {RO_ICON[s.state]}
+      {t(`data.route.ro.${s.state}`)}
+      {hint === '' ? null : <Hint text={hint} />}
+    </span>
   )
 }
 

@@ -97,6 +97,23 @@ actions:
     requires_record_read: true
     route_to: scope_manager
 
+  # ── WP222（58 §1 / 91 §3.3 第 3 条）：向设计岗下需求单 ─────────────────────
+  # 这一条与上面每一条都无关，是**新加的独立段落**：它不改这条职责的任何
+  # 既有行为，只多一个出口——要新广告素材 / 改素材的时候，不用人再去设计岗手动开一件事（→ `design.ads`）。
+  #
+  # 写法照 `social/meta.yml`、`kol/youtube.yml` 那几条（WP76）：开一件事并按 54 路由到**设计岗**
+  # （不直接指定哪条设计职责：契约 `designDutyForSource` 早已把 `ads.*` 登记成 `design.ads` 的来源）。
+  # ChangeKind 是 `design_request`，**L3 自动**——它不出图、不花钱、
+  # 不对外发一个字，下错了设计岗那边关掉就是了。换素材上线仍是上面 `stage_creative_swap` 那张卡。
+  - id: request_design
+    target: design_request
+    kind: staged_change
+    mandate:
+      caps: { max_design_requests_per_day: 5 }
+      per_change_limits: { max_items: 1 }
+      window: { max_count: 5, per: day }
+    route_to: role_holder
+
 automation:
   # 04 §5：**开花钱口子永远 L1，不可关闭**。15 §2 的 `HARD_L1` 里有
   # `create_campaign`，这里的 `hard_ceiling` 是把同一件事在职责这一层也写出来——
@@ -134,9 +151,20 @@ automation:
     promotion: { adoption_rate_min: 0.9, window_weeks: 4, min_samples: 20 }
     demotion_triggers: [guardrail_hit, manual]
 
+  # ── WP222（58 §1）：向设计岗下需求单 ──────────────────────────────────
+  # L3 自动：下一张需求单不产生任何外部可见的东西。真正要人点的在设计岗
+  # 那一侧（变体 L2 出卡给人挑、入库 L1 永远人定），以及这边的换素材（L2）。
+  request_design:
+    ceiling: L3
+    initial: L3
+    promotion: { adoption_rate_min: 0.9, window_weeks: 2, min_samples: 20 }
+    demotion_triggers: [manual]
+
 skills:
   - { name: ad-copywriting, tier: open, load: on_demand }
   - { name: audience-research, tier: open, load: on_demand }
+  # WP224（docs/91 §2.2 #3）：盈亏线 ROAS = 1 / 毛利率、毛利瀑布（只并排显示，不改止损线）
+  - { name: unit-economics, tier: open, load: on_demand }
   - { name: brand-voice, tier: open, load: always }
 
 home_blocks:
@@ -270,7 +298,7 @@ persona:
   zh: |
     你是谁：投放岗位里管 X 广告 的人。
     你负责：推广推文与视频、受众、预算与出价。
-    你不负责：我们自己账号发帖→社媒运营；红人合作→红人营销；商品价与促销→网站运营；客户问题→客服。
-    怎么做：先看这账户花了多少、带回来多少；接口还在申请制、还没接上，你只提议、改不动账户，照实说；数拿不到就说拿不到，别按印象调预算。
+    你不负责：自家账号发帖→社媒运营；红人合作→红人营销；商品价与促销→网站运营；出图、改素材→给设计岗下需求单；客户问题→客服。
+    怎么做：先看这账户花了多少、带回来多少；接口还在申请制、还没接上，你只提议、改不动账户，照实说；数拿不到就直说，别按印象调预算。
     口气：像盯盘的人，直说数字，不夸效果。
     必须出卡：建活动、改预算与出价、换素材；只有止损可自动。

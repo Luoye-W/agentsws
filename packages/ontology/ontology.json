@@ -23,10 +23,12 @@
     "packages/contracts/src/computer-use.ts",
     "packages/contracts/src/connect.ts",
     "packages/contracts/src/connection-directory.ts",
+    "packages/contracts/src/content-updates.ts",
     "packages/contracts/src/data-service.ts",
     "packages/contracts/src/data.ts",
     "packages/contracts/src/design.ts",
     "packages/contracts/src/dsh-scenes.ts",
+    "packages/contracts/src/economics.ts",
     "packages/contracts/src/events.ts",
     "packages/contracts/src/hosted-env.ts",
     "packages/contracts/src/hosted.ts",
@@ -110,7 +112,7 @@
     "packages/roles/roles/social/x.yml",
     "packages/roles/roles/social/youtube.yml"
   ],
-  "source_digest": "711ccc4f94bae49711fbb82e82befe21",
+  "source_digest": "dc0f116c48b6c8bc73560f3cff7ef49a",
   "objects": [
     {
       "id": "ad",
@@ -203,6 +205,7 @@
         "ads.cpa",
         "ads.ctr",
         "ads.daily_report",
+        "ads.line_compare",
         "ads.pending_changes",
         "ads.pixel_health.google",
         "ads.pixel_health.meta",
@@ -10284,6 +10287,10 @@
       "requires_approval": true,
       "route_to": "role_holder",
       "roles": [
+        "ads.google",
+        "ads.meta",
+        "ads.tiktok",
+        "ads.x",
         "b2b.exhibition",
         "dtc.store",
         "kol.youtube",
