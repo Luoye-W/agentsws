@@ -256,6 +256,11 @@ const EVENT_KEYS = [
   // WP65 品牌是顶层（52 O1 / O2）
   'org.brand',
   'org.brand_check',
+  // WP215 每个品牌的后台同时跑（52 §4）
+  'org.brand_view',
+  'org.brand_background',
+  'org.brand_halt',
+  'org.brand_background_check',
   // WP121b 初始化设置（70 §1–§3）
   'org.onboarding',
   // WP56 知识溯源链（48 §4 #6）
@@ -289,6 +294,8 @@ const EXPECTED_KEYS = [
   'escalated_tiers',
   'escalated_to',
   'escalation_trail',
+  // WP215：视图停在 A 时 B 的后台照跑、结果只进 B
+  'brand_background',
   'sampled',
   'auto_approved',
   'judge_min_score',
@@ -624,6 +631,62 @@ function parseEvent(source: string, index: number, raw: unknown): ScenarioEvent 
         at,
         type: 'org.brand_check',
         brand_check: {
+          brand: str(source, `${path}.${key}.brand`, body.brand),
+          who: str(source, `${path}.${key}.who`, body.who),
+        },
+      }
+    }
+    // WP215（52 §4）：眼前品牌切到哪（只是视图）
+    case 'org.brand_view': {
+      known(source, `${path}.${key}`, body, ['brand', 'who'])
+      return {
+        at,
+        type: 'org.brand_view',
+        brand_view: {
+          brand: str(source, `${path}.${key}.brand`, body.brand),
+          who: str(source, `${path}.${key}.who`, body.who),
+        },
+      }
+    }
+    // WP215：给一个品牌装一条后台巡检
+    case 'org.brand_background': {
+      known(source, `${path}.${key}`, body, ['brand', 'who', 'every', 'halted'])
+      const every = optStr(source, `${path}.${key}.every`, body.every)
+      if (every !== undefined && parseDuration(every) <= 0) {
+        fail(source, `${path}.${key}.every`, '巡检间隔得大于 0')
+      }
+      return {
+        at,
+        type: 'org.brand_background',
+        brand_background: {
+          brand: str(source, `${path}.${key}.brand`, body.brand),
+          who: str(source, `${path}.${key}.who`, body.who),
+          ...(every === undefined ? {} : { every }),
+          ...(body.halted === undefined
+            ? {}
+            : { halted: requireBool(source, `${path}.${key}.halted`, body.halted) }),
+        },
+      }
+    }
+    // WP215：品牌急停按下 / 放开
+    case 'org.brand_halt': {
+      known(source, `${path}.${key}`, body, ['brand', 'on'])
+      return {
+        at,
+        type: 'org.brand_halt',
+        brand_halt: {
+          brand: str(source, `${path}.${key}.brand`, body.brand),
+          on: requireBool(source, `${path}.${key}.on`, body.on),
+        },
+      }
+    }
+    // WP215：这个品牌后台跑了几次、队列里巡检卡各是谁的
+    case 'org.brand_background_check': {
+      known(source, `${path}.${key}`, body, ['brand', 'who'])
+      return {
+        at,
+        type: 'org.brand_background_check',
+        brand_background_check: {
           brand: str(source, `${path}.${key}.brand`, body.brand),
           who: str(source, `${path}.${key}.who`, body.who),
         },
@@ -2549,6 +2612,27 @@ function parseExpected(source: string, raw: unknown): ScenarioExpected {
       ...(decided_by === undefined ? {} : { decided_by }),
       ...(could === undefined ? {} : { could_not_decide: could }),
       ...(state === undefined ? {} : { state }),
+    }
+  }
+  if (raw.brand_background !== undefined) {
+    const b = raw.brand_background
+    const path = 'expected.brand_background'
+    if (!isRec(b)) fail(source, path, '必须是对象')
+    known(source, path, b, ['brand', 'viewing', 'min_patrols', 'halt_isolated'])
+    const brand = str(source, `${path}.brand`, b.brand)
+    const viewing = str(source, `${path}.viewing`, b.viewing)
+    if (brand === viewing) fail(source, `${path}.viewing`, '眼前品牌得是另一个品牌')
+    const min_patrols = num(source, `${path}.min_patrols`, b.min_patrols)
+    if (!Number.isInteger(min_patrols) || min_patrols < 1) {
+      fail(source, `${path}.min_patrols`, '至少 1 次（0 次就什么都没验）')
+    }
+    out.brand_background = {
+      brand,
+      viewing,
+      min_patrols,
+      ...(b.halt_isolated === undefined
+        ? {}
+        : { halt_isolated: requireBool(source, `${path}.halt_isolated`, b.halt_isolated) }),
     }
   }
   if (raw.sampled !== undefined) out.sampled = numeric(source, 'expected.sampled', raw.sampled)

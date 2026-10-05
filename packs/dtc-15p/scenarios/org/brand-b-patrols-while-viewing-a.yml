@@ -1,0 +1,85 @@
+# 眼前切在甲品牌，乙品牌的后台照常巡检，结果只进乙（WP215 / 52 §4）。
+#
+# 旁边那条 `two-brands-cannot-see-each-other` 钉的是"数据各在各的库里"；这一条钉的是
+# **后台**：Luoye 同时替两家做事（INMO 的 Reddit 巡检、另一家的独立站），担心
+# "切到一个品牌，另一个品牌的自动化就停了"。
+#
+# 1. **切品牌只换视图**。`org.brand_view` 只改"眼前是谁"；后台一个字节都不读它。
+#    甲、乙两个品牌各装一条巡检，共用一个调度循环（`createScheduler` + `createBrandRouter`）：
+#    到点按**任务自己的** `workspace_id` 找那个品牌登记的处理器，绝不借别人的。
+# 2. **结果只进自己**。乙的巡检卡出在乙的队列里、事件记乙的 `workspace_id`；
+#    甲的队列里一张乙的卡都没有（反过来也一样）。同一个人李默两边都有岗位，
+#    这件事更容易串——所以挑他。
+# 3. **急停按品牌**。乙按下急停那一个钟头，乙一次不跑、甲照跑；放开后乙按
+#    "错过了补一次"的规矩接着跑。
+#
+# 反过来也验一条：**后台巡检不动外面的世界**——它只出待审的卡，一封信没发、一条变更没提。
+id: org/brand-b-patrols-while-viewing-a
+version: 1
+dataset: { pack: dtc-15p, seed: 42 }
+stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
+clock: { start: '2026-09-15T09:00:00+08:00' }
+events:
+  # 两个品牌，同一个人李默两边都有岗位（照抄 two-brands-cannot-see-each-other）
+  - at: '+0m'
+    org.brand:
+      id: ws_brand_a
+      name: 诺伏特户外
+      who: p_li
+      role: dtc.store
+      card: 甲品牌的一封回信
+  - at: '+5m'
+    org.brand:
+      id: ws_brand_b
+      name: 诺伏特课程
+      who: p_li
+      role: dtc.support
+      card: 乙品牌的一封回信
+  # 两个品牌各装一条巡检：甲半小时一轮，乙一刻钟一轮
+  - at: '+10m'
+    org.brand_background: { brand: ws_brand_a, who: p_li, every: 30m }
+  - at: '+10m'
+    org.brand_background: { brand: ws_brand_b, who: p_li, every: 15m }
+  # 李默先在乙那边看了一眼，然后切到甲、一直停在甲
+  - at: '+20m'
+    org.brand_view: { brand: ws_brand_b, who: p_li }
+  - at: '+30m'
+    org.brand_view: { brand: ws_brand_a, who: p_li }
+  # 乙按下急停一个钟头：只停乙
+  - at: '+3h'
+    org.brand_halt: { brand: ws_brand_b, on: true }
+  - at: '+4h'
+    org.brand_halt: { brand: ws_brand_b, on: false }
+  # 两边各体检一次：跑了几次、自己的卡几张、别人的卡几张
+  - at: '+5h'
+    org.brand_background_check: { brand: ws_brand_b, who: p_li }
+  - at: '+5h'
+    org.brand_background_check: { brand: ws_brand_a, who: p_li }
+  - at: '+6h'
+    clock.advance: {}
+expected:
+  event_types:
+    - brand.created
+    - simulation.brand_viewed
+    - simulation.brand_background_started
+    - simulation.brand_patrol
+    - simulation.brand_halted
+    - simulation.brand_background_check
+  brand_background:
+    brand: ws_brand_b
+    viewing: ws_brand_a
+    # 乙一刻钟一轮：切到甲之后到急停前 10 轮，放开后到 +6h 又 9 轮（含补的那一轮）
+    min_patrols: 16
+    halt_isolated: true
+  metrics:
+    runs_failed: 0
+    # 后台巡检只出待审的卡：一封信不发、一条变更不提、不施行
+    applied_changes: 0
+    outbound_sent: 0
+    staged_changes: 0
+invariants:
+  - no_write_without_stage
+  - apply_only_after_approved
+  - provenance_respected
+  - fencing_covers_external
+  - prompt_replayable

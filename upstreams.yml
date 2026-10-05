@@ -241,6 +241,29 @@ upstreams:
     locked_in:
       - apps/server/package.json
 
+  # WP216（Luoye 10-05）：建站岗位接的 Shopify 官方 Dev MCP。它不进 package.json——由 `npx` 在用到时
+  # 拉**钉死的那一版**（`apps/server/src/shopify-devmcp.ts` 的 DEV_MCP_ARGS），所以没有 locked_in、也不在锁文件里。
+  # 10-05 查：npm latest 已是 1.16.0（09-25；工具改成 learn_shopify_api / search_docs_chunks / validate /
+  # validate_theme / feedback，validate_graphql_codeblocks 不再注册），升级走 docs/42、另开一单。
+  - id: shopify-dev-mcp
+    kind: runtime-dep
+    why: 建站岗位（只给 Shopify 品牌）的只读文档查询与 GraphQL 校验；遥测由我们起子进程时关掉
+    npm: '@shopify/dev-mcp'
+    locked_version: 1.15.0
+    pin: exact
+    lockfile_single: false
+    watch: [versions, wishlist]
+    we_depend_on:
+      - '工具名 search_docs_chunks / learn_shopify_api / validate_graphql_codeblocks（UPSTREAM_CANDIDATES 按优先级映射成我们的三个名字）'
+      - '关遥测的两个变量 OPT_OUT_INSTRUMENTATION=true / DO_NOT_TRACK=1（PLATFORM_KITS 的 telemetry_off_env）'
+      - 'ISC 许可证；出网 shopify.dev、raw.githubusercontent.com（theme-check 文档）、registry.npmjs.org（npx 下载）'
+    wishlist:
+      - 换了关遥测的变量名或开始默认上报新字段（卡上的出网清单要跟着改）
+      - 合并后的 validate 工具稳定下来（我们的 shopify.graphql.validate 要改映射才能跟到 1.16）
+      - 加了 Liquid 主题校验的只读工具（网页模板与邮件模板想直接用）
+    covered_by:
+      - apps/server/test/platform-kit.test.ts
+
   - id: playwright-mcp
     kind: runtime-dep
     # 传递依赖：`dsh-experimental-browser-use-playwright-mcp` 拖进来的，我们没有直接依赖，
@@ -557,6 +580,35 @@ upstreams:
       - packages/skills/test/bundled.test.ts
       - packages/skills/bundled/THIRD-PARTY-NOTICES
 
+  # WP216（Luoye 10-05）：Shopify 官方发布的 agent skills。2.0（09-25）起 22 本分题技能合成一本 `shopify`，
+  # `shopify-liquid` 等旧名退役。我们**原样收录**（MIT）SKILL.md 与 liquid / custom-data / admin 三份参考，
+  # 不带 scripts/（它们向 shopify.dev 上报查询、代码与用户原话）与 hooks/；我们这一侧的话在旁注里。
+  # 升级 = 换这几个文件 + 改 agentsws.json 的 tag / commit / sha256 / version（官方功能优先，跟着用上，走 docs/42）。
+  - id: shopify-ai-toolkit
+    kind: ported
+    why: 建站岗位（只给 Shopify 品牌）的官方技能 `shopify`——网页模板 / 邮件模板 / 整站搭建三条按需加载
+    repo: Shopify/Shopify-AI-Toolkit
+    pinned_commit: 8692e6a449ff7f088a0c3883a357688aba9a3235
+    watch: [releases, readme, wishlist]
+    watch_paths:
+      - skills/shopify/SKILL.md
+      - skills/shopify/references/liquid.md
+      - skills/shopify/references/custom-data.md
+      - skills/shopify/references/admin.md
+      - LICENSE
+    we_depend_on:
+      - 'skills/shopify/SKILL.md 与 references/{liquid,custom-data,admin}.md → packages/skills/bundled/shopify/（原样，sha256 记在 packages/skills/bundled/shopify/agentsws.json）'
+      - 'frontmatter 的 name / description 与 metadata.version（拼进来时用；hooks 不要）'
+      - '路由表里 liquid / custom-data / admin 三题的名字（AGENTSWS.md 第 3 条点名）'
+      - 'MIT 许可证（换了许可证就不能再原样分发，改成首次使用时下载）'
+    wishlist:
+      - 许可证变化
+      - 脚本的上报换了关法（AGENTSWS.md 第 1、2 条要跟着改）
+      - 主题 / 邮件模板相关的新参考（建站岗位想一起收）
+    covered_by:
+      - packages/skills/test/official-skills.test.ts
+      - packages/skills/bundled/THIRD-PARTY-NOTICES
+
   # WP146（Luoye 09-24）：工作台里复制进来的界面源码也登记。两条都是"源码已复制并改成 --ws-* 令牌"，
   # 上游更新只作参考、不自动同步；周报只看 release 与 wishlist 里的破坏性改动。
   - id: tremor-raw
@@ -869,3 +921,18 @@ upstreams:
     watch: [releases, readme]
     covered_by:
       - packages/brand-design/src/site-design.ts
+
+  # WP216（Luoye 10-05）：Shopify 官方 CLI。**不进安装包**，用户按需自己装、自己在浏览器里登录；
+  # 我们只检测版本、给官方安装命令与教程（PLATFORM_KITS 的 cli 一行）。盯它是为了 Node 要求与命令变化。
+  - id: shopify-cli
+    kind: reference
+    why: 建站岗位「Shopify CLI」卡与网页模板的主题工作流（theme pull / push --unpublished / check）；engines.node 变了卡上的门槛要跟着改
+    npm: '@shopify/cli'
+    repo: Shopify/cli
+    watch: [versions, releases, wishlist]
+    wishlist:
+      - engines.node 提高（PLATFORM_KITS 的 min_node_major 要跟）
+      - theme push / theme check 的参数改名
+      - 关使用统计的变量改名（SHOPIFY_CLI_NO_ANALYTICS）
+    covered_by:
+      - apps/server/test/platform-kit.test.ts

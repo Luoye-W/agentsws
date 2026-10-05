@@ -16,6 +16,8 @@ import { approvalRoutes } from './routes/approvals.js'
 import { askRoutes } from './routes/ask.js'
 import { assignmentRoutes } from './routes/assignments.js'
 import { b2bRoutes } from './routes/b2b.js'
+// WP215：每个品牌一套后台（状态 / 全进程并发上限 / 品牌急停）
+import { backgroundRoutes } from './routes/background.js'
 import { backupRoutes } from './routes/backup.js'
 import { brandDesignRoutes } from './routes/brand-design.js'
 import { brandIntakeRoutes } from './routes/brand-intake.js'
@@ -55,6 +57,7 @@ import { ontologyRoutes } from './routes/ontology.js'
 import { orgRoutes } from './routes/org.js'
 import { organizationRoutes } from './routes/organizations.js'
 import { personaRoutes } from './routes/personas.js'
+import { platformKitRoutes } from './routes/platform-kit.js'
 import { positionEntryRoutes } from './routes/positions.js'
 import { prRoutes } from './routes/pr.js'
 import { privacyRoutes } from './routes/privacy.js'
@@ -239,8 +242,12 @@ export function collectRoutes(): Route[] {
     ...computerUseRoutes(),
     // WP180：官方插件（装 / 升级 / 卸载出卡、只从审过的清单装、配置写回只许写非锁定行）。`/v1/settings/official-plugins*` 是新路径
     ...officialPluginsRoutes(),
+    // WP216：平台专属那一套（官方技能 / MCP / CLI 卡）
+    ...platformKitRoutes(),
     // WP172（docs/84）：B2B 库。`/v1/b2b/*` 是新前缀，与别处都不撞（放在最后：生成物的顺序不动别人）
     ...b2bRoutes(),
+    // WP215：每个品牌一套后台。`/v1/settings/background*` 是新路径（放在最后：生成物的顺序不动别人）
+    ...backgroundRoutes(),
   ]
 }
 
@@ -274,10 +281,17 @@ export function createGateway(deps: GatewayDeps): Gateway {
     await next()
   }
 
-  const haltOutbound: MiddlewareHandler<GatewayEnv> = async (_c, next) => {
+  const haltOutbound: MiddlewareHandler<GatewayEnv> = async (c, next) => {
     if (deps.halt.isHalted('outbound'))
       throw new ApiError('halted', '对外发送与施行已急停（AGENTSWS_HALT=outbound）；读照常', {
         details: deps.halt.state().outbound,
+      })
+    // WP215：品牌急停只拦这个品牌（主体在鉴权之后才有，所以这一道排在 auth 之后）
+    const ws = c.get('rctx')?.principal?.workspace_id
+    const brand = ws === undefined ? undefined : deps.brandHalt?.(ws)
+    if (brand?.isHalted('outbound') === true)
+      throw new ApiError('halted', '这个品牌的后台与对外发送已急停；读照常，别的品牌不受影响', {
+        details: brand.state().outbound,
       })
     await next()
   }

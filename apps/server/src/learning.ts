@@ -298,12 +298,26 @@ export interface LearningOptions {
   dbDir?: string
   /** 策略层技能：永不进学习回路（24 §3）。 */
   policySkills?: string[]
+  /**
+   * WP215：别的品牌的卡发给谁、挂在哪个岗位上（那个品牌里的负责人与他的 owner 分配）。
+   * 不给或回 `undefined` = 用上面那一对（bootstrap 品牌的）——只对 bootstrap 品牌成立；
+   * 别的品牌回不出来就**不出卡**，绝不把 B 的卡挂到 A 的人头上。
+   */
+  ownerOf?(workspace_id: WorkspaceId): { owner: PersonId; ownerAssignment: Assignment } | undefined
 }
 
 export interface LearningAssembly {
   learning: Learning
   /** 每天 07:30 跑一次：池 → `skill_lesson` 卡。 */
   proposeDaily(now: Iso8601): Promise<{ created: string[]; filtered: FilteredProposal[] }>
+  /**
+   * WP215：同上，但只看**这个品牌**的池、卡只出在这个品牌里（夜扫按品牌各跑一轮）。
+   * `proposeDaily(now)` 等于 `proposeDailyFor(<bootstrap>, now)`。
+   */
+  proposeDailyFor(
+    workspace_id: WorkspaceId,
+    now: Iso8601,
+  ): Promise<{ created: string[]; filtered: FilteredProposal[] }>
   /** 周一 06:00：跨人聚类 → `skill_promotion` 卡。 */
   weeklyConsolidate(
     workspace_id: WorkspaceId,
@@ -393,12 +407,26 @@ export function createLearningAssembly(options: LearningOptions): LearningAssemb
   })
   const cards = new Map<string, LessonProposalCard>()
 
+  /** WP215：这个品牌的卡发给谁、挂在哪个岗位（bootstrap 品牌就是装配时给的那一对）。 */
+  const targetOf = (
+    ws: WorkspaceId,
+  ): { owner: PersonId; ownerAssignment: Assignment } | undefined =>
+    options.ownerOf?.(ws) ??
+    (ws === workspace_id
+      ? { owner: options.owner, ownerAssignment: options.ownerAssignment }
+      : undefined)
+
   let traceSeq = 0
-  const emit = (type: string, payload: Record<string, unknown>, subject?: string): void => {
+  const emit = (
+    type: string,
+    payload: Record<string, unknown>,
+    subject?: string,
+    ws: WorkspaceId = workspace_id,
+  ): void => {
     traceSeq += 1
     options.appendEvent({
       schema_version: 1,
-      workspace_id,
+      workspace_id: ws,
       type,
       actor: { kind: 'system', id: 'learning' },
       ...(subject === undefined ? {} : { subject: { type: 'approval_item', id: subject } }),
@@ -455,9 +483,13 @@ export function createLearningAssembly(options: LearningOptions): LearningAssemb
     if (CARD_KINDS.has(item.kind)) return
     const decision = decisionOf(item, input)
     if (decision === undefined) return
-    const assignment_id = item.proposer.assignment_id ?? options.ownerAssignment.id
+    // WP215：lesson 记在**卡所属的品牌**名下（之前一律记在第一个品牌，B 的教训会进 A 的夜扫）
+    const ws = item.workspace_id
+    const target = targetOf(ws)
+    const assignment_id = item.proposer.assignment_id ?? target?.ownerAssignment.id
+    if (assignment_id === undefined) return
     const extractInput: ExtractInput = {
-      workspace_id,
+      workspace_id: ws,
       assignment_id,
       run_id: item.evidence.run_id ?? `card_${item.id}`,
       at: decision.at,
@@ -466,20 +498,25 @@ export function createLearningAssembly(options: LearningOptions): LearningAssemb
     }
     for (const lesson of extractLessons(extractInput)) {
       const pooled = learning.pool.pool(lesson)
-      emit('lesson.pooled', {
-        lesson_id: pooled.id,
-        skill: pooled.applies_to.skill,
-        signal: pooled.signal,
-        hits: pooled.hits,
-        confidence: pooled.confidence,
-      })
+      emit(
+        'lesson.pooled',
+        {
+          lesson_id: pooled.id,
+          skill: pooled.applies_to.skill,
+          signal: pooled.signal,
+          hits: pooled.hits,
+          confidence: pooled.confidence,
+        },
+        undefined,
+        ws,
+      )
     }
   }
 
   /** 采纳一张 `skill_lesson` 卡：写 overlay。人没选就当"都不要"。 */
   const applyLesson = async (item: ApprovalItem, input: DecideInput): Promise<void> => {
     const payload = item.payload as SkillLessonPayload
-    const card = cards.get(item.id) ?? cardFrom(item, payload, workspace_id)
+    const card = cards.get(item.id) ?? cardFrom(item, payload, item.workspace_id)
     const accepted = item.state === 'approved' || item.state === 'approved_edited'
     const edited = (item.decision?.edited_payload as { text?: string } | undefined)?.text
     const out = await applyLessonDecision(
@@ -507,6 +544,7 @@ export function createLearningAssembly(options: LearningOptions): LearningAssemb
         ...(out.blacklisted === undefined ? {} : { blacklisted: out.blacklisted }),
       },
       item.id,
+      item.workspace_id,
     )
   }
 
@@ -526,7 +564,7 @@ export function createLearningAssembly(options: LearningOptions): LearningAssemb
     // `skills/roles/<id>`）；公司层是工作区，部门层沿用卡上的职责 id（老行为不动）。
     const owner =
       payload.to_tier === 'company'
-        ? workspace_id
+        ? item.workspace_id
         : payload.to_tier === 'position' || payload.to_tier === 'role'
           ? (payload.scope_id ?? (item.role_id as string))
           : (item.role_id as string)
@@ -539,7 +577,12 @@ export function createLearningAssembly(options: LearningOptions): LearningAssemb
       base_version: existing?.base_version ?? '0.0.0',
       version: existing?.version ?? 0,
     })
-    emit('skill.promoted', { skill: payload.skill, to_tier: payload.to_tier }, item.id)
+    emit(
+      'skill.promoted',
+      { skill: payload.skill, to_tier: payload.to_tier },
+      item.id,
+      item.workspace_id,
+    )
   }
 
   /** 采纳一张 `knowledge_update` 卡：写进知识库并激活（19 §1）。 */
@@ -552,9 +595,10 @@ export function createLearningAssembly(options: LearningOptions): LearningAssemb
     }
     const statement = p.statement ?? ''
     if (statement.trim() === '') throw new Error('知识卡没有正文，无法写入')
+    // WP215：写进**卡所属品牌**的知识库（之前一律写进第一个品牌：B 批的口径会出现在 A 的知识里）
     const card = await options.knowledge.store.propose({
       schema_version: 1,
-      workspace_id,
+      workspace_id: item.workspace_id,
       layer: p.layer ?? 'fact',
       domain: 'company',
       scope: [],
@@ -568,7 +612,12 @@ export function createLearningAssembly(options: LearningOptions): LearningAssemb
       created_by: { kind: 'person', id: item.decision?.by ?? options.owner },
     })
     await options.knowledge.store.activate(card.id, item.decision?.by ?? options.owner)
-    emit('knowledge.card.activated', { card_id: card.id, layer: card.layer }, item.id)
+    emit(
+      'knowledge.card.activated',
+      { card_id: card.id, layer: card.layer },
+      item.id,
+      item.workspace_id,
+    )
   }
 
   /**
@@ -599,7 +648,7 @@ export function createLearningAssembly(options: LearningOptions): LearningAssemb
       })
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
-      emit('learning.apply_failed', { kind: item.kind, message }, item.id)
+      emit('learning.apply_failed', { kind: item.kind, message }, item.id, item.workspace_id)
       await record?.call(bus, item.id, 'apply_failed', {
         attempts: [
           {
@@ -616,13 +665,27 @@ export function createLearningAssembly(options: LearningOptions): LearningAssemb
 
   const cardEnvelope = (
     kind: 'skill_lesson' | 'skill_promotion',
+    ws: WorkspaceId = workspace_id,
+  ): Omit<
+    CreateApprovalInput<unknown>,
+    'kind' | 'subject' | 'dedupe_key' | 'title' | 'summary' | 'payload' | 'evidence'
+  > => {
+    const target = targetOf(ws)
+    if (target === undefined) throw new Error(`品牌 ${ws} 里找不到负责人，学到的东西不出卡`)
+    return envelopeFor(kind, ws, target)
+  }
+
+  const envelopeFor = (
+    kind: 'skill_lesson' | 'skill_promotion',
+    ws: WorkspaceId,
+    target: { owner: PersonId; ownerAssignment: Assignment },
   ): Omit<
     CreateApprovalInput<unknown>,
     'kind' | 'subject' | 'dedupe_key' | 'title' | 'summary' | 'payload' | 'evidence'
   > => ({
-    workspace_id,
+    workspace_id: ws,
     schema_version: 1,
-    role_id: options.ownerAssignment.role_id,
+    role_id: target.ownerAssignment.role_id,
     proposer: { kind: 'system', id: 'learning' },
     automation: {
       level_at_creation: 'L1',
@@ -632,7 +695,7 @@ export function createLearningAssembly(options: LearningOptions): LearningAssemb
     },
     routing: {
       recipients: [
-        { person: options.owner, via: kind === 'skill_lesson' ? 'role_holder' : 'owner' },
+        { person: target.owner, via: kind === 'skill_lesson' ? 'role_holder' : 'owner' },
       ],
       rule: kind === 'skill_lesson' ? 'role_holder' : 'owner',
       escalation: {
@@ -646,7 +709,10 @@ export function createLearningAssembly(options: LearningOptions): LearningAssemb
     priority: 'queue',
   })
 
-  const proposeDaily: LearningAssembly['proposeDaily'] = async (now) => {
+  const proposeDailyFor: LearningAssembly['proposeDailyFor'] = async (ws, now) => {
+    // 这个品牌里找不到负责人：池子照留着，等有人了再出（绝不把卡挂到别的品牌的人头上）
+    if (targetOf(ws) === undefined) return { created: [], filtered: [] }
+    const workspace_id = ws
     const { proposals, filtered } = draftProposals({
       workspace_id,
       lessons: learning.pool.list({ workspace_id }),
@@ -672,7 +738,7 @@ export function createLearningAssembly(options: LearningOptions): LearningAssemb
         run_ids: card.evidence.run_ids,
       }
       const item = await options.approvals.create({
-        ...cardEnvelope('skill_lesson'),
+        ...cardEnvelope('skill_lesson', workspace_id),
         kind: 'skill_lesson',
         subject: { object: { type: 'skill', id: card.skill } },
         // 14 §4：`skill_*` 的去重键是 (skill, section)——同一段一天只问一次
@@ -692,17 +758,21 @@ export function createLearningAssembly(options: LearningOptions): LearningAssemb
       cards.set(item.id, card)
       for (const id of card.lessons) learning.pool.mark(id, 'proposed', now)
       created.push(item.id)
-      emit('lesson.proposed', { skill: card.skill, hits: card.hits }, item.id)
+      emit('lesson.proposed', { skill: card.skill, hits: card.hits }, item.id, workspace_id)
     }
     return { created, filtered }
   }
+  const proposeDaily: LearningAssembly['proposeDaily'] = (now) => proposeDailyFor(workspace_id, now)
 
   const weeklyConsolidate: LearningAssembly['weeklyConsolidate'] = async (ws, now) => {
+    // WP215：卡出在**这个品牌**、发给这个品牌的负责人（之前一律出在第一个品牌）
+    const target = targetOf(ws)
+    if (target === undefined) return { proposals: [] }
     const { cards: promotions } = weeklyPromotions({
       workspace_id: ws,
       lessons: learning.pool.list({ workspace_id: ws }),
       now,
-      from: { tier: 'personal', owner: options.owner },
+      from: { tier: 'personal', owner: target.owner },
       ...(options.policySkills === undefined ? {} : { policySkills: options.policySkills }),
     })
     for (const card of promotions) {
@@ -718,7 +788,7 @@ export function createLearningAssembly(options: LearningOptions): LearningAssemb
         lessons: card.evidence.lessons,
       }
       await options.approvals.create({
-        ...cardEnvelope('skill_promotion'),
+        ...envelopeFor('skill_promotion', ws, target),
         kind: 'skill_promotion',
         subject: { object: { type: 'skill', id: card.skill } },
         dedupe_key: `${ws}:skill_promotion:${card.skill}:${card.section_ids.join(',')}`,
@@ -1135,6 +1205,7 @@ export function createLearningAssembly(options: LearningOptions): LearningAssemb
   return {
     learning,
     proposeDaily,
+    proposeDailyFor,
     weeklyConsolidate,
     lessons,
     promote,
@@ -1146,8 +1217,10 @@ export function createLearningAssembly(options: LearningOptions): LearningAssemb
     summaries,
     proposalSummaries,
     onRunCompleted(input) {
+      // WP215：记在**这次运行所在岗位的品牌**名下（岗位知道自己在哪个品牌）
+      const ws = options.roles.assignments.get(input.assignment_id)?.workspace_id ?? workspace_id
       const lessons = extractLessons({
-        workspace_id,
+        workspace_id: ws,
         assignment_id: input.assignment_id,
         run_id: input.run_id,
         at: clock.now(),

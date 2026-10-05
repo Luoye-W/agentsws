@@ -273,6 +273,8 @@ export interface ConnectionsAssembly {
   wrapDataSource(base: WorkstationDataSource): WorkstationDataSource
   /** 现在接上了哪些职责连接器 kind（email / shopify / ga4 …），给职责的 ready 算法用。 */
   connectedKinds(): string[]
+  /** WP216：现在连着（active）的连接目录 service（`shopify_admin` …）——推断品牌的建站平台用。 */
+  connectedServices(): string[]
   close(): void
 }
 
@@ -1485,6 +1487,9 @@ export async function createConnections(options: ConnectionsOptions): Promise<Co
     onMailChange(listener) {
       mailListeners.add(listener)
       return () => mailListeners.delete(listener)
+    },
+    connectedServices() {
+      return [...new Set(cached.filter((c) => c.status === 'active').map((c) => c.service))]
     },
     connectedKinds() {
       const kinds = new Set<string>()

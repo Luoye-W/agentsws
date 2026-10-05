@@ -78,8 +78,11 @@ export interface CatalogIndexOptions {
    */
   scheduler?: () => Scheduler | undefined
   workflows?: () => WorkflowEngine | undefined
-  /** 工作区里现在有哪些岗位（用来算"哪些岗位在用"） */
-  positions?: () => CatalogPositionView[]
+  /**
+   * 工作区里现在有哪些岗位（用来算"哪些岗位在用"）。
+   * WP215：带上问的是哪个品牌——不带参数的老写法照样能传，只是各品牌看到的是同一份。
+   */
+  positions?: (workspace_id: WorkspaceId) => CatalogPositionView[]
   /** 技能库里现在有哪些技能名 */
   skillNames?: () => string[]
   /** 某个技能是谁的个人层 overlay（有就说明这是个人副本） */
@@ -126,6 +129,8 @@ export interface CatalogAssembly {
   port: CatalogPort
   /** 周复盘"疑似重复"段与工具箱高亮同一份 */
   duplicates(limit?: number): Promise<CatalogDuplicateView[]>
+  /** WP215：同上，**这个品牌**的（周复盘按品牌各跑一轮）。 */
+  duplicatesFor(workspace_id: WorkspaceId, limit?: number): Promise<CatalogDuplicateView[]>
   /** 好东西往上浮：过了 Wilson 门槛的那些 */
   promotions(named_in_review?: Iterable<string>): Promise<PromotionCandidate[]>
   /**
@@ -133,6 +138,12 @@ export interface CatalogAssembly {
    * **只出卡，不落层**——升不升是人在卡上按的。
    */
   proposePromotions(
+    deps: PromotionDeps,
+    named_in_review?: Iterable<string>,
+  ): Promise<{ created: string[]; blocked: string[] }>
+  /** WP215：同上，候选与卡都只在**这个品牌**里。 */
+  proposePromotionsFor(
+    workspace_id: WorkspaceId,
     deps: PromotionDeps,
     named_in_review?: Iterable<string>,
   ): Promise<{ created: string[]; blocked: string[] }>
@@ -226,7 +237,7 @@ export function createCatalogIndex(options: CatalogIndexOptions): CatalogAssembl
     index.register({
       kind: 'skill',
       list: ({ workspace_id: ws }) => {
-        const positions = options.positions?.() ?? []
+        const positions = options.positions?.(ws) ?? []
         return [...new Set(skillNames())].sort().map((name) => {
           const who = options.skillOwner?.(name)
           return {
@@ -307,19 +318,24 @@ export function createCatalogIndex(options: CatalogIndexOptions): CatalogAssembl
     const payload = item.payload
     if (!isCatalogPromotion(payload)) return
     if (item.state !== 'approved' && item.state !== 'approved_edited') return
+    // WP215：升的是**卡所属品牌**的那一条（之前一律在第一个品牌里找）
     index.promote({
-      workspace_id,
+      workspace_id: item.workspace_id,
       entry_id: payload.entry_id,
       to_layer: payload.to_layer,
       supersede: payload.supersede,
     })
   }
 
-  return {
+  const assembly: CatalogAssembly = {
     index,
     port,
     duplicates: async (limit) =>
       port.duplicates({ workspace_id, ...(limit === undefined ? {} : { limit }) }),
+    duplicatesFor: async (ws, limit) =>
+      port.duplicates({ workspace_id: ws, ...(limit === undefined ? {} : { limit }) }),
+    proposePromotions: (deps, named_in_review) =>
+      assembly.proposePromotionsFor(workspace_id, deps, named_in_review),
     promotions: async (named_in_review) =>
       (
         await index.promotionCandidates({
@@ -327,7 +343,8 @@ export function createCatalogIndex(options: CatalogIndexOptions): CatalogAssembl
           ...(named_in_review === undefined ? {} : { named_in_review }),
         })
       ).filter((c) => c.passed),
-    async proposePromotions(deps, named_in_review) {
+    // 参数故意叫 `workspace_id`：方法体里的每一处都换成这个品牌的，一处都漏不掉
+    async proposePromotionsFor(workspace_id, deps, named_in_review) {
       const created: string[] = []
       const blocked: string[] = []
       const candidates = await index.promotionCandidates({
@@ -466,4 +483,5 @@ export function createCatalogIndex(options: CatalogIndexOptions): CatalogAssembl
       index.close()
     },
   }
+  return assembly
 }

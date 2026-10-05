@@ -456,6 +456,28 @@ describe('(c) 凭据不经模型、不进事件（13 §4）', () => {
     expect(plan.refs.FOO).toBe('FOO_REF')
     expect(JSON.stringify(plan)).not.toContain(FAKE_TOKEN)
   })
+
+  it('WP216：跑 CLI 时官方使用统计一律关掉（SHOPIFY_CLI_NO_ANALYTICS / OPT_OUT_INSTRUMENTATION）', () => {
+    const plan = shellCredentialPlan({ workspace_root: '/x', mode: 'workspace-write' })
+    expect(plan.literals.SHOPIFY_CLI_NO_ANALYTICS).toBe('1')
+    expect(plan.literals.OPT_OUT_INSTRUMENTATION).toBe('true')
+  })
+
+  it('WP216：登录永远是用户本人在浏览器里做——`shopify auth login` / `shopify store execute` 一律拒', () => {
+    for (const command of ['shopify auth login', 'shopify auth logout', 'shopify store execute']) {
+      expect(checkShellCommand({ command, root: '/x' }).verdict, command).toBe('deny')
+    }
+    expect(
+      checkShellCommand({ command: 'shopify theme push --unpublished --theme draft', root: '/x' })
+        .verdict,
+    ).toBe('allow')
+    expect(
+      checkShellCommand({ command: 'shopify theme check --output json', root: '/x' }).verdict,
+    ).toBe('allow')
+    expect(
+      checkShellCommand({ command: 'shopify theme publish --theme 1', root: '/x' }).verdict,
+    ).toBe('publish')
+  })
 })
 
 // ── (f) 两档 headless ─────────────────────────────────────────────────

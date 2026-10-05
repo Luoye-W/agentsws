@@ -59,6 +59,11 @@ export interface MeetingsAssembly {
   speech: SpeechToText
   /** 37 §2.2b：会议跟进的事项由工作模型开；装配完成后由 server 注入。 */
   bind(work: Work): void
+  /**
+   * WP215：每个品牌各有一套工作模型——会议的事项与待认领池开在**会议所属品牌**的那一套里。
+   * 挂上之后 `bind` 那一份不再兜底（找不到这个品牌的工作模型就不开事项，绝不开到别的品牌）。
+   */
+  bindBrands(workOf: (workspace_id: string) => Work | undefined): void
   /** 会议 → 日历（37 §2 表第三行「会议一定有时间，一定上日历」）。 */
   calendarItems(range: { from: string; to: string }, workspace_id: string): Promise<CalendarItem[]>
   close(): void
@@ -140,6 +145,7 @@ export function createMeetings(options: MeetingsOptions): MeetingsAssembly {
   async function sendCard(input: MeetingSendCardInput) {
     const meeting = await store.getMeeting(input.meeting_id)
     if (meeting === undefined) throw new Error(`会议不存在：${input.meeting_id}`)
+    const work = workFor(meeting.workspace_id)
     const outputs = (await store.outputs(input.meeting_id)).find(
       (o) => o.record_id === input.record_id,
     )
@@ -263,7 +269,11 @@ export function createMeetings(options: MeetingsOptions): MeetingsAssembly {
     return { approval_id: item.id, title: item.title }
   }
 
-  let work: Work | undefined
+  let boundWork: Work | undefined
+  let brandWork: ((workspace_id: string) => Work | undefined) | undefined
+  /** WP215：这场会属于哪个品牌，就用哪个品牌的工作模型。 */
+  const workFor = (workspace_id: string): Work | undefined =>
+    brandWork === undefined ? boundWork : brandWork(workspace_id)
 
   /**
    * 37 §2.2b / §4.1：会议记录一处理完就开一个 `meeting` 类事项，把 `Meeting.matter_id`
@@ -276,6 +286,7 @@ export function createMeetings(options: MeetingsOptions): MeetingsAssembly {
     meeting: Meeting,
     outputs: MeetingOutputs,
   ): Promise<Matter | undefined> {
+    const work = workFor(meeting.workspace_id)
     if (work === undefined) return undefined
     let matter_id = meeting.matter_id
     if (matter_id === undefined || work.getMatter(matter_id) === undefined) {
@@ -348,7 +359,10 @@ export function createMeetings(options: MeetingsOptions): MeetingsAssembly {
     port,
     speech,
     bind(w) {
-      work = w
+      boundWork = w
+    },
+    bindBrands(workOf) {
+      brandWork = workOf
     },
     async calendarItems(range, workspace_id) {
       const meetings = await store.listMeetings({

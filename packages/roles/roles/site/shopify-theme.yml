@@ -109,7 +109,11 @@ grounding:
       prefetch: false,
     }
 
-skills: []
+skills:
+  # WP216（Luoye 10-05）：Shopify 官方技能（Shopify-AI-Toolkit 的 `shopify`，原样收录，MIT）。
+  # 按需：拼好约 37 KB（官方正文 + liquid / custom-data / admin 三份参考），常驻会把每次运行的提示词撑大一倍；
+  # 写 Liquid、改分区之前由模型自己 `read_skill` 读。只在品牌平台是 Shopify 时加载（`PLATFORM_KITS`）。
+  - { name: shopify, tier: open, load: on_demand }
 
 home_blocks:
   - {

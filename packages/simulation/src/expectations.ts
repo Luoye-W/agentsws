@@ -410,6 +410,85 @@ export function checkExpectations(
           : `没有一张对得上：${withTrail.map(describe).join('；')}`,
     )
   }
+  // ── WP215：视图停在 A 时 B 的后台照常巡检，结果只进 B ─────────────────
+  if (expected.brand_background !== undefined) {
+    const want = expected.brand_background
+    const rec = (e: (typeof evidence.events)[number]): Record<string, unknown> =>
+      (e.payload ?? {}) as Record<string, unknown>
+    const patrols = evidence.events.filter((e) => e.type === 'simulation.brand_patrol')
+    const problems: string[] = []
+    // ① 视图停在 viewing 时，brand 的巡检照常触发——**按事件的 workspace_id 认**是谁的
+    const whileViewing = patrols.filter(
+      (e) => e.workspace_id === want.brand && rec(e).viewing === want.viewing,
+    ).length
+    if (whileViewing < want.min_patrols) {
+      problems.push(
+        `眼前在 ${want.viewing} 时 ${want.brand} 只巡检了 ${whileViewing} 次（要 ≥ ${want.min_patrols}）`,
+      )
+    }
+    // 事件自己说的品牌与它记在哪个工作区要对得上（记错工作区 = 审计串品牌）
+    const misfiled = patrols.filter((e) => rec(e).brand !== e.workspace_id).length
+    if (misfiled > 0) problems.push(`${misfiled} 条巡检事件记错了工作区`)
+    // ② ③ 两边最后一次体检：跑了几次就有几张自己的卡，别人的卡一张没有
+    const lastCheck = (brand: string): Record<string, unknown> | undefined => {
+      const hits = evidence.events.filter(
+        (e) => e.type === 'simulation.brand_background_check' && e.workspace_id === brand,
+      )
+      const last = hits[hits.length - 1]
+      return last === undefined ? undefined : rec(last)
+    }
+    for (const brand of [want.brand, want.viewing]) {
+      const c = lastCheck(brand)
+      if (c === undefined) {
+        problems.push(`${brand} 没做过后台体检（org.brand_background_check）`)
+        continue
+      }
+      const ran = Number(c.patrols)
+      const own = Number(c.own_cards)
+      const foreign = (c.foreign_cards ?? {}) as Record<string, number>
+      if (own !== ran) problems.push(`${brand} 跑了 ${ran} 次巡检，自己队列里却是 ${own} 张卡`)
+      const others = Object.entries(foreign).filter(([, n]) => n > 0)
+      if (others.length > 0) {
+        problems.push(
+          `${brand} 的队列里有别的品牌的卡：${others.map(([b, n]) => `${b}×${n}`).join(' ')}`,
+        )
+      }
+      if (brand === want.brand && ran < want.min_patrols) {
+        problems.push(`${brand} 一共只跑了 ${ran} 次巡检`)
+      }
+    }
+    // ④ brand 急停那几段：brand 一次不跑、viewing 照跑
+    let windows = 0
+    if (want.halt_isolated === true) {
+      let from: number | undefined
+      evidence.events.forEach((e, i) => {
+        if (e.type !== 'simulation.brand_halted' || e.workspace_id !== want.brand) return
+        if (rec(e).on === true) from ??= i
+        else if (from !== undefined) {
+          const inside = evidence.events
+            .slice(from + 1, i)
+            .filter((x) => x.type === 'simulation.brand_patrol')
+          const mine = inside.filter((x) => x.workspace_id === want.brand).length
+          const theirs = inside.filter((x) => x.workspace_id === want.viewing).length
+          windows += 1
+          if (mine > 0) problems.push(`${want.brand} 急停期间还跑了 ${mine} 次`)
+          if (theirs === 0)
+            problems.push(`${want.brand} 急停期间 ${want.viewing} 也没跑（急停串了品牌）`)
+          from = undefined
+        }
+      })
+      if (windows === 0) problems.push(`场景里 ${want.brand} 没有一段按下又放开的急停`)
+    }
+    add(
+      'brand_background',
+      problems.length === 0,
+      problems.length === 0
+        ? `眼前在 ${want.viewing} 时 ${want.brand} 巡检 ${whileViewing} 次，卡全在自己队列${
+            want.halt_isolated === true ? `；急停 ${windows} 段只停了 ${want.brand}` : ''
+          }`
+        : problems.join('；'),
+    )
+  }
   if (expected.sampled !== undefined) {
     const n = evidence.sampling_reviews.length
     add(
