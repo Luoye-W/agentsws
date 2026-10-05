@@ -14,6 +14,8 @@ import { B2bSalesPanel } from '@/components/b2b/sales-panel'
 import { BlockCard } from '@/components/blocks/block-view'
 import { CalendarLink } from '@/components/calendar/calendar-link'
 import { connectPathFor } from '@/components/connections/links'
+// WP216：建站平台的官方 CLI 卡
+import { PlatformCliCard } from '@/components/connections/platform-cli-card'
 // WP83（54（将改号 55）§4 第二层）：「连上这 N 个就能开工」
 import { PositionConnections } from '@/components/connections/position-connections'
 import { DeckSection } from '@/components/deck'
@@ -438,6 +440,10 @@ export function PositionPage(): React.ReactNode {
         而是"还开不了工"；连完最后一个它自己消失，不占地方。
       */}
       <PositionConnections id={id} />
+      {/* WP216：建站平台的官方 CLI 卡——按岗位模板 id（`site`）问，只在平台那一行写的岗位上、只给对得上平台的品牌 */}
+      {instance === undefined ? null : (
+        <PlatformCliCard positionId={instance.position_id} assignment={id} />
+      )}
       {/* WP74：从岗位进日历，默认开"待办 + 会议 + 卡片到期"那三层（任何岗位都成立） */}
       <div className="flex">
         <CalendarLink />
