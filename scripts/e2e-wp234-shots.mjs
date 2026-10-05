@@ -36,7 +36,8 @@ const PORT = Number(value('--port', '4399'))
 const BASE = `http://127.0.0.1:${PORT}`
 const OWNER = 'wang@nordvolt.example'
 const SITE = 'https://nordvolt.example/'
-const INTENT = '做了三年 Shopify 店。接下来只做 Reddit：盯着大家怎么说我们，也自己发帖；网站客服也得有人管。'
+const INTENT =
+  '做了三年 Shopify 店。接下来只做 Reddit：盯着大家怎么说我们，也自己发帖；网站客服也得有人管。'
 
 function startDemo() {
   const child = spawn(

@@ -54,7 +54,8 @@ export function PositionReshape({
   return (
     <div className="flex flex-col gap-2" data-testid="position-reshape">
       <div className="flex flex-wrap items-center gap-1">
-        {others.length === 0 ? null : (
+        {/* 只有底座职责的岗位（「普通成员」）没东西可并 */}
+        {others.length === 0 || duties.length === 0 ? null : (
           <Button
             size="xs"
             variant="ghost"

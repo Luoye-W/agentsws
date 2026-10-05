@@ -183,7 +183,7 @@ export const keywordSuggester: Suggester = {
       const byChannel =
         channel === undefined ? undefined : hit(channel.length < 3 ? undefined : channel)
       if (byChannel !== undefined) {
-        push(r.id, `你说要做 ${byChannel}，这条是 ${byChannel} 上的${r.name}`, byChannel)
+        push(r.id, `你说要做 ${byChannel}`, byChannel)
         continue
       }
       const byCategory = hit(r.category)
