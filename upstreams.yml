@@ -529,6 +529,28 @@ upstreams:
       - packages/skills/test/bundled.test.ts
       - packages/skills/bundled/THIRD-PARTY-NOTICES
 
+  # WP224（docs/91 §5 #1 #2 #9、§5.1 署名）：后台两份技能改写自 agency-agents。只从英文原仓、钉在这一提交上改写；
+  # 上游改了只对照、不自动同步（理由同 marketingskills：我们改写过，冲突条款以我们为准）。
+  - id: agency-agents
+    kind: ported
+    why: unit-economics（成本项清单、定价硬规矩与折扣治理）与 weekly-review（高管摘要五段、先验数据写出处）改写自它的四个角色文件（MIT）；所有门槛数都没搬，进公司层阈值或事实卡
+    repo: msitarzewski/agency-agents
+    pinned_commit: 83294689da3832c0a9f223221148c411fd3eacc0
+    watch: [releases, readme]
+    watch_paths:
+      - marketing/marketing-cross-border-ecommerce.md
+      - specialized/specialized-pricing-analyst.md
+      - support/support-executive-summary-generator.md
+      - support/support-analytics-reporter.md
+    we_depend_on:
+      - 'marketing/marketing-cross-border-ecommerce.md（Margin Discipline 的八项成本清单）→ packages/skills/bundled/unit-economics/SKILL.md「毛利瀑布：八项一项不漏」'
+      - 'specialized/specialized-pricing-analyst.md（Critical Rules 六条、Discount Policy 的替代手段）→ packages/skills/bundled/unit-economics/SKILL.md「改价与折扣」'
+      - 'support/support-executive-summary-generator.md（五段格式与字数、每条发现带数、不越过数据假设）→ packages/skills/bundled/weekly-review/SKILL.md「五段怎么写」「硬规矩」与 packages/deck/src/weekly-review.ts 的五段结构'
+      - 'support/support-analytics-reporter.md（Data Quality First：先验数据、写来源与假设）→ packages/skills/bundled/weekly-review/SKILL.md「硬规矩」'
+    covered_by:
+      - packages/skills/test/bundled.test.ts
+      - packages/skills/bundled/THIRD-PARTY-NOTICES
+
   # WP146（Luoye 09-24）：工作台里复制进来的界面源码也登记。两条都是"源码已复制并改成 --ws-* 令牌"，
   # 上游更新只作参考、不自动同步；周报只看 release 与 wishlist 里的破坏性改动。
   - id: tremor-raw

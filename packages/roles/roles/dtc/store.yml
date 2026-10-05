@@ -272,7 +272,9 @@ thresholds:
   # 评分低于这个数的评价进"差评表"（与 `review_reply_min_rating` 同一条线）
   bad_review_rating: 3
 
-skills: []
+# WP224（docs/91 §2.2 #3）：改价 / 折扣要附算式与到期日；落地成本、毛利瀑布
+skills:
+  - { name: unit-economics, tier: open, load: on_demand }
 home_blocks:
   # 36 §3 待审改动：**listing / 价 / 上下架 / 促销各一条车道**。
   # 为什么分车道而不是一张大表：这四种卡该看的东西不一样——文案看 diff、

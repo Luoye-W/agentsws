@@ -154,6 +154,8 @@ automation:
 skills:
   - { name: ad-copywriting, tier: open, load: on_demand }
   - { name: audience-research, tier: open, load: on_demand }
+  # WP224（docs/91 §2.2 #3）：盈亏线 ROAS = 1 / 毛利率、毛利瀑布（只并排显示，不改止损线）
+  - { name: unit-economics, tier: open, load: on_demand }
   - { name: brand-voice, tier: open, load: always }
 
 home_blocks:

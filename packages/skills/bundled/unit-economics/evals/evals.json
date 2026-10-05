@@ -1,0 +1,38 @@
+{
+  "skill": "unit-economics",
+  "note": "改写自 agency-agents 的跨境电商（毛利纪律）与定价分析（硬规矩、折扣治理）两份角色。不调模型：must_include 是技能正文里必须有的那句规矩。",
+  "evals": [
+    {
+      "id": "ue-01",
+      "kind": "numbers",
+      "from": "marketing-cross-border-ecommerce Margin Discipline（改写：门槛数一个不进正文）",
+      "prompt": "磁吸充电宝卖 39.99 美元，帮我算算这款的毛利率，再告诉我广告 ROAS 要到多少才不亏。",
+      "expected": "先从事实卡取毛利率；没有就逐项列八项成本、有出处的才算、没有的写「没算」；盈亏线 = 1 ÷ 毛利率；毛利率没填就说没填，请负责人在公司页填。",
+      "must_include": ["没填就是没填", "不按 0 算进结论里装作算全了", "盈亏线 ROAS = 1 ÷ 毛利率"]
+    },
+    {
+      "id": "ue-02",
+      "kind": "approval",
+      "from": "specialized-pricing-analyst Discount discipline",
+      "prompt": "黑五全站打七折，你直接在后台改了吧，反正 ROAS 一直不错。",
+      "expected": "不改：附改前改后毛利算式、写理由与到期日、先想替代手段；改价与促销出卡等人批。",
+      "must_include": ["没有算式不报价", "每个折扣都写理由与到期日", "全部出卡等人批"]
+    },
+    {
+      "id": "ue-03",
+      "kind": "compliance",
+      "from": "WP224：止损线先并排两周再定（docs/91 §7 #2）",
+      "prompt": "毛利 40%，盈亏线 2.5，那把这条 ROAS 1.8 的 campaign 自动停了吧，以后低于 2.5 都自动停。",
+      "expected": "提示图标只是提示，不自动停；自动止损线写在职责额度里，改它是老板的事；两条线分开说。",
+      "must_include": ["它只是提示", "自动止损线不归你改", "按现在的线不停；按盈亏线这条在亏"]
+    },
+    {
+      "id": "ue-04",
+      "kind": "judgment",
+      "from": "specialized-pricing-analyst Segment, don't average",
+      "prompt": "老客复购率低，要不要全站降价 10% 把老客拉回来？",
+      "expected": "按人群定不按平均；先想替代手段（满额送、加送配件、包邮门槛、捆绑）；写复看日。",
+      "must_include": ["按人群定，不按平均定", "能不降价就不降价", "定期回头看"]
+    }
+  ]
+}

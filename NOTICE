@@ -15,5 +15,8 @@ This product includes software developed by third parties under their own licens
   (SEO judgment rules in packages/skills/bundled/seo-judgment/SKILL.md)
 - Portions adapted from open-dingtalk/dingtalk-stream-sdk-nodejs (MIT, Copyright (c) 2023 DingTalk Open Platform team) -
   https://github.com/open-dingtalk/dingtalk-stream-sdk-nodejs (Stream-mode protocol in packages/channels/src/dingtalk-bot)
+- Portions adapted from msitarzewski/agency-agents (MIT, Copyright (c) 2025 AgentLand Contributors) - https://github.com/msitarzewski/agency-agents
+  (rewritten into packages/skills/bundled/{unit-economics,weekly-review}/SKILL.md at commit 83294689;
+   license text in packages/skills/bundled/THIRD-PARTY-NOTICES)
 - @larksuiteoapi/node-sdk (MIT) - https://github.com/larksuite/node-sdk (Feishu/Lark long connection, loaded on demand)
 See each package's LICENSE for details.
