@@ -155,9 +155,7 @@ describe.each(MODES)('WP230 dsh 运行时（%s）：伪调用文字兜底', (mod
     expect(rec.staged).toHaveLength(0)
     const failed = events.filter((e) => e.type === 'run.failed')
     expect(failed).toHaveLength(1)
-    expect(failed[0]?.type === 'run.failed' && failed[0].error.message).toBe(
-      TOOL_CALL_TEXT_FAILURE,
-    )
+    expect(failed[0]?.type === 'run.failed' && failed[0].error.message).toBe(TOOL_CALL_TEXT_FAILURE)
     expect(events.some((e) => e.type === 'run.completed')).toBe(false)
     expect(JSON.stringify(events.filter((e) => e.type === 'text.delta'))).not.toContain('calling')
   })

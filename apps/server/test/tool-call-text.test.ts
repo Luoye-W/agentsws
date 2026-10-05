@@ -50,7 +50,12 @@ function scripted(replies: readonly string[]) {
 }
 
 const roles: RoleStore = {
-  effectiveConfig: () => ({ role_id: 'common.owner', grounding: [], skills: [], browser_scope: [] }),
+  effectiveConfig: () => ({
+    role_id: 'common.owner',
+    grounding: [],
+    skills: [],
+    browser_scope: [],
+  }),
   assignments: { get: () => undefined },
 } as unknown as RoleStore
 
