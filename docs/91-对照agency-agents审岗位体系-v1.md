@@ -326,3 +326,37 @@ handoffs:
 | H5 | **幕僚长的打扰判据**：「不说的话，老板会不会在别处先听说、措手不及？」 | 秘书（41）推不推即时通知的一条判据；其余进日报 | 中 | S | 判据是给模型的，真正的即时推送仍按各职责 `notifications` |
 
 不借的：七阶段流水线与指挥结构（软件项目用的，我们的活是天天在跑的运营，不是有终点的项目）；开发 ↔ 质检自动重试；MCP 记忆；「人当胶水」的复制粘贴。
+
+## 5. 可引进的原文清单
+
+MIT 允许改写、商用、再分发，条件只有一条：**保留版权声明与许可证全文**。按 10 §3 的分类，改写后放进 `packages/skills/bundled/` 属于 `ported`（与 `marketingskills` 同一档）。**一律从英文原仓、钉在提交 `83294689` 上自己改写，不从中文译本搬**（§1.4）。下表「改编方式」统一指：翻成中文、按我们的规矩改（出卡、数字只引事实卡、取不到就说取不到、不写完成式）、把里面的默认数挪进公司层阈值或事实卡。
+
+| # | 来源（`agency-agents/` 下） | 取哪段 | 进哪 | 不要的部分 |
+|---|---|---|---|---|
+| 1 | `marketing/marketing-cross-border-ecommerce.md` | 跨境选品打分表的**三维结构**（市场 / 毛利 / 合规）、毛利纪律的**成本项清单**、合规红线、本地化四原则、listing 标题公式、亚马逊广告分阶段的**结构** | `unit-economics`（成本项、盈亏线）、`market-compliance`（红线）、`localization`（四原则）、将来 Amazon 运营的技能（标题公式、广告分阶段） | 所有门槛数（月搜索 > 1 万、首页评论 < 500、售价 $15–50、佣金 15%、ACOS 25%、各平台毛利区间）；收汇工具、东南亚平台段 |
+| 2 | `specialized/specialized-pricing-analyst.md` | 硬规矩六条（没有算式不报价、先保毛利、折扣要理由与到期日、按人群不按平均、定期复看）、折扣替代手段（捆绑、赠品、分期而非直降） | `unit-economics`；`dtc.store` 改价卡上要附的算式 | 收入提升 10–25% 之类目标；SaaS 定价模型段 |
+| 3 | `specialized/retail-customer-returns.md` | 退货原因码、例外留痕、「同一政策对每个客户一样执行」、不当面指控 | `returns-policy-calc`（§3.5 示例 2）、`customer-care` 一句 | 门店验货 / 收银 / 现金退款 / 处置流程；「欺诈嫌疑」只留内部标记 |
+| 4 | `marketing/marketing-email-strategist.md` | 每条自动流程写**退出条件**（买了、退订、硬退信、投诉、长期不活跃）；看点击与转化、不拿打开率当成绩（苹果邮件隐私保护让打开率虚高）；交易邮件里不夹营销；同意留记录（日期、方式、来源、范围）；流程设计单格式 | `email-sms` 加一节「流程设计单」与「退出条件」 | 「2025 年平均打开率 43.46%」等无出处数；CRM 字段映射模板 |
+| 5 | `marketing/marketing-ai-citation-strategist.md` | 硬规矩六条（多平台都查、永不保证被引用、AEO 与 SEO 分开、先测基线再改、按影响排、各平台分开看）；「丢失问法分析」与「修复包」两个格式 | `seo-judgment` 的 AI 可见度一节 | 「30 天引用率 +20%」等目标 |
+| 6 | `paid-media/paid-media-auditor.md`、`paid-media-tracking-specialist.md` | 体检六大块（结构 / 追踪 / 出价预算 / 关键词与受众 / 素材 / 商品 feed 与落地页）、严重度四级、每条写影响与改法；追踪那几项（转化动作、归因窗口、服务端事件） | 新技能 `ads-audit`，挂投放四条 | 「200+ 检查点」的说法（原文没有列全）；Google Ads MCP 的工具段 |
+| 7 | `project-management/project-management-experiment-tracker.md`（+ `marketing-growth-hacker.md` 的漏斗拆法） | 硬规矩八条（先算样本量、随机分组、不中途偷看就停、多组比较要校正、写回滚）、实验设计单 | 新技能 `experiments` | 「每月 10 个实验」「30% 胜率」等 |
+| 8 | `product/product-feedback-synthesizer.md` | 收集 → 归类 → 打分 → 交付四步、按主题聚而不是按单条 | 新技能 `voice-of-customer` | 这份正文很薄（118 行），主要只借结构；所有准确率目标 |
+| 9 | `support/support-executive-summary-generator.md`（+ `support-analytics-reporter.md` 的硬规矩） | 五段格式（情况 / 发现 / 影响 / 建议 / 下一步）与每段字数、「每条发现带一个数」「不越过给定数据做假设」；报表那份的「先验数据、写来源与假设」 | 新技能 `weekly-review`（老板一页纸）；复盘卡的格式 | 麦肯锡 / BCG / 贝恩的名头；「≤ 500 词」改成中文字数 |
+| 10 | `support/support-legal-compliance-checker.md`（+ 跨境通才合规段、`marketing-livestream-commerce-coach.md` 的宣称禁令） | 「每条合规决定写依据与出处、留痕」「政策改动走审批」；宣称禁令（最低价、功效、贬低竞品、诱导未成年） | `market-compliance`；宣称那几条进 WP159 的违规宣称规则表（知识库卡） | GDPR 框架代码、隐私政策生成器、合同审查（不在范围） |
+| 11 | `testing/testing-reality-checker.md` | 质检立场：默认「还不行」、前一棒的满分当危险信号、每条结论对证据 | 内容 / 新闻稿 / 群发的「发布前质检」那一段提示 | 截图命令、Playwright 那一套 |
+| 12 | `strategy/coordination/handoff-templates.md` | #1 标准交接、#3 质检不通过、#4 升级报告三份的**栏目** | H1 交接单、H4 退回格式、H3「卡住了」卡 | 冲刺、阶段闸、事故交接 |
+| 13 | `strategy/runbooks/scenario-marketing-campaign.md` | 角色名单 → 按周分工 → 检查点 → 指标负责人的**结构** | H2 两份活动模板 | 指标目标（互动率 > 3%、转化 > 5%）；App Store 段 |
+| 14 | `design/design-image-prompt-engineer.md`、`design-inclusive-visuals-specialist.md` | 出图提示词骨架（主体 / 环境 / 光 / 风格 / 技术参数 / 反向词）、光影一致；人像不千人一面、反向词禁生成文字与假标识 | `design-core` 的 brief → 提示词那一步、设计技能一小节 | 摄影师名字仿风格那条（版权与肖像风险）；Sora / Runway 专属段 |
+| 15 | `marketing/marketing-pr-communications-manager.md` | 危机：先出一份站得住的说明、不说「无可奉告」、对记者不说假话、一次活动最多三条主信息 | 公关技能（与 WP220 合并做） | 奖项申报、高管思想领导力段 |
+| 16 | `specialized/specialized-chief-of-staff.md` | 「立刻上报 / 先办后报」两档的判据 | 秘书（41）一句 | ADHD、私人助理那几段 |
+| 17 | `specialized/language-translator.md` | 按意思不按字、标出正式 / 非正式、医疗法律不猜、地区用词差异要标 | `localization` | 西语专属内容、发音指南、紧急短语 |
+| 18 | `sales/sales-account-strategist.md` | 「客户还没用好就别推加单」「信号要配上原因、时机、谁在乎」 | `b2b-inquiry` / `quotation` 一句 | SaaS 续约、QBR 段 |
+
+### 5.1 署名怎么做（照 42 / 10 §3 与 `marketingskills` 的先例）
+
+1. **每份改编的 SKILL.md 第一行**写出处：「改编自 msitarzewski/agency-agents `<路径>`（MIT，© 2025 AgentLand Contributors），提交 83294689。已按 Agents 工坊的规矩改写，冲突处以本文为准。」只借了一两句的，写在那一节的开头（§3.5 示例 2 的写法）。
+2. **`packages/skills/bundled/THIRD-PARTY-NOTICES`** 加一段：仓库地址、钉的提交、用在哪几份技能、MIT 全文（版权行是 `Copyright (c) 2025 AgentLand Contributors`）。
+3. **仓库根 `NOTICE`** 加一行「Portions adapted from msitarzewski/agency-agents (MIT, Copyright (c) 2025 AgentLand Contributors)」。
+4. **`upstreams.yml`** 加一条 `id: agency-agents`、`kind: ported`、`pinned_commit: 83294689da3832c0a9f223221148c411fd3eacc0`，`watch_paths` 只列真引了的那几个文件，`we_depend_on` 写清「哪个文件 → 哪份技能」。上游改了只对照、不自动同步（理由同 `marketingskills`：我们改写过，冲突条款以我们为准）。
+5. 随软件带出去的技能更新，走 90（WP219）定的「已审内容更新通道」，不另开路。
+6. 交接单、活动模板、退回格式这类**只借了栏目结构**的（#12、#13），栏目本身不构成可受保护的表达，不强制署名；仍在设计文档里写一句来历，方便以后对照。
