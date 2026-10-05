@@ -7,10 +7,10 @@
  *
  * 两张大卡，二选一：
  *
- * - **用 Agents 工坊的接口**（推荐，送 10 积分）：输邮箱 → 发登录信 →
- *   用户去邮箱点链接（真正的下一步发生在他的邮箱里，不在这一页）→ 这边轮询
- *   关联状态 → 关联上了就自动启用云模型、把各能力开关切到「用 Agents 工坊的」→
- *   显示到账的积分。
+ * - **用 Agents 工坊的接口**（推荐，送 10 积分）：WP231 起分「注册新账号」（默认）/「已有账号，登录」
+ *   两个页签（`CloudAuthForm`，与设置页同一个件）：注册 = 名字 + 邮箱 + 密码 + 同意条款 → 6 位验证码；
+ *   登录 = 邮箱验证码（默认）或密码。验过就关联上 → 自动启用云模型、把各能力开关切到
+ *   「用 Agents 工坊的」→ 显示到账的积分。
  * - **用我自己的模型接口**：沿用现有 `ModelForm`（原生表单、key 不进 state、
  *   不经 AI），存完**当场验证三步**（`POST /v1/models/providers/:id/test`：连通 →
  *   文字 → 带图，WP127）。三步都过才算接上；**看不了图的不放行**（Agents 工坊
@@ -34,13 +34,12 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Check, Cloud, KeyRound, Loader2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { BrandIcon } from '@/components/brand-icons'
+import { CloudAuthForm } from '@/components/cloud/cloud-auth-form'
 import { InlineGuideLink, TutorialLink } from '@/components/help/tutorial-link'
 import { DeepSeekAccountLogin } from '@/components/models/deepseek-account-login'
 import { ModelCheckSteps } from '@/components/models/model-check-steps'
 import { ModelForm, type ModelFormValues } from '@/components/models/model-form'
 import { CLOUD_PROVIDER_ID } from '@/components/settings/model-cloud-card'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import {
   ApiClientError,
   discoverModelProviderModels,
@@ -50,7 +49,6 @@ import {
   getDeepSeekAccount,
   isAccountTemplate,
   isDeepSeekAccountKind,
-  linkCloudAccount,
   listModelProviders,
   type ModelProviderKind,
   type ModelTestResult,
@@ -167,8 +165,6 @@ export function AiStep({ assignment, onConnected, onDemo }: AiStepProps): React.
   const { t } = useApp()
   const client = useQueryClient()
   const [choice, setChoice] = useState<AiChoice | undefined>(undefined)
-  const [email, setEmail] = useState('')
-  const [sent, setSent] = useState(false)
   const [failure, setFailure] = useState<string | undefined>(undefined)
   const [test, setTest] = useState<ModelTestResult | undefined>(undefined)
   const [picked, setPicked] = useState<string | undefined>(undefined)
@@ -184,8 +180,6 @@ export function AiStep({ assignment, onConnected, onDemo }: AiStepProps): React.
     queryKey: ['cloud-account', assignment],
     queryFn: () => getCloudAccount(assignment),
     retry: false,
-    // 登录信点没点，这边只能问。点开之前每隔几秒问一次，点开了就停
-    refetchInterval: sent ? 3000 : false,
   })
 
   const linked = account.data?.linked === true
@@ -204,31 +198,9 @@ export function AiStep({ assignment, onConnected, onDemo }: AiStepProps): React.
   })
 
   /**
-   * WP142（docs/78 #6）：发登录信那一跳**连不上云时单独说**——等的时候有一句
-   * 「正在连 Agents 工坊云…」，失败了给「再试一次」与「先逛逛演示数据」两个按钮，
-   * 不只报一个网址。朋友里没有自己模型 key 的人全靠这一跳。
-   */
-  const [sendError, setSendError] = useState<string | undefined>(undefined)
-  const send = useMutation({
-    mutationFn: (value: string) => linkCloudAccount(value, assignment),
-    onSuccess: () => {
-      setFailure(undefined)
-      setSendError(undefined)
-      setSent(true)
-    },
-    onError: (err: unknown) => {
-      setSendError(
-        err instanceof ApiClientError && err.code !== 'provider_unavailable'
-          ? err.message
-          : t('onboarding.ai.official.offline'),
-      )
-    },
-  })
-
-  /**
    * 关联上之后那一串动作：启用云模型 + 把各能力开关切到「用 Agents 工坊的」。
    *
-   * 用户按的是「发登录信」，不是"启用云模型"——他选的是**这条路**，
+   * 用户按的是「注册 / 登录」，不是"启用云模型"——他选的是**这条路**，
    * 中间这几下该我们替他做完。
    */
   const enable = useMutation({
@@ -407,78 +379,14 @@ export function AiStep({ assignment, onConnected, onDemo }: AiStepProps): React.
           ) : (
             <div className="mt-2 flex flex-col gap-2">
               <TutorialLink slug="agentsws-credits" className="self-start" />
-              <div className="flex items-center gap-2">
-                <Input
-                  type="email"
-                  data-testid="ai-official-email"
-                  aria-label={t('onboarding.ai.official.email')}
-                  placeholder={t('cloud.account.email.placeholder')}
-                  value={email}
-                  onChange={(e) => {
-                    setEmail(e.target.value)
-                    setSent(false)
-                  }}
-                />
-                <Button
-                  size="sm"
-                  disabled={send.isPending || email.trim() === ''}
-                  data-testid="ai-official-send"
-                  onClick={() => {
-                    setSendError(undefined)
-                    send.mutate(email.trim())
-                  }}
-                >
-                  {send.isPending ? <Loader2 aria-hidden className="animate-spin" /> : null}
-                  {t('onboarding.ai.official.send')}
-                </Button>
-              </div>
-              {send.isPending ? (
-                <p
-                  className="flex items-center gap-1.5 text-ws-muted-fg"
-                  data-testid="ai-official-pending"
-                >
-                  <Loader2 aria-hidden className="size-3.5 animate-spin" />
-                  {t('onboarding.ai.official.pending')}
-                </p>
-              ) : null}
-              {sendError === undefined || send.isPending ? null : (
-                <div className="flex flex-col gap-2" data-testid="ai-official-failed">
-                  <p role="alert" className="text-destructive" data-testid="ai-error">
-                    {sendError}
-                  </p>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      data-testid="ai-official-retry"
-                      disabled={email.trim() === ''}
-                      onClick={() => {
-                        setSendError(undefined)
-                        send.mutate(email.trim())
-                      }}
-                    >
-                      {t('onboarding.ai.official.retry')}
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      data-testid="ai-official-demo"
-                      onClick={onDemo}
-                    >
-                      {t('onboarding.ai.demo')}
-                    </Button>
-                  </div>
-                </div>
-              )}
-              {sent ? (
-                <p
-                  className="flex items-center gap-1.5 text-ws-muted-fg"
-                  data-testid="ai-official-sent"
-                >
-                  <Loader2 aria-hidden className="size-3.5 animate-spin" />
-                  {t('onboarding.ai.official.sent')}
-                </p>
-              ) : null}
+              <CloudAuthForm
+                {...(assignment === undefined ? {} : { assignment })}
+                testPrefix="ai-official"
+                onDemo={onDemo}
+                onDone={() => {
+                  void client.invalidateQueries({ queryKey: ['cloud-account'] })
+                }}
+              />
             </div>
           )
         ) : null}

@@ -968,7 +968,9 @@ describe('WP164 契约覆盖', () => {
     ]
     // WP194：成员 / 岗位额度那六条只在私有仓 `agentsws-cloud` 里实现；开源仓这份旧云端代码
     // 是 docs/83 §8 第 4 步要删的副本，不再补新路由，覆盖检查到私有仓那份测试里做。
-    const privateOnly = (route: string): boolean => route.includes(' /v1/wallet/allocation')
+    // 私有仓才实现的：成员额度（WP206）、密码注册 / 验证码登录（WP231）——开源这份旧副本不实现
+    const privateOnly = (route: string): boolean =>
+      route.includes(' /v1/wallet/allocation') || route.includes(' /v1/cloud/auth/')
     expect(rec.missingSuccess(tags).filter((r) => !privateOnly(r))).toEqual([])
   })
 })

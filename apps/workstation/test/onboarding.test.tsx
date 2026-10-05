@@ -295,6 +295,10 @@ const state = {
   /** 云账号：测试里靠改它模拟"用户去邮箱点了那条链接"。 */
   account: { linked: false, cloud_base_url: 'https://cloud.agentsws.dev' } as CloudAccountView,
   links: [] as string[],
+  /** WP231：注册那一跳收到的（名字、邮箱、密码）与验码。 */
+  signups: [] as { name: string; email: string; password: string }[],
+  signupVerifies: [] as { email: string; code: string }[],
+  signupConflict: false,
   credits: { linked: false } as CloudCreditsView,
   providers: [] as ModelProviderView[],
   savedProviders: [] as { id: string; input: { kind: string; model: string; api_key?: string } }[],
@@ -368,6 +372,36 @@ vi.mock('@/lib/api', async () => {
     }),
     getCloudAccount: async () => state.account,
     getCloudCredits: async () => state.credits,
+    // WP231：注册 / 登录（登录验证码那一跳沿用 WP142 的「挂着 / 连不上」开关）
+    cloudSignup: async (input: { name: string; email: string; password: string }) => {
+      state.signups.push({ name: input.name, email: input.email, password: input.password })
+      if (state.signupConflict)
+        throw new actual.ApiClientError(409, {
+          code: 'conflict',
+          message: '这个邮箱注册过了，直接登录。',
+          details: { reason: 'already_registered' },
+        })
+      return { expires_at: T0, delivered: 'email' as const }
+    },
+    cloudSignupVerify: async (input: { email: string; code: string }) => {
+      state.signupVerifies.push(input)
+      state.account = {
+        linked: true,
+        email: input.email,
+        cloud_base_url: 'https://cloud.agentsws.dev',
+      }
+      return { ...state.account, registered: true, bonus_credits: 10 }
+    },
+    cloudLoginCode: async (input: { email: string }) => {
+      state.links.push(input.email)
+      if (state.linkHold !== undefined) await state.linkHold
+      if (state.linkFail)
+        throw new actual.ApiClientError(503, {
+          code: 'provider_unavailable',
+          message: '网络不通，这一下没连上 Agents 工坊云。检查一下网络再试一次。',
+        })
+      return { expires_at: T0, delivered: 'email' as const }
+    },
     linkCloudAccount: async (email: string) => {
       state.links.push(email)
       if (state.linkHold !== undefined) await state.linkHold
@@ -437,6 +471,9 @@ beforeEach(() => {
   state.state = STATE
   state.account = { linked: false, cloud_base_url: 'https://cloud.agentsws.dev' }
   state.links = []
+  state.signups = []
+  state.signupVerifies = []
+  state.signupConflict = false
   state.credits = { linked: false }
   state.providers = []
   state.savedProviders = []
@@ -559,21 +596,65 @@ describe('70 §2 第 ① 步：接上 AI', () => {
     expect(screen.queryByTestId('ai-official-email')).toBeNull()
   })
 
-  it('官方接口：发登录信之后说"去邮箱点那条链接"，不跳转也不弹窗', async () => {
+  it('WP231 官方接口：默认是「注册新账号」；不勾条款按不动；注册 → 验证码 → 关联上', async () => {
     const user = userEvent.setup()
     renderWithProviders(<OnboardingPage />)
     await user.click(await screen.findByTestId('ai-pick-official'))
+    expect(screen.getByTestId('ai-official-auth').getAttribute('data-tab')).toBe('signup')
+    await user.type(screen.getByTestId('ai-official-name'), '北风电器')
     await user.type(screen.getByTestId('ai-official-email'), 'wang@nordvolt.cn')
-    await user.click(screen.getByTestId('ai-official-send'))
+    await user.type(screen.getByTestId('ai-official-password'), 'Sunflower-77')
+    // 强度条只看分数
+    expect(screen.getByTestId('ai-official-strength').getAttribute('data-score')).toBe('4')
+    const send = screen.getByTestId('ai-official-send') as HTMLButtonElement
+    expect(send.disabled).toBe(true)
+    await user.click(screen.getByTestId('ai-official-agree'))
+    expect(send.disabled).toBe(false)
+    await user.click(send)
 
     await waitFor(() => {
-      expect(state.links).toEqual(['wang@nordvolt.cn'])
+      expect(state.signups).toEqual([
+        { name: '北风电器', email: 'wang@nordvolt.cn', password: 'Sunflower-77' },
+      ])
     })
-    expect((await screen.findByTestId('ai-official-sent')).textContent).toContain(
-      '去邮箱点那条链接',
-    )
-    // 真正的下一步在用户的邮箱里：这一页这时还没接上
+    expect((await screen.findByTestId('ai-official-sent')).textContent).toContain('验证码')
+    // 密码一个字节都不留在页面上
+    expect(document.body.innerHTML).not.toContain('Sunflower-77')
+    // 真正的下一步在邮箱里：这时还没接上
     expect((screen.getByTestId('onboarding-next') as HTMLButtonElement).disabled).toBe(true)
+
+    await user.type(screen.getByTestId('ai-official-code'), '135790')
+    await user.click(screen.getByTestId('ai-official-verify'))
+    await waitFor(() => {
+      expect(state.signupVerifies).toEqual([{ email: 'wang@nordvolt.cn', code: '135790' }])
+    })
+    await waitFor(() => {
+      expect(state.savedProviders.map((p) => p.input.kind)).toContain('agentsws_cloud')
+    })
+  })
+
+  it('WP231 注册时邮箱已注册：说「注册过了」+ 一键切到登录（邮箱带过去）', async () => {
+    const user = userEvent.setup()
+    state.signupConflict = true
+    renderWithProviders(<OnboardingPage />)
+    await user.click(await screen.findByTestId('ai-pick-official'))
+    await user.type(screen.getByTestId('ai-official-name'), '北风电器')
+    await user.type(screen.getByTestId('ai-official-email'), 'wang@nordvolt.cn')
+    await user.type(screen.getByTestId('ai-official-password'), 'Sunflower-77')
+    await user.click(screen.getByTestId('ai-official-agree'))
+    await user.click(screen.getByTestId('ai-official-send'))
+    const failed = await screen.findByTestId('ai-official-failed')
+    expect(failed.getAttribute('data-reason')).toBe('already_registered')
+    expect(failed.textContent).toContain('注册过了')
+    await user.click(within(failed).getByTestId('ai-official-switch-login'))
+    expect(screen.getByTestId('ai-official-auth').getAttribute('data-tab')).toBe('login')
+    expect((screen.getByTestId('ai-official-email') as HTMLInputElement).value).toBe(
+      'wang@nordvolt.cn',
+    )
+    // 登录：发码之后统一一句「如果已注册……」+「去注册」
+    await user.click(screen.getByTestId('ai-official-send'))
+    expect((await screen.findByTestId('ai-official-sent')).textContent).toContain('如果')
+    expect(screen.getByTestId('ai-official-go-signup')).toBeTruthy()
   })
 
   it('官方接口：点开登录信回来 → 自动启用云模型、各能力开关切过去、显示到账 10 积分', async () => {
@@ -1394,6 +1475,7 @@ describe('WP142 第 ① 步：官方云那一跳有反馈；模板不重名', ()
     })
     renderWithProviders(<OnboardingPage />)
     await user.click(await screen.findByTestId('ai-pick-official'))
+    await user.click(screen.getByTestId('ai-official-tab-login'))
     await user.type(screen.getByTestId('ai-official-email'), 'wang@nordvolt.cn')
     await user.click(screen.getByTestId('ai-official-send'))
     expect((await screen.findByTestId('ai-official-pending')).textContent).toContain(
@@ -1409,11 +1491,12 @@ describe('WP142 第 ① 步：官方云那一跳有反馈；模板不重名', ()
     state.linkFail = true
     renderWithProviders(<OnboardingPage />)
     await user.click(await screen.findByTestId('ai-pick-official'))
+    await user.click(screen.getByTestId('ai-official-tab-login'))
     await user.type(screen.getByTestId('ai-official-email'), 'wang@nordvolt.cn')
     await user.click(screen.getByTestId('ai-official-send'))
 
     const failed = await screen.findByTestId('ai-official-failed')
-    expect(within(failed).getByTestId('ai-error').textContent).toContain('网络不通')
+    expect(within(failed).getByTestId('ai-official-error').textContent).toContain('网络不通')
     expect(failed.textContent).not.toMatch(/https?:\/\//)
 
     // 再试一次：同一个邮箱再发一遍，这回通了
@@ -1428,6 +1511,7 @@ describe('WP142 第 ① 步：官方云那一跳有反馈；模板不重名', ()
     state.linkFail = true
     renderWithProviders(<OnboardingPage />)
     await user.click(await screen.findByTestId('ai-pick-official'))
+    await user.click(screen.getByTestId('ai-official-tab-login'))
     await user.type(screen.getByTestId('ai-official-email'), 'wang@nordvolt.cn')
     await user.click(screen.getByTestId('ai-official-send'))
     await user.click(await screen.findByTestId('ai-official-demo'))

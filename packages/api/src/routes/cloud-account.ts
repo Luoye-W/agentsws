@@ -16,8 +16,9 @@
  * 一次性 `state`——对不上就当没发生。
  */
 
-import type { CloudScope } from '@agentsws/contracts'
-import { z } from 'zod'
+import type { CloudAuthConfig, CloudAuthLocale, CloudScope } from '@agentsws/contracts'
+import { CLOUD_PASSWORD_MAX, CLOUD_PASSWORD_MIN, LEGAL_TERMS_VERSION } from '@agentsws/contracts'
+import { type ZodType, z } from 'zod'
 import { ApiError } from '../errors.js'
 import { assignmentOf, body, ok, principalOf } from '../helpers.js'
 import { type Route, route } from '../route-spec.js'
@@ -76,7 +77,46 @@ export interface CloudUnlinkResult {
   reason?: string
 }
 
+/** WP231：验证码发出去了（登录 / 忘记密码对没注册的邮箱静默不发，回包一样）。 */
+export interface CloudCodeSentView {
+  expires_at: string
+  delivered: 'email'
+}
+
+/** WP231：注册 / 登录成了——关联状态，外加这一下是不是刚注册、送了多少积分。 */
+export interface CloudAuthDoneView extends CloudAccountView {
+  registered?: boolean
+  bonus_credits?: number
+}
+
+/**
+ * WP231：注册与登录（密码 + 邮箱验证码）。**密码与验证码只经这一跳转发到云（HTTPS）**：
+ * 不落盘、不进事件、不进日志、不经 AI。老的 `begin` / `complete`（邮件链接）保留给老客户端。
+ */
+export interface CloudAuthPort {
+  authConfig(): Promise<CloudAuthConfig>
+  signup(input: {
+    name: string
+    email: string
+    password: string
+    locale: CloudAuthLocale
+    terms_version: string
+  }): Promise<CloudCodeSentView>
+  verifySignup(input: { email: string; code: string }): Promise<CloudAuthDoneView>
+  sendLoginCode(input: { email: string; locale: CloudAuthLocale }): Promise<CloudCodeSentView>
+  verifyLoginCode(input: { email: string; code: string }): Promise<CloudAuthDoneView>
+  passwordLogin(input: { email: string; password: string }): Promise<CloudAuthDoneView>
+  forgotPassword(input: { email: string; locale: CloudAuthLocale }): Promise<CloudCodeSentView>
+  resetPassword(input: {
+    email: string
+    code: string
+    new_password: string
+  }): Promise<CloudAuthDoneView>
+}
+
 export interface CloudAccountPort {
+  /** WP231：注册 / 登录那几条（没装配就 501，老的邮件链接照旧）。 */
+  auth?: CloudAuthPort
   status(workspace_id: string): Promise<CloudAccountView>
   /** 起一次关联：向云侧要一封登录邮件，落点是本机的回调。 */
   begin(input: BeginCloudLinkInput): Promise<BeginCloudLinkResult>
@@ -87,12 +127,78 @@ export interface CloudAccountPort {
 
 const LinkBody = z.object({ email: z.string().min(3).max(320) })
 
+// ── WP231 的几张表单（密码长度在这里先挡一道，云上再挡一道）─────────────
+const Email = z.string().trim().toLowerCase().min(3).max(320)
+const Locale = z.enum(['zh', 'en']).default('zh')
+const Password = z.string().min(CLOUD_PASSWORD_MIN).max(CLOUD_PASSWORD_MAX)
+const Code = z
+  .string()
+  .trim()
+  .regex(/^\d{6}$/u)
+const SignupBody = z.object({
+  name: z.string().trim().min(1).max(120),
+  email: Email,
+  password: Password,
+  /** 没勾「我已阅读并同意」就不许发。 */
+  accept_terms: z.literal(true),
+  terms_version: z.string().min(1).max(40).default(LEGAL_TERMS_VERSION),
+  locale: Locale,
+})
+const CodeBody = z.object({ email: Email, code: Code })
+const EmailBody = z.object({ email: Email, locale: Locale })
+const PasswordLoginBody = z.object({
+  email: Email,
+  password: z.string().min(1).max(CLOUD_PASSWORD_MAX),
+})
+const ResetBody = z.object({ email: Email, code: Code, new_password: Password })
+
 export function cloudAccountRoutes(): Route[] {
   const portOf = (port: CloudAccountPort | undefined): CloudAccountPort => {
     if (port === undefined)
       throw new ApiError('not_implemented', '这个服务进程没有装配云账号（49 M1）')
     return port
   }
+
+  /** WP231：注册 / 登录那几条要的口；老节点没装配就 501（老的邮件链接照旧能用）。 */
+  const authOf = (port: CloudAccountPort | undefined): CloudAuthPort => {
+    const auth = portOf(port).auth
+    if (auth === undefined)
+      throw new ApiError('not_implemented', '这个服务进程没有装配注册 / 登录（WP231）')
+    return auth
+  }
+
+  /**
+   * WP231 的一条 POST：关联是整个工作区的事（`policy.stage@workspace`），而且是一次出站。
+   * 请求体里的密码 / 验证码只在这一次调用里，**不进任何日志与事件**。
+   */
+  const authRoute = <T, R>(
+    path: string,
+    operationId: string,
+    summary: string,
+    schema: ZodType<T>,
+    run: (port: CloudAuthPort, input: T) => Promise<R>,
+    returns: string,
+  ): Route =>
+    route(
+      {
+        method: 'post',
+        path,
+        operationId,
+        summary,
+        tag: TAG,
+        auth: 'bearer',
+        assignment: true,
+        authz: WRITE,
+        outbound: true,
+        body: schema,
+        returns,
+      },
+      async (c, deps) => {
+        assignmentOf(c)
+        const input = await body(c, schema)
+        return ok(c, await run(authOf(deps.cloudAccount), input))
+      },
+    )
 
   return [
     route(
@@ -200,6 +306,88 @@ export function cloudAccountRoutes(): Route[] {
           }),
         )
       },
+    ),
+    // ── WP231：注册与登录（密码 + 邮箱验证码）。密码与验证码只转发到云，不落盘、不进事件 ──
+    route(
+      {
+        method: 'get',
+        path: '/v1/cloud/account/auth-config',
+        operationId: 'getCloudAuthConfig',
+        summary: '注册 / 登录界面要知道的几样（密码最短几位、验证码几位、条款版本）',
+        tag: TAG,
+        auth: 'bearer',
+        assignment: true,
+        authz: READ,
+        outbound: true,
+        returns: 'CloudAuthConfig',
+      },
+      async (c, deps) => {
+        assignmentOf(c)
+        return ok(c, await authOf(deps.cloudAccount).authConfig())
+      },
+    ),
+    authRoute(
+      '/v1/cloud/account/signup',
+      'cloudSignup',
+      '注册：名字 + 邮箱 + 密码 + 同意条款 → 云发一封 6 位注册验证码',
+      SignupBody,
+      (port, input) =>
+        port.signup({
+          name: input.name,
+          email: input.email,
+          password: input.password,
+          locale: input.locale,
+          terms_version: input.terms_version,
+        }),
+      '{ expires_at, delivered: "email" }',
+    ),
+    authRoute(
+      '/v1/cloud/account/signup/verify',
+      'cloudSignupVerify',
+      '注册验证码 → 建号、送注册积分、关联这台机器',
+      CodeBody,
+      (port, input) => port.verifySignup(input),
+      'CloudAuthDoneView',
+    ),
+    authRoute(
+      '/v1/cloud/account/code',
+      'cloudLoginCode',
+      '登录：发一封 6 位登录验证码（没注册的邮箱云上静默不发）',
+      EmailBody,
+      (port, input) => port.sendLoginCode(input),
+      '{ expires_at, delivered: "email" }',
+    ),
+    authRoute(
+      '/v1/cloud/account/code/verify',
+      'cloudLoginCodeVerify',
+      '登录验证码 → 关联这台机器',
+      CodeBody,
+      (port, input) => port.verifyLoginCode(input),
+      'CloudAuthDoneView',
+    ),
+    authRoute(
+      '/v1/cloud/account/password-login',
+      'cloudPasswordLogin',
+      '密码登录 → 关联这台机器',
+      PasswordLoginBody,
+      (port, input) => port.passwordLogin(input),
+      'CloudAuthDoneView',
+    ),
+    authRoute(
+      '/v1/cloud/account/password/forgot',
+      'cloudPasswordForgot',
+      '忘记密码：发一封重置验证码',
+      EmailBody,
+      (port, input) => port.forgotPassword(input),
+      '{ expires_at, delivered: "email" }',
+    ),
+    authRoute(
+      '/v1/cloud/account/password/reset',
+      'cloudPasswordReset',
+      '验证码 + 新密码 → 设好新密码（别的会话全部失效）并关联这台机器',
+      ResetBody,
+      (port, input) => port.resetPassword(input),
+      'CloudAuthDoneView',
     ),
   ]
 }

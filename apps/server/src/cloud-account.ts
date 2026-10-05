@@ -30,6 +30,9 @@ import type {
   BeginCloudLinkResult,
   CloudAccountPort,
   CloudAccountView,
+  CloudAuthDoneView,
+  CloudAuthPort,
+  CloudCodeSentView,
   CloudUnlinkResult,
 } from '@agentsws/api'
 import { ApiError } from '@agentsws/api'
@@ -37,11 +40,21 @@ import type {
   Clock,
   CloudAccountLinkedPayload,
   CloudAccountUnlinkedPayload,
+  CloudAuthConfig,
   CloudScope,
+  CloudSessionIssued,
   EventEnvelope,
   WorkspaceId,
 } from '@agentsws/contracts'
-import { CLOUD_BASE_URL_ENV, DEFAULT_CLOUD_BASE_URL, emailDomain } from '@agentsws/contracts'
+import {
+  CLOUD_BASE_URL_ENV,
+  CLOUD_OTP_LENGTH,
+  CLOUD_OTP_TTL_SECONDS,
+  CLOUD_PASSWORD_MIN,
+  DEFAULT_CLOUD_BASE_URL,
+  emailDomain,
+  LEGAL_TERMS_VERSION,
+} from '@agentsws/contracts'
 import type { SecretStore } from './secret-store.js'
 
 /** 本机加密库里的 key 名。与连接面（`conn:*`）、模型面（`model:*`）同库不同前缀。 */
@@ -55,6 +68,10 @@ export const LINK_PENDING_TTL_MS = 30 * 60 * 1000
 
 /** WP142：关联那一跳最多等多久（超了就说连不上、给「再试一次」）。 */
 export const CLOUD_LINK_TIMEOUT_MS = 12_000
+
+/** WP231：云那头还没有注册 / 登录这几条（老版本的云）时那一句。 */
+export const CLOUD_AUTH_OUTDATED_MESSAGE =
+  'Agents 工坊云还没更新到这一版的注册 / 登录，过一会儿再试。'
 
 /** WP142（docs/78 #6）：连不上云时那一句——说人话、给下一步，不报网址。 */
 export const CLOUD_OFFLINE_MESSAGE = '网络不通，这一下没连上 Agents 工坊云。检查一下网络再试一次。'
@@ -122,6 +139,41 @@ export function cloudBaseUrl(env: Record<string, string | undefined>): string {
   const raw = env[CLOUD_BASE_URL_ENV]
   const value = raw === undefined || raw.trim() === '' ? DEFAULT_CLOUD_BASE_URL : raw.trim()
   return value.replace(/\/+$/, '')
+}
+
+/**
+ * WP231：云回的注册 / 登录错误 → 本机网关的错误（码、`details.reason`、等多久）。
+ *
+ * 云的 401（验证码不对、密码不对）**不当 401 往回传**：本机的 401 在工作台上是
+ * 「登录过期了，刷新一下」——那是本机会话的事，不是这一次填错了。所以翻成 400，
+ * `details.reason` 照带，界面按它说人话。云那头没有这条路（老版本的云，404 not_found
+ * 且没有 reason）时说「云还没更新」。
+ */
+export function passThroughError(
+  status: number,
+  body: { message?: string; code?: string; details?: unknown },
+): ApiError {
+  const details =
+    body.details !== null && typeof body.details === 'object'
+      ? (body.details as Record<string, unknown>)
+      : undefined
+  const reason = typeof details?.reason === 'string' ? details.reason : undefined
+  const message = body.message ?? `Agents 工坊云回了 ${String(status)}，再试一次。`
+  const keep = reason === undefined ? undefined : { details: { ...details, reason } }
+  if (status === 404 && reason === undefined)
+    return new ApiError('not_implemented', CLOUD_AUTH_OUTDATED_MESSAGE)
+  if (status === 429) {
+    const retry = typeof details?.retry_after === 'number' ? details.retry_after : undefined
+    return new ApiError('rate_limited', message, {
+      details: { ...(details ?? {}), ...(reason === undefined ? {} : { reason }) },
+      ...(retry === undefined ? {} : { headers: { 'Retry-After': String(retry) } }),
+    })
+  }
+  if (status === 409 && body.code === 'conflict')
+    return new ApiError('conflict', message, keep ?? {})
+  if (status === 400 || status === 401 || status === 403 || status === 404)
+    return new ApiError('invalid_input', message, keep ?? {})
+  return new ApiError('provider_error', message, keep ?? {})
 }
 
 export function createCloudAccount(options: CloudAccountOptions): CloudAccountAssembly {
@@ -199,7 +251,16 @@ export function createCloudAccount(options: CloudAccountOptions): CloudAccountAs
   /** 向云侧发一次请求；错误翻成网关的信封，**原文里绝不回显任何令牌**。 */
   const call = async <T>(
     path: string,
-    init: { method?: string; token?: string; body?: unknown } = {},
+    init: {
+      method?: string
+      token?: string
+      body?: unknown
+      /**
+       * WP231：把云回的错误码与 `details.reason` 原样带回界面（已注册 / 验证码不对 / 锁定…）。
+       * 只给注册 / 登录那几条用；老的几条照旧翻成 `provider_error`。
+       */
+      passThrough?: boolean
+    } = {},
   ): Promise<T> => {
     let res: Awaited<ReturnType<CloudFetch>>
     let timer: ReturnType<typeof setTimeout> | undefined
@@ -238,9 +299,10 @@ export function createCloudAccount(options: CloudAccountOptions): CloudAccountAs
       parsed = {}
     }
     if (!res.ok) {
-      const body = parsed as { message?: string }
+      const body = parsed as { message?: string; code?: string; details?: unknown }
       if (res.status >= 500 && body.message === undefined)
         throw new ApiError('provider_unavailable', CLOUD_OFFLINE_MESSAGE)
+      if (init.passThrough === true) throw passThroughError(res.status, body)
       throw new ApiError(
         res.status === 401 || res.status === 403 ? 'forbidden' : 'provider_error',
         body.message ?? `Agents 工坊云回了 ${String(res.status)}，这一次没关联上。再试一次。`,
@@ -249,7 +311,161 @@ export function createCloudAccount(options: CloudAccountOptions): CloudAccountAs
     return (parsed as { data: T }).data
   }
 
+  /**
+   * 拿到一张云账号会话之后的那一串（邮件链接、WP231 的验证码 / 密码都走这里）：
+   * 每个品牌各签一把工作区令牌进本机加密库、记一条关联事件、云侧会话当场注销。
+   */
+  const bind = async (
+    verified: {
+      account: { id: string; email: string }
+      org: { id: string; name: string }
+      session_token: string
+    },
+    traceKey: string,
+  ): Promise<void> => {
+    const workspace_id = options.workspace_id()
+    try {
+      /*
+       * WP66（52 O1）：云上那把令牌是**按工作区签**的，而账号与余额在组织级
+       * （49 M1）——所以这家公司下**每个品牌各签一把**。当前这个品牌先签
+       * （它的那一把决定这次关联的回执长什么样）；别的品牌签不下来不算失败：
+       * 关联本身已经成了，补签走"加品牌"那条路（`ensureBrandToken`）。
+       */
+      const issued = await call<{
+        link: { expires_at: string; scopes: CloudScope[]; cloud_org_id: string }
+        token: string
+      }>('/v1/cloud/links', {
+        method: 'POST',
+        token: verified.session_token,
+        body: { workspace_id, label: workspace_id },
+      })
+      const fieldsOf = (t: string, expires_at: string, scopes: string) => ({
+        token: t,
+        email: verified.account.email,
+        org_id: verified.org.id,
+        org_name: verified.org.name,
+        expires_at,
+        scopes,
+        linked_at: options.clock.now(),
+      })
+      vaultOf(workspace_id).put(
+        CLOUD_TOKEN_SECRET_ID,
+        fieldsOf(issued.token, issued.link.expires_at, issued.link.scopes.join(',')),
+      )
+      for (const ws of brandsOf()) {
+        if (ws === workspace_id) continue
+        try {
+          const extra = await call<{
+            link: { expires_at: string; scopes: CloudScope[] }
+            token: string
+          }>('/v1/cloud/links', {
+            method: 'POST',
+            token: verified.session_token,
+            body: { workspace_id: ws, label: ws },
+          })
+          vaultOf(ws).put(
+            CLOUD_TOKEN_SECRET_ID,
+            fieldsOf(extra.token, extra.link.expires_at, extra.link.scopes.join(',')),
+          )
+        } catch {
+          // 这个品牌没签上：它的"用 agentsws 的"暂时不可用，别的品牌照常
+        }
+      }
+      const payload: CloudAccountLinkedPayload = {
+        email_domain: emailDomain(verified.account.email),
+        cloud_org_id: verified.org.id,
+        scopes: issued.link.scopes,
+        expires_at: issued.link.expires_at,
+      }
+      options.appendEvent({
+        schema_version: 1,
+        workspace_id,
+        type: 'cloud.account_linked',
+        actor: { kind: 'system', id: 'cloud-account' },
+        correlation: { trace_id: `tr_cloud_link_${traceKey}` },
+        payload,
+      })
+    } finally {
+      // 云侧会话用完就注销：本机不留第二把能管账号的钥匙
+      pending = undefined
+      try {
+        await call('/v1/cloud/auth/logout', { method: 'POST', token: verified.session_token })
+      } catch {
+        // 注销失败不影响关联本身（那张会话 12 小时后自己过期）
+      }
+    }
+  }
+
+  /**
+   * WP231：注册与登录（密码 + 邮箱验证码）。**密码与验证码只在这一跳的请求体里**（HTTPS 到云）：
+   * 不落盘、不进事件、不进日志；出错信息里也不回显。拿到会话之后走同一个 {@link bind}。
+   */
+  const guardLinkable = (): void => {
+    if (!options.secrets.available)
+      throw new ApiError(
+        'not_implemented',
+        '这台机器没有秘密库密钥（AGENTSWS_SECRETS_KEY），令牌无处安全存放',
+      )
+    if (stored() !== undefined)
+      throw new ApiError('conflict', '这个工作区已经关联过了，先解除再关联别的账号')
+  }
+  const sendCode = async (path: string, body: unknown): Promise<CloudCodeSentView> => {
+    guardLinkable()
+    const out = await call<{ expires_at: string }>(path, {
+      method: 'POST',
+      body,
+      passThrough: true,
+    })
+    return { expires_at: out.expires_at, delivered: 'email' }
+  }
+  const finish = async (path: string, body: unknown): Promise<CloudAuthDoneView> => {
+    guardLinkable()
+    const verified = await call<CloudSessionIssued>(path, {
+      method: 'POST',
+      body,
+      passThrough: true,
+    })
+    await bind(verified, rand(4).toString('hex'))
+    const granted = verified.bonus?.granted === true ? verified.bonus.credits : undefined
+    return {
+      ...view(),
+      ...(verified.registered === undefined ? {} : { registered: verified.registered }),
+      ...(granted === undefined ? {} : { bonus_credits: granted }),
+    }
+  }
+  const auth: CloudAuthPort = {
+    async authConfig(): Promise<CloudAuthConfig> {
+      try {
+        return await call<CloudAuthConfig>('/v1/cloud/auth/config', { passThrough: true })
+      } catch {
+        // 云不在 / 老版本：界面照默认值画（Turnstile 不出），真发的时候再说人话
+        return {
+          password_min: CLOUD_PASSWORD_MIN,
+          otp_length: CLOUD_OTP_LENGTH,
+          otp_ttl_seconds: CLOUD_OTP_TTL_SECONDS,
+          terms_version: LEGAL_TERMS_VERSION,
+        }
+      }
+    },
+    signup: (input) =>
+      sendCode('/v1/cloud/auth/signup', {
+        name: input.name,
+        email: input.email,
+        password: input.password,
+        consent: { accepted: true, terms_version: input.terms_version },
+        source: 'workstation',
+        locale: input.locale,
+      }),
+    verifySignup: (input) => finish('/v1/cloud/auth/signup/verify', input),
+    sendLoginCode: (input) => sendCode('/v1/cloud/auth/otp', input),
+    verifyLoginCode: (input) => finish('/v1/cloud/auth/otp/verify', input),
+    passwordLogin: (input) => finish('/v1/cloud/auth/password', input),
+    forgotPassword: (input) => sendCode('/v1/cloud/auth/password/forgot', input),
+    resetPassword: (input) => finish('/v1/cloud/auth/password/reset', input),
+  }
+
   const port: CloudAccountPort = {
+    auth,
     async status() {
       return view()
     },
@@ -296,78 +512,7 @@ export function createCloudAccount(options: CloudAccountOptions): CloudAccountAs
         org: { id: string; name: string }
         session_token: string
       }>('/v1/cloud/auth/verify', { method: 'POST', body: { token } })
-
-      const workspace_id = options.workspace_id()
-      try {
-        /*
-         * WP66（52 O1）：云上那把令牌是**按工作区签**的，而账号与余额在组织级
-         * （49 M1）——所以这家公司下**每个品牌各签一把**。当前这个品牌先签
-         * （它的那一把决定这次关联的回执长什么样）；别的品牌签不下来不算失败：
-         * 关联本身已经成了，补签走"加品牌"那条路（`ensureBrandToken`）。
-         */
-        const issued = await call<{
-          link: { expires_at: string; scopes: CloudScope[]; cloud_org_id: string }
-          token: string
-        }>('/v1/cloud/links', {
-          method: 'POST',
-          token: verified.session_token,
-          body: { workspace_id, label: workspace_id },
-        })
-        const fieldsOf = (t: string, expires_at: string, scopes: string) => ({
-          token: t,
-          email: verified.account.email,
-          org_id: verified.org.id,
-          org_name: verified.org.name,
-          expires_at,
-          scopes,
-          linked_at: options.clock.now(),
-        })
-        vaultOf(workspace_id).put(
-          CLOUD_TOKEN_SECRET_ID,
-          fieldsOf(issued.token, issued.link.expires_at, issued.link.scopes.join(',')),
-        )
-        for (const ws of brandsOf()) {
-          if (ws === workspace_id) continue
-          try {
-            const extra = await call<{
-              link: { expires_at: string; scopes: CloudScope[] }
-              token: string
-            }>('/v1/cloud/links', {
-              method: 'POST',
-              token: verified.session_token,
-              body: { workspace_id: ws, label: ws },
-            })
-            vaultOf(ws).put(
-              CLOUD_TOKEN_SECRET_ID,
-              fieldsOf(extra.token, extra.link.expires_at, extra.link.scopes.join(',')),
-            )
-          } catch {
-            // 这个品牌没签上：它的"用 agentsws 的"暂时不可用，别的品牌照常
-          }
-        }
-        const payload: CloudAccountLinkedPayload = {
-          email_domain: emailDomain(verified.account.email),
-          cloud_org_id: verified.org.id,
-          scopes: issued.link.scopes,
-          expires_at: issued.link.expires_at,
-        }
-        options.appendEvent({
-          schema_version: 1,
-          workspace_id,
-          type: 'cloud.account_linked',
-          actor: { kind: 'system', id: 'cloud-account' },
-          correlation: { trace_id: `tr_cloud_link_${state.slice(0, 8)}` },
-          payload,
-        })
-      } finally {
-        // 云侧会话用完就注销：本机不留第二把能管账号的钥匙
-        pending = undefined
-        try {
-          await call('/v1/cloud/auth/logout', { method: 'POST', token: verified.session_token })
-        } catch {
-          // 注销失败不影响关联本身（那张会话 12 小时后自己过期）
-        }
-      }
+      await bind(verified, state.slice(0, 8))
       return view()
     },
 

@@ -2,7 +2,7 @@
  * 49 M1 / M5 设置页「账号与积分」的账号卡。
  *
  * 四组断言：
- * 1. 没关联时是一句人话 + 邮箱框 + 「发登录邮件」，按完只提示"去邮箱点"；
+ * 1. 没关联时是一句人话 + WP231 的注册 / 登录表单（默认注册；登录走验证码或密码）；
  * 2. 已关联时出邮箱、到期、动作集与「解除关联」；
  * 3. **这一页任何时候都看不到令牌**（服务端也不回它）；
  * 4. 积分那块是 WP59 的空插槽，现在什么都不渲染。
@@ -33,6 +33,7 @@ const LINKED: CloudAccountView = {
 const state = {
   view: UNLINKED as CloudAccountView,
   linked: [] as string[],
+  codes: [] as string[],
   unlinked: 0,
 }
 
@@ -44,6 +45,23 @@ vi.mock('@/lib/api', async () => {
     linkCloudAccount: async (email: string) => {
       state.linked.push(email)
       return { expires_at: '2026-09-15T00:15:00.000Z', delivered: 'email' as const }
+    },
+    // WP231：登录验证码 / 密码登录
+    cloudLoginCode: async (input: { email: string }) => {
+      state.linked.push(input.email)
+      return { expires_at: '2026-09-15T00:05:00.000Z', delivered: 'email' as const }
+    },
+    cloudLoginCodeVerify: async (input: { email: string; code: string }) => {
+      state.codes.push(input.code)
+      state.view = LINKED
+      return LINKED
+    },
+    cloudPasswordLogin: async () => {
+      throw new actual.ApiClientError(400, {
+        code: 'invalid_input',
+        message: '邮箱或密码不对',
+        details: { reason: 'bad_credentials' },
+      })
     },
     // WP142：积分卡按账号状态回（解除关联之后要换成「没关联」那一面）
     getCloudCredits: async () =>
@@ -78,6 +96,7 @@ vi.mock('@/lib/api', async () => {
 beforeEach(() => {
   state.view = UNLINKED
   state.linked = []
+  state.codes = []
   state.unlinked = 0
 })
 
@@ -101,21 +120,43 @@ describe('49 M1 设置页账号卡', () => {
         ?.getAttribute('data-hint'),
     ).toContain('一分不扣')
 
-    const input = screen.getByLabelText('邮箱')
-    await userEvent.type(input, 'luoye@example.com')
-    await userEvent.click(screen.getByRole('button', { name: '发登录邮件' }))
+    // WP231：默认「注册新账号」；切到「已有账号，登录」→ 邮箱验证码
+    expect(screen.getByTestId('cloud-account-auth').getAttribute('data-tab')).toBe('signup')
+    await userEvent.click(screen.getByTestId('cloud-account-tab-login'))
+    await userEvent.type(screen.getByLabelText('邮箱'), 'luoye@example.com')
+    await userEvent.click(screen.getByRole('button', { name: '发验证码' }))
 
     await screen.findByTestId('cloud-account-sent')
     expect(state.linked).toEqual(['luoye@example.com'])
-    // 一次性 token 只进邮件：这一页不出现任何 token 形状的串
-    expect(document.body.textContent ?? '').not.toMatch(/cml_|wst_/)
+    await userEvent.type(screen.getByTestId('cloud-account-code'), '246810')
+    await userEvent.click(screen.getByTestId('cloud-account-verify'))
+    await screen.findByTestId('cloud-account-linked')
+    expect(state.codes).toEqual(['246810'])
+    // 一次性的东西不留在页面上
+    expect(document.body.textContent ?? '').not.toMatch(/cml_|wst_|246810/)
   })
 
   it('邮箱没填时按钮点不动', async () => {
     renderWithProviders(<CloudAccountCard assignment="asg_1" />)
     await screen.findByTestId('cloud-account-unlinked')
-    const button = screen.getByRole('button', { name: '发登录邮件' })
+    await userEvent.click(screen.getByTestId('cloud-account-tab-login'))
+    const button = screen.getByRole('button', { name: '发验证码' })
     expect(button.hasAttribute('disabled')).toBe(true)
+  })
+
+  it('WP231 密码登录不对：说人话 + 一键换成验证码登录；密码不留在页面上', async () => {
+    renderWithProviders(<CloudAccountCard assignment="asg_1" />)
+    await screen.findByTestId('cloud-account-unlinked')
+    await userEvent.click(screen.getByTestId('cloud-account-tab-login'))
+    await userEvent.click(screen.getByTestId('cloud-account-via-password'))
+    await userEvent.type(screen.getByLabelText('邮箱'), 'luoye@example.com')
+    await userEvent.type(screen.getByTestId('cloud-account-password'), 'wrong-pass-1')
+    await userEvent.click(screen.getByRole('button', { name: '登录' }))
+    const failed = await screen.findByTestId('cloud-account-failed')
+    expect(failed.textContent).toContain('邮箱或密码不对')
+    expect(document.body.innerHTML).not.toContain('wrong-pass-1')
+    await userEvent.click(screen.getByTestId('cloud-account-switch-code'))
+    expect(screen.getByRole('button', { name: '发验证码' })).toBeTruthy()
   })
 
   it('已关联：邮箱、到期、动作集都在，且没有令牌', async () => {
@@ -163,7 +204,7 @@ describe('49 M1 设置页账号卡', () => {
     renderWithProviders(<CloudAccountCard assignment="asg_1" />)
     await screen.findByTestId('cloud-account-unlinked')
     expect(screen.getByText(/这台机器还没有秘密库密钥/)).toBeTruthy()
-    expect(screen.getByRole('button', { name: '发登录邮件' }).hasAttribute('disabled')).toBe(true)
+    expect(screen.getByRole('button', { name: '注册' }).hasAttribute('disabled')).toBe(true)
   })
 
   it('积分那块是 WP59 的空插槽，现在不渲染任何东西', () => {

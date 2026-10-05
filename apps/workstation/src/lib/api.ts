@@ -3938,6 +3938,70 @@ export const linkCloudAccount = (
     ...(assignment === undefined ? {} : { assignment }),
   })
 
+/* ── WP231：注册与登录（密码 + 邮箱验证码）。密码只在这一次请求体里，发给本机服务、由它转到云 ── */
+
+export interface CloudAuthConfigView {
+  password_min: number
+  otp_length: number
+  otp_ttl_seconds: number
+  terms_version: string
+  turnstile_site_key?: string
+}
+
+export interface CloudCodeSent {
+  expires_at: string
+  delivered: 'email'
+}
+
+export interface CloudAuthDone extends CloudAccountView {
+  registered?: boolean
+  bonus_credits?: number
+}
+
+const cloudAuthPost = <T>(path: string, body: unknown, assignment?: string): Promise<T> =>
+  api<T>(path, { method: 'POST', body, ...(assignment === undefined ? {} : { assignment }) })
+
+export const getCloudAuthConfig = (assignment?: string): Promise<CloudAuthConfigView> =>
+  api<CloudAuthConfigView>('/v1/cloud/account/auth-config', {
+    ...(assignment === undefined ? {} : { assignment }),
+  })
+
+export const cloudSignup = (
+  input: { name: string; email: string; password: string; locale: 'zh' | 'en' },
+  assignment?: string,
+): Promise<CloudCodeSent> =>
+  cloudAuthPost('/v1/cloud/account/signup', { ...input, accept_terms: true }, assignment)
+
+export const cloudSignupVerify = (
+  input: { email: string; code: string },
+  assignment?: string,
+): Promise<CloudAuthDone> => cloudAuthPost('/v1/cloud/account/signup/verify', input, assignment)
+
+export const cloudLoginCode = (
+  input: { email: string; locale: 'zh' | 'en' },
+  assignment?: string,
+): Promise<CloudCodeSent> => cloudAuthPost('/v1/cloud/account/code', input, assignment)
+
+export const cloudLoginCodeVerify = (
+  input: { email: string; code: string },
+  assignment?: string,
+): Promise<CloudAuthDone> => cloudAuthPost('/v1/cloud/account/code/verify', input, assignment)
+
+export const cloudPasswordLogin = (
+  input: { email: string; password: string },
+  assignment?: string,
+): Promise<CloudAuthDone> => cloudAuthPost('/v1/cloud/account/password-login', input, assignment)
+
+export const cloudPasswordForgot = (
+  input: { email: string; locale: 'zh' | 'en' },
+  assignment?: string,
+): Promise<CloudCodeSent> => cloudAuthPost('/v1/cloud/account/password/forgot', input, assignment)
+
+export const cloudPasswordReset = (
+  input: { email: string; code: string; new_password: string },
+  assignment?: string,
+): Promise<CloudAuthDone> => cloudAuthPost('/v1/cloud/account/password/reset', input, assignment)
+
 export const unlinkCloudAccount = (assignment?: string): Promise<CloudUnlinkResult> =>
   api<CloudUnlinkResult>('/v1/cloud/account/unlink', {
     method: 'POST',
