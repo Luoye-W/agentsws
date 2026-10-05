@@ -149,6 +149,17 @@ const switches = {
   writes: [] as { id: string; input: Record<string, boolean>; assignment?: string }[],
 }
 
+/** WP228：本机只读浏览器那一格（`null` = 服务进程没装，接口 501）。 */
+const roStatus = {
+  view: null as null | {
+    state: 'ready' | 'no_browser' | 'quota_used_up' | 'blocked'
+    message?: string
+    pages_last_day: number
+    max_pages_per_day: number
+    browser?: string
+  },
+}
+
 vi.mock('@/components/connections/bridge', () => ({
   openExternal: (url: string) => {
     opened.push(url)
@@ -168,6 +179,10 @@ vi.mock('@/lib/api', async () => {
     listConnections: async () => ({ connections: state.connections }),
     listProviders: async () => ({ providers: state.providers }),
     getConnectRuntime: async () => state.runtime,
+    getRedditBrowserReadStatus: async () => {
+      if (roStatus.view === null) throw new Error('501')
+      return roStatus.view
+    },
     beginConnect: async (service: string) => {
       const provider = state.providers.find((p) => p.service === service)
       if (provider?.auth === 'oauth2') {
@@ -211,6 +226,7 @@ beforeEach(() => {
   state.providers = [MAIL_PROVIDER, GA4_PROVIDER, SHOP_PROVIDER]
   state.runtime = READY
   state.pollStatus = 'connected'
+  roStatus.view = null
   submitted.length = 0
   opened.length = 0
   removed.length = 0
@@ -710,6 +726,33 @@ describe('WP210：连接页收拾（Luoye 09-30）', () => {
     expect(route.textContent).toContain('2. 浏览器只读（不扣积分，限速）')
     expect(route.textContent).toContain('发帖、回帖永远用品牌号')
     expect(route.textContent).not.toContain('我的平台 key')
+  })
+
+  it('WP228：「浏览器只读」那一路旁边显示本机只读浏览器的状态（图标 + 少字）；没装就不画', async () => {
+    const user = userEvent.setup()
+    state.providers = [
+      { ...GA4_PROVIDER, service: 'reddit', label: 'Reddit', auth: 'api_key', data_sources: [] },
+    ]
+    roStatus.view = {
+      state: 'no_browser',
+      message: '这台电脑上没找到 Chrome 或 Edge。',
+      pages_last_day: 0,
+      max_pages_per_day: 200,
+    }
+    const view = renderWithProviders(<ConnectionsPage />, '/connections')
+    let card = (await screen.findAllByTestId('provider-card'))[0] as HTMLElement
+    await user.click(within(card).getByTestId('provider-sources-toggle'))
+    const badge = await within(card).findByTestId('readonly-browser-status')
+    expect(badge.getAttribute('data-state')).toBe('no_browser')
+    expect(badge.textContent).toContain('没找到浏览器')
+    view.unmount()
+
+    roStatus.view = null
+    renderWithProviders(<ConnectionsPage />, '/connections')
+    card = (await screen.findAllByTestId('provider-card'))[0] as HTMLElement
+    await user.click(within(card).getByTestId('provider-sources-toggle'))
+    await within(card).findByTestId('data-source-route')
+    expect(within(card).queryByTestId('readonly-browser-status')).toBeNull()
   })
 
   it('没有第二条路的卡连「数据来源」按钮都不出', async () => {

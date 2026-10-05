@@ -15,6 +15,7 @@
  * 按「要红人职责」挑自己名下任一条红人职责（`lib/pick-assignment.ts`）。挑不到就说清楚，不发必 403 的请求。
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { CircleAlert, CircleCheck, Hourglass, ShieldAlert } from 'lucide-react'
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Hint } from '@/components/ui/hint'
@@ -24,6 +25,7 @@ import {
   clearKolByoSource,
   getCapabilitySources,
   getKolByoSources,
+  getRedditBrowserReadStatus,
   setCapabilitySources,
   setKolByoSource,
   testKolByoSource,
@@ -133,6 +135,9 @@ export function DataSourceRouteControl({
             <span className={disabled ? 'text-muted-foreground line-through' : ''}>
               {i + 1}. {t(LEVEL_LABEL_KEYS[level])}
             </span>
+            {level === 'browser_readonly' && !disabled ? (
+              <ReadonlyBrowserBadge assignment={assignment} />
+            ) : null}
             <span className="flex-1" />
             <Button
               size="xs"
@@ -168,6 +173,56 @@ export function DataSourceRouteControl({
         <p className="text-[11px] text-destructive">{save.error.message}</p>
       )}
     </div>
+  )
+}
+
+const RO_ICON = {
+  ready: <CircleCheck className="size-3.5 text-primary" aria-hidden />,
+  no_browser: <CircleAlert className="size-3.5 text-muted-foreground" aria-hidden />,
+  quota_used_up: <Hourglass className="size-3.5 text-muted-foreground" aria-hidden />,
+  blocked: <ShieldAlert className="size-3.5 text-destructive" aria-hidden />,
+} as const
+
+/**
+ * WP228：「浏览器只读」那一路现在能不能用（本机只读浏览器）——图标 + 两三个字，原话进问号（36 §7）。
+ * 服务进程没装这一面（演示 / 托管）就什么都不画。
+ */
+export function ReadonlyBrowserBadge({
+  assignment,
+}: {
+  assignment?: string | undefined
+}): React.ReactNode {
+  const { t } = useApp()
+  const status = useQuery({
+    queryKey: ['reddit-browser-read-status', assignment],
+    queryFn: () => getRedditBrowserReadStatus(assignment),
+    retry: false,
+    refetchInterval: 60_000,
+  })
+  const s = status.data
+  if (s === undefined) return null
+  const hint =
+    s.state === 'ready'
+      ? t('data.route.ro.ready_hint', {
+          browser: s.browser ?? 'Chrome',
+          used: s.pages_last_day,
+          max: s.max_pages_per_day,
+        })
+      : s.until === undefined
+        ? (s.message ?? '')
+        : `${s.message ?? ''}${t('data.route.ro.until', {
+            time: new Date(s.until).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          })}`
+  return (
+    <span
+      className="flex items-center gap-1 text-[11px] text-muted-foreground"
+      data-testid="readonly-browser-status"
+      data-state={s.state}
+    >
+      {RO_ICON[s.state]}
+      {t(`data.route.ro.${s.state}`)}
+      {hint === '' ? null : <Hint text={hint} />}
+    </span>
   )
 }
 
