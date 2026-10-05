@@ -30,6 +30,7 @@ import { ApiError } from './errors.js'
 import {
   type AcceptedInvitation,
   type CreateInvitationInput,
+  changedEmail,
   DEFAULT_INVITE_TTL,
   DEFAULT_WORKSPACE_POLICY,
   type Invitation,
@@ -116,6 +117,16 @@ CREATE INDEX IF NOT EXISTS invitations_by_ws ON invitations (workspace_id);
 CREATE TABLE IF NOT EXISTS organizations (
   id   TEXT PRIMARY KEY NOT NULL,
   json TEXT NOT NULL
+) STRICT;
+`,
+  },
+  {
+    // WP233：改过邮箱的人，旧地址仍指回他（启动时按占位邮箱认 owner、桌面壳换会话都靠它）
+    version: 4,
+    sql: `
+CREATE TABLE IF NOT EXISTS person_email_aliases (
+  email     TEXT PRIMARY KEY NOT NULL,
+  person_id TEXT NOT NULL
 ) STRICT;
 `,
   },
@@ -373,10 +384,9 @@ export class SqliteIdentityService implements LocalIdentityService {
   async createPerson(input: { email: string; name: string; id?: PersonId }): Promise<Person> {
     const email = input.email.trim().toLowerCase()
     if (email === '' || !email.includes('@')) throw new ApiError('invalid_input', 'email 不合法')
-    const existing = this.#db
-      .prepare<[string], PersonRow>('SELECT * FROM people WHERE email = ?')
-      .get(email)
-    if (existing !== undefined) return this.#person(existing)
+    // WP233：按旧地址（别名）来认也算同一个人——启动时按占位邮箱认 owner 就靠这一条
+    const existing = this.personByEmail(email)
+    if (existing !== undefined) return existing
     const person: Person = {
       id: input.id ?? this.#id('per'),
       email,
@@ -409,10 +419,46 @@ export class SqliteIdentityService implements LocalIdentityService {
   }
 
   personByEmail(email: string): Person | undefined {
-    const row = this.#db
-      .prepare<[string], PersonRow>('SELECT * FROM people WHERE email = ?')
-      .get(email.trim().toLowerCase())
+    const key = email.trim().toLowerCase()
+    const row =
+      this.#db.prepare<[string], PersonRow>('SELECT * FROM people WHERE email = ?').get(key) ??
+      this.#db
+        .prepare<[string], PersonRow>(
+          'SELECT p.* FROM person_email_aliases a JOIN people p ON p.id = a.person_id WHERE a.email = ?',
+        )
+        .get(key)
     return row === undefined ? undefined : this.#person(row)
+  }
+
+  async changePersonEmail(
+    id: PersonId,
+    email: string,
+    options?: { keep_old_as_alias?: boolean },
+  ): Promise<Person> {
+    const row = this.#getPersonRow(id)
+    if (row === undefined) throw new ApiError('not_found', `人不存在：${id}`)
+    const person = this.#person(row)
+    const next = email.trim().toLowerCase()
+    if (next === '' || !next.includes('@')) throw new ApiError('invalid_input', 'email 不合法')
+    if (next === person.email) return person
+    const holder = this.personByEmail(next)
+    if (holder !== undefined && holder.id !== id)
+      throw new ApiError('conflict', '这个邮箱已经是别人的了')
+    const changed = changedEmail(person, next)
+    // 一次事务：邮箱、身份、别名三处要么都改要么都不改
+    this.#db.transaction(() => {
+      this.#db
+        .prepare('UPDATE people SET email = ?, identities = ? WHERE id = ?')
+        .run(next, JSON.stringify(changed.identities), id)
+      this.#db.prepare('DELETE FROM person_email_aliases WHERE email = ?').run(next)
+      if (options?.keep_old_as_alias === true)
+        this.#db
+          .prepare(
+            'INSERT INTO person_email_aliases (email, person_id) VALUES (?, ?) ON CONFLICT(email) DO UPDATE SET person_id = excluded.person_id',
+          )
+          .run(person.email, id)
+    })()
+    return changed
   }
 
   // ───────────────────────────── 工作区与成员
