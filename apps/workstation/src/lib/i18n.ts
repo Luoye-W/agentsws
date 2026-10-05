@@ -3148,6 +3148,7 @@ const zh: Table = {
   'scenes.officialDesktop.note': '用它自己的数据和登录，和上面的官方场景是两份。',
   'scenes.officialDesktop.opened': '已打开官方桌面端。',
   'help.dsh-scenes.title': '切换场景',
+  'help.install-update.title': '安装与更新',
   'scenes.error': '没办成：{message}',
   // ── WP141（docs/78 §1 #4、§2）：牌堆与屏上的字 ─────────────────────────
   'kind.kol_campaign': '红人挑人清单',
@@ -6762,6 +6763,7 @@ const en: Table = {
     'Uses its own data and sign-in, separate from the official scene above.',
   'scenes.officialDesktop.opened': 'Opened the official desktop app.',
   'help.dsh-scenes.title': 'Switching scenes',
+  'help.install-update.title': 'Installing and updating',
   'scenes.error': 'That did not work: {message}',
   // ── WP141 (docs/78 §1 #4, §2): the deck and the words on screen ─────────
   'kind.kol_campaign': 'Creator shortlist',
