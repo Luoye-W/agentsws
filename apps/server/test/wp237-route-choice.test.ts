@@ -126,7 +126,7 @@ afterEach(async () => {
 })
 
 describe('WP237 ① 同一个人的两条职责打平：不问人，按分高的那条开跑', () => {
-  it('「Reddit 调研」→ 直接走「Reddit 运营」并起运行；时间线挂「换成 Reddit 营销」', async () => {
+  it('「Reddit 调研」→ 直接走「自家版运营」并起运行；时间线挂「换成 Reddit 营销」', async () => {
     const out = await open('帮我做一份 Reddit 调研，看看大家怎么评价我们')
     expect(out.ambiguous).toBe(false)
     expect(out.approval_item_id).toBeUndefined()
@@ -136,7 +136,7 @@ describe('WP237 ① 同一个人的两条职责打平：不问人，按分高的
     expect(matter.position_id).toBe(held.get('social.reddit'))
 
     const routed = timeline(out.matter.id).find((e) => e.actor.id === 'position_router')
-    expect(routed?.text).toContain('按「Reddit 运营」来做的')
+    expect(routed?.text).toContain('按「自家版运营」来做的')
     expect(routed?.text).toContain('要换成「Reddit 营销」点这里')
     expect(routed?.route).toEqual({
       picked: 'social.reddit',
@@ -166,14 +166,14 @@ describe('WP237 ① 同一个人的两条职责打平：不问人，按分高的
 })
 
 describe('WP237（Fable 代定）一个判据词都没命中：按岗位里职责的先后取第一条开跑', () => {
-  it('「整理一下」→ 走「Reddit 运营」并起运行，时间线挂「换成 Reddit 营销」，不出卡', async () => {
+  it('「整理一下」→ 走「自家版运营」并起运行，时间线挂「换成 Reddit 营销」，不出卡', async () => {
     const out = await open('整理一下')
     expect(out.ambiguous).toBe(false)
     expect(out.approval_item_id).toBeUndefined()
     expect(out.picked?.role_id).toBe('social.reddit')
     expect(out.run_id).toBeDefined()
     const routed = timeline(out.matter.id).find((e) => e.actor.id === 'position_router')
-    expect(routed?.text).toContain('看不出更像哪条，先按「Reddit 运营」来做的')
+    expect(routed?.text).toContain('看不出更像哪条，先按「自家版运营」来做的')
     expect(routed?.route).toEqual({
       picked: 'social.reddit',
       options: [{ role_id: 'pr.reddit', role_name: 'Reddit 营销' }],
@@ -278,11 +278,11 @@ describe('WP237 ②③ 几条都沾一点、谁都不像才出卡；卡上按钮
 })
 
 describe('WP237 还没定职责时续一句话：绝不落到负责人的通用助手', () => {
-  it('「按 Reddit 运营这条来，开始吧。」→ 钉到 Reddit 运营，用那条分配起运行', async () => {
+  it('「按 自家版运营这条来，开始吧。」→ 钉到 自家版运营，用那条分配起运行', async () => {
     const out = await open('你好')
     const said = await dataOf<{ run_id?: string }>(
       await call('POST', `/v1/matters/${out.matter.id}/messages`, {
-        text: '按 Reddit 运营这条来，开始吧。',
+        text: '按 自家版运营这条来，开始吧。',
       }),
     )
     expect(said.run_id).toBeDefined()
@@ -364,7 +364,7 @@ describe('WP237（Fable 代定）「换成 X」重跑之前先停掉还在跑的
       run: true,
     })
     // 停在新运行之前（那一刻只有开事项时那一次）
-    expect(calls).toEqual([`stop ${out.matter.id} 已换成「Reddit 运营」重跑 runs=1`])
+    expect(calls).toEqual([`stop ${out.matter.id} 已换成「自家版运营」重跑 runs=1`])
     expect(res.run_id).toBeDefined()
     expect(runs(out.matter.id).length).toBe(2)
   })
