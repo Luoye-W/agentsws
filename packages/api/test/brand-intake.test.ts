@@ -110,12 +110,13 @@ async function wired(options: { withPort?: boolean } = {}): Promise<{
 const data = async <T>(res: Response): Promise<T> => ((await res.json()) as { data: T }).data
 
 describe('WP121 网关：品牌接入面', () => {
-  it('五条路由都在 /v1/brand-intake 之下，都要 Bearer + X-Assignment + 权限元组', async () => {
+  it('六条路由都在 /v1/brand-intake 之下（WP242 加了就地手填），都要 Bearer + X-Assignment + 权限元组', async () => {
     const { h } = await wired()
     const specs = h.gateway.specs.filter((s) => s.path.startsWith('/v1/brand-intake'))
     expect(specs.map((s) => `${s.method.toUpperCase()} ${s.path}`).sort()).toEqual([
       'GET /v1/brand-intake/runs/:id',
       'GET /v1/brand-intake/runs/latest',
+      'POST /v1/brand-intake/manual',
       'POST /v1/brand-intake/runs',
       'POST /v1/brand-intake/runs/:id/confirm',
       'POST /v1/brand-intake/runs/:id/reanalyze',
