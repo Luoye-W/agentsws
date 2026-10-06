@@ -5,8 +5,8 @@
     <div>
       <h1>Reddit 运营</h1>
       <p class="stat">
-        <a href="#need"><i class="d" style="background:var(--ws-warn)"></i><b>3</b> 张等你定</a><span class="mid">·</span>
-        <a href="#work" data-jump="doing"><i class="d" style="background:var(--ws-brand)"></i><b>5</b> 件在办</a><span class="mid">·</span>
+        <a href="#need" data-jump="deck"><i class="d" style="background:var(--ws-warn)"></i><b>4</b> 张等你定</a><span class="mid">·</span>
+        <a href="#work" data-jump="doing"><i class="d" style="background:var(--ws-brand)"></i><b>6</b> 件在办</a><span class="mid">·</span>
         <a href="#work" data-jump="today"><i class="d" style="background:var(--ws-info)"></i>今天 <b>1</b> 个待办</a>
       </p>
     </div>
@@ -41,28 +41,24 @@
       </div>
     </div>
 
-    <!-- ③ 要你处理 -->
+    <!-- ③ 要你处理 = 现有卡片流（DeckSection），钉在这个岗位上；唯一「要你决定」的地方 -->
     <section id="need">
-      <div class="sec-h"><h3>要你处理</h3><span class="c">3</span><div class="r"><a class="lnk" href="#">全部 3 张<svg class="ico s14"><use href="#i-go"/></svg></a></div></div>
-      <div class="need">
-        <article class="card nc">
-          <div class="l1"><span class="pill t-warn">等你批</span><span class="duty">{{DI_MK}}Reddit 营销</span><span class="t">今天 18:00</span></div>
-          <h4>回帖草稿：「近视能戴 INMO Air 3 吗？」</h4>
-          <p>r/SmartGlasses · 带了镜片夹片的说明，用品牌号发</p>
-          <div class="ft"><button class="btn sm pri" type="button">批准发出</button><button class="btn sm out" type="button">改一下</button><a class="go" href="#"><svg class="ico"><use href="#i-go"/></svg></a></div>
-        </article>
-        <article class="card nc">
-          <div class="l1"><span class="pill t-info">等你选</span><span class="duty">{{DI_MK}}Reddit 营销</span><span class="t">今天</span></div>
-          <h4>有人说 INMO「召回」，怎么处理？</h4>
-          <p>出处只有一条评论，没核实，Agent 不下结论</p>
-          <div class="ft"><button class="btn sm pri" type="button">交公关核实</button><button class="btn sm out" type="button">先观察</button><a class="go" href="#"><svg class="ico"><use href="#i-go"/></svg></a></div>
-        </article>
-        <article class="card nc">
-          <div class="l1"><span class="pill t-warn">等你批</span><span class="duty">{{DI_CM}}自家版</span><span class="t">10-08</span></div>
-          <h4>r/INMO 置顶公告：固件 2.1 续航说明</h4>
-          <p>回应 3 条续航抱怨，数字都查过事实卡</p>
-          <div class="ft"><button class="btn sm pri" type="button">批准发布</button><button class="btn sm out" type="button">改一下</button><a class="go" href="#"><svg class="ico"><use href="#i-go"/></svg></a></div>
-        </article>
+      <div class="sec-h"><h3>要你处理</h3><span class="c" id="deckCount">4 张</span><span class="hint" tabindex="0" data-hint="和首页同一副牌，只是钉在这个岗位上。批、选、改都只在这里。">?</span></div>
+      <div class="deck" id="deck" tabindex="0" aria-label="卡片流">
+        <div class="dfilt">
+          <div class="l"><span class="dchip">客户在等 0</span><span class="dchip">无人等待 0</span><span class="dsel">所有卡型<svg class="ico s12"><use href="#i-cd"/></svg></span><span class="dsel">所有来源<svg class="ico s12"><use href="#i-cd"/></svg></span></div>
+          <div class="dmodes"><b class="on">中文摘要</b><b>原文</b><b>English</b></div>
+        </div>
+        <p class="dreceipt" id="dreceipt" hidden></p>
+        <div class="dnav">
+          <button type="button" id="dprev"><svg class="ico s14"><use href="#i-cl"/></svg>上一张</button>
+          <p id="dprog">第 1 / 4 张</p>
+          <button type="button" id="dnext">下一张<svg class="ico s14"><use href="#i-cr"/></svg></button>
+          <button type="button" id="dlistBtn" style="margin-left:4px"><svg class="ico s14"><use href="#i-list"/></svg><span>全部列出</span></button>
+        </div>
+        <div class="dlist" id="dlist" hidden></div>
+        <div class="dstack" id="dstack"></div>
+        <p class="dkeys" id="dkeys"></p>
       </div>
     </section>
 
@@ -78,7 +74,7 @@
         </div>
         <span class="sep"></span>
         <div class="qv" id="qv">
-          <button type="button" data-view="community" data-tip="职责「自家版」的专属工具"><img src="{{REDDIT}}" alt="">自家版待处理<span class="n">7</span></button>
+          <button type="button" data-view="community" data-tip="职责「自家版」的专属工具"><img src="{{REDDIT}}" alt="">自家版待处理<span class="n">3</span></button>
           <button type="button" data-view="schedule" data-tip="职责「Reddit 营销」的专属工具"><svg class="ico s14"><use href="#i-calclock"/></svg>发帖排期</button>
         </div>
         <div class="r" id="tools">
@@ -93,9 +89,9 @@
       <div id="viewport"></div>
     </section>
 
-    <!-- ⑤ 数字：一条紧凑的带子，点开看图 -->
+    <!-- ⑤ 数据看板：一条紧凑的带子，点开看图 -->
     <section id="nums">
-      <div class="sec-h"><h3>数字</h3><span class="hint" tabindex="0" data-hint="数据来自 Agents 工坊接口（Reddit 取数已通），不用另连。">?</span>
+      <div class="sec-h"><h3>数据看板</h3><span class="hint" tabindex="0" data-hint="数据来自 Agents 工坊接口（Reddit 取数已通），不用另连。">?</span>
         <div class="r"><div class="tabs" style="height:28px"><a style="font-size:12.5px;padding:0 9px">昨天</a><a class="on" style="font-size:12.5px;padding:0 9px">近 7 天</a></div>
         <button class="btn sm ghost" type="button" id="chartsBtn"><svg class="ico s14"><use href="#i-chart"/></svg>看图表</button></div>
       </div>
