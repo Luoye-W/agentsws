@@ -130,12 +130,68 @@ describe('职责页（WP71 / 36 §10）', () => {
     }
   })
 
-  it('概览列的是能看什么 / 能做什么 / 挂着的技能', async () => {
+  it('WP238：能看什么 / 能做什么 / 技能 / 连接收在默认折叠的「高级」里，翻成人话', async () => {
     renderWithProviders(<DutyPage />, '/positions/asg_store/duties/dtc.store', 'asg_store')
-    expect(await screen.findByTestId('duty-scope')).toBeDefined()
-    expect(screen.getByTestId('duty-action').textContent).toContain('price_change')
-    expect(screen.getByTestId('duty-skill').textContent).toContain('customer-care')
-    expect(screen.getByTestId('duty-connectors').textContent).toContain('shopify_admin')
+    const toggle = await screen.findByTestId('duty-advanced-toggle')
+    // 默认收着：一行权限声明都不在页面上
+    expect(toggle.getAttribute('aria-expanded')).toBe('false')
+    expect(screen.queryByTestId('duty-scope')).toBeNull()
+    fireEvent.click(toggle)
+    const scope = await screen.findByTestId('duty-scope')
+    // 认不出的数据域退回原名，ops 翻成人话
+    expect(scope.textContent).toContain('看store · 可提议改动')
+    // 动作：没有译文的拼「对象」；没写自动化档位 = 要人批
+    expect(screen.getByTestId('duty-action').textContent).toContain('商品 · 要人批')
+    expect(screen.getByTestId('duty-skill').textContent).toContain('技能：')
+    expect(screen.getByTestId('duty-skill').textContent).toContain('（常驻）')
+    expect(screen.getByTestId('duty-connector').textContent).toContain('（必需）')
+    // 原始声明只在 tooltip（data-raw / data-hint）里
+    expect(scope.getAttribute('data-raw')).toBe('store · read / stage · assigned · internal')
+    expect(screen.getByTestId('duty-action').getAttribute('data-raw')).toBe(
+      'price_change · price_change → product',
+    )
+  })
+
+  it('WP238：社群职责的权限翻成人话，内部 id 不上屏', async () => {
+    getRoleDefinition.mockResolvedValue({
+      ...ROLE,
+      scopes: [
+        {
+          domain: 'community_member',
+          ops: ['read', 'stage'],
+          range: 'assigned',
+          max_sensitivity: 'internal',
+        },
+      ],
+      actions: [
+        {
+          id: 'reply_thread',
+          kind: 'outbound_message',
+          target: 'community_thread',
+          route_to: 'role_holder',
+          review_cannot_be_disabled: false,
+          caps: [],
+        },
+      ],
+      automation: [
+        { action_id: 'reply_thread', ceiling: 'L3', initial: 'L2', hard_ceiling: false },
+      ],
+      skills: [{ name: 'brand-voice', tier: 'open', load: 'always' }],
+      connectors: [{ kind: 'reddit', required: false }],
+    })
+    renderWithProviders(<DutyPage />, '/positions/asg_store/duties/dtc.store', 'asg_store')
+    fireEvent.click(await screen.findByTestId('duty-advanced-toggle'))
+    const body = await screen.findByTestId('duty-advanced-body')
+    expect(screen.getByTestId('duty-scope').textContent).toContain('看社群成员 · 可提议改动')
+    expect(screen.getByTestId('duty-action').textContent).toContain('回帖子与私信 · 额度内自己做')
+    expect(screen.getByTestId('duty-skill').textContent).toContain('技能：品牌话术（常驻）')
+    expect(screen.getByTestId('duty-connector').textContent).toContain('Reddit API（可选）')
+    // 可见文字里没有 yml 的 id（sr-only 的 tooltip 副本除外）
+    const visible = [...body.querySelectorAll('li')]
+      .map((li) => li.firstElementChild?.firstChild?.textContent ?? '')
+      .join(' ')
+    for (const id of ['community_member', 'outbound_message', 'brand-voice', 'staged_change'])
+      expect(visible).not.toContain(id)
   })
 
   it('「用这条职责开一件事」走这条职责的分配，然后进事项页', async () => {

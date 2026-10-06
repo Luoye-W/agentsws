@@ -115,11 +115,20 @@ vi.mock('@/lib/api', async () => {
       position_id: 'pr',
       position_name: '公共关系',
       ready: false,
-      missing_required: ['email'],
+      // WP238：卡上只画必需且真缺的——「还没做」的那两条也得是必需的才上卡
+      missing_required: ['email', 'press_distribution', 'x_ads'],
       items: [
         item('email', { required: true, connect_service: 'imap_smtp' }),
-        item('press_distribution', { status: 'planned', note: { zh: PRESS_NOTE, en: PRESS_NOTE } }),
-        item('x_ads', { status: 'planned', note: { zh: X_ADS_NOTE, en: X_ADS_NOTE } }),
+        item('press_distribution', {
+          required: true,
+          status: 'planned',
+          note: { zh: PRESS_NOTE, en: PRESS_NOTE },
+        }),
+        item('x_ads', {
+          required: true,
+          status: 'planned',
+          note: { zh: X_ADS_NOTE, en: X_ADS_NOTE },
+        }),
       ],
     }),
     // 职责页

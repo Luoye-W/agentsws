@@ -81,7 +81,7 @@ const CHECKLIST: PositionConnectionsView = {
   position_id: 'customer-care',
   position_name: '客服',
   ready: false,
-  missing_required: ['email'],
+  missing_required: ['email', 'tracking'],
   items: [
     {
       kind: 'email',
@@ -95,11 +95,21 @@ const CHECKLIST: PositionConnectionsView = {
     {
       kind: 'tracking',
       name: { zh: '物流追踪', en: 'Shipment tracking' },
-      required: false,
+      required: true,
       connected: false,
       needed_by: ['网站售后客服'],
       status: 'planned',
       note: { zh: '还没接：只读轨迹那一块先空着。', en: 'Not wired yet.' },
+    },
+    {
+      // WP238：可选的一条——不进这张卡（只在连接页按职责列）
+      kind: 'reddit',
+      name: { zh: 'Reddit API', en: 'Reddit API' },
+      required: false,
+      connected: false,
+      needed_by: ['Reddit 运营'],
+      status: 'available',
+      connect_service: 'reddit',
     },
   ],
 }
@@ -198,6 +208,24 @@ describe('岗位页那张「连上这 N 个就能开工」的卡', () => {
     expect(within(email).getByTestId('position-connection-go').getAttribute('href')).toBe(
       '/connections?service=imap_smtp',
     )
+  })
+
+  it('WP238：可选的一律不进卡，也不再标「必需 / 可选」', async () => {
+    renderWithProviders(<PositionConnections id="customer-care" />)
+    await screen.findByTestId('position-connections')
+    expect(screen.queryByText(/Reddit API/)).toBeNull()
+    expect(screen.queryByText('可选')).toBeNull()
+    expect(screen.queryByText('必需')).toBeNull()
+  })
+
+  it('WP238：只剩可选项（或服务端说已由接口中台满足）→ 整张卡不出现', async () => {
+    const reddit = CHECKLIST.items[2] as PositionConnectionsView['items'][number]
+    state.checklist = { ...CHECKLIST, ready: true, missing_required: [], items: [reddit] }
+    const { container } = renderWithProviders(<PositionConnections id="customer-care" />)
+    await waitFor(() => {
+      expect(screen.queryByTestId('position-connections')).toBeNull()
+    })
+    expect(container.textContent).toBe('')
   })
 
   it('一条不缺时整张卡不出现（不是出一张"都连好了"）', async () => {

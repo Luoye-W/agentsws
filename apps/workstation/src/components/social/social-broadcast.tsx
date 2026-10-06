@@ -19,8 +19,10 @@
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { Megaphone, ShieldAlert } from 'lucide-react'
 import { useState } from 'react'
+import { connectPathForChannel } from '@/components/connections/links'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { EmptyLine } from '@/components/ui/empty-line'
 import { SafetyNote } from '@/components/ui/hint'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -73,6 +75,24 @@ export function SocialBroadcast({
     onSuccess: setResult,
   })
 
+  /*
+   * 36 §3：没有群就说没有群，不画一个点不动的向导。
+   * WP238（36 §7）：一行灰字 + 一个去处按钮，不再占一张带标题的大卡。
+   */
+  if (accounts.isSuccess && account_id === undefined)
+    return (
+      <EmptyLine
+        icon={<Megaphone className="size-4" aria-hidden />}
+        text={t('social.broadcast.no_account')}
+        action={{
+          label: t('social.empty.connect'),
+          to: connectPathForChannel(channel),
+          testId: 'social-broadcast-connect',
+        }}
+        testId="social-broadcast-no-account"
+      />
+    )
+
   return (
     <Card data-testid="social-broadcast">
       <CardHeader>
@@ -82,12 +102,7 @@ export function SocialBroadcast({
         </CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-3 text-sm">
-        {account_id === undefined ? (
-          // 36 §3：没有群就说没有群，不画一个点不动的向导
-          <p className="text-xs text-muted-foreground" data-testid="social-broadcast-no-account">
-            {t('social.broadcast.no_account')}
-          </p>
-        ) : (
+        {account_id === undefined ? null : (
           <>
             <div className="flex flex-col gap-1">
               <span className="text-xs text-muted-foreground">

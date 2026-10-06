@@ -23,8 +23,10 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { CalendarDays, ChevronLeft, ChevronRight } from 'lucide-react'
 import { useState } from 'react'
 import { UnifiedCalendar } from '@/components/calendar/unified-calendar'
+import { connectPathForChannel } from '@/components/connections/links'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { EmptyLine } from '@/components/ui/empty-line'
 import { SafetyNote } from '@/components/ui/hint'
 import { Textarea } from '@/components/ui/textarea'
 import { createSocialPost, getSocialAccounts, type SocialChannelId } from '@/lib/api'
@@ -99,6 +101,24 @@ export function SocialCalendar({
     },
   })
 
+  /*
+   * 36 §3：没有号就说没有号，不画一张空日历让人以为是自己没排。
+   * WP238（36 §7）：而且不再占一张大卡——一行灰字 + 一个去处按钮。
+   */
+  if (accounts.isSuccess && accountRows.length === 0)
+    return (
+      <EmptyLine
+        icon={<CalendarDays className="size-4" aria-hidden />}
+        text={t('social.calendar.no_account')}
+        action={{
+          label: t('social.empty.connect'),
+          to: connectPathForChannel(channel),
+          testId: 'social-calendar-connect',
+        }}
+        testId="social-calendar-no-account"
+      />
+    )
+
   return (
     <Card data-testid="social-calendar">
       <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
@@ -151,13 +171,6 @@ export function SocialCalendar({
                 },
               })}
         />
-
-        {accountRows.length === 0 ? (
-          // 36 §3：没有号就说没有号，不画一张空日历让人以为是自己没排
-          <p className="text-xs text-muted-foreground" data-testid="social-calendar-no-account">
-            {t('social.calendar.no_account')}
-          </p>
-        ) : null}
 
         {composing === undefined ? null : (
           <div className="flex flex-col gap-2 rounded border p-2" data-testid="social-compose">
