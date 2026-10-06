@@ -1,7 +1,7 @@
 /**
  * WP69（54）岗位面：**岗位是任务主入口**。
  *
- * 三条路由，三件事：
+ * 三条路由，三件事（WP241 加第四条 `GET /v1/positions/:id/work`，见下）：
  * - `GET /v1/positions/:id`：岗位实体（54 §1）——补齐 `/v1/positions` 列表的形状。
  * - `POST /v1/positions/:id/matters`：交给这个岗位一件事（54 §2 主入口）。
  * - `POST /v1/matters/:id/reroute`：手动换职责。
@@ -18,7 +18,13 @@
  * - **但路由挑出来的那条职责才是起 Run 用的那一条**——服务端替用户选，选的只能是
  *   他自己名下的（端口里判），所以岗位入口既不并集也不扩权。
  */
-import type { MaybePromise, PersonId, PositionInstance, WorkspaceId } from '@agentsws/contracts'
+import type {
+  MaybePromise,
+  PersonId,
+  PositionInstance,
+  PositionWorkView,
+  WorkspaceId,
+} from '@agentsws/contracts'
 import { z } from 'zod'
 import { ApiError } from '../errors.js'
 import { assignmentOf, body, ok, param, principalOf } from '../helpers.js'
@@ -105,6 +111,11 @@ export interface PositionEntryPort {
     assignment_id: string
     run_id?: string
   }>
+  /**
+   * WP241（docs/54 §7）：岗位页「工作」——本岗位的事项 + 本人的待办 + 定时 + 排期合成一份。
+   * `id` 两种都收（同 `instance`）。可选：没装就是 `not_implemented`，老装配照旧。
+   */
+  work?(actor: PositionActor, id: string): MaybePromise<PositionWorkView>
 }
 
 function portOf(deps: GatewayDeps): PositionEntryPort {
@@ -147,6 +158,34 @@ export function positionEntryRoutes(): Route[] {
         returns: 'PositionInstance',
       },
       async (c, deps) => ok(c, await portOf(deps).instance(actorOf(c), param(c, 'id'))),
+    ),
+    route(
+      {
+        method: 'get',
+        path: '/v1/positions/:id/work',
+        operationId: 'getPositionWork',
+        summary:
+          '岗位页「工作」（WP241）：本岗位的事项 + 本人的待办 + 定时 + 排期合成一份；每项带所属职责、分组（进行中 / 排着的 / 等别人 / 已完成）、截止或下次时间、最近一句进展、等你的卡',
+        tag: 'workstation',
+        auth: 'bearer',
+        assignment: true,
+        authz: READ,
+        params: [
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            description: '岗位模板 id；给本人持有的 assignment_id 也认',
+          },
+        ],
+        returns: 'PositionWorkView',
+      },
+      async (c, deps) => {
+        const port = portOf(deps)
+        if (port.work === undefined)
+          throw new ApiError('not_implemented', '这个服务进程的岗位面没有装「工作」视图')
+        return ok(c, await port.work(actorOf(c), param(c, 'id')))
+      },
     ),
     route(
       {

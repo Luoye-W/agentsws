@@ -114,7 +114,7 @@ export interface PositionWorkView {
     done: number
     /** 挂在工作项上、等你定的卡（去重后的张数） */
     cards: number
-    /** 今天到期 / 排在今天、还没做完的待办 */
+    /** 今天到期（含已过期）、还没做完的待办 */
     todos_today: number
   }
   /** 本人在这个岗位里做的那几条职责（筛选「职责」的选项、加待办时挂哪条） */

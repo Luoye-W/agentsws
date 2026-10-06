@@ -3769,6 +3769,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
             stopped += 1
         return stopped
       },
+      // WP241（docs/54 §7）：岗位页「工作」里的定时与排期（这个品牌自己那一份）
+      schedules: (person_id) => schedule.scheduler.list({ workspace_id: ws, owner: person_id }),
+      socialPosts: () => social.posts(),
     })
     positionAssemblies.set(ws, positionsAssembly)
     // 六层技能里的 `position` 那一层、以及岗位层上下文那三样，都从这里来
@@ -6962,6 +6965,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     }
     const port: PositionEntryPort = {
       instance: (actor, id) => assembly.instance(resolveId(actor, id), actor.person_id),
+      // WP241（docs/54 §7）：岗位页「工作」
+      work: (actor, id) => assembly.work(resolveId(actor, id), actor.person_id),
       mine: (actor) => assembly.mine(actor.person_id),
       open: async (actor, id, input) => {
         const out = await assembly.open({
