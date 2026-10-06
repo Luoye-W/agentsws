@@ -20,6 +20,8 @@ export {
 } from './images.js'
 export type { BudgetCtx, BudgetScopeState, CapSpec, Reservation } from './ledger.js'
 export { BudgetLedger } from './ledger.js'
+// WP242：网络层失败的真原因（cause.code）
+export { describeFetchError, isTransientNetError, type NetCause, netCauseOf } from './net-cause.js'
 export { staticPrefixHash, staticPrefixLength, truncateToHour } from './prefix.js'
 export type {
   CatalogHit,

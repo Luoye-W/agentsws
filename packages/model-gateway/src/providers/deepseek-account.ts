@@ -45,6 +45,7 @@ import type {
   ReasoningReplay,
   ToolDef,
 } from '@agentsws/contracts'
+import { describeFetchError } from '../net-cause.js'
 import { GatewayError, ProviderError } from '../types.js'
 import {
   DEFAULT_FILES_API_TIMEOUT_MS,
@@ -458,10 +459,9 @@ export function deepseekMessagesProvider(options: DeepSeekMessagesProviderOption
       })
     } catch (e) {
       const name = e instanceof Error ? e.name : ''
-      throw new ProviderError(
-        `request to ${url} failed: ${e instanceof Error ? e.message : String(e)}`,
-        { timeout: name === 'TimeoutError' || name === 'AbortError' },
-      )
+      throw new ProviderError(`request to ${url} failed: ${describeFetchError(e)}`, {
+        timeout: name === 'TimeoutError' || name === 'AbortError',
+      })
     }
   }
 
