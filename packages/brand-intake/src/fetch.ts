@@ -209,7 +209,7 @@ export async function unlockShopifyStorefront(
     const raw =
       typeof res.headers.getSetCookie === 'function'
         ? res.headers.getSetCookie()
-        : (res.headers.get('set-cookie') ?? '').split(/,(?=\s*[A-Za-z0-9_\-]+=)/)
+        : (res.headers.get('set-cookie') ?? '').split(/,(?=\s*[A-Za-z0-9_-]+=)/)
     const pairs = raw
       .map((line) => line.split(';')[0]?.trim() ?? '')
       .filter((pair) => /^[^=\s]+=/.test(pair))

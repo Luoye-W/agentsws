@@ -199,7 +199,7 @@ export function BusinessStep({
     return () => {
       clearTimeout(timer)
     }
-  }, [running, readPages, currentId])
+  }, [running, readPages])
   const skip = (): void => {
     setSkipped(true)
     onSettled(undefined)
