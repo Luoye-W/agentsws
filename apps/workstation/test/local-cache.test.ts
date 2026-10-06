@@ -51,6 +51,11 @@ const ALLOWED_KEYS = [
 ]
 /** 未发送的草稿走这个前缀（40 §1.2 明确允许的那一类）。 */
 const DRAFT_PREFIX = 'agentsws.draft.'
+/**
+ * WP241（docs/54 §7.5）：岗位页「工作」在这个岗位上的视图 / 筛选 / 分组 / 排序 / 列——**纯界面偏好**，
+ * 同日历那两个键；键 = 前缀 + 岗位模板 id。值里没有任何一条工作项的内容。
+ */
+const POSITION_WORK_PREFIX = 'agentsws.position_work.'
 
 function sourceFiles(dir: string): string[] {
   const out: string[] = []
@@ -62,7 +67,8 @@ function sourceFiles(dir: string): string[] {
   return out
 }
 
-const allowed = (key: string): boolean => ALLOWED_KEYS.includes(key) || key.startsWith(DRAFT_PREFIX)
+const allowed = (key: string): boolean =>
+  ALLOWED_KEYS.includes(key) || key.startsWith(DRAFT_PREFIX) || key.startsWith(POSITION_WORK_PREFIX)
 
 describe('40 §1.2 第一条规则：个人电脑上不存真源', () => {
   const files = sourceFiles(SRC)

@@ -100,7 +100,8 @@ async function makeOldWorkspace(token) {
   const members = await api(token, owner, 'GET', `/v1/workspaces/${me.workspace.id}/members`)
   for (const m of members) {
     const support = m.assignments.find((a) => a.role_id === 'dtc.support')
-    if (m.person_id !== me.person.id && support !== undefined) keep.add(`${m.person_id}/dtc.support`)
+    if (m.person_id !== me.person.id && support !== undefined)
+      keep.add(`${m.person_id}/dtc.support`)
     for (const a of m.assignments) {
       if (a.role_id.startsWith('common.') || keep.has(`${m.person_id}/${a.role_id}`)) continue
       await api(token, owner, 'DELETE', `/v1/assignments/${a.assignment_id}`)
@@ -125,23 +126,6 @@ async function main() {
   try {
     await waitForDemo(log)
     const token = await login()
-    await makeOldWorkspace(token)
-    let me = await api(token, undefined, 'GET', '/v1/me')
-    const owner = me.assignments.find((a) => a.role_id === 'common.owner').id
-    const merged = await api(token, owner, 'POST', '/v1/org/positions/pr/merge', {
-      into: 'social-media',
-    })
-    const positionId = merged.created
-    console.log(`  合并成岗位：${positionId}`)
-    await api(token, owner, 'POST', '/v1/cloud/account/link', { email: OWNER })
-    await new Promise((r) => setTimeout(r, 2500))
-    me = await api(token, undefined, 'GET', '/v1/me')
-    const pr = me.assignments.find((a) => a.role_id === 'pr.reddit').id
-    const social = me.assignments.find((a) => a.role_id === 'social.reddit').id
-    for (const a of [pr, social])
-      await api(token, owner, 'PUT', `/v1/assignments/${a}`, {
-        ranges: [{ kind: 'brand', id: me.workspace.id }],
-      })
 
     browser = await chromium.launch({ headless: true })
     const contextOf = async (width, dark) => {
@@ -175,6 +159,47 @@ async function main() {
       await page.waitForTimeout(1500)
     }
 
+    // ── 演示世界原样里卡最多的那个岗位：看卡片流 + 工作里「N 张卡等你」怎么接（Reddit 运营在演示里没有卡） ──
+    {
+      const me0 = await api(token, undefined, 'GET', '/v1/me')
+      const owner0 = me0.assignments.find((a) => a.role_id === 'common.owner').id
+      const listed = await api(token, owner0, 'GET', '/v1/positions')
+      const busiest = [...(listed.instances ?? [])].sort(
+        (a, b) => b.pending_cards - a.pending_cards,
+      )[0]
+      const asg = busiest?.roles.find((r) => r.my_assignment_id !== undefined)?.my_assignment_id
+      if (asg !== undefined) {
+        const { context, page } = await contextOf(1440, false)
+        await open(page, `/positions/${asg}`)
+        await shot(page, 'demo-cards-1440-light')
+        const badge = page.locator('[data-testid="work-cards-badge"]').first()
+        if ((await badge.count()) > 0) {
+          await badge.click()
+          await page.waitForTimeout(800)
+          await shot(page, 'demo-jump-to-card', false)
+        }
+        await context.close()
+      }
+    }
+
+    await makeOldWorkspace(token)
+    let me = await api(token, undefined, 'GET', '/v1/me')
+    const owner = me.assignments.find((a) => a.role_id === 'common.owner').id
+    const merged = await api(token, owner, 'POST', '/v1/org/positions/pr/merge', {
+      into: 'social-media',
+    })
+    const positionId = merged.created
+    console.log(`  合并成岗位：${positionId}`)
+    await api(token, owner, 'POST', '/v1/cloud/account/link', { email: OWNER })
+    await new Promise((r) => setTimeout(r, 2500))
+    me = await api(token, undefined, 'GET', '/v1/me')
+    const pr = me.assignments.find((a) => a.role_id === 'pr.reddit').id
+    const social = me.assignments.find((a) => a.role_id === 'social.reddit').id
+    for (const a of [pr, social])
+      await api(token, owner, 'PUT', `/v1/assignments/${a}`, {
+        ranges: [{ kind: 'brand', id: me.workspace.id }],
+      })
+
     // ── 空岗位：先拍（这时候还没往里放任何事）。临时建一个只装「自家版运营」的岗位不现实（会把
     //    social.reddit 挪走），所以直接拍 Reddit 运营这一刻——演示世界里它下面还什么都没有。
     {
@@ -203,9 +228,9 @@ async function main() {
       )
     const closeMe = opened.at(-1)?.matter.id
     if (closeMe !== undefined)
-      await api(token, social, 'POST', `/v1/matters/${closeMe}/close`, { unfinished: 'keep' }).catch(
-        () => undefined,
-      )
+      await api(token, social, 'POST', `/v1/matters/${closeMe}/close`, {
+        unfinished: 'keep',
+      }).catch(() => undefined)
     const todo = async (assignment, title, due) =>
       (
         await api(token, assignment, 'POST', '/v1/todos', {
@@ -251,6 +276,12 @@ async function main() {
           await shot(page, `list-view-${v}`)
         }
         await page.click('[data-testid="work-view-list"]')
+        await page.locator('[data-testid="work-section"]').scrollIntoViewIfNeeded()
+        await page.evaluate(() =>
+          document
+            .querySelector('[data-testid="work-section"]')
+            ?.scrollIntoView({ block: 'start' }),
+        )
         await page.click('[data-testid="work-filter"]')
         await shot(page, 'list-filter-open', false)
         await page.keyboard.press('Escape')

@@ -469,7 +469,7 @@ describe('空岗位', () => {
 describe('lib/position-work', () => {
   it('偏好：没存过 / 坏数据 / 存储不让用 → 默认列表（#74）', () => {
     expect(loadWorkPrefs('p_none')).toEqual(DEFAULT_PREFS)
-    globalThis.localStorage.setItem('agentsws.position-work.p_bad', '{oops')
+    globalThis.localStorage.setItem('agentsws.position_work.p_bad', '{oops')
     expect(loadWorkPrefs('p_bad').view).toBe('list')
     saveWorkPrefs('p_ok', { ...DEFAULT_PREFS, view: 'table', columns: ['due'] })
     expect(loadWorkPrefs('p_ok')).toMatchObject({ view: 'table', columns: ['due'] })

@@ -13,6 +13,7 @@ import {
 } from '@agentsws/contracts'
 import { channelOfRole } from '@/components/kol/kol-panel'
 import { socialChannelOfRole } from '@/components/social/social-calendar'
+import { POSITION_WORK_KEY_PREFIX, readString, writeString } from '@/lib/ui-state'
 
 export type BaseView = 'list' | 'board' | 'calendar' | 'table'
 export const BASE_VIEWS: readonly BaseView[] = ['list', 'board', 'calendar', 'table']
@@ -66,7 +67,7 @@ export const DEFAULT_PREFS: WorkPrefs = {
   calendar: 'month',
 }
 
-const PREFS_KEY = (position_id: string): string => `agentsws.position-work.${position_id}`
+const PREFS_KEY = (position_id: string): string => `${POSITION_WORK_KEY_PREFIX}${position_id}`
 
 const oneOf = <T extends string>(all: readonly T[], v: unknown, fallback: T): T =>
   typeof v === 'string' && (all as readonly string[]).includes(v) ? (v as T) : fallback
@@ -79,11 +80,11 @@ const listOf = <T extends string>(all: readonly T[] | undefined, v: unknown): T[
       ) as T[])
     : []
 
-/** 读这个岗位记住的看法；读不到（隐私模式、坏数据、没存过）就是默认列表。 */
+/** 读这个岗位记住的看法（本机存储只经 `ui-state.ts`）；读不到（隐私模式、坏数据、没存过）就是默认列表。 */
 export function loadWorkPrefs(position_id: string): WorkPrefs {
   try {
-    const raw = globalThis.localStorage?.getItem(PREFS_KEY(position_id))
-    if (raw === null || raw === undefined) return { ...DEFAULT_PREFS }
+    const raw = readString(PREFS_KEY(position_id))
+    if (raw === null) return { ...DEFAULT_PREFS }
     const v = JSON.parse(raw) as Record<string, unknown>
     const f = (v.filters ?? {}) as Record<string, unknown>
     const columns = listOf(ALL_COLUMNS, v.columns)
@@ -109,11 +110,8 @@ export function loadWorkPrefs(position_id: string): WorkPrefs {
 }
 
 export function saveWorkPrefs(position_id: string, prefs: WorkPrefs): void {
-  try {
-    globalThis.localStorage?.setItem(PREFS_KEY(position_id), JSON.stringify(prefs))
-  } catch {
-    // 存不下（隐私模式 / 满了）就只在这一次打开里有效，不影响看
-  }
+  // 存不下（隐私模式 / 满了）由 `writeString` 吞掉：只在这一次打开里有效，不影响看
+  writeString(PREFS_KEY(position_id), JSON.stringify(prefs))
 }
 
 export function activeFilterCount(f: WorkFilters): number {
