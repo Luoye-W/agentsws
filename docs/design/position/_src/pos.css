@@ -1,0 +1,21 @@
+/* 岗位页三张稿共用：页头 · 横幅 · 页签 */
+.page{max-width:1120px;margin:0 auto;display:flex;flex-direction:column;gap:18px}
+.ph{display:flex;align-items:center;gap:14px}
+.pic{width:44px;height:44px;border-radius:12px;display:grid;place-items:center;background:var(--ws-tint);color:var(--ws-ink);--ia:var(--ws-brand);flex:none}
+.pic .gl{width:24px;height:24px}
+.ph h1{font-family:var(--display);font-weight:600;letter-spacing:-.02em;font-size:26px;line-height:1.15}
+.ph .stat{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px;margin-top:3px;font-size:13.5px;color:var(--ws-body)}
+.ph .stat a{display:inline-flex;align-items:center;gap:5px;border-radius:6px;padding:0 2px}
+.ph .stat a:hover{color:var(--ws-ink);text-decoration:underline dotted;text-underline-offset:3px}
+.ph .stat a b{font-weight:600;color:var(--ws-ink)}
+.ph .stat .d{width:6px;height:6px;border-radius:50%;display:inline-block}
+.ph .stat .mid{color:var(--ws-muted-fg)}
+.ph .r{margin-left:auto;display:flex;align-items:center;gap:8px}
+.holders{display:flex;align-items:center}
+.holders .av{box-shadow:0 0 0 2px var(--ws-paper)}
+.holders .av+.av{margin-left:-6px}
+.banner{display:flex;align-items:center;gap:10px;min-height:36px;padding:6px 8px 6px 12px;border-radius:10px;background:var(--ws-warn-bg);color:var(--ws-warn);font-size:13px}
+.banner span{color:var(--ws-ink)}
+html.dark .banner span{color:var(--ws-body)}
+.banner .btn{margin-left:auto;background:var(--ws-card);color:var(--ws-ink)}
+.ptabs{display:flex;align-items:center;gap:12px;margin-top:-4px}
