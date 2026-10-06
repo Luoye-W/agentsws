@@ -146,6 +146,16 @@ describe('WP238 面板：没连但有路取数的源带 via', () => {
     expect(reddit?.via).toBe('workshop')
   })
 
+  it('底表里压根没列这个源（demo 那份写死的表）：照样补上一条没连、带 via 的', () => {
+    const out = withReadVia([{ id: 'shop', label: '店铺后台', connected: true }], {
+      social_reddit: 'workshop',
+    })
+    expect(out.find((s) => s.id === 'social_reddit')).toMatchObject({
+      connected: false,
+      via: 'workshop',
+    })
+  })
+
   it('已经连上的源不加 via；路由不通也不加', () => {
     const on = withReadVia([{ id: 'social_reddit', label: 'Reddit', connected: true }], {
       social_reddit: 'workshop',

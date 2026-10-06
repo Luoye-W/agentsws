@@ -268,10 +268,18 @@ export function withReadVia(
   base: readonly DataSourceStatus[],
   via: Partial<Record<DataSourceId, 'workshop' | 'browser_readonly'>>,
 ): DataSourceStatus[] {
-  return base.map((s) => {
+  const out = base.map((s) => {
     const level = via[s.id]
     return level === undefined || s.connected ? s : { ...s, via: level }
   })
+  // 底表里压根没列这个源（demo / 测试那两份写死的表）= 没连：照样补上，带 via
+  const have = new Set(base.map((s) => s.id))
+  for (const [id, level] of Object.entries(via) as [
+    DataSourceId,
+    'workshop' | 'browser_readonly',
+  ][])
+    if (!have.has(id)) out.push({ id, label: SOURCE_LABELS[id], connected: false, via: level })
+  return out
 }
 
 /**
