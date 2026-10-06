@@ -20,6 +20,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
 import { BrandMark } from '@/components/design'
 import { BrandProfileCard } from '@/components/onboarding/brand-profile-card'
+import { ManualProfileForm } from '@/components/onboarding/manual-profile-form'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -29,6 +30,8 @@ import {
   confirmBrandIntake,
   getBrandIntake,
   latestBrandIntake,
+  type ManualBrandProfile,
+  manualBrandIntake,
   reanalyzeBrandIntake,
   startBrandIntake,
 } from '@/lib/api'
@@ -81,6 +84,8 @@ export interface BusinessStepProps {
    * WP240：公司加的品牌——公司全称与你的称呼是公司那一层的，已经有了，这一步不再问。
    */
   addedBrand?: boolean
+  /** WP242：这个品牌现在叫什么（就地手填那一格预填它）。 */
+  brandName?: string
   onRename: (name: string) => void
   onCompanyName: (name: string) => void
   companyName: string
@@ -98,6 +103,7 @@ export function BusinessStep({
   person,
   cloudEmail,
   addedBrand = false,
+  brandName,
   onRename,
   onCompanyName,
   companyName,
@@ -118,6 +124,8 @@ export function BusinessStep({
   const [storePassword, setStorePassword] = useState('')
   /** WP240：跑了 30 秒还一页没读着。 */
   const [slow, setSlow] = useState(false)
+  /** WP242：就地手填那张小表开着没有（读不到网站 / 不想等时）。 */
+  const [manualOpen, setManualOpen] = useState(false)
 
   /** 回到这一步时先问一次"最近那一次是什么"——现场就是这么恢复的。 */
   const latest = useQuery({
@@ -186,7 +194,26 @@ export function BusinessStep({
     onError: say,
   })
 
-  const busy = start.isPending || again.isPending || confirm.isPending || isRunning(current)
+  /** WP242：就地手填——存下去就是一条已确认的 run，档案卡直接显示「已确认」。 */
+  const manual = useMutation({
+    mutationFn: (edits: ManualBrandProfile) => manualBrandIntake(edits, assignment),
+    onSuccess: (done) => {
+      setFailure(undefined)
+      setManualOpen(false)
+      setSkipped(false)
+      client.setQueryData(['brand-intake', 'run', done.id, assignment], done)
+      setRunId(done.id)
+      onSettled(done)
+    },
+    onError: say,
+  })
+
+  const busy =
+    start.isPending ||
+    again.isPending ||
+    confirm.isPending ||
+    manual.isPending ||
+    isRunning(current)
   const running = isRunning(current)
   const readPages = current?.pages.length ?? 0
   // WP240：跑着、一页没读着——30 秒后把「先跳过」摆出来；读着了 / 停了就收起
@@ -200,8 +227,10 @@ export function BusinessStep({
       clearTimeout(timer)
     }
   }, [running, readPages])
+  /** 「先跳过，手动填品牌资料」：放行向导，并把就地手填那张小表摆出来（WP242：不再只说「之后去设置里填」）。 */
   const skip = (): void => {
     setSkipped(true)
+    setManualOpen(true)
     onSettled(undefined)
   }
   const analyzedLegal = current?.profile.legal_name?.value
@@ -236,7 +265,9 @@ export function BusinessStep({
                 start.mutate()
               }}
             >
-              {t('onboarding.business.start')}
+              {current?.status === 'failed'
+                ? t('onboarding.business.reread')
+                : t('onboarding.business.start')}
             </Button>
           </div>
           <Input
@@ -354,11 +385,36 @@ export function BusinessStep({
           </div>
           {/* WP240：30 秒还一页没读着——别让人干等，给一条「先跳过」 */}
           {slow ? (
-            <div className="flex flex-wrap items-center gap-2" data-testid="intake-slow">
-              <span className="text-xs text-ws-muted-fg">{t('onboarding.business.slow')}</span>
-              <Button size="sm" variant="ghost" data-testid="intake-slow-skip" onClick={skip}>
-                {t('onboarding.business.skip')}
-              </Button>
+            <div className="flex flex-col gap-2" data-testid="intake-slow">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs text-ws-muted-fg">{t('onboarding.business.slow')}</span>
+                <Button size="sm" variant="ghost" data-testid="intake-slow-skip" onClick={skip}>
+                  {t('onboarding.business.skip')}
+                </Button>
+              </div>
+              {/* WP242：卡在 0 页时也能换个网址再读（起一轮新的，不等这一轮） */}
+              <div className="flex items-center gap-2">
+                <Input
+                  data-testid="intake-other-url"
+                  aria-label={t('onboarding.business.reread')}
+                  placeholder={t('onboarding.business.url.placeholder')}
+                  value={url}
+                  onChange={(e) => {
+                    setUrl(e.target.value)
+                  }}
+                />
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={start.isPending || url.trim() === ''}
+                  data-testid="intake-other-start"
+                  onClick={() => {
+                    start.mutate()
+                  }}
+                >
+                  {t('onboarding.business.reread')}
+                </Button>
+              </div>
             </div>
           ) : null}
         </div>
@@ -404,13 +460,17 @@ export function BusinessStep({
 
       {/* ── 顺带确认：公司名与你的称呼 ───────────────────────────── */}
       {/* WP240：加的品牌不出——公司全称与称呼是公司那一层的，已经有了 */}
-      {addedBrand ? (
-        skipped ? (
-          <p className="text-xs text-ws-muted-fg" data-testid="intake-skipped-later">
-            {t('onboarding.business.later')}
-          </p>
-        ) : null
-      ) : current === undefined && !skipped ? null : (
+      {/* WP242：就地手填（读不到网站 / 先跳过时）——不再只说「之后在设置里填」 */}
+      {manualOpen ? (
+        <ManualProfileForm
+          {...(brandName === undefined ? {} : { brandName })}
+          busy={busy}
+          onSave={(edits) => {
+            manual.mutate(edits)
+          }}
+        />
+      ) : null}
+      {addedBrand ? null : current === undefined && !skipped ? null : (
         <div className="flex flex-col gap-2 border-t pt-3" data-testid="onboarding-person">
           <div className="flex flex-col gap-1">
             <Label htmlFor="company-name">{t('onboarding.company.legal_name')}</Label>

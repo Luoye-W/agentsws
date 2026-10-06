@@ -407,6 +407,7 @@ export function OnboardingPage(): React.ReactNode {
                 }}
                 {...(cloudEmail === undefined ? {} : { cloudEmail })}
                 addedBrand={addedBrand}
+                brandName={state.data.brand_name}
                 companyName={companyName}
                 companyEdited={companyDraft !== undefined}
                 onRename={setNameDraft}

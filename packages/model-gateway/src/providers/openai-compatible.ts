@@ -9,6 +9,7 @@ import type {
   ProviderTranscription,
   ToolDef,
 } from '@agentsws/contracts'
+import { describeFetchError, isTransientNetError } from '../net-cause.js'
 import { estimateInputTokens } from '../pricing.js'
 import { GatewayError, ProviderError } from '../types.js'
 import {
@@ -303,10 +304,17 @@ export function openaiCompatibleProvider(options: OpenAiCompatibleOptions): Mode
     // 值只在这个函数栈里活一次：取 → 进 header → 结束
     const key = options.apiKey === undefined ? env[options.apiKeyEnv ?? ''] : options.apiKey()
     if (key === undefined || key === '') {
-      throw new GatewayError('invalid_input', 'missing api key', {
-        // 报错里只有来源（环境变量名 / 本机加密库），永远没有值
-        source: options.apiKey === undefined ? (options.apiKeyEnv ?? 'unset') : 'local_vault',
-      })
+      throw new GatewayError(
+        'invalid_input',
+        // WP242：官方接口那一条缺的是关联账号时签的工作区令牌，不是用户填的 key——照实说
+        options.cloudErrors === true
+          ? 'missing cloud workspace token (this brand has no Agents Workshop link)'
+          : 'missing api key',
+        {
+          // 报错里只有来源（环境变量名 / 本机加密库），永远没有值
+          source: options.apiKey === undefined ? (options.apiKeyEnv ?? 'unset') : 'local_vault',
+        },
+      )
     }
     return {
       'content-type': 'application/json',
@@ -340,21 +348,32 @@ export function openaiCompatibleProvider(options: OpenAiCompatibleOptions): Mode
         : signals.length === 1
           ? signals[0]
           : AbortSignal.any(signals)
-    let res: Awaited<ReturnType<FetchLike>>
-    try {
-      res = await doFetch(url, {
+    const send = () =>
+      doFetch(url, {
         method: init.method,
         headers,
         ...(init.body === undefined ? {} : { body: init.body }),
         ...(signal === undefined ? {} : { signal }),
       })
+    let res: Awaited<ReturnType<FetchLike>>
+    try {
+      try {
+        res = await send()
+      } catch (first) {
+        /*
+         * WP242：连接被对面 / 本机代理掐了（`ECONNRESET`、陈旧的长连接 `UND_ERR_SOCKET`……）——
+         * 还没拿到回执，马上再发一次大概率就好。只重发一次；调用方停的、超时的不重发。
+         * multipart 的正文是一次性的流，不重发。
+         */
+        if (!isTransientNetError(first) || init.multipart === true || signal?.aborted === true)
+          throw first
+        res = await send()
+      }
     } catch (e) {
       const name = e instanceof Error ? e.name : ''
       const timeout = name === 'TimeoutError' || name === 'AbortError'
-      throw new ProviderError(
-        `request to ${url} failed: ${e instanceof Error ? e.message : String(e)}`,
-        { timeout },
-      )
+      // WP242：`fetch failed` 后面带上真原因（cause.code），不然 provider_down 里什么都看不出来
+      throw new ProviderError(`request to ${url} failed: ${describeFetchError(e)}`, { timeout })
     }
     if (!res.ok) {
       const detail = await res.text().catch(() => '')
