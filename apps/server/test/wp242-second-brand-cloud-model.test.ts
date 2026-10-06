@@ -25,12 +25,9 @@ import {
   type Server,
 } from '../src/index.js'
 import { SECRETS_KEY_ENV } from '../src/secret-store.js'
+import { ROLLOUT_TEXT } from './wp242-fixtures.js'
 
 vi.setConfig({ testTimeout: 30_000 })
-
-/** 一句 Rollout 的「你要做什么」（真机上那一类说法：独立站 + 社媒 + 红人 + 投放 + 客服）。 */
-export const ROLLOUT_TEXT =
-  'Rollout 是我们新做的户外品牌，Shopify 独立站刚建好要改主题；要做社媒，找红人和达人合作，跑广告投放，客服管售前售后。'
 
 interface Hit {
   path: string
@@ -306,7 +303,18 @@ describe('WP242 第二个品牌用云接口调模型', () => {
       text: ROLLOUT_TEXT,
     })
     expect(out.data?.source).toBe('keyword')
-    expect(out.data?.roles.length).toBeGreaterThan(0)
+    // 真目录上按词对（WP242 补的说法）：建站、社媒、红人、投放、客服都推上；没提 Amazon 不推 Amazon 客服
+    const got = out.data?.roles.map((r) => r.role_id) ?? []
+    expect(got).toEqual(
+      expect.arrayContaining([
+        'site.shopify-build',
+        'social.instagram',
+        'kol.youtube',
+        'ads.meta',
+        'dtc.support',
+      ]),
+    )
+    expect(got).not.toContain('amz.support')
     const down = server.kernel.eventLog
       .readSync({ workspace_id: rollout.workspace_id as never })
       .filter((e) => e.type === 'model.provider_down')

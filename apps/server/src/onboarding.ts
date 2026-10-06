@@ -1154,7 +1154,7 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
       const catalog = catalogOf().map((p) => ({
         id: p.id,
         name: p.name.zh,
-        roles: p.roles.map((r) => ({ id: r.role })),
+        roles: p.roles.map((r) => ({ id: r.role, default: r.default })),
       }))
       const list = catalogRoles(catalog, (id) => {
         const def = roles.roles.get(id)

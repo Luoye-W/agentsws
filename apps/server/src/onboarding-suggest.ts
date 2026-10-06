@@ -35,6 +35,8 @@ export interface SuggestCatalogRole {
   category_id: string
   category: string
   what_it_does: string
+  /** WP242：模板里默认勾不勾（按类别说法对词时只推默认的那几条；不给 = 当默认）。 */
+  default?: boolean
 }
 
 /** 模型 / 替身回来的那一份（还没校验）。 */
@@ -62,7 +64,9 @@ export const sha256 = (s: string): string => createHash('sha256').update(s).dige
 
 /** 把岗位模板摊成「目录里的一条条职责」（一条职责挂在几个类别里时归第一个）。 */
 export function catalogRoles(
-  catalog: readonly PositionCatalogEntry[],
+  catalog: readonly (Omit<PositionCatalogEntry, 'roles'> & {
+    roles: readonly { id: string; default?: boolean }[]
+  })[],
   describe: (
     role_id: string,
   ) => { name: string; name_en?: string; what_it_does: string } | undefined,
@@ -82,6 +86,7 @@ export function catalogRoles(
         category_id: cat.id,
         category: cat.name,
         what_it_does: d.what_it_does,
+        ...(r.default === undefined ? {} : { default: r.default }),
       })
     }
   }
@@ -158,14 +163,34 @@ export function modelSuggester(complete: (prompt: string) => Promise<string>): S
 /* ------------------------------------------------------------------ */
 
 /**
+ * WP242（Fable 10-06 真机）：常见说法 → 类别。AI 不在、退回按词对时，光认类别名不够——
+ * 「独立站」「红人」「投放」这些说法对不上「建站」「红人营销」「投放」之外的字面就一条都推不出。
+ * 说到这些词，推那个类别里**模板默认勾的**几条（Amazon 那几条只在提到 Amazon 时推）。
+ */
+export const KEYWORD_SYNONYMS: readonly { terms: readonly string[]; category_id: string }[] = [
+  { terms: ['独立站', 'Shopify', '建站', '主题'], category_id: 'site' },
+  { terms: ['社媒', '社交媒体'], category_id: 'social-media' },
+  { terms: ['红人', '达人', 'KOL', '网红'], category_id: 'kol-marketing' },
+  { terms: ['广告', '投放'], category_id: 'ads' },
+  { terms: ['客服', '售前', '售后'], category_id: 'customer-care' },
+  { terms: ['设计', '出图'], category_id: 'design' },
+]
+
+/** 这条职责是不是 Amazon 专属的（只在原话提到 Amazon / 亚马逊时才推）。 */
+const amazonOnly = (r: SuggestCatalogRole): boolean =>
+  /^amz\./.test(r.id) || /amazon/i.test(r.id) || /amazon|亚马逊/i.test(r.name)
+
+/**
  * **按词对**：按原话里出现的词对职责（职责名、渠道名、类别名）。AI 不在时的退路（真环境与演示同一套），
  * 回执上标 `keyword`。说到类别名（「客服」）推那个类别里的全部；说到渠道（「Reddit」）推那个渠道的
- * 每一条；说到职责名推那一条。
+ * 每一条；说到职责名推那一条。WP242：再按 {@link KEYWORD_SYNONYMS} 认常见说法；
+ * Amazon 专属的职责只在提到 Amazon 时推（说「客服」不推「Amazon 客服」）。
  */
 export const keywordSuggester: Suggester = {
   source: 'keyword',
   run: async ({ text, catalog }) => {
     const lower = text.toLowerCase()
+    const mentionsAmazon = /amazon|亚马逊/i.test(text)
     const hit = (term: string | undefined): string | undefined => {
       if (term === undefined || term.trim().length < 2) return undefined
       const at = lower.indexOf(term.toLowerCase())
@@ -188,8 +213,19 @@ export const keywordSuggester: Suggester = {
         push(r.id, `你说要做 ${byChannel}`, byChannel)
         continue
       }
+      if (amazonOnly(r) && !mentionsAmazon) continue
       const byCategory = hit(r.category)
       if (byCategory !== undefined) push(r.id, `你提到了「${byCategory}」，这条属于它`, byCategory)
+    }
+    // WP242：常见说法 → 类别（只推默认勾的那几条）
+    for (const group of KEYWORD_SYNONYMS) {
+      const term = group.terms.map((t) => hit(t)).find((t) => t !== undefined)
+      if (term === undefined) continue
+      for (const r of catalog) {
+        if (r.category_id !== group.category_id || r.default === false) continue
+        if (amazonOnly(r) && !mentionsAmazon) continue
+        push(r.id, `你提到了「${term}」，这条属于${r.category}`, term)
+      }
     }
     return { roles }
   },
