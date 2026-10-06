@@ -48,6 +48,13 @@ export const CALENDAR_VIEW_KEY = 'agentsws.calendar.view'
  */
 export const MOTION_PREF_KEY = 'agentsws.motion'
 
+/**
+ * WP241（docs/54 §7.5）：岗位页「工作」在**这个岗位**上停在哪个视图、怎么筛 / 分组 / 排序、表格开了哪几列。
+ * 与日历那两个键同一类——**纯界面偏好**，值里只有视图名、职责 id、状态名这些结构，没有一条工作项的内容；
+ * 丢了最坏的结果是下次打开回默认列表。键 = 前缀 + 岗位模板 id（id 本来就在地址栏里）。
+ */
+export const POSITION_WORK_KEY_PREFIX = 'agentsws.position_work.'
+
 export const RIGHT_RAIL_MIN_WIDTH = 320
 export const RIGHT_RAIL_MAX_WIDTH = 520
 export const RIGHT_RAIL_DEFAULT_WIDTH = 380

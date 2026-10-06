@@ -28,6 +28,7 @@ import type {
   PersonId,
   Position,
   PositionInstance,
+  PositionWorkView,
   RoleId,
   WorkspaceId,
 } from '@agentsws/contracts'
@@ -47,6 +48,12 @@ import {
 } from '@agentsws/roles'
 import type { Work } from '@agentsws/work'
 import { belongsTo, holdersByPlacement, WORKSPACE_BASE_ROLES } from './position-placements.js'
+import {
+  buildPositionWork,
+  clip,
+  type WorkPostLike,
+  type WorkScheduleLike,
+} from './position-work.js'
 
 /**
  * 工作区的底座职责。每个岗位模板都带着它（`org.ts` 的 `SEED_POSITIONS`），
@@ -99,6 +106,15 @@ export interface PositionsOptions {
    * 「换成 X」重跑之前先停，不让两次并行花钱。回停了几次；不给 = 这个进程没有运行时。
    */
   stopRuns?(matter_id: MatterId, reason: string): Promise<number>
+  /**
+   * WP241（docs/54 §7）：本人的定时任务（岗位页「工作」里的「定时」那一类）。
+   * 不给 = 这个进程没有调度器，工作里就少这一类。
+   */
+  schedules?(
+    person_id: PersonId,
+  ): Promise<readonly WorkScheduleLike[]> | readonly WorkScheduleLike[]
+  /** WP241：这个品牌的社媒帖子（「排期」那一类；按渠道 → 职责只留本岗位的）。 */
+  socialPosts?(): readonly WorkPostLike[]
 }
 
 export interface OpenAtPositionInput {
@@ -180,6 +196,11 @@ export interface PositionsAssembly {
   positionOf(role_id: RoleId, assignment_id?: AssignmentId): { position_id?: string; note?: string }
   /** 岗位层上下文的三样（54 §3）。 */
   layerContext(position_id: string, person_id: PersonId): Promise<PositionLayerContext | undefined>
+  /**
+   * WP241（docs/54 §7）：岗位页「工作」——事项 + 本人的待办 + 定时 + 排期合成一份，
+   * 每项带所属职责、分组、截止 / 下次、最近一句进展、等你的卡。
+   */
+  work(position_id: string, person_id: PersonId): Promise<PositionWorkView>
 }
 
 /** 54 §3 岗位层上下文：面板数字与告警摘要、进行中事项摘要、持有人可用时段。 */
@@ -958,7 +979,63 @@ export function createPositions(options: PositionsOptions): PositionsAssembly {
     return said.run_id === undefined ? { event: said.event } : said
   }
 
-  return { instance, mine, open, reroute, onChoiceDecided, sayAt, positionOf, layerContext }
+  /**
+   * WP241（docs/54 §7）：本岗位的工作项。归属规则与 `instance` 同一套——
+   * 事项按 `matterInPosition`（与页头「N 件在办」同口径），待办 / 定时只取**本人**挂在
+   * 这个岗位某条分配上的，卡只取本人队列里这个岗位职责上的真卡（与 `pending_cards` 同口径）。
+   */
+  const work_ = async (position_id: string, person_id: PersonId): Promise<PositionWorkView> => {
+    const template = templateOf(position_id)
+    const view = await instance(position_id, person_id)
+    const duties = view.roles.flatMap((r) =>
+      r.my_assignment_id === undefined || WORKSPACE_BASE_ROLES.has(r.role_id)
+        ? []
+        : [{ role_id: r.role_id, role_name: r.role_name, assignment_id: r.my_assignment_id }],
+    )
+    const mineIds = new Set(minePerRole(template, person_id).map((m) => m.assignment_id))
+    const allIds = new Set(view.roles.flatMap((r) => r.assignment_ids))
+    const dutyRoles = new Set(duties.map((d) => d.role_id))
+    const cards = (await cardsOf(person_id)).filter(
+      (i) => WAITING_STATES.has(i.state) && dutyRoles.has(i.role_id) && isDeckCard(i),
+    )
+    const schedules = (await options.schedules?.(person_id)) ?? []
+    return buildPositionWork({
+      position_id: template.id,
+      now: clock.now(),
+      today: work.todayRange(),
+      duties,
+      matters: work.listMatters({}).filter((m) => matterInPosition(m, position_id, allIds)),
+      todos: work
+        .listTodos({ owner: person_id })
+        .filter((t) => t.position_id !== undefined && mineIds.has(t.position_id)),
+      schedules: schedules.filter((s) => mineIds.has(s.assignment_id)),
+      posts: options.socialPosts?.() ?? [],
+      cards,
+      roleName,
+      roleOfAssignment: (id) => roles.assignments.get(id)?.role_id,
+      // 「到哪了」摘要优先；没有就拿时间线最后一句人话（运行、状态、Agent 的话）
+      progressOf: (m) =>
+        clip(m.context.summary) ??
+        clip(
+          work.store
+            .listMatterEvents(m.id, { limit: 6 })
+            .filter((e) => e.kind !== 'human_message' && e.text.trim() !== '')
+            .at(-1)?.text,
+        ),
+    })
+  }
+
+  return {
+    instance,
+    mine,
+    open,
+    reroute,
+    onChoiceDecided,
+    sayAt,
+    positionOf,
+    layerContext,
+    work: work_,
+  }
 }
 
 /**

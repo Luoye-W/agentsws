@@ -616,6 +616,32 @@ export const getPosition = (id: string): Promise<PositionInstanceData> =>
   api<PositionInstanceData>(`/v1/positions/${encodeURIComponent(id)}`, { assignment: id })
 
 /**
+ * WP241（docs/54 §7）：岗位页「工作」——本岗位的事项 + 本人的待办 + 定时 + 排期合成一份。
+ * `id` 同 `getPosition`：岗位模板 id 或本人持有的一条分配 id。
+ */
+export type PositionWorkData = import('@agentsws/contracts').PositionWorkView
+export type PositionWorkItemData = import('@agentsws/contracts').PositionWorkItem
+
+export const getPositionWork = (id: string): Promise<PositionWorkData> =>
+  api<PositionWorkData>(`/v1/positions/${encodeURIComponent(id)}/work`, { assignment: id })
+
+/**
+ * WP241：岗位页「加一个待办」——挂在本人这条职责的分配上（服务端从 `X-Assignment` 取）。
+ * 与 `createTodo` 同一条路由，只是请求头换成那条分配。
+ */
+export const createTodoAt = (
+  assignment: string,
+  input: { title: string; due?: string },
+): Promise<{ todo: Todo }> => api('/v1/todos', { method: 'POST', body: input, assignment })
+
+/** WP241：看板上拖一张待办 = 改它的状态（`PUT /v1/todos/:id`，待办本来就由人改）。 */
+export const setTodoStatus = (
+  id: string,
+  status: 'open' | 'doing' | 'blocked' | 'done',
+): Promise<{ todo: Todo }> =>
+  api(`/v1/todos/${encodeURIComponent(id)}`, { method: 'PUT', body: { status } })
+
+/**
  * 54 §2 主入口：交给这个岗位一件事（一句话 → 事项）。
  *
  * WP84：从快捷提示点进来时带 `role_id`——那句话本来就写在那条职责的 yml 里，

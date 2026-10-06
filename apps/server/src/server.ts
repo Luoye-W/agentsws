@@ -452,6 +452,7 @@ import {
   registerSocialBroadcast,
   registerSocialPublish,
   registerTokenRefresh,
+  HANDLERS as SCHEDULE_HANDLERS,
   type ScheduleAssembly,
   type SchedulePosition,
 } from './schedule.js'
@@ -3769,6 +3770,15 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
             stopped += 1
         return stopped
       },
+      // WP241（docs/54 §7）：岗位页「工作」里的定时与排期（这个品牌自己那一份）
+      // 系统例行（每日计划、复盘、巡检…处理器是工作台自己的那几个）不算岗位在做的事，不进工作
+      schedules: async (person_id) =>
+        (await schedule.scheduler.list({ workspace_id: ws, owner: person_id })).filter(
+          (t) =>
+            t.handler === undefined ||
+            !(Object.values(SCHEDULE_HANDLERS) as string[]).includes(t.handler),
+        ),
+      socialPosts: () => social.posts(),
     })
     positionAssemblies.set(ws, positionsAssembly)
     // 六层技能里的 `position` 那一层、以及岗位层上下文那三样，都从这里来
@@ -6962,6 +6972,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     }
     const port: PositionEntryPort = {
       instance: (actor, id) => assembly.instance(resolveId(actor, id), actor.person_id),
+      // WP241（docs/54 §7）：岗位页「工作」
+      work: (actor, id) => assembly.work(resolveId(actor, id), actor.person_id),
       mine: (actor) => assembly.mine(actor.person_id),
       open: async (actor, id, input) => {
         const out = await assembly.open({

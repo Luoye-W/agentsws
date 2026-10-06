@@ -12,7 +12,7 @@
 import type { BattleReport, DeckCard, DeckContentMode, DeckFilters, DeckKind } from '@agentsws/deck'
 import { CONTENT_MODES, sortCards } from '@agentsws/deck'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { type KeyboardEvent, useRef, useState } from 'react'
+import { type KeyboardEvent, useEffect, useRef, useState } from 'react'
 import { deckActionLabel } from '@/components/deck/deck-action-bar'
 import { DeckBattleReport } from '@/components/deck/deck-battle-report'
 import { DeckBrowser } from '@/components/deck/deck-browser'
@@ -50,6 +50,12 @@ export interface DeckSectionProps {
   filters?: DeckFilters
   /** 37 §2.2b：`open` = 进入事项。事项页由 WP22 做，这里只把卡交出去 */
   onOpen: (card: DeckCard) => void
+  /**
+   * WP241（docs/54 §7）：从别处「翻到这张」——岗位页「工作」行尾「N 张卡等你」点过来的。
+   * `nonce` 每点一次变一次（同一张点两次也要再翻）。那张卡被筛掉了就先清筛选再翻。
+   * 只是翻页，不决定、不改卡的长相。
+   */
+  focus?: { card_id: string; nonce: number }
 }
 
 interface DeckData {
@@ -121,6 +127,7 @@ export function DeckSection({
   positionIds,
   filters,
   onOpen,
+  focus,
 }: DeckSectionProps): React.ReactNode {
   const { t } = useApp()
   const client = useQueryClient()
@@ -184,6 +191,23 @@ export function DeckSection({
 
   const cards = query.data?.cards ?? []
   const total = cards.length
+
+  // WP241：外面要翻到哪张——在这副牌里就直接翻；被筛掉了就回到全部牌再翻
+  const focusId = focus?.card_id
+  const focusNonce = focus?.nonce
+  const allIds = (all.data?.cards ?? []).map((c) => c.id).join(',')
+  // biome-ignore lint/correctness/useExhaustiveDependencies: 只在「点了一次」与牌到齐时翻，不跟着筛选来回跳
+  useEffect(() => {
+    if (focusId === undefined) return
+    const inView = cards.some((c) => c.id === focusId)
+    if (!inView && allIds.split(',').includes(focusId) && Object.keys(active).length > 0) {
+      setActive({})
+    }
+    setCursor(focusId)
+    setError('')
+    deckRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' })
+    deckRef.current?.focus({ preventScroll: true })
+  }, [focusId, focusNonce, allIds])
   const found = cursor === undefined ? -1 : cards.findIndex((c) => c.id === cursor)
   const index = found >= 0 ? found : Math.max(0, Math.min(fallback, total - 1))
   const card = cards[index]

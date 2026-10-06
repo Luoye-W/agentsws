@@ -6,10 +6,9 @@
  * - 主入口只要**一句话**：输进去 → 开事项 → 岗位自己判断走哪条职责 → 起 Run；
  * - 拿不准的时候界面不替人选：把候选摆出来，让人点一下。
  */
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import { Send, Split } from 'lucide-react'
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { DutyIcon, PositionIcon } from '@/components/role-icons/role-icon'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -18,14 +17,9 @@ import { Hint } from '@/components/ui/hint'
 import { PlannedTag } from '@/components/ui/planned-tag'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Textarea } from '@/components/ui/textarea'
-import {
-  createMatterWithRole,
-  getPosition,
-  type OpenAtPositionData,
-  openMatterAtPosition,
-  rerouteMatter,
-} from '@/lib/api'
+import { getPosition } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
+import { usePositionOpen } from './use-position-open'
 
 /**
  * 岗位页顶部：岗位名 + 一句话入口 + 折叠着的职责层。
@@ -38,51 +32,16 @@ const MAX_ENTRY_SUGGESTIONS = 4
 
 export function PositionEntry({ id }: { id: string }): React.ReactNode {
   const { t, lang } = useApp()
-  const client = useQueryClient()
-  const navigate = useNavigate()
   const [text, setText] = useState('')
-  const [choice, setChoice] = useState<OpenAtPositionData | undefined>(undefined)
+  // WP241：三条提交路抽成 `usePositionOpen`（岗位页 v2 的一行入口也用它），行为不变
+  const { open, withRole, pick, choice } = usePositionOpen(id, () => {
+    setText('')
+  })
 
   const position = useQuery({
     queryKey: ['position-instance', id],
     queryFn: () => getPosition(id),
     enabled: id !== '',
-  })
-
-  const open = useMutation({
-    mutationFn: (input: { title: string }) => openMatterAtPosition(id, input),
-    onSuccess: (out) => {
-      setText('')
-      void client.invalidateQueries({ queryKey: ['position-instance', id] })
-      // 判准了就直接进事项页；拿不准就停在这儿，把候选摆出来让人点一下
-      // WP237：只有出了选择卡才停在这儿；「你好」这类（没出卡、事项里回了一句问要做什么）进事项页
-      if (out.ambiguous && out.approval_item_id !== undefined) setChoice(out)
-      else navigate(`/matters/${out.matter.id}`)
-    },
-  })
-
-  /**
-   * 54 §2 次入口：**用这条职责开**——跳过路由，指定用它的规矩做。
-   * 用的就是那条职责的分配，所以权限、额度、动作面一个不多一个不少。
-   */
-  const withRole = useMutation({
-    mutationFn: (input: { assignment: string; title: string }) =>
-      createMatterWithRole(input.assignment, { title: input.title }),
-    onSuccess: (out) => {
-      setText('')
-      navigate(`/matters/${out.matter.id}`)
-    },
-  })
-
-  /** 选择卡上点了一条：把这件事定给那条职责，然后进事项页（新的 Run 走它）。 */
-  const pick = useMutation({
-    mutationFn: (input: { matter_id: string; role_id: string }) =>
-      // WP237：选了就钉到那条并立刻开跑（原来只钉不跑，事项停在那儿）
-      rerouteMatter(input.matter_id, input.role_id, { run: true }),
-    onSuccess: (_out, input) => {
-      setChoice(undefined)
-      navigate(`/matters/${input.matter_id}`)
-    },
   })
 
   if (position.isPending) return <Skeleton className="h-28 w-full" />

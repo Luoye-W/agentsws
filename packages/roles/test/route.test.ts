@@ -213,7 +213,7 @@ describe('WP237 同一个人的几条职责打平：不问人，按分高的那�
     }
   })
 
-  it('Reddit 运营 + Reddit 营销 合并成一个岗位：「Reddit 调研」打平 → 按模板顺序取第一条，另一条留作「换成」', () => {
+  it('自家版运营 + Reddit 营销 合并成一个岗位：「Reddit 调研」打平 → 按模板顺序取第一条，另一条留作「换成」', () => {
     const raw = routeWithinPosition('帮我做一份 Reddit 调研', REDDIT)
     expect(raw.ambiguous).toBe(true)
     const out = settleCloseCall(raw, ['social.reddit', 'pr.reddit'])
@@ -222,7 +222,7 @@ describe('WP237 同一个人的几条职责打平：不问人，按分高的那�
     // 分数一样时不按 id 字典序（那会落到 pr.reddit），按岗位里职责的先后
     expect(out.picked).toBe('social.reddit')
     expect(out.alternatives?.map((c) => c.role_id)).toEqual(['pr.reddit'])
-    expect(out.reason).toContain('按「Reddit 运营」来做的')
+    expect(out.reason).toContain('按「自家版运营」来做的')
     expect(out.reason).toContain('要换成「Reddit 营销」点这里')
   })
 
