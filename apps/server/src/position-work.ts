@@ -257,8 +257,9 @@ export function buildPositionWork(input: BuildPositionWorkInput): PositionWorkVi
   // 封顶：先保没做完的（已完成排在最后，截掉的就是最旧的那些已完成）
   const kept = items.slice(0, MAX_POSITION_WORK_ITEMS)
   const count = (g: PositionWorkItem['group']): number => kept.filter((i) => i.group === g).length
-  // 「今天 N 个待办」= 今天到期的，连同已经过期还没做完的（它们今天也得处理）
-  const dueByToday = (at: Iso8601 | undefined): boolean => at !== undefined && at < input.today.to
+  // 「今天 N 个待办」= 截止 / 排在今天、还没做完的（点过去是「截止：今天」那个筛选，两边同一个口径）
+  const inToday = (at: Iso8601 | undefined): boolean =>
+    at !== undefined && at >= input.today.from && at < input.today.to
   return {
     position_id: input.position_id,
     generated_at: input.now,
@@ -270,7 +271,7 @@ export function buildPositionWork(input: BuildPositionWorkInput): PositionWorkVi
       done: count('done'),
       cards: new Set(kept.flatMap((i) => i.card_ids)).size,
       todos_today: kept.filter(
-        (i) => i.kind === 'todo' && i.group !== 'done' && dueByToday(i.due_at),
+        (i) => i.kind === 'todo' && i.group !== 'done' && inToday(i.due_at),
       ).length,
     },
     duties: input.duties.map((d) => ({ ...d })),

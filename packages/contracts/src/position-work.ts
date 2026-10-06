@@ -9,7 +9,7 @@
  * - 工作台用它决定看板上哪一类能拖、拖到哪一列改成什么状态。
  *
  * **这是视图，不是新对象**：没有任何一张表存「工作项」，每次现算；每一项都指回它真正的
- * 那一行（`kind` + `ref_id`）。改状态走那一行自己的写口（待办 `PATCH /v1/todos/:id`），
+ * 那一行（`kind` + `ref_id`）。改状态走那一行自己的写口（待办 `PUT /v1/todos/:id`），
  * 这里一个写口都没有。
  */
 import type { AssignmentId, Iso8601, RoleId } from './common.js'
@@ -114,7 +114,7 @@ export interface PositionWorkView {
     done: number
     /** 挂在工作项上、等你定的卡（去重后的张数） */
     cards: number
-    /** 今天到期（含已过期）、还没做完的待办 */
+    /** 截止 / 排在今天、还没做完的待办（与工作台「截止：今天」筛选同一个口径） */
     todos_today: number
   }
   /** 本人在这个岗位里做的那几条职责（筛选「职责」的选项、加待办时挂哪条） */
