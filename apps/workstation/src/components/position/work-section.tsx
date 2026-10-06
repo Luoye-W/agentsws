@@ -24,6 +24,7 @@ import {
   Table2,
 } from 'lucide-react'
 import { type ReactNode, useMemo } from 'react'
+import { DutyIcon } from '@/components/role-icons/role-icon'
 import { Hint } from '@/components/ui/hint'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { PositionWorkData } from '@/lib/api'
@@ -165,6 +166,7 @@ export function WorkSection({
                 set({ view: q.id })
               }}
             >
+              <DutyIcon role_id={q.role_id} size={14} />
               {quickLabel(t, q, quickLabelNeedsDuty(quickViews, q))}
             </button>
           )

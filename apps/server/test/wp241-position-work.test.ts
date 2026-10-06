@@ -69,7 +69,7 @@ const base = {
 }
 
 describe('buildPositionWork', () => {
-  it('四类合成一份，按 进行中 / 排着的 / 等别人 / 已完成 排；每项带所属职责', () => {
+  it('四类合成一份，按 进行中 / 排着的 / 等别人 / 已完成 排；每项带所属职责；系统例行不进', () => {
     const view = buildPositionWork({
       ...base,
       matters: [
@@ -87,6 +87,15 @@ describe('buildPositionWork', () => {
           state: 'active',
           created_by: 'user',
           next_fire_at: '2026-10-07T01:00:00.000Z',
+        },
+        {
+          id: 'sch_sys',
+          title: '晚上做一次复盘',
+          role_id: 'pr.reddit',
+          assignment_id: 'asg_pr',
+          state: 'active',
+          created_by: 'system',
+          next_fire_at: '2026-10-06T12:00:00.000Z',
         },
       ],
       posts: [

@@ -199,6 +199,9 @@ export function buildPositionWork(input: BuildPositionWorkInput): PositionWorkVi
   }
 
   for (const s of input.schedules) {
+    // 系统例行（每日计划、日 / 周 / 月复盘、巡检）每条分配各一份，是「工作台怎么运转」不是「这个岗位在做的事」——
+    // 不进工作（不然一个两条职责的岗位光复盘就占八行）；它们在「设置 · 定时任务」里照样能看能停
+    if (s.created_by === 'system') continue
     const group = scheduleGroupOf(s.state)
     if (group === undefined) continue
     if (group === 'done' && !recent(s.last_fire_at ?? s.updated_at)) continue
@@ -270,9 +273,8 @@ export function buildPositionWork(input: BuildPositionWorkInput): PositionWorkVi
       waiting: count('waiting'),
       done: count('done'),
       cards: new Set(kept.flatMap((i) => i.card_ids)).size,
-      todos_today: kept.filter(
-        (i) => i.kind === 'todo' && i.group !== 'done' && inToday(i.due_at),
-      ).length,
+      todos_today: kept.filter((i) => i.kind === 'todo' && i.group !== 'done' && inToday(i.due_at))
+        .length,
     },
     duties: input.duties.map((d) => ({ ...d })),
     done_window_days: POSITION_WORK_DONE_DAYS,

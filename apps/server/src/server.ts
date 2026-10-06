@@ -452,6 +452,7 @@ import {
   registerSocialBroadcast,
   registerSocialPublish,
   registerTokenRefresh,
+  HANDLERS as SCHEDULE_HANDLERS,
   type ScheduleAssembly,
   type SchedulePosition,
 } from './schedule.js'
@@ -3770,7 +3771,13 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         return stopped
       },
       // WP241（docs/54 §7）：岗位页「工作」里的定时与排期（这个品牌自己那一份）
-      schedules: (person_id) => schedule.scheduler.list({ workspace_id: ws, owner: person_id }),
+      // 系统例行（每日计划、复盘、巡检…处理器是工作台自己的那几个）不算岗位在做的事，不进工作
+      schedules: async (person_id) =>
+        (await schedule.scheduler.list({ workspace_id: ws, owner: person_id })).filter(
+          (t) =>
+            t.handler === undefined ||
+            !(Object.values(SCHEDULE_HANDLERS) as string[]).includes(t.handler),
+        ),
       socialPosts: () => social.posts(),
     })
     positionAssemblies.set(ws, positionsAssembly)

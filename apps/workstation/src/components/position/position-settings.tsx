@@ -37,6 +37,9 @@ import { actionLines, connectorLines, scopeLines, skillLines } from '@/lib/duty-
 import { formatDate } from '@/lib/format'
 import { Pop } from './work-bits'
 
+/** 职责说明里的 `**粗体**` 记号在一行小字里不认，去掉星号（整段在职责页）。 */
+const plain = (text: string | undefined): string => (text ?? '').replace(/\*\*/g, '')
+
 const SECTIONS = ['duties', 'connections', 'memory', 'schedules', 'advanced'] as const
 
 function SectionHead({ id, title, sub }: { id: string; title: string; sub?: string }): ReactNode {
@@ -80,7 +83,9 @@ function DutyLine({
             </span>
           ) : null}
         </p>
-        <p className="truncate text-xs text-ws-muted-fg">{def.data?.description ?? ''}</p>
+        <p className="truncate text-xs text-ws-muted-fg" title={plain(def.data?.description)}>
+          {plain(def.data?.description)}
+        </p>
       </div>
       {mine === undefined ? null : (
         <Link

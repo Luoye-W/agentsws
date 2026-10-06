@@ -17,13 +17,23 @@ import { CardsBadge, DutyChip, GroupIcon, KindIcon, WhoBadge } from './work-bits
 
 const TONE_TEXT = { bad: 'text-ws-bad font-medium', warn: 'text-ws-warn font-medium' } as const
 
-/** 标题：有事项就链到事项页。 */
-export function ItemTitle({ item }: { item: PositionWorkItem }): ReactNode {
+/** 标题：有事项就链到事项页。`wrap` = 看板卡片里折两行，列表 / 表格里一行省略。 */
+export function ItemTitle({
+  item,
+  wrap = false,
+}: {
+  item: PositionWorkItem
+  wrap?: boolean
+}): ReactNode {
+  const cls = wrap ? 'line-clamp-2 break-words' : 'min-w-0 truncate'
   return item.matter_id === undefined ? (
-    <span className="truncate">{item.title}</span>
+    <span className={cls} title={item.title}>
+      {item.title}
+    </span>
   ) : (
     <Link
-      className="truncate hover:underline"
+      className={`${cls} hover:underline`}
+      title={item.title}
       to={`/matters/${encodeURIComponent(item.matter_id)}`}
     >
       {item.title}
