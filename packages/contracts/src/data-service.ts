@@ -792,6 +792,34 @@ export function clampRedditBrowserReadLimits(raw: unknown): RedditBrowserReadLim
 /** 浏览器只读那一路能开的站（`pr.forums` 的 `browser_scope` 里那条 `*.reddit.com` 同一个意思）。 */
 export const REDDIT_READ_HOSTS: readonly string[] = ['*.reddit.com', '*.redd.it']
 
+/**
+ * WP238（Luoye 10-06 Windows 真机）：哪几张连接卡的**只读**那一半也能从一条取数路由拿到。
+ *
+ * 键是连接 kind；`route` 是 `data_source_routing` 的键；`read_grants` 是职责 `connectors[].grants`
+ * 里算「只读」的那几项。一条职责对这张卡要的 grants **全落在** `read_grants` 里、而这条路由现在
+ * 走得通（接口中台已关联且没被关 / 本机只读浏览器在），这条连接就**不算缺**——岗位页
+ * 「连上这 N 个就能开工」不再催人去连。要发帖 / 版务（`submit` / `modposts`……）的照旧要连。
+ */
+export const CONNECTION_READ_ROUTES: Readonly<
+  Record<string, { route: string; read_grants: readonly string[] }>
+> = {
+  reddit: {
+    route: REDDIT_READ_ROUTE_KEY,
+    read_grants: ['read_subreddit', 'read_posts', 'read_rules', 'search'],
+  },
+}
+
+/**
+ * WP238：一条取数路由现在走得通的第一级（按顺序、跳过被关的）。`usable` 由调用方说这一级
+ * 在这台机器上有没有（接口中台 = 关联了账号；浏览器只读 = 本机装了只读浏览器）。都不通回 `undefined`。
+ */
+export function firstUsableReadLevel(
+  route: { order: readonly DataSourceLevel[]; disabled: readonly DataSourceLevel[] },
+  usable: (level: DataSourceLevel) => boolean,
+): DataSourceLevel | undefined {
+  return route.order.find((level) => !route.disabled.includes(level) && usable(level))
+}
+
 /* ------------------------------------------------------------------ */
 /* WP220：研究取数的来源记录与白名单                                      */
 /* ------------------------------------------------------------------ */

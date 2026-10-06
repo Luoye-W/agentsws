@@ -664,13 +664,17 @@ export function assembleView(role_id: RoleId, ctx: QueryContext): ViewSection[] 
       const report_url = SOURCE_REPORT_URLS[b.source]
       // WP62：数据源自带的那一句"还没做"（平台没接）原样端到面板上——
       // 36 §3 的老规矩：缺连接器就明说，不出一块永远为空的图
-      const note = ctx.sources.find((s) => s.id === b.source)?.note
+      const status = ctx.sources.find((s) => s.id === b.source)
+      const note = status?.note
+      // WP238：没连、但取数已由别的路满足——界面不再催「去连接」
+      const via = connected ? undefined : status?.via
       sections.set(b.source, {
         source: b.source,
         label: SOURCE_LABELS[b.source],
         connected,
         ...(report_url === undefined || !connected ? {} : { report_url }),
         ...(note === undefined ? {} : { note }),
+        ...(via === undefined ? {} : { via }),
         blocks: [b],
       })
     } else {

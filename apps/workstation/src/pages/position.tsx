@@ -24,6 +24,7 @@ import { ScheduleList } from '@/components/schedule-list'
 import { GoogleSourcePicker } from '@/components/seo/google-source-picker'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { EmptyLine } from '@/components/ui/empty-line'
 import { Hint } from '@/components/ui/hint'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -295,39 +296,35 @@ function StoreSections({
                 </div>
               )}
             </div>
+          ) : section.via !== undefined ? (
+            /*
+             * WP238（Luoye 10-06）：没连，但取数已经有别的路（Agents 工坊接口 / 本机浏览器只读）——
+             * 不再催「去连接」，一行灰字说数据从哪来；哪些数非连不可进问号。
+             */
+            <p
+              className="flex items-center gap-1.5 text-sm text-muted-foreground"
+              data-testid="source-via"
+              data-via={section.via}
+              data-slot="status"
+            >
+              {t(`view.via.${section.via}`)}
+              <Hint text={t('view.via.hint', { source: section.label })} testId="source-via-why" />
+            </p>
           ) : (
-            <Card data-testid="connect-card">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-1.5 text-sm">
-                  <Link2Off className="size-4" aria-hidden />
-                  {t('view.not_connected', { source: section.label })}
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="flex flex-col gap-2">
-                {/*
-                  WP62 / WP63（36 §3）：**没连**与**还没做**是两回事。
-                  有 `note` 就是后者（这个平台我们还没接 / 这个连接器还没做）——
-                  照实说那句话，并且**不给「去连接」按钮**：点进去无处可点的按钮，
-                  会让人在连接页上反复找、以为是自己哪里填错了。
-                */}
-                {section.note === undefined ? (
-                  <div>
-                    <Button size="sm" variant="outline" asChild>
-                      {/* WP20 §C：直接落到那一个 provider 的卡片上，不让用户自己找 */}
-                      <Link to={connectPathFor(section.source)}>{t('view.connect')}</Link>
-                    </Button>
-                  </div>
-                ) : (
-                  <p
-                    className="text-sm text-muted-foreground"
-                    data-testid="source-note"
-                    data-slot="status"
-                  >
-                    {section.note}
-                  </p>
-                )}
-              </CardContent>
-            </Card>
+            /*
+             * WP238（36 §7）：空状态 = 一行灰字 + 一个去处按钮，不再占一张大卡。
+             * WP62 / WP63（36 §3）：**没连**与**还没做**是两回事。有 `note` 就是后者——
+             * 照实说那句话，**不给「去连接」按钮**（点进去无处可点，会让人以为是自己填错了）。
+             */
+            <EmptyLine
+              icon={<Link2Off className="size-4" aria-hidden />}
+              testId="connect-card"
+              text={section.note ?? t('view.not_connected', { source: section.label })}
+              {...(section.note === undefined
+                ? // WP20 §C：直接落到那一个 provider 的卡片上，不让用户自己找
+                  { action: { label: t('view.connect'), to: connectPathFor(section.source) } }
+                : {})}
+            />
           )}
         </section>
       ))}

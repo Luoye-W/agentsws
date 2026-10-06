@@ -506,6 +506,11 @@ export interface DataSourceStatus {
    * 那一句，而不是给一个点了也连不上的按钮。有 `note` 就显示它。
    */
   note?: string
+  /**
+   * WP238（Luoye 10-06）：没连、但**取数已由别的路满足**（`workshop` = Agents 工坊接口，
+   * `browser_readonly` = 本机浏览器只读）。界面据此不再催「去连接」，只说数据从哪来。
+   */
+  via?: 'workshop' | 'browser_readonly'
 }
 
 export interface TileSpec {
@@ -1362,6 +1367,8 @@ export interface ViewSection {
   report_url?: string
   /** WP62：这个数据源"还没做"时那一句人话（见 `DataSourceStatus.note`）。 */
   note?: string
+  /** WP238：没连、但取数已由别的路满足（见 `DataSourceStatus.via`）。 */
+  via?: 'workshop' | 'browser_readonly'
   blocks: BlockDef[]
 }
 

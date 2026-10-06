@@ -12,6 +12,9 @@
  *    凭据在那张原生表单里填（13 §4.3），这个组件从头到尾不碰任何值。
  * 4. **"还没做"不给按钮**（36 §3）。点进去无处可点的按钮，会让人在连接页上反复找、
  *    以为是自己哪里填错了——照实说那句话就好。
+ * 5. **WP238（Luoye 10-06 Windows 真机）：只列真缺的必需项**。可选 / 推荐的一律不进这张卡
+ *    （它们在连接页按职责列着）；读的那一半已经有别的路取数（接口中台）的，服务端算
+ *    `missing_required` 时就扣掉了——这里只照 `missing_required` 画，自己一条判据都不写。
  */
 import { useQuery } from '@tanstack/react-query'
 import { Link2Off, TriangleAlert } from 'lucide-react'
@@ -31,15 +34,18 @@ export function PositionConnections({ id }: { id: string }): React.ReactNode {
     enabled: id !== '',
   })
   const data = view.data
+  // WP238：只画服务端说「真缺」的必需项（可选的、已由别的来源满足的都不在 `missing_required` 里）
+  const missing = new Set(data?.missing_required ?? [])
+  const items = (data?.items ?? []).filter((item) => item.required && missing.has(item.kind))
   // 还在查、查失败、或者一条都不缺：都不出卡（36 §3「不确定的时候少说话」）
-  if (data === undefined || data.items.length === 0) return null
+  if (data === undefined || items.length === 0) return null
 
   return (
     <Card data-testid="position-connections">
       <CardHeader>
         <CardTitle className="flex flex-wrap items-center gap-2 text-sm">
           <Link2Off className="size-4" aria-hidden />
-          {t('position.connections.title', { n: String(data.items.length) })}
+          {t('position.connections.title', { n: String(items.length) })}
           {/* WP157：「连一个少一条、连完这张卡就不见了」进问号 */}
           <Hint text={t('position.connections.subtitle')} />
           {data.ready ? null : (
@@ -52,7 +58,7 @@ export function PositionConnections({ id }: { id: string }): React.ReactNode {
       </CardHeader>
       <CardContent className="flex flex-col gap-2">
         <ul className="flex flex-col gap-2">
-          {data.items.map((item) => (
+          {items.map((item) => (
             <li
               key={item.kind}
               className="flex flex-wrap items-start justify-between gap-3 rounded-md border p-2"
@@ -63,20 +69,13 @@ export function PositionConnections({ id }: { id: string }): React.ReactNode {
                 <p className="flex flex-wrap items-center gap-2 text-sm">
                   {lang === 'zh' ? item.name.zh : item.name.en}
                   {/* 36 §3：**没连**与**还没做**是两回事，后者那句话（为什么还没有）进问号，
-                      右边照样写着「还没做」 */}
+                      右边照样写着「还没做」。WP238：卡上全是必需的，不再标「必需 / 可选」 */}
                   {item.status === 'planned' && item.note !== undefined ? (
                     <Hint
                       text={lang === 'zh' ? item.note.zh : item.note.en}
                       testId="position-connection-note"
                     />
                   ) : null}
-                  <span className="text-xs text-muted-foreground" data-slot="status">
-                    {item.required
-                      ? t('position.connections.required')
-                      : item.recommended === true
-                        ? t('position.connections.recommended')
-                        : t('position.connections.optional')}
-                  </span>
                 </p>
                 <p className="text-xs text-muted-foreground" data-slot="data">
                   {t('position.connections.needed_by', { roles: item.needed_by.join('、') })}

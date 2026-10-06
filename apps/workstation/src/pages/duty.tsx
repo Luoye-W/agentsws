@@ -8,21 +8,21 @@
  *
  * - 头部：面包屑「岗位 › 职责」、职责名、版本、"内置只读 / 从内置模板复制"pill、
  *   谁在做、范围，以及**「用这条职责开一件事」**（走 WP69 的 `entry: 'role'`）；
- * - 两个 tab：**概览**（这条职责能看什么、能做什么、挂着哪些技能与连接器）与
- *   **记录**（它做过什么）。
+ * - 两个 tab：**概览**（一句人话；能看什么、能做什么、挂着哪些技能与连接器收在默认折叠的
+ *   「高级」里，WP238 起翻成人话）与**记录**（它做过什么）。
  *
  * **记忆 / 技能 / 知识 / 额度不在这一页上**——它们是第三栏的四个面板（36 §9），
  * 跟着当前职责走。进了这一页，右栏打开的就是这条职责那一份。头部那四个按钮
  * 只是"把右栏打开到那一格"的快捷方式，不是第二个入口。
  */
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { Play } from 'lucide-react'
+import { ChevronDown, ChevronRight, Play } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { B2bOutboundPanel } from '@/components/b2b/outbound-panel'
 import { B2bSalesPanel } from '@/components/b2b/sales-panel'
 import { CalendarLink } from '@/components/calendar/calendar-link'
-import { WsTag } from '@/components/design'
+import { InfoTip, WsTag } from '@/components/design'
 import { PanelError } from '@/components/rail/panel-error'
 import { useRailState } from '@/components/rail/rail-state'
 import { DutyIcon } from '@/components/role-icons/role-icon'
@@ -32,7 +32,6 @@ import { GoogleSourcePicker } from '@/components/seo/google-source-picker'
 import { SocialBroadcast } from '@/components/social/social-broadcast'
 import { SocialCalendar, socialChannelOfRole } from '@/components/social/social-calendar'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Hint } from '@/components/ui/hint'
 import { Input } from '@/components/ui/input'
 import { MarkdownInline } from '@/components/ui/safe-markdown'
@@ -44,8 +43,16 @@ import {
   getPosition,
   getPositionRecords,
   getRoleDefinition,
+  type RoleDetailView,
 } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
+import {
+  actionLines,
+  type CapabilityLine,
+  connectorLines,
+  scopeLines,
+  skillLines,
+} from '@/lib/duty-capabilities'
 import { formatDate } from '@/lib/format'
 import { firstSentence } from '@/lib/help'
 
@@ -102,7 +109,6 @@ function OpenHere({ assignment }: { assignment: string }): React.ReactNode {
 }
 
 function OverviewTab({ role_id }: { role_id: string }): React.ReactNode {
-  const { t } = useApp()
   const role = useQuery({
     queryKey: ['role-definition', role_id],
     queryFn: () => getRoleDefinition(role_id),
@@ -127,64 +133,80 @@ function OverviewTab({ role_id }: { role_id: string }): React.ReactNode {
           <Hint text={view.description} testId="duty-description" />
         )}
       </p>
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-sm">{t('duty.scopes')}</CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-1 text-sm">
-          {view.scopes.map((s) => (
-            <div key={`${s.domain}:${s.range}`} data-testid="duty-scope">
-              <span className="font-medium">{s.domain}</span>
-              <span className="text-muted-foreground">
-                {' · '}
-                {s.ops.join(' / ')} · {s.range} · {s.max_sensitivity}
-              </span>
-            </div>
-          ))}
-        </CardContent>
-      </Card>
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-sm">{t('duty.actions')}</CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-1 text-sm">
-          {view.actions.length === 0 ? (
-            <p className="text-muted-foreground">{t('duty.actions.none')}</p>
-          ) : (
-            view.actions.map((a) => (
-              <div key={a.id} data-testid="duty-action">
-                <span className="font-medium">{a.id}</span>
-                <span className="text-muted-foreground">
-                  {' · '}
-                  {a.kind} → {a.target}
-                </span>
-              </div>
-            ))
-          )}
-        </CardContent>
-      </Card>
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-sm">{t('duty.skills')}</CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-1 text-sm">
-          {view.skills.map((s) => (
-            <div key={s.name} data-testid="duty-skill">
-              <span>{s.name}</span>
-              <span className="text-muted-foreground">
-                {' · '}
-                {s.tier} · {s.load}
-              </span>
-            </div>
-          ))}
-          {view.connectors.length === 0 ? null : (
-            <p className="text-xs text-muted-foreground" data-testid="duty-connectors">
-              {t('duty.connectors', { list: view.connectors.map((c) => c.kind).join(' · ') })}
-            </p>
-          )}
-        </CardContent>
-      </Card>
+      {/* WP238：权限 / 本体声明收进默认折叠的「高级」，翻成人话；原始 id 只进每一行的 tooltip */}
+      <DutyAdvanced view={view} />
     </div>
+  )
+}
+
+/**
+ * WP238（Luoye 10-06 Windows 真机）：「高级 · 这条职责能做什么」。
+ *
+ * 默认收着——这是给想弄清楚「它到底被允许干什么」的人看的，不是每天要读的东西。
+ * 展开后是四小组人话（能看什么 / 能做什么 / 技能 / 要的连接），不再是三张大卡；
+ * 原始声明（`social_account · read / stage · assigned · internal`）只在停在那一行时出现。
+ */
+function DutyAdvanced({ view }: { view: RoleDetailView }): React.ReactNode {
+  const { t, lang } = useApp()
+  const [open, setOpen] = useState(false)
+  const groups: { id: string; title: string; lines: CapabilityLine[]; empty?: string }[] = [
+    { id: 'scope', title: t('duty.scopes'), lines: scopeLines(view, t) },
+    {
+      id: 'action',
+      title: t('duty.actions'),
+      lines: actionLines(view, t),
+      empty: t('duty.actions.none'),
+    },
+    { id: 'skill', title: t('duty.skills'), lines: skillLines(view, t) },
+    { id: 'connector', title: t('duty.connectors.title'), lines: connectorLines(view, t, lang) },
+  ]
+  return (
+    <section data-testid="duty-advanced">
+      <div className="flex items-center gap-1">
+        <button
+          type="button"
+          className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+          aria-expanded={open}
+          data-testid="duty-advanced-toggle"
+          onClick={() => {
+            setOpen(!open)
+          }}
+        >
+          {open ? (
+            <ChevronDown className="size-3.5" aria-hidden />
+          ) : (
+            <ChevronRight className="size-3.5" aria-hidden />
+          )}
+          {t('duty.advanced')}
+        </button>
+        <Hint text={t('duty.advanced.hint')} />
+      </div>
+      {open ? (
+        <div
+          className="mt-2 grid gap-4 pl-5 text-sm sm:grid-cols-2"
+          data-testid="duty-advanced-body"
+        >
+          {groups.map((g) =>
+            g.lines.length === 0 && g.empty === undefined ? null : (
+              <div key={g.id} className="flex flex-col gap-1">
+                <h4 className="text-xs text-muted-foreground">{g.title}</h4>
+                {g.lines.length === 0 ? (
+                  <p className="text-muted-foreground">{g.empty}</p>
+                ) : (
+                  <ul className="flex flex-col gap-0.5">
+                    {g.lines.map((line) => (
+                      <li key={line.key} data-testid={`duty-${g.id}`} data-raw={line.raw}>
+                        <InfoTip text={line.raw}>{line.text}</InfoTip>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            ),
+          )}
+        </div>
+      ) : null}
+    </section>
   )
 }
 

@@ -8,6 +8,7 @@
  * 这里挑 v1 的那一个；用户到了页面上仍然能选别的。
  */
 import type { DataSourceId } from '@agentsws/deck'
+import { SOCIAL_SOURCE_BY_CHANNEL, SOURCES_BY_SERVICE } from '@agentsws/deck'
 
 const SERVICE_BY_SOURCE: Partial<Record<DataSourceId, string>> = {
   shop: 'shopify_admin',
@@ -23,5 +24,18 @@ const SERVICE_BY_SOURCE: Partial<Record<DataSourceId, string>> = {
 /** 数据源 → 连接页的地址（认不出来的就落到连接页首屏）。 */
 export function connectPathFor(source: string | undefined): string {
   const service = source === undefined ? undefined : SERVICE_BY_SOURCE[source as DataSourceId]
+  return service === undefined ? '/connections' : `/connections?service=${service}`
+}
+
+/**
+ * WP238：社媒渠道 → 连接页上那一张卡（`reddit` → `/connections?service=reddit`）。
+ * 职责页「还没登记号」那一行的去处按钮用它；渠道没有连接器（Facebook 群组）就落到连接页首屏。
+ */
+export function connectPathForChannel(channel: string): string {
+  const source = SOCIAL_SOURCE_BY_CHANNEL[channel]
+  if (source === undefined) return '/connections'
+  const service = Object.entries(SOURCES_BY_SERVICE).find(([, sources]) =>
+    sources.includes(source),
+  )?.[0]
   return service === undefined ? '/connections' : `/connections?service=${service}`
 }
