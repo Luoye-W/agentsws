@@ -1,0 +1,15 @@
+/* 新岗位、什么都没有：交给它放大当主角，其余各块只留一行 */
+.first{padding:22px 24px 18px;display:flex;flex-direction:column;gap:12px}
+.first h2{font-family:var(--display);font-weight:600;letter-spacing:-.02em;font-size:20px;display:flex;align-items:center;gap:10px}
+.first .box{display:flex;align-items:flex-start;gap:10px;border-radius:12px;border:1px solid var(--input);background:var(--ws-paper);padding:10px 10px 10px 14px;transition:box-shadow .18s,border-color .18s}
+.first .box:focus-within{border-color:transparent;box-shadow:var(--ws-glow)}
+.first textarea{flex:1;min-width:0;resize:none;height:66px;font-size:14.5px;line-height:22px}
+.first textarea::placeholder{color:var(--ws-muted-fg)}
+.first .box .btn{align-self:flex-end}
+.first .sugs{display:flex;flex-wrap:wrap;gap:6px}
+.first .sugs .sug{height:28px;padding:0 12px;font-size:12.5px;color:var(--ws-body);background:var(--ws-card)}
+.first .tip{font-size:12.5px;color:var(--ws-muted-fg);display:flex;align-items:center;gap:6px}
+.emptyv{padding:34px 20px;display:flex;flex-direction:column;align-items:center;gap:12px;text-align:center;color:var(--ws-muted-fg);font-size:13.5px}
+.emptyv .ghost-rows{width:min(420px,100%);display:flex;flex-direction:column;gap:8px;margin-bottom:6px}
+.emptyv .ghost-rows i{display:block;height:12px;border-radius:6px;background:var(--ws-surface)}
+.vbar.off .tabs,.vbar.off .r{opacity:.55;pointer-events:none}

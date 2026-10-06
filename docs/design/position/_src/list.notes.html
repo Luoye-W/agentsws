@@ -1,0 +1,44 @@
+  <div class="blk">
+    <h4>从上往下 = 先急后缓</h4>
+    <ol>
+      <li><b>要我做什么</b>：交给它、要你处理</li>
+      <li><b>它在做什么</b>：工作（列表 / 看板 / 日历 / 表格）</li>
+      <li><b>做得怎么样</b>：数字</li>
+      <li><b>设置</b>：收进「设置」页签，平时看不到</li>
+    </ol>
+  </div>
+  <div class="blk">
+    <h4>和现在比</h4>
+    <ul>
+      <li>四个页签 → 三个：<span class="was">卡片 / 面板 / 记忆</span> 工作 / 记录 / 设置</li>
+      <li>交给它：三行大框 → <b>一行</b>，点进去才展开</li>
+      <li>「连上就能开工」大卡 → 只在真缺时出<b>一行</b>横幅</li>
+      <li>CLI 卡、「在日历里看」→ 设置里 / 视图里</li>
+      <li>待办不用再跳日历：日历是这里的<b>一种视图</b>，只显示这个岗位的，默认是列表</li>
+      <li>Reddit 社群、发帖排期不用钻职责页：视图栏后面一点就开</li>
+      <li>面板里的数字块 → 底下<b>一条</b>数字带，要看图再点开</li>
+    </ul>
+  </div>
+  <div class="blk">
+    <h4>点点看</h4>
+    <div class="try">
+      <button type="button" onclick="showView('list')">列表</button>
+      <button type="button" onclick="showView('board')">看板（能拖）</button>
+      <button type="button" onclick="showView('calendar')">日历</button>
+      <button type="button" onclick="showView('table')">表格</button>
+      <button type="button" onclick="showView('community')">自家版待处理</button>
+      <button type="button" onclick="showView('schedule')">发帖排期</button>
+      <button type="button" onclick="document.querySelector('[data-pop=filter]').click()">筛选</button>
+      <button type="button" onclick="toggleBanner()">缺连接时的横幅</button>
+      <button type="button" onclick="location.href='position-v2-settings.html'">设置页签</button>
+      <button type="button" onclick="location.href='position-v2-empty.html'">新岗位空的时候</button>
+    </div>
+  </div>
+  <div class="blk ask">
+    <h4>要你定（详见 README）</h4>
+    <ol>
+      <li>「要你处理」和列表里「等你」那组会重复出现同几件事：留着（上面是快捷动作），还是只留一处？</li>
+      <li>列表第一组叫「等你」（批 / 选 / 你自己的待办），不叫「等你批」，行不行？</li>
+      <li>职责「Reddit 运营」跟岗位同名，稿里先叫「自家版」，要不要正式改名？</li>
+    </ol>
+  </div>

@@ -1,0 +1,601 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Reddit 运营 · 岗位设置 v2</title>
+<!-- WP239 岗位页重排设计稿（静态、合成数据，不是产品代码）。由 _src/build.mjs 生成，改 _src 里的文件再重出。
+     ?theme=dark 看暗色；?notes=0 收起右边的设计说明。令牌真源：apps/workstation/src/index.css -->
+<script>(function(){var q=new URLSearchParams(location.search),h=document.documentElement;if(q.get("theme")==="dark")h.classList.add("dark");var n=q.get("notes");if(n==="0"||(n!=="1"&&innerWidth<1200))h.classList.add("notes-off");})();</script>
+<style>
+/* WP239 设计稿共用底。令牌逐个照抄 apps/workstation/src/index.css（docs/36 §1.1），名字也一样（--ws-*）；
+   控件尺寸照 components/ui/{button,tabs,input,badge}.tsx 与 components/design/primitives.tsx。 */
+@font-face{font-family:"Outfit";font-weight:500;src:url("../../../apps/workstation/node_modules/@fontsource/outfit/files/outfit-latin-500-normal.woff2") format("woff2")}
+@font-face{font-family:"Outfit";font-weight:600;src:url("../../../apps/workstation/node_modules/@fontsource/outfit/files/outfit-latin-600-normal.woff2") format("woff2")}
+@font-face{font-family:"Outfit";font-weight:700;src:url("../../../apps/workstation/node_modules/@fontsource/outfit/files/outfit-latin-700-normal.woff2") format("woff2")}
+:root{
+  --ws-paper:#f3f5f2;--ws-card:#fff;--ws-line:#ecefea;--ws-ink:#263331;--ws-body:#4b5550;--ws-muted-fg:#6b746f;
+  --ws-brand:#007b67;--ws-brand-ink:#045246;--ws-brand-fg:#fff;--ws-tint:#e8f3f0;
+  --ws-good:#158a4b;--ws-good-bg:#e3f5ea;--ws-warn:#b26e0b;--ws-warn-bg:#fff4db;--ws-bad:#c93b30;--ws-bad-bg:#fde9e7;--ws-info:#2f63c8;--ws-info-bg:#e9f0fb;
+  --ws-brand-soft:#cfebdd;--ws-surface:#f7f9f6;
+  --ws-shadow:0 1px 2px rgba(20,40,30,.04),0 8px 24px rgba(20,40,30,.05);
+  --ws-shadow-hover:0 16px 34px rgba(20,40,30,.14),0 2px 6px rgba(20,40,30,.06);
+  --ws-glow:0 0 0 1px rgba(0,123,103,.32),0 0 12px 2px rgba(0,123,103,.14);
+  --ws-badge-plate:#fff;--ws-badge-ring:rgba(38,51,49,.14);
+  --secondary:#edf0eb;--muted:#f3f5f2;--input:#e6eae5;--sidebar:#f8faf7;
+  --mk0:#2e86d8;--mk1:#1fb8a4;--mk2:#d9a82e;
+  --display:"Outfit","Noto Sans SC",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans SC","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  --notes-w:320px;
+  color-scheme:light;
+}
+html.dark{
+  --ws-paper:#0e100f;--ws-card:#171a18;--ws-line:#242825;--ws-ink:#f1f4f0;--ws-body:#c9d2cc;--ws-muted-fg:#98a29b;
+  --ws-brand:#76fb91;--ws-brand-ink:#b9ffc9;--ws-brand-fg:#0e100f;--ws-tint:#173c24;
+  --ws-good:#76fb91;--ws-good-bg:#173c24;--ws-warn:#f5c451;--ws-warn-bg:#3a2e10;--ws-bad:#ff7a6b;--ws-bad-bg:#3d1d19;--ws-info:#8bb8ff;--ws-info-bg:#1a2436;
+  --ws-brand-soft:#2c5c3b;--ws-surface:#1c201d;
+  --ws-shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px rgba(0,0,0,.32);
+  --ws-shadow-hover:0 16px 34px rgba(0,0,0,.5),0 2px 6px rgba(0,0,0,.36);
+  --ws-glow:0 0 0 1px rgba(118,251,145,.32),0 0 12px 2px rgba(118,251,145,.14);
+  --ws-badge-plate:#f1f4f0;--ws-badge-ring:transparent;
+  --secondary:#1f2320;--muted:#1d211e;--input:#2a2e2b;--sidebar:#121513;
+  --mk0:#4ea8ff;--mk1:#2fe0c8;--mk2:#ffd84d;
+  color-scheme:dark;
+}
+[hidden]{display:none!important}
+*{box-sizing:border-box;margin:0;padding:0;border-color:var(--ws-line)}
+html,body{background:var(--ws-paper);color:var(--ws-ink);font-family:var(--sans);font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased}
+button,input,textarea,select{font:inherit;color:inherit;background:none;border:0;outline:0}
+button{cursor:pointer}
+a{color:inherit;text-decoration:none}
+:focus-visible{outline:2px solid var(--ws-brand);outline-offset:2px}
+svg{flex:none}
+.ico{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.ico.s14{width:14px;height:14px}.ico.s12{width:12px;height:12px}.ico.s18{width:18px;height:18px}
+.gl{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round;overflow:visible}
+.display{font-family:var(--display);font-weight:600;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.num{font-variant-numeric:tabular-nums}
+.muted{color:var(--ws-muted-fg)}
+.body{color:var(--ws-body)}
+
+/* ── 外壳：左栏 240（app-shell.tsx w-60）· 主区 · 右侧图标轨 44 · 稿子的「设计说明」栏 ── */
+.app{display:grid;grid-template-columns:240px minmax(0,1fr) 44px var(--notes-w);min-height:100vh}
+html.notes-off .app{grid-template-columns:240px minmax(0,1fr) 44px 0}
+.side{position:sticky;top:0;height:100vh;display:flex;flex-direction:column;background:var(--sidebar);border-right:1px solid var(--ws-line);padding:12px}
+.logo{display:flex;align-items:center;gap:8px;padding:4px 8px 16px;font-family:var(--display);font-weight:600;font-size:14px;letter-spacing:-.02em}
+.nav{display:flex;flex-direction:column;gap:2px;flex:1;overflow:auto}
+.nv{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:10px;font-size:13.5px;color:var(--ws-ink)}
+.nv svg{color:var(--ws-muted-fg)}
+.nv:hover{background:color-mix(in srgb,var(--ws-tint) 60%,transparent)}
+.nv.on{background:var(--ws-tint);color:var(--ws-brand-ink);font-weight:500;--ia:var(--ws-brand)}
+.nv.on svg{color:currentColor}
+html.dark .nv.on{color:var(--ws-brand-ink)}
+.nv .cnt{margin-left:auto;border-radius:4px;background:var(--muted);padding:2px 6px;font-size:11px;font-weight:400}
+.nv .dot{margin-left:auto;width:6px;height:6px;border-radius:50%;background:var(--ws-brand)}
+.nsec{display:flex;align-items:center;justify-content:space-between;padding:16px 10px 6px;font-size:11px;letter-spacing:.06em;color:var(--ws-muted-fg)}
+.prow{display:flex;align-items:center;gap:2px}
+.prow .chev{width:20px;height:20px;display:grid;place-items:center;color:var(--ws-muted-fg);border-radius:4px}
+.prow .nv{flex:1;min-width:0}
+.acct{margin-top:8px;padding-top:8px;border-top:1px solid var(--ws-line);display:flex;align-items:center;gap:10px;padding-left:8px}
+.acct b{font-size:13px;font-weight:600;display:block}
+.acct small{font-size:11.5px;color:var(--ws-muted-fg)}
+.top{display:flex;align-items:center;justify-content:flex-end;gap:8px;border-bottom:1px solid var(--ws-line);background:var(--ws-paper);padding:10px 20px}
+.kbar{display:flex;align-items:center;gap:8px;height:36px;width:100%;max-width:280px;padding:0 12px;border-radius:10px;background:var(--ws-card);box-shadow:var(--ws-shadow);font-size:13px;color:var(--ws-muted-fg)}
+.kbar kbd{margin-left:auto;font:inherit;font-size:11px}
+.tchip{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;border-radius:999px;background:var(--ws-card);box-shadow:var(--ws-shadow);font-size:12px;color:var(--ws-body);white-space:nowrap}
+.tchip i{width:6px;height:6px;border-radius:50%;background:var(--ws-good);display:inline-block}
+.mainwrap{min-width:0;display:flex;flex-direction:column}
+main{flex:1;min-width:0;padding:28px}
+.rail{position:sticky;top:0;height:100vh;border-left:1px solid var(--ws-line);display:flex;flex-direction:column;align-items:center;gap:18px;padding-top:16px;color:var(--ws-muted-fg)}
+.rail hr{width:20px;border:0;border-top:1px solid var(--ws-line)}
+
+/* ── 通用件 ── */
+.card{background:var(--ws-card);border-radius:16px;box-shadow:var(--ws-shadow)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:32px;padding:0 10px;border-radius:10px;font-size:14px;font-weight:500;white-space:nowrap;border:1px solid transparent;transition:background-color .15s}
+.btn.pri{background:var(--ws-brand);color:var(--ws-brand-fg)}
+.btn.pri:hover{background:color-mix(in srgb,var(--ws-brand) 80%,transparent)}
+.btn.out{border-color:var(--ws-line);background:var(--ws-paper)}
+html.dark .btn.out{border-color:var(--input);background:color-mix(in srgb,var(--input) 30%,transparent)}
+.btn.out:hover,.btn.ghost:hover{background:var(--muted)}
+.btn.sec{background:var(--secondary)}
+.btn.ghost{color:var(--ws-ink)}
+.btn.sm{height:28px;padding:0 10px;border-radius:8px;font-size:12.8px}
+.btn.xs{height:24px;padding:0 8px;border-radius:8px;font-size:12px;gap:4px}
+.btn.icon{width:32px;padding:0}.btn.sm.icon{width:28px}.btn.xs.icon{width:24px}
+.tag{display:inline-flex;align-items:center;gap:5px;height:22px;padding:0 8px;border-radius:6px;background:var(--ws-surface);font-size:12px;color:var(--ws-body);white-space:nowrap}
+.pill{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 10px;border-radius:999px;font-size:12px;font-weight:500;white-space:nowrap}
+.pill::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+.t-brand{background:var(--ws-tint);color:var(--ws-brand-ink)}
+.t-good{background:var(--ws-good-bg);color:var(--ws-good)}
+.t-warn{background:var(--ws-warn-bg);color:var(--ws-warn)}
+.t-bad{background:var(--ws-bad-bg);color:var(--ws-bad)}
+.t-info{background:var(--ws-info-bg);color:var(--ws-info)}
+.t-neutral{background:var(--ws-surface);color:var(--ws-muted-fg)}
+.dp{display:inline-flex;align-items:center;gap:3px;height:20px;padding:0 6px;border-radius:999px;font-size:11.5px;font-weight:600}
+.av{display:inline-grid;place-items:center;width:26px;height:26px;border-radius:50%;font-size:11px;font-weight:600;flex:none}
+.av.sm{width:20px;height:20px;font-size:10px}
+.go{display:inline-grid;place-items:center;width:30px;height:30px;border-radius:50%;background:var(--ws-surface);color:var(--ws-ink);flex:none;transition:background-color .15s,color .15s}
+.go:hover{background:var(--ws-brand);color:var(--ws-brand-fg)}
+.hint{display:inline-grid;place-items:center;width:14px;height:14px;border-radius:50%;box-shadow:inset 0 0 0 1.25px currentColor;font-size:9.5px;font-weight:700;color:var(--ws-muted-fg);cursor:help;position:relative;flex:none;font-family:var(--sans)}
+.hint:hover::after,.hint:focus::after{content:attr(data-hint);position:absolute;left:50%;bottom:calc(100% + 6px);transform:translateX(-50%);width:max-content;max-width:240px;padding:6px 9px;border-radius:8px;background:var(--ws-ink);color:var(--ws-paper);font-size:12px;font-weight:400;line-height:1.45;z-index:30;white-space:normal;box-shadow:var(--ws-shadow-hover)}
+[data-tip]{position:relative}
+[data-tip]:hover::after{content:attr(data-tip);position:absolute;left:50%;bottom:calc(100% + 6px);transform:translateX(-50%);width:max-content;max-width:240px;padding:5px 8px;border-radius:8px;background:var(--ws-ink);color:var(--ws-paper);font-size:12px;font-weight:400;line-height:1.4;z-index:30;pointer-events:none}
+/* 页内页签：照 components/ui/tabs.tsx（h-8、p-3px、选中是卡底 + 浅阴影） */
+.tabs{display:inline-flex;align-items:center;height:32px;padding:3px;border-radius:10px;background:var(--muted);gap:0}
+.tabs>*{height:100%;display:inline-flex;align-items:center;gap:6px;padding:0 12px;border-radius:7px;font-size:14px;font-weight:500;color:color-mix(in srgb,var(--ws-ink) 60%,transparent)}
+.tabs>*:hover{color:var(--ws-ink)}
+.tabs>.on{background:var(--ws-card);color:var(--ws-ink);box-shadow:0 1px 2px rgba(20,40,30,.08)}
+html.dark .tabs>.on{background:color-mix(in srgb,var(--input) 30%,transparent);box-shadow:inset 0 0 0 1px var(--input)}
+.tabs .n{font-size:11.5px;color:var(--ws-muted-fg);font-weight:400}
+/* 职责小图标 = 岗位线描 + 右下角 Reddit 官网角标（WP213：浅色圆底，深色下也是浅的） */
+.di{position:relative;display:inline-block;width:16px;height:16px;flex:none}
+.di .gl{width:16px;height:16px}
+.di img{position:absolute;right:-3px;bottom:-3px;width:10px;height:10px;border-radius:50%;background:var(--ws-badge-plate);box-shadow:0 0 0 1.5px var(--ws-card),0 0 0 .5px var(--ws-badge-ring) inset;padding:1px}
+.duty{display:inline-flex;align-items:center;gap:6px;height:22px;padding:0 8px 0 6px;border-radius:6px;background:var(--ws-surface);font-size:12px;color:var(--ws-body);white-space:nowrap}
+.duty .di{width:14px;height:14px}.duty .di .gl{width:14px;height:14px}.duty .di img{width:9px;height:9px;right:-3px;bottom:-3px}
+.sep{width:1px;height:18px;background:var(--ws-line);flex:none}
+.sec-h{display:flex;align-items:center;gap:8px;margin:0 2px 10px}
+.sec-h h3{font-family:var(--display);font-weight:600;letter-spacing:-.02em;font-size:17px}
+.sec-h .c{font-size:13px;color:var(--ws-muted-fg)}
+.sec-h .r{margin-left:auto;display:flex;align-items:center;gap:6px}
+.lnk{font-size:13px;color:var(--ws-muted-fg);display:inline-flex;align-items:center;gap:4px}
+.lnk:hover{color:var(--ws-ink)}
+.pop{position:absolute;z-index:40;background:var(--ws-card);border-radius:12px;box-shadow:var(--ws-shadow-hover),0 0 0 1px var(--ws-line);padding:8px}
+.toggle{width:30px;height:18px;border-radius:999px;background:var(--input);position:relative;flex:none;transition:background-color .15s}
+.toggle::after{content:"";position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.2);transition:left .15s}
+.toggle.on{background:var(--ws-brand)}.toggle.on::after{left:14px}
+html.dark .toggle.on::after{background:var(--ws-brand-fg)}
+
+/* ── 状态图标：颜色 + 形状双编码（同 docs/36 §7 第 19 条 StatusIcons 的思路，色弱可辨） ── */
+.st{width:16px;height:16px;flex:none;display:inline-block}
+.st circle,.st path{fill:none;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round}
+.st.you circle{stroke:var(--ws-warn)}.st.you .f{fill:var(--ws-warn);stroke:none}
+.st.doing circle{stroke:var(--ws-brand)}.st.doing .f{fill:var(--ws-brand);stroke:none}
+.st.others circle{stroke:var(--ws-info);stroke-dasharray:2.4 2.2}.st.others path{stroke:var(--ws-info)}
+.st.done .f{fill:var(--ws-good);stroke:none}.st.done path{stroke:var(--ws-card);stroke-width:2}
+
+/* ── 稿子的「设计说明」栏：不是产品界面，故意画成便签纸的样子 ── */
+.notes{position:sticky;top:0;height:100vh;overflow:auto;border-left:1px dashed color-mix(in srgb,var(--ws-muted-fg) 50%,transparent);background:repeating-linear-gradient(-45deg,transparent 0 10px,color-mix(in srgb,var(--ws-line) 45%,transparent) 10px 11px),var(--ws-paper);padding:18px 18px 40px;font-size:13px;color:var(--ws-body)}
+html.notes-off .notes{display:none}
+.notes .nh{display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap}
+.notes .nh>*{white-space:nowrap}
+.notes .nh b{font-family:var(--display);font-size:15px;color:var(--ws-ink)}
+.notes .nh .tag{background:var(--ws-warn-bg);color:var(--ws-warn)}
+.notes .blk{background:var(--ws-card);border-radius:12px;padding:12px 14px;margin-bottom:10px;box-shadow:var(--ws-shadow)}
+.notes h4{font-size:12.5px;color:var(--ws-ink);margin-bottom:6px;display:flex;align-items:center;gap:6px}
+.notes ol,.notes ul{padding-left:18px;display:flex;flex-direction:column;gap:4px}
+.notes li{line-height:1.5}
+.notes li b{color:var(--ws-ink);font-weight:600}
+.notes .was{text-decoration:line-through;color:var(--ws-muted-fg)}
+.notes .try{display:flex;flex-wrap:wrap;gap:6px}
+.notes .try button{height:24px;padding:0 8px;border-radius:8px;background:var(--ws-surface);font-size:12px;color:var(--ws-ink);box-shadow:inset 0 0 0 1px var(--ws-line)}
+.notes .try button:hover{box-shadow:inset 0 0 0 1px var(--ws-brand)}
+.notes .ask{border-left:3px solid var(--ws-warn);padding-left:10px}
+.notes-fab{position:fixed;right:56px;bottom:18px;z-index:50;display:none;align-items:center;gap:6px;height:32px;padding:0 12px;border-radius:999px;background:var(--ws-ink);color:var(--ws-paper);font-size:12.5px;font-weight:600;box-shadow:var(--ws-shadow-hover)}
+html.notes-off .notes-fab{display:inline-flex}
+.theme-btn{position:fixed;left:252px;bottom:18px;z-index:50}
+@media (max-width:1199px){
+  html:not(.notes-off) .app{grid-template-columns:240px minmax(0,1fr) 44px 0}
+  html:not(.notes-off) .notes{position:fixed;right:0;top:0;width:min(340px,90vw);z-index:60;box-shadow:var(--ws-shadow-hover)}
+}
+
+/* 岗位页三张稿共用：页头 · 横幅 · 页签 */
+.page{max-width:1120px;margin:0 auto;display:flex;flex-direction:column;gap:18px}
+.ph{display:flex;align-items:center;gap:14px}
+.pic{width:44px;height:44px;border-radius:12px;display:grid;place-items:center;background:var(--ws-tint);color:var(--ws-ink);--ia:var(--ws-brand);flex:none}
+.pic .gl{width:24px;height:24px}
+.ph h1{font-family:var(--display);font-weight:600;letter-spacing:-.02em;font-size:26px;line-height:1.15}
+.ph .stat{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px;margin-top:3px;font-size:13.5px;color:var(--ws-body)}
+.ph .stat a{display:inline-flex;align-items:center;gap:5px;border-radius:6px;padding:0 2px}
+.ph .stat a:hover{color:var(--ws-ink);text-decoration:underline dotted;text-underline-offset:3px}
+.ph .stat a b{font-weight:600;color:var(--ws-ink)}
+.ph .stat .d{width:6px;height:6px;border-radius:50%;display:inline-block}
+.ph .stat .mid{color:var(--ws-muted-fg)}
+.ph .r{margin-left:auto;display:flex;align-items:center;gap:8px}
+.holders{display:flex;align-items:center}
+.holders .av{box-shadow:0 0 0 2px var(--ws-paper)}
+.holders .av+.av{margin-left:-6px}
+.banner{display:flex;align-items:center;gap:10px;min-height:36px;padding:6px 8px 6px 12px;border-radius:10px;background:var(--ws-warn-bg);color:var(--ws-warn);font-size:13px}
+.banner span{color:var(--ws-ink)}
+html.dark .banner span{color:var(--ws-body)}
+.banner .btn{margin-left:auto;background:var(--ws-card);color:var(--ws-ink)}
+.ptabs{display:flex;align-items:center;gap:12px;margin-top:-4px}
+
+/* 「设置」页签：左边一列小目录，右边分节 */
+.sgrid{display:grid;grid-template-columns:150px minmax(0,1fr);gap:24px;align-items:start}
+.toc{position:sticky;top:20px;display:flex;flex-direction:column;gap:2px}
+.toc a{display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:10px;font-size:13.5px;color:var(--ws-body)}
+.toc a:hover{background:var(--muted)}
+.toc a.on{background:var(--ws-tint);color:var(--ws-brand-ink);font-weight:500}
+.toc a .n{margin-left:auto;font-size:11.5px;color:var(--ws-muted-fg)}
+.scol{display:flex;flex-direction:column;gap:26px;min-width:0}
+.ss{scroll-margin-top:20px}
+.ss h3{font-family:var(--display);font-weight:600;letter-spacing:-.02em;font-size:17px;display:flex;align-items:center;gap:8px;margin:0 2px 10px}
+.ss h3 .c{font-family:var(--sans);font-size:13px;font-weight:400;letter-spacing:0;color:var(--ws-muted-fg)}
+.ss h3 .r{margin-left:auto;display:flex;gap:6px}
+.sub{font-size:12px;color:var(--ws-muted-fg);padding:12px 16px 4px;display:flex;align-items:center;gap:6px}
+.li{display:flex;align-items:center;gap:12px;padding:12px 16px;min-height:58px;position:relative}
+.li+.li{border-top:1px solid var(--ws-line)}
+.sub~.sub{border-top:1px solid var(--ws-line);margin-top:4px}
+.li .ic{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;background:var(--ws-surface);color:var(--ws-ink);flex:none}
+.li .ic .di,.li .ic .di .gl{width:18px;height:18px}
+.li .ic .di img{width:11px;height:11px}
+.li .ic img.fav{width:18px;height:18px;border-radius:4px}
+.li .tx{flex:1;min-width:0}
+.li .tx>b{font-size:14px;font-weight:600;display:flex;align-items:center;gap:6px}
+.li .tx small{display:block;font-size:12.5px;color:var(--ws-muted-fg);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}
+.li .act{display:flex;align-items:center;gap:8px;flex:none}
+.li.dim .tx b{color:var(--ws-muted-fg);font-weight:500}
+.sfoot{display:flex;align-items:center;gap:8px;padding:10px 16px;border-top:1px solid var(--ws-line);flex-wrap:wrap}
+/* 状态图标：四态 通 / 不通 / 没测，颜色 + 形状双编码（components/design/status-icons.tsx） */
+.sis{display:flex;align-items:center;gap:6px}
+.si{position:relative;width:24px;height:24px;border-radius:7px;display:grid;place-items:center;flex:none}
+.si>.ico{width:13px;height:13px}
+.si.ok{background:var(--ws-good-bg);color:var(--ws-good)}
+.si.fail{background:var(--ws-bad-bg);color:var(--ws-bad)}
+.si.unknown{border:1px dashed color-mix(in srgb,var(--ws-muted-fg) 60%,transparent);color:var(--ws-muted-fg)}
+.si i{position:absolute;right:-3px;bottom:-3px;width:11px;height:11px;border-radius:50%;display:grid;place-items:center;box-shadow:0 0 0 1.5px var(--ws-card)}
+.si i svg{width:7px;height:7px;stroke:#fff;stroke-width:3.5;fill:none;stroke-linecap:round;stroke-linejoin:round}
+html.dark .si i svg{stroke:var(--ws-paper)}
+.si.ok i{background:var(--ws-good)}.si.fail i{background:var(--ws-bad)}.si.unknown i{background:var(--ws-muted-fg)}
+.val{font-size:12.5px;color:var(--ws-body);white-space:nowrap}
+.why{color:var(--ws-bad)!important}
+/* 记忆 */
+.mh{display:flex;align-items:center;gap:8px;padding:12px 16px 6px;font-size:13px;font-weight:600}
+.mh .c{font-weight:400;color:var(--ws-muted-fg)}
+.mh .r{margin-left:auto}
+.mem{display:flex;align-items:flex-start;gap:10px;padding:9px 16px}
+.mem+.mem{border-top:1px solid var(--ws-line)}
+.mem .q{flex:1;min-width:0;font-size:13.5px;line-height:1.5}
+.mem .q small{display:block;font-size:12px;color:var(--ws-muted-fg);margin-top:1px}
+.mem .act{display:flex;gap:2px;opacity:.5}
+.mem:hover .act{opacity:1}
+.mcard+.mcard{margin-top:12px}
+/* 定时 */
+.cron .tx small b{font-weight:500;color:var(--ws-body)}
+/* 高级：默认折叠 */
+.adv summary{list-style:none;display:flex;align-items:center;gap:8px;padding:14px 16px;cursor:pointer;font-size:14px;font-weight:600}
+.adv summary::-webkit-details-marker{display:none}
+.adv summary .tw{color:var(--ws-muted-fg);transition:transform .15s;transform:rotate(-90deg)}
+.adv[open] summary .tw{transform:none}
+.adv summary small{font-weight:400;color:var(--ws-muted-fg);font-size:12.5px}
+.adv summary .r{margin-left:auto;display:flex;align-items:center;gap:8px;font-weight:400;font-size:12.5px;color:var(--ws-muted-fg)}
+.cap{padding:2px 16px 16px;border-top:1px solid var(--ws-line)}
+.cap h5{font-size:13px;font-weight:600;display:flex;align-items:center;gap:6px;margin:14px 0 8px}
+.caps{display:flex;flex-wrap:wrap;gap:6px}
+.cp{display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 4px 0 10px;border-radius:8px;background:var(--ws-surface);font-size:12.5px;color:var(--ws-ink)}
+.cp em{font-style:normal;font-size:11.5px;padding:0 7px;border-radius:999px;height:18px;display:inline-flex;align-items:center}
+.cp.k{padding-right:10px}
+.cp code{display:none;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;color:var(--ws-muted-fg);padding-right:6px}
+.dev .cp code{display:inline}
+.limits{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:12.5px;color:var(--ws-body)}
+.limits b{color:var(--ws-ink);font-weight:600}
+.menu{position:absolute;right:16px;top:46px;min-width:200px;padding:6px}
+.menu .opt{display:flex;align-items:center;gap:8px;width:100%;height:30px;padding:0 8px;border-radius:8px;font-size:13px;text-align:left}
+.menu .opt:hover{background:var(--muted)}
+.menu .opt.bad{color:var(--ws-bad)}
+.menu hr{border:0;border-top:1px solid var(--ws-line);margin:4px 0}
+.fld{display:flex;align-items:center;gap:8px;height:32px;padding:0 10px;border-radius:10px;border:1px solid var(--input);font-size:14px;min-width:200px}
+@media (max-width:1199px){.sgrid{grid-template-columns:1fr}.toc{position:static;flex-direction:row;flex-wrap:wrap}.toc a .n{margin-left:4px}}
+
+</style>
+</head>
+<body>
+<svg xmlns="http://www.w3.org/2000/svg" style="position:absolute;width:0;height:0" aria-hidden="true">
+<defs>
+<linearGradient id="mk" gradientUnits="userSpaceOnUse" x1="14" y1="77" x2="79" y2="12"><stop offset="0" style="stop-color:var(--mk0)"/><stop offset=".52" style="stop-color:var(--mk1)"/><stop offset="1" style="stop-color:var(--mk2)"/></linearGradient>
+</defs>
+<!-- lucide（工作台左栏 / 顶栏 / 右栏用的同一套，线宽 2） -->
+<symbol id="i-chat" viewBox="0 0 24 24"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/></symbol>
+<symbol id="i-home" viewBox="0 0 24 24"><path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"/><path d="M3 10a2 2 0 0 1 .709-1.528l7-5.999a2 2 0 0 1 2.582 0l7 5.999A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></symbol>
+<symbol id="i-inbox" viewBox="0 0 24 24"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></symbol>
+<symbol id="i-msgs" viewBox="0 0 24 24"><path d="M14 9a2 2 0 0 1-2 2H6l-4 4V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2z"/><path d="M18 9h2a2 2 0 0 1 2 2v11l-4-4h-6a2 2 0 0 1-2-2v-1"/></symbol>
+<symbol id="i-todo" viewBox="0 0 24 24"><rect x="3" y="5" width="6" height="6" rx="1"/><path d="m3 17 2 2 4-4"/><path d="M13 6h8"/><path d="M13 12h8"/><path d="M13 18h8"/></symbol>
+<symbol id="i-cal" viewBox="0 0 24 24"><path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/><path d="M8 14h.01"/><path d="M12 14h.01"/><path d="M16 14h.01"/><path d="M8 18h.01"/><path d="M12 18h.01"/></symbol>
+<symbol id="i-cmd" viewBox="0 0 24 24"><path d="M15 6v12a3 3 0 1 0 3-3H6a3 3 0 1 0 3 3V6a3 3 0 1 0-3 3h12a3 3 0 1 0-3-3"/></symbol>
+<symbol id="i-plus" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M12 5v14"/></symbol>
+<symbol id="i-cr" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+<symbol id="i-cd" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+<symbol id="i-cl" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></symbol>
+<symbol id="i-more" viewBox="0 0 24 24"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></symbol>
+<symbol id="i-send" viewBox="0 0 24 24"><path d="M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z"/><path d="m21.854 2.147-10.94 10.939"/></symbol>
+<symbol id="i-clip" viewBox="0 0 24 24"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></symbol>
+<symbol id="i-list" viewBox="0 0 24 24"><path d="M3 12h.01"/><path d="M3 18h.01"/><path d="M3 6h.01"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M8 6h13"/></symbol>
+<symbol id="i-board" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M8 7v7"/><path d="M12 7v4"/><path d="M16 7v9"/></symbol>
+<symbol id="i-table" viewBox="0 0 24 24"><path d="M12 3v18"/><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 9h18"/><path d="M3 15h18"/></symbol>
+<symbol id="i-filter" viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M7 12h10"/><path d="M10 18h4"/></symbol>
+<symbol id="i-group" viewBox="0 0 24 24"><rect width="18" height="7" x="3" y="3" rx="1"/><rect width="18" height="7" x="3" y="14" rx="1"/></symbol>
+<symbol id="i-sort" viewBox="0 0 24 24"><path d="m21 16-4 4-4-4"/><path d="M17 20V4"/><path d="m3 8 4-4 4 4"/><path d="M7 4v16"/></symbol>
+<symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></symbol>
+<symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+<symbol id="i-go" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></symbol>
+<symbol id="i-up" viewBox="0 0 24 24"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></symbol>
+<symbol id="i-down" viewBox="0 0 24 24"><path d="m7 7 10 10"/><path d="M17 7v10H7"/></symbol>
+<symbol id="i-unlink" viewBox="0 0 24 24"><path d="M9 17H7A5 5 0 0 1 7 7"/><path d="M15 7h2a5 5 0 0 1 4 8"/><path d="M8 12h4"/><path d="m2 2 20 20"/></symbol>
+<symbol id="i-chart" viewBox="0 0 24 24"><path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></symbol>
+<symbol id="i-play" viewBox="0 0 24 24"><polygon points="6 3 20 12 6 21 6 3"/></symbol>
+<symbol id="i-alarm" viewBox="0 0 24 24"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2 2"/><path d="M5 3 2 6"/><path d="m22 6-3-3"/></symbol>
+<symbol id="i-evid" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><circle cx="11.5" cy="14.5" r="2.5"/><path d="M13.3 16.3 15 18"/></symbol>
+<symbol id="i-brain" viewBox="0 0 24 24"><path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z"/><path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z"/><path d="M12 5v13"/></symbol>
+<symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></symbol>
+<symbol id="i-file" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></symbol>
+<symbol id="i-ask" viewBox="0 0 24 24"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></symbol>
+<symbol id="i-book" viewBox="0 0 24 24"><path d="M21.42 10.922a1 1 0 0 0-.019-1.838L12.83 5.18a2 2 0 0 0-1.66 0L2.6 9.08a1 1 0 0 0 0 1.832l8.57 3.908a2 2 0 0 0 1.66 0z"/><path d="M22 10v6"/><path d="M6 12.5V16a6 3 0 0 0 12 0v-3.5"/></symbol>
+<symbol id="i-sliders" viewBox="0 0 24 24"><path d="M21 4h-7"/><path d="M10 4H3"/><path d="M21 12h-9"/><path d="M8 12H3"/><path d="M21 20h-5"/><path d="M12 20H3"/><path d="M14 2v4"/><path d="M8 10v4"/><path d="M16 18v4"/></symbol>
+<symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></symbol>
+<symbol id="i-matter" viewBox="0 0 24 24"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></symbol>
+<symbol id="i-sq" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="m9 12 2 2 4-4"/></symbol>
+<symbol id="i-calclock" viewBox="0 0 24 24"><path d="M21 7.5V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h3.5"/><path d="M16 2v4"/><path d="M8 2v4"/><path d="M3 10h5"/><path d="M17.5 17.5 16 16.3V14"/><circle cx="16" cy="16" r="6"/></symbol>
+<symbol id="i-stamp" viewBox="0 0 24 24"><path d="M5 22h14"/><path d="M19.27 13.73A2.5 2.5 0 0 0 17.5 13h-11A2.5 2.5 0 0 0 4 15.5V17a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-1.5c0-.66-.26-1.3-.73-1.77Z"/><path d="M14 13V8.5C14 7 15 7 15 5a3 3 0 0 0-6 0c0 2 1 2 1 3.5V13"/></symbol>
+<symbol id="i-plug" viewBox="0 0 24 24"><path d="M12 22v-5"/><path d="M9 8V2"/><path d="M15 8V2"/><path d="M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z"/></symbol>
+<symbol id="i-shield" viewBox="0 0 24 24"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/></symbol>
+<symbol id="i-code" viewBox="0 0 24 24"><path d="m16 18 6-6-6-6"/><path d="m8 6-6 6 6 6"/></symbol>
+<symbol id="i-pause" viewBox="0 0 24 24"><rect x="14" y="4" width="4" height="16" rx="1"/><rect x="6" y="4" width="4" height="16" rx="1"/></symbol>
+<symbol id="i-pen" viewBox="0 0 24 24"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/></symbol>
+<symbol id="i-merge" viewBox="0 0 24 24"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M6 21V9a9 9 0 0 0 9 9"/></symbol>
+<symbol id="i-split" viewBox="0 0 24 24"><path d="M16 3h5v5"/><path d="M8 3H3v5"/><path d="M12 22v-8.3a4 4 0 0 0-1.172-2.872L3 3"/><path d="m15 9 6-6"/></symbol>
+<symbol id="i-warn" viewBox="0 0 24 24"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></symbol>
+<symbol id="i-grip" viewBox="0 0 24 24"><circle cx="9" cy="12" r="1"/><circle cx="9" cy="5" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="19" r="1"/></symbol>
+<symbol id="i-cols" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/><path d="M15 3v18"/></symbol>
+<symbol id="i-bot" viewBox="0 0 24 24"><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></symbol>
+<symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></symbol>
+<symbol id="i-note" viewBox="0 0 24 24"><path d="M13.4 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7.4"/><path d="M2 6h4"/><path d="M2 10h4"/><path d="M2 14h4"/><path d="M2 18h4"/><path d="M21.378 5.626a1 1 0 1 0-3.004-3.004l-5.01 5.012a2 2 0 0 0-.506.854l-.837 2.87a.5.5 0 0 0 .62.62l2.87-.837a2 2 0 0 0 .854-.506z"/></symbol>
+<!-- 岗位 / 职责线描（WP213 role-icons/glyphs.ts 原样；线宽 1.75，点睛那一笔走 --ia） -->
+<symbol id="g-pr" viewBox="0 0 24 24"><rect x="2.5" y="4" width="10" height="16" rx="1.5"/><path d="M5.5 8.5h4M5.5 12h4M5.5 15.5h2.5"/><path d="M15.5 10v4M15.5 10l5-3.5v11l-5-3.5" style="stroke:var(--ia,currentColor)"/></symbol>
+<symbol id="g-social" viewBox="0 0 24 24"><path d="M14.5 7.5V6.5a3 3 0 0 0-3-3h-6a3 3 0 0 0-3 3V9a3 3 0 0 0 3 3v2.5L8 12"/><path d="M13 10h5.5a3 3 0 0 1 3 3v2.5a3 3 0 0 1-3 3V21L16 18.5h-3a3 3 0 0 1-3-3V13a3 3 0 0 1 3-3z"/><circle cx="19.5" cy="4.5" r="1.5" style="stroke:var(--ia,currentColor)"/></symbol>
+<symbol id="g-care" viewBox="0 0 24 24"><path d="M3.5 15.5V11a8.5 8.5 0 0 1 17 0v4.5"/><path d="M8.5 9.5h7A2.5 2.5 0 0 1 18 12v3a2.5 2.5 0 0 1-2.5 2.5H12l-3 2.5v-2.5h-.5A2.5 2.5 0 0 1 6 15v-3a2.5 2.5 0 0 1 2.5-2.5z"/><path d="M9.5 13.5h.01M12 13.5h.01M14.5 13.5h.01" style="stroke:var(--ia,currentColor)"/></symbol>
+<symbol id="g-web" viewBox="0 0 24 24"><circle cx="11" cy="13" r="8"/><path d="M11 5c-2.2 2.2-3.2 5-3.2 8s1 5.8 3.2 8"/><path d="M2.5 16c3-.2 5-2.2 7.5-2.2s4-1.8 5.5-4.3S19 5 21.5 4.5" style="stroke:var(--ia,currentColor)"/></symbol>
+</svg>
+
+<div class="app">
+<aside class="side">
+  <div class="logo"><svg width="24" height="24" viewBox="14 12 65 65" aria-hidden="true"><g fill="url(#mk)"><rect x="14" y="44" width="17" height="17" rx="2.5"/><rect x="38" y="52" width="17" height="17" rx="2.5"/><rect x="38" y="28" width="17" height="17" rx="2.5"/><rect x="62" y="60" width="17" height="17" rx="2.5"/><rect x="62" y="36" width="17" height="17" rx="2.5"/><rect x="62" y="12" width="17" height="17" rx="2.5"/></g></svg>Agents 工坊</div>
+  <nav class="nav" aria-label="主导航">
+    <a class="nv"><svg class="ico"><use href="#i-chat"/></svg>随便聊</a>
+    <a class="nv"><svg class="ico"><use href="#i-home"/></svg>首页</a>
+    <a class="nv"><svg class="ico"><use href="#i-inbox"/></svg>消息<span class="dot"></span></a>
+    <a class="nv"><svg class="ico"><use href="#i-todo"/></svg>待办</a>
+    <a class="nv"><svg class="ico"><use href="#i-cal"/></svg>日历</a>
+    <div class="nsec">岗位<svg class="ico s14"><use href="#i-plus"/></svg></div>
+    <div class="prow"><span class="chev"><svg class="ico s14"><use href="#i-cr"/></svg></span><a class="nv on" href="position-v2-list.html"><svg class="gl"><use href="#g-pr"/></svg>Reddit 运营<span class="cnt">3</span></a></div>
+    <div class="prow"><span class="chev"><svg class="ico s14"><use href="#i-cr"/></svg></span><a class="nv"><svg class="gl"><use href="#g-care"/></svg>客服</a></div>
+    <div class="prow"><span class="chev"><svg class="ico s14"><use href="#i-cr"/></svg></span><a class="nv"><svg class="gl"><use href="#g-web"/></svg>网站运营</a></div>
+  </nav>
+  <div class="acct"><span class="av t-warn">舟</span><div><b>林舟</b><small>负责人 · INMO</small></div></div>
+</aside>
+<div class="mainwrap">
+  <header class="top">
+    <button class="kbar" type="button"><svg class="ico"><use href="#i-cmd"/></svg>交给某个岗位一件事…<kbd>⌘K</kbd></button>
+    <span class="tchip"><i></i>DeepSeek</span>
+    <span class="tchip num">积分 101.1</span>
+  </header>
+  <main>
+<div class="page">
+  <div class="ph">
+    <span class="pic"><svg class="gl"><use href="#g-pr"/></svg></span>
+    <div>
+      <h1>Reddit 运营</h1>
+      <p class="stat">
+        <a href="position-v2-list.html#need"><i class="d" style="background:var(--ws-warn)"></i><b>3</b> 张等你定</a><span class="mid">·</span>
+        <a href="position-v2-list.html#work"><i class="d" style="background:var(--ws-brand)"></i><b>5</b> 件在办</a><span class="mid">·</span>
+        <a href="position-v2-list.html#work"><i class="d" style="background:var(--ws-info)"></i>今天 <b>1</b> 个待办</a>
+      </p>
+    </div>
+    <div class="r"><span class="holders"><span class="av sm t-warn">舟</span><span class="av sm t-brand">AI</span></span></div>
+  </div>
+  <div class="ptabs"><div class="tabs"><a href="position-v2-list.html">工作</a><a href="position-v2-list.html?tab=records">记录</a><a class="on">设置</a></div></div>
+
+  <div class="sgrid">
+    <nav class="toc" id="toc">
+      <a href="#s-duty" class="on"><svg class="ico s14"><use href="#i-group"/></svg>职责<span class="n">2</span></a>
+      <a href="#s-conn"><svg class="ico s14"><use href="#i-plug"/></svg>连接<span class="n">5</span></a>
+      <a href="#s-mem"><svg class="ico s14"><use href="#i-brain"/></svg>记忆<span class="n">7</span></a>
+      <a href="#s-cron"><svg class="ico s14"><use href="#i-alarm"/></svg>定时任务<span class="n">4</span></a>
+      <a href="#s-adv"><svg class="ico s14"><use href="#i-sliders"/></svg>高级</a>
+    </nav>
+    <div class="scol">
+      <!-- 职责：这个岗位装哪几条，加减、合并拆分 -->
+      <section class="ss" id="s-duty">
+        <h3>职责<span class="c">这个岗位装了 2 条，交给它的事它自己挑一条做</span></h3>
+        <div class="card">
+          <div class="li">
+            <span class="ic"><span class="di"><svg class="gl"><use href="#g-pr"/></svg><img src="../../../apps/workstation/src/assets/brand/reddit.png" alt=""></span></span>
+            <div class="tx"><b>Reddit 营销</b><small>去别人的版：找版、读版规、回帖发帖、盯口碑</small></div>
+            <div class="act"><button class="btn xs out" type="button"><svg class="ico s12"><use href="#i-play"/></svg>用这条开</button><button class="btn xs icon ghost" type="button" data-menu aria-label="更多"><svg class="ico s14"><use href="#i-more"/></svg></button></div>
+          </div>
+          <div class="li">
+            <span class="ic"><span class="di"><svg class="gl"><use href="#g-social"/></svg><img src="../../../apps/workstation/src/assets/brand/reddit.png" alt=""></span></span>
+            <div class="tx"><b>自家版 <span class="hint" tabindex="0" data-hint="原名「Reddit 运营」，和岗位同名，稿里先叫「自家版」">?</span></b><small>我们自己的 r/INMO：入群审核、版规、公告、删帖禁言</small></div>
+            <div class="act"><button class="btn xs out" type="button"><svg class="ico s12"><use href="#i-play"/></svg>用这条开</button><button class="btn xs icon ghost" type="button" data-menu aria-label="更多"><svg class="ico s14"><use href="#i-more"/></svg></button></div>
+          </div>
+          <div class="sfoot">
+            <button class="btn sm out" type="button"><svg class="ico s14"><use href="#i-plus"/></svg>加一条职责</button>
+            <button class="btn sm ghost" type="button"><svg class="ico s14"><use href="#i-merge"/></svg>把别的岗位合进来</button>
+            <span class="hint" tabindex="0" data-hint="合并、拆分、移动职责都不丢上下文和记忆（WP234）。事太多时它会建议拆。">?</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- 连接：只列这个岗位用得到的；必需 / 可选分开 -->
+      <section class="ss" id="s-conn">
+        <h3>连接<span class="c">只列这个岗位用得到的</span><span class="r"><a class="lnk" href="#">全部连接<svg class="ico s14"><use href="#i-go"/></svg></a></span></h3>
+        <div class="card">
+          <div class="sub">必需</div>
+          <div class="li">
+            <span class="ic"><svg width="18" height="18" viewBox="14 12 65 65" aria-hidden="true"><g fill="url(#mk)"><rect x="14" y="44" width="17" height="17" rx="2.5"/><rect x="38" y="52" width="17" height="17" rx="2.5"/><rect x="38" y="28" width="17" height="17" rx="2.5"/><rect x="62" y="60" width="17" height="17" rx="2.5"/><rect x="62" y="36" width="17" height="17" rx="2.5"/><rect x="62" y="12" width="17" height="17" rx="2.5"/></g></svg></span>
+            <div class="tx"><b>Reddit 取数</b><small>用 Agents 工坊接口</small></div>
+            <div class="act"><span class="val num">今天 3 次 · 0.6 积分</span><span class="sis"><span class="si ok" data-tip="连通：通 · 10-06 14:18 取回 25 条"><svg class="ico"><use href="#i-globe"/></svg><i><svg viewBox="0 0 10 10"><path d="m2.5 5.2 1.7 1.7 3.4-3.6"/></svg></i></span></span><button class="btn xs ghost" type="button">换来源</button></div>
+          </div>
+          <div class="li">
+            <span class="ic"><img class="fav" src="../../../apps/workstation/src/assets/brand/reddit.png" alt=""></span>
+            <div class="tx"><b>品牌 Reddit 号</b><small>回帖、发帖用它，每条都要你批</small></div>
+            <div class="act"><span class="val">u/inmo_****</span><span class="sis"><span class="si ok" data-tip="登录：通 · 只在你自己的浏览器里登录"><svg class="ico"><use href="#i-shield"/></svg><i><svg viewBox="0 0 10 10"><path d="m2.5 5.2 1.7 1.7 3.4-3.6"/></svg></i></span></span><button class="btn xs ghost" type="button">改</button></div>
+          </div>
+          <div class="sub">可选</div>
+          <div class="li dim">
+            <span class="ic"><img class="fav" src="../../../apps/workstation/src/assets/brand/reddit.png" alt=""></span>
+            <div class="tx"><b>自己的 Reddit API</b><small>不用连：取数已经走 Agents 工坊接口</small></div>
+            <div class="act"><button class="btn xs ghost" type="button">连接</button></div>
+          </div>
+          <div class="li dim">
+            <span class="ic"><svg class="ico"><use href="#i-plug"/></svg></span>
+            <div class="tx"><b>Apify（自带 key）</b><small>想用自己的额度取数时再连</small></div>
+            <div class="act"><span class="sis"><span class="si unknown" data-tip="没连"><svg class="ico"><use href="#i-plug"/></svg><i><svg viewBox="0 0 10 10"><path d="M3 5h4"/></svg></i></span></span><button class="btn xs ghost" type="button">连接</button></div>
+          </div>
+          <div class="li">
+            <span class="ic"><svg class="ico"><use href="#i-globe"/></svg></span>
+            <div class="tx"><b>浏览器只读</b><small class="why">被 Reddit 人机验证挡下，已自动停用</small></div>
+            <div class="act"><span class="sis"><span class="si fail" data-tip="可用：不通 · 10-06 13:52 遇到人机验证，照规矩不绕"><svg class="ico"><use href="#i-globe"/></svg><i><svg viewBox="0 0 10 10"><path d="m3 3 4 4M7 3 3 7"/></svg></i></span></span><button class="btn xs ghost" type="button">再试一次</button></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 记忆：岗位层 + 职责层，分开列 -->
+      <section class="ss" id="s-mem">
+        <h3>记忆<span class="c">它攒下来的规矩，可以改</span></h3>
+        <div class="card mcard">
+          <div class="mh"><svg class="gl" style="width:15px;height:15px"><use href="#g-pr"/></svg>这个岗位<span class="c">3 条 · 两条职责都用</span><span class="r"><button class="btn xs ghost" type="button"><svg class="ico s12"><use href="#i-plus"/></svg>加一条</button></span></div>
+          <div class="mem"><div class="q">回帖先说明身份：「我是 INMO 官方」，不装普通用户<small>你定的 · 10-05</small></div><div class="act"><button class="btn xs icon ghost" type="button" data-tip="改"><svg class="ico s12"><use href="#i-pen"/></svg></button><button class="btn xs icon ghost" type="button" data-tip="删"><svg class="ico s12"><use href="#i-x"/></svg></button></div></div>
+          <div class="mem"><div class="q">没核实的说法（比如「召回」）不下结论，交公关<small>复盘提上来的 · 10-06</small></div><div class="act"><button class="btn xs icon ghost" type="button" data-tip="改"><svg class="ico s12"><use href="#i-pen"/></svg></button><button class="btn xs icon ghost" type="button" data-tip="删"><svg class="ico s12"><use href="#i-x"/></svg></button></div></div>
+          <div class="mem"><div class="q">客户的具体问题（订单、退换、故障）转客服，不在 Reddit 上处理<small>你定的 · 10-05</small></div><div class="act"><button class="btn xs icon ghost" type="button" data-tip="改"><svg class="ico s12"><use href="#i-pen"/></svg></button><button class="btn xs icon ghost" type="button" data-tip="删"><svg class="ico s12"><use href="#i-x"/></svg></button></div></div>
+        </div>
+        <div class="card mcard">
+          <div class="mh"><span class="di"><svg class="gl"><use href="#g-pr"/></svg><img src="../../../apps/workstation/src/assets/brand/reddit.png" alt=""></span>Reddit 营销<span class="c">2 条</span><span class="r"><button class="btn xs ghost" type="button"><svg class="ico s12"><use href="#i-plus"/></svg>加一条</button></span></div>
+          <div class="mem"><div class="q">r/SmartGlasses 禁止带链接，回帖不放购买链接<small>读版规记下的 · 10-02</small></div><div class="act"><button class="btn xs icon ghost" type="button" data-tip="提到「这个岗位」"><svg class="ico s12"><use href="#i-up"/></svg></button><button class="btn xs icon ghost" type="button" data-tip="改"><svg class="ico s12"><use href="#i-pen"/></svg></button></div></div>
+          <div class="mem"><div class="q">取数先少取、看清再加，换词不超过 3 次<small>复盘提上来的 · 10-06</small></div><div class="act"><button class="btn xs icon ghost" type="button" data-tip="提到「这个岗位」"><svg class="ico s12"><use href="#i-up"/></svg></button><button class="btn xs icon ghost" type="button" data-tip="改"><svg class="ico s12"><use href="#i-pen"/></svg></button></div></div>
+        </div>
+        <div class="card mcard">
+          <div class="mh"><span class="di"><svg class="gl"><use href="#g-social"/></svg><img src="../../../apps/workstation/src/assets/brand/reddit.png" alt=""></span>自家版<span class="c">2 条</span><span class="r"><button class="btn xs ghost" type="button"><svg class="ico s12"><use href="#i-plus"/></svg>加一条</button></span></div>
+          <div class="mem"><div class="q">新成员 24 小时内发欢迎帖，一周合并成一条<small>你定的 · 10-03</small></div><div class="act"><button class="btn xs icon ghost" type="button" data-tip="提到「这个岗位」"><svg class="ico s12"><use href="#i-up"/></svg></button><button class="btn xs icon ghost" type="button" data-tip="改"><svg class="ico s12"><use href="#i-pen"/></svg></button></div></div>
+          <div class="mem"><div class="q">注册不到 7 天、带外链的号，进版前先问你<small>复盘提上来的 · 10-06</small></div><div class="act"><button class="btn xs icon ghost" type="button" data-tip="提到「这个岗位」"><svg class="ico s12"><use href="#i-up"/></svg></button><button class="btn xs icon ghost" type="button" data-tip="改"><svg class="ico s12"><use href="#i-pen"/></svg></button></div></div>
+        </div>
+      </section>
+
+      <!-- 定时任务 -->
+      <section class="ss" id="s-cron">
+        <h3>定时任务<span class="c">它按点自己做的事</span></h3>
+        <div class="card cron">
+          <div class="li"><span class="ic"><span class="di"><svg class="gl"><use href="#g-pr"/></svg><img src="../../../apps/workstation/src/assets/brand/reddit.png" alt=""></span></span><div class="tx"><b>扫一遍 Reddit 上提到 INMO 的帖子</b><small>每天 09:00 · 下次 <b>明天 09:00</b> · 每次最多 3 积分</small></div><div class="act"><span class="sis"><span class="si ok" data-tip="上次：成功 · 今天 09:00"><svg class="ico"><use href="#i-alarm"/></svg><i><svg viewBox="0 0 10 10"><path d="m2.5 5.2 1.7 1.7 3.4-3.6"/></svg></i></span></span><button class="toggle on" type="button" aria-label="开着"></button></div></div>
+          <div class="li"><span class="ic"><span class="di"><svg class="gl"><use href="#g-social"/></svg><img src="../../../apps/workstation/src/assets/brand/reddit.png" alt=""></span></span><div class="tx"><b>r/INMO 入群审核</b><small>每 2 小时 · 下次 <b>今天 16:00</b></small></div><div class="act"><span class="sis"><span class="si ok" data-tip="上次：成功 · 今天 14:00"><svg class="ico"><use href="#i-alarm"/></svg><i><svg viewBox="0 0 10 10"><path d="m2.5 5.2 1.7 1.7 3.4-3.6"/></svg></i></span></span><button class="toggle on" type="button" aria-label="开着"></button></div></div>
+          <div class="li"><span class="ic"><span class="di"><svg class="gl"><use href="#g-social"/></svg><img src="../../../apps/workstation/src/assets/brand/reddit.png" alt=""></span></span><div class="tx"><b>r/INMO 每周问答帖</b><small>每周五 09:00 · 下次 <b>10-09</b></small></div><div class="act"><span class="sis"><span class="si ok" data-tip="上次：成功 · 10-02 09:00"><svg class="ico"><use href="#i-alarm"/></svg><i><svg viewBox="0 0 10 10"><path d="m2.5 5.2 1.7 1.7 3.4-3.6"/></svg></i></span></span><button class="toggle on" type="button" aria-label="开着"></button></div></div>
+          <div class="li dim"><span class="ic"><svg class="gl"><use href="#g-pr"/></svg></span><div class="tx"><b>周报卡</b><small>每周一 08:30 · 停着</small></div><div class="act"><button class="toggle" type="button" aria-label="停着"></button></div></div>
+        </div>
+      </section>
+
+      <!-- 高级：默认折叠；人话在前，原始 id 只在开发者视图 -->
+      <section class="ss" id="s-adv">
+        <details class="card adv" id="adv">
+          <summary><svg class="ico s14 tw"><use href="#i-cd"/></svg>高级<small>每条职责能做什么、运行上限</small><span class="r">开发者视图<button class="toggle" type="button" id="devToggle" aria-label="开发者视图"></button></span></summary>
+          <div class="cap" id="cap">
+            <h5><span class="di"><svg class="gl"><use href="#g-pr"/></svg><img src="../../../apps/workstation/src/assets/brand/reddit.png" alt=""></span>Reddit 营销 能做什么</h5>
+            <div class="caps">
+              <span class="cp">看帖子和评论<em class="t-neutral">只读</em><code>community_thread · read</code></span>
+              <span class="cp">回帖<em class="t-warn">要你批</em><code>reply_thread → L2</code></span>
+              <span class="cp">在别人的版发帖<em class="t-warn">要你批</em><code>post_external → L2</code></span>
+              <span class="cp">私信版主<em class="t-warn">要你批</em><code>dm_moderator → L2</code></span>
+              <span class="cp">取数<em class="t-info">按价目扣积分</em><code>read_reddit</code></span>
+            </div>
+            <h5><span class="di"><svg class="gl"><use href="#g-social"/></svg><img src="../../../apps/workstation/src/assets/brand/reddit.png" alt=""></span>自家版 能做什么</h5>
+            <div class="caps">
+              <span class="cp">看成员和帖子<em class="t-neutral">只读</em><code>community_member · read</code></span>
+              <span class="cp">放人进版<em class="t-brand">可先做后报</em><code>approve_member → staged_change</code></span>
+              <span class="cp">删帖、禁言<em class="t-warn">要你批</em><code>moderate_thread → L2</code></span>
+              <span class="cp">发公告<em class="t-warn">要你批</em><code>post_announcement → L2</code></span>
+            </div>
+            <h5>技能</h5>
+            <div class="caps">
+              <span class="cp k">品牌语气 · 常驻<code>brand-voice · open · always</code></span>
+              <span class="cp k">Reddit 运营方法 · 用到才读<code>reddit-ops · on_demand</code></span>
+              <span class="cp k">话题研究 · 用到才读<code>trend-research · on_demand</code></span>
+            </div>
+            <h5>运行上限</h5>
+            <div class="limits"><span>每次取数最多 <b>3 积分</b></span><span>没动静 <b>3 分钟</b>就停</span><span>最长 <b>20 分钟</b></span><button class="btn xs ghost" type="button">改</button></div>
+          </div>
+        </details>
+      </section>
+    </div>
+  </div>
+</div>
+
+  </main>
+</div>
+<aside class="rail" aria-label="右栏（收起）">
+  <svg class="ico"><use href="#i-chart"/></svg><svg class="ico"><use href="#i-play"/></svg><svg class="ico"><use href="#i-alarm"/></svg><svg class="ico"><use href="#i-evid"/></svg>
+  <hr><svg class="ico"><use href="#i-brain"/></svg><svg class="ico"><use href="#i-book"/></svg>
+  <hr><svg class="ico"><use href="#i-globe"/></svg><svg class="ico"><use href="#i-file"/></svg><svg class="ico"><use href="#i-ask"/></svg>
+</aside>
+<aside class="notes" aria-label="设计说明">
+  <div class="nh"><svg class="ico s14"><use href="#i-note"/></svg><b>设计说明</b><span class="tag">不是界面</span><button class="btn xs ghost" type="button" style="margin-left:auto" onclick="document.documentElement.classList.toggle('dark')"><svg class="ico s14"><use href="#i-sun"/></svg>明 / 暗</button><button class="btn xs icon ghost" type="button" onclick="document.documentElement.classList.add('notes-off')" aria-label="收起"><svg class="ico s14"><use href="#i-x"/></svg></button></div>
+  <div class="blk">
+    <h4>设置 = 平时不用看的都在这</h4>
+    <ul>
+      <li>五节：<b>职责 · 连接 · 记忆 · 定时任务 · 高级</b>，左边小目录一点就到</li>
+      <li>顺序按「多久动一次」排：常改的在上，几乎不改的折叠在最下</li>
+    </ul>
+  </div>
+  <div class="blk">
+    <h4>从哪儿挪过来的</h4>
+    <ul>
+      <li>职责：原来折在「交给它」底下 → 这里，<b>加减、移动、拆分</b>一处做</li>
+      <li>连接：原来页顶的「连上就能开工」大卡 → 这里，<b>必需 / 可选分开</b>；已经由 Agents 工坊接口满足的写「不用连」</li>
+      <li>记忆：原来的「记忆」页签 → 这里，岗位一层、每条职责一层</li>
+      <li>定时任务：原来压在「记录」底下 → 这里，<b>一个开关</b>停 / 开</li>
+      <li>「能看什么 / 能做什么 / 技能」：原来摊在面板上一堆 id → <b>高级</b>里，说人话；id 只在开发者视图</li>
+    </ul>
+  </div>
+  <div class="blk">
+    <h4>点点看</h4>
+    <div class="try">
+      <button type="button" onclick="document.querySelectorAll('[data-menu]')[1].click()">职责的 ⋯ 菜单</button>
+      <button type="button" onclick="var a=document.getElementById('adv');a.open=true;a.scrollIntoView()">展开高级</button>
+      <button type="button" onclick="var a=document.getElementById('adv');a.open=true;document.getElementById('devToggle').click();a.scrollIntoView()">开发者视图</button>
+      <button type="button" onclick="location.href='position-v2-list.html'">回「工作」</button>
+    </div>
+  </div>
+  <div class="blk ask">
+    <h4>要你定</h4>
+    <ol>
+      <li>「可选」连接现在是摊开的；要不要收成一行「还有 3 个可选」，点了才展开？</li>
+      <li>一条职责移走 / 拆出去时，它手上没做完的事跟着走，还是留在原岗位？稿子按「跟着走」画。</li>
+    </ol>
+  </div>
+
+</aside>
+</div>
+<button class="notes-fab" type="button" onclick="document.documentElement.classList.remove('notes-off')"><svg class="ico s14"><use href="#i-note"/></svg>设计说明</button>
+<script>
+var $ = function (s, r) { return (r || document).querySelector(s); };
+var $$ = function (s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); };
+var q = new URLSearchParams(location.search);
+/* 小目录跟着滚动高亮 */
+var secs = $$(".ss");
+function spy() {
+  var cur = secs[0].id;
+  secs.forEach(function (s) { if (s.getBoundingClientRect().top < 140) cur = s.id; });
+  $$("#toc a").forEach(function (a) { a.classList.toggle("on", a.getAttribute("href") === "#" + cur); });
+}
+addEventListener("scroll", spy, { passive: true });
+$$("#toc a").forEach(function (a) { a.onclick = function (e) { e.preventDefault(); var t = $(a.getAttribute("href")); t.scrollIntoView({ behavior: "smooth", block: "start" }); if (t.id === "s-adv") $("#adv").open = true; }; });
+/* 职责那一行的 ⋯：改名 / 移到别的岗位 / 拆成新岗位 / 拿掉 */
+var menu = null;
+function closeMenu() { if (menu) { menu.remove(); menu = null; } }
+$$("[data-menu]").forEach(function (b) {
+  b.onclick = function (e) {
+    e.stopPropagation(); closeMenu();
+    menu = document.createElement("div");
+    menu.className = "pop menu";
+    menu.innerHTML = '<button class="opt" type="button"><svg class="ico s14"><use href="#i-pen"/></svg>改名</button><button class="opt" type="button"><svg class="ico s14"><use href="#i-go"/></svg>移到别的岗位…</button><button class="opt" type="button"><svg class="ico s14"><use href="#i-split"/></svg>拆出去，单独成一个岗位</button><hr><button class="opt bad" type="button"><svg class="ico s14"><use href="#i-x"/></svg>从这个岗位拿掉</button>';
+    b.closest(".li").appendChild(menu);
+  };
+});
+document.addEventListener("click", function (e) { if (menu && !menu.contains(e.target)) closeMenu(); });
+/* 开关 */
+$$(".toggle").forEach(function (t) { t.addEventListener("click", function (e) { e.preventDefault(); e.stopPropagation(); t.classList.toggle("on"); if (t.id === "devToggle") $("#cap").classList.toggle("dev", t.classList.contains("on")); }); });
+/* 截图参数：?adv=1 展开高级、?dev=1 开发者视图、?menu=1 打开第二条职责的菜单 */
+if (q.get("adv") || q.get("dev")) $("#adv").open = true;
+if (q.get("dev")) $("#devToggle").click();
+if (q.get("menu")) $$("[data-menu]")[1].click();
+
+</script>
+</body>
+</html>

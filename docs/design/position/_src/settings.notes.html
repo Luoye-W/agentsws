@@ -1,0 +1,33 @@
+  <div class="blk">
+    <h4>设置 = 平时不用看的都在这</h4>
+    <ul>
+      <li>五节：<b>职责 · 连接 · 记忆 · 定时任务 · 高级</b>，左边小目录一点就到</li>
+      <li>顺序按「多久动一次」排：常改的在上，几乎不改的折叠在最下</li>
+    </ul>
+  </div>
+  <div class="blk">
+    <h4>从哪儿挪过来的</h4>
+    <ul>
+      <li>职责：原来折在「交给它」底下 → 这里，<b>加减、移动、拆分</b>一处做</li>
+      <li>连接：原来页顶的「连上就能开工」大卡 → 这里，<b>必需 / 可选分开</b>；已经由 Agents 工坊接口满足的写「不用连」</li>
+      <li>记忆：原来的「记忆」页签 → 这里，岗位一层、每条职责一层</li>
+      <li>定时任务：原来压在「记录」底下 → 这里，<b>一个开关</b>停 / 开</li>
+      <li>「能看什么 / 能做什么 / 技能」：原来摊在面板上一堆 id → <b>高级</b>里，说人话；id 只在开发者视图</li>
+    </ul>
+  </div>
+  <div class="blk">
+    <h4>点点看</h4>
+    <div class="try">
+      <button type="button" onclick="document.querySelectorAll('[data-menu]')[1].click()">职责的 ⋯ 菜单</button>
+      <button type="button" onclick="var a=document.getElementById('adv');a.open=true;a.scrollIntoView()">展开高级</button>
+      <button type="button" onclick="var a=document.getElementById('adv');a.open=true;document.getElementById('devToggle').click();a.scrollIntoView()">开发者视图</button>
+      <button type="button" onclick="location.href='position-v2-list.html'">回「工作」</button>
+    </div>
+  </div>
+  <div class="blk ask">
+    <h4>要你定</h4>
+    <ol>
+      <li>「可选」连接现在是摊开的；要不要收成一行「还有 3 个可选」，点了才展开？</li>
+      <li>一条职责移走 / 拆出去时，它手上没做完的事跟着走，还是留在原岗位？稿子按「跟着走」画。</li>
+    </ol>
+  </div>

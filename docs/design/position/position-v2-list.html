@@ -1,0 +1,999 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Reddit 运营 · 岗位页 v2</title>
+<!-- WP239 岗位页重排设计稿（静态、合成数据，不是产品代码）。由 _src/build.mjs 生成，改 _src 里的文件再重出。
+     ?theme=dark 看暗色；?notes=0 收起右边的设计说明。令牌真源：apps/workstation/src/index.css -->
+<script>(function(){var q=new URLSearchParams(location.search),h=document.documentElement;if(q.get("theme")==="dark")h.classList.add("dark");var n=q.get("notes");if(n==="0"||(n!=="1"&&innerWidth<1200))h.classList.add("notes-off");})();</script>
+<style>
+/* WP239 设计稿共用底。令牌逐个照抄 apps/workstation/src/index.css（docs/36 §1.1），名字也一样（--ws-*）；
+   控件尺寸照 components/ui/{button,tabs,input,badge}.tsx 与 components/design/primitives.tsx。 */
+@font-face{font-family:"Outfit";font-weight:500;src:url("../../../apps/workstation/node_modules/@fontsource/outfit/files/outfit-latin-500-normal.woff2") format("woff2")}
+@font-face{font-family:"Outfit";font-weight:600;src:url("../../../apps/workstation/node_modules/@fontsource/outfit/files/outfit-latin-600-normal.woff2") format("woff2")}
+@font-face{font-family:"Outfit";font-weight:700;src:url("../../../apps/workstation/node_modules/@fontsource/outfit/files/outfit-latin-700-normal.woff2") format("woff2")}
+:root{
+  --ws-paper:#f3f5f2;--ws-card:#fff;--ws-line:#ecefea;--ws-ink:#263331;--ws-body:#4b5550;--ws-muted-fg:#6b746f;
+  --ws-brand:#007b67;--ws-brand-ink:#045246;--ws-brand-fg:#fff;--ws-tint:#e8f3f0;
+  --ws-good:#158a4b;--ws-good-bg:#e3f5ea;--ws-warn:#b26e0b;--ws-warn-bg:#fff4db;--ws-bad:#c93b30;--ws-bad-bg:#fde9e7;--ws-info:#2f63c8;--ws-info-bg:#e9f0fb;
+  --ws-brand-soft:#cfebdd;--ws-surface:#f7f9f6;
+  --ws-shadow:0 1px 2px rgba(20,40,30,.04),0 8px 24px rgba(20,40,30,.05);
+  --ws-shadow-hover:0 16px 34px rgba(20,40,30,.14),0 2px 6px rgba(20,40,30,.06);
+  --ws-glow:0 0 0 1px rgba(0,123,103,.32),0 0 12px 2px rgba(0,123,103,.14);
+  --ws-badge-plate:#fff;--ws-badge-ring:rgba(38,51,49,.14);
+  --secondary:#edf0eb;--muted:#f3f5f2;--input:#e6eae5;--sidebar:#f8faf7;
+  --mk0:#2e86d8;--mk1:#1fb8a4;--mk2:#d9a82e;
+  --display:"Outfit","Noto Sans SC",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans SC","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  --notes-w:320px;
+  color-scheme:light;
+}
+html.dark{
+  --ws-paper:#0e100f;--ws-card:#171a18;--ws-line:#242825;--ws-ink:#f1f4f0;--ws-body:#c9d2cc;--ws-muted-fg:#98a29b;
+  --ws-brand:#76fb91;--ws-brand-ink:#b9ffc9;--ws-brand-fg:#0e100f;--ws-tint:#173c24;
+  --ws-good:#76fb91;--ws-good-bg:#173c24;--ws-warn:#f5c451;--ws-warn-bg:#3a2e10;--ws-bad:#ff7a6b;--ws-bad-bg:#3d1d19;--ws-info:#8bb8ff;--ws-info-bg:#1a2436;
+  --ws-brand-soft:#2c5c3b;--ws-surface:#1c201d;
+  --ws-shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px rgba(0,0,0,.32);
+  --ws-shadow-hover:0 16px 34px rgba(0,0,0,.5),0 2px 6px rgba(0,0,0,.36);
+  --ws-glow:0 0 0 1px rgba(118,251,145,.32),0 0 12px 2px rgba(118,251,145,.14);
+  --ws-badge-plate:#f1f4f0;--ws-badge-ring:transparent;
+  --secondary:#1f2320;--muted:#1d211e;--input:#2a2e2b;--sidebar:#121513;
+  --mk0:#4ea8ff;--mk1:#2fe0c8;--mk2:#ffd84d;
+  color-scheme:dark;
+}
+[hidden]{display:none!important}
+*{box-sizing:border-box;margin:0;padding:0;border-color:var(--ws-line)}
+html,body{background:var(--ws-paper);color:var(--ws-ink);font-family:var(--sans);font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased}
+button,input,textarea,select{font:inherit;color:inherit;background:none;border:0;outline:0}
+button{cursor:pointer}
+a{color:inherit;text-decoration:none}
+:focus-visible{outline:2px solid var(--ws-brand);outline-offset:2px}
+svg{flex:none}
+.ico{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.ico.s14{width:14px;height:14px}.ico.s12{width:12px;height:12px}.ico.s18{width:18px;height:18px}
+.gl{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round;overflow:visible}
+.display{font-family:var(--display);font-weight:600;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.num{font-variant-numeric:tabular-nums}
+.muted{color:var(--ws-muted-fg)}
+.body{color:var(--ws-body)}
+
+/* ── 外壳：左栏 240（app-shell.tsx w-60）· 主区 · 右侧图标轨 44 · 稿子的「设计说明」栏 ── */
+.app{display:grid;grid-template-columns:240px minmax(0,1fr) 44px var(--notes-w);min-height:100vh}
+html.notes-off .app{grid-template-columns:240px minmax(0,1fr) 44px 0}
+.side{position:sticky;top:0;height:100vh;display:flex;flex-direction:column;background:var(--sidebar);border-right:1px solid var(--ws-line);padding:12px}
+.logo{display:flex;align-items:center;gap:8px;padding:4px 8px 16px;font-family:var(--display);font-weight:600;font-size:14px;letter-spacing:-.02em}
+.nav{display:flex;flex-direction:column;gap:2px;flex:1;overflow:auto}
+.nv{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:10px;font-size:13.5px;color:var(--ws-ink)}
+.nv svg{color:var(--ws-muted-fg)}
+.nv:hover{background:color-mix(in srgb,var(--ws-tint) 60%,transparent)}
+.nv.on{background:var(--ws-tint);color:var(--ws-brand-ink);font-weight:500;--ia:var(--ws-brand)}
+.nv.on svg{color:currentColor}
+html.dark .nv.on{color:var(--ws-brand-ink)}
+.nv .cnt{margin-left:auto;border-radius:4px;background:var(--muted);padding:2px 6px;font-size:11px;font-weight:400}
+.nv .dot{margin-left:auto;width:6px;height:6px;border-radius:50%;background:var(--ws-brand)}
+.nsec{display:flex;align-items:center;justify-content:space-between;padding:16px 10px 6px;font-size:11px;letter-spacing:.06em;color:var(--ws-muted-fg)}
+.prow{display:flex;align-items:center;gap:2px}
+.prow .chev{width:20px;height:20px;display:grid;place-items:center;color:var(--ws-muted-fg);border-radius:4px}
+.prow .nv{flex:1;min-width:0}
+.acct{margin-top:8px;padding-top:8px;border-top:1px solid var(--ws-line);display:flex;align-items:center;gap:10px;padding-left:8px}
+.acct b{font-size:13px;font-weight:600;display:block}
+.acct small{font-size:11.5px;color:var(--ws-muted-fg)}
+.top{display:flex;align-items:center;justify-content:flex-end;gap:8px;border-bottom:1px solid var(--ws-line);background:var(--ws-paper);padding:10px 20px}
+.kbar{display:flex;align-items:center;gap:8px;height:36px;width:100%;max-width:280px;padding:0 12px;border-radius:10px;background:var(--ws-card);box-shadow:var(--ws-shadow);font-size:13px;color:var(--ws-muted-fg)}
+.kbar kbd{margin-left:auto;font:inherit;font-size:11px}
+.tchip{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;border-radius:999px;background:var(--ws-card);box-shadow:var(--ws-shadow);font-size:12px;color:var(--ws-body);white-space:nowrap}
+.tchip i{width:6px;height:6px;border-radius:50%;background:var(--ws-good);display:inline-block}
+.mainwrap{min-width:0;display:flex;flex-direction:column}
+main{flex:1;min-width:0;padding:28px}
+.rail{position:sticky;top:0;height:100vh;border-left:1px solid var(--ws-line);display:flex;flex-direction:column;align-items:center;gap:18px;padding-top:16px;color:var(--ws-muted-fg)}
+.rail hr{width:20px;border:0;border-top:1px solid var(--ws-line)}
+
+/* ── 通用件 ── */
+.card{background:var(--ws-card);border-radius:16px;box-shadow:var(--ws-shadow)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:32px;padding:0 10px;border-radius:10px;font-size:14px;font-weight:500;white-space:nowrap;border:1px solid transparent;transition:background-color .15s}
+.btn.pri{background:var(--ws-brand);color:var(--ws-brand-fg)}
+.btn.pri:hover{background:color-mix(in srgb,var(--ws-brand) 80%,transparent)}
+.btn.out{border-color:var(--ws-line);background:var(--ws-paper)}
+html.dark .btn.out{border-color:var(--input);background:color-mix(in srgb,var(--input) 30%,transparent)}
+.btn.out:hover,.btn.ghost:hover{background:var(--muted)}
+.btn.sec{background:var(--secondary)}
+.btn.ghost{color:var(--ws-ink)}
+.btn.sm{height:28px;padding:0 10px;border-radius:8px;font-size:12.8px}
+.btn.xs{height:24px;padding:0 8px;border-radius:8px;font-size:12px;gap:4px}
+.btn.icon{width:32px;padding:0}.btn.sm.icon{width:28px}.btn.xs.icon{width:24px}
+.tag{display:inline-flex;align-items:center;gap:5px;height:22px;padding:0 8px;border-radius:6px;background:var(--ws-surface);font-size:12px;color:var(--ws-body);white-space:nowrap}
+.pill{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 10px;border-radius:999px;font-size:12px;font-weight:500;white-space:nowrap}
+.pill::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+.t-brand{background:var(--ws-tint);color:var(--ws-brand-ink)}
+.t-good{background:var(--ws-good-bg);color:var(--ws-good)}
+.t-warn{background:var(--ws-warn-bg);color:var(--ws-warn)}
+.t-bad{background:var(--ws-bad-bg);color:var(--ws-bad)}
+.t-info{background:var(--ws-info-bg);color:var(--ws-info)}
+.t-neutral{background:var(--ws-surface);color:var(--ws-muted-fg)}
+.dp{display:inline-flex;align-items:center;gap:3px;height:20px;padding:0 6px;border-radius:999px;font-size:11.5px;font-weight:600}
+.av{display:inline-grid;place-items:center;width:26px;height:26px;border-radius:50%;font-size:11px;font-weight:600;flex:none}
+.av.sm{width:20px;height:20px;font-size:10px}
+.go{display:inline-grid;place-items:center;width:30px;height:30px;border-radius:50%;background:var(--ws-surface);color:var(--ws-ink);flex:none;transition:background-color .15s,color .15s}
+.go:hover{background:var(--ws-brand);color:var(--ws-brand-fg)}
+.hint{display:inline-grid;place-items:center;width:14px;height:14px;border-radius:50%;box-shadow:inset 0 0 0 1.25px currentColor;font-size:9.5px;font-weight:700;color:var(--ws-muted-fg);cursor:help;position:relative;flex:none;font-family:var(--sans)}
+.hint:hover::after,.hint:focus::after{content:attr(data-hint);position:absolute;left:50%;bottom:calc(100% + 6px);transform:translateX(-50%);width:max-content;max-width:240px;padding:6px 9px;border-radius:8px;background:var(--ws-ink);color:var(--ws-paper);font-size:12px;font-weight:400;line-height:1.45;z-index:30;white-space:normal;box-shadow:var(--ws-shadow-hover)}
+[data-tip]{position:relative}
+[data-tip]:hover::after{content:attr(data-tip);position:absolute;left:50%;bottom:calc(100% + 6px);transform:translateX(-50%);width:max-content;max-width:240px;padding:5px 8px;border-radius:8px;background:var(--ws-ink);color:var(--ws-paper);font-size:12px;font-weight:400;line-height:1.4;z-index:30;pointer-events:none}
+/* 页内页签：照 components/ui/tabs.tsx（h-8、p-3px、选中是卡底 + 浅阴影） */
+.tabs{display:inline-flex;align-items:center;height:32px;padding:3px;border-radius:10px;background:var(--muted);gap:0}
+.tabs>*{height:100%;display:inline-flex;align-items:center;gap:6px;padding:0 12px;border-radius:7px;font-size:14px;font-weight:500;color:color-mix(in srgb,var(--ws-ink) 60%,transparent)}
+.tabs>*:hover{color:var(--ws-ink)}
+.tabs>.on{background:var(--ws-card);color:var(--ws-ink);box-shadow:0 1px 2px rgba(20,40,30,.08)}
+html.dark .tabs>.on{background:color-mix(in srgb,var(--input) 30%,transparent);box-shadow:inset 0 0 0 1px var(--input)}
+.tabs .n{font-size:11.5px;color:var(--ws-muted-fg);font-weight:400}
+/* 职责小图标 = 岗位线描 + 右下角 Reddit 官网角标（WP213：浅色圆底，深色下也是浅的） */
+.di{position:relative;display:inline-block;width:16px;height:16px;flex:none}
+.di .gl{width:16px;height:16px}
+.di img{position:absolute;right:-3px;bottom:-3px;width:10px;height:10px;border-radius:50%;background:var(--ws-badge-plate);box-shadow:0 0 0 1.5px var(--ws-card),0 0 0 .5px var(--ws-badge-ring) inset;padding:1px}
+.duty{display:inline-flex;align-items:center;gap:6px;height:22px;padding:0 8px 0 6px;border-radius:6px;background:var(--ws-surface);font-size:12px;color:var(--ws-body);white-space:nowrap}
+.duty .di{width:14px;height:14px}.duty .di .gl{width:14px;height:14px}.duty .di img{width:9px;height:9px;right:-3px;bottom:-3px}
+.sep{width:1px;height:18px;background:var(--ws-line);flex:none}
+.sec-h{display:flex;align-items:center;gap:8px;margin:0 2px 10px}
+.sec-h h3{font-family:var(--display);font-weight:600;letter-spacing:-.02em;font-size:17px}
+.sec-h .c{font-size:13px;color:var(--ws-muted-fg)}
+.sec-h .r{margin-left:auto;display:flex;align-items:center;gap:6px}
+.lnk{font-size:13px;color:var(--ws-muted-fg);display:inline-flex;align-items:center;gap:4px}
+.lnk:hover{color:var(--ws-ink)}
+.pop{position:absolute;z-index:40;background:var(--ws-card);border-radius:12px;box-shadow:var(--ws-shadow-hover),0 0 0 1px var(--ws-line);padding:8px}
+.toggle{width:30px;height:18px;border-radius:999px;background:var(--input);position:relative;flex:none;transition:background-color .15s}
+.toggle::after{content:"";position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.2);transition:left .15s}
+.toggle.on{background:var(--ws-brand)}.toggle.on::after{left:14px}
+html.dark .toggle.on::after{background:var(--ws-brand-fg)}
+
+/* ── 状态图标：颜色 + 形状双编码（同 docs/36 §7 第 19 条 StatusIcons 的思路，色弱可辨） ── */
+.st{width:16px;height:16px;flex:none;display:inline-block}
+.st circle,.st path{fill:none;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round}
+.st.you circle{stroke:var(--ws-warn)}.st.you .f{fill:var(--ws-warn);stroke:none}
+.st.doing circle{stroke:var(--ws-brand)}.st.doing .f{fill:var(--ws-brand);stroke:none}
+.st.others circle{stroke:var(--ws-info);stroke-dasharray:2.4 2.2}.st.others path{stroke:var(--ws-info)}
+.st.done .f{fill:var(--ws-good);stroke:none}.st.done path{stroke:var(--ws-card);stroke-width:2}
+
+/* ── 稿子的「设计说明」栏：不是产品界面，故意画成便签纸的样子 ── */
+.notes{position:sticky;top:0;height:100vh;overflow:auto;border-left:1px dashed color-mix(in srgb,var(--ws-muted-fg) 50%,transparent);background:repeating-linear-gradient(-45deg,transparent 0 10px,color-mix(in srgb,var(--ws-line) 45%,transparent) 10px 11px),var(--ws-paper);padding:18px 18px 40px;font-size:13px;color:var(--ws-body)}
+html.notes-off .notes{display:none}
+.notes .nh{display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap}
+.notes .nh>*{white-space:nowrap}
+.notes .nh b{font-family:var(--display);font-size:15px;color:var(--ws-ink)}
+.notes .nh .tag{background:var(--ws-warn-bg);color:var(--ws-warn)}
+.notes .blk{background:var(--ws-card);border-radius:12px;padding:12px 14px;margin-bottom:10px;box-shadow:var(--ws-shadow)}
+.notes h4{font-size:12.5px;color:var(--ws-ink);margin-bottom:6px;display:flex;align-items:center;gap:6px}
+.notes ol,.notes ul{padding-left:18px;display:flex;flex-direction:column;gap:4px}
+.notes li{line-height:1.5}
+.notes li b{color:var(--ws-ink);font-weight:600}
+.notes .was{text-decoration:line-through;color:var(--ws-muted-fg)}
+.notes .try{display:flex;flex-wrap:wrap;gap:6px}
+.notes .try button{height:24px;padding:0 8px;border-radius:8px;background:var(--ws-surface);font-size:12px;color:var(--ws-ink);box-shadow:inset 0 0 0 1px var(--ws-line)}
+.notes .try button:hover{box-shadow:inset 0 0 0 1px var(--ws-brand)}
+.notes .ask{border-left:3px solid var(--ws-warn);padding-left:10px}
+.notes-fab{position:fixed;right:56px;bottom:18px;z-index:50;display:none;align-items:center;gap:6px;height:32px;padding:0 12px;border-radius:999px;background:var(--ws-ink);color:var(--ws-paper);font-size:12.5px;font-weight:600;box-shadow:var(--ws-shadow-hover)}
+html.notes-off .notes-fab{display:inline-flex}
+.theme-btn{position:fixed;left:252px;bottom:18px;z-index:50}
+@media (max-width:1199px){
+  html:not(.notes-off) .app{grid-template-columns:240px minmax(0,1fr) 44px 0}
+  html:not(.notes-off) .notes{position:fixed;right:0;top:0;width:min(340px,90vw);z-index:60;box-shadow:var(--ws-shadow-hover)}
+}
+
+/* 岗位页三张稿共用：页头 · 横幅 · 页签 */
+.page{max-width:1120px;margin:0 auto;display:flex;flex-direction:column;gap:18px}
+.ph{display:flex;align-items:center;gap:14px}
+.pic{width:44px;height:44px;border-radius:12px;display:grid;place-items:center;background:var(--ws-tint);color:var(--ws-ink);--ia:var(--ws-brand);flex:none}
+.pic .gl{width:24px;height:24px}
+.ph h1{font-family:var(--display);font-weight:600;letter-spacing:-.02em;font-size:26px;line-height:1.15}
+.ph .stat{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px;margin-top:3px;font-size:13.5px;color:var(--ws-body)}
+.ph .stat a{display:inline-flex;align-items:center;gap:5px;border-radius:6px;padding:0 2px}
+.ph .stat a:hover{color:var(--ws-ink);text-decoration:underline dotted;text-underline-offset:3px}
+.ph .stat a b{font-weight:600;color:var(--ws-ink)}
+.ph .stat .d{width:6px;height:6px;border-radius:50%;display:inline-block}
+.ph .stat .mid{color:var(--ws-muted-fg)}
+.ph .r{margin-left:auto;display:flex;align-items:center;gap:8px}
+.holders{display:flex;align-items:center}
+.holders .av{box-shadow:0 0 0 2px var(--ws-paper)}
+.holders .av+.av{margin-left:-6px}
+.banner{display:flex;align-items:center;gap:10px;min-height:36px;padding:6px 8px 6px 12px;border-radius:10px;background:var(--ws-warn-bg);color:var(--ws-warn);font-size:13px}
+.banner span{color:var(--ws-ink)}
+html.dark .banner span{color:var(--ws-body)}
+.banner .btn{margin-left:auto;background:var(--ws-card);color:var(--ws-ink)}
+.ptabs{display:flex;align-items:center;gap:12px;margin-top:-4px}
+
+/* ── ② 交给它：一行输入，聚焦展开 ── */
+.hand{padding:8px 8px 8px 14px;transition:box-shadow .18s}
+.hand:focus-within{box-shadow:var(--ws-glow),var(--ws-shadow)}
+.hrow{display:flex;align-items:center;gap:10px}
+.hrow>svg{color:var(--ws-muted-fg)}
+.hrow textarea{flex:1;min-width:0;resize:none;height:22px;line-height:22px;font-size:14px;overflow:hidden;transition:height .15s}
+.hrow textarea::placeholder{color:var(--ws-muted-fg)}
+.hand.open .hrow{align-items:flex-start}
+.hand.open .hrow>svg{margin-top:4px}
+.hand.open textarea{height:66px;overflow:auto}
+.hfoot{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:6px}
+.sug{display:inline-flex;align-items:center;height:24px;padding:0 10px;border-radius:999px;box-shadow:inset 0 0 0 1px var(--ws-line);font-size:12px;color:var(--ws-muted-fg);white-space:nowrap}
+.sug:hover{background:var(--ws-tint);color:var(--ws-ink)}
+.hx{display:none;align-items:center;gap:6px;margin-left:auto}
+.hand.open .hx{display:flex}
+.hand.open .hfoot .sug.more{display:none}
+
+/* ── ③ 要你处理：横向最多 3 张 ── */
+.need{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(210px,1fr);gap:14px;overflow-x:auto;padding:2px 2px 10px;margin:-2px -2px -10px}
+.nc{padding:14px 16px;display:flex;flex-direction:column;gap:7px;min-width:0;transition:box-shadow .18s,transform .18s}
+.nc:hover{box-shadow:var(--ws-shadow-hover);transform:translateY(-2px)}
+.nc .l1{display:flex;align-items:center;gap:6px;min-width:0}
+.nc .l1 .t{margin-left:auto;font-size:12px;color:var(--ws-muted-fg);white-space:nowrap}
+.nc h4{font-size:14.5px;font-weight:600;line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:40px}
+.nc p{font-size:12.5px;color:var(--ws-muted-fg);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.nc .ft{display:flex;align-items:center;gap:6px;margin-top:2px}
+.nc .ft .go{margin-left:auto}
+.none-line{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ws-muted-fg);padding:4px 2px}
+
+/* ── ④ 工作：Notion Database 式的视图栏 ── */
+.vbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px;position:relative}
+.vbar .tabs>*{font-size:13px;padding:0 10px}
+.qv{display:flex;align-items:center;gap:4px}
+.qv button{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;border-radius:8px;font-size:13px;color:var(--ws-body)}
+.qv button:hover{background:var(--muted)}
+.qv button.on{background:var(--ws-card);color:var(--ws-ink);box-shadow:var(--ws-shadow);font-weight:500}
+.qv img{width:14px;height:14px;border-radius:50%}
+.qv .n{font-size:11.5px;color:var(--ws-muted-fg)}
+.vbar .r{margin-left:auto;display:flex;align-items:center;gap:2px}
+.vbar .r .btn{color:var(--ws-body);font-size:13px;font-weight:500}
+.vbar .r .btn.on{color:var(--ws-brand-ink);background:var(--ws-tint)}
+html.dark .vbar .r .btn.on{color:var(--ws-brand)}
+.vbar .r .btn .b{display:inline-grid;place-items:center;min-width:16px;height:16px;border-radius:999px;background:var(--ws-brand);color:var(--ws-brand-fg);font-size:10.5px;padding:0 4px}
+.fchips{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:-4px 0 12px}
+.fchips .fc{display:inline-flex;align-items:center;gap:4px;height:24px;padding:0 4px 0 9px;border-radius:999px;background:var(--ws-tint);color:var(--ws-brand-ink);font-size:12px}
+html.dark .fchips .fc{color:var(--ws-brand)}
+.fchips .fc button{display:grid;place-items:center;width:18px;height:18px;border-radius:50%}
+.fchips .fc button:hover{background:color-mix(in srgb,var(--ws-brand) 15%,transparent)}
+/* 弹层：筛选 / 分组 / 排序 / 列 */
+.pop{min-width:200px}
+.pop .ph2{font-size:11.5px;color:var(--ws-muted-fg);padding:6px 8px 4px;display:flex;align-items:center;gap:6px}
+.pop .opt{display:flex;align-items:center;gap:8px;width:100%;height:30px;padding:0 8px;border-radius:8px;font-size:13px;text-align:left}
+.pop .opt:hover{background:var(--muted)}
+.pop .opt .ck{width:16px;height:16px;border-radius:5px;box-shadow:inset 0 0 0 1.5px var(--ws-line);display:grid;place-items:center;color:transparent;flex:none}
+.pop .opt.on .ck{background:var(--ws-brand);box-shadow:none;color:var(--ws-brand-fg)}
+.pop .opt .rd{width:14px;height:14px;border-radius:50%;box-shadow:inset 0 0 0 1.5px var(--ws-line);flex:none}
+.pop .opt.on .rd{box-shadow:inset 0 0 0 4px var(--ws-brand)}
+.pop .opt .cnt{margin-left:auto;font-size:12px;color:var(--ws-muted-fg)}
+.pop hr{border:0;border-top:1px solid var(--ws-line);margin:6px 0}
+.fpop{width:520px;display:grid;grid-template-columns:1fr 1fr;gap:2px 10px;padding:10px}
+.fpop .full{grid-column:1/-1}
+.fpop .foot{grid-column:1/-1;display:flex;align-items:center;gap:8px;border-top:1px solid var(--ws-line);margin-top:6px;padding-top:8px}
+.fpop .foot .btn:last-child{margin-left:auto}
+
+/* 列表视图 */
+.grp{margin-bottom:12px}
+.gh{display:flex;align-items:center;gap:8px;padding:6px 6px;font-size:13px;font-weight:600;cursor:pointer;user-select:none}
+.gh .c{font-weight:400;color:var(--ws-muted-fg)}
+.gh .tw{color:var(--ws-muted-fg);transition:transform .15s}
+.grp.fold .gh .tw{transform:rotate(-90deg)}
+.grp.fold .rows{display:none}
+.rows{padding:4px 0}
+.row{display:grid;grid-template-columns:16px 14px minmax(160px,1.3fr) minmax(0,1fr) 112px 92px 22px;align-items:center;gap:10px;min-height:42px;padding:0 14px;font-size:13.5px;cursor:pointer}
+.row+.row{border-top:1px solid var(--ws-line)}
+.row:hover{background:color-mix(in srgb,var(--ws-surface) 70%,transparent)}
+.row .kd{color:var(--ws-muted-fg);display:grid;place-items:center}
+.row .tt{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:500}
+.row .pg{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--ws-muted-fg);font-size:12.5px}
+.due{font-size:12.5px;color:var(--ws-body);white-space:nowrap;text-align:right}
+.due.today{color:var(--ws-warn);font-weight:600}
+.due.late{color:var(--ws-bad);font-weight:600}
+.due.none{color:var(--ws-muted-fg)}
+.row.done .tt{color:var(--ws-muted-fg);font-weight:400}
+.addrow{display:flex;align-items:center;gap:8px;height:38px;padding:0 14px;font-size:13px;color:var(--ws-muted-fg);border-top:1px solid var(--ws-line);width:100%}
+.addrow:hover{color:var(--ws-ink)}
+
+/* 看板视图 */
+.board{display:grid;grid-template-columns:repeat(4,minmax(180px,1fr));gap:12px;overflow-x:auto;padding-bottom:6px}
+.col{background:color-mix(in srgb,var(--ws-surface) 80%,transparent);border-radius:14px;padding:8px;min-height:240px;transition:box-shadow .15s}
+html.dark .col{background:color-mix(in srgb,var(--ws-card) 55%,transparent)}
+.col.over{box-shadow:inset 0 0 0 1.5px var(--ws-brand)}
+.col .gh{padding:4px 6px 8px;cursor:default}
+.kc{background:var(--ws-card);border-radius:12px;box-shadow:var(--ws-shadow);padding:10px 12px;margin-bottom:8px;cursor:grab;display:flex;flex-direction:column;gap:6px}
+.kc:active{cursor:grabbing}
+.kc.drag{opacity:.4}
+.kc .tt{font-size:13.5px;font-weight:500;line-height:1.4}
+.kc .pg{font-size:12px;color:var(--ws-muted-fg);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kc .mt{display:flex;align-items:center;gap:6px}
+.kc .mt .due{margin-left:auto}
+
+/* 日历视图 */
+.calh{display:flex;align-items:center;gap:8px;padding:12px 14px;border-bottom:1px solid var(--ws-line)}
+.calh b{font-family:var(--display);font-size:17px;font-weight:600;letter-spacing:-.02em}
+.calh .r{margin-left:auto;display:flex;align-items:center;gap:8px}
+.mgrid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr))}
+.mgrid .wd{font-size:11.5px;color:var(--ws-muted-fg);padding:8px 8px 4px;text-align:left}
+.mgrid .dc{min-height:98px;border-top:1px solid var(--ws-line);padding:6px;display:flex;flex-direction:column;gap:3px;min-width:0}
+.mgrid .dc:not(:nth-child(7n+1)){border-left:1px solid var(--ws-line)}
+.mgrid .dc .dn{font-size:12px;color:var(--ws-body);width:22px;height:22px;display:grid;place-items:center;border-radius:50%}
+.mgrid .dc.out .dn{color:color-mix(in srgb,var(--ws-muted-fg) 55%,transparent)}
+.mgrid .dc.today{background:color-mix(in srgb,var(--ws-tint) 55%,transparent)}
+.mgrid .dc.today .dn{background:var(--ws-brand);color:var(--ws-brand-fg);font-weight:600}
+.ev{display:flex;align-items:center;gap:5px;height:20px;padding:0 6px;border-radius:5px;font-size:11.5px;white-space:nowrap;overflow:hidden;background:var(--ws-surface);color:var(--ws-ink);border-left:3px solid var(--c,var(--ws-muted-fg));min-width:0}
+.ev span{overflow:hidden;text-overflow:ellipsis}
+.ev.done{color:var(--ws-muted-fg);text-decoration:line-through}
+.wgrid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr))}
+.wgrid .wc{min-height:300px;padding:8px;display:flex;flex-direction:column;gap:6px;min-width:0}
+.wgrid .wc+.wc{border-left:1px solid var(--ws-line)}
+.wgrid .wh{font-size:12px;color:var(--ws-muted-fg);display:flex;align-items:baseline;gap:6px;padding-bottom:6px}
+.wgrid .wh b{font-family:var(--display);font-size:18px;color:var(--ws-ink)}
+.wgrid .wc.today{background:color-mix(in srgb,var(--ws-tint) 55%,transparent)}
+.wgrid .wc.today .wh b{color:var(--ws-brand)}
+.wgrid .ev{height:auto;min-height:22px;padding:3px 6px;white-space:normal;align-items:flex-start;flex-direction:column;gap:1px}
+.wgrid .ev small{font-size:11px;color:var(--ws-muted-fg)}
+
+/* 表格视图 */
+.tbl{overflow-x:auto}
+.tbl table{width:100%;border-collapse:collapse;font-size:13px;min-width:720px}
+.tbl th{font-size:12px;font-weight:500;color:var(--ws-muted-fg);text-align:left;padding:10px 12px;border-bottom:1px solid var(--ws-line);white-space:nowrap}
+.tbl th .ico{vertical-align:-2px;margin-left:2px;opacity:.6}
+.tbl td{padding:9px 12px;border-bottom:1px solid var(--ws-line);white-space:nowrap;vertical-align:middle}
+.tbl tr:last-child td{border-bottom:0}
+.tbl tbody tr:hover td{background:color-mix(in srgb,var(--ws-surface) 70%,transparent)}
+.tbl td.tt{font-weight:500;max-width:240px;overflow:hidden;text-overflow:ellipsis}
+.tbl .stc{display:inline-flex;align-items:center;gap:6px}
+
+/* 快捷视图：自家版待处理 / 发帖排期 */
+.qhead{display:flex;align-items:center;gap:8px;padding:12px 16px;border-bottom:1px solid var(--ws-line);font-size:13px;color:var(--ws-muted-fg)}
+.qhead b{font-size:14px;color:var(--ws-ink)}
+.qhead .r{margin-left:auto;display:flex;gap:6px}
+.qrow{display:flex;align-items:center;gap:12px;padding:12px 16px;font-size:13.5px}
+.qrow+.qrow{border-top:1px solid var(--ws-line)}
+.qrow .ic{width:30px;height:30px;border-radius:9px;display:grid;place-items:center;flex:none}
+.qrow .tx{flex:1;min-width:0}
+.qrow .tx div{font-weight:500}
+.qrow .tx small{display:block;font-size:12.5px;color:var(--ws-muted-fg);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.qrow .act{display:flex;gap:6px}
+.lane{display:grid;grid-template-columns:150px repeat(7,minmax(0,1fr));font-size:12.5px}
+.lane>div{padding:8px;border-top:1px solid var(--ws-line);min-height:46px}
+.lane>div:not(:nth-child(8n+1)){border-left:1px solid var(--ws-line)}
+.lane .lh{color:var(--ws-muted-fg);font-size:11.5px;border-top:0}
+.lane .sub{font-weight:500;display:flex;flex-direction:column;gap:2px}
+.lane .sub small{font-weight:400;color:var(--ws-muted-fg);font-size:11px}
+.lane .cool{background:repeating-linear-gradient(-45deg,transparent 0 5px,color-mix(in srgb,var(--ws-warn) 14%,transparent) 5px 7px)}
+.lane .ev{height:auto;min-height:22px;padding:3px 6px;white-space:normal;line-height:1.35}
+.lane .today{background:color-mix(in srgb,var(--ws-tint) 55%,transparent)}
+
+/* ── ⑤ 数字带 ── */
+.band{display:flex;flex-direction:column;padding:4px 6px}
+.bgrp{display:grid;grid-template-columns:150px repeat(4,minmax(0,1fr));align-items:center;min-width:0}
+.bgrp+.bgrp{border-top:1px solid var(--ws-line)}
+.blab{display:flex;flex-direction:column;justify-content:center;gap:4px;padding:8px 12px;font-size:12px;color:var(--ws-muted-fg);min-width:96px}
+.blab b{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--ws-ink);font-weight:600}
+.kv{display:flex;flex-direction:column;gap:2px;padding:8px 12px;min-width:0}
+.kv .k{font-size:12px;color:var(--ws-muted-fg);white-space:nowrap}
+.kv .v{display:flex;align-items:center;gap:6px}
+.kv .v b{font-family:var(--display);font-weight:600;letter-spacing:-.02em;font-size:20px;line-height:1.2;font-variant-numeric:tabular-nums}
+.spark{width:56px;height:18px;color:var(--ws-brand);margin-top:2px}
+.charts{display:none;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px}
+.charts.on{display:grid}
+.chart{padding:14px 16px}
+.chart h5{font-size:13px;font-weight:600;margin-bottom:10px;display:flex;align-items:center;gap:8px}
+.chart h5 .lg{margin-left:auto;display:flex;gap:10px;font-size:11.5px;font-weight:400;color:var(--ws-muted-fg)}
+.chart h5 .lg i{display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:4px;vertical-align:0}
+.bars{display:flex;align-items:flex-end;gap:10px;height:120px;padding-top:6px;border-bottom:1px solid var(--ws-line)}
+.bars .bd{flex:1;display:flex;align-items:flex-end;justify-content:center;gap:3px;height:100%}
+.bars .bd i{width:10px;border-radius:3px 3px 0 0;background:var(--ws-brand-soft)}
+.bars .bd i.a{background:var(--ws-brand)}
+.bx{display:flex;gap:10px;font-size:11px;color:var(--ws-muted-fg);margin-top:5px}
+.bx span{flex:1;text-align:center}
+
+/* 记录页签 */
+.rec{padding:6px 18px}
+.rec li{list-style:none;display:grid;grid-template-columns:96px 1fr;gap:14px;padding:12px 0}
+.rec li+li{border-top:1px solid var(--ws-line)}
+.rec time{font-size:12px;color:var(--ws-muted-fg)}
+.rec .t1{font-size:13.5px;font-weight:500;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.rec p{font-size:12.5px;color:var(--ws-muted-fg);margin-top:2px}
+
+@media (max-width:1199px){
+  .row{grid-template-columns:16px 14px minmax(0,1fr) 112px 84px 22px}
+  .row .pg{display:none}
+  .fpop{width:440px}
+  .charts{grid-template-columns:1fr}
+}
+
+</style>
+</head>
+<body>
+<svg xmlns="http://www.w3.org/2000/svg" style="position:absolute;width:0;height:0" aria-hidden="true">
+<defs>
+<linearGradient id="mk" gradientUnits="userSpaceOnUse" x1="14" y1="77" x2="79" y2="12"><stop offset="0" style="stop-color:var(--mk0)"/><stop offset=".52" style="stop-color:var(--mk1)"/><stop offset="1" style="stop-color:var(--mk2)"/></linearGradient>
+</defs>
+<!-- lucide（工作台左栏 / 顶栏 / 右栏用的同一套，线宽 2） -->
+<symbol id="i-chat" viewBox="0 0 24 24"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/></symbol>
+<symbol id="i-home" viewBox="0 0 24 24"><path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"/><path d="M3 10a2 2 0 0 1 .709-1.528l7-5.999a2 2 0 0 1 2.582 0l7 5.999A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></symbol>
+<symbol id="i-inbox" viewBox="0 0 24 24"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></symbol>
+<symbol id="i-msgs" viewBox="0 0 24 24"><path d="M14 9a2 2 0 0 1-2 2H6l-4 4V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2z"/><path d="M18 9h2a2 2 0 0 1 2 2v11l-4-4h-6a2 2 0 0 1-2-2v-1"/></symbol>
+<symbol id="i-todo" viewBox="0 0 24 24"><rect x="3" y="5" width="6" height="6" rx="1"/><path d="m3 17 2 2 4-4"/><path d="M13 6h8"/><path d="M13 12h8"/><path d="M13 18h8"/></symbol>
+<symbol id="i-cal" viewBox="0 0 24 24"><path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/><path d="M8 14h.01"/><path d="M12 14h.01"/><path d="M16 14h.01"/><path d="M8 18h.01"/><path d="M12 18h.01"/></symbol>
+<symbol id="i-cmd" viewBox="0 0 24 24"><path d="M15 6v12a3 3 0 1 0 3-3H6a3 3 0 1 0 3 3V6a3 3 0 1 0-3 3h12a3 3 0 1 0-3-3"/></symbol>
+<symbol id="i-plus" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M12 5v14"/></symbol>
+<symbol id="i-cr" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+<symbol id="i-cd" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+<symbol id="i-cl" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></symbol>
+<symbol id="i-more" viewBox="0 0 24 24"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></symbol>
+<symbol id="i-send" viewBox="0 0 24 24"><path d="M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z"/><path d="m21.854 2.147-10.94 10.939"/></symbol>
+<symbol id="i-clip" viewBox="0 0 24 24"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></symbol>
+<symbol id="i-list" viewBox="0 0 24 24"><path d="M3 12h.01"/><path d="M3 18h.01"/><path d="M3 6h.01"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M8 6h13"/></symbol>
+<symbol id="i-board" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M8 7v7"/><path d="M12 7v4"/><path d="M16 7v9"/></symbol>
+<symbol id="i-table" viewBox="0 0 24 24"><path d="M12 3v18"/><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 9h18"/><path d="M3 15h18"/></symbol>
+<symbol id="i-filter" viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M7 12h10"/><path d="M10 18h4"/></symbol>
+<symbol id="i-group" viewBox="0 0 24 24"><rect width="18" height="7" x="3" y="3" rx="1"/><rect width="18" height="7" x="3" y="14" rx="1"/></symbol>
+<symbol id="i-sort" viewBox="0 0 24 24"><path d="m21 16-4 4-4-4"/><path d="M17 20V4"/><path d="m3 8 4-4 4 4"/><path d="M7 4v16"/></symbol>
+<symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></symbol>
+<symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+<symbol id="i-go" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></symbol>
+<symbol id="i-up" viewBox="0 0 24 24"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></symbol>
+<symbol id="i-down" viewBox="0 0 24 24"><path d="m7 7 10 10"/><path d="M17 7v10H7"/></symbol>
+<symbol id="i-unlink" viewBox="0 0 24 24"><path d="M9 17H7A5 5 0 0 1 7 7"/><path d="M15 7h2a5 5 0 0 1 4 8"/><path d="M8 12h4"/><path d="m2 2 20 20"/></symbol>
+<symbol id="i-chart" viewBox="0 0 24 24"><path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></symbol>
+<symbol id="i-play" viewBox="0 0 24 24"><polygon points="6 3 20 12 6 21 6 3"/></symbol>
+<symbol id="i-alarm" viewBox="0 0 24 24"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2 2"/><path d="M5 3 2 6"/><path d="m22 6-3-3"/></symbol>
+<symbol id="i-evid" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><circle cx="11.5" cy="14.5" r="2.5"/><path d="M13.3 16.3 15 18"/></symbol>
+<symbol id="i-brain" viewBox="0 0 24 24"><path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z"/><path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z"/><path d="M12 5v13"/></symbol>
+<symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></symbol>
+<symbol id="i-file" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></symbol>
+<symbol id="i-ask" viewBox="0 0 24 24"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></symbol>
+<symbol id="i-book" viewBox="0 0 24 24"><path d="M21.42 10.922a1 1 0 0 0-.019-1.838L12.83 5.18a2 2 0 0 0-1.66 0L2.6 9.08a1 1 0 0 0 0 1.832l8.57 3.908a2 2 0 0 0 1.66 0z"/><path d="M22 10v6"/><path d="M6 12.5V16a6 3 0 0 0 12 0v-3.5"/></symbol>
+<symbol id="i-sliders" viewBox="0 0 24 24"><path d="M21 4h-7"/><path d="M10 4H3"/><path d="M21 12h-9"/><path d="M8 12H3"/><path d="M21 20h-5"/><path d="M12 20H3"/><path d="M14 2v4"/><path d="M8 10v4"/><path d="M16 18v4"/></symbol>
+<symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></symbol>
+<symbol id="i-matter" viewBox="0 0 24 24"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></symbol>
+<symbol id="i-sq" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="m9 12 2 2 4-4"/></symbol>
+<symbol id="i-calclock" viewBox="0 0 24 24"><path d="M21 7.5V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h3.5"/><path d="M16 2v4"/><path d="M8 2v4"/><path d="M3 10h5"/><path d="M17.5 17.5 16 16.3V14"/><circle cx="16" cy="16" r="6"/></symbol>
+<symbol id="i-stamp" viewBox="0 0 24 24"><path d="M5 22h14"/><path d="M19.27 13.73A2.5 2.5 0 0 0 17.5 13h-11A2.5 2.5 0 0 0 4 15.5V17a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-1.5c0-.66-.26-1.3-.73-1.77Z"/><path d="M14 13V8.5C14 7 15 7 15 5a3 3 0 0 0-6 0c0 2 1 2 1 3.5V13"/></symbol>
+<symbol id="i-plug" viewBox="0 0 24 24"><path d="M12 22v-5"/><path d="M9 8V2"/><path d="M15 8V2"/><path d="M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z"/></symbol>
+<symbol id="i-shield" viewBox="0 0 24 24"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/></symbol>
+<symbol id="i-code" viewBox="0 0 24 24"><path d="m16 18 6-6-6-6"/><path d="m8 6-6 6 6 6"/></symbol>
+<symbol id="i-pause" viewBox="0 0 24 24"><rect x="14" y="4" width="4" height="16" rx="1"/><rect x="6" y="4" width="4" height="16" rx="1"/></symbol>
+<symbol id="i-pen" viewBox="0 0 24 24"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/></symbol>
+<symbol id="i-merge" viewBox="0 0 24 24"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M6 21V9a9 9 0 0 0 9 9"/></symbol>
+<symbol id="i-split" viewBox="0 0 24 24"><path d="M16 3h5v5"/><path d="M8 3H3v5"/><path d="M12 22v-8.3a4 4 0 0 0-1.172-2.872L3 3"/><path d="m15 9 6-6"/></symbol>
+<symbol id="i-warn" viewBox="0 0 24 24"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></symbol>
+<symbol id="i-grip" viewBox="0 0 24 24"><circle cx="9" cy="12" r="1"/><circle cx="9" cy="5" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="19" r="1"/></symbol>
+<symbol id="i-cols" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/><path d="M15 3v18"/></symbol>
+<symbol id="i-bot" viewBox="0 0 24 24"><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></symbol>
+<symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></symbol>
+<symbol id="i-note" viewBox="0 0 24 24"><path d="M13.4 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7.4"/><path d="M2 6h4"/><path d="M2 10h4"/><path d="M2 14h4"/><path d="M2 18h4"/><path d="M21.378 5.626a1 1 0 1 0-3.004-3.004l-5.01 5.012a2 2 0 0 0-.506.854l-.837 2.87a.5.5 0 0 0 .62.62l2.87-.837a2 2 0 0 0 .854-.506z"/></symbol>
+<!-- 岗位 / 职责线描（WP213 role-icons/glyphs.ts 原样；线宽 1.75，点睛那一笔走 --ia） -->
+<symbol id="g-pr" viewBox="0 0 24 24"><rect x="2.5" y="4" width="10" height="16" rx="1.5"/><path d="M5.5 8.5h4M5.5 12h4M5.5 15.5h2.5"/><path d="M15.5 10v4M15.5 10l5-3.5v11l-5-3.5" style="stroke:var(--ia,currentColor)"/></symbol>
+<symbol id="g-social" viewBox="0 0 24 24"><path d="M14.5 7.5V6.5a3 3 0 0 0-3-3h-6a3 3 0 0 0-3 3V9a3 3 0 0 0 3 3v2.5L8 12"/><path d="M13 10h5.5a3 3 0 0 1 3 3v2.5a3 3 0 0 1-3 3V21L16 18.5h-3a3 3 0 0 1-3-3V13a3 3 0 0 1 3-3z"/><circle cx="19.5" cy="4.5" r="1.5" style="stroke:var(--ia,currentColor)"/></symbol>
+<symbol id="g-care" viewBox="0 0 24 24"><path d="M3.5 15.5V11a8.5 8.5 0 0 1 17 0v4.5"/><path d="M8.5 9.5h7A2.5 2.5 0 0 1 18 12v3a2.5 2.5 0 0 1-2.5 2.5H12l-3 2.5v-2.5h-.5A2.5 2.5 0 0 1 6 15v-3a2.5 2.5 0 0 1 2.5-2.5z"/><path d="M9.5 13.5h.01M12 13.5h.01M14.5 13.5h.01" style="stroke:var(--ia,currentColor)"/></symbol>
+<symbol id="g-web" viewBox="0 0 24 24"><circle cx="11" cy="13" r="8"/><path d="M11 5c-2.2 2.2-3.2 5-3.2 8s1 5.8 3.2 8"/><path d="M2.5 16c3-.2 5-2.2 7.5-2.2s4-1.8 5.5-4.3S19 5 21.5 4.5" style="stroke:var(--ia,currentColor)"/></symbol>
+</svg>
+
+<div class="app">
+<aside class="side">
+  <div class="logo"><svg width="24" height="24" viewBox="14 12 65 65" aria-hidden="true"><g fill="url(#mk)"><rect x="14" y="44" width="17" height="17" rx="2.5"/><rect x="38" y="52" width="17" height="17" rx="2.5"/><rect x="38" y="28" width="17" height="17" rx="2.5"/><rect x="62" y="60" width="17" height="17" rx="2.5"/><rect x="62" y="36" width="17" height="17" rx="2.5"/><rect x="62" y="12" width="17" height="17" rx="2.5"/></g></svg>Agents 工坊</div>
+  <nav class="nav" aria-label="主导航">
+    <a class="nv"><svg class="ico"><use href="#i-chat"/></svg>随便聊</a>
+    <a class="nv"><svg class="ico"><use href="#i-home"/></svg>首页</a>
+    <a class="nv"><svg class="ico"><use href="#i-inbox"/></svg>消息<span class="dot"></span></a>
+    <a class="nv"><svg class="ico"><use href="#i-todo"/></svg>待办</a>
+    <a class="nv"><svg class="ico"><use href="#i-cal"/></svg>日历</a>
+    <div class="nsec">岗位<svg class="ico s14"><use href="#i-plus"/></svg></div>
+    <div class="prow"><span class="chev"><svg class="ico s14"><use href="#i-cr"/></svg></span><a class="nv on" href="position-v2-list.html"><svg class="gl"><use href="#g-pr"/></svg>Reddit 运营<span class="cnt">3</span></a></div>
+    <div class="prow"><span class="chev"><svg class="ico s14"><use href="#i-cr"/></svg></span><a class="nv"><svg class="gl"><use href="#g-care"/></svg>客服</a></div>
+    <div class="prow"><span class="chev"><svg class="ico s14"><use href="#i-cr"/></svg></span><a class="nv"><svg class="gl"><use href="#g-web"/></svg>网站运营</a></div>
+  </nav>
+  <div class="acct"><span class="av t-warn">舟</span><div><b>林舟</b><small>负责人 · INMO</small></div></div>
+</aside>
+<div class="mainwrap">
+  <header class="top">
+    <button class="kbar" type="button"><svg class="ico"><use href="#i-cmd"/></svg>交给某个岗位一件事…<kbd>⌘K</kbd></button>
+    <span class="tchip"><i></i>DeepSeek</span>
+    <span class="tchip num">积分 101.1</span>
+  </header>
+  <main>
+<div class="page">
+  <!-- ① 页头：图标 + 名字 + 一行状态（每段可点）；右边岗位设置 -->
+  <div class="ph">
+    <span class="pic"><svg class="gl"><use href="#g-pr"/></svg></span>
+    <div>
+      <h1>Reddit 运营</h1>
+      <p class="stat">
+        <a href="#need"><i class="d" style="background:var(--ws-warn)"></i><b>3</b> 张等你定</a><span class="mid">·</span>
+        <a href="#work" data-jump="doing"><i class="d" style="background:var(--ws-brand)"></i><b>5</b> 件在办</a><span class="mid">·</span>
+        <a href="#work" data-jump="today"><i class="d" style="background:var(--ws-info)"></i>今天 <b>1</b> 个待办</a>
+      </p>
+    </div>
+    <div class="r">
+      <span class="holders" data-tip="谁在做：你 + 2 条职责的 Agent"><span class="av sm t-warn">舟</span><span class="av sm t-brand">AI</span></span>
+      <a class="btn sm out" href="position-v2-settings.html"><svg class="ico s14"><use href="#i-more"/></svg>岗位设置</a>
+    </div>
+  </div>
+  <div class="banner" id="banner" hidden><svg class="ico s14"><use href="#i-unlink"/></svg><span>回帖要用品牌自己的 Reddit 号，还没登记</span><button class="btn xs" type="button">去登记</button></div>
+
+  <div class="ptabs">
+    <div class="tabs" role="tablist"><a class="on" data-tab="work">工作</a><a data-tab="records">记录</a><a href="position-v2-settings.html">设置</a></div>
+  </div>
+
+  <div id="tab-work" style="display:flex;flex-direction:column;gap:26px">
+    <!-- ② 交给它 -->
+    <div class="hand card" id="hand">
+      <div class="hrow">
+        <svg class="ico"><use href="#i-send"/></svg>
+        <textarea id="handText" rows="1" placeholder="交给它一件事，比如「哪些版适合我们」"></textarea>
+        <button class="btn sm pri" type="button"><svg class="ico s14"><use href="#i-send"/></svg>交给它</button>
+      </div>
+      <div class="hfoot">
+        <button class="sug" type="button">哪些版适合我们</button>
+        <button class="sug" type="button">这周 Reddit 上怎么说我们</button>
+        <button class="sug" type="button">起草一条置顶公告</button>
+        <button class="sug more" type="button">有谁在等着进群</button>
+        <div class="hx">
+          <button class="btn xs ghost" type="button"><svg class="ico s12"><use href="#i-clip"/></svg>附件</button>
+          <button class="btn xs out" type="button" data-tip="默认它自己判断走哪条职责">职责：自动<svg class="ico s12"><use href="#i-cd"/></svg></button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ③ 要你处理 -->
+    <section id="need">
+      <div class="sec-h"><h3>要你处理</h3><span class="c">3</span><div class="r"><a class="lnk" href="#">全部 3 张<svg class="ico s14"><use href="#i-go"/></svg></a></div></div>
+      <div class="need">
+        <article class="card nc">
+          <div class="l1"><span class="pill t-warn">等你批</span><span class="duty"><span class="di"><svg class="gl"><use href="#g-pr"/></svg><img src="../../../apps/workstation/src/assets/brand/reddit.png" alt=""></span>Reddit 营销</span><span class="t">今天 18:00</span></div>
+          <h4>回帖草稿：「近视能戴 INMO Air 3 吗？」</h4>
+          <p>r/SmartGlasses · 带了镜片夹片的说明，用品牌号发</p>
+          <div class="ft"><button class="btn sm pri" type="button">批准发出</button><button class="btn sm out" type="button">改一下</button><a class="go" href="#"><svg class="ico"><use href="#i-go"/></svg></a></div>
+        </article>
+        <article class="card nc">
+          <div class="l1"><span class="pill t-info">等你选</span><span class="duty"><span class="di"><svg class="gl"><use href="#g-pr"/></svg><img src="../../../apps/workstation/src/assets/brand/reddit.png" alt=""></span>Reddit 营销</span><span class="t">今天</span></div>
+          <h4>有人说 INMO「召回」，怎么处理？</h4>
+          <p>出处只有一条评论，没核实，Agent 不下结论</p>
+          <div class="ft"><button class="btn sm pri" type="button">交公关核实</button><button class="btn sm out" type="button">先观察</button><a class="go" href="#"><svg class="ico"><use href="#i-go"/></svg></a></div>
+        </article>
+        <article class="card nc">
+          <div class="l1"><span class="pill t-warn">等你批</span><span class="duty"><span class="di"><svg class="gl"><use href="#g-social"/></svg><img src="../../../apps/workstation/src/assets/brand/reddit.png" alt=""></span>自家版</span><span class="t">10-08</span></div>
+          <h4>r/INMO 置顶公告：固件 2.1 续航说明</h4>
+          <p>回应 3 条续航抱怨，数字都查过事实卡</p>
+          <div class="ft"><button class="btn sm pri" type="button">批准发布</button><button class="btn sm out" type="button">改一下</button><a class="go" href="#"><svg class="ico"><use href="#i-go"/></svg></a></div>
+        </article>
+      </div>
+    </section>
+
+    <!-- ④ 工作：一个数据集，四种视图 + 职责快捷视图 -->
+    <section id="work">
+      <div class="sec-h"><h3>工作</h3><span class="c" id="workCount"></span><span class="hint" tabindex="0" data-hint="事项、待办、排期合成一份。视图、筛选、分组按岗位记住，下次进来还是这样。">?</span></div>
+      <div class="vbar" id="vbar">
+        <div class="tabs" id="views">
+          <a data-view="list"><svg class="ico s14"><use href="#i-list"/></svg>列表</a>
+          <a data-view="board"><svg class="ico s14"><use href="#i-board"/></svg>看板</a>
+          <a data-view="calendar"><svg class="ico s14"><use href="#i-cal"/></svg>日历</a>
+          <a data-view="table"><svg class="ico s14"><use href="#i-table"/></svg>表格</a>
+        </div>
+        <span class="sep"></span>
+        <div class="qv" id="qv">
+          <button type="button" data-view="community" data-tip="职责「自家版」的专属工具"><img src="../../../apps/workstation/src/assets/brand/reddit.png" alt="">自家版待处理<span class="n">7</span></button>
+          <button type="button" data-view="schedule" data-tip="职责「Reddit 营销」的专属工具"><svg class="ico s14"><use href="#i-calclock"/></svg>发帖排期</button>
+        </div>
+        <div class="r" id="tools">
+          <button class="btn sm ghost" type="button" data-pop="filter"><svg class="ico s14"><use href="#i-filter"/></svg>筛选<span class="b" id="fcount" hidden></span></button>
+          <button class="btn sm ghost" type="button" data-pop="group"><svg class="ico s14"><use href="#i-group"/></svg><span id="glabel">按状态</span></button>
+          <button class="btn sm ghost" type="button" data-pop="sort"><svg class="ico s14"><use href="#i-sort"/></svg><span id="slabel">按截止</span></button>
+          <button class="btn sm ghost" type="button" data-pop="cols" id="colsBtn" hidden><svg class="ico s14"><use href="#i-cols"/></svg>列</button>
+          <button class="btn sm out" type="button"><svg class="ico s14"><use href="#i-plus"/></svg>待办</button>
+        </div>
+      </div>
+      <div class="fchips" id="fchips"></div>
+      <div id="viewport"></div>
+    </section>
+
+    <!-- ⑤ 数字：一条紧凑的带子，点开看图 -->
+    <section id="nums">
+      <div class="sec-h"><h3>数字</h3><span class="hint" tabindex="0" data-hint="数据来自 Agents 工坊接口（Reddit 取数已通），不用另连。">?</span>
+        <div class="r"><div class="tabs" style="height:28px"><a style="font-size:12.5px;padding:0 9px">昨天</a><a class="on" style="font-size:12.5px;padding:0 9px">近 7 天</a></div>
+        <button class="btn sm ghost" type="button" id="chartsBtn"><svg class="ico s14"><use href="#i-chart"/></svg>看图表</button></div>
+      </div>
+      <div class="card band">
+        <div class="bgrp">
+          <div class="blab"><b><span class="di"><svg class="gl"><use href="#g-pr"/></svg><img src="../../../apps/workstation/src/assets/brand/reddit.png" alt=""></span>Reddit 营销</b>外部的版</div>
+          <div class="kv"><span class="k">提到我们</span><span class="v"><b>38</b><span class="dp t-good"><svg class="ico s12"><use href="#i-up"/></svg>12%</span></span></div>
+          <div class="kv"><span class="k">正面占比</span><span class="v"><b>61%</b><span class="dp t-good"><svg class="ico s12"><use href="#i-up"/></svg>4 点</span></span></div>
+          <div class="kv"><span class="k">待回应</span><span class="v"><b>3</b></span></div>
+          <div class="kv"><span class="k">冷却中的版</span><span class="v"><b>2</b></span></div>
+        </div>
+        <div class="bgrp">
+          <div class="blab"><b><span class="di"><svg class="gl"><use href="#g-social"/></svg><img src="../../../apps/workstation/src/assets/brand/reddit.png" alt=""></span>自家版</b>r/INMO</div>
+          <div class="kv"><span class="k">成员</span><span class="v"><b>1,284</b><span class="dp t-good"><svg class="ico s12"><use href="#i-up"/></svg>23</span></span></div>
+          <div class="kv"><span class="k">待处理</span><span class="v"><b>7</b></span></div>
+          <div class="kv"><span class="k">本周帖子</span><span class="v"><b>14</b><span class="dp t-bad"><svg class="ico s12"><use href="#i-down"/></svg>3</span></span></div>
+        </div>
+      </div>
+      <div class="charts" id="charts">
+        <div class="card chart"><h5>每天提到我们<span class="lg"><span><i style="background:var(--ws-brand)"></i>本周</span><span><i style="background:var(--ws-brand-soft)"></i>上周</span></span></h5>
+          <div class="bars" id="bars1"></div><div class="bx"><span>三</span><span>四</span><span>五</span><span>六</span><span>日</span><span>一</span><span>二</span></div></div>
+        <div class="card chart"><h5>r/INMO 新成员<span class="lg"><span><i style="background:var(--ws-brand)"></i>本周</span><span><i style="background:var(--ws-brand-soft)"></i>上周</span></span></h5>
+          <div class="bars" id="bars2"></div><div class="bx"><span>三</span><span>四</span><span>五</span><span>六</span><span>日</span><span>一</span><span>二</span></div></div>
+      </div>
+    </section>
+  </div>
+
+  <!-- 记录页签（原来的「记录」，内容不变，只是挪成三个页签之一） -->
+  <div id="tab-records" hidden>
+    <ol class="card rec">
+      <li><time>今天 14:20</time><div><div class="t1">INMO Reddit 口碑调研（第一轮）收尾<span class="duty"><span class="di"><svg class="gl"><use href="#g-pr"/></svg><img src="../../../apps/workstation/src/assets/brand/reddit.png" alt=""></span>Reddit 营销</span></div><p>5 条重点帖、3 件要回应；「召回」说法未核实，交你定。花了 2.2 积分。</p></div></li>
+      <li><time>今天 11:05</time><div><div class="t1">r/INMO 放进 4 个新成员，拦下 1 个广告号<span class="duty"><span class="di"><svg class="gl"><use href="#g-social"/></svg><img src="../../../apps/workstation/src/assets/brand/reddit.png" alt=""></span>自家版</span></div><p>按版规第 3 条拦的，原帖留着备查。</p></div></li>
+      <li><time>昨天 21:40</time><div><div class="t1">你批了：在 r/SmartGlasses 回「Air 3 和 One 怎么选」<span class="duty"><span class="di"><svg class="gl"><use href="#g-pr"/></svg><img src="../../../apps/workstation/src/assets/brand/reddit.png" alt=""></span>Reddit 营销</span></div><p>用品牌号发出，目前 34 赞 5 条回复。</p></div></li>
+      <li><time>10-04</time><div><div class="t1">给 r/augmentedreality 版主发了私信<span class="duty"><span class="di"><svg class="gl"><use href="#g-pr"/></svg><img src="../../../apps/workstation/src/assets/brand/reddit.png" alt=""></span>Reddit 营销</span></div><p>问能不能发官方帖，还没回。</p></div></li>
+      <li><time>10-03</time><div><div class="t1">r/INMO 版规改版上线<span class="duty"><span class="di"><svg class="gl"><use href="#g-social"/></svg><img src="../../../apps/workstation/src/assets/brand/reddit.png" alt=""></span>自家版</span></div><p>加了「求助帖要写型号和固件版本」。</p></div></li>
+    </ol>
+  </div>
+</div>
+
+  </main>
+</div>
+<aside class="rail" aria-label="右栏（收起）">
+  <svg class="ico"><use href="#i-chart"/></svg><svg class="ico"><use href="#i-play"/></svg><svg class="ico"><use href="#i-alarm"/></svg><svg class="ico"><use href="#i-evid"/></svg>
+  <hr><svg class="ico"><use href="#i-brain"/></svg><svg class="ico"><use href="#i-book"/></svg>
+  <hr><svg class="ico"><use href="#i-globe"/></svg><svg class="ico"><use href="#i-file"/></svg><svg class="ico"><use href="#i-ask"/></svg>
+</aside>
+<aside class="notes" aria-label="设计说明">
+  <div class="nh"><svg class="ico s14"><use href="#i-note"/></svg><b>设计说明</b><span class="tag">不是界面</span><button class="btn xs ghost" type="button" style="margin-left:auto" onclick="document.documentElement.classList.toggle('dark')"><svg class="ico s14"><use href="#i-sun"/></svg>明 / 暗</button><button class="btn xs icon ghost" type="button" onclick="document.documentElement.classList.add('notes-off')" aria-label="收起"><svg class="ico s14"><use href="#i-x"/></svg></button></div>
+  <div class="blk">
+    <h4>从上往下 = 先急后缓</h4>
+    <ol>
+      <li><b>要我做什么</b>：交给它、要你处理</li>
+      <li><b>它在做什么</b>：工作（列表 / 看板 / 日历 / 表格）</li>
+      <li><b>做得怎么样</b>：数字</li>
+      <li><b>设置</b>：收进「设置」页签，平时看不到</li>
+    </ol>
+  </div>
+  <div class="blk">
+    <h4>和现在比</h4>
+    <ul>
+      <li>四个页签 → 三个：<span class="was">卡片 / 面板 / 记忆</span> 工作 / 记录 / 设置</li>
+      <li>交给它：三行大框 → <b>一行</b>，点进去才展开</li>
+      <li>「连上就能开工」大卡 → 只在真缺时出<b>一行</b>横幅</li>
+      <li>CLI 卡、「在日历里看」→ 设置里 / 视图里</li>
+      <li>待办不用再跳日历：日历是这里的<b>一种视图</b>，只显示这个岗位的，默认是列表</li>
+      <li>Reddit 社群、发帖排期不用钻职责页：视图栏后面一点就开</li>
+      <li>面板里的数字块 → 底下<b>一条</b>数字带，要看图再点开</li>
+    </ul>
+  </div>
+  <div class="blk">
+    <h4>点点看</h4>
+    <div class="try">
+      <button type="button" onclick="showView('list')">列表</button>
+      <button type="button" onclick="showView('board')">看板（能拖）</button>
+      <button type="button" onclick="showView('calendar')">日历</button>
+      <button type="button" onclick="showView('table')">表格</button>
+      <button type="button" onclick="showView('community')">自家版待处理</button>
+      <button type="button" onclick="showView('schedule')">发帖排期</button>
+      <button type="button" onclick="document.querySelector('[data-pop=filter]').click()">筛选</button>
+      <button type="button" onclick="toggleBanner()">缺连接时的横幅</button>
+      <button type="button" onclick="location.href='position-v2-settings.html'">设置页签</button>
+      <button type="button" onclick="location.href='position-v2-empty.html'">新岗位空的时候</button>
+    </div>
+  </div>
+  <div class="blk ask">
+    <h4>要你定（详见 README）</h4>
+    <ol>
+      <li>「要你处理」和列表里「等你」那组会重复出现同几件事：留着（上面是快捷动作），还是只留一处？</li>
+      <li>列表第一组叫「等你」（批 / 选 / 你自己的待办），不叫「等你批」，行不行？</li>
+      <li>职责「Reddit 运营」跟岗位同名，稿里先叫「自家版」，要不要正式改名？</li>
+    </ol>
+  </div>
+
+</aside>
+</div>
+<button class="notes-fab" type="button" onclick="document.documentElement.classList.remove('notes-off')"><svg class="ico s14"><use href="#i-note"/></svg>设计说明</button>
+<script>
+/* 合成数据：照 10-06 Windows 真机那轮 INMO Reddit 调研编的（不含真实用户名 / 邮箱）。今天 = 2026-10-06（周二） */
+var REDDIT = "../../../apps/workstation/src/assets/brand/reddit.png";
+var DUTY = {
+  mk: { name: "Reddit 营销", glyph: "g-pr" },
+  cm: { name: "自家版", glyph: "g-social" },
+};
+var ST = {
+  you: { name: "等你", tip: "等你批、等你选、你自己的待办", c: "var(--ws-warn)" },
+  doing: { name: "进行中", tip: "Agent 正在做", c: "var(--ws-brand)" },
+  others: { name: "等别人", tip: "等公关、客服、版主回话", c: "var(--ws-info)" },
+  done: { name: "已完成", tip: "", c: "var(--ws-good)" },
+};
+var KIND = { card: ["i-stamp", "卡 · 要你拍板"], matter: ["i-matter", "事项"], todo: ["i-sq", "待办 · 你自己做"], post: ["i-calclock", "排期 · 到点发"] };
+var SRC = { you: "你交的", agent: "Agent 发现", cron: "定时", mail: "来信" };
+var WORK = [
+  { id: 1, t: "回帖草稿：「近视能戴 INMO Air 3 吗？」", d: "mk", s: "you", k: "card", due: "10-06 18:00", p: "草稿写好了，带镜片夹片的说明", src: "agent", cost: 0.6, upd: "25 分钟前", who: "AI" },
+  { id: 2, t: "有人说 INMO「召回」，怎么处理？", d: "mk", s: "you", k: "card", due: "10-06", p: "出处只有一条评论，没核实", src: "agent", cost: 0.2, upd: "1 小时前", who: "AI" },
+  { id: 3, t: "r/INMO 置顶公告：固件 2.1 续航说明", d: "cm", s: "you", k: "card", due: "10-08", p: "草稿等你批", src: "you", cost: 0.3, upd: "1 小时前", who: "AI" },
+  { id: 4, t: "私信 r/SmartGlasses 版主：能否挂官方 flair", d: "mk", s: "you", k: "todo", due: "10-06", p: "你来发，Agent 起草了一版", src: "you", cost: 0, upd: "今天 09:12", who: "舟" },
+  { id: 5, t: "INMO Reddit 口碑调研（第二轮）", d: "mk", s: "doing", k: "matter", due: "10-09", p: "取回 25 条，去掉同名噪音剩 10 条", src: "you", cost: 2.2, upd: "10 分钟前", who: "AI" },
+  { id: 6, t: "盯 10-07 那篇评测帖的评论", d: "mk", s: "doing", k: "matter", due: "10-07", p: "评测明早发，发了第一时间看评论", src: "agent", cost: 0, upd: "2 小时前", who: "AI" },
+  { id: 7, t: "5 条重点帖的回应口径", d: "mk", s: "doing", k: "matter", due: "10-08", p: "写完 3 / 5", src: "you", cost: 1.1, upd: "40 分钟前", who: "AI" },
+  { id: 8, t: "r/INMO 每周问答帖", d: "cm", s: "doing", k: "post", due: "10-09 09:00", p: "排好了，到点自动发", src: "cron", cost: 0.1, upd: "昨天", who: "AI" },
+  { id: 9, t: "r/INMO 新人入群审核", d: "cm", s: "doing", k: "matter", due: "", p: "今天放进 4 人，拦下 1 个广告号", src: "cron", cost: 0.4, upd: "3 小时前", who: "AI" },
+  { id: 10, t: "「召回」说法核实（上周那条）", d: "mk", s: "others", k: "matter", due: "10-07", p: "交给公关了，等回话", src: "agent", cost: 0.3, upd: "昨天", who: "公" },
+  { id: 11, t: "固件 2.1 续航投诉 3 条", d: "cm", s: "others", k: "matter", due: "10-07", p: "客户问题转客服，等客服回", src: "mail", cost: 0.2, upd: "今天 10:30", who: "客" },
+  { id: 12, t: "r/augmentedreality 能否发官方帖", d: "mk", s: "others", k: "matter", due: "10-05", p: "10-04 私信了版主，还没回", src: "you", cost: 0, upd: "10-04", who: "版" },
+  { id: 13, t: "INMO Reddit 口碑调研（第一轮）", d: "mk", s: "done", k: "matter", due: "10-06", p: "5 条重点帖、3 件要回应", src: "you", cost: 2.2, upd: "今天 14:20", who: "AI" },
+  { id: 14, t: "r/INMO 版规改版", d: "cm", s: "done", k: "matter", due: "10-03", p: "加了「求助帖写型号和固件」", src: "you", cost: 0.5, upd: "10-03", who: "AI" },
+  { id: 15, t: "找 5 个适合我们的版", d: "mk", s: "done", k: "matter", due: "10-02", p: "能发 2 个、只能答 2 个、别去 1 个", src: "you", cost: 0.9, upd: "10-02", who: "AI" },
+];
+var TODAY = "10-06";
+var KEY = "wp239.position.reddit-ops"; // 视图记在这个岗位上
+var state = { view: "list", group: "status", sort: "due", f: { d: [], s: [], due: "", src: [] }, cols: ["d", "s", "due", "cost", "src", "upd"], cal: "month", fold: { done: true } };
+try { Object.assign(state, JSON.parse(localStorage.getItem(KEY) || "{}")); } catch (e) {}
+var q = new URLSearchParams(location.search);
+if (q.get("view")) state.view = q.get("view");
+function save() { try { localStorage.setItem(KEY, JSON.stringify({ view: state.view, group: state.group, sort: state.sort, cols: state.cols, cal: state.cal })); } catch (e) {} }
+var $ = function (s, r) { return (r || document).querySelector(s); };
+var $$ = function (s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); };
+function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
+
+function di(d) { return '<span class="di"><svg class="gl"><use href="#' + DUTY[d].glyph + '"/></svg><img src="' + REDDIT + '" alt=""></span>'; }
+function dutyTag(d) { return '<span class="duty">' + di(d) + DUTY[d].name + "</span>"; }
+function stIcon(s) {
+  if (s === "you") return '<svg class="st you" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.2"/><circle class="f" cx="8" cy="8" r="2.6"/></svg>';
+  if (s === "doing") return '<svg class="st doing" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.2"/><path class="f" d="M8 3.6a4.4 4.4 0 0 1 0 8.8z"/></svg>';
+  if (s === "others") return '<svg class="st others" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.2"/><path d="M8 5.2V8l1.8 1.2"/></svg>';
+  return '<svg class="st done" viewBox="0 0 16 16"><circle class="f" cx="8" cy="8" r="7"/><path d="m5.2 8.2 1.9 1.9 3.7-3.9"/></svg>';
+}
+function kindIcon(k) { return '<span class="kd" data-tip="' + KIND[k][1] + '"><svg class="ico s14"><use href="#' + KIND[k][0] + '"/></svg></span>'; }
+function md(due) { return due ? due.slice(0, 5) : ""; }
+function dueCell(w) {
+  if (!w.due) return '<span class="due none">没有截止</span>';
+  var m = md(w.due), cls = "due";
+  if (w.s !== "done" && m === TODAY) cls += " today";
+  else if (w.s !== "done" && m < TODAY) cls += " late";
+  var label = m === TODAY ? "今天" + (w.due.length > 5 ? " " + w.due.slice(6) : "") : m === "10-07" ? "明天" : m + (w.due.length > 5 ? " " + w.due.slice(6) : "");
+  return '<span class="' + cls + '">' + label + "</span>";
+}
+function whoAv(w) {
+  var tone = w.who === "AI" ? "t-brand" : w.who === "舟" ? "t-warn" : "t-info";
+  var tip = w.who === "AI" ? "Agent 在做" : w.who === "舟" ? "你" : w.who === "公" ? "公关岗位" : w.who === "客" ? "客服岗位" : "对方版主";
+  return '<span class="av sm ' + tone + '" data-tip="' + tip + '">' + w.who + "</span>";
+}
+
+function passes(w) {
+  var f = state.f;
+  if (f.d.length && f.d.indexOf(w.d) < 0) return false;
+  if (f.s.length && f.s.indexOf(w.s) < 0) return false;
+  if (f.src.length && f.src.indexOf(w.src) < 0) return false;
+  var m = md(w.due);
+  if (f.due === "today" && m !== TODAY) return false;
+  if (f.due === "week" && !(m >= "10-05" && m <= "10-11")) return false;
+  if (f.due === "late" && !(m && m < TODAY && w.s !== "done")) return false;
+  if (f.due === "none" && m) return false;
+  return true;
+}
+function sorted(list) {
+  var a = list.slice();
+  if (state.sort === "due") a.sort(function (x, y) { return (md(x.due) || "99") < (md(y.due) || "99") ? -1 : 1; });
+  if (state.sort === "upd") a.sort(function (x, y) { return x.id < y.id ? 1 : -1; });
+  if (state.sort === "cost") a.sort(function (x, y) { return y.cost - x.cost; });
+  return a;
+}
+function groups(list) {
+  if (state.group === "duty") return ["mk", "cm"].map(function (d) { return { key: d, head: di(d) + DUTY[d].name, items: list.filter(function (w) { return w.d === d; }) }; });
+  if (state.group === "due") {
+    var b = [["late", "已过期"], ["today", "今天"], ["week", "这周"], ["later", "以后"], ["none", "没有截止"]];
+    return b.map(function (x) {
+      return { key: x[0], head: x[1], items: list.filter(function (w) {
+        var m = md(w.due); if (!m) return x[0] === "none";
+        if (m < TODAY) return x[0] === (w.s === "done" ? "week" : "late");
+        if (m === TODAY) return x[0] === "today";
+        return x[0] === (m <= "10-11" ? "week" : "later");
+      }) };
+    }).filter(function (g) { return g.items.length; });
+  }
+  if (state.group === "none") return [{ key: "all", head: "全部", items: list }];
+  return ["you", "doing", "others", "done"].map(function (s) { return { key: s, head: stIcon(s) + ST[s].name + (ST[s].tip ? ' <span class="hint" tabindex="0" data-hint="' + ST[s].tip + '">?</span>' : ""), items: list.filter(function (w) { return w.s === s; }) }; });
+}
+
+/* ── 视图渲染 ── */
+function vList(list) {
+  return groups(list).map(function (g) {
+    var fold = state.group === "status" && state.fold[g.key];
+    var rows = g.items.map(function (w) {
+      return '<div class="row' + (w.s === "done" ? " done" : "") + '">' + stIcon(w.s) + kindIcon(w.k) + '<span class="tt">' + esc(w.t) + '</span><span class="pg">' + esc(w.p) + "</span>" + dutyTag(w.d) + dueCell(w) + whoAv(w) + "</div>";
+    }).join("");
+    var add = g.key === "you" || g.key === "all" ? '<button class="addrow" type="button"><svg class="ico s14"><use href="#i-plus"/></svg>加一个待办</button>' : "";
+    return '<div class="grp' + (fold ? " fold" : "") + '" data-g="' + g.key + '"><div class="gh"><svg class="ico s14 tw"><use href="#i-cd"/></svg>' + g.head + '<span class="c">' + g.items.length + '</span></div><div class="card rows">' + (rows || '<div class="none-line" style="padding:10px 14px">这一组是空的</div>') + add + "</div></div>";
+  }).join("");
+}
+function vBoard(list) {
+  return '<div class="board">' + ["you", "doing", "others", "done"].map(function (s) {
+    var items = list.filter(function (w) { return w.s === s; });
+    return '<div class="col" data-s="' + s + '"><div class="gh">' + stIcon(s) + ST[s].name + '<span class="c">' + items.length + "</span></div>" + items.map(function (w) {
+      return '<div class="kc" draggable="true" data-id="' + w.id + '"><div class="tt">' + esc(w.t) + '</div><div class="pg">' + esc(w.p) + '</div><div class="mt">' + dutyTag(w.d) + dueCell(w) + "</div></div>";
+    }).join("") + "</div>";
+  }).join("") + "</div>";
+}
+function evHtml(w, wk) {
+  var c = ST[w.s].c;
+  return '<div class="ev' + (w.s === "done" ? " done" : "") + '" style="--c:' + c + '" data-tip="' + esc(w.t) + '">' + (wk ? '<span>' + esc(w.t) + "</span><small>" + DUTY[w.d].name + (w.due.length > 5 ? " · " + w.due.slice(6) : "") + "</small>" : '<span>' + esc(w.t) + "</span>") + "</div>";
+}
+function vCal(list) {
+  var dated = list.filter(function (w) { return w.due; });
+  var head = '<div class="calh"><button class="btn xs icon ghost" type="button"><svg class="ico s14"><use href="#i-cl"/></svg></button><button class="btn xs icon ghost" type="button"><svg class="ico s14"><use href="#i-cr"/></svg></button><b>' + (state.cal === "month" ? "2026 年 10 月" : "10 月 5 日 – 11 日") + '</b><span class="tag">只看这个岗位</span><div class="r"><button class="btn xs out" type="button">今天</button><div class="tabs" id="calseg" style="height:28px"><a data-cal="month" class="' + (state.cal === "month" ? "on" : "") + '" style="font-size:12.5px;padding:0 10px">月</a><a data-cal="week" class="' + (state.cal === "week" ? "on" : "") + '" style="font-size:12.5px;padding:0 10px">周</a></div></div></div>';
+  var wd = ["一", "二", "三", "四", "五", "六", "日"];
+  if (state.cal === "week") {
+    var cols = [5, 6, 7, 8, 9, 10, 11].map(function (d, i) {
+      var key = "10-" + (d < 10 ? "0" + d : d);
+      var items = dated.filter(function (w) { return md(w.due) === key; });
+      return '<div class="wc' + (key === TODAY ? " today" : "") + '"><div class="wh">周' + wd[i] + "<b>" + d + "</b></div>" + items.map(function (w) { return evHtml(w, true); }).join("") + "</div>";
+    }).join("");
+    return '<div class="card">' + head + '<div class="wgrid">' + cols + "</div></div>";
+  }
+  var cells = wd.map(function (x) { return '<div class="wd">' + x + "</div>"; }).join("");
+  for (var i = 0; i < 35; i++) {
+    var day = i - 2; // 10-01 是周四
+    var out = day < 1 || day > 31;
+    var label = out ? (day < 1 ? 30 + day : day - 31) : day;
+    var key = "10-" + (day < 10 ? "0" + day : day);
+    var items = out ? [] : dated.filter(function (w) { return md(w.due) === key; });
+    if (!out && (day === 16 || day === 23 || day === 30)) items = items.concat([{ t: "r/INMO 每周问答帖", d: "cm", s: "doing", due: key + " 09:00" }]);
+    var more = items.length > 3 ? '<div class="muted" style="font-size:11px;padding-left:4px">还有 ' + (items.length - 3) + " 件</div>" : "";
+    cells += '<div class="dc' + (out ? " out" : "") + (key === TODAY && !out ? " today" : "") + '"><span class="dn">' + label + "</span>" + items.slice(0, 3).map(function (w) { return evHtml(w); }).join("") + more + "</div>";
+  }
+  return '<div class="card">' + head + '<div class="mgrid">' + cells + "</div></div>";
+}
+var COLS = { d: "职责", s: "状态", due: "截止", cost: "花费积分", src: "来源", upd: "最近更新" };
+function vTable(list) {
+  var th = '<th>标题<svg class="ico s12"><use href="#i-sort"/></svg></th>' + state.cols.map(function (c) { return "<th>" + COLS[c] + "</th>"; }).join("");
+  var tr = list.map(function (w) {
+    var cell = { d: dutyTag(w.d), s: '<span class="stc">' + stIcon(w.s) + ST[w.s].name + "</span>", due: dueCell(w), cost: '<span class="num">' + (w.cost ? w.cost.toFixed(1) : "—") + "</span>", src: SRC[w.src], upd: '<span class="muted">' + w.upd + "</span>" };
+    return '<tr><td class="tt">' + esc(w.t) + "</td>" + state.cols.map(function (c) { return "<td>" + cell[c] + "</td>"; }).join("") + "</tr>";
+  }).join("");
+  var total = list.reduce(function (a, w) { return a + w.cost; }, 0);
+  return '<div class="card tbl"><table><thead><tr>' + th + "</tr></thead><tbody>" + tr + '</tbody></table><div class="muted" style="font-size:12px;padding:10px 12px;border-top:1px solid var(--ws-line)">' + list.length + " 件 · 合计花了 " + total.toFixed(1) + " 积分</div></div>";
+}
+function vCommunity() {
+  var r = function (tone, ic, title, sub, act) { return '<div class="qrow"><span class="ic ' + tone + '"><svg class="ico"><use href="#' + ic + '"/></svg></span><div class="tx"><div>' + title + "</div><small>" + sub + '</small></div><div class="act">' + act + "</div></div>"; };
+  return '<div class="card"><div class="qhead"><img src="' + REDDIT + '" width="16" height="16" alt=""><b>r/INMO 待处理</b>· 职责「自家版」的专属工具<div class="r"><a class="btn xs ghost" href="#">在职责页打开<svg class="ico s12"><use href="#i-up"/></svg></a></div></div>' +
+    r("t-brand", "i-plus", "4 个人申请进版", "都有 30 天以上的号，没发过广告", '<button class="btn sm pri" type="button">全放进来</button><button class="btn sm out" type="button">逐个看</button>') +
+    r("t-bad", "i-warn", "1 条帖子被举报：疑似广告链接", "u/****_deals · 「便宜 50% 的 INMO 渠道」", '<button class="btn sm pri" type="button">删帖</button><button class="btn sm out" type="button">留着</button>') +
+    r("t-info", "i-file", "2 条新帖等审核", "都是求助帖，Agent 建议放行", '<button class="btn sm pri" type="button">都放行</button><button class="btn sm out" type="button">逐个看</button>') + "</div>";
+}
+function vSchedule() {
+  var days = ["5 一", "6 二", "7 三", "8 四", "9 五", "10 六", "11 日"];
+  var head = '<div class="lh">版</div>' + days.map(function (d, i) { return '<div class="lh' + (i === 1 ? " today" : "") + '">' + d + "</div>"; }).join("");
+  var lane = function (name, sub, cells) { return '<div class="sub">' + name + "<small>" + sub + "</small></div>" + cells.map(function (c, i) { return '<div class="' + (c === "cool" ? "cool" : "") + (i === 1 ? " today" : "") + '">' + (c && c !== "cool" ? c : "") + "</div>"; }).join(""); };
+  var ev = function (t, s) { return '<div class="ev" style="--c:' + ST[s].c + '"><span>' + t + "</span></div>"; };
+  return '<div class="card"><div class="qhead"><svg class="ico s14"><use href="#i-calclock"/></svg><b>发帖排期</b>· 斜线 = 这个版的冷却期，不能发<div class="r"><a class="btn xs ghost" href="#">在职责页打开<svg class="ico s12"><use href="#i-up"/></svg></a></div></div><div class="lane">' + head +
+    lane("r/SmartGlasses", "能发 · 72 小时冷却", ["", ev("回帖：近视求助", "you"), "cool", "cool", "", ev("Air 3 使用一周", "doing"), ""]) +
+    lane("r/augmentedreality", "等版主答复", ["", "", ev("盯评测评论", "doing"), "", "", "", ""]) +
+    lane("r/INMO", "自家版", ["", "", "", ev("置顶公告", "you"), ev("每周问答帖", "doing"), "", ""]) +
+    lane("r/gadgets", "只能答不能发", ["", "", "", "", "", "", ""]) + "</div></div>";
+}
+
+/* ── 装配 + 交互 ── */
+var GL = { status: "按状态", duty: "按职责", due: "按截止", none: "不分组" };
+var SL = { due: "按截止", upd: "按最近更新", cost: "按花费" };
+function render() {
+  var list = sorted(WORK.filter(passes));
+  var v = state.view, html = "";
+  if (v === "board") html = vBoard(list);
+  else if (v === "calendar") html = vCal(list);
+  else if (v === "table") html = vTable(list);
+  else if (v === "community") html = vCommunity();
+  else if (v === "schedule") html = vSchedule();
+  else html = vList(list);
+  $("#viewport").innerHTML = html;
+  $$("#views a").forEach(function (a) { a.classList.toggle("on", a.dataset.view === v); });
+  $$("#qv button").forEach(function (b) { b.classList.toggle("on", b.dataset.view === v); });
+  var quick = v === "community" || v === "schedule";
+  $("#tools").style.display = quick ? "none" : "";
+  $("#colsBtn").hidden = v !== "table";
+  $("#glabel").textContent = GL[state.group];
+  $("#slabel").textContent = SL[state.sort];
+  $("#workCount").textContent = quick ? "" : list.length + " 件";
+  var n = state.f.d.length + state.f.s.length + state.f.src.length + (state.f.due ? 1 : 0);
+  $("#fcount").hidden = !n; $("#fcount").textContent = n;
+  $("[data-pop=filter]").classList.toggle("on", !!n);
+  chips(quick);
+  wire();
+  save();
+}
+var DUE = { today: "今天到期", week: "这周到期", late: "已过期", none: "没有截止" };
+function chips(quick) {
+  var f = state.f, out = [];
+  f.d.forEach(function (d) { out.push(["d", d, "职责：" + DUTY[d].name]); });
+  f.s.forEach(function (s) { out.push(["s", s, "状态：" + ST[s].name]); });
+  if (f.due) out.push(["due", f.due, DUE[f.due]]);
+  f.src.forEach(function (s) { out.push(["src", s, "来源：" + SRC[s]]); });
+  $("#fchips").innerHTML = quick || !out.length ? "" : out.map(function (c) { return '<span class="fc">' + c[2] + '<button type="button" data-rm="' + c[0] + ":" + c[1] + '" aria-label="去掉"><svg class="ico s12"><use href="#i-x"/></svg></button></span>'; }).join("") + '<button class="btn xs ghost" type="button" data-rm="all">清空</button>';
+  $$("#fchips [data-rm]").forEach(function (b) {
+    b.onclick = function () {
+      var r = b.dataset.rm;
+      if (r === "all") state.f = { d: [], s: [], due: "", src: [] };
+      else { var p = r.split(":"); if (p[0] === "due") state.f.due = ""; else state.f[p[0]] = state.f[p[0]].filter(function (x) { return x !== p[1]; }); }
+      render();
+    };
+  });
+}
+function wire() {
+  $$(".grp .gh").forEach(function (h) { h.onclick = function (e) { if (e.target.closest(".hint")) return; var g = h.parentNode; g.classList.toggle("fold"); state.fold[g.dataset.g] = g.classList.contains("fold"); }; });
+  $$("#calseg a").forEach(function (a) { a.onclick = function () { state.cal = a.dataset.cal; render(); }; });
+  // 看板：真能拖，拖到哪一列就改成哪个状态
+  $$(".kc").forEach(function (c) {
+    c.ondragstart = function (e) { e.dataTransfer.setData("text/plain", c.dataset.id); c.classList.add("drag"); };
+    c.ondragend = function () { c.classList.remove("drag"); };
+  });
+  $$(".col").forEach(function (col) {
+    col.ondragover = function (e) { e.preventDefault(); col.classList.add("over"); };
+    col.ondragleave = function () { col.classList.remove("over"); };
+    col.ondrop = function (e) { e.preventDefault(); var id = +e.dataTransfer.getData("text/plain"); WORK.forEach(function (w) { if (w.id === id) w.s = col.dataset.s; }); render(); };
+  });
+}
+/* 弹层 */
+var popEl = null;
+function closePop() { if (popEl) { popEl.remove(); popEl = null; } }
+function opt(on, label, attrs, radio, cnt) { return '<button class="opt' + (on ? " on" : "") + '" type="button" ' + attrs + ">" + (radio ? '<span class="rd"></span>' : '<span class="ck"><svg class="ico s12"><use href="#i-check"/></svg></span>') + label + (cnt !== undefined ? '<span class="cnt">' + cnt + "</span>" : "") + "</button>"; }
+function cnt(fn) { return WORK.filter(fn).length; }
+function popHtml(kind) {
+  var f = state.f;
+  if (kind === "filter") {
+    return '<div class="ph2">职责</div><div class="ph2">状态</div>' +
+      "<div>" + ["mk", "cm"].map(function (d) { return opt(f.d.indexOf(d) >= 0, di(d) + DUTY[d].name, 'data-f="d:' + d + '"', false, cnt(function (w) { return w.d === d; })); }).join("") + '<div class="ph2" style="margin-top:6px">截止</div>' +
+      ["today", "week", "late", "none"].map(function (k) { return opt(f.due === k, DUE[k], 'data-f="due:' + k + '"', true); }).join("") + "</div>" +
+      "<div>" + ["you", "doing", "others", "done"].map(function (s) { return opt(f.s.indexOf(s) >= 0, stIcon(s) + ST[s].name, 'data-f="s:' + s + '"', false, cnt(function (w) { return w.s === s; })); }).join("") + '<div class="ph2" style="margin-top:6px">来源</div>' +
+      ["you", "agent", "cron", "mail"].map(function (s) { return opt(f.src.indexOf(s) >= 0, SRC[s], 'data-f="src:' + s + '"', false, cnt(function (w) { return w.src === s; })); }).join("") + "</div>" +
+      '<div class="foot"><button class="btn sm ghost" type="button" data-f="clear">清空</button><span class="muted" style="font-size:12px">筛选记在这个岗位上</span><button class="btn sm pri" type="button" data-f="done">好了</button></div>';
+  }
+  if (kind === "group") return '<div class="ph2">分组</div>' + Object.keys(GL).map(function (k) { return opt(state.group === k, GL[k], 'data-g="' + k + '"', true); }).join("");
+  if (kind === "sort") return '<div class="ph2">排序</div>' + Object.keys(SL).map(function (k) { return opt(state.sort === k, SL[k], 'data-s="' + k + '"', true); }).join("");
+  return '<div class="ph2">显示哪几列</div><button class="opt on" type="button" disabled><span class="ck"><svg class="ico s12"><use href="#i-check"/></svg></span>标题</button>' + Object.keys(COLS).map(function (k) { return opt(state.cols.indexOf(k) >= 0, COLS[k], 'data-c="' + k + '"'); }).join("");
+}
+function openPop(kind, btn) {
+  closePop();
+  popEl = document.createElement("div");
+  popEl.className = "pop" + (kind === "filter" ? " fpop" : "");
+  popEl.innerHTML = popHtml(kind);
+  $("#vbar").appendChild(popEl);
+  var bar = $("#vbar").getBoundingClientRect(), b = btn.getBoundingClientRect();
+  popEl.style.top = b.bottom - bar.top + 6 + "px";
+  popEl.style.right = Math.max(0, bar.right - b.right) + "px";
+  popEl.dataset.kind = kind;
+  popEl.onclick = function (e) {
+    e.stopPropagation();
+    var t = e.target.closest("button"); if (!t) return;
+    if (t.dataset.f) {
+      var v = t.dataset.f;
+      if (v === "done") return closePop();
+      if (v === "clear") state.f = { d: [], s: [], due: "", src: [] };
+      else { var p = v.split(":"); if (p[0] === "due") state.f.due = state.f.due === p[1] ? "" : p[1]; else { var a = state.f[p[0]], i = a.indexOf(p[1]); if (i >= 0) a.splice(i, 1); else a.push(p[1]); } }
+    }
+    if (t.dataset.g) { state.group = t.dataset.g; render(); return closePop(); }
+    if (t.dataset.s) { state.sort = t.dataset.s; render(); return closePop(); }
+    if (t.dataset.c) { var c = t.dataset.c, j = state.cols.indexOf(c); if (j >= 0) state.cols.splice(j, 1); else state.cols = Object.keys(COLS).filter(function (k) { return k === c || state.cols.indexOf(k) >= 0; }); }
+    render(); popEl.innerHTML = popHtml(kind);
+  };
+}
+$$("[data-pop]").forEach(function (b) { b.onclick = function (e) { e.stopPropagation(); if (popEl && popEl.dataset.kind === b.dataset.pop) return closePop(); openPop(b.dataset.pop, b); }; });
+document.addEventListener("click", function (e) { if (popEl && !popEl.contains(e.target)) closePop(); });
+$$("#views a, #qv button").forEach(function (a) { a.onclick = function () { state.view = a.dataset.view; closePop(); render(); }; });
+/* 页签：工作 / 记录（设置是另一张稿） */
+$$("[data-tab]").forEach(function (a) { a.onclick = function () { $$("[data-tab]").forEach(function (x) { x.classList.toggle("on", x === a); }); $("#tab-work").style.display = a.dataset.tab === "work" ? "flex" : "none"; $("#tab-records").hidden = a.dataset.tab !== "records"; }; });
+/* 页头那一行状态：点了跳到对应的地方并筛好 */
+$$("[data-jump]").forEach(function (a) { a.onclick = function () { state.view = "list"; state.f = { d: [], s: a.dataset.jump === "doing" ? ["doing"] : [], due: a.dataset.jump === "today" ? "today" : "", src: [] }; render(); }; });
+/* 交给它：一行，聚焦展开 */
+var hand = $("#hand"), ta = $("#handText");
+ta.onfocus = function () { hand.classList.add("open"); };
+ta.onblur = function () { if (!ta.value) hand.classList.remove("open"); };
+$$(".sug").forEach(function (s) { s.onmousedown = function (e) { e.preventDefault(); ta.value = s.textContent; hand.classList.add("open"); ta.focus(); }; });
+/* 图表 */
+function bars(id, a, b) { $(id).innerHTML = a.map(function (v, i) { return '<div class="bd"><i style="height:' + b[i] * 8 + 'px"></i><i class="a" style="height:' + v * 8 + 'px"></i></div>'; }).join(""); }
+bars("#bars1", [4, 6, 3, 5, 4, 7, 9], [3, 4, 4, 3, 5, 4, 5]);
+bars("#bars2", [2, 3, 5, 2, 4, 3, 4], [1, 2, 3, 2, 2, 3, 2]);
+$("#chartsBtn").onclick = function () { $("#charts").classList.toggle("on"); this.classList.toggle("on"); };
+/* 截图用的参数：?filter=1 ?group=duty ?banner=1 ?tab=records ?focus=1 ?charts=1 */
+if (q.get("group")) state.group = q.get("group");
+if (q.get("banner")) $("#banner").hidden = false;
+render();
+if (q.get("filter")) { state.f.d = ["mk"]; render(); openPop("filter", $("[data-pop=filter]")); }
+if (q.get("tab") === "records") $("[data-tab=records]").click();
+if (q.get("focus")) { ta.focus(); }
+if (q.get("charts")) $("#chartsBtn").click();
+function toggleBanner() { var b = $("#banner"); b.hidden = !b.hidden; b.scrollIntoView({ block: "center" }); }
+function showView(v) { state.view = v; render(); $("#work").scrollIntoView({ block: "start" }); }
+
+</script>
+</body>
+</html>

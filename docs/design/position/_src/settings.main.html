@@ -1,0 +1,146 @@
+<div class="page">
+  <div class="ph">
+    <span class="pic"><svg class="gl"><use href="#g-pr"/></svg></span>
+    <div>
+      <h1>Reddit 运营</h1>
+      <p class="stat">
+        <a href="position-v2-list.html#need"><i class="d" style="background:var(--ws-warn)"></i><b>3</b> 张等你定</a><span class="mid">·</span>
+        <a href="position-v2-list.html#work"><i class="d" style="background:var(--ws-brand)"></i><b>5</b> 件在办</a><span class="mid">·</span>
+        <a href="position-v2-list.html#work"><i class="d" style="background:var(--ws-info)"></i>今天 <b>1</b> 个待办</a>
+      </p>
+    </div>
+    <div class="r"><span class="holders"><span class="av sm t-warn">舟</span><span class="av sm t-brand">AI</span></span></div>
+  </div>
+  <div class="ptabs"><div class="tabs"><a href="position-v2-list.html">工作</a><a href="position-v2-list.html?tab=records">记录</a><a class="on">设置</a></div></div>
+
+  <div class="sgrid">
+    <nav class="toc" id="toc">
+      <a href="#s-duty" class="on"><svg class="ico s14"><use href="#i-group"/></svg>职责<span class="n">2</span></a>
+      <a href="#s-conn"><svg class="ico s14"><use href="#i-plug"/></svg>连接<span class="n">5</span></a>
+      <a href="#s-mem"><svg class="ico s14"><use href="#i-brain"/></svg>记忆<span class="n">7</span></a>
+      <a href="#s-cron"><svg class="ico s14"><use href="#i-alarm"/></svg>定时任务<span class="n">4</span></a>
+      <a href="#s-adv"><svg class="ico s14"><use href="#i-sliders"/></svg>高级</a>
+    </nav>
+    <div class="scol">
+      <!-- 职责：这个岗位装哪几条，加减、合并拆分 -->
+      <section class="ss" id="s-duty">
+        <h3>职责<span class="c">这个岗位装了 2 条，交给它的事它自己挑一条做</span></h3>
+        <div class="card">
+          <div class="li">
+            <span class="ic">{{DI_MK}}</span>
+            <div class="tx"><b>Reddit 营销</b><small>去别人的版：找版、读版规、回帖发帖、盯口碑</small></div>
+            <div class="act"><button class="btn xs out" type="button"><svg class="ico s12"><use href="#i-play"/></svg>用这条开</button><button class="btn xs icon ghost" type="button" data-menu aria-label="更多"><svg class="ico s14"><use href="#i-more"/></svg></button></div>
+          </div>
+          <div class="li">
+            <span class="ic">{{DI_CM}}</span>
+            <div class="tx"><b>自家版 <span class="hint" tabindex="0" data-hint="原名「Reddit 运营」，和岗位同名，稿里先叫「自家版」">?</span></b><small>我们自己的 r/INMO：入群审核、版规、公告、删帖禁言</small></div>
+            <div class="act"><button class="btn xs out" type="button"><svg class="ico s12"><use href="#i-play"/></svg>用这条开</button><button class="btn xs icon ghost" type="button" data-menu aria-label="更多"><svg class="ico s14"><use href="#i-more"/></svg></button></div>
+          </div>
+          <div class="sfoot">
+            <button class="btn sm out" type="button"><svg class="ico s14"><use href="#i-plus"/></svg>加一条职责</button>
+            <button class="btn sm ghost" type="button"><svg class="ico s14"><use href="#i-merge"/></svg>把别的岗位合进来</button>
+            <span class="hint" tabindex="0" data-hint="合并、拆分、移动职责都不丢上下文和记忆（WP234）。事太多时它会建议拆。">?</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- 连接：只列这个岗位用得到的；必需 / 可选分开 -->
+      <section class="ss" id="s-conn">
+        <h3>连接<span class="c">只列这个岗位用得到的</span><span class="r"><a class="lnk" href="#">全部连接<svg class="ico s14"><use href="#i-go"/></svg></a></span></h3>
+        <div class="card">
+          <div class="sub">必需</div>
+          <div class="li">
+            <span class="ic"><svg width="18" height="18" viewBox="14 12 65 65" aria-hidden="true"><g fill="url(#mk)"><rect x="14" y="44" width="17" height="17" rx="2.5"/><rect x="38" y="52" width="17" height="17" rx="2.5"/><rect x="38" y="28" width="17" height="17" rx="2.5"/><rect x="62" y="60" width="17" height="17" rx="2.5"/><rect x="62" y="36" width="17" height="17" rx="2.5"/><rect x="62" y="12" width="17" height="17" rx="2.5"/></g></svg></span>
+            <div class="tx"><b>Reddit 取数</b><small>用 Agents 工坊接口</small></div>
+            <div class="act"><span class="val num">今天 3 次 · 0.6 积分</span><span class="sis"><span class="si ok" data-tip="连通：通 · 10-06 14:18 取回 25 条"><svg class="ico"><use href="#i-globe"/></svg><i><svg viewBox="0 0 10 10"><path d="m2.5 5.2 1.7 1.7 3.4-3.6"/></svg></i></span></span><button class="btn xs ghost" type="button">换来源</button></div>
+          </div>
+          <div class="li">
+            <span class="ic"><img class="fav" src="{{REDDIT}}" alt=""></span>
+            <div class="tx"><b>品牌 Reddit 号</b><small>回帖、发帖用它，每条都要你批</small></div>
+            <div class="act"><span class="val">u/inmo_****</span><span class="sis"><span class="si ok" data-tip="登录：通 · 只在你自己的浏览器里登录"><svg class="ico"><use href="#i-shield"/></svg><i><svg viewBox="0 0 10 10"><path d="m2.5 5.2 1.7 1.7 3.4-3.6"/></svg></i></span></span><button class="btn xs ghost" type="button">改</button></div>
+          </div>
+          <div class="sub">可选</div>
+          <div class="li dim">
+            <span class="ic"><img class="fav" src="{{REDDIT}}" alt=""></span>
+            <div class="tx"><b>自己的 Reddit API</b><small>不用连：取数已经走 Agents 工坊接口</small></div>
+            <div class="act"><button class="btn xs ghost" type="button">连接</button></div>
+          </div>
+          <div class="li dim">
+            <span class="ic"><svg class="ico"><use href="#i-plug"/></svg></span>
+            <div class="tx"><b>Apify（自带 key）</b><small>想用自己的额度取数时再连</small></div>
+            <div class="act"><span class="sis"><span class="si unknown" data-tip="没连"><svg class="ico"><use href="#i-plug"/></svg><i><svg viewBox="0 0 10 10"><path d="M3 5h4"/></svg></i></span></span><button class="btn xs ghost" type="button">连接</button></div>
+          </div>
+          <div class="li">
+            <span class="ic"><svg class="ico"><use href="#i-globe"/></svg></span>
+            <div class="tx"><b>浏览器只读</b><small class="why">被 Reddit 人机验证挡下，已自动停用</small></div>
+            <div class="act"><span class="sis"><span class="si fail" data-tip="可用：不通 · 10-06 13:52 遇到人机验证，照规矩不绕"><svg class="ico"><use href="#i-globe"/></svg><i><svg viewBox="0 0 10 10"><path d="m3 3 4 4M7 3 3 7"/></svg></i></span></span><button class="btn xs ghost" type="button">再试一次</button></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 记忆：岗位层 + 职责层，分开列 -->
+      <section class="ss" id="s-mem">
+        <h3>记忆<span class="c">它攒下来的规矩，可以改</span></h3>
+        <div class="card mcard">
+          <div class="mh"><svg class="gl" style="width:15px;height:15px"><use href="#g-pr"/></svg>这个岗位<span class="c">3 条 · 两条职责都用</span><span class="r"><button class="btn xs ghost" type="button"><svg class="ico s12"><use href="#i-plus"/></svg>加一条</button></span></div>
+          <div class="mem"><div class="q">回帖先说明身份：「我是 INMO 官方」，不装普通用户<small>你定的 · 10-05</small></div><div class="act"><button class="btn xs icon ghost" type="button" data-tip="改"><svg class="ico s12"><use href="#i-pen"/></svg></button><button class="btn xs icon ghost" type="button" data-tip="删"><svg class="ico s12"><use href="#i-x"/></svg></button></div></div>
+          <div class="mem"><div class="q">没核实的说法（比如「召回」）不下结论，交公关<small>复盘提上来的 · 10-06</small></div><div class="act"><button class="btn xs icon ghost" type="button" data-tip="改"><svg class="ico s12"><use href="#i-pen"/></svg></button><button class="btn xs icon ghost" type="button" data-tip="删"><svg class="ico s12"><use href="#i-x"/></svg></button></div></div>
+          <div class="mem"><div class="q">客户的具体问题（订单、退换、故障）转客服，不在 Reddit 上处理<small>你定的 · 10-05</small></div><div class="act"><button class="btn xs icon ghost" type="button" data-tip="改"><svg class="ico s12"><use href="#i-pen"/></svg></button><button class="btn xs icon ghost" type="button" data-tip="删"><svg class="ico s12"><use href="#i-x"/></svg></button></div></div>
+        </div>
+        <div class="card mcard">
+          <div class="mh">{{DI_MK}}Reddit 营销<span class="c">2 条</span><span class="r"><button class="btn xs ghost" type="button"><svg class="ico s12"><use href="#i-plus"/></svg>加一条</button></span></div>
+          <div class="mem"><div class="q">r/SmartGlasses 禁止带链接，回帖不放购买链接<small>读版规记下的 · 10-02</small></div><div class="act"><button class="btn xs icon ghost" type="button" data-tip="提到「这个岗位」"><svg class="ico s12"><use href="#i-up"/></svg></button><button class="btn xs icon ghost" type="button" data-tip="改"><svg class="ico s12"><use href="#i-pen"/></svg></button></div></div>
+          <div class="mem"><div class="q">取数先少取、看清再加，换词不超过 3 次<small>复盘提上来的 · 10-06</small></div><div class="act"><button class="btn xs icon ghost" type="button" data-tip="提到「这个岗位」"><svg class="ico s12"><use href="#i-up"/></svg></button><button class="btn xs icon ghost" type="button" data-tip="改"><svg class="ico s12"><use href="#i-pen"/></svg></button></div></div>
+        </div>
+        <div class="card mcard">
+          <div class="mh">{{DI_CM}}自家版<span class="c">2 条</span><span class="r"><button class="btn xs ghost" type="button"><svg class="ico s12"><use href="#i-plus"/></svg>加一条</button></span></div>
+          <div class="mem"><div class="q">新成员 24 小时内发欢迎帖，一周合并成一条<small>你定的 · 10-03</small></div><div class="act"><button class="btn xs icon ghost" type="button" data-tip="提到「这个岗位」"><svg class="ico s12"><use href="#i-up"/></svg></button><button class="btn xs icon ghost" type="button" data-tip="改"><svg class="ico s12"><use href="#i-pen"/></svg></button></div></div>
+          <div class="mem"><div class="q">注册不到 7 天、带外链的号，进版前先问你<small>复盘提上来的 · 10-06</small></div><div class="act"><button class="btn xs icon ghost" type="button" data-tip="提到「这个岗位」"><svg class="ico s12"><use href="#i-up"/></svg></button><button class="btn xs icon ghost" type="button" data-tip="改"><svg class="ico s12"><use href="#i-pen"/></svg></button></div></div>
+        </div>
+      </section>
+
+      <!-- 定时任务 -->
+      <section class="ss" id="s-cron">
+        <h3>定时任务<span class="c">它按点自己做的事</span></h3>
+        <div class="card cron">
+          <div class="li"><span class="ic">{{DI_MK}}</span><div class="tx"><b>扫一遍 Reddit 上提到 INMO 的帖子</b><small>每天 09:00 · 下次 <b>明天 09:00</b> · 每次最多 3 积分</small></div><div class="act"><span class="sis"><span class="si ok" data-tip="上次：成功 · 今天 09:00"><svg class="ico"><use href="#i-alarm"/></svg><i><svg viewBox="0 0 10 10"><path d="m2.5 5.2 1.7 1.7 3.4-3.6"/></svg></i></span></span><button class="toggle on" type="button" aria-label="开着"></button></div></div>
+          <div class="li"><span class="ic">{{DI_CM}}</span><div class="tx"><b>r/INMO 入群审核</b><small>每 2 小时 · 下次 <b>今天 16:00</b></small></div><div class="act"><span class="sis"><span class="si ok" data-tip="上次：成功 · 今天 14:00"><svg class="ico"><use href="#i-alarm"/></svg><i><svg viewBox="0 0 10 10"><path d="m2.5 5.2 1.7 1.7 3.4-3.6"/></svg></i></span></span><button class="toggle on" type="button" aria-label="开着"></button></div></div>
+          <div class="li"><span class="ic">{{DI_CM}}</span><div class="tx"><b>r/INMO 每周问答帖</b><small>每周五 09:00 · 下次 <b>10-09</b></small></div><div class="act"><span class="sis"><span class="si ok" data-tip="上次：成功 · 10-02 09:00"><svg class="ico"><use href="#i-alarm"/></svg><i><svg viewBox="0 0 10 10"><path d="m2.5 5.2 1.7 1.7 3.4-3.6"/></svg></i></span></span><button class="toggle on" type="button" aria-label="开着"></button></div></div>
+          <div class="li dim"><span class="ic"><svg class="gl"><use href="#g-pr"/></svg></span><div class="tx"><b>周报卡</b><small>每周一 08:30 · 停着</small></div><div class="act"><button class="toggle" type="button" aria-label="停着"></button></div></div>
+        </div>
+      </section>
+
+      <!-- 高级：默认折叠；人话在前，原始 id 只在开发者视图 -->
+      <section class="ss" id="s-adv">
+        <details class="card adv" id="adv">
+          <summary><svg class="ico s14 tw"><use href="#i-cd"/></svg>高级<small>每条职责能做什么、运行上限</small><span class="r">开发者视图<button class="toggle" type="button" id="devToggle" aria-label="开发者视图"></button></span></summary>
+          <div class="cap" id="cap">
+            <h5>{{DI_MK}}Reddit 营销 能做什么</h5>
+            <div class="caps">
+              <span class="cp">看帖子和评论<em class="t-neutral">只读</em><code>community_thread · read</code></span>
+              <span class="cp">回帖<em class="t-warn">要你批</em><code>reply_thread → L2</code></span>
+              <span class="cp">在别人的版发帖<em class="t-warn">要你批</em><code>post_external → L2</code></span>
+              <span class="cp">私信版主<em class="t-warn">要你批</em><code>dm_moderator → L2</code></span>
+              <span class="cp">取数<em class="t-info">按价目扣积分</em><code>read_reddit</code></span>
+            </div>
+            <h5>{{DI_CM}}自家版 能做什么</h5>
+            <div class="caps">
+              <span class="cp">看成员和帖子<em class="t-neutral">只读</em><code>community_member · read</code></span>
+              <span class="cp">放人进版<em class="t-brand">可先做后报</em><code>approve_member → staged_change</code></span>
+              <span class="cp">删帖、禁言<em class="t-warn">要你批</em><code>moderate_thread → L2</code></span>
+              <span class="cp">发公告<em class="t-warn">要你批</em><code>post_announcement → L2</code></span>
+            </div>
+            <h5>技能</h5>
+            <div class="caps">
+              <span class="cp k">品牌语气 · 常驻<code>brand-voice · open · always</code></span>
+              <span class="cp k">Reddit 运营方法 · 用到才读<code>reddit-ops · on_demand</code></span>
+              <span class="cp k">话题研究 · 用到才读<code>trend-research · on_demand</code></span>
+            </div>
+            <h5>运行上限</h5>
+            <div class="limits"><span>每次取数最多 <b>3 积分</b></span><span>没动静 <b>3 分钟</b>就停</span><span>最长 <b>20 分钟</b></span><button class="btn xs ghost" type="button">改</button></div>
+          </div>
+        </details>
+      </section>
+    </div>
+  </div>
+</div>
