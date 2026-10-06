@@ -304,6 +304,7 @@ const state = {
   starts: [] as { urls: string[] }[],
   reanalyzes: [] as { id: string; urls?: string[]; password?: string }[],
   confirms: [] as { id: string; edits?: Record<string, unknown> }[],
+  manuals: [] as Record<string, unknown>[],
   run: undefined as BrandIntakeRun | undefined,
   /** WP142：发登录信那一跳——连不上云 / 先挂着不回（看「正在连」那一句）。 */
   linkFail: false,
@@ -464,6 +465,28 @@ vi.mock('@/lib/api', async () => {
       state.run = { ...websiteRun(), status: 'running', pages: [] }
       return state.run
     },
+    manualBrandIntake: async (edits: Record<string, unknown>) => {
+      state.manuals.push(edits)
+      state.run = {
+        ...websiteRun(),
+        id: 'bi_manual',
+        status: 'confirmed',
+        inputs: [],
+        pages: [],
+        profile: Object.fromEntries(
+          Object.entries(edits).map(([k, value]) => [
+            k,
+            {
+              value,
+              confidence: 'high',
+              evidence: [{ url: 'human', locator: 'edited' }],
+              edited: true,
+            },
+          ]),
+        ),
+      } as BrandIntakeRun
+      return state.run
+    },
     confirmBrandIntake: async (id: string, edits?: Record<string, unknown>) => {
       state.confirms.push({ id, ...(edits === undefined ? {} : { edits }) })
       state.run = { ...(state.run ?? websiteRun()), status: 'confirmed' }
@@ -494,6 +517,7 @@ beforeEach(() => {
   state.starts = []
   state.reanalyzes = []
   state.confirms = []
+  state.manuals = []
   state.run = undefined
   state.linkFail = false
   state.linkHold = undefined
@@ -2107,7 +2131,10 @@ describe('WP240 加的品牌走首次设置', () => {
     await user.click(screen.getByTestId('intake-no-site'))
     expect(screen.queryByTestId('company-legal-name')).toBeNull()
     expect(screen.queryByTestId('person-name')).toBeNull()
-    expect(screen.getByTestId('intake-skipped-later')).toBeTruthy()
+    // WP242：不再只说「之后在设置里填」——就地手填那张小表摆出来，品牌名预填建品牌时起的
+    expect(((await screen.findByTestId('manual-brand_name')) as HTMLInputElement).value).toBe(
+      'Rollout',
+    )
     // 回第 ① 步：不是接 AI 的那几张卡，是一句「已接上（跟随公司）」
     await user.click(screen.getByTestId('onboarding-back'))
     expect((await screen.findByTestId('onboarding-ai-inherited')).textContent).toContain('跟随公司')
@@ -2177,6 +2204,70 @@ describe('WP240 第 ② 步：读不到网站时照实说、给下一步', () =>
       fireEvent.click(await screen.findByTestId('intake-slow-skip'))
       await waitFor(() => {
         expect(screen.queryByTestId('intake-working')).toBeNull()
+      })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+})
+
+describe('WP242 第 ② 步：读不到网站时换个网址再读、就地手填', () => {
+  const ADDED: OnboardingStateView = {
+    ...STATE,
+    workspace_name: 'Rollout',
+    brand_name: 'Rollout',
+    added_brand: true,
+    model_configured: true,
+  }
+
+  it('被拦：那一句照实说；「开始分析」换成「换个网址再读」；点「先跳过」出手填表，存下去就是已确认的档案', async () => {
+    const user = userEvent.setup()
+    state.state = ADDED
+    state.run = websiteRun({
+      status: 'failed',
+      pages: [],
+      failure: '这个网站拦了自动读取（429）。换个网址再读，或者就在下面手动填品牌资料。',
+      failure_kind: 'blocked',
+    })
+    renderWithProviders(<OnboardingPage />)
+    expect((await screen.findByTestId('intake-failed')).textContent).toContain('（429）')
+    expect(screen.getByTestId('intake-start').textContent).toBe('换个网址再读')
+    await user.click(screen.getByTestId('intake-skip'))
+    const form = await screen.findByTestId('manual-profile-form')
+    // 一格都没动之外的（品牌名预填了）也能存；先填几格
+    await user.type(within(form).getByTestId('manual-one_liner'), '户外滑板')
+    await user.type(within(form).getByTestId('manual-support_email'), 'support@rollout.example')
+    await user.type(within(form).getByTestId('manual-currency'), 'usd')
+    await user.click(within(form).getByTestId('manual-save'))
+    await waitFor(() => {
+      expect(state.manuals).toEqual([
+        {
+          brand_name: 'Rollout',
+          one_liner: '户外滑板',
+          support_email: 'support@rollout.example',
+          currency: 'USD',
+        },
+      ])
+    })
+    // 存好：表收起，档案卡显示已确认
+    await waitFor(() => {
+      expect(screen.queryByTestId('manual-profile-form')).toBeNull()
+    })
+  })
+
+  it('卡在 0 页：除了「先跳过」，还能换个网址再读（起一轮新的）', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    try {
+      state.state = ADDED
+      state.run = websiteRun({ status: 'running', pages: [] })
+      renderWithProviders(<OnboardingPage />)
+      await screen.findByTestId('intake-working')
+      await vi.advanceTimersByTimeAsync(31_000)
+      const other = (await screen.findByTestId('intake-other-url')) as HTMLInputElement
+      fireEvent.change(other, { target: { value: 'https://rollout.example' } })
+      fireEvent.click(screen.getByTestId('intake-other-start'))
+      await waitFor(() => {
+        expect(state.starts).toEqual([{ urls: ['https://rollout.example'] }])
       })
     } finally {
       vi.useRealTimers()

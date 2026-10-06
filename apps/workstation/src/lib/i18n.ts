@@ -3248,6 +3248,10 @@ const zh: Table = {
   'onboarding.business.skip': '先跳过，手动填品牌资料',
   'onboarding.business.later': '品牌资料之后在「设置 → 公司档案」里填。',
   'onboarding.business.retry': '再试一次',
+  // WP242：读不到网站时换个网址再读 / 就地手填
+  'onboarding.business.reread': '换个网址再读',
+  'onboarding.business.manual.title': '手动填品牌资料（都可以空着，填了的才存）',
+  'onboarding.business.manual.save': '存好',
   'onboarding.business.password.label': '店铺访问密码',
   'onboarding.business.password.submit': '再读一次',
   'onboarding.business.password.note': '只用于这一次读取：不保存、不进日志、不经 AI。',
@@ -7178,6 +7182,10 @@ const en: Table = {
   'onboarding.business.skip': 'Skip for now, fill in brand details by hand',
   'onboarding.business.later': 'Fill in brand details later under Settings \u2192 Company profile.',
   'onboarding.business.retry': 'Try again',
+  'onboarding.business.reread': 'Try another URL',
+  'onboarding.business.manual.title':
+    'Fill in brand details (leave any blank; only filled ones are saved)',
+  'onboarding.business.manual.save': 'Save',
   'onboarding.business.password.label': 'Store access password',
   'onboarding.business.password.submit': 'Read again',
   'onboarding.business.password.note':

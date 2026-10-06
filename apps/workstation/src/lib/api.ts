@@ -5838,6 +5838,26 @@ export const confirmBrandIntake = (
     ...withAssignment(assignment),
   })
 
+/** WP242：读不到网站时就地手填的那几格（与档案卡同名）。 */
+export interface ManualBrandProfile {
+  brand_name?: string
+  one_liner?: string
+  support_email?: string
+  currency?: string
+  markets?: string[]
+}
+
+/** WP242：就地手填品牌资料——与「看着没问题」同一条写法，回一条已确认的 run。 */
+export const manualBrandIntake = (
+  edits: ManualBrandProfile,
+  assignment?: string,
+): Promise<BrandIntakeRunView> =>
+  api('/v1/brand-intake/manual', {
+    method: 'POST',
+    body: { edits },
+    ...withAssignment(assignment),
+  })
+
 /** 重新分析（改了网址或换了新品时用）：**用户手改过的格子整格不动**。 */
 export const reanalyzeBrandIntake = (
   id: string,
