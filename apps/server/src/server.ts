@@ -1679,10 +1679,22 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       ranges: [...config.ranges],
     }
   }
-  const brandNameOfWorkspace = (id: WorkspaceId): string => {
+  /**
+   * 同步取一个品牌工作区（先看启动负责人名下的，再看各公司的品牌一览）。
+   * WP240：别人建的品牌（负责人不是启动负责人）以前取不到，名字就退回成了启动品牌的名字。
+   */
+  const workspaceSync = (id: WorkspaceId) => {
     const owner = bootstrapOwner
-    const found =
-      owner === undefined ? undefined : identity.workspacesOf(owner).find((w) => w.id === id)
+    return (
+      (owner === undefined ? undefined : identity.workspacesOf(owner).find((w) => w.id === id)) ??
+      identity
+        .listOrganizations()
+        .flatMap((o) => identity.brandsOf(o.id))
+        .find((w) => w.id === id)
+    )
+  }
+  const brandNameOfWorkspace = (id: WorkspaceId): string => {
+    const found = workspaceSync(id)
     return found === undefined ? (bootstrapWorkspaceName ?? id) : brandNameOf(found)
   }
 
@@ -5488,7 +5500,12 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     random,
     workspace_id: workspace.id,
     owner: person.id,
-    workspaceName: () => workspace.name,
+    // WP240：首次设置按 actor 的品牌问（不给 = 启动品牌）
+    workspaceName: (ws) =>
+      ws === undefined || ws === workspace.id
+        ? workspace.name
+        : (workspaceSync(ws)?.name ?? brandNameOfWorkspace(ws)),
+    ownerOf: (ws) => workspaceSync(ws)?.owner_id,
     appendEvent,
     roles,
     approvals,
@@ -5497,8 +5514,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       createPerson: (input) => identity.createPerson(input),
       addMember: (m) => identity.addMember(m),
     },
-    members: async () => {
-      const rows = await identity.members(workspace.id)
+    members: async (ws) => {
+      const rows = await identity.members(ws ?? workspace.id)
       const people = await Promise.all(
         rows
           .filter((m) => m.left_at === undefined)
@@ -5544,14 +5561,28 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       // 没接上真模型（只有 stub / 演示）：回 undefined，推荐那一层退回按原话对词并明说（Luoye 10-06）
       return undefined
     },
-    // WP66：首次设置这一面仍然只问 bootstrap 品牌那一套（52 O5：一个值守子进程
-    // 一个品牌；向导本来就是"把当前这台机器上的这个品牌设起来"）
-    connectedKinds: () => boot.connections.connectedKinds(),
+    /*
+     * WP240：首次设置按**这个人这会儿开着的那个品牌**问连接、模型与店铺（52 O3：它们都是品牌级的）。
+     * 不给品牌 = 启动品牌（启动时那一次补挂范围用）。以前一律问启动品牌——第二个品牌的分配
+     * 会挂到第一个品牌的店上、清单说的"已连"也是第一个品牌的。
+     */
+    connectedKinds: async (ws) =>
+      ws === undefined || ws === workspace.id
+        ? boot.connections.connectedKinds()
+        : (await brandModules.forWorkspace(ws)).connections.connectedKinds(),
     installedSkills: () => skills.registry.listSkillNames(),
-    modelConfigured: () => boot.ownModels.configured(),
-    // 46 I6：连上 Shopify 的店自动挂上岗位的范围；一家没连就挂空
-    shopifyStores: () =>
-      boot.connections.shopify.list().map((r) => ({ id: r.shop, label: r.alias })),
+    modelConfigured: async (ws) =>
+      ws === undefined || ws === workspace.id
+        ? boot.ownModels.configured()
+        : (await brandModules.models(ws)).configured(),
+    // 46 I6：连上 Shopify 的店自动挂上岗位的范围；一家没连就挂整个品牌
+    shopifyStores: (ws) => {
+      const list = (c: typeof boot.connections) =>
+        c.shopify.list().map((r) => ({ id: r.shop, label: r.alias }))
+      return ws === undefined || ws === workspace.id
+        ? list(boot.connections)
+        : brandModules.forWorkspace(ws).then((b) => list(b.connections))
+    },
     port: () => boundPort,
     ...(dbDir === undefined ? {} : { dbDir }),
     ...(options.mdns === undefined ? {} : { mdns: options.mdns }),
@@ -5570,9 +5601,10 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     organization: () =>
       bootstrapOrg === undefined ? undefined : organizationProfileOf(bootstrapOrg),
     // 52 O1：品牌名（顶栏切换器显示的那一个）。没迁过的就是工作区名
-    brandName: () => brandNameOfWorkspace(workspace.id),
-    setBrandName: (name) => {
-      void identity.setBrand(workspace.id, { name }).catch(() => undefined)
+    // WP240：按品牌读写（不给 = 启动品牌）——以前一律读写启动品牌
+    brandName: (ws) => brandNameOfWorkspace(ws ?? workspace.id),
+    setBrandName: (name, ws) => {
+      void identity.setBrand(ws ?? workspace.id, { name }).catch(() => undefined)
     },
     updateOrganization: (patch) => {
       if (bootstrapOrg === undefined) return
@@ -5601,23 +5633,41 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     clock,
     workspace_id: workspace.id,
     fetch: options.brandIntakeFetch ?? (globalThis.fetch as never),
+    // WP240：Shopify 店铺访问密码那一下（POST /password）。离线替身（测试 / demo）不给——不出网
+    ...(options.brandIntakeFetch === undefined ? { passwordPost: globalThis.fetch as never } : {}),
     newId: (prefix) => `${prefix}_${Math.floor(random() * 1e12).toString(36)}`,
     sinks: {
-      applyProfile: async (profile) => {
-        const legal = profile.legal_name?.value ?? profile.brand_name?.value
+      /*
+       * WP240：写的是**确认的那个人这会儿开着的那个品牌**（`actor.workspace_id`）。
+       * 以前一律写启动品牌：在第二个品牌里确认分析，会把第一个品牌的档案、品牌名与公司全称
+       * 一起改成第二个品牌网站上的样子（测试 `wp240-two-brand-onboarding` 钉住）。
+       *
+       * 公司加的品牌（公司那一层已经设过）：公司全称不跟着分析结果改；品牌名是建品牌时
+       * 起的那个，只有用户在档案卡上亲手改了品牌名才改。
+       */
+      applyProfile: async (profile, actor) => {
+        const added = onboarding.isAddedBrand(actor.workspace_id as WorkspaceId)
+        const company = onboarding.companyProfile()?.legal_name
+        const legal =
+          added && company !== undefined && company.trim() !== ''
+            ? company
+            : (profile.legal_name?.value ?? profile.brand_name?.value)
         if (typeof legal !== 'string' || legal.trim() === '') return
+        const brandName =
+          typeof profile.brand_name?.value === 'string' &&
+          (!added || profile.brand_name.edited === true)
+            ? profile.brand_name.value
+            : undefined
         await onboarding.port.setProfile(
           {
-            workspace_id: workspace.id,
-            person_id: person.id,
-            assignment_id: '',
-            role_id: '',
+            workspace_id: actor.workspace_id,
+            person_id: actor.person_id,
+            assignment_id: actor.assignment_id,
+            role_id: actor.role_id,
           },
           {
             legal_name: legal,
-            ...(typeof profile.brand_name?.value === 'string'
-              ? { brand_name: profile.brand_name.value }
-              : {}),
+            ...(brandName === undefined ? {} : { brand_name: brandName }),
             ...(profile.storefront_platform === undefined
               ? {}
               : { storefront_platform: profile.storefront_platform.value }),
@@ -5636,11 +5686,12 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
        *
        * 一条失败不连累其余：一个品牌的退款政策没建成，不该让商品卡也一起没了。
        */
-      seedKnowledge: async (profile) => {
+      // WP240：首批知识进**确认的那个品牌**的知识库（以前一律进启动品牌）
+      seedKnowledge: async (profile, actor) => {
         for (const card of brandKnowledgeCards(profile, {
-          workspace_id: workspace.id,
+          workspace_id: actor.workspace_id as WorkspaceId,
           at: clock.now(),
-          owner: person.id,
+          owner: actor.person_id as PersonId,
         })) {
           try {
             await knowledge.store.propose(card)
@@ -5848,6 +5899,19 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   ).id
   // 档案建出来了，把品牌级档案那个晚绑定的读法接上（48 v2 L2、51 §1 N0、WP66）
   onboardingRef = onboarding
+  /*
+   * WP240：一次性自检加的品牌的档案——建品牌那一刻自动起、还没人用过的那几份标回「待设置」，
+   * 这些品牌切过去就会进首次设置（以前永远判成"设过了"）。跑过一次就记下，不再跑。
+   */
+  {
+    const checked = onboarding.reconcileBrandProfiles(
+      identity.brandsOf(bootstrapOrg).map((w) => ({ workspace_id: w.id, name: brandNameOf(w) })),
+    )
+    if (checked.reopened.length > 0 && options.quiet !== true)
+      process.stderr.write(
+        `[onboarding] ${String(checked.reopened.length)} 个加的品牌还没走过首次设置，切过去会进向导\n`,
+      )
+  }
 
   // WP50 Join 向导（20 §4–§5、45）：个人工作区并进公司。装在 org 之后——
   // 它要读同一份职责层（品牌 / 产品线 / 分配），并往同一条审批总线上建 `join_mapping`。

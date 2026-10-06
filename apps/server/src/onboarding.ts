@@ -259,14 +259,24 @@ export interface OnboardingOptions {
   random: () => number
   workspace_id: WorkspaceId
   owner: PersonId
-  /** 工作区名字（人话）。 */
-  workspaceName: () => string
+  /**
+   * 工作区名字（人话）。WP240：给了 `workspace_id` 就是**那个品牌**的（不给 = 启动品牌）——
+   * 首次设置按 actor 所在的品牌回，不许拿启动品牌的名字顶。
+   */
+  workspaceName: (workspace_id?: WorkspaceId) => string
   appendEvent(e: Omit<EventEnvelope, 'id' | 'at'> & { at?: string }): void
   roles: RoleStore
   approvals: ApprovalBus
   identity: InvitesIdentity
-  /** 这个工作区现在有几个人（发现时对外只报这个数，不报名单）。 */
-  members(): Promise<{ person_id: PersonId; name: string; email: string }[]>
+  /**
+   * 这个工作区现在有几个人（发现时对外只报这个数，不报名单）。
+   * WP240：给了 `workspace_id` 就问那个品牌（向导第 ② 步带出本人的名字与邮箱）。
+   */
+  members(
+    workspace_id?: WorkspaceId,
+  ): Promise<{ person_id: PersonId; name: string; email: string }[]>
+  /** WP240：某个品牌的负责人（建它的人）。不给就当启动品牌的 `owner`。 */
+  ownerOf?(workspace_id: WorkspaceId): PersonId | undefined
   /** 岗位模板（27）——`org.ts` 的那一份。 */
   positions(): PositionLike[]
   /**
@@ -289,14 +299,25 @@ export interface OnboardingOptions {
    * 回 `undefined` = 这会儿没有能用的（界面照实说，退回只手选）。
    */
   suggester?(): Suggester | undefined
-  /** 现在接上了哪些职责连接器 kind（email / shopify / ga4 …）。 */
-  connectedKinds(): string[]
+  /**
+   * 现在接上了哪些职责连接器 kind（email / shopify / ga4 …）。
+   * WP240：按品牌问（连接是品牌级的，52 O3）；不给 `workspace_id` = 启动品牌。
+   */
+  connectedKinds(workspace_id?: WorkspaceId): string[] | Promise<string[]>
   /** 装了哪些技能包。 */
   installedSkills(): string[]
-  /** 模型接没接（36 首页那条黄条问的就是它）。 */
-  modelConfigured(): boolean
-  /** 已连 Shopify 的店（46 I6：连上就自动挂，没连就挂空并在面板明说）。 */
-  shopifyStores(): { id: string; label: string }[]
+  /**
+   * 模型接没接（36 首页那条黄条问的就是它）。
+   * WP240：按品牌问——跟随公司默认的品牌算公司那一份。
+   */
+  modelConfigured(workspace_id?: WorkspaceId): boolean | Promise<boolean>
+  /**
+   * 已连 Shopify 的店（46 I6：连上就自动挂，没连就挂空并在面板明说）。
+   * WP240：按品牌问（Rollout 的分配不该挂到 INMO 的店上）。
+   */
+  shopifyStores(
+    workspace_id?: WorkspaceId,
+  ): { id: string; label: string }[] | Promise<{ id: string; label: string }[]>
   /** 给了就落盘（`onboarding.sqlite`）；不给就纯内存。 */
   dbDir?: string
   /** 服务进程监听的端口（局域网广播要报它）。 */
@@ -325,10 +346,17 @@ export interface OnboardingOptions {
   organization?: () => OrganizationProfile | undefined
   /** 写公司档案时同步写组织（52 O1「写时同步写组织」）。 */
   updateOrganization?: (patch: OrganizationProfile) => void
-  /** WP65（52 O1）：这个品牌叫什么（没设过就等于工作区名）。 */
-  brandName?: () => string
-  /** 52 O4 第 ① 步下半块：改这个工作区的品牌名。 */
-  setBrandName?: (name: string) => void
+  /**
+   * WP65（52 O1）：这个品牌叫什么（没设过就等于工作区名）。
+   * WP240：给了 `workspace_id` 就是那个品牌的；不给 = 启动品牌（老调用方）。
+   */
+  brandName?: (workspace_id?: WorkspaceId) => string
+  /**
+   * 52 O4 第 ① 步下半块：改品牌名。
+   * WP240：**改的是 `workspace_id` 那个品牌**（不给 = 启动品牌）——以前一律改启动品牌，
+   * 在第二个品牌里存设置页会把第一个品牌改名。
+   */
+  setBrandName?: (name: string, workspace_id?: WorkspaceId) => void
 }
 
 /** 52 O1：公司级那三样的最小面（组织与档案共用同一个形状）。 */
@@ -418,6 +446,27 @@ export interface OnboardingAssembly {
    * 店主后来自己清空的范围不会被它加回去。
    */
   backfillWizardRanges(): { patched: string[] }
+  /**
+   * WP240：这个品牌是不是公司**加的**品牌（不是启动品牌、而且公司那一层已经设过）。
+   * 网址分析确认时据此决定：公司全称不跟着分析结果改、建品牌时起的品牌名不被站名顶掉。
+   */
+  isAddedBrand(workspace_id: WorkspaceId): boolean
+  /**
+   * WP240：**一次性**自检加的品牌的档案（启动时跑，跑过一次就记下来）。
+   *
+   * 这一版之前，建品牌那一刻就替它起了一份档案（公司全称的影子 + 平台），于是新品牌永远判成
+   * "设过了"、进不了首次设置。这里把**看得出是自动起的、还没人用过**的那几份标回 `provisional`：
+   * 档案里只有建品牌时写的那几格（没有市场、地址），并且这个品牌里除了负责人那一条没有别的分配。
+   * 用户自己存过（有市场 / 地址）或已经分过岗位的一律不碰。
+   *
+   * 品牌名不在档案里（读的是品牌工作区自己的名字），所以"档案里的品牌名不对"在存储上不存在——
+   * 以前回错的是**读法**（一律读启动品牌），读法改了就对了；这里只把每个品牌的名字与档案对一遍，
+   * 回报给调用方（不改）。
+   */
+  reconcileBrandProfiles(brands: { workspace_id: WorkspaceId; name: string }[]): {
+    reopened: WorkspaceId[]
+    checked: number
+  }
   discovery: Discovery
   invites: InvitesAssembly
   close(): void
@@ -426,6 +475,9 @@ export interface OnboardingAssembly {
 /** WP138：补挂迁移的名字（记在 `onboarding_migrations` 里）。 */
 export const WIZARD_RANGE_BACKFILL = 'wp138_wizard_ranges'
 
+/** WP240：加的品牌档案自检的名字（记在 `onboarding_migrations` 里）。 */
+export const ADDED_BRAND_PROFILE_CHECK = 'wp240_added_brand_profiles'
+
 export function createOnboarding(options: OnboardingOptions): OnboardingAssembly {
   const { clock, workspace_id, roles, appendEvent } = options
   const backend =
@@ -433,10 +485,16 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
       ? createMemoryProfileBackend()
       : createSqliteProfileBackend(join(options.dbDir, 'onboarding.sqlite'), options.workspace_id)
 
-  const emit = (type: string, actor: PersonId, payload: Record<string, unknown>): void => {
+  /** WP240：事件记在**发生的那个品牌**名下（不给 = 启动品牌）。 */
+  const emit = (
+    type: string,
+    actor: PersonId,
+    payload: Record<string, unknown>,
+    ws: WorkspaceId = workspace_id,
+  ): void => {
     appendEvent({
       schema_version: 1,
-      workspace_id,
+      workspace_id: ws,
       type,
       actor: { kind: 'person', id: actor },
       correlation: { trace_id: `tr_onboarding_${clock.now()}` },
@@ -506,13 +564,26 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
     ...(options.dbDir === undefined ? {} : { dbDir: options.dbDir }),
   })
 
-  /** 52 O1：展示用的公司级三样以组织为准（档案里那三个位只是影子）。 */
-  /** 52 O1：品牌名的唯一读法（没装配就退回工作区名）。 */
-  const brandNameOf = (): string => options.brandName?.() ?? options.workspaceName()
+  /**
+   * 52 O1：品牌名的唯一读法（没装配就退回工作区名）。
+   * WP240：**按品牌读**——不给 = 启动品牌；首次设置一律传 actor 的那个品牌。
+   */
+  const brandNameOf = (ws: WorkspaceId = workspace_id): string =>
+    options.brandName?.(ws) ?? options.workspaceName(ws)
 
-  const viewOf = (p: WorkspaceProfile): WorkspaceProfileView => ({
+  /**
+   * WP240：公司那一层设过没有——启动品牌（公司的第一个品牌）走过第 ① / ② 步就算。
+   * 之后加的品牌走首次设置时，公司级的（全称、你的称呼）不再问、分析结果也不改公司全称。
+   */
+  const companyConfigured = (): boolean => {
+    const first = profileOf(workspace_id)
+    return first !== undefined && first.provisional !== true
+  }
+  const isAddedBrand = (ws: WorkspaceId): boolean => ws !== workspace_id && companyConfigured()
+
+  const viewOf = (p: WorkspaceProfile, ws: WorkspaceId = workspace_id): WorkspaceProfileView => ({
     legal_name: companyOf()?.legal_name ?? p.legal_name,
-    brand_name: brandNameOf(),
+    brand_name: brandNameOf(ws),
     ...(() => {
       const domain = companyOf()?.domain ?? p.domain
       return domain === undefined ? {} : { domain }
@@ -531,9 +602,9 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
     set_at: p.set_at,
   })
 
-  const activeOf = (person_id: PersonId) =>
+  const activeOf = (person_id: PersonId, ws: WorkspaceId = workspace_id) =>
     roles.assignments
-      .listByPerson(person_id, { workspace_id })
+      .listByPerson(person_id, { workspace_id: ws })
       .filter((a) => a.revoked_at === undefined)
 
   /**
@@ -544,14 +615,18 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
    * 连了店不再额外挂品牌：挂了品牌就等于盖住以后接进来的每一家店，这一步留给店主在
    * 组织页自己决定。
    */
-  const wizardRanges = (): RangeRef[] => {
-    const stores = options.shopifyStores().map((s) => ({ kind: 'store' as const, id: s.id }))
-    return stores.length > 0 ? stores : [{ kind: 'brand', id: workspace_id }]
+  const wizardRanges = (stores: { id: string }[], ws: WorkspaceId = workspace_id): RangeRef[] => {
+    const refs = stores.map((s) => ({ kind: 'store' as const, id: s.id }))
+    return refs.length > 0 ? refs : [{ kind: 'brand', id: ws }]
   }
-  const rangeLabel = (r: RangeRef): string =>
+  const rangeLabel = (
+    r: RangeRef,
+    stores: { id: string; label: string }[],
+    ws: WorkspaceId = workspace_id,
+  ): string =>
     r.kind === 'brand'
-      ? `整个品牌（${brandNameOf()}）`
-      : (options.shopifyStores().find((s) => s.id === r.id)?.label ?? r.id)
+      ? `整个品牌（${brandNameOf(ws)}）`
+      : (stores.find((s) => s.id === r.id)?.label ?? r.id)
 
   /** 这条职责要不要范围（有一条 `range: assigned` 的 scope 就要）。 */
   const needsRanges = (role_id: string): boolean =>
@@ -625,12 +700,13 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
    * Shopify 的工作区解析成 `shopify_admin`，WooCommerce 的解析成 `woocommerce`，
    * 选了 Magento / 其它的解析成空（清单里干脆不出店铺卡，而不是出一张连不上的）。
    */
-  function providersOf(kind: string): string[] {
+  function providersOf(kind: string, ws: WorkspaceId = workspace_id): string[] {
     if (SHOP_CONNECTOR_KINDS.has(kind)) {
       // `storefrontUsableService` 问的是"今天点得动的是哪一个"（`supported` 那几个）；
       // 再对着连接目录核一次——目录才是"到底有没有这张卡"的真源。
       // 点进去无处可点的条目就是噪音，等目录里真有它的那天自然会出现。
-      const service = storefrontUsableService(profileOf()?.storefront_platform)
+      // WP240：按**这个品牌**的平台解析
+      const service = storefrontUsableService(profileOf(ws)?.storefront_platform)
       return service === undefined || catalogEntry(service) === undefined ? [] : [service]
     }
     const hits = Object.entries(ROLE_CONNECTOR_KIND)
@@ -656,12 +732,17 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
     return { id: cli.id, label: cli.label, position_id, tutorial: cli.tutorial }
   }
 
-  function planOf(input: OnboardingPlanInput, ws?: WorkspaceId): OnboardingPlanView {
+  async function planOf(
+    input: OnboardingPlanInput,
+    ws: WorkspaceId = workspace_id,
+    person: PersonId = options.owner,
+  ): Promise<OnboardingPlanView> {
     const positions = options.positions()
     // WP216：平台专属的官方技能 / CLI 按**这个品牌**的档案判断（不是进程默认那个品牌）
     const platform = profileOf(ws)?.storefront_platform
     const roleIds = expandRoles(input, positions)
-    const connected = new Set(options.connectedKinds())
+    // WP240：连接、模型、已持有的分配都按**这个品牌**算
+    const connected = new Set(await options.connectedKinds(ws))
     const installed = new Set(options.installedSkills())
 
     const connectors = new Map<string, OnboardingConnectorItem>()
@@ -672,7 +753,7 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
       for (const c of def.connectors) {
         // 目录里没有对应 provider 的 kind（tracking / payment_dispute）不进清单——
         // 点进去无处可点的条目就是噪音。等目录里真有它们的那天自然会出现。
-        const service = providersOf(c.kind)[0]
+        const service = providersOf(c.kind, ws)[0]
         if (service === undefined) continue
         const existing = connectors.get(service)
         if (existing === undefined) {
@@ -703,7 +784,7 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
       }
     }
 
-    const held = new Set(activeOf(options.owner).map((a) => a.role_id))
+    const held = new Set(activeOf(person, ws).map((a) => a.role_id))
     const fromList = (input.positions ?? []).flatMap((p, i): OnboardingPositionPlanItem[] => {
       const ids = p.role_ids.filter((r) => roleIds.includes(r))
       if (ids.length === 0) return []
@@ -744,7 +825,7 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
       })
     }
 
-    const model_configured = options.modelConfigured()
+    const model_configured = await options.modelConfigured(ws)
     const platform_cli = platformCliOf(platform, roleIds)
     return {
       connectors: [...connectors.values()].sort(
@@ -785,14 +866,24 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
   const port: OnboardingPort = {
     async state(actor) {
       // 52 O1：档案是按品牌存的——看的是**这个人这会儿开着的那个品牌**
-      const profile = profileOf(actor.workspace_id)
-      const members = await options.members()
+      // WP240：品牌名、工作区名、人、"别人的分配"也一律按这个品牌（以前全是启动品牌的）
+      const ws = actor.workspace_id
+      const profile = profileOf(ws)
+      const members = await options.members(ws)
       const me = members.find((m) => m.person_id === actor.person_id)
+      const brandOwner = options.ownerOf?.(ws) ?? options.owner
       // 46 §1 末段：向导只出现在"还没设过公司名"的时候；已经有别人的分配了就更不该弹
       const others = roles.assignments
-        .listByWorkspace(workspace_id)
-        .filter((a) => a.revoked_at === undefined && a.person_id !== options.owner).length
+        .listByWorkspace(ws)
+        .filter(
+          (a) =>
+            a.revoked_at === undefined &&
+            a.person_id !== options.owner &&
+            a.person_id !== brandOwner,
+        ).length
       const runtime = discovery.status()
+      const added = isAddedBrand(ws)
+      const model_configured = await options.modelConfigured(ws)
       return {
         /*
          * 46 §1 末段的判据一个字没改：**这个品牌的档案设过没有**。
@@ -800,10 +891,11 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
          * 52 O1 之后每个工作区启动时都会挂上一个组织（迁移建的那个用工作区名占位），
          * 所以"有没有组织"**不能**当判据——真正的判据仍然是有没有人填过第 ① 步。
          */
-        needs_setup: profile === undefined && others === 0,
-        workspace_name: options.workspaceName(),
-        brand_name: brandNameOf(),
-        ...(profile === undefined ? {} : { profile: viewOf(profile) }),
+        // WP240：建品牌时自动起的那份影子档案（`provisional`）不算"设过"
+        needs_setup: (profile === undefined || profile.provisional === true) && others === 0,
+        workspace_name: options.workspaceName(ws),
+        brand_name: brandNameOf(ws),
+        ...(profile === undefined ? {} : { profile: viewOf(profile, ws) }),
         person: { name: me?.name ?? '', email: me?.email ?? '' },
         other_assignments: others,
         is_owner: actor.person_id === options.owner,
@@ -816,13 +908,18 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
         verticals: verticalChoices(),
         // WP62（51 §1 N0）：四个都发下来，灰显的那三个带"待增加"的 tooltip
         storefront_platforms: storefrontPlatformChoices(),
+        // WP240：加的品牌——公司级的不再问、从第 ② 步开始；AI 接上了第 ① 步直接过
+        ...(added ? { added_brand: true as const } : {}),
+        model_configured,
       } satisfies OnboardingStateView
     },
 
     setProfile(actor, input: WorkspaceProfileInput) {
       const legal_name = input.legal_name.trim()
       if (legal_name === '') throw new OnboardingError('invalid_input', '公司全称不能是空的')
-      const previous = profileOf(actor.workspace_id)
+      // WP240：写的是**这个人这会儿开着的那个品牌**（档案、品牌名、事件一律跟着它）
+      const ws = actor.workspace_id
+      const previous = profileOf(ws)
       const company = companyOf()
       const domain = normalizeDomain(input.domain)
       // 48 v2 L2：不给就沿用上一次；从来没设过就是实物
@@ -857,28 +954,44 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
         ...(storefront_platform === undefined ? {} : { storefront_platform }),
         set_at: clock.now(),
       }
-      backend.put(actor.workspace_id, next)
+      backend.put(ws, next)
       /*
        * 52 O1「写时同步写组织」：公司级那三样的真源是组织，档案里那一份只是影子。
        * 两边一起写，于是无论谁先读到的都是同一套；读的时候一律以组织为准。
+       *
+       * WP240：**只在公司级那三样真变了时才写组织**——设置页公司与品牌是同一张表一起存的，
+       * 在某个品牌里只改了品牌那几格，不该顺手把组织也"改"一遍。
        */
-      options.updateOrganization?.({
-        legal_name: next.legal_name,
-        ...(next.domain === undefined ? {} : { domain: next.domain }),
-        discoverable: next.discoverable,
-      })
+      const companyChanged =
+        company === undefined ||
+        company.legal_name !== next.legal_name ||
+        (next.domain !== undefined && next.domain !== company.domain) ||
+        (input.discoverable !== undefined && input.discoverable !== company.discoverable)
+      if (companyChanged)
+        options.updateOrganization?.({
+          legal_name: next.legal_name,
+          ...(next.domain === undefined ? {} : { domain: next.domain }),
+          discoverable: next.discoverable,
+        })
       // 52 O4：第 ① 步下半块。品牌名与公司名落在两个地方——它们是两件事
+      // WP240：改的是**这个品牌**的名字；和现在一样就不写（不留一条什么都没变的更名）
       const brand_name = input.brand_name?.trim()
-      if (brand_name !== undefined && brand_name !== '') options.setBrandName?.(brand_name)
+      if (brand_name !== undefined && brand_name !== '' && brand_name !== brandNameOf(ws))
+        options.setBrandName?.(brand_name, ws)
       // 21 §5：日志里只有归一化后的哈希与"有没有域名"，**全称不进日志**
-      emit('workspace.profile_set', actor.person_id, {
-        company_key: companyKey(next.legal_name, next.domain),
-        has_domain: next.domain !== undefined,
-        discoverable: next.discoverable,
-        vertical: next.vertical ?? 'goods',
-        // WP62（51 §1 N0）：平台不是秘密，进日志（换平台是一次会影响所有店铺读写的变更）
-        storefront_platform: next.storefront_platform ?? DEFAULT_STOREFRONT_PLATFORM,
-      })
+      emit(
+        'workspace.profile_set',
+        actor.person_id,
+        {
+          company_key: companyKey(next.legal_name, next.domain),
+          has_domain: next.domain !== undefined,
+          discoverable: next.discoverable,
+          vertical: next.vertical ?? 'goods',
+          // WP62（51 §1 N0）：平台不是秘密，进日志（换平台是一次会影响所有店铺读写的变更）
+          storefront_platform: next.storefront_platform ?? DEFAULT_STOREFRONT_PLATFORM,
+        },
+        ws,
+      )
       /*
        * 开关变了就真的开 / 关：关掉 = 停广播、停监听、清掉看见过的同伴。
        *
@@ -894,7 +1007,7 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
         // 名字改了 → 钥匙变了 → 重新广播（否则还在用旧钥匙找同事）
         discovery.refresh()
       }
-      return viewOf(next)
+      return viewOf(next, ws)
     },
 
     positions(): OnboardingPositionView[] {
@@ -929,14 +1042,17 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
     },
 
     plan(actor, input) {
-      return planOf(input, actor.workspace_id)
+      return planOf(input, actor.workspace_id, actor.person_id)
     },
 
-    apply(actor, input) {
-      const plan = planOf(input, actor.workspace_id)
+    async apply(actor, input) {
+      // WP240：分配、范围、岗位安放一律建在**这个人这会儿开着的那个品牌**里
+      const ws = actor.workspace_id
+      const plan = await planOf(input, ws, actor.person_id)
       // 46 §3 I6：连上 Shopify 的店自动挂上；WP138：一家没连就挂整个品牌（不再挂空）
-      const ranges = wizardRanges()
-      const held = new Map(activeOf(actor.person_id).map((a) => [a.role_id, a]))
+      const stores = await options.shopifyStores(ws)
+      const ranges = wizardRanges(stores, ws)
+      const held = new Map(activeOf(actor.person_id, ws).map((a) => [a.role_id, a]))
       const created: OnboardingApplyView['created_assignments'] = []
       const skipped: string[] = []
       for (const role_id of plan.role_ids) {
@@ -946,7 +1062,7 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
         }
         const assignment = roles.assignments.create({
           person_id: actor.person_id,
-          workspace_id,
+          workspace_id: ws,
           role_id,
           ranges,
           granted_by: actor.person_id,
@@ -995,18 +1111,23 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
         }
       }
       if (created.length > 0)
-        emit('onboarding.applied', actor.person_id, {
-          assignment_ids: created.map((c) => c.id),
-          ranges,
-          // WP234：建了哪几个岗位（id 与职责；不带他那段原话）
-          ...(builtPositions.length === 0
-            ? {}
-            : { positions: builtPositions.map((p) => ({ id: p.id, role_ids: p.role_ids })) }),
-        })
+        emit(
+          'onboarding.applied',
+          actor.person_id,
+          {
+            assignment_ids: created.map((c) => c.id),
+            ranges,
+            // WP234：建了哪几个岗位（id 与职责；不带他那段原话）
+            ...(builtPositions.length === 0
+              ? {}
+              : { positions: builtPositions.map((p) => ({ id: p.id, role_ids: p.role_ids })) }),
+          },
+          ws,
+        )
       return {
         created_assignments: created,
         skipped,
-        ranges: ranges.map((r) => ({ kind: r.kind, id: r.id, label: rangeLabel(r) })),
+        ranges: ranges.map((r) => ({ kind: r.kind, id: r.id, label: rangeLabel(r, stores, ws) })),
         plan,
         ...(builtPositions.length === 0 ? {} : { positions: builtPositions }),
       } satisfies OnboardingApplyView
@@ -1031,11 +1152,16 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
         suggester: options.suggester?.(),
       })
       // 原话不进日志（21 §5）：只记来源与条数
-      emit('onboarding.suggested', _actor.person_id, {
-        source: out.source,
-        roles: out.roles.length,
-        positions: out.positions.length,
-      })
+      emit(
+        'onboarding.suggested',
+        _actor.person_id,
+        {
+          source: out.source,
+          roles: out.roles.length,
+          positions: out.positions.length,
+        },
+        _actor.workspace_id,
+      )
       return out
     },
 
@@ -1075,7 +1201,13 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
 
   const backfillWizardRanges = (): { patched: string[] } => {
     if (backend.migrated(WIZARD_RANGE_BACKFILL)) return { patched: [] }
-    const ranges = wizardRanges()
+    // 启动时那一下只管启动品牌（老数据只在它身上）
+    const stores = options.shopifyStores()
+    if (stores instanceof Promise) {
+      void stores.catch(() => undefined)
+      return { patched: [] }
+    }
+    const ranges = wizardRanges(stores)
     const patched: string[] = []
     for (const a of activeOf(options.owner)) {
       // 分不出哪条是向导建的（老版本没留痕），所以只认店主自己给自己建的那几条
@@ -1091,9 +1223,46 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
     return { patched }
   }
 
+  const reconcileBrandProfiles = (
+    brands: { workspace_id: WorkspaceId; name: string }[],
+  ): { reopened: WorkspaceId[]; checked: number } => {
+    if (backend.migrated(ADDED_BRAND_PROFILE_CHECK)) return { reopened: [], checked: 0 }
+    const reopened: WorkspaceId[] = []
+    let checked = 0
+    for (const brand of brands) {
+      if (brand.workspace_id === workspace_id) continue
+      const p = profileOf(brand.workspace_id)
+      if (p === undefined || p.provisional === true) continue
+      checked += 1
+      // 用户自己动过的痕迹：市场、地址、按市场的语言——有一样就不碰
+      if (
+        p.markets !== undefined ||
+        p.markets_source !== undefined ||
+        p.market_languages !== undefined ||
+        p.postal_address !== undefined
+      )
+        continue
+      const used = roles.assignments
+        .listByWorkspace(brand.workspace_id)
+        .some((a) => a.revoked_at === undefined && a.role_id !== 'common.owner')
+      if (used) continue
+      backend.put(brand.workspace_id, { ...p, provisional: true })
+      reopened.push(brand.workspace_id)
+    }
+    if (reopened.length > 0)
+      emit('workspace.profile_reopened', options.owner, {
+        workspace_ids: reopened,
+        reason: 'wp240_added_brand_never_set_up',
+      })
+    backend.markMigrated(ADDED_BRAND_PROFILE_CHECK, clock.now())
+    return { reopened, checked }
+  }
+
   return {
     port,
     backfillWizardRanges,
+    isAddedBrand,
+    reconcileBrandProfiles,
     companyKey: keyOf,
     companyProfile: () => companyOf(),
     vertical: () => profileOf()?.vertical,
@@ -1190,6 +1359,10 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
       const company = companyOf()
       const previous = profileOf(ws)
       backend.put(ws, {
+        // WP240：建品牌那一刻起的这一份不算"设过"——新品牌照样进首次设置
+        ...(previous === undefined || previous.provisional === true
+          ? { provisional: true as const }
+          : {}),
         legal_name: company?.legal_name ?? previous?.legal_name ?? options.workspaceName(),
         ...(company?.domain === undefined ? {} : { domain: company.domain }),
         discoverable: company?.discoverable ?? previous?.discoverable ?? true,

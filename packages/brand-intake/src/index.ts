@@ -28,15 +28,24 @@ export {
   isBlocked,
   storefrontCards,
 } from './amazon.js'
-export type { FetchedPage, PageFetch } from './fetch.js'
+export type {
+  FetchedPage,
+  FetchFailureKind,
+  PageFetch,
+  StorefrontPasswordPost,
+} from './fetch.js'
 export {
   BRAND_INTAKE_TIMEOUT_MS,
   BRAND_INTAKE_USER_AGENT,
+  failureKindOf,
   fetchPage,
   fetchRobots,
   isDisallowed,
+  isShopifyPasswordPage,
   MAX_PAGE_CHARS,
   parseRobotsDisallow,
+  ROBOTS_TIMEOUT_MS,
+  unlockShopifyStorefront,
 } from './fetch.js'
 export type { IntakeLayer } from './field.js'
 export {
@@ -70,11 +79,12 @@ export {
   shippingCountries,
   tldCountry,
 } from './markets.js'
-export type { SiteIntakeResult } from './site.js'
+export type { SiteIntakeOptions, SiteIntakeResult } from './site.js'
 export { analyzeSite, detectPlatform, looksLikePolicy, POLICY_PROBE_PATHS } from './site.js'
 
 import {
   type BrandIntakeBudget,
+  type BrandIntakeFailureKind,
   type BrandIntakePage,
   type BrandIntakeProfile,
   type BrandIntakeSourceKind,
@@ -126,6 +136,10 @@ export interface AnalyzeBrandResult {
   stopped_for_budget: boolean
   /** 抓回来的 HTML 原文（只在 `keepHtml` 时有；见 {@link SiteIntakeResult.documents}）。 */
   documents?: { url: string; kind: BrandIntakePage['kind']; html: string }[]
+  /** WP240：官网首页就读不到时是哪一种（第一条官网链接的）。 */
+  failure_kind?: BrandIntakeFailureKind
+  /** WP240：官网开着 Shopify 访问密码。 */
+  password_protected?: boolean
 }
 
 /**
@@ -137,7 +151,15 @@ export interface AnalyzeBrandResult {
 export async function analyzeBrand(
   doFetch: PageFetch,
   urls: string[],
-  options: { capCredits?: number; keepHtml?: boolean } = {},
+  options: {
+    capCredits?: number
+    keepHtml?: boolean
+    /** WP240：每抓完一页回一次（界面进度跟着动）。 */
+    onPage?: (page: BrandIntakePage) => void
+    /** WP240：店铺访问密码与解开它的那一下（见 `SiteIntakeOptions`）。 */
+    storefrontPassword?: string
+    unlock?: (origin: string, password: string) => Promise<string | undefined>
+  } = {},
 ): Promise<AnalyzeBrandResult> {
   const cap = options.capCredits ?? DEFAULT_BRAND_INTAKE_CAP_CREDITS
   const pages: BrandIntakePage[] = []
@@ -145,6 +167,8 @@ export async function analyzeBrand(
   let profile: BrandIntakeProfile = {}
   let spent = 0
   let stopped = false
+  let failure: BrandIntakeFailureKind | undefined
+  let locked = false
 
   for (const url of urls) {
     if (spent >= cap) {
@@ -161,8 +185,15 @@ export async function analyzeBrand(
       const site = await analyzeSite(doFetch, url, {
         maxPages: affordable,
         ...(options.keepHtml === true ? { keepHtml: true } : {}),
+        ...(options.onPage === undefined ? {} : { onPage: options.onPage }),
+        ...(options.storefrontPassword === undefined
+          ? {}
+          : { storefrontPassword: options.storefrontPassword }),
+        ...(options.unlock === undefined ? {} : { unlock: options.unlock }),
       })
       documents.push(...(site.documents ?? []))
+      failure ??= site.failure_kind
+      if (site.password_protected === true) locked = true
       got = site
     } else {
       const entry = classifyAmazonUrl(url)
@@ -208,6 +239,8 @@ export async function analyzeBrand(
     },
     stopped_for_budget: stopped,
     ...(options.keepHtml === true ? { documents } : {}),
+    ...(failure === undefined ? {} : { failure_kind: failure }),
+    ...(locked ? { password_protected: true } : {}),
   }
 }
 

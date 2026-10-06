@@ -57,7 +57,15 @@ export interface BrandIntakePort {
   /** 发起一次。回一条刚排上队的 `queued` / `running`。 */
   start(
     actor: BrandIntakeActor,
-    input: { urls: string[]; cap_credits?: number },
+    input: {
+      urls: string[]
+      cap_credits?: number
+      /**
+       * WP240：Shopify 店铺访问密码（用户在原生表单里填的）。**只用于这一次抓取**：
+       * 不进 run、不进事件、不落日志、不经 AI；跑完即丢。
+       */
+      storefront_password?: string
+    },
   ): MaybePromise<BrandIntakeRun>
   /** 这一次跑到哪儿了（界面用呼吸标记表示"Agent 在干活"，36 §12）。 */
   get(actor: BrandIntakeActor, run_id: string): MaybePromise<BrandIntakeRun>
@@ -71,7 +79,7 @@ export interface BrandIntakePort {
   /** 重新分析：带着上一次的结果重跑，**用户改过的格子不动**。 */
   reanalyze(
     actor: BrandIntakeActor,
-    input: { run_id: string; urls?: string[] },
+    input: { run_id: string; urls?: string[]; storefront_password?: string },
   ): MaybePromise<BrandIntakeRun>
 }
 
@@ -84,6 +92,8 @@ export interface BrandIntakePort {
 const StartBody = z.object({
   urls: z.array(z.string().url('这不像一个网址')).min(1).max(3),
   cap_credits: z.number().positive().max(10).optional(),
+  // WP240：店铺访问密码只用于这一次抓取（不回显、不落库、不进日志）
+  storefront_password: z.string().min(1).max(200).optional(),
 })
 
 /**
@@ -98,6 +108,7 @@ const ConfirmBody = z.object({
 
 const ReanalyzeBody = z.object({
   urls: z.array(z.string().url('这不像一个网址')).min(1).max(3).optional(),
+  storefront_password: z.string().min(1).max(200).optional(),
 })
 
 function portOf(deps: GatewayDeps): BrandIntakePort {
@@ -149,6 +160,9 @@ export function brandIntakeRoutes(): Route[] {
           await portOf(deps).start(actorOf(c), {
             urls: input.urls,
             ...(input.cap_credits === undefined ? {} : { cap_credits: input.cap_credits }),
+            ...(input.storefront_password === undefined
+              ? {}
+              : { storefront_password: input.storefront_password }),
           }),
           201,
         )
@@ -259,6 +273,9 @@ export function brandIntakeRoutes(): Route[] {
           await portOf(deps).reanalyze(actorOf(c), {
             run_id: param(c, 'id'),
             ...(input.urls === undefined ? {} : { urls: input.urls }),
+            ...(input.storefront_password === undefined
+              ? {}
+              : { storefront_password: input.storefront_password }),
           }),
           201,
         )
