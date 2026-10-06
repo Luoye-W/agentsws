@@ -25,6 +25,7 @@ import { dirname, join } from 'node:path'
 import type {
   Clock,
   ConnectionDirectoryEntry,
+  DataSourceLevel,
   McpProbeResult,
   McpServerInput,
   McpServerRecord,
@@ -38,6 +39,7 @@ import type {
 } from '@agentsws/contracts'
 import {
   CONNECTION_DIRECTORY,
+  CONNECTION_READ_ROUTES,
   canonicalConnectionKind,
   connectionDirectoryEntry,
   customMcpServerOfKind,
@@ -131,6 +133,11 @@ export interface ConnectionDirectoryOptions {
   connections?(): readonly ConnectionStateLike[]
   /** 公司档案里的「网站是用什么搭的」（`shop` 按它解析）。 */
   storefrontPlatform?(): StorefrontPlatform | undefined
+  /**
+   * WP238：一条取数路由（`data_source_routing` 的键，如 `reddit.read`）现在走得通的那一级；
+   * 都不通回 `undefined`。给了它，只读需求已被这条路由满足的连接不算缺（{@link CONNECTION_READ_ROUTES}）。
+   */
+  readRouteLevel?(route: string): DataSourceLevel | undefined
   probeMcp?: McpProbe
 }
 
@@ -416,6 +423,14 @@ export function createConnectionDirectory(
     }
   }
 
+  /** WP238：这张卡的这几项授权是不是只读、且那条取数路由现在走得通。 */
+  const readCovered = (kind: string, grants: readonly string[]): boolean => {
+    const via = CONNECTION_READ_ROUTES[kind]
+    if (via === undefined || options.readRouteLevel === undefined) return false
+    if (grants.length === 0 || !grants.every((g) => via.read_grants.includes(g))) return false
+    return options.readRouteLevel(via.route) !== undefined
+  }
+
   /** 这几条职责要、但还没连上的连接（岗位连接清单与店主的 `list_connections` 共用这一份）。 */
   const gapsOf = (
     role_ids: readonly RoleId[],
@@ -445,6 +460,11 @@ export function createConnectionDirectory(
          * 岗位卡在 `ready: false` 上——他还没有网站，不是少连了一个东西。
          */
         if (entry?.resolved_by_profile === true && storefrontNotBuilt(platformOf())) continue
+        /*
+         * WP238（Luoye 10-06）：这条职责对这张卡只要**读**，而读已经有别的路走得通
+         * （接口中台 / 本机只读浏览器）——不算缺，不进清单。要发帖 / 版务的照旧算。
+         */
+        if (readCovered(kind, dep.grants)) continue
         const existing = merged.get(kind)
         if (existing === undefined)
           merged.set(kind, {

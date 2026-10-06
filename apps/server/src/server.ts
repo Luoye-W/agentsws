@@ -67,6 +67,7 @@ import type {
   Assignment,
   Clock,
   ContentPublicKey,
+  DataSourceLevel,
   EventEnvelope,
   Halt,
   KolChannel,
@@ -109,7 +110,7 @@ import {
   uncitedFigures,
 } from '@agentsws/core'
 import { createDataStore, type SqliteDataStore } from '@agentsws/data'
-import { withOwnSources } from '@agentsws/deck'
+import { withOwnSources, withReadVia } from '@agentsws/deck'
 import type { WebCredential } from '@agentsws/dsh-adapter'
 import {
   type OfficialPluginBackend,
@@ -407,6 +408,7 @@ import {
 import { createPrStore, prDeckData, seedDemoPr } from './pr.js'
 import { createPrService } from './pr-service.js'
 import { createPricingCatalog, type PricingCatalogSource } from './pricing-catalog.js'
+import { readRouteLevelOf, readViaSources } from './read-route.js'
 import { createReadonlyBrowser, type ReadonlyBrowserOptions } from './readonly-browser/index.js'
 import { redditReadBrowserOf, redditReadLimiterOf } from './readonly-browser/reddit.js'
 import {
@@ -2463,6 +2465,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       ...breakEvenView(resolveGrossMargin(economics.margins())?.margin_pct),
       fixed_line: fixedStopLossCaps().stop_loss_roas_below ?? ADS_DEFAULT_CAPS.stop_loss_roas_below,
     })
+    /** WP238：取数路由走得通哪一级（云客户端在下面才建好，这里先占位、建好后填上）。 */
+    const readLevelHolder: { of?: (route: string) => DataSourceLevel | undefined } = {}
     const workData: WorkstationDataSource = {
       ...baseWorkData,
       systemCards: (actor) => ({
@@ -2532,7 +2536,12 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           : own
       },
       // 红人库与社媒库都不是"连接"，所以它们不在那两份写死的数据源表里（见 `withOwnSources`）
-      sources: () => withOwnSources(baseWorkData.sources()),
+      // WP238：没连 Reddit API、但读 Reddit 已能经接口中台 / 只读浏览器取到——面板不再催「去连接」
+      sources: () =>
+        withReadVia(
+          withOwnSources(baseWorkData.sources()),
+          readLevelHolder.of === undefined ? {} : readViaSources(readLevelHolder.of),
+        ),
     }
     // 连接清单变了（连上 / 断开 / 换令牌）：下一次读之前重拉一轮，不用等定时器
     connections.onConnectionChange(() => {
@@ -3133,6 +3142,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       directory: () => creditsDirectory(ws),
       timeZone: async () => (await identity.getWorkspace(ws))?.tz,
     })
+    readLevelHolder.of = readRouteLevelOf(ownCloud, readonlyBrowser)
     // WP206：名册推上云（网页「成员额度」页列人）。公司页装好之后（`rosterReady`）才开始推
     const rosterSync = createRosterSync({
       build: () => cloudRoster(ws),
@@ -7298,6 +7308,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       connectedKinds: () => brand.connections.connectedKinds(),
       connections: () => brand.connections.liveConnections(),
       storefrontPlatform: () => brandProfileOf(ws).storefront_platform,
+      // WP238：读 Reddit 已经能经接口中台 / 本机只读浏览器取到，就不算缺 Reddit API
+      readRouteLevel: readRouteLevelOf(brand.ownCloud, brand.readonlyBrowser),
     })
     directoryAssemblies.set(ws, assembly)
     const port: ConnectionDirectoryPort = {

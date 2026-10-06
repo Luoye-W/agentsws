@@ -259,6 +259,22 @@ export function withOwnSources(base: readonly DataSourceStatus[]): DataSourceSta
 }
 
 /**
+ * WP238（Luoye 10-06）：把「没连、但取数已由别的路满足」标到那几个源上。
+ *
+ * `via` 的键是数据源；已经连上的源不动（连上了就照常出数），没连的加上 `via`，
+ * 面板据此不再出「去连接」，只说一句数据从哪来。
+ */
+export function withReadVia(
+  base: readonly DataSourceStatus[],
+  via: Partial<Record<DataSourceId, 'workshop' | 'browser_readonly'>>,
+): DataSourceStatus[] {
+  return base.map((s) => {
+    const level = via[s.id]
+    return level === undefined || s.connected ? s : { ...s, via: level }
+  })
+}
+
+/**
  * 把真实连接算出来的状态盖到一份既有表上（demo / 测试里那份写死的表）。
  *
  * 规则是**只加不减**：底表里已经 `connected: true` 的（比如 demo 里由合成世界喂的店铺后台）
