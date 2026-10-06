@@ -8,7 +8,9 @@
  *
  * 不联网：抓取口是 `@agentsws/brand-intake` 的夹具表。
  */
-import { readFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { createRequire } from 'node:module'
+import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { PageFetch } from '@agentsws/brand-intake'
@@ -70,8 +72,9 @@ afterEach(async () => {
   for (const s of servers.splice(0)) await s.close()
 })
 
-async function boot(): Promise<Server> {
+async function boot(dbDir?: string): Promise<Server> {
   const server = await createServer({
+    ...(dbDir === undefined ? {} : { dbDir }),
     clock: makeClock(),
     random: seeded(),
     quiet: true,
@@ -418,5 +421,69 @@ describe('WP240 第二个品牌的首次设置不串品牌', () => {
       `/v1/orgs/${org}/brands`,
     )
     expect(asInmo.data?.find((b) => b.current)?.workspace_id).toBe(server.bootstrap.workspace.id)
+  })
+
+  it('存量自检：上一版建的品牌（影子档案没标记、没人分过岗位）重启后进首次设置；分过岗位的不碰', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'agentsws-wp240-'))
+    try {
+      const first = await boot(dir)
+      await setUpInmo(first)
+      const fresh = await addBrand(first, 'Rollout')
+      const used = await addBrand(first, 'Busy')
+      await call(first, used, 'POST', '/v1/onboarding/apply', {
+        position_ids: [],
+        role_ids: [],
+        positions: [{ name: '客服', role_ids: ['dtc.support'], template_id: 'customer-care' }],
+      })
+      // 把两份档案改回上一版的样子：没有 provisional，自检也没跑过
+      await first.close()
+      servers.splice(servers.indexOf(first), 1)
+      const Database = createRequire(import.meta.url)('better-sqlite3') as new (
+        path: string,
+      ) => {
+        prepare(sql: string): { run(...a: unknown[]): unknown; get(...a: unknown[]): unknown }
+        close(): void
+      }
+      const db = new Database(join(dir, 'onboarding.sqlite'))
+      for (const ws of [fresh.workspace_id, used.workspace_id]) {
+        const row = db
+          .prepare('SELECT json FROM onboarding_profiles WHERE workspace_id = ?')
+          .get(ws) as { json: string }
+        const { provisional: _p, ...legacy } = JSON.parse(row.json) as Record<string, unknown>
+        db.prepare('UPDATE onboarding_profiles SET json = ? WHERE workspace_id = ?').run(
+          JSON.stringify(legacy),
+          ws,
+        )
+      }
+      db.prepare('DELETE FROM onboarding_migrations WHERE key = ?').run(
+        'wp240_added_brand_profiles',
+      )
+      db.close()
+
+      const again = await boot(dir)
+      const org = await orgId(again)
+      const whoIn = async (ws: string): Promise<Who> => {
+        const switched = await call<{ session_token?: string }>(
+          again,
+          inmo(again),
+          'POST',
+          `/v1/orgs/${org}/brands/${ws}/switch`,
+        )
+        const a = again.roles.assignments
+          .listByPerson(again.bootstrap.person.id, { workspace_id: ws })
+          .find((x) => x.revoked_at === undefined && x.role_id === 'common.owner')
+        return {
+          workspace_id: ws,
+          token: switched.data?.session_token ?? '',
+          assignment: a?.id ?? '',
+        }
+      }
+      expect((await state(again, await whoIn(fresh.workspace_id))).needs_setup).toBe(true)
+      expect((await state(again, await whoIn(used.workspace_id))).needs_setup).toBe(false)
+      expect((await state(again, inmo(again))).needs_setup).toBe(false)
+    } finally {
+      for (const s of servers.splice(0)) await s.close()
+      rmSync(dir, { recursive: true, force: true })
+    }
   })
 })
