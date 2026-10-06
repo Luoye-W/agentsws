@@ -68,6 +68,8 @@ export * from './packages.js'
 export * from './platform-kits.js'
 // WP234（docs/54 §6.3）：岗位划分建议——一份算法，工作台第 ③ 步与服务端同用
 export * from './position-plan.js'
+// WP241（docs/54 §7）：岗位页「工作」——工作项视图的形状与分组规则，前后端同用
+export * from './position-work.js'
 // 60 §1 / §2 公共关系的四条职责与四个对象（WP78）。与 social.ts 一条都不共用：
 // `social.reddit` 是**我们自己的** subreddit，`pr.reddit` 是**别人的**。
 export * from './pr.js'
