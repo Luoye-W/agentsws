@@ -24,7 +24,12 @@ afterEach(async () => {
 async function boot(): Promise<Server> {
   let t = Date.parse('2026-10-06T09:00:00.000Z')
   const server = await createServer({
-    clock: { now: () => new Date((t += 1)).toISOString() },
+    clock: {
+      now: () => {
+        t += 1
+        return new Date(t).toISOString()
+      },
+    },
     quiet: true,
     startRun: false,
     tokenRefreshIntervalMs: 0,

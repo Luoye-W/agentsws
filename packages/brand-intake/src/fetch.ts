@@ -305,7 +305,7 @@ function compileRule(rule: string): RegExp | undefined {
 export function isDisallowed(pathname: string, disallow: string[]): boolean {
   for (const rule of disallow) {
     const re = compileRule(rule)
-    if (re !== undefined && re.test(pathname)) return true
+    if (re?.test(pathname) === true) return true
   }
   return false
 }
