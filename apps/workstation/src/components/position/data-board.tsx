@@ -9,7 +9,7 @@
  * 没挂范围的职责：说人话（`NoRangeNotice`，44 / WP138），不出一个假的 0。
  */
 import type { RangeName } from '@agentsws/deck'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
 import { BarChart3, Link2Off, ScanSearch } from 'lucide-react'
 import { type ReactNode, useState } from 'react'
 import { Link } from 'react-router-dom'
@@ -237,10 +237,13 @@ function DutyRow({
   duty,
   range,
   expanded,
+  taken,
 }: {
   duty: BoardDuty
   range: RangeName
   expanded: boolean
+  /** 前面几行已经摆过的数字块 → 摆它的那条职责名（同一份店铺数据不在每条职责下各摆一遍） */
+  taken: ReadonlyMap<string, string>
 }): ReactNode {
   const { t } = useApp()
   const view = useQuery({
@@ -248,7 +251,26 @@ function DutyRow({
     queryFn: () => getPositionView(duty.assignment_id, range),
   })
   const sections = view.data?.sections ?? []
-  const tiles = sections.filter((s) => s.connected).flatMap((s) => s.blocks.filter(isTile))
+  const all = sections.filter((s) => s.connected).flatMap((s) => s.blocks.filter(isTile))
+  const tiles = all.filter((b) => !taken.has(b.id))
+  const sharedWith = all.length > 0 && tiles.length === 0 ? taken.get(all[0]?.id ?? '') : undefined
+  if (sharedWith !== undefined)
+    return (
+      <div
+        className="grid grid-cols-1 items-center gap-3 border-b px-4 py-3 last:border-b-0 md:grid-cols-[10rem_minmax(0,1fr)]"
+        data-testid="data-row"
+        data-role={duty.role_id}
+        data-shared="true"
+      >
+        <div className="flex min-w-0 items-center gap-1.5 text-sm font-medium">
+          <DutyIcon role_id={duty.role_id} size={15} />
+          <span className="truncate">{duty.role_name}</span>
+        </div>
+        <span className="text-xs text-ws-muted-fg">
+          {t('pos2.data.shared', { duty: sharedWith })}
+        </span>
+      </div>
+    )
   const offline = sections.filter((s) => !s.connected)
   return (
     <div
@@ -316,6 +338,21 @@ export function DataBoard({
   const noRange = duties.filter((d) => d.ranges !== undefined && d.ranges.length === 0)
   const shown = duties.filter((d) => !noRange.includes(d))
   const first = noRange[0]
+  // 同一个数字块谁先摆：按职责顺序，第一条拥有它（与各行自己的查询同一把缓存键，不多发请求）
+  const views = useQueries({
+    queries: shown.map((d) => ({
+      queryKey: ['view', d.assignment_id, range],
+      queryFn: () => getPositionView(d.assignment_id, range),
+    })),
+  })
+  const takenBefore: Map<string, string>[] = []
+  const seen = new Map<string, string>()
+  shown.forEach((d, i) => {
+    takenBefore.push(new Map(seen))
+    for (const s of views[i]?.data?.sections ?? [])
+      if (s.connected)
+        for (const b of s.blocks) if (isTile(b) && !seen.has(b.id)) seen.set(b.id, d.role_name)
+  })
   if (empty && first === undefined)
     return (
       <section className="flex flex-col gap-2" data-testid="data-board" data-empty="true">
@@ -368,8 +405,14 @@ export function DataBoard({
       )}
       {shown.length === 0 ? null : (
         <div className="rounded-xl border bg-card">
-          {shown.map((d) => (
-            <DutyRow key={d.assignment_id} duty={d} range={range} expanded={expanded} />
+          {shown.map((d, i) => (
+            <DutyRow
+              key={d.assignment_id}
+              duty={d}
+              range={range}
+              expanded={expanded}
+              taken={takenBefore[i] ?? new Map()}
+            />
           ))}
         </div>
       )}

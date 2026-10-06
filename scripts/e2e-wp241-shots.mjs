@@ -16,7 +16,7 @@
  * ```
  */
 import { spawn } from 'node:child_process'
-import { mkdirSync, writeFileSync } from 'node:fs'
+import { mkdirSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -257,7 +257,6 @@ async function main() {
     })
     await new Promise((r) => setTimeout(r, 3000))
     const work = await api(token, social, 'GET', `/v1/positions/${positionId}/work`)
-    writeFileSync(join(SHOTS, 'work-sample.json'), `${JSON.stringify(work.counts, null, 2)}\n`)
     console.log(`  工作：${JSON.stringify(work.counts)}`)
 
     // ── 主稿：明暗 × 1440 / 1024 ──

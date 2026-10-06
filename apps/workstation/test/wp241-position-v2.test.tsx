@@ -54,7 +54,9 @@ const state: {
   instance: PositionInstanceData
   missing: string[]
   setTodoStatus: ReturnType<typeof vi.fn>
+  view: unknown
 } = {
+  view: undefined,
   work: undefined as unknown as PositionWorkView,
   instance: undefined as unknown as PositionInstanceData,
   missing: [],
@@ -187,12 +189,11 @@ vi.mock('@/lib/api', async () => {
       },
       pinned_p0: [],
     }),
-    getPositionView: async () => ({
-      position_id: 'asg_pr',
-      range: 'yesterday',
-      sections: [
-        { source: 'social_reddit', label: 'Reddit', connected: false, via: 'workshop', blocks: [] },
-      ],
+    getPositionView: async () => state.view,
+    getBlockData: async (id: string) => ({
+      block: { id, component: 'stat_tile', title: '总销售额', source: 'shop' },
+      status: 'ok',
+      payload: { value: 22.5, previous: 20, delta_pct: 12.5, spark: [], currency: 'USD' },
     }),
     getPositionRecords: async () => ({ payload: { rows: [] } }),
     getPositionConnections: async () => ({
@@ -277,6 +278,13 @@ beforeEach(() => {
   state.instance = instance()
   state.missing = []
   state.setTodoStatus = vi.fn(async () => ({ todo: {} }))
+  state.view = {
+    position_id: 'asg_pr',
+    range: 'yesterday',
+    sections: [
+      { source: 'social_reddit', label: 'Reddit', connected: false, via: 'workshop', blocks: [] },
+    ],
+  }
 })
 
 afterEach(() => {
@@ -419,6 +427,39 @@ describe('工作', () => {
     fireEvent.click(quick[0] as HTMLElement)
     expect((await screen.findByTestId('social-calendar-stub')).textContent).toBe('reddit')
     expect(screen.getByTestId('work-quick-view').textContent).toContain('要你拍板的都出成卡')
+  })
+})
+
+describe('数据看板', () => {
+  it('每条职责一行数 + 涨跌；同一份店铺数字只在第一条职责下摆一次', async () => {
+    state.view = {
+      position_id: 'asg_pr',
+      range: 'yesterday',
+      sections: [
+        {
+          source: 'shop',
+          label: '店铺后台',
+          connected: true,
+          blocks: [
+            { id: 'shop.revenue', component: 'stat_tile', title: '总销售额', source: 'shop' },
+          ],
+        },
+      ],
+    }
+    openAt()
+    const rows = await screen.findAllByTestId('data-row')
+    await waitFor(() => {
+      expect(screen.getAllByTestId('data-tile')).toHaveLength(1)
+    })
+    const tile = screen.getByTestId('data-tile')
+    await waitFor(() => {
+      expect(tile.textContent).toContain('22.5')
+    })
+    expect(within(tile).getByTestId('ws-delta').getAttribute('data-direction')).toBe('up')
+    await waitFor(() => {
+      expect(screen.getAllByTestId('data-row')[1]?.getAttribute('data-shared')).toBe('true')
+    })
+    expect(rows).toHaveLength(2)
   })
 })
 
