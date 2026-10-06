@@ -76,6 +76,15 @@ export interface BrandIntakePort {
     actor: BrandIntakeActor,
     input: { run_id: string; edits?: Record<string, unknown> },
   ): MaybePromise<BrandIntakeRun>
+  /**
+   * WP242：读不到网站（被拦 / 没有网站 / 不想等）时**就地手填**——品牌名、一句话、客服邮箱、
+   * 币种、市场。与「看着没问题」走同一条写法（档案、品牌名、市场），回一条已确认的 run。
+   * 可选：没装的进程回 501。
+   */
+  manual?(
+    actor: BrandIntakeActor,
+    input: { edits: Record<string, unknown> },
+  ): MaybePromise<BrandIntakeRun>
   /** 重新分析：带着上一次的结果重跑，**用户改过的格子不动**。 */
   reanalyze(
     actor: BrandIntakeActor,
@@ -104,6 +113,29 @@ const StartBody = z.object({
  */
 const ConfirmBody = z.object({
   edits: z.record(z.string(), z.unknown()).optional(),
+})
+
+/**
+ * WP242：就地手填的那几格（与档案卡同名同形；全可选，但至少要有一格）。
+ */
+const ManualBody = z.object({
+  edits: z
+    .object({
+      brand_name: z.string().trim().min(1).max(80).optional(),
+      one_liner: z.string().trim().min(1).max(200).optional(),
+      support_email: z.string().trim().email('这不像一个邮箱').optional(),
+      currency: z
+        .string()
+        .trim()
+        .regex(/^[A-Za-z]{3}$/, '币种填三个字母，比如 USD')
+        .transform((v) => v.toUpperCase())
+        .optional(),
+      markets: z
+        .array(z.string().regex(/^[A-Z]{2}$/, '市场用两个大写字母的国家码'))
+        .max(60)
+        .optional(),
+    })
+    .refine((e) => Object.values(e).some((v) => v !== undefined), '至少填一格'),
 })
 
 const ReanalyzeBody = z.object({
@@ -279,6 +311,32 @@ export function brandIntakeRoutes(): Route[] {
           }),
           201,
         )
+      },
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/brand-intake/manual',
+        operationId: 'manualBrandIntake',
+        summary:
+          'WP242：读不到网站时就地手填品牌资料（品牌名 / 一句话 / 客服邮箱 / 币种 / 市场），与「看着没问题」同一条写法',
+        tag: TAG,
+        auth: 'bearer',
+        assignment: true,
+        authz: WRITE,
+        authzBypass: holdsOwnerWrite,
+        body: ManualBody,
+        returns: 'BrandIntakeRun',
+      },
+      async (c, deps) => {
+        const input = await body(c, ManualBody)
+        const port = portOf(deps)
+        if (port.manual === undefined)
+          throw new ApiError('not_implemented', '这个服务进程不支持手填品牌资料')
+        const edits = Object.fromEntries(
+          Object.entries(input.edits).filter(([, v]) => v !== undefined),
+        )
+        return ok(c, await port.manual(actorOf(c), { edits }), 201)
       },
     ),
   ]

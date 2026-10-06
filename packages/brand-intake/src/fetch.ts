@@ -58,6 +58,8 @@ function sayStatus(status: number): string {
   if (status === 403) return '对方拒绝了（403）'
   if (status === 404) return '这个页面不存在（404）'
   if (status === 429) return '对方在限流（429），先不抓了'
+  // WP242：Shopify 对它认定的机器人回 430（Security Rejection）
+  if (status === 430) return '对方的机器人防护拦了（430）'
   if (status === 401) return '要登录才看得到（401）'
   if (status >= 500) return `对方服务器出错（${String(status)}）`
   return `没取到（${String(status)}）`
@@ -94,12 +96,21 @@ export async function fetchPage(
         status: res.status,
         html: '',
         reason: sayStatus(res.status),
-        ...(res.status === 429 || res.status === 403 || res.status === 401
-          ? { failure_kind: 'blocked' as const }
-          : {}),
+        ...(BLOCKED_STATUSES.has(res.status) ? { failure_kind: 'blocked' as const } : {}),
         ...final,
       }
     const text = await res.text()
+    // WP242：回了 200 但其实是一张「验证你是不是机器人」的页（Cloudflare / 店铺防护）——当被拦
+    if (isBotChallengePage(text))
+      return {
+        url,
+        ok: false,
+        status: res.status,
+        html: '',
+        reason: '对方的机器人防护拦了（要人点一下验证）',
+        failure_kind: 'blocked',
+        ...final,
+      }
     return { url, ok: true, status: res.status, html: text.slice(0, MAX_PAGE_CHARS), ...final }
   } catch (err) {
     const kind = failureKindOf(err)
@@ -114,10 +125,40 @@ export async function fetchPage(
           ? '等太久了，先不抓了'
           : kind === 'dns'
             ? '找不到这个域名（还没解析，或者网址拼错了）'
-            : `连不上（${message}）`,
+            : `连不上（${message}${causeCodeOf(err) === undefined ? '' : ` · ${causeCodeOf(err)}`}）`,
       failure_kind: kind,
     }
   }
+}
+
+/** WP242：算「被拦」的状态码（429 限流、430 Shopify 机器人防护、401 / 403 拒绝）。 */
+const BLOCKED_STATUSES = new Set([401, 403, 429, 430])
+
+/**
+ * WP242：这一页是不是「验证你是不是机器人」的那一张（回 200，但内容只是一道验证）。
+ * 只认标题：很多正常页面也挂着防护脚本，按脚本认会误伤。
+ */
+export function isBotChallengePage(html: string): boolean {
+  const title = /<title[^>]*>([^<]*)<\/title>/i.exec(html.slice(0, 20_000))?.[1]?.trim() ?? ''
+  return /^(just a moment|attention required|access denied|verifying you are human|checking your browser)/i.test(
+    title,
+  )
+}
+
+/** WP242：`fetch failed` 背后的错误码（`ECONNRESET`……）；挖不出回 `undefined`。 */
+export function causeCodeOf(err: unknown): string | undefined {
+  let cur: unknown = err
+  for (let i = 0; i < 5 && cur !== undefined && cur !== null; i++) {
+    const code = (cur as { code?: unknown }).code
+    if (i > 0 && typeof code === 'string') return code
+    const errors = (cur as { errors?: unknown }).errors
+    if (Array.isArray(errors) && errors.length > 0) {
+      const first = (errors[0] as { code?: unknown } | undefined)?.code
+      if (typeof first === 'string') return first
+    }
+    cur = (cur as { cause?: unknown }).cause
+  }
+  return undefined
 }
 
 /**

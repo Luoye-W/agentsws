@@ -102,8 +102,8 @@ describe('WP240 服务侧 · 读不到时照实说', () => {
     const done = await f.port.get(ACTOR, started.id)
     expect(done.status).toBe('failed')
     expect(done.failure_kind).toBe('blocked')
-    expect(done.failure).toBe(failureLine('blocked'))
-    expect(done.failure).toContain('先跳过')
+    expect(done.failure).toBe(failureLine('blocked', '对方在限流（429），先不抓了'))
+    expect(done.failure).toContain('手动填')
   })
 
   it('店铺有访问密码：failed + password；填对密码重新分析就读到了；密码哪儿都不留', async () => {

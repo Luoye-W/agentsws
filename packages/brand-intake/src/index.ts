@@ -37,9 +37,11 @@ export type {
 export {
   BRAND_INTAKE_TIMEOUT_MS,
   BRAND_INTAKE_USER_AGENT,
+  causeCodeOf,
   failureKindOf,
   fetchPage,
   fetchRobots,
+  isBotChallengePage,
   isDisallowed,
   isShopifyPasswordPage,
   MAX_PAGE_CHARS,

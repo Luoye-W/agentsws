@@ -114,14 +114,20 @@ export function failureLine(kind: BrandIntakeFailureKind | undefined, reason?: s
       return '店铺开着访问密码，读不到内容。填一下店铺密码再读，或者先跳过、手动填品牌资料。'
     case 'password_wrong':
       return '店铺密码没能解开。核对一下再试，或者先跳过、手动填品牌资料。'
-    case 'blocked':
-      return '对方暂时不让读（被限流或被拦了）。过几分钟再试，或者先跳过、手动填品牌资料。'
+    case 'blocked': {
+      // WP242：把状态码说出来（Shopify 对脚本常回 429 / 430），并给两条路：换个网址、就地手填
+      const code = /[（(](\d{3})[)）]/.exec(reason ?? '')?.[1]
+      return `这个网站拦了自动读取${code === undefined ? '' : `（${code}）`}。换个网址再读，或者就在下面手动填品牌资料。`
+    }
     case 'dns':
       return '找不到这个网址（域名还没解析，或者拼错了）。核对一下网址，或者先跳过。'
     case 'timeout':
       return '对方一直没回应。过一会再试，或者先跳过、手动填品牌资料。'
-    case 'unreachable':
-      return '连不上这个网站。核对一下网址，或者先跳过、手动填品牌资料。'
+    case 'unreachable': {
+      // WP242：带上真原因（`ECONNRESET` 之类），排查网络 / 代理时有个抓手
+      const code = /\b(E[A-Z_]{3,}|UND_ERR_[A-Z_]+|CERT_[A-Z_]+)\b/.exec(reason ?? '')?.[1]
+      return `连不上这个网站${code === undefined ? '' : `（${code}）`}。核对一下网址、换个网址再读，或者就在下面手动填品牌资料。`
+    }
     default:
       return reason ?? '一个页面都没抓着，换个网址再试试'
   }
@@ -290,6 +296,31 @@ export function createBrandIntake(options: BrandIntakeOptions): BrandIntakeAssem
       }
       runs.set(next.id, next)
       return next
+    },
+
+    /*
+     * WP242：读不到网站时就地手填。建一条没有网址、没有页面的 run，档案就是他填的那几格
+     * （全标「人改的」），然后走与「看着没问题」**同一条**写法——不另开一条写入路径。
+     */
+    async manual(actor, input) {
+      const at = now()
+      const profile = applyEdits({}, input.edits, at)
+      await options.sinks.applyProfile(profile, actor)
+      await options.sinks.seedKnowledge?.(profile, actor)
+      const done: BrandIntakeRun = {
+        id: options.newId('bi'),
+        schema_version: 1,
+        workspace_id: actor.workspace_id,
+        status: 'confirmed',
+        inputs: [],
+        pages: [],
+        budget: { estimated_credits: 0, cap_credits: 0, spent_credits: 0 },
+        profile,
+        created_at: at,
+        updated_at: at,
+      }
+      runs.set(done.id, done)
+      return done
     },
 
     reanalyze(actor, input) {
