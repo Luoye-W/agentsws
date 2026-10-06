@@ -2588,6 +2588,7 @@ const zh: Table = {
   'markets.empty': '没看出来，请选一下',
   'markets.add': '加市场',
   'markets.search': '搜国家或地区',
+  'markets.many_default': '网站上能选的国家很多，先只选了美国，其余你自己加',
   'markets.more': '还有 {n} 个',
   'markets.less': '收起',
   'markets.clear': '全部清掉',
@@ -6487,6 +6488,8 @@ const en: Table = {
   'markets.empty': "Couldn't tell — please pick",
   'markets.add': 'Add market',
   'markets.search': 'Search a country or region',
+  'markets.many_default':
+    'Your site lets shoppers pick a lot of countries, so we only picked the US for now \u2014 add the rest yourself',
   'markets.more': '{n} more',
   'markets.less': 'Show less',
   'markets.clear': 'Clear all',

@@ -26,6 +26,20 @@ export function marketLabel(code: string, lang: 'zh' | 'en'): string {
   }
 }
 
+/**
+ * WP240（Luoye 10-06）：网站上能选的国家太多（> 30）时，分析默认只选了美国——出处带这个 `locator`。
+ * 与 `@agentsws/brand-intake` 的 `MARKETS_MANY_LOCATOR` 同一个值（工作台不依赖那个包，这里抄一份）。
+ */
+export const MARKETS_MANY_LOCATOR = 'markets:many-default-us'
+
+/** 这份市场是不是「国家太多、先只选了美国」那一份。 */
+export function isManyDefault(origin: MarketsOrigin | undefined): boolean {
+  return (
+    origin?.from === 'site' &&
+    (origin.evidence ?? []).some((e) => e.locator === MARKETS_MANY_LOCATOR)
+  )
+}
+
 /** 出处里的 `locator` → 问号里那几个字的 key。 */
 const KIND_OF: readonly [RegExp, string][] = [
   [/^shopify:localization/, 'markets.kind.localization'],
@@ -232,6 +246,16 @@ export function MarketsPicker({
         )}
       </select>
       {originText === undefined ? null : <Hint text={originText} testId="markets-origin" />}
+      {/* WP240：国家太多、先只选了美国——这一句是状态，铺在外面（人得知道其余要自己加） */}
+      {isManyDefault(origin) ? (
+        <span
+          className="basis-full text-[11px] text-amber-700 dark:text-amber-300"
+          data-slot="status"
+          data-testid="markets-many-note"
+        >
+          {t('markets.many_default')}
+        </span>
+      ) : null}
       {value.length < 2 ? null : (
         <span
           className="flex basis-full items-center gap-1 text-[11px] text-ws-muted-fg"

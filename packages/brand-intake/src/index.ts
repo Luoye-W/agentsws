@@ -76,6 +76,9 @@ export {
   inferMarkets,
   localizationCountries,
   MARKET_SELECTOR_MAX,
+  MARKETS_MANY_DEFAULT,
+  MARKETS_MANY_LOCATOR,
+  MARKETS_MANY_THRESHOLD,
   shippingCountries,
   tldCountry,
 } from './markets.js'

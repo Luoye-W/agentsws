@@ -191,3 +191,54 @@ describe('WP240 目标市场多了不平铺', () => {
     expect(screen.getByTestId('market-add').textContent).toContain('没找到')
   })
 })
+
+describe('WP240（Luoye 10-06）网站上能选的国家太多', () => {
+  it('分析默认只选了美国：一句提示铺在外面；人改过之后（出处 human）不再出', () => {
+    const base = {
+      legal_name: 'Rollout Ltd',
+      brand_name: 'Rollout',
+      discoverable: true,
+      vertical: 'goods' as const,
+      storefront_platform: 'shopify' as const,
+      markets: ['US'],
+      set_at: AT,
+    }
+    const { unmount } = renderWithProviders(
+      <ProfileForm
+        profile={{
+          ...base,
+          markets_source: {
+            from: 'site',
+            evidence: [
+              {
+                url: 'https://rollout.example/',
+                locator: 'markets:many-default-us',
+                quote: 'shopify:localization: 214',
+              },
+            ],
+            at: AT,
+          },
+        }}
+        busy={false}
+        saved={false}
+        onSave={() => {}}
+      />,
+    )
+    expect(screen.getAllByTestId('market-chip').map((c) => c.getAttribute('data-code'))).toEqual([
+      'US',
+    ])
+    expect(screen.getByTestId('markets-many-note').textContent).toBe(
+      '网站上能选的国家很多，先只选了美国，其余你自己加',
+    )
+    unmount()
+    renderWithProviders(
+      <ProfileForm
+        profile={{ ...base, markets_source: { from: 'human', at: AT } }}
+        busy={false}
+        saved={false}
+        onSave={() => {}}
+      />,
+    )
+    expect(screen.queryByTestId('markets-many-note')).toBeNull()
+  })
+})
