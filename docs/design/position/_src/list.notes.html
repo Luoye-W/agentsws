@@ -1,27 +1,39 @@
   <div class="blk">
     <h4>从上往下 = 先急后缓</h4>
     <ol>
-      <li><b>要我做什么</b>：交给它、要你处理</li>
+      <li><b>要我做什么</b>：交给它、要你处理（卡片流）</li>
       <li><b>它在做什么</b>：工作（列表 / 看板 / 日历 / 表格）</li>
-      <li><b>做得怎么样</b>：数字</li>
+      <li><b>做得怎么样</b>：数据看板</li>
       <li><b>设置</b>：收进「设置」页签，平时看不到</li>
     </ol>
+  </div>
+  <div class="blk">
+    <h4>卡片流管决定，工作管进度</h4>
+    <ul>
+      <li><b>卡片流</b>是唯一要你决定的地方：批、选、改都在这。就是首页那副牌，钉在这个岗位上，不另画样式</li>
+      <li><b>工作</b>只看 AI 在做什么、做到哪，<b>没有决定按钮</b>。分组：进行中 / 排着的 / 等别人 / 已完成</li>
+      <li>某件事有卡等你，行尾挂「1 张卡等你」，点了跳到上面那张卡</li>
+      <li>你自己加的待办也在工作里，用方框勾图标认出来，它不是卡</li>
+      <li>快捷视图（自家版待处理、发帖排期）同理：要拍板的都出卡</li>
+      <li>页头「4 张等你定」→ 卡片流；「6 件在办」→ 工作</li>
+    </ul>
   </div>
   <div class="blk">
     <h4>和现在比</h4>
     <ul>
       <li>四个页签 → 三个：<span class="was">卡片 / 面板 / 记忆</span> 工作 / 记录 / 设置</li>
+      <li>卡片流从「卡片」页签挪到工作页上面，长相不变</li>
       <li>交给它：三行大框 → <b>一行</b>，点进去才展开</li>
       <li>「连上就能开工」大卡 → 只在真缺时出<b>一行</b>横幅</li>
-      <li>CLI 卡、「在日历里看」→ 设置里 / 视图里</li>
       <li>待办不用再跳日历：日历是这里的<b>一种视图</b>，只显示这个岗位的，默认是列表</li>
-      <li>Reddit 社群、发帖排期不用钻职责页：视图栏后面一点就开</li>
-      <li>面板里的数字块 → 底下<b>一条</b>数字带，要看图再点开</li>
+      <li>面板 → 底下的<b>数据看板</b>，一条带子，要看图再点开</li>
     </ul>
   </div>
   <div class="blk">
     <h4>点点看</h4>
     <div class="try">
+      <button type="button" onclick="document.getElementById('deck').focus();document.getElementById('deck').scrollIntoView()">卡片流（方向键能批）</button>
+      <button type="button" onclick="showCard(3)">从工作跳到卡</button>
       <button type="button" onclick="showView('list')">列表</button>
       <button type="button" onclick="showView('board')">看板（能拖）</button>
       <button type="button" onclick="showView('calendar')">日历</button>
@@ -35,10 +47,9 @@
     </div>
   </div>
   <div class="blk ask">
-    <h4>要你定（详见 README）</h4>
+    <h4>还要你定（详见 README）</h4>
     <ol>
-      <li>「要你处理」和列表里「等你」那组会重复出现同几件事：留着（上面是快捷动作），还是只留一处？</li>
-      <li>列表第一组叫「等你」（批 / 选 / 你自己的待办），不叫「等你批」，行不行？</li>
       <li>职责「Reddit 运营」跟岗位同名，稿里先叫「自家版」，要不要正式改名？</li>
+      <li>要不要让岗位模板自带默认视图（比如社媒默认日历）？</li>
     </ol>
   </div>

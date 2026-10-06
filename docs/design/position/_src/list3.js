@@ -68,7 +68,7 @@ function popHtml(kind) {
     return '<div class="ph2">职责</div><div class="ph2">状态</div>' +
       "<div>" + ["mk", "cm"].map(function (d) { return opt(f.d.indexOf(d) >= 0, di(d) + DUTY[d].name, 'data-f="d:' + d + '"', false, cnt(function (w) { return w.d === d; })); }).join("") + '<div class="ph2" style="margin-top:6px">截止</div>' +
       ["today", "week", "late", "none"].map(function (k) { return opt(f.due === k, DUE[k], 'data-f="due:' + k + '"', true); }).join("") + "</div>" +
-      "<div>" + ["you", "doing", "others", "done"].map(function (s) { return opt(f.s.indexOf(s) >= 0, stIcon(s) + ST[s].name, 'data-f="s:' + s + '"', false, cnt(function (w) { return w.s === s; })); }).join("") + '<div class="ph2" style="margin-top:6px">来源</div>' +
+      "<div>" + STS.map(function (s) { return opt(f.s.indexOf(s) >= 0, stIcon(s) + ST[s].name, 'data-f="s:' + s + '"', false, cnt(function (w) { return w.s === s; })); }).join("") + '<div class="ph2" style="margin-top:6px">来源</div>' +
       ["you", "agent", "cron", "mail"].map(function (s) { return opt(f.src.indexOf(s) >= 0, SRC[s], 'data-f="src:' + s + '"', false, cnt(function (w) { return w.src === s; })); }).join("") + "</div>" +
       '<div class="foot"><button class="btn sm ghost" type="button" data-f="clear">清空</button><span class="muted" style="font-size:12px">筛选记在这个岗位上</span><button class="btn sm pri" type="button" data-f="done">好了</button></div>';
   }
@@ -107,7 +107,7 @@ $$("#views a, #qv button").forEach(function (a) { a.onclick = function () { stat
 /* 页签：工作 / 记录（设置是另一张稿） */
 $$("[data-tab]").forEach(function (a) { a.onclick = function () { $$("[data-tab]").forEach(function (x) { x.classList.toggle("on", x === a); }); $("#tab-work").style.display = a.dataset.tab === "work" ? "flex" : "none"; $("#tab-records").hidden = a.dataset.tab !== "records"; }; });
 /* 页头那一行状态：点了跳到对应的地方并筛好 */
-$$("[data-jump]").forEach(function (a) { a.onclick = function () { state.view = "list"; state.f = { d: [], s: a.dataset.jump === "doing" ? ["doing"] : [], due: a.dataset.jump === "today" ? "today" : "", src: [] }; render(); }; });
+$$("[data-jump]").forEach(function (a) { a.onclick = function () { if (a.dataset.jump === "deck") return; state.view = "list"; state.f = { d: [], s: a.dataset.jump === "doing" ? ["doing"] : [], due: a.dataset.jump === "today" ? "today" : "", src: [] }; render(); }; });
 /* 交给它：一行，聚焦展开 */
 var hand = $("#hand"), ta = $("#handText");
 ta.onfocus = function () { hand.classList.add("open"); };

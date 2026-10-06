@@ -218,16 +218,6 @@ html.dark .banner span{color:var(--ws-body)}
 .hand.open .hx{display:flex}
 .hand.open .hfoot .sug.more{display:none}
 
-/* ── ③ 要你处理：横向最多 3 张 ── */
-.need{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(210px,1fr);gap:14px;overflow-x:auto;padding:2px 2px 10px;margin:-2px -2px -10px}
-.nc{padding:14px 16px;display:flex;flex-direction:column;gap:7px;min-width:0;transition:box-shadow .18s,transform .18s}
-.nc:hover{box-shadow:var(--ws-shadow-hover);transform:translateY(-2px)}
-.nc .l1{display:flex;align-items:center;gap:6px;min-width:0}
-.nc .l1 .t{margin-left:auto;font-size:12px;color:var(--ws-muted-fg);white-space:nowrap}
-.nc h4{font-size:14.5px;font-weight:600;line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:40px}
-.nc p{font-size:12.5px;color:var(--ws-muted-fg);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.nc .ft{display:flex;align-items:center;gap:6px;margin-top:2px}
-.nc .ft .go{margin-left:auto}
 .none-line{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ws-muted-fg);padding:4px 2px}
 
 /* ── ④ 工作：Notion Database 式的视图栏 ── */
@@ -397,6 +387,71 @@ html.dark .col{background:color-mix(in srgb,var(--ws-card) 55%,transparent)}
   .charts{grid-template-columns:1fr}
 }
 
+/* ── ③ 要你处理 = 现有卡片流，照 components/deck/{deck-section,deck-browser,deck-card,deck-action-bar}.tsx 画，不另起样式 ── */
+.deck{display:flex;flex-direction:column;gap:12px;width:100%;max-width:780px;margin:0 auto;border-radius:16px;outline:0}
+.deck:focus-visible{box-shadow:0 0 0 2px var(--ws-brand)}
+.dfilt{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px}
+.dfilt .l{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.dchip{display:inline-flex;align-items:center;height:24px;padding:0 10px;border-radius:999px;box-shadow:inset 0 0 0 1px var(--ws-line);font-size:12px;color:var(--ws-muted-fg)}
+.dsel{display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 8px 0 10px;border-radius:8px;background:var(--ws-surface);font-size:12px;color:var(--ws-ink)}
+.dmodes{display:inline-flex;border-radius:999px;box-shadow:inset 0 0 0 1px var(--ws-line);padding:2px;font-size:12px}
+.dmodes b{font-weight:400;padding:2px 10px;border-radius:999px;color:var(--ws-muted-fg)}
+.dmodes b.on{background:var(--ws-brand);color:var(--ws-brand-fg)}
+.dnav{display:flex;flex-wrap:wrap;align-items:center;gap:4px}
+.dnav button{display:inline-flex;align-items:center;gap:2px;height:24px;padding:0 6px;border-radius:6px;font-size:12px;color:var(--ws-muted-fg)}
+.dnav button:hover{background:var(--ws-surface);color:var(--ws-ink)}
+.dnav button:disabled{opacity:.4;pointer-events:none}
+.dnav p{padding:0 4px;font-size:12px;color:var(--ws-muted-fg)}
+.dlist{display:flex;flex-direction:column;border-radius:12px;background:var(--ws-card);padding:4px;box-shadow:0 1px 2px rgba(20,40,30,.06)}
+.dlist button{display:flex;align-items:baseline;gap:8px;width:100%;padding:6px 10px;border-radius:8px;font-size:13px;text-align:left}
+.dlist button:hover,.dlist button.on{background:var(--ws-surface)}
+.dlist button span{font-size:12px;color:var(--ws-muted-fg);flex:none}
+.dstack{position:relative;margin-bottom:16px}
+.dghost{position:absolute;left:12px;right:12px;top:8px;height:100%;transform:rotate(1deg);border-radius:16px;border:1px solid var(--ws-line);background:color-mix(in srgb,var(--ws-card) 70%,transparent);box-shadow:0 1px 2px rgba(20,40,30,.05)}
+.dghost.g2{left:24px;right:24px;top:16px;transform:rotate(-1deg);background:color-mix(in srgb,var(--ws-card) 40%,transparent);box-shadow:none}
+.dcard{position:relative;display:flex;flex-direction:column;overflow:hidden;min-height:320px;transition:transform .3s ease-out,opacity .3s ease-out}
+.dcard.out-r{transform:translateX(130%) rotate(12deg);opacity:0}
+.dcard.out-l{transform:translateX(-130%) rotate(-12deg);opacity:0}
+.dcard.out-u{transform:translateY(-140%);opacity:0}
+.dmatter{display:block;width:100%;border-bottom:1px solid var(--ws-line);padding:8px 20px;text-align:left;font-size:12px;color:var(--ws-muted-fg)}
+.dmatter:hover{color:var(--ws-ink)}
+.dtag{display:flex;flex-wrap:wrap;align-items:center;gap:8px;border-bottom:1px solid var(--ws-line);padding:12px 20px;font-size:12px}
+.dtag .r{margin-left:auto;display:flex;align-items:center;gap:8px}
+.dtag .orig{color:var(--ws-muted-fg)}
+.dtag .orig:hover{color:var(--ws-ink);text-decoration:underline}
+.evp{display:inline-flex;align-items:center;gap:4px;height:24px;padding:0 8px;border-radius:999px;background:var(--ws-surface);font-size:11px;color:var(--ws-muted-fg)}
+.evp:hover{color:var(--ws-ink)}
+.dbody{flex:1;padding:16px 20px;max-height:420px;overflow-y:auto}
+.dbody .ti{font-size:15px;line-height:24px;font-weight:600}
+.dbox{margin-top:12px;border-radius:12px;background:var(--ws-surface);padding:12px 14px;font-size:14px;line-height:1.6;color:var(--ws-ink)}
+.dbox small{display:block;font-size:12px;color:var(--ws-muted-fg);margin-bottom:4px}
+.dopts{margin-top:12px;border-radius:12px;background:var(--ws-surface);padding:8px 14px 10px;position:relative}
+.dopts legend{font-size:12px;color:var(--ws-muted-fg);padding:0 2px}
+.dopts label{display:flex;align-items:center;gap:10px;padding:3px 0;font-size:14px;cursor:pointer}
+.dopts input{appearance:none;width:16px;height:16px;border-radius:50%;box-shadow:inset 0 0 0 1px var(--ws-line);background:var(--ws-card);flex:none}
+.dopts input:checked{box-shadow:inset 0 0 0 5px var(--ws-brand)}
+.dchips{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
+.dchips span{display:inline-flex;align-items:center;gap:5px;height:26px;padding:0 10px;border-radius:8px;box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--ws-brand) 45%,transparent);font-size:12.5px;color:var(--ws-ink)}
+.dchips span.fact{box-shadow:none;background:var(--ws-info-bg);color:var(--ws-info)}
+.dact{display:flex;align-items:center;gap:12px;border-top:1px solid var(--ws-line);background:var(--ws-surface);padding:12px 20px}
+.dact .bar{display:flex;flex-wrap:wrap;align-items:center;gap:8px;flex:1;min-width:0}
+.dact .bar .need{font-size:12px;color:var(--ws-muted-fg)}
+.dact .more{margin-left:auto;width:28px;height:28px;border-radius:8px;display:grid;place-items:center;color:var(--ws-muted-fg)}
+.dact .more:hover{background:var(--ws-card);color:var(--ws-ink)}
+.btn:disabled{opacity:.5;pointer-events:none}
+.dkeys{font-size:12px;color:var(--ws-muted-fg)}
+.dreceipt{font-size:12px;color:var(--ws-good)}
+/* 工作列表行尾的「1 张卡等你」：点了滚到卡片流那张 */
+.cardref{display:inline-flex;align-items:center;gap:4px;height:22px;padding:0 8px;border-radius:999px;background:var(--ws-warn-bg);color:var(--ws-warn);font-size:11.5px;font-weight:600;white-space:nowrap;flex:none}
+.cardref:hover{box-shadow:inset 0 0 0 1px var(--ws-warn)}
+.deck.flash .dcard{box-shadow:var(--ws-glow),var(--ws-shadow-hover)}
+.st.queued circle{stroke:var(--ws-muted-fg)}.st.queued path{stroke:var(--ws-muted-fg);stroke-width:1.75}
+.row .tt{display:flex;align-items:center;gap:8px;min-width:0}
+.row .tt .tx{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.kc .cardref{margin-top:-2px}
+.ev .cardref{height:16px;font-size:10.5px;padding:0 5px;margin-top:2px}
+.qfoot{display:flex;align-items:center;gap:8px;padding:10px 16px;border-top:1px solid var(--ws-line);font-size:12.5px;color:var(--ws-muted-fg);background:var(--ws-surface)}
+
 </style>
 </head>
 <body>
@@ -476,7 +531,7 @@ html.dark .col{background:color-mix(in srgb,var(--ws-card) 55%,transparent)}
     <a class="nv"><svg class="ico"><use href="#i-todo"/></svg>待办</a>
     <a class="nv"><svg class="ico"><use href="#i-cal"/></svg>日历</a>
     <div class="nsec">岗位<svg class="ico s14"><use href="#i-plus"/></svg></div>
-    <div class="prow"><span class="chev"><svg class="ico s14"><use href="#i-cr"/></svg></span><a class="nv on" href="position-v2-list.html"><svg class="gl"><use href="#g-pr"/></svg>Reddit 运营<span class="cnt">3</span></a></div>
+    <div class="prow"><span class="chev"><svg class="ico s14"><use href="#i-cr"/></svg></span><a class="nv on" href="position-v2-list.html"><svg class="gl"><use href="#g-pr"/></svg>Reddit 运营<span class="cnt">4</span></a></div>
     <div class="prow"><span class="chev"><svg class="ico s14"><use href="#i-cr"/></svg></span><a class="nv"><svg class="gl"><use href="#g-care"/></svg>客服</a></div>
     <div class="prow"><span class="chev"><svg class="ico s14"><use href="#i-cr"/></svg></span><a class="nv"><svg class="gl"><use href="#g-web"/></svg>网站运营</a></div>
   </nav>
@@ -496,8 +551,8 @@ html.dark .col{background:color-mix(in srgb,var(--ws-card) 55%,transparent)}
     <div>
       <h1>Reddit 运营</h1>
       <p class="stat">
-        <a href="#need"><i class="d" style="background:var(--ws-warn)"></i><b>3</b> 张等你定</a><span class="mid">·</span>
-        <a href="#work" data-jump="doing"><i class="d" style="background:var(--ws-brand)"></i><b>5</b> 件在办</a><span class="mid">·</span>
+        <a href="#need" data-jump="deck"><i class="d" style="background:var(--ws-warn)"></i><b>4</b> 张等你定</a><span class="mid">·</span>
+        <a href="#work" data-jump="doing"><i class="d" style="background:var(--ws-brand)"></i><b>6</b> 件在办</a><span class="mid">·</span>
         <a href="#work" data-jump="today"><i class="d" style="background:var(--ws-info)"></i>今天 <b>1</b> 个待办</a>
       </p>
     </div>
@@ -532,28 +587,24 @@ html.dark .col{background:color-mix(in srgb,var(--ws-card) 55%,transparent)}
       </div>
     </div>
 
-    <!-- ③ 要你处理 -->
+    <!-- ③ 要你处理 = 现有卡片流（DeckSection），钉在这个岗位上；唯一「要你决定」的地方 -->
     <section id="need">
-      <div class="sec-h"><h3>要你处理</h3><span class="c">3</span><div class="r"><a class="lnk" href="#">全部 3 张<svg class="ico s14"><use href="#i-go"/></svg></a></div></div>
-      <div class="need">
-        <article class="card nc">
-          <div class="l1"><span class="pill t-warn">等你批</span><span class="duty"><span class="di"><svg class="gl"><use href="#g-pr"/></svg><img src="../../../apps/workstation/src/assets/brand/reddit.png" alt=""></span>Reddit 营销</span><span class="t">今天 18:00</span></div>
-          <h4>回帖草稿：「近视能戴 INMO Air 3 吗？」</h4>
-          <p>r/SmartGlasses · 带了镜片夹片的说明，用品牌号发</p>
-          <div class="ft"><button class="btn sm pri" type="button">批准发出</button><button class="btn sm out" type="button">改一下</button><a class="go" href="#"><svg class="ico"><use href="#i-go"/></svg></a></div>
-        </article>
-        <article class="card nc">
-          <div class="l1"><span class="pill t-info">等你选</span><span class="duty"><span class="di"><svg class="gl"><use href="#g-pr"/></svg><img src="../../../apps/workstation/src/assets/brand/reddit.png" alt=""></span>Reddit 营销</span><span class="t">今天</span></div>
-          <h4>有人说 INMO「召回」，怎么处理？</h4>
-          <p>出处只有一条评论，没核实，Agent 不下结论</p>
-          <div class="ft"><button class="btn sm pri" type="button">交公关核实</button><button class="btn sm out" type="button">先观察</button><a class="go" href="#"><svg class="ico"><use href="#i-go"/></svg></a></div>
-        </article>
-        <article class="card nc">
-          <div class="l1"><span class="pill t-warn">等你批</span><span class="duty"><span class="di"><svg class="gl"><use href="#g-social"/></svg><img src="../../../apps/workstation/src/assets/brand/reddit.png" alt=""></span>自家版</span><span class="t">10-08</span></div>
-          <h4>r/INMO 置顶公告：固件 2.1 续航说明</h4>
-          <p>回应 3 条续航抱怨，数字都查过事实卡</p>
-          <div class="ft"><button class="btn sm pri" type="button">批准发布</button><button class="btn sm out" type="button">改一下</button><a class="go" href="#"><svg class="ico"><use href="#i-go"/></svg></a></div>
-        </article>
+      <div class="sec-h"><h3>要你处理</h3><span class="c" id="deckCount">4 张</span><span class="hint" tabindex="0" data-hint="和首页同一副牌，只是钉在这个岗位上。批、选、改都只在这里。">?</span></div>
+      <div class="deck" id="deck" tabindex="0" aria-label="卡片流">
+        <div class="dfilt">
+          <div class="l"><span class="dchip">客户在等 0</span><span class="dchip">无人等待 0</span><span class="dsel">所有卡型<svg class="ico s12"><use href="#i-cd"/></svg></span><span class="dsel">所有来源<svg class="ico s12"><use href="#i-cd"/></svg></span></div>
+          <div class="dmodes"><b class="on">中文摘要</b><b>原文</b><b>English</b></div>
+        </div>
+        <p class="dreceipt" id="dreceipt" hidden></p>
+        <div class="dnav">
+          <button type="button" id="dprev"><svg class="ico s14"><use href="#i-cl"/></svg>上一张</button>
+          <p id="dprog">第 1 / 4 张</p>
+          <button type="button" id="dnext">下一张<svg class="ico s14"><use href="#i-cr"/></svg></button>
+          <button type="button" id="dlistBtn" style="margin-left:4px"><svg class="ico s14"><use href="#i-list"/></svg><span>全部列出</span></button>
+        </div>
+        <div class="dlist" id="dlist" hidden></div>
+        <div class="dstack" id="dstack"></div>
+        <p class="dkeys" id="dkeys"></p>
       </div>
     </section>
 
@@ -569,7 +620,7 @@ html.dark .col{background:color-mix(in srgb,var(--ws-card) 55%,transparent)}
         </div>
         <span class="sep"></span>
         <div class="qv" id="qv">
-          <button type="button" data-view="community" data-tip="职责「自家版」的专属工具"><img src="../../../apps/workstation/src/assets/brand/reddit.png" alt="">自家版待处理<span class="n">7</span></button>
+          <button type="button" data-view="community" data-tip="职责「自家版」的专属工具"><img src="../../../apps/workstation/src/assets/brand/reddit.png" alt="">自家版待处理<span class="n">3</span></button>
           <button type="button" data-view="schedule" data-tip="职责「Reddit 营销」的专属工具"><svg class="ico s14"><use href="#i-calclock"/></svg>发帖排期</button>
         </div>
         <div class="r" id="tools">
@@ -584,9 +635,9 @@ html.dark .col{background:color-mix(in srgb,var(--ws-card) 55%,transparent)}
       <div id="viewport"></div>
     </section>
 
-    <!-- ⑤ 数字：一条紧凑的带子，点开看图 -->
+    <!-- ⑤ 数据看板：一条紧凑的带子，点开看图 -->
     <section id="nums">
-      <div class="sec-h"><h3>数字</h3><span class="hint" tabindex="0" data-hint="数据来自 Agents 工坊接口（Reddit 取数已通），不用另连。">?</span>
+      <div class="sec-h"><h3>数据看板</h3><span class="hint" tabindex="0" data-hint="数据来自 Agents 工坊接口（Reddit 取数已通），不用另连。">?</span>
         <div class="r"><div class="tabs" style="height:28px"><a style="font-size:12.5px;padding:0 9px">昨天</a><a class="on" style="font-size:12.5px;padding:0 9px">近 7 天</a></div>
         <button class="btn sm ghost" type="button" id="chartsBtn"><svg class="ico s14"><use href="#i-chart"/></svg>看图表</button></div>
       </div>
@@ -638,27 +689,39 @@ html.dark .col{background:color-mix(in srgb,var(--ws-card) 55%,transparent)}
   <div class="blk">
     <h4>从上往下 = 先急后缓</h4>
     <ol>
-      <li><b>要我做什么</b>：交给它、要你处理</li>
+      <li><b>要我做什么</b>：交给它、要你处理（卡片流）</li>
       <li><b>它在做什么</b>：工作（列表 / 看板 / 日历 / 表格）</li>
-      <li><b>做得怎么样</b>：数字</li>
+      <li><b>做得怎么样</b>：数据看板</li>
       <li><b>设置</b>：收进「设置」页签，平时看不到</li>
     </ol>
+  </div>
+  <div class="blk">
+    <h4>卡片流管决定，工作管进度</h4>
+    <ul>
+      <li><b>卡片流</b>是唯一要你决定的地方：批、选、改都在这。就是首页那副牌，钉在这个岗位上，不另画样式</li>
+      <li><b>工作</b>只看 AI 在做什么、做到哪，<b>没有决定按钮</b>。分组：进行中 / 排着的 / 等别人 / 已完成</li>
+      <li>某件事有卡等你，行尾挂「1 张卡等你」，点了跳到上面那张卡</li>
+      <li>你自己加的待办也在工作里，用方框勾图标认出来，它不是卡</li>
+      <li>快捷视图（自家版待处理、发帖排期）同理：要拍板的都出卡</li>
+      <li>页头「4 张等你定」→ 卡片流；「6 件在办」→ 工作</li>
+    </ul>
   </div>
   <div class="blk">
     <h4>和现在比</h4>
     <ul>
       <li>四个页签 → 三个：<span class="was">卡片 / 面板 / 记忆</span> 工作 / 记录 / 设置</li>
+      <li>卡片流从「卡片」页签挪到工作页上面，长相不变</li>
       <li>交给它：三行大框 → <b>一行</b>，点进去才展开</li>
       <li>「连上就能开工」大卡 → 只在真缺时出<b>一行</b>横幅</li>
-      <li>CLI 卡、「在日历里看」→ 设置里 / 视图里</li>
       <li>待办不用再跳日历：日历是这里的<b>一种视图</b>，只显示这个岗位的，默认是列表</li>
-      <li>Reddit 社群、发帖排期不用钻职责页：视图栏后面一点就开</li>
-      <li>面板里的数字块 → 底下<b>一条</b>数字带，要看图再点开</li>
+      <li>面板 → 底下的<b>数据看板</b>，一条带子，要看图再点开</li>
     </ul>
   </div>
   <div class="blk">
     <h4>点点看</h4>
     <div class="try">
+      <button type="button" onclick="document.getElementById('deck').focus();document.getElementById('deck').scrollIntoView()">卡片流（方向键能批）</button>
+      <button type="button" onclick="showCard(3)">从工作跳到卡</button>
       <button type="button" onclick="showView('list')">列表</button>
       <button type="button" onclick="showView('board')">看板（能拖）</button>
       <button type="button" onclick="showView('calendar')">日历</button>
@@ -672,11 +735,10 @@ html.dark .col{background:color-mix(in srgb,var(--ws-card) 55%,transparent)}
     </div>
   </div>
   <div class="blk ask">
-    <h4>要你定（详见 README）</h4>
+    <h4>还要你定（详见 README）</h4>
     <ol>
-      <li>「要你处理」和列表里「等你」那组会重复出现同几件事：留着（上面是快捷动作），还是只留一处？</li>
-      <li>列表第一组叫「等你」（批 / 选 / 你自己的待办），不叫「等你批」，行不行？</li>
       <li>职责「Reddit 运营」跟岗位同名，稿里先叫「自家版」，要不要正式改名？</li>
+      <li>要不要让岗位模板自带默认视图（比如社媒默认日历）？</li>
     </ol>
   </div>
 
@@ -691,32 +753,35 @@ var DUTY = {
   cm: { name: "自家版", glyph: "g-social" },
 };
 var ST = {
-  you: { name: "等你", tip: "等你批、等你选、你自己的待办", c: "var(--ws-warn)" },
-  doing: { name: "进行中", tip: "Agent 正在做", c: "var(--ws-brand)" },
+  doing: { name: "进行中", tip: "Agent 正在做，或你自己的待办", c: "var(--ws-brand)" },
+  queued: { name: "排着的", tip: "排好期的帖子、定时任务，到点自己做", c: "var(--ws-muted-fg)" },
   others: { name: "等别人", tip: "等公关、客服、版主回话", c: "var(--ws-info)" },
   done: { name: "已完成", tip: "", c: "var(--ws-good)" },
 };
-var KIND = { card: ["i-stamp", "卡 · 要你拍板"], matter: ["i-matter", "事项"], todo: ["i-sq", "待办 · 你自己做"], post: ["i-calclock", "排期 · 到点发"] };
+var STS = ["doing", "queued", "others", "done"];
+var KIND = { matter: ["i-matter", "事项 · Agent 在做"], todo: ["i-sq", "待办 · 你自己加的"], post: ["i-calclock", "排期 · 到点发"], cron: ["i-alarm", "定时 · 按点做"] };
 var SRC = { you: "你交的", agent: "Agent 发现", cron: "定时", mail: "来信" };
+/* card = 这件事上挂着的那张卡（在上面卡片流里第几张）；工作这里只挂一个小标，不放决定按钮 */
 var WORK = [
-  { id: 1, t: "回帖草稿：「近视能戴 INMO Air 3 吗？」", d: "mk", s: "you", k: "card", due: "10-06 18:00", p: "草稿写好了，带镜片夹片的说明", src: "agent", cost: 0.6, upd: "25 分钟前", who: "AI" },
-  { id: 2, t: "有人说 INMO「召回」，怎么处理？", d: "mk", s: "you", k: "card", due: "10-06", p: "出处只有一条评论，没核实", src: "agent", cost: 0.2, upd: "1 小时前", who: "AI" },
-  { id: 3, t: "r/INMO 置顶公告：固件 2.1 续航说明", d: "cm", s: "you", k: "card", due: "10-08", p: "草稿等你批", src: "you", cost: 0.3, upd: "1 小时前", who: "AI" },
-  { id: 4, t: "私信 r/SmartGlasses 版主：能否挂官方 flair", d: "mk", s: "you", k: "todo", due: "10-06", p: "你来发，Agent 起草了一版", src: "you", cost: 0, upd: "今天 09:12", who: "舟" },
-  { id: 5, t: "INMO Reddit 口碑调研（第二轮）", d: "mk", s: "doing", k: "matter", due: "10-09", p: "取回 25 条，去掉同名噪音剩 10 条", src: "you", cost: 2.2, upd: "10 分钟前", who: "AI" },
-  { id: 6, t: "盯 10-07 那篇评测帖的评论", d: "mk", s: "doing", k: "matter", due: "10-07", p: "评测明早发，发了第一时间看评论", src: "agent", cost: 0, upd: "2 小时前", who: "AI" },
-  { id: 7, t: "5 条重点帖的回应口径", d: "mk", s: "doing", k: "matter", due: "10-08", p: "写完 3 / 5", src: "you", cost: 1.1, upd: "40 分钟前", who: "AI" },
-  { id: 8, t: "r/INMO 每周问答帖", d: "cm", s: "doing", k: "post", due: "10-09 09:00", p: "排好了，到点自动发", src: "cron", cost: 0.1, upd: "昨天", who: "AI" },
-  { id: 9, t: "r/INMO 新人入群审核", d: "cm", s: "doing", k: "matter", due: "", p: "今天放进 4 人，拦下 1 个广告号", src: "cron", cost: 0.4, upd: "3 小时前", who: "AI" },
-  { id: 10, t: "「召回」说法核实（上周那条）", d: "mk", s: "others", k: "matter", due: "10-07", p: "交给公关了，等回话", src: "agent", cost: 0.3, upd: "昨天", who: "公" },
-  { id: 11, t: "固件 2.1 续航投诉 3 条", d: "cm", s: "others", k: "matter", due: "10-07", p: "客户问题转客服，等客服回", src: "mail", cost: 0.2, upd: "今天 10:30", who: "客" },
-  { id: 12, t: "r/augmentedreality 能否发官方帖", d: "mk", s: "others", k: "matter", due: "10-05", p: "10-04 私信了版主，还没回", src: "you", cost: 0, upd: "10-04", who: "版" },
-  { id: 13, t: "INMO Reddit 口碑调研（第一轮）", d: "mk", s: "done", k: "matter", due: "10-06", p: "5 条重点帖、3 件要回应", src: "you", cost: 2.2, upd: "今天 14:20", who: "AI" },
-  { id: 14, t: "r/INMO 版规改版", d: "cm", s: "done", k: "matter", due: "10-03", p: "加了「求助帖写型号和固件」", src: "you", cost: 0.5, upd: "10-03", who: "AI" },
-  { id: 15, t: "找 5 个适合我们的版", d: "mk", s: "done", k: "matter", due: "10-02", p: "能发 2 个、只能答 2 个、别去 1 个", src: "you", cost: 0.9, upd: "10-02", who: "AI" },
+  { id: 1, t: "近视求助帖的回帖", d: "mk", s: "doing", k: "matter", due: "10-06 18:00", p: "草稿写好了，带镜片夹片的说明", src: "agent", cost: 0.6, upd: "25 分钟前", who: "AI", card: 1 },
+  { id: 2, t: "「召回」传言怎么应对", d: "mk", s: "doing", k: "matter", due: "10-06", p: "出处只有一条评论，没核实", src: "agent", cost: 0.2, upd: "1 小时前", who: "AI", card: 2 },
+  { id: 3, t: "私信 r/SmartGlasses 版主：能否挂官方 flair", d: "mk", s: "doing", k: "todo", due: "10-06", p: "你来发，Agent 起草了一版", src: "you", cost: 0, upd: "今天 09:12", who: "舟" },
+  { id: 4, t: "INMO Reddit 口碑调研（第二轮）", d: "mk", s: "doing", k: "matter", due: "10-09", p: "取回 25 条，去掉同名噪音剩 10 条", src: "you", cost: 2.2, upd: "10 分钟前", who: "AI" },
+  { id: 5, t: "盯 10-07 那篇评测帖的评论", d: "mk", s: "doing", k: "matter", due: "10-07", p: "评测明早发，发了第一时间看评论", src: "agent", cost: 0, upd: "2 小时前", who: "AI" },
+  { id: 6, t: "5 条重点帖的回应口径", d: "mk", s: "doing", k: "matter", due: "10-08", p: "写完 3 / 5", src: "you", cost: 1.1, upd: "40 分钟前", who: "AI" },
+  { id: 7, t: "r/INMO 置顶公告：固件 2.1 续航说明", d: "cm", s: "queued", k: "post", due: "10-08 09:00", p: "排在 10-08 发，发前要你批", src: "you", cost: 0.3, upd: "1 小时前", who: "AI", card: 3 },
+  { id: 8, t: "r/INMO 每周问答帖", d: "cm", s: "queued", k: "post", due: "10-09 09:00", p: "排好了，到点自动发", src: "cron", cost: 0.1, upd: "昨天", who: "AI" },
+  { id: 9, t: "r/INMO 入群审核与举报处理", d: "cm", s: "queued", k: "cron", due: "10-06 16:00", p: "每 2 小时一轮；今天放进 4 人，1 条举报出了卡", src: "cron", cost: 0.4, upd: "14:00", who: "AI", card: 4 },
+  { id: 10, t: "扫一遍 Reddit 上提到 INMO 的帖子", d: "mk", s: "queued", k: "cron", due: "10-07 09:00", p: "每天 09:00；今天取回 25 条", src: "cron", cost: 0.6, upd: "09:00", who: "AI" },
+  { id: 11, t: "「召回」说法核实（上周那条）", d: "mk", s: "others", k: "matter", due: "10-07", p: "交给公关了，等回话", src: "agent", cost: 0.3, upd: "昨天", who: "公" },
+  { id: 12, t: "固件 2.1 续航投诉 3 条", d: "cm", s: "others", k: "matter", due: "10-07", p: "客户问题转客服，等客服回", src: "mail", cost: 0.2, upd: "今天 10:30", who: "客" },
+  { id: 13, t: "r/augmentedreality 能否发官方帖", d: "mk", s: "others", k: "matter", due: "10-05", p: "10-04 私信了版主，还没回", src: "you", cost: 0, upd: "10-04", who: "版" },
+  { id: 14, t: "INMO Reddit 口碑调研（第一轮）", d: "mk", s: "done", k: "matter", due: "10-06", p: "5 条重点帖、3 件要回应", src: "you", cost: 2.2, upd: "今天 14:20", who: "AI" },
+  { id: 15, t: "r/INMO 版规改版", d: "cm", s: "done", k: "matter", due: "10-03", p: "加了「求助帖写型号和固件」", src: "you", cost: 0.5, upd: "10-03", who: "AI" },
+  { id: 16, t: "找 5 个适合我们的版", d: "mk", s: "done", k: "matter", due: "10-02", p: "能发 2 个、只能答 2 个、别去 1 个", src: "you", cost: 0.9, upd: "10-02", who: "AI" },
 ];
 var TODAY = "10-06";
-var KEY = "wp239.position.reddit-ops"; // 视图记在这个岗位上
+var KEY = "wp239b.position.reddit-ops"; // 视图记在这个岗位上
 var state = { view: "list", group: "status", sort: "due", f: { d: [], s: [], due: "", src: [] }, cols: ["d", "s", "due", "cost", "src", "upd"], cal: "month", fold: { done: true } };
 try { Object.assign(state, JSON.parse(localStorage.getItem(KEY) || "{}")); } catch (e) {}
 var q = new URLSearchParams(location.search);
@@ -729,7 +794,7 @@ function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { "&
 function di(d) { return '<span class="di"><svg class="gl"><use href="#' + DUTY[d].glyph + '"/></svg><img src="' + REDDIT + '" alt=""></span>'; }
 function dutyTag(d) { return '<span class="duty">' + di(d) + DUTY[d].name + "</span>"; }
 function stIcon(s) {
-  if (s === "you") return '<svg class="st you" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.2"/><circle class="f" cx="8" cy="8" r="2.6"/></svg>';
+  if (s === "queued") return '<svg class="st queued" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.2"/><path d="M5.2 8h5.6"/></svg>';
   if (s === "doing") return '<svg class="st doing" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.2"/><path class="f" d="M8 3.6a4.4 4.4 0 0 1 0 8.8z"/></svg>';
   if (s === "others") return '<svg class="st others" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.2"/><path d="M8 5.2V8l1.8 1.2"/></svg>';
   return '<svg class="st done" viewBox="0 0 16 16"><circle class="f" cx="8" cy="8" r="7"/><path d="m5.2 8.2 1.9 1.9 3.7-3.9"/></svg>';
@@ -750,6 +815,7 @@ function whoAv(w) {
   return '<span class="av sm ' + tone + '" data-tip="' + tip + '">' + w.who + "</span>";
 }
 
+function cardRef(w) { return w.card ? '<a class="cardref" href="#need" data-card="' + w.card + '" data-tip="点了跳到上面卡片流里那张">1 张卡等你</a>' : ""; }
 function passes(w) {
   var f = state.f;
   if (f.d.length && f.d.indexOf(w.d) < 0) return false;
@@ -783,7 +849,7 @@ function groups(list) {
     }).filter(function (g) { return g.items.length; });
   }
   if (state.group === "none") return [{ key: "all", head: "全部", items: list }];
-  return ["you", "doing", "others", "done"].map(function (s) { return { key: s, head: stIcon(s) + ST[s].name + (ST[s].tip ? ' <span class="hint" tabindex="0" data-hint="' + ST[s].tip + '">?</span>' : ""), items: list.filter(function (w) { return w.s === s; }) }; });
+  return STS.map(function (s) { return { key: s, head: stIcon(s) + ST[s].name + (ST[s].tip ? ' <span class="hint" tabindex="0" data-hint="' + ST[s].tip + '">?</span>' : ""), items: list.filter(function (w) { return w.s === s; }) }; });
 }
 
 /* ── 视图渲染 ── */
@@ -791,17 +857,17 @@ function vList(list) {
   return groups(list).map(function (g) {
     var fold = state.group === "status" && state.fold[g.key];
     var rows = g.items.map(function (w) {
-      return '<div class="row' + (w.s === "done" ? " done" : "") + '">' + stIcon(w.s) + kindIcon(w.k) + '<span class="tt">' + esc(w.t) + '</span><span class="pg">' + esc(w.p) + "</span>" + dutyTag(w.d) + dueCell(w) + whoAv(w) + "</div>";
+      return '<div class="row' + (w.s === "done" ? " done" : "") + '">' + stIcon(w.s) + kindIcon(w.k) + '<span class="tt"><span class="tx">' + esc(w.t) + "</span>" + cardRef(w) + '</span><span class="pg">' + esc(w.p) + "</span>" + dutyTag(w.d) + dueCell(w) + whoAv(w) + "</div>";
     }).join("");
-    var add = g.key === "you" || g.key === "all" ? '<button class="addrow" type="button"><svg class="ico s14"><use href="#i-plus"/></svg>加一个待办</button>' : "";
+    var add = g.key === "doing" || g.key === "all" ? '<button class="addrow" type="button"><svg class="ico s14"><use href="#i-plus"/></svg>加一个待办</button>' : "";
     return '<div class="grp' + (fold ? " fold" : "") + '" data-g="' + g.key + '"><div class="gh"><svg class="ico s14 tw"><use href="#i-cd"/></svg>' + g.head + '<span class="c">' + g.items.length + '</span></div><div class="card rows">' + (rows || '<div class="none-line" style="padding:10px 14px">这一组是空的</div>') + add + "</div></div>";
   }).join("");
 }
 function vBoard(list) {
-  return '<div class="board">' + ["you", "doing", "others", "done"].map(function (s) {
+  return '<div class="board">' + STS.map(function (s) {
     var items = list.filter(function (w) { return w.s === s; });
     return '<div class="col" data-s="' + s + '"><div class="gh">' + stIcon(s) + ST[s].name + '<span class="c">' + items.length + "</span></div>" + items.map(function (w) {
-      return '<div class="kc" draggable="true" data-id="' + w.id + '"><div class="tt">' + esc(w.t) + '</div><div class="pg">' + esc(w.p) + '</div><div class="mt">' + dutyTag(w.d) + dueCell(w) + "</div></div>";
+      return '<div class="kc" draggable="true" data-id="' + w.id + '"><div class="tt">' + esc(w.t) + "</div>" + (w.card ? "<div>" + cardRef(w) + "</div>" : "") + '<div class="pg">' + esc(w.p) + '</div><div class="mt">' + dutyTag(w.d) + dueCell(w) + "</div></div>";
     }).join("") + "</div>";
   }).join("") + "</div>";
 }
@@ -828,7 +894,7 @@ function vCal(list) {
     var label = out ? (day < 1 ? 30 + day : day - 31) : day;
     var key = "10-" + (day < 10 ? "0" + day : day);
     var items = out ? [] : dated.filter(function (w) { return md(w.due) === key; });
-    if (!out && (day === 16 || day === 23 || day === 30)) items = items.concat([{ t: "r/INMO 每周问答帖", d: "cm", s: "doing", due: key + " 09:00" }]);
+    if (!out && (day === 16 || day === 23 || day === 30)) items = items.concat([{ t: "r/INMO 每周问答帖", d: "cm", s: "queued", due: key + " 09:00" }]);
     var more = items.length > 3 ? '<div class="muted" style="font-size:11px;padding-left:4px">还有 ' + (items.length - 3) + " 件</div>" : "";
     cells += '<div class="dc' + (out ? " out" : "") + (key === TODAY && !out ? " today" : "") + '"><span class="dn">' + label + "</span>" + items.slice(0, 3).map(function (w) { return evHtml(w); }).join("") + more + "</div>";
   }
@@ -839,27 +905,29 @@ function vTable(list) {
   var th = '<th>标题<svg class="ico s12"><use href="#i-sort"/></svg></th>' + state.cols.map(function (c) { return "<th>" + COLS[c] + "</th>"; }).join("");
   var tr = list.map(function (w) {
     var cell = { d: dutyTag(w.d), s: '<span class="stc">' + stIcon(w.s) + ST[w.s].name + "</span>", due: dueCell(w), cost: '<span class="num">' + (w.cost ? w.cost.toFixed(1) : "—") + "</span>", src: SRC[w.src], upd: '<span class="muted">' + w.upd + "</span>" };
-    return '<tr><td class="tt">' + esc(w.t) + "</td>" + state.cols.map(function (c) { return "<td>" + cell[c] + "</td>"; }).join("") + "</tr>";
+    return '<tr><td class="tt">' + esc(w.t) + (w.card ? " " + cardRef(w) : "") + "</td>" + state.cols.map(function (c) { return "<td>" + cell[c] + "</td>"; }).join("") + "</tr>";
   }).join("");
   var total = list.reduce(function (a, w) { return a + w.cost; }, 0);
   return '<div class="card tbl"><table><thead><tr>' + th + "</tr></thead><tbody>" + tr + '</tbody></table><div class="muted" style="font-size:12px;padding:10px 12px;border-top:1px solid var(--ws-line)">' + list.length + " 件 · 合计花了 " + total.toFixed(1) + " 积分</div></div>";
 }
 function vCommunity() {
-  var r = function (tone, ic, title, sub, act) { return '<div class="qrow"><span class="ic ' + tone + '"><svg class="ico"><use href="#' + ic + '"/></svg></span><div class="tx"><div>' + title + "</div><small>" + sub + '</small></div><div class="act">' + act + "</div></div>"; };
+  var r = function (tone, ic, title, sub, tail) { return '<div class="qrow"><span class="ic ' + tone + '"><svg class="ico"><use href="#' + ic + '"/></svg></span><div class="tx"><div>' + title + "</div><small>" + sub + '</small></div><div class="act">' + tail + "</div></div>"; };
+  var ok = function (t) { return '<span class="pill t-good">' + t + "</span>"; };
   return '<div class="card"><div class="qhead"><img src="' + REDDIT + '" width="16" height="16" alt=""><b>r/INMO 待处理</b>· 职责「自家版」的专属工具<div class="r"><a class="btn xs ghost" href="#">在职责页打开<svg class="ico s12"><use href="#i-up"/></svg></a></div></div>' +
-    r("t-brand", "i-plus", "4 个人申请进版", "都有 30 天以上的号，没发过广告", '<button class="btn sm pri" type="button">全放进来</button><button class="btn sm out" type="button">逐个看</button>') +
-    r("t-bad", "i-warn", "1 条帖子被举报：疑似广告链接", "u/****_deals · 「便宜 50% 的 INMO 渠道」", '<button class="btn sm pri" type="button">删帖</button><button class="btn sm out" type="button">留着</button>') +
-    r("t-info", "i-file", "2 条新帖等审核", "都是求助帖，Agent 建议放行", '<button class="btn sm pri" type="button">都放行</button><button class="btn sm out" type="button">逐个看</button>') + "</div>";
+    r("t-brand", "i-plus", "4 个人申请进版", "都有 30 天以上的号、没发过广告，按版规放进来了", ok("已放进")) +
+    r("t-bad", "i-warn", "1 条帖子被举报：疑似广告链接", "u/****_deals · 「便宜 50% 的 INMO 渠道」· 删不删要你定", cardRef({ card: 4 })) +
+    r("t-info", "i-file", "2 条新帖等审核", "都是求助帖，版规允许，已放行", ok("已放行")) +
+    '<div class="qfoot"><svg class="ico s14"><use href="#i-stamp"/></svg>要你拍板的都出成卡，在上面「要你处理」里批；这里只看它做到哪</div></div>';
 }
 function vSchedule() {
   var days = ["5 一", "6 二", "7 三", "8 四", "9 五", "10 六", "11 日"];
   var head = '<div class="lh">版</div>' + days.map(function (d, i) { return '<div class="lh' + (i === 1 ? " today" : "") + '">' + d + "</div>"; }).join("");
   var lane = function (name, sub, cells) { return '<div class="sub">' + name + "<small>" + sub + "</small></div>" + cells.map(function (c, i) { return '<div class="' + (c === "cool" ? "cool" : "") + (i === 1 ? " today" : "") + '">' + (c && c !== "cool" ? c : "") + "</div>"; }).join(""); };
-  var ev = function (t, s) { return '<div class="ev" style="--c:' + ST[s].c + '"><span>' + t + "</span></div>"; };
+  var ev = function (t, s, card) { return '<div class="ev" style="--c:' + ST[s].c + '"><span>' + t + "</span>" + (card ? cardRef({ card: card }) : "") + "</div>"; };
   return '<div class="card"><div class="qhead"><svg class="ico s14"><use href="#i-calclock"/></svg><b>发帖排期</b>· 斜线 = 这个版的冷却期，不能发<div class="r"><a class="btn xs ghost" href="#">在职责页打开<svg class="ico s12"><use href="#i-up"/></svg></a></div></div><div class="lane">' + head +
-    lane("r/SmartGlasses", "能发 · 72 小时冷却", ["", ev("回帖：近视求助", "you"), "cool", "cool", "", ev("Air 3 使用一周", "doing"), ""]) +
+    lane("r/SmartGlasses", "能发 · 72 小时冷却", ["", ev("回帖：近视求助", "doing", 1), "cool", "cool", "", ev("Air 3 使用一周", "queued"), ""]) +
     lane("r/augmentedreality", "等版主答复", ["", "", ev("盯评测评论", "doing"), "", "", "", ""]) +
-    lane("r/INMO", "自家版", ["", "", "", ev("置顶公告", "you"), ev("每周问答帖", "doing"), "", ""]) +
+    lane("r/INMO", "自家版", ["", "", "", ev("置顶公告", "queued", 3), ev("每周问答帖", "queued"), "", ""]) +
     lane("r/gadgets", "只能答不能发", ["", "", "", "", "", "", ""]) + "</div></div>";
 }
 
@@ -933,7 +1001,7 @@ function popHtml(kind) {
     return '<div class="ph2">职责</div><div class="ph2">状态</div>' +
       "<div>" + ["mk", "cm"].map(function (d) { return opt(f.d.indexOf(d) >= 0, di(d) + DUTY[d].name, 'data-f="d:' + d + '"', false, cnt(function (w) { return w.d === d; })); }).join("") + '<div class="ph2" style="margin-top:6px">截止</div>' +
       ["today", "week", "late", "none"].map(function (k) { return opt(f.due === k, DUE[k], 'data-f="due:' + k + '"', true); }).join("") + "</div>" +
-      "<div>" + ["you", "doing", "others", "done"].map(function (s) { return opt(f.s.indexOf(s) >= 0, stIcon(s) + ST[s].name, 'data-f="s:' + s + '"', false, cnt(function (w) { return w.s === s; })); }).join("") + '<div class="ph2" style="margin-top:6px">来源</div>' +
+      "<div>" + STS.map(function (s) { return opt(f.s.indexOf(s) >= 0, stIcon(s) + ST[s].name, 'data-f="s:' + s + '"', false, cnt(function (w) { return w.s === s; })); }).join("") + '<div class="ph2" style="margin-top:6px">来源</div>' +
       ["you", "agent", "cron", "mail"].map(function (s) { return opt(f.src.indexOf(s) >= 0, SRC[s], 'data-f="src:' + s + '"', false, cnt(function (w) { return w.src === s; })); }).join("") + "</div>" +
       '<div class="foot"><button class="btn sm ghost" type="button" data-f="clear">清空</button><span class="muted" style="font-size:12px">筛选记在这个岗位上</span><button class="btn sm pri" type="button" data-f="done">好了</button></div>';
   }
@@ -972,7 +1040,7 @@ $$("#views a, #qv button").forEach(function (a) { a.onclick = function () { stat
 /* 页签：工作 / 记录（设置是另一张稿） */
 $$("[data-tab]").forEach(function (a) { a.onclick = function () { $$("[data-tab]").forEach(function (x) { x.classList.toggle("on", x === a); }); $("#tab-work").style.display = a.dataset.tab === "work" ? "flex" : "none"; $("#tab-records").hidden = a.dataset.tab !== "records"; }; });
 /* 页头那一行状态：点了跳到对应的地方并筛好 */
-$$("[data-jump]").forEach(function (a) { a.onclick = function () { state.view = "list"; state.f = { d: [], s: a.dataset.jump === "doing" ? ["doing"] : [], due: a.dataset.jump === "today" ? "today" : "", src: [] }; render(); }; });
+$$("[data-jump]").forEach(function (a) { a.onclick = function () { if (a.dataset.jump === "deck") return; state.view = "list"; state.f = { d: [], s: a.dataset.jump === "doing" ? ["doing"] : [], due: a.dataset.jump === "today" ? "today" : "", src: [] }; render(); }; });
 /* 交给它：一行，聚焦展开 */
 var hand = $("#hand"), ta = $("#handText");
 ta.onfocus = function () { hand.classList.add("open"); };
@@ -993,6 +1061,99 @@ if (q.get("focus")) { ta.focus(); }
 if (q.get("charts")) $("#chartsBtn").click();
 function toggleBanner() { var b = $("#banner"); b.hidden = !b.hidden; b.scrollIntoView({ block: "center" }); }
 function showView(v) { state.view = v; render(); $("#work").scrollIntoView({ block: "start" }); }
+
+/* ── 卡片流：照 DeckSection 的行为——一次一张、上一张 / 下一张、全部列出、方向键、决定后飞走换下一张 ──
+   卡就是普通卡片流里的卡：标签行「岗位 · 类别」+ 剩几天 + 证据 N + 谁提的；Reddit 不另起样式。 */
+var CARDS = [
+  { id: 1, matter: "近视求助帖的回帖", cat: "回帖草稿", tone: "t-warn", left: "剩 1 天", orig: true, ev: 5, who: "AI",
+    title: "回帖 r/SmartGlasses：「近视能戴 INMO Air 3 吗？」",
+    box: '<small>用品牌号发 · 中文摘要</small>先表明是 INMO 官方；能戴，Air 3 有磁吸近视镜片夹片，度数在 −8.00 以内可配；附上配镜说明页，不放购买链接（这个版禁链接）。',
+    chips: ["r/SmartGlasses", "品牌号 u/inmo_****"], fact: "事实卡 · 夹片支持到 −8.00",
+    acts: [["pri", "发出"], ["out", "改一下"], ["out", "不发"]], keys: "→ 发出 · ← 不发 · ↑ 稍后 · ↓ 改一下" },
+  { id: 2, matter: "「召回」传言怎么应对", cat: "要你选", tone: "t-info", left: "剩 2 天", orig: true, ev: 2, who: "AI",
+    title: "有人说 INMO「召回」，怎么处理？",
+    box: '<small>为什么问你</small>出处只有 r/gadgets 一条评论，没找到官方或媒体消息。没核实的说法不下结论（这个岗位的规矩）。',
+    opts: ["交给公关核实", "先观察，不回应", "我来说"],
+    acts: [["pri", "就这条", true]], keys: "→ 就这条 · ← 都不是 · ↑ 稍后" },
+  { id: 3, matter: "r/INMO 置顶公告：固件 2.1 续航说明", cat: "发公告", tone: "t-warn", left: "剩 2 天", ev: 3, who: "AI",
+    title: "r/INMO 置顶公告：固件 2.1 续航说明",
+    box: '<small>排在 10-08 09:00 发 · 中文摘要</small>回应这周 3 条续航抱怨：2.1 之后待机耗电变高是已知问题，2.1.1 本月下旬修；临时办法是关掉「抬头唤醒」。',
+    chips: ["r/INMO"], fact: "事实卡 · 2.1.1 修复计划",
+    acts: [["pri", "批准发布"], ["out", "改一下"], ["out", "驳回"]], keys: "→ 批准发布 · ← 驳回 · ↑ 稍后 · ↓ 改一下" },
+  { id: 4, matter: "r/INMO 入群审核与举报处理", cat: "删帖", tone: "t-neutral", left: "剩 3 天", ev: 2, who: "AI",
+    title: "删掉被举报的帖子「便宜 50% 的 INMO 渠道」？",
+    box: '<small>r/INMO · 被 2 人举报</small>发帖号注册 3 天，帖里是外部低价链接，违反版规第 2 条（禁广告）。建议删帖并禁言 7 天。',
+    chips: ["r/INMO", "u/****_deals"],
+    acts: [["pri", "删帖"], ["out", "只删不禁言"], ["out", "留着"]], keys: "→ 删帖 · ← 留着 · ↑ 稍后 · ↓ 指导" },
+];
+var deck = { i: 0, left: CARDS.slice(), busy: false };
+function dEl(s) { return document.querySelector(s); }
+function cardHtml(c) {
+  var body = '<p class="ti">' + c.title + "</p>" + '<div class="dbox">' + c.box + "</div>";
+  if (c.opts) body += '<fieldset class="dopts"><legend>选一个</legend>' + c.opts.map(function (o, i) { return '<label><input type="radio" name="o' + c.id + '" value="' + i + '">' + o + "</label>"; }).join("") + "</fieldset>";
+  if (c.chips || c.fact) body += '<div class="dchips">' + (c.chips || []).map(function (x) { return "<span>" + x + "</span>"; }).join("") + (c.fact ? '<span class="fact">' + c.fact + "</span>" : "") + "</div>";
+  var acts = c.acts.map(function (a) { return '<button class="btn sm ' + a[0] + '" type="button" data-dec="' + (a[0] === "pri" ? "r" : "l") + '"' + (a[2] ? " disabled" : "") + ">" + a[1] + "</button>"; }).join("") + (c.opts ? '<span class="need">先选一个</span>' : "");
+  return '<div class="card dcard" id="dcard">' +
+    '<button class="dmatter" type="button">属于：' + c.matter + "</button>" +
+    '<div class="dtag"><span class="pill ' + c.tone + '">Reddit 运营 · ' + c.cat + '</span><span class="pill t-warn">' + c.left + '</span><span class="r">' + (c.orig ? '<a class="orig" href="#">看原帖 →</a>' : "") + '<button class="evp" type="button"><svg class="ico s12"><use href="#i-evid"/></svg>证据 ' + c.ev + '</button><span class="av t-good" style="width:22px;height:22px;font-size:10px">' + c.who + "</span></span></div>" +
+    '<div class="dbody">' + body + "</div>" +
+    '<div class="dact"><div class="bar">' + acts + '<button class="more" type="button" aria-label="更多"><svg class="ico"><use href="#i-more"/></svg></button></div><a class="go" href="#" aria-label="进这件事"><svg class="ico"><use href="#i-go"/></svg></a></div></div>';
+}
+function renderDeck() {
+  var L = deck.left, n = L.length;
+  dEl("#deckCount").textContent = n + " 张";
+  if (!n) {
+    dEl("#dstack").innerHTML = '<div class="card" style="padding:28px;text-align:center;color:var(--ws-muted-fg)">队列清空了</div>';
+    dEl("#dkeys").textContent = ""; dEl("#dprog").textContent = "0 张"; return;
+  }
+  deck.i = Math.max(0, Math.min(deck.i, n - 1));
+  var c = L[deck.i];
+  dEl("#dstack").innerHTML = (deck.i + 1 < n ? '<div class="dghost"></div>' : "") + (deck.i + 2 < n ? '<div class="dghost g2"></div>' : "") + cardHtml(c);
+  dEl("#dprog").textContent = "第 " + (deck.i + 1) + " / " + n + " 张";
+  dEl("#dprev").disabled = deck.i === 0;
+  dEl("#dnext").disabled = deck.i === n - 1;
+  dEl("#dkeys").textContent = c.keys;
+  dEl("#dlist").innerHTML = L.map(function (x, i) { return '<button type="button" data-i="' + i + '" class="' + (i === deck.i ? "on" : "") + '"><span>' + x.cat + "</span>" + x.title + "</button>"; }).join("");
+  Array.prototype.forEach.call(document.querySelectorAll("#dlist button"), function (b) { b.onclick = function () { deck.i = +b.dataset.i; renderDeck(); }; });
+  Array.prototype.forEach.call(document.querySelectorAll("#dcard input"), function (r) { r.onchange = function () { var p = dEl("#dcard [data-dec=r]"); p.disabled = false; var nd = dEl("#dcard .need"); if (nd) nd.remove(); }; });
+  Array.prototype.forEach.call(document.querySelectorAll("#dcard [data-dec]"), function (b) { b.onclick = function () { decide(b.dataset.dec, b.textContent); }; });
+}
+function decide(dir, label) {
+  if (deck.busy || !deck.left.length) return;
+  var c = deck.left[deck.i], el = dEl("#dcard");
+  if (c.opts && dir === "r" && !el.querySelector("input:checked")) return;
+  deck.busy = true;
+  el.classList.add(dir === "r" ? "out-r" : dir === "l" ? "out-l" : "out-u");
+  setTimeout(function () {
+    if (dir !== "u") {
+      deck.left.splice(deck.i, 1);
+      WORK.forEach(function (w) { if (w.card === c.id) delete w.card; });
+      var rc = dEl("#dreceipt"); rc.hidden = false; rc.textContent = "记下了：" + label;
+      if (typeof render === "function") render();
+    } else deck.i = (deck.i + 1) % deck.left.length;
+    deck.busy = false; renderDeck();
+  }, 300);
+}
+dEl("#dprev").onclick = function () { deck.i--; renderDeck(); };
+dEl("#dnext").onclick = function () { deck.i++; renderDeck(); };
+dEl("#dlistBtn").onclick = function () { var l = dEl("#dlist"); l.hidden = !l.hidden; this.querySelector("span").textContent = l.hidden ? "全部列出" : "收起列表"; };
+/* 方向键绑在这副牌上，不绑整页（与 DeckSection 同一条） */
+dEl("#deck").addEventListener("keydown", function (e) {
+  if (/INPUT|TEXTAREA/.test(e.target.tagName) && e.target.type !== "radio") return;
+  var m = { ArrowRight: "r", ArrowLeft: "l", ArrowUp: "u" }[e.key];
+  if (!m) return; e.preventDefault();
+  var c = deck.left[deck.i]; if (!c) return;
+  decide(m, m === "r" ? c.acts[0][1] : m === "l" ? (c.opts ? "都不是" : c.acts[c.acts.length - 1][1]) : "稍后");
+});
+/* 工作里的「1 张卡等你」：滚到卡片流并翻到那张 */
+function showCard(id) {
+  var i = deck.left.findIndex(function (c) { return c.id === id; });
+  if (i >= 0) { deck.i = i; renderDeck(); }
+  var d = dEl("#deck"); d.scrollIntoView({ behavior: "smooth", block: "start" });
+  d.classList.add("flash"); setTimeout(function () { d.classList.remove("flash"); }, 1200);
+}
+document.addEventListener("click", function (e) { var a = e.target.closest && e.target.closest("[data-card]"); if (a) { e.preventDefault(); e.stopPropagation(); showCard(+a.dataset.card); } }, true);
+renderDeck();
 
 </script>
 </body>

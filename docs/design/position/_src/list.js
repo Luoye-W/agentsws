@@ -5,32 +5,35 @@ var DUTY = {
   cm: { name: "自家版", glyph: "g-social" },
 };
 var ST = {
-  you: { name: "等你", tip: "等你批、等你选、你自己的待办", c: "var(--ws-warn)" },
-  doing: { name: "进行中", tip: "Agent 正在做", c: "var(--ws-brand)" },
+  doing: { name: "进行中", tip: "Agent 正在做，或你自己的待办", c: "var(--ws-brand)" },
+  queued: { name: "排着的", tip: "排好期的帖子、定时任务，到点自己做", c: "var(--ws-muted-fg)" },
   others: { name: "等别人", tip: "等公关、客服、版主回话", c: "var(--ws-info)" },
   done: { name: "已完成", tip: "", c: "var(--ws-good)" },
 };
-var KIND = { card: ["i-stamp", "卡 · 要你拍板"], matter: ["i-matter", "事项"], todo: ["i-sq", "待办 · 你自己做"], post: ["i-calclock", "排期 · 到点发"] };
+var STS = ["doing", "queued", "others", "done"];
+var KIND = { matter: ["i-matter", "事项 · Agent 在做"], todo: ["i-sq", "待办 · 你自己加的"], post: ["i-calclock", "排期 · 到点发"], cron: ["i-alarm", "定时 · 按点做"] };
 var SRC = { you: "你交的", agent: "Agent 发现", cron: "定时", mail: "来信" };
+/* card = 这件事上挂着的那张卡（在上面卡片流里第几张）；工作这里只挂一个小标，不放决定按钮 */
 var WORK = [
-  { id: 1, t: "回帖草稿：「近视能戴 INMO Air 3 吗？」", d: "mk", s: "you", k: "card", due: "10-06 18:00", p: "草稿写好了，带镜片夹片的说明", src: "agent", cost: 0.6, upd: "25 分钟前", who: "AI" },
-  { id: 2, t: "有人说 INMO「召回」，怎么处理？", d: "mk", s: "you", k: "card", due: "10-06", p: "出处只有一条评论，没核实", src: "agent", cost: 0.2, upd: "1 小时前", who: "AI" },
-  { id: 3, t: "r/INMO 置顶公告：固件 2.1 续航说明", d: "cm", s: "you", k: "card", due: "10-08", p: "草稿等你批", src: "you", cost: 0.3, upd: "1 小时前", who: "AI" },
-  { id: 4, t: "私信 r/SmartGlasses 版主：能否挂官方 flair", d: "mk", s: "you", k: "todo", due: "10-06", p: "你来发，Agent 起草了一版", src: "you", cost: 0, upd: "今天 09:12", who: "舟" },
-  { id: 5, t: "INMO Reddit 口碑调研（第二轮）", d: "mk", s: "doing", k: "matter", due: "10-09", p: "取回 25 条，去掉同名噪音剩 10 条", src: "you", cost: 2.2, upd: "10 分钟前", who: "AI" },
-  { id: 6, t: "盯 10-07 那篇评测帖的评论", d: "mk", s: "doing", k: "matter", due: "10-07", p: "评测明早发，发了第一时间看评论", src: "agent", cost: 0, upd: "2 小时前", who: "AI" },
-  { id: 7, t: "5 条重点帖的回应口径", d: "mk", s: "doing", k: "matter", due: "10-08", p: "写完 3 / 5", src: "you", cost: 1.1, upd: "40 分钟前", who: "AI" },
-  { id: 8, t: "r/INMO 每周问答帖", d: "cm", s: "doing", k: "post", due: "10-09 09:00", p: "排好了，到点自动发", src: "cron", cost: 0.1, upd: "昨天", who: "AI" },
-  { id: 9, t: "r/INMO 新人入群审核", d: "cm", s: "doing", k: "matter", due: "", p: "今天放进 4 人，拦下 1 个广告号", src: "cron", cost: 0.4, upd: "3 小时前", who: "AI" },
-  { id: 10, t: "「召回」说法核实（上周那条）", d: "mk", s: "others", k: "matter", due: "10-07", p: "交给公关了，等回话", src: "agent", cost: 0.3, upd: "昨天", who: "公" },
-  { id: 11, t: "固件 2.1 续航投诉 3 条", d: "cm", s: "others", k: "matter", due: "10-07", p: "客户问题转客服，等客服回", src: "mail", cost: 0.2, upd: "今天 10:30", who: "客" },
-  { id: 12, t: "r/augmentedreality 能否发官方帖", d: "mk", s: "others", k: "matter", due: "10-05", p: "10-04 私信了版主，还没回", src: "you", cost: 0, upd: "10-04", who: "版" },
-  { id: 13, t: "INMO Reddit 口碑调研（第一轮）", d: "mk", s: "done", k: "matter", due: "10-06", p: "5 条重点帖、3 件要回应", src: "you", cost: 2.2, upd: "今天 14:20", who: "AI" },
-  { id: 14, t: "r/INMO 版规改版", d: "cm", s: "done", k: "matter", due: "10-03", p: "加了「求助帖写型号和固件」", src: "you", cost: 0.5, upd: "10-03", who: "AI" },
-  { id: 15, t: "找 5 个适合我们的版", d: "mk", s: "done", k: "matter", due: "10-02", p: "能发 2 个、只能答 2 个、别去 1 个", src: "you", cost: 0.9, upd: "10-02", who: "AI" },
+  { id: 1, t: "近视求助帖的回帖", d: "mk", s: "doing", k: "matter", due: "10-06 18:00", p: "草稿写好了，带镜片夹片的说明", src: "agent", cost: 0.6, upd: "25 分钟前", who: "AI", card: 1 },
+  { id: 2, t: "「召回」传言怎么应对", d: "mk", s: "doing", k: "matter", due: "10-06", p: "出处只有一条评论，没核实", src: "agent", cost: 0.2, upd: "1 小时前", who: "AI", card: 2 },
+  { id: 3, t: "私信 r/SmartGlasses 版主：能否挂官方 flair", d: "mk", s: "doing", k: "todo", due: "10-06", p: "你来发，Agent 起草了一版", src: "you", cost: 0, upd: "今天 09:12", who: "舟" },
+  { id: 4, t: "INMO Reddit 口碑调研（第二轮）", d: "mk", s: "doing", k: "matter", due: "10-09", p: "取回 25 条，去掉同名噪音剩 10 条", src: "you", cost: 2.2, upd: "10 分钟前", who: "AI" },
+  { id: 5, t: "盯 10-07 那篇评测帖的评论", d: "mk", s: "doing", k: "matter", due: "10-07", p: "评测明早发，发了第一时间看评论", src: "agent", cost: 0, upd: "2 小时前", who: "AI" },
+  { id: 6, t: "5 条重点帖的回应口径", d: "mk", s: "doing", k: "matter", due: "10-08", p: "写完 3 / 5", src: "you", cost: 1.1, upd: "40 分钟前", who: "AI" },
+  { id: 7, t: "r/INMO 置顶公告：固件 2.1 续航说明", d: "cm", s: "queued", k: "post", due: "10-08 09:00", p: "排在 10-08 发，发前要你批", src: "you", cost: 0.3, upd: "1 小时前", who: "AI", card: 3 },
+  { id: 8, t: "r/INMO 每周问答帖", d: "cm", s: "queued", k: "post", due: "10-09 09:00", p: "排好了，到点自动发", src: "cron", cost: 0.1, upd: "昨天", who: "AI" },
+  { id: 9, t: "r/INMO 入群审核与举报处理", d: "cm", s: "queued", k: "cron", due: "10-06 16:00", p: "每 2 小时一轮；今天放进 4 人，1 条举报出了卡", src: "cron", cost: 0.4, upd: "14:00", who: "AI", card: 4 },
+  { id: 10, t: "扫一遍 Reddit 上提到 INMO 的帖子", d: "mk", s: "queued", k: "cron", due: "10-07 09:00", p: "每天 09:00；今天取回 25 条", src: "cron", cost: 0.6, upd: "09:00", who: "AI" },
+  { id: 11, t: "「召回」说法核实（上周那条）", d: "mk", s: "others", k: "matter", due: "10-07", p: "交给公关了，等回话", src: "agent", cost: 0.3, upd: "昨天", who: "公" },
+  { id: 12, t: "固件 2.1 续航投诉 3 条", d: "cm", s: "others", k: "matter", due: "10-07", p: "客户问题转客服，等客服回", src: "mail", cost: 0.2, upd: "今天 10:30", who: "客" },
+  { id: 13, t: "r/augmentedreality 能否发官方帖", d: "mk", s: "others", k: "matter", due: "10-05", p: "10-04 私信了版主，还没回", src: "you", cost: 0, upd: "10-04", who: "版" },
+  { id: 14, t: "INMO Reddit 口碑调研（第一轮）", d: "mk", s: "done", k: "matter", due: "10-06", p: "5 条重点帖、3 件要回应", src: "you", cost: 2.2, upd: "今天 14:20", who: "AI" },
+  { id: 15, t: "r/INMO 版规改版", d: "cm", s: "done", k: "matter", due: "10-03", p: "加了「求助帖写型号和固件」", src: "you", cost: 0.5, upd: "10-03", who: "AI" },
+  { id: 16, t: "找 5 个适合我们的版", d: "mk", s: "done", k: "matter", due: "10-02", p: "能发 2 个、只能答 2 个、别去 1 个", src: "you", cost: 0.9, upd: "10-02", who: "AI" },
 ];
 var TODAY = "10-06";
-var KEY = "wp239.position.reddit-ops"; // 视图记在这个岗位上
+var KEY = "wp239b.position.reddit-ops"; // 视图记在这个岗位上
 var state = { view: "list", group: "status", sort: "due", f: { d: [], s: [], due: "", src: [] }, cols: ["d", "s", "due", "cost", "src", "upd"], cal: "month", fold: { done: true } };
 try { Object.assign(state, JSON.parse(localStorage.getItem(KEY) || "{}")); } catch (e) {}
 var q = new URLSearchParams(location.search);
@@ -43,7 +46,7 @@ function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { "&
 function di(d) { return '<span class="di"><svg class="gl"><use href="#' + DUTY[d].glyph + '"/></svg><img src="' + REDDIT + '" alt=""></span>'; }
 function dutyTag(d) { return '<span class="duty">' + di(d) + DUTY[d].name + "</span>"; }
 function stIcon(s) {
-  if (s === "you") return '<svg class="st you" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.2"/><circle class="f" cx="8" cy="8" r="2.6"/></svg>';
+  if (s === "queued") return '<svg class="st queued" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.2"/><path d="M5.2 8h5.6"/></svg>';
   if (s === "doing") return '<svg class="st doing" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.2"/><path class="f" d="M8 3.6a4.4 4.4 0 0 1 0 8.8z"/></svg>';
   if (s === "others") return '<svg class="st others" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.2"/><path d="M8 5.2V8l1.8 1.2"/></svg>';
   return '<svg class="st done" viewBox="0 0 16 16"><circle class="f" cx="8" cy="8" r="7"/><path d="m5.2 8.2 1.9 1.9 3.7-3.9"/></svg>';
@@ -64,6 +67,7 @@ function whoAv(w) {
   return '<span class="av sm ' + tone + '" data-tip="' + tip + '">' + w.who + "</span>";
 }
 
+function cardRef(w) { return w.card ? '<a class="cardref" href="#need" data-card="' + w.card + '" data-tip="点了跳到上面卡片流里那张">1 张卡等你</a>' : ""; }
 function passes(w) {
   var f = state.f;
   if (f.d.length && f.d.indexOf(w.d) < 0) return false;
@@ -97,5 +101,5 @@ function groups(list) {
     }).filter(function (g) { return g.items.length; });
   }
   if (state.group === "none") return [{ key: "all", head: "全部", items: list }];
-  return ["you", "doing", "others", "done"].map(function (s) { return { key: s, head: stIcon(s) + ST[s].name + (ST[s].tip ? ' <span class="hint" tabindex="0" data-hint="' + ST[s].tip + '">?</span>' : ""), items: list.filter(function (w) { return w.s === s; }) }; });
+  return STS.map(function (s) { return { key: s, head: stIcon(s) + ST[s].name + (ST[s].tip ? ' <span class="hint" tabindex="0" data-hint="' + ST[s].tip + '">?</span>' : ""), items: list.filter(function (w) { return w.s === s; }) }; });
 }
