@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{{TITLE}}</title>
+<!-- WP239 岗位页重排设计稿（静态、合成数据，不是产品代码）。由 _src/build.mjs 生成，改 _src 里的文件再重出。
+     ?theme=dark 看暗色；?notes=0 收起右边的设计说明。令牌真源：apps/workstation/src/index.css -->
+<script>(function(){var q=new URLSearchParams(location.search),h=document.documentElement;if(q.get("theme")==="dark")h.classList.add("dark");var n=q.get("notes");if(n==="0"||(n!=="1"&&innerWidth<1200))h.classList.add("notes-off");})();</script>
+<style>
+{{CSS}}
+{{PAGE_CSS}}
+</style>
+</head>
+<body>
+{{ICONS}}
+<div class="app">
+<aside class="side">
+  <div class="logo"><svg width="24" height="24" viewBox="14 12 65 65" aria-hidden="true"><g fill="url(#mk)"><rect x="14" y="44" width="17" height="17" rx="2.5"/><rect x="38" y="52" width="17" height="17" rx="2.5"/><rect x="38" y="28" width="17" height="17" rx="2.5"/><rect x="62" y="60" width="17" height="17" rx="2.5"/><rect x="62" y="36" width="17" height="17" rx="2.5"/><rect x="62" y="12" width="17" height="17" rx="2.5"/></g></svg>Agents 工坊</div>
+  <nav class="nav" aria-label="主导航">
+    <a class="nv"><svg class="ico"><use href="#i-chat"/></svg>随便聊</a>
+    <a class="nv"><svg class="ico"><use href="#i-home"/></svg>首页</a>
+    <a class="nv"><svg class="ico"><use href="#i-inbox"/></svg>消息<span class="dot"></span></a>
+    <a class="nv"><svg class="ico"><use href="#i-todo"/></svg>待办</a>
+    <a class="nv"><svg class="ico"><use href="#i-cal"/></svg>日历</a>
+    <div class="nsec">岗位<svg class="ico s14"><use href="#i-plus"/></svg></div>
+    <div class="prow"><span class="chev"><svg class="ico s14"><use href="#i-cr"/></svg></span><a class="nv on" href="{{HOME}}"><svg class="gl"><use href="#g-pr"/></svg>Reddit 运营{{NAV_CNT}}</a></div>
+    <div class="prow"><span class="chev"><svg class="ico s14"><use href="#i-cr"/></svg></span><a class="nv"><svg class="gl"><use href="#g-care"/></svg>客服</a></div>
+    <div class="prow"><span class="chev"><svg class="ico s14"><use href="#i-cr"/></svg></span><a class="nv"><svg class="gl"><use href="#g-web"/></svg>网站运营</a></div>
+  </nav>
+  <div class="acct"><span class="av t-warn">舟</span><div><b>林舟</b><small>负责人 · INMO</small></div></div>
+</aside>
+<div class="mainwrap">
+  <header class="top">
+    <button class="kbar" type="button"><svg class="ico"><use href="#i-cmd"/></svg>交给某个岗位一件事…<kbd>⌘K</kbd></button>
+    <span class="tchip"><i></i>DeepSeek</span>
+    <span class="tchip num">积分 101.1</span>
+  </header>
+  <main>
+{{MAIN}}
+  </main>
+</div>
+<aside class="rail" aria-label="右栏（收起）">
+  <svg class="ico"><use href="#i-chart"/></svg><svg class="ico"><use href="#i-play"/></svg><svg class="ico"><use href="#i-alarm"/></svg><svg class="ico"><use href="#i-evid"/></svg>
+  <hr><svg class="ico"><use href="#i-brain"/></svg><svg class="ico"><use href="#i-book"/></svg>
+  <hr><svg class="ico"><use href="#i-globe"/></svg><svg class="ico"><use href="#i-file"/></svg><svg class="ico"><use href="#i-ask"/></svg>
+</aside>
+<aside class="notes" aria-label="设计说明">
+  <div class="nh"><svg class="ico s14"><use href="#i-note"/></svg><b>设计说明</b><span class="tag">不是界面</span><button class="btn xs ghost" type="button" style="margin-left:auto" onclick="document.documentElement.classList.toggle('dark')"><svg class="ico s14"><use href="#i-sun"/></svg>明 / 暗</button><button class="btn xs icon ghost" type="button" onclick="document.documentElement.classList.add('notes-off')" aria-label="收起"><svg class="ico s14"><use href="#i-x"/></svg></button></div>
+{{NOTES}}
+</aside>
+</div>
+<button class="notes-fab" type="button" onclick="document.documentElement.classList.remove('notes-off')"><svg class="ico s14"><use href="#i-note"/></svg>设计说明</button>
+<script>
+{{JS}}
+</script>
+</body>
+</html>

@@ -1,0 +1,136 @@
+<div class="page">
+  <!-- ① 页头：图标 + 名字 + 一行状态（每段可点）；右边岗位设置 -->
+  <div class="ph">
+    <span class="pic"><svg class="gl"><use href="#g-pr"/></svg></span>
+    <div>
+      <h1>Reddit 运营</h1>
+      <p class="stat">
+        <a href="#need"><i class="d" style="background:var(--ws-warn)"></i><b>3</b> 张等你定</a><span class="mid">·</span>
+        <a href="#work" data-jump="doing"><i class="d" style="background:var(--ws-brand)"></i><b>5</b> 件在办</a><span class="mid">·</span>
+        <a href="#work" data-jump="today"><i class="d" style="background:var(--ws-info)"></i>今天 <b>1</b> 个待办</a>
+      </p>
+    </div>
+    <div class="r">
+      <span class="holders" data-tip="谁在做：你 + 2 条职责的 Agent"><span class="av sm t-warn">舟</span><span class="av sm t-brand">AI</span></span>
+      <a class="btn sm out" href="position-v2-settings.html"><svg class="ico s14"><use href="#i-more"/></svg>岗位设置</a>
+    </div>
+  </div>
+  <div class="banner" id="banner" hidden><svg class="ico s14"><use href="#i-unlink"/></svg><span>回帖要用品牌自己的 Reddit 号，还没登记</span><button class="btn xs" type="button">去登记</button></div>
+
+  <div class="ptabs">
+    <div class="tabs" role="tablist"><a class="on" data-tab="work">工作</a><a data-tab="records">记录</a><a href="position-v2-settings.html">设置</a></div>
+  </div>
+
+  <div id="tab-work" style="display:flex;flex-direction:column;gap:26px">
+    <!-- ② 交给它 -->
+    <div class="hand card" id="hand">
+      <div class="hrow">
+        <svg class="ico"><use href="#i-send"/></svg>
+        <textarea id="handText" rows="1" placeholder="交给它一件事，比如「哪些版适合我们」"></textarea>
+        <button class="btn sm pri" type="button"><svg class="ico s14"><use href="#i-send"/></svg>交给它</button>
+      </div>
+      <div class="hfoot">
+        <button class="sug" type="button">哪些版适合我们</button>
+        <button class="sug" type="button">这周 Reddit 上怎么说我们</button>
+        <button class="sug" type="button">起草一条置顶公告</button>
+        <button class="sug more" type="button">有谁在等着进群</button>
+        <div class="hx">
+          <button class="btn xs ghost" type="button"><svg class="ico s12"><use href="#i-clip"/></svg>附件</button>
+          <button class="btn xs out" type="button" data-tip="默认它自己判断走哪条职责">职责：自动<svg class="ico s12"><use href="#i-cd"/></svg></button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ③ 要你处理 -->
+    <section id="need">
+      <div class="sec-h"><h3>要你处理</h3><span class="c">3</span><div class="r"><a class="lnk" href="#">全部 3 张<svg class="ico s14"><use href="#i-go"/></svg></a></div></div>
+      <div class="need">
+        <article class="card nc">
+          <div class="l1"><span class="pill t-warn">等你批</span><span class="duty">{{DI_MK}}Reddit 营销</span><span class="t">今天 18:00</span></div>
+          <h4>回帖草稿：「近视能戴 INMO Air 3 吗？」</h4>
+          <p>r/SmartGlasses · 带了镜片夹片的说明，用品牌号发</p>
+          <div class="ft"><button class="btn sm pri" type="button">批准发出</button><button class="btn sm out" type="button">改一下</button><a class="go" href="#"><svg class="ico"><use href="#i-go"/></svg></a></div>
+        </article>
+        <article class="card nc">
+          <div class="l1"><span class="pill t-info">等你选</span><span class="duty">{{DI_MK}}Reddit 营销</span><span class="t">今天</span></div>
+          <h4>有人说 INMO「召回」，怎么处理？</h4>
+          <p>出处只有一条评论，没核实，Agent 不下结论</p>
+          <div class="ft"><button class="btn sm pri" type="button">交公关核实</button><button class="btn sm out" type="button">先观察</button><a class="go" href="#"><svg class="ico"><use href="#i-go"/></svg></a></div>
+        </article>
+        <article class="card nc">
+          <div class="l1"><span class="pill t-warn">等你批</span><span class="duty">{{DI_CM}}自家版</span><span class="t">10-08</span></div>
+          <h4>r/INMO 置顶公告：固件 2.1 续航说明</h4>
+          <p>回应 3 条续航抱怨，数字都查过事实卡</p>
+          <div class="ft"><button class="btn sm pri" type="button">批准发布</button><button class="btn sm out" type="button">改一下</button><a class="go" href="#"><svg class="ico"><use href="#i-go"/></svg></a></div>
+        </article>
+      </div>
+    </section>
+
+    <!-- ④ 工作：一个数据集，四种视图 + 职责快捷视图 -->
+    <section id="work">
+      <div class="sec-h"><h3>工作</h3><span class="c" id="workCount"></span><span class="hint" tabindex="0" data-hint="事项、待办、排期合成一份。视图、筛选、分组按岗位记住，下次进来还是这样。">?</span></div>
+      <div class="vbar" id="vbar">
+        <div class="tabs" id="views">
+          <a data-view="list"><svg class="ico s14"><use href="#i-list"/></svg>列表</a>
+          <a data-view="board"><svg class="ico s14"><use href="#i-board"/></svg>看板</a>
+          <a data-view="calendar"><svg class="ico s14"><use href="#i-cal"/></svg>日历</a>
+          <a data-view="table"><svg class="ico s14"><use href="#i-table"/></svg>表格</a>
+        </div>
+        <span class="sep"></span>
+        <div class="qv" id="qv">
+          <button type="button" data-view="community" data-tip="职责「自家版」的专属工具"><img src="{{REDDIT}}" alt="">自家版待处理<span class="n">7</span></button>
+          <button type="button" data-view="schedule" data-tip="职责「Reddit 营销」的专属工具"><svg class="ico s14"><use href="#i-calclock"/></svg>发帖排期</button>
+        </div>
+        <div class="r" id="tools">
+          <button class="btn sm ghost" type="button" data-pop="filter"><svg class="ico s14"><use href="#i-filter"/></svg>筛选<span class="b" id="fcount" hidden></span></button>
+          <button class="btn sm ghost" type="button" data-pop="group"><svg class="ico s14"><use href="#i-group"/></svg><span id="glabel">按状态</span></button>
+          <button class="btn sm ghost" type="button" data-pop="sort"><svg class="ico s14"><use href="#i-sort"/></svg><span id="slabel">按截止</span></button>
+          <button class="btn sm ghost" type="button" data-pop="cols" id="colsBtn" hidden><svg class="ico s14"><use href="#i-cols"/></svg>列</button>
+          <button class="btn sm out" type="button"><svg class="ico s14"><use href="#i-plus"/></svg>待办</button>
+        </div>
+      </div>
+      <div class="fchips" id="fchips"></div>
+      <div id="viewport"></div>
+    </section>
+
+    <!-- ⑤ 数字：一条紧凑的带子，点开看图 -->
+    <section id="nums">
+      <div class="sec-h"><h3>数字</h3><span class="hint" tabindex="0" data-hint="数据来自 Agents 工坊接口（Reddit 取数已通），不用另连。">?</span>
+        <div class="r"><div class="tabs" style="height:28px"><a style="font-size:12.5px;padding:0 9px">昨天</a><a class="on" style="font-size:12.5px;padding:0 9px">近 7 天</a></div>
+        <button class="btn sm ghost" type="button" id="chartsBtn"><svg class="ico s14"><use href="#i-chart"/></svg>看图表</button></div>
+      </div>
+      <div class="card band">
+        <div class="bgrp">
+          <div class="blab"><b>{{DI_MK}}Reddit 营销</b>外部的版</div>
+          <div class="kv"><span class="k">提到我们</span><span class="v"><b>38</b><span class="dp t-good"><svg class="ico s12"><use href="#i-up"/></svg>12%</span></span></div>
+          <div class="kv"><span class="k">正面占比</span><span class="v"><b>61%</b><span class="dp t-good"><svg class="ico s12"><use href="#i-up"/></svg>4 点</span></span></div>
+          <div class="kv"><span class="k">待回应</span><span class="v"><b>3</b></span></div>
+          <div class="kv"><span class="k">冷却中的版</span><span class="v"><b>2</b></span></div>
+        </div>
+        <div class="bgrp">
+          <div class="blab"><b>{{DI_CM}}自家版</b>r/INMO</div>
+          <div class="kv"><span class="k">成员</span><span class="v"><b>1,284</b><span class="dp t-good"><svg class="ico s12"><use href="#i-up"/></svg>23</span></span></div>
+          <div class="kv"><span class="k">待处理</span><span class="v"><b>7</b></span></div>
+          <div class="kv"><span class="k">本周帖子</span><span class="v"><b>14</b><span class="dp t-bad"><svg class="ico s12"><use href="#i-down"/></svg>3</span></span></div>
+        </div>
+      </div>
+      <div class="charts" id="charts">
+        <div class="card chart"><h5>每天提到我们<span class="lg"><span><i style="background:var(--ws-brand)"></i>本周</span><span><i style="background:var(--ws-brand-soft)"></i>上周</span></span></h5>
+          <div class="bars" id="bars1"></div><div class="bx"><span>三</span><span>四</span><span>五</span><span>六</span><span>日</span><span>一</span><span>二</span></div></div>
+        <div class="card chart"><h5>r/INMO 新成员<span class="lg"><span><i style="background:var(--ws-brand)"></i>本周</span><span><i style="background:var(--ws-brand-soft)"></i>上周</span></span></h5>
+          <div class="bars" id="bars2"></div><div class="bx"><span>三</span><span>四</span><span>五</span><span>六</span><span>日</span><span>一</span><span>二</span></div></div>
+      </div>
+    </section>
+  </div>
+
+  <!-- 记录页签（原来的「记录」，内容不变，只是挪成三个页签之一） -->
+  <div id="tab-records" hidden>
+    <ol class="card rec">
+      <li><time>今天 14:20</time><div><div class="t1">INMO Reddit 口碑调研（第一轮）收尾<span class="duty">{{DI_MK}}Reddit 营销</span></div><p>5 条重点帖、3 件要回应；「召回」说法未核实，交你定。花了 2.2 积分。</p></div></li>
+      <li><time>今天 11:05</time><div><div class="t1">r/INMO 放进 4 个新成员，拦下 1 个广告号<span class="duty">{{DI_CM}}自家版</span></div><p>按版规第 3 条拦的，原帖留着备查。</p></div></li>
+      <li><time>昨天 21:40</time><div><div class="t1">你批了：在 r/SmartGlasses 回「Air 3 和 One 怎么选」<span class="duty">{{DI_MK}}Reddit 营销</span></div><p>用品牌号发出，目前 34 赞 5 条回复。</p></div></li>
+      <li><time>10-04</time><div><div class="t1">给 r/augmentedreality 版主发了私信<span class="duty">{{DI_MK}}Reddit 营销</span></div><p>问能不能发官方帖，还没回。</p></div></li>
+      <li><time>10-03</time><div><div class="t1">r/INMO 版规改版上线<span class="duty">{{DI_CM}}自家版</span></div><p>加了「求助帖要写型号和固件版本」。</p></div></li>
+    </ol>
+  </div>
+</div>
