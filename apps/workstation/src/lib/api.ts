@@ -3420,6 +3420,10 @@ export interface OnboardingStateView {
   verticals: VerticalChoiceView[]
   /** WP62（51 §1 N0）：「网站是用什么搭的」四个选项（含灰显的那三个）。 */
   storefront_platforms: StorefrontPlatformChoiceView[]
+  /** WP240：公司加的品牌（公司那一层已经设过）——公司级的不再问，从第 ② 步开始。 */
+  added_brand?: true
+  /** WP240：这个品牌现在有没有能用的 AI（跟随公司默认的算公司那一份）。 */
+  model_configured?: boolean
 }
 
 /** 向导第 ③ 步的候选：一个岗位与它包含的职责（每条带一句"它会干什么"）。 */
@@ -5752,6 +5756,7 @@ type BrandIntakeRunView = import('@agentsws/contracts').BrandIntakeRun
 export type {
   BrandIntakeConfidence,
   BrandIntakeEvidence,
+  BrandIntakeFailureKind,
   BrandIntakeField,
   BrandIntakePage,
   BrandIntakePolicy,
@@ -5764,7 +5769,11 @@ export type {
 
 /** 发起一次：贴 1–3 条链接（官网 / Amazon 商品 / Amazon 店铺）。 */
 export const startBrandIntake = (
-  input: { urls: string[]; cap_credits?: number },
+  /**
+   * WP240：`storefront_password` 是用户在原生表单里填的 Shopify 店铺访问密码——只随这一次请求
+   * 发给本机服务、只用于这一次抓取；界面不存、不进缓存、不进 URL。
+   */
+  input: { urls: string[]; cap_credits?: number; storefront_password?: string },
   assignment?: string,
 ): Promise<BrandIntakeRunView> =>
   api('/v1/brand-intake/runs', {
@@ -5808,10 +5817,15 @@ export const reanalyzeBrandIntake = (
   id: string,
   urls: string[] | undefined,
   assignment?: string,
+  /** WP240：店铺访问密码（同 `startBrandIntake`，只用于这一次抓取）。 */
+  storefront_password?: string,
 ): Promise<BrandIntakeRunView> =>
   api(`/v1/brand-intake/runs/${encodeURIComponent(id)}/reanalyze`, {
     method: 'POST',
-    body: urls === undefined ? {} : { urls },
+    body: {
+      ...(urls === undefined ? {} : { urls }),
+      ...(storefront_password === undefined ? {} : { storefront_password }),
+    },
     ...withAssignment(assignment),
   })
 

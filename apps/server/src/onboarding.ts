@@ -1073,6 +1073,15 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
           role_name: roles.roles.get(role_id)?.name.zh ?? role_id,
         })
       }
+      /*
+       * WP240：加的品牌走完了向导（哪怕第 ② 步跳过了网址分析）——建品牌时起的那份影子档案
+       * 从此算"设过"，不然下次打开又被拉回向导。
+       */
+      const shadow = profileOf(ws)
+      if (shadow?.provisional === true) {
+        const { provisional: _p, ...settled } = shadow
+        backend.put(ws, settled)
+      }
       // WP138：留一条痕——以后要分「向导建的」与「手动分配的」，靠的就是它
       /*
        * WP234（docs/54 §6.2）：给了岗位清单——每一行落成一个岗位行（复用模板或新建自建岗位），

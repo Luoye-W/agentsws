@@ -63,6 +63,7 @@ export function BrandBackgroundBadge({
   focusable = true,
   className,
   testId = 'brand-bg',
+  labelled = false,
 }: {
   background: BrandBackgroundView | undefined
   /**
@@ -72,6 +73,11 @@ export function BrandBackgroundBadge({
   focusable?: boolean
   className?: string
   testId?: string
+  /**
+   * WP240：数字旁边写明它是什么（「后台任务 27」）。公司页品牌一览那一行用——那里一排好几个数，
+   * 光秃秃一个 27 没人看得懂；切换器那一行空间窄、旁边就是品牌名，照旧只画数字。
+   */
+  labelled?: boolean
 }): ReactNode {
   const { t, lang } = useApp()
   if (background === undefined) return null
@@ -120,7 +126,7 @@ export function BrandBackgroundBadge({
               )}
               data-testid={`${testId}-count`}
             >
-              {background.scheduled}
+              {labelled ? t('brand.bg.count', { n: background.scheduled }) : background.scheduled}
             </span>
           </span>
         </TooltipTrigger>

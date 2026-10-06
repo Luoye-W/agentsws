@@ -302,7 +302,7 @@ const state = {
   test: { ok: true, reason: 'ok', checked_at: T0 } as ModelTestResult,
   /** 分析：起了几次、当前那一次长什么样、确认时带上来的 edits。 */
   starts: [] as { urls: string[] }[],
-  reanalyzes: [] as { id: string; urls?: string[] }[],
+  reanalyzes: [] as { id: string; urls?: string[]; password?: string }[],
   confirms: [] as { id: string; edits?: Record<string, unknown> }[],
   run: undefined as BrandIntakeRun | undefined,
   /** WP142：发登录信那一跳——连不上云 / 先挂着不回（看「正在连」那一句）。 */
@@ -450,8 +450,17 @@ vi.mock('@/lib/api', async () => {
       }
       return state.run
     },
-    reanalyzeBrandIntake: async (id: string, urls?: string[]) => {
-      state.reanalyzes.push({ id, ...(urls === undefined ? {} : { urls }) })
+    reanalyzeBrandIntake: async (
+      id: string,
+      urls?: string[],
+      _assignment?: string,
+      password?: string,
+    ) => {
+      state.reanalyzes.push({
+        id,
+        ...(urls === undefined ? {} : { urls }),
+        ...(password === undefined ? {} : { password }),
+      })
       state.run = { ...websiteRun(), status: 'running', pages: [] }
       return state.run
     },
@@ -2075,5 +2084,102 @@ describe('WP233 第 ② 步「你的账号」与「公司邮箱后缀」', () =>
     await user.type(screen.getByTestId('company-legal-name'), '深圳映墨科技')
     await user.click(screen.getByTestId('company-save'))
     expect(saved.at(-1)?.domain).toBe('inmoxr.com')
+  })
+})
+
+describe('WP240 加的品牌走首次设置', () => {
+  const ADDED: OnboardingStateView = {
+    ...STATE,
+    workspace_name: 'Rollout',
+    brand_name: 'Rollout',
+    added_brand: true,
+    model_configured: true,
+  }
+
+  it('AI 跟随公司接上了：一进来就在第 ② 步，标题带品牌名；第 ① 步显示「已接上（跟随公司）」', async () => {
+    const user = userEvent.setup()
+    state.state = ADDED
+    renderWithProviders(<OnboardingPage />)
+    await screen.findByTestId('onboarding-business')
+    expect(screen.getByTestId('onboarding-title').textContent).toContain('Rollout')
+    // 公司那一层的（公司全称、你的称呼、加入一家公司）这里不再问
+    expect(screen.queryByTestId('join-panel')).toBeNull()
+    await user.click(screen.getByTestId('intake-no-site'))
+    expect(screen.queryByTestId('company-legal-name')).toBeNull()
+    expect(screen.queryByTestId('person-name')).toBeNull()
+    expect(screen.getByTestId('intake-skipped-later')).toBeTruthy()
+    // 回第 ① 步：不是接 AI 的那几张卡，是一句「已接上（跟随公司）」
+    await user.click(screen.getByTestId('onboarding-back'))
+    expect((await screen.findByTestId('onboarding-ai-inherited')).textContent).toContain('跟随公司')
+    expect(screen.queryByTestId('ai-demo')).toBeNull()
+    expect((screen.getByTestId('onboarding-next') as HTMLButtonElement).disabled).toBe(false)
+  })
+
+  it('AI 还没接上：照旧从第 ① 步开始', async () => {
+    state.state = { ...ADDED, model_configured: false }
+    renderWithProviders(<OnboardingPage />)
+    expect(await screen.findByTestId('ai-demo')).toBeTruthy()
+    expect(screen.queryByTestId('onboarding-business')).toBeNull()
+  })
+})
+
+describe('WP240 第 ② 步：读不到网站时照实说、给下一步', () => {
+  it('店铺开着访问密码：一句人话 + 原生密码框；填了只随「再读一次」发一次，发完就清空', async () => {
+    const user = userEvent.setup()
+    state.run = websiteRun({
+      status: 'failed',
+      pages: [{ url: 'https://nordvolt.cn/', kind: 'home', ok: false, reason: '店铺开着访问密码' }],
+      failure: '店铺开着访问密码，读不到内容。填一下店铺密码再读，或者先跳过、手动填品牌资料。',
+      failure_kind: 'password',
+      password_protected: true,
+    })
+    renderWithProviders(<OnboardingPage />)
+    await passAi()
+    const failed = await screen.findByTestId('intake-failed')
+    expect(failed.getAttribute('data-kind')).toBe('password')
+    const box = screen.getByTestId('intake-store-password') as HTMLInputElement
+    expect(box.type).toBe('password')
+    await user.type(box, 'fake-store-pass')
+    await user.click(screen.getByTestId('intake-password-submit'))
+    await waitFor(() => {
+      expect(state.reanalyzes).toEqual([{ id: 'bi_1', password: 'fake-store-pass' }])
+    })
+    expect(box.value).toBe('')
+  })
+
+  it('被限流：「再试一次」与「先跳过」都在，不出密码框', async () => {
+    const user = userEvent.setup()
+    state.run = websiteRun({
+      status: 'failed',
+      pages: [],
+      failure: '对方暂时不让读（被限流或被拦了）。过几分钟再试，或者先跳过、手动填品牌资料。',
+      failure_kind: 'blocked',
+    })
+    renderWithProviders(<OnboardingPage />)
+    await passAi()
+    await screen.findByTestId('intake-failed')
+    expect(screen.queryByTestId('intake-store-password')).toBeNull()
+    await user.click(screen.getByTestId('intake-retry'))
+    await waitFor(() => {
+      expect(state.reanalyzes).toEqual([{ id: 'bi_1' }])
+    })
+  })
+
+  it('跑了 30 秒还一页没读着：出「先跳过」，点了就能往下走', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    try {
+      state.run = websiteRun({ status: 'running', pages: [] })
+      renderWithProviders(<OnboardingPage />)
+      fireEvent.click(await screen.findByTestId('ai-demo'))
+      await screen.findByTestId('intake-working')
+      expect(screen.queryByTestId('intake-slow')).toBeNull()
+      await vi.advanceTimersByTimeAsync(31_000)
+      fireEvent.click(await screen.findByTestId('intake-slow-skip'))
+      await waitFor(() => {
+        expect(screen.queryByTestId('intake-working')).toBeNull()
+      })
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })

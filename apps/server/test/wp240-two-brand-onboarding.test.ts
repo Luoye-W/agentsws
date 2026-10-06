@@ -302,6 +302,8 @@ describe('WP240 第二个品牌的首次设置不串品牌', () => {
         .listByWorkspace(server.bootstrap.workspace.id)
         .filter((a) => a.revoked_at === undefined).length,
     ).toBe(inmoBefore)
+    // 跳过了网址分析也算走完了：下次打开不再被拉回向导
+    expect((await state(server, rollout)).needs_setup).toBe(false)
   })
 
   it('设置页在 Rollout 下保存：品牌名写 Rollout；公司全称没改就不碰组织', async () => {

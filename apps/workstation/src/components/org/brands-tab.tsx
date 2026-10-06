@@ -52,10 +52,10 @@ function Stat({
   value: string
 }): React.ReactNode {
   return (
+    // WP240：数字旁边写明它是什么（「待审卡 0」）——以前只有读屏念得出来，眼睛看到的是一个光秃秃的数
     <span className="flex items-center gap-1 text-xs text-muted-foreground">
       <Icon aria-hidden className="size-3.5" />
-      <span className="sr-only">{label}</span>
-      {value}
+      {label} {value}
     </span>
   )
 }
@@ -103,6 +103,7 @@ function BrandRow({
       <BrandBackgroundBadge
         background={brand.background}
         testId={`brand-row-bg-${brand.workspace_id}`}
+        labelled
       />
       {onHalt === undefined ||
       brand.background === undefined ||

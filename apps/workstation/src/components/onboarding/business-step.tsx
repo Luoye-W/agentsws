@@ -17,7 +17,7 @@
  */
 import { DEFAULT_BRAND_INTAKE_CAP_CREDITS, isPlaceholderOwnerEmail } from '@agentsws/contracts'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { BrandMark } from '@/components/design'
 import { BrandProfileCard } from '@/components/onboarding/brand-profile-card'
 import { Button } from '@/components/ui/button'
@@ -37,6 +37,17 @@ import { useApp } from '@/lib/app-context'
 /** 这一轮还在跑吗（跑着的时候界面挂呼吸标记、轮询继续）。 */
 export function isRunning(run: BrandIntakeRun | undefined): boolean {
   return run?.status === 'queued' || run?.status === 'running'
+}
+
+/** WP240：跑了这么久还一页没读着，就把「先跳过」摆出来（不让人干等）。 */
+export const SLOW_START_MS = 30_000
+
+/** WP240：读不到时要不要出「店铺密码」那一格（Shopify 开着访问密码 / 密码没解开）。 */
+export function asksStorePassword(run: BrandIntakeRun | undefined): boolean {
+  return (
+    run?.status === 'failed' &&
+    (run.failure_kind === 'password' || run.failure_kind === 'password_wrong')
+  )
 }
 
 /**
@@ -66,6 +77,10 @@ export interface BusinessStepProps {
   person: { name: string; email: string }
   /** WP233：第 ① 步关联上的云账号邮箱（没关联就不给）。见 {@link shownAccountEmail}。 */
   cloudEmail?: string
+  /**
+   * WP240：公司加的品牌——公司全称与你的称呼是公司那一层的，已经有了，这一步不再问。
+   */
+  addedBrand?: boolean
   onRename: (name: string) => void
   onCompanyName: (name: string) => void
   companyName: string
@@ -82,6 +97,7 @@ export function BusinessStep({
   onSettled,
   person,
   cloudEmail,
+  addedBrand = false,
   onRename,
   onCompanyName,
   companyName,
@@ -95,6 +111,13 @@ export function BusinessStep({
   const [edits, setEdits] = useState<Record<string, unknown>>({})
   const [failure, setFailure] = useState<string | undefined>(undefined)
   const [skipped, setSkipped] = useState(false)
+  /**
+   * WP240：店铺访问密码。**只活在这一格里**：发出去那一下就清空，不进 query 缓存、
+   * 不进本机存储、不进 URL，也不经 AI（它只随这一次请求交给本机服务）。
+   */
+  const [storePassword, setStorePassword] = useState('')
+  /** WP240：跑了 30 秒还一页没读着。 */
+  const [slow, setSlow] = useState(false)
 
   /** 回到这一步时先问一次"最近那一次是什么"——现场就是这么恢复的。 */
   const latest = useQuery({
@@ -132,7 +155,13 @@ export function BusinessStep({
   })
 
   const again = useMutation({
-    mutationFn: () => reanalyzeBrandIntake(currentId ?? '', urls(), assignment),
+    mutationFn: (password?: string) =>
+      reanalyzeBrandIntake(
+        currentId ?? '',
+        urls().length === 0 ? undefined : urls(),
+        assignment,
+        password,
+      ),
     onSuccess: (fresh) => {
       setFailure(undefined)
       setRunId(fresh.id)
@@ -158,6 +187,23 @@ export function BusinessStep({
   })
 
   const busy = start.isPending || again.isPending || confirm.isPending || isRunning(current)
+  const running = isRunning(current)
+  const readPages = current?.pages.length ?? 0
+  // WP240：跑着、一页没读着——30 秒后把「先跳过」摆出来；读着了 / 停了就收起
+  useEffect(() => {
+    setSlow(false)
+    if (!running || readPages > 0) return
+    const timer = setTimeout(() => {
+      setSlow(true)
+    }, SLOW_START_MS)
+    return () => {
+      clearTimeout(timer)
+    }
+  }, [running, readPages, currentId])
+  const skip = (): void => {
+    setSkipped(true)
+    onSettled(undefined)
+  }
   const analyzedLegal = current?.profile.legal_name?.value
   const shownCompany =
     !companyEdited && typeof analyzedLegal === 'string' && analyzedLegal.trim() !== ''
@@ -212,18 +258,87 @@ export function BusinessStep({
             </p>
           ) : null}
           {current?.status === 'failed' ? (
-            <p role="alert" className="text-destructive" data-testid="intake-failed">
+            <p
+              role="alert"
+              className="text-destructive"
+              data-testid="intake-failed"
+              data-kind={current.failure_kind ?? ''}
+            >
               {current.failure ?? t('error.generic')}
             </p>
+          ) : null}
+          {/*
+            WP240：Shopify 店开着访问密码——在这里填一次（原生表单，type=password）。
+            只随这一次「再读一次」交给本机服务、只用于这一次抓取，不保存、不进日志、不经 AI。
+          */}
+          {asksStorePassword(current) ? (
+            <form
+              className="flex flex-col gap-1"
+              data-testid="intake-password-form"
+              onSubmit={(e) => {
+                e.preventDefault()
+                const password = storePassword
+                setStorePassword('')
+                if (password !== '') again.mutate(password)
+              }}
+            >
+              <Label htmlFor="intake-store-password">
+                {t('onboarding.business.password.label')}
+              </Label>
+              <div className="flex items-center gap-2">
+                <Input
+                  id="intake-store-password"
+                  data-testid="intake-store-password"
+                  type="password"
+                  autoComplete="off"
+                  value={storePassword}
+                  onChange={(e) => {
+                    setStorePassword(e.target.value)
+                  }}
+                />
+                <Button
+                  type="submit"
+                  size="sm"
+                  disabled={busy || storePassword === ''}
+                  data-testid="intake-password-submit"
+                >
+                  {t('onboarding.business.password.submit')}
+                </Button>
+              </div>
+              <p className="text-xs text-ws-muted-fg">{t('onboarding.business.password.note')}</p>
+            </form>
+          ) : null}
+          {current?.status === 'failed' &&
+          (current.failure_kind === 'blocked' || current.failure_kind === 'timeout') ? (
+            <Button
+              size="sm"
+              variant="outline"
+              className="self-start"
+              disabled={busy}
+              data-testid="intake-retry"
+              onClick={() => {
+                again.mutate(undefined)
+              }}
+            >
+              {t('onboarding.business.retry')}
+            </Button>
+          ) : null}
+          {current?.status === 'failed' ? (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="self-start"
+              data-testid="intake-skip"
+              onClick={skip}
+            >
+              {t('onboarding.business.skip')}
+            </Button>
           ) : null}
           <button
             type="button"
             data-testid="intake-no-site"
             className="self-start text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
-            onClick={() => {
-              setSkipped(true)
-              onSettled(undefined)
-            }}
+            onClick={skip}
           >
             {t('onboarding.business.no_site')}
           </button>
@@ -231,12 +346,21 @@ export function BusinessStep({
       ) : null}
 
       {/* ── 在干活 ─────────────────────────────────────────────── */}
-      {isRunning(current) ? (
-        <div className="flex items-center gap-2 text-ws-muted-fg" data-testid="intake-working">
-          <BrandMark size={20} motion="breathe" />
-          {t('onboarding.business.working', {
-            done: current?.pages.length ?? 0,
-          })}
+      {running && !skipped ? (
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center gap-2 text-ws-muted-fg" data-testid="intake-working">
+            <BrandMark size={20} motion="breathe" />
+            {t('onboarding.business.working', { done: readPages })}
+          </div>
+          {/* WP240：30 秒还一页没读着——别让人干等，给一条「先跳过」 */}
+          {slow ? (
+            <div className="flex flex-wrap items-center gap-2" data-testid="intake-slow">
+              <span className="text-xs text-ws-muted-fg">{t('onboarding.business.slow')}</span>
+              <Button size="sm" variant="ghost" data-testid="intake-slow-skip" onClick={skip}>
+                {t('onboarding.business.skip')}
+              </Button>
+            </div>
+          ) : null}
         </div>
       ) : null}
 
@@ -263,7 +387,7 @@ export function BusinessStep({
               confirm.mutate()
             }}
             onReanalyze={() => {
-              again.mutate()
+              again.mutate(undefined)
             }}
           />
           {failedPages.length === 0 ? null : (
@@ -279,7 +403,14 @@ export function BusinessStep({
       ) : null}
 
       {/* ── 顺带确认：公司名与你的称呼 ───────────────────────────── */}
-      {current === undefined && !skipped ? null : (
+      {/* WP240：加的品牌不出——公司全称与称呼是公司那一层的，已经有了 */}
+      {addedBrand ? (
+        skipped ? (
+          <p className="text-xs text-ws-muted-fg" data-testid="intake-skipped-later">
+            {t('onboarding.business.later')}
+          </p>
+        ) : null
+      ) : current === undefined && !skipped ? null : (
         <div className="flex flex-col gap-2 border-t pt-3" data-testid="onboarding-person">
           <div className="flex flex-col gap-1">
             <Label htmlFor="company-name">{t('onboarding.company.legal_name')}</Label>

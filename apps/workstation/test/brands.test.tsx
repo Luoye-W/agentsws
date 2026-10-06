@@ -191,6 +191,40 @@ describe('52 O2 / O4 公司页品牌一览', () => {
     expect(screen.getByTestId('brand-open-ws_b')).not.toBeNull()
   })
 
+  it('WP240：卡上的数字都写明是什么（待审卡 / 告警 / 后台任务），不出光秃秃的数', async () => {
+    state.orgs = [COMPANY]
+    state.brands = [
+      {
+        ...BRAND_A,
+        background: {
+          workspace_id: 'ws_a',
+          state: 'running',
+          halted: false,
+          global_halted: false,
+          scheduled: 27,
+          errors: 0,
+        },
+      },
+      {
+        ...BRAND_B,
+        background: {
+          workspace_id: 'ws_b',
+          state: 'running',
+          halted: false,
+          global_halted: false,
+          scheduled: 16,
+          errors: 0,
+        },
+      },
+    ]
+    renderWithProviders(<BrandsTab org_id="org_1" assignment="asg_owner" />)
+    const rowA = await screen.findByTestId('brand-row-ws_a')
+    expect(rowA.textContent).toContain('待审卡')
+    expect(rowA.textContent).toContain('告警')
+    expect(screen.getByTestId('brand-row-bg-ws_a-count').textContent).toBe('后台任务 27')
+    expect(screen.getByTestId('brand-row-bg-ws_b-count').textContent).toBe('后台任务 16')
+  })
+
   it('只有一个品牌时也在，说的是"要做第二个品牌就在这里加"', async () => {
     state.orgs = [SOLO]
     state.brands = [BRAND_A]

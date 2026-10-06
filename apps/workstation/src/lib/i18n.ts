@@ -2587,6 +2587,11 @@ const zh: Table = {
   'markets.hint': '搜索结果与 AI 回答按这几个市场分别探测，违规宣称规则也按它开组。',
   'markets.empty': '没看出来，请选一下',
   'markets.add': '加市场',
+  'markets.search': '搜国家或地区',
+  'markets.more': '还有 {n} 个',
+  'markets.less': '收起',
+  'markets.clear': '全部清掉',
+  'markets.no_match': '没找到',
   'markets.common': '常用',
   'markets.all': '全部',
   'markets.remove': '去掉{name}',
@@ -2693,6 +2698,7 @@ const zh: Table = {
   'brand.bg.next': '下一次 {at}',
   'brand.bg.errors': '{n} 条出错：{title}——{message}',
   'brand.bg.errors_bare': '{n} 条出错',
+  'brand.bg.count': '后台任务 {n}',
   // WP66（52 O1）：连接页与设置页只管当前这个品牌
   'brand.scope': '这一页只管当前品牌「{brand}」。别的品牌各有各的一套，切过去再设。',
   'command.group.brands': '品牌',
@@ -3233,6 +3239,16 @@ const zh: Table = {
   'onboarding.business.working': '正在读你的网站，已经读了 {done} 页。可以先去选岗位，回来看结果。',
   'onboarding.business.capped': '花到 {cap} 积分的上限就停下了——已经读到的都在下面。',
   'onboarding.business.missed': '有 {count} 个页面没读着：{reason}。缺的那几格自己填上就行。',
+  // WP240：加的品牌的首次设置、读不到网站时的下一步
+  'onboarding.title.brand': '设置品牌「{name}」',
+  'onboarding.ai.inherited': '已接上（跟随公司）',
+  'onboarding.business.slow': '读得有点慢，还一页都没读着。',
+  'onboarding.business.skip': '先跳过，手动填品牌资料',
+  'onboarding.business.later': '品牌资料之后在「设置 → 公司档案」里填。',
+  'onboarding.business.retry': '再试一次',
+  'onboarding.business.password.label': '店铺访问密码',
+  'onboarding.business.password.submit': '再读一次',
+  'onboarding.business.password.note': '只用于这一次读取：不保存、不进日志、不经 AI。',
   // WP127：文字模型必须能看图；生图单独一档
   'onboarding.ai.own.err.vision':
     '这个模型看不了图，Agents 工坊要求模型能看图。换一个能看图的再试，常见的有：{models}。',
@@ -6470,6 +6486,11 @@ const en: Table = {
     'Search results and AI answers are checked per market, and the claim rules follow them too.',
   'markets.empty': "Couldn't tell — please pick",
   'markets.add': 'Add market',
+  'markets.search': 'Search a country or region',
+  'markets.more': '{n} more',
+  'markets.less': 'Show less',
+  'markets.clear': 'Clear all',
+  'markets.no_match': 'No match',
   'markets.common': 'Common',
   'markets.all': 'All',
   'markets.remove': 'Remove {name}',
@@ -6563,6 +6584,7 @@ const en: Table = {
   'brand.bg.next': 'Next {at}',
   'brand.bg.errors': '{n} failing: {title} \u2014 {message}',
   'brand.bg.errors_bare': '{n} failing',
+  'brand.bg.count': 'Background tasks {n}',
   // WP66 (doc 52 O1): connections and settings belong to the current brand only
   'brand.scope':
     'This page covers the current brand, \u201c{brand}\u201d, only. Every brand has its own set \u2014 switch over to set those up.',
@@ -7145,6 +7167,17 @@ const en: Table = {
     'It stopped at the {cap}-credit cap. Everything read so far is below.',
   'onboarding.business.missed':
     '{count} pages could not be read ({reason}). Just fill those fields in yourself.',
+  // WP240: onboarding an added brand; what to do when the site cannot be read
+  'onboarding.title.brand': 'Set up brand \u201c{name}\u201d',
+  'onboarding.ai.inherited': 'Connected (company default)',
+  'onboarding.business.slow': 'This is slow \u2014 not a single page read yet.',
+  'onboarding.business.skip': 'Skip for now, fill in brand details by hand',
+  'onboarding.business.later': 'Fill in brand details later under Settings \u2192 Company profile.',
+  'onboarding.business.retry': 'Try again',
+  'onboarding.business.password.label': 'Store access password',
+  'onboarding.business.password.submit': 'Read again',
+  'onboarding.business.password.note':
+    'Used for this one read only: not saved, not logged, never sent to AI.',
   // WP127: the text model must see images; image generation is its own setting
   'onboarding.ai.own.err.vision':
     'This model cannot see images, and Agents Workshop needs one that can. Try one that can — common ones: {models}.',
