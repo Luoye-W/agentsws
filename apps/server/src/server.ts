@@ -5550,17 +5550,29 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       },
       placementOf: (assignment_id) => org.placementOf(assignment_id),
     },
-    suggester: () => {
-      const ref = boot.ownModels.configured() ? boot.ownModels.defaultRef() : undefined
-      // 真模型：走现有模型口（记在本机负责人那条分配上，`extraction` 档）
-      if (ref !== undefined && ref.provider !== 'stub')
+    suggester: async (actor) => {
+      /*
+       * WP242：按**点推荐的那个人这会儿开着的品牌**取模型面与网关（跟随公司的，`brandModules`
+       * 解析成公司那一份——令牌也是公司那一把），用量记在这个品牌、这个人头上（`extraction` 档）。
+       * 以前一律用启动品牌的网关、记在启动品牌负责人头上：第二个品牌点推荐，账记到了第一个品牌。
+       */
+      const ws = (actor?.workspace_id ?? workspace.id) as WorkspaceId
+      const own = ws === workspace.id
+      const models = own ? boot.ownModels : await brandModules.models(ws)
+      const ref = models.configured() ? models.defaultRef() : undefined
+      if (ref !== undefined && ref.provider !== 'stub') {
+        const gateway = own ? boot.ownGateway : await brandModules.gateway(ws)
+        const who =
+          actor === undefined
+            ? { assignment_id: ownerAssignment.id, role_id: ownerAssignment.role_id as string }
+            : { assignment_id: actor.assignment_id, role_id: actor.role_id }
         return modelSuggester(async (prompt) => {
-          const completion = await boot.ownGateway.complete({
+          const completion = await gateway.complete({
             messages: [{ role: 'user', content: prompt }],
             meta: {
-              workspace_id: workspace.id,
-              assignment_id: ownerAssignment.id,
-              role_id: ownerAssignment.role_id,
+              workspace_id: ws,
+              assignment_id: who.assignment_id as never,
+              role_id: who.role_id as never,
               run_id: `onb_suggest_${suggestSha(prompt).slice(0, 16)}` as never,
               purpose: 'extraction',
             },
@@ -5568,6 +5580,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           })
           return completion.text
         })
+      }
       // 没接上真模型（只有 stub / 演示）：回 undefined，推荐那一层退回按原话对词并明说（Luoye 10-06）
       return undefined
     },

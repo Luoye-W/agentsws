@@ -297,8 +297,16 @@ export interface OnboardingOptions {
   /**
    * WP234：「说说你要做什么工作」用的推荐引擎。**每次现取**——第 ① 步之后模型才接上。
    * 回 `undefined` = 这会儿没有能用的（界面照实说，退回只手选）。
+   *
+   * WP242：带上点推荐的那个人——按**他这会儿开着的品牌**取模型（跟随公司的用公司那一份），
+   * 用量记在这个品牌、这个人头上。不给 = 启动品牌的负责人（老调用方）。
    */
-  suggester?(): Suggester | undefined
+  suggester?(actor?: {
+    workspace_id: string
+    person_id: string
+    assignment_id: string
+    role_id: string
+  }): Suggester | undefined | Promise<Suggester | undefined>
   /**
    * 现在接上了哪些职责连接器 kind（email / shopify / ga4 …）。
    * WP240：按品牌问（连接是品牌级的，52 O3）；不给 `workspace_id` = 启动品牌。
@@ -1158,7 +1166,7 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
         text: input.text,
         catalog,
         roles: list,
-        suggester: options.suggester?.(),
+        suggester: await options.suggester?.(_actor),
       })
       // 原话不进日志（21 §5）：只记来源与条数
       emit(
