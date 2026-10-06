@@ -8,6 +8,7 @@
  */
 import { COMMON_MARKETS, MARKET_COUNTRY_CODES } from '@agentsws/contracts'
 import { X } from 'lucide-react'
+import { useState } from 'react'
 import { Hint } from '@/components/ui/hint'
 import { useApp } from '@/lib/app-context'
 
@@ -23,6 +24,20 @@ export function marketLabel(code: string, lang: 'zh' | 'en'): string {
   } catch {
     return code
   }
+}
+
+/**
+ * WP240（Luoye 10-06）：网站上能选的国家太多（> 30）时，分析默认只选了美国——出处带这个 `locator`。
+ * 与 `@agentsws/brand-intake` 的 `MARKETS_MANY_LOCATOR` 同一个值（工作台不依赖那个包，这里抄一份）。
+ */
+export const MARKETS_MANY_LOCATOR = 'markets:many-default-us'
+
+/** 这份市场是不是「国家太多、先只选了美国」那一份。 */
+export function isManyDefault(origin: MarketsOrigin | undefined): boolean {
+  return (
+    origin?.from === 'site' &&
+    (origin.evidence ?? []).some((e) => e.locator === MARKETS_MANY_LOCATOR)
+  )
 }
 
 /** 出处里的 `locator` → 问号里那几个字的 key。 */
@@ -81,6 +96,19 @@ export function weeklyProbeCredits(markets: number): number {
   return Math.round(d.questions * d.platforms * markets * d.credits_per_probe * 10) / 10
 }
 
+/**
+ * WP240（Fable 10-06 真机）：选中的市场最多先摆这么多个小标签，其余收进「还有 N 个」。
+ * Shopify 店的国家切换器常常列着两百多个国家，原样铺开就是满满一屏。
+ */
+export const MARKETS_SHOWN = 8
+
+/** WP240：按国名或国家码搜（不分大小写）。 */
+export function matchesMarket(code: string, name: string, query: string): boolean {
+  const q = query.trim().toLowerCase()
+  if (q === '') return true
+  return code.toLowerCase().includes(q) || name.toLowerCase().includes(q)
+}
+
 export function MarketsPicker({
   value,
   onChange,
@@ -95,12 +123,17 @@ export function MarketsPicker({
 }): React.ReactNode {
   const { t, lang } = useApp()
   const originText = useMarketsOriginText()(origin)
+  const [expanded, setExpanded] = useState(false)
+  const [query, setQuery] = useState('')
   const rest = MARKET_COUNTRY_CODES.filter((c) => !value.includes(c))
-  const common = COMMON_MARKETS.filter((c) => rest.includes(c))
+  const hit = (c: string): boolean => matchesMarket(c, marketLabel(c, lang), query)
+  const common = COMMON_MARKETS.filter((c) => rest.includes(c) && hit(c))
   const others = rest
-    .filter((c) => !COMMON_MARKETS.includes(c))
+    .filter((c) => !COMMON_MARKETS.includes(c) && hit(c))
     .map((c) => ({ c, name: marketLabel(c, lang) }))
     .sort((a, b) => a.name.localeCompare(b.name, lang === 'zh' ? 'zh-CN' : 'en'))
+  const many = value.length > MARKETS_SHOWN
+  const shown = many && !expanded ? value.slice(0, MARKETS_SHOWN) : value
 
   return (
     <div className="flex flex-wrap items-center gap-1" data-testid="markets-picker">
@@ -113,7 +146,7 @@ export function MarketsPicker({
           {t('markets.empty')}
         </span>
       ) : (
-        value.map((code) => {
+        shown.map((code) => {
           const name = marketLabel(code, lang)
           return (
             <span
@@ -139,6 +172,45 @@ export function MarketsPicker({
           )
         })
       )}
+      {/* WP240：多了就收起来，留「还有 N 个 / 收起」与「全部清掉」 */}
+      {many ? (
+        <button
+          type="button"
+          className="rounded-sm px-1 text-[11px] text-ws-muted-fg underline-offset-2 hover:text-foreground hover:underline"
+          data-testid="markets-more"
+          onClick={() => {
+            setExpanded((v) => !v)
+          }}
+        >
+          {expanded ? t('markets.less') : t('markets.more', { n: value.length - MARKETS_SHOWN })}
+        </button>
+      ) : null}
+      {many ? (
+        <button
+          type="button"
+          disabled={disabled}
+          className="rounded-sm px-1 text-[11px] text-ws-muted-fg underline-offset-2 hover:text-foreground hover:underline"
+          data-testid="markets-clear"
+          onClick={() => {
+            onChange([])
+          }}
+        >
+          {t('markets.clear')}
+        </button>
+      ) : null}
+      {/* WP240：先搜再选——下拉里只剩搜得到的那几个 */}
+      <input
+        type="search"
+        aria-label={t('markets.search')}
+        placeholder={t('markets.search')}
+        data-testid="market-search"
+        disabled={disabled}
+        className="h-6 w-28 rounded-sm border bg-transparent px-1 text-[11px]"
+        value={query}
+        onChange={(e) => {
+          setQuery(e.target.value)
+        }}
+      />
       <select
         aria-label={t('markets.add')}
         data-testid="market-add"
@@ -148,25 +220,42 @@ export function MarketsPicker({
         onChange={(e) => {
           const code = e.target.value
           if (code !== '' && !value.includes(code)) onChange([...value, code])
+          setQuery('')
         }}
       >
-        <option value="">+ {t('markets.add')}</option>
-        <optgroup label={t('markets.common')}>
-          {common.map((c) => (
-            <option key={c} value={c}>
-              {marketLabel(c, lang)}
-            </option>
-          ))}
-        </optgroup>
-        <optgroup label={t('markets.all')}>
-          {others.map(({ c, name }) => (
-            <option key={c} value={c}>
-              {name}
-            </option>
-          ))}
-        </optgroup>
+        <option value="">
+          {common.length + others.length === 0 ? t('markets.no_match') : `+ ${t('markets.add')}`}
+        </option>
+        {common.length === 0 ? null : (
+          <optgroup label={t('markets.common')}>
+            {common.map((c) => (
+              <option key={c} value={c}>
+                {marketLabel(c, lang)}
+              </option>
+            ))}
+          </optgroup>
+        )}
+        {others.length === 0 ? null : (
+          <optgroup label={t('markets.all')}>
+            {others.map(({ c, name }) => (
+              <option key={c} value={c}>
+                {name}
+              </option>
+            ))}
+          </optgroup>
+        )}
       </select>
       {originText === undefined ? null : <Hint text={originText} testId="markets-origin" />}
+      {/* WP240：国家太多、先只选了美国——这一句是状态，铺在外面（人得知道其余要自己加） */}
+      {isManyDefault(origin) ? (
+        <span
+          className="basis-full text-[11px] text-amber-700 dark:text-amber-300"
+          data-slot="status"
+          data-testid="markets-many-note"
+        >
+          {t('markets.many_default')}
+        </span>
+      ) : null}
       {value.length < 2 ? null : (
         <span
           className="flex basis-full items-center gap-1 text-[11px] text-ws-muted-fg"

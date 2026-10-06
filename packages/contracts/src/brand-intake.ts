@@ -182,7 +182,32 @@ export interface BrandIntakeRun {
   updated_at: Iso8601
   /** 跑挂了的那一句人话。 */
   failure?: string
+  /**
+   * WP240：读不到的**是哪一种**（界面按它给下一步：填店铺密码 / 先跳过 / 换网址）。
+   * 没有 = 老 run 或说不清是哪一种（照旧只看 `failure`）。
+   */
+  failure_kind?: BrandIntakeFailureKind
+  /** WP240：入口是 Shopify 密码页（店铺开着访问密码）。跑完 / 跑挂都可能带它。 */
+  password_protected?: boolean
 }
+
+/**
+ * WP240：读不到网站的几种原因（各配一句人话 + 下一步）。
+ *
+ * - `password`：Shopify 店开着访问密码（读到的是密码页）——填一次店铺密码再读，或先跳过；
+ * - `password_wrong`：填了店铺密码但没解开；
+ * - `blocked`：对方限流 / 拒绝（429 / 403）——过一会再试，或先跳过；
+ * - `dns`：域名还没解析（或拼错了）——检查网址；
+ * - `timeout`：对方太慢、一直没回；
+ * - `unreachable`：别的连不上。
+ */
+export type BrandIntakeFailureKind =
+  | 'password'
+  | 'password_wrong'
+  | 'blocked'
+  | 'dns'
+  | 'timeout'
+  | 'unreachable'
 
 /** 发起一次分析。 */
 export interface BrandIntakeStartInput {

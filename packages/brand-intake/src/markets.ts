@@ -14,16 +14,34 @@
  * | 结账币种 | 商品价的币种（只认一国一币的：GBP → 英国；EUR 认不出是哪国，不猜） | `currency` |
  *
  * 纪律：**推不出就空着**（界面说「没看出来，请选一下」）；币种最弱，只在别的信号一个都没有时才用，
- * 而且把握度是 `low`（界面标「请确认」）。国家切换一口气列了几十上百个国家的（「卖全世界」），
- * 那一条不算——那不是目标市场，是没设限。
+ * 而且把握度是 `low`（界面标「请确认」）。国家切换一口气列了三十个以上国家的（「卖全世界」），
+ * 不照写——WP240（Luoye 10-06）起默认只选美国，界面提示其余自己加。
  */
 import type { BrandIntakeEvidence, BrandIntakeField } from '@agentsws/contracts'
 import { MARKET_COUNTRY_CODES, normalizeMarkets } from '@agentsws/contracts'
 import { MAX_QUOTE_CHARS } from './field.js'
 import { absolute, hrefs, visibleText } from './html.js'
 
-/** 国家切换里列出的国家超过这个数，就当"卖全世界"，这一条不算目标市场。 */
-export const MARKET_SELECTOR_MAX = 25
+/**
+ * WP240（Luoye 10-06）：网站上能选的国家超过这个数，就**不照写**——目标市场默认只选美国，
+ * 界面明说「网站上能选的国家很多，先只选了美国，其余你自己加」。
+ *
+ * 原话：「你给他选了 200 多个国家，后面取消起来会很麻烦。一般情况下不会覆盖这么多国家市场，
+ * 所以不如让用户自己去选。」≤ 这个数时照常用读到的。
+ */
+export const MARKETS_MANY_THRESHOLD = 30
+
+/** 国家多到这个地步时默认选的那一个。 */
+export const MARKETS_MANY_DEFAULT = 'US'
+
+/** 默认只选美国那一份的出处 `locator`（界面认它出那句提示）。 */
+export const MARKETS_MANY_LOCATOR = 'markets:many-default-us'
+
+/**
+ * 国家切换里列出的国家超过这个数，这一条不按原样算目标市场（WP240 起与
+ * {@link MARKETS_MANY_THRESHOLD} 同一个数，超过就默认只选美国）。
+ */
+export const MARKET_SELECTOR_MAX = MARKETS_MANY_THRESHOLD
 
 /** 一国一币（币种 → 国家）。欧元、美元以外的多国货币不在表里：认不出是哪国，不猜。 */
 const SINGLE_COUNTRY_CURRENCY: Readonly<Record<string, string>> = {
@@ -261,8 +279,17 @@ export function inferMarkets(input: MarketInputs): BrandIntakeField<string[]> | 
   const home = input.home ?? ''
   const entry = input.entryUrl
 
+  /** WP240：国家多到不像目标市场——默认只选美国，其余让人自己加。 */
+  const manyDefault = (count: number, url: string, from: string): BrandIntakeField<string[]> => ({
+    value: [MARKETS_MANY_DEFAULT],
+    confidence: 'low',
+    evidence: [{ url, locator: MARKETS_MANY_LOCATOR, quote: `${from}: ${String(count)}` }],
+  })
+
   const selector = localizationCountries(home)
-  if (selector.length > 0 && selector.length <= MARKET_SELECTOR_MAX)
+  if (selector.length > MARKETS_MANY_THRESHOLD)
+    return manyDefault(selector.length, entry, 'shopify:localization')
+  if (selector.length > 0)
     add(selector, { url: entry, locator: 'shopify:localization', quote: selector.join(' ') })
 
   const lang = hreflangCountries(home, entry)
@@ -305,6 +332,9 @@ export function inferMarkets(input: MarketInputs): BrandIntakeField<string[]> | 
     }
   }
   if (votes.size === 0) return undefined
+  // WP240：别的信号（配送政策列了一长串国家之类）加起来也超了，同样默认只选美国
+  if (votes.size > MARKETS_MANY_THRESHOLD)
+    return manyDefault(votes.size, evidence[0]?.url ?? entry, evidence[0]?.locator ?? 'site')
   const order = [...votes.keys()]
   const value = [...order].sort(
     (a, b) => (votes.get(b) ?? 0) - (votes.get(a) ?? 0) || order.indexOf(a) - order.indexOf(b),

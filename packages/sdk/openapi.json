@@ -33753,6 +33753,11 @@
                     "type": "number",
                     "exclusiveMinimum": 0,
                     "maximum": 10
+                  },
+                  "storefront_password": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
                   }
                 },
                 "required": ["urls"]
@@ -34300,6 +34305,11 @@
                       "type": "string",
                       "format": "uri"
                     }
+                  },
+                  "storefront_password": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
                   }
                 }
               }

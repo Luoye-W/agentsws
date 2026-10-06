@@ -438,6 +438,11 @@ export interface WorkspaceProfile {
    * 没填 = 开发信不能发。以前住在 B2B「主动开发」的设置里，已有值启动时搬过来。
    */
   postal_address?: string
+  /**
+   * WP240：建品牌那一刻自动起的那一份（公司级三样的影子 + 建品牌时选的平台），**还没人走过首次设置**。
+   * 有它 = 这个品牌仍该进首次设置；走过第 ② 步 / 设置页存过一次就没有了。
+   */
+  provisional?: true
   set_at: Iso8601
 }
 

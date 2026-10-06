@@ -173,6 +173,16 @@ export interface OnboardingStateView {
    * 真源是契约里的 `STOREFRONT_PLATFORMS`。
    */
   storefront_platforms: StorefrontPlatformChoiceView[]
+  /**
+   * WP240：这是公司**加的**品牌（不是第一个品牌），而且公司那一层已经设过——
+   * 向导里公司级的（公司全称、你的称呼）不再问，从第 ② 步开始。第一个品牌没有这一位。
+   */
+  added_brand?: true
+  /**
+   * WP240：**这个品牌**现在有没有能用的 AI（跟随公司默认的算公司那一份）。
+   * 加的品牌接上了就把第 ① 步显示成「已接上（跟随公司）」直接过。
+   */
+  model_configured?: boolean
 }
 
 /** 向导第 ③ 步的候选：岗位与它包含的职责。 */

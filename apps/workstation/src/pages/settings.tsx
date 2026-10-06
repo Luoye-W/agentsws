@@ -123,7 +123,12 @@ export function SettingsPage({
           // WP62（51 §1 N0）：平台也能改；改成接不上的那几个之前，件里已经问过一次了
           storefront_platform: draft.storefront_platform,
           // WP65（52 O1）：品牌名（顶栏切换器显示的那一个）也从这里改
-          ...(draft.brand_name.trim() === '' ? {} : { brand_name: draft.brand_name.trim() }),
+          // WP240：只在改过时发；改的是**当前品牌**（服务端按会话绑的品牌写）。公司那三样
+          // 没变服务端也不碰组织——同一张表存，只写有改动的那一级
+          ...(draft.brand_name.trim() === '' ||
+          draft.brand_name.trim() === (onboarding.data?.brand_name ?? '')
+            ? {}
+            : { brand_name: draft.brand_name.trim() }),
           // WP166：目标市场——只在改过时发（原样存不该把「从官网看出来的」改成「你选的」）
           ...(sameMarkets(draft.markets, onboarding.data?.profile?.markets ?? [])
             ? {}

@@ -2,8 +2,9 @@
  * WP166：从官网推目标市场。
  *
  * 要钉住的事：每一条信号认得出来、各带一条出处；推不出就空着（不编）；币种最弱、只在别的都没有时用；
- * 「卖全世界」的国家切换不算；否定句（We do not ship to …）里的国家不算。
+ * 「卖全世界」的国家切换（> 30 个）不照写、默认只选美国（WP240）；否定句（We do not ship to …）里的国家不算。
  */
+import { MARKET_COUNTRY_CODES } from '@agentsws/contracts'
 import { describe, expect, it } from 'vitest'
 import {
   analyzeBrand,
@@ -12,6 +13,8 @@ import {
   hreflangCountries,
   inferMarkets,
   localizationCountries,
+  MARKETS_MANY_LOCATOR,
+  MARKETS_MANY_THRESHOLD,
   shippingCountries,
   tldCountry,
 } from '../src/index.js'
@@ -93,10 +96,21 @@ describe('WP166 · 从官网推目标市场', () => {
     ).toBeUndefined()
   })
 
-  it('「卖全世界」的国家切换（几十个国家）不算目标市场；什么都推不出就空着', () => {
-    const many = ['US', 'CA', 'GB', 'DE', 'FR', 'IT', 'ES', 'NL', 'BE', 'AT', 'CH', 'SE', 'NO']
+  it('WP240：国家切换 ≤ 30 个照常用读到的（27 个就是 27 个）', () => {
     const all = [
-      ...many,
+      'US',
+      'CA',
+      'GB',
+      'DE',
+      'FR',
+      'IT',
+      'ES',
+      'NL',
+      'BE',
+      'AT',
+      'CH',
+      'SE',
+      'NO',
       'DK',
       'FI',
       'IE',
@@ -113,7 +127,37 @@ describe('WP166 · 从官网推目标市场', () => {
       'BR',
     ]
     const home = `<form action="/localization">${all.map((c) => `<a data-value="${c}"></a>`).join('')}</form>`
-    expect(inferMarkets({ entryUrl: HOME, home })).toBeUndefined()
+    const f = inferMarkets({ entryUrl: HOME, home })
+    expect(f?.value).toEqual(all)
+    expect(f?.evidence[0]?.locator).toBe('shopify:localization')
+  })
+
+  it('WP240（Luoye 10-06）：国家切换超过 30 个——不照写、不判「全球」，默认只选美国', () => {
+    const many = MARKET_COUNTRY_CODES.slice(0, MARKETS_MANY_THRESHOLD + 1)
+    expect(many.length).toBe(31)
+    const home = `<form action="/localization">${many.map((c) => `<a data-value="${c}"></a>`).join('')}</form>`
+    const f = inferMarkets({
+      entryUrl: HOME,
+      home,
+      // 别的信号也在：一样只选美国（让人自己加）
+      shipping: { url: `${HOME}policies/shipping-policy`, text: 'We ship to Germany and France.' },
+    })
+    expect(f?.value).toEqual(['US'])
+    expect(f?.confidence).toBe('low')
+    expect(f?.evidence).toHaveLength(1)
+    expect(f?.evidence[0]?.locator).toBe(MARKETS_MANY_LOCATOR)
+    expect(f?.evidence[0]?.quote).toContain('31')
+  })
+
+  it('WP240：别的信号（这里是 35 个语言版本）超过 30 个国家也一样默认只选美国', () => {
+    const codes = MARKET_COUNTRY_CODES.slice(0, 35)
+    const home = codes
+      .map((c) => `<link rel="alternate" hreflang="en-${c.toLowerCase()}" href="${HOME}">`)
+      .join('')
+    const f = inferMarkets({ entryUrl: HOME, home })
+    expect(f?.value).toEqual(['US'])
+    expect(f?.evidence[0]?.locator).toBe(MARKETS_MANY_LOCATOR)
+    expect(f?.evidence[0]?.quote).toContain('35')
   })
 
   it('页面上的「Ships to …」', () => {

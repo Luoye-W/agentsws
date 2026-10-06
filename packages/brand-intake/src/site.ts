@@ -23,6 +23,7 @@
 import {
   BRAND_INTAKE_MAX_PAGES,
   BRAND_INTAKE_MAX_PRODUCTS,
+  type BrandIntakeFailureKind,
   type BrandIntakePage,
   type BrandIntakePolicy,
   type BrandIntakeProduct,
@@ -30,7 +31,13 @@ import {
   type BrandIntakeSocialLink,
   type StorefrontPlatform,
 } from '@agentsws/contracts'
-import { fetchPage, fetchRobots, isDisallowed, type PageFetch } from './fetch.js'
+import {
+  fetchPage,
+  fetchRobots,
+  isDisallowed,
+  isShopifyPasswordPage,
+  type PageFetch,
+} from './fetch.js'
 import { field, type IntakeLayer } from './field.js'
 import {
   absolute,
@@ -171,6 +178,24 @@ export interface SiteIntakeResult {
    * **同一次抓取**上再读一遍 CSS，重抓一遍别人的站是我们不该做的事。
    */
   documents?: { url: string; kind: BrandIntakePage['kind']; html: string }[]
+  /** WP240：首页就读不到时是哪一种（界面按它给下一步）。读到了就没有。 */
+  failure_kind?: BrandIntakeFailureKind
+  /** WP240：入口是 Shopify 密码页（解开了也照样带着，界面据此不再问密码）。 */
+  password_protected?: boolean
+}
+
+/** WP240：`analyzeSite` 的可选项。 */
+export interface SiteIntakeOptions {
+  maxPages?: number
+  keepHtml?: boolean
+  /** 每抓完一页回一次（界面「已经读了 N 页」靠它跟着动，不等整轮跑完）。 */
+  onPage?: (page: BrandIntakePage) => void
+  /**
+   * 用户在原生表单里填的店铺访问密码 + 解开它的那一下（`unlockShopifyStorefront`）。
+   * 两样都给才会去解；密码只交给 `unlock`，不进结果、不进页面记录。
+   */
+  storefrontPassword?: string
+  unlock?: (origin: string, password: string) => Promise<string | undefined>
 }
 
 /**
@@ -183,7 +208,7 @@ export interface SiteIntakeResult {
 export async function analyzeSite(
   doFetch: PageFetch,
   entryUrl: string,
-  options: { maxPages?: number; keepHtml?: boolean } = {},
+  options: SiteIntakeOptions = {},
 ): Promise<SiteIntakeResult> {
   const maxPages = options.maxPages ?? BRAND_INTAKE_MAX_PAGES
   const documents: { url: string; kind: BrandIntakePage['kind']; html: string }[] = []
@@ -192,16 +217,37 @@ export async function analyzeSite(
   const disallow = await fetchRobots(doFetch, origin)
   const pages: BrandIntakePage[] = []
   const profile: BrandIntakeProfile = {}
+  /** WP240：解开店铺密码之后这一次抓取带的 cookie（只活在这个函数里）。 */
+  let cookie: string | undefined
+  let failure: BrandIntakeFailureKind | undefined
+  let passwordProtected = false
+  let homeLocked = false
+
+  const record = (page: BrandIntakePage): void => {
+    pages.push(page)
+    options.onPage?.(page)
+  }
 
   const get = async (url: string, kind: BrandIntakePage['kind']): Promise<string | undefined> => {
     if (pages.length >= maxPages) return undefined
     const path = new URL(url).pathname
     if (isDisallowed(path, disallow)) {
-      pages.push({ url, kind, ok: false, reason: 'robots.txt 不让抓这一页' })
+      record({ url, kind, ok: false, reason: 'robots.txt 不让抓这一页' })
       return undefined
     }
-    const res = await fetchPage(doFetch, url)
-    pages.push({
+    const res = await fetchPage(doFetch, url, cookie === undefined ? {} : { cookie })
+    // 解开之前读到的密码页不算读到（首页那一跳在下面单独处理）
+    if (res.ok && kind !== 'home' && isShopifyPasswordPage(res.html, res.final_url)) {
+      record({ url, kind, ok: false, reason: '店铺有访问密码，这一页读不到' })
+      return undefined
+    }
+    if (!res.ok && kind === 'home' && res.failure_kind !== undefined) failure = res.failure_kind
+    // 首页是密码页：先不记这一页（解开了算读到，解不开下面记一条「有访问密码」）
+    if (res.ok && kind === 'home' && isShopifyPasswordPage(res.html, res.final_url)) {
+      homeLocked = true
+      return res.html
+    }
+    record({
       url,
       kind,
       ok: res.ok,
@@ -216,11 +262,42 @@ export async function analyzeSite(
     pages,
     profile,
     ...(options.keepHtml === true ? { documents } : {}),
+    ...(failure === undefined ? {} : { failure_kind: failure }),
+    ...(passwordProtected ? { password_protected: true } : {}),
   })
 
   // ── 首页 ────────────────────────────────────────────────────────────
-  const home = await get(entryUrl, 'home')
+  let home = await get(entryUrl, 'home')
   if (home === undefined) return done(profile)
+  /*
+   * WP240：Shopify 开着访问密码。用户填了密码就解一次再读；没填 / 解不开就**当场停**，
+   * 照实说「店铺有访问密码」——后面那十来页全会被跳到密码页，接着抓只是让人干等。
+   */
+  if (homeLocked) {
+    passwordProtected = true
+    const password = options.storefrontPassword
+    cookie =
+      password === undefined || password === '' || options.unlock === undefined
+        ? undefined
+        : await options.unlock(origin, password)
+    if (cookie !== undefined) {
+      const opened = await fetchPage(doFetch, entryUrl, { cookie })
+      home =
+        opened.ok && !isShopifyPasswordPage(opened.html, opened.final_url) ? opened.html : undefined
+    } else home = undefined
+    if (home === undefined) {
+      failure = password === undefined || password === '' ? 'password' : 'password_wrong'
+      record({
+        url: entryUrl,
+        kind: 'home',
+        ok: false,
+        reason: failure === 'password' ? '店铺开着访问密码，读到的是密码页' : '店铺密码没能解开',
+      })
+      return done(profile)
+    }
+    if (options.keepHtml === true) documents.push({ url: entryUrl, kind: 'home', html: home })
+    record({ url: entryUrl, kind: 'home', ok: true })
+  }
 
   const org = jsonLdNodes(home).find((n) => isType(n, /organization|brand|onlinestore/i))
   const siteName =

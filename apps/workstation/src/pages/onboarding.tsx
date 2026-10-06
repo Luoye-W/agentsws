@@ -20,6 +20,7 @@
  *    走了旁路的人向导完成后才看得见顶栏那条「还没接模型」（70 §2.2 末段）。
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Check } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { BrandMark } from '@/components/design'
@@ -126,8 +127,23 @@ function DoneMark() {
   )
 }
 
-/** 第 ① 步是怎么过去的：接上了官方接口 / 自己的模型 / 走了演示旁路。 */
-type AiState = 'official' | 'own' | 'account' | 'demo' | undefined
+/**
+ * 第 ① 步是怎么过去的：接上了官方接口 / 自己的模型 / 走了演示旁路；
+ * WP240：`inherited` = 公司加的品牌、AI 跟随公司已经接上（第 ① 步显示「已接上（跟随公司）」直接过）。
+ */
+type AiState = 'official' | 'own' | 'account' | 'demo' | 'inherited' | undefined
+
+/**
+ * WP240：加的品牌从哪一步开始。公司那一层已经设过、AI 也接上了（跟随公司默认）——
+ * 第 ① 步不用再问，直接从第 ② 步「你的生意」开始；AI 没接上的照旧从第 ① 步。
+ */
+export function addedBrandStart(state: {
+  added_brand?: true
+  model_configured?: boolean
+}): { step: number; ai: AiState } | undefined {
+  if (state.added_brand !== true || state.model_configured !== true) return undefined
+  return { step: 1, ai: 'inherited' }
+}
 
 export function OnboardingPage(): React.ReactNode {
   const { t } = useApp()
@@ -147,6 +163,20 @@ export function OnboardingPage(): React.ReactNode {
   const [companyDraft, setCompanyDraft] = useState<string | undefined>(undefined)
 
   const state = useQuery({ queryKey: ['onboarding', 'state'], queryFn: () => getOnboardingState() })
+  /*
+   * WP240：加的品牌（公司那一层设过、AI 跟随公司接上了）一进来就站在第 ② 步。
+   * 只在第一次拿到 state 时定一次——之后用户点「上一步」回第 ① 步看得到「已接上（跟随公司）」。
+   */
+  const [startedFrom, setStartedFrom] = useState(false)
+  useEffect(() => {
+    if (startedFrom || state.data === undefined) return
+    setStartedFrom(true)
+    const start = addedBrandStart(state.data)
+    if (start === undefined) return
+    setAi(start.ai)
+    setStep(start.step)
+  }, [startedFrom, state.data])
+  const addedBrand = state.data?.added_brand === true
   /**
    * WP233：第 ② 步那一行「你的账号」就是第 ① 步关联的那个云账号（与 `AiStep` 同一个 queryKey，
    * 共用缓存）。没关联 / 查不到就不给，那一行按本机身份决定出不出（`shownAccountEmail`）。
@@ -316,9 +346,15 @@ export function OnboardingPage(): React.ReactNode {
           WP112：**第一屏**的页头带一段「集结」——六块依次落位。
           它说的是"这套东西正在起来"，所以只在第 ① 步出、只播一次、播完停住。
         */}
-        <h1 className="flex items-center gap-2 text-sm font-semibold">
+        <h1
+          className="flex items-center gap-2 text-sm font-semibold"
+          data-testid="onboarding-title"
+        >
           {step === 0 ? <BrandMark size={28} motion="assemble" /> : null}
-          {t('onboarding.title')}
+          {/* WP240：加的品牌标题带上品牌名——设置的是哪一个品牌，一眼可见 */}
+          {addedBrand
+            ? t('onboarding.title.brand', { name: state.data.brand_name })
+            : t('onboarding.title')}
         </h1>
         {step === DONE_STEP ? null : (
           <button
@@ -339,7 +375,17 @@ export function OnboardingPage(): React.ReactNode {
 
       <Card>
         <CardContent className="flex flex-col gap-4 pt-6">
-          {step === 0 ? (
+          {step === 0 && ai === 'inherited' ? (
+            <p
+              className="flex items-center gap-2 text-sm"
+              data-slot="status"
+              data-testid="onboarding-ai-inherited"
+            >
+              <Check aria-hidden className="size-4 text-ws-good" />
+              {t('onboarding.ai.inherited')}
+            </p>
+          ) : null}
+          {step === 0 && ai !== 'inherited' ? (
             <AiStep
               onConnected={(how) => {
                 setAi(how)
@@ -360,6 +406,7 @@ export function OnboardingPage(): React.ReactNode {
                   email: state.data.person.email,
                 }}
                 {...(cloudEmail === undefined ? {} : { cloudEmail })}
+                addedBrand={addedBrand}
                 companyName={companyName}
                 companyEdited={companyDraft !== undefined}
                 onRename={setNameDraft}
@@ -369,16 +416,19 @@ export function OnboardingPage(): React.ReactNode {
                 }}
               />
               {/* 46 §2 I2 I3：已经有同事在用的话，这一步就是"加入他们"而不是"再开一家" */}
-              <JoinPanel
-                {...(peers.data === undefined ? {} : { discovery: peers.data })}
-                configured={state.data.profile !== undefined}
-                collapsed
-                busy={join.isPending}
-                sent={sent}
-                onJoin={(input) => {
-                  join.mutate(input)
-                }}
-              />
+              {/* WP240：加的品牌不出（公司已经在了，不存在"加入别家"这回事） */}
+              {addedBrand ? null : (
+                <JoinPanel
+                  {...(peers.data === undefined ? {} : { discovery: peers.data })}
+                  configured={state.data.profile !== undefined}
+                  collapsed
+                  busy={join.isPending}
+                  sent={sent}
+                  onJoin={(input) => {
+                    join.mutate(input)
+                  }}
+                />
+              )}
             </div>
           ) : null}
 

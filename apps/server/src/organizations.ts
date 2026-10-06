@@ -57,7 +57,10 @@ export interface OrganizationsAssemblyOptions {
   roles: RoleStore
   approvals: ApprovalBus
   appendEvent(e: Omit<EventEnvelope, 'id' | 'at'> & { at?: string }): void
-  /** 这个服务进程这会儿装配的是哪个品牌（活数据源只有它有）。 */
+  /**
+   * 这个服务进程启动时装配的是哪个品牌。
+   * WP240：品牌一览的「当前」不再看它（看会话绑的品牌）；留着是契约只加不删。
+   */
   currentWorkspace(): WorkspaceId
   /** 品牌级档案：读一个品牌的「你卖的是」「网站平台」。 */
   brandProfile(workspace_id: WorkspaceId): BrandProfile | undefined
@@ -201,7 +204,11 @@ export function createOrganizations(options: OrganizationsAssemblyOptions): Orga
     actor: OrganizationActor,
   ): Promise<BrandView> => {
     const profile = options.brandProfile(workspace.id)
-    const current = workspace.id === options.currentWorkspace()
+    /*
+     * WP240：「当前」= **这个人这会儿的会话绑在哪个品牌**（切品牌换的就是这张票），
+     * 不是这个进程启动时装配的那个品牌——以前切到第二个品牌后，一览里还标着第一个品牌「当前」。
+     */
+    const current = workspace.id === actor.workspace_id
     const open = await approvals.queue({
       workspace_id: workspace.id,
       person_id: actor.person_id,

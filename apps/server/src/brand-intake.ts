@@ -33,8 +33,11 @@ import {
   estimateCredits,
   mergeProfile,
   type PageFetch,
+  type StorefrontPasswordPost,
+  unlockShopifyStorefront,
 } from '@agentsws/brand-intake'
 import type {
+  BrandIntakeFailureKind,
   BrandIntakeProfile,
   BrandIntakeRun,
   BrandIntakeSourceKind,
@@ -50,14 +53,19 @@ import { DEFAULT_BRAND_INTAKE_CAP_CREDITS } from '@agentsws/contracts'
  * 其中一边做错事。
  */
 export interface BrandIntakeSinks {
-  /** 写组织 / 工作区档案（品牌名、平台、币种…）。 */
-  applyProfile(profile: BrandIntakeProfile): Promise<void> | void
+  /**
+   * 写组织 / 工作区档案（品牌名、平台、币种…）。
+   *
+   * WP240：带上**是谁、在哪个品牌**确认的——写的必须是 `actor.workspace_id` 那个品牌，
+   * 不是这个进程启动时的那个品牌（第二个品牌的分析写到第一个品牌身上，就是那次事故）。
+   */
+  applyProfile(profile: BrandIntakeProfile, actor: BrandIntakeActor): Promise<void> | void
   /**
    * 往知识库里建首批条目（政策要点、商品卡），**标来源「自动分析，待核」**。
    *
    * 不给就是这个进程不装知识库——档案照写，知识那一步跳过。
    */
-  seedKnowledge?: (profile: BrandIntakeProfile) => Promise<void> | void
+  seedKnowledge?: (profile: BrandIntakeProfile, actor: BrandIntakeActor) => Promise<void> | void
 }
 
 export interface BrandIntakeOptions {
@@ -69,6 +77,11 @@ export interface BrandIntakeOptions {
   sinks: BrandIntakeSinks
   /** 后台那一跳炸了的时候写哪儿（默认 stderr）。 */
   warn?: (line: string) => void
+  /**
+   * WP240：提交 Shopify 店铺访问密码用的 POST（生产传 `globalThis.fetch`）。不给 = 不支持
+   * 填密码（界面照样说「店铺有访问密码」，只是只剩「先跳过」）。
+   */
+  passwordPost?: StorefrontPasswordPost
 }
 
 export interface BrandIntakeAssembly {
@@ -91,11 +104,36 @@ export interface BrandIntakeAssembly {
   settle(): Promise<void>
 }
 
+/**
+ * WP240：读不到时的那一句人话 + 下一步。按种类说，**不说"请求失败"**；说不清是哪一种就用
+ * 第一页自己带的原因。
+ */
+export function failureLine(kind: BrandIntakeFailureKind | undefined, reason?: string): string {
+  switch (kind) {
+    case 'password':
+      return '店铺开着访问密码，读不到内容。填一下店铺密码再读，或者先跳过、手动填品牌资料。'
+    case 'password_wrong':
+      return '店铺密码没能解开。核对一下再试，或者先跳过、手动填品牌资料。'
+    case 'blocked':
+      return '对方暂时不让读（被限流或被拦了）。过几分钟再试，或者先跳过、手动填品牌资料。'
+    case 'dns':
+      return '找不到这个网址（域名还没解析，或者拼错了）。核对一下网址，或者先跳过。'
+    case 'timeout':
+      return '对方一直没回应。过一会再试，或者先跳过、手动填品牌资料。'
+    case 'unreachable':
+      return '连不上这个网站。核对一下网址，或者先跳过、手动填品牌资料。'
+    default:
+      return reason ?? '一个页面都没抓着，换个网址再试试'
+  }
+}
+
 export function createBrandIntake(options: BrandIntakeOptions): BrandIntakeAssembly {
   const runs = new Map<string, BrandIntakeRun>()
   /** 工作区 → 最近那一轮抓回来的 HTML（见 `BrandIntakeAssembly.latestDocuments`）。 */
   const documents = new Map<string, { url: string; kind: string; html: string }[]>()
   const inflight = new Set<Promise<void>>()
+  /** WP240：每个 run 当前是第几轮（重新分析会换一轮）。 */
+  const gens = new Map<string, number>()
   const warn = options.warn ?? ((line: string) => process.stderr.write(line))
 
   const now = (): string => options.clock.now()
@@ -116,17 +154,49 @@ export function createBrandIntake(options: BrandIntakeOptions): BrandIntakeAssem
    *
    * `previous` 有值就是「重新分析」——合并时用户改过的格子整格不动（70 §3.4）。
    */
-  const run = (id: string, urls: string[], cap: number, previous?: BrandIntakeProfile): void => {
+  const run = (
+    id: string,
+    urls: string[],
+    cap: number,
+    previous?: BrandIntakeProfile,
+    storefrontPassword?: string,
+  ): void => {
+    /*
+     * WP240：店铺访问密码**只活在这个闭包里**——不进 run、不进事件、不进 warn 那一行。
+     * 解开它的那一下也只拿回一串 cookie，同样只用于这一次抓取。
+     */
+    const post = options.passwordPost
+    // 同一个 run 重新分析时，上一轮还没收尾的那一跳不许再往新一轮上写进度
+    const gen = (gens.get(id) ?? 0) + 1
+    gens.set(id, gen)
     const task = (async () => {
       try {
-        const out = await analyzeBrand(options.fetch, urls, { capCredits: cap, keepHtml: true })
+        const out = await analyzeBrand(options.fetch, urls, {
+          capCredits: cap,
+          keepHtml: true,
+          // WP240：每抓完一页就把进度写回 run（界面「已经读了 N 页」跟着动，不等整轮跑完）
+          onPage: (page) => {
+            const current = runs.get(id)
+            if (gens.get(id) !== gen || current === undefined || current.status !== 'running')
+              return
+            runs.set(id, { ...current, pages: [...current.pages, page], updated_at: now() })
+          },
+          ...(storefrontPassword === undefined || post === undefined
+            ? {}
+            : {
+                storefrontPassword,
+                unlock: (origin: string, password: string) =>
+                  unlockShopifyStorefront(post, origin, password),
+              }),
+        })
         const current = runs.get(id)
-        if (current === undefined) return
+        if (current === undefined || gens.get(id) !== gen) return
         const profile = previous === undefined ? out.profile : mergeProfile(previous, out.profile)
         const gotSomething = out.pages.some((p) => p.ok)
         documents.set(current.workspace_id, out.documents ?? [])
+        const { failure: _f, failure_kind: _k, password_protected: _p, ...rest } = current
         runs.set(id, {
-          ...current,
+          ...rest,
           status: gotSomething
             ? out.stopped_for_budget
               ? 'budget_exceeded'
@@ -136,9 +206,13 @@ export function createBrandIntake(options: BrandIntakeOptions): BrandIntakeAssem
           budget: out.budget,
           profile,
           updated_at: now(),
+          ...(out.password_protected === true ? { password_protected: true } : {}),
           ...(gotSomething
             ? {}
-            : { failure: out.pages[0]?.reason ?? '一个页面都没抓着，换个网址再试试' }),
+            : {
+                failure: failureLine(out.failure_kind, out.pages[0]?.reason),
+                ...(out.failure_kind === undefined ? {} : { failure_kind: out.failure_kind }),
+              }),
         })
       } catch (err) {
         const current = runs.get(id)
@@ -179,7 +253,7 @@ export function createBrandIntake(options: BrandIntakeOptions): BrandIntakeAssem
       }
       runs.set(id, fresh)
       // **不等它**：用户这就可以去第 ③ 步选岗位
-      run(id, input.urls, cap)
+      run(id, input.urls, cap, undefined, input.storefront_password)
       return fresh
     },
 
@@ -206,8 +280,8 @@ export function createBrandIntake(options: BrandIntakeOptions): BrandIntakeAssem
         input.edits === undefined
           ? current.profile
           : applyEdits(current.profile, input.edits, now())
-      await options.sinks.applyProfile(profile)
-      await options.sinks.seedKnowledge?.(profile)
+      await options.sinks.applyProfile(profile, actor)
+      await options.sinks.seedKnowledge?.(profile, actor)
       const next: BrandIntakeRun = {
         ...current,
         status: 'confirmed',
@@ -221,8 +295,9 @@ export function createBrandIntake(options: BrandIntakeOptions): BrandIntakeAssem
     reanalyze(actor, input) {
       const current = mine(actor, input.run_id)
       const urls = input.urls ?? current.inputs.map((i) => i.url)
+      const { failure: _f, failure_kind: _k, ...rest } = current
       const next: BrandIntakeRun = {
-        ...current,
+        ...rest,
         status: 'running',
         inputs: inputsOf(urls),
         pages: [],
@@ -231,7 +306,7 @@ export function createBrandIntake(options: BrandIntakeOptions): BrandIntakeAssem
       }
       runs.set(next.id, next)
       // 带着上一次的结果进去：用户改过的格子整格不动
-      run(next.id, urls, next.budget.cap_credits, current.profile)
+      run(next.id, urls, next.budget.cap_credits, current.profile, input.storefront_password)
       return next
     },
   }

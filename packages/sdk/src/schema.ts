@@ -30897,6 +30897,7 @@ export interface operations {
         'application/json': {
           urls: string[]
           cap_credits?: number
+          storefront_password?: string
         }
       }
     }
@@ -31268,6 +31269,7 @@ export interface operations {
       content: {
         'application/json': {
           urls?: string[]
+          storefront_password?: string
         }
       }
     }
