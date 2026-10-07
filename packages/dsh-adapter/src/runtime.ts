@@ -33,12 +33,16 @@ import type { DraftPayload, StageIntent } from '@agentsws/stand-ins'
 import {
   assemblePrompt,
   boundariesToAsk,
+  deliversWith,
   describeRun,
+  looksUnfinished,
   promptHash,
   TOOL_CALL_TEXT_FAILURE,
   TOOL_CALL_TEXT_NUDGE,
   TOOL_CALL_TEXT_RETRIES,
   TOOL_CALL_TEXT_STEP,
+  UNFINISHED_NUDGE,
+  UNFINISHED_STEP,
 } from '@agentsws/stand-ins'
 import { replySubject } from '@agentsws/support-core'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
@@ -145,7 +149,19 @@ export function createInProcessDshRuntime(options: DshRuntimeOptions): RuntimeAd
           ? `memory://dsh/${req.id}`
           : `file://${join(options.sessionLogRoot, `${session_id}.jsonl`)}`
 
+      /** WP260：要产出的运行，产出了没有（成功调到 `produce.deliver_tools` 里的工具）。 */
+      const callTools = new Map<string, string>()
+      let delivered = false
       const emit = (e: RunEvent): void => {
+        if (req.produce !== undefined) {
+          if (e.type === 'tool.call') callTools.set(e.call_id, e.tool)
+          if (
+            e.type === 'tool.result' &&
+            e.status === 'ok' &&
+            deliversWith(req.produce, callTools.get(e.call_id) ?? '')
+          )
+            delivered = true
+        }
         events.push(e)
         sink(e)
       }
@@ -437,6 +453,31 @@ export function createInProcessDshRuntime(options: DshRuntimeOptions): RuntimeAd
         ) {
           emit({ type: 'progress', step: TOOL_CALL_TEXT_STEP, note: 'retry' })
           turn = await harness.runTurn(TOOL_CALL_TEXT_NUDGE)
+        }
+        /*
+         * WP260：要产出的运行还没产出、这一轮却以「我接下来要…」收尾——在同一个 Agent 上追加一句「接着做」
+         * 再跑一轮（`agent.followup`，与上面重试同一条路；最多 `max_nudges` 次）。普通运行一个字节不变。
+         */
+        const produce = req.produce
+        for (
+          let nudge = 0;
+          produce !== undefined &&
+          nudge < produce.max_nudges &&
+          !delivered &&
+          harness.gate.outputs.length === 0 &&
+          turn.tool_call_text !== true &&
+          looksUnfinished(turn.text) &&
+          !signal.aborted &&
+          exhausted === undefined &&
+          modelError === undefined;
+          nudge += 1
+        ) {
+          emit({
+            type: 'progress',
+            step: UNFINISHED_STEP,
+            note: `${nudge + 1}/${produce.max_nudges}`,
+          })
+          turn = await harness.runTurn(UNFINISHED_NUDGE)
         }
         offProjection()
         toolCalls = harness.gate.toolCalls

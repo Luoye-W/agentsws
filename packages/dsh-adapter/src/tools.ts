@@ -24,6 +24,7 @@ import {
   isWebTool,
   OWNER_TOOL_DEF_BY_NAME,
   READ_SKILL_TOOL,
+  renderThemeRead,
   renderTrustedToolResult,
   SKILL_TOOL_DEF_BY_NAME,
   STAGE_NOT_CREATED,
@@ -60,8 +61,21 @@ function renderReadResult(
   value: unknown,
 ): { type: 'text'; text: string }[] {
   const trusted = renderTrustedToolResult(name, args, value)
-  if (trusted === undefined) return renderToolResult(value)
-  return [{ type: 'text', text: redactOutboundText('tool_result', trusted) }]
+  if (trusted !== undefined)
+    return [{ type: 'text', text: redactOutboundText('tool_result', trusted) }]
+  // WP260：主题文件原文不转义、按一页放宽围栏（与 direct 同一个函数）
+  const themeRead = renderThemeRead(name, value)
+  if (themeRead !== undefined)
+    return [
+      {
+        type: 'text',
+        text: EXTERNAL_FENCE.fencePayload(
+          redactOutboundText('tool_result', themeRead.text),
+          themeRead.max_chars,
+        ),
+      },
+    ]
+  return renderToolResult(value)
 }
 
 /** WP89：官方 `dsh-tool-bash` 的工具名（分类由 `gate.ts` 那一关先给出，见下）；WP225：Windows 上是 `dsh-tool-pwsh` 的 `pwsh`。 */
