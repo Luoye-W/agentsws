@@ -76,8 +76,17 @@ export const THEME_BASE = {
   bytes: 627_845,
 } as const
 
-export const themeBaseUrl = (commit: string = THEME_BASE.commit): string =>
-  `https://codeload.github.com/${THEME_BASE.repo}/tar.gz/${commit}`
+/** 起底包的钉子（测试 / 演示换成本地造的假主题包）。 */
+export interface ThemeBasePin {
+  repo: string
+  version: string
+  commit: string
+  sha256: string
+  license: string
+}
+
+export const themeBaseUrl = (pin: ThemeBasePin = THEME_BASE): string =>
+  `https://codeload.github.com/${pin.repo}/tar.gz/${pin.commit}`
 
 /** 店铺主题认的几个目录（`theme push` 只传这些；AI 也只许写这些）。 */
 export const THEME_DIRS = [
@@ -159,6 +168,8 @@ export interface SiteThemeOptions {
   run?: RunCli
   /** 下起底包（测试 / 演示注入）；不给 = 全局 fetch。 */
   fetch?: ThemeFetch
+  /** 起底钉哪一版（测试 / 演示注入假包的钉子）；不给 = {@link THEME_BASE}。 */
+  base?: ThemeBasePin
   ledger: { stage(input: StageInput): Promise<StageOutcome> }
   effectiveConfig(assignment_id: string): EffectiveConfig
   /** 「预览好了」进事项时间线（有事项时）。 */
@@ -283,6 +294,7 @@ export function resolveInside(root: string, raw: string): { abs: string; rel: st
 
 export function createSiteTheme(options: SiteThemeOptions): SiteThemeAssembly {
   const ws = options.workspace_id
+  const pin: ThemeBasePin = options.base ?? THEME_BASE
   const now = (): string => options.clock.now()
   const emit = (type: string, payload: Record<string, unknown>): void =>
     options.appendEvent?.(type, payload)
@@ -485,7 +497,7 @@ export function createSiteTheme(options: SiteThemeOptions): SiteThemeAssembly {
         options.fetch ?? ((url) => fetch(url, { signal: AbortSignal.timeout(120_000) }))
       let bytes: Uint8Array
       try {
-        const res = await fetchImpl(themeBaseUrl())
+        const res = await fetchImpl(themeBaseUrl(pin))
         if (!res.ok) throw new Error(`HTTP ${res.status}`)
         bytes = new Uint8Array(await res.arrayBuffer())
       } catch (e) {
@@ -494,7 +506,7 @@ export function createSiteTheme(options: SiteThemeOptions): SiteThemeAssembly {
           `下不来开源主题 agentsws-theme（${e instanceof Error ? e.message : String(e)}）。看一下网络，再让我试一次。`,
         )
       }
-      if (sha256(bytes) !== THEME_BASE.sha256)
+      if (sha256(bytes) !== pin.sha256)
         throw new SiteThemeError(
           'integrity',
           '下来的开源主题和钉死的那一版对不上（校验没过），一个文件都没放。',
@@ -503,7 +515,7 @@ export function createSiteTheme(options: SiteThemeOptions): SiteThemeAssembly {
       mkdirSync(staging, { recursive: true })
       try {
         extractTgz(bytes, staging)
-        const top = join(staging, `${THEME_BASE.repo.split('/')[1]}-${THEME_BASE.commit}`)
+        const top = join(staging, `${pin.repo.split('/')[1]}-${pin.commit}`)
         if (!existsSync(top) || !statSync(top).isDirectory())
           throw new SiteThemeError('integrity', '开源主题的包里没有预期的那一层目录')
         for (const name of readdirSync(top)) renameSync(join(top, name), join(root, name))
@@ -513,21 +525,21 @@ export function createSiteTheme(options: SiteThemeOptions): SiteThemeAssembly {
       }
       const state = stateOf(shop)
       state.base = {
-        repo: THEME_BASE.repo,
-        version: THEME_BASE.version,
-        commit: THEME_BASE.commit,
-        license: THEME_BASE.license,
+        repo: pin.repo,
+        version: pin.version,
+        commit: pin.commit,
+        license: pin.license,
         at: now(),
       }
       state.baseline = manifestOf(root)
       save()
-      emit('site_theme.initialized', { workspace_id: ws, version: THEME_BASE.version })
+      emit('site_theme.initialized', { workspace_id: ws, version: pin.version })
       return {
         base: {
-          repo: THEME_BASE.repo,
-          version: THEME_BASE.version,
-          commit: THEME_BASE.commit,
-          license: THEME_BASE.license,
+          repo: pin.repo,
+          version: pin.version,
+          commit: pin.commit,
+          license: pin.license,
         },
         files: Object.keys(state.baseline).length,
         moved_aside: moved,

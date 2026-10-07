@@ -509,6 +509,7 @@ import {
   createSiteTheme,
   type SiteThemeAssembly,
   SiteThemeError,
+  type ThemeBasePin,
   type ThemeFetch,
 } from './site-theme.js'
 import { enrichSkillSummaries } from './skill-catalog.js'
@@ -881,7 +882,7 @@ export interface ServerOptions {
    * WP253：建站岗位主题工坊的注入点（测试 / demo 换成假 `shopify` 与本地假主题包，不联网、不碰真店）。
    * 生产不传：用 WP245 装好的 CLI 真跑，起底包从 codeload.github.com 下钉死的那一版。
    */
-  siteTheme?: { run?: RunCli; fetch?: ThemeFetch }
+  siteTheme?: { run?: RunCli; fetch?: ThemeFetch; base?: ThemeBasePin }
   /**
    * WP247：本机连接器下载器的注入点（测试换成假 npm，不联网）。生产不传：只有桌面壳设了
    * `AGENTSWS_CONNECT_LOCAL_RUNTIME=1`（它来起停本机连接器）且有数据目录时才装配。
@@ -2478,6 +2479,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       env,
       ...(options.siteTheme?.run === undefined ? {} : { run: options.siteTheme.run }),
       ...(options.siteTheme?.fetch === undefined ? {} : { fetch: options.siteTheme.fetch }),
+      ...(options.siteTheme?.base === undefined ? {} : { base: options.siteTheme.base }),
       ledger: txn.ledger,
       effectiveConfig: (id) => roles.effectiveConfig(id),
       notePreview: (matter_id, input) => {
