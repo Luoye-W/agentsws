@@ -27,7 +27,7 @@ export const LOCAL_CONNECTOR_ZH: Record<string, string> = {
   'connector.local.err.unhardened': '连接器起来了，但安全设置没生效，暂时不能用。',
   'connector.local.detail.code': '原因码：{code}',
   'connector.local.confirm.title': '要先下载连接器',
-  'connector.local.confirm.body': '约 {mb} MB，只下载这一次。下好后接着连{service}。',
+  'connector.local.confirm.body': '约 {mb} MB，只下载这一次。下好后接着连 {service}。',
   'connector.local.confirm.ok': '下载',
   'connector.local.confirm.cancel': '先不了',
   'diagnostics.connector.title': '连接器',
