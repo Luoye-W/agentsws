@@ -245,6 +245,8 @@ export type QuickKind =
   | 'chat'
   // WP249：自家版待处理（只有 `social.reddit`）
   | 'modqueue'
+  // WP255：群里的帖子（社群组五条：线程列表 + 每条「回复」）
+  | 'threads'
 
 export interface QuickView {
   /** `quick:<kind>:<role_id>`——记在偏好里的就是它 */
@@ -286,6 +288,7 @@ export function quickViewsOf(
     const social = socialChannelOfRole(d.role_id)
     if (social !== undefined && COMMUNITY_CHANNELS.includes(social)) add('broadcast', d)
     if (d.role_id === 'social.reddit') add('modqueue', d)
+    if (social !== undefined && COMMUNITY_CHANNELS.includes(social)) add('threads', d)
     if (channelOfRole(d.role_id) !== undefined) add('kol', d)
     if (d.role_id === 'b2b.outbound') add('outbound', d)
     if (d.role_id === 'b2b.sales') add('sales', d)

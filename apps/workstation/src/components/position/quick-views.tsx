@@ -15,6 +15,7 @@ import { DutyIcon } from '@/components/role-icons/role-icon'
 import { OwnSubQueue } from '@/components/social/own-sub-queue'
 import { SocialBroadcast } from '@/components/social/social-broadcast'
 import { SocialCalendar, socialChannelOfRole } from '@/components/social/social-calendar'
+import { SocialThreads } from '@/components/social/social-threads'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Hint } from '@/components/ui/hint'
@@ -91,6 +92,10 @@ function QuickBody({ view }: { view: QuickView }): ReactNode {
     }
     case 'modqueue':
       return <OwnSubQueue assignment={view.assignment_id} />
+    case 'threads':
+      return social === undefined ? null : (
+        <SocialThreads assignment={view.assignment_id} channel={social} />
+      )
     case 'outbound':
       return <B2bOutboundPanel assignment={view.assignment_id} />
     case 'sales':
