@@ -244,6 +244,8 @@ export type {
   ConnectRequestStatus,
   ConnectTestResult,
   CredentialStore,
+  LocalConnectorJobView,
+  LocalConnectorView,
   MailboxDetectResult,
   MailboxPresetView,
   MailboxSwitchesInput,
