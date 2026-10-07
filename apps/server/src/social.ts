@@ -26,6 +26,7 @@ import { join } from 'node:path'
 import type {
   CommunityMember,
   CommunityThread,
+  Iso8601,
   SocialAccount,
   SocialChannel,
   SocialPost,
@@ -35,15 +36,49 @@ import type {
 import type { SocialDeckData } from '@agentsws/deck'
 import type BetterSqlite3 from 'better-sqlite3'
 
-/** 库里的四张表。名字与对象类型一一对应，不另起别名。 */
-export type SocialTable = 'social_account' | 'social_post' | 'community_member' | 'community_thread'
+/**
+ * 库里的表。前四张与对象类型一一对应，不另起别名；`ingest_state` 是 WP256 加的
+ * 「自动进帖读到哪儿了」（不是对象，是读的进度——见 {@link SocialIngestRow}）。
+ */
+export type SocialTable =
+  | 'social_account'
+  | 'social_post'
+  | 'community_member'
+  | 'community_thread'
+  | 'ingest_state'
 
 export const SOCIAL_TABLES: readonly SocialTable[] = [
   'social_account',
   'social_post',
   'community_member',
   'community_thread',
+  'ingest_state',
 ]
+
+/**
+ * WP256（决策 147）：一个号 / 群的「自动进帖」进度（id = 账号 id），或一条渠道的读取设置
+ * （id = `settings:<渠道>`）。**只有进度与状态，没有正文**——正文在线程那张表里。
+ */
+export interface SocialIngestRow {
+  id: string
+  channel: SocialChannel
+  account_id?: string
+  /** 读到哪一条了（平台那一侧的 id；下次从它往后读）。 */
+  cursor?: string
+  state?: 'ok' | 'needs_channel' | 'missing_permissions' | 'limited' | 'failed'
+  /** 上次没读成时那句人话。 */
+  message?: string
+  /** 缺哪几样权限（`ChannelReadGap`）。 */
+  missing?: string[]
+  last_read_at?: Iso8601
+  next_read_at?: Iso8601
+  /** 上次查权限的时刻（一天查一次；缺权限时每轮都查，补上了就能马上读）。 */
+  access_checked_at?: Iso8601
+  /** 一共记进来几条。 */
+  ingested_total?: number
+  /** 设置那一行：多久读一次（分钟）。 */
+  every_minutes?: number
+}
 
 interface SocialBackend {
   all<T>(table: SocialTable): T[]
@@ -147,6 +182,9 @@ export interface SocialStore {
   savePost(row: SocialPost): void
   saveMember(row: CommunityMember): void
   saveThread(row: CommunityThread): void
+  /** WP256：自动进帖的进度 / 设置（只加不改）。 */
+  ingestState(id: string): SocialIngestRow | undefined
+  saveIngestState(row: SocialIngestRow): void
   /**
    * 拉完数之后回填一条帖子的表现。
    *
@@ -213,6 +251,8 @@ export function createSocialStore(options: SocialStoreOptions): SocialStore {
     savePost: (row) => backend.put('social_post', row.id, row),
     saveMember: (row) => backend.put('community_member', row.id, row),
     saveThread: (row) => backend.put('community_thread', row.id, row),
+    ingestState: (id) => backend.get<SocialIngestRow>('ingest_state', id),
+    saveIngestState: (row) => backend.put('ingest_state', row.id, row),
 
     recordMetrics: ({ post_id, metrics, observed_at }) => {
       const post = backend.get<SocialPost>('social_post', post_id)

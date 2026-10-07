@@ -22,11 +22,20 @@
 
 import type { SocialChannel } from '@agentsws/contracts'
 import {
+  type DiscordOverwrite,
+  type DiscordRawMessage,
+  discordChannelPermissions,
+  discordFeedPage,
+  discordReadGaps,
+} from './discord-read.js'
+import {
   type BroadcastInput,
   type ChannelComment,
+  type ChannelFeedPage,
   type ChannelMember,
   type ChannelPost,
   type ChannelProfile,
+  type ChannelReadGap,
   callJson,
   guardConnected,
   type MemberDecisionInput,
@@ -185,6 +194,101 @@ export function createDiscordAdapter(transport: SocialTransport): SocialChannelA
             created_at: m.timestamp ?? transport.now(),
           })),
       }
+    },
+
+    /*
+     * WP256（决策 147）：「群里的帖子」自动进帖——读 `after` 之后的新消息（只读：不回、不加反应）。
+     * 没给 `after` = 最近一页（第一次读只取眼前这一页，不往回翻历史）。排序与过滤在 `discord-read.ts`。
+     */
+    async feed({ account_external_id, after, limit }): Promise<SocialResult<ChannelFeedPage>> {
+      const guard = off()
+      if (guard !== undefined) return guard
+      const t = needChannel(account_external_id)
+      if ('error' in t) return t.error
+      const n = Math.min(Math.max(limit ?? 50, 1), 100)
+      const url =
+        `${DISCORD_API_BASE}/channels/${encodeURIComponent(t.channel)}/messages?limit=${n}` +
+        (after === undefined ? '' : `&after=${encodeURIComponent(after)}`)
+      const res = await callJson<DiscordRawMessage[]>(transport, LABEL, url, {
+        headers: await auth(),
+      })
+      if (!('data' in res)) return res
+      return {
+        ok: true,
+        observed_at: transport.now(),
+        data: discordFeedPage(Array.isArray(res.data) ? res.data : [], transport.now()),
+      }
+    },
+
+    /*
+     * WP256：读这个频道还缺哪几样（`discord-read.ts` 文件头第 2–4 条）。五跳只读：我是谁、我在不在这个服务器、
+     * 服务器角色、频道覆写、应用开关。只在第一次读、读不动、或隔一天时才查一次（调用方管频率）。
+     */
+    async readAccess(account_external_id): Promise<SocialResult<{ missing: ChannelReadGap[] }>> {
+      const guard = off()
+      if (guard !== undefined) return guard
+      const t = needChannel(account_external_id)
+      if ('error' in t) return t.error
+      const headers = await auth()
+      const ok = (missing: ChannelReadGap[]): SocialResult<{ missing: ChannelReadGap[] }> => ({
+        ok: true,
+        observed_at: transport.now(),
+        data: { missing },
+      })
+      const me = await callJson<{ id?: string }>(
+        transport,
+        LABEL,
+        `${DISCORD_API_BASE}/users/@me`,
+        {
+          headers,
+        },
+      )
+      if (!('data' in me)) return me
+      const botId = me.data.id ?? ''
+      // 应用开关读不到（老令牌 / 那一跳失败）就不判这一样——不凭空说缺
+      const app = await callJson<{ flags?: number }>(
+        transport,
+        LABEL,
+        `${DISCORD_API_BASE}/applications/@me`,
+        { headers },
+      )
+      const flags = 'data' in app ? (app.data.flags ?? 0) : undefined
+      const member = await callJson<{ roles?: string[] }>(
+        transport,
+        LABEL,
+        `${DISCORD_API_BASE}/guilds/${encodeURIComponent(t.guild)}/members/${encodeURIComponent(botId)}`,
+        { headers },
+      )
+      if (!('data' in member)) {
+        if (member.status === 404 || member.status === 403) return ok(['bot_not_in_server'])
+        return member
+      }
+      const channel = await callJson<{ permission_overwrites?: DiscordOverwrite[] }>(
+        transport,
+        LABEL,
+        `${DISCORD_API_BASE}/channels/${encodeURIComponent(t.channel)}`,
+        { headers },
+      )
+      if (!('data' in channel)) {
+        // 看不到这个频道时连频道本身都读不到（Missing Access）
+        if (channel.status === 403 || channel.status === 404) return ok(discordReadGaps(0n, flags))
+        return channel
+      }
+      const roles = await callJson<{ id?: string; permissions?: string }[]>(
+        transport,
+        LABEL,
+        `${DISCORD_API_BASE}/guilds/${encodeURIComponent(t.guild)}/roles`,
+        { headers },
+      )
+      if (!('data' in roles)) return roles
+      const perms = discordChannelPermissions({
+        guild_id: t.guild,
+        bot_id: botId,
+        member_roles: member.data.roles ?? [],
+        roles: Array.isArray(roles.data) ? roles.data : [],
+        overwrites: channel.data.permission_overwrites ?? [],
+      })
+      return ok(discordReadGaps(perms, flags))
     },
 
     async publish(
