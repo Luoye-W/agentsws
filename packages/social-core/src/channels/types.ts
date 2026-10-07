@@ -216,6 +216,10 @@ export interface ModerateInput {
    * 不给就只移除、不留话。
    */
   removal_message?: string
+  /**
+   * WP249：这一条在哪个版务队列里（浏览器通道要在那一页上点按钮；OAuth 接口用不着）。
+   */
+  queue?: 'modqueue' | 'unmoderated'
 }
 
 /**

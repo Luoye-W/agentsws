@@ -98,7 +98,10 @@ interface RawModThing {
  *
  * 外部文本原样搬，只截长度；`created_utc` 是**秒**。
  */
-export function redditModListing(raw: unknown, source: 'modqueue' | 'unmoderated'): ModQueueEntry[] {
+export function redditModListing(
+  raw: unknown,
+  source: 'modqueue' | 'unmoderated',
+): ModQueueEntry[] {
   const children =
     (raw as { data?: { children?: { kind?: string; data?: RawModThing }[] } })?.data?.children ?? []
   const out: ModQueueEntry[] = []
@@ -492,7 +495,11 @@ export function createRedditAdapter(transport: SocialTransport): SocialChannelAd
            * WP249：附一句移除理由（公开留给作者）。**先移除再留话**——Reddit 要求东西先被移除
            * 才收理由；留话没成不回滚移除，照实说「移除了，理由没留上」。
            */
-          if ('data' in res && input.removal_message !== undefined && input.removal_message !== '') {
+          if (
+            'data' in res &&
+            input.removal_message !== undefined &&
+            input.removal_message !== ''
+          ) {
             const bad0 = jsonErrors(res.data)
             if (bad0 !== undefined) return bad0
             const msg = await postJson(
