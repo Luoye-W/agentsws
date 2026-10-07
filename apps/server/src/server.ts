@@ -398,6 +398,7 @@ import {
   personaFileIn,
 } from './personas.js'
 import { createPlatformCliProber, PlatformCliLoginStore, type ProbeExec } from './platform-cli.js'
+import { createPlatformCliRunner, type PlatformCliRunnerOptions } from './platform-cli-runner.js'
 import { createPlatformKitPort, resolveBrandPlatform } from './platform-kit.js'
 import {
   createPositions,
@@ -833,6 +834,11 @@ export interface ServerOptions {
    * 生产不传：照 PATH 真跑 `<cli> version` 与 `node --version`。
    */
   platformCliExec?: ProbeExec
+  /**
+   * WP245：「一键安装 / 一键登录」替用户跑命令的注入点（测试 / demo 换成假 npm / 假 CLI，不联网）。
+   * 生产不传：用服务进程自己的 node（捆绑的那份）+ 钉死的 npm，装进 `<数据目录>/tools`。
+   */
+  platformCliRunner?: Partial<Omit<PlatformCliRunnerOptions, 'now'>>
   /**
    * WP134：「用我的 DeepSeek 账号登录」的注入点（测试 / demo 用替身 → 全程不联网）。
    * 生产不传：第一次有人点"用 DeepSeek 账号登录"时才 `import()` 官方模块。
@@ -7421,6 +7427,13 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   const freeChatPortOf = brandFreeChatPort(brandModules, freeChatPortFor)
 
   const platformCliLogins = new Map<string, PlatformCliLoginStore>()
+  // WP245：CLI 装进应用自己的数据目录（`<data>/tools/<cli id>`）；内存档没有数据目录 = 不能一键装
+  const platformCliRunner = createPlatformCliRunner({
+    now: () => clock.now(),
+    toolsDir: dbDir === undefined ? undefined : join(dbDir, 'tools'),
+    env,
+    ...options.platformCliRunner,
+  })
   const platformKitPort = createPlatformKitPort({
     now: () => clock.now(),
     platformOf: (ws) => brandPlatformOf(ws),
@@ -7432,7 +7445,10 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       now: () => clock.now(),
       env,
       ...(options.platformCliExec === undefined ? {} : { exec: options.platformCliExec }),
+      // WP245：优先认工作台自己装的那份，系统里已有的也认
+      invocation: (spec) => platformCliRunner.invocation(spec),
     }),
+    runner: platformCliRunner,
     loginStoreOf: (ws) => {
       let store = platformCliLogins.get(ws)
       if (store === undefined) {

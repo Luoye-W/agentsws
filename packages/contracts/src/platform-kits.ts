@@ -86,6 +86,16 @@ export interface PlatformCliSpec {
   install: readonly { method: 'npm' | 'homebrew'; command: string }[]
   /** 用户自己在终端里跑、会在浏览器里打开登录页的那条命令。 */
   login_command: string
+  /**
+   * WP245：工作台替用户跑登录时的参数（与 {@link login_command} 同一条命令，拆好的；不经 shell）。
+   * 不写 = 这个 CLI 不支持「一键登录」，卡上只给复制命令。
+   */
+  login_args?: readonly string[]
+  /**
+   * WP245：「一键安装」装哪个 npm 标签（装进应用自己的数据目录，不写全局）。不写 = `latest`。
+   * 参数在服务端拼死（`npm install --prefix <数据目录> <npm>@<tag>`），不接受任意字符串。
+   */
+  npm_tag?: string
   /** 教程（`docs/help/<slug>.md`）。 */
   tutorial: string
   /** 卡出现在哪几个岗位页上。 */
@@ -147,6 +157,9 @@ export const PLATFORM_KITS: readonly PlatformKit[] = [
         { method: 'homebrew', command: 'brew tap shopify/shopify && brew install shopify-cli' },
       ],
       login_command: 'shopify auth login',
+      // WP245：一键登录（服务端起这一条，登录网址交给工作台打开；密码只在 Shopify 网页上输）
+      login_args: ['auth', 'login'],
+      npm_tag: 'latest',
       tutorial: 'shopify-cli',
       positions: ['site'],
       // 主题工作流（拉主题 / 推未发布副本 / theme check）只在网页模板这一条上；邮件模板在店铺后台改，不经 CLI
