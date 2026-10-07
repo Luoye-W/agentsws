@@ -125,6 +125,12 @@ server 哪天提供了运行期急停接口，`src/halt.ts` 换成直接调它�
 `extraResources` 把当前平台那一份摆进 `<resources>/node`。第 4 条留着只是兜底
 （开发期没跑过脚本、或者捆绑那份被杀毒软件删了）——退化成"要装 Node"比直接起不来好。
 
+**npm 也跟着带（WP254）。** 同一个脚本再把这版 Node 官方配套的 npm（22.23.2 配 10.9.8；sha512 钉在锁的
+`npm` 段，与 registry 的 `dist.integrity` 逐字相同）按官方发行包的布局摆到 `vendor/node/<平台>/lib/node_modules/npm`
+（Windows 是 `node_modules/npm`）。服务进程找 npm 先看的就是这里，所以「一键安装 Shopify CLI」「下载连接器」
+不再先联网下 npm。安装包大约 +3 MB（npm 的 tgz 2.97 MB，装好后约 11.7 MB、2009 个文件）；afterPack 查它在不在、
+版本对不对，本机平台再用捆绑的 Node 跑一次 `npm --version`。
+
 **原生模块跟着那份 Node 的 ABI 走。** 捆绑的是 Node 22（`NODE_MODULE_VERSION` 127），
 所以 `better_sqlite3.node` 也必须是 v127 那一份——用开发机 Node（可能是 25）编的那份塞进去
 只会在用户那儿炸 `ERR_DLOPEN_FAILED`。脚本按 ABI 取官方 prebuild 放进 `vendor/natives/<平台>/`，
