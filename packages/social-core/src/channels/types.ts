@@ -244,6 +244,32 @@ export interface ModQueueEntry {
 /** WP249：读哪一个版务队列。`join_requests` = 入群申请（Reddit 这一版读不到，照实说）。 */
 export type ModQueueSource = 'modqueue' | 'unmoderated' | 'join_requests'
 
+/**
+ * WP256（决策 147）：「群里的帖子」自动进帖——读一个频道里**某条之后**的新消息（按平台 id 续读）。
+ * 一页的结果：别人说的话（机器人自己的不算）+ 这一页读到的最后一条的 id（含机器人那几条，续读从它往后）。
+ */
+export interface ChannelFeedPage {
+  items: ChannelComment[]
+  /** 这一页里 id 最大的那一条（不管是谁说的）；没读到就没有。下一次从它往后读。 */
+  last_id?: string
+  /** 平台这一页回了几条（含过滤掉的）。不满一页 = 读到头了。 */
+  fetched: number
+}
+
+/**
+ * WP256：读消息还缺什么（照实提示缺哪个权限）。
+ *
+ * - `bot_not_in_server`：机器人不在这个服务器里（没邀请 / 被踢了）
+ * - `view_channel`：看不到这个频道（「查看频道」）
+ * - `read_message_history`：看得到频道但读不了历史消息（「读取消息历史」）
+ * - `message_content`：开发者后台没开 Message Content Intent（读回来的正文全是空的）
+ */
+export type ChannelReadGap =
+  | 'bot_not_in_server'
+  | 'view_channel'
+  | 'read_message_history'
+  | 'message_content'
+
 export interface MemberDecisionInput {
   account_external_id: string
   member_external_id: string
@@ -291,6 +317,17 @@ export interface SocialChannelAdapter {
   }): Promise<SocialResult<ModQueueEntry[]>>
   /** WP249：这个社群的版规（短名，一条一行）。只有 Reddit 实现。 */
   communityRules?(account_external_id: string): Promise<SocialResult<string[]>>
+  /**
+   * WP256（决策 147）：读一个频道里 `after` 之后的新消息（不给 `after` = 最近一页）。**只读**：
+   * 不回复、不加反应。只加不改：目前只有 Discord 实现。
+   */
+  feed?(input: {
+    account_external_id: string
+    after?: string
+    limit?: number
+  }): Promise<SocialResult<ChannelFeedPage>>
+  /** WP256：读这个频道的消息还缺哪几样权限（空数组 = 都齐了）。只有 Discord 实现。 */
+  readAccess?(account_external_id: string): Promise<SocialResult<{ missing: ChannelReadGap[] }>>
 }
 
 /* ── 共用的那几句人话与那几段样板 ─────────────────────────────────────── */

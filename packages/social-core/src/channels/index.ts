@@ -27,6 +27,7 @@ import { createXAdapter } from './x.js'
 import { createYouTubeSocialAdapter } from './youtube.js'
 
 export * from './discord.js'
+export * from './discord-read.js'
 export * from './facebook.js'
 export * from './facebook-group.js'
 export * from './instagram.js'
