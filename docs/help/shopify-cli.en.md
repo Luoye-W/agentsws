@@ -4,43 +4,36 @@ Shopify CLI is Shopify's official command-line tool. The Theme duty on the Site 
 
 You only need this when your brand runs on Shopify. Other site platforms don't need it.
 
-## 1. Check your Node version
+## 1. One-click install
 
-Shopify CLI runs on Node.js **22 or newer** (the "Node" icon on the card shows what you have).
+1. Open the Site Building page (or Connections) and find the "Shopify CLI" card.
+2. Click **Install** and wait until it goes from "Downloading" to installed — usually a minute or two.
 
-1. Open Terminal (on a Mac: Applications → Utilities).
-2. Type `node --version` and press Return. `v22.` or higher is fine.
-3. Too old or not found: install the LTS version from [nodejs.org](https://nodejs.org/), then open a new Terminal window.
+- No terminal and no Node.js setup: Agents Workshop uses the Node that ships with the app and installs the CLI into **its own data folder**. No system settings change and no admin rights are needed.
+- If Shopify CLI is already installed on your computer, the card recognizes it.
+- If it fails, the card says why in one line (usually network or proxy). Click "Try again"; "Details" shows the raw output.
 
-## 2. Install
+## 2. Sign in to Shopify (you do this yourself)
 
-Run this in Terminal (the card has a Copy button):
+1. Once installed, click **Sign in to Shopify**. Your browser opens the Shopify sign-in page.
+2. Sign in with the account that manages this store and confirm (the code on the page matches the one on the card).
+3. Come back to the workshop; the card turns green by itself.
+
+- Browser did not open: click "Did not open? Click here" on the card.
+- Changed your mind: click "Cancel".
+- **You type your account and password only on Shopify's own page.** Agents Workshop never sees or stores them.
+- Shopify CLI keeps its own session on your computer, in its own place. We don't read it and it never goes into our logs.
+
+## 3. Prefer the terminal? (optional)
+
+"Details" has both commands to copy:
 
 ```
 npm install -g @shopify/cli@latest
-```
-
-On a Mac with Homebrew you can use:
-
-```
-brew tap shopify/shopify && brew install shopify-cli
-```
-
-Then click "Installed — check again" on the card. The "Installed" icon turns green.
-
-## 3. Sign in through your browser (you do this yourself)
-
-Run:
-
-```
 shopify auth login
 ```
 
-A Shopify sign-in page opens in your browser. Sign in with the account that manages this store and pick the store. Then click "I have signed in" on the card.
-
-- **You type your account and password only on Shopify's own page.** Agents Workshop never sees or stores them.
-- Shopify CLI keeps its own session on your computer, in its own place. We don't read it and it never goes into our logs.
-- To sign out: run `shopify auth logout`.
+This way needs Node.js **22 or newer**. Then click "Check again" on the card. To sign out, run `shopify auth logout`.
 
 ## 4. What happens next
 

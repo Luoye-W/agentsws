@@ -35,6 +35,7 @@ import {
   type BrandView,
   copyBrandSettings,
   createBrand,
+  enterSwitchedBrand,
   listBrands,
   setBrandBackgroundHalt,
   switchBrand,
@@ -241,7 +242,8 @@ export function BrandsTab({
     switchBrand(org_id, workspace_id, assignment)
       .then(() => {
         // 52 O2：整站重载——换品牌换的是首页、岗位、连接、知识、设置全部
-        globalThis.location?.reload()
+        // WP244：回这个品牌的首页（没设置完就由首页送进它的首次设置）
+        enterSwitchedBrand()
       })
       .catch((err: unknown) => {
         setSwitching(false)

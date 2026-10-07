@@ -208,6 +208,8 @@ export {
   personSubject,
 } from './offboard.js'
 export { createOrg, type OrgAssembly, type OrgOptions } from './org.js'
+// WP245：demo 里一键安装 / 一键登录 Shopify CLI 的替身（不跑真 npm、不开真登录页）
+export { platformCliStandIn } from './platform-cli-stand-in.js'
 // WP246：演示里「取数路线 / 登录读号」的替身（不起浏览器、不访问 reddit.com）
 export { readonlyBrowserStandIn } from './readonly-browser/stand-in.js'
 export {

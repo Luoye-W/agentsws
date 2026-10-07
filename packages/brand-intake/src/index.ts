@@ -65,6 +65,7 @@ export {
   isType,
   jsonLdNodes,
   linkHref,
+  mainText,
   metaContent,
   squash,
   themeColor,
@@ -85,7 +86,16 @@ export {
   tldCountry,
 } from './markets.js'
 export type { SiteIntakeOptions, SiteIntakeResult } from './site.js'
-export { analyzeSite, detectPlatform, looksLikePolicy, POLICY_PROBE_PATHS } from './site.js'
+export {
+  analyzeSite,
+  detectPlatform,
+  isFreshShopifyStore,
+  isPlaceholderStoreName,
+  looksLikeDefaultPolicy,
+  looksLikePolicy,
+  POLICY_PROBE_PATHS,
+  SHOPIFY_PLACEHOLDER_NAMES,
+} from './site.js'
 
 import {
   type BrandIntakeBudget,
@@ -145,6 +155,8 @@ export interface AnalyzeBrandResult {
   failure_kind?: BrandIntakeFailureKind
   /** WP240：官网开着 Shopify 访问密码。 */
   password_protected?: boolean
+  /** WP244：官网是刚开的 Shopify 空店（占位店名 / 默认首页）。 */
+  fresh_store?: boolean
 }
 
 /**
@@ -174,6 +186,7 @@ export async function analyzeBrand(
   let stopped = false
   let failure: BrandIntakeFailureKind | undefined
   let locked = false
+  let fresh = false
 
   for (const url of urls) {
     if (spent >= cap) {
@@ -199,6 +212,7 @@ export async function analyzeBrand(
       documents.push(...(site.documents ?? []))
       failure ??= site.failure_kind
       if (site.password_protected === true) locked = true
+      if (site.fresh_store === true) fresh = true
       got = site
     } else {
       const entry = classifyAmazonUrl(url)
@@ -246,6 +260,7 @@ export async function analyzeBrand(
     ...(options.keepHtml === true ? { documents } : {}),
     ...(failure === undefined ? {} : { failure_kind: failure }),
     ...(locked ? { password_protected: true } : {}),
+    ...(fresh ? { fresh_store: true } : {}),
   }
 }
 

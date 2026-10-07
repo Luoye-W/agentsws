@@ -97,7 +97,15 @@ export interface BrandProfileCardProps {
   busy?: boolean
   /** WP142：已经点过「看着没问题」了——给一句回执，按钮换成「已确认」。 */
   confirmed?: boolean
+  /**
+   * WP244：官网是刚开的 Shopify 空店——明说一句「品牌资料请自己填」，
+   * 品牌名 / 一句话两格空着也摆出来（点铅笔就能填），不再整行藏起来。
+   */
+  freshStore?: boolean
 }
+
+/** WP244：空店时这两格空着也要摆出来（让人自己填）。 */
+const FRESH_FIELDS: readonly TextField[] = ['brand_name', 'one_liner']
 
 /** 一格的当前值：用户改过就是他改的那个，否则是分析出来的。 */
 function currentValue(
@@ -165,17 +173,20 @@ function Row({
   profile,
   edits,
   onEdit,
+  always = false,
 }: {
   field: TextField
   profile: BrandIntakeProfile
   edits: Record<string, unknown>
   onEdit: (field: string, value: string) => void
+  /** WP244：空着也摆出来（空店的品牌名 / 一句话：要人自己填）。 */
+  always?: boolean
 }): React.ReactNode {
   const { t } = useApp()
   const [open, setOpen] = useState(false)
   const value = currentValue(profile, edits, field)
-  // 抓不到又没改过的格子**整行不出**：一行空格子比没有这一行更糟
-  if (value === '' && !open) return null
+  // 抓不到又没改过的格子**整行不出**：一行空格子比没有这一行更糟（空店那两格除外）
+  if (value === '' && !open && !always) return null
   return (
     <div className="flex items-baseline gap-2 text-sm" data-testid={`intake-row-${field}`}>
       <span className="w-24 shrink-0 text-ws-muted-fg">{t(`intake.field.${field}`)}</span>
@@ -194,7 +205,12 @@ function Row({
         />
       ) : (
         <>
-          <span data-testid={`intake-value-${field}`}>{value}</span>
+          <span
+            data-testid={`intake-value-${field}`}
+            className={value === '' ? 'text-ws-muted-fg' : undefined}
+          >
+            {value === '' ? t('intake.empty') : value}
+          </span>
           <ConfidenceTag profile={profile} edits={edits} field={field} />
           <button
             type="button"
@@ -221,6 +237,7 @@ export function BrandProfileCard({
   onReanalyze,
   busy = false,
   confirmed = false,
+  freshStore = false,
 }: BrandProfileCardProps): React.ReactNode {
   const { t, lang } = useApp()
   const currency = currentValue(profile, edits, 'currency')
@@ -264,9 +281,26 @@ export function BrandProfileCard({
         )}
       </div>
 
+      {freshStore ? (
+        <p
+          role="status"
+          className="rounded-md bg-ws-warn-bg px-2 py-1.5 text-xs text-ws-warn"
+          data-testid="intake-fresh"
+        >
+          {t('intake.fresh')}
+        </p>
+      ) : null}
+
       <div className="flex flex-col gap-1.5">
         {TEXT_FIELDS.map((f) => (
-          <Row key={f} field={f} profile={profile} edits={edits} onEdit={onEdit} />
+          <Row
+            key={f}
+            field={f}
+            profile={profile}
+            edits={edits}
+            onEdit={onEdit}
+            always={freshStore && FRESH_FIELDS.includes(f)}
+          />
         ))}
       </div>
 

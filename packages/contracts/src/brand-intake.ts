@@ -189,6 +189,12 @@ export interface BrandIntakeRun {
   failure_kind?: BrandIntakeFailureKind
   /** WP240：入口是 Shopify 密码页（店铺开着访问密码）。跑完 / 跑挂都可能带它。 */
   password_protected?: boolean
+  /**
+   * WP244：认出官网是**刚开的 Shopify 空店**（店名还是 My Store、首页还是默认主题）。
+   * 这时品牌名 / 一句话不填、默认生成的政策不进知识库；界面明说「品牌资料请自己填」，
+   * 第 ③ 步推荐加上建站。
+   */
+  fresh_store?: boolean
 }
 
 /**

@@ -13,7 +13,7 @@ import { Input } from '@/components/ui/input'
 import { createTodoAt, type PositionWorkData } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 import { dueTone, type GroupBy, groupItems, whenText } from '@/lib/position-work'
-import { CardsBadge, DutyChip, GroupIcon, KindIcon, WhoBadge } from './work-bits'
+import { CardsBadge, DutyChip, GroupIcon, KindIcon, ProgressText, WhoBadge } from './work-bits'
 
 const TONE_TEXT = { bad: 'text-ws-bad font-medium', warn: 'text-ws-warn font-medium' } as const
 
@@ -84,9 +84,12 @@ function Row({
       </span>
       <span
         className="col-start-2 row-start-2 min-w-0 truncate text-xs text-ws-muted-fg md:col-start-auto md:row-start-auto"
-        title={item.progress}
+        title={item.stuck_reason ?? item.progress}
       >
-        {item.progress ?? (item.status === 'paused' ? t('pos2.set.schedules.paused') : '')}
+        <ProgressText
+          item={item}
+          fallback={item.status === 'paused' ? t('pos2.set.schedules.paused') : ''}
+        />
       </span>
       <span className="hidden min-w-0 md:block">
         <DutyChip item={item} />
@@ -238,6 +241,8 @@ export function WorkList({
   const { t } = useApp()
   // 已完成默认折叠；别的组默认展开
   const [closed, setClosed] = useState<Set<string>>(new Set(['done']))
+  /** WP244：有「待你看结果」时已完成自动展开；人手动收过一次就照他的（记在这里）。 */
+  const [opened, setOpened] = useState<Set<string>>(new Set())
   const groups = groupItems(
     items,
     groupBy,
@@ -254,7 +259,9 @@ export function WorkList({
       {groups.map((g, index) => {
         // 按状态分时空组不画（「已完成」除外也一样：没有就不出）
         if (g.items.length === 0 && !(groupBy === 'status' && g.id === 'doing')) return null
-        const isClosed = closed.has(g.id)
+        // WP244：已完成默认折叠——但里面有「待你看结果」的就展开（不然结果出来了没人看见）
+        const hasResult = g.id === 'done' && g.items.some((i) => i.result_ready === true)
+        const isClosed = closed.has(g.id) && !(hasResult && !opened.has(g.id))
         const addHere = groupBy === 'status' ? g.id === 'doing' : index === 0
         return (
           <section key={g.id} data-testid="work-group" data-group={g.id}>
@@ -269,6 +276,7 @@ export function WorkList({
                   if (isClosed) next.delete(g.id)
                   else next.add(g.id)
                   setClosed(next)
+                  setOpened(new Set(opened).add(g.id))
                 }}
               >
                 {isClosed ? (

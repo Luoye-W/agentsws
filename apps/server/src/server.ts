@@ -402,6 +402,7 @@ import {
   personaFileIn,
 } from './personas.js'
 import { createPlatformCliProber, PlatformCliLoginStore, type ProbeExec } from './platform-cli.js'
+import { createPlatformCliRunner, type PlatformCliRunnerOptions } from './platform-cli-runner.js'
 import { createPlatformKitPort, resolveBrandPlatform } from './platform-kit.js'
 import {
   createPositions,
@@ -849,6 +850,11 @@ export interface ServerOptions {
    * 生产不传：照 PATH 真跑 `<cli> version` 与 `node --version`。
    */
   platformCliExec?: ProbeExec
+  /**
+   * WP245：「一键安装 / 一键登录」替用户跑命令的注入点（测试 / demo 换成假 npm / 假 CLI，不联网）。
+   * 生产不传：用服务进程自己的 node（捆绑的那份）+ 钉死的 npm，装进 `<数据目录>/tools`。
+   */
+  platformCliRunner?: Partial<Omit<PlatformCliRunnerOptions, 'now'>>
   /**
    * WP134：「用我的 DeepSeek 账号登录」的注入点（测试 / demo 用替身 → 全程不联网）。
    * 生产不传：第一次有人点"用 DeepSeek 账号登录"时才 `import()` 官方模块。
@@ -3855,6 +3861,13 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
             !(Object.values(SCHEDULE_HANDLERS) as string[]).includes(t.handler),
         ),
       socialPosts: () => social.posts(),
+      // WP244：工作里开着的事项按最近那一轮运行分组（在跑 / 答完了 / 卡住了）
+      runningMatters: () => new Set((runtime?.activeRuns() ?? []).map((r) => r.matter_id)),
+      // WP244：卡住了说缺什么——这条职责还缺的必需连接（连接目录按品牌装好之后才有）
+      missingConnections: (role_id) =>
+        (directoryAssemblies.get(ws)?.roleGaps([role_id]) ?? [])
+          .filter((g) => g.required && !g.connected)
+          .map((g) => g.name.zh),
     })
     positionAssemblies.set(ws, positionsAssembly)
     // 六层技能里的 `position` 那一层、以及岗位层上下文那三样，都从这里来
@@ -7516,6 +7529,13 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   const freeChatPortOf = brandFreeChatPort(brandModules, freeChatPortFor)
 
   const platformCliLogins = new Map<string, PlatformCliLoginStore>()
+  // WP245：CLI 装进应用自己的数据目录（`<data>/tools/<cli id>`）；内存档没有数据目录 = 不能一键装
+  const platformCliRunner = createPlatformCliRunner({
+    now: () => clock.now(),
+    toolsDir: dbDir === undefined ? undefined : join(dbDir, 'tools'),
+    env,
+    ...options.platformCliRunner,
+  })
   const platformKitPort = createPlatformKitPort({
     now: () => clock.now(),
     platformOf: (ws) => brandPlatformOf(ws),
@@ -7527,7 +7547,10 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       now: () => clock.now(),
       env,
       ...(options.platformCliExec === undefined ? {} : { exec: options.platformCliExec }),
+      // WP245：优先认工作台自己装的那份，系统里已有的也认
+      invocation: (spec) => platformCliRunner.invocation(spec),
     }),
+    runner: platformCliRunner,
     loginStoreOf: (ws) => {
       let store = platformCliLogins.get(ws)
       if (store === undefined) {
@@ -8365,6 +8388,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       for (const im of imByBrand.values()) await im.close()
       // WP136：起过的其他场景一并关掉（它们是这个进程的子进程，不留孤儿占着端口）
       await dshScenesSetup.manager?.close()
+      // WP245：替用户跑着的安装 / 登录一并停掉（不留孤儿进程等浏览器）
+      platformCliRunner.dispose()
       learning.close()
       knowledge.close()
       data.close()

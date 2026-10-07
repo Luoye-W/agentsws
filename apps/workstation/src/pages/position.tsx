@@ -282,6 +282,28 @@ export function PositionPage(): React.ReactNode {
                 <span className="size-1.5 rounded-full bg-ws-good" aria-hidden />
                 {t('pos2.status.doing', { n: counts?.doing ?? view.open_matters })}
               </button>
+              {/* WP244：卡住了的单独说出来（点了筛到「卡住了」那一组） */}
+              {counts?.stuck === undefined || counts.stuck === 0 ? null : (
+                <>
+                  <span aria-hidden>·</span>
+                  <button
+                    type="button"
+                    data-testid="status-stuck"
+                    className="inline-flex items-center gap-1 text-ws-warn hover:text-foreground"
+                    onClick={() => {
+                      setTab('work')
+                      setPrefs(
+                        { ...prefs, view: 'list', filters: { ...NO_FILTERS, group: ['stuck'] } },
+                        false,
+                      )
+                      scrollTo(workRef.current)
+                    }}
+                  >
+                    <span className="size-1.5 rounded-full bg-ws-warn" aria-hidden />
+                    {t('pos2.status.stuck', { n: counts.stuck })}
+                  </button>
+                </>
+              )}
               {counts === undefined || counts.todos_today === 0 ? null : (
                 <>
                   <span aria-hidden>·</span>

@@ -1,5 +1,5 @@
 /**
- * WP241「工作」的看板视图：四列 = 四个分组。
+ * WP241「工作」的看板视图：一列一个分组（WP244：「卡住了」那列只在有东西时出）。
  *
  * 拖动按 `canMoveWorkItem`（`@agentsws/contracts`，docs/54 §7.3）：**只有待办能拖**，
  * 在「进行中 / 等别人 / 已完成」之间拖，改的是待办自己的状态（`PUT /v1/todos/:id`）；
@@ -15,7 +15,7 @@ import {
 import { type ReactNode, useState } from 'react'
 import { setTodoStatus } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
-import { CardsBadge, DutyChip, GroupIcon, KindIcon } from './work-bits'
+import { CardsBadge, DutyChip, GroupIcon, KindIcon, ProgressText } from './work-bits'
 import { DueText, ItemTitle } from './work-list'
 
 const DRAG_TYPE = 'application/x-agentsws-work-item'
@@ -36,6 +36,11 @@ export function WorkBoard({
   const [over, setOver] = useState<PositionWorkGroup | undefined>(undefined)
   const [error, setError] = useState('')
 
+  // WP244：「卡住了」那一列只在有东西时出（它只收事项，空着摆一列只是占地方）
+  const columns = POSITION_WORK_GROUPS.filter(
+    (g) => g !== 'stuck' || items.some((i) => i.group === 'stuck'),
+  )
+
   const move = async (item: PositionWorkItem, to: PositionWorkGroup): Promise<void> => {
     if (!canMoveWorkItem(item, to)) return
     try {
@@ -54,8 +59,10 @@ export function WorkBoard({
           {error}
         </p>
       )}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        {POSITION_WORK_GROUPS.map((g) => {
+      <div
+        className={`grid grid-cols-1 gap-3 sm:grid-cols-2 ${columns.length > 4 ? 'lg:grid-cols-5' : 'lg:grid-cols-4'}`}
+      >
+        {columns.map((g) => {
           const col = items.filter((i) => i.group === g)
           const accepts = dragging !== undefined && canMoveWorkItem(dragging, g)
           return (
@@ -124,8 +131,12 @@ export function WorkBoard({
                         <CardsBadge item={item} onJump={onJump} />
                       </div>
                     ) : null}
-                    {item.progress === undefined ? null : (
-                      <p className="truncate text-xs text-ws-muted-fg">{item.progress}</p>
+                    {item.progress === undefined &&
+                    item.stuck_reason === undefined &&
+                    item.result_ready !== true ? null : (
+                      <p className="truncate text-xs text-ws-muted-fg">
+                        <ProgressText item={item} />
+                      </p>
                     )}
                     <div className="flex items-center justify-between gap-2 text-xs">
                       <span className="min-w-0">
