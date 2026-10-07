@@ -380,7 +380,11 @@ import {
   type OnboardingAssembly,
   storefrontPlatformChoices,
 } from './onboarding.js'
-import { modelSuggester, sha256 as suggestSha } from './onboarding-suggest.js'
+import {
+  modelSuggester,
+  SUGGEST_MAX_OUTPUT_TOKENS,
+  sha256 as suggestSha,
+} from './onboarding-suggest.js'
 import { createOrg, type OrgAssembly } from './org.js'
 import { createOrgDuplicateScan, type OrgDuplicateScan } from './org-duplicates.js'
 import {
@@ -5577,6 +5581,12 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
               purpose: 'extraction',
             },
             model: ref,
+            /*
+             * WP243：一次性抽取——不要思考、封住输出上限。10-06 真机那一次出了 8859 个 token、
+             * 等了 38 秒；答案本身只是一小段紧凑 JSON。
+             */
+            max_output_tokens: SUGGEST_MAX_OUTPUT_TOKENS,
+            thinking: 'off',
           })
           return completion.text
         })
