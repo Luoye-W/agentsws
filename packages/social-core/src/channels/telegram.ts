@@ -23,8 +23,15 @@
 
 import type { SocialChannel } from '@agentsws/contracts'
 import {
+  type TelegramBotSelf,
+  type TelegramRawUpdate,
+  telegramUpdatesPage,
+} from './telegram-read.js'
+import {
   type BroadcastInput,
   type ChannelProfile,
+  type ChannelReadGap,
+  type ChannelUpdatesPage,
   callJson,
   guardConnected,
   type MemberDecisionInput,
@@ -124,6 +131,14 @@ export function createTelegramAdapter(transport: SocialTransport): SocialChannel
     if (!('data' in res)) return res
     return unwrap<T>(LABEL, res.data)
   }
+  /** WP257：机器人自己（`getMe`），查一次记住（判「@ 了我们」与隐私模式用）。 */
+  let self: TelegramBotSelf | undefined
+  const getMe = async (): Promise<{ ok: true; data: TelegramBotSelf } | SocialError> => {
+    if (self !== undefined) return { ok: true, data: self }
+    const me = await call<TelegramBotSelf>('getMe', {})
+    if ('data' in me && typeof me.data.id === 'number') self = me.data
+    return me
+  }
 
   return {
     channel: CHANNEL,
@@ -155,9 +170,85 @@ export function createTelegramAdapter(transport: SocialTransport): SocialChannel
       }
     },
 
+    /*
+     * WP257（决策 156）：整个机器人的收件流读一页（`getUpdates`，`timeout: 0` 不挂长轮询）。**只读**：
+     * 不回复、不改 webhook、不改 `allowed_updates`（那是机器人的全局设置）。拆页在 `telegram-read.ts`。
+     */
+    async updates({ offset, limit }): Promise<SocialResult<ChannelUpdatesPage>> {
+      const guard = off()
+      if (guard !== undefined) return guard
+      const me = await getMe()
+      const res = await call<TelegramRawUpdate[]>('getUpdates', {
+        ...(offset === undefined ? {} : { offset: Number(offset) }),
+        limit: Math.min(Math.max(limit ?? 100, 1), 100),
+        timeout: 0,
+      })
+      if (!('data' in res)) return res
+      return {
+        ok: true,
+        observed_at: transport.now(),
+        data: telegramUpdatesPage(
+          Array.isArray(res.data) ? res.data : [],
+          transport.now(),
+          'data' in me ? me.data : undefined,
+        ),
+      }
+    },
+
+    /*
+     * WP257：读这个群还缺什么（`telegram-read.ts` 文件头第 2–3 条）。三跳只读：我是谁、有没有 webhook、
+     * 我在这个群里是什么身份。
+     */
+    async readAccess(account_external_id): Promise<SocialResult<{ missing: ChannelReadGap[] }>> {
+      const guard = off()
+      if (guard !== undefined) return guard
+      const me = await getMe()
+      if (!('data' in me)) return me
+      const missing: ChannelReadGap[] = []
+      const hook = await call<{ url?: string }>('getWebhookInfo', {})
+      if ('data' in hook && (hook.data.url ?? '') !== '') missing.push('webhook_active')
+      const member = await call<{ status?: string }>('getChatMember', {
+        chat_id: account_external_id,
+        user_id: me.data.id,
+      })
+      if (!('data' in member)) {
+        // 「chat not found」/「bot was kicked」：机器人不在这个群里
+        if (member.status === 400 || member.status === 403) missing.push('bot_not_in_server')
+        else return member
+      } else if (member.data.status === 'left' || member.data.status === 'kicked')
+        missing.push('bot_not_in_server')
+      else if (
+        member.data.status !== 'administrator' &&
+        member.data.status !== 'creator' &&
+        me.data.can_read_all_group_messages !== true
+      )
+        // 管理员机器人不受隐私模式限制；不是管理员又开着隐私模式 → 只看得到 @它的话
+        missing.push('privacy_mode')
+      return { ok: true, observed_at: transport.now(), data: { missing } }
+    },
+
+    /* WP257：登记群时读一次群名，并把 `@用户名` 换成数字 id（收件流里只认数字 id）。 */
+    async describeTarget(account_external_id) {
+      const guard = off()
+      if (guard !== undefined) return guard
+      const chat = await call<RawChat>('getChat', { chat_id: account_external_id })
+      if (!('data' in chat)) return chat
+      const name = (chat.data.title ?? chat.data.username ?? '').trim()
+      if (name === '')
+        return { ok: false, reason: 'upstream_error', message: 'Telegram 没回这个群的名字。' }
+      return {
+        ok: true,
+        observed_at: transport.now(),
+        data: {
+          name,
+          ...(chat.data.id === undefined ? {} : { external_id: String(chat.data.id) }),
+        },
+      }
+    },
+
     // `posts` / `comments` / `members` 故意缺席（文件头第 3 条）：
     // Bot API 没有"给我这个群的历史消息 / 成员名册"。群里说了什么是靠
-    // 更新（webhook / long polling）推过来的，那是渠道入站那一侧的事。
+    // 更新推过来的——WP257 起由上面的 `updates`（`getUpdates`）低频读进来。
 
     async publish(
       input: PublishInput,
