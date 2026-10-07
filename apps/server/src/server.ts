@@ -8274,6 +8274,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       for (const im of imByBrand.values()) await im.close()
       // WP136：起过的其他场景一并关掉（它们是这个进程的子进程，不留孤儿占着端口）
       await dshScenesSetup.manager?.close()
+      // WP245：替用户跑着的安装 / 登录一并停掉（不留孤儿进程等浏览器）
+      platformCliRunner.dispose()
       learning.close()
       knowledge.close()
       data.close()

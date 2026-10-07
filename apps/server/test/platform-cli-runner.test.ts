@@ -4,7 +4,7 @@
  */
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { delimiter, join } from 'node:path'
 import { PLATFORM_KITS, type PlatformCliSpec } from '@agentsws/contracts'
 import { afterEach, describe, expect, it } from 'vitest'
 import { NpmRuntimeError } from '../src/npm-runtime.js'
@@ -14,6 +14,7 @@ import {
   createPlatformCliRunner,
   type PlatformCliRunner,
   privateCliEntry,
+  runEnv,
 } from '../src/platform-cli-runner.js'
 import { setLoginMode, writeFakeNpm } from './fixtures/fake-cli.js'
 
@@ -215,5 +216,36 @@ describe('一键登录：服务端起 auth login，网址交给工作台', () =>
     expect(denied.phase).toBe('failed')
     expect(denied.error?.code).toBe('denied')
     expect(m.loggedIn()).toBe(0)
+  })
+})
+
+describe('子进程环境（白名单）', () => {
+  const env = {
+    PATH: '/usr/bin',
+    HOME: '/home/a',
+    HTTPS_PROXY: 'http://127.0.0.1:7890',
+    AGENTSWS_SECRETS_KEY: 'never',
+    DEEPSEEK_API_KEY: 'never',
+  }
+  it('登录：不带 CI（带了 CLI 就拒绝交互登录）、带代理、关遥测、PATH 最前面是我们的 node', () => {
+    const out = runEnv(SPEC, env, { nodeExec: '/app/node/bin/node', action: 'login' })
+    expect(out.CI).toBeUndefined()
+    expect(out.HTTPS_PROXY).toBe('http://127.0.0.1:7890')
+    expect(out.SHOPIFY_CLI_NO_ANALYTICS).toBe('1')
+    expect(out.PATH?.split(delimiter)[0]).toBe('/app/node/bin')
+    expect(JSON.stringify(out)).not.toContain('never')
+  })
+  it('安装：npm 缓存放在工具目录、不查更新不审计；报版本：照旧 CI=1、不带代理', () => {
+    const install = runEnv(SPEC, env, {
+      nodeExec: '/app/node/bin/node',
+      action: 'install',
+      toolsDir: '/data/tools',
+    })
+    expect(install.npm_config_cache).toBe(join('/data/tools', 'npm-cache'))
+    expect(install.npm_config_update_notifier).toBe('false')
+    expect(install.CI).toBe('1')
+    const version = runEnv(SPEC, env, { nodeExec: 'node', action: 'version' })
+    expect(version.HTTPS_PROXY).toBeUndefined()
+    expect(version.PATH).toBe('/usr/bin')
   })
 })

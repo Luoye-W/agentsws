@@ -22,6 +22,7 @@
  */
 import { spawn } from 'node:child_process'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { homedir } from 'node:os'
 import { delimiter, dirname, join, posix, win32 } from 'node:path'
 import { stripVTControlCharacters } from 'node:util'
 import type { PlatformCliJobView } from '@agentsws/api'
@@ -182,7 +183,7 @@ export function cliInvocation(
 /** 服务进程是不是跑在 Electron 自带的 Node 上（那时 execPath 不是一个叫 node 的文件）。 */
 const onElectron = (): boolean => typeof process.versions.electron === 'string'
 
-/** 安装时多放行的几个（代理与下载源：国内网络常要；不是我们的秘密）。 */
+/** 安装 / 登录时多放行的几个（代理、证书与下载源：国内网络常要；不是我们的秘密）。 */
 export const INSTALL_EXTRA_ENV: readonly string[] = [
   'ComSpec',
   'HTTP_PROXY',
@@ -191,6 +192,9 @@ export const INSTALL_EXTRA_ENV: readonly string[] = [
   'http_proxy',
   'https_proxy',
   'no_proxy',
+  'ALL_PROXY',
+  'all_proxy',
+  'NODE_EXTRA_CA_CERTS',
   'npm_config_registry',
   'NPM_CONFIG_REGISTRY',
 ]
@@ -211,11 +215,13 @@ export function runEnv(
   const nodeDir = /[\\/]/.test(opts.nodeExec) && !onElectron() ? dirname(opts.nodeExec) : undefined
   out.PATH = nodeDir === undefined ? path : path === '' ? nodeDir : `${nodeDir}${delimiter}${path}`
   if (onElectron()) out.ELECTRON_RUN_AS_NODE = '1'
-  if (opts.action === 'install') {
+  // 代理与证书：安装要连 npm 源，登录要连平台的账号服务（CLI 自己认这几个变量）
+  if (opts.action !== 'version')
     for (const key of INSTALL_EXTRA_ENV) {
       const value = env[key]
       if (typeof value === 'string' && value !== '') out[key] = value
     }
+  if (opts.action === 'install') {
     out.npm_config_update_notifier = 'false'
     out.npm_config_fund = 'false'
     out.npm_config_audit = 'false'
@@ -365,6 +371,8 @@ export interface PlatformCliRunner {
   cancel(cliId: string): CliJobView | undefined
   /** 现在怎么起这个 CLI（检测与主题命令共用）。 */
   invocation(spec: PlatformCliSpec): CliInvocation
+  /** 服务进程收尾：跑着的全部停掉。 */
+  dispose(): void
   readonly nodeExec: string
   readonly toolsDir: string | undefined
 }
@@ -546,7 +554,8 @@ export function createPlatformCliRunner(options: PlatformCliRunnerOptions): Plat
       how.command,
       [...how.prefix, ...(spec.login_args ?? [])],
       runEnv(spec, env, { nodeExec, action: 'login' }),
-      toolsDir ?? process.cwd(),
+      // 登录不在乎目录；工具目录还没建过（用的是系统里那份）就在用户主目录里起
+      toolsDir !== undefined && existsSync(toolsDir) ? toolsDir : homedir(),
       options.loginTimeoutMs ?? 15 * 60 * 1000,
       (line, proc) => {
         const hit = parseLoginLine(line)
@@ -579,6 +588,13 @@ export function createPlatformCliRunner(options: PlatformCliRunnerOptions): Plat
     nodeExec,
     toolsDir,
     invocation,
+    dispose: () => {
+      for (const entry of jobs.values()) {
+        if (!RUNNING.has(entry.view.phase)) continue
+        entry.cancelled = true
+        entry.proc?.kill()
+      }
+    },
     job: (id) => {
       const entry = jobs.get(id)
       return entry === undefined ? undefined : snapshot(entry.view)
