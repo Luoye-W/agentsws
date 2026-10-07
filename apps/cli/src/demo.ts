@@ -52,6 +52,7 @@ import {
   cloudStandIn,
   createServer,
   deepseekAccountStandIn,
+  demoOldReddit,
   demoWebSearch,
   periodQueryRunner,
   platformCliStandIn,
@@ -1425,6 +1426,14 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
      * demo 不该为了演示去敲 DeepSeek 的服务器，也不该在没网的机器上演不出这张卡。
      */
     deepseekAccount: deepseekAccountStandIn(),
+    /*
+     * WP249：「Reddit 官方号浏览器通道」在 demo 里是内存替身——「登录官方号」打开即登录，
+     * 自家版队列里各类都有一两条；不起浏览器、不连 reddit.com。
+     */
+    redditOfficialBrowser: {
+      openPage: demoOldReddit().opener(),
+      sleep: async () => undefined,
+    },
     /*
      * WP246：本机只读浏览器在 demo 里是**替身**——不起浏览器、不访问 reddit.com。连接页「取数路线」演得出
      * 「登录读号 → 窗口开着 → 1.5 秒后像用户关掉了 → 已登录 u/demo_reader」；YouTube / 网页那两级不出网

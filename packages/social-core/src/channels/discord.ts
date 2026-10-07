@@ -358,6 +358,9 @@ export function createDiscordAdapter(transport: SocialTransport): SocialChannelA
           init = { method: 'DELETE', headers }
           break
         }
+        // WP249：版务队列的「批准」只有 Reddit 有
+        case 'approve':
+          return notImplemented(LABEL, 'Discord 没有版务队列，「批准」这一口不适用')
       }
       const res = await callJson<unknown>(transport, LABEL, url, init)
       if (!('data' in res) && res.status !== undefined) return res

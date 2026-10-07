@@ -7,6 +7,7 @@
 import { CLOUD_AUTH_EN, CLOUD_AUTH_ZH } from './i18n-cloud-auth'
 import { LIBRARY_EN, LIBRARY_ZH } from './i18n-library'
 import { LOCAL_CONNECTOR_EN, LOCAL_CONNECTOR_ZH } from './i18n-local-connector'
+import { OWN_SUB_EN, OWN_SUB_ZH } from './i18n-own-sub'
 import { POSITION_EN, POSITION_ZH } from './i18n-position'
 import { READ_ROUTES_EN, READ_ROUTES_ZH } from './i18n-read-routes'
 
@@ -7914,7 +7915,7 @@ const en: Table = {
 // WP209：技能 / 知识分组的词条在自己的文件里（`i18n-library.ts`），这里并进来
 const TABLES: Record<Lang, Table> = {
   // WP241：岗位页 v2 的词条在 `i18n-position.ts`
-  // WP246：连接页「取数路线」的词条在 `i18n-read-routes.ts`；WP247：本机连接器在 `i18n-local-connector.ts`
+  // WP246：连接页「取数路线」的词条在 `i18n-read-routes.ts`；WP247：本机连接器在 `i18n-local-connector.ts`；WP249：自家版待处理在 `i18n-own-sub.ts`
   zh: {
     ...zh,
     ...LIBRARY_ZH,
@@ -7922,6 +7923,7 @@ const TABLES: Record<Lang, Table> = {
     ...POSITION_ZH,
     ...READ_ROUTES_ZH,
     ...LOCAL_CONNECTOR_ZH,
+    ...OWN_SUB_ZH,
   },
   en: {
     ...en,
@@ -7930,6 +7932,7 @@ const TABLES: Record<Lang, Table> = {
     ...POSITION_EN,
     ...READ_ROUTES_EN,
     ...LOCAL_CONNECTOR_EN,
+    ...OWN_SUB_EN,
   },
 }
 
