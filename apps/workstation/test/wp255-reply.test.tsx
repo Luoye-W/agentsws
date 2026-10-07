@@ -206,6 +206,6 @@ describe('WP255 社群线程列表', () => {
   it('没有要回的：照实说一句', async () => {
     state.threads = []
     renderWithProviders(<SocialThreads assignment="asg_dc" channel="discord" />)
-    expect(await screen.findByText('没有要回的帖子')).toBeTruthy()
+    expect(await screen.findByText('还没有要回的帖子')).toBeTruthy()
   })
 })

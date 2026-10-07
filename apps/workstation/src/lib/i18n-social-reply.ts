@@ -19,7 +19,7 @@ export const SOCIAL_REPLY_ZH: Record<string, string> = {
   'reply.failed': '没出卡：{message}',
   'reply.staged': '回帖卡已出，在上面「要你处理」里批',
   'pos2.quick.threads': '群里的帖子',
-  'threads.empty': '没有要回的帖子',
+  'threads.empty': '还没有要回的帖子',
   'threads.surface.thread': '帖子',
   'threads.surface.comment': '评论',
   'threads.surface.dm': '私信',
@@ -30,7 +30,7 @@ export const SOCIAL_REPLY_ZH: Record<string, string> = {
   'threads.triage.partnership': '合作',
   'threads.triage.other': '其他',
   'threads.hint':
-    '这条渠道里还没处理完的帖子、评论和私信。客户问题已经转给客服，不在这里。回复都先出卡，你批了才发。',
+    '这条渠道里还没处理完的帖子、评论和私信。客户问题已经转给客服，不在这里。回复都先出卡，你批了才发。群里的新帖暂时还不会自动拉进来；自家版的帖子在「自家版待处理」里回。',
 }
 
 export const SOCIAL_REPLY_EN: Record<string, string> = {
@@ -48,7 +48,7 @@ export const SOCIAL_REPLY_EN: Record<string, string> = {
   'reply.failed': 'No card: {message}',
   'reply.staged': 'Reply card created — approve it in “Needs you” above',
   'pos2.quick.threads': 'Community threads',
-  'threads.empty': 'Nothing to reply to',
+  'threads.empty': 'Nothing to reply to yet',
   'threads.surface.thread': 'Post',
   'threads.surface.comment': 'Comment',
   'threads.surface.dm': 'DM',
@@ -59,5 +59,5 @@ export const SOCIAL_REPLY_EN: Record<string, string> = {
   'threads.triage.partnership': 'Partnership',
   'threads.triage.other': 'Other',
   'threads.hint':
-    'Open posts, comments and DMs on this channel. Customer questions already went to support and are not listed. Every reply becomes a card first and is sent only after you approve.',
+    'Open posts, comments and DMs on this channel. Customer questions already went to support and are not listed. Every reply becomes a card first and is sent only after you approve. New posts are not pulled in from the group automatically yet; reply to your own subreddit from “Own sub queue”.',
 }
