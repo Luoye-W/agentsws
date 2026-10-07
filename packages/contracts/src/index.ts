@@ -99,4 +99,6 @@ export * from './social.js'
 export * from './standby.js'
 // 67 §3 WP118：按月订阅的增值服务（一份引擎，红人是第一个实例，客服 WP124 在后）
 export * from './subscription.js'
+// WP259：「交给它」长文本拆成标题 + 完整原文（工作台与服务端共用一条规矩）
+export * from './task-text.js'
 export * from './work.js'
