@@ -30,7 +30,29 @@ export const SOCIAL_REPLY_ZH: Record<string, string> = {
   'threads.triage.partnership': '合作',
   'threads.triage.other': '其他',
   'threads.hint':
-    '这条渠道里还没处理完的帖子、评论和私信。客户问题已经转给客服，不在这里。回复都先出卡，你批了才发。群里的新帖暂时还不会自动拉进来；自家版的帖子在「自家版待处理」里回。',
+    '这条渠道里还没处理完的帖子、评论和私信。客户问题已经转给客服，不在这里。回复都先出卡，你批了才发。Discord 按设定的频率自动拉登记过的频道；Reddit 自家版的新帖在读「自家版待处理」时顺手拉进来，没人看时一小时补读一次。',
+  // WP256（决策 147）：空态按渠道照实说
+  'threads.empty.no_posts': '这个群还没有新帖',
+  'threads.empty.not_connected': '还没连上',
+  'threads.empty.connect': '去连接页',
+  'threads.empty.manual': '这条渠道还不会自动拉新帖',
+  'threads.empty.no_channel': '还没登记要读的频道',
+  'threads.empty.no_own_sub': '还没登记自家版，去「自家版待处理」登记',
+  'threads.register.placeholder': '粘贴频道链接',
+  'threads.register': '登记',
+  'threads.register.invalid': '认不出这个链接：在 Discord 里右键频道 →「复制链接」再粘贴',
+  'threads.register.hint':
+    '在 Discord 里右键要读的频道，点「复制链接」，粘贴到这里。登记后按设定的频率自动读这个频道的新消息，只读不回。',
+  'threads.every': '每 {n}',
+  'threads.every.label': '多久读一次',
+  'threads.every.5': '5 分钟',
+  'threads.every.15': '15 分钟',
+  'threads.every.30': '30 分钟',
+  'threads.every.60': '1 小时',
+  'threads.every.180': '3 小时',
+  'threads.every.1440': '1 天',
+  'threads.issue.missing_hint':
+    '「查看频道」「读取消息历史」：Discord 服务器设置 → 角色 → 机器人的角色里打开（或在这个频道的权限里给机器人打开）。「Message Content Intent」：Discord 开发者后台 → 你的应用 → Bot 页打开。改好后下一轮自己就能读。',
 }
 
 export const SOCIAL_REPLY_EN: Record<string, string> = {
@@ -59,5 +81,27 @@ export const SOCIAL_REPLY_EN: Record<string, string> = {
   'threads.triage.partnership': 'Partnership',
   'threads.triage.other': 'Other',
   'threads.hint':
-    'Open posts, comments and DMs on this channel. Customer questions already went to support and are not listed. Every reply becomes a card first and is sent only after you approve. New posts are not pulled in from the group automatically yet; reply to your own subreddit from “Own sub queue”.',
+    'Open posts, comments and DMs on this channel. Customer questions already went to support and are not listed. Every reply becomes a card first and is sent only after you approve. Discord channels you registered are pulled on a schedule; new posts in your own subreddit come in whenever “Own sub queue” is read, and once an hour when nobody is looking.',
+  'threads.empty.no_posts': 'No new posts in this group yet',
+  'threads.empty.not_connected': 'Not connected yet',
+  'threads.empty.connect': 'Go to Connections',
+  'threads.empty.manual': 'New posts are not pulled in automatically on this channel yet',
+  'threads.empty.no_channel': 'No channel registered to read yet',
+  'threads.empty.no_own_sub': 'No own subreddit yet — register one in “Own sub queue”',
+  'threads.register.placeholder': 'Paste channel link',
+  'threads.register': 'Add',
+  'threads.register.invalid':
+    'Not a channel link: right-click the channel in Discord → “Copy Link”',
+  'threads.register.hint':
+    'Right-click the channel in Discord, choose “Copy Link” and paste it here. New messages are then read on a schedule — read only, nothing is posted.',
+  'threads.every': 'Every {n}',
+  'threads.every.label': 'How often to read',
+  'threads.every.5': '5 min',
+  'threads.every.15': '15 min',
+  'threads.every.30': '30 min',
+  'threads.every.60': '1 hour',
+  'threads.every.180': '3 hours',
+  'threads.every.1440': '1 day',
+  'threads.issue.missing_hint':
+    '“View Channel” and “Read Message History”: Discord server settings → Roles → the bot role (or this channel’s permissions). “Message Content Intent”: Discord Developer Portal → your app → Bot. The next round picks it up by itself.',
 }

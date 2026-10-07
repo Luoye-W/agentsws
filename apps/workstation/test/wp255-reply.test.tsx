@@ -86,6 +86,19 @@ vi.mock('@/lib/own-sub-api', () => ({
   checkRedditBrowserLogin: async () => view().browser,
   registerOwnSub: async () => ({ id: 'sa_2' }),
 }))
+// WP256：「群里的帖子」上方的读取状态（连上了、读得好好的）
+vi.mock('@/lib/social-ingest-api', () => ({
+  getSocialIngest: async () => ({
+    channel: 'discord',
+    auto: true,
+    connected: true,
+    every_minutes: 15,
+    accounts: [{ account_id: 'sa_dc', name: 'INMO 社群', state: 'ok' }],
+  }),
+  setSocialIngestInterval: async () => ({}),
+  registerDiscordChannel: async () => ({ id: 'sa_x' }),
+  parseDiscordChannel: () => undefined,
+}))
 vi.mock('@/lib/social-reply-api', () => ({
   getSocialThreads: async () => ({ rows: state.threads }),
   ownSubThread: (...a: unknown[]) => state.ownSubThread(...(a as [])),
@@ -203,9 +216,9 @@ describe('WP255 社群线程列表', () => {
     expect((await within(row).findByTestId('reply-staged')).textContent).toContain('回帖卡已出')
   })
 
-  it('没有要回的：照实说一句', async () => {
+  it('没有要回的：照实说一句（WP256 起按渠道说：连上了、读得好好的 →「这个群还没有新帖」）', async () => {
     state.threads = []
     renderWithProviders(<SocialThreads assignment="asg_dc" channel="discord" />)
-    expect(await screen.findByText('还没有要回的帖子')).toBeTruthy()
+    expect(await screen.findByText('这个群还没有新帖')).toBeTruthy()
   })
 })
