@@ -391,9 +391,10 @@ describe('site.shopify-theme（12 §2 建站；WP77 改名，内容照旧）', (
     expect(product?.ops).toEqual(['read'])
   })
 
-  it('连接器要主题读写权限', () => {
+  it('连接器要主题读写权限（WP253：可选、建议连——主题走 CLI 登录 + 店铺地址就够）', () => {
     const shopify = builder().connectors.find((c) => c.kind === 'shopify')
-    expect(shopify?.required).toBe(true)
+    expect(shopify?.required).toBe(false)
+    expect(shopify?.recommended).toBe(true)
     expect(shopify?.grants).toContain('read_themes')
     expect(shopify?.grants).toContain('write_themes')
   })

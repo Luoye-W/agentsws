@@ -11,6 +11,7 @@ import { NPM_REGISTRY_EN, NPM_REGISTRY_ZH } from './i18n-npm-registry'
 import { OWN_SUB_EN, OWN_SUB_ZH } from './i18n-own-sub'
 import { POSITION_EN, POSITION_ZH } from './i18n-position'
 import { READ_ROUTES_EN, READ_ROUTES_ZH } from './i18n-read-routes'
+import { SITE_THEME_EN, SITE_THEME_ZH } from './i18n-site-theme'
 import { SOCIAL_EXEC_EN, SOCIAL_EXEC_ZH } from './i18n-social-exec'
 
 export type Lang = 'zh' | 'en'
@@ -7934,6 +7935,8 @@ const TABLES: Record<Lang, Table> = {
     ...POSITION_ZH,
     ...READ_ROUTES_ZH,
     ...LOCAL_CONNECTOR_ZH,
+    // WP253：建站岗位「AI 改主题」引导在 `i18n-site-theme.ts`
+    ...SITE_THEME_ZH,
     ...OWN_SUB_ZH,
     // WP254：下载源（换国内源再试）
     ...NPM_REGISTRY_ZH,
@@ -7947,6 +7950,7 @@ const TABLES: Record<Lang, Table> = {
     ...POSITION_EN,
     ...READ_ROUTES_EN,
     ...LOCAL_CONNECTOR_EN,
+    ...SITE_THEME_EN,
     ...OWN_SUB_EN,
     ...NPM_REGISTRY_EN,
     ...SOCIAL_EXEC_EN,

@@ -15,18 +15,41 @@ export const FAKE_SHOPIFY_RUN = `#!/usr/bin/env node
 const args = process.argv.slice(2)
 if (args[0] === 'version') { console.log('Current Shopify CLI version: 4.8.5'); process.exit(0) }
 if (args[0] === 'auth' && args[1] === 'login') {
+  const fs = require('node:fs')
+  const path = require('node:path')
   if ('CI' in process.env) { console.error('Authorization is required to continue, but the current environment does not support interactive prompts.'); process.exit(3) }
+  // WP253：照 4.8.5——非交互环境下不带 --alias 一开头就报错退出（Fable 10-07 真机撞上的那一句）
+  const ai = args.indexOf('--alias')
+  const alias = ai < 0 ? undefined : args[ai + 1]
+  if (!process.stdin.isTTY && alias === undefined) {
+    console.error('Flag not specified:\\n\\n--alias\\n\\nThis flag is required in non-interactive terminal environments, such as a CI environment, or when piping input from another process.')
+    process.exit(1)
+  }
+  // 会话存在「CLI 配置目录」里：HOME 指到品牌那一份（路径里有 -sessions）就真写进去；别的 HOME 一律记在脚本旁边
+  // （按 HOME 分开，不碰真的 HOME）。存下来的别名是账号邮箱，不是 --alias 给的那个（4.8.5 就是这样）
+  const home = process.env.HOME || ''
+  const inHome = home.includes('-sessions')
+  const storeFile = inHome ? path.join(home, 'fake-shopify-sessions.json') : path.join(__dirname, 'sessions.json')
+  let store = {}
+  try { store = JSON.parse(fs.readFileSync(storeFile, 'utf8')) } catch {}
+  const mine = store[home] || []
+  fs.appendFileSync(path.join(__dirname, 'logins.jsonl'), JSON.stringify({ args, home, appdata: process.env.APPDATA }) + '\\n')
+  if (alias !== undefined && mine.some((s) => s.alias === alias)) { console.log('Current account: ' + alias + '.'); process.exit(0) }
+  if (mine.length > 0) { console.error('Failed to prompt: Which account would you like to use? This usually happens when running a command non-interactively'); process.exit(1) }
   let mode = 'ok'
-  try { mode = require('node:fs').readFileSync(require('node:path').join(__dirname, 'mode'), 'utf8').trim() } catch {}
+  try { mode = fs.readFileSync(path.join(__dirname, 'mode'), 'utf8').trim() } catch {}
   console.log('\\nTo run this command, log in to Shopify.')
   const url = 'https://accounts.shopify.com/activate-with-code?device_code%5Buser_code%5D=ABCD-EFGH'
   const finish = () => {
     console.log('User verification code: ABCD-EFGH')
-    console.log('\\u001b[1m👉 Open this link to start the auth process:\\u001b[0m ' + url)
+    if (mode === 'opened') console.log('Opened link to start the auth process: ' + url)
+    else console.log('\\u001b[1m👉 Open this link to start the auth process:\\u001b[0m ' + url)
     if (mode === 'hang') { setInterval(() => {}, 1000); return }
     setTimeout(() => {
       if (mode === 'denied') { console.error('Device authorization failed: Access denied.'); process.exit(1) }
-      console.log('Logged in.'); process.exit(0)
+      store[home] = [...mine, { alias: 'owner@example.test' }]
+      fs.writeFileSync(storeFile, JSON.stringify(store))
+      console.log('Logged in.'); console.log('Current account: owner@example.test.'); process.exit(0)
     }, 150)
   }
   if (mode === 'presskey') {
@@ -84,6 +107,9 @@ export function writeFakeNpm(
 }
 
 /** 装好的假 shopify 下一次登录演哪一出。 */
-export function setLoginMode(entry: string, mode: 'ok' | 'presskey' | 'denied' | 'hang'): void {
+export function setLoginMode(
+  entry: string,
+  mode: 'ok' | 'presskey' | 'denied' | 'hang' | 'opened',
+): void {
   writeFileSync(join(entry, '..', 'mode'), mode)
 }

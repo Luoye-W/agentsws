@@ -5,8 +5,9 @@
  * 只监听 127.0.0.1；一个进程一个端口（`AGENTSWS_PORT`，默认 4317）。
  */
 import { promises as dnsPromises } from 'node:dns'
-import { mkdirSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync } from 'node:fs'
 import type { IncomingMessage } from 'node:http'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { Duplex } from 'node:stream'
 import {
@@ -21,6 +22,7 @@ import type {
   ConnectionDirectoryPort,
   FreeChatPort,
   PositionEntryPort,
+  SiteThemeView,
   WorkPort,
   WorkstationPort,
 } from '@agentsws/api'
@@ -74,6 +76,7 @@ import type {
   KolChannel,
   Person,
   PersonId,
+  PlatformCliSpec,
   PromptSection,
   SearchDataPort,
   SkillTier,
@@ -97,6 +100,7 @@ import {
   KOL_FOLDER,
   PLACEHOLDER_OWNER_EMAIL,
   PR_ROLE_IDS,
+  platformKitOf,
   REDDIT_READ_HOSTS,
   resolveDataCreditBudget,
   SOCIAL_ROLE_IDS,
@@ -411,8 +415,19 @@ import {
   type PersonasAssembly,
   personaFileIn,
 } from './personas.js'
-import { createPlatformCliProber, PlatformCliLoginStore, type ProbeExec } from './platform-cli.js'
+import {
+  createPlatformCliProber,
+  PlatformCliLoginStore,
+  type PlatformCliProbe,
+  type ProbeExec,
+} from './platform-cli.js'
 import { createPlatformCliRunner, type PlatformCliRunnerOptions } from './platform-cli-runner.js'
+import {
+  type CliSession,
+  cliSessionAlias,
+  cliSessionEnv,
+  cliSessionHome,
+} from './platform-cli-session.js'
 import { createPlatformKitPort, resolveBrandPlatform } from './platform-kit.js'
 import {
   createPositions,
@@ -503,7 +518,15 @@ import { createSecretaryAssembly, type SecretaryAssembly } from './secretary.js'
 import { claimRuleCard, createSeoService, pickRoleHolder } from './seo-service.js'
 import type { BrokerFetch } from './shopify-broker.js'
 import { createShopifyDevMcp } from './shopify-devmcp.js'
+import type { RunCli } from './shopify-theme.js'
 import { createConnectSiteFacts, createSiteService, createSiteStore, seedDemoSite } from './site.js'
+import {
+  createSiteTheme,
+  type SiteThemeAssembly,
+  SiteThemeError,
+  type ThemeBasePin,
+  type ThemeFetch,
+} from './site-theme.js'
 import { enrichSkillSummaries } from './skill-catalog.js'
 import {
   createSocialStore,
@@ -527,6 +550,7 @@ import {
   type SupportJudgment,
   supportSlaTask,
 } from './support-judgment.js'
+import { createThemeToolExecutor } from './theme-tools.js'
 import { createWeeklyReviewService } from './weekly-review.js'
 // WP60（48 §4 L3 #11 的云端一半）：聊天窗的嵌入脚本与 CORS 预检
 import { CHAT_WIDGET_JS, mountChatWidget } from './widget.js'
@@ -870,6 +894,11 @@ export interface ServerOptions {
    * 生产不传：用服务进程自己的 node（捆绑的那份）+ 钉死的 npm，装进 `<数据目录>/tools`。
    */
   platformCliRunner?: Partial<Omit<PlatformCliRunnerOptions, 'now'>>
+  /**
+   * WP253：建站岗位主题工坊的注入点（测试 / demo 换成假 `shopify` 与本地假主题包，不联网、不碰真店）。
+   * 生产不传：用 WP245 装好的 CLI 真跑，起底包从 codeload.github.com 下钉死的那一版。
+   */
+  siteTheme?: { run?: RunCli; fetch?: ThemeFetch; base?: ThemeBasePin }
   /**
    * WP247：本机连接器下载器的注入点（测试换成假 npm，不联网）。生产不传：只有桌面壳设了
    * `AGENTSWS_CONNECT_LOCAL_RUNTIME=1`（它来起停本机连接器）且有数据目录时才装配。
@@ -1881,6 +1910,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       // WP173：开发信那一批卡批了才发（不是 b2b_outreach 回 undefined）
       const outreachSent = await brand?.b2bOutbound.apply(change)
       if (outreachSent !== undefined) return outreachSent
+      // WP253：换线上主题那张卡批了 → 由服务端跑 `theme publish`（这是整条路上唯一换线上主题的地方）
+      if (change.kind === 'publish_theme') {
+        const themed = await (await siteThemeOf(change.workspace_id))?.apply(change)
+        if (themed !== undefined) return themed
+      }
       return backend.apply(change, opts)
     },
     // 18 §3：批准了的对外草稿真发出去。渠道接不住的（不是邮件 / 没装邮箱）
@@ -2474,6 +2508,85 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   if (localConnector !== undefined && env.AGENTSWS_CONNECT_AUTO_UPDATE !== '0')
     localConnector.autoUpdate()
 
+  /*
+   * WP253：建站岗位的主题工坊——**一个品牌一份**（懒建）。CLI 的检测 / 起法 / 登录那一笔
+   * 在后面（平台工具包那一段）才建出来，这里经 `siteThemeCli` 晚绑定；没绑上之前当没装。
+   */
+  const siteThemes = new Map<WorkspaceId, SiteThemeAssembly>()
+  const siteThemeCli: {
+    probe?: (spec: PlatformCliSpec, fresh: boolean) => Promise<PlatformCliProbe>
+    invocation?: (spec: PlatformCliSpec) => { command: string; prefix: readonly string[] }
+    loggedIn?: (ws: WorkspaceId, cli_id: string) => boolean
+    sessionEnv?: (ws: WorkspaceId, cli_id: string) => Record<string, string> | undefined
+  } = {}
+  let themeScratchDir: string | undefined
+  const siteThemeOf = async (ws: WorkspaceId): Promise<SiteThemeAssembly | undefined> => {
+    const cached = siteThemes.get(ws)
+    if (cached !== undefined) return cached
+    const brand = await brands?.forWorkspace(ws)
+    if (brand === undefined) return undefined
+    // 内存档没有数据目录：主题工作副本放进一个临时目录（只在真用到时建一次）
+    themeScratchDir ??=
+      dbDir === undefined ? mkdtempSync(join(tmpdir(), 'agentsws-themes-')) : undefined
+    const dataDir = dbDir ?? (themeScratchDir as string)
+    const assembly = createSiteTheme({
+      workspace_id: ws,
+      clock,
+      dataDir,
+      ...(brand.dir === undefined ? {} : { settingsFile: join(brand.dir, 'site-theme.json') }),
+      cliSpec: () => platformKitOf(brandPlatformOf(ws))?.cli,
+      probe: (spec, fresh) =>
+        siteThemeCli.probe === undefined
+          ? Promise.resolve({
+              installed: false,
+              node_ok: false,
+              min_node_major: spec.min_node_major,
+              checked_at: clock.now(),
+            })
+          : siteThemeCli.probe(spec, fresh === true),
+      loggedIn: (cli_id) => siteThemeCli.loggedIn?.(ws, cli_id) ?? false,
+      sessionEnv: (cli_id) => siteThemeCli.sessionEnv?.(ws, cli_id),
+      invocation: (spec) => siteThemeCli.invocation?.(spec) ?? { command: spec.bin, prefix: [] },
+      connectedShops: () =>
+        brand.connections.shopify
+          .list()
+          .map((r) => r.shop)
+          .sort(),
+      env,
+      ...(options.siteTheme?.run === undefined ? {} : { run: options.siteTheme.run }),
+      ...(options.siteTheme?.fetch === undefined ? {} : { fetch: options.siteTheme.fetch }),
+      ...(options.siteTheme?.base === undefined ? {} : { base: options.siteTheme.base }),
+      // Luoye 决定 140：随安装包带的那份起底包（GitHub 下不动时的兜底；打包那一半见 WP253 报告）
+      ...(env.AGENTSWS_THEME_BASE_DIR === undefined || env.AGENTSWS_THEME_BASE_DIR === ''
+        ? {}
+        : { localBaseDir: env.AGENTSWS_THEME_BASE_DIR }),
+      ledger: txn.ledger,
+      effectiveConfig: (id) => roles.effectiveConfig(id),
+      notePreview: (matter_id, input) => {
+        try {
+          brand.work.appendEvent(matter_id as never, {
+            kind: 'status',
+            text: input.text,
+            actor: { kind: 'agent', id: 'site.shopify-theme' },
+            preview: { url: input.url, label: input.label },
+          })
+        } catch {
+          // 事项已经没了（被删 / 换了品牌）：预览照样在工具结果里，时间线少一条而已
+        }
+      },
+      appendEvent: (type, payload) =>
+        appendEvent({
+          schema_version: 1,
+          workspace_id: ws,
+          type,
+          actor: { kind: 'system', id: 'site.theme' },
+          correlation: { trace_id: `trc_theme_${Date.parse(clock.now()).toString(36)}` },
+          payload,
+        }),
+    })
+    siteThemes.set(ws, assembly)
+    return assembly
+  }
   // WP252（决策 125）：一台机一个连接器、多个品牌共用——整台机一份连接归属表，各品牌的连接面共用同一个实例；
   // 启动时先把各品牌老状态文件里记过的归属补记进来（幂等），必须在任何品牌列连接之前。
   const connectOwners = openConnectOwners({ dbDir, startup: workspace.id, now: clock.now() })
@@ -3623,6 +3736,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
               workspace_id: ws,
               port: () => b2bOutboundLate.current?.port,
             }),
+            /*
+             * WP253：网页模板的九个受限主题工具（起底 / 列 / 拉 / 检查 / 看改文件 / 推未发布 / 发布出卡）。
+             * 主题工坊按品牌懒建——取值函数只在真调工具那一刻才碰它。
+             */
+            themeTools: createThemeToolExecutor({ module: () => siteThemeOf(ws) }),
             vertical: () => brandProfileOf(ws).vertical,
             // WP216：平台专属的官方技能 / Dev MCP 工具只给平台对得上的品牌（每次现取档案）
             storefrontPlatform: () => brandPlatformOf(ws),
@@ -7712,10 +7830,29 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     async (ws) => (await brandModules.forWorkspace(ws)).adsService.port,
   )
   /** WP77（59 §2）：建站数据面 `/v1/site/*`（一个品牌一张库）。 */
-  const sitePortOf = brandSitePort(
-    brandModules,
-    async (ws) => (await brandModules.forWorkspace(ws)).siteService.port,
-  )
+  const sitePortOf = brandSitePort(brandModules, async (ws) => {
+    const base = (await brandModules.forWorkspace(ws)).siteService.port
+    // WP253：网页模板「AI 改主题还差哪一步」与店铺地址（主题工坊按品牌懒建）
+    const themeView = async (fresh: boolean): Promise<SiteThemeView> => {
+      const theme = await siteThemeOf(ws)
+      if (theme === undefined) throw new ApiError('not_implemented', '这个品牌没装主题工坊')
+      return theme.readiness({ fresh })
+    }
+    return {
+      ...base,
+      themeStatus: (_actor, input) => themeView(input.fresh === true),
+      setThemeStore: async (_actor, input) => {
+        const theme = await siteThemeOf(ws)
+        if (theme === undefined) throw new ApiError('not_implemented', '这个品牌没装主题工坊')
+        try {
+          return await theme.setStore(input.store)
+        } catch (e) {
+          if (e instanceof SiteThemeError) throw new ApiError('invalid_input', e.message)
+          throw e
+        }
+      },
+    }
+  })
   /** WP76（58 §5）：设计库 `/v1/design/*`（一个品牌一张库、一段 blob 前缀）。 */
   const designPortOf = brandDesignPort(
     brandModules,
@@ -7790,6 +7927,45 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     registry: () => npmRegistry.choose(),
     ...options.platformCliRunner,
   })
+  const platformCliProber = createPlatformCliProber({
+    now: () => clock.now(),
+    env,
+    ...(options.platformCliExec === undefined ? {} : { exec: options.platformCliExec }),
+    // WP245：优先认工作台自己装的那份，系统里已有的也认
+    invocation: (spec) => platformCliRunner.invocation(spec),
+  })
+  const platformCliLoginOf = (ws: string): PlatformCliLoginStore => {
+    let store = platformCliLogins.get(ws)
+    if (store === undefined) {
+      store = new PlatformCliLoginStore(brandDirOf(dbDir, ws as WorkspaceId, workspace.id))
+      platformCliLogins.set(ws, store)
+    }
+    return store
+  }
+  // WP253：主题工坊与 CLI 卡认的是同一份检测、同一个起法、同一笔登录记录
+  siteThemeCli.probe = (spec, fresh) => platformCliProber.probe(spec, { fresh })
+  siteThemeCli.invocation = (spec) => platformCliRunner.invocation(spec)
+  /*
+   * WP253（Fable 10-07 真机 + 决定 138）：CLI 会话按品牌分开——每个品牌一份 CLI 配置目录
+   * （`platform-cli-session.ts` 写了依据）。没有数据目录（内存档）就用整台电脑那一份。
+   */
+  const cliSessionOf = (ws: string, cli_id: string): CliSession => {
+    const toolsDir = platformCliRunner.toolsDir
+    return {
+      alias: cliSessionAlias(ws),
+      ...(toolsDir === undefined ? {} : { home: cliSessionHome(toolsDir, cli_id, ws) }),
+    }
+  }
+  // 「登好了」= 按品牌记过一笔，而且这个品牌那一份会话目录还在（WP253 之前在整台电脑那一份登的要再登一次）
+  siteThemeCli.loggedIn = (ws, cli_id) => {
+    if (platformCliLoginOf(ws).confirmedAt(cli_id) === undefined) return false
+    const home = cliSessionOf(ws, cli_id).home
+    return home === undefined || existsSync(home)
+  }
+  siteThemeCli.sessionEnv = (ws, cli_id) => {
+    const home = cliSessionOf(ws, cli_id).home
+    return home === undefined ? undefined : cliSessionEnv(home)
+  }
   const platformKitPort = createPlatformKitPort({
     now: () => clock.now(),
     platformOf: (ws) => brandPlatformOf(ws),
@@ -7797,22 +7973,10 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     hasRoles: (ws, role_ids) =>
       role_ids.some((r) => roles.assignments.listByRole(r, { workspace_id: ws }).length > 0),
     platformChoices: () => storefrontPlatformChoices(),
-    prober: createPlatformCliProber({
-      now: () => clock.now(),
-      env,
-      ...(options.platformCliExec === undefined ? {} : { exec: options.platformCliExec }),
-      // WP245：优先认工作台自己装的那份，系统里已有的也认
-      invocation: (spec) => platformCliRunner.invocation(spec),
-    }),
+    prober: platformCliProber,
     runner: platformCliRunner,
-    loginStoreOf: (ws) => {
-      let store = platformCliLogins.get(ws)
-      if (store === undefined) {
-        store = new PlatformCliLoginStore(brandDirOf(dbDir, ws, workspace.id))
-        platformCliLogins.set(ws, store)
-      }
-      return store
-    },
+    loginStoreOf: platformCliLoginOf,
+    sessionOf: (ws, spec) => cliSessionOf(ws, spec.id),
     displayNameOf: (name) => {
       const extra = skills.registry.frontmatterOf(name)?.extra
       const zh = extra?.display_name?.trim() ?? ''

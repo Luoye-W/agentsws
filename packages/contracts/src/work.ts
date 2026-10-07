@@ -97,6 +97,11 @@ export interface MatterEvent {
    */
   route?: { picked?: RoleId; options: { role_id: RoleId; role_name: string }[] }
   /**
+   * WP253：这一条是「预览好了」——AI 把主题推成了一份**未发布**副本（线上没动），界面在它下面出
+   * 「打开预览」按钮。`url` 是 Shopify 的预览链接，`label` 是那份副本的名字。老事件没有这一格。
+   */
+  preview?: { url: string; label: string }
+  /**
    * WP251（决策 91）：这一轮运行**卡在缺连接 / 缺凭据上**——工具回了 `not_connected` 或缺凭据，
    * 运行时在这一轮收尾时记下的结构化标记（缺哪个连接）。岗位工作视图按它分「卡住了」，
    * 不再认 AI 最后那句话。老事件没有这一格。

@@ -91,6 +91,11 @@ export interface PlatformCliSpec {
    * 不写 = 这个 CLI 不支持「一键登录」，卡上只给复制命令。
    */
   login_args?: readonly string[]
+  /**
+   * WP253（Fable 10-07 真机）：登录时指定会话别名的那个参数（Shopify CLI 4.x 是 `--alias`：
+   * 非交互环境下**不带就直接报错退出**）。写了它，工作台替用户登录时带上 `<参数> <本品牌的别名>`。
+   */
+  login_alias_flag?: string
   /** WP245：卡上「登录 X」的 X（登的是哪家的账号；不写就用 {@link label}）。 */
   account_label?: string
   /**
@@ -161,6 +166,8 @@ export const PLATFORM_KITS: readonly PlatformKit[] = [
       login_command: 'shopify auth login',
       // WP245：一键登录（服务端起这一条，登录网址交给工作台打开；密码只在 Shopify 网页上输）
       login_args: ['auth', 'login'],
+      // WP253：4.8.x 非交互登录必须带 `--alias`（env `SHOPIFY_FLAG_AUTH_ALIAS`），否则「Flag not specified: --alias」
+      login_alias_flag: '--alias',
       account_label: 'Shopify',
       npm_tag: 'latest',
       tutorial: 'shopify-cli',

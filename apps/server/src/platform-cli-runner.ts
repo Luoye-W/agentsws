@@ -21,7 +21,7 @@
  * 5. 输出先抹一遍（{@link scrubCliOutput}）再进「详情」，不进事件；事件里只有 CLI id / 动作 / 结果码。
  */
 import { spawn } from 'node:child_process'
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { delimiter, dirname, join, posix, win32 } from 'node:path'
 import { stripVTControlCharacters } from 'node:util'
@@ -32,6 +32,7 @@ import { killTree } from './kill-tree.js'
 import { type NpmRegistryChoice, withRegistry } from './npm-registry.js'
 import { ensureNpmCli, NpmRuntimeError } from './npm-runtime.js'
 import { probeEnv } from './platform-cli.js'
+import { type CliSession, cliSessionEnv } from './platform-cli-session.js'
 import { scrubCliOutput } from './shopify-theme.js'
 import { cliSpawnSpec, envValue } from './win-cli.js'
 
@@ -329,6 +330,19 @@ export function loginFailure(lines: readonly string[]): CliJobErrorCode {
 
 // ── 跑 ──────────────────────────────────────────────────────────────────
 
+/**
+ * 登录参数：`login_args` + `<login_alias_flag> <本品牌别名>`（Shopify CLI 4.x 非交互登录必须带 `--alias`）。
+ * 没给品牌会话时用一个固定别名兜底——不带就是 Fable 10-07 真机上那一句「Flag not specified: --alias」。
+ */
+export function loginArgs(
+  spec: Pick<PlatformCliSpec, 'login_args' | 'login_alias_flag'>,
+  session: CliSession | undefined,
+): string[] {
+  const base = [...(spec.login_args ?? [])]
+  if (spec.login_alias_flag === undefined) return base
+  return [...base, spec.login_alias_flag, session?.alias ?? 'agentsws']
+}
+
 export class CliRunnerError extends Error {
   constructor(
     readonly code: 'conflict' | 'not_installed' | 'not_supported' | 'unavailable',
@@ -369,6 +383,11 @@ export interface StartContext {
   onLoginOk?: () => void
   /** 任何一次结束（装好 / 失败 / 取消）：调用方清检测缓存、记事件。 */
   onFinished?: (job: CliJobView) => void
+  /**
+   * WP253：这次登录是哪个品牌的会话（`platform-cli-session.ts`）。`alias` 跟在 `login_alias_flag` 后面；
+   * `home` 给了就把 CLI 的配置目录指过去（一个品牌一份会话）。不给 = 老行为。
+   */
+  session?: CliSession
 }
 
 export interface PlatformCliRunner {
@@ -567,11 +586,23 @@ export function createPlatformCliRunner(options: PlatformCliRunnerOptions): Plat
   ): Promise<void> => {
     entry.view.phase = 'waiting_browser'
     let pressed = false
+    const session = ctx.session
+    // 重新登录：这个品牌原来那份会话先挪成 `.prev`（空配置才不会撞上 CLI 的「选哪个账号」提问）
+    const home = session?.home
+    const prev = home === undefined ? undefined : `${home}.prev`
+    if (home !== undefined && prev !== undefined) {
+      if (existsSync(prev)) rmSync(prev, { recursive: true, force: true })
+      if (existsSync(home)) renameSync(home, prev)
+      mkdirSync(home, { recursive: true })
+    }
     const result = await runProcess(
       entry,
       how.command,
-      [...how.prefix, ...(spec.login_args ?? [])],
-      runEnv(spec, env, { nodeExec, action: 'login' }),
+      [...how.prefix, ...loginArgs(spec, session)],
+      {
+        ...runEnv(spec, env, { nodeExec, action: 'login' }),
+        ...(home === undefined ? {} : cliSessionEnv(home)),
+      },
       // 登录不在乎目录；工具目录还没建过（用的是系统里那份）就在用户主目录里起
       toolsDir !== undefined && existsSync(toolsDir) ? toolsDir : homedir(),
       options.loginTimeoutMs ?? 15 * 60 * 1000,
@@ -588,9 +619,25 @@ export function createPlatformCliRunner(options: PlatformCliRunnerOptions): Plat
         }
       },
     )
-    if (result === 'cancelled') return finish(entry, 'cancelled', ctx)
-    if (result === 'timeout') return finish(entry, 'failed', ctx, { code: 'timeout' })
-    if (result !== 0) return finish(entry, 'failed', ctx, { code: loginFailure(entry.view.log) })
+    // 没登成：挪回原来那份（原来登着的品牌不因为一次失败的重登变成没登录）
+    const restore = (): void => {
+      if (home === undefined || prev === undefined || !existsSync(prev)) return
+      rmSync(home, { recursive: true, force: true })
+      renameSync(prev, home)
+    }
+    if (result === 'cancelled') {
+      restore()
+      return finish(entry, 'cancelled', ctx)
+    }
+    if (result === 'timeout') {
+      restore()
+      return finish(entry, 'failed', ctx, { code: 'timeout' })
+    }
+    if (result !== 0) {
+      restore()
+      return finish(entry, 'failed', ctx, { code: loginFailure(entry.view.log) })
+    }
+    if (prev !== undefined && existsSync(prev)) rmSync(prev, { recursive: true, force: true })
     try {
       ctx.onLoginOk?.()
     } catch {
@@ -642,7 +689,7 @@ export function createPlatformCliRunner(options: PlatformCliRunnerOptions): Plat
           ? `npm install --prefix "${privateCliDir(toolsDir ?? '', spec)}" ${spec.npm}@${spec.npm_tag ?? 'latest'}`
           : [
               how?.source === 'app' ? `${spec.bin} (${how.prefix[0]})` : spec.bin,
-              ...(spec.login_args ?? []),
+              ...loginArgs(spec, ctx.session),
             ].join(' ')
       const entry = {
         view: {

@@ -27,6 +27,7 @@ import {
   renderTrustedToolResult,
   SKILL_TOOL_DEF_BY_NAME,
   STAGE_NOT_CREATED,
+  THEME_TOOL_DEF_BY_NAME,
 } from '@agentsws/stand-ins'
 import type { ToolDefinition } from '@deepseek-ai/dsh-tools'
 import { defineTool } from '@deepseek-ai/dsh-tools'
@@ -319,6 +320,26 @@ const B2B_OUTBOUND_PARAMS: Readonly<Record<string, Record<string, unknown>>> = {
   },
 }
 
+/**
+ * WP253：网页模板那九个主题工具的参数——从 stub / direct 那份 `input_schema` 原样转成 dsh 的参数表
+ * （同一份定义，不另抄一遍）。
+ */
+function themeParams(name: string): Record<string, unknown> | undefined {
+  const def = THEME_TOOL_DEF_BY_NAME.get(name)
+  if (def === undefined) return undefined
+  const schema = def.input_schema as {
+    properties?: Record<string, Record<string, unknown>>
+    required?: string[]
+  }
+  const required = new Set(schema.required ?? [])
+  return Object.fromEntries(
+    Object.entries(schema.properties ?? {}).map(([key, spec]) => [
+      key,
+      { ...spec, ...(required.has(key) ? { required: true } : {}) },
+    ]),
+  )
+}
+
 const STAGE_PARAMS = {
   order_id: { type: 'string', description: 'Order the refund belongs to.', required: true },
   amount: { type: 'number', description: 'Refund amount in the order currency.', required: true },
@@ -372,12 +393,15 @@ function readTool(name: string, hooks: ReadToolHooks): ToolDefinition {
       OWNER_TOOL_DEF_BY_NAME.get(name)?.description ??
       SKILL_TOOL_DEF_BY_NAME.get(name)?.description ??
       B2B_OUTBOUND_TOOL_DEF_BY_NAME.get(name)?.description ??
+      // WP253：网页模板的主题工具（与 stub / direct 同一份描述）
+      THEME_TOOL_DEF_BY_NAME.get(name)?.description ??
       `agentsws read tool ${name}`,
     // WP162：读技能只要一个名字；WP176：开发信那两个有自己的参数；别的只读工具照旧是那一张共用参数表
     parameters:
       name === READ_SKILL_TOOL
         ? SKILL_PARAMS
         : ((B2B_OUTBOUND_PARAMS[name] as typeof READ_PARAMS | undefined) ??
+          (themeParams(name) as typeof READ_PARAMS | undefined) ??
           (B2B_OUTBOUND_TOOL_DEF_BY_NAME.has(name) ? {} : READ_PARAMS)),
     output: {
       schema: { type: 'json' },

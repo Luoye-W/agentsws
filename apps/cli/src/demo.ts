@@ -54,9 +54,11 @@ import {
   deepseekAccountStandIn,
   demoOldReddit,
   demoWebSearch,
+  fakeThemeBase,
   periodQueryRunner,
   platformCliStandIn,
   readonlyBrowserStandIn,
+  themeCliStandIn,
 } from '@agentsws/server'
 import type { Pack, RunContext, World } from '@agentsws/simulation'
 import { buildRunRequest, createWorld, loadPack, parseScenario } from '@agentsws/simulation'
@@ -1448,6 +1450,14 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
     ...((): Pick<ServerOptions, 'platformCliExec' | 'platformCliRunner'> => {
       const cli = platformCliStandIn()
       return { platformCliExec: cli.exec, platformCliRunner: cli.runner }
+    })(),
+    /*
+     * WP253：网页模板的主题工坊在 demo 里也是替身——起底用一份内存里造的最小假主题包（不连 GitHub），
+     * `shopify theme …` 是进程内的假 CLI（店里的主题只活在内存里），一个真店都不碰。
+     */
+    siteTheme: ((): NonNullable<ServerOptions['siteTheme']> => {
+      const base = fakeThemeBase()
+      return { run: themeCliStandIn().run, fetch: base.fetch, base: base.pin }
     })(),
     cloudFetch: cloud.fetch,
     /*

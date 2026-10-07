@@ -39,6 +39,9 @@ const SCALAR_FIELDS = [
   'private_source',
   // WP252：不进 pnpm 的 npm 运行时（桌面按需下载的 OpenConnector）——钉版本与逐包 sha512 的 npm 锁文件
   'npm_lock_file',
+  // WP253：按 git tag 钉、运行时按需下载的上游（agentsws-theme 起底包）——tag 与钉子那份 JSON
+  'pinned_tag',
+  'pin_file',
 ]
 const LIST_FIELDS = [
   'watch',
@@ -266,6 +269,18 @@ export function validateShape(items) {
       p(`${where} 有 \`npm_lock_file\` / \`npm_pin_in\` 就要有 \`npm\` 与 \`locked_version\``)
     if (it.npm_lock_file !== undefined && it.lockfile_single !== false)
       p(`${where} 有 \`npm_lock_file\`（不进 pnpm）就要写 \`lockfile_single: false\``)
+    // WP253：`pin_file` 是代码里唯一的钉子（`{ repo, tag, commit, sha256 }`），要与登记表的 repo / tag / commit 一起改
+    if (
+      (it.pin_file !== undefined || it.pinned_tag !== undefined) &&
+      (!it.repo || !it.pinned_commit)
+    )
+      p(`${where} 有 \`pin_file\` / \`pinned_tag\` 就要有 \`repo\` 与 \`pinned_commit\``)
+    if (
+      it.pinned_commit !== undefined &&
+      it.pin_file !== undefined &&
+      !/^[0-9a-f]{40}$/.test(String(it.pinned_commit))
+    )
+      p(`${where} 有 \`pin_file\` 时 \`pinned_commit\` 要写完整的 40 位 commit`)
     if (String(it.locked_version ?? '').startsWith('^') && it.pin !== 'allow_caret')
       p(`${where} \`locked_version\` 带 ^ 就要显式写 \`pin: allow_caret\`（docs/42 红线 3）`)
   }
@@ -358,6 +373,7 @@ export function checkPins(items, root = REPO_ROOT) {
     problems.push(...checkImagePins(it, root))
     problems.push(...checkBinLock(it, root))
     problems.push(...checkNpmLock(it, root))
+    problems.push(...checkPinFile(it, root))
 
     for (const rel of it.covered_by ?? []) {
       if (!existsSync(join(root, String(rel)))) p(`${where} covered_by 指向不存在的路径：${rel}`)
@@ -482,6 +498,38 @@ export function checkNpmLock(it, root = REPO_ROOT) {
     if (!text.includes(`'${want}'`))
       problems.push(`${where} ${rel} 里没有钉 \`'${want}'\`（登记表与代码里的钉版本要一起改）`)
   }
+  return problems
+}
+
+/**
+ * WP253：按 git tag 钉、运行时按需下载的上游（agentsws-theme 起底包）。`pin_file` 是代码里唯一的钉子
+ * （`{ repo, tag, commit, sha256 }`）：repo / tag / commit 要逐字等于登记表的 `repo` / `pinned_tag` / `pinned_commit`，
+ * sha256 要是 64 位十六进制（换 tag 时三处一起改，sha256 对新 commit 的包现算）。
+ * @returns {string[]}
+ */
+export function checkPinFile(it, root = REPO_ROOT) {
+  if (it.pin_file === undefined) return []
+  const where = `[${it.id}]`
+  const rel = String(it.pin_file)
+  const text = readIfExists(join(root, rel))
+  if (text === null) return [`${where} pin_file 指向不存在的文件：${rel}`]
+  let pin
+  try {
+    pin = JSON.parse(text)
+  } catch {
+    return [`${where} ${rel} 不是合法的 JSON`]
+  }
+  const problems = []
+  const same = (field, want) => {
+    if (want === undefined) return
+    if (pin?.[field] !== String(want))
+      problems.push(`${where} ${rel} 的 ${field} 是 \`${pin?.[field]}\`，登记表写的是 \`${want}\``)
+  }
+  same('repo', it.repo)
+  same('commit', it.pinned_commit)
+  same('tag', it.pinned_tag)
+  if (!/^[0-9a-f]{64}$/.test(String(pin?.sha256 ?? '')))
+    problems.push(`${where} ${rel} 的 sha256 要是 64 位十六进制`)
   return problems
 }
 
