@@ -455,6 +455,11 @@ export interface WorkspaceProfile {
   /** WP248（决策 83）：客服邮箱（给客人写信、话术里留的那一个）。没写过就没有。 */
   support_email?: string
   /**
+   * WP258：官网里读到的 Shopify 店铺地址（`xxx.myshopify.com`，品牌分析确认时顺手存下）。
+   * 建站岗位找店时拿它和登录账号下的店对一下；没读到就没有。
+   */
+  shopify_domain?: string
+  /**
    * WP248（决策 83）：这个品牌卖货用的币种（ISO 4217，大写三位）。没写过按
    * {@link DEFAULT_BRAND_CURRENCY}（读的时候补，不往老档案里回写）。
    */

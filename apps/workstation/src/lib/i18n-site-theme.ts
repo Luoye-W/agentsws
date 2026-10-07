@@ -15,6 +15,15 @@ export const SITE_THEME_ZH: Record<string, string> = {
   'site_theme.store.save': '保存',
   'site_theme.store.connect': '或者去连接店铺',
   'site_theme.store.invalid': '店铺地址看不懂，填 xxx.myshopify.com，或把后台地址栏那一串粘进来',
+  // WP258：登录后自动找店
+  'site_theme.need.pick': '让 AI 改网站，选一下是哪家店',
+  'site_theme.need.none': '这个 Shopify 账号下没有店铺',
+  'site_theme.pick.label': '改哪家店',
+  'site_theme.pick.placeholder': '选一家店',
+  'site_theme.pick.manual': '都不是？手动填',
+  'site_theme.none.relogin': '换个账号登录',
+  'site_theme.none.open': '去 Shopify 开店',
+  'site_theme.retry': '再找一次',
   'matter.preview.open': '打开预览',
 }
 
@@ -31,5 +40,13 @@ export const SITE_THEME_EN: Record<string, string> = {
   'site_theme.store.save': 'Save',
   'site_theme.store.connect': 'or connect the store',
   'site_theme.store.invalid': 'Use xxx.myshopify.com, or paste the admin address bar',
+  'site_theme.need.pick': 'To let AI edit your site, pick your store',
+  'site_theme.need.none': 'This Shopify account has no stores',
+  'site_theme.pick.label': 'Store to edit',
+  'site_theme.pick.placeholder': 'Pick a store',
+  'site_theme.pick.manual': 'Not listed? Type it in',
+  'site_theme.none.relogin': 'Sign in with another account',
+  'site_theme.none.open': 'Open a Shopify store',
+  'site_theme.retry': 'Look again',
   'matter.preview.open': 'Open preview',
 }

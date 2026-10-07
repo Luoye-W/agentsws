@@ -345,6 +345,14 @@ function defaultRun(cli = SYSTEM_CLI): RunCli {
     })
 }
 
+/**
+ * WP258：按同一个起法跑一条 CLI 命令、不绑哪家店（登录后找店那两条只读命令用——这时还不知道是哪家店，
+ * 走不了 {@link ShopifyTheme}）。不给 `cli` = 系统 PATH 上的 `shopify`。
+ */
+export function createRunCli(cli?: () => { command: string; prefix: readonly string[] }): RunCli {
+  return defaultRun(cli)
+}
+
 function defaultSpawn(cli = SYSTEM_CLI): SpawnCli {
   return (args, opts) => {
     const how = cli()

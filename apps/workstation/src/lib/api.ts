@@ -6938,7 +6938,17 @@ export interface SiteThemeView {
   cli: 'missing' | 'node_old' | 'needs_login' | 'ready'
   cli_source?: 'app' | 'system'
   store?: string
-  store_source?: 'connection' | 'manual'
+  /** WP258：`cli` = 登录后从这个账号下的店里自动取的 / 人从下拉框里选的。 */
+  store_source?: 'connection' | 'manual' | 'cli'
+  /** WP258：登录后在这个 Shopify 账号下找到的店（`ok` 至少一家；`none` 一家都没有；`failed` 没找成）。 */
+  store_lookup?: {
+    status: 'ok' | 'none' | 'failed'
+    stores: SiteThemeStoreChoice[]
+    checked_at: string
+    message?: string
+  }
+  /** WP258：官网里读到的那个 `xxx.myshopify.com`。 */
+  site_store?: string
   workspace: {
     files: number
     base?: { repo: string; version: string; commit: string; license: string; at: string }
@@ -6957,9 +6967,28 @@ export interface SiteThemeView {
 export const getSiteTheme = (assignment: string, fresh = false): Promise<SiteThemeView> =>
   api(`/v1/site/theme${fresh ? '?fresh=1' : ''}`, withAssignment(assignment))
 
-/** WP253：记下店铺地址（`xxx.myshopify.com` 或后台地址栏那一串）。 */
-export const setSiteThemeStore = (store: string, assignment: string): Promise<SiteThemeView> =>
-  api('/v1/site/theme/store', { method: 'PUT', body: { store }, ...withAssignment(assignment) })
+/** WP258：登录账号下的一家店（下拉框里一行）。 */
+export interface SiteThemeStoreChoice {
+  store: string
+  name?: string
+  plan?: string
+  organization?: string
+}
+
+/**
+ * WP253：记下店铺地址（`xxx.myshopify.com` 或后台地址栏那一串）。
+ * WP258：`source: 'list'` = 从登录账号下找到的店里选的（服务端核对它在清单里）。
+ */
+export const setSiteThemeStore = (
+  store: string,
+  assignment: string,
+  source?: 'manual' | 'list',
+): Promise<SiteThemeView> =>
+  api('/v1/site/theme/store', {
+    method: 'PUT',
+    body: source === undefined ? { store } : { store, source },
+    ...withAssignment(assignment),
+  })
 
 /** WP245：停掉正在跑的那件（登录等浏览器时的「取消」）。 */
 export const cancelPlatformCli = (assignment?: string): Promise<PlatformKitView> =>

@@ -6572,7 +6572,7 @@ export interface paths {
       cookie?: never
     }
     get?: never
-    /** 网页模板：记下这个品牌的店铺地址（xxx.myshopify.com，或后台地址栏那一整串）。连了店的品牌以连接为准 */
+    /** 网页模板：记下这个品牌的店铺地址（xxx.myshopify.com，或后台地址栏那一整串）。连了店的品牌以连接为准。`source=list` = 从登录账号下找到的店里选的（必须在清单里） */
     put: operations['setSiteThemeStore']
     post?: never
     delete?: never
@@ -51049,6 +51049,8 @@ export interface operations {
       content: {
         'application/json': {
           store: string
+          /** @enum {string} */
+          source?: 'manual' | 'list'
         }
       }
     }

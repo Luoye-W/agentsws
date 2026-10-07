@@ -190,6 +190,25 @@ export function looksLikeDefaultPolicy(text: string): boolean {
   )
 }
 
+/**
+ * WP258：页面自己漏出来的 Shopify 店铺地址（`xxx.myshopify.com`）。
+ *
+ * Shopify 的每一页（包括开着访问密码时的密码页）都有一行 `Shopify.shop = "xxx.myshopify.com";`；
+ * 有的主题 / 应用还会写 `"myshopifyDomain":"…"` / `myshopify_domain`。都没有就不猜（自家域名不是它）。
+ * 建站岗位登录 Shopify 后拿它和账号下的店对一下：对上了就默认选那家。
+ */
+export function shopifyShopDomain(html: string): string | undefined {
+  const patterns = [
+    /Shopify\.shop\s*=\s*["']([a-z0-9][a-z0-9-]*\.myshopify\.com)["']/i,
+    /["']?myshopify_?domain["']?\s*[:=]\s*["']([a-z0-9][a-z0-9-]*\.myshopify\.com)["']/i,
+  ]
+  for (const re of patterns) {
+    const hit = re.exec(html)?.[1]
+    if (hit !== undefined) return hit.toLowerCase()
+  }
+  return undefined
+}
+
 /** 认得出来的社媒域名 → 平台名。认不出来的照样留着，`platform` 记 `other`。 */
 const SOCIAL_HOSTS: readonly [RegExp, string][] = [
   [/(^|\.)instagram\.com$/i, 'instagram'],
@@ -382,6 +401,14 @@ export async function analyzeSite(
   // ── 首页 ────────────────────────────────────────────────────────────
   let home = await get(entryUrl, 'home')
   if (home === undefined) return done(profile)
+  // WP258：店铺地址在密码页上也有——先取下来（解不开密码、下面提前收尾时也带着）
+  const shopDomain = shopifyShopDomain(home)
+  if (shopDomain !== undefined)
+    profile.shopify_domain = field(shopDomain, 'selector', {
+      url: entryUrl,
+      locator: 'script:Shopify.shop',
+      quote: shopDomain,
+    })
   /*
    * WP240：Shopify 开着访问密码。用户填了密码就解一次再读；没填 / 解不开就**当场停**，
    * 照实说「店铺有访问密码」——后面那十来页全会被跳到密码页，接着抓只是让人干等。
