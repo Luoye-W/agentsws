@@ -145,6 +145,9 @@ async function addBrand(server: Server, name: string): Promise<Who> {
 
 /** 一条一分钟后的「拟今天的安排」——两个品牌里各建一条（走 `/v1/schedules`，与人在界面上建的同一条路）。 */
 async function planTask(server: Server, who: Who, title: string, at: string): Promise<string> {
+  // WP244：0 条建议不出卡——先在这个品牌的待办箱里放一条，计划才有东西可建议
+  const todo = await call(server, who, 'POST', '/v1/todos', { title: `${title}：要跟进的一件事` })
+  expect(todo.status, JSON.stringify(todo)).toBe(201)
   const res = await call<{ id: string }>(server, who, 'POST', '/v1/schedules', {
     title,
     trigger: { kind: 'once', at },

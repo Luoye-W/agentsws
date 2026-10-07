@@ -101,6 +101,8 @@ describe('七个消费者', () => {
 
   it('① 每日计划：08:00 触发 → 一张 daily_plan 卡', async () => {
     const asg = server.bootstrap.ownerAssignment.id
+    // WP244：0 条建议不出卡——待办箱里有一条，计划才有可建议的
+    server.work.createTodo({ title: '给老客户回一封信', owner: server.bootstrap.person.id })
     const task = server.schedule.scheduler.get(`sched_daily_plan_${asg}`)
     expect(task?.trigger).toMatchObject({ kind: 'cron', expr: '0 8 * * *' })
     const out = await server.schedule.scheduler.runNow(`sched_daily_plan_${asg}`)
@@ -111,6 +113,14 @@ describe('七个消费者', () => {
     // 一天一条：再跑一次不重复出卡
     await server.schedule.scheduler.runNow(`sched_daily_plan_${asg}`)
     expect(await cardsOf('daily_plan')).toHaveLength(1)
+  })
+
+  it('① WP244：今天一条可建议的都没有 → 不出「0 条建议」的卡（计划照样记下）', async () => {
+    const asg = server.bootstrap.ownerAssignment.id
+    const out = await server.schedule.scheduler.runNow(`sched_daily_plan_${asg}`)
+    expect(out.ok).toBe(true)
+    expect(await cardsOf('daily_plan')).toHaveLength(0)
+    expect((out.result as { plans: string[] }).plans).toHaveLength(1)
   })
 
   it('② 复盘：20:00 触发 → 一张 review 卡；周五 / 月末各有一条长周期版本', async () => {
