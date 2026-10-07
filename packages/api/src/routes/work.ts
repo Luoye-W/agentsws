@@ -34,7 +34,7 @@ import type {
   TodoStatus,
   WorkspaceId,
 } from '@agentsws/contracts'
-import { CALENDAR_SOURCES } from '@agentsws/contracts'
+import { CALENDAR_SOURCES, fitTaskTitle, TASK_TEXT_MAX, taskTextOf } from '@agentsws/contracts'
 import { z } from 'zod'
 import { ApiError } from '../errors.js'
 import { assignmentOf, body, ok, param, principalOf } from '../helpers.js'
@@ -130,9 +130,18 @@ const Slot = z.object({ start: z.string().min(1), end: z.string().min(1) })
 
 const CreateMatterBody = z.object({
   kind: z.enum(MATTER_KIND),
-  title: z.string().min(1).max(120),
+  /**
+   * WP259：标题上限还是 120（`MATTER_TITLE_MAX`），但超长 / 多行的不再 400——
+   * 服务端按 `fitTaskTitle` 拆：标题取第一句 / 前 40 字加「…」，完整原文进 `summary`。
+   */
+  title: z.string().min(1).max(TASK_TEXT_MAX),
   goal_id: z.string().min(1).optional(),
-  summary: z.string().max(2000).optional(),
+  summary: z.string().max(TASK_TEXT_MAX).optional(),
+  /**
+   * WP259：开完立刻用请求头上那条分配起首轮运行（任务文本 = 完整原文，时间线第一条是这段原话）。
+   * 「用这条职责开」那几个入口带它；不给 = 老行为（只建事项，不起跑）。
+   */
+  run: z.boolean().optional(),
 })
 
 const CloseMatterBody = z.object({ unfinished: z.enum(['close_all', 'keep']) })
@@ -482,12 +491,23 @@ export function workRoutes(): Route[] {
         assignment: true,
         authz: READ,
         body: CreateMatterBody,
-        returns: '{ matter: Matter }',
+        returns: '{ matter: Matter, run_id? }',
       },
       async (c, deps) => {
         const actor = actorOf(c)
-        const input = await body(c, CreateMatterBody)
-        return ok(c, { matter: await workOf(deps).createMatter(actor, input) }, 201)
+        const { run, ...raw } = await body(c, CreateMatterBody)
+        // WP259：空白标题拦下（说人话）；超长 / 多行拆成标题 + 完整原文，不再 400
+        if (raw.title.trim() === '')
+          throw new ApiError('invalid_input', '说一句要办的事再交出去（现在是空的）')
+        const input = fitTaskTitle({ ...raw, title: raw.title.trim() })
+        const matter = await workOf(deps).createMatter(actor, input)
+        if (run !== true) return ok(c, { matter }, 201)
+        const said = await workOf(deps).say(
+          actor,
+          matter.id,
+          taskTextOf(input.title, input.summary),
+        )
+        return ok(c, { matter, ...(said.run_id === undefined ? {} : { run_id: said.run_id }) }, 201)
       },
     ),
     route(
