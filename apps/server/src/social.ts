@@ -78,6 +78,10 @@ export interface SocialIngestRow {
   ingested_total?: number
   /** 设置那一行：多久读一次（分钟）。 */
   every_minutes?: number
+  /** WP257：设置那一行（`settings:tags`）——自动进帖判类要不要再请模型复核一遍（默认关）。 */
+  model_review?: boolean
+  /** WP257：上次去读这个群 / 频道叫什么的时刻（读不到时一天再试一次）。 */
+  name_checked_at?: Iso8601
 }
 
 interface SocialBackend {
@@ -405,9 +409,16 @@ export function socialDeckData(
     .slice(0, MAX_ROWS)
     .map(threadRow)
 
-  /** 转客服：判成客户问题、已经出了卡的那些。计数与清单在同一张表里。 */
+  /**
+   * 转客服：判成客户问题、已经出了卡的那些。计数与清单在同一张表里。
+   * WP257：自动进帖那一步只打了标签（`triage_by`）、没出卡的不算「转客服」——球还在社媒运营这边。
+   */
   const handoffs = threads
-    .filter((t) => t.triage === 'customer_question')
+    .filter(
+      (t) =>
+        t.triage === 'customer_question' &&
+        (t.triage_by === undefined || t.routed_approval_id !== undefined),
+    )
     .slice()
     .sort((a, b) => at(b.created_at) - at(a.created_at))
     .slice(0, MAX_ROWS)
@@ -477,6 +488,23 @@ export function socialDeckData(
         : { audience: accounts.get(p.account_id)?.member_count as number }),
     }))
 
+  /**
+   * WP257（决策 152）：自动进帖按类计数（一条渠道一类一行，六类都列）。按帖子发出来的时刻算近 7 / 14 天。
+   */
+  const tagged = threads.filter((t) => t.triage_by !== undefined && t.triage !== undefined)
+  const thread_tags = [...new Set(tagged.map((t) => t.channel as string))].sort().flatMap((ch) =>
+    THREAD_TAG_ORDER.map((triage) => {
+      const of = tagged.filter((t) => t.channel === ch && t.triage === triage)
+      return {
+        channel: ch,
+        triage,
+        last_7d: of.filter((t) => within(t.created_at, SEVEN_DAYS)).length,
+        last_14d: of.filter((t) => within(t.created_at, 2 * SEVEN_DAYS)).length,
+        total: of.length,
+      }
+    }),
+  )
+
   return {
     calendar,
     queue,
@@ -487,8 +515,19 @@ export function socialDeckData(
     activity,
     broadcasts,
     handoffs,
+    thread_tags,
   }
 }
+
+/** 六类在计数表里的顺序（客户问题在最前：最要紧的先看）。 */
+const THREAD_TAG_ORDER: readonly NonNullable<CommunityThread['triage']>[] = [
+  'customer_question',
+  'complaint',
+  'praise',
+  'partnership',
+  'spam',
+  'other',
+]
 
 /**
  * `agentsws demo` 用的那几条社媒数据。

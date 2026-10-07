@@ -59759,7 +59759,7 @@
       },
       "put": {
         "operationId": "setSocialIngestInterval",
-        "summary": "改「群里的帖子」多久自动读一次（现在只有 Discord 能调：5 分钟到 24 小时，默认 15 分钟）",
+        "summary": "改「群里的帖子」多久自动读一次（Discord、Telegram 群能调：5 分钟到 24 小时，默认 15 分钟）",
         "tags": ["social"],
         "parameters": [
           {
@@ -59889,6 +59889,125 @@
                   }
                 },
                 "required": ["channel", "every_minutes"]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/social/ingest/tags": {
+      "put": {
+        "operationId": "setSocialTagReview",
+        "summary": "自动进帖判类打标签要不要再请模型复核（默认关：只按关键词 + 渠道 + 是否 @品牌判）。只改设置，不出卡、不转客服",
+        "tags": ["social"],
+        "parameters": [
+          {
+            "name": "X-Assignment",
+            "in": "header",
+            "required": true,
+            "description": "本次请求绑定的 Assignment（31 §3.1：一次请求一个 Assignment）",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "SocialTagSettingsView",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-authz": {
+          "domain": "social_account",
+          "op": "stage",
+          "range": "assigned",
+          "sensitivity": "internal"
+        },
+        "x-returns": "SocialTagSettingsView",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "model_review": {
+                    "type": "boolean"
+                  }
+                },
+                "required": ["model_review"]
               }
             }
           }

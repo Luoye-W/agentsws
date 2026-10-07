@@ -26,6 +26,7 @@ import {
   type DiscordRawMessage,
   discordChannelPermissions,
   discordFeedPage,
+  discordNeedsBotId,
   discordReadGaps,
 } from './discord-read.js'
 import {
@@ -108,6 +109,19 @@ export function createDiscordAdapter(transport: SocialTransport): SocialChannelA
         ),
       }
     return { guild, channel }
+  }
+  /**
+   * WP257：机器人自己的 id（判「这条是不是 @ 了我们」用）。查一次记住；`readAccess` 那一跳顺手记下，
+   * 读消息时只有这一页里真有人 @ 了谁 / 回了谁才去问一次。
+   */
+  let botId: string | undefined
+  const whoAmI = async (headers: Record<string, string>): Promise<string | undefined> => {
+    if (botId !== undefined) return botId
+    const me = await callJson<{ id?: string }>(transport, LABEL, `${DISCORD_API_BASE}/users/@me`, {
+      headers,
+    })
+    if ('data' in me && typeof me.data.id === 'string' && me.data.id !== '') botId = me.data.id
+    return botId
   }
 
   return {
@@ -209,15 +223,39 @@ export function createDiscordAdapter(transport: SocialTransport): SocialChannelA
       const url =
         `${DISCORD_API_BASE}/channels/${encodeURIComponent(t.channel)}/messages?limit=${n}` +
         (after === undefined ? '' : `&after=${encodeURIComponent(after)}`)
-      const res = await callJson<DiscordRawMessage[]>(transport, LABEL, url, {
-        headers: await auth(),
-      })
+      const headers = await auth()
+      const res = await callJson<DiscordRawMessage[]>(transport, LABEL, url, { headers })
       if (!('data' in res)) return res
+      const raw = Array.isArray(res.data) ? res.data : []
+      // WP257：有人 @ 了谁 / 回了谁时才需要知道机器人是谁（判「冲着我们来的」）
+      const me = discordNeedsBotId(raw) ? await whoAmI(headers) : botId
       return {
         ok: true,
         observed_at: transport.now(),
-        data: discordFeedPage(Array.isArray(res.data) ? res.data : [], transport.now()),
+        data: discordFeedPage(raw, transport.now(), me),
       }
+    },
+
+    /*
+     * WP257（决策 155）：登记频道时读一次频道名（`GET /channels/{id}`，只读），显示成「#general」。
+     * 读不到由调用方退回「#频道 id 末四位」。
+     */
+    async describeTarget(account_external_id) {
+      const guard = off()
+      if (guard !== undefined) return guard
+      const t = needChannel(account_external_id)
+      if ('error' in t) return t.error
+      const res = await callJson<{ name?: string }>(
+        transport,
+        LABEL,
+        `${DISCORD_API_BASE}/channels/${encodeURIComponent(t.channel)}`,
+        { headers: await auth() },
+      )
+      if (!('data' in res)) return res
+      const name = (res.data.name ?? '').trim()
+      if (name === '')
+        return { ok: false, reason: 'upstream_error', message: 'Discord 没回这个频道的名字。' }
+      return { ok: true, observed_at: transport.now(), data: { name: `#${name}` } }
     },
 
     /*
@@ -244,7 +282,8 @@ export function createDiscordAdapter(transport: SocialTransport): SocialChannelA
         },
       )
       if (!('data' in me)) return me
-      const botId = me.data.id ?? ''
+      const selfId = me.data.id ?? ''
+      if (selfId !== '') botId = selfId
       // 应用开关读不到（老令牌 / 那一跳失败）就不判这一样——不凭空说缺
       const app = await callJson<{ flags?: number }>(
         transport,
@@ -256,7 +295,7 @@ export function createDiscordAdapter(transport: SocialTransport): SocialChannelA
       const member = await callJson<{ roles?: string[] }>(
         transport,
         LABEL,
-        `${DISCORD_API_BASE}/guilds/${encodeURIComponent(t.guild)}/members/${encodeURIComponent(botId)}`,
+        `${DISCORD_API_BASE}/guilds/${encodeURIComponent(t.guild)}/members/${encodeURIComponent(selfId)}`,
         { headers },
       )
       if (!('data' in member)) {
@@ -283,7 +322,7 @@ export function createDiscordAdapter(transport: SocialTransport): SocialChannelA
       if (!('data' in roles)) return roles
       const perms = discordChannelPermissions({
         guild_id: t.guild,
-        bot_id: botId,
+        bot_id: selfId,
         member_roles: member.data.roles ?? [],
         roles: Array.isArray(roles.data) ? roles.data : [],
         overwrites: channel.data.permission_overwrites ?? [],

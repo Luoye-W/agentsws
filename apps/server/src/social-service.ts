@@ -91,6 +91,7 @@ import {
 } from './social-executor.js'
 import { createSocialIngest, type SocialIngest } from './social-ingest.js'
 import { type ReplyDrafter, replyBlockedReason, templateReply } from './social-reply-draft.js'
+import type { TagReviewer } from './social-tags.js'
 import { recipientOf, type ScopeManagerRouter } from './supervisor.js'
 
 /**
@@ -229,6 +230,15 @@ export interface SocialServiceOptions {
    * 按点起草那个人这会儿开着的品牌取模型）。不给 / 回 `undefined` = 没接上模型，给一句模板并照实说。
    */
   replyDrafter?(actor: SocialActor): ReplyDrafter | undefined
+  /** WP257（决策 152）：品牌名（自动进帖判类时，正文里提到品牌名算「冲着我们来的」）。 */
+  brandName?(): string
+  /**
+   * WP257：自动进帖判类的模型复核引擎（默认关；按渠道取，用量记在持有那条社媒职责的人头上）。
+   * 不给 / 回 `undefined` = 没接上真模型或没人持有那条职责，只按规则判。
+   */
+  tagReviewer?(channel: SocialChannel): TagReviewer | undefined
+  /** WP257：这台接没接上真模型（「模型复核」开关旁照实说）。 */
+  modelReady?(): boolean
 }
 
 export interface SocialServiceAssembly {
@@ -551,7 +561,7 @@ export function createSocialService(options: SocialServiceOptions): SocialServic
 
   /**
    * WP256（决策 147）：「群里的帖子」自动进帖——Discord 按频率读新消息，Reddit 自家版没人看视图时低频补读。
-   * 只读：不判类、不出卡（人看了要回再点「回复」）。
+   * 只读、不出卡（人看了要回再点「回复」）。WP257：入库按规则判类打标签（仍不出卡），加 Telegram 群。
    */
   const ingest = createSocialIngest({
     workspace_id,
@@ -571,6 +581,16 @@ export function createSocialService(options: SocialServiceOptions): SocialServic
         : undefined
     },
     ...(ownSub === undefined ? {} : { ownSub }),
+    brandTerms: () => {
+      const name = options.brandName?.().trim() ?? ''
+      return name === '' ? [] : [name]
+    },
+    ...(options.tagReviewer === undefined
+      ? {}
+      : { tagReviewer: (channel: SocialChannel) => options.tagReviewer?.(channel) }),
+    ...(options.modelReady === undefined
+      ? {}
+      : { modelReady: () => options.modelReady?.() === true }),
   })
 
   const ownSubOr501 = (): OwnSubQueue => {
@@ -583,6 +603,7 @@ export function createSocialService(options: SocialServiceOptions): SocialServic
     // ── WP256：「群里的帖子」自动进帖 ──
     ingestStatus: (actor, channel) => ingest.view(actor, channel),
     setIngestInterval: (actor, input) => ingest.setInterval(actor, input),
+    setTagReview: (actor, input) => ingest.setTagReview(actor, input),
 
     // ── WP249：自家版待处理 + Reddit 官方号浏览器通道 ──
     ownSubQueue: (actor) => ownSubOr501().queue(actor),
@@ -599,7 +620,7 @@ export function createSocialService(options: SocialServiceOptions): SocialServic
       ) as SocialAccountRow[],
     }),
 
-    createAccount: (actor, input: SocialAccountInput) => {
+    createAccount: async (actor, input: SocialAccountInput) => {
       const row: SocialAccount = {
         id: nextId('sa'),
         workspace_id,
@@ -623,7 +644,8 @@ export function createSocialService(options: SocialServiceOptions): SocialServic
         channel: row.channel,
         role_id: actor.role_id,
       })
-      return row
+      // WP257（决策 155 / 156）：Discord 频道 / Telegram 群登记时读一次名字（只读一跳；读不到用默认名，下一轮再补）
+      return (await ingest.named(row)) as SocialAccountRow
     },
 
     posts: (_actor, filter) => {
@@ -877,11 +899,13 @@ export function createSocialService(options: SocialServiceOptions): SocialServic
        */
       store.recordTriage({ thread_id: row.id, triage: verdict.klass })
       const rules = options.rulesOf?.(account.id) ?? DEFAULT_COMMUNITY_RULES
-      const prior = store
-        .threads({ account_id: account.id })
-        .filter(
-          (t) => t.author_external_id === input.author_external_id && t.triage === 'spam',
-        ).length
+      const prior = store.threads({ account_id: account.id }).filter(
+        // WP257：自动进帖只打了标签的不算「前科」（那一步没人看过、也没出卡）
+        (t) =>
+          t.author_external_id === input.author_external_id &&
+          t.triage === 'spam' &&
+          t.triage_by === undefined,
+      ).length
       const verdictM = moderate({ text: input.text, rules, prior_offenses: prior })
       const moderation = {
         action: verdictM.action,

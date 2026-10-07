@@ -762,7 +762,40 @@ const SOCIAL_QUERIES: QueryDef[] = [
       })),
     }),
   },
+  {
+    /*
+     * WP257（决策 152）：自动进帖按类计数——一类一行，近 7 天 / 近 14 天 / 累计。
+     * 只打了标签、没出卡（卡要等跑一两周看了量再定），所以这里只有数，没有「去处理」。
+     */
+    name: 'social.thread_tags',
+    source: 'social',
+    returns: 'table',
+    run: (ctx) => ({
+      columns: [
+        { key: 'triage', label: '归类' },
+        { key: 'last_7d', label: '近 7 天', align: 'right' as const, format: 'count' as const },
+        { key: 'last_14d', label: '近 14 天', align: 'right' as const, format: 'count' as const },
+        { key: 'total', label: '累计', align: 'right' as const, format: 'count' as const },
+      ],
+      rows: ofChannel(ctx.social?.thread_tags ?? [], ctx).map((r) => ({
+        triage: THREAD_TAG_WORDS[r.triage] ?? r.triage,
+        last_7d: r.last_7d,
+        last_14d: r.last_14d,
+        total: r.total,
+      })),
+    }),
+  },
 ]
+
+/** WP257：六类的人话（与工作台「群里的帖子」标签同一套说法）。 */
+const THREAD_TAG_WORDS: Readonly<Record<string, string>> = {
+  customer_question: '客户问题',
+  complaint: '抱怨',
+  praise: '夸奖',
+  partnership: '合作',
+  spam: '广告垃圾',
+  other: '闲聊 / 其他',
+}
 
 /*
  * 平台那一侧的两块：**一条渠道一个查询**，因为它们各自的"连没连"不一样。

@@ -9,10 +9,14 @@
  * WP256（决策 147）：Discord 登记过的频道按频率自动拉新消息、Reddit 自家版新帖读队列时顺手拉进来。
  * 空态按渠道照实说：没连上（去连接页）/ 还没登记 / 这个群还没有新帖 / 这条渠道还不会自动拉；
  * 缺权限、被限速、上次没读成的那几个群，在列表上方各一行说清楚（缺哪个权限、怎么开进问号）。
+ *
+ * WP257（决策 152 / 156）：自动进来的帖子入库就判了类（标签，不出卡）——列表上方一排标签按类筛、带条数；
+ * 旁边一个「模型复核」小开关（默认关）。Telegram 群照 Discord：没登记时粘贴群链接登记；隐私模式开着照实说、
+ * 怎么关进问号。
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, Mail, MessageSquare, MessagesSquare, Plug } from 'lucide-react'
-import { type ReactNode, useState } from 'react'
+import { type ReactNode, useMemo, useState } from 'react'
 import { connectPathForChannel } from '@/components/connections/links'
 import { WsTag } from '@/components/design'
 import { ReplyButton } from '@/components/social/reply-button'
@@ -20,14 +24,18 @@ import { Button } from '@/components/ui/button'
 import { EmptyLine } from '@/components/ui/empty-line'
 import { Hint } from '@/components/ui/hint'
 import { Input } from '@/components/ui/input'
+import { Switch } from '@/components/ui/switch'
 import type { SocialChannelId } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 import {
   getSocialIngest,
   parseDiscordChannel,
+  parseTelegramGroup,
   registerDiscordChannel,
+  registerTelegramGroup,
   type SocialIngestData,
   setSocialIngestInterval,
+  setSocialTagReview,
 } from '@/lib/social-ingest-api'
 import { getSocialThreads, type SocialThreadRowData } from '@/lib/social-reply-api'
 
@@ -35,6 +43,17 @@ import { getSocialThreads, type SocialThreadRowData } from '@/lib/social-reply-a
 const EVERY_OPTIONS = [5, 15, 30, 60, 180, 1440] as const
 /** 这几种状态要在列表上方单独说一行。 */
 const ISSUE_STATES = new Set(['missing_permissions', 'limited', 'failed', 'needs_channel'])
+/** WP257：标签的顺序（客户问题在最前：最要紧的先看）。 */
+const TAG_ORDER = [
+  'customer_question',
+  'complaint',
+  'praise',
+  'partnership',
+  'spam',
+  'other',
+] as const
+/** 能在这里登记要读的群 / 频道的渠道。 */
+const REGISTRABLE = new Set<SocialChannelId>(['discord', 'telegram_group'])
 
 const SURFACE_ICON = {
   thread: MessagesSquare,
@@ -72,20 +91,36 @@ function Row({ row, assignment }: { row: SocialThreadRowData; assignment: string
   )
 }
 
-/** Discord：粘贴频道链接登记一个要读的频道。 */
+/**
+ * 粘贴链接登记一个要读的群：Discord 频道（WP256）/ Telegram 群（WP257）。
+ * 登记那一下服务端读一次名字（「#general」/ 群名），读不到先用默认名。
+ */
 function RegisterChannel({
   assignment,
+  channel,
   onDone,
 }: {
   assignment: string
+  channel: SocialChannelId
   onDone: () => void
 }): ReactNode {
   const { t } = useApp()
   const [link, setLink] = useState('')
   const [invalid, setInvalid] = useState(false)
+  const telegram = channel === 'telegram_group'
+  /** 这条渠道的词条：Telegram 有自己的一份，没有就用 Discord 那份。 */
+  const k = (key: string): string => (telegram ? `${key}.telegram_group` : key)
   const add = useMutation({
-    mutationFn: (target: { guild: string; channel: string }) =>
-      registerDiscordChannel(target, assignment),
+    mutationFn: async (raw: string) => {
+      if (telegram) {
+        const chat = parseTelegramGroup(raw)
+        if (chat === undefined) throw new Error('invalid')
+        return registerTelegramGroup(chat, assignment)
+      }
+      const target = parseDiscordChannel(raw)
+      if (target === undefined) throw new Error('invalid')
+      return registerDiscordChannel(target, assignment)
+    },
     onSuccess: () => {
       setLink('')
       onDone()
@@ -95,22 +130,25 @@ function RegisterChannel({
     <form
       className="flex flex-wrap items-center gap-2"
       data-testid="threads-register"
+      data-channel={channel}
       onSubmit={(e) => {
         e.preventDefault()
-        const target = parseDiscordChannel(link)
-        setInvalid(target === undefined)
-        if (target !== undefined) add.mutate(target)
+        const ok = telegram
+          ? parseTelegramGroup(link) !== undefined
+          : parseDiscordChannel(link) !== undefined
+        setInvalid(!ok)
+        if (ok) add.mutate(link)
       }}
     >
       <EmptyLine
         icon={<MessagesSquare className="size-4" aria-hidden />}
-        text={t('threads.empty.no_channel')}
+        text={t(k('threads.empty.no_channel'))}
       />
       <Input
         className="h-7 w-56"
         value={link}
-        placeholder={t('threads.register.placeholder')}
-        aria-label={t('threads.register.placeholder')}
+        placeholder={t(k('threads.register.placeholder'))}
+        aria-label={t(k('threads.register.placeholder'))}
         data-testid="threads-register-link"
         onChange={(e) => {
           setLink(e.target.value)
@@ -120,10 +158,10 @@ function RegisterChannel({
       <Button size="xs" type="submit" disabled={link.trim() === '' || add.isPending}>
         {t('threads.register')}
       </Button>
-      <Hint text={t('threads.register.hint')} />
+      <Hint text={t(k('threads.register.hint'))} />
       {invalid ? (
         <p className="w-full text-xs text-ws-bad" data-testid="threads-register-invalid">
-          {t('threads.register.invalid')}
+          {t(k('threads.register.invalid'))}
         </p>
       ) : null}
     </form>
@@ -149,7 +187,13 @@ function Issues({ ingest }: { ingest: SocialIngestData }): ReactNode {
             <span className="font-medium">{a.name}</span>：{a.message ?? ''}
           </span>
           {a.state === 'missing_permissions' ? (
-            <Hint text={t('threads.issue.missing_hint')} />
+            <Hint
+              text={t(
+                ingest.channel === 'telegram_group'
+                  ? 'threads.issue.missing_hint.telegram_group'
+                  : 'threads.issue.missing_hint',
+              )}
+            />
           ) : null}
         </li>
       ))}
@@ -191,12 +235,100 @@ function Empty({
       />
     )
   if (ingest.accounts.length === 0)
-    return channel === 'discord' ? (
-      <RegisterChannel assignment={assignment} onDone={onRegistered} />
+    return REGISTRABLE.has(channel) ? (
+      <RegisterChannel assignment={assignment} channel={channel} onDone={onRegistered} />
     ) : (
       <EmptyLine icon={icon} text={t('threads.empty.no_own_sub')} testId="threads-empty" />
     )
   return <EmptyLine icon={icon} text={t('threads.empty.no_posts')} testId="threads-empty" />
+}
+
+/** WP257：一排标签按类筛（带条数；只列有帖子的类）。 */
+function TagFilter({
+  rows,
+  value,
+  onChange,
+}: {
+  rows: readonly SocialThreadRowData[]
+  value: string | undefined
+  onChange: (next: string | undefined) => void
+}): ReactNode {
+  const { t } = useApp()
+  const counts = useMemo(() => {
+    const m = new Map<string, number>()
+    for (const r of rows) if (r.triage !== undefined) m.set(r.triage, (m.get(r.triage) ?? 0) + 1)
+    return m
+  }, [rows])
+  if (counts.size === 0) return null
+  const chip = (key: string | undefined, label: string, n: number) => (
+    <Button
+      key={key ?? 'all'}
+      size="xs"
+      variant={value === key ? 'secondary' : 'ghost'}
+      aria-pressed={value === key}
+      data-testid="threads-tag"
+      data-tag={key ?? 'all'}
+      onClick={() => {
+        onChange(key)
+      }}
+    >
+      {label}
+      <span className="ws-num text-[11px] text-ws-muted-fg">{n}</span>
+    </Button>
+  )
+  return (
+    <fieldset
+      className="m-0 flex flex-wrap items-center gap-1 border-0 p-0"
+      aria-label={t('threads.tags.label')}
+      data-testid="threads-tags"
+    >
+      {chip(undefined, t('threads.tags.all'), rows.length)}
+      {TAG_ORDER.filter((k) => counts.has(k)).map((k) =>
+        chip(k, t(`threads.triage.${k}`), counts.get(k) ?? 0),
+      )}
+    </fieldset>
+  )
+}
+
+/** WP257：「模型复核」小开关（默认关；没接上模型时照实说只按规则判）。 */
+function TagReviewSwitch({
+  view,
+  assignment,
+  onChanged,
+}: {
+  view: SocialIngestData
+  assignment: string
+  onChanged: (next: NonNullable<SocialIngestData['tags']>) => void
+}): ReactNode {
+  const { t } = useApp()
+  const set = useMutation({
+    mutationFn: (on: boolean) => setSocialTagReview(on, assignment),
+    onSuccess: onChanged,
+  })
+  const tags = view.tags
+  if (tags === undefined || !view.auto) return null
+  return (
+    <span className="flex items-center gap-1" data-testid="threads-review">
+      <Switch
+        size="sm"
+        checked={tags.model_review}
+        disabled={set.isPending}
+        aria-label={t('threads.tags.review')}
+        data-testid="threads-review-switch"
+        onCheckedChange={(on) => {
+          set.mutate(on)
+        }}
+      />
+      <span>{t('threads.tags.review')}</span>
+      <Hint
+        text={
+          tags.model_review && !tags.model_ready
+            ? `${t('threads.tags.review.hint')} ${t('threads.tags.review.not_ready')}`
+            : t('threads.tags.review.hint')
+        }
+      />
+    </span>
+  )
 }
 
 export function SocialThreads({
@@ -224,16 +356,30 @@ export function SocialThreads({
       qc.setQueryData(ingestKey, view)
     },
   })
-  const rows = q.data?.rows ?? []
+  const [tag, setTag] = useState<string | undefined>(undefined)
+  const all = q.data?.rows ?? []
+  // 选中的类这会儿没帖子了（都回完了）：回到「全部」，不显示一个空列表
+  const active = tag !== undefined && all.some((r) => r.triage === tag) ? tag : undefined
+  const rows = active === undefined ? all : all.filter((r) => r.triage === active)
   const view = ingest.data
   return (
     <div className="flex flex-col gap-2" data-testid="social-threads">
       <div className="flex items-center gap-1.5 px-1 text-xs text-ws-muted-fg">
-        <span className="rounded-full bg-ws-surface px-1.5 text-[11px]">{rows.length}</span>
+        <span className="rounded-full bg-ws-surface px-1.5 text-[11px]">{all.length}</span>
         <Hint text={t('threads.hint')} />
+        <span className="ml-auto" />
+        {view === undefined ? null : (
+          <TagReviewSwitch
+            view={view}
+            assignment={assignment}
+            onChanged={(tags) => {
+              qc.setQueryData(ingestKey, { ...view, tags })
+            }}
+          />
+        )}
         {view?.every_minutes === undefined || !view.connected ? null : (
           <select
-            className="ml-auto h-6 rounded-md border bg-background px-1 text-xs"
+            className="h-6 rounded-md border bg-background px-1 text-xs"
             aria-label={t('threads.every.label')}
             value={view.every_minutes}
             disabled={every.isPending}
@@ -254,7 +400,8 @@ export function SocialThreads({
         )}
       </div>
       {view === undefined ? null : <Issues ingest={view} />}
-      {q.isSuccess && rows.length === 0 && !ingest.isPending ? (
+      <TagFilter rows={all} value={active} onChange={setTag} />
+      {q.isSuccess && all.length === 0 && !ingest.isPending ? (
         <Empty
           ingest={view}
           channel={channel}

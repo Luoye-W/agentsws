@@ -142,21 +142,37 @@ export interface SocialIngestAccountView {
     | 'limited'
     | 'failed'
   message?: string
-  /** 缺哪几样（Discord：`bot_not_in_server` / `view_channel` / `read_message_history` / `message_content`）。 */
+  /**
+   * 缺哪几样（Discord：`bot_not_in_server` / `view_channel` / `read_message_history` / `message_content`；
+   * WP257 Telegram：`bot_not_in_server` / `privacy_mode` / `webhook_active`）。
+   */
   missing?: string[]
   last_read_at?: Iso8601
   next_read_at?: Iso8601
 }
 
+/**
+ * WP257（决策 152）：自动进帖判类打标签的设置（一个品牌一份）。
+ *
+ * 标签默认按规则判（关键词 + 渠道 + 是否 @品牌，不花钱）；`model_review` 打开后每一拍再请模型复核最近几条
+ * （花这个品牌的模型用量）。`model_ready`：这台接没接上真模型——没接上时开着也只按规则判，界面照实说。
+ */
+export interface SocialTagSettingsView {
+  model_review: boolean
+  model_ready: boolean
+}
+
 export interface SocialIngestView {
   channel: SocialChannel
-  /** 这条渠道会不会自动拉新帖（现在：Discord、Reddit 自家版）。不会的照实说，不画一个空列表装作没帖。 */
+  /** 这条渠道会不会自动拉新帖（现在：Discord、Reddit 自家版、Telegram 群（WP257））。不会的照实说，不画一个空列表装作没帖。 */
   auto: boolean
   /** 这条渠道连上了没有（Reddit：接口或官方号浏览器有一条通）。 */
   connected: boolean
-  /** 多久读一次（分钟；只有能调的渠道有——Discord）。 */
+  /** 多久读一次（分钟；只有能调的渠道有——Discord、Telegram 群）。 */
   every_minutes?: number
   accounts: SocialIngestAccountView[]
+  /** WP257：判类打标签的设置（老服务进程没有这一格）。 */
+  tags?: SocialTagSettingsView
 }
 
 /** 一条新入站线程处理完之后回来的那一份。 */
@@ -396,11 +412,16 @@ export interface SocialPort {
 
   /** 这条渠道的自动进帖读到什么样了（空态照实说用）。只读。 */
   ingestStatus?(actor: SocialActor, channel: SocialChannel): MaybePromise<SocialIngestView>
-  /** 改多久读一次（现在只有 Discord：5 分钟到 24 小时）。 */
+  /** 改多久读一次（Discord、Telegram 群（WP257）：5 分钟到 24 小时）。 */
   setIngestInterval?(
     actor: SocialActor,
     input: { channel: SocialChannel; every_minutes: number },
   ): MaybePromise<SocialIngestView>
+  /** WP257（决策 152）：自动进帖判类要不要再请模型复核（默认关）。只改设置，不出卡。 */
+  setTagReview?(
+    actor: SocialActor,
+    input: { model_review: boolean },
+  ): MaybePromise<SocialTagSettingsView>
 
   /* ── WP249（决策 81 / 89）：自家版待处理 + Reddit 官方号浏览器通道。只加不改：没装配回 501 ── */
 
@@ -567,6 +588,9 @@ const IngestIntervalBody = z.object({
     .min(5)
     .max(24 * 60),
 })
+
+/** WP257：自动进帖判类要不要请模型复核。 */
+const TagReviewBody = z.object({ model_review: z.boolean() })
 
 /** WP249：端口上的可选口，没装配就照实说。 */
 function need<K extends keyof SocialPort>(port: SocialPort, key: K): NonNullable<SocialPort[K]> {
@@ -966,7 +990,7 @@ export function socialRoutes(): Route[] {
         path: '/v1/social/ingest',
         operationId: 'setSocialIngestInterval',
         summary:
-          '改「群里的帖子」多久自动读一次（现在只有 Discord 能调：5 分钟到 24 小时，默认 15 分钟）',
+          '改「群里的帖子」多久自动读一次（Discord、Telegram 群能调：5 分钟到 24 小时，默认 15 分钟）',
         tag: 'social',
         auth: 'bearer',
         assignment: true,
@@ -979,6 +1003,27 @@ export function socialRoutes(): Route[] {
         if (port.setIngestInterval === undefined)
           throw new ApiError('not_implemented', '这个服务进程没有装配「群里的帖子」自动进帖。')
         return ok(c, await port.setIngestInterval(actorOf(c), await body(c, IngestIntervalBody)))
+      },
+    ),
+    route(
+      {
+        method: 'put',
+        path: '/v1/social/ingest/tags',
+        operationId: 'setSocialTagReview',
+        summary:
+          '自动进帖判类打标签要不要再请模型复核（默认关：只按关键词 + 渠道 + 是否 @品牌判）。只改设置，不出卡、不转客服',
+        tag: 'social',
+        auth: 'bearer',
+        assignment: true,
+        authz: STAGE_ACCOUNT,
+        body: TagReviewBody,
+        returns: 'SocialTagSettingsView',
+      },
+      async (c, deps) => {
+        const port = portOf(deps)
+        if (port.setTagReview === undefined)
+          throw new ApiError('not_implemented', '这个服务进程没有装配「群里的帖子」自动进帖。')
+        return ok(c, await port.setTagReview(actorOf(c), await body(c, TagReviewBody)))
       },
     ),
     // ── WP249（决策 81 / 89）：自家版待处理 + Reddit 官方号浏览器通道 ──

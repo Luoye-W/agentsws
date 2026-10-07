@@ -54,6 +54,28 @@ export interface DiscordRawMessage {
   author?: { id?: string; username?: string; bot?: boolean }
   attachments?: unknown[]
   message_reference?: { message_id?: string }
+  /** 这条 @ 了谁（WP257：@ 了我们的机器人 = 冲着我们来的）。 */
+  mentions?: { id?: string }[]
+  /** 回的是哪一条（Discord 带着被回那条的作者）。 */
+  referenced_message?: { author?: { id?: string } } | null
+}
+
+/** WP257：这条是不是冲着我们的机器人来的（@ 了它 / 回的是它说的那句）。不知道机器人 id 就不判。 */
+export function discordMentionsBot(m: DiscordRawMessage, bot_id: string | undefined): boolean {
+  if (bot_id === undefined || bot_id === '') return false
+  if ((m.mentions ?? []).some((u) => u.id === bot_id)) return true
+  if (m.referenced_message?.author?.id === bot_id) return true
+  return (m.content ?? '').includes(`<@${bot_id}>`) || (m.content ?? '').includes(`<@!${bot_id}>`)
+}
+
+/** WP257：这一页里有没有要知道机器人 id 才判得了的（@ 了人 / 回了一条）。 */
+export function discordNeedsBotId(raw: readonly DiscordRawMessage[]): boolean {
+  return raw.some(
+    (m) =>
+      (m.mentions ?? []).length > 0 ||
+      m.referenced_message?.author?.id !== undefined ||
+      /<@!?\d+>/u.test(m.content ?? ''),
+  )
 }
 
 /**
@@ -64,6 +86,8 @@ export interface DiscordRawMessage {
 export function discordFeedPage(
   raw: readonly DiscordRawMessage[],
   now: string,
+  /** WP257：机器人自己的 id（给了才判「是不是冲着我们来的」）。 */
+  bot_id?: string,
 ): { items: ChannelComment[]; last_id?: string; fetched: number } {
   const sorted = raw
     .filter((m): m is DiscordRawMessage & { id: string } => typeof m.id === 'string' && m.id !== '')
@@ -86,6 +110,7 @@ export function discordFeedPage(
       author_handle: m.author?.username ?? m.author?.id ?? '',
       text: text === '' ? '（只发了附件）' : (m.content ?? ''),
       created_at: m.timestamp ?? now,
+      ...(bot_id === undefined ? {} : { mentions_us: discordMentionsBot(m, bot_id) }),
     })
   }
   return { items, ...(last === undefined ? {} : { last_id: last }), fetched: raw.length }
@@ -166,10 +191,27 @@ export const CHANNEL_READ_GAP_WORDS: Readonly<Record<ChannelReadGap, string>> = 
   view_channel: '「查看频道」权限',
   read_message_history: '「读取消息历史」权限',
   message_content: '开发者后台的「Message Content Intent」开关',
+  privacy_mode: '关掉隐私模式（privacy mode）',
+  webhook_active: '停掉别处设的 webhook',
 }
 
 export function readGapMessage(label: string, missing: readonly ChannelReadGap[]): string {
+  if (label.startsWith('Telegram')) return telegramGapMessage(missing)
   if (missing.includes('bot_not_in_server'))
     return `${label} 机器人不在这个服务器里：用连接页里的邀请链接把它拉进来，再回来看。`
   return `${label} 机器人还缺 ${missing.map((m) => CHANNEL_READ_GAP_WORDS[m]).join('、')}，所以读不到这个频道的新消息。`
+}
+
+/**
+ * WP257（决策 156）：Telegram 缺什么 → 一句人话（界面上那一行；怎么关隐私模式写在问号里，这里也写一遍
+ * 最要紧的那一步，免得人不点问号）。
+ */
+export function telegramGapMessage(missing: readonly ChannelReadGap[]): string {
+  if (missing.includes('webhook_active'))
+    return 'Telegram 机器人设了 webhook（别的工具在收它的消息），Agents 工坊读不到群消息：在那个工具里停掉 webhook，或给工坊单独建一个机器人。'
+  if (missing.includes('bot_not_in_server'))
+    return 'Telegram 机器人不在这个群里：在 Telegram 里把它拉进群，再回来看。'
+  if (missing.includes('privacy_mode'))
+    return 'Telegram 机器人开着隐私模式，在群里只看得到 @它的话：找 @BotFather 发 /setprivacy → 选这个机器人 → Disable，再把机器人移出群、重新拉进来（或者把它设成群管理员）。'
+  return `Telegram 机器人还缺 ${missing.map((m) => CHANNEL_READ_GAP_WORDS[m]).join('、')}，所以读不到这个群的新消息。`
 }

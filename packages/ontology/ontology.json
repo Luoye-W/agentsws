@@ -63,7 +63,6 @@
     "packages/contracts/src/social.ts",
     "packages/contracts/src/standby.ts",
     "packages/contracts/src/subscription.ts",
-    "packages/contracts/src/task-text.ts",
     "packages/contracts/src/work.ts",
     "packages/core/src/guardrail.ts",
     "packages/deck/src/queries.ts",
@@ -118,7 +117,7 @@
     "packages/roles/roles/social/x.yml",
     "packages/roles/roles/social/youtube.yml"
   ],
-  "source_digest": "8ce6d9ea1dfdc18d5b2e0fb223c2d666",
+  "source_digest": "dcec3d7bf391004936612c13ea07968e",
   "objects": [
     {
       "id": "ad",
@@ -1605,6 +1604,12 @@
         {
           "name": "triage",
           "type": "CommunityTriage",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "triage_by",
+          "type": "'rule' | 'model'",
           "sensitivity": "internal",
           "optional": true
         },

@@ -944,6 +944,19 @@ export interface SocialDeckData {
   }[]
   /** 转客服：判成客户问题、已经出了卡的那些（56 边界行）。 */
   handoffs: (SocialThreadRow & { status: string; approval_id?: string })[]
+  /**
+   * WP257（决策 152）：自动进帖按类计数——一条渠道一类一行（六类都列，没有的是 0），方便跑一两周看量。
+   * 只算自动进帖那一步打了标签的（`CommunityThread.triage_by`），经接口进来、判完就出卡的不算。
+   * 可选：老宿主不递就没有这一块的数。
+   */
+  thread_tags?: {
+    channel: string
+    /** 六类之一（`CommunityTriage`）。 */
+    triage: string
+    last_7d: number
+    last_14d: number
+    total: number
+  }[]
 }
 
 /**
