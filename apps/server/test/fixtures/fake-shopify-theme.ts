@@ -14,7 +14,7 @@ const fs = require('node:fs')
 const path = require('node:path')
 const here = __dirname
 const argv = process.argv.slice(2)
-fs.appendFileSync(path.join(here, 'calls.jsonl'), JSON.stringify({ argv, cwd: process.cwd(), env: Object.keys(process.env).sort() }) + '\\n')
+fs.appendFileSync(path.join(here, 'calls.jsonl'), JSON.stringify({ argv, cwd: process.cwd(), env: Object.keys(process.env).sort(), home: process.env.HOME, appdata: process.env.APPDATA }) + '\\n')
 const statePath = path.join(here, 'state.json')
 const state = JSON.parse(fs.readFileSync(statePath, 'utf8'))
 const save = () => fs.writeFileSync(statePath, JSON.stringify(state))
@@ -70,7 +70,7 @@ console.error('unsupported ' + sub); process.exit(2)
 export interface FakeShopifyTheme {
   /** CLI 入口（`<node> <entry> …` 起）。 */
   entry: string
-  calls(): { argv: string[]; cwd: string; env: string[] }[]
+  calls(): { argv: string[]; cwd: string; env: string[]; home?: string; appdata?: string }[]
   themes(): { id: string; name: string; role: string; files: Record<string, string> }[]
   setLoggedOut(out: boolean): void
 }

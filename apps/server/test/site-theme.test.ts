@@ -22,6 +22,7 @@ import { join } from 'node:path'
 import { platformKitOf, type RunRequest, type StagedChange } from '@agentsws/contracts'
 import type { StageInput, StageOutcome } from '@agentsws/txn'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { cliSessionEnv } from '../src/platform-cli-session.js'
 import {
   baseWritable,
   changedFiles,
@@ -72,6 +73,8 @@ function make(
     }),
     loggedIn: () => machine.loggedIn,
     invocation: () => ({ command: process.execPath, prefix: [cli.entry] }),
+    // WP253：一个品牌一份 CLI 会话（配置目录指到品牌那一份）
+    sessionEnv: () => cliSessionEnv(join(dir, 'sessions', WS)),
     connectedShops: () => machine.shops,
     env: { ...process.env, AGENTSWS_SECRETS_KEY: 'never-leaks', OOMOL_CONNECT_ADMIN_TOKEN: 'x' },
     fetch: overrides.fetch ?? base.fetch,
@@ -262,6 +265,9 @@ describe('起底 → 改 → 检查 → 推未发布 → 发布出卡 → 批了
       expect(c.env).not.toContain('OOMOL_CONNECT_ADMIN_TOKEN')
       expect(c.env).not.toContain('SHOPIFY_CLI_THEME_TOKEN')
       expect(c.env).toContain('SHOPIFY_FLAG_STORE')
+      // 主题命令跑在本品牌那一份 CLI 会话里（决定 138：不同品牌可以是不同的 Shopify 账号）
+      expect(c.home).toBe(join(dir, 'sessions', WS))
+      expect(c.appdata).toBe(join(dir, 'sessions', WS, 'AppData', 'Roaming'))
     }
   })
 

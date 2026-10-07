@@ -158,6 +158,8 @@ export interface SiteThemeOptions {
   probe(spec: PlatformCliSpec, fresh?: boolean): Promise<PlatformCliProbe>
   /** WP245 一键登录按品牌记的那一笔（登好了 = true）。 */
   loggedIn(cli_id: string): boolean
+  /** WP253：这个品牌那一份 CLI 会话的环境变量（一个品牌一份会话，见 `platform-cli-session.ts`）。 */
+  sessionEnv?(cli_id: string): Record<string, string> | undefined
   /** 怎么起 CLI（私有安装 → `<node> <入口>`；系统里的 → `shopify`）。 */
   invocation(spec: PlatformCliSpec): { command: string; prefix: readonly string[] }
   /** 这个品牌接管的店（连接页那一条）。 */
@@ -356,6 +358,7 @@ export function createSiteTheme(options: SiteThemeOptions): SiteThemeAssembly {
       // 凭据只在 CLI 自己的会话里（一键登录）；我们这一侧一个令牌都不拿
       tokenFor: () => undefined,
       sessionLogin: () => options.loggedIn(spec.id),
+      sessionEnv: () => options.sessionEnv?.(spec.id),
       cli: () => options.invocation(spec),
       ...(options.run === undefined ? {} : { run: options.run }),
       appendEvent: (type, payload) => emit(type, { ...payload, workspace_id: ws }),

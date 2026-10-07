@@ -2,7 +2,7 @@
  * WP245：工作台替用户跑平台 CLI 登记过的命令。假 npm / 假 shopify 是真脚本、真子进程
  * （跑在测试自己的 node 上），覆盖 装好 / 网络失败 / 登录成功 / 用户取消 / 超时；不联网、不碰全局。
  */
-import { mkdtempSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { delimiter, join } from 'node:path'
 import { PLATFORM_KITS, type PlatformCliSpec } from '@agentsws/contracts'
@@ -16,6 +16,7 @@ import {
   privateCliEntry,
   runEnv,
 } from '../src/platform-cli-runner.js'
+import { cliSessionAlias, cliSessionEnv, cliSessionHome } from '../src/platform-cli-session.js'
 import { setLoginMode, writeFakeNpm } from './fixtures/fake-cli.js'
 
 const SPEC = PLATFORM_KITS[0]?.cli as PlatformCliSpec
@@ -216,6 +217,92 @@ describe('一键登录：服务端起 auth login，网址交给工作台', () =>
     expect(denied.phase).toBe('failed')
     expect(denied.error?.code).toBe('denied')
     expect(m.loggedIn()).toBe(0)
+  })
+})
+
+describe('WP253：登录带 --alias，会话按品牌分开（4.8.5 非交互登录的规矩）', () => {
+  const logins = (entry: string): { args: string[]; home: string; appdata?: string }[] => {
+    const file = join(entry, '..', 'logins.jsonl')
+    return existsSync(file)
+      ? readFileSync(file, 'utf8')
+          .split('\n')
+          .filter((l) => l !== '')
+          .map((l) => JSON.parse(l) as { args: string[]; home: string; appdata?: string })
+      : []
+  }
+
+  it('不带 --alias：假 CLI 照 4.8.5 那样一秒内报「Flag not specified: --alias」（防回归）', async () => {
+    const m = await installed()
+    const { login_alias_flag: _drop, ...noAlias } = SPEC
+    m.runner.start(noAlias as PlatformCliSpec, 'login', m.ctx)
+    const job = await m.settle()
+    expect(job.phase).toBe('failed')
+    expect(job.log.join('\n')).toContain('Flag not specified')
+    expect(m.loggedIn()).toBe(0)
+  })
+
+  it('4.8.5 的两行输出：确认码与「Opened link…」网址都认出来，CLI 自己开了浏览器就不再开', async () => {
+    const m = await installed()
+    setLoginMode(m.entry, 'opened')
+    m.runner.start(SPEC, 'login', m.ctx)
+    const job = await m.settle()
+    expect(job).toMatchObject({
+      phase: 'done',
+      user_code: 'ABCD-EFGH',
+      login_url:
+        'https://accounts.shopify.com/activate-with-code?device_code%5Buser_code%5D=ABCD-EFGH',
+      browser_opened: true,
+    })
+  })
+
+  it('两个品牌各登各的：别名 + 各自一份 CLI 配置目录；同一品牌重登不撞「选哪个账号」；重登失败挪回原来那份', async () => {
+    const m = await installed()
+    const sessionA = {
+      alias: cliSessionAlias('ws_rollout'),
+      home: cliSessionHome(m.toolsDir, SPEC.id, 'ws_rollout'),
+    }
+    const sessionB = {
+      alias: cliSessionAlias('ws_inmo'),
+      home: cliSessionHome(m.toolsDir, SPEC.id, 'ws_inmo'),
+    }
+    m.runner.start(SPEC, 'login', { ...m.ctx, session: sessionA })
+    expect((await m.settle()).phase).toBe('done')
+    m.runner.start(SPEC, 'login', { ...m.ctx, session: sessionB })
+    expect((await m.settle()).phase).toBe('done')
+    const seen = logins(m.entry)
+    expect(seen[0]?.args).toEqual(['auth', 'login', '--alias', 'agentsws-ws_rollout'])
+    expect(seen[0]?.home).toBe(sessionA.home)
+    expect(seen[0]?.appdata).toBe(join(sessionA.home, 'AppData', 'Roaming'))
+    expect(seen[1]?.home).toBe(sessionB.home)
+    // 同一品牌再登一次：原来那份先挪开，空配置里重新登（共用一份的话这里会撞上「Failed to prompt」）
+    m.runner.start(SPEC, 'login', { ...m.ctx, session: sessionA })
+    expect((await m.settle()).phase).toBe('done')
+    expect(existsSync(`${sessionA.home}.prev`)).toBe(false)
+    expect(m.loggedIn()).toBe(3)
+    // 重登被拒：原来那份挪回来（原来登着的品牌不变成没登录）
+    writeFileSync(join(sessionA.home, 'marker'), 'old session')
+    setLoginMode(m.entry, 'denied')
+    m.runner.start(SPEC, 'login', { ...m.ctx, session: sessionA })
+    expect((await m.settle()).phase).toBe('failed')
+    expect(readFileSync(join(sessionA.home, 'marker'), 'utf8')).toBe('old session')
+  })
+
+  it('共用一份配置（不分品牌）时第二个账号登不进去——这就是要分开的理由', async () => {
+    const m = await installed()
+    m.runner.start(SPEC, 'login', { ...m.ctx, session: { alias: 'agentsws-ws_a' } })
+    expect((await m.settle()).phase).toBe('done')
+    m.runner.start(SPEC, 'login', { ...m.ctx, session: { alias: 'agentsws-ws_b' } })
+    const second = await m.settle()
+    expect(second.phase).toBe('failed')
+    expect(second.log.join('\n')).toContain('Failed to prompt')
+  })
+
+  it('环境变量：三个平台的 CLI 配置目录都指到品牌那一份', () => {
+    expect(cliSessionAlias('WS_19cx/../x')).toBe('agentsws-ws_19cx-x')
+    const env = cliSessionEnv('/d/tools/shopify-cli-sessions/ws_a')
+    expect(env.HOME).toBe('/d/tools/shopify-cli-sessions/ws_a')
+    expect(env.APPDATA).toBe(join('/d/tools/shopify-cli-sessions/ws_a', 'AppData', 'Roaming'))
+    expect(env.XDG_CONFIG_HOME).toBe(join('/d/tools/shopify-cli-sessions/ws_a', '.config'))
   })
 })
 

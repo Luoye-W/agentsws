@@ -225,6 +225,11 @@ export interface ShopifyThemeOptions {
    * 变更审阅 `change-files.ts` 同一个地方）。
    */
   workspaceDir?: (shop: string) => string
+  /**
+   * WP253：这个品牌那一份 CLI 会话的环境变量（`platform-cli-session.ts` 的 `cliSessionEnv`：把 CLI 的配置目录
+   * 指到品牌自己那一份）。给了就盖在白名单之上；不给 = 整台电脑共用的那一份会话（老行为）。
+   */
+  sessionEnv?: () => Record<string, string> | undefined
 }
 
 /** WP245：默认的起法（系统 PATH 上的 `shopify`）。 */
@@ -400,6 +405,7 @@ export function createShopifyTheme(options: ShopifyThemeOptions): ShopifyTheme {
     // CLI 在 CI 模式下不问交互问题；我们没有终端可以回答它
     out.CI = '1'
     out.SHOPIFY_CLI_NO_ANALYTICS = '1'
+    Object.assign(out, options.sessionEnv?.() ?? {})
     out[THEME_STORE_ENV] = shop
     if (token !== undefined && token !== '') out[THEME_TOKEN_ENV] = token
     return out

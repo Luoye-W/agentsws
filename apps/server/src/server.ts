@@ -5,7 +5,7 @@
  * 只监听 127.0.0.1；一个进程一个端口（`AGENTSWS_PORT`，默认 4317）。
  */
 import { promises as dnsPromises } from 'node:dns'
-import { mkdirSync, mkdtempSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync } from 'node:fs'
 import type { IncomingMessage } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -419,6 +419,12 @@ import {
   type ProbeExec,
 } from './platform-cli.js'
 import { createPlatformCliRunner, type PlatformCliRunnerOptions } from './platform-cli-runner.js'
+import {
+  type CliSession,
+  cliSessionAlias,
+  cliSessionEnv,
+  cliSessionHome,
+} from './platform-cli-session.js'
 import { createPlatformKitPort, resolveBrandPlatform } from './platform-kit.js'
 import {
   createPositions,
@@ -2476,6 +2482,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     probe?: (spec: PlatformCliSpec, fresh: boolean) => Promise<PlatformCliProbe>
     invocation?: (spec: PlatformCliSpec) => { command: string; prefix: readonly string[] }
     loggedIn?: (ws: WorkspaceId, cli_id: string) => boolean
+    sessionEnv?: (ws: WorkspaceId, cli_id: string) => Record<string, string> | undefined
   } = {}
   let themeScratchDir: string | undefined
   const siteThemeOf = async (ws: WorkspaceId): Promise<SiteThemeAssembly | undefined> => {
@@ -2503,6 +2510,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
             })
           : siteThemeCli.probe(spec, fresh === true),
       loggedIn: (cli_id) => siteThemeCli.loggedIn?.(ws, cli_id) ?? false,
+      sessionEnv: (cli_id) => siteThemeCli.sessionEnv?.(ws, cli_id),
       invocation: (spec) => siteThemeCli.invocation?.(spec) ?? { command: spec.bin, prefix: [] },
       connectedShops: () =>
         brand.connections.shopify
@@ -7823,7 +7831,27 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   // WP253：主题工坊与 CLI 卡认的是同一份检测、同一个起法、同一笔登录记录
   siteThemeCli.probe = (spec, fresh) => platformCliProber.probe(spec, { fresh })
   siteThemeCli.invocation = (spec) => platformCliRunner.invocation(spec)
-  siteThemeCli.loggedIn = (ws, cli_id) => platformCliLoginOf(ws).confirmedAt(cli_id) !== undefined
+  /*
+   * WP253（Fable 10-07 真机 + 决定 138）：CLI 会话按品牌分开——每个品牌一份 CLI 配置目录
+   * （`platform-cli-session.ts` 写了依据）。没有数据目录（内存档）就用整台电脑那一份。
+   */
+  const cliSessionOf = (ws: string, cli_id: string): CliSession => {
+    const toolsDir = platformCliRunner.toolsDir
+    return {
+      alias: cliSessionAlias(ws),
+      ...(toolsDir === undefined ? {} : { home: cliSessionHome(toolsDir, cli_id, ws) }),
+    }
+  }
+  // 「登好了」= 按品牌记过一笔，而且这个品牌那一份会话目录还在（WP253 之前在整台电脑那一份登的要再登一次）
+  siteThemeCli.loggedIn = (ws, cli_id) => {
+    if (platformCliLoginOf(ws).confirmedAt(cli_id) === undefined) return false
+    const home = cliSessionOf(ws, cli_id).home
+    return home === undefined || existsSync(home)
+  }
+  siteThemeCli.sessionEnv = (ws, cli_id) => {
+    const home = cliSessionOf(ws, cli_id).home
+    return home === undefined ? undefined : cliSessionEnv(home)
+  }
   const platformKitPort = createPlatformKitPort({
     now: () => clock.now(),
     platformOf: (ws) => brandPlatformOf(ws),
@@ -7834,6 +7862,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     prober: platformCliProber,
     runner: platformCliRunner,
     loginStoreOf: platformCliLoginOf,
+    sessionOf: (ws, spec) => cliSessionOf(ws, spec.id),
     displayNameOf: (name) => {
       const extra = skills.registry.frontmatterOf(name)?.extra
       const zh = extra?.display_name?.trim() ?? ''
