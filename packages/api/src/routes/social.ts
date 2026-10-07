@@ -300,6 +300,16 @@ export interface SocialPort {
     id: string,
     input: { action: string; reason?: string | undefined },
   ): MaybePromise<SocialStagedView>
+  /**
+   * WP254（决策 117）：回一条线程（帖子 / 评论 / 私信）——出一张**回帖卡**（`outbound_draft`，
+   * `payload.form = 'social_reply'`），批了就经这条渠道的出口发出去（Reddit：接口优先、官方号浏览器兜底）。
+   * 正文带第一人称承诺 / 无依据让步 → 打回（400），不出卡。没装配 = 路由回 not_implemented。
+   */
+  replyThread?(
+    actor: SocialActor,
+    id: string,
+    input: { text: string },
+  ): MaybePromise<SocialStagedView>
 
   /**
    * 群发向导那一下：算受众 → 自查 → 出一张 `community_broadcast` 卡（**永远 L1**）。
@@ -450,6 +460,8 @@ const ModerateBody = z.object({
   action: z.enum(MODERATION_ACTIONS),
   reason: z.string().max(500).optional(),
 })
+
+const ReplyBody = z.object({ text: z.string().trim().min(1).max(4000) })
 
 const OwnSubStageBody = z.object({
   account_id: z.string().min(1).max(200),
@@ -708,6 +720,28 @@ export function socialRoutes(): Route[] {
             await body(c, ModerateBody),
           ),
         ),
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/social/threads/:id/reply',
+        operationId: 'replySocialThread',
+        summary:
+          'WP254：回一条线程——出一张回帖卡（`outbound_draft`，批了才经渠道出口发出去；Reddit 接口优先、官方号浏览器兜底）；带承诺词打回 400',
+        tag: 'social',
+        auth: 'bearer',
+        assignment: true,
+        authz: STAGE_THREAD,
+        params: [{ name: 'id', in: 'path', required: true, description: 'thread_id' }],
+        body: ReplyBody,
+        returns: 'SocialStagedView',
+      },
+      async (c, deps) => {
+        const port = portOf(deps)
+        if (port.replyThread === undefined)
+          throw new ApiError('not_implemented', '这个服务进程不能出回帖卡')
+        return ok(c, await port.replyThread(actorOf(c), param(c, 'id'), await body(c, ReplyBody)))
+      },
     ),
     route(
       {

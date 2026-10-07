@@ -82,6 +82,7 @@ import type { KolPort } from './routes/kol.js'
 import type { MeetingsPort } from './routes/meetings.js'
 import type { MessagesPort } from './routes/messages.js'
 import type { ModelsPort } from './routes/models.js'
+import type { NpmRegistryPort } from './routes/npm-registry.js'
 import type { OfficialPluginsPort } from './routes/official-plugins.js'
 import type { OnboardingPort } from './routes/onboarding.js'
 import type { OffboardPort, OrgPort } from './routes/org.js'
@@ -907,6 +908,11 @@ export interface GatewayDeps {
    * 没装配时 `/v1/settings/read-routes*` 与 `/v1/settings/reddit-read-account/*` 回 not_implemented。
    */
   readRoutes?: ReadRoutesApiPort
+  /**
+   * WP254（决策 100 / 123）：下载源（官方源 / 国内源，每台机一份）。
+   * 没装配时 `/v1/settings/npm-registry` 回 not_implemented。
+   */
+  npmRegistry?: NpmRegistryPort
   /**
    * WP192（docs/83 §4）：官方数据接口统一能力口（能力清单、同步调用、异步任务）。按品牌取。
    * 没装配时 `/v1/data-service*` 回 not_implemented。

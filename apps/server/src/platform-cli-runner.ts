@@ -29,6 +29,7 @@ import type { PlatformCliJobView } from '@agentsws/api'
 import type { PlatformCliSpec } from '@agentsws/contracts'
 import { netCauseOf } from '@agentsws/model-gateway'
 import { killTree } from './kill-tree.js'
+import { type NpmRegistryChoice, withRegistry } from './npm-registry.js'
 import { ensureNpmCli, NpmRuntimeError } from './npm-runtime.js'
 import { probeEnv } from './platform-cli.js'
 import { scrubCliOutput } from './shopify-theme.js'
@@ -346,8 +347,16 @@ export interface PlatformCliRunnerOptions {
   nodeExec?: string
   env?: NodeJS.ProcessEnv
   spawn?: SpawnTool
-  /** 找 / 下 npm（默认 {@link ensureNpmCli}）。`onDownload` 时界面进「下载中」。 */
-  npmCli?: (onDownload: () => void) => Promise<string>
+  /**
+   * 找 / 下 npm（默认 {@link ensureNpmCli}）。`onDownload` 时界面进「下载中」；`registry` 是这一次
+   * 用的源（WP254：用户点过「换国内源再试」就是 npmmirror）。
+   */
+  npmCli?: (onDownload: () => void, registry?: string) => Promise<string>
+  /**
+   * WP254（决策 100 / 123）：这一次装用哪个源（每台机记的那一份，见 `npm-registry.ts`）。
+   * 不给 = 只看环境里的 `npm_config_registry`（WP245 的老样子）。
+   */
+  registry?: () => NpmRegistryChoice
   fetchImpl?: typeof fetch
   installTimeoutMs?: number
   loginTimeoutMs?: number
@@ -396,10 +405,16 @@ export function createPlatformCliRunner(options: PlatformCliRunnerOptions): Plat
   const keep = options.logLines ?? 80
   const jobs = new Map<string, JobEntry>()
   const toolsDir = options.toolsDir
-  const registry = env.npm_config_registry ?? env.NPM_CONFIG_REGISTRY
+  const envRegistry = env.npm_config_registry ?? env.NPM_CONFIG_REGISTRY
+  /** 这一次的源：注入的那一份（每台机记的）优先；没注入只看环境变量。 */
+  const chooseRegistry = (): NpmRegistryChoice =>
+    options.registry?.() ??
+    (envRegistry === undefined || envRegistry === ''
+      ? { source: 'official' }
+      : { source: 'custom', url: envRegistry })
   const npmCli =
     options.npmCli ??
-    ((onDownload: () => void) => {
+    ((onDownload: () => void, registry?: string) => {
       if (toolsDir === undefined) throw new CliRunnerError('unavailable', '没有数据目录，装不了')
       return ensureNpmCli({
         nodeExec,
@@ -471,11 +486,14 @@ export function createPlatformCliRunner(options: PlatformCliRunnerOptions): Plat
       finish(entry, 'failed', ctx, { code: 'failed', detail: 'no data dir' })
       return
     }
+    // WP254：这一次用哪个源，记在任务上（失败行据此决定给不给「换国内源再试」）
+    const choice = chooseRegistry()
+    entry.view.registry = choice.source
     let cli: string
     try {
       cli = await npmCli(() => {
         if (entry.view.phase === 'preparing') entry.view.phase = 'downloading'
-      })
+      }, choice.url)
     } catch (err) {
       const { code, detail } = npmFetchFailure(err)
       entry.view.log.push(cleanLine(err instanceof Error ? err.message : String(err)))
@@ -520,7 +538,7 @@ export function createPlatformCliRunner(options: PlatformCliRunnerOptions): Plat
       entry,
       nodeExec,
       args,
-      runEnv(spec, env, { nodeExec, action: 'install', toolsDir }),
+      withRegistry(runEnv(spec, env, { nodeExec, action: 'install', toolsDir }), choice),
       dir,
       options.installTimeoutMs ?? 10 * 60 * 1000,
       (line) => {

@@ -25,6 +25,7 @@ import {
   type RuntimeStatusView,
 } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
+import { offerMirrorRetry, setNpmRegistry } from '@/lib/npm-registry-api'
 import { cn } from '@/lib/utils'
 
 type Translate = (key: string, vars?: Record<string, string>) => string
@@ -103,9 +104,12 @@ export function LocalConnectorLine({
   const { t } = useApp()
   const act = useLocalConnectorAction(assignment)
   const local = status.local
+  // WP254（决策 100 / 123）：「换国内源再试」= 先把这台电脑的下载源改成国内源，再下一次
+  const mirror = useMutation({ mutationFn: () => setNpmRegistry('npmmirror') })
   if (local === undefined || local.status === 'ready') return null
   const mb = aboutMb(local.download_bytes)
-  const busy = act.isPending
+  const busy = act.isPending || mirror.isPending
+  let mirrorRetry = false
 
   let icon = <PackageOpen className="size-4 shrink-0" aria-hidden />
   let tone = 'text-muted-foreground'
@@ -143,6 +147,7 @@ export function LocalConnectorLine({
     text = `${t('connector.local.error')}：${err.sentence}`
     hint = err.detail
     action = { label: t('connector.local.retry'), run: err.retry, testId: 'retry' }
+    mirrorRetry = err.retry === 'install' && offerMirrorRetry(local.job)
   }
 
   return (
@@ -172,6 +177,20 @@ export function LocalConnectorLine({
             {action.label}
           </Button>
         )}
+        {mirrorRetry ? (
+          <Button
+            size="xs"
+            variant="outline"
+            title={t('npm_registry.retry_mirror.hint')}
+            data-testid="local-connector-retry-mirror"
+            disabled={busy}
+            onClick={() => {
+              mirror.mutate(undefined, { onSuccess: () => act.mutate('install') })
+            }}
+          >
+            {t('npm_registry.retry_mirror')}
+          </Button>
+        ) : null}
       </p>
       {progress === undefined ? null : (
         <div
@@ -187,6 +206,11 @@ export function LocalConnectorLine({
       {act.error === null ? null : (
         <p className="text-xs text-destructive" data-slot="status">
           {act.error.message}
+        </p>
+      )}
+      {mirror.error === null ? null : (
+        <p className="text-xs text-destructive" data-slot="status">
+          {mirror.error.message}
         </p>
       )}
     </div>

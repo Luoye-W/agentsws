@@ -82,6 +82,11 @@ export interface PlatformCliJobView {
   command: string
   /** 「详情」里的输出尾巴（抹过令牌、去了颜色码）。 */
   log: string[]
+  /**
+   * WP254（决策 100 / 123）：安装用的哪个下载源。`npmmirror` = 用户点过「换国内源再试」；
+   * `custom` = 用户环境里自己设的 `npm_config_registry`。网络类失败且不是国内源时卡上多一个按钮。
+   */
+  registry?: 'official' | 'npmmirror' | 'custom'
 }
 
 /** CLI 卡上那四档（36 §7 第四档：状态用图标）。 */

@@ -1,12 +1,13 @@
 /**
  * WP245：给「一键安装平台 CLI」找一份 **npm**——用户机器上多半没有 Node，更没有 npm。
  *
- * 安装包里捆绑的只有一个 `node` 可执行文件（`apps/desktop/scripts/fetch-node.mjs` 只取 `bin/node` /
- * `node.exe`，不带 npm），所以按这个顺序找：
+ * WP254（决策 99）起安装包里**随 node 一起带了配套的 npm**（`apps/desktop/scripts/fetch-node.mjs` 按官方
+ * 发行包布局摆好，版本与 sha512 钉在 `apps/desktop/node-runtime.lock.json`），所以按这个顺序找：
  *
  * 1. 捆绑 node 旁边自带的 npm（官方发行包的布局：`<dir>/../lib/node_modules/npm`，Windows 是
- *    `<dir>/node_modules/npm`）——开发机、以后若把 npm 一起打进安装包，走这一条；
- * 2. 之前下载过的那一份：`<tools>/npm/<版本>/package/bin/npm-cli.js`；
+ *    `<dir>/node_modules/npm`）——装好的桌面版与开发机都走这一条，**不联网**；
+ * 2. 之前下载过的那一份：`<tools>/npm/<版本>/package/bin/npm-cli.js`（WP254 之前装的、或服务进程跑在
+ *    Electron 自带 Node 上那一档）；
  * 3. 都没有：从 npm 官方源下**钉死的那一版**（{@link NPM_RUNTIME}），**校验 sha512**（与 registry 上
  *    `dist.integrity` 逐字相同）后解到上面那个目录。校验不过就不解、不留文件。
  *
