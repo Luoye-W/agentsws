@@ -436,6 +436,7 @@ export function BusinessStep({
             edits={edits}
             busy={busy}
             confirmed={current.status === 'confirmed'}
+            freshStore={current.fresh_store === true}
             onEdit={(field, value) => {
               setEdits((prev) => ({ ...prev, [field]: value }))
             }}

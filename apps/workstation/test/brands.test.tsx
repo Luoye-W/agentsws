@@ -139,13 +139,16 @@ describe('52 O2 顶栏品牌切换器', () => {
     expect(screen.getByTestId('brand-option-ws_a').textContent).toContain('4')
   })
 
-  it('点另一个品牌 = 换一张绑它的会话票（整站重载由 location 负责）', async () => {
+  it('点另一个品牌 = 换一张绑它的会话票，回那个品牌的首页（WP244：不停在旧品牌的岗位地址上）', async () => {
     state.orgs = [COMPANY]
     state.brands = [BRAND_A, BRAND_B]
     const reload = vi.fn()
+    const assign = vi.fn()
     vi.spyOn(globalThis, 'location', 'get').mockReturnValue({
       ...globalThis.location,
+      pathname: '/positions/asg_inmo_support',
       reload,
+      assign,
     } as Location)
     renderShell()
     await screen.findByTestId('brand-current')
@@ -156,8 +159,10 @@ describe('52 O2 顶栏品牌切换器', () => {
       expect(switched).toEqual([{ org: 'org_1', workspace: 'ws_b' }])
     })
     await waitFor(() => {
-      expect(reload).toHaveBeenCalled()
+      expect(assign).toHaveBeenCalledWith('/')
     })
+    // 不是原地重载（那样会停在 INMO 的 /positions/asg_… 上，Rollout 下打开是一片空白）
+    expect(reload).not.toHaveBeenCalled()
     vi.restoreAllMocks()
   })
 
@@ -345,5 +350,28 @@ describe('52 O4 第 ① 步拆两块', () => {
     renderWithProviders(<ProfileForm busy={false} saved={false} onSave={() => {}} />)
     expect(screen.getByText('这个品牌')).not.toBeNull()
     expect(screen.queryByText('第一个品牌')).toBeNull()
+  })
+})
+
+describe('WP244 公司页切品牌：回那个品牌的首页', () => {
+  it('品牌一览里点「切到这个品牌」→ 换票后去 `/`，不原地重载', async () => {
+    state.orgs = [COMPANY]
+    state.brands = [BRAND_A, BRAND_B]
+    const reload = vi.fn()
+    const assign = vi.fn()
+    vi.spyOn(globalThis, 'location', 'get').mockReturnValue({
+      ...globalThis.location,
+      pathname: '/org',
+      reload,
+      assign,
+    } as Location)
+    renderWithProviders(<BrandsTab org_id="org_1" assignment="asg_owner" />)
+    const user = userEvent.setup({ delay: null, pointerEventsCheck: 0 })
+    await user.click(await screen.findByTestId('brand-open-ws_b'))
+    await waitFor(() => {
+      expect(assign).toHaveBeenCalledWith('/')
+    })
+    expect(reload).not.toHaveBeenCalled()
+    vi.restoreAllMocks()
   })
 })

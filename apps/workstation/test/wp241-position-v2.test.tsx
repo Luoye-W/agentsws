@@ -536,8 +536,10 @@ describe('lib/position-work', () => {
     expect(filterItems(items, { ...NO_FILTERS, source: ['schedule'] }, now)).toHaveLength(1)
     const byDuty = groupItems(items, 'duty', ['pr.reddit', 'social.reddit'])
     expect(byDuty.map((g) => g.id)).toEqual(['pr.reddit', 'social.reddit'])
+    // WP244：加了「卡住了」（排在进行中后面；空组界面不画）
     expect(groupItems(items, 'status', []).map((g) => g.id)).toEqual([
       'doing',
+      'stuck',
       'queued',
       'waiting',
       'done',
@@ -563,5 +565,82 @@ describe('lib/position-work', () => {
     expect(whenText(new Date(2026, 9, 6, 18, 0).toISOString(), now, t)).toBe('今天 18:00')
     expect(whenText(new Date(2026, 9, 7, 9, 0).toISOString(), now, t)).toBe('明天')
     expect(whenText(new Date(2026, 9, 9, 0, 0).toISOString(), now, t)).toBe('10-09')
+  })
+})
+
+describe('WP244 工作：答完了的进已完成（待你看结果），交不出来的进卡住了', () => {
+  const realWork = (): PositionWorkView => ({
+    ...fullWork(),
+    items: [
+      item({ id: 'matter:m_run', ref_id: 'm_run', title: '整理本周热帖', progress: '在查' }),
+      item({
+        id: 'matter:m_stuck',
+        ref_id: 'm_stuck',
+        title: '回版主私信',
+        group: 'stuck',
+        progress: '这份活现在交不出来——不是没人干，是没接上。',
+        stuck_reason: '缺品牌 Reddit 号连接',
+      }),
+      item({
+        id: 'matter:m_done',
+        ref_id: 'm_done',
+        title: '查近视求助帖',
+        group: 'done',
+        progress: '查完了。',
+        result_ready: true,
+      }),
+    ],
+    counts: { doing: 1, stuck: 1, queued: 0, waiting: 0, done: 1, cards: 0, todos_today: 0 },
+  })
+
+  it('列表：卡住了一组、说缺什么；已完成里有「待你看结果」就展开；页头说 1 件卡住了', async () => {
+    state.work = realWork()
+    openAt()
+    await screen.findByTestId('work-list')
+    const groups = screen.getAllByTestId('work-group').map((g) => g.getAttribute('data-group'))
+    expect(groups).toEqual(['doing', 'stuck', 'done'])
+    const rows = new Map(
+      screen.getAllByTestId('work-row').map((r) => [r.getAttribute('data-id'), r as HTMLElement]),
+    )
+    // 卡住了：行上是缺什么，不是 AI 那句原话；谁在做说「AI 卡住了」
+    const stuck = rows.get('matter:m_stuck') as HTMLElement
+    expect(within(stuck).getByTestId('work-stuck-reason').textContent).toBe('缺品牌 Reddit 号连接')
+    expect(stuck.getAttribute('data-group')).toBe('stuck')
+    // 已完成默认折叠——但有「待你看结果」的就展开着
+    const done = rows.get('matter:m_done') as HTMLElement
+    expect(done).toBeDefined()
+    expect(within(done).getByTestId('work-result-ready').textContent).toBe('待你看结果')
+    expect(done.textContent).toContain('查完了。')
+    // 页头：N 件在办只数真在做的；卡住了单独一格，点了筛到那一组
+    expect(screen.getByTestId('status-doing').textContent).toContain('1 件在办')
+    const chip = screen.getByTestId('status-stuck')
+    expect(chip.textContent).toContain('1 件卡住了')
+    fireEvent.click(chip)
+    await waitFor(() => {
+      expect(screen.getAllByTestId('work-row').map((r) => r.getAttribute('data-id'))).toEqual([
+        'matter:m_stuck',
+      ])
+    })
+  })
+
+  it('看板：「卡住了」那列有东西才出', async () => {
+    state.work = realWork()
+    openAt()
+    await screen.findAllByTestId('work-row')
+    fireEvent.click(screen.getByTestId('work-view-board'))
+    await screen.findAllByTestId('work-board-card')
+    expect(
+      screen.getAllByTestId('work-board-column').map((c) => c.getAttribute('data-group')),
+    ).toEqual(['doing', 'stuck', 'queued', 'waiting', 'done'])
+  })
+
+  it('看板：没有卡住的 → 还是四列', async () => {
+    openAt()
+    await screen.findAllByTestId('work-row')
+    fireEvent.click(screen.getByTestId('work-view-board'))
+    await screen.findAllByTestId('work-board-card')
+    expect(
+      screen.getAllByTestId('work-board-column').map((c) => c.getAttribute('data-group')),
+    ).toEqual(['doing', 'queued', 'waiting', 'done'])
   })
 })

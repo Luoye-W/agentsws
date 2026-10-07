@@ -76,11 +76,10 @@ async function localCloud(): Promise<{
         usage: { prompt_tokens: 100, completion_tokens: 20 },
       }
       if ((JSON.parse(body) as { stream?: boolean }).stream === true) {
-        // 随便聊走流式：一段 SSE
+        // 随便聊走流式：一段 SSE。WP243：官方接口那一条推荐也内部走流式——推荐那一次回推荐
+        const content = body.includes('可选的职责') ? reply.choices[0]?.message.content : '在的'
         res.writeHead(200, { 'content-type': 'text/event-stream' })
-        res.write(
-          `data: ${JSON.stringify({ choices: [{ index: 0, delta: { content: '在的' } }] })}\n\n`,
-        )
+        res.write(`data: ${JSON.stringify({ choices: [{ index: 0, delta: { content } }] })}\n\n`)
         res.write(
           `data: ${JSON.stringify({ choices: [{ index: 0, delta: {}, finish_reason: 'stop' }], usage: reply.usage })}\n\n`,
         )

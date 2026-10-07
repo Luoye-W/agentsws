@@ -10,6 +10,7 @@
  * | 官网 | 网站运营那几条（Shopify 说得更确定）+ 网站客服、网站在线客服 |
  * | Amazon listing / 店铺 | Amazon 客服 |
  * | 社媒链接 | 社媒运营里**对应那几条渠道**（认不出来的平台一条都不推） |
+ * | 刚开的 Shopify 空店（WP244） | 建站：Shopify 整站搭建、网页模板（排最前） |
  *
  * 纯函数，与界面分开：它错了的后果是新用户第一眼看到的推荐是别人的活。
  */
@@ -48,6 +49,8 @@ const PLATFORM_LABEL: Record<string, string> = {
 const WEB_OPS = 'web-ops'
 const SITE_CARE = ['dtc.support', 'dtc.live-chat']
 const AMAZON_CARE = 'amz.support'
+/** WP244：空店先要把站搭起来——建站里的整站搭建与网页模板（`apps/server/src/org.ts` 的 `site`）。 */
+const SITE_BUILD = ['site.shopify-build', 'site.shopify-theme']
 
 export interface RecommendInput {
   run?: BrandIntakeRun
@@ -71,6 +74,9 @@ export function recommendFromIntake({ run, positions }: RecommendInput): DutyRec
   const kinds = new Set(run.inputs.map((i) => i.kind))
   const website = kinds.has('website')
   const amazon = kinds.has('amazon_listing') || kinds.has('amazon_storefront')
+  // WP244：刚开的 Shopify 空店——先把站搭起来（排在最前）
+  if (website && run.fresh_store === true)
+    for (const id of SITE_BUILD) push(id, '官网分析：店铺还是 Shopify 初始状态，先把站搭起来')
   // 官网 = 有一个自己的店要运营；Shopify 只是让这一条更确定，不是它的前提
   if (website) {
     const shopify = run.profile.storefront_platform?.value === 'shopify'

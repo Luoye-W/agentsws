@@ -21,7 +21,14 @@ export {
 export type { BudgetCtx, BudgetScopeState, CapSpec, Reservation } from './ledger.js'
 export { BudgetLedger } from './ledger.js'
 // WP242：网络层失败的真原因（cause.code）
-export { describeFetchError, isTransientNetError, type NetCause, netCauseOf } from './net-cause.js'
+export {
+  describeFetchError,
+  isTransientNetError,
+  type NetCause,
+  netCauseOf,
+  STREAM_INCOMPLETE_CODE,
+  streamIncompleteError,
+} from './net-cause.js'
 export { staticPrefixHash, staticPrefixLength, truncateToHour } from './prefix.js'
 export type {
   CatalogHit,
@@ -116,6 +123,8 @@ export {
   // WP147：工具结果里的截图怎么出线（OpenAI 兼容口）
   TOOL_IMAGE_PLACEHOLDER,
   TOOL_IMAGES_LEAD,
+  // WP243：「关思考」在各家线上的写法
+  thinkingOffFields,
   toWireMessages,
 } from './providers/openai-compatible.js'
 export type { OpenAiImageOptions } from './providers/openai-images.js'

@@ -14,8 +14,14 @@ import {
 const NOW = '2026-10-06T08:00:00.000Z'
 
 describe('分组', () => {
-  it('四组的顺序 = 列表从上到下、看板从左到右', () => {
-    expect(POSITION_WORK_GROUPS).toEqual(['doing', 'queued', 'waiting', 'done'])
+  it('五组的顺序 = 列表从上到下、看板从左到右（WP244 加「卡住了」，排在进行中后面）', () => {
+    expect(POSITION_WORK_GROUPS).toEqual(['doing', 'stuck', 'queued', 'waiting', 'done'])
+  })
+
+  it('WP244：「卡住了」只收事项，待办拖不进去', () => {
+    expect(canMoveWorkItem({ kind: 'todo', group: 'doing' }, 'stuck')).toBe(false)
+    expect(canMoveWorkItem({ kind: 'matter', group: 'doing' }, 'stuck')).toBe(false)
+    expect(todoStatusForGroup('stuck')).toBe('blocked')
   })
 
   it('事项：开着 = 进行中，等着 = 等别人，关了 = 已完成', () => {
@@ -66,7 +72,8 @@ describe('看板拖动', () => {
   })
 
   it('拖到哪列改成哪个待办状态（与分组规则互逆）', () => {
-    for (const g of POSITION_WORK_GROUPS.filter((x) => x !== 'queued'))
+    // 「排着的」「卡住了」不收拖动（WP244：卡住了只收事项），只看能拖进去的那几列
+    for (const g of POSITION_WORK_GROUPS.filter((x) => x !== 'queued' && x !== 'stuck'))
       expect(todoGroupOf(todoStatusForGroup(g), undefined, NOW)).toBe(g)
     expect(todoStatusForGroup('queued')).toBe('open')
   })

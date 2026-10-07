@@ -380,7 +380,11 @@ import {
   type OnboardingAssembly,
   storefrontPlatformChoices,
 } from './onboarding.js'
-import { modelSuggester, sha256 as suggestSha } from './onboarding-suggest.js'
+import {
+  modelSuggester,
+  SUGGEST_MAX_OUTPUT_TOKENS,
+  sha256 as suggestSha,
+} from './onboarding-suggest.js'
 import { createOrg, type OrgAssembly } from './org.js'
 import { createOrgDuplicateScan, type OrgDuplicateScan } from './org-duplicates.js'
 import {
@@ -3785,6 +3789,13 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
             !(Object.values(SCHEDULE_HANDLERS) as string[]).includes(t.handler),
         ),
       socialPosts: () => social.posts(),
+      // WP244：工作里开着的事项按最近那一轮运行分组（在跑 / 答完了 / 卡住了）
+      runningMatters: () => new Set((runtime?.activeRuns() ?? []).map((r) => r.matter_id)),
+      // WP244：卡住了说缺什么——这条职责还缺的必需连接（连接目录按品牌装好之后才有）
+      missingConnections: (role_id) =>
+        (directoryAssemblies.get(ws)?.roleGaps([role_id]) ?? [])
+          .filter((g) => g.required && !g.connected)
+          .map((g) => g.name.zh),
     })
     positionAssemblies.set(ws, positionsAssembly)
     // 六层技能里的 `position` 那一层、以及岗位层上下文那三样，都从这里来
@@ -5583,6 +5594,12 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
               purpose: 'extraction',
             },
             model: ref,
+            /*
+             * WP243：一次性抽取——不要思考、封住输出上限。10-06 真机那一次出了 8859 个 token、
+             * 等了 38 秒；答案本身只是一小段紧凑 JSON。
+             */
+            max_output_tokens: SUGGEST_MAX_OUTPUT_TOKENS,
+            thinking: 'off',
           })
           return completion.text
         })

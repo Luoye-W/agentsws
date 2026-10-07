@@ -2576,6 +2576,9 @@ const zh: Table = {
   'intake.confirm': '看着没问题',
   'intake.reanalyze': '重新分析',
   'intake.policies': '另外还读到 {count} 份政策，确认后进知识库（标「自动分析，待核」）。',
+  // WP244：刚开的 Shopify 空店
+  'intake.fresh': '店铺还是 Shopify 初始状态（店名 My Store、首页没改过），品牌资料请自己填。',
+  'intake.empty': '没填',
   'intake.field.brand_name': '品牌名',
   'intake.field.legal_name': '公司全称',
   'intake.field.one_liner': '一句话',
@@ -6504,6 +6507,9 @@ const en: Table = {
   'intake.reanalyze': 'Analyse again',
   'intake.policies':
     'We also read {count} policy pages. Confirming files them under knowledge, marked "auto-analysed, unverified".',
+  'intake.fresh':
+    'This store is still a fresh Shopify store (named My Store, default home page). Please fill in the brand details yourself.',
+  'intake.empty': 'Not set',
   'intake.field.brand_name': 'Brand name',
   'intake.field.legal_name': 'Legal name',
   'intake.field.one_liner': 'In one line',
