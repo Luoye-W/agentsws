@@ -277,7 +277,8 @@ class StoreLookupFailure extends Error {
 }
 
 /** CLI 说的是「没登录 / 会话过期」。 */
-const LOGIN_HINT = /not logged in|log ?in again|auth login|session (?:has )?expired|unauthori[sz]ed|\b401\b|reauthenticat/i
+const LOGIN_HINT =
+  /not logged in|log ?in again|auth login|session (?:has )?expired|unauthori[sz]ed|\b401\b|reauthenticat/i
 
 /** `store list --json` 的一行 → 下拉框的一行（不是 `xxx.myshopify.com` 的不要）。 */
 export function storeChoiceOf(row: unknown, orgName?: string): SiteThemeStoreChoice | undefined {
@@ -556,7 +557,13 @@ export function createSiteTheme(options: SiteThemeOptions): SiteThemeAssembly {
       return { status: 'failed', stores: [], checked_at: at, message: STORE_LOOKUP_TEXT.failed }
     }
     if (found.size === 0 && unresolved)
-      return { status: 'failed', stores: [], checked_at: at, message: NEED_TEXT.login, need_login: true }
+      return {
+        status: 'failed',
+        stores: [],
+        checked_at: at,
+        message: NEED_TEXT.login,
+        need_login: true,
+      }
     const stores = [...found.values()].sort((a, b) => a.store.localeCompare(b.store))
     return stores.length === 0
       ? { status: 'none', stores: [], checked_at: at }
@@ -613,6 +620,7 @@ export function createSiteTheme(options: SiteThemeOptions): SiteThemeAssembly {
         status: lookup.status,
         stores: lookup.stores.length,
         ...(lookup.need_login === true ? { need_login: true } : {}),
+        ...(opts.relogin === true ? { after_login: true } : {}),
       })
       return lookup
     })().finally(() => {

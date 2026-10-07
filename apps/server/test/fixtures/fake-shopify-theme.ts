@@ -5,6 +5,10 @@
  * `state.json`（子进程环境走白名单，传不进路径，只能靠脚本自己的位置找）；每次调用记一行到 `calls.jsonl`
  * （参数、工作目录、环境变量名——**不记值**，凭据断言看的是「有没有这个名字」）。
  * 脚本旁边放一个 `logged-out` 文件 = 模拟 CLI 自己的会话过期（要碰店铺的命令报「没登录」）。
+ *
+ * WP258：`organization list --json` / `store list --json` 照 4.8.5 发行包的样子回话（`state.orgs` 没设 =
+ * 这条命令不认识，退出 2——老测试照旧走「没找成 → 手填」）：多组织又没带 `--organization-id` 时非交互报错；
+ * `stores-fail` 文件 = 网络错。
  */
 import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -24,6 +28,26 @@ const DIRS = ['assets','blocks','config','layout','locales','sections','snippets
 const readTheme = (root) => { const out = {}; for (const top of DIRS) { const d = path.join(root, top); if (!fs.existsSync(d)) continue; const walk = (x) => { for (const n of fs.readdirSync(x)) { const f = path.join(x, n); if (fs.statSync(f).isDirectory()) walk(f); else out[path.relative(root, f).split(path.sep).join('/')] = fs.readFileSync(f, 'utf8') } }; walk(d) } return out }
 const view = (t) => ({ id: Number(t.id), name: t.name, role: t.role, shop: store, preview_url: 'https://' + store + '?preview_theme_id=' + t.id, editor_url: 'https://' + store + '/admin/themes/' + t.id + '/editor' })
 if (argv[0] === 'version') { console.log('4.8.5'); process.exit(0) }
+const loggedOut = fs.existsSync(path.join(here, 'logged-out'))
+const storesFail = fs.existsSync(path.join(here, 'stores-fail'))
+if (argv[0] === 'organization' && argv[1] === 'list') {
+  if (!state.orgs) { console.error('unknown'); process.exit(2) }
+  if (storesFail) { console.error('Error: getaddrinfo ENOTFOUND app.shopify.com'); process.exit(1) }
+  if (loggedOut) { process.stdout.write(JSON.stringify({ organizations: [] }, null, 2)); process.exit(0) }
+  process.stdout.write(JSON.stringify({ organizations: state.orgs.map((o) => ({ id: o.id, gid: 'gid://shopify/Organization/' + o.id, name: o.name })) }, null, 2)); process.exit(0)
+}
+if (argv[0] === 'store' && argv[1] === 'list') {
+  if (!state.orgs) { console.error('unknown'); process.exit(2) }
+  if (storesFail) { console.error('Error: getaddrinfo ENOTFOUND app.shopify.com'); process.exit(1) }
+  if (loggedOut) { console.error('Error: You are not logged in. Run shopify auth login (401 Unauthorized)'); process.exit(1) }
+  if (state.orgs.length === 0) { process.stdout.write(JSON.stringify({ stores: [] }, null, 2)); process.exit(0) }
+  const id = flag('--organization-id')
+  let org
+  if (id !== undefined) { org = state.orgs.find((o) => o.id === id); if (!org) { console.error('Organization with ID ' + id + ' not found.'); process.exit(1) } }
+  else if (state.orgs.length > 1 && process.env.CI) { console.error('An organization ID is required to list stores non-interactively.\\nProvide \`--organization-id\`, for example \`--organization-id 1234567\`. Run \`shopify organization list\` to find IDs.'); process.exit(1) }
+  else org = state.orgs[0]
+  process.stdout.write(JSON.stringify({ stores: org.stores.map((s, i) => ({ id: 'gid://shopify/Shop/' + (900 + i), store: s.store, createdAt: '2026-10-0' + (i + 1) + 'T00:00:00Z', organizationId: org.id, organizationName: org.name, name: s.name, plan: s.plan })), organization: { id: org.id, name: org.name } }, null, 2)); process.exit(0)
+}
 if (argv[0] !== 'theme') { console.error('unknown'); process.exit(2) }
 const sub = argv[1]
 const remote = ['list','pull','push','publish'].includes(sub)
@@ -73,6 +97,16 @@ export interface FakeShopifyTheme {
   calls(): { argv: string[]; cwd: string; env: string[]; home?: string; appdata?: string }[]
   themes(): { id: string; name: string; role: string; files: Record<string, string> }[]
   setLoggedOut(out: boolean): void
+  /** WP258：这个账号下的组织与店（不设 = `store list` / `organization list` 这两条命令不认识）。 */
+  setOrgs(orgs: FakeOrg[] | undefined): void
+  /** WP258：找店那两条命令报网络错。 */
+  setStoresFail(fail: boolean): void
+}
+
+export interface FakeOrg {
+  id: string
+  name: string
+  stores: { store: string; name: string; plan: string }[]
 }
 
 export function writeFakeShopifyTheme(dir: string): FakeShopifyTheme {
@@ -106,6 +140,18 @@ export function writeFakeShopifyTheme(dir: string): FakeShopifyTheme {
     setLoggedOut: (out) => {
       const flag = join(dir, 'logged-out')
       if (out) writeFileSync(flag, '1')
+      else rmSync(flag, { force: true })
+    },
+    setOrgs: (orgs) => {
+      const file = join(dir, 'state.json')
+      const state = JSON.parse(readFileSync(file, 'utf8')) as Record<string, unknown>
+      if (orgs === undefined) delete state.orgs
+      else state.orgs = orgs
+      writeFileSync(file, JSON.stringify(state))
+    },
+    setStoresFail: (fail) => {
+      const flag = join(dir, 'stores-fail')
+      if (fail) writeFileSync(flag, '1')
       else rmSync(flag, { force: true })
     },
   }
