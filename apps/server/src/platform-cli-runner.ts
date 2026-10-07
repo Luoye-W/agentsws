@@ -22,7 +22,7 @@
  */
 import { spawn } from 'node:child_process'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
-import { delimiter, dirname, join } from 'node:path'
+import { delimiter, dirname, join, posix, win32 } from 'node:path'
 import { stripVTControlCharacters } from 'node:util'
 import type { PlatformCliJobView } from '@agentsws/api'
 import type { PlatformCliSpec } from '@agentsws/contracts'
@@ -116,9 +116,16 @@ export function defaultSpawnTool(): SpawnTool {
 // ── 私有安装在哪、怎么起 ────────────────────────────────────────────────
 
 /** 这个 CLI 的私有安装目录：`<tools>/<cli id>`。 */
-export function privateCliDir(toolsDir: string, spec: Pick<PlatformCliSpec, 'id'>): string {
-  return join(toolsDir, spec.id)
+export function privateCliDir(
+  toolsDir: string,
+  spec: Pick<PlatformCliSpec, 'id'>,
+  platform: string = process.platform,
+): string {
+  return pathFor(platform).join(toolsDir, spec.id)
 }
+
+/** 按平台拼路径（Windows 的路径在 mac 上的单测里也拼得对）。 */
+const pathFor = (platform: string): typeof posix => (platform === 'win32' ? win32 : posix)
 
 /**
  * 私有安装的入口脚本（`node_modules/<npm>/package.json` 里 `bin[spec.bin]` 指的那个文件）；
@@ -129,8 +136,14 @@ export function privateCliEntry(
   spec: Pick<PlatformCliSpec, 'id' | 'npm' | 'bin'>,
   exists: (path: string) => boolean = existsSync,
   read: (path: string) => string = (p) => readFileSync(p, 'utf8'),
+  platform: string = process.platform,
 ): string | undefined {
-  const pkgDir = join(privateCliDir(toolsDir, spec), 'node_modules', ...spec.npm.split('/'))
+  const { join } = pathFor(platform)
+  const pkgDir = join(
+    privateCliDir(toolsDir, spec, platform),
+    'node_modules',
+    ...spec.npm.split('/'),
+  )
   const pkgFile = join(pkgDir, 'package.json')
   if (!exists(pkgFile)) return undefined
   try {
@@ -156,8 +169,11 @@ export function cliInvocation(
   nodeExec: string,
   spec: Pick<PlatformCliSpec, 'id' | 'npm' | 'bin'>,
   exists?: (path: string) => boolean,
+  read?: (path: string) => string,
+  platform?: string,
 ): CliInvocation {
-  const entry = toolsDir === undefined ? undefined : privateCliEntry(toolsDir, spec, exists)
+  const entry =
+    toolsDir === undefined ? undefined : privateCliEntry(toolsDir, spec, exists, read, platform)
   return entry === undefined
     ? { command: spec.bin, prefix: [], source: 'system' }
     : { command: nodeExec, prefix: [entry], source: 'app' }

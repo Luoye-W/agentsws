@@ -158,6 +158,8 @@ export interface EnsureNpmOptions {
   platform?: string
   /** 下载超时（毫秒），默认 2 分钟。 */
   timeoutMs?: number
+  /** 钉哪一版（测试换成自己造的包；不给 = {@link NPM_RUNTIME}）。 */
+  pin?: { version: string; integrity: string }
   /** 进度：开始下载 npm 时叫一声（界面上的「下载中」）。 */
   onDownload?: () => void
 }
@@ -176,11 +178,12 @@ export async function ensureNpmCli(options: EnsureNpmOptions): Promise<string> {
   for (const candidate of bundledNpmCandidates(options.nodeExec, options.platform)) {
     if (exists(candidate)) return candidate
   }
-  const cached = cachedNpmCli(options.toolsDir)
+  const pin = options.pin ?? NPM_RUNTIME
+  const cached = cachedNpmCli(options.toolsDir, pin.version)
   if (exists(cached)) return cached
   options.onDownload?.()
   const doFetch = options.fetchImpl ?? fetch
-  const url = npmTarballUrl(options.registry ?? DEFAULT_NPM_REGISTRY)
+  const url = npmTarballUrl(options.registry ?? DEFAULT_NPM_REGISTRY, pin.version)
   let bytes: Uint8Array
   try {
     const res = await doFetch(url, { signal: AbortSignal.timeout(options.timeoutMs ?? 120_000) })
@@ -189,7 +192,7 @@ export async function ensureNpmCli(options: EnsureNpmOptions): Promise<string> {
   } catch (err) {
     throw new NpmRuntimeError('network', `下载 npm 失败：${url}`, { cause: err })
   }
-  if (!integrityOk(bytes, NPM_RUNTIME.integrity))
+  if (!integrityOk(bytes, pin.integrity))
     throw new NpmRuntimeError('integrity', '下载的 npm 校验不对（sha512 不一致），没有安装')
   const finalDir = dirname(dirname(dirname(cached)))
   const staging = `${finalDir}.part-${process.pid}-${Date.now().toString(36)}`
