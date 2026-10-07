@@ -1,5 +1,5 @@
 /**
- * WP249：内存里的「old.reddit 官方号页面」替身（**不访问 reddit.com、不起浏览器**）。
+ * WP249：内存里的「old.reddit 官方号页面」替身（**不访问 reddit.com、不起浏览器**）——测试与 demo 共用。
  *
  * 照 `page.ts` 的 `AutomationPage` 那几个口子演一个登着版主号的 old.reddit：版务队列（`.json` 与
  * 页面两种）、版规、帖子页回复框、封禁页。点击 / 填写按选择器认；**写请求过网络闸**（与真页面同一个
@@ -10,7 +10,7 @@ import {
   type RedditBrowserPlan,
   OLD_REDDIT_SELECTORS as S,
 } from '@agentsws/social-core'
-import type { AutomationPage, PageGoto, RawThing } from '../src/reddit-official-browser/page.js'
+import type { AutomationPage, PageGoto, RawThing } from './page.js'
 
 export interface FakeThing {
   kind: 't3' | 't1'
@@ -199,5 +199,61 @@ export function createFakeOldReddit(origin: string, sub = 'inmoxr'): FakeOldRedd
       close: async () => undefined,
     }
   }
+  return site
+}
+
+/**
+ * demo 用的那一份：一个登着官方号的自家版，队列里各类都有一两条（Nordvolt 的演示品牌）。
+ * 「登录官方号」在 demo 里打开即登录（同 DeepSeek 账号替身的做法），不连 reddit.com。
+ */
+export function demoOldReddit(sub = 'nordvolt'): FakeOldReddit {
+  const site = createFakeOldReddit('https://old.reddit.com', sub)
+  site.loggedIn = true
+  site.username = 'nordvolt_official'
+  site.rules = ['No spam or self-promotion', 'Be civil', 'Stay on topic', 'No order issues here']
+  site.queues.modqueue = [
+    {
+      kind: 't3',
+      id: 'q1spam',
+      title: 'Cheap Nordvolt hubs 70% off — DM me on telegram',
+      body: 'wholesale price, ship worldwide https://bit.ly/nv-deal',
+      author: 'deal_bot_88',
+      reports: ['No spam or self-promotion', 'Spam'],
+    },
+    {
+      kind: 't1',
+      id: 'q2rude',
+      title: 'Hub keeps dropping my second monitor',
+      body: 'Read the manual, idiot. Works fine for everyone else.',
+      author: 'grumpy_dock',
+      reports: ['Be civil'],
+    },
+    {
+      kind: 't3',
+      id: 'q3topic',
+      title: 'What desk mat are you all using?',
+      body: 'Not hub related but this sub has great taste.',
+      author: 'desk_wanderer',
+      reports: ['Stay on topic'],
+    },
+    {
+      kind: 't3',
+      id: 'q4held',
+      title: 'My 3-monitor setup with the Nordvolt dock',
+      body: 'Took a while to get the cables right, photos in the comments.',
+      author: 'new_user_2026',
+      reports: [],
+    },
+  ]
+  site.queues.unmoderated = [
+    {
+      kind: 't3',
+      id: 'q5new',
+      title: 'Firmware 2.1 fixed my USB-C flicker',
+      body: 'Updated last night and the flicker is gone. Thanks team!',
+      author: 'happy_maker',
+      reports: [],
+    },
+  ]
   return site
 }

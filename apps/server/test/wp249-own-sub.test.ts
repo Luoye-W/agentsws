@@ -15,7 +15,7 @@
 import type { Assignment, OwnSubQueueView } from '@agentsws/contracts'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createServer, type Server } from '../src/index.js'
-import { createFakeOldReddit, type FakeOldReddit } from './fake-old-reddit-page.js'
+import { createFakeOldReddit, type FakeOldReddit } from '../src/reddit-official-browser/stand-in.js'
 
 const T0 = '2026-10-07T09:00:00.000Z'
 const SECRETS_KEY = 'e'.repeat(64)

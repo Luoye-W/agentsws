@@ -216,6 +216,8 @@ export {
   type ReconcileReport,
   type ReconcileState,
 } from './reconcile.js'
+// WP249：Reddit 官方号浏览器通道的内存替身（demo 用：打开即登录，不连 reddit.com）
+export { demoOldReddit } from './reddit-official-browser/stand-in.js'
 export {
   createRuntime,
   hasModelProvider,

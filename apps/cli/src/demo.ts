@@ -52,6 +52,7 @@ import {
   cloudStandIn,
   createServer,
   deepseekAccountStandIn,
+  demoOldReddit,
   demoWebSearch,
   periodQueryRunner,
 } from '@agentsws/server'
@@ -1423,6 +1424,14 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
      * demo 不该为了演示去敲 DeepSeek 的服务器，也不该在没网的机器上演不出这张卡。
      */
     deepseekAccount: deepseekAccountStandIn(),
+    /*
+     * WP249：「Reddit 官方号浏览器通道」在 demo 里是内存替身——「登录官方号」打开即登录，
+     * 自家版队列里各类都有一两条；不起浏览器、不连 reddit.com。
+     */
+    redditOfficialBrowser: {
+      openPage: demoOldReddit().opener(),
+      sleep: async () => undefined,
+    },
     /*
      * WP216：「Shopify CLI」卡的本机检测在 demo 里是替身——不跑这台机器上真的 `shopify`：
      * CLI 当作还没装、Node 当作 22.12.0，卡上演的是「第一步：装」那一档。
