@@ -18,6 +18,7 @@ export interface FakeDiscordMessage {
   author: { id: string; username: string; bot?: boolean }
   timestamp: string
   type?: number
+  mentions?: { id: string }[]
 }
 
 export interface FakeDiscord {
@@ -29,6 +30,8 @@ export interface FakeDiscord {
   everyone: bigint
   /** 机器人角色的权限位。 */
   botRole: bigint
+  /** WP257：频道 id → 频道名（没有就不回 name）。 */
+  names: Map<string, string>
   /** 频道 id → 覆写。 */
   overwrites: Map<string, { id: string; type: number; allow: string; deny: string }[]>
   /** 应用 flags（默认开了 Message Content Intent 的那一档）。 */
@@ -47,7 +50,7 @@ export interface FakeDiscord {
   say(
     channel: string,
     content: string,
-    opts?: { bot?: boolean; at?: string; type?: number },
+    opts?: { bot?: boolean; at?: string; type?: number; mentionBot?: boolean },
   ): string
   fetch: SocialFetch
 }
@@ -67,6 +70,7 @@ export function createFakeDiscord(options: { guild: string; now: () => string })
     channels: new Map(),
     everyone: VIEW_CHANNEL | READ_MESSAGE_HISTORY,
     botRole: 0n,
+    names: new Map(),
     overwrites: new Map(),
     appFlags: 1 << 19,
     botInGuild: true,
@@ -86,6 +90,7 @@ export function createFakeDiscord(options: { guild: string; now: () => string })
             : { id: `u_${(list.length % 3) + 1}`, username: `member${(list.length % 3) + 1}` },
         timestamp: opts.at ?? options.now(),
         ...(opts.type === undefined ? {} : { type: opts.type }),
+        ...(opts.mentionBot === true ? { mentions: [{ id: site.bot }] } : {}),
       })
       site.channels.set(channel, list)
       return id
@@ -114,7 +119,12 @@ export function createFakeDiscord(options: { guild: string; now: () => string })
       if (ch !== null) {
         const id = ch[1] as string
         if (!site.channels.has(id)) return json(404, { code: 10003 })
-        return json(200, { id, permission_overwrites: site.overwrites.get(id) ?? [] })
+        const name = site.names.get(id)
+        return json(200, {
+          id,
+          ...(name === undefined ? {} : { name }),
+          permission_overwrites: site.overwrites.get(id) ?? [],
+        })
       }
       const m = path.match(/^\/channels\/(\d+)\/messages$/u)
       if (m !== null) {
