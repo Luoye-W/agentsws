@@ -77,7 +77,8 @@ export const POLICY_MIN_CHARS_CJK = 80
 const POLICY_WORDS =
   /refund|return|exchange|shipping|deliver|warranty|privacy|terms|退货|退款|换货|运费|物流|配送|保修|隐私|条款|返品|配送料|保証|プライバシー|환불|반품|배송|교환|개인정보/i
 /** 中日韩文字（汉字、平假名、片假名、谚文）。 */
-const CJK_CHAR = /[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\uac00-\ud7af\u1100-\u11ff]/gu
+const CJK_CHAR =
+  /[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\uac00-\ud7af\u1100-\u11ff]/gu
 /** 算「字」的那些：字母、数字、中日韩文字（空白与标点不算）。 */
 const WORD_CHAR = /[\p{L}\p{N}]/gu
 
