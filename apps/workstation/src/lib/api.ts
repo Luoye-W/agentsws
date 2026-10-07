@@ -1194,6 +1194,48 @@ export interface ProviderView {
   planned?: boolean
   /** WP25：两种以上接法时给出来，第一条是推荐的那条。 */
   auth_options?: ProviderAuthOption[]
+  /** WP111：这张卡要本机连接器。 */
+  requires_runtime?: boolean
+  /** WP247：本机连接器还没下载 / 没起来，但能按需下载——点了先弹「要先下载连接器」。 */
+  needs_download?: boolean
+}
+
+/** WP247：连接器下载那件事走到哪了。 */
+export interface LocalConnectorJobView {
+  phase: 'preparing' | 'downloading' | 'verifying' | 'done' | 'failed' | 'cancelled'
+  version: string
+  started_at: string
+  finished_at?: string
+  fetched: number
+  total: number
+  error?: {
+    code: 'network' | 'timeout' | 'disk_full' | 'permission' | 'integrity' | 'busy' | 'failed'
+    detail?: string
+  }
+}
+
+/** WP247：本机连接器（按需下载、桌面壳起停）的样子。 */
+export interface LocalConnectorView {
+  status: 'not_installed' | 'downloading' | 'starting' | 'ready' | 'error' | 'stopped'
+  version: string
+  download_bytes: number
+  installed?: string
+  previous?: string
+  update_available: boolean
+  desired: 'run' | 'stop'
+  job?: LocalConnectorJobView
+  supervisor?: {
+    state: 'stopped' | 'starting' | 'running' | 'backoff' | 'failed'
+    version?: string
+    port: number
+    pid?: number
+    attempts: number
+    started_at?: string
+    last_exit?: { code: number | null; signal: string | null; at: string }
+    retry_in_ms?: number
+    last_error?: string
+    updated_at: string
+  }
 }
 
 export interface RuntimeStatusView {
@@ -1205,6 +1247,8 @@ export interface RuntimeStatusView {
   secrets_vault: { available: boolean; reason?: string }
   /** WP44：出站解析环境（代理 fake-IP 会让连接器把外网域名当内网拦下）。 */
   egress?: { fake_ip_detected: boolean; trusted_hosts: string[]; detail?: string }
+  /** WP247：本机连接器归工作台管时才有（桌面版）。 */
+  local?: LocalConnectorView
 }
 
 export interface BeginConnectResult {
@@ -1226,6 +1270,20 @@ export const listProviders = (assignment?: string): Promise<{ providers: Provide
 
 export const getConnectRuntime = (assignment?: string): Promise<RuntimeStatusView> =>
   api<RuntimeStatusView>('/v1/connections/runtime', withAssignment(assignment))
+
+/** WP247：本机连接器的五个动作（只给人点；每个都回最新状态）。 */
+export type LocalConnectorAction = 'install' | 'cancel' | 'restart' | 'rollback' | 'remove'
+
+export const localConnectorAction = (
+  action: LocalConnectorAction,
+  assignment?: string,
+): Promise<RuntimeStatusView> =>
+  api<RuntimeStatusView>(
+    action === 'remove'
+      ? '/v1/connections/runtime/local'
+      : `/v1/connections/runtime/local/${action}`,
+    { method: action === 'remove' ? 'DELETE' : 'POST', ...withAssignment(assignment) },
+  )
 
 export const beginConnect = (
   service: string,
