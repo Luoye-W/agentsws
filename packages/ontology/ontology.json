@@ -44,6 +44,7 @@
     "packages/contracts/src/messages.ts",
     "packages/contracts/src/model.ts",
     "packages/contracts/src/official-plugins.ts",
+    "packages/contracts/src/own-sub.ts",
     "packages/contracts/src/packages.ts",
     "packages/contracts/src/platform-kits.ts",
     "packages/contracts/src/position-plan.ts",
@@ -115,7 +116,7 @@
     "packages/roles/roles/social/x.yml",
     "packages/roles/roles/social/youtube.yml"
   ],
-  "source_digest": "95ef1aec340005c657cbce95c7c0de90",
+  "source_digest": "862cf363357a1cfeea3c100eb97bf74c",
   "objects": [
     {
       "id": "ad",
@@ -4520,6 +4521,12 @@
         {
           "name": "member_count",
           "type": "number",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "own_subreddit",
+          "type": "boolean",
           "sensitivity": "internal",
           "optional": true
         },
