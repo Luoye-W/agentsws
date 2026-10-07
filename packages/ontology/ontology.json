@@ -63,6 +63,7 @@
     "packages/contracts/src/social.ts",
     "packages/contracts/src/standby.ts",
     "packages/contracts/src/subscription.ts",
+    "packages/contracts/src/task-text.ts",
     "packages/contracts/src/work.ts",
     "packages/core/src/guardrail.ts",
     "packages/deck/src/queries.ts",
@@ -117,7 +118,7 @@
     "packages/roles/roles/social/x.yml",
     "packages/roles/roles/social/youtube.yml"
   ],
-  "source_digest": "8f9dc2b04d64dcb403cf37025dced3ef",
+  "source_digest": "8ce6d9ea1dfdc18d5b2e0fb223c2d666",
   "objects": [
     {
       "id": "ad",

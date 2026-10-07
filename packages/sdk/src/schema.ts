@@ -36586,11 +36586,12 @@ export interface operations {
           title: string
           goal_id?: string
           summary?: string
+          run?: boolean
         }
       }
     }
     responses: {
-      /** @description { matter: Matter } */
+      /** @description { matter: Matter, run_id? } */
       200: {
         headers: {
           [name: string]: unknown

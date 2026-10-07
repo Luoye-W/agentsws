@@ -41150,11 +41150,11 @@
                   "title": {
                     "type": "string",
                     "minLength": 1,
-                    "maxLength": 200
+                    "maxLength": 4000
                   },
                   "summary": {
                     "type": "string",
-                    "maxLength": 2000
+                    "maxLength": 4000
                   },
                   "pinned": {
                     "maxItems": 20,
@@ -41519,7 +41519,7 @@
         ],
         "responses": {
           "200": {
-            "description": "{ matter: Matter }",
+            "description": "{ matter: Matter, run_id? }",
             "content": {
               "application/json": {
                 "schema": {
@@ -41610,7 +41610,7 @@
           "range": "own",
           "sensitivity": "internal"
         },
-        "x-returns": "{ matter: Matter }",
+        "x-returns": "{ matter: Matter, run_id? }",
         "requestBody": {
           "required": true,
           "content": {
@@ -41626,7 +41626,7 @@
                   "title": {
                     "type": "string",
                     "minLength": 1,
-                    "maxLength": 120
+                    "maxLength": 4000
                   },
                   "goal_id": {
                     "type": "string",
@@ -41634,7 +41634,10 @@
                   },
                   "summary": {
                     "type": "string",
-                    "maxLength": 2000
+                    "maxLength": 4000
+                  },
+                  "run": {
+                    "type": "boolean"
                   }
                 },
                 "required": ["kind", "title"]
