@@ -17,6 +17,7 @@ import {
   MAX_DRAFT_OUTPUT,
   modelReplyDrafter,
   type ReplyDrafter,
+  replyBlockedReason,
   replyDraftPrompt,
   templateReply,
 } from '../src/social-reply-draft.js'
@@ -159,6 +160,17 @@ describe('WP255 起草（提示词与整理）', () => {
     expect(cleanDraft('Reply: hi')).toBe('hi')
     expect(cleanDraft(undefined)).toBe('')
     expect(cleanDraft('x'.repeat(MAX_DRAFT_OUTPUT + 50)).length).toBe(MAX_DRAFT_OUTPUT + 1)
+  })
+
+  it('打回原因说人话：承诺一句、禁用词原样列出；规则内部名不露出来', () => {
+    const both = replyBlockedReason({
+      commitment_hits: ['l3:refund#t3:en', 'unsourced_concession'],
+      banned_hits: ['最便宜'],
+    })
+    expect(both).toContain('第一人称承诺')
+    expect(both).toContain('禁用的词：最便宜')
+    expect(both).not.toContain('l3:refund')
+    expect(both).not.toContain('unsourced_concession')
   })
 
   it('模板照原话语言：中文 → 中文，其余 → 英文；没有作者名也通', () => {

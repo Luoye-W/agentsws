@@ -159,6 +159,8 @@ describe('WP255 自家版待处理里的「回复」', () => {
     const body = (await bad.json()) as { code: string; message: string }
     expect(body.code).toBe('invalid_input')
     expect(body.message).toContain('第一人称承诺')
+    // 给人看的话：不带规则内部名（`l3:refund#t3:en` 那种）
+    expect(body.message).not.toMatch(/[a-z]\d:|#t\d|unsourced_concession/u)
     expect(await cardCount()).toBe(before)
   })
 

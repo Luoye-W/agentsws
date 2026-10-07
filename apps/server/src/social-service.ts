@@ -89,7 +89,7 @@ import {
   type SocialExecutor,
   type SocialExecutorOptions,
 } from './social-executor.js'
-import { type ReplyDrafter, templateReply } from './social-reply-draft.js'
+import { type ReplyDrafter, replyBlockedReason, templateReply } from './social-reply-draft.js'
 import { recipientOf, type ScopeManagerRouter } from './supervisor.js'
 
 /**
@@ -954,7 +954,7 @@ export function createSocialService(options: SocialServiceOptions): SocialServic
       const account = accountOr404(thread.account_id)
       const text = input.text.trim()
       const scan = checkOutbound(text)
-      if (!scan.ok) throw new ApiError('invalid_input', scan.rewrite_instruction)
+      if (!scan.ok) throw new ApiError('invalid_input', replyBlockedReason(scan))
       const channel_label = socialChannelSpec(thread.channel)?.zh ?? thread.channel
       const target: ObjectRef = { type: 'community_thread', id: thread.id }
       const { level } = actionOf(actor.assignment_id, SOCIAL_ACTIONS.replyThread)
@@ -1066,7 +1066,7 @@ export function createSocialService(options: SocialServiceOptions): SocialServic
         text,
         source: ai === undefined ? 'template' : 'ai',
         ...(ai === undefined ? { note: '这次没用 AI：先给一句开头，你接着写。' } : {}),
-        ...(scan.ok ? {} : { warning: scan.rewrite_instruction }),
+        ...(scan.ok ? {} : { warning: replyBlockedReason(scan) }),
       }
     },
 

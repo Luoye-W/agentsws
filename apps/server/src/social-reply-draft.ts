@@ -79,3 +79,23 @@ export function modelReplyDrafter(complete: (prompt: string) => Promise<string>)
     }
   }
 }
+
+/**
+ * 回帖被承诺扫描拦下时给人看的那一句（「回复」框里就地显示）。
+ *
+ * 不用 `checkOutbound` 的 `rewrite_instruction` 原样：那句给模型看，带着规则内部名（`l3:refund#t3:en`），
+ * 非开发者看不懂。规则表还是同一份（`support-core` 的承诺扫描），这里只换说法；品牌禁用词是人写的词，原样列出。
+ */
+export function replyBlockedReason(scan: {
+  commitment_hits: readonly string[]
+  banned_hits: readonly string[]
+}): string {
+  const parts: string[] = []
+  if (scan.commitment_hits.length > 0)
+    parts.push(
+      '正文里有第一人称承诺或让步的话（比如「我们会退款」「保证明天到」）。去掉这类话再出卡；真要给什么，走对应的审批，别在群里许诺。',
+    )
+  if (scan.banned_hits.length > 0)
+    parts.push(`用了这个品牌禁用的词：${scan.banned_hits.join('、')}。换个说法再来。`)
+  return parts.join(' ')
+}
