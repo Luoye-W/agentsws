@@ -6,7 +6,7 @@
  * 这里**没有**点击、输入、提交的方法——想加也得先改这个文件，审核看得见。
  */
 import { chromium } from 'playwright-core'
-import { spawnChrome } from './chrome.js'
+import { type ChromeMode, spawnChrome } from './chrome.js'
 import { type ExtractArgs, type ExtractResult, extractRedditPage } from './extract.js'
 import type { Env } from './find-browser.js'
 import { requestVerdict } from './guard.js'
@@ -22,8 +22,22 @@ export interface PageRead {
   extract?: ExtractResult
 }
 
+/** WP246：这一页怎么读。 */
+export interface ReadPageOptions {
+  /**
+   * 用这份用户数据目录**自己的**登录态（读号）读：开在浏览器的默认上下文里（带着读号的 cookie），
+   * 页面脚本照样关、只读闸照样装。不给 = WP228 原来的一次性上下文（什么登录态都不带）。
+   */
+  profile?: boolean
+}
+
 export interface BrowserSession {
-  readPage(url: string, args: ExtractArgs, allowedHosts: readonly string[]): Promise<PageRead>
+  readPage(
+    url: string,
+    args: ExtractArgs,
+    allowedHosts: readonly string[],
+    options?: ReadPageOptions,
+  ): Promise<PageRead>
   close(): Promise<void>
   /** 进程退出的最后一刻同步结束浏览器（不等）。 */
   killNow(): void
@@ -36,6 +50,8 @@ export type SessionLauncher = (input: {
   profileDir: string
   platform: NodeJS.Platform
   env: Env
+  /** WP246：无头 / 有头最小化（缺省无头）。 */
+  mode?: ChromeMode
 }) => Promise<BrowserSession>
 
 const NAV_TIMEOUT_MS = 30_000
@@ -59,21 +75,44 @@ export const launchChromeSession: SessionLauncher = async (input) => {
     chrome.killNow()
     throw new Error(`连不上起好的浏览器：${err instanceof Error ? err.message : String(err)}`)
   }
+  const minimized = input.mode === 'minimized'
+  if (input.mode !== undefined && input.mode !== 'headless') {
+    // 有头：不收任何下载（无头那一档靠一次性上下文的 acceptDownloads: false）
+    const bcdp = await browser.newBrowserCDPSession().catch(() => undefined)
+    await bcdp?.send('Browser.setDownloadBehavior', { behavior: 'deny' }).catch(() => undefined)
+  }
   return {
-    async readPage(url, args, allowedHosts) {
-      const ctx = await browser.newContext({
-        javaScriptEnabled: false,
-        acceptDownloads: false,
-        serviceWorkers: 'block',
-      })
+    async readPage(url, args, allowedHosts, opts) {
+      const useProfile = opts?.profile === true
+      const shared = useProfile ? browser.contexts()[0] : undefined
+      const ctx =
+        shared ??
+        (await browser.newContext({
+          javaScriptEnabled: false,
+          acceptDownloads: false,
+          serviceWorkers: 'block',
+        }))
+      const page = await ctx.newPage()
       try {
-        const page = await ctx.newPage()
         let offSite: string | undefined
         /*
          * 闸装在 CDP 的 Fetch 一层而不是 Playwright 的 route：route 拦不到跳转的下一跳（302 到白名单外
          * 的站照样会发出去——本地假站点实测抓到过），Fetch 每一跳都停下来问一次。
          */
         const cdp = await ctx.newCDPSession(page)
+        if (shared !== undefined) {
+          // WP246：默认上下文没有「关脚本 / 挡 Service Worker」的上下文开关——在这一页上用 CDP 关
+          await cdp.send('Emulation.setScriptExecutionDisabled', { value: true })
+          await cdp.send('Network.enable')
+          await cdp.send('Network.setBypassServiceWorker', { bypass: true })
+        }
+        if (minimized) {
+          // 有头最小化：新开的这一页所在窗口收到最小化（不抢焦点、不挡人）
+          const { windowId } = await cdp.send('Browser.getWindowForTarget')
+          await cdp
+            .send('Browser.setWindowBounds', { windowId, bounds: { windowState: 'minimized' } })
+            .catch(() => undefined)
+        }
         const main = (await cdp.send('Page.getFrameTree')).frameTree.frame.id
         cdp.on('Fetch.requestPaused', (e) => {
           const v = requestVerdict(
@@ -114,7 +153,9 @@ export const launchChromeSession: SessionLauncher = async (input) => {
           extract,
         }
       } finally {
-        await ctx.close().catch(() => undefined)
+        // 读号那一档：只关这一页，上下文（登录态）留着；一次性上下文整个关掉
+        if (shared !== undefined) await page.close().catch(() => undefined)
+        else await ctx.close().catch(() => undefined)
       }
     },
     async close() {

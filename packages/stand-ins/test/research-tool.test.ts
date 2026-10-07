@@ -22,6 +22,7 @@ describe('WP220 read_reddit 的工具定义', () => {
     expect(def?.description).toContain('action 可以不填')
     const none = makeRequest({ roleId: 'dtc.support', allow: [], outputs: ['answer'] })
     expect(assemblePrompt(none).tools.find((t) => t.name === READ_REDDIT_TOOL)).toBeUndefined()
-    expect(RESEARCH_TOOL_NAMES).toEqual(['read_reddit'])
+    // WP246：加了 YouTube 字幕与网页转文字两个零配置的只读工具
+    expect(RESEARCH_TOOL_NAMES).toEqual(['read_reddit', 'read_youtube_transcript', 'read_webpage'])
   })
 })

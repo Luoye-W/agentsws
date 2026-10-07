@@ -28,8 +28,9 @@ import { ConnectionDirectorySection } from '@/components/connections/directory'
 // WP216：建站平台的官方 CLI 卡（平台没有 CLI 就不出）
 import { PlatformCliCard } from '@/components/connections/platform-cli-card'
 import { ProviderCard, type WizardPhase } from '@/components/connections/provider-card'
-import { RuntimeBar } from '@/components/connections/runtime-bar'
 // WP155（docs/81）：「搜索数据」一行（官方用积分 / 自带 key / 不接）
+import { ReadRoutesSection } from '@/components/connections/read-routes'
+import { RuntimeBar } from '@/components/connections/runtime-bar'
 import { SearchDataSection } from '@/components/connections/search-data'
 import { Hint } from '@/components/ui/hint'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -360,6 +361,9 @@ export function ConnectionsPage(): React.ReactNode {
 
       {/* WP155（docs/81）：SEO / GEO 用的搜索数据从哪来 */}
       <SearchDataSection {...(ownerId === undefined ? {} : { assignment: ownerId })} />
+
+      {/* WP246（决策 87 / 88）：取数路线——每个平台首选 → 备选、每级通不通、Reddit 读号 */}
+      <ReadRoutesSection {...(ownerId === undefined ? {} : { assignment: ownerId })} />
 
       {/* WP119（68）：浏览器插件——6 位配对码 + 已配上的那几个浏览器 */}
       <BrowserExtensionSection {...(ownerId === undefined ? {} : { assignment: ownerId })} />
