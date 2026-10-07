@@ -41150,11 +41150,11 @@
                   "title": {
                     "type": "string",
                     "minLength": 1,
-                    "maxLength": 200
+                    "maxLength": 4000
                   },
                   "summary": {
                     "type": "string",
-                    "maxLength": 2000
+                    "maxLength": 4000
                   },
                   "pinned": {
                     "maxItems": 20,
@@ -41519,7 +41519,7 @@
         ],
         "responses": {
           "200": {
-            "description": "{ matter: Matter }",
+            "description": "{ matter: Matter, run_id? }",
             "content": {
               "application/json": {
                 "schema": {
@@ -41610,7 +41610,7 @@
           "range": "own",
           "sensitivity": "internal"
         },
-        "x-returns": "{ matter: Matter }",
+        "x-returns": "{ matter: Matter, run_id? }",
         "requestBody": {
           "required": true,
           "content": {
@@ -41626,7 +41626,7 @@
                   "title": {
                     "type": "string",
                     "minLength": 1,
-                    "maxLength": 120
+                    "maxLength": 4000
                   },
                   "goal_id": {
                     "type": "string",
@@ -41634,7 +41634,10 @@
                   },
                   "summary": {
                     "type": "string",
-                    "maxLength": 2000
+                    "maxLength": 4000
+                  },
+                  "run": {
+                    "type": "boolean"
                   }
                 },
                 "required": ["kind", "title"]
@@ -62900,7 +62903,7 @@
     "/v1/site/theme/store": {
       "put": {
         "operationId": "setSiteThemeStore",
-        "summary": "网页模板：记下这个品牌的店铺地址（xxx.myshopify.com，或后台地址栏那一整串）。连了店的品牌以连接为准",
+        "summary": "网页模板：记下这个品牌的店铺地址（xxx.myshopify.com，或后台地址栏那一整串）。连了店的品牌以连接为准。`source=list` = 从登录账号下找到的店里选的（必须在清单里）",
         "tags": ["site"],
         "parameters": [
           {
@@ -63009,6 +63012,10 @@
                     "type": "string",
                     "minLength": 1,
                     "maxLength": 300
+                  },
+                  "source": {
+                    "type": "string",
+                    "enum": ["manual", "list"]
                   }
                 },
                 "required": ["store"]

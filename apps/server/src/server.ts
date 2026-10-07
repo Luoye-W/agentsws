@@ -2554,6 +2554,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           .list()
           .map((r) => r.shop)
           .sort(),
+      // WP258：品牌分析时从官网读到的 `xxx.myshopify.com`（找到好几家店时拿它对一下）
+      siteStore: () => onboardingRef?.shopifyDomainOf(ws),
       env,
       ...(options.siteTheme?.run === undefined ? {} : { run: options.siteTheme.run }),
       ...(options.siteTheme?.fetch === undefined ? {} : { fetch: options.siteTheme.fetch }),
@@ -6208,9 +6210,16 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           ...(support_email === undefined ? {} : { support_email }),
           ...(currency === undefined ? {} : { currency }),
         }
+        // WP258：官网里漏出来的 `xxx.myshopify.com` 存进档案（建站岗位登录后找店时拿它对一下）
+        const shopDomain = text(profile.shopify_domain)
+        const rememberShopDomain = (): void => {
+          if (shopDomain !== undefined)
+            onboarding.setShopifyDomain(actor.workspace_id as WorkspaceId, shopDomain)
+        }
         if (typeof legal !== 'string' || legal.trim() === '') {
           // 公司名、品牌名都还没有：档案已经在就只补这三格，没有档案不替人建
           onboarding.setBrandFacts(actor.workspace_id as WorkspaceId, facts)
+          rememberShopDomain()
           return
         }
         const brandName =
@@ -6237,6 +6246,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
             ...facts,
           },
         )
+        rememberShopDomain()
       },
       /**
        * WP121b（70 §3.5）：首批知识条目——政策要点与商品卡。
@@ -7925,7 +7935,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         const theme = await siteThemeOf(ws)
         if (theme === undefined) throw new ApiError('not_implemented', '这个品牌没装主题工坊')
         try {
-          return await theme.setStore(input.store)
+          return await theme.setStore(input.store, { source: input.source })
         } catch (e) {
           if (e instanceof SiteThemeError) throw new ApiError('invalid_input', e.message)
           throw e
@@ -8057,6 +8067,12 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     runner: platformCliRunner,
     loginStoreOf: platformCliLoginOf,
     sessionOf: (ws, spec) => cliSessionOf(ws, spec.id),
+    // WP258：登好了就去找这个账号下的店（后台跑；岗位页下一次刷新就看到结果）
+    onLoggedIn: (ws) => {
+      void siteThemeOf(ws as WorkspaceId)
+        .then((theme) => theme?.refreshStores({ relogin: true }))
+        .catch(() => undefined)
+    },
     displayNameOf: (name) => {
       const extra = skills.registry.frontmatterOf(name)?.extra
       const zh = extra?.display_name?.trim() ?? ''

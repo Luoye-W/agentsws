@@ -185,6 +185,8 @@ describe('54 §2 / §4 岗位页顶部：交给这个岗位一件事', () => {
     await waitFor(() => {
       expect(createMatterWithRole).toHaveBeenCalledWith('asg_store', {
         title: '把 A 商品降价 10%',
+        // WP259：用职责开 = 开完立刻起首轮运行
+        run: true,
       })
     })
   })
@@ -202,6 +204,8 @@ describe('54 §2 / §4 岗位页顶部：交给这个岗位一件事', () => {
     await waitFor(() => {
       expect(createMatterWithRole).toHaveBeenCalledWith('asg_content', {
         title: '把这篇文章发出去',
+        // WP259：用职责开 = 开完立刻起首轮运行
+        run: true,
       })
     })
     expect(navigate).toHaveBeenCalledWith('/matters/mat_3')

@@ -100,6 +100,7 @@ export {
   placeholderTextHits,
   policyLength,
   SHOPIFY_PLACEHOLDER_NAMES,
+  shopifyShopDomain,
 } from './site.js'
 export {
   hashSentence,

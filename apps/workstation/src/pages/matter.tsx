@@ -507,7 +507,15 @@ export function MatterPage(): React.ReactNode {
             </Button>
           </div>
         )}
-        <p className="text-sm text-muted-foreground" data-testid="matter-summary">
+        {/*
+          WP259：「交给它」的一大段原文也存在描述里——时间线第一条就是它的全文，
+          这里最多三行（保留换行），整段悬停看。
+        */}
+        <p
+          className="line-clamp-3 whitespace-pre-line text-sm text-muted-foreground"
+          data-testid="matter-summary"
+          title={view.matter.context.summary === '' ? undefined : view.matter.context.summary}
+        >
           {view.matter.context.summary}
         </p>
       </header>

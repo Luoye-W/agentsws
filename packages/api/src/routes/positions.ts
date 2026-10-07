@@ -25,6 +25,7 @@ import type {
   PositionWorkView,
   WorkspaceId,
 } from '@agentsws/contracts'
+import { fitTaskTitle, TASK_TEXT_MAX } from '@agentsws/contracts'
 import { z } from 'zod'
 import { ApiError } from '../errors.js'
 import { assignmentOf, body, ok, param, principalOf } from '../helpers.js'
@@ -60,9 +61,13 @@ export interface OpenAtPositionView {
 }
 
 const OpenBody = z.object({
-  /** 一句话就够（54 §2：岗位页顶部那个按钮） */
-  title: z.string().min(1).max(200),
-  summary: z.string().max(2000).optional(),
+  /**
+   * 一句话就够（54 §2：岗位页顶部那个按钮）。WP259：一大段多行也照收——超过事项标题上限
+   * 或多行就按 `fitTaskTitle` 拆（标题取第一句 / 前 40 字加「…」，完整原文进 `summary`，
+   * 路由与首轮运行都用完整原文）。
+   */
+  title: z.string().min(1).max(TASK_TEXT_MAX),
+  summary: z.string().max(TASK_TEXT_MAX).optional(),
   /** 附件 / 关联对象引用（订单、客户、文件…），原样钉在事项上 */
   pinned: z
     .array(z.object({ type: z.string().min(1), id: z.string().min(1) }))
@@ -209,8 +214,14 @@ export function positionEntryRoutes(): Route[] {
         body: OpenBody,
         returns: '{ matter, picked?, candidates, ambiguous, reason, approval_item_id?, run_id? }',
       },
-      async (c, deps) =>
-        ok(c, await portOf(deps).open(actorOf(c), param(c, 'id'), await body(c, OpenBody)), 201),
+      async (c, deps) => {
+        const raw = await body(c, OpenBody)
+        // WP259：空白拦下（说人话）；超长 / 多行拆成标题 + 完整原文
+        if (raw.title.trim() === '')
+          throw new ApiError('invalid_input', '说一句要办的事再交出去（现在是空的）')
+        const input = fitTaskTitle({ ...raw, title: raw.title.trim() })
+        return ok(c, await portOf(deps).open(actorOf(c), param(c, 'id'), input), 201)
+      },
     ),
     route(
       {

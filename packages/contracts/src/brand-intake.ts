@@ -116,6 +116,11 @@ export interface BrandIntakeProfile {
   one_liner?: BrandIntakeField<string>
   category?: BrandIntakeField<string>
   storefront_platform?: BrandIntakeField<StorefrontPlatform>
+  /**
+   * WP258：官网页面自己漏出来的 Shopify 店铺地址（`Shopify.shop = "xxx.myshopify.com"`）。
+   * 不给人看、不给人改——建站岗位登录 Shopify 后拿它和账号下的店对一下，对上了就默认选那家。
+   */
+  shopify_domain?: BrandIntakeField<string>
   products?: BrandIntakeField<BrandIntakeProduct[]>
   /** 目标市场（ISO 国家码）。 */
   markets?: BrandIntakeField<string[]>

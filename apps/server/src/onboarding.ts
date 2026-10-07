@@ -490,6 +490,13 @@ export interface OnboardingAssembly {
    */
   setPostalAddress(workspace_id: WorkspaceId, address: string | undefined): boolean
   /**
+   * WP258：记下官网里读到的 Shopify 店铺地址（`xxx.myshopify.com`；品牌分析确认时用）。
+   * 只是一条线索，不给人看；档案还没建过回 `false`（不替人建档案）。读不懂的地址不写。
+   */
+  setShopifyDomain(workspace_id: WorkspaceId, domain: string): boolean
+  /** WP258：官网里读到的那个 Shopify 店铺地址（没读到 / 没档案就没有）。 */
+  shopifyDomainOf(workspace_id: WorkspaceId): string | undefined
+  /**
    * WP216：只改某个品牌档案上的「网站是用什么搭的」。`source` 记是人选的还是按已连的店铺推断的
    * （进事件，不进档案）。档案还没建过：公司已有名字就用它起一份最小档案；公司也没名字回 `false`。
    */
@@ -1129,6 +1136,10 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
         discoverable: input.discoverable ?? company?.discoverable ?? previous?.discoverable ?? true,
         ...(vertical === undefined ? {} : { vertical }),
         ...(storefront_platform === undefined ? {} : { storefront_platform }),
+        // WP258：官网读到的店铺地址不在设置页上，存档案时原样带着
+        ...(previous?.shopify_domain === undefined
+          ? {}
+          : { shopify_domain: previous.shopify_domain }),
         set_at: clock.now(),
       }
       backend.put(ws, next)
@@ -1588,6 +1599,16 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
       })
       return true
     },
+    shopifyDomainOf: (ws) => profileOf(ws)?.shopify_domain,
+    setShopifyDomain(ws, domain) {
+      const value = domain.trim().toLowerCase()
+      if (!/^[a-z0-9][a-z0-9-]*\.myshopify\.com$/.test(value)) return false
+      const previous = profileOf(ws)
+      if (previous === undefined) return false
+      if (previous.shopify_domain === value) return true
+      backend.put(ws, { ...previous, shopify_domain: value })
+      return true
+    },
     setPostalAddress(ws, address) {
       const next = address === undefined ? undefined : normalizePostalAddress(address)
       if (writesCompany(ws)) {
@@ -1666,6 +1687,10 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
           : { postal_address: (company?.postal_address ?? previous?.postal_address) as string }),
         // WP248：品牌三格也不归这一步管
         ...(previous === undefined ? {} : nextBrandFacts(previous, {})),
+        // WP258：官网读到的店铺地址也不归这一步管
+        ...(previous?.shopify_domain === undefined
+          ? {}
+          : { shopify_domain: previous.shopify_domain }),
         set_at: clock.now(),
       })
     },

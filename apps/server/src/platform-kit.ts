@@ -83,6 +83,8 @@ export interface PlatformKitPortOptions {
   runner?: PlatformCliRunner
   /** WP253：这个品牌的 CLI 会话（别名 + 配置目录；一个品牌一份）。不给 = 整台电脑共用一份。 */
   sessionOf?(workspace_id: string, spec: PlatformCliSpec): CliSession | undefined
+  /** WP258：一键登录成功之后（记过「登好了」那一笔）——建站岗位接着去找这个账号下的店。 */
+  onLoggedIn?(workspace_id: string, spec: PlatformCliSpec): void
   /** 记一笔事件（只有 CLI id / 状态，没有任何输出与凭据）。 */
   appendEvent?(workspace_id: string, type: string, payload: Record<string, unknown>): void
 }
@@ -224,6 +226,11 @@ export function createPlatformKitPort(options: PlatformKitPortOptions): Platform
           ...(session === undefined ? {} : { session }),
           onLoginOk: () => {
             options.loginStoreOf(ws).set(spec.id, options.now())
+            try {
+              options.onLoggedIn?.(ws, spec)
+            } catch {
+              // 找店失败不影响「登好了」
+            }
           },
           onFinished: (job) => {
             options.prober.invalidate?.(spec.id)

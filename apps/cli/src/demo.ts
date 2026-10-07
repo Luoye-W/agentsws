@@ -1457,7 +1457,24 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
      */
     siteTheme: ((): NonNullable<ServerOptions['siteTheme']> => {
       const base = fakeThemeBase()
-      return { run: themeCliStandIn().run, fetch: base.fetch, base: base.pin }
+      // WP258：登好了替身账号下有两家店（岗位页演得出「选一下是哪家店」的下拉框）
+      const run = themeCliStandIn({
+        orgs: [
+          {
+            id: '1234567',
+            name: 'Nordvolt',
+            stores: [
+              { store: 'nordvolt.myshopify.com', name: 'Nordvolt', plan: 'Shopify' },
+              {
+                store: 'nordvolt-staging.myshopify.com',
+                name: 'Nordvolt Staging',
+                plan: 'Development',
+              },
+            ],
+          },
+        ],
+      }).run
+      return { run, fetch: base.fetch, base: base.pin }
     })(),
     cloudFetch: cloud.fetch,
     /*

@@ -6,6 +6,7 @@
  *   **不是**真主题的拷贝——开源仓里只放这几行占位。
  * - {@link themeCliStandIn}：进程内的假 `shopify theme …`（列 / 拉 / 检查 / 推未发布 / 发布），
  *   店里的主题只活在内存里；预览链接是店铺域名 + `?preview_theme_id=`（与 Shopify 的形状一样）。
+ *   WP258：给了 `orgs` 就也认 `organization list --json` / `store list --json`（形状照 4.8.5 发行包）。
  */
 import { createHash } from 'node:crypto'
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
@@ -129,7 +130,14 @@ function readThemeDir(root: string): Record<string, string> {
  * 进程内的假 `shopify theme …`。新店本来就有一份线上主题（Shopify 开店自带的那一份）。
  * `calls` 记每条命令的前两个词与参数（测试断言「没登录 / 没批之前一次 publish 都没跑」用）。
  */
-export function themeCliStandIn(options: { shop?: string } = {}): {
+/** WP258：替身账号下的一个组织与它的店。 */
+export interface StandInOrg {
+  id: string
+  name: string
+  stores: { store: string; name: string; plan: string }[]
+}
+
+export function themeCliStandIn(options: { shop?: string; orgs?: StandInOrg[] } = {}): {
   run: RunCli
   calls: string[][]
   themes: FakeTheme[]
@@ -159,6 +167,31 @@ export function themeCliStandIn(options: { shop?: string } = {}): {
     calls.push([...args])
     const [top, sub] = args
     if (top === 'version') return out('4.8.5\n')
+    const orgs = options.orgs
+    if (top === 'organization' && sub === 'list' && orgs !== undefined)
+      return out({ organizations: orgs.map((o) => ({ id: o.id, name: o.name })) })
+    if (top === 'store' && sub === 'list' && orgs !== undefined) {
+      const id = flag(args, '--organization-id')
+      if (orgs.length === 0) return out({ stores: [] })
+      const org =
+        id !== undefined
+          ? orgs.find((o) => o.id === id)
+          : orgs.length === 1 || opts.env.CI === undefined
+            ? orgs[0]
+            : undefined
+      if (org === undefined)
+        return out('An organization ID is required to list stores non-interactively.', 1)
+      return out({
+        stores: org.stores.map((s) => ({
+          store: s.store,
+          organizationId: org.id,
+          organizationName: org.name,
+          name: s.name,
+          plan: s.plan,
+        })),
+        organization: { id: org.id, name: org.name },
+      })
+    }
     if (top !== 'theme') return out('unknown command', 1)
     const shop = shopOf(opts.env)
     const view = (t: FakeTheme): Record<string, unknown> => ({

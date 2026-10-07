@@ -1292,7 +1292,8 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       }
     }
     const summary = matter.context.summary.trim()
-    if (summary !== '') {
+    // WP259：「交给它」那一大段原文既是事项描述又是这次的任务文本——一样的就只给一份（下面 brief 那条）
+    if (summary !== '' && summary !== brief.trim()) {
       const content = canonical({ title: matter.title, status: matter.status, summary })
       items.push({
         id: `matter_${matter.id}`,
