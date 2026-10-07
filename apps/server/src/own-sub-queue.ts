@@ -22,6 +22,7 @@ import type {
   ApprovalItem,
   ChangeKind,
   Clock,
+  CommunityThread,
   ObjectRef,
   OwnSubQueueItem,
   OwnSubQueueView,
@@ -87,6 +88,11 @@ export interface OwnSubQueueOptions {
 export interface OwnSubQueue {
   queue(actor: SocialActor): Promise<OwnSubQueueView>
   stage(actor: SocialActor, input: OwnSubStageInput): Promise<SocialStagedView>
+  /**
+   * WP255（决策 144）：队列里一条要回复 → 记成社媒库里的一条线程（Reddit fullname 当平台 id，同一条只记一次；
+   * **不判类、不出卡**），回线程 id。起草与回帖卡走线程那两条口子（`/v1/social/threads/:id/reply…`）。
+   */
+  thread(actor: SocialActor, input: { account_id: string; item_id: string }): { thread_id: string }
   /** 执行器调：是这一类卡就执行并回结果，不是就 `undefined`（掉回原来那条路）。 */
   apply(change: StagedChange): Promise<
     | {
@@ -356,6 +362,33 @@ export function createOwnSubQueue(options: OwnSubQueueOptions): OwnSubQueue {
         staged: staged.staged,
       })
       return staged
+    },
+
+    thread(_actor, input) {
+      const hit = cache.get(input.item_id)
+      if (hit === undefined || hit.account.id !== input.account_id)
+        throw new ApiError('not_found', '队列里没有这一条了（可能刚被处理过）。刷新一下再点。')
+      const { entry, account } = hit
+      const known = store
+        .threads({ account_id: account.id })
+        .find((t) => t.external_id === entry.id)
+      if (known !== undefined) return { thread_id: known.id }
+      const row: CommunityThread = {
+        // Reddit 的 fullname 全站唯一：拿它拼线程 id，同一条怎么点都只有一行
+        id: `ct_reddit_${entry.id}`,
+        account_id: account.id,
+        channel: 'reddit',
+        external_id: entry.id,
+        surface: entry.thing === 'post' ? 'thread' : 'comment',
+        author_external_id: entry.author,
+        author_handle: `u/${entry.author}`,
+        // 外部文本原样存（回帖卡上「回的是哪一句」就是它）
+        text: `${entry.title === undefined ? '' : `${entry.title}\n`}${entry.excerpt}`,
+        created_at: entry.created_at ?? clock.now(),
+        status: 'open',
+      }
+      store.saveThread(row)
+      return { thread_id: row.id }
     },
 
     async apply(change) {

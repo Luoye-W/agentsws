@@ -514,6 +514,7 @@ import {
 // WP73（56 §6）：九条渠道真打出去的那一跳 + 社媒库的 /v1 面
 import { createSocialChannels, type SocialFetch } from './social-channels.js'
 import { isSocialExecutableApproval } from './social-executor.js'
+import { modelReplyDrafter } from './social-reply-draft.js'
 import { createSocialService } from './social-service.js'
 import { createStandby } from './standby.js'
 import { mountStatic } from './static.js'
@@ -2921,6 +2922,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
      * `triage.ts` 与 `moderation.ts` 的调用方就在它里面——56 那条
      * "群里的客户问题不归社媒运营"的边界，从这一跳起是真会发生的事。
      */
+    let replyDrafts = 0
+    const nextReplyDraft = (): string => `${Date.parse(clock.now()).toString(36)}_${++replyDrafts}`
     const socialService = createSocialService({
       workspace_id: ws,
       routeScopeManager,
@@ -2944,6 +2947,32 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
             kind: 'outbound_draft',
             state: ['approved', 'approved_edited'],
           }),
+      },
+      /*
+       * WP255（决策 144）：「回复」框的 AI 起草。按这个品牌（跟随公司时用公司那份）的默认模型、经品牌急停那一层网关；
+       * 用量记在点起草的那个人头上（`extraction` 档）。只有 stub（演示 / 没接模型）→ 不给，起草退回一句模板并照实说。
+       * 网关在下面才建出来：这里只在请求那一刻取（闭包晚绑定），装配期不碰它。
+       */
+      replyDrafter: (actor) => {
+        const models = effectiveModels()
+        const ref = models.configured() ? models.defaultRef() : undefined
+        if (ref === undefined || ref.provider === 'stub') return undefined
+        return modelReplyDrafter(async (prompt) => {
+          const completion = await gatewayProxy.complete({
+            messages: [{ role: 'user', content: prompt }],
+            meta: {
+              workspace_id: ws,
+              assignment_id: actor.assignment_id as never,
+              role_id: actor.role_id as never,
+              run_id: `social_reply_draft_${nextReplyDraft()}` as never,
+              purpose: 'extraction',
+            },
+            model: ref,
+            max_output_tokens: 300,
+            thinking: 'off',
+          })
+          return completion.text
+        })
       },
       // 日界线按**这个品牌的数据源**报的时区（与定时任务那一份同一个真源，
       // 不去读本机时区——那在测试与服务器上都不是用户所在的那个时区）

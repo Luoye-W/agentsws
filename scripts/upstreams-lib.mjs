@@ -696,7 +696,9 @@ export function versionVerdict(locked, tagVersions, allVersions) {
  * 上游 latest 在别的大版本上（npm 11、Node 24）不算「落后」：我们跟的是 Node 22 LTS 与它配的那版 npm。
  */
 export function lineCandidates(line, versions) {
-  return (versions ?? []).filter((v) => String(v).startsWith(`${line}.`) && !String(v).includes('-'))
+  return (versions ?? []).filter(
+    (v) => String(v).startsWith(`${line}.`) && !String(v).includes('-'),
+  )
 }
 
 const stripV = (t) => String(t).replace(/^v/, '')

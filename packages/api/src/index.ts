@@ -647,6 +647,7 @@ export type {
   SocialPostInput,
   SocialPostRow,
   SocialPostView,
+  SocialReplyDraftView,
   SocialStagedView,
   SocialThreadInput,
   SocialThreadRow,

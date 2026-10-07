@@ -35,6 +35,7 @@ import type {
   SocialPostInput,
   SocialPostRow,
   SocialPostView,
+  SocialReplyDraftView,
   SocialStagedView,
   SocialThreadInput,
   SocialThreadRow,
@@ -88,6 +89,7 @@ import {
   type SocialExecutor,
   type SocialExecutorOptions,
 } from './social-executor.js'
+import { type ReplyDrafter, templateReply } from './social-reply-draft.js'
 import { recipientOf, type ScopeManagerRouter } from './supervisor.js'
 
 /**
@@ -221,6 +223,11 @@ export interface SocialServiceOptions {
    * 补扫时看哪些卡）。不给 = 只能由执行器被动调（`backendApply` / `deliverOutbound`），没人主动施行。
    */
   executor?: Pick<SocialExecutorOptions, 'applyApproval' | 'cancelWindowMs' | 'approvedItems'>
+  /**
+   * WP255（决策 144）：「回复」框里那一句的起草引擎（`social-reply-draft.ts` 的 `modelReplyDrafter`，
+   * 按点起草那个人这会儿开着的品牌取模型）。不给 / 回 `undefined` = 没接上模型，给一句模板并照实说。
+   */
+  replyDrafter?(actor: SocialActor): ReplyDrafter | undefined
 }
 
 export interface SocialServiceAssembly {
@@ -546,6 +553,7 @@ export function createSocialService(options: SocialServiceOptions): SocialServic
     // ── WP249：自家版待处理 + Reddit 官方号浏览器通道 ──
     ownSubQueue: (actor) => ownSubOr501().queue(actor),
     stageOwnSub: (actor, input) => ownSubOr501().stage(actor, input),
+    ownSubThread: (actor, input) => ownSubOr501().thread(actor, input),
     redditBrowserStatus: () => ownSubOr501().browserStatus(),
     redditBrowserLogin: () => ownSubOr501().openLogin(),
     redditBrowserCheck: () => ownSubOr501().checkLogin(),
@@ -1027,6 +1035,39 @@ export function createSocialService(options: SocialServiceOptions): SocialServic
           level: 'L1',
         }
       return { staged: true, approval_item_id: item.id, level: 'L1' }
+    },
+
+    /*
+     * WP255（决策 144）：给「回复」框起草一句。只起草：不出卡、不落库；事件只记 id 与来源，不记正文。
+     * 起草出来的这句自己过不了承诺扫描就带上那句改写要求（人改掉再出卡，否则出卡那一步打回）。
+     */
+    async draftReply(actor, id): Promise<SocialReplyDraftView> {
+      const thread = store.thread(id)
+      if (thread === undefined) throw new ApiError('not_found', `没有这条线程：${id}`)
+      const account = accountOr404(thread.account_id)
+      const input = {
+        channel_label: socialChannelSpec(thread.channel)?.zh ?? thread.channel,
+        account_name: account.display_name,
+        surface: thread.surface,
+        author: thread.author_handle,
+        text: thread.text,
+      }
+      const drafter = options.replyDrafter?.(actor)
+      const ai = drafter === undefined ? undefined : await drafter(input).catch(() => undefined)
+      const text = ai ?? templateReply(input)
+      const scan = checkOutbound(text)
+      emit('social.reply_drafted', actor.person_id, {
+        thread_id: thread.id,
+        channel: thread.channel,
+        source: ai === undefined ? 'template' : 'ai',
+        flagged: !scan.ok,
+      })
+      return {
+        text,
+        source: ai === undefined ? 'template' : 'ai',
+        ...(ai === undefined ? { note: '这次没用 AI：先给一句开头，你接着写。' } : {}),
+        ...(scan.ok ? {} : { warning: scan.rewrite_instruction }),
+      }
     },
 
     async broadcast(actor, input: SocialBroadcastInput): Promise<SocialBroadcastView> {
