@@ -38,6 +38,7 @@ import {
   CommandList,
 } from '@/components/ui/command'
 import { Input } from '@/components/ui/input'
+import { HandoffError } from '@/components/work/handoff-error'
 import {
   enterSwitchedBrand,
   listCatalog,
@@ -47,6 +48,7 @@ import {
   switchBrand,
 } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
+import { handoffInput, TASK_TEXT_MAX } from '@/lib/handoff'
 import { HELP_SLUGS, helpAddress } from '@/lib/help'
 import { translate } from '@/lib/i18n'
 import { myAssignments } from '@/lib/positions'
@@ -186,12 +188,14 @@ export function CommandPalette({
           data-testid="command-compose"
           onSubmit={(e) => {
             e.preventDefault()
-            const title = sentence.trim()
-            if (title === '' || handOver.isPending) return
+            const text = sentence.trim()
+            if (text === '' || handOver.isPending) return
+            // WP259：一大段也照收——标题取第一句…，完整原文作描述、交给 AI（原来截到 200 字）
+            const split = handoffInput(text)
             handOver.mutate(
               {
                 assignment: compose.assignment,
-                handoff: { title: title.slice(0, 200), summary: '' },
+                handoff: { title: split.title, summary: split.summary ?? '' },
                 role_id: compose.role_id,
               },
               {
@@ -208,17 +212,21 @@ export function CommandPalette({
           <Input
             autoFocus
             value={sentence}
-            maxLength={200}
+            maxLength={TASK_TEXT_MAX}
             placeholder={t('command.compose.placeholder')}
             aria-label={t('command.compose.placeholder')}
             data-testid="command-compose-input"
             onChange={(e) => {
               setSentence(e.target.value)
+              if (handOver.error !== null) handOver.reset()
             }}
           />
-          {handOver.error === null ? null : (
-            <p className="text-xs text-destructive">{handOver.error.message}</p>
-          )}
+          {handOver.isPending ? (
+            <p className="text-xs text-muted-foreground" data-testid="handoff-sending">
+              {t('handoff.sending')}
+            </p>
+          ) : null}
+          <HandoffError error={handOver.error} />
         </form>
       </CommandDialog>
     )
@@ -301,9 +309,12 @@ export function CommandPalette({
               ))}
             </CommandGroup>
           </CommandList>
-          {handOver.error === null ? null : (
-            <p className="px-3 pb-2 text-xs text-destructive">{handOver.error.message}</p>
-          )}
+          {handOver.isPending ? (
+            <p className="px-3 pb-2 text-xs text-muted-foreground" data-testid="handoff-sending">
+              {t('handoff.sending')}
+            </p>
+          ) : null}
+          <HandoffError error={handOver.error} className="px-3 pb-2 text-xs text-destructive" />
         </Command>
       </CommandDialog>
     )

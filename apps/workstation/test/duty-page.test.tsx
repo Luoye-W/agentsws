@@ -11,7 +11,7 @@
  */
 import { fireEvent, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { PositionInstanceData, RoleDetailView } from '@/lib/api'
+import { ApiClientError, type PositionInstanceData, type RoleDetailView } from '@/lib/api'
 import { renderWithProviders } from './helpers'
 
 const INSTANCE: PositionInstanceData = {
@@ -68,7 +68,7 @@ const getRoleDefinition = vi.fn(async () => ROLE)
 const getPositionRecords = vi.fn(async () => ({ payload: { rows: [] } }))
 // 断言要看参数，所以这几个桩带上真实签名（`...(a as [])` 那种写法拿不到参数类型）
 const createMatterWithRole = vi.fn(
-  async (_assignment: string, _input: { title: string; summary?: string }) => ({
+  async (_assignment: string, _input: { title: string; summary?: string; run?: boolean }) => ({
     matter: { id: 'mat_9' },
   }),
 )
@@ -207,6 +207,35 @@ describe('职责页（WP71 / 36 §10）', () => {
     // 用的是**这条职责**的分配：权限、额度、动作面全是它的（不是岗位的并集）
     expect(createMatterWithRole.mock.calls[0]?.[0]).toBe('asg_store')
     expect(navigate).toHaveBeenCalledWith('/matters/mat_9')
+  })
+
+  it('WP259：一大段也照收——拆成「第一句…」+ 完整原文，开完立刻起首轮运行', async () => {
+    const text = `把 GB-12 降价 10%。${'同时把同系列的另外几款也按竞品价对一下，'.repeat(6)}改完给我看。`
+    renderWithProviders(<DutyPage />, '/positions/asg_store/duties/dtc.store', 'asg_store')
+    await screen.findByTestId('duty-name')
+    fireEvent.change(screen.getByTestId('duty-open-text'), { target: { value: text } })
+    fireEvent.click(screen.getByTestId('duty-open-submit'))
+    await waitFor(() => {
+      expect(createMatterWithRole).toHaveBeenCalledWith('asg_store', {
+        title: '把 GB-12 降价 10%…',
+        summary: text,
+        run: true,
+      })
+    })
+  })
+
+  it('WP259：没开成就说一句人话（含服务端那句），字还在', async () => {
+    createMatterWithRole.mockRejectedValueOnce(
+      new ApiClientError(403, { code: 'forbidden', message: '你名下没有这条职责，开不了' }),
+    )
+    renderWithProviders(<DutyPage />, '/positions/asg_store/duties/dtc.store', 'asg_store')
+    await screen.findByTestId('duty-name')
+    fireEvent.change(screen.getByTestId('duty-open-text'), { target: { value: '把 GB-12 降价' } })
+    fireEvent.click(screen.getByTestId('duty-open-submit'))
+    const alert = await screen.findByTestId('duty-open-error')
+    expect(alert.textContent).toBe('没交出去：你名下没有这条职责，开不了')
+    expect((screen.getByTestId('duty-open-text') as HTMLInputElement).value).toBe('把 GB-12 降价')
+    expect(navigate).not.toHaveBeenCalled()
   })
 
   it('一句话都没写的时候按钮是灰的（不开一件没说要做什么的事）', async () => {

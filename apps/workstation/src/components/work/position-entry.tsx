@@ -7,7 +7,7 @@
  * - 拿不准的时候界面不替人选：把候选摆出来，让人点一下。
  */
 import { useQuery } from '@tanstack/react-query'
-import { Send, Split } from 'lucide-react'
+import { Loader2, Send, Split } from 'lucide-react'
 import { useState } from 'react'
 import { DutyIcon, PositionIcon } from '@/components/role-icons/role-icon'
 import { Button } from '@/components/ui/button'
@@ -19,6 +19,8 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Textarea } from '@/components/ui/textarea'
 import { getPosition } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
+import { TASK_TEXT_MAX } from '@/lib/handoff'
+import { HandoffError } from './handoff-error'
 import { usePositionOpen } from './use-position-open'
 
 /**
@@ -34,7 +36,7 @@ export function PositionEntry({ id }: { id: string }): React.ReactNode {
   const { t, lang } = useApp()
   const [text, setText] = useState('')
   // WP241：三条提交路抽成 `usePositionOpen`（岗位页 v2 的一行入口也用它），行为不变
-  const { open, withRole, pick, choice } = usePositionOpen(id, () => {
+  const { open, withRole, pick, choice, error, busy, clearError } = usePositionOpen(id, () => {
     setText('')
   })
 
@@ -103,10 +105,12 @@ export function PositionEntry({ id }: { id: string }): React.ReactNode {
             id="position-entry-text"
             rows={2}
             value={text}
+            maxLength={TASK_TEXT_MAX}
             placeholder={placeholder}
             data-testid="position-entry-input"
             onChange={(e) => {
               setText(e.target.value)
+              clearError()
             }}
           />
           {/*
@@ -138,18 +142,26 @@ export function PositionEntry({ id }: { id: string }): React.ReactNode {
           <div className="flex items-center gap-2">
             <Button
               size="sm"
-              disabled={text.trim() === '' || open.isPending}
+              disabled={text.trim() === '' || busy}
               data-testid="position-entry-submit"
+              data-busy={open.isPending ? 'true' : undefined}
               onClick={() => {
+                clearError()
                 open.mutate({ title: text.trim() })
               }}
             >
-              <Send className="size-3.5" aria-hidden />
-              {t('position.entry.submit')}
+              {open.isPending ? (
+                <Loader2 className="size-3.5 animate-spin" aria-hidden />
+              ) : (
+                <Send className="size-3.5" aria-hidden />
+              )}
+              {open.isPending ? t('handoff.sending') : t('position.entry.submit')}
             </Button>
             {/* WP157：「岗位自己判断走哪条职责」是解释，进问号 */}
             <Hint text={t('position.entry.hint')} testId="position-entry-hint" />
           </div>
+          {/* WP259：没交出去就在框下说一句（含服务端那句话），不再静默 */}
+          <HandoffError error={error} />
         </div>
 
         {/* 拿不准：这件事像 A 也像 B，你定（54 §2） */}
@@ -199,19 +211,23 @@ export function PositionEntry({ id }: { id: string }): React.ReactNode {
                 <Button
                   size="xs"
                   variant="ghost"
-                  disabled={
-                    role?.my_assignment_id === undefined || text.trim() === '' || withRole.isPending
-                  }
+                  disabled={role?.my_assignment_id === undefined || text.trim() === '' || busy}
                   title={text.trim() === '' ? t('position.roles.open_with.need_text') : undefined}
                   data-testid="open-with-role"
                   onClick={() => {
                     // 只能用**本人**那一条：拿别人那条去开，就是借岗位扩权
                     const assignment = role?.my_assignment_id
                     if (assignment === undefined) return
+                    clearError()
                     withRole.mutate({ assignment, title: text.trim() })
                   }}
                 >
-                  <Split className="size-3.5" aria-hidden />
+                  {withRole.isPending &&
+                  withRole.variables?.assignment === role?.my_assignment_id ? (
+                    <Loader2 className="size-3.5 animate-spin" aria-hidden />
+                  ) : (
+                    <Split className="size-3.5" aria-hidden />
+                  )}
                   {t('position.roles.open_with')}
                 </Button>
               </div>

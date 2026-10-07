@@ -365,6 +365,8 @@ const SOCIAL_COMMUNITY_BLOCKS = (channel: string, source?: string): BlockDef[] =
         ),
       ]),
   block(`social.${channel}.handoffs`, 'table', '转客服', 'social.support_handoffs'),
+  // WP257（决策 152）：自动进帖按类计数（只打标签不出卡，跑一两周看量）
+  block(`social.${channel}.thread_tags`, 'table', '进帖分类', 'social.thread_tags'),
 ]
 
 /**
