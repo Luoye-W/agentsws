@@ -129,6 +129,35 @@ export interface CompletionStream {
   signal?: AbortSignal
 }
 
+/**
+ * WP243（只加）：这一次调用的「输出别太长」提示。一次性抽取（首次设置的推荐之类）用：
+ * 不需要思考、答案就是一小段 JSON——让思考模型白想几千个 token 只会更慢更贵。
+ *
+ * **只是提示**：认得的 provider 照做（OpenAI 兼容口：`max_tokens` / 关思考的那一格），
+ * 认不得的照旧（不报错）。
+ */
+export interface CompletionHints {
+  /** 这一次最多出多少 token（含思考）。不给 = provider 默认。 */
+  max_output_tokens?: number
+  /** `off` = 别走思考（推理）模式；不给 = provider 默认。 */
+  thinking?: 'off'
+}
+
+/**
+ * WP243（只加）：provider 内部重发过的那几次失败（连接被掐 / 流式中途断了，整体重发一次）。
+ * 成功时随补全带回（网关记进 `model.usage`），失败时挂在错误上（网关记进 `model.provider_down`）。
+ * 只有错误码、耗时与一句原因——不含请求头与正文。
+ */
+export interface ProviderNetTry {
+  /** 第一个挖到的网络错误码（`UND_ERR_SOCKET`、`ECONNRESET`、`STREAM_INCOMPLETE`……）。 */
+  code?: string
+  /** 这一次从发出到失败用了多久。 */
+  duration_ms: number
+  /** HTTP 状态（回了非 2xx 时才有）。 */
+  status?: number
+  message: string
+}
+
 /* ------------------------------------------------------------------ */
 /* ASR 槽（22 + 37 §4.3）                                               */
 /* ------------------------------------------------------------------ */
@@ -250,15 +279,17 @@ export interface ModelGateway {
    * 记账与驻留同 `complete`。
    */
   images?: ImageProvider
-  complete(req: {
-    model?: ModelRef
-    messages: ChatMessage[]
-    tools?: ToolDef[]
-    cache_breakpoints?: number[]
-    meta: ModelMeta
-    seed?: number
-    tool_choice?: ToolChoice
-  }): Promise<Completion>
+  complete(
+    req: {
+      model?: ModelRef
+      messages: ChatMessage[]
+      tools?: ToolDef[]
+      cache_breakpoints?: number[]
+      meta: ModelMeta
+      seed?: number
+      tool_choice?: ToolChoice
+    } & CompletionHints,
+  ): Promise<Completion>
   embed(
     texts: string[],
     meta: ModelMeta,
@@ -290,6 +321,8 @@ export interface ModelGateway {
 /** provider 返回的补全：`model`/`static_prefix_hash` 由网关补，`usage.cost_base` 由网关按价目表覆盖（provider 填 0 即可）。 */
 export type ProviderCompletion = Omit<Completion, 'model' | 'static_prefix_hash' | 'usage'> & {
   usage: Omit<CompletionUsage, 'cost_base'> & { cost_base?: number }
+  /** WP243（只加）：成功之前内部重发过的那几次失败（没重发就不给）。 */
+  net_retries?: ProviderNetTry[]
 }
 
 /**
@@ -368,7 +401,8 @@ export interface ModelProvider {
        * 「Agents 工坊官方接口」那一条靠它在请求头里带上「谁 / 哪个岗位」（云上按人按岗位的每月上限）。
        */
       meta?: ModelMeta
-    } & CompletionStream,
+    } & CompletionStream &
+      CompletionHints,
   ): Promise<ProviderCompletion>
   /** 是否原生支持 `tool_choice`；缺省视为不支持（网关会剥掉该字段）。 */
   supports_tool_choice?: boolean

@@ -123,24 +123,27 @@ function fakeUpstream(): FakeUpstream {
           text: async () => '{"error":{"message":"image_url is not supported by this model"}}',
         }
       }
+      // WP243：官方接口那一条内部走流式、读的是 text()——两样回的得是同一份
+      const seen = {
+        choices: [{ message: { content: VISION_PROBE_WORD } }],
+        usage: { prompt_tokens: 90, completion_tokens: 2 },
+      }
       return {
         ok: true,
         status: 200,
-        json: async () => ({
-          choices: [{ message: { content: VISION_PROBE_WORD } }],
-          usage: { prompt_tokens: 90, completion_tokens: 2 },
-        }),
-        text: async () => '{}',
+        json: async () => seen,
+        text: async () => JSON.stringify(seen),
       }
+    }
+    const reply = {
+      choices: [{ message: { content: '好' } }],
+      usage: { prompt_tokens: 9, completion_tokens: 1 },
     }
     return {
       ok: true,
       status: 200,
-      json: async () => ({
-        choices: [{ message: { content: '好' } }],
-        usage: { prompt_tokens: 9, completion_tokens: 1 },
-      }),
-      text: async () => '{}',
+      json: async () => reply,
+      text: async () => JSON.stringify(reply),
     }
   }
   return state

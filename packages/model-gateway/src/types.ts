@@ -3,6 +3,7 @@ import type {
   AssignmentId,
   ChatMessage,
   Completion,
+  CompletionHints,
   CompletionStream,
   ErrorCode,
   EventEnvelope,
@@ -10,6 +11,7 @@ import type {
   ModelMeta,
   ModelPurpose,
   ModelRef,
+  ProviderNetTry,
   RoleId,
   ToolChoice,
   ToolDef,
@@ -77,6 +79,11 @@ export interface ModelUsagePayload {
   duration_ms: number
   /** ASR 调用才有：音频摘要（哈希 / 时长 / 字节数）。**字节与转写正文永不进事件日志。** */
   audio?: TranscriptionAudioDigest
+  /**
+   * WP243：成功之前 provider 内部重发过的那几次失败（连接被掐 / 流式中途断）。没重发就没有这一格。
+   * 「重发要看得见」：成了也知道中间断过几次、断在哪。
+   */
+  net_retries?: ProviderNetTry[]
 }
 
 export interface BlockedResidencyPayload {
@@ -88,7 +95,17 @@ export interface BlockedResidencyPayload {
 
 export interface ProviderDownPayload {
   model: ModelRef
-  attempts: { model: ModelRef; status?: number; message: string }[]
+  /**
+   * 每一次尝试一条。WP243：provider 内部重发的那一次也单独一条（同一个 `model`），
+   * 带网络错误码 `code` 与这一次的耗时 `duration_ms`（provider 报得出时才有）。
+   */
+  attempts: {
+    model: ModelRef
+    status?: number
+    message: string
+    code?: string
+    duration_ms?: number
+  }[]
 }
 
 export interface BudgetFrozenPayload {
@@ -114,7 +131,7 @@ export type ModelEventSink = (event: ModelGatewayEvent) => void
  * 22 §1 complete 请求；在契约基础上加运行预算、EU 客户标记与输出估算（都可选）。
  * WP188：再加流式与停止（`on_delta` / `signal`，见契约 {@link CompletionStream}）。
  */
-export interface CompleteRequest extends CompletionStream {
+export interface CompleteRequest extends CompletionStream, CompletionHints {
   model?: ModelRef
   messages: ChatMessage[]
   tools?: ToolDef[]
@@ -153,11 +170,23 @@ export class GatewayError extends Error implements AppError {
 export class ProviderError extends Error {
   readonly status: number | undefined
   readonly timeout: boolean
-  constructor(message: string, opts?: { status?: number; timeout?: boolean }) {
+  /** WP243：网络错误码（挖得出才有）。 */
+  readonly code: string | undefined
+  /**
+   * WP243：这一次调用里**每一次**尝试（含内部重发的那一次），最后一条就是这个错本身。
+   * 网关把它们逐条记进 `provider_down.attempts`。
+   */
+  readonly tries: ProviderNetTry[] | undefined
+  constructor(
+    message: string,
+    opts?: { status?: number; timeout?: boolean; code?: string; tries?: ProviderNetTry[] },
+  ) {
     super(message)
     this.name = 'ProviderError'
     this.status = opts?.status
     this.timeout = opts?.timeout === true
+    this.code = opts?.code
+    this.tries = opts?.tries
   }
 }
 

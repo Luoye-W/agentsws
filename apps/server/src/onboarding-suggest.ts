@@ -97,6 +97,18 @@ export function catalogRoles(
 /* 真模型                                                               */
 /* ------------------------------------------------------------------ */
 
+/**
+ * WP243：推荐这一次最多出多少 token。答案只是一小段紧凑 JSON（二十来条职责 ≈ 一千 token 上下），
+ * 给足余量但封住上限——10-06 真机那一次出了 8859 个 token、等了 38 秒（思考模型白想了几千个 token），
+ * 中间的代理还会把这么久没字节的连接掐掉。
+ */
+export const SUGGEST_MAX_OUTPUT_TOKENS = 2048
+
+/**
+ * 喂给模型的那段话。WP243：回话改成**紧凑的数组 JSON**（`r` 每条 `[id, 理由, 原话]`，
+ * `p` 每个岗位 `[名字, [id…]]`）——同样的内容少一半 token；理由与原话都限了字数。
+ * 目录一条一行照旧（职责说明留着：推荐准不准靠它）。
+ */
 export function buildSuggestPrompt(text: string, catalog: readonly SuggestCatalogRole[]): string {
   const lines = catalog.map(
     (r) => `- ${r.id} | ${r.name} | 类别：${r.category} | ${r.what_it_does}`,
@@ -110,42 +122,80 @@ export function buildSuggestPrompt(text: string, catalog: readonly SuggestCatalo
     ...lines,
     '',
     '规矩：',
-    '1. 只推荐他话里有依据的职责；每条给一句理由（中文，20 字以内），quote 填他原话里的一段（原样抄，不改字）。',
+    '1. 只推荐他话里有依据的职责。每条三样：职责 id、理由（中文，15 字以内）、原话（他原话里最能说明的那几个字，原样抄、不改字，12 字以内）。',
     '2. 把推荐的职责分成几个岗位：一个人通常一起干的放一个岗位；同一个渠道的几条可以放一起；一个岗位不超过 6 条；岗位名用中文，短。',
-    '3. 只回一个 JSON，不要别的字：',
-    '{"roles":[{"role_id":"…","reason":"…","quote":"…"}],"positions":[{"name":"…","role_ids":["…"]}]}',
+    '3. 直接回一个紧凑的 JSON（不换行、不加空格、不要解释、不要 ``` ），格式：',
+    '{"r":[["职责id","理由","原话"]],"p":[["岗位名",["职责id","职责id"]]]}',
   ].join('\n')
 }
 
-/** 从模型回的那段文字里抠出 JSON（允许前后有废话、允许包在 ``` 里）。 */
+/** 一条职责：紧凑的 `[id, 理由, 原话]`（WP243）或老的 `{role_id, reason, quote}`。 */
+function roleOf(r: unknown): RawSuggestion['roles'][number] | undefined {
+  if (Array.isArray(r)) {
+    const [role_id, reason, quote] = r as unknown[]
+    if (typeof role_id !== 'string' || typeof reason !== 'string') return undefined
+    return { role_id, reason, ...(typeof quote === 'string' ? { quote } : {}) }
+  }
+  if (typeof r !== 'object' || r === null) return undefined
+  const { role_id, reason, quote } = r as Record<string, unknown>
+  if (typeof role_id !== 'string' || typeof reason !== 'string') return undefined
+  return { role_id, reason, ...(typeof quote === 'string' ? { quote } : {}) }
+}
+
+/** 一个岗位：紧凑的 `[名字, [id…]]`（WP243）或老的 `{name, role_ids}`。 */
+function positionOf(p: unknown): PlannedPosition | undefined {
+  const [name, role_ids] = Array.isArray(p)
+    ? (p as unknown[])
+    : typeof p === 'object' && p !== null
+      ? [(p as Record<string, unknown>).name, (p as Record<string, unknown>).role_ids]
+      : []
+  if (typeof name !== 'string' || !Array.isArray(role_ids)) return undefined
+  return { name, role_ids: role_ids.filter((x): x is string => typeof x === 'string') }
+}
+
+/**
+ * WP243：回话被输出上限截断了（JSON 没收尾）——能救的职责救回来：`"r"` 那一段里写完整了的
+ * `["id","理由","原话"]` 一条条抠出来；岗位那段不救（交给算法版分岗位）。
+ */
+function salvageRoles(raw: string): RawSuggestion | undefined {
+  const at = raw.search(/"r"\s*:\s*\[/)
+  if (at < 0) return undefined
+  const rest = raw.slice(at)
+  const cut = rest.search(/"p"\s*:/)
+  const part = cut < 0 ? rest : rest.slice(0, cut)
+  const roles: RawSuggestion['roles'] = []
+  const tuple = /\[\s*"([^"\\]+)"\s*,\s*"((?:[^"\\]|\\.)*)"\s*(?:,\s*"((?:[^"\\]|\\.)*)"\s*)?\]/g
+  for (const m of part.matchAll(tuple)) {
+    const [, role_id, reason, quote] = m
+    if (role_id === undefined || reason === undefined) continue
+    roles.push({ role_id, reason, ...(quote === undefined ? {} : { quote }) })
+  }
+  return roles.length === 0 ? undefined : { roles }
+}
+
+/** 从模型回的那段文字里抠出 JSON（允许前后有废话、允许包在 ``` 里；被截断时救回写完整的职责）。 */
 export function parseSuggestion(raw: string): RawSuggestion | undefined {
   const start = raw.indexOf('{')
   const end = raw.lastIndexOf('}')
-  if (start < 0 || end <= start) return undefined
+  if (start < 0) return undefined
   let parsed: unknown
   try {
+    if (end <= start) throw new Error('unterminated')
     parsed = JSON.parse(raw.slice(start, end + 1))
   } catch {
-    return undefined
+    return salvageRoles(raw.slice(start))
   }
   if (typeof parsed !== 'object' || parsed === null) return undefined
-  const obj = parsed as { roles?: unknown; positions?: unknown }
-  if (!Array.isArray(obj.roles)) return undefined
-  const roles: RawSuggestion['roles'] = []
-  for (const r of obj.roles) {
-    if (typeof r !== 'object' || r === null) continue
-    const { role_id, reason, quote } = r as Record<string, unknown>
-    if (typeof role_id !== 'string' || typeof reason !== 'string') continue
-    roles.push({ role_id, reason, ...(typeof quote === 'string' ? { quote } : {}) })
-  }
-  const positions: PlannedPosition[] = []
-  if (Array.isArray(obj.positions))
-    for (const p of obj.positions) {
-      if (typeof p !== 'object' || p === null) continue
-      const { name, role_ids } = p as Record<string, unknown>
-      if (typeof name !== 'string' || !Array.isArray(role_ids)) continue
-      positions.push({ name, role_ids: role_ids.filter((x): x is string => typeof x === 'string') })
-    }
+  const obj = parsed as { r?: unknown; p?: unknown; roles?: unknown; positions?: unknown }
+  const rawRoles = Array.isArray(obj.r) ? obj.r : obj.roles
+  if (!Array.isArray(rawRoles)) return undefined
+  const roles = rawRoles
+    .map(roleOf)
+    .filter((r): r is RawSuggestion['roles'][number] => r !== undefined)
+  const rawPositions = Array.isArray(obj.p) ? obj.p : obj.positions
+  const positions = (Array.isArray(rawPositions) ? rawPositions : [])
+    .map(positionOf)
+    .filter((p): p is PlannedPosition => p !== undefined)
   return { roles, ...(positions.length === 0 ? {} : { positions }) }
 }
 
