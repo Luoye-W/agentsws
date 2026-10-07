@@ -539,6 +539,7 @@ import { createSocialChannels, type SocialFetch } from './social-channels.js'
 import { isSocialExecutableApproval } from './social-executor.js'
 import { modelReplyDrafter } from './social-reply-draft.js'
 import { createSocialService } from './social-service.js'
+import { modelTagReviewer } from './social-tags.js'
 import { createStandby } from './standby.js'
 import { mountStatic } from './static.js'
 import { createStorage } from './storage.js'
@@ -3082,6 +3083,45 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
             },
             model: ref,
             max_output_tokens: 300,
+            thinking: 'off',
+          })
+          return completion.text
+        })
+      },
+      /*
+       * WP257（决策 152）：自动进帖判类打标签。品牌名进规则（正文里提到算「冲着我们来的」）；模型复核默认关，
+       * 打开了才调：按这个品牌的默认模型、经品牌急停那一层网关，用量记在持有那条社媒职责的人头上
+       * （`extraction` 档，最多 8 个输出 token）。只有 stub / 没人持有那条职责 → 不给，只按规则判。
+       */
+      brandName: () => brandNameOfWorkspace(ws),
+      modelReady: () => {
+        const models = effectiveModels()
+        return models.configured() && models.defaultRef().provider !== 'stub'
+      },
+      tagReviewer: (channel) => {
+        const models = effectiveModels()
+        const ref = models.configured() ? models.defaultRef() : undefined
+        if (ref === undefined || ref.provider === 'stub') return undefined
+        const spec = socialChannelSpec(channel)
+        const holder =
+          spec === undefined
+            ? undefined
+            : roles.assignments
+                .listByRole(spec.role_id)
+                .find((a) => a.workspace_id === ws && a.revoked_at === undefined)
+        if (holder === undefined) return undefined
+        return modelTagReviewer(async (prompt) => {
+          const completion = await gatewayProxy.complete({
+            messages: [{ role: 'user', content: prompt }],
+            meta: {
+              workspace_id: ws,
+              assignment_id: holder.id as never,
+              role_id: holder.role_id as never,
+              run_id: `social_tag_review_${nextReplyDraft()}` as never,
+              purpose: 'extraction',
+            },
+            model: ref,
+            max_output_tokens: 8,
             thinking: 'off',
           })
           return completion.text

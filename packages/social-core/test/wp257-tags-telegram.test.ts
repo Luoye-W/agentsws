@@ -411,7 +411,7 @@ describe('WP257 Discord：频道名与 @ 我们', () => {
     })
     const r = await adapter.feed?.({ account_external_id: `${G}/${C}` })
     expect(r).toMatchObject({ ok: true })
-    const items = r !== undefined && r.ok ? r.data.items : []
+    const items = r?.ok ? r.data.items : []
     expect(items.map((i) => i.mentions_us)).toEqual([true, false])
     await adapter.feed?.({ account_external_id: `${G}/${C}` })
     expect(calls.filter((c) => c.endsWith('/users/@me'))).toHaveLength(1)

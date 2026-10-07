@@ -26,9 +26,9 @@ export const SOCIAL_REPLY_ZH: Record<string, string> = {
   'threads.triage.customer_question': '客户问题',
   'threads.triage.praise': '夸奖',
   'threads.triage.complaint': '抱怨',
-  'threads.triage.spam': '广告',
+  'threads.triage.spam': '广告垃圾',
   'threads.triage.partnership': '合作',
-  'threads.triage.other': '其他',
+  'threads.triage.other': '闲聊 / 其他',
   'threads.hint':
     '这条渠道里还没处理完的帖子、评论和私信。客户问题已经转给客服，不在这里。回复都先出卡，你批了才发。Discord 按设定的频率自动拉登记过的频道；Reddit 自家版的新帖在读「自家版待处理」时顺手拉进来，没人看时一小时补读一次。',
   // WP256（决策 147）：空态按渠道照实说

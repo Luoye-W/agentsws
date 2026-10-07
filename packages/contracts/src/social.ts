@@ -507,6 +507,11 @@ export interface CommunityThread {
   status: CommunityThreadStatus
   /** 分类结论（文件头第 2 条：这是分类，不是回复）。没判过就没有。 */
   triage?: CommunityTriage
+  /**
+   * WP257（决策 152）：自动进帖那一步打的标签是谁判的——`rule` 按规则（关键词 + 渠道 + 是否 @品牌），
+   * `model` 模型复核过（默认关）。**有这一格 = 只打了标签，没出转客服卡**；经接口进来、判完就出卡的那条路没有它。
+   */
+  triage_by?: 'rule' | 'model'
   /** 判成 `customer_question` 之后那张转客服卡的 id。 */
   routed_approval_id?: string
   /** 回过的话，回的那条在平台上的 id。 */

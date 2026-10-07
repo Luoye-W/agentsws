@@ -43,6 +43,7 @@ import {
 } from '@agentsws/social-core'
 import type { RedditOfficialBrowser } from './reddit-official-browser/index.js'
 import type { SocialStore } from './social.js'
+import { ruleTagged } from './social-tags.js'
 
 /** 这一类卡在 `after.source` 上的记号（执行器靠它认出来）。 */
 export const OWN_SUB_SOURCE = 'own_sub_queue'
@@ -202,7 +203,8 @@ export function createOwnSubQueue(options: OwnSubQueueOptions): OwnSubQueue {
       created_at: entry.created_at ?? clock.now(),
       status: 'open',
     }
-    store.saveThread(row)
+    // WP257（决策 152）：入库就按规则判类打标签（自家版里的帖子本来就是冲着我们来的）；不出卡
+    store.saveThread(ruleTagged(row, { own_community: true }))
     return { thread_id: row.id, created: true }
   }
 

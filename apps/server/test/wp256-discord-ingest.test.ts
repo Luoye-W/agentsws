@@ -122,7 +122,8 @@ describe('WP256 Discord 自动进帖：入库与去重', () => {
     const row = store.threads({ account_id: 'sa_dc' })[0]
     expect(row).toMatchObject({ channel: 'discord', status: 'open', surface: 'thread' })
     expect(row?.id).toBe(`ct_discord_${row?.external_id}`)
-    expect(row?.triage).toBeUndefined()
+    // WP257（决策 152）：入库就按规则打标签（仍不出卡）
+    expect(row).toMatchObject({ triage: 'other', triage_by: 'rule' })
 
     // 15 分钟到了再读：没有新消息 → 不重记
     nowMs += 15 * MIN
@@ -327,7 +328,8 @@ describe('WP256 Discord 自动进帖：没权限 / 没连上 照实说', () => {
     expect(svc.ingest.view(actor, 'discord').accounts[0]).toMatchObject({ state: 'needs_channel' })
     expect(discord.calls).toEqual([])
 
-    expect(svc.ingest.view(actor, 'telegram_group')).toMatchObject({ auto: false, accounts: [] })
+    // WP257 起 Telegram 群也会自动拉；WhatsApp 仍照实说不会
+    expect(svc.ingest.view(actor, 'whatsapp')).toMatchObject({ auto: false, accounts: [] })
   })
 
   it('还没轮到第一次读 → waiting；读过之后 ok + 下一次几点', async () => {
