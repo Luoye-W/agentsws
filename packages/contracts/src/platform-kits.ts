@@ -99,6 +99,19 @@ export interface PlatformCliSpec {
   /** WP245：卡上「登录 X」的 X（登的是哪家的账号；不写就用 {@link label}）。 */
   account_label?: string
   /**
+   * WP258（Luoye 10-07：「店铺地址不是应该自动获取吗」）：登录后**找这个账号下有哪几家店**用的两条只读命令。
+   * 参数写死在这里，服务端只往 `stores_args` 后面接 `<organization_flag> <纯数字的组织 id>`（id 取自
+   * `organizations_args` 的输出，不接受任何别的字符串）。不写 = 这个 CLI 不会自己找店，岗位页照旧手填。
+   */
+  store_lookup?: {
+    /** 列组织（`organization list --json` → `{ organizations: [{ id, name }] }`）。 */
+    organizations_args: readonly string[]
+    /** 列某个组织下的店（`store list --json` → `{ stores: [{ store, name, plan, … }] }`）。 */
+    stores_args: readonly string[]
+    /** 指定组织的那个参数（多组织时非交互环境必须带，否则 CLI 直接报错）。 */
+    organization_flag: string
+  }
+  /**
    * WP245：「一键安装」装哪个 npm 标签（装进应用自己的数据目录，不写全局）。不写 = `latest`。
    * 参数在服务端拼死（`npm install --prefix <数据目录> <npm>@<tag>`），不接受任意字符串。
    */
@@ -169,6 +182,12 @@ export const PLATFORM_KITS: readonly PlatformKit[] = [
       // WP253：4.8.x 非交互登录必须带 `--alias`（env `SHOPIFY_FLAG_AUTH_ALIAS`），否则「Flag not specified: --alias」
       login_alias_flag: '--alias',
       account_label: 'Shopify',
+      // WP258：登录后自动找店（读 4.8.5 发行包核过：`store list` 多组织时非交互必须带 `--organization-id`）
+      store_lookup: {
+        organizations_args: ['organization', 'list', '--json'],
+        stores_args: ['store', 'list', '--json'],
+        organization_flag: '--organization-id',
+      },
       npm_tag: 'latest',
       tutorial: 'shopify-cli',
       positions: ['site'],

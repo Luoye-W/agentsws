@@ -105,8 +105,26 @@ export interface SiteThemeView {
   cli_source?: 'app' | 'system'
   /** `xxx.myshopify.com`；不知道就没有。 */
   store?: string
-  /** 店铺地址从哪来：本品牌的店铺连接 / 人在岗位页上填的。 */
-  store_source?: 'connection' | 'manual'
+  /**
+   * 店铺地址从哪来：本品牌的店铺连接 / 人在岗位页上填的 / WP258：登录 Shopify 后从这个账号下的店里自动取的
+   * （只有一家、或与官网对上），或人从下拉框里选的。
+   */
+  store_source?: 'connection' | 'manual' | 'cli'
+  /**
+   * WP258：登录后在这个 Shopify 账号下找到的店（`shopify store list`）。没登录 / 连了店 / 手填过就不找，没有这一格。
+   * - `ok`：找到了（`stores` 至少一家；多家时岗位页给下拉框）；
+   * - `none`：这个账号下一家店都没有；
+   * - `failed`：命令没跑成（网络 / CLI 出错），岗位页退回手填。
+   */
+  store_lookup?: {
+    status: 'ok' | 'none' | 'failed'
+    stores: SiteThemeStoreChoice[]
+    checked_at: string
+    /** `failed` 时的一句人话（没有 CLI 原文）。 */
+    message?: string
+  }
+  /** WP258：品牌档案里官网读到的那个 `xxx.myshopify.com`（与上面某家对上就默认选它）。 */
+  site_store?: string
   workspace: {
     /** 工作目录里有几个主题文件（0 = 还没起底 / 没拉过）。 */
     files: number
@@ -121,6 +139,16 @@ export interface SiteThemeView {
     changed_files: string[]
   }
   next?: 'install_cli' | 'node' | 'login' | 'store'
+}
+
+/** WP258：登录账号下的一家店（下拉框里一行：店名 + myshopify 域名 + 套餐）。 */
+export interface SiteThemeStoreChoice {
+  /** `xxx.myshopify.com` */
+  store: string
+  name?: string
+  /** Shopify 套餐（`basic` / `Development` …，CLI 原样给的）。 */
+  plan?: string
+  organization?: string
 }
 
 /* ── 端口 ─────────────────────────────────────────────────────────────── */
@@ -168,7 +196,10 @@ export interface SitePort {
   /** WP253：AI 改主题还差哪一步（CLI / 登录 / 店铺地址）+ 最近一次预览。没装配 = 501。 */
   themeStatus?(actor: SiteActor, input: { fresh?: boolean }): MaybePromise<SiteThemeView>
   /** WP253：记下这个品牌的店铺地址（没连店时用；`xxx.myshopify.com` 或后台地址栏那一串）。 */
-  setThemeStore?(actor: SiteActor, input: { store: string }): MaybePromise<SiteThemeView>
+  setThemeStore?(
+    actor: SiteActor,
+    input: { store: string; source?: 'manual' | 'list' | undefined },
+  ): MaybePromise<SiteThemeView>
 }
 
 /* ── 装配 ─────────────────────────────────────────────────────────────── */
@@ -201,7 +232,11 @@ const EmailTemplateBody = z.object({
   enabled: z.boolean(),
 })
 
-const ThemeStoreBody = z.object({ store: z.string().min(1).max(300) })
+const ThemeStoreBody = z.object({
+  store: z.string().min(1).max(300),
+  /** WP258：`list` = 从登录账号下找到的那几家里选的（必须在清单里）；不给 / `manual` = 人手填的。 */
+  source: z.enum(['manual', 'list']).optional(),
+})
 
 const AppInstallBody = z.object({
   app_id: z.string().min(1).max(200),
@@ -332,7 +367,7 @@ export function siteRoutes(): Route[] {
         path: '/v1/site/theme/store',
         operationId: 'setSiteThemeStore',
         summary:
-          '网页模板：记下这个品牌的店铺地址（xxx.myshopify.com，或后台地址栏那一整串）。连了店的品牌以连接为准',
+          '网页模板：记下这个品牌的店铺地址（xxx.myshopify.com，或后台地址栏那一整串）。连了店的品牌以连接为准。`source=list` = 从登录账号下找到的店里选的（必须在清单里）',
         tag: 'site',
         auth: 'bearer',
         assignment: true,

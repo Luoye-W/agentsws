@@ -631,6 +631,7 @@ export type {
   SiteEmailTemplateView,
   SitePort,
   SiteStagedView,
+  SiteThemeStoreChoice,
   SiteThemeView,
 } from './routes/site.js'
 export { siteRoutes } from './routes/site.js'

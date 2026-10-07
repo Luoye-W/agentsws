@@ -34,7 +34,7 @@ import {
   writeFileSync,
 } from 'node:fs'
 import { dirname, join, normalize, relative, sep } from 'node:path'
-import type { SiteThemeView } from '@agentsws/api'
+import type { SiteThemeStoreChoice, SiteThemeView } from '@agentsws/api'
 import type {
   Clock,
   EffectiveConfig,
@@ -51,11 +51,14 @@ import { extractTgz } from './npm-runtime.js'
 import type { PlatformCliProbe } from './platform-cli.js'
 import { normalizeShopDomain } from './shopify-broker.js'
 import {
+  createRunCli,
   createShopifyTheme,
+  PASSTHROUGH_ENV,
   type PushedTheme,
   type RunCli,
   type ShopifyTheme,
   ShopifyThemeError,
+  scrubCliOutput,
   type ThemeCheckResult,
   type ThemeSummary,
 } from './shopify-theme.js'
@@ -132,10 +135,29 @@ interface StoreState {
   pushes: ThemePushRecord[]
 }
 
+/**
+ * WP258：登录后在这个 Shopify 账号下找到的店（存在设置文件里，岗位页下拉框用；`need_login` 不给界面看原文）。
+ */
+export interface StoreLookupState {
+  status: 'ok' | 'none' | 'failed'
+  stores: SiteThemeStoreChoice[]
+  checked_at: string
+  message?: string
+  /** 命令说的是「没登录 / 会话过期」——岗位页那一行回到「登录 Shopify」。 */
+  need_login?: boolean
+}
+
 interface SettingsFile {
   version: 1
-  /** 人在岗位页上填的店铺地址（没连店时用）。 */
+  /** 这个品牌建站用的店铺地址（没连店时用）。 */
   store?: string
+  /**
+   * WP258：这个地址是怎么来的。`manual` = 人手填的（**永远不被自动覆盖**；WP253 时存下的老地址没有这一格，
+   * 一律当手填）；`cli` = 登录后自动取的（账号下只有一家，或与官网对上）；`picked` = 人从下拉框里选的。
+   */
+  store_by?: 'manual' | 'cli' | 'picked'
+  /** WP258：最近一次找店的结果。 */
+  lookup?: StoreLookupState
   stores: Record<string, StoreState>
 }
 
@@ -164,6 +186,8 @@ export interface SiteThemeOptions {
   invocation(spec: PlatformCliSpec): { command: string; prefix: readonly string[] }
   /** 这个品牌接管的店（连接页那一条）。 */
   connectedShops(): string[]
+  /** WP258：品牌档案里官网读到的那个 `xxx.myshopify.com`（找到好几家店时拿它对一下）。 */
+  siteStore?(): string | undefined
   env?: NodeJS.ProcessEnv
   /** 测试 / 演示注入假 CLI。 */
   run?: RunCli
@@ -203,9 +227,22 @@ export const NEED_TEXT: Readonly<Record<ThemeNeed, string>> = {
     '还不知道是哪家店。请到建站岗位页填上店铺地址（xxx.myshopify.com），或者在连接页把店接上。',
 }
 
+/** WP258：找过店之后「还不知道是哪家店」的两种更具体的说法。 */
+export const STORE_LOOKUP_TEXT = {
+  none: '这个 Shopify 账号下没有店铺。请到建站岗位页换个账号登录，或者先去 Shopify 开店。',
+  pick: '这个 Shopify 账号下有好几家店。请到建站岗位页选一家，我再接着做。',
+  failed: '没能从 Shopify 找到你的店铺，可以在建站岗位页手动填一下店铺地址（xxx.myshopify.com）。',
+} as const
+
 export interface SiteThemeAssembly {
   readiness(opts?: { fresh?: boolean }): Promise<ThemeReadiness>
-  setStore(raw: string): Promise<ThemeReadiness>
+  /** `source: 'list'`（WP258）= 从登录账号下找到的店里选的（必须在清单里）；不给 = 人手填的。 */
+  setStore(raw: string, opts?: { source?: 'manual' | 'list' | undefined }): Promise<ThemeReadiness>
+  /**
+   * WP258：现找一次这个账号下的店（`relogin` = 刚登录 / 换了账号：自动取的、选的那家不在新账号下就清掉）。
+   * 不是 Shopify / 没装 / 没登录 / CLI 不会找店 → 什么都不做。
+   */
+  refreshStores(opts?: { relogin?: boolean }): Promise<StoreLookupState | undefined>
   initFromBase(input: { replace?: boolean }): Promise<{
     base: { repo: string; version: string; commit: string; license: string }
     files: number
@@ -229,6 +266,53 @@ export interface SiteThemeAssembly {
   }>
   /** 执行器批过的 `publish_theme`（不是这个品牌的 / 不是这一类回 undefined）。 */
   apply(change: StagedChange): Promise<BackendResult | undefined>
+}
+
+/** WP258：找店命令没跑成（`detail` 是抹过令牌的输出，只用来判断是哪一种失败，不给人看）。 */
+class StoreLookupFailure extends Error {
+  constructor(readonly detail: string) {
+    super('store lookup failed')
+    this.name = 'StoreLookupFailure'
+  }
+}
+
+/** CLI 说的是「没登录 / 会话过期」。 */
+const LOGIN_HINT = /not logged in|log ?in again|auth login|session (?:has )?expired|unauthori[sz]ed|\b401\b|reauthenticat/i
+
+/** `store list --json` 的一行 → 下拉框的一行（不是 `xxx.myshopify.com` 的不要）。 */
+export function storeChoiceOf(row: unknown, orgName?: string): SiteThemeStoreChoice | undefined {
+  if (typeof row !== 'object' || row === null) return undefined
+  const r = row as Record<string, unknown>
+  if (typeof r.store !== 'string') return undefined
+  let store: string
+  try {
+    store = normalizeShopDomain(r.store)
+  } catch {
+    return undefined
+  }
+  if (!store.endsWith('.myshopify.com')) return undefined
+  const text = (v: unknown): string | undefined =>
+    typeof v === 'string' && v.trim() !== '' ? v.trim().slice(0, 120) : undefined
+  const name = text(r.name)
+  const plan = text(r.plan)
+  const organization = text(r.organizationName) ?? text(orgName)
+  return {
+    store,
+    ...(name === undefined ? {} : { name }),
+    ...(plan === undefined ? {} : { plan }),
+    ...(organization === undefined ? {} : { organization }),
+  }
+}
+
+/** `organization list --json` 的一行 → 组织 id（只认纯数字，或 `gid://shopify/Organization/<数字>`）。 */
+function orgOf(row: unknown): { id: string; name?: string } | undefined {
+  if (typeof row !== 'object' || row === null) return undefined
+  const r = row as Record<string, unknown>
+  const raw = typeof r.id === 'number' ? String(r.id) : typeof r.id === 'string' ? r.id : undefined
+  const gid = typeof r.gid === 'string' ? /\/(\d+)$/.exec(r.gid)?.[1] : undefined
+  const id = raw !== undefined && /^\d{1,20}$/.test(raw) ? raw : gid
+  if (id === undefined) return undefined
+  return { id, ...(typeof r.name === 'string' ? { name: r.name } : {}) }
 }
 
 const sha256 = (bytes: Uint8Array | string): string =>
@@ -310,9 +394,18 @@ export function createSiteTheme(options: SiteThemeOptions): SiteThemeAssembly {
   if (options.settingsFile !== undefined && existsSync(options.settingsFile)) {
     try {
       const raw = JSON.parse(readFileSync(options.settingsFile, 'utf8')) as Partial<SettingsFile>
+      const by = raw.store_by
+      const lookup = raw.lookup
       settings = {
         version: 1,
         ...(typeof raw.store === 'string' ? { store: raw.store } : {}),
+        ...(by === 'manual' || by === 'cli' || by === 'picked' ? { store_by: by } : {}),
+        ...(lookup !== undefined &&
+        typeof lookup === 'object' &&
+        Array.isArray(lookup.stores) &&
+        typeof lookup.checked_at === 'string'
+          ? { lookup }
+          : {}),
         stores: raw.stores !== undefined && typeof raw.stores === 'object' ? raw.stores : {},
       }
     } catch {
@@ -333,14 +426,19 @@ export function createSiteTheme(options: SiteThemeOptions): SiteThemeAssembly {
   }
 
   // ── 店铺地址 ─────────────────────────────────────────────────────────
-  const storeOf = (): { store: string; source: 'connection' | 'manual' } | undefined => {
+  /** WP258：存下的地址是怎么来的（WP253 存的老地址没有 `store_by`，当手填）。 */
+  const storeBy = (): SettingsFile['store_by'] =>
+    settings.store === undefined ? undefined : (settings.store_by ?? 'manual')
+
+  const storeOf = (): { store: string; source: 'connection' | 'manual' | 'cli' } | undefined => {
     const shops = options.connectedShops()
     if (shops.length > 0) {
       const manual = settings.store
       const pick = manual !== undefined && shops.includes(manual) ? manual : shops[0]
       return pick === undefined ? undefined : { store: pick, source: 'connection' }
     }
-    return settings.store === undefined ? undefined : { store: settings.store, source: 'manual' }
+    if (settings.store === undefined) return undefined
+    return { store: settings.store, source: storeBy() === 'manual' ? 'manual' : 'cli' }
   }
 
   const rootOf = (shop: string): string => {
@@ -364,21 +462,214 @@ export function createSiteTheme(options: SiteThemeOptions): SiteThemeAssembly {
       appendEvent: (type, payload) => emit(type, { ...payload, workspace_id: ws }),
     })
 
+  // ── WP258：登录后自动找店 ───────────────────────────────────────────
+
+  /** 找店那两条命令的环境：与主题命令同一个白名单 + 本品牌那一份会话；不带店铺、不带任何令牌。 */
+  const lookupEnv = (spec: PlatformCliSpec): Record<string, string> => {
+    const env = options.env ?? process.env
+    const out: Record<string, string> = {}
+    for (const key of PASSTHROUGH_ENV) {
+      const value = env[key]
+      if (typeof value === 'string') out[key] = value
+    }
+    // 非交互：CLI 要问「选哪个组织」时直接报错，不会卡住等输入
+    out.CI = '1'
+    Object.assign(out, spec.telemetry_off_env)
+    Object.assign(out, options.sessionEnv?.(spec.id) ?? {})
+    return out
+  }
+
+  /** 跑一条找店命令；非零退出码 → 抛（带抹过的输出，只用来判断是哪一种失败）。 */
+  const lookupRun = async (spec: PlatformCliSpec, args: readonly string[]): Promise<unknown> => {
+    const run = options.run ?? createRunCli(() => options.invocation(spec))
+    const cwd = join(options.dataDir, 'theme-work', ws)
+    mkdirSync(cwd, { recursive: true })
+    const result = await run(args, { cwd, env: lookupEnv(spec), timeoutMs: 90_000 })
+    emit('site_theme.store_lookup_command', {
+      workspace_id: ws,
+      command: args.slice(0, 2).join(' '),
+      exit_code: result.code,
+    })
+    if (result.code !== 0)
+      throw new StoreLookupFailure(scrubCliOutput(`${result.stdout}\n${result.stderr}`))
+    const at = result.stdout.search(/[[{]/)
+    if (at < 0) throw new StoreLookupFailure('no json')
+    try {
+      return JSON.parse(result.stdout.slice(at)) as unknown
+    } catch {
+      throw new StoreLookupFailure('bad json')
+    }
+  }
+
+  /**
+   * 这个账号下有哪几家店：先 `store list --json`（只有一个组织时 CLI 自己选，一条命令就够）；
+   * CLI 说「好几个组织、非交互要给组织 id」再 `organization list --json`，逐个组织列（组织 id 只认纯数字）。
+   */
+  const lookupStores = async (spec: PlatformCliSpec): Promise<StoreLookupState> => {
+    const how = spec.store_lookup
+    const at = now()
+    if (how === undefined) return { status: 'failed', stores: [], checked_at: at }
+    const found = new Map<string, SiteThemeStoreChoice>()
+    let unresolved = false
+    const collect = (out: unknown, orgName?: string): void => {
+      const o = (typeof out === 'object' && out !== null ? out : {}) as Record<string, unknown>
+      if (typeof o.notice === 'string' && /resolve a shopify account/i.test(o.notice))
+        unresolved = true
+      const org = o.organization as { name?: unknown } | undefined
+      for (const row of Array.isArray(o.stores) ? o.stores : []) {
+        const choice = storeChoiceOf(row, typeof org?.name === 'string' ? org.name : orgName)
+        if (choice !== undefined && !found.has(choice.store)) found.set(choice.store, choice)
+      }
+    }
+    try {
+      try {
+        collect(await lookupRun(spec, how.stores_args))
+      } catch (e) {
+        if (!(e instanceof StoreLookupFailure) || !/organization[ -]id/i.test(e.detail)) throw e
+        // 好几个组织：先列组织，再逐个组织列店（最多 10 个组织）
+        const orgsOut = (await lookupRun(spec, how.organizations_args)) as {
+          organizations?: unknown
+        }
+        const orgs = (Array.isArray(orgsOut?.organizations) ? orgsOut.organizations : [])
+          .map(orgOf)
+          .filter((x): x is { id: string; name?: string } => x !== undefined)
+          .slice(0, 10)
+        if (orgs.length === 0) throw e
+        for (const org of orgs)
+          collect(
+            await lookupRun(spec, [...how.stores_args, how.organization_flag, org.id]),
+            org.name,
+          )
+      }
+    } catch (e) {
+      if (e instanceof ShopifyThemeError && e.code === 'cli_missing')
+        return { status: 'failed', stores: [], checked_at: at, message: NEED_TEXT.install_cli }
+      const detail = e instanceof StoreLookupFailure ? e.detail : ''
+      if (LOGIN_HINT.test(detail))
+        return {
+          status: 'failed',
+          stores: [],
+          checked_at: at,
+          message: NEED_TEXT.login,
+          need_login: true,
+        }
+      return { status: 'failed', stores: [], checked_at: at, message: STORE_LOOKUP_TEXT.failed }
+    }
+    if (found.size === 0 && unresolved)
+      return { status: 'failed', stores: [], checked_at: at, message: NEED_TEXT.login, need_login: true }
+    const stores = [...found.values()].sort((a, b) => a.store.localeCompare(b.store))
+    return stores.length === 0
+      ? { status: 'none', stores: [], checked_at: at }
+      : { status: 'ok', stores, checked_at: at }
+  }
+
+  /**
+   * 找完之后定店：**手填的永远不动**；自动取的 / 人选的那家不在这个账号下了（换了账号）就清掉；
+   * 只有一家 → 就它；好几家 → 与官网读到的那个对上就默认选它，对不上就等人在下拉框里选。
+   */
+  const settle = (lookup: StoreLookupState): void => {
+    settings.lookup = lookup
+    const by = storeBy()
+    if (by === 'manual') return
+    if (by !== undefined) {
+      if (lookup.status === 'failed') return
+      if (lookup.stores.some((s) => s.store === settings.store)) return
+      delete settings.store
+      delete settings.store_by
+    }
+    if (lookup.status !== 'ok') return
+    const site = options.siteStore?.()
+    const match = site === undefined ? undefined : lookup.stores.find((s) => s.store === site)
+    const pick = lookup.stores.length === 1 ? lookup.stores[0] : match
+    if (pick === undefined) return
+    settings.store = pick.store
+    settings.store_by = 'cli'
+    emit('site_theme.store_auto', {
+      workspace_id: ws,
+      stores: lookup.stores.length,
+      matched_site: match !== undefined,
+    })
+  }
+
+  let lookupInFlight: Promise<StoreLookupState | undefined> | undefined
+  const refreshStores = (
+    opts: { relogin?: boolean } = {},
+  ): Promise<StoreLookupState | undefined> => {
+    if (lookupInFlight !== undefined) return lookupInFlight
+    const spec = options.cliSpec()
+    if (spec?.store_lookup === undefined) return Promise.resolve(undefined)
+    if (options.connectedShops().length > 0) return Promise.resolve(undefined)
+    if (!options.loggedIn(spec.id)) return Promise.resolve(undefined)
+    // 手填过的永远以手填为准（不去找，也就不会被覆盖）
+    if (storeBy() === 'manual') return Promise.resolve(undefined)
+    lookupInFlight = (async () => {
+      const probe = await options.probe(spec)
+      if (!probe.installed || !probe.node_ok) return undefined
+      const lookup = await lookupStores(spec)
+      settle(lookup)
+      save()
+      emit('site_theme.store_lookup', {
+        workspace_id: ws,
+        status: lookup.status,
+        stores: lookup.stores.length,
+        ...(lookup.need_login === true ? { need_login: true } : {}),
+      })
+      return lookup
+    })().finally(() => {
+      lookupInFlight = undefined
+    })
+    return lookupInFlight
+  }
+
+  /** 什么时候顺手找一次：没找过、`fresh`、或上次没找成且过了 5 分钟。手填过 / 连了店就不找。 */
+  const shouldLookup = (fresh: boolean): boolean => {
+    if (storeBy() === 'manual') return false
+    const last = settings.lookup
+    if (last === undefined) return true
+    if (fresh) return true
+    return last.status === 'failed' && Date.parse(now()) - Date.parse(last.checked_at) > 5 * 60_000
+  }
+
   const readiness = async (opts: { fresh?: boolean } = {}): Promise<ThemeReadiness> => {
     const spec = options.cliSpec()
+    const probe = spec === undefined ? undefined : await options.probe(spec, opts.fresh === true)
+    const cliOk = probe?.installed === true && probe.node_ok
+    // WP258：登好了、没连店、没手填 → 顺手找一次这个账号下的店（找过就用存下的那一份）
+    if (
+      spec?.store_lookup !== undefined &&
+      cliOk &&
+      options.connectedShops().length === 0 &&
+      options.loggedIn(spec.id) &&
+      (lookupInFlight !== undefined || shouldLookup(opts.fresh === true))
+    )
+      await refreshStores()
     const store = storeOf()
     const state = store === undefined ? undefined : settings.stores[store.store]
     const files =
       store === undefined || !existsSync(themeWorkspaceRoot(options.dataDir, ws, store.store))
         ? 0
         : themeFiles(themeWorkspaceRoot(options.dataDir, ws, store.store)).length
+    const lookup =
+      store?.source === 'connection' || store?.source === 'manual' ? undefined : settings.lookup
+    const site = options.siteStore?.()
     const base = {
       workspace: { files, ...(state?.base === undefined ? {} : { base: state.base }) },
       ...(store === undefined ? {} : { store: store.store, store_source: store.source }),
       ...(state?.pushes.length ? { last_push: state.pushes[state.pushes.length - 1] } : {}),
+      ...(lookup === undefined
+        ? {}
+        : {
+            store_lookup: {
+              status: lookup.status,
+              stores: lookup.stores,
+              checked_at: lookup.checked_at,
+              ...(lookup.message === undefined ? {} : { message: lookup.message }),
+            },
+          }),
+      ...(site === undefined ? {} : { site_store: site }),
     }
-    if (spec === undefined) return { applicable: false, cli: 'missing', ...base }
-    const probe = await options.probe(spec, opts.fresh === true)
+    if (spec === undefined || probe === undefined)
+      return { applicable: false, cli: 'missing', ...base }
     const cli: ThemeReadiness['cli'] = !probe.installed
       ? 'missing'
       : !probe.node_ok
@@ -393,9 +684,12 @@ export function createSiteTheme(options: SiteThemeOptions): SiteThemeAssembly {
           ? 'node'
           : cli === 'needs_login'
             ? 'login'
-            : store === undefined
-              ? 'store'
-              : undefined
+            : store !== undefined
+              ? undefined
+              : // WP258：找店时 CLI 说会话过期 → 回到「登录 Shopify」
+                lookup?.need_login === true
+                ? 'login'
+                : 'store'
     return {
       applicable: true,
       cli,
@@ -421,9 +715,21 @@ export function createSiteTheme(options: SiteThemeOptions): SiteThemeAssembly {
         NEED_TEXT[r.cli === 'missing' ? 'install_cli' : 'node'],
         r.cli === 'missing' ? 'install_cli' : 'node',
       )
-    if (level === 'remote' && r.cli === 'needs_login')
+    if (level === 'remote' && (r.cli === 'needs_login' || r.next === 'login'))
       throw new SiteThemeError('needs', NEED_TEXT.login, 'login')
-    if (r.store === undefined) throw new SiteThemeError('needs', NEED_TEXT.store, 'store')
+    if (r.store === undefined) {
+      // WP258：找过店的，照找到的情况说（没有店 / 好几家要选 / 没找成）
+      const found = r.store_lookup
+      const text =
+        found?.status === 'none'
+          ? STORE_LOOKUP_TEXT.none
+          : found?.status === 'ok'
+            ? STORE_LOOKUP_TEXT.pick
+            : found?.status === 'failed'
+              ? STORE_LOOKUP_TEXT.failed
+              : NEED_TEXT.store
+      throw new SiteThemeError('needs', text, 'store')
+    }
     return { shop: r.store, spec: options.cliSpec() }
   }
 
@@ -508,18 +814,28 @@ export function createSiteTheme(options: SiteThemeOptions): SiteThemeAssembly {
   return {
     readiness,
 
-    async setStore(raw) {
+    async setStore(raw, opts = {}) {
       let shop: string
       try {
         shop = normalizeShopDomain(raw)
       } catch (e) {
         throw new SiteThemeError('invalid_input', e instanceof Error ? e.message : '店铺地址看不懂')
       }
+      const fromList = opts.source === 'list'
+      // WP258：从下拉框选的必须是这个账号下找到的那几家之一
+      if (fromList && settings.lookup?.stores.some((s) => s.store === shop) !== true)
+        throw new SiteThemeError(
+          'invalid_input',
+          '这家店不在登录账号下找到的店里。换一家，或者选「都不是？手动填」。',
+        )
       settings.store = shop
+      settings.store_by = fromList ? 'picked' : 'manual'
       save()
-      emit('site_theme.store_set', { workspace_id: ws })
+      emit('site_theme.store_set', { workspace_id: ws, source: fromList ? 'list' : 'manual' })
       return readiness()
     },
+
+    refreshStores,
 
     async initFromBase({ replace }) {
       const { shop } = await need('files')
