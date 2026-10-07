@@ -88,9 +88,7 @@ export interface OwnSubQueue {
   queue(actor: SocialActor): Promise<OwnSubQueueView>
   stage(actor: SocialActor, input: OwnSubStageInput): Promise<SocialStagedView>
   /** 执行器调：是这一类卡就执行并回结果，不是就 `undefined`（掉回原来那条路）。 */
-  apply(
-    change: StagedChange,
-  ): Promise<
+  apply(change: StagedChange): Promise<
     | {
         status: 'ok' | 'failed'
         execution_id?: string
@@ -130,7 +128,10 @@ const subName = (a: SocialAccount): string =>
 export function createOwnSubQueue(options: OwnSubQueueOptions): OwnSubQueue {
   const { workspace_id, store, clock } = options
   const cache = new Map<string, Cached>()
+  /** 版规（短名）与读到的时刻：版规难得改，六小时内不重读（省官方号浏览器的读额度）。 */
   const rulesOf = new Map<string, string[]>()
+  const rulesAt = new Map<string, number>()
+  const RULES_TTL_MS = 6 * 3_600_000
   const failures = new Map<string, string>()
   /** 队列里那一条 → 它那张卡的审批项 id（卡片流认的是它）。 */
   const approvalOf = new Map<string, string>()
@@ -198,9 +199,13 @@ export function createOwnSubQueue(options: OwnSubQueueOptions): OwnSubQueue {
           rules.push({ subreddit: sub, rules: [] })
           continue
         }
-        const r = await adapter.communityRules?.(sub)
+        const fresh = Date.parse(clock.now()) - (rulesAt.get(sub) ?? -Infinity) < RULES_TTL_MS
+        const r = fresh ? undefined : await adapter.communityRules?.(sub)
         const subRules = r?.ok === true ? r.data : (rulesOf.get(sub) ?? [])
-        if (r?.ok === true) rulesOf.set(sub, r.data)
+        if (r?.ok === true) {
+          rulesOf.set(sub, r.data)
+          rulesAt.set(sub, Date.parse(clock.now()))
+        }
         rules.push({ subreddit: sub, rules: subRules })
         for (const source of ['modqueue', 'unmoderated', 'join_requests'] as const) {
           const res = await adapter.modQueue?.({ account_external_id: sub, source, limit: 50 })

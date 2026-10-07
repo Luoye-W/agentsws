@@ -12,6 +12,7 @@ import { B2bOutboundPanel } from '@/components/b2b/outbound-panel'
 import { B2bSalesPanel } from '@/components/b2b/sales-panel'
 import { channelOfRole, KolPanel } from '@/components/kol/kol-panel'
 import { DutyIcon } from '@/components/role-icons/role-icon'
+import { OwnSubQueue } from '@/components/social/own-sub-queue'
 import { SocialBroadcast } from '@/components/social/social-broadcast'
 import { SocialCalendar, socialChannelOfRole } from '@/components/social/social-calendar'
 import { Button } from '@/components/ui/button'
@@ -88,6 +89,8 @@ function QuickBody({ view }: { view: QuickView }): ReactNode {
         <KolPanel assignment={view.assignment_id} channel={channel} />
       )
     }
+    case 'modqueue':
+      return <OwnSubQueue assignment={view.assignment_id} />
     case 'outbound':
       return <B2bOutboundPanel assignment={view.assignment_id} />
     case 'sales':

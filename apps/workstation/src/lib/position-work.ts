@@ -222,7 +222,15 @@ export function groupItems(
 // ── 快捷视图 ───────────────────────────────────────────────────────────
 
 /** 职责专属快捷视图的种类（docs/54 §7.5 那张表）。 */
-export type QuickKind = 'schedule' | 'broadcast' | 'kol' | 'outbound' | 'sales' | 'chat'
+export type QuickKind =
+  | 'schedule'
+  | 'broadcast'
+  | 'kol'
+  | 'outbound'
+  | 'sales'
+  | 'chat'
+  // WP249：自家版待处理（只有 `social.reddit`）
+  | 'modqueue'
 
 export interface QuickView {
   /** `quick:<kind>:<role_id>`——记在偏好里的就是它 */
@@ -263,6 +271,7 @@ export function quickViewsOf(
   for (const d of duties) {
     const social = socialChannelOfRole(d.role_id)
     if (social !== undefined && COMMUNITY_CHANNELS.includes(social)) add('broadcast', d)
+    if (d.role_id === 'social.reddit') add('modqueue', d)
     if (channelOfRole(d.role_id) !== undefined) add('kol', d)
     if (d.role_id === 'b2b.outbound') add('outbound', d)
     if (d.role_id === 'b2b.sales') add('sales', d)
