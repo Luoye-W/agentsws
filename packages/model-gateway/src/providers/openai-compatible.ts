@@ -1,15 +1,22 @@
 import type {
   ChatContentPart,
   ChatMessage,
+  CompletionHints,
   ModelCapabilities,
   ModelMeta,
   ModelProvider,
   ModelRef,
   ProviderModelInfo,
+  ProviderNetTry,
   ProviderTranscription,
   ToolDef,
 } from '@agentsws/contracts'
-import { describeFetchError, isTransientNetError } from '../net-cause.js'
+import {
+  describeFetchError,
+  isTransientNetError,
+  netCauseOf,
+  streamIncompleteError,
+} from '../net-cause.js'
 import { estimateInputTokens } from '../pricing.js'
 import { GatewayError, ProviderError } from '../types.js'
 import {
@@ -91,6 +98,13 @@ export interface OpenAiCompatibleOptions {
    * 「本月额度用完了，找管理员加。」与「积分不够了」是两句话，不能被翻成泛泛的上游错误。
    */
   cloudErrors?: boolean
+  /**
+   * WP243：一整段的对话调用（推荐、岗位运行……）也在内部走流式（`stream: true`，收齐了拼成一整段）。
+   * 「Agents 工坊官方接口」那一条开：非流式要等模型想完、写完才回第一个字节，几十秒里连接上
+   * 一个字节都没有，中间的代理（Clash TUN、安全软件）会把它当空闲连接掐掉（Windows 真机
+   * `UND_ERR_SOCKET other side closed`）。流式时字一直在来，连接不空闲。别家不开（照旧）。
+   */
+  streamAlways?: boolean
 }
 
 interface WireToolCall {
@@ -262,6 +276,32 @@ function toolNameMap(tools: ToolDef[] | undefined): Map<string, string> {
   return map
 }
 
+/**
+ * WP243：「关思考」在各家线上叫什么。DeepSeek（V3.1 起）与智谱 GLM 是 `thinking: { type: 'disabled' }`，
+ * 通义 Qwen3（百炼 / SiliconFlow 的兼容口）是 `enable_thinking: false`。认不出的不发——
+ * 发了不认识的字段，有的口（OpenAI 本家）会 400。
+ */
+export function thinkingOffFields(model: string): Record<string, unknown> {
+  if (/deepseek|glm/i.test(model)) return { thinking: { type: 'disabled' } }
+  if (/qwen3/i.test(model)) return { enable_thinking: false }
+  return {}
+}
+
+/** OpenAI 本家的推理模型（o 系列、gpt-5）不收 `max_tokens`，只收 `max_completion_tokens`。 */
+const usesMaxCompletionTokens = (model: string): boolean => /^(o\d|gpt-5)/i.test(model)
+
+/** WP243：{@link CompletionHints} → 请求体里的那几格。 */
+function hintFields(model: string, hints: CompletionHints): Record<string, unknown> {
+  return {
+    ...(hints.max_output_tokens === undefined
+      ? {}
+      : usesMaxCompletionTokens(model)
+        ? { max_completion_tokens: hints.max_output_tokens }
+        : { max_tokens: hints.max_output_tokens }),
+    ...(hints.thinking === 'off' ? thinkingOffFields(model) : {}),
+  }
+}
+
 const cachedOf = (u: WireUsage | undefined): number =>
   u?.prompt_tokens_details?.cached_tokens ?? u?.prompt_cache_hit_tokens ?? 0
 
@@ -323,15 +363,31 @@ export function openaiCompatibleProvider(options: OpenAiCompatibleOptions): Mode
     }
   }
 
-  /** 一次上游调用。**唯一**发请求的地方——header 由 `authHeaders()` 现取现用。 */
+  /** 这一次的停止信号：超时（每一次尝试各算各的）+ 调用方的。 */
+  const signalOf = (caller: AbortSignal | undefined): AbortSignal | undefined => {
+    const timeout =
+      options.timeoutMs === undefined ? undefined : AbortSignal.timeout(options.timeoutMs)
+    const signals = [timeout, caller].filter((x): x is AbortSignal => x !== undefined)
+    return signals.length === 0
+      ? undefined
+      : signals.length === 1
+        ? signals[0]
+        : AbortSignal.any(signals)
+  }
+
+  /**
+   * 一次上游调用（不重发——重发在 {@link attempt}）。**唯一**发请求的地方——header 由
+   * `authHeaders()` 现取现用。网络层的错原样抛（`attempt` 认错误码决定重不重发）；
+   * 非 2xx 在这里翻成 `ProviderError` / 那几句人话。
+   */
   const open = async (
     url: string,
     init: {
       method: 'GET' | 'POST'
       body?: string | FormData
       multipart?: boolean
-      /** WP188：调用方的停止信号（流式那条路给）。 */
-      signal?: AbortSignal
+      /** 停止信号（超时 + 调用方的，`signalOf` 合好的）。 */
+      signal?: AbortSignal | undefined
       /** WP194：这一次多带的头（官方接口那一条的「谁 / 哪个岗位」）。 */
       headers?: Record<string, string>
     },
@@ -339,42 +395,12 @@ export function openaiCompatibleProvider(options: OpenAiCompatibleOptions): Mode
     const headers = { ...authHeaders(), ...init.headers }
     // multipart 的 boundary 由 fetch 自己写，手工塞 content-type 会让上游解不出来
     if (init.multipart === true) delete headers['content-type']
-    const timeout =
-      options.timeoutMs === undefined ? undefined : AbortSignal.timeout(options.timeoutMs)
-    const signals = [timeout, init.signal].filter((x): x is AbortSignal => x !== undefined)
-    const signal =
-      signals.length === 0
-        ? undefined
-        : signals.length === 1
-          ? signals[0]
-          : AbortSignal.any(signals)
-    const send = () =>
-      doFetch(url, {
-        method: init.method,
-        headers,
-        ...(init.body === undefined ? {} : { body: init.body }),
-        ...(signal === undefined ? {} : { signal }),
-      })
-    let res: Awaited<ReturnType<FetchLike>>
-    try {
-      try {
-        res = await send()
-      } catch (first) {
-        /*
-         * WP242：连接被对面 / 本机代理掐了（`ECONNRESET`、陈旧的长连接 `UND_ERR_SOCKET`……）——
-         * 还没拿到回执，马上再发一次大概率就好。只重发一次；调用方停的、超时的不重发。
-         * multipart 的正文是一次性的流，不重发。
-         */
-        if (!isTransientNetError(first) || init.multipart === true || signal?.aborted === true)
-          throw first
-        res = await send()
-      }
-    } catch (e) {
-      const name = e instanceof Error ? e.name : ''
-      const timeout = name === 'TimeoutError' || name === 'AbortError'
-      // WP242：`fetch failed` 后面带上真原因（cause.code），不然 provider_down 里什么都看不出来
-      throw new ProviderError(`request to ${url} failed: ${describeFetchError(e)}`, { timeout })
-    }
+    const res = await doFetch(url, {
+      method: init.method,
+      headers,
+      ...(init.body === undefined ? {} : { body: init.body }),
+      ...(init.signal === undefined ? {} : { signal: init.signal }),
+    })
     if (!res.ok) {
       const detail = await res.text().catch(() => '')
       if (options.cloudErrors === true && res.status === 402) throw cloudQuotaError(detail)
@@ -389,6 +415,64 @@ export function openaiCompatibleProvider(options: OpenAiCompatibleOptions): Mode
     return res
   }
 
+  /**
+   * 跑一次上游调用（`run` 里发请求并把回包读完）；连接被掐就**整体**重发一次。
+   *
+   * - WP242：连接被对面 / 本机代理掐了（`ECONNRESET`、陈旧的长连接 `UND_ERR_SOCKET`……）——
+   *   马上再发一次大概率就好。只重发一次；调用方停的、超时的不重发；multipart 的正文是一次性的流，不重发。
+   * - WP243：**回包读到一半断了也算**（流式中途 `UND_ERR_SOCKET`、或者流干净地关了却没说「完了」）——
+   *   已经收到的那一截不当成功，整段重来。调用方已经看到过字（`mayRetry` 回 false）就不重来：
+   *   重来会把两段拼在一起。
+   * - 每一次失败都记一条（错误码 + 耗时），成了随补全带回、没成挂在 `ProviderError.tries` 上。
+   */
+  const attempt = async <T>(
+    url: string,
+    opts: { multipart?: boolean; signal?: AbortSignal | undefined; mayRetry?: () => boolean },
+    run: (signal: AbortSignal | undefined) => Promise<T>,
+  ): Promise<{ value: T; retries: ProviderNetTry[] }> => {
+    const tries: ProviderNetTry[] = []
+    for (let n = 0; ; n += 1) {
+      const started = Date.now()
+      try {
+        return { value: await run(signalOf(opts.signal)), retries: tries }
+      } catch (e) {
+        // 人话那几种（余额 / 额度 / 缺令牌）与调用方停的：原样往上抛
+        if (e instanceof GatewayError || opts.signal?.aborted === true) throw e
+        const duration_ms = Math.max(Date.now() - started, 0)
+        if (e instanceof ProviderError) {
+          tries.push({
+            duration_ms,
+            ...(e.status === undefined ? {} : { status: e.status }),
+            message: e.message,
+          })
+          throw new ProviderError(e.message, {
+            ...(e.status === undefined ? {} : { status: e.status }),
+            timeout: e.timeout,
+            tries,
+          })
+        }
+        const name = e instanceof Error ? e.name : ''
+        const timeout = name === 'TimeoutError' || name === 'AbortError'
+        const { code } = netCauseOf(e)
+        // WP242：`fetch failed` 后面带上真原因（cause.code），不然 provider_down 里什么都看不出来
+        const message = `request to ${url} failed: ${describeFetchError(e)}`
+        tries.push({ ...(code === undefined ? {} : { code }), duration_ms, message })
+        const again =
+          n === 0 &&
+          !timeout &&
+          opts.multipart !== true &&
+          isTransientNetError(e) &&
+          (opts.mayRetry?.() ?? true)
+        if (again) continue
+        throw new ProviderError(message, {
+          timeout,
+          ...(code === undefined ? {} : { code }),
+          tries,
+        })
+      }
+    }
+  }
+
   const request = async (
     url: string,
     init: {
@@ -397,19 +481,18 @@ export function openaiCompatibleProvider(options: OpenAiCompatibleOptions): Mode
       multipart?: boolean
       headers?: Record<string, string>
     },
-  ): Promise<unknown> => (await open(url, init)).json()
-
-  const post = async (
-    path: string,
-    body: unknown,
-    form?: FormData,
-    headers?: Record<string, string>,
   ): Promise<unknown> =>
+    (
+      await attempt(url, init.multipart === true ? { multipart: true } : {}, async (signal) =>
+        (await open(url, { ...init, signal })).json(),
+      )
+    ).value
+
+  const post = async (path: string, body: unknown, form?: FormData): Promise<unknown> =>
     request(`${baseUrl}${path}`, {
       method: 'POST',
       body: form ?? JSON.stringify(body),
       ...(form === undefined ? {} : { multipart: true }),
-      ...(headers === undefined ? {} : { headers }),
     })
 
   /**
@@ -442,21 +525,50 @@ export function openaiCompatibleProvider(options: OpenAiCompatibleOptions): Mode
     throw first
   }
 
-  /** WP188：流式请求一次，拼回非流式那个形状（后面的工具调用解析、用量换算照旧）。 */
+  /**
+   * WP188：流式请求一次，拼回非流式那个形状（后面的工具调用解析、用量换算照旧）。
+   * WP243：`onText` 不给 = 内部走流式（调用方要的是一整段，只是让连接上一直有字节）。
+   * 流没走完就断了整体重来一次（见 {@link attempt}）。
+   */
   const streamed = async (
     payload: Record<string, unknown>,
-    onText: (text: string) => void,
+    onText: ((text: string) => void) | undefined,
     signal: AbortSignal | undefined,
     headers?: Record<string, string>,
-  ): Promise<WireChatResponse> => {
-    const res = await open(`${baseUrl}/chat/completions`, {
-      method: 'POST',
-      body: JSON.stringify({ ...payload, stream: true, stream_options: { include_usage: true } }),
-      ...(signal === undefined ? {} : { signal }),
-      ...(headers === undefined ? {} : { headers }),
-    })
-    const reply = await readChatStream(res, onText, signal)
-    return {
+  ): Promise<{ json: WireChatResponse; retries: ProviderNetTry[] }> => {
+    const url = `${baseUrl}/chat/completions`
+    let shown = false
+    const { value: reply, retries } = await attempt(
+      url,
+      { signal, mayRetry: () => !shown },
+      async (combined) => {
+        const res = await open(url, {
+          method: 'POST',
+          body: JSON.stringify({
+            ...payload,
+            stream: true,
+            stream_options: { include_usage: true },
+          }),
+          signal: combined,
+          ...(headers === undefined ? {} : { headers }),
+        })
+        const got = await readChatStream(
+          res,
+          (text) => {
+            if (onText === undefined) return
+            shown = true
+            onText(text)
+          },
+          signal,
+        )
+        // 已经收到的那一截不当成功：上游没说「完了」就是中间被掐了
+        if (got.whole === undefined && got.finished !== true) throw streamIncompleteError()
+        return got
+      },
+    )
+    // 中转没按流式回、直接回了一整个 JSON：照非流式那条路
+    if (reply.whole !== undefined) return { json: reply.whole as WireChatResponse, retries }
+    const json: WireChatResponse = {
       choices: [
         {
           message: {
@@ -478,6 +590,7 @@ export function openaiCompatibleProvider(options: OpenAiCompatibleOptions): Mode
       ],
       ...(reply.usage === undefined ? {} : { usage: reply.usage }),
     }
+    return { json, retries }
   }
 
   const provider: ModelProvider = {
@@ -491,19 +604,29 @@ export function openaiCompatibleProvider(options: OpenAiCompatibleOptions): Mode
         messages: toWireMessages(req.messages),
         ...(req.tools === undefined ? {} : { tools: req.tools.map(toWireTool) }),
         ...(req.seed === undefined ? {} : { seed: req.seed }),
+        // WP243：输出上限 / 关思考
+        ...hintFields(options.model, req),
       }
       // WP194：官方接口那一条带上「谁 / 哪个岗位」
       const extra = options.requestHeaders?.(req.meta)
-      // WP188：调用方要一段一段收（随便聊）→ 走流式；拼回来的形状与非流式一模一样
-      const json: WireChatResponse =
-        req.on_delta === undefined
-          ? ((await post(
-              '/chat/completions',
-              { ...payload, stream: false },
-              undefined,
-              extra,
-            )) as WireChatResponse)
-          : await streamed(payload, req.on_delta, req.signal, extra)
+      /*
+       * WP188：调用方要一段一段收（随便聊）→ 走流式；拼回来的形状与非流式一模一样。
+       * WP243：`streamAlways`（官方接口那一条）→ 一整段的调用也走流式，让连接上一直有字节——
+       * 非流式要等几十秒才回第一个字节，中间的代理会把「空闲」的连接掐掉。
+       */
+      const viaStream = req.on_delta !== undefined || options.streamAlways === true
+      const url = `${baseUrl}/chat/completions`
+      const { json, retries } = viaStream
+        ? await streamed(payload, req.on_delta, req.signal, extra)
+        : await attempt(url, {}, async (signal) => {
+            const res = await open(url, {
+              method: 'POST',
+              body: JSON.stringify({ ...payload, stream: false }),
+              signal,
+              ...(extra === undefined ? {} : { headers: extra }),
+            })
+            return (await res.json()) as WireChatResponse
+          }).then(({ value, retries }) => ({ json: value, retries }))
       const message = json.choices?.[0]?.message
       if (message === undefined) {
         throw new ProviderError('provider response has no choices')
@@ -536,8 +659,9 @@ export function openaiCompatibleProvider(options: OpenAiCompatibleOptions): Mode
         text,
         ...(calls.length === 0 ? {} : { tool_calls: calls }),
         ...(typeof reasoning === 'string' && reasoning.length > 0 ? { reasoning } : {}),
+        ...(retries.length === 0 ? {} : { net_retries: retries }),
         usage:
-          usage === undefined && req.on_delta !== undefined
+          usage === undefined && viaStream
             ? // WP188：有的上游流式时不回用量（不认 include_usage）——按字数估，好过记 0
               {
                 input_tokens: estimateInputTokens(req.messages, req.tools, 4),

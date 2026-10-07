@@ -1273,6 +1273,8 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
                 ? {}
                 : attributionHeaders(options.cloudAttribution(meta)),
             cloudErrors: true,
+            // WP243：一整段的调用也内部走流式——连接上一直有字节，代理不当它空闲掐掉
+            streamAlways: true,
           }
         : {}),
     })
