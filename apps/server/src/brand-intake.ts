@@ -200,7 +200,13 @@ export function createBrandIntake(options: BrandIntakeOptions): BrandIntakeAssem
         const profile = previous === undefined ? out.profile : mergeProfile(previous, out.profile)
         const gotSomething = out.pages.some((p) => p.ok)
         documents.set(current.workspace_id, out.documents ?? [])
-        const { failure: _f, failure_kind: _k, password_protected: _p, ...rest } = current
+        const {
+          failure: _f,
+          failure_kind: _k,
+          password_protected: _p,
+          fresh_store: _fs,
+          ...rest
+        } = current
         runs.set(id, {
           ...rest,
           status: gotSomething
@@ -213,6 +219,8 @@ export function createBrandIntake(options: BrandIntakeOptions): BrandIntakeAssem
           profile,
           updated_at: now(),
           ...(out.password_protected === true ? { password_protected: true } : {}),
+          // WP244：空店——界面据此明说「品牌资料请自己填」，推荐里加建站
+          ...(out.fresh_store === true ? { fresh_store: true } : {}),
           ...(gotSomething
             ? {}
             : {

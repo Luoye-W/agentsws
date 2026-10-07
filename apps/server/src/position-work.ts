@@ -19,6 +19,7 @@ import {
   type Iso8601,
   MAX_POSITION_WORK_ITEMS,
   type Matter,
+  type MatterEvent,
   matterGroupOf,
   POSITION_WORK_DONE_DAYS,
   POSITION_WORK_GROUPS,
@@ -84,6 +85,93 @@ export interface BuildPositionWorkInput {
   roleOfAssignment(assignment_id: string): RoleId | undefined
   /** 事项最近一句进展（摘要或时间线最后一句）；不给就只用摘要 */
   progressOf?(matter: Matter): string | undefined
+  /**
+   * WP244：事项的运行情况（现在有没有在跑、最近一轮怎么收的尾、那条职责还缺什么）。
+   * 不给 = 老口径（开着就是「进行中」）。
+   */
+  runOf?(matter: Matter): MatterRunState | undefined
+}
+
+/**
+ * WP244：一件开着的事项「AI 这边」到哪了——分组靠它，不再一律算「进行中」。
+ *
+ * 根因（Fable 10-07 真机）：事项（37 Matter）只有 开着 / 等着 / 关了 三种状态，一轮运行跑完它照样
+ * 「开着」（人还能接着说），WP241 的分组又把「开着」一律归进「进行中 · AI 在做」——于是答完了的
+ * （「查完了。」）、交不出来的（「这份活现在交不出来——是没接上」）都一直挂在进行中。
+ * 事项本身没有该收口而没收口的毛病；要改的是**视图的分组规则**：看它最近那一轮运行。
+ */
+export interface MatterRunState {
+  /** 这件事上现在有运行在跑（或排着） */
+  running: boolean
+  /**
+   * 最近一轮运行（时间线上最后一条「开始跑」之后）怎么收的尾：
+   * `answered` = AI 回了话；`failed` = 没跑成；`stopped` = 被停了（看门狗 / 人 / 额度）。
+   * 还没收尾 / 从没跑过 = 没有。
+   */
+  last?: { outcome: 'answered' | 'failed' | 'stopped'; text: string }
+  /** 这件事那条职责还缺的**必需**连接（人话名）——卡住时「缺什么」先说它 */
+  missing?: string[]
+}
+
+/**
+ * AI 自己说「交不出来 / 没接上 / 没权限」的那几种说法（中英）。只在它最后那句答复上看，
+ * 而且只决定「卡住了」还是「出结果了」——不改事项、不改卡。
+ */
+const STUCK_WORDS =
+  /交不出|没接上|没连上|还没连|连不上|接不上|没有权限|没权限|没授权|未授权|未连接|缺少?(?:必需的?)?连接|not connected|isn['’]t connected|no access|missing (?:a |the )?connection/i
+
+/**
+ * 从时间线读出「最近那一轮运行怎么收的尾」。
+ *
+ * 按 `run_id` 认一轮，不按事件先后切——同步跑的那一路是**跑完才记「开始跑了」那一条**
+ * （`Work.say` 等 `startRun` 回来才写 `run` 事件），所以「最后一条 run 事件之后」什么都没有。
+ * 最近一轮 = 时间线上最后一条带 `run_id` 的事件所属的那一轮。
+ */
+export function matterRunStateOf(
+  events: readonly Pick<MatterEvent, 'kind' | 'text' | 'run_id' | 'stopped'>[],
+  running: boolean,
+  missing?: readonly string[],
+): MatterRunState {
+  const base: MatterRunState = {
+    running,
+    ...(missing === undefined || missing.length === 0 ? {} : { missing: [...missing] }),
+  }
+  const run_id = [...events].reverse().find((e) => e.run_id !== undefined)?.run_id
+  if (run_id === undefined) return base
+  const mine = events.filter((e) => e.run_id === run_id)
+  const halted = mine.find(
+    (e) => e.kind === 'status' && (e.stopped !== undefined || e.text.startsWith('这次运行没跑成')),
+  )
+  const partial = mine.find((e) => e.kind === 'agent_message' && e.stopped !== undefined)
+  if (halted !== undefined || partial !== undefined) {
+    const line = halted ?? mine.find((e) => e.kind === 'status' && e.text.trim() !== '') ?? partial
+    return {
+      ...base,
+      last: {
+        outcome: halted?.text.startsWith('这次运行没跑成') === true ? 'failed' : 'stopped',
+        text: line?.text ?? '',
+      },
+    }
+  }
+  const answer = mine.filter((e) => e.kind === 'agent_message' && e.text.trim() !== '').at(-1)
+  return answer === undefined ? base : { ...base, last: { outcome: 'answered', text: answer.text } }
+}
+
+/** 一件**开着**的事项按运行情况落哪一组（关了 / 等着的不走这里）。 */
+export function openMatterPhase(
+  state: MatterRunState | undefined,
+  cards: number,
+): { group: 'doing' | 'stuck' | 'done'; result_ready?: true; stuck_reason?: string } {
+  if (state === undefined || state.running || state.last === undefined) return { group: 'doing' }
+  const missing = state.missing ?? []
+  const reason = (fallback: string): string =>
+    missing.length > 0 ? `缺${missing.join('、')}连接` : (clip(fallback, 60) ?? '这次没做成')
+  const { outcome, text } = state.last
+  if (outcome === 'failed' || outcome === 'stopped' || STUCK_WORDS.test(text))
+    return { group: 'stuck', stuck_reason: reason(text) }
+  // 答完了、还有卡等你定：照旧挂进行中（行尾「N 张卡等你」就是下一步），不算「已完成」
+  if (cards > 0) return { group: 'doing' }
+  return { group: 'done', result_ready: true }
 }
 
 /** 一句话截短（列表那一格放不下长段落；完整的在事项页）。 */
@@ -141,11 +229,15 @@ export function buildPositionWork(input: BuildPositionWorkInput): PositionWorkVi
 
   for (const m of input.matters) {
     if (m.archived_at !== undefined && m.status !== 'closed') continue
-    const group = matterGroupOf(m.status)
-    if (group === 'done' && !recent(m.closed_at ?? m.updated_at)) continue
+    const card_ids = cardsByMatter.get(m.id) ?? []
+    // WP244：开着的事项按最近那一轮运行分：在跑 = 进行中；答完了 = 已完成（待你看结果）；交不出来 = 卡住了
+    const phase =
+      m.status === 'open' ? openMatterPhase(input.runOf?.(m), card_ids.length) : undefined
+    const group = phase?.group ?? matterGroupOf(m.status)
+    if (group === 'done' && !recent(m.closed_at ?? m.context.last_activity ?? m.updated_at))
+      continue
     const role_id =
       m.role_id ?? (m.position_id === undefined ? undefined : input.roleOfAssignment(m.position_id))
-    const card_ids = cardsByMatter.get(m.id) ?? []
     const progress = clip(input.progressOf?.(m) ?? m.context.summary)
     items.push({
       id: `matter:${m.id}`,
@@ -162,6 +254,8 @@ export function buildPositionWork(input: BuildPositionWorkInput): PositionWorkVi
       updated_at: m.context.last_activity ?? m.updated_at,
       matter_id: m.id,
       movable: false,
+      ...(phase?.result_ready === true ? { result_ready: true as const } : {}),
+      ...(phase?.stuck_reason === undefined ? {} : { stuck_reason: phase.stuck_reason }),
     })
   }
 
@@ -269,6 +363,7 @@ export function buildPositionWork(input: BuildPositionWorkInput): PositionWorkVi
     items: kept,
     counts: {
       doing: count('doing'),
+      stuck: count('stuck'),
       queued: count('queued'),
       waiting: count('waiting'),
       done: count('done'),

@@ -17,6 +17,7 @@ const MAX_PER_DAY_MONTH = 3
 
 const BAR: Record<PositionWorkGroup, string> = {
   doing: 'border-l-ws-good',
+  stuck: 'border-l-ws-warn',
   queued: 'border-l-ws-muted-fg',
   waiting: 'border-l-ws-info',
   done: 'border-l-ws-good line-through text-ws-muted-fg',

@@ -2,7 +2,8 @@
  * WP241 岗位页「工作」的小零件：状态图标、类别图标、「N 张卡等你」、职责胶囊、谁在做、弹层。
  *
  * 状态图标颜色 + 形状双编码（设计稿 README「我自己定的几处」，同 36 §7 的思路，色弱也分得开）：
- * 进行中 = 绿色半圆、排着的 = 灰圈一横、等别人 = 蓝色虚线圈加钟、已完成 = 绿底勾。
+ * 进行中 = 绿色半圆、卡住了 = 琥珀色圈加感叹号（WP244）、排着的 = 灰圈一横、等别人 = 蓝色虚线圈加钟、
+ * 已完成 = 绿底勾。
  */
 import type { PositionWorkGroup, PositionWorkItem } from '@agentsws/contracts'
 import { AlarmClock, CalendarClock, Check, FolderClosed, SquareCheck } from 'lucide-react'
@@ -38,6 +39,21 @@ export function GroupIcon({
         <title>{label}</title>
         <circle cx="8" cy="8" r="6.25" fill="none" stroke="currentColor" strokeWidth="1.5" />
         <path d="M8 1.75a6.25 6.25 0 0 1 0 12.5z" fill="currentColor" />
+      </svg>
+    )
+  // WP244：卡住了 = 琥珀色圈里一个感叹号
+  if (group === 'stuck')
+    return (
+      <svg
+        {...common}
+        className="shrink-0 text-ws-warn"
+        data-testid="group-icon"
+        data-group={group}
+      >
+        <title>{label}</title>
+        <circle cx="8" cy="8" r="6.25" fill="none" stroke="currentColor" strokeWidth="1.5" />
+        <path d="M8 4.6v4.2" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+        <circle cx="8" cy="11.2" r="0.95" fill="currentColor" />
       </svg>
     )
   if (group === 'queued')
@@ -144,6 +160,39 @@ export function CardsBadge({
   )
 }
 
+/**
+ * WP244：行上「到哪了」那一格——卡住了先说缺什么（琥珀色），AI 答完了前面挂「待你看结果」，
+ * 其余照旧是最近一句进展。
+ */
+export function ProgressText({
+  item,
+  fallback = '',
+}: {
+  item: PositionWorkItem
+  fallback?: string
+}): ReactNode {
+  const { t } = useApp()
+  if (item.stuck_reason !== undefined)
+    return (
+      <span className="text-ws-warn" data-testid="work-stuck-reason">
+        {item.stuck_reason}
+      </span>
+    )
+  return (
+    <>
+      {item.result_ready === true ? (
+        <span
+          className="mr-1.5 inline-flex h-4 items-center rounded-full bg-ws-good-bg px-1.5 text-[10.5px] font-medium text-ws-good"
+          data-testid="work-result-ready"
+        >
+          {t('pos2.result_ready')}
+        </span>
+      ) : null}
+      {item.progress ?? fallback}
+    </>
+  )
+}
+
 export function DutyChip({ item }: { item: PositionWorkItem }): ReactNode {
   if (item.role_id === undefined) return <span className="text-xs text-ws-muted-fg">—</span>
   return (
@@ -158,12 +207,18 @@ export function DutyChip({ item }: { item: PositionWorkItem }): ReactNode {
   )
 }
 
-/** 谁在做：AI / 你（待办的承诺人永远是人）。 */
+/** 谁在做：AI / 你（待办的承诺人永远是人）。WP244：AI 做完了 / 卡住了的不说「AI 在做」。 */
 export function WhoBadge({ item }: { item: PositionWorkItem }): ReactNode {
   const { t } = useApp()
   const mine = item.kind === 'todo'
+  const aiText =
+    item.group === 'stuck'
+      ? t('pos2.who.ai_stuck')
+      : item.group === 'done'
+        ? t('pos2.who.ai_done')
+        : t('pos2.who.ai')
   return (
-    <InfoTip text={mine ? t('pos2.who.you') : t('pos2.who.ai')}>
+    <InfoTip text={mine ? t('pos2.who.you') : aiText}>
       <span
         data-testid="work-who"
         data-who={mine ? 'you' : 'ai'}

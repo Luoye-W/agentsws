@@ -7,7 +7,7 @@ import { ArrowUpDown } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { useApp } from '@/lib/app-context'
 import { type ColumnId, whenText } from '@/lib/position-work'
-import { CardsBadge, DutyChip, GroupIcon, KindIcon } from './work-bits'
+import { CardsBadge, DutyChip, GroupIcon, KindIcon, ProgressText } from './work-bits'
 import { DueText, ItemTitle } from './work-list'
 
 export function WorkTable({
@@ -48,8 +48,11 @@ export function WorkTable({
         return <span className="whitespace-nowrap">{t(`pos2.source.${item.source}`)}</span>
       case 'progress':
         return (
-          <span className="line-clamp-1 text-ws-muted-fg" title={item.progress}>
-            {item.progress ?? '—'}
+          <span
+            className="line-clamp-1 text-ws-muted-fg"
+            title={item.stuck_reason ?? item.progress}
+          >
+            <ProgressText item={item} fallback="—" />
           </span>
         )
       default:

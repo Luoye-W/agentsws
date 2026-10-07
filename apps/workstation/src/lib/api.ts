@@ -3450,6 +3450,8 @@ export interface OnboardingStateView {
   added_brand?: true
   /** WP240：这个品牌现在有没有能用的 AI（跟随公司默认的算公司那一份）。 */
   model_configured?: boolean
+  /** WP244：这个品牌的第 ② 步已经做过（档案有人确认 / 存过）——向导重开时从第 ③ 步接着走。 */
+  business_done?: true
 }
 
 /** 向导第 ③ 步的候选：一个岗位与它包含的职责（每条带一句"它会干什么"）。 */
@@ -4347,6 +4349,18 @@ export async function switchBrand(
   // 当前岗位是上一个品牌的 assignment_id，换品牌之后它一定不成立——先忘掉它
   clearAssignment()
   return switched
+}
+
+/**
+ * WP244（Fable 10-07 真机）：切完品牌**回这个品牌的首页**，不是原地重载。
+ *
+ * 原地重载会停在上一个品牌的地址上——在 INMO 的 `/positions/asg_…` 切到 Rollout，地址不变、
+ * 岗位名空白、内容全空（那个 asg 是 INMO 的）。换品牌后旧地址里的 id 一律不成立，所以一律回 `/`：
+ * 那个品牌还没设置完，首页那一跳自己会把人送进它的首次设置（`App` 按 `needs_setup` 判）。
+ * 仍然是整站重新加载（52 O2：不一页一页失效缓存）。
+ */
+export function enterSwitchedBrand(): void {
+  globalThis.location?.assign('/')
 }
 
 // ── WP215 每个品牌一套后台 ────────────────────────────────────────────

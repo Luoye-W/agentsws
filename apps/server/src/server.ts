@@ -3783,6 +3783,13 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
             !(Object.values(SCHEDULE_HANDLERS) as string[]).includes(t.handler),
         ),
       socialPosts: () => social.posts(),
+      // WP244：工作里开着的事项按最近那一轮运行分组（在跑 / 答完了 / 卡住了）
+      runningMatters: () => new Set((runtime?.activeRuns() ?? []).map((r) => r.matter_id)),
+      // WP244：卡住了说缺什么——这条职责还缺的必需连接（连接目录按品牌装好之后才有）
+      missingConnections: (role_id) =>
+        (directoryAssemblies.get(ws)?.roleGaps([role_id]) ?? [])
+          .filter((g) => g.required && !g.connected)
+          .map((g) => g.name.zh),
     })
     positionAssemblies.set(ws, positionsAssembly)
     // 六层技能里的 `position` 那一层、以及岗位层上下文那三样，都从这里来
