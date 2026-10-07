@@ -37,6 +37,8 @@ const SCALAR_FIELDS = [
   'bin_lock_file',
   // WP171：Luoye 自己的**私有**仓库（不在公网，不 watch）——写它在哪，不写 repo / npm / image
   'private_source',
+  // WP252：不进 pnpm 的 npm 运行时（桌面按需下载的 OpenConnector）——钉版本与逐包 sha512 的 npm 锁文件
+  'npm_lock_file',
 ]
 const LIST_FIELDS = [
   'watch',
@@ -46,6 +48,8 @@ const LIST_FIELDS = [
   'watch_paths',
   'wishlist',
   'covered_by',
+  // WP252：代码里钉这个版本的地方（逐字含 `'<npm>'` 与 `'<locked_version>'`）
+  'npm_pin_in',
 ]
 const ALL_FIELDS = [...SCALAR_FIELDS, ...LIST_FIELDS]
 
@@ -255,6 +259,13 @@ export function validateShape(items) {
       p(`${where} 有 \`bin_version\` 就要有 \`repo\`（比的是它的 release）`)
     if (it.lockfile_single !== undefined && typeof it.lockfile_single !== 'boolean')
       p(`${where} \`lockfile_single\` 只许 true / false`)
+    if (
+      (it.npm_lock_file !== undefined || it.npm_pin_in?.length) &&
+      (!it.npm || !it.locked_version)
+    )
+      p(`${where} 有 \`npm_lock_file\` / \`npm_pin_in\` 就要有 \`npm\` 与 \`locked_version\``)
+    if (it.npm_lock_file !== undefined && it.lockfile_single !== false)
+      p(`${where} 有 \`npm_lock_file\`（不进 pnpm）就要写 \`lockfile_single: false\``)
     if (String(it.locked_version ?? '').startsWith('^') && it.pin !== 'allow_caret')
       p(`${where} \`locked_version\` 带 ^ 就要显式写 \`pin: allow_caret\`（docs/42 红线 3）`)
   }
@@ -346,6 +357,7 @@ export function checkPins(items, root = REPO_ROOT) {
 
     problems.push(...checkImagePins(it, root))
     problems.push(...checkBinLock(it, root))
+    problems.push(...checkNpmLock(it, root))
 
     for (const rel of it.covered_by ?? []) {
       if (!existsSync(join(root, String(rel)))) p(`${where} covered_by 指向不存在的路径：${rel}`)
@@ -428,6 +440,72 @@ export function checkBinLock(it, root = REPO_ROOT) {
   if (plugin && it.npm && plugin.name === it.npm && plugin.version !== String(it.locked_version))
     problems.push(
       `${where} ${rel} 的 plugin.version 是 \`${plugin.version}\`，登记表锁的是 \`${it.locked_version}\``,
+    )
+  return problems
+}
+
+/**
+ * WP252：不走 pnpm 的 npm 运行时（WP247 桌面按需下载的 OpenConnector）。`npm_lock_file` 是一份 npm 锁文件
+ * （`npm ci` 吃它），要求：根依赖与那个包的 `version` 都等于登记表的 `locked_version`、那个包与锁文件里
+ * 每个要下载的包都钉了 sha512；`npm_pin_in` 的每个文件都逐字含 `'<npm>'` 与 `'<locked_version>'`
+ * （代码里的钉版本常量与登记表一起改）。
+ * @returns {string[]}
+ */
+export function checkNpmLock(it, root = REPO_ROOT) {
+  const problems = []
+  if (!it.npm || !it.locked_version) return problems
+  const where = `[${it.id}]`
+  const name = String(it.npm)
+  const want = String(it.locked_version)
+  if (it.npm_lock_file !== undefined) {
+    const rel = String(it.npm_lock_file)
+    const text = readIfExists(join(root, rel))
+    if (text === null) problems.push(`${where} npm_lock_file 指向不存在的文件：${rel}`)
+    else {
+      let lock
+      try {
+        lock = JSON.parse(text)
+      } catch {
+        lock = undefined
+        problems.push(`${where} ${rel} 不是合法的 JSON`)
+      }
+      if (lock !== undefined) problems.push(...npmLockProblems(where, rel, lock, name, want))
+    }
+  }
+  for (const rel of it.npm_pin_in ?? []) {
+    const text = readIfExists(join(root, String(rel)))
+    if (text === null) {
+      problems.push(`${where} npm_pin_in 指向不存在的文件：${rel}`)
+      continue
+    }
+    if (!text.includes(`'${name}'`)) problems.push(`${where} ${rel} 里没有 \`'${name}'\``)
+    if (!text.includes(`'${want}'`))
+      problems.push(`${where} ${rel} 里没有钉 \`'${want}'\`（登记表与代码里的钉版本要一起改）`)
+  }
+  return problems
+}
+
+function npmLockProblems(where, rel, lock, name, want) {
+  const problems = []
+  const packages = lock?.packages
+  if (typeof packages !== 'object' || packages === null)
+    return [`${where} ${rel} 没有 \`packages\`（要 npm 锁文件 v2 / v3）`]
+  const rootDep = packages['']?.dependencies?.[name]
+  if (rootDep !== want)
+    problems.push(
+      `${where} ${rel} 的根依赖 \`${name}\` 是 \`${rootDep}\`，登记表写的是 \`${want}\``,
+    )
+  const entry = packages[`node_modules/${name}`]
+  if (entry === undefined) problems.push(`${where} ${rel} 里没有 \`node_modules/${name}\``)
+  else if (entry.version !== want)
+    problems.push(`${where} ${rel} 里 \`${name}\` 解析成 ${entry.version}，登记表写的是 ${want}`)
+  const unpinned = Object.entries(packages)
+    .filter(([path, e]) => path !== '' && e?.resolved !== undefined)
+    .filter(([, e]) => !String(e.integrity ?? '').startsWith('sha512-'))
+    .map(([path]) => path)
+  if (unpinned.length > 0)
+    problems.push(
+      `${where} ${rel} 里 ${unpinned.length} 个包没钉 sha512：${unpinned.slice(0, 3).join('、')}`,
     )
   return problems
 }

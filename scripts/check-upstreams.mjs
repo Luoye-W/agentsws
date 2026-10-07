@@ -13,6 +13,8 @@
  *   ④ 镜像（WP146）：`image_in` 里每个文件对镜像的每一处引用都逐字等于
  *      `image:image_tag@image_digest`（compose 里 digest 改坏一位就红）
  *   ⑤ 二进制（WP146）：`bin_lock_file` 里钉的 cli / 插件版本与登记表一致
+ *   ⑥ npm 运行时（WP252）：`npm_lock_file` 的根依赖 / 包版本等于 `locked_version`、每个包钉 sha512，
+ *      `npm_pin_in` 里的钉版本常量与登记表一致
  *
  * 退出码：0 没问题；1 有问题；2 文件读不了 / 解析不了。
  */

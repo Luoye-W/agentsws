@@ -73,10 +73,21 @@ export interface ConnectionView {
    * 界面上要说清楚该怎么换过去；`hint` 就是给非技术用户看的那一句。
    */
   legacy?: { kind: LegacyConnectionKind; hint: string }
+  /**
+   * WP252（决策 125）：一台机多个品牌共用一个连接器时，这条连接**以前和另一个品牌共用过同一个连接名**
+   * （都用 `default` 连了同一家服务，上游是同一条）。迁移时归给了启动品牌：
+   * - `reconnect`：本品牌这一行只是个提醒（id 以 `reconnect_` 开头，上游那条是别的品牌的）——
+   *   要重新连接一次；删掉它（界面上是「收起」）只收起提醒，不碰上游。
+   * - `kept`：留在本品牌的那一条，凭据可能是对方最后填进去的——点一次「测试」核对账号，之后不再提醒。
+   */
+  brand_conflict?: { kind: BrandConflictKind; hint: string }
 }
 
 /** 老办法的种类。v1 只有一种：Shopify 自定义应用的 `shpat_` 访问令牌。 */
 export type LegacyConnectionKind = 'shopify_access_token'
+
+/** WP252：多品牌共用同一个连接名留下的两种提醒（见 `ConnectionView.brand_conflict`）。 */
+export type BrandConflictKind = 'reconnect' | 'kept'
 
 /** 原生表单的一个字段。`secret: true` 的在前端一律 `type=password` + `autocomplete=off`。 */
 export interface ProviderFieldSpec {

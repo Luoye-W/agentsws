@@ -166,7 +166,7 @@ Shopify / Meta / WhatsApp 的 webhook 接收、IMAP 轮询、飞书事件订阅�
 | 起停 | 桌面壳 `connect-launcher.ts`（sidecar 监督者：退避重启、连续失败停在 failed 等人点重启）；只听 127.0.0.1，端口第一次选好记进配置（OAuth 回调地址不变）；应用退出时关 stdin 请它收尾，Windows 到点按进程树强杀 |
 | 加固 | 宿主脚本缺 `ENCRYPTION_KEY` / `ADMIN_TOKEN` 或 proxy 没封 `*` 就拒绝启动（退出码 78）；`/v1` 另挂一把由管理令牌派生的静态令牌（全新库也不匿名可读）；两把密钥来自桌面壳的 safeStorage，只经环境变量给子进程；`assertRuntimeHardened` 通过才算就绪 |
 | 地址出处 | 仍只有两种：`AGENTSWS_CONNECT_URL` 显式给了就用它、不拉起本机的（Docker / 外部 / 将来的云端连接 86）；否则打包版由壳起本机的并把地址交给服务进程（`AGENTSWS_CONNECT_LOCAL_RUNTIME=1`） |
-| 数据 | `<data>/runtime/open-connector-data`（每台机一份；品牌靠命名连接 + 各品牌自己的 adapter 状态区分，WP66）；「删除下载」只删 `open-connector/`，不碰它 |
+| 数据 | `<data>/runtime/open-connector-data`（每台机一份；品牌靠**连接名带品牌段**（`<别名>--<品牌段>`）+ 整台机一份归属表 `connect-owners.json` 区分，只列 / 只用 / 只签本品牌的连接，老 `default` 归启动品牌——WP252，决策 125）；「删除下载」只删 `open-connector/`，不碰它 |
 
 **风险**
 

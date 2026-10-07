@@ -1182,6 +1182,11 @@ export interface ConnectionView {
   last_test?: ConnectTestResult
   /** WP44：用已经下线的老办法接的（Shopify 的 shpat_ 直填令牌）。 */
   legacy?: { kind: 'shopify_access_token'; hint: string }
+  /**
+   * WP252：以前和本机另一个品牌共用过同一个连接名。`reconnect` = 本品牌这一行只是提醒（要重新连接，
+   * 「收起」不碰别的品牌那条）；`kept` = 留在本品牌的那条，点一次「测试」核对账号。
+   */
+  brand_conflict?: { kind: 'reconnect' | 'kept'; hint: string }
 }
 
 export interface ProviderView {
