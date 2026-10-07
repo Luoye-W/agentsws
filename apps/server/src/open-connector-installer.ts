@@ -46,6 +46,7 @@ import {
   parseSupervisorFile,
   type SupervisorFile,
 } from '@agentsws/connect-adapter'
+import { type NpmRegistryChoice, withRegistry } from './npm-registry.js'
 import { ensureNpmCli, NpmRuntimeError } from './npm-runtime.js'
 import {
   classifyErrorCode,
@@ -106,8 +107,13 @@ export interface OpenConnectorInstallerOptions {
   nodeExec?: string
   env?: NodeJS.ProcessEnv
   spawn?: SpawnTool
-  /** 找 / 下 npm（默认 WP245 的 `ensureNpmCli`，装在 `<data>/tools/npm`）。 */
-  npmCli?: (onDownload: () => void) => Promise<string>
+  /** 找 / 下 npm（默认 WP245 的 `ensureNpmCli`，装在 `<data>/tools/npm`）；`registry` 是这一次的源。 */
+  npmCli?: (onDownload: () => void, registry?: string) => Promise<string>
+  /**
+   * WP254（决策 100 / 123）：这一次下载用哪个源（每台机记的那一份）。不给 = 只看环境变量。
+   * 换源不换校验：锁文件里每个包的 sha512 照样逐个对。
+   */
+  registry?: () => NpmRegistryChoice
   /** 测试换成自己的小包；不给 = 代码里钉死的那一版。 */
   pin?: OpenConnectorPin
   lockfile?: OpenConnectorLockfile
@@ -187,10 +193,15 @@ export function createOpenConnectorInstaller(
   const toolsDir = join(options.dataDir, 'tools')
   const sleep =
     options.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)))
-  const registry = env.npm_config_registry ?? env.NPM_CONFIG_REGISTRY
+  const envRegistry = env.npm_config_registry ?? env.NPM_CONFIG_REGISTRY
+  const chooseRegistry = (): NpmRegistryChoice =>
+    options.registry?.() ??
+    (envRegistry === undefined || envRegistry === ''
+      ? { source: 'official' }
+      : { source: 'custom', url: envRegistry })
   const npmCli =
     options.npmCli ??
-    ((onDownload: () => void) =>
+    ((onDownload: () => void, registry?: string) =>
       ensureNpmCli({
         nodeExec,
         toolsDir,
@@ -198,8 +209,10 @@ export function createOpenConnectorInstaller(
         ...(registry === undefined || registry === '' ? {} : { registry }),
       }))
   // npm 与冒烟共用的子进程环境：WP245 的白名单（代理 / 证书 / 源地址照样放行），PATH 最前面是我们的 node
-  const childEnv = (): Record<string, string> =>
-    runEnv({ telemetry_off_env: {} }, env, { nodeExec, action: 'install', toolsDir })
+  const childEnv = (choice?: NpmRegistryChoice): Record<string, string> => {
+    const base = runEnv({ telemetry_off_env: {} }, env, { nodeExec, action: 'install', toolsDir })
+    return choice === undefined ? base : withRegistry(base, choice)
+  }
   const verify = options.verify ?? defaultVerify(nodeExec, spawnTool, childEnv())
 
   let job: LocalConnectorJobView | undefined
@@ -275,11 +288,14 @@ export function createOpenConnectorInstaller(
     const fail = (code: LocalJobErrorCode, detail?: string): void => {
       finish('failed', { code, ...(detail === undefined ? {} : { detail }) })
     }
+    // WP254：这一次用哪个源，记在任务上（「出错」那一行据此决定给不给「换国内源再试」）
+    const choice = chooseRegistry()
+    job.registry = choice.source
     let cli: string
     try {
       cli = await npmCli(() => {
         if (job?.phase === 'preparing') job.phase = 'downloading'
-      })
+      }, choice.url)
     } catch (err) {
       // 下 npm 失败（WP245 的分类：网络 / 磁盘 / 校验不对……）；分不出来的按网络算——那一步只有下载
       const { code, detail } = npmFetchFailure(err)
@@ -318,7 +334,7 @@ export function createOpenConnectorInstaller(
       layout.cache,
     ]
     const log: string[] = []
-    const started = spawnTool(nodeExec, args, { env: childEnv(), cwd: staging })
+    const started = spawnTool(nodeExec, args, { env: childEnv(choice), cwd: staging })
     proc = started
     started.onLine((raw) => {
       const line = cleanLine(raw)

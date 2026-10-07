@@ -7,6 +7,7 @@
 import { CLOUD_AUTH_EN, CLOUD_AUTH_ZH } from './i18n-cloud-auth'
 import { LIBRARY_EN, LIBRARY_ZH } from './i18n-library'
 import { LOCAL_CONNECTOR_EN, LOCAL_CONNECTOR_ZH } from './i18n-local-connector'
+import { NPM_REGISTRY_EN, NPM_REGISTRY_ZH } from './i18n-npm-registry'
 import { OWN_SUB_EN, OWN_SUB_ZH } from './i18n-own-sub'
 import { POSITION_EN, POSITION_ZH } from './i18n-position'
 import { READ_ROUTES_EN, READ_ROUTES_ZH } from './i18n-read-routes'
@@ -7924,6 +7925,8 @@ const TABLES: Record<Lang, Table> = {
     ...READ_ROUTES_ZH,
     ...LOCAL_CONNECTOR_ZH,
     ...OWN_SUB_ZH,
+    // WP254：下载源（换国内源再试）
+    ...NPM_REGISTRY_ZH,
   },
   en: {
     ...en,
@@ -7933,6 +7936,7 @@ const TABLES: Record<Lang, Table> = {
     ...READ_ROUTES_EN,
     ...LOCAL_CONNECTOR_EN,
     ...OWN_SUB_EN,
+    ...NPM_REGISTRY_EN,
   },
 }
 

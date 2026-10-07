@@ -374,6 +374,7 @@ import {
   STUB_REF,
   templatesFor,
 } from './models.js'
+import { createNpmRegistryPreference, NPM_REGISTRY_URLS } from './npm-registry.js'
 import { createOffboard, type Offboard } from './offboard.js'
 import { createOfficialPlugins, officialPluginsDirIn } from './official-plugins.js'
 import {
@@ -2422,6 +2423,15 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
    * （`AGENTSWS_CONNECT_LOCAL_RUNTIME=1`，同时一定给了 `AGENTSWS_CONNECT_URL`）且有数据目录时才有；
    * 指外部 runtime / Docker 档 / 替身档都没有它（runtime 地址仍然只认那两种来源）。
    */
+  /**
+   * WP254（决策 100 / 123）：下载源（官方源 / 国内源）——**每台机一份**，记在 `<data>/tools/npm-registry.json`。
+   * 一键安装平台 CLI 与下载连接器每次开始时问它这一次用哪个源。
+   */
+  const npmRegistry = createNpmRegistryPreference({
+    toolsDir: dbDir === undefined ? undefined : join(dbDir, 'tools'),
+    now: () => clock.now(),
+    env,
+  })
   const localConnector =
     dbDir !== undefined &&
     env[LOCAL_RUNTIME_ENV] === '1' &&
@@ -2430,6 +2440,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           dataDir: dbDir,
           now: () => clock.now(),
           env,
+          registry: () => npmRegistry.choose(),
           ...options.localConnector,
         })
       : undefined
@@ -7666,6 +7677,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     now: () => clock.now(),
     toolsDir: dbDir === undefined ? undefined : join(dbDir, 'tools'),
     env,
+    registry: () => npmRegistry.choose(),
     ...options.platformCliRunner,
   })
   const platformKitPort = createPlatformKitPort({
@@ -7780,6 +7792,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     /*
      * WP246（决策 87 / 88）：取数路线（体检、设置、Reddit 读号），按品牌取。
      */
+    // WP254：下载源（每台机一份；「换国内源再试」与设置 · 诊断里改回官方源）
+    npmRegistry: {
+      get: () => ({ ...npmRegistry.get(), urls: { ...NPM_REGISTRY_URLS } }),
+      set: (source) => ({ ...npmRegistry.set(source), urls: { ...NPM_REGISTRY_URLS } }),
+    },
     readRoutes: {
       view: async (actor) => (await readRoutesOf(actor.workspace_id)).view(),
       doctor: async (actor) => (await readRoutesOf(actor.workspace_id)).doctor(),
