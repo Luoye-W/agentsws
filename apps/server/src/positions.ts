@@ -51,6 +51,7 @@ import { belongsTo, holdersByPlacement, WORKSPACE_BASE_ROLES } from './position-
 import {
   buildPositionWork,
   clip,
+  matterRunStateOf,
   type WorkPostLike,
   type WorkScheduleLike,
 } from './position-work.js'
@@ -115,6 +116,13 @@ export interface PositionsOptions {
   ): Promise<readonly WorkScheduleLike[]> | readonly WorkScheduleLike[]
   /** WP241：这个品牌的社媒帖子（「排期」那一类；按渠道 → 职责只留本岗位的）。 */
   socialPosts?(): readonly WorkPostLike[]
+  /**
+   * WP244：现在有运行在跑的事项（运行时的 `activeRuns`）。不给 = 不知道谁在跑——
+   * 那时开着的事项照旧一律算「进行中」（老口径）。
+   */
+  runningMatters?(): ReadonlySet<string>
+  /** WP244：这条职责还缺哪些**必需**连接（人话名）——卡住的事项说「缺什么」用。 */
+  missingConnections?(role_id: RoleId): readonly string[]
 }
 
 export interface OpenAtPositionInput {
@@ -999,6 +1007,7 @@ export function createPositions(options: PositionsOptions): PositionsAssembly {
       (i) => WAITING_STATES.has(i.state) && dutyRoles.has(i.role_id) && isDeckCard(i),
     )
     const schedules = (await options.schedules?.(person_id)) ?? []
+    const running = options.runningMatters?.()
     return buildPositionWork({
       position_id: template.id,
       now: clock.now(),
@@ -1013,6 +1022,23 @@ export function createPositions(options: PositionsOptions): PositionsAssembly {
       cards,
       roleName,
       roleOfAssignment: (id) => roles.assignments.get(id)?.role_id,
+      // WP244：开着的事项看最近那一轮运行（在跑 / 答完了 / 交不出来）；不知道谁在跑就不判
+      ...(running === undefined
+        ? {}
+        : {
+            runOf: (m: Matter) => {
+              const role_id =
+                m.role_id ??
+                (m.position_id === undefined
+                  ? undefined
+                  : roles.assignments.get(m.position_id)?.role_id)
+              return matterRunStateOf(
+                work.store.listMatterEvents(m.id, { limit: 40 }),
+                running.has(m.id),
+                role_id === undefined ? undefined : options.missingConnections?.(role_id),
+              )
+            },
+          }),
       // 「到哪了」摘要优先；没有就拿时间线最后一句人话（运行、状态、Agent 的话）
       progressOf: (m) =>
         clip(m.context.summary) ??

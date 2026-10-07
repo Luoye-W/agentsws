@@ -44,6 +44,7 @@ import {
   type BrandIntakeRun,
   getCloudAccount,
   getOnboardingState,
+  latestBrandIntake,
   listDiscoveryPeers,
   listOnboardingPositions,
   type OnboardingPlanInput,
@@ -145,6 +146,24 @@ export function addedBrandStart(state: {
   return { step: 1, ai: 'inherited' }
 }
 
+/**
+ * WP244（Fable 10-07 真机）：向导**重开**时从哪一步接着走。
+ *
+ * 第 ② 步「看着没问题」+「保存并继续」进了第 ③ 步，重新登录回来又从第 ② 步开始、第 ② 步没打勾——
+ * 步数只活在这一页的内存里。现在服务端说「第 ② 步做过了」（`business_done`）、AI 也接着，
+ * 就直接站在第 ③ 步（①② 打勾）；点「上一步」回第 ② 步，现场照样由最近那一次分析恢复。
+ */
+export function resumeStart(state: {
+  added_brand?: true
+  model_configured?: boolean
+  business_done?: true
+}): { step: number; ai: AiState } | undefined {
+  const added = addedBrandStart(state)
+  if (state.business_done === true && state.model_configured === true)
+    return { step: 2, ai: added?.ai ?? 'own' }
+  return added
+}
+
 export function OnboardingPage(): React.ReactNode {
   const { t } = useApp()
   const client = useQueryClient()
@@ -171,7 +190,7 @@ export function OnboardingPage(): React.ReactNode {
   useEffect(() => {
     if (startedFrom || state.data === undefined) return
     setStartedFrom(true)
-    const start = addedBrandStart(state.data)
+    const start = resumeStart(state.data)
     if (start === undefined) return
     setAi(start.ai)
     setStep(start.step)
@@ -234,6 +253,18 @@ export function OnboardingPage(): React.ReactNode {
    * WP234（Luoye 10-05）：第 ② 步分析出来的、AI 推荐的，**都只是推荐**——一条不预勾，
    * 点了才算选上；什么信息都没有就一条不推（70 §5）。
    */
+  /*
+   * WP244：从第 ③ 步接着走时（重新登录 / 刷新），第 ② 步那次分析不在这一页的内存里了——
+   * 按「最近那一次」补回来（与第 ② 步同一个缓存键），推荐照样按它出。只认已确认的那一次。
+   */
+  const latestIntake = useQuery({
+    queryKey: ['brand-intake', 'latest', undefined],
+    enabled: step === 2 && intake === undefined,
+    queryFn: () => latestBrandIntake(undefined),
+    retry: false,
+  })
+  const intakeRun: BrandIntakeRun | undefined =
+    intake ?? (latestIntake.data?.status === 'confirmed' ? latestIntake.data : undefined)
   const recommendations: DutyRecommendation[] = mergeRecommendations(
     (suggestion?.roles ?? []).map((r) => ({
       role_id: r.role_id,
@@ -241,7 +272,7 @@ export function OnboardingPage(): React.ReactNode {
       ...(r.quote === undefined ? {} : { quote: r.quote }),
     })),
     recommendFromIntake({
-      ...(intake === undefined ? {} : { run: intake }),
+      ...(intakeRun === undefined ? {} : { run: intakeRun }),
       positions: positions.data ?? [],
     }),
   )

@@ -3450,6 +3450,8 @@ export interface OnboardingStateView {
   added_brand?: true
   /** WP240：这个品牌现在有没有能用的 AI（跟随公司默认的算公司那一份）。 */
   model_configured?: boolean
+  /** WP244：这个品牌的第 ② 步已经做过（档案有人确认 / 存过）——向导重开时从第 ③ 步接着走。 */
+  business_done?: true
 }
 
 /** 向导第 ③ 步的候选：一个岗位与它包含的职责（每条带一句"它会干什么"）。 */
@@ -4347,6 +4349,18 @@ export async function switchBrand(
   // 当前岗位是上一个品牌的 assignment_id，换品牌之后它一定不成立——先忘掉它
   clearAssignment()
   return switched
+}
+
+/**
+ * WP244（Fable 10-07 真机）：切完品牌**回这个品牌的首页**，不是原地重载。
+ *
+ * 原地重载会停在上一个品牌的地址上——在 INMO 的 `/positions/asg_…` 切到 Rollout，地址不变、
+ * 岗位名空白、内容全空（那个 asg 是 INMO 的）。换品牌后旧地址里的 id 一律不成立，所以一律回 `/`：
+ * 那个品牌还没设置完，首页那一跳自己会把人送进它的首次设置（`App` 按 `needs_setup` 判）。
+ * 仍然是整站重新加载（52 O2：不一页一页失效缓存）。
+ */
+export function enterSwitchedBrand(): void {
+  globalThis.location?.assign('/')
 }
 
 // ── WP215 每个品牌一套后台 ────────────────────────────────────────────
@@ -6653,6 +6667,39 @@ export async function fetchB2bQuotePdf(
 
 // ── WP216：平台专属那一套（官方技能 / 官方 MCP / 官方 CLI）────────────────────
 
+/** WP245：工作台替用户跑的那件事（安装 / 登录）走到哪了。 */
+export interface PlatformCliJob {
+  action: 'install' | 'login'
+  phase:
+    | 'preparing'
+    | 'downloading'
+    | 'installing'
+    | 'waiting_browser'
+    | 'done'
+    | 'failed'
+    | 'cancelled'
+  started_at: string
+  finished_at?: string
+  fetched?: number
+  login_url?: string
+  user_code?: string
+  browser_opened?: boolean
+  error?: {
+    code:
+      | 'network'
+      | 'timeout'
+      | 'disk_full'
+      | 'permission'
+      | 'denied'
+      | 'expired'
+      | 'not_installed'
+      | 'failed'
+    detail?: string
+  }
+  command: string
+  log: string[]
+}
+
 /** CLI 卡的四档：没装 / Node 不够 / 没登录 / 好了。 */
 export type PlatformCliState = 'missing' | 'node_old' | 'needs_login' | 'ready'
 
@@ -6665,7 +6712,13 @@ export interface PlatformCliView {
     node_ok: boolean
     min_node_major: number
     checked_at: string
+    /** WP245：`app` = 工作台装在自己数据目录里的那份；`system` = 系统里本来就有的。 */
+    source?: 'app' | 'system'
   }
+  /** WP245：这台机器上能不能一键安装 / 一键登录。 */
+  can?: { install: boolean; login: boolean }
+  /** WP245：替用户跑的那件事（跑着的或刚结束的）。 */
+  job?: PlatformCliJob
   login_confirmed_at?: string
   state: PlatformCliState
   /** CLI 不在 / 没登录时退回 Admin API 那条路的职责。 */
@@ -6712,7 +6765,22 @@ export const getPlatformKit = (
 export const checkPlatformCli = (assignment?: string): Promise<PlatformKitView> =>
   api('/v1/platform-kit/cli/check', { method: 'POST', ...withAssignment(assignment) })
 
-/** 「我登好了」/ 撤回：只记一个时间，不碰任何凭据。 */
+/** WP245：替用户跑登记过的命令（一键安装 / 一键登录 / 再查一次）。 */
+export const runPlatformCli = (
+  action: 'install' | 'login' | 'version',
+  assignment?: string,
+): Promise<PlatformKitView> =>
+  api('/v1/platform-kit/cli/run', {
+    method: 'POST',
+    body: { action },
+    ...withAssignment(assignment),
+  })
+
+/** WP245：停掉正在跑的那件（登录等浏览器时的「取消」）。 */
+export const cancelPlatformCli = (assignment?: string): Promise<PlatformKitView> =>
+  api('/v1/platform-kit/cli/cancel', { method: 'POST', ...withAssignment(assignment) })
+
+/** 「我登好了」/ 撤回：只记一个时间，不碰任何凭据（WP245 后卡上不再用）。 */
 export const confirmPlatformCliLogin = (
   confirmed: boolean,
   assignment?: string,

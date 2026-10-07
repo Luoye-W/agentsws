@@ -8,6 +8,7 @@ export const POSITION_ZH: Record<string, string> = {
   // 页头
   'pos2.status.cards': '{n} 张等你定',
   'pos2.status.doing': '{n} 件在办',
+  'pos2.status.stuck': '{n} 件卡住了',
   'pos2.status.today': '今天 {n} 个待办',
   'pos2.status.new': '刚建好，还没开工 · {n} 条职责',
   'pos2.settings': '岗位设置',
@@ -77,13 +78,15 @@ export const POSITION_ZH: Record<string, string> = {
   'pos2.columns': '列',
 
   'pos2.group.doing': '进行中',
+  'pos2.group.stuck': '卡住了',
   'pos2.group.queued': '排着的',
   'pos2.group.waiting': '等别人',
   'pos2.group.done': '已完成',
   'pos2.group.doing.hint': 'AI 正在做的事，和你手上还没做完的待办',
+  'pos2.group.stuck.hint': 'AI 交不出来的事：没跑成、被停了，或者缺连接。行上写着缺什么',
   'pos2.group.queued.hint': '排了时间、到点自己做的：定时任务、发帖排期',
   'pos2.group.waiting.hint': '在等外面的人回话，或者被卡住了',
-  'pos2.group.done.hint': '最近 {n} 天做完的；再早的去「记录」看',
+  'pos2.group.done.hint': '最近 {n} 天做完的（AI 答完了的标「待你看结果」）；再早的去「记录」看',
   'pos2.group.none': '全部',
   'pos2.group.noduty': '没归职责',
 
@@ -98,6 +101,9 @@ export const POSITION_ZH: Record<string, string> = {
   'pos2.source.meeting': '会议',
   'pos2.cards.badge': '{n} 张卡等你',
   'pos2.who.ai': 'AI 在做',
+  'pos2.who.ai_done': 'AI 做完了',
+  'pos2.who.ai_stuck': 'AI 卡住了',
+  'pos2.result_ready': '待你看结果',
   'pos2.who.you': '你来做',
 
   'pos2.todo.add': '加一个待办',
@@ -191,6 +197,7 @@ export const POSITION_ZH: Record<string, string> = {
 export const POSITION_EN: Record<string, string> = {
   'pos2.status.cards': '{n} waiting for you',
   'pos2.status.doing': '{n} in progress',
+  'pos2.status.stuck': '{n} stuck',
   'pos2.status.today': '{n} to-dos today',
   'pos2.status.new': 'Just set up, nothing started · {n} duties',
   'pos2.settings': 'Position settings',
@@ -259,13 +266,17 @@ export const POSITION_EN: Record<string, string> = {
   'pos2.columns': 'Columns',
 
   'pos2.group.doing': 'In progress',
+  'pos2.group.stuck': 'Stuck',
   'pos2.group.queued': 'Queued',
   'pos2.group.waiting': 'Waiting on others',
   'pos2.group.done': 'Done',
   'pos2.group.doing.hint': 'What the AI is working on, plus your unfinished to-dos',
+  'pos2.group.stuck.hint':
+    "What the AI couldn't deliver: the run failed, was stopped, or a connection is missing. The row says what's missing",
   'pos2.group.queued.hint': 'Things with a time slot that run on their own: schedules, post slots',
   'pos2.group.waiting.hint': 'Waiting for someone outside to reply, or blocked',
-  'pos2.group.done.hint': 'Finished in the last {n} days; older ones are in Records',
+  'pos2.group.done.hint':
+    'Finished in the last {n} days (AI answers are marked "result ready"); older ones are in Records',
   'pos2.group.none': 'All',
   'pos2.group.noduty': 'No duty',
 
@@ -280,6 +291,9 @@ export const POSITION_EN: Record<string, string> = {
   'pos2.source.meeting': 'Meeting',
   'pos2.cards.badge': '{n} cards waiting',
   'pos2.who.ai': 'AI is on it',
+  'pos2.who.ai_done': 'AI is done',
+  'pos2.who.ai_stuck': 'AI is stuck',
+  'pos2.result_ready': 'Result ready',
   'pos2.who.you': 'Yours',
 
   'pos2.todo.add': 'Add a to-do',

@@ -391,7 +391,12 @@ export async function draftPlansFor(deps: PlanDeps): Promise<{ plans: string[] }
       // 40 §3.4：撞上「别人正在做的」那几条不建议
       position_id: position.assignment_id,
     })
-    if (plan.approval_item_id === undefined) {
+    /*
+     * WP244（Fable 10-07 真机，INMO Reddit 运营）：**0 条建议不出卡**。「今天的安排：0 条建议」
+     * 也做成一张要你选「采纳 / 调整 / 稍后」的卡，是让人对着空气做决定（36：只有要人拍板的才是卡）。
+     * 计划照样记下（一天一条），只是不出卡；明早有建议了照常出。
+     */
+    if (plan.approval_item_id === undefined && plan.suggestions.length > 0) {
       const card = await createPlanCard(deps, position, plan)
       deps.work.linkPlanApproval(plan.id, card.id)
     }

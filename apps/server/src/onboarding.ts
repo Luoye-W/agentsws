@@ -919,6 +919,10 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
         // WP240：加的品牌——公司级的不再问、从第 ② 步开始；AI 接上了第 ① 步直接过
         ...(added ? { added_brand: true as const } : {}),
         model_configured,
+        // WP244：第 ② 步做过了（档案有人确认 / 存过）——向导重开时从第 ③ 步接着走
+        ...(profile !== undefined && profile.provisional !== true
+          ? { business_done: true as const }
+          : {}),
       } satisfies OnboardingStateView
     },
 

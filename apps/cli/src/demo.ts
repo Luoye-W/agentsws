@@ -55,6 +55,7 @@ import {
   demoOldReddit,
   demoWebSearch,
   periodQueryRunner,
+  platformCliStandIn,
 } from '@agentsws/server'
 import type { Pack, RunContext, World } from '@agentsws/simulation'
 import { buildRunRequest, createWorld, loadPack, parseScenario } from '@agentsws/simulation'
@@ -1433,11 +1434,14 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
       sleep: async () => undefined,
     },
     /*
-     * WP216：「Shopify CLI」卡的本机检测在 demo 里是替身——不跑这台机器上真的 `shopify`：
-     * CLI 当作还没装、Node 当作 22.12.0，卡上演的是「第一步：装」那一档。
+     * WP216 / WP245：「Shopify CLI」卡在 demo 里是替身——不跑这台机器上真的 npm / `shopify`：
+     * 一开始当作没装；「一键安装」演进度后装好（工作台自带那份），「登录 Shopify」打出一个
+     * `.test` 域名的假登录网址，过一会儿登好。
      */
-    platformCliExec: async (bin) =>
-      bin === 'node' ? { ok: true, stdout: 'v22.12.0' } : { ok: false, stdout: '', missing: true },
+    ...((): Pick<ServerOptions, 'platformCliExec' | 'platformCliRunner'> => {
+      const cli = platformCliStandIn()
+      return { platformCliExec: cli.exec, platformCliRunner: cli.runner }
+    })(),
     cloudFetch: cloud.fetch,
     /*
      * WP188：关联了替身云之后，「Agents 工坊（用积分）」那条模型来源打的是替身的 `/v1/ai`

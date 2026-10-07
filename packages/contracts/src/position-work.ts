@@ -34,13 +34,18 @@ export const POSITION_WORK_KINDS: readonly PositionWorkKind[] = [
 ]
 
 /**
- * 分组（设计稿 `docs/design/position`）：进行中 / 排着的（排期、定时）/ 等别人 / 已完成（折叠）。
+ * 分组（设计稿 `docs/design/position`）：进行中 / 卡住了 / 排着的（排期、定时）/ 等别人 / 已完成（折叠）。
  * 顺序就是列表里从上到下、看板从左到右的顺序。
+ *
+ * WP244：加「卡住了」（`stuck`）——AI 这件事交不出来（运行没跑成、被停了、它自己说缺连接），
+ * 不再挂在「进行中 · AI 在做」里；行上说缺什么（{@link PositionWorkItem.stuck_reason}）。
+ * 只有事项会进这一组（待办的「卡住」仍是 `blocked` → 等别人，人改的状态不动）。
  */
-export type PositionWorkGroup = 'doing' | 'queued' | 'waiting' | 'done'
+export type PositionWorkGroup = 'doing' | 'stuck' | 'queued' | 'waiting' | 'done'
 
 export const POSITION_WORK_GROUPS: readonly PositionWorkGroup[] = [
   'doing',
+  'stuck',
   'queued',
   'waiting',
   'done',
@@ -98,6 +103,13 @@ export interface PositionWorkItem {
   matter_id?: string
   /** 看板上能不能拖：只有人能改状态的那一类（待办）。规则见 {@link canMoveWorkItem} */
   movable: boolean
+  /**
+   * WP244：事项上 AI 这一轮做完了、结果出来了（没在跑、最后一句是它的答复）——进「已完成」，
+   * 行上标「待你看结果」。事项本身没关（人还能接着说），再跑一轮就回「进行中」。
+   */
+  result_ready?: true
+  /** WP244：在「卡住了」里时，卡在哪 / 缺什么（一句人话：「缺 Shopify 连接」或运行停下来那一句）。 */
+  stuck_reason?: string
 }
 
 /** `GET /v1/positions/:id/work` 的回包。 */
@@ -112,6 +124,8 @@ export interface PositionWorkView {
     queued: number
     waiting: number
     done: number
+    /** WP244：卡住了的件数（老服务端没有这一格） */
+    stuck?: number
     /** 挂在工作项上、等你定的卡（去重后的张数） */
     cards: number
     /** 截止 / 排在今天、还没做完的待办（与工作台「截止：今天」筛选同一个口径） */
@@ -182,7 +196,7 @@ export function todoSourceOf(source: TodoSource): PositionWorkSource {
  * 看板拖动的规则（WP241，按现有状态机来）：
  *
  * - **待办**：人是承诺人（37 Todo.owner 永远是人），状态本来就由人改——能在「进行中 /
- *   等别人 / 已完成」三列之间拖，拖到哪列就改成 {@link todoStatusForGroup} 给的那个状态。
+ *   等别人 / 已完成」三列之间拖（「卡住了」只收事项，WP244），拖到哪列就改成 {@link todoStatusForGroup} 给的那个状态。
  *   「排着的」那一列不收：它的意思是「排在以后某个时段」，进去要给时间（日历视图里拖到某天），
  *   光拖一下没有时间可记，放进去刷新就会弹回「进行中」。
  * - **事项 / 定时 / 排期**：状态由 AI 的运行、调度循环、发帖结果推进，人在这里拖一下
@@ -193,14 +207,15 @@ export function canMoveWorkItem(
   item: Pick<PositionWorkItem, 'kind' | 'group'>,
   to: PositionWorkGroup,
 ): boolean {
-  if (item.kind !== 'todo' || to === 'queued') return false
+  // WP244：「卡住了」只收事项（AI 交不出来的那种），待办拖不进去
+  if (item.kind !== 'todo' || to === 'queued' || to === 'stuck') return false
   return item.group !== to
 }
 
 /** 待办拖到某一列 → 改成哪个状态（`queued` 不收拖动，给 `open` 只为函数是全的）。 */
 export function todoStatusForGroup(group: PositionWorkGroup): TodoStatus {
   if (group === 'done') return 'done'
-  if (group === 'waiting') return 'blocked'
+  if (group === 'waiting' || group === 'stuck') return 'blocked'
   if (group === 'doing') return 'doing'
   return 'open'
 }

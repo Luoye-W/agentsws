@@ -1,34 +1,52 @@
 /**
  * WP216（Luoye 10-05「也要引导用户设置 Shopify CLI 啥的」）：**平台官方 CLI 卡**。
+ * WP245（Luoye 10-07 Windows 真机：「能不能像 Claude 一样把终端集成进来，自动装、自动跑」）：
+ * **用户不开终端、不装 Node、不敲命令**——工作台在后台替他跑工具包里登记过的那几条命令。
  *
- * 这张卡里没有一个平台名：叫什么、装的命令、登录命令、教程是哪篇，全来自服务端那一行
+ * 这张卡里没有一个平台名：叫什么、装哪个包、登录谁、教程是哪篇，全来自服务端那一行
  * `PLATFORM_KITS`（`GET /v1/platform-kit`）。品牌的平台没有 CLI（WooCommerce / 还没建站…）
- * 服务端回 `kit: null`，这里**什么都不画**——卡不出、也不检测本机。
+ * 服务端回 `kit: null`，这里**什么都不画**。
  *
- * 四条：
+ * 五条：
  *
- * 1. **状态用图标**（36 §7 第四档）：装好 / Node / 登录三格；好了之后卡上只剩这一排。
- * 2. **说明只在没好的时候**：缺哪一步就只给那一步——没装给安装命令、Node 不够给门槛、没登录给登录命令；
- *    长的步骤在教程里（「看教程」）。
- * 3. **登录永远是用户本人在浏览器里做**：我们只给命令让他复制到自己的终端，他登完点「我登好了」——
- *    这里一个账号、一个密码、一个令牌都不碰。
- * 4. **没好之前照实说降级**：网页模板先走店铺后台接口（不能本地预览）。
+ * 1. **状态用图标**（36 §7 第四档）：装好 / 登录（Node 只有在不够时才出那一格）；好了之后卡上只剩这一排。
+ * 2. **界面少字**：没好的时候主状态一行 + 一个主按钮（「一键安装」/「登录 X」）；命令、日志、版本号
+ *    收进「详情」折叠；降级说明进标题旁的问号。
+ * 3. **一键安装**：服务端用安装包自带的 node 把 CLI 装进应用自己的数据目录，这里画进度
+ *    （下载中 / 安装中 / 装好了 / 失败一句人话 + 重试）。
+ * 4. **一键登录**：服务端起登录命令、解析出登录网址，**这里交给系统浏览器打开**（桌面壳走
+ *    `shell.openExternal`）；登录期间「浏览器里登录完回来就行」+ 取消；进程结束自动复查、卡片变绿。
+ *    账号密码只在平台网页上输，这里一个都不经手。
+ * 5. 这台机器不能自动装（服务端没有数据目录）才退回「复制这条命令到终端」。
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Copy, Cpu, LogIn, PackageOpen, RefreshCw, SquareTerminal, Store } from 'lucide-react'
-import { useState } from 'react'
+import {
+  Copy,
+  Cpu,
+  Download,
+  ExternalLink,
+  Loader2,
+  LogIn,
+  PackageOpen,
+  RefreshCw,
+  SquareTerminal,
+  Store,
+} from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { openExternal } from '@/components/connections/bridge'
 import { StatusIcons, type StatusItem } from '@/components/design/status-icons'
 import { TutorialLink } from '@/components/help/tutorial-link'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Hint } from '@/components/ui/hint'
 import {
-  checkPlatformCli,
-  confirmPlatformCliLogin,
+  cancelPlatformCli,
   getPlatformKit,
   getPositions,
+  type PlatformCliJob,
   type PlatformCliView,
   type PlatformKitView,
+  runPlatformCli,
   setPlatformKitPlatform,
 } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
@@ -82,6 +100,20 @@ export function cliStatusItems(
             detail: `${mcp.label} ${mcp.version}`,
           },
         ]
+  // WP245：CLI 装在工作台自己那份 node 上，Node 一般不用用户操心——只有不够时才出这一格
+  const nodeItem: StatusItem[] =
+    cli.state === 'node_old' || (probe?.installed === true && probe.node_ok !== true)
+      ? [
+          {
+            key: 'node',
+            label: t('platform_cli.item.node'),
+            icon: Cpu,
+            state: 'fail',
+            ...(probe?.node_version === undefined ? {} : { value: probe.node_version }),
+            detail: t('platform_cli.node_need', { min: String(cli.spec.min_node_major) }),
+          },
+        ]
+      : []
   return [
     {
       key: 'installed',
@@ -90,14 +122,7 @@ export function cliStatusItems(
       state: installed ? 'ok' : 'fail',
       ...(probe?.version === undefined ? {} : { value: probe.version }),
     },
-    {
-      key: 'node',
-      label: t('platform_cli.item.node'),
-      icon: Cpu,
-      state: probe?.node_ok === true ? 'ok' : 'fail',
-      ...(probe?.node_version === undefined ? {} : { value: probe.node_version }),
-      detail: t('platform_cli.node_need', { min: String(cli.spec.min_node_major) }),
-    },
+    ...nodeItem,
     {
       key: 'login',
       label: t('platform_cli.item.login'),
@@ -179,6 +204,106 @@ function ChoosePlatformRow({
   )
 }
 
+/** 登录 / 安装还在走（要接着问状态）。 */
+const RUNNING = new Set<PlatformCliJob['phase']>([
+  'preparing',
+  'downloading',
+  'installing',
+  'waiting_browser',
+])
+const isRunning = (job: PlatformCliJob | undefined): job is PlatformCliJob =>
+  job !== undefined && RUNNING.has(job.phase)
+
+/** 跑着的时候多久问一次。 */
+const POLL_MS = 1500
+
+/** 正在跑的那一行：转圈 + 一句话（+ 登录时的「没弹出来？」与确认码）。 */
+function JobLine({ job }: { job: PlatformCliJob }): React.ReactNode {
+  const { t } = useApp()
+  const text =
+    job.action === 'login'
+      ? job.login_url === undefined
+        ? t('platform_cli.job.opening')
+        : t('platform_cli.job.waiting_browser')
+      : t(`platform_cli.job.${job.phase}`)
+  return (
+    <div className="flex flex-col gap-1" data-testid="platform-cli-job" data-phase={job.phase}>
+      <p className="flex items-center gap-2 text-sm" data-testid="platform-cli-step">
+        <Loader2 className="size-3.5 animate-spin" aria-hidden />
+        {text}
+        {job.action === 'install' && (job.fetched ?? 0) > 0 ? (
+          <span className="text-xs text-muted-foreground">
+            {t('platform_cli.job.fetched', { n: String(job.fetched) })}
+          </span>
+        ) : null}
+      </p>
+      {job.action === 'login' && job.login_url !== undefined ? (
+        <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+          <button
+            type="button"
+            className="inline-flex items-center gap-1 underline underline-offset-2"
+            onClick={() => {
+              if (job.login_url !== undefined) openExternal(job.login_url)
+            }}
+            data-testid="platform-cli-reopen"
+          >
+            <ExternalLink className="size-3" aria-hidden />
+            {t('platform_cli.job.reopen')}
+          </button>
+          {job.user_code === undefined ? null : (
+            <span data-testid="platform-cli-code">
+              {t('platform_cli.job.user_code', { code: job.user_code })}
+            </span>
+          )}
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+/** 「详情」：版本、命令、输出尾巴、自己在终端里跑的那两条（默认收着）。 */
+function CliDetails({ cli }: { cli: PlatformCliView }): React.ReactNode {
+  const { t } = useApp()
+  const probe = cli.probe
+  const install = cli.spec.install[0]
+  const job = cli.job
+  return (
+    <details className="text-xs text-muted-foreground" data-testid="platform-cli-details">
+      <summary className="cursor-pointer select-none">{t('platform_cli.details')}</summary>
+      <div className="mt-2 flex flex-col gap-2">
+        {probe?.version === undefined ? null : (
+          <p data-testid="platform-cli-version">
+            {t('platform_cli.details.version', { version: probe.version })}
+            {probe.source === undefined
+              ? null
+              : ` · ${t(`platform_cli.details.source.${probe.source}`)}`}
+          </p>
+        )}
+        {job === undefined ? null : (
+          <>
+            <code className="break-all font-mono" data-testid="platform-cli-command">
+              {job.command}
+            </code>
+            {job.log.length === 0 ? null : (
+              <pre
+                className="max-h-40 overflow-auto whitespace-pre-wrap rounded-md border bg-muted/40 p-2 font-mono text-[11px]"
+                data-testid="platform-cli-log"
+              >
+                {job.log.slice(-30).join('\n')}
+              </pre>
+            )}
+          </>
+        )}
+        <p>{t('platform_cli.details.manual')}</p>
+        {install === undefined ? null : (
+          <CommandLine command={install.command} testId="platform-cli-install" />
+        )}
+        <CommandLine command={cli.spec.login_command} testId="platform-cli-login" />
+      </div>
+    </details>
+  )
+}
+
 export function PlatformCliCard({
   positionId,
   assignment,
@@ -195,15 +320,28 @@ export function PlatformCliCard({
     queryKey: key,
     queryFn: () =>
       getPlatformKit(positionId === undefined ? {} : { position_id: positionId }, assignment),
+    // 安装 / 登录跑着的时候接着问（进度、登录网址、结束后自动复查）
+    refetchInterval: (q) => (isRunning(q.state.data?.kit?.cli?.job) ? POLL_MS : false),
   })
   const set = (next: PlatformKitView): void => {
     client.setQueryData(key, next)
   }
-  const recheck = useMutation({ mutationFn: () => checkPlatformCli(assignment), onSuccess: set })
-  const login = useMutation({
-    mutationFn: (confirmed: boolean) => confirmPlatformCliLogin(confirmed, assignment),
+  const run = useMutation({
+    mutationFn: (action: 'install' | 'login' | 'version') => runPlatformCli(action, assignment),
     onSuccess: set,
   })
+  const cancel = useMutation({ mutationFn: () => cancelPlatformCli(assignment), onSuccess: set })
+  const cli = view.data?.kit?.cli
+  const job = cli?.job
+  // 登录网址一出来就交给系统浏览器（CLI 自己已经开了就不再开第二次）；同一次登录只开一回
+  const opened = useRef<string | undefined>(undefined)
+  useEffect(() => {
+    if (job?.action !== 'login' || job.login_url === undefined) return
+    if (job.browser_opened === true || opened.current === job.started_at) return
+    opened.current = job.started_at
+    openExternal(job.login_url)
+  }, [job?.action, job?.login_url, job?.browser_opened, job?.started_at])
+
   const choose = view.data?.choose_platform
   if (choose !== undefined)
     return (
@@ -213,11 +351,64 @@ export function PlatformCliCard({
         onSaved={set}
       />
     )
-  const cli = view.data?.kit?.cli
   // 平台没有 CLI / 不是这个岗位 / 还在查 / 查失败：都不出卡
   if (cli === undefined) return null
   const spec = cli.spec
   const install = spec.install[0]
+  const running = isRunning(job)
+  const canInstall = cli.can?.install === true
+  const canLogin = cli.can?.login === true
+  // 上一次替用户跑的那件失败了（而且状态没变）：一句人话 + 重试
+  const failed = job?.phase === 'failed' ? job : undefined
+  const name = spec.account_label ?? spec.label
+  const wantInstall = cli.state === 'missing' || cli.state === 'node_old'
+
+  const primary = (): React.ReactNode => {
+    if (running)
+      return (
+        <Button
+          size="sm"
+          variant="ghost"
+          disabled={cancel.isPending}
+          onClick={() => cancel.mutate()}
+          data-testid="platform-cli-cancel"
+        >
+          {t('platform_cli.cancel')}
+        </Button>
+      )
+    if (wantInstall && canInstall)
+      return (
+        <Button
+          size="sm"
+          className="gap-1"
+          disabled={run.isPending}
+          onClick={() => run.mutate('install')}
+          data-testid="platform-cli-install-run"
+        >
+          <Download className="size-3.5" aria-hidden />
+          {failed?.action === 'install' ? t('platform_cli.retry') : t('platform_cli.install')}
+        </Button>
+      )
+    if (cli.state === 'needs_login' && canLogin)
+      return (
+        <Button
+          size="sm"
+          className="gap-1"
+          disabled={run.isPending}
+          onClick={() => run.mutate('login')}
+          data-testid="platform-cli-login-run"
+        >
+          <LogIn className="size-3.5" aria-hidden />
+          {t('platform_cli.login', { name })}
+        </Button>
+      )
+    return null
+  }
+
+  const stepText = (): string =>
+    wantInstall && !canInstall
+      ? t('platform_cli.step.manual')
+      : t(`platform_cli.step.${cli.state}`, { min: String(spec.min_node_major), name })
 
   return (
     <Card data-testid="platform-cli-card" data-cli={spec.id} data-state={cli.state}>
@@ -225,7 +416,13 @@ export function PlatformCliCard({
         <CardTitle className="flex flex-wrap items-center gap-2 text-sm">
           <SquareTerminal className="size-4" aria-hidden />
           {spec.label}
-          <Hint text={t('platform_cli.hint')} />
+          <Hint
+            text={
+              cli.state === 'ready'
+                ? t('platform_cli.hint')
+                : `${t('platform_cli.hint')} ${t('platform_cli.degraded')}`
+            }
+          />
           {isHelpSlug(spec.tutorial) ? <TutorialLink slug={spec.tutorial} /> : null}
         </CardTitle>
       </CardHeader>
@@ -235,46 +432,45 @@ export function PlatformCliCard({
           label={spec.label}
           testId="platform-cli-status"
         />
-        {cli.state === 'ready' ? null : (
-          <>
-            <p className="text-xs text-muted-foreground" data-testid="platform-cli-degraded">
-              {t('platform_cli.degraded')}
-            </p>
-            <p className="text-sm" data-testid="platform-cli-step">
-              {t(`platform_cli.step.${cli.state}`, { min: String(spec.min_node_major) })}
-            </p>
-            {cli.state === 'missing' && install !== undefined ? (
-              <CommandLine command={install.command} testId="platform-cli-install" />
-            ) : null}
-            {cli.state === 'needs_login' ? (
-              <CommandLine command={spec.login_command} testId="platform-cli-login" />
-            ) : null}
-            <div className="flex flex-wrap gap-2">
-              {cli.state === 'needs_login' ? (
-                <Button
-                  size="sm"
-                  disabled={login.isPending}
-                  onClick={() => login.mutate(true)}
-                  data-testid="platform-cli-login-done"
-                >
-                  {t('platform_cli.login_done')}
-                </Button>
-              ) : (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="gap-1"
-                  disabled={recheck.isPending}
-                  onClick={() => recheck.mutate()}
-                  data-testid="platform-cli-recheck"
-                >
-                  <RefreshCw className="size-3.5" aria-hidden />
-                  {t('platform_cli.recheck')}
-                </Button>
-              )}
-            </div>
-          </>
+        {running ? <JobLine job={job} /> : null}
+        {!running && cli.state !== 'ready' ? (
+          <p className="text-sm" data-testid="platform-cli-step">
+            {stepText()}
+          </p>
+        ) : null}
+        {!running && failed !== undefined && cli.state !== 'ready' ? (
+          <p role="alert" className="text-xs text-destructive" data-testid="platform-cli-error">
+            {t(`platform_cli.error.${failed.error?.code ?? 'failed'}`)}
+            {failed.error?.detail === undefined ? null : (
+              <span className="ml-1 font-mono text-muted-foreground">{failed.error.detail}</span>
+            )}
+          </p>
+        ) : null}
+        {!running && wantInstall && !canInstall && install !== undefined ? (
+          <CommandLine command={install.command} testId="platform-cli-install-manual" />
+        ) : null}
+        {run.error === null ? null : (
+          <p role="alert" className="text-xs text-destructive">
+            {run.error.message}
+          </p>
         )}
+        <div className="flex flex-wrap items-center gap-2">
+          {primary()}
+          {running ? null : (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-7 gap-1 px-2 text-xs text-muted-foreground"
+              disabled={run.isPending}
+              onClick={() => run.mutate('version')}
+              data-testid="platform-cli-recheck"
+            >
+              <RefreshCw className="size-3" aria-hidden />
+              {t('platform_cli.recheck')}
+            </Button>
+          )}
+        </div>
+        <CliDetails cli={cli} />
       </CardContent>
     </Card>
   )

@@ -24,7 +24,13 @@ import { useNavigate } from 'react-router-dom'
 import { BrandBackgroundBadge } from '@/components/brand-background-badge'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
-import { type BrandView, listBrands, listOrganizations, switchBrand } from '@/lib/api'
+import {
+  type BrandView,
+  enterSwitchedBrand,
+  listBrands,
+  listOrganizations,
+  switchBrand,
+} from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 import { cn } from '@/lib/utils'
 
@@ -79,7 +85,8 @@ export function BrandSwitcher(): React.ReactNode {
     switchBrand(org_id, workspace_id)
       .then(() => {
         // 整站重载：换品牌要换的东西太多，一页一页失效缓存漏一处就串味
-        globalThis.location?.reload()
+        // WP244：回这个品牌的首页（旧地址里的岗位 id 是上一个品牌的）
+        enterSwitchedBrand()
       })
       .catch(() => {
         setFailed(true)

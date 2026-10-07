@@ -208,7 +208,18 @@ export interface ShopifyThemeOptions {
   timeoutMs?: number
   /** 事件汇；payload 里只有店铺 / 主题 id / 命令名，没有令牌、没有原始输出。 */
   appendEvent?: (type: string, payload: Record<string, unknown>) => void
+  /**
+   * WP245：怎么起 CLI。工作台装在自己数据目录里的那份 = `{ command: <我们的 node>, prefix: [<入口>] }`；
+   * 不给 = 系统 PATH 上的 `shopify`。
+   */
+  cli?: () => { command: string; prefix: readonly string[] }
 }
+
+/** WP245：默认的起法（系统 PATH 上的 `shopify`）。 */
+const SYSTEM_CLI = (): { command: string; prefix: readonly string[] } => ({
+  command: 'shopify',
+  prefix: [],
+})
 
 export interface ShopifyTheme {
   status(): Promise<ThemeCliStatus>
@@ -247,13 +258,14 @@ export function scrubCliOutput(text: string): string {
 
 // ── 默认的子进程实现 ───────────────────────────────────────────────────
 
-function defaultRun(): RunCli {
+function defaultRun(cli = SYSTEM_CLI): RunCli {
   return (args, opts) =>
     new Promise<CliResult>((resolve, reject) => {
       // WP225：Windows 上 `shopify` 是 `shopify.cmd`，经 cmd.exe 起（见 win-cli.ts）
       let spec: ReturnType<typeof cliSpawnSpec>
       try {
-        spec = cliSpawnSpec('shopify', args, { env: opts.env })
+        const how = cli()
+        spec = cliSpawnSpec(how.command, [...how.prefix, ...args], { env: opts.env })
       } catch (err) {
         reject(argumentRefused(err) ?? err)
         return
@@ -294,9 +306,10 @@ function defaultRun(): RunCli {
     })
 }
 
-function defaultSpawn(): SpawnCli {
+function defaultSpawn(cli = SYSTEM_CLI): SpawnCli {
   return (args, opts) => {
-    const spec = cliSpawnSpec('shopify', args, { env: opts.env })
+    const how = cli()
+    const spec = cliSpawnSpec(how.command, [...how.prefix, ...args], { env: opts.env })
     const child = spawn(spec.command, spec.args, {
       cwd: opts.cwd,
       env: opts.env,
@@ -332,8 +345,8 @@ const URL_RE = /(https?:\/\/[^\s"'<>]+)/
 
 export function createShopifyTheme(options: ShopifyThemeOptions): ShopifyTheme {
   const env = options.env ?? process.env
-  const run = options.run ?? defaultRun()
-  const spawnCli = options.spawnProcess ?? defaultSpawn()
+  const run = options.run ?? defaultRun(options.cli)
+  const spawnCli = options.spawnProcess ?? defaultSpawn(options.cli)
   const timeoutMs = options.timeoutMs ?? 10 * 60 * 1000
   const emit = (type: string, payload: Record<string, unknown>): void => {
     options.appendEvent?.(type, payload)

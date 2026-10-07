@@ -3,6 +3,7 @@
  * 纯函数，mac 上也跑：文件是否存在由替身回答，平台按参数给。
  */
 import { describe, expect, it } from 'vitest'
+import { cliInvocation, privateCliDir, privateCliEntry } from '../src/platform-cli-runner.js'
 import {
   CliArgumentError,
   cliSpawnSpec,
@@ -130,5 +131,61 @@ describe('控制台输出的编码', () => {
       ),
     ).toBe(936)
     expect(oemCodePageOf('ERROR')).toBeUndefined()
+  })
+})
+
+describe('WP245：一键安装 / 一键登录在 Windows 上怎么起（中文用户名路径）', () => {
+  const NODE = 'C:\\Program Files\\Agents Workshop\\resources\\node\\node.exe'
+  const TOOLS = 'C:\\Users\\张三\\AppData\\Roaming\\Agents Workshop\\data\\tools'
+  const SPEC = { id: 'shopify-cli', npm: '@shopify/cli', bin: 'shopify' }
+  const PKG = `${TOOLS}\\shopify-cli\\node_modules\\@shopify\\cli\\package.json`
+  const ENTRY = `${TOOLS}\\shopify-cli\\node_modules\\@shopify\\cli\\bin\\run.js`
+  const files = new Set([NODE, PKG, ENTRY])
+  const has = (p: string): boolean => files.has(p)
+  const read = (): string => JSON.stringify({ bin: { shopify: './bin/run.js' } })
+
+  it('私有安装：按 Windows 路径找到入口，由我们自己的 node.exe 直接起（不经 cmd.exe、不碰 .cmd 壳）', () => {
+    expect(privateCliDir(TOOLS, SPEC, 'win32')).toBe(`${TOOLS}\\shopify-cli`)
+    expect(privateCliEntry(TOOLS, SPEC, has, read, 'win32')).toBe(ENTRY)
+    const how = cliInvocation(TOOLS, NODE, SPEC, has, read, 'win32')
+    expect(how).toEqual({ command: NODE, prefix: [ENTRY], source: 'app' })
+    const spawnSpec = cliSpawnSpec(how.command, [...how.prefix, 'auth', 'login'], {
+      platform: 'win32',
+      env: ENV,
+      exists: has,
+    })
+    // .exe 直接起：中文路径就是一个参数，Node 按 UTF-16 交给 CreateProcess，不经 cmd 的引号规则
+    expect(spawnSpec).toEqual({ command: NODE, args: [ENTRY, 'auth', 'login'] })
+    // npm 也一样：node.exe + npm-cli.js，参数里的安装目录原样
+    const npm = cliSpawnSpec(
+      NODE,
+      ['C:\\x\\npm-cli.js', 'install', '--prefix', `${TOOLS}\\shopify-cli`],
+      {
+        platform: 'win32',
+        env: ENV,
+        exists: has,
+      },
+    )
+    expect(npm.windowsVerbatimArguments).toBeUndefined()
+    expect(npm.args[3]).toBe(`${TOOLS}\\shopify-cli`)
+  })
+
+  it('没有私有安装：退回系统里那份 shopify.cmd，登录参数经 cmd.exe 加引号', () => {
+    const how = cliInvocation(TOOLS, NODE, SPEC, () => false, read, 'win32')
+    expect(how).toEqual({ command: 'shopify', prefix: [], source: 'system' })
+    const spawnSpec = cliSpawnSpec(how.command, ['auth', 'login'], {
+      platform: 'win32',
+      env: ENV,
+      exists,
+    })
+    expect(spawnSpec.windowsVerbatimArguments).toBe(true)
+    expect(spawnSpec.args.at(-1)).toBe(
+      '""C:\\Users\\张三\\AppData\\Roaming\\npm\\shopify.cmd" "auth" "login""',
+    )
+  })
+
+  it('入口文件不在 / package.json 坏了：当没装', () => {
+    expect(privateCliEntry(TOOLS, SPEC, (p) => p === PKG, read, 'win32')).toBeUndefined()
+    expect(privateCliEntry(TOOLS, SPEC, has, () => '{', 'win32')).toBeUndefined()
   })
 })

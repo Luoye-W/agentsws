@@ -99,6 +99,26 @@ export function visibleText(html: string, maxChars = 8000): string {
   return squash(decodeEntities(stripTags(body))).slice(0, maxChars)
 }
 
+/**
+ * WP244：**正文**——政策摘要、口吻样例用它，不用整页文字。
+ *
+ * 整页文字开头总是页头那一串：「Skip to content」、导航（Home Catalog Contact）、购物车（Cart 0）。
+ * 拿它当政策摘要，摘要的前一半就是导航（Fable 10-07 真机）。所以：有 `<main>` 只取 `<main>`；
+ * 再把页头 / 导航 / 页脚 / 侧栏整块去掉，最后把「跳到正文」那一句去掉。
+ */
+export function mainText(html: string, maxChars = 8000): string {
+  const main = /<main\b[^>]*>([\s\S]*?)<\/main>/i.exec(html)?.[1]
+  const body = (main ?? html)
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<noscript[\s\S]*?<\/noscript>/gi, ' ')
+    .replace(/<(header|nav|footer|aside)\b[\s\S]*?<\/\1>/gi, ' ')
+  const text = squash(decodeEntities(stripTags(body)))
+    .replace(/^(skip to (main )?content|跳到正文|跳至内容)\s*/i, '')
+    .trim()
+  return text.slice(0, maxChars)
+}
+
 function stripTags(s: string): string {
   return s.replace(/<[^>]*>/g, ' ')
 }
@@ -107,6 +127,10 @@ export function squash(s: string): string {
   return s.replace(/\s+/g, ' ').trim()
 }
 
+/**
+ * 常见的命名实体。WP244：Shopify 的政策页满是 `&ndash;` / `&rsquo;` / `&hellip;`，
+ * 以前只认五个，摘要里就留着一串 `&ndash;`（Fable 10-07 真机）。
+ */
 const ENTITIES: Record<string, string> = {
   amp: '&',
   lt: '<',
@@ -115,14 +139,49 @@ const ENTITIES: Record<string, string> = {
   apos: "'",
   nbsp: ' ',
   '#39': "'",
+  ndash: '–',
+  mdash: '—',
+  lsquo: '‘',
+  rsquo: '’',
+  sbquo: '‚',
+  ldquo: '“',
+  rdquo: '”',
+  bdquo: '„',
+  hellip: '…',
+  middot: '·',
+  bull: '•',
+  laquo: '«',
+  raquo: '»',
+  lsaquo: '‹',
+  rsaquo: '›',
+  copy: '©',
+  reg: '®',
+  trade: '™',
+  deg: '°',
+  times: '×',
+  divide: '÷',
+  euro: '€',
+  pound: '£',
+  yen: '¥',
+  cent: '¢',
+  sect: '§',
+  para: '¶',
+  shy: '',
+  ensp: ' ',
+  emsp: ' ',
+  thinsp: ' ',
+  zwj: '',
+  zwnj: '',
 }
 
 export function decodeEntities(s: string): string {
   return s.replace(/&(#?\w+);/g, (whole, name: string) => {
-    const known = ENTITIES[name]
+    const known = ENTITIES[name] ?? ENTITIES[name.toLowerCase()]
     if (known !== undefined) return known
     if (name.startsWith('#')) {
-      const code = Number(name.slice(1))
+      // `&#8211;` 与 `&#x2013;` 两种写法都有
+      const raw = name.slice(1)
+      const code = /^x[0-9a-f]+$/i.test(raw) ? Number.parseInt(raw.slice(1), 16) : Number(raw)
       if (Number.isFinite(code) && code > 0 && code < 0x10ffff) return String.fromCodePoint(code)
     }
     return whole

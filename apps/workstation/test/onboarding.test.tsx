@@ -2274,3 +2274,98 @@ describe('WP242 第 ② 步：读不到网站时换个网址再读、就地手�
     }
   })
 })
+
+describe('WP244 新开的 Shopify 空店 / 接着上次的进度', () => {
+  const ADDED: OnboardingStateView = {
+    ...STATE,
+    workspace_name: 'Rollout',
+    brand_name: 'Rollout',
+    added_brand: true,
+    model_configured: true,
+  }
+  /** Shopify 默认店分析出来的样子：品牌名 / 一句话 / 政策都没填，只认出了平台。 */
+  const freshRun = (overrides: Partial<BrandIntakeRun> = {}): BrandIntakeRun =>
+    websiteRun({
+      inputs: [{ url: 'https://rolloutgear.com', kind: 'website' }],
+      pages: [{ url: 'https://rolloutgear.com/', kind: 'home', ok: true }],
+      profile: {
+        storefront_platform: {
+          value: 'shopify',
+          confidence: 'medium',
+          evidence: [{ url: 'https://rolloutgear.com/', locator: 'page:cdn.shopify.com' }],
+        },
+      },
+      fresh_store: true,
+      ...overrides,
+    })
+
+  it('空店：档案卡明说「品牌资料请自己填」，品牌名 / 一句话两格空着也摆出来能填', async () => {
+    const user = userEvent.setup()
+    state.state = ADDED
+    state.run = freshRun()
+    renderWithProviders(<OnboardingPage />)
+    expect((await screen.findByTestId('intake-fresh')).textContent).toContain('自己填')
+    expect(screen.getByTestId('intake-value-brand_name').textContent).toBe('没填')
+    expect(screen.getByTestId('intake-value-one_liner').textContent).toBe('没填')
+    expect(screen.queryByTestId('intake-policies')).toBeNull()
+    await user.click(screen.getByTestId('intake-edit-brand_name'))
+    await user.type(screen.getByTestId('intake-input-brand_name'), 'Rollout Gear')
+    await user.click(screen.getByTestId('intake-confirm'))
+    await waitFor(() => {
+      expect(state.confirms.at(-1)?.edits).toEqual({ brand_name: 'Rollout Gear' })
+    })
+  })
+
+  it('空店的推荐：建站（整站搭建、网页模板）排最前；正式店不推建站', () => {
+    const withSite: OnboardingPositionView[] = [
+      ...POSITIONS,
+      {
+        id: 'site',
+        name: '建站',
+        roles: [
+          {
+            id: 'site.shopify-build',
+            name: 'Shopify 整站搭建',
+            default: true,
+            what_it_does: '搭站。',
+          },
+          { id: 'site.shopify-theme', name: '网页模板', default: true, what_it_does: '改主题。' },
+          { id: 'site.shopify-email', name: '邮件模板', default: true, what_it_does: '改信。' },
+        ],
+      },
+    ]
+    const fresh = recommendFromIntake({ run: freshRun(), positions: withSite })
+    expect(fresh.slice(0, 2).map((r) => r.role_id)).toEqual([
+      'site.shopify-build',
+      'site.shopify-theme',
+    ])
+    expect(fresh[0]?.reason).toContain('初始状态')
+    // 网站运营 / 客服那几条照样推（空店也要运营）
+    expect(fresh.map((r) => r.role_id)).toContain('dtc.store')
+    const normal = recommendFromIntake({ run: websiteRun(), positions: withSite })
+    expect(normal.some((r) => r.role_id.startsWith('site.'))).toBe(false)
+  })
+
+  it('第 ② 步做过了：重开向导直接在第 ③ 步，①② 打勾；推荐按最近那次分析补回来', async () => {
+    state.state = { ...ADDED, business_done: true }
+    state.run = freshRun({ status: 'confirmed' })
+    renderWithProviders(<OnboardingPage />)
+    await screen.findByTestId('onboarding-roles')
+    const steps = screen.getAllByTestId('onboarding-step').map((s) => s.getAttribute('data-state'))
+    expect(steps).toEqual(['done', 'done', 'current', 'todo'])
+    // 推荐不丢：第 ② 步那次分析（已确认）按「最近那一次」补回来
+    await waitFor(() => {
+      expect(screen.getAllByTestId('onboarding-rec-reason').length).toBeGreaterThan(0)
+    })
+    expect(screen.queryByTestId('onboarding-business')).toBeNull()
+  })
+
+  it('第 ② 步还没做：照旧从第 ② 步开始', async () => {
+    state.state = ADDED
+    state.run = undefined
+    renderWithProviders(<OnboardingPage />)
+    await screen.findByTestId('onboarding-business')
+    const steps = screen.getAllByTestId('onboarding-step').map((s) => s.getAttribute('data-state'))
+    expect(steps).toEqual(['done', 'current', 'todo', 'todo'])
+  })
+})

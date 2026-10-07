@@ -2,12 +2,17 @@
  * WP216 端到端（真装配线：路由 → 端口 → 品牌档案）：平台改成什么，CLI 卡、技能页、向导清单就跟着变。
  * 本机检测用替身 exec（记录调用），不跑真的 `shopify`、不联网。
  */
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { createServer, type Server } from '../src/index.js'
 import type { ProbeExec } from '../src/platform-cli.js'
+import { writeFakeNpm } from './fixtures/fake-cli.js'
 
 const T0 = '2026-10-05T09:00:00.000Z'
 const servers: Server[] = []
+const tmpDirs: string[] = []
 
 function seeded(seed = 7): () => number {
   let a = seed >>> 0
@@ -32,6 +37,7 @@ function ticking(): { now: () => string } {
 
 afterEach(async () => {
   for (const s of servers.splice(0)) await s.close()
+  for (const d of tmpDirs.splice(0)) rmSync(d, { recursive: true, force: true })
 })
 
 async function machine() {
@@ -177,5 +183,132 @@ describe('WP216 按品牌的建站平台走', () => {
       position_id: 'site',
     })
     expect(picked.kit?.cli?.spec.label).toBe('Shopify CLI')
+  })
+})
+
+describe('WP245 一键安装 / 一键登录（真装配线 + 假 npm / 假 shopify 子进程）', () => {
+  type CliView = {
+    state: string
+    can?: { install: boolean; login: boolean }
+    probe?: { installed: boolean; source?: string }
+    login_confirmed_at?: string
+    job?: { action: string; phase: string; login_url?: string; error?: { code: string } }
+  }
+  type View = { kit: null | { cli?: CliView } }
+
+  async function wired() {
+    const root = mkdtempSync(join(tmpdir(), 'wp245-srv-'))
+    tmpDirs.push(root)
+    const { npmCli } = writeFakeNpm(root)
+    const server = await createServer({
+      clock: ticking(),
+      random: seeded(),
+      quiet: true,
+      mdns: () => ({ mdns: { publish() {}, browse() {}, stop() {} } }),
+      startRun: false,
+      tokenRefreshIntervalMs: 0,
+      // 没有 PATH：系统里的 shopify / node 一个都找不到，只能是工作台自己装的那份
+      env: { AGENTSWS_OWNER_EMAIL: 'owner@example.test' },
+      platformCliRunner: { toolsDir: join(root, 'tools'), npmCli: async () => npmCli },
+    })
+    servers.push(server)
+    const call = async <T>(method: string, path: string, body?: unknown, token?: string) => {
+      const headers = new Headers({
+        Authorization: `Bearer ${token ?? server.bootstrap.internalToken}`,
+        'X-Assignment': server.bootstrap.ownerAssignment.id,
+      })
+      if (body !== undefined) headers.set('content-type', 'application/json')
+      const res = await server.gateway.fetch(
+        new Request(`http://127.0.0.1${path}`, {
+          method,
+          headers,
+          ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+        }),
+      )
+      return {
+        status: res.status,
+        body: (await res.json()) as { data?: T; error?: { code: string } },
+      }
+    }
+    const ok = async <T>(method: string, path: string, body?: unknown): Promise<T> => {
+      const r = await call<T>(method, path, body)
+      if (r.status >= 300)
+        throw new Error(`${method} ${path} → ${r.status} ${JSON.stringify(r.body)}`)
+      return r.body.data as T
+    }
+    await ok('PUT', '/v1/workspace/profile', {
+      legal_name: '一家耳机店',
+      storefront_platform: 'shopify',
+    })
+    await ok('POST', '/v1/onboarding/apply', { position_ids: ['site'] })
+    const cli = async (): Promise<CliView> =>
+      (await ok<View>('GET', '/v1/platform-kit?position_id=site')).kit?.cli as CliView
+    const until = async (pred: (c: CliView) => boolean): Promise<CliView> => {
+      for (let i = 0; i < 300; i += 1) {
+        const c = await cli()
+        if (pred(c)) return c
+        await new Promise((r) => setTimeout(r, 30))
+      }
+      throw new Error(`没等到：${JSON.stringify(await cli())}`)
+    }
+    return { server, call, ok, cli, until }
+  }
+
+  it('没装 → 一键装（进数据目录）→ 没登录 → 一键登录（网址给工作台）→ 好了', async () => {
+    const m = await wired()
+    const first = await m.cli()
+    expect(first.state).toBe('missing')
+    expect(first.can).toEqual({ install: true, login: true })
+    // 没装就点登录：说先装
+    expect((await m.call('POST', '/v1/platform-kit/cli/run', { action: 'login' })).status).toBe(409)
+    const started = await m.ok<View>('POST', '/v1/platform-kit/cli/run', { action: 'install' })
+    expect(started.kit?.cli?.job?.action).toBe('install')
+    const installed = await m.until((c) => c.state === 'needs_login')
+    expect(installed.probe).toMatchObject({ installed: true, source: 'app' })
+    expect(installed.job?.phase).toBe('done')
+    await m.ok('POST', '/v1/platform-kit/cli/run', { action: 'login' })
+    const waiting = await m.until((c) => c.job?.login_url !== undefined)
+    expect(waiting.job?.login_url).toMatch(/^https:\/\/accounts\.shopify\.com\//)
+    const ready = await m.until((c) => c.state === 'ready')
+    expect(ready.login_confirmed_at).toBeDefined()
+    expect(ready.job?.phase).toBe('done')
+    // 事件里只有 id / 动作 / 结果，没有输出、没有网址
+    const events = m.server.kernel.eventLog
+      .readSync({ workspace_id: m.server.bootstrap.workspace.id })
+      .filter((e) => e.type.startsWith('platform_cli.'))
+    expect(events.map((e) => e.type)).toEqual(
+      expect.arrayContaining([
+        'platform_cli.install_started',
+        'platform_cli.install_finished',
+        'platform_cli.login_started',
+        'platform_cli.login_finished',
+      ]),
+    )
+    expect(JSON.stringify(events)).not.toContain('activate-with-code')
+    expect(JSON.stringify(events)).not.toContain('ABCD-EFGH')
+  })
+
+  it('只认 install / login / version；AI 运行（runtime 令牌）一律拒', async () => {
+    const m = await wired()
+    const bad = await m.call('POST', '/v1/platform-kit/cli/run', { action: 'rm -rf /' })
+    expect(bad.status).toBe(400)
+    const version = await m.ok<View>('POST', '/v1/platform-kit/cli/run', { action: 'version' })
+    expect(version.kit?.cli?.state).toBe('missing')
+    const { person, workspace } = m.server.bootstrap
+    const runtimeToken = m.server.identity.issue('runtime', person.id, workspace.id).token
+    const denied = await m.call(
+      'POST',
+      '/v1/platform-kit/cli/run',
+      { action: 'install' },
+      runtimeToken,
+    )
+    expect(denied.status).toBe(403)
+    const deniedCancel = await m.call(
+      'POST',
+      '/v1/platform-kit/cli/cancel',
+      undefined,
+      runtimeToken,
+    )
+    expect(deniedCancel.status).toBe(403)
   })
 })
