@@ -85,6 +85,8 @@ export {
   shippingCountries,
   tldCountry,
 } from './markets.js'
+export type { ShopifyDefaultText } from './shopify-default-texts.js'
+export { SHOPIFY_DEFAULT_HOME_TEXTS } from './shopify-default-texts.js'
 export type { SiteIntakeOptions, SiteIntakeResult } from './site.js'
 export {
   analyzeSite,
@@ -94,8 +96,16 @@ export {
   looksLikeDefaultPolicy,
   looksLikePolicy,
   POLICY_PROBE_PATHS,
+  placeholderTextHits,
   SHOPIFY_PLACEHOLDER_NAMES,
 } from './site.js'
+export {
+  hashSentence,
+  normalizeForMatch,
+  pageSentenceHashes,
+  sentencesOf,
+  textHashes,
+} from './text-hash.js'
 
 import {
   type BrandIntakeBudget,

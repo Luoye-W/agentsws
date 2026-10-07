@@ -16,6 +16,13 @@ import { ConnectAdapterError, mapRuntimeError } from './errors.js'
 import type { ConnectEvent, ConnectEventSink } from './events.js'
 import type { FetchLike } from './http.js'
 import { RuntimeHttp } from './http.js'
+import {
+  brandConnectionName,
+  brandSegment,
+  type ConnectionOwnerRecord,
+  type ConnectionOwners,
+  parseBrandConnectionName,
+} from './owners.js'
 import { fingerprint, readSecretFromEnv } from './secrets.js'
 import type { SideEffect } from './side-effects.js'
 import { loadSideEffectTable, type SideEffectTable } from './side-effects.js'
@@ -171,6 +178,18 @@ export interface ConnectAdapterOptions {
   stateFile?: string
   /** workspace → runtime baseUrl。目标工作区不在本 runtime 上时 `transferConnection` 拒绝。 */
   workspaceRuntimes?: Readonly<Record<string, string>>
+  /**
+   * WP252（决策 125）：整台机一份的连接归属表——一台机一个 runtime、多个品牌共用时**必给**，
+   * 所有品牌的适配器给同一个实例。给了它就是「按品牌隔开」档：
+   * 新建连接的上游名字带品牌段（`<别名>--<品牌段>`）；只列 / 只用 / 只签 / 只删本品牌的连接；
+   * `allowedConnections` 里混进别的品牌的连接一律拒签。不给 = 老行为（单品牌、测试替身）。
+   */
+  owners?: ConnectionOwners
+  /**
+   * WP252：这个适配器是不是**启动品牌**的（这台机第一个品牌，`server.ts` 的 bootstrap 工作区）。
+   * 只有它认领老数据：没人认领、名字不带品牌段的老连接（`default`）归它。
+   */
+  claimsLegacy?: boolean
 }
 
 const CATALOG_TOKEN_NAME = 'agentsws:catalog'
@@ -182,6 +201,8 @@ interface PendingConnect {
   request_id: string
   service: string
   alias: string
+  /** 上游的连接名（按品牌隔开档 = 带品牌段的那个）。 */
+  connection_name: string
   workspace_id: WorkspaceId
   ownership: Connection['ownership']
   mode: 'own_app' | 'agentsws_connect'
@@ -285,6 +306,12 @@ class OpenConnectorAdapter implements ConnectAdapter {
 
   async connections(workspace_id: WorkspaceId): Promise<Connection[]> {
     const list = await this.listConnections(true)
+    // WP252：按品牌隔开档只认归属表里归本品牌的——没记录过的连接不再「默认算我的」
+    // （一个适配器只替自己那个品牌回答：拿别的品牌的 workspace_id 来问，回空）
+    if (this.opts.owners !== undefined) {
+      if (workspace_id !== this.workspaceId) return []
+      return list.filter((c) => this.isMine(c)).map((c) => this.toConnection(c))
+    }
     return list.map((c) => this.toConnection(c)).filter((c) => c.workspace_id === workspace_id)
   }
 
@@ -304,15 +331,17 @@ class OpenConnectorAdapter implements ConnectAdapter {
     // 先用轻量的 `/v1/providers?service=` 判 auth 类型；只有需要画表单时才去拉
     // `/api/providers/:service`（那份带全部 Action 的 schema，很沉）
     const kind = await this.providerAuthKind(service)
-    const existing = new Set((await this.listConnections(true)).map((c) => c.id))
+    const before = await this.listConnections(true)
+    const existing = new Set(before.map((c) => c.id))
+    const connection_name = this.upstreamName(service, opts.alias, before)
 
     if (kind === 'oauth2') {
       const started = await this.http.request<WireOAuthStart>('POST', '/api/oauth/authorizations', {
         auth: 'admin',
-        body: { service, connectionName: opts.alias },
+        body: { service, connectionName: connection_name },
       })
       const request_id = started.data.state
-      this.rememberPending(request_id, service, opts, existing)
+      this.rememberPending(request_id, service, connection_name, opts, existing)
       await this.emit({
         type: 'connect.connection_started',
         at: this.now(),
@@ -329,7 +358,7 @@ class OpenConnectorAdapter implements ConnectAdapter {
     for (const f of auth?.fields ?? []) fields.push({ name: f.key, secret: f.secret === true })
     for (const f of auth?.extraFields ?? []) fields.push({ name: f.key, secret: f.secret === true })
     const request_id = this.nextId('creq')
-    this.rememberPending(request_id, service, opts, existing)
+    this.rememberPending(request_id, service, connection_name, opts, existing)
     await this.emit({
       type: 'connect.connection_started',
       at: this.now(),
@@ -343,7 +372,10 @@ class OpenConnectorAdapter implements ConnectAdapter {
     if (p === undefined) return 'expired'
     const list = await this.listConnections(true)
     const hit = list.find(
-      (c) => c.service === p.service && c.connectionName === p.alias && !p.existing_ids.has(c.id),
+      (c) =>
+        c.service === p.service &&
+        c.connectionName === p.connection_name &&
+        !p.existing_ids.has(c.id),
     )
     if (hit !== undefined) {
       this.state.putConnectionMeta({
@@ -351,6 +383,7 @@ class OpenConnectorAdapter implements ConnectAdapter {
         workspace_id: p.workspace_id,
         ownership: p.ownership,
       })
+      this.claimNew(hit, p.workspace_id)
       this.pending.delete(request_id)
       await this.emit({
         type: 'connect.connection_established',
@@ -384,16 +417,19 @@ class OpenConnectorAdapter implements ConnectAdapter {
         service,
       })
     }
-    const before = new Set((await this.listConnections(true)).map((c) => c.id))
+    const beforeList = await this.listConnections(true)
+    const before = new Set(beforeList.map((c) => c.id))
+    // WP252：上游按 (service, 连接名) 就地覆盖——名字带品牌段，绝不顶掉别的品牌的那一条
+    const connection_name = this.upstreamName(service, input.alias, beforeList)
     await this.http.request<unknown>('PUT', `/api/connections/${encodeURIComponent(service)}`, {
       auth: 'admin',
-      body: { authType: auth_type, connectionName: input.alias, values: { ...input.fields } },
+      body: { authType: auth_type, connectionName: connection_name, values: { ...input.fields } },
     })
     const after = await this.listConnections(true)
     const hit =
       after.find(
-        (c) => c.service === service && c.connectionName === input.alias && !before.has(c.id),
-      ) ?? after.find((c) => c.service === service && c.connectionName === input.alias)
+        (c) => c.service === service && c.connectionName === connection_name && !before.has(c.id),
+      ) ?? after.find((c) => c.service === service && c.connectionName === connection_name)
     if (hit === undefined) {
       throw new ConnectAdapterError(
         'provider_error',
@@ -406,6 +442,7 @@ class OpenConnectorAdapter implements ConnectAdapter {
       workspace_id: input.workspace_id,
       ownership: input.ownership,
     })
+    this.claimNew(hit, input.workspace_id)
     if (input.request_id !== undefined) this.pending.delete(input.request_id)
     // payload 里只有**字段名**，没有任何字段值
     await this.emit({
@@ -450,7 +487,8 @@ class OpenConnectorAdapter implements ConnectAdapter {
   async removeConnection(id: string): Promise<void> {
     const list = await this.listConnections(true)
     const wire = list.find((c) => c.id === id)
-    if (wire === undefined) {
+    // WP252：别的品牌的连接对本品牌来说就是「不存在」——不许删，也不说它在
+    if (wire === undefined || !this.isMine(wire)) {
       throw new ConnectAdapterError('not_found', `连接不存在：${id}`, { connection: id })
     }
     const path = `/api/connections/${encodeURIComponent(wire.service)}?connectionName=${encodeURIComponent(wire.connectionName)}`
@@ -465,6 +503,7 @@ class OpenConnectorAdapter implements ConnectAdapter {
         { connection: id, tried: path },
       )
     }
+    this.opts.owners?.release(id)
     await this.emit({
       type: 'connect.connection_removed',
       at: this.now(),
@@ -483,7 +522,7 @@ class OpenConnectorAdapter implements ConnectAdapter {
     }
     const list = await this.listConnections(true)
     const wire = list.find((c) => c.id === id)
-    if (wire === undefined) {
+    if (wire === undefined || !this.isMine(wire)) {
       throw new ConnectAdapterError('not_found', `连接不存在：${id}`, { connection: id })
     }
     const current = this.toConnection(wire)
@@ -499,6 +538,14 @@ class OpenConnectorAdapter implements ConnectAdapter {
       ...(current.owner_person_id === undefined
         ? {}
         : { owner_person_id: current.owner_person_id }),
+    })
+    this.opts.owners?.assign({
+      connection_id: id,
+      workspace_id: to_workspace,
+      service: wire.service,
+      connection_name: wire.connectionName,
+      via: 'transferred',
+      since: this.now(),
     })
     await this.emit({
       type: 'connect.connection_transferred',
@@ -543,12 +590,17 @@ class OpenConnectorAdapter implements ConnectAdapter {
         )
       }
     }
-    const known = new Set((await this.listConnections(true)).map((c) => c.id))
+    // WP252：按品牌隔开档只认本品牌的连接——别的品牌的连接在这里与「不存在」一视同仁，拒签
+    const known = new Set(
+      (await this.listConnections(true)).filter((c) => this.isMine(c)).map((c) => c.id),
+    )
     const unknown = input.allowed_connections.filter((c) => !known.has(c))
     if (unknown.length > 0) {
       throw new ConnectAdapterError(
         'invalid_input',
-        `allowed_connections 含未知连接：${unknown.join(', ')}`,
+        this.opts.owners === undefined
+          ? `allowed_connections 含未知连接：${unknown.join(', ')}`
+          : `allowed_connections 含未知连接或不属于本品牌的连接：${unknown.join(', ')}`,
         { unknown },
       )
     }
@@ -864,6 +916,8 @@ class OpenConnectorAdapter implements ConnectAdapter {
 
   private toConnection(c: WireConnection): Connection {
     const meta = this.state.connectionMeta(c.id)
+    const branded =
+      this.opts.owners === undefined ? undefined : parseBrandConnectionName(c.connectionName)
     const identity: Connection['identity'] = {
       ...(c.profile?.accountId === undefined ? {} : { account_id: c.profile.accountId }),
       ...(c.profile?.displayName === undefined ? {} : { display_name: c.profile.displayName }),
@@ -874,9 +928,13 @@ class OpenConnectorAdapter implements ConnectAdapter {
     return {
       id: c.id,
       service: c.service,
-      alias: c.connectionName,
+      // WP252：界面上的别名不带品牌段（`default--ws_x` → `default`）
+      alias: branded?.alias ?? c.connectionName,
       ownership: meta?.ownership ?? 'workspace',
-      workspace_id: meta?.workspace_id ?? this.workspaceId,
+      workspace_id:
+        (this.opts.owners === undefined ? undefined : this.ownerOf(c)) ??
+        meta?.workspace_id ??
+        this.workspaceId,
       ...(meta?.owner_person_id === undefined ? {} : { owner_person_id: meta.owner_person_id }),
       ...(Object.keys(identity).length === 0 ? {} : { identity }),
       status: meta?.status_override ?? (c.configured === false ? 'reauth_required' : 'active'),
@@ -889,7 +947,109 @@ class OpenConnectorAdapter implements ConnectAdapter {
       auth: 'admin',
     })
     this.connectionCache = res.data ?? []
+    // WP252：任何一个品牌列到一条连接都顺手把 provider / 连接名补进归属表——
+    // 迁移时只知道连接 id，「请重新连接」那一行要靠它说清是哪家服务
+    const owners = this.opts.owners
+    if (owners !== undefined) {
+      for (const c of this.connectionCache) {
+        owners.describe({
+          connection_id: c.id,
+          service: c.service,
+          connection_name: c.connectionName,
+        })
+      }
+    }
     return this.connectionCache
+  }
+
+  // ------------------------------------------------------------ WP252 品牌归属
+
+  /**
+   * 这条上游连接归哪个品牌。不按品牌隔开时沿用老口径（本品牌状态里记过的归记的那个，没记过的归本品牌）。
+   *
+   * 按品牌隔开时：归属表里有就听它的；没有时——名字带本品牌段的认领为本品牌（归属表丢了也找得回来）；
+   * 名字带别的品牌段的不是本品牌的；老名字（不带品牌段）只有本品牌老状态里记过、或者本品牌是启动品牌才认领。
+   * 上游的 no_auth 虚拟连接（公共只读 API，没有凭据）谁都能用。
+   */
+  private ownerOf(c: WireConnection): WorkspaceId | undefined {
+    const owners = this.opts.owners
+    if (owners === undefined)
+      return this.state.connectionMeta(c.id)?.workspace_id ?? this.workspaceId
+    if (c.virtual === true) return this.workspaceId
+    const rec = owners.ownerOf(c.id)
+    if (rec !== undefined) return rec.workspace_id
+    const parsed = parseBrandConnectionName(c.connectionName)
+    if (parsed !== undefined) {
+      return parsed.segment === brandSegment(this.workspaceId)
+        ? this.claimAs(c, this.workspaceId, 'connected').workspace_id
+        : undefined
+    }
+    if (this.state.connectionMeta(c.id) !== undefined) {
+      return this.claimAs(c, this.workspaceId, 'migrated').workspace_id
+    }
+    if (this.opts.claimsLegacy === true) {
+      return this.claimAs(c, this.workspaceId, 'legacy').workspace_id
+    }
+    return undefined
+  }
+
+  /** 按品牌隔开时：是不是本品牌的。不按品牌隔开时一律是（老行为：只看上游有没有）。 */
+  private isMine(c: WireConnection): boolean {
+    if (this.opts.owners === undefined) return true
+    return this.ownerOf(c) === this.workspaceId
+  }
+
+  private claimAs(
+    c: WireConnection,
+    workspace_id: WorkspaceId,
+    via: ConnectionOwnerRecord['via'],
+  ): ConnectionOwnerRecord {
+    const owners = this.opts.owners
+    const record: ConnectionOwnerRecord = {
+      connection_id: c.id,
+      workspace_id,
+      service: c.service,
+      connection_name: c.connectionName,
+      via,
+      since: this.now(),
+    }
+    return owners === undefined ? record : owners.claim(record)
+  }
+
+  /** 刚连上的那一条记成本品牌的（上游名字是我们按品牌起的，不可能已经是别人的）。 */
+  private claimNew(c: WireConnection, workspace_id: WorkspaceId): void {
+    if (this.opts.owners === undefined) return
+    const rec = this.claimAs(c, workspace_id, 'connected')
+    if (rec.workspace_id !== workspace_id) {
+      throw new ConnectAdapterError(
+        'connection_not_allowed',
+        `连接 ${c.service}/${c.connectionName} 属于另一个品牌，不能当成本品牌的`,
+        { connection: c.id },
+      )
+    }
+  }
+
+  /**
+   * 新建 / 重连时上游用的名字。不按品牌隔开 = 用户给的别名原样；按品牌隔开 = `<别名>--<品牌段>`，
+   * 例外是本品牌已经有一条同 provider、同别名的老连接（名字不带品牌段）——沿用它的名字，重连就地更新。
+   * 名字已被别的品牌占着（理论上走不到：品牌段各不相同）就拒绝，绝不覆盖。
+   */
+  private upstreamName(service: string, alias: string, list: WireConnection[]): string {
+    if (this.opts.owners === undefined) return alias
+    const mineNamed = (n: string): boolean =>
+      list.some((c) => c.service === service && c.connectionName === n && this.isMine(c))
+    // 先认本品牌带品牌段的那条（令牌刷新按别名推回来时落在它身上），再认本品牌的老名字
+    const branded = brandConnectionName(this.workspaceId, alias)
+    const name = mineNamed(branded) ? branded : mineNamed(alias) ? alias : branded
+    const taken = list.find((c) => c.service === service && c.connectionName === name)
+    if (taken !== undefined && !this.isMine(taken)) {
+      throw new ConnectAdapterError(
+        'connection_not_allowed',
+        `${service} 的连接名 ${name} 已被另一个品牌占用，换一个名字再连`,
+        { service },
+      )
+    }
+    return name
   }
 
   private async providerAuthKind(service: string): Promise<string> {
@@ -921,6 +1081,7 @@ class OpenConnectorAdapter implements ConnectAdapter {
   private rememberPending(
     request_id: string,
     service: string,
+    connection_name: string,
     opts: {
       workspace_id: WorkspaceId
       ownership: Connection['ownership']
@@ -933,6 +1094,7 @@ class OpenConnectorAdapter implements ConnectAdapter {
       request_id,
       service,
       alias: opts.alias,
+      connection_name,
       workspace_id: opts.workspace_id,
       ownership: opts.ownership,
       mode: opts.mode,
@@ -972,11 +1134,14 @@ class OpenConnectorAdapter implements ConnectAdapter {
     service: string,
     requested: string | undefined,
   ): Promise<WireConnection> {
-    let list = await this.listConnections()
-    let hit = pickConnection(list, service, requested)
+    // WP252：按品牌隔开档只在本品牌的连接里挑（别的品牌的默认连接、同名连接一律看不见）
+    const scope = (all: WireConnection[]): WireConnection[] =>
+      this.opts.owners === undefined ? all : all.filter((c) => this.isMine(c))
+    let list = scope(await this.listConnections())
+    let hit = pickConnection(list, service, requested, this.opts.owners !== undefined)
     if (hit === undefined) {
-      list = await this.listConnections(true)
-      hit = pickConnection(list, service, requested)
+      list = scope(await this.listConnections(true))
+      hit = pickConnection(list, service, requested, this.opts.owners !== undefined)
     }
     if (hit === undefined) {
       throw new ConnectAdapterError(
@@ -1024,13 +1189,23 @@ function pickConnection(
   list: WireConnection[],
   service: string,
   requested: string | undefined,
+  branded = false,
 ): WireConnection | undefined {
   if (requested === undefined) {
-    return list.find((c) => c.service === service && c.default === true)
+    const def = list.find((c) => c.service === service && c.default === true)
+    // 按品牌隔开时上游的「默认连接」可能是别的品牌的：本品牌没有默认那条就用本品牌的第一条
+    return def ?? (branded ? list.find((c) => c.service === service) : undefined)
   }
   return (
     list.find((c) => c.id === requested) ??
-    list.find((c) => c.service === service && c.connectionName === requested)
+    list.find((c) => c.service === service && c.connectionName === requested) ??
+    (branded
+      ? list.find(
+          (c) =>
+            c.service === service &&
+            parseBrandConnectionName(c.connectionName)?.alias === requested,
+        )
+      : undefined)
   )
 }
 

@@ -7,6 +7,7 @@
 import { CLOUD_AUTH_EN, CLOUD_AUTH_ZH } from './i18n-cloud-auth'
 import { LIBRARY_EN, LIBRARY_ZH } from './i18n-library'
 import { LOCAL_CONNECTOR_EN, LOCAL_CONNECTOR_ZH } from './i18n-local-connector'
+import { OWN_SUB_EN, OWN_SUB_ZH } from './i18n-own-sub'
 import { POSITION_EN, POSITION_ZH } from './i18n-position'
 import { READ_ROUTES_EN, READ_ROUTES_ZH } from './i18n-read-routes'
 import { SITE_THEME_EN, SITE_THEME_ZH } from './i18n-site-theme'
@@ -1583,6 +1584,10 @@ const zh: Table = {
   // WP44：老办法接的连接（Shopify 的 shpat_ 直填令牌）
   'connections.legacy': '老办法接的',
   'connections.legacy.action': '断开后重接一次',
+  // WP252：以前和本机另一个品牌共用过同一个连接名
+  'connections.brand_conflict.reconnect': '请重新连接',
+  'connections.brand_conflict.kept': '请核对账号',
+  'connections.brand_conflict.dismiss': '收起',
   // WP44：代理 fake-IP 模式下的出站防护
   'connections.egress.fake_ip': '你的网络在用代理的 fake-IP 模式',
   'connections.egress.fake_ip.short': '连接器已改用公共 DNS，重启开发环境生效。',
@@ -5514,6 +5519,9 @@ const en: Table = {
     'This machine has no vault key yet, so mailbox passwords cannot be stored.',
   'connections.legacy': 'connected the old way',
   'connections.legacy.action': 'Disconnect and reconnect',
+  'connections.brand_conflict.reconnect': 'Please reconnect',
+  'connections.brand_conflict.kept': 'Check the account',
+  'connections.brand_conflict.dismiss': 'Dismiss',
   'connections.egress.fake_ip': 'Your network is using a proxy in fake-IP mode',
   'connections.egress.fake_ip.short':
     'The connector now uses public DNS; restart the dev environment.',
@@ -7915,7 +7923,7 @@ const en: Table = {
 // WP209：技能 / 知识分组的词条在自己的文件里（`i18n-library.ts`），这里并进来
 const TABLES: Record<Lang, Table> = {
   // WP241：岗位页 v2 的词条在 `i18n-position.ts`
-  // WP246：连接页「取数路线」的词条在 `i18n-read-routes.ts`；WP247：本机连接器在 `i18n-local-connector.ts`
+  // WP246：连接页「取数路线」的词条在 `i18n-read-routes.ts`；WP247：本机连接器在 `i18n-local-connector.ts`；WP249：自家版待处理在 `i18n-own-sub.ts`
   zh: {
     ...zh,
     ...LIBRARY_ZH,
@@ -7925,6 +7933,7 @@ const TABLES: Record<Lang, Table> = {
     ...LOCAL_CONNECTOR_ZH,
     // WP253：建站岗位「AI 改主题」引导在 `i18n-site-theme.ts`
     ...SITE_THEME_ZH,
+    ...OWN_SUB_ZH,
   },
   en: {
     ...en,
@@ -7934,6 +7943,7 @@ const TABLES: Record<Lang, Table> = {
     ...READ_ROUTES_EN,
     ...LOCAL_CONNECTOR_EN,
     ...SITE_THEME_EN,
+    ...OWN_SUB_EN,
   },
 }
 

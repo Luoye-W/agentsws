@@ -39,6 +39,10 @@
 # locked_in           这些 package.json 里声明的版本必须**逐字等于** locked_version。
 # lockfile_single     默认 true（有 npm + locked_version 时）：pnpm-lock.yaml 的 packages: 段里
 #                     这个包只许解析出**一个**版本，且等于 locked_version。
+# npm_lock_file       不进 pnpm 的 npm 运行时（WP252：桌面按需下载的 OpenConnector）的 npm 锁文件。
+#                     `--check` 要求根依赖与那个包的 version 都等于 locked_version、每个要下载的包都钉 sha512；
+#                     写了它就要写 `lockfile_single: false`。
+# npm_pin_in          代码里钉这个版本的文件（WP252）：每个都要逐字含 `'<npm>'` 与 `'<locked_version>'`。
 # release_age_prefix  pnpm-workspace.yaml 的 minimumReleaseAgeExclude 里，以这个前缀开头的
 #                     每一条都必须是 locked_version（docs/42 红线 3：写死版本、不写通配）。
 # we_depend_on        我们碰到的 seam，一行一条。docs/42 §4 第 1 条说的就是这份清单：
@@ -209,6 +213,34 @@ upstreams:
       - packages/connect-adapter/test/errors.test.ts
       - packages/connect-adapter/test/fixtures
       - packages/connect-adapter/README.md
+
+  - id: open-connector-runtime
+    kind: runtime-dep
+    # WP252：open-connector 现在有两种形态。上面那条是 SDK + Docker 镜像（自托管 / 开发 / 录磁带）；
+    # 这一条是 WP247 起桌面版按需下载的 **npm 包 + 我们的锁文件**（`npm ci --ignore-scripts`，318 个包逐个
+    # sha512）。它不进 package.json / pnpm-lock.yaml，版本钉在 `OPEN_CONNECTOR_PIN` 与锁文件里，
+    # `--check` 对账这三处；升级走 docs/42「npm 运行时怎么升」（改钉版本 → 重出锁文件 → 测试）。
+    # 发行 / release notes 由上面那条盯（同一个仓库），这一条只盯 npm 版本表。
+    why: 桌面版的本机连接器（WP247：用户第一次点「连接」时下载、桌面壳当后台服务起停，不要 Docker）
+    npm: '@oomol-lab/open-connector'
+    repo: oomol-lab/open-connector
+    locked_version: 1.8.0
+    pin: exact
+    lockfile_single: false
+    npm_lock_file: packages/connect-adapter/src/open-connector-lock.json
+    npm_pin_in:
+      - packages/connect-adapter/src/local-runtime.ts
+    watch: [versions]
+    we_depend_on:
+      - '无头库的入口：宿主脚本（local-runtime.ts 的 HOST_SCRIPT）自己 import 它、套 @hono/node-server 的 HTTP 外壳'
+      - '与镜像同一套 HTTP 面：/api/connections、/api/runtime-tokens、/v1/*（connect-adapter 两档共用）'
+      - '加固：/v1 静态令牌、加密主密钥、proxy 全封（08 §5；宿主脚本缺一样就拒绝启动）'
+      - 'engines.node（1.8.0 要 >=22.18.0；安装包自带的 Node 要满足）'
+    covered_by:
+      - packages/connect-adapter/test/local-runtime.test.ts
+      - apps/server/test/open-connector-installer.test.ts
+      - apps/desktop/test/connect-launcher-live.test.ts
+      - scripts/open-connector-lock.mjs
 
   - id: new-api
     kind: runtime-dep

@@ -42,6 +42,7 @@ export function ConnectedRow({
 }): React.ReactNode {
   const { t, lang } = useApp()
   const title = accountLabel(connection)
+  const reconnect = connection.brand_conflict?.kind === 'reconnect'
   // 问号里：这是哪一类连接、凭据存在哪、上次什么时候测的（基础信息，不上卡面）
   const meta = [
     t(`connections.store.${connection.credential_store}`),
@@ -99,18 +100,21 @@ export function ConnectedRow({
           </Badge>
         )}
         <div className="ml-auto flex items-center gap-1">
-          <Button size="xs" variant="outline" onClick={onTest} disabled={busy !== undefined}>
-            <RefreshCw aria-hidden />
-            {busy === 'test' ? t('connections.testing') : t('connections.test')}
-          </Button>
+          {/* WP252：「请重新连接」那一行没有可测的东西，「断开」也只是收起提醒 */}
+          {reconnect ? null : (
+            <Button size="xs" variant="outline" onClick={onTest} disabled={busy !== undefined}>
+              <RefreshCw aria-hidden />
+              {busy === 'test' ? t('connections.testing') : t('connections.test')}
+            </Button>
+          )}
           <Button
             size="xs"
-            variant="destructive"
+            variant={reconnect ? 'outline' : 'destructive'}
             onClick={onDisconnect}
             disabled={busy !== undefined}
           >
-            <Link2Off aria-hidden />
-            {t('connections.disconnect')}
+            {reconnect ? null : <Link2Off aria-hidden />}
+            {reconnect ? t('connections.brand_conflict.dismiss') : t('connections.disconnect')}
           </Button>
         </div>
       </div>
@@ -126,6 +130,23 @@ export function ConnectedRow({
             <strong className="font-medium">{t('connections.legacy')}</strong>
             <span aria-hidden>：</span>
             {connection.legacy.hint}
+          </span>
+        </p>
+      )}
+      {connection.brand_conflict === undefined ? null : (
+        <p
+          className="flex items-start gap-1.5 rounded-md border border-amber-500/40 bg-amber-500/5 px-2 py-1.5 text-xs text-amber-700 dark:text-amber-400"
+          data-testid="connection-brand-conflict"
+          data-kind={connection.brand_conflict.kind}
+          data-slot="warning"
+        >
+          <AlertTriangle className="mt-px size-3.5 shrink-0" aria-hidden />
+          <span>
+            <strong className="font-medium">
+              {t(`connections.brand_conflict.${connection.brand_conflict.kind}`)}
+            </strong>
+            <span aria-hidden>：</span>
+            {connection.brand_conflict.hint}
           </span>
         </p>
       )}

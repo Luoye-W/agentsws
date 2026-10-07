@@ -220,6 +220,8 @@ export {
   type ReconcileReport,
   type ReconcileState,
 } from './reconcile.js'
+// WP249：Reddit 官方号浏览器通道的内存替身（demo 用：打开即登录，不连 reddit.com）
+export { demoOldReddit } from './reddit-official-browser/stand-in.js'
 export {
   createRuntime,
   hasModelProvider,
@@ -506,6 +508,8 @@ export async function main(): Promise<void> {
       ...(dbDir === undefined ? {} : { dbDir }),
       // WP228：本机只读浏览器（Reddit「浏览器只读」那一路）只在真正的服务进程里装
       readonlyBrowser: {},
+      // WP249：Reddit 官方号浏览器通道（每品牌一个独立目录；要用时才起）
+      redditOfficialBrowser: {},
       // WP246：YouTube 字幕、网页转文字、取数路线体检要出网——同样只在真正的服务进程里装
       readNet: {},
       ...(staticDir === undefined ? {} : { staticDir }),
