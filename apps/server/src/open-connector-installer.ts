@@ -137,6 +137,11 @@ export interface OpenConnectorInstaller {
   snapshot(): LocalRuntimeSnapshot
   /** 开始下载（已经在下 → `conflict`）。立刻返回，进度看 `snapshot().job`。 */
   install(): LocalConnectorJobView
+  /**
+   * 工作台升级后钉的版本变了、而这台机器装的是旧版：后台把新版下好（下好桌面壳自动切过去，
+   * 旧版留一份可回退）。没装过、已是新版、正在下载都不动。回「开始了没有」。
+   */
+  autoUpdate(): boolean
   cancel(): LocalConnectorJobView | undefined
   /** 请桌面壳重启它（`restart_seq + 1`）。 */
   restart(): void
@@ -396,6 +401,12 @@ export function createOpenConnectorInstaller(
           if (existsSync(staging)) removeOwned(staging)
         })
       return { ...job }
+    },
+    autoUpdate() {
+      const cur = current()
+      if (cur === undefined || cur.version === pin.version || isLocalJobRunning(job)) return false
+      this.install()
+      return true
     },
     cancel() {
       if (job === undefined) return undefined

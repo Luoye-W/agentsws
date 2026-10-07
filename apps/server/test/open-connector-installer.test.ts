@@ -256,6 +256,20 @@ describe('升级、回退、重启、删除下载', () => {
     expect(i.snapshot()).toMatchObject({ installed: '1.7.0', previous: '1.8.0' })
   })
 
+  it('自动更新：装着旧版才下新版；没装过 / 已是新版 / 正在下都不动', async () => {
+    const m = machine()
+    expect(m.make('1.7.0').autoUpdate()).toBe(false)
+    const old = m.make('1.7.0')
+    old.install()
+    await settle(old)
+    expect(m.make('1.7.0').autoUpdate()).toBe(false)
+    const next = m.make('1.8.0')
+    expect(next.autoUpdate()).toBe(true)
+    expect(next.autoUpdate()).toBe(false)
+    const s = await settle(next)
+    expect(s).toMatchObject({ installed: '1.8.0', previous: '1.7.0' })
+  })
+
   it('没有上一版不能回退；没装不能重启', () => {
     const i = machine().make()
     expect(() => i.rollback()).toThrow(/上一版/)

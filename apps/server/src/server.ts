@@ -2358,6 +2358,10 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           ...options.localConnector,
         })
       : undefined
+  // WP247：工作台升级带来了新钉的连接器版本 → 后台下好（桌面壳看到就切过去，旧版留一份可回退）。
+  //     上游的安全修复只发在最新版（08 §5），所以默认跟；`AGENTSWS_CONNECT_AUTO_UPDATE=0` 关掉。
+  if (localConnector !== undefined && env.AGENTSWS_CONNECT_AUTO_UPDATE !== '0')
+    localConnector.autoUpdate()
 
   const assembleBrand = async (ws: WorkspaceId): Promise<BrandModuleSet> => {
     const isBootstrap = ws === workspace.id
