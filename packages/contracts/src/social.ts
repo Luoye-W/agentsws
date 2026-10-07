@@ -355,6 +355,11 @@ export interface SocialAccount {
   followers?: number
   /** 社群组：成员数（内容组没有这一格）。 */
   member_count?: number
+  /**
+   * WP249（决策 81）：Reddit 才有——这是**我们自己当版主的版**（自家版）。只有标了它的版才拉
+   * 版务队列（被举报 / 待审 / 新帖）；没标的版我们不是版主，那里没有队列可看。
+   */
+  own_subreddit?: boolean
   /** 这份数字什么时候看到的。**必填**（文件头第 4 条）。 */
   observed_at: Iso8601
 }
