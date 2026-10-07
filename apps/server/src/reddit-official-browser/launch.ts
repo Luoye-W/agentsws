@@ -106,7 +106,10 @@ export const launchOfficialBrowser: OfficialLauncher = async (input) => {
   if (platform === 'win32' && child.pid !== undefined) writeFileSync(pidFile, String(child.pid))
   const killNow = (): void => {
     if (child.pid === undefined) return
-    if (platform !== 'win32') return killGroup(child.pid)
+    if (platform !== 'win32') {
+      killGroup(child.pid)
+      return
+    }
     if (child.exitCode !== null) return
     spawnSync(taskkillPath(env), ['/PID', String(child.pid), '/T', '/F'], {
       windowsHide: true,

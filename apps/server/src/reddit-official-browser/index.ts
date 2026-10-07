@@ -189,7 +189,7 @@ export function createRedditOfficialBrowser(
       preferred: options.executable?.(),
     })
 
-  const alive = (): boolean => proc !== undefined && proc.alive()
+  const alive = (): boolean => proc?.alive() === true
 
   async function stop(): Promise<void> {
     if (idle !== undefined) clearTimeout(idle)

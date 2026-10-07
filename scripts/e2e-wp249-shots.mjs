@@ -154,7 +154,9 @@ async function main() {
     const openQuick = async (page) => {
       await page.goto(`${BASE}/positions/${social}`, { waitUntil: 'networkidle' })
       await page.waitForSelector('[data-testid="position-page"]')
-      await page.locator('[data-testid="work-quick"][data-quick="quick:modqueue:social.reddit"]').click()
+      await page
+        .locator('[data-testid="work-quick"][data-quick="quick:modqueue:social.reddit"]')
+        .click()
       await page.waitForSelector('[data-testid="own-sub-item"]', { timeout: 20_000 })
       await page.waitForTimeout(600)
       return page.locator('[data-testid="work-quick-view"]')
@@ -198,7 +200,9 @@ async function main() {
         .filter({ hasText: 'spam' })
         .first()
       if ((await card.count()) > 0) await shotOf(card, `card-${dark ? 'dark' : 'light'}`)
-      await page.screenshot({ path: join(SHOTS, `position-with-card-${dark ? 'dark' : 'light'}.png`) })
+      await page.screenshot({
+        path: join(SHOTS, `position-with-card-${dark ? 'dark' : 'light'}.png`),
+      })
       console.log(`  📷 position-with-card-${dark ? 'dark' : 'light'}.png`)
       await context.close()
     }
