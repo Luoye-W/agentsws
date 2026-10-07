@@ -15,6 +15,19 @@ export {
   parseConfig,
   serializeConfig,
 } from './config.js'
+// WP247：本机连接器按需下载后由壳当后台服务起停
+export type {
+  ConnectPlan,
+  LocalConnectLauncher,
+  LocalConnectLauncherOptions,
+} from './connect-launcher.js'
+export {
+  createLocalConnectLauncher,
+  DEFAULT_CONNECT_PORT,
+  localConnectUrl,
+  pickConnectPort,
+  planConnectRuntime,
+} from './connect-launcher.js'
 export type {
   ConnectHardeningCheck,
   ConnectLauncher,

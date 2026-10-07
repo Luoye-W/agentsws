@@ -60,6 +60,7 @@ import { designRoleFamily } from '@agentsws/brand-design'
 import type { PageFetch as BrandIntakeFetch } from '@agentsws/brand-intake'
 import type { ResolveMx } from '@agentsws/channels'
 import { routeOfPosition } from '@agentsws/channels'
+import { LOCAL_RUNTIME_ENV } from '@agentsws/connect-adapter'
 import type {
   AdsCaps,
   ApprovalBus,
@@ -385,6 +386,10 @@ import {
   SUGGEST_MAX_OUTPUT_TOKENS,
   sha256 as suggestSha,
 } from './onboarding-suggest.js'
+import {
+  createOpenConnectorInstaller,
+  type OpenConnectorInstallerOptions,
+} from './open-connector-installer.js'
 import { createOrg, type OrgAssembly } from './org.js'
 import { createOrgDuplicateScan, type OrgDuplicateScan } from './org-duplicates.js'
 import {
@@ -855,6 +860,11 @@ export interface ServerOptions {
    * 生产不传：用服务进程自己的 node（捆绑的那份）+ 钉死的 npm，装进 `<数据目录>/tools`。
    */
   platformCliRunner?: Partial<Omit<PlatformCliRunnerOptions, 'now'>>
+  /**
+   * WP247：本机连接器下载器的注入点（测试换成假 npm，不联网）。生产不传：只有桌面壳设了
+   * `AGENTSWS_CONNECT_LOCAL_RUNTIME=1`（它来起停本机连接器）且有数据目录时才装配。
+   */
+  localConnector?: Partial<Omit<OpenConnectorInstallerOptions, 'now' | 'dataDir'>>
   /**
    * WP134：「用我的 DeepSeek 账号登录」的注入点（测试 / demo 用替身 → 全程不联网）。
    * 生产不传：第一次有人点"用 DeepSeek 账号登录"时才 `import()` 官方模块。
@@ -2375,6 +2385,27 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     appendEvent,
   })
 
+  /**
+   * WP247：本机连接器（按需下载、桌面壳起停）——**整台机器一份**，各品牌共用。只有桌面壳说了「我来起它」
+   * （`AGENTSWS_CONNECT_LOCAL_RUNTIME=1`，同时一定给了 `AGENTSWS_CONNECT_URL`）且有数据目录时才有；
+   * 指外部 runtime / Docker 档 / 替身档都没有它（runtime 地址仍然只认那两种来源）。
+   */
+  const localConnector =
+    dbDir !== undefined &&
+    env[LOCAL_RUNTIME_ENV] === '1' &&
+    (env.AGENTSWS_CONNECT_URL ?? '').trim() !== ''
+      ? createOpenConnectorInstaller({
+          dataDir: dbDir,
+          now: () => clock.now(),
+          env,
+          ...options.localConnector,
+        })
+      : undefined
+  // WP247：工作台升级带来了新钉的连接器版本 → 后台下好（桌面壳看到就切过去，旧版留一份可回退）。
+  //     上游的安全修复只发在最新版（08 §5），所以默认跟；`AGENTSWS_CONNECT_AUTO_UPDATE=0` 关掉。
+  if (localConnector !== undefined && env.AGENTSWS_CONNECT_AUTO_UPDATE !== '0')
+    localConnector.autoUpdate()
+
   const assembleBrand = async (ws: WorkspaceId): Promise<BrandModuleSet> => {
     const isBootstrap = ws === workspace.id
     const dir = brandDirOf(dbDir, ws, workspace.id)
@@ -2415,6 +2446,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       ...(options.resolveMx === undefined ? {} : { resolveMx: options.resolveMx }),
       ...(options.connect === undefined ? {} : { connect: options.connect }),
       ...(dir === undefined ? {} : { dbDir: dir }),
+      ...(localConnector === undefined ? {} : { localRuntime: localConnector }),
     })
 
     /**
@@ -8427,6 +8459,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       await dshScenesSetup.manager?.close()
       // WP245：替用户跑着的安装 / 登录一并停掉（不留孤儿进程等浏览器）
       platformCliRunner.dispose()
+      // WP247：正在下载的连接器一并停掉（下了一半的暂存目录由下载器自己清）
+      localConnector?.dispose()
       learning.close()
       knowledge.close()
       data.close()
