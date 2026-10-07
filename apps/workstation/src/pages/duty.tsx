@@ -16,7 +16,7 @@
  * 只是"把右栏打开到那一格"的快捷方式，不是第二个入口。
  */
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { ChevronDown, ChevronRight, Play } from 'lucide-react'
+import { ChevronDown, ChevronRight, Loader2, Play } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { B2bOutboundPanel } from '@/components/b2b/outbound-panel'
@@ -37,8 +37,8 @@ import { Input } from '@/components/ui/input'
 import { MarkdownInline } from '@/components/ui/safe-markdown'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { HandoffError } from '@/components/work/handoff-error'
 import {
-  ApiClientError,
   createMatterWithRole,
   getPosition,
   getPositionRecords,
@@ -54,6 +54,7 @@ import {
   skillLines,
 } from '@/lib/duty-capabilities'
 import { formatDate } from '@/lib/format'
+import { handoffInput, TASK_TEXT_MAX } from '@/lib/handoff'
 import { firstSentence } from '@/lib/help'
 
 /** 头部那一行「用这条职责开一件事」：54 §2 保留的从职责开启那条路。 */
@@ -61,18 +62,15 @@ function OpenHere({ assignment }: { assignment: string }): React.ReactNode {
   const { t } = useApp()
   const navigate = useNavigate()
   const [title, setTitle] = useState('')
-  const [error, setError] = useState<string | null>(null)
   const open = useMutation({
     // 54 §2 职责入口：用**这条职责的分配**建事项，跳过岗位内路由——
-    // 权限、额度、动作面全是这一条的（不是岗位的并集）
-    mutationFn: (text: string) => createMatterWithRole(assignment, { title: text }),
+    // 权限、额度、动作面全是这一条的（不是岗位的并集）。
+    // WP259：长文本拆成标题 + 完整原文；开完立刻用这条职责起首轮运行（原来只建不跑）
+    mutationFn: (text: string) =>
+      createMatterWithRole(assignment, { ...handoffInput(text), run: true }),
     onSuccess: (out) => {
       setTitle('')
-      setError(null)
       navigate(`/matters/${out.matter.id}`)
-    },
-    onError: (err: unknown) => {
-      setError(err instanceof ApiClientError ? err.message : t('error.generic'))
     },
   })
   return (
@@ -80,30 +78,34 @@ function OpenHere({ assignment }: { assignment: string }): React.ReactNode {
       <div className="flex gap-2">
         <Input
           value={title}
+          maxLength={TASK_TEXT_MAX}
           aria-label={t('duty.open')}
           placeholder={t('duty.open.placeholder')}
           data-testid="duty-open-text"
           onChange={(e) => {
             setTitle(e.target.value)
+            if (open.error !== null) open.reset()
           }}
         />
         <Button
           size="sm"
           data-testid="duty-open-submit"
+          data-busy={open.isPending ? 'true' : undefined}
           disabled={title.trim() === '' || open.isPending}
           onClick={() => {
             open.mutate(title.trim())
           }}
         >
-          <Play aria-hidden className="size-3.5" />
-          {t('duty.open')}
+          {open.isPending ? (
+            <Loader2 aria-hidden className="size-3.5 animate-spin" />
+          ) : (
+            <Play aria-hidden className="size-3.5" />
+          )}
+          {open.isPending ? t('handoff.sending') : t('duty.open')}
         </Button>
       </div>
-      {error === null ? null : (
-        <p role="alert" className="text-xs text-destructive" data-testid="duty-open-error">
-          {error}
-        </p>
-      )}
+      {/* WP259：没开成就说一句人话（含服务端那句），与「交给它」几个入口同一个口径 */}
+      <HandoffError error={open.error} testId="duty-open-error" />
     </div>
   )
 }

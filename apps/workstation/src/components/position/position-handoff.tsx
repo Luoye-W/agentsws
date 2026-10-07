@@ -7,15 +7,17 @@
  *
  * `hero`：新岗位、什么都还没有时（`position-v2-empty.html`），它放大当主角。
  */
-import { Send } from 'lucide-react'
+import { Loader2, Send } from 'lucide-react'
 import { useState } from 'react'
 import { DutyIcon } from '@/components/role-icons/role-icon'
 import { Button } from '@/components/ui/button'
 import { Hint } from '@/components/ui/hint'
 import { Textarea } from '@/components/ui/textarea'
+import { HandoffError } from '@/components/work/handoff-error'
 import { usePositionOpen } from '@/components/work/use-position-open'
 import type { PositionInstanceData } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
+import { TASK_TEXT_MAX } from '@/lib/handoff'
 
 const MAX_SUGGESTIONS = 4
 
@@ -32,7 +34,7 @@ export function PositionHandoff({
   const [text, setText] = useState('')
   const [focused, setFocused] = useState(false)
   const [duty, setDuty] = useState('')
-  const { open, withRole, pick, choice } = usePositionOpen(id, () => {
+  const { open, withRole, pick, choice, error, clearError } = usePositionOpen(id, () => {
     setText('')
   })
 
@@ -55,6 +57,7 @@ export function PositionHandoff({
   const submit = (): void => {
     const title = text.trim()
     if (title === '' || busy) return
+    clearError()
     const assignment = mine.find((r) => r.role_id === duty)?.my_assignment_id
     if (assignment !== undefined) withRole.mutate({ assignment, title })
     else open.mutate({ title })
@@ -83,6 +86,7 @@ export function PositionHandoff({
           aria-label={t('position.entry.title')}
           rows={expanded ? 3 : 1}
           value={text}
+          maxLength={TASK_TEXT_MAX}
           placeholder={placeholder}
           data-testid="position-entry-input"
           className={
@@ -98,6 +102,7 @@ export function PositionHandoff({
           }}
           onChange={(e) => {
             setText(e.target.value)
+            clearError()
           }}
           onKeyDown={(e) => {
             if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
@@ -111,12 +116,19 @@ export function PositionHandoff({
           className={hero ? 'absolute right-2 bottom-2' : 'shrink-0'}
           disabled={text.trim() === '' || busy}
           data-testid="position-entry-submit"
+          data-busy={busy ? 'true' : undefined}
           onClick={submit}
         >
-          <Send className="size-3.5" aria-hidden />
-          {t('position.entry.submit')}
+          {busy ? (
+            <Loader2 className="size-3.5 animate-spin" aria-hidden />
+          ) : (
+            <Send className="size-3.5" aria-hidden />
+          )}
+          {busy ? t('handoff.sending') : t('position.entry.submit')}
         </Button>
       </div>
+      {/* WP259：没交出去就在框下说一句（含服务端那句话），不再静默 */}
+      <HandoffError error={error} />
       <div className="flex flex-wrap items-center gap-1.5">
         {suggestions.map((q) => (
           <button

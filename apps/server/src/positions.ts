@@ -32,6 +32,7 @@ import type {
   RoleId,
   WorkspaceId,
 } from '@agentsws/contracts'
+import { isTaskBrief, taskTextOf } from '@agentsws/contracts'
 import { isQueueCard, isRouteChoiceItem } from '@agentsws/deck'
 import {
   bundledPositionIcon,
@@ -579,7 +580,11 @@ export function createPositions(options: PositionsOptions): PositionsAssembly {
         'forbidden',
         `你名下没有「${template.name.zh}」这个岗位下的任何一条职责，开不了这里的事`,
       )
-    const text = input.summary === undefined ? input.title : `${input.title} ${input.summary}`
+    /*
+     * 路由与首轮运行用的那段话。WP259：标题是从一大段话里摘出来的（「第一句…」）时，
+     * 就是那段完整原文；否则照老规矩「标题 + 描述」（随便聊带过来的上下文）。
+     */
+    const text = taskTextOf(input.title, input.summary)
     /*
      * WP84：从快捷提示点进来的，职责是**已经定好的**，不跑路由。
      *
@@ -760,7 +765,8 @@ export function createPositions(options: PositionsOptions): PositionsAssembly {
   const briefOf = (matter: Matter): string =>
     work.store
       .listMatterEvents(matter.id)
-      .find((e) => e.kind === 'human_message' && e.text.startsWith(matter.title))?.text ??
+      // WP259：标题拆过（「第一句…」）的，原话以去掉「…」的那段开头
+      .find((e) => e.kind === 'human_message' && isTaskBrief(matter.title, e.text))?.text ??
     matter.title
 
   /** 这件事上还没定的那张「走哪条职责」卡（时间线上路由那一条记着卡号）。 */

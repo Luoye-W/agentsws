@@ -308,6 +308,24 @@ describe('WP207 左栏三级「+」', () => {
   })
 })
 
+describe('WP259 ⌘K 一句话交给职责：长文本照收', () => {
+  it('一大段：标题取第一句…，完整原文作描述（原来截到 200 字）', async () => {
+    renderShell(true)
+    fireEvent.click(screen.getByTestId('rail-new-matter'))
+    const input = await screen.findByTestId('command-compose-input')
+    const text = `联系 Jake 要新视频的数据。${'顺便问他下个月能不能再排一条合作视频，'.repeat(8)}`
+    fireEvent.change(input, { target: { value: text } })
+    fireEvent.submit(screen.getByTestId('command-compose'))
+    await waitFor(() => {
+      expect(called('openMatterAtPosition')).toHaveLength(1)
+    })
+    expect(called('openMatterAtPosition')[0]?.args).toEqual([
+      'asg_yt',
+      { title: '联系 Jake 要新视频的数据…', summary: text, role_id: 'kol.youtube' },
+    ])
+  })
+})
+
 describe('WP207 职责下的对话 / 任务', () => {
   it('状态小点、默认 5 条 + 更多、已归档（n）；岗位数改成「等你处理的」', async () => {
     const user = userEvent.setup()
