@@ -16,7 +16,7 @@
  *
  * `theme dev`（长驻）不给 AI。名字、给模型看的描述在这里；stub 运行时的那一段剧本也在这里。
  */
-import type { RunRequest, ToolDef } from '@agentsws/contracts'
+import type { PromptSection, RunRequest, ToolDef } from '@agentsws/contracts'
 
 export const THEME_INIT_TOOL = 'theme_init_from_base'
 export const THEME_LIST_TOOL = 'theme_list'
@@ -173,6 +173,34 @@ export const THEME_TOOL_DEF_BY_NAME: ReadonlyMap<string, ToolDef> = new Map(
   THEME_TOOL_DEFS.map((d) => [d.name, d]),
 )
 
+/**
+ * WP260：**网页模板的做法**——带主题工具的运行才进系统提示（服务端 `runtime.ts` 加；order 26：紧跟公共段
+ * 「说话规矩」之后、技能正文之前）。persona 有 260 字上限、英文由脚本翻译，放不下一整套工作法，所以单写一节。
+ *
+ * 10-07 真机（ci.16）：模型把同一批文件读了两三遍、去查店里的商品（店铺没连）、读完说一句「现在读…」就停——
+ * 这一节把顺序写死：读一次 → 改模板与设置 → 检查 → 推未发布 → 一段话交代，中途不汇报。
+ */
+export const THEME_WORK_ORDER = 26
+
+export const THEME_WORK_RULES = [
+  '网页模板的做法（一口气做到出预览，中途不停下来汇报；做完再用一段话交代）：',
+  '1. 主题工作目录是空的就先起底（agentsws-theme）；起过底就别再起。',
+  '2. AGENTS.md 读一次；CATALOG.json 先读目录页，要用的分区 / 块（如 hero、faq、container、newsletter）再给 ids 读一次完整设置；recipes/compose-page.md 是搭页面的现成做法。不必读 .liquid 源码，同一个文件读过就别再读。',
+  '3. 照 recipes 改 templates/index.json（放哪些分区、什么顺序、每块的设置）和 config/settings_data.json（颜色、字体等主题设置）；新东西只写 custom-* 文件，核心文件不动。',
+  '4. 跑官方检查，有错误就改，改到 0 个错误。',
+  '5. 推成未发布主题；最后给预览链接、改了哪几块、怎么退回。发布只出卡，等人点。',
+  '店铺数据：主推商品、合集先留空占位（人在主题编辑器里挑），不去查店里的商品。店面文案用顾客的语言（照 AGENTS.md）。',
+].join('\n')
+
+export function themeWorkSection(): PromptSection {
+  return {
+    id: 'theme_work',
+    name: '网页模板的做法',
+    order: THEME_WORK_ORDER,
+    text: THEME_WORK_RULES,
+  }
+}
+
 // ── 回来的数据形状（服务端 `theme-tools.ts` 拼，stub 剧本读） ─────────────
 
 /**
@@ -196,6 +224,8 @@ export interface ThemeReadData {
   catalog?: 'index' | 'entries'
   /** 按 ids 挑时没找到的那几个。 */
   missing?: string[]
+  /** 按 ids 挑时这一页放不下、要另读一次的那几个。 */
+  more_ids?: string[]
 }
 
 export function themeReadOf(data: unknown): ThemeReadData | undefined {
@@ -223,7 +253,7 @@ export function renderThemeRead(
     r.catalog === 'index'
       ? `主题文件 ${r.path}（目录页：每项一行；要某几项的完整设置再读一次并给 ids）`
       : r.catalog === 'entries'
-        ? `主题文件 ${r.path}（按 ids 挑出的完整几项${r.missing !== undefined && r.missing.length > 0 ? `；没有：${r.missing.join(', ')}` : ''}）`
+        ? `主题文件 ${r.path}（按 ids 挑出的完整几项${r.missing !== undefined && r.missing.length > 0 ? `；没有：${r.missing.join(', ')}` : ''}${r.more_ids !== undefined && r.more_ids.length > 0 ? `；这一页放不下，另读一次给 ids=${JSON.stringify(r.more_ids)}` : ''}）`
         : r.total_chars !== undefined
           ? `主题文件 ${r.path}（第 ${n((r.offset ?? 0) + 1)}–${n((r.offset ?? 0) + r.content.length)} 字，共 ${n(r.total_chars)} 字${r.next_offset === undefined ? '，到底了' : `；后面还有，接着读给 offset=${r.next_offset}`}）`
           : `主题文件 ${r.path}（全文，${n(r.content.length)} 字）`

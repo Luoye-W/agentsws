@@ -38,6 +38,7 @@ import type {
   RunBrowser,
   RunConnection,
   RunEvent,
+  RunProduce,
   RunRequest,
   RunTimeLimits,
   RuntimeAdapter,
@@ -101,7 +102,10 @@ import {
   READ_WEBPAGE_TOOL,
   RESEARCH_TOOL_NAMES,
   SCHEDULE_TOOL_NAMES,
+  THEME_PUBLISH_TOOL,
+  THEME_PUSH_TOOL,
   THEME_TOOL_NAMES,
+  themeWorkSection,
   WEB_FETCH_TOOL,
   WEB_SEARCH_TOOL,
 } from '@agentsws/stand-ins'
@@ -1423,12 +1427,18 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
     // WP181：装了官方「自动化任务」插件才挂那四个工具（每次运行现问）
     const automationOn =
       options.automation === undefined ? false : await options.automation.enabled()
+    /** WP253：网页模板（带主题工具）的运行。WP260：它是「要产出东西」的长活（见 `THEME_PRODUCE`）。 */
+    const themeRun = isThemeRole(config.role_id) && options.themeTools !== undefined
     const allow = [
       ...new Set([
         ...config.grounding.map((g) => g.tool),
         // WP162：有按需技能可读，才有读技能的工具
         ...(skillIndex.length > 0 ? [READ_SKILL_TOOL] : []),
-        ...DEFAULT_TOOLS,
+        /*
+         * WP260（10-07 真机 ci.16）：网页模板不摆订单 / 商品那四个只读工具——店铺没连时一调就是
+         * `not_connected`，白花一轮；搭页面时主推商品先放占位，由人在主题编辑器里挑。
+         */
+        ...(themeRun ? [] : DEFAULT_TOOLS),
         ...devToolNames(config.role_id),
         ...(isKolRole(config.role_id) ? KOL_TOOL_NAMES : []),
         // WP153：店主才有「列岗位 / 列连接」这两个只读工具
@@ -1466,7 +1476,6 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       role_id: config.role_id,
       matter_id: input.matter.id,
     })
-    const themeRun = isThemeRole(config.role_id) && options.themeTools !== undefined
     const granted = computer_use?.granted_until !== undefined
     // WP237（#67）：按条计费的工具（现在只有 read_reddit）每次运行按价目现填单价
     const tool_prices: Record<string, number> = {}
@@ -1566,6 +1575,8 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
            * 排在职责那一节后面、技能前面（order 25）。三个运行时拿到的是同一份字节。
            */
           houseRulesSection('zh'),
+          // WP260：网页模板的做法（读一次 → 改模板与设置 → 检查 → 推未发布；中途不汇报）。只给带主题工具的运行
+          ...(themeRun ? [themeWorkSection()] : []),
           /*
            * 24 §1 + WP69（54 §1）：解析后的技能正文——**六层**叠加完的那一份
            * （包 → 公司 → 部门 → 岗位 → 职责 → 个人）。
@@ -1642,6 +1653,8 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       ...(web === undefined ? {} : { web }),
       // WP237：取不到价就不写这个字段（描述里只说「按条计积分」），老运行的请求一个字节不变
       ...(Object.keys(tool_prices).length === 0 ? {} : { tool_prices }),
+      // WP260：网页模板是要产出东西的长活（没产出就续跑、压缩按 token 阈值）；别的运行不写这个字段
+      ...(themeRun ? { produce: THEME_PRODUCE } : {}),
       idempotency_key: `idem_${input.run_id}`,
     }
   }
@@ -1953,10 +1966,32 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
 export function runBudgetCaps(input: { themeRun: boolean; granted: boolean; browsing: boolean }): {
   max_tokens: number
   max_tool_calls: number
+  max_turns?: number
 } {
-  if (input.themeRun) return { max_tokens: 400_000, max_tool_calls: 60 }
+  /*
+   * WP260（ci.16）：工具调用放到 60 次之后，真正先到的是**回合**上限（运行时缺省 8 回合，一回合读三四个文件）
+   * ——8 回合到了就停在一句「现在读…」。网页模板的回合放到 40（一回合至少一次调用，60 次调用的上限仍在）。
+   */
+  if (input.themeRun) return { max_tokens: 400_000, max_tool_calls: 60, max_turns: 40 }
   return {
     max_tokens: 60_000,
     max_tool_calls: input.granted ? 40 : input.browsing ? 30 : 12,
   }
+}
+
+/**
+ * WP260：网页模板这类「读一批文件再改」的运行怎么跑（`RunRequest.produce`，三个运行时同一口径）。
+ *
+ * - 成功推出未发布预览（`theme_push_unpublished`）或出了发布卡（`theme_publish`）= 产出了；之前模型回一句
+ *   「我接下来要…」不算完成，追加「接着做」再跑一回合，最多 3 次；
+ * - 模型面前的历史超过 4.8 万 token 才压（以前是 min(上限×0.6, 1.2 万)，几乎每步都压），压到七成为止；
+ *   最近 6 条工具结果不压（刚读完、马上要照着改的那几份），压掉的换成「读过哪个文件 + 要点」。
+ *   4.8 万：真主题一轮要读的（AGENTS.md ≈ 3 千、目录页 ≈ 4 千、几项完整设置 ≈ 8 千、模板 / 设置 ≈ 1 千 token）
+ *   加上提示词，正常一轮不会压；也远在模型的上下文窗口之内。
+ */
+export const THEME_PRODUCE: RunProduce = {
+  deliver_tools: [THEME_PUSH_TOOL, THEME_PUBLISH_TOOL],
+  max_nudges: 3,
+  compact_at_tokens: 48_000,
+  keep_recent_results: 6,
 }

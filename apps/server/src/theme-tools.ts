@@ -23,6 +23,7 @@ import {
   THEME_WRITE_FILE_TOOL,
 } from '@agentsws/stand-ins'
 import { type SiteThemeAssembly, SiteThemeError } from './site-theme.js'
+import { themeReadPage } from './theme-read.js'
 
 export interface ThemeToolsOptions {
   /** 这个品牌的主题工坊（懒取：比运行时晚建出来）。 */
@@ -82,7 +83,8 @@ export function createThemeToolExecutor(options: ThemeToolsOptions): ToolExecuto
           const path = str(input.path)
           if (path === undefined)
             return { status: 'error', reason: '要给 path（工作目录里的相对路径）。' }
-          return { status: 'ok', data: await m.readFile(path) }
+          // WP260：长文件分页、CATALOG.json 给目录页 / 按 ids 挑（见 `theme-read.ts`）
+          return { status: 'ok', data: themeReadPage(await m.readFile(path), input) }
         }
         case THEME_WRITE_FILE_TOOL: {
           const path = str(input.path)
