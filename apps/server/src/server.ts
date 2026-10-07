@@ -2513,6 +2513,10 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       ...(options.siteTheme?.run === undefined ? {} : { run: options.siteTheme.run }),
       ...(options.siteTheme?.fetch === undefined ? {} : { fetch: options.siteTheme.fetch }),
       ...(options.siteTheme?.base === undefined ? {} : { base: options.siteTheme.base }),
+      // Luoye 决定 140：随安装包带的那份起底包（GitHub 下不动时的兜底；打包那一半见 WP253 报告）
+      ...(env.AGENTSWS_THEME_BASE_DIR === undefined || env.AGENTSWS_THEME_BASE_DIR === ''
+        ? {}
+        : { localBaseDir: env.AGENTSWS_THEME_BASE_DIR }),
       ledger: txn.ledger,
       effectiveConfig: (id) => roles.effectiveConfig(id),
       notePreview: (matter_id, input) => {

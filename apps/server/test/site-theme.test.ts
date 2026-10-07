@@ -307,6 +307,51 @@ describe('起底包与工作目录的边界', () => {
     ).toBe('{}')
   })
 
+  it('GitHub 下不动 / 校验不对：用随包带的那份兜底（校验同一个）；兜底那份也不对就照实报错；下不来时原目录不动', async () => {
+    const base = fakeThemeBase()
+    const local = join(dir, 'bundled')
+    mkdirSync(local)
+    const file = join(local, `agentsws-theme-${base.pin.commit}.tgz`)
+    const offline = async (): Promise<never> => {
+      throw new Error('getaddrinfo ENOTFOUND codeload.github.com')
+    }
+    const mk = () =>
+      createSiteTheme({
+        workspace_id: WS,
+        clock: { now: () => T0 },
+        dataDir: join(dir, 'data'),
+        cliSpec: () => spec,
+        probe: async () => ({ installed: true, node_ok: true, min_node_major: 20, checked_at: T0 }),
+        loggedIn: () => true,
+        invocation: () => ({ command: process.execPath, prefix: [cli.entry] }),
+        connectedShops: () => [SHOP],
+        fetch: offline,
+        base: base.pin,
+        localBaseDir: local,
+        ledger: { stage: async () => ({ ok: false, reason: 'guardrail', message: 'x' }) },
+        effectiveConfig: () => ({}) as never,
+      })
+    // 兜底那份不对：照实说下不来，一个文件都不放
+    writeFileSync(file, 'not a tarball')
+    await expect(mk().initFromBase({})).rejects.toThrow(/下不来开源主题/)
+    // 兜底那份对：用它起底
+    writeFileSync(file, base.tgz)
+    const t = mk()
+    expect((await t.initFromBase({})).files).toBeGreaterThan(5)
+    // replace 时下不来 → 原目录一个字节不动
+    rmSync(file)
+    await t.writeFile('templates/custom-keep.json', '{}')
+    await expect(t.initFromBase({ replace: true })).rejects.toThrow(/下不来/)
+    expect(readFileSync(join(themeDir(), 'templates', 'custom-keep.json'), 'utf8')).toBe('{}')
+  })
+
+  it('钉子只在 theme-base-pin.json 一处：tag / commit / sha256 / MIT', () => {
+    expect(THEME_BASE.tag).toMatch(/^v\d+\.\d+\.\d+$/)
+    expect(THEME_BASE.commit).toMatch(/^[0-9a-f]{40}$/)
+    expect(THEME_BASE.license).toBe('MIT')
+    expect(THEME_BASE.version).toBe(THEME_BASE.tag.slice(1))
+  })
+
   it('越界写 / 读一律拒：..、绝对路径、隐藏目录、链接', async () => {
     const t = make()
     await t.setStore(SHOP)

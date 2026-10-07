@@ -59,22 +59,19 @@ import {
   type ThemeCheckResult,
   type ThemeSummary,
 } from './shopify-theme.js'
+import PIN from './theme-base-pin.json' with { type: 'json' }
 
 /**
- * 起底用的开源主题（升级走 docs/42：改 commit / version / sha256 三样，sha256 从 codeload 的 tar.gz 现算）。
+ * 起底用的开源主题——**钉子只在一处**：`theme-base-pin.json`（tag + commit + 起底包 sha256 + 许可证）。
  *
- * 10-07 实查：仓库 `package.json` 与 LICENSE 都是 **MIT**（派工单写的 Apache-2.0 对不上，报告里列给 Luoye），
- * 没有 tag 也没有 release，所以钉的是 commit；同一个 commit 的 tar.gz 两次下载 sha256 相同。
+ * 换一个新 tag 只改那一个文件：`tag` / `version` / `commit` 照 GitHub 上那个 tag 指的 commit 抄，
+ * `sha256` / `bytes` 对 `https://codeload.github.com/Luoye-W/agentsws-theme/tar.gz/<commit>` 现算
+ * （按 commit 下，包里那一层目录是 `agentsws-theme-<commit>`；按 tag 下的包目录名不同、校验值也不同，不用它）。
+ * `upstreams.yml` 的 `agentsws-theme` 一条写着同一个 tag / commit，`check-upstreams` 对账（docs/42）。
+ *
+ * 10-07：主题仓库与 package.json 都是 **MIT**（Luoye 决定 136：口径就是 MIT）。
  */
-export const THEME_BASE = {
-  repo: 'Luoye-W/agentsws-theme',
-  version: '0.8.0',
-  commit: 'f6546c2ec04975b15e717b74c82e285b33fe8f62',
-  sha256: '553becc92c1875293a4d846a611653339f9f28589be09355da3a00ec3e8a5da3',
-  license: 'MIT',
-  /** 约 630 KB。 */
-  bytes: 627_845,
-} as const
+export const THEME_BASE: ThemeBasePin & { tag: string; bytes: number } = PIN
 
 /** 起底包的钉子（测试 / 演示换成本地造的假主题包）。 */
 export interface ThemeBasePin {
@@ -83,6 +80,8 @@ export interface ThemeBasePin {
   commit: string
   sha256: string
   license: string
+  /** 上游的 release tag（只用来说清楚是哪一版；下载按 commit）。 */
+  tag?: string
 }
 
 export const themeBaseUrl = (pin: ThemeBasePin = THEME_BASE): string =>
@@ -170,6 +169,11 @@ export interface SiteThemeOptions {
   fetch?: ThemeFetch
   /** 起底钉哪一版（测试 / 演示注入假包的钉子）；不给 = {@link THEME_BASE}。 */
   base?: ThemeBasePin
+  /**
+   * 随安装包带的起底包所在目录（`<repo名>-<commit>.tgz`；Luoye 决定 140 的兜底）。GitHub 下不动时用它，
+   * 校验值与 {@link THEME_BASE} 同一个。不给 = 只从 GitHub 下。服务进程经 `AGENTSWS_THEME_BASE_DIR` 拿。
+   */
+  localBaseDir?: string
   ledger: { stage(input: StageInput): Promise<StageOutcome> }
   effectiveConfig(assignment_id: string): EffectiveConfig
   /** 「预览好了」进事项时间线（有事项时）。 */
@@ -453,6 +457,51 @@ export function createSiteTheme(options: SiteThemeOptions): SiteThemeAssembly {
     })
   }
 
+  /**
+   * 起底包：先从 GitHub（codeload，按 commit）下；下不来、或下来的校验不对，就用随安装包带的那一份
+   * （`localBaseDir/<repo名>-<commit>.tgz`，Luoye 决定 140 的兜底）——两份认的是同一个 sha256。
+   */
+  const downloadBase = async (): Promise<Uint8Array> => {
+    const fetchImpl: ThemeFetch =
+      options.fetch ?? ((url) => fetch(url, { signal: AbortSignal.timeout(120_000) }))
+    let reason: string
+    let tampered = false
+    try {
+      const res = await fetchImpl(themeBaseUrl(pin))
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const bytes = new Uint8Array(await res.arrayBuffer())
+      if (sha256(bytes) === pin.sha256) return bytes
+      tampered = true
+      reason = '校验没过'
+    } catch (e) {
+      reason = e instanceof Error ? e.message : String(e)
+    }
+    const local = localBaseFile()
+    if (local !== undefined && existsSync(local)) {
+      const bytes = new Uint8Array(readFileSync(local))
+      if (sha256(bytes) === pin.sha256) {
+        emit('site_theme.base_local', {
+          workspace_id: ws,
+          reason: tampered ? 'integrity' : 'network',
+        })
+        return bytes
+      }
+    }
+    if (tampered)
+      throw new SiteThemeError(
+        'integrity',
+        '下来的开源主题和钉死的那一版对不上（校验没过），一个文件都没放。',
+      )
+    throw new SiteThemeError(
+      'network',
+      `下不来开源主题 agentsws-theme（${reason}）。看一下网络，再让我试一次。`,
+    )
+  }
+  const localBaseFile = (): string | undefined =>
+    options.localBaseDir === undefined
+      ? undefined
+      : join(options.localBaseDir, `${pin.repo.split('/')[1]}-${pin.commit}.tgz`)
+
   return {
     readiness,
 
@@ -474,12 +523,14 @@ export function createSiteTheme(options: SiteThemeOptions): SiteThemeAssembly {
       const root = rootOf(shop)
       const existing = readdirSync(root)
       let moved = false
+      if (existing.length > 0 && replace !== true)
+        throw new SiteThemeError(
+          'invalid_input',
+          '主题工作目录里已经有东西了，没覆盖。要从 agentsws-theme 重新起底，带 replace=true（旧的会挪到一边，不删）。',
+        )
+      // 先下好、校验过，再动工作目录（下不来时原来的东西一个字节不动）
+      const bytes = await downloadBase()
       if (existing.length > 0) {
-        if (replace !== true)
-          throw new SiteThemeError(
-            'invalid_input',
-            '主题工作目录里已经有东西了，没覆盖。要从 agentsws-theme 重新起底，带 replace=true（旧的会挪到一边，不删）。',
-          )
         // 旧的挪到工作区外面的「旧版」目录（不删；变更审阅只看 themes/<ws>/ 下的店铺目录）
         const aside = join(
           options.dataDir,
@@ -493,24 +544,6 @@ export function createSiteTheme(options: SiteThemeOptions): SiteThemeAssembly {
         mkdirSync(root, { recursive: true })
         moved = true
       }
-      const fetchImpl: ThemeFetch =
-        options.fetch ?? ((url) => fetch(url, { signal: AbortSignal.timeout(120_000) }))
-      let bytes: Uint8Array
-      try {
-        const res = await fetchImpl(themeBaseUrl(pin))
-        if (!res.ok) throw new Error(`HTTP ${res.status}`)
-        bytes = new Uint8Array(await res.arrayBuffer())
-      } catch (e) {
-        throw new SiteThemeError(
-          'network',
-          `下不来开源主题 agentsws-theme（${e instanceof Error ? e.message : String(e)}）。看一下网络，再让我试一次。`,
-        )
-      }
-      if (sha256(bytes) !== pin.sha256)
-        throw new SiteThemeError(
-          'integrity',
-          '下来的开源主题和钉死的那一版对不上（校验没过），一个文件都没放。',
-        )
       const staging = join(options.dataDir, 'theme-work', ws, 'staging', String(Date.parse(now())))
       mkdirSync(staging, { recursive: true })
       try {
