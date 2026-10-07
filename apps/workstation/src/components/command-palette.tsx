@@ -39,6 +39,7 @@ import {
 } from '@/components/ui/command'
 import { Input } from '@/components/ui/input'
 import {
+  enterSwitchedBrand,
   listCatalog,
   openMatterAtPosition,
   type PositionInstanceData,
@@ -447,7 +448,9 @@ export function CommandPalette({
                     if (b.current) return
                     // 切过去之后整站重载（与顶栏切换器同一条路）
                     switchBrand(org_id, b.workspace_id)
-                      .then(() => globalThis.location?.reload())
+                      .then(() => {
+                        enterSwitchedBrand()
+                      })
                       .catch(() => undefined)
                   }}
                 >
