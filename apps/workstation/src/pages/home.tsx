@@ -346,12 +346,16 @@ function TodayTimeline({ items }: { items: CalendarItem[] }): React.ReactNode {
 /** ② 右：今天的到期清单。 */
 function TodayDue({
   todos,
+  overdueIds = [],
   cardsWaiting,
 }: {
   todos: Todo[]
+  /** WP248（决策 79）：已过期没做完的那几条——标红一个小标 */
+  overdueIds?: readonly string[]
   cardsWaiting: number
 }): React.ReactNode {
   const { t } = useApp()
+  const overdue = new Set(overdueIds)
   return (
     <div className="flex flex-col gap-2" data-testid="today-due">
       {todos.length === 0 ? (
@@ -370,6 +374,14 @@ function TodayDue({
                     {todo.title}
                   </Link>
                 )}
+                {overdue.has(todo.id) ? (
+                  <span
+                    data-testid="today-overdue"
+                    className="inline-flex h-5 shrink-0 items-center rounded-full bg-ws-bad-bg px-2 text-[11px] font-medium whitespace-nowrap text-ws-bad"
+                  >
+                    {t('home.today.overdue')}
+                  </span>
+                ) : null}
               </li>
             )
           })}
@@ -500,10 +512,16 @@ export function HomePage(): React.ReactNode {
         <div>
           <h1 className="ws-display text-[30px]">{t('home.headline')}</h1>
           <p className="mt-1 text-[13px] text-ws-muted-fg">
-            {t('home.greeting.line', {
-              cards: data.counts.total,
-              matters: today?.due.todos.length ?? 0,
-            })}
+            {t(
+              (today?.due.overdue_ids?.length ?? 0) > 0
+                ? 'home.greeting.line.overdue'
+                : 'home.greeting.line',
+              {
+                cards: data.counts.total,
+                matters: today?.due.todos.length ?? 0,
+                overdue: today?.due.overdue_ids?.length ?? 0,
+              },
+            )}
           </p>
         </div>
         {/* WP188：一句话进随便聊（少字：一个图标 + 一句问句） */}
@@ -646,7 +664,11 @@ export function HomePage(): React.ReactNode {
                   同一个数——都是牌堆的张数（合并前）。原来这里读的是工作模型里所有等着人的
                   审批项，日报也算一张，于是页头 7、这里 8。
                 */}
-                <TodayDue todos={today.due.todos} cardsWaiting={data.counts.total} />
+                <TodayDue
+                  todos={today.due.todos}
+                  overdueIds={today.due.overdue_ids ?? []}
+                  cardsWaiting={data.counts.total}
+                />
               </WsCard>
               <WsCard className="p-4" data-testid="home-inprogress">
                 <InProgressTitle />

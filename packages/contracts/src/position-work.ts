@@ -110,6 +110,11 @@ export interface PositionWorkItem {
   result_ready?: true
   /** WP244：在「卡住了」里时，卡在哪 / 缺什么（一句人话：「缺 Shopify 连接」或运行停下来那一句）。 */
   stuck_reason?: string
+  /**
+   * WP248（决策 79）：待办的截止已经过了（工作区时区今天之前）、还没做完——行上标红一个「已过期」小标。
+   * 只有待办会有（事项没有截止；定时 / 排期的「下次时间」过了不叫过期）。
+   */
+  overdue?: true
 }
 
 /** `GET /v1/positions/:id/work` 的回包。 */
@@ -128,8 +133,15 @@ export interface PositionWorkView {
     stuck?: number
     /** 挂在工作项上、等你定的卡（去重后的张数） */
     cards: number
-    /** 截止 / 排在今天、还没做完的待办（与工作台「截止：今天」筛选同一个口径） */
+    /**
+     * 截止 / 排在今天、还没做完的待办。
+     *
+     * WP248（决策 79，Luoye 10-07）：**已过期没做完的也算进来**（页头写「今天 3 个待办（1 个已过期）」），
+     * 点过去是工作台「截止：今天及已过期」筛选，同一个口径。
+     */
     todos_today: number
+    /** WP248：上面那个数里已过期的有几个（老服务端没有这一格 = 0） */
+    todos_overdue?: number
   }
   /** 本人在这个岗位里做的那几条职责（筛选「职责」的选项、加待办时挂哪条） */
   duties: { role_id: RoleId; role_name: string; assignment_id: AssignmentId }[]
@@ -197,8 +209,9 @@ export function todoSourceOf(source: TodoSource): PositionWorkSource {
  *
  * - **待办**：人是承诺人（37 Todo.owner 永远是人），状态本来就由人改——能在「进行中 /
  *   等别人 / 已完成」三列之间拖（「卡住了」只收事项，WP244），拖到哪列就改成 {@link todoStatusForGroup} 给的那个状态。
- *   「排着的」那一列不收：它的意思是「排在以后某个时段」，进去要给时间（日历视图里拖到某天），
- *   光拖一下没有时间可记，放进去刷新就会弹回「进行中」。
+ *   「排着的」那一列的意思是「排在以后某个时段」，进去要给时间：WP248（决策 82）起**收**待办，
+ *   但先弹一个选日期（默认明天上午），选好了才落（写 `scheduled` + 状态回 `open`），取消就弹回原列
+ *   ——见 {@link todoMoveNeedsTime}。
  * - **事项 / 定时 / 排期**：状态由 AI 的运行、调度循环、发帖结果推进，人在这里拖一下
  *   改不了「它做到哪了」——**不许拖**（卡片拿着不动，悬停说一句为什么）。要停一个定时任务
  *   去「设置 · 定时任务」，要结束一件事进事项页；要人拍板的出卡、在卡片流里定。
@@ -208,11 +221,20 @@ export function canMoveWorkItem(
   to: PositionWorkGroup,
 ): boolean {
   // WP244：「卡住了」只收事项（AI 交不出来的那种），待办拖不进去
-  if (item.kind !== 'todo' || to === 'queued' || to === 'stuck') return false
+  // WP248：「排着的」收待办（落之前要选时间，见 `todoMoveNeedsTime`）
+  if (item.kind !== 'todo' || to === 'stuck') return false
   return item.group !== to
 }
 
-/** 待办拖到某一列 → 改成哪个状态（`queued` 不收拖动，给 `open` 只为函数是全的）。 */
+/**
+ * WP248（决策 82）：拖到这一列之前要不要先问一个时间。「排着的」= 排在以后某个时段，
+ * 光拖一下没有时间可记（不给时间放进去，刷新就弹回「进行中」）——所以先弹选日期，选好才落。
+ */
+export function todoMoveNeedsTime(to: PositionWorkGroup): boolean {
+  return to === 'queued'
+}
+
+/** 待办拖到某一列 → 改成哪个状态（`queued` 是 `open` + 一个以后的 `scheduled`，时间另给）。 */
 export function todoStatusForGroup(group: PositionWorkGroup): TodoStatus {
   if (group === 'done') return 'done'
   if (group === 'waiting' || group === 'stuck') return 'blocked'

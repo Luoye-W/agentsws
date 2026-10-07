@@ -32726,6 +32726,28 @@
                   "postal_address": {
                     "type": "string",
                     "maxLength": 500
+                  },
+                  "one_liner": {
+                    "type": "string",
+                    "maxLength": 300
+                  },
+                  "support_email": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "const": ""
+                      },
+                      {
+                        "type": "string",
+                        "maxLength": 254,
+                        "format": "email",
+                        "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+                      }
+                    ]
+                  },
+                  "currency": {
+                    "type": "string",
+                    "pattern": "^([A-Za-z]{3})?$"
                   }
                 },
                 "required": ["legal_name"]

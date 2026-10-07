@@ -15,7 +15,11 @@
  * 那句"只交换一串哈希"是 36 §7 的**可见**档（安全承诺不许藏进 tooltip）：
  * 用户凭它决定要不要把开关打开。
  */
-import { companyEmailSuffix, suggestCompanyEmailSuffix } from '@agentsws/contracts'
+import {
+  companyEmailSuffix,
+  DEFAULT_BRAND_CURRENCY,
+  suggestCompanyEmailSuffix,
+} from '@agentsws/contracts'
 import { useEffect, useState } from 'react'
 import { MarketsPicker } from '@/components/onboarding/markets-picker'
 import { Button } from '@/components/ui/button'
@@ -45,6 +49,10 @@ export interface ProfileDraft {
   markets: string[]
   /** WP176：公司实体地址（开发信页脚、报价单、单证从这里取）。空 = 没填。 */
   postal_address: string
+  /** WP248（决策 83）：品牌一句话介绍 / 客服邮箱 / 币种（设置页才出；向导第 ② 步走档案卡）。 */
+  one_liner: string
+  support_email: string
+  currency: string
 }
 
 export function ProfileForm({
@@ -106,6 +114,9 @@ export function ProfileForm({
     storefront_platform: profile?.storefront_platform ?? 'shopify',
     markets: profile?.markets ?? [],
     postal_address: profile?.postal_address ?? '',
+    one_liner: profile?.one_liner ?? '',
+    support_email: profile?.support_email ?? '',
+    currency: profile?.currency ?? DEFAULT_BRAND_CURRENCY,
   })
   /**
    * WP233：建议值可能晚到（云账号、品牌分析是各自查回来的）。用户没动过、档案里也没存过、
@@ -383,6 +394,58 @@ export function ProfileForm({
                 {profile.markets_source.note}
               </p>
             ) : null}
+          </div>
+        )}
+        {/*
+          WP248（决策 83）：品牌档案三格（设置页才出；向导第 ② 步在档案卡 / 手填表里填）。
+          一句话一整行；客服邮箱与币种并排。AI 干活时取品牌上下文会带上它们。
+        */}
+        {firstBrand ? null : (
+          <div className="flex flex-col gap-3" data-testid="profile-brand-facts">
+            <div className="flex flex-col gap-1">
+              <Label htmlFor="brand-one-liner" className="flex items-center gap-1">
+                {t('onboarding.brand.one_liner')}
+                <Hint text={t('onboarding.brand.facts.hint')} />
+              </Label>
+              <Input
+                id="brand-one-liner"
+                data-testid="brand-one-liner"
+                value={draft.one_liner}
+                maxLength={300}
+                placeholder={t('onboarding.brand.one_liner.placeholder')}
+                onChange={(e) => {
+                  setDraft({ ...draft, one_liner: e.target.value })
+                }}
+              />
+            </div>
+            <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_8rem]">
+              <div className="flex flex-col gap-1">
+                <Label htmlFor="brand-support-email">{t('onboarding.brand.support_email')}</Label>
+                <Input
+                  id="brand-support-email"
+                  data-testid="brand-support-email"
+                  type="email"
+                  value={draft.support_email}
+                  placeholder="support@example.com"
+                  onChange={(e) => {
+                    setDraft({ ...draft, support_email: e.target.value })
+                  }}
+                />
+              </div>
+              <div className="flex flex-col gap-1">
+                <Label htmlFor="brand-currency">{t('onboarding.brand.currency')}</Label>
+                <Input
+                  id="brand-currency"
+                  data-testid="brand-currency"
+                  value={draft.currency}
+                  maxLength={3}
+                  placeholder={DEFAULT_BRAND_CURRENCY}
+                  onChange={(e) => {
+                    setDraft({ ...draft, currency: e.target.value.toUpperCase() })
+                  }}
+                />
+              </div>
+            </div>
           </div>
         )}
         {/*

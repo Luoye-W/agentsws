@@ -313,15 +313,24 @@ export function PositionPage(): React.ReactNode {
                     className="inline-flex items-center gap-1 hover:text-foreground"
                     onClick={() => {
                       setTab('work')
+                      // WP248（决策 79）：数里含已过期的，筛选也用「今天及已过期」
                       setPrefs(
-                        { ...prefs, view: 'list', filters: { ...NO_FILTERS, due: 'today' } },
+                        { ...prefs, view: 'list', filters: { ...NO_FILTERS, due: 'by_today' } },
                         false,
                       )
                       scrollTo(workRef.current)
                     }}
                   >
-                    <span className="size-1.5 rounded-full bg-ws-info" aria-hidden />
-                    {t('pos2.status.today', { n: counts.todos_today })}
+                    <span
+                      className={`size-1.5 rounded-full ${(counts.todos_overdue ?? 0) > 0 ? 'bg-ws-bad' : 'bg-ws-info'}`}
+                      aria-hidden
+                    />
+                    {(counts.todos_overdue ?? 0) > 0
+                      ? t('pos2.status.today_overdue', {
+                          n: counts.todos_today,
+                          m: counts.todos_overdue ?? 0,
+                        })
+                      : t('pos2.status.today', { n: counts.todos_today })}
                   </button>
                 </>
               )}

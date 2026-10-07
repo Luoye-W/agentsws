@@ -30408,6 +30408,9 @@ export interface operations {
             [key: string]: string
           }
           postal_address?: string
+          one_liner?: string
+          support_email?: '' | string
+          currency?: string
         }
       }
     }

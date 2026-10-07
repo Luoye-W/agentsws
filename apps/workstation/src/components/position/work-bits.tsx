@@ -160,6 +160,20 @@ export function CardsBadge({
   )
 }
 
+/** WP248（决策 79）：没做完、截止已过的待办——标题旁一个红色小标「已过期」。 */
+export function OverdueBadge({ item }: { item: PositionWorkItem }): ReactNode {
+  const { t } = useApp()
+  if (item.overdue !== true) return null
+  return (
+    <span
+      data-testid="work-overdue"
+      className="inline-flex h-5 shrink-0 items-center rounded-full bg-ws-bad-bg px-2 text-[11px] font-medium whitespace-nowrap text-ws-bad"
+    >
+      {t('pos2.overdue')}
+    </span>
+  )
+}
+
 /**
  * WP244：行上「到哪了」那一格——卡住了先说缺什么（琥珀色），AI 答完了前面挂「待你看结果」，
  * 其余照旧是最近一句进展。
