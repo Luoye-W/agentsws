@@ -3551,6 +3551,8 @@ const zh: Table = {
   'platform_cli.job.opening': '正在打开登录页…',
   'platform_cli.job.waiting_browser': '浏览器里登录完回来就行。',
   'platform_cli.job.user_code': '网页上的确认码：{code}',
+  'platform_cli.job.user_code_hint': 'Shopify 网页要你填码时，填这个：',
+  'platform_cli.job.user_code_copy': '复制',
   'platform_cli.job.reopen': '没弹出来？点这里打开',
   'platform_cli.error.network': '网络连不上。检查一下网络或代理，再点重试。',
   'platform_cli.error.timeout': '太久没好，已经停下。网络慢的话再点重试。',
@@ -7545,6 +7547,8 @@ const en: Table = {
   'platform_cli.job.opening': 'Opening the sign-in page…',
   'platform_cli.job.waiting_browser': 'Sign in in your browser, then come back.',
   'platform_cli.job.user_code': 'Code on the page: {code}',
+  'platform_cli.job.user_code_hint': 'If the page asks for a code, enter:',
+  'platform_cli.job.user_code_copy': 'Copy',
   'platform_cli.job.reopen': 'Did not open? Click here',
   'platform_cli.error.network':
     'Could not reach the network. Check your connection or proxy, then try again.',

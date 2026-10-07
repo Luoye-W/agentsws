@@ -1466,6 +1466,7 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       role_id: config.role_id,
       matter_id: input.matter.id,
     })
+    const themeRun = isThemeRole(config.role_id) && options.themeTools !== undefined
     const granted = computer_use?.granted_until !== undefined
     // WP237（#67）：按条计费的工具（现在只有 read_reddit）每次运行按价目现填单价
     const tool_prices: Record<string, number> = {}
@@ -1596,16 +1597,12 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
        * 打开、截图、翻页、再截图，12 次不够一个小任务；比电脑操控低，因为它不需要逐像素找按钮。
        */
       budget: {
-        max_tokens: 60_000,
-        /*
-         * WP179：挂了网页工具的运行同理放到 30——搜一次、抓两三页、再搜一次，12 次不够；
-         * 次数上限另在门禁里按职责阈值管（搜索缺省 5、抓取 10）。
-         */
-        max_tool_calls: granted
-          ? 40
-          : (browser !== undefined && allowed_hosts.length > 0) || web !== undefined
-            ? 30
-            : 12,
+        // token / 工具调用上限按运行挂了什么定（见 `runBudgetCaps`）
+        ...runBudgetCaps({
+          themeRun,
+          granted,
+          browsing: (browser !== undefined && allowed_hosts.length > 0) || web !== undefined,
+        }),
         // WP236：与看门狗的总时长线对齐（原来固定 120 秒，direct 档跑满就收）
         max_seconds: timeLimitsFor(config.role_id).max_duration_seconds,
         max_cost_base: 5,
@@ -1942,5 +1939,24 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       positions = source
     },
     startRun,
+  }
+}
+
+/**
+ * 一次职责运行的 token / 工具调用上限（时间与花费另算）。
+ *
+ * - 缺省 6 万 token、12 次；
+ * - WP144：批过电脑操控授权的 40 次；WP148 / WP179：真挂了浏览器或网页工具的 30 次；
+ * - 10-07 真机（Fable）：网页模板（带主题工具）一轮读主题规矩 / 目录 / 模板 / 区块就十几次调用、
+ *   七万多 token，旧上限连第一页都没改到就「预算不够」停了——放到 40 万 token、60 次。
+ */
+export function runBudgetCaps(input: { themeRun: boolean; granted: boolean; browsing: boolean }): {
+  max_tokens: number
+  max_tool_calls: number
+} {
+  if (input.themeRun) return { max_tokens: 400_000, max_tool_calls: 60 }
+  return {
+    max_tokens: 60_000,
+    max_tool_calls: input.granted ? 40 : input.browsing ? 30 : 12,
   }
 }

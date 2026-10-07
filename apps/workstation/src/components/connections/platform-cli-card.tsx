@@ -238,6 +238,31 @@ function JobLine({ job }: { job: PlatformCliJob }): React.ReactNode {
           </span>
         ) : null}
       </p>
+      {job.action === 'login' && job.user_code !== undefined ? (
+        // 10-07 真机：Shopify 网页上先登账号、跳回来时网址里的码丢了，要人手填——码得一眼看得见
+        <div
+          className="flex flex-wrap items-center gap-3 rounded-md border border-primary/30 bg-primary/5 px-3 py-2"
+          data-testid="platform-cli-code"
+        >
+          <span className="text-xs text-muted-foreground">
+            {t('platform_cli.job.user_code_hint')}
+          </span>
+          <span className="font-mono text-lg font-semibold tracking-widest select-all">
+            {job.user_code}
+          </span>
+          <button
+            type="button"
+            className="inline-flex items-center gap-1 text-xs underline underline-offset-2"
+            onClick={() => {
+              if (job.user_code !== undefined) void navigator.clipboard?.writeText(job.user_code)
+            }}
+            data-testid="platform-cli-code-copy"
+          >
+            <Copy className="size-3" aria-hidden />
+            {t('platform_cli.job.user_code_copy')}
+          </button>
+        </div>
+      ) : null}
       {job.action === 'login' && job.login_url !== undefined ? (
         <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
           <button
@@ -251,11 +276,6 @@ function JobLine({ job }: { job: PlatformCliJob }): React.ReactNode {
             <ExternalLink className="size-3" aria-hidden />
             {t('platform_cli.job.reopen')}
           </button>
-          {job.user_code === undefined ? null : (
-            <span data-testid="platform-cli-code">
-              {t('platform_cli.job.user_code', { code: job.user_code })}
-            </span>
-          )}
         </div>
       ) : null}
     </div>
