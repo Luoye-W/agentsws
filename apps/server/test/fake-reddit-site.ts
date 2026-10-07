@@ -94,6 +94,27 @@ function route(req: IncomingMessage, res: ServerResponse, origin: string) {
   if (p === '/r/offsite/')
     return html(302, '', { location: `${origin.replace('localhost', '127.0.0.1')}/offsite-target` })
   if (p === '/r/changed/') return html(200, page('<div>new layout we do not know</div>'))
+  // WP246：读号——「登录」只是种一个 cookie（假站点，不是真登录）；旧版首页的页头按 cookie 显示用户名
+  if (p === '/set-reader/')
+    return html(200, page(post('r1', 'inmo', 'Reader set', 1, 0)), {
+      'set-cookie': `reader=${url.searchParams.get('u') ?? 'reader_bob'}; Path=/; Max-Age=86400`,
+    })
+  if (p === '/old-home/') {
+    const who = /(?:^|;\s*)reader=([\w-]+)/.exec(req.headers.cookie ?? '')?.[1]
+    const header =
+      who === undefined
+        ? '<div id="header-bottom-right"><span class="user">Want to join? <a href="/login">Log in or sign up</a></span></div>'
+        : `<div id="header-bottom-right"><span class="user"><a href="/user/${who}/">${who}</a>&nbsp;(<span class="userkarma">1</span>)</span></div>`
+    return html(
+      200,
+      page(
+        header +
+          '<div class="thing link" data-fullname="t3_h1" data-permalink="/r/inmo/comments/h1/x/" data-author="z" data-subreddit="inmo">' +
+          '<a class="title" href="/r/inmo/comments/h1/x/">Home post</a></div>' +
+          SPY,
+      ),
+    )
+  }
   return html(404, page('not found'))
 }
 

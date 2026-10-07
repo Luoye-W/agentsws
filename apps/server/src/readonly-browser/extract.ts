@@ -29,6 +29,11 @@ export interface ExtractResult {
     passwordInputs: number
     frameSources: string[]
     items: number
+    /**
+     * WP246：页面顶上显示的「当前登录的是谁」（读号体检用；没登录 / 认不出就没有）。
+     * 只读页面上显示的用户名，不碰 cookie。旧版（old.reddit.com）在页头 `.user a` 里。
+     */
+    account?: string
   }
   items: Record<string, unknown>[]
 }
@@ -126,6 +131,11 @@ export function extractRedditPage(args: ExtractArgs): ExtractResult {
   if (document.querySelector('.g-recaptcha, .h-captcha, #px-captcha, .cf-turnstile') !== null)
     frameSources.push('captcha-widget')
   const bodyText = (document.body as HTMLElement | null)?.innerText ?? ''
+  // WP246：页头的登录用户名（旧版页头；新版页头靠页面脚本画，关了脚本读不到，所以体检开旧版首页）
+  const userLink = document.querySelector(
+    '#header-bottom-right .user a[href*="/user/"], span.user > a[href*="/user/"]',
+  )
+  const account = clip(userLink?.textContent, 40)
   return {
     signals: {
       title: clip(document.title, 200),
@@ -133,6 +143,7 @@ export function extractRedditPage(args: ExtractArgs): ExtractResult {
       passwordInputs: document.querySelectorAll('input[type="password"]').length,
       frameSources,
       items: items.length,
+      ...(account === '' ? {} : { account }),
     },
     items,
   }

@@ -62,6 +62,8 @@ export interface ReadUsage {
   check(nowMs: number): LimitCheck
   take(nowMs: number): void
   block(kind: WallKind, message: string, nowMs: number, retryAfterMs?: number): void
+  /** WP246：人在「登录读号」窗口里手动过了验证、体检认出了读号——解除被拦暂停。 */
+  unblock(): void
   snapshot(nowMs: number): UsageSnapshot
 }
 
@@ -135,6 +137,11 @@ export function createReadUsage(options: { file?: string; limits(): ReadLimits }
       const pause = Math.max(BLOCK_PAUSE_MS[kind], retryAfterMs ?? 0)
       if (pause <= 0) return
       state.block = { kind, message, at: now, until: now + pause }
+      flush()
+    },
+    unblock() {
+      if (state.block === undefined) return
+      delete state.block
       flush()
     },
     snapshot(now) {

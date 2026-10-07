@@ -1914,6 +1914,75 @@ export interface ReadonlyBrowserStatus {
 export const getRedditBrowserReadStatus = (assignment?: string): Promise<ReadonlyBrowserStatus> =>
   api('/v1/settings/reddit-browser-read/status', withAssignment(assignment))
 
+/* ── WP246（决策 87 / 88）：取数路线「首选 → 备选 + 体检」、Reddit 读号 ── */
+
+export type ReadLevel =
+  | 'workshop'
+  | 'browser_readonly'
+  | 'page_captions'
+  | 'local_extract'
+  | 'third_party_reader'
+
+export interface ReadLevelCheck {
+  level: ReadLevel
+  state: 'ok' | 'down' | 'off' | 'pending'
+  reason: string
+  fix?: string
+  action?:
+    | 'link_account'
+    | 'login_read_account'
+    | 'install_browser'
+    | 'enable_level'
+    | 'check_network'
+    | 'wait'
+  detail?: string
+  last?: { ok: boolean; at: string; message?: string }
+}
+
+export interface ReadRouteHealth {
+  platform: string
+  route_key: string
+  tool: string
+  levels: ReadLevelCheck[]
+  active?: ReadLevel
+}
+
+export interface RedditReadAccountStatus {
+  state: 'none' | 'logging_in' | 'logged_in' | 'refused' | 'unknown'
+  username?: string
+  message?: string
+  checked_at?: string
+}
+
+export interface ReadRoutesSettings {
+  web_third_party_reader: boolean
+  reddit_browser_window: 'minimized' | 'headless'
+}
+
+export interface ReadRoutesView {
+  doctor: { routes: ReadRouteHealth[]; checked_at: string; deep: boolean }
+  settings: ReadRoutesSettings
+  reddit_account?: RedditReadAccountStatus
+}
+
+/** 快查（不连网）：每个平台现在走哪一级、哪级断了。 */
+export const getReadRoutes = (assignment?: string): Promise<ReadRoutesView> =>
+  api('/v1/settings/read-routes', withAssignment(assignment))
+
+/** 重新体检（真去连一下）。 */
+export const runReadRoutesDoctor = (assignment?: string): Promise<ReadRoutesView> =>
+  api('/v1/settings/read-routes/doctor', { ...withAssignment(assignment), method: 'POST' })
+
+export const setReadRoutesSettings = (
+  patch: Partial<ReadRoutesSettings>,
+  assignment?: string,
+): Promise<ReadRoutesView> =>
+  api('/v1/settings/read-routes', { ...withAssignment(assignment), method: 'PUT', body: patch })
+
+/** 打开「登录读号」窗口（用户自己在网页上登录；关掉后服务端自动体检）。 */
+export const openRedditReadAccountLogin = (assignment?: string): Promise<RedditReadAccountStatus> =>
+  api('/v1/settings/reddit-read-account/login', { ...withAssignment(assignment), method: 'POST' })
+
 /** 整张表一次给全——两个标签页各改一项就不会互相覆盖。路由表（WP126）一并对齐。 */
 export const setCapabilitySources = (
   capability_sources: Record<string, CapabilitySource>,

@@ -241,6 +241,16 @@ grounding:
       prefetch: true,
     }
 
+  # WP246（决策 87）：读别人视频的字幕、标题与简介（零配置：直接读视频页里的字幕轨，不扣积分）。
+  # 意图词故意写窄（整句短语）：这一行只为把工具挂上，不该改变岗位路由。
+  - {
+      name: youtube_transcript,
+      intent_terms: [读字幕, 视频字幕内容, 视频文字稿, transcript],
+      cue_terms: [],
+      tool: read_youtube_transcript,
+      prefetch: false,
+    }
+
 notifications:
   # 建合作永远人审，卡压着不动 = 一次合作黄了，12 小时就催
   - {
