@@ -6,10 +6,12 @@
  *
  * 四条纪律：
  *
- * 1. **不进安装包**（「不打包重型本机运行时」）：我们只检测、只给官方安装命令与教程；装是用户自己在终端里装。
- * 2. **登录永远是用户本人在浏览器里完成**：我们不跑登录命令、不碰账号密码、不读 CLI 自己存的会话文件。
- *    「登好了没有」只有两个来源：用户在卡上点「我登好了」（按品牌记一笔时间，**不存任何凭据**），
- *    或者之后一次真的主题命令成功（同一个口子记）。
+ * 1. **不进安装包**（「不打包重型本机运行时」）：CLI 不随包带。WP245 起由工作台按需装进**应用自己的数据目录**
+ *    （`platform-cli-runner.ts`，用我们自己的 node + npm），检测时优先认这一份，系统里已有的全局安装也认。
+ * 2. **登录永远是用户本人在浏览器里完成**：WP245 起登录命令由工作台在后台起、登录网址交给工作台打开，
+ *    密码只在平台网页上输；我们不碰账号密码、不读 CLI 自己存的会话文件。
+ *    「登好了没有」的来源：登录进程正常结束（按品牌记一笔时间，**不存任何凭据**），
+ *    或者老接口「我登好了」（同一个口子记）。
  * 3. **平台对不上就不检测**：调用方先按品牌档案查 `platformKitOf(...)?.cli`，没有就不调这里——
  *    非 Shopify 的品牌一次 `shopify version` 都不跑。
  * 4. **子进程环境走白名单**（与 `shopify-theme.ts` 同一张 `PASSTHROUGH_ENV`），另加平台那一行要求的
@@ -17,7 +19,7 @@
  */
 import { execFile } from 'node:child_process'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
+import { delimiter, dirname, join } from 'node:path'
 import type { PlatformCliSpec } from '@agentsws/contracts'
 import { PASSTHROUGH_ENV } from './shopify-theme.js'
 import { cliSpawnSpec } from './win-cli.js'
@@ -40,6 +42,11 @@ export interface PlatformCliProbe {
   node_ok: boolean
   min_node_major: number
   checked_at: string
+  /**
+   * WP245：查到的是哪一份——`app` = 工作台装在自己数据目录里的那份（用我们自己的 node 跑），
+   * `system` = 系统里本来就有的（PATH 上的）。没装 = 没有这一格。
+   */
+  source?: 'app' | 'system'
 }
 
 /** 只取版本号（`3.84.1`、`v22.11.0` → `22.11.0`）；认不出回 undefined。 */
@@ -99,6 +106,15 @@ export function defaultProbeExec(): ProbeExec {
 export interface PlatformCliProber {
   /** 检测一次（`fresh` = 不用缓存）。**永不抛**——查不出就是没装。 */
   probe(spec: PlatformCliSpec, opts?: { fresh?: boolean }): Promise<PlatformCliProbe>
+  /** WP245：装完 / 登录完把这个 CLI 的缓存丢掉（下一次检测现跑）。 */
+  invalidate?(cli_id: string): void
+}
+
+/** WP245：怎么起这个 CLI（私有安装 → `<我们的 node> <入口>`；没有 → 系统里的 `spec.bin`）。 */
+export interface ProbeInvocation {
+  command: string
+  prefix: readonly string[]
+  source: 'app' | 'system'
 }
 
 export function createPlatformCliProber(options: {
@@ -108,6 +124,8 @@ export function createPlatformCliProber(options: {
   /** 缓存多久（毫秒）：卡片每次刷新都去跑一遍 CLI 太重。默认 5 分钟。 */
   ttlMs?: number
   timeoutMs?: number
+  /** WP245：优先用工作台自己装的那份（不给 = 只看系统 PATH）。 */
+  invocation?: (spec: PlatformCliSpec) => ProbeInvocation
 }): PlatformCliProber {
   const exec = options.exec ?? defaultProbeExec()
   const env = options.env ?? process.env
@@ -119,13 +137,27 @@ export function createPlatformCliProber(options: {
       const hit = cache.get(spec.id)
       const nowMs = Date.parse(options.now())
       if (opts.fresh !== true && hit !== undefined && nowMs - hit.at < ttl) return hit.value
+      const how = options.invocation?.(spec) ?? {
+        command: spec.bin,
+        prefix: [],
+        source: 'system' as const,
+      }
       const childEnv = probeEnv(spec, env)
+      // 私有安装：CLI 跑在我们自己的 node 上，「Node 够不够」问的也是它；PATH 最前面放它的目录
+      const nodeBin = how.source === 'app' ? how.command : 'node'
+      if (how.source === 'app' && /[\\/]/.test(how.command)) {
+        const dir = dirname(how.command)
+        childEnv.PATH = childEnv.PATH === undefined ? dir : `${dir}${delimiter}${childEnv.PATH}`
+      }
       const [cli, node] = await Promise.all([
-        exec(spec.bin, spec.version_args, { env: childEnv, timeoutMs }).catch(() => ({
+        exec(how.command, [...how.prefix, ...spec.version_args], {
+          env: childEnv,
+          timeoutMs,
+        }).catch(() => ({
           ok: false,
           stdout: '',
         })),
-        exec('node', ['--version'], { env: childEnv, timeoutMs }).catch(() => ({
+        exec(nodeBin, ['--version'], { env: childEnv, timeoutMs }).catch(() => ({
           ok: false,
           stdout: '',
         })),
@@ -139,9 +171,13 @@ export function createPlatformCliProber(options: {
         node_ok: nodeMajorOk(node_version, spec.min_node_major),
         min_node_major: spec.min_node_major,
         checked_at: options.now(),
+        ...(cli.ok ? { source: how.source } : {}),
       }
       cache.set(spec.id, { at: nowMs, value })
       return value
+    },
+    invalidate: (cli_id) => {
+      cache.delete(cli_id)
     },
   }
 }

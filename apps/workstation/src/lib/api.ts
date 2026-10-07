@@ -6667,6 +6667,39 @@ export async function fetchB2bQuotePdf(
 
 // ── WP216：平台专属那一套（官方技能 / 官方 MCP / 官方 CLI）────────────────────
 
+/** WP245：工作台替用户跑的那件事（安装 / 登录）走到哪了。 */
+export interface PlatformCliJob {
+  action: 'install' | 'login'
+  phase:
+    | 'preparing'
+    | 'downloading'
+    | 'installing'
+    | 'waiting_browser'
+    | 'done'
+    | 'failed'
+    | 'cancelled'
+  started_at: string
+  finished_at?: string
+  fetched?: number
+  login_url?: string
+  user_code?: string
+  browser_opened?: boolean
+  error?: {
+    code:
+      | 'network'
+      | 'timeout'
+      | 'disk_full'
+      | 'permission'
+      | 'denied'
+      | 'expired'
+      | 'not_installed'
+      | 'failed'
+    detail?: string
+  }
+  command: string
+  log: string[]
+}
+
 /** CLI 卡的四档：没装 / Node 不够 / 没登录 / 好了。 */
 export type PlatformCliState = 'missing' | 'node_old' | 'needs_login' | 'ready'
 
@@ -6679,7 +6712,13 @@ export interface PlatformCliView {
     node_ok: boolean
     min_node_major: number
     checked_at: string
+    /** WP245：`app` = 工作台装在自己数据目录里的那份；`system` = 系统里本来就有的。 */
+    source?: 'app' | 'system'
   }
+  /** WP245：这台机器上能不能一键安装 / 一键登录。 */
+  can?: { install: boolean; login: boolean }
+  /** WP245：替用户跑的那件事（跑着的或刚结束的）。 */
+  job?: PlatformCliJob
   login_confirmed_at?: string
   state: PlatformCliState
   /** CLI 不在 / 没登录时退回 Admin API 那条路的职责。 */
@@ -6726,7 +6765,22 @@ export const getPlatformKit = (
 export const checkPlatformCli = (assignment?: string): Promise<PlatformKitView> =>
   api('/v1/platform-kit/cli/check', { method: 'POST', ...withAssignment(assignment) })
 
-/** 「我登好了」/ 撤回：只记一个时间，不碰任何凭据。 */
+/** WP245：替用户跑登记过的命令（一键安装 / 一键登录 / 再查一次）。 */
+export const runPlatformCli = (
+  action: 'install' | 'login' | 'version',
+  assignment?: string,
+): Promise<PlatformKitView> =>
+  api('/v1/platform-kit/cli/run', {
+    method: 'POST',
+    body: { action },
+    ...withAssignment(assignment),
+  })
+
+/** WP245：停掉正在跑的那件（登录等浏览器时的「取消」）。 */
+export const cancelPlatformCli = (assignment?: string): Promise<PlatformKitView> =>
+  api('/v1/platform-kit/cli/cancel', { method: 'POST', ...withAssignment(assignment) })
+
+/** 「我登好了」/ 撤回：只记一个时间，不碰任何凭据（WP245 后卡上不再用）。 */
 export const confirmPlatformCliLogin = (
   confirmed: boolean,
   assignment?: string,

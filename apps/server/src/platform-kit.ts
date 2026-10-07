@@ -26,6 +26,7 @@ import {
   type StorefrontPlatform,
 } from '@agentsws/contracts'
 import type { PlatformCliLoginStore, PlatformCliProbe, PlatformCliProber } from './platform-cli.js'
+import { CliRunnerError, type PlatformCliRunner } from './platform-cli-runner.js'
 
 /** 推断平台要的几样事实（都按品牌问、每次现取）。 */
 export interface BrandPlatformFacts {
@@ -75,6 +76,10 @@ export interface PlatformKitPortOptions {
   mcpStatus?(): { enabled: boolean; downloaded: boolean; tools: string[] }
   /** 首次设置同一份平台清单（灰显的照样给）。 */
   platformChoices?(): { key: string; label: string; supported: boolean }[]
+  /**
+   * WP245：替用户跑登记过的命令（一键安装 / 一键登录）。不给 = 卡上只有老的复制命令那一套。
+   */
+  runner?: PlatformCliRunner
   /** 记一笔事件（只有 CLI id / 状态，没有任何输出与凭据）。 */
   appendEvent?(workspace_id: string, type: string, payload: Record<string, unknown>): void
 }
@@ -103,9 +108,20 @@ export function createPlatformKitPort(options: PlatformKitPortOptions): Platform
     const probe = await options.prober.probe(spec, { fresh })
     const login_confirmed_at = options.loginStoreOf(ws).confirmedAt(spec.id)
     const state = cliStateOf(probe, login_confirmed_at)
+    const runner = options.runner
+    const job = runner?.job(spec.id)
     return {
       spec,
       probe,
+      ...(runner === undefined
+        ? {}
+        : {
+            can: {
+              install: runner.toolsDir !== undefined,
+              login: (spec.login_args?.length ?? 0) > 0,
+            },
+          }),
+      ...(job === undefined ? {} : { job }),
       ...(login_confirmed_at === undefined ? {} : { login_confirmed_at }),
       state,
       degraded_roles: state === 'ready' ? [] : [...spec.roles],
@@ -182,6 +198,55 @@ export function createPlatformKitPort(options: PlatformKitPortOptions): Platform
           confirmed: input.confirmed,
         })
       }
+      return build(actor.workspace_id, {})
+    },
+    runCli: async (actor, input) => {
+      const ws = actor.workspace_id
+      const action = input.action
+      // 「报版本」= 再查一次（不走缓存），走检测那条路
+      if (action === 'version') return build(ws, { fresh: true })
+      const runner = options.runner
+      if (runner === undefined)
+        throw new ApiError('not_implemented', '这个服务进程不能替用户跑命令')
+      const view = await build(ws, {})
+      const cli = view.kit?.cli
+      // 平台没有 CLI / 这个品牌没有那几条职责：没有可跑的（不接受「替我跑别的」）
+      if (cli === undefined) throw new ApiError('not_found', '这个品牌的平台没有要装的命令行工具')
+      const spec = cli.spec
+      if (action === 'login' && cli.probe?.installed !== true)
+        throw new ApiError('conflict', `${spec.label} 还没装好，先装再登录`)
+      try {
+        runner.start(spec, action, {
+          onLoginOk: () => {
+            options.loginStoreOf(ws).set(spec.id, options.now())
+          },
+          onFinished: (job) => {
+            options.prober.invalidate?.(spec.id)
+            options.appendEvent?.(ws, `platform_cli.${job.action}_finished`, {
+              cli: spec.id,
+              phase: job.phase,
+              ...(job.error === undefined ? {} : { error: job.error.code }),
+            })
+          },
+        })
+      } catch (err) {
+        if (err instanceof CliRunnerError)
+          throw new ApiError(
+            err.code === 'conflict'
+              ? 'conflict'
+              : err.code === 'not_supported'
+                ? 'invalid_input'
+                : 'not_implemented',
+            err.message,
+          )
+        throw err
+      }
+      options.appendEvent?.(ws, `platform_cli.${action}_started`, { cli: spec.id })
+      return build(ws, {})
+    },
+    cancelCli: async (actor) => {
+      const cli = platformKitOf(options.platformOf(actor.workspace_id))?.cli
+      if (cli !== undefined) options.runner?.cancel(cli.id)
       return build(actor.workspace_id, {})
     },
     setPlatform: async (actor, input) => {
