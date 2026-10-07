@@ -2686,6 +2686,7 @@ const zh: Table = {
   // 这一摊整块不出现；真有第二个品牌或第二个人了，出现的也是"公司"与"品牌"
   // 这两个用户自己会用的词，不是对象模型里的名字。
   'onboarding.block.company': '公司',
+  'onboarding.block.company.hint': '改的是公司，这家公司的所有品牌都跟着变',
   'onboarding.block.first_brand': '第一个品牌',
   'onboarding.block.brand': '这个品牌',
   'onboarding.brand.name': '品牌名',
@@ -6615,6 +6616,7 @@ const en: Table = {
   'onboarding.step4': 'Connect and start',
   // ── WP65 (52 O1–O4) brands on top: company = organization, brand = workspace ──
   'onboarding.block.company': 'Company',
+  'onboarding.block.company.hint': 'These belong to the company — every brand under it changes too',
   'onboarding.block.first_brand': 'Your first brand',
   'onboarding.block.brand': 'This brand',
   'onboarding.brand.name': 'Brand name',
