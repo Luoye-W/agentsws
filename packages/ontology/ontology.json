@@ -117,7 +117,7 @@
     "packages/roles/roles/social/x.yml",
     "packages/roles/roles/social/youtube.yml"
   ],
-  "source_digest": "8f9dc2b04d64dcb403cf37025dced3ef",
+  "source_digest": "dcec3d7bf391004936612c13ea07968e",
   "objects": [
     {
       "id": "ad",
@@ -1604,6 +1604,12 @@
         {
           "name": "triage",
           "type": "CommunityTriage",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "triage_by",
+          "type": "'rule' | 'model'",
           "sensitivity": "internal",
           "optional": true
         },
