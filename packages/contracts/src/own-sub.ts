@@ -59,6 +59,8 @@ export interface OwnSubQueueItem {
   suggestion: OwnSubSuggestion
   /** 这一条已经有一张没定的卡了（卡片流里那张的 id）。 */
   pending_approval_id?: string
+  /** 上一次批过的动作执行没成（原话照搬，比如「页面要做人机验证」）。 */
+  last_failure?: string
 }
 
 /** 这次是从哪条路读的。`none` = 两条都不通（没连 OAuth、官方号也没登录）。 */

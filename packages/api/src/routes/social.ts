@@ -29,6 +29,9 @@ import type {
   CommunityTriage,
   Iso8601,
   MaybePromise,
+  OwnSubQueueView,
+  OwnSubStageInput,
+  RedditOfficialBrowserStatus,
   SocialAccount,
   SocialChannel,
   SocialPost,
@@ -198,6 +201,8 @@ export interface SocialAccountInput {
   url: string
   external_id: string
   connection_id?: string | undefined
+  /** WP249：Reddit 才认——这是我们自己当版主的版（自家版），才拉版务队列。 */
+  own_subreddit?: boolean | undefined
 }
 
 export interface SocialPostInput {
@@ -318,6 +323,19 @@ export interface SocialPort {
     id: string,
     input: { decision: 'approve' | 'reject'; reason?: string | undefined },
   ): MaybePromise<SocialStagedView>
+
+  /* ── WP249（决策 81 / 89）：自家版待处理 + Reddit 官方号浏览器通道。只加不改：没装配回 501 ── */
+
+  /** 自家版的版务队列（被举报 / 被扣下 / 新帖 / 入群申请）+ 每条的 AI 建议。只读。 */
+  ownSubQueue?(actor: SocialActor): MaybePromise<OwnSubQueueView>
+  /** 从队列里一条出一张版务卡（批准 / 移除 / 封禁）。**不直接执行**。 */
+  stageOwnSub?(actor: SocialActor, input: OwnSubStageInput): MaybePromise<SocialStagedView>
+  redditBrowserStatus?(actor: SocialActor): MaybePromise<RedditOfficialBrowserStatus>
+  /** 有头打开登录页，用户自己在网页上登录官方号（我们不碰密码、不读 cookie）。 */
+  redditBrowserLogin?(actor: SocialActor): MaybePromise<RedditOfficialBrowserStatus>
+  /** 「我登录好了」：体检看登着谁。 */
+  redditBrowserCheck?(actor: SocialActor): MaybePromise<RedditOfficialBrowserStatus>
+  redditBrowserClose?(actor: SocialActor): MaybePromise<RedditOfficialBrowserStatus>
 }
 
 /* ── 装配 ─────────────────────────────────────────────────────────────── */
@@ -378,6 +396,8 @@ const AccountBody = z.object({
   /** 平台那一侧的 id（页面 id / 频道 id / 群 id）。发布与群发按它打。 */
   external_id: z.string().min(1).max(200),
   connection_id: z.string().min(1).max(200).optional(),
+  /** WP249：Reddit 才认——我们自己当版主的版（自家版）。 */
+  own_subreddit: z.boolean().optional(),
 })
 
 const ThreadBody = z.object({
@@ -430,6 +450,25 @@ const ModerateBody = z.object({
   action: z.enum(MODERATION_ACTIONS),
   reason: z.string().max(500).optional(),
 })
+
+const OwnSubStageBody = z.object({
+  account_id: z.string().min(1).max(200),
+  item_id: z
+    .string()
+    .regex(/^t[13]_[a-z0-9]+$/iu)
+    .max(40),
+  action: z.enum(['approve', 'remove', 'ban']),
+  removal_rule: z.string().min(1).max(200).optional(),
+  ban_days: z.number().int().min(1).max(999).optional(),
+})
+
+/** WP249：端口上的可选口，没装配就照实说。 */
+function need<K extends keyof SocialPort>(port: SocialPort, key: K): NonNullable<SocialPort[K]> {
+  const fn = port[key]
+  if (typeof fn !== 'function')
+    throw new ApiError('not_implemented', '这个服务进程没有装配「自家版待处理」。')
+  return (fn as (...a: unknown[]) => unknown).bind(port) as NonNullable<SocialPort[K]>
+}
 
 const MemberDecisionBody = z.object({
   decision: z.enum(['approve', 'reject']),
@@ -747,6 +786,109 @@ export function socialRoutes(): Route[] {
             await body(c, MemberDecisionBody),
           ),
         ),
+    ),
+    // ── WP249（决策 81 / 89）：自家版待处理 + Reddit 官方号浏览器通道 ──
+    route(
+      {
+        method: 'get',
+        path: '/v1/social/own-sub/queue',
+        operationId: 'getOwnSubQueue',
+        summary:
+          '自家版待处理：只对登记过、标成自家版的 subreddit 拉版务队列（被举报 / 被扣下 / 新帖；入群申请读不到就照实说），每条带 AI 建议（引用版规）。只读',
+        tag: 'social',
+        auth: 'bearer',
+        assignment: true,
+        authz: READ_THREAD,
+        returns: 'OwnSubQueueView',
+      },
+      async (c, deps) => ok(c, await need(portOf(deps), 'ownSubQueue')(actorOf(c))),
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/social/own-sub/stage',
+        operationId: 'stageOwnSubAction',
+        summary:
+          '从自家版队列里一条出一张版务卡（批准 / 移除 / 封禁）：卡上写原文、AI 建议、理由、将执行的动作；**不直接执行**，人批了才经 Reddit 出口执行',
+        tag: 'social',
+        auth: 'bearer',
+        assignment: true,
+        authz: STAGE_THREAD,
+        body: OwnSubStageBody,
+        returns: 'SocialStagedView',
+      },
+      async (c, deps) => {
+        const input = await body(c, OwnSubStageBody)
+        return ok(
+          c,
+          await need(portOf(deps), 'stageOwnSub')(actorOf(c), {
+            account_id: input.account_id,
+            item_id: input.item_id,
+            action: input.action,
+            ...(input.removal_rule === undefined ? {} : { removal_rule: input.removal_rule }),
+            ...(input.ban_days === undefined ? {} : { ban_days: input.ban_days }),
+          }),
+          201,
+        )
+      },
+    ),
+    route(
+      {
+        method: 'get',
+        path: '/v1/social/reddit-browser',
+        operationId: 'getRedditBrowserStatus',
+        summary:
+          'Reddit 官方号浏览器通道现在的样子（没登录 / 登录窗口开着 / 已登录 u/xxx / 被拦了）',
+        tag: 'social',
+        auth: 'bearer',
+        assignment: true,
+        authz: READ_ACCOUNT,
+        returns: 'RedditOfficialBrowserStatus',
+      },
+      async (c, deps) => ok(c, await need(portOf(deps), 'redditBrowserStatus')(actorOf(c))),
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/social/reddit-browser/login',
+        operationId: 'openRedditBrowserLogin',
+        summary:
+          '「登录官方号」：在这台电脑上开一个独立的浏览器窗口到 Reddit 登录页，你自己在网页上登录（我们不碰密码、不读 cookie）',
+        tag: 'social',
+        auth: 'bearer',
+        assignment: true,
+        authz: STAGE_ACCOUNT,
+        returns: 'RedditOfficialBrowserStatus',
+      },
+      async (c, deps) => ok(c, await need(portOf(deps), 'redditBrowserLogin')(actorOf(c))),
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/social/reddit-browser/check',
+        operationId: 'checkRedditBrowserLogin',
+        summary: '「我登录好了」：体检官方号浏览器现在登着谁',
+        tag: 'social',
+        auth: 'bearer',
+        assignment: true,
+        authz: READ_ACCOUNT,
+        returns: 'RedditOfficialBrowserStatus',
+      },
+      async (c, deps) => ok(c, await need(portOf(deps), 'redditBrowserCheck')(actorOf(c))),
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/social/reddit-browser/close',
+        operationId: 'closeRedditBrowser',
+        summary: '关掉官方号浏览器窗口（登录态留在这台电脑的独立目录里，下次不用重登）',
+        tag: 'social',
+        auth: 'bearer',
+        assignment: true,
+        authz: READ_ACCOUNT,
+        returns: 'RedditOfficialBrowserStatus',
+      },
+      async (c, deps) => ok(c, await need(portOf(deps), 'redditBrowserClose')(actorOf(c))),
     ),
   ]
 }
