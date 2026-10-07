@@ -15,6 +15,18 @@ export interface NetCause {
   detail?: string
 }
 
+/** WP243：流式回包没走完就断了（连接干净地关了，但上游没说「完了」）。 */
+export const STREAM_INCOMPLETE_CODE = 'STREAM_INCOMPLETE'
+
+/** WP243：造一个「流式中途断了」的错（形状同 Node fetch：笼统一句 + cause 上挂错误码）。 */
+export function streamIncompleteError(): Error {
+  return new Error('stream ended early', {
+    cause: Object.assign(new Error('upstream closed the stream before it finished'), {
+      code: STREAM_INCOMPLETE_CODE,
+    }),
+  })
+}
+
 /** 网络层、值得**马上再试一次**的那几种（连接被对面 / 代理掐了、陈旧的长连接）。 */
 const TRANSIENT_CODES = new Set([
   'ECONNRESET',
@@ -23,6 +35,8 @@ const TRANSIENT_CODES = new Set([
   'UND_ERR_SOCKET',
   'UND_ERR_CLOSED',
   'EAI_AGAIN',
+  // WP243：流式回包走到头却没收到结尾（`[DONE]` / `finish_reason`）——中间被掐了
+  STREAM_INCOMPLETE_CODE,
 ])
 
 interface ErrLike {

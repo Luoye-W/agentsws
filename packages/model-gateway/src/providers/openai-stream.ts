@@ -27,7 +27,7 @@ interface WireDelta {
 }
 
 interface WireChunk {
-  choices?: { delta?: WireDelta }[]
+  choices?: { delta?: WireDelta; finish_reason?: string | null }[]
   usage?: StreamWireUsage | null
 }
 
@@ -37,6 +37,16 @@ export interface StreamedReply {
   reasoning: string
   tool_calls: { id?: string; name?: string; arguments: string }[]
   usage?: StreamWireUsage
+  /**
+   * WP243：上游明确说完了（收到 `data: [DONE]` 或某一块带了 `finish_reason`）。
+   * 流走到头却两样都没见到 = 中间被掐了，拿到的那一截**不能当成功**。
+   */
+  finished?: boolean
+  /**
+   * WP243：上游没按流式回、直接回了一整个 JSON（有的中转不认 `stream: true`）——原样交回，
+   * 调用方按非流式那条路解析。
+   */
+  whole?: unknown
 }
 
 /** 流式回包能读的样子：真 fetch 有 `body`；替身可能只有 `text()`。 */
@@ -56,12 +66,15 @@ export async function readChatStream(
 ): Promise<StreamedReply> {
   const reply: StreamedReply = { content: '', reasoning: '', tool_calls: [] }
   let done = false
+  let sawData = false
   const line = (raw: string): void => {
     const trimmed = raw.trim()
     if (done || !trimmed.startsWith('data:')) return
+    sawData = true
     const data = trimmed.slice(5).trim()
     if (data === '[DONE]') {
       done = true
+      reply.finished = true
       return
     }
     let chunk: WireChunk
@@ -72,6 +85,8 @@ export async function readChatStream(
       return
     }
     if (chunk.usage !== undefined && chunk.usage !== null) reply.usage = chunk.usage
+    const reason = chunk.choices?.[0]?.finish_reason
+    if (typeof reason === 'string' && reason !== '') reply.finished = true
     const delta = chunk.choices?.[0]?.delta
     if (delta === undefined) return
     if (typeof delta.reasoning_content === 'string') reply.reasoning += delta.reasoning_content
@@ -95,6 +110,17 @@ export async function readChatStream(
     return e
   }
 
+  /** 一个 `data:` 行都没有、整段是一个 JSON：上游没按流式回（见 {@link StreamedReply.whole}）。 */
+  const wholeOf = (text: string): unknown => {
+    const trimmed = text.trim()
+    if (!trimmed.startsWith('{')) return undefined
+    try {
+      return JSON.parse(trimmed) as unknown
+    } catch {
+      return undefined
+    }
+  }
+
   const body = res.body
   if (body === undefined || body === null) {
     const text = await res.text()
@@ -102,12 +128,18 @@ export async function readChatStream(
       if (signal?.aborted === true) throw stopped()
       line(raw)
     }
+    if (!sawData) {
+      const whole = wholeOf(text)
+      if (whole !== undefined) reply.whole = whole
+    }
     return reply
   }
 
   const reader = body.getReader()
   const decoder = new TextDecoder()
   let buffer = ''
+  /** 还没见到 `data:` 行之前收到的原文（留着认「上游回了一整个 JSON」；有上限）。 */
+  let head = ''
   const onAbort = (): void => {
     void reader.cancel().catch(() => undefined)
   }
@@ -117,7 +149,9 @@ export async function readChatStream(
       if (signal?.aborted === true) throw stopped()
       const { value, done: finished } = await reader.read()
       if (finished) break
-      buffer += decoder.decode(value, { stream: true })
+      const piece = decoder.decode(value, { stream: true })
+      if (!sawData && head.length < MAX_WHOLE_CHARS) head += piece
+      buffer += piece
       let at = buffer.indexOf('\n')
       while (at >= 0) {
         line(buffer.slice(0, at))
@@ -129,11 +163,18 @@ export async function readChatStream(
     if (isAborted(signal)) throw stopped()
     buffer += decoder.decode()
     if (buffer !== '') line(buffer)
+    if (!sawData) {
+      const whole = wholeOf(head)
+      if (whole !== undefined) reply.whole = whole
+    }
   } finally {
     signal?.removeEventListener('abort', onAbort)
   }
   return reply
 }
+
+/** 认「上游回了一整个 JSON」时最多攒多少字（再大就不是正常的一次对话回包了）。 */
+const MAX_WHOLE_CHARS = 4_000_000
 
 /** 读一次"停了没有"（`await` 之后要重新读，别让 TS 沿用前面的判断）。 */
 const isAborted = (signal: AbortSignal | undefined): boolean => signal?.aborted === true

@@ -11,6 +11,7 @@ import type {
   ModelMeta,
   ModelProvider,
   ModelRef,
+  ProviderNetTry,
   RoleId,
   ToolDef,
   Trace,
@@ -292,6 +293,7 @@ class Gateway implements ModelGatewayApi {
     staticPrefix: string,
     durationMs: number,
     audio?: TranscriptionAudioDigest,
+    netRetries?: ProviderNetTry[],
   ): void {
     this.usageRecords.push({
       at,
@@ -319,6 +321,8 @@ class Gateway implements ModelGatewayApi {
       duration_ms: durationMs,
       // 21 §1「秘密从不进」的音频版：只记摘要，字节与转写正文永不进事件日志
       ...(audio === undefined ? {} : { audio }),
+      // WP243：成了之前重发过——也记下来（「重发要看得见」）
+      ...(netRetries === undefined || netRetries.length === 0 ? {} : { net_retries: netRetries }),
     }
     this.emit('model.usage', ctxOf(meta), payload)
   }
@@ -376,7 +380,8 @@ class Gateway implements ModelGatewayApi {
       primary,
       startedAt,
       req.max_cost_base,
-      req.estimated_output_tokens,
+      // WP243：给了输出上限、没给预估的，按上限预留（不会比它多）
+      req.estimated_output_tokens ?? req.max_output_tokens,
     )
 
     /*
@@ -462,6 +467,11 @@ class Gateway implements ModelGatewayApi {
               : { tool_choice: req.tool_choice }),
             ...(onDelta === undefined ? {} : { on_delta: onDelta }),
             ...(req.signal === undefined ? {} : { signal: req.signal }),
+            // WP243：输出上限 / 关思考（只是提示，provider 认得才照做）
+            ...(req.max_output_tokens === undefined
+              ? {}
+              : { max_output_tokens: req.max_output_tokens }),
+            ...(req.thinking === undefined ? {} : { thinking: req.thinking }),
           })
           // WP188：停了就不再等上游（不会流式的 provider 也一样停得下来）
           const raw = req.signal === undefined ? await call : await untilAborted(call, req.signal)
@@ -482,6 +492,8 @@ class Gateway implements ModelGatewayApi {
             finishedAt,
             staticPrefix,
             Math.max(Date.parse(finishedAt) - Date.parse(startedAt), 0),
+            undefined,
+            raw.net_retries,
           )
           return {
             text: raw.text,
@@ -499,11 +511,24 @@ class Gateway implements ModelGatewayApi {
         } catch (e) {
           // WP188：调用方停的——不算上游坏了，不降级、不报 provider_down
           if (isAborted(req.signal)) return stoppedCompletion(ref)
-          attempts.push({
-            model: ref,
-            ...(e instanceof ProviderError && e.status !== undefined ? { status: e.status } : {}),
-            message: messageOf(e),
-          })
+          if (e instanceof ProviderError && e.tries !== undefined && e.tries.length > 0) {
+            // WP243：provider 内部重发过——每一次单独一条（错误码 + 耗时），看得出重没重发、各断在哪
+            for (const t of e.tries) {
+              attempts.push({
+                model: ref,
+                ...(t.status === undefined ? {} : { status: t.status }),
+                message: t.message,
+                ...(t.code === undefined ? {} : { code: t.code }),
+                duration_ms: t.duration_ms,
+              })
+            }
+          } else {
+            attempts.push({
+              model: ref,
+              ...(e instanceof ProviderError && e.status !== undefined ? { status: e.status } : {}),
+              message: messageOf(e),
+            })
+          }
           // WP151：DeepSeek 余额不足同理——换一家救不回来，也不该悄悄换模型；原样往上抛
           // WP194：官方接口说「本月额度用完了 / 公司积分用完了」也一样——换一家救不回来，原样那句人话往上抛
           if (
