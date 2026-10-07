@@ -62781,7 +62781,7 @@
     "/v1/site/theme/store": {
       "put": {
         "operationId": "setSiteThemeStore",
-        "summary": "网页模板：记下这个品牌的店铺地址（xxx.myshopify.com，或后台地址栏那一整串）。连了店的品牌以连接为准",
+        "summary": "网页模板：记下这个品牌的店铺地址（xxx.myshopify.com，或后台地址栏那一整串）。连了店的品牌以连接为准。`source=list` = 从登录账号下找到的店里选的（必须在清单里）",
         "tags": ["site"],
         "parameters": [
           {
@@ -62890,6 +62890,10 @@
                     "type": "string",
                     "minLength": 1,
                     "maxLength": 300
+                  },
+                  "source": {
+                    "type": "string",
+                    "enum": ["manual", "list"]
                   }
                 },
                 "required": ["store"]
