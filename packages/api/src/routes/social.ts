@@ -364,6 +364,8 @@ const MODERATION_ACTIONS = [
   'ban',
   'permanent_ban',
   'unban',
+  // WP249：版务队列里的「批准」（Reddit）
+  'approve',
 ] as const
 
 const ChannelSchema = z.enum(CHANNEL_IDS as [SocialChannel, ...SocialChannel[]])

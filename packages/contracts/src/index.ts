@@ -91,6 +91,8 @@ export * from './skills.js'
 // 56 §1 / §2 社媒运营的九条渠道与四个对象（WP72）。与 kol.ts 一条都不共用：
 // 那边的主语是别人的账号（`Creator`），这边是我们自己的号（`SocialAccount`）。
 export * from './social.js'
+// WP249（决策 81 / 89）：自家版待处理（版务队列 + Reddit 官方号浏览器通道的状态）
+export * from './own-sub.js'
 // 49 §6 WP60 / 48 L6：在线值守与聊天窗托管
 export * from './standby.js'
 // 67 §3 WP118：按月订阅的增值服务（一份引擎，红人是第一个实例，客服 WP124 在后）

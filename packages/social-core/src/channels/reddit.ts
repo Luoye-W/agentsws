@@ -33,6 +33,8 @@ import {
   callJson,
   guardConnected,
   type ModerateInput,
+  type ModQueueEntry,
+  type ModQueueSource,
   notImplemented,
   type PublishInput,
   type ReplyInput,
@@ -58,6 +60,94 @@ export const REDDIT_REMOVE_PATH = '/api/remove'
 export const REDDIT_DISTINGUISH_PATH = '/api/distinguish'
 export const REDDIT_FRIEND_PATH = '/api/friend'
 export const REDDIT_UNFRIEND_PATH = '/api/unfriend'
+/** WP249：移除之后公开留一句理由（帖子 / 评论两口；PRAW `send_removal_message` 用的就是它们）。 */
+export const REDDIT_REMOVAL_LINK_MESSAGE_PATH = '/api/v1/modactions/removal_link_message'
+export const REDDIT_REMOVAL_COMMENT_MESSAGE_PATH = '/api/v1/modactions/removal_comment_message'
+
+/**
+ * WP249：入群申请读不到的那一句（两条通道共用）。
+ *
+ * Reddit 公开的 Data API 里没有「私密版入群申请」的读口（有的是「批准用户」名单
+ * `/about/contributors` 与加人 `/api/friend type=contributor`）；old.reddit 也没有对应页面。
+ * 所以这一类照实说读不到，**不假装 0 条**。
+ */
+export const REDDIT_JOIN_REQUESTS_UNSUPPORTED =
+  'Reddit 没有公开的「入群申请」读口（接口与 old.reddit 页面都没有），这一类先在 Reddit 网页的版务工具里处理。'
+
+interface RawModThing {
+  name?: string
+  id?: string
+  title?: string
+  selftext?: string
+  body?: string
+  link_title?: string
+  author?: string
+  permalink?: string
+  created_utc?: number
+  subreddit?: string
+  num_reports?: number | null
+  /** `[原因, 次数, …]` */
+  user_reports?: unknown[][]
+  /** `[原因, 版主名]` */
+  mod_reports?: unknown[][]
+}
+
+/**
+ * WP249：版务队列的 listing（`/about/modqueue` / `/about/unmoderated` 的 JSON，OAuth 接口与
+ * 官方号浏览器读 `.json` 回来的是同一个形状）→ {@link ModQueueEntry}。
+ *
+ * 外部文本原样搬，只截长度；`created_utc` 是**秒**。
+ */
+export function redditModListing(raw: unknown, source: 'modqueue' | 'unmoderated'): ModQueueEntry[] {
+  const children =
+    (raw as { data?: { children?: { kind?: string; data?: RawModThing }[] } })?.data?.children ?? []
+  const out: ModQueueEntry[] = []
+  for (const c of children) {
+    const d = c.data ?? {}
+    const comment = c.kind === 't1' || (d.name ?? '').startsWith('t1_')
+    const id = d.name ?? redditFullname(d.id ?? '', comment ? 't1' : 't3')
+    if (id === '' || id.endsWith('_')) continue
+    const reasons: string[] = []
+    for (const r of [...(d.user_reports ?? []), ...(d.mod_reports ?? [])]) {
+      const text = typeof r[0] === 'string' ? r[0].trim() : ''
+      if (text !== '' && !reasons.includes(text)) reasons.push(text)
+    }
+    // 只有次数没有原因（举报人没写）：照实记一句，不编原因
+    if (reasons.length === 0 && typeof d.num_reports === 'number' && d.num_reports > 0)
+      reasons.push(`有 ${d.num_reports} 个举报（没写原因）`)
+    const text = (comment ? d.body : d.selftext) ?? ''
+    out.push({
+      id,
+      subreddit: d.subreddit ?? '',
+      thing: comment ? 'comment' : 'post',
+      ...(comment
+        ? d.link_title === undefined
+          ? {}
+          : { title: d.link_title.slice(0, 300) }
+        : d.title === undefined
+          ? {}
+          : { title: d.title.slice(0, 300) }),
+      excerpt: text.slice(0, 600),
+      author: d.author ?? '',
+      report_reasons: reasons.slice(0, 10),
+      ...(d.created_utc === undefined
+        ? {}
+        : { created_at: new Date(d.created_utc * 1000).toISOString() }),
+      url: d.permalink === undefined ? '' : `https://www.reddit.com${d.permalink}`,
+      source,
+    })
+  }
+  return out
+}
+
+/** WP249：`/about/rules` 的 JSON → 版规短名（一条一个）。 */
+export function redditRuleNames(raw: unknown): string[] {
+  const rules = (raw as { rules?: { short_name?: string }[] })?.rules ?? []
+  return rules
+    .map((r) => (r.short_name ?? '').trim())
+    .filter((r) => r !== '')
+    .slice(0, 30)
+}
 
 /**
  * 补上 fullname 的类型前缀（文件头第 2 条）。
@@ -162,6 +252,20 @@ export function createRedditAdapter(transport: SocialTransport): SocialChannelAd
       method: 'POST',
       headers: await headers({ 'content-type': 'application/x-www-form-urlencoded' }),
       body,
+    })
+  }
+
+  /** WP249：一跳（写，JSON 体）。`/api/v1/modactions/*` 收的是 JSON，不是表单。 */
+  const postJson = async <T>(
+    path: string,
+    payload: unknown,
+  ): Promise<{ ok: true; data: T } | SocialError> => {
+    const quota = overQuota()
+    if (quota !== undefined) return quota
+    return callJson<T>(transport, LABEL, `${REDDIT_API_BASE}${path}`, {
+      method: 'POST',
+      headers: await headers({ 'content-type': 'application/json' }),
+      body: JSON.stringify(payload),
     })
   }
 
@@ -380,11 +484,35 @@ export function createRedditAdapter(transport: SocialTransport): SocialChannelAd
       const sub = subOf(input.account_external_id)
       let res: { ok: true; data: unknown } | SocialError
       switch (input.action) {
-        case 'delete_post':
+        case 'delete_post': {
           // `spam: false` = 按"违反版规"删，不是标成垃圾信（后者会连坐这个人的别的帖子）
-          res = await form(REDDIT_REMOVE_PATH, {
+          const id = redditFullname(input.target_external_id, 't3')
+          res = await form(REDDIT_REMOVE_PATH, { id, spam: 'false' })
+          /*
+           * WP249：附一句移除理由（公开留给作者）。**先移除再留话**——Reddit 要求东西先被移除
+           * 才收理由；留话没成不回滚移除，照实说「移除了，理由没留上」。
+           */
+          if ('data' in res && input.removal_message !== undefined && input.removal_message !== '') {
+            const bad0 = jsonErrors(res.data)
+            if (bad0 !== undefined) return bad0
+            const msg = await postJson(
+              id.startsWith('t1_')
+                ? REDDIT_REMOVAL_COMMENT_MESSAGE_PATH
+                : REDDIT_REMOVAL_LINK_MESSAGE_PATH,
+              { item_id: [id], message: input.removal_message, title: 'removed', type: 'public' },
+            )
+            if (!('data' in msg))
+              return {
+                ...msg,
+                message: `已移除，但移除理由没留上：${msg.message}`,
+              }
+          }
+          break
+        }
+        case 'approve':
+          // WP249：版务队列里放行一条（清掉举报、移出队列）。评论 / 帖子都收 fullname
+          res = await form(REDDIT_APPROVE_PATH, {
             id: redditFullname(input.target_external_id, 't3'),
-            spam: 'false',
           })
           break
         case 'unmute':
@@ -473,6 +601,36 @@ export function createRedditAdapter(transport: SocialTransport): SocialChannelAd
       if (badPin !== undefined) return badPin
       // 一条置顶帖 = 一次"发出去了"。数字是 1 不是订阅者数——我们没给谁单独发过东西
       return { ok: true, observed_at: transport.now(), data: { sent: 1, failed: 0 } }
+    },
+
+    async modQueue({
+      account_external_id,
+      source,
+      limit,
+    }: {
+      account_external_id: string
+      source: ModQueueSource
+      limit?: number
+    }): Promise<SocialResult<ModQueueEntry[]>> {
+      const guard = off()
+      if (guard !== undefined) return guard
+      if (source === 'join_requests')
+        return { ok: false, reason: 'not_implemented', message: REDDIT_JOIN_REQUESTS_UNSUPPORTED }
+      const sub = subOf(account_external_id)
+      const res = await get<unknown>(
+        `/r/${encodeURIComponent(sub)}/about/${source}?limit=${Math.min(limit ?? 50, 100)}&raw_json=1`,
+      )
+      if (!('data' in res)) return res
+      return { ok: true, observed_at: transport.now(), data: redditModListing(res.data, source) }
+    },
+
+    async communityRules(account_external_id: string): Promise<SocialResult<string[]>> {
+      const guard = off()
+      if (guard !== undefined) return guard
+      const sub = subOf(account_external_id)
+      const res = await get<unknown>(`/r/${encodeURIComponent(sub)}/about/rules?raw_json=1`)
+      if (!('data' in res)) return res
+      return { ok: true, observed_at: transport.now(), data: redditRuleNames(res.data) }
     },
 
     // `decideMember` 故意缺席：subreddit 没有入群审批（见 `members` 里那一段）。

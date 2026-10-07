@@ -1311,7 +1311,8 @@ export function evaluateGuardrail(
      */
     case 'community_moderation': {
       const action = typeof after.action === 'string' ? after.action : ''
-      const allowed = ['delete_post', 'mute', 'unmute', 'ban', 'permanent_ban', 'unban']
+      // WP249：`approve`（版务队列里放行一条）只加不改
+      const allowed = ['delete_post', 'mute', 'unmute', 'ban', 'permanent_ban', 'unban', 'approve']
       if (!allowed.includes(action))
         block('community_moderation_action_required', allowed.join('|'), action || 'missing')
       if (COMMUNITY_MODERATION_L1_ACTIONS.includes(action))

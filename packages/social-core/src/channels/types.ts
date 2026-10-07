@@ -203,11 +203,42 @@ export interface ModerateInput {
   account_external_id: string
   /** 删帖时是帖子 id，禁言 / 封禁时是人的 id。 */
   target_external_id: string
-  action: 'delete_post' | 'mute' | 'unmute' | 'ban' | 'permanent_ban' | 'unban'
+  /**
+   * WP249：`approve` = 版务队列里「批准」（被举报 / 被扣下 / 新帖放行，清掉举报）。只加不改：
+   * 目前只有 Reddit 有这一口，别的渠道回 `not_implemented`。
+   */
+  action: 'delete_post' | 'mute' | 'unmute' | 'ban' | 'permanent_ban' | 'unban' | 'approve'
   /** 禁言多久（分钟）；不给就按平台默认。 */
   duration_minutes?: number
   reason?: string
+  /**
+   * WP249：移除时附的一句理由（版规条目），**公开**留给作者看。只有 Reddit 用它；
+   * 不给就只移除、不留话。
+   */
+  removal_message?: string
 }
+
+/**
+ * WP249：版务队列里的一条（被举报 / 被扣下 / 新帖未审），两条通道（OAuth 接口、官方号浏览器）
+ * 读回来都归成这个形状。`title` / `excerpt` / `report_reasons` 是**外部文本**。
+ */
+export interface ModQueueEntry {
+  /** fullname（`t3_` 帖子 / `t1_` 评论）。 */
+  id: string
+  subreddit: string
+  thing: 'post' | 'comment'
+  title?: string
+  excerpt: string
+  author: string
+  report_reasons: string[]
+  created_at?: string
+  url: string
+  /** 从哪个队列读的。 */
+  source: 'modqueue' | 'unmoderated'
+}
+
+/** WP249：读哪一个版务队列。`join_requests` = 入群申请（Reddit 这一版读不到，照实说）。 */
+export type ModQueueSource = 'modqueue' | 'unmoderated' | 'join_requests'
 
 export interface MemberDecisionInput {
   account_external_id: string
@@ -246,6 +277,16 @@ export interface SocialChannelAdapter {
   decideMember?(input: MemberDecisionInput): Promise<SocialResult<{ ok: true }>>
   broadcast?(input: BroadcastInput): Promise<SocialResult<{ sent: number; failed: number }>>
   moderate?(input: ModerateInput): Promise<SocialResult<{ ok: true }>>
+  /**
+   * WP249：读一个版务队列（只有自家版、我们是版主才有）。只加不改：目前只有 Reddit 实现。
+   */
+  modQueue?(input: {
+    account_external_id: string
+    source: ModQueueSource
+    limit?: number
+  }): Promise<SocialResult<ModQueueEntry[]>>
+  /** WP249：这个社群的版规（短名，一条一行）。只有 Reddit 实现。 */
+  communityRules?(account_external_id: string): Promise<SocialResult<string[]>>
 }
 
 /* ── 共用的那几句人话与那几段样板 ─────────────────────────────────────── */
