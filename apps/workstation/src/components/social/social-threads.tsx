@@ -277,9 +277,8 @@ function TagFilter({
     </Button>
   )
   return (
-    <div
-      className="flex flex-wrap items-center gap-1"
-      role="group"
+    <fieldset
+      className="m-0 flex flex-wrap items-center gap-1 border-0 p-0"
       aria-label={t('threads.tags.label')}
       data-testid="threads-tags"
     >
@@ -287,7 +286,7 @@ function TagFilter({
       {TAG_ORDER.filter((k) => counts.has(k)).map((k) =>
         chip(k, t(`threads.triage.${k}`), counts.get(k) ?? 0),
       )}
-    </div>
+    </fieldset>
   )
 }
 
