@@ -69,7 +69,7 @@ const ARTICLE = `<!doctype html><html lang="en"><head><title>Air3 review</title>
 const SPA =
   '<!doctype html><html><head><title>App</title></head><body><div id="root"></div><script src="/app.js"></script></body></html>'
 
-function route(req: IncomingMessage, res: ServerResponse, host: string): void {
+function route(req: IncomingMessage, res: ServerResponse, host: string) {
   const url = new URL(req.url ?? '/', 'http://x')
   const send = (
     code: number,
