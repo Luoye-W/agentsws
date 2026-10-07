@@ -35,7 +35,7 @@ import {
   statSync,
 } from 'node:fs'
 import { createRequire } from 'node:module'
-import { dirname, join, resolve, sep } from 'node:path'
+import { dirname, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { stashDirOf } from './after-extract.mjs'
 import { findNativeBinaries, NOTICE_FILE, writeNotice } from './third-party-licenses.mjs'
@@ -430,6 +430,21 @@ export function bundledNpmCli(resources, platformName) {
     : join(nodeDir, 'lib', 'node_modules', 'npm', 'bin', 'npm-cli.js')
 }
 
+/**
+ * 把 `vendor/node/<target>` 里的 npm 补进包里（10-07 Windows CI 实测：electron-builder 的
+ * extraResources 会跳过名为 `node_modules` 的目录，全匹配的 filter 也拦不住，npm 于是没进包）。
+ * 包里已经有就不动；vendor 里也没有就留给下面的检查报错。返回是否补了。
+ */
+export function placeBundledNpm(resources, platformName, vendorNodeDir) {
+  const cli = bundledNpmCli(resources, platformName)
+  if (existsSync(cli)) return false
+  const npmDir = dirname(dirname(cli))
+  const from = join(vendorNodeDir, relative(join(resources, 'node'), npmDir))
+  if (!existsSync(join(from, 'bin', 'npm-cli.js'))) return false
+  cpSync(from, npmDir, { recursive: true, dereference: true })
+  return true
+}
+
 /** 包里那份 npm 有什么问题（空 = 没问题）：不在 / 版本与 `node-runtime.lock.json` 不一致。 */
 export function bundledNpmProblem(resources, platformName, expectedVersion) {
   const cli = bundledNpmCli(resources, platformName)
@@ -536,6 +551,8 @@ export default async function afterPack(context) {
 
   // ⑧ WP254：npm 随包带（每个平台都查；本机平台再用捆绑的 Node 真跑一次 `npm --version`）
   const npmVersion = readJson(join(DESKTOP_ROOT, 'node-runtime.lock.json'))?.npm?.version
+  if (placeBundledNpm(resources, platformName, join(DESKTOP_ROOT, 'vendor', 'node', target)))
+    log('随包的 npm：extraResources 漏了 node_modules，已从 vendor 补进来')
   const npmProblem = bundledNpmProblem(resources, platformName, npmVersion)
   if (npmProblem !== undefined) throw new Error(npmProblem)
   log(`随包的 npm：${npmVersion}`)
