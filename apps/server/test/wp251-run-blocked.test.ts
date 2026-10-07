@@ -438,13 +438,34 @@ describe('WP251 启动品牌挂到公司（装配）', () => {
       ],
       [{ id: 'org_a', owner_id: 'per_1', created_at: '2026-10-02T00:00:00.000Z' }],
     )
+    // 真机实际的形状（Fable 10-07 复查）：INMO 一直挂着公司、只是 kind = personal——只改 kind，别的不动
+    const kept: string[] = []
     const out = await attachBootBrandToCompany({
       identity: two.identity as never,
       workspace_id: 'ws_inmo' as never,
-      ownModelsConfigured: async () => false,
-      keepOwnModels: async () => undefined,
+      ownModelsConfigured: async () => true,
+      keepOwnModels: async (id) => {
+        kept.push(id)
+      },
     })
-    expect(out.shared).toEqual(['ws_inmo'])
-    expect(two.ws.get('ws_inmo')?.kind).toBe('shared')
+    expect(out).toEqual({ shared: ['ws_inmo'], kept_own_models: [] })
+    expect(two.ws.get('ws_inmo')).toEqual({
+      id: 'ws_inmo',
+      owner_id: 'per_1',
+      kind: 'shared',
+      org_id: 'org_a',
+    })
+    expect(kept).toEqual([])
+    // 再跑一次：什么都不变
+    const again = await attachBootBrandToCompany({
+      identity: two.identity as never,
+      workspace_id: 'ws_inmo' as never,
+      ownModelsConfigured: async () => true,
+      keepOwnModels: async (id) => {
+        kept.push(id)
+      },
+    })
+    expect(again).toEqual({ shared: [], kept_own_models: [] })
+    expect(kept).toEqual([])
   })
 })

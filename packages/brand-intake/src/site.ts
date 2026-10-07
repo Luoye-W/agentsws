@@ -53,6 +53,8 @@ import {
   visibleText,
 } from './html.js'
 import { inferMarkets } from './markets.js'
+import { SHOPIFY_DEFAULT_HOME_TEXTS } from './shopify-default-texts.js'
+import { pageSentenceHashes } from './text-hash.js'
 
 /** Shopify / 自建页两套约定（KefuAgent 那边按真站验过的顺序）。 */
 export const POLICY_PROBE_PATHS: readonly { path: string; kind: BrandIntakePolicy['kind'] }[] = [
@@ -67,7 +69,10 @@ export const POLICY_PROBE_PATHS: readonly { path: string; kind: BrandIntakePolic
 const ABOUT_PATHS = ['/pages/about', '/about', '/about-us', '/pages/about-us']
 const CONTACT_PATHS = ['/pages/contact', '/contact', '/contact-us', '/pages/contact-us']
 
-/** 一份政策至少得有这么长，且命中一个政策词。 */
+/**
+ * 一份政策至少得有这么长，且命中一个政策词。
+ * WP250：补上繁体、日、韩、德、法、西的政策词（以前这几种语言的店一份政策都认不出来）。
+ */
 const POLICY_MIN_CHARS = 200
 /**
  * WP251（决策 106）：中日韩文字一个字顶英文好几个字母——同样一段「七天无理由退货」的政策，
@@ -75,7 +80,7 @@ const POLICY_MIN_CHARS = 200
  */
 export const POLICY_MIN_CHARS_CJK = 80
 const POLICY_WORDS =
-  /refund|return|exchange|shipping|deliver|warranty|privacy|terms|退货|退款|换货|运费|物流|配送|保修|隐私|条款|返品|配送料|保証|プライバシー|환불|반품|배송|교환|개인정보/i
+  /refund|return|exchange|shipping|deliver|warranty|privacy|terms|退货|退款|换货|运费|物流|配送|保修|隐私|条款|退貨|換貨|運費|隱私|條款|返品|返金|送料|保証|プライバシー|利用規約|환불|반품|배송|개인정보|이용약관|rückgabe|erstattung|versand|datenschutz|remboursement|livraison|confidentialité|reembolso|devoluci|envío|privacidad|교환/i
 /** 中日韩文字（汉字、平假名、片假名、谚文）。 */
 const CJK_CHAR =
   /[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\uac00-\ud7af\u1100-\u11ff]/gu
@@ -108,23 +113,44 @@ export function looksLikePolicy(text: string): boolean {
 /**
  * WP244：Shopify 新开店的默认店名（后台没改过名字时页面上就是它）。
  * 认到它就不当品牌名——那不是品牌，是 Shopify 替你起的占位名。
+ *
+ * WP250：英文的 My Store 有 Shopify 帮助中心为证（「By default, your store name is My Store」）；
+ * 中文 / 繁体后台新店的默认店名没查到官方说法，先按候选「我的商店」「我的店铺」「我的商店名称」收
+ * （见 docs/briefs/reports/WP250.md）。比对忽略大小写与首尾空白。
  */
-export const SHOPIFY_PLACEHOLDER_NAMES: readonly string[] = ['My Store', 'My store', 'My Shop']
+export const SHOPIFY_PLACEHOLDER_NAMES: readonly string[] = [
+  'My Store',
+  'My store',
+  'My Shop',
+  '我的商店',
+  '我的店铺',
+  '我的商店名称',
+]
 
 /**
- * Shopify 默认主题首页上的占位文字（新店没动过首页时会有好几句）。
- * 单独一句「Welcome to our store」正式店也可能写，所以**要对上两句**才算。
+ * WP250：正式店也常原样留着的两处——公告栏的欢迎语、默认首页横幅那句写死的英文。
+ * 只对上这两处不算空店：至少还得有一处「只有没动过的店才会有」的
+ * （示例商品名、富文本 / 图片横幅的占位说明……）。
  */
-const SHOPIFY_PLACEHOLDER_TEXT: readonly RegExp[] = [
-  /welcome to our store/i,
-  /talk about your brand/i,
-  /example product title/i,
-  /your content goes here/i,
-  /\bimage banner\b/i,
-  /pair text with an image/i,
-  /share information about your brand with your customers/i,
-  /use this text to share information/i,
-]
+const WEAK_PLACEHOLDER_IDS: ReadonlySet<string> = new Set([
+  'announcement_welcome',
+  'home_banner_browse',
+])
+
+/**
+ * 这一页对上了哪几处默认文字（按「同一处」去重：同一处的中英两版只算一处）。
+ *
+ * WP250（决策 103）：不存原文，只比哈希——页面每个文本节点切句、归一、算哈希；某段官方文案
+ * 切出的那几句哈希**全在**页面上，就算对上这一处（见 `text-hash.ts`、`shopify-default-texts.ts`）。
+ * 看整页文字——公告栏在 `<main>` 外面。
+ */
+export function placeholderTextHits(html: string): string[] {
+  const page = pageSentenceHashes(html)
+  const hits: string[] = []
+  for (const c of SHOPIFY_DEFAULT_HOME_TEXTS)
+    if (c.texts.some((t) => t.sentences.every((h) => page.has(h)))) hits.push(c.id)
+  return hits
+}
 
 /** 这个名字是不是 Shopify 的占位店名。 */
 export function isPlaceholderStoreName(name: string | undefined): boolean {
@@ -136,18 +162,21 @@ export function isPlaceholderStoreName(name: string | undefined): boolean {
 /**
  * WP244（Fable 10-07 真机，rolloutgear.com）：**刚开的 Shopify 空店**。
  *
- * 店名还是 My Store、首页还是 Welcome to our store、只有 Shopify 自动生成的那份隐私政策——
+ * 店名还是 My Store、首页还是默认主题的欢迎语、只有 Shopify 自动生成的那份隐私政策——
  * 这时读出来的「品牌名 = My Store（把握度高）」「一句话 = My Store」全是占位，
  * 照填等于让人把占位名当品牌名确认下去。认出来就这几格不填、默认政策不进知识库，
  * 界面明说「店铺还是 Shopify 初始状态，品牌资料请自己填」，推荐里加上建站。
  *
- * 判据：是 Shopify，并且（店名是占位名 **或** 首页正文里对上两句以上默认主题的占位文字）。
+ * 判据：是 Shopify，并且（店名是占位名 **或** 首页对上两处以上默认主题的占位文字）。
+ *
+ * WP250：占位文字认中 / 繁 / 日 / 韩 / 德 / 法 / 西的官方文案，中英混排的按「同一处」合并计数；
+ * 两处里至少一处不是公告栏 / 横幅那两句常被留着的（见 {@link WEAK_PLACEHOLDER_IDS}）。
  */
 export function isFreshShopifyStore(home: string, siteName: string | undefined): boolean {
   if (detectPlatform(home)?.platform !== 'shopify') return false
   if (isPlaceholderStoreName(siteName) || isPlaceholderStoreName(titleOf(home))) return true
-  const text = mainText(home, 20_000)
-  return SHOPIFY_PLACEHOLDER_TEXT.filter((re) => re.test(text)).length >= 2
+  const hits = placeholderTextHits(home)
+  return hits.length >= 2 && hits.some((id) => !WEAK_PLACEHOLDER_IDS.has(id))
 }
 
 /**

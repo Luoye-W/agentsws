@@ -374,166 +374,178 @@ function connectionFiles(dir: string): Map<string, string> {
 }
 
 describe('WP251 启动品牌挂到公司（模拟真机数据目录）', () => {
-  it('INMO 没有 org_id、各品牌各存一份公司全称 → 升级后挂进公司、以公司为准；一条数据不丢；再启动不再变', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'wp251-brandco-'))
-    try {
-      // ── 上一版的样子：INMO 设过、有岗位 / 事项 / 知识；加 Rollout，也有岗位 / 事项 / 知识
-      const first = await boot(dir)
-      await analyzeAndConfirm(first, inmo(first))
-      await putProfile(first, inmo(first), { legal_name: 'INMO', brand_name: 'INMO' })
-      await applyCustomerCare(first, inmo(first))
-      const m1 = await call(first, inmo(first), 'POST', '/v1/matters', {
-        kind: 'adhoc',
-        title: 'INMO 的一件事',
-      })
-      expect(m1.status).toBe(201)
-      const rollout = await addBrand(first, 'Rollout')
-      await analyzeAndConfirm(first, rollout)
-      await applyCustomerCare(first, rollout)
-      const m2 = await call(first, rollout, 'POST', '/v1/matters', {
-        kind: 'adhoc',
-        title: 'Rollout 的一件事',
-      })
-      expect(m2.status).toBe(201)
-      // Rollout 的设置页改了公司全称（真机就是这么改的）
-      await putProfile(first, rollout, { legal_name: COMPANY })
-      const INMO = inmo(first).workspace_id
-      const ROLLOUT = rollout.workspace_id
-      const ORG = await orgId(first)
-      await shut(first)
+  /*
+   * 两种形状都钉：真机实际是 INMO 一直挂着公司、只是 kind = personal（Fable 10-07 复查）；
+   * 另一种是工单最初以为的「没有 org_id」——也要挂得进去。
+   */
+  it.each([
+    ['真机：INMO 挂着公司、kind = personal', true],
+    ['INMO 没有 org_id', false],
+  ] as const)(
+    '%s、各品牌各存一份公司全称 → 升级后以公司为准；一条数据不丢；再启动不再变',
+    async (_label, keepOrg) => {
+      const dir = mkdtempSync(join(tmpdir(), 'wp251-brandco-'))
+      try {
+        // ── 上一版的样子：INMO 设过、有岗位 / 事项 / 知识；加 Rollout，也有岗位 / 事项 / 知识
+        const first = await boot(dir)
+        await analyzeAndConfirm(first, inmo(first))
+        await putProfile(first, inmo(first), { legal_name: 'INMO', brand_name: 'INMO' })
+        await applyCustomerCare(first, inmo(first))
+        const m1 = await call(first, inmo(first), 'POST', '/v1/matters', {
+          kind: 'adhoc',
+          title: 'INMO 的一件事',
+        })
+        expect(m1.status).toBe(201)
+        const rollout = await addBrand(first, 'Rollout')
+        await analyzeAndConfirm(first, rollout)
+        await applyCustomerCare(first, rollout)
+        const m2 = await call(first, rollout, 'POST', '/v1/matters', {
+          kind: 'adhoc',
+          title: 'Rollout 的一件事',
+        })
+        expect(m2.status).toBe(201)
+        // Rollout 的设置页改了公司全称（真机就是这么改的）
+        await putProfile(first, rollout, { legal_name: COMPANY })
+        const INMO = inmo(first).workspace_id
+        const ROLLOUT = rollout.workspace_id
+        const ORG = await orgId(first)
+        await shut(first)
 
-      // ── 把数据目录改成真机那一刻的形状
-      {
-        const id = openDb(join(dir, 'identity.sqlite'))
-        const row = id.prepare('SELECT json FROM workspaces WHERE id = ?').get(INMO) as {
-          json: string
-        }
-        const { org_id: _o, ...ws } = JSON.parse(row.json) as Record<string, unknown>
-        id.prepare('UPDATE workspaces SET json = ? WHERE id = ?').run(
-          JSON.stringify({ ...ws, kind: 'personal' }),
-          INMO,
-        )
-        const orgRow = id.prepare('SELECT json FROM organizations WHERE id = ?').get(ORG) as {
-          json: string
-        }
-        const { postal_address: _a, ...org } = JSON.parse(orgRow.json) as Record<string, unknown>
-        id.prepare('UPDATE organizations SET json = ? WHERE id = ?').run(JSON.stringify(org), ORG)
-        id.close()
-        const ob = openDb(join(dir, 'onboarding.sqlite'))
-        const mine = ob
-          .prepare('SELECT json FROM onboarding_profiles WHERE workspace_id = ?')
-          .get(INMO) as { json: string }
-        const inmoProfile = {
-          ...(JSON.parse(mine.json) as Record<string, unknown>),
-          legal_name: 'INMO',
-          postal_address: 'INMO 的老地址',
-        }
-        ob.prepare('UPDATE onboarding_profiles SET json = ? WHERE workspace_id = ?').run(
-          JSON.stringify(inmoProfile),
-          INMO,
-        )
-        ob.prepare('UPDATE onboarding_profile SET json = ? WHERE id = 1').run(
-          JSON.stringify(inmoProfile),
-        )
-        // 上一版没有这几样记号
-        ob.prepare("DELETE FROM onboarding_migrations WHERE key LIKE 'wp251_%'").run()
-        ob.prepare('DELETE FROM onboarding_completed').run()
-        ob.close()
-      }
-      const before = rowCounts(dir)
-      const connectionsBefore = connectionFiles(dir)
-
-      // ── 升级后第一次启动
-      const second = await boot(dir, '2026-10-08T09:00:00.000Z')
-      const inmoWs = await second.identity.getWorkspace(INMO as never)
-      expect(inmoWs?.org_id).toBe(ORG)
-      expect(inmoWs?.kind).toBe('shared')
-      expect((await second.identity.getWorkspace(ROLLOUT as never))?.kind).toBe('shared')
-      expect(second.identity.listOrganizations()).toHaveLength(1)
-      // 以公司为准：全称是 Rollout 设置页改的那个；公司没有地址 → 从品牌档案搬上来
-      const org = second.identity.getOrganization(ORG as never)
-      expect(org?.legal_name).toBe(COMPANY)
-      expect(org?.postal_address).toBe('INMO 的老地址')
-      // 两个品牌读到的公司一样
-      const r = await state(second, await enter(second, ROLLOUT))
-      const i = await state(second, inmo(second))
-      expect(r.profile?.legal_name).toBe(COMPANY)
-      expect(i.profile?.legal_name).toBe(COMPANY)
-      expect(i.profile?.postal_address).toBe('INMO 的老地址')
-      // 存量加的品牌已经有岗位：不被拉回向导
-      expect(r.needs_setup).toBe(false)
-      expect(i.needs_setup).toBe(false)
-      // Rollout 自己没接模型：挂进来之后跟随公司（INMO 成了公司默认品牌）
-      expect(second.brands.orgDefaultOf(ROLLOUT as never)).toBe(INMO)
-      // AI 上下文
-      expect(brandText(second, ROLLOUT)).toContain('品牌：Rollout')
-      expect(brandText(second, ROLLOUT)).toContain(`公司：${COMPANY}`)
-      await shut(second)
-
-      // 档案里的影子刷成公司的值（老表也是）；迁移前的原样留了一份备份
-      {
-        const ob = openDb(join(dir, 'onboarding.sqlite'))
-        for (const ws of [INMO, ROLLOUT]) {
-          const row = ob
-            .prepare('SELECT json FROM onboarding_profiles WHERE workspace_id = ?')
-            .get(ws) as { json: string }
-          expect(JSON.parse(row.json).legal_name).toBe(COMPANY)
-        }
-        const legacy = ob.prepare('SELECT json FROM onboarding_profile WHERE id = 1').get() as {
-          json: string
-        }
-        expect(JSON.parse(legacy.json).legal_name).toBe(COMPANY)
-        const backup = ob
-          .prepare(
-            "SELECT json FROM onboarding_profiles_backup WHERE key = 'wp251' AND workspace_id = ?",
+        // ── 把数据目录改成真机那一刻的形状
+        {
+          const id = openDb(join(dir, 'identity.sqlite'))
+          const row = id.prepare('SELECT json FROM workspaces WHERE id = ?').get(INMO) as {
+            json: string
+          }
+          const parsed = JSON.parse(row.json) as Record<string, unknown>
+          const { org_id: _o, ...ws } = parsed
+          if (keepOrg) ws.org_id = parsed.org_id
+          id.prepare('UPDATE workspaces SET json = ? WHERE id = ?').run(
+            JSON.stringify({ ...ws, kind: 'personal' }),
+            INMO,
           )
-          .get(INMO) as { json: string }
-        expect(JSON.parse(backup.json).legal_name).toBe('INMO')
-        expect(JSON.parse(backup.json).postal_address).toBe('INMO 的老地址')
-        ob.close()
-      }
-
-      // 一条不丢：业务表一行不差，其余的表只多不少（启动会记事件、Rollout 的后台这次起来了）
-      const after = rowCounts(dir)
-      const businessKeys = [...before.keys()].filter((k) => BUSINESS.test(k))
-      expect(businessKeys.length).toBeGreaterThan(5)
-      for (const k of businessKeys) expect([k, after.get(k)]).toEqual([k, before.get(k)])
-      for (const [k, n] of before) expect([k, (after.get(k) ?? 0) >= n]).toEqual([k, true])
-      expect(connectionFiles(dir)).toEqual(connectionsBefore)
-      // 两个品牌各自的事项都还在原来的品牌名下（事项库按 workspace_id 分）
-      {
-        const work = openDb(join(dir, 'work.sqlite'))
-        for (const [ws, title] of [
-          [INMO, 'INMO 的一件事'],
-          [ROLLOUT, 'Rollout 的一件事'],
-        ] as const) {
-          const titles = (
-            work.prepare('SELECT json FROM matters WHERE workspace_id = ?').all(ws) as {
-              json: string
-            }[]
-          ).map((m) => (JSON.parse(m.json) as { title: string }).title)
-          expect(titles).toContain(title)
+          const orgRow = id.prepare('SELECT json FROM organizations WHERE id = ?').get(ORG) as {
+            json: string
+          }
+          const { postal_address: _a, ...org } = JSON.parse(orgRow.json) as Record<string, unknown>
+          id.prepare('UPDATE organizations SET json = ? WHERE id = ?').run(JSON.stringify(org), ORG)
+          id.close()
+          const ob = openDb(join(dir, 'onboarding.sqlite'))
+          const mine = ob
+            .prepare('SELECT json FROM onboarding_profiles WHERE workspace_id = ?')
+            .get(INMO) as { json: string }
+          const inmoProfile = {
+            ...(JSON.parse(mine.json) as Record<string, unknown>),
+            legal_name: 'INMO',
+            postal_address: 'INMO 的老地址',
+          }
+          ob.prepare('UPDATE onboarding_profiles SET json = ? WHERE workspace_id = ?').run(
+            JSON.stringify(inmoProfile),
+            INMO,
+          )
+          ob.prepare('UPDATE onboarding_profile SET json = ? WHERE id = 1').run(
+            JSON.stringify(inmoProfile),
+          )
+          // 上一版没有这几样记号
+          ob.prepare("DELETE FROM onboarding_migrations WHERE key LIKE 'wp251_%'").run()
+          ob.prepare('DELETE FROM onboarding_completed').run()
+          ob.close()
         }
-        work.close()
-      }
+        const before = rowCounts(dir)
+        const connectionsBefore = connectionFiles(dir)
 
-      // ── 再启动一次：什么都不再变（幂等）
-      const settled = rowCounts(dir)
-      const third = await boot(dir, '2026-10-09T09:00:00.000Z')
-      expect(third.identity.listOrganizations()).toHaveLength(1)
-      expect((await third.identity.getWorkspace(INMO as never))?.org_id).toBe(ORG)
-      expect(third.identity.getOrganization(ORG as never)?.postal_address).toBe('INMO 的老地址')
-      await shut(third)
-      const again = rowCounts(dir)
-      for (const k of [...settled.keys()].filter((key) => BUSINESS.test(key)))
-        expect([k, again.get(k)]).toEqual([k, settled.get(k)])
-      expect(again.get('onboarding.sqlite:onboarding_profiles_backup')).toBe(
-        settled.get('onboarding.sqlite:onboarding_profiles_backup'),
-      )
-      expect(existsSync(join(dir, 'identity.sqlite'))).toBe(true)
-    } finally {
-      for (const s of servers.splice(0)) await s.close()
-      rmSync(dir, { recursive: true, force: true })
-    }
-  })
+        // ── 升级后第一次启动
+        const second = await boot(dir, '2026-10-08T09:00:00.000Z')
+        const inmoWs = await second.identity.getWorkspace(INMO as never)
+        expect(inmoWs?.org_id).toBe(ORG)
+        expect(inmoWs?.kind).toBe('shared')
+        expect((await second.identity.getWorkspace(ROLLOUT as never))?.kind).toBe('shared')
+        expect(second.identity.listOrganizations()).toHaveLength(1)
+        // 以公司为准：全称是 Rollout 设置页改的那个；公司没有地址 → 从品牌档案搬上来
+        const org = second.identity.getOrganization(ORG as never)
+        expect(org?.legal_name).toBe(COMPANY)
+        expect(org?.postal_address).toBe('INMO 的老地址')
+        // 两个品牌读到的公司一样
+        const r = await state(second, await enter(second, ROLLOUT))
+        const i = await state(second, inmo(second))
+        expect(r.profile?.legal_name).toBe(COMPANY)
+        expect(i.profile?.legal_name).toBe(COMPANY)
+        expect(i.profile?.postal_address).toBe('INMO 的老地址')
+        // 存量加的品牌已经有岗位：不被拉回向导
+        expect(r.needs_setup).toBe(false)
+        expect(i.needs_setup).toBe(false)
+        // Rollout 自己没接模型：挂进来之后跟随公司（INMO 成了公司默认品牌）
+        expect(second.brands.orgDefaultOf(ROLLOUT as never)).toBe(INMO)
+        // AI 上下文
+        expect(brandText(second, ROLLOUT)).toContain('品牌：Rollout')
+        expect(brandText(second, ROLLOUT)).toContain(`公司：${COMPANY}`)
+        await shut(second)
+
+        // 档案里的影子刷成公司的值（老表也是）；迁移前的原样留了一份备份
+        {
+          const ob = openDb(join(dir, 'onboarding.sqlite'))
+          for (const ws of [INMO, ROLLOUT]) {
+            const row = ob
+              .prepare('SELECT json FROM onboarding_profiles WHERE workspace_id = ?')
+              .get(ws) as { json: string }
+            expect(JSON.parse(row.json).legal_name).toBe(COMPANY)
+          }
+          const legacy = ob.prepare('SELECT json FROM onboarding_profile WHERE id = 1').get() as {
+            json: string
+          }
+          expect(JSON.parse(legacy.json).legal_name).toBe(COMPANY)
+          const backup = ob
+            .prepare(
+              "SELECT json FROM onboarding_profiles_backup WHERE key = 'wp251' AND workspace_id = ?",
+            )
+            .get(INMO) as { json: string }
+          expect(JSON.parse(backup.json).legal_name).toBe('INMO')
+          expect(JSON.parse(backup.json).postal_address).toBe('INMO 的老地址')
+          ob.close()
+        }
+
+        // 一条不丢：业务表一行不差，其余的表只多不少（启动会记事件、Rollout 的后台这次起来了）
+        const after = rowCounts(dir)
+        const businessKeys = [...before.keys()].filter((k) => BUSINESS.test(k))
+        expect(businessKeys.length).toBeGreaterThan(5)
+        for (const k of businessKeys) expect([k, after.get(k)]).toEqual([k, before.get(k)])
+        for (const [k, n] of before) expect([k, (after.get(k) ?? 0) >= n]).toEqual([k, true])
+        expect(connectionFiles(dir)).toEqual(connectionsBefore)
+        // 两个品牌各自的事项都还在原来的品牌名下（事项库按 workspace_id 分）
+        {
+          const work = openDb(join(dir, 'work.sqlite'))
+          for (const [ws, title] of [
+            [INMO, 'INMO 的一件事'],
+            [ROLLOUT, 'Rollout 的一件事'],
+          ] as const) {
+            const titles = (
+              work.prepare('SELECT json FROM matters WHERE workspace_id = ?').all(ws) as {
+                json: string
+              }[]
+            ).map((m) => (JSON.parse(m.json) as { title: string }).title)
+            expect(titles).toContain(title)
+          }
+          work.close()
+        }
+
+        // ── 再启动一次：什么都不再变（幂等）
+        const settled = rowCounts(dir)
+        const third = await boot(dir, '2026-10-09T09:00:00.000Z')
+        expect(third.identity.listOrganizations()).toHaveLength(1)
+        expect((await third.identity.getWorkspace(INMO as never))?.org_id).toBe(ORG)
+        expect(third.identity.getOrganization(ORG as never)?.postal_address).toBe('INMO 的老地址')
+        await shut(third)
+        const again = rowCounts(dir)
+        for (const k of [...settled.keys()].filter((key) => BUSINESS.test(key)))
+          expect([k, again.get(k)]).toEqual([k, settled.get(k)])
+        expect(again.get('onboarding.sqlite:onboarding_profiles_backup')).toBe(
+          settled.get('onboarding.sqlite:onboarding_profiles_backup'),
+        )
+        expect(existsSync(join(dir, 'identity.sqlite'))).toBe(true)
+      } finally {
+        for (const s of servers.splice(0)) await s.close()
+        rmSync(dir, { recursive: true, force: true })
+      }
+    },
+  )
 })
