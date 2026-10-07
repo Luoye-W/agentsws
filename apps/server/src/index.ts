@@ -499,6 +499,8 @@ export async function main(): Promise<void> {
       ...(dbDir === undefined ? {} : { dbDir }),
       // WP228：本机只读浏览器（Reddit「浏览器只读」那一路）只在真正的服务进程里装
       readonlyBrowser: {},
+      // WP246：YouTube 字幕、网页转文字、取数路线体检要出网——同样只在真正的服务进程里装
+      readNet: {},
       ...(staticDir === undefined ? {} : { staticDir }),
       ...(profileDir === undefined || profileDir === ''
         ? {}

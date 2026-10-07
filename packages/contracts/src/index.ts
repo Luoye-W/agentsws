@@ -58,8 +58,6 @@ export * from './kol-public.js'
 // WP166：目标市场一处定、处处用（国家码清单、归一化、出处）
 export * from './markets.js'
 export * from './meetings.js'
-// WP246（决策 87 / 88）：取数路线「首选 → 备选 + 体检」、Reddit 读号
-export * from './read-routes.js'
 // WP113（63）：消息——统一收件处。v1 只有邮箱一种来源，但数据模型按"来源可扩"建
 export * from './messages.js'
 export * from './model.js'
@@ -77,6 +75,8 @@ export * from './position-work.js'
 export * from './pr.js'
 // WP165（docs/83 §2）：公开价目 `GET /v1/pricing`（价目只放云上，本机缓存一份离线显示）
 export * from './pricing-catalog.js'
+// WP246（决策 87 / 88）：取数路线「首选 → 备选 + 体检」、Reddit 读号
+export * from './read-routes.js'
 export * from './roles.js'
 export * from './run.js'
 // WP236：运行的空闲超时 / 总时长线、停的原因与看门狗

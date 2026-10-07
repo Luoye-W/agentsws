@@ -64,6 +64,7 @@ import { platformKitRoutes } from './routes/platform-kit.js'
 import { positionEntryRoutes } from './routes/positions.js'
 import { prRoutes } from './routes/pr.js'
 import { privacyRoutes } from './routes/privacy.js'
+import { readRoutesRoutes } from './routes/read-routes.js'
 import { runLimitsRoutes } from './routes/run-limits.js'
 import { scheduleRoutes } from './routes/schedules.js'
 import { searchDataRoutes } from './routes/search-data.js'
@@ -131,6 +132,9 @@ export function collectRoutes(): Route[] {
     ...dshScenesRoutes(),
     // WP155（docs/81）：搜索数据接口（连接页那一行 + SERP / AI 问答探测）
     ...searchDataRoutes(),
+    // WP246（决策 87 / 88）：取数路线（体检、设置、Reddit 读号）。`/v1/settings/read-routes*` 与
+    // `/v1/settings/reddit-read-account/*` 都是定值段，与同级的 browser / capability-sources 不撞
+    ...readRoutesRoutes(),
     // WP192（docs/83 §4）：官方数据接口统一能力口（本机按能力路由，转给云上的 /v1/data/*）
     ...dataServiceRoutes(),
     // WP31 本机秘密库密钥轮换（owner）；`/v1/secrets/rotate` 与连接面不撞

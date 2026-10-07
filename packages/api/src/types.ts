@@ -91,6 +91,7 @@ import type { PlatformKitPort } from './routes/platform-kit.js'
 import type { PositionEntryPort } from './routes/positions.js'
 import type { PrPort } from './routes/pr.js'
 import type { PrivacyPort } from './routes/privacy.js'
+import type { ReadRoutesApiPort } from './routes/read-routes.js'
 import type { RunLimitsPort } from './routes/run-limits.js'
 import type { SearchDataApiPort } from './routes/search-data.js'
 import type { SecretaryPort } from './routes/secretary.js'
@@ -901,6 +902,11 @@ export interface GatewayDeps {
    * 没装配时 `/v1/search-data*` 回 not_implemented。
    */
   searchData?: SearchDataApiPort
+  /**
+   * WP246（决策 87 / 88）：取数路线（体检、设置、Reddit 读号）。按品牌取。
+   * 没装配时 `/v1/settings/read-routes*` 与 `/v1/settings/reddit-read-account/*` 回 not_implemented。
+   */
+  readRoutes?: ReadRoutesApiPort
   /**
    * WP192（docs/83 §4）：官方数据接口统一能力口（能力清单、同步调用、异步任务）。按品牌取。
    * 没装配时 `/v1/data-service*` 回 not_implemented。
