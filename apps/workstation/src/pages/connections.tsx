@@ -340,7 +340,12 @@ export function ConnectionsPage(): React.ReactNode {
                   runTest.mutate(c.id)
                 }}
                 onDisconnect={() => {
-                  if (!globalThis.confirm(t('connections.disconnect.confirm'))) return
+                  // WP252：「请重新连接」那一行只是提醒，收起它什么都不删，不用确认
+                  if (
+                    c.brand_conflict?.kind !== 'reconnect' &&
+                    !globalThis.confirm(t('connections.disconnect.confirm'))
+                  )
+                    return
                   setBusyId({ id: c.id, kind: 'remove' })
                   disconnect.mutate(c.id)
                 }}

@@ -1704,7 +1704,7 @@ export async function createConnections(options: ConnectionsOptions): Promise<Co
 const RECONNECT_PREFIX = 'reconnect_'
 const RECONNECT_HINT =
   '这条连接以前和本机另一个品牌用的是同一个名字，已经归给第一个品牌。' +
-  '请在这一页重新连接一次，连出来的那条只属于本品牌；点「断开」只是收起这条提醒。'
+  '请在这一页重新连接一次，连出来的那条只属于本品牌。'
 const KEPT_HINT =
   '这条连接以前被本机另一个品牌用同一个名字连过，里面存的可能是对方最后填的账号。' +
   '点一次「测试」核对账号；不是本品牌的就断开重连。'
