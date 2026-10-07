@@ -350,7 +350,17 @@ export interface RunRequest {
   tools: { allow: string[]; connect_token: string; side_effect_policy: 'personal' | 'executor' }
   skills: SkillRef[]
   persona: { sections: PromptSection[] }
-  budget: { max_tokens: number; max_tool_calls: number; max_seconds: number; max_cost_base: number }
+  budget: {
+    max_tokens: number
+    max_tool_calls: number
+    max_seconds: number
+    max_cost_base: number
+    /**
+     * WP260：模型回合（一问一答算一回合）上限。不给 = 运行时缺省（direct 的 turn loop / dsh 的步数都是 8）。
+     * 10-07 真机：网页模板一回合读三四个文件，8 回合到了就停在一句「现在读…」——要产出的长活由服务端放宽。
+     */
+    max_turns?: number
+  }
   expectations: {
     outputs: ('draft' | 'staged_change' | 'proposal' | 'answer' | 'dev_result' | 'none')[]
     must_stage_if_change_requested: boolean
@@ -429,7 +439,31 @@ export interface RunRequest {
    * 老的运行记录里没有这个字段，回放出来照样是不写数的那一版。
    */
   tool_prices?: Record<string, number>
+  /**
+   * WP260：这是一件**要产出东西**的长活（网页模板：读规矩 → 改文件 → 检查 → 推未发布预览）。
+   * 不给 = 老行为（普通问答、客服、红人……一个字节不变）；老的运行记录里没有这个字段，回放照旧。
+   */
+  produce?: RunProduce
   idempotency_key: string
+}
+
+/**
+ * WP260：要产出东西的运行怎么跑（见 {@link RunRequest.produce}）。三个运行时同一口径：
+ *
+ * - **没产出就不算完**：模型回了一句「我接下来要…」、却还没成功调过 `deliver_tools` 里的工具、也没出卡，
+ *   运行不收工——追加一句「接着做」再跑一回合，最多 `max_nudges` 次；
+ * - **历史压缩按 token 阈值**：模型面前的历史超过 `compact_at_tokens` 才压，压到阈值的七成为止；
+ *   最近 `keep_recent_results` 条工具结果原样留着，压掉的那条换成「读过哪个文件 + 要点」，不是空占位。
+ */
+export interface RunProduce {
+  /** 成功调到其中一个 = 这次运行产出了（主题：推未发布 / 出发布卡）。出了卡、起了草稿也算。 */
+  deliver_tools: string[]
+  /** 「说了要做却停下」最多续几次。 */
+  max_nudges: number
+  /** 历史超过这么多 token 才压。 */
+  compact_at_tokens: number
+  /** 压的时候最近这几条工具结果原样留着。 */
+  keep_recent_results: number
 }
 
 /**

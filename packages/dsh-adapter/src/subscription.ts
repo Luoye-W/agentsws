@@ -152,7 +152,7 @@ export function watchSubscriptionCalls(ctx: Context, watch: SubscriptionCallWatc
       steps += 1
       if (budget !== undefined) {
         if (steps > budget.max_steps) {
-          budget.exhausted('max_seconds', steps, budget.max_steps)
+          budget.exhausted('max_turns', steps, budget.max_steps)
           yield { type: 'finish', reason: { kind: 'stop' } }
           return
         }

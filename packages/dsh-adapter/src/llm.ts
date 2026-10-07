@@ -297,7 +297,7 @@ export interface GatewayBudget {
    * 预算耗尽时回调宿主：宿主发 `budget.exhausted` 并把 Agent 停下。
    * 回调之后这一轮收成一个空的 `stop`，让 loop 干净地结束。
    */
-  exhausted(which: 'max_tokens' | 'max_seconds', used: number, cap: number): void
+  exhausted(which: 'max_tokens' | 'max_seconds' | 'max_turns', used: number, cap: number): void
 }
 
 export interface GatewayAdapterOptions {
@@ -423,7 +423,8 @@ export class GatewayLlmAdapter extends LlmAdapter {
     this.steps += 1
     if (budget !== undefined) {
       if (this.steps > budget.max_steps) {
-        budget.exhausted('max_seconds', this.steps, budget.max_steps)
+        // WP260：步数用完记成回合用完（以前借 `max_seconds` 这一格，排障时看着像超时）
+        budget.exhausted('max_turns', this.steps, budget.max_steps)
         yield { type: 'finish', reason: { kind: 'stop' } }
         return
       }

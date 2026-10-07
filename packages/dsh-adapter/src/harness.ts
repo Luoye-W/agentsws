@@ -92,8 +92,11 @@ export function maxStepsFor(request: {
   browser?: unknown
   computer_use?: unknown
   web?: unknown
-  budget: { max_tool_calls: number }
+  budget: { max_tool_calls: number; max_turns?: number }
 }): number {
+  // WP260：请求自己带了回合上限（要产出的长活，服务端放宽的）就按它
+  if (request.budget.max_turns !== undefined)
+    return Math.max(DEFAULT_MAX_STEPS, request.budget.max_turns)
   // WP179：挂了网页工具的运行同理——搜一次、抓两页、再搜一次，一步一个工具
   if (
     request.browser === undefined &&

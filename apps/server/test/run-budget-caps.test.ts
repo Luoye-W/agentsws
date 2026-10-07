@@ -16,10 +16,16 @@ describe('runBudgetCaps', () => {
       40,
     )
   })
-  it('10-07 真机：网页模板（主题工具）40 万 token、60 次', () => {
+  it('10-07 真机：网页模板（主题工具）60 次；WP260：80 万 token、回合 40（缺省 8 回合是 ci.16 停的原因）', () => {
     expect(runBudgetCaps({ themeRun: true, granted: false, browsing: false })).toEqual({
-      max_tokens: 400_000,
+      max_tokens: 800_000,
       max_tool_calls: 60,
+      max_turns: 40,
     })
+  })
+  it('WP260：别的运行不带回合上限（运行时缺省，一个字节不变）', () => {
+    expect(runBudgetCaps({ themeRun: false, granted: true, browsing: true })).not.toHaveProperty(
+      'max_turns',
+    )
   })
 })

@@ -16,7 +16,7 @@
  *
  * `theme dev`（长驻）不给 AI。名字、给模型看的描述在这里；stub 运行时的那一段剧本也在这里。
  */
-import type { RunRequest, ToolDef } from '@agentsws/contracts'
+import type { PromptSection, RunRequest, ToolDef } from '@agentsws/contracts'
 
 export const THEME_INIT_TOOL = 'theme_init_from_base'
 export const THEME_LIST_TOOL = 'theme_list'
@@ -102,8 +102,26 @@ export const THEME_TOOL_DEFS: readonly ToolDef[] = [
   },
   {
     name: THEME_READ_FILE_TOOL,
-    description: '读主题工作目录里的一个文件（只限这个目录）。',
-    input_schema: { type: 'object', properties: { path: PATH_PARAM }, required: ['path'] },
+    description:
+      '读主题工作目录里的一个文件（只限这个目录）。一次最多回 2.4 万字，长文件回「后面还有」和下一段的 offset。' +
+      'CATALOG.json 很大：不给 ids 时回一页目录（每个分区 / 块一行：id + 什么时候用）；' +
+      '要某几项的完整设置就给 ids（如 ["hero","faq","container"]）。同一个文件读过一次就别再读。',
+    input_schema: {
+      type: 'object',
+      properties: {
+        path: PATH_PARAM,
+        offset: {
+          type: 'integer',
+          description: '从第几个字开始读（上一次回的 next_offset）；不给 = 从头',
+        },
+        ids: {
+          type: 'array',
+          items: { type: 'string' },
+          description: '只对 CATALOG.json：要看哪几项的完整设置（分区 / 块的 id）',
+        },
+      },
+      required: ['path'],
+    },
   },
   {
     name: THEME_WRITE_FILE_TOOL,
@@ -155,7 +173,92 @@ export const THEME_TOOL_DEF_BY_NAME: ReadonlyMap<string, ToolDef> = new Map(
   THEME_TOOL_DEFS.map((d) => [d.name, d]),
 )
 
+/**
+ * WP260：**网页模板的做法**——带主题工具的运行才进系统提示（服务端 `runtime.ts` 加；order 26：紧跟公共段
+ * 「说话规矩」之后、技能正文之前）。persona 有 260 字上限、英文由脚本翻译，放不下一整套工作法，所以单写一节。
+ *
+ * 10-07 真机（ci.16）：模型把同一批文件读了两三遍、去查店里的商品（店铺没连）、读完说一句「现在读…」就停——
+ * 这一节把顺序写死：读一次 → 改模板与设置 → 检查 → 推未发布 → 一段话交代，中途不汇报。
+ */
+export const THEME_WORK_ORDER = 26
+
+export const THEME_WORK_RULES = [
+  '网页模板的做法（一口气做到出预览，中途不停下来汇报；做完再用一段话交代）：',
+  '1. 主题工作目录是空的就先起底（agentsws-theme）；起过底就别再起。',
+  '2. AGENTS.md 读一次；CATALOG.json 先读目录页，要用的分区 / 块（如 hero、faq、container、newsletter）再给 ids 读一次完整设置；recipes/compose-page.md 是搭页面的现成做法。不必读 .liquid 源码，同一个文件读过就别再读。',
+  '3. 照 recipes 改 templates/index.json（放哪些分区、什么顺序、每块的设置）和 config/settings_data.json（颜色、字体等主题设置）；新东西只写 custom-* 文件，核心文件不动。',
+  '4. 跑官方检查，有错误就改，改到 0 个错误。',
+  '5. 推成未发布主题；最后给预览链接、改了哪几块、怎么退回。发布只出卡，等人点。',
+  '店铺数据：主推商品、合集先留空占位（人在主题编辑器里挑），不去查店里的商品。店面文案用顾客的语言（照 AGENTS.md）。',
+].join('\n')
+
+export function themeWorkSection(): PromptSection {
+  return {
+    id: 'theme_work',
+    name: '网页模板的做法',
+    order: THEME_WORK_ORDER,
+    text: THEME_WORK_RULES,
+  }
+}
+
 // ── 回来的数据形状（服务端 `theme-tools.ts` 拼，stub 剧本读） ─────────────
+
+/**
+ * WP260：`theme_read_file` 一次最多回这么多字（长文件分页）。工具结果围栏缺省只放 1.2 万字，
+ * 10-07 真机读 `sections/faq.liquid`（2.5 万字）只看得见前一半——`{% schema %}` 恰好在文件尾巴上，
+ * 模型于是一遍遍重读。主题文件这一路按页给、围栏也按这一页放宽（{@link renderThemeRead}）。
+ */
+export const THEME_READ_PAGE_CHARS = 24_000
+
+/** `theme_read_file` 回的数据（长文件、目录页才有后面几格）。 */
+export interface ThemeReadData {
+  path: string
+  content: string
+  /** 这一页从第几个字开始（分页时才有）。 */
+  offset?: number
+  /** 整个文件多少字（分页时才有）。 */
+  total_chars?: number
+  /** 后面还有：下一段从这里读。 */
+  next_offset?: number
+  /** CATALOG.json：`index` = 一页目录；`entries` = 按 ids 挑出来的完整几项。 */
+  catalog?: 'index' | 'entries'
+  /** 按 ids 挑时没找到的那几个。 */
+  missing?: string[]
+  /** 按 ids 挑时这一页放不下、要另读一次的那几个。 */
+  more_ids?: string[]
+}
+
+export function themeReadOf(data: unknown): ThemeReadData | undefined {
+  const o = obj(data)
+  return typeof o.path === 'string' && typeof o.content === 'string'
+    ? (o as unknown as ThemeReadData)
+    : undefined
+}
+
+/**
+ * WP260：`theme_read_file` 的结果给模型看的那一段（direct / dsh 同一份）：先一行「哪个文件、第几段、
+ * 后面还有没有」，再是原文（不转义成 JSON 字符串——换行、引号原样，模型读得懂、也省 token）。
+ * 仍然包外部围栏（主题文件可能是从店里拉下来的），围栏的长度上限按一页放宽。
+ */
+export function renderThemeRead(
+  name: string,
+  data: unknown,
+): { text: string; max_chars: number } | undefined {
+  const bare = name.includes('.') ? name.slice(name.lastIndexOf('.') + 1) : name
+  if (bare !== THEME_READ_FILE_TOOL) return undefined
+  const r = themeReadOf(data)
+  if (r === undefined) return undefined
+  const n = (x: number): string => x.toLocaleString('en-US')
+  const head =
+    r.catalog === 'index'
+      ? `主题文件 ${r.path}（目录页：每项一行；要某几项的完整设置再读一次并给 ids）`
+      : r.catalog === 'entries'
+        ? `主题文件 ${r.path}（按 ids 挑出的完整几项${r.missing !== undefined && r.missing.length > 0 ? `；没有：${r.missing.join(', ')}` : ''}${r.more_ids !== undefined && r.more_ids.length > 0 ? `；这一页放不下，另读一次给 ids=${JSON.stringify(r.more_ids)}` : ''}）`
+        : r.total_chars !== undefined
+          ? `主题文件 ${r.path}（第 ${n((r.offset ?? 0) + 1)}–${n((r.offset ?? 0) + r.content.length)} 字，共 ${n(r.total_chars)} 字${r.next_offset === undefined ? '，到底了' : `；后面还有，接着读给 offset=${r.next_offset}`}）`
+          : `主题文件 ${r.path}（全文，${n(r.content.length)} 字）`
+  return { text: `${head}\n\n${r.content}`, max_chars: THEME_READ_PAGE_CHARS + 2_000 }
+}
 
 /** 还差哪一步才能动店铺（工具回 error 时一并带上，岗位页同一套话）。 */
 export type ThemeNeed = 'install_cli' | 'node' | 'login' | 'store'

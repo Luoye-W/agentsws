@@ -174,15 +174,47 @@ describe('预算是硬的（17 §5.3 §5.6）', () => {
     expect(failed?.error.message).toBe(DEEPSEEK_ACCOUNT_QUOTA_MESSAGE)
   })
 
-  it('turn 上限：到顶就收尾，未闭合调用补齐', async () => {
+  it('turn 上限：到顶就收尾，未闭合调用补齐；模型还在调工具就照实记成回合用完（WP260）', async () => {
     const h = harness({
       script: () => ({ tool_calls: [{ name: 'get_order', input: { order_id: 'ord_1001' } }] }),
       maxTurns: 2,
     })
     const result = await h.run(makeRequest({ grounding: [] }))
-    expect(result.status).toBe('completed')
+    // WP260（10-07 真机 ci.16）：以前照「做完了」收，最后那半句被当成答复
+    expect(result.status).toBe('budget_exhausted')
+    expect(eventsOf(h.events, 'budget.exhausted')).toEqual([
+      { type: 'budget.exhausted', which: 'max_turns', used: 2, cap: 2 },
+    ])
+    expect(result.outputs.some((o) => o.kind === 'answer')).toBe(false)
     expect(eventsOf(h.events, 'tool.call')).toHaveLength(2)
     expect(eventsOf(h.events, 'tool.result')).toHaveLength(2)
+  })
+
+  it('WP260：请求带了 budget.max_turns 就按请求的（不按装配时的缺省）', async () => {
+    const h = harness({
+      script: () => ({ tool_calls: [{ name: 'get_order', input: { order_id: 'ord_1001' } }] }),
+      maxTurns: 2,
+    })
+    const req = makeRequest({ grounding: [] })
+    const result = await h.run({ ...req, budget: { ...req.budget, max_turns: 5 } })
+    expect(result.status).toBe('budget_exhausted')
+    expect(eventsOf(h.events, 'tool.call')).toHaveLength(5)
+  })
+
+  it('模型自己收尾（最后一回合没调工具）照旧算做完', async () => {
+    let n = 0
+    const h = harness({
+      script: () => {
+        n += 1
+        return n < 2
+          ? { tool_calls: [{ name: 'get_order', input: { order_id: 'ord_1001' } }] }
+          : { text: '查好了。' }
+      },
+      maxTurns: 2,
+    })
+    const result = await h.run(makeRequest({ grounding: [] }))
+    expect(result.status).toBe('completed')
+    expect(eventsOf(h.events, 'budget.exhausted')).toEqual([])
   })
 
   it('close_open_tool_uses 的占位文本自带原因', () => {
