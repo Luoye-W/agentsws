@@ -69,6 +69,24 @@ import {
   rewriteForChannelGuard,
 } from './support.js'
 import {
+  checkOf,
+  latestCopyOf,
+  publishOf,
+  pushedOf,
+  renderThemeAnswer,
+  THEME_CHECK_TOOL,
+  THEME_INIT_TOOL,
+  THEME_LIST_TOOL,
+  THEME_PUBLISH_TOOL,
+  THEME_PUSH_TOOL,
+  THEME_TOOL_DEF_BY_NAME,
+  type ThemeCheckData,
+  type ThemePublishData,
+  type ThemePushData,
+  type ThemeStep,
+  themeBranch,
+} from './theme.js'
+import {
   renderWebAnswer,
   urlsIn,
   WEB_FETCH_TOOL,
@@ -286,7 +304,9 @@ function toolDefs(req: RunRequest): ToolDef[] {
       // WP237：单价按这次运行的价目现填（`tool_prices`），取不到就只说「按条计积分」
       researchToolDef(name, req.tool_prices) ??
       // WP181：官方「自动化任务」的四个工具（只有装了那个官方插件的运行才有）
-      SCHEDULE_TOOL_DEF_BY_NAME.get(name) ?? {
+      SCHEDULE_TOOL_DEF_BY_NAME.get(name) ??
+      // WP253：网页模板的九个受限主题工具（只有那条职责、服务端接了主题工具的运行才有）
+      THEME_TOOL_DEF_BY_NAME.get(name) ?? {
         name,
         description: `stand-in tool ${name}`,
         input_schema: { type: 'object' },
@@ -895,6 +915,103 @@ export function createStubRuntime(options: StubRuntimeOptions): RuntimeAdapter {
           ...(sequences === undefined ? {} : { sequences }),
           ...(started === undefined ? {} : { started }),
           replies: !b2bCalls.includes(B2B_START_ROUND_TOOL) && /回信|回复|分类|repl/i.test(b2bText),
+          failed,
+        })
+        outputs.push({ kind: 'answer', text: answer })
+        usage.output_tokens = Math.ceil(answer.length / 4) + (seed % 7)
+        const summary = describeRun({
+          readTools,
+          drafted: false,
+          reply: answer,
+          tools: req.tools.allow,
+          ...(exhausted === undefined ? {} : { exhausted: exhausted.which }),
+        })
+        sink({
+          type: 'run.completed',
+          usage: {
+            ...usage,
+            tool_calls: toolCalls,
+            seconds: Math.max(0, (Date.parse(clock.now()) - startedMs) / 1000),
+            cost_base: 0,
+          },
+          outputs,
+          summary,
+        })
+        return finish(exhausted ? 'budget_exhausted' : 'completed', summary)
+      }
+
+      /*
+       * WP253：**网页模板做主题**。工具面里有主题工具、说的是搭 / 改 / 预览 / 发布，就去调：
+       * 起底（说了 agentsws-theme 才起）→ 官方检查 → 推一份未发布副本（预览链接）；说发布 →
+       * 列一次、对最新那份副本出发布卡（不直接发）。stub 不会写 Liquid，改文件留给真模型。
+       */
+      const themeCalls = themeBranch(req, b2bText)
+      if (themeCalls !== undefined) {
+        const failed: Record<string, string> = {}
+        let initialized = false
+        let check: ThemeCheckData | undefined
+        let pushed: ThemePushData | undefined
+        let published: ThemePublishData | undefined
+        const queue: ThemeStep[] = [...themeCalls]
+        while (queue.length > 0) {
+          const step = queue.shift() as ThemeStep
+          if (signal.aborted) {
+            sink(cancelledEvent(signal))
+            return finish('cancelled', '运行被中断')
+          }
+          const call_id = `call_${toolCalls + 1}`
+          sink({ type: 'tool.call', call_id, tool: step.tool, input: step.input })
+          if (toolCalls >= req.budget.max_tool_calls) {
+            exhausted = { which: 'max_tool_calls', used: toolCalls, cap: req.budget.max_tool_calls }
+            sink({ type: 'budget.exhausted', ...exhausted })
+            sink({ type: 'tool.result', call_id, status: 'blocked', reason: 'budget_exhausted' })
+            break
+          }
+          const res =
+            options.executeTool === undefined
+              ? { status: 'error' as const, reason: 'no_tool_executor' }
+              : await options.executeTool({ name: step.tool, input: step.input, request: req })
+          toolCalls += 1
+          sink({
+            type: 'tool.result',
+            call_id,
+            status: res.status,
+            ...(res.reason === undefined ? {} : { reason: res.reason }),
+          })
+          if (res.status !== 'ok') {
+            failed[step.tool] =
+              res.reason === 'no_tool_executor'
+                ? '这个进程没接工具'
+                : (res.reason ?? '这一步没走通')
+            // 前一步没走通，后面的推送 / 发布不再接着做（不在没检查过的东西上出预览）
+            break
+          }
+          readTools.push(step.tool)
+          if (step.tool === THEME_INIT_TOOL) initialized = true
+          if (step.tool === THEME_CHECK_TOOL) {
+            check = checkOf(res.data)
+            if (check !== undefined && check.errors > 0) break
+          }
+          if (step.tool === THEME_PUSH_TOOL) pushed = pushedOf(res.data)
+          if (step.tool === THEME_LIST_TOOL) {
+            const copy = latestCopyOf(res.data)
+            if (copy === undefined)
+              failed[THEME_PUBLISH_TOOL] = '店里还没有未发布的副本，先推一份预览'
+            else queue.push({ tool: THEME_PUBLISH_TOOL, input: { theme_id: copy.id } })
+          }
+          if (step.tool === THEME_PUBLISH_TOOL) {
+            published = publishOf(res.data)
+            if (published?.change_id !== undefined) {
+              sink({ type: 'change.staged', change_id: published.change_id })
+              outputs.push({ kind: 'staged_change', change_id: published.change_id })
+            }
+          }
+        }
+        const answer = renderThemeAnswer({
+          initialized,
+          ...(check === undefined ? {} : { check }),
+          ...(pushed === undefined ? {} : { pushed }),
+          ...(published === undefined ? {} : { published }),
           failed,
         })
         outputs.push({ kind: 'answer', text: answer })

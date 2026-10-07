@@ -95,11 +95,13 @@ import {
   isB2bOutboundRole,
   isOwnerRole,
   isScheduleTool,
+  isThemeRole,
   OWNER_TOOL_NAMES,
   READ_SKILL_TOOL,
   READ_WEBPAGE_TOOL,
   RESEARCH_TOOL_NAMES,
   SCHEDULE_TOOL_NAMES,
+  THEME_TOOL_NAMES,
   WEB_FETCH_TOOL,
   WEB_SEARCH_TOOL,
 } from '@agentsws/stand-ins'
@@ -141,6 +143,8 @@ const HOST_TOOL_EFFECTS: Readonly<Record<string, ToolSideEffect>> = Object.fromE
     ...RESEARCH_TOOL_NAMES,
     // WP181：官方「自动化任务」的四个工具——只动本机调度器、会往外发的出卡
     ...SCHEDULE_TOOL_NAMES,
+    // WP253：网页模板的主题工具——只动本机工作目录 / 推未发布副本；发布只出卡（服务端执行器判）
+    ...THEME_TOOL_NAMES,
   ].map((name) => [name, classifySideEffect(name) === 'read_external' ? 'read_external' : 'local']),
 )
 
@@ -314,6 +318,11 @@ export interface RuntimeOptions {
    * 的工具面——别的职责一律没有；执行器里还会再判一次职责。
    */
   b2bOutboundTools?: ToolExecutor
+  /**
+   * WP253：网页模板的九个受限主题工具（`theme-tools.ts` 建的那一份）。给了才进 `site.shopify-theme`
+   * 的工具面——别的职责一律没有；执行器里还会再判一次职责。发布只出卡，不直接发。
+   */
+  themeTools?: ToolExecutor
   /**
    * WP181：官方「自动化任务」的四个工具（`automation.ts` 建的那一份）。**装了那个官方插件**
    * （`enabled()`，每次运行现问）才进工具面——所有职责都有（给自己建提醒）；会往外发的周期任务
@@ -968,6 +977,7 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
     const research = options.researchTools
     const owner = options.ownerTools
     const b2bOut = options.b2bOutboundTools
+    const themeOut = options.themeTools
     const dev = options.devTools
     const automation = options.automation
     /*
@@ -991,6 +1001,7 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       research === undefined &&
       owner === undefined &&
       b2bOut === undefined &&
+      themeOut === undefined &&
       dev === undefined &&
       readSkill === undefined &&
       automation === undefined
@@ -1018,6 +1029,10 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       // WP176：主动开发的开发信工具（名字与别处不重名；职责在执行器里再判一次）
       if (b2bOut !== undefined && B2B_OUTBOUND_TOOL_NAMES.includes(bareOf(call.name))) {
         return b2bOut(call)
+      }
+      // WP253：网页模板的主题工具（名字与别处不重名；职责在执行器里再判一次）
+      if (themeOut !== undefined && THEME_TOOL_NAMES.includes(bareOf(call.name))) {
+        return themeOut(call)
       }
       if (dev !== undefined && devToolNames(call.request.actor.role_id).includes(call.name)) {
         try {
@@ -1054,6 +1069,7 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
     if (options.ownerTools !== undefined && OWNER_TOOL_NAMES.includes(bare)) return true
     if (options.b2bOutboundTools !== undefined && B2B_OUTBOUND_TOOL_NAMES.includes(bare))
       return true
+    if (options.themeTools !== undefined && THEME_TOOL_NAMES.includes(bare)) return true
     // 官方网页工具由 dsh 那棵树自己挂（`dsh-tool-web`），不经宿主执行器
     if (WEB_TOOL_NAMES.includes(name)) return true
     if (options.devTools !== undefined && devToolNames(role_id).includes(name)) return true
@@ -1422,6 +1438,10 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
         // WP176：主动开发才有开发信那三个工具（列序列 / 开一轮 / 分回信）
         ...(isB2bOutboundRole(config.role_id) && options.b2bOutboundTools !== undefined
           ? B2B_OUTBOUND_TOOL_NAMES
+          : []),
+        // WP253：网页模板才有那九个受限主题工具（不是终端；发布只出卡）
+        ...(isThemeRole(config.role_id) && options.themeTools !== undefined
+          ? THEME_TOOL_NAMES
           : []),
         // WP179：官方网页工具（只有真给了的那几个）
         ...(web?.search === true ? [WEB_SEARCH_TOOL] : []),

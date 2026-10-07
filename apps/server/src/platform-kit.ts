@@ -27,6 +27,7 @@ import {
 } from '@agentsws/contracts'
 import type { PlatformCliLoginStore, PlatformCliProbe, PlatformCliProber } from './platform-cli.js'
 import { CliRunnerError, type PlatformCliRunner } from './platform-cli-runner.js'
+import type { CliSession } from './platform-cli-session.js'
 
 /** 推断平台要的几样事实（都按品牌问、每次现取）。 */
 export interface BrandPlatformFacts {
@@ -80,6 +81,8 @@ export interface PlatformKitPortOptions {
    * WP245：替用户跑登记过的命令（一键安装 / 一键登录）。不给 = 卡上只有老的复制命令那一套。
    */
   runner?: PlatformCliRunner
+  /** WP253：这个品牌的 CLI 会话（别名 + 配置目录；一个品牌一份）。不给 = 整台电脑共用一份。 */
+  sessionOf?(workspace_id: string, spec: PlatformCliSpec): CliSession | undefined
   /** 记一笔事件（只有 CLI id / 状态，没有任何输出与凭据）。 */
   appendEvent?(workspace_id: string, type: string, payload: Record<string, unknown>): void
 }
@@ -216,7 +219,9 @@ export function createPlatformKitPort(options: PlatformKitPortOptions): Platform
       if (action === 'login' && cli.probe?.installed !== true)
         throw new ApiError('conflict', `${spec.label} 还没装好，先装再登录`)
       try {
+        const session = options.sessionOf?.(ws, spec)
         runner.start(spec, action, {
+          ...(session === undefined ? {} : { session }),
           onLoginOk: () => {
             options.loginStoreOf(ws).set(spec.id, options.now())
           },

@@ -30,9 +30,12 @@ scopes:
   - { domain: skill, ops: [read], range: own, max_sensitivity: internal }
 
 connectors:
+  # WP253（Fable 10-07）：店铺连接**可选、建议连**——没连也能开工（检查单读不到的那几格照实记「没读到」，
+  # 主题那一摊走 CLI）；要把导航 / 页面结构这一批真写进店里时才用得到连接。建站岗位页因此不再出「还缺必需的连接」。
   - {
       kind: shopify,
-      required: true,
+      required: false,
+      recommended: true,
       grants: [read_themes, write_themes, read_content, write_content, read_products],
       ownership: workspace,
     }

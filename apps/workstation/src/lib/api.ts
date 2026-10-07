@@ -6926,6 +6926,38 @@ export const runPlatformCli = (
     ...withAssignment(assignment),
   })
 
+/**
+ * WP253：网页模板「AI 改主题」还差哪一步（服务端 `SiteThemeView` 同形）。
+ * `next`：第一件还没做的事（装 CLI / Node / 登录 / 店铺地址）；都好了就没有。
+ */
+export interface SiteThemeView {
+  applicable: boolean
+  cli: 'missing' | 'node_old' | 'needs_login' | 'ready'
+  cli_source?: 'app' | 'system'
+  store?: string
+  store_source?: 'connection' | 'manual'
+  workspace: {
+    files: number
+    base?: { repo: string; version: string; commit: string; license: string; at: string }
+  }
+  last_push?: {
+    theme_id: string
+    theme_name: string
+    preview_url?: string
+    at: string
+    changed_files: string[]
+  }
+  next?: 'install_cli' | 'node' | 'login' | 'store'
+}
+
+/** WP253：网页模板还差哪一步（用网页模板那条分配；`fresh` = 现查 CLI）。 */
+export const getSiteTheme = (assignment: string, fresh = false): Promise<SiteThemeView> =>
+  api(`/v1/site/theme${fresh ? '?fresh=1' : ''}`, withAssignment(assignment))
+
+/** WP253：记下店铺地址（`xxx.myshopify.com` 或后台地址栏那一串）。 */
+export const setSiteThemeStore = (store: string, assignment: string): Promise<SiteThemeView> =>
+  api('/v1/site/theme/store', { method: 'PUT', body: { store }, ...withAssignment(assignment) })
+
 /** WP245：停掉正在跑的那件（登录等浏览器时的「取消」）。 */
 export const cancelPlatformCli = (assignment?: string): Promise<PlatformKitView> =>
   api('/v1/platform-kit/cli/cancel', { method: 'POST', ...withAssignment(assignment) })

@@ -32,6 +32,7 @@ import {
   checkBinLock,
   checkImagePins,
   checkNpmLock,
+  checkPinFile,
   checkPins,
   checkRuntimeLock,
   compareVersions,
@@ -1011,5 +1012,60 @@ describe('随包 Node / npm：check-upstreams 对账 node-runtime.lock.json（WP
     expect(npm.locked_version).toBe(lock.npm.version)
     expect(checkRuntimeLock(node, REPO_ROOT)).toEqual([])
     expect(checkRuntimeLock(npm, REPO_ROOT)).toEqual([])
+  })
+})
+
+// ── 按 tag 钉、运行时下载的上游：agentsws-theme 起底包（WP253）──────────────────
+
+const themeItem = (over = {}) => ({
+  id: 'agentsws-theme',
+  kind: 'runtime-dep',
+  why: '起底主题',
+  repo: 'o/theme',
+  pinned_tag: 'v0.9.0',
+  pinned_commit: 'e'.repeat(40),
+  pin_file: 'pin.json',
+  watch: ['releases'],
+  ...over,
+})
+const themePin = (over = {}) =>
+  JSON.stringify({
+    repo: 'o/theme',
+    tag: 'v0.9.0',
+    commit: 'e'.repeat(40),
+    sha256: 'a'.repeat(64),
+    ...over,
+  })
+
+describe('按 tag 钉的上游：check-upstreams 对账 pin_file（WP253）', () => {
+  it('钉子文件与登记表的 repo / tag / commit 一致 → 没问题', () => {
+    expect(checkPinFile(themeItem(), imgRepo({ 'pin.json': themePin() }))).toEqual([])
+    expect(validateShape([themeItem()])).toEqual([])
+  })
+
+  it('只改了钉子文件、没改登记表（或反过来）→ 报出来', () => {
+    const p = checkPinFile(
+      themeItem(),
+      imgRepo({ 'pin.json': themePin({ tag: 'v0.9.1', commit: 'f'.repeat(40) }) }),
+    ).join('\n')
+    expect(p).toContain('tag 是 `v0.9.1`')
+    expect(p).toContain('commit 是')
+    expect(
+      checkPinFile(themeItem(), imgRepo({ 'pin.json': themePin({ sha256: 'x' }) })).join('\n'),
+    ).toContain('sha256')
+    expect(checkPinFile(themeItem({ pin_file: 'nope.json' }), tmp()).join('\n')).toContain('不存在')
+  })
+
+  it('形状：有 pin_file 就要有 repo 与完整的 pinned_commit', () => {
+    expect(validateShape([themeItem({ pinned_commit: 'eed7f57' })]).join('\n')).toContain('40 位')
+    expect(validateShape([themeItem({ pinned_commit: undefined })]).join('\n')).toContain(
+      'pinned_commit',
+    )
+  })
+
+  it('仓库里真的那一条：登记表与 theme-base-pin.json 一致', () => {
+    const it = loadUpstreams(REPO_ROOT).find((x) => x.id === 'agentsws-theme')
+    expect(it?.pin_file).toBe('apps/server/src/theme-base-pin.json')
+    expect(checkPinFile(it, REPO_ROOT)).toEqual([])
   })
 })

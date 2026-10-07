@@ -92,6 +92,37 @@ export interface SiteAppRow extends ShopAppRecord {
   connectable: boolean
 }
 
+/**
+ * WP253：网页模板「AI 改主题」还差哪一步（岗位页那一行引导用）。
+ *
+ * 判断在服务端（`site-theme.ts` 的 `readiness`）：CLI 装没装、Node 够不够、登没登录、知不知道是哪家店。
+ * `next` 是第一件还没做的事；都好了就没有。没有一个凭据、没有一行 CLI 原文。
+ */
+export interface SiteThemeView {
+  /** 这个品牌的平台有没有主题 CLI（不是 Shopify = false，岗位页什么都不出）。 */
+  applicable: boolean
+  cli: 'missing' | 'node_old' | 'needs_login' | 'ready'
+  cli_source?: 'app' | 'system'
+  /** `xxx.myshopify.com`；不知道就没有。 */
+  store?: string
+  /** 店铺地址从哪来：本品牌的店铺连接 / 人在岗位页上填的。 */
+  store_source?: 'connection' | 'manual'
+  workspace: {
+    /** 工作目录里有几个主题文件（0 = 还没起底 / 没拉过）。 */
+    files: number
+    base?: { repo: string; version: string; commit: string; license: string; at: string }
+  }
+  /** 最近一次推上去的未发布副本（预览链接在这里）。 */
+  last_push?: {
+    theme_id: string
+    theme_name: string
+    preview_url?: string
+    at: string
+    changed_files: string[]
+  }
+  next?: 'install_cli' | 'node' | 'login' | 'store'
+}
+
 /* ── 端口 ─────────────────────────────────────────────────────────────── */
 
 export interface SiteEmailTemplateInput {
@@ -134,6 +165,10 @@ export interface SitePort {
   apps(actor: SiteActor): MaybePromise<{ rows: SiteAppRow[] }>
   /** 提一条装 / 卸 App（`app_install`，**永远 L1**）。 */
   proposeApp(actor: SiteActor, input: SiteAppInstallInput): MaybePromise<SiteStagedView>
+  /** WP253：AI 改主题还差哪一步（CLI / 登录 / 店铺地址）+ 最近一次预览。没装配 = 501。 */
+  themeStatus?(actor: SiteActor, input: { fresh?: boolean }): MaybePromise<SiteThemeView>
+  /** WP253：记下这个品牌的店铺地址（没连店时用；`xxx.myshopify.com` 或后台地址栏那一串）。 */
+  setThemeStore?(actor: SiteActor, input: { store: string }): MaybePromise<SiteThemeView>
 }
 
 /* ── 装配 ─────────────────────────────────────────────────────────────── */
@@ -165,6 +200,8 @@ const EmailTemplateBody = z.object({
   body: z.string().min(1).max(200_000),
   enabled: z.boolean(),
 })
+
+const ThemeStoreBody = z.object({ store: z.string().min(1).max(300) })
 
 const AppInstallBody = z.object({
   app_id: z.string().min(1).max(200),
@@ -268,6 +305,47 @@ export function siteRoutes(): Route[] {
       },
       async (c, deps) =>
         ok(c, await portOf(deps).proposeApp(actorOf(c), await body(c, AppInstallBody)), 201),
+    ),
+    route(
+      {
+        method: 'get',
+        path: '/v1/site/theme',
+        operationId: 'getSiteTheme',
+        summary:
+          '网页模板：AI 改主题还差哪一步（Shopify CLI 装没装、登没登录、知不知道是哪家店）+ 最近一次未发布预览。`fresh=1` 现查 CLI',
+        tag: 'site',
+        auth: 'bearer',
+        assignment: true,
+        authz: READ_CONTENT,
+        returns: 'SiteThemeView',
+      },
+      async (c, deps) => {
+        const port = portOf(deps)
+        if (port.themeStatus === undefined)
+          throw new ApiError('not_implemented', '这个服务进程没装主题工坊')
+        return ok(c, await port.themeStatus(actorOf(c), { fresh: c.req.query('fresh') === '1' }))
+      },
+    ),
+    route(
+      {
+        method: 'put',
+        path: '/v1/site/theme/store',
+        operationId: 'setSiteThemeStore',
+        summary:
+          '网页模板：记下这个品牌的店铺地址（xxx.myshopify.com，或后台地址栏那一整串）。连了店的品牌以连接为准',
+        tag: 'site',
+        auth: 'bearer',
+        assignment: true,
+        authz: STAGE_CONTENT,
+        body: ThemeStoreBody,
+        returns: 'SiteThemeView',
+      },
+      async (c, deps) => {
+        const port = portOf(deps)
+        if (port.setThemeStore === undefined)
+          throw new ApiError('not_implemented', '这个服务进程没装主题工坊')
+        return ok(c, await port.setThemeStore(actorOf(c), await body(c, ThemeStoreBody)))
+      },
     ),
   ]
 }

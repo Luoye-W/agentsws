@@ -54,6 +54,16 @@ export const TOOL_WORDS_ZH: Readonly<Record<string, string>> = {
   // WP246
   read_youtube_transcript: '读 YouTube 字幕',
   read_webpage: '网页转文字',
+  // WP253：网页模板的受限主题工具
+  theme_init_from_base: '开源主题起底',
+  theme_list: '店里的主题列表',
+  theme_pull: '拉主题',
+  theme_check: '主题检查',
+  theme_files: '主题文件列表',
+  theme_read_file: '读主题文件',
+  theme_write_file: '改主题文件',
+  theme_push_unpublished: '推未发布主题',
+  theme_publish: '主题发布卡',
 }
 
 /** 去掉 `service.` 前缀（`shopify.get_order` → `get_order`）；点在中间的 MCP 全名原样。 */
