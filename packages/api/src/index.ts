@@ -567,6 +567,12 @@ export {
   type PrivacyPort,
   privacyRoutes,
 } from './routes/privacy.js'
+// WP246：取数路线（体检、设置、Reddit 读号）
+export {
+  type ReadRoutesActor,
+  type ReadRoutesApiPort,
+  readRoutesRoutes,
+} from './routes/read-routes.js'
 // WP236：运行时长线
 export { type RunLimitsPort, runLimitsRoutes } from './routes/run-limits.js'
 export { scheduleRoutes } from './routes/schedules.js'

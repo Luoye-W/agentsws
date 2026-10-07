@@ -55,6 +55,7 @@ import type {
   WorkspaceVertical,
 } from '@agentsws/contracts'
 import {
+  DEFAULT_BRAND_CURRENCY,
   DEFAULT_STOREFRONT_PLATFORM,
   normalizeMarketLanguages,
   normalizeMarkets,
@@ -409,7 +410,16 @@ export interface OnboardingAssembly {
     market_languages?: Record<string, string>
     /** WP176：公司实体地址（没填过就没有）。 */
     postal_address?: string
+    /** WP248（决策 83）：品牌一句话介绍 / 客服邮箱 / 币种（没写过就没有；币种读的人自己按 USD 补）。 */
+    one_liner?: string
+    support_email?: string
+    currency?: string
   }
+  /**
+   * WP248（决策 83）：只改某个品牌档案上的一句话介绍 / 客服邮箱 / 币种（品牌分析确认时公司名还没有、
+   * 走不了 `setProfile` 的那一次用）。不给的格子不动；空串 = 清空。档案还没建过回 `false`（不替人建档案）。
+   */
+  setBrandFacts(workspace_id: WorkspaceId, facts: BrandFactsInput): boolean
   /**
    * WP176：只改某个品牌档案上的公司实体地址（B2B「主动开发」里原来那一格搬过来那一次用；
    * 设置页走 `setProfile`）。档案还没建过回 `false`（不替人建档案）。`undefined` / 空串 = 清空。
@@ -607,6 +617,9 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
     ...(p.market_languages === undefined ? {} : { market_languages: { ...p.market_languages } }),
     // WP176：公司实体地址（开发信页脚、报价单、单证从这里取）
     ...(p.postal_address === undefined ? {} : { postal_address: p.postal_address }),
+    // WP248（决策 83）：品牌三格；币种没写过按 USD
+    ...brandFactsOf(p),
+    currency: p.currency ?? DEFAULT_BRAND_CURRENCY,
     set_at: p.set_at,
   })
 
@@ -952,10 +965,13 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
         input.postal_address === undefined
           ? previous?.postal_address
           : normalizePostalAddress(input.postal_address)
+      // WP248（决策 83）：品牌三格——不给就沿用上一次；空串 = 清空
+      const facts = nextBrandFacts(previous, input)
       const next: WorkspaceProfile = {
         legal_name,
         ...(domain === '' ? {} : { domain }),
         ...(postal_address === undefined ? {} : { postal_address }),
+        ...facts,
         ...(markets === undefined || markets.length === 0 ? {} : { markets }),
         ...(markets_source === undefined ? {} : { markets_source }),
         ...(market_languages === undefined || Object.keys(market_languages).length === 0
@@ -1260,7 +1276,10 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
         p.markets !== undefined ||
         p.markets_source !== undefined ||
         p.market_languages !== undefined ||
-        p.postal_address !== undefined
+        p.postal_address !== undefined ||
+        p.one_liner !== undefined ||
+        p.support_email !== undefined ||
+        p.currency !== undefined
       )
         continue
       const used = roles.assignments
@@ -1301,7 +1320,16 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
           ? {}
           : { market_languages: { ...p.market_languages } }),
         ...(p?.postal_address === undefined ? {} : { postal_address: p.postal_address }),
+        ...(p === undefined ? {} : brandFactsOf(p)),
+        ...(p?.currency === undefined ? {} : { currency: p.currency }),
       }
+    },
+    setBrandFacts(ws, facts) {
+      const previous = profileOf(ws)
+      if (previous === undefined) return false
+      const { one_liner: _o, support_email: _e, currency: _c, ...rest } = previous
+      backend.put(ws, { ...rest, ...nextBrandFacts(previous, facts) })
+      return true
     },
     setStorefrontPlatform(ws, platform, source) {
       const next = normalizeStorefrontPlatform(platform)
@@ -1403,6 +1431,8 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
         ...(previous?.postal_address === undefined
           ? {}
           : { postal_address: previous.postal_address }),
+        // WP248：品牌三格也不归这一步管
+        ...(previous === undefined ? {} : nextBrandFacts(previous, {})),
         set_at: clock.now(),
       })
     },
@@ -1414,6 +1444,61 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
       backend.close()
     },
   }
+}
+
+/** WP248（决策 83）：品牌三格的写入形状（不给 = 不改；空串 = 清空）。 */
+export interface BrandFactsInput {
+  one_liner?: string | undefined
+  support_email?: string | undefined
+  currency?: string | undefined
+}
+
+/** 档案上已经写着的那三格（币种没写过就不出现——读的人按 USD 补）。 */
+function brandFactsOf(
+  p: Pick<WorkspaceProfile, 'one_liner' | 'support_email'>,
+): Pick<WorkspaceProfile, 'one_liner' | 'support_email'> {
+  return {
+    ...(p.one_liner === undefined ? {} : { one_liner: p.one_liner }),
+    ...(p.support_email === undefined ? {} : { support_email: p.support_email }),
+  }
+}
+
+/** 下一份档案上的三格：给了的按归一化结果（空 = 去掉），没给的沿用上一次。 */
+export function nextBrandFacts(
+  previous: Pick<WorkspaceProfile, 'one_liner' | 'support_email' | 'currency'> | undefined,
+  input: BrandFactsInput,
+): Pick<WorkspaceProfile, 'one_liner' | 'support_email' | 'currency'> {
+  const pick = (
+    given: string | undefined,
+    old: string | undefined,
+    norm: (v: string) => string | undefined,
+  ): string | undefined => (given === undefined ? old : norm(given))
+  const one_liner = pick(input.one_liner, previous?.one_liner, normalizeOneLiner)
+  const support_email = pick(input.support_email, previous?.support_email, normalizeSupportEmail)
+  const currency = pick(input.currency, previous?.currency, normalizeCurrency)
+  return {
+    ...(one_liner === undefined ? {} : { one_liner }),
+    ...(support_email === undefined ? {} : { support_email }),
+    ...(currency === undefined ? {} : { currency }),
+  }
+}
+
+/** 一句话介绍：空白收成一个、去两端，封顶 300 字；空 = 没有。 */
+export function normalizeOneLiner(value: string): string | undefined {
+  const line = value.replace(/\s+/g, ' ').trim()
+  return line === '' ? undefined : line.slice(0, 300)
+}
+
+/** 客服邮箱：去两端空白；空或不像邮箱 = 没有（HTTP 那一面已经先挡过一次）。 */
+export function normalizeSupportEmail(value: string): string | undefined {
+  const v = value.trim()
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v) ? v : undefined
+}
+
+/** 币种：三位字母、存大写；别的都当没写。 */
+export function normalizeCurrency(value: string): string | undefined {
+  const v = value.trim().toUpperCase()
+  return /^[A-Z]{3}$/.test(v) ? v : undefined
 }
 
 /** WP176：公司实体地址归一化（多余空白收成一个，去两端；空 = 没有）。 */

@@ -95,6 +95,12 @@ export interface WorkspaceProfileInput {
    * WP176：公司实体地址（开发信页脚、报价单、单证从这里取）。不给 = 不改；给空串 = 清空。
    */
   postal_address?: string | undefined
+  /** WP248（决策 83）：品牌一句话介绍。不给 = 不改；给空串 = 清空。 */
+  one_liner?: string | undefined
+  /** WP248（决策 83）：客服邮箱。不给 = 不改；给空串 = 清空；不像邮箱回 400。 */
+  support_email?: string | undefined
+  /** WP248（决策 83）：币种（三位字母，存大写）。不给 = 不改；给空串 = 清空（读时按 USD）。 */
+  currency?: string | undefined
 }
 
 /** 公司档案的对外形状。**没有归一化哈希**——它是发现用的，不是给人看的。 */
@@ -116,6 +122,12 @@ export interface WorkspaceProfileView {
   market_languages?: Record<string, string>
   /** WP176：公司实体地址（没填过就没有）。 */
   postal_address?: string
+  /** WP248（决策 83）：品牌一句话介绍（没写过就没有）。 */
+  one_liner?: string
+  /** WP248（决策 83）：客服邮箱（没写过就没有）。 */
+  support_email?: string
+  /** WP248（决策 83）：币种。服务端总会给——没写过就是 `USD`（`DEFAULT_BRAND_CURRENCY`）。 */
+  currency?: string
   set_at: string
 }
 
@@ -453,6 +465,15 @@ const ProfileBody = z.object({
     .optional(),
   // WP176：公司实体地址。不给 = 不改；空串 = 清空。
   postal_address: z.string().max(500).optional(),
+  // WP248（决策 83）：品牌三格。不给 = 不改；空串 = 清空（邮箱不像邮箱回 400；币种服务端存大写）
+  one_liner: z.string().max(300).optional(),
+  support_email: z
+    .union([z.literal(''), z.string().trim().max(254).email('这不像一个邮箱')])
+    .optional(),
+  currency: z
+    .string()
+    .regex(/^([A-Za-z]{3})?$/)
+    .optional(),
 })
 
 const PlannedPositionBody = z.object({
@@ -576,6 +597,10 @@ export function onboardingRoutes(): Route[] {
               : { market_languages: input.market_languages }),
             // WP176：公司实体地址（不给 = 不改；空串 = 清空）
             ...(input.postal_address === undefined ? {} : { postal_address: input.postal_address }),
+            // WP248（决策 83）：品牌一句话 / 客服邮箱 / 币种（不给 = 不改；空串 = 清空）
+            ...(input.one_liner === undefined ? {} : { one_liner: input.one_liner }),
+            ...(input.support_email === undefined ? {} : { support_email: input.support_email }),
+            ...(input.currency === undefined ? {} : { currency: input.currency }),
           }),
         )
       },

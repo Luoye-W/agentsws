@@ -250,6 +250,31 @@ export function createWorkPort(options: WorkPortOptions): WorkPort {
   const todayDue = (person_id: PersonId): Todo[] =>
     work.listTodos({ owner: person_id, horizon: ['today'], status: ['open', 'doing', 'blocked'] })
 
+  /**
+   * WP248（决策 79，Luoye 10-07）：首页「今天的待办」把**已过期没做完的**也算进来，并单独点出是哪几条。
+   *
+   * `horizon` 是写入那一刻推出来的（过期的当时算今天），之后不会自己变——上周写的「本周」待办
+   * 今天过了期，`horizon` 还是 `week`。所以过期的这几条按截止现算（与岗位页同一个口径：
+   * 截止 = `due`，没有就看 `scheduled.start`；早于工作区时区的今天零点 = 已过期），排在最前。
+   */
+  const homeDue = (person_id: PersonId): { todos: Todo[]; overdue_ids: string[] } => {
+    const dayStart = ms(work.todayRange().from)
+    const dueOf = (t: Todo): string | undefined => t.due ?? t.scheduled?.start
+    const late = (t: Todo): boolean => {
+      const at = dueOf(t)
+      return at !== undefined && ms(at) < dayStart
+    }
+    const today = todayDue(person_id)
+    const seen = new Set(today.map((t) => t.id))
+    const extra = work
+      .listTodos({ owner: person_id, status: ['open', 'doing', 'blocked'] })
+      .filter((t) => !seen.has(t.id) && late(t))
+    const todos = [...extra, ...today].sort(
+      (a, b) => Number(late(b)) - Number(late(a)) || (dueOf(a) ?? '').localeCompare(dueOf(b) ?? ''),
+    )
+    return { todos, overdue_ids: todos.filter(late).map((t) => t.id) }
+  }
+
   return {
     async home(actor): Promise<WorkHome> {
       const cards = await cardsOf(actor)
@@ -267,7 +292,7 @@ export function createWorkPort(options: WorkPortOptions): WorkPort {
             { person_id: actor.person_id },
             await sourcesFor(actor, range, cards),
           ),
-          due: { todos: todayDue(actor.person_id), cards_waiting: waitingCount(cards) },
+          due: { ...homeDue(actor.person_id), cards_waiting: waitingCount(cards) },
         },
         ...(review === undefined ? {} : { review }),
         ...(plan === undefined ? {} : { plan }),

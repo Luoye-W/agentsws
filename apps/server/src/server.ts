@@ -419,6 +419,18 @@ import { createPrStore, prDeckData, seedDemoPr } from './pr.js'
 import { createPrService } from './pr-service.js'
 import { createPricingCatalog, type PricingCatalogSource } from './pricing-catalog.js'
 import { readRouteLevelOf, readViaSources } from './read-route.js'
+import {
+  chainResearchTools,
+  createReadRoutes,
+  createReadRoutesStore,
+  type ReadNetOptions,
+  type ReadRoutesAssembly,
+} from './read-routes/index.js'
+import {
+  createRedditReadAccount,
+  type LoginWindowLauncher,
+  type RedditReadAccount,
+} from './readonly-browser/account.js'
 import { createReadonlyBrowser, type ReadonlyBrowserOptions } from './readonly-browser/index.js'
 import { redditReadBrowserOf, redditReadLimiterOf } from './readonly-browser/reddit.js'
 import {
@@ -879,8 +891,22 @@ export interface ServerOptions {
    * grounding 也不会去起真浏览器、开真 reddit.com。
    */
   readonlyBrowser?:
-    | Partial<Pick<ReadonlyBrowserOptions, 'launch' | 'exists' | 'platform' | 'env' | 'nowMs'>>
+    | (Partial<Pick<ReadonlyBrowserOptions, 'launch' | 'exists' | 'platform' | 'env' | 'nowMs'>> & {
+        /** WP246：「登录读号」的窗口（测试 / 演示塞替身；默认真起有头浏览器）。 */
+        loginWindow?: LoginWindowLauncher
+        /** WP246：登录页与体检页的地址（测试指向本地假站点；默认真 Reddit）。 */
+        loginUrl?: string
+        whoamiUrl?: string
+        /** WP246：只读白名单（测试放行本地假站点；默认 Reddit）。 */
+        allowedHosts?: readonly string[]
+      })
     | false
+  /**
+   * WP246：取数路线里要出网的那几级（YouTube 字幕、网页转文字、体检探测）。**给了才出网**：
+   * 生产入口给 `{}`（用 `globalThis.fetch`）；测试塞指向本地假站点的 fetch。
+   * 不给（或 `false`）= 不出网，两个工具照实说「没装」——测试、模拟、演示不会去敲真网站。
+   */
+  readNet?: ReadNetOptions | false
   /**
    * WP68（48 §5.4）：五条渠道适配器打出去用的 fetch。
    *
@@ -2318,6 +2344,21 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
    * 声明提到这里是为了晚绑定：`org` 与 `onboarding` 都比它晚建，所以 `positions`
    * 与 `brand` 都写成现查的闭包（与上面 `positionAssemblies` 同一个套路）。
    */
+  /**
+   * WP248（决策 83）：品牌档案里给 AI 当上下文的三格（一句话介绍、客服邮箱、币种）。
+   * 写过才带——币种没写过不替人补 USD（69 §5「别编」：默认值是界面上的缺省，不是这个品牌说过的话）。
+   */
+  const brandFactsContextOf = (
+    ws: WorkspaceId,
+  ): { one_liner?: string; support_email?: string; currency?: string } => {
+    const p = onboardingRef?.brandProfile(ws)
+    return {
+      ...(p?.one_liner === undefined ? {} : { one_liner: p.one_liner }),
+      ...(p?.support_email === undefined ? {} : { support_email: p.support_email }),
+      ...(p?.currency === undefined ? {} : { currency: p.currency }),
+    }
+  }
+
   const personas = createPersonas({
     workspace_id: workspace.id,
     clock,
@@ -2331,13 +2372,15 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     /*
      * WP121（70 §3）：品牌上下文的四个槽位。**取不到就不写那一句**——
      * 品牌名从工作区档案里来（那是确认品牌分析之后写下的那一份）。
-     * 定位、市场、口吻样例还没有落盘的地方（WP121b 正在重写向导），所以现在它们
-     * 一律取不到，于是 persona 里就没有那几行——这正是 69 §5 要的行为：**别编**。
+     * 市场、口吻样例这里还不取，于是 persona 里就没有那几行——这正是 69 §5 要的行为：**别编**。
      * WP122 的「视觉气质」走同一个槽位（`visual_tone`），填上就多一行。
+     * WP248（决策 83）：一句话定位、客服邮箱、币种进了品牌档案，按这次运行所在的品牌带上（写过才有）。
      */
-    brand: () => {
+    brand: (ws) => {
       const name = onboardingRef?.companyProfile()?.legal_name?.trim()
-      return name === undefined || name === '' ? undefined : { brand_name: name }
+      const facts = brandFactsContextOf((ws ?? workspace.id) as WorkspaceId)
+      const ctx = { ...(name === undefined || name === '' ? {} : { brand_name: name }), ...facts }
+      return Object.keys(ctx).length === 0 ? undefined : ctx
     },
     appendEvent,
   })
@@ -3157,16 +3200,45 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     const rbOptions = options.readonlyBrowser
     // WP228（Luoye 10-05）：托管实例（云上那份）不装——没有浏览器，这一路停用、连接页那一行不显示
     const hostedInstance = hostedBoot !== undefined
+    // WP246：取数路线的小账（设置 + 每级最近一次结果），每品牌一份
+    const readStore = createReadRoutesStore(dir)
+    const {
+      loginWindow: rbLoginWindow,
+      loginUrl: rbLoginUrl,
+      whoamiUrl: rbWhoamiUrl,
+      allowedHosts: rbHosts,
+      ...rbLaunch
+    } = rbOptions === undefined || rbOptions === false ? {} : rbOptions
     const readonlyBrowser =
       rbOptions === undefined || rbOptions === false || hostedInstance
         ? undefined
         : createReadonlyBrowser({
             ...(dir === undefined ? {} : { dir: join(dir, 'readonly-browser') }),
-            allowedHosts: () => REDDIT_READ_HOSTS,
+            allowedHosts: () => rbHosts ?? REDDIT_READ_HOSTS,
             limits: () => ownCloud.redditBrowserReadLimits(),
             nowMs: () => Date.parse(clock.now()),
             executable: () => browserSettings.get().executable_path,
-            ...(rbOptions ?? {}),
+            // WP246：用读号的登录态读；有头最小化 / 无头按设置
+            useProfile: () => true,
+            windowMode: () => readStore.settings().reddit_browser_window,
+            ...rbLaunch,
+          })
+    /*
+     * WP246（决策 88）：Reddit 读号——用户自己在网页上登录的普通号；品牌登记的 Reddit 号（官方 / 版主）一律拦。
+     */
+    const readAccount: RedditReadAccount | undefined =
+      readonlyBrowser === undefined
+        ? undefined
+        : createRedditReadAccount({
+            browser: readonlyBrowser,
+            ...(dir === undefined ? {} : { dir: join(dir, 'readonly-browser') }),
+            brandHandles: () => social.accounts({ channel: 'reddit' }).map((a) => a.handle),
+            nowMs: () => Date.parse(clock.now()),
+            ...(rbLaunch.platform === undefined ? {} : { platform: rbLaunch.platform }),
+            ...(rbLaunch.env === undefined ? {} : { env: rbLaunch.env }),
+            ...(rbLoginWindow === undefined ? {} : { openWindow: rbLoginWindow }),
+            ...(rbLoginUrl === undefined ? {} : { loginUrl: rbLoginUrl }),
+            ...(rbWhoamiUrl === undefined ? {} : { whoamiUrl: rbWhoamiUrl }),
           })
     const ownCloud = createCloud({
       ...(readonlyBrowser !== undefined
@@ -3197,7 +3269,19 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       directory: () => creditsDirectory(ws),
       timeZone: async () => (await identity.getWorkspace(ws))?.tz,
     })
-    readLevelHolder.of = readRouteLevelOf(ownCloud, readonlyBrowser)
+    readLevelHolder.of = readRouteLevelOf(ownCloud, readonlyBrowser, readAccount)
+    // WP246：取数路线（体检、设置、读号、两个零配置工具）
+    const readRoutes: ReadRoutesAssembly = createReadRoutes({
+      store: readStore,
+      nowMs: () => Date.parse(clock.now()),
+      cloud: ownCloud,
+      hosted: hostedInstance,
+      ...(readonlyBrowser === undefined ? {} : { browser: readonlyBrowser }),
+      ...(readAccount === undefined ? {} : { account: readAccount }),
+      ...(options.readNet === undefined || options.readNet === false
+        ? {}
+        : { net: options.readNet }),
+    })
     // WP206：名册推上云（网页「成员额度」页列人）。公司页装好之后（`rosterReady`）才开始推
     const rosterSync = createRosterSync({
       build: () => cloudRoster(ws),
@@ -3347,27 +3431,32 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
              * 顺序、停用、限速每次取数现读这个品牌的设置。浏览器只读那一路 WP228 接上本机只读浏览器
              * （单独的只读会话）；没装（测试 / 模拟 / 演示）就照实「没配」，不拿 Agent 的浏览器凑。
              */
-            researchTools: createResearchToolExecutor({
-              route: () => ownCloud.redditReadRoute(),
-              limits: () => ownCloud.redditBrowserReadLimits(),
-              callData: (capability, input) =>
-                createDataService(ownCloud).call(capability, { input }),
-              // WP228：浏览器只读那一路接上本机只读浏览器（单独的只读会话）；限速与它同一本账
-              ...(readonlyBrowser === undefined
-                ? {}
-                : {
-                    browser: () => redditReadBrowserOf(readonlyBrowser),
-                    limiter: redditReadLimiterOf(readonlyBrowser),
-                  }),
-              nowMs: () => Date.parse(clock.now()),
-              /*
-               * WP236 ⑨：每次运行的取数积分预算（职责阈值 `data_credits_per_run`，缺省 3）；
-               * 按价目表把条数收进剩下的预算（取不到价就不收，只按实花的记账）。
-               */
-              creditBudget: (req) =>
-                resolveDataCreditBudget(roles.roles.get(req.actor.role_id)?.thresholds),
-              priceOf: async (capability) => (await ownCloud.priceOf(capability))?.credits,
-            }),
+            researchTools: chainResearchTools(
+              createResearchToolExecutor({
+                route: () => ownCloud.redditReadRoute(),
+                limits: () => ownCloud.redditBrowserReadLimits(),
+                callData: (capability, input) =>
+                  createDataService(ownCloud).call(capability, { input }),
+                // WP228：浏览器只读那一路接上本机只读浏览器（单独的只读会话）；限速与它同一本账
+                ...(readonlyBrowser === undefined
+                  ? {}
+                  : {
+                      // WP246：只有读号登录好、而且不是品牌登记的号时才读
+                      browser: () => redditReadBrowserOf(readonlyBrowser, readAccount),
+                      limiter: redditReadLimiterOf(readonlyBrowser),
+                    }),
+                nowMs: () => Date.parse(clock.now()),
+                /*
+                 * WP236 ⑨：每次运行的取数积分预算（职责阈值 `data_credits_per_run`，缺省 3）；
+                 * 按价目表把条数收进剩下的预算（取不到价就不收，只按实花的记账）。
+                 */
+                creditBudget: (req) =>
+                  resolveDataCreditBudget(roles.roles.get(req.actor.role_id)?.thresholds),
+                priceOf: async (capability) => (await ownCloud.priceOf(capability))?.credits,
+              }),
+              // WP246：YouTube 字幕、网页转文字（零配置那一级；体检小账一起记）
+              readRoutes.tools,
+            ),
             // WP237（#67）：read_reddit 的描述里写现价（价目表现查；三项单价不一样或取不到就不写数）
             toolPrice: (tool) => redditReadPrice(tool, (c) => ownCloud.priceOf(c)),
             /*
@@ -3476,7 +3565,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
              * 公司在右栏改写了某条 persona，下一次运行就是新的那一份——
              * `personas` 每次现查覆盖表，不用重启（同 `vertical` / `browser`）。
              */
-            personaSections: (input) => personas.sections(input),
+            // WP248：带上这个品牌（品牌上下文按品牌取）
+            personaSections: (input) => personas.sections({ ...input, workspace_id: ws }),
             /*
              * WP122b（71 §9 第 7 条）：三个注入口通电——建站 / 社媒 / 投放出活时
              * 提示词里真带上品牌令牌。照 `design.ts` 的样板：取值口 + 现取
@@ -3765,6 +3855,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           {
             ...(name === undefined ? {} : { brand_name: name }),
             ...(markets === undefined ? {} : { markets }),
+            // WP248（决策 83）：品牌档案三格
+            ...brandFactsContextOf(ws),
           },
           language,
         )
@@ -4730,6 +4822,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       ownGateway,
       ownCloud,
       ...(readonlyBrowser === undefined ? {} : { readonlyBrowser }),
+      readRoutes,
       async dispose() {
         await chat.close()
         messages.close()
@@ -4742,6 +4835,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         ownCloud.kolSync?.close()
         // WP228：只读浏览器开着就关掉（按进程树结束，不留孤儿）
         await readonlyBrowser?.close()
+        // WP246：「登录读号」的窗口开着就体面地关掉
+        await readRoutes.close()
         rosterSync.close()
         if (rosterSyncs.get(ws) === rosterSync) rosterSyncs.delete(ws)
         site.close()
@@ -5730,7 +5825,23 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           added && company !== undefined && company.trim() !== ''
             ? company
             : (profile.legal_name?.value ?? profile.brand_name?.value)
-        if (typeof legal !== 'string' || legal.trim() === '') return
+        // WP248（决策 83）：一句话介绍 / 客服邮箱 / 币种进品牌档案（以前只活在这一轮分析里）。
+        // 读到了才写；没读到的格子不动（不拿「没读到」去清人以前填的）
+        const text = (f: { value: unknown } | undefined): string | undefined =>
+          typeof f?.value === 'string' && f.value.trim() !== '' ? f.value : undefined
+        const one_liner = text(profile.one_liner)
+        const support_email = text(profile.support_email)
+        const currency = text(profile.currency)
+        const facts = {
+          ...(one_liner === undefined ? {} : { one_liner }),
+          ...(support_email === undefined ? {} : { support_email }),
+          ...(currency === undefined ? {} : { currency }),
+        }
+        if (typeof legal !== 'string' || legal.trim() === '') {
+          // 公司名、品牌名都还没有：档案已经在就只补这三格，没有档案不替人建
+          onboarding.setBrandFacts(actor.workspace_id as WorkspaceId, facts)
+          return
+        }
         const brandName =
           typeof profile.brand_name?.value === 'string' &&
           (!added || profile.brand_name.edited === true)
@@ -5752,6 +5863,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
             // WP159：目标市场进档案（违规宣称规则按它开市场组）
             // WP166：连出处一起写；人在档案卡上改过（`edited`）的记成「人改的」，清空也算数
             ...marketsFromIntake(profile.markets, clock.now()),
+            ...facts,
           },
         )
       },
@@ -7453,7 +7565,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       connections: () => brand.connections.liveConnections(),
       storefrontPlatform: () => brandProfileOf(ws).storefront_platform,
       // WP238：读 Reddit 已经能经接口中台 / 本机只读浏览器取到，就不算缺 Reddit API
-      readRouteLevel: readRouteLevelOf(brand.ownCloud, brand.readonlyBrowser),
+      readRouteLevel: readRouteLevelOf(
+        brand.ownCloud,
+        brand.readonlyBrowser,
+        brand.readRoutes?.account,
+      ),
     })
     directoryAssemblies.set(ws, assembly)
     const port: ConnectionDirectoryPort = {
@@ -7469,6 +7585,12 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     return port
   }
   const connectionDirectoryOf = brandConnectionDirectoryPort(brandModules, directoryPortFor)
+  // WP246：取数路线按品牌取（装配里总有一份；托管实例没有读号那一格）
+  const readRoutesOf = async (ws: WorkspaceId): Promise<ReadRoutesAssembly> => {
+    const r = (await brandModules.forWorkspace(ws)).readRoutes
+    if (r === undefined) throw new ApiError('not_implemented', '这个品牌没装取数路线')
+    return r
+  }
 
   const workPortOf = brandWorkPort(brandModules, workPortFor)
   const workstationPortOf = brandWorkstationPort(brandModules, workstationPortFor)
@@ -7592,6 +7714,18 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
      * 自带 key 只从 PUT 进来一次、进加密库，读视图里只有 has_key。
      */
     searchData: searchDataApiPort(async (ws) => (await brandModules.forWorkspace(ws)).searchData),
+    /*
+     * WP246（决策 87 / 88）：取数路线（体检、设置、Reddit 读号），按品牌取。
+     */
+    readRoutes: {
+      view: async (actor) => (await readRoutesOf(actor.workspace_id)).view(),
+      doctor: async (actor) => (await readRoutesOf(actor.workspace_id)).doctor(),
+      setSettings: async (actor, patch) =>
+        (await readRoutesOf(actor.workspace_id)).setSettings(patch),
+      openRedditLogin: async (actor) => (await readRoutesOf(actor.workspace_id)).openRedditLogin(),
+      checkRedditAccount: async (actor) =>
+        (await readRoutesOf(actor.workspace_id)).checkRedditAccount(),
+    },
     /*
      * WP192（docs/83 §4）：官方数据接口统一能力口，按品牌的云客户端走（路由键 `data.<能力>`，
      * 默认只有「Agents 工坊（用积分）」一级）。

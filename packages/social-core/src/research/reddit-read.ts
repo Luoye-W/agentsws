@@ -72,6 +72,11 @@ export type ReadBrowserSessionKind = 'readonly_isolated' | 'brand_posting' | 'us
 export interface RedditReadBrowser {
   session(): { kind: ReadBrowserSessionKind; id: string }
   /**
+   * WP246（决策 87 / 88）：这一路现在能不能用（读号登没登录、是不是品牌官方 / 版主号）。
+   * 不能用回一句人话，路由记 `not_configured`（品牌登记的号记 `session_refused`）。不给 = 老行为（能用）。
+   */
+  availability?(): { ok: true } | { ok: false; message: string; refused?: boolean }
+  /**
    * WP228：第二个参数是这次要几条、读的是哪一项（脚本描述里只有人话，真执行器要个数）。
    * `handover` = 被站点拦了（登录墙 / 验证码 / 429），这一路记 `blocked`。
    */
@@ -309,6 +314,15 @@ export function createRedditReadRouter(options: RedditReadRouterOptions) {
             session.kind === 'brand_posting'
               ? '给的是品牌发帖账号的浏览器会话——取数绝不用它。要一个单独的只读会话。'
               : '给的是你自己的浏览器（可能登着品牌号）——取数要单独起一个只读会话。',
+        },
+      } as const
+    const avail = browser.availability?.()
+    if (avail !== undefined && !avail.ok)
+      return {
+        attempt: {
+          route: 'browser_readonly',
+          outcome: avail.refused === true ? 'session_refused' : 'not_configured',
+          message: avail.message,
         },
       } as const
     const script = redditReadScript(req)

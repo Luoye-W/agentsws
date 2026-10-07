@@ -285,6 +285,42 @@ describe('首页第三稿（37 §3）', () => {
     })
     expect(link.getAttribute('href')).toBe('/matters/mat_1#mev_9')
   })
+
+  it('WP248（决策 79）：已过期没做完的算进今天——页头「今天 2 个待办（1 个已过期）」，过期那条标红', async () => {
+    getHome.mockImplementation(async () => ({
+      ...home,
+      today: {
+        timeline: [],
+        due: {
+          todos: [
+            todo({ id: 'td_late', title: '回版主私信', due: '2026-09-07T09:00:00.000Z' }),
+            todo(),
+          ],
+          cards_waiting: 1,
+          overdue_ids: ['td_late'],
+        },
+      },
+    }))
+    try {
+      renderWithProviders(<HomePage />)
+      const due = await screen.findByTestId('today-due')
+      expect(screen.getByTestId('home-header').textContent).toContain('今天 2 个待办（1 个已过期）')
+      const badges = within(due).getAllByTestId('today-overdue')
+      expect(badges).toHaveLength(1)
+      expect(badges[0]?.closest('li')?.textContent).toContain('回版主私信')
+    } finally {
+      getHome.mockImplementation(async () => home)
+    }
+  })
+
+  it('WP248：没有过期的就只说「今天 N 个待办」', async () => {
+    renderWithProviders(<HomePage />)
+    await screen.findByTestId('today-due')
+    const header = screen.getByTestId('home-header').textContent ?? ''
+    expect(header).toContain('今天 1 个待办')
+    expect(header).not.toContain('已过期')
+    expect(screen.queryByTestId('today-overdue')).toBeNull()
+  })
 })
 
 describe('待办箱（37 §2.2b：打勾 / 菜单 / 点标题 / 拖到日历）', () => {

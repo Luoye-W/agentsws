@@ -13,7 +13,15 @@ import { Input } from '@/components/ui/input'
 import { createTodoAt, type PositionWorkData } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 import { dueTone, type GroupBy, groupItems, whenText } from '@/lib/position-work'
-import { CardsBadge, DutyChip, GroupIcon, KindIcon, ProgressText, WhoBadge } from './work-bits'
+import {
+  CardsBadge,
+  DutyChip,
+  GroupIcon,
+  KindIcon,
+  OverdueBadge,
+  ProgressText,
+  WhoBadge,
+} from './work-bits'
 
 const TONE_TEXT = { bad: 'text-ws-bad font-medium', warn: 'text-ws-warn font-medium' } as const
 
@@ -80,6 +88,7 @@ function Row({
       </span>
       <span className="flex min-w-0 items-center gap-2 font-medium">
         <ItemTitle item={item} />
+        <OverdueBadge item={item} />
         <CardsBadge item={item} onJump={onJump} />
       </span>
       <span

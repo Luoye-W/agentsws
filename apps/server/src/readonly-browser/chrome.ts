@@ -70,10 +70,25 @@ export function browserEnv(env: Env): Record<string, string> {
   return out
 }
 
+/**
+ * WP246：浏览器怎么开。
+ *
+ * - `headless`：无头（WP228 原来的样子；UA 照实是 HeadlessChrome，Reddit 更容易拦）；
+ * - `minimized`：有头、起来就最小化（真浏览器，读号登录态照常用；默认）；
+ * - `login`：「登录读号」那个给人用的窗口——有头、开着页面脚本与图片，用户自己在网页上登录。
+ */
+export type ChromeMode = 'headless' | 'minimized' | 'login'
+
 /** 起浏览器的参数。没有任何「藏自动化」「伪装」的开关。 */
-export function chromeArgs(profileDir: string, platform: NodeJS.Platform): string[] {
+export function chromeArgs(
+  profileDir: string,
+  platform: NodeJS.Platform,
+  mode: ChromeMode = 'headless',
+  url = 'about:blank',
+): string[] {
+  const headed = mode !== 'headless'
   return [
-    '--headless=new',
+    ...(headed ? [] : ['--headless=new']),
     `--user-data-dir=${profileDir}`,
     '--remote-debugging-port=0',
     '--no-first-run',
@@ -84,12 +99,14 @@ export function chromeArgs(profileDir: string, platform: NodeJS.Platform): strin
     '--disable-background-networking',
     '--disable-component-update',
     '--disable-features=Translate,MediaRouter,OptimizationHints',
-    '--blink-settings=imagesEnabled=false',
+    // 登录窗口要看得见图片（验证码就是图）；自动读取那两种不取图
+    ...(mode === 'login' ? [] : ['--blink-settings=imagesEnabled=false']),
     '--mute-audio',
     '--password-store=basic',
     ...(platform === 'darwin' ? ['--use-mock-keychain'] : []),
-    ...(platform === 'win32' ? ['--disable-gpu'] : []),
-    'about:blank',
+    ...(platform === 'win32' && !headed ? ['--disable-gpu'] : []),
+    ...(mode === 'minimized' ? ['--window-size=1280,900'] : []),
+    url,
   ]
 }
 
@@ -185,15 +202,21 @@ export async function spawnChrome(input: {
   platform: NodeJS.Platform
   env: Env
   readyTimeoutMs?: number
+  /** WP246：怎么开（缺省无头，与 WP228 一样）。 */
+  mode?: ChromeMode
+  /** WP246：一起来就打开哪一页（缺省空白页）。 */
+  url?: string
 }): Promise<SpawnedChrome> {
   const { executable, profileDir, platform, env } = input
+  const mode = input.mode ?? 'headless'
   mkdirSync(profileDir, { recursive: true })
   killOrphan(profileDir, executable, platform, env)
   const portFile = join(profileDir, 'DevToolsActivePort')
   if (existsSync(portFile)) unlinkSync(portFile)
-  const child = spawn(executable, chromeArgs(profileDir, platform), {
+  const child = spawn(executable, chromeArgs(profileDir, platform, mode, input.url), {
     stdio: 'ignore',
-    windowsHide: true,
+    // 登录窗口是给人看的：别让 Windows 把它的第一个窗口藏起来
+    windowsHide: mode !== 'login',
     // mac / Linux 自成一个进程组（见 killGroup）；Windows 用 taskkill /T 按树结束
     detached: platform !== 'win32',
     env: browserEnv(env),

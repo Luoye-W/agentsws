@@ -10,7 +10,11 @@
  */
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { hostAllowed, type ReadonlyBrowserStatus } from '@agentsws/contracts'
+import {
+  hostAllowed,
+  type ReadBrowserWindowMode,
+  type ReadonlyBrowserStatus,
+} from '@agentsws/contracts'
 import type { ExtractArgs } from './extract.js'
 import { type Env, findBrowser } from './find-browser.js'
 import { detectWall, hostOf, type WallKind } from './guard.js'
@@ -33,6 +37,8 @@ export type ReadFailure =
   | 'off_site'
   | 'empty'
   | 'failed'
+  /** WP246：「登录读号」的窗口开着（这份用户数据目录被它占着），先不读。 */
+  | 'held'
 
 export type ReadOutcome =
   | { ok: true; items: Record<string, unknown>[]; final_url: string }
@@ -54,7 +60,15 @@ export interface ReadonlyBrowserOptions {
   launch?: SessionLauncher
   /** 闲多久自动关（默认 90 秒）。 */
   idleMs?: number
+  /** WP246：自动读取时浏览器怎么开（缺省无头，与 WP228 一样；服务进程按设置给）。 */
+  windowMode?(): ReadBrowserWindowMode
+  /** WP246：用这份用户数据目录自己的登录态（读号）读；缺省不用（WP228 的一次性上下文）。 */
+  useProfile?(): boolean
 }
+
+export type WhoAmI =
+  | { ok: true; account?: string; final_url: string }
+  | { ok: false; reason: ReadFailure; message: string; wall?: WallKind }
 
 export interface ReadonlyBrowser {
   read(url: string, options?: { limit?: number }): Promise<ReadOutcome>
@@ -64,6 +78,18 @@ export interface ReadonlyBrowser {
   /** 现在浏览器开着没有。 */
   running(): boolean
   close(): Promise<void>
+  /**
+   * WP246：读一页、只看页头上「登录的是谁」（读号体检）。不受两页间隔与被拦暂停限制
+   * （人刚在登录窗口里手动过了验证，正要确认），但照样记一页、照样只读、照样认拦截。
+   */
+  whoami(url: string): Promise<WhoAmI>
+  /** WP246：这份只读用户数据目录（「登录读号」窗口开的就是它）。 */
+  readonly profileDir: string
+  /** WP246：找到的浏览器（登录窗口用同一个）。 */
+  executable(): { ok: true; executable: string } | { ok: false; message: string }
+  /** WP246：先关掉自动读取的那个浏览器，并停读（登录窗口要占用这份目录）；`release` 之后恢复。 */
+  hold(message: string): Promise<void>
+  release(): void
 }
 
 const browserName = (exe: string): string =>
@@ -83,7 +109,10 @@ export function createReadonlyBrowser(options: ReadonlyBrowserOptions): Readonly
   let starting: Promise<BrowserSession> | undefined
   let idle: NodeJS.Timeout | undefined
   let queue: Promise<unknown> = Promise.resolve()
+  let held: string | undefined
   const onExit = (): void => session?.killNow()
+  const mode = (): ReadBrowserWindowMode => options.windowMode?.() ?? 'headless'
+  let launchedMode: ReadBrowserWindowMode | undefined
 
   const find = () =>
     findBrowser({
@@ -94,8 +123,11 @@ export function createReadonlyBrowser(options: ReadonlyBrowserOptions): Readonly
     })
 
   async function ensure(executable: string): Promise<BrowserSession> {
+    // 设置里换了开法：关掉旧的，下面按新的起
+    if (session !== undefined && launchedMode !== mode()) await closeNow()
     if (session !== undefined) return session
-    starting ??= launch({ executable, profileDir, platform, env }).then(
+    launchedMode = mode()
+    starting ??= launch({ executable, profileDir, platform, env, mode: launchedMode }).then(
       (s) => {
         session = s
         process.once('exit', onExit)
@@ -125,15 +157,16 @@ export function createReadonlyBrowser(options: ReadonlyBrowserOptions): Readonly
     idle.unref?.()
   }
 
-  async function readOnce(url: string, limit: number): Promise<ReadOutcome> {
+  async function readOnce(url: string, limit: number, who = false): Promise<ReadOutcome> {
     const hosts = options.allowedHosts()
     if (!hostAllowed(hostOf(url), hosts))
       return { ok: false, reason: 'not_allowed', message: `不在只读白名单里：${url}` }
+    if (held !== undefined) return { ok: false, reason: 'held', message: held }
     const found = find()
     if (!found.ok) return { ok: false, reason: 'no_browser', message: found.message }
     const now = options.nowMs()
     const gate = usage.check(now)
-    if (!gate.ok)
+    if (!gate.ok && !who)
       return {
         ok: false,
         reason: gate.reason === 'blocked' ? 'blocked' : 'limited',
@@ -144,7 +177,10 @@ export function createReadonlyBrowser(options: ReadonlyBrowserOptions): Readonly
     let page: Awaited<ReturnType<BrowserSession['readPage']>>
     try {
       const s = await ensure(found.executable)
-      page = await s.readPage(url, args, hosts)
+      page =
+        options.useProfile?.() === true
+          ? await s.readPage(url, args, hosts, { profile: true })
+          : await s.readPage(url, args, hosts)
     } catch (err) {
       return {
         ok: false,
@@ -161,7 +197,8 @@ export function createReadonlyBrowser(options: ReadonlyBrowserOptions): Readonly
       ...(page.extract === undefined ? {} : { signals: page.extract.signals }),
     })
     if (wall !== undefined) {
-      usage.block(wall.kind, wall.message, options.nowMs(), page.retryAfterMs)
+      // 体检那一页被拦不再加一段暂停（人正在手动处理）；自动读取被拦照旧暂停
+      if (!who) usage.block(wall.kind, wall.message, options.nowMs(), page.retryAfterMs)
       return {
         ok: false,
         reason: wall.kind === 'off_site' ? 'off_site' : 'wall',
@@ -171,6 +208,14 @@ export function createReadonlyBrowser(options: ReadonlyBrowserOptions): Readonly
     }
     if (page.status >= 400)
       return { ok: false, reason: 'failed', message: `站点回了 ${page.status}，这一页没读到。` }
+    if (who) {
+      const account = page.extract?.signals.account
+      return {
+        ok: true,
+        items: account === undefined ? [] : [{ account }],
+        final_url: page.finalUrl,
+      }
+    }
     const items = page.extract?.items ?? []
     if (items.length === 0)
       return {
@@ -219,5 +264,34 @@ export function createReadonlyBrowser(options: ReadonlyBrowserOptions): Readonly
     },
     running: () => session !== undefined,
     close: closeNow,
+    profileDir,
+    executable: () => {
+      const found = find()
+      return found.ok
+        ? { ok: true, executable: found.executable }
+        : { ok: false, message: found.message }
+    },
+    async whoami(url) {
+      const next = queue.then(() => readOnce(url, 1, true))
+      queue = next.catch(() => undefined)
+      const got = await next
+      if (!got.ok) return got
+      const account = got.items[0]?.account
+      return {
+        ok: true,
+        final_url: got.final_url,
+        ...(typeof account === 'string' ? { account } : {}),
+      }
+    },
+    async hold(message) {
+      held = message
+      // 排在正在读的那一页后面关，不打断它
+      const next = queue.then(() => closeNow())
+      queue = next.catch(() => undefined)
+      await next
+    },
+    release() {
+      held = undefined
+    },
   }
 }
