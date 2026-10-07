@@ -7,7 +7,7 @@
  * 模型留在这里而不是另开一页：接模型是**一次性的**（填一把 key 就完了），
  * 之后只会偶尔来看一眼花了多少；连接是要长期管的（试连、重新授权、断开）。
  */
-import { isPlaceholderOwnerEmail } from '@agentsws/contracts'
+import { DEFAULT_BRAND_CURRENCY, isPlaceholderOwnerEmail } from '@agentsws/contracts'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
@@ -108,7 +108,9 @@ export function SettingsPage({
     enabled: ownerId !== undefined,
     retry: false,
   })
-  const supportEmail = intake.data?.profile.support_email?.value
+  // WP248：品牌档案里存了客服邮箱就先用它（以前只能看那一轮分析）
+  const supportEmail =
+    onboarding.data?.profile?.support_email ?? intake.data?.profile.support_email?.value
   const orgs = useQuery({ queryKey: ['orgs'], queryFn: () => listOrganizations(), retry: false })
   const org = orgs.data?.[0]
   const save = useMutation({
@@ -137,6 +139,17 @@ export function SettingsPage({
           ...(draft.postal_address.trim() === (onboarding.data?.profile?.postal_address ?? '')
             ? {}
             : { postal_address: draft.postal_address.trim() }),
+          // WP248（决策 83）：品牌三格——只在改过时发（空 = 清空；币种空 = 回到 USD）
+          ...(draft.one_liner.trim() === (onboarding.data?.profile?.one_liner ?? '')
+            ? {}
+            : { one_liner: draft.one_liner.trim() }),
+          ...(draft.support_email.trim() === (onboarding.data?.profile?.support_email ?? '')
+            ? {}
+            : { support_email: draft.support_email.trim() }),
+          ...(draft.currency.trim().toUpperCase() ===
+          (onboarding.data?.profile?.currency ?? DEFAULT_BRAND_CURRENCY)
+            ? {}
+            : { currency: draft.currency.trim().toUpperCase() }),
         },
         ownerId,
       ),

@@ -439,12 +439,27 @@ export interface WorkspaceProfile {
    */
   postal_address?: string
   /**
+   * WP248（决策 83，Luoye 10-07）：品牌的一句话介绍。以前只活在那一轮网址分析里（进程内存，重启就没了）；
+   * 现在第 ② 步确认分析 / 手填时写进档案，设置页「这个品牌」能改，AI 运行取品牌上下文时带上。没写过就没有。
+   */
+  one_liner?: string
+  /** WP248（决策 83）：客服邮箱（给客人写信、话术里留的那一个）。没写过就没有。 */
+  support_email?: string
+  /**
+   * WP248（决策 83）：这个品牌卖货用的币种（ISO 4217，大写三位）。没写过按
+   * {@link DEFAULT_BRAND_CURRENCY}（读的时候补，不往老档案里回写）。
+   */
+  currency?: string
+  /**
    * WP240：建品牌那一刻自动起的那一份（公司级三样的影子 + 建品牌时选的平台），**还没人走过首次设置**。
    * 有它 = 这个品牌仍该进首次设置；走过第 ② 步 / 设置页存过一次就没有了。
    */
   provisional?: true
   set_at: Iso8601
 }
+
+/** WP248（决策 83）：品牌档案没写过币种时按它（Luoye 10-07：默认 USD）。 */
+export const DEFAULT_BRAND_CURRENCY = 'USD'
 
 /**
  * 46 §2 I2 第一条渠道：邀请码。

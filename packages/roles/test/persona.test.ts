@@ -261,6 +261,23 @@ describe('品牌上下文：取不到就不写那一句（69 §5「别编」）'
     expect(text.split('\n')).toEqual(['品牌：甲', '视觉气质：克制的暖色'])
   })
 
+  it('WP248（决策 83）：品牌档案里的币种、客服邮箱各一行；没写就不出', () => {
+    const text = renderBrandContext({
+      brand_name: '甲',
+      one_liner: '给近视的人做的 AR 眼镜',
+      currency: 'USD',
+      support_email: 'support@a.example',
+    })
+    expect(text.split('\n')).toEqual([
+      '品牌：甲',
+      '一句话定位：给近视的人做的 AR 眼镜',
+      '币种：USD',
+      '客服邮箱：support@a.example',
+    ])
+    expect(renderBrandContext({ currency: 'EUR' }, 'en')).toBe('Currency: EUR')
+    expect(renderBrandContext({ brand_name: '甲' })).not.toContain('币种')
+  })
+
   it('口吻样例只是语气参考，明写着别照抄', () => {
     const text = renderBrandContext({ brand_name: '甲', tone_samples: ['我们不催单。'] })
     expect(text).toContain('别照抄')

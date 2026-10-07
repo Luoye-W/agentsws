@@ -2302,6 +2302,21 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
    * 声明提到这里是为了晚绑定：`org` 与 `onboarding` 都比它晚建，所以 `positions`
    * 与 `brand` 都写成现查的闭包（与上面 `positionAssemblies` 同一个套路）。
    */
+  /**
+   * WP248（决策 83）：品牌档案里给 AI 当上下文的三格（一句话介绍、客服邮箱、币种）。
+   * 写过才带——币种没写过不替人补 USD（69 §5「别编」：默认值是界面上的缺省，不是这个品牌说过的话）。
+   */
+  const brandFactsContextOf = (
+    ws: WorkspaceId,
+  ): { one_liner?: string; support_email?: string; currency?: string } => {
+    const p = onboardingRef?.brandProfile(ws)
+    return {
+      ...(p?.one_liner === undefined ? {} : { one_liner: p.one_liner }),
+      ...(p?.support_email === undefined ? {} : { support_email: p.support_email }),
+      ...(p?.currency === undefined ? {} : { currency: p.currency }),
+    }
+  }
+
   const personas = createPersonas({
     workspace_id: workspace.id,
     clock,
@@ -2315,13 +2330,15 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     /*
      * WP121（70 §3）：品牌上下文的四个槽位。**取不到就不写那一句**——
      * 品牌名从工作区档案里来（那是确认品牌分析之后写下的那一份）。
-     * 定位、市场、口吻样例还没有落盘的地方（WP121b 正在重写向导），所以现在它们
-     * 一律取不到，于是 persona 里就没有那几行——这正是 69 §5 要的行为：**别编**。
+     * 市场、口吻样例这里还不取，于是 persona 里就没有那几行——这正是 69 §5 要的行为：**别编**。
      * WP122 的「视觉气质」走同一个槽位（`visual_tone`），填上就多一行。
+     * WP248（决策 83）：一句话定位、客服邮箱、币种进了品牌档案，按这次运行所在的品牌带上（写过才有）。
      */
-    brand: () => {
+    brand: (ws) => {
       const name = onboardingRef?.companyProfile()?.legal_name?.trim()
-      return name === undefined || name === '' ? undefined : { brand_name: name }
+      const facts = brandFactsContextOf((ws ?? workspace.id) as WorkspaceId)
+      const ctx = { ...(name === undefined || name === '' ? {} : { brand_name: name }), ...facts }
+      return Object.keys(ctx).length === 0 ? undefined : ctx
     },
     appendEvent,
   })
@@ -3438,7 +3455,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
              * 公司在右栏改写了某条 persona，下一次运行就是新的那一份——
              * `personas` 每次现查覆盖表，不用重启（同 `vertical` / `browser`）。
              */
-            personaSections: (input) => personas.sections(input),
+            // WP248：带上这个品牌（品牌上下文按品牌取）
+            personaSections: (input) => personas.sections({ ...input, workspace_id: ws }),
             /*
              * WP122b（71 §9 第 7 条）：三个注入口通电——建站 / 社媒 / 投放出活时
              * 提示词里真带上品牌令牌。照 `design.ts` 的样板：取值口 + 现取
@@ -3727,6 +3745,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           {
             ...(name === undefined ? {} : { brand_name: name }),
             ...(markets === undefined ? {} : { markets }),
+            // WP248（决策 83）：品牌档案三格
+            ...brandFactsContextOf(ws),
           },
           language,
         )
@@ -5692,7 +5712,23 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           added && company !== undefined && company.trim() !== ''
             ? company
             : (profile.legal_name?.value ?? profile.brand_name?.value)
-        if (typeof legal !== 'string' || legal.trim() === '') return
+        // WP248（决策 83）：一句话介绍 / 客服邮箱 / 币种进品牌档案（以前只活在这一轮分析里）。
+        // 读到了才写；没读到的格子不动（不拿「没读到」去清人以前填的）
+        const text = (f: { value: unknown } | undefined): string | undefined =>
+          typeof f?.value === 'string' && f.value.trim() !== '' ? f.value : undefined
+        const one_liner = text(profile.one_liner)
+        const support_email = text(profile.support_email)
+        const currency = text(profile.currency)
+        const facts = {
+          ...(one_liner === undefined ? {} : { one_liner }),
+          ...(support_email === undefined ? {} : { support_email }),
+          ...(currency === undefined ? {} : { currency }),
+        }
+        if (typeof legal !== 'string' || legal.trim() === '') {
+          // 公司名、品牌名都还没有：档案已经在就只补这三格，没有档案不替人建
+          onboarding.setBrandFacts(actor.workspace_id as WorkspaceId, facts)
+          return
+        }
         const brandName =
           typeof profile.brand_name?.value === 'string' &&
           (!added || profile.brand_name.edited === true)
@@ -5714,6 +5750,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
             // WP159：目标市场进档案（违规宣称规则按它开市场组）
             // WP166：连出处一起写；人在档案卡上改过（`edited`）的记成「人改的」，清空也算数
             ...marketsFromIntake(profile.markets, clock.now()),
+            ...facts,
           },
         )
       },
