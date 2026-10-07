@@ -212,4 +212,27 @@ describe('WP253 建站岗位端到端（stub）', () => {
     for (const t of toolsCalled(out.run_id ?? '')) expect(THEME_TOOL_NAMES).not.toContain(t)
     expect(fake.calls).toEqual([])
   })
+
+  it('建站四条职责的店铺连接是可选（建议连）：岗位不再缺必需连接；店铺管理 / 订单履约照旧必需', async () => {
+    const owner = server.bootstrap.ownerAssignment.id
+    type Conn = {
+      ready: boolean
+      missing_required: string[]
+      items: { kind: string; required: boolean; recommended?: boolean }[]
+    }
+    const conn = await dataOf<Conn>(await call('GET', `/v1/positions/${theme.id}/connections`))
+    expect(conn.missing_required).toEqual([])
+    expect(conn.ready).toBe(true)
+    const shop = conn.items.find((i) => i.kind.startsWith('shop'))
+    expect(shop).toMatchObject({ required: false, recommended: true })
+    type Plan = { connectors: { service: string; required: boolean }[] }
+    const site = await dataOf<Plan>(
+      await call('POST', '/v1/onboarding/plan', { position_ids: ['site'] }, owner),
+    )
+    expect(site.connectors.find((c) => c.service === 'shopify_admin')?.required).toBe(false)
+    const ops = await dataOf<Plan>(
+      await call('POST', '/v1/onboarding/plan', { position_ids: ['web-ops'] }, owner),
+    )
+    expect(ops.connectors.find((c) => c.service === 'shopify_admin')?.required).toBe(true)
+  })
 })

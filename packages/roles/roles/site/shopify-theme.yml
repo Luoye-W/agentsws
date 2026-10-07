@@ -31,9 +31,12 @@ scopes:
 
 connectors:
   # 主题读写要 read_themes / write_themes；CLI 与 Admin API 用的是同一套权限
+  # WP253（Fable 10-07）：店铺连接**可选**——主题这条路走 Shopify CLI（工作台一键装、一键登录）+ 店铺地址就够了，
+  # 不需要 Dev Dashboard 应用。连上了照样有用（店铺地址直接取连接的），所以标「建议连」。
   - {
       kind: shopify,
-      required: true,
+      required: false,
+      recommended: true,
       grants: [read_themes, write_themes, read_content, write_content, read_products],
       ownership: workspace,
     }
