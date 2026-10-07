@@ -698,13 +698,15 @@ export function createSiteTheme(options: SiteThemeOptions): SiteThemeAssembly {
       }
       const title = `将把主题「${target.name}」设为线上主题`
       const fileLines =
-        files.length === 0
-          ? ['改了哪些文件：没有记录（这份副本不是在工坊里推的，或推之前没起底 / 拉过）']
-          : [
-              `改了 ${files.length} 个文件：`,
-              ...files.slice(0, 12).map((f) => `· ${f}`),
-              ...(files.length > 12 ? [`· 还有 ${files.length - 12} 个`] : []),
-            ]
+        record === undefined
+          ? ['改了哪些文件：没有记录（这份副本不是在工坊里推的）']
+          : files.length === 0
+            ? ['相对起底 / 拉下来的那一份没改文件（原样）。']
+            : [
+                `改了 ${files.length} 个文件：`,
+                ...files.slice(0, 12).map((f) => `· ${f}`),
+                ...(files.length > 12 ? [`· 还有 ${files.length - 12} 个`] : []),
+              ]
       const notes = [
         live === undefined
           ? `这家店线上还没有主题；批了之后「${target.name}」就是线上那一份。`
