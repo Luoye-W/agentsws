@@ -33,22 +33,30 @@ import type {
 import {
   boundariesToAsk,
   boundaryGate,
+  COMPACTED_MARK,
+  compactSummary,
   contextItemHash,
   DRAFT_NOT_CREATED,
+  deliversWith,
   describeRun,
+  fileTouch,
   looksLikeToolCallText,
+  looksUnfinished,
+  renderThemeRead,
   renderTrustedToolResult,
   rewriteForChannelGuard,
   TOOL_CALL_TEXT_FAILURE,
   TOOL_CALL_TEXT_NUDGE,
   TOOL_CALL_TEXT_RETRIES,
   TOOL_CALL_TEXT_STEP,
+  UNFINISHED_NUDGE,
+  UNFINISHED_STEP,
   WebUsageCounter,
 } from '@agentsws/stand-ins'
 import { assembleDirect, DRAFT_REPLY_TOOL, STAGE_REFUND_TOOL } from './assemble.js'
 import { failureOf } from './errors.js'
 import { gateToolCall, inferRefs, type SideEffectLookup } from './gate.js'
-import { CLOSED_TOOL_RESULT, compactHistory, historyTokens } from './history.js'
+import { CLOSED_TOOL_RESULT, compactHistory, compactHistoryFor, historyTokens } from './history.js'
 import { IDEMPOTENCY_WINDOW_MS, IdempotencyStore } from './idempotency.js'
 import type { DirectGateway } from './tool-choice.js'
 import { supportsToolChoice } from './tool-choice.js'
@@ -83,7 +91,7 @@ export interface DirectRuntimeOptions {
   defaultReturnWindowDays?: number
   /** 16 §3 副作用表；不给的工具按读处理（executeTool 是兜底那道门）。 */
   sideEffectOf?: SideEffectLookup
-  /** turn loop 上限（防死循环）；默认 8。 */
+  /** turn loop 上限（防死循环）；默认 8。请求带了 `budget.max_turns`（WP260）就按请求的。 */
   maxTurns?: number
   /** A9 compact_history 阈值（token）；默认 `min(max_tokens × 0.6, 12000)`。 */
   compactThresholdTokens?: number
@@ -161,6 +169,17 @@ export function createDirectRuntime(options: DirectRuntimeOptions): RuntimeAdapt
       /** WP230：最近一轮是不是「把工具调用写成了文字」；重试过几次。 */
       let callText = false
       let callTextRetries = 0
+      /*
+       * WP260：要产出东西的运行（`req.produce`，现在只有网页模板）——产出了没有、续过几次；
+       * 压缩时每条工具结果换成什么（按 call_id 记一行摘要：读过哪个文件 + 要点）。
+       */
+      const produce = req.produce
+      let delivered = false
+      let nudges = 0
+      const compactLines = new Map<string, string>()
+      const turnCap = req.budget.max_turns ?? maxTurns
+      /** 回合用完时模型还在调工具（不是自己收的尾）。 */
+      let ranOut = false
       let exhausted: { which: keyof RunRequest['budget']; used: number; cap: number } | undefined
 
       const messages: ChatMessage[] = []
@@ -370,6 +389,7 @@ export function createDirectRuntime(options: DirectRuntimeOptions): RuntimeAdapt
 
       const compactLimit =
         options.compactThresholdTokens ??
+        produce?.compact_at_tokens ??
         Math.max(1, Math.min(Math.floor(req.budget.max_tokens * 0.6), COMPACT_HARD_CAP))
 
       // ── 产出工具：stage / 起草经注入的回调 ────────────────────────────
@@ -489,7 +509,7 @@ export function createDirectRuntime(options: DirectRuntimeOptions): RuntimeAdapt
       }
 
       // ── turn loop ────────────────────────────────────────────────────
-      for (let turn = 0; turn < maxTurns; turn += 1) {
+      for (let turn = 0; turn < turnCap; turn += 1) {
         if (signal.aborted) {
           closeOpenToolUses('cancelled')
           sink(cancelledEvent(signal))
@@ -515,7 +535,16 @@ export function createDirectRuntime(options: DirectRuntimeOptions): RuntimeAdapt
 
         // A9 compact_history：超阈值就把最早的工具结果换成占位
         if (historyTokens(messages, tools) > compactLimit) {
-          const compacted = compactHistory(messages, tools, compactLimit)
+          // WP260：要产出的运行按工作类型压（先压过时的、最近几条不压、换成摘要）；别的照旧
+          const compacted =
+            produce === undefined
+              ? compactHistory(messages, tools, compactLimit)
+              : compactHistoryFor(messages, tools, compactLimit, {
+                  keepRecent: produce.keep_recent_results,
+                  summaryOf: (id) => compactLines.get(id),
+                  touchOf: fileTouch,
+                  compactedMark: COMPACTED_MARK,
+                })
           if (compacted.compacted > 0) {
             messages.length = 0
             messages.push(...compacted.messages)
@@ -617,7 +646,32 @@ export function createDirectRuntime(options: DirectRuntimeOptions): RuntimeAdapt
           messages.push({ role: 'user', content: TOOL_CALL_TEXT_NUDGE })
           continue
         }
-        if (calls.length === 0) break
+        if (calls.length === 0) {
+          /*
+           * WP260：要产出的运行还没产出、模型却回了一句「我接下来要…」——不收工，追加一句「接着做」
+           * 再跑一回合（最多 `max_nudges` 次）。普通运行（没有 `produce`）照旧到此为止。
+           */
+          if (
+            produce !== undefined &&
+            !delivered &&
+            outputs.length === 0 &&
+            nudges < produce.max_nudges &&
+            looksUnfinished(completion.text)
+          ) {
+            nudges += 1
+            sink({
+              type: 'progress',
+              step: UNFINISHED_STEP,
+              note: `${nudges}/${produce.max_nudges}`,
+            })
+            messages.push({ role: 'user', content: UNFINISHED_NUDGE })
+            // 续的这一回合正好是最后一回合：照「回合用完」收（不把那半句当答复）
+            if (turn === turnCap - 1) ranOut = true
+            continue
+          }
+          break
+        }
+        if (turn === turnCap - 1) ranOut = true
 
         let stop = false
         for (const [callIndex, call] of calls.entries()) {
@@ -667,6 +721,9 @@ export function createDirectRuntime(options: DirectRuntimeOptions): RuntimeAdapt
           }
           toolCalls += 1
           openCalls.delete(call_id)
+          if (exec.status === 'ok' && deliversWith(produce, call.name)) delivered = true
+          if (produce !== undefined && exec.status === 'ok')
+            compactLines.set(call_id, compactSummary(call.name, input, exec.data))
 
           const refs = exec.status === 'ok' ? (exec.provenance ?? inferRefs(exec.data)) : []
           if (refs.length > 0) prov.see(refs, { full: true })
@@ -699,10 +756,21 @@ export function createDirectRuntime(options: DirectRuntimeOptions): RuntimeAdapt
             return finish('cancelled', '运行被中断：未闭合的工具调用已补齐')
           }
         }
-        if (stop) break
+        if (stop) {
+          ranOut = false
+          break
+        }
       }
 
       closeOpenToolUses('turn_limit')
+      /*
+       * WP260（10-07 真机 ci.16 停的原因）：回合用完时模型还在调工具——以前照「做完了」收，
+       * 最后那半句「现在读…」被当成答复。现在照实记成预算用完（`max_turns`），摘要说「预算不够就停了」。
+       */
+      if (ranOut && exhausted === undefined) {
+        exhausted = { which: 'max_turns', used: turnCap, cap: turnCap }
+        sink({ type: 'budget.exhausted', ...exhausted })
+      }
 
       // WP230：重试过还是「用文字调工具」——照实报格式异常：假文字不当答案、不出卡
       if (callText && exhausted === undefined) {
@@ -819,6 +887,13 @@ export function refsFromEvents(events: readonly RunEvent[]): ObjectRef[] {
 function toolResultContent(name: string, input: Record<string, unknown>, data: unknown): string {
   const trusted = renderTrustedToolResult(name, input, data)
   if (trusted !== undefined) return redactOutboundText('tool_result', trusted)
+  // WP260：主题文件原文不转义、按一页放宽围栏（仍然围起来）
+  const themeRead = renderThemeRead(name, data)
+  if (themeRead !== undefined)
+    return EXTERNAL_FENCE.fencePayload(
+      redactOutboundText('tool_result', themeRead.text),
+      themeRead.max_chars,
+    )
   return EXTERNAL_FENCE.fencePayload(redactOutbound('tool_result', data))
 }
 

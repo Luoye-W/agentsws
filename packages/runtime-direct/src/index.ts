@@ -16,10 +16,12 @@ export {
 export { DirectRuntimeError, failureOf } from './errors.js'
 export type { GateDecision, SideEffectLookup } from './gate.js'
 export { gateToolCall, inAllowlist, inferRefs } from './gate.js'
+export type { CompactPolicy } from './history.js'
 export {
   CLOSED_TOOL_RESULT,
   COMPACT_PLACEHOLDER,
   compactHistory,
+  compactHistoryFor,
   historyTokens,
 } from './history.js'
 export { IDEMPOTENCY_WINDOW_MS, IdempotencyStore } from './idempotency.js'

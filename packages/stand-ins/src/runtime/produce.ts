@@ -40,7 +40,7 @@ export function deliversWith(produce: RunProduce | undefined, tool: string): boo
 
 /** 开头就是「现在 / 接下来 / 我先……」+ 一个动作。 */
 const START =
-  /^(?:好的?|好|ok(?:ay)?|明白了?|收到)?[，,。.!！\s]*(?:现在|接下来|下一步|然后|随后|下面|先|我先|我再|我来|我将|我会|我要|我这就|我马上|马上|让我|开始|继续)[^。！？!?\n]{0,12}?(?:读|看|查|写|改|检查|推|做|生成|创建|调整|整理|补|拉|起底|列|确认|搭|加|更新|修|核对)/i
+  /^(?:好的?|好|ok(?:ay)?|明白了?|收到)?[，,。.!！\s]*(?:现在|接下来|下一步|然后|随后|下面|先|我先|我再|我来|我将|我会|我要|我这就|我马上|马上|让我|开始|继续)(?![^。！？!?\n]{0,3}[你您])[^。！？!?\n]{0,12}?(?:读|看|查|写|改|检查|推|做|生成|创建|调整|整理|补|拉|起底|列|确认|搭|加|更新|修|核对)/i
 /** 收尾那一句是「接下来我去……」。 */
 const TAIL =
   /(?:接下来|下一步|现在|马上|这就|随后|然后)[^。！？!?\n]{0,8}?(?:读|看|查|写|改|检查|推|做|生成|创建|调整|整理|补|拉|起底|搭|加|更新|修)[^。！？!?\n]*[。.…：:]?\s*$/
@@ -60,7 +60,10 @@ export function looksUnfinished(text: string): boolean {
   const last = (lines[lines.length - 1] ?? '').trim()
   const lastSentence = last.split(/(?<=[。！？!?])/).pop() ?? last
   if (/[？?]\s*$/.test(lastSentence)) return false
-  if (/[：:…]\s*$/.test(last) && t.length < 400) return true
+  // 「我先把这几样读一下：」——冒号收尾、话又不长，后面本该跟着工具调用
+  if (/[：:]\s*$/.test(last) && t.length < 400) return true
+  // 「接下来你可以…」是交代给人的，不是它自己还要做
+  if (/[你您]/.test(lastSentence)) return false
   return TAIL.test(lastSentence) || EN_TAIL.test(lastSentence)
 }
 
@@ -137,21 +140,23 @@ function markdownPoints(content: string): string | undefined {
  * 压掉一条工具结果时换成的那一行（不是空占位）：读过哪个文件、多长、要点；要再看原文就再读一次。
  * 认不出来的工具回一句通用的（仍比空占位多一个工具名）。
  */
-export function compactSummary(name: string, input: Record<string, unknown>, data: unknown): string {
+export function compactSummary(
+  name: string,
+  input: Record<string, unknown>,
+  data: unknown,
+): string {
   const bare = bareOf(name)
   if (bare === THEME_READ_FILE_TOOL) {
     const r = themeReadOf(data)
     const path = r?.path ?? (typeof input.path === 'string' ? input.path : '?')
-    if (r === undefined) return `${COMPACTED_MARK} 读过 ${path}（结果已从历史里拿掉；要用就再读一次）`
+    if (r === undefined)
+      return `${COMPACTED_MARK} 读过 ${path}（结果已从历史里拿掉；要用就再读一次）`
     const whole = r.total_chars ?? r.content.length
     const part =
       r.catalog === 'index'
         ? `目录页，${r.content.split('\n').filter((l) => l.startsWith('- ')).length} 项`
         : r.catalog === 'entries'
-          ? `完整几项：${list(
-              idsOf(rec(parse(r.content))?.entries ?? parse(r.content)),
-              12,
-            )}`
+          ? `完整几项：${list(idsOf(rec(parse(r.content))?.entries ?? parse(r.content)), 12)}`
           : r.total_chars === undefined
             ? `全文 ${whole.toLocaleString('en-US')} 字`
             : `第 ${(r.offset ?? 0) + 1} 字起的一段，共 ${whole.toLocaleString('en-US')} 字`
@@ -194,7 +199,9 @@ export function fileTouch(
   const path = typeof input.path === 'string' ? input.path.trim().replace(/^\.\//, '') : undefined
   if (path === undefined || path === '') return undefined
   if (bare === THEME_READ_FILE_TOOL) {
-    const ids = Array.isArray(input.ids) ? (input.ids as unknown[]).map(String).sort().join(',') : ''
+    const ids = Array.isArray(input.ids)
+      ? (input.ids as unknown[]).map(String).sort().join(',')
+      : ''
     const offset = typeof input.offset === 'number' ? input.offset : 0
     return { op: 'read', path, key: `${path}|${offset}|${ids}` }
   }
