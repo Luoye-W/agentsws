@@ -45,6 +45,12 @@ export interface Organization {
   domain?: string
   /** "让用同一个工具的同事找到我"（46 §1 表，默认 true）。 */
   discoverable: boolean
+  /**
+   * WP251（Luoye 10-07）：公司实体地址（开发信页脚、报价单、单证都从这里取）。
+   * 以前按品牌各存一份（{@link WorkspaceProfile.postal_address}），现在公司只有一份、对所有品牌生效；
+   * 启动时一次性从品牌档案搬上来。没填过就没有。
+   */
+  postal_address?: string
   owner_id: PersonId
   members: OrganizationMember[]
   /** 49 M1 / 52 O3「钱」：云侧那个计费主体。关联账号时写上。 */
@@ -436,6 +442,9 @@ export interface WorkspaceProfile {
   /**
    * WP176：公司实体地址（开发信页脚、报价单、单证都从这里取；CAN-SPAM 要求开发信带它）。
    * 没填 = 开发信不能发。以前住在 B2B「主动开发」的设置里，已有值启动时搬过来。
+   *
+   * @deprecated WP251：公司级，真源是 {@link Organization.postal_address}。档案里这一格只是
+   * 与公司同步的影子（回滚到旧版时读得到同一份），程序一律从公司读。
    */
   postal_address?: string
   /**

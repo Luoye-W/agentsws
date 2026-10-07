@@ -123,6 +123,11 @@ export interface PositionsOptions {
   runningMatters?(): ReadonlySet<string>
   /** WP244：这条职责还缺哪些**必需**连接（人话名）——卡住的事项说「缺什么」用。 */
   missingConnections?(role_id: RoleId): readonly string[]
+  /**
+   * WP251（决策 91）：「卡住了」改看运行时结构化标记的起点（这一版第一次启动的时刻）。
+   * 在它之前跑的那几轮（老数据）才退回认 AI 末句；不给 = 一律当老数据（WP244 口径）。
+   */
+  runBlockMarkedSince?(): string | undefined
 }
 
 export interface OpenAtPositionInput {
@@ -1036,6 +1041,7 @@ export function createPositions(options: PositionsOptions): PositionsAssembly {
                 work.store.listMatterEvents(m.id, { limit: 40 }),
                 running.has(m.id),
                 role_id === undefined ? undefined : options.missingConnections?.(role_id),
+                options.runBlockMarkedSince?.(),
               )
             },
           }),

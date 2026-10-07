@@ -141,8 +141,13 @@ export function ProfileForm({
           设置页里它们还在——那一页上下文多，分组是有用的。
         */}
         {firstBrand ? null : (
-          <p className="text-xs font-medium text-muted-foreground">
+          <p
+            className="flex items-center gap-1 text-xs font-medium text-muted-foreground"
+            data-testid="profile-company-title"
+          >
             {t('onboarding.block.company')}
+            {/* WP251：公司这几格改的是公司——对这家公司的所有品牌生效 */}
+            <Hint text={t('onboarding.block.company.hint')} testId="profile-company-hint" />
           </p>
         )}
         <div className="flex flex-col gap-1">
@@ -200,6 +205,28 @@ export function ProfileForm({
             }}
           />
         </div>
+        {/*
+          WP176：公司实体地址（设置页才出；向导不问）。开发信页脚、报价单、单证都从这里取——
+          以前在 B2B「主动开发」里单独一格，已有值启动时搬过来了。
+          WP251：地址是**公司**的（对所有品牌生效），从「这个品牌」挪到「公司」这一块。
+        */}
+        {firstBrand ? null : (
+          <div className="flex flex-col gap-1" data-testid="profile-address">
+            <Label htmlFor="company-postal-address" className="flex items-center gap-1">
+              {t('onboarding.company.address')}
+              <Hint text={t('onboarding.company.address.hint')} />
+            </Label>
+            <Input
+              id="company-postal-address"
+              data-testid="company-postal-address"
+              value={draft.postal_address}
+              placeholder={t('onboarding.company.address.placeholder')}
+              onChange={(e) => {
+                setDraft({ ...draft, postal_address: e.target.value })
+              }}
+            />
+          </div>
+        )}
         <SafetyNote text={t('onboarding.company.promise')} />
       </section>
 
@@ -446,27 +473,6 @@ export function ProfileForm({
                 />
               </div>
             </div>
-          </div>
-        )}
-        {/*
-          WP176：公司实体地址（设置页才出；向导不问）。开发信页脚、报价单、单证都从这里取——
-          以前在 B2B「主动开发」里单独一格，已有值启动时搬过来了。
-        */}
-        {firstBrand ? null : (
-          <div className="flex flex-col gap-1" data-testid="profile-address">
-            <Label htmlFor="company-postal-address" className="flex items-center gap-1">
-              {t('onboarding.company.address')}
-              <Hint text={t('onboarding.company.address.hint')} />
-            </Label>
-            <Input
-              id="company-postal-address"
-              data-testid="company-postal-address"
-              value={draft.postal_address}
-              placeholder={t('onboarding.company.address.placeholder')}
-              onChange={(e) => {
-                setDraft({ ...draft, postal_address: e.target.value })
-              }}
-            />
           </div>
         )}
       </section>

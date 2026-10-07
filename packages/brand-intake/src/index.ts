@@ -95,8 +95,10 @@ export {
   isPlaceholderStoreName,
   looksLikeDefaultPolicy,
   looksLikePolicy,
+  POLICY_MIN_CHARS_CJK,
   POLICY_PROBE_PATHS,
   placeholderTextHits,
+  policyLength,
   SHOPIFY_PLACEHOLDER_NAMES,
 } from './site.js'
 export {

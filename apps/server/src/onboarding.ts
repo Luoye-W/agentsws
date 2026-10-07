@@ -171,12 +171,24 @@ interface ProfileBackend {
   /** WP138：一次性迁移跑过没有（按名字记，跑过一次就再也不跑）。 */
   migrated(key: string): boolean
   markMigrated(key: string, at: string): void
+  /** WP251：这个一次性记号是什么时候记下的（没记过 = `undefined`）。 */
+  migratedAt(key: string): string | undefined
+  /** WP251（决策 92）：这个品牌的首次设置走完过第 ④ 步没有。 */
+  completed(workspace_id: WorkspaceId): boolean
+  markCompleted(workspace_id: WorkspaceId, at: string): void
+  /**
+   * WP251：迁移前把全部品牌档案原样抄一份（按 `key` 记在备份表里；已经抄过的不覆盖）。
+   * 内存档没有可备份的东西，什么都不做。
+   */
+  backup(key: string, at: string): void
   close(): void
 }
 
 function createMemoryProfileBackend(): ProfileBackend {
   const profiles = new Map<WorkspaceId, WorkspaceProfile>()
   const done = new Set<string>()
+  const finished = new Set<WorkspaceId>()
+  const stamps = new Map<string, string>()
   return {
     get: (ws) => {
       const found = profiles.get(ws)
@@ -186,9 +198,16 @@ function createMemoryProfileBackend(): ProfileBackend {
       profiles.set(ws, { ...p })
     },
     migrated: (key) => done.has(key),
-    markMigrated: (key) => {
+    markMigrated: (key, at) => {
       done.add(key)
+      stamps.set(key, at)
     },
+    migratedAt: (key) => stamps.get(key),
+    completed: (ws) => finished.has(ws),
+    markCompleted: (ws) => {
+      finished.add(ws)
+    },
+    backup: () => undefined,
     close: () => {
       profiles.clear()
     },
@@ -199,6 +218,8 @@ const SCHEMA = `
 CREATE TABLE IF NOT EXISTS onboarding_profile (id INTEGER PRIMARY KEY CHECK (id = 1), json TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS onboarding_profiles (workspace_id TEXT PRIMARY KEY NOT NULL, json TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS onboarding_migrations (key TEXT PRIMARY KEY NOT NULL, at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS onboarding_completed (workspace_id TEXT PRIMARY KEY NOT NULL, at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS onboarding_profiles_backup (key TEXT NOT NULL, workspace_id TEXT NOT NULL, json TEXT NOT NULL, at TEXT NOT NULL, PRIMARY KEY (key, workspace_id));
 `
 
 /**
@@ -233,6 +254,31 @@ function createSqliteProfileBackend(dbPath: string, defaultWorkspace: WorkspaceI
       db.prepare('SELECT 1 FROM onboarding_migrations WHERE key = ?').get(key) !== undefined,
     markMigrated: (key, at) => {
       db.prepare('INSERT OR IGNORE INTO onboarding_migrations (key, at) VALUES (?, ?)').run(key, at)
+    },
+    migratedAt: (key) =>
+      (
+        db.prepare('SELECT at FROM onboarding_migrations WHERE key = ?').get(key) as
+          | { at: string }
+          | undefined
+      )?.at,
+    completed: (ws) =>
+      db.prepare('SELECT 1 FROM onboarding_completed WHERE workspace_id = ?').get(ws) !== undefined,
+    markCompleted: (ws, at) => {
+      db.prepare('INSERT OR IGNORE INTO onboarding_completed (workspace_id, at) VALUES (?, ?)').run(
+        ws,
+        at,
+      )
+    },
+    backup: (key, at) => {
+      // 老的单行表那一行记成 `legacy:1`；品牌档案按 workspace_id。已经抄过的不覆盖（幂等）
+      db.transaction(() => {
+        db.prepare(
+          'INSERT OR IGNORE INTO onboarding_profiles_backup (key, workspace_id, json, at) SELECT ?, workspace_id, json, ? FROM onboarding_profiles',
+        ).run(key, at)
+        db.prepare(
+          "INSERT OR IGNORE INTO onboarding_profiles_backup (key, workspace_id, json, at) SELECT ?, 'legacy:1', json, ? FROM onboarding_profile WHERE id = 1",
+        ).run(key, at)
+      })()
     },
     put: (ws, p) => {
       put.run(ws, JSON.stringify(p))
@@ -353,8 +399,21 @@ export interface OnboardingOptions {
    * 不给（还没迁过的机器）就退回读档案，行为与这一版上线前一模一样。
    */
   organization?: () => OrganizationProfile | undefined
-  /** 写公司档案时同步写组织（52 O1「写时同步写组织」）。 */
-  updateOrganization?: (patch: OrganizationProfile) => void
+  /**
+   * WP251：**某个品牌**挂的那家公司（公司级四样：全称 / 邮箱后缀 / 发现开关 / 地址）。
+   * 不给 = 一律当 `organization()`（一台机器只有一家公司时两者是同一个）。
+   */
+  organizationOf?: (workspace_id: WorkspaceId) => OrganizationProfile | undefined
+  /**
+   * 写公司档案时同步写组织（52 O1「写时同步写组织」）。
+   * WP251：给了 `workspace_id` 就写**那个品牌挂的那家公司**；只给改了的那几格（地址空串 = 清掉）。
+   */
+  updateOrganization?: (patch: OrganizationProfilePatch, workspace_id?: WorkspaceId) => void
+  /**
+   * WP251：和这个品牌挂在同一家公司下的全部品牌（含它自己）。档案里公司那几格的影子
+   * 改公司时一起刷新。不给 = 只有它自己。
+   */
+  brandsOfCompany?: (workspace_id: WorkspaceId) => WorkspaceId[]
   /**
    * WP65（52 O1）：这个品牌叫什么（没设过就等于工作区名）。
    * WP240：给了 `workspace_id` 就是那个品牌的；不给 = 启动品牌（老调用方）。
@@ -373,7 +432,12 @@ export interface OrganizationProfile {
   legal_name: string
   domain?: string
   discoverable: boolean
+  /** WP251：公司实体地址（公司级，对所有品牌生效）。 */
+  postal_address?: string
 }
+
+/** WP251：改公司时只给改了的那几格（`postal_address: ''` = 清掉）。 */
+export type OrganizationProfilePatch = Partial<OrganizationProfile>
 
 export interface OnboardingAssembly {
   port: OnboardingPort
@@ -444,7 +508,29 @@ export interface OnboardingAssembly {
    *
    * 启动时的一次性迁移用它——建组织要的正是档案里的全称、域名与发现开关。
    */
-  companyProfile(): OrganizationProfile | undefined
+  companyProfile(workspace_id?: WorkspaceId): OrganizationProfile | undefined
+  /**
+   * WP251：**一次性**把公司级那几格归到公司上（启动时跑，跑过一次就记下）。
+   *
+   * 1. 先把全部品牌档案原样备份一份（`onboarding_profiles_backup`，键 `wp251`）；
+   * 2. 公司还没有地址的：从品牌档案里搬一份上去（最近存过的那个品牌的）；
+   * 3. 每个品牌档案里公司那几格的影子刷成公司现在的值（以组织为准）。
+   *
+   * 没有组织（还没迁过）就什么都不做、也不记下（下次启动再跑）。
+   */
+  settleCompanyOnOrganization(): { address_moved: boolean; synced: WorkspaceId[] }
+  /**
+   * WP251（决策 92）：**一次性**认一遍存量加的品牌——已经有岗位（除负责人那一条外有分配）的
+   * 当作走完过首次设置，免得升级后把在用的品牌拉回向导。跑过一次就记下。
+   */
+  settleAddedBrandCompletion(brands: WorkspaceId[]): { completed: WorkspaceId[] }
+  /**
+   * WP251：某件事**从什么时候起**这样做（第一次问的那一刻记下，之后一直回那一刻）。
+   * 「卡住了」按结构化标记分组从这一版第一次启动起算——在那之前跑的老数据才退回认 AI 末句。
+   */
+  since(key: string): string
+  /** WP251：改公司之后（公司页那条路）把各品牌档案里的影子刷一遍。 */
+  syncCompanyShadows(workspace_id: WorkspaceId): WorkspaceId[]
   /**
    * 建一个新品牌时把品牌级那两样写下来（52 O4 第 ① 步的下半块）。
    *
@@ -496,6 +582,15 @@ export const WIZARD_RANGE_BACKFILL = 'wp138_wizard_ranges'
 /** WP240：加的品牌档案自检的名字（记在 `onboarding_migrations` 里）。 */
 export const ADDED_BRAND_PROFILE_CHECK = 'wp240_added_brand_profiles'
 
+/** WP251：公司级字段归公司的迁移名（也是备份表里那一份的键）。 */
+export const COMPANY_ON_ORG = 'wp251_company_on_org'
+
+/** WP251（决策 91）：「卡住了」改看结构化标记的起点（记在 `onboarding_migrations` 里）。 */
+export const RUN_BLOCK_MARKED_SINCE = 'wp251_run_block_marked_since'
+
+/** WP251（决策 92）：存量加的品牌认「走完过」的迁移名。 */
+export const ADDED_BRAND_COMPLETION = 'wp251_added_brand_completion'
+
 export function createOnboarding(options: OnboardingOptions): OnboardingAssembly {
   const { clock, workspace_id, roles, appendEvent } = options
   const backend =
@@ -527,17 +622,57 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
    * 52 O1：公司级那三样以**组织**为准，档案只是影子。
    * 还没迁过（没装配组织）就退回读档案——存量机器的行为一个字节不变。
    */
-  const companyOf = (): OrganizationProfile | undefined => {
-    const org = options.organization?.()
+  /**
+   * WP251：这个品牌挂的那家公司（真源）。没有组织（还没迁过）才退回读这个品牌档案里的影子。
+   */
+  const orgOf = (ws: WorkspaceId): OrganizationProfile | undefined =>
+    options.organizationOf?.(ws) ?? options.organization?.()
+  const companyFor = (ws: WorkspaceId = workspace_id): OrganizationProfile | undefined => {
+    const org = orgOf(ws)
     if (org !== undefined) return org
-    const p = profileOf()
+    const p = profileOf(ws)
     return p === undefined
       ? undefined
       : {
           legal_name: p.legal_name,
           ...(p.domain === undefined ? {} : { domain: p.domain }),
           discoverable: p.discoverable,
+          ...(p.postal_address === undefined ? {} : { postal_address: p.postal_address }),
         }
+  }
+  /** 启动品牌那家公司（发现、`company_key` 用它——局域网广播是这台机器的事）。 */
+  const companyOf = (): OrganizationProfile | undefined => companyFor(workspace_id)
+  /** 公司那几格写到组织上（没装组织就是 `false`，调用方退回写档案）。 */
+  const writesCompany = (ws: WorkspaceId): boolean =>
+    options.updateOrganization !== undefined && orgOf(ws) !== undefined
+  /**
+   * WP251：档案里公司那几格的影子刷成公司现在的值（同一家公司下的每个品牌）。
+   * 影子只为回滚到旧版时读得到同一套——这一版一格都不读它。回刷了哪几个品牌。
+   */
+  const syncCompanyShadows = (ws: WorkspaceId): WorkspaceId[] => {
+    const company = orgOf(ws)
+    if (company === undefined) return []
+    const synced: WorkspaceId[] = []
+    for (const sib of options.brandsOfCompany?.(ws) ?? [ws]) {
+      const p = profileOf(sib)
+      if (p === undefined) continue
+      const same =
+        p.legal_name === company.legal_name &&
+        p.domain === company.domain &&
+        p.discoverable === company.discoverable &&
+        p.postal_address === company.postal_address
+      if (same) continue
+      const { domain: _d, postal_address: _a, ...rest } = p
+      backend.put(sib, {
+        ...rest,
+        legal_name: company.legal_name,
+        ...(company.domain === undefined ? {} : { domain: company.domain }),
+        discoverable: company.discoverable,
+        ...(company.postal_address === undefined ? {} : { postal_address: company.postal_address }),
+      })
+      synced.push(sib)
+    }
+    return synced
   }
   const keyOf = (): string | undefined => {
     const c = companyOf()
@@ -599,29 +734,36 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
   }
   const isAddedBrand = (ws: WorkspaceId): boolean => ws !== workspace_id && companyConfigured()
 
-  const viewOf = (p: WorkspaceProfile, ws: WorkspaceId = workspace_id): WorkspaceProfileView => ({
-    legal_name: companyOf()?.legal_name ?? p.legal_name,
-    brand_name: brandNameOf(ws),
-    ...(() => {
-      const domain = companyOf()?.domain ?? p.domain
-      return domain === undefined ? {} : { domain }
-    })(),
-    discoverable: companyOf()?.discoverable ?? p.discoverable,
-    // 48 v2 L2：没设过就是实物——存量档案里没有这个字段，它们的行为不许变
-    vertical: p.vertical ?? 'goods',
-    // WP62（51 §1 N0）：没设过就是 Shopify——存量档案里没有这个字段，它们的行为不许变
-    storefront_platform: p.storefront_platform ?? DEFAULT_STOREFRONT_PLATFORM,
-    // WP166：目标市场与出处（设置页「公司档案」同一份可改）
-    ...(p.markets === undefined ? {} : { markets: [...p.markets] }),
-    ...(p.markets_source === undefined ? {} : { markets_source: p.markets_source }),
-    ...(p.market_languages === undefined ? {} : { market_languages: { ...p.market_languages } }),
-    // WP176：公司实体地址（开发信页脚、报价单、单证从这里取）
-    ...(p.postal_address === undefined ? {} : { postal_address: p.postal_address }),
-    // WP248（决策 83）：品牌三格；币种没写过按 USD
-    ...brandFactsOf(p),
-    currency: p.currency ?? DEFAULT_BRAND_CURRENCY,
-    set_at: p.set_at,
-  })
+  const viewOf = (p: WorkspaceProfile, ws: WorkspaceId = workspace_id): WorkspaceProfileView => {
+    // WP251：公司那几格一律读**这个品牌挂的那家公司**（档案里那一份只是影子）
+    const company = companyFor(ws)
+    return {
+      legal_name: company?.legal_name ?? p.legal_name,
+      brand_name: brandNameOf(ws),
+      ...(() => {
+        const domain = company === undefined ? p.domain : company.domain
+        return domain === undefined ? {} : { domain }
+      })(),
+      discoverable: company?.discoverable ?? p.discoverable,
+      // 48 v2 L2：没设过就是实物——存量档案里没有这个字段，它们的行为不许变
+      vertical: p.vertical ?? 'goods',
+      // WP62（51 §1 N0）：没设过就是 Shopify——存量档案里没有这个字段，它们的行为不许变
+      storefront_platform: p.storefront_platform ?? DEFAULT_STOREFRONT_PLATFORM,
+      // WP166：目标市场与出处（设置页「公司档案」同一份可改）
+      ...(p.markets === undefined ? {} : { markets: [...p.markets] }),
+      ...(p.markets_source === undefined ? {} : { markets_source: p.markets_source }),
+      ...(p.market_languages === undefined ? {} : { market_languages: { ...p.market_languages } }),
+      // WP176：公司实体地址（开发信页脚、报价单、单证从这里取）；WP251：公司级
+      ...(() => {
+        const address = company === undefined ? p.postal_address : company.postal_address
+        return address === undefined ? {} : { postal_address: address }
+      })(),
+      // WP248（决策 83）：品牌三格；币种没写过按 USD
+      ...brandFactsOf(p),
+      currency: p.currency ?? DEFAULT_BRAND_CURRENCY,
+      set_at: p.set_at,
+    }
+  }
 
   const activeOf = (person_id: PersonId, ws: WorkspaceId = workspace_id) =>
     roles.assignments
@@ -913,7 +1055,11 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
          * 所以"有没有组织"**不能**当判据——真正的判据仍然是有没有人填过第 ① 步。
          */
         // WP240：建品牌时自动起的那份影子档案（`provisional`）不算"设过"
-        needs_setup: (profile === undefined || profile.provisional === true) && others === 0,
+        // WP251（决策 92）：加的品牌要**走完第 ④ 步**才算设置完——第 ② 步确认了、③④ 没做就离开，
+        // 回首页照样拉回它的首次设置（停在上次那一步：`business_done`）。启动品牌口径不变。
+        needs_setup:
+          others === 0 &&
+          (added ? !backend.completed(ws) : profile === undefined || profile.provisional === true),
         workspace_name: options.workspaceName(ws),
         brand_name: brandNameOf(ws),
         ...(profile === undefined ? {} : { profile: viewOf(profile, ws) }),
@@ -945,7 +1091,8 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
       // WP240：写的是**这个人这会儿开着的那个品牌**（档案、品牌名、事件一律跟着它）
       const ws = actor.workspace_id
       const previous = profileOf(ws)
-      const company = companyOf()
+      // WP251：公司级那几格是**这个品牌挂的那家公司**的（不再是启动品牌那一家、也不再按品牌各一份）
+      const company = companyFor(ws)
       const domain = normalizeDomain(input.domain)
       // 48 v2 L2：不给就沿用上一次；从来没设过就是实物
       const vertical = normalizeVertical(input.vertical) ?? previous?.vertical
@@ -960,10 +1107,12 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
         input.market_languages === undefined
           ? previous?.market_languages
           : normalizeMarketLanguages(input.market_languages)
-      // WP176：公司实体地址——不给就沿用上一次；给空串 = 清空
+      // WP176：公司实体地址——不给就沿用上一次；给空串 = 清空。WP251：公司级（沿用的是公司那一份）
       const postal_address =
         input.postal_address === undefined
-          ? previous?.postal_address
+          ? company === undefined
+            ? previous?.postal_address
+            : company.postal_address
           : normalizePostalAddress(input.postal_address)
       // WP248（决策 83）：品牌三格——不给就沿用上一次；空串 = 清空
       const facts = nextBrandFacts(previous, input)
@@ -990,17 +1139,27 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
        * WP240：**只在公司级那三样真变了时才写组织**——设置页公司与品牌是同一张表一起存的，
        * 在某个品牌里只改了品牌那几格，不该顺手把组织也"改"一遍。
        */
+      const addressChanged =
+        input.postal_address !== undefined && postal_address !== company?.postal_address
       const companyChanged =
         company === undefined ||
         company.legal_name !== next.legal_name ||
         (next.domain !== undefined && next.domain !== company.domain) ||
-        (input.discoverable !== undefined && input.discoverable !== company.discoverable)
-      if (companyChanged)
-        options.updateOrganization?.({
-          legal_name: next.legal_name,
-          ...(next.domain === undefined ? {} : { domain: next.domain }),
-          discoverable: next.discoverable,
-        })
+        (input.discoverable !== undefined && input.discoverable !== company.discoverable) ||
+        addressChanged
+      if (companyChanged) {
+        // WP251：写**这个品牌挂的那家公司**；改了公司 = 对所有品牌生效，各品牌档案里的影子一起刷
+        options.updateOrganization?.(
+          {
+            legal_name: next.legal_name,
+            ...(next.domain === undefined ? {} : { domain: next.domain }),
+            discoverable: next.discoverable,
+            ...(addressChanged ? { postal_address: postal_address ?? '' } : {}),
+          },
+          ws,
+        )
+        syncCompanyShadows(ws)
+      }
       // 52 O4：第 ① 步下半块。品牌名与公司名落在两个地方——它们是两件事
       // WP240：改的是**这个品牌**的名字；和现在一样就不写（不留一条什么都没变的更名）
       const brand_name = input.brand_name?.trim()
@@ -1110,6 +1269,8 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
         const { provisional: _p, ...settled } = shadow
         backend.put(ws, settled)
       }
+      // WP251（决策 92）：走完第 ④ 步——加的品牌从此不再被拉回首次设置
+      backend.markCompleted(ws, clock.now())
       // WP138：留一条痕——以后要分「向导建的」与「手动分配的」，靠的就是它
       /*
        * WP234（docs/54 §6.2）：给了岗位清单——每一行落成一个岗位行（复用模板或新建自建岗位），
@@ -1304,7 +1465,68 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
     isAddedBrand,
     reconcileBrandProfiles,
     companyKey: keyOf,
-    companyProfile: () => companyOf(),
+    companyProfile: (ws) => companyFor(ws ?? workspace_id),
+    syncCompanyShadows,
+    since(key) {
+      const at = backend.migratedAt(key)
+      if (at !== undefined) return at
+      const now = clock.now()
+      backend.markMigrated(key, now)
+      return backend.migratedAt(key) ?? now
+    },
+    settleCompanyOnOrganization() {
+      if (backend.migrated(COMPANY_ON_ORG)) return { address_moved: false, synced: [] }
+      // 没有组织（还没迁过）：什么都不做、也不记下——下次启动组织在了再跑
+      if (orgOf(workspace_id) === undefined || options.updateOrganization === undefined)
+        return { address_moved: false, synced: [] }
+      const at = clock.now()
+      backend.backup('wp251', at)
+      const brands = options.brandsOfCompany?.(workspace_id) ?? [workspace_id]
+      let address_moved = false
+      if (orgOf(workspace_id)?.postal_address === undefined) {
+        // 公司还没有地址：搬最近存过的那个品牌档案里的那一份（一个品牌都没填过就不搬）
+        const latest = brands
+          .map((ws) => profileOf(ws))
+          .filter(
+            (p): p is WorkspaceProfile =>
+              p !== undefined && p.postal_address !== undefined && p.postal_address.trim() !== '',
+          )
+          .sort((a, b) => b.set_at.localeCompare(a.set_at))[0]
+        if (latest?.postal_address !== undefined) {
+          options.updateOrganization({ postal_address: latest.postal_address }, workspace_id)
+          address_moved = true
+        }
+      }
+      const synced = syncCompanyShadows(workspace_id)
+      // 地址不进日志（WP176）；全称也不进（21 §5）——只记搬没搬、刷了几个品牌
+      appendEvent({
+        schema_version: 1,
+        workspace_id,
+        type: 'workspace.company_settled',
+        actor: { kind: 'system', id: 'onboarding' },
+        correlation: { trace_id: `tr_onboarding_${at}` },
+        payload: { address_moved, synced: synced.length, brands: brands.length },
+      })
+      backend.markMigrated(COMPANY_ON_ORG, at)
+      return { address_moved, synced }
+    },
+    settleAddedBrandCompletion(brands) {
+      if (backend.migrated(ADDED_BRAND_COMPLETION)) return { completed: [] }
+      const completed: WorkspaceId[] = []
+      const at = clock.now()
+      for (const ws of brands) {
+        if (ws === workspace_id || backend.completed(ws)) continue
+        // 除负责人那一条外有分配 = 已经在用了（走过第 ④ 步，或者在公司页手动分过岗位）
+        const used = roles.assignments
+          .listByWorkspace(ws)
+          .some((a) => a.revoked_at === undefined && a.role_id !== 'common.owner')
+        if (!used) continue
+        backend.markCompleted(ws, at)
+        completed.push(ws)
+      }
+      backend.markMigrated(ADDED_BRAND_COMPLETION, at)
+      return { completed }
+    },
     vertical: () => profileOf()?.vertical,
     storefrontPlatform: () => profileOf()?.storefront_platform,
     brandProfile(ws) {
@@ -1319,7 +1541,11 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
         ...(p?.market_languages === undefined
           ? {}
           : { market_languages: { ...p.market_languages } }),
-        ...(p?.postal_address === undefined ? {} : { postal_address: p.postal_address }),
+        // WP251：地址是公司级的（读这个品牌挂的那家公司；没有组织才读档案里那一份）
+        ...(() => {
+          const address = companyFor(ws)?.postal_address
+          return address === undefined ? {} : { postal_address: address }
+        })(),
         ...(p === undefined ? {} : brandFactsOf(p)),
         ...(p?.currency === undefined ? {} : { currency: p.currency }),
       }
@@ -1341,7 +1567,7 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
         // 品牌档案还没建过（跳过了首次设置的品牌）：公司已经有名字就用它起一份最小档案，
         // 只多这一格平台；公司还没名字就不替人建（回 false，界面让人先去设置里填公司信息）。
         // 能走到这里的人已经有岗位了（`needs_setup` 本来就是 false），不会把首次设置挡掉。
-        const company = companyOf()
+        const company = companyFor(ws)
         const legal_name = company?.legal_name?.trim() ?? ''
         if (legal_name === '') return false
         backend.put(ws, {
@@ -1363,11 +1589,17 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
       return true
     },
     setPostalAddress(ws, address) {
-      const previous = profileOf(ws)
-      if (previous === undefined) return false
-      const { postal_address: _old, ...rest } = previous
       const next = address === undefined ? undefined : normalizePostalAddress(address)
-      backend.put(ws, { ...rest, ...(next === undefined ? {} : { postal_address: next }) })
+      if (writesCompany(ws)) {
+        // WP251：地址是公司的——写组织（对所有品牌生效），各品牌档案里的影子一起刷
+        options.updateOrganization?.({ postal_address: next ?? '' }, ws)
+        syncCompanyShadows(ws)
+      } else {
+        const previous = profileOf(ws)
+        if (previous === undefined) return false
+        const { postal_address: _old, ...rest } = previous
+        backend.put(ws, { ...rest, ...(next === undefined ? {} : { postal_address: next }) })
+      }
       appendEvent({
         schema_version: 1,
         workspace_id: ws,
@@ -1405,7 +1637,8 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
       return true
     },
     setBrandProfile(ws, input) {
-      const company = companyOf()
+      // WP251：新品牌挂的那家公司（影子照它抄）
+      const company = companyFor(ws)
       const previous = profileOf(ws)
       backend.put(ws, {
         // WP240：建品牌那一刻起的这一份不算"设过"——新品牌照样进首次设置
@@ -1427,10 +1660,10 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
         ...(previous?.market_languages === undefined
           ? {}
           : { market_languages: previous.market_languages }),
-        // WP176：公司实体地址也不归这一步管
-        ...(previous?.postal_address === undefined
+        // WP176：公司实体地址也不归这一步管（WP251：影子照公司抄）
+        ...((company?.postal_address ?? previous?.postal_address) === undefined
           ? {}
-          : { postal_address: previous.postal_address }),
+          : { postal_address: (company?.postal_address ?? previous?.postal_address) as string }),
         // WP248：品牌三格也不归这一步管
         ...(previous === undefined ? {} : nextBrandFacts(previous, {})),
         set_at: clock.now(),
