@@ -37,6 +37,11 @@ export interface DesktopConfig {
    * 环境变量 `AGENTSWS_UPDATE_GITHUB_FALLBACK=0/1` 优先于它（见 `update-feed.ts`）。
    */
   updateGithubFallback: boolean
+  /**
+   * WP247：本机连接器（OpenConnector）上次用的端口；0 = 还没选过。第一次起的时候选一个空的
+   * 记在这里，之后一直用它——OAuth 回调地址（`http://127.0.0.1:<端口>/oauth/callback`）因此不变。
+   */
+  connectPort: number
 }
 
 export const DEFAULT_PORT = 4317
@@ -50,6 +55,7 @@ export const DEFAULT_CONFIG: DesktopConfig = {
   serverUrl: '',
   sceneInBrowser: false,
   updateGithubFallback: true,
+  connectPort: 0,
 }
 
 function isLanguage(value: unknown): value is Language {
@@ -85,6 +91,7 @@ export function parseConfig(raw: unknown): DesktopConfig {
       typeof obj.updateGithubFallback === 'boolean'
         ? obj.updateGithubFallback
         : DEFAULT_CONFIG.updateGithubFallback,
+    connectPort: readPort(obj.connectPort) ?? DEFAULT_CONFIG.connectPort,
   }
 }
 
@@ -99,6 +106,7 @@ export function serializeConfig(config: DesktopConfig): string {
     serverUrl: config.serverUrl,
     sceneInBrowser: config.sceneInBrowser,
     updateGithubFallback: config.updateGithubFallback,
+    connectPort: config.connectPort,
   }
   return `${JSON.stringify(clean, null, 2)}\n`
 }

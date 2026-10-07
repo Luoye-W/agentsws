@@ -224,6 +224,19 @@ describe('WP31：共享真源与地址透传', () => {
     expect(request.env.AGENTSWS_CONNECT_URL).toBe('http://127.0.0.1:3100')
   })
 
+  it('WP247：本机连接器归壳管时多给一个开关；没给地址就不给开关', () => {
+    const local = serverSpawnRequest(
+      input({ connectUrl: 'http://127.0.0.1:43170', connectLocalRuntime: true }),
+    )
+    expect(local.env.AGENTSWS_CONNECT_LOCAL_RUNTIME).toBe('1')
+    expect(
+      serverSpawnRequest(input({ connectLocalRuntime: true })).env.AGENTSWS_CONNECT_LOCAL_RUNTIME,
+    ).toBeUndefined()
+    expect(
+      serverSpawnRequest(input({ connectUrl: 'http://x' })).env.AGENTSWS_CONNECT_LOCAL_RUNTIME,
+    ).toBeUndefined()
+  })
+
   it('四把密钥都在，且 AGENTSWS_SECRETS_KEY 也在（WP20 的第四把）', () => {
     const env = serverSpawnRequest(input()).env
     expect(env.OOMOL_CONNECT_ENCRYPTION_KEY).toBe(secrets.connectEncryptionKey)

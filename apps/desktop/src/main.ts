@@ -29,6 +29,13 @@ import { type ApiClient, createApiClient, type DesktopSession } from './api-clie
 import { BRIDGE_CHANNELS, type BridgeInfo, type SceneOpenOutcome } from './bridge-types.js'
 import { createConfigStore, type DesktopConfig, type Language } from './config.js'
 import {
+  createLocalConnectLauncher,
+  type LocalConnectLauncher,
+  localConnectUrl,
+  pickConnectPort,
+  planConnectRuntime,
+} from './connect-launcher.js'
+import {
   type ConnectRuntimeStatus,
   connectUrlForServer,
   connectUrlFrom,
@@ -75,6 +82,8 @@ import {
   nodeAbort,
   nodeSpawner,
   nodeTimers,
+  osFreePort,
+  portIsFree,
   sleep,
   systemClock,
 } from './node-runtime.js'
@@ -390,12 +399,31 @@ async function bootstrap(): Promise<void> {
   //     拖进主进程的启动路径。WP111：**打包之后一定给一个值**——不给，服务进程会走
   //     开发替身，连接页上连出来的是假连接（见 `connectUrlForServer`）。
   const { DEFAULT_CONNECT_URL: SERVER_DEFAULT_CONNECT_URL } = await import('@agentsws/server')
-  const connectUrl = connectUrlFrom(process.env) ?? SERVER_DEFAULT_CONNECT_URL
-  const serverConnectUrl = connectUrlForServer({
-    env: process.env,
-    packaged: app.isPackaged,
-    fallback: SERVER_DEFAULT_CONNECT_URL,
-  })
+  //     WP247：打包版（且没用 `AGENTSWS_CONNECT_URL` 指外部 runtime）由壳自己起本机连接器——
+  //     不要 Docker；第一次点「连接店铺」时服务进程按需下载，壳当后台服务起停。端口第一次选好就记进配置。
+  const connectPlan = planConnectRuntime({ env: process.env, packaged: app.isPackaged, remote })
+  let connectPort: number | undefined
+  if (connectPlan.kind === 'local') {
+    connectPort = await pickConnectPort({
+      preferred: config.connectPort,
+      isFree: (p) => portIsFree(p),
+      osPort: () => osFreePort(),
+    })
+    if (connectPort !== config.connectPort) config = configStore.update({ connectPort })
+  }
+  const connectUrl =
+    connectPort !== undefined
+      ? localConnectUrl(connectPort)
+      : (connectUrlFrom(process.env) ?? SERVER_DEFAULT_CONNECT_URL)
+  const serverConnectUrl =
+    connectPort !== undefined
+      ? localConnectUrl(connectPort)
+      : connectUrlForServer({
+          env: process.env,
+          packaged: app.isPackaged,
+          fallback: SERVER_DEFAULT_CONNECT_URL,
+        })
+  logger.info('连接器从哪来', { plan: connectPlan.kind, url: serverConnectUrl ?? '(替身)' })
 
   const server = createSidecar({
     name: 'server',
@@ -418,6 +446,8 @@ async function bootstrap(): Promise<void> {
         haltFile: paths.haltFile,
         halt: halt.read(),
         ...(serverConnectUrl === undefined ? {} : { connectUrl: serverConnectUrl }),
+        // WP247：本机连接器归壳管——告诉服务进程它可以替用户下载
+        connectLocalRuntime: connectPort !== undefined,
         // WP136（docs/79）：dsh 场景与本机凭据库住在 `<userData>/dsh`，不碰用户另装的 `~/.dsh`
         dshHome: paths.dshHome,
         appDataDir: paths.userData,
@@ -447,12 +477,49 @@ async function bootstrap(): Promise<void> {
   //     员工电脑既探不到也不该探——那一格在托盘上直接不出现。
   //     WP111：探不到**不影响启动**，只让依赖它的连接卡置灰（见 catalog.ts 的
   //     `connectCardGating`）。托盘上那一行照旧说"连接器 runtime：未检测到"。
+  /*
+   * WP247：本机连接器的监督者（`connect-launcher.ts`）。服务进程下载装好后它自己看见、自己起；
+   * 崩了退避重启；应用退出时与服务进程一起停干净（Windows 上关 stdin、到点按进程树强杀）。
+   * 输出进 `logs/open-connector.log`（过脱敏）。
+   */
+  const connectLog = createLogger({
+    files,
+    path: join(paths.logDir, 'open-connector.log'),
+    clock: systemClock,
+    ...(secrets === undefined ? {} : { redactor: createRedactor(secretLiterals(secrets)) }),
+  })
+  const connectLauncher: LocalConnectLauncher | undefined =
+    connectPort === undefined
+      ? undefined
+      : createLocalConnectLauncher({
+          dataDir: paths.serverDataDir,
+          port: connectPort,
+          nodeExec: serverRuntime.execPath,
+          electron: serverRuntime.kind === 'electron',
+          secrets: () => ({
+            encryptionKey: secrets?.connectEncryptionKey ?? '',
+            adminToken: secrets?.connectAdminToken ?? '',
+          }),
+          baseEnv: process.env,
+          files,
+          spawner: nodeSpawner(),
+          timers: nodeTimers(),
+          clock: systemClock,
+          logger,
+          random: () => (cryptoRandomBytes(1)[0] ?? 0) / 256,
+          onOutput: (stream, line) => {
+            connectLog.raw(`[${stream}] ${line}`)
+          },
+          // 连接器的两把密钥不随「轮换本机密钥」变（那只换 AGENTSWS_SECRETS_KEY），一份脱敏器用到底
+          redact: createRedactor(secrets === undefined ? [] : secretLiterals(secrets)),
+        })
+
   const connect = remote
     ? undefined
     : createConnectRuntime({
         baseUrl: connectUrl,
         clock: systemClock,
-        launcher: notImplementedLauncher('docker'),
+        launcher: connectLauncher ?? notImplementedLauncher('docker'),
         probe: async (baseUrl): Promise<HardeningReportLike> => {
           const { assertRuntimeHardened } = await import('@agentsws/connect-adapter')
           return assertRuntimeHardened(baseUrl, {
@@ -1453,9 +1520,14 @@ async function bootstrap(): Promise<void> {
     quitApproved = true
     quitConfirmation.dispose()
   })
-  /** 服务进程（连同它起的场景）退干净没有；最多等 15 秒（Windows 上 8 秒没退壳会按进程树强杀）。 */
+  /**
+   * 服务进程（连同它起的场景）与本机连接器（WP247）退干净没有；最多等 15 秒
+   * （Windows 上 8 秒没退壳会按进程树强杀）。
+   */
+  const childAlive = (): boolean =>
+    server.snapshot().pid !== undefined || connectLauncher?.snapshot().pid !== undefined
   const waitServerGone = async (): Promise<void> => {
-    for (let i = 0; i < 60 && server.snapshot().pid !== undefined; i += 1) await sleep(250)
+    for (let i = 0; i < 60 && childAlive(); i += 1) await sleep(250)
   }
   let serverDrained = false
   app.on('before-quit', (event) => {
@@ -1474,9 +1546,10 @@ async function bootstrap(): Promise<void> {
      * 强杀那个计时器在壳里——壳先走了，收尾卡住的服务进程就成了孤儿，锁着安装目录里的 node.exe，
      * 下一次更新 / 卸载「文件被占用」。
      */
-    if (!serverDrained && server.snapshot().pid !== undefined) {
+    if (!serverDrained && childAlive()) {
       event.preventDefault()
       server.stop()
+      void connectLauncher?.stop()
       void waitServerGone().then(() => {
         serverDrained = true
         app.quit()
@@ -1484,6 +1557,7 @@ async function bootstrap(): Promise<void> {
       return
     }
     server.stop()
+    void connectLauncher?.stop()
   })
 
   server.subscribe(() => {
@@ -1491,6 +1565,8 @@ async function bootstrap(): Promise<void> {
   })
   // 40 §1.3 的那句话落在这一行：`remote` 档**一个进程都不拉**。
   if (!remote) server.start()
+  // WP247：本机连接器——没下载就只是每 2 秒看一眼，下好了自己起
+  void connectLauncher?.start()
 
   // ── 健康轮询：托盘状态、"打开工作台"是否可点都看它。
   let firstRunOpened = false
@@ -1657,6 +1733,7 @@ async function bootstrap(): Promise<void> {
     quitting = true
     for (const w of liveSceneWindows()) w.window.destroy()
     server.stop()
+    void connectLauncher?.stop()
     await waitServerGone()
   }
 
