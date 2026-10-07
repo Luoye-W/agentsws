@@ -1961,7 +1961,8 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
  * - 缺省 6 万 token、12 次；
  * - WP144：批过电脑操控授权的 40 次；WP148 / WP179：真挂了浏览器或网页工具的 30 次；
  * - 10-07 真机（Fable）：网页模板（带主题工具）一轮读主题规矩 / 目录 / 模板 / 区块就十几次调用、
- *   七万多 token，旧上限连第一页都没改到就「预算不够」停了——放到 40 万 token、60 次。
+ *   七万多 token，旧上限连第一页都没改到就「预算不够」停了——放到 40 万 token、60 次；
+ *   WP260：再放到 80 万 token、40 回合（见下）。
  */
 export function runBudgetCaps(input: { themeRun: boolean; granted: boolean; browsing: boolean }): {
   max_tokens: number
@@ -1971,8 +1972,11 @@ export function runBudgetCaps(input: { themeRun: boolean; granted: boolean; brow
   /*
    * WP260（ci.16）：工具调用放到 60 次之后，真正先到的是**回合**上限（运行时缺省 8 回合，一回合读三四个文件）
    * ——8 回合到了就停在一句「现在读…」。网页模板的回合放到 40（一回合至少一次调用，60 次调用的上限仍在）。
+   * token 放到 80 万：这是**累计**输入（每回合把整段历史再送一遍，大半是缓存命中）。WP260 回放一轮 10 回合
+   * 约 16 万、历史峰值 2.2 万；真模型回合多一倍、历史压到 4.8 万阈值附近时，40 万会在推预览之前用完。
+   * 花费另有 `max_cost_base` 兜底。
    */
-  if (input.themeRun) return { max_tokens: 400_000, max_tool_calls: 60, max_turns: 40 }
+  if (input.themeRun) return { max_tokens: 800_000, max_tool_calls: 60, max_turns: 40 }
   return {
     max_tokens: 60_000,
     max_tool_calls: input.granted ? 40 : input.browsing ? 30 : 12,
