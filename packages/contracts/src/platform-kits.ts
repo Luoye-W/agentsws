@@ -91,6 +91,8 @@ export interface PlatformCliSpec {
    * 不写 = 这个 CLI 不支持「一键登录」，卡上只给复制命令。
    */
   login_args?: readonly string[]
+  /** WP245：卡上「登录 X」的 X（登的是哪家的账号；不写就用 {@link label}）。 */
+  account_label?: string
   /**
    * WP245：「一键安装」装哪个 npm 标签（装进应用自己的数据目录，不写全局）。不写 = `latest`。
    * 参数在服务端拼死（`npm install --prefix <数据目录> <npm>@<tag>`），不接受任意字符串。
@@ -159,6 +161,7 @@ export const PLATFORM_KITS: readonly PlatformKit[] = [
       login_command: 'shopify auth login',
       // WP245：一键登录（服务端起这一条，登录网址交给工作台打开；密码只在 Shopify 网页上输）
       login_args: ['auth', 'login'],
+      account_label: 'Shopify',
       npm_tag: 'latest',
       tutorial: 'shopify-cli',
       positions: ['site'],
