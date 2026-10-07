@@ -330,6 +330,8 @@ export function createOwnSubQueue(options: OwnSubQueueOptions): OwnSubQueue {
           ...(removal_rule === undefined || removal_rule === '' ? {} : { removal_rule }),
           ...(removal_message === undefined ? {} : { removal_message }),
           via: channel(),
+          // 卡面那一句「将执行」（渲染层原样显示；执行器读的是上面那几格结构化字段）
+          will_do: `${what}（经${via}）`,
         },
         notes: [
           `将执行：${what}（经${via}）。`,

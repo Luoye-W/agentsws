@@ -6,6 +6,12 @@
  */
 export const OWN_SUB_ZH: Record<string, string> = {
   'pos2.quick.modqueue': '自家版待处理',
+  'category.own_sub_moderation': '版务',
+  'ownsub.card.will_do': '将执行',
+  'ownsub.card.original': '原文',
+  'ownsub.card.reports': '举报原因',
+  'ownsub.card.suggestion': 'AI 建议',
+  'ownsub.card.public_reply': '移除后公开回复',
   'ownsub.title': '自家版待处理',
   'ownsub.refresh': '刷新',
   'ownsub.via.api': '官方接口',
@@ -57,6 +63,12 @@ export const OWN_SUB_ZH: Record<string, string> = {
 
 export const OWN_SUB_EN: Record<string, string> = {
   'pos2.quick.modqueue': 'Own sub queue',
+  'category.own_sub_moderation': 'Moderation',
+  'ownsub.card.will_do': 'Will do',
+  'ownsub.card.original': 'Original',
+  'ownsub.card.reports': 'Reports',
+  'ownsub.card.suggestion': 'AI suggestion',
+  'ownsub.card.public_reply': 'Public reply after removal',
   'ownsub.title': 'Own sub queue',
   'ownsub.refresh': 'Refresh',
   'ownsub.via.api': 'Official API',

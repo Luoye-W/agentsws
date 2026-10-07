@@ -63,6 +63,7 @@ export {
   estimatedMinutes,
   evidenceChipsOf,
   highlightsOf,
+  isOwnSubModerationItem,
   isRouteChoiceItem,
   MAX_ENTITY_CHIPS,
   MAX_EVIDENCE_CHIPS,
