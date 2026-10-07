@@ -9,6 +9,7 @@ import { LIBRARY_EN, LIBRARY_ZH } from './i18n-library'
 import { LOCAL_CONNECTOR_EN, LOCAL_CONNECTOR_ZH } from './i18n-local-connector'
 import { POSITION_EN, POSITION_ZH } from './i18n-position'
 import { READ_ROUTES_EN, READ_ROUTES_ZH } from './i18n-read-routes'
+import { SITE_THEME_EN, SITE_THEME_ZH } from './i18n-site-theme'
 
 export type Lang = 'zh' | 'en'
 
@@ -7922,6 +7923,8 @@ const TABLES: Record<Lang, Table> = {
     ...POSITION_ZH,
     ...READ_ROUTES_ZH,
     ...LOCAL_CONNECTOR_ZH,
+    // WP253：建站岗位「AI 改主题」引导在 `i18n-site-theme.ts`
+    ...SITE_THEME_ZH,
   },
   en: {
     ...en,
@@ -7930,6 +7933,7 @@ const TABLES: Record<Lang, Table> = {
     ...POSITION_EN,
     ...READ_ROUTES_EN,
     ...LOCAL_CONNECTOR_EN,
+    ...SITE_THEME_EN,
   },
 }
 

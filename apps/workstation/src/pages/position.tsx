@@ -22,6 +22,7 @@ import { DeckSection } from '@/components/deck'
 import { DataBoard } from '@/components/position/data-board'
 import { PositionHandoff } from '@/components/position/position-handoff'
 import { PositionSettings } from '@/components/position/position-settings'
+import { SiteThemeBanner } from '@/components/position/site-theme-banner'
 import { WorkSection } from '@/components/position/work-section'
 import { PositionIcon } from '@/components/role-icons/role-icon'
 import { Hint } from '@/components/ui/hint'
@@ -374,6 +375,9 @@ export function PositionPage(): React.ReactNode {
           )}
         </div>
       )}
+
+      {/* WP253：建站岗位「让 AI 改网站还差哪一步」（没装 CLI / 没登录 / 没店铺地址）；补上就消失 */}
+      <SiteThemeBanner positionId={view?.position_id} duties={duties} />
 
       <Tabs value={tab} onValueChange={setTab}>
         <TabsList>

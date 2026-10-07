@@ -14,6 +14,7 @@ import {
   Bot,
   CheckSquare,
   CreditCard,
+  ExternalLink,
   FileText,
   MessageSquare,
   Pin,
@@ -21,6 +22,7 @@ import {
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
+import { openExternal } from '@/components/connections/bridge'
 import { AskAiPanel } from '@/components/deck/ask-ai-panel'
 import { StatusPill } from '@/components/design'
 import { RAIL_FETCH } from '@/components/sidebar/duty-threads'
@@ -263,6 +265,21 @@ function TimelineEvent({
             </div>
           )
         })()}
+        {/* WP253：「预览好了」那一条——未发布主题的预览链接（线上没动） */}
+        {event.preview === undefined ? null : (
+          <Button
+            size="xs"
+            variant="outline"
+            className="mt-1 gap-1"
+            data-testid="matter-preview-open"
+            onClick={() => {
+              if (event.preview !== undefined) openExternal(event.preview.url)
+            }}
+          >
+            <ExternalLink className="size-3" aria-hidden />
+            {t('matter.preview.open')}
+          </Button>
+        )}
         {onResume === undefined ? null : (
           <Button
             size="xs"
