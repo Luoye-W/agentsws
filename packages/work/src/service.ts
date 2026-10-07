@@ -469,6 +469,8 @@ export class Work {
       stopped?: MatterEvent['stopped']
       /** WP237：岗位内路由那一条上能一键选 / 换的职责。 */
       route?: MatterEvent['route']
+      /** WP251（决策 91）：这一轮卡在缺连接 / 缺凭据上的结构化标记。 */
+      blocked?: MatterEvent['blocked']
       at?: Iso8601
     },
   ): MatterEvent {
@@ -492,6 +494,15 @@ export class Work {
             route: {
               ...(input.route.picked === undefined ? {} : { picked: input.route.picked }),
               options: input.route.options.map((o) => ({ ...o })),
+            },
+          }),
+      ...(input.blocked === undefined
+        ? {}
+        : {
+            blocked: {
+              reason: input.blocked.reason,
+              connections: [...input.blocked.connections],
+              tools: [...input.blocked.tools],
             },
           }),
     }

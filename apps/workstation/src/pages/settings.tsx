@@ -157,6 +157,8 @@ export function SettingsPage({
       setFailure(undefined)
       setSaved(true)
       await client.invalidateQueries({ queryKey: ['onboarding'] })
+      // WP251：「公司」一块改的是公司——下面那张「公司」卡（全称）也要跟着刷
+      await client.invalidateQueries({ queryKey: ['orgs'] })
     },
     onError: (err: unknown) => {
       setFailure(err instanceof ApiClientError ? err.message : t('error.generic'))

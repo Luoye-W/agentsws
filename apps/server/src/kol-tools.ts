@@ -208,6 +208,12 @@ export function createKolToolExecutor(options: KolToolsOptions): ToolExecutor {
             },
           }
         }
+        // WP251（决策 91）：「没连上」带上机器码开头——运行时据此在这一轮上记结构化的「卡住了」
+        if (res.reason === 'not_connected')
+          return {
+            status: 'error',
+            reason: `not_connected：${res.message ?? `${channel} 还没连上。`}`,
+          }
         return { status: 'error', reason: res.message ?? res.reason ?? '这条渠道这次没答上来。' }
       }
 
