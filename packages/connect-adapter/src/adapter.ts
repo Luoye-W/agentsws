@@ -1036,10 +1036,11 @@ class OpenConnectorAdapter implements ConnectAdapter {
    */
   private upstreamName(service: string, alias: string, list: WireConnection[]): string {
     if (this.opts.owners === undefined) return alias
-    const legacyMine = list.find(
-      (c) => c.service === service && c.connectionName === alias && this.isMine(c),
-    )
-    const name = legacyMine !== undefined ? alias : brandConnectionName(this.workspaceId, alias)
+    const mineNamed = (n: string): boolean =>
+      list.some((c) => c.service === service && c.connectionName === n && this.isMine(c))
+    // 先认本品牌带品牌段的那条（令牌刷新按别名推回来时落在它身上），再认本品牌的老名字
+    const branded = brandConnectionName(this.workspaceId, alias)
+    const name = mineNamed(branded) ? branded : mineNamed(alias) ? alias : branded
     const taken = list.find((c) => c.service === service && c.connectionName === name)
     if (taken !== undefined && !this.isMine(taken)) {
       throw new ConnectAdapterError(

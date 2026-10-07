@@ -451,3 +451,29 @@ describe('WP252 迁移：补记归属（幂等）', () => {
     expect(owners.ownerOf('x')?.workspace_id).toBe(A)
   })
 })
+
+describe('WP252 同一个品牌再推一次（令牌刷新 / 重连）', () => {
+  it('按别名再推：落在本品牌带品牌段的那条上就地更新，不另起一条', async () => {
+    const rt = fakeRuntime()
+    const owners = new ConnectionOwners()
+    const b = brand(rt, B, owners)
+    const first = await submit(b, B, 'token-1')
+    const again = await submit(b, B, 'token-2')
+    expect(again.id).toBe(first.id)
+    expect(rt.conns).toHaveLength(1)
+    expect(rt.conns[0]?.secret).toBe('token-2')
+  })
+
+  it('本品牌老名字与带品牌段的都有：先认带品牌段的那条', async () => {
+    const rt = fakeRuntime([
+      {},
+      { id: 'c-a', connectionName: 'default--ws_0llwvcm2', default: false, secret: 'new' },
+    ])
+    const owners = new ConnectionOwners()
+    const a = brand(rt, A, owners)
+    expect((await a.connections(A)).map((c) => c.id).sort()).toEqual(['c-a', 'legacy-1'])
+    const pushed = await submit(a, A, 'rotated')
+    expect(pushed.id).toBe('c-a')
+    expect(rt.conns.find((c) => c.id === 'legacy-1')?.secret).toBe('old')
+  })
+})
