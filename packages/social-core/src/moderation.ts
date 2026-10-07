@@ -29,6 +29,8 @@ export type ModerationAction =
   | 'ban'
   | 'permanent_ban'
   | 'unban'
+  // WP249：版务队列里的「批准」（Reddit：放行被举报 / 被扣下的帖子，清掉举报）。只加不改
+  | 'approve'
 
 /** 这个群自己写的一条群规。 */
 export interface CommunityRule {
@@ -134,4 +136,5 @@ export const ACTION_WORDS: Readonly<Record<ModerationAction, string>> = {
   ban: '移出并封禁',
   permanent_ban: '永久封禁',
   unban: '解封',
+  approve: '批准（放回版里）',
 }

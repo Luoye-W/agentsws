@@ -561,7 +561,15 @@ describe('lib/position-work', () => {
       { role_id: 'b2b.outbound', role_name: '主动开发', assignment_id: 'a3' },
       { role_id: 'dtc.live-chat', role_name: '在线客服', assignment_id: 'a4' },
     ])
-    expect(views.map((v) => v.kind)).toEqual(['schedule', 'kol', 'broadcast', 'outbound', 'chat'])
+    // WP249：自家版运营多一个「自家版待处理」，排在它的群发后面
+    expect(views.map((v) => v.kind)).toEqual([
+      'schedule',
+      'kol',
+      'broadcast',
+      'modqueue',
+      'outbound',
+      'chat',
+    ])
   })
 
   it('时间说法：今天 18:00 / 明天 / MM-DD', () => {

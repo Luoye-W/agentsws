@@ -79,6 +79,7 @@ import {
   weekStart,
 } from '@agentsws/social-core'
 import type { StageInput, StageOutcome } from '@agentsws/txn'
+import { createOwnSubQueue, type OwnSubQueue, type OwnSubQueueOptions } from './own-sub-queue.js'
 import type { SocialStore } from './social.js'
 import type { SocialChannelsAssembly } from './social-channels.js'
 import { recipientOf, type ScopeManagerRouter } from './supervisor.js'
@@ -199,6 +200,14 @@ export interface SocialServiceOptions {
     /** 为什么发不出去（平台原话或"没连上"），写进待办备注。 */
     reason: string
   }): { todo_id: string } | undefined
+  /**
+   * WP249（决策 81 / 89）：「自家版待处理」要的那几样（官方号浏览器、施行口）。不给 = 不装配
+   * 这一块（那几个路由照实说没装配）。审批、额度、事件与库由这里注入，不另起一套。
+   */
+  ownSub?: Pick<
+    OwnSubQueueOptions,
+    'officialBrowser' | 'apiConnected' | 'applyApproval' | 'cancelWindowMs'
+  >
 }
 
 export interface SocialServiceAssembly {
@@ -219,6 +228,8 @@ export interface SocialServiceAssembly {
    * 代价是关注的人看到两条一样的。
    */
   publishDue(): Promise<SocialPublishSweep>
+  /** WP249：自家版待处理（执行器与决定钩子从这里调）。没装配就没有。 */
+  ownSub?: OwnSubQueue
 }
 
 /** {@link SocialServiceAssembly.broadcastDue} 回的那一份。 */
@@ -460,7 +471,35 @@ export function createSocialService(options: SocialServiceOptions): SocialServic
     }
   }
 
+  /** WP249：自家版待处理（出卡走上面那个 `stageOne`——审批、额度只有一处）。 */
+  const ownSub: OwnSubQueue | undefined =
+    options.ownSub === undefined
+      ? undefined
+      : createOwnSubQueue({
+          ...options.ownSub,
+          workspace_id,
+          store,
+          clock,
+          adapter: () => options.channels?.adapters.reddit,
+          stage: stageOne,
+          ledger,
+          emit: (type, actor, payload) => emit(type, actor, payload),
+        })
+  const ownSubOr501 = (): OwnSubQueue => {
+    if (ownSub === undefined)
+      throw new ApiError('not_implemented', '这个服务进程没有装配「自家版待处理」。')
+    return ownSub
+  }
+
   const port: SocialPort = {
+    // ── WP249：自家版待处理 + Reddit 官方号浏览器通道 ──
+    ownSubQueue: (actor) => ownSubOr501().queue(actor),
+    stageOwnSub: (actor, input) => ownSubOr501().stage(actor, input),
+    redditBrowserStatus: () => ownSubOr501().browserStatus(),
+    redditBrowserLogin: () => ownSubOr501().openLogin(),
+    redditBrowserCheck: () => ownSubOr501().checkLogin(),
+    redditBrowserClose: () => ownSubOr501().closeWindow(),
+
     accounts: (_actor, filter) => ({
       rows: store.accounts(
         filter.channel === undefined ? undefined : { channel: filter.channel },
@@ -477,6 +516,10 @@ export function createSocialService(options: SocialServiceOptions): SocialServic
         url: input.url,
         external_id: input.external_id,
         ...(input.connection_id === undefined ? {} : { connection_id: input.connection_id }),
+        // WP249：只有 Reddit 的版能标「自家版」（我们是版主，才有版务队列）
+        ...(input.own_subreddit === true && input.channel === 'reddit'
+          ? { own_subreddit: true }
+          : {}),
         // 刚登记的号还没拉过数：`observed_at` 是"这一份资料什么时候看到的"，
         // 现在看到的就是用户自己填的这一份，所以就是此刻
         observed_at: clock.now(),
@@ -1217,5 +1260,5 @@ export function createSocialService(options: SocialServiceOptions): SocialServic
     return out
   }
 
-  return { port, publishDue, broadcastDue }
+  return { port, publishDue, broadcastDue, ...(ownSub === undefined ? {} : { ownSub }) }
 }

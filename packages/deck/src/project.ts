@@ -685,6 +685,23 @@ export function priorityBandOf(
  * WP237：岗位内路由拿不准时出的那张「这件事该走哪条职责」卡（`claim` 类、`form: 'route_choice'`）。
  * 它借的是认领卡的 kind，但问的是选择题——按钮是候选职责，不是「认领 / 不是客户问题」。
  */
+/**
+ * WP249：「自家版待处理」出的版务卡（`community_moderation` + `after.source === 'own_sub_queue'`）。
+ *
+ * 表里 `community_moderation` 是 ⑦ 事后决定（「解除禁言 / 先停着」——设计稿按「L2 已经做了、问要不要
+ * 改回来」画的）。自家版这一类是**做之前**的卡（批了才执行），所以按 ② 改动卡排：主动词「批准」，
+ * 卡面由渲染层画原文、AI 建议、理由、将执行的动作。别的 `community_moderation` 一个字节不变。
+ */
+export function isOwnSubModerationItem(item: Pick<ApprovalItem, 'kind' | 'payload'>): boolean {
+  if (item.kind !== 'staged_change' || !isRecord(item.payload)) return false
+  const after = item.payload.after
+  return (
+    item.payload.kind === 'community_moderation' &&
+    isRecord(after) &&
+    after.source === 'own_sub_queue'
+  )
+}
+
 export function isRouteChoiceItem(item: Pick<ApprovalItem, 'kind' | 'payload'>): boolean {
   return item.kind === 'claim' && isRecord(item.payload) && item.payload.form === 'route_choice'
 }
@@ -778,7 +795,9 @@ export function projectCard(item: ApprovalItem, ctx: ProjectContext): DeckCard {
     layout:
       isRouteChoiceItem(item) && options !== undefined
         ? 'choice'
-        : layoutFor(kind, str(payload.kind)),
+        : isOwnSubModerationItem(item)
+          ? 'change'
+          : layoutFor(kind, str(payload.kind)),
     // WP100：算 layout 时已经读过这一格，顺手带出来给类别人话与主动词用（见 verbs.ts）
     ...(kind === 'staged_change' && str(payload.kind) !== undefined
       ? { change_kind: str(payload.kind) as string }
