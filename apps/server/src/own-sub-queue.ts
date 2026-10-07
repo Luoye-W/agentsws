@@ -93,6 +93,14 @@ export interface OwnSubQueue {
    * **不判类、不出卡**），回线程 id。起草与回帖卡走线程那两条口子（`/v1/social/threads/:id/reply…`）。
    */
   thread(actor: SocialActor, input: { account_id: string; item_id: string }): { thread_id: string }
+  /**
+   * WP256（决策 147）：没人打开「自家版待处理」时的低频补读——只读 `unmoderated`（新帖）一页，把新帖记成线程
+   * （进「群里的帖子」）。**不另起轮询**：挂在社媒那条每 5 分钟的定时上，但同一个版一小时内被读过
+   * （视图读的也算）就不读；没接上就不读。限速照旧走出口自己那本账。
+   */
+  backgroundRead(): Promise<{ read: number; ingested: number }>
+  /** 这会儿走哪条路（接口 / 官方号浏览器 / 都不通）。 */
+  route(): OwnSubQueueView['channel']
   /** 执行器调：是这一类卡就执行并回结果，不是就 `undefined`（掉回原来那条路）。 */
   apply(change: StagedChange): Promise<
     | {
@@ -122,6 +130,12 @@ const NO_BROWSER_STATUS: RedditOfficialBrowserStatus = {
   writes_last_day: 0,
   max_writes_per_day: 0,
 }
+
+/**
+ * WP256：没人看视图时多久补读一次（毫秒）。官方号浏览器一天 150 页的读额度里，这一条每个版每天最多 24 页
+ * （只读新帖那一页），给人打开视图、点刷新留够余量。
+ */
+export const OWN_SUB_BACKGROUND_READ_MS = 60 * 60_000
 
 const isOwnSub = (after: unknown): after is Record<string, unknown> =>
   typeof after === 'object' &&
@@ -162,6 +176,79 @@ export function createOwnSubQueue(options: OwnSubQueueOptions): OwnSubQueue {
     (await options.ledger.list({ workspace_id, kind: 'community_moderation' })).filter((c) =>
       isOwnSub(c.after),
     )
+
+  /**
+   * 队列里的一条 → 社媒库线程（Reddit fullname 全站唯一：线程 id 拿它拼，同一条只记一次；已经记过的
+   * 原样不动——它可能已经回过了）。**不判类、不出卡**。回线程 id 与这次是不是新记的。
+   */
+  const recordThread = (
+    entry: ModQueueEntry,
+    account: SocialAccount,
+  ): { thread_id: string; created: boolean } => {
+    const known =
+      store.thread(`ct_reddit_${entry.id}`) ??
+      store.threads({ account_id: account.id }).find((t) => t.external_id === entry.id)
+    if (known !== undefined) return { thread_id: known.id, created: false }
+    const row: CommunityThread = {
+      id: `ct_reddit_${entry.id}`,
+      account_id: account.id,
+      channel: 'reddit',
+      external_id: entry.id,
+      surface: entry.thing === 'post' ? 'thread' : 'comment',
+      author_external_id: entry.author,
+      author_handle: `u/${entry.author}`,
+      // 外部文本原样存（回帖卡上「回的是哪一句」就是它）
+      text: `${entry.title === undefined ? '' : `${entry.title}\n`}${entry.excerpt}`,
+      created_at: entry.created_at ?? clock.now(),
+      status: 'open',
+    }
+    store.saveThread(row)
+    return { thread_id: row.id, created: true }
+  }
+
+  /**
+   * WP256（决策 147）：`unmoderated` 读回来的新帖记进「群里的帖子」，并记下这个版这次读到的时刻
+   * （后台补读看它决定要不要读）。只记帖子（评论不是「新帖」）。
+   */
+  const ingestNewPosts = (account: SocialAccount, entries: readonly ModQueueEntry[]): number => {
+    let created = 0
+    for (const entry of entries)
+      if (entry.thing === 'post' && recordThread(entry, account).created) created += 1
+    // 读成了：上次那句失败原话不留
+    const { message: _message, ...prev } = store.ingestState(account.id) ?? {
+      id: account.id,
+      channel: 'reddit' as const,
+    }
+    store.saveIngestState({
+      ...prev,
+      id: account.id,
+      channel: 'reddit',
+      account_id: account.id,
+      state: 'ok',
+      last_read_at: clock.now(),
+      ingested_total: (prev.ingested_total ?? 0) + created,
+    })
+    if (created > 0)
+      options.emit('social.threads_ingested', 'system', {
+        channel: 'reddit',
+        account_id: account.id,
+        count: created,
+      })
+    return created
+  }
+
+  /** 读失败也记一笔（视图那一行照实说上次为什么没读成）。 */
+  const ingestFailed = (account: SocialAccount, limited: boolean, message: string): void => {
+    store.saveIngestState({
+      ...store.ingestState(account.id),
+      id: account.id,
+      channel: 'reddit',
+      account_id: account.id,
+      state: limited ? 'limited' : 'failed',
+      message,
+      last_read_at: clock.now(),
+    })
+  }
 
   /** 批了、过了取消窗口、还没施行的：补施行（读队列时顺手扫一遍）。 */
   const drain = async (cards: readonly StagedChange[]): Promise<void> => {
@@ -216,6 +303,8 @@ export function createOwnSubQueue(options: OwnSubQueueOptions): OwnSubQueue {
         for (const source of ['modqueue', 'unmoderated', 'join_requests'] as const) {
           const res = await adapter.modQueue?.({ account_external_id: sub, source, limit: 50 })
           if (res === undefined || !res.ok) {
+            if (source === 'unmoderated' && res !== undefined && res.reason !== 'not_implemented')
+              ingestFailed(account, res.reason === 'rate_limited', res.message)
             sources.push({
               subreddit: sub,
               source,
@@ -230,6 +319,8 @@ export function createOwnSubQueue(options: OwnSubQueueOptions): OwnSubQueue {
             continue
           }
           sources.push({ subreddit: sub, source, status: 'ok', count: res.data.length })
+          // WP256：新帖顺手记进「群里的帖子」（复用这一次读，不另读）
+          if (source === 'unmoderated') ingestNewPosts(account, res.data)
           for (const entry of res.data) {
             // 同一条既在 modqueue 又在 unmoderated：按 modqueue 那一条算（带举报的更要紧）
             if (cache.has(entry.id)) continue
@@ -368,28 +459,35 @@ export function createOwnSubQueue(options: OwnSubQueueOptions): OwnSubQueue {
       const hit = cache.get(input.item_id)
       if (hit === undefined || hit.account.id !== input.account_id)
         throw new ApiError('not_found', '队列里没有这一条了（可能刚被处理过）。刷新一下再点。')
-      const { entry, account } = hit
-      const known = store
-        .threads({ account_id: account.id })
-        .find((t) => t.external_id === entry.id)
-      if (known !== undefined) return { thread_id: known.id }
-      const row: CommunityThread = {
-        // Reddit 的 fullname 全站唯一：拿它拼线程 id，同一条怎么点都只有一行
-        id: `ct_reddit_${entry.id}`,
-        account_id: account.id,
-        channel: 'reddit',
-        external_id: entry.id,
-        surface: entry.thing === 'post' ? 'thread' : 'comment',
-        author_external_id: entry.author,
-        author_handle: `u/${entry.author}`,
-        // 外部文本原样存（回帖卡上「回的是哪一句」就是它）
-        text: `${entry.title === undefined ? '' : `${entry.title}\n`}${entry.excerpt}`,
-        created_at: entry.created_at ?? clock.now(),
-        status: 'open',
-      }
-      store.saveThread(row)
-      return { thread_id: row.id }
+      return { thread_id: recordThread(hit.entry, hit.account).thread_id }
     },
+
+    async backgroundRead() {
+      const out = { read: 0, ingested: 0 }
+      const adapter = options.adapter()
+      if (adapter?.modQueue === undefined || channel() === 'none') return out
+      const nowMs = Date.parse(clock.now())
+      for (const account of ownSubs()) {
+        const last = store.ingestState(account.id)?.last_read_at
+        if (last !== undefined && nowMs - Date.parse(last) < OWN_SUB_BACKGROUND_READ_MS) continue
+        const res = await adapter.modQueue({
+          account_external_id: subName(account),
+          source: 'unmoderated',
+          limit: 50,
+        })
+        out.read += 1
+        if (!res.ok) {
+          ingestFailed(account, res.reason === 'rate_limited', res.message)
+          // 被限速 / 被拦了：别的版这一轮也不读了（同一个官方号、同一本账）
+          if (res.reason === 'rate_limited') break
+          continue
+        }
+        out.ingested += ingestNewPosts(account, res.data)
+      }
+      return out
+    },
+
+    route: channel,
 
     async apply(change) {
       if (change.kind !== 'community_moderation' || !isOwnSub(change.after)) return undefined

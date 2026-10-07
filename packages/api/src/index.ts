@@ -643,6 +643,8 @@ export type {
   SocialBroadcastView,
   SocialCalendarCell,
   SocialCalendarView,
+  SocialIngestAccountView,
+  SocialIngestView,
   SocialMemberRow,
   SocialPort,
   SocialPostInput,

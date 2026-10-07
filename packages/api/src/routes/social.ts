@@ -121,6 +121,44 @@ export interface SocialReplyDraftView {
   warning?: string
 }
 
+/**
+ * WP256（决策 147）：「群里的帖子」自动进帖读到什么样了（一条渠道一份）。
+ *
+ * 空态照实说就靠它：没连上 / 还没登记群 / 缺权限 / 读得好好的只是没新帖，是四件不同的事。
+ */
+export interface SocialIngestAccountView {
+  account_id: string
+  name: string
+  /**
+   * `ok` 读过了；`waiting` 还没轮到第一次读；`not_connected` 没连上；`needs_channel` 没说读哪个频道；
+   * `missing_permissions` 缺权限（见 `missing`）；`limited` 被平台限速，晚点再读；`failed` 上次没读成（见 `message`）。
+   */
+  state:
+    | 'ok'
+    | 'waiting'
+    | 'not_connected'
+    | 'needs_channel'
+    | 'missing_permissions'
+    | 'limited'
+    | 'failed'
+  message?: string
+  /** 缺哪几样（Discord：`bot_not_in_server` / `view_channel` / `read_message_history` / `message_content`）。 */
+  missing?: string[]
+  last_read_at?: Iso8601
+  next_read_at?: Iso8601
+}
+
+export interface SocialIngestView {
+  channel: SocialChannel
+  /** 这条渠道会不会自动拉新帖（现在：Discord、Reddit 自家版）。不会的照实说，不画一个空列表装作没帖。 */
+  auto: boolean
+  /** 这条渠道连上了没有（Reddit：接口或官方号浏览器有一条通）。 */
+  connected: boolean
+  /** 多久读一次（分钟；只有能调的渠道有——Discord）。 */
+  every_minutes?: number
+  accounts: SocialIngestAccountView[]
+}
+
 /** 一条新入站线程处理完之后回来的那一份。 */
 export interface SocialThreadView {
   thread: SocialThreadRow
@@ -354,6 +392,16 @@ export interface SocialPort {
     input: { decision: 'approve' | 'reject'; reason?: string | undefined },
   ): MaybePromise<SocialStagedView>
 
+  /* ── WP256（决策 147）：「群里的帖子」自动进帖。只加不改：没装配回 501 ── */
+
+  /** 这条渠道的自动进帖读到什么样了（空态照实说用）。只读。 */
+  ingestStatus?(actor: SocialActor, channel: SocialChannel): MaybePromise<SocialIngestView>
+  /** 改多久读一次（现在只有 Discord：5 分钟到 24 小时）。 */
+  setIngestInterval?(
+    actor: SocialActor,
+    input: { channel: SocialChannel; every_minutes: number },
+  ): MaybePromise<SocialIngestView>
+
   /* ── WP249（决策 81 / 89）：自家版待处理 + Reddit 官方号浏览器通道。只加不改：没装配回 501 ── */
 
   /** 自家版的版务队列（被举报 / 被扣下 / 新帖 / 入群申请）+ 每条的 AI 建议。只读。 */
@@ -508,6 +556,16 @@ const OwnSubStageBody = z.object({
   action: z.enum(['approve', 'remove', 'ban']),
   removal_rule: z.string().min(1).max(200).optional(),
   ban_days: z.number().int().min(1).max(999).optional(),
+})
+
+/** WP256：改自动进帖的读取频率（5 分钟到 24 小时）。 */
+const IngestIntervalBody = z.object({
+  channel: ChannelSchema,
+  every_minutes: z
+    .number()
+    .int()
+    .min(5)
+    .max(24 * 60),
 })
 
 /** WP249：端口上的可选口，没装配就照实说。 */
@@ -877,6 +935,51 @@ export function socialRoutes(): Route[] {
             await body(c, MemberDecisionBody),
           ),
         ),
+    ),
+    // ── WP256（决策 147）：「群里的帖子」自动进帖 ──
+    route(
+      {
+        method: 'get',
+        path: '/v1/social/ingest',
+        operationId: 'getSocialIngest',
+        summary:
+          '「群里的帖子」自动进帖读到什么样了（一条渠道一份）：连上没有、登记了哪几个群、每个群上次读到几点、缺哪个权限。只读',
+        tag: 'social',
+        auth: 'bearer',
+        assignment: true,
+        authz: READ_THREAD,
+        params: [{ name: 'channel', in: 'query', required: true, description: '哪条渠道' }],
+        returns: 'SocialIngestView',
+      },
+      async (c, deps) => {
+        const channel = channelQuery(c)
+        if (channel === undefined) throw new ApiError('invalid_input', '要说是哪条渠道（channel）')
+        const port = portOf(deps)
+        if (port.ingestStatus === undefined)
+          throw new ApiError('not_implemented', '这个服务进程没有装配「群里的帖子」自动进帖。')
+        return ok(c, await port.ingestStatus(actorOf(c), channel))
+      },
+    ),
+    route(
+      {
+        method: 'put',
+        path: '/v1/social/ingest',
+        operationId: 'setSocialIngestInterval',
+        summary:
+          '改「群里的帖子」多久自动读一次（现在只有 Discord 能调：5 分钟到 24 小时，默认 15 分钟）',
+        tag: 'social',
+        auth: 'bearer',
+        assignment: true,
+        authz: STAGE_ACCOUNT,
+        body: IngestIntervalBody,
+        returns: 'SocialIngestView',
+      },
+      async (c, deps) => {
+        const port = portOf(deps)
+        if (port.setIngestInterval === undefined)
+          throw new ApiError('not_implemented', '这个服务进程没有装配「群里的帖子」自动进帖。')
+        return ok(c, await port.setIngestInterval(actorOf(c), await body(c, IngestIntervalBody)))
+      },
     ),
     // ── WP249（决策 81 / 89）：自家版待处理 + Reddit 官方号浏览器通道 ──
     route(

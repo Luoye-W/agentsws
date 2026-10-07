@@ -83,6 +83,7 @@ import type { StageInput, StageOutcome } from '@agentsws/txn'
 import { createOwnSubQueue, type OwnSubQueue, type OwnSubQueueOptions } from './own-sub-queue.js'
 import type { SocialStore } from './social.js'
 import type { SocialChannelsAssembly } from './social-channels.js'
+import { createSocialIngest, type SocialIngest } from './social-ingest.js'
 import {
   createSocialExecutor,
   SOCIAL_REPLY_FORM,
@@ -252,6 +253,8 @@ export interface SocialServiceAssembly {
   ownSub?: OwnSubQueue
   /** WP254：别的社群的版务卡与回帖卡批了之后的执行器（`backendApply` / `deliverOutbound` / 决定钩子调）。 */
   executor: SocialExecutor
+  /** WP256（决策 147）：「群里的帖子」自动进帖（定时那一拍在 {@link publishDue} 里顺手跑）。 */
+  ingest: SocialIngest
 }
 
 /** {@link SocialServiceAssembly.broadcastDue} 回的那一份。 */
@@ -543,6 +546,23 @@ export function createSocialService(options: SocialServiceOptions): SocialServic
     ledger,
   })
 
+  /**
+   * WP256（决策 147）：「群里的帖子」自动进帖——Discord 按频率读新消息，Reddit 自家版没人看视图时低频补读。
+   * 只读：不判类、不出卡（人看了要回再点「回复」）。
+   */
+  const ingest = createSocialIngest({
+    workspace_id,
+    store,
+    clock,
+    adapter: (channel) => options.channels?.adapters[channel],
+    connected: (channel) =>
+      channel === 'reddit' && ownSub !== undefined
+        ? ownSub.route() !== 'none'
+        : (options.channels?.transport.connected(channel) ?? false),
+    emit: (type, actor, payload) => emit(type, actor, payload),
+    ...(ownSub === undefined ? {} : { ownSub }),
+  })
+
   const ownSubOr501 = (): OwnSubQueue => {
     if (ownSub === undefined)
       throw new ApiError('not_implemented', '这个服务进程没有装配「自家版待处理」。')
@@ -550,6 +570,10 @@ export function createSocialService(options: SocialServiceOptions): SocialServic
   }
 
   const port: SocialPort = {
+    // ── WP256：「群里的帖子」自动进帖 ──
+    ingestStatus: (actor, channel) => ingest.view(actor, channel),
+    setIngestInterval: (actor, input) => ingest.setInterval(actor, input),
+
     // ── WP249：自家版待处理 + Reddit 官方号浏览器通道 ──
     ownSubQueue: (actor) => ownSubOr501().queue(actor),
     stageOwnSub: (actor, input) => ownSubOr501().stage(actor, input),
@@ -1262,6 +1286,8 @@ export function createSocialService(options: SocialServiceOptions): SocialServic
   const publishDue = async (): Promise<SocialPublishSweep> => {
     // WP254：顺手补扫批了、过了取消窗口还没施行的版务卡与回帖卡（批准那一刻排的那一次可能随进程重启丢了）
     await executor.sweep().catch(() => 0)
+    // WP256：「群里的帖子」自动进帖（到点的 Discord 频道读一轮；Reddit 自家版一小时内没读过才补读一页）
+    await ingest.sweep().catch(() => undefined)
     const now = clock.now()
     const nowMs = Date.parse(now)
     const due = store
@@ -1461,6 +1487,7 @@ export function createSocialService(options: SocialServiceOptions): SocialServic
   return {
     port,
     publishDue,
+    ingest,
     broadcastDue,
     executor,
     ...(ownSub === undefined ? {} : { ownSub }),
