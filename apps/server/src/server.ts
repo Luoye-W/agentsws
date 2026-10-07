@@ -5644,8 +5644,19 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     // WP73：社媒定时发布与群发（这个品牌的号发这个品牌的内容）
     registerSocialPublish(s, {
       sweep: async () => {
-        const one = await (await of()).socialService.publishDue()
-        return { ...one, skipped: one.skipped.map((x) => ({ ...x, workspace_id: ws })) }
+        const social = (await of()).socialService
+        const one = await social.publishDue()
+        /*
+         * WP256（决策 147）：「群里的帖子」自动进帖挂在这一拍上（不另起定时）：Discord 到点的频道读一轮
+         * （默认 15 分钟一次），Reddit 自家版一小时内没人读过才补读一页新帖。读失败照实记在进帖状态里，
+         * 不影响发布这一轮的结果。
+         */
+        const ingested = await social.ingest.sweep().catch(() => undefined)
+        return {
+          ...one,
+          skipped: one.skipped.map((x) => ({ ...x, workspace_id: ws })),
+          ...(ingested === undefined ? {} : { ingested: ingested.ingested }),
+        }
       },
     })
     registerSocialBroadcast(s, {

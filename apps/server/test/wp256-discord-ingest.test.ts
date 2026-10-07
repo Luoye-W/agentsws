@@ -330,12 +330,17 @@ describe('WP256 Discord 自动进帖：没权限 / 没连上 照实说', () => {
     expect(svc.ingest.view(actor, 'telegram_group')).toMatchObject({ auto: false, accounts: [] })
   })
 
-  it('还没轮到第一次读 → waiting；定时那一拍（publishDue）顺手读', async () => {
+  it('还没轮到第一次读 → waiting；读过之后 ok + 下一次几点', async () => {
     register()
-    discord.say(CH, 'via publishDue')
+    discord.say(CH, 'first')
     const svc = service()
     expect(svc.ingest.view(actor, 'discord').accounts[0]).toMatchObject({ state: 'waiting' })
-    await svc.publishDue()
-    expect(texts()).toEqual(['via publishDue'])
+    await svc.ingest.sweep()
+    expect(texts()).toEqual(['first'])
+    expect(svc.ingest.view(actor, 'discord').accounts[0]).toMatchObject({
+      state: 'ok',
+      last_read_at: T0,
+      next_read_at: new Date(Date.parse(T0) + 15 * MIN).toISOString(),
+    })
   })
 })

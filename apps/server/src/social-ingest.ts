@@ -63,6 +63,11 @@ export interface SocialIngestOptions {
   /** 这条渠道连上了没有（Reddit：接口或官方号浏览器有一条通）。 */
   connected(channel: SocialChannel): boolean
   emit(type: string, actor: string, payload: Record<string, unknown>): void
+  /**
+   * 这条渠道这会儿是不是被平台拦着（Reddit 官方号浏览器弹了验证码 / 被限流）——拦着时那条路暂时不通，
+   * 但不是「没连上」，视图上要说清是被拦了。回那句人话；没被拦回 `undefined`。
+   */
+  blocked?(channel: SocialChannel): string | undefined
   /** Reddit 自家版那一半（WP249 的队列）。不给 = 这台没装配自家版待处理。 */
   ownSub?: { backgroundRead(): Promise<{ read: number; ingested: number }> }
 }
@@ -276,7 +281,12 @@ export function createSocialIngest(options: SocialIngestOptions): SocialIngest {
   const accountView = (account: SocialAccount, connected: boolean): SocialIngestAccountView => {
     const row = store.ingestState(account.id)
     const base = { account_id: account.id, name: account.display_name }
-    if (!connected) return { ...base, state: 'not_connected' }
+    if (!connected) {
+      const blocked = options.blocked?.(account.channel)
+      return blocked === undefined
+        ? { ...base, state: 'not_connected' }
+        : { ...base, state: 'limited', message: blocked }
+    }
     if (account.channel === 'discord' && splitTarget(account.external_id).channel === undefined)
       return {
         ...base,
