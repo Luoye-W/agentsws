@@ -102,8 +102,26 @@ export const THEME_TOOL_DEFS: readonly ToolDef[] = [
   },
   {
     name: THEME_READ_FILE_TOOL,
-    description: '读主题工作目录里的一个文件（只限这个目录）。',
-    input_schema: { type: 'object', properties: { path: PATH_PARAM }, required: ['path'] },
+    description:
+      '读主题工作目录里的一个文件（只限这个目录）。一次最多回 2.4 万字，长文件回「后面还有」和下一段的 offset。' +
+      'CATALOG.json 很大：不给 ids 时回一页目录（每个分区 / 块一行：id + 什么时候用）；' +
+      '要某几项的完整设置就给 ids（如 ["hero","faq","container"]）。同一个文件读过一次就别再读。',
+    input_schema: {
+      type: 'object',
+      properties: {
+        path: PATH_PARAM,
+        offset: {
+          type: 'integer',
+          description: '从第几个字开始读（上一次回的 next_offset）；不给 = 从头',
+        },
+        ids: {
+          type: 'array',
+          items: { type: 'string' },
+          description: '只对 CATALOG.json：要看哪几项的完整设置（分区 / 块的 id）',
+        },
+      },
+      required: ['path'],
+    },
   },
   {
     name: THEME_WRITE_FILE_TOOL,
@@ -156,6 +174,61 @@ export const THEME_TOOL_DEF_BY_NAME: ReadonlyMap<string, ToolDef> = new Map(
 )
 
 // ── 回来的数据形状（服务端 `theme-tools.ts` 拼，stub 剧本读） ─────────────
+
+/**
+ * WP260：`theme_read_file` 一次最多回这么多字（长文件分页）。工具结果围栏缺省只放 1.2 万字，
+ * 10-07 真机读 `sections/faq.liquid`（2.5 万字）只看得见前一半——`{% schema %}` 恰好在文件尾巴上，
+ * 模型于是一遍遍重读。主题文件这一路按页给、围栏也按这一页放宽（{@link renderThemeRead}）。
+ */
+export const THEME_READ_PAGE_CHARS = 24_000
+
+/** `theme_read_file` 回的数据（长文件、目录页才有后面几格）。 */
+export interface ThemeReadData {
+  path: string
+  content: string
+  /** 这一页从第几个字开始（分页时才有）。 */
+  offset?: number
+  /** 整个文件多少字（分页时才有）。 */
+  total_chars?: number
+  /** 后面还有：下一段从这里读。 */
+  next_offset?: number
+  /** CATALOG.json：`index` = 一页目录；`entries` = 按 ids 挑出来的完整几项。 */
+  catalog?: 'index' | 'entries'
+  /** 按 ids 挑时没找到的那几个。 */
+  missing?: string[]
+}
+
+export function themeReadOf(data: unknown): ThemeReadData | undefined {
+  const o = obj(data)
+  return typeof o.path === 'string' && typeof o.content === 'string'
+    ? (o as unknown as ThemeReadData)
+    : undefined
+}
+
+/**
+ * WP260：`theme_read_file` 的结果给模型看的那一段（direct / dsh 同一份）：先一行「哪个文件、第几段、
+ * 后面还有没有」，再是原文（不转义成 JSON 字符串——换行、引号原样，模型读得懂、也省 token）。
+ * 仍然包外部围栏（主题文件可能是从店里拉下来的），围栏的长度上限按一页放宽。
+ */
+export function renderThemeRead(
+  name: string,
+  data: unknown,
+): { text: string; max_chars: number } | undefined {
+  const bare = name.includes('.') ? name.slice(name.lastIndexOf('.') + 1) : name
+  if (bare !== THEME_READ_FILE_TOOL) return undefined
+  const r = themeReadOf(data)
+  if (r === undefined) return undefined
+  const n = (x: number): string => x.toLocaleString('en-US')
+  const head =
+    r.catalog === 'index'
+      ? `主题文件 ${r.path}（目录页：每项一行；要某几项的完整设置再读一次并给 ids）`
+      : r.catalog === 'entries'
+        ? `主题文件 ${r.path}（按 ids 挑出的完整几项${r.missing !== undefined && r.missing.length > 0 ? `；没有：${r.missing.join(', ')}` : ''}）`
+        : r.total_chars !== undefined
+          ? `主题文件 ${r.path}（第 ${n((r.offset ?? 0) + 1)}–${n((r.offset ?? 0) + r.content.length)} 字，共 ${n(r.total_chars)} 字${r.next_offset === undefined ? '，到底了' : `；后面还有，接着读给 offset=${r.next_offset}`}）`
+          : `主题文件 ${r.path}（全文，${n(r.content.length)} 字）`
+  return { text: `${head}\n\n${r.content}`, max_chars: THEME_READ_PAGE_CHARS + 2_000 }
+}
 
 /** 还差哪一步才能动店铺（工具回 error 时一并带上，岗位页同一套话）。 */
 export type ThemeNeed = 'install_cli' | 'node' | 'login' | 'store'
