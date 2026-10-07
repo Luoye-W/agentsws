@@ -150,6 +150,7 @@ describe('WP20 网关：路由与信封', () => {
     const specs = h.gateway.specs.filter((s) => s.path.startsWith('/v1/connections'))
     expect(specs.map((s) => `${s.method.toUpperCase()} ${s.path}`).sort()).toEqual([
       'DELETE /v1/connections/:id',
+      'DELETE /v1/connections/runtime/local',
       'GET /v1/connections',
       'GET /v1/connections/:id/mailbox-switches',
       'GET /v1/connections/mail/detect',
@@ -159,6 +160,10 @@ describe('WP20 网关：路由与信封', () => {
       'POST /v1/connections/:id/test',
       'POST /v1/connections/:service/begin',
       'POST /v1/connections/:service/submit',
+      'POST /v1/connections/runtime/local/cancel',
+      'POST /v1/connections/runtime/local/install',
+      'POST /v1/connections/runtime/local/restart',
+      'POST /v1/connections/runtime/local/rollback',
       'PUT /v1/connections/:id/mailbox-switches',
     ])
     for (const s of specs) {

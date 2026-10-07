@@ -82,3 +82,43 @@ describe('connectCardGating', () => {
     expect(out.unavailable_reason).toBe('还没接')
   })
 })
+
+describe('WP247：桌面版本机连接器能按需下载时', () => {
+  const runtimeCard = { store: 'openconnector' as const }
+  const gateLocal = (runtime: 'ready' | 'absent' | 'unhardened' | 'stand_in') =>
+    connectCardGating({
+      entry: runtimeCard,
+      runtime,
+      downloadable: true,
+      secretsAvailable: true,
+      vaultReason: VAULT_REASON,
+    })
+
+  it('没下载：卡点得动，点了先下载（不再说「需要 Docker」）', () => {
+    expect(gateLocal('absent')).toEqual({
+      available: true,
+      requires_runtime: true,
+      needs_download: true,
+    })
+  })
+
+  it('加固不过照样不给连；就绪就是普通的点得动', () => {
+    expect(gateLocal('unhardened')).toMatchObject({
+      available: false,
+      unavailable_reason: RUNTIME_UNHARDENED_REASON,
+    })
+    expect(gateLocal('ready')).toEqual({ available: true, requires_runtime: true })
+  })
+
+  it('不要连接器的卡不受影响', () => {
+    expect(
+      connectCardGating({
+        entry: { store: 'local_vault' },
+        runtime: 'absent',
+        downloadable: true,
+        secretsAvailable: true,
+        vaultReason: VAULT_REASON,
+      }),
+    ).toEqual({ available: true, requires_runtime: false })
+  })
+})
