@@ -62,6 +62,23 @@ export {
 } from './local-runtime.js'
 export type { OpenConnectorLockEntry, OpenConnectorLockfile } from './local-runtime-lock.js'
 export { lockedPackageCount, OPEN_CONNECTOR_LOCKFILE } from './local-runtime-lock.js'
+// WP252（决策 125）：一台机一个 runtime、多个品牌共用时的连接归属与按品牌起名
+export type {
+  BrandStateSource,
+  ConnectionConflictRecord,
+  ConnectionOwnerRecord,
+  ConnectionOwnersFile,
+  ConnectionOwnersMigration,
+  ConnectionOwnerVia,
+} from './owners.js'
+export {
+  BRAND_NAME_SEPARATOR,
+  brandConnectionName,
+  brandSegment,
+  ConnectionOwners,
+  migrateConnectionOwners,
+  parseBrandConnectionName,
+} from './owners.js'
 export { fingerprint, readSecretFromEnv, secretKey } from './secrets.js'
 export type { ShopifyTargetType, ShopifyWriteAction } from './shopify-actions.js'
 export {

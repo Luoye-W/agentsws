@@ -777,3 +777,64 @@ describe('WP210：连接页收拾（Luoye 09-30）', () => {
     expect(within(card).queryByTestId('provider-sources-toggle')).toBeNull()
   })
 })
+
+describe('WP252 多品牌共用连接名留下的提醒', () => {
+  const RECONNECT_ROW: ConnectionView = {
+    id: 'reconnect_0123456789ab',
+    service: 'shopify_admin',
+    service_label: 'Shopify 店铺',
+    alias: 'default',
+    ownership: 'workspace',
+    status: 'reauth_required',
+    credential_store: 'openconnector',
+    data_sources: ['shop'],
+    brand_conflict: {
+      kind: 'reconnect',
+      hint: '请在这一页重新连接一次，连出来的那条只属于本品牌。',
+    },
+  }
+
+  it('「请重新连接」那一行：黄条说人话，没有「测试」，「收起」不弹删除确认', async () => {
+    state.connections = [RECONNECT_ROW]
+    const confirm = vi.spyOn(globalThis, 'confirm')
+    renderWithProviders(<ConnectionsPage />)
+    const note = await screen.findByTestId('connection-brand-conflict')
+    expect(note.getAttribute('data-kind')).toBe('reconnect')
+    expect(note.textContent ?? '').toContain('请重新连接')
+    const row = screen.getByTestId('connection-row')
+    expect(within(row).queryByRole('button', { name: '测试' })).toBeNull()
+    expect(within(row).queryByRole('button', { name: '断开' })).toBeNull()
+    await userEvent.setup().click(within(row).getByRole('button', { name: '收起' }))
+    await waitFor(() => {
+      expect(removed).toEqual([RECONNECT_ROW.id])
+    })
+    expect(confirm).not.toHaveBeenCalled()
+    confirm.mockRestore()
+  })
+
+  it('留下的那一条：提醒核对账号，照常能测试与断开', async () => {
+    state.connections = [
+      {
+        ...RECONNECT_ROW,
+        id: 'oc-legacy',
+        status: 'active',
+        identity: { display_name: 'inmo.myshopify.com' },
+        brand_conflict: { kind: 'kept', hint: '点一次「测试」核对账号。' },
+      },
+    ]
+    renderWithProviders(<ConnectionsPage />)
+    const note = await screen.findByTestId('connection-brand-conflict')
+    expect(note.getAttribute('data-kind')).toBe('kept')
+    expect(note.textContent ?? '').toContain('请核对账号')
+    const row = screen.getByTestId('connection-row')
+    expect(within(row).getByRole('button', { name: '测试' })).toBeDefined()
+    expect(within(row).getByRole('button', { name: '断开' })).toBeDefined()
+  })
+
+  it('正常的连接不出这条黄条', async () => {
+    state.connections = [MAIL_CONNECTION]
+    renderWithProviders(<ConnectionsPage />)
+    await screen.findByTestId('connection-row')
+    expect(screen.queryByTestId('connection-brand-conflict')).toBeNull()
+  })
+})
