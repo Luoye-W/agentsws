@@ -512,8 +512,8 @@ upstreams:
     kind: runtime-dep
     why: 建站岗位「网页模板」的起底主题（`theme_init_from_base`，MIT，LICENSE 原样带进用户的工作目录）；我们是它的作者，也是它的上游消费者
     repo: Luoye-W/agentsws-theme
-    pinned_tag: v0.9.0
-    pinned_commit: eed7f57c47f156fa5a1a00782d71a520927cba2e
+    pinned_tag: v0.9.1
+    pinned_commit: be73de40caca5cdacc7fd26c1eb4238334082a92
     pin_file: apps/server/src/theme-base-pin.json
     watch: [releases, readme]
     we_depend_on:

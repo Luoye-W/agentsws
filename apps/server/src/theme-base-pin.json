@@ -1,9 +1,9 @@
 {
   "repo": "Luoye-W/agentsws-theme",
-  "tag": "v0.9.0",
-  "version": "0.9.0",
-  "commit": "eed7f57c47f156fa5a1a00782d71a520927cba2e",
-  "sha256": "a870eb5858f09f39d233fc570283952bdb7197b057a923952813154d832853c3",
+  "tag": "v0.9.1",
+  "version": "0.9.1",
+  "commit": "be73de40caca5cdacc7fd26c1eb4238334082a92",
+  "sha256": "6a1db7e7fe874b579288b8ddbec82785331ebfcc35f04f73e6e4beba8e440011",
   "license": "MIT",
-  "bytes": 627850
+  "bytes": 628910
 }
