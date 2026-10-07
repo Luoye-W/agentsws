@@ -7,14 +7,7 @@ import { ArrowUpDown } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { useApp } from '@/lib/app-context'
 import { type ColumnId, whenText } from '@/lib/position-work'
-import {
-  CardsBadge,
-  DutyChip,
-  GroupIcon,
-  KindIcon,
-  OverdueBadge,
-  ProgressText,
-} from './work-bits'
+import { CardsBadge, DutyChip, GroupIcon, KindIcon, OverdueBadge, ProgressText } from './work-bits'
 import { DueText, ItemTitle } from './work-list'
 
 export function WorkTable({

@@ -108,6 +108,7 @@ export function WorkBoard({
               data-testid="work-board-column"
               data-group={g}
               data-accepts={accepts ? 'true' : 'false'}
+              aria-label={t(`pos2.group.${g}`)}
               className={`flex min-h-24 flex-col gap-2 rounded-xl bg-ws-surface p-2 transition-colors ${over === g && accepts ? 'ring-2 ring-ws-brand/50' : ''} ${dragging !== undefined && !accepts && dragging.group !== g ? 'opacity-60' : ''}`}
               onDragOver={(e) => {
                 if (!accepts) return

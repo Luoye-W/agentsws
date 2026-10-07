@@ -310,10 +310,7 @@ export const QUEUE_SLOT_MS = 3_600_000
 /**
  * `datetime-local` 的值 → 排期时段。读不出来、或不在以后（「排着的」= 排在以后某个时段）回 `undefined`。
  */
-export function queueSlotOf(
-  value: string,
-  now: Date,
-): { start: string; end: string } | undefined {
+export function queueSlotOf(value: string, now: Date): { start: string; end: string } | undefined {
   if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(value)) return undefined
   const at = new Date(value)
   if (Number.isNaN(at.getTime()) || at.getTime() <= now.getTime()) return undefined

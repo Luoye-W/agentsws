@@ -2027,7 +2027,8 @@ const zh: Table = {
   'home.headline': '今天',
   // WP248（决策 79）：与岗位页同一个说法；已过期没做完的也算进「今天」，括号里点出几个
   'home.greeting.line': '{cards} 张卡等你决定 · 今天 {matters} 个待办',
-  'home.greeting.line.overdue': '{cards} 张卡等你决定 · 今天 {matters} 个待办（{overdue} 个已过期）',
+  'home.greeting.line.overdue':
+    '{cards} 张卡等你决定 · 今天 {matters} 个待办（{overdue} 个已过期）',
   'home.today.overdue': '已过期',
   'home.stats': '今天的数',
   // WP84（54 §1 第 6 行）+ WP98：快捷提示收进岗位卡右上角的 `···`——点一条就是开一件事，不是聊天框
