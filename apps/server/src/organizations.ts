@@ -310,6 +310,13 @@ export function createOrganizations(options: OrganizationsAssemblyOptions): Orga
         org_id,
         brand_name: name,
       })
+      /*
+       * WP251：公司下有两个品牌了——还是 `personal` 的那几个（多半是启动品牌）改成 `shared`，
+       * 与加的品牌同一个口径（`kind` 只是口径，没有代码按它分叉）。
+       */
+      for (const w of siblings)
+        if (w.kind !== 'shared')
+          await identity.attachWorkspaceToOrg({ workspace_id: w.id, org_id, kind: 'shared' })
       options.setBrandProfile(workspace.id, {
         ...(input.vertical === undefined ? {} : { vertical: input.vertical }),
         ...(input.storefront_platform === undefined

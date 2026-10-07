@@ -251,8 +251,13 @@ export function personaView(input: {
  * 模型读到一句编出来的品牌定位，会把它当事实用进开发信里。
  */
 export interface PersonaBrandContext {
-  /** 品牌名。 */
+  /** 品牌名（这次运行所在的那个品牌）。 */
   brand_name?: string
+  /**
+   * WP251（决策 119）：公司全称（这个品牌挂的那家公司）。另起一行「公司：」；
+   * 与品牌名一样（个人用户常把两格填成同一个名字）就不重复写。
+   */
+  company_name?: string
   /** 一句话定位。 */
   one_liner?: string
   /** 目标市场（ISO 国家码，最多写前几个）。 */
@@ -271,6 +276,13 @@ export interface PersonaBrandContext {
   support_email?: string
   /** WP248（决策 83）：这个品牌卖货的币种（ISO 4217；品牌档案里写过才有，不替人补默认值）。 */
   currency?: string
+}
+
+/** WP251：公司全称与品牌名是不是同一个（大小写、空白不算）。没有品牌名 = 不一样。 */
+function sameName(a: string, b: string | undefined): boolean {
+  if (b === undefined || b === '') return false
+  const norm = (v: string): string => v.normalize('NFKC').toLowerCase().replace(/\s+/g, '')
+  return norm(a) === norm(b)
 }
 
 /** 市场那一行最多列几个（再多就是一串没人读的国家码）。 */
@@ -292,6 +304,9 @@ export function renderBrandContext(
   const lines: string[] = []
   const name = brand.brand_name?.trim()
   if (name) lines.push(zh ? `品牌：${name}` : `Brand: ${name}`)
+  const company = brand.company_name?.trim()
+  if (company && !sameName(company, name))
+    lines.push(zh ? `公司：${company}` : `Company: ${company}`)
   const one = brand.one_liner?.trim()
   if (one) lines.push(zh ? `一句话定位：${one}` : `Positioning: ${one}`)
   const markets = (brand.markets ?? []).filter((m) => m.trim() !== '').slice(0, MAX_MARKETS)

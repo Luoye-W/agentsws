@@ -50,6 +50,8 @@ export interface OrganizationPatch {
   domain?: string
   discoverable?: boolean
   cloud_org_id?: string
+  /** WP251：公司实体地址。空串 = 清掉；`undefined` = 不动。 */
+  postal_address?: string
 }
 
 export interface AttachWorkspaceInput {
@@ -57,6 +59,11 @@ export interface AttachWorkspaceInput {
   org_id: OrganizationId
   /** 不给就用工作区现在的品牌名（再没有就用工作区名）。 */
   brand_name?: string
+  /**
+   * WP251：顺手把工作区的 `kind` 改成这个（公司下的品牌一律 `shared`，与「加一个品牌」建出来的一致）。
+   * 不给 = 不动。
+   */
+  kind?: Workspace['kind']
 }
 
 /** 离职（40 E2）：组织成员收尾 + 这个人在**这个组织全部品牌**里的成员关系一起收。 */
@@ -207,15 +214,19 @@ export function createOrganizations(options: OrganizationsOptions): Organization
       if (legal_name !== undefined && legal_name === '')
         throw new ApiError('invalid_input', '公司全称不能为空')
       const domain = patch.domain?.trim()
+      const postal = patch.postal_address?.trim()
       const next: Organization = {
         ...org,
         ...(legal_name === undefined ? {} : { legal_name }),
         ...(domain === undefined || domain === '' ? {} : { domain }),
         ...(patch.discoverable === undefined ? {} : { discoverable: patch.discoverable }),
         ...(patch.cloud_org_id === undefined ? {} : { cloud_org_id: patch.cloud_org_id }),
+        ...(postal === undefined || postal === '' ? {} : { postal_address: postal }),
       }
       // 空串 = 把域名清掉（界面上把那一格删干净就是这个意思）；`undefined` = 不动它
       if (domain === '') delete next.domain
+      // WP251：地址同一条规矩
+      if (postal === '') delete next.postal_address
       backend.put(next)
       return next
     },
@@ -267,7 +278,7 @@ export function createOrganizations(options: OrganizationsOptions): Organization
       return all.filter((w) => mine.has(w.id))
     },
 
-    async attachWorkspaceToOrg({ workspace_id, org_id, brand_name }): Promise<Workspace> {
+    async attachWorkspaceToOrg({ workspace_id, org_id, brand_name, kind }): Promise<Workspace> {
       const workspace = needWorkspace(workspace_id)
       need(org_id)
       if (workspace.org_id !== undefined && workspace.org_id !== org_id)
@@ -276,6 +287,7 @@ export function createOrganizations(options: OrganizationsOptions): Organization
       const next: Workspace = {
         ...workspace,
         org_id,
+        ...(kind === undefined ? {} : { kind }),
         brand: {
           ...workspace.brand,
           name: name === undefined || name === '' ? brandNameOf(workspace) : name,

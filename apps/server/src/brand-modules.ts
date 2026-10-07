@@ -386,8 +386,17 @@ export interface BrandModules {
   isOrgDefault(workspace_id: WorkspaceId): boolean
   /** 公司默认品牌（跟随时读它那一份）。 */
   orgDefaultOf(workspace_id: WorkspaceId): WorkspaceId
-  /** 改"跟随公司默认"。改完这个品牌的模块会重建一次（下一次请求生效）。 */
-  setInheritOrg(workspace_id: WorkspaceId, inherit: boolean): Promise<void>
+  /**
+   * 改"跟随公司默认"。改完这个品牌的模块会重建一次（下一次请求生效）。
+   *
+   * WP251：`even_if_default` = 它现在是公司默认品牌也照记——启动品牌挂进公司之前先替原来的
+   * 公司默认品牌记下"用自己那一套"，挂进去之后它的模型面不变。
+   */
+  setInheritOrg(
+    workspace_id: WorkspaceId,
+    inherit: boolean,
+    options?: { even_if_default?: boolean },
+  ): Promise<void>
   /** 离开 / 删品牌：关掉这一套（下一次 `forWorkspace` 会重新建）。 */
   release(workspace_id: WorkspaceId): Promise<void>
   /** 关掉全部（进程退出）。 */
@@ -489,8 +498,8 @@ export function createBrandModules(options: BrandModulesOptions): BrandModules {
     inheritsOrg,
     isOrgDefault,
     orgDefaultOf,
-    async setInheritOrg(workspace_id, inherit) {
-      if (isOrgDefault(workspace_id)) return
+    async setInheritOrg(workspace_id, inherit, opts) {
+      if (isOrgDefault(workspace_id) && opts?.even_if_default !== true) return
       const rows = { ...(state.inherit_org ?? {}) }
       rows[workspace_id] = inherit
       state = { version: 1, inherit_org: rows }

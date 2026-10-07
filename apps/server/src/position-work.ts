@@ -20,6 +20,7 @@ import {
   MAX_POSITION_WORK_ITEMS,
   type Matter,
   type MatterEvent,
+  type MatterRunBlock,
   matterGroupOf,
   POSITION_WORK_DONE_DAYS,
   POSITION_WORK_GROUPS,
@@ -111,6 +112,16 @@ export interface MatterRunState {
   last?: { outcome: 'answered' | 'failed' | 'stopped'; text: string }
   /** 这件事那条职责还缺的**必需**连接（人话名）——卡住时「缺什么」先说它 */
   missing?: string[]
+  /**
+   * WP251（决策 91）：最近那一轮上运行时记下的结构化标记（工具回了「没连上 / 缺凭据」）。
+   * 有它就是「卡住了」，缺哪个连接也从它来。
+   */
+  blocked?: MatterRunBlock
+  /**
+   * WP251：最近那一轮是**结构化标记上线之前**跑的（老数据）——只有它才退回认 AI 最后那句话。
+   * `false` = 新数据，只认标记；没有这一格 = 不知道，当老数据（与 WP244 一样）。
+   */
+  legacy?: boolean
 }
 
 /**
@@ -128,9 +139,15 @@ const STUCK_WORDS =
  * 最近一轮 = 时间线上最后一条带 `run_id` 的事件所属的那一轮。
  */
 export function matterRunStateOf(
-  events: readonly Pick<MatterEvent, 'kind' | 'text' | 'run_id' | 'stopped'>[],
+  events: readonly (Pick<MatterEvent, 'kind' | 'text' | 'run_id' | 'stopped'> &
+    Partial<Pick<MatterEvent, 'at' | 'blocked'>>)[],
   running: boolean,
   missing?: readonly string[],
+  /**
+   * WP251：结构化标记从什么时候起记（这一版第一次启动的时刻）。这一轮在它之后跑的，只认标记、
+   * 不认 AI 末句；在它之前的（老数据）照旧认末句兜底。不给 = 一律当老数据（WP244 的口径）。
+   */
+  markedSince?: string,
 ): MatterRunState {
   const base: MatterRunState = {
     running,
@@ -139,6 +156,16 @@ export function matterRunStateOf(
   const run_id = [...events].reverse().find((e) => e.run_id !== undefined)?.run_id
   if (run_id === undefined) return base
   const mine = events.filter((e) => e.run_id === run_id)
+  const blocked = mine.find((e) => e.blocked !== undefined)?.blocked
+  const startedAt = mine.find((e) => e.at !== undefined)?.at
+  const legacy =
+    blocked === undefined &&
+    (markedSince === undefined || startedAt === undefined || startedAt < markedSince)
+  const tagged: MatterRunState = {
+    ...base,
+    ...(blocked === undefined ? {} : { blocked }),
+    legacy,
+  }
   const halted = mine.find(
     (e) => e.kind === 'status' && (e.stopped !== undefined || e.text.startsWith('这次运行没跑成')),
   )
@@ -146,7 +173,7 @@ export function matterRunStateOf(
   if (halted !== undefined || partial !== undefined) {
     const line = halted ?? mine.find((e) => e.kind === 'status' && e.text.trim() !== '') ?? partial
     return {
-      ...base,
+      ...tagged,
       last: {
         outcome: halted?.text.startsWith('这次运行没跑成') === true ? 'failed' : 'stopped',
         text: line?.text ?? '',
@@ -154,7 +181,13 @@ export function matterRunStateOf(
     }
   }
   const answer = mine.filter((e) => e.kind === 'agent_message' && e.text.trim() !== '').at(-1)
-  return answer === undefined ? base : { ...base, last: { outcome: 'answered', text: answer.text } }
+  if (answer !== undefined) return { ...tagged, last: { outcome: 'answered', text: answer.text } }
+  // WP251：只记了「卡住了」那一条、AI 一句话都没说（工具一失败就收了尾）——照样算收尾
+  if (blocked !== undefined) {
+    const line = mine.find((e) => e.blocked !== undefined)?.text ?? ''
+    return { ...tagged, last: { outcome: 'answered', text: line } }
+  }
+  return tagged
 }
 
 /** 一件**开着**的事项按运行情况落哪一组（关了 / 等着的不走这里）。 */
@@ -167,7 +200,30 @@ export function openMatterPhase(
   const reason = (fallback: string): string =>
     missing.length > 0 ? `缺${missing.join('、')}连接` : (clip(fallback, 60) ?? '这次没做成')
   const { outcome, text } = state.last
-  if (outcome === 'failed' || outcome === 'stopped' || STUCK_WORDS.test(text))
+  /*
+   * WP251（决策 91）：运行时记了结构化标记 = 卡住了，缺哪个以标记为准（标记没认出是哪个，
+   * 再看这条职责现在还缺的必需连接）。
+   */
+  const block = state.blocked
+  if (block !== undefined) {
+    const named = block.connections.length > 0 ? block.connections : missing
+    const what = named.length > 0 ? named.join('、') : undefined
+    return {
+      group: 'stuck',
+      stuck_reason:
+        block.reason === 'missing_credential'
+          ? what === undefined
+            ? '缺凭据'
+            : `${what}缺凭据`
+          : what === undefined
+            ? '缺连接'
+            : `缺${what}连接`,
+    }
+  }
+  if (outcome === 'failed' || outcome === 'stopped')
+    return { group: 'stuck', stuck_reason: reason(text) }
+  // AI 末句兜底只给老数据（结构化标记上线之前跑的那几轮）
+  if (state.legacy !== false && STUCK_WORDS.test(text))
     return { group: 'stuck', stuck_reason: reason(text) }
   // 答完了、还有卡等你定：照旧挂进行中（行尾「N 张卡等你」就是下一步），不算「已完成」
   if (cards > 0) return { group: 'doing' }
