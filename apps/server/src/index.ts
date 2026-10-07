@@ -210,9 +210,6 @@ export {
 export { createOrg, type OrgAssembly, type OrgOptions } from './org.js'
 // WP245：demo 里一键安装 / 一键登录 Shopify CLI 的替身（不跑真 npm、不开真登录页）
 export { platformCliStandIn } from './platform-cli-stand-in.js'
-// WP253：主题工坊的替身（demo / 测试：假主题包 + 进程内假 `shopify theme`，不联网、不碰真店）
-export { fakeThemeBase, themeCliStandIn } from './site-theme-stand-in.js'
-export { THEME_BASE, type ThemeBasePin } from './site-theme.js'
 // WP246：演示里「取数路线 / 登录读号」的替身（不起浏览器、不访问 reddit.com）
 export { readonlyBrowserStandIn } from './readonly-browser/stand-in.js'
 export {
@@ -354,6 +351,9 @@ export {
   THEME_STORE_ENV,
   THEME_TOKEN_ENV,
 } from './shopify-theme.js'
+export { THEME_BASE, type ThemeBasePin } from './site-theme.js'
+// WP253：主题工坊的替身（demo / 测试：假主题包 + 进程内假 `shopify theme`，不联网、不碰真店）
+export { fakeThemeBase, themeCliStandIn } from './site-theme-stand-in.js'
 // WP60（49 §6 / 48 L7）：在线值守的本地一面
 export {
   createStandby,

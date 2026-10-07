@@ -133,29 +133,43 @@ async function main() {
     const header = async (name) => {
       // 页头 + 那一行：截岗位页上半截
       await page.waitForTimeout(400)
-      await page.screenshot({ path: join(SHOTS, `${name}.png`), clip: { x: 0, y: 0, width: 1280, height: 420 } })
+      await page.screenshot({
+        path: join(SHOTS, `${name}.png`),
+        clip: { x: 0, y: 0, width: 1280, height: 420 },
+      })
       console.log(`  📷 ${name}.png`)
     }
 
     await page.goto(`${BASE}/positions/${theme}`, { waitUntil: 'networkidle' })
-    await page.waitForSelector('[data-testid="site-theme-banner"][data-next="install_cli"]', { timeout: 30_000 })
+    await page.waitForSelector('[data-testid="site-theme-banner"][data-next="install_cli"]', {
+      timeout: 30_000,
+    })
     await header('1-banner-install')
     await page.click('[data-testid="site-theme-install"]')
     await page.waitForSelector('[data-testid="platform-cli-job"]', { timeout: 30_000 })
     await page.waitForTimeout(1200)
     await shotOf(banner, '2-banner-installing')
-    await page.waitForSelector('[data-testid="site-theme-banner"][data-next="login"]', { timeout: 60_000 })
+    await page.waitForSelector('[data-testid="site-theme-banner"][data-next="login"]', {
+      timeout: 60_000,
+    })
     await page.reload({ waitUntil: 'networkidle' })
-    await page.waitForSelector('[data-testid="site-theme-banner"][data-next="login"]', { timeout: 30_000 })
+    await page.waitForSelector('[data-testid="site-theme-banner"][data-next="login"]', {
+      timeout: 30_000,
+    })
     await header('3-banner-login')
     await page.click('[data-testid="site-theme-login"]')
-    await page.waitForSelector('[data-testid="site-theme-banner"][data-next="store"]', { timeout: 90_000 })
+    await page.waitForSelector('[data-testid="site-theme-banner"][data-next="store"]', {
+      timeout: 90_000,
+    })
     await page.reload({ waitUntil: 'networkidle' })
     await page.waitForSelector('[data-testid="site-theme-store-input"]', { timeout: 30_000 })
     await page.fill('[data-testid="site-theme-store-input"]', SHOP)
     await header('4-banner-store')
     await page.click('[data-testid="site-theme-store-save"]')
-    await page.waitForSelector('[data-testid="site-theme-banner"]', { state: 'detached', timeout: 30_000 })
+    await page.waitForSelector('[data-testid="site-theme-banner"]', {
+      state: 'detached',
+      timeout: 30_000,
+    })
     await header('5-banner-gone')
 
     // 搭首页：起底 → 检查 → 推未发布；时间线「预览好了」+ 打开预览
@@ -173,7 +187,10 @@ async function main() {
       role_id: 'site.shopify-theme',
     })
     await page.goto(`${BASE}/positions/${theme}`, { waitUntil: 'networkidle' })
-    const card = page.locator('[data-testid="deck-card"]').filter({ hasText: '设为线上主题' }).first()
+    const card = page
+      .locator('[data-testid="deck-card"]')
+      .filter({ hasText: '设为线上主题' })
+      .first()
     await card.waitFor({ timeout: 60_000 })
     await card.scrollIntoViewIfNeeded()
     await shotOf(card, '7-publish-card')
