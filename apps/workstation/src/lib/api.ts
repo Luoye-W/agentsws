@@ -3450,6 +3450,8 @@ export interface OnboardingStateView {
   added_brand?: true
   /** WP240：这个品牌现在有没有能用的 AI（跟随公司默认的算公司那一份）。 */
   model_configured?: boolean
+  /** WP244：这个品牌的第 ② 步已经做过（档案有人确认 / 存过）——向导重开时从第 ③ 步接着走。 */
+  business_done?: true
 }
 
 /** 向导第 ③ 步的候选：一个岗位与它包含的职责（每条带一句"它会干什么"）。 */
