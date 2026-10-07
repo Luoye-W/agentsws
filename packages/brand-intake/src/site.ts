@@ -69,17 +69,39 @@ const CONTACT_PATHS = ['/pages/contact', '/contact', '/contact-us', '/pages/cont
 
 /** 一份政策至少得有这么长，且命中一个政策词。 */
 const POLICY_MIN_CHARS = 200
+/**
+ * WP251（决策 106）：中日韩文字一个字顶英文好几个字母——同样一段「七天无理由退货」的政策，
+ * 中文八十来个字就说完了，按 200 个字符卡会把真政策当成不够长丢掉。按文字类型分门槛。
+ */
+export const POLICY_MIN_CHARS_CJK = 80
 const POLICY_WORDS =
-  /refund|return|exchange|shipping|deliver|warranty|privacy|terms|退货|退款|换货|运费|物流|配送|保修|隐私|条款/i
+  /refund|return|exchange|shipping|deliver|warranty|privacy|terms|退货|退款|换货|运费|物流|配送|保修|隐私|条款|返品|配送料|保証|プライバシー|환불|반품|배송|교환|개인정보/i
+/** 中日韩文字（汉字、平假名、片假名、谚文）。 */
+const CJK_CHAR = /[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\uac00-\ud7af\u1100-\u11ff]/gu
+/** 算「字」的那些：字母、数字、中日韩文字（空白与标点不算）。 */
+const WORD_CHAR = /[\p{L}\p{N}]/gu
+
+/**
+ * WP251（决策 106）：这段文字按哪种门槛算——中日韩文字占了字母数字的一半以上就是中日韩。
+ * 回门槛与按它算出来的长度：中日韩数**字**（不算空白标点），其他照旧数字符。
+ */
+export function policyLength(text: string): { length: number; min: number; cjk: boolean } {
+  const cjk = text.match(CJK_CHAR)?.length ?? 0
+  const words = text.match(WORD_CHAR)?.length ?? 0
+  if (cjk > 0 && cjk * 2 >= words) return { length: words, min: POLICY_MIN_CHARS_CJK, cjk: true }
+  return { length: text.length, min: POLICY_MIN_CHARS, cjk: false }
+}
 
 /**
  * 这一页真的是政策页吗。
  *
  * **不看状态码，看内容**：Shopify 把删掉的政策 302 回首页，那一跳是 200，
  * 首页正文也够长——唯一分得开的办法是问"这段话像不像一份政策"。
+ * WP251：门槛按文字类型分（中日韩 80 字，其他 200 字符）。
  */
 export function looksLikePolicy(text: string): boolean {
-  return text.length >= POLICY_MIN_CHARS && POLICY_WORDS.test(text)
+  const { length, min } = policyLength(text)
+  return length >= min && POLICY_WORDS.test(text)
 }
 
 /**
