@@ -13,6 +13,7 @@ import { POSITION_EN, POSITION_ZH } from './i18n-position'
 import { READ_ROUTES_EN, READ_ROUTES_ZH } from './i18n-read-routes'
 import { SITE_THEME_EN, SITE_THEME_ZH } from './i18n-site-theme'
 import { SOCIAL_EXEC_EN, SOCIAL_EXEC_ZH } from './i18n-social-exec'
+import { SOCIAL_REPLY_EN, SOCIAL_REPLY_ZH } from './i18n-social-reply'
 
 export type Lang = 'zh' | 'en'
 
@@ -7942,6 +7943,8 @@ const TABLES: Record<Lang, Table> = {
     ...NPM_REGISTRY_ZH,
     // WP254：版务卡（批准执行 / 不做）与回帖卡
     ...SOCIAL_EXEC_ZH,
+    // WP255：「回复」按钮与社群线程列表
+    ...SOCIAL_REPLY_ZH,
   },
   en: {
     ...en,
@@ -7954,6 +7957,7 @@ const TABLES: Record<Lang, Table> = {
     ...OWN_SUB_EN,
     ...NPM_REGISTRY_EN,
     ...SOCIAL_EXEC_EN,
+    ...SOCIAL_REPLY_EN,
   },
 }
 

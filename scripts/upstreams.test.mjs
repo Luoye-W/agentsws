@@ -34,10 +34,12 @@ import {
   checkNpmLock,
   checkPinFile,
   checkPins,
+  checkRuntimeLock,
   compareVersions,
   findImageRefs,
   imageVerdict,
   keywordsOf,
+  lineCandidates,
   loadUpstreams,
   lockfileVersions,
   parseUpstreamsYaml,
@@ -883,6 +885,133 @@ describe('npm 运行时钉版本：check-upstreams 对账 npm_lock_file / npm_pi
     expect(checkNpmLock(rt, REPO_ROOT)).toEqual([])
     const lock = JSON.parse(readFileSync(join(REPO_ROOT, rt.npm_lock_file), 'utf8'))
     expect(lock.packages['node_modules/@oomol-lab/open-connector'].version).toBe(rt.locked_version)
+  })
+})
+
+// ── 随包 Node / npm：check-upstreams 对账 node-runtime.lock.json（WP255，决策 145）────────
+
+const SHA = 'a'.repeat(64)
+const INTEGRITY = `sha512-${'B'.repeat(86)}==`
+const runtimeLock = (over = {}) =>
+  JSON.stringify({
+    node: {
+      version: '22.23.2',
+      abi: 127,
+      targets: { 'darwin-arm64': { sha256: SHA }, 'win32-x64': { sha256: SHA } },
+    },
+    npm: {
+      version: '10.9.8',
+      integrity: INTEGRITY,
+      tarball: 'https://registry.npmjs.org/npm/-/npm-10.9.8.tgz',
+    },
+    ...over,
+  })
+const nodeItem = (over = {}) => ({
+  id: 'node-runtime',
+  kind: 'runtime-dep',
+  why: '随包 Node',
+  repo: 'nodejs/node',
+  locked_version: '22.23.2',
+  version_line: '22',
+  runtime_lock_file: 'lock.json',
+  runtime_lock_key: 'node',
+  watch: ['releases'],
+  ...over,
+})
+const npmRtItem = (over = {}) => ({
+  id: 'npm-runtime',
+  kind: 'runtime-dep',
+  why: '随包 npm',
+  npm: 'npm',
+  locked_version: '10.9.8',
+  version_line: '10',
+  lockfile_single: false,
+  runtime_lock_file: 'lock.json',
+  runtime_lock_key: 'npm',
+  watch: ['versions'],
+  ...over,
+})
+
+describe('随包 Node / npm：check-upstreams 对账 node-runtime.lock.json（WP255）', () => {
+  it('登记表与锁一致 → 没问题（node 每平台 sha256、npm sha512 + registry tgz）', () => {
+    const root = imgRepo({ 'lock.json': runtimeLock() })
+    expect(checkRuntimeLock(nodeItem(), root)).toEqual([])
+    expect(checkRuntimeLock(npmRtItem(), root)).toEqual([])
+    expect(validateShape([nodeItem(), npmRtItem()])).toEqual([])
+  })
+
+  it('锁里升了 Node、登记表没跟 → 报出来；npm 同理', () => {
+    const root = imgRepo({
+      'lock.json': runtimeLock({
+        node: { version: '22.24.0', abi: 127, targets: { 'darwin-arm64': { sha256: SHA } } },
+        npm: {
+          version: '10.9.9',
+          integrity: INTEGRITY,
+          tarball: 'https://registry.npmjs.org/npm/-/npm-10.9.9.tgz',
+        },
+      }),
+    })
+    expect(checkRuntimeLock(nodeItem(), root).join('\n')).toContain(
+      'node.version 是 `22.24.0`，登记表写的是 `22.23.2`',
+    )
+    const p = checkRuntimeLock(npmRtItem(), root).join('\n')
+    expect(p).toContain('npm.version 是 `10.9.9`，登记表写的是 `10.9.8`')
+    expect(p).toContain('npm.tarball 是')
+  })
+
+  it('哪个平台没钉 sha256、abi 丢了、npm 的 integrity 不是 sha512 → 逐条报', () => {
+    const root = imgRepo({
+      'lock.json': runtimeLock({
+        node: { version: '22.23.2', targets: { 'linux-x64': { sha256: 'abc' } } },
+        npm: { version: '10.9.8', integrity: 'sha1-xyz' },
+      }),
+    })
+    const n = checkRuntimeLock(nodeItem(), root).join('\n')
+    expect(n).toContain('node.abi 不是整数')
+    expect(n).toContain('node.targets.linux-x64 没钉 sha256')
+    expect(checkRuntimeLock(npmRtItem(), root).join('\n')).toContain('不是 registry 那种 sha512')
+  })
+
+  it('锁文件不在 / 没有那一段 / 坏 JSON → 报出来', () => {
+    expect(checkRuntimeLock(nodeItem({ runtime_lock_file: 'nope.json' }), tmp())).toEqual([
+      '[node-runtime] runtime_lock_file 指向不存在的文件：nope.json',
+    ])
+    const noNpm = imgRepo({ 'lock.json': JSON.stringify({ node: {} }) })
+    expect(checkRuntimeLock(npmRtItem(), noNpm).join('\n')).toContain('里没有 `npm` 这一段')
+    const bad = imgRepo({ 'lock.json': '{' })
+    expect(checkRuntimeLock(nodeItem(), bad).join('\n')).toContain('不是合法的 JSON')
+  })
+
+  it('形状：成对字段只写一半、key 写错、版本不在 version_line 上、有 npm 没写 lockfile_single → 报错', () => {
+    const p = (o) => validateShape([o]).join('\n')
+    expect(p(nodeItem({ runtime_lock_key: undefined }))).toContain('要么都写、要么都不写')
+    expect(p(nodeItem({ runtime_lock_key: 'yarn' }))).toContain('只许 node / npm')
+    expect(p(nodeItem({ version_line: '24' }))).toContain('不在 `version_line: 24` 这条线上')
+    expect(p(nodeItem({ version_line: 'lts' }))).toContain('只写大版本号')
+    expect(p(npmRtItem({ lockfile_single: undefined }))).toContain('lockfile_single: false')
+  })
+
+  it('周报只拿 version_line 上的正式版比：npm latest 是 11.x 不算落后，10.9.9 出了才算', () => {
+    const versions = ['10.9.7', '10.9.8', '11.6.2', '11.7.0-pre.1', '10.10.0-rc.1']
+    const line = lineCandidates('10', versions)
+    expect(line).toEqual(['10.9.7', '10.9.8'])
+    expect(versionVerdict('10.9.8', line, versions).state).toBe('current')
+    const newer = [...versions, '10.9.9']
+    expect(versionVerdict('10.9.8', lineCandidates('10', newer), newer)).toMatchObject({
+      state: 'behind',
+      highest: '10.9.9',
+    })
+  })
+
+  it('仓库里那一份：node-runtime / npm-runtime 与 apps/desktop/node-runtime.lock.json 逐字一致', () => {
+    const all = loadUpstreams(REPO_ROOT)
+    const node = all.find((i) => i.id === 'node-runtime')
+    const npm = all.find((i) => i.id === 'npm-runtime')
+    const lock = JSON.parse(readFileSync(join(REPO_ROOT, node.runtime_lock_file), 'utf8'))
+    expect(node.locked_version).toBe(lock.node.version)
+    expect(npm.locked_version).toBe(lock.npm.version)
+    expect(checkRuntimeLock(node, REPO_ROOT)).toEqual([])
+    expect(checkRuntimeLock(npm, REPO_ROOT)).toEqual([])
   })
 })
 

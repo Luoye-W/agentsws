@@ -22,6 +22,7 @@ import process from 'node:process'
 import {
   binReleaseVerdict,
   imageVerdict,
+  lineCandidates,
   loadUpstreams,
   REPO_ROOT,
   validateShape,
@@ -114,7 +115,12 @@ async function observeNpm(item) {
   const d = r.data ?? {}
   const versions = Object.keys(d.versions ?? {})
   const distTags = d['dist-tags'] ?? {}
-  const verdict = versionVerdict(item.locked_version, Object.values(distTags), versions)
+  // WP255：只跟一条大版本线的（随包 npm 跟 Node 22 配的 10.x）只拿这条线上的正式版比，不拿 latest（11.x）喊落后
+  const candidates =
+    item.version_line === undefined
+      ? Object.values(distTags)
+      : lineCandidates(String(item.version_line), versions)
+  const verdict = versionVerdict(item.locked_version, candidates, versions)
   const times = d.time ?? {}
   return {
     distTags,

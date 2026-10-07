@@ -107,6 +107,20 @@ export interface SocialStagedView {
   level?: string
 }
 
+/**
+ * WP255（决策 144）：「回复」框里那一句起草（人改了再出卡）。
+ *
+ * `source`：`ai` = 模型起草的；`template` = 没接上模型，给的是一句照着原话套的模板（界面明说「没用 AI」）。
+ * `warning`：起草出来的这句**自己就过不了承诺扫描**时那句改写要求——人改掉再出卡，不然出卡那一步会被打回。
+ * 起草不出卡、不落库、不进事件正文。
+ */
+export interface SocialReplyDraftView {
+  text: string
+  source: 'ai' | 'template'
+  note?: string
+  warning?: string
+}
+
 /** 一条新入站线程处理完之后回来的那一份。 */
 export interface SocialThreadView {
   thread: SocialThreadRow
@@ -312,6 +326,12 @@ export interface SocialPort {
   ): MaybePromise<SocialStagedView>
 
   /**
+   * WP255（决策 144）：给一条线程起草一句回复（AI；没接上模型就给一句模板并照实说）。
+   * **只起草**：不出卡、不落库；出卡仍走 {@link replyThread}（承诺话术在那里打回）。
+   */
+  draftReply?(actor: SocialActor, id: string): MaybePromise<SocialReplyDraftView>
+
+  /**
    * 群发向导那一下：算受众 → 自查 → 出一张 `community_broadcast` 卡（**永远 L1**）。
    *
    * 一次群发出去收不回来，而且收的是群里的人不是同事——所以它在 `HARD_L1` 里，
@@ -340,6 +360,14 @@ export interface SocialPort {
   ownSubQueue?(actor: SocialActor): MaybePromise<OwnSubQueueView>
   /** 从队列里一条出一张版务卡（批准 / 移除 / 封禁）。**不直接执行**。 */
   stageOwnSub?(actor: SocialActor, input: OwnSubStageInput): MaybePromise<SocialStagedView>
+  /**
+   * WP255（决策 144）：「自家版待处理」里一条要回复——把它记成社媒库里的一条线程（同一条只记一次，
+   * **不判类、不出卡**），回 `thread_id`；之后起草与出回帖卡都走线程那两条口子。
+   */
+  ownSubThread?(
+    actor: SocialActor,
+    input: { account_id: string; item_id: string },
+  ): MaybePromise<{ thread_id: string }>
   redditBrowserStatus?(actor: SocialActor): MaybePromise<RedditOfficialBrowserStatus>
   /** 有头打开登录页，用户自己在网页上登录官方号（我们不碰密码、不读 cookie）。 */
   redditBrowserLogin?(actor: SocialActor): MaybePromise<RedditOfficialBrowserStatus>
@@ -462,6 +490,14 @@ const ModerateBody = z.object({
 })
 
 const ReplyBody = z.object({ text: z.string().trim().min(1).max(4000) })
+
+const OwnSubThreadBody = z.object({
+  account_id: z.string().min(1).max(200),
+  item_id: z
+    .string()
+    .regex(/^t[13]_[a-z0-9]+$/iu)
+    .max(40),
+})
 
 const OwnSubStageBody = z.object({
   account_id: z.string().min(1).max(200),
@@ -746,6 +782,27 @@ export function socialRoutes(): Route[] {
     route(
       {
         method: 'post',
+        path: '/v1/social/threads/:id/reply-draft',
+        operationId: 'draftSocialReply',
+        summary:
+          'WP255：给一条线程起草一句回复（AI；没接上模型给一句模板并照实说）。**只起草**：不出卡、不落库；起草的这句自己过不了承诺扫描时带 `warning`',
+        tag: 'social',
+        auth: 'bearer',
+        assignment: true,
+        authz: STAGE_THREAD,
+        params: [{ name: 'id', in: 'path', required: true, description: 'thread_id' }],
+        returns: 'SocialReplyDraftView',
+      },
+      async (c, deps) => {
+        const port = portOf(deps)
+        if (port.draftReply === undefined)
+          throw new ApiError('not_implemented', '这个服务进程不能起草回复')
+        return ok(c, await port.draftReply(actorOf(c), param(c, 'id')))
+      },
+    ),
+    route(
+      {
+        method: 'post',
         path: '/v1/social/broadcasts',
         operationId: 'createSocialBroadcast',
         summary:
@@ -836,6 +893,26 @@ export function socialRoutes(): Route[] {
         returns: 'OwnSubQueueView',
       },
       async (c, deps) => ok(c, await need(portOf(deps), 'ownSubQueue')(actorOf(c))),
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/social/own-sub/thread',
+        operationId: 'ownSubThread',
+        summary:
+          'WP255：自家版队列里一条要回复——记成社媒库里的一条线程（同一条只记一次，不判类、不出卡），回 `thread_id`；起草与出回帖卡走线程那两条口子',
+        tag: 'social',
+        auth: 'bearer',
+        assignment: true,
+        authz: STAGE_THREAD,
+        body: OwnSubThreadBody,
+        returns: '{ thread_id: string }',
+      },
+      async (c, deps) =>
+        ok(
+          c,
+          await need(portOf(deps), 'ownSubThread')(actorOf(c), await body(c, OwnSubThreadBody)),
+        ),
     ),
     route(
       {

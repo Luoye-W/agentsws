@@ -2,7 +2,8 @@
  * WP249（决策 81 / 89）：「自家版待处理」——自家版运营职责视图栏后面那个快捷视图。
  *
  * 一屏：页头（这次走哪条路 + 登录官方号）→ 按类型分组的列表（被举报 / 被扣下待审 / 新帖 / 入群申请），
- * 每条一句摘要 + 举报原因 + AI 建议（批准 / 移除 / 先不管 + 一句理由，引用版规）+ 三个动作按钮。
+ * 每条一句摘要 + 举报原因 + AI 建议（批准 / 移除 / 先不管 + 一句理由，引用版规）+ 三个动作按钮
+ * + 「回复」（WP255：出一张回帖卡，同样不直接发）。
  *
  * 三条界面纪律：
  *
@@ -26,6 +27,7 @@ import {
 } from 'lucide-react'
 import { type ReactNode, useState } from 'react'
 import { StatusPill, type Tone, WsTag } from '@/components/design'
+import { ReplyButton } from '@/components/social/reply-button'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -46,6 +48,7 @@ import {
   registerOwnSub,
   stageOwnSub,
 } from '@/lib/own-sub-api'
+import { ownSubThread } from '@/lib/social-reply-api'
 
 const GROUPS = ['reported', 'held', 'new_post'] as const
 const VERDICT_TONE: Record<OwnSubQueueItem['suggestion']['verdict'], Tone> = {
@@ -311,6 +314,14 @@ function Row({
             onIgnore={onIgnore}
           />
         )}
+        {/* WP255（决策 144）：回复这一条——出一张回帖卡（先把它记成社媒库里的一条线程） */}
+        <ReplyButton
+          assignment={assignment}
+          resolveThread={async () =>
+            (await ownSubThread({ account_id: item.account_id, item_id: item.id }, assignment))
+              .thread_id
+          }
+        />
       </div>
     </li>
   )
