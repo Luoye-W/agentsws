@@ -11,6 +11,7 @@
  * 环境变量按**白名单**传：宿主环境里可能有开发者自己的 `DEEPSEEK_API_KEY`、
  * `OOMOL_CONNECT_*`，全量继承会让"密钥只从 safeStorage 来"这条纪律形同虚设。
  */
+import { LOCAL_RUNTIME_ENV } from '@agentsws/connect-adapter/local-runtime'
 import { findBundledNode } from './bundled-node.js'
 import type { HaltScope } from './halt.js'
 import { haltEnv } from './halt.js'
@@ -107,6 +108,11 @@ export interface ServerSpawnInput {
    */
   connectUrl?: string
   /**
+   * WP247：本机连接器归壳管（按需下载、壳当后台服务起停）——告诉服务进程「你可以替用户下载它」
+   * （`AGENTSWS_CONNECT_LOCAL_RUNTIME=1`）。只在 `connectUrl` 就是壳选的本机地址时给。
+   */
+  connectLocalRuntime?: boolean
+  /**
    * WP136（docs/79）：我们自己的 `DSH_HOME`（`<userData>/dsh`）。服务进程拿它当场景目录
    * （`AGENTSWS_DSH_HOME`），同一个值也作为 `DSH_HOME` 给出去——dsh 的本机凭据库
    * （`$DSH_HOME/.credentials.yaml`）因此是**所有场景共用的一份**，DeepSeek 账号登录一次就够。
@@ -141,6 +147,9 @@ export function serverSpawnRequest(input: ServerSpawnInput): SpawnRequest {
     AGENTSWS_CONTENT_UPDATES: input.baseEnv.AGENTSWS_CONTENT_UPDATES === 'off' ? 'off' : 'on',
     ...(input.haltFile === undefined ? {} : { AGENTSWS_HALT_FILE: input.haltFile }),
     ...(input.connectUrl === undefined ? {} : { AGENTSWS_CONNECT_URL: input.connectUrl }),
+    ...(input.connectLocalRuntime === true && input.connectUrl !== undefined
+      ? { [LOCAL_RUNTIME_ENV]: '1' }
+      : {}),
     ...(input.dshHome === undefined
       ? {}
       : { AGENTSWS_DSH_HOME: input.dshHome, DSH_HOME: input.dshHome }),

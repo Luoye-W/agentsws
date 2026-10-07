@@ -1,6 +1,7 @@
 /** `Spawner` / `TimerPort` / `Clock` / `RandomBytes` 的 node 实现。 */
 import { spawn } from 'node:child_process'
 import { randomBytes as nodeRandomBytes } from 'node:crypto'
+import { createServer } from 'node:net'
 import { win32 } from 'node:path'
 import type { ChildHandle, Clock, RandomBytes, Spawner, TimerPort } from './ports.js'
 
@@ -144,5 +145,35 @@ export function nodeAbort(timeoutMs: number): { signal: AbortSignal; done: () =>
 export function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => {
     setTimeout(resolve, ms)
+  })
+}
+
+/** WP247：这个端口在 127.0.0.1 上现在空不空（真去 listen 一下再关掉）。 */
+export function portIsFree(port: number, host = '127.0.0.1'): Promise<boolean> {
+  return new Promise((resolve) => {
+    const server = createServer()
+    server.once('error', () => {
+      resolve(false)
+    })
+    server.listen(port, host, () => {
+      server.close(() => {
+        resolve(true)
+      })
+    })
+  })
+}
+
+/** WP247：让系统在 127.0.0.1 上给一个空端口（选端口的最后一招）。 */
+export function osFreePort(host = '127.0.0.1'): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const server = createServer()
+    server.once('error', reject)
+    server.listen(0, host, () => {
+      const address = server.address()
+      const port = typeof address === 'object' && address !== null ? address.port : 0
+      server.close(() => {
+        resolve(port)
+      })
+    })
   })
 }
