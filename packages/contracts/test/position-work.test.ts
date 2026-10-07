@@ -7,6 +7,7 @@ import {
   postGroupOf,
   scheduleGroupOf,
   todoGroupOf,
+  todoMoveNeedsTime,
   todoSourceOf,
   todoStatusForGroup,
 } from '../src/position-work.js'
@@ -62,10 +63,17 @@ describe('分组', () => {
 })
 
 describe('看板拖动', () => {
-  it('只有待办能拖；拖回原列不算动；「排着的」不收拖动（要给时间）', () => {
+  it('只有待办能拖；拖回原列不算动；WP248：「排着的」收待办，但落之前要选时间', () => {
     expect(canMoveWorkItem({ kind: 'todo', group: 'doing' }, 'done')).toBe(true)
     expect(canMoveWorkItem({ kind: 'todo', group: 'doing' }, 'waiting')).toBe(true)
-    expect(canMoveWorkItem({ kind: 'todo', group: 'done' }, 'queued')).toBe(false)
+    expect(canMoveWorkItem({ kind: 'todo', group: 'done' }, 'queued')).toBe(true)
+    expect(canMoveWorkItem({ kind: 'todo', group: 'queued' }, 'queued')).toBe(false)
+    expect(todoMoveNeedsTime('queued')).toBe(true)
+    for (const g of POSITION_WORK_GROUPS.filter((x) => x !== 'queued'))
+      expect(todoMoveNeedsTime(g)).toBe(false)
+    // 事项 / 定时 / 排期照旧拖不动，「排着的」也一样
+    for (const kind of ['matter', 'schedule', 'post'] as const)
+      expect(canMoveWorkItem({ kind, group: 'doing' }, 'queued')).toBe(false)
     expect(canMoveWorkItem({ kind: 'todo', group: 'doing' }, 'doing')).toBe(false)
     for (const kind of ['matter', 'schedule', 'post'] as const)
       expect(canMoveWorkItem({ kind, group: 'doing' }, 'done')).toBe(false)

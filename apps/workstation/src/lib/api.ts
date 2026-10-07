@@ -291,7 +291,11 @@ export interface HomeData {
   battle_report: BattleReport
   /** 37 §3 首页第三稿多出来的四段（服务进程没装工作模型时不出） */
   goals?: GoalProgress[]
-  today?: { timeline: CalendarItem[]; due: { todos: Todo[]; cards_waiting: number } }
+  today?: {
+    timeline: CalendarItem[]
+    /** WP248（决策 79）：`todos` 含已过期没做完的；`overdue_ids` 是其中已过期的那几条（老服务端没有） */
+    due: { todos: Todo[]; cards_waiting: number; overdue_ids?: string[] }
+  }
   report?: WorkBattleReport
   review?: Review
   plan?: DailyPlan
@@ -3406,6 +3410,12 @@ export interface WorkspaceProfileView {
   markets_source?: MarketsSource
   /** WP176：公司实体地址（开发信页脚、报价单、单证从这里取）。 */
   postal_address?: string
+  /** WP248（决策 83）：品牌一句话介绍（没写过就没有）。 */
+  one_liner?: string
+  /** WP248（决策 83）：客服邮箱（没写过就没有）。 */
+  support_email?: string
+  /** WP248（决策 83）：币种（新服务端总会给，没写过 = USD）。 */
+  currency?: string
   set_at: string
 }
 
@@ -3602,6 +3612,10 @@ export const setWorkspaceProfile = (
     markets?: string[]
     /** WP176：公司实体地址（不给 = 不改；空串 = 清空）。 */
     postal_address?: string
+    /** WP248（决策 83）：品牌三格（不给 = 不改；空串 = 清空）。 */
+    one_liner?: string
+    support_email?: string
+    currency?: string
   },
   assignment?: string,
 ): Promise<WorkspaceProfileView> =>

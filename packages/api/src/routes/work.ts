@@ -104,7 +104,11 @@ export interface WorkHome {
   /** ② 今天：左时间轴 / 右到期清单 */
   today: {
     timeline: CalendarItem[]
-    due: { todos: Todo[]; cards_waiting: number }
+    /**
+     * WP248（决策 79）：`todos` 含已过期没做完的（排在最前）；`overdue_ids` 是其中已过期的那几条
+     * （首页标红一个小标、页头写「（N 个已过期）」）。老服务端没有这一格 = 没有过期的。
+     */
+    due: { todos: Todo[]; cards_waiting: number; overdue_ids?: string[] }
   }
   /** ④ 战报四格：白天就是它；数从今天的审批项状态里数出来（29 原则 ③） */
   report: BattleReport
