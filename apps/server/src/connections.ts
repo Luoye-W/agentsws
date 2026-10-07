@@ -40,7 +40,14 @@ import {
   type ResolveMx,
   SmtpMailer,
 } from '@agentsws/channels'
-import { assertRuntimeHardened, createConnectAdapter } from '@agentsws/connect-adapter'
+import {
+  assertRuntimeHardened,
+  type ConnectionConflictRecord,
+  type ConnectionOwners,
+  createConnectAdapter,
+  parseBrandConnectionName,
+  fingerprint as sha256Prefix,
+} from '@agentsws/connect-adapter'
 import type {
   ActionMeta,
   Clock,
@@ -235,6 +242,14 @@ export interface ConnectionsOptions {
    * 状态里多一块 `local`，下载 / 重启 / 回退 / 删除走它。
    */
   localRuntime?: OpenConnectorInstaller
+  /**
+   * WP252（决策 125）：整台机一份的连接归属表（`connect-owners.ts` 开、各品牌共用同一个实例）。
+   * 给了它，真连接器那一档就按品牌隔开：新建连接的上游名字带品牌段，只列 / 只用 / 只签本品牌的连接；
+   * 迁移时让给了别的品牌的那几条在本品牌留一行「请重新连接」。不给 = 老行为（单品牌、测试注入）。
+   */
+  owners?: ConnectionOwners
+  /** WP252：这是不是**启动品牌**（bootstrap 工作区）——只有它认领没人记过的老 `default` 连接。 */
+  startupBrand?: boolean
 }
 
 export interface ConnectionsAssembly {
@@ -521,6 +536,9 @@ export async function createConnections(options: ConnectionsOptions): Promise<Co
           clock,
           env,
           workspaceId: workspace_id,
+          ...(options.owners === undefined
+            ? {}
+            : { owners: options.owners, claimsLegacy: options.startupBrand === true }),
           services: CATALOG.filter((c) => c.upstream !== 'local').map((c) => c.upstream),
           ...(options.dbDir === undefined
             ? {}
@@ -938,6 +956,37 @@ export async function createConnections(options: ConnectionsOptions): Promise<Co
     }
   }
 
+  // ── WP252（决策 125）：多品牌共用同一个连接名留下的两种提醒
+  //
+  // 迁移时同一条上游连接被两个品牌都记过（都用 `default` 连了同一家服务）→ 归启动品牌。
+  // 让出去的那一边留一行「请重新连接」（id 以 `reconnect_` 开头，**不是**上游连接的 id——
+  // 断开它只收起提醒，绝不去删别的品牌那条）；留下的那一边在点「测试」核对之前带一句提醒。
+  const owners = options.owners
+  const reconnectIdOf = (r: ConnectionConflictRecord): string =>
+    `${RECONNECT_PREFIX}${sha256Prefix(r.connection_id)}`
+  const reconnectView = (r: ConnectionConflictRecord): ConnectionView | undefined => {
+    // 迁移时只知道连接 id；任何一个品牌列到它之前不知道是哪家服务，先不画
+    if (r.service === undefined) return undefined
+    const service = serviceOfUpstream(r.service)
+    const entry = catalogEntry(service)
+    const name = r.connection_name ?? 'default'
+    return {
+      id: reconnectIdOf(r),
+      service,
+      service_label: entry?.label ?? service,
+      alias: parseBrandConnectionName(name)?.alias ?? name,
+      ownership: 'workspace',
+      status: 'reauth_required',
+      credential_store: 'openconnector',
+      data_sources: entry?.data_sources ?? [],
+      brand_conflict: { kind: 'reconnect', hint: RECONNECT_HINT },
+    }
+  }
+  const withKeptNotice = (row: ConnectionView): ConnectionView =>
+    owners?.keptUncheckedOf(workspace_id).some((c) => c.connection_id === row.id) === true
+      ? { ...row, brand_conflict: { kind: 'kept', hint: KEPT_HINT } }
+      : row
+
   let cached: ConnectionView[] = state.local.map(localView)
 
   // WP46：连接清单变了就叫一声（活数据源据此重拉）。指纹只有 id / service / 状态。
@@ -963,10 +1012,15 @@ export async function createConnections(options: ConnectionsOptions): Promise<Co
       for (const c of await connect.connections(workspace_id)) {
         // 上游的 no_auth 虚拟连接（`service:default`，公共只读 API）不是用户连的，不进"已连接"
         if (c.id.endsWith(':default') && catalogEntry(c.service) === undefined) continue
-        rows.push(remoteView(c))
+        rows.push(withKeptNotice(remoteView(c)))
       }
     } catch {
       // runtime 挂了不该让整页白屏：本地那几条照常列，状态条上会红着说明原因
+    }
+    // WP252：迁移时让给了别的品牌的那几条（只有提醒，没有凭据、也不是上游连接）
+    for (const r of owners?.reconnectsOf(workspace_id) ?? []) {
+      const view = reconnectView(r)
+      if (view !== undefined) rows.push(view)
     }
     const before = fingerprint(cached)
     cached = rows
@@ -1185,7 +1239,22 @@ export async function createConnections(options: ConnectionsOptions): Promise<Co
         checked_at: clock.now(),
       }
     }
-    return rememberTest(id, await smokeRemote(view))
+    // WP252：「请重新连接」那一行没有可测的东西——上游那条是别的品牌的
+    if (view.brand_conflict?.kind === 'reconnect') {
+      return {
+        ok: false,
+        reason: 'reconnect_required',
+        detail: RECONNECT_HINT,
+        checked_at: clock.now(),
+      }
+    }
+    const result = rememberTest(id, await smokeRemote(view))
+    // 留下的那一条：人按过一次「测试」就算核对过了（账号名就在这一行的标题上）
+    if (view.brand_conflict?.kind === 'kept') {
+      owners?.markKeptChecked(workspace_id, id)
+      await listAll()
+    }
+    return result
   }
 
   /**
@@ -1358,7 +1427,11 @@ export async function createConnections(options: ConnectionsOptions): Promise<Co
       if (status !== 'connected') return { status }
       const rows = await listAll()
       // 刚连上的那条：OpenConnector 侧最新出现的一条（listAll 已经刷新过）
-      const hit = rows.filter((r) => r.credential_store === 'openconnector').at(-1)
+      const hit = rows
+        .filter(
+          (r) => r.credential_store === 'openconnector' && r.brand_conflict?.kind !== 'reconnect',
+        )
+        .at(-1)
       return { status, ...(hit === undefined ? {} : { connection: hit }) }
     },
 
@@ -1451,6 +1524,14 @@ export async function createConnections(options: ConnectionsOptions): Promise<Co
     },
 
     async remove(_actor, id) {
+      // WP252：「请重新连接」那一行——只收起提醒，上游那条（别的品牌的）一个字节不碰
+      if (id.startsWith(RECONNECT_PREFIX)) {
+        const hit = owners?.reconnectsOf(workspace_id).find((r) => reconnectIdOf(r) === id)
+        if (hit === undefined) throw notFound(`连接不存在：${id}`)
+        owners?.dismissReconnect(workspace_id, hit.connection_id)
+        await listAll()
+        return
+      }
       const localIndex = state.local.findIndex((m) => m.id === id)
       if (localIndex >= 0) {
         state.local.splice(localIndex, 1)
@@ -1563,7 +1644,11 @@ export async function createConnections(options: ConnectionsOptions): Promise<Co
     refreshTokens,
     snapshot: () =>
       cached.map((c) => ({ service: c.service, status: c.status }) satisfies ConnectionLike),
-    liveConnections: () => cached.map((c) => ({ id: c.id, service: c.service, status: c.status })),
+    // WP252：「请重新连接」那一行不是真连接，活数据源不该拿它去要数
+    liveConnections: () =>
+      cached
+        .filter((c) => !c.id.startsWith(RECONNECT_PREFIX))
+        .map((c) => ({ id: c.id, service: c.service, status: c.status })),
     async refreshConnectionToken(connection_id) {
       if (shopify.recordOf(connection_id) === undefined) return false
       await shopify.refresh(connection_id)
@@ -1612,6 +1697,17 @@ export async function createConnections(options: ConnectionsOptions): Promise<Co
     },
   }
 }
+
+// ── WP252 提醒文案 ─────────────────────────────────────────────────────
+
+/** 「请重新连接」那一行的 id 前缀（不是上游连接 id）。 */
+const RECONNECT_PREFIX = 'reconnect_'
+const RECONNECT_HINT =
+  '这条连接以前和本机另一个品牌用的是同一个名字，已经归给第一个品牌。' +
+  '请在这一页重新连接一次，连出来的那条只属于本品牌。'
+const KEPT_HINT =
+  '这条连接以前被本机另一个品牌用同一个名字连过，里面存的可能是对方最后填的账号。' +
+  '点一次「测试」核对账号；不是本品牌的就断开重连。'
 
 // ── 错误（网关会把 code 翻成 HTTP 状态）────────────────────────────────
 

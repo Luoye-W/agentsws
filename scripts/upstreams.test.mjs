@@ -31,6 +31,7 @@ import {
   binReleaseVerdict,
   checkBinLock,
   checkImagePins,
+  checkNpmLock,
   checkPins,
   compareVersions,
   findImageRefs,
@@ -791,5 +792,95 @@ describe('二进制钉版本：check-upstreams 对账 bin_lock_file（WP146）',
       opts,
     )
     expect(md).toContain('上游最新正式 release：查不到（403）')
+  })
+})
+
+// ── npm 运行时：桌面按需下载的 OpenConnector（WP252 追加）──────────────────────
+
+const npmItem = (over = {}) => ({
+  id: 'oc-rt',
+  kind: 'runtime-dep',
+  why: '本机连接器',
+  npm: '@o/rt',
+  locked_version: '1.8.0',
+  lockfile_single: false,
+  npm_lock_file: 'lock.json',
+  npm_pin_in: ['pin.ts'],
+  watch: ['versions'],
+  ...over,
+})
+const npmLock = (over = {}) =>
+  JSON.stringify({
+    lockfileVersion: 3,
+    packages: {
+      '': { dependencies: { '@o/rt': '1.8.0' } },
+      'node_modules/@o/rt': {
+        version: '1.8.0',
+        resolved: 'https://r/rt.tgz',
+        integrity: 'sha512-a',
+      },
+      'node_modules/dep': {
+        version: '2.0.0',
+        resolved: 'https://r/dep.tgz',
+        integrity: 'sha512-b',
+      },
+      ...over,
+    },
+  })
+const PIN_TS = "export const PIN = { package: '@o/rt', version: '1.8.0' }\n"
+
+describe('npm 运行时钉版本：check-upstreams 对账 npm_lock_file / npm_pin_in（WP252）', () => {
+  it('锁文件、代码里的钉版本与登记表三处一致 → 没问题', () => {
+    expect(checkNpmLock(npmItem(), imgRepo({ 'lock.json': npmLock(), 'pin.ts': PIN_TS }))).toEqual(
+      [],
+    )
+  })
+
+  it('锁文件重出成了别的版本、登记表没跟 → 报出来', () => {
+    const lock = npmLock({
+      '': { dependencies: { '@o/rt': '1.9.0' } },
+      'node_modules/@o/rt': { version: '1.9.0', resolved: 'x', integrity: 'sha512-a' },
+    })
+    const p = checkNpmLock(npmItem(), imgRepo({ 'lock.json': lock, 'pin.ts': PIN_TS })).join('\n')
+    expect(p).toContain('根依赖 `@o/rt` 是 `1.9.0`')
+    expect(p).toContain('解析成 1.9.0')
+  })
+
+  it('有包没钉 sha512 → 报出来', () => {
+    const lock = npmLock({
+      'node_modules/loose': { version: '1.0.0', resolved: 'https://r/l.tgz' },
+    })
+    expect(
+      checkNpmLock(npmItem(), imgRepo({ 'lock.json': lock, 'pin.ts': PIN_TS })).join('\n'),
+    ).toContain('没钉 sha512：node_modules/loose')
+  })
+
+  it('代码里的钉版本改了、登记表没跟 → 报出来；文件不在也报', () => {
+    const p = checkNpmLock(
+      npmItem(),
+      imgRepo({ 'lock.json': npmLock(), 'pin.ts': PIN_TS.replace('1.8.0', '1.9.0') }),
+    )
+    expect(p.join('\n')).toContain("没有钉 `'1.8.0'`")
+    expect(checkNpmLock(npmItem({ npm_lock_file: 'nope.json' }), tmp()).join('\n')).toContain(
+      '不存在的文件：nope.json',
+    )
+  })
+
+  it('形状：写了 npm_lock_file 却没写 lockfile_single: false / 没有 npm → 报错', () => {
+    expect(validateShape([npmItem({ lockfile_single: undefined })]).join('\n')).toContain(
+      'lockfile_single: false',
+    )
+    expect(validateShape([npmItem({ npm: undefined, repo: 'o/rt' })]).join('\n')).toContain(
+      '就要有 `npm` 与 `locked_version`',
+    )
+  })
+
+  it('仓库里那一份：open-connector-runtime 钉的就是 OPEN_CONNECTOR_PIN 与锁文件里那一版', () => {
+    const rt = loadUpstreams(REPO_ROOT).find((i) => i.id === 'open-connector-runtime')
+    expect(rt.npm).toBe('@oomol-lab/open-connector')
+    expect(rt.npm_lock_file).toBe('packages/connect-adapter/src/open-connector-lock.json')
+    expect(checkNpmLock(rt, REPO_ROOT)).toEqual([])
+    const lock = JSON.parse(readFileSync(join(REPO_ROOT, rt.npm_lock_file), 'utf8'))
+    expect(lock.packages['node_modules/@oomol-lab/open-connector'].version).toBe(rt.locked_version)
   })
 })

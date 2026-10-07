@@ -18,6 +18,21 @@
 | `execute()` | `POST /v1/actions/:id`（经 SDK `OpenConnector.executeRaw`）+ `Idempotency-Key` + `x-oo-connector-alias` |
 | `proxy()` | 一律本地拒绝（role-read 的 `allowedProxies` 恒空；role-apply v1 也不开） |
 
+### 一台机多个品牌共用一个 runtime（WP252，决策 125）
+
+给了 `owners`（整台机一份的 `ConnectionOwners`，所有品牌的适配器传同一个实例）就是「按品牌隔开」档：
+
+- **连接名带品牌段**：新建连接在上游叫 `<别名>--<品牌段>`（品牌段 = workspace id 只留 `[a-z0-9_]`，
+  例如 `default--ws_19cxxs7l`）；界面上的 `alias` 去掉品牌段。上游 `PUT /api/connections/:service` 按
+  (service, 连接名) 就地覆盖，名字各是各的才不会把别的品牌的凭据顶掉。本品牌已经有同名老连接（不带品牌段）时沿用老名字，重连就地更新。
+- **只认自己的**：`connections()` / `execute()`（含不点名时挑默认连接）/ `issueToken()`（`allowedConnections`）/
+  `removeConnection()` / `transferConnection()` 只认归属表里归本品牌的；别的品牌的连接与「不存在」一视同仁。
+- **老数据**：没人认领、名字不带品牌段的老连接（`default`）只归 `claimsLegacy: true` 的那个适配器（启动品牌）。
+  `migrateConnectionOwners()` 把各品牌老 `connect-adapter.json` 里记过的归属补进归属表（幂等）；同一条被两个品牌都记过的归启动品牌，
+  另一个品牌留一条「请重新连接」（`reconnectsOf`），它给同一个 provider 连上自己的一条后自动结掉。
+
+不给 `owners` = 老行为（单品牌、测试）。服务进程的装配在 `apps/server/src/connect-owners.ts`。
+
 ### 在哪一版上验过（WP146 起镜像钉版本）
 
 | 镜像 | digest（多架构 index） | 验了什么 | 日期 |

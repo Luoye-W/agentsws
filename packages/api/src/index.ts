@@ -236,6 +236,7 @@ export type {
 export { connectionDirectoryRoutes } from './routes/connection-directory.js'
 export type {
   BeginConnectResult,
+  BrandConflictKind,
   ConnectionOwnership,
   ConnectionStatus,
   ConnectionsActor,

@@ -275,6 +275,7 @@ import { withCloudAttribution } from './cloud-attribution.js'
 import { createRosterSync, isRosterEvent, type RosterSync } from './cloud-roster.js'
 import { ComputerUseError, createComputerUse } from './computer-use.js'
 import { ComputerUseInstallError } from './computer-use-install.js'
+import { openConnectOwners } from './connect-owners.js'
 import { connectBaseUrl } from './connect-url.js'
 // WP83（54 §4）：连接目录 + 岗位连接清单 + 自定义 MCP 服务器（保存 / 校验 / 探测）
 import type { ConnectionDirectoryAssembly } from './connection-directory.js'
@@ -2455,6 +2456,10 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   if (localConnector !== undefined && env.AGENTSWS_CONNECT_AUTO_UPDATE !== '0')
     localConnector.autoUpdate()
 
+  // WP252（决策 125）：一台机一个连接器、多个品牌共用——整台机一份连接归属表，各品牌的连接面共用同一个实例；
+  // 启动时先把各品牌老状态文件里记过的归属补记进来（幂等），必须在任何品牌列连接之前。
+  const connectOwners = openConnectOwners({ dbDir, startup: workspace.id, now: clock.now() })
+
   const assembleBrand = async (ws: WorkspaceId): Promise<BrandModuleSet> => {
     const isBootstrap = ws === workspace.id
     const dir = brandDirOf(dbDir, ws, workspace.id)
@@ -2496,6 +2501,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       ...(options.connect === undefined ? {} : { connect: options.connect }),
       ...(dir === undefined ? {} : { dbDir: dir }),
       ...(localConnector === undefined ? {} : { localRuntime: localConnector }),
+      // WP252：连接按品牌隔开；只有启动品牌认领没人记过的老 `default` 连接
+      owners: connectOwners.owners,
+      startupBrand: isBootstrap,
     })
 
     /**

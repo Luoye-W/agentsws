@@ -140,7 +140,7 @@ export interface ImportResult {
 
 const SQLITE_EXT = ['.db', '.sqlite']
 /** 不是库、但同样是真源的一部分（连接状态、模型配置）。 */
-const RAW_FILES = ['connections.json', 'connect-adapter.json', 'models.json']
+const RAW_FILES = ['connections.json', 'connect-adapter.json', 'connect-owners.json', 'models.json']
 
 const isSqlite = (name: string): boolean => SQLITE_EXT.some((e) => name.endsWith(e))
 

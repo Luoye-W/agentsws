@@ -1583,6 +1583,10 @@ const zh: Table = {
   // WP44：老办法接的连接（Shopify 的 shpat_ 直填令牌）
   'connections.legacy': '老办法接的',
   'connections.legacy.action': '断开后重接一次',
+  // WP252：以前和本机另一个品牌共用过同一个连接名
+  'connections.brand_conflict.reconnect': '请重新连接',
+  'connections.brand_conflict.kept': '请核对账号',
+  'connections.brand_conflict.dismiss': '收起',
   // WP44：代理 fake-IP 模式下的出站防护
   'connections.egress.fake_ip': '你的网络在用代理的 fake-IP 模式',
   'connections.egress.fake_ip.short': '连接器已改用公共 DNS，重启开发环境生效。',
@@ -5515,6 +5519,9 @@ const en: Table = {
     'This machine has no vault key yet, so mailbox passwords cannot be stored.',
   'connections.legacy': 'connected the old way',
   'connections.legacy.action': 'Disconnect and reconnect',
+  'connections.brand_conflict.reconnect': 'Please reconnect',
+  'connections.brand_conflict.kept': 'Check the account',
+  'connections.brand_conflict.dismiss': 'Dismiss',
   'connections.egress.fake_ip': 'Your network is using a proxy in fake-IP mode',
   'connections.egress.fake_ip.short':
     'The connector now uses public DNS; restart the dev environment.',
