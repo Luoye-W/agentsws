@@ -145,6 +145,11 @@ export interface ChannelComment {
   /** 正文。**外部文本**——调用方进模型上下文前要围栏（21 §1 / 39）。 */
   text: string
   created_at: string
+  /**
+   * WP257（决策 152）：这条是不是冲着我们来的——@ 了我们的机器人，或回的是机器人说的那句。
+   * 判类打标签时当一条结构判据用。平台给不出就没有这一格（不猜）。
+   */
+  mentions_us?: boolean
 }
 
 /** 一个社群成员（读回来的那一份）。 */
@@ -269,6 +274,30 @@ export type ChannelReadGap =
   | 'view_channel'
   | 'read_message_history'
   | 'message_content'
+  /** WP257（Telegram）：机器人开着隐私模式（privacy mode），又不是群管理员——群里只看得到 @它的话与命令。 */
+  | 'privacy_mode'
+  /** WP257（Telegram）：这个机器人设了 webhook（别的工具在收它的消息），`getUpdates` 读不了。 */
+  | 'webhook_active'
+
+/**
+ * WP257（决策 156）：Telegram 那种「整个机器人一条收件流」的一页（`getUpdates`）。
+ *
+ * 和 Discord 按频道续读不一样：Telegram 的新消息不分群，一个机器人只有一条流，按 `update_id` 续读；
+ * 读走（下一次带上 `offset`）就算确认了，Telegram 不再给第二遍。所以每一条都带着它是哪个群的。
+ */
+export interface ChannelUpdatesPage {
+  items: {
+    /** 哪个群（数字 id 的字符串，超级群是 `-100…`）。 */
+    chat_id: string
+    /** 公开群的 @用户名（不带 @）；私有群没有。 */
+    chat_username?: string
+    comment: ChannelComment
+  }[]
+  /** 下一次从哪儿接着读（最后一条 `update_id + 1`）。这一页一条都没有就没有。 */
+  next_offset?: string
+  /** 平台这一页回了几条（含过滤掉的）。不满一页 = 读到头了。 */
+  fetched: number
+}
 
 export interface MemberDecisionInput {
   account_external_id: string
@@ -326,8 +355,20 @@ export interface SocialChannelAdapter {
     after?: string
     limit?: number
   }): Promise<SocialResult<ChannelFeedPage>>
-  /** WP256：读这个频道的消息还缺哪几样权限（空数组 = 都齐了）。只有 Discord 实现。 */
+  /** WP256：读这个频道的消息还缺哪几样权限（空数组 = 都齐了）。Discord、Telegram（WP257）实现。 */
   readAccess?(account_external_id: string): Promise<SocialResult<{ missing: ChannelReadGap[] }>>
+  /**
+   * WP257（决策 155 / 156）：登记一个群 / 频道时读一次它叫什么（**只读**一跳）：Discord 回「#general」，
+   * Telegram 回群名，并把 `@用户名` 换成数字 id（收件流里只认数字 id）。
+   */
+  describeTarget?(
+    account_external_id: string,
+  ): Promise<SocialResult<{ name: string; external_id?: string }>>
+  /**
+   * WP257（决策 156）：整个机器人的新消息流（Telegram `getUpdates`），从 `offset` 往后读一页。**只读**：
+   * 不回复。读走即确认（见 {@link ChannelUpdatesPage}）。只加不改：目前只有 Telegram 实现。
+   */
+  updates?(input: { offset?: string; limit?: number }): Promise<SocialResult<ChannelUpdatesPage>>
 }
 
 /* ── 共用的那几句人话与那几段样板 ─────────────────────────────────────── */

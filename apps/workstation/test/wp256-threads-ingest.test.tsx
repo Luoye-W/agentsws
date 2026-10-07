@@ -64,8 +64,9 @@ describe('WP256 群里的帖子：空态照实说', () => {
   })
 
   it('这条渠道不会自动拉：照实说', async () => {
-    state.ingest = base({ channel: 'telegram_group', auto: false, accounts: [] })
-    renderWithProviders(<SocialThreads assignment="asg" channel="telegram_group" />)
+    // WP257 起 Telegram 群会自动拉了；WhatsApp 仍不会
+    state.ingest = base({ channel: 'whatsapp', auto: false, accounts: [] })
+    renderWithProviders(<SocialThreads assignment="asg" channel="whatsapp" />)
     expect((await screen.findByTestId('threads-empty')).textContent).toContain(
       '这条渠道还不会自动拉新帖',
     )

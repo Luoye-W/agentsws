@@ -22,8 +22,21 @@
  *    `missing_permissions`，把缺的那几样摆在视图上（补上之后下一轮自己就能读）。
  *
  * 正文是外部文本：原样进线程表，进事件日志的只有渠道、账号 id 与条数。
+ *
+ * WP257（决策 152 / 155 / 156）补三件：
+ *
+ * - **入库就打标签**（`social-tags.ts`）：按规则判六类之一，`triage_by: 'rule'`；**仍不出卡、不转客服**。
+ *   WP256 时没打标签的老帖下一拍补上；打开「模型复核」（默认关）后每一拍再复核最近几条。
+ * - **Discord 频道名**：登记时读一次（`describeTarget`），读不到退回「#频道 id 末四位」；老频道下一轮读时顺手补。
+ * - **Telegram 群**（`social-ingest-telegram.ts`）：同一套去重、断点续读、限速退避、缺什么照实说；
+ *   不同的是 Telegram 一个机器人只有一条收件流，按机器人续读、再按群分。
  */
-import type { SocialActor, SocialIngestAccountView, SocialIngestView } from '@agentsws/api'
+import type {
+  SocialActor,
+  SocialIngestAccountView,
+  SocialIngestView,
+  SocialTagSettingsView,
+} from '@agentsws/api'
 import { ApiError } from '@agentsws/api'
 import type {
   Clock,
@@ -39,6 +52,14 @@ import {
   splitTarget,
 } from '@agentsws/social-core'
 import type { SocialIngestRow, SocialStore } from './social.js'
+import { readTelegramRound } from './social-ingest-telegram.js'
+import {
+  ruleTagged,
+  TAG_REVIEW_BATCH,
+  TAG_REVIEW_WINDOW_MS,
+  TAG_SETTINGS_ID,
+  type TagReviewer,
+} from './social-tags.js'
 
 export const DISCORD_INGEST_DEFAULT_MINUTES = 15
 export const DISCORD_INGEST_MIN_MINUTES = 5
@@ -50,10 +71,27 @@ const FIRST_PAGE = 50
 /** 第一次读只记这么近的（不把几个月前的老消息当「新帖」堆进来）。 */
 const FIRST_READ_WINDOW_MS = 7 * 86_400_000
 /** 权限一天查一次。 */
-const ACCESS_RECHECK_MS = 86_400_000
+export const ACCESS_RECHECK_MS = 86_400_000
+/** WP257：群名 / 频道名读不到时，一天再试一次。 */
+const NAME_RECHECK_MS = 86_400_000
+/** WP257：老帖补标签，一拍最多补这么多条。 */
+const BACKFILL_BATCH = 500
 
-/** 会自动进帖的渠道。 */
-const AUTO_CHANNELS: readonly SocialChannel[] = ['discord', 'reddit']
+/** 会自动进帖的渠道（WP257 加 Telegram 群）。 */
+const AUTO_CHANNELS: readonly SocialChannel[] = ['discord', 'reddit', 'telegram_group']
+/** 读取频率能调的渠道。 */
+const INTERVAL_CHANNELS: readonly SocialChannel[] = ['discord', 'telegram_group']
+
+/** WP257（决策 155）：登记时还没读到名字的那个默认名——Discord「#频道 id 末四位」。 */
+export const discordFallbackName = (channel_id: string): string => `#${channel_id.slice(-4)}`
+/** Telegram 群的默认名：公开群就是 `@用户名`，私有群「群 id 末四位」。 */
+export const telegramFallbackName = (chat: string): string =>
+  chat.startsWith('@') ? chat : `群 ${chat.slice(-4)}`
+
+const CHANNEL_LABEL: Partial<Record<SocialChannel, string>> = {
+  discord: 'Discord',
+  telegram_group: 'Telegram 群组',
+}
 
 export interface SocialIngestOptions {
   workspace_id: WorkspaceId
@@ -70,6 +108,12 @@ export interface SocialIngestOptions {
   blocked?(channel: SocialChannel): string | undefined
   /** Reddit 自家版那一半（WP249 的队列）。不给 = 这台没装配自家版待处理。 */
   ownSub?: { backgroundRead(): Promise<{ read: number; ingested: number }> }
+  /** WP257：品牌名（正文里提到也算「冲着我们来的」）。 */
+  brandTerms?(): readonly string[]
+  /** WP257：模型复核引擎（按渠道取，记在持有那条职责的人头上）。没接上真模型 / 没人持有 → 不给。 */
+  tagReviewer?(channel: SocialChannel): TagReviewer | undefined
+  /** WP257：这台接没接上真模型（视图照实说「开着也只按规则判」）。 */
+  modelReady?(): boolean
 }
 
 export interface SocialIngestSweep {
@@ -89,15 +133,23 @@ export interface SocialIngest {
     actor: SocialActor,
     input: { channel: SocialChannel; every_minutes: number },
   ): SocialIngestView
+  /** WP257：判类要不要再请模型复核（默认关）。 */
+  setTagReview(actor: SocialActor, input: { model_review: boolean }): SocialTagSettingsView
+  /**
+   * WP257（决策 155）：刚登记的 Discord 频道 / Telegram 群读一次名字（只读一跳）；读到了改显示名
+   * （Telegram 顺手把 `@用户名` 换成数字 id），读不到原样回（下一轮读时再试）。
+   */
+  named(account: SocialAccount): Promise<SocialAccount>
 }
 
-const settingsId = (channel: SocialChannel): string => `settings:${channel}`
+export const settingsId = (channel: SocialChannel): string => `settings:${channel}`
 
 export function createSocialIngest(options: SocialIngestOptions): SocialIngest {
   const { store, clock } = options
 
-  const everyMinutes = (): number =>
-    store.ingestState(settingsId('discord'))?.every_minutes ?? DISCORD_INGEST_DEFAULT_MINUTES
+  const everyMinutes = (channel: SocialChannel = 'discord'): number =>
+    store.ingestState(settingsId(channel))?.every_minutes ?? DISCORD_INGEST_DEFAULT_MINUTES
+  const brandTerms = (): readonly string[] => options.brandTerms?.() ?? []
 
   const later = (ms: number): string => new Date(Date.parse(clock.now()) + ms).toISOString()
 
@@ -133,35 +185,108 @@ export function createSocialIngest(options: SocialIngestOptions): SocialIngest {
         state: 'limited',
         message: res.message,
         last_read_at: clock.now(),
-        next_read_at: later(everyMinutes() * 60_000 * 2),
+        next_read_at: later(everyMinutes(account.channel) * 60_000 * 2),
       })
       out.skipped.push({ account_id: account.id, reason: res.message })
       return false
     }
     if (res.data.missing.length === 0) {
-      save(account, { access_checked_at: clock.now(), missing: [] })
+      // 补上了：上次那句缺权限的话不留（读成之后状态由读那一步写）
+      const prev = store.ingestState(account.id)
+      if (prev?.state === 'missing_permissions') {
+        const { message: _m, missing: _x, state: _s, ...keep } = prev
+        store.saveIngestState({ ...keep, access_checked_at: clock.now(), missing: [] })
+      } else save(account, { access_checked_at: clock.now(), missing: [] })
       return true
     }
-    const message = readGapMessage('Discord', res.data.missing)
+    const message = readGapMessage(
+      CHANNEL_LABEL[account.channel] ?? account.channel,
+      res.data.missing,
+    )
     save(account, {
       access_checked_at: clock.now(),
       state: 'missing_permissions',
       missing: res.data.missing,
       message,
       last_read_at: clock.now(),
-      next_read_at: later(everyMinutes() * 60_000),
+      next_read_at: later(everyMinutes(account.channel) * 60_000),
     })
     out.skipped.push({ account_id: account.id, reason: message })
     return false
   }
 
+  /** WP257：这个号的显示名还是登记时的默认名（没读到真名）吗。 */
+  const needsName = (account: SocialAccount): boolean => {
+    const shown = account.display_name.trim()
+    if (account.channel === 'discord') {
+      const ch = splitTarget(account.external_id).channel
+      return ch !== undefined && (shown === '' || shown === discordFallbackName(ch))
+    }
+    if (account.channel === 'telegram_group')
+      return (
+        shown === '' ||
+        shown === account.external_id ||
+        shown === telegramFallbackName(account.external_id) ||
+        account.external_id.startsWith('@')
+      )
+    return false
+  }
+
+  /**
+   * WP257（决策 155）：读一次名字（`force` = 登记那一下，不看上次试过没有）。读到了改显示名；读不到记下时刻，
+   * 一天后再试（默认名「#频道 id 末四位」照用）。
+   */
+  const fillName = async (
+    adapter: SocialChannelAdapter,
+    account: SocialAccount,
+    force = false,
+  ): Promise<SocialAccount> => {
+    if (adapter.describeTarget === undefined || !needsName(account)) return account
+    const row = store.ingestState(account.id)
+    if (
+      !force &&
+      row?.name_checked_at !== undefined &&
+      Date.parse(clock.now()) - Date.parse(row.name_checked_at) < NAME_RECHECK_MS
+    )
+      return account
+    const res = await adapter.describeTarget(account.external_id)
+    save(account, { name_checked_at: clock.now() })
+    if (!res.ok) return account
+    const next: SocialAccount = {
+      ...account,
+      display_name: res.data.name,
+      ...(res.data.external_id === undefined ||
+      res.data.external_id === account.external_id ||
+      account.channel !== 'telegram_group'
+        ? {}
+        : { external_id: res.data.external_id }),
+    }
+    store.saveAccount(next)
+    options.emit('social.account_named', 'system', {
+      account_id: account.id,
+      channel: account.channel,
+    })
+    return next
+  }
+
+  /** WP257：一条新线程打上规则标签再存（不出卡）。 */
+  const saveTagged = (thread: CommunityThread, mentions_us: boolean | undefined): void => {
+    store.saveThread(
+      ruleTagged(thread, {
+        ...(mentions_us === undefined ? {} : { mentions_us }),
+        brand_terms: brandTerms(),
+      }),
+    )
+  }
+
   /** 一个 Discord 频道读一轮。回 `'stop'` = 被限速了，这一轮别的频道也别读了。 */
   const readDiscord = async (
     adapter: SocialChannelAdapter,
-    account: SocialAccount,
+    registered: SocialAccount,
     out: SocialIngestSweep,
   ): Promise<'ok' | 'stop'> => {
-    const interval = everyMinutes() * 60_000
+    const interval = everyMinutes('discord') * 60_000
+    let account = registered
     const row = store.ingestState(account.id)
     if (splitTarget(account.external_id).channel === undefined) {
       if (row?.state !== 'needs_channel')
@@ -173,6 +298,8 @@ export function createSocialIngest(options: SocialIngestOptions): SocialIngest {
     }
     const nowMs = Date.parse(clock.now())
     if (row?.next_read_at !== undefined && Date.parse(row.next_read_at) > nowMs) return 'ok'
+    // WP257：老频道还是「#id 末四位」→ 顺手读一次频道名
+    account = await fillName(adapter, account)
     const accessDue =
       row?.access_checked_at === undefined ||
       row.state === 'missing_permissions' ||
@@ -222,7 +349,8 @@ export function createSocialIngest(options: SocialIngestOptions): SocialIngest {
           created_at: item.created_at,
           status: 'open',
         }
-        store.saveThread(thread)
+        // WP257：入库就打标签（规则），不出卡
+        saveTagged(thread, item.mentions_us)
         known.add(item.external_id)
         created += 1
       }
@@ -321,9 +449,66 @@ export function createSocialIngest(options: SocialIngestOptions): SocialIngest {
       channel,
       auto,
       connected,
-      ...(channel === 'discord' ? { every_minutes: everyMinutes() } : {}),
+      ...(INTERVAL_CHANNELS.includes(channel) ? { every_minutes: everyMinutes(channel) } : {}),
       accounts: auto ? accounts.map((a) => accountView(a, connected)) : [],
+      tags: tagSettings(),
     }
+  }
+
+  const tagSettings = (): SocialTagSettingsView => ({
+    model_review: store.ingestState(TAG_SETTINGS_ID)?.model_review === true,
+    model_ready: options.modelReady?.() === true,
+  })
+
+  /** WP257：WP256 时进来、还没打标签的老帖补上（规则，不花钱）。 */
+  const backfill = (): number => {
+    let n = 0
+    const accounts = new Map(store.accounts().map((a) => [a.id, a]))
+    for (const t of store.threads({ open: true })) {
+      if (n >= BACKFILL_BATCH) break
+      if (t.triage !== undefined || !AUTO_CHANNELS.includes(t.channel)) continue
+      store.saveThread(
+        ruleTagged(t, {
+          brand_terms: brandTerms(),
+          ...(accounts.get(t.account_id)?.own_subreddit === true ? { own_community: true } : {}),
+        }),
+      )
+      n += 1
+    }
+    return n
+  }
+
+  /**
+   * WP257：模型复核（默认关）。挑最近 7 天、还开着、只按规则判过的几条，请模型再看一眼；模型判的类覆盖规则的，
+   * 拿不准就留规则那一类。调不成（抛错）这一拍停下，下一拍再试。**不出卡**。
+   */
+  const review = async (): Promise<void> => {
+    if (!tagSettings().model_review) return
+    const nowMs = Date.parse(clock.now())
+    const due = store
+      .threads({ open: true })
+      .filter(
+        (t) =>
+          t.triage_by === 'rule' &&
+          t.triage !== undefined &&
+          nowMs - Date.parse(t.created_at) <= TAG_REVIEW_WINDOW_MS,
+      )
+      .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at))
+      .slice(0, TAG_REVIEW_BATCH)
+    let reviewed = 0
+    let changed = 0
+    for (const t of due) {
+      const reviewer = options.tagReviewer?.(t.channel)
+      if (reviewer === undefined || t.triage === undefined) continue
+      const verdict = await reviewer({ channel: t.channel, text: t.text, rule: t.triage })
+      if (verdict === undefined) break
+      const latest = store.thread(t.id) ?? t
+      const klass = verdict === 'unsure' ? t.triage : verdict
+      if (klass !== t.triage) changed += 1
+      store.saveThread({ ...latest, triage: klass, triage_by: 'model' })
+      reviewed += 1
+    }
+    if (reviewed > 0) options.emit('social.thread_tags_reviewed', 'system', { reviewed, changed })
   }
 
   return {
@@ -333,39 +518,83 @@ export function createSocialIngest(options: SocialIngestOptions): SocialIngest {
       if (discord?.feed !== undefined && options.connected('discord'))
         for (const account of store.accounts({ channel: 'discord' }))
           if ((await readDiscord(discord, account, out)) === 'stop') break
+      const telegram = options.adapter('telegram_group')
+      if (telegram?.updates !== undefined && options.connected('telegram_group'))
+        await readTelegramRound({
+          store,
+          clock,
+          adapter: telegram,
+          out,
+          interval: everyMinutes('telegram_group') * 60_000,
+          later,
+          save,
+          checkAccess,
+          fillName,
+          saveTagged,
+          emit: options.emit,
+        })
       if (options.ownSub !== undefined) {
         const r = await options.ownSub.backgroundRead().catch(() => ({ read: 0, ingested: 0 }))
         out.read += r.read
         out.ingested += r.ingested
       }
+      // WP257：老帖补标签 + （开着时）模型复核。打标签失败不影响进帖
+      backfill()
+      await review().catch(() => undefined)
       return out
+    },
+
+    named: async (account) => {
+      if (!options.connected(account.channel)) return account
+      const adapter = options.adapter(account.channel)
+      return adapter === undefined ? account : fillName(adapter, account, true).catch(() => account)
+    },
+
+    setTagReview(actor, input) {
+      store.saveIngestState({
+        ...store.ingestState(TAG_SETTINGS_ID),
+        id: TAG_SETTINGS_ID,
+        // 设置行的渠道格没有意义（这一份管全部自动进帖的渠道）；表结构要它，写第一条会自动进帖的渠道
+        channel: 'discord',
+        model_review: input.model_review,
+      })
+      options.emit('social.tag_review_set', actor.person_id, { model_review: input.model_review })
+      return tagSettings()
     },
 
     view: (_actor, channel) => view(channel),
 
     setInterval(actor, input) {
-      if (input.channel !== 'discord')
-        throw new ApiError('invalid_input', '现在只有 Discord 能调读取频率。')
+      const channel = input.channel
+      if (!INTERVAL_CHANNELS.includes(channel))
+        throw new ApiError('invalid_input', '现在只有 Discord 与 Telegram 群能调读取频率。')
       const minutes = Math.round(input.every_minutes)
       if (minutes < DISCORD_INGEST_MIN_MINUTES || minutes > DISCORD_INGEST_MAX_MINUTES)
         throw new ApiError('invalid_input', '读取频率要在 5 分钟到 24 小时之间。')
+      // 合进原来那一行（Telegram 的设置行里还存着读到哪儿了，不能冲掉）
+      const settings = store.ingestState(settingsId(channel))
+      const nextAt = later(minutes * 60_000)
       store.saveIngestState({
-        id: settingsId('discord'),
-        channel: 'discord',
+        ...settings,
+        id: settingsId(channel),
+        channel,
         every_minutes: minutes,
+        ...(settings?.next_read_at !== undefined &&
+        Date.parse(settings.next_read_at) > Date.parse(nextAt)
+          ? { next_read_at: nextAt }
+          : {}),
       })
       // 改了频率：已经排好的下一次按新频率重排（改短了不用干等旧的那一次）
-      const nextAt = later(minutes * 60_000)
-      for (const account of store.accounts({ channel: 'discord' })) {
+      for (const account of store.accounts({ channel })) {
         const row = store.ingestState(account.id)
         if (row?.next_read_at !== undefined && Date.parse(row.next_read_at) > Date.parse(nextAt))
           store.saveIngestState({ ...row, next_read_at: nextAt })
       }
       options.emit('social.ingest_interval_set', actor.person_id, {
-        channel: 'discord',
+        channel,
         every_minutes: minutes,
       })
-      return view('discord')
+      return view(channel)
     },
   }
 }

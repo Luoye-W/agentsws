@@ -52,6 +52,7 @@ interface ThreadRow {
   external_id: string
   text: string
   triage?: string
+  triage_by?: string
   account_name: string
 }
 const threads = async (): Promise<ThreadRow[]> =>
@@ -151,7 +152,8 @@ describe('WP256 Reddit 自家版新帖进「群里的帖子」', () => {
       text: 'First impressions\nHinge feels solid.',
       account_name: 'INMO XR',
     })
-    expect(rows.every((r) => r.triage === undefined)).toBe(true)
+    // WP257（决策 152）：入库就按规则打标签（仍不出卡、不转客服）
+    expect(rows.every((r) => r.triage !== undefined && r.triage_by === 'rule')).toBe(true)
     expect(await cardCount()).toBe(cardsBefore)
 
     // 再读一次：一条都不多；「回复」那条口子拿到的是同一行

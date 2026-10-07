@@ -191,6 +191,16 @@ home_blocks:
       pinnable: true,
       adaptive: false,
     }
+  # WP257（决策 152）：自动进帖按类计数（只打标签不出卡，跑一两周看量）
+  - {
+      id: social.telegram-group.thread_tags,
+      placement: role_view,
+      component: table,
+      query: social.thread_tags,
+      default_order: 60,
+      pinnable: true,
+      adaptive: false,
+    }
 
 grounding:
   # 54 §2：岗位路由在**一个岗位的职责集合内**按职责名 / 描述短语 / 意图词 /
