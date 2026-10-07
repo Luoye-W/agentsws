@@ -439,6 +439,12 @@ export type {
   SubscriptionView,
 } from './routes/models.js'
 export { MODEL_PURPOSES, modelRoutes, parseModelId } from './routes/models.js'
+// WP254：下载源（官方源 / 国内源，每台机一份）
+export {
+  type NpmRegistryPort,
+  type NpmRegistryView,
+  npmRegistryRoutes,
+} from './routes/npm-registry.js'
 export {
   type OfficialPluginsActor,
   type OfficialPluginsPort,

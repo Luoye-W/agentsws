@@ -688,9 +688,8 @@ export function priorityBandOf(
 /**
  * WP249：「自家版待处理」出的版务卡（`community_moderation` + `after.source === 'own_sub_queue'`）。
  *
- * 表里 `community_moderation` 是 ⑦ 事后决定（「解除禁言 / 先停着」——设计稿按「L2 已经做了、问要不要
- * 改回来」画的）。自家版这一类是**做之前**的卡（批了才执行），所以按 ② 改动卡排：主动词「批准」，
- * 卡面由渲染层画原文、AI 建议、理由、将执行的动作。别的 `community_moderation` 一个字节不变。
+ * 卡面由渲染层画原文、AI 建议、理由、将执行的动作。WP254（决策 117）起表里所有 `community_moderation`
+ * 都是 ② 改动卡（「批准执行 / 不做」），这个判据只剩「卡面画哪一种」的用处。
  */
 export function isOwnSubModerationItem(item: Pick<ApprovalItem, 'kind' | 'payload'>): boolean {
   if (item.kind !== 'staged_change' || !isRecord(item.payload)) return false

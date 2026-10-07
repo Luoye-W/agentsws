@@ -193,6 +193,7 @@ import { type B2bServiceAssembly, createB2bService } from './b2b-service.js'
 import { type B2bStore, createB2bStore } from './b2b-store.js'
 import { MemoryBackend } from './backend.js'
 import { type BackupRunResult, backupDirOf, backupKeepOf, runBackup } from './backup.js'
+import { attachBootBrandToCompany } from './boot-brand-org.js'
 // WP121b（70 §3.5）：确认档案卡那一刻建的首批知识条目（政策要点 + 商品卡，一律 proposed）
 // WP215：每个品牌一套后台（品牌急停、全进程并发上限、切换器那一格）
 import { type BrandBackground, createBrandBackground } from './brand-background.js'
@@ -379,11 +380,13 @@ import {
   STUB_REF,
   templatesFor,
 } from './models.js'
+import { createNpmRegistryPreference, NPM_REGISTRY_URLS } from './npm-registry.js'
 import { createOffboard, type Offboard } from './offboard.js'
 import { createOfficialPlugins, officialPluginsDirIn } from './official-plugins.js'
 import {
   createOnboarding,
   type OnboardingAssembly,
+  RUN_BLOCK_MARKED_SINCE,
   storefrontPlatformChoices,
 } from './onboarding.js'
 import {
@@ -533,6 +536,7 @@ import {
 } from './social.js'
 // WP73（56 §6）：九条渠道真打出去的那一跳 + 社媒库的 /v1 面
 import { createSocialChannels, type SocialFetch } from './social-channels.js'
+import { isSocialExecutableApproval } from './social-executor.js'
 import { createSocialService } from './social-service.js'
 import { createStandby } from './standby.js'
 import { mountStatic } from './static.js'
@@ -1807,13 +1811,17 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   /** 组织上的公司级三样（首次设置那一面读它，不直接拿整个 `Organization`）。 */
   const organizationProfileOf = (
     id: string,
-  ): { legal_name: string; domain?: string; discoverable: boolean } | undefined => {
+  ):
+    | { legal_name: string; domain?: string; discoverable: boolean; postal_address?: string }
+    | undefined => {
     const org = identity.getOrganization(id)
     if (org === undefined) return undefined
     return {
       legal_name: org.legal_name,
       ...(org.domain === undefined ? {} : { domain: org.domain }),
       discoverable: org.discoverable,
+      // WP251：公司实体地址也是公司的
+      ...(org.postal_address === undefined ? {} : { postal_address: org.postal_address }),
     }
   }
   const approvalDirectory = createApprovalDirectory({
@@ -1885,6 +1893,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       // WP249：自家版版务卡批了 → 经 Reddit 出口（接口优先、官方号浏览器兜底）执行卡上那一个动作
       const ownSubApplied = await brand?.socialService.ownSub?.apply(change)
       if (ownSubApplied !== undefined) return ownSubApplied
+      // WP254（决策 117）：别的社群的版务卡批了 → 经这条渠道适配器的 moderate 执行卡上那一个动作
+      const moderationApplied = await brand?.socialService.executor.applyModeration(change)
+      if (moderationApplied !== undefined) return moderationApplied
       // WP172：B2B 库的卡批了才落库（不是 B2B 库的卡回 undefined，掉回原来那条路）
       const b2bApplied = brand?.b2bService.apply(change)
       if (b2bApplied !== undefined) {
@@ -1921,6 +1932,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
        */
       const sandboxed = kolSandboxIntercept(brand, item)
       if (sandboxed !== undefined) return sandboxed
+      // WP254（决策 117）：社媒回帖卡批了就发——经这条渠道的出口（Reddit：接口优先、官方号浏览器兜底）
+      const socialReply = await brand?.socialService.executor.deliverReply(item)
+      if (socialReply !== undefined) return socialReply
       // WP57：聊天草稿（`payload.channel === 'chat'`）先问聊天车道，它接不住才轮到邮件
       return (
         (await brand?.chat.deliver(item, opts)) ??
@@ -2443,10 +2457,21 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
      * WP122 的「视觉气质」走同一个槽位（`visual_tone`），填上就多一行。
      * WP248（决策 83）：一句话定位、客服邮箱、币种进了品牌档案，按这次运行所在的品牌带上（写过才有）。
      */
+    /*
+     * WP251（决策 119）：「品牌：」按**这次运行所在的品牌**取品牌名（品牌档案里的品牌名 = 工作区的
+     * `brand.name`），公司全称另起一行「公司：」（这个品牌挂的那家公司）。以前这一行一直是公司全称、
+     * 每个品牌都一样——Rollout 跑 AI 看到的是「品牌：INMO 的公司全称」。
+     */
     brand: (ws) => {
-      const name = onboardingRef?.companyProfile()?.legal_name?.trim()
-      const facts = brandFactsContextOf((ws ?? workspace.id) as WorkspaceId)
-      const ctx = { ...(name === undefined || name === '' ? {} : { brand_name: name }), ...facts }
+      const target = (ws ?? workspace.id) as WorkspaceId
+      const name = brandNameOfWorkspace(target).trim()
+      const company = onboardingRef?.companyProfile(target)?.legal_name?.trim()
+      const facts = brandFactsContextOf(target)
+      const ctx = {
+        ...(name === '' ? {} : { brand_name: name }),
+        ...(company === undefined || company === '' ? {} : { company_name: company }),
+        ...facts,
+      }
       return Object.keys(ctx).length === 0 ? undefined : ctx
     },
     appendEvent,
@@ -2457,6 +2482,15 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
    * （`AGENTSWS_CONNECT_LOCAL_RUNTIME=1`，同时一定给了 `AGENTSWS_CONNECT_URL`）且有数据目录时才有；
    * 指外部 runtime / Docker 档 / 替身档都没有它（runtime 地址仍然只认那两种来源）。
    */
+  /**
+   * WP254（决策 100 / 123）：下载源（官方源 / 国内源）——**每台机一份**，记在 `<data>/tools/npm-registry.json`。
+   * 一键安装平台 CLI 与下载连接器每次开始时问它这一次用哪个源。
+   */
+  const npmRegistry = createNpmRegistryPreference({
+    toolsDir: dbDir === undefined ? undefined : join(dbDir, 'tools'),
+    now: () => clock.now(),
+    env,
+  })
   const localConnector =
     dbDir !== undefined &&
     env[LOCAL_RUNTIME_ENV] === '1' &&
@@ -2465,6 +2499,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           dataDir: dbDir,
           now: () => clock.now(),
           env,
+          registry: () => npmRegistry.choose(),
           ...options.localConnector,
         })
       : undefined
@@ -3012,6 +3047,17 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         applyApproval: (id) => txn.executor.applyApproval(id),
         cancelWindowMs: txn.runtime.policy.cancel_window_sec * 1000,
       },
+      // WP254（决策 117）：别的社群的版务卡与回帖卡批了，过了取消窗口由执行器施行（定时发布那一轮补扫）
+      executor: {
+        applyApproval: (id) => txn.executor.applyApproval(id),
+        cancelWindowMs: txn.runtime.policy.cancel_window_sec * 1000,
+        approvedItems: () =>
+          txn.runtime.store.listApprovals({
+            workspace_id: ws,
+            kind: 'outbound_draft',
+            state: ['approved', 'approved_edited'],
+          }),
+      },
       // 日界线按**这个品牌的数据源**报的时区（与定时任务那一份同一个真源，
       // 不去读本机时区——那在测试与服务器上都不是用户所在的那个时区）
       tzOffsetMinutes: workData.tz_offset_minutes,
@@ -3555,6 +3601,17 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
             workspace_id: ws,
             // WP236：「设置 → 通用」的运行时长线（每次运行现读；职责阈值优先）
             runLimits: () => runLimitsSettings.get(),
+            /*
+             * WP251（决策 91）：工具回「没连上 / 缺凭据」时说清缺哪个——这条职责还没连上的连接
+             * （必需的在前；必需的都连上了才列可选的）。连接目录按品牌装好之后才有，没有就不说。
+             */
+            missingConnections: (role_id) => {
+              const gaps = (directoryAssemblies.get(ws)?.roleGaps([role_id]) ?? []).filter(
+                (g) => !g.connected,
+              )
+              const required = gaps.filter((g) => g.required)
+              return (required.length > 0 ? required : gaps).map((g) => g.name.zh)
+            },
             // WP194：运行里打云的数据接口带上「谁 / 哪个岗位」
             aroundRun: (actor, fn) =>
               withCloudAttribution(cloudAttributionOf(actor.assignment_id, actor.role_id), fn),
@@ -4104,6 +4161,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         (directoryAssemblies.get(ws)?.roleGaps([role_id]) ?? [])
           .filter((g) => g.required && !g.connected)
           .map((g) => g.name.zh),
+      // WP251（决策 91）：结构化标记从这一版第一次启动起算（之前的老数据才认 AI 末句）
+      runBlockMarkedSince: () => onboardingRef?.since(RUN_BLOCK_MARKED_SINCE),
     })
     positionAssemblies.set(ws, positionsAssembly)
     // 六层技能里的 `position` 那一层、以及岗位层上下文那三样，都从这里来
@@ -4418,12 +4477,12 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           : [...options.b2bStandIns.mailboxes],
       // 主域名：公司档案的域名；没填就把第一只接上的邮箱当主域名（宁可少认一只"单独域名"）
       primaryDomains: () => {
-        const org = onboardingRef?.companyProfile()?.domain?.trim()
+        const org = onboardingRef?.companyProfile(ws)?.domain?.trim()
         if (org !== undefined && org !== '') return [org]
         const first = options.b2bStandIns?.mailboxes?.[0] ?? connections.mailAccounts()[0]?.address
         return first === undefined ? [] : [first.slice(first.lastIndexOf('@') + 1)]
       },
-      companyName: () => onboardingRef?.companyProfile()?.legal_name ?? brandNameOfWorkspace(ws),
+      companyName: () => onboardingRef?.companyProfile(ws)?.legal_name ?? brandNameOfWorkspace(ws),
       sendMail: options.b2bStandIns?.sendMail ?? ((input) => channels.sendMail(input)),
       dns: options.b2bStandIns?.dns ?? {
         txt: async (name) => (await dnsPromises.resolveTxt(name)).map((chunks) => chunks.join('')),
@@ -4571,7 +4630,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       },
       // 按官网判断行业：公司档案（名称、域名）+ 品牌分析建的商品卡
       industry: async () => {
-        const org = onboardingRef?.companyProfile()
+        const org = onboardingRef?.companyProfile(ws)
         const actor = await b2bFactActor()
         const products =
           actor === undefined
@@ -4598,9 +4657,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         }
       },
       drafter: ({ assignment_id, role_id, run_id }) => seoModel({ assignment_id, role_id }, run_id),
-      companyName: () => onboardingRef?.companyProfile()?.legal_name ?? brandNameOfWorkspace(ws),
+      companyName: () => onboardingRef?.companyProfile(ws)?.legal_name ?? brandNameOfWorkspace(ws),
       companyAddress: () => onboardingRef?.brandProfile(ws).postal_address,
-      companyWebsite: () => onboardingRef?.companyProfile()?.domain,
+      companyWebsite: () => onboardingRef?.companyProfile(ws)?.domain,
       letterhead: () => b2bLetterheadOf(brandDesignRef?.profileOf(ws)),
       sendMail: options.b2bStandIns?.sendMail ?? ((input) => channels.sendMail(input)),
       ...(options.b2bStandIns?.sendWhatsApp === undefined
@@ -5021,6 +5080,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         await readonlyBrowser?.close()
         // WP249：官方号浏览器（登录窗口 / 无头那一个）一并关掉；登录态留在目录里
         socialService.ownSub?.close()
+        socialService.executor.close()
         await redditOfficial?.close()
         // WP246：「登录读号」的窗口开着就体面地关掉
         await readRoutes.close()
@@ -5052,6 +5112,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     // 驳回（「去邮箱回复」）什么都不做——人自己回，死信留在「设置 → 诊断」里
     // WP249：自家版版务卡批了 → 过了取消窗口施行（读队列时也会补扫一遍）
     if (isOwnSubApproval(item)) return brand?.socialService.ownSub?.onDecided(item)
+    // WP254：别的社群的版务卡 / 回帖卡批了 → 过了取消窗口施行（定时发布那一轮也会补扫）
+    if (isSocialExecutableApproval(item)) return brand?.socialService.executor.onDecided(item)
     if (item.kind === 'inbound_dead_letter') {
       const id = deadLetterToRequeue(item)
       if (id !== undefined) await brand?.channels.requeueDeadLetter(id)
@@ -5093,6 +5155,33 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
    * 挂回来之前问，只接了 DeepSeek 账号的机器重启后就一直是 stub（账号任务根本跑不到模型上）。
    */
   await deepseekAccount.resume()
+  /*
+   * WP251：启动品牌没挂在公司下、而它的负责人已经有一家公司（Fable 10-07 真机：INMO 没有 org_id，
+   * 加的品牌 Rollout 挂在公司下）——挂进去，kind 与加的品牌一致。放在建任何一个品牌那一套之前之后都行，
+   * 但必须在品牌后台起来之前（它们按「这家公司有哪些品牌」起），也必须在 DeepSeek 账号挂回来之后
+   * （判"原来的公司默认品牌自己接没接模型"要建它那一套）。幂等：挂过就只剩 kind 的核对。
+   */
+  {
+    const settled = await attachBootBrandToCompany({
+      identity,
+      workspace_id: workspace.id,
+      ownModelsConfigured: async (ws) =>
+        (await brandModules.forWorkspace(ws)).ownModels.configured(),
+      keepOwnModels: (ws) => brandModules.setInheritOrg(ws, false, { even_if_default: true }),
+      record: (type, ws, payload) => {
+        appendEvent({
+          schema_version: 1,
+          workspace_id: ws,
+          type,
+          actor: { kind: 'system', id: 'organizations' },
+          correlation: { trace_id: `tr_org_${clock.now()}` },
+          payload,
+        })
+      },
+    })
+    if (settled.attached !== undefined && options.quiet !== true)
+      process.stderr.write('[organizations] 启动品牌挂到了公司下（WP251）\n')
+  }
   /** bootstrap 品牌那一套：进程自己要用的那几处（会议 ASR、秘书、问 AI）取它。 */
   const boot = await brandModules.forWorkspace(workspace.id)
   // WP128：托管的是这家公司的另一个品牌时，品牌那一套是懒装配的——现在就装上，
@@ -5962,17 +6051,29 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
      */
     organization: () =>
       bootstrapOrg === undefined ? undefined : organizationProfileOf(bootstrapOrg),
+    // WP251：某个品牌挂的那家公司（公司全称、后缀、发现、地址都读它）
+    organizationOf: (ws) => {
+      const org_id = workspaceSync(ws)?.org_id
+      return org_id === undefined ? undefined : organizationProfileOf(org_id)
+    },
+    // WP251：同一家公司下的全部品牌（改公司时各品牌档案里的影子一起刷）
+    brandsOfCompany: (ws) => {
+      const org_id = workspaceSync(ws)?.org_id ?? bootstrapOrg
+      return org_id === undefined ? [ws] : identity.brandsOf(org_id).map((w) => w.id)
+    },
     // 52 O1：品牌名（顶栏切换器显示的那一个）。没迁过的就是工作区名
     // WP240：按品牌读写（不给 = 启动品牌）——以前一律读写启动品牌
     brandName: (ws) => brandNameOfWorkspace(ws ?? workspace.id),
     setBrandName: (name, ws) => {
       void identity.setBrand(ws ?? workspace.id, { name }).catch(() => undefined)
     },
-    updateOrganization: (patch) => {
-      if (bootstrapOrg === undefined) return
+    updateOrganization: (patch, ws) => {
+      // WP251：写**这个品牌挂的那家公司**（不给品牌 / 它没挂公司 = 启动品牌那一家）
+      const target = (ws === undefined ? undefined : workspaceSync(ws)?.org_id) ?? bootstrapOrg
+      if (target === undefined) return
       // 两档身份服务这一步都是同步落库的（Promise 只是签名）；唯一可能的失败是
       // 空的公司全称，而那一条 `setProfile` 在更早的地方就挡掉了
-      void identity.updateOrganization(bootstrapOrg, patch).catch(() => undefined)
+      void identity.updateOrganization(target, patch).catch(() => undefined)
     },
   })
   /*
@@ -6009,7 +6110,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
        */
       applyProfile: async (profile, actor) => {
         const added = onboarding.isAddedBrand(actor.workspace_id as WorkspaceId)
-        const company = onboarding.companyProfile()?.legal_name
+        // WP251：这个品牌挂的那家公司
+        const company = onboarding.companyProfile(actor.workspace_id as WorkspaceId)?.legal_name
         const legal =
           added && company !== undefined && company.trim() !== ''
             ? company
@@ -6258,6 +6360,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     backgroundOf: (ws) => background.status(ws),
     // 发现开关的真源在组织上，但"开 / 关"这个动作在首次设置那一面——两边改都得生效
     onCompanyChanged: ({ by, discoverable, key_changed }) => {
+      // WP251：公司页改了公司——各品牌档案里公司那几格的影子跟着刷（读一律读公司）
+      onboardingRef?.syncCompanyShadows(workspace.id)
       if (!discoverable) {
         onboarding.discovery.disable(by)
         return
@@ -6278,6 +6382,15 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   ).id
   // 档案建出来了，把品牌级档案那个晚绑定的读法接上（48 v2 L2、51 §1 N0、WP66）
   onboardingRef = onboarding
+  /*
+   * WP251：公司级那几格（全称 / 邮箱后缀 / 发现 / 地址）归到公司上——先备份全部品牌档案，
+   * 公司没有地址就从品牌档案搬一份，各品牌档案里的影子刷成公司的值。一次性、幂等。
+   * 再认一遍存量加的品牌：已经分过岗位的当作走完过首次设置（决策 92 的新口径不把它们拉回向导）。
+   */
+  onboarding.settleCompanyOnOrganization()
+  // WP251（决策 91）：「卡住了」改看结构化标记——起点记在这一刻（第一次启动这一版时）
+  onboarding.since(RUN_BLOCK_MARKED_SINCE)
+  onboarding.settleAddedBrandCompletion(identity.brandsOf(bootstrapOrg).map((w) => w.id))
   /*
    * WP240：一次性自检加的品牌的档案——建品牌那一刻自动起、还没人用过的那几份标回「待设置」，
    * 这些品牌切过去就会进首次设置（以前永远判成"设过了"）。跑过一次就记下，不再跑。
@@ -7811,6 +7924,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     now: () => clock.now(),
     toolsDir: dbDir === undefined ? undefined : join(dbDir, 'tools'),
     env,
+    registry: () => npmRegistry.choose(),
     ...options.platformCliRunner,
   })
   const platformCliProber = createPlatformCliProber({
@@ -7952,6 +8066,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     /*
      * WP246（决策 87 / 88）：取数路线（体检、设置、Reddit 读号），按品牌取。
      */
+    // WP254：下载源（每台机一份；「换国内源再试」与设置 · 诊断里改回官方源）
+    npmRegistry: {
+      get: () => ({ ...npmRegistry.get(), urls: { ...NPM_REGISTRY_URLS } }),
+      set: (source) => ({ ...npmRegistry.set(source), urls: { ...NPM_REGISTRY_URLS } }),
+    },
     readRoutes: {
       view: async (actor) => (await readRoutesOf(actor.workspace_id)).view(),
       doctor: async (actor) => (await readRoutesOf(actor.workspace_id)).doctor(),

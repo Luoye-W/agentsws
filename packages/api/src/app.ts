@@ -54,6 +54,7 @@ import { meetingRoutes } from './routes/meetings.js'
 // WP113（63）：消息——统一收件处 `/v1/messages/*`
 import { messageRoutes } from './routes/messages.js'
 import { modelRoutes } from './routes/models.js'
+import { npmRegistryRoutes } from './routes/npm-registry.js'
 import { officialPluginsRoutes } from './routes/official-plugins.js'
 import { onboardingRoutes } from './routes/onboarding.js'
 import { ontologyRoutes } from './routes/ontology.js'
@@ -135,6 +136,8 @@ export function collectRoutes(): Route[] {
     // WP246（决策 87 / 88）：取数路线（体检、设置、Reddit 读号）。`/v1/settings/read-routes*` 与
     // `/v1/settings/reddit-read-account/*` 都是定值段，与同级的 browser / capability-sources 不撞
     ...readRoutesRoutes(),
+    // WP254（决策 100 / 123）：下载源（每台机一份）。`/v1/settings/npm-registry` 是定值段
+    ...npmRegistryRoutes(),
     // WP192（docs/83 §4）：官方数据接口统一能力口（本机按能力路由，转给云上的 /v1/data/*）
     ...dataServiceRoutes(),
     // WP31 本机秘密库密钥轮换（owner）；`/v1/secrets/rotate` 与连接面不撞

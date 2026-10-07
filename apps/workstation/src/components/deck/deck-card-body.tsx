@@ -12,6 +12,7 @@
  */
 import type { DeckCard, DeckContentMode } from '@agentsws/deck'
 import { pickContent } from '@agentsws/deck'
+import { isModerationPayload, ModerationCardBody } from '@/components/social/moderation-card-body'
 import { isOwnSubPayload, OwnSubCardBody } from '@/components/social/own-sub-card-body'
 import { Label } from '@/components/ui/label'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
@@ -276,6 +277,8 @@ export function DeckCardBody({
       case 'change':
         // WP249：自家版版务卡——原文、举报原因、AI 建议 + 理由、将执行的动作
         if (isOwnSubPayload(payload)) return <OwnSubCardBody payload={payload} />
+        // WP254：别的社群的版务卡——将执行什么、原话、依据（批了才经渠道适配器去做）
+        if (isModerationPayload(payload)) return <ModerationCardBody payload={payload} />
         return (
           <div className="mt-2.5 flex flex-col gap-2.5" data-testid="deck-layout-change">
             <BeforeAfter before={payload.before} after={payload.after} />

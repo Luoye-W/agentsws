@@ -19,6 +19,8 @@
  * 5. **审过的官方插件清单与锁定 patch 在包里**（WP181，`<resources>/profiles/agentsws/` 的两份）。
  * 6. **钉版本表齐**（WP225，仓库根的 `*.lock.json` 抄进 `<resources>/`，包里服务进程找得到）；
  *    冒烟里还用**包里那份**主进程代码取一次 `autoUpdater`（WP218 的包在 Windows 上就坏在这一步）。
+ * 7. **npm 随包带**（WP254）：捆绑 Node 旁边按官方布局有那版配套的 npm、版本与锁一致；
+ *    本机平台再用捆绑的 Node 真跑一次 `npm --version`。
  */
 import { execFileSync } from 'node:child_process'
 import {
@@ -414,6 +416,31 @@ export function unreachableLockFiles(appDir, resources, names) {
   })
 }
 
+// ── ⑧ 随包的 npm（WP254，决策 99）────────────────────────────────────────
+
+/**
+ * 捆绑 Node 旁边那份 npm 的入口（官方发行包布局：Windows `node/node_modules/npm`，
+ * 其余 `node/lib/node_modules/npm`）。服务进程 `bundledNpmCandidates` 先找的就是它——
+ * 找到了，一键安装平台 CLI、下载连接器都不必再联网下 npm。
+ */
+export function bundledNpmCli(resources, platformName) {
+  const nodeDir = join(resources, 'node')
+  return platformName === 'win32'
+    ? join(nodeDir, 'node_modules', 'npm', 'bin', 'npm-cli.js')
+    : join(nodeDir, 'lib', 'node_modules', 'npm', 'bin', 'npm-cli.js')
+}
+
+/** 包里那份 npm 有什么问题（空 = 没问题）：不在 / 版本与 `node-runtime.lock.json` 不一致。 */
+export function bundledNpmProblem(resources, platformName, expectedVersion) {
+  const cli = bundledNpmCli(resources, platformName)
+  if (!existsSync(cli))
+    return `安装包里没有随包的 npm：${cli}（先跑 fetch-node.mjs；extraResources 没生效？）`
+  const meta = readJson(join(dirname(dirname(cli)), 'package.json'))
+  if (meta?.version !== expectedVersion)
+    return `安装包里的 npm 是 ${String(meta?.version)}，锁里钉的是 ${expectedVersion}`
+  return undefined
+}
+
 // ── 钩子本体 ────────────────────────────────────────────────────────────
 
 export default async function afterPack(context) {
@@ -507,6 +534,12 @@ export default async function afterPack(context) {
   if (!existsSync(nodeExec))
     throw new Error(`安装包里没有捆绑的 Node：${nodeExec}（extraResources 没生效？）`)
 
+  // ⑧ WP254：npm 随包带（每个平台都查；本机平台再用捆绑的 Node 真跑一次 `npm --version`）
+  const npmVersion = readJson(join(DESKTOP_ROOT, 'node-runtime.lock.json'))?.npm?.version
+  const npmProblem = bundledNpmProblem(resources, platformName, npmVersion)
+  if (npmProblem !== undefined) throw new Error(npmProblem)
+  log(`随包的 npm：${npmVersion}`)
+
   if (platformName === hostPlatform()) {
     const out = probeBundled(
       nodeExec,
@@ -514,6 +547,15 @@ export default async function afterPack(context) {
       plan.map((p) => p.pkgDir),
     )
     log(`捆绑 Node 冒烟：${out.trim()}`)
+    const npmOut = execFileSync(nodeExec, [bundledNpmCli(resources, platformName), '--version'], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+      timeout: 60_000,
+      env: { ...process.env, ELECTRON_RUN_AS_NODE: '1', npm_config_update_notifier: 'false' },
+    }).trim()
+    if (npmOut !== npmVersion)
+      throw new Error(`捆绑 Node 跑随包的 npm 回的是 ${npmOut}，应是 ${npmVersion}`)
+    log(`随包 npm 冒烟：${npmOut}`)
   } else {
     log(`跨平台打包（${platformName} ≠ ${hostPlatform()}），冒烟跳过`)
   }

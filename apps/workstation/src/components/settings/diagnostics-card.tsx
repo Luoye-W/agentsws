@@ -19,6 +19,7 @@ import { useApp } from '@/lib/app-context'
 import { formatDate, formatDateTime } from '@/lib/format'
 // WP247：本机连接器（版本 / 状态 / 重启 / 换回上一版 / 删除下载）——桌面版才出
 import { ConnectorDiagnostics } from './connector-diagnostics'
+import { NpmRegistryDiagnostics } from './npm-registry-diagnostics'
 
 export function DiagnosticsCard({ assignment }: { assignment: string }): React.ReactNode {
   const { t, lang } = useApp()
@@ -106,6 +107,7 @@ export function DiagnosticsCard({ assignment }: { assignment: string }): React.R
           </ul>
         )}
         <ConnectorDiagnostics assignment={assignment} />
+        <NpmRegistryDiagnostics />
       </CardContent>
     </Card>
   )

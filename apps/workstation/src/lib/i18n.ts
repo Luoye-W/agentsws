@@ -7,10 +7,12 @@
 import { CLOUD_AUTH_EN, CLOUD_AUTH_ZH } from './i18n-cloud-auth'
 import { LIBRARY_EN, LIBRARY_ZH } from './i18n-library'
 import { LOCAL_CONNECTOR_EN, LOCAL_CONNECTOR_ZH } from './i18n-local-connector'
+import { NPM_REGISTRY_EN, NPM_REGISTRY_ZH } from './i18n-npm-registry'
 import { OWN_SUB_EN, OWN_SUB_ZH } from './i18n-own-sub'
 import { POSITION_EN, POSITION_ZH } from './i18n-position'
 import { READ_ROUTES_EN, READ_ROUTES_ZH } from './i18n-read-routes'
 import { SITE_THEME_EN, SITE_THEME_ZH } from './i18n-site-theme'
+import { SOCIAL_EXEC_EN, SOCIAL_EXEC_ZH } from './i18n-social-exec'
 
 export type Lang = 'zh' | 'en'
 
@@ -2693,6 +2695,7 @@ const zh: Table = {
   // 这一摊整块不出现；真有第二个品牌或第二个人了，出现的也是"公司"与"品牌"
   // 这两个用户自己会用的词，不是对象模型里的名字。
   'onboarding.block.company': '公司',
+  'onboarding.block.company.hint': '改的是公司，这家公司的所有品牌都跟着变',
   'onboarding.block.first_brand': '第一个品牌',
   'onboarding.block.brand': '这个品牌',
   'onboarding.brand.name': '品牌名',
@@ -6625,6 +6628,7 @@ const en: Table = {
   'onboarding.step4': 'Connect and start',
   // ── WP65 (52 O1–O4) brands on top: company = organization, brand = workspace ──
   'onboarding.block.company': 'Company',
+  'onboarding.block.company.hint': 'These belong to the company — every brand under it changes too',
   'onboarding.block.first_brand': 'Your first brand',
   'onboarding.block.brand': 'This brand',
   'onboarding.brand.name': 'Brand name',
@@ -7934,6 +7938,10 @@ const TABLES: Record<Lang, Table> = {
     // WP253：建站岗位「AI 改主题」引导在 `i18n-site-theme.ts`
     ...SITE_THEME_ZH,
     ...OWN_SUB_ZH,
+    // WP254：下载源（换国内源再试）
+    ...NPM_REGISTRY_ZH,
+    // WP254：版务卡（批准执行 / 不做）与回帖卡
+    ...SOCIAL_EXEC_ZH,
   },
   en: {
     ...en,
@@ -7944,6 +7952,8 @@ const TABLES: Record<Lang, Table> = {
     ...LOCAL_CONNECTOR_EN,
     ...SITE_THEME_EN,
     ...OWN_SUB_EN,
+    ...NPM_REGISTRY_EN,
+    ...SOCIAL_EXEC_EN,
   },
 }
 

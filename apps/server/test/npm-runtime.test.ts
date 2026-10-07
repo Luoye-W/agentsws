@@ -3,7 +3,15 @@
  * 下载用替身 fetch（测试自己造的 tgz），不联网；解包是纯 JS（不调系统 tar）。
  */
 import { createHash } from 'node:crypto'
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs'
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { gzipSync } from 'node:zlib'
@@ -75,6 +83,34 @@ describe('找 npm', () => {
     })
     expect(got).toBe('/app/node/lib/node_modules/npm/bin/npm-cli.js')
     expect(fetched).toBe(0)
+  })
+
+  it('WP254：照安装包的真实布局（<resources>/node + 随包 npm）摆在磁盘上，两个平台都不联网', async () => {
+    for (const platform of ['darwin', 'win32'] as const) {
+      const res = tmp()
+      const nodeExec =
+        platform === 'win32' ? join(res, 'node', 'node.exe') : join(res, 'node', 'bin', 'node')
+      // 与 apps/desktop/scripts/fetch-node.mjs 的 npmRelDir 同一布局
+      const npmDir =
+        platform === 'win32'
+          ? join(res, 'node', 'node_modules', 'npm')
+          : join(res, 'node', 'lib', 'node_modules', 'npm')
+      mkdirSync(join(npmDir, 'bin'), { recursive: true })
+      writeFileSync(join(npmDir, 'bin', 'npm-cli.js'), '')
+      let fetched = 0
+      const got = await ensureNpmCli({
+        nodeExec,
+        toolsDir: join(res, 'tools'),
+        platform,
+        fetchImpl: (async () => {
+          fetched += 1
+          throw new Error('不该联网')
+        }) as typeof fetch,
+      })
+      expect(got).toBe(join(npmDir, 'bin', 'npm-cli.js'))
+      expect(fetched).toBe(0)
+      expect(existsSync(join(res, 'tools'))).toBe(false)
+    }
   })
 
   it('没有就下钉死的那一版，校验对了才解到 <tools>/npm/<版本>', async () => {

@@ -101,6 +101,22 @@ export interface MatterEvent {
    * 「打开预览」按钮。`url` 是 Shopify 的预览链接，`label` 是那份副本的名字。老事件没有这一格。
    */
   preview?: { url: string; label: string }
+  /**
+   * WP251（决策 91）：这一轮运行**卡在缺连接 / 缺凭据上**——工具回了 `not_connected` 或缺凭据，
+   * 运行时在这一轮收尾时记下的结构化标记（缺哪个连接）。岗位工作视图按它分「卡住了」，
+   * 不再认 AI 最后那句话。老事件没有这一格。
+   */
+  blocked?: MatterRunBlock
+}
+
+/** WP251（决策 91）：一轮运行卡在哪。 */
+export interface MatterRunBlock {
+  /** `not_connected` = 没连上；`missing_credential` = 连接 / 账号缺凭据（钥匙没填、过期、被拒）。 */
+  reason: 'not_connected' | 'missing_credential'
+  /** 缺的连接（人话名，如「Shopify 店铺后台」）；认不出是哪一个就是空数组。 */
+  connections: string[]
+  /** 撞上的工具（裸名，给排障用；界面不显示）。 */
+  tools: string[]
 }
 
 export interface MatterContext {

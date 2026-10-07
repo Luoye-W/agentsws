@@ -139,6 +139,8 @@ export function bundledVersions(desktopRoot = DESKTOP_ROOT) {
   const electron = readJson(join(desktopRoot, 'node_modules', 'electron', 'package.json'))
   return {
     ...(typeof lock?.node?.version === 'string' ? { node: lock.node.version } : {}),
+    // WP254：随 Node 一起带的 npm
+    ...(typeof lock?.npm?.version === 'string' ? { npm: lock.npm.version } : {}),
     ...(typeof electron?.version === 'string' ? { electron: electron.version } : {}),
   }
 }
@@ -226,6 +228,11 @@ export function specialSection(rows, versions = {}, natives = undefined) {
     '',
     `3. 服务进程用的那份 Node.js${versions.node === undefined ? '' : ` v${versions.node}`}（MIT；内含 V8、OpenSSL、libuv、ICU 等）`,
     `   各自的许可证：https://github.com/nodejs/node/blob/${versions.node === undefined ? 'main' : `v${versions.node}`}/LICENSE`,
+    ...(versions.npm === undefined
+      ? []
+      : [
+          `   与它配套的 npm v${versions.npm}（Artistic-2.0；它自带的依赖各自的许可证在 node/…/npm/node_modules 下各包里）`,
+        ]),
     '',
     '4. better-sqlite3 的预编译模块（MIT；内含 SQLite，公有领域）',
     '   来自 https://github.com/WiseLibs/better-sqlite3/releases ，sha256 钉在 node-runtime.lock.json 里。',

@@ -125,6 +125,7 @@ interface Run {
 
 interface State {
   needs_setup: boolean
+  business_done?: true
   brand_name: string
   profile?: { markets?: string[] }
 }
@@ -150,7 +151,7 @@ describe('WP242 第 ② 步读不到网站：说清楚 + 就地手填', () => {
     expect(run?.failure).toContain('手动填')
   })
 
-  it('就地手填：写进 Rollout（品牌名、市场），INMO 不动；走过就不再要设置', async () => {
+  it('就地手填：写进 Rollout（品牌名、市场），INMO 不动；第 ② 步算做过（还要走完第 ④ 步）', async () => {
     const server = await boot()
     const rollout = await rolloutOf(server)
     const inmoBefore = server.onboarding.brandProfile(server.bootstrap.workspace.id)
@@ -170,7 +171,9 @@ describe('WP242 第 ② 步读不到网站：说清楚 + 就地手填', () => {
 
     const r = (await call<State>(server, rollout, 'GET', '/v1/onboarding/state')).data
     expect(r?.brand_name).toBe('Rollout Outdoors')
-    expect(r?.needs_setup).toBe(false)
+    // WP251（决策 92）：手填存好 = 第 ② 步做完；加的品牌要走完第 ④ 步才算设置完
+    expect(r?.needs_setup).toBe(true)
+    expect(r?.business_done).toBe(true)
     expect(server.onboarding.brandProfile(rollout.workspace_id as never).markets).toEqual([
       'US',
       'CA',

@@ -471,6 +471,8 @@ export class Work {
       route?: MatterEvent['route']
       /** WP253：「预览好了」那一条（界面据此出「打开预览」）。 */
       preview?: MatterEvent['preview']
+      /** WP251（决策 91）：这一轮卡在缺连接 / 缺凭据上的结构化标记。 */
+      blocked?: MatterEvent['blocked']
       at?: Iso8601
     },
   ): MatterEvent {
@@ -499,6 +501,15 @@ export class Work {
       ...(input.preview === undefined
         ? {}
         : { preview: { url: input.preview.url, label: input.preview.label } }),
+      ...(input.blocked === undefined
+        ? {}
+        : {
+            blocked: {
+              reason: input.blocked.reason,
+              connections: [...input.blocked.connections],
+              tools: [...input.blocked.tools],
+            },
+          }),
     }
     this.store.appendMatterEvent(event)
     this.store.putMatter({

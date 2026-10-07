@@ -51,6 +51,7 @@ import {
 } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 import { HELP_SLUGS, type HelpSlug } from '@/lib/help'
+import { offerMirrorRetry, setNpmRegistry } from '@/lib/npm-registry-api'
 
 const isHelpSlug = (s: string): s is HelpSlug => (HELP_SLUGS as readonly string[]).includes(s)
 
@@ -331,6 +332,14 @@ export function PlatformCliCard({
     onSuccess: set,
   })
   const cancel = useMutation({ mutationFn: () => cancelPlatformCli(assignment), onSuccess: set })
+  // WP254（决策 100 / 123）：网络类失败 →「换国内源再试」= 先把这台电脑的下载源改成国内源，再装一次
+  const mirrorRetry = useMutation({
+    mutationFn: async () => {
+      await setNpmRegistry('npmmirror')
+      return runPlatformCli('install', assignment)
+    },
+    onSuccess: set,
+  })
   const cli = view.data?.kit?.cli
   const job = cli?.job
   // 登录网址一出来就交给系统浏览器（CLI 自己已经开了就不再开第二次）；同一次登录只开一回
@@ -454,8 +463,30 @@ export function PlatformCliCard({
             {run.error.message}
           </p>
         )}
+        {mirrorRetry.error === null ? null : (
+          <p role="alert" className="text-xs text-destructive">
+            {mirrorRetry.error.message}
+          </p>
+        )}
         <div className="flex flex-wrap items-center gap-2">
           {primary()}
+          {!running &&
+          wantInstall &&
+          canInstall &&
+          failed?.action === 'install' &&
+          offerMirrorRetry(failed) ? (
+            <Button
+              size="sm"
+              variant="outline"
+              className="gap-1"
+              title={t('npm_registry.retry_mirror.hint')}
+              disabled={run.isPending || mirrorRetry.isPending}
+              onClick={() => mirrorRetry.mutate()}
+              data-testid="platform-cli-retry-mirror"
+            >
+              {t('npm_registry.retry_mirror')}
+            </Button>
+          ) : null}
           {running ? null : (
             <Button
               size="sm"

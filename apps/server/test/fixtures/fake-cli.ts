@@ -3,7 +3,8 @@
  *
  * 子进程的环境是白名单（传不进 `FAKE_*`），所以「演哪一出」写在脚本旁边的 `mode` 文件里：
  * 假 npm：`ok` = 打几行取包进度、在 `--prefix` 下造一个假 `@shopify/cli`（入口抄自旁边的 `run.js`）；
- * `enotfound` = 打 npm 10 的网络错误行退出 1；`hang` = 一直不退。
+ * `enotfound` = 打 npm 10 的网络错误行退出 1；`hang` = 一直不退；`mirror_only`（WP254）= 只有源是国内源
+ * npmmirror 时才装得上，别的源一律当 ENOTFOUND（冒充国内网络）。
  * 假 shopify 的 `auth login`：`ok` / `presskey` / `denied` / `hang`（`bin/mode` 文件，默认 ok）；
  * 带着 `CI` 就照真 CLI 那样拒绝交互登录（退出 3）。
  */
@@ -73,7 +74,7 @@ const prefix = args[args.indexOf('--prefix') + 1]
 const target = args[args.length - 1]
 if (process.env.npm_config_cache === undefined) process.exit(8)
 if (mode === 'hang') { setInterval(() => {}, 1000); return }
-if (mode === 'enotfound') {
+if (mode === 'enotfound' || (mode === 'mirror_only' && process.env.npm_config_registry !== 'https://registry.npmmirror.com')) {
   console.error('npm error code ENOTFOUND')
   console.error('npm error syscall getaddrinfo')
   console.error('npm error errno ENOTFOUND')
@@ -88,11 +89,13 @@ writeFileSync(join(dir, 'bin', 'run.js'), readFileSync(join(__dirname, 'run.js')
 console.log('added 3 packages in 1s')
 `
 
+export type FakeNpmMode = 'ok' | 'enotfound' | 'hang' | 'mirror_only'
+
 /** 在 `root` 下摆好假 npm（旁边带假 shopify 的入口），回 npm 脚本的路径；`mode` 改演哪一出。 */
 export function writeFakeNpm(
   root: string,
-  mode: 'ok' | 'enotfound' | 'hang' = 'ok',
-): { npmCli: string; setMode: (m: 'ok' | 'enotfound' | 'hang') => void } {
+  mode: FakeNpmMode = 'ok',
+): { npmCli: string; setMode: (m: FakeNpmMode) => void } {
   const dir = join(root, 'fake-npm', 'bin')
   mkdirSync(dir, { recursive: true })
   const file = join(dir, 'npm-cli.cjs')

@@ -164,6 +164,7 @@ async function addBrand(server: Server, name: string): Promise<Who> {
 
 interface State {
   needs_setup: boolean
+  business_done?: true
   workspace_name: string
   brand_name: string
   added_brand?: boolean
@@ -246,7 +247,9 @@ describe('WP240 第二个品牌的首次设置不串品牌', () => {
     // Rollout：平台从站上看出来了，档案是它自己的；品牌名仍是建品牌时起的那个
     const r = await state(server, rollout)
     expect(r.brand_name).toBe('Rollout')
-    expect(r.needs_setup).toBe(false)
+    // WP251（决策 92）：加的品牌第 ② 步做完还不算设置完——走完第 ④ 步才算（停在第 ③ 步接着走）
+    expect(r.needs_setup).toBe(true)
+    expect(r.business_done).toBe(true)
     expect(server.onboarding.brandProfile(rollout.workspace_id).storefront_platform).toBe('shopify')
     // 公司全称没被分析结果顶掉（公司级的已经有了，加品牌不再问）
     expect(server.onboarding.companyProfile()?.legal_name).toBe('INMO')

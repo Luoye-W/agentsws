@@ -1221,6 +1221,8 @@ export interface LocalConnectorJobView {
     code: 'network' | 'timeout' | 'disk_full' | 'permission' | 'integrity' | 'busy' | 'failed'
     detail?: string
   }
+  /** WP254：这次下载用的哪个源（不是国内源且网络失败 → 多一个「换国内源再试」）。 */
+  registry?: 'official' | 'npmmirror' | 'custom'
 }
 
 /** WP247：本机连接器（按需下载、桌面壳起停）的样子。 */
@@ -6844,6 +6846,8 @@ export interface PlatformCliJob {
   }
   command: string
   log: string[]
+  /** WP254：安装用的哪个下载源（不是国内源且网络失败 → 多一个「换国内源再试」）。 */
+  registry?: 'official' | 'npmmirror' | 'custom'
 }
 
 /** CLI 卡的四档：没装 / Node 不够 / 没登录 / 好了。 */

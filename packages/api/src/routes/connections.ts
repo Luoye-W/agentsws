@@ -252,6 +252,8 @@ export interface LocalConnectorJobView {
     code: 'network' | 'timeout' | 'disk_full' | 'permission' | 'integrity' | 'busy' | 'failed'
     detail?: string
   }
+  /** WP254（决策 100 / 123）：下载用的哪个源（同 `PlatformCliJobView.registry`）。 */
+  registry?: 'official' | 'npmmirror' | 'custom'
 }
 
 /** WP247：本机连接器的样子（连接页顶上一行 + 设置 · 诊断里那一块）。 */

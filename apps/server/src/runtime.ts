@@ -30,6 +30,7 @@ import type {
   EventEnvelope,
   GateDecision,
   Matter,
+  MatterRunBlock,
   ModelRef,
   ObjectRef,
   PersonId,
@@ -107,6 +108,7 @@ import {
 
 import { cardRefOf, type Work } from '@agentsws/work'
 import type { ComputerUseAssembly } from './computer-use.js'
+import { blockedByTool, blockedLine, blockReasonOf, RunBlockLog } from './run-blocked.js'
 import { PartialRunLog, stoppedLine } from './run-stop.js'
 import { createSkillToolExecutor, isReadSkillTool } from './skill-tools.js'
 
@@ -219,6 +221,11 @@ export interface RuntimeOptions {
    * 职责阈值 `run_idle_timeout_seconds` / `run_max_duration_seconds` 优先，都没有走缺省（3 / 20 分钟）。
    */
   runLimits?(): Partial<RunTimeLimits> | undefined
+  /**
+   * WP251（决策 91）：这条职责现在**没连上**的连接（人话名，必需的在前；必需的全连上了才列可选的）。
+   * 工具回 `not_connected` / 缺凭据时，运行时拿它说清「缺哪个连接」。不给 = 只记卡住了、不说缺哪个。
+   */
+  missingConnections?(role_id: string): string[]
   /** seed 化的随机（运行时的确定性）；不给按 `random` 起一个 */
   seed?: number
   /** 运行时的名字；缺省按有没有模型 provider 配置自动选 */
@@ -584,7 +591,26 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
    * WP236：每次运行的看门狗与现场记录（开跑登记、收尾摘掉，与 `active` 同一个生命周期）。
    * 宿主执行器每调一次工具都给看门狗续命、把回来的数据记一笔——停下来时拼「已经查到的部分」。
    */
-  const runWatch = new Map<string, { watchdog: RunWatchdog; log: PartialRunLog }>()
+  const runWatch = new Map<
+    string,
+    { watchdog: RunWatchdog; log: PartialRunLog; blocks: RunBlockLog }
+  >()
+  /** WP251：这一轮撞上「缺连接 / 缺凭据」时记一笔（缺哪个连接按这条职责现查）。 */
+  const noteBlocked = (
+    blocks: RunBlockLog | undefined,
+    tool: string,
+    reason: MatterRunBlock['reason'],
+    role_id: string,
+  ): void => {
+    if (blocks === undefined) return
+    let connections: string[] = []
+    try {
+      connections = options.missingConnections?.(role_id) ?? []
+    } catch {
+      // 连接目录还没装好：只记卡住了，不说缺哪个
+    }
+    blocks.note(tool, reason, connections)
+  }
 
   /** WP236：这条职责这一次的时长线（职责阈值 → 设置 → 缺省）。 */
   const timeLimitsFor = (role_id: string): RunTimeLimits =>
@@ -1058,6 +1084,10 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
           watch?.watchdog.touch()
           const res = await executeToolRaw(call)
           watch?.watchdog.touch()
+          // WP251（决策 91）：工具回「没连上 / 缺凭据」——在这一轮上记结构化标记
+          const why = blockedByTool(res)
+          if (why !== undefined)
+            noteBlocked(watch?.blocks, bareOf(call.name), why, call.request.actor.role_id)
           watch?.log.hostTool({
             tool: bareOf(call.name),
             input: call.input,
@@ -1687,16 +1717,38 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
      */
     const limits = timeLimitsFor(request.actor.role_id)
     const runLog = new PartialRunLog()
+    const runBlocks = new RunBlockLog()
+    /** WP251：`tool.result` 只带 call_id——按 `tool.call` 认回是哪个工具。 */
+    const callTools = new Map<string, string>()
     const watchdog = createRunWatchdog({
       idleMs: limits.idle_timeout_seconds * 1000,
       maxMs: limits.max_duration_seconds * 1000,
       onFire: (reason) => controller.abort(reason),
     })
-    runWatch.set(run_id, { watchdog, log: runLog })
+    runWatch.set(run_id, { watchdog, log: runLog, blocks: runBlocks })
+    /** WP251：这一轮卡住了就在时间线上记一条带结构化标记的（收尾时调一次）。 */
+    const recordBlocked = (): void => {
+      const block = runBlocks.block()
+      if (block === undefined) return
+      work?.appendEvent(input.matter.id, {
+        kind: 'status',
+        text: blockedLine(block),
+        actor: { kind: 'system', id: 'runtime' },
+        run_id,
+        blocked: block,
+      })
+    }
     let cancelledReason: RunCancelReason | undefined
     const sink = (e: RunEvent): void => {
       watchdog.touch()
       if (e.type === 'text.delta') runLog.text(e.text)
+      // WP251：不经宿主执行器的工具（底座自己挂的）回「没连上 / 缺凭据」也记一笔
+      if (e.type === 'tool.call') callTools.set(e.call_id, bareOf(e.tool))
+      if (e.type === 'tool.result' && e.status !== 'ok') {
+        const why = blockReasonOf(e.reason)
+        if (why !== undefined)
+          noteBlocked(runBlocks, callTools.get(e.call_id) ?? 'tool', why, request.actor.role_id)
+      }
       if (e.type === 'run.cancelled')
         cancelledReason = e.reason ?? cancelReasonOf(controller.signal)
       appendRunEvent(request, e)
@@ -1807,6 +1859,7 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
             stopped: { reason: stoppedReason },
           })
         }
+        recordBlocked()
         work?.onRunCompleted({
           matter_id: input.matter.id,
           run_id,
@@ -1832,6 +1885,7 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
           run_id,
         })
       }
+      recordBlocked()
       work?.onRunCompleted({
         matter_id: input.matter.id,
         run_id,
@@ -1845,6 +1899,7 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
         actor: { kind: 'system', id: 'runtime' },
         run_id,
       })
+      recordBlocked()
     } finally {
       watchdog.stop()
       scope = undefined
