@@ -23,7 +23,7 @@ import { join } from 'node:path'
  * 再用 `node scripts/open-connector-lock.mjs` 重出锁文件——两样必须一起改（有测试对着查）。
  *
  * 选 npm 包而不是官方单文件发行物（评估见 WP247 报告 §2）：同一版本下 npm 包 + 锁文件
- * 实测下载 27.8 MB（318 个包，每个都按锁文件里的 sha512 校验），单文件发行物每个平台 170–195 MB 且不压缩。
+ * 实测下载约 27 MB（318 个包，每个都按锁文件里的 sha512 校验），单文件发行物每个平台 180–204 MB 且不压缩。
  */
 export const OPEN_CONNECTOR_PIN = {
   package: '@oomol-lab/open-connector',
@@ -35,7 +35,7 @@ export const OPEN_CONNECTOR_PIN = {
   hostDeps: { '@hono/node-server': '2.0.10' },
   /** 10-07 实测（干净缓存 `npm ci`）：要下的包数、压缩字节、解开后的字节——界面上的「约 30 MB」由它算。 */
   packages: 318,
-  downloadBytes: 27_800_000,
+  downloadBytes: 26_800_000,
   installedBytes: 243_000_000,
   /** 上游 `engines.node`；安装包自带的 Node 22.23 满足。 */
   minNode: '22.18.0',

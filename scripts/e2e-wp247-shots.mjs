@@ -29,7 +29,7 @@ const NOW = new Date().toISOString()
 
 const LOCAL = {
   version: '1.8.0',
-  download_bytes: 27_800_000,
+  download_bytes: 26_800_000,
   update_available: false,
   desired: 'run',
 }

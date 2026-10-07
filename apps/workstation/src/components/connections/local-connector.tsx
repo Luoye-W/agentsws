@@ -29,7 +29,7 @@ import { cn } from '@/lib/utils'
 
 type Translate = (key: string, vars?: Record<string, string>) => string
 
-/** 「约 30 MB」：往上取到 5 的倍数（实测 27.8 MB）。 */
+/** 「约 30 MB」：往上取到 5 的倍数（实测 26.8 MB）。 */
 export function aboutMb(bytes: number): string {
   return String(Math.max(5, Math.ceil(bytes / 1_000_000 / 5) * 5))
 }

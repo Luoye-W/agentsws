@@ -26,7 +26,7 @@ const SHOP: ProviderView = {
 const LOCAL: LocalConnectorView = {
   status: 'not_installed',
   version: '1.8.0',
-  download_bytes: 27_800_000,
+  download_bytes: 26_800_000,
   update_available: false,
   desired: 'run',
 }
@@ -184,7 +184,8 @@ describe('点要连接器的卡', () => {
     expect(actions).toEqual(['install'])
     // 下好、起来了（轮询拿到 ready）→ 自动接着连 Shopify
     state.runtime = READY
-    state.providers = [{ ...SHOP, needs_download: undefined } as ProviderView]
+    const { needs_download: _gone, ...ready } = SHOP
+    state.providers = [ready]
     await waitFor(() => expect(begun).toEqual(['shopify_admin']), { timeout: 4000 })
   })
 

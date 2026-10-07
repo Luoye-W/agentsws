@@ -161,7 +161,7 @@ Shopify / Meta / WhatsApp 的 webhook 接收、IMAP 轮询、飞书事件订阅�
 
 | 项 | 怎么做的 |
 |---|---|
-| 发行形态 | npm 包 `@oomol-lab/open-connector`（无头库）+ 我们自己的宿主脚本；版本钉在 `packages/connect-adapter/src/local-runtime.ts`，锁文件 `open-connector-lock.json`（318 个包逐个 sha512）。不用官方单文件发行物（每平台 170–195 MB、不压缩；npm 实测只下 27.8 MB） |
+| 发行形态 | npm 包 `@oomol-lab/open-connector`（无头库）+ 我们自己的宿主脚本；版本钉在 `packages/connect-adapter/src/local-runtime.ts`，锁文件 `open-connector-lock.json`（318 个包逐个 sha512）。不用官方单文件发行物（每平台 180–204 MB、不压缩；npm 实测只下 26.8 MB） |
 | 下载 | 服务进程用安装包自带的 node + 钉版本 npm（WP245）`npm ci --ignore-scripts` 装进 `<data>/runtime/open-connector/<版本>`；进度按「已取回 N / 318」、可取消、失败分网络 / 超时 / 磁盘 / 权限 / 校验；升级时上一版留一份可回退 |
 | 起停 | 桌面壳 `connect-launcher.ts`（sidecar 监督者：退避重启、连续失败停在 failed 等人点重启）；只听 127.0.0.1，端口第一次选好记进配置（OAuth 回调地址不变）；应用退出时关 stdin 请它收尾，Windows 到点按进程树强杀 |
 | 加固 | 宿主脚本缺 `ENCRYPTION_KEY` / `ADMIN_TOKEN` 或 proxy 没封 `*` 就拒绝启动（退出码 78）；`/v1` 另挂一把由管理令牌派生的静态令牌（全新库也不匿名可读）；两把密钥来自桌面壳的 safeStorage，只经环境变量给子进程；`assertRuntimeHardened` 通过才算就绪 |
