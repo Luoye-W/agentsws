@@ -4,19 +4,24 @@
  * 拖动按 `canMoveWorkItem`（`@agentsws/contracts`，docs/54 §7.3）：**只有待办能拖**，
  * 在「进行中 / 等别人 / 已完成」之间拖，改的是待办自己的状态（`PUT /v1/todos/:id`）；
  * 事项 / 定时 / 排期拿着不动，悬停说为什么。拖动之后整份工作重取，不在前端改本地数据。
+ *
+ * WP248（决策 82）：拖到「排着的」先弹选日期（默认明天上午），选好才落——写排期
+ * （`POST /v1/todos/:id/schedule`），状态不是 `open` 的再改回 `open`；取消就什么都不改，卡片留在原列。
  */
 import {
   canMoveWorkItem,
   POSITION_WORK_GROUPS,
   type PositionWorkGroup,
   type PositionWorkItem,
+  todoMoveNeedsTime,
   todoStatusForGroup,
 } from '@agentsws/contracts'
 import { type ReactNode, useState } from 'react'
-import { setTodoStatus } from '@/lib/api'
+import { scheduleTodo, setTodoStatus } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
-import { CardsBadge, DutyChip, GroupIcon, KindIcon, ProgressText } from './work-bits'
+import { CardsBadge, DutyChip, GroupIcon, KindIcon, OverdueBadge, ProgressText } from './work-bits'
 import { DueText, ItemTitle } from './work-list'
+import { WorkQueueDialog } from './work-queue-dialog'
 
 const DRAG_TYPE = 'application/x-agentsws-work-item'
 
@@ -35,20 +40,52 @@ export function WorkBoard({
   const [dragging, setDragging] = useState<PositionWorkItem | undefined>(undefined)
   const [over, setOver] = useState<PositionWorkGroup | undefined>(undefined)
   const [error, setError] = useState('')
+  /** WP248：拖到「排着的」、正在问时间的那一条（取消 = 清掉，什么都不改） */
+  const [asking, setAsking] = useState<PositionWorkItem | undefined>(undefined)
+  const [busy, setBusy] = useState(false)
 
   // WP244：「卡住了」那一列只在有东西时出（它只收事项，空着摆一列只是占地方）
   const columns = POSITION_WORK_GROUPS.filter(
     (g) => g !== 'stuck' || items.some((i) => i.group === 'stuck'),
   )
 
+  const fail = (err: unknown): void => {
+    setError(t('pos2.board.error', { message: err instanceof Error ? err.message : String(err) }))
+  }
+
   const move = async (item: PositionWorkItem, to: PositionWorkGroup): Promise<void> => {
     if (!canMoveWorkItem(item, to)) return
+    // 「排着的」要一个以后的时间：先问，选好了在 `queue` 里落
+    if (todoMoveNeedsTime(to)) {
+      setAsking(item)
+      return
+    }
     try {
       await setTodoStatus(item.ref_id, todoStatusForGroup(to) as 'doing' | 'blocked' | 'done')
       setError('')
       onMoved()
     } catch (err) {
-      setError(t('pos2.board.error', { message: err instanceof Error ? err.message : String(err) }))
+      fail(err)
+    }
+  }
+
+  const queue = async (
+    item: PositionWorkItem,
+    slot: { start: string; end: string },
+  ): Promise<void> => {
+    setBusy(true)
+    try {
+      await scheduleTodo(item.ref_id, slot)
+      // 「排着的」= 还没开始：做着 / 卡着 / 做完的拖进来，状态回到 open
+      if (item.status !== 'open') await setTodoStatus(item.ref_id, 'open')
+      setError('')
+      setAsking(undefined)
+      onMoved()
+    } catch (err) {
+      fail(err)
+      setAsking(undefined)
+    } finally {
+      setBusy(false)
     }
   }
 
@@ -71,11 +108,7 @@ export function WorkBoard({
               data-testid="work-board-column"
               data-group={g}
               data-accepts={accepts ? 'true' : 'false'}
-              title={
-                dragging?.kind === 'todo' && g === 'queued'
-                  ? t('pos2.board.queued_locked')
-                  : undefined
-              }
+              aria-label={t(`pos2.group.${g}`)}
               className={`flex min-h-24 flex-col gap-2 rounded-xl bg-ws-surface p-2 transition-colors ${over === g && accepts ? 'ring-2 ring-ws-brand/50' : ''} ${dragging !== undefined && !accepts && dragging.group !== g ? 'opacity-60' : ''}`}
               onDragOver={(e) => {
                 if (!accepts) return
@@ -125,6 +158,7 @@ export function WorkBoard({
                       <span className="min-w-0 flex-1 leading-snug">
                         <ItemTitle item={item} wrap />
                       </span>
+                      <OverdueBadge item={item} />
                     </div>
                     {item.cards > 0 ? (
                       <div>
@@ -151,6 +185,17 @@ export function WorkBoard({
           )
         })}
       </div>
+      <WorkQueueDialog
+        item={asking}
+        now={now}
+        busy={busy}
+        onCancel={() => {
+          setAsking(undefined)
+        }}
+        onConfirm={(slot) => {
+          if (asking !== undefined) void queue(asking, slot)
+        }}
+      />
     </div>
   )
 }

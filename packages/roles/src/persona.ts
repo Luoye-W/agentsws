@@ -267,6 +267,10 @@ export interface PersonaBrandContext {
    * WP122 只要把这一格填上，这一段自然多一行，别处一行都不用改。
    */
   visual_tone?: string
+  /** WP248（决策 83）：客服邮箱（品牌档案里写着的那一个；没写就整行不出）。 */
+  support_email?: string
+  /** WP248（决策 83）：这个品牌卖货的币种（ISO 4217；品牌档案里写过才有，不替人补默认值）。 */
+  currency?: string
 }
 
 /** 市场那一行最多列几个（再多就是一串没人读的国家码）。 */
@@ -293,6 +297,10 @@ export function renderBrandContext(
   const markets = (brand.markets ?? []).filter((m) => m.trim() !== '').slice(0, MAX_MARKETS)
   if (markets.length > 0)
     lines.push(zh ? `主要市场：${markets.join('、')}` : `Main markets: ${markets.join(', ')}`)
+  const currency = brand.currency?.trim()
+  if (currency) lines.push(zh ? `币种：${currency}` : `Currency: ${currency}`)
+  const email = brand.support_email?.trim()
+  if (email) lines.push(zh ? `客服邮箱：${email}` : `Support email: ${email}`)
   const visual = brand.visual_tone?.trim()
   if (visual) lines.push(zh ? `视觉气质：${visual}` : `Visual character: ${visual}`)
   const tone = (brand.tone_samples ?? []).filter((t) => t.trim() !== '').slice(0, MAX_TONE_SAMPLES)

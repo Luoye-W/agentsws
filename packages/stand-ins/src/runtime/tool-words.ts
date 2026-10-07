@@ -51,6 +51,9 @@ export const TOOL_WORDS_ZH: Readonly<Record<string, string>> = {
   web_fetch: '网页抓取',
   // WP236：WP220 的只读 Reddit（停下来时「已经取回的数据」那一段要叫得出名字）
   read_reddit: 'Reddit 只读取数',
+  // WP246
+  read_youtube_transcript: '读 YouTube 字幕',
+  read_webpage: '网页转文字',
 }
 
 /** 去掉 `service.` 前缀（`shopify.get_order` → `get_order`）；点在中间的 MCP 全名原样。 */

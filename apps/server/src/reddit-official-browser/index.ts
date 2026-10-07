@@ -107,6 +107,11 @@ export interface RedditOfficialBrowser {
   checkLogin(): Promise<RedditOfficialBrowserStatus>
   /** 关掉登录窗口（或无头那一个）。 */
   closeWindow(): Promise<void>
+  /**
+   * 在这个通道里**登录过**的官方号（体检认出来的用户名，去重、不带 `u/`；登出了也还记着）。
+   * 决策 108：它们一律进只读读号的拦截名单——官方号不能当读号用。
+   */
+  officialUsernames(): readonly string[]
   readonly port: RedditOfficialBrowserPort
   close(): Promise<void>
 }
@@ -116,6 +121,8 @@ interface StateFile {
   logged_in: boolean
   username?: string
   checked_at?: number
+  /** 体检认出来过的官方号（决策 108：进读号拦截名单）。 */
+  seen?: string[]
   block?: { kind: string; message: string; until: number }
   reads: number[]
   writes: number[]
@@ -149,6 +156,9 @@ export function createRedditOfficialBrowser(
         logged_in: raw.logged_in === true,
         ...(typeof raw.username === 'string' ? { username: raw.username } : {}),
         ...(typeof raw.checked_at === 'number' ? { checked_at: raw.checked_at } : {}),
+        ...(Array.isArray(raw.seen)
+          ? { seen: raw.seen.filter((u): u is string => typeof u === 'string') }
+          : {}),
         ...(raw.block === undefined ? {} : { block: raw.block }),
         reads: Array.isArray(raw.reads) ? raw.reads.filter((t) => typeof t === 'number') : [],
         writes: Array.isArray(raw.writes) ? raw.writes.filter((t) => typeof t === 'number') : [],
@@ -446,7 +456,11 @@ export function createRedditOfficialBrowser(
           if (res.ok) {
             state.logged_in = true
             if (res.username === undefined) delete state.username
-            else state.username = res.username
+            else {
+              state.username = res.username
+              const name = res.username.replace(/^\/?u\//u, '').toLowerCase()
+              if (!(state.seen ?? []).includes(name)) state.seen = [...(state.seen ?? []), name]
+            }
             // 人在窗口里处理过了：之前记的「被拦」作废
             delete state.block
             // 登好了就把登录窗口收起来（之后读写在无头那一个里做，不再弹窗）；页面在 finally 里先关
@@ -468,6 +482,7 @@ export function createRedditOfficialBrowser(
         return status()
       }),
     closeWindow: () => serial(stop),
+    officialUsernames: () => [...(state.seen ?? [])],
     close: () => serial(stop),
   }
 }

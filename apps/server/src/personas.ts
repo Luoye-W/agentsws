@@ -112,7 +112,7 @@ export interface PersonasOptions {
    * WP121：品牌上下文的四个槽位。**取不到就不写那一句**——
    * 这个回调回 `undefined` 或空对象时，persona 里一句品牌的话都不出现（69 §5「别编」）。
    */
-  brand?(): PersonaBrandContext | undefined
+  brand?(workspace_id?: string): PersonaBrandContext | undefined
   appendEvent(e: Omit<EventEnvelope, 'id' | 'at'> & { at?: string }): void
 }
 
@@ -135,6 +135,11 @@ export interface PersonasAssembly {
     role_id: RoleId
     position_id?: string | undefined
     lang?: PersonaLang
+    /**
+     * WP248：这次运行在哪个品牌里（品牌上下文按它取：一句话介绍、客服邮箱、币种各品牌各一份）。
+     * 不给 = 启动品牌（老调用方行为不变）。
+     */
+    workspace_id?: string | undefined
   }): PromptSection[]
 }
 
@@ -301,7 +306,7 @@ export function createPersonas(options: PersonasOptions): PersonasAssembly {
       return viewOf(subject)
     },
 
-    sections({ role_id, position_id, lang }) {
+    sections({ role_id, position_id, lang, workspace_id }) {
       const role = options.roles.roles.get(role_id)
       const template = position_id === undefined ? undefined : positionOf(position_id)
       return personaSections({
@@ -322,7 +327,7 @@ export function createPersonas(options: PersonasOptions): PersonasAssembly {
             : { name: (lang ?? 'zh') === 'zh' ? role.name.zh : role.name.en }),
           persona: effectiveOf({ kind: 'role', id: role_id }),
         },
-        ...(options.brand === undefined ? {} : { brand: options.brand() }),
+        ...(options.brand === undefined ? {} : { brand: options.brand(workspace_id) }),
       })
     },
   }

@@ -96,6 +96,7 @@ import {
   isScheduleTool,
   OWNER_TOOL_NAMES,
   READ_SKILL_TOOL,
+  READ_WEBPAGE_TOOL,
   RESEARCH_TOOL_NAMES,
   SCHEDULE_TOOL_NAMES,
   WEB_FETCH_TOOL,
@@ -1395,6 +1396,8 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
         // WP179：官方网页工具（只有真给了的那几个）
         ...(web?.search === true ? [WEB_SEARCH_TOOL] : []),
         ...(web?.fetch === true ? [WEB_FETCH_TOOL] : []),
+        // WP246：能抓网页的职责也能要「干净正文」（本机抽取，不经第三方；接了研究工具执行器才给）
+        ...(web?.fetch === true && options.researchTools !== undefined ? [READ_WEBPAGE_TOOL] : []),
         ...(automationOn ? SCHEDULE_TOOL_NAMES : []),
       ]),
     ]

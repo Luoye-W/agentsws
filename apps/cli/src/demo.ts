@@ -56,6 +56,7 @@ import {
   demoWebSearch,
   periodQueryRunner,
   platformCliStandIn,
+  readonlyBrowserStandIn,
 } from '@agentsws/server'
 import type { Pack, RunContext, World } from '@agentsws/simulation'
 import { buildRunRequest, createWorld, loadPack, parseScenario } from '@agentsws/simulation'
@@ -1433,6 +1434,12 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
       openPage: demoOldReddit().opener(),
       sleep: async () => undefined,
     },
+    /*
+     * WP246：本机只读浏览器在 demo 里是**替身**——不起浏览器、不访问 reddit.com。连接页「取数路线」演得出
+     * 「登录读号 → 窗口开着 → 1.5 秒后像用户关掉了 → 已登录 u/demo_reader」；YouTube / 网页那两级不出网
+     * （没给 readNet），工具照实说「演示环境没装出网读取」。
+     */
+    readonlyBrowser: readonlyBrowserStandIn(),
     /*
      * WP216 / WP245：「Shopify CLI」卡在 demo 里是替身——不跑这台机器上真的 npm / `shopify`：
      * 一开始当作没装；「一键安装」演进度后装好（工作台自带那份），「登录 Shopify」打出一个

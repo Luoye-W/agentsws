@@ -210,6 +210,8 @@ export {
 export { createOrg, type OrgAssembly, type OrgOptions } from './org.js'
 // WP245：demo 里一键安装 / 一键登录 Shopify CLI 的替身（不跑真 npm、不开真登录页）
 export { platformCliStandIn } from './platform-cli-stand-in.js'
+// WP246：演示里「取数路线 / 登录读号」的替身（不起浏览器、不访问 reddit.com）
+export { readonlyBrowserStandIn } from './readonly-browser/stand-in.js'
 export {
   createReconcileGuard,
   RECONCILE_HALT_REASON,
@@ -505,6 +507,8 @@ export async function main(): Promise<void> {
       readonlyBrowser: {},
       // WP249：Reddit 官方号浏览器通道（每品牌一个独立目录；要用时才起）
       redditOfficialBrowser: {},
+      // WP246：YouTube 字幕、网页转文字、取数路线体检要出网——同样只在真正的服务进程里装
+      readNet: {},
       ...(staticDir === undefined ? {} : { staticDir }),
       ...(profileDir === undefined || profileDir === ''
         ? {}

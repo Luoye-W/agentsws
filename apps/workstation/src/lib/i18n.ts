@@ -8,6 +8,7 @@ import { CLOUD_AUTH_EN, CLOUD_AUTH_ZH } from './i18n-cloud-auth'
 import { LIBRARY_EN, LIBRARY_ZH } from './i18n-library'
 import { OWN_SUB_EN, OWN_SUB_ZH } from './i18n-own-sub'
 import { POSITION_EN, POSITION_ZH } from './i18n-position'
+import { READ_ROUTES_EN, READ_ROUTES_ZH } from './i18n-read-routes'
 
 export type Lang = 'zh' | 'en'
 
@@ -2026,7 +2027,11 @@ const zh: Table = {
   'home.positions.running': '运行中',
   'home.positions.running.hint': '运行中 · {count} 件在办',
   'home.headline': '今天',
-  'home.greeting.line': '{cards} 张卡等你决定 · {matters} 件今天到期',
+  // WP248（决策 79）：与岗位页同一个说法；已过期没做完的也算进「今天」，括号里点出几个
+  'home.greeting.line': '{cards} 张卡等你决定 · 今天 {matters} 个待办',
+  'home.greeting.line.overdue':
+    '{cards} 张卡等你决定 · 今天 {matters} 个待办（{overdue} 个已过期）',
+  'home.today.overdue': '已过期',
   'home.stats': '今天的数',
   // WP84（54 §1 第 6 行）+ WP98：快捷提示收进岗位卡右上角的 `···`——点一条就是开一件事，不是聊天框
   'home.quick.menu': '快捷提示',
@@ -3730,6 +3735,12 @@ const zh: Table = {
   'b2b.out.reason.sender_auth': '发信邮箱体检没过',
   'b2b.out.reason.company_address': '公司地址没填',
   'onboarding.company.address': '公司地址',
+  // WP248（决策 83）：品牌档案三格（设置页「这个品牌」）
+  'onboarding.brand.one_liner': '一句话介绍',
+  'onboarding.brand.one_liner.placeholder': '比如：给近视的人做的 AR 眼镜',
+  'onboarding.brand.facts.hint': 'AI 写回复、写文案时会带上这几格。每个品牌各一份。',
+  'onboarding.brand.support_email': '客服邮箱',
+  'onboarding.brand.currency': '币种',
   'onboarding.company.address.hint': '实体地址。开发信页脚（法规要求）、报价单、单证都用这一份',
   'onboarding.company.address.placeholder': '如 8 Keji Rd, Nanshan, Shenzhen, China',
   'b2b.out.address.none': '还没填',
@@ -5943,7 +5954,10 @@ const en: Table = {
   'home.positions.running': 'Running',
   'home.positions.running.hint': 'Running · {count} in flight',
   'home.headline': 'Today',
-  'home.greeting.line': '{cards} cards waiting on you · {matters} due today',
+  'home.greeting.line': '{cards} cards waiting on you · {matters} to-dos today',
+  'home.greeting.line.overdue':
+    '{cards} cards waiting on you · {matters} to-dos today ({overdue} overdue)',
+  'home.today.overdue': 'Overdue',
   'home.stats': "Today's numbers",
   // WP84 (54 §1 line 6): quick starts under each position card — a click opens a matter
   'home.quick.menu': 'Quick prompts',
@@ -7719,6 +7733,12 @@ const en: Table = {
   'b2b.out.reason.sender_auth': 'sending mailbox failed the health check',
   'b2b.out.reason.company_address': 'company address missing',
   'onboarding.company.address': 'Company address',
+  'onboarding.brand.one_liner': 'One-line intro',
+  'onboarding.brand.one_liner.placeholder': 'e.g. AR glasses made for people with myopia',
+  'onboarding.brand.facts.hint':
+    'The AI uses these when it writes replies and copy. Each brand has its own.',
+  'onboarding.brand.support_email': 'Support email',
+  'onboarding.brand.currency': 'Currency',
   'onboarding.company.address.hint':
     'Postal address. Cold-email footers (required by law), quotes and shipping documents all use this one',
   'onboarding.company.address.placeholder': 'e.g. 8 Keji Rd, Nanshan, Shenzhen, China',
@@ -7894,9 +7914,9 @@ const en: Table = {
 // WP209：技能 / 知识分组的词条在自己的文件里（`i18n-library.ts`），这里并进来
 const TABLES: Record<Lang, Table> = {
   // WP241：岗位页 v2 的词条在 `i18n-position.ts`
-  // WP249：自家版待处理在 `i18n-own-sub.ts`
-  zh: { ...zh, ...LIBRARY_ZH, ...CLOUD_AUTH_ZH, ...POSITION_ZH, ...OWN_SUB_ZH },
-  en: { ...en, ...LIBRARY_EN, ...CLOUD_AUTH_EN, ...POSITION_EN, ...OWN_SUB_EN },
+  // WP249：自家版待处理在 `i18n-own-sub.ts`；WP246：连接页「取数路线」在 `i18n-read-routes.ts`
+  zh: { ...zh, ...LIBRARY_ZH, ...CLOUD_AUTH_ZH, ...POSITION_ZH, ...READ_ROUTES_ZH, ...OWN_SUB_ZH },
+  en: { ...en, ...LIBRARY_EN, ...CLOUD_AUTH_EN, ...POSITION_EN, ...READ_ROUTES_EN, ...OWN_SUB_EN },
 }
 
 export function translate(lang: Lang, key: string, vars?: Record<string, string | number>): string {

@@ -8,19 +8,36 @@
  *   两边数的是同一本账，连接页显示的「今天额度用完」也是它。
  */
 import type { RedditReadBrowser, RedditReadLimiter } from '@agentsws/social-core'
+import type { RedditReadAccount } from './account.js'
 import type { ReadonlyBrowser } from './index.js'
 
 export const READONLY_SESSION_ID = 'agentsws-readonly'
 
-export function redditReadBrowserOf(rb: ReadonlyBrowser): RedditReadBrowser {
+/** WP246：用读号读时被验证码 / 拦截页拦下，告诉人怎么手动过一次。 */
+export const READ_ACCOUNT_CAPTCHA_HINT =
+  '点连接页「取数路线」的「登录读号」，在打开的窗口里手动过一次验证再关掉，这一路就恢复。'
+
+/**
+ * @param account WP246：读号（给了 = 只有读号登录好、而且不是品牌登记的号时才读；生产都给）。
+ *   不给 = WP228 的老行为（测试里直接验只读浏览器本身）。
+ */
+export function redditReadBrowserOf(
+  rb: ReadonlyBrowser,
+  account?: RedditReadAccount,
+): RedditReadBrowser {
   return {
     session: () => ({ kind: 'readonly_isolated', id: READONLY_SESSION_ID }),
+    ...(account === undefined ? {} : { availability: () => account.gate() }),
     async run(action, hint) {
       if (action.writes) return { status: 'failed', message: '只读浏览器不做任何会改东西的动作。' }
       const got = await rb.read(action.url, { limit: hint?.limit ?? 25 })
       if (got.ok) return { status: 'ok', items: got.items, verified: true }
+      const human = account !== undefined && (got.wall === 'captcha' || got.wall === 'blocked')
       return got.reason === 'wall' || got.reason === 'blocked'
-        ? { status: 'handover', message: got.message }
+        ? {
+            status: 'handover',
+            message: human ? `${got.message}${READ_ACCOUNT_CAPTCHA_HINT}` : got.message,
+          }
         : { status: 'failed', message: got.message }
     },
   }

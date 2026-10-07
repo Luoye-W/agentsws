@@ -18,8 +18,19 @@ import { POSITION_WORK_KEY_PREFIX, readString, writeString } from '@/lib/ui-stat
 export type BaseView = 'list' | 'board' | 'calendar' | 'table'
 export const BASE_VIEWS: readonly BaseView[] = ['list', 'board', 'calendar', 'table']
 
-export type DueFilter = 'all' | 'overdue' | 'today' | 'week' | 'none'
-export const DUE_FILTERS: readonly DueFilter[] = ['all', 'overdue', 'today', 'week', 'none']
+/**
+ * 截止筛选。WP248（决策 79）：加 `by_today`「今天及已过期」——页头「今天 N 个待办（M 个已过期）」
+ * 点过去就是它（没做完、截止在今天或更早），与服务端 `counts.todos_today` 同一个口径。
+ */
+export type DueFilter = 'all' | 'by_today' | 'overdue' | 'today' | 'week' | 'none'
+export const DUE_FILTERS: readonly DueFilter[] = [
+  'all',
+  'by_today',
+  'overdue',
+  'today',
+  'week',
+  'none',
+]
 export type GroupBy = 'status' | 'duty' | 'none'
 export const GROUP_BYS: readonly GroupBy[] = ['status', 'duty', 'none']
 export type SortBy = 'due' | 'updated' | 'title'
@@ -137,6 +148,8 @@ export function dueMatches(due: string | undefined, filter: DueFilter, now: Date
   const at = Date.parse(due)
   if (filter === 'overdue') return at < now.getTime()
   if (filter === 'today') return localDay(due) === localDay(now)
+  // 今天及更早（没做完的那一半在 `filterItems` 里看分组）
+  if (filter === 'by_today') return localDay(due) <= localDay(now)
   return at >= now.getTime() - DAY_MS && at <= now.getTime() + 7 * DAY_MS
 }
 
@@ -177,7 +190,8 @@ export function filterItems(
       (f.duty.length === 0 || (i.role_id !== undefined && f.duty.includes(i.role_id))) &&
       (f.group.length === 0 || f.group.includes(i.group)) &&
       (f.source.length === 0 || f.source.includes(i.source)) &&
-      dueMatches(i.due_at, f.due, now),
+      dueMatches(i.due_at, f.due, now) &&
+      (f.due !== 'by_today' || i.group !== 'done'),
   )
 }
 
@@ -283,4 +297,34 @@ export function quickViewsOf(
 /** 同一种快捷视图有几条（多条时标签后面带职责名）。 */
 export function quickLabelNeedsDuty(views: readonly QuickView[], v: QuickView): boolean {
   return views.filter((x) => x.kind === v.kind).length > 1
+}
+
+// ── WP248（决策 82）：拖到「排着的」时选的那个时间 ─────────────────────────
+
+/** 排着的默认排到「明天上午」：明天 09:00（浏览器时区）。 */
+export function defaultQueueAt(now: Date): Date {
+  const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 9, 0, 0, 0)
+  return d
+}
+
+/** `Date` → `<input type="datetime-local">` 的值（本地时间，到分钟）。 */
+export function toLocalInput(d: Date): string {
+  const p = (n: number): string => String(n).padStart(2, '0')
+  return `${localDay(d)}T${p(d.getHours())}:${p(d.getMinutes())}`
+}
+
+/** 排期占一小时（日历上要有一段；人要改长短去日历里拖）。 */
+export const QUEUE_SLOT_MS = 3_600_000
+
+/**
+ * `datetime-local` 的值 → 排期时段。读不出来、或不在以后（「排着的」= 排在以后某个时段）回 `undefined`。
+ */
+export function queueSlotOf(value: string, now: Date): { start: string; end: string } | undefined {
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(value)) return undefined
+  const at = new Date(value)
+  if (Number.isNaN(at.getTime()) || at.getTime() <= now.getTime()) return undefined
+  return {
+    start: at.toISOString(),
+    end: new Date(at.getTime() + QUEUE_SLOT_MS).toISOString(),
+  }
 }

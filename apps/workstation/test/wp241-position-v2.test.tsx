@@ -16,12 +16,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { PositionInstanceData } from '@/lib/api'
 import {
   DEFAULT_PREFS,
+  defaultQueueAt,
   filterItems,
   groupItems,
   loadWorkPrefs,
   NO_FILTERS,
   quickViewsOf,
   saveWorkPrefs,
+  toLocalInput,
   whenText,
 } from '@/lib/position-work'
 import { PositionPage } from '@/pages/position'
@@ -54,6 +56,7 @@ const state: {
   instance: PositionInstanceData
   missing: string[]
   setTodoStatus: ReturnType<typeof vi.fn>
+  scheduleTodo: ReturnType<typeof vi.fn>
   view: unknown
 } = {
   view: undefined,
@@ -61,6 +64,7 @@ const state: {
   instance: undefined as unknown as PositionInstanceData,
   missing: [],
   setTodoStatus: vi.fn(async () => ({ todo: {} })),
+  scheduleTodo: vi.fn(async () => ({ todo: {} })),
 }
 
 const fullWork = (): PositionWorkView => ({
@@ -250,6 +254,8 @@ vi.mock('@/lib/api', async () => {
     }),
     setTodoStatus: (...args: unknown[]) =>
       (state.setTodoStatus as unknown as (...a: unknown[]) => Promise<unknown>)(...args),
+    scheduleTodo: (...args: unknown[]) =>
+      (state.scheduleTodo as unknown as (...a: unknown[]) => Promise<unknown>)(...args),
   }
 })
 
@@ -278,6 +284,7 @@ beforeEach(() => {
   state.instance = instance()
   state.missing = []
   state.setTodoStatus = vi.fn(async () => ({ todo: {} }))
+  state.scheduleTodo = vi.fn(async () => ({ todo: {} }))
   state.view = {
     position_id: 'asg_pr',
     range: 'yesterday',
@@ -388,7 +395,8 @@ describe('工作', () => {
     const queued = screen
       .getAllByTestId('work-board-column')
       .find((c) => c.getAttribute('data-group') === 'queued') as HTMLElement
-    expect(queued.getAttribute('data-accepts')).toBe('false')
+    // WP248（决策 82）：「排着的」也收待办了（落之前先选时间，见 WP248 那几条）
+    expect(queued.getAttribute('data-accepts')).toBe('true')
     fireEvent.dragOver(done, { dataTransfer: data })
     fireEvent.drop(done, { dataTransfer: data })
     await waitFor(() => {
@@ -650,5 +658,110 @@ describe('WP244 工作：答完了的进已完成（待你看结果），交不�
     expect(
       screen.getAllByTestId('work-board-column').map((c) => c.getAttribute('data-group')),
     ).toEqual(['doing', 'queued', 'waiting', 'done'])
+  })
+})
+
+describe('WP248 决策 79 / 82', () => {
+  /** 一条过期没做完的待办 + 一条今天的；页头 2 个待办（1 个已过期） */
+  const lateWork = (): PositionWorkView => {
+    const w = fullWork()
+    return {
+      ...w,
+      items: [
+        ...w.items,
+        item({
+          id: 'todo:t_late',
+          kind: 'todo',
+          ref_id: 't_late',
+          title: '回版主私信',
+          role_id: 'social.reddit',
+          role_name: '自家版运营',
+          assignment_id: 'asg_social',
+          status: 'doing',
+          due_at: '2026-10-03T10:00:00.000Z',
+          movable: true,
+          overdue: true,
+        }),
+      ],
+      counts: { ...w.counts, todos_today: 2, todos_overdue: 1 },
+    }
+  }
+
+  it('79：页头「今天 2 个待办（1 个已过期）」，点了筛「今天及已过期」；过期那条标红「已过期」', async () => {
+    state.work = lateWork()
+    openAt()
+    const chip = await screen.findByTestId('status-today')
+    expect(chip.textContent).toContain('今天 2 个待办（1 个已过期）')
+    const late = screen
+      .getAllByTestId('work-row')
+      .find((r) => r.getAttribute('data-id') === 'todo:t_late') as HTMLElement
+    expect(within(late).getByTestId('work-overdue').textContent).toBe('已过期')
+    expect(screen.getAllByTestId('work-overdue')).toHaveLength(1)
+    fireEvent.click(chip)
+    // 今天及已过期：两条待办都在；没截止的事项、已完成的不在
+    await waitFor(() => {
+      expect(screen.getByTestId('work-filter').textContent).toContain('筛选 · 1')
+    })
+    const ids = screen.getAllByTestId('work-row').map((r) => r.getAttribute('data-id'))
+    expect(ids).toEqual(expect.arrayContaining(['todo:t_1', 'todo:t_late']))
+    expect(ids).not.toContain('matter:m_1')
+    expect(ids).not.toContain('matter:m_9')
+  })
+
+  it('82：待办拖到「排着的」先弹选日期（默认明天上午）；取消什么都不改，确认才排期并改回 open', async () => {
+    state.work = lateWork()
+    openAt()
+    await screen.findAllByTestId('work-row')
+    fireEvent.click(screen.getByTestId('work-view-board'))
+    const cards = await screen.findAllByTestId('work-board-card')
+    const late = cards.find((c) => c.getAttribute('data-id') === 'todo:t_late') as HTMLElement
+    expect(within(late).getByTestId('work-overdue')).toBeTruthy()
+    const queued = () =>
+      screen
+        .getAllByTestId('work-board-column')
+        .find((c) => c.getAttribute('data-group') === 'queued') as HTMLElement
+    const data = { setData: () => {}, effectAllowed: '' }
+    const dropOnQueued = () => {
+      fireEvent.dragStart(late, { dataTransfer: data })
+      fireEvent.dragOver(queued(), { dataTransfer: data })
+      fireEvent.drop(queued(), { dataTransfer: data })
+    }
+
+    // 取消：框关掉、一个写口都没调，卡片还在原列
+    dropOnQueued()
+    const dialog = await screen.findByTestId('work-queue-dialog')
+    const at = within(dialog).getByTestId('work-queue-at') as HTMLInputElement
+    expect(at.value).toBe(toLocalInput(defaultQueueAt(new Date(NOW))))
+    expect(at.value.endsWith('T09:00')).toBe(true)
+    fireEvent.click(within(dialog).getByTestId('work-queue-cancel'))
+    await waitFor(() => {
+      expect(screen.queryByTestId('work-queue-dialog')).toBeNull()
+    })
+    expect(state.scheduleTodo).not.toHaveBeenCalled()
+    expect(state.setTodoStatus).not.toHaveBeenCalled()
+
+    // 选以前的时间：排不上
+    dropOnQueued()
+    const again = await screen.findByTestId('work-queue-dialog')
+    fireEvent.change(within(again).getByTestId('work-queue-at'), {
+      target: { value: '2026-10-01T09:00' },
+    })
+    expect(within(again).getByTestId('work-queue-invalid')).toBeTruthy()
+    expect((within(again).getByTestId('work-queue-confirm') as HTMLButtonElement).disabled).toBe(
+      true,
+    )
+    // 改成后天上午 10 点 → 排上：写排期（一小时），状态从 doing 改回 open
+    fireEvent.change(within(again).getByTestId('work-queue-at'), {
+      target: { value: '2026-10-08T10:00' },
+    })
+    fireEvent.click(within(again).getByTestId('work-queue-confirm'))
+    await waitFor(() => {
+      expect(state.setTodoStatus).toHaveBeenCalledWith('t_late', 'open')
+    })
+    const start = new Date('2026-10-08T10:00').toISOString()
+    expect(state.scheduleTodo).toHaveBeenCalledWith('t_late', {
+      start,
+      end: new Date(Date.parse(start) + 3_600_000).toISOString(),
+    })
   })
 })

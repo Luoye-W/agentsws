@@ -273,3 +273,7 @@ function dropFilled(have: BrandIntakeProfile, incoming: BrandIntakeProfile): Bra
   }
   return out as BrandIntakeProfile
 }
+
+// WP246：网页转文字（本机那一级）——任意网页 → 干净正文 markdown
+export type { ReadableResult } from './readable.js'
+export { htmlToReadable, parseHtmlTree, READABLE_MAX_CHARS } from './readable.js'

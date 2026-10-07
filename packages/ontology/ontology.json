@@ -51,6 +51,7 @@
     "packages/contracts/src/position-work.ts",
     "packages/contracts/src/pr.ts",
     "packages/contracts/src/pricing-catalog.ts",
+    "packages/contracts/src/read-routes.ts",
     "packages/contracts/src/roles.ts",
     "packages/contracts/src/run-limits.ts",
     "packages/contracts/src/run.ts",
@@ -116,7 +117,7 @@
     "packages/roles/roles/social/x.yml",
     "packages/roles/roles/social/youtube.yml"
   ],
-  "source_digest": "3910f143f40482686977cf7afb8430c4",
+  "source_digest": "62ff7c2a6fc2c29bf8909b3f2946a684",
   "objects": [
     {
       "id": "ad",
