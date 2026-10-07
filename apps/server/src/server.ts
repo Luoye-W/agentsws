@@ -510,6 +510,7 @@ import {
 } from './social.js'
 // WP73（56 §6）：九条渠道真打出去的那一跳 + 社媒库的 /v1 面
 import { createSocialChannels, type SocialFetch } from './social-channels.js'
+import { isSocialExecutableApproval } from './social-executor.js'
 import { createSocialService } from './social-service.js'
 import { createStandby } from './standby.js'
 import { mountStatic } from './static.js'
@@ -1856,6 +1857,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       // WP249：自家版版务卡批了 → 经 Reddit 出口（接口优先、官方号浏览器兜底）执行卡上那一个动作
       const ownSubApplied = await brand?.socialService.ownSub?.apply(change)
       if (ownSubApplied !== undefined) return ownSubApplied
+      // WP254（决策 117）：别的社群的版务卡批了 → 经这条渠道适配器的 moderate 执行卡上那一个动作
+      const moderationApplied = await brand?.socialService.executor.applyModeration(change)
+      if (moderationApplied !== undefined) return moderationApplied
       // WP172：B2B 库的卡批了才落库（不是 B2B 库的卡回 undefined，掉回原来那条路）
       const b2bApplied = brand?.b2bService.apply(change)
       if (b2bApplied !== undefined) {
@@ -1887,6 +1891,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
        */
       const sandboxed = kolSandboxIntercept(brand, item)
       if (sandboxed !== undefined) return sandboxed
+      // WP254（决策 117）：社媒回帖卡批了就发——经这条渠道的出口（Reddit：接口优先、官方号浏览器兜底）
+      const socialReply = await brand?.socialService.executor.deliverReply(item)
+      if (socialReply !== undefined) return socialReply
       // WP57：聊天草稿（`payload.channel === 'chat'`）先问聊天车道，它接不住才轮到邮件
       return (
         (await brand?.chat.deliver(item, opts)) ??
@@ -2901,6 +2908,17 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         apiConnected: () => socialChannels.transport.connected('reddit'),
         applyApproval: (id) => txn.executor.applyApproval(id),
         cancelWindowMs: txn.runtime.policy.cancel_window_sec * 1000,
+      },
+      // WP254（决策 117）：别的社群的版务卡与回帖卡批了，过了取消窗口由执行器施行（定时发布那一轮补扫）
+      executor: {
+        applyApproval: (id) => txn.executor.applyApproval(id),
+        cancelWindowMs: txn.runtime.policy.cancel_window_sec * 1000,
+        approvedItems: () =>
+          txn.runtime.store.listApprovals({
+            workspace_id: ws,
+            kind: 'outbound_draft',
+            state: ['approved', 'approved_edited'],
+          }),
       },
       // 日界线按**这个品牌的数据源**报的时区（与定时任务那一份同一个真源，
       // 不去读本机时区——那在测试与服务器上都不是用户所在的那个时区）
@@ -4906,6 +4924,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         await readonlyBrowser?.close()
         // WP249：官方号浏览器（登录窗口 / 无头那一个）一并关掉；登录态留在目录里
         socialService.ownSub?.close()
+        socialService.executor.close()
         await redditOfficial?.close()
         // WP246：「登录读号」的窗口开着就体面地关掉
         await readRoutes.close()
@@ -4937,6 +4956,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     // 驳回（「去邮箱回复」）什么都不做——人自己回，死信留在「设置 → 诊断」里
     // WP249：自家版版务卡批了 → 过了取消窗口施行（读队列时也会补扫一遍）
     if (isOwnSubApproval(item)) return brand?.socialService.ownSub?.onDecided(item)
+    // WP254：别的社群的版务卡 / 回帖卡批了 → 过了取消窗口施行（定时发布那一轮也会补扫）
+    if (isSocialExecutableApproval(item)) return brand?.socialService.executor.onDecided(item)
     if (item.kind === 'inbound_dead_letter') {
       const id = deadLetterToRequeue(item)
       if (id !== undefined) await brand?.channels.requeueDeadLetter(id)

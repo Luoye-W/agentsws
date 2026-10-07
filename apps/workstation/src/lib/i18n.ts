@@ -11,6 +11,7 @@ import { NPM_REGISTRY_EN, NPM_REGISTRY_ZH } from './i18n-npm-registry'
 import { OWN_SUB_EN, OWN_SUB_ZH } from './i18n-own-sub'
 import { POSITION_EN, POSITION_ZH } from './i18n-position'
 import { READ_ROUTES_EN, READ_ROUTES_ZH } from './i18n-read-routes'
+import { SOCIAL_EXEC_EN, SOCIAL_EXEC_ZH } from './i18n-social-exec'
 
 export type Lang = 'zh' | 'en'
 
@@ -7927,6 +7928,8 @@ const TABLES: Record<Lang, Table> = {
     ...OWN_SUB_ZH,
     // WP254：下载源（换国内源再试）
     ...NPM_REGISTRY_ZH,
+    // WP254：版务卡（批准执行 / 不做）与回帖卡
+    ...SOCIAL_EXEC_ZH,
   },
   en: {
     ...en,
@@ -7937,6 +7940,7 @@ const TABLES: Record<Lang, Table> = {
     ...LOCAL_CONNECTOR_EN,
     ...OWN_SUB_EN,
     ...NPM_REGISTRY_EN,
+    ...SOCIAL_EXEC_EN,
   },
 }
 

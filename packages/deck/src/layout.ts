@@ -165,6 +165,12 @@ export const LAYOUT_BY_CHANGE: Record<ChangeKind, DeckLayout> = {
   flow_edit: 'change',
   social_profile_edit: 'change',
   community_rules: 'change',
+  /*
+   * WP254（决策 117）：删帖 / 禁言 / 封禁都是**做之前**出的卡（风险档 medium，从不自动执行），
+   * 批了才由执行器经各渠道适配器去做——所以是改动卡（「批准执行 / 不做」），不是「事后决定」。
+   * 原来排在 ⑦ 是按「L2 已经做了、问要不要改回来」画的，按钮成了「解除禁言」——批一次删帖却点「解除禁言」。
+   */
+  community_moderation: 'change',
   address_change: 'change',
   split_order: 'change',
   create_fulfillment: 'change',
@@ -191,7 +197,6 @@ export const LAYOUT_BY_CHANGE: Record<ChangeKind, DeckLayout> = {
 
   // ── ⑦ 事后决定：系统已经做了，问要不要改回来 ───────────────────────
   pause_ad: 'aftermath',
-  community_moderation: 'aftermath',
   // WP96 起检查单不再进审批队列（见 `NOT_A_CARD`）：它是一次只读巡检的结果
   launch_check: 'aftermath',
 

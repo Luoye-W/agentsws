@@ -99,7 +99,6 @@ const PRIMARY_BY_KIND: Partial<Record<DeckLayout, Record<string, string>>> = {
   },
   aftermath: {
     pause_ad: 'verb.aftermath.approve.pause_ad',
-    community_moderation: 'verb.aftermath.approve.community_moderation',
   },
 }
 
@@ -154,6 +153,11 @@ const VERB_BY_KIND: Readonly<Record<string, Partial<Record<DeckAction, string>>>
   content_conflict: {
     approve: 'verb.content_conflict.approve',
     open: 'verb.content_conflict.open',
+  },
+  // WP254（决策 117）：版务卡是做之前的改动卡——「批准执行 / 不做」（批了就经渠道适配器真去删 / 禁 / 封）
+  community_moderation: {
+    approve: 'verb.moderation.approve',
+    reject: 'verb.moderation.reject',
   },
   b2b_account_transfer: {
     approve: 'verb.handoff.approve.account_transfer',
@@ -280,7 +284,7 @@ export const CATEGORY_BY_CHANGE: Partial<Record<ChangeKind, string>> = {
   // 变体 / 事后 / 人 / 转交
   design_variant: 'variants',
   pause_ad: 'after_stop_loss',
-  community_moderation: 'after_moderation',
+  community_moderation: 'moderation',
   launch_check: 'launch_check',
   community_membership: 'join',
   mention_triage: 'handoff',

@@ -82,6 +82,12 @@ import type { StageInput, StageOutcome } from '@agentsws/txn'
 import { createOwnSubQueue, type OwnSubQueue, type OwnSubQueueOptions } from './own-sub-queue.js'
 import type { SocialStore } from './social.js'
 import type { SocialChannelsAssembly } from './social-channels.js'
+import {
+  createSocialExecutor,
+  SOCIAL_REPLY_FORM,
+  type SocialExecutor,
+  type SocialExecutorOptions,
+} from './social-executor.js'
 import { recipientOf, type ScopeManagerRouter } from './supervisor.js'
 
 /**
@@ -121,6 +127,8 @@ export const SOCIAL_ACTIONS = {
   moderate: 'moderate',
   stagePost: 'stage_post',
   stageBroadcast: 'stage_broadcast',
+  // WP254：回帖 / 回私信（职责 yml 里那一条，出站卡）
+  replyThread: 'reply_thread',
 } as const
 
 export interface SocialServiceOptions {
@@ -208,6 +216,11 @@ export interface SocialServiceOptions {
     OwnSubQueueOptions,
     'officialBrowser' | 'apiConnected' | 'applyApproval' | 'cancelWindowMs'
   >
+  /**
+   * WP254（决策 117）：别的社群的版务卡与回帖卡批了之后的执行器要的那几样（施行口、取消窗口、
+   * 补扫时看哪些卡）。不给 = 只能由执行器被动调（`backendApply` / `deliverOutbound`），没人主动施行。
+   */
+  executor?: Pick<SocialExecutorOptions, 'applyApproval' | 'cancelWindowMs' | 'approvedItems'>
 }
 
 export interface SocialServiceAssembly {
@@ -230,6 +243,8 @@ export interface SocialServiceAssembly {
   publishDue(): Promise<SocialPublishSweep>
   /** WP249：自家版待处理（执行器与决定钩子从这里调）。没装配就没有。 */
   ownSub?: OwnSubQueue
+  /** WP254：别的社群的版务卡与回帖卡批了之后的执行器（`backendApply` / `deliverOutbound` / 决定钩子调）。 */
+  executor: SocialExecutor
 }
 
 /** {@link SocialServiceAssembly.broadcastDue} 回的那一份。 */
@@ -336,6 +351,31 @@ export function createSocialService(options: SocialServiceOptions): SocialServic
           }),
         )
       : { person: actor.person_id, via: rule }
+
+  /**
+   * WP254（决策 117）：版务卡卡面那几格——将执行什么（经哪条渠道）、原话、违反了哪几条群规。
+   * 执行器读的是 `action` / `target_external_id` 那几格结构化字段，这几格只给人看（只加不改）。
+   */
+  const moderationCardFields = (
+    account: SocialAccount,
+    action: ModerationAction,
+    from: { author: string; text: string; rules?: string[] },
+  ): Record<string, unknown> => {
+    const channel_label = socialChannelSpec(account.channel)?.zh ?? account.channel
+    const who = action === 'delete_post' || action === 'approve' ? '这条' : from.author
+    const will_do =
+      action === 'warn'
+        ? `提醒一句：${from.author}（只记在工作台里，平台上不做动作；要在群里说话请另出一张回帖卡）`
+        : `${ACTION_WORDS[action]}：${who}（经 ${channel_label} · ${account.display_name}）`
+    return {
+      action_label: ACTION_WORDS[action],
+      channel_label: `${channel_label} · ${account.display_name}`,
+      author: from.author,
+      excerpt: from.text.slice(0, 600),
+      will_do,
+      ...(from.rules === undefined || from.rules.length === 0 ? {} : { rule_texts: from.rules }),
+    }
+  }
 
   /** 一条 staged change 的共用那一段（提上去 → 翻成视图）。 */
   const stageOne = async (input: {
@@ -485,6 +525,17 @@ export function createSocialService(options: SocialServiceOptions): SocialServic
           ledger,
           emit: (type, actor, payload) => emit(type, actor, payload),
         })
+  /** WP254（决策 117）：别的社群的版务卡与回帖卡批了之后经渠道出口去做。 */
+  const executor = createSocialExecutor({
+    ...options.executor,
+    workspace_id,
+    store,
+    clock,
+    adapter: (channel) => options.channels?.adapters[channel],
+    emit: (type, actor, payload) => emit(type, actor, payload),
+    ledger,
+  })
+
   const ownSubOr501 = (): OwnSubQueue => {
     if (ownSub === undefined)
       throw new ApiError('not_implemented', '这个服务进程没有装配「自家版待处理」。')
@@ -820,6 +871,12 @@ export function createSocialService(options: SocialServiceOptions): SocialServic
             verdictM.action === 'delete_post' ? row.external_id : input.author_external_id,
           matched_rules: verdictM.matched_rules.map((r) => r.id),
           reason: verdictM.reason,
+          // WP254：卡面那几格（改动卡「批准执行 / 不做」要把将执行什么、原话、依据写清）
+          ...moderationCardFields(account, verdictM.action, {
+            author: input.author_handle,
+            text: input.text,
+            rules: verdictM.matched_rules.map((r) => r.text),
+          }),
         },
         notes: [verdictM.reason],
         title: `${ACTION_WORDS[verdictM.action]}：${input.author_handle}（${account.display_name}）`,
@@ -862,6 +919,10 @@ export function createSocialService(options: SocialServiceOptions): SocialServic
           target_external_id:
             action === 'delete_post' ? thread.external_id : thread.author_external_id,
           ...(input.reason === undefined ? {} : { reason: input.reason }),
+          ...moderationCardFields(account, action, {
+            author: thread.author_handle,
+            text: thread.text,
+          }),
         },
         notes: [
           input.reason ??
@@ -872,6 +933,100 @@ export function createSocialService(options: SocialServiceOptions): SocialServic
         seen: [{ type: 'community_thread', id: thread.id }],
         rule: 'role_holder',
       })
+    },
+
+    /*
+     * WP254（决策 117）：回一条线程 = 一张**回帖卡**（`outbound_draft`，56 §2 那一列写的是
+     * `outbound_message`——回一条评论不是一条变更）。形状与模拟世界那张同一个（`form: 'social_reply'`）。
+     * 批了由执行器经这条渠道的出口发出去；正文带第一人称承诺 / 无依据让步就打回（不出卡）。
+     */
+    async replyThread(actor, id, input): Promise<SocialStagedView> {
+      const thread = store.thread(id)
+      if (thread === undefined) throw new ApiError('not_found', `没有这条线程：${id}`)
+      const account = accountOr404(thread.account_id)
+      const text = input.text.trim()
+      const scan = checkOutbound(text)
+      if (!scan.ok) throw new ApiError('invalid_input', scan.rewrite_instruction)
+      const channel_label = socialChannelSpec(thread.channel)?.zh ?? thread.channel
+      const target: ObjectRef = { type: 'community_thread', id: thread.id }
+      const { level } = actionOf(actor.assignment_id, SOCIAL_ACTIONS.replyThread)
+      const run_id = `run_social_${nextId('r')}`
+      const item = await approvals.create({
+        workspace_id,
+        schema_version: 1,
+        kind: 'outbound_draft',
+        role_id: actor.role_id,
+        subject: { object: target },
+        dedupe_key: `${workspace_id}:social_reply:${thread.id}:${nextId('d')}`,
+        title: `回${thread.surface === 'dm' ? '私信' : '帖子'}：${thread.author_handle}（${channel_label} · ${account.display_name}）`,
+        summary: text.slice(0, 120),
+        payload: {
+          form: SOCIAL_REPLY_FORM,
+          channel: thread.channel,
+          channel_label: `${channel_label} · ${account.display_name}`,
+          account_id: account.id,
+          thread_id: thread.id,
+          to: target,
+          author: thread.author_handle,
+          // 回的是哪一句（人批之前要看见；外部文本，只上卡不进事件）
+          in_reply_to: thread.text.slice(0, 300),
+          body: { text },
+        },
+        evidence: {
+          source_events: [],
+          run_id,
+          provenance: { seen: [target] },
+          precheck: {},
+        },
+        proposer: { kind: 'person', id: actor.person_id, assignment_id: actor.assignment_id },
+        // 回帖卡一律人点（批了就发出去、收不回来）；配置的等级只记进事件，不据此自动放行
+        automation: {
+          level_at_creation: 'L1',
+          auto_approved: false,
+          mandate_check: { within: true, caps_hit: [] },
+          sampling: { selected: false },
+        },
+        routing: {
+          recipients: [await recipientFor(actor, 'role_holder')],
+          rule: 'role_holder',
+          escalation: {
+            after_hours: 12,
+            business_hours: true,
+            chain: ['scope_manager'],
+            escalated_at: [],
+          },
+          separation_of_duties: false,
+        },
+        priority: 'queue',
+        context: {
+          // 31 §3.3 收件人门禁：回的是这条线程里的人，不是我们自己挑的地址
+          thread_participants: [thread.id],
+          gates: [
+            {
+              gate: 'commitment_scan' as const,
+              status: 'pass' as const,
+              ruleset_hash: 'support-core/commitment',
+              evidence: { hits: 0 },
+            },
+          ],
+        },
+      })
+      emit('social.reply_staged', actor.person_id, {
+        thread_id: thread.id,
+        channel: thread.channel,
+        configured_level: level,
+        blocked: item.state === 'blocked',
+      })
+      if (item.state === 'blocked')
+        return {
+          staged: false,
+          message: `没出卡：前置检查没过（${Object.entries(item.evidence.precheck)
+            .filter(([, v]) => v !== 'ok')
+            .map(([k]) => k)
+            .join('、')}）`,
+          level: 'L1',
+        }
+      return { staged: true, approval_item_id: item.id, level: 'L1' }
     },
 
     async broadcast(actor, input: SocialBroadcastInput): Promise<SocialBroadcastView> {
@@ -1064,6 +1219,8 @@ export function createSocialService(options: SocialServiceOptions): SocialServic
    *    "这条渠道还没接上"。
    */
   const publishDue = async (): Promise<SocialPublishSweep> => {
+    // WP254：顺手补扫批了、过了取消窗口还没施行的版务卡与回帖卡（批准那一刻排的那一次可能随进程重启丢了）
+    await executor.sweep().catch(() => 0)
     const now = clock.now()
     const nowMs = Date.parse(now)
     const due = store
@@ -1260,5 +1417,11 @@ export function createSocialService(options: SocialServiceOptions): SocialServic
     return out
   }
 
-  return { port, publishDue, broadcastDue, ...(ownSub === undefined ? {} : { ownSub }) }
+  return {
+    port,
+    publishDue,
+    broadcastDue,
+    executor,
+    ...(ownSub === undefined ? {} : { ownSub }),
+  }
 }
