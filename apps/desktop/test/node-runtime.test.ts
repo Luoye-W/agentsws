@@ -9,6 +9,8 @@ import {
   nodeAbort,
   nodeSpawner,
   nodeTimers,
+  osFreePort,
+  portIsFree,
   sleep,
   systemClock,
   windowsKillTree,
@@ -261,5 +263,25 @@ describe('tray-icon', () => {
   it('两档分辨率的 data URL 都是 PNG', () => {
     expect(TRAY_ICON_DATA_URL.startsWith('data:image/png;base64,')).toBe(true)
     expect(TRAY_ICON_2X_DATA_URL.length).toBeGreaterThan(TRAY_ICON_DATA_URL.length)
+  })
+})
+
+describe('WP247：选端口用的两件', () => {
+  it('系统给的端口是空的；占上之后就不空了', async () => {
+    const { createServer } = await import('node:net')
+    const port = await osFreePort()
+    expect(port).toBeGreaterThan(0)
+    expect(await portIsFree(port)).toBe(true)
+    const server = createServer()
+    await new Promise<void>((r) => server.listen(port, '127.0.0.1', r))
+    try {
+      expect(await portIsFree(port)).toBe(false)
+    } finally {
+      server.close()
+    }
+  })
+
+  it('系统给不出端口（主机名不对）→ 抛', async () => {
+    await expect(osFreePort('256.0.0.1')).rejects.toThrow()
   })
 })

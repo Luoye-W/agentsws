@@ -157,6 +157,17 @@ Shopify / Meta / WhatsApp 的 webhook 接收、IMAP 轮询、飞书事件订阅�
 
 **核实（09-08，`SECURITY.md`）**：admin 与 runtime 鉴权**默认关闭**；无 `OOMOL_CONNECT_ENCRYPTION_KEY` 时凭据与 idempotent 响应**明文**；每个 provider proxy **默认允许**直到用变量限制，Action 策略不约束 proxy；持久 token 的 `allowedProxies` 空 = 拒绝 proxy，但 `allowedConnections` 空 = **不限制连接**；安全修复只发在最新版。→ 安装器强制：`ENCRYPTION_KEY` + `ADMIN_TOKEN` 未设不启动；`OOMOL_CONNECT_BLOCKED_PROXIES="*"` 默认；role-read token 的 allowedConnections 必须非空；升级策略不能永久锁旧版（上游哨兵盯安全公告）。
 
+**落地（WP247，Luoye 10-07 定 85）：不打进安装包、不要 Docker，按需下载 + 桌面壳当后台服务。**
+
+| 项 | 怎么做的 |
+|---|---|
+| 发行形态 | npm 包 `@oomol-lab/open-connector`（无头库）+ 我们自己的宿主脚本；版本钉在 `packages/connect-adapter/src/local-runtime.ts`，锁文件 `open-connector-lock.json`（318 个包逐个 sha512）。不用官方单文件发行物（每平台 180–204 MB、不压缩；npm 实测只下 26.8 MB） |
+| 下载 | 服务进程用安装包自带的 node + 钉版本 npm（WP245）`npm ci --ignore-scripts` 装进 `<data>/runtime/open-connector/<版本>`；进度按「已取回 N / 318」、可取消、失败分网络 / 超时 / 磁盘 / 权限 / 校验；升级时上一版留一份可回退 |
+| 起停 | 桌面壳 `connect-launcher.ts`（sidecar 监督者：退避重启、连续失败停在 failed 等人点重启）；只听 127.0.0.1，端口第一次选好记进配置（OAuth 回调地址不变）；应用退出时关 stdin 请它收尾，Windows 到点按进程树强杀 |
+| 加固 | 宿主脚本缺 `ENCRYPTION_KEY` / `ADMIN_TOKEN` 或 proxy 没封 `*` 就拒绝启动（退出码 78）；`/v1` 另挂一把由管理令牌派生的静态令牌（全新库也不匿名可读）；两把密钥来自桌面壳的 safeStorage，只经环境变量给子进程；`assertRuntimeHardened` 通过才算就绪 |
+| 地址出处 | 仍只有两种：`AGENTSWS_CONNECT_URL` 显式给了就用它、不拉起本机的（Docker / 外部 / 将来的云端连接 86）；否则打包版由壳起本机的并把地址交给服务进程（`AGENTSWS_CONNECT_LOCAL_RUNTIME=1`） |
+| 数据 | `<data>/runtime/open-connector-data`（每台机一份；品牌靠命名连接 + 各品牌自己的 adapter 状态区分，WP66）；「删除下载」只删 `open-connector/`，不碰它 |
+
 **风险**
 
 1. **成熟度**：目录大不等于能跑。verification 文档自己承认 `catalogOnly` 的存在。要在开工第一阶段对我们的 10 个关键 provider 做冒烟，统计 `locallyExecutable` 比例，不合格的自己补 executor

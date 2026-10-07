@@ -11,6 +11,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./local-runtime": {
+      "types": "./dist/local-runtime.d.ts",
+      "import": "./dist/local-runtime.js"
     }
   },
   "scripts": {

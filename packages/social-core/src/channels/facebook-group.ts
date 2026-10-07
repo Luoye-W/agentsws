@@ -252,6 +252,7 @@ export function moderateScript(input: ModerateInput): BrowserAction {
     ban: '把这个人移出并封禁',
     permanent_ban: '把这个人永久封禁',
     unban: '解除这个人的封禁',
+    approve: '批准这条帖子',
   }
   return {
     url: groupUrl(input.account_external_id),

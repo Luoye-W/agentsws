@@ -60,6 +60,7 @@ import { designRoleFamily } from '@agentsws/brand-design'
 import type { PageFetch as BrandIntakeFetch } from '@agentsws/brand-intake'
 import type { ResolveMx } from '@agentsws/channels'
 import { routeOfPosition } from '@agentsws/channels'
+import { LOCAL_RUNTIME_ENV } from '@agentsws/connect-adapter'
 import type {
   AdsCaps,
   ApprovalBus,
@@ -387,12 +388,17 @@ import {
   SUGGEST_MAX_OUTPUT_TOKENS,
   sha256 as suggestSha,
 } from './onboarding-suggest.js'
+import {
+  createOpenConnectorInstaller,
+  type OpenConnectorInstallerOptions,
+} from './open-connector-installer.js'
 import { createOrg, type OrgAssembly } from './org.js'
 import { createOrgDuplicateScan, type OrgDuplicateScan } from './org-duplicates.js'
 import {
   createOrganizations as createOrganizationsAssembly,
   type OrganizationsAssembly,
 } from './organizations.js'
+import { isOwnSubApproval } from './own-sub-queue.js'
 import { alignOwnerEmail } from './owner-email.js'
 import { createOwnerToolExecutor } from './owner-tools.js'
 import { createPageBodyReader } from './page-body.js'
@@ -436,6 +442,10 @@ import {
   type ReconcileGuardOptions,
 } from './reconcile.js'
 import { createConnectRecordSource } from './records.js'
+import {
+  createRedditOfficialBrowser,
+  type RedditOfficialBrowserOptions,
+} from './reddit-official-browser/index.js'
 import { createResearchToolExecutor, redditReadPrice } from './research-tools.js'
 import { readRunBrowser } from './run-browser.js'
 import { createRunLimitsSettings } from './run-limits-settings.js'
@@ -858,6 +868,11 @@ export interface ServerOptions {
    */
   platformCliRunner?: Partial<Omit<PlatformCliRunnerOptions, 'now'>>
   /**
+   * WP247：本机连接器下载器的注入点（测试换成假 npm，不联网）。生产不传：只有桌面壳设了
+   * `AGENTSWS_CONNECT_LOCAL_RUNTIME=1`（它来起停本机连接器）且有数据目录时才装配。
+   */
+  localConnector?: Partial<Omit<OpenConnectorInstallerOptions, 'now' | 'dataDir'>>
+  /**
    * WP134：「用我的 DeepSeek 账号登录」的注入点（测试 / demo 用替身 → 全程不联网）。
    * 生产不传：第一次有人点"用 DeepSeek 账号登录"时才 `import()` 官方模块。
    */
@@ -892,6 +907,30 @@ export interface ServerOptions {
         /** WP246：只读白名单（测试放行本地假站点；默认 Reddit）。 */
         allowedHosts?: readonly string[]
       })
+    | false
+  /**
+   * WP249（决策 89）：Reddit 官方号浏览器通道（每品牌一个独立配置目录，与只读读号分开）。
+   * **给了才装**：生产入口给 `{}`；测试塞替身页面 / 本地假站点地址。不给 = 不装，Reddit 出口照旧
+   * 只有 OAuth 接口那一条，「自家版待处理」读不了（照实说怎么接上）。
+   */
+  redditOfficialBrowser?:
+    | Partial<
+        Pick<
+          RedditOfficialBrowserOptions,
+          | 'launch'
+          | 'openPage'
+          | 'exists'
+          | 'platform'
+          | 'env'
+          | 'nowMs'
+          | 'origin'
+          | 'allowedHosts'
+          | 'limits'
+          | 'sleep'
+          | 'idleMs'
+          | 'loginHeadless'
+        >
+      >
     | false
   /**
    * WP246：取数路线里要出网的那几级（YouTube 字幕、网页转文字、体检探测）。**给了才出网**：
@@ -1819,6 +1858,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       const brand = await brands?.forWorkspace(change.workspace_id)
       const sandboxed = kolOutreachApply(brand, change) ?? kolQuoteApply(brand, change)
       if (sandboxed !== undefined) return sandboxed
+      // WP249：自家版版务卡批了 → 经 Reddit 出口（接口优先、官方号浏览器兜底）执行卡上那一个动作
+      const ownSubApplied = await brand?.socialService.ownSub?.apply(change)
+      if (ownSubApplied !== undefined) return ownSubApplied
       // WP172：B2B 库的卡批了才落库（不是 B2B 库的卡回 undefined，掉回原来那条路）
       const b2bApplied = brand?.b2bService.apply(change)
       if (b2bApplied !== undefined) {
@@ -2392,6 +2434,27 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     appendEvent,
   })
 
+  /**
+   * WP247：本机连接器（按需下载、桌面壳起停）——**整台机器一份**，各品牌共用。只有桌面壳说了「我来起它」
+   * （`AGENTSWS_CONNECT_LOCAL_RUNTIME=1`，同时一定给了 `AGENTSWS_CONNECT_URL`）且有数据目录时才有；
+   * 指外部 runtime / Docker 档 / 替身档都没有它（runtime 地址仍然只认那两种来源）。
+   */
+  const localConnector =
+    dbDir !== undefined &&
+    env[LOCAL_RUNTIME_ENV] === '1' &&
+    (env.AGENTSWS_CONNECT_URL ?? '').trim() !== ''
+      ? createOpenConnectorInstaller({
+          dataDir: dbDir,
+          now: () => clock.now(),
+          env,
+          ...options.localConnector,
+        })
+      : undefined
+  // WP247：工作台升级带来了新钉的连接器版本 → 后台下好（桌面壳看到就切过去，旧版留一份可回退）。
+  //     上游的安全修复只发在最新版（08 §5），所以默认跟；`AGENTSWS_CONNECT_AUTO_UPDATE=0` 关掉。
+  if (localConnector !== undefined && env.AGENTSWS_CONNECT_AUTO_UPDATE !== '0')
+    localConnector.autoUpdate()
+
   const assembleBrand = async (ws: WorkspaceId): Promise<BrandModuleSet> => {
     const isBootstrap = ws === workspace.id
     const dir = brandDirOf(dbDir, ws, workspace.id)
@@ -2432,6 +2495,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       ...(options.resolveMx === undefined ? {} : { resolveMx: options.resolveMx }),
       ...(options.connect === undefined ? {} : { connect: options.connect }),
       ...(dir === undefined ? {} : { dbDir: dir }),
+      ...(localConnector === undefined ? {} : { localRuntime: localConnector }),
     })
 
     /**
@@ -2803,12 +2867,27 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
      * 它的"连上了"看的是第三栏那个受控浏览器（55 §3），这里先不装，
      * 装配在浏览器设置那一侧（`browser-settings.ts`）落地之后再接。
      */
+    /*
+     * WP249（决策 89）：Reddit 官方号浏览器通道（每品牌一份，目录 `<品牌目录>/reddit-official-browser/`，
+     * 与只读读号那份分开）。托管实例不装（云上没有浏览器、也不该有谁的登录态）。
+     */
+    const robOptions = options.redditOfficialBrowser
+    const redditOfficial =
+      robOptions === undefined || robOptions === false || hostedBoot !== undefined
+        ? undefined
+        : createRedditOfficialBrowser({
+            ...(dir === undefined ? {} : { dir: join(dir, 'reddit-official-browser') }),
+            nowMs: () => Date.parse(clock.now()),
+            executable: () => browserSettings.get().executable_path,
+            ...robOptions,
+          })
     const socialChannels = createSocialChannels({
       workspace_id: ws,
       clock,
       connections: () => connections.liveConnections(),
       secrets: brandSecrets,
       ...(options.socialFetch === undefined ? {} : { fetch: options.socialFetch }),
+      ...(redditOfficial === undefined ? {} : { redditBrowser: redditOfficial.port }),
     })
     /**
      * WP73：社媒库的 `/v1` 面。
@@ -2822,6 +2901,13 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       store: social,
       // WP73：到点真发出去那一跳走这九条适配器
       channels: socialChannels,
+      // WP249：自家版待处理（批了的版务卡过了取消窗口由执行器施行，结果进变更账本）
+      ownSub: {
+        ...(redditOfficial === undefined ? {} : { officialBrowser: redditOfficial }),
+        apiConnected: () => socialChannels.transport.connected('reddit'),
+        applyApproval: (id) => txn.executor.applyApproval(id),
+        cancelWindowMs: txn.runtime.policy.cancel_window_sec * 1000,
+      },
       // 日界线按**这个品牌的数据源**报的时区（与定时任务那一份同一个真源，
       // 不去读本机时区——那在测试与服务器上都不是用户所在的那个时区）
       tzOffsetMinutes: workData.tz_offset_minutes,
@@ -3217,7 +3303,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         : createRedditReadAccount({
             browser: readonlyBrowser,
             ...(dir === undefined ? {} : { dir: join(dir, 'readonly-browser') }),
-            brandHandles: () => social.accounts({ channel: 'reddit' }).map((a) => a.handle),
+            // 决策 108：登记过的 Reddit 号 + 在「官方号浏览器」里登录过的官方号（WP249），都不能当读号
+            brandHandles: () => [
+              ...social.accounts({ channel: 'reddit' }).map((a) => a.handle),
+              ...(redditOfficial?.officialUsernames() ?? []),
+            ],
             nowMs: () => Date.parse(clock.now()),
             ...(rbLaunch.platform === undefined ? {} : { platform: rbLaunch.platform }),
             ...(rbLaunch.env === undefined ? {} : { env: rbLaunch.env }),
@@ -4833,6 +4923,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         ownCloud.kolSync?.close()
         // WP228：只读浏览器开着就关掉（按进程树结束，不留孤儿）
         await readonlyBrowser?.close()
+        // WP249：官方号浏览器（登录窗口 / 无头那一个）一并关掉；登录态留在目录里
+        socialService.ownSub?.close()
+        await redditOfficial?.close()
         // WP246：「登录读号」的窗口开着就体面地关掉
         await readRoutes.close()
         rosterSync.close()
@@ -4861,6 +4954,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     if (item.kind === B2B_SENDER_CHOICE_KIND) return brand?.b2bOutbound.onSenderChosen(item)
     // WP210：客户来信投不进的那张卡批了（「再投一次」）→ 把那条死信重投回队列；
     // 驳回（「去邮箱回复」）什么都不做——人自己回，死信留在「设置 → 诊断」里
+    // WP249：自家版版务卡批了 → 过了取消窗口施行（读队列时也会补扫一遍）
+    if (isOwnSubApproval(item)) return brand?.socialService.ownSub?.onDecided(item)
     if (item.kind === 'inbound_dead_letter') {
       const id = deadLetterToRequeue(item)
       if (id !== undefined) await brand?.channels.requeueDeadLetter(id)
@@ -8508,6 +8603,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       await dshScenesSetup.manager?.close()
       // WP245：替用户跑着的安装 / 登录一并停掉（不留孤儿进程等浏览器）
       platformCliRunner.dispose()
+      // WP247：正在下载的连接器一并停掉（下了一半的暂存目录由下载器自己清）
+      localConnector?.dispose()
       learning.close()
       knowledge.close()
       data.close()

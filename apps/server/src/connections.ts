@@ -17,19 +17,20 @@
  */
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
-import type {
-  BeginConnectResult,
-  ConnectionsActor,
-  ConnectionsPort,
-  ConnectionView,
-  ConnectRequestStatus,
-  ConnectTestResult,
-  MailboxDetectResult,
-  MailboxPresetView,
-  ProviderFieldSpec,
-  ProviderView,
-  RuntimeStatusView,
-  SubmitConnectionInput,
+import {
+  ApiError,
+  type BeginConnectResult,
+  type ConnectionsActor,
+  type ConnectionsPort,
+  type ConnectionView,
+  type ConnectRequestStatus,
+  type ConnectTestResult,
+  type MailboxDetectResult,
+  type MailboxPresetView,
+  type ProviderFieldSpec,
+  type ProviderView,
+  type RuntimeStatusView,
+  type SubmitConnectionInput,
 } from '@agentsws/api'
 import {
   classifyMailFailure,
@@ -69,6 +70,11 @@ import {
   serviceOfUpstream,
 } from './catalog.js'
 import {
+  LocalRuntimeError,
+  localStatus,
+  type OpenConnectorInstaller,
+} from './open-connector-installer.js'
+import {
   createSecretStore,
   SECRETS_KEY_ENV,
   type SecretStore,
@@ -88,6 +94,8 @@ const SMOKE_ASSIGNMENT = 'asg_connection_smoke'
 const SMOKE_TOKEN_TTL_SECONDS = 120
 /** 加固检查的缓存时长——每敲一次界面就去探一次 runtime 没必要。 */
 const HARDENING_TTL_MS = 30_000
+/** WP247：本机连接器装好了、还在启动（探不到）时，加固检查只缓存这么久。 */
+const LOCAL_STARTING_TTL_MS = 2_000
 const LOCAL_SERVICE = 'imap_smtp'
 
 /** OpenConnector 的最小面（真适配器与替身都满足这个形状）。 */
@@ -221,6 +229,12 @@ export interface ConnectionsOptions {
    * 它只影响**目录里显示哪张店铺卡**：别的平台的卡不渲染（51 §1 「它影响什么」①）。
    */
   storefrontPlatform?: () => StorefrontPlatform | undefined
+  /**
+   * WP247：本机连接器归工作台管（桌面版、没指外部 runtime）时的下载器——**整台机器一份**，各品牌的连接面共用
+   * （一台机一个 runtime，品牌靠命名连接区分，WP66）。给了它：没下载时依赖连接器的卡**点得动**（点了先下载），
+   * 状态里多一块 `local`，下载 / 重启 / 回退 / 删除走它。
+   */
+  localRuntime?: OpenConnectorInstaller
 }
 
 export interface ConnectionsAssembly {
@@ -719,10 +733,28 @@ export async function createConnections(options: ConnectionsOptions): Promise<Co
 
   // ── runtime 加固检查（带缓存）
   let hardening: { at: number; report: Awaited<ReturnType<typeof probe>> } | undefined
+  /**
+   * WP247：本机连接器的「指纹」（装的哪一版 + 监督者状态 + 进程号）。一变就不吃缓存——刚下载完 / 刚起来 /
+   * 刚崩过的那一刻界面要立刻跟上，而不是等 30 秒。还在启动（探不到）时缓存也只留 2 秒。
+   */
+  let localKey: string | undefined
   const hardeningReport = async (): Promise<Awaited<ReturnType<typeof probe>> | undefined> => {
     if (baseUrl === undefined || baseUrl === '') return undefined
     const now = Date.parse(clock.now())
-    if (hardening !== undefined && now - hardening.at < HARDENING_TTL_MS) return hardening.report
+    const local = options.localRuntime?.snapshot()
+    if (local !== undefined) {
+      const key = [local.installed, local.supervisor?.state, local.supervisor?.pid, local.desired]
+        .map(String)
+        .join('|')
+      if (key !== localKey) hardening = undefined
+      localKey = key
+    }
+    const ttl =
+      local?.installed !== undefined &&
+      hardening?.report.reasons.includes('runtime_unreachable') === true
+        ? LOCAL_STARTING_TTL_MS
+        : HARDENING_TTL_MS
+    if (hardening !== undefined && now - hardening.at < ttl) return hardening.report
     // 实测：全新 runtime 里一个 token 都没有时，匿名 /v1/health 是 200；适配器按需自签的
     // 目录 token 一存在，/v1 就强制鉴权。所以先让适配器把目录 token 签出来，再探。
     try {
@@ -768,15 +800,55 @@ export async function createConnections(options: ConnectionsOptions): Promise<Co
       }
     }
     const absent = report.reasons.includes('runtime_unreachable')
+    const state = report.ok ? 'ready' : absent ? 'absent' : 'unhardened'
+    const local = localConnectorView(state)
     return {
-      state: report.ok ? 'ready' : absent ? 'absent' : 'unhardened',
+      state,
       ...(baseUrl === undefined ? {} : { base_url: baseUrl }),
       reasons: [...report.reasons],
       checks: report.checks.map((c) => ({ ...c })),
       checked_at,
       secrets_vault: vault,
       egress,
+      ...(local === undefined ? {} : { local }),
     }
+  }
+
+  /** WP247：状态里的 `local` 那一块（本机连接器不归我们管就没有）。 */
+  const localConnectorView = (
+    hardened: 'ready' | 'absent' | 'unhardened',
+  ): RuntimeStatusView['local'] | undefined => {
+    const installer = options.localRuntime
+    if (installer === undefined) return undefined
+    const s = installer.snapshot()
+    const sup = s.supervisor
+    return {
+      status: localStatus(s, hardened),
+      version: s.version,
+      download_bytes: s.download_bytes,
+      ...(s.installed === undefined ? {} : { installed: s.installed }),
+      ...(s.previous === undefined ? {} : { previous: s.previous }),
+      update_available: s.update_available,
+      desired: s.desired,
+      ...(s.job === undefined ? {} : { job: s.job }),
+      ...(sup === undefined ? {} : { supervisor: { ...sup } }),
+    }
+  }
+
+  /** WP247：下载 / 重启 / 回退 / 删除之后回最新状态（加固缓存作废，免得界面停在旧的那一格）。 */
+  const localAction = async (
+    act: (i: OpenConnectorInstaller) => unknown,
+  ): Promise<RuntimeStatusView> => {
+    const installer = options.localRuntime
+    if (installer === undefined) throw new ApiError('not_implemented', '这台服务进程不管本机连接器')
+    try {
+      await act(installer)
+    } catch (err) {
+      if (err instanceof LocalRuntimeError) throw new ApiError('conflict', err.message)
+      throw err
+    }
+    hardening = undefined
+    return runtimeStatus()
   }
 
   /**
@@ -789,6 +861,8 @@ export async function createConnections(options: ConnectionsOptions): Promise<Co
     if (options.connect !== undefined) return 'ready'
     return (await runtimeStatus()).state
   }
+  /** WP247：依赖连接器的卡没下载时也点得动（点了先下载）——只在本机连接器归我们管时。 */
+  const downloadable = options.localRuntime !== undefined && !usingStandIn
 
   /** OpenConnector 那条路现在能不能用（替身档永远能用）。 */
   const connectUsable = async (): Promise<{ ok: boolean; reason?: string }> => {
@@ -799,7 +873,11 @@ export async function createConnections(options: ConnectionsOptions): Promise<Co
       ok: false,
       reason:
         status.state === 'absent'
-          ? '本机还没有装 OpenConnector runtime（或者它没起来）'
+          ? status.local !== undefined
+            ? status.local.installed === undefined
+              ? '本机连接器还没下载：在连接页点一下「连接」会先下载它'
+              : '本机连接器还在启动，稍等几秒再试'
+            : '本机还没有装 OpenConnector runtime（或者它没起来）'
           : `OpenConnector runtime 没加固好，不能用：${status.reasons.join('、')}`,
     }
   }
@@ -1182,12 +1260,14 @@ export async function createConnections(options: ConnectionsOptions): Promise<Co
         // 是两回事（51 §1 N0 里"没连"与"还没做"分得开的那条老规矩，同一条）。
         // WP111：判定整个搬进 `connectCardGating`（catalog.ts），这里只把结论端出去——
         // 没有 Docker 时那几张卡说的是"这张需要 Docker（可选）"，而不是让应用起不来。
-        const { available, unavailable_reason, requires_runtime } = connectCardGating({
-          entry,
-          runtime: runtimeState,
-          secretsAvailable: secrets.available,
-          vaultReason: `这台机器没有秘密库密钥（${SECRETS_KEY_ENV}），邮箱账号密码无处安全存放`,
-        })
+        const { available, unavailable_reason, requires_runtime, needs_download } =
+          connectCardGating({
+            entry,
+            runtime: runtimeState,
+            downloadable,
+            secretsAvailable: secrets.available,
+            vaultReason: `这台机器没有秘密库密钥（${SECRETS_KEY_ENV}），邮箱账号密码无处安全存放`,
+          })
         return {
           service: entry.service,
           label: entry.label,
@@ -1197,6 +1277,7 @@ export async function createConnections(options: ConnectionsOptions): Promise<Co
           available,
           ...(unavailable_reason === undefined ? {} : { unavailable_reason }),
           requires_runtime,
+          ...(needs_download === true ? { needs_download } : {}),
           data_sources: [...entry.data_sources],
           setup_guide: entry.setup_guide,
           ...(entry.data_note === undefined ? {} : { data_note: entry.data_note }),
@@ -1400,6 +1481,17 @@ export async function createConnections(options: ConnectionsOptions): Promise<Co
     test: (_actor, id) => testById(id),
 
     runtime: () => runtimeStatus(),
+
+    // WP247：本机连接器（按需下载、桌面壳起停）——不归我们管时整组不出现，路由回 501
+    ...(options.localRuntime === undefined
+      ? {}
+      : {
+          installLocalRuntime: () => localAction((i) => i.install()),
+          cancelLocalRuntime: () => localAction((i) => i.cancel()),
+          restartLocalRuntime: () => localAction((i) => i.restart()),
+          rollbackLocalRuntime: () => localAction((i) => i.rollback()),
+          removeLocalRuntime: () => localAction((i) => i.remove()),
+        }),
 
     /**
      * WP25 交付 B：按域名的 MX 记录认出是哪家邮箱。

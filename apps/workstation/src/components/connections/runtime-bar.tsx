@@ -11,10 +11,14 @@
  * - 秘密库密钥缺了 → 一句（邮箱密码暂时存不了）。
  *
  * fake-IP 不算「要动手」：连接器已经自己改用公共 DNS 了，所以它只进问号。
+ *
+ * WP247：桌面版的连接器由工作台按需下载、跟着工作台开关——那时 `status.local` 在，没就绪之前
+ * 顶上那一行换成 `LocalConnectorLine`（没下载 / 下载中 / 启动中 / 出错 / 停着，一句话 + 一个按钮）。
  */
 
 import { AlertTriangle, CheckCircle2, FlaskConical, PackageOpen } from 'lucide-react'
 import { useState } from 'react'
+import { LocalConnectorLine } from '@/components/connections/local-connector'
 import { Button } from '@/components/ui/button'
 import { Hint } from '@/components/ui/hint'
 import type { RuntimeStatusView } from '@/lib/api'
@@ -58,8 +62,17 @@ function detailOf(status: RuntimeStatusView, t: Translate): string {
   return parts.join(' ')
 }
 
-export function RuntimeBar({ status }: { status: RuntimeStatusView }): React.ReactNode {
+export function RuntimeBar({
+  status,
+  assignment,
+}: {
+  status: RuntimeStatusView
+  /** WP247：本机连接器的下载 / 重试按钮要带所有者那条 Assignment。 */
+  assignment?: string
+}): React.ReactNode {
   const { t } = useApp()
+  // WP247：本机连接器归工作台管、还没就绪时，顶上那一行换成它自己的（没下载 / 下载中 / 启动中 / 出错）
+  const local = status.local !== undefined && status.local.status !== 'ready'
   const [open, setOpen] = useState(false)
   const Icon = ICONS[status.state]
   const reasons = status.reasons.map((r) => {
@@ -70,7 +83,7 @@ export function RuntimeBar({ status }: { status: RuntimeStatusView }): React.Rea
     return { code: r, detail }
   })
   const shown = open ? reasons : reasons.slice(0, REASONS_SHOWN)
-  const needsAction = status.state === 'absent' || status.state === 'unhardened'
+  const needsAction = !local && (status.state === 'absent' || status.state === 'unhardened')
 
   return (
     <section
@@ -78,11 +91,15 @@ export function RuntimeBar({ status }: { status: RuntimeStatusView }): React.Rea
       data-state={status.state}
       className="flex min-w-0 flex-col gap-1.5 text-sm"
     >
-      <p className={cn('flex items-center gap-1.5 font-medium', TONE[status.state])}>
-        <Icon className="size-4 shrink-0" aria-hidden />
-        <span data-slot="status">{t(`connections.runtime.${status.state}`)}</span>
-        <Hint text={detailOf(status, t)} testId="runtime-detail" />
-      </p>
+      {local ? (
+        <LocalConnectorLine status={status} {...(assignment === undefined ? {} : { assignment })} />
+      ) : (
+        <p className={cn('flex items-center gap-1.5 font-medium', TONE[status.state])}>
+          <Icon className="size-4 shrink-0" aria-hidden />
+          <span data-slot="status">{t(`connections.runtime.${status.state}`)}</span>
+          <Hint text={detailOf(status, t)} testId="runtime-detail" />
+        </p>
+      )}
       {needsAction ? (
         <div
           data-testid="runtime-action"

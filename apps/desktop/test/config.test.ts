@@ -28,7 +28,15 @@ describe('parseConfig', () => {
       serverUrl: '',
       sceneInBrowser: false,
       updateGithubFallback: true,
+      connectPort: 0,
     })
+  })
+
+  // WP247：本机连接器的端口记在配置里（OAuth 回调地址因此不变）；坏值退回 0（= 下次重选）
+  it('connectPort 只认 0–65535 的整数，默认 0', () => {
+    expect(parseConfig({ connectPort: 43170 }).connectPort).toBe(43170)
+    expect(parseConfig({ connectPort: 70000 }).connectPort).toBe(0)
+    expect(parseConfig({ connectPort: '43170' }).connectPort).toBe(0)
   })
 
   // WP218：主源连不上退 GitHub 的开关，默认开

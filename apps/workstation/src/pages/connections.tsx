@@ -25,6 +25,12 @@ import { ConnectedRow } from '@/components/connections/connected-row'
 import { DataBackend } from '@/components/connections/data-backend'
 // WP83（54（将改号 55）§4 第一层）：按分类 + 搜索的「添加连接」，默认收起
 import { ConnectionDirectorySection } from '@/components/connections/directory'
+// WP247：本机连接器按需下载（点了要连接器的卡先问一句；下好、起来之后接着连）
+import {
+  DownloadConfirm,
+  localBusy,
+  useLocalConnectorAction,
+} from '@/components/connections/local-connector'
 // WP216：建站平台的官方 CLI 卡（平台没有 CLI 就不出）
 import { PlatformCliCard } from '@/components/connections/platform-cli-card'
 import { ProviderCard, type WizardPhase } from '@/components/connections/provider-card'
@@ -71,6 +77,13 @@ export function ConnectionsPage(): React.ReactNode {
   const [wizard, setWizard] = useState<Wizard | null>(null)
   const [results, setResults] = useState<Record<string, ConnectTestResult>>({})
   const [busyId, setBusyId] = useState<{ id: string; kind: 'test' | 'remove' } | null>(null)
+  /** WP247：等连接器下好、起来之后要接着连的那一张（点卡时它还没就绪）。 */
+  const [pendingConnect, setPendingConnect] = useState<{
+    service: string
+    label: string
+    auth_option?: string
+    confirm: boolean
+  } | null>(null)
   const pollTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // 连接由**工作区所有者**管（05 common.owner 的 authorize_connector）。一个人可能同时
@@ -84,6 +97,8 @@ export function ConnectionsPage(): React.ReactNode {
     queryKey: ['connect-runtime', ownerId],
     enabled: ready,
     queryFn: () => getConnectRuntime(ownerId),
+    // WP247：连接器下载中 / 启动中时 1.5 秒问一次（进度条要动、起来了要马上变绿）
+    refetchInterval: (q) => (localBusy(q.state.data) ? 1500 : false),
   })
   const providers = useQuery({
     queryKey: ['connect-providers', ownerId],
@@ -224,6 +239,28 @@ export function ConnectionsPage(): React.ReactNode {
     },
   })
 
+  // WP247：连接器刚变成就绪 → 卡上的「先下载」标记跟着变；等着的那一张接着连（只接一次）
+  const localStatus = runtime.data?.local?.status
+  const localConnector = useLocalConnectorAction(ownerId)
+  const lastLocal = useRef(localStatus)
+  useEffect(() => {
+    if (lastLocal.current !== localStatus && localStatus === 'ready')
+      void client.invalidateQueries({ queryKey: ['connect-providers'] })
+    lastLocal.current = localStatus
+  }, [localStatus, client])
+  const beginRef = useRef(begin)
+  beginRef.current = begin
+  useEffect(() => {
+    if (localStatus !== 'ready' || pendingConnect === null || pendingConnect.confirm) return
+    setPendingConnect(null)
+    beginRef.current.mutate({
+      service: pendingConnect.service,
+      ...(pendingConnect.auth_option === undefined
+        ? {}
+        : { auth_option: pendingConnect.auth_option }),
+    })
+  }, [localStatus, pendingConnect])
+
   const runTest = useMutation({
     mutationFn: (id: string) => testConnection(id, ownerId),
     onSettled: () => {
@@ -268,7 +305,22 @@ export function ConnectionsPage(): React.ReactNode {
         <BrandScopeNote testId="connections-brand-scope" />
       </header>
 
-      {runtime.data === undefined ? null : <RuntimeBar status={runtime.data} />}
+      {runtime.data === undefined ? null : (
+        <RuntimeBar
+          status={runtime.data}
+          {...(ownerId === undefined ? {} : { assignment: ownerId })}
+        />
+      )}
+      <DownloadConfirm
+        open={pendingConnect?.confirm === true}
+        bytes={runtime.data?.local?.download_bytes ?? 0}
+        serviceLabel={pendingConnect?.label ?? ''}
+        onCancel={() => setPendingConnect(null)}
+        onConfirm={() => {
+          setPendingConnect((p) => (p === null ? p : { ...p, confirm: false }))
+          localConnector.mutate('install')
+        }}
+      />
 
       <section className="flex flex-col gap-2">
         <h3 className="text-sm font-medium">{t('connections.connected')}</h3>
@@ -336,6 +388,22 @@ export function ConnectionsPage(): React.ReactNode {
                 })
                 // 开始向导就把高亮撤掉，免得跳转来的高亮一直挂着
                 if (highlight !== null) setParams({}, { replace: true })
+                // WP247：要连接器、它还没就绪——没下载（或下载失败）先问一句；在下 / 在起就排个队
+                const local = runtime.data?.local
+                if (p.needs_download === true && local !== undefined && local.status !== 'ready') {
+                  const idle =
+                    local.status === 'not_installed' ||
+                    (local.status === 'error' && local.installed === undefined)
+                  setPendingConnect({
+                    service: p.service,
+                    label: p.label,
+                    ...(auth_option === undefined ? {} : { auth_option }),
+                    confirm: idle,
+                  })
+                  if (!idle && (local.status === 'stopped' || local.status === 'error'))
+                    localConnector.mutate('restart')
+                  return
+                }
                 begin.mutate({
                   service: p.service,
                   ...(auth_option === undefined ? {} : { auth_option }),

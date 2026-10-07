@@ -148,6 +148,11 @@ export interface ProviderView {
    * 界面只能去 `unavailable_reason` 那句话里找「Docker」二字。
    */
   requires_runtime?: boolean
+  /**
+   * WP247：这张卡要本机连接器，而它还没下载（或正在下载 / 启动）——卡**点得动**，点了先弹
+   * 「要先下载连接器」的确认，下好、起来之后接着连。只在本机连接器归工作台管时出现。
+   */
+  needs_download?: boolean
 }
 
 export interface BeginConnectResult {
@@ -214,6 +219,60 @@ export interface RuntimeStatusView {
     /** 凭什么这么判（"api.deepseek.com 解析到了 198.18.0.7"）。 */
     detail?: string
   }
+  /**
+   * WP247：本机连接器由工作台**按需下载**、桌面壳当后台服务起停时才有这一块
+   * （桌面版且没有用 `AGENTSWS_CONNECT_URL` 指外部 runtime）。没有 = 不归我们管（Docker / 外部 / 替身）。
+   */
+  local?: LocalConnectorView
+}
+
+/** WP247：下载那件事走到哪了（连接页顶上那一行画进度）。 */
+export interface LocalConnectorJobView {
+  phase: 'preparing' | 'downloading' | 'verifying' | 'done' | 'failed' | 'cancelled'
+  /** 装的是哪一版（钉死在代码里的那一版）。 */
+  version: string
+  started_at: string
+  finished_at?: string
+  /** 已取回几个包 / 一共几个（锁文件里数出来的，所以能算百分比）。 */
+  fetched: number
+  total: number
+  /** 失败的种类（界面按它说一句人话）+ 原始码（`ENOTFOUND` / `EINTEGRITY` / `exit 1`）。 */
+  error?: {
+    code: 'network' | 'timeout' | 'disk_full' | 'permission' | 'integrity' | 'busy' | 'failed'
+    detail?: string
+  }
+}
+
+/** WP247：本机连接器的样子（连接页顶上一行 + 设置 · 诊断里那一块）。 */
+export interface LocalConnectorView {
+  /** 顶上那一行：没下载 / 下载中 / 启动中 / 就绪 / 出错 / 停着。 */
+  status: 'not_installed' | 'downloading' | 'starting' | 'ready' | 'error' | 'stopped'
+  /** 代码里钉死的那一版（要下载 / 升级到的）。 */
+  version: string
+  /** 这一版大约要下载多少字节（「约 30 MB」）。 */
+  download_bytes: number
+  /** 装好了的那一版；没装 = 没有。 */
+  installed?: string
+  /** 保留着可回退的上一版。 */
+  previous?: string
+  /** 装好的不是钉死那一版（升级了工作台）：再点一次「下载」就换新。 */
+  update_available: boolean
+  desired: 'run' | 'stop'
+  job?: LocalConnectorJobView
+  /** 桌面壳的监督者报上来的状态；没有 = 壳还没起它（或不在桌面版里）。 */
+  supervisor?: {
+    state: 'stopped' | 'starting' | 'running' | 'backoff' | 'failed'
+    version?: string
+    port: number
+    pid?: number
+    attempts: number
+    started_at?: string
+    last_exit?: { code: number | null; signal: string | null; at: string }
+    retry_in_ms?: number
+    /** 子进程最后一行错误输出（已脱敏）。 */
+    last_error?: string
+    updated_at: string
+  }
 }
 
 export interface ConnectionsActor {
@@ -257,6 +316,15 @@ export interface ConnectionsPort {
   remove(actor: ConnectionsActor, id: string): MaybePromise<void>
   test(actor: ConnectionsActor, id: string): MaybePromise<ConnectTestResult>
   runtime(): MaybePromise<RuntimeStatusView>
+  /**
+   * WP247：本机连接器（按需下载、桌面壳起停）。不实现 = 这台服务进程不管本机连接器
+   * （Docker / 外部 runtime / 替身），对应路由回 501。每个都回最新的 `RuntimeStatusView`。
+   */
+  installLocalRuntime?(): MaybePromise<RuntimeStatusView>
+  cancelLocalRuntime?(): MaybePromise<RuntimeStatusView>
+  restartLocalRuntime?(): MaybePromise<RuntimeStatusView>
+  rollbackLocalRuntime?(): MaybePromise<RuntimeStatusView>
+  removeLocalRuntime?(): MaybePromise<RuntimeStatusView>
   /**
    * 邮箱自动识别（WP25 交付 B）：只查一次 MX，回主机端口。
    *
@@ -390,6 +458,18 @@ function actorOf(c: Parameters<typeof principalOf>[0]): ConnectionsActor {
   return { workspace_id: p.workspace_id, person_id: p.person_id }
 }
 
+/** WP247：下载 / 重启 / 删除本机连接器只给人点（AI 运行的 runtime 令牌一律 403）。 */
+function humanOnly(c: Parameters<typeof principalOf>[0]): void {
+  if (principalOf(c).kind === 'runtime')
+    throw new ApiError(
+      'forbidden',
+      '本机连接器的下载、重启与删除只能由人在工作台上点，AI 运行不能调用',
+    )
+}
+
+const LOCAL_RUNTIME_UNMANAGED =
+  '这台服务进程不管本机连接器（用的是外部 / Docker 里的 runtime，或开发替身）'
+
 const SERVICE_PARAM = {
   name: 'service',
   in: 'path',
@@ -451,6 +531,108 @@ export function connectionRoutes(): Route[] {
         returns: 'RuntimeStatusView',
       },
       async (c, deps) => ok(c, await portOf(deps).runtime()),
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/connections/runtime/local/install',
+        operationId: 'installLocalConnectRuntime',
+        summary:
+          'WP247：下载本机连接器（钉死的版本、逐包校验 sha512）装进应用数据目录；下好由桌面壳当后台服务起。只给人点',
+        tag: TAG,
+        auth: 'bearer',
+        assignment: true,
+        authz: WRITE,
+        returns: 'RuntimeStatusView',
+      },
+      async (c, deps) => {
+        humanOnly(c)
+        const port = portOf(deps)
+        if (port.installLocalRuntime === undefined)
+          throw new ApiError('not_implemented', LOCAL_RUNTIME_UNMANAGED)
+        return ok(c, await port.installLocalRuntime())
+      },
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/connections/runtime/local/cancel',
+        operationId: 'cancelLocalConnectRuntime',
+        summary: 'WP247：停掉正在进行的连接器下载（下了一半的文件一并清掉）',
+        tag: TAG,
+        auth: 'bearer',
+        assignment: true,
+        authz: WRITE,
+        returns: 'RuntimeStatusView',
+      },
+      async (c, deps) => {
+        humanOnly(c)
+        const port = portOf(deps)
+        if (port.cancelLocalRuntime === undefined)
+          throw new ApiError('not_implemented', LOCAL_RUNTIME_UNMANAGED)
+        return ok(c, await port.cancelLocalRuntime())
+      },
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/connections/runtime/local/restart',
+        operationId: 'restartLocalConnectRuntime',
+        summary: 'WP247：请桌面壳重启本机连接器（设置 · 诊断里的「重启」）',
+        tag: TAG,
+        auth: 'bearer',
+        assignment: true,
+        authz: WRITE,
+        returns: 'RuntimeStatusView',
+      },
+      async (c, deps) => {
+        humanOnly(c)
+        const port = portOf(deps)
+        if (port.restartLocalRuntime === undefined)
+          throw new ApiError('not_implemented', LOCAL_RUNTIME_UNMANAGED)
+        return ok(c, await port.restartLocalRuntime())
+      },
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/connections/runtime/local/rollback',
+        operationId: 'rollbackLocalConnectRuntime',
+        summary: 'WP247：换回保留着的上一版连接器（升级后出问题时用）',
+        tag: TAG,
+        auth: 'bearer',
+        assignment: true,
+        authz: WRITE,
+        returns: 'RuntimeStatusView',
+      },
+      async (c, deps) => {
+        humanOnly(c)
+        const port = portOf(deps)
+        if (port.rollbackLocalRuntime === undefined)
+          throw new ApiError('not_implemented', LOCAL_RUNTIME_UNMANAGED)
+        return ok(c, await port.rollbackLocalRuntime())
+      },
+    ),
+    route(
+      {
+        method: 'delete',
+        path: '/v1/connections/runtime/local',
+        operationId: 'removeLocalConnectRuntime',
+        summary:
+          'WP247：删除下载的连接器（只删我们下载的那份程序；连接与凭据的数据目录不动）。先请桌面壳停下它',
+        tag: TAG,
+        auth: 'bearer',
+        assignment: true,
+        authz: WRITE,
+        returns: 'RuntimeStatusView',
+      },
+      async (c, deps) => {
+        humanOnly(c)
+        const port = portOf(deps)
+        if (port.removeLocalRuntime === undefined)
+          throw new ApiError('not_implemented', LOCAL_RUNTIME_UNMANAGED)
+        return ok(c, await port.removeLocalRuntime())
+      },
     ),
     route(
       {

@@ -295,6 +295,9 @@ export function createTelegramAdapter(transport: SocialTransport): SocialChannel
           if (!('data' in res)) return res
           break
         }
+        // WP249：版务队列的「批准」只有 Reddit 有
+        case 'approve':
+          return notImplemented(LABEL, 'Telegram 群没有版务队列，「批准」这一口不适用')
       }
       return { ok: true, observed_at: transport.now(), data: { ok: true } }
     },

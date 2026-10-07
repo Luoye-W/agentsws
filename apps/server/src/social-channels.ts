@@ -28,8 +28,13 @@
  */
 import type { Clock, SocialChannel, WorkspaceId } from '@agentsws/contracts'
 import { SOCIAL_CHANNELS } from '@agentsws/contracts'
-import type { BrowserExecutor, SocialChannelAdapter, SocialTransport } from '@agentsws/social-core'
-import { createSocialAdapters } from '@agentsws/social-core'
+import type {
+  BrowserExecutor,
+  RedditOfficialBrowserPort,
+  SocialChannelAdapter,
+  SocialTransport,
+} from '@agentsws/social-core'
+import { createRedditHybridAdapter, createSocialAdapters } from '@agentsws/social-core'
 import type { SecretStore } from './secret-store.js'
 
 /** 注入的 fetch（测试塞一个假的；生产用全局那一个）。 */
@@ -82,6 +87,11 @@ export interface SocialChannelsOptions {
    * 不给 = 那条渠道还是"只出脚本描述、不假装点过了"（WP72 那个样子）。
    */
   browser?: BrowserExecutor
+  /**
+   * WP249（决策 89）：Reddit 官方号浏览器通道。给了它，Reddit 的出口就是「OAuth 接口优先、
+   * 官方号浏览器兜底」（发帖 / 回帖 / 置顶公告 / 版务动作 / 版务队列都走这一个）。
+   */
+  redditBrowser?: RedditOfficialBrowserPort
 }
 
 export interface SocialChannelsAssembly {
@@ -153,12 +163,16 @@ export function createSocialChannels(options: SocialChannelsOptions): SocialChan
     },
   }
 
-  return {
+  const adapters = createSocialAdapters(
     transport,
-    adapters: createSocialAdapters(
+    options.browser === undefined ? {} : { browser: options.browser },
+  )
+  if (options.redditBrowser !== undefined)
+    adapters.reddit = createRedditHybridAdapter({
+      api: adapters.reddit,
+      apiConnected: () => transport.connected('reddit'),
+      browser: options.redditBrowser,
       transport,
-      options.browser === undefined ? {} : { browser: options.browser },
-    ),
-    connectionOf,
-  }
+    })
+  return { transport, adapters, connectionOf }
 }

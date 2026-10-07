@@ -1483,6 +1483,8 @@ export interface ConnectCardGating {
   unavailable_reason?: string
   /** 界面上「这张要 Docker」那个角标；与 `available` 分开——装好了它也还是要 Docker。 */
   requires_runtime: boolean
+  /** WP247：要本机连接器、它还没下载 / 没起来，但能由工作台按需下载——卡点得动，点了先下载。 */
+  needs_download?: boolean
 }
 
 /**
@@ -1493,10 +1495,18 @@ export interface ConnectCardGating {
  * 2. 本机库那几张 —— 缺 `AGENTSWS_SECRETS_KEY`，凭据无处安全存放。
  * 3. 要 runtime 那几张 + 没装 —— 就是这次要说的"需要 Docker（可选）"。
  * 4. 要 runtime + 装了没加固 —— 另一句话，别跟"没装"混成一句。
+ *
+ * WP247：第 3 层在桌面版上不再是「需要 Docker」——本机连接器能按需下载时卡照样点得动
+ * （`needs_download`），点了先弹「要先下载连接器」的确认。
  */
 export function connectCardGating(input: {
   entry: Pick<CatalogEntry, 'store' | 'planned'>
   runtime: ConnectRuntimeState
+  /**
+   * WP247：本机连接器归工作台管（桌面版按需下载、桌面壳起停）。`absent` 时不再是「需要 Docker」，
+   * 而是「点了先下载」。不给 = 老样子（Docker / 外部 runtime 那几档）。
+   */
+  downloadable?: boolean
   secretsAvailable: boolean
   /** 本机库那一档的理由（调用方知道环境变量名）。 */
   vaultReason: string
@@ -1510,6 +1520,8 @@ export function connectCardGating(input: {
       : { available: false, unavailable_reason: input.vaultReason, requires_runtime }
   if (input.runtime === 'ready' || input.runtime === 'stand_in')
     return { available: true, requires_runtime }
+  if (input.runtime === 'absent' && input.downloadable === true)
+    return { available: true, requires_runtime, needs_download: true }
   return {
     available: false,
     unavailable_reason:

@@ -186,6 +186,9 @@ const BAND_TONE: Record<DeckCard['priority_band'], Tone> = {
 export function categoryOf(card: DeckCard, t: (key: string) => string): string {
   // WP237：「走哪条职责」借的是认领卡的 kind，但它不是转交
   if (card.kind === 'claim' && card.layout === 'choice') return t('category.route_choice')
+  // WP249：自家版的版务卡是「做之前」的（排成改动卡），不是「处置后」
+  if (card.change_kind === 'community_moderation' && card.layout === 'change')
+    return t('category.own_sub_moderation')
   const key = categoryKey(card.kind, card.change_kind)
   return t(key ?? `kind.${card.kind}`)
 }
