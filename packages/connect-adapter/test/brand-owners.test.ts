@@ -40,6 +40,8 @@ interface FakeRuntime {
   puts: { service: string; connectionName: string }[]
   tokens: { allowedConnections: string[] }[]
   executed: { action: string; connectionName: string | undefined }[]
+  /** OAuth 发起时上游收到的连接名。 */
+  oauth: string[]
 }
 
 function fakeRuntime(seed: Partial<WireConn>[] = []): FakeRuntime {
@@ -59,6 +61,7 @@ function fakeRuntime(seed: Partial<WireConn>[] = []): FakeRuntime {
     puts: [],
     tokens: [],
     executed: [],
+    oauth: [],
     fetchImpl: async () => new Response('{}', { status: 404 }),
   }
   const json = (body: unknown, status = 200): Response =>
@@ -103,7 +106,22 @@ function fakeRuntime(seed: Partial<WireConn>[] = []): FakeRuntime {
       return json({ service, connectionName: name, configured: false })
     }
     if (path === '/v1/providers') {
-      return json({ success: true, data: [{ service: 'gotify', authTypes: ['api_key'] }] })
+      const all = [
+        { service: 'gotify', authTypes: ['api_key'] },
+        { service: 'gmail', authTypes: ['oauth2'] },
+      ]
+      const wanted = u.searchParams.getAll('service')
+      return json({
+        success: true,
+        data: wanted.length === 0 ? all : all.filter((p) => wanted.includes(p.service)),
+      })
+    }
+    if (path === '/api/oauth/authorizations' && method === 'POST') {
+      rt.oauth.push((body as { connectionName: string }).connectionName)
+      return json({
+        authorizationUrl: 'https://accounts.example.test/auth',
+        state: `st_${rt.oauth.length}`,
+      })
     }
     if (path === '/api/providers/gotify') {
       return json({ service: 'gotify', auth: [{ type: 'api_key', fields: [] }] })
@@ -475,5 +493,37 @@ describe('WP252 同一个品牌再推一次（令牌刷新 / 重连）', () => {
     const pushed = await submit(a, A, 'rotated')
     expect(pushed.id).toBe('c-a')
     expect(rt.conns.find((c) => c.id === 'legacy-1')?.secret).toBe('old')
+  })
+})
+
+describe('WP252 OAuth 那条路', () => {
+  it('授权发起时上游拿到带品牌段的名字；授权回来那条记成本品牌的，另一个品牌看不见', async () => {
+    const rt = fakeRuntime()
+    const owners = new ConnectionOwners()
+    const a = brand(rt, A, owners)
+    const b = brand(rt, B, owners)
+    const started = await b.beginConnect('gmail', {
+      workspace_id: B,
+      ownership: 'workspace',
+      alias: 'default',
+      mode: 'own_app',
+    })
+    expect(rt.oauth).toEqual(['default--ws_19cxxs7l'])
+    expect(await b.pollConnect(started.request_id)).toBe('initiated')
+    // 用户在浏览器里授权完：上游出现这条连接
+    rt.conns.push({
+      id: 'g-1',
+      service: 'gmail',
+      connectionName: 'default--ws_19cxxs7l',
+      authType: 'oauth2',
+      configured: true,
+      default: true,
+      secret: 'oauth-token',
+      profile: { accountId: 'g', displayName: 'hello@rollout.example' },
+    })
+    expect(await b.pollConnect(started.request_id)).toBe('connected')
+    expect(owners.ownerOf('g-1')?.workspace_id).toBe(B)
+    expect((await b.connections(B)).map((c) => [c.id, c.alias])).toEqual([['g-1', 'default']])
+    expect(await a.connections(A)).toEqual([])
   })
 })
