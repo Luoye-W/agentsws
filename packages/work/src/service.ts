@@ -469,6 +469,8 @@ export class Work {
       stopped?: MatterEvent['stopped']
       /** WP237：岗位内路由那一条上能一键选 / 换的职责。 */
       route?: MatterEvent['route']
+      /** WP253：「预览好了」那一条（界面据此出「打开预览」）。 */
+      preview?: MatterEvent['preview']
       at?: Iso8601
     },
   ): MatterEvent {
@@ -494,6 +496,9 @@ export class Work {
               options: input.route.options.map((o) => ({ ...o })),
             },
           }),
+      ...(input.preview === undefined
+        ? {}
+        : { preview: { url: input.preview.url, label: input.preview.label } }),
     }
     this.store.appendMatterEvent(event)
     this.store.putMatter({

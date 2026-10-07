@@ -213,6 +213,18 @@ export interface ShopifyThemeOptions {
    * 不给 = 系统 PATH 上的 `shopify`。
    */
   cli?: () => { command: string; prefix: readonly string[] }
+  /**
+   * WP253：CLI 自己登录过了（`shopify auth login`，WP245 的一键登录，按品牌记一笔）。
+   * 返回 true 时，没有主题令牌也照跑——凭据在 CLI 自己的会话里，我们不读、不传。
+   * 不给 = 老行为（没有令牌就 `no_token`）。
+   */
+  sessionLogin?: (shop: string) => boolean
+  /**
+   * WP253：这家店的工作副本放哪。不给 = `<workdir>/themes/<shop>`（老行为）。
+   * 建站岗位那一路给的是 `<data>/themes/<workspace>/<shop>`（与 `dsh-adapter` 的 `themeWorkspaceRoot`、
+   * 变更审阅 `change-files.ts` 同一个地方）。
+   */
+  workspaceDir?: (shop: string) => string
 }
 
 /** WP245：默认的起法（系统 PATH 上的 `shopify`）。 */
@@ -239,6 +251,28 @@ export interface ShopifyTheme {
   }): Promise<{ url: string | undefined; stop(): void }>
   /** 组一条"发布这份副本"的变更提案（before 取自线上那一份）。 */
   proposePublish(input: { shop: string; pushed: PushedTheme }): Promise<ThemePublishProposal>
+  /**
+   * WP253：官方 `theme check`（本地检查，不碰店铺、不要凭据）。有 error 的退出码不算失败——
+   * 那正是要回给人看的结果。
+   */
+  check(input: { shop: string }): Promise<ThemeCheckResult>
+  /**
+   * WP253：把工作副本推到**一份已经存在的副本**上（同名再推一次时更新它，不在店里堆一份又一份）。
+   * **调用方先确认它不是线上那一份**——这个方法不判（与 `publish` 同一条：判断在别处）。
+   */
+  pushToTheme(input: { shop: string; theme_id: string }): Promise<PushedTheme>
+}
+
+/** WP253：`theme check` 的结论（只留人要看的几格）。 */
+export interface ThemeCheckResult {
+  errors: number
+  warnings: number
+  offenses: {
+    path: string
+    severity: 'error' | 'warning' | 'info'
+    message: string
+    line?: number
+  }[]
 }
 
 // ── 输出清洗 ───────────────────────────────────────────────────────────
@@ -375,7 +409,7 @@ export function createShopifyTheme(options: ShopifyThemeOptions): ShopifyTheme {
     if (!/^[a-z0-9][a-z0-9.-]*$/.test(shop)) {
       throw new ShopifyThemeError('invalid_input', `店铺域名看不懂：${shop}`)
     }
-    const dir = join(options.workdir, 'themes', shop)
+    const dir = options.workspaceDir?.(shop) ?? join(options.workdir, 'themes', shop)
     mkdirSync(dir, { recursive: true })
     return dir
   }
@@ -383,7 +417,10 @@ export function createShopifyTheme(options: ShopifyThemeOptions): ShopifyTheme {
   /** 跑一条需要凭据的命令。没有令牌就别跑——跑了也只会拿到一句英文的 401。 */
   const runAuthed = async (shop: string, args: readonly string[]): Promise<CliResult> => {
     const token = options.tokenFor(shop)
-    if (token === undefined || token === '') {
+    // WP253：CLI 自己登录过（一键登录）就不要令牌——凭据在 CLI 的会话里
+    const viaSession =
+      (token === undefined || token === '') && options.sessionLogin?.(shop) === true
+    if ((token === undefined || token === '') && !viaSession) {
       throw new ShopifyThemeError(
         'no_token',
         `还没有 ${shop} 的主题访问凭据。先在连接页把这家店接上（Dev Dashboard 应用），` +
@@ -414,6 +451,25 @@ export function createShopifyTheme(options: ShopifyThemeOptions): ShopifyTheme {
       return JSON.parse(text.slice(at)) as unknown
     } catch {
       throw new ShopifyThemeError('bad_output', `${what}：CLI 回的 JSON 读不懂`)
+    }
+  }
+
+  /** `theme push --json` 回来的那一份 → {@link PushedTheme}（两条推送路共用）。 */
+  const pushedFrom = (result: CliResult, shop: string, name: string): PushedTheme => {
+    const parsed = parseJson(result.stdout, '推送主题') as Record<string, unknown>
+    const theme = (parsed.theme ?? parsed) as Record<string, unknown>
+    const id = theme.id
+    const theme_id = typeof id === 'number' ? String(id) : typeof id === 'string' ? id : undefined
+    if (theme_id === undefined) {
+      throw new ShopifyThemeError('bad_output', '推送主题：CLI 没有回新主题的 id')
+    }
+    const preview = pickUrl(theme, result.stdout)
+    emit('shopify.theme_pushed', { shop, theme_id, unpublished: true })
+    return {
+      theme_id,
+      theme_name: typeof theme.name === 'string' ? theme.name : name,
+      ...(preview === undefined ? {} : { preview_url: preview }),
+      path: workspaceOf(shop),
     }
   }
 
@@ -493,21 +549,7 @@ export function createShopifyTheme(options: ShopifyThemeOptions): ShopifyTheme {
         name,
         '--json',
       ])
-      const parsed = parseJson(result.stdout, '推送主题') as Record<string, unknown>
-      const theme = (parsed.theme ?? parsed) as Record<string, unknown>
-      const id = theme.id
-      const theme_id = typeof id === 'number' ? String(id) : typeof id === 'string' ? id : undefined
-      if (theme_id === undefined) {
-        throw new ShopifyThemeError('bad_output', '推送主题：CLI 没有回新主题的 id')
-      }
-      const preview = pickUrl(theme, result.stdout)
-      emit('shopify.theme_pushed', { shop, theme_id, unpublished: true })
-      return {
-        theme_id,
-        theme_name: typeof theme.name === 'string' ? theme.name : name,
-        ...(preview === undefined ? {} : { preview_url: preview }),
-        path: workspaceOf(shop),
-      }
+      return pushedFrom(result, shop, name)
     },
 
     async publish({ shop, theme_id }) {
@@ -582,6 +624,74 @@ export function createShopifyTheme(options: ShopifyThemeOptions): ShopifyTheme {
         staged_at: options.clock.now(),
       }
     },
+
+    async check({ shop }) {
+      // 本地检查：不要凭据、不碰店铺（`--path` 缺省就是 cwd = 工作副本）
+      const result = await run(['theme', 'check', '--output', 'json'], {
+        cwd: workspaceOf(shop),
+        env: childEnv(shop, undefined),
+        timeoutMs,
+      })
+      emit('shopify.theme_command', { shop, command: 'theme check', exit_code: result.code })
+      // 有 error 时退出码非零——那是结论不是失败；只有读不出 JSON 才算失败
+      if (result.stdout.search(/[[{]/) < 0) {
+        throw new ShopifyThemeError('cli_failed', cliFailureMessage(['theme', 'check'], result), {
+          detail: scrubCliOutput(`${result.stdout}\n${result.stderr}`).trim().slice(0, 600),
+        })
+      }
+      return parseCheck(parseJson(result.stdout, '主题检查'))
+    },
+
+    async pushToTheme({ shop, theme_id }) {
+      const result = await runAuthed(shop, ['theme', 'push', '--theme', theme_id, '--json'])
+      return pushedFrom(result, shop, theme_id)
+    },
+  }
+}
+
+/**
+ * `theme check --output json` → 人要看的几格。官方格式是「按文件一组、每组一串 offense」，
+ * severity 是数字（0 错误 / 1 警告 / 2 提示）；老版本是字符串。两种都认，认不出按警告。
+ */
+export function parseCheck(parsed: unknown): ThemeCheckResult {
+  const files = Array.isArray(parsed)
+    ? parsed
+    : Array.isArray((parsed as { files?: unknown }).files)
+      ? ((parsed as { files: unknown[] }).files as unknown[])
+      : []
+  const offenses: ThemeCheckResult['offenses'] = []
+  for (const f of files) {
+    if (f === null || typeof f !== 'object') continue
+    const file = f as Record<string, unknown>
+    const path = typeof file.path === 'string' ? file.path : ''
+    const list = Array.isArray(file.offenses) ? file.offenses : []
+    for (const o of list) {
+      if (o === null || typeof o !== 'object') continue
+      const off = o as Record<string, unknown>
+      const sev = off.severity
+      const severity: 'error' | 'warning' | 'info' =
+        sev === 0 || sev === 'error' ? 'error' : sev === 2 || sev === 'info' ? 'info' : 'warning'
+      const start = off.start as { line?: unknown } | undefined
+      const line =
+        typeof start?.line === 'number'
+          ? start.line + 1
+          : typeof off.start_row === 'number'
+            ? off.start_row + 1
+            : undefined
+      offenses.push({
+        path,
+        severity,
+        message: scrubCliOutput(
+          typeof off.message === 'string' ? off.message : String(off.check ?? ''),
+        ),
+        ...(line === undefined ? {} : { line }),
+      })
+    }
+  }
+  return {
+    errors: offenses.filter((o) => o.severity === 'error').length,
+    warnings: offenses.filter((o) => o.severity === 'warning').length,
+    offenses,
   }
 }
 

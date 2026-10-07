@@ -96,6 +96,11 @@ export interface MatterEvent {
    * 老事件没有这一格。
    */
   route?: { picked?: RoleId; options: { role_id: RoleId; role_name: string }[] }
+  /**
+   * WP253：这一条是「预览好了」——AI 把主题推成了一份**未发布**副本（线上没动），界面在它下面出
+   * 「打开预览」按钮。`url` 是 Shopify 的预览链接，`label` 是那份副本的名字。老事件没有这一格。
+   */
+  preview?: { url: string; label: string }
 }
 
 export interface MatterContext {
