@@ -89,10 +89,17 @@ export function redditBrowserCheck(
     if (!gate.ok) {
       if (acct?.state === 'logging_in')
         return { level, state: 'down', reason: gate.message, action: 'wait', ...who }
+      // 原因只说「怎么了」，「怎么修」单独一格（提示里不重复）
+      const reason =
+        acct?.state === 'refused'
+          ? `u/${acct.username ?? '?'} 是品牌登记的号（官方号 / 版主号），读取不用它。`
+          : acct?.state === 'none' || acct === undefined
+            ? '还没登录读号（Reddit 不登录基本都会被人机验证拦）。'
+            : gate.message
       return {
         level,
         state: 'down',
-        reason: gate.message,
+        reason,
         fix:
           acct?.state === 'refused'
             ? '点「登录读号」，在窗口里退出这个号、换一个普通号。'

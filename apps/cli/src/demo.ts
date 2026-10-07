@@ -54,6 +54,7 @@ import {
   deepseekAccountStandIn,
   demoWebSearch,
   periodQueryRunner,
+  readonlyBrowserStandIn,
 } from '@agentsws/server'
 import type { Pack, RunContext, World } from '@agentsws/simulation'
 import { buildRunRequest, createWorld, loadPack, parseScenario } from '@agentsws/simulation'
@@ -1423,6 +1424,12 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
      * demo 不该为了演示去敲 DeepSeek 的服务器，也不该在没网的机器上演不出这张卡。
      */
     deepseekAccount: deepseekAccountStandIn(),
+    /*
+     * WP246：本机只读浏览器在 demo 里是**替身**——不起浏览器、不访问 reddit.com。连接页「取数路线」演得出
+     * 「登录读号 → 窗口开着 → 1.5 秒后像用户关掉了 → 已登录 u/demo_reader」；YouTube / 网页那两级不出网
+     * （没给 readNet），工具照实说「演示环境没装出网读取」。
+     */
+    readonlyBrowser: readonlyBrowserStandIn(),
     /*
      * WP216：「Shopify CLI」卡的本机检测在 demo 里是替身——不跑这台机器上真的 `shopify`：
      * CLI 当作还没装、Node 当作 22.12.0，卡上演的是「第一步：装」那一档。

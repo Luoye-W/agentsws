@@ -63,12 +63,8 @@ function levelItem(route: ReadRouteHealth, c: ReadLevelCheck, t: T): StatusItem 
         ? t('read_routes.last_ok')
         : t('read_routes.last_fail', { message: c.last.message ?? '' }),
     )
-  const value =
-    route.active === c.level
-      ? c.detail === undefined
-        ? t('read_routes.active')
-        : `${t('read_routes.active')} · ${c.detail}`
-      : c.detail
+  // 在用的那一级只标「在用」（读号是谁在下面那一行说）；没在用的才把细节（读号）摆在旁边
+  const value = route.active === c.level ? t('read_routes.active') : c.detail
   return {
     key: c.level,
     label: t(`read_routes.level.${c.level}`),
