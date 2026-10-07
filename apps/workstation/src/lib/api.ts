@@ -898,11 +898,14 @@ export const getMatter = (id: string): Promise<MatterViewWithPeople> =>
 /**
  * WP69（54 §2）**职责入口**：指定用这条职责的规矩做，跳过岗位内路由。
  * `assignment` 就是那条职责的分配——权限、额度、动作面全是它的。
+ *
+ * WP259：`run: true` = 开完立刻用这条职责起首轮运行（任务文本 = 完整原文）；
+ * 长文本先用 `handoffInput` 拆成标题 + 描述再交。
  */
 export const createMatterWithRole = (
   assignment: string,
-  input: { title: string; summary?: string },
-): Promise<{ matter: Matter }> =>
+  input: { title: string; summary?: string; run?: boolean },
+): Promise<{ matter: Matter; run_id?: string }> =>
   api(`/v1/matters`, {
     method: 'POST',
     body: { kind: 'adhoc', ...input },

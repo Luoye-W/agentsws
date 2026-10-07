@@ -6,6 +6,10 @@
  * - `pick`：选择卡上点了一条 → 钉到那条并立刻开跑（WP237）。
  *
  * WP241 从 `position-entry.tsx` 原样抽出来（行为一个字没改），给岗位页 v2 的一行入口用。
+ *
+ * WP259：交进来的 `title` 是人写的整段话——超过事项标题上限或多行就拆成「第一句…」+ 完整原文
+ * （`handoffInput`），整段都交给 AI；`withRole` 开完立刻用那条职责起首轮运行（原来只建事项不起跑，
+ * 事项页空着）；三条路任何一条失败都把错误交出去（`error`），框下说人话。
  */
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
@@ -16,6 +20,7 @@ import {
   openMatterAtPosition,
   rerouteMatter,
 } from '@/lib/api'
+import { handoffInput } from '@/lib/handoff'
 
 export function usePositionOpen(id: string, onSubmitted: () => void) {
   const client = useQueryClient()
@@ -23,7 +28,7 @@ export function usePositionOpen(id: string, onSubmitted: () => void) {
   const [choice, setChoice] = useState<OpenAtPositionData | undefined>(undefined)
 
   const open = useMutation({
-    mutationFn: (input: { title: string }) => openMatterAtPosition(id, input),
+    mutationFn: (input: { title: string }) => openMatterAtPosition(id, handoffInput(input.title)),
     onSuccess: (out) => {
       onSubmitted()
       void client.invalidateQueries({ queryKey: ['position-instance', id] })
@@ -40,8 +45,9 @@ export function usePositionOpen(id: string, onSubmitted: () => void) {
    * 用的就是那条职责的分配，所以权限、额度、动作面一个不多一个不少。
    */
   const withRole = useMutation({
+    // WP259：开完立刻起首轮运行（`run: true`），与不选职责走路由那条一样
     mutationFn: (input: { assignment: string; title: string }) =>
-      createMatterWithRole(input.assignment, { title: input.title }),
+      createMatterWithRole(input.assignment, { ...handoffInput(input.title), run: true }),
     onSuccess: (out) => {
       onSubmitted()
       navigate(`/matters/${out.matter.id}`)
@@ -59,5 +65,15 @@ export function usePositionOpen(id: string, onSubmitted: () => void) {
     },
   })
 
-  return { open, withRole, pick, choice }
+  /** WP259：最近一次没交出去的原因（三条路谁失败都算）；正在交 / 交成了就是 `null`。 */
+  const error = open.error ?? withRole.error ?? pick.error
+  const busy = open.isPending || withRole.isPending || pick.isPending
+  /** 人改了框里的字：上一次的错误收起来。 */
+  const clearError = (): void => {
+    if (open.error !== null) open.reset()
+    if (withRole.error !== null) withRole.reset()
+    if (pick.error !== null) pick.reset()
+  }
+
+  return { open, withRole, pick, choice, error, busy, clearError }
 }

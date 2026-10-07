@@ -38,6 +38,7 @@ import { StatTileView } from '@/components/stat-tile'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ClaimPool } from '@/components/work/claim-pool'
+import { HandoffError } from '@/components/work/handoff-error'
 import { InProgressList } from '@/components/work/in-progress-list'
 import {
   getHome,
@@ -50,6 +51,7 @@ import {
 import { useApp } from '@/lib/app-context'
 import { LAYER_ICON } from '@/lib/calendar-layers'
 import { formatValue } from '@/lib/format'
+import { handoffInput } from '@/lib/handoff'
 import type { Lang } from '@/lib/i18n'
 import { hhmm, matterUrl, todoUrl } from '@/lib/work'
 
@@ -211,7 +213,11 @@ function QuickPromptMenu({ position }: { position: PositionInstanceData }): Reac
 
   const openMatter = useMutation({
     mutationFn: (input: { assignment: string; role_id: string; prompt: string }) =>
-      openMatterAtPosition(input.assignment, { title: input.prompt, role_id: input.role_id }),
+      // WP259：提示写得长也照收（标题取第一句…，完整原文交给 AI）
+      openMatterAtPosition(input.assignment, {
+        ...handoffInput(input.prompt),
+        role_id: input.role_id,
+      }),
     onSuccess: (out) => {
       navigate(`/matters/${out.matter.id}`)
     },
@@ -266,7 +272,7 @@ function QuickPromptMenu({ position }: { position: PositionInstanceData }): Reac
                       disabled={assignment === undefined || openMatter.isPending}
                       onClick={() => {
                         if (assignment === undefined) return
-                        setOpen(false)
+                        // WP259：交成了才进事项页（菜单跟着走）；没交出去菜单留着，底下说一句人话
                         openMatter.mutate({ assignment, role_id: role.role_id, prompt: q.prompt })
                       }}
                     >
@@ -277,6 +283,12 @@ function QuickPromptMenu({ position }: { position: PositionInstanceData }): Reac
               </div>
             )
           })}
+          {openMatter.isPending ? (
+            <p className="text-[11px] text-muted-foreground" data-testid="handoff-sending">
+              {t('handoff.sending')}
+            </p>
+          ) : null}
+          <HandoffError error={openMatter.error} className="text-[11px] text-destructive" />
           <p className="text-[11px] text-muted-foreground">{t('home.quick.hint')}</p>
         </div>
       ) : null}
