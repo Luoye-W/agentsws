@@ -51,6 +51,8 @@ export interface AutomationPage {
   click(selector: string): Promise<void>
   fill(selector: string, value: string): Promise<void>
   count(selector: string): Promise<number>
+  /** 等这个元素出现（页面刚跳转 / 脚本刚插进来）；等不到回假。 */
+  waitFor(selector: string): Promise<boolean>
   textOf(selector: string): Promise<string>
   url(): string
   /** 被网络闸掐掉的写请求（`POST /api/vote` 这种）。 */
@@ -108,6 +110,21 @@ export async function openAutomationPage(
   const settle = async (): Promise<void> => {
     await page.waitForLoadState('networkidle', { timeout: 8_000 }).catch(() => undefined)
   }
+  /**
+   * 页面里读一下。点完按钮页面可能正在跳转 / 刷新（封禁页提交后会自己刷新），读到一半上下文没了
+   * 就等它落定再读一次——只读，重读不会多做任何事。
+   */
+  const read = async <T>(fn: () => T): Promise<T> => {
+    try {
+      return await page.evaluate(fn)
+    } catch {
+      await page
+        .waitForLoadState('domcontentloaded', { timeout: NAV_TIMEOUT_MS })
+        .catch(() => undefined)
+      await settle()
+      return page.evaluate(fn)
+    }
+  }
 
   return {
     async goto(url) {
@@ -129,7 +146,7 @@ export async function openAutomationPage(
       }
     },
     look: () =>
-      page.evaluate(() => {
+      read(() => {
         const user = document.querySelector('#header-bottom-right span.user > a')
         const name = user?.textContent?.trim() ?? ''
         return {
@@ -142,9 +159,9 @@ export async function openAutomationPage(
             .slice(0, 50),
         }
       }),
-    bodyText: () => page.evaluate(() => document.body?.innerText ?? ''),
+    bodyText: () => read(() => document.body?.innerText ?? ''),
     things: () =>
-      page.evaluate(() =>
+      read(() =>
         [...document.querySelectorAll('div.thing[data-fullname]')].slice(0, 100).map((el) => {
           const d = (el as HTMLElement).dataset
           const ts = Number(d.timestamp)
@@ -173,6 +190,15 @@ export async function openAutomationPage(
       await page.locator(selector).first().fill(value, { timeout: STEP_TIMEOUT_MS })
     },
     count: (selector) => page.locator(selector).count(),
+    waitFor: (selector) =>
+      page
+        .locator(selector)
+        .first()
+        .waitFor({ state: 'visible', timeout: STEP_TIMEOUT_MS })
+        .then(
+          () => true,
+          () => false,
+        ),
     textOf: async (selector) =>
       (
         await page

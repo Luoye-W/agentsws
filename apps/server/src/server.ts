@@ -890,6 +890,7 @@ export interface ServerOptions {
           | 'limits'
           | 'sleep'
           | 'idleMs'
+          | 'loginHeadless'
         >
       >
     | false

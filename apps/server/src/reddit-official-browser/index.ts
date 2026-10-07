@@ -95,6 +95,8 @@ export interface RedditOfficialBrowserOptions {
   sleep?(ms: number): Promise<void>
   /** 无头那一个闲多久自动关（默认 90 秒；登录窗口不自动关）。 */
   idleMs?: number
+  /** 测试用：「登录官方号」也无头起（CI 与并行代理不弹窗口）。生产不给。 */
+  loginHeadless?: boolean
 }
 
 export interface RedditOfficialBrowser {
@@ -168,6 +170,8 @@ export function createRedditOfficialBrowser(
   }
 
   let proc: OfficialBrowserProcess | undefined
+  /** 现在开着的是「登录官方号」那个窗口（不自动关、状态显示「登录窗口开着」）。 */
+  let loginWindow = false
   let idle: NodeJS.Timeout | undefined
   let queue: Promise<unknown> = Promise.resolve()
   const onExit = (): void => proc?.killNow()
@@ -192,6 +196,7 @@ export function createRedditOfficialBrowser(
     idle = undefined
     const p = proc
     proc = undefined
+    loginWindow = false
     process.removeListener('exit', onExit)
     await p?.close()
   }
@@ -217,7 +222,7 @@ export function createRedditOfficialBrowser(
 
   const armIdle = (): void => {
     if (idle !== undefined) clearTimeout(idle)
-    if (proc?.mode !== 'headless') return
+    if (proc === undefined || loginWindow) return
     idle = setTimeout(() => void serial(stop), idleMs)
     idle.unref?.()
   }
@@ -388,7 +393,7 @@ export function createRedditOfficialBrowser(
         message: state.block.message,
         until: new Date(state.block.until).toISOString(),
       }
-    if (proc?.mode === 'headed' && alive() && !state.logged_in)
+    if (loginWindow && alive() && !state.logged_in)
       return { ...base, ...browser, state: 'login_window_open' }
     if (state.logged_in)
       return {
@@ -410,7 +415,7 @@ export function createRedditOfficialBrowser(
     openLogin: () =>
       serial(async () => {
         if (options.openPage === undefined) {
-          if (proc?.mode === 'headed' && alive()) return status()
+          if (loginWindow && alive()) return status()
           await stop()
           const found = find()
           if (!found.ok) return status()
@@ -419,10 +424,11 @@ export function createRedditOfficialBrowser(
             profileDir,
             platform,
             env,
-            mode: 'headed',
+            mode: options.loginHeadless === true ? 'headless' : 'headed',
             startUrl: loginPageUrl(origin),
           })
           process.once('exit', onExit)
+          loginWindow = true
         }
         state.logged_in = false
         flush()
@@ -432,6 +438,7 @@ export function createRedditOfficialBrowser(
     checkLogin: () =>
       serial(async () => {
         let page: AutomationPage | undefined
+        let closeAfter = false
         try {
           page = await open()
           const res = await checkLoginOn(page, loginCheckUrl(origin), hosts())
@@ -442,6 +449,8 @@ export function createRedditOfficialBrowser(
             else state.username = res.username
             // 人在窗口里处理过了：之前记的「被拦」作废
             delete state.block
+            // 登好了就把登录窗口收起来（之后读写在无头那一个里做，不再弹窗）；页面在 finally 里先关
+            closeAfter = loginWindow
           } else {
             state.logged_in = false
             absorb(res.verdict.wall === 'login' ? undefined : res.verdict)
@@ -453,6 +462,7 @@ export function createRedditOfficialBrowser(
           flush()
         } finally {
           await page?.close()
+          if (closeAfter) await stop()
           armIdle()
         }
         return status()

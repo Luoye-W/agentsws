@@ -189,7 +189,7 @@ export async function runWriteOn(
             message: `Reddit 回了 ${got.status}（${new URL(step.url).pathname}）。`,
           }
       } else if (step.op === 'click') {
-        if ((await page.count(step.selector)) === 0)
+        if (!(await page.waitFor(step.selector)))
           return {
             status: 'handover',
             message:

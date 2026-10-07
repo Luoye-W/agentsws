@@ -186,6 +186,9 @@ export function createFakeOldReddit(origin: string, sub = 'inmoxr'): FakeOldRedd
           ).length + (selector === S.replySave || selector === S.banSubmit ? 1 : 0)
         )
       },
+      async waitFor(selector) {
+        return (await this.count(selector)) > 0
+      },
       async textOf(selector) {
         if (selector === S.bannedTable) return site.banned.join('\n')
         const id = path.match(/^\/comments\/([a-z0-9]+)\/$/u)?.[1] ?? ''
