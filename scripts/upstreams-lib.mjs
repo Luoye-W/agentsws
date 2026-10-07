@@ -39,6 +39,11 @@ const SCALAR_FIELDS = [
   'private_source',
   // WP252：不进 pnpm 的 npm 运行时（桌面按需下载的 OpenConnector）——钉版本与逐包 sha512 的 npm 锁文件
   'npm_lock_file',
+  // WP255（决策 145）：安装包里捆绑的 Node / npm——钉在 `apps/desktop/node-runtime.lock.json` 的哪一段
+  'runtime_lock_file',
+  'runtime_lock_key',
+  // WP255：只跟这一条大版本线（Node 22 LTS、它配的 npm 10）；周报只拿这条线上的正式版比
+  'version_line',
 ]
 const LIST_FIELDS = [
   'watch',
@@ -266,6 +271,23 @@ export function validateShape(items) {
       p(`${where} 有 \`npm_lock_file\` / \`npm_pin_in\` 就要有 \`npm\` 与 \`locked_version\``)
     if (it.npm_lock_file !== undefined && it.lockfile_single !== false)
       p(`${where} 有 \`npm_lock_file\`（不进 pnpm）就要写 \`lockfile_single: false\``)
+    const rt = ['runtime_lock_file', 'runtime_lock_key'].filter((k) => it[k] !== undefined)
+    if (rt.length === 1) p(`${where} runtime_lock_file / runtime_lock_key 要么都写、要么都不写`)
+    if (rt.length === 2) {
+      if (!RUNTIME_LOCK_KEYS.includes(String(it.runtime_lock_key)))
+        p(`${where} \`runtime_lock_key\` 只许 ${RUNTIME_LOCK_KEYS.join(' / ')}`)
+      if (!it.locked_version) p(`${where} 有 \`runtime_lock_file\` 就要有 \`locked_version\``)
+      if (it.npm && it.lockfile_single !== false)
+        p(`${where} 随包的运行时不进 pnpm，有 \`npm\` 就要写 \`lockfile_single: false\``)
+    }
+    if (it.version_line !== undefined) {
+      if (!/^\d+$/.test(String(it.version_line)))
+        p(`${where} \`version_line\` 只写大版本号（如 22），写的是 \`${it.version_line}\``)
+      else if (it.locked_version && !String(it.locked_version).startsWith(`${it.version_line}.`))
+        p(
+          `${where} 锁的 \`${it.locked_version}\` 不在 \`version_line: ${it.version_line}\` 这条线上`,
+        )
+    }
     if (String(it.locked_version ?? '').startsWith('^') && it.pin !== 'allow_caret')
       p(`${where} \`locked_version\` 带 ^ 就要显式写 \`pin: allow_caret\`（docs/42 红线 3）`)
   }
@@ -273,6 +295,9 @@ export function validateShape(items) {
 }
 
 export const DIGEST_RE = /^sha256:[0-9a-f]{64}$/
+
+/** WP255：`runtime_lock_key` 认的两段（`node-runtime.lock.json` 的 `node` / `npm`）。 */
+export const RUNTIME_LOCK_KEYS = ['node', 'npm']
 
 // ── 与仓库实际锁的版本对账 ─────────────────────────────────────────────────
 
@@ -358,6 +383,7 @@ export function checkPins(items, root = REPO_ROOT) {
     problems.push(...checkImagePins(it, root))
     problems.push(...checkBinLock(it, root))
     problems.push(...checkNpmLock(it, root))
+    problems.push(...checkRuntimeLock(it, root))
 
     for (const rel of it.covered_by ?? []) {
       if (!existsSync(join(root, String(rel)))) p(`${where} covered_by 指向不存在的路径：${rel}`)
@@ -481,6 +507,57 @@ export function checkNpmLock(it, root = REPO_ROOT) {
     if (!text.includes(`'${name}'`)) problems.push(`${where} ${rel} 里没有 \`'${name}'\``)
     if (!text.includes(`'${want}'`))
       problems.push(`${where} ${rel} 里没有钉 \`'${want}'\`（登记表与代码里的钉版本要一起改）`)
+  }
+  return problems
+}
+
+const SHA256_HEX_RE = /^[0-9a-f]{64}$/
+const SHA512_SRI_RE = /^sha512-[A-Za-z0-9+/]{86}==$/
+
+/**
+ * WP255（决策 145）：安装包里捆绑的 Node 与它配的 npm（WP111 / WP254）。两样都不走 pnpm，钉在
+ * `apps/desktop/node-runtime.lock.json`，只经 `fetch-node.mjs --write-lock --all` 改：
+ *
+ * - `runtime_lock_key: node` → `node.version` 等于 `locked_version`；`node.abi` 是整数；`node.targets`
+ *   至少一个平台、每个平台钉了 64 位十六进制的 sha256（来源：nodejs.org 那一版的 `SHASUMS256.txt`）。
+ * - `runtime_lock_key: npm` → `npm.version` 等于 `locked_version`；`npm.integrity` 是 registry
+ *   `dist.integrity` 那种 sha512；写了 `tarball` 就必须是 registry 上这一版的 tgz（换源不换校验）。
+ *
+ * @returns {string[]}
+ */
+export function checkRuntimeLock(it, root = REPO_ROOT) {
+  if (!it.runtime_lock_file || !it.runtime_lock_key || !it.locked_version) return []
+  const where = `[${it.id}]`
+  const rel = String(it.runtime_lock_file)
+  const want = String(it.locked_version)
+  const text = readIfExists(join(root, rel))
+  if (text === null) return [`${where} runtime_lock_file 指向不存在的文件：${rel}`]
+  let lock
+  try {
+    lock = JSON.parse(text)
+  } catch {
+    return [`${where} ${rel} 不是合法的 JSON`]
+  }
+  const key = String(it.runtime_lock_key)
+  const sec = lock?.[key]
+  if (typeof sec !== 'object' || sec === null) return [`${where} ${rel} 里没有 \`${key}\` 这一段`]
+  const problems = []
+  const p = (msg) => problems.push(`${where} ${rel} ${msg}`)
+  if (sec.version !== want)
+    p(`的 ${key}.version 是 \`${sec.version}\`，登记表写的是 \`${want}\`（两边一起改）`)
+  if (key === 'node') {
+    if (!Number.isInteger(sec.abi)) p('的 node.abi 不是整数（原生模块按它取 prebuild）')
+    const targets = Object.entries(sec.targets ?? {})
+    if (targets.length === 0) p('的 node.targets 一个平台都没有')
+    for (const [target, row] of targets)
+      if (!SHA256_HEX_RE.test(String(row?.sha256 ?? '')))
+        p(`的 node.targets.${target} 没钉 sha256（要 64 位十六进制，抄自 SHASUMS256.txt）`)
+  } else {
+    if (!SHA512_SRI_RE.test(String(sec.integrity ?? '')))
+      p('的 npm.integrity 不是 registry 那种 sha512（`sha512-<base64>`）')
+    const tgz = `https://registry.npmjs.org/npm/-/npm-${want}.tgz`
+    if (sec.tarball !== undefined && sec.tarball !== tgz)
+      p(`的 npm.tarball 是 \`${sec.tarball}\`，应该是 \`${tgz}\``)
   }
   return problems
 }
@@ -612,6 +689,14 @@ export function versionVerdict(locked, tagVersions, allVersions) {
     highest,
     lockedIsKnown: all.includes(lock),
   }
+}
+
+/**
+ * WP255：`version_line` 那条线上的正式版（`22.` / `10.` 开头、不带预发布后缀）——周报只拿它们与锁的版本比。
+ * 上游 latest 在别的大版本上（npm 11、Node 24）不算「落后」：我们跟的是 Node 22 LTS 与它配的那版 npm。
+ */
+export function lineCandidates(line, versions) {
+  return (versions ?? []).filter((v) => String(v).startsWith(`${line}.`) && !String(v).includes('-'))
 }
 
 const stripV = (t) => String(t).replace(/^v/, '')

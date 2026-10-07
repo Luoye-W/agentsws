@@ -43,6 +43,11 @@
 #                     `--check` 要求根依赖与那个包的 version 都等于 locked_version、每个要下载的包都钉 sha512；
 #                     写了它就要写 `lockfile_single: false`。
 # npm_pin_in          代码里钉这个版本的文件（WP252）：每个都要逐字含 `'<npm>'` 与 `'<locked_version>'`。
+# runtime_lock_file   安装包里捆绑的运行时（WP255：Node 与它配的 npm）钉在哪份 JSON（`apps/desktop/node-runtime.lock.json`）。
+# runtime_lock_key      与上一项成对：对哪一段（`node` / `npm`）。`--check` 要求那一段的 version = locked_version，
+#                       node 每个平台都钉 sha256（抄自 nodejs.org 的 SHASUMS256.txt）、npm 钉 registry 的 sha512。
+# version_line        只跟这一条大版本线（写成带引号的 `'22'` = Node 22 LTS、`10` = 它配的 npm）。`locked_version` 必须在这条线上；
+#                     周报只拿这条线上的正式版比（npm 的 latest 已是 11.x，不算"落后"）。
 # release_age_prefix  pnpm-workspace.yaml 的 minimumReleaseAgeExclude 里，以这个前缀开头的
 #                     每一条都必须是 locked_version（docs/42 红线 3：写死版本、不写通配）。
 # we_depend_on        我们碰到的 seam，一行一条。docs/42 §4 第 1 条说的就是这份清单：
@@ -241,6 +246,53 @@ upstreams:
       - apps/server/test/open-connector-installer.test.ts
       - apps/desktop/test/connect-launcher-live.test.ts
       - scripts/open-connector-lock.mjs
+
+  # WP255（决策 145）：安装包里捆绑的 Node 与它配的 npm（WP111 / WP254）。两样都不进 package.json /
+  # pnpm-lock.yaml，钉在 apps/desktop/node-runtime.lock.json，只经 `fetch-node.mjs --write-lock --all` 改；
+  # `--check` 对账登记表与那份锁。**一起升**：Node 22 出安全版 → 锁里 node 换版本 → 同一条命令按
+  # nodejs.org/dist/index.json 查这版配的 npm、重算 sha256 / sha512 → 测试 → 打包冒烟（docs/42「随包 Node / npm 怎么升」）。
+  - id: node-runtime
+    kind: runtime-dep
+    why: 安装包自带的 Node（服务进程跑在它上面；原生模块按它的 ABI 127 取 prebuild），四个平台各一份
+    repo: nodejs/node
+    locked_version: 22.23.2
+    pin: exact
+    version_line: '22'
+    runtime_lock_file: apps/desktop/node-runtime.lock.json
+    runtime_lock_key: node
+    watch: [releases, wishlist]
+    we_depend_on:
+      - 'nodejs.org/dist/v<版本>/ 的发行包命名（node-v<版本>-<平台>.tar.gz、win-x64/node.exe）与 SHASUMS256.txt（每平台 sha256 的来源）'
+      - 'nodejs.org/dist/index.json 的 npm 字段（这版 Node 配哪版 npm，fetch-node.mjs --write-lock 按它取）'
+      - 'NODE_MODULE_VERSION 127（better-sqlite3 的 prebuild 按它取，锁里 node.abi）'
+      - 'engines.node：OpenConnector 1.8.0 要 >=22.18.0（open-connector-runtime 那条）'
+    wishlist:
+      - security release（22.x 出安全版就连 npm 一起升）
+      - Node 22 end-of-life（2027-04 结束维护，之前换到下一条 LTS）
+    covered_by:
+      - apps/desktop/scripts/fetch-node.mjs
+      - apps/desktop/test/fetch-node.test.ts
+      - apps/desktop/scripts/after-pack.mjs
+
+  - id: npm-runtime
+    kind: runtime-dep
+    why: 安装包自带的 npm（一键装 Shopify CLI、按需下载本机连接器都用它；WP254 起随包带，不再先联网下）
+    npm: npm
+    repo: npm/cli
+    locked_version: 10.9.8
+    pin: exact
+    version_line: '10'
+    lockfile_single: false
+    runtime_lock_file: apps/desktop/node-runtime.lock.json
+    runtime_lock_key: npm
+    watch: [versions]
+    we_depend_on:
+      - '版本跟 Node 走：只用 nodejs.org/dist/index.json 里这版 Node 配的那一版，不单独升'
+      - 'registry.npmjs.org/npm/-/npm-<版本>.tgz 与 dist.integrity（sha512 钉在锁里；换国内源不换校验）'
+      - '发行包布局：<node>/lib/node_modules/npm（Windows 是 node_modules/npm），服务进程 bundledNpmCandidates 先找这两处'
+    covered_by:
+      - apps/desktop/test/bundled-npm.test.ts
+      - apps/server/test/npm-runtime.test.ts
 
   - id: new-api
     kind: runtime-dep
