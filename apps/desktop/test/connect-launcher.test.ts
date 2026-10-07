@@ -243,3 +243,19 @@ describe('起停', () => {
     expect(r.spawner.requests).toHaveLength(1)
   })
 })
+
+describe('坏文件与写不进', () => {
+  it('control.json 坏了当没有（照常跑）；supervisor.json 写不进只记一笔，不影响起停', () => {
+    const r = rig()
+    r.install()
+    r.files.writeText(L.control, '{oops')
+    const rename = r.files.rename
+    r.files.rename = () => {
+      throw new Error('EACCES')
+    }
+    r.launcher.tick()
+    expect(r.spawner.requests).toHaveLength(1)
+    expect(r.supervisor()?.state).toBe('stopped')
+    r.files.rename = rename
+  })
+})
