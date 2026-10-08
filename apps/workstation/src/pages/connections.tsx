@@ -38,6 +38,8 @@ import { ProviderCard, type WizardPhase } from '@/components/connections/provide
 import { ReadRoutesSection } from '@/components/connections/read-routes'
 import { RuntimeBar } from '@/components/connections/runtime-bar'
 import { SearchDataSection } from '@/components/connections/search-data'
+// WP265：Shopify 卡的「连接 Shopify」一键授权（老的客户端 ID 表单收进卡内「高级」）
+import { ShopifyConnect } from '@/components/connections/shopify-connect'
 import { Hint } from '@/components/ui/hint'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { ConnectTestResult, ProviderFieldSpec } from '@/lib/api'
@@ -386,6 +388,17 @@ export function ConnectionsPage(): React.ReactNode {
               result={results[p.service]}
               assignment={ownerId}
               oauthUrl={wizard?.service === p.service ? wizard.authorization_url : undefined}
+              {...(p.service === 'shopify_admin'
+                ? {
+                    oneClick: (
+                      <ShopifyConnect
+                        {...(ownerId === undefined ? {} : { assignment: ownerId })}
+                        onChanged={refresh}
+                      />
+                    ),
+                    advancedLabel: t('shopconnect.advanced'),
+                  }
+                : {})}
               onStart={(auth_option) => {
                 setResults((prev) => {
                   const { [p.service]: _dropped, ...rest } = prev

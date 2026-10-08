@@ -73,6 +73,7 @@ import { secretaryRoutes } from './routes/secretary.js'
 import { secretRoutes } from './routes/secrets.js'
 import { seoRoutes } from './routes/seo.js'
 import { shopAdminRoutes } from './routes/shop-admin.js'
+import { shopifyConnectRoutes } from './routes/shopify-connect.js'
 import { siteRoutes } from './routes/site.js'
 import { skillRoutes } from './routes/skills.js'
 import { socialRoutes } from './routes/social.js'
@@ -134,6 +135,8 @@ export function collectRoutes(): Route[] {
     ...dshScenesRoutes(),
     // WP155（docs/81）：搜索数据接口（连接页那一行 + SERP / AI 问答探测）
     ...searchDataRoutes(),
+    // WP265：连接页 Shopify 卡的一键授权。`/v1/shopify-connect*` 是新前缀，与 `/v1/connections/:id` 不撞
+    ...shopifyConnectRoutes(),
     // WP246（决策 87 / 88）：取数路线（体检、设置、Reddit 读号）。`/v1/settings/read-routes*` 与
     // `/v1/settings/reddit-read-account/*` 都是定值段，与同级的 browser / capability-sources 不撞
     ...readRoutesRoutes(),

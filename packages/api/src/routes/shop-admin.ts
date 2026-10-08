@@ -94,6 +94,11 @@ export interface ShopAdminView {
   /** 上一次执行时 Shopify 说的问题（过期 / 被收回 / 缺权限）。 */
   problem?: { code: 'expired' | 'revoked' | 'missing_scope'; missing?: string[]; at: string }
   job?: ShopAdminAuthJob
+  /**
+   * WP265：这一行按哪一路算（`cloud` = 连接页一键授权的云端应用，优先；没有就是 CLI 授权）。
+   * `cloud` 时「授权 / 重新授权」去连接页 Shopify 卡上做，不起 CLI。
+   */
+  via?: 'cloud' | 'cli'
 }
 
 export interface ShopAdminPort {

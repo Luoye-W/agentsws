@@ -50,6 +50,11 @@ import {
   StandInDataError,
   StandInWallet,
 } from '@agentsws/stand-ins'
+import {
+  type ShopifyCloudStandIn,
+  type ShopifyCloudStandInOptions,
+  shopifyCloudStandIn,
+} from './shopify-cloud-stand-in.js'
 
 /** demo 用的云地址：`.invalid` 是保留顶级域（RFC 2606），任何请求漏出去都只会解析失败。 */
 export const CLOUD_STAND_IN_BASE_URL = 'https://cloud.demo.invalid'
@@ -64,6 +69,8 @@ export interface CloudStandInOptions {
   autoLinkAfterMs?: number
   /** 替用户「点链接」的那一下。默认只对本机回环口发 GET，别的地址一律不点。 */
   click?: (url: string) => Promise<void>
+  /** WP265：Shopify 一键授权那几条的替身设置（默认 1.5 秒后像店主点了「安装」）。 */
+  shopify?: ShopifyCloudStandInOptions
 }
 
 /** 替身收到过的一次请求（测试用：断言走的是替身，而不是别处）。 */
@@ -118,6 +125,8 @@ export interface CloudStandIn {
   roster(): AllocationRosterRequest | undefined
   /** 等替身那一下「点链接」做完（测试用）。没有在途的就立刻回。 */
   settled(): Promise<void>
+  /** WP265：Shopify 一键授权那几条（测试推状态用）。 */
+  shopify: ShopifyCloudStandIn
 }
 
 /** 只点本机回环口：替身绝不替用户去访问别的网址。 */
@@ -183,6 +192,7 @@ export function cloudStandIn(options: CloudStandInOptions = {}): CloudStandIn {
   const sessions = new Map<string, string>()
   const workspaceTokens = new Set<string>()
   const mint = (prefix: string): string => `${prefix}_${randomBytes(12).toString('hex')}`
+  const shopify = shopifyCloudStandIn({ now, ...options.shopify })
   /** WP231：已注册的邮箱 → 密码（替身只在内存里，demo 一关就没了）。 */
   const registered = new Map<string, string>([
     [CLOUD_STAND_IN_REGISTERED_EMAIL, CLOUD_STAND_IN_PASSWORD],
@@ -777,6 +787,13 @@ export function cloudStandIn(options: CloudStandInOptions = {}): CloudStandIn {
         throw err
       }
     }
+    // ── WP265：Shopify 一键授权（只认替身签过的工作区令牌；授权页是 .invalid 假地址）
+    if (path.startsWith('/v1/shopify/')) {
+      if (token === undefined || !workspaceTokens.has(token))
+        return fail(401, 'unauthenticated', '令牌无效')
+      const out = shopify.handle(method, path, body)
+      if (out !== undefined) return respond(out.status, out.body)
+    }
     return fail(404, 'not_found', '演示里没有这一项（demo 不连真云）')
   }
 
@@ -808,5 +825,6 @@ export function cloudStandIn(options: CloudStandInOptions = {}): CloudStandIn {
     async settled() {
       await Promise.all([...inFlight])
     },
+    shopify,
   }
 }

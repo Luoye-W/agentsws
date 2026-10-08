@@ -9248,7 +9248,16 @@
       },
       "CloudScope": {
         "type": "string",
-        "enum": ["ai", "wallet:read", "wallet:topup", "wallet:admin", "standby", "data", "kol"],
+        "enum": [
+          "ai",
+          "wallet:read",
+          "wallet:topup",
+          "wallet:admin",
+          "standby",
+          "data",
+          "kol",
+          "store"
+        ],
         "description": "18 §1「最小动作集」：一把工作区令牌能做什么，逐条列出来，没列的一律不行。"
       },
       "CloudSessionIssued": {

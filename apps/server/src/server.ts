@@ -530,10 +530,12 @@ import {
   type ShopAdminAssembly,
   STORE_SESSION_CLI_ID,
 } from './shop-auth.js'
+import { preferCloudShopAdmin } from './shop-cloud-admin.js'
 import type { ShopOps } from './shop-ops.js'
 import { createShopOps } from './shop-service.js'
 import { createShopToolSurface } from './shop-tools.js'
 import type { BrokerFetch } from './shopify-broker.js'
+import { createCloudShopLinks, createShopifyConnect } from './shopify-connect.js'
 import { createShopifyDevMcp } from './shopify-devmcp.js'
 import { createRunCli, type RunCli } from './shopify-theme.js'
 import { createConnectSiteFacts, createSiteService, createSiteStore, seedDemoSite } from './site.js'
@@ -2652,7 +2654,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           ? undefined
           : join(dbDir, 'tools')
     const cliSpec = (): PlatformCliSpec | undefined => platformKitOf(brandPlatformOf(ws))?.cli
-    const auth = createShopAdmin({
+    const cliAuth = createShopAdmin({
       workspace_id: ws,
       clock,
       ...(brand.dir === undefined ? {} : { settingsFile: join(brand.dir, 'shop-admin.json') }),
@@ -2706,6 +2708,18 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           payload,
         }),
     })
+    /*
+     * WP265（Fable 追加）：这个品牌在连接页一键授权连着店 → **优先走云端代发**（查询不带、批过的卡带
+     * `allow_mutations`），岗位页那一行、工具面、出卡都按云端那一条；没有才回退上面的 CLI 授权。
+     */
+    const auth = preferCloudShopAdmin(cliAuth, {
+      link: () => cloudShopLinks.link(ws),
+      call: async () => {
+        const cloud = await brandModules.cloud(ws)
+        return cloud.linked() ? cloud.call : undefined
+      },
+      onAuthProblem: () => cloudShopLinks.invalidate(ws),
+    })
     const ops = createShopOps({
       workspace_id: ws,
       clock,
@@ -2743,6 +2757,18 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   // 启动时先把各品牌老状态文件里记过的归属补记进来（幂等），必须在任何品牌列连接之前。
   const connectOwners = openConnectOwners({ dbDir, startup: workspace.id, now: clock.now() })
 
+  /*
+   * WP265（Fable 追加）：每个品牌「云端一键授权连着哪家店」的缓存。岗位就绪（`shopify` / `shop` 两个 kind）
+   * 与运营工具（优先云端、没有才回退 CLI 授权）按它认；连接页卡上每看一次、连上 / 断开都顺手更新。
+   * 云客户端是品牌模块里的那一份——晚绑定（`brandModules` 在下面才建好）。
+   */
+  const cloudShopLinks = createCloudShopLinks({
+    cloudOf: (ws) => brandModules.cloud(ws),
+    startupBrand: workspace.id,
+    clock,
+    // 只记店与权限名（没有令牌）：重启之后不打云也知道上次连着哪家
+    ...(dbDir === undefined ? {} : { file: join(dbDir, 'shopify-cloud-links.json') }),
+  })
   const assembleBrand = async (ws: WorkspaceId): Promise<BrandModuleSet> => {
     const isBootstrap = ws === workspace.id
     const dir = brandDirOf(dbDir, ws, workspace.id)
@@ -2787,6 +2813,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       // WP252：连接按品牌隔开；只有启动品牌认领没人记过的老 `default` 连接
       owners: connectOwners.owners,
       startupBrand: isBootstrap,
+      // WP265：云端一键授权连着店也算店铺后台已连（岗位顶上「还缺必需的连接：店铺后台」不再挂着）
+      extraKinds: () => (cloudShopLinks.peek(ws) === undefined ? [] : ['shopify', 'shop']),
     })
 
     /**
@@ -8338,6 +8366,47 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       })
     return rows
   }
+  /**
+   * WP265：一键连 Shopify 时自动带的店铺域名，按先后：品牌档案里官网读到的 `shopify_domain`
+   * → 建站岗位找到 / 选定的店 → Shopify CLI 店铺清单（WP258）→ 老的客户端凭据连接。
+   * 建站那一份最多等 3 秒（它可能顺手去找店）；没等到就跳过，卡上让人填一格。
+   */
+  const shopifyShopHints = async (
+    ws: WorkspaceId,
+  ): Promise<{ shop: string; source: 'profile' | 'site' | 'cli' | 'connection' }[]> => {
+    const out: { shop: string; source: 'profile' | 'site' | 'cli' | 'connection' }[] = []
+    const profile = onboardingRef?.shopifyDomainOf(ws)
+    if (profile !== undefined && profile !== '') out.push({ shop: profile, source: 'profile' })
+    try {
+      const theme = await siteThemeOf(ws)
+      const ready =
+        theme === undefined
+          ? undefined
+          : await Promise.race([
+              theme.readiness(),
+              new Promise<undefined>((resolve) => {
+                setTimeout(() => resolve(undefined), 3000).unref?.()
+              }),
+            ])
+      if (ready?.store !== undefined)
+        out.push({
+          shop: ready.store,
+          source: ready.store_source === 'connection' ? 'connection' : 'site',
+        })
+      for (const row of ready?.store_lookup?.stores ?? [])
+        out.push({ shop: row.store, source: 'cli' })
+    } catch {
+      // 建站那一份没装好 / 不是 Shopify：跳过
+    }
+    try {
+      const brand = await brandModules.forWorkspace(ws)
+      for (const r of brand.connections.shopify.list())
+        out.push({ shop: r.shop, source: 'connection' })
+    } catch {
+      // 这个品牌的连接面还没起来：跳过
+    }
+    return out
+  }
   const deps: GatewayDeps = {
     identity,
     // WP194：一次请求绑好分配之后，开一个「算在谁头上」的作用域（打云时带归属头）
@@ -8380,6 +8449,21 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
      * 自带 key 只从 PUT 进来一次、进加密库，读视图里只有 has_key。
      */
     searchData: searchDataApiPort(async (ws) => (await brandModules.forWorkspace(ws)).searchData),
+    /*
+     * WP265：连接页 Shopify 卡的一键授权（接私有云 WP263），按品牌取那个品牌的云令牌。
+     * 店铺令牌只在云上；本机只拿这个品牌的工作区令牌开口（动作集 store）。
+     */
+    shopifyConnect: createShopifyConnect({
+      clock,
+      cloudOf: (ws) => brandModules.cloud(ws),
+      emailOf: async (ws) => {
+        const v = await cloudAccount.port.status(ws)
+        return v.linked ? v.email : undefined
+      },
+      shopHints: (ws) => shopifyShopHints(ws),
+      startupBrand: workspace.id,
+      links: cloudShopLinks,
+    }),
     /*
      * WP246（决策 87 / 88）：取数路线（体检、设置、Reddit 读号），按品牌取。
      */

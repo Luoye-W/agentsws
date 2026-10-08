@@ -16,6 +16,9 @@
  *   浏览器里新窗口），然后轮询直到连上。密码只输在对方网站上，我们连表单都不出。
  * - **表单类**：展开一个**原生 `<form>`**（`SecureForm`），提交只打一条 `/submit`，
  *   提交完立刻试连并把结果显示出来。
+ *
+ * WP265：有一键授权的卡（Shopify）把那一块作为主按钮（`oneClick`），老的接法收进卡内
+ * 「高级」折叠——普通用户默认看不到；老接法正在进行中（表单开着 / 等授权）时自动展开。
  */
 
 import { ChevronDown, ExternalLink } from 'lucide-react'
@@ -53,6 +56,8 @@ export function ProviderCard({
   onStart,
   onCancel,
   onSubmit,
+  oneClick,
+  advancedLabel,
 }: {
   provider: ProviderView
   /** 从「去连接」跳过来时高亮这一张。 */
@@ -70,6 +75,10 @@ export function ProviderCard({
   onStart: (auth_option?: string) => void
   onCancel: () => void
   onSubmit: (values: Record<string, string>) => void
+  /** WP265：一键授权那一块（有它就是主按钮，老接法进「高级」折叠）。 */
+  oneClick?: React.ReactNode
+  /** 「高级」折叠按钮上的字（缺省「高级」）。 */
+  advancedLabel?: string
 }): React.ReactNode {
   const { t } = useApp()
   const oauth = provider.auth === 'oauth2'
@@ -90,6 +99,9 @@ export function ProviderCard({
   // WP220（Luoye 10-05）：Reddit 卡上也有「数据从哪里来」——接口中台 → 浏览器只读，可调顺序、可停用
   const redditRoute = provider.service === 'reddit'
   const [sourcesOpen, setSourcesOpen] = useState(false)
+  const [advancedOpen, setAdvancedOpen] = useState(false)
+  /** 老接法正在进行中（表单开着 / 等授权 / 刚出了结果）就别把它藏起来。 */
+  const advancedShown = advancedOpen || phase !== 'idle' || result !== undefined
   /** 点不动的原因压成一句；原话在旁边的问号里。还没做的那几张直说「还没做」。 */
   const reason =
     provider.unavailable_reason === undefined
@@ -123,7 +135,7 @@ export function ProviderCard({
         </CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-2 text-sm">
-        {provider.available ? null : (
+        {provider.available || oneClick !== undefined ? null : (
           <p
             className="flex items-center gap-1 text-xs text-destructive"
             data-slot="status"
@@ -138,54 +150,94 @@ export function ProviderCard({
           </p>
         )}
 
-        {phase === 'form' ? (
-          <SecureForm
-            service={provider.service}
-            fields={fields ?? provider.fields}
-            busy={busy}
-            safetyNote={false}
-            {...(assignment === undefined ? {} : { assignment })}
-            onCancel={onCancel}
-            onSubmit={onSubmit}
-          />
-        ) : phase === 'authorizing' ? (
-          <div className="flex flex-col gap-1.5" data-testid="oauth-waiting">
-            <p className="text-xs text-muted-foreground" data-slot="status">
-              {t('connections.oauth.opened')}
-            </p>
-            {oauthUrl === undefined ? null : (
-              <a
-                href={oauthUrl}
-                target="_blank"
-                rel="noreferrer noopener"
-                className="inline-flex items-center gap-1 text-xs text-primary underline-offset-4 hover:underline"
+        {oneClick}
+        {oneClick !== undefined ? (
+          <Button
+            size="xs"
+            variant="ghost"
+            className="self-start px-1 text-muted-foreground"
+            aria-expanded={advancedShown}
+            data-testid="provider-advanced-toggle"
+            onClick={() => {
+              setAdvancedOpen((v) => !v)
+            }}
+          >
+            {advancedLabel ?? t('connections.advanced')}
+            <ChevronDown
+              aria-hidden
+              className={cn('transition-transform', advancedShown && 'rotate-180')}
+            />
+          </Button>
+        ) : null}
+        {oneClick === undefined || advancedShown ? (
+          <div
+            className="flex flex-col gap-2"
+            data-testid={oneClick === undefined ? undefined : 'provider-legacy'}
+          >
+            {provider.available || oneClick === undefined ? null : (
+              <p
+                className="flex items-center gap-1 text-xs text-destructive"
+                data-slot="status"
+                data-testid="provider-unavailable"
               >
-                {t('connections.oauth.manual')}
-                <ExternalLink className="size-3" aria-hidden />
-              </a>
+                {t('connections.unavailable')}
+                {reason === undefined ? '' : `：${reason}`}
+                {provider.unavailable_reason === undefined ||
+                provider.unavailable_reason === reason ? null : (
+                  <Hint text={provider.unavailable_reason} testId="provider-unavailable-why" />
+                )}
+              </p>
             )}
-            <div>
-              <Button size="xs" variant="ghost" onClick={onCancel}>
-                {t('connections.cancel')}
-              </Button>
-            </div>
-          </div>
-        ) : (
-          <div className="flex items-center gap-2">
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={!provider.available || busy}
-              onClick={() => {
-                onStart()
-              }}
-            >
-              {oauth ? t('connections.authorize') : t('connections.connect')}
-            </Button>
-          </div>
-        )}
+            {phase === 'form' ? (
+              <SecureForm
+                service={provider.service}
+                fields={fields ?? provider.fields}
+                busy={busy}
+                safetyNote={false}
+                {...(assignment === undefined ? {} : { assignment })}
+                onCancel={onCancel}
+                onSubmit={onSubmit}
+              />
+            ) : phase === 'authorizing' ? (
+              <div className="flex flex-col gap-1.5" data-testid="oauth-waiting">
+                <p className="text-xs text-muted-foreground" data-slot="status">
+                  {t('connections.oauth.opened')}
+                </p>
+                {oauthUrl === undefined ? null : (
+                  <a
+                    href={oauthUrl}
+                    target="_blank"
+                    rel="noreferrer noopener"
+                    className="inline-flex items-center gap-1 text-xs text-primary underline-offset-4 hover:underline"
+                  >
+                    {t('connections.oauth.manual')}
+                    <ExternalLink className="size-3" aria-hidden />
+                  </a>
+                )}
+                <div>
+                  <Button size="xs" variant="ghost" onClick={onCancel}>
+                    {t('connections.cancel')}
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={!provider.available || busy}
+                  onClick={() => {
+                    onStart()
+                  }}
+                >
+                  {oauth ? t('connections.authorize') : t('connections.connect')}
+                </Button>
+              </div>
+            )}
 
-        {result === undefined ? null : <TestResultLine result={result} />}
+            {result === undefined ? null : <TestResultLine result={result} />}
+          </div>
+        ) : null}
 
         {/*
           49 M2 / WP126：数据类卡的「用我的 / 用 Agents 工坊的」开关，红人那五张再加「数据从哪里来」

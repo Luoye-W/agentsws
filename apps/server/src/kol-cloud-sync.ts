@@ -319,6 +319,8 @@ export interface KolCloudCall<T> {
   code?: string
   /** 云侧那句人话（直接进界面）。 */
   message?: string
+  /** WP265：云侧信封里的 `details`（缺动作集时的 `required_scope`、`reason` …）。 */
+  details?: Record<string, unknown>
 }
 
 /** 打云侧那一跳（`apps/server/src/cloud.ts` 提供：令牌只在那一处出现）。 */

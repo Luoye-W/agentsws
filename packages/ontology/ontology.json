@@ -59,6 +59,7 @@
     "packages/contracts/src/schedule.ts",
     "packages/contracts/src/search-data.ts",
     "packages/contracts/src/seo.ts",
+    "packages/contracts/src/shopify-cloud.ts",
     "packages/contracts/src/site.ts",
     "packages/contracts/src/skills.ts",
     "packages/contracts/src/social.ts",
@@ -119,7 +120,7 @@
     "packages/roles/roles/social/x.yml",
     "packages/roles/roles/social/youtube.yml"
   ],
-  "source_digest": "b3483441665025c33c33eabbfec1fe25",
+  "source_digest": "1fbfa1ea3699a976d79a57da7afb66a1",
   "objects": [
     {
       "id": "ad",

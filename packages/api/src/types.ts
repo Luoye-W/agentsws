@@ -99,6 +99,7 @@ import type { SecretaryPort } from './routes/secretary.js'
 import type { SecretsPort } from './routes/secrets.js'
 import type { SeoPort } from './routes/seo.js'
 import type { ShopAdminPort } from './routes/shop-admin.js'
+import type { ShopifyConnectPort } from './routes/shopify-connect.js'
 import type { SitePort } from './routes/site.js'
 import type { SocialPort } from './routes/social.js'
 import type { StandbyPort } from './routes/standby.js'
@@ -904,6 +905,11 @@ export interface GatewayDeps {
    * 没装配时 `/v1/search-data*` 回 not_implemented。
    */
   searchData?: SearchDataApiPort
+  /**
+   * WP265：连接页 Shopify 卡的一键授权（接私有云 WP263）。按品牌取（令牌是品牌那一把）。
+   * 没装配时 `/v1/shopify-connect*` 回 not_implemented。
+   */
+  shopifyConnect?: ShopifyConnectPort
   /**
    * WP246（决策 87 / 88）：取数路线（体检、设置、Reddit 读号）。按品牌取。
    * 没装配时 `/v1/settings/read-routes*` 与 `/v1/settings/reddit-read-account/*` 回 not_implemented。

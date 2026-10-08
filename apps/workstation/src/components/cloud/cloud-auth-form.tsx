@@ -56,6 +56,15 @@ export interface CloudAuthFormProps {
   /** 连不上云时多给一个「先逛逛演示数据」（只有向导给）。 */
   onDemo?: () => void
   disabled?: boolean
+  /** 一打开停在哪个页签（默认「注册新账号」）。 */
+  initialTab?: CloudAuthTab
+  /** 预填的邮箱（WP265：重新登录时填好账号邮箱）。 */
+  initialEmail?: string
+  /**
+   * WP265：已关联、**同一个账号**再登录一次换新令牌（老令牌缺新动作集）。只有登录页签、
+   * 没有「去注册」；登录那几条带 `refresh: true`。
+   */
+  refresh?: boolean
 }
 
 const fieldOf = (form: HTMLFormElement, name: string): string => {
@@ -69,15 +78,18 @@ export function CloudAuthForm({
   onDone,
   onDemo,
   disabled = false,
+  initialTab,
+  initialEmail,
+  refresh = false,
 }: CloudAuthFormProps): React.ReactNode {
   const { t, lang } = useApp()
   const id = useId()
-  const [tab, setTab] = useState<CloudAuthTab>('signup')
+  const [tab, setTab] = useState<CloudAuthTab>(initialTab ?? (refresh ? 'login' : 'signup'))
   const [via, setVia] = useState<LoginVia>('code')
   const [step, setStep] = useState<Step>('form')
   const [codeFor, setCodeFor] = useState<CodeFor>('signup')
   const [name, setName] = useState('')
-  const [email, setEmail] = useState('')
+  const [email, setEmail] = useState(initialEmail ?? '')
   const [agree, setAgree] = useState(false)
   const [show, setShow] = useState(false)
   /** 强度条只存分数，不存密码。 */
@@ -89,6 +101,8 @@ export function CloudAuthForm({
 
   const locale = lang === 'en' ? 'en' : 'zh'
   const clean = email.trim().toLowerCase()
+  /** WP265：重新登录那一档，登录那几条多带一个 `refresh: true`。 */
+  const again = refresh ? { refresh: true as const } : {}
 
   const fail = (err: unknown, again?: () => void): void => {
     if (err instanceof ApiClientError) {
@@ -127,7 +141,7 @@ export function CloudAuthForm({
       void run(
         () =>
           purpose === 'login'
-            ? cloudLoginCode({ email: clean, locale }, assignment)
+            ? cloudLoginCode({ email: clean, locale, ...again }, assignment)
             : cloudPasswordForgot({ email: clean, locale }, assignment),
         () => {
           setCodeFor(purpose)
@@ -159,7 +173,7 @@ export function CloudAuthForm({
     const form = e.currentTarget
     const password = fieldOf(form, 'password')
     form.reset()
-    void run(() => cloudPasswordLogin({ email: clean, password }, assignment), onDone)
+    void run(() => cloudPasswordLogin({ email: clean, password, ...again }, assignment), onDone)
   }
 
   const onCode = (e: FormEvent<HTMLFormElement>): void => {
@@ -174,7 +188,7 @@ export function CloudAuthForm({
         codeFor === 'signup'
           ? cloudSignupVerify({ email: clean, code }, assignment)
           : codeFor === 'login'
-            ? cloudLoginCodeVerify({ email: clean, code }, assignment)
+            ? cloudLoginCodeVerify({ email: clean, code, ...again }, assignment)
             : cloudPasswordReset({ email: clean, code, new_password: next }, assignment),
       onDone,
     )
@@ -301,7 +315,7 @@ export function CloudAuthForm({
 
   return (
     <div className="flex flex-col gap-2" data-testid={`${p}-auth`} data-tab={tab} data-step={step}>
-      <div className="flex flex-wrap gap-1.5" role="tablist">
+      <div className={cn('flex flex-wrap gap-1.5', refresh && 'hidden')} role="tablist">
         {(['signup', 'login'] as const).map((k) => (
           <button
             key={k}
@@ -395,7 +409,7 @@ export function CloudAuthForm({
                 {t('cauth.code.resend')}
               </button>
             )}
-            {codeFor === 'login' ? (
+            {codeFor === 'login' && !refresh ? (
               <span className="text-ws-muted-fg">
                 {t('cauth.code.no_account')}{' '}
                 <button

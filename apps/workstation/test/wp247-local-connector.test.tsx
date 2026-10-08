@@ -175,6 +175,8 @@ describe('点要连接器的卡', () => {
       (c) => c.dataset.service === 'shopify_admin',
     )
     expect(card).toBeTruthy()
+    // WP265：Shopify 卡的老接法收进了「高级」，先点开
+    await user.click(within(card as HTMLElement).getByTestId('provider-advanced-toggle'))
     await user.click(within(card as HTMLElement).getByRole('button', { name: '连接' }))
     const dialog = await screen.findByTestId('connector-download-confirm')
     expect(dialog.textContent).toContain('要先下载连接器')
@@ -195,6 +197,7 @@ describe('点要连接器的卡', () => {
     const card = (await screen.findAllByTestId('provider-card')).find(
       (c) => c.dataset.service === 'shopify_admin',
     )
+    await user.click(within(card as HTMLElement).getByTestId('provider-advanced-toggle'))
     await user.click(within(card as HTMLElement).getByRole('button', { name: '连接' }))
     await user.click(await screen.findByRole('button', { name: '先不了' }))
     expect(actions).toEqual([])
