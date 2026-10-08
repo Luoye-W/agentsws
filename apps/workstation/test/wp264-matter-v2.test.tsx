@@ -162,10 +162,19 @@ vi.mock('@/components/connections/bridge', async () => {
   return { ...actual, openExternal: (url: string) => openExternal(url) }
 })
 
+/** WP276：组织（不给 = 按 ③ 兜底）；② 里事项页「⋯」多一个「交给同事」。 */
+const matterOrgs: unknown[] = []
+
 vi.mock('@/lib/api', async () => {
   const actual = await vi.importActual<typeof import('@/lib/api')>('@/lib/api')
   return {
     ...actual,
+    listOrganizations: async () => matterOrgs,
+    ensureSession: async () => ({
+      person: { id: 'per_1', email: 'p1@ex.com', name: '王岚' },
+      workspace: { id: 'ws_1', name: 'Rollout' },
+      assignments: [],
+    }),
     getMatter: (...a: unknown[]) => getMatter(...(a as [])),
     postMatterMessage: (...a: unknown[]) => postMatterMessage(...(a as [])),
     retitleMatter: (...a: unknown[]) => retitleMatter(...(a as [])),
@@ -195,6 +204,17 @@ vi.mock('@/lib/work-archive', async () => {
     ...actual,
     getWorkRail: async () => ({ positions: [] }),
     markMatterSeen: async () => undefined,
+  }
+})
+
+vi.mock('@/lib/api-peers', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/api-peers')>('@/lib/api-peers')
+  return {
+    ...actual,
+    listHandoffs: async () => ({ to_me: [], from_me: [] }),
+    listColleagues: async () => ({
+      colleagues: [{ person_id: 'per_2', name: '林峰', in_progress: 0, load: '空着' }],
+    }),
   }
 })
 
@@ -254,6 +274,72 @@ describe('WP264 页头', () => {
     expect(screen.getByTestId('matter-archive').hasAttribute('disabled')).toBe(true)
     expect(screen.getByTestId('matter-archive-why').textContent).toContain('还在跑')
     expect(screen.getByTestId('matter-state').textContent).toBe('在跑')
+  })
+})
+
+describe('WP276 ② 交给同事', () => {
+  it('「⋯」里多一个「交给同事」，点了出同事下拉（带忙闲）；整页不像公司；① 里没有这一项', async () => {
+    matterOrgs.splice(0, matterOrgs.length, {
+      id: 'org_1',
+      legal_name: 'Rollout',
+      discoverable: true,
+      owner_id: 'per_1',
+      role: 'owner',
+      brands: 1,
+      members: 2,
+      solo: false,
+      mode: 'peers',
+      created_at: '2026-10-08T09:00:00.000Z',
+    })
+    try {
+      renderMatter()
+      const u = user()
+      await u.click(await screen.findByTestId('matter-menu'))
+      await u.click(await screen.findByTestId('matter-handoff'))
+      expect((await screen.findByTestId('handoff-person')).textContent).toContain('林峰')
+      expect(screen.getByTestId('handoff-person').textContent).toContain('空着')
+      // 扫的是界面自己的字（页头、菜单、交给同事那一框）；时间线里是 AI 与人说的话，不算
+      const text = `${screen.getByTestId('matter-header').textContent ?? ''}${
+        screen.getByTestId('handoff-dialog').textContent ?? ''
+      }`
+      for (const word of [
+        '主管',
+        '老板',
+        '上级',
+        '审批',
+        '部门',
+        '范围',
+        '并进来',
+        '加入一家公司',
+        '成员额度',
+      ])
+        expect(text, word).not.toContain(word)
+    } finally {
+      matterOrgs.length = 0
+    }
+  }, 20_000)
+
+  it('① 个人：「⋯」里没有「交给同事」', async () => {
+    matterOrgs.splice(0, matterOrgs.length, {
+      id: 'org_1',
+      legal_name: 'Rollout',
+      discoverable: false,
+      owner_id: 'per_1',
+      role: 'owner',
+      brands: 1,
+      members: 1,
+      solo: true,
+      mode: 'solo',
+      created_at: '2026-10-08T09:00:00.000Z',
+    })
+    try {
+      renderMatter()
+      const u = user()
+      await u.click(await screen.findByTestId('matter-menu'))
+      expect(screen.queryByTestId('matter-handoff')).toBeNull()
+    } finally {
+      matterOrgs.length = 0
+    }
   })
 })
 

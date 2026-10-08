@@ -549,7 +549,10 @@ export function DeckCardBody({
    * 有选项就一定要有单选列表（36 §2.1 裸 approve 会被拒）。
    * ⑤ 自己就是列表，⑥ 的缩略图格本身就是选法——只有这两种不再追加一份。
    */
-  const needsOptions = options.length > 0 && card.layout !== 'choice' && card.layout !== 'variants'
+  // WP276：交给你的卡，选项就是动作行上那几个「接下」按钮——不再追加一份单选列表
+  const handoffOffer = (card.detail.payload as { form?: unknown } | undefined)?.form === 'handoff'
+  const needsOptions =
+    options.length > 0 && card.layout !== 'choice' && card.layout !== 'variants' && !handoffOffer
   return (
     <>
       {main}

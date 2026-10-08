@@ -167,10 +167,14 @@ vi.mock('@/components/connections/bridge', () => ({
   },
 }))
 
+/** WP276：组织（不给 = 读不到，按 ③ 兜底）。 */
+const modeOrgs: unknown[] = []
+
 vi.mock('@/lib/api', async () => {
   const actual = await vi.importActual<typeof import('@/lib/api')>('@/lib/api')
   return {
     ...actual,
+    listOrganizations: async () => modeOrgs,
     // 连接页用「工作区所有者」那条 Assignment（05 authorize_connector 是 owner 专属）
     getPositions: async () => ({
       positions: ownerPositions,
@@ -242,6 +246,48 @@ describe('连接页：只有工作区所有者能管', () => {
     renderWithProviders(<ConnectionsPage />, '/connections')
     expect(await screen.findByTestId('connections-not-owner')).toBeDefined()
     expect(screen.queryByTestId('provider-card')).toBeNull()
+  })
+
+  it('WP276 ② 同事互联：平级同事也进得来、能接自己的连接；家务那几块（数据后端等）不出；不像公司', async () => {
+    ownerPositions.splice(0, ownerPositions.length, {
+      ...OWNER_POSITION,
+      position_id: 'asg_li',
+      role_id: 'dtc.support',
+    })
+    modeOrgs.splice(0, modeOrgs.length, {
+      id: 'org_1',
+      legal_name: '诺伏特',
+      discoverable: true,
+      owner_id: 'per_wang',
+      role: 'member',
+      brands: 1,
+      members: 2,
+      solo: false,
+      mode: 'peers',
+      created_at: '2026-10-08T09:00:00.000Z',
+    })
+    try {
+      renderWithProviders(<ConnectionsPage />, '/connections')
+      expect(await screen.findByTestId('connections-page')).toBeDefined()
+      expect(screen.queryByTestId('connections-not-owner')).toBeNull()
+      expect(screen.getAllByTestId('provider-card')).toHaveLength(3)
+      expect(screen.queryByTestId('data-backend')).toBeNull()
+      const text = document.body.textContent ?? ''
+      for (const word of [
+        '主管',
+        '老板',
+        '上级',
+        '审批',
+        '部门',
+        '范围',
+        '并进来',
+        '加入一家公司',
+        '成员额度',
+      ])
+        expect(text, word).not.toContain(word)
+    } finally {
+      modeOrgs.length = 0
+    }
   })
 })
 
