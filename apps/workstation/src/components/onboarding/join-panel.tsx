@@ -21,6 +21,7 @@ import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
 import type { DiscoveryStateView, InviteView, MembershipRequestView } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
+import { formatDateTime } from '@/lib/format'
 import { useMode } from '@/lib/mode'
 
 export interface JoinSubmit {
@@ -92,8 +93,7 @@ export function JoinPanel({
   const shown = joinable && (!collapsed || open || peers.length > 0)
   const [copied, setCopied] = useState<string | null>(null)
 
-  const when = (iso: string): string =>
-    new Date(iso).toLocaleString(lang === 'zh' ? 'zh-CN' : 'en-US')
+  const when = (iso: string): string => formatDateTime(iso, lang)
 
   const statusText = (r: MembershipRequestView): string => t(`onboarding.requests.${r.status}`)
 
