@@ -32,7 +32,8 @@ export interface AdminOperation {
  */
 export interface ShopifyAdmin {
   /** 哪一种实现（事件里记；以后还有 `app_token` / `open_connector`）。 */
-  readonly via: 'cli_store_execute' | 'stand_in'
+  /** `cloud_app`（WP265）：云端一键授权的应用，经云代发（店铺令牌不出云）。 */
+  readonly via: 'cli_store_execute' | 'stand_in' | 'cloud_app'
   readonly store: string
   query<T = unknown>(op: AdminOperation): Promise<T>
   mutate<T = unknown>(op: AdminOperation): Promise<T>

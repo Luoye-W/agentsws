@@ -36,8 +36,15 @@ export interface ShopifyCloudStandInOptions {
   autoConnectAfterMs?: number
   /** 这家店回 501（应用的分发范围外）。默认没有。 */
   unsupported?: (shop: string) => boolean
+  /** 店主授了哪些权限（默认 = 应用 B 的那一套，docs/92）。 */
+  scopes?: readonly string[]
   /** 测试连接时回的店名。 */
   shopName?: (shop: string) => string
+  /**
+   * 运营工具那几条查询 / 改动的回包（Shopify 的 `{ data, errors? }`）；不给或回 `undefined`
+   * 就只认「测试连接」那一条（店名 + 域名）。
+   */
+  graphql?: (req: { shop: string; query: string; variables?: unknown }) => unknown
 }
 
 export interface ShopifyStandInReply {
@@ -59,6 +66,8 @@ export interface ShopifyCloudStandIn {
   reauth(shop: string, input: { reason?: string; missing_scopes?: string[] }): void
   attempts(): { id: string; shop: string; brand?: string; status: ShopifyOauthAttemptStatus }[]
   connections(): ShopifyCloudConnection[]
+  /** 收到过的代发请求（测试看带没带 `allow_mutations`）。 */
+  graphqlCalls(): { shop: string; query: string; allow_mutations: boolean }[]
 }
 
 export function shopifyCloudStandIn(options: ShopifyCloudStandInOptions = {}): ShopifyCloudStandIn {
@@ -71,6 +80,7 @@ export function shopifyCloudStandIn(options: ShopifyCloudStandInOptions = {}): S
   /** `brand|shop` → 绑定。 */
   const bound = new Map<string, ShopifyCloudConnection>()
   let seq = 0
+  const gqlCalls: { shop: string; query: string; allow_mutations: boolean }[] = []
   const ok = (data: unknown, status = 200): ShopifyStandInReply => ({ status, body: { data } })
   const fail = (status: number, code: string, message: string): ShopifyStandInReply => ({
     status,
@@ -86,7 +96,7 @@ export function shopifyCloudStandIn(options: ShopifyCloudStandInOptions = {}): S
       app: 'rollout',
       ...(a.brand === undefined ? {} : { brand: a.brand }),
       status: 'connected',
-      scopes: [...SHOPIFY_STAND_IN_SCOPES],
+      scopes: [...(options.scopes ?? SHOPIFY_STAND_IN_SCOPES)],
       missing_scopes: [],
       connected_at: now(),
     })
@@ -111,7 +121,7 @@ export function shopifyCloudStandIn(options: ShopifyCloudStandInOptions = {}): S
             attempt_id: id,
             authorize_url: `${SHOPIFY_STAND_IN_AUTHORIZE_BASE}?shop=${encodeURIComponent(shop)}&state=${id}`,
             app: 'rollout',
-            scopes: [...SHOPIFY_STAND_IN_SCOPES],
+            scopes: [...(options.scopes ?? SHOPIFY_STAND_IN_SCOPES)],
             expires_at: new Date(Date.parse(now()) + 10 * 60_000).toISOString(),
           },
           201,
@@ -146,6 +156,14 @@ export function shopifyCloudStandIn(options: ShopifyCloudStandInOptions = {}): S
         if (row === undefined) return fail(404, 'not_found', '这家店还没连上')
         if (row.status === 'reauth_required')
           return fail(409, 'conflict', '店铺授权失效了，重新授权一次。')
+        const query = typeof body.query === 'string' ? body.query : ''
+        const allow = body.allow_mutations === true
+        gqlCalls.push({ shop, query, allow_mutations: allow })
+        // 与真云同一道闸：文档是 mutation 却没说要改 → 拒
+        if (/^\s*mutation\b/u.test(query.replace(/#[^\n]*/gu, '')) && !allow)
+          return fail(400, 'invalid_input', '这一条是改动，没带 allow_mutations')
+        const custom = options.graphql?.({ shop, query, variables: body.variables })
+        if (custom !== undefined) return ok(custom)
         return ok({
           data: {
             shop: { name: options.shopName?.(shop) ?? shop.split('.')[0], myshopifyDomain: shop },
@@ -173,5 +191,6 @@ export function shopifyCloudStandIn(options: ShopifyCloudStandInOptions = {}): S
     },
     attempts: () => [...attempts.values()].map((a) => ({ ...a })),
     connections: () => [...bound.values()].map((c) => ({ ...c })),
+    graphqlCalls: () => gqlCalls.map((c) => ({ ...c })),
   }
 }

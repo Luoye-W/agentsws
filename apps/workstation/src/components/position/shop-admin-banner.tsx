@@ -11,6 +11,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { CheckCircle2, Download, KeyRound, Loader2, Store } from 'lucide-react'
 import { type ReactNode, useEffect, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { openExternal } from '@/components/connections/bridge'
 import { Button } from '@/components/ui/button'
 import { Hint } from '@/components/ui/hint'
@@ -36,6 +37,7 @@ export function ShopAdminBanner({
   duties: readonly { role_id: string; assignment_id: string }[]
 }): ReactNode {
   const { t, lang } = useApp()
+  const navigate = useNavigate()
   const client = useQueryClient()
   const mine = duties.filter((d) => SHOP_ADMIN_ROLES.includes(d.role_id))
   const roles = [...new Set(mine.map((d) => d.role_id))].sort()
@@ -135,12 +137,17 @@ export function ShopAdminBanner({
       )}
     </div>
   )
+  /** WP265：云端一键授权那一路的（重新）授权在连接页 Shopify 卡上做，不起 CLI。 */
+  const reauthorize = (): void => {
+    if (v?.via === 'cloud') navigate('/connections?service=shopify_admin')
+    else run.mutate('authorize')
+  }
   const authorizeButton = (label: string): ReactNode => (
     <Button
       size="xs"
       className="gap-1"
       disabled={run.isPending}
-      onClick={() => run.mutate('authorize')}
+      onClick={() => reauthorize()}
       data-testid="shop-admin-authorize"
     >
       <KeyRound className="size-3.5" aria-hidden />
@@ -277,7 +284,7 @@ export function ShopAdminBanner({
             type="button"
             className="underline-offset-2 hover:underline"
             disabled={run.isPending}
-            onClick={() => run.mutate('authorize')}
+            onClick={() => reauthorize()}
             data-testid="shop-admin-reauthorize"
           >
             {t('shop_admin.reauthorize')}

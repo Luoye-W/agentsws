@@ -7108,6 +7108,8 @@ export interface ShopAdminView {
     browser_opened?: boolean
     error?: { code: string; missing?: string[]; detail?: string }
   }
+  /** WP265：`cloud` = 连接页一键授权的云端应用（授权 / 重新授权去连接页做）。 */
+  via?: 'cloud' | 'cli'
 }
 
 const rolesQuery = (roles: readonly string[]): string =>

@@ -529,6 +529,7 @@ import {
   type ShopAdminAssembly,
   STORE_SESSION_CLI_ID,
 } from './shop-auth.js'
+import { preferCloudShopAdmin } from './shop-cloud-admin.js'
 import type { ShopOps } from './shop-ops.js'
 import { createShopOps } from './shop-service.js'
 import { createShopToolSurface } from './shop-tools.js'
@@ -2646,7 +2647,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           ? undefined
           : join(dbDir, 'tools')
     const cliSpec = (): PlatformCliSpec | undefined => platformKitOf(brandPlatformOf(ws))?.cli
-    const auth = createShopAdmin({
+    const cliAuth = createShopAdmin({
       workspace_id: ws,
       clock,
       ...(brand.dir === undefined ? {} : { settingsFile: join(brand.dir, 'shop-admin.json') }),
@@ -2699,6 +2700,18 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           correlation: { trace_id: `trc_shop_${Date.parse(clock.now()).toString(36)}` },
           payload,
         }),
+    })
+    /*
+     * WP265（Fable 追加）：这个品牌在连接页一键授权连着店 → **优先走云端代发**（查询不带、批过的卡带
+     * `allow_mutations`），岗位页那一行、工具面、出卡都按云端那一条；没有才回退上面的 CLI 授权。
+     */
+    const auth = preferCloudShopAdmin(cliAuth, {
+      link: () => cloudShopLinks.link(ws),
+      call: async () => {
+        const cloud = await brandModules.cloud(ws)
+        return cloud.linked() ? cloud.call : undefined
+      },
+      onAuthProblem: () => cloudShopLinks.invalidate(ws),
     })
     const ops = createShopOps({
       workspace_id: ws,
