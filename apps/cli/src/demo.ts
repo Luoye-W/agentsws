@@ -1491,6 +1491,22 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
         fetch: (async () => new Response(null, { status: 204 })) as unknown as typeof fetch,
       }
     })(),
+    /*
+     * WP268：生图在 demo 里是占位图（模拟世界挂的那一条）；挑中传店铺「文件」走上面那家假店，
+     * 不等 Shopify 处理；店里商品图（假店的 `cdn.shopify.test`）取的是一张占位图，不连外网。
+     */
+    images: {
+      sleep: async () => undefined,
+      extraImageHosts: /^cdn\.shopify\.test$/,
+      fetch: async () => {
+        // 一张 1×1 的 PNG（占位；字节写死，不依赖网关包）
+        const png = Buffer.from(
+          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC',
+          'base64',
+        )
+        return { ok: true, status: 200, arrayBuffer: async () => new Uint8Array(png).buffer }
+      },
+    },
     cloudFetch: cloud.fetch,
     /*
      * WP188：关联了替身云之后，「Agents 工坊（用积分）」那条模型来源打的是替身的 `/v1/ai`
