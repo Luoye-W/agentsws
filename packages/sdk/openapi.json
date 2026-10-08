@@ -85294,6 +85294,395 @@
           }
         }
       }
+    },
+    "/v1/brand-assets": {
+      "get": {
+        "operationId": "listBrandAssets",
+        "summary": "品牌素材库（WP268）：AI 出的图、人拖进来的图、店里商品图；新的在前",
+        "tags": ["design"],
+        "parameters": [
+          {
+            "name": "matter_id",
+            "in": "query",
+            "required": false,
+            "description": "只看这件事项里的",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "tag",
+            "in": "query",
+            "required": false,
+            "description": "只看这个用途标",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "source",
+            "in": "query",
+            "required": false,
+            "description": "generated / uploaded / external",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "picked_only",
+            "in": "query",
+            "required": false,
+            "description": "只看选中过的（true / false）",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "最多几行",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "X-Assignment",
+            "in": "header",
+            "required": true,
+            "description": "本次请求绑定的 Assignment（31 §3.1：一次请求一个 Assignment）",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "{ rows: BrandAssetRow[] }",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-authz": {
+          "domain": "approval",
+          "op": "read",
+          "range": "own",
+          "sensitivity": "internal"
+        },
+        "x-returns": "{ rows: BrandAssetRow[] }"
+      }
+    },
+    "/v1/brand-assets/{id}/file": {
+      "get": {
+        "operationId": "getBrandAssetFile",
+        "summary": "取素材库里一张图的原图字节（挑图卡与素材库页的缩略图）",
+        "tags": ["design"],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "素材 id",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Assignment",
+            "in": "header",
+            "required": true,
+            "description": "本次请求绑定的 Assignment（31 §3.1：一次请求一个 Assignment）",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "图片字节（不是本品牌的 / 没有原图 → 404）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-authz": {
+          "domain": "approval",
+          "op": "read",
+          "range": "own",
+          "sensitivity": "internal"
+        },
+        "x-returns": "图片字节（不是本品牌的 / 没有原图 → 404）"
+      }
+    },
+    "/v1/brand-assets/upload": {
+      "post": {
+        "operationId": "uploadBrandAsset",
+        "summary": "传一张图进素材库（multipart，字段 file；可带 matter_id = 事项里拖进来的、tags 逗号分隔）",
+        "tags": ["design"],
+        "parameters": [
+          {
+            "name": "X-Assignment",
+            "in": "header",
+            "required": true,
+            "description": "本次请求绑定的 Assignment（31 §3.1：一次请求一个 Assignment）",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "幂等键；24h 内同键重放原响应（28 §2）",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "{ asset: BrandAssetRow }",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-authz": {
+          "domain": "approval",
+          "op": "read",
+          "range": "own",
+          "sensitivity": "internal"
+        },
+        "x-returns": "{ asset: BrandAssetRow }"
+      }
     }
   },
   "x-asyncapi": {

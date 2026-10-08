@@ -19,6 +19,7 @@ import {
   DRAFT_NOT_CREATED,
   DRAFT_SUBJECT_DESCRIPTION,
   DRAFT_TOOL_DESCRIPTION,
+  IMAGE_TOOL_DEF_BY_NAME,
   isMcpReadTool,
   isScheduleTool,
   isWebTool,
@@ -341,7 +342,11 @@ const B2B_OUTBOUND_PARAMS: Readonly<Record<string, Record<string, unknown>>> = {
  */
 function themeParams(name: string): Record<string, unknown> | undefined {
   // WP261：独立站运营工具同一个转法（定义在 stand-ins 的 `runtime/shop.ts`）
-  const def = THEME_TOOL_DEF_BY_NAME.get(name) ?? SHOP_TOOL_DEF_BY_NAME.get(name)
+  // WP268：生图 / 改图 / 素材库同一个转法（定义在 stand-ins 的 `runtime/image.ts`）
+  const def =
+    THEME_TOOL_DEF_BY_NAME.get(name) ??
+    SHOP_TOOL_DEF_BY_NAME.get(name) ??
+    IMAGE_TOOL_DEF_BY_NAME.get(name)
   if (def === undefined) return undefined
   const schema = def.input_schema as {
     properties?: Record<string, Record<string, unknown>>
@@ -413,6 +418,8 @@ function readTool(name: string, hooks: ReadToolHooks): ToolDefinition {
       THEME_TOOL_DEF_BY_NAME.get(name)?.description ??
       // WP261：独立站运营工具（查询只读；改动只出卡）
       SHOP_TOOL_DEF_BY_NAME.get(name)?.description ??
+      // WP268：生图 / 改图 / 素材库（出图进素材库、出挑图卡；不直接定稿）
+      IMAGE_TOOL_DEF_BY_NAME.get(name)?.description ??
       `agentsws read tool ${name}`,
     // WP162：读技能只要一个名字；WP176：开发信那两个有自己的参数；别的只读工具照旧是那一张共用参数表
     parameters:

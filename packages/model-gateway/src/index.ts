@@ -11,6 +11,8 @@ export { createModelGateway } from './gateway.js'
 export type { StubImageProviderOptions } from './images.js'
 export {
   encodePng,
+  imageFidelitySupported,
+  imageSizeFor,
   NO_IMAGE_MODEL_EN,
   NO_IMAGE_MODEL_ZH,
   parseImageSize,

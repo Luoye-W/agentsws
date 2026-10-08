@@ -55,6 +55,9 @@ const KNOWN_KINDS: ReadonlySet<string> = new Set<ApprovalKind>([
   'content_conflict',
   // WP224：本周经营一页纸（L3 自动出、看完归档）
   'weekly_review',
+  // WP268（决策 213）：挑图卡（选一张 / 都不要 / 再来一版）与生图超额卡
+  'image_pick',
+  'image_budget',
 ])
 
 export function isKnownKind(kind: string): boolean {

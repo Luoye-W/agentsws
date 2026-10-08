@@ -58,6 +58,7 @@ import type { AskPort } from './routes/ask.js'
 import type { B2bOutboundPort, B2bPort, B2bSalesPort } from './routes/b2b.js'
 import type { BackgroundPort } from './routes/background.js'
 import type { BackupPort } from './routes/backup.js'
+import type { BrandAssetsPort } from './routes/brand-assets.js'
 import type { BrandDesignPort } from './routes/brand-design.js'
 import type { BrandIntakePort } from './routes/brand-intake.js'
 import type { BrowserPort } from './routes/browser.js'
@@ -1055,6 +1056,10 @@ export interface GatewayDeps {
    * 没装配时 `/v1/shop-admin*` 回 not_implemented（岗位页那一行不出）。
    */
   shopAdmin?: ShopAdminPort
+  /**
+   * WP268（决策 213）：品牌素材库（列 / 取原图 / 传一张）。按品牌；没装配时 `/v1/brand-assets*` 回 not_implemented。
+   */
+  brandAssets?: BrandAssetsPort
   /**
    * WP215（52 §4 收口）：每个品牌一套后台——状态、全进程并发上限、品牌急停。
    * 没装配时 `/v1/settings/background*` 回 not_implemented。

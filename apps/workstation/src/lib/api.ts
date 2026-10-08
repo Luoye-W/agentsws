@@ -7256,3 +7256,85 @@ export const setWeeklyReviewSchedule = (
     body: input,
     ...withAssignment(assignment),
   })
+
+// ── WP268（决策 213）：品牌素材库（AI 出的图、拖进来的图、店里商品图）─────────────
+//
+// 取原图与上传都不走 `api()`（那个只收发 JSON）：自己拼 `Authorization` / `X-Assignment`。
+
+/** 素材库里的一行（服务端 `brandAssetRow`）。 */
+export interface BrandAssetRow {
+  id: string
+  status: 'variant' | 'picked' | 'published' | 'rejected'
+  content_type?: string
+  width?: number
+  height?: number
+  tags?: string[]
+  file_url: string
+  source_label: string
+  provenance: {
+    source: 'generated' | 'uploaded' | 'external'
+    operation?: 'generate' | 'edit'
+    model?: { provider: string; model: string }
+    prompt?: string
+    credits?: number
+    matter_id?: string
+    reference_asset_ids?: string[]
+    picked_at?: string
+    origin?: { kind: string; ref?: string; url?: string }
+  }
+  shop_file?: { filename: string; theme_ref: string; url?: string; store: string }
+  placed?: { file: string; section?: string; block?: string; setting: string; preview_url?: string }
+  created_at: string
+}
+
+/** 单张上限（与服务端同一个数）。 */
+export const BRAND_ASSET_MAX_BYTES = 20 * 1024 * 1024
+export const BRAND_ASSET_ACCEPT = 'image/png,image/jpeg,image/webp,image/gif'
+
+export const listBrandAssets = (
+  filter: {
+    matter_id?: string
+    source?: 'generated' | 'uploaded' | 'external'
+    picked_only?: boolean
+    limit?: number
+  } = {},
+): Promise<{ rows: BrandAssetRow[] }> => {
+  const q = new URLSearchParams()
+  if (filter.matter_id !== undefined) q.set('matter_id', filter.matter_id)
+  if (filter.source !== undefined) q.set('source', filter.source)
+  if (filter.picked_only === true) q.set('picked_only', 'true')
+  if (filter.limit !== undefined) q.set('limit', String(filter.limit))
+  const qs = q.toString()
+  return api(`/v1/brand-assets${qs === '' ? '' : `?${qs}`}`)
+}
+
+/** 取一张图的字节，回一个页面内可用的 `blob:` 地址（用完由调用方 `URL.revokeObjectURL`）。 */
+export async function brandAssetObjectUrl(file_url: string): Promise<string> {
+  const headers = new Headers()
+  const token = readStoredToken()
+  if (token !== null) headers.set('Authorization', `Bearer ${token}`)
+  if (currentAssignment !== null) headers.set('X-Assignment', currentAssignment)
+  const res = await fetch(file_url, { headers })
+  if (!res.ok) throw new ApiClientError(res.status, (await res.json()) as ApiErrorBody)
+  return URL.createObjectURL(await res.blob())
+}
+
+/** 传一张图进素材库（事项里拖进来的带 `matter_id`）。 */
+export async function uploadBrandAsset(
+  file: File,
+  opts: { matter_id?: string; tags?: string[] } = {},
+): Promise<{ asset: BrandAssetRow }> {
+  const headers = new Headers()
+  const token = readStoredToken()
+  if (token !== null) headers.set('Authorization', `Bearer ${token}`)
+  if (currentAssignment !== null) headers.set('X-Assignment', currentAssignment)
+  const form = new FormData()
+  form.append('file', file)
+  if (opts.matter_id !== undefined) form.append('matter_id', opts.matter_id)
+  if (opts.tags !== undefined && opts.tags.length > 0) form.append('tags', opts.tags.join(','))
+  const res = await fetch('/v1/brand-assets/upload', { method: 'POST', headers, body: form })
+  const text = await res.text()
+  const parsed: unknown = text === '' ? {} : JSON.parse(text)
+  if (!res.ok) throw new ApiClientError(res.status, parsed as ApiErrorBody)
+  return (parsed as ApiEnvelope<{ asset: BrandAssetRow }>).data
+}

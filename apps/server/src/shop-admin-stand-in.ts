@@ -57,6 +57,8 @@ export interface FakeShop {
   /** 授权过的店 → 权限 / 过期。 */
   sessions: Map<string, { scopes: string[]; expiresAt: string }>
   seq: number
+  /** WP268：店铺「文件」里的图（`fileCreate` 建的；第一次查状态是 UPLOADED，再查才 READY）。 */
+  files?: { id: string; filename: string; url: string; alt?: string; polled: number }[]
 }
 
 const NOW = (): string => new Date().toISOString()
@@ -435,6 +437,59 @@ export function resolveFakeShop(shop: FakeShop, op: string, vars: Obj): Obj | un
           userErrors: [],
         },
       }
+    // WP268：店铺「文件」与商品图（`shop-files.ts` 那三条）
+    case 'AgentswsFileCreate': {
+      const list = (vars.files as Obj[] | undefined) ?? []
+      shop.files ??= []
+      const made = list.map((f) => {
+        const wanted = String(f.filename ?? `file-${id()}.png`)
+        // 撞名时 Shopify 默认在文件名后面加一段（APPEND_UUID）
+        const filename = shop.files?.some((x) => x.filename === wanted)
+          ? wanted.replace(/(\.[a-z]+)$/i, `_${id()}$1`)
+          : wanted
+        const file = {
+          id: `gid://shopify/MediaImage/${id()}`,
+          filename,
+          url: `https://cdn.shopify.com/s/files/1/0000/0001/files/${filename}?v=1`,
+          ...(typeof f.alt === 'string' ? { alt: f.alt } : {}),
+          polled: 0,
+        }
+        shop.files?.push(file)
+        return { id: file.id, fileStatus: 'UPLOADED', alt: file.alt ?? null, image: null }
+      })
+      return { fileCreate: { files: made, userErrors: [] } }
+    }
+    case 'AgentswsFileStatus': {
+      const f = shop.files?.find((x) => x.id === vars.id)
+      if (f === undefined) return { node: null }
+      f.polled += 1
+      return {
+        node: {
+          id: f.id,
+          fileStatus: f.polled >= 1 ? 'READY' : 'UPLOADED',
+          image: { url: f.url, width: 1536, height: 1024 },
+        },
+      }
+    }
+    case 'AgentswsProductImages': {
+      const p = prod(vars.id)
+      return {
+        product:
+          p === undefined
+            ? null
+            : {
+                id: p.id,
+                title: p.title,
+                media: {
+                  nodes: p.media.map((m) => ({
+                    mediaContentType: 'IMAGE',
+                    image: { url: m.url, width: 1000, height: 1000 },
+                    preview: { image: { url: m.url } },
+                  })),
+                },
+              },
+      }
+    }
     case 'AgentswsCollectionCreate': {
       const input = vars.input as Obj
       const cid = `gid://shopify/Collection/${id()}`

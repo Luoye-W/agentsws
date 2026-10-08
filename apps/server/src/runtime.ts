@@ -97,6 +97,8 @@ import {
   B2B_OUTBOUND_TOOL_NAMES,
   createStubRuntime,
   humanizeToolNames,
+  IMAGE_TOOL_NAMES,
+  imageWorkSection,
   isB2bOutboundRole,
   isOwnerRole,
   isScheduleTool,
@@ -157,6 +159,8 @@ const HOST_TOOL_EFFECTS: Readonly<Record<string, ToolSideEffect>> = Object.fromE
     ...THEME_TOOL_NAMES,
     // WP261：独立站运营工具——查询只读店铺；改动只出卡（人批了服务端执行器才改）
     ...SHOP_TOOL_NAMES,
+    // WP268：生图 / 改图 / 素材库——只动本机素材库、出挑图卡（花积分由执行器按上限判）
+    ...IMAGE_TOOL_NAMES,
   ].map((name) => [name, classifySideEffect(name) === 'read_external' ? 'read_external' : 'local']),
 )
 
@@ -341,6 +345,11 @@ export interface RuntimeOptions {
    * 改动工具只出卡，人批了执行器才改。不给 = 没有这一组（老装配、模拟世界字节不变）。
    */
   shopTools?: { executeTool: ToolExecutor; offered(role_id: string): Promise<string[]> }
+  /**
+   * WP268（决策 213）：生图 / 改图 / 素材库三个工具（`image-tools.ts` 建的那一份，按品牌）。工具面每次运行现问：
+   * 设计岗五条 + 网页模板，且「生图」那一档配了才有（模型不会改图就不摆 `edit_image`）。不给 = 没有这一组。
+   */
+  imageTools?: { executeTool: ToolExecutor; offered(role_id: string): Promise<string[]> }
   /**
    * WP181：官方「自动化任务」的四个工具（`automation.ts` 建的那一份）。**装了那个官方插件**
    * （`enabled()`，每次运行现问）才进工具面——所有职责都有（给自己建提醒）；会往外发的周期任务
@@ -1005,6 +1014,7 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
     const b2bOut = options.b2bOutboundTools
     const themeOut = options.themeTools
     const shopOut = options.shopTools
+    const imageOut = options.imageTools
     const dev = options.devTools
     const automation = options.automation
     /*
@@ -1030,6 +1040,7 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       b2bOut === undefined &&
       themeOut === undefined &&
       shopOut === undefined &&
+      imageOut === undefined &&
       dev === undefined &&
       readSkill === undefined &&
       automation === undefined
@@ -1065,6 +1076,10 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       // WP261：独立站运营工具（名字与别处不重名；职责与授权在执行器里再判一次）
       if (shopOut !== undefined && SHOP_TOOL_NAMES.includes(bareOf(call.name))) {
         return shopOut.executeTool(call)
+      }
+      // WP268：生图 / 改图 / 素材库（名字与别处不重名；职责在执行器里再判一次）
+      if (imageOut !== undefined && IMAGE_TOOL_NAMES.includes(bareOf(call.name))) {
+        return imageOut.executeTool(call)
       }
       if (dev !== undefined && devToolNames(call.request.actor.role_id).includes(call.name)) {
         try {
@@ -1103,6 +1118,7 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       return true
     if (options.themeTools !== undefined && THEME_TOOL_NAMES.includes(bare)) return true
     if (options.shopTools !== undefined && SHOP_TOOL_NAMES.includes(bare)) return true
+    if (options.imageTools !== undefined && IMAGE_TOOL_NAMES.includes(bare)) return true
     // 官方网页工具由 dsh 那棵树自己挂（`dsh-tool-web`），不经宿主执行器
     if (WEB_TOOL_NAMES.includes(name)) return true
     if (options.devTools !== undefined && devToolNames(role_id).includes(name)) return true
@@ -1464,6 +1480,11 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       options.shopTools === undefined
         ? []
         : await options.shopTools.offered(config.role_id).catch(() => [] as string[])
+    /** WP268：生图配了、这条职责能出图（设计岗 / 网页模板）才有（每次运行现问）。 */
+    const imageNames =
+      options.imageTools === undefined
+        ? []
+        : await options.imageTools.offered(config.role_id).catch(() => [] as string[])
     const allow = [
       ...new Set([
         ...config.grounding.map((g) => g.tool),
@@ -1490,6 +1511,8 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
           : []),
         // WP261：独立站运营工具（授权过才有；网页模板只给读商品 / 合集，选合集 / 挂商品用）
         ...shopNames,
+        // WP268：生图 / 改图 / 素材库
+        ...imageNames,
         // WP179：官方网页工具（只有真给了的那几个）
         ...(web?.search === true ? [WEB_SEARCH_TOOL] : []),
         ...(web?.fetch === true ? [WEB_FETCH_TOOL] : []),
@@ -1619,6 +1642,8 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
           { id: 'next_step', name: '下一步建议', order: 27, text: NEXT_SUGGESTION_RULE },
           // WP260：网页模板的做法（读一次 → 改模板与设置 → 检查 → 推未发布；中途不汇报）。只给带主题工具的运行
           ...(themeRun ? [themeWorkSection({ shopRead: shopNames.length > 0 })] : []),
+          // WP268：网页模板摆了生图工具时多一段「配图的做法」（没摆的运行一个字节不多）
+          ...(themeRun && imageNames.length > 0 ? [imageWorkSection()] : []),
           /*
            * 24 §1 + WP69（54 §1）：解析后的技能正文——**六层**叠加完的那一份
            * （包 → 公司 → 部门 → 岗位 → 职责 → 个人）。

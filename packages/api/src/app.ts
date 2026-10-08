@@ -20,6 +20,7 @@ import { b2bRoutes } from './routes/b2b.js'
 // WP215：每个品牌一套后台（状态 / 全进程并发上限 / 品牌急停）
 import { backgroundRoutes } from './routes/background.js'
 import { backupRoutes } from './routes/backup.js'
+import { brandAssetRoutes } from './routes/brand-assets.js'
 import { brandDesignRoutes } from './routes/brand-design.js'
 import { brandIntakeRoutes } from './routes/brand-intake.js'
 import { browserRoutes } from './routes/browser.js'
@@ -273,6 +274,8 @@ export function collectRoutes(): Route[] {
     ...economicsRoutes(),
     // WP261：店铺授权（Shopify CLI `store auth`）。`/v1/shop-admin*` 是新前缀（放在最后：生成物的顺序不动别人）
     ...shopAdminRoutes(),
+    // WP268：品牌素材库（列 / 取原图 / 传一张）
+    ...brandAssetRoutes(),
   ]
 }
 

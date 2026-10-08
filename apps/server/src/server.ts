@@ -73,6 +73,7 @@ import type {
   DataSourceLevel,
   EventEnvelope,
   Halt,
+  ImageProvider,
   KolChannel,
   Person,
   PersonId,
@@ -89,6 +90,7 @@ import type {
 import {
   ADS_DEFAULT_CAPS,
   ADS_PLATFORMS,
+  AI_IMAGE_EDIT_CAPABILITY,
   B2B_FACT_SUBJECT_TYPE,
   B2B_SENDER_CHOICE_KIND,
   brandNameOf,
@@ -116,6 +118,7 @@ import {
 } from '@agentsws/core'
 import { createDataStore, type SqliteDataStore } from '@agentsws/data'
 import { withOwnSources, withReadVia } from '@agentsws/deck'
+import { resolveBrandSystem } from '@agentsws/design-core'
 import type { WebCredential } from '@agentsws/dsh-adapter'
 import {
   type OfficialPluginBackend,
@@ -194,6 +197,12 @@ import { type B2bStore, createB2bStore } from './b2b-store.js'
 import { MemoryBackend } from './backend.js'
 import { type BackupRunResult, backupDirOf, backupKeepOf, runBackup } from './backup.js'
 import { attachBootBrandToCompany } from './boot-brand-org.js'
+import {
+  BrandAssetError,
+  type BrandAssets,
+  brandAssetRow,
+  createBrandAssets,
+} from './brand-assets.js'
 // WP121b（70 §3.5）：确认档案卡那一刻建的首批知识条目（政策要点 + 商品卡，一律 proposed）
 // WP215：每个品牌一套后台（品牌急停、全进程并发上限、切换器那一格）
 import { type BrandBackground, createBrandBackground } from './brand-background.js'
@@ -336,6 +345,8 @@ import { createApprovalDirectory } from './housekeeping.js'
 import { createImChannels, type ImChannelsAssembly, mountBrandImRoutes } from './im-channels.js'
 import { feishuSdkTransportFactory, fetchHttp, wsSocketFactory } from './im-sdk.js'
 import { createTeamBotManagerCheck } from './im-team-bots.js'
+import { createImagePlacer } from './image-place.js'
+import { createImageService, type ImageService } from './image-tools.js'
 import { createJoin, type JoinAssembly } from './join.js'
 // WP56（48 §4 #9）：知识包导入的落库那一步
 import { knowledgeSourceFile } from './knowledge-file.js'
@@ -925,6 +936,20 @@ export interface ServerOptions {
    * 不联网、不碰真店）。生产不传：用 WP245 装好的 CLI 真跑，令牌在本品牌那一份会话目录里。
    */
   shopAdmin?: { run?: RunCli; spawn?: SpawnTool; fetch?: typeof fetch }
+  /**
+   * WP268：生图那一路的注入点（测试 / demo）：只回网址的上游与店里商品图怎么取字节（不给用全局 fetch）、
+   * 等店铺文件处理好时怎么睡（测试给 0 秒）。生产不传。
+   */
+  images?: {
+    fetch?: (
+      url: string,
+    ) => Promise<{ ok: boolean; status: number; arrayBuffer(): Promise<ArrayBuffer> }>
+    sleep?: (ms: number) => Promise<void>
+    /** 另外认哪些图片主机（demo 假店的 `cdn.shopify.test`）。 */
+    extraImageHosts?: RegExp
+    /** 没在设置页配生图时挂的那一条（测试接假云端、demo 接占位图）。生产不传 = 「生图还没配」那句人话。 */
+    provider?: ImageProvider
+  }
   /**
    * WP247：本机连接器下载器的注入点（测试换成假 npm，不联网）。生产不传：只有桌面壳设了
    * `AGENTSWS_CONNECT_LOCAL_RUNTIME=1`（它来起停本机连接器）且有数据目录时才装配。
@@ -1751,7 +1776,12 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
        * demo 里反过来：不挂的话"待挑"那一块永远是空的，58 §3 的变体挑选卡
        * 在演示里一次都出不来。
        */
-      ...(options.mount === undefined ? {} : { images: stubImageProvider({ seed: 7 }) }),
+      // WP268：测试 / demo 可以注入一条生图（假云端的 OpenAI 形态口）；生产不传
+      ...(options.images?.provider !== undefined
+        ? { images: options.images.provider }
+        : options.mount === undefined
+          ? {}
+          : { images: stubImageProvider({ seed: 7 }) }),
       policy: { default: STUB_REF, data_residency: 'cn', prices: priceTable },
       clock,
       env,
@@ -2639,6 +2669,15 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     ...(options.shopAdmin?.spawn === undefined ? {} : { spawn: options.shopAdmin.spawn }),
   })
   const shops = new Map<WorkspaceId, { auth: ShopAdminAssembly; ops: ShopOps }>()
+  /** WP268：每个品牌一份素材库与生图服务（装品牌时登记；决定钩子与 `/v1/brand-assets` 按品牌取）。 */
+  const brandAssetsByWs = new Map<WorkspaceId, BrandAssets>()
+  const imageServices = new Map<WorkspaceId, ImageService>()
+  const brandAssetsOf = async (ws: WorkspaceId): Promise<BrandAssets> => {
+    await brands?.forWorkspace(ws)
+    const lib = brandAssetsByWs.get(ws)
+    if (lib === undefined) throw new ApiError('not_implemented', '这个品牌没有素材库')
+    return lib
+  }
   const shopOf = async (
     ws: WorkspaceId,
   ): Promise<{ auth: ShopAdminAssembly; ops: ShopOps } | undefined> => {
@@ -3548,6 +3587,95 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       },
     })
 
+    /*
+     * WP268（决策 213）：品牌素材库（设计库那张素材表 + 对象存储）与生图 / 改图工具。
+     * 生图那一档、单价每次现取（设置页改了立刻生效）；挑中带 `place` 的交给 `createImagePlacer`
+     * （传店铺文件 → 写模板 → 推未发布预览）。工作模型比这里晚建（`workRef` 晚绑定）。
+     */
+    const brandAssets = createBrandAssets({
+      workspace_id: ws,
+      store: design,
+      ...(blobs === undefined ? {} : { blobs }),
+      clock,
+      random,
+      ...(options.images?.extraImageHosts === undefined
+        ? {}
+        : { extraImageHosts: options.images.extraImageHosts }),
+    })
+    brandAssetsByWs.set(ws, brandAssets)
+    const imageService = createImageService({
+      workspace_id: ws,
+      clock,
+      assets: brandAssets,
+      images: () => ownGateway.images,
+      pricing: () => {
+        const view = ownModels.imageView()
+        const per_edit = pricingCatalog.creditsFor(AI_IMAGE_EDIT_CAPABILITY, 1)
+        return {
+          // 设置页没配、却有一条生图挂着（demo 的占位图 / 测试的假云端）：按官方接口的价算，宁可多报不少报
+          official: view.official || !view.configured,
+          ...(view.model === undefined ? {} : { model: view.model }),
+          ...(view.credits_per_image === undefined ? {} : { per_image: view.credits_per_image }),
+          ...(per_edit === undefined ? {} : { per_edit }),
+        }
+      },
+      approvals: () => approvals,
+      work: () => workRef,
+      designContext: () => brandDesignRef?.context(ws, 'design'),
+      forbidden: () =>
+        skills.registry.listSections(BRAND_SYSTEM_SKILL_NAME).length === 0
+          ? []
+          : (resolveBrandSystem(
+              [
+                {
+                  name: BRAND_SYSTEM_SKILL_NAME,
+                  scope: 'org' as const,
+                  body: skills.registry
+                    .listSections(BRAND_SYSTEM_SKILL_NAME)
+                    .map((sec) => `## ${sec.heading}\n${sec.body}`)
+                    .join('\n'),
+                },
+              ],
+              'dtc',
+            ).system?.forbidden ?? []),
+      shopReader: async () => {
+        const m = await shopOf(ws)
+        if (m === undefined || (await m.auth.access().catch(() => undefined)) === undefined)
+          return undefined
+        return m.auth.reader()
+      },
+      place: createImagePlacer({
+        workspace_id: ws,
+        assets: brandAssets,
+        clock,
+        shop: async () => {
+          const m = await shopOf(ws)
+          return m === undefined
+            ? undefined
+            : {
+                scopes: async () => (await m.auth.access().catch(() => undefined))?.scopes,
+                admin: () => m.auth.admin(),
+              }
+        },
+        theme: () => siteThemeOf(ws),
+        ...(options.shopAdmin?.fetch === undefined
+          ? {}
+          : { uploadFetch: options.shopAdmin.fetch as never }),
+        ...(options.images?.sleep === undefined ? {} : { sleep: options.images.sleep }),
+      }),
+      ...(options.images?.fetch === undefined ? {} : { fetch: options.images.fetch }),
+      appendEvent: (type, payload) =>
+        appendEvent({
+          schema_version: 1,
+          workspace_id: ws,
+          type,
+          actor: { kind: 'system', id: 'images' },
+          correlation: { trace_id: `trc_img_${Date.parse(clock.now()).toString(36)}` },
+          payload,
+        }),
+    })
+    imageServices.set(ws, imageService)
+
     let workRef: Work | undefined
     /**
      * WP125：客服判断层（晚绑定，同 `workRef` 那一条理由）。
@@ -4030,6 +4158,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
              * 店铺授权与运营按品牌懒建——取值函数只在真用到那一刻才碰它。
              */
             shopTools: createShopToolSurface({ module: () => shopOf(ws) }),
+            // WP268：生图 / 改图 / 素材库（设计岗五条 + 网页模板；生图配了才摆）
+            imageTools: imageService,
             vertical: () => brandProfileOf(ws).vertical,
             // WP216：平台专属的官方技能 / Dev MCP 工具只给平台对得上的品牌（每次现取档案）
             storefrontPlatform: () => brandPlatformOf(ws),
@@ -5436,6 +5566,12 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
 
   // WP154：选题卡批了 → 按卡片所属品牌开事项（品牌模块到这里才建得出来）
   seoDecidedHook.current = async (item) => {
+    // WP268：挑图卡 / 超额卡被决定 → 记选中 / 传店铺挂主题 / 再来一版 / 照卡出图
+    if (item.kind === 'image_pick' || item.kind === 'image_budget') {
+      await brands?.forWorkspace(item.workspace_id)
+      await imageServices.get(item.workspace_id)?.onDecided(item)
+      return
+    }
     // WP237：选择卡选了（或者老卡点了「认领」）→ 事项钉到那条职责、按原话起一次运行
     if (isRouteChoice(item)) return (await positionsFor(item.workspace_id)).onChoiceDecided(item)
     const brand = await brands?.forWorkspace(item.workspace_id)
@@ -8586,6 +8722,38 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     /*
      * WP261：「授权管理商品和页面」那一行（Shopify CLI `store auth`，按品牌；参数在服务端拼死）。
      */
+    /*
+     * WP268（决策 213）：品牌素材库（按品牌；先把品牌装起来，素材库随品牌建）。
+     */
+    brandAssets: {
+      list: async (actor, filter) => {
+        const lib = await brandAssetsOf(actor.workspace_id as WorkspaceId)
+        const rows = lib
+          .list({
+            ...(filter.matter_id === undefined ? {} : { matter_id: filter.matter_id }),
+            ...(filter.tag === undefined ? {} : { tag: filter.tag }),
+            ...(filter.source === undefined ? {} : { source: filter.source }),
+            status:
+              filter.picked_only === true
+                ? ['picked', 'published']
+                : ['variant', 'picked', 'published'],
+            limit: filter.limit ?? 100,
+          })
+          .map(brandAssetRow)
+        return { rows }
+      },
+      file: async (actor, id) => (await brandAssetsOf(actor.workspace_id as WorkspaceId)).bytes(id),
+      upload: async (actor, input) => {
+        const lib = await brandAssetsOf(actor.workspace_id as WorkspaceId)
+        try {
+          const asset = await lib.importUpload({ ...input, by: actor.person_id })
+          return { asset: brandAssetRow(asset) }
+        } catch (e) {
+          if (e instanceof BrandAssetError) throw new ApiError('invalid_input', e.message)
+          throw e
+        }
+      },
+    },
     shopAdmin: {
       view: async (actor, input) => {
         const m = await shopOf(actor.workspace_id as WorkspaceId)
@@ -9347,6 +9515,9 @@ function seoDecided(bus: ApprovalBus, hook: SeoDecidedHook): ApprovalBus {
           out.kind === 'seo_topic' ||
           out.kind === B2B_SENDER_CHOICE_KIND ||
           out.kind === 'inbound_dead_letter' ||
+          // WP268：挑图卡 / 超额卡
+          out.kind === 'image_pick' ||
+          out.kind === 'image_budget' ||
           // WP237：「这件事该走哪条职责」选定了 → 钉到那条、立刻开跑
           isRouteChoice(out)
         ) {

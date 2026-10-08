@@ -645,6 +645,50 @@ export interface DesignAssetProvenance {
   /** 人点"就这张"的那一下。**Agent 填不了这两格**（服务端按请求人盖）。 */
   picked_by?: PersonId
   picked_at?: Iso8601
+  /* ── WP268（决策 213）：AI 生图 / 改图进素材库时多记的几格（都可选，老素材不受影响） ── */
+  /** 从零出（`generate`）还是参考图改（`edit`）。 */
+  operation?: 'generate' | 'edit'
+  /**
+   * 提示词原文（WP268 派工单要「带提示词」：「再来一版」与回头查都要它）。**只落在本品牌的素材库里**，
+   * 不进事件日志、不上云；上限 2000 字。与 58 §1「只存哈希」的取舍见 WP268 报告「要 Luoye 定的事」。
+   */
+  prompt?: string
+  /** 改图用了素材库里哪几张当参考（第一张是主参考）。 */
+  reference_asset_ids?: readonly string[]
+  /** 这一张花了多少积分（官方接口按张扣；自己的接口不扣 → 不写）。 */
+  credits?: number
+  /** 哪件事项、哪次运行、哪条职责出的（挑图卡挂在那件事项上）。 */
+  matter_id?: string
+  run_id?: string
+  role_id?: string
+  /** `external` 时：从哪来的（店里某件商品的图 = `shop_product`，带商品 id 与原图地址）。 */
+  origin?: { kind: 'shop_product' | 'matter_upload' | 'library_upload'; ref?: string; url?: string }
+}
+
+/** WP268：选中的图传到 Shopify 店铺「文件」之后记下的那一份（主题里引用它）。 */
+export interface DesignAssetShopFile {
+  /** Shopify 的 `MediaImage` / `GenericFile` gid。 */
+  id: string
+  /** 上传时用的文件名（主题里 `shopify://shop_images/<文件名>` 引用的就是它）。 */
+  filename: string
+  /** 主题设置里写的那一串：`shopify://shop_images/<文件名>`。 */
+  theme_ref: string
+  /** CDN 地址（`fileStatus` 到 READY 才有）。 */
+  url?: string
+  store: string
+  uploaded_at: Iso8601
+}
+
+/** WP268：选中的图挂到了主题的哪一格（未发布预览那一份）。 */
+export interface DesignAssetPlacement {
+  /** `templates/index.json` / `sections/header-group.json` / `config/settings_data.json`。 */
+  file: string
+  section?: string
+  block?: string
+  setting: string
+  theme_id?: string
+  preview_url?: string
+  at: Iso8601
 }
 
 /**
@@ -681,6 +725,10 @@ export interface DesignAsset {
    */
   design_note?: string
   provenance: DesignAssetProvenance
+  /** WP268：传到店铺「文件」之后的那一份（没传过 = 没有）。 */
+  shop_file?: DesignAssetShopFile
+  /** WP268：挂到主题哪一格（最近一次）。 */
+  placed?: DesignAssetPlacement
   created_at: Iso8601
   updated_at?: Iso8601
 }
