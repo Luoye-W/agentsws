@@ -612,6 +612,15 @@ const DESIGN_QUERIES: QueryDef[] = [
                 { metric: '定稿（真能用的）', value: week.final },
                 { metric: '出了多少张变体', value: week.variants },
                 ...week.by_use.map((u) => ({ metric: `定稿 · ${u.use}`, value: u.count })),
+                // WP274：用自己的 key 出的图不扣积分，但花的是自己那把 key 的钱——张数 + 估算美元
+                ...(week.own_key === undefined
+                  ? []
+                  : [
+                      {
+                        metric: `用你自己的账号出图（估算约 US$${week.own_key.est_usd.toFixed(2)}，不扣积分）`,
+                        value: week.own_key.images,
+                      },
+                    ]),
               ],
       }
     },

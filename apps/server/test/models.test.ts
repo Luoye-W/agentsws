@@ -853,10 +853,34 @@ describe('WP127 生图单独一档', () => {
     const view = await data<ModelImageView>(
       await put('/v1/models/image', { provider_id: 'openai' }),
     )
-    expect(view).toMatchObject({ configured: true, model: 'gpt-image-1', official: false })
+    // WP274（决策 246 / 255）：OpenAI 官方地址没填型号 → GPT Image 2.5（出图 flare、改图 sunburst）
+    expect(view).toMatchObject({
+      configured: true,
+      model: 'gpt-image-2.5-flare',
+      edit_model: 'gpt-image-2.5-sunburst',
+      official: false,
+      override: true,
+    })
     expect(view.choices.map((c) => c.provider_id)).toEqual(['openai'])
     expect(ctx.server.models.images.available).toBe(true)
-    // 不给空串就不配
+    // 给空串 = 不单独指定：文字模型就是自己的 OpenAI key，自动跟着它（WP274），仍然配着
+    const off = await data<ModelImageView>(await put('/v1/models/image', { provider_id: '' }))
+    expect(off.override).toBe(false)
+    expect(off.using?.source).toBe('own_openai')
+    expect(ctx.server.models.images.available).toBe(true)
+  })
+
+  it('兼容口不是 OpenAI 官方（认不出厂商）：没填型号仍按老默认 gpt-image-1', async () => {
+    await put('/v1/models/providers/proxy', {
+      kind: 'openai_compatible',
+      base_url: 'https://proxy.example.com/v1',
+      model: 'gpt-4o-mini',
+      api_key: API_KEY,
+      region: 'global',
+    })
+    const view = await data<ModelImageView>(await put('/v1/models/image', { provider_id: 'proxy' }))
+    expect(view.model).toBe('gpt-image-1')
+    expect(view.edit_model).toBeUndefined()
     const off = await data<ModelImageView>(await put('/v1/models/image', { provider_id: '' }))
     expect(off.configured).toBe(false)
     expect(ctx.server.models.images.available).toBe(false)

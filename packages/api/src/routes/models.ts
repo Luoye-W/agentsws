@@ -136,6 +136,8 @@ export interface ModelProviderView {
   vision_status?: ModelVisionStatus
   /** 这一条是环境变量给的（`DEEPSEEK_API_KEY`），界面上不给删。 */
   from_env?: boolean
+  /** WP274：只用来生图的那一条（不挂文字模型）。 */
+  image_only?: boolean
   /**
    * WP151：DeepSeek 说**余额不足**（推理口 402，判定照官方 0.1.7-rc.2）。模型卡与顶栏据此出一行
    * 醒目提示 +「去充值」：账号那一条引到官方账号模块的 `links.topUpUrl`，API key 那一条引到开放平台的
@@ -414,15 +416,59 @@ export interface ModelImageView {
   /** 官方接口一张图多少积分（`pricing.json` 的 `ai.image`）。**不管配没配都给**，界面常显。 */
   credits_per_image?: number
   /** 能选哪几条（已配、有 key 的 provider；订阅登录那两种没有生图口，不列）。 */
-  choices: { provider_id: string; label: string; official: boolean; default_model: string }[]
+  choices: {
+    provider_id: string
+    label: string
+    official: boolean
+    default_model: string
+    /** WP274：这一条认出来是哪家官方（OpenAI / Google）；认不出（自建 / 中转）就没有。 */
+    vendor?: 'openai' | 'google'
+    /** WP274：这家默认的改图型号（OpenAI 是 sunburst）。 */
+    default_edit_model?: string
+    /** WP274：只用来生图的那一条（不挂文字模型）。 */
+    image_only?: boolean
+  }[]
   /** 没配 / 配的那条现在用不了时的人话。 */
   unavailable_reason?: string
+  /**
+   * WP274（决策 255）：**这一次出图实际用谁**——按「单独指定的生图接口 > 文字模型同厂商且带生图 >
+   * Agents 工坊积分」解析出来的那一条。设置页「生图」一档那句「现在用：……」读它。没有 = 出不了图。
+   */
+  using?: ModelImageUsing
+  /** WP274：不单独指定时自动会用谁（下拉里「自动」那一项的说明）。没有 = 自动也选不出来。 */
+  auto?: ModelImageUsing
+  /** WP274：单独指定了一条（`provider_id` / `model` 是那一份）。 */
+  override?: boolean
+  /** WP274：单独指定时改图用的型号（不给 = 同出图型号）。 */
+  edit_model?: string
 }
 
-/** 改生图那一档。`provider_id` 给空串 = 不配。 */
+/** WP274：一次出图解析出来的那一条。 */
+export interface ModelImageUsing {
+  /**
+   * - `override`：设置里单独指定的那一条；
+   * - `own_openai` / `own_google`：文字模型用的是自己的 OpenAI / Google key，生图跟着用它（不扣积分）；
+   * - `cloud`：走 Agents 工坊云（按张扣积分）。
+   */
+  source: 'override' | 'own_openai' | 'own_google' | 'cloud'
+  /** 那一条 provider 的 id（自动走云、但设置里没加积分那张卡时是 `agentsws-cloud`）。 */
+  provider_id: string
+  /** 给人看的一句：「你的 OpenAI 账号（GPT Image 2.5）」/「你的 Google 账号（Nano Banana 2.1）」/「Agents 工坊积分」。 */
+  label: string
+  /** 出图型号。 */
+  generate_model: string
+  /** 改图型号（OpenAI 那一路是 sunburst，别的同出图型号）。 */
+  edit_model: string
+  /** 走用户自己的 key（不预扣积分、不出积分口径的超额卡；本机记张数与估算美元）。 */
+  own_key: boolean
+}
+
+/** 改生图那一档。`provider_id` 给空串 = 不单独指定（自动）。 */
 export interface SetModelImageInput {
   provider_id: string
   model?: string | undefined
+  /** WP274：改图型号（不给 = 同出图型号）。 */
+  edit_model?: string | undefined
 }
 
 /**
@@ -592,6 +638,11 @@ export interface SaveModelProviderInput {
    * 一个后台任务悄悄覆盖掉。不给就由服务端判断（能在价目表里查到就是 catalog）。
    */
   price_source?: 'catalog' | 'manual' | undefined
+  /**
+   * WP274：只用来生图的接口（设置 → 模型 →「生图」里单独指定的那一条）。不挂到文字模型上、
+   * 不进默认模型下拉、不跑三步验证；key 同样只进本机加密库。
+   */
+  image_only?: boolean | undefined
 }
 
 export interface ModelsPort {
@@ -728,6 +779,7 @@ const SaveBody = z.object({
   price_out: z.number().min(0).max(100_000).optional(),
   price_cached: z.number().min(0).max(100_000).optional(),
   price_source: z.enum(['catalog', 'manual']).optional(),
+  image_only: z.boolean().optional(),
 })
 
 /** 拉模型列表的请求体。`api_key` 同 `SaveBody`：只限长度，值不进任何错误信封。 */
@@ -738,6 +790,7 @@ const InheritanceBody = z.object({ inherit_org: z.boolean() })
 const ImageBody = z.object({
   provider_id: z.string().max(64),
   model: z.string().min(1).max(128).optional(),
+  edit_model: z.string().min(1).max(128).optional(),
 })
 
 const DiscoverBody = z.object({

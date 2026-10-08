@@ -45,7 +45,7 @@ import {
   imageCredits,
 } from '@agentsws/contracts'
 import { checkPrompt, resolveSpec } from '@agentsws/design-core'
-import { imageSizeFor } from '@agentsws/model-gateway'
+import { estimateImageUsd, imageSizeFor } from '@agentsws/model-gateway'
 import type { ToolExecution, ToolExecutor } from '@agentsws/stand-ins'
 import {
   EDIT_IMAGE_TOOL,
@@ -492,6 +492,15 @@ export function createImageService(options: ImageServiceOptions): ImageService {
           })
         : await provider.generate({ prompt, size: job.size, n: job.n, meta })
     const cost = costOf({ operation: job.operation, n: out.assets.length })
+    // WP274：自己的 key 不扣积分，但记一个估算美元（一张多少）给数据看板
+    const est_usd = cost.own_key
+      ? estimateImageUsd({
+          model: out.model.model,
+          size: job.size,
+          operation: job.operation,
+          references: job.reference_asset_ids?.length ?? 0,
+        })
+      : undefined
     const duty = designDutyOfRole(ctx.role_id)?.id ?? 'dtc'
     const saved: DesignAsset[] = []
     for (const img of out.assets) {
@@ -516,7 +525,8 @@ export function createImageService(options: ImageServiceOptions): ImageService {
             ...(job.reference_asset_ids === undefined
               ? {}
               : { reference_asset_ids: job.reference_asset_ids }),
-            ...(cost.own_key ? {} : { credits: cost.per }),
+            ...(cost.own_key ? { own_key: true } : { credits: cost.per }),
+            ...(est_usd === undefined ? {} : { est_usd }),
             run_id: ctx.run_id,
             role_id: ctx.role_id,
             ...(ctx.matter_id === undefined ? {} : { matter_id: ctx.matter_id }),
@@ -535,6 +545,10 @@ export function createImageService(options: ImageServiceOptions): ImageService {
       images: saved.length,
       credits,
       model: out.model.model,
+      ...(cost.own_key ? { own_key: true } : {}),
+      ...(est_usd === undefined
+        ? {}
+        : { est_usd: Math.round(est_usd * saved.length * 10_000) / 10_000 }),
     })
     const variants: ImagePickVariant[] = saved.map((a, i) => ({
       id: `${IMAGE_PICK_PREFIX}${a.id}`,
@@ -637,7 +651,7 @@ export function createImageService(options: ImageServiceOptions): ImageService {
           status: 'needs_approval',
           approval_item_id: item.id,
           credits: cost.total,
-          message: `${why}，这次先没出图，出了一张卡问人要不要继续（约 ${cost.total} 积分）。别再重试，等人批。`,
+          message: `${why}，这次先没出图，出了一张卡问人要不要继续${cost.own_key ? '（用自己的接口，不扣积分）' : `（约 ${cost.total} 积分）`}。别再重试，等人批。`,
         },
       }
     }
