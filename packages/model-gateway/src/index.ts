@@ -9,12 +9,14 @@ export type {
 export { createModelGateway } from './gateway.js'
 // WP274：生图跟着用户自己的模型走（认厂商、两个型号合一、估美元）+ Google 生图
 export {
+  cloudImageModels,
   defaultImageModels,
   estimateImageUsd,
   GPT_IMAGE_EDIT_MODEL,
   GPT_IMAGE_GENERATE_MODEL,
   type ImageVendor,
   imageVendorOf,
+  SEEDREAM_MODEL,
   splitImageProvider,
 } from './image-routing.js'
 // WP76（22 图片槽 / 58 §1）：图片能力的两个实现 + 「没有图片模型」那句人话

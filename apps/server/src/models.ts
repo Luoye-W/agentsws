@@ -78,6 +78,7 @@ import type {
 import {
   catalogModels,
   checkModel,
+  cloudImageModels,
   DEEPSEEK_ACCOUNT_BASE_URL,
   DEEPSEEK_ACCOUNT_DEFAULT_MODEL,
   DEEPSEEK_ACCOUNT_MODELS,
@@ -88,8 +89,6 @@ import {
   deepseekAccountProvider,
   deepseekMessagesProvider,
   defaultImageModels,
-  GPT_IMAGE_EDIT_MODEL,
-  GPT_IMAGE_GENERATE_MODEL,
   geminiImageProvider,
   hostOf,
   imageVendorOf,
@@ -206,6 +205,7 @@ export function prettyImageModel(model: string): string {
   const name = model.trim().toLowerCase()
   if (/^gpt-image-2\.5/.test(name)) return 'GPT Image 2.5'
   if (/^gemini-nano-banana-2\.1/.test(name)) return 'Nano Banana 2.1'
+  if (/^doubao-seedream-5-0-pro/.test(name)) return 'Seedream 5.0 Pro'
   return model
 }
 
@@ -1434,6 +1434,20 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
     }
   }
 
+  /**
+   * 一条接口没填型号时的默认出图 / 改图型号：OpenAI 官方 → GPT Image 2.5（flare / sunburst）；
+   * Google 官方 → Nano Banana 2.1；我们的云 → 按数据驻留（`cn` 用 Seedream 5.0 Pro，决策 262；
+   * 不限用 GPT Image 2.5）；别的兼容口 → 老默认 `gpt-image-1`（WP127）。
+   */
+  const defaultModelsFor = (config: ModelProviderConfig): { generate: string; edit: string } => {
+    if (config.kind === 'agentsws_cloud')
+      return cloudImageModels(state.defaults.data_residency ?? 'cn')
+    const vendor = imageVendorOf(config.base_url)
+    return vendor === undefined
+      ? { generate: DEFAULT_IMAGE_MODEL, edit: DEFAULT_IMAGE_MODEL }
+      : defaultImageModels(vendor)
+  }
+
   /** 不单独指定时自动选谁（第 2、3 档）。 */
   const autoImageRoute = (): ImageRoute | undefined => {
     const run = policyOf().by_purpose?.run ?? defaultRef()
@@ -1448,7 +1462,7 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
         vendor === 'openai' ? 'own_openai' : 'own_google',
         defaultImageModels(vendor),
       )
-    const cloudModels = defaultImageModels('openai')
+    const cloudModels = cloudImageModels(state.defaults.data_residency ?? 'cn')
     const cloud = activeConfigs().find((c) => c.kind === 'agentsws_cloud')
     if (cloud !== undefined) return imageRouteOf(cloud, 'cloud', cloudModels)
     if (!hasCloudToken()) return undefined
@@ -1578,21 +1592,14 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
       .filter((c) => IMAGE_CAPABLE_KINDS.includes(c.kind))
       .map((c) => {
         const vendor = c.kind === 'agentsws_cloud' ? undefined : imageVendorOf(c.base_url)
-        const models = vendor === undefined ? undefined : defaultImageModels(vendor)
+        const models = defaultModelsFor(c)
         return {
           provider_id: c.id,
           label: providerDisplayLabel(c),
           official: c.kind === 'agentsws_cloud',
-          default_model:
-            c.kind === 'agentsws_cloud'
-              ? GPT_IMAGE_GENERATE_MODEL
-              : (models?.generate ?? DEFAULT_IMAGE_MODEL),
+          default_model: models.generate,
           ...(vendor === undefined ? {} : { vendor }),
-          ...(c.kind === 'agentsws_cloud'
-            ? { default_edit_model: GPT_IMAGE_EDIT_MODEL }
-            : models === undefined || models.edit === models.generate
-              ? {}
-              : { default_edit_model: models.edit }),
+          ...(models.edit === models.generate ? {} : { default_edit_model: models.edit }),
           ...(c.image_only === true ? { image_only: true } : {}),
         }
       })
@@ -2331,13 +2338,8 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
             `${providerDisplayLabel(config)} 没有生图接口。生图请选 Agents 工坊官方接口，或者一条 OpenAI 兼容口。`,
           )
         }
-        // WP274：没填型号就按这家的默认（OpenAI 官方 → GPT Image 2.5 flare / sunburst；Google → Nano Banana 2.1；
-        // 云 → GPT Image 2.5；别的兼容口 → 老默认 `gpt-image-1`）
-        const vendor = config.kind === 'agentsws_cloud' ? 'openai' : imageVendorOf(config.base_url)
-        const fallback =
-          vendor === undefined
-            ? { generate: DEFAULT_IMAGE_MODEL, edit: DEFAULT_IMAGE_MODEL }
-            : defaultImageModels(vendor)
+        // WP274：没填型号就按这家的默认（见 `defaultModelsFor`）
+        const fallback = defaultModelsFor(config)
         const model = input.model?.trim() || fallback.generate
         const edit_model =
           input.edit_model?.trim() ||

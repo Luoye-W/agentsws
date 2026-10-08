@@ -268,10 +268,21 @@ describe('WP274 自动解析：文字模型同厂商且带生图', () => {
     })
     expect(view.using?.label).toContain('Agents 工坊积分')
     expect(view.official).toBe(true)
+    // 工作区默认「数据不出境」：云上默认 Seedream 5.0 Pro（决策 262：GPT 在境外会被云端 422）
+    expect(view.using?.label).toBe('Agents 工坊积分（Seedream 5.0 Pro）')
     await server.models.images.generate({ prompt: 'x', meta })
     const hit = calls.find((c) => c.url.endsWith('/v1/ai/images/generations'))
     expect(hit?.auth).toBe(`Bearer ${CLOUD_TOKEN}`)
-    expect(hit?.model).toBe('gpt-image-2.5-flare')
+    expect(hit?.model).toBe('doubao-seedream-5-0-pro-260628')
+    // 驻留放开：GPT Image 2.5（出图 flare、改图 sunburst）
+    await call(server, owner(server), 'PUT', '/v1/models/defaults', { data_residency: 'any' })
+    const any = await imageView(server)
+    expect(any.using).toMatchObject({
+      generate_model: 'gpt-image-2.5-flare',
+      edit_model: 'gpt-image-2.5-sunburst',
+    })
+    await server.models.images.generate({ prompt: 'y', meta })
+    expect(calls.at(-1)?.model).toBe('gpt-image-2.5-flare')
   })
 
   it('OpenAI key 填的是中转地址（不是官方主机）：不当它带生图，退到云 / 没配', async () => {

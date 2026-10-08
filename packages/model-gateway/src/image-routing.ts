@@ -21,6 +21,19 @@ export const GPT_IMAGE_GENERATE_MODEL = 'gpt-image-2.5-flare'
 /** GPT Image 2.5 改图档（精，官方：「editing precision matters most」）。 */
 export const GPT_IMAGE_EDIT_MODEL = 'gpt-image-2.5-sunburst'
 
+/**
+ * Seedream 5.0 Pro（字节，境内可用）。云端「数据不出境」工作区的默认生图型号（决策 262：GPT 在境外，
+ * 驻留 `cn` 时云端会 422）。生成、改图同一个型号（云端白名单 WP273）。
+ */
+export const SEEDREAM_MODEL = 'doubao-seedream-5-0-pro-260628'
+
+/** 走 Agents 工坊云时的默认出图 / 改图型号：按工作区数据驻留选（决策 246 / 262）。 */
+export function cloudImageModels(residency: 'cn' | 'any'): { generate: string; edit: string } {
+  return residency === 'cn'
+    ? { generate: SEEDREAM_MODEL, edit: SEEDREAM_MODEL }
+    : { generate: GPT_IMAGE_GENERATE_MODEL, edit: GPT_IMAGE_EDIT_MODEL }
+}
+
 /** 能用同一把 key 生图的厂商。 */
 export type ImageVendor = 'openai' | 'google'
 
