@@ -1,0 +1,49 @@
+/* ── 底部输入卡（Luoye 10-08：要明显、发送是卡内右下角圆形图标、问 AI 并进来、学 Claude） ── */
+.dock{position:sticky;bottom:0;z-index:20;padding:10px 0 18px;background:linear-gradient(to bottom,transparent,var(--ws-paper) 22px)}
+.cmp{position:relative;border-radius:20px;background:var(--ws-card);box-shadow:0 0 0 1px color-mix(in srgb,var(--ws-ink) 14%,transparent),0 2px 4px rgba(20,40,30,.04),0 10px 28px rgba(20,40,30,.08);transition:box-shadow .15s,background-color .15s}
+html.dark .cmp{box-shadow:0 0 0 1px color-mix(in srgb,var(--ws-ink) 16%,transparent),0 10px 28px rgba(0,0,0,.45)}
+.cmp:focus-within{box-shadow:0 0 0 1px color-mix(in srgb,var(--ws-ink) 30%,transparent),0 2px 4px rgba(20,40,30,.05),0 12px 32px rgba(20,40,30,.11)}
+html.dark .cmp:focus-within{box-shadow:0 0 0 1px color-mix(in srgb,var(--ws-ink) 34%,transparent),0 12px 32px rgba(0,0,0,.5)}
+.cmp .field{position:relative}
+.cmp textarea{display:block;width:100%;min-height:56px;max-height:240px;resize:none;padding:14px 16px 4px;font-size:15px;line-height:1.55;color:var(--ws-ink);overflow-y:auto}
+.cmp textarea::placeholder{color:var(--ws-muted-fg)}
+/* 建议输入：浅灰字直接在框里 + 一个很小的 Tab 键帽；按 Tab 收下，打别的字就消失 */
+.cmp .sug{position:absolute;left:0;top:0;right:0;padding:14px 16px 4px;font-size:15px;line-height:1.55;color:color-mix(in srgb,var(--ws-muted-fg) 80%,transparent);pointer-events:none;display:flex;align-items:baseline;gap:8px;white-space:nowrap;overflow:hidden}
+.cmp .sug[hidden]{display:none}
+.kbd{display:inline-flex;align-items:center;height:18px;padding:0 5px;border-radius:5px;font-size:10.5px;font-weight:600;letter-spacing:.02em;color:var(--ws-muted-fg);box-shadow:inset 0 0 0 1px var(--ws-line),0 1px 0 var(--ws-line);background:var(--ws-surface);font-family:var(--sans);flex:none}
+.cmp .bar{display:flex;align-items:center;gap:2px;padding:4px 8px 8px 8px}
+.cmp .ib{width:32px;height:32px;border-radius:10px;display:grid;place-items:center;color:var(--ws-muted-fg)}
+.cmp .ib:hover{background:var(--muted);color:var(--ws-ink)}
+.cmp .mode{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 10px 0 8px;margin-left:4px;border-radius:999px;font-size:12.5px;font-weight:500;color:var(--ws-muted-fg);box-shadow:inset 0 0 0 1px var(--ws-line)}
+.cmp .mode:hover{color:var(--ws-ink);background:var(--muted)}
+.cmp .mode .toggle{width:24px;height:14px}.cmp .mode .toggle::after{width:10px;height:10px}.cmp .mode .toggle.on::after{left:12px}
+.cmp .khint{margin-left:auto;margin-right:8px;font-size:11.5px;color:var(--ws-muted-fg);opacity:0;transition:opacity .15s;white-space:nowrap}
+.cmp:focus-within .khint,.cmp.has .khint{opacity:1}
+.send{width:32px;height:32px;border-radius:50%;display:grid;place-items:center;background:var(--muted);color:color-mix(in srgb,var(--ws-muted-fg) 70%,transparent);transition:background-color .15s,color .15s,transform .1s;flex:none}
+html.dark .send{background:var(--input)}
+.send .ico{width:17px;height:17px;stroke-width:2.4}
+.cmp.has .send{background:var(--ws-brand);color:var(--ws-brand-fg);cursor:pointer}
+.cmp.has .send:hover{background:color-mix(in srgb,var(--ws-brand) 85%,var(--ws-ink))}
+.cmp.has .send:active{transform:scale(.94)}
+.send[disabled]{cursor:default}
+/* 正在跑：发送位变「停」；还能打字，发出去排在这一轮后面 */
+.cmp.running .send{background:var(--ws-ink);color:var(--ws-paper);cursor:pointer}
+.cmp.running .send .ico{width:13px;height:13px}
+/* 私聊 AI 模式：整张卡换成蓝色系、顶上一行标签，发送钮也是蓝的——一眼和「交代给 Agent」分开 */
+.cmp .ptag{display:none;align-items:center;gap:6px;padding:10px 16px 0;font-size:12px;font-weight:500;color:var(--ws-info)}
+.cmp.private{background:color-mix(in srgb,var(--ws-info-bg) 70%,var(--ws-card));box-shadow:0 0 0 1.5px color-mix(in srgb,var(--ws-info) 55%,transparent),0 10px 28px rgba(20,40,30,.08)}
+.cmp.private .ptag{display:flex}
+.cmp.private textarea{padding-top:6px}.cmp.private .sug{padding-top:6px}
+.cmp.private .mode{background:var(--ws-info-bg);color:var(--ws-info);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--ws-info) 40%,transparent)}
+.cmp.private .mode .toggle.on{background:var(--ws-info)}
+.cmp.private.has .send{background:var(--ws-info);color:#fff}
+html.dark .cmp.private.has .send{color:var(--ws-paper)}
+.cmp.closed textarea::placeholder{color:var(--ws-muted-fg)}
+.under{display:flex;justify-content:center;margin-top:6px;font-size:11.5px;color:var(--ws-muted-fg)}
+
+/* 私聊 AI 的一问一答：只你看得见，虚线框、带锁，不进事项记录（关掉就没了） */
+.pv{border-radius:14px;box-shadow:inset 0 0 0 1.5px color-mix(in srgb,var(--ws-info) 40%,transparent);background:color-mix(in srgb,var(--ws-info-bg) 55%,transparent);padding:10px 12px 12px;display:flex;flex-direction:column;gap:8px;background-clip:padding-box;border:1px dashed transparent}
+.pv .ph2{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:500;color:var(--ws-info)}
+.pv .ph2 button{margin-left:auto;color:var(--ws-muted-fg)}
+.pv .q{align-self:flex-end;background:var(--ws-card);padding:7px 12px;border-radius:14px 14px 4px 14px;font-size:13.5px}
+.pv .a{font-size:13.5px;line-height:1.65;color:var(--ws-ink)}
