@@ -56,8 +56,11 @@ export interface CloudOrg {
  * - `standby`：在线值守（WP60）。
  * - `data`：公共红人库服务（`/v1/data/*`，WP61）——浏览、体检、付费 reveal、插件配对。
  * - `kol`：红人营销增值服务（`/v1/kol/*`，WP118）——租户私有的云端红人库与双向同步。
+ * - `store`：管自己的网店（`/v1/shopify/*`，WP263 / WP265，决策 186）——一键授权连店、
+ *   列 / 断开连接、云端代发 Admin GraphQL。店铺令牌只在云上（决策 185），这把动作集只管
+ *   「这把工作区令牌能不能替这个工作区开口」。
  *
- * 本版七个（WP59 把钱包拆成 read / topup / admin，WP61 加 `data`，WP118 加 `kol`）；
+ * 本版八个（WP59 把钱包拆成 read / topup / admin，WP61 加 `data`，WP118 加 `kol`，WP265 加 `store`）；
  * 加能力就加成员（只加不删）。
  */
 export type CloudScope =
@@ -68,6 +71,7 @@ export type CloudScope =
   | 'standby'
   | 'data'
   | 'kol'
+  | 'store'
 
 export const CLOUD_SCOPES: readonly CloudScope[] = [
   'ai',
@@ -77,6 +81,7 @@ export const CLOUD_SCOPES: readonly CloudScope[] = [
   'standby',
   'data',
   'kol',
+  'store',
 ]
 
 /**
@@ -91,6 +96,10 @@ export const CLOUD_SCOPES: readonly CloudScope[] = [
  * 没订阅的组织调同步接口一律 402，所以这把动作集本身不解锁任何东西。
  * 不放进默认的后果是"订阅完了还要回云上重签一把令牌"——那一步用户不知道要做，
  * 也不该知道（18 §1 最小动作集管的是**能做什么**，不是**付过钱没有**）。
+ *
+ * `store` 进默认（决策 186）同 `kol` 的理由：一键授权连店要店主在 Shopify 上点「安装」，
+ * 没点过的工作区调 `/v1/shopify/*` 什么也拿不到；不放进默认的后果是「连店之前先回云上
+ * 重签一把令牌」——那一步用户不知道要做。老令牌缺这一项时本机照实说、引导重新登录一次。
  */
 export const DEFAULT_CLOUD_SCOPES: readonly CloudScope[] = [
   'ai',
@@ -98,6 +107,7 @@ export const DEFAULT_CLOUD_SCOPES: readonly CloudScope[] = [
   'wallet:topup',
   'data',
   'kol',
+  'store',
 ]
 
 /** 工作区服务令牌的前缀。一眼能认出来是什么，也方便在日志里做前缀级的屏蔽。 */
