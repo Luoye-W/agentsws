@@ -81,6 +81,23 @@ describe('WP275：超了上限，再确认一次', () => {
     expect(onDecide.mock.calls[0]?.[0]).toMatchObject({ action: 'approve' })
   })
 
+  it('① 里按钮是「通过 / 不要」，不是「批准 / 驳回」', async () => {
+    state.orgs = [SOLO_ORG]
+    renderWithProviders(
+      <DeckCardView
+        card={overLimitCard({ layout: 'money' })}
+        mode="zh_summary"
+        onDecide={noop}
+        onOpen={noop}
+      />,
+    )
+    const bar = screen.getByTestId('deck-action-bar')
+    await waitFor(() => {
+      expect(bar.textContent).toContain('通过')
+    })
+    expect(bar.textContent).not.toMatch(/批准|驳回/)
+  })
+
   it('没超上限的卡照旧一下就过、也不出那句提示', () => {
     const onDecide = vi.fn()
     renderWithProviders(
