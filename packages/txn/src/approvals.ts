@@ -75,6 +75,8 @@ export class ApprovalBusImpl implements ApprovalBus {
       )
     // 14：调用方只给等级，其余三项宿主补齐（缺 mandate_check 的卡后面每一步都要用它）
     const input = normalizeCreateInput(raw)
+    // WP275：① ② 没有审批流——超了上限的改动卡要本人再确认一次（落库前就写进收件人）
+    if ((await this.approvalFlowOf(input.workspace_id)) === false) markReconfirm(input)
     const ctx: ApprovalContext = input.context ?? {}
     const now = this.rt.now()
     const pre = runPrecheck(input, ctx)
@@ -488,10 +490,12 @@ export class ApprovalBusImpl implements ApprovalBus {
       throw new TxnError('forbidden', '该 Assignment 对此职责没有 approve 操作')
 
     // §4.2 SoD；个人工作区（成员 1）自动关闭并在事件标 self_approved
+    // WP275：给了 `approvalFlow` 就只看它——① ② 没有审批流，提的人自己点就是安全闸本身
     let self_approved = false
     if (item.routing.separation_of_duties && item.proposer.id === by) {
-      const members = dir?.memberCount?.(item.workspace_id) ?? 2
-      if (members > 1) throw new TxnError('sod_violation', '提议者不得自批（职责分离）')
+      const flow = await this.approvalFlowOf(item.workspace_id)
+      const enforced = flow ?? (dir?.memberCount?.(item.workspace_id) ?? 2) > 1
+      if (enforced) throw new TxnError('sod_violation', '提议者不得自批（职责分离）')
       self_approved = true
     }
 
@@ -822,6 +826,12 @@ export class ApprovalBusImpl implements ApprovalBus {
       const elapsed = item.routing.escalation.business_hours
         ? businessHoursBetween(item.created_at, now, this.rt.policy.business_tz_offset_minutes)
         : (ms(now) - ms(item.created_at)) / 3_600_000
+      // WP275：① ② 没有审批流——到点不升级给上级 / 老板，只提醒本人
+      if ((await this.approvalFlowOf(item.workspace_id)) === false) {
+        const reminded = await this.remindOnly(item, elapsed, now)
+        if (reminded !== undefined) out.push(reminded)
+        continue
+      }
       let changed = false
       for (const tier of item.routing.escalation.chain) {
         const hours =
@@ -864,6 +874,61 @@ export class ApprovalBusImpl implements ApprovalBus {
       }
     }
     return out
+  }
+
+  /** WP275：这个工作区有没有审批流（宿主没给口子 = `undefined`，按以前的规矩办）。 */
+  private async approvalFlowOf(workspace_id: WorkspaceId): Promise<boolean | undefined> {
+    const hook = this.rt.opts.directory?.approvalFlow
+    return hook === undefined ? undefined : await hook(workspace_id)
+  }
+
+  /**
+   * WP275（docs/95 §5「卡片没人管：① 只提醒你 / ② 只提醒本人」）：到了升级那一级的时点，
+   * 不往名单里加任何人，只给**原收件人**再投一次（卡在他那边重新冒出来）。
+   *
+   * 每一级只提醒一次（记进 `escalated_at`，与升级共用同一个计数，模式改回 ③ 时不会补升已经提醒过的那一级）；
+   * 不写升级链（`trail`）——没有人被加进来，快照与「谁能拍板」都不变。
+   */
+  private async remindOnly(
+    item: ApprovalItem,
+    elapsed: number,
+    now: Iso8601,
+  ): Promise<ApprovalItem | undefined> {
+    let changed = false
+    item.routing.escalation.chain.forEach((tier, idx) => {
+      const hours =
+        tier === 'scope_manager'
+          ? this.rt.policy.escalation_hours.scope_manager
+          : this.rt.policy.escalation_hours.owner
+      if (elapsed < hours || idx < item.routing.escalation.escalated_at.length) return
+      item.routing.escalation.escalated_at.push(now)
+      changed = true
+    })
+    if (!changed) return undefined
+    const to = [...new Set(boundRecipients(item))]
+    for (const person of to)
+      item.deliveries.push({
+        channel: 'workstation',
+        to: person,
+        sent_at: now,
+        view: 'full',
+        decision_token: this.issueToken(item, person),
+        status: 'sent',
+      })
+    item.updated_at = now
+    this.rt.store.putApproval(item)
+    await this.rt.emit('approval.reminded', {
+      workspace_id: item.workspace_id,
+      actor: { kind: 'system', id: 'txn' },
+      subject: { type: 'approval_item', id: item.id },
+      payload: {
+        to,
+        business_hours: elapsed,
+        reminders: item.routing.escalation.escalated_at.length,
+      },
+      item_id: item.id,
+    })
+    return this.rt.store.getApproval(item.id)
   }
 
   /** 14 §10 /approvals/{id}/retry-apply：施行失败后重开，恢复批准态并重新预占。 */
@@ -955,6 +1020,23 @@ export class ApprovalBusImpl implements ApprovalBus {
 }
 
 /** 14 §3：发出的是 decision.edited_payload ?? payload。 */
+/** WP275：卡上那一句（① ② 超了上限、落回本人时）。 */
+export const RECONFIRM_REASON = '超了你设的上限，要你再确认一次'
+
+/**
+ * WP275：① ② 里额度核对没过的改动卡（护栏判「要人看」）——收件人都要再确认一次。
+ * 只看 `staged_change`：别的卡没有额度核对这回事（没报过额度的默认值也是 `within: false`）。
+ * 调用方已经写了那一句（比如 B2B 报价写清超了哪几项）就不覆盖。
+ */
+function markReconfirm<P>(input: NormalizedCreateInput<P>): void {
+  if (input.kind !== 'staged_change' || input.automation.mandate_check.within) return
+  input.routing.recipients = input.routing.recipients.map((r) => ({
+    ...r,
+    reconfirm: true,
+    reason: r.reason ?? RECONFIRM_REASON,
+  }))
+}
+
 export function finalPayload(item: ApprovalItem): unknown {
   return item.decision?.edited_payload ?? item.payload
 }

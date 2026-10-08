@@ -148,7 +148,13 @@ export type {
   ScopeManagerRoute,
   SupervisedPosition,
 } from './supervisor.js'
-export { positionOfRole, resolveScopeManager, scopeManagerReasonText } from './supervisor.js'
+export {
+  hasApprovalFlow,
+  positionOfRole,
+  reconfirmReasonText,
+  resolveScopeManager,
+  scopeManagerReasonText,
+} from './supervisor.js'
 export type {
   AccessRequest,
   DecisionOutcome,

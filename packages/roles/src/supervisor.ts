@@ -9,7 +9,7 @@
  * （`apps/server/src/supervisor.ts`）与模拟世界用的是同一个函数，所以"模拟里转上级、
  * 真机器上转老板"这种两边不一样的事不会再出现（WP172 报告「需要定」第 1 条）。
  */
-import type { PersonId, Position, RoleId } from '@agentsws/contracts'
+import type { OrganizationMode, PersonId, Position, RoleId } from '@agentsws/contracts'
 
 /** 解析要看的岗位那几格（存下来的那份岗位就够，不要求整份模板）。 */
 export type SupervisedPosition = Pick<Position, 'id' | 'roles' | 'supervisor_person_id'> & {
@@ -28,6 +28,11 @@ export type ScopeManagerReason =
   | 'self'
   /** 上级已经不在这个工作区（离职 / 被移出）。 */
   | 'inactive'
+  /**
+   * WP275：① 个人 / ② 同事互联没有审批流，落回这件事是谁的那个人（提的人）。
+   * 卡上不写那一句（{@link scopeManagerReasonText} 回空串）。
+   */
+  | 'own'
 
 export interface ScopeManagerRoute {
   person: PersonId
@@ -117,5 +122,28 @@ export function scopeManagerReasonText(
       return `${pos}的上级就是提的人自己，转给了老板${who === '老板' ? '' : who}`
     case 'inactive':
       return `${pos}的上级已经不在工作区，转给了老板${who === '老板' ? '' : who}`
+    case 'own':
+      return ''
   }
+}
+
+/**
+ * WP275（docs/95 §5，决策 222）：这种用法里**有没有审批流**——「这件事是你的，但要另一个人点头」。
+ *
+ * 只有 ③ 公司集体有。① 个人 / ② 同事互联只有安全闸：AI 要做对外、动钱、不可逆的事之前，
+ * 问**这件事是谁的**那个人；`scope_manager` / `owner` 的规矩一律落回他，不转上级、不转老板，
+ * 卡上也不写「转给了…」那句。服务进程与模拟世界都只问这一个函数。
+ */
+export function hasApprovalFlow(mode: OrganizationMode): boolean {
+  return mode === 'company'
+}
+
+/**
+ * WP275：① ② 里超了上限、落回本人时卡上那一句（安全闸「再确认一次」）。
+ * `words` 是超了哪几项的人话（「金额、毛利」）；不给就只说超了上限。
+ */
+export function reconfirmReasonText(words?: string): string {
+  return words === undefined || words === ''
+    ? '超了你设的上限，要你再确认一次'
+    : `超了你设的上限（${words}），要你再确认一次`
 }

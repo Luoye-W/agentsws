@@ -30,6 +30,8 @@ export type KnownEventType =
   | 'approval.delivered'
   | 'approval.claimed'
   | 'approval.escalated'
+  /** WP275：① ② 没有审批流，卡没人管到点只提醒本人（不升级给别人）。 */
+  | 'approval.reminded'
   | 'approval.decided'
   | 'approval.auto_approved'
   | 'approval.sampled'

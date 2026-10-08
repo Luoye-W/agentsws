@@ -171,6 +171,12 @@ export interface WorkOptions {
    * **没有正文**：待办的备注、事项时间线里的人话都留在各自的库里（21 §1 的纪律）。
    */
   emit?: WorkEventSink
+  /**
+   * WP275（决策 259）：① 个人用时这个品牌**唯一的那个人**。给了且回了人，进待认领池的活
+   * （会议纪要、告警、复盘、卡片里冒出来的）直接记到他名下——不进「待认领」、不用点「我来」。
+   * 回 `undefined`（② ③，或不知道）就照旧进池。每次进池现问，模式变了立刻跟着变。
+   */
+  soleOwner?: () => PersonId | undefined
 }
 
 /**
@@ -349,7 +355,10 @@ export class Work {
     this.startRunFn = options.startRun
     this.summarize = options.summarize ?? ((i) => i.run_summary)
     this.sink = options.emit
+    this.soleOwner = options.soleOwner
   }
+
+  private readonly soleOwner: (() => PersonId | undefined) | undefined
 
   /**
    * 往事件日志发一条摘要。没接 sink 就什么都不做。
@@ -1427,6 +1436,9 @@ export class Work {
    */
   poolTodo(input: PoolTodoInput): Todo {
     const { similar_to, ...rest } = input
+    // WP275（决策 259）：① 个人——没有别人可认，直接记到唯一那个人名下
+    const sole = this.soleOwner?.()
+    if (sole !== undefined) return this.ownPooled(rest, sole, similar_to)
     const todo = this.createTodo({ ...rest, owner: UNCLAIMED_OWNER })
     const at = this.now()
     const next = this.putClaim(todo, {
@@ -1453,6 +1465,49 @@ export class Work {
         title: todo.title,
         source: todo.source,
         similar_to: (similar_to ?? []).length,
+        ...(todo.position_id === undefined ? {} : { position_id: todo.position_id }),
+      },
+    )
+    return next
+  }
+
+  /** WP275：① 里进池的活 = 直接是他的（认领记录照写，事后看得出它是从哪冒出来的）。 */
+  private ownPooled(
+    input: Omit<PoolTodoInput, 'similar_to'>,
+    owner: PersonId,
+    similar_to: PoolTodoInput['similar_to'],
+  ): Todo {
+    const todo = this.createTodo({ ...input, owner })
+    const at = this.now()
+    const next = this.putClaim(todo, {
+      state: 'claimed',
+      collaborators: [],
+      recycled: 0,
+      pooled_at: at,
+      claimed_at: at,
+      claimed_by: owner,
+      ...(similar_to === undefined || similar_to.length === 0
+        ? {}
+        : { similar_to: [...similar_to] }),
+    })
+    if (todo.matter_id !== undefined) {
+      this.addParticipant(todo.matter_id, owner)
+      this.appendEvent(todo.matter_id, {
+        kind: 'todo',
+        text: `「${todo.title}」记到了你的待办里`,
+        actor: { kind: 'system', id: 'work.claim_pool' },
+        todo_id: todo.id,
+      })
+    }
+    this.emit(
+      'todo.pooled',
+      { type: 'todo', id: todo.id },
+      { kind: 'system', id: 'work.claim_pool' },
+      {
+        title: todo.title,
+        source: todo.source,
+        similar_to: (similar_to ?? []).length,
+        sole_owner: true,
         ...(todo.position_id === undefined ? {} : { position_id: todo.position_id }),
       },
     )

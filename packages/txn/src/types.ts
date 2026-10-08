@@ -81,6 +81,19 @@ export interface Directory {
   memberCount?(workspace_id: WorkspaceId): number
   scopeManager?(item: ApprovalItem): PersonId | undefined
   owner?(item: ApprovalItem): PersonId | undefined
+  /**
+   * WP275（docs/95 §5）：这个工作区现在**有没有审批流**——只有 ③ 公司集体有（「这件事是你的，
+   * 但要另一个人点头」）；① 个人 / ② 同事互联只有安全闸（「问这件事是谁的那个人」）。
+   *
+   * 给了就以它为准，`false` 时：
+   * - 职责分离不拦（提的人自己点，事件上标 `self_approved`）——不再看 `memberCount`；
+   * - 超时不升级给上级 / 老板，到点只**提醒本人**（`approval.reminded`，投递给原收件人）；
+   * - 超了上限的改动卡（额度核对没过）要收件人**再确认一次**（`Recipient.reconfirm`）。
+   *
+   * 不给 = 与以前一样（职责分离按人数、升级照链走）。出卡、决定、升级时各问一次，所以模式
+   * 变了以后，已经出的卡在下一次决定 / 升级时按新模式算。
+   */
+  approvalFlow?(workspace_id: WorkspaceId): boolean | Promise<boolean>
 }
 
 export interface TxnPolicy {
