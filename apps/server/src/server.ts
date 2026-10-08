@@ -2605,6 +2605,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     cloudOf: (ws) => brandModules.cloud(ws),
     startupBrand: workspace.id,
     clock,
+    // 只记店与权限名（没有令牌）：重启之后不打云也知道上次连着哪家
+    ...(dbDir === undefined ? {} : { file: join(dbDir, 'shopify-cloud-links.json') }),
   })
   const assembleBrand = async (ws: WorkspaceId): Promise<BrandModuleSet> => {
     const isBootstrap = ws === workspace.id
@@ -2653,14 +2655,6 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       // WP265：云端一键授权连着店也算店铺后台已连（岗位顶上「还缺必需的连接：店铺后台」不再挂着）
       extraKinds: () => (cloudShopLinks.peek(ws) === undefined ? [] : ['shopify', 'shop']),
     })
-    // 起来之后顺手问一次云（没关联账号就什么都不发生）；不挡建品牌
-    setTimeout(() => {
-      try {
-        void cloudShopLinks.link(ws).catch(() => undefined)
-      } catch {
-        // 品牌模块表还没好：下一次有人问就会问到
-      }
-    }, 0).unref?.()
 
     /**
      * WP46：岗位面板吃**真实**店铺数据（定时经连接器跑 `list_orders` / `get_shop`，

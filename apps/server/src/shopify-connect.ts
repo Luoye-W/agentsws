@@ -20,6 +20,8 @@
  * 3. 测试连接只发一次**只读**查询（店名 + 域名），不改店里任何东西。
  */
 
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { dirname } from 'node:path'
 import type {
   ShopifyConnectActor,
   ShopifyConnectAttemptView,
@@ -411,9 +413,36 @@ export function createCloudShopLinks(options: {
   ttlMs?: number
   /** 某个品牌的「云端连着没有」变了（就绪、工具面跟着重算）。 */
   onChange?: (ws: WorkspaceId) => void
+  /**
+   * 落盘的那一份（只有店与权限名，没有令牌）：重启之后不打云也知道「上次连着哪家」，
+   * 就绪算法（同步读）开机就对；不给 = 只在内存里。
+   */
+  file?: string
 }): CloudShopLinks {
   const ttl = options.ttlMs ?? 60_000
   const cache = new Map<string, { at: number; link: CloudShopLink | undefined }>()
+  if (options.file !== undefined && existsSync(options.file))
+    try {
+      const saved = JSON.parse(readFileSync(options.file, 'utf8')) as {
+        links?: Record<string, CloudShopLink>
+      }
+      // at = 0：开机先用存的，第一次有人现问就去云上核一遍
+      for (const [ws, link] of Object.entries(saved.links ?? {}))
+        if (typeof link?.shop === 'string') cache.set(ws, { at: 0, link })
+    } catch {
+      // 坏文件当没有
+    }
+  const save = (): void => {
+    if (options.file === undefined) return
+    const links: Record<string, CloudShopLink> = {}
+    for (const [ws, v] of cache) if (v.link !== undefined) links[ws] = v.link
+    try {
+      mkdirSync(dirname(options.file), { recursive: true })
+      writeFileSync(options.file, `${JSON.stringify({ version: 1, links }, null, 2)}\n`)
+    } catch {
+      // 写不下去：下次开机现问
+    }
+  }
   const now = (): number => Date.parse(options.clock.now())
   const pick = (rows: readonly ShopifyCloudConnection[]): CloudShopLink | undefined => {
     const row = rows.find((r) => r.status === 'connected')
@@ -425,6 +454,7 @@ export function createCloudShopLinks(options: {
   const set = (ws: WorkspaceId, link: CloudShopLink | undefined): void => {
     const before = cache.get(ws)?.link
     cache.set(ws, { at: now(), link })
+    if (JSON.stringify(before ?? null) !== JSON.stringify(link ?? null)) save()
     if ((before?.shop ?? '') !== (link?.shop ?? '')) options.onChange?.(ws)
   }
   return {

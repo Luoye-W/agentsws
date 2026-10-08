@@ -21,7 +21,7 @@ roles: [dtc.store, dtc.store-config, dtc.catalog, dtc.support, site.shopify-buil
 - **卡上说「这家店暂不支持一键授权」**：一键授权现在只开给内测的店，公开应用过了 Shopify 审核之后任何店都能用。等不及的话用下面「自己建应用」那一路。
 - **授权失效 / 还缺某项**：点「重新授权」，再在浏览器里点一次安装。
 
-## 高级：用自己的 Shopify 应用
+## Shopify 店铺 · 高级：用自己的 Shopify 应用
 
 卡上「高级：用自己的 Shopify 应用」点开就是这一路。在 Shopify 的 Dev Dashboard 里建一个应用，装到你的店上，再把 Client ID 和密钥填过来就行。Shopify 给的访问令牌 24 小时就过期，我们自己续，你不用管。
 
