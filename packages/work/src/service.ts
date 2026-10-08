@@ -84,6 +84,7 @@ import {
 import { notFound, WorkError } from './errors.js'
 import { goalProgress, goalProgressAll, type QueryRunner } from './goals.js'
 import {
+  dispatchNoticeDue,
   type HandoffItem,
   type HandoffRef,
   handoffExpired,
@@ -1938,15 +1939,20 @@ export class Work {
       /** 跟着事走过来的未定卡几张（宿主改派完再告诉这里，只为留痕）。 */
       cards_moved?: number | undefined
       label?: ((id: PersonId) => string) | undefined
+      /** WP277（决策 241）：③ 里上级派给下属——不等对方点，时间线写「X 派给了 Y」。 */
+      dispatched?: boolean | undefined
     },
   ): Matter | Todo {
     const name = (p: PersonId): string => input.label?.(p) ?? p
     const h = this.pendingFor(ref, input.person)
     const at = this.now()
+    const dispatched = input.dispatched === true
     const settled = settleHandoff(h, 'accepted', at, {
       position_id: input.position_id,
       ...(input.cards_moved === undefined ? {} : { cards_moved: input.cards_moved }),
+      ...(dispatched ? { dispatched: true } : {}),
     })
+    const took = dispatched ? `${name(h.from)} 派给了 ${name(h.to)}` : `${name(h.to)} 接下了`
     if (ref.kind === 'matter') {
       const matter = this.requireMatter(ref.id)
       const rest = matter.context.participants.filter((p) => p !== h.to)
@@ -1981,7 +1987,7 @@ export class Work {
       }
       this.appendEvent(ref.id, {
         kind: 'status',
-        text: `${name(h.to)} 接下了`,
+        text: took,
         actor: { kind: 'person', id: h.to },
         at,
       })
@@ -2000,7 +2006,7 @@ export class Work {
         this.addParticipant(todo.matter_id, h.to)
         this.appendEvent(todo.matter_id, {
           kind: 'todo',
-          text: `「${todo.title}」${name(h.to)} 接下了`,
+          text: `「${todo.title}」${took}`,
           actor: { kind: 'person', id: h.to },
           todo_id: todo.id,
           at,
@@ -2016,6 +2022,7 @@ export class Work {
         from: h.from,
         to: h.to,
         ...(input.cards_moved === undefined ? {} : { cards_moved: input.cards_moved }),
+        ...(dispatched ? { dispatched: true } : {}),
       },
     )
     return this.objectOf(ref)
@@ -2108,9 +2115,18 @@ export class Work {
     )
   }
 
-  /** 发起人点掉了那一行通知。 */
+  /** WP277（决策 241）：派给这个人、他还没点掉那一行通知的（③ 里上级派给下属）。 */
+  handoffsDispatchedTo(person: PersonId): HandoffItem[] {
+    return this.handoffItems().filter((i) => dispatchNoticeDue(i.handoff, person))
+  }
+
+  /** 发起人点掉了那一行通知（WP277：被派的那位点掉「X 派给你…」也走这里）。 */
   markHandoffSeen(ref: HandoffRef, person: PersonId): void {
     const h = this.handoffOf(ref)
+    if (h !== undefined && dispatchNoticeDue(h, person)) {
+      this.patchHandoff(ref, (x) => ({ ...x, seen_to: true }))
+      return
+    }
     if (h === undefined || h.from !== person || h.state === 'offered') return
     this.patchHandoff(ref, (x) => ({ ...x, seen: true }))
   }

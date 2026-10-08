@@ -77,6 +77,12 @@ export interface HandoffOptions {
    * 不给 = 不出「按人用量」。
    */
   usage?(): { assignment_id: string; input_tokens: number; output_tokens: number }[]
+  /**
+   * WP277（决策 241）：③ 公司集体里 `from` 是 `to` 哪几个岗位的上级（回那几个岗位的模板 id）。
+   * 回非空 = 这一次是**上级派给下属**：直接生效，不出「接下 / 不接」那张卡。不是 ③、不是上级回空；
+   * 不给 = 一律按交给对方（要对方接下）。
+   */
+  supervisedBy?(from: PersonId, to: PersonId): Promise<readonly string[]>
 }
 
 export interface HandoffAssembly extends HandoffPort {
@@ -367,6 +373,7 @@ export function createHandoff(options: HandoffOptions): HandoffAssembly {
     person: PersonId,
     picked: string | undefined,
     takes?: { id: string; role_id?: string; position_template_id?: string }[],
+    dispatched = false,
   ): Promise<Matter | Todo> => {
     const item = itemOf(ref)
     const h = item.handoff
@@ -388,6 +395,7 @@ export function createHandoff(options: HandoffOptions): HandoffAssembly {
         person,
         label: name,
         cards_moved: moved,
+        ...(dispatched ? { dispatched: true } : {}),
         ...(chosen === undefined
           ? {}
           : {
@@ -435,6 +443,20 @@ export function createHandoff(options: HandoffOptions): HandoffAssembly {
           label: name,
         }),
       )
+      /*
+       * WP277（决策 241）：③ 里上级给下属是「派」——直接生效，不出卡、不用对方接；用的是他在
+       * 这位上级管的那个岗位（几个就挑第一个对得上的）。平级之间照 WP276 交给对方。
+       */
+      const led = (await options.supervisedBy?.(actor.person_id, input.to)) ?? []
+      if (led.length > 0) {
+        const choices = await optionsFor(input.to, ref)
+        const chosen =
+          choices.find(
+            (o) => o.position_template_id !== undefined && led.includes(o.position_template_id),
+          ) ?? choices[0]
+        await accept(ref, input.to, chosen?.id, choices, true)
+        return viewOf(itemOf(ref))
+      }
       const card_id = await issueCard(ref, actor)
       if (card_id !== undefined) work.attachHandoffCard(ref, card_id)
       return viewOf(itemOf(ref))
@@ -479,7 +501,8 @@ export function createHandoff(options: HandoffOptions): HandoffAssembly {
       const from_me = await Promise.all(
         work.handoffsFrom(actor.person_id, { all: opts.all === true }).map(viewOf),
       )
-      return { to_me, from_me }
+      const dispatched = await Promise.all(work.handoffsDispatchedTo(actor.person_id).map(viewOf))
+      return { to_me, from_me, ...(dispatched.length === 0 ? {} : { dispatched }) }
     },
 
     async colleagues(actor): Promise<ColleagueView[]> {

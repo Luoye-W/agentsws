@@ -300,6 +300,7 @@ import {
 } from './cloud-account.js'
 import { withCloudAttribution } from './cloud-attribution.js'
 import { createRosterSync, isRosterEvent, type RosterSync } from './cloud-roster.js'
+import { type CompanyMode, createCompanyMode, isCompanyNotice } from './company-mode.js'
 import { ComputerUseError, createComputerUse } from './computer-use.js'
 import { ComputerUseInstallError } from './computer-use-install.js'
 import { openConnectOwners } from './connect-owners.js'
@@ -1924,6 +1925,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
    * 审批路由、职责分离、超时升级都问它（docs/95 §5：只有 ③ 有审批流）。
    */
   let modeOfWorkspace: ((ws: string) => Promise<OrganizationMode>) | undefined
+  /** WP277：开公司模式那一块（组织面装好之后才有；之前没有那种卡）。 */
+  let companyModeRef: CompanyMode | undefined
   /** WP275（决策 259）：① 个人时这个品牌唯一的那个人（同步读；② ③ 或还没装好 = 没有）。 */
   let soleOwnerOf: ((ws: string) => PersonId | undefined) | undefined
   /** WP276：同上的同步版（角色定位「谁都能改」、连接「谁接的谁管」要同步判）。 */
@@ -5666,6 +5669,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       if (choseUndo(item)) await peerUndoers.get(undo.target)?.(undo, item)
       return
     }
+    // WP277（决策 239）：开公司模式时同事那张「知道了 / 我要退出」——选了退出就按 ② 的退出走
+    if (companyModeRef?.isNotice(item) === true) return companyModeRef.onNoticeDecided(item)
     // WP276（决策 237）：有人申请加入——卡上同意 / 拒绝就是同意 / 拒绝这条申请（谁先点算谁的）
     if (item.kind === 'membership') return onMembershipDecided(item)
     const brand = await brands?.forWorkspace(item.workspace_id)
@@ -6978,6 +6983,20 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       if (key_changed) onboarding.discovery.refresh()
     },
   })
+  /*
+   * WP277（docs/95 §3.4–§3.6）：开公司模式（只有发起人）/ 降回同事互联（只有老板）；同事收「知道了 /
+   * 我要退出」卡，退出按 ② 的退出走。
+   */
+  const companyMode = createCompanyMode({
+    clock,
+    identity,
+    roles,
+    approvals,
+    appendEvent,
+    modeOf: (ws) => organizations.modeOf(ws),
+    optOut: (person) => org.optOut(person),
+  })
+  companyModeRef = companyMode
   // WP275：审批路由、职责分离、超时升级从这一刻起按模式走（之前没有任何卡）
   modeOfWorkspace = (ws) => organizations.modeOf(ws)
   modeOfWorkspaceSync = (ws) => organizations.modeOfSync(ws)
@@ -7034,6 +7053,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     // Join 向导只在 bootstrap 品牌那一档跑（20 §4：个人工作区并进公司）
     connect: boot.connections.connect,
     ...(dbDir === undefined ? {} : { dbDir }),
+    // WP277：对照表 ② 发起人确认 / ③ 老板批——收件人都是所有者，卡上的说法按模式
+    mode: () => organizations.modeOf(workspace.id),
+    personName: async (id) => (await identity.getPerson(id))?.name || undefined,
   })
 
   // WP36 离职编排（40 §1.2）：装在 org 之后——它要撤分配、真转事项、动个人层与个人记忆。
@@ -8217,6 +8239,18 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       },
       days: () => state.settings().handoff_days ?? DEFAULT_HANDOFF_RETURN_DAYS,
       initiator: () => organizations.organizationOf(ws)?.owner_id,
+      // WP277（决策 241）：③ 里上级给下属是「派」——他是对方哪几个岗位的上级（公司页存的那一份）
+      supervisedBy: async (from, to) => {
+        if ((await organizations.modeOf(ws)) !== 'company') return []
+        const led = new Set(
+          org
+            .positions()
+            .filter((p) => p.supervisor_person_id === from)
+            .map((p) => p.id),
+        )
+        if (led.size === 0) return []
+        return (await assembly.mine(to)).map((p) => p.position_id).filter((id) => led.has(id))
+      },
       // WP276（决策 238）：按人用量——这个月这个品牌的 `model.usage`（只有数字）
       usage: () => {
         const now = new Date(clock.now())
@@ -9404,8 +9438,17 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     // WP121（70 §3）：贴一个网址，自动分析出品牌档案
     brandIntake: brandIntake.port,
     brandDesign: brandDesign.port,
-    // WP65（52 O1）：组织与品牌（`/v1/orgs/*`）
-    organizations: organizations.port,
+    // WP65（52 O1）：组织与品牌（`/v1/orgs/*`）；WP277：开公司模式 / 降回同事互联
+    organizations: {
+      ...organizations.port,
+      modeSetup: (actor, id) => companyMode.setup(actor, id),
+      setMode: async (actor, id, input) => {
+        await companyMode.set(actor, id, input)
+        const view = (await organizations.port.list(actor)).find((o) => o.id === id)
+        if (view === undefined) throw new ApiError('not_found', `公司不存在：${id}`)
+        return view
+      },
+    },
     join: joinAssembly.port,
     // 41 §1 秘书面：`/v1/me/profile`、`/v1/people/:id/ask`、`/v1/people/:id/meet`、`/v1/me/secretary/route`
     // WP215：按主体所在品牌取那个品牌的秘书
@@ -9929,7 +9972,9 @@ function seoDecided(bus: ApprovalBus, hook: SeoDecidedHook): ApprovalBus {
           isHandoffItem(out) ||
           // WP276：② 改共用东西的「知道了 / 撤回」（带撤回办法的那种）、有人申请加入
           peerUndoOf(out) !== undefined ||
-          out.kind === 'membership'
+          out.kind === 'membership' ||
+          // WP277：开公司模式时同事那张「知道了 / 我要退出」
+          isCompanyNotice(out)
         ) {
           try {
             await hook.current?.(out)

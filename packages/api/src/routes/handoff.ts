@@ -58,6 +58,8 @@ export interface HandoffLists {
   to_me: HandoffView[]
   /** 我交出去的：还在等的 + 有了结果我还没点掉的（首页那一行通知） */
   from_me: HandoffView[]
+  /** WP277（决策 241）：③ 里上级派给我的、我还没点掉那一行通知的（直接生效，没有卡）。 */
+  dispatched?: HandoffView[]
 }
 
 /** 「交给同事」那个下拉里的一个人（带忙闲）。 */
