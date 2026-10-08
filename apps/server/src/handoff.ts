@@ -19,6 +19,7 @@ import type {
   HandoffLists,
   HandoffPort,
   HandoffView,
+  MyWorkExport,
   WorkPort,
 } from '@agentsws/api'
 import { ApiError } from '@agentsws/api'
@@ -36,6 +37,7 @@ import type {
 } from '@agentsws/contracts'
 import { HANDOFF_DECLINE_NO_REASON, isHandoffItem } from '@agentsws/deck'
 import {
+  claimOf,
   type HandoffItem,
   type HandoffRef,
   isHandoffPending,
@@ -79,6 +81,14 @@ export interface HandoffAssembly extends HandoffPort {
   sweep(): Promise<number>
   /** 已经落成「交出去」、还没出卡的（撞车时「交给他」）补一张卡。 */
   adopt(actor: HandoffActor, ref: HandoffRef): Promise<void>
+  /**
+   * WP276（docs/95 §3.6「某人退出 ②」）：有人退出 / 被请离开——他手上的事退回原处：
+   * 交给他还没接的退回发起人、他交出去还没接的撤回、从待认领池认下的回池、别人交给他的再交还给
+   * 原来那个人（要对方接下）。别的留在品牌里（共享的东西留下）。回动了几件。
+   */
+  release(person: PersonId, by: PersonId): Promise<number>
+  /** 这个人在这个品牌里参与过的事项（含时间线）与名下的待办——退出时带走一份副本。 */
+  exportOf(person: PersonId): MyWorkExport
 }
 
 const isAccepted = (item: ApprovalItem): boolean =>
@@ -390,6 +400,13 @@ export function createHandoff(options: HandoffOptions): HandoffAssembly {
     )
   }
 
+  const adopt = async (actor: HandoffActor, ref: HandoffRef): Promise<void> => {
+    const h = itemOf(ref).handoff
+    if (!isHandoffPending(h) || h.card_id !== undefined) return
+    const card_id = await issueCard(ref, actor)
+    if (card_id !== undefined) work.attachHandoffCard(ref, card_id)
+  }
+
   const sweep = async (): Promise<number> => {
     const name = await namesFor(await options.members())
     const returned = work.expireHandoffs(name)
@@ -510,12 +527,68 @@ export function createHandoff(options: HandoffOptions): HandoffAssembly {
 
     sweep,
 
-    async adopt(actor, ref) {
-      const h = itemOf(ref).handoff
-      if (!isHandoffPending(h) || h.card_id !== undefined) return
-      const card_id = await issueCard(ref, actor)
-      if (card_id !== undefined) work.attachHandoffCard(ref, card_id)
+    async release(person, by) {
+      let moved = 0
+      const name = await namesFor([...(await options.members()), person])
+      for (const i of work.handoffsTo(person)) {
+        work.declineHandoff(i.ref, { person, reason: '他退出了', label: name })
+        await retire(i.handoff, by)
+        moved += 1
+      }
+      for (const i of work.handoffsFrom(person).filter((x) => x.handoff.state === 'offered')) {
+        work.withdrawHandoff(i.ref, { by: person })
+        await retire(i.handoff, by)
+        moved += 1
+      }
+      const members = new Set(await options.members())
+      for (const t of work.listTodos({ owner: person, status: ['open', 'doing', 'blocked'] })) {
+        const back = t.handoff?.state === 'accepted' ? t.handoff.from : undefined
+        if (back !== undefined && back !== person && members.has(back)) {
+          work.offer(
+            { kind: 'todo', id: t.id },
+            { from: person, to: back, days: options.days(), label: name },
+          )
+          await adopt(
+            { workspace_id, person_id: by, assignment_id: '' },
+            { kind: 'todo', id: t.id },
+          )
+          moved += 1
+        } else if (claimOf(t).pooled_at !== undefined) {
+          work.recycleTodo(t.id, 'member_left')
+          moved += 1
+        }
+      }
+      for (const m of work.listMatters({ participant: person, status: ['open', 'waiting'] })) {
+        if (m.context.participants[0] !== person) continue
+        const back = m.handoff?.state === 'accepted' ? m.handoff.from : undefined
+        if (back === undefined || back === person || !members.has(back)) continue
+        work.offer(
+          { kind: 'matter', id: m.id },
+          { from: person, to: back, days: options.days(), label: name },
+        )
+        await adopt(
+          { workspace_id, person_id: by, assignment_id: '' },
+          { kind: 'matter', id: m.id },
+        )
+        moved += 1
+      }
+      return moved
     },
+
+    exportMine: (actor) => exportOf(actor.person_id),
+    exportOf: (person) => exportOf(person),
+    adopt,
+  }
+
+  function exportOf(person: PersonId): MyWorkExport {
+    const matters = work.listMatters({ participant: person }).map((matter) => ({
+      matter,
+      timeline: work.store
+        .listMatterEvents(matter.id, { limit: 1000 })
+        .map((e) => ({ at: e.at, kind: e.kind, text: e.text })),
+    }))
+    const todos = work.listTodos().filter((t) => t.owner === person || t.handoff?.from === person)
+    return { exported_at: work.now(), matters, todos }
   }
 }
 

@@ -7,7 +7,14 @@
  * 选接手人的岗位、通知）。准入与工作模型同一个：能读自己的队列，就能交自己的事、接给自己的事；
  * 「是不是你的」「是不是交给你的」由工作模型逐条判。
  */
-import type { Handoff, MaybePromise, PersonId, WorkspaceId } from '@agentsws/contracts'
+import type {
+  Handoff,
+  Matter,
+  MaybePromise,
+  PersonId,
+  Todo,
+  WorkspaceId,
+} from '@agentsws/contracts'
 import { z } from 'zod'
 import { ApiError } from '../errors.js'
 import { assignmentOf, body, ok, param, principalOf } from '../helpers.js'
@@ -95,6 +102,17 @@ export interface HandoffPort {
   list(actor: HandoffActor, options: { all?: boolean }): Promise<HandoffLists>
   /** 同事名单（带忙闲；不含自己）。 */
   colleagues(actor: HandoffActor): Promise<ColleagueView[]>
+  /**
+   * WP276（docs/95 §3.6）：我参与过的事项（含时间线）与名下的待办——退出前带走一份副本。
+   * 只有本人自己的那一份（事项里有他、待办是他的或他交出去的），不含凭据、不含别人的待办。
+   */
+  exportMine(actor: HandoffActor): MaybePromise<MyWorkExport>
+}
+
+export interface MyWorkExport {
+  exported_at: string
+  matters: { matter: Matter; timeline: { at: string; kind: string; text: string }[] }[]
+  todos: Todo[]
 }
 
 const KINDS = ['matter', 'todo'] as const
@@ -244,6 +262,20 @@ export function handoffRoutes(): Route[] {
         const all = c.req.query('all')
         return ok(c, await portOf(deps).list(actorOf(c), { all: all === '1' || all === 'true' }))
       },
+    ),
+    route(
+      {
+        method: 'get',
+        path: '/v1/work/mine/export',
+        operationId: 'exportMyWork',
+        summary: 'WP276 导出我自己的那一份（参与过的事项与时间线、名下的待办）——退出前带走副本',
+        tag: TAG,
+        auth: 'bearer',
+        assignment: true,
+        authz: READ,
+        returns: 'MyWorkExport',
+      },
+      async (c, deps) => ok(c, await portOf(deps).exportMine(actorOf(c))),
     ),
     route(
       {

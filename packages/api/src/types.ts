@@ -880,6 +880,10 @@ export interface GatewayDeps {
    * WP276（docs/95 §4）：交给对方（`/v1/handoffs*`、`/v1/work/colleagues`）。没装配时回 not_implemented。
    */
   handoff?: HandoffPort
+  /**
+   * WP276：这个品牌现在是不是 ② 同事互联（同步；`peersBypass` 问它）。不给 = 永远不是。
+   */
+  peerAccess?: (workspace_id: WorkspaceId) => boolean
   /** 37 §4 会议内核；没装配时 `/v1/meetings/*` 回 not_implemented。 */
   meetings?: MeetingsPort
   /**

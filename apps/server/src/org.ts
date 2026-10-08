@@ -460,7 +460,12 @@ export interface OrgOptions {
    * WP182：一个人离开工作区（被移出 / 走完离职编排）之后调——B2B 业务员的客户、商机、没回的询盘
    * 出一张交接卡给老板。出错不拦移出本身（交接卡可以事后再出，人已经走了）。
    */
-  afterMemberLeft?: (person_id: PersonId, by: PersonId) => Promise<unknown>
+  afterMemberLeft?: (
+    person_id: PersonId,
+    by: PersonId,
+    /** WP276：走之前这个品牌是哪种用法（② 里不出交接卡，手上的事退回原处）。 */
+    context?: { mode?: OrganizationMode },
+  ) => Promise<unknown>
   /**
    * WP234（docs/54 §6.4）：岗位合并 / 移动之后，事项与岗位层记忆跟着走。
    * 事项在各品牌的工作模型里、记忆在学习回路里，制度层够不着，所以由装配方给。
@@ -1672,6 +1677,36 @@ export function createOrg(options: OrgOptions): OrgAssembly {
    * 不用他点头，但他得知道。`only` 给了就只处理这个人（离职那一刻），不给就把
    * 所有已经不在工作区的上级一起扫掉（打开岗位页时兜一次底）。
    */
+  /**
+   * 移出一个人（发起人请他离开 / ② 里他自己退出，WP276 把两条收成一处）。
+   * ② 里不出 B2B 交接卡（那是 ③ 的离职交接），手上的事由装配方退回原处（`afterMemberLeft`）。
+   */
+  const removeMemberAs = async (
+    by: PersonId,
+    person_id: PersonId,
+    mode: OrganizationMode,
+  ): Promise<{ revoked_assignments: number; returned: number }> => {
+    const workspace = await identity.getWorkspace(workspace_id)
+    if (workspace?.owner_id === person_id)
+      throw ORG_ERROR('conflict', '工作区所有者不能被移出（先把所有者换给别人）')
+    const active = activeAssignments(person_id)
+    for (const a of active) roles.assignments.revoke(a.id)
+    await identity.leaveWorkspace(workspace_id, person_id)
+    emit('membership.removed', by, {
+      person_id,
+      revoked_assignments: active.length,
+      ...(by === person_id ? { self: true } : {}),
+    })
+    // WP174：他是哪几个岗位的上级，就清空、提醒老板、改派他手上的卡
+    await clearLeftSupervisors(by, person_id)
+    // WP182：B2B 业务员的客户 / 商机 / 没回的询盘 → 交接卡给老板（③）；WP276：② 退回原处
+    const returned = await options.afterMemberLeft?.(person_id, by, { mode }).catch(() => undefined)
+    return {
+      revoked_assignments: active.length,
+      returned: typeof returned === 'number' ? returned : 0,
+    }
+  }
+
   const clearLeftSupervisors = async (by: PersonId, only?: PersonId): Promise<string[]> => {
     const active = new Set(await memberIds())
     const stale = backend
@@ -2282,23 +2317,22 @@ export function createOrg(options: OrgOptions): OrgAssembly {
       return out
     },
 
+    async leave(actor) {
+      await reconcile()
+      const mode = (await options.mode?.()) ?? 'company'
+      if (mode === 'company') throw ORG_ERROR('conflict', '公司模式里离开要走离职，找管理员办')
+      const workspace = await identity.getWorkspace(workspace_id)
+      if (workspace?.owner_id === actor.person_id)
+        throw ORG_ERROR('conflict', '你是发起人，先把发起人交给同事再退出')
+      const out = await removeMemberAs(actor.person_id, actor.person_id, mode)
+      return { revoked_assignments: out.revoked_assignments, returned: out.returned }
+    },
+
     async removeMember(actor, person_id) {
       await reconcile()
-      const workspace = await identity.getWorkspace(workspace_id)
-      if (workspace?.owner_id === person_id)
-        throw ORG_ERROR('conflict', '工作区所有者不能被移出（先把所有者换给别人）')
-      const active = activeAssignments(person_id)
-      for (const a of active) roles.assignments.revoke(a.id)
-      await identity.leaveWorkspace(workspace_id, person_id)
-      emit('membership.removed', actor.person_id, {
-        person_id,
-        revoked_assignments: active.length,
-      })
-      // WP174：他是哪几个岗位的上级，就清空、提醒老板、改派他手上的卡
-      await clearLeftSupervisors(actor.person_id, person_id)
-      // WP182：B2B 业务员的客户 / 商机 / 没回的询盘 → 交接卡给老板
-      await options.afterMemberLeft?.(person_id, actor.person_id).catch(() => undefined)
-      return { revoked_assignments: active.length }
+      const mode = (await options.mode?.()) ?? 'company'
+      const out = await removeMemberAs(actor.person_id, person_id, mode)
+      return { revoked_assignments: out.revoked_assignments }
     },
 
     async invitations(_actor) {

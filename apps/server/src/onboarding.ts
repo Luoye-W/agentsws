@@ -391,6 +391,8 @@ export interface OnboardingOptions {
    * **懒取**——Join 装在本模块之后，要到真用的时候才拿得到。不给就走兜底（只记事件）。
    */
   join?: () => JoinPort | undefined
+  /** WP276：这个品牌现在是哪种用法（申请卡说「一起用」还是「加入」）；不给按 ③。 */
+  mode?: () => Promise<'solo' | 'peers' | 'company'>
   /**
    * WP65（52 O1 / O3）：这个品牌挂在哪个组织下。
    *
@@ -721,6 +723,7 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
     peerIds: () => discovery.peerIds(),
     ...(options.post === undefined ? {} : { post: options.post }),
     ...(options.join === undefined ? {} : { join: options.join }),
+    ...(options.mode === undefined ? {} : { mode: options.mode }),
     ...(options.dbDir === undefined ? {} : { dbDir: options.dbDir }),
   })
 

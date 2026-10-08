@@ -199,6 +199,12 @@ export interface InvitesOptions {
    * 不装配时走兜底（只记一条 `next: 'join_import'` 的事件，与 WP51 原样）。
    */
   join?: () => JoinPort | undefined
+  /**
+   * WP276（docs/95 §3.3，决策 237）：这个品牌现在是哪种用法。不是 ③ 时申请卡说「想一起用」
+   * （不是「加入公司 / 成为成员」），同意之后不出空的并进来对照卡（两边各建了同一个品牌才出）。
+   * 不给 = 老样子（按 ③ 说）。
+   */
+  mode?: () => Promise<'solo' | 'peers' | 'company'>
   dbDir?: string
 }
 
@@ -285,6 +291,7 @@ export function createInvites(options: InvitesOptions): InvitesAssembly {
     status: r.status,
     created_at: r.created_at,
     ...(r.decided_at === undefined ? {} : { decided_at: r.decided_at }),
+    ...(r.decided_by === undefined ? {} : { decided_by: r.decided_by }),
     ...(r.superseded_reason === undefined ? {} : { superseded_reason: r.superseded_reason }),
     ...(r.approval_item_id === undefined ? {} : { approval_item_id: r.approval_item_id }),
   })
@@ -318,6 +325,8 @@ export function createInvites(options: InvitesOptions): InvitesAssembly {
     const who = isPlaceholderOwnerEmail(input.email)
       ? input.name
       : `${input.name}（${input.email}）`
+    // WP276：① ② 里申请的是「一起用」，不是「加入公司」
+    const together = ((await options.mode?.()) ?? 'company') !== 'company'
     const item = await approvals.create({
       workspace_id,
       schema_version: 1,
@@ -325,10 +334,13 @@ export function createInvites(options: InvitesOptions): InvitesAssembly {
       role_id: 'common.owner',
       subject: { object: { type: 'membership_request', id: row.id } },
       dedupe_key: `${workspace_id}:membership:${sha256(input.email.trim().toLowerCase()).slice(0, 16)}`,
-      title: `${input.name} 想加入`,
+      title: together ? `${input.name} 想和你们一起用` : `${input.name} 想加入`,
       // WP233：对方本机的占位邮箱（owner@localhost）不进卡面，只说名字
-      summary:
-        input.via === 'lan'
+      summary: together
+        ? input.via === 'lan'
+          ? `${who}在同一个局域网里。同意了就能一起用这个品牌。`
+          : `${who}贴了邀请码。同意了就能一起用这个品牌。`
+        : input.via === 'lan'
           ? `${who}在同一个局域网里，公司名算出来和你们一样。同意他就成为成员，之后走一遍合并向导。`
           : `${who}贴了你发的邀请码。同意他就成为成员，之后走一遍合并向导。`,
       payload: {
@@ -366,6 +378,18 @@ export function createInvites(options: InvitesOptions): InvitesAssembly {
       ...(row.approval_item_id === undefined ? {} : { approval_item_id: row.approval_item_id }),
     })
     return viewOf(row)
+  }
+
+  /** 申请那张卡还开着就收掉（定过了 / 没了就算了）。 */
+  async function retireCard(id: string | undefined, by: PersonId): Promise<void> {
+    if (id === undefined || typeof approvals.get !== 'function') return
+    const card = await approvals.get(id)
+    if (card === undefined || (card.state !== 'pending' && card.state !== 'in_review')) return
+    try {
+      await approvals.withdraw(id, by)
+    } catch {
+      // 收不掉不影响申请本身
+    }
   }
 
   /** 往某位同伴那边转发一条申请（我们的人要进他那儿）。 */
@@ -484,6 +508,9 @@ export function createInvites(options: InvitesOptions): InvitesAssembly {
       if (row === undefined) throw new OnboardingError('not_found', `没有这条申请：${id}`)
       if (row.status !== 'pending') throw new OnboardingError('conflict', '这条申请已经定过了')
       row.decided_at = clock.now()
+      row.decided_by = by
+      // WP276：在团队页上定的——队列里那张卡也收掉（卡上点的那一路，卡已经是定了的）
+      await retireCard(row.approval_item_id, by)
       if (!input.approve) {
         row.status = 'rejected'
         backend.putRequest(row)
@@ -539,7 +566,9 @@ export function createInvites(options: InvitesOptions): InvitesAssembly {
        * Join 没装配、或者建卡失败：退回 WP51 的老路（只记事件）。
        * **人已经建好了，不能因为一张卡没建成就把批准回滚。**
        */
-      const port = options.join?.()
+      // WP276：① ② 不出空的并进来对照卡（他那边的东西整个挂进来；两边各建了同一个品牌才出对照表）
+      const port =
+        ((await options.mode?.()) ?? 'company') === 'company' ? options.join?.() : undefined
       let joined: { join_id: string; approval_item_id: string } | undefined
       let joinFailed: string | undefined
       if (port !== undefined) {

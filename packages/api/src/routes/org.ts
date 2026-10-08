@@ -30,7 +30,7 @@ import type {
 import { z } from 'zod'
 import { ApiError } from '../errors.js'
 import { assignmentOf, body, ok, param, principalOf } from '../helpers.js'
-import { type Route, route } from '../route-spec.js'
+import { peersBypass, type Route, route } from '../route-spec.js'
 import type { GatewayDeps } from '../types.js'
 
 const READ = {
@@ -571,6 +571,11 @@ export interface OrgPort {
   proposePolicyChange(actor: OrgActor, input: PolicyPatchInput): MaybePromise<OrgChangeReceipt>
   members(actor: OrgActor): MaybePromise<MemberView[]>
   removeMember(actor: OrgActor, person_id: string): MaybePromise<{ revoked_assignments: number }>
+  /**
+   * WP276（docs/95 §3.6）：② 同事互联里**自己退出**——个人渠道跟人走，共享品牌里的东西留下，
+   * 手上没做完的事退回原处。发起人不能直接退（先把发起人交给同事）；③ 里走离职，不走这里。
+   */
+  leave?(actor: OrgActor): MaybePromise<{ revoked_assignments: number; returned: number }>
   invitations(actor: OrgActor): MaybePromise<InvitationView[]>
   invite(actor: OrgActor, input: InviteInput): MaybePromise<InvitationView>
   /** **公开**：被邀请的人这会儿还没有任何凭据，只有邮件里那把 token。 */
@@ -923,6 +928,8 @@ export function orgRoutes(): Route[] {
         auth: 'bearer',
         assignment: true,
         authz: READ,
+        // WP276：② 同事互联里平级同事也能用
+        authzBypass: peersBypass,
         returns: 'RoleSummaryView[]',
       },
       async (c, deps) => ok(c, await portOf(deps).roles(actorOf(c))),
@@ -937,6 +944,8 @@ export function orgRoutes(): Route[] {
         auth: 'bearer',
         assignment: true,
         authz: WRITE,
+        // WP276：② 同事互联里平级同事也能用
+        authzBypass: peersBypass,
         body: CopyRoleBody,
         returns: 'RoleDetailView',
       },
@@ -974,6 +983,8 @@ export function orgRoutes(): Route[] {
         authzBypass: (c, rctx, deps) => {
           const p = rctx.principal
           if (p === undefined) return false
+          // WP276：② 同事互联里平级同事能看、能改共用职责的规矩（决策 243 / 274）
+          if (peersBypass(c, rctx, deps)) return true
           const wanted = param(c, 'id')
           return deps.roles
             .listAssignments(p.person_id, { workspace_id: p.workspace_id })
@@ -998,6 +1009,8 @@ export function orgRoutes(): Route[] {
         auth: 'bearer',
         assignment: true,
         authz: WRITE,
+        // WP276：② 同事互联里平级同事也能用
+        authzBypass: peersBypass,
         params: [{ name: 'id', in: 'path', required: true, description: 'role_id' }],
         body: RolePatchBody,
         returns: 'OrgChangeReceipt（③ 是 pending_approval；① ② 自己改的当场生效 = applied，WP275）',
@@ -1020,6 +1033,8 @@ export function orgRoutes(): Route[] {
         auth: 'bearer',
         assignment: true,
         authz: READ,
+        // WP276：② 同事互联里平级同事也能用
+        authzBypass: peersBypass,
         returns: 'PositionView[]',
       },
       async (c, deps) => ok(c, await portOf(deps).positions(actorOf(c))),
@@ -1268,6 +1283,8 @@ export function orgRoutes(): Route[] {
         auth: 'bearer',
         assignment: true,
         authz: READ,
+        // WP276：② 同事互联里平级同事也能用
+        authzBypass: peersBypass,
         params: [{ name: 'id', in: 'path', required: true, description: '工作区 id' }],
         returns: 'WorkspacePolicyView',
       },
@@ -1305,6 +1322,8 @@ export function orgRoutes(): Route[] {
         auth: 'bearer',
         assignment: true,
         authz: READ,
+        // WP276：② 同事互联里平级同事也能用
+        authzBypass: peersBypass,
         params: [{ name: 'id', in: 'path', required: true, description: '工作区 id' }],
         returns: 'MemberView[]',
       },
@@ -1328,6 +1347,28 @@ export function orgRoutes(): Route[] {
       },
       async (c, deps) =>
         ok(c, await portOf(deps).removeMember(sameWorkspace(c), param(c, 'person_id'))),
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/workspaces/:id/leave',
+        operationId: 'leaveWorkspace',
+        summary:
+          'WP276 ② 里自己退出：撤销自己的分配、token 失效；手上的事退回原处，共享的东西留下（发起人不能直接退）',
+        tag: TAG,
+        auth: 'bearer',
+        assignment: true,
+        // 自己退出是对自己的事：能读自己的队列就能退（发起人、③ 由端口拦）
+        authz: { domain: 'approval', op: 'read', range: 'own', sensitivity: 'internal' },
+        params: [{ name: 'id', in: 'path', required: true, description: '工作区 id' }],
+        returns: '{ revoked_assignments, returned }',
+      },
+      async (c, deps) => {
+        const port = portOf(deps)
+        if (port.leave === undefined)
+          throw new ApiError('not_implemented', '这个服务进程不支持自己退出')
+        return ok(c, await port.leave(sameWorkspace(c)))
+      },
     ),
     // ── 离职（40 §1.2；WP36）──────────────────────────────────────────
     // 路径里的 `offboard` 是定值段，排在 `:person_id` 的 DELETE 之外，不与它撞。

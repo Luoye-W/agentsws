@@ -373,6 +373,7 @@ export {
   type HandoffPort,
   type HandoffView,
   handoffRoutes,
+  type MyWorkExport,
 } from './routes/handoff.js'
 export { healthRoutes, type ReconcilePort } from './routes/health.js'
 export {

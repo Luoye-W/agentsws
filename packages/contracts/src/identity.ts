@@ -543,6 +543,8 @@ export interface MembershipRequest {
   status: MembershipRequestStatus
   created_at: Iso8601
   decided_at?: Iso8601
+  /** WP276（决策 237）：谁点的同意 / 拒绝（② 里任何一位同事都能定，团队页上写名字）。 */
+  decided_by?: PersonId
   /** 批准后建出来的成员（没批就没有）。 */
   person_id?: PersonId
   /** 46 I3：两边互相申请时后批的那一条为什么自动失效。 */
