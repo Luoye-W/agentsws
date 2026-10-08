@@ -24,7 +24,7 @@ describe('WP275 职责分离按模式', () => {
     })
     expect(out.state).toBe('approved')
     const ev = h.events.find((e) => e.type === 'approval.decided')
-    expect((ev?.payload as { self_approved?: boolean }).self_approved).toBe(true)
+    expect((ev?.payload as { self_approved?: boolean } | undefined)?.self_approved).toBe(true)
   })
 
   it('③：照拦，哪怕只有一个人（模式说了算，不是人数）', async () => {

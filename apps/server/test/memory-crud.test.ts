@@ -223,6 +223,9 @@ describe('WP71 越层改被拒（改得动哪一层，看你在哪一层干活�
 
 describe('WP71 提升仍然走提议（手动加不是提升）', () => {
   it('「提到上一层」出的是一张待审卡，不落任何一层', async () => {
+    // WP275：③ 公司集体才出待审卡（① ② 自己提的当场生效，见 wp275-mode-approvals.test.ts）
+    for (const org of server.identity.listOrganizations())
+      await server.identity.updateOrganization(org.id, { mode: 'company' })
     // 先在个人层上改一段（晋升提的是个人层上改过的那几段，24 §2）
     const sections = server.skills.registry.listSections('customer-care')
     const section_id = sections[0]?.id ?? ''
@@ -247,6 +250,29 @@ describe('WP71 提升仍然走提议（手动加不是提升）', () => {
     // 不批不生效：卡出来了，岗位层一个字都还没多
     const after = await memoryAt('position', 'web-ops')
     expect(after.entries).toHaveLength(before.entries.length)
+  })
+
+  it('WP275 ① 个人：自己提到岗位层当场生效，卡是本人当场点掉的', async () => {
+    const sections = server.skills.registry.listSections('customer-care')
+    const section_id = sections[0]?.id ?? ''
+    await server.skills.registry.setOverlay({
+      skill: 'customer-care',
+      tier: 'personal',
+      owner: server.bootstrap.person.id,
+      ops: [{ op: 'replace', section_id, body: '想让整个岗位都照这么做的一句话' }],
+      base_version: '1.0.0',
+      version: 0,
+    })
+    const out = await dataOf<{ accepted: boolean; approval_item_id?: string; applied?: boolean }>(
+      await call('POST', '/v1/skills/customer-care/promote', {
+        body: { section_ids: [section_id], to_tier: 'position', scope_id: 'web-ops' },
+      }),
+    )
+    expect(out.applied).toBe(true)
+    const card = await server.txn.approvals.get(out.approval_item_id ?? '')
+    expect(card?.decision?.by).toBe(server.bootstrap.person.id)
+    const overlay = server.skills.registry.getOverlay('customer-care', 'position', 'web-ops')
+    expect(JSON.stringify(overlay?.ops ?? [])).toContain('想让整个岗位都照这么做的一句话')
   })
 })
 
