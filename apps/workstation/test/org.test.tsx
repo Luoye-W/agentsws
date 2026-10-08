@@ -909,13 +909,17 @@ describe('WP271 三种模式：公司页', () => {
     )
     expect(site.queryByText('工作区成员')).toBeNull()
     expect(companyWordsIn(document.body)).toEqual([])
-    // 「我来做」= 直接分给自己，不挑范围（服务端在 ① 里落成整个品牌）
-    const take = support.getByTestId('position-assign')
+    // 已经在做的岗位不出「我来做」；模板上的「我来做」= 直接分给自己，不挑范围（服务端在 ① 里落成整个品牌）
+    expect(support.queryByTestId('position-assign')).toBeNull()
+    const design = within(
+      cards.find((c) => c.getAttribute('data-position') === 'brand-design') as HTMLElement,
+    )
+    const take = design.getByTestId('position-assign')
     expect(take.textContent).toBe('我来做')
     await user.click(take)
     await waitFor(() => {
       expect(assigned).toEqual([
-        { person_id: 'per_wang', position_id: 'dtc-support', ranges: [], range_groups: [] },
+        { person_id: 'per_wang', position_id: 'brand-design', ranges: [], range_groups: [] },
       ])
     })
     expect(screen.queryByTestId('assign-inline')).toBeNull()

@@ -477,16 +477,19 @@ export function PositionsTab({
         ) : null}
 
         <div className="flex flex-wrap gap-2">
-          <Button
-            size="sm"
-            data-testid="position-assign"
-            aria-expanded={assigning === p.id}
-            onClick={() => {
-              onAssign(p.id)
-            }}
-          >
-            {tm('org.positions.assign')}
-          </Button>
+          {/* WP271：① 个人里只有你一个人——已经在做的岗位不再出「我来做」 */}
+          {solo && p.holders.length > 0 ? null : (
+            <Button
+              size="sm"
+              data-testid="position-assign"
+              aria-expanded={assigning === p.id}
+              onClick={() => {
+                onAssign(p.id)
+              }}
+            >
+              {tm('org.positions.assign')}
+            </Button>
+          )}
           <Button
             size="sm"
             variant="outline"

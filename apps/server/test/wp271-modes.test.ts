@@ -194,9 +194,26 @@ describe('WP271 ① 里建分配不挑范围 = 整个品牌', () => {
       { person_id: server.bootstrap.person.id, role_id: 'dtc.support', ranges: [] },
     )
     expect(made.status).toBe(201)
-    expect(made.data?.[0]?.ranges).toEqual([
-      { kind: 'brand', id: server.bootstrap.workspace.id },
-    ])
+    expect(made.data?.[0]?.ranges).toEqual([{ kind: 'brand', id: server.bootstrap.workspace.id }])
+  })
+})
+
+describe('WP271 ② 同事互联里建分配不挑范围也 = 整个品牌', () => {
+  it('第二个人进来（②）之后，不给范围的分配照样落成整个品牌', async () => {
+    const server = await boot()
+    const org = await orgOf(server)
+    await call(server, 'POST', `/v1/orgs/${org.id}/members`, {
+      email: 'colleague@example.com',
+      brands: [server.bootstrap.workspace.id],
+    })
+    expect((await orgOf(server)).mode).toBe('peers')
+    const made = await call<{ ranges: { kind: string; id: string }[] }[]>(
+      server,
+      'POST',
+      '/v1/assignments',
+      { person_id: server.bootstrap.person.id, role_id: 'dtc.support', ranges: [] },
+    )
+    expect(made.data?.[0]?.ranges).toEqual([{ kind: 'brand', id: server.bootstrap.workspace.id }])
   })
 })
 
