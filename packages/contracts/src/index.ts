@@ -90,6 +90,8 @@ export * from './schedule.js'
 export * from './search-data.js'
 // WP154「内容与搜索」：六个信号、每日 5 件事、收入归因、GEO、发布前质检的形状
 export * from './seo.js'
+// WP265：云端 Shopify 一键授权（私有云 WP263）在本机这一侧的约定（不进 CloudApi，决策 191）
+export * from './shopify-cloud.js'
 export * from './site.js'
 export * from './skills.js'
 // 56 §1 / §2 社媒运营的九条渠道与四个对象（WP72）。与 kol.ts 一条都不共用：

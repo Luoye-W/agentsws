@@ -380,14 +380,19 @@ export function createCloud(options: CloudOptions): CloudAssembly {
         signal: controller.signal,
       })
       const payload = (await res.json().catch(() => undefined)) as
-        | { data?: T; code?: string; message?: string }
+        | { data?: T; code?: string; message?: string; details?: unknown }
         | undefined
+      const details =
+        payload?.details !== null && typeof payload?.details === 'object'
+          ? (payload.details as Record<string, unknown>)
+          : undefined
       if (!res.ok)
         return {
           ok: false,
           status: res.status,
           ...(payload?.code === undefined ? {} : { code: payload.code }),
           message: payload?.message ?? `云上回了 ${String(res.status)}，这一次没有动你的数据。`,
+          ...(details === undefined ? {} : { details }),
         }
       return {
         ok: true,

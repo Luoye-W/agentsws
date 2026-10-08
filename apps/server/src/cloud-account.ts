@@ -51,7 +51,9 @@ import {
   CLOUD_OTP_LENGTH,
   CLOUD_OTP_TTL_SECONDS,
   CLOUD_PASSWORD_MIN,
+  CLOUD_SCOPES,
   DEFAULT_CLOUD_BASE_URL,
+  DEFAULT_CLOUD_SCOPES,
   emailDomain,
   LEGAL_TERMS_VERSION,
 } from '@agentsws/contracts'
@@ -226,6 +228,21 @@ export function createCloudAccount(options: CloudAccountOptions): CloudAccountAs
       .map((s) => s.trim())
       .filter((s): s is CloudScope => s === 'ai' || s === 'wallet:read' || s === 'standby')
 
+  /**
+   * WP265（决策 186）：这把令牌比现在的默认动作集少了哪几项。签发时的动作集读不出来（很老的
+   * 存档没记）就当不知道、不报——宁可让云上那一跳照实回 403，也不凭空吓人。
+   */
+  const missingScopes = (raw: string): CloudScope[] => {
+    const have = new Set(
+      raw
+        .split(',')
+        .map((x) => x.trim())
+        .filter((x) => x !== ''),
+    )
+    if (have.size === 0) return []
+    return DEFAULT_CLOUD_SCOPES.filter((x) => !have.has(x) && CLOUD_SCOPES.includes(x))
+  }
+
   const view = (): CloudAccountView => {
     const link = stored()
     if (link === undefined)
@@ -245,6 +262,9 @@ export function createCloudAccount(options: CloudAccountOptions): CloudAccountAs
       scopes: parseScopes(link.scopes),
       linked_at: link.linked_at,
       cloud_base_url: base,
+      ...(missingScopes(link.scopes).length === 0
+        ? {}
+        : { missing_scopes: missingScopes(link.scopes) }),
     }
   }
 
@@ -322,8 +342,17 @@ export function createCloudAccount(options: CloudAccountOptions): CloudAccountAs
       session_token: string
     },
     traceKey: string,
+    /**
+     * WP265：已关联、同一账号再登录一次换新令牌（老令牌缺新动作集）。新的全存好了，再用**这张会话**
+     * 按 id 撤掉这几个品牌之前的关联——不能拿老令牌打 `links/current/revoke`：云上「当前那条」
+     * 是这个工作区最新的一条，撤的会是刚签的新令牌。
+     */
+    opts: { replace?: boolean } = {},
   ): Promise<void> => {
     const workspace_id = options.workspace_id()
+    const fresh = new Set<string>()
+    /** 真签到新令牌的品牌（只撤这几个的老关联：没签上的那个还靠老令牌活着）。 */
+    const renewed = new Set<string>()
     try {
       /*
        * WP66（52 O1）：云上那把令牌是**按工作区签**的，而账号与余额在组织级
@@ -332,13 +361,15 @@ export function createCloudAccount(options: CloudAccountOptions): CloudAccountAs
        * 关联本身已经成了，补签走"加品牌"那条路（`ensureBrandToken`）。
        */
       const issued = await call<{
-        link: { expires_at: string; scopes: CloudScope[]; cloud_org_id: string }
+        link: { id?: string; expires_at: string; scopes: CloudScope[]; cloud_org_id: string }
         token: string
       }>('/v1/cloud/links', {
         method: 'POST',
         token: verified.session_token,
         body: { workspace_id, label: workspace_id },
       })
+      if (issued.link.id !== undefined) fresh.add(issued.link.id)
+      renewed.add(workspace_id)
       const fieldsOf = (t: string, expires_at: string, scopes: string) => ({
         token: t,
         email: verified.account.email,
@@ -356,13 +387,15 @@ export function createCloudAccount(options: CloudAccountOptions): CloudAccountAs
         if (ws === workspace_id) continue
         try {
           const extra = await call<{
-            link: { expires_at: string; scopes: CloudScope[] }
+            link: { id?: string; expires_at: string; scopes: CloudScope[] }
             token: string
           }>('/v1/cloud/links', {
             method: 'POST',
             token: verified.session_token,
             body: { workspace_id: ws, label: ws },
           })
+          if (extra.link.id !== undefined) fresh.add(extra.link.id)
+          renewed.add(ws)
           vaultOf(ws).put(
             CLOUD_TOKEN_SECRET_ID,
             fieldsOf(extra.token, extra.link.expires_at, extra.link.scopes.join(',')),
@@ -371,6 +404,7 @@ export function createCloudAccount(options: CloudAccountOptions): CloudAccountAs
           // 这个品牌没签上：它的"用 agentsws 的"暂时不可用，别的品牌照常
         }
       }
+      if (opts.replace === true) await revokeOlder(verified.session_token, fresh, renewed)
       const payload: CloudAccountLinkedPayload = {
         email_domain: emailDomain(verified.account.email),
         cloud_org_id: verified.org.id,
@@ -397,20 +431,56 @@ export function createCloudAccount(options: CloudAccountOptions): CloudAccountAs
   }
 
   /**
+   * WP265：换新令牌之后把这几个品牌之前的关联撤掉（按 id、用会话）。撤不掉不算失败——
+   * 新令牌已经在用了，老的那把本机已经没有了，到期自己作废；云那头没有列关联这一条也一样。
+   */
+  const revokeOlder = async (
+    session: string,
+    fresh: Set<string>,
+    mine: Set<string>,
+  ): Promise<void> => {
+    let links: { id: string; workspace_id: string; revoked_at?: string }[] = []
+    try {
+      const listed = await call<{
+        links?: { id: string; workspace_id: string; revoked_at?: string }[]
+      }>('/v1/cloud/links', { token: session })
+      links = listed.links ?? []
+    } catch {
+      return
+    }
+    for (const l of links) {
+      if (!mine.has(l.workspace_id) || fresh.has(l.id) || l.revoked_at !== undefined) continue
+      try {
+        await call(`/v1/cloud/links/${encodeURIComponent(l.id)}/revoke`, {
+          method: 'POST',
+          token: session,
+        })
+      } catch {
+        // 同上：撤不掉就等它到期
+      }
+    }
+  }
+
+  /**
    * WP231：注册与登录（密码 + 邮箱验证码）。**密码与验证码只在这一跳的请求体里**（HTTPS 到云）：
    * 不落盘、不进事件、不进日志；出错信息里也不回显。拿到会话之后走同一个 {@link bind}。
    */
-  const guardLinkable = (): void => {
+  /** `refresh`（WP265）：已关联时同一账号再登录一次，换一把带新动作集的令牌——这时不挡。 */
+  const guardLinkable = (refresh = false): void => {
     if (!options.secrets.available)
       throw new ApiError(
         'not_implemented',
         '这台机器没有秘密库密钥（AGENTSWS_SECRETS_KEY），令牌无处安全存放',
       )
-    if (stored() !== undefined)
+    if (stored() !== undefined && !refresh)
       throw new ApiError('conflict', '这个工作区已经关联过了，先解除再关联别的账号')
   }
-  const sendCode = async (path: string, body: unknown): Promise<CloudCodeSentView> => {
-    guardLinkable()
+  const sendCode = async (
+    path: string,
+    body: unknown,
+    refresh = false,
+  ): Promise<CloudCodeSentView> => {
+    guardLinkable(refresh)
     const out = await call<{ expires_at: string }>(path, {
       method: 'POST',
       body,
@@ -418,14 +488,36 @@ export function createCloudAccount(options: CloudAccountOptions): CloudAccountAs
     })
     return { expires_at: out.expires_at, delivered: 'email' }
   }
-  const finish = async (path: string, body: unknown): Promise<CloudAuthDoneView> => {
-    guardLinkable()
+  const finish = async (
+    path: string,
+    body: unknown,
+    refresh = false,
+  ): Promise<CloudAuthDoneView> => {
+    guardLinkable(refresh)
+    const before = stored()
     const verified = await call<CloudSessionIssued>(path, {
       method: 'POST',
       body,
       passThrough: true,
     })
-    await bind(verified, rand(4).toString('hex'))
+    // WP265：换新令牌只许同一个账号（换账号要先解除——钱从哪个账号出不能悄悄变）
+    if (
+      refresh &&
+      before !== undefined &&
+      before.email.trim().toLowerCase() !== verified.account.email.trim().toLowerCase()
+    ) {
+      try {
+        await call('/v1/cloud/auth/logout', { method: 'POST', token: verified.session_token })
+      } catch {
+        // 会话 12 小时后自己过期
+      }
+      throw new ApiError(
+        'conflict',
+        '这是另一个 Agents 工坊账号。要换账号，先在设置里解除关联再登录。',
+        { details: { reason: 'other_account' } },
+      )
+    }
+    await bind(verified, rand(4).toString('hex'), { replace: refresh && before !== undefined })
     const granted = verified.bonus?.granted === true ? verified.bonus.credits : undefined
     return {
       ...view(),
@@ -457,9 +549,24 @@ export function createCloudAccount(options: CloudAccountOptions): CloudAccountAs
         locale: input.locale,
       }),
     verifySignup: (input) => finish('/v1/cloud/auth/signup/verify', input),
-    sendLoginCode: (input) => sendCode('/v1/cloud/auth/otp', input),
-    verifyLoginCode: (input) => finish('/v1/cloud/auth/otp/verify', input),
-    passwordLogin: (input) => finish('/v1/cloud/auth/password', input),
+    sendLoginCode: (input) =>
+      sendCode(
+        '/v1/cloud/auth/otp',
+        { email: input.email, locale: input.locale },
+        input.refresh === true,
+      ),
+    verifyLoginCode: (input) =>
+      finish(
+        '/v1/cloud/auth/otp/verify',
+        { email: input.email, code: input.code },
+        input.refresh === true,
+      ),
+    passwordLogin: (input) =>
+      finish(
+        '/v1/cloud/auth/password',
+        { email: input.email, password: input.password },
+        input.refresh === true,
+      ),
     forgotPassword: (input) => sendCode('/v1/cloud/auth/password/forgot', input),
     resetPassword: (input) => finish('/v1/cloud/auth/password/reset', input),
   }

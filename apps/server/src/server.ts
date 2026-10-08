@@ -517,6 +517,7 @@ import {
 import { createSecretaryAssembly, type SecretaryAssembly } from './secretary.js'
 import { claimRuleCard, createSeoService, pickRoleHolder } from './seo-service.js'
 import type { BrokerFetch } from './shopify-broker.js'
+import { createShopifyConnect } from './shopify-connect.js'
 import { createShopifyDevMcp } from './shopify-devmcp.js'
 import type { RunCli } from './shopify-theme.js'
 import { createConnectSiteFacts, createSiteService, createSiteStore, seedDemoSite } from './site.js'
@@ -8117,6 +8118,47 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       })
     return rows
   }
+  /**
+   * WP265：一键连 Shopify 时自动带的店铺域名，按先后：品牌档案里官网读到的 `shopify_domain`
+   * → 建站岗位找到 / 选定的店 → Shopify CLI 店铺清单（WP258）→ 老的客户端凭据连接。
+   * 建站那一份最多等 3 秒（它可能顺手去找店）；没等到就跳过，卡上让人填一格。
+   */
+  const shopifyShopHints = async (
+    ws: WorkspaceId,
+  ): Promise<{ shop: string; source: 'profile' | 'site' | 'cli' | 'connection' }[]> => {
+    const out: { shop: string; source: 'profile' | 'site' | 'cli' | 'connection' }[] = []
+    const profile = onboardingRef?.shopifyDomainOf(ws)
+    if (profile !== undefined && profile !== '') out.push({ shop: profile, source: 'profile' })
+    try {
+      const theme = await siteThemeOf(ws)
+      const ready =
+        theme === undefined
+          ? undefined
+          : await Promise.race([
+              theme.readiness(),
+              new Promise<undefined>((resolve) => {
+                setTimeout(() => resolve(undefined), 3000).unref?.()
+              }),
+            ])
+      if (ready?.store !== undefined)
+        out.push({
+          shop: ready.store,
+          source: ready.store_source === 'connection' ? 'connection' : 'site',
+        })
+      for (const row of ready?.store_lookup?.stores ?? [])
+        out.push({ shop: row.store, source: 'cli' })
+    } catch {
+      // 建站那一份没装好 / 不是 Shopify：跳过
+    }
+    try {
+      const brand = await brandModules.forWorkspace(ws)
+      for (const r of brand.connections.shopify.list())
+        out.push({ shop: r.shop, source: 'connection' })
+    } catch {
+      // 这个品牌的连接面还没起来：跳过
+    }
+    return out
+  }
   const deps: GatewayDeps = {
     identity,
     // WP194：一次请求绑好分配之后，开一个「算在谁头上」的作用域（打云时带归属头）
@@ -8159,6 +8201,20 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
      * 自带 key 只从 PUT 进来一次、进加密库，读视图里只有 has_key。
      */
     searchData: searchDataApiPort(async (ws) => (await brandModules.forWorkspace(ws)).searchData),
+    /*
+     * WP265：连接页 Shopify 卡的一键授权（接私有云 WP263），按品牌取那个品牌的云令牌。
+     * 店铺令牌只在云上；本机只拿这个品牌的工作区令牌开口（动作集 store）。
+     */
+    shopifyConnect: createShopifyConnect({
+      clock,
+      cloudOf: (ws) => brandModules.cloud(ws),
+      emailOf: async (ws) => {
+        const v = await cloudAccount.port.status(ws)
+        return v.linked ? v.email : undefined
+      },
+      shopHints: (ws) => shopifyShopHints(ws),
+      startupBrand: workspace.id,
+    }),
     /*
      * WP246（决策 87 / 88）：取数路线（体检、设置、Reddit 读号），按品牌取。
      */

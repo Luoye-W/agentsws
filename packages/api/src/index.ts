@@ -622,6 +622,19 @@ export type {
   SeoRunView,
 } from './routes/seo.js'
 export { seoRoutes } from './routes/seo.js'
+// WP265：连接页 Shopify 卡的一键授权（接私有云 WP263）
+export {
+  type ShopifyConnectActor,
+  type ShopifyConnectAttemptView,
+  type ShopifyConnectBlockedReason,
+  type ShopifyConnectPort,
+  type ShopifyConnectRow,
+  type ShopifyConnectStarted,
+  type ShopifyConnectTestResult,
+  type ShopifyConnectView,
+  type ShopifyShopSource,
+  shopifyConnectRoutes,
+} from './routes/shopify-connect.js'
 // WP77（59 §1 / §2）：建站那一侧最小一组
 export type {
   SiteAppInstallInput,

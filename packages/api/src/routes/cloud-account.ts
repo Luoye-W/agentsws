@@ -56,6 +56,11 @@ export interface CloudAccountView {
   cloud_base_url: string
   /** 现在还关联不了的原因（比如这台机器没有秘密库密钥）。能关联时没有这一格。 */
   blocked_reason?: string
+  /**
+   * WP265（决策 186）：这把令牌比现在的默认动作集少了哪几项（老令牌签发时还没有 `store`）。
+   * 只在关联了、且能读出签发时的动作集时才有；补上的办法是重新登录一次（`refresh: true`）。
+   */
+  missing_scopes?: CloudScope[]
 }
 
 export interface BeginCloudLinkInput {
@@ -103,9 +108,25 @@ export interface CloudAuthPort {
     terms_version: string
   }): Promise<CloudCodeSentView>
   verifySignup(input: { email: string; code: string }): Promise<CloudAuthDoneView>
-  sendLoginCode(input: { email: string; locale: CloudAuthLocale }): Promise<CloudCodeSentView>
-  verifyLoginCode(input: { email: string; code: string }): Promise<CloudAuthDoneView>
-  passwordLogin(input: { email: string; password: string }): Promise<CloudAuthDoneView>
+  sendLoginCode(input: {
+    email: string
+    locale: CloudAuthLocale
+    refresh?: boolean
+  }): Promise<CloudCodeSentView>
+  /**
+   * `refresh`（WP265）：已经关联了、再登录一次**同一个账号**换新令牌（老令牌缺新动作集时用）；
+   * 新的存好了才撤旧的，登录没成什么都不动。
+   */
+  verifyLoginCode(input: {
+    email: string
+    code: string
+    refresh?: boolean
+  }): Promise<CloudAuthDoneView>
+  passwordLogin(input: {
+    email: string
+    password: string
+    refresh?: boolean
+  }): Promise<CloudAuthDoneView>
   forgotPassword(input: { email: string; locale: CloudAuthLocale }): Promise<CloudCodeSentView>
   resetPassword(input: {
     email: string
@@ -145,10 +166,14 @@ const SignupBody = z.object({
   locale: Locale,
 })
 const CodeBody = z.object({ email: Email, code: Code })
+/** WP265：登录那两条多一个 `refresh`（已关联时同一账号再登录一次，换一把带新动作集的令牌）。 */
+const LoginCodeBody = CodeBody.extend({ refresh: z.boolean().optional() })
 const EmailBody = z.object({ email: Email, locale: Locale })
+const LoginEmailBody = EmailBody.extend({ refresh: z.boolean().optional() })
 const PasswordLoginBody = z.object({
   email: Email,
   password: z.string().min(1).max(CLOUD_PASSWORD_MAX),
+  refresh: z.boolean().optional(),
 })
 const ResetBody = z.object({ email: Email, code: Code, new_password: Password })
 
@@ -352,25 +377,40 @@ export function cloudAccountRoutes(): Route[] {
     authRoute(
       '/v1/cloud/account/code',
       'cloudLoginCode',
-      '登录：发一封 6 位登录验证码（没注册的邮箱云上静默不发）',
-      EmailBody,
-      (port, input) => port.sendLoginCode(input),
+      '登录：发一封 6 位登录验证码（没注册的邮箱云上静默不发；`refresh` 见验码那条）',
+      LoginEmailBody,
+      (port, input) =>
+        port.sendLoginCode({
+          email: input.email,
+          locale: input.locale,
+          ...(input.refresh === true ? { refresh: true } : {}),
+        }),
       '{ expires_at, delivered: "email" }',
     ),
     authRoute(
       '/v1/cloud/account/code/verify',
       'cloudLoginCodeVerify',
-      '登录验证码 → 关联这台机器',
-      CodeBody,
-      (port, input) => port.verifyLoginCode(input),
+      '登录验证码 → 关联这台机器（`refresh: true`：已关联时同一账号换一把新令牌）',
+      LoginCodeBody,
+      (port, input) =>
+        port.verifyLoginCode({
+          email: input.email,
+          code: input.code,
+          ...(input.refresh === true ? { refresh: true } : {}),
+        }),
       'CloudAuthDoneView',
     ),
     authRoute(
       '/v1/cloud/account/password-login',
       'cloudPasswordLogin',
-      '密码登录 → 关联这台机器',
+      '密码登录 → 关联这台机器（`refresh: true`：已关联时同一账号换一把新令牌）',
       PasswordLoginBody,
-      (port, input) => port.passwordLogin(input),
+      (port, input) =>
+        port.passwordLogin({
+          email: input.email,
+          password: input.password,
+          ...(input.refresh === true ? { refresh: true } : {}),
+        }),
       'CloudAuthDoneView',
     ),
     authRoute(
