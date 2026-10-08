@@ -73,6 +73,7 @@ import {
   type PositionSummary,
 } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
+import { useMode } from '@/lib/mode'
 import { holdsDuty } from '@/lib/pick-assignment'
 import { myAssignments } from '@/lib/positions'
 import { RAIL_EXPANDED_KEY, readFlags, writeFlags } from '@/lib/ui-state'
@@ -331,6 +332,8 @@ export function AppShell({
   onAddTile: (position_id: string, tile_id: string) => void
 }): ReactNode {
   const { t, position } = useApp()
+  // WP271：① 个人里左栏「公司」叫「岗位与品牌」、「我的代理」收起（都是对同事的事）
+  const { t: tm, solo } = useMode()
   const [paletteOpen, setPaletteOpen] = useState(false)
   /** WP188：「交给岗位去做」带过来的那件事（面板开着时只列岗位）。 */
   const [handoff, setHandoff] = useState<Handoff | undefined>(undefined)
@@ -577,11 +580,14 @@ export function AppShell({
                       </NavLink>
                     ))}
               <Separator className="my-2" />
-              {/* 41 §1：每人自带的个人代理——问别人的代理、管自己的 profile 与日程 */}
-              <NavLink to="/secretary" className={navClass}>
-                <NavIcon icon={Bot} />
-                {t('nav.secretary')}
-              </NavLink>
+              {/* 41 §1：每人自带的个人代理——问别人的代理、管自己的 profile 与日程。
+                  WP271：① 个人收起——它的四样都是对同事的，「把事丢给代理」与 ⌘K 重复 */}
+              {solo ? null : (
+                <NavLink to="/secretary" className={navClass} data-testid="nav-secretary">
+                  <NavIcon icon={Bot} />
+                  {t('nav.secretary')}
+                </NavLink>
+              )}
               <NavLink to="/meetings" className={navClass}>
                 <NavIcon icon={Users} />
                 {t('nav.meetings')}
@@ -595,9 +601,10 @@ export function AppShell({
                 {t('nav.skills')}
               </NavLink>
               {/* WP28 制度面：岗位 / 成员 / 职责（谁在做什么、能做到哪一步） */}
-              <NavLink to="/org" className={navClass}>
+              {/* WP271（决策 235）：① 叫「岗位与品牌」/ ② 「团队」/ ③ 「公司」 */}
+              <NavLink to="/org" className={navClass} data-testid="nav-org">
                 <NavIcon icon={Building2} />
-                {t('nav.org')}
+                {tm('nav.org')}
               </NavLink>
               <NavLink to="/connections" className={navClass}>
                 <NavIcon icon={Plug} />

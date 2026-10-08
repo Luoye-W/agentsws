@@ -295,6 +295,9 @@ describe('一致性用例', () => {
   })
 
   it('空范围拒：范围为空的分配标 unassigned_range，assigned 范围的查询拿不到东西', async () => {
+    // WP271：「没给范围」只在 ③ 公司集体里有；① ② 不挑范围 = 整个品牌（见 wp271-modes.test.ts）
+    for (const org of server.identity.listOrganizations())
+      await server.identity.updateOrganization(org.id, { mode: 'company' })
     const mate = await inviteColleague('empty@example.com')
     const granted = await data<AssignmentView[]>(
       await call('POST', '/v1/assignments', {

@@ -258,6 +258,11 @@ export type KnownEventType =
    */
   | 'organization.created'
   | 'brand.created'
+  /*
+   * WP271（docs/95 §3.2）：组织的用法（① 个人 / ② 同事互联 / ③ 公司集体）改了。
+   * 启动时按决策 232 推出来写上也记一条（`inferred: true`）。只记模式，不记任何名字。
+   */
+  | 'organization.mode_changed'
   // schedule / workflow (25 §5, WP27)
   | 'schedule.created'
   | 'schedule.updated'

@@ -26,6 +26,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { currentSession, getBlockData, getPositionView, updateAssignmentRanges } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 import { formatValue } from '@/lib/format'
+import { useMode } from '@/lib/mode'
 
 const RANGES: RangeName[] = ['yesterday', 'last_7d']
 /** 一行最多几个数（设计稿：3–4 个，再多就是第二张面板了）。 */
@@ -52,7 +53,11 @@ export function NoRangeNotice({
   /** 店主那条分配（`common.owner`）；给了才出一键挂品牌。 */
   ownerAssignment?: string | undefined
 }): ReactNode {
-  const { t } = useApp()
+  /*
+   * WP271（docs/95 §2.4）：① 个人——不挑范围本来就是整个品牌，只有老分配会走到这里：
+   * 只给一键「挂上整个品牌」，不出「去分配 / 找负责人」。
+   */
+  const { t, solo } = useMode()
   const client = useQueryClient()
   const assign = useMutation({
     mutationFn: async () => {
@@ -91,11 +96,13 @@ export function NoRangeNotice({
               {ownerAssignment === undefined ? null : (
                 <Hint text={t('view.no_range.self.hint')} testId="no-range-self-hint" />
               )}
-              <Button size="sm" variant="outline" asChild>
-                <Link to="/org?tab=positions" data-testid="no-range-assign">
-                  {t('view.no_range.action')}
-                </Link>
-              </Button>
+              {solo ? null : (
+                <Button size="sm" variant="outline" asChild>
+                  <Link to="/org?tab=positions" data-testid="no-range-assign">
+                    {t('view.no_range.action')}
+                  </Link>
+                </Button>
+              )}
             </div>
             {assign.error === null ? null : (
               <p className="text-xs text-destructive" data-testid="no-range-self-error">

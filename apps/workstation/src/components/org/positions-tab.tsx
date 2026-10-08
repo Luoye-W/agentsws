@@ -28,6 +28,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import type { OrgPositionView, RoleSummaryView } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
+import { useMode } from '@/lib/mode'
 import { inUseCount, splitPositions } from '@/lib/org-positions'
 import { rangeText } from '@/lib/ranges'
 import { cn } from '@/lib/utils'
@@ -73,6 +74,9 @@ function Holder({
 export function pickableRoles(roles: RoleSummaryView[], held: string[] = []): RoleSummaryView[] {
   return roles.filter((r) => r.superseded_by === undefined || held.includes(r.id))
 }
+
+/** WP271：「工作区成员」那条底座职责（加入工作区本身）；① 个人里不列。 */
+const MEMBER_DUTY = 'common.member'
 
 /** WP234：「负责人」那个岗位行的 id（身份，不在岗位清单里列）。 */
 export { OWNER_POSITION } from '@/lib/org-positions'
@@ -149,6 +153,8 @@ export function PositionsTab({
   notice?: string
 }): React.ReactNode {
   const { t, lang } = useApp()
+  // WP271：① 个人——「你的岗位」「我来做」；「工作区成员」那条底座职责不列（docs/95 §2.2）
+  const { t: tm, solo } = useMode()
   // WP196：正在改名的那个岗位与两格草稿（一次一个）
   const [renaming, setRenaming] = useState<string | null>(null)
   const [renameZh, setRenameZh] = useState('')
@@ -365,7 +371,9 @@ export function PositionsTab({
         {/* WP70：职责是第二层，默认折叠；点开才看得到这个岗位含哪几条 */}
         <DutyFold
           testId="position-duties"
-          duties={p.roles.map((r) => ({ id: r.role_id, name: r.name }))}
+          duties={p.roles
+            .filter((r) => !(solo && r.role_id === MEMBER_DUTY))
+            .map((r) => ({ id: r.role_id, name: r.name }))}
           renderDuty={(duty) => {
             const inPosition = p.roles.find((r) => r.role_id === duty.id)
             const full = roles.find((r) => r.id === duty.id)
@@ -469,16 +477,19 @@ export function PositionsTab({
         ) : null}
 
         <div className="flex flex-wrap gap-2">
-          <Button
-            size="sm"
-            data-testid="position-assign"
-            aria-expanded={assigning === p.id}
-            onClick={() => {
-              onAssign(p.id)
-            }}
-          >
-            {t('org.positions.assign')}
-          </Button>
+          {/* WP271：① 个人里只有你一个人——已经在做的岗位不再出「我来做」 */}
+          {solo && p.holders.length > 0 ? null : (
+            <Button
+              size="sm"
+              data-testid="position-assign"
+              aria-expanded={assigning === p.id}
+              onClick={() => {
+                onAssign(p.id)
+              }}
+            >
+              {tm('org.positions.assign')}
+            </Button>
+          )}
           <Button
             size="sm"
             variant="outline"
@@ -548,7 +559,7 @@ export function PositionsTab({
         {/* WP235：上面「你们的岗位」（有人在做的 + 自建的），下面折叠的「可以加的岗位（模板）」。
             「负责人」在页顶身份卡、「普通成员」是底座身份，都不进岗位清单 */}
         <section className="flex flex-col gap-3" data-testid="positions-ours">
-          <h3 className="font-medium text-sm">{t('org.positions.ours')}</h3>
+          <h3 className="font-medium text-sm">{tm('org.positions.ours')}</h3>
           {ours.length === 0 ? (
             <p className="text-muted-foreground text-sm">{t('org.positions.ours.empty')}</p>
           ) : (
@@ -560,7 +571,7 @@ export function PositionsTab({
             <summary className="flex cursor-pointer items-center gap-2 font-medium text-sm">
               {t('org.positions.templates')}
               <Badge variant="outline">{templates.length}</Badge>
-              <Hint text={t('org.positions.templates.hint')} />
+              <Hint text={tm('org.positions.templates.hint')} />
             </summary>
             <div className="mt-3 flex flex-col gap-3">
               {templates.map((p) => renderCard(p, false))}

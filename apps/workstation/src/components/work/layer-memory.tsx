@@ -16,7 +16,7 @@ import { Button } from '@/components/ui/button'
 import { Hint } from '@/components/ui/hint'
 import { Skeleton } from '@/components/ui/skeleton'
 import { getLayerMemory, promoteSkillTo } from '@/lib/api'
-import { useApp } from '@/lib/app-context'
+import { useMode } from '@/lib/mode'
 
 export function LayerMemory({
   tier,
@@ -25,7 +25,7 @@ export function LayerMemory({
   tier: 'company' | 'department' | 'position' | 'role'
   scopeId?: string
 }): React.ReactNode {
-  const { t } = useApp()
+  const { t } = useMode()
   const client = useQueryClient()
   const memory = useQuery({
     queryKey: ['layer-memory', tier, scopeId ?? ''],

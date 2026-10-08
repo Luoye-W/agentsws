@@ -45,6 +45,7 @@ import {
   getTopupTiers,
 } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
+import { useMode } from '@/lib/mode'
 import { KolCloudCard } from './kol-cloud-card'
 
 type Group = 'capability' | 'workspace' | 'day'
@@ -126,7 +127,9 @@ export function cheapestOf(entries: readonly PricingEntry[]): PricingEntry | und
 }
 
 export function CreditsPanel({ assignment }: { assignment?: string }): React.ReactNode {
-  const { t, lang } = useApp()
+  const { lang } = useApp()
+  // WP271：① 个人——用量「按品牌」、问号里不提所有者 / 成员（docs/95 §2.3）
+  const { t } = useMode()
   const navigate = useNavigate()
   const [group, setGroup] = useState<Group>('capability')
   /** 没关联时默认展开：那时候这张表就是这一页的正文（WP142）。 */
@@ -722,14 +725,15 @@ function MyAllowance({
  * 「我的本月额度」那一份里给 `role` 与 `allocation_url`，别人拿不到地址就不画。
  */
 function AllocationWebLink({ assignment }: { assignment: string | undefined }): React.ReactNode {
-  const { t } = useApp()
+  // WP271：给同事分额度只在 ③ 公司集体（① 里没有别人）
+  const { t, solo } = useMode()
   const mine = useQuery({
     queryKey: ['cloud-allocation-me', assignment],
     queryFn: () => getMyCloudAllocation(assignment),
     retry: false,
   })
   const url = mine.data?.allocation_url
-  if (mine.data?.role === undefined || url === undefined || url === '') return null
+  if (solo || mine.data?.role === undefined || url === undefined || url === '') return null
   const tip = t('credits.alloc_web.tip')
   return (
     <p className="text-xs">
@@ -779,7 +783,7 @@ function UsageTable({
   group: Group
   num: (n: number) => string
 }): React.ReactNode {
-  const { t } = useApp()
+  const { t } = useMode()
   if (pending) return <Skeleton className="h-20 w-full" />
   if (report === null || report.rows.length === 0) {
     return (

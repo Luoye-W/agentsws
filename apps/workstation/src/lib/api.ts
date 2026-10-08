@@ -4443,8 +4443,13 @@ export interface OrganizationView {
   cloud_org_id?: string
   brands: number
   members: number
-  /** 一个人、一个品牌 = 个人用户：界面上一律不显示"组织"这两个字（52 O1）。 */
+  /** 个人用户：界面上一律不显示"组织"这两个字（52 O1）。WP271 起只看模式，不看品牌数。 */
   solo: boolean
+  /**
+   * WP271（决策 222）：① 个人 / ② 同事互联 / ③ 公司集体。老服务进程不回它——
+   * 读的时候一律过 `useMode()` / `modeOfOrg()`。
+   */
+  mode?: 'solo' | 'peers' | 'company'
   created_at: string
 }
 

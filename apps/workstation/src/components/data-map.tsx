@@ -17,7 +17,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Hint } from '@/components/ui/hint'
 import { Skeleton } from '@/components/ui/skeleton'
 import { getPositionOntology } from '@/lib/api'
-import { useApp } from '@/lib/app-context'
+import { useMode } from '@/lib/mode'
 
 /** `cached:300` → "缓存 5 分钟"；其余两档直接查表。 */
 function freshnessText(
@@ -41,7 +41,8 @@ export function DataMapPanel({
   position: string
   assignment?: string
 }): React.ReactNode {
-  const { t } = useApp()
+  // WP271：① 个人里不说「范围」（docs/95 §6.1 那批词）
+  const { t } = useMode()
   const map = useQuery({
     queryKey: ['ontology', position],
     queryFn: () => getPositionOntology(position, assignment),

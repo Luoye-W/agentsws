@@ -1133,7 +1133,8 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
         ...(market_languages === undefined || Object.keys(market_languages).length === 0
           ? {}
           : { market_languages }),
-        discoverable: input.discoverable ?? company?.discoverable ?? previous?.discoverable ?? true,
+        discoverable:
+          input.discoverable ?? company?.discoverable ?? previous?.discoverable ?? false,
         ...(vertical === undefined ? {} : { vertical }),
         ...(storefront_platform === undefined ? {} : { storefront_platform }),
         // WP258：官网读到的店铺地址不在设置页上，存档案时原样带着
@@ -1668,7 +1669,7 @@ export function createOnboarding(options: OnboardingOptions): OnboardingAssembly
           : {}),
         legal_name: company?.legal_name ?? previous?.legal_name ?? options.workspaceName(),
         ...(company?.domain === undefined ? {} : { domain: company.domain }),
-        discoverable: company?.discoverable ?? previous?.discoverable ?? true,
+        discoverable: company?.discoverable ?? previous?.discoverable ?? false,
         ...(input.vertical === undefined ? {} : { vertical: input.vertical }),
         ...(input.storefront_platform === undefined
           ? {}

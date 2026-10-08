@@ -27,6 +27,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { getSkills, promoteSkillTo, type SkillSummary, setSkillExcluded } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 import { skillLabel, skillsForScope } from '@/lib/library'
+import { useMode } from '@/lib/mode'
 import { cn } from '@/lib/utils'
 
 /** 真源是 `packages/skills` 的 `TIER_ORDER`；工作台不依赖那个包，这里抄的是顺序。 */
@@ -41,7 +42,8 @@ function SkillRow({
   scope: RailScope
   onChanged: () => void
 }): React.ReactNode {
-  const { t, lang } = useApp()
+  const { lang } = useApp()
+  const { t } = useMode()
   const exclude = useMutation({
     mutationFn: (excluded: boolean) => setSkillExcluded(skill.name, excluded),
     onSettled: onChanged,
@@ -106,7 +108,7 @@ function SkillRow({
 }
 
 export function SkillsPanel({ scope }: { scope: RailScope }): React.ReactNode {
-  const { t } = useApp()
+  const { t } = useMode()
   const client = useQueryClient()
   const skills = useQuery({ queryKey: ['skills'], queryFn: getSkills })
   const onChanged = (): void => {

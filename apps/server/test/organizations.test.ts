@@ -183,13 +183,14 @@ describe('52 O1 一次性迁移与个人用户', () => {
     expect(workspace?.brand?.name).toBe('诺伏特户外')
   })
 
-  it('一个人一个品牌 = solo：界面上不显示组织（52 O1）', async () => {
+  it('一个人 = solo：界面上不显示组织（52 O1）；WP271 起加第二个品牌仍是 solo', async () => {
     const server = await boot()
     expect((await orgOf(server)).solo).toBe(true)
     const org = await orgOf(server)
     await call(server, 'POST', `/v1/orgs/${org.id}/brands`, { body: { name: '诺伏特室内' } })
-    // 加了第二个品牌就不再是 solo——从这一刻起切换器与组织卡才该出现
-    expect((await orgOf(server)).solo).toBe(false)
+    // WP271（docs/95 §1.2）：品牌数与模式无关——一个人管两个品牌仍是 ① 个人；
+    // 切换器出不出只看品牌数（工作台那边判），不看 solo
+    expect((await orgOf(server)).solo).toBe(true)
   })
 
   it('写公司档案 = 写组织：发现开关与全称的真源在组织上（52 O1「写时同步写组织」）', async () => {

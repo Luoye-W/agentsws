@@ -13,6 +13,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { PositionInstanceData } from '@/lib/api'
 import { homeData } from './fixtures'
 import { renderWithProviders } from './helpers'
+import { COMPANY_ORG, companyWordsIn, SOLO_ORG } from './mode-words'
 
 const home = homeData()
 
@@ -102,6 +103,9 @@ const inProgress: {
 }[] = []
 const listInProgress = vi.fn(async () => ({ items: [...inProgress], scope: 'position' }))
 
+/** WP271：组织（不给 = 读不到，按 ③ 兜底）与待认领池。 */
+const modeState: { orgs: (typeof SOLO_ORG)[]; pool: unknown[] } = { orgs: [], pool: [] }
+
 vi.mock('@/lib/api', async () => {
   const actual = await vi.importActual<typeof import('@/lib/api')>('@/lib/api')
   return {
@@ -111,6 +115,8 @@ vi.mock('@/lib/api', async () => {
     listMembers: (...args: unknown[]) => listMembers(...(args as [])),
     decide: (...args: unknown[]) => decide(...(args as [])),
     listInProgress: (...args: unknown[]) => listInProgress(...(args as [])),
+    listOrganizations: async () => modeState.orgs,
+    listClaimPool: async () => ({ pool: modeState.pool }),
   }
 })
 
@@ -322,5 +328,48 @@ describe('WP98 收口：岗位卡补齐持有人与一句真状态', () => {
     // WP100：圆里只放一个字（名字的末字），全名在 title 上
     expect(avatar.textContent).toBe('岚')
     expect(cards.textContent).not.toContain('p_hidden')
+  })
+})
+
+describe('WP271 三种模式：首页', () => {
+  const TODAY = { timeline: [], due: { todos: [], cards_waiting: 0 } }
+  const POOL_ITEM = {
+    todo_id: 'td_1',
+    title: '会议里冒出来的：给供应商回电话',
+    source: 'meeting',
+    recycled: 0,
+    similar_to: [],
+  }
+
+  beforeEach(() => {
+    modeState.orgs = []
+    modeState.pool = []
+    getHome.mockImplementation(async () => ({ ...home, today: TODAY }))
+  })
+
+  it('① 个人：「正在进行」收起，「待认领」空着就收起；一个公司概念词都不出', async () => {
+    modeState.orgs = [SOLO_ORG]
+    renderWithProviders(<HomePage />)
+    await screen.findByTestId('today')
+    await waitFor(() => {
+      expect(screen.queryByTestId('home-inprogress')).toBeNull()
+    })
+    expect(screen.queryByTestId('home-claim-pool')).toBeNull()
+    expect(companyWordsIn(document.body)).toEqual([])
+  })
+
+  it('① 个人：待认领里真有活就照样出（不能让会议里冒出来的活悄悄看不见）', async () => {
+    modeState.orgs = [SOLO_ORG]
+    modeState.pool = [POOL_ITEM]
+    renderWithProviders(<HomePage />)
+    expect(await screen.findByTestId('home-claim-pool')).toBeTruthy()
+    expect(screen.queryByTestId('home-inprogress')).toBeNull()
+  })
+
+  it('③ 公司集体：「正在进行」「待认领」照旧', async () => {
+    modeState.orgs = [COMPANY_ORG]
+    renderWithProviders(<HomePage />)
+    expect(await screen.findByTestId('home-inprogress')).toBeTruthy()
+    expect(screen.getByTestId('home-claim-pool')).toBeTruthy()
   })
 })

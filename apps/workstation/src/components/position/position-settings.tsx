@@ -35,6 +35,7 @@ import {
 import { useApp } from '@/lib/app-context'
 import { actionLines, connectorLines, scopeLines, skillLines } from '@/lib/duty-capabilities'
 import { formatDate } from '@/lib/format'
+import { useMode } from '@/lib/mode'
 import { Pop } from './work-bits'
 
 /** 职责说明里的 `**粗体**` 记号在一行小字里不认，去掉星号（整段在职责页）。 */
@@ -316,14 +317,16 @@ function DutyCapabilities({
   name: string
   dev: boolean
 }): ReactNode {
-  const { t, lang } = useApp()
+  const { lang } = useApp()
+  // WP271（决策 244）：① 个人——「要你确认 / 上限内自己做 / 自己做，事后告诉你」，「可批卡」不出
+  const { t, solo } = useMode()
   const def = useQuery({
     queryKey: ['role-definition', role_id],
     queryFn: () => getRoleDefinition(role_id),
   })
   if (def.data === undefined) return def.isPending ? <Skeleton className="h-10 w-full" /> : null
   const lines = [
-    ...scopeLines(def.data, t),
+    ...scopeLines(def.data, t, { solo }),
     ...actionLines(def.data, t),
     ...skillLines(def.data, t),
     ...connectorLines(def.data, t, lang),
@@ -415,6 +418,7 @@ export function PositionSettings({
   view: PositionInstanceData | undefined
 }): ReactNode {
   const { t } = useApp()
+  const { t: tm } = useMode()
   if (view === undefined) return <Skeleton className="h-64 w-full" />
   const mine = view.roles.flatMap((r) =>
     r.my_assignment_id === undefined ? [] : [r.my_assignment_id],
@@ -470,7 +474,7 @@ export function PositionSettings({
                 <ExternalLink className="size-3.5" aria-hidden />
                 {t('pos2.set.duty.merge')}
               </Link>
-              <Hint text={t('pos2.set.duty.reshape.hint')} />
+              <Hint text={tm('pos2.set.duty.reshape.hint')} />
             </div>
           </div>
         </section>
