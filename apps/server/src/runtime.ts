@@ -102,6 +102,7 @@ import {
   READ_WEBPAGE_TOOL,
   RESEARCH_TOOL_NAMES,
   SCHEDULE_TOOL_NAMES,
+  SHOP_TOOL_NAMES,
   THEME_PUBLISH_TOOL,
   THEME_PUSH_TOOL,
   THEME_TOOL_NAMES,
@@ -149,6 +150,8 @@ const HOST_TOOL_EFFECTS: Readonly<Record<string, ToolSideEffect>> = Object.fromE
     ...SCHEDULE_TOOL_NAMES,
     // WP253：网页模板的主题工具——只动本机工作目录 / 推未发布副本；发布只出卡（服务端执行器判）
     ...THEME_TOOL_NAMES,
+    // WP261：独立站运营工具——查询只读店铺；改动只出卡（人批了服务端执行器才改）
+    ...SHOP_TOOL_NAMES,
   ].map((name) => [name, classifySideEffect(name) === 'read_external' ? 'read_external' : 'local']),
 )
 
@@ -327,6 +330,12 @@ export interface RuntimeOptions {
    * 的工具面——别的职责一律没有；执行器里还会再判一次职责。发布只出卡，不直接发。
    */
   themeTools?: ToolExecutor
+  /**
+   * WP261（决策 175 第 1 步）：独立站运营工具（`shop-tools.ts` 建的那一份，按品牌）。工具面按
+   * 「职责表 × 店铺授权里的权限」每次运行现问（`offered`）：没授权 / 过期一个都不出（岗位页引导去授权）；
+   * 改动工具只出卡，人批了执行器才改。不给 = 没有这一组（老装配、模拟世界字节不变）。
+   */
+  shopTools?: { executeTool: ToolExecutor; offered(role_id: string): Promise<string[]> }
   /**
    * WP181：官方「自动化任务」的四个工具（`automation.ts` 建的那一份）。**装了那个官方插件**
    * （`enabled()`，每次运行现问）才进工具面——所有职责都有（给自己建提醒）；会往外发的周期任务
@@ -982,6 +991,7 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
     const owner = options.ownerTools
     const b2bOut = options.b2bOutboundTools
     const themeOut = options.themeTools
+    const shopOut = options.shopTools
     const dev = options.devTools
     const automation = options.automation
     /*
@@ -1006,6 +1016,7 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       owner === undefined &&
       b2bOut === undefined &&
       themeOut === undefined &&
+      shopOut === undefined &&
       dev === undefined &&
       readSkill === undefined &&
       automation === undefined
@@ -1037,6 +1048,10 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       // WP253：网页模板的主题工具（名字与别处不重名；职责在执行器里再判一次）
       if (themeOut !== undefined && THEME_TOOL_NAMES.includes(bareOf(call.name))) {
         return themeOut(call)
+      }
+      // WP261：独立站运营工具（名字与别处不重名；职责与授权在执行器里再判一次）
+      if (shopOut !== undefined && SHOP_TOOL_NAMES.includes(bareOf(call.name))) {
+        return shopOut.executeTool(call)
       }
       if (dev !== undefined && devToolNames(call.request.actor.role_id).includes(call.name)) {
         try {
@@ -1074,6 +1089,7 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
     if (options.b2bOutboundTools !== undefined && B2B_OUTBOUND_TOOL_NAMES.includes(bare))
       return true
     if (options.themeTools !== undefined && THEME_TOOL_NAMES.includes(bare)) return true
+    if (options.shopTools !== undefined && SHOP_TOOL_NAMES.includes(bare)) return true
     // 官方网页工具由 dsh 那棵树自己挂（`dsh-tool-web`），不经宿主执行器
     if (WEB_TOOL_NAMES.includes(name)) return true
     if (options.devTools !== undefined && devToolNames(role_id).includes(name)) return true
@@ -1430,6 +1446,11 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       options.automation === undefined ? false : await options.automation.enabled()
     /** WP253：网页模板（带主题工具）的运行。WP260：它是「要产出东西」的长活（见 `THEME_PRODUCE`）。 */
     const themeRun = isThemeRole(config.role_id) && options.themeTools !== undefined
+    /** WP261：店铺授权过、这条职责登记了的运营工具（每次运行现问：授权过期了下一次运行就没有）。 */
+    const shopNames =
+      options.shopTools === undefined
+        ? []
+        : await options.shopTools.offered(config.role_id).catch(() => [] as string[])
     const allow = [
       ...new Set([
         ...config.grounding.map((g) => g.tool),
@@ -1454,6 +1475,8 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
         ...(isThemeRole(config.role_id) && options.themeTools !== undefined
           ? THEME_TOOL_NAMES
           : []),
+        // WP261：独立站运营工具（授权过才有；网页模板只给读商品 / 合集，选合集 / 挂商品用）
+        ...shopNames,
         // WP179：官方网页工具（只有真给了的那几个）
         ...(web?.search === true ? [WEB_SEARCH_TOOL] : []),
         ...(web?.fetch === true ? [WEB_FETCH_TOOL] : []),
@@ -1577,7 +1600,7 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
            */
           houseRulesSection('zh'),
           // WP260：网页模板的做法（读一次 → 改模板与设置 → 检查 → 推未发布；中途不汇报）。只给带主题工具的运行
-          ...(themeRun ? [themeWorkSection()] : []),
+          ...(themeRun ? [themeWorkSection({ shopRead: shopNames.length > 0 })] : []),
           /*
            * 24 §1 + WP69（54 §1）：解析后的技能正文——**六层**叠加完的那一份
            * （包 → 公司 → 部门 → 岗位 → 职责 → 个人）。

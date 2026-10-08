@@ -12,6 +12,7 @@ import { NPM_REGISTRY_EN, NPM_REGISTRY_ZH } from './i18n-npm-registry'
 import { OWN_SUB_EN, OWN_SUB_ZH } from './i18n-own-sub'
 import { POSITION_EN, POSITION_ZH } from './i18n-position'
 import { READ_ROUTES_EN, READ_ROUTES_ZH } from './i18n-read-routes'
+import { SHOP_ADMIN_EN, SHOP_ADMIN_ZH } from './i18n-shop-admin'
 import { SITE_THEME_EN, SITE_THEME_ZH } from './i18n-site-theme'
 import { SOCIAL_EXEC_EN, SOCIAL_EXEC_ZH } from './i18n-social-exec'
 import { SOCIAL_REPLY_EN, SOCIAL_REPLY_ZH } from './i18n-social-reply'
@@ -7952,6 +7953,8 @@ const TABLES: Record<Lang, Table> = {
     ...SOCIAL_REPLY_ZH,
     // WP259：「交给它」提交中 / 没交出去
     ...HANDOFF_ZH,
+    // WP261：岗位页「授权管理商品和页面」
+    ...SHOP_ADMIN_ZH,
   },
   en: {
     ...en,
@@ -7966,6 +7969,7 @@ const TABLES: Record<Lang, Table> = {
     ...SOCIAL_EXEC_EN,
     ...SOCIAL_REPLY_EN,
     ...HANDOFF_EN,
+    ...SHOP_ADMIN_EN,
   },
 }
 

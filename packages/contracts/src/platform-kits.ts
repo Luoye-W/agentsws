@@ -112,6 +112,11 @@ export interface PlatformCliSpec {
     organization_flag: string
   }
   /**
+   * WP261（决策 175 第 1 步）：经这个 CLI 的「店铺授权 + 执行后台接口」管店里的商品 / 合集 / 页面 / 菜单 / 折扣。
+   * 不写 = 这个 CLI 管不了店里的数据，岗位页不出「授权管理商品和页面」那一行、工具面里没有那组运营工具。
+   */
+  store_admin?: PlatformStoreAdminSpec
+  /**
    * WP245：「一键安装」装哪个 npm 标签（装进应用自己的数据目录，不写全局）。不写 = `latest`。
    * 参数在服务端拼死（`npm install --prefix <数据目录> <npm>@<tag>`），不接受任意字符串。
    */
@@ -124,6 +129,66 @@ export interface PlatformCliSpec {
   roles: readonly string[]
   /** 子进程环境里关掉遥测的变量。 */
   telemetry_off_env: Readonly<Record<string, string>>
+}
+
+/**
+ * WP261（决策 175 第 1 步）：**店铺授权 + 后台接口**那两条命令的登记（Shopify CLI 4.8.5 的 `store auth` / `store execute`）。
+ *
+ * 读 `@shopify/cli@4.8.5` 发行包核过（`npm pack` 到临时目录，没装）：
+ *
+ * - `store auth --store <店> --scopes <逗号分隔> --json`：PKCE 浏览器授权（Shopify CLI 自己的应用，**用户不建开发者应用**），
+ *   本机 `127.0.0.1:13387` 收回调、5 分钟等不到就退出；成功打一段 JSON（权限、何时过期、有没有续期令牌）。
+ *   令牌存在 `conf` 的 `shopify-cli-store` 那一份配置里（同 WP253，按 HOME / APPDATA 分品牌）。
+ * - `store execute --store <店> --query-file <文件> [--variable-file <文件>] [--version <版本>] [--allow-mutations] --output-file <文件> --json`：
+ *   跑一条 Admin GraphQL；文档里只能有一个操作，**是 mutation 又没带 `--allow-mutations` 就直接拒**。
+ *
+ * 参数全写在这里，服务端只往后接：店铺（规范过的 `xxx.myshopify.com`）、权限（只能取 {@link scopes_by_role} 里的）、
+ * 我们自己写在本品牌目录里的三个文件路径、接口版本（{@link api_version}）。查询 / 改动的文档是服务端写死的那几条，
+ * AI 拿不到任意 GraphQL。
+ */
+export interface PlatformStoreAdminSpec {
+  /** 授权：`['store', 'auth', '--json']`。 */
+  auth_args: readonly string[]
+  /** 执行：`['store', 'execute', '--json']`。 */
+  execute_args: readonly string[]
+  store_flag: string
+  scopes_flag: string
+  query_file_flag: string
+  variable_file_flag: string
+  output_file_flag: string
+  version_flag: string
+  /** 只有执行器（人批过的卡）才带它。 */
+  allow_mutations_flag: string
+  /** 钉的 Admin API 版本（CLI 说这个版本已不支持时退回 CLI 默认的最新稳定版，见 `shop-admin.ts`）。 */
+  api_version: string
+  /** 每条职责最少要哪些权限（授权时按岗位上这几条职责的并集要；CLI 会把已有的权限并进来）。 */
+  scopes_by_role: Readonly<Record<string, readonly string[]>>
+}
+
+/** `write_x` 隐含 `read_x`（与 CLI 的 `expandImpliedStoreAuthScopes` 同一条规矩）。 */
+export function expandStoreScopes(scopes: readonly string[]): string[] {
+  const out = new Set(scopes)
+  for (const s of scopes) {
+    const m = /^(unauthenticated_)?write_(.+)$/.exec(s)
+    if (m !== null) out.add(`${m[1] ?? ''}read_${m[2]}`)
+  }
+  return [...out].sort()
+}
+
+/** 这几条职责一起要的最少权限（只认登记过的职责；排好序）。 */
+export function storeAdminScopesFor(
+  spec: PlatformStoreAdminSpec | undefined,
+  role_ids: readonly string[],
+): string[] {
+  if (spec === undefined) return []
+  const out = new Set<string>()
+  for (const id of role_ids) for (const s of spec.scopes_by_role[id] ?? []) out.add(s)
+  return [...out].sort()
+}
+
+/** 登记表里出现过的所有权限（授权参数只能取这里面的）。 */
+export function storeAdminAllScopes(spec: PlatformStoreAdminSpec | undefined): string[] {
+  return storeAdminScopesFor(spec, Object.keys(spec?.scopes_by_role ?? {}))
 }
 
 export interface PlatformKit {
@@ -187,6 +252,37 @@ export const PLATFORM_KITS: readonly PlatformKit[] = [
         organizations_args: ['organization', 'list', '--json'],
         stores_args: ['store', 'list', '--json'],
         organization_flag: '--organization-id',
+      },
+      /*
+       * WP261（决策 175 第 1 步）：店铺授权 + 后台接口（读 4.8.5 发行包核过：`store auth` 不要 `auth login`，
+       * 用的是 Shopify CLI 自己的应用；`store execute` 不带 `--allow-mutations` 只能查）。
+       * 权限按职责最少给：店铺管理要商品 / 库存（只读）/ 页面 / 菜单 / 折扣 / 订单（只读）/ 上架到网店；
+       * 整站搭建只改页面与菜单；网页模板只读商品与合集（选合集 / 挂商品用）。
+       */
+      store_admin: {
+        auth_args: ['store', 'auth', '--json'],
+        execute_args: ['store', 'execute', '--json'],
+        store_flag: '--store',
+        scopes_flag: '--scopes',
+        query_file_flag: '--query-file',
+        variable_file_flag: '--variable-file',
+        output_file_flag: '--output-file',
+        version_flag: '--version',
+        allow_mutations_flag: '--allow-mutations',
+        api_version: '2026-07',
+        scopes_by_role: {
+          'dtc.store': [
+            'read_inventory',
+            'read_orders',
+            'write_content',
+            'write_discounts',
+            'write_online_store_navigation',
+            'write_products',
+            'write_publications',
+          ],
+          'site.shopify-build': ['read_products', 'write_content', 'write_online_store_navigation'],
+          'site.shopify-theme': ['read_products'],
+        },
       },
       npm_tag: 'latest',
       tutorial: 'shopify-cli',
