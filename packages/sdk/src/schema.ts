@@ -2619,9 +2619,9 @@ export interface paths {
       path?: never
       cookie?: never
     }
-    /** 生图那一档（WP127）：配了没有、用哪条、官方接口一张图多少积分（常显）、能选哪几条 */
+    /** 生图那一档（WP127）：配了没有、用哪条、官方接口一张图多少积分（常显）、能选哪几条；WP274：using = 这一次出图实际用谁（单独指定 > 文字模型同厂商且带生图 > Agents 工坊积分） */
     get: operations['getModelImage']
-    /** 改生图那一档（WP127）：选一条已配的 provider 与生图模型，或给空串不配；保存即生效 */
+    /** 改生图那一档（WP127）：选一条已配的 provider 与出图 / 改图型号（WP274 edit_model），或给空串回到自动；保存即生效 */
     put: operations['setModelImage']
     post?: never
     delete?: never
