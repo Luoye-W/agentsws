@@ -531,6 +531,22 @@ export const CLAUDE_SUBSCRIPTION_URL = 'https://claude.ai'
  */
 export const ANTHROPIC_OPENAI_COMPAT_URL = 'https://api.anthropic.com/v1'
 
+/**
+ * WP274（决策 255）：Google 官方的 **OpenAI 兼容口**（ai.google.dev/gemini-api/docs/openai，10-08 核对）。
+ * 文字模型走这一层；同一把 key 生图时改打原生 `…/v1beta/interactions`（Nano Banana 2.1）。
+ */
+export const GOOGLE_OPENAI_COMPAT_URL = 'https://generativelanguage.googleapis.com/v1beta/openai'
+
+/** Google 那张卡的默认文字模型（官方兼容层示例里的那个；能看图）。 */
+export const GOOGLE_DEFAULT_MODEL = 'gemini-3.8-flash'
+
+const GOOGLE_VENDOR = {
+  vendor: 'google',
+  vendor_label: 'Google Gemini',
+  vendor_summary:
+    '去 Google AI Studio 建一把 API key：文字用 Gemini，生图自动用同一把 key 的 Nano Banana 2.1（不扣积分）。',
+} as const
+
 const OPENAI_VENDOR = {
   vendor: 'openai',
   vendor_label: 'OpenAI / ChatGPT',
@@ -949,6 +965,35 @@ export const MODEL_TEMPLATES: readonly ModelProviderTemplate[] = [
         label: 'OpenAI SDK 兼容层说明',
         url: 'https://docs.anthropic.com/en/api/openai-sdk',
       },
+    ],
+  },
+  /*
+   * WP274（决策 255）：**Google Gemini** 一张卡（只有 API key 一个方案）。形态仍是 OpenAI 兼容口
+   * （Google 官方那一层），所以 `kind` 还是 `openai_compatible`；单开一张是因为它带生图——
+   * 接上之后设置页「生图」一档自动显示「你的 Google 账号（Nano Banana 2.1）」。
+   */
+  {
+    kind: 'openai_compatible',
+    label: 'Google Gemini（API key，按量计费）',
+    summary: GOOGLE_VENDOR.vendor_summary,
+    ...GOOGLE_VENDOR,
+    plan_label: 'API key（按量计费）',
+    plan_order: 1,
+    auth: 'api_key',
+    default_base_url: GOOGLE_OPENAI_COMPAT_URL,
+    default_model: GOOGLE_DEFAULT_MODEL,
+    region: 'global',
+    steps: [
+      '打开 Google AI Studio，用 Google 账号登录',
+      '点「Get API key」→「Create API key」，复制那一串',
+      '粘进下面的表单，地址保持预填的那条（Google 官方的 OpenAI 兼容口）',
+      '点「拉取模型列表」选一个 Gemini 模型，再点「测试」',
+      '生图不用另配：「生图」那一块会自动用这把 key 的 Nano Banana 2.1',
+    ],
+    links: [
+      { label: 'Google AI Studio（拿 API key）', url: 'https://aistudio.google.com/apikey' },
+      { label: 'OpenAI 兼容层说明', url: 'https://ai.google.dev/gemini-api/docs/openai' },
+      { label: '价格（含生图按张价）', url: 'https://ai.google.dev/gemini-api/docs/pricing' },
     ],
   },
   /*

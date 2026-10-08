@@ -20,6 +20,8 @@ export const HELP_SLUGS = [
   'model-bailian',
   'model-openai',
   'model-anthropic',
+  // WP274：Google 一张卡（带生图）
+  'model-google',
   'browser',
   'computer-use',
   'search-data',
@@ -75,6 +77,7 @@ export const HELP_SCOPES: Readonly<Record<HelpSlug, HelpScope>> = {
   'model-bailian': { positions: [], roles: [] },
   'model-openai': { positions: [], roles: [] },
   'model-anthropic': { positions: [], roles: [] },
+  'model-google': { positions: [], roles: [] },
   browser: {
     positions: ['kol-marketing'],
     roles: ['kol.youtube', 'kol.instagram', 'kol.tiktok', 'kol.facebook', 'kol.x', 'amz.support'],
@@ -237,6 +240,7 @@ export const HELP_BY_VENDOR: Readonly<Record<string, HelpSlug>> = {
   bailian: 'model-bailian',
   openai: 'model-openai',
   anthropic: 'model-anthropic',
+  google: 'model-google',
   'agentsws-cloud': 'agentsws-credits',
 }
 

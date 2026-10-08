@@ -307,8 +307,10 @@ describe('WP25 §C 模板与空状态', () => {
    *
    * WP152（Luoye 09-26）：账号登录挂回 `vendor: 'deepseek'`，与 API key 那条合成一张「DeepSeek 官方」卡，
    * 卡里二选一（官方账户登录排第一）。十一条 → 六张。kind 与顺序不变。
+   *
+   * WP274：加 Google Gemini 一张卡（带生图）。十二条 → 七张。
    */
-  it('十一条模板 → 六张卡（一家一张、点进去选方案），各带 ≤ 5 步说明', async () => {
+  it('十二条模板 → 七张卡（一家一张、点进去选方案），各带 ≤ 5 步说明', async () => {
     const { templates } = await data<{ templates: ModelProviderTemplate[] }>(
       await api('/v1/models/providers'),
     )
@@ -323,6 +325,8 @@ describe('WP25 §C 模板与空状态', () => {
       'openai_compatible',
       // Anthropic 那张卡的两个方案
       'anthropic',
+      'openai_compatible',
+      // WP274：Google 一张卡（API key，带生图）
       'openai_compatible',
       // WP134：第三种模型来源
       'deepseek_account',
@@ -347,6 +351,8 @@ describe('WP25 §C 模板与空状态', () => {
       'bailian',
       'openai',
       'anthropic',
+      // WP274：Google 一张卡（带生图）
+      'google',
       'agentsws-cloud',
     ])
     const planOf = (vendor: string): ModelProviderTemplate[] =>

@@ -626,6 +626,8 @@ const ID_BY_HOST: readonly (readonly [RegExp, string])[] = [
   [/(^|\.)(bigmodel\.cn|z\.ai)$/, 'zhipu'],
   [/(^|\.)siliconflow\.(cn|com)$/, 'siliconflow'],
   [/(^|\.)anthropic\.com$/, 'anthropic'],
+  // WP274：Google 官方（文字走兼容层、生图走原生口，同一把 key）
+  [/^generativelanguage\.googleapis\.com$/, 'google'],
   [/(^|\.)openrouter\.ai$/, 'openrouter'],
   [/^(127\.0\.0\.1|localhost|0\.0\.0\.0|\[::1\])$/, 'ollama'],
 ]
