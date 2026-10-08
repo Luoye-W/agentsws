@@ -420,7 +420,14 @@ export function createWorkPort(options: WorkPortOptions): WorkPort {
         const c = claimOf(t)
         return {
           ...poolItemView(poolItemOf(t)),
-          ...(c.offered_by === undefined ? {} : { offered_by: c.offered_by }),
+          ...(c.offered_by === undefined
+            ? {}
+            : {
+                offered_by: c.offered_by,
+                // WP276：名字由服务端补（docs/95 §4.2 第 5 条）
+                offered_by_label:
+                  options.label({ type: 'person', id: c.offered_by }) ?? c.offered_by,
+              }),
         }
       }),
     ],

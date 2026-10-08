@@ -71,7 +71,7 @@ export function ClaimPool(): React.ReactNode {
               <p className="flex items-center gap-1 text-xs text-muted-foreground">
                 {item.offered_by === undefined
                   ? t(`claim.source.${item.source}`)
-                  : t('claim.offered', { who: item.offered_by })}
+                  : t('claim.offered', { who: item.offered_by_label ?? item.offered_by })}
                 {item.recycled > 0 ? (
                   <span className="inline-flex items-center gap-0.5">
                     <RotateCcw className="size-3" aria-hidden />

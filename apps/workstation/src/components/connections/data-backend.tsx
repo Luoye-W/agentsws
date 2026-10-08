@@ -177,7 +177,7 @@ export function DataBackend({ assignment }: { assignment?: string }): React.Reac
   const selected = choice ?? active
 
   return (
-    <section className="mt-8" data-testid="data-backend">
+    <section className="mt-8" id="data-backend" data-testid="data-backend">
       <div className="flex items-baseline gap-2">
         <h2 className="text-sm font-medium">{t('storage.title')}</h2>
         <span className="text-xs text-muted-foreground">{t('storage.subtitle')}</span>

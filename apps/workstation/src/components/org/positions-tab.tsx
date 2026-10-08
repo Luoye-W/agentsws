@@ -116,13 +116,15 @@ export function PositionsTab({
   submitted?: string
   busy: boolean
   error?: string
-  onAssign(position_id: string): void
+  /** WP276：② 里不是发起人的同事不出「请同事一起做」（分配是家务）——不给 = 不出按钮。 */
+  onAssign?(position_id: string): void
   onCreate(input: { name: string; roles: { role_id: string; default: boolean }[] }): void
   onSaveRoles(
     id: string,
     input: { name: string; roles: { role_id: string; default: boolean }[] },
   ): void
-  onDelete(id: string): void
+  /** WP276（决策 274 第 3 条）：② 里同事能改规矩、不能删岗位——不给 = 不出「删掉」。 */
+  onDelete?(id: string): void
   /** 原「职责」tab 的两个动作，现在挂在折叠层里每条职责下面。 */
   onCopyRole(id: string): void
   onProposeRole(id: string, patch: RoleChangePatch): void
@@ -478,7 +480,7 @@ export function PositionsTab({
 
         <div className="flex flex-wrap gap-2">
           {/* WP271：① 个人里只有你一个人——已经在做的岗位不再出「我来做」 */}
-          {solo && p.holders.length > 0 ? null : (
+          {(solo && p.holders.length > 0) || onAssign === undefined ? null : (
             <Button
               size="sm"
               data-testid="position-assign"
@@ -500,17 +502,19 @@ export function PositionsTab({
           >
             {t('org.positions.edit')}
           </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            data-testid="position-delete"
-            disabled={busy}
-            onClick={() => {
-              onDelete(p.id)
-            }}
-          >
-            {t('org.positions.delete')}
-          </Button>
+          {onDelete === undefined ? null : (
+            <Button
+              size="sm"
+              variant="ghost"
+              data-testid="position-delete"
+              disabled={busy}
+              onClick={() => {
+                onDelete(p.id)
+              }}
+            >
+              {t('org.positions.delete')}
+            </Button>
+          )}
         </div>
         {/* WP235：合并 / 移动 / 拆出只在「你们的岗位」上，目标也只列这一块 */}
         {!isOurs ||

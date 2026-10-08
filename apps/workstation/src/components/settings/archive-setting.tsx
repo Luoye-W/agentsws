@@ -51,3 +51,44 @@ export function ArchiveSetting(): ReactNode {
     </div>
   )
 }
+
+const HANDOFF_DAYS = Array.from({ length: 14 }, (_, i) => i + 1)
+
+/**
+ * WP276（决策 241）：「设置 → 通用」里的一行——交给同事几天没人理就自动退回（默认 3 天）。
+ * 只在有同事的时候出（① 个人没有「交给同事」）；老服务进程没有这一格就不出。
+ */
+export function HandoffDaysSetting(): ReactNode {
+  const { t } = useApp()
+  const client = useQueryClient()
+  const current = useQuery({ queryKey: KEY, queryFn: getWorkArchiveSettings, retry: false })
+  const save = useMutation({
+    mutationFn: (days: number) => setWorkArchiveSettings(current.data?.idle_days ?? null, days),
+    onSuccess: (next) => {
+      client.setQueryData(KEY, next)
+    },
+  })
+  const days = current.data?.handoff_days
+  if (days === undefined) return null
+  return (
+    <div className="flex items-center justify-between" data-testid="settings-handoff">
+      <span>{t('settings.handoff_days')}</span>
+      <select
+        className="h-8 rounded-md border bg-background px-2 text-sm"
+        aria-label={t('settings.handoff_days')}
+        data-testid="settings-handoff-days"
+        value={String(days)}
+        disabled={save.isPending}
+        onChange={(e) => {
+          save.mutate(Number(e.target.value))
+        }}
+      >
+        {HANDOFF_DAYS.map((n) => (
+          <option key={n} value={String(n)}>
+            {t('settings.handoff_days.unit', { n })}
+          </option>
+        ))}
+      </select>
+    </div>
+  )
+}

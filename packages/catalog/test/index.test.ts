@@ -81,6 +81,35 @@ describe.each(stores())('$name', ({ make }) => {
     expect((await index.list({ workspace_id: WS })).map((e) => e.id)).toEqual(['schedule:a'])
     expect((await index.list({ workspace_id: WS, include_superseded: true })).length).toBe(2)
   })
+
+  it('WP276 整条换回去：合并之前的注记原样放回（没有就删掉），被取代的又回来了', async () => {
+    const store = make()
+    const index = new CatalogIndex({
+      clock,
+      store,
+      sources: [
+        source('schedule', [
+          entry({ id: 'schedule:a', title: '每天早上汇总退款单' }),
+          entry({ id: 'schedule:b', title: '早上汇总退款单' }),
+        ]),
+      ],
+    })
+    const before = { a: store.get(WS, 'schedule:a'), b: store.get(WS, 'schedule:b') }
+    index.promote({
+      workspace_id: WS,
+      entry_id: 'schedule:a',
+      to_layer: 'dept',
+      supersede: ['schedule:b'],
+    })
+    expect((await index.list({ workspace_id: WS })).map((e) => e.id)).toEqual(['schedule:a'])
+    store.replace?.(WS, 'schedule:a', before.a)
+    store.replace?.(WS, 'schedule:b', before.b)
+    expect((await index.list({ workspace_id: WS })).map((e) => e.id).sort()).toEqual([
+      'schedule:a',
+      'schedule:b',
+    ])
+    expect(store.get(WS, 'schedule:b')).toBeUndefined()
+  })
 })
 
 describe('CatalogIndex', () => {

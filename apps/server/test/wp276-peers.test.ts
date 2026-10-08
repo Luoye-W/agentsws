@@ -309,6 +309,80 @@ describe('WP276 ② 同事互联（真服务进程）', () => {
     expect(await server.organizations.modeOf(ws())).toBe('solo')
   })
 
+  it('② 提到岗位层、工具箱合并：当场生效，同岗位的人 / 两条的主人收「知道了 / 撤回」，撤回就改回去', async () => {
+    const lin = await joinWithCode('林峰', 'lin@ex.com')
+    const linToken = await login('lin@ex.com')
+    const linB2b = await giveB2b(lin)
+    await giveB2b(owner())
+    const as = { token: linToken, assignment: linB2b }
+    // 提层：林峰把自己的一句话提到 B2B 岗位层
+    const section_id = server.skills.registry.listSections('customer-care')[0]?.id ?? ''
+    await server.skills.registry.setOverlay({
+      skill: 'customer-care',
+      tier: 'personal',
+      owner: lin,
+      ops: [{ op: 'replace', section_id, body: '岗位里都这么回' }],
+      base_version: '1.0.0',
+      version: 0,
+    })
+    const promoted = await data<{ applied?: boolean }>(
+      await call('POST', '/v1/skills/customer-care/promote', {
+        ...as,
+        body: { section_ids: [section_id], to_tier: 'position', scope_id: 'b2b' },
+      }),
+    )
+    expect(promoted.applied).toBe(true)
+    expect(
+      JSON.stringify(server.skills.registry.getOverlay('customer-care', 'position', 'b2b')?.ops),
+    ).toContain('岗位里都这么回')
+    await new Promise((r) => setTimeout(r, 10))
+    const layerNotice = (await queueOf(owner())).find(
+      (i) => (i.payload as { target?: string }).target === 'skill_overlay',
+    )
+    expect(layerNotice?.title).toContain('林峰改了')
+    await call('POST', `/v1/approvals/${layerNotice?.id}/decide`, {
+      body: { action: 'approve', selected_option_id: 'before' },
+    })
+    expect(server.skills.registry.getOverlay('customer-care', 'position', 'b2b')?.ops).toEqual([])
+
+    // 合并：发起人建了一条、林峰建了一条一样的；林峰把发起人那条并进自己的 → 发起人收通知，撤回就拆开
+    const CRON = { kind: 'cron', expr: '0 9 * * *', tz: 'Asia/Shanghai' }
+    const a = await data<{ id: string }>(
+      await call('POST', '/v1/schedules', { body: { title: '每天早上汇总询盘', trigger: CRON } }),
+    )
+    const b = await data<{ id: string }>(
+      await call('POST', '/v1/schedules', {
+        ...as,
+        body: {
+          title: '每天早上汇总询盘',
+          trigger: CRON,
+          duplicate_ack: {
+            decision: 'new',
+            reason: '我这条只看外贸询盘，口径不一样的',
+            similar_to: [`schedule:${a.id}`],
+          },
+        },
+      }),
+    )
+    const merged = await data<{ applied?: boolean }>(
+      await call('POST', '/v1/catalog/merge', {
+        ...as,
+        body: { keep: `schedule:${b.id}`, drop: `schedule:${a.id}` },
+      }),
+    )
+    expect(merged.applied).toBe(true)
+    await new Promise((r) => setTimeout(r, 10))
+    const mergeNotice = (await queueOf(owner())).find(
+      (i) => (i.payload as { target?: string }).target === 'catalog_merge',
+    )
+    expect(mergeNotice).toBeDefined()
+    await call('POST', `/v1/approvals/${mergeNotice?.id}/decide`, {
+      body: { action: 'approve', selected_option_id: 'before' },
+    })
+    const left = await data<{ id: string }[]>(await call('GET', '/v1/catalog?kind=schedule'))
+    expect(left.map((e) => e.id).sort()).toEqual([`schedule:${a.id}`, `schedule:${b.id}`].sort())
+  })
+
   it('③ 不变：同一个同事进不了公司页、不能自己退', async () => {
     const lin = await joinWithCode('林峰', 'lin@ex.com')
     const linToken = await login('lin@ex.com')

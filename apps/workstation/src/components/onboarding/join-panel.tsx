@@ -40,6 +40,9 @@ export function JoinPanel({
   onJoin,
   onCreateInvite,
   onDecide,
+  joinable = true,
+  inviteLink,
+  names,
 }: {
   discovery?: DiscoveryStateView
   /**
@@ -66,6 +69,17 @@ export function JoinPanel({
   onJoin(input: JoinSubmit): void
   onCreateInvite?(): void
   onDecide?(id: string, approve: boolean): void
+  /**
+   * WP276：不给「加入别人那边」那一块（② 团队页只管请人进来、谁申请过）。默认给。
+   */
+  joinable?: boolean
+  /**
+   * WP276（两套邀请合一）：邀请码旁边那个「复制邀请链接」——链接就是带着这个码的申请页，
+   * 同事点开填名字邮箱、申请一起用，你们任何一位同意就进来了（与贴码同一套规矩）。不给 = 不出。
+   */
+  inviteLink?: (code: string) => string
+  /** WP276：谁同意的（person_id → 名字）；给了才在申请那一行写「X 同意的」。 */
+  names?: Record<string, string>
 }): React.ReactNode {
   const { lang } = useApp()
   // WP271（决策 245）：① 个人里那一行小字说「同事已经在用？输入邀请码」
@@ -75,7 +89,8 @@ export function JoinPanel({
   const [open, setOpen] = useState(false)
   const peers = discovery?.peers ?? []
   /** 折叠着的时候只出那一行；看见同伴了就自己打开。 */
-  const shown = !collapsed || open || peers.length > 0
+  const shown = joinable && (!collapsed || open || peers.length > 0)
+  const [copied, setCopied] = useState<string | null>(null)
 
   const when = (iso: string): string =>
     new Date(iso).toLocaleString(lang === 'zh' ? 'zh-CN' : 'en-US')
@@ -85,7 +100,7 @@ export function JoinPanel({
   return (
     <div className="flex flex-col gap-4 text-sm" data-testid="join-panel">
       {/* WP79 ⑤：折叠着的时候整块就这一行 */}
-      {collapsed && !shown ? (
+      {joinable && collapsed && !shown ? (
         <button
           type="button"
           aria-expanded={false}
@@ -216,9 +231,26 @@ export function JoinPanel({
                   data-testid="invite-row"
                 >
                   <span className="font-mono text-base tracking-widest">{i.code}</span>
-                  <span className="text-xs text-muted-foreground">
+                  <span className="flex items-center gap-2 text-xs text-muted-foreground">
                     {t('onboarding.invite.uses', { n: String(i.uses_left) })} ·{' '}
                     {t('onboarding.invite.expires', { at: when(i.expires_at) })}
+                    {inviteLink === undefined ? null : (
+                      <Button
+                        size="xs"
+                        variant="ghost"
+                        data-testid="invite-copy-link"
+                        onClick={() => {
+                          void globalThis.navigator?.clipboard?.writeText(inviteLink(i.code)).then(
+                            () => {
+                              setCopied(i.code)
+                            },
+                            () => undefined,
+                          )
+                        }}
+                      >
+                        {copied === i.code ? t('team.invite.copied') : t('team.invite.link')}
+                      </Button>
+                    )}
                   </span>
                 </div>
               ))
@@ -262,7 +294,12 @@ export function JoinPanel({
                         )}
                       </p>
                       <p className="text-xs text-muted-foreground">
-                        {t(`onboarding.requests.via.${r.via}`)} · {statusText(r)}
+                        {t(`onboarding.requests.via.${r.via}`)} ·{' '}
+                        {r.status === 'approved' &&
+                        r.decided_by !== undefined &&
+                        names?.[r.decided_by] !== undefined
+                          ? t('team.new', { name: names[r.decided_by] ?? '' })
+                          : statusText(r)}
                       </p>
                       {r.superseded_reason === undefined ? null : (
                         <p className="text-xs text-muted-foreground">{r.superseded_reason}</p>

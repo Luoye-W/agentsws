@@ -456,6 +456,43 @@ export function DeckCardBody({
 
       // ⑨ 转交 / 认领：主体是**原话** + 分类依据
       case 'handoff': {
+        // WP276（docs/95 §4.3 第 3 步）：「X 想把「…」交给你」——留言、到哪了、截止、几号退回
+        if (payload.form === 'handoff') {
+          const note = str(payload.note)
+          const where = str(payload.matter_summary)
+          const day = (iso: string | undefined): string | undefined => iso?.slice(5, 10)
+          const facts = [
+            where === undefined || where === note
+              ? undefined
+              : `${t('handoff.card.where')}：${where}`,
+            str(payload.progress),
+            str(payload.due) === undefined
+              ? undefined
+              : t('handoff.card.due', { date: day(str(payload.due)) ?? '' }),
+            str(payload.expires_at) === undefined
+              ? undefined
+              : t('handoff.card.back', { date: day(str(payload.expires_at)) ?? '' }),
+          ].filter((x): x is string => x !== undefined)
+          return (
+            <div className="mt-2.5 flex flex-col gap-2" data-testid="deck-layout-handoff-offer">
+              {note === undefined ? null : (
+                <blockquote
+                  data-testid="deck-quote"
+                  className="rounded-[10px] bg-ws-surface p-3 text-[13px] leading-5 whitespace-pre-wrap text-ws-body"
+                >
+                  {note}
+                </blockquote>
+              )}
+              {facts.length === 0 ? null : (
+                <ul className="flex flex-col gap-0.5 text-xs text-ws-muted-fg">
+                  {facts.map((f) => (
+                    <li key={f}>{f}</li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )
+        }
         const quote = str(payload.quote) ?? str(payload.original) ?? content.text
         return (
           <div className="mt-2.5 flex flex-col gap-2.5" data-testid="deck-layout-handoff">

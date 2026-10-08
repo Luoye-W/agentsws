@@ -72,6 +72,11 @@ export interface HandoffOptions {
   days(): number
   /** 发起人（组织所有者）——团队页上标一个小字。 */
   initiator?(): PersonId | undefined
+  /**
+   * WP276（决策 238）：这个月这个品牌的模型用量（本机事件日志里的 `model.usage`，只有数字）。
+   * 不给 = 不出「按人用量」。
+   */
+  usage?(): { assignment_id: string; input_tokens: number; output_tokens: number }[]
 }
 
 export interface HandoffAssembly extends HandoffPort {
@@ -575,6 +580,26 @@ export function createHandoff(options: HandoffOptions): HandoffAssembly {
       return moved
     },
 
+    async peopleUsage() {
+      const rows = options.usage?.() ?? []
+      const per = new Map<PersonId, { calls: number; tokens: number }>()
+      for (const r of rows) {
+        const who = options.assignment(r.assignment_id)?.person_id
+        if (who === undefined) continue
+        const cur = per.get(who) ?? { calls: 0, tokens: 0 }
+        per.set(who, {
+          calls: cur.calls + 1,
+          tokens: cur.tokens + r.input_tokens + r.output_tokens,
+        })
+      }
+      const people = new Set([...(await options.members()), ...per.keys()])
+      const out = []
+      for (const person_id of people) {
+        const u = per.get(person_id) ?? { calls: 0, tokens: 0 }
+        out.push({ person_id, name: (await options.personName(person_id)) ?? '同事', ...u })
+      }
+      return out.sort((a, b) => b.tokens - a.tokens || a.name.localeCompare(b.name))
+    },
     exportMine: (actor) => exportOf(actor.person_id),
     exportOf: (person) => exportOf(person),
     adopt,

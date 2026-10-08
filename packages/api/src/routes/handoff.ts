@@ -107,6 +107,20 @@ export interface HandoffPort {
    * 只有本人自己的那一份（事项里有他、待办是他的或他交出去的），不含凭据、不含别人的待办。
    */
   exportMine(actor: HandoffActor): MaybePromise<MyWorkExport>
+  /**
+   * WP276（决策 238）：② 共用一个余额，**按人显示用量**（这个月、这个品牌、本机记的模型用量），
+   * 不设每人上限。只有数字与名字，没有内容。
+   */
+  peopleUsage?(actor: HandoffActor): MaybePromise<PersonUsageView[]>
+}
+
+export interface PersonUsageView {
+  person_id: PersonId
+  name: string
+  /** 这个月调了几次模型 */
+  calls: number
+  /** 输入 + 输出 token */
+  tokens: number
 }
 
 export interface MyWorkExport {
@@ -276,6 +290,25 @@ export function handoffRoutes(): Route[] {
         returns: 'MyWorkExport',
       },
       async (c, deps) => ok(c, await portOf(deps).exportMine(actorOf(c))),
+    ),
+    route(
+      {
+        method: 'get',
+        path: '/v1/usage/people',
+        operationId: 'listPeopleUsage',
+        summary: 'WP276 ② 每个人这个月的用量（共用一个余额，按人只显示，不设上限）',
+        tag: TAG,
+        auth: 'bearer',
+        assignment: true,
+        authz: READ,
+        returns: '{ people: PersonUsageView[] }',
+      },
+      async (c, deps) => {
+        const port = portOf(deps)
+        if (port.peopleUsage === undefined)
+          throw new ApiError('not_implemented', '这个服务进程没有按人记用量')
+        return ok(c, { people: await port.peopleUsage(actorOf(c)) })
+      },
     ),
     route(
       {

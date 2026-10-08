@@ -85,6 +85,21 @@ export class SqliteCatalogStore implements CatalogStore {
       .run(merged.workspace_id, merged.entry_id, JSON.stringify(merged), merged.at)
   }
 
+  replace(workspace_id: WorkspaceId, entry_id: string, note: CatalogNote | undefined): void {
+    if (note === undefined) {
+      this.db
+        .prepare('DELETE FROM catalog_notes WHERE workspace_id = ? AND entry_id = ?')
+        .run(workspace_id, entry_id)
+      return
+    }
+    this.db
+      .prepare(
+        'INSERT INTO catalog_notes (workspace_id, entry_id, json, at) VALUES (?, ?, ?, ?) ' +
+          'ON CONFLICT (workspace_id, entry_id) DO UPDATE SET json = excluded.json, at = excluded.at',
+      )
+      .run(workspace_id, entry_id, JSON.stringify(note), note.at)
+  }
+
   get(workspace_id: WorkspaceId, entry_id: string): CatalogNote | undefined {
     const row = this.db
       .prepare<[string, string], { json: string }>(

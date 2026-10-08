@@ -3,7 +3,7 @@ import type { LessonRecord } from '@agentsws/contracts'
 import { z } from 'zod'
 import { ApiError } from '../errors.js'
 import { assignmentOf, body, ok, param, principalOf } from '../helpers.js'
-import { type Route, route } from '../route-spec.js'
+import { peersBypass, type Route, route } from '../route-spec.js'
 import type { GatewayDeps } from '../types.js'
 import { DuplicateAck, guardSimilar, recordCatalogNote } from './catalog.js'
 
@@ -263,6 +263,8 @@ export function skillRoutes(): Route[] {
         auth: 'bearer',
         assignment: true,
         authz: WRITE,
+        // WP276（docs/95 §5、决策 274 第 2 条）：② 里谁都能把自己的写法提到岗位层 / 职责层（同岗位的人可撤回）
+        authzBypass: peersBypass,
         params: [{ name: 'name', in: 'path', required: true, description: '技能名' }],
         body: PromoteBody,
         returns: '{ accepted, approval_item_id?, reason?, applied? }',

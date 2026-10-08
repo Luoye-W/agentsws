@@ -106,13 +106,20 @@ export const markMatterSeen = (id: string): Promise<void> =>
     .then(() => undefined)
     .catch(() => undefined)
 
-export const getWorkArchiveSettings = (): Promise<{ idle_days: number | null }> =>
-  api('/v1/settings/work-archive')
+export const getWorkArchiveSettings = (): Promise<{
+  idle_days: number | null
+  /** WP276：交给同事几天没人理退回（老服务进程没有这一格）。 */
+  handoff_days?: number
+}> => api('/v1/settings/work-archive')
 
 export const setWorkArchiveSettings = (
   idle_days: number | null,
-): Promise<{ idle_days: number | null }> =>
-  api('/v1/settings/work-archive', { method: 'PUT', body: { idle_days } })
+  handoff_days?: number,
+): Promise<{ idle_days: number | null; handoff_days?: number }> =>
+  api('/v1/settings/work-archive', {
+    method: 'PUT',
+    body: { idle_days, ...(handoff_days === undefined ? {} : { handoff_days }) },
+  })
 
 /**
  * 候选卡上「为什么像」：服务端给的是 `种类:词`，这里拆开给界面翻成人话。

@@ -12,6 +12,7 @@ import {
   ArrowLeftRight,
   ChevronDown,
   CircleX,
+  Forward,
   Link2,
   MoreHorizontal,
   Pencil,
@@ -160,6 +161,7 @@ export function MatterHeader({
   canClose,
   onClose,
   onRetitle,
+  onHandOff,
 }: {
   title: string
   roleId?: string | undefined
@@ -180,6 +182,8 @@ export function MatterHeader({
   canClose: boolean
   onClose: () => void
   onRetitle: (title: string) => void
+  /** WP276：「交给同事」（② 里、事项是我的、没在交的时候才给；不给 = 菜单里没有这一项）。 */
+  onHandOff?: (() => void) | undefined
 }): ReactNode {
   const { t } = useApp()
   const menu = usePopover()
@@ -341,6 +345,21 @@ export function MatterHeader({
                 <ArrowLeftRight aria-hidden className="size-3.5" />
                 {t('matter.menu.duty')}
               </button>
+              {onHandOff === undefined ? null : (
+                <button
+                  type="button"
+                  role="menuitem"
+                  data-testid="matter-handoff"
+                  onClick={() => {
+                    menu.setOpen(false)
+                    onHandOff()
+                  }}
+                  className="flex h-8 items-center gap-2 rounded-lg px-2 text-left text-[13px] hover:bg-muted"
+                >
+                  <Forward aria-hidden className="size-3.5" />
+                  {t('handoff.give')}
+                </button>
+              )}
               <button
                 type="button"
                 role="menuitem"
