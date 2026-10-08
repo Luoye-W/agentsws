@@ -170,7 +170,10 @@ export function ProviderCard({
           </Button>
         ) : null}
         {oneClick === undefined || advancedShown ? (
-          <div className="flex flex-col gap-2" data-testid="provider-legacy">
+          <div
+            className="flex flex-col gap-2"
+            data-testid={oneClick === undefined ? undefined : 'provider-legacy'}
+          >
             {provider.available || oneClick === undefined ? null : (
               <p
                 className="flex items-center gap-1 text-xs text-destructive"
