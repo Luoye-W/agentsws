@@ -98,6 +98,7 @@ import type { SearchDataApiPort } from './routes/search-data.js'
 import type { SecretaryPort } from './routes/secretary.js'
 import type { SecretsPort } from './routes/secrets.js'
 import type { SeoPort } from './routes/seo.js'
+import type { ShopAdminPort } from './routes/shop-admin.js'
 import type { SitePort } from './routes/site.js'
 import type { SocialPort } from './routes/social.js'
 import type { StandbyPort } from './routes/standby.js'
@@ -1043,6 +1044,11 @@ export interface GatewayDeps {
    * 没装配时 `/v1/platform-kit*` 回 not_implemented。
    */
   platformKit?: PlatformKitPort
+  /**
+   * WP261（决策 175 第 1 步）：「授权管理商品和页面」那一行（Shopify CLI `store auth`）。按品牌；
+   * 没装配时 `/v1/shop-admin*` 回 not_implemented（岗位页那一行不出）。
+   */
+  shopAdmin?: ShopAdminPort
   /**
    * WP215（52 §4 收口）：每个品牌一套后台——状态、全进程并发上限、品牌急停。
    * 没装配时 `/v1/settings/background*` 回 not_implemented。

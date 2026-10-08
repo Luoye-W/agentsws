@@ -72,6 +72,7 @@ import { searchDataRoutes } from './routes/search-data.js'
 import { secretaryRoutes } from './routes/secretary.js'
 import { secretRoutes } from './routes/secrets.js'
 import { seoRoutes } from './routes/seo.js'
+import { shopAdminRoutes } from './routes/shop-admin.js'
 import { siteRoutes } from './routes/site.js'
 import { skillRoutes } from './routes/skills.js'
 import { socialRoutes } from './routes/social.js'
@@ -267,6 +268,8 @@ export function collectRoutes(): Route[] {
     ...activityRoutes(),
     // WP224：毛利率事实卡、两条止损线对照、本周经营一页纸。`/v1/economics/*` 是新前缀（放在最后）
     ...economicsRoutes(),
+    // WP261：店铺授权（Shopify CLI `store auth`）。`/v1/shop-admin*` 是新前缀（放在最后：生成物的顺序不动别人）
+    ...shopAdminRoutes(),
   ]
 }
 
