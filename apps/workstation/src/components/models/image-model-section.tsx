@@ -252,6 +252,7 @@ export function ImageModelSection({ assignment }: { assignment?: string }): Reac
           <p className="mb-1 text-[11px] text-muted-foreground">{t('models.image.custom_hint')}</p>
           <ModelForm
             template={customTemplate}
+            imageOnly
             busy={addCustom.isPending}
             takenIds={(providers.data?.providers ?? []).map((p) => p.id)}
             onCancel={() => {

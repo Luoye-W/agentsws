@@ -45,6 +45,7 @@ export function ModelForm({
   onDiscover,
   pricing,
   takenIds,
+  imageOnly = false,
 }: {
   template: ModelProviderTemplate
   /** 改一条已有的：id 锁住，key 留空就是"别动已经存着的那一把"。 */
@@ -67,6 +68,11 @@ export function ModelForm({
   pricing?: ModelPricingView
   /** 已经用掉的编号（自动生成时避开它们）。 */
   takenIds?: string[]
+  /**
+   * WP274：只用来生图的接口（设置 →「生图」→ 自定义生图接口）。不出向量模型与 token 价三格——
+   * 生图按张计、也不当文字模型用。
+   */
+  imageOnly?: boolean
 }): React.ReactNode {
   const { t } = useApp()
   const prefix = useId()
@@ -447,19 +453,21 @@ export function ModelForm({
         />
       </Field>
 
-      <Field
-        id={`${prefix}-embedding_model`}
-        label={t('models.field.embedding')}
-        hint={t('models.field.embedding.hint')}
-      >
-        <Input
+      {imageOnly ? null : (
+        <Field
           id={`${prefix}-embedding_model`}
-          name="embedding_model"
-          defaultValue={existing?.embedding_model ?? ''}
-          autoComplete="off"
-          spellCheck={false}
-        />
-      </Field>
+          label={t('models.field.embedding')}
+          hint={t('models.field.embedding.hint')}
+        >
+          <Input
+            id={`${prefix}-embedding_model`}
+            name="embedding_model"
+            defaultValue={existing?.embedding_model ?? ''}
+            autoComplete="off"
+            spellCheck={false}
+          />
+        </Field>
+      )}
 
       <fieldset className="flex flex-col gap-1">
         <legend className="flex items-center gap-1 text-xs font-medium">
@@ -489,47 +497,54 @@ export function ModelForm({
         用户在框里敲一个字就变成"手动"——之后换模型不自动改它，每周那次官网
         刷新也不动它。
       */}
-      <div className="grid grid-cols-3 gap-2" data-testid="model-prices">
-        {(
-          [
-            ['price_in', t('models.field.price_in'), existing?.price_in],
-            ['price_out', t('models.field.price_out'), existing?.price_out],
-            ['price_cached', t('models.field.price_cached'), existing?.price_cached],
-          ] as const
-        ).map(([name, label, value]) => (
-          <Field key={name} id={`${prefix}-${name}`} label={label}>
-            <Input
-              id={`${prefix}-${name}`}
-              name={name}
-              type="number"
-              step="0.001"
-              min="0"
-              defaultValue={value ?? (priceManual ? '' : (quote?.[priceKeyOf(name)] ?? ''))}
-              autoComplete="off"
-              data-testid={`model-${name}`}
-              onInput={() => {
-                setPriceManual(true)
-              }}
-            />
-          </Field>
-        ))}
-      </div>
-      {/* 价的来源是状态，可见；「为什么要填」是规则，进问号 */}
-      <p
-        className="flex items-center gap-1 text-[11px] text-muted-foreground"
-        data-testid="model-price-source"
-      >
-        {priceManual
-          ? t('models.price.manual')
-          : quote === undefined
-            ? t('models.field.price.hint')
-            : // WP88：价目表里三个数都是 0 = 这家按套餐配额收钱（百炼 Coding Plan），
-              // 不是"价目表漏了它"。这两件事在界面上长得一样，所以必须分开说
-              quote.in === 0 && quote.out === 0 && quote.cached === 0
-              ? t('models.price.included_in_plan', { as_of: quote.as_of })
-              : t('models.price.from_catalog', { as_of: quote.as_of, currency: quote.currency })}
-        <Hint text={t('models.field.price.why.hint')} />
-      </p>
+      {imageOnly ? null : (
+        <>
+          <div className="grid grid-cols-3 gap-2" data-testid="model-prices">
+            {(
+              [
+                ['price_in', t('models.field.price_in'), existing?.price_in],
+                ['price_out', t('models.field.price_out'), existing?.price_out],
+                ['price_cached', t('models.field.price_cached'), existing?.price_cached],
+              ] as const
+            ).map(([name, label, value]) => (
+              <Field key={name} id={`${prefix}-${name}`} label={label}>
+                <Input
+                  id={`${prefix}-${name}`}
+                  name={name}
+                  type="number"
+                  step="0.001"
+                  min="0"
+                  defaultValue={value ?? (priceManual ? '' : (quote?.[priceKeyOf(name)] ?? ''))}
+                  autoComplete="off"
+                  data-testid={`model-${name}`}
+                  onInput={() => {
+                    setPriceManual(true)
+                  }}
+                />
+              </Field>
+            ))}
+          </div>
+          {/* 价的来源是状态，可见；「为什么要填」是规则，进问号 */}
+          <p
+            className="flex items-center gap-1 text-[11px] text-muted-foreground"
+            data-testid="model-price-source"
+          >
+            {priceManual
+              ? t('models.price.manual')
+              : quote === undefined
+                ? t('models.field.price.hint')
+                : // WP88：价目表里三个数都是 0 = 这家按套餐配额收钱（百炼 Coding Plan），
+                  // 不是"价目表漏了它"。这两件事在界面上长得一样，所以必须分开说
+                  quote.in === 0 && quote.out === 0 && quote.cached === 0
+                  ? t('models.price.included_in_plan', { as_of: quote.as_of })
+                  : t('models.price.from_catalog', {
+                      as_of: quote.as_of,
+                      currency: quote.currency,
+                    })}
+            <Hint text={t('models.field.price.why.hint')} />
+          </p>
+        </>
+      )}
 
       {/*
         「编号」只是这条配置在文件里的键名——非技术用户既不该关心也没法凭直觉起一个，

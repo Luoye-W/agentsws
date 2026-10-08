@@ -352,6 +352,7 @@ export function ModelsPanel({ assignment }: { assignment?: string }): React.Reac
                   />
                   {editing === p.id ? (
                     <ModelForm
+                      imageOnly={p.image_only === true}
                       template={
                         // WP88：同一个 kind 现在可能有两张卡，先按接口地址认是哪一张
                         // （改一条百炼的配置，该看到百炼那张的预设，不是通用那张的）
