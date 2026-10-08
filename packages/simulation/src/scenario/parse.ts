@@ -164,6 +164,10 @@ const EVENT_KEYS = [
   'work.pool',
   'work.claim',
   'work.idle_sweep',
+  // WP276 交给对方（docs/95 §4.3）
+  'work.matter',
+  'work.handoff',
+  'work.handoff_decide',
   // WP39 秘书 Agent（41 §1）
   'secretary.profile',
   'secretary.ask',
@@ -344,6 +348,8 @@ const EXPECTED_KEYS = [
   // WP171（docs/84）
   'b2b',
   'b2b_fraud',
+  // WP276（docs/95 §4.3）
+  'work_handoffs',
   // WP173（docs/84 §2）
   'b2b_sequence',
   'b2b_replies',
@@ -2266,6 +2272,53 @@ function parseEvent(source: string, index: number, raw: unknown): ScenarioEvent 
         },
       }
     }
+    case 'work.matter': {
+      known(source, `${path}.${key}`, body, ['who', 'title', 'role'])
+      return {
+        at,
+        type: 'work.matter',
+        matter: {
+          who: str(source, `${path}.${key}.who`, body.who),
+          title: str(source, `${path}.${key}.title`, body.title),
+          ...(body.role === undefined
+            ? {}
+            : { role: str(source, `${path}.${key}.role`, body.role) }),
+        },
+      }
+    }
+    case 'work.handoff': {
+      known(source, `${path}.${key}`, body, ['who', 'to', 'title', 'note'])
+      return {
+        at,
+        type: 'work.handoff',
+        handoff: {
+          who: str(source, `${path}.${key}.who`, body.who),
+          to: str(source, `${path}.${key}.to`, body.to),
+          title: str(source, `${path}.${key}.title`, body.title),
+          ...(body.note === undefined
+            ? {}
+            : { note: str(source, `${path}.${key}.note`, body.note) }),
+        },
+      }
+    }
+    case 'work.handoff_decide': {
+      known(source, `${path}.${key}`, body, ['who', 'title', 'action', 'reason'])
+      const action = str(source, `${path}.${key}.action`, body.action)
+      if (action !== 'accept' && action !== 'decline')
+        fail(source, `${path}.${key}.action`, 'action 只能是 accept / decline')
+      return {
+        at,
+        type: 'work.handoff_decide',
+        handoff_decide: {
+          who: str(source, `${path}.${key}.who`, body.who),
+          title: str(source, `${path}.${key}.title`, body.title),
+          action,
+          ...(body.reason === undefined
+            ? {}
+            : { reason: str(source, `${path}.${key}.reason`, body.reason) }),
+        },
+      }
+    }
     case 'work.idle_sweep': {
       known(source, `${path}.${key}`, body, ['idle_days'])
       return {
@@ -2836,6 +2889,24 @@ function parseExpected(source: string, raw: unknown): ScenarioExpected {
   for (const [key, spec] of Object.entries(shapes)) {
     const parsed = shaped(source, key, raw[key], spec)
     if (parsed !== undefined) bag[key] = parsed
+  }
+  // WP276：交给对方的结果，一件事一条
+  if (raw.work_handoffs !== undefined) {
+    if (!Array.isArray(raw.work_handoffs)) fail(source, 'expected.work_handoffs', '必须是数组')
+    out.work_handoffs = raw.work_handoffs.map((item, i) => {
+      const at = `work_handoffs[${i}]`
+      const parsed = shaped(source, at, item, {
+        title: 'str',
+        state: 'str',
+        owner: 'str',
+        runs_as: 'str',
+        role: 'str',
+        reason: 'str',
+      }) as Record<string, unknown> | undefined
+      if (parsed === undefined || typeof parsed.title !== 'string')
+        fail(source, `expected.${at}`, '要写 title')
+      return parsed as NonNullable<ScenarioExpected['work_handoffs']>[number]
+    })
   }
   // WP171（docs/84）：B2B 那几个写动作是一张**有序的表**（一条对一条），不是一个平对象
   if (raw.b2b !== undefined) {

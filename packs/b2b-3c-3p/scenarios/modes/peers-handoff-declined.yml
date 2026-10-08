@@ -1,0 +1,38 @@
+# WP276（docs/95 §4.3 第 4b 步，决策 241）：**② 同事互联——交给对方，对方不接，退回发起人。**
+#
+# 林峰把「展会样品寄送」交给何佳；何佳太忙，点「不接」写了一句理由：
+# 1. 这件事原样留在林峰手上（主人、分配都不变——之后的运行还是林峰那条）；
+# 2. 理由记在这次交接上（发起人那边一行通知会说「何佳没接：太忙」）；
+# 3. 不经任何审批、不升级。
+id: b2b/modes/peers-handoff-declined
+version: 1
+dataset: { pack: b2b-3c-3p, seed: 42 }
+org_mode: peers
+stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
+clock: { start: '2026-10-08T10:00:00+08:00' }
+events:
+  - at: '+0m'
+    work.matter: { who: p_lin, title: 展会样品寄送, role: b2b.sales }
+  - at: '+5m'
+    work.handoff: { who: p_lin, to: p_he, title: 展会样品寄送 }
+  - at: '+20m'
+    work.handoff_decide: { who: p_he, title: 展会样品寄送, action: decline, reason: 太忙 }
+  - at: '+1h'
+    clock.advance: {}
+expected:
+  work_handoffs:
+    - title: 展会样品寄送
+      state: declined
+      owner: p_lin
+      runs_as: p_lin
+      reason: 太忙
+  event_types: [handoff.offered, handoff.declined]
+  metrics:
+    escalations: 0
+    runs_failed: 0
+invariants:
+  - no_write_without_stage
+  - apply_only_after_approved
+  - provenance_respected
+rubric: >-
+  对方不接时，这件事是不是原样退回发起人、主人与运行分配都没变？理由有没有记下来？

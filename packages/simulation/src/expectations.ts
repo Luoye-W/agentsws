@@ -2376,6 +2376,30 @@ export function checkExpectations(
       )
     }
   }
+  // WP276（docs/95 §4.3）：交给对方的结果——每件事读它最后一条 `simulation.work_handoff`
+  if (expected.work_handoffs !== undefined) {
+    const problems: string[] = []
+    for (const want of expected.work_handoffs) {
+      const got = evidence.events
+        .filter((e) => e.type === 'simulation.work_handoff' && payloadOf(e).title === want.title)
+        .pop()
+      if (got === undefined) {
+        problems.push(`「${want.title}」：没交过`)
+        continue
+      }
+      const p = payloadOf(got)
+      for (const k of ['state', 'owner', 'runs_as', 'role', 'reason'] as const) {
+        const w = want[k]
+        if (w !== undefined && String(p[k] ?? '') !== w)
+          problems.push(`「${want.title}」${k} 是 ${String(p[k] ?? '无')}，不合期望 ${w}`)
+      }
+    }
+    add(
+      'work_handoffs',
+      problems.length === 0,
+      problems.length === 0 ? `${expected.work_handoffs.length} 件事都对` : problems.join('；'),
+    )
+  }
   if (expected.blocked_rules !== undefined) {
     const rules = new Set(evidence.blocked.map((b) => b.rule))
     const missing = expected.blocked_rules.filter((r) => !rules.has(r))
