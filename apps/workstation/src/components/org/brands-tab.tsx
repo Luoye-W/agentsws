@@ -41,6 +41,7 @@ import {
   switchBrand,
 } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
+import { useMode } from '@/lib/mode'
 import { cn } from '@/lib/utils'
 
 function Stat({
@@ -162,7 +163,8 @@ export function BrandsTab({
    */
   haltAssignment?: string
 }): React.ReactNode {
-  const { t } = useApp()
+  // WP271：① 个人里「复制」的说明不提范围
+  const { t } = useMode()
   const client = useQueryClient()
   const [name, setName] = useState('')
   const [copyFrom, setCopyFrom] = useState('')

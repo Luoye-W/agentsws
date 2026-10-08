@@ -5,15 +5,16 @@
  * 与单品牌时一模一样——不说一句，用户会以为自己在改"这台机器"的设置，
  * 然后奇怪为什么切过去之后邮箱又不见了。
  *
- * **个人用户不出**（一个人、一个品牌）：对他来说没有第二个品牌，这句话只是噪音。
+ * **只有一个品牌时不出**：没有第二个品牌，这句话只是噪音。WP271：只看品牌数——
+ * 一个人管两个品牌照样要这句（docs/95 §1.2）。
  */
 import { useBrands } from '@/components/brand-switcher'
 import { useApp } from '@/lib/app-context'
 
 export function BrandScopeNote({ testId }: { testId?: string }): React.ReactNode {
   const { t } = useApp()
-  const { brands, solo } = useBrands()
-  if (solo || brands.length <= 1) return null
+  const { brands } = useBrands()
+  if (brands.length <= 1) return null
   const current = brands.find((b) => b.current)
   if (current === undefined) return null
   return (

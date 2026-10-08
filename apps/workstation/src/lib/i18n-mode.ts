@@ -1,0 +1,146 @@
+/**
+ * WP271（docs/95 §2，决策 233 / 235 / 244 / 245）：三种用法里**换说法**的那些词。
+ *
+ * 写法：`原 key@solo`（① 个人）、`原 key@peers`（② 同事互联）。`useMode().t` 先找带后缀的，
+ * 没有就用原来的——③ 公司集体永远是原来那一套，所以这里没有 `@company`。
+ *
+ * ① 的规矩（Luoye 10-08）：不出现任何公司概念的词（主管 / 老板 / 上级 / 成员 / 部门 / 范围 /
+ * 所有者 / 负责人……）；用「确认」系，不用「审批」系；少字。
+ */
+export const MODE_ZH: Record<string, string> = {
+  // 左栏与页头（决策 235）
+  'nav.org@solo': '岗位与品牌',
+  'nav.org@peers': '团队',
+  'org.title@solo': '岗位与品牌',
+  'org.title@peers': '团队',
+  'org.subtitle@solo': '你的岗位和品牌。',
+  // 岗位 tab
+  'org.positions.ours@solo': '你的岗位',
+  'org.positions.assign@solo': '我来做',
+  'org.positions.templates.hint@solo': '挑一个，点「我来做」就开工。',
+  'org.assign.receipt@solo': '「{position}」开工了',
+  'org.assign.receipt.hint@solo': '左栏「岗位」里能找到它。',
+  // 职责规矩：AI 自己能做到哪一步（决策 244，安全闸不是审批）
+  'org.level.L1@solo': '每条都要你确认',
+  'org.level.L2@solo': '上限内自己做',
+  'org.level.L3@solo': '自己做，事后告诉你',
+  'org.roles.rename@solo': '这个职责叫什么',
+  'org.roles.custom@solo': '自己的',
+  'org.roles.copy_note@solo': '内置模板不给直接改。复制一份，改你自己那一份。',
+  'org.roles.submitted@solo': '已提交：首页出一张卡，你点通过才生效。',
+  'org.roles.approval_note@solo': '改了要你在首页再点一次通过。',
+  'duty.level.L1@solo': '要你确认',
+  'duty.level.L2@solo': '上限内自己做',
+  'duty.level.L3@solo': '自己做，事后告诉你',
+  // 工具箱
+  'toolbox.subtitle@solo': '你做过的自动化都在这儿。',
+  'toolbox.subtitle.hint@solo': '建之前先来看一眼，做过的就别再做一遍。',
+  'toolbox.empty@solo': '还没建过东西。建一条定时任务或在对话里定制一张卡，这儿就有了。',
+  'toolbox.dupes.hint@solo': '这几对做的像是同一件事，而且都还在用。合并之后只留一份。',
+  'toolbox.dupes.merged@solo': '首页出了一张卡，你点通过才合',
+  // 设置页：品牌档案 + 主体信息（决策 233）
+  'settings.company@solo': '品牌档案',
+  'settings.company.hint@solo': 'AI 写回复、写文案时会带上这里的品牌资料。',
+  'onboarding.block.company@solo': '主体信息',
+  'onboarding.block.company.hint@solo': '开发信页脚、报价单用；选填',
+  'onboarding.company.legal_name@solo': '营业执照上的全称',
+  'onboarding.company.address@solo': '实体地址',
+  'onboarding.company.save@solo': '保存',
+  'onboarding.company.empty@solo': '全称还没填。',
+  'onboarding.company.promise@solo': '只交换一串哈希，名字不出这台机器。',
+  'onboarding.company.discoverable.hint@solo':
+    '打开后只往局域网广播一串哈希，全称与任何业务数据都不出去。关着就是一个人用，随时能打开。',
+  // 首次设置：邀请码压成一行小字（决策 245）
+  'onboarding.join.toggle@solo': '同事已经在用？输入邀请码',
+  'onboarding.join.sent@solo': '申请发出去了，等对方点头。',
+  // 岗位页数据看板：① 里不挑范围本来就是整个品牌（老分配才会走到这里）
+  'view.no_range@solo': '这个岗位还没挂上品牌',
+  'view.no_range.self@solo': '挂上整个品牌',
+  'view.no_range.self.hint@solo': '挂上之后，这个岗位看整个品牌的数据。',
+  'view.no_range.detail@solo': '还没挂品牌，所以看不到店铺数据——不是没数。',
+  'view.no_range.ask_owner@solo': '点上面的按钮挂上整个品牌。',
+  'pos2.set.duty.reshape.hint@solo':
+    '加减、合并、移动、拆出都在「岗位与品牌」页的岗位卡上做；拆走的职责手上没做完的事跟着走',
+  // 设置 → 账号：用量
+  'credits.scope_note@solo': '这里是你各个品牌一起的用量。',
+  'credits.group.workspace@solo': '按品牌',
+  // 品牌 tab：从某个品牌复制
+  'org.brands.add.copy_from.hint@solo':
+    '复制岗位（谁做什么）与模型设置（用哪家、哪个模型、预算多少）。**店铺不跟着走**——那是原品牌的店；**API key 也不复制**——去新品牌里填一次。连接与知识一个字节都不复制。',
+  // 技能 / 记忆的层级（① 只剩 内置 / 岗位层 / 职责层 / 我的）
+  // 「公司 / 部门」层在 ① 里就是整个品牌都用的那一层（docs/95 §2.4）
+  'rail.tier.company@solo': '品牌',
+  'rail.tier.department@solo': '品牌',
+  'skills.tier.company@solo': '品牌',
+  'skills.tier.department@solo': '品牌',
+  'memory.promote.company@solo': '提到品牌层',
+  'memory.promote.department@solo': '提到品牌层',
+  'knowledge.scope.kind.department@solo': '分组',
+  'rail.tier.personal@solo': '我的',
+  'skills.tier.personal@solo': '我的',
+}
+
+export const MODE_EN: Record<string, string> = {
+  'nav.org@solo': 'Positions & brands',
+  'nav.org@peers': 'Team',
+  'org.title@solo': 'Positions & brands',
+  'org.title@peers': 'Team',
+  'org.subtitle@solo': 'Your positions and brands.',
+  'org.positions.ours@solo': 'Your positions',
+  'org.positions.assign@solo': 'Take it on',
+  'org.positions.templates.hint@solo': 'Pick one and click “Take it on”.',
+  'org.assign.receipt@solo': '“{position}” is up and running',
+  'org.assign.receipt.hint@solo': 'Find it under Positions in the left rail.',
+  'org.level.L1@solo': 'Confirm every one',
+  'org.level.L2@solo': 'On its own within limits',
+  'org.level.L3@solo': 'On its own, tells you after',
+  'org.roles.rename@solo': 'What this duty is called',
+  'org.roles.custom@solo': 'yours',
+  'org.roles.copy_note@solo': 'Built-in templates are read-only. Copy one and edit your copy.',
+  'org.roles.submitted@solo': 'Sent: a card is on your home page; it applies once you approve.',
+  'org.roles.approval_note@solo': 'Changes apply after you approve the card on your home page.',
+  'duty.level.L1@solo': 'You confirm',
+  'duty.level.L2@solo': 'On its own within limits',
+  'duty.level.L3@solo': 'On its own, tells you after',
+  'toolbox.subtitle@solo': 'Automations you have built live here.',
+  'toolbox.subtitle.hint@solo': 'Look here before building — you may have built it already.',
+  'toolbox.empty@solo':
+    'Nothing built yet. Create a scheduled task or pin a card and it shows up here.',
+  'toolbox.dupes.hint@solo':
+    'These pairs seem to do the same thing and are both in use. Merge to keep one.',
+  'toolbox.dupes.merged@solo': 'A card is on your home page; it merges once you approve',
+  'settings.company@solo': 'Brand profile',
+  'settings.company.hint@solo': 'The AI uses these brand details when it writes replies and copy.',
+  'onboarding.block.company@solo': 'Legal entity',
+  'onboarding.block.company.hint@solo': 'For outreach footers and quotes; optional',
+  'onboarding.company.legal_name@solo': 'Registered name',
+  'onboarding.company.address@solo': 'Street address',
+  'onboarding.company.save@solo': 'Save',
+  'onboarding.company.empty@solo': 'No registered name yet.',
+  'onboarding.company.promise@solo': 'Only a hash is exchanged; names never leave this machine.',
+  'onboarding.company.discoverable.hint@solo':
+    'When on, only a hash is broadcast on your local network. Off means you use it on your own; turn it on any time.',
+  'onboarding.join.toggle@solo': 'Colleagues already on it? Enter an invite code',
+  'onboarding.join.sent@solo': 'Request sent. Waiting for them to say yes.',
+  'view.no_range@solo': 'This position is not linked to a brand yet',
+  'view.no_range.self@solo': 'Link the whole brand',
+  'view.no_range.self.hint@solo': 'Once linked, this position sees data for the whole brand.',
+  'view.no_range.detail@solo':
+    'No brand linked yet, so store numbers are hidden — the data is there.',
+  'view.no_range.ask_owner@solo': 'Use the button above to link the whole brand.',
+  'pos2.set.duty.reshape.hint@solo':
+    'Add, merge, move or split duties on the position cards in Positions & brands; unfinished work moves with a split-off duty',
+  'credits.scope_note@solo': 'Usage across all your brands.',
+  'credits.group.workspace@solo': 'By brand',
+  'org.brands.add.copy_from.hint@solo':
+    'Copies positions (who does what) and model settings. **Stores stay behind** — they belong to the source brand; **API keys are not copied** either. Connections and knowledge are never copied.',
+  'rail.tier.company@solo': 'Brand',
+  'rail.tier.department@solo': 'Brand',
+  'skills.tier.company@solo': 'Brand',
+  'skills.tier.department@solo': 'Brand',
+  'memory.promote.company@solo': 'Lift to brand layer',
+  'memory.promote.department@solo': 'Lift to brand layer',
+  'knowledge.scope.kind.department@solo': 'Group',
+  'rail.tier.personal@solo': 'Mine',
+  'skills.tier.personal@solo': 'Mine',
+}

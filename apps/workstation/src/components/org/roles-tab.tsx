@@ -20,6 +20,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import type { RoleSummaryView } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
+import { useMode } from '@/lib/mode'
 import { cn } from '@/lib/utils'
 
 export interface RoleChangePatch {
@@ -57,7 +58,11 @@ export function RoleDetail({
   onCopy(id: string): void
   onPropose(id: string, patch: RoleChangePatch): void
 }): React.ReactNode {
-  const { t } = useApp()
+  /*
+   * WP271（决策 244）：① 个人——每个动作右边的「本人定 / 主管定 / 老板定」不出（没有上下级）；
+   * 「AI 最多能自己做到哪一步」是安全闸，留着，词换成「每条都要你确认 / 上限内自己做 / …」。
+   */
+  const { t, solo } = useMode()
   // null = 没动过（清空输入框应该是空的，不是又弹回原名）
   const [name, setName] = useState<string | null>(null)
   const [caps, setCaps] = useState<Record<string, string>>(() => capsOf(role))
@@ -73,7 +78,9 @@ export function RoleDetail({
     <Card data-testid="role-detail">
       <CardHeader className="flex-row items-center justify-between gap-2">
         <CardTitle className="text-sm">{role.name}</CardTitle>
-        <Badge variant="outline">{t('org.roles.holders', { n: role.holders })}</Badge>
+        {solo ? null : (
+          <Badge variant="outline">{t('org.roles.holders', { n: role.holders })}</Badge>
+        )}
       </CardHeader>
       <CardContent className="flex flex-col gap-4 text-sm">
         <p className="text-muted-foreground">{role.description}</p>
@@ -102,9 +109,11 @@ export function RoleDetail({
               <div key={a.id} className="rounded-md border px-2 py-1.5" data-testid="role-action">
                 <div className="flex items-center justify-between gap-2">
                   <span>{actionLabel(a.id)}</span>
-                  <span className="text-xs text-muted-foreground">
-                    {t(`org.route.${a.route_to}`)}
-                  </span>
+                  {solo ? null : (
+                    <span className="text-xs text-muted-foreground" data-testid="role-action-route">
+                      {t(`org.route.${a.route_to}`)}
+                    </span>
+                  )}
                 </div>
                 {a.caps.length === 0 && a.window === undefined ? null : (
                   <div className="mt-1 flex flex-wrap gap-1 text-xs text-muted-foreground">

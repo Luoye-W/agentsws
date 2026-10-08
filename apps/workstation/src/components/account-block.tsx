@@ -19,6 +19,7 @@ import { avatarInitial } from '@/components/design'
 import { Separator } from '@/components/ui/separator'
 import { clearToken, getPositions, type Me } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
+import { useMode } from '@/lib/mode'
 
 /**
  * 名字取一个字当头像。
@@ -31,6 +32,8 @@ const initialOf = avatarInitial
 
 export function AccountBlock({ me }: { me?: Me }): React.ReactNode {
   const { t, theme, toggleTheme, lang, setLang } = useApp()
+  // WP271：① 个人只写品牌名，不写「所有者」（这里只有你一个人）
+  const { solo } = useMode()
   const navigate = useNavigate()
   const [open, setOpen] = useState(false)
 
@@ -76,7 +79,7 @@ export function AccountBlock({ me }: { me?: Me }): React.ReactNode {
             {name}
           </span>
           <span className="block truncate text-[11px] text-muted-foreground">
-            {company === '' ? role : `${role} · ${company}`}
+            {solo && company !== '' ? company : company === '' ? role : `${role} · ${company}`}
           </span>
         </span>
         <ChevronsUpDown aria-hidden className="size-3 shrink-0 opacity-60" />

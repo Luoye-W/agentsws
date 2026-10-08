@@ -28,7 +28,7 @@ import {
   type SimilarExistsDetails,
   similarExists,
 } from '@/lib/api'
-import { useApp } from '@/lib/app-context'
+import { useMode } from '@/lib/mode'
 import { cn } from '@/lib/utils'
 
 /** 分组顺序：先"能跑的"，再"改行为的"。 */
@@ -50,7 +50,8 @@ export function ToolboxTab({
   /** ⌘K 跳过来时带的搜索词。 */
   initialQuery?: string
 }): React.ReactNode {
-  const { t } = useApp()
+  // WP271：① 个人——「你做过的」；层标签（个人 / 部门 / 公司）与「谁建的」不出（docs/95 §2.2）
+  const { t, solo } = useMode()
   const client = useQueryClient()
   const [kind, setKind] = useState<CatalogKind | null>(null)
   const [query, setQuery] = useState(initialQuery ?? '')
@@ -365,14 +366,16 @@ export function ToolboxTab({
                       {flagged.has(e.id) ? (
                         <Badge variant="outline">{t('toolbox.dupe.badge')}</Badge>
                       ) : null}
-                      <Badge variant="secondary">{t(`toolbox.layer.${e.layer}`)}</Badge>
+                      {solo ? null : (
+                        <Badge variant="secondary">{t(`toolbox.layer.${e.layer}`)}</Badge>
+                      )}
                     </div>
                   </div>
                   {e.summary === '' ? null : (
                     <span className="text-xs text-muted-foreground">{e.summary}</span>
                   )}
                   <span className="text-xs text-muted-foreground">
-                    {t('toolbox.owner', { who: e.owner })} ·{' '}
+                    {solo ? null : `${t('toolbox.owner', { who: e.owner })} · `}
                     {e.used_by_positions.length === 0
                       ? t('toolbox.positions.none')
                       : t('toolbox.positions', { n: e.used_by_positions.length })}

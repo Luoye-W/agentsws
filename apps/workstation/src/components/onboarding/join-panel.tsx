@@ -21,6 +21,7 @@ import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
 import type { DiscoveryStateView, InviteView, MembershipRequestView } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
+import { useMode } from '@/lib/mode'
 
 export interface JoinSubmit {
   code?: string
@@ -66,7 +67,9 @@ export function JoinPanel({
   onCreateInvite?(): void
   onDecide?(id: string, approve: boolean): void
 }): React.ReactNode {
-  const { t, lang } = useApp()
+  const { lang } = useApp()
+  // WP271（决策 245）：① 个人里那一行小字说「同事已经在用？输入邀请码」
+  const { t } = useMode()
   const [code, setCode] = useState('')
   const [peer, setPeer] = useState<string | null>(null)
   const [open, setOpen] = useState(false)

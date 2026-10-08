@@ -9,10 +9,10 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import type { SkillOverlayView, SkillSummary } from '@/lib/api'
-import { useApp } from '@/lib/app-context'
+import { useMode } from '@/lib/mode'
 
 function OriginBadge({ origin }: { origin: 'authored' | 'learned' }): React.ReactNode {
-  const { t } = useApp()
+  const { t } = useMode()
   return (
     <Badge
       variant={origin === 'learned' ? 'default' : 'outline'}
@@ -25,7 +25,7 @@ function OriginBadge({ origin }: { origin: 'authored' | 'learned' }): React.Reac
 }
 
 function OverlayRow({ overlay }: { overlay: SkillOverlayView }): React.ReactNode {
-  const { t } = useApp()
+  const { t } = useMode()
   return (
     <div className="rounded-md border p-2">
       <div className="flex items-center gap-2">
@@ -72,7 +72,7 @@ export function SkillDetails({
   skill: SkillSummary
   onToggleExcluded(next: boolean): void
 }): React.ReactNode {
-  const { t } = useApp()
+  const { t } = useMode()
   return (
     <div className="space-y-3 text-sm" data-testid="skill-details" data-skill={skill.name}>
       <div className="flex flex-wrap items-center gap-2">
@@ -135,7 +135,7 @@ export function SkillCard({
   skill: SkillSummary
   onToggleExcluded(next: boolean): void
 }): React.ReactNode {
-  const { t } = useApp()
+  const { t } = useMode()
   return (
     <Card data-skill={skill.name}>
       <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">

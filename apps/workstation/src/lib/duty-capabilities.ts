@@ -29,11 +29,19 @@ export function domainLabel(t: T, domain: string): string {
   return tOr(t, `duty.domain.${domain}`, domain.replace(/_/g, ' '))
 }
 
-/** 能看什么：「看社群成员 · 可提议改动」。 */
-export function scopeLines(view: Pick<RoleDetailView, 'scopes'>, t: T): CapabilityLine[] {
+/**
+ * 能看什么：「看社群成员 · 可提议改动」。
+ *
+ * WP271：`solo`（① 个人）时不出「可批卡」——一个人没有替别人批卡这回事（docs/95 §2.4）。
+ */
+export function scopeLines(
+  view: Pick<RoleDetailView, 'scopes'>,
+  t: T,
+  options: { solo?: boolean } = {},
+): CapabilityLine[] {
   return view.scopes.map((s) => {
     const extra = s.ops
-      .filter((op) => op !== 'read')
+      .filter((op) => op !== 'read' && !(options.solo === true && op === 'approve'))
       .map((op) => tOr(t, `duty.op.${op}`, op))
       .join(' · ')
     const head = t('duty.scope.line', { domain: domainLabel(t, s.domain) })

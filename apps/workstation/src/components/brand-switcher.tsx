@@ -3,8 +3,8 @@
  *
  * 三条：
  *
- * 1. **个人用户看不到它**（52 O1）。一个人、一个品牌的时候整块不渲染——
- *    "组织"这一层对他不存在，多一个下拉只是多一个要理解的东西。
+ * 1. **只有一个品牌时看不到它**（52 O1）。整块不渲染——多一个下拉只是多一个要理解的东西。
+ *    WP271（docs/95 §1.2）：只看品牌数，不看 `solo`——一个人管两个品牌照样要切。
  * 2. **只列进得去的品牌**。下拉里是服务端按"本人有没有成员资格"筛过的那几个
  *    （`GET /v1/orgs/:id/brands`），不是这家公司的全部品牌。
  * 3. **切换 = 整站重载**。换品牌要换的是首页、岗位、连接、知识、设置全部——
@@ -43,7 +43,7 @@ import { cn } from '@/lib/utils'
 export function useBrands(): {
   org_id?: string
   brands: BrandView[]
-  /** 52 O1：一个人一个品牌 = 个人用户，界面上一律不显示组织与切换器。 */
+  /** 52 O1 个人用户（WP271 起只看模式）。切换器出不出不看它，只看品牌数。 */
   solo: boolean
   loading: boolean
 } {
@@ -70,12 +70,12 @@ export function useBrands(): {
 export function BrandSwitcher(): React.ReactNode {
   const { t } = useApp()
   const navigate = useNavigate()
-  const { org_id, brands, solo } = useBrands()
+  const { org_id, brands } = useBrands()
   const [open, setOpen] = useState(false)
   const [failed, setFailed] = useState(false)
 
-  // 52 O1：个人用户（一个人、一个品牌）界面上一律不显示组织概念
-  if (solo || org_id === undefined || brands.length <= 1) return null
+  // 52 O1：只有一个品牌就不出；WP271：一人多品牌也要出（只看品牌数）
+  if (org_id === undefined || brands.length <= 1) return null
   const current = brands.find((b) => b.current) ?? brands[0]
   if (current === undefined) return null
 

@@ -64,6 +64,7 @@ import {
   uploadKnowledgeSource,
 } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
+import { useMode } from '@/lib/mode'
 import {
   countByStatus,
   filterKnowledge,
@@ -98,6 +99,8 @@ interface UploadItem {
 
 export function KnowledgePage(): React.ReactNode {
   const { t } = useApp()
+  // WP271：① 个人里知识范围类型「部门」不叫部门（docs/95 §2.4）
+  const { t: tm } = useMode()
   const client = useQueryClient()
   const rail = useRailState()
   const fileInput = useRef<HTMLInputElement>(null)
@@ -281,7 +284,7 @@ export function KnowledgePage(): React.ReactNode {
   const statusCounts = countByStatus(filterKnowledge(allCards, { query, scope }))
   const scopes = scopeOptions(allCards)
   const scopeName = (ref: { kind: string; id: string }): string =>
-    scopeLabel(ref, rangeGroups.data ?? [], t)
+    scopeLabel(ref, rangeGroups.data ?? [], tm)
   // 上传的文件没有状态、没有范围：按状态 / 范围筛的时候不列它们，只按名字搜
   const shownUploads =
     status !== 'all' || scope !== SCOPE_ALL
