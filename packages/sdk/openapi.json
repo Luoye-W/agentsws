@@ -24738,7 +24738,7 @@
     "/v1/skills/{name}/promote": {
       "post": {
         "operationId": "promoteSkill",
-        "summary": "把个人层的几段提上去：产出一条 skill_promotion 审批项（不落任何层）",
+        "summary": "把个人层的几段提上去：③ 产出一条 skill_promotion 审批项（不落任何层）；① ② 当场生效（WP275）",
         "tags": ["skill"],
         "parameters": [
           {
@@ -24771,7 +24771,7 @@
         ],
         "responses": {
           "200": {
-            "description": "{ accepted, approval_item_id?, reason? }",
+            "description": "{ accepted, approval_item_id?, reason?, applied? }",
             "content": {
               "application/json": {
                 "schema": {
@@ -24872,7 +24872,7 @@
           "range": "workspace",
           "sensitivity": "internal"
         },
-        "x-returns": "{ accepted, approval_item_id?, reason? }",
+        "x-returns": "{ accepted, approval_item_id?, reason?, applied? }",
         "requestBody": {
           "required": true,
           "content": {
@@ -28150,7 +28150,7 @@
         ],
         "responses": {
           "200": {
-            "description": "OrgChangeReceipt（status 永远是 pending_approval）",
+            "description": "OrgChangeReceipt（③ 是 pending_approval；① ② 自己改的当场生效 = applied，WP275）",
             "content": {
               "application/json": {
                 "schema": {
@@ -28241,7 +28241,7 @@
           "range": "workspace",
           "sensitivity": "restricted"
         },
-        "x-returns": "OrgChangeReceipt（status 永远是 pending_approval）",
+        "x-returns": "OrgChangeReceipt（③ 是 pending_approval；① ② 自己改的当场生效 = applied，WP275）",
         "requestBody": {
           "required": true,
           "content": {
@@ -49299,7 +49299,7 @@
     "/v1/catalog/merge": {
       "post": {
         "operationId": "mergeCatalogEntries",
-        "summary": "一键合并两条疑似重复的（40 §2.2 第 4 条）：出一张 policy_change 卡，批了才合",
+        "summary": "一键合并两条疑似重复的（40 §2.2 第 4 条）：③ 出一张 policy_change 卡，批了才合；① ② 当场合（WP275）",
         "tags": ["catalog"],
         "parameters": [
           {
@@ -49323,7 +49323,7 @@
         ],
         "responses": {
           "200": {
-            "description": "{ approval_item_id }",
+            "description": "{ approval_item_id, applied? }",
             "content": {
               "application/json": {
                 "schema": {
@@ -49414,7 +49414,7 @@
           "range": "own",
           "sensitivity": "internal"
         },
-        "x-returns": "{ approval_item_id }",
+        "x-returns": "{ approval_item_id, applied? }",
         "requestBody": {
           "required": true,
           "content": {
