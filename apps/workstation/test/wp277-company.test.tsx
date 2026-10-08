@@ -87,7 +87,12 @@ vi.mock('@/lib/api', async () => {
   }
 })
 
+const seenCalls: string[] = []
 vi.mock('@/lib/api-company', async () => ({
+  markModeSeen: async (org: string) => {
+    seenCalls.push(org)
+    return { ok: true }
+  },
   getCompanyMode: async () => state.setup,
   setCompanyMode: async (_org: string, input: SetCompanyModeInput) => {
     sent.push(input)
@@ -125,11 +130,7 @@ beforeEach(() => {
   state.lists = { to_me: [], from_me: [] }
   sent.length = 0
   exported.length = 0
-  try {
-    globalThis.localStorage?.clear()
-  } catch {
-    // 没有本地存储就算了
-  }
+  seenCalls.length = 0
 })
 
 // 向导里一个字一个字地打，满并发时慢
@@ -323,8 +324,19 @@ describe('WP277 通知（不是卡）', () => {
     const line = await screen.findByTestId('mode-notice')
     expect(line.textContent).toBe('王岚 把这里改回了同事互联')
     await user.click(screen.getByTestId('mode-notice-ok'))
-    expect(screen.queryByTestId('mode-notice')).toBeNull()
+    await waitFor(() => {
+      expect(screen.queryByTestId('mode-notice')).toBeNull()
+    })
+    // 记在组织上（换电脑也不再出），不记在浏览器里
+    expect(seenCalls).toEqual(['org_1'])
     unmount()
+
+    // 点掉过的（服务端回 mode_notice_seen）不出
+    state.orgs = [{ ...(state.orgs[0] as OrganizationView), mode_notice_seen: true }]
+    const again = renderWithProviders(<ModeNotice />)
+    await new Promise((r) => setTimeout(r, 20))
+    expect(again.container.textContent).toBe('')
+    again.unmount()
 
     state.me = 'per_wang'
     const { container } = renderWithProviders(<ModeNotice />)

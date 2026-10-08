@@ -6,7 +6,7 @@
  * - {@link CompanyWizard}：开公司模式三步——公司全称（带出「主体信息」里填过的）、谁是老板（默认自己）、
  *   管理员（可不选）。
  * - {@link CloseDialog}：回到同事互联的确认（只有老板；离职交接没做完时按钮不能点）。
- * - {@link ModeNotice}：降回 ② 之后同事首页那一行通知（不是卡）；点「知道了」就不再出（只记在这台浏览器）。
+ * - {@link ModeNotice}：降回 ② 之后同事首页那一行通知（不是卡）；点掉就不再出（记在组织上）。
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { X } from 'lucide-react'
@@ -16,7 +16,12 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Hint } from '@/components/ui/hint'
 import { Input } from '@/components/ui/input'
 import { ApiClientError, ensureSession, getPositions, listOrganizations } from '@/lib/api'
-import { type CompanyModeView, getCompanyMode, setCompanyMode } from '@/lib/api-company'
+import {
+  type CompanyModeView,
+  getCompanyMode,
+  markModeSeen,
+  setCompanyMode,
+} from '@/lib/api-company'
 import { exportMyWork } from '@/lib/api-peers'
 import { useApp } from '@/lib/app-context'
 import { cn } from '@/lib/utils'
@@ -354,26 +359,22 @@ export function CloseDialog({
   )
 }
 
-const SEEN_KEY = 'agentsws.mode-notice.seen'
-
-function seenAt(): string | null {
-  try {
-    return globalThis.localStorage?.getItem(SEEN_KEY) ?? null
-  } catch {
-    return null
-  }
-}
-
 /**
- * 决策 240：老板改回同事互联之后，别的同事首页一行通知（不是卡）。点「知道了」记在这台浏览器上
- * ——读不到本地存储（隐私窗口）就每次都出，不影响别的。
+ * 决策 240：老板改回同事互联之后，别的同事首页一行通知（不是卡）。点掉记在组织上（谁点掉过），
+ * 换电脑也不再出；再改一次模式大家再看到一次。
  */
 export function ModeNotice(): React.ReactNode {
   const { t } = useApp()
   const orgs = useQuery({ queryKey: ['orgs'], queryFn: () => listOrganizations(), retry: false })
   const session = useQuery({ queryKey: ['session'], queryFn: ensureSession })
-  const [dismissed, setDismissed] = useState<string | null>(seenAt)
+  const client = useQueryClient()
   const org = orgs.data?.[0]
+  const seen = useMutation({
+    mutationFn: (id: string) => markModeSeen(id),
+    onSuccess: async () => {
+      await client.invalidateQueries({ queryKey: ['orgs'] })
+    },
+  })
   const me = session.data?.person.id
   if (
     org === undefined ||
@@ -382,10 +383,10 @@ export function ModeNotice(): React.ReactNode {
     org.mode_changed_by === undefined ||
     org.mode_changed_by === me ||
     org.mode_changed_at === undefined ||
-    dismissed === org.mode_changed_at
+    org.mode_notice_seen === true ||
+    seen.isSuccess
   )
     return null
-  const at = org.mode_changed_at
   return (
     <p
       className="flex items-center gap-2 rounded-lg bg-ws-surface px-3 py-1.5 text-[13px]"
@@ -400,13 +401,9 @@ export function ModeNotice(): React.ReactNode {
         title={t('mode.notice.ok')}
         className="text-ws-muted-fg hover:text-foreground"
         data-testid="mode-notice-ok"
+        disabled={seen.isPending}
         onClick={() => {
-          try {
-            globalThis.localStorage?.setItem(SEEN_KEY, at)
-          } catch {
-            // 存不住就只在这一次收起
-          }
-          setDismissed(at)
+          seen.mutate(org.id)
         }}
       >
         <X className="size-3.5" aria-hidden />

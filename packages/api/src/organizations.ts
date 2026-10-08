@@ -62,6 +62,8 @@ export interface OrganizationPatch {
   mode?: OrganizationMode
   /** WP271：谁改的（启动时推出来的不给）。 */
   mode_changed_by?: PersonId
+  /** WP277：这个人点掉了「改了模式」那一行通知（加进名单，模式一变就清空）。 */
+  mode_seen?: PersonId
 }
 
 export interface AttachWorkspaceInput {
@@ -274,6 +276,10 @@ export function createOrganizations(options: OrganizationsOptions): Organization
       if (domain === '') delete next.domain
       // WP251：地址同一条规矩
       if (postal === '') delete next.postal_address
+      // WP277：模式变了，「谁点掉了那一行通知」从头数；没变就把这个人加进去
+      if (patch.mode !== undefined && patch.mode !== org.mode) delete next.mode_seen_by
+      else if (patch.mode_seen !== undefined && !(org.mode_seen_by ?? []).includes(patch.mode_seen))
+        next.mode_seen_by = [...(org.mode_seen_by ?? []), patch.mode_seen]
       // WP271：换了模式却没说是谁（启动时推的）——上一次的「谁改的」不能留着冒名
       if (
         patch.mode !== undefined &&

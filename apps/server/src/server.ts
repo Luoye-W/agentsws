@@ -9442,6 +9442,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     organizations: {
       ...organizations.port,
       modeSetup: (actor, id) => companyMode.setup(actor, id),
+      modeSeen: (actor, id) => companyMode.seen(actor, id),
       setMode: async (actor, id, input) => {
         await companyMode.set(actor, id, input)
         const view = (await organizations.port.list(actor)).find((o) => o.id === id)

@@ -59,6 +59,8 @@ export interface CompanyModeOptions {
 export interface CompanyMode {
   setup(actor: OrganizationActor, org_id: string): Promise<CompanyModeView>
   set(actor: OrganizationActor, org_id: string, input: SetOrganizationModeInput): Promise<void>
+  /** 点掉「X 把这里改回了同事互联」那一行。 */
+  seen(actor: OrganizationActor, org_id: string): Promise<{ ok: true }>
   /** 这张卡是不是「X 把这里改成了公司模式」。 */
   isNotice(item: ApprovalItem): boolean
   /** 同事在那张卡上点了（审批总线 decide 之后调）。 */
@@ -380,6 +382,13 @@ export function createCompanyMode(options: CompanyModeOptions): CompanyMode {
       if (input.mode === 'company') return open(actor, org, input, from)
       if (from !== 'company') throw new ApiError('conflict', '现在不是公司模式')
       return close(actor, org)
+    },
+
+    async seen(actor, org_id): Promise<{ ok: true }> {
+      const org = needOrg(org_id)
+      await needInside(org, actor.person_id)
+      await identity.updateOrganization(org.id, { mode_seen: actor.person_id })
+      return { ok: true }
     },
 
     isNotice: isNoticeItem,

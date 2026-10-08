@@ -40,3 +40,7 @@ export const setCompanyMode = (
     body: input,
     ...(assignment === undefined ? {} : { assignment }),
   })
+
+/** 点掉「X 把这里改回了同事互联」那一行（记在组织上）。 */
+export const markModeSeen = (org_id: string): Promise<{ ok: true }> =>
+  api<{ ok: true }>(`/v1/orgs/${enc(org_id)}/mode/seen`, { method: 'POST' })

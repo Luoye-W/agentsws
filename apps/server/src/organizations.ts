@@ -237,6 +237,7 @@ export function createOrganizations(options: OrganizationsAssemblyOptions): Orga
             mode_changed_by: org.mode_changed_by,
             mode_changed_by_name: (await identity.getPerson(org.mode_changed_by))?.name || '同事',
           }),
+      ...((org.mode_seen_by ?? []).includes(person_id) ? { mode_notice_seen: true } : {}),
       created_at: org.created_at,
     }
   }

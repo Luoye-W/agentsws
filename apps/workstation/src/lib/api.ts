@@ -4464,6 +4464,8 @@ export interface OrganizationView {
   mode_changed_at?: string
   mode_changed_by?: string
   mode_changed_by_name?: string
+  /** WP277：我点掉过那一行通知没有。 */
+  mode_notice_seen?: boolean
   created_at: string
 }
 

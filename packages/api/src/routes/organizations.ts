@@ -84,6 +84,8 @@ export interface OrganizationView {
   mode_changed_by?: string
   /** WP277：改模式那个人的名字（界面上不印 id）。 */
   mode_changed_by_name?: string
+  /** WP277：当前这个人点掉过「改了模式」那一行通知没有。 */
+  mode_notice_seen?: boolean
   created_at: string
 }
 
@@ -293,6 +295,8 @@ export interface OrganizationsPort {
   ): MaybePromise<BrandSwitchView>
   /** WP277：开公司模式向导 / 降级那一屏要的东西。不给 = 这个进程不会开公司模式（回 501）。 */
   modeSetup?(actor: OrganizationActor, org_id: string): MaybePromise<CompanyModeView>
+  /** WP277：点掉「X 把这里改回了同事互联」那一行（记在组织上，换电脑也不再出）。 */
+  modeSeen?(actor: OrganizationActor, org_id: string): MaybePromise<{ ok: true }>
   /** WP277：开公司模式（只有发起人）/ 回到同事互联（只有老板）。 */
   setMode?(
     actor: OrganizationActor,
@@ -608,6 +612,28 @@ export function organizationRoutes(): Route[] {
         if (port.modeSetup === undefined)
           throw new ApiError('not_implemented', '这个服务进程不会开公司模式')
         return ok(c, await port.modeSetup(actorOf(c), param(c, 'id')))
+      },
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/orgs/:id/mode/seen',
+        operationId: 'markOrganizationModeSeen',
+        summary: '点掉「X 把这里改回了同事互联」那一行通知（只记 person id；WP277）',
+        tag: TAG,
+        auth: 'bearer',
+        assignment: true,
+        authz: READ,
+        // 自助：点掉的是自己首页上那一行
+        authzBypass: () => true,
+        params: [{ name: 'id', in: 'path', required: true, description: '组织 id' }],
+        returns: '{ ok: true }',
+      },
+      async (c, deps) => {
+        const port = portOf(deps)
+        if (port.modeSeen === undefined)
+          throw new ApiError('not_implemented', '这个服务进程不会开公司模式')
+        return ok(c, await port.modeSeen(actorOf(c), param(c, 'id')))
       },
     ),
     route(

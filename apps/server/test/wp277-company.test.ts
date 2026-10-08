@@ -307,6 +307,14 @@ describe('WP277 降回同事互联（决策 240）', () => {
     )[0]
     expect(view?.mode).toBe('peers')
     expect(view?.mode_changed_by_name).toBe(server.bootstrap.person.name)
+    // 林峰点掉那一行：记在组织上，再读不出；再改一次模式又出
+    await call('POST', `/v1/orgs/${orgId()}/mode/seen`, { token: lin.token, assignment: linB2b })
+    const after = (
+      await data<{ mode_notice_seen?: boolean }[]>(
+        await call('GET', '/v1/orgs', { token: lin.token, assignment: linB2b }),
+      )
+    )[0]
+    expect(after?.mode_notice_seen).toBe(true)
 
     // ② 里林峰自己点得了（没有职责分离）
     const decided = await call('POST', `/v1/approvals/${card.id}/decide`, {
