@@ -64,7 +64,6 @@ import {
   uploadKnowledgeSource,
 } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
-import { useMode } from '@/lib/mode'
 import {
   countByStatus,
   filterKnowledge,
@@ -75,6 +74,7 @@ import {
   scopeLabel,
   scopeOptions,
 } from '@/lib/library'
+import { useMode } from '@/lib/mode'
 import { cn } from '@/lib/utils'
 
 /**

@@ -45,6 +45,7 @@ import type {
 } from '@/lib/api'
 import { OnboardingPage } from '@/pages/onboarding'
 import { renderWithProviders } from './helpers'
+import { COMPANY_ORG, companyWordsIn, SOLO_ORG } from './mode-words'
 
 const T0 = '2026-09-19T09:00:00.000Z'
 
@@ -280,6 +281,8 @@ function websiteRun(overrides: Partial<BrandIntakeRun> = {}): BrandIntakeRun {
 }
 
 const state = {
+  /** WP271：组织（不给 = 读不到，按 ③ 兜底——老用例全走这一档）。 */
+  orgs: [] as (typeof SOLO_ORG)[],
   renames: [] as string[],
   profiles: [] as { legal_name: string }[],
   plans: [] as OnboardingPlanInput[],
@@ -330,6 +333,7 @@ vi.mock('@/lib/api', async () => {
   return {
     ...actual,
     getOnboardingState: async () => state.state,
+    listOrganizations: async () => state.orgs,
     listOnboardingPositions: async () => POSITIONS,
     suggestOnboarding: async (text: string) => {
       state.suggests.push(text)
@@ -496,6 +500,7 @@ vi.mock('@/lib/api', async () => {
 })
 
 beforeEach(() => {
+  state.orgs = []
   state.renames = []
   state.profiles = []
   state.plans = []
@@ -2367,5 +2372,37 @@ describe('WP244 新开的 Shopify 空店 / 接着上次的进度', () => {
     await screen.findByTestId('onboarding-business')
     const steps = screen.getAllByTestId('onboarding-step').map((s) => s.getAttribute('data-state'))
     expect(steps).toEqual(['done', 'current', 'todo', 'todo'])
+  })
+})
+
+describe('WP271 三种模式：首次设置', () => {
+  it('① 个人：第 ② 步不问公司全称；邀请码压成一行小字；一个公司概念词都不出', async () => {
+    state.orgs = [SOLO_ORG]
+    state.peers = { available: true, enabled: false, peers: [] }
+    const user = userEvent.setup()
+    renderWithProviders(<OnboardingPage />)
+    await passAi()
+    await user.click(screen.getByTestId('intake-no-site'))
+    const person = await screen.findByTestId('onboarding-person')
+    expect(within(person).getByTestId('person-name')).toBeTruthy()
+    await waitFor(() => {
+      expect(screen.getByTestId('join-toggle').textContent).toBe('同事已经在用？输入邀请码')
+    })
+    expect(within(person).queryByTestId('company-legal-name')).toBeNull()
+    expect(companyWordsIn(document.body)).toEqual([])
+  })
+
+  it('③ 公司集体：照旧问公司全称，那一行还是「已有邀请码？」', async () => {
+    state.orgs = [COMPANY_ORG]
+    state.peers = { available: true, enabled: false, peers: [] }
+    const user = userEvent.setup()
+    renderWithProviders(<OnboardingPage />)
+    await passAi()
+    await user.click(screen.getByTestId('intake-no-site'))
+    const person = await screen.findByTestId('onboarding-person')
+    await waitFor(() => {
+      expect(within(person).getByTestId('company-legal-name')).toBeTruthy()
+    })
+    expect(screen.getByTestId('join-toggle').textContent).toBe('已有邀请码？')
   })
 })

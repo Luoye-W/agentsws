@@ -125,6 +125,13 @@ describe('52 O2 顶栏品牌切换器', () => {
     expect(screen.queryByTestId('brand-switcher')).toBeNull()
   })
 
+  it('WP271：一个人两个品牌（仍是 ① 个人）也出切换器——只看品牌数', async () => {
+    state.orgs = [{ ...SOLO, brands: 2, mode: 'solo' }]
+    state.brands = [BRAND_A, BRAND_B]
+    renderShell()
+    expect((await screen.findByTestId('brand-current')).textContent).toContain('诺伏特户外')
+  })
+
   it('两个品牌：显示当前品牌名，下拉里两个都在，另一个带待审数', async () => {
     state.orgs = [COMPANY]
     state.brands = [BRAND_A, BRAND_B]
@@ -271,6 +278,14 @@ describe('52 O1 设置页那张"公司"卡', () => {
   it('个人用户看不到它', async () => {
     state.orgs = [SOLO]
     state.brands = [BRAND_A]
+    renderWithProviders(<SettingsPage />)
+    await screen.findByText('设置')
+    expect(screen.queryByTestId('settings-org')).toBeNull()
+  })
+
+  it('WP271：一个人两个品牌仍看不到它（只看模式，不看品牌数）', async () => {
+    state.orgs = [{ ...SOLO, brands: 2, mode: 'solo' }]
+    state.brands = [BRAND_A, BRAND_B]
     renderWithProviders(<SettingsPage />)
     await screen.findByText('设置')
     expect(screen.queryByTestId('settings-org')).toBeNull()

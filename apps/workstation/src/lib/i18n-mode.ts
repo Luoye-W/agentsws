@@ -64,6 +64,13 @@ export const MODE_ZH: Record<string, string> = {
   // 设置 → 账号：用量
   'credits.scope_note@solo': '这里是你各个品牌一起的用量。',
   'credits.group.workspace@solo': '按品牌',
+  // 设置 → 数据地图
+  'datamap.hint@solo':
+    '这一页只读：按对象类型列出它的真源在哪、多新、你看得到哪些、能对它做什么。数据本身不在这儿，这里只是一张目录。',
+  'datamap.col.range@solo': '我能看的',
+  'datamap.col.range.hint@solo': '这条岗位能看到哪些：只有我自己的 / 这个岗位管的 / 整个品牌。',
+  'datamap.range.assigned@solo': '这个岗位管的',
+  'datamap.range.workspace@solo': '整个品牌',
   // 品牌 tab：从某个品牌复制
   'org.brands.add.copy_from.hint@solo':
     '复制岗位（谁做什么）与模型设置（用哪家、哪个模型、预算多少）。**店铺不跟着走**——那是原品牌的店；**API key 也不复制**——去新品牌里填一次。连接与知识一个字节都不复制。',
@@ -131,6 +138,13 @@ export const MODE_EN: Record<string, string> = {
   'pos2.set.duty.reshape.hint@solo':
     'Add, merge, move or split duties on the position cards in Positions & brands; unfinished work moves with a split-off duty',
   'credits.scope_note@solo': 'Usage across all your brands.',
+  'datamap.hint@solo':
+    'Read-only: where each kind of object really lives, how fresh it is, what you can see and do with it. It is a directory, not the data.',
+  'datamap.col.range@solo': 'What I can see',
+  'datamap.col.range.hint@solo':
+    'What this position can see: only mine / what this position covers / the whole brand.',
+  'datamap.range.assigned@solo': 'what this position covers',
+  'datamap.range.workspace@solo': 'the whole brand',
   'credits.group.workspace@solo': 'By brand',
   'org.brands.add.copy_from.hint@solo':
     'Copies positions (who does what) and model settings. **Stores stay behind** — they belong to the source brand; **API keys are not copied** either. Connections and knowledge are never copied.',
