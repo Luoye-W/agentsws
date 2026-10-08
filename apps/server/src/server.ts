@@ -944,6 +944,8 @@ export interface ServerOptions {
       url: string,
     ) => Promise<{ ok: boolean; status: number; arrayBuffer(): Promise<ArrayBuffer> }>
     sleep?: (ms: number) => Promise<void>
+    /** 另外认哪些图片主机（demo 假店的 `cdn.shopify.test`）。 */
+    extraImageHosts?: RegExp
   }
   /**
    * WP247：本机连接器下载器的注入点（测试换成假 npm，不联网）。生产不传：只有桌面壳设了
@@ -3567,6 +3569,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       ...(blobs === undefined ? {} : { blobs }),
       clock,
       random,
+      ...(options.images?.extraImageHosts === undefined
+        ? {}
+        : { extraImageHosts: options.images.extraImageHosts }),
     })
     brandAssetsByWs.set(ws, brandAssets)
     const imageService = createImageService({

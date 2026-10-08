@@ -144,6 +144,8 @@ export interface BrandAssetsOptions {
   blobs?: BlobStore
   clock: Clock
   random: () => number
+  /** 测试 / demo：另外再认哪些图片主机（假店的 `cdn.shopify.test`）。生产不传，只认 Shopify CDN。 */
+  extraImageHosts?: RegExp
 }
 
 const SHOP_CDN = /^(cdn\.shopify\.com|[a-z0-9-]+\.myshopify\.com)$/i
@@ -280,7 +282,10 @@ export function createBrandAssets(options: BrandAssetsOptions): BrandAssets {
       } catch {
         throw new BrandAssetError('bad_url', '图片地址不对。')
       }
-      if (url.protocol !== 'https:' || !SHOP_CDN.test(url.hostname))
+      if (
+        url.protocol !== 'https:' ||
+        !(SHOP_CDN.test(url.hostname) || options.extraImageHosts?.test(url.hostname) === true)
+      )
         throw new BrandAssetError('bad_url', '只从店铺的图片地址（cdn.shopify.com）取图。')
       const same = store
         .assets()
