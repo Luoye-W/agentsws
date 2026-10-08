@@ -6,6 +6,7 @@
  */
 import { CLOUD_AUTH_EN, CLOUD_AUTH_ZH } from './i18n-cloud-auth'
 import { HANDOFF_EN, HANDOFF_ZH } from './i18n-handoff'
+import { IMAGES_EN, IMAGES_ZH } from './i18n-images'
 import { LIBRARY_EN, LIBRARY_ZH } from './i18n-library'
 import { LOCAL_CONNECTOR_EN, LOCAL_CONNECTOR_ZH } from './i18n-local-connector'
 import { MATTER_EN, MATTER_ZH } from './i18n-matter'
@@ -7961,6 +7962,8 @@ const TABLES: Record<Lang, Table> = {
     ...MATTER_ZH,
     // WP261：岗位页「授权管理商品和页面」
     ...SHOP_ADMIN_ZH,
+    // WP268：挑图卡、品牌素材库、事项里拖图
+    ...IMAGES_ZH,
   },
   en: {
     ...en,
@@ -7978,6 +7981,7 @@ const TABLES: Record<Lang, Table> = {
     ...HANDOFF_EN,
     ...MATTER_EN,
     ...SHOP_ADMIN_EN,
+    ...IMAGES_EN,
   },
 }
 

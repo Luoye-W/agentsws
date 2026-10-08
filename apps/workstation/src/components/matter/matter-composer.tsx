@@ -5,13 +5,15 @@
  * - 发送是卡内右下角的圆形箭头：空时灰、有字主色；运行中变成「停」，有字时又是箭头（排在这一轮后面）。
  *   悬停「发送（Enter）」；Enter 发送、Shift+Enter 换行，提示只在聚焦或有字时出。
  * - 左下「私聊 AI」开关（替代原来那块「问 AI」）：打开后整张卡变蓝、顶上一行「只你看得见」。
- * - 左下预留「+」「@」（置灰，悬停「即将推出」）。
+ * - 左下「+」：WP268 起能加图（点选 / 拖进来 / 粘贴），图先进品牌素材库，发出去的话里带上素材 id；「@」仍置灰。
  * - 建议输入：框空着、又有合适的下一步时浅灰字直接显示在框里 + 小 Tab 键帽；按 Tab 收下变正文，
  *   打别的字就消失。涉及花钱 / 对外的也只是填进框，仍要人按发送。
  */
 import { cn } from 'cn'
-import { ArrowUp, AtSign, Lock, Plus, Square } from 'lucide-react'
+import { ArrowUp, AtSign, Lock, Plus, Square, X } from 'lucide-react'
 import { type ReactNode, useEffect, useId, useRef } from 'react'
+import { AuthedImage } from '@/components/images/authed-image'
+import { BRAND_ASSET_ACCEPT } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 
 const MAX_HEIGHT = 240
@@ -28,6 +30,10 @@ export function MatterComposer({
   suggestion,
   sending,
   disabled = false,
+  attachments,
+  onAttach,
+  onDetach,
+  attaching = false,
 }: {
   value: string
   onChange: (v: string) => void
@@ -42,11 +48,20 @@ export function MatterComposer({
   suggestion?: string | undefined
   sending: boolean
   disabled?: boolean
+  /** WP268：已经加进来的图（素材库 id + 取图地址）。不给 = 「+」照旧置灰。 */
+  attachments?: { id: string; url: string }[] | undefined
+  onAttach?: ((files: File[]) => void) | undefined
+  onDetach?: ((id: string) => void) | undefined
+  attaching?: boolean
 }): ReactNode {
   const { t } = useApp()
   const area = useRef<HTMLTextAreaElement>(null)
   const hintId = useId()
-  const has = value.trim() !== ''
+  const picker = useRef<HTMLInputElement>(null)
+  const canAttach = onAttach !== undefined && !privateMode
+  const has = value.trim() !== '' || (canAttach && (attachments ?? []).length > 0)
+  const imagesOf = (list: FileList | null | undefined): File[] =>
+    [...(list ?? [])].filter((f) => f.type.startsWith('image/'))
   const ghost = !privateMode && value === '' && suggestion !== undefined ? suggestion : undefined
   const stopMode = running && !has && !privateMode
 
@@ -84,6 +99,21 @@ export function MatterComposer({
           e.preventDefault()
           submit()
         }}
+        onDragOver={(e) => {
+          if (canAttach && [...e.dataTransfer.types].includes('Files')) e.preventDefault()
+        }}
+        onDrop={(e) => {
+          if (!canAttach) return
+          const files = imagesOf(e.dataTransfer.files)
+          if (files.length === 0) return
+          e.preventDefault()
+          onAttach?.(files)
+        }}
+        onPaste={(e) => {
+          if (!canAttach) return
+          const files = imagesOf(e.clipboardData.files)
+          if (files.length > 0) onAttach?.(files)
+        }}
         className={cn(
           'ws-composer group/cmp relative rounded-[20px] bg-ws-card transition-[box-shadow,background-color]',
           privateMode && 'ws-composer-private',
@@ -97,6 +127,28 @@ export function MatterComposer({
           >
             <Lock aria-hidden className="size-3" />
             {t('matter.cmp.private.tag')}
+          </div>
+        ) : null}
+        {canAttach && (attachments ?? []).length > 0 ? (
+          <div className="flex flex-wrap gap-1.5 px-4 pt-3" data-testid="matter-attachments">
+            {(attachments ?? []).map((a) => (
+              <div
+                key={a.id}
+                className="relative size-14 overflow-hidden rounded-[10px] ring-1 ring-ws-line"
+              >
+                <AuthedImage src={a.url} alt={a.id} className="size-full" />
+                <button
+                  type="button"
+                  aria-label={t('matter.cmp.attach.remove')}
+                  className="absolute top-0.5 right-0.5 grid size-5 place-items-center rounded-full bg-ws-ink/70 text-white"
+                  onClick={() => {
+                    onDetach?.(a.id)
+                  }}
+                >
+                  <X aria-hidden className="size-3" />
+                </button>
+              </div>
+            ))}
           </div>
         ) : null}
         <div className="relative">
@@ -151,13 +203,34 @@ export function MatterComposer({
         <div className="flex items-center gap-0.5 px-2 pt-1 pb-2">
           <button
             type="button"
-            disabled
-            aria-label={t('matter.cmp.attach')}
-            title={t('matter.cmp.attach')}
-            className="grid size-8 place-items-center rounded-[10px] text-ws-muted-fg/70"
+            disabled={!canAttach || attaching}
+            data-testid="matter-attach"
+            aria-label={canAttach ? t('matter.cmp.attach.image') : t('matter.cmp.attach')}
+            title={canAttach ? t('matter.cmp.attach.image') : t('matter.cmp.attach')}
+            onClick={() => {
+              picker.current?.click()
+            }}
+            className={cn(
+              'grid size-8 place-items-center rounded-[10px]',
+              canAttach ? 'text-ws-body hover:bg-muted' : 'text-ws-muted-fg/70',
+            )}
           >
             <Plus aria-hidden className="size-[18px]" />
           </button>
+          {canAttach ? (
+            <input
+              ref={picker}
+              type="file"
+              multiple
+              accept={BRAND_ASSET_ACCEPT}
+              className="hidden"
+              onChange={(e) => {
+                const files = imagesOf(e.target.files)
+                if (files.length > 0) onAttach?.(files)
+                e.target.value = ''
+              }}
+            />
+          ) : null}
           <button
             type="button"
             disabled
