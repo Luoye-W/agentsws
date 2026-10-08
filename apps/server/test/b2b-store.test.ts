@@ -258,6 +258,7 @@ describe('报价：永远出卡，授权只决定谁批；版本只增', () => {
     expect(b.breaches).toEqual(['quote_amount_over_mandate', 'quote_margin_under_mandate'])
     const card = await txn.approvals.get(b.approval_item_id ?? '')
     expect(card?.routing.recipients.map((r) => r.person)).toEqual(['p_zhou'])
+    // 没装路由口（卡上没有「转给了…」那一句）：摘要自己说转给谁
     expect(card?.summary).toBe('超了授权（金额、毛利），转老板批')
     // 面板上的「报价待审」来自已提交没批的那一张
     expect(service.deckData(NOW).quotes_pending[0]).toMatchObject({ version: 2, approver: 'owner' })

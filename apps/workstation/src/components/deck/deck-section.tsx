@@ -33,7 +33,7 @@ import { DECK_EXIT_MS, DECK_MAX_WIDTH_CLASS } from '@/components/deck/deck-layou
 import { ReportBlocks } from '@/components/deck/panel-blocks'
 import { Skeleton } from '@/components/ui/skeleton'
 import { type CardsData, type DecideInput, decide, getHome, getPositionCards } from '@/lib/api'
-import { useApp } from '@/lib/app-context'
+import { useMode } from '@/lib/mode'
 
 export interface DeckSectionProps {
   /** 给了就只看这个岗位（岗位页）；不给就是首页的跨岗位队列 */
@@ -129,7 +129,8 @@ export function DeckSection({
   onOpen,
   focus,
 }: DeckSectionProps): React.ReactNode {
-  const { t } = useApp()
+  // WP275：回执与快捷键那几句按模式换词（① ② 是「通过」系，不是「批准」系）
+  const { t } = useMode()
   const client = useQueryClient()
   const deckRef = useRef<HTMLElement | null>(null)
 
@@ -269,6 +270,11 @@ export function DeckSection({
     if (action === 'approve') {
       // 一道选择题没选中就不存在「同意」，键盘也不是后门。
       if (card.options !== undefined && card.options.length > 0) return
+      // WP275：超了上限要再确认一次的卡——键盘也得点两下（走按钮那一条）
+      if (card.reconfirm === true) {
+        deckRef.current?.querySelector<HTMLButtonElement>('button[data-action="approve"]')?.click()
+        return
+      }
       dispatch({ action: 'approve', version: card.version })
       return
     }

@@ -131,6 +131,11 @@ export interface B2bSalesOptions {
   /** 这个工作区里现在持着 B2B 职责的分配（每次现查）。 */
   holders(): readonly B2bHolder[]
   owner(): Promise<PersonId | undefined>
+  /**
+   * WP275（docs/95 §5）：没有审批流（① 个人 / ② 同事互联）时，诈骗嫌疑这张红卡只给这件事是谁的
+   * 那个人（持 B2B 职责的业务员）点——硬闸三种模式都关不掉，只是不再另外抄给老板。不给按 ③。
+   */
+  approvalFlow?(): boolean | Promise<boolean>
   personName?(person_id: PersonId): Promise<string | undefined>
   /** 本机加密库（报价 / 寄样通知发的那一刻取联系人邮箱明文；WhatsApp 号码当场存进去）。 */
   secrets?: {
@@ -375,7 +380,11 @@ export function createB2bSales(options: B2bSalesOptions): B2bSalesAssembly {
   ): Promise<string | undefined> => {
     const approvals = options.approvals
     if (approvals === undefined) return undefined
-    const owner = (await options.owner()) ?? holder.person_id
+    // WP275：① ② 没有审批流——红卡落在业务员自己身上（硬闸照旧，一律要人点）
+    const owner =
+      (await options.approvalFlow?.()) === false
+        ? holder.person_id
+        : ((await options.owner()) ?? holder.person_id)
     const item = await approvals.create({
       workspace_id,
       schema_version: 1,

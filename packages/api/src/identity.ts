@@ -181,6 +181,11 @@ export interface LocalIdentityService extends IdentityService, Organizations {
    * 分配的撤销由 roles 侧做（这里只管身份）。
    */
   leaveWorkspace(workspace_id: WorkspaceId, person_id: PersonId): Promise<Membership | undefined>
+  /**
+   * WP275：{@link IdentityService.members} 的同步版（本地两档本来就是同步读）。给只能同步问的地方用
+   * ——比如「进待认领池的活要不要直接记到唯一那个人名下」（决策 259）。可选：没有就当不知道。
+   */
+  membersSync?(workspace_id: WorkspaceId): Membership[]
 }
 
 /** 20 §5 邀请：一次性、带期限、绑工作区。token 只存哈希。 */
@@ -475,6 +480,10 @@ export class MemoryIdentityService implements LocalIdentityService {
   }
 
   async members(workspace_id: WorkspaceId): Promise<Membership[]> {
+    return this.membersSync(workspace_id)
+  }
+
+  membersSync(workspace_id: WorkspaceId): Membership[] {
     return [...(this.#members.get(workspace_id) ?? [])]
   }
 

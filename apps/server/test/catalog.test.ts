@@ -145,6 +145,9 @@ describe('40 §2.2 建之前先查（真进程）', () => {
 
 describe('40 §2.2 疑似重复与一键合并（真进程）', () => {
   it('两条都在用 → 成对报出来；合并出一张 policy_change 卡，批了才真的合', async () => {
+    // WP275：③ 公司集体才出策略变更卡给老板批（① ② 自己改当场生效，见 wp275-mode-approvals.test.ts）
+    for (const org of server.identity.listOrganizations())
+      await server.identity.updateOrganization(org.id, { mode: 'company' })
     const a = await data<{ id: string }>(
       await post('/v1/schedules', { title: '每天早上汇总退款单', trigger: CRON }),
     )

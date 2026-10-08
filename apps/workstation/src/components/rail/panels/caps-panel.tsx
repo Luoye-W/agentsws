@@ -6,9 +6,10 @@
  *
  * 两条硬规矩，这一栏的全部设计都从它们来：
  *
- * 1. **改额度 = 提一张 `policy_change` 审批卡，不是当场生效**（14 §1）。走的是
- *    `PUT /v1/roles/:id`（org 页职责编辑那条路，**不另起一条**），回执里 `status`
- *    永远是 `pending_approval`——界面照它显示"已提交审批"。
+ * 1. **③ 公司集体里改额度 = 提一张 `policy_change` 审批卡，不是当场生效**（14 §1）。走的是
+ *    `PUT /v1/roles/:id`（org 页职责编辑那条路，**不另起一条**），回执 `pending_approval`
+ *    ——界面照它显示"已提交审批"。WP275：① 个人 / ② 同事互联没有审批流，自己改的保存前问一句、
+ *    当场生效（回执 `applied`）。
  * 2. **内置模板只读，先复制一份才能改**（05 §0）。`RoleSummaryView.editable === false`
  *    时这一栏出的是「复制一份再改」（`POST /v1/roles`），不是一个按下去会 403 的输入框。
  *
@@ -36,6 +37,7 @@ import {
   type RoleDetailView,
 } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
+import { useMode } from '@/lib/mode'
 
 /** 一条动作的额度：键值对现在是字符串（服务端给的人话），改的时候只收数字。 */
 function ActionRow({
@@ -97,7 +99,8 @@ function ActionRow({
 
 /** 职责层：一张可改的表 + 「提交审批」。 */
 function RoleCaps({ role_id }: { role_id: string }): React.ReactNode {
-  const { t } = useApp()
+  // WP275：词按模式换（① ② 是「保存 / 当场生效」，③ 是「提交审批」）
+  const { t, mode } = useMode()
   const client = useQueryClient()
   const [draft, setDraft] = useState<Record<string, string>>({})
   const [error, setError] = useState<string | null>(null)
@@ -130,9 +133,12 @@ function RoleCaps({ role_id }: { role_id: string }): React.ReactNode {
           })
           .filter((x): x is { id: string; caps: Record<string, number> } => x !== undefined),
       }),
-    onSuccess: () => {
+    onSuccess: (receipt) => {
       setDraft({})
       setError(null)
+      // 当场生效了：表上的数要换成新的
+      if (receipt.status === 'applied')
+        void client.invalidateQueries({ queryKey: ['role-definition'] })
     },
     onError: (err: unknown) => {
       setError(err instanceof ApiClientError ? err.message : t('error.generic'))
@@ -219,6 +225,8 @@ function RoleCaps({ role_id }: { role_id: string }): React.ReactNode {
               data-testid="caps-submit"
               disabled={!dirty || propose.isPending}
               onClick={() => {
+                // WP275：① ② 保存即生效——二次确认
+                if (mode !== 'company' && !globalThis.confirm(t('mode.apply_now.confirm'))) return
                 propose.mutate(view)
               }}
             >
@@ -229,7 +237,7 @@ function RoleCaps({ role_id }: { role_id: string }): React.ReactNode {
           </div>
           {propose.data === undefined ? null : (
             <p className="text-[11px] text-muted-foreground" data-testid="caps-submitted">
-              {propose.data.status === 'pending_approval'
+              {propose.data.status === 'pending_approval' || propose.data.status === 'applied'
                 ? t('rail.caps.submitted')
                 : propose.data.summary}
             </p>

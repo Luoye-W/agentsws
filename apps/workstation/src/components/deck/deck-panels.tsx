@@ -14,6 +14,7 @@ import { Hint } from '@/components/ui/hint'
 import { Textarea } from '@/components/ui/textarea'
 import type { RoleTaskExampleData } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
+import { useMode } from '@/lib/mode'
 
 export type NoteMode = 'instruct' | 'reject'
 
@@ -40,7 +41,9 @@ export function DeckNotePanel({
   onCancel: () => void
   onSubmit: (input: { text: string; scope?: InstructionScope }) => void
 }): React.ReactNode {
-  const { t, lang } = useApp()
+  const { lang } = useApp()
+  // WP275：「以后都这样」在 ① ② 不说「进策略变更审批」
+  const { t } = useMode()
   const [text, setText] = useState('')
   const [scope, setScope] = useState<InstructionScope>('single_reply')
   // 指导必须有话；驳回也必须写原因（14 §4：它是最强的学习信号）。

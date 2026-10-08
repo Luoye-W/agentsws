@@ -25,6 +25,7 @@ import {
   setupB2bFacts,
 } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
+import { useMode } from '@/lib/mode'
 
 const FACT_TONE: Readonly<Record<string, Tone>> = { active: 'good', proposed: 'warn' }
 
@@ -122,7 +123,8 @@ function SampleStep({
 }
 
 export function B2bSalesPanel({ assignment }: { assignment: string }): React.ReactNode {
-  const { t } = useApp()
+  // WP275：① ② 报价「等你确认」，不写「上级批 / 老板批」
+  const { t } = useMode()
   const qc = useQueryClient()
   const key = ['b2b-sales', assignment]
   const q = useQuery({ queryKey: key, queryFn: () => getB2bSales(assignment) })

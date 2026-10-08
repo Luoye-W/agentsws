@@ -137,6 +137,9 @@ beforeEach(async () => {
     startRun: false,
     tokenRefreshIntervalMs: 0,
   })
+  // WP275：上级 / 老板这套审批流只在 ③ 公司集体里有（① ② 见 wp275-mode-approvals.test.ts）
+  for (const org of server.identity.listOrganizations())
+    await server.identity.updateOrganization(org.id, { mode: 'company' })
 })
 
 afterEach(async () => {
@@ -164,7 +167,7 @@ describe('WP174 岗位上级：scope_manager 真的落到上级，没有才落�
       { person: lin.id, via: 'scope_manager', reason: '转给了「B2B」岗位的上级林峰' },
     ])
     // Fable 终审：卡面说人话，不露 amount / margin 这种字段名
-    expect(second.summary).toBe('超了授权（金额、毛利），转上级批')
+    expect(second.summary).toBe('超了授权（金额、毛利）')
     expect(second.summary).not.toMatch(/[a-z_]{3,}/)
 
     // 上级就是提的人自己 → 老板

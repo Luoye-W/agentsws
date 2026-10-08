@@ -2879,7 +2879,7 @@ export interface paths {
     }
     get?: never
     put?: never
-    /** 把个人层的几段提上去：产出一条 skill_promotion 审批项（不落任何层） */
+    /** 把个人层的几段提上去：③ 产出一条 skill_promotion 审批项（不落任何层）；① ② 当场生效（WP275） */
     post: operations['promoteSkill']
     delete?: never
     options?: never
@@ -5159,7 +5159,7 @@ export interface paths {
     }
     get?: never
     put?: never
-    /** 一键合并两条疑似重复的（40 §2.2 第 4 条）：出一张 policy_change 卡，批了才合 */
+    /** 一键合并两条疑似重复的（40 §2.2 第 4 条）：③ 出一张 policy_change 卡，批了才合；① ② 当场合（WP275） */
     post: operations['mergeCatalogEntries']
     delete?: never
     options?: never
@@ -26230,7 +26230,7 @@ export interface operations {
       }
     }
     responses: {
-      /** @description { accepted, approval_item_id?, reason? } */
+      /** @description { accepted, approval_item_id?, reason?, applied? } */
       200: {
         headers: {
           [name: string]: unknown
@@ -28430,7 +28430,7 @@ export interface operations {
       }
     }
     responses: {
-      /** @description OrgChangeReceipt（status 永远是 pending_approval） */
+      /** @description OrgChangeReceipt（③ 是 pending_approval；① ② 自己改的当场生效 = applied，WP275） */
       200: {
         headers: {
           [name: string]: unknown
@@ -42101,7 +42101,7 @@ export interface operations {
       }
     }
     responses: {
-      /** @description { approval_item_id } */
+      /** @description { approval_item_id, applied? } */
       200: {
         headers: {
           [name: string]: unknown

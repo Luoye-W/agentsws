@@ -841,6 +841,60 @@ describe('公司页：岗位下面那一层职责（WP70）', () => {
       patch: { actions: [{ id: 'stage_refund', caps: { max_auto_refund_amount: 30 } }] },
     })
   })
+
+  it('WP275 ① 自己改：保存前问一句、当场生效；点「取消」就不发', async () => {
+    modeState.orgs = [SOLO_ORG]
+    const confirm = vi.spyOn(globalThis, 'confirm')
+    try {
+      const user = userEvent.setup()
+      const custom = await openDuty(user, '售后（本公司）')
+      const cap = await within(custom).findByLabelText('max_auto_refund_amount')
+      await user.clear(cap)
+      await user.type(cap, '30')
+      const submit = within(custom).getByTestId('role-submit')
+      await waitFor(() => {
+        expect(submit.textContent).toBe('保存')
+      })
+      confirm.mockReturnValueOnce(false)
+      await user.click(submit)
+      expect(confirm).toHaveBeenCalledTimes(1)
+      expect(proposed).toHaveLength(0)
+      confirm.mockReturnValueOnce(true)
+      await user.click(submit)
+      await waitFor(() => {
+        expect(proposed).toHaveLength(1)
+      })
+      expect((await within(custom).findByTestId('role-submitted')).textContent).toBe(
+        '改好了，当场生效。',
+      )
+      // 「谁定」那一列不出；没有审批系的词
+      expect(within(custom).queryByTestId('role-action-route')).toBeNull()
+      expect(custom.textContent).not.toMatch(/审批|批准/)
+    } finally {
+      confirm.mockRestore()
+    }
+  })
+
+  it('WP275 ② 同事互联：同样不出「谁定」，保存后说同岗位的人能撤回', async () => {
+    modeState.orgs = [{ ...SOLO_ORG, members: 2, solo: false, mode: 'peers' }]
+    const confirm = vi.spyOn(globalThis, 'confirm').mockReturnValue(true)
+    try {
+      const user = userEvent.setup()
+      const custom = await openDuty(user, '售后（本公司）')
+      await waitFor(() => {
+        expect(within(custom).queryByTestId('role-action-route')).toBeNull()
+      })
+      const cap = await within(custom).findByLabelText('max_auto_refund_amount')
+      await user.clear(cap)
+      await user.type(cap, '25')
+      await user.click(within(custom).getByTestId('role-submit'))
+      expect((await within(custom).findByTestId('role-submitted')).textContent).toContain(
+        '可以撤回',
+      )
+    } finally {
+      confirm.mockRestore()
+    }
+  })
 })
 
 describe('不是所有者', () => {

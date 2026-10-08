@@ -25,7 +25,7 @@ export function LayerMemory({
   tier: 'company' | 'department' | 'position' | 'role'
   scopeId?: string
 }): React.ReactNode {
-  const { t } = useMode()
+  const { t, mode } = useMode()
   const client = useQueryClient()
   const memory = useQuery({
     queryKey: ['layer-memory', tier, scopeId ?? ''],
@@ -90,6 +90,8 @@ export function LayerMemory({
           onClick={() => {
             const first = view.entries[0]
             if (first === undefined) return
+            // WP275：① ② 当场生效——二次确认
+            if (mode !== 'company' && !globalThis.confirm(t('mode.apply_now.confirm'))) return
             promote.mutate({ skill: first.skill, section_id: first.section_id })
           }}
         >

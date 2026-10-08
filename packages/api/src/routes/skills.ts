@@ -257,14 +257,15 @@ export function skillRoutes(): Route[] {
         method: 'post',
         path: '/v1/skills/:name/promote',
         operationId: 'promoteSkill',
-        summary: '把个人层的几段提上去：产出一条 skill_promotion 审批项（不落任何层）',
+        summary:
+          '把个人层的几段提上去：③ 产出一条 skill_promotion 审批项（不落任何层）；① ② 当场生效（WP275）',
         tag: 'skill',
         auth: 'bearer',
         assignment: true,
         authz: WRITE,
         params: [{ name: 'name', in: 'path', required: true, description: '技能名' }],
         body: PromoteBody,
-        returns: '{ accepted, approval_item_id?, reason? }',
+        returns: '{ accepted, approval_item_id?, reason?, applied? }',
       },
       async (c, deps) => {
         const p = principalOf(c)

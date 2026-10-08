@@ -76,6 +76,12 @@ export interface ApprovalDirectoryOptions {
   /** 工作区 owner；升级链的最后一层永远是他。 */
   owner(): PersonId | undefined
   roles: RoleStore
+  /**
+   * WP275（docs/95 §5）：这个品牌现在有没有审批流（只有 ③ 公司集体有）。给了，审批总线在
+   * 决定时按它开关职责分离、在升级时按它决定「升给上级 / 老板」还是「只提醒本人」。
+   * 不给 = 与以前一样。
+   */
+  approvalFlow?(workspace_id: string): boolean | Promise<boolean>
 }
 
 /**
@@ -89,6 +95,7 @@ export interface ApprovalDirectoryOptions {
  *
  * 这个目录只回答升级要问的两件事：`canApprove` 与 `memberCount` 留空，
  * 免得顺手改了 SoD 与「谁能决定」的既有行为（那两条各有自己的真源）。
+ * WP275：职责分离与升级开不开改问模式（`approvalFlow`），不再按人数。
  */
 export function createApprovalDirectory(options: ApprovalDirectoryOptions): Directory {
   const managers = (item: ApprovalItem): PersonId | undefined => {
@@ -102,8 +109,10 @@ export function createApprovalDirectory(options: ApprovalDirectoryOptions): Dire
       .map((a) => a.person_id)
     return found.find((p) => p !== owner) ?? found[0] ?? owner
   }
+  const approvalFlow = options.approvalFlow
   return {
     scopeManager: (item) => managers(item),
     owner: () => options.owner(),
+    ...(approvalFlow === undefined ? {} : { approvalFlow: (ws: string) => approvalFlow(ws) }),
   }
 }

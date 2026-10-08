@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
+  hasApprovalFlow,
   positionOfRole,
+  reconfirmReasonText,
   resolveScopeManager,
   type SupervisedPosition,
   scopeManagerReasonText,
@@ -73,5 +75,23 @@ describe('WP174 scope_manager 解析：岗位上级 → 老板', () => {
     expect(positionOfRole('common.member', [B2B, MEMBER])?.id).toBe('member')
     expect(positionOfRole('common.member', [MEMBER, B2B], ['b2b'])?.id).toBe('b2b')
     expect(positionOfRole('nope', [B2B, MEMBER])).toBeUndefined()
+  })
+})
+
+describe('WP275 有没有审批流（docs/95 §5）', () => {
+  it('只有 ③ 公司集体有；① ② 只有安全闸', () => {
+    expect(hasApprovalFlow('company')).toBe(true)
+    expect(hasApprovalFlow('peers')).toBe(false)
+    expect(hasApprovalFlow('solo')).toBe(false)
+  })
+
+  it('① ② 落回本人：卡上不写那一句；超了上限的那句不提上级 / 老板', () => {
+    expect(
+      scopeManagerReasonText({ person: 'p_he', via: 'scope_manager', reason: 'own' }, {}),
+    ).toBe('')
+    expect(reconfirmReasonText('金额、毛利')).toBe('超金额、毛利上限')
+    expect(reconfirmReasonText()).toBe('')
+    for (const text of [reconfirmReasonText('金额'), reconfirmReasonText()])
+      expect(text).not.toMatch(/上级|老板|主管|转给/)
   })
 })

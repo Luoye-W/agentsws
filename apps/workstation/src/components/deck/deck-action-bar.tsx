@@ -24,7 +24,7 @@ import { LAYOUT_VERBS, MANUAL_SEND_VERB_KIND, verbKey, verbRank } from '@agentsw
 import { MoreHorizontal } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
-import { useApp } from '@/lib/app-context'
+import { useMode } from '@/lib/mode'
 
 export const MAX_QUICK_ACTIONS = 3
 
@@ -86,8 +86,14 @@ export function DeckActionBar({
   /** WP219：主次按钮后面再放一个（内容更新卡的「查看改动」）。不是第四个决定，只是看。 */
   extra?: React.ReactNode
 }): React.ReactNode {
-  const { t } = useApp()
+  // WP275：按钮的字按模式换（① ② 是「通过 / 不要」）
+  const { t } = useMode()
   const [open, setOpen] = useState(false)
+  /**
+   * WP275（docs/95 §5）：① ② 超了你设的上限——安全闸要你**再点一次**。第一下只把按钮换成
+   * 「再点一次确认」，第二下才真的通过（键盘的 → 也是点这个按钮，同样要两下）。
+   */
+  const [armed, setArmed] = useState(false)
   const box = useRef<HTMLSpanElement>(null)
   const quick = quickActions(card)
   const more = moreActions(card)
@@ -96,6 +102,7 @@ export function DeckActionBar({
   // biome-ignore lint/correctness/useExhaustiveDependencies: 依赖就是"换了一张卡"这件事
   useEffect(() => {
     setOpen(false)
+    setArmed(false)
   }, [card.id])
 
   /** 点菜单外面收起来（朴素下拉的那一条必备行为，与岗位卡的 `···` 同一个做法）。 */
@@ -123,13 +130,23 @@ export function DeckActionBar({
           disabled={disabled === true || (action === 'approve' && optionMissing === true)}
           data-action={action}
           data-rank={verbRank(card.layout, action)}
+          data-armed={action === 'approve' && armed ? 'true' : undefined}
           onClick={() => {
+            if (action === 'approve' && card.reconfirm === true && !armed) {
+              setArmed(true)
+              return
+            }
             onAction(action)
           }}
         >
-          {labelOf(action)}
+          {action === 'approve' && armed ? t('deck.reconfirm.again') : labelOf(action)}
         </Button>
       ))}
+      {card.reconfirm === true ? (
+        <span className="text-xs text-ws-warn" data-testid="deck-reconfirm-hint">
+          {t('deck.reconfirm.hint')}
+        </span>
+      ) : null}
       {extra}
       {optionMissing === true ? (
         <span className="text-xs text-muted-foreground">{t('deck.option_required')}</span>

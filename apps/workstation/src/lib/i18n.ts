@@ -1860,6 +1860,12 @@ const zh: Table = {
   'deck.countdown.days': '剩 {n} 天',
   'deck.countdown.expired': '已过期',
   'deck.option_required': '先选一个',
+  // WP275（docs/95 §5）：① ② 超了你设的上限——安全闸要你再点一次（只在这种卡上出）
+  'deck.reconfirm.again': '再点一次确认',
+  'deck.policy.peer_notice': '已经生效。觉得不对，选「撤回」就改回去。',
+  'deck.reconfirm.hint': '超了你设的上限，要再点一次才算',
+  // WP275：① ② 自己改的当场生效，保存前问一句
+  'mode.apply_now.confirm': '保存后当场生效。确定吗？',
   'deck.merge': '合并 {n} 张',
   // WP98：卡片右上角那个「证据 N」——证据层不常驻卡面，点开在第三栏看
   'deck.evidence.pill': '证据 {n}',
@@ -5792,6 +5798,10 @@ const en: Table = {
   'deck.countdown.days': '{n}d left',
   'deck.countdown.expired': 'Expired',
   'deck.option_required': 'Pick one first',
+  'deck.reconfirm.again': 'Click again to confirm',
+  'deck.policy.peer_notice': 'Already in effect. If it looks wrong, pick “Undo” to change it back.',
+  'deck.reconfirm.hint': 'Over the limit you set — click once more to confirm',
+  'mode.apply_now.confirm': 'This takes effect as soon as you save. Go ahead?',
   'deck.merge': '{n} merged',
   'deck.evidence.pill': 'Evidence {n}',
   'deck.evidence.open': 'See this card evidence in the right rail',

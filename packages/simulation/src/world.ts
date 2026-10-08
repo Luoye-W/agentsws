@@ -183,12 +183,14 @@ import type { EffectiveConfig, RoleStore, SupervisedPosition } from '@agentsws/r
 import {
   changeKindOf,
   createRoleStore,
+  hasApprovalFlow,
   loadBundledRole,
   parseRole,
   productLineMatches,
   type RangeExpanded,
   ROLE_ID_SPLITS,
   rangeTargetOfProduct,
+  reconfirmReasonText,
   resolveScopeManager,
   scopeManagerReasonText,
 } from '@agentsws/roles'
@@ -439,6 +441,12 @@ export interface WorldOptions {
    * 包在网关这一层，因为只有它拿得到 `meta`（run_id / purpose）。
    */
   modelTrace?: ModelTrace
+  /**
+   * WP275（docs/95 §5）：组织是哪种用法。给了 `solo` / `peers`，世界里就没有审批流——
+   * 审批总线职责分离不拦、没人管只提醒本人，B2B 报价超授权落回业务员自己、再确认一次。
+   * 不给 = 与以前一样（不装 `approvalFlow` 这个口子，审批总线按老规矩走）。
+   */
+  orgMode?: 'solo' | 'peers' | 'company'
 }
 
 /** 14 §11.6 / §13.2 的两个旋钮 + 过期天数（只覆盖给到的字段）。 */
@@ -2037,6 +2045,8 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
   const owner = pack.people.find((p) => p.owner === true)?.id ?? primary.person_id
   const roleHolder = primary.person_id
   const scopeManager = pack.people.find((p) => p.scope_manager === true)?.id ?? owner
+  /** WP275：有没有审批流（只有 ③ 有；场景没说 = 与以前一样，按有算）。 */
+  const approvalFlow = hasApprovalFlow(opts.orgMode ?? 'company')
   /** 14 §13.2 默认 10%；场景可以压到 0 或提到 1，报告里要写清用的是哪个数。 */
   const txnSamplingRate = opts.txnPolicy?.sampling_rate ?? 0.1
 
@@ -2753,6 +2763,8 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
       // 15 / 50 人 pack 在 people.yml 里标了 `scope_manager: true`，升级才真的换人。
       scopeManager: () => scopeManager,
       owner: () => owner,
+      // WP275：场景说了是哪种用法才装这个口子（与服务进程同一个判据 `hasApprovalFlow`）
+      ...(opts.orgMode === undefined ? {} : { approvalFlow: () => approvalFlow }),
     },
   })
   // 合成人在同一条审批总线上决定（26 §3）
@@ -7755,6 +7767,8 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
       } else {
         approver = typeof spec.route_to === 'string' ? spec.route_to : 'role_holder'
       }
+      // WP275：① ② 没有审批流——落回业务员自己，超了上限只再确认一次（与服务进程同一个判据）
+      if (!approvalFlow) approver = 'role_holder'
       const route =
         approver === 'scope_manager'
           ? resolveScopeManager({ role_id, proposer: who, owner, positions: b2bPositions })
@@ -7779,11 +7793,18 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
         (kind === 'b2b_quote'
           ? `报价 V${String(after.version ?? '?')}：${String(after.amount_usd ?? '?')} 美元`
           : `${roles.roles.get(role_id)?.name.zh ?? role_id}：${action}`)
+      // WP275：① ② 超了上限——卡上那一句是「再确认一次」，不是「转给了…」
+      const reconfirm = !approvalFlow && kind === 'b2b_quote' && breaches.length > 0
       const cardSummary =
         kind === 'b2b_quote'
           ? breaches.length === 0
             ? '在授权内，业务员自己批（报价永远出卡）'
-            : `超了授权（${breachWords}），转${approver === 'owner' ? '老板' : '上级'}批`
+            : reconfirm
+              ? reconfirmReasonText(breachWords)
+              : routedReason !== undefined
+                ? // 转给谁、为什么由卡上那一句说；摘要只说超了哪几项（与服务进程同一个口径）
+                  `超了授权（${breachWords}）`
+                : `超了授权（${breachWords}），转${approver === 'owner' ? '老板' : '上级'}批`
           : String(after.subject ?? after.body ?? cardTitle).slice(0, 160)
 
       const outcome = await txn.ledger.stage({
@@ -7809,6 +7830,7 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
               person: routed_to,
               via: approver,
               ...(routedReason === undefined ? {} : { reason: routedReason }),
+              ...(reconfirm ? { reason: reconfirmReasonText(breachWords), reconfirm: true } : {}),
             },
           ],
           proposer: { kind: 'agent', id: `agent_${asg.role_id}`, assignment_id: asg.id },
@@ -7861,7 +7883,14 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
             kind !== 'b2b_quote' ||
             (breaches.length === 0
               ? outcome.approval.summary.includes('授权内')
-              : outcome.approval.summary.includes('超了授权')),
+              : reconfirm
+                ? outcome.approval.summary === reconfirmReasonText(breachWords)
+                : outcome.approval.summary.includes('超了授权')),
+          // WP275：要不要再确认一次；卡上有没有「转给了…」那一句（① ② 不该有）
+          reconfirm: outcome.approval.routing.recipients.some((r) => r.reconfirm === true),
+          forwarded: outcome.approval.routing.recipients.some((r) =>
+            (r.reason ?? '').includes('转给'),
+          ),
         },
       })
       return {

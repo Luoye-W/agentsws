@@ -131,6 +131,8 @@ function assemble(over: {
   confidence?: number
   /** WP173：接上开发信序列（回信分类、停序列）。 */
   outbound?: boolean
+  /** WP275：有没有审批流（① ② 没有）。不给 = 与以前一样。 */
+  approvalFlow?: boolean
 }) {
   const events: EventEnvelope[] = []
   const appendEvent = (e: unknown): void => void events.push(e as EventEnvelope)
@@ -173,6 +175,7 @@ function assemble(over: {
         .filter((r) => r.startsWith('b2b.'))
         .map((r) => ({ person_id: 'p_he', assignment_id: `asg_${r}`, role_id: r })),
     owner: async () => 'p_zhou',
+    ...(over.approvalFlow === undefined ? {} : { approvalFlow: () => over.approvalFlow === true }),
     approvals: txn.approvals,
     work,
     startRun: ({ matter }) => {
@@ -543,5 +546,30 @@ describe('WP172：「待确认」里的「这是 B2B」与红卡', () => {
     expect(card?.kind).toBe('b2b_fraud_alert')
     expect(card?.routing.recipients.map((r) => r.person)).toEqual(['p_zhou', 'p_he'])
     expect(JSON.stringify(card)).not.toContain('AE07 0331')
+  })
+
+  it('WP275 ① ②：改收款账户的红卡照样出（硬闸关不掉），只给业务员自己点、不抄老板', async () => {
+    const box = new Mailbox()
+    const h = assemble({ boxes: [{ address: ME, box }], approvalFlow: false })
+    h.store.put('b2b_account', {
+      id: 'acc_dp',
+      name: 'Dubai Power LLC',
+      domain: 'dubai-power.example',
+    })
+    box.deliver(
+      1,
+      mime({
+        from: 'ap@dubai-power.example',
+        subject: 'Re: PO-7702 balance payment',
+        body: 'Dear partner, please note our bank details have changed due to an audit. Kindly remit the balance to the new account IBAN AE07 0331 2345 6789 0123 456 instead.',
+        mid: 'fraud-2',
+      }),
+    )
+    await h.messages.poll()
+    const [inq] = h.store.inquiries()
+    const card = await h.txn.approvals.get(inq?.fraud_alert_id as string)
+    expect(card?.kind).toBe('b2b_fraud_alert')
+    expect(card?.state).toBe('pending')
+    expect(card?.routing.recipients.map((r) => r.person)).toEqual(['p_he'])
   })
 })

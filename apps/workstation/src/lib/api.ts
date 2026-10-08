@@ -237,8 +237,8 @@ export const createSchedule = (
 export const mergeCatalogEntries = (
   input: { keep: string; drop: string },
   assignment?: string,
-): Promise<{ approval_item_id: string }> =>
-  api<{ approval_item_id: string }>('/v1/catalog/merge', {
+): Promise<{ approval_item_id: string; applied?: boolean }> =>
+  api<{ approval_item_id: string; applied?: boolean }>('/v1/catalog/merge', {
     method: 'POST',
     body: input,
     ...withAssignment(assignment),
@@ -749,7 +749,13 @@ export const promoteSkillTo = (input: {
   section_ids: string[]
   to_tier: 'company' | 'department' | 'position' | 'role'
   scope_id?: string
-}): Promise<{ accepted: boolean; approval_item_id?: string; reason?: string }> =>
+}): Promise<{
+  accepted: boolean
+  approval_item_id?: string
+  reason?: string
+  /** WP275：① ② 里自己提的当场生效了 */
+  applied?: boolean
+}> =>
   api(`/v1/skills/${encodeURIComponent(input.skill)}/promote`, {
     method: 'POST',
     body: {

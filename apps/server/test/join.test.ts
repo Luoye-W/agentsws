@@ -430,6 +430,9 @@ describe('45 H3 / H5：别名解析与「提议修改」', () => {
   })
 
   it('提议修改：卡落在真源那一条上，批了才改，理由太短直接 400', async () => {
+    // WP275：③ 公司集体才出待审卡（① ② 自己提的当场生效，见 wp275-mode-approvals.test.ts）
+    for (const org of server.identity.listOrganizations())
+      await server.identity.updateOrganization(org.id, { mode: 'company' })
     const { mine, company } = await joined()
     expect(
       (

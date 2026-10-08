@@ -51,6 +51,7 @@ import type {
   EventEnvelope,
   ExportShipment,
   Mandate,
+  OrganizationMode,
   PersonId,
   Recipient,
   TradeShow,
@@ -59,6 +60,7 @@ import type {
 } from '@agentsws/contracts'
 import { DEFAULT_B2B_QUOTE_MANDATE } from '@agentsws/contracts'
 import type { B2bDeckData } from '@agentsws/deck'
+import { hasApprovalFlow, reconfirmReasonText } from '@agentsws/roles'
 import type { BackendResult, StageInput, StageOutcome } from '@agentsws/txn'
 import { addressHash, type B2bStore } from './b2b-store.js'
 import { maskAddress } from './mailbox-actions.js'
@@ -133,6 +135,12 @@ export interface B2bServiceOptions {
    * 给了就以它为准（`scopeManager` 不再看）；服务进程里装的是这一个。
    */
   routeScopeManager?: ScopeManagerRouter
+  /**
+   * WP275（docs/95 §5）：这个品牌现在是哪种用法。① 个人 / ② 同事互联没有审批流：本该转上级 /
+   * 老板的卡（报价超授权、规矩写着「老板定」的）一律落回业务员自己，超了上限的再确认一次。
+   * 不给按 ③（与以前一样）。
+   */
+  mode?(): OrganizationMode | Promise<OrganizationMode>
 }
 
 export interface B2bServiceAssembly {
@@ -415,8 +423,19 @@ export function createB2bService(options: B2bServiceOptions): B2bServiceAssembly
       )
     }
     const owner = (await options.owner()) ?? actor.person_id
+    // WP275：① ② 没有审批流——这件事是业务员的，就落回他；超了上限只要他再确认一次
+    const flow = hasApprovalFlow((await options.mode?.()) ?? 'company')
     let recipient: Recipient
-    if (approver === 'scope_manager' && options.routeScopeManager !== undefined) {
+    if (!flow) {
+      approver = 'role_holder'
+      recipient = {
+        person: actor.person_id,
+        via: 'role_holder',
+        ...(breaches.length === 0
+          ? {}
+          : { reason: reconfirmReasonText(quoteBreachText(breaches)), reconfirm: true }),
+      }
+    } else if (approver === 'scope_manager' && options.routeScopeManager !== undefined) {
       recipient = recipientOf(
         await options.routeScopeManager({
           workspace_id,
@@ -439,7 +458,13 @@ export function createB2bService(options: B2bServiceOptions): B2bServiceAssembly
       kind === 'b2b_quote'
         ? breaches.length === 0
           ? '在授权内，业务员自己批（报价永远出卡）'
-          : `超了授权（${quoteBreachText(breaches)}），转${approver === 'owner' ? '老板' : '上级'}批`
+          : !flow
+            ? // WP275：与卡上那一句同一句（界面见到一样的就只出一处）；「要再点一次」在按钮旁边
+              reconfirmReasonText(quoteBreachText(breaches))
+            : // 转给谁、为什么由卡上那一句说（路由口给了理由时）；这里只说超了哪几项
+              recipient.reason !== undefined
+              ? `超了授权（${quoteBreachText(breaches)}）`
+              : `超了授权（${quoteBreachText(breaches)}），转${approver === 'owner' ? '老板' : '上级'}批`
         : d.op === 'create'
           ? '新建一条记录，批了才进 B2B 库'
           : '改一条记录，批了才生效（原样见「改之前」）'

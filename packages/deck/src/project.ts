@@ -748,9 +748,14 @@ const CHANNEL_OF: Record<string, DeckCard['channel']> = {
 
 /** 36 §2：审批项 → 卡片。 */
 /** WP174：收件人上那一句「转给了谁、为什么」（第一条带理由的；没有就不出）。 */
-function routedNoteOf(item: ApprovalItem): { routed_note?: string } {
+function routedNoteOf(item: ApprovalItem): { routed_note?: string; reconfirm?: true } {
   const reason = item.routing.recipients.find((r) => r.reason !== undefined)?.reason
-  return reason === undefined || reason === '' ? {} : { routed_note: reason }
+  // WP275：① ② 超了上限落回本人——要他再确认一次
+  const reconfirm = item.routing.recipients.some((r) => r.reconfirm === true)
+  return {
+    ...(reason === undefined || reason === '' ? {} : { routed_note: reason }),
+    ...(reconfirm ? { reconfirm: true as const } : {}),
+  }
 }
 
 /** WP232：收件人待定的草稿卡上，按钮不能写「发送」——批了不会发出去。 */

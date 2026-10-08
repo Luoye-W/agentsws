@@ -2851,6 +2851,8 @@ function parseExpected(source: string, raw: unknown): ScenarioExpected {
         auto_approved: 'bool',
         stated_on_card: 'bool',
         version: 'num',
+        reconfirm: 'bool',
+        forwarded: 'bool',
       }) as Record<string, unknown> | undefined
       if (parsed === undefined || typeof parsed.kind !== 'string')
         fail(source, `expected.${at}`, '要写 kind')
@@ -3001,6 +3003,7 @@ export function parseScenario(text: string, source = '<string>'): Scenario {
     'control_for',
     'policy',
     'tiers',
+    'org_mode',
   ])
 
   const id = str(source, 'id', doc.id)
@@ -3086,6 +3089,10 @@ export function parseScenario(text: string, source = '<string>'): Scenario {
   if (doc.hidden !== undefined && typeof doc.hidden !== 'boolean') {
     fail(source, 'hidden', '必须是布尔值')
   }
+  // WP275：组织是哪种用法（不写 = 与以前一样）
+  const orgMode = optStr(source, 'org_mode', doc.org_mode)
+  if (orgMode !== undefined && !['solo', 'peers', 'company'].includes(orgMode))
+    fail(source, 'org_mode', '只认 solo / peers / company')
 
   return {
     id,
@@ -3102,6 +3109,7 @@ export function parseScenario(text: string, source = '<string>'): Scenario {
     ...(rubric === undefined ? {} : { rubric }),
     ...(doc.hidden === true ? { hidden: true } : {}),
     ...(control_for === undefined ? {} : { control_for }),
+    ...(orgMode === undefined ? {} : { org_mode: orgMode as 'solo' | 'peers' | 'company' }),
     source,
   }
 }

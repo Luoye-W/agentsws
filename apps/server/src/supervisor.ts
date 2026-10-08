@@ -11,8 +11,16 @@
  *
  * 所有用到 `scope_manager` 的服务（公关、建站、社媒、SEO、投放、B2B）都只认这一个口。
  */
-import type { Assignment, PersonId, Recipient, RoleId, WorkspaceId } from '@agentsws/contracts'
+import type {
+  Assignment,
+  OrganizationMode,
+  PersonId,
+  Recipient,
+  RoleId,
+  WorkspaceId,
+} from '@agentsws/contracts'
 import {
+  hasApprovalFlow,
   resolveScopeManager,
   type ScopeManagerRoute,
   type SupervisedPosition,
@@ -42,10 +50,27 @@ export interface ScopeManagerRouterOptions {
   activeMembers(workspace_id: WorkspaceId): Promise<readonly PersonId[]>
   owner(workspace_id: WorkspaceId): Promise<PersonId | undefined>
   personName(person_id: PersonId): Promise<string | undefined>
+  /**
+   * WP275（docs/95 §5）：这个品牌所在组织现在是哪种用法。只有 ③ 公司集体按「上级 → 老板」走；
+   * ① 个人 / ② 同事互联一律落回提的人自己（这件事是谁的），卡上不写「转给了…」。
+   * 不给按 ③（与以前一样）。
+   */
+  mode?(workspace_id: WorkspaceId): OrganizationMode | Promise<OrganizationMode>
+}
+
+/** WP275：① ② 里的那一格——落回提的人，收件人写 `role_holder`（是他自己的事），不带那句为什么。 */
+export function ownRecipient(proposer: PersonId): ScopeManagerRecipient {
+  return {
+    person: proposer,
+    via: 'role_holder',
+    route: { person: proposer, via: 'scope_manager', reason: 'own' },
+  }
 }
 
 export function createScopeManagerRouter(options: ScopeManagerRouterOptions): ScopeManagerRouter {
   return async (query) => {
+    const mode = (await options.mode?.(query.workspace_id)) ?? 'company'
+    if (!hasApprovalFlow(mode)) return ownRecipient(query.proposer)
     const positions = options.positions()
     const held = options.assignments(query.proposer, query.workspace_id).map((a) => a.role_id)
     const heldBy = positions
@@ -79,5 +104,6 @@ export function createScopeManagerRouter(options: ScopeManagerRouterOptions): Sc
 export const recipientOf = (r: ScopeManagerRecipient): Recipient => ({
   person: r.person,
   via: r.via,
-  ...(r.reason === undefined ? {} : { reason: r.reason }),
+  ...(r.reason === undefined || r.reason === '' ? {} : { reason: r.reason }),
+  ...(r.reconfirm === true ? { reconfirm: true } : {}),
 })

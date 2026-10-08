@@ -183,6 +183,7 @@ export async function runScenario(
     runtime,
     ...(options.dbPath === undefined ? {} : { dbPath: options.dbPath }),
     ...(scenario.policy === undefined ? {} : { txnPolicy: scenario.policy }),
+    ...(scenario.org_mode === undefined ? {} : { orgMode: scenario.org_mode }),
     ...(options.model === undefined ? {} : { model: options.model }),
     ...(options.modelTrace === undefined ? {} : { modelTrace: options.modelTrace }),
   })

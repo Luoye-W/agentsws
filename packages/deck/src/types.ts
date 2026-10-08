@@ -314,6 +314,11 @@ export interface DeckCard {
    * 只在路由真做过判断时有：`scope_manager` 落到上级或老板、上级离职后改派。
    */
   routed_note?: string
+  /**
+   * WP275（docs/95 §5）：安全闸要你**再确认一次**——① 个人 / ② 同事互联里超了你设的上限，
+   * 不转给别人，落回你；点「通过」要点两下。③ 不出（超了就按规矩转人）。
+   */
+  reconfirm?: true
   source: DeckSource
   highlights: DeckHighlight[]
   evidence_chips: DeckEvidenceChip[]
