@@ -253,7 +253,7 @@ describe('WP276 ② 团队页（平级同事，不是发起人）', () => {
     expect(screen.getByRole('heading', { name: '团队' })).toBeDefined()
     const tabs = screen.getAllByRole('tab').map((x) => x.textContent)
     expect(tabs).toContain('同事')
-    for (const gone of ['成员', '品牌与产品线', '加入一家公司', '并进来'])
+    for (const gone of ['成员', '店铺组与产品线', '加入一家公司', '并进来'])
       expect(tabs).not.toContain(gone)
     expect(screen.queryByTestId('owner-card')).toBeNull()
     // 家务：删岗位、分岗位、上级——一个都不出

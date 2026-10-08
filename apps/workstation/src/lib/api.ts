@@ -4460,6 +4460,12 @@ export interface OrganizationView {
    * 读的时候一律过 `useMode()` / `modeOfOrg()`。
    */
   mode?: 'solo' | 'peers' | 'company'
+  /** WP277：模式最后一次谁、什么时候改的（降回 ② 时同事那一行通知读它）。 */
+  mode_changed_at?: string
+  mode_changed_by?: string
+  mode_changed_by_name?: string
+  /** WP277：我点掉过那一行通知没有。 */
+  mode_notice_seen?: boolean
   created_at: string
 }
 

@@ -46,6 +46,7 @@ import type {
   JoinResolution,
   JoinStoreRange,
   ObjectOrigin,
+  OrganizationMode,
   PersonId,
   ProductLine,
   RangeGroup,
@@ -164,6 +165,13 @@ export interface JoinOptions {
   connect?: JoinConnectPort
   /** 给了就落盘（`join.sqlite`）。 */
   dbDir?: string
+  /**
+   * WP277（docs/95 §3.4）：对照表那张卡在 ② 里由**发起人确认**、③ 里**老板批**（收件人都是组织所有者，
+   * 换的只是卡上的说法）。不给按 ③。
+   */
+  mode?(): OrganizationMode | Promise<OrganizationMode>
+  /** WP277：卡上写人名不写 id；翻不出来写「同事」。 */
+  personName?(id: PersonId): Promise<string | undefined>
 }
 
 export interface JoinAssembly {
@@ -377,6 +385,8 @@ export function createJoin(options: JoinOptions): JoinAssembly {
         target_workspace_id: workspace_id,
       })
       const summary = joinSummary(payload)
+      const who = (await options.personName?.(bundle.person_id)) ?? bundle.person_id
+      const mode = (await options.mode?.()) ?? 'company'
       const item = await approvals.create({
         workspace_id,
         schema_version: 1,
@@ -384,7 +394,11 @@ export function createJoin(options: JoinOptions): JoinAssembly {
         role_id: 'common.owner',
         subject: { object: { type: 'policy', id: `join:${join_id}` } },
         dedupe_key: `${workspace_id}:join:${join_id}`,
-        title: `${bundle.person_id} 要把个人工作区并进公司`,
+        // WP277：② 是「并进来、等发起人确认」，③ 才是「并进公司、老板批」（收件人一样是所有者）
+        title:
+          mode === 'company'
+            ? `${who} 要把个人工作区并进公司`
+            : `${who} 要把自己那份并进来，等你确认`,
         summary,
         payload: payload as unknown as Record<string, unknown>,
         evidence: {

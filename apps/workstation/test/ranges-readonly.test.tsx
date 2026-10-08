@@ -116,7 +116,7 @@ describe('45 H4：新建品牌时的查重提示', () => {
         onCheckDuplicate={check}
       />,
     )
-    await user.type(screen.getByLabelText('品牌叫什么'), '品牌 B')
+    await user.type(screen.getByLabelText('店铺组叫什么'), '品牌 B')
     const hit = await screen.findByTestId('dupe-hit')
     expect(hit.textContent).toContain('已有：品牌B（王岚 建，3 个岗位挂着）')
     expect(hit.textContent).toContain('名字归一化后一样')
@@ -145,11 +145,11 @@ describe('45 H4：新建品牌时的查重提示', () => {
         onCheckDuplicate={async () => [HIT]}
       />,
     )
-    await user.type(screen.getByLabelText('品牌叫什么'), '品牌 B')
+    await user.type(screen.getByLabelText('店铺组叫什么'), '品牌 B')
     await user.click(await screen.findByTestId('dupe-reuse'))
     expect((await screen.findByTestId('dupe-reused')).textContent).toContain('品牌B')
     expect(onCreateGroup).not.toHaveBeenCalled()
-    expect((screen.getByLabelText('品牌叫什么') as HTMLInputElement).value).toBe('')
+    expect((screen.getByLabelText('店铺组叫什么') as HTMLInputElement).value).toBe('')
   })
 
   it('写够一句为什么 → 建得出来，`duplicate_ack` 带着候选一起发上去', async () => {
@@ -169,7 +169,7 @@ describe('45 H4：新建品牌时的查重提示', () => {
         onCheckDuplicate={async () => [HIT]}
       />,
     )
-    await user.type(screen.getByLabelText('品牌叫什么'), '品牌 B')
+    await user.type(screen.getByLabelText('店铺组叫什么'), '品牌 B')
     await user.type(await screen.findByTestId('dupe-reason'), '这是欧洲那个同名的牌子')
     await user.click(screen.getByTestId('brand-create'))
     expect(onCreateGroup).toHaveBeenCalledWith({

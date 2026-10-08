@@ -101,6 +101,9 @@ beforeEach(async () => {
     scheduleIntervalMs: 0,
     env: { AGENTSWS_OWNER_EMAIL: 'luoye@example.com' },
   })
+  // WP277：离职交接只在 ③ 公司集体——这一套钉的是 ③ 的行为
+  const org = server.organizations.organizationOf(server.bootstrap.workspace.id)
+  if (org !== undefined) await server.identity.updateOrganization(org.id, { mode: 'company' })
 })
 
 afterEach(async () => {

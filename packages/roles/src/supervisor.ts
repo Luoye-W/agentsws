@@ -145,3 +145,45 @@ export function hasApprovalFlow(mode: OrganizationMode): boolean {
 export function reconfirmReasonText(words?: string): string {
   return words === undefined || words === '' ? '' : `超${words}上限`
 }
+
+/**
+ * WP277（docs/95 §3.6，决策 240）：③ 降回 ② 那一刻，一张还没定、等着主管 / 老板的卡**退回给谁**。
+ *
+ * 「这件事是谁的」= 提的人（人自己提的）/ 挂的那条分配的人（AI 起草的）/ 规矩上本来就是本人那一格
+ * （`role_holder`）。要从卡上拿走的 = 走 `scope_manager` / `owner` / 升级来的那几位（不是本人的）。
+ * 找不到本人、或者本人已经不在这个品牌里（例如申请加入的人）就回 `undefined`——这张不动。
+ * 服务进程与模拟世界都用这一份。
+ */
+export function returnOnDowngrade(
+  item: {
+    proposer: { kind: string; id: string; assignment_id?: string | undefined }
+    routing: { recipients: readonly { person: PersonId; via: string }[] }
+  },
+  lookup: {
+    /** 一条分配是谁的（撤销了也回）。 */
+    personOfAssignment(id: string): PersonId | undefined
+    /** 这个人还在不在这个品牌里。 */
+    isMember(person: PersonId): boolean
+  },
+): { self: PersonId; from: PersonId[] } | undefined {
+  const recipients = item.routing.recipients
+  const self =
+    item.proposer.kind === 'person'
+      ? item.proposer.id
+      : item.proposer.assignment_id !== undefined
+        ? lookup.personOfAssignment(item.proposer.assignment_id)
+        : recipients.find((r) => r.via === 'role_holder')?.person
+  if (self === undefined || !lookup.isMember(self)) return undefined
+  const from = [
+    ...new Set(
+      recipients
+        .filter(
+          (r) =>
+            r.person !== self &&
+            (r.via === 'scope_manager' || r.via === 'owner' || r.via === 'escalation'),
+        )
+        .map((r) => r.person),
+    ),
+  ]
+  return from.length === 0 ? undefined : { self, from }
+}

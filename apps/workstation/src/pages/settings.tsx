@@ -11,6 +11,7 @@ import { DEFAULT_BRAND_CURRENCY, isPlaceholderOwnerEmail } from '@agentsws/contr
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
+import { CompanyModeEntry } from '@/components/company/company-mode'
 import { DataMapPanel } from '@/components/data-map'
 import { MOTION_PREFS, setMotionPref, useMotionPref } from '@/components/design'
 import { ModelsPanel } from '@/components/models/models-panel'
@@ -375,6 +376,8 @@ export function SettingsPage({
           与连接同一档权限（所有者），放在最后：平时用不着，排查时才来。
         */}
         {ownerId === undefined ? null : <DiagnosticsCard assignment={ownerId} />}
+        {/* WP277（docs/95 §7 D 单）：开公司模式 / 回到同事互联——放在最底下一行小字，不推 */}
+        <CompanyModeEntry className="justify-end" />
       </TabsContent>
       <TabsContent value="account" className="flex flex-col gap-4">
         <CloudAccountCard {...(ownerId === undefined ? {} : { assignment: ownerId })} />

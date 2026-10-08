@@ -31,7 +31,7 @@ import {
 } from '@/components/deck/deck-gestures'
 import { DECK_EXIT_MS, DECK_MAX_WIDTH_CLASS } from '@/components/deck/deck-layout'
 import { ReportBlocks } from '@/components/deck/panel-blocks'
-import { isHandoffOfferCard } from '@/components/peers/handoff-strip'
+import { isHandoffOfferCard, noticeKeys } from '@/components/peers/handoff-strip'
 import { Skeleton } from '@/components/ui/skeleton'
 import { type CardsData, type DecideInput, decide, getHome, getPositionCards } from '@/lib/api'
 import { useMode } from '@/lib/mode'
@@ -265,6 +265,16 @@ export function DeckSection({
     if (card === undefined || exiting !== null) return
     const direction = directionForDeckKey(event.key)
     if (direction === undefined) return
+    // WP277：「知道了」型通知卡——键盘跟着卡上的按钮走（→ 知道了），不是「批准 / 稍后 / 指导」
+    const notice = noticeKeys(card)
+    if (notice !== undefined) {
+      const picked =
+        direction === 'right' ? notice.right : direction === 'left' ? notice.left : undefined
+      if (picked === undefined) return
+      event.preventDefault()
+      dispatch({ action: 'approve', selected_option_id: picked.id, version: card.version })
+      return
+    }
     const action = deckActionForDirection(direction)
     if (!card.available_actions.includes(action)) return
     event.preventDefault()
@@ -308,10 +318,25 @@ export function DeckSection({
       ...(active.kind === undefined ? [] : [active.kind]),
     ]),
   ] as DeckKind[]
+  const notice = card === undefined ? undefined : noticeKeys(card)
   const hints =
     card === undefined
       ? []
-      : keyboardHints(card.available_actions, (a) => deckActionLabel(card, a, t))
+      : notice !== undefined
+        ? // WP277：通知卡的提示就是它那两个按钮（「我要退出」不给键盘，也就不写）
+          [
+            ...(notice.right === undefined ? [] : [`→ ${notice.right.label}`]),
+            ...(notice.left === undefined ? [] : [`← ${notice.left.label}`]),
+          ]
+        : keyboardHints(
+            // 选择题卡（选项就是按钮、没选中 → 不做事）：不写「→ 批准」——只有交给你的卡单岗位时 → 是「接下」
+            card.options !== undefined &&
+              card.options.length > 0 &&
+              !(isHandoffOfferCard(card) && card.options.length === 1)
+              ? card.available_actions.filter((a) => a !== 'approve')
+              : card.available_actions,
+            (a) => deckActionLabel(card, a, t),
+          )
 
   return (
     <section

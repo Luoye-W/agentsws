@@ -229,6 +229,15 @@ export function createOrganizations(options: OrganizationsAssemblyOptions): Orga
       // WP271（docs/95 §1.2）：个人不个人只看模式，不看品牌数——一个人管三个品牌仍是个人
       solo: mode === 'solo',
       mode,
+      // WP277：降回 ② 时同事那一行通知要「谁、什么时候」（名字不印 id）
+      ...(org.mode_changed_at === undefined ? {} : { mode_changed_at: org.mode_changed_at }),
+      ...(org.mode_changed_by === undefined
+        ? {}
+        : {
+            mode_changed_by: org.mode_changed_by,
+            mode_changed_by_name: (await identity.getPerson(org.mode_changed_by))?.name || '同事',
+          }),
+      ...((org.mode_seen_by ?? []).includes(person_id) ? { mode_notice_seen: true } : {}),
       created_at: org.created_at,
     }
   }

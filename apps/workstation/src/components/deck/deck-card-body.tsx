@@ -12,6 +12,7 @@
  */
 import type { DeckCard, DeckContentMode } from '@agentsws/deck'
 import { pickContent } from '@agentsws/deck'
+import { CompanyNoticeExtras } from '@/components/company/company-mode'
 import { isModerationPayload, ModerationCardBody } from '@/components/social/moderation-card-body'
 import { isOwnSubPayload, OwnSubCardBody } from '@/components/social/own-sub-card-body'
 import { Label } from '@/components/ui/label'
@@ -303,6 +304,14 @@ export function DeckCardBody({
 
       // ⑪ 策略：配置 diff。与 ② 同一块双格，但下面那句是"谁能批"而不是"依据"
       case 'policy':
+        // WP277（决策 239）：开公司模式时同事那张——一句以后会怎样 + 退之前导出一份（没有双格）
+        if (payload.form === 'company_notice')
+          return (
+            <div className="mt-2.5 flex flex-col gap-2" data-testid="deck-layout-company-notice">
+              <Note testId="deck-reason">{reasonText}</Note>
+              {options.some((o) => o.id === 'leave') ? <CompanyNoticeExtras /> : null}
+            </div>
+          )
         return (
           <div className="mt-2.5 flex flex-col gap-2.5" data-testid="deck-layout-policy">
             <BeforeAfter before={payload.before} after={payload.after} />
@@ -556,7 +565,9 @@ export function DeckCardBody({
   // WP276：② 的「知道了 / 撤回」通知也一样——两个选项就是动作行上的两个按钮
   const handoffOffer =
     (card.detail.payload as { form?: unknown } | undefined)?.form === 'handoff' ||
-    (card.detail.payload as { form?: unknown } | undefined)?.form === 'peer_change_notice'
+    (card.detail.payload as { form?: unknown } | undefined)?.form === 'peer_change_notice' ||
+    // WP277：开公司模式时同事那张「知道了 / 我要退出」
+    (card.detail.payload as { form?: unknown } | undefined)?.form === 'company_notice'
   const needsOptions =
     options.length > 0 && card.layout !== 'choice' && card.layout !== 'variants' && !handoffOffer
   return (

@@ -535,6 +535,11 @@ export interface OrgAssembly {
    */
   onMemberLeft(person_id: PersonId, by?: PersonId): Promise<string[]>
   /**
+   * WP277（决策 239）：开公司模式时同事点了「我要退出」——按 ② 的退出走（手上的事退回原处、共享品牌里的
+   * 东西留下、不出离职交接卡），不是 ③ 的离职。
+   */
+  optOut(person_id: PersonId): Promise<{ revoked_assignments: number; returned: number }>
+  /**
    * WP234（docs/54 §6.1）：这条分配安放在哪个岗位（安放的岗位已经不在了 = 没安放）。
    * 岗位面（`positions.ts`）按它算「我的岗位」与起 Run 的岗位层。
    */
@@ -2637,6 +2642,10 @@ export function createOrg(options: OrgOptions): OrgAssembly {
       split: splitPosition,
     },
     onRangeExpanded,
+    optOut: async (person_id) => {
+      await reconcile()
+      return removeMemberAs(person_id, person_id, 'peers')
+    },
     onMemberLeft: async (person_id, by) => {
       const out = await clearLeftSupervisors(by ?? 'system', person_id)
       // WP182：离职编排那条路同样出 B2B 交接卡

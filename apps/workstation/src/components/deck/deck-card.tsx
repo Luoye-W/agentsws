@@ -21,6 +21,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
 import { Link, Navigate, useInRouterContext } from 'react-router-dom'
 import { FactChip } from '@/components/chips'
+import { isCompanyNoticeCard } from '@/components/company/company-mode'
 import {
   ContentConflictDialog,
   ContentDiffDialog,
@@ -195,6 +196,8 @@ export function categoryOf(card: DeckCard, t: (key: string) => string): string {
     (card.detail.payload as { form?: unknown } | undefined)?.form === 'handoff'
   )
     return t('category.handoff_offer')
+  // WP277：开公司模式时同事那张「知道了 / 我要退出」
+  if (isCompanyNoticeCard(card)) return t('category.company_notice')
   // WP237：「走哪条职责」借的是认领卡的 kind，但它不是转交
   if (card.kind === 'claim' && card.layout === 'choice') return t('category.route_choice')
   // WP249：自家版的版务卡是「做之前」的（排成改动卡），不是「处置后」
@@ -367,7 +370,8 @@ export function DeckCardView({
         <StatusPill tone={BAND_TONE[card.priority_band]} data-testid="deck-band">
           {positionName === undefined ? category : `${positionName} · ${category}`}
         </StatusPill>
-        <WaitPill card={card} />
+        {/* WP277：「知道了」型通知卡没有人在等它的结果——不出等待时长 */}
+        {peerNotice ? null : <WaitPill card={card} />}
         <span className="ml-auto flex items-center gap-2">
           {/*
             WP212（docs/88 §2.3）：来自消息往来的卡，证据旁边一个「看原件 →」——跳回消息页
@@ -386,14 +390,17 @@ export function DeckCardView({
             右上角那个「证据 N」：点它在第三栏的证据面板里看（WP71 就有那一格）。
             走 WP95 的公开注册路 `show('evidence')`，注册层一个字不碰。
           */}
-          <EvidencePill
-            lines={evidence}
-            onOpen={() => {
-              // WP100：一下动作两半——把这张卡交给证据面板，再把那一格打开
-              focusEvidenceCard(card)
-              rail.show('evidence')
-            }}
-          />
+          {/* WP277：通知卡不是要人凭证据拍板的——不出「证据 N」 */}
+          {peerNotice ? null : (
+            <EvidencePill
+              lines={evidence}
+              onOpen={() => {
+                // WP100：一下动作两半——把这张卡交给证据面板，再把那一格打开
+                focusEvidenceCard(card)
+                rail.show('evidence')
+              }}
+            />
+          )}
           {/* WP96 通用头的最后一格：**谁提的**。只按 proposer.kind 出字，不印任何 id。 */}
           <WsAvatar
             name={t(`deck.proposer.${card.detail.proposer.kind}`)}

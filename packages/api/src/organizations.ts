@@ -62,6 +62,8 @@ export interface OrganizationPatch {
   mode?: OrganizationMode
   /** WP271：谁改的（启动时推出来的不给）。 */
   mode_changed_by?: PersonId
+  /** WP277：这个人点掉了「改了模式」那一行通知（加进名单，模式一变就清空）。 */
+  mode_seen?: PersonId
 }
 
 export interface AttachWorkspaceInput {
@@ -110,6 +112,15 @@ export interface OrganizationsOptions {
   workspacesOf(person_id: PersonId): Workspace[]
   /** 20 §6 用例 6：离开一个工作区 = 成员收尾 + 他在那里的 token 立刻失效。 */
   leaveWorkspace(workspace_id: WorkspaceId, person_id: PersonId): Promise<unknown>
+  /**
+   * WP277（docs/95 §3.4）：改一个人在某个品牌里的成员角色（开公司模式时老板换人，新老板在各品牌里
+   * 成了 `owner`，原来的发起人留 `manager`）。不给 = 只改组织这一层。
+   */
+  setMembershipRole?(
+    workspace_id: WorkspaceId,
+    person_id: PersonId,
+    role: 'owner' | 'manager' | 'member',
+  ): void
 }
 
 /**
@@ -148,6 +159,21 @@ export interface Organizations {
     domain?: string
     discoverable?: boolean
   }): Promise<MigratedWorkspace>
+  /**
+   * WP277（docs/95 §3.4，开公司模式的「管理员」那一步）：把一位还在的人设成 `admin` / `member`。
+   * 他还不在组织名单里（贴邀请码进来的只在品牌里）就先加进来。所有者不能这样改（走转交）。
+   */
+  setOrganizationMemberRole?(
+    org_id: OrganizationId,
+    person_id: PersonId,
+    role: 'admin' | 'member',
+  ): Promise<OrganizationMember>
+  /**
+   * WP277（docs/95 §3.4「谁是老板」）：把组织的所有者换成另一位还在的人——组织 `owner_id`、组织名单
+   * 里的角色（新的 `owner`，原来的留 `admin`）、这个组织下每个品牌工作区的 `owner_id`（审批落「老板」
+   * 读的就是它）一起换。新老板必须已经在组织或某个品牌里。
+   */
+  transferOrganizationOwner?(org_id: OrganizationId, to: PersonId): Promise<Organization>
 }
 
 const activeMembers = (org: Organization): OrganizationMember[] =>
@@ -250,6 +276,10 @@ export function createOrganizations(options: OrganizationsOptions): Organization
       if (domain === '') delete next.domain
       // WP251：地址同一条规矩
       if (postal === '') delete next.postal_address
+      // WP277：模式变了，「谁点掉了那一行通知」从头数；没变就把这个人加进去
+      if (patch.mode !== undefined && patch.mode !== org.mode) delete next.mode_seen_by
+      else if (patch.mode_seen !== undefined && !(org.mode_seen_by ?? []).includes(patch.mode_seen))
+        next.mode_seen_by = [...(org.mode_seen_by ?? []), patch.mode_seen]
       // WP271：换了模式却没说是谁（启动时推的）——上一次的「谁改的」不能留着冒名
       if (
         patch.mode !== undefined &&
@@ -299,6 +329,58 @@ export function createOrganizations(options: OrganizationsOptions): Organization
         if (removed !== undefined) left.push(ws)
       }
       return { organization, brands: left }
+    },
+
+    async setOrganizationMemberRole(org_id, person_id, role): Promise<OrganizationMember> {
+      const org = need(org_id)
+      if (org.owner_id === person_id)
+        throw new ApiError('invalid_input', '所有者的角色不能这样改；先把所有权转给别人')
+      if (!options.hasPerson(person_id)) throw new ApiError('not_found', `人不存在：${person_id}`)
+      const existing = activeMembers(org).find((m) => m.person_id === person_id)
+      const member: OrganizationMember =
+        existing === undefined ? { person_id, role, joined_at: clock.now() } : { ...existing, role }
+      backend.put({
+        ...org,
+        members:
+          existing === undefined
+            ? [...org.members, member]
+            : org.members.map((m) => (m === existing ? member : m)),
+      })
+      return member
+    },
+
+    async transferOrganizationOwner(org_id, to): Promise<Organization> {
+      const org = need(org_id)
+      if (org.owner_id === to) return org
+      const brands = options.listWorkspaces().filter((w) => w.org_id === org_id)
+      const inBrand = new Set(options.workspacesOf(to).map((w) => w.id))
+      const inOrg = activeMembers(org).some((m) => m.person_id === to)
+      if (!inOrg && !brands.some((w) => inBrand.has(w.id)))
+        throw new ApiError('not_found', '这个人还不在这家公司里')
+      const from = org.owner_id
+      const at = clock.now()
+      const members = org.members.map((m) =>
+        m.left_at !== undefined
+          ? m
+          : m.person_id === to
+            ? { ...m, role: 'owner' as const }
+            : m.person_id === from
+              ? { ...m, role: 'admin' as const }
+              : m,
+      )
+      const next: Organization = {
+        ...org,
+        owner_id: to,
+        members: inOrg ? members : [...members, { person_id: to, role: 'owner', joined_at: at }],
+      }
+      backend.put(next)
+      for (const w of brands) {
+        if (w.owner_id === to) continue
+        options.putWorkspace({ ...w, owner_id: to })
+        if (inBrand.has(w.id)) options.setMembershipRole?.(w.id, to, 'owner')
+        options.setMembershipRole?.(w.id, from, 'manager')
+      }
+      return next
     },
 
     brandsOf(org_id, person_id): Workspace[] {

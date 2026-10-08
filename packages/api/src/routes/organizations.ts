@@ -79,7 +79,45 @@ export interface OrganizationView {
    * `company` ③ 公司集体。工作台按它收起与换词（`useMode()`）。
    */
   mode: 'solo' | 'peers' | 'company'
+  /** WP277：模式最后一次是谁、什么时候改的（启动时推出来的没有「谁」）。降回 ② 时同事那一行通知读它。 */
+  mode_changed_at?: string
+  mode_changed_by?: string
+  /** WP277：改模式那个人的名字（界面上不印 id）。 */
+  mode_changed_by_name?: string
+  /** WP277：当前这个人点掉过「改了模式」那一行通知没有。 */
+  mode_notice_seen?: boolean
   created_at: string
+}
+
+/**
+ * WP277（docs/95 §3.4–§3.6，决策 239 / 240）：开公司模式向导与「回到同事互联」那一屏要的东西。
+ */
+export interface CompanyModeView {
+  mode: 'solo' | 'peers' | 'company'
+  /** 这个人能不能开：只有发起人（组织所有者），而且现在还不是 ③。 */
+  can_open: boolean
+  /** 能不能降回 ②：只有老板（③ 里的所有者），而且现在是 ③。 */
+  can_close: boolean
+  /** 降不了的原因（例如离职交接还没做完）；能降就没有。 */
+  close_blocked?: string
+  /** 公司全称（「主体信息」里填过就带出来）。 */
+  legal_name: string
+  /** 现在的发起人 / 老板。 */
+  owner_id: string
+  /** 这家里还在的人（向导里选老板、管理员；名字不是 id）。 */
+  people: { person_id: string; name: string; role: 'owner' | 'admin' | 'member' }[]
+}
+
+/** WP277：`PUT /v1/orgs/:id/mode` 的入参。 */
+export interface SetOrganizationModeInput {
+  /** `company` = 开公司模式；`peers` = 回到同事互联（人走到只剩一个时自动是 ①）。 */
+  mode: 'company' | 'peers'
+  /** 开的时候必填：公司全称。 */
+  legal_name?: string | undefined
+  /** 谁是老板（默认发起人自己）。 */
+  boss?: string | undefined
+  /** 管理员（可选，可以一个都不选）。 */
+  admins?: string[] | undefined
 }
 
 /** 组织页"品牌一览"里的一行（52 O2）。 */
@@ -255,6 +293,16 @@ export interface OrganizationsPort {
     org_id: string,
     workspace_id: string,
   ): MaybePromise<BrandSwitchView>
+  /** WP277：开公司模式向导 / 降级那一屏要的东西。不给 = 这个进程不会开公司模式（回 501）。 */
+  modeSetup?(actor: OrganizationActor, org_id: string): MaybePromise<CompanyModeView>
+  /** WP277：点掉「X 把这里改回了同事互联」那一行（记在组织上，换电脑也不再出）。 */
+  modeSeen?(actor: OrganizationActor, org_id: string): MaybePromise<{ ok: true }>
+  /** WP277：开公司模式（只有发起人）/ 回到同事互联（只有老板）。 */
+  setMode?(
+    actor: OrganizationActor,
+    org_id: string,
+    input: SetOrganizationModeInput,
+  ): MaybePromise<OrganizationView>
 }
 
 // ── 校验 ───────────────────────────────────────────────────────────────
@@ -287,6 +335,13 @@ const InviteBody = z.object({
 })
 
 const CopyFromBody = z.object({ from: z.string().min(1).max(64) })
+
+const SetModeBody = z.object({
+  mode: z.enum(['company', 'peers']),
+  legal_name: z.string().min(1).max(200).optional(),
+  boss: z.string().min(1).max(64).optional(),
+  admins: z.array(z.string().min(1).max(64)).max(50).optional(),
+})
 
 function portOf(deps: GatewayDeps): OrganizationsPort {
   const p = deps.organizations
@@ -535,6 +590,82 @@ export function organizationRoutes(): Route[] {
       },
       async (c, deps) =>
         ok(c, await portOf(deps).switchBrand(actorOf(c), param(c, 'id'), param(c, 'ws'))),
+    ),
+    route(
+      {
+        method: 'get',
+        path: '/v1/orgs/:id/mode',
+        operationId: 'getOrganizationMode',
+        summary:
+          '开公司模式向导 / 回到同事互联要的东西：能不能开 / 降、公司全称、这家里的人（WP277）',
+        tag: TAG,
+        auth: 'bearer',
+        assignment: true,
+        authz: READ,
+        // 同 `GET /v1/orgs`：谁都能问「这里是哪种用法、我能不能改」；能不能改由实现按人判
+        authzBypass: () => true,
+        params: [{ name: 'id', in: 'path', required: true, description: '组织 id' }],
+        returns: 'CompanyModeView',
+      },
+      async (c, deps) => {
+        const port = portOf(deps)
+        if (port.modeSetup === undefined)
+          throw new ApiError('not_implemented', '这个服务进程不会开公司模式')
+        return ok(c, await port.modeSetup(actorOf(c), param(c, 'id')))
+      },
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/orgs/:id/mode/seen',
+        operationId: 'markOrganizationModeSeen',
+        summary: '点掉「X 把这里改回了同事互联」那一行通知（只记 person id；WP277）',
+        tag: TAG,
+        auth: 'bearer',
+        assignment: true,
+        authz: READ,
+        // 自助：点掉的是自己首页上那一行
+        authzBypass: () => true,
+        params: [{ name: 'id', in: 'path', required: true, description: '组织 id' }],
+        returns: '{ ok: true }',
+      },
+      async (c, deps) => {
+        const port = portOf(deps)
+        if (port.modeSeen === undefined)
+          throw new ApiError('not_implemented', '这个服务进程不会开公司模式')
+        return ok(c, await port.modeSeen(actorOf(c), param(c, 'id')))
+      },
+    ),
+    route(
+      {
+        method: 'put',
+        path: '/v1/orgs/:id/mode',
+        operationId: 'setOrganizationMode',
+        summary:
+          '开公司模式（只有发起人：公司全称、老板、管理员）/ 回到同事互联（只有老板；公司设置收起不删）（WP277）',
+        tag: TAG,
+        auth: 'bearer',
+        assignment: true,
+        authz: WRITE,
+        params: [{ name: 'id', in: 'path', required: true, description: '组织 id' }],
+        body: SetModeBody,
+        returns: 'OrganizationView',
+      },
+      async (c, deps) => {
+        const port = portOf(deps)
+        if (port.setMode === undefined)
+          throw new ApiError('not_implemented', '这个服务进程不会开公司模式')
+        const input = await body(c, SetModeBody)
+        return ok(
+          c,
+          await port.setMode(actorOf(c), param(c, 'id'), {
+            mode: input.mode,
+            ...(input.legal_name === undefined ? {} : { legal_name: input.legal_name }),
+            ...(input.boss === undefined ? {} : { boss: input.boss }),
+            ...(input.admins === undefined ? {} : { admins: input.admins }),
+          }),
+        )
+      },
     ),
   ]
 }

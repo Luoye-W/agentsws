@@ -616,7 +616,7 @@ describe('公司页：品牌与产品线（44）', () => {
   const openTab = async (user: ReturnType<typeof userEvent.setup>): Promise<HTMLElement> => {
     renderWithProviders(<OrgPage />)
     await screen.findAllByTestId('position-card')
-    await user.click(screen.getByRole('tab', { name: '品牌与产品线' }))
+    await user.click(screen.getByRole('tab', { name: '店铺组与产品线' }))
     return screen.findByTestId('ranges-tab')
   }
 
@@ -636,7 +636,7 @@ describe('公司页：品牌与产品线（44）', () => {
   it('建一个品牌：名字 + 勾几个店', async () => {
     const user = userEvent.setup()
     const tab = await openTab(user)
-    await user.type(within(tab).getByLabelText('品牌叫什么'), '品牌丙')
+    await user.type(within(tab).getByLabelText('店铺组叫什么'), '品牌丙')
     const options = within(tab).getAllByTestId('brand-new-member')
     await user.click(options[1] as HTMLElement)
     await user.click(within(tab).getByTestId('brand-create'))

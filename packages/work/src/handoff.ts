@@ -72,6 +72,8 @@ export function settleHandoff(
     reason?: string | undefined
     position_id?: string | undefined
     cards_moved?: number
+    /** WP277（决策 241）：③ 里上级派给下属——直接生效，发起人那边不用再出「接下了」的通知。 */
+    dispatched?: boolean
   } = {},
 ): Handoff {
   const reason = extra.reason?.trim().slice(0, HANDOFF_NOTE_MAX)
@@ -82,7 +84,13 @@ export function settleHandoff(
     ...(reason === undefined || reason === '' ? {} : { reason }),
     ...(extra.position_id === undefined ? {} : { position_id: extra.position_id }),
     ...(extra.cards_moved === undefined ? {} : { cards_moved: extra.cards_moved }),
+    ...(extra.dispatched === true ? { dispatched: true, seen: true } : {}),
   }
+}
+
+/** WP277（决策 241）：被派的那位要不要出一行「X 派给你…」——派的、他还没点掉。 */
+export function dispatchNoticeDue(h: Handoff | undefined, person: PersonId): boolean {
+  return h?.dispatched === true && h.to === person && h.seen_to !== true
 }
 
 /**

@@ -70,6 +70,11 @@ export interface Organization {
   mode_changed_at?: Iso8601
   /** WP271：谁改的；启动时推出来的没有这一格。 */
   mode_changed_by?: PersonId
+  /**
+   * WP277（决策 240）：降回同事互联之后首页那一行通知，谁已经点掉了。模式一变就清空（再改一次，
+   * 大家再看到一次）。只有 person id。
+   */
+  mode_seen_by?: PersonId[]
 }
 
 /** WP271（docs/95 §1）：① 个人（默认）/ ② 同事互联 / ③ 公司集体。 */

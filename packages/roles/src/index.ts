@@ -153,6 +153,7 @@ export {
   positionOfRole,
   reconfirmReasonText,
   resolveScopeManager,
+  returnOnDowngrade,
   scopeManagerReasonText,
 } from './supervisor.js'
 export type {

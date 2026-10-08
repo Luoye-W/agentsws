@@ -78,6 +78,7 @@ export {
   type QueryRunner,
 } from './goals.js'
 export {
+  dispatchNoticeDue,
   HANDOFF_NOTE_MAX,
   HANDOFF_OUTCOMES,
   type HandoffItem,

@@ -308,6 +308,12 @@ export class MemoryIdentityService implements LocalIdentityService {
       listWorkspaces: () => [...this.#workspaces.values()],
       workspacesOf: (id) => this.workspacesOf(id),
       leaveWorkspace: (ws, person) => this.leaveWorkspace(ws, person),
+      setMembershipRole: (ws, person, role) => {
+        const m = (this.#members.get(ws) ?? []).find(
+          (x) => x.person_id === person && x.left_at === undefined,
+        )
+        if (m !== undefined) m.role = role
+      },
     })
   }
 
@@ -327,6 +333,24 @@ export class MemoryIdentityService implements LocalIdentityService {
     this.#organizations.addOrganizationMember(input)
   removeOrganizationMember: Organizations['removeOrganizationMember'] = (org, person) =>
     this.#organizations.removeOrganizationMember(org, person)
+  /** WP277：开公司模式时设管理员。 */
+  setOrganizationMemberRole: NonNullable<Organizations['setOrganizationMemberRole']> = (
+    org,
+    person,
+    role,
+  ) =>
+    (
+      this.#organizations.setOrganizationMemberRole as NonNullable<
+        Organizations['setOrganizationMemberRole']
+      >
+    )(org, person, role)
+  /** WP277：开公司模式时老板换人。 */
+  transferOrganizationOwner: NonNullable<Organizations['transferOrganizationOwner']> = (org, to) =>
+    (
+      this.#organizations.transferOrganizationOwner as NonNullable<
+        Organizations['transferOrganizationOwner']
+      >
+    )(org, to)
   brandsOf: Organizations['brandsOf'] = (org, person) => this.#organizations.brandsOf(org, person)
   attachWorkspaceToOrg: Organizations['attachWorkspaceToOrg'] = (input) =>
     this.#organizations.attachWorkspaceToOrg(input)

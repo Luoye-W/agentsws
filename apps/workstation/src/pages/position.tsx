@@ -18,7 +18,9 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link2Off, MoreHorizontal } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { ModeNotice } from '@/components/company/company-mode'
 import { DeckSection } from '@/components/deck'
+import { HandoffNotices } from '@/components/peers/handoff-strip'
 import { DataBoard } from '@/components/position/data-board'
 import { PositionHandoff } from '@/components/position/position-handoff'
 import { PositionSettings } from '@/components/position/position-settings'
@@ -381,6 +383,16 @@ export function PositionPage(): React.ReactNode {
       <SiteThemeBanner positionId={view?.position_id} duties={duties} />
       {/* WP261：店铺管理 / 整站搭建 / 网页模板所在的岗位「授权管理商品和页面」 */}
       <ShopAdminBanner duties={duties} />
+      {/*
+        WP277：只有一个岗位的人首页就是这一页（WP69）——首页那几行通知（交接结果、上级派活、
+        改回同事互联）在这里也出，不然他永远看不到。两个及以上岗位的人在首页看。
+      */}
+      {mine.data?.instances?.length === 1 ? (
+        <>
+          <HandoffNotices />
+          <ModeNotice />
+        </>
+      ) : null}
 
       <Tabs value={tab} onValueChange={setTab}>
         <TabsList>

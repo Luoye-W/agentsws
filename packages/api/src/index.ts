@@ -543,6 +543,7 @@ export type {
   BrandCopyView,
   BrandSwitchView,
   BrandView,
+  CompanyModeView,
   CreateBrandInput,
   OrganizationActor,
   OrganizationInviteView,
@@ -551,6 +552,7 @@ export type {
   OrganizationProfileInput,
   OrganizationsPort,
   OrganizationView,
+  SetOrganizationModeInput,
 } from './routes/organizations.js'
 export { organizationRoutes } from './routes/organizations.js'
 export type { PersonaActor, PersonaPort } from './routes/personas.js'

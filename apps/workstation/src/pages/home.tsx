@@ -31,6 +31,7 @@ import {
 } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router-dom'
+import { ModeNotice } from '@/components/company/company-mode'
 import { DeckSection } from '@/components/deck'
 import { AlertBlocks, ReportBlocks } from '@/components/deck/panel-blocks'
 import { BrandMark, PositionCard, type Tone, WsCard } from '@/components/design'
@@ -698,6 +699,7 @@ export function HomePage(): React.ReactNode {
               </WsCard>
               {/* WP276：交给同事的结果（接下 / 没接 / 退回）一行一条，点掉就没了——不是卡 */}
               {solo ? null : <HandoffNotices />}
+              {solo ? null : <ModeNotice />}
               {solo ? null : (
                 <WsCard className="p-4" data-testid="home-inprogress">
                   <InProgressTitle />
