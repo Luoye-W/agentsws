@@ -4,6 +4,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import {
+  imageFidelitySupported,
   imageSizeFor,
   openaiImageProvider,
   ProviderError,
@@ -89,7 +90,12 @@ describe('openaiImageProvider.edit（images/edits，multipart）', () => {
       fetch: async (_url, init) => {
         calls += 1
         count = (init.body as FormData).getAll('image[]').length
-        return { ok: true, status: 200, json: async () => ({ data: [{ url: 'https://cdn/a.png' }] }), text: async () => '' }
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ data: [{ url: 'https://cdn/a.png' }] }),
+          text: async () => '',
+        }
       },
     })
     await expect(provider.edit?.({ prompt: 'x', images: [], meta })).rejects.toThrow(/at least one/)
@@ -106,7 +112,12 @@ describe('openaiImageProvider.edit（images/edits，multipart）', () => {
       apiKey: () => 'k',
       model: 'some-model',
       provider: 'p',
-      fetch: async () => ({ ok: false, status: 402, json: async () => ({}), text: async () => 'insufficient credits' }),
+      fetch: async () => ({
+        ok: false,
+        status: 402,
+        json: async () => ({}),
+        text: async () => 'insufficient credits',
+      }),
     })
     const err = await provider
       .edit?.({ prompt: 'x', images: [{ bytes: png(1), content_type: 'image/png' }], meta })
@@ -126,7 +137,11 @@ describe('openaiImageProvider.edit（images/edits，multipart）', () => {
       },
     })
     await expect(
-      provider.edit?.({ prompt: 'x', images: [{ bytes: png(1), content_type: 'image/png' }], meta }),
+      provider.edit?.({
+        prompt: 'x',
+        images: [{ bytes: png(1), content_type: 'image/png' }],
+        meta,
+      }),
     ).rejects.toThrow(/missing api key/)
   })
 })
@@ -179,6 +194,26 @@ describe('宽高比 → 画布（imageSizeFor）', () => {
     expect(imageSizeFor(undefined, 'gpt-image-1')).toBe('1024x1024')
   })
 
+  it('gpt-image-2 / 2.5：任意画布，边长 16 的倍数、比例夹在 1:3–3:1', () => {
+    const [w, h] = imageSizeFor('16:9', 'gpt-image-2.5-flare').split('x').map(Number) as [
+      number,
+      number,
+    ]
+    expect(w % 16).toBe(0)
+    expect(h % 16).toBe(0)
+    expect(Math.abs(w / h - 16 / 9)).toBeLessThan(0.03)
+    const [w2, h2] = imageSizeFor('21:9', 'gpt-image-2').split('x').map(Number) as [number, number]
+    expect(w2 / h2).toBeLessThanOrEqual(3.01)
+  })
+
+  it('input_fidelity 只给 gpt-image-1 / 1.5（2 / 2.5 传了会被拒）', () => {
+    expect(imageFidelitySupported('gpt-image-1')).toBe(true)
+    expect(imageFidelitySupported('gpt-image-1.5')).toBe(true)
+    expect(imageFidelitySupported('gpt-image-1-mini')).toBe(false)
+    expect(imageFidelitySupported('gpt-image-2.5-sunburst')).toBe(false)
+    expect(imageFidelitySupported('doubao-seedream-5-0-pro-260628')).toBe(false)
+  })
+
   it('别的模型按比例算约 1 百万像素、边长是 64 的倍数', () => {
     const [w, h] = imageSizeFor('16:9', 'gemini-2.5-flash-image').split('x').map(Number) as [
       number,
@@ -187,6 +222,32 @@ describe('宽高比 → 画布（imageSizeFor）', () => {
     expect(w % 64).toBe(0)
     expect(h % 64).toBe(0)
     expect(Math.abs(w / h - 16 / 9)).toBeLessThan(0.05)
-    expect(imageSizeFor('1:1', 'doubao-seedream-4-0')).toBe('1024x1024')
+    expect(imageSizeFor('1:1', 'doubao-seedream-5-0-pro-260628')).toBe('1024x1024')
+  })
+
+  it('不认 input_fidelity 的型号不带这个字段', async () => {
+    let form: FormData | undefined
+    const provider = openaiImageProvider({
+      baseUrl: 'https://x/v1',
+      apiKey: () => 'k',
+      model: 'gpt-image-2.5-sunburst',
+      provider: 'p',
+      fetch: async (_u, init) => {
+        form = init.body as FormData
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ data: [{ url: 'https://cdn/a.png' }] }),
+          text: async () => '',
+        }
+      },
+    })
+    await provider.edit?.({
+      prompt: 'x',
+      images: [{ bytes: png(1), content_type: 'image/png' }],
+      fidelity: 'high',
+      meta,
+    })
+    expect(form?.has('input_fidelity')).toBe(false)
   })
 })

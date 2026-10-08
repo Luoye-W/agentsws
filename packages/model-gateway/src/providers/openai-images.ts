@@ -22,7 +22,7 @@ import type {
 } from '@agentsws/contracts'
 import { IMAGE_EDIT_MAX_REFERENCES } from '@agentsws/contracts'
 import { sha256 } from '@agentsws/core'
-import { parseImageSize } from '../images.js'
+import { imageFidelitySupported, parseImageSize } from '../images.js'
 import { describeFetchError } from '../net-cause.js'
 import { GatewayError, ProviderError } from '../types.js'
 import type { FetchLike } from './openai-compatible.js'
@@ -140,7 +140,7 @@ export function openaiImageProvider(options: OpenAiImageOptions): ImageProvider 
      * WP268：参考图改图，OpenAI 形态 `POST {base}/images/edits`（multipart）。
      *
      * 参考图走重复的 `image[]` 字段（`gpt-image-*` 认多张；只认一张的上游只看第一张）；遮罩可选；
-     * `input_fidelity` 只在要「保持产品」时带（不认这个参数的兼容网关会忽略多出来的表单字段）。
+     * `input_fidelity` 只在要「保持产品」且型号认它时带（`imageFidelitySupported`）。
      */
     edit(req: ImageEditRequest): Promise<ImageGeneration> {
       if (req.images.length === 0)
@@ -152,7 +152,9 @@ export function openaiImageProvider(options: OpenAiImageOptions): ImageProvider 
       form.append('prompt', req.prompt)
       form.append('n', String(n))
       form.append('size', `${width}x${height}`)
-      if (req.fidelity !== undefined) form.append('input_fidelity', req.fidelity)
+      // 只有认这个参数的型号才带（gpt-image-2 传了会被上游拒）
+      if (req.fidelity !== undefined && imageFidelitySupported(options.model))
+        form.append('input_fidelity', req.fidelity)
       req.images.slice(0, IMAGE_EDIT_MAX_REFERENCES).forEach((img, i) => {
         form.append(
           'image[]',

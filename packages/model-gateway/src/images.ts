@@ -154,26 +154,39 @@ export function stubImageProvider(options: StubImageProviderOptions): ImageProvi
 }
 
 /**
- * WP268：宽高比 → 这个模型认的画布。
+ * WP268：宽高比 → 这个模型认的画布（换模型只改设置，画布跟着型号名走）。
  *
- * - `gpt-image-*`（OpenAI 及兼容网关后面的同名模型）只认三种：`1024x1024` / `1536x1024` / `1024x1536`，
- *   取最接近的那一种（横幅 16:9 → `1536x1024`，裁切交给主题的图片设置）；
- * - 别的模型（Gemini / Seedream / Qwen-Image / FLUX 经 New API 转 OpenAI 形态）：按比例算一块约 1 百万像素、
- *   边长是 64 的倍数的画布（这几家都收任意 `WxH`，超出范围的由上游就近取，回包里报真实尺寸）。
+ * - `gpt-image-1` / `-1.5` / `-1-mini` / `dall-e-*`：只认三种 `1024x1024` / `1536x1024` / `1024x1536`，取最接近的；
+ * - `gpt-image-2*`（含 2.5 sunburst / flare）：任意 `WxH`，边长是 16 的倍数、比例 1:3–3:1、总像素 0.66–8.3MP
+ *   （OpenAI 官方指南）——按比例算一块约 1.57MP（≈1536×1024）的画布，3:1 以外的比例夹到 3:1；
+ * - 别的模型（Seedream / Qwen-Image / Gemini 经 New API）：按比例算约 1 百万像素、边长是 64 的倍数
+ *   （这几家都收任意 `WxH`，超出范围的由上游就近取，回包里报真实尺寸）。
  */
 export function imageSizeFor(aspect: ImageAspectRatio | undefined, model: string): string {
   const [w, h] = (aspect ?? '1:1').split(':').map(Number) as [number, number]
   const ratio = w / h
-  if (/^gpt-image|^dall-e/i.test(model.trim())) {
+  const name = model.trim().toLowerCase()
+  if (/^gpt-image-1|^dall-e/.test(name)) {
     if (ratio > 1.15) return '1536x1024'
     if (ratio < 0.87) return '1024x1536'
     return '1024x1024'
   }
-  const area = 1024 * 1024
-  const round64 = (x: number): number => Math.max(256, Math.round(x / 64) * 64)
-  const width = round64(Math.sqrt(area * ratio))
-  const height = round64(width / ratio)
-  return `${width}x${height}`
+  const fit = (area: number, step: number, r: number): string => {
+    const round = (x: number): number => Math.max(step * 4, Math.round(x / step) * step)
+    const width = round(Math.sqrt(area * r))
+    const height = round(width / r)
+    return `${width}x${height}`
+  }
+  if (/^gpt-image/.test(name)) return fit(1536 * 1024, 16, Math.min(3, Math.max(1 / 3, ratio)))
+  return fit(1024 * 1024, 64, ratio)
+}
+
+/**
+ * WP268：这个型号认不认 `input_fidelity`（OpenAI 官方：只有 `gpt-image-1` / `-1.5` 认 high / low；
+ * `-1-mini` 只认 low；`gpt-image-2` 传了**直接报错**，2.5 没写明按 2 处理）。认不出的型号一律不带。
+ */
+export function imageFidelitySupported(model: string): boolean {
+  return /^gpt-image-1(\.5)?(-\d{4}-\d{2}-\d{2})?$/.test(model.trim().toLowerCase())
 }
 
 /* ── 一个刚好够用的 PNG 编码器 ───────────────────────────────────── */
