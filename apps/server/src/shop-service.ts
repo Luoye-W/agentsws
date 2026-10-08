@@ -124,7 +124,11 @@ export function createShopOps(
         notes: draft.notes,
         created_by: { kind: 'agent', id: `agent_${role_id}` },
         mandate: m.mandate,
-        level: m.level,
+        /*
+         * 决策 175：改店一律先出卡、**人批了**才改——不管职责 yml 给这条动作开到了 L2（额内自动）。
+         * 第 1 步先全按 L1 走；以后要不要按 yml 放开由 Luoye 定（见 WP261 报告）。
+         */
+        level: 'L1',
         provenance: {
           run_id,
           seen: { [draft.target.type]: [draft.target.id] },

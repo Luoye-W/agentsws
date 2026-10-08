@@ -192,12 +192,22 @@ export const THEME_WORK_RULES = [
   '店铺数据：主推商品、合集先留空占位（人在主题编辑器里挑），不去查店里的商品。店面文案用顾客的语言（照 AGENTS.md）。',
 ].join('\n')
 
-export function themeWorkSection(): PromptSection {
+/**
+ * WP261：店铺授权过（工具面里有读商品 / 合集）时，最后那一句换成「可以查真实的 id 填进去」；
+ * 没授权照旧留空占位（字节与 WP260 一样）。
+ */
+export const THEME_WORK_SHOP_LINE =
+  '店铺数据：要挂合集 / 主推商品时，可以用 shop_list_collections / shop_list_products 查真实的 id 填进模板设置；查不到就留空占位（人在主题编辑器里挑）。店面文案用顾客的语言（照 AGENTS.md）。'
+
+export function themeWorkSection(opts: { shopRead?: boolean } = {}): PromptSection {
   return {
     id: 'theme_work',
     name: '网页模板的做法',
     order: THEME_WORK_ORDER,
-    text: THEME_WORK_RULES,
+    text:
+      opts.shopRead === true
+        ? [...THEME_WORK_RULES.split('\n').slice(0, -1), THEME_WORK_SHOP_LINE].join('\n')
+        : THEME_WORK_RULES,
   }
 }
 
