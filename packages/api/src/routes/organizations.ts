@@ -68,10 +68,17 @@ export interface OrganizationView {
   brands: number
   members: number
   /**
-   * 52 O1 个人用户：**一个人、一个品牌**。为真时界面上一律不显示"组织"这个词
-   * ——不出切换器、不出组织卡，直到加第二个品牌或第二个人。
+   * 52 O1 个人用户。为真时界面上一律不显示"组织"这个词。
+   *
+   * WP271（docs/95 §1.2）：改为**按模式**算——等于 `mode === 'solo'`，不再看品牌数
+   * （一个人管三个品牌仍是个人）。品牌切换器出不出只看品牌数，不看它。
    */
   solo: boolean
+  /**
+   * WP271（决策 222）：这家公司现在的用法——`solo` ① 个人 / `peers` ② 同事互联 /
+   * `company` ③ 公司集体。工作台按它收起与换词（`useMode()`）。
+   */
+  mode: 'solo' | 'peers' | 'company'
   created_at: string
 }
 

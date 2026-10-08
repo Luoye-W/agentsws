@@ -247,8 +247,8 @@ describe('46 §1 首次设置', () => {
         body: { legal_name: '深圳诺伏特科技有限公司', domain: 'nordvolt.cn' },
       }),
     )
-    // 46 §1 表：开关默认开
-    expect(profile.discoverable).toBe(true)
+    // WP271（决策 234）：个人用默认关「让同事找到我」，点「和同事一起用」才开
+    expect(profile.discoverable).toBe(false)
     expect(profile.domain).toBe('nordvolt.cn')
 
     const after = await data<{ needs_setup: boolean; profile?: { legal_name: string } }>(
@@ -705,10 +705,10 @@ describe('46 §2 I2 局域网发现', () => {
     const b = await machine({ lan, host: '10.0.0.2', ownerEmail: 'li@nordvolt.cn', seed: 9 })
     // 两个人写法不同：一个写全称，一个多打了空格还加了"有限公司"
     await a.call('PUT', '/v1/workspace/profile', {
-      body: { legal_name: '深圳诺伏特科技', domain: 'nordvolt.cn' },
+      body: { legal_name: '深圳诺伏特科技', domain: 'nordvolt.cn', discoverable: true },
     })
     await b.call('PUT', '/v1/workspace/profile', {
-      body: { legal_name: '深圳诺伏特  科技 有限公司', domain: 'NordVolt.cn' },
+      body: { legal_name: '深圳诺伏特  科技 有限公司', domain: 'NordVolt.cn', discoverable: true },
     })
 
     const seen = await data<PeersView>(await a.call('GET', '/v1/discovery/peers'))
@@ -728,10 +728,10 @@ describe('46 §2 I2 局域网发现', () => {
     const a = await machine({ lan, host: '10.0.0.1', ownerEmail: 'wang@nordvolt.cn', seed: 3 })
     const c = await machine({ lan, host: '10.0.0.3', ownerEmail: 'zhao@other.cn', seed: 11 })
     await a.call('PUT', '/v1/workspace/profile', {
-      body: { legal_name: '深圳诺伏特科技', domain: 'nordvolt.cn' },
+      body: { legal_name: '深圳诺伏特科技', domain: 'nordvolt.cn', discoverable: true },
     })
     await c.call('PUT', '/v1/workspace/profile', {
-      body: { legal_name: '另一家公司', domain: 'other.cn' },
+      body: { legal_name: '另一家公司', domain: 'other.cn', discoverable: true },
     })
     const seen = await data<PeersView>(await a.call('GET', '/v1/discovery/peers'))
     expect(seen.peers).toEqual([])
@@ -742,10 +742,10 @@ describe('46 §2 I2 局域网发现', () => {
     const a = await machine({ lan, host: '10.0.0.1', ownerEmail: 'wang@nordvolt.cn', seed: 3 })
     const b = await machine({ lan, host: '10.0.0.2', ownerEmail: 'li@nordvolt.cn', seed: 9 })
     await a.call('PUT', '/v1/workspace/profile', {
-      body: { legal_name: '诺伏特', domain: 'nordvolt.cn' },
+      body: { legal_name: '诺伏特', domain: 'nordvolt.cn', discoverable: true },
     })
     await b.call('PUT', '/v1/workspace/profile', {
-      body: { legal_name: '诺伏特', domain: 'nordvolt.cn' },
+      body: { legal_name: '诺伏特', domain: 'nordvolt.cn', discoverable: true },
     })
     expect((await data<PeersView>(await a.call('GET', '/v1/discovery/peers'))).peers).toHaveLength(
       1,
@@ -817,7 +817,7 @@ describe('46 §2 邀请码与申请加入', () => {
     const clock = makeClock()
     const a = await machine({ lan, host: '10.0.0.1', ownerEmail: 'wang@nordvolt.cn', clock })
     await a.call('PUT', '/v1/workspace/profile', {
-      body: { legal_name: '诺伏特', domain: 'nordvolt.cn' },
+      body: { legal_name: '诺伏特', domain: 'nordvolt.cn', discoverable: true },
     })
     const invite = await data<{ code: string; expires_at: string; uses_left: number }>(
       await a.call('POST', '/v1/invites'),
@@ -1022,7 +1022,7 @@ describe('46 §2 邀请码与申请加入', () => {
     const b = await machine({ lan, host: '10.0.0.2', ownerEmail: 'li@nordvolt.cn', seed: 9 })
     for (const m of [a, b])
       await m.call('PUT', '/v1/workspace/profile', {
-        body: { legal_name: '深圳诺伏特科技有限公司', domain: 'nordvolt.cn' },
+        body: { legal_name: '深圳诺伏特科技有限公司', domain: 'nordvolt.cn', discoverable: true },
       })
     const peers = await data<PeersView>(await b.call('GET', '/v1/discovery/peers'))
     const target = peers.peers[0]
@@ -1056,7 +1056,7 @@ describe('46 §2 邀请码与申请加入', () => {
     const b = await machine({ lan, host: '10.0.0.2', ownerEmail: 'li@nordvolt.cn', seed: 9 })
     for (const m of [a, b])
       await m.call('PUT', '/v1/workspace/profile', {
-        body: { legal_name: '诺伏特', domain: 'nordvolt.cn' },
+        body: { legal_name: '诺伏特', domain: 'nordvolt.cn', discoverable: true },
       })
     const aSees = await data<PeersView>(await a.call('GET', '/v1/discovery/peers'))
     const bSees = await data<PeersView>(await b.call('GET', '/v1/discovery/peers'))

@@ -6219,6 +6219,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     appendEvent,
     ...(dbDir === undefined ? {} : { dbDir }),
     brandName: () => brandNameOfWorkspace(workspace.id),
+    // WP271：① ② 里建分配不挑范围 = 整个品牌（组织在下面才装配好，用到时才取）
+    mode: () => organizations.modeOf(workspace.id),
     // WP174：上级离职时，各品牌里他手上的卡都要改派（审批总线是同一条）
     workspaceIds: () => [
       ...new Set([workspace.id, ...(brands?.loaded().map((b) => b.workspace_id) ?? [])]),
@@ -6740,6 +6742,12 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
    * 再认一遍存量加的品牌：已经分过岗位的当作走完过首次设置（决策 92 的新口径不把它们拉回向导）。
    */
   onboarding.settleCompanyOnOrganization()
+  /*
+   * WP271（决策 232 / 234）：老组织没有「模式」那一格——按人数推一次写上：
+   * 除所有者外还有在的人 → ③ 公司集体（行为不变）；只有本人（不管几个品牌）→ ① 个人，
+   * 并关掉局域网发现。一次性、幂等。放在公司档案归位之后、任何人能开发现之前。
+   */
+  if ((await organizations.settleModes()).length > 0) onboarding.syncCompanyShadows(workspace.id)
   // WP251（决策 91）：「卡住了」改看结构化标记——起点记在这一刻（第一次启动这一版时）
   onboarding.since(RUN_BLOCK_MARKED_SINCE)
   onboarding.settleAddedBrandCompletion(identity.brandsOf(bootstrapOrg).map((w) => w.id))

@@ -35,13 +35,14 @@ import type {
   Clock,
   EventEnvelope,
   Organization,
+  OrganizationMode,
   PersonId,
   StorefrontPlatform,
   Workspace,
   WorkspaceId,
   WorkspaceVertical,
 } from '@agentsws/contracts'
-import { brandNameOf } from '@agentsws/contracts'
+import { brandNameOf, organizationModeOf } from '@agentsws/contracts'
 import { companyKey } from '@agentsws/core'
 import type { RoleStore } from '@agentsws/roles'
 
@@ -127,6 +128,14 @@ export interface OrganizationsAssembly {
   }): Promise<Organization>
   /** 当前品牌挂在哪个组织下（发现与 `company_key` 取它，46 §2）。 */
   organizationOf(workspace_id: WorkspaceId): Organization | undefined
+  /**
+   * WP271（决策 232）：启动时一次性给还没有「模式」那一格的组织推一个写上——除所有者外还有
+   * 在的人 → ③（行为与以前一样）；只有本人（不管几个品牌）→ ①，并把「让同事找到我」关掉
+   * （决策 234）。已经有模式的一个字节不动；再跑一遍什么都不变。回推了哪几家。
+   */
+  settleModes(): Promise<{ org_id: string; mode: OrganizationMode }[]>
+  /** WP271：某个品牌所在的组织现在是哪种用法（没挂组织 = ① 个人）。 */
+  modeOf(workspace_id: WorkspaceId): Promise<OrganizationMode>
 }
 
 /** 队列上"还没定"的那几档（与工作台首页同一套判据）。 */
@@ -180,9 +189,28 @@ export function createOrganizations(options: OrganizationsAssemblyOptions): Orga
   const activeMembers = (org: Organization): Organization['members'] =>
     org.members.filter((m) => m.left_at === undefined)
 
-  const viewOf = (org: Organization, person_id: PersonId): OrganizationView => {
+  /**
+   * WP271：除所有者外还在的人（组织成员 + 各品牌成员，去重）。
+   *
+   * 两处都要数：「成员」页的邀请先进组织，邀请码申请批下来进的是品牌（46 / 20 §4）——
+   * 只数一处，就会把「其实已经有同事」的公司当成一个人。
+   */
+  const othersOf = async (org: Organization): Promise<number> => {
+    const people = new Set(activeMembers(org).map((m) => m.person_id))
+    for (const w of identity.brandsOf(org.id))
+      for (const m of await identity.members(w.id))
+        if (m.left_at === undefined) people.add(m.person_id)
+    people.delete(org.owner_id)
+    return people.size
+  }
+
+  const modeOfOrg = async (org: Organization): Promise<OrganizationMode> =>
+    organizationModeOf(org, await othersOf(org))
+
+  const viewOf = async (org: Organization, person_id: PersonId): Promise<OrganizationView> => {
     const brands = identity.brandsOf(org.id)
     const members = activeMembers(org)
+    const mode = await modeOfOrg(org)
     return {
       id: org.id,
       legal_name: org.legal_name,
@@ -193,8 +221,9 @@ export function createOrganizations(options: OrganizationsAssemblyOptions): Orga
       ...(org.cloud_org_id === undefined ? {} : { cloud_org_id: org.cloud_org_id }),
       brands: brands.length,
       members: members.length,
-      // 52 O1：一个人、一个品牌 = 个人用户，界面上一律不提"组织"这两个字
-      solo: members.length <= 1 && brands.length <= 1,
+      // WP271（docs/95 §1.2）：个人不个人只看模式，不看品牌数——一个人管三个品牌仍是个人
+      solo: mode === 'solo',
+      mode,
       created_at: org.created_at,
     }
   }
@@ -246,7 +275,9 @@ export function createOrganizations(options: OrganizationsAssemblyOptions): Orga
 
   const port: OrganizationsPort = {
     async list(actor): Promise<OrganizationView[]> {
-      return identity.organizationsOf(actor.person_id).map((o) => viewOf(o, actor.person_id))
+      return Promise.all(
+        identity.organizationsOf(actor.person_id).map((o) => viewOf(o, actor.person_id)),
+      )
     },
 
     async create(actor, input): Promise<OrganizationView> {
@@ -527,6 +558,43 @@ export function createOrganizations(options: OrganizationsAssemblyOptions): Orga
           migrated: true,
         })
       return migrated.organization
+    },
+    async settleModes(): Promise<{ org_id: string; mode: OrganizationMode }[]> {
+      const settled: { org_id: string; mode: OrganizationMode }[] = []
+      for (const org of identity.listOrganizations()) {
+        if (org.mode !== undefined) continue
+        // 决策 232：没存模式时 organizationModeOf 推的就是老数据的口径（有别人 → ③，只有自己 → ①）
+        const mode = await modeOfOrg(org)
+        const next = await identity.updateOrganization(org.id, {
+          mode,
+          // 决策 234：个人用默认不让同事找到——老安装落到 ① 的一并关掉局域网广播
+          ...(mode === 'solo' && org.discoverable ? { discoverable: false } : {}),
+        })
+        const ws = identity.brandsOf(org.id)[0]?.id
+        if (ws !== undefined)
+          options.appendEvent({
+            schema_version: 1,
+            workspace_id: ws,
+            type: 'organization.mode_changed',
+            // 不是谁改的，是这一版启动时按老数据推出来的
+            actor: { kind: 'system', id: 'organizations' },
+            correlation: { trace_id: `tr_org_${clock.now()}` },
+            payload: {
+              organization_id: org.id,
+              mode,
+              inferred: true,
+              ...(org.discoverable && !next.discoverable ? { discovery_off: true } : {}),
+            },
+          })
+        settled.push({ org_id: org.id, mode })
+      }
+      return settled
+    },
+    async modeOf(workspace_id): Promise<OrganizationMode> {
+      const org = identity
+        .listOrganizations()
+        .find((o) => identity.brandsOf(o.id).some((w) => w.id === workspace_id))
+      return org === undefined ? 'solo' : modeOfOrg(org)
     },
     organizationOf(workspace_id): Organization | undefined {
       // 工作区身上就写着它挂在哪个组织下（52 O1）——不用反过来扫组织

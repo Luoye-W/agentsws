@@ -375,7 +375,39 @@ export function runIdentityConformance(h: IdentityHarness): void {
       const { svc, workspace } = await seed()
       const migrated = await svc.migrateWorkspace({ workspace_id: workspace.id })
       expect(migrated.organization.legal_name).toBe('default')
-      expect(migrated.organization.discoverable).toBe(true)
+      // WP271（决策 234）：个人用默认关「让同事找到我」
+      expect(migrated.organization.discoverable).toBe(false)
+      // WP271：迁移建出来的组织先不定模式，留给启动时按决策 232 推
+      expect(migrated.organization.mode).toBeUndefined()
+      expect(svc.getOrganization(migrated.organization.id)?.mode).toBeUndefined()
+    })
+
+    it('WP271 模式：新建默认 ① 个人；改了才记时刻与谁，同一个值再写不留痕', async () => {
+      const { svc, person } = await seed()
+      const org = await svc.createOrganization({ legal_name: '诺伏特', owner_id: person.id })
+      expect(org.mode).toBe('solo')
+      expect(org.discoverable).toBe(false)
+      const peers = await svc.createOrganization({
+        legal_name: '诺伏特二',
+        owner_id: person.id,
+        mode: 'peers',
+      })
+      expect(peers.discoverable).toBe(true)
+      const opened = await svc.updateOrganization(org.id, {
+        mode: 'company',
+        mode_changed_by: person.id,
+      })
+      expect(opened.mode).toBe('company')
+      expect(opened.mode_changed_by).toBe(person.id)
+      expect(opened.mode_changed_at).toBeDefined()
+      const same = await svc.updateOrganization(org.id, { mode: 'company' })
+      expect(same.mode_changed_at).toBe(opened.mode_changed_at)
+      expect(same.mode_changed_by).toBe(person.id)
+      // 换了模式却没说是谁：上一次的「谁」不留着
+      const back = await svc.updateOrganization(org.id, { mode: 'peers' })
+      expect(back.mode).toBe('peers')
+      expect(back.mode_changed_by).toBeUndefined()
+      expect(svc.getOrganization(org.id)?.mode).toBe('peers')
     })
 
     it('brandsOf：一个组织两个品牌；只回本人有成员资格的那几个（52 O2）', async () => {
@@ -459,7 +491,8 @@ export function runIdentityConformance(h: IdentityHarness): void {
       const renamed = await svc.updateOrganization(org.id, { legal_name: '诺伏特科技' })
       expect(renamed.legal_name).toBe('诺伏特科技')
       expect(renamed.domain).toBe('nordvolt.cn')
-      expect(renamed.discoverable).toBe(true)
+      // WP271：个人用（新建默认）发现默认关，改名不动它
+      expect(renamed.discoverable).toBe(false)
       const cleared = await svc.updateOrganization(org.id, { domain: '  ' })
       expect(cleared.domain).toBeUndefined()
       expect(cleared.legal_name).toBe('诺伏特科技')

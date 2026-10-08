@@ -58,6 +58,7 @@ import type {
   EventEnvelope,
   Level,
   Mandate,
+  OrganizationMode,
   Person,
   PersonId,
   Position,
@@ -460,6 +461,12 @@ export interface OrgOptions {
    * 不给就只动制度层（岗位行 + 安放），事项与记忆原地不动。
    */
   reshape?: PositionReshapeHooks
+  /**
+   * WP271（docs/95 §3.2 第 5 条）：这个品牌所在的组织现在是哪种用法。① 个人 / ② 同事互联里
+   * 建分配不挑范围 = **整个品牌**（不再落成「还没给范围」）；③ 公司集体照旧按给的范围。
+   * 不给按 ③（与以前一样）。
+   */
+  mode?: () => OrganizationMode | Promise<OrganizationMode>
 }
 
 /** WP234：岗位合并 / 移动时制度层以外要跟着走的两样。 */
@@ -1993,11 +2000,19 @@ export function createOrg(options: OrgOptions): OrgAssembly {
       } else {
         throw ORG_ERROR('invalid_input', '要么给岗位，要么给一个职责')
       }
+      // WP271：① ② 里不挑范围 = 整个品牌（③ 才有「还没给范围」这回事）
+      const unscoped =
+        input.ranges.length === 0 && (input.range_groups ?? []).length === 0
+      const mode = unscoped ? await options.mode?.() : undefined
+      const ranges: RangeRef[] =
+        unscoped && mode !== undefined && mode !== 'company'
+          ? [{ kind: 'brand', id: workspace_id }]
+          : input.ranges
       const created = grant({
         person_id: input.person_id,
         granted_by: actor.person_id,
         roleIds,
-        ranges: input.ranges,
+        ranges,
         ...(input.range_groups === undefined ? {} : { range_groups: input.range_groups }),
       })
       // WP234（docs/54 §6.1）：按岗位分的，新建的那几条就安放在这个岗位上——

@@ -23,6 +23,7 @@ import type {
   Organization,
   OrganizationId,
   OrganizationMember,
+  OrganizationMode,
   PersonId,
   Workspace,
   WorkspaceId,
@@ -35,8 +36,13 @@ export type OrganizationRole = OrganizationMember['role']
 export interface CreateOrganizationInput {
   legal_name: string
   domain?: string
-  /** 46 §1 表：默认 true。 */
+  /**
+   * 46 §1 表：默认 true。WP271（决策 234）：个人用（`mode` 为 `solo`，也是默认）默认 **false**
+   * ——一个人用不着让同事找到他；点「和同事一起用」时才开。
+   */
   discoverable?: boolean
+  /** WP271：不给 = `solo`（新装一律从 ① 个人开始，docs/95 §1）。 */
+  mode?: OrganizationMode
   owner_id: PersonId
   /** 49 M1：关联云账号时才有。 */
   cloud_org_id?: string
@@ -52,6 +58,10 @@ export interface OrganizationPatch {
   cloud_org_id?: string
   /** WP251：公司实体地址。空串 = 清掉；`undefined` = 不动。 */
   postal_address?: string
+  /** WP271：改用法（① / ② / ③）。真变了才记 `mode_changed_at`。 */
+  mode?: OrganizationMode
+  /** WP271：谁改的（启动时推出来的不给）。 */
+  mode_changed_by?: PersonId
 }
 
 export interface AttachWorkspaceInput {
@@ -181,16 +191,19 @@ export function createOrganizations(options: OrganizationsOptions): Organization
       const id = input.id ?? options.nextId('org')
       if (backend.get(id) !== undefined) throw new ApiError('conflict', `组织已存在：${id}`)
       const domain = input.domain?.trim()
+      const mode = input.mode ?? 'solo'
       const org: Organization = {
         id,
         legal_name,
         ...(domain === undefined || domain === '' ? {} : { domain }),
-        // 46 §1 表：不给按 true——"让同事找到我"默认开着
-        discoverable: input.discoverable ?? true,
+        // 46 §1 表：不给按 true——"让同事找到我"默认开着。
+        // WP271（决策 234）：个人用（默认）不给按 false，点「和同事一起用」才开
+        discoverable: input.discoverable ?? mode !== 'solo',
         owner_id: input.owner_id,
         members: [{ person_id: input.owner_id, role: 'owner', joined_at: clock.now() }],
         ...(input.cloud_org_id === undefined ? {} : { cloud_org_id: input.cloud_org_id }),
         created_at: clock.now(),
+        mode,
       }
       backend.put(org)
       return org
@@ -222,11 +235,24 @@ export function createOrganizations(options: OrganizationsOptions): Organization
         ...(patch.discoverable === undefined ? {} : { discoverable: patch.discoverable }),
         ...(patch.cloud_org_id === undefined ? {} : { cloud_org_id: patch.cloud_org_id }),
         ...(postal === undefined || postal === '' ? {} : { postal_address: postal }),
+        // WP271：模式真变了才记谁、什么时候（同一个值再写一遍不留痕）
+        ...(patch.mode === undefined || patch.mode === org.mode
+          ? {}
+          : {
+              mode: patch.mode,
+              mode_changed_at: clock.now(),
+              ...(patch.mode_changed_by === undefined
+                ? {}
+                : { mode_changed_by: patch.mode_changed_by }),
+            }),
       }
       // 空串 = 把域名清掉（界面上把那一格删干净就是这个意思）；`undefined` = 不动它
       if (domain === '') delete next.domain
       // WP251：地址同一条规矩
       if (postal === '') delete next.postal_address
+      // WP271：换了模式却没说是谁（启动时推的）——上一次的「谁改的」不能留着冒名
+      if (patch.mode !== undefined && patch.mode !== org.mode && patch.mode_changed_by === undefined)
+        delete next.mode_changed_by
       backend.put(next)
       return next
     },
@@ -329,8 +355,14 @@ export function createOrganizations(options: OrganizationsOptions): Organization
         ...(discoverable === undefined ? {} : { discoverable }),
         owner_id: workspace.owner_id,
       })
+      /*
+       * WP271：迁移建出来的组织**先不定模式**——老安装里可能早就有同事了，
+       * 交给启动时那一步按决策 232 推（有别人 → ③，只有自己 → ①）。
+       */
+      const { mode: _unset, ...unsettled } = org
+      backend.put(unsettled)
       const attached = await this.attachWorkspaceToOrg({ workspace_id, org_id: org.id })
-      return { organization: org, workspace: attached, created: true }
+      return { organization: unsettled, workspace: attached, created: true }
     },
   }
 }

@@ -56,6 +56,41 @@ export interface Organization {
   /** 49 M1 / 52 O3「钱」：云侧那个计费主体。关联账号时写上。 */
   cloud_org_id?: CloudOrgId
   created_at: Iso8601
+  /**
+   * WP271（docs/95，决策 222）：这个组织的**用法**——① 个人 / ② 同事互联 / ③ 公司集体。
+   *
+   * 存下来的是「开没开公司模式」这个意图：`company` 只能有人主动开；`solo` 与 `peers`
+   * 由人数自动走（第二个人进来就是 ②，只剩一个人就回 ①），所以读的时候一律过
+   * {@link organizationModeOf}，不要直接读这一格。
+   *
+   * 可选：这一格出现之前建的组织没有它，启动时按决策 232 一次性推出来写上。
+   */
+  mode?: OrganizationMode
+  /** WP271：模式最后一次改的时刻（启动时推出来的也记）。 */
+  mode_changed_at?: Iso8601
+  /** WP271：谁改的；启动时推出来的没有这一格。 */
+  mode_changed_by?: PersonId
+}
+
+/** WP271（docs/95 §1）：① 个人（默认）/ ② 同事互联 / ③ 公司集体。 */
+export type OrganizationMode = 'solo' | 'peers' | 'company'
+
+/**
+ * WP271：这个组织**现在**是哪种用法——工作台与服务端都只问这一个函数。
+ *
+ * `others` = 除所有者之外还在的人数（组织成员与各品牌成员去重后）。
+ *
+ * - 存了 `company` → ③（只有人主动开，人再少也不自己掉下来，docs/95 §3.6）。
+ * - 存了 `solo` / `peers` → 看人数：有别人就是 ②，只剩自己就是 ①（§3.3 / §3.6）。
+ * - 没存（老数据，决策 232）→ 有别人就是 ③（行为与以前一样），只有自己（不管几个品牌）就是 ①。
+ */
+export function organizationModeOf(
+  org: Pick<Organization, 'mode'>,
+  others: number,
+): OrganizationMode {
+  if (org.mode === 'company') return 'company'
+  if (org.mode === undefined) return others > 0 ? 'company' : 'solo'
+  return others > 0 ? 'peers' : 'solo'
 }
 
 /**
