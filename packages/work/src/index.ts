@@ -77,6 +77,18 @@ export {
   goalTree,
   type QueryRunner,
 } from './goals.js'
+export {
+  HANDOFF_NOTE_MAX,
+  HANDOFF_OUTCOMES,
+  type HandoffItem,
+  type HandoffRef,
+  handoffExpired,
+  handoffExpiry,
+  handoffNoticeDue,
+  isHandoffPending,
+  newHandoff,
+  settleHandoff,
+} from './handoff.js'
 export { deriveHorizon, type HorizonInput, isOpen, resolveHorizon, WEEK_DAYS } from './horizon.js'
 export { type Migration, migrate, schemaVersion, WORK_MIGRATIONS } from './migrations.js'
 export {
