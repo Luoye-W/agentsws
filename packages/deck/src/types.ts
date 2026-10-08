@@ -1226,6 +1226,11 @@ export interface DesignDeckData {
     final: number
     variants: number
     by_use: { use: string; count: number }[]
+    /**
+     * WP274：这一周用**用户自己的 key**出的图（不扣积分）——张数与估算美元（估不出的那几张不计钱）。
+     * 一张都没有就不给这一格（面板上不出那两行）。
+     */
+    own_key?: { images: number; est_usd: number }
   }
 }
 

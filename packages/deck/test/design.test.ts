@@ -205,6 +205,23 @@ describe('58 §3 五块积木', () => {
     expect(rows[1]).toEqual({ metric: '出了多少张变体', value: 21 })
   })
 
+  it('WP274：这一周用自己的账号出的图——张数 + 估算美元一行（没有就不出这一行）', () => {
+    const ctx = ctxFor('design.dtc', [])
+    const rowsOf = (c: QueryContext) => {
+      const q = runQuery('design.weekly_output', c, 'last_7d')
+      return q.status === 'ok' ? (q.data as { rows: { metric: string; value: number }[] }).rows : []
+    }
+    expect(rowsOf(ctx).some((r) => r.metric.includes('自己的账号'))).toBe(false)
+    const own = {
+      ...ctx,
+      design: { ...DESIGN, weekly: { ...DESIGN.weekly, own_key: { images: 6, est_usd: 0.2 } } },
+    } as QueryContext
+    expect(rowsOf(own).at(-1)).toEqual({
+      metric: '用你自己的账号出图（估算约 US$0.20，不扣积分）',
+      value: 6,
+    })
+  })
+
   it('素材库把「没打标」那一格也列出来，不藏起来', () => {
     const ctx = ctxFor('design.dtc', [])
     const q = runQuery('design.asset_library', ctx, 'last_7d')

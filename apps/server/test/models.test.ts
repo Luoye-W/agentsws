@@ -307,8 +307,10 @@ describe('WP25 §C 模板与空状态', () => {
    *
    * WP152（Luoye 09-26）：账号登录挂回 `vendor: 'deepseek'`，与 API key 那条合成一张「DeepSeek 官方」卡，
    * 卡里二选一（官方账户登录排第一）。十一条 → 六张。kind 与顺序不变。
+   *
+   * WP274：加 Google Gemini 一张卡（带生图）。十二条 → 七张。
    */
-  it('十一条模板 → 六张卡（一家一张、点进去选方案），各带 ≤ 5 步说明', async () => {
+  it('十二条模板 → 七张卡（一家一张、点进去选方案），各带 ≤ 5 步说明', async () => {
     const { templates } = await data<{ templates: ModelProviderTemplate[] }>(
       await api('/v1/models/providers'),
     )
@@ -323,6 +325,8 @@ describe('WP25 §C 模板与空状态', () => {
       'openai_compatible',
       // Anthropic 那张卡的两个方案
       'anthropic',
+      'openai_compatible',
+      // WP274：Google 一张卡（API key，带生图）
       'openai_compatible',
       // WP134：第三种模型来源
       'deepseek_account',
@@ -347,6 +351,8 @@ describe('WP25 §C 模板与空状态', () => {
       'bailian',
       'openai',
       'anthropic',
+      // WP274：Google 一张卡（带生图）
+      'google',
       'agentsws-cloud',
     ])
     const planOf = (vendor: string): ModelProviderTemplate[] =>
@@ -853,10 +859,34 @@ describe('WP127 生图单独一档', () => {
     const view = await data<ModelImageView>(
       await put('/v1/models/image', { provider_id: 'openai' }),
     )
-    expect(view).toMatchObject({ configured: true, model: 'gpt-image-1', official: false })
+    // WP274（决策 246 / 255）：OpenAI 官方地址没填型号 → GPT Image 2.5（出图 flare、改图 sunburst）
+    expect(view).toMatchObject({
+      configured: true,
+      model: 'gpt-image-2.5-flare',
+      edit_model: 'gpt-image-2.5-sunburst',
+      official: false,
+      override: true,
+    })
     expect(view.choices.map((c) => c.provider_id)).toEqual(['openai'])
     expect(ctx.server.models.images.available).toBe(true)
-    // 不给空串就不配
+    // 给空串 = 不单独指定：文字模型就是自己的 OpenAI key，自动跟着它（WP274），仍然配着
+    const off = await data<ModelImageView>(await put('/v1/models/image', { provider_id: '' }))
+    expect(off.override).toBe(false)
+    expect(off.using?.source).toBe('own_openai')
+    expect(ctx.server.models.images.available).toBe(true)
+  })
+
+  it('兼容口不是 OpenAI 官方（认不出厂商）：没填型号仍按老默认 gpt-image-1', async () => {
+    await put('/v1/models/providers/proxy', {
+      kind: 'openai_compatible',
+      base_url: 'https://proxy.example.com/v1',
+      model: 'gpt-4o-mini',
+      api_key: API_KEY,
+      region: 'global',
+    })
+    const view = await data<ModelImageView>(await put('/v1/models/image', { provider_id: 'proxy' }))
+    expect(view.model).toBe('gpt-image-1')
+    expect(view.edit_model).toBeUndefined()
     const off = await data<ModelImageView>(await put('/v1/models/image', { provider_id: '' }))
     expect(off.configured).toBe(false)
     expect(ctx.server.models.images.available).toBe(false)

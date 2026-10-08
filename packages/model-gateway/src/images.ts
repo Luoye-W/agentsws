@@ -41,6 +41,14 @@ export const NO_IMAGE_MODEL_EN =
   'endpoint). This duty still works — it produces the brief, the specs and the variant plan, ' +
   'just no pictures.'
 
+/**
+ * WP274：生图被内容安全规则拦下时那句人话（OpenAI 的 `moderation_blocked`、Google 的 SAFETY 都是它）。
+ * 全仓一份，测试与界面读同一个字符串。
+ */
+export const IMAGE_SAFETY_REFUSAL_ZH =
+  '这次没出图：模型的内容安全规则把它拦下了。换个说法再试——别写真人名字、别家商标、' +
+  '暴力或成人内容；产品图就直说「这件产品的场景图 / 换背景」。'
+
 const DEFAULT_REF: ModelRef = { provider: 'local', model: 'no-image-model' }
 const STUB_REF: ModelRef = { provider: 'local', model: 'stub-image' }
 

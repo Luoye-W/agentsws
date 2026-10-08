@@ -657,6 +657,12 @@ export interface DesignAssetProvenance {
   reference_asset_ids?: readonly string[]
   /** 这一张花了多少积分（官方接口按张扣；自己的接口不扣 → 不写）。 */
   credits?: number
+  /**
+   * WP274：走用户自己的 key 出的（不扣积分）。这时记一个**估算**美元（`est_usd`，一张多少），
+   * 数据看板据此说「这周用你自己的账号出了几张、大约多少钱」；估不出（型号不认识）就不写。
+   */
+  own_key?: boolean
+  est_usd?: number
   /** 哪件事项、哪次运行、哪条职责出的（挑图卡挂在那件事项上）。 */
   matter_id?: string
   run_id?: string

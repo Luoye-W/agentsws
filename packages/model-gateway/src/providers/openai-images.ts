@@ -22,7 +22,7 @@ import type {
 } from '@agentsws/contracts'
 import { IMAGE_EDIT_MAX_REFERENCES } from '@agentsws/contracts'
 import { sha256 } from '@agentsws/core'
-import { imageFidelitySupported, parseImageSize } from '../images.js'
+import { IMAGE_SAFETY_REFUSAL_ZH, imageFidelitySupported, parseImageSize } from '../images.js'
 import { describeFetchError } from '../net-cause.js'
 import { GatewayError, ProviderError } from '../types.js'
 import type { FetchLike } from './openai-compatible.js'
@@ -93,6 +93,11 @@ export function openaiImageProvider(options: OpenAiImageOptions): ImageProvider 
     }
     if (!res.ok) {
       const detail = await res.text().catch(() => '')
+      // WP274：内容安全拦了（OpenAI `moderation_blocked` / 老的 `content_policy_violation`）说人话
+      if (/moderation_blocked|content_policy_violation|safety system/i.test(detail))
+        throw new GatewayError('invalid_input', IMAGE_SAFETY_REFUSAL_ZH, {
+          reason: 'content_safety',
+        })
       throw new ProviderError(`provider http ${res.status}: ${detail.slice(0, 200)}`, {
         status: res.status,
       })
