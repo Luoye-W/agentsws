@@ -1,20 +1,27 @@
 /**
  * WP265：连接页 Shopify 卡的「连接 Shopify」一键授权，卡片各状态。
  *
- * - 没登录：一句话 + 「登录」→ 就地出注册 / 登录表单；
- * - 老令牌缺 store：「重新登录」→ 登录页签、邮箱预填、验码带 `refresh: true`；
- * - 连不上：「再试一次」；
+ * - 没登录：一句话 + 「去登录」→ 跳「设置 → 账号」（WP272：卡里不再内嵌登录表单）；
+ * - 后台补签也没成：「工坊账号需要重新登录」+「去重新登录」→ 账号页（relogin）；
+ * - 连不上：「再试一次」+ 问号里原因码；
  * - 自动带上店铺域名 → 点「连接 Shopify」→ 打开授权页 + 「在浏览器里点安装」+ 取消 → 连上；
  * - 没有任何来源：出一格域名；云上 501：照实说 + 问号；
  * - 已连接：店名、域名、能管什么、测试连接、断开；失效 / 缺权限：「重新授权」；
  * - 卡片：老的客户端 ID 表单收进「高级」，默认看不到。
  */
 import { fireEvent, screen, waitFor } from '@testing-library/react'
+import { useLocation } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ProviderCard } from '@/components/connections/provider-card'
 import { ShopifyConnect, scopeWords } from '@/components/connections/shopify-connect'
 import type { ProviderView, ShopifyConnectView } from '@/lib/api'
 import { renderWithProviders } from './helpers'
+
+/** 当前路由（看「去登录」跳到哪）。 */
+function Where(): React.ReactNode {
+  const loc = useLocation()
+  return <span data-testid="where">{`${loc.pathname}${loc.search}`}</span>
+}
 
 const opened: string[] = []
 vi.mock('@/components/connections/bridge', () => ({
@@ -54,9 +61,6 @@ const state = {
   verify: [] as Record<string, unknown>[],
   tests: [] as string[],
   disconnects: [] as string[],
-  /** WP267：一点补签（`undefined` = 成；给了 = 按这个 reason 失败）。 */
-  upgradeError: undefined as string | undefined,
-  upgrades: 0,
 }
 
 vi.mock('@/lib/api', async () => {
@@ -86,18 +90,6 @@ vi.mock('@/lib/api', async () => {
     testShopifyConnect: async (shop: string) => {
       state.tests.push(shop)
       return { ok: true, shop, name: 'Rollout', domain: shop, checked_at: '2026-10-08T00:00:00Z' }
-    },
-    upgradeShopifyConnect: async () => {
-      state.upgrades += 1
-      if (state.upgradeError !== undefined)
-        throw new actual.ApiClientError(501, {
-          code: 'not_implemented',
-          message: 'no',
-          details: { reason: state.upgradeError },
-        })
-      state.view = IDLE
-      state.startError = undefined
-      return { upgraded: true, added: ['store'], scopes: ['ai', 'store'] }
     },
     disconnectShopifyConnect: async (shop: string) => {
       state.disconnects.push(shop)
@@ -130,27 +122,42 @@ beforeEach(() => {
   state.verify = []
   state.tests = []
   state.disconnects = []
-  state.upgradeError = undefined
-  state.upgrades = 0
   opened.length = 0
 })
 
 describe('WP265 卡片：点不了的几种', () => {
-  it('没登录：一句话 + 登录 → 就地出注册 / 登录表单', async () => {
+  it('没登录：一句话 + 去登录 → 跳设置 → 账号（带回来的路），卡里没有登录表单', async () => {
     state.view = {
       linked: false,
       blocked: { reason: 'not_linked', message: 'x' },
       connections: [],
       candidates: [],
     }
-    renderWithProviders(<ShopifyConnect assignment="asg_owner" />)
-    expect(await screen.findByText('先登录 Agents 工坊账号，再一键连 Shopify')).toBeTruthy()
+    renderWithProviders(
+      <>
+        <ShopifyConnect assignment="asg_owner" />
+        <Where />
+      </>,
+      '/connections',
+    )
+    expect(await screen.findByText('先登录 Agents 工坊账号')).toBeTruthy()
     expect(screen.queryByTestId('shopconnect-connect')).toBeNull()
+    // 问号里说清：不是 Shopify 账号
+    expect(
+      screen.getByTestId('shopconnect-account-hint').getAttribute('data-hint') ?? '',
+    ).toContain('不是 Shopify')
     fireEvent.click(screen.getByTestId('shopconnect-login'))
-    expect(await screen.findByTestId('shopconnect-auth')).toBeTruthy()
+    const where = screen.getByTestId('where').textContent ?? ''
+    expect(where.startsWith('/settings?tab=account')).toBe(true)
+    expect(new URLSearchParams(where.split('?')[1]).get('return')).toBe(
+      '/connections?service=shopify_admin',
+    )
+    expect(new URLSearchParams(where.split('?')[1]).get('relogin')).toBeNull()
+    expect(screen.queryByTestId('shopconnect-auth')).toBeNull()
+    expect(document.querySelector('input[type="password"]')).toBeNull()
   })
 
-  it('老令牌缺 store：一点补签没成（WP267）→ 退回重新登录 = 登录页签、邮箱预填、验码带 refresh', async () => {
+  it('后台补签也没成（scope_missing）：「工坊账号需要重新登录」+ 去重新登录 → 账号页 relogin，没有「授权要更新」', async () => {
     state.view = {
       linked: true,
       email: 'owner@example.com',
@@ -158,29 +165,46 @@ describe('WP265 卡片：点不了的几种', () => {
       connections: [],
       candidates: [],
     }
-    state.upgradeError = 'upgrade_unavailable'
-    renderWithProviders(<ShopifyConnect assignment="asg_owner" />)
-    expect(await screen.findByText('账号授权要更新一下，点一下就好')).toBeTruthy()
-    fireEvent.click(screen.getByTestId('shopconnect-upgrade'))
-    expect(await screen.findByTestId('shopconnect-upgrade-fallback')).toBeTruthy()
-    const form = await screen.findByTestId('shopconnect-auth')
-    expect(form.getAttribute('data-tab')).toBe('login')
-    expect((screen.getByTestId('shopconnect-email') as HTMLInputElement).value).toBe(
-      'owner@example.com',
+    renderWithProviders(
+      <>
+        <ShopifyConnect assignment="asg_owner" />
+        <Where />
+      </>,
+      '/connections',
     )
-    // 注册 / 登录两个页签藏起来了（只能用同一个账号重新登录）
-    expect(screen.getByRole('tablist', { hidden: true }).className).toContain('hidden')
+    expect(await screen.findByText('工坊账号需要重新登录')).toBeTruthy()
+    expect(document.body.textContent ?? '').not.toMatch(/授权要更新|更新授权/)
+    expect(screen.queryByTestId('shopconnect-upgrade')).toBeNull()
+    fireEvent.click(screen.getByTestId('shopconnect-relogin'))
+    const where = screen.getByTestId('where').textContent ?? ''
+    expect(new URLSearchParams(where.split('?')[1]).get('relogin')).toBe('1')
+    expect(screen.queryByTestId('shopconnect-auth')).toBeNull()
   })
 
-  it('连不上云：再试一次', async () => {
+  it('令牌被撤（已登录过、not_linked）：同样说「需要重新登录」', async () => {
     state.view = {
       linked: true,
-      blocked: { reason: 'offline', message: 'x' },
+      blocked: { reason: 'not_linked', message: 'x' },
+      connections: [],
+      candidates: [],
+    }
+    renderWithProviders(<ShopifyConnect assignment="asg_owner" />)
+    expect(await screen.findByText('工坊账号需要重新登录')).toBeTruthy()
+    expect(screen.getByTestId('shopconnect-relogin')).toBeTruthy()
+  })
+
+  it('连不上云：再试一次；问号里有原因码', async () => {
+    state.view = {
+      linked: true,
+      blocked: { reason: 'offline', message: 'x', cause_code: 'ENOTFOUND' },
       connections: [],
       candidates: [],
     }
     renderWithProviders(<ShopifyConnect />)
     expect(await screen.findByTestId('shopconnect-retry')).toBeTruthy()
+    expect(screen.getByTestId('shopconnect-offline-hint').getAttribute('data-hint')).toContain(
+      'ENOTFOUND',
+    )
   })
 })
 
@@ -325,33 +349,22 @@ describe('WP265 Shopify 卡：老表单收进「高级」', () => {
   })
 })
 
-describe('WP267 卡片：账号授权一点补签', () => {
-  it('点连接撞上「授权要更新」→「更新授权」一点就好，成了接着连刚才那家店（不用重新登录）', async () => {
+describe('WP272 卡片：补权限全自动', () => {
+  it('点连接撞上缺动作集（服务端补签也没成）：整张卡换成「需要重新登录」，不出登录表单、不出「更新授权」', async () => {
     state.startError = { reason: 'scope_missing', message: 'x', status: 403 }
     renderWithProviders(<ShopifyConnect assignment="asg_owner" />)
     fireEvent.click(await screen.findByTestId('shopconnect-connect'))
-    // 起授权回 scope_missing → 卡上换成「更新授权」
-    state.view = {
-      ...IDLE,
-      blocked: { reason: 'scope_missing', message: 'x' },
-    }
-    const upgrade = await screen.findByTestId('shopconnect-upgrade')
-    expect(screen.queryByTestId('shopconnect-relogin')).toBeNull()
-    fireEvent.click(upgrade)
-    await waitFor(() => expect(state.upgrades).toBe(1))
-    // 接着做刚才那一步：再起一次授权，还是那家店
-    await waitFor(() => expect(state.starts).toHaveLength(2))
-    expect(state.starts[1]).toEqual({ shop: '6suegp-md.myshopify.com' })
-    expect(await screen.findByTestId('shopconnect-waiting')).toBeTruthy()
-    expect(opened).toHaveLength(1)
+    state.view = { ...IDLE, blocked: { reason: 'scope_missing', message: 'x' } }
+    expect(await screen.findByTestId('shopconnect-relogin')).toBeTruthy()
+    expect(screen.queryByTestId('shopconnect-upgrade')).toBeNull()
     expect(screen.queryByTestId('shopconnect-auth')).toBeNull()
   })
 
-  it('卡一打开就是「授权要更新」：点一下补签，回到能连的样子', async () => {
-    state.view = { ...IDLE, blocked: { reason: 'scope_missing', message: 'x' } }
+  it('服务端补签成了（卡上看到的就是能连）：连接按钮直接可用', async () => {
     renderWithProviders(<ShopifyConnect assignment="asg_owner" />)
-    fireEvent.click(await screen.findByTestId('shopconnect-upgrade'))
-    expect(await screen.findByTestId('shopconnect-connect')).toBeTruthy()
-    expect(state.starts).toEqual([])
+    fireEvent.click(await screen.findByTestId('shopconnect-connect'))
+    await waitFor(() => expect(state.starts).toHaveLength(1))
+    expect(await screen.findByTestId('shopconnect-waiting')).toBeTruthy()
+    expect(document.body.textContent ?? '').not.toMatch(/授权要更新|更新授权/)
   })
 })

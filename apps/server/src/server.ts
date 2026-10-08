@@ -520,6 +520,7 @@ import {
   type ScheduleAssembly,
   type SchedulePosition,
 } from './schedule.js'
+import { createScopeAutoUpgrade, type ScopeAutoUpgrade } from './scope-auto-upgrade.js'
 import {
   createOfficialSearchClient,
   createSearchDataService,
@@ -1439,10 +1440,19 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     if (isRosterEvent(e.type))
       for (const sync of rosterSyncs.values()) sync.poke(e.type === 'cloud.account_linked')
     // WP233：刚关联上云账号 → 本机负责人的占位邮箱改成云账号邮箱（不管是哪条关联路走过来的）
-    if (e.type === 'cloud.account_linked') cloudLinkedSink?.()
+    if (e.type === 'cloud.account_linked') {
+      cloudLinkedSink?.()
+      // WP272：新签的令牌——补签没成的冷却作废
+      scopeAutoUpgrade?.reset()
+    }
   }
   /** WP233：晚绑定——云账号那一套装好之后才挂上（见 `alignOwnerEmail`）。 */
   let cloudLinkedSink: (() => void) | undefined
+  /**
+   * WP272：令牌缺动作集时后台自动补签（`scope-auto-upgrade.ts`）。晚绑定：各品牌的云面先建，
+   * 账号面后装；没装好之前撞上缺动作集就照实回 403。
+   */
+  let scopeAutoUpgrade: ScopeAutoUpgrade | undefined
   /** WP206：每个品牌一份名册同步（品牌装好时建，`rosterReady` 之后才开始推）。 */
   const rosterSyncs = new Map<WorkspaceId, RosterSync>()
   let rosterReady = false
@@ -3905,6 +3915,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       canManage: (actor) => creditsRoleOf(actor.person_id, ws),
       directory: () => creditsDirectory(ws),
       timeZone: async () => (await identity.getWorkspace(ws))?.tz,
+      // WP272：撞上缺动作集 → 后台补签 → 原样再打一次（用户无感）
+      scopeUpgrade: () => scopeAutoUpgrade?.ensure(ws) ?? Promise.resolve(false),
     })
     readLevelHolder.of = readRouteLevelOf(ownCloud, readonlyBrowser, readAccount)
     // WP246：取数路线（体检、设置、读号、两个零配置工具）
@@ -7310,6 +7322,15 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     ...(options.cloudFetch === undefined ? {} : { fetch: options.cloudFetch }),
   })
 
+  scopeAutoUpgrade = createScopeAutoUpgrade({
+    upgrade: (ws) => cloudAccount.upgradeScopes(ws),
+    missingOf: (ws) => cloudAccount.missingScopesOf(ws),
+    brands: () => brandsOfThisOrg(),
+    nowMs: () => Date.parse(clock.now()),
+  })
+  // WP272：启动时后台补一次（不等它、不挡启动；断网就等下一跳撞上再补）
+  void scopeAutoUpgrade.sweep().catch(() => undefined)
+
   /*
    * WP233：本机负责人的登录邮箱跟云账号对齐（只改占位 `owner@localhost`，可重复跑）。
    * 两个时机：刚关联上（事件钩子），以及**启动时补一次**——老工作区早就关联了云账号，
@@ -8646,6 +8667,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       links: cloudShopLinks,
       // WP267（决策 208）：老令牌缺 store → 一点补签（云上就地补，不用重新登录）
       upgrade: (ws) => cloudAccount.upgradeScopes(ws),
+      // WP272：卡上不再出「更新授权」——撞上缺动作集就后台补签、接着做（与云面同一份去重 / 冷却）
+      autoUpgrade: (ws) => scopeAutoUpgrade?.ensure(ws) ?? Promise.resolve(false),
     }),
     /*
      * WP246（决策 87 / 88）：取数路线（体检、设置、Reddit 读号），按品牌取。

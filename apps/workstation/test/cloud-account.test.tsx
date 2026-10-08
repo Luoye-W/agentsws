@@ -7,8 +7,9 @@
  * 3. **这一页任何时候都看不到令牌**（服务端也不回它）；
  * 4. 积分那块是 WP59 的空插槽，现在什么都不渲染。
  */
-import { screen } from '@testing-library/react'
+import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { useLocation } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { CloudAccountCard } from '@/components/settings/cloud-account'
 import { CreditsPanel } from '@/components/settings/credits-panel'
@@ -210,5 +211,67 @@ describe('49 M1 设置页账号卡', () => {
   it('积分那块是 WP59 的空插槽，现在不渲染任何东西', () => {
     const { container } = renderWithProviders(<CreditsPanel />)
     expect(container.textContent).toBe('')
+  })
+})
+
+/** 当前路由（看登录完回到哪）。 */
+function Where(): React.ReactNode {
+  const loc = useLocation()
+  return <span data-testid="where">{`${loc.pathname}${loc.search}`}</span>
+}
+
+describe('WP272 账号页：登录表单只在这里', () => {
+  const FROM_SHOP = `/settings?tab=account&return=${encodeURIComponent('/connections?service=shopify_admin')}`
+
+  it('说清是哪个账号：积分、云端功能都在上面，不是 Shopify 账号', async () => {
+    renderWithProviders(<CloudAccountCard assignment="asg_1" />)
+    await screen.findByTestId('cloud-account-unlinked')
+    expect(screen.getByTestId('cloud-account-what').textContent).toContain(
+      '积分、云端功能都在这个账号上',
+    )
+    expect(screen.getByTestId('cloud-account-what').textContent).toContain('不是 Shopify')
+  })
+
+  it('从 Shopify 卡跳来登录：登录完自动回到连接页那张卡', async () => {
+    renderWithProviders(
+      <>
+        <CloudAccountCard assignment="asg_1" />
+        <Where />
+      </>,
+      FROM_SHOP,
+    )
+    await screen.findByTestId('cloud-account-unlinked')
+    await userEvent.click(screen.getByTestId('cloud-account-tab-login'))
+    await userEvent.type(screen.getByLabelText('邮箱'), 'luoye@example.com')
+    await userEvent.click(screen.getByRole('button', { name: '发验证码' }))
+    await userEvent.type(await screen.findByTestId('cloud-account-code'), '246810')
+    await userEvent.click(screen.getByTestId('cloud-account-verify'))
+    await waitFor(() =>
+      expect(screen.getByTestId('where').textContent).toBe('/connections?service=shopify_admin'),
+    )
+  })
+
+  it('已关联 + relogin=1：直接摊开登录表单（登录页签、邮箱预填），当前邮箱照样显示', async () => {
+    state.view = LINKED
+    renderWithProviders(<CloudAccountCard assignment="asg_1" />, `${FROM_SHOP}&relogin=1`)
+    await screen.findByTestId('cloud-account-linked')
+    expect(screen.getByTestId('cloud-account').textContent).toContain('luoye@example.com')
+    const form = await screen.findByTestId('cloud-account-relogin-auth')
+    expect(form.getAttribute('data-tab')).toBe('login')
+    expect((screen.getByTestId('cloud-account-relogin-email') as HTMLInputElement).value).toBe(
+      'luoye@example.com',
+    )
+  })
+
+  it('已关联、没带 relogin：表单收着，点「重新登录」才出来；站外的 return 不认', async () => {
+    state.view = LINKED
+    renderWithProviders(
+      <CloudAccountCard assignment="asg_1" />,
+      '/settings?tab=account&return=https%3A%2F%2Fevil.example',
+    )
+    await screen.findByTestId('cloud-account-linked')
+    expect(screen.queryByTestId('cloud-account-relogin-auth')).toBeNull()
+    await userEvent.click(screen.getByTestId('cloud-account-relogin'))
+    expect(await screen.findByTestId('cloud-account-relogin-auth')).toBeTruthy()
   })
 })
