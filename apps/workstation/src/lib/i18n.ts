@@ -12,6 +12,7 @@ import { NPM_REGISTRY_EN, NPM_REGISTRY_ZH } from './i18n-npm-registry'
 import { OWN_SUB_EN, OWN_SUB_ZH } from './i18n-own-sub'
 import { POSITION_EN, POSITION_ZH } from './i18n-position'
 import { READ_ROUTES_EN, READ_ROUTES_ZH } from './i18n-read-routes'
+import { SHOPIFY_CONNECT_EN, SHOPIFY_CONNECT_ZH } from './i18n-shopify-connect'
 import { SITE_THEME_EN, SITE_THEME_ZH } from './i18n-site-theme'
 import { SOCIAL_EXEC_EN, SOCIAL_EXEC_ZH } from './i18n-social-exec'
 import { SOCIAL_REPLY_EN, SOCIAL_REPLY_ZH } from './i18n-social-reply'
@@ -7950,6 +7951,8 @@ const TABLES: Record<Lang, Table> = {
     ...SOCIAL_EXEC_ZH,
     // WP255：「回复」按钮与社群线程列表
     ...SOCIAL_REPLY_ZH,
+    // WP265：连接页 Shopify 卡「连接 Shopify」一键授权
+    ...SHOPIFY_CONNECT_ZH,
     // WP259：「交给它」提交中 / 没交出去
     ...HANDOFF_ZH,
   },
@@ -7964,6 +7967,7 @@ const TABLES: Record<Lang, Table> = {
     ...OWN_SUB_EN,
     ...NPM_REGISTRY_EN,
     ...SOCIAL_EXEC_EN,
+    ...SHOPIFY_CONNECT_EN,
     ...SOCIAL_REPLY_EN,
     ...HANDOFF_EN,
   },

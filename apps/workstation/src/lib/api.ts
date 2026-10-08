@@ -4198,6 +4198,16 @@ export const teachChatSession = (
 /* ── 49 M1 云账号（WP58）──────────────────────────────────────────────── */
 
 export type CloudScopeName = 'ai' | 'wallet:read' | 'standby'
+/** WP265：契约里的整套动作集（`missing_scopes` 用；老的 `CloudScopeName` 只是界面上显示的那几项）。 */
+export type CloudScopeId =
+  | 'ai'
+  | 'wallet:read'
+  | 'wallet:topup'
+  | 'wallet:admin'
+  | 'standby'
+  | 'data'
+  | 'kol'
+  | 'store'
 
 /** 关联状态。**这里没有、也不会有令牌字段**——它只在本机加密库里。 */
 export interface CloudAccountView {
@@ -4210,6 +4220,8 @@ export interface CloudAccountView {
   cloud_base_url: string
   /** 现在还关联不了的原因（比如这台机器没有秘密库密钥）。 */
   blocked_reason?: string
+  /** WP265：这把令牌比现在的默认动作集少了哪几项（老令牌没有 `store`）。 */
+  missing_scopes?: CloudScopeId[]
 }
 
 export interface CloudUnlinkResult {
@@ -4277,17 +4289,17 @@ export const cloudSignupVerify = (
 ): Promise<CloudAuthDone> => cloudAuthPost('/v1/cloud/account/signup/verify', input, assignment)
 
 export const cloudLoginCode = (
-  input: { email: string; locale: 'zh' | 'en' },
+  input: { email: string; locale: 'zh' | 'en'; refresh?: boolean },
   assignment?: string,
 ): Promise<CloudCodeSent> => cloudAuthPost('/v1/cloud/account/code', input, assignment)
 
 export const cloudLoginCodeVerify = (
-  input: { email: string; code: string },
+  input: { email: string; code: string; refresh?: boolean },
   assignment?: string,
 ): Promise<CloudAuthDone> => cloudAuthPost('/v1/cloud/account/code/verify', input, assignment)
 
 export const cloudPasswordLogin = (
-  input: { email: string; password: string },
+  input: { email: string; password: string; refresh?: boolean },
   assignment?: string,
 ): Promise<CloudAuthDone> => cloudAuthPost('/v1/cloud/account/password-login', input, assignment)
 
@@ -4305,6 +4317,81 @@ export const unlinkCloudAccount = (assignment?: string): Promise<CloudUnlinkResu
   api<CloudUnlinkResult>('/v1/cloud/account/unlink', {
     method: 'POST',
     ...(assignment === undefined ? {} : { assignment }),
+  })
+
+/* ── WP265：连接页 Shopify 卡的一键授权（店铺令牌只在云上，这里一个令牌字段都没有）──────── */
+
+export interface ShopifyConnectRow {
+  shop: string
+  name?: string
+  app?: string
+  status: 'connected' | 'reauth_required'
+  reauth_reason?: string
+  scopes: string[]
+  missing_scopes: string[]
+  expires_at?: string
+}
+
+export interface ShopifyConnectView {
+  linked: boolean
+  email?: string
+  blocked?: { reason: 'not_linked' | 'scope_missing' | 'offline'; message: string }
+  connections: ShopifyConnectRow[]
+  suggested_shop?: string
+  candidates: { shop: string; source: 'profile' | 'site' | 'cli' | 'connection' }[]
+}
+
+export interface ShopifyConnectStarted {
+  attempt_id: string
+  authorize_url: string
+  shop: string
+  expires_at: string
+}
+
+export interface ShopifyConnectAttempt {
+  status: 'pending' | 'connected' | 'failed' | 'expired'
+  shop?: string
+  message?: string
+}
+
+export interface ShopifyConnectTest {
+  ok: boolean
+  shop: string
+  name?: string
+  domain?: string
+  message?: string
+  checked_at: string
+}
+
+export const getShopifyConnect = (assignment?: string): Promise<ShopifyConnectView> =>
+  api<ShopifyConnectView>('/v1/shopify-connect', withAssignment(assignment))
+
+export const startShopifyConnect = (
+  input: { shop?: string },
+  assignment?: string,
+): Promise<ShopifyConnectStarted> =>
+  api('/v1/shopify-connect/start', { method: 'POST', body: input, ...withAssignment(assignment) })
+
+export const getShopifyConnectAttempt = (
+  id: string,
+  assignment?: string,
+): Promise<ShopifyConnectAttempt> =>
+  api(`/v1/shopify-connect/attempts/${encodeURIComponent(id)}`, withAssignment(assignment))
+
+export const testShopifyConnect = (
+  shop: string,
+  assignment?: string,
+): Promise<ShopifyConnectTest> =>
+  api('/v1/shopify-connect/test', { method: 'POST', body: { shop }, ...withAssignment(assignment) })
+
+export const disconnectShopifyConnect = (
+  shop: string,
+  assignment?: string,
+): Promise<{ disconnected: boolean }> =>
+  api('/v1/shopify-connect/disconnect', {
+    method: 'POST',
+    body: { shop },
+    ...withAssignment(assignment),
   })
 
 // ── WP65（52 O1–O4）组织与品牌 ─────────────────────────────────────────
