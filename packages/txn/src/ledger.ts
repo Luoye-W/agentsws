@@ -307,7 +307,12 @@ export class ChangeLedgerImpl {
         run_id: input.run_id,
         source_events: input.approval.source_events ?? [],
         provenance: { seen: seenRefs(input) },
-        precheck: {},
+        /*
+         * WP261：这次运行的 provenance 证明读过目标全文 → 预检那道老门（`record_read`，给没接 provenance 的
+         * 老路径留的自报字段）照实记 ok。真正的强制在上面的 guardrail（同一份 provenance、同一张
+         * `RECORD_READ_KINDS`）——它已经判过；不记这一格，经账本提的改文案卡一律被老门拦成 blocked。
+         */
+        precheck: provenance?.hasFull(input.target) === true ? { record_read: 'ok' } : {},
       },
       proposer: input.approval.proposer,
       automation: {

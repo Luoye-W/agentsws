@@ -117,6 +117,25 @@ const FIELDS: Record<string, FieldDef> = {
   currency: { label: { zh: '币种', en: 'Currency' } },
   discount: { label: { zh: '折扣', en: 'Discount' } },
   code: { label: { zh: '折扣码', en: 'Code' } },
+  // WP261：独立站运营卡（商品 / 页面 / 菜单 / 折扣）
+  description_html: { label: { zh: '描述', en: 'Description' } },
+  body_html: { label: { zh: '正文', en: 'Body' } },
+  product_type: { label: { zh: '类型', en: 'Type' } },
+  vendor: { label: { zh: '品牌', en: 'Vendor' } },
+  compare_at_price: { label: { zh: '划线价', en: 'Compare-at price' } },
+  sku: { label: { zh: 'SKU', en: 'SKU' } },
+  handle: { label: { zh: '网址', en: 'URL handle' } },
+  pictures: { label: { zh: '图片', en: 'Images' } },
+  menu: { label: { zh: '菜单项', en: 'Menu items' } },
+  spec: { label: { zh: '规格', en: 'Options' } },
+  count: { label: { zh: '件数', en: 'Items' } },
+  percent: { label: { zh: '减', en: 'Off' }, unit: { zh: '%', en: '%' } },
+  amount_off: { label: { zh: '每单减', en: 'Amount off' } },
+  usage_limit: { label: { zh: '最多用几次', en: 'Usage limit' } },
+  once_per_customer: { label: { zh: '每位顾客一次', en: 'Once per customer' } },
+  minimum_subtotal: { label: { zh: '满多少可用', en: 'Minimum subtotal' } },
+  starts_at: { label: { zh: '开始', en: 'Starts' } },
+  ends_at: { label: { zh: '结束', en: 'Ends' } },
   // 状态类：值也要翻
   stage: { label: { zh: '阶段', en: 'Stage' }, values: STAGE_VALUES },
   status: { label: { zh: '状态', en: 'Status' }, values: STATUS_VALUES },
@@ -168,6 +187,14 @@ export function fieldValue(key: string, value: unknown, lang: Lang): string {
   if (typeof value === 'string') {
     const mapped = def?.values?.[value]
     if (mapped !== undefined) return mapped[lang]
+    // WP261：HTML 正文 / 描述上卡面只看字（去标签、截短）
+    if (key.endsWith('_html')) {
+      const text = value
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+      return text.length > 200 ? `${text.slice(0, 200)}…` : text
+    }
     return whenText(value, lang)
   }
   if (Array.isArray(value)) return value.map((v) => fieldValue(key, v, lang)).join('、')

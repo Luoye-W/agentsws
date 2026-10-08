@@ -7006,6 +7006,80 @@ export const setSiteThemeStore = (
     ...withAssignment(assignment),
   })
 
+/**
+ * WP261（决策 175 第 1 步）：「授权管理商品和页面」那一行（服务端 `ShopAdminView` 同形）。
+ * `roles` = 这个岗位上的职责（权限按它们的并集算「还缺哪项」）。
+ */
+export interface ShopAdminView {
+  applicable: boolean
+  state?:
+    | 'no_cli'
+    | 'no_store'
+    | 'unauthorized'
+    | 'authorizing'
+    | 'expired'
+    | 'missing_scopes'
+    | 'authorized'
+  store?: string
+  scopes_needed: string[]
+  scopes_granted: string[]
+  missing: string[]
+  authorized_at?: string
+  expires_at?: string
+  refreshable?: boolean
+  problem?: { code: 'expired' | 'revoked' | 'missing_scope'; missing?: string[]; at: string }
+  job?: {
+    action: 'install' | 'authorize'
+    phase: 'running' | 'waiting_browser' | 'done' | 'failed' | 'cancelled'
+    started_at: string
+    finished_at?: string
+    auth_url?: string
+    browser_opened?: boolean
+    error?: { code: string; missing?: string[]; detail?: string }
+  }
+}
+
+const rolesQuery = (roles: readonly string[]): string =>
+  roles.length === 0 ? '' : `?roles=${encodeURIComponent(roles.join(','))}`
+
+export const getShopAdmin = (
+  assignment: string,
+  roles: readonly string[],
+): Promise<ShopAdminView> => api(`/v1/shop-admin${rolesQuery(roles)}`, withAssignment(assignment))
+
+/** 一键安装 CLI / 起店铺授权（浏览器里点批准）。只给人点。 */
+export const runShopAdmin = (
+  action: 'install' | 'authorize',
+  assignment: string,
+  roles: readonly string[],
+): Promise<ShopAdminView> =>
+  api('/v1/shop-admin/run', {
+    method: 'POST',
+    body: { action, roles: [...roles] },
+    ...withAssignment(assignment),
+  })
+
+export const cancelShopAdmin = (
+  assignment: string,
+  roles: readonly string[],
+): Promise<ShopAdminView> =>
+  api('/v1/shop-admin/cancel', {
+    method: 'POST',
+    body: { roles: [...roles] },
+    ...withAssignment(assignment),
+  })
+
+export const setShopAdminStore = (
+  store: string,
+  assignment: string,
+  roles: readonly string[],
+): Promise<ShopAdminView> =>
+  api('/v1/shop-admin/store', {
+    method: 'PUT',
+    body: { store, roles: [...roles] },
+    ...withAssignment(assignment),
+  })
+
 /** WP245：停掉正在跑的那件（登录等浏览器时的「取消」）。 */
 export const cancelPlatformCli = (assignment?: string): Promise<PlatformKitView> =>
   api('/v1/platform-kit/cli/cancel', { method: 'POST', ...withAssignment(assignment) })

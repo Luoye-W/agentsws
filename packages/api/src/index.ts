@@ -622,6 +622,14 @@ export type {
   SeoRunView,
 } from './routes/seo.js'
 export { seoRoutes } from './routes/seo.js'
+export {
+  type ShopAdminActor,
+  type ShopAdminAuthJob,
+  type ShopAdminPort,
+  type ShopAdminState,
+  type ShopAdminView,
+  shopAdminRoutes,
+} from './routes/shop-admin.js'
 // WP77（59 §1 / §2）：建站那一侧最小一组
 export type {
   SiteAppInstallInput,
