@@ -23,6 +23,8 @@ import {
   SHOP_VIA,
   type ShopOps,
   type ShopOpsOptions,
+  fromCard,
+  toCard,
 } from './shop-ops.js'
 import { draftOf } from './shop-propose.js'
 
@@ -119,8 +121,9 @@ export function createShopOps(
         kind,
         target: draft.target,
         ...(draft.field === undefined ? {} : { field: draft.field }),
-        before: draft.before,
-        after: draft.after,
+        // 卡面只给人看人话那几格；给执行器的那几格改名成 `_` 开头（见 `toCard`）
+        before: toCard(draft.before),
+        after: toCard(draft.after),
         notes: draft.notes,
         created_by: { kind: 'agent', id: `agent_${role_id}` },
         mandate: m.mandate,
@@ -164,10 +167,7 @@ export function createShopOps(
     },
 
     async apply(change: StagedChange): Promise<BackendResult | undefined> {
-      const after =
-        change.after !== null && typeof change.after === 'object'
-          ? (change.after as Record<string, unknown>)
-          : {}
+      const after = fromCard(change.after)
       if (after.via !== SHOP_VIA || change.workspace_id !== ws) return undefined
       const done = loadApplied()[change.id]
       if (done !== undefined)
@@ -202,7 +202,7 @@ export function createShopOps(
       try {
         result = await applyShopChange(
           { admin, access, fileRoots: options.fileRoots(), fetch: options.fetch ?? fetch, now },
-          change,
+          { ...change, after, before: fromCard(change.before) },
         )
       } catch (e) {
         const retryable =

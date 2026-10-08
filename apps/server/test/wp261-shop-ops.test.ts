@@ -271,7 +271,7 @@ describe('改动：只出卡 → 批了才改 → 读回', () => {
     )
     expect(staged[0]).toMatchObject({
       kind: 'listing_edit',
-      after: { shop_op: 'product_create', status: 'DRAFT', price: 12.5 },
+      after: { _shop_op: 'product_create', _status: 'DRAFT', status: 'draft', price: 12.5, spec: '颜色（黑 / 白）' },
     })
     expect(staged[0]?.approval.title).toBe('新建商品「Rollout 杯架」（先存草稿）')
     expect((await ops.apply(changeOf(0)))?.status).toBe('ok')
@@ -295,7 +295,7 @@ describe('改动：只出卡 → 批了才改 → 读回', () => {
     expect(staged[2]).toMatchObject({
       kind: 'publish_product',
       level: 'L1',
-      after: { status: 'ACTIVE' },
+      after: { _status: 'ACTIVE', status: 'active' },
     })
     expect((await ops.apply(changeOf(2)))?.status).toBe('ok')
     expect(shop.products[1]).toMatchObject({ status: 'ACTIVE', published: true })
@@ -323,7 +323,7 @@ describe('改动：只出卡 → 批了才改 → 读回', () => {
     await ops.propose('shop_save_collection', { id: col, add_product_ids: ['1002'] }, req())
     expect(staged[0]).toMatchObject({
       kind: 'collection_edit',
-      after: { add: ['gid://shopify/Product/1002'], products: ['gid://shopify/Product/1002'] },
+      after: { _add: ['gid://shopify/Product/1002'], count: 1, added: '1 件商品' },
     })
     expect((await ops.apply(changeOf(0)))?.status).toBe('ok')
     expect(shop.collections[0]?.products).toContain('gid://shopify/Product/1002')
@@ -337,7 +337,7 @@ describe('改动：只出卡 → 批了才改 → 读回', () => {
     )
     expect(staged[1]).toMatchObject({
       kind: 'store_setup',
-      after: { shop_op: 'page_update', body_html: '<p>新的介绍</p>' },
+      after: { _shop_op: 'page_update', body_html: '<p>新的介绍</p>' },
     })
     expect((await ops.apply(changeOf(1)))?.status).toBe('ok')
     expect(shop.pages[0]?.body).toBe('<p>新的介绍</p>')
@@ -431,7 +431,7 @@ describe('改动：只出卡 → 批了才改 → 读回', () => {
         id: 'x',
         workspace_id: 'ws_other',
         kind: 'listing_edit',
-        after: { via: 'shop_admin' },
+        after: { _via: 'shop_admin' },
       } as unknown as StagedChange),
     ).toBeUndefined()
   })

@@ -59,8 +59,82 @@ export type ShopOp =
   | 'menu_update'
   | 'discount_create'
 
-/** 卡上 `after.via` 写这个，执行器才认（别的来路的同一类卡不归这里）。 */
+/** 卡上 `after._via` 写这个，执行器才认（别的来路的同一类卡不归这里）。 */
 export const SHOP_VIA = 'shop_admin'
+
+/**
+ * 卡面与执行器的分工：`after` / `before` 里**给执行器用的**那几格（店铺、id、操作名、图片文件、菜单项原样…）
+ * 落卡时改名成 `_` 开头——卡面不显示（`deck-card-body` 的规矩），人只看到标题 / 价格 / 状态这些；
+ * 列表类另给一行人话摘要（几张图、菜单项是哪几个、加减几件）。执行器拿回来时 {@link fromCard} 还原。
+ */
+const MACHINE_KEYS = new Set([
+  'via',
+  'shop_op',
+  'store',
+  'id',
+  'product_id',
+  'variant_id',
+  'product_title',
+  'page_title',
+  'collection_title',
+  'images',
+  'items',
+  'options',
+  'add',
+  'remove',
+  'products',
+])
+/** 只给卡面看的摘要（执行器不认，还原时丢掉）。 */
+const SUMMARY_KEYS = new Set(['count', 'pictures', 'menu', 'spec', 'added', 'removed'])
+
+const titlesOfItems = (items: unknown): string[] =>
+  Array.isArray(items)
+    ? items.flatMap((i) => {
+        const x = i !== null && typeof i === 'object' ? (i as Record<string, unknown>) : {}
+        return [String(x.title ?? ''), ...titlesOfItems(x.items).map((t) => `${String(x.title ?? '')} › ${t}`)]
+      })
+    : []
+
+export function toCard(x: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {}
+  for (const [k, v] of Object.entries(x)) {
+    if (MACHINE_KEYS.has(k)) out[`_${k}`] = v
+    else if (k === 'status' && typeof v === 'string') {
+      out._status = v
+      out.status = v.toLowerCase()
+    } else out[k] = v
+  }
+  if (Array.isArray(x.products)) out.count = x.products.length
+  if (Array.isArray(x.images))
+    out.pictures = x.images
+      .map((i) => {
+        const im = i as Record<string, unknown>
+        return typeof im.url === 'string' ? im.url : `本机文件 ${String(im.name ?? '')}`
+      })
+      .join('；')
+  if (typeof x.images === 'number') out.pictures = `${x.images} 张`
+  if (Array.isArray(x.items)) out.menu = titlesOfItems(x.items).join('、') || '（空）'
+  if (Array.isArray(x.options))
+    out.spec = x.options
+      .map((o) => {
+        const op = o as { name?: string; values?: string[] }
+        return `${op.name ?? ''}（${(op.values ?? []).join(' / ')}）`
+      })
+      .join('，')
+  if (Array.isArray(x.add) && x.add.length > 0) out.added = `${x.add.length} 件商品`
+  if (Array.isArray(x.remove) && x.remove.length > 0) out.removed = `${x.remove.length} 件商品`
+  return out
+}
+
+export function fromCard(x: unknown): Record<string, unknown> {
+  const o = x !== null && typeof x === 'object' ? (x as Record<string, unknown>) : {}
+  const out: Record<string, unknown> = {}
+  for (const [k, v] of Object.entries(o)) {
+    if (k.startsWith('_')) out[k.slice(1)] = v
+    else if (!SUMMARY_KEYS.has(k) && !(k === 'status' && '_status' in o)) out[k] = v
+  }
+  return out
+}
 
 export class ShopOpsError extends Error {
   constructor(

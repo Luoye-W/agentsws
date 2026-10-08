@@ -41,8 +41,11 @@ function valueText(v: unknown): string {
  * 而是「过了退货期还能宽限: 0 天 → 7 天」。
  */
 function pairs(v: unknown, lang: Lang): [string, string][] {
+  // WP261：`_` 开头的是给执行器用的（店铺、id、原样的菜单项…），不上卡面
   if (isRecord(v))
-    return Object.entries(v).map(([k, x]) => [fieldLabel(k, lang), fieldValue(k, x, lang)])
+    return Object.entries(v)
+      .filter(([k]) => !k.startsWith('_'))
+      .map(([k, x]) => [fieldLabel(k, lang), fieldValue(k, x, lang)])
   if (v === undefined) return []
   return [['', valueText(v)]]
 }

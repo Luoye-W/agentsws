@@ -22,7 +22,7 @@ const api = {
 }
 
 const view = (
-  state: ShopAdminView['state'],
+  state: NonNullable<ShopAdminView['state']>,
   extra: Partial<ShopAdminView> = {},
 ): ShopAdminView => ({
   applicable: true,
