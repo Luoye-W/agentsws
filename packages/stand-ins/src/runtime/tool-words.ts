@@ -64,6 +64,24 @@ export const TOOL_WORDS_ZH: Readonly<Record<string, string>> = {
   theme_write_file: '改主题文件',
   theme_push_unpublished: '推未发布主题',
   theme_publish: '主题发布卡',
+  // WP261：独立站运营工具（查询只读；改动只出卡）
+  shop_list_products: '店里的商品列表',
+  shop_get_product: '商品详情',
+  shop_list_collections: '店里的合集',
+  shop_get_collection: '合集详情',
+  shop_list_pages: '店里的页面',
+  shop_get_page: '页面正文',
+  shop_list_menus: '店里的菜单',
+  shop_list_discounts: '店里的折扣',
+  shop_recent_orders: '最近订单',
+  shop_save_product: '商品改动卡',
+  shop_set_price: '改价卡',
+  shop_set_product_status: '上下架卡',
+  shop_add_product_images: '商品加图卡',
+  shop_save_collection: '合集改动卡',
+  shop_save_page: '页面改动卡',
+  shop_save_menu: '菜单改动卡',
+  shop_create_discount: '折扣码卡',
 }
 
 /** 去掉 `service.` 前缀（`shopify.get_order` → `get_order`）；点在中间的 MCP 全名原样。 */
