@@ -250,6 +250,11 @@ export interface ConnectionsOptions {
   owners?: ConnectionOwners
   /** WP252：这是不是**启动品牌**（bootstrap 工作区）——只有它认领没人记过的老 `default` 连接。 */
   startupBrand?: boolean
+  /**
+   * WP265：不经连接器、但也算「连上了」的职责连接器 kind（云端一键授权连着店 → `shopify` / `shop`）。
+   * 同步读（就绪算法是同步的），给的是上一次问到的。不给 = 只看连接器里的连接。
+   */
+  extraKinds?: () => readonly string[]
 }
 
 export interface ConnectionsAssembly {
@@ -1678,6 +1683,7 @@ export async function createConnections(options: ConnectionsOptions): Promise<Co
         // `dtc.store` 写的是 `kind: shop`，不写死某一家平台的名字
         if (isStorefrontService(c.service)) kinds.add('shop')
       }
+      for (const k of options.extraKinds?.() ?? []) kinds.add(k)
       return [...kinds]
     },
     wrapDataSource(base) {

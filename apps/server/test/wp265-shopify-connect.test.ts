@@ -16,7 +16,7 @@ import { createCloud } from '../src/cloud.js'
 import { CLOUD_TOKEN_SECRET_ID } from '../src/cloud-account.js'
 import { createSecretStore } from '../src/secret-store.js'
 import { type ShopifyCloudStandIn, shopifyCloudStandIn } from '../src/shopify-cloud-stand-in.js'
-import { createShopifyConnect } from '../src/shopify-connect.js'
+import { createCloudShopLinks, createShopifyConnect } from '../src/shopify-connect.js'
 
 const INMO = 'ws_inmo' as WorkspaceId
 const ROLLOUT = 'ws_rollout' as WorkspaceId
@@ -324,5 +324,59 @@ describe('WP265 测试连接与断开', () => {
     expect((await port.view(actor(INMO))).connections.map((c) => c.shop)).toEqual([
       'shared.myshopify.com',
     ])
+  })
+})
+
+describe('WP265 云端连接缓存（运营工具 / 岗位就绪按它认）', () => {
+  it('问一次云：本品牌连着的那家 + 去掉没授到的权限；别的品牌、要重新授权的不算', async () => {
+    const clouds = new Map([
+      [INMO, cloudWith('wst_fake_inmo_0001')],
+      [ROLLOUT, cloudWith('wst_fake_rollout_0001')],
+    ])
+    const changed: string[] = []
+    const links = createCloudShopLinks({
+      cloudOf: async (ws) => clouds.get(ws),
+      startupBrand: INMO,
+      clock,
+      onChange: (ws) => changed.push(ws),
+    })
+    const port = portWith({ [ROLLOUT]: 'wst_fake_rollout_0001' })
+    const a = await port.start(actor(ROLLOUT), { shop: '6suegp-md.myshopify.com' })
+    fake.settle(a.attempt_id, 'connected')
+    fake.reauth('6suegp-md.myshopify.com', { missing_scopes: ['read_orders'] })
+    expect(links.peek(ROLLOUT)).toBeUndefined()
+    const link = await links.link(ROLLOUT)
+    expect(link?.shop).toBe('6suegp-md.myshopify.com')
+    expect(link?.scopes).toContain('write_products')
+    expect(link?.scopes).not.toContain('read_orders')
+    expect(links.peek(ROLLOUT)?.shop).toBe('6suegp-md.myshopify.com')
+    expect(await links.link(INMO)).toBeUndefined()
+    expect(changed).toEqual([ROLLOUT])
+    // 失效之后：作废缓存、再问一次就不算连着了
+    fake.reauth('6suegp-md.myshopify.com', { reason: 'app_uninstalled' })
+    links.invalidate(ROLLOUT)
+    expect(await links.link(ROLLOUT)).toBeUndefined()
+    expect(links.peek(ROLLOUT)).toBeUndefined()
+  })
+
+  it('卡上看一次就记住；断开即作废', async () => {
+    const links = createCloudShopLinks({
+      cloudOf: async () => cloudWith('wst_fake_rollout_0001'),
+      startupBrand: INMO,
+      clock,
+    })
+    const port = createShopifyConnect({
+      clock,
+      cloudOf: async () => cloudWith('wst_fake_rollout_0001'),
+      shopHints: () => [],
+      startupBrand: INMO,
+      links,
+    })
+    const a = await port.start(actor(ROLLOUT), { shop: '6suegp-md.myshopify.com' })
+    fake.settle(a.attempt_id, 'connected')
+    await port.view(actor(ROLLOUT))
+    expect(links.peek(ROLLOUT)?.shop).toBe('6suegp-md.myshopify.com')
+    await port.disconnect(actor(ROLLOUT), '6suegp-md.myshopify.com')
+    expect(await links.link(ROLLOUT)).toBeUndefined()
   })
 })

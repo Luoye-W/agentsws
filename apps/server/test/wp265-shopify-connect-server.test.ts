@@ -119,6 +119,12 @@ describe('WP265 /v1/shopify-connect 真装配线', () => {
 
     const view = await call<ShopifyConnectView>('GET', '/v1/shopify-connect')
     expect(view.data.connections.map((c) => c.shop)).toEqual(['nordvolt.myshopify.com'])
+    // 云端连着店 = 店铺后台已连（连接目录 / 岗位就绪同一个算法）
+    const dir = await call<{ entries: { kind: string; state: string }[] }>(
+      'GET',
+      '/v1/connection-directory',
+    )
+    expect(dir.data.entries.find((e) => e.kind === 'shopify')?.state).toBe('connected')
 
     const tested = await call<{ ok: boolean; domain?: string }>(
       'POST',

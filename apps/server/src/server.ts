@@ -517,7 +517,7 @@ import {
 import { createSecretaryAssembly, type SecretaryAssembly } from './secretary.js'
 import { claimRuleCard, createSeoService, pickRoleHolder } from './seo-service.js'
 import type { BrokerFetch } from './shopify-broker.js'
-import { createShopifyConnect } from './shopify-connect.js'
+import { createCloudShopLinks, createShopifyConnect } from './shopify-connect.js'
 import { createShopifyDevMcp } from './shopify-devmcp.js'
 import type { RunCli } from './shopify-theme.js'
 import { createConnectSiteFacts, createSiteService, createSiteStore, seedDemoSite } from './site.js'
@@ -2596,6 +2596,16 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   // 启动时先把各品牌老状态文件里记过的归属补记进来（幂等），必须在任何品牌列连接之前。
   const connectOwners = openConnectOwners({ dbDir, startup: workspace.id, now: clock.now() })
 
+  /*
+   * WP265（Fable 追加）：每个品牌「云端一键授权连着哪家店」的缓存。岗位就绪（`shopify` / `shop` 两个 kind）
+   * 与运营工具（优先云端、没有才回退 CLI 授权）按它认；连接页卡上每看一次、连上 / 断开都顺手更新。
+   * 云客户端是品牌模块里的那一份——晚绑定（`brandModules` 在下面才建好）。
+   */
+  const cloudShopLinks = createCloudShopLinks({
+    cloudOf: (ws) => brandModules.cloud(ws),
+    startupBrand: workspace.id,
+    clock,
+  })
   const assembleBrand = async (ws: WorkspaceId): Promise<BrandModuleSet> => {
     const isBootstrap = ws === workspace.id
     const dir = brandDirOf(dbDir, ws, workspace.id)
@@ -2640,7 +2650,17 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       // WP252：连接按品牌隔开；只有启动品牌认领没人记过的老 `default` 连接
       owners: connectOwners.owners,
       startupBrand: isBootstrap,
+      // WP265：云端一键授权连着店也算店铺后台已连（岗位顶上「还缺必需的连接：店铺后台」不再挂着）
+      extraKinds: () => (cloudShopLinks.peek(ws) === undefined ? [] : ['shopify', 'shop']),
     })
+    // 起来之后顺手问一次云（没关联账号就什么都不发生）；不挡建品牌
+    setTimeout(() => {
+      try {
+        void cloudShopLinks.link(ws).catch(() => undefined)
+      } catch {
+        // 品牌模块表还没好：下一次有人问就会问到
+      }
+    }, 0).unref?.()
 
     /**
      * WP46：岗位面板吃**真实**店铺数据（定时经连接器跑 `list_orders` / `get_shop`，
@@ -8214,6 +8234,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       },
       shopHints: (ws) => shopifyShopHints(ws),
       startupBrand: workspace.id,
+      links: cloudShopLinks,
     }),
     /*
      * WP246（决策 87 / 88）：取数路线（体检、设置、Reddit 读号），按品牌取。

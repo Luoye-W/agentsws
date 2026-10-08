@@ -197,7 +197,8 @@ describe('WP265 卡片：一键授权', () => {
   })
 
   it('没有任何来源：出一格域名，填了才能点', async () => {
-    state.view = { ...IDLE, suggested_shop: undefined, candidates: [] }
+    const { suggested_shop: _none, ...rest } = IDLE
+    state.view = { ...rest, candidates: [] }
     renderWithProviders(<ShopifyConnect />)
     const input = (await screen.findByTestId('shopconnect-shop')) as HTMLInputElement
     expect((screen.getByTestId('shopconnect-connect') as HTMLButtonElement).disabled).toBe(true)

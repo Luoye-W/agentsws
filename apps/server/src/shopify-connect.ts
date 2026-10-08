@@ -81,6 +81,8 @@ export interface ShopifyConnectOptions {
   startupBrand: WorkspaceId
   /** 连上 / 断开之后（首页、岗位面板跟着刷新）。 */
   onChange?: (ws: WorkspaceId) => void
+  /** 云端连接的缓存（运营工具 / 岗位就绪按它认「云端已连」）；卡上每看一次、连上 / 断开都顺手更新。 */
+  links?: CloudShopLinks
 }
 
 /** 云上那一跳的失败 → 本机网关的错误（带 `details.reason`）。 */
@@ -111,6 +113,17 @@ function failure(out: KolCloudCall<unknown>, fallback: string): ApiError {
   return new ApiError('provider_error', out.message ?? fallback, {
     ...(out.details === undefined ? {} : { details: out.details }),
   })
+}
+
+/** 这个品牌的那几条（云上没记 `brand` 的老绑定只算启动品牌的，与 WP252 同一条）。 */
+function brandRows(
+  ws: string,
+  startup: string,
+  rows: ShopifyCloudConnection[],
+): ShopifyCloudConnection[] {
+  return rows.filter((r) =>
+    typeof r.brand !== 'string' || r.brand === '' ? ws === startup : r.brand === ws,
+  )
 }
 
 function rowOf(c: ShopifyCloudConnection, name: string | undefined): ShopifyConnectRow {
@@ -178,9 +191,7 @@ export function createShopifyConnect(options: ShopifyConnectOptions): ShopifyCon
   }
 
   const mineOf = (ws: string, rows: ShopifyCloudConnection[]): ShopifyCloudConnection[] =>
-    rows.filter((r) =>
-      typeof r.brand !== 'string' || r.brand === '' ? ws === options.startupBrand : r.brand === ws,
-    )
+    brandRows(ws, options.startupBrand, rows)
 
   const shopInput = (raw: string): string => {
     try {
@@ -231,8 +242,10 @@ export function createShopifyConnect(options: ShopifyConnectOptions): ShopifyCon
       blocked = { reason: 'not_linked', message: SHOPIFY_CONNECT_NOT_LINKED }
     } else {
       const out = await cloud.call<unknown>(SHOPIFY_CLOUD_PATHS.connections)
-      if (out.ok) rows = mineOf(ws, connectionsOf(out.data))
-      else {
+      if (out.ok) {
+        rows = mineOf(ws, connectionsOf(out.data))
+        options.links?.remember(ws as WorkspaceId, rows)
+      } else {
         const err = failure(out, '这一下没取到连接状态')
         const reason = (err.details as { reason?: string } | undefined)?.reason
         if (reason === 'scope_missing' || reason === 'not_linked' || reason === 'offline')
@@ -304,7 +317,10 @@ export function createShopifyConnect(options: ShopifyConnectOptions): ShopifyCon
     const shop = out.data.shop ?? known?.shop
     if (status === 'connected' || status === 'failed' || status === 'expired') {
       attempts.delete(id)
-      if (status === 'connected') options.onChange?.(ws as WorkspaceId)
+      if (status === 'connected') {
+        options.links?.invalidate(ws as WorkspaceId)
+        options.onChange?.(ws as WorkspaceId)
+      }
     }
     return {
       status:
@@ -361,9 +377,79 @@ export function createShopifyConnect(options: ShopifyConnectOptions): ShopifyCon
     // 云上本来就没有这条：当断开了（按钮按的就是「不要它了」）
     if (!out.ok && out.status !== 404) throw failure(out, '这一下没断开，再试一次')
     names.delete(`${ws}:${shop}`)
+    options.links?.invalidate(ws as WorkspaceId)
     options.onChange?.(ws as WorkspaceId)
     return { disconnected: true }
   }
 
   return { view, start, attempt, test, disconnect }
+}
+
+/** 云端一键授权连上的那一家店（只有店与权限，没有令牌）。 */
+export interface CloudShopLink {
+  shop: string
+  /** 已授、且没被标成缺的权限（原名，未展开）。 */
+  scopes: string[]
+}
+
+/**
+ * WP265（Fable 追加）：每个品牌「云端连着哪家店」的缓存——运营工具（优先云端、没有才回退 CLI）、
+ * 岗位就绪（「还缺必需的连接：店铺后台」）按它认。`peek` 是同步的（就绪算法是同步读），
+ * 只回上一次问到的；`link` 过期（默认 60 秒）就现问一次云。
+ */
+export interface CloudShopLinks {
+  link(ws: WorkspaceId): Promise<CloudShopLink | undefined>
+  peek(ws: WorkspaceId): CloudShopLink | undefined
+  remember(ws: WorkspaceId, rows: readonly ShopifyCloudConnection[]): void
+  invalidate(ws: WorkspaceId): void
+}
+
+export function createCloudShopLinks(options: {
+  cloudOf: (ws: WorkspaceId) => Promise<ShopifyConnectCloud | undefined>
+  startupBrand: WorkspaceId
+  clock: Clock
+  ttlMs?: number
+  /** 某个品牌的「云端连着没有」变了（就绪、工具面跟着重算）。 */
+  onChange?: (ws: WorkspaceId) => void
+}): CloudShopLinks {
+  const ttl = options.ttlMs ?? 60_000
+  const cache = new Map<string, { at: number; link: CloudShopLink | undefined }>()
+  const now = (): number => Date.parse(options.clock.now())
+  const pick = (rows: readonly ShopifyCloudConnection[]): CloudShopLink | undefined => {
+    const row = rows.find((r) => r.status === 'connected')
+    if (row === undefined) return undefined
+    const missing = new Set(Array.isArray(row.missing_scopes) ? row.missing_scopes : [])
+    const scopes = (Array.isArray(row.scopes) ? row.scopes : []).filter((x) => !missing.has(x))
+    return { shop: row.shop, scopes }
+  }
+  const set = (ws: WorkspaceId, link: CloudShopLink | undefined): void => {
+    const before = cache.get(ws)?.link
+    cache.set(ws, { at: now(), link })
+    if ((before?.shop ?? '') !== (link?.shop ?? '')) options.onChange?.(ws)
+  }
+  return {
+    async link(ws) {
+      const hit = cache.get(ws)
+      if (hit !== undefined && now() - hit.at < ttl) return hit.link
+      const cloud = await options.cloudOf(ws)
+      if (cloud === undefined || !cloud.linked()) {
+        set(ws, undefined)
+        return undefined
+      }
+      const out = await cloud.call<unknown>(SHOPIFY_CLOUD_PATHS.connections)
+      // 云上一时没回（断网 / 偶发错）：沿用上一次的，不把正在用的连接当成断了
+      if (!out.ok) return hit?.link
+      const link = pick(brandRows(ws, options.startupBrand, connectionsOf(out.data)))
+      set(ws, link)
+      return link
+    },
+    peek: (ws) => cache.get(ws)?.link,
+    remember(ws, rows) {
+      set(ws, pick(rows))
+    },
+    invalidate(ws) {
+      const hit = cache.get(ws)
+      if (hit !== undefined) cache.set(ws, { at: 0, link: hit.link })
+    },
+  }
 }
