@@ -194,6 +194,10 @@ describe('WP276 ② 同事互联（真服务进程）', () => {
     const chen = server.identity.personByEmail('chen@ex.com')?.id ?? ''
     expect((await call('DELETE', `/v1/workspaces/${ws()}/members/${chen}`, as)).status).toBe(403)
     expect((await call('DELETE', '/v1/org/positions/b2b', as)).status).toBe(403)
+    // 连接：谁接的谁管——不是他接的（这一版之前接的、没记过是谁）断不了
+    const conn = await call('DELETE', '/v1/connections/conn_from_before', as)
+    expect(conn.status).toBe(403)
+    expect(((await conn.json()) as { message?: string }).message).toContain('谁接的谁管')
     expect((await call('DELETE', `/v1/workspaces/${ws()}/members/${chen}`)).status).toBe(200)
   })
 

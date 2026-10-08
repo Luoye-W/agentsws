@@ -240,7 +240,8 @@ export function withConnectionOwners(
   const guard = (actor: ConnectionsActor, id: string): void => {
     if (options.mode(actor.workspace_id) !== 'peers') return
     const who = options.owners.of(id)
-    if (who === undefined || who === actor.person_id) return
+    if (who === actor.person_id) return
+    // 没记过是谁接的（这一版之前接的）：那时候只有发起人能接——还是发起人管
     if (options.initiator(actor.workspace_id) === actor.person_id) return
     throw new ApiError('forbidden', '这条连接是同事接的，谁接的谁管')
   }
