@@ -26,7 +26,8 @@ scopes:
   - { domain: store_config, ops: [read], range: assigned, max_sensitivity: internal }
   - { domain: analytics, ops: [read], range: assigned, max_sensitivity: internal }
   - { domain: knowledge, ops: [read], range: workspace, max_sensitivity: internal }
-  - { domain: approval, ops: [read, stage], range: own, max_sensitivity: internal }
+  # WP268：自己这件事里的挑图卡 / 生图超额卡要能在事项页上直接点（卡只发给自己；换线上主题的发布卡仍归老板批）
+  - { domain: approval, ops: [read, stage, approve], range: own, max_sensitivity: internal }
   - { domain: skill, ops: [read], range: own, max_sensitivity: internal }
 
 connectors:

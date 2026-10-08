@@ -22,6 +22,10 @@ import type { SiteThemeAssembly } from './site-theme.js'
 type Obj = Record<string, unknown>
 const isObj = (v: unknown): v is Obj => v !== null && typeof v === 'object' && !Array.isArray(v)
 
+/** 错误原话去掉句末标点（后面还要接一句）。 */
+const reasonOf = (e: unknown): string =>
+  (e instanceof Error ? e.message : String(e)).replace(/[。.！!]+$/, '')
+
 export class ThemePlaceError extends Error {
   constructor(message: string) {
     super(message)
@@ -115,7 +119,7 @@ export function createImagePlacer(options: ImagePlaceOptions) {
     try {
       admin = await shop.admin()
     } catch (e) {
-      return { ok: false, message: `没连上店铺：${e instanceof Error ? e.message : String(e)}` }
+      return { ok: false, message: `没连上店铺：${reasonOf(e)}` }
     }
     let file = asset.shop_file?.store === admin.store ? asset.shop_file : undefined
     if (file === undefined) {
@@ -137,7 +141,7 @@ export function createImagePlacer(options: ImagePlaceOptions) {
         )
         file = { ...up, store: admin.store, uploaded_at: options.clock.now() }
       } catch (e) {
-        return { ok: false, message: `图没传到店铺：${e instanceof Error ? e.message : String(e)}` }
+        return { ok: false, message: `图没传到店铺：${reasonOf(e)}` }
       }
       options.assets.update({ ...asset, shop_file: file })
     }
@@ -153,7 +157,7 @@ export function createImagePlacer(options: ImagePlaceOptions) {
     } catch (e) {
       return {
         ok: false,
-        message: `图传到店铺「文件」了（${file.filename}），但没写进${where}：${e instanceof Error ? e.message : String(e)}`,
+        message: `图传到店铺「文件」了（${file.filename}），但没写进${where}：${reasonOf(e)}`,
       }
     }
     const last = (await theme.readiness().catch(() => undefined))?.last_push
@@ -174,7 +178,7 @@ export function createImagePlacer(options: ImagePlaceOptions) {
       })
       return {
         ok: false,
-        message: `图已传到店铺、写进${where}，但推预览没成：${e instanceof Error ? e.message : String(e)}。让 AI 再推一次预览就好。`,
+        message: `图已传到店铺、写进${where}，但推预览没成：${reasonOf(e)}。让 AI 再推一次预览就好。`,
       }
     }
     options.assets.update({

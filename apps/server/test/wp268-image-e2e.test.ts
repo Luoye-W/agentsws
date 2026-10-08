@@ -231,13 +231,12 @@ describe('WP268 生图接入建站端到端', () => {
 
     // 选第 2 张
     const pick = card.options[1]?.id ?? ''
-    // 人在工作台上点（老板那一条分配批卡，同工作台）
-    const decided = await call(
-      'POST',
-      `/v1/approvals/${card.id}/decide`,
-      { action: 'approve', selected_option_id: pick, via: 'workstation' },
-      server.bootstrap.ownerAssignment.id,
-    )
+    // 人在事项页上点（事项页用这件事的岗位分配去批——网页模板那一条要能批自己这件事里的卡）
+    const decided = await call('POST', `/v1/approvals/${card.id}/decide`, {
+      action: 'approve',
+      selected_option_id: pick,
+      via: 'workstation',
+    })
     expect(decided.status).toBe(200)
 
     // 传了店铺文件、写进 hero、推到上一次那份未发布副本（没多建一份），没发布

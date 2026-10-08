@@ -140,7 +140,7 @@ export function MatterComposer({
                 <button
                   type="button"
                   aria-label={t('matter.cmp.attach.remove')}
-                  className="absolute top-0.5 right-0.5 grid size-5 place-items-center rounded-full bg-ws-ink/70 text-white"
+                  className="absolute top-0.5 right-0.5 grid size-5 place-items-center rounded-full bg-black/60 text-white"
                   onClick={() => {
                     onDetach?.(a.id)
                   }}

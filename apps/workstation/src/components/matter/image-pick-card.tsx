@@ -155,7 +155,7 @@ export function ImageCard({
                 }}
               >
                 <AuthedImage src={v.url} alt={v.label} className="size-full" />
-                <span className="absolute top-1.5 left-1.5 rounded-full bg-ws-ink/70 px-1.5 text-[11px] text-white">
+                <span className="absolute top-1.5 left-1.5 rounded-full bg-black/60 px-1.5 text-[11px] text-white">
                   {v.label}
                 </span>
               </div>

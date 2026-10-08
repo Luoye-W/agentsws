@@ -3612,7 +3612,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         const view = ownModels.imageView()
         const per_edit = pricingCatalog.creditsFor(AI_IMAGE_EDIT_CAPABILITY, 1)
         return {
-          official: view.official,
+          // 设置页没配、却有一条生图挂着（demo 的占位图 / 测试的假云端）：按官方接口的价算，宁可多报不少报
+          official: view.official || !view.configured,
           ...(view.model === undefined ? {} : { model: view.model }),
           ...(view.credits_per_image === undefined ? {} : { per_image: view.credits_per_image }),
           ...(per_edit === undefined ? {} : { per_edit }),

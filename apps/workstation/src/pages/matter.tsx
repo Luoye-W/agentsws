@@ -339,8 +339,11 @@ export function MatterPage(): ReactNode {
     items,
     busy: running || queued !== undefined,
     blockedSay: t('matter.blocked.say'),
+    // WP268：挑图卡要点一张图，不是说一句「就这张」——不给建议
     cardAction:
-      firstWaiting === undefined ? undefined : deckActionLabel(firstWaiting, 'approve', t),
+      firstWaiting === undefined || isImageCard(firstWaiting)
+        ? undefined
+        : deckActionLabel(firstWaiting, 'approve', t),
   })
   const blockedArchive = archiveBlock(
     running || railState === 'running' ? 'running' : awaiting ? 'awaiting' : undefined,

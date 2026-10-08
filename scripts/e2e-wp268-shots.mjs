@@ -99,8 +99,15 @@ async function login() {
 async function assignmentFor(token, me, owner, role_id) {
   const hit = me.assignments.find((a) => a.role_id === role_id)?.id
   if (hit !== undefined) return hit
-  return (await api(token, owner, 'POST', '/v1/assignments', { person_id: me.person.id, role_id, ranges: [] }))
-    .id
+  const made = await api(token, owner, 'POST', '/v1/assignments', {
+    person_id: me.person.id,
+    role_id,
+    ranges: [],
+  })
+  const id = made?.id ?? made?.assignment?.id
+  if (id !== undefined) return id
+  const again = await api(token, undefined, 'GET', '/v1/me')
+  return again.assignments.find((a) => a.role_id === role_id)?.id
 }
 
 async function main() {
@@ -126,7 +133,12 @@ async function main() {
       (v) => v.next !== 'install_cli' && v.next !== 'node',
       'CLI 装好',
     )
-    await api(token, theme, 'PUT', '/v1/platform-kit/cli/login', { confirmed: true })
+    await api(token, theme, 'POST', '/v1/platform-kit/cli/run', { action: 'login' })
+    await poll(
+      () => api(token, theme, 'GET', '/v1/site/theme?fresh=1'),
+      (v) => v.next !== 'login',
+      'CLI 登录',
+    )
     await api(token, theme, 'PUT', '/v1/site/theme/store', { store: SHOP })
     await api(token, theme, 'POST', `/v1/positions/${theme}/matters`, {
       title: '用 agentsws-theme 给我搭个首页',
@@ -194,14 +206,27 @@ async function main() {
     {
       const { context, page } = await shots('light')
       await page.goto(`${BASE}/matters/${hero.matter.id}`, { waitUntil: 'networkidle' })
-      await page.locator('[data-testid="image-pick-use"]').nth(1).click()
-      await page.waitForFunction(() => document.body.textContent?.includes('挂好了'), undefined, {
-        timeout: 60_000,
+      page.on('response', async (r) => {
+        if (r.url().includes('/decide') && !r.ok())
+          console.error(`  ⚠️ 批卡没成：${r.status()} ${await r.text().catch(() => '')}`)
       })
+      await page.waitForSelector('[data-testid="image-pick-use"]', { timeout: 30_000 })
+      await page.locator('[data-testid="image-pick-use"]').nth(1).click()
+      await page
+        .waitForFunction(() => document.body.textContent?.includes('挂好了'), undefined, {
+          timeout: 60_000,
+        })
+        .catch(async (e) => {
+          const v = await api(token, theme, 'GET', `/v1/matters/${hero.matter.id}`)
+          console.error(v.timeline.map((x) => `${x.kind}: ${x.text}`).join('\n'))
+          throw e
+        })
       await page.reload({ waitUntil: 'networkidle' })
       await page.waitForTimeout(800)
-      await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight))
-      await snap(page.locator('main'), '2-picked-placed')
+      await page.locator('text=挂好了').last().scrollIntoViewIfNeeded()
+      await page.waitForTimeout(600)
+      await page.screenshot({ path: join(SHOTS, '2-picked-placed.png') })
+      console.log('  📷 2-picked-placed.png')
       await context.close()
     }
 
