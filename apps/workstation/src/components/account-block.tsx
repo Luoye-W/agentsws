@@ -33,7 +33,7 @@ const initialOf = avatarInitial
 export function AccountBlock({ me }: { me?: Me }): React.ReactNode {
   const { t, theme, toggleTheme, lang, setLang } = useApp()
   // WP271：① 个人只写品牌名，不写「所有者」（这里只有你一个人）
-  const { solo } = useMode()
+  const { solo, mode, t: tm } = useMode()
   const navigate = useNavigate()
   const [open, setOpen] = useState(false)
 
@@ -48,7 +48,12 @@ export function AccountBlock({ me }: { me?: Me }): React.ReactNode {
 
   const name = me?.person.name ?? me?.person.email ?? '—'
   const company = me?.workspace.name ?? ''
-  const role = isOwner ? t('account.role.owner') : t('account.role.member')
+  /*
+   * WP276（docs/95 §2.1、决策 256）：② 同事互联——发起人写「发起人」，别的同事只写品牌名
+   * （不写「成员」「所有者」，第二个人进来时界面不能像公司）。
+   */
+  const role = isOwner ? tm('account.role.owner') : t('account.role.member')
+  const plain = solo || (mode === 'peers' && !isOwner)
 
   const go = (to: string): void => {
     setOpen(false)
@@ -79,7 +84,7 @@ export function AccountBlock({ me }: { me?: Me }): React.ReactNode {
             {name}
           </span>
           <span className="block truncate text-[11px] text-muted-foreground">
-            {solo && company !== '' ? company : company === '' ? role : `${role} · ${company}`}
+            {plain && company !== '' ? company : company === '' ? role : `${role} · ${company}`}
           </span>
         </span>
         <ChevronsUpDown aria-hidden className="size-3 shrink-0 opacity-60" />

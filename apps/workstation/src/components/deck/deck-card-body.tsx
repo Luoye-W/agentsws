@@ -306,7 +306,10 @@ export function DeckCardBody({
         return (
           <div className="mt-2.5 flex flex-col gap-2.5" data-testid="deck-layout-policy">
             <BeforeAfter before={payload.before} after={payload.after} />
-            <Note testId="deck-reason">{reasonText}</Note>
+            {/* WP276（界面少字）：通知卡那句「谁改的、已生效、可撤回」下面那一行已经说了，正文框不再说一遍 */}
+            {payload.form === 'peer_change_notice' ? null : (
+              <Note testId="deck-reason">{reasonText}</Note>
+            )}
             {/* WP275：① ② 的词按模式换；② 里同事自己改了共用的规矩，这张是「已生效、可撤回」的通知 */}
             <p className="text-xs text-ws-muted-fg">
               {payload.form === 'peer_change_notice'
@@ -550,7 +553,10 @@ export function DeckCardBody({
    * ⑤ 自己就是列表，⑥ 的缩略图格本身就是选法——只有这两种不再追加一份。
    */
   // WP276：交给你的卡，选项就是动作行上那几个「接下」按钮——不再追加一份单选列表
-  const handoffOffer = (card.detail.payload as { form?: unknown } | undefined)?.form === 'handoff'
+  // WP276：② 的「知道了 / 撤回」通知也一样——两个选项就是动作行上的两个按钮
+  const handoffOffer =
+    (card.detail.payload as { form?: unknown } | undefined)?.form === 'handoff' ||
+    (card.detail.payload as { form?: unknown } | undefined)?.form === 'peer_change_notice'
   const needsOptions =
     options.length > 0 && card.layout !== 'choice' && card.layout !== 'variants' && !handoffOffer
   return (

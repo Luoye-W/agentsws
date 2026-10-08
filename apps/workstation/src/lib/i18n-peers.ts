@@ -82,6 +82,7 @@ export const PEERS_ZH: Record<string, string> = {
   'joincode.bad': '这个邀请码不对，或者已经过期 / 用完了。',
   // ── 换说法：② 同事互联（@peers）与 ① 个人（@solo）
   'org.subtitle@peers': '大家的岗位、谁在做什么。',
+  'account.role.owner@peers': '发起人',
   'org.positions.ours@peers': '岗位',
   'org.positions.assign@peers': '请同事一起做',
   'toolbox.subtitle@peers': '大家做过的自动化都在这儿。',
@@ -188,6 +189,7 @@ export const PEERS_EN: Record<string, string> = {
   'joincode.sent': 'Request sent. Once a teammate says yes, sign in with this email.',
   'joincode.bad': 'That invite code is wrong, expired or used up.',
   'org.subtitle@peers': 'Everyone’s positions and who is doing what.',
+  'account.role.owner@peers': 'Starter',
   'org.positions.ours@peers': 'Positions',
   'org.positions.assign@peers': 'Ask a teammate to do it',
   'toolbox.subtitle@peers': 'Automations the team has built live here.',

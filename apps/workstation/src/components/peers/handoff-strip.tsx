@@ -26,6 +26,28 @@ import { useApp } from '@/lib/app-context'
 
 export const HANDOFFS_KEY = ['handoffs'] as const
 
+/** 「X 想把「…」交给你」那张卡（`claim` 类、`form: 'handoff'`）。 */
+export function isHandoffOfferCard(card: { kind: string; detail: { payload?: unknown } }): boolean {
+  const p = card.detail.payload
+  return (
+    card.kind === 'claim' &&
+    typeof p === 'object' &&
+    p !== null &&
+    (p as { form?: unknown }).form === 'handoff'
+  )
+}
+
+/** ② 改了共用东西的「知道了 / 撤回」通知卡（选项直接是按钮，不是单选 + 通过）。 */
+export function isPeerNoticeCard(card: { kind: string; detail: { payload?: unknown } }): boolean {
+  const p = card.detail.payload
+  return (
+    card.kind === 'policy_change' &&
+    typeof p === 'object' &&
+    p !== null &&
+    (p as { form?: unknown }).form === 'peer_change_notice'
+  )
+}
+
 /** 底座职责（不算一个能接活的岗位），与服务端同一份。 */
 const BASE = new Set(['common.member', 'common.owner'])
 
@@ -143,6 +165,7 @@ export function HandoffDecide({
         variant="ghost"
         disabled={busy}
         data-testid="handoff-decline"
+        data-action="reject"
         onClick={() => {
           setDeclining(true)
         }}

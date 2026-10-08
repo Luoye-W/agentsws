@@ -31,6 +31,7 @@ import {
 } from '@/components/deck/deck-gestures'
 import { DECK_EXIT_MS, DECK_MAX_WIDTH_CLASS } from '@/components/deck/deck-layout'
 import { ReportBlocks } from '@/components/deck/panel-blocks'
+import { isHandoffOfferCard } from '@/components/peers/handoff-strip'
 import { Skeleton } from '@/components/ui/skeleton'
 import { type CardsData, type DecideInput, decide, getHome, getPositionCards } from '@/lib/api'
 import { useMode } from '@/lib/mode'
@@ -268,6 +269,12 @@ export function DeckSection({
     if (!card.available_actions.includes(action)) return
     event.preventDefault()
     if (action === 'approve') {
+      // WP276：交给你的卡只有一个岗位时，→ 就是「接下」（几个岗位就得点按钮挑一个）
+      const only = card.options?.length === 1 ? card.options[0] : undefined
+      if (only !== undefined && isHandoffOfferCard(card)) {
+        dispatch({ action: 'approve', selected_option_id: only.id, version: card.version })
+        return
+      }
       // 一道选择题没选中就不存在「同意」，键盘也不是后门。
       if (card.options !== undefined && card.options.length > 0) return
       // WP275：超了上限要再确认一次的卡——键盘也得点两下（走按钮那一条）

@@ -40,7 +40,11 @@ import {
 import { DeckNotePanel, DeckSupplementPanel, type NoteMode } from '@/components/deck/deck-panels'
 import { CardChips, EvidencePill, evidenceLines } from '@/components/deck/evidence-chips'
 import { GoButton, StatusPill, type Tone, WsAvatar } from '@/components/design'
-import { HandoffDecide } from '@/components/peers/handoff-strip'
+import {
+  HandoffDecide,
+  isHandoffOfferCard,
+  isPeerNoticeCard,
+} from '@/components/peers/handoff-strip'
 import { useRailState } from '@/components/rail/rail-state'
 import { Button } from '@/components/ui/button'
 import { getPositions, type RoleTaskExampleData } from '@/lib/api'
@@ -263,10 +267,10 @@ export function DeckCardView({
    * 点哪个就是选哪条、立刻开跑；不是「认领 / 不是客户问题」，也不先单选再按一个通用的「接」。
    */
   /** WP276：「X 想把「…」交给你」——选项是自己的岗位 +「不接」（理由可选），不是「走哪条职责」。 */
-  const handoffOffer =
-    card.kind === 'claim' &&
-    (card.detail.payload as { form?: unknown } | undefined)?.form === 'handoff'
-  const routeChoice = card.kind === 'claim' && isQuestion && !handoffOffer
+  const handoffOffer = isHandoffOfferCard(card)
+  /** WP276：② 改共用东西的通知——「知道了 / 撤回」直接是两个按钮（不是先选一个再点通过）。 */
+  const peerNotice = isPeerNoticeCard(card)
+  const routeChoice = (card.kind === 'claim' && isQuestion && !handoffOffer) || peerNotice
   const examples = useTaskExamples(card.role_id)
   const positionName = usePositionName(card.role_id)
   const rail = useRailState()
@@ -333,8 +337,9 @@ export function DeckCardView({
       {compare && card.kind === 'content_conflict' ? (
         <ContentConflictDialog payload={contentPayload} open onOpenChange={setCompare} />
       ) : null}
-      {/* 37 §2.2b：卡片是指向事项的指针。点它 = 进入那个工作现场。 */}
-      {card.matter_id === undefined ? null : (
+      {/* 37 §2.2b：卡片是指向事项的指针。点它 = 进入那个工作现场。
+          WP276：交给你的卡标题里已经写了是哪件事，这一行不再说一遍 */}
+      {card.matter_id === undefined || handoffOffer ? null : (
         <button
           type="button"
           data-testid="deck-matter-link"
