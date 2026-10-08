@@ -95,6 +95,8 @@ export interface ImageJob {
 export interface ImagePickPayload {
   form: 'image_pick'
   variants: ImagePickVariant[]
+  /** 选项（每张图 + 「再来一版」）。卡片投影读这一份（36 §2.2），审批项本身也留一份。 */
+  options: { id: string; label: string }[]
   /** 这一批的参数（「再来一版」照它）。 */
   job: ImageJob
   /** 给人看的模型名（`gpt-image-1` 之类）。 */

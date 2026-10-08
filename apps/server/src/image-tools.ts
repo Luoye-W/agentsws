@@ -545,9 +545,14 @@ export function createImageService(options: ImageServiceOptions): ImageService {
       ...(a.height === undefined ? {} : { height: a.height }),
     }))
     const again = costOf({ operation: job.operation, n: job.n })
+    const pickOptions = [
+      ...variants.map((v) => ({ id: v.id, label: v.label })),
+      { id: IMAGE_PICK_AGAIN, label: '再来一版' },
+    ]
     const payload: ImagePickPayload = {
       form: 'image_pick',
       variants,
+      options: pickOptions,
       job,
       model_label: out.model.model,
       credits,
@@ -574,10 +579,7 @@ export function createImageService(options: ImageServiceOptions): ImageService {
           : `都不行点「都不要」；想换一批点「再来一版」（约 ${again.total} 积分）。`,
       ].join('\n'),
       payload,
-      options: [
-        ...variants.map((v) => ({ id: v.id, label: v.label })),
-        { id: IMAGE_PICK_AGAIN, label: '再来一版' },
-      ],
+      options: pickOptions,
       seen: saved.map((a) => a.id),
     })
     return { item, assets: saved, credits, own_key: cost.own_key }

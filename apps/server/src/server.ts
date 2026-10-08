@@ -73,6 +73,7 @@ import type {
   DataSourceLevel,
   EventEnvelope,
   Halt,
+  ImageProvider,
   KolChannel,
   Person,
   PersonId,
@@ -946,6 +947,8 @@ export interface ServerOptions {
     sleep?: (ms: number) => Promise<void>
     /** 另外认哪些图片主机（demo 假店的 `cdn.shopify.test`）。 */
     extraImageHosts?: RegExp
+    /** 没在设置页配生图时挂的那一条（测试接假云端、demo 接占位图）。生产不传 = 「生图还没配」那句人话。 */
+    provider?: ImageProvider
   }
   /**
    * WP247：本机连接器下载器的注入点（测试换成假 npm，不联网）。生产不传：只有桌面壳设了
@@ -1773,7 +1776,12 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
        * demo 里反过来：不挂的话"待挑"那一块永远是空的，58 §3 的变体挑选卡
        * 在演示里一次都出不来。
        */
-      ...(options.mount === undefined ? {} : { images: stubImageProvider({ seed: 7 }) }),
+      // WP268：测试 / demo 可以注入一条生图（假云端的 OpenAI 形态口）；生产不传
+      ...(options.images?.provider !== undefined
+        ? { images: options.images.provider }
+        : options.mount === undefined
+          ? {}
+          : { images: stubImageProvider({ seed: 7 }) }),
       policy: { default: STUB_REF, data_residency: 'cn', prices: priceTable },
       clock,
       env,
