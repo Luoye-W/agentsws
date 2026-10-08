@@ -8,12 +8,17 @@
  *   已有账号登录（邮箱验证码或密码）。验过就关联上，不跳转、不弹窗。
  * - **已关联**：邮箱、令牌到期、动作集、「解除关联」。
  *
+ * WP272（Luoye 10-08 真机）：**Agents 工坊账号的登录表单只在这里**（连接页 Shopify 卡不再内嵌）。
+ * 标题下一句「积分、云端功能都在这个账号上」；从连接卡跳来时带 `?return=`（登录完自动回去）与
+ * `relogin=1`（已关联但要重新登录：直接摊开登录表单，走 refresh）。
+ *
  * 这一页**永远看不到令牌**：服务端的 `GET /v1/cloud/account` 就不回它
  * （令牌在本机加密库里，21 §5）。所以这个文件里没有一处 token 变量。
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link2 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { CloudAuthForm } from '@/components/cloud/cloud-auth-form'
 import { BrandMark, StatusIcons } from '@/components/design'
 import { TutorialLink } from '@/components/help/tutorial-link'
@@ -39,7 +44,20 @@ function day(iso: string | undefined): string {
 export function CloudAccountCard({ assignment }: { assignment?: string }): React.ReactNode {
   const { t } = useApp()
   const client = useQueryClient()
+  const navigate = useNavigate()
   const [error, setError] = useState<string | null>(null)
+  /** WP272：从别处（连接卡）跳来登录的，登录完回哪去（只认站内路径）。 */
+  const [params] = useSearchParams()
+  const back = params.get('return')
+  const returnTo = back?.startsWith('/') && !back.startsWith('//') ? back : undefined
+  const [reloginOpen, setReloginOpen] = useState(params.get('relogin') === '1')
+  const loggedIn = (): void => {
+    setError(null)
+    setReloginOpen(false)
+    void client.invalidateQueries({ queryKey: ['cloud-account'] })
+    void client.invalidateQueries({ queryKey: ['shopify-connect'] })
+    if (returnTo !== undefined) navigate(returnTo)
+  }
 
   const account = useQuery({
     queryKey: ['cloud-account', assignment],
@@ -98,6 +116,10 @@ export function CloudAccountCard({ assignment }: { assignment?: string }): React
         </CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-3 text-sm">
+        {/* WP272：说清这是哪个账号（Luoye 把 Shopify 后台的邮箱密码填进了这里） */}
+        <p className="text-xs text-muted-foreground" data-testid="cloud-account-what">
+          {t('cloud.account.what')}
+        </p>
         {account.isLoading ? <Skeleton className="h-16 w-full" /> : null}
         {view === undefined ? null : view.linked ? (
           <div className="flex flex-col gap-3" data-testid="cloud-account-linked">
@@ -124,7 +146,7 @@ export function CloudAccountCard({ assignment }: { assignment?: string }): React
                 },
               ]}
             />
-            <div>
+            <div className="flex flex-wrap items-center gap-2">
               <Button
                 size="sm"
                 variant="outline"
@@ -135,7 +157,30 @@ export function CloudAccountCard({ assignment }: { assignment?: string }): React
               >
                 {t('cloud.account.unlink')}
               </Button>
+              {/* WP272：令牌被撤 / 补权限没成时在这里重新登录（同一个账号，换一把新令牌） */}
+              {reloginOpen ? null : (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  data-testid="cloud-account-relogin"
+                  onClick={() => {
+                    setReloginOpen(true)
+                  }}
+                >
+                  {t('cloud.account.relogin')}
+                </Button>
+              )}
             </div>
+            {reloginOpen ? (
+              <CloudAuthForm
+                {...(assignment === undefined ? {} : { assignment })}
+                testPrefix="cloud-account-relogin"
+                refresh
+                initialTab="login"
+                {...(view.email === undefined ? {} : { initialEmail: view.email })}
+                onDone={loggedIn}
+              />
+            ) : null}
           </div>
         ) : (
           <div className="flex flex-col gap-3" data-testid="cloud-account-unlinked">
@@ -150,10 +195,7 @@ export function CloudAccountCard({ assignment }: { assignment?: string }): React
               {...(assignment === undefined ? {} : { assignment })}
               testPrefix="cloud-account"
               disabled={view.blocked_reason !== undefined}
-              onDone={() => {
-                setError(null)
-                void client.invalidateQueries({ queryKey: ['cloud-account'] })
-              }}
+              onDone={loggedIn}
             />
             {view.blocked_reason === undefined ? null : (
               <p className="text-muted-foreground" data-slot="status">
