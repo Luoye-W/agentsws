@@ -370,7 +370,8 @@ export function DeckCardView({
         <StatusPill tone={BAND_TONE[card.priority_band]} data-testid="deck-band">
           {positionName === undefined ? category : `${positionName} · ${category}`}
         </StatusPill>
-        <WaitPill card={card} />
+        {/* WP277：「知道了」型通知卡没有人在等它的结果——不出等待时长 */}
+        {peerNotice ? null : <WaitPill card={card} />}
         <span className="ml-auto flex items-center gap-2">
           {/*
             WP212（docs/88 §2.3）：来自消息往来的卡，证据旁边一个「看原件 →」——跳回消息页
@@ -389,14 +390,17 @@ export function DeckCardView({
             右上角那个「证据 N」：点它在第三栏的证据面板里看（WP71 就有那一格）。
             走 WP95 的公开注册路 `show('evidence')`，注册层一个字不碰。
           */}
-          <EvidencePill
-            lines={evidence}
-            onOpen={() => {
-              // WP100：一下动作两半——把这张卡交给证据面板，再把那一格打开
-              focusEvidenceCard(card)
-              rail.show('evidence')
-            }}
-          />
+          {/* WP277：通知卡不是要人凭证据拍板的——不出「证据 N」 */}
+          {peerNotice ? null : (
+            <EvidencePill
+              lines={evidence}
+              onOpen={() => {
+                // WP100：一下动作两半——把这张卡交给证据面板，再把那一格打开
+                focusEvidenceCard(card)
+                rail.show('evidence')
+              }}
+            />
+          )}
           {/* WP96 通用头的最后一格：**谁提的**。只按 proposer.kind 出字，不印任何 id。 */}
           <WsAvatar
             name={t(`deck.proposer.${card.detail.proposer.kind}`)}

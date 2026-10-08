@@ -49,6 +49,26 @@ export function isPeerNoticeCard(card: { kind: string; detail: { payload?: unkno
   )
 }
 
+/**
+ * WP277：「知道了」型通知卡（② 的「知道了 / 撤回」、开公司模式的「知道了 / 我要退出」）上键盘干什么。
+ *
+ * 按钮就是卡上的选项，所以键盘也跟着选项走：→ 是第一个（知道了），← 是第二个（撤回）；
+ * 「我要退出」这种走了就回不来的不给键盘，只能点按钮。↑ ↓ 不做事（这种卡没有稍后 / 指导）。
+ * 不是这种卡回 `undefined`（照审批卡的老规矩）。
+ */
+export function noticeKeys(card: {
+  kind: string
+  detail: { payload?: unknown }
+  options?: { id: string; label: string }[] | undefined
+}): { right?: { id: string; label: string }; left?: { id: string; label: string } } | undefined {
+  if (!isPeerNoticeCard(card)) return undefined
+  const [first, second] = card.options ?? []
+  return {
+    ...(first === undefined ? {} : { right: first }),
+    ...(second === undefined || second.id === 'leave' ? {} : { left: second }),
+  }
+}
+
 /** 底座职责（不算一个能接活的岗位），与服务端同一份。 */
 const BASE = new Set(['common.member', 'common.owner'])
 
