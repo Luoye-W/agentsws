@@ -48,6 +48,8 @@ export * from './observations.js'
 export * from './registry.js'
 export * from './runtime/b2b-outbound.js'
 export * from './runtime/dev-stub.js'
+// WP268（决策 213）：生图 / 改图 / 素材库三个工具
+export * from './runtime/image.js'
 export * from './runtime/kol.js'
 export * from './runtime/output-cards.js'
 export * from './runtime/owner.js'

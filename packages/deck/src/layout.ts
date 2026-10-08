@@ -111,6 +111,10 @@ export const LAYOUT_BY_KIND: Record<Exclude<DeckKind, 'staged_change'>, DeckLayo
   content_update: 'change',
   // WP219：新版改了你也改过的段——用新版 / 保留我的（看对比）
   content_conflict: 'choice',
+  // WP268：挑图卡——N 张缩略图，人点一张（或「再来一版」/「都不要」）
+  image_pick: 'variants',
+  // WP268：生图超额——「出 N 张，约 X 积分，要继续吗？」一道是非题
+  image_budget: 'policy',
 }
 
 /**

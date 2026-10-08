@@ -271,6 +271,45 @@ export interface ImageProvider {
   /** 出不了图的原因，人话一句（`available: false` 时必有）。 */
   unavailable_reason?: string
   generate(req: ImageGenerateRequest): Promise<ImageGeneration>
+  /**
+   * WP268（决策 213）：**参考图改图**——给 1–N 张参考图（产品图）+ 提示词（+ 可选遮罩），
+   * 出保持产品不变、换背景 / 场景的新图。OpenAI 形态是 `POST {base}/images/edits`（multipart）。
+   *
+   * **可选**（只加不删）：老实现没有它；没有 = 这个模型只会从零出图，调用方明说「这个生图模型不会改图」。
+   */
+  edit?(req: ImageEditRequest): Promise<ImageGeneration>
+  /** WP268：一次最多收几张参考图（不写 = 按 {@link IMAGE_EDIT_MAX_REFERENCES}）。 */
+  max_reference_images?: number
+}
+
+/** WP268：一次改图最多带几张参考图（OpenAI `gpt-image-*` 的 `image[]` 上限是 16；我们收得更紧）。 */
+export const IMAGE_EDIT_MAX_REFERENCES = 4
+
+/** WP268：一张参考图 / 遮罩（字节在宿主手里，**不进事件日志**）。 */
+export interface ImageInput {
+  bytes: Uint8Array
+  content_type: string
+  /** 文件名（multipart 上传要一个；没有就用 `ref-<n>.png`）。 */
+  filename?: string
+}
+
+/**
+ * WP268：参考图改图的入参。字段与 {@link ImageGenerateRequest} 对齐，多两格：参考图与遮罩。
+ *
+ * - `images`：1–N 张（第一张是主参考，产品就在它上面）；
+ * - `mask`：可选，PNG，透明的地方是要改的地方（OpenAI 规矩：遮罩作用在第一张上）；
+ * - `fidelity`：`high` = 尽量保持参考图里的产品（gpt-image 的 `input_fidelity`），不认的上游忽略。
+ */
+export interface ImageEditRequest {
+  prompt: string
+  images: ImageInput[]
+  mask?: ImageInput
+  size?: string
+  n?: number
+  fidelity?: 'high' | 'low'
+  meta: ModelMeta
+  model?: ModelRef
+  seed?: number
 }
 
 export interface ModelGateway {

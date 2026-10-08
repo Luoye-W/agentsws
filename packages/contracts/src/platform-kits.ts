@@ -296,7 +296,8 @@ export const PLATFORM_KITS: readonly PlatformKit[] = [
             'write_publications',
           ],
           'site.shopify-build': ['read_products', 'write_content', 'write_online_store_navigation'],
-          'site.shopify-theme': ['read_products'],
+          // WP268（决策 213）：挑中的图传到店铺「文件」再挂主题（`fileCreate`；write 隐含 read）
+          'site.shopify-theme': ['read_products', 'write_files'],
         },
       },
       npm_tag: 'latest',

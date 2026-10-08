@@ -33,6 +33,7 @@
     "packages/contracts/src/hosted-env.ts",
     "packages/contracts/src/hosted.ts",
     "packages/contracts/src/identity.ts",
+    "packages/contracts/src/images.ts",
     "packages/contracts/src/join.ts",
     "packages/contracts/src/kernel.ts",
     "packages/contracts/src/knowledge.ts",
@@ -120,7 +121,7 @@
     "packages/roles/roles/social/x.yml",
     "packages/roles/roles/social/youtube.yml"
   ],
-  "source_digest": "553a22d8173aa2be97f9270881e37f3c",
+  "source_digest": "9b2839612a49639a6a7c35e458238025",
   "objects": [
     {
       "id": "ad",
@@ -2014,6 +2015,18 @@
           "type": "DesignAssetProvenance",
           "sensitivity": "internal",
           "optional": false
+        },
+        {
+          "name": "shop_file",
+          "type": "DesignAssetShopFile",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "placed",
+          "type": "DesignAssetPlacement",
+          "sensitivity": "internal",
+          "optional": true
         },
         {
           "name": "created_at",

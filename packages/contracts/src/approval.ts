@@ -140,6 +140,19 @@ export type ApprovalKind =
    * 同一类：L3 自动出、看完归档，**不进审批队列**。payload = `WeeklyReviewPayload`。
    */
   | 'weekly_review'
+  /**
+   * WP268（决策 213）：**挑图卡**。AI 生图 / 改图出了 1–4 张，进了品牌素材库，问人挑哪张：
+   * 选项 = 每张图一个（`asset:<id>`）+「再来一版」（`again`）；驳回 =「都不要」。
+   * 带 `place`（网页模板要挂到主题某一格）时，**选中 = 同意传到店铺「文件」并写进模板那一格、推一份未发布预览**
+   * ——卡面写明这一句。payload = `ImagePickPayload`（`@agentsws/contracts` 的 `images.ts`）。
+   */
+  | 'image_pick'
+  /**
+   * WP268：**生图超额卡**。这一次运行要出的张数 / 积分超过单次上限（或今天出图已到上限）——先不花，
+   * 出这张问一句「出 N 张，约 X 积分，要继续吗？」。批了才出图（出完照常出挑图卡），驳回什么都不花。
+   * payload = `ImageBudgetPayload`。
+   */
+  | 'image_budget'
 
 /** 14 §13.2 抽检复核：L2 自动批被抽中后，范围管理者看完说什么（WP32） */
 export interface SamplingReview {

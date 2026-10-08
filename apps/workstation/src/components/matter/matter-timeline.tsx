@@ -151,7 +151,7 @@ export function MeBubble({
 }
 
 /** AI 那一条的外壳：头像 + 名字 + 钟点，正文在第二列。 */
-function AiShell({
+export function AiShell({
   id,
   roleId,
   name,

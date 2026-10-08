@@ -583,6 +583,30 @@ export interface AiImageRequest {
   [key: string]: unknown
 }
 
+/**
+ * WP268（决策 213）：**参考图改图** `POST /v1/ai/images/edits` 的请求（OpenAI 形态，`multipart/form-data`）。
+ *
+ * 字段：`model`、`prompt`、`image[]`（1–4 张参考图，png / jpeg / webp，单张 ≤ 20 MB）、可选 `mask`（png）、
+ * `n`（≤ 4）、`size`、可选 `input_fidelity`（`high` / `low`）。回包同 {@link AiImages}。
+ *
+ * **还没进 {@link CloudApi}**（同 WP265 云上那几条的做法）：私有仓实现转发与按张计费之后，
+ * 再把路由加进 `CloudApi` 并重出 `cloud-openapi.json`（见 WP268 报告「云端配合清单」）。
+ * 这里先钉住形状，本机实现与假云端测试按它来。
+ */
+export interface AiImageEditRequest {
+  model: string
+  prompt: string
+  /** multipart 里是重复的 `image[]` 字段；这里写成数组说明张数。 */
+  image: { filename: string; content_type: string; bytes: number }[]
+  mask?: { filename: string; content_type: string; bytes: number }
+  n?: number
+  size?: string
+  input_fidelity?: 'high' | 'low'
+}
+
+/** WP268：改图的计费能力名（云上价目表那一行；没有这一行时按 `ai.image` 算）。 */
+export const AI_IMAGE_EDIT_CAPABILITY = 'ai.image_edit'
+
 /** 生图回包（上游原样；按 `data` 里真回来几张结算）。 */
 export interface AiImages {
   data: unknown[]

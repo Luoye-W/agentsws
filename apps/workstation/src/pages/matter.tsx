@@ -18,6 +18,7 @@ import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { openExternal } from '@/components/connections/bridge'
 import { deckActionLabel } from '@/components/deck/deck-action-bar'
+import { ImageCard, isImageCard } from '@/components/matter/image-pick-card'
 import { MatterComposer, PrivatePair } from '@/components/matter/matter-composer'
 import { type DutyOption, MatterHeader } from '@/components/matter/matter-header'
 import { buildItems, dayKey, matterState, suggestionFor } from '@/components/matter/matter-model'
@@ -39,6 +40,7 @@ import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
   askAi,
+  BRAND_ASSET_MAX_BYTES,
   closeMatter,
   completeTodo,
   decide,
@@ -51,6 +53,7 @@ import {
   rerouteMatter,
   retitleMatter,
   stopMatterRuns,
+  uploadBrandAsset,
 } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 import { formatDateTime } from '@/lib/format'
@@ -97,6 +100,9 @@ export function MatterPage(): ReactNode {
   const [limit, setLimit] = useState(20)
   const [closing, setClosing] = useState(false)
   const [privateMode, setPrivateMode] = useState(false)
+  // WP268：事项里加进来的图（已进素材库，发话时带上 id）
+  const [attached, setAttached] = useState<{ id: string; url: string }[]>([])
+  const [attaching, setAttaching] = useState(false)
   const [asks, setAsks] = useState<PrivateAsk[]>([])
   const [queued, setQueued] = useState<string | undefined>(undefined)
   const askSeq = useRef(0)
@@ -259,6 +265,8 @@ export function MatterPage(): ReactNode {
       card: DeckCard
       action: Exclude<DeckAction, 'open'>
       option?: string | undefined
+      /** WP268：「都不要 / 不出了」也是一次驳回，原因就是按钮上那句。 */
+      reason?: string | undefined
     }) =>
       decide(
         input.card.id,
@@ -266,6 +274,7 @@ export function MatterPage(): ReactNode {
           action: input.action,
           version: input.card.version,
           ...(input.option === undefined ? {} : { selected_option_id: input.option }),
+          ...(input.reason === undefined ? {} : { reason: input.reason }),
         },
         positionId ?? input.card.position_id,
       ),
@@ -330,8 +339,11 @@ export function MatterPage(): ReactNode {
     items,
     busy: running || queued !== undefined,
     blockedSay: t('matter.blocked.say'),
+    // WP268：挑图卡要点一张图，不是说一句「就这张」——不给建议
     cardAction:
-      firstWaiting === undefined ? undefined : deckActionLabel(firstWaiting, 'approve', t),
+      firstWaiting === undefined || isImageCard(firstWaiting)
+        ? undefined
+        : deckActionLabel(firstWaiting, 'approve', t),
   })
   const blockedArchive = archiveBlock(
     running || railState === 'running' ? 'running' : awaiting ? 'awaiting' : undefined,
@@ -343,8 +355,18 @@ export function MatterPage(): ReactNode {
       : formatDateTime(last, lang)
 
   const send = (): void => {
-    const value = text.trim()
+    const typed = text.trim()
+    // WP268：加进来的图已经在素材库里了，话里带上它们的 id（AI 用 list_brand_assets / edit_image 拿得到）
+    const note =
+      privateMode || attached.length === 0
+        ? ''
+        : t('matter.cmp.attach.note', {
+            n: attached.length,
+            ids: attached.map((a) => a.id).join('、'),
+          })
+    const value = [typed, note].filter((x) => x !== '').join('\n\n')
     if (value === '') return
+    if (!privateMode) setAttached([])
     if (privateMode) {
       askSeq.current += 1
       const ask: PrivateAsk = { id: askSeq.current, question: value }
@@ -423,6 +445,22 @@ export function MatterPage(): ReactNode {
         )
       case 'card': {
         const hit = cards.get(item.event.approval_item_id ?? '')
+        // WP268：挑图卡 / 生图超额卡（图并排、选一张 / 再来一版 / 都不要）
+        if (hit?.card !== undefined && isImageCard(hit.card))
+          return (
+            <ImageCard
+              key={item.key}
+              at={item.event.at}
+              eventId={item.event.id}
+              card={hit.card}
+              roleId={roleId}
+              roleName={roleName}
+              deciding={decideCard.isPending}
+              onDecide={(card, action, option, reason) => {
+                decideCard.mutate({ card, action, option, reason })
+              }}
+            />
+          )
         return (
           <InlineCard
             key={item.key}
@@ -633,6 +671,26 @@ export function MatterPage(): ReactNode {
         }}
         suggestion={suggestion}
         sending={false}
+        attachments={attached}
+        attaching={attaching}
+        onAttach={(files) => {
+          setAttaching(true)
+          void Promise.all(
+            files
+              .filter((f) => f.size <= BRAND_ASSET_MAX_BYTES)
+              .map((f) => uploadBrandAsset(f, { matter_id: id }).then((r) => r.asset)),
+          )
+            .then((rows) => {
+              setAttached((xs) => [...xs, ...rows.map((r) => ({ id: r.id, url: r.file_url }))])
+            })
+            .catch(() => undefined)
+            .finally(() => {
+              setAttaching(false)
+            })
+        }}
+        onDetach={(aid) => {
+          setAttached((xs) => xs.filter((x) => x.id !== aid))
+        }}
       />
       {say.error === null ? null : (
         <p role="alert" className="text-center text-[12.5px] text-destructive">

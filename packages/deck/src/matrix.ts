@@ -64,6 +64,10 @@ const BY_KIND: Partial<Record<DeckKind, DeckAction[]>> = {
   content_update: ['approve', 'snooze', 'open'],
   // WP219：选一个（用新版 / 保留我的）再批；「看对比」= open
   content_conflict: ['approve', 'snooze', 'open'],
+  // WP268：挑一张（选项）/ 都不要（驳回）；「再来一版」是选项之一
+  image_pick: ['approve', 'reject', 'snooze', 'open'],
+  // WP268：继续出 / 不出了
+  image_budget: ['approve', 'reject', 'snooze', 'open'],
 }
 
 export function actionsFor(kind: DeckKind, state: ApprovalState): DeckAction[] {
@@ -93,6 +97,8 @@ const LABELS: Partial<Record<DeckKind, Partial<Record<DeckAction, string>>>> = {
   inbound_dead_letter: { approve: '再投一次', reject: '去邮箱回复', snooze: '稍后' },
   content_update: { approve: '更新', snooze: '稍后', open: '查看改动' },
   content_conflict: { approve: '就这样', snooze: '稍后', open: '看对比' },
+  image_pick: { approve: '就这张', reject: '都不要', snooze: '稍后' },
+  image_budget: { approve: '继续出', reject: '不出了', snooze: '稍后' },
 }
 
 const DEFAULT_LABELS: Record<DeckAction, string> = {
@@ -133,6 +139,9 @@ const RISK_BY_KIND: Partial<Record<DeckKind, RiskClass>> = {
   // WP219：审过、可一键退回；只换技能这类声明式内容，不碰程序
   content_update: 'low',
   content_conflict: 'medium',
+  // WP268：选中可能连带传店铺文件、改未发布预览（线上不动）
+  image_pick: 'medium',
+  image_budget: 'low',
   outbound_draft: 'medium',
   dev_handoff_result: 'medium',
   scheduled_task: 'medium',
@@ -177,6 +186,8 @@ const MINUTES_BY_KIND: Partial<Record<DeckKind, number>> = {
   inbound_dead_letter: 2,
   content_update: 1,
   content_conflict: 2,
+  image_pick: 1,
+  image_budget: 1,
   dev_handoff_result: 5,
   home_suggestion: 1,
   system_alert: 3,

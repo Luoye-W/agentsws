@@ -14,13 +14,15 @@
  */
 import type {
   GeneratedImage,
+  ImageEditRequest,
   ImageGenerateRequest,
   ImageGeneration,
   ImageProvider,
   ModelRef,
 } from '@agentsws/contracts'
+import { IMAGE_EDIT_MAX_REFERENCES } from '@agentsws/contracts'
 import { sha256 } from '@agentsws/core'
-import { parseImageSize } from '../images.js'
+import { imageFidelitySupported, parseImageSize } from '../images.js'
 import { describeFetchError } from '../net-cause.js'
 import { GatewayError, ProviderError } from '../types.js'
 import type { FetchLike } from './openai-compatible.js'
@@ -53,70 +55,126 @@ export function openaiImageProvider(options: OpenAiImageOptions): ImageProvider 
     model: options.model,
     ...(options.region === undefined ? {} : { region: options.region }),
   }
+  const keyOrThrow = (): string => {
+    const key = options.apiKey()
+    if (key === undefined || key === '') {
+      throw new GatewayError('invalid_input', 'missing api key', { source: 'local_vault' })
+    }
+    return key
+  }
+
+  /** 发一次、收回包：两条口（generations / edits）只差 URL 与 body 的形状。 */
+  const send = async (
+    path: 'generations' | 'edits',
+    body: string | FormData,
+    req: { prompt: string; size?: string; model?: ModelRef },
+  ): Promise<ImageGeneration> => {
+    const key = keyOrThrow()
+    const [width, height] = parseImageSize(req.size)
+    const url = `${baseUrl}/images/${path}`
+    let res: Awaited<ReturnType<FetchLike>>
+    try {
+      res = await doFetch(url, {
+        method: 'POST',
+        headers: {
+          // multipart 的 content-type（带 boundary）交给 fetch 自己填
+          ...(typeof body === 'string' ? { 'content-type': 'application/json' } : {}),
+          authorization: `Bearer ${key}`,
+          ...options.extraHeaders,
+        },
+        body,
+        signal: AbortSignal.timeout(options.timeoutMs ?? IMAGE_TIMEOUT_MS),
+      })
+    } catch (e) {
+      const name = e instanceof Error ? e.name : ''
+      throw new ProviderError(`request to ${url} failed: ${describeFetchError(e)}`, {
+        timeout: name === 'TimeoutError' || name === 'AbortError',
+      })
+    }
+    if (!res.ok) {
+      const detail = await res.text().catch(() => '')
+      throw new ProviderError(`provider http ${res.status}: ${detail.slice(0, 200)}`, {
+        status: res.status,
+      })
+    }
+    const json = (await res.json()) as WireImageResponse
+    const prompt_sha256 = sha256(req.prompt)
+    const assets: GeneratedImage[] = []
+    for (const row of json.data ?? []) {
+      const base = { content_type: 'image/png', width, height, prompt_sha256 }
+      if (typeof row.b64_json === 'string' && row.b64_json !== '') {
+        assets.push({ ...base, bytes: new Uint8Array(Buffer.from(row.b64_json, 'base64')) })
+      } else if (typeof row.url === 'string' && row.url !== '') {
+        assets.push({ ...base, url: row.url })
+      }
+    }
+    if (assets.length === 0) {
+      throw new ProviderError('provider returned no image', { status: 502 })
+    }
+    return {
+      assets,
+      model: req.model ?? ref,
+      usage: {
+        input_tokens: json.usage?.input_tokens ?? Math.ceil(req.prompt.length / 4),
+        output_tokens: json.usage?.output_tokens ?? 0,
+        cached_tokens: 0,
+        cost_base: 0,
+      },
+    }
+  }
+
   return {
     ref,
     available: true,
-    async generate(req: ImageGenerateRequest): Promise<ImageGeneration> {
-      const key = options.apiKey()
-      if (key === undefined || key === '') {
-        throw new GatewayError('invalid_input', 'missing api key', { source: 'local_vault' })
-      }
+    max_reference_images: IMAGE_EDIT_MAX_REFERENCES,
+    generate(req: ImageGenerateRequest): Promise<ImageGeneration> {
       const [width, height] = parseImageSize(req.size)
       const n = Math.max(1, Math.min(4, req.n ?? 1))
-      const url = `${baseUrl}/images/generations`
-      let res: Awaited<ReturnType<FetchLike>>
-      try {
-        res = await doFetch(url, {
-          method: 'POST',
-          headers: {
-            'content-type': 'application/json',
-            authorization: `Bearer ${key}`,
-            ...options.extraHeaders,
-          },
-          body: JSON.stringify({
-            model: options.model,
-            prompt: req.prompt,
-            n,
-            size: `${width}x${height}`,
-          }),
-          signal: AbortSignal.timeout(options.timeoutMs ?? IMAGE_TIMEOUT_MS),
-        })
-      } catch (e) {
-        const name = e instanceof Error ? e.name : ''
-        throw new ProviderError(`request to ${url} failed: ${describeFetchError(e)}`, {
-          timeout: name === 'TimeoutError' || name === 'AbortError',
-        })
-      }
-      if (!res.ok) {
-        const detail = await res.text().catch(() => '')
-        throw new ProviderError(`provider http ${res.status}: ${detail.slice(0, 200)}`, {
-          status: res.status,
-        })
-      }
-      const json = (await res.json()) as WireImageResponse
-      const prompt_sha256 = sha256(req.prompt)
-      const assets: GeneratedImage[] = []
-      for (const row of json.data ?? []) {
-        const base = { content_type: 'image/png', width, height, prompt_sha256 }
-        if (typeof row.b64_json === 'string' && row.b64_json !== '') {
-          assets.push({ ...base, bytes: new Uint8Array(Buffer.from(row.b64_json, 'base64')) })
-        } else if (typeof row.url === 'string' && row.url !== '') {
-          assets.push({ ...base, url: row.url })
-        }
-      }
-      if (assets.length === 0) {
-        throw new ProviderError('provider returned no image', { status: 502 })
-      }
-      return {
-        assets,
-        model: req.model ?? ref,
-        usage: {
-          input_tokens: json.usage?.input_tokens ?? Math.ceil(req.prompt.length / 4),
-          output_tokens: json.usage?.output_tokens ?? 0,
-          cached_tokens: 0,
-          cost_base: 0,
-        },
-      }
+      return send(
+        'generations',
+        JSON.stringify({ model: options.model, prompt: req.prompt, n, size: `${width}x${height}` }),
+        req,
+      )
+    },
+    /**
+     * WP268：参考图改图，OpenAI 形态 `POST {base}/images/edits`（multipart）。
+     *
+     * 参考图走重复的 `image[]` 字段（`gpt-image-*` 认多张；只认一张的上游只看第一张）；遮罩可选；
+     * `input_fidelity` 只在要「保持产品」且型号认它时带（`imageFidelitySupported`）。
+     */
+    edit(req: ImageEditRequest): Promise<ImageGeneration> {
+      if (req.images.length === 0)
+        return Promise.reject(new GatewayError('invalid_input', 'edit needs at least one image'))
+      const [width, height] = parseImageSize(req.size)
+      const n = Math.max(1, Math.min(4, req.n ?? 1))
+      const form = new FormData()
+      form.append('model', options.model)
+      form.append('prompt', req.prompt)
+      form.append('n', String(n))
+      form.append('size', `${width}x${height}`)
+      // 只有认这个参数的型号才带（gpt-image-2 传了会被上游拒）
+      if (req.fidelity !== undefined && imageFidelitySupported(options.model))
+        form.append('input_fidelity', req.fidelity)
+      req.images.slice(0, IMAGE_EDIT_MAX_REFERENCES).forEach((img, i) => {
+        form.append(
+          'image[]',
+          new Blob([new Uint8Array(img.bytes)], { type: img.content_type }),
+          img.filename ?? `ref-${i + 1}.${extOf(img.content_type)}`,
+        )
+      })
+      if (req.mask !== undefined)
+        form.append(
+          'mask',
+          new Blob([new Uint8Array(req.mask.bytes)], { type: req.mask.content_type }),
+          req.mask.filename ?? 'mask.png',
+        )
+      return send('edits', form, req)
     },
   }
+}
+
+function extOf(content_type: string): string {
+  if (content_type === 'image/jpeg') return 'jpg'
+  if (content_type === 'image/webp') return 'webp'
+  return 'png'
 }

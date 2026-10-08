@@ -19,6 +19,7 @@ import { useSearchParams } from 'react-router-dom'
 import { BrandMark } from '@/components/design'
 import { JoinPanel } from '@/components/onboarding/join-panel'
 import { AssignWizard } from '@/components/org/assign-wizard'
+import { BrandAssetsCard } from '@/components/org/brand-assets-card'
 import { BrandDesignCard } from '@/components/org/brand-design-card'
 import { BrandsTab } from '@/components/org/brands-tab'
 import { GrossMarginCard } from '@/components/org/gross-margin-card'
@@ -658,6 +659,10 @@ export function OrgPage(): React.ReactNode {
           {/* WP208：设计规范从第三栏搬来——每个品牌一份，看的是当前品牌那一份 */}
           <div className="pt-4">
             <BrandDesignCard />
+          </div>
+          {/* WP268：品牌素材库（AI 出的图、传进来的图、店里商品图） */}
+          <div className="pt-4">
+            <BrandAssetsCard />
           </div>
           {/* WP224：毛利率（品牌事实里的一格）——投放面板的盈亏线从这里算 */}
           <div className="pt-4">
