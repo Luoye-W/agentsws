@@ -626,7 +626,7 @@ describe('事项页（37 §2.2b：唯一的上下文容器）', () => {
     closeMatter.mockClear()
   })
 
-  it('顶部摘要 + 固定记录 + 待办 + 时间线 + 底部对话输入', async () => {
+  it('WP264 一行页头（标题 · 职责 · 状态 · 参与者 · 待办有才出）+ 对话式时间线 + 输入卡；固定记录收进「⋯」', async () => {
     renderWithProviders(
       <Routes>
         <Route path="/matters/:id" element={<MatterPage />} />
@@ -634,13 +634,23 @@ describe('事项页（37 §2.2b：唯一的上下文容器）', () => {
       '/matters/mat_1',
     )
     await screen.findByTestId('matter')
-    expect(screen.getByTestId('matter-summary').textContent).toContain('窗口内')
-    expect(within(screen.getByTestId('matter-pinned')).getByText('#1001')).toBeDefined()
+    expect(screen.getByTestId('matter-title').textContent).toContain('Anna 要退 #1001')
+    // 摘要不再单独一行（就在对话里）
+    expect(screen.queryByTestId('matter-summary')).toBeNull()
+    // 有未决的卡 → 状态「等你批」
+    expect(screen.getByTestId('matter-state').textContent).toBe('等你批')
+    expect(screen.getByTestId('matter-participant').getAttribute('title')).toBe('李默')
+    // 待办有才出：灰字行尾「1 个待办」，点开就地展开
+    const user = userEvent.setup({ delay: null, pointerEventsCheck: 0 })
+    await user.click(screen.getByTestId('matter-todos-chip'))
     expect(within(screen.getByTestId('matter-todos')).getByText('回 Anna 的退货')).toBeDefined()
-    expect(screen.getByTestId('timeline-event')).toBeDefined()
+    // 固定记录收进「⋯」
+    expect(screen.queryByTestId('matter-pinned')).toBeNull()
+    await user.click(screen.getByRole('button', { name: '更多' }))
+    expect(within(screen.getByTestId('matter-pinned')).getByText('#1001')).toBeDefined()
+    // 你说的在右边气泡
+    expect(screen.getByTestId('timeline-event').getAttribute('data-kind')).toBe('human_message')
     expect(screen.getByTestId('matter-say')).toBeDefined()
-    // 未决的卡数
-    expect(screen.getByText('未决的卡：1 张')).toBeDefined()
   })
 
   it('底部对话输入发出去 = 在这个事项里起一次 Run（第四处入口，有边界）', async () => {
@@ -653,7 +663,7 @@ describe('事项页（37 §2.2b：唯一的上下文容器）', () => {
     await screen.findByTestId('matter')
     const user = userEvent.setup({ delay: null, pointerEventsCheck: 0 })
     await user.type(screen.getByLabelText('在这个事项里说一句'), '帮我查一下物流')
-    await user.click(screen.getByRole('button', { name: '发' }))
+    await user.click(screen.getByRole('button', { name: '发送（Enter）' }))
     await waitFor(() => {
       expect(postMatterMessage).toHaveBeenCalledWith('mat_1', '帮我查一下物流')
     })
@@ -668,7 +678,8 @@ describe('事项页（37 §2.2b：唯一的上下文容器）', () => {
     )
     await screen.findByTestId('matter')
     const user = userEvent.setup({ delay: null, pointerEventsCheck: 0 })
-    await user.click(screen.getByRole('button', { name: '关闭事项' }))
+    await user.click(screen.getByRole('button', { name: '更多' }))
+    await user.click(screen.getByRole('menuitem', { name: '关闭事项' }))
     expect(screen.getByTestId('close-dialog')).toBeDefined()
     await user.click(screen.getByRole('button', { name: '留着' }))
     await waitFor(() => {

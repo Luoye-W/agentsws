@@ -110,7 +110,9 @@ describe('WP259 岗位入口：长文本照收，完整原文进首轮运行', (
     const res = await call('POST', '/v1/positions/web-ops/matters', { body: { title: LONG } })
     expect(res.status).toBe(201)
     const out = await json<{ matter: Matter; run_id?: string }>(res)
-    expect(out.matter.title).toBe('用 agentsws-theme 帮我搭一个英文首页，先别发布…')
+    // WP264（决策 184）：首轮开跑时起短标题；测试里没接模型 → 退回原话前 20 字宽（WP259 的「首句…」只是临时的）
+    expect(out.matter.title).toBe('用 agentsws-theme 帮我搭一个英文首页，先…')
+    expect(server.work.getMatter(out.matter.id)?.title_source).toBe('brief')
     expect(out.run_id).toBeDefined()
     expect(server.work.getMatter(out.matter.id)?.context.summary).toBe(LONG)
     // 首轮运行收到的任务就是完整原文（不是标题、也不把开头重复一遍）

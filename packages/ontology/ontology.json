@@ -40,6 +40,7 @@
     "packages/contracts/src/kol-public.ts",
     "packages/contracts/src/kol.ts",
     "packages/contracts/src/markets.ts",
+    "packages/contracts/src/matter-chat.ts",
     "packages/contracts/src/meetings.ts",
     "packages/contracts/src/messages.ts",
     "packages/contracts/src/model.ts",
@@ -118,7 +119,7 @@
     "packages/roles/roles/social/x.yml",
     "packages/roles/roles/social/youtube.yml"
   ],
-  "source_digest": "55172c0e5fa2039d72f29ac0c82214a1",
+  "source_digest": "b3483441665025c33c33eabbfec1fe25",
   "objects": [
     {
       "id": "ad",
@@ -2919,6 +2920,12 @@
           "optional": false
         },
         {
+          "name": "title_source",
+          "type": "MatterTitleSource",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
           "name": "status",
           "type": "MatterStatus",
           "sensitivity": "internal",
@@ -5397,6 +5404,12 @@
           "type": "string",
           "sensitivity": "internal",
           "optional": false
+        },
+        {
+          "name": "title_source",
+          "type": "MatterTitleSource",
+          "sensitivity": "internal",
+          "optional": true
         },
         {
           "name": "status",

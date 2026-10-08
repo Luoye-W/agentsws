@@ -10,6 +10,7 @@ import type {
   AllocationAuditList,
   AllocationLimitChanged,
   AllocationLimitRequest,
+  ApprovalItem,
   BrandDesignDoc,
   BrandDesignRevision,
   BrandDesignRun,
@@ -926,6 +927,21 @@ export const closeMatter = (
   unfinished: 'close_all' | 'keep',
 ): Promise<{ matter: Matter; closed_todo_ids: string[]; kept_todo_ids: string[] }> =>
   api(`/v1/matters/${encodeURIComponent(id)}/close`, { method: 'POST', body: { unfinished } })
+
+/** WP264（决策 177）：人在事项页上就地改标题（之后不再被 AI 起的短标题覆盖）。 */
+export const retitleMatter = (id: string, title: string): Promise<{ matter: Matter }> =>
+  api(`/v1/matters/${encodeURIComponent(id)}`, { method: 'PATCH', body: { title } })
+
+/** WP264：停下这件事上正在跑的运行（输入卡上的「停」）。 */
+export const stopMatterRuns = (id: string): Promise<{ stopped: number }> =>
+  api(`/v1/matters/${encodeURIComponent(id)}/stop`, { method: 'POST' })
+
+/** WP264：时间线上内嵌的那张卡（审批 / 选择）——按事项那条分配取，决定也用它。 */
+export const getApproval = (id: string, assignment?: string): Promise<ApprovalItem> =>
+  api<ApprovalItem>(
+    `/v1/approvals/${encodeURIComponent(id)}`,
+    assignment === undefined ? {} : { assignment },
+  )
 
 export const listGoals = (): Promise<GoalsData> => api<GoalsData>('/v1/goals')
 

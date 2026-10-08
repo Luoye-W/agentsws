@@ -762,12 +762,16 @@ export function createPositions(options: PositionsOptions): PositionsAssembly {
    * 这件事原来那段话：岗位入口开事项时记下的那句人话（以标题打头的那一句），没有就用标题
    * （WP237 之前开的、还没定职责的事项没记原话）。
    */
-  const briefOf = (matter: Matter): string =>
-    work.store
-      .listMatterEvents(matter.id)
+  const briefOf = (matter: Matter): string => {
+    const said = work.store.listMatterEvents(matter.id).filter((e) => e.kind === 'human_message')
+    return (
       // WP259：标题拆过（「第一句…」）的，原话以去掉「…」的那段开头
-      .find((e) => e.kind === 'human_message' && isTaskBrief(matter.title, e.text))?.text ??
-    matter.title
+      said.find((e) => isTaskBrief(matter.title, e.text))?.text ??
+      // WP264：标题换成了 AI 起的短标题 / 人改过的——原话就是这件事的第一句人话
+      (matter.title_source === undefined ? undefined : said[0]?.text) ??
+      matter.title
+    )
+  }
 
   /** 这件事上还没定的那张「走哪条职责」卡（时间线上路由那一条记着卡号）。 */
   const pendingChoiceOf = async (matter_id: MatterId): Promise<ApprovalItem | undefined> => {

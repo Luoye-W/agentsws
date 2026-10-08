@@ -100,13 +100,69 @@ export interface MatterEvent {
    * WP253：这一条是「预览好了」——AI 把主题推成了一份**未发布**副本（线上没动），界面在它下面出
    * 「打开预览」按钮。`url` 是 Shopify 的预览链接，`label` 是那份副本的名字。老事件没有这一格。
    */
-  preview?: { url: string; label: string }
+  preview?: MatterPreview
   /**
    * WP251（决策 91）：这一轮运行**卡在缺连接 / 缺凭据上**——工具回了 `not_connected` 或缺凭据，
    * 运行时在这一轮收尾时记下的结构化标记（缺哪个连接）。岗位工作视图按它分「卡住了」，
    * 不再认 AI 最后那句话。老事件没有这一格。
    */
   blocked?: MatterRunBlock
+  /**
+   * WP264（决策 182）：这一条是**一次运行跑完了**——用了多久、做了哪几步（人话），事项页缩成居中一行灰字、
+   * 点开看步骤。运行时在收尾时记（`kind: 'status'`，排在 AI 那段话前面；「跑了几次」仍只数开跑那条 `run`）。老事件没有这一格。
+   */
+  run_digest?: MatterRunDigest
+  /**
+   * WP264（决策 179）：AI 这段话末尾给的**下一步**——替人想好的下一句（短句，人的口吻，如「发布上线」）。
+   * 输入框空着时显示成浅灰建议、按 Tab 收下；只在 `agent_message` 上有。不从正文里猜。
+   */
+  next_suggestion?: string
+}
+
+/**
+ * WP253：「预览好了」——AI 把主题推成了一份**未发布**副本（线上没动）。
+ * WP264 加了三格给结果卡用（改了几个文件、检查结果、副本 id），老事件只有 `url` / `label`。
+ */
+export interface MatterPreview {
+  url: string
+  label: string
+  /** WP264：那份未发布副本的 id。 */
+  theme_id?: string
+  /** WP264：相对起底 / 拉下来的那一份改了哪些文件（最多列 40 个）。 */
+  changed_files?: string[]
+  /** WP264：推之前最近一次主题检查的结论。 */
+  check?: { errors: number; warnings: number }
+}
+
+/** WP264：一次运行里给人看的一步（读了哪个文件、改了哪个、检查、推送）。 */
+export interface MatterRunStep {
+  /** 人话（不露工具名），如「读 templates/index.json」。 */
+  text: string
+  /** `running` 只出现在正在跑的那一次（{@link MatterLiveRun}）里。 */
+  status: 'ok' | 'error' | 'running'
+  /** 这一步用了几秒（跑完才有）。 */
+  seconds?: number
+}
+
+/** WP264：一次运行跑完时的摘要（事项页那一行灰字）。 */
+export interface MatterRunDigest {
+  /** 总共用了几秒。 */
+  seconds: number
+  /** `completed` 跑完了；`stopped` 被停下（没动静 / 超时 / 人点停）；`failed` 没跑成。 */
+  outcome: 'completed' | 'stopped' | 'failed'
+  /** 最多 40 步；多的不列。 */
+  steps: MatterRunStep[]
+}
+
+/**
+ * WP264：这件事上**正在跑**的那一次（事项页左侧「正在做…」+ 当前一步，可展开实时步骤）。
+ * 只在 `GET /v1/matters/:id` 的那一屏上有，不进库。
+ */
+export interface MatterLiveRun {
+  run_id: RunId
+  started_at: Iso8601
+  /** 已经做完的几步 + 正在做的那一步（`status: 'running'`，在最后）。 */
+  steps: MatterRunStep[]
 }
 
 /** WP251（决策 91）：一轮运行卡在哪。 */
@@ -130,6 +186,17 @@ export interface MatterContext {
   last_activity: Iso8601
 }
 
+/**
+ * WP264（决策 177 / 184）：事项标题是怎么来的。
+ *
+ * - `brief`：照原话截的（起不出 AI 标题时的退路：原话前 20 字）；
+ * - `ai`：首轮开跑时便宜模型单独起的短标题（中文 16 字左右）；
+ * - `user`：人在事项页上改过——之后**不再被自动覆盖**。
+ *
+ * 缺省 = 还没起过（WP259 拆出来的「首句 ≤40 字」那个临时标题，或老事项）。
+ */
+export type MatterTitleSource = 'brief' | 'ai' | 'user'
+
 export interface Matter {
   id: MatterId
   schema_version: 1
@@ -137,6 +204,8 @@ export interface Matter {
   position_id?: PositionId
   kind: MatterKind
   title: string
+  /** WP264：标题是怎么来的（见 {@link MatterTitleSource}）；老事项没有这一格。 */
+  title_source?: MatterTitleSource
   status: MatterStatus
   /** WP69（54 §2）：从岗位开的还是从职责开的；缺省按 `role` 读。 */
   entry?: MatterEntry
@@ -236,6 +305,8 @@ export interface MatterView {
   open_card_ids: string[]
   /** `pinned` 的展示名（服务端补；前端不猜、也不查库） */
   pinned_labels: { ref: ObjectRef; label: string }[]
+  /** WP264：这件事上正在跑的那一次（没在跑 = 没有这一格）。 */
+  live?: MatterLiveRun
 }
 
 // ── 目标（37 §2.3）─────────────────────────────────────────────────────
