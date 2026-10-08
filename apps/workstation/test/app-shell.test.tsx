@@ -4,11 +4,28 @@
  * 断言的是「每个 NavLink 里有一个 svg」——图标换成别的 lucide 图形不该让测试红，
  * 但漏掉一条就该红。
  */
-import { screen } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import { screen, waitFor } from '@testing-library/react'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { AppShell } from '@/components/app-shell'
 import type { PositionSummary } from '@/lib/api'
 import { renderWithProviders } from './helpers'
+import { COMPANY_ORG, SOLO_ORG } from './mode-words'
+
+/** WP271：组织（不给 = 读不到，按 ③ 兜底——老用例全走这一档）。 */
+const modeState = vi.hoisted(() => ({ orgs: [] as unknown[] }))
+
+vi.mock('@/lib/api', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/api')>('@/lib/api')
+  return {
+    ...actual,
+    listOrganizations: async () => modeState.orgs,
+    getPositions: async () => ({ positions }),
+  }
+})
+
+beforeEach(() => {
+  modeState.orgs = []
+})
 
 const positions: PositionSummary[] = [
   {
@@ -100,5 +117,55 @@ describe('左栏 / 顶栏新风格（WP96）', () => {
     const nav = screen.getByTestId('main-nav')
     // 最下面 = 在导航之后
     expect(nav.compareDocumentPosition(bottom) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+})
+
+describe('WP271 三种模式：左栏与账号块', () => {
+  const me = {
+    person: { id: 'per_wang', name: '王岚', email: 'wang@nordvolt.example' },
+    workspace: { id: 'ws_1', name: 'Nordvolt' },
+    assignments: [],
+  }
+
+  it('① 个人：「岗位与品牌」，「我的代理」收起，账号块只写品牌名', async () => {
+    modeState.orgs = [SOLO_ORG]
+    renderWithProviders(
+      <AppShell
+        positions={positions}
+        cards={[]}
+        tileLibrary={[]}
+        onAddTile={() => {}}
+        me={me as never}
+      >
+        <div>主区</div>
+      </AppShell>,
+    )
+    await waitFor(() => {
+      expect(screen.getByTestId('nav-org').textContent).toBe('岗位与品牌')
+    })
+    expect(screen.queryByTestId('nav-secretary')).toBeNull()
+    const account = screen.getByTestId('account-block').textContent ?? ''
+    expect(account).toContain('Nordvolt')
+    expect(account).not.toContain('所有者')
+  })
+
+  it('③ 公司集体：照旧「公司」「我的代理」、账号块「所有者 · 品牌」', async () => {
+    modeState.orgs = [COMPANY_ORG]
+    renderWithProviders(
+      <AppShell
+        positions={positions}
+        cards={[]}
+        tileLibrary={[]}
+        onAddTile={() => {}}
+        me={me as never}
+      >
+        <div>主区</div>
+      </AppShell>,
+    )
+    await waitFor(() => {
+      expect(screen.getByTestId('account-block').textContent).toContain('所有者 · Nordvolt')
+    })
+    expect(screen.getByTestId('nav-org').textContent).toBe('公司')
+    expect(screen.getByTestId('nav-secretary')).toBeTruthy()
   })
 })

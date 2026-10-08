@@ -94,6 +94,11 @@ export interface BusinessStepProps {
    * ——档案卡上不再另出一格，公司全称只有这一个来源。
    */
   companyEdited?: boolean
+  /**
+   * WP271（决策 233）：问不问「公司全称」。① 个人不问——品牌名够用；要开发信 / 报价单时
+   * 再去设置页「主体信息」里填。不给 = 问（③ 与以前一样）。
+   */
+  askCompany?: boolean
 }
 
 export function BusinessStep({
@@ -108,6 +113,7 @@ export function BusinessStep({
   onCompanyName,
   companyName,
   companyEdited = false,
+  askCompany = true,
 }: BusinessStepProps): React.ReactNode {
   const { t } = useApp()
   const client = useQueryClient()
@@ -473,18 +479,20 @@ export function BusinessStep({
       ) : null}
       {addedBrand ? null : current === undefined && !skipped ? null : (
         <div className="flex flex-col gap-2 border-t pt-3" data-testid="onboarding-person">
-          <div className="flex flex-col gap-1">
-            <Label htmlFor="company-name">{t('onboarding.company.legal_name')}</Label>
-            <Input
-              id="company-name"
-              data-testid="company-legal-name"
-              maxLength={128}
-              value={shownCompany}
-              onChange={(e) => {
-                onCompanyName(e.target.value)
-              }}
-            />
-          </div>
+          {askCompany ? (
+            <div className="flex flex-col gap-1">
+              <Label htmlFor="company-name">{t('onboarding.company.legal_name')}</Label>
+              <Input
+                id="company-name"
+                data-testid="company-legal-name"
+                maxLength={128}
+                value={shownCompany}
+                onChange={(e) => {
+                  onCompanyName(e.target.value)
+                }}
+              />
+            </div>
+          ) : null}
           <div className="flex flex-col gap-1">
             <Label htmlFor="person-name">{t('onboarding.person.name')}</Label>
             <Input

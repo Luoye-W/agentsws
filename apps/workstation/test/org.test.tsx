@@ -23,6 +23,7 @@ import type {
 } from '@/lib/api'
 import { OrgPage } from '@/pages/org'
 import { renderWithProviders } from './helpers'
+import { COMPANY_ORG, companyWordsIn, SOLO_ORG } from './mode-words'
 
 const T0 = '2026-09-10T09:00:00.000Z'
 const OWNER_ASSIGNMENT = 'asg_owner'
@@ -231,6 +232,9 @@ const LINES: ProductLineView[] = [
   },
 ]
 
+/** WP271：这家公司现在是哪种用法（不给 = 读不到组织，按 ③ 兜底——老用例全走这一档）。 */
+const modeState: { orgs: (typeof SOLO_ORG)[]; extra: OrgPositionView[] } = { orgs: [], extra: [] }
+
 const assigned: unknown[] = []
 const brandWrites: unknown[] = []
 const lineWrites: unknown[] = []
@@ -254,7 +258,8 @@ vi.mock('@/lib/api', async () => {
       tile_library: [],
       max_tiles: 6,
     }),
-    listOrgPositions: async () => POSITIONS,
+    listOrgPositions: async () => [...POSITIONS, ...modeState.extra],
+    listOrganizations: async () => modeState.orgs,
     listRoleDefinitions: async () => state.roles,
     listMembers: async () => [...MEMBERS, TWO_DUTIES],
     listInvitations: async () => [],
@@ -316,6 +321,8 @@ vi.mock('@/lib/api', async () => {
 })
 
 beforeEach(() => {
+  modeState.orgs = []
+  modeState.extra = []
   assigned.length = 0
   brandWrites.length = 0
   lineWrites.length = 0
@@ -854,5 +861,91 @@ describe('不是所有者', () => {
     renderWithProviders(<OrgPage />)
     expect(await screen.findByTestId('org-not-owner')).toBeTruthy()
     expect(screen.queryByTestId('org-credits-only')).toBeNull()
+  })
+})
+
+/** WP271：带「工作区成员」那条底座职责的岗位（① 里不该列出来）。 */
+const WITH_MEMBER_DUTY: OrgPositionView = {
+  id: 'site-ops',
+  name: '网站运营',
+  name_en: 'Site Ops',
+  version: '1.0.0',
+  source: 'bundled',
+  roles: [
+    { role_id: 'dtc.support', name: '独立站售后客服', default: true, loaded: true },
+    { role_id: 'common.member', name: '工作区成员', default: false, loaded: true },
+  ],
+  holders: [{ person_id: 'per_wang', name: '王岚', ranges: [{ kind: 'brand', id: 'ws_dtc3c' }] }],
+}
+
+describe('WP271 三种模式：公司页', () => {
+  it('① 个人：叫「岗位与品牌」，只留品牌 / 岗位 / 工具箱；没有负责人卡、上级、分给同事、工作区成员；一个公司概念词都不出', async () => {
+    modeState.orgs = [SOLO_ORG]
+    modeState.extra = [WITH_MEMBER_DUTY]
+    const user = userEvent.setup()
+    renderWithProviders(<OrgPage />)
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('岗位与品牌')
+    })
+    const cards = await screen.findAllByTestId('position-card')
+    expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual([
+      '品牌',
+      '岗位',
+      '工具箱',
+    ])
+    expect(screen.queryByTestId('org-owner')).toBeNull()
+    expect(screen.queryByTestId('position-supervisor')).toBeNull()
+    expect(screen.getByText('你的岗位')).toBeTruthy()
+    // 规矩折叠层：看得到「AI 自己能做到哪一步」（决策 244 的词），看不到谁定
+    const support = within(cards[0] as HTMLElement)
+    await user.click(support.getByTestId('position-duties-toggle'))
+    await user.click(support.getAllByTestId('position-duty-detail')[0] as HTMLElement)
+    const detail = await screen.findByTestId('role-detail')
+    expect(detail.textContent).toContain('上限内自己做')
+    expect(within(detail).queryByTestId('role-action-route')).toBeNull()
+    // 「工作区成员」那条底座职责不列
+    const site = within(
+      cards.find((c) => c.getAttribute('data-position') === 'site-ops') as HTMLElement,
+    )
+    expect(site.queryByText('工作区成员')).toBeNull()
+    expect(companyWordsIn(document.body)).toEqual([])
+    // 已经在做的岗位不出「我来做」；模板上的「我来做」= 直接分给自己，不挑范围（服务端在 ① 里落成整个品牌）
+    expect(support.queryByTestId('position-assign')).toBeNull()
+    const design = within(
+      cards.find((c) => c.getAttribute('data-position') === 'brand-design') as HTMLElement,
+    )
+    const take = design.getByTestId('position-assign')
+    expect(take.textContent).toBe('我来做')
+    await user.click(take)
+    await waitFor(() => {
+      expect(assigned).toEqual([
+        { person_id: 'per_wang', position_id: 'brand-design', ranges: [], range_groups: [] },
+      ])
+    })
+    expect(screen.queryByTestId('assign-inline')).toBeNull()
+    // 工具箱 tab 也干净
+    await user.click(screen.getByRole('tab', { name: '工具箱' }))
+    expect(companyWordsIn(document.body)).toEqual([])
+  })
+
+  it('③ 公司集体：照旧——八个 tab、负责人卡、上级、分给同事、主管定', async () => {
+    modeState.orgs = [COMPANY_ORG]
+    const user = userEvent.setup()
+    renderWithProviders(<OrgPage />)
+    const cards = await screen.findAllByTestId('position-card')
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('公司')
+    })
+    expect(screen.getAllByRole('tab')).toHaveLength(8)
+    expect(screen.getByTestId('org-owner')).toBeTruthy()
+    const support = within(cards[0] as HTMLElement)
+    expect(support.getByTestId('position-supervisor').textContent).toContain('上级')
+    expect(support.getByTestId('position-assign').textContent).toBe('分给同事')
+    await user.click(support.getByTestId('position-duties-toggle'))
+    await user.click(support.getAllByTestId('position-duty-detail')[0] as HTMLElement)
+    const detail = await screen.findByTestId('role-detail')
+    expect(detail.textContent).toContain('主管定')
+    expect(detail.textContent).toContain('额度内可自己做')
+    expect(screen.getByText('你们的岗位')).toBeTruthy()
   })
 })

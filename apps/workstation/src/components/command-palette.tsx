@@ -104,7 +104,7 @@ export function CommandPalette({
    * 与顶栏切换器同一个数据源、同一条判据——个人用户（一个人一个品牌）这一组不出，
    * 进不去的品牌也不出（服务端已经筛过）。
    */
-  const { org_id, brands, solo } = useBrands()
+  const { org_id, brands } = useBrands()
   const client = useQueryClient()
   /** WP207：面板里打的字（要拿去搜对话与任务、也要拿去让 AI 找回）。 */
   const [search, setSearch] = useState('')
@@ -447,7 +447,8 @@ export function CommandPalette({
               {t('nav.settings')}
             </CommandItem>
           </CommandGroup>
-          {solo || org_id === undefined || brands.length <= 1 ? null : (
+          {/* WP271：一人多品牌也要能搜品牌——只看品牌数，不看 solo */}
+          {org_id === undefined || brands.length <= 1 ? null : (
             <CommandGroup heading={t('command.group.brands')}>
               {brands.map((b) => (
                 <CommandItem

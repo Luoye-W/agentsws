@@ -13,6 +13,7 @@ import type { PositionWorkItem, PositionWorkView } from '@agentsws/contracts'
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { NoRangeNotice } from '@/components/position/data-board'
 import type { PositionInstanceData } from '@/lib/api'
 import {
   DEFAULT_PREFS,
@@ -29,6 +30,7 @@ import {
 import { PositionPage } from '@/pages/position'
 import { draftCard } from './fixtures'
 import { renderWithProviders } from './helpers'
+import { COMPANY_ORG, companyWordsIn, SOLO_ORG } from './mode-words'
 
 const NOW = '2026-10-06T08:00:00.000Z'
 
@@ -50,6 +52,9 @@ const item = (over: Partial<PositionWorkItem>): PositionWorkItem => ({
   movable: false,
   ...over,
 })
+
+/** WP271：组织（不给 = 读不到，按 ③ 兜底）与「每条职责能做什么」那一份声明。 */
+const modeState: { orgs: (typeof SOLO_ORG)[]; capable: boolean } = { orgs: [], capable: false }
 
 const state: {
   work: PositionWorkView
@@ -235,6 +240,7 @@ vi.mock('@/lib/api', async () => {
       ],
     }),
     getSchedules: async () => [],
+    listOrganizations: async () => modeState.orgs,
     getRoleDefinition: async (id: string) => ({
       id,
       name: id,
@@ -251,6 +257,21 @@ vi.mock('@/lib/api', async () => {
       connectors: [],
       scopes: [],
       skills: [],
+      // WP271：「高级」里要看词的那几样（一个可批卡的数据域 + 一个起步要人点的动作）
+      ...(modeState.capable
+        ? {
+            scopes: [
+              {
+                domain: 'community',
+                ops: ['read', 'stage', 'approve'],
+                range: 'brand',
+                max_sensitivity: 'internal',
+              },
+            ],
+            actions: [{ id: 'approve_member', kind: 'staged_change', target: 'community_member' }],
+            automation: [{ action_id: 'approve_member', initial: 'L1', ceiling: 'L2' }],
+          }
+        : {}),
     }),
     setTodoStatus: (...args: unknown[]) =>
       (state.setTodoStatus as unknown as (...a: unknown[]) => Promise<unknown>)(...args),
@@ -279,6 +300,8 @@ function memoryStorage(): Storage {
 }
 
 beforeEach(() => {
+  modeState.orgs = []
+  modeState.capable = false
   vi.stubGlobal('localStorage', memoryStorage())
   state.work = fullWork()
   state.instance = instance()
@@ -764,5 +787,62 @@ describe('WP248 决策 79 / 82', () => {
       start,
       end: new Date(Date.parse(start) + 3_600_000).toISOString(),
     })
+  })
+})
+
+describe('WP271 三种模式：岗位页', () => {
+  const openAdvanced = async (): Promise<HTMLElement> => {
+    openAt('/positions/asg_pr?tab=settings')
+    await screen.findByTestId('position-settings')
+    fireEvent.click(screen.getByTestId('settings-advanced-toggle'))
+    const lines = await screen.findAllByTestId('settings-capabilities')
+    return lines[0] as HTMLElement
+  }
+
+  it('① 个人：「要你确认」，不出「可批卡」；设置页签一个公司概念词都不出', async () => {
+    modeState.orgs = [SOLO_ORG]
+    modeState.capable = true
+    const first = await openAdvanced()
+    await waitFor(() => {
+      expect(first.textContent).toContain('要你确认')
+    })
+    expect(first.textContent).not.toContain('可批卡')
+    expect(companyWordsIn(document.body)).toEqual([])
+  })
+
+  it('① 个人：工作页签（默认）一个公司概念词都不出', async () => {
+    modeState.orgs = [SOLO_ORG]
+    openAt()
+    await screen.findByTestId('status-cards')
+    await screen.findByTestId('data-board')
+    await screen.findAllByTestId('deck-section')
+    expect(companyWordsIn(document.body)).toEqual([])
+  })
+
+  it('③ 公司集体：照旧「要人批」「可批卡」', async () => {
+    modeState.orgs = [COMPANY_ORG]
+    modeState.capable = true
+    const first = await openAdvanced()
+    await waitFor(() => {
+      expect(first.textContent).toContain('要人批')
+    })
+    expect(first.textContent).toContain('可批卡')
+  })
+
+  it('没挂品牌的老分配：① 只给一键挂整个品牌，不出「去分配 / 找负责人」；③ 照旧', async () => {
+    modeState.orgs = [SOLO_ORG]
+    const solo = renderWithProviders(
+      <NoRangeNotice id="asg_pr" isOwner ownerAssignment="asg_owner" />,
+    )
+    await waitFor(() => {
+      expect(screen.getByTestId('no-range-self-assign').textContent).toBe('挂上整个品牌')
+    })
+    expect(screen.queryByTestId('no-range-assign')).toBeNull()
+    expect(companyWordsIn(document.body)).toEqual([])
+    solo.unmount()
+
+    modeState.orgs = [COMPANY_ORG]
+    renderWithProviders(<NoRangeNotice id="asg_pr" isOwner ownerAssignment="asg_owner" />)
+    expect(await screen.findByTestId('no-range-assign')).toBeTruthy()
   })
 })

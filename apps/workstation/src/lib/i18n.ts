@@ -10,6 +10,7 @@ import { IMAGES_EN, IMAGES_ZH } from './i18n-images'
 import { LIBRARY_EN, LIBRARY_ZH } from './i18n-library'
 import { LOCAL_CONNECTOR_EN, LOCAL_CONNECTOR_ZH } from './i18n-local-connector'
 import { MATTER_EN, MATTER_ZH } from './i18n-matter'
+import { MODE_EN, MODE_ZH } from './i18n-mode'
 import { NPM_REGISTRY_EN, NPM_REGISTRY_ZH } from './i18n-npm-registry'
 import { OWN_SUB_EN, OWN_SUB_ZH } from './i18n-own-sub'
 import { POSITION_EN, POSITION_ZH } from './i18n-position'
@@ -7966,6 +7967,8 @@ const TABLES: Record<Lang, Table> = {
     ...SHOP_ADMIN_ZH,
     // WP268：挑图卡、品牌素材库、事项里拖图
     ...IMAGES_ZH,
+    // WP271：三种模式的换词（`key@solo` / `key@peers`，`useMode().t` 先找它）
+    ...MODE_ZH,
   },
   en: {
     ...en,
@@ -7984,7 +7987,13 @@ const TABLES: Record<Lang, Table> = {
     ...MATTER_EN,
     ...SHOP_ADMIN_EN,
     ...IMAGES_EN,
+    ...MODE_EN,
   },
+}
+
+/** WP271：这张表里有没有这个 key（换词时先看 `key@solo` 在不在）。 */
+export function hasKey(lang: Lang, key: string): boolean {
+  return TABLES[lang][key] !== undefined || TABLES.zh[key] !== undefined
 }
 
 export function translate(lang: Lang, key: string, vars?: Record<string, string | number>): string {

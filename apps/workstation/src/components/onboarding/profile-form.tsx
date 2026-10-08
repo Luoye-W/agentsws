@@ -33,7 +33,8 @@ import type {
   VerticalChoiceView,
   WorkspaceProfileView,
 } from '@/lib/api'
-import { useApp } from '@/lib/app-context'
+import { useMode } from '@/lib/mode'
+import { cn } from '@/lib/utils'
 
 export interface ProfileDraft {
   legal_name: string
@@ -103,12 +104,17 @@ export function ProfileForm({
   error?: string
   onSave(draft: ProfileDraft): void
 }): React.ReactNode {
-  const { t } = useApp()
+  /*
+   * WP271（决策 233 / 234）：① 个人——这一张叫「品牌档案」，品牌那几格在上；公司全称与地址
+   * 挪到下面「主体信息（开发信、报价单用）」、选填；「公司邮箱后缀」只为认同事，不出。
+   */
+  const { t, solo } = useMode()
   const suggested = suggestCompanyEmailSuffix([...(suggestFrom ?? []), emailHint]) ?? ''
   const [draft, setDraft] = useState<ProfileDraft>({
     legal_name: profile?.legal_name ?? '',
     domain: profile?.domain ?? suggested,
-    discoverable: profile?.discoverable ?? true,
+    // WP271（决策 234）：没设过就是关着——一个人用不着让同事找到他
+    discoverable: profile?.discoverable ?? false,
     brand_name: profile?.brand_name ?? '',
     vertical: profile?.vertical ?? 'goods',
     storefront_platform: profile?.storefront_platform ?? 'shopify',
@@ -133,7 +139,10 @@ export function ProfileForm({
   return (
     <div className="flex flex-col gap-4 text-sm" data-testid="onboarding-profile">
       {/* ── 上半块：公司（→ 组织；52 O1 / O3「人、钱、发现」都挂在它上面）── */}
-      <section className="flex flex-col gap-3" data-testid="profile-company-block">
+      <section
+        className={cn('flex flex-col gap-3', solo && 'order-1 border-t pt-3')}
+        data-testid="profile-company-block"
+      >
         {/*
           WP79 ② / ③：**新建品牌那一屏这两个灰色小标题都不出**（WP121b 之后
           向导不再用这个件，问的东西并进了第 ② 步那一轮分析）。品牌那三样直接
@@ -166,30 +175,32 @@ export function ProfileForm({
           />
         </div>
 
-        <div className="flex flex-col gap-1">
-          <Label htmlFor="company-domain" className="flex items-center gap-1">
-            {t('onboarding.company.domain')}
-            <Hint text={t('onboarding.company.domain.hint')} testId="company-domain-hint" />
-          </Label>
-          <Input
-            id="company-domain"
-            data-testid="company-domain"
-            value={draft.domain}
-            placeholder={t('onboarding.company.domain.placeholder')}
-            onChange={(e) => {
-              // WP233：只收后缀——误填整个邮箱时当场截 @ 后面那段
-              const raw = e.target.value
-              setDomainTouched(true)
-              setDraft({
-                ...draft,
-                domain: raw.includes('@') ? companyEmailSuffix(raw) : raw.toLowerCase(),
-              })
-            }}
-            onBlur={() => {
-              setDraft((prev) => ({ ...prev, domain: companyEmailSuffix(prev.domain) }))
-            }}
-          />
-        </div>
+        {solo ? null : (
+          <div className="flex flex-col gap-1">
+            <Label htmlFor="company-domain" className="flex items-center gap-1">
+              {t('onboarding.company.domain')}
+              <Hint text={t('onboarding.company.domain.hint')} testId="company-domain-hint" />
+            </Label>
+            <Input
+              id="company-domain"
+              data-testid="company-domain"
+              value={draft.domain}
+              placeholder={t('onboarding.company.domain.placeholder')}
+              onChange={(e) => {
+                // WP233：只收后缀——误填整个邮箱时当场截 @ 后面那段
+                const raw = e.target.value
+                setDomainTouched(true)
+                setDraft({
+                  ...draft,
+                  domain: raw.includes('@') ? companyEmailSuffix(raw) : raw.toLowerCase(),
+                })
+              }}
+              onBlur={() => {
+                setDraft((prev) => ({ ...prev, domain: companyEmailSuffix(prev.domain) }))
+              }}
+            />
+          </div>
+        )}
 
         <div className="flex items-center justify-between gap-3">
           <Label htmlFor="company-discoverable" className="flex items-center gap-1">
@@ -478,12 +489,12 @@ export function ProfileForm({
       </section>
 
       {error === undefined ? null : (
-        <p role="alert" className="text-destructive" data-testid="company-error">
+        <p role="alert" className="order-2 text-destructive" data-testid="company-error">
           {error}
         </p>
       )}
 
-      <div className="flex items-center justify-end gap-2">
+      <div className="order-2 flex items-center justify-end gap-2">
         {saved ? (
           <span className="text-xs text-muted-foreground" data-testid="company-saved">
             {t('onboarding.company.saved')}
@@ -492,9 +503,19 @@ export function ProfileForm({
         <Button
           size="sm"
           data-testid="company-save"
-          disabled={busy || draft.legal_name.trim() === ''}
+          disabled={busy || (!solo && draft.legal_name.trim() === '')}
           onClick={() => {
-            onSave({ ...draft, domain: companyEmailSuffix(draft.domain) })
+            /*
+             * WP271（决策 233）：① 里全称选填。组织上总得有个名字（服务端不收空名），
+             * 没填就沿用原来那个（迁移时是品牌名占位），再没有就用品牌名。
+             */
+            const legal_name =
+              draft.legal_name.trim() !== ''
+                ? draft.legal_name
+                : (profile?.legal_name ?? '').trim() !== ''
+                  ? (profile?.legal_name ?? '')
+                  : draft.brand_name
+            onSave({ ...draft, legal_name, domain: companyEmailSuffix(draft.domain) })
           }}
         >
           {/* WP79 ⑥：向导里保存完就进下一步，所以按钮说的是「保存并继续」 */}

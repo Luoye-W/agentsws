@@ -56,6 +56,7 @@ import {
   suggestOnboarding,
 } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
+import { useMode } from '@/lib/mode'
 import {
   type Board,
   deselectDuty,
@@ -166,6 +167,8 @@ export function resumeStart(state: {
 
 export function OnboardingPage(): React.ReactNode {
   const { t } = useApp()
+  // WP271：① 个人（新装默认）不问公司全称，邀请码压成一行小字（决策 233 / 245）
+  const { solo } = useMode()
   const client = useQueryClient()
   const navigate = useNavigate()
   const [step, setStep] = useState(0)
@@ -441,6 +444,8 @@ export function OnboardingPage(): React.ReactNode {
                 brandName={state.data.brand_name}
                 companyName={companyName}
                 companyEdited={companyDraft !== undefined}
+                // WP271（决策 233）：① 个人不问公司全称
+                askCompany={!solo}
                 onRename={setNameDraft}
                 onCompanyName={setCompanyDraft}
                 onSettled={(run) => {

@@ -38,6 +38,7 @@ import {
 } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 import { formatDate } from '@/lib/format'
+import { useMode } from '@/lib/mode'
 import { cn } from '@/lib/utils'
 
 /**
@@ -65,7 +66,8 @@ function Entry({
   canEdit: boolean
   onChanged: () => void
 }): React.ReactNode {
-  const { t, lang } = useApp()
+  const { lang } = useApp()
+  const { t } = useMode()
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(entry.body)
   const [error, setError] = useState<string | null>(null)
@@ -209,7 +211,7 @@ function Entry({
 
 /** 折着的"上面继承的"：上面几层各有多少条。只数、不列——那几层在它们自己的面板里改。 */
 function Inherited({ scope }: { scope: RailScope }): React.ReactNode {
-  const { t } = useApp()
+  const { t } = useMode()
   const [open, setOpen] = useState(false)
   const parent = scope.parent
   const above = useQuery({
@@ -266,7 +268,7 @@ function Inherited({ scope }: { scope: RailScope }): React.ReactNode {
 
 /** "六层怎么叠"：越靠下越具体、越优先；本层高亮。 */
 function TierCard({ tier }: { tier: RailScope['tier'] }): React.ReactNode {
-  const { t } = useApp()
+  const { t } = useMode()
   return (
     <div className="rounded-md border p-2" data-testid="memory-tier-card">
       {/* WP157：「越靠下越具体」那句进标题旁的问号；下面六层是状态（本层高亮），不是步骤 */}
@@ -297,7 +299,7 @@ function TierCard({ tier }: { tier: RailScope['tier'] }): React.ReactNode {
 }
 
 export function MemoryPanel({ scope }: { scope: RailScope }): React.ReactNode {
-  const { t } = useApp()
+  const { t } = useMode()
   const client = useQueryClient()
   const [adding, setAdding] = useState(false)
   const [draft, setDraft] = useState('')

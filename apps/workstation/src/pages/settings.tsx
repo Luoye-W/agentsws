@@ -42,6 +42,7 @@ import {
   setWorkspaceProfile,
 } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
+import { useMode } from '@/lib/mode'
 
 export function SettingsPage({
   identity,
@@ -52,6 +53,8 @@ export function SettingsPage({
   defaultTab?: 'general' | 'account' | 'plugins'
 }): React.ReactNode {
   const { t, theme, toggleTheme, lang, setLang, position } = useApp()
+  // WP271（决策 233）：① 个人里「公司档案」叫「品牌档案」；「公司」卡只看模式不看品牌数
+  const { t: tm } = useMode()
   const motionPref = useMotionPref()
   const client = useQueryClient()
   const [saved, setSaved] = useState(false)
@@ -277,8 +280,8 @@ export function SettingsPage({
           <Card id="company" data-testid="settings-company">
             <CardHeader>
               <CardTitle className="flex items-center gap-1 text-sm">
-                {t('settings.company')}
-                <Hint text={t('settings.company.hint')} />
+                {tm('settings.company')}
+                <Hint text={tm('settings.company.hint')} />
               </CardTitle>
             </CardHeader>
             <CardContent>

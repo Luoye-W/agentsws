@@ -80,21 +80,32 @@ import {
   updateRangeGroup,
 } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
+import { useMode } from '@/lib/mode'
 
 /** WP202：预填的红人营销岗位勾哪两条（与 WP201b 在真线上建的那一个一样）。 */
 const KOL_PRESET_ROLES = ['kol.youtube', 'kol.instagram']
 
+/** WP271：① 个人里公司页（「岗位与品牌」）只留这三个 tab（docs/95 §2.2）。 */
+const SOLO_TABS = new Set(['brands', 'positions', 'toolbox'])
+
 export function OrgPage(): React.ReactNode {
   const { t } = useApp()
+  /*
+   * WP271（docs/95 §2.2）：① 个人——左栏叫「岗位与品牌」，页里只留品牌 / 岗位 / 工具箱；
+   * 负责人卡、成员、品牌与产品线、加入一家公司、并进来、进行中一律收起（数据都在）。
+   */
+  const { t: tm, solo } = useMode()
   const client = useQueryClient()
   // ⌘K 的"工具箱"结果跳到这里：`/org?tab=toolbox&q=…`
   const [params] = useSearchParams()
   // ⌘K 与顶栏切换器的"管理品牌"跳这里：`/org?tab=brands`
   const initialTab = params.get('tab')
   // WP206：「积分」tab 拿掉了（额度分配只在网页版账号页做）；老链接 `?tab=credits` 落到岗位
-  const [tab, setTab] = useState(
+  const [chosenTab, setTab] = useState(
     initialTab === 'toolbox' || initialTab === 'brands' ? initialTab : 'positions',
   )
+  // WP271：① 里收起的 tab 落回「岗位」（老链接、或从 ③ 降回来时停在那几个 tab 上）
+  const tab = solo && !SOLO_TABS.has(chosenTab) ? 'positions' : chosenTab
   const query = params.get('q')
   /**
    * WP202：`/org?new=kol`——从「连接 → 浏览器插件」那句「你还没有红人营销岗位」跳来。
@@ -165,7 +176,8 @@ export function OrgPage(): React.ReactNode {
   // 45：等着并进来的个人工作区（对照表）
   const joins = useQuery({
     queryKey: ['org', 'joins'],
-    enabled,
+    // WP271：① 个人收起了「加入一家公司」与「并进来」，不去问
+    enabled: enabled && !solo,
     queryFn: () => listJoins(owner),
   })
   // 44：品牌（范围组）与产品线
@@ -192,19 +204,22 @@ export function OrgPage(): React.ReactNode {
   })
   const peers = useQuery({
     queryKey: ['onboarding', 'peers'],
-    enabled,
+    // WP271：① 个人收起了「加入一家公司」与「并进来」，不去问
+    enabled: enabled && !solo,
     queryFn: () => listDiscoveryPeers(owner),
     retry: false,
   })
   const invites = useQuery({
     queryKey: ['onboarding', 'invites'],
-    enabled,
+    // WP271：① 个人收起了「加入一家公司」与「并进来」，不去问
+    enabled: enabled && !solo,
     queryFn: () => listInvites(owner),
     retry: false,
   })
   const requests = useQuery({
     queryKey: ['onboarding', 'requests'],
-    enabled,
+    // WP271：① 个人收起了「加入一家公司」与「并进来」，不去问
+    enabled: enabled && !solo,
     queryFn: () => listMembershipRequests(owner),
     retry: false,
   })
@@ -572,9 +587,9 @@ export function OrgPage(): React.ReactNode {
           <BrandMark size={44} motion="split" />
           <div className="flex min-w-0 flex-1 flex-col gap-0.5">
             <p className="ws-display text-[15px]">
-              {t('org.assign.receipt', { person: receipt.person, position: receipt.position })}
+              {tm('org.assign.receipt', { person: receipt.person, position: receipt.position })}
             </p>
-            <p className="text-[12.5px] text-ws-muted-fg">{t('org.assign.receipt.hint')}</p>
+            <p className="text-[12.5px] text-ws-muted-fg">{tm('org.assign.receipt.hint')}</p>
           </div>
           <Button
             variant="ghost"
@@ -611,43 +626,50 @@ export function OrgPage(): React.ReactNode {
   return (
     <div className="flex flex-col gap-4">
       <div>
-        <h1 className="text-sm font-semibold">{t('org.title')}</h1>
-        <p className="text-xs text-muted-foreground">{t('org.subtitle')}</p>
+        <h1 className="text-sm font-semibold">{tm('org.title')}</h1>
+        <p className="text-xs text-muted-foreground">{tm('org.subtitle')}</p>
       </div>
 
-      {/* WP234（docs/54 §6.5）：负责人是身份——在公司页顶上，不在左栏「岗位」里 */}
-      {(() => {
-        const ownerRow = positions.data?.find((p) => p.id === OWNER_POSITION)
-        const holders = ownerRow?.holders ?? []
-        const live = (members.data ?? []).filter((m) => m.left_at === undefined)
-        return (
-          <OwnerCard
-            title={ownerRow?.name ?? t('org.owner.title')}
-            holders={holders.map((h) => ({ person_id: h.person_id, name: h.name }))}
-            candidates={live
-              .filter((m) => !holders.some((h) => h.person_id === m.person_id))
-              .map((m) => ({ person_id: m.person_id, name: m.name }))}
-            {...(owner === undefined ? {} : { settingsHref: `/positions/${owner}` })}
-            busy={busy}
-            {...(handedTo === undefined ? {} : { transferred: handedTo })}
-            onTransfer={(person_id) => {
-              handOver.mutate(person_id)
-            }}
-          />
-        )
-      })()}
+      {/* WP234（docs/54 §6.5）：负责人是身份——在公司页顶上，不在左栏「岗位」里。
+          WP271：① 个人收起（这里只有你一个人） */}
+      {solo
+        ? null
+        : (() => {
+            const ownerRow = positions.data?.find((p) => p.id === OWNER_POSITION)
+            const holders = ownerRow?.holders ?? []
+            const live = (members.data ?? []).filter((m) => m.left_at === undefined)
+            return (
+              <OwnerCard
+                title={ownerRow?.name ?? t('org.owner.title')}
+                holders={holders.map((h) => ({ person_id: h.person_id, name: h.name }))}
+                candidates={live
+                  .filter((m) => !holders.some((h) => h.person_id === m.person_id))
+                  .map((m) => ({ person_id: m.person_id, name: m.name }))}
+                {...(owner === undefined ? {} : { settingsHref: `/positions/${owner}` })}
+                busy={busy}
+                {...(handedTo === undefined ? {} : { transferred: handedTo })}
+                onTransfer={(person_id) => {
+                  handOver.mutate(person_id)
+                }}
+              />
+            )
+          })()}
 
       <Tabs value={tab} onValueChange={setTab}>
         <TabsList>
           {/* 52 O2：品牌一览排在最前——公司页问的第一件事就是"这家公司有哪几个品牌" */}
           <TabsTrigger value="brands">{t('org.tab.brands')}</TabsTrigger>
           <TabsTrigger value="positions">{t('org.tab.positions')}</TabsTrigger>
-          <TabsTrigger value="members">{t('org.tab.members')}</TabsTrigger>
-          <TabsTrigger value="ranges">{t('org.tab.ranges')}</TabsTrigger>
-          <TabsTrigger value="invite">{t('onboarding.join.title')}</TabsTrigger>
-          <TabsTrigger value="join">{t('org.tab.join')}</TabsTrigger>
+          {solo ? null : (
+            <>
+              <TabsTrigger value="members">{t('org.tab.members')}</TabsTrigger>
+              <TabsTrigger value="ranges">{t('org.tab.ranges')}</TabsTrigger>
+              <TabsTrigger value="invite">{t('onboarding.join.title')}</TabsTrigger>
+              <TabsTrigger value="join">{t('org.tab.join')}</TabsTrigger>
+            </>
+          )}
           <TabsTrigger value="toolbox">{t('org.tab.toolbox')}</TabsTrigger>
-          <TabsTrigger value="inprogress">{t('org.tab.inprogress')}</TabsTrigger>
+          {solo ? null : <TabsTrigger value="inprogress">{t('org.tab.inprogress')}</TabsTrigger>}
         </TabsList>
 
         <TabsContent value="brands" className="pt-3">
@@ -686,6 +708,16 @@ export function OrgPage(): React.ReactNode {
               onAssign={(id) => {
                 setFailure(undefined)
                 setReceipt(null)
+                /*
+                 * WP271：① 个人没有「分给同事」——按钮叫「我来做」，点了直接分给自己，
+                 * 不挑范围（服务端在 ① 里落成整个品牌）
+                 */
+                if (solo) {
+                  const me = session.data?.person.id
+                  if (me !== undefined)
+                    assign.mutate({ person_id: me, position_id: id, ranges: [], range_groups: [] })
+                  return
+                }
                 // 再点一次同一张卡的「分给同事」= 收起
                 setWizard((current) => (current === id ? null : id))
               }}
@@ -698,9 +730,14 @@ export function OrgPage(): React.ReactNode {
               people={(members.data ?? [])
                 .filter((m) => m.left_at === undefined)
                 .map((m) => ({ person_id: m.person_id, name: m.name }))}
-              onSupervisor={(id, person_id) => {
-                supervise.mutate({ id, person_id })
-              }}
+              // WP271：「上级：不设（转老板）」只在 ③ 公司集体（① ② 没有上下级）
+              {...(solo
+                ? {}
+                : {
+                    onSupervisor: (id: string, person_id: string | null) => {
+                      supervise.mutate({ id, person_id })
+                    },
+                  })}
               onRename={(id, input) => {
                 // WP196：只改名——职责原样带回去（连「可选」那几条的勾选也不动），服务端就不当改模板
                 const current = positions.data?.find((p) => p.id === id)

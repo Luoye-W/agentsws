@@ -43,6 +43,7 @@ import { InProgressList } from '@/components/work/in-progress-list'
 import {
   getHome,
   getPositions,
+  listClaimPool,
   listInProgress,
   listMembers,
   openMatterAtPosition,
@@ -53,6 +54,7 @@ import { LAYER_ICON } from '@/lib/calendar-layers'
 import { formatValue } from '@/lib/format'
 import { handoffInput } from '@/lib/handoff'
 import type { Lang } from '@/lib/i18n'
+import { useMode } from '@/lib/mode'
 import { hhmm, matterUrl, todoUrl } from '@/lib/work'
 
 const RANGES: RangeName[] = ['yesterday', 'last_7d']
@@ -481,6 +483,17 @@ function InProgressSection(): React.ReactNode {
 
 export function HomePage(): React.ReactNode {
   const { t } = useApp()
+  /*
+   * WP271（docs/95 §2.6）：① 个人——「正在进行」收起（一个人时永远是「这会儿没人在做什么」）；
+   * 「待认领」空着就收起，真有会议 / 告警里冒出来的活才出（不能让它们悄悄看不见）。
+   */
+  const { solo } = useMode()
+  const claimPool = useQuery({
+    queryKey: ['home', 'claim-pool'],
+    queryFn: () => listClaimPool(),
+    enabled: solo,
+  })
+  const showClaimPool = !solo || (claimPool.data?.pool.length ?? 0) > 0
   const navigate = useNavigate()
   const [range, setRange] = useState<RangeName>('yesterday')
 
@@ -682,17 +695,21 @@ export function HomePage(): React.ReactNode {
                   cardsWaiting={data.counts.total}
                 />
               </WsCard>
-              <WsCard className="p-4" data-testid="home-inprogress">
-                <InProgressTitle />
-                <InProgressSection />
-              </WsCard>
-              <WsCard className="p-4" data-testid="home-claim-pool">
-                <h3 className="mb-2 flex items-center gap-1.5 text-sm font-medium">
-                  <HandHeart className="size-4" aria-hidden />
-                  {t('home.claim_pool')}
-                </h3>
-                <ClaimPool />
-              </WsCard>
+              {solo ? null : (
+                <WsCard className="p-4" data-testid="home-inprogress">
+                  <InProgressTitle />
+                  <InProgressSection />
+                </WsCard>
+              )}
+              {showClaimPool ? (
+                <WsCard className="p-4" data-testid="home-claim-pool">
+                  <h3 className="mb-2 flex items-center gap-1.5 text-sm font-medium">
+                    <HandHeart className="size-4" aria-hidden />
+                    {t('home.claim_pool')}
+                  </h3>
+                  <ClaimPool />
+                </WsCard>
+              ) : null}
             </section>
           )}
 
