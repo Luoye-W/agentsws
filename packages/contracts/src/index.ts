@@ -47,6 +47,8 @@ export * from './hosted.js'
 // WP165（docs/83 §2）：托管实例的容器环境变量契约（云上写、容器里的 apps/server 读）
 export * from './hosted-env.js'
 export * from './identity.js'
+// WP268（决策 213）：生图 / 改图的工具参数、挑图卡与超额卡、上限
+export * from './images.js'
 export * from './join.js'
 export * from './kernel.js'
 export * from './knowledge.js'

@@ -16,6 +16,8 @@
 import { deflateSync } from 'node:zlib'
 import type {
   GeneratedImage,
+  ImageAspectRatio,
+  ImageEditRequest,
   ImageGenerateRequest,
   ImageGeneration,
   ImageProvider,
@@ -66,6 +68,7 @@ export function unavailableImageProvider(options?: {
     available: false,
     unavailable_reason: reason,
     generate: () => Promise.reject(new GatewayError('not_implemented', reason)),
+    edit: () => Promise.reject(new GatewayError('not_implemented', reason)),
   }
 }
 
@@ -114,7 +117,63 @@ export function stubImageProvider(options: StubImageProviderOptions): ImageProvi
         },
       })
     },
+    /**
+     * WP268：改图的占位——颜色由「提示词 + 每张参考图的哈希」定（换一张参考图就换一种颜色），
+     * 同一组输入必然同一批字节。参考图一张都没有就是错（同真上游：`image[]` 必填）。
+     */
+    edit: (req: ImageEditRequest): Promise<ImageGeneration> => {
+      if (req.images.length === 0)
+        return Promise.reject(new GatewayError('invalid_input', 'edit needs at least one image'))
+      const [width, height] = parseImageSize(req.size)
+      const n = Math.max(1, Math.min(16, req.n ?? 1))
+      const prompt_sha256 = sha256(req.prompt)
+      const refs = req.images.map((img) => sha256(Buffer.from(img.bytes).toString('base64')))
+      const assets: GeneratedImage[] = []
+      for (let i = 0; i < n; i += 1) {
+        const hash = sha256(`edit:${prompt_sha256}:${refs.join(',')}:${options.seed}:${i}`)
+        assets.push({
+          bytes: placeholderPng(width, height, hash),
+          content_type: 'image/png',
+          width,
+          height,
+          prompt_sha256,
+        })
+      }
+      return Promise.resolve({
+        assets,
+        model: req.model ?? ref,
+        usage: {
+          input_tokens: Math.ceil(req.prompt.length / 4),
+          output_tokens: tokens * n,
+          cached_tokens: 0,
+          cost_base: 0,
+        },
+      })
+    },
   }
+}
+
+/**
+ * WP268：宽高比 → 这个模型认的画布。
+ *
+ * - `gpt-image-*`（OpenAI 及兼容网关后面的同名模型）只认三种：`1024x1024` / `1536x1024` / `1024x1536`，
+ *   取最接近的那一种（横幅 16:9 → `1536x1024`，裁切交给主题的图片设置）；
+ * - 别的模型（Gemini / Seedream / Qwen-Image / FLUX 经 New API 转 OpenAI 形态）：按比例算一块约 1 百万像素、
+ *   边长是 64 的倍数的画布（这几家都收任意 `WxH`，超出范围的由上游就近取，回包里报真实尺寸）。
+ */
+export function imageSizeFor(aspect: ImageAspectRatio | undefined, model: string): string {
+  const [w, h] = (aspect ?? '1:1').split(':').map(Number) as [number, number]
+  const ratio = w / h
+  if (/^gpt-image|^dall-e/i.test(model.trim())) {
+    if (ratio > 1.15) return '1536x1024'
+    if (ratio < 0.87) return '1024x1536'
+    return '1024x1024'
+  }
+  const area = 1024 * 1024
+  const round64 = (x: number): number => Math.max(256, Math.round(x / 64) * 64)
+  const width = round64(Math.sqrt(area * ratio))
+  const height = round64(width / ratio)
+  return `${width}x${height}`
 }
 
 /* ── 一个刚好够用的 PNG 编码器 ───────────────────────────────────── */

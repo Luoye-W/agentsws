@@ -217,6 +217,9 @@ export const CATEGORY_BY_KIND: Partial<Record<DeckKind, string>> = {
   // WP219
   content_update: 'content_update',
   content_conflict: 'content_conflict',
+  // WP268
+  image_pick: 'image_pick',
+  image_budget: 'image_budget',
 }
 
 /** `ChangeKind` → 类别人话（`staged_change` 专用；画布头一行写的就是这一列）。 */
