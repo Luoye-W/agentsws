@@ -365,6 +365,17 @@ export type {
 } from './routes/free-chat.js'
 export { freeChatRoutes } from './routes/free-chat.js'
 export { HALT_SCOPES, haltRoutes } from './routes/halt.js'
+export {
+  type ColleagueView,
+  type HandoffActor,
+  type HandoffKind,
+  type HandoffLists,
+  type HandoffPort,
+  type HandoffView,
+  handoffRoutes,
+  type MyWorkExport,
+  type PersonUsageView,
+} from './routes/handoff.js'
 export { healthRoutes, type ReconcilePort } from './routes/health.js'
 export {
   type JoinActor,

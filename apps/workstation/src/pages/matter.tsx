@@ -15,7 +15,7 @@ import { type DeckAction, type DeckCard, projectCard } from '@agentsws/deck'
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Archive, CircleCheck } from 'lucide-react'
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { openExternal } from '@/components/connections/bridge'
 import { deckActionLabel } from '@/components/deck/deck-action-bar'
 import { ImageCard, isImageCard } from '@/components/matter/image-pick-card'
@@ -34,6 +34,8 @@ import {
   RunningEntry,
   SysLine,
 } from '@/components/matter/matter-timeline'
+import { HandoffDialog } from '@/components/peers/handoff-dialog'
+import { MatterHandoffBar } from '@/components/peers/handoff-strip'
 import { RAIL_FETCH } from '@/components/sidebar/duty-threads'
 import { archiveBlock } from '@/components/sidebar/matter-menu'
 import { Button } from '@/components/ui/button'
@@ -44,6 +46,7 @@ import {
   closeMatter,
   completeTodo,
   decide,
+  ensureSession,
   getApproval,
   getMatter,
   getMatterTimeline,
@@ -57,6 +60,7 @@ import {
 } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 import { formatDateTime } from '@/lib/format'
+import { useMode } from '@/lib/mode'
 import {
   archiveMatter,
   getWorkRail,
@@ -99,6 +103,17 @@ export function MatterPage(): ReactNode {
   const [text, setText] = useState('')
   const [limit, setLimit] = useState(20)
   const [closing, setClosing] = useState(false)
+  // WP276：「交给同事」（⋯ 菜单或 ⌘K 带 `?handoff=1` 进来时打开）
+  const [search, setSearch] = useSearchParams()
+  const [handingOff, setHandingOff] = useState(search.get('handoff') === '1')
+  // 已经在这件事里时从 ⌘K 选「交给同事…」：同一页只换了查询串
+  const wantsHandoff = search.get('handoff') === '1'
+  useEffect(() => {
+    if (wantsHandoff) setHandingOff(true)
+  }, [wantsHandoff])
+  const { mode } = useMode()
+  const session = useQuery({ queryKey: ['session'], queryFn: ensureSession })
+  const me = session.data?.person.id
   const [privateMode, setPrivateMode] = useState(false)
   // WP268：事项里加进来的图（已进素材库，发话时带上 id）
   const [attached, setAttached] = useState<{ id: string; url: string }[]>([])
@@ -290,6 +305,13 @@ export function MatterPage(): ReactNode {
   const running = live !== undefined || say.isPending
   polling.current = running
   const closed = view?.matter.status === 'closed'
+  /** WP276：能交给同事——不是一个人用、事项是我的（参与者第一位）、没关、没在交。 */
+  const canHandOff =
+    mode !== 'solo' &&
+    !closed &&
+    me !== undefined &&
+    view?.matter.context.participants[0] === me &&
+    view.matter.handoff?.state !== 'offered'
 
   const items = useMemo(
     () => buildItems(timeline, { live, roleId: view?.matter.role_id, closed }),
@@ -546,7 +568,32 @@ export function MatterPage(): ReactNode {
         onRetitle={(title) => {
           retitle.mutate(title)
         }}
+        onHandOff={
+          canHandOff
+            ? () => {
+                setHandingOff(true)
+              }
+            : undefined
+        }
       />
+      {/* WP276：等 Y 接 · 撤回 / X 想把这件事交给你 · 接下 · 不接（一个人用时没有） */}
+      {mode === 'solo' ? null : <MatterHandoffBar matterId={view.matter.id} me={me} />}
+      {canHandOff ? (
+        <HandoffDialog
+          kind="matter"
+          id={view.matter.id}
+          title={view.matter.title}
+          open={handingOff}
+          onOpenChange={(open) => {
+            setHandingOff(open)
+            if (!open && search.get('handoff') !== null) {
+              const next = new URLSearchParams(search)
+              next.delete('handoff')
+              setSearch(next, { replace: true })
+            }
+          }}
+        />
+      ) : null}
 
       {/* WP207：归档的事照样能看；一句话 + 一个「放回左栏」 */}
       {view.matter.archived_at === undefined ? null : (

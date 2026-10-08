@@ -77,6 +77,7 @@ import type { DshScenesPort } from './routes/dsh-scenes.js'
 import type { EconomicsPort } from './routes/economics.js'
 import type { ExtensionPort } from './routes/extension.js'
 import type { FreeChatPort } from './routes/free-chat.js'
+import type { HandoffPort } from './routes/handoff.js'
 import type { ReconcilePort } from './routes/health.js'
 import type { JoinPort } from './routes/join.js'
 import type { KolPort } from './routes/kol.js'
@@ -875,6 +876,14 @@ export interface GatewayDeps {
    * `/v1/matters/:id/unarchive`、`/v1/settings/work-archive` 回 not_implemented——左栏照常列岗位与职责。
    */
   workArchive?: WorkArchivePort
+  /**
+   * WP276（docs/95 §4）：交给对方（`/v1/handoffs*`、`/v1/work/colleagues`）。没装配时回 not_implemented。
+   */
+  handoff?: HandoffPort
+  /**
+   * WP276：这个品牌现在是不是 ② 同事互联（同步；`peersBypass` 问它）。不给 = 永远不是。
+   */
+  peerAccess?: (workspace_id: WorkspaceId) => boolean
   /** 37 §4 会议内核；没装配时 `/v1/meetings/*` 回 not_implemented。 */
   meetings?: MeetingsPort
   /**

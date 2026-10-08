@@ -34,7 +34,7 @@ import {
   principalOf,
   OWNER_WRITE as WRITE,
 } from '../helpers.js'
-import { type Route, route } from '../route-spec.js'
+import { peersBypass, type Route, route } from '../route-spec.js'
 import type { GatewayDeps } from '../types.js'
 
 /** 看别人的成员申请 = 策略层读权限；看自己要不要走向导走自助豁免。 */
@@ -374,6 +374,8 @@ export interface MembershipRequestView {
   status: 'pending' | 'approved' | 'rejected' | 'superseded'
   created_at: string
   decided_at?: string
+  /** WP276：谁定的（② 里任何一位同事都能定）。 */
+  decided_by?: string
   superseded_reason?: string
   /** 同意后那张审批卡的 id（界面上"去队列里看"）。 */
   approval_item_id?: string
@@ -719,6 +721,8 @@ export function onboardingRoutes(): Route[] {
         auth: 'bearer',
         assignment: true,
         authz: READ,
+        // WP276：② 同事互联里平级同事也能用
+        authzBypass: peersBypass,
         returns: 'InviteView[]',
       },
       async (c, deps) => ok(c, await portOf(deps).invites(actorOf(c))),
@@ -733,6 +737,8 @@ export function onboardingRoutes(): Route[] {
         auth: 'bearer',
         assignment: true,
         authz: WRITE,
+        // WP276：② 同事互联里平级同事也能用
+        authzBypass: peersBypass,
         body: InviteBody,
         returns: 'InviteView（明文码只在这一次出现）',
       },
@@ -755,6 +761,8 @@ export function onboardingRoutes(): Route[] {
         auth: 'bearer',
         assignment: true,
         authz: READ,
+        // WP276：② 同事互联里平级同事也能用
+        authzBypass: peersBypass,
         returns: 'MembershipRequestView[]',
       },
       async (c, deps) => ok(c, await portOf(deps).requests(actorOf(c))),
@@ -822,6 +830,8 @@ export function onboardingRoutes(): Route[] {
         auth: 'bearer',
         assignment: true,
         authz: WRITE,
+        // WP276：② 同事互联里平级同事也能用
+        authzBypass: peersBypass,
         params: [{ name: 'id', in: 'path', required: true, description: '申请 id' }],
         body: DecideBody,
         returns: 'MembershipRequestView',

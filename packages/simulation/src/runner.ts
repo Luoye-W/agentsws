@@ -7,9 +7,11 @@
  */
 import type {
   ApprovalItem,
+  Assignment,
   DecisionAction,
   InboundEvent,
   Iso8601,
+  Matter,
   ObjectRef,
   RunEvent,
   RunResult,
@@ -47,6 +49,9 @@ import type {
   ScenarioSecretaryMeet,
   ScenarioSecretaryRoute,
   ScenarioWorkClaim,
+  ScenarioWorkHandoff,
+  ScenarioWorkHandoffDecide,
+  ScenarioWorkMatter,
   ScenarioWorkTodo,
   Tier,
 } from './scenario/types.js'
@@ -622,6 +627,105 @@ async function execute(
     }
   }
 
+  /* ── WP276 交给对方（docs/95 §4.3）──────────────────────────────── */
+
+  /** 这个人在这条职责上的分配（没有就退回主分配，与 world 里的 `assignmentFor` 同一口径）。 */
+  const assignmentOf = (who: string, role?: string): Assignment => {
+    if (role === undefined) return world.assignment
+    return (
+      world.roles.assignments
+        .listByPerson(who, {})
+        .find((a) => a.role_id === role && a.revoked_at === undefined) ?? world.assignment
+    )
+  }
+  const matterNamed = (title: string): Matter | undefined =>
+    world.work
+      .listMatters({})
+      .filter((m) => m.title === title)
+      .pop()
+  /** 交接之后的样子（期望读这一条：谁是主人、之后的运行用谁的分配）。 */
+  const handoffEvidence = (title: string): void => {
+    const m = matterNamed(title)
+    if (m === undefined) return
+    const runs_as =
+      m.position_id === undefined
+        ? undefined
+        : world.roles.assignments.get(m.position_id)?.person_id
+    world.appendEvent(
+      'simulation.work_handoff',
+      {
+        title,
+        state: m.handoff?.state ?? 'none',
+        owner: m.context.participants[0] ?? '',
+        ...(runs_as === undefined ? {} : { runs_as }),
+        ...(m.role_id === undefined ? {} : { role: m.role_id }),
+        ...(m.handoff?.reason === undefined ? {} : { reason: m.handoff.reason }),
+      },
+      { subject: { type: 'matter', id: m.id } },
+    )
+  }
+  const workMatter = (input: ScenarioWorkMatter): void => {
+    world.work.createMatter({
+      kind: 'project',
+      title: input.title,
+      participants: [input.who],
+      position_id: assignmentOf(input.who, input.role).id,
+      ...(input.role === undefined ? {} : { role_id: input.role }),
+    })
+  }
+  const workHandoff = (input: ScenarioWorkHandoff): void => {
+    const m = matterNamed(input.title)
+    if (m === undefined) {
+      world.blocked.push({
+        rule: 'not_found',
+        at: clock.now(),
+        message: `没有这件事：${input.title}`,
+      })
+      return
+    }
+    try {
+      world.work.offer(
+        { kind: 'matter', id: m.id },
+        {
+          from: input.who,
+          to: input.to,
+          ...(input.note === undefined ? {} : { note: input.note }),
+        },
+      )
+      handoffEvidence(input.title)
+    } catch (e) {
+      workBlocked(e, 'handoff')
+    }
+  }
+  const workHandoffDecide = (input: ScenarioWorkHandoffDecide): void => {
+    const m = matterNamed(input.title)
+    if (m === undefined) {
+      world.blocked.push({
+        rule: 'not_found',
+        at: clock.now(),
+        message: `没有这件事：${input.title}`,
+      })
+      return
+    }
+    try {
+      if (input.action === 'accept') {
+        // 接手人用**他自己**那条职责的分配接——之后的运行、规矩、用量都是他的
+        const asg = assignmentOf(input.who, m.role_id)
+        world.work.acceptHandoff(
+          { kind: 'matter', id: m.id },
+          { person: input.who, position_id: asg.id, role_id: asg.role_id },
+        )
+      } else
+        world.work.declineHandoff(
+          { kind: 'matter', id: m.id },
+          { person: input.who, ...(input.reason === undefined ? {} : { reason: input.reason }) },
+        )
+      handoffEvidence(input.title)
+    } catch (e) {
+      workBlocked(e, 'handoff')
+    }
+  }
+
   /* ── WP39 秘书 Agent（41 §1）──────────────────────────────────────── */
 
   /** 惰性装：场景里没有 `secretary.*` 就一个都不装，原有场景一条指标不变。 */
@@ -1027,6 +1131,19 @@ async function execute(
       }
       case 'work.claim': {
         workClaim(event.claim)
+        return
+      }
+      // ── WP276 交给对方（docs/95 §4.3）──────────────────────────────
+      case 'work.matter': {
+        workMatter(event.matter)
+        return
+      }
+      case 'work.handoff': {
+        workHandoff(event.handoff)
+        return
+      }
+      case 'work.handoff_decide': {
+        workHandoffDecide(event.handoff_decide)
         return
       }
       case 'work.idle_sweep': {

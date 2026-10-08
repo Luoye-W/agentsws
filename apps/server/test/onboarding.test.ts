@@ -93,6 +93,15 @@ afterEach(async () => {
 })
 
 /** 起一台"机器"：自己的工作区、自己的 owner、挂在同一条内存网段上。 */
+/**
+ * WP276：这几条钉的是 ③ 公司集体的说法（「想加入」「成为成员」）与同意后的并进来对照卡；
+ * ① ② 里说「想一起用」、不出空的对照卡（见 wp276-peers.test.ts）。
+ */
+async function pinCompany(s: Server): Promise<void> {
+  for (const org of s.identity.listOrganizations())
+    await s.identity.updateOrganization(org.id, { mode: 'company' })
+}
+
 async function machine(input: {
   lan: ReturnType<typeof createLanBus>
   host: string
@@ -816,6 +825,7 @@ describe('46 §2 邀请码与申请加入', () => {
     const lan = createLanBus()
     const clock = makeClock()
     const a = await machine({ lan, host: '10.0.0.1', ownerEmail: 'wang@nordvolt.cn', clock })
+    await pinCompany(a.server)
     await a.call('PUT', '/v1/workspace/profile', {
       body: { legal_name: '诺伏特', domain: 'nordvolt.cn', discoverable: true },
     })
@@ -1020,6 +1030,7 @@ describe('46 §2 邀请码与申请加入', () => {
     const lan = createLanBus()
     const a = await machine({ lan, host: '10.0.0.1', ownerEmail: 'wang@nordvolt.cn', seed: 3 })
     const b = await machine({ lan, host: '10.0.0.2', ownerEmail: 'li@nordvolt.cn', seed: 9 })
+    await pinCompany(a.server)
     for (const m of [a, b])
       await m.call('PUT', '/v1/workspace/profile', {
         body: { legal_name: '深圳诺伏特科技有限公司', domain: 'nordvolt.cn', discoverable: true },
@@ -1100,6 +1111,7 @@ describe('WP233 申请卡上不露对方本机的占位邮箱', () => {
       ownerEmail: 'wang@nordvolt.cn',
       clock: makeClock(),
     })
+    await pinCompany(a.server)
     const invite = await data<{ code: string }>(await a.call('POST', '/v1/invites'))
     const local = await data<RequestView>(
       await a.call('POST', '/v1/memberships/requests', {

@@ -120,6 +120,16 @@ vi.mock('@/lib/api', async () => {
   }
 })
 
+/** WP276：交给同事的结果（首页一行通知）。 */
+const peersState: { from_me: unknown[] } = { from_me: [] }
+vi.mock('@/lib/api-peers', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/api-peers')>('@/lib/api-peers')
+  return {
+    ...actual,
+    listHandoffs: async () => ({ to_me: [], from_me: peersState.from_me }),
+  }
+})
+
 // 动态 import 必须在 mock 之后
 const { HomePage } = await import('@/pages/home')
 
@@ -364,6 +374,49 @@ describe('WP271 三种模式：首页', () => {
     renderWithProviders(<HomePage />)
     expect(await screen.findByTestId('home-claim-pool')).toBeTruthy()
     expect(screen.queryByTestId('home-inprogress')).toBeNull()
+  })
+
+  it('WP276 ② 同事互联：交给同事的结果一行一条；整页不像公司（决策 256）', async () => {
+    modeState.orgs = [{ ...SOLO_ORG, members: 2, solo: false, mode: 'peers' }]
+    peersState.from_me = [
+      {
+        kind: 'matter',
+        id: 'mat_1',
+        title: 'Acme 的报价',
+        from_label: '王岚',
+        to_label: '李默',
+        status: 'open',
+        handoff: {
+          state: 'accepted',
+          from: 'per_wang',
+          to: 'per_li',
+          at: '2026-10-08T09:00:00.000Z',
+          expires_at: '2026-10-11T09:00:00.000Z',
+        },
+      },
+    ]
+    try {
+      renderWithProviders(<HomePage />)
+      expect((await screen.findByTestId('handoff-notices')).textContent).toContain(
+        '李默 接下了「Acme 的报价」',
+      )
+      expect(screen.getByTestId('home-inprogress')).toBeTruthy()
+      const text = document.body.textContent ?? ''
+      for (const word of [
+        '主管',
+        '老板',
+        '上级',
+        '审批',
+        '部门',
+        '范围',
+        '并进来',
+        '加入一家公司',
+        '成员额度',
+      ])
+        expect(text, word).not.toContain(word)
+    } finally {
+      peersState.from_me = []
+    }
   })
 
   it('③ 公司集体：「正在进行」「待认领」照旧', async () => {

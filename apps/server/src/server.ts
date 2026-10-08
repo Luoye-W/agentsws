@@ -60,6 +60,7 @@ import { guessIndustry } from '@agentsws/b2b-core'
 import { blobKey, blobUri, openBlobStore } from '@agentsws/blob'
 import { designRoleFamily } from '@agentsws/brand-design'
 import type { PageFetch as BrandIntakeFetch } from '@agentsws/brand-intake'
+import type { CatalogNote } from '@agentsws/catalog'
 import type { ResolveMx } from '@agentsws/channels'
 import { routeOfPosition } from '@agentsws/channels'
 import { LOCAL_RUNTIME_ENV } from '@agentsws/connect-adapter'
@@ -77,6 +78,9 @@ import type {
   KolChannel,
   OrganizationMode,
   Person,
+  PersonaSubject,
+  PersonaText,
+  PersonaView,
   PersonId,
   PlatformCliSpec,
   PromptSection,
@@ -98,6 +102,7 @@ import {
   CONTENT_CHECK_INTERVAL_MS,
   CONTENT_SIGNING_PUBLIC_KEYS,
   contentChannelOf,
+  DEFAULT_HANDOFF_RETURN_DAYS,
   KOL_AUDIT_CAPABILITY,
   KOL_CHANNEL_IDS,
   KOL_FOLDER,
@@ -118,7 +123,7 @@ import {
   uncitedFigures,
 } from '@agentsws/core'
 import { createDataStore, type SqliteDataStore } from '@agentsws/data'
-import { withOwnSources, withReadVia } from '@agentsws/deck'
+import { isHandoffItem, withOwnSources, withReadVia } from '@agentsws/deck'
 import { resolveBrandSystem } from '@agentsws/design-core'
 import type { WebCredential } from '@agentsws/dsh-adapter'
 import {
@@ -169,7 +174,13 @@ import {
   type SearchConsolePort,
 } from '@agentsws/seo-core'
 import { siteDesignPrompt, themeDesignVariables } from '@agentsws/site-core'
-import { CONTENT_REJECT_TEXT, createSkills, readBundledSkill, type Skills } from '@agentsws/skills'
+import {
+  CONTENT_REJECT_TEXT,
+  createSkills,
+  type OverlayEx,
+  readBundledSkill,
+  type Skills,
+} from '@agentsws/skills'
 // WP74（37 §2.5）：统一日历里社媒那一层的撞车说明，判据只有 social-core 这一份
 import { scheduleConflicts, scheduleRulesFor } from '@agentsws/social-core'
 import { detectAnsweredBoundaries, SUPPORT_BOUNDARIES } from '@agentsws/support-core'
@@ -236,6 +247,7 @@ import {
   brandConnectionsPort,
   brandDesignPort,
   brandFreeChatPort,
+  brandHandoffPort,
   brandKolPort,
   brandMessagesPort,
   brandModelsPort,
@@ -335,6 +347,7 @@ import { REVEAL_PRICE_CAPABILITY } from './extension-service.js'
 import { chatCredits, createFreeChatPort } from './free-chat.js'
 import { createFreeChatStore, type FreeChatStore } from './free-chat-store.js'
 import { createGoogleReads, type GoogleReads } from './google-reads.js'
+import { createHandoff, type HandoffAssembly, withHandoff } from './handoff.js'
 import {
   createHostedOwnerClient,
   ensureCloudModelDefault,
@@ -422,6 +435,15 @@ import { isOwnSubApproval } from './own-sub-queue.js'
 import { alignOwnerEmail } from './owner-email.js'
 import { createOwnerToolExecutor } from './owner-tools.js'
 import { createPageBodyReader } from './page-body.js'
+import {
+  choseUndo,
+  createConnectionOwners,
+  notifyPeers,
+  type PeerUndo,
+  peersRouting,
+  peerUndoOf,
+  withConnectionOwners,
+} from './peers.js'
 import {
   createFilePersonaBackend,
   createPersonas,
@@ -1149,6 +1171,11 @@ export interface Server {
   learning: LearningAssembly
   models: ModelGatewayApi
   txn: Txn
+  /**
+   * WP276：服务进程里各模块出卡用的那条审批总线（`txn.approvals` 外面套了学习回路、目录、
+   * ② 没主人的卡改发给做那条职责的人等几层）。测试与模拟拿它看「出卡那一刻」的路由。
+   */
+  approvals: ApprovalBus
   /** 37 工作模型：事项 / 目标 / 待办 / 计划 / 复盘 */
   work: Work
   /** 37 §4 会议内核（存储 / 受控原始材料区 / 处理管线 / 端口）。 */
@@ -1899,6 +1926,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   let modeOfWorkspace: ((ws: string) => Promise<OrganizationMode>) | undefined
   /** WP275（决策 259）：① 个人时这个品牌唯一的那个人（同步读；② ③ 或还没装好 = 没有）。 */
   let soleOwnerOf: ((ws: string) => PersonId | undefined) | undefined
+  /** WP276：同上的同步版（角色定位「谁都能改」、连接「谁接的谁管」要同步判）。 */
+  let modeOfWorkspaceSync: ((ws: string) => OrganizationMode | undefined) | undefined
   const approvalDirectory = createApprovalDirectory({
     roles,
     owner: () => bootstrapOwner,
@@ -2094,8 +2123,23 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   // WP117b（66 复测 #19）：挂了模拟世界（demo）时有两本审批账——世界的演示卡
   // 与服务进程 stage 的卡（红人开发信 / 议价）。读合成一本、决定各回各家；
   // 生产没挂世界，服务进程那一本就是唯一的一本。见 `approvals-composite.ts`。
-  const rawApprovals =
-    mount === undefined ? txn.approvals : compositeApprovals(mount.approvals, txn.approvals)
+  /*
+   * WP276（决策 274 第 1 条）：② 同事互联里没主人的卡（AI / 系统提的、老规矩发给所有者的）
+   * 改发给做那条职责的人，谁先点算谁的。包在最里层：任何一层出的卡都过它。
+   */
+  const rawApprovals = peersRouting(
+    mount === undefined ? txn.approvals : compositeApprovals(mount.approvals, txn.approvals),
+    {
+      modeOf: async (ws) => (await modeOfWorkspace?.(ws)) ?? 'company',
+      holdersOf: (ws, role_id) =>
+        roles.assignments
+          .listByRole(role_id, { workspace_id: ws })
+          .filter((a) => a.revoked_at === undefined)
+          .map((a) => a.person_id),
+      members: async (ws) =>
+        (await identity.members(ws)).filter((m) => m.left_at === undefined).map((m) => m.person_id),
+    },
+  )
   // WP29 学习回路：技能库空着的话先铺一份自带技能（学到的东西得有段落可落），
   // 再把审批总线包一层——每张卡被决定之后抽 lesson，技能 / 知识类卡批了就施行。
   await seedDefaultSkill(skills, workspace.id)
@@ -2527,7 +2571,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     roles,
     positions: () => org.positions(),
     ...(dbDir === undefined ? {} : { backend: createFilePersonaBackend(personaFileIn(dbDir)) }),
+    // WP276（决策 243 / 274 第 4 条）：② 同事互联里角色定位谁都能改（留名字、同岗位的人可撤回）
     isOwner: (person_id) =>
+      modeOfWorkspaceSync?.(workspace.id) === 'peers' ||
       roles.assignments
         .listByPerson(person_id, { workspace_id: workspace.id, role_id: 'common.owner' })
         .some((a) => a.revoked_at === undefined),
@@ -5612,6 +5658,16 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     }
     // WP237：选择卡选了（或者老卡点了「认领」）→ 事项钉到那条职责、按原话起一次运行
     if (isRouteChoice(item)) return (await positionsFor(item.workspace_id)).onChoiceDecided(item)
+    // WP276：交给对方那张卡——接下（换主人与分配、未定的卡跟过去）/ 不接（退回）
+    if (isHandoffItem(item)) return (await handoffFor(item.workspace_id)).onDecided(item)
+    // WP276（决策 243 / 274）：② 里同事点了「撤回」→ 按卡上带的办法改回去
+    const undo = peerUndoOf(item)
+    if (undo !== undefined) {
+      if (choseUndo(item)) await peerUndoers.get(undo.target)?.(undo, item)
+      return
+    }
+    // WP276（决策 237）：有人申请加入——卡上同意 / 拒绝就是同意 / 拒绝这条申请（谁先点算谁的）
+    if (item.kind === 'membership') return onMembershipDecided(item)
     const brand = await brands?.forWorkspace(item.workspace_id)
     // WP173：「发信域名」那张选择卡选了 → 记下发信邮箱、体检、排着的首封往前推
     if (item.kind === B2B_SENDER_CHOICE_KIND) return brand?.b2bOutbound.onSenderChosen(item)
@@ -6400,8 +6456,28 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       ...new Set([workspace.id, ...(brands?.loaded().map((b) => b.workspace_id) ?? [])]),
     ],
     // WP182：B2B 业务员离开 → 各品牌里他名下的客户 / 商机 / 没回的询盘各出一张交接卡给老板
-    afterMemberLeft: async (person_id, by) => {
-      for (const brand of await brandModules.all()) await brand.b2bSales.onMemberLeft(person_id, by)
+    afterMemberLeft: async (person_id, by, context) => {
+      /*
+       * WP276（docs/95 §3.6）：① ② 里有人退出 / 被请离开——没有离职交接（那是 ③ 的），
+       * 手上的事退回原处（交给他没接的退回、他交出去的撤回、池里认下的回池、别人交给他的交还）；
+       * 共享品牌里的客户与知识原样留下。
+       */
+      const peersLeft = context?.mode !== undefined && context.mode !== 'company'
+      let returned = 0
+      if (peersLeft) {
+        for (const brand of await brandModules.all())
+          returned += await (await handoffFor(brand.workspace_id)).release(person_id, by)
+        appendEvent({
+          schema_version: 1,
+          workspace_id: workspace.id,
+          type: 'member.left',
+          actor: { kind: 'person', id: by },
+          correlation: { trace_id: `tr_left_${clock.now()}` },
+          payload: { person_id, self: by === person_id, returned },
+        })
+      } else
+        for (const brand of await brandModules.all())
+          await brand.b2bSales.onMemberLeft(person_id, by)
       /*
        * WP194：删人时把他在云上的额度行清掉（历史用量留着，账对得上）。钱在公司那一个云组织上，
        * 任一个关联了的品牌清一次就够；尽力而为——没关联 / 连不上不拦删人。
@@ -6410,6 +6486,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         if (!brand.ownCloud.linked()) continue
         if (await brand.ownCloud.forgetMember(person_id, by).catch(() => false)) break
       }
+      return returned
     },
     /*
      * WP234（docs/54 §6.4）：岗位合并 / 移动之后，事项（各品牌的工作模型里）与岗位层记忆
@@ -6448,6 +6525,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
    * 清单必须现算，不能在装配那一刻定死（否则"去连"回来之后清单还说没连）。
    */
   const onboarding = createOnboarding({
+    // WP276：申请卡在 ① ② 说「想一起用」，同意后不出空的并进来对照卡
+    mode: async () => (await modeOfWorkspace?.(workspace.id)) ?? 'company',
     clock,
     random,
     workspace_id: workspace.id,
@@ -6901,6 +6980,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   })
   // WP275：审批路由、职责分离、超时升级从这一刻起按模式走（之前没有任何卡）
   modeOfWorkspace = (ws) => organizations.modeOf(ws)
+  modeOfWorkspaceSync = (ws) => organizations.modeOfSync(ws)
   soleOwnerOf = (ws) =>
     organizations.modeOfSync(ws) === 'solo' ? organizations.organizationOf(ws)?.owner_id : undefined
   const company = onboarding.companyProfile()
@@ -7241,16 +7321,40 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       ),
     exclude: (name, person_id, excluded) => skills.registry.exclude(name, person_id, excluded),
     proposals: () => learning.proposalSummaries(),
-    promote: async (input) =>
-      learning.promote({
+    promote: async (input) => {
+      const mode = (await modeOfWorkspace?.(input.actor.workspace_id)) ?? 'company'
+      /*
+       * WP276（决策 274 第 2 条）：② 里提到岗位层 / 职责层 / 品牌层是改共用的——提之前记下那一层原来的样子，
+       * 生效后给同岗位的人一张「知道了 / 撤回」，撤回就把那一层改回去。
+       */
+      const owner =
+        input.to_tier === 'company'
+          ? input.actor.workspace_id
+          : input.to_tier === 'position' || input.to_tier === 'role'
+            ? input.scope_id
+            : undefined
+      const before =
+        mode === 'peers' && owner !== undefined
+          ? (skills.registry.getOverlay(input.skill, input.to_tier, owner) ?? null)
+          : undefined
+      const out = await learning.promote({
         skill: input.skill,
         section_ids: input.section_ids,
         to_tier: input.to_tier,
         ...(input.scope_id === undefined ? {} : { scope_id: input.scope_id }),
         by: input.actor.person_id,
         // WP275：① ② 人自己提层当场生效（二次确认在界面上）
-        direct: !hasApprovalFlow((await modeOfWorkspace?.(input.actor.workspace_id)) ?? 'company'),
-      }),
+        direct: !hasApprovalFlow(mode),
+      })
+      if (before !== undefined && owner !== undefined && out.applied === true)
+        void notifyLayerPeers(input.actor.person_id, input.actor.workspace_id, {
+          skill: input.skill,
+          tier: input.to_tier,
+          owner,
+          before,
+        }).catch(() => undefined)
+      return out
+    },
     // WP69（54 §3）：第三栏「记忆」面板按层读；WP71 多回一格"能不能改"
     memory: async (input) => ({
       summary: learning.memorySummary({
@@ -7805,8 +7909,10 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           reasons: d.reasons,
         })),
     })
-    workPorts.set(ws, port)
-    return port
+    // WP276：转交 / 撞车「交给他」走交给对方（出卡、到点退回）；读之前先把到点的退回
+    const wrapped = withHandoff(port, brand.work, () => handoffFor(ws))
+    workPorts.set(ws, wrapped)
+    return wrapped
   }
   const workstationPortFor = async (ws: WorkspaceId): Promise<WorkstationPort> => {
     const cached = workstationPorts.get(ws)
@@ -8067,6 +8173,75 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
    * 天数与「看过了」存在品牌目录下的 `work-archive.json`（没有数据目录就是内存档）。
    */
   const workArchives = new Map<WorkspaceId, WorkArchiveAssembly>()
+  /** 一个品牌一份「通用」偏好（归档天数、交给对方几天退回）——归档与交接共用。 */
+  const archiveStates = new Map<WorkspaceId, ReturnType<typeof createArchiveStateStore>>()
+  const archiveStateOf = (
+    ws: WorkspaceId,
+    dir: string | undefined,
+  ): ReturnType<typeof createArchiveStateStore> => {
+    const cached = archiveStates.get(ws)
+    if (cached !== undefined) return cached
+    const made = createArchiveStateStore(
+      dir === undefined ? undefined : join(dir, 'work-archive.json'),
+    )
+    archiveStates.set(ws, made)
+    return made
+  }
+  /**
+   * WP276（docs/95 §4.3）：交给对方——一个品牌一份（事项与待办落在这个品牌的 `Work` 里）。
+   * 出卡走同一条审批总线；几天退回读「设置 → 通用」那一格（与归档天数同一个文件）。
+   */
+  const handoffs = new Map<WorkspaceId, HandoffAssembly>()
+  const handoffFor = async (ws: WorkspaceId): Promise<HandoffAssembly> => {
+    const cached = handoffs.get(ws)
+    if (cached !== undefined) return cached
+    const brand = await brandModules.forWorkspace(ws)
+    const assembly = await positionsFor(ws)
+    const state = archiveStateOf(ws, brandDirOf(dbDir, ws, workspace.id))
+    const made = createHandoff({
+      workspace_id: ws,
+      work: brand.work,
+      approvals,
+      personName: async (id) => {
+        const p = await identity.getPerson(id)
+        return p === undefined || p.name === '' ? undefined : p.name
+      },
+      members: async () =>
+        (await identity.members(ws)).filter((m) => m.left_at === undefined).map((m) => m.person_id),
+      positionsOf: (person) => assembly.mine(person),
+      assignment: (id) => {
+        const a = roles.assignments.get(id)
+        return a === undefined || a.revoked_at !== undefined
+          ? undefined
+          : { person_id: a.person_id, role_id: a.role_id }
+      },
+      days: () => state.settings().handoff_days ?? DEFAULT_HANDOFF_RETURN_DAYS,
+      initiator: () => organizations.organizationOf(ws)?.owner_id,
+      // WP276（决策 238）：按人用量——这个月这个品牌的 `model.usage`（只有数字）
+      usage: () => {
+        const now = new Date(clock.now())
+        const since_at = new Date(
+          Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1),
+        ).toISOString()
+        return kernel.eventLog
+          .readSync({ workspace_id: ws, since_at, types: ['model.usage'] })
+          .map((e) => {
+            const p = e.payload as {
+              assignment_id?: string
+              input_tokens?: number
+              output_tokens?: number
+            }
+            return {
+              assignment_id: p.assignment_id ?? '',
+              input_tokens: p.input_tokens ?? 0,
+              output_tokens: p.output_tokens ?? 0,
+            }
+          })
+      },
+    })
+    handoffs.set(ws, made)
+    return made
+  }
   const workArchiveFor = async (ws: WorkspaceId): Promise<WorkArchiveAssembly> => {
     const cached = workArchives.get(ws)
     if (cached !== undefined) return cached
@@ -8076,9 +8251,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     const made = createWorkArchive({
       clock,
       work: brand.work,
-      state: createArchiveStateStore(
-        dir === undefined ? undefined : join(dir, 'work-archive.json'),
-      ),
+      state: archiveStateOf(ws, dir),
       positions: (person_id) => assembly.mine(person_id),
       assignmentsOf: (person_id) =>
         roles.assignments
@@ -8178,6 +8351,149 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     if (error instanceof PersonaError) throw new ApiError(error.code, error.message)
     throw error
   }
+  /**
+   * WP276（决策 243 / 274）：② 里改了共用的东西，同事那张「知道了 / 撤回」选了撤回之后怎么改回去。
+   * 按卡上的 `undo.target` 找；撤回的人留名字（`by` 是点撤回的那位）。
+   */
+  const peerUndoers = new Map<string, (undo: PeerUndo, item: ApprovalItem) => Promise<void>>()
+  peerUndoers.set('persona', async (undo, item) => {
+    const by = item.decision?.by
+    if (by === undefined || by === 'mandate') return
+    const subject = undo.subject as PersonaSubject
+    try {
+      if (undo.text === null || undo.text === undefined) personas.revert({ subject, by })
+      else personas.set({ subject, text: undo.text as PersonaText, by })
+    } catch {
+      // 模式变了（开了公司模式）或岗位不在册了：撤回作罢，卡照样是定了的
+    }
+  })
+  peerUndoers.set('skill_overlay', async (undo) => {
+    const before = undo.before as OverlayEx | null
+    const skill = String(undo.skill)
+    const tier = undo.tier as SkillTier
+    const owner = String(undo.owner)
+    const now = skills.registry.getOverlay(skill, tier, owner)
+    await skills.registry.setOverlay(
+      before ?? {
+        skill,
+        tier,
+        owner,
+        ops: [],
+        base_version: now?.base_version ?? '0.0.0',
+        version: now?.version ?? 0,
+      },
+    )
+  })
+  peerUndoers.set('catalog_merge', async (undo) => {
+    const ws = String(undo.workspace_id)
+    for (const n of (undo.notes ?? []) as { entry_id: string; note: CatalogNote | null }[])
+      catalog.index.store.replace?.(ws, n.entry_id, n.note ?? undefined)
+  })
+  /** ② 提层之后：做这个岗位 / 这条职责的人（品牌层 = 品牌里所有人）各一张「知道了 / 撤回」。 */
+  const notifyLayerPeers = async (
+    by: PersonId,
+    ws: WorkspaceId,
+    layer: { skill: string; tier: SkillTier; owner: string; before: OverlayEx | null },
+  ): Promise<void> => {
+    const to =
+      layer.tier === 'company'
+        ? (await identity.members(ws))
+            .filter((m) => m.left_at === undefined)
+            .map((m) => m.person_id)
+        : holdersOfSubject({
+            kind: layer.tier === 'position' ? 'position' : 'role',
+            id: layer.owner,
+          })
+    await notifyPeers(approvals, {
+      workspace_id: ws,
+      by,
+      by_name: (await identity.getPerson(by))?.name || '同事',
+      to,
+      role_id: layer.tier === 'role' ? layer.owner : 'common.member',
+      what: `「${layer.skill}」${layer.tier === 'position' ? '岗位层' : layer.tier === 'role' ? '职责层' : '品牌层'}的写法`,
+      object: { type: 'skill', id: `${layer.skill}:${layer.tier}:${layer.owner}` },
+      before: null,
+      after: null,
+      undo: { target: 'skill_overlay', ...layer },
+      at: clock.now(),
+    })
+  }
+  /** ② 合并之后：两条的主人与在用它们的人各一张「知道了 / 撤回」。 */
+  const notifyMergePeers = async (
+    by: PersonId,
+    ws: WorkspaceId,
+    keep: string,
+    drop: string,
+    notes: { entry_id: string; note: CatalogNote | null }[],
+  ): Promise<void> => {
+    const entries = await catalog.index.entries(ws)
+    const keepE = entries.find((e) => e.id === keep)
+    const dropE = entries.find((e) => e.id === drop)
+    const to = [keepE?.owner, dropE?.owner].filter((p): p is PersonId => p !== undefined)
+    await notifyPeers(approvals, {
+      workspace_id: ws,
+      by,
+      by_name: (await identity.getPerson(by))?.name || '同事',
+      to,
+      role_id: 'common.member',
+      what: `工具箱：「${dropE?.title ?? drop}」并进「${keepE?.title ?? keep}」`,
+      object: { type: 'catalog', id: `${keep}:${drop}` },
+      before: { keep, drop },
+      after: { keep, superseded: [drop] },
+      undo: { target: 'catalog_merge', workspace_id: ws, notes },
+      at: clock.now(),
+    })
+  }
+  /** 做这个岗位 / 这条职责的人（启动品牌里、没撤销的分配）。 */
+  const holdersOfSubject = (subject: PersonaSubject): PersonId[] => {
+    const role_ids =
+      subject.kind === 'role'
+        ? [subject.id]
+        : (org
+            .positions()
+            .find((p) => p.id === subject.id)
+            ?.roles.map((r) => r.role) ?? [])
+    const people = new Set<PersonId>()
+    for (const role_id of role_ids)
+      for (const a of roles.assignments.listByRole(role_id, { workspace_id: workspace.id }))
+        if (a.revoked_at === undefined) people.add(a.person_id)
+    return [...people]
+  }
+  const notifyPersonaPeers = async (
+    by: PersonId,
+    subject: PersonaSubject,
+    before: PersonaView,
+    after: PersonaView,
+  ): Promise<void> => {
+    const by_name = (await identity.getPerson(by))?.name || '同事'
+    await notifyPeers(approvals, {
+      workspace_id: workspace.id,
+      by,
+      by_name,
+      to: holdersOfSubject(subject),
+      role_id: subject.kind === 'role' ? subject.id : 'common.member',
+      what: `「${before.name.zh}」的角色定位`,
+      object: { type: 'persona', id: `${subject.kind}:${subject.id}` },
+      before: personaTextIn(before.effective, 'zh'),
+      after: personaTextIn(after.effective, 'zh'),
+      undo: { target: 'persona', subject, text: before.overridden ? before.effective : null },
+      at: clock.now(),
+    })
+  }
+  /** WP276（决策 237）：申请加入那张卡上点了同意 / 拒绝 = 同意 / 拒绝这条申请。 */
+  const onMembershipDecided = async (item: ApprovalItem): Promise<void> => {
+    const request_id = (item.payload as { request_id?: unknown } | undefined)?.request_id
+    const by = item.decision?.by
+    if (typeof request_id !== 'string' || by === undefined || by === 'mandate') return
+    const approve =
+      item.state === 'approved' || item.state === 'approved_edited' || item.state === 'applied'
+    if (!approve && item.state !== 'rejected') return
+    try {
+      await onboarding.invites.decide(by, request_id, { approve })
+    } catch {
+      // 已经在团队页上定过了（先定的为准）
+    }
+  }
   const personaPort: PersonaPort = {
     view: (_actor, subject) => {
       try {
@@ -8195,12 +8511,17 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
          * 变了就是「未翻译」（英文界面显示中文 + 标记）。中文没给（老客户端只改英文）
          * 才从现在生效的那一份补中文。
          */
-        const current = personas.view(subject).effective
-        return personas.set({
+        const before = personas.view(subject)
+        const current = before.effective
+        const out = personas.set({
           subject,
           text: { zh: text.zh ?? personaTextIn(current, 'zh'), en: text.en ?? '' },
           by: actor.person_id,
         })
+        // WP276：② 里改的是共用的——做这个岗位 / 这条职责的同事各收一张「知道了 / 撤回」
+        if (modeOfWorkspaceSync?.(workspace.id) === 'peers')
+          void notifyPersonaPeers(actor.person_id, subject, before, out).catch(() => undefined)
+        return out
       } catch (error) {
         return toApiError(error)
       }
@@ -8665,7 +8986,16 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     roles: rolesPort,
     meetings: meetings.port,
     // WP20 / WP66：连接面按品牌（死信与重投也按品牌，见 `brand-ports.ts`）
-    connections: brandConnectionsPort(brandModules),
+    // WP276：② 里谁接的连接谁管（记一张 id → 人的小表，凭据不碰）
+    connections: withConnectionOwners(brandConnectionsPort(brandModules), {
+      owners: createConnectionOwners(
+        dbDir === undefined ? undefined : join(dbDir, 'connection-owners.json'),
+      ),
+      mode: (ws) => organizations.modeOfSync(ws),
+      initiator: (ws) => organizations.organizationOf(ws)?.owner_id,
+    }),
+    // WP276：② 同事互联里平级同事也能进团队页 / 连接页、改共用规矩、同意新人
+    peerAccess: (ws) => organizations.modeOfSync(ws) === 'peers',
     // WP113（63）：消息——按请求的品牌取那一只邮箱库
     messages: brandMessagesPort(brandModules),
     // WP83（54 §4）：连接目录（按 kind 的总表）与岗位连接清单，也按品牌
@@ -9127,8 +9457,17 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     catalog: {
       ...catalog.port,
       // 复盘卡 / 工具箱上那个"合并"：出一张 policy_change 卡，批了才合
-      merge: async (input) =>
-        catalog.proposeMerge({
+      merge: async (input) => {
+        const mode = (await modeOfWorkspace?.(input.workspace_id)) ?? 'company'
+        // WP276（决策 274 第 2 条）：② 里合并是改共用的——合之前记下两条原来的样子，合完给用到它的人一张「知道了 / 撤回」
+        const notes =
+          mode === 'peers'
+            ? [input.keep, input.drop].map((entry_id) => ({
+                entry_id,
+                note: catalog.index.store.get(input.workspace_id, entry_id) ?? null,
+              }))
+            : undefined
+        const out = await catalog.proposeMerge({
           approvals,
           owner: person.id,
           role_id: ownerAssignment.role_id,
@@ -9136,8 +9475,14 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           drop: input.drop,
           by: input.by,
           // WP275：① ② 自己按的合并当场合（二次确认在界面上）
-          direct: !hasApprovalFlow((await modeOfWorkspace?.(input.workspace_id)) ?? 'company'),
-        }),
+          direct: !hasApprovalFlow(mode),
+        })
+        if (notes !== undefined && out?.applied === true && input.by !== undefined)
+          void notifyMergePeers(input.by, input.workspace_id, input.keep, input.drop, notes).catch(
+            () => undefined,
+          )
+        return out
+      },
     },
     // WP36 40 §1.2：离职是一个正式动作。网关只转发，编排在 ./offboard.ts；
     // 三条路由都是 owner 级（动别人的分配、别人的个人数据、公司技能层）
@@ -9194,6 +9539,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     work: workPortOf,
     // WP207：左栏职责下的对话 / 任务、归档与找回（按品牌）
     workArchive: workArchivePortOf,
+    // WP276：交给对方（按品牌）
+    handoff: brandHandoffPort(brandModules, handoffFor),
     // WP236：运行时长线（这台机器一份）
     runLimits: { get: () => runLimitsSettings.get(), set: (input) => runLimitsSettings.set(input) },
     // WP69（54）：岗位实体、交给岗位一件事、换职责
@@ -9361,6 +9708,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     learning,
     models,
     txn,
+    approvals,
     work,
     meetings,
     /*
@@ -9576,7 +9924,12 @@ function seoDecided(bus: ApprovalBus, hook: SeoDecidedHook): ApprovalBus {
           out.kind === 'image_pick' ||
           out.kind === 'image_budget' ||
           // WP237：「这件事该走哪条职责」选定了 → 钉到那条、立刻开跑
-          isRouteChoice(out)
+          isRouteChoice(out) ||
+          // WP276：「X 想把「…」交给你」接下 / 不接了
+          isHandoffItem(out) ||
+          // WP276：② 改共用东西的「知道了 / 撤回」（带撤回办法的那种）、有人申请加入
+          peerUndoOf(out) !== undefined ||
+          out.kind === 'membership'
         ) {
           try {
             await hook.current?.(out)

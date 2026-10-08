@@ -306,7 +306,10 @@ export function DeckCardBody({
         return (
           <div className="mt-2.5 flex flex-col gap-2.5" data-testid="deck-layout-policy">
             <BeforeAfter before={payload.before} after={payload.after} />
-            <Note testId="deck-reason">{reasonText}</Note>
+            {/* WP276（界面少字）：通知卡那句「谁改的、已生效、可撤回」下面那一行已经说了，正文框不再说一遍 */}
+            {payload.form === 'peer_change_notice' ? null : (
+              <Note testId="deck-reason">{reasonText}</Note>
+            )}
             {/* WP275：① ② 的词按模式换；② 里同事自己改了共用的规矩，这张是「已生效、可撤回」的通知 */}
             <p className="text-xs text-ws-muted-fg">
               {payload.form === 'peer_change_notice'
@@ -456,6 +459,43 @@ export function DeckCardBody({
 
       // ⑨ 转交 / 认领：主体是**原话** + 分类依据
       case 'handoff': {
+        // WP276（docs/95 §4.3 第 3 步）：「X 想把「…」交给你」——留言、到哪了、截止、几号退回
+        if (payload.form === 'handoff') {
+          const note = str(payload.note)
+          const where = str(payload.matter_summary)
+          const day = (iso: string | undefined): string | undefined => iso?.slice(5, 10)
+          const facts = [
+            where === undefined || where === note
+              ? undefined
+              : `${t('handoff.card.where')}：${where}`,
+            str(payload.progress),
+            str(payload.due) === undefined
+              ? undefined
+              : t('handoff.card.due', { date: day(str(payload.due)) ?? '' }),
+            str(payload.expires_at) === undefined
+              ? undefined
+              : t('handoff.card.back', { date: day(str(payload.expires_at)) ?? '' }),
+          ].filter((x): x is string => x !== undefined)
+          return (
+            <div className="mt-2.5 flex flex-col gap-2" data-testid="deck-layout-handoff-offer">
+              {note === undefined ? null : (
+                <blockquote
+                  data-testid="deck-quote"
+                  className="rounded-[10px] bg-ws-surface p-3 text-[13px] leading-5 whitespace-pre-wrap text-ws-body"
+                >
+                  {note}
+                </blockquote>
+              )}
+              {facts.length === 0 ? null : (
+                <ul className="flex flex-col gap-0.5 text-xs text-ws-muted-fg">
+                  {facts.map((f) => (
+                    <li key={f}>{f}</li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )
+        }
         const quote = str(payload.quote) ?? str(payload.original) ?? content.text
         return (
           <div className="mt-2.5 flex flex-col gap-2.5" data-testid="deck-layout-handoff">
@@ -512,7 +552,13 @@ export function DeckCardBody({
    * 有选项就一定要有单选列表（36 §2.1 裸 approve 会被拒）。
    * ⑤ 自己就是列表，⑥ 的缩略图格本身就是选法——只有这两种不再追加一份。
    */
-  const needsOptions = options.length > 0 && card.layout !== 'choice' && card.layout !== 'variants'
+  // WP276：交给你的卡，选项就是动作行上那几个「接下」按钮——不再追加一份单选列表
+  // WP276：② 的「知道了 / 撤回」通知也一样——两个选项就是动作行上的两个按钮
+  const handoffOffer =
+    (card.detail.payload as { form?: unknown } | undefined)?.form === 'handoff' ||
+    (card.detail.payload as { form?: unknown } | undefined)?.form === 'peer_change_notice'
+  const needsOptions =
+    options.length > 0 && card.layout !== 'choice' && card.layout !== 'variants' && !handoffOffer
   return (
     <>
       {main}

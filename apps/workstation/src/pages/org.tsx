@@ -22,6 +22,7 @@ import { AssignWizard } from '@/components/org/assign-wizard'
 import { BrandAssetsCard } from '@/components/org/brand-assets-card'
 import { BrandDesignCard } from '@/components/org/brand-design-card'
 import { BrandsTab } from '@/components/org/brands-tab'
+import { ColleaguesTab, inviteLinkOf } from '@/components/org/colleagues-tab'
 import { GrossMarginCard } from '@/components/org/gross-margin-card'
 import { InprogressTab } from '@/components/org/inprogress-tab'
 import { type JoinChoice, JoinTab } from '@/components/org/join-tab'
@@ -32,6 +33,7 @@ import { type ProductLineDraft, type RangeGroupDraft, RangesTab } from '@/compon
 import { ToolboxTab } from '@/components/org/toolbox-tab'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Hint } from '@/components/ui/hint'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import type { OrgInvitationView } from '@/lib/api'
@@ -79,6 +81,7 @@ import {
   updateOrgPosition,
   updateRangeGroup,
 } from '@/lib/api'
+import { exportMyWork, leaveWorkspace, turnOnDiscovery } from '@/lib/api-peers'
 import { useApp } from '@/lib/app-context'
 import { useMode } from '@/lib/mode'
 
@@ -87,6 +90,8 @@ const KOL_PRESET_ROLES = ['kol.youtube', 'kol.instagram']
 
 /** WP271：① 个人里公司页（「岗位与品牌」）只留这三个 tab（docs/95 §2.2）。 */
 const SOLO_TABS = new Set(['brands', 'positions', 'toolbox'])
+/** WP276：② 同事互联的「团队」页——同事、品牌、岗位、进行中、工具箱（没有成员 / 范围 / 加入公司 / 并进来）。 */
+const PEER_TABS = new Set(['brands', 'positions', 'colleagues', 'toolbox', 'inprogress'])
 
 export function OrgPage(): React.ReactNode {
   const { t } = useApp()
@@ -94,7 +99,11 @@ export function OrgPage(): React.ReactNode {
    * WP271（docs/95 §2.2）：① 个人——左栏叫「岗位与品牌」，页里只留品牌 / 岗位 / 工具箱；
    * 负责人卡、成员、品牌与产品线、加入一家公司、并进来、进行中一律收起（数据都在）。
    */
-  const { t: tm, solo } = useMode()
+  const { t: tm, solo, mode } = useMode()
+  /** WP276：② 同事互联（平级，团队页人人能进）。 */
+  const peers = mode === 'peers'
+  /** WP276：① 里「和同事一起用」那一块开着没有（开的那一下打开局域网发现，决策 234）。 */
+  const [together, setTogether] = useState(false)
   const client = useQueryClient()
   // ⌘K 的"工具箱"结果跳到这里：`/org?tab=toolbox&q=…`
   const [params] = useSearchParams()
@@ -105,7 +114,10 @@ export function OrgPage(): React.ReactNode {
     initialTab === 'toolbox' || initialTab === 'brands' ? initialTab : 'positions',
   )
   // WP271：① 里收起的 tab 落回「岗位」（老链接、或从 ③ 降回来时停在那几个 tab 上）
-  const tab = solo && !SOLO_TABS.has(chosenTab) ? 'positions' : chosenTab
+  const tab =
+    (solo && !SOLO_TABS.has(chosenTab)) || (peers && !PEER_TABS.has(chosenTab))
+      ? 'positions'
+      : chosenTab
   const query = params.get('q')
   /**
    * WP202：`/org?new=kol`——从「连接 → 浏览器插件」那句「你还没有红人营销岗位」跳来。
@@ -140,6 +152,15 @@ export function OrgPage(): React.ReactNode {
   const mine = useQuery({ queryKey: ['positions'], queryFn: getPositions })
   // 05：制度这一层是所有者的事；这一页不跟着左栏当前岗位走
   const owner = mine.data?.positions.find((p) => p.role_id === 'common.owner')?.position_id
+  /**
+   * WP276（docs/95 §6.2 第 2 条）：② 平级的同事没有所有者那条分配——团队页用他自己任意一条
+   * （服务端在 ② 里把团队页那几条放开）；改规矩、发邀请码、同意新人也用它。家务（请人离开、
+   * 删岗位、分岗位）仍然只用所有者那条，不是发起人就不出那几个按钮。
+   */
+  const as = owner ?? (peers ? mine.data?.positions[0]?.position_id : undefined)
+  const myId = session.data?.person.id
+  const initiator = orgs.data?.[0]?.owner_id
+  const company = mode === 'company'
   // WP215（Fable 10-05）：品牌急停公司管理员也能按——没有所有者岗位的管理员拿自己任意一条岗位去按
   const orgRole = orgs.data?.[0]?.role
   const haltAs =
@@ -147,48 +168,50 @@ export function OrgPage(): React.ReactNode {
     (orgRole === 'owner' || orgRole === 'admin' ? mine.data?.positions[0]?.position_id : undefined)
   const workspace = session.data?.workspace.id
 
-  const enabled = owner !== undefined && workspace !== undefined
+  const enabled = as !== undefined && workspace !== undefined
   const positions = useQuery({
     queryKey: ['org', 'positions'],
     enabled,
-    queryFn: () => listOrgPositions(owner),
+    queryFn: () => listOrgPositions(as),
   })
   const roles = useQuery({
     queryKey: ['org', 'roles'],
     enabled,
-    queryFn: () => listRoleDefinitions(owner),
+    queryFn: () => listRoleDefinitions(as),
   })
   const members = useQuery({
     queryKey: ['org', 'members'],
     enabled,
-    queryFn: () => listMembers(workspace ?? '', owner),
+    queryFn: () => listMembers(workspace ?? '', as),
   })
   const invitations = useQuery({
     queryKey: ['org', 'invitations'],
-    enabled,
+    // WP276：邮件邀请链接只在 ③（① ② 只有邀请码 + 它的链接，两套合一）
+    enabled: enabled && company,
     queryFn: () => listInvitations(workspace ?? '', owner),
   })
   const ranges = useQuery({
     queryKey: ['org', 'ranges'],
-    enabled,
+    // WP276：范围只在 ③ 有
+    enabled: enabled && company,
     queryFn: () => listRangeOptions(owner),
   })
   // 45：等着并进来的个人工作区（对照表）
   const joins = useQuery({
     queryKey: ['org', 'joins'],
-    // WP271：① 个人收起了「加入一家公司」与「并进来」，不去问
-    enabled: enabled && !solo,
+    // WP271 / WP276：「并进来」只在 ③
+    enabled: enabled && company,
     queryFn: () => listJoins(owner),
   })
   // 44：品牌（范围组）与产品线
   const brands = useQuery({
     queryKey: ['org', 'range-groups'],
-    enabled,
+    enabled: enabled && company,
     queryFn: () => listRangeGroups(owner),
   })
   const lines = useQuery({
     queryKey: ['org', 'product-lines'],
-    enabled,
+    enabled: enabled && company,
     queryFn: () => listProductLines(owner),
   })
 
@@ -199,28 +222,28 @@ export function OrgPage(): React.ReactNode {
   const me = useQuery({
     queryKey: ['onboarding', 'state'],
     enabled,
-    queryFn: () => getOnboardingState(owner),
+    queryFn: () => getOnboardingState(as),
     retry: false,
   })
-  const peers = useQuery({
+  const lan = useQuery({
     queryKey: ['onboarding', 'peers'],
-    // WP271：① 个人收起了「加入一家公司」与「并进来」，不去问
-    enabled: enabled && !solo,
-    queryFn: () => listDiscoveryPeers(owner),
+    // WP271：① 个人收起了「加入一家公司」；WP276：点开「和同事一起用」才问
+    enabled: enabled && (!solo || together),
+    queryFn: () => listDiscoveryPeers(as),
     retry: false,
   })
   const invites = useQuery({
     queryKey: ['onboarding', 'invites'],
-    // WP271：① 个人收起了「加入一家公司」与「并进来」，不去问
-    enabled: enabled && !solo,
-    queryFn: () => listInvites(owner),
+    // WP271：① 个人收起了「加入一家公司」；WP276：点开「和同事一起用」才问
+    enabled: enabled && (!solo || together),
+    queryFn: () => listInvites(as),
     retry: false,
   })
   const requests = useQuery({
     queryKey: ['onboarding', 'requests'],
-    // WP271：① 个人收起了「加入一家公司」与「并进来」，不去问
-    enabled: enabled && !solo,
-    queryFn: () => listMembershipRequests(owner),
+    // WP271：① 个人收起了「加入一家公司」；WP276：点开「和同事一起用」才问
+    enabled: enabled && (!solo || together),
+    queryFn: () => listMembershipRequests(as),
     retry: false,
   })
   // 45 H4：建之前先查。身份稳定（`useCallback`），不然表单每渲染一次就重排一次查询
@@ -395,7 +418,7 @@ export function OrgPage(): React.ReactNode {
   })
 
   const copy = useMutation({
-    mutationFn: (id: string) => copyRoleDefinition(id, undefined, owner),
+    mutationFn: (id: string) => copyRoleDefinition(id, undefined, as),
     onSuccess: async () => {
       setFailure(undefined)
       await refresh()
@@ -407,7 +430,7 @@ export function OrgPage(): React.ReactNode {
     mutationFn: (input: {
       id: string
       patch: { name?: string; actions?: { id: string; caps?: Record<string, number> }[] }
-    }) => proposeRoleChange(input.id, input.patch, owner),
+    }) => proposeRoleChange(input.id, input.patch, as),
     onSuccess: async (_receipt, input) => {
       setFailure(undefined)
       setSubmitted(input.id)
@@ -480,7 +503,7 @@ export function OrgPage(): React.ReactNode {
 
   const [joinSent, setJoinSent] = useState(false)
   const newInvite = useMutation({
-    mutationFn: () => createInvite(undefined, owner),
+    mutationFn: () => createInvite(undefined, as),
     onSuccess: async () => {
       setFailure(undefined)
       await refresh()
@@ -502,13 +525,51 @@ export function OrgPage(): React.ReactNode {
   })
   const decide = useMutation({
     mutationFn: (input: { id: string; approve: boolean }) =>
-      decideMembershipRequest(input.id, { approve: input.approve }, owner),
+      decideMembershipRequest(input.id, { approve: input.approve }, as),
     onSuccess: async () => {
       setFailure(undefined)
       await refresh()
     },
     onError: say,
   })
+
+  /** WP276：② 自己退出（发起人不行）——退完回到登录页。 */
+  const leave = useMutation({
+    mutationFn: () => leaveWorkspace(workspace ?? ''),
+    onSuccess: () => {
+      globalThis.location?.assign('/login')
+    },
+    onError: say,
+  })
+  /** WP276：导出我的副本（参与过的事、名下的待办）——存成一个 JSON 文件。 */
+  const exportMine = useMutation({
+    mutationFn: exportMyWork,
+    onSuccess: (data) => {
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = 'my-work.json'
+      a.click()
+      URL.revokeObjectURL(url)
+    },
+    onError: say,
+  })
+  /** WP276：① 点「和同事一起用」——打开局域网发现（决策 234），再展开邀请那一块。 */
+  const startTogether = useMutation({
+    mutationFn: async () => {
+      if (orgId !== undefined) await turnOnDiscovery(orgId, owner)
+    },
+    onSettled: async () => {
+      setTogether(true)
+      await client.invalidateQueries({ queryKey: ['onboarding'] })
+      await client.invalidateQueries({ queryKey: ['orgs'] })
+    },
+  })
+  /** WP276：② 发起人「请同事一起做」——直接分给他，不挑范围（② 里就是整个品牌）。 */
+  const peerAssign = (position_id: string, person_id: string): void => {
+    assign.mutate({ person_id, position_id, ranges: [], range_groups: [] })
+  }
 
   // WP202：`?new=kol` 只在拿到岗位与职责清单后判一次
   const kolHandled = useRef(false)
@@ -555,10 +616,51 @@ export function OrgPage(): React.ReactNode {
     merge.isPending ||
     moveDuty.isPending ||
     split.isPending ||
-    handOver.isPending
+    handOver.isPending ||
+    leave.isPending ||
+    exportMine.isPending ||
+    startTogether.isPending
 
   /** WP202：某张岗位卡下面就地展开的那一块——正在分的向导，或刚分完的回执。 */
   const below = (position_id: string): React.ReactNode => {
+    // WP276：② 里「请同事一起做」只是挑一个同事（不挑范围，整个品牌）
+    if (wizard === position_id && peers) {
+      const holders = new Set(
+        (positions.data ?? []).find((x) => x.id === position_id)?.holders.map((h) => h.person_id),
+      )
+      const candidates = (members.data ?? []).filter(
+        (m) => m.left_at === undefined && !holders.has(m.person_id),
+      )
+      return (
+        <div
+          className="flex flex-wrap items-center gap-2 rounded-md border p-3"
+          data-testid="peer-assign"
+        >
+          {candidates.map((m) => (
+            <Button
+              key={m.person_id}
+              size="sm"
+              variant="outline"
+              disabled={assign.isPending}
+              onClick={() => {
+                peerAssign(position_id, m.person_id)
+              }}
+            >
+              {m.name}
+            </Button>
+          ))}
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => {
+              setWizard(null)
+            }}
+          >
+            {t('action.cancel')}
+          </Button>
+        </div>
+      )
+    }
     if (wizard === position_id)
       return (
         <div className="flex flex-col gap-3 rounded-md border p-3" data-testid="assign-inline">
@@ -625,14 +727,60 @@ export function OrgPage(): React.ReactNode {
 
   return (
     <div className="flex flex-col gap-4">
-      <div>
-        <h1 className="text-sm font-semibold">{tm('org.title')}</h1>
-        <p className="text-xs text-muted-foreground">{tm('org.subtitle')}</p>
+      <div className="flex items-start gap-2">
+        <div className="min-w-0 flex-1">
+          <h1 className="text-sm font-semibold">{tm('org.title')}</h1>
+          <p className="text-xs text-muted-foreground">{tm('org.subtitle')}</p>
+        </div>
+        {/* WP276（docs/95 §3.3，决策 234）：① 一行小入口——点了才打开局域网发现、出邀请那一块 */}
+        {solo ? (
+          <span className="flex items-center gap-1">
+            <Button
+              size="sm"
+              variant="ghost"
+              data-testid="together-entry"
+              aria-expanded={together}
+              disabled={startTogether.isPending}
+              onClick={() => {
+                if (together) setTogether(false)
+                else startTogether.mutate()
+              }}
+            >
+              {t('together.entry')}
+            </Button>
+            <Hint text={t('together.entry.hint')} />
+          </span>
+        ) : null}
       </div>
+      {solo && together && myId !== undefined ? (
+        <Card data-testid="together-panel">
+          <CardContent className="pt-4">
+            <JoinPanel
+              collapsed
+              {...(lan.data === undefined ? {} : { discovery: lan.data })}
+              invites={invites.data ?? []}
+              requests={requests.data ?? []}
+              busy={busy}
+              sent={joinSent}
+              inviteLink={inviteLinkOf}
+              {...(failure === undefined || wizard !== null ? {} : { error: failure })}
+              onJoin={(input) => {
+                join.mutate(input)
+              }}
+              onCreateInvite={() => {
+                newInvite.mutate()
+              }}
+              onDecide={(id, approve) => {
+                decide.mutate({ id, approve })
+              }}
+            />
+          </CardContent>
+        </Card>
+      ) : null}
 
       {/* WP234（docs/54 §6.5）：负责人是身份——在公司页顶上，不在左栏「岗位」里。
-          WP271：① 个人收起（这里只有你一个人） */}
-      {solo
+          WP271：① 个人收起（这里只有你一个人）；WP276：② 也收起（发起人只在「同事」里标一个小字） */}
+      {!company
         ? null
         : (() => {
             const ownerRow = positions.data?.find((p) => p.id === OWNER_POSITION)
@@ -660,7 +808,9 @@ export function OrgPage(): React.ReactNode {
           {/* 52 O2：品牌一览排在最前——公司页问的第一件事就是"这家公司有哪几个品牌" */}
           <TabsTrigger value="brands">{t('org.tab.brands')}</TabsTrigger>
           <TabsTrigger value="positions">{t('org.tab.positions')}</TabsTrigger>
-          {solo ? null : (
+          {/* WP276：② 团队页——「同事」代替成员 / 加入公司；范围、并进来不出 */}
+          {peers ? <TabsTrigger value="colleagues">{t('team.tab.colleagues')}</TabsTrigger> : null}
+          {!company ? null : (
             <>
               <TabsTrigger value="members">{t('org.tab.members')}</TabsTrigger>
               <TabsTrigger value="ranges">{t('org.tab.ranges')}</TabsTrigger>
@@ -705,22 +855,30 @@ export function OrgPage(): React.ReactNode {
               {...(wizard === null ? {} : { assigning: wizard })}
               below={below}
               {...(kolDraft === undefined ? {} : { draft: kolDraft })}
-              onAssign={(id) => {
-                setFailure(undefined)
-                setReceipt(null)
-                /*
-                 * WP271：① 个人没有「分给同事」——按钮叫「我来做」，点了直接分给自己，
-                 * 不挑范围（服务端在 ① 里落成整个品牌）
-                 */
-                if (solo) {
-                  const me = session.data?.person.id
-                  if (me !== undefined)
-                    assign.mutate({ person_id: me, position_id: id, ranges: [], range_groups: [] })
-                  return
-                }
-                // 再点一次同一张卡的「分给同事」= 收起
-                setWizard((current) => (current === id ? null : id))
-              }}
+              {...(solo || owner !== undefined
+                ? {
+                    onAssign: (id: string) => {
+                      setFailure(undefined)
+                      setReceipt(null)
+                      /*
+                       * WP271：① 个人没有「分给同事」——按钮叫「我来做」，点了直接分给自己，
+                       * 不挑范围（服务端在 ① 里落成整个品牌）
+                       */
+                      if (solo) {
+                        if (myId !== undefined)
+                          assign.mutate({
+                            person_id: myId,
+                            position_id: id,
+                            ranges: [],
+                            range_groups: [],
+                          })
+                        return
+                      }
+                      // 再点一次同一张卡的「分给同事」= 收起
+                      setWizard((current) => (current === id ? null : id))
+                    },
+                  }
+                : {})}
               onCreate={(input) => {
                 create.mutate(input)
               }}
@@ -731,7 +889,7 @@ export function OrgPage(): React.ReactNode {
                 .filter((m) => m.left_at === undefined)
                 .map((m) => ({ person_id: m.person_id, name: m.name }))}
               // WP271：「上级：不设（转老板）」只在 ③ 公司集体（① ② 没有上下级）
-              {...(solo
+              {...(!company
                 ? {}
                 : {
                     onSupervisor: (id: string, person_id: string | null) => {
@@ -750,9 +908,14 @@ export function OrgPage(): React.ReactNode {
                   },
                 })
               }}
-              onDelete={(id) => {
-                drop.mutate(id)
-              }}
+              // WP276（决策 274 第 3 条）：② 里同事能改规矩、不能删岗位（删是发起人的家务）
+              {...(owner === undefined
+                ? {}
+                : {
+                    onDelete: (id: string) => {
+                      drop.mutate(id)
+                    },
+                  })}
               onCopyRole={(id) => {
                 copy.mutate(id)
               }}
@@ -838,7 +1001,7 @@ export function OrgPage(): React.ReactNode {
             <Skeleton className="h-40 w-full" />
           ) : (
             <JoinPanel
-              {...(peers.data === undefined ? {} : { discovery: peers.data })}
+              {...(lan.data === undefined ? {} : { discovery: lan.data })}
               configured={me.data.profile !== undefined}
               invites={invites.data ?? []}
               requests={requests.data ?? []}
@@ -872,8 +1035,40 @@ export function OrgPage(): React.ReactNode {
         </TabsContent>
 
         <TabsContent value="toolbox" className="pt-3">
-          <ToolboxTab assignment={owner} {...(query === null ? {} : { initialQuery: query })} />
+          <ToolboxTab assignment={as} {...(query === null ? {} : { initialQuery: query })} />
         </TabsContent>
+
+        {/* WP276：② 团队页「同事」——名单带忙闲、请同事一起用、想一起用的人、数据放哪、退出 */}
+        {peers ? (
+          <TabsContent value="colleagues" className="pt-3">
+            <ColleaguesTab
+              me={myId}
+              initiator={initiator}
+              members={members.data ?? []}
+              invites={invites.data ?? []}
+              requests={requests.data ?? []}
+              busy={busy}
+              {...(failure === undefined || wizard !== null ? {} : { error: failure })}
+              onCreateInvite={() => {
+                newInvite.mutate()
+              }}
+              onDecide={(id, approve) => {
+                decide.mutate({ id, approve })
+              }}
+              onRemove={(person_id, name) => {
+                if (globalThis.confirm?.(t('team.remove.confirm', { name })) === false) return
+                remove.mutate(person_id)
+              }}
+              onLeave={() => {
+                if (globalThis.confirm?.(t('team.leave.confirm')) === false) return
+                leave.mutate()
+              }}
+              onExport={() => {
+                exportMine.mutate()
+              }}
+            />
+          </TabsContent>
+        ) : null}
 
         {/* 40 §3.3 进行中看板：自己取数，页面这边只多这一行 */}
         <TabsContent value="inprogress" className="pt-3">

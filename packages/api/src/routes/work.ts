@@ -101,6 +101,8 @@ export interface WorkPoolItem {
   similar_to: string[]
   /** 这条是转交给我的，不是池里的公共项 */
   offered_by?: PersonId
+  /** WP276：交给我的那个人的名字（服务端补；docs/95 §4.2 第 5 条：不印 id） */
+  offered_by_label?: string
 }
 
 /** 首页第三稿（37 §3）在 `GET /v1/home` 上多出来的三段。 */
@@ -784,7 +786,24 @@ export function workRoutes(): Route[] {
         authz: READ,
         returns: '{ pool: WorkPoolItem[] }',
       },
-      async (c, deps) => ok(c, { pool: await workOf(deps).pool(actorOf(c)) }),
+      async (c, deps) => {
+        const pool = await workOf(deps).pool(actorOf(c))
+        // WP276：「{who} 交给你的」写名字，不写 id（docs/95 §4.2 第 5 条）
+        const names = await personLabels(
+          deps,
+          pool.flatMap((i) => (i.offered_by === undefined ? [] : [i.offered_by])),
+        )
+        return ok(c, {
+          pool: pool.map((i) =>
+            i.offered_by === undefined
+              ? i
+              : {
+                  ...i,
+                  offered_by_label: names.get(i.offered_by) ?? i.offered_by_label ?? i.offered_by,
+                },
+          ),
+        })
+      },
     ),
     route(
       {

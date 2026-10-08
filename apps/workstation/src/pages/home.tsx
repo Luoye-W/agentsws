@@ -34,6 +34,7 @@ import { Link, Navigate, useNavigate } from 'react-router-dom'
 import { DeckSection } from '@/components/deck'
 import { AlertBlocks, ReportBlocks } from '@/components/deck/panel-blocks'
 import { BrandMark, PositionCard, type Tone, WsCard } from '@/components/design'
+import { HandoffNotices } from '@/components/peers/handoff-strip'
 import { StatTileView } from '@/components/stat-tile'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -695,6 +696,8 @@ export function HomePage(): React.ReactNode {
                   cardsWaiting={data.counts.total}
                 />
               </WsCard>
+              {/* WP276：交给同事的结果（接下 / 没接 / 退回）一行一条，点掉就没了——不是卡 */}
+              {solo ? null : <HandoffNotices />}
               {solo ? null : (
                 <WsCard className="p-4" data-testid="home-inprogress">
                   <InProgressTitle />

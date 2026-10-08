@@ -360,6 +360,9 @@ describe('一致性用例', () => {
 
   it('非 owner 403：售后岗位打制度面一律拒', async () => {
     const mate = await inviteColleague('nope@example.com')
+    // WP276：钉的是 ③ 公司集体（② 同事互联里平级同事能进团队页，见 wp276-peers.test.ts）
+    for (const org of server.identity.listOrganizations())
+      await server.identity.updateOrganization(org.id, { mode: 'company' })
     const granted = await data<AssignmentView[]>(
       await call('POST', '/v1/assignments', {
         body: {

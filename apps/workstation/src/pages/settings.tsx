@@ -16,7 +16,7 @@ import { MOTION_PREFS, setMotionPref, useMotionPref } from '@/components/design'
 import { ModelsPanel } from '@/components/models/models-panel'
 import { NoModelBanner } from '@/components/models/no-model-banner'
 import { type ProfileDraft, ProfileForm } from '@/components/onboarding/profile-form'
-import { ArchiveSetting } from '@/components/settings/archive-setting'
+import { ArchiveSetting, HandoffDaysSetting } from '@/components/settings/archive-setting'
 import { BackgroundCard } from '@/components/settings/background-card'
 import { BrowserCard } from '@/components/settings/browser-card'
 import { CloudAccountCard } from '@/components/settings/cloud-account'
@@ -25,6 +25,7 @@ import { ContentUpdatesSetting } from '@/components/settings/content-updates-set
 import { CreditsPanel } from '@/components/settings/credits-panel'
 import { DiagnosticsCard } from '@/components/settings/diagnostics-card'
 import { OfficialPluginsPanel } from '@/components/settings/official-plugins'
+import { PeopleUsage } from '@/components/settings/people-usage'
 import { RunLimitsSetting } from '@/components/settings/run-limits-setting'
 import { WeeklyReviewCard } from '@/components/settings/weekly-review-card'
 import { Button } from '@/components/ui/button'
@@ -54,7 +55,7 @@ export function SettingsPage({
 }): React.ReactNode {
   const { t, theme, toggleTheme, lang, setLang, position } = useApp()
   // WP271（决策 233）：① 个人里「公司档案」叫「品牌档案」；「公司」卡只看模式不看品牌数
-  const { t: tm } = useMode()
+  const { t: tm, mode } = useMode()
   const motionPref = useMotionPref()
   const client = useQueryClient()
   const [saved, setSaved] = useState(false)
@@ -251,6 +252,8 @@ export function SettingsPage({
             </div>
             {/* WP207：对话 / 任务多少天没动就自动归档（1–30 天或不自动归档） */}
             <ArchiveSetting />
+            {/* WP276（决策 241）：交给同事几天没人理退回——① 个人没有同事，不出 */}
+            {mode === 'solo' ? null : <HandoffDaysSetting />}
             {/* WP236：一次运行多久没动静算卡死、最多跑多久 */}
             <RunLimitsSetting />
             {/* WP219：已审的内容更新——自动 / 每次问我（默认），更新过的条目可一键退回 */}
@@ -376,6 +379,8 @@ export function SettingsPage({
       <TabsContent value="account" className="flex flex-col gap-4">
         <CloudAccountCard {...(ownerId === undefined ? {} : { assignment: ownerId })} />
         <CreditsPanel />
+        {/* WP276（决策 238）：② 共用一个余额，每个人的用量都看得见（不设每人上限） */}
+        {mode === 'peers' ? <PeopleUsage /> : null}
       </TabsContent>
       {ownerId === undefined ? null : (
         <TabsContent value="plugins" className="flex flex-col gap-4">

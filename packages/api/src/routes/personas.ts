@@ -50,6 +50,8 @@ const ownerBypass = (
 ): boolean => {
   const p = rctx.principal
   if (p === undefined) return false
+  // WP276（决策 243 / 274 第 4 条）：② 同事互联里角色定位谁都能改（留名字、可撤回）
+  if (deps.peerAccess?.(p.workspace_id) === true) return true
   return deps.roles
     .listAssignments(p.person_id, { workspace_id: p.workspace_id })
     .some((a) => a.role_id === 'common.owner' && a.revoked_at === undefined)

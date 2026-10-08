@@ -661,13 +661,16 @@ function MyAllowance({
   num: (n: number) => string
 }): React.ReactNode {
   const { t } = useApp()
+  // WP276（决策 238 / docs/95 §2.3）：成员额度只在 ③；① ② 共用一个余额、不设每人上限
+  const { mode } = useMode()
   const mine = useQuery({
     queryKey: ['cloud-allocation-me', assignment],
     queryFn: () => getMyCloudAllocation(assignment),
     retry: false,
+    enabled: mode === 'company',
   })
   const data = mine.data?.mine
-  if (data === undefined) return null
+  if (mode !== 'company' || data === undefined) return null
   const limit = data.monthly_limit
   const percent = data.percent ?? 0
   const state =
@@ -726,14 +729,16 @@ function MyAllowance({
  */
 function AllocationWebLink({ assignment }: { assignment: string | undefined }): React.ReactNode {
   // WP271：给同事分额度只在 ③ 公司集体（① 里没有别人）
-  const { t, solo } = useMode()
+  const { t, mode } = useMode()
   const mine = useQuery({
     queryKey: ['cloud-allocation-me', assignment],
     queryFn: () => getMyCloudAllocation(assignment),
     retry: false,
   })
   const url = mine.data?.allocation_url
-  if (solo || mine.data?.role === undefined || url === undefined || url === '') return null
+  // WP276：「给同事分额度」只在 ③（② 没有成员额度）
+  if (mode !== 'company' || mine.data?.role === undefined || url === undefined || url === '')
+    return null
   const tip = t('credits.alloc_web.tip')
   return (
     <p className="text-xs">

@@ -235,7 +235,57 @@ export interface Matter {
    * 缺省（老事项）= 没归档。
    */
   archived_at?: Iso8601
+  /**
+   * WP276（docs/95 §4，决策 241 / 242）：**交给对方**——这件事正在交 / 交过一次的样子。
+   * 交出去之后主人不变，等对方点「接下」才换人；老事项没有这一格。见 {@link Handoff}。
+   */
+  handoff?: Handoff
 }
+
+/**
+ * WP276（docs/95 §4.3）：交给对方的一次交接。事项与待办同一个形状。
+ *
+ * - `offered`：交出去了，等对方定（主人还是 `from`）；
+ * - `accepted`：对方接下了（主人换成 `to`，`from` 变参与者）；
+ * - `declined`：对方不接，退回 `from`（`reason` 可选）；
+ * - `returned`：没人理，过了 `expires_at` 自动退回 `from`（决策 241，默认 3 天）；
+ * - `withdrawn`：`from` 自己撤回了。
+ *
+ * 只有 `offered` 是悬着的；其余四种都是结果，`seen` 记 `from` 看过这条结果没有
+ * （首页那一行通知点 × 之后就不再出）。
+ */
+export type HandoffState = 'offered' | 'accepted' | 'declined' | 'returned' | 'withdrawn'
+
+export interface Handoff {
+  state: HandoffState
+  /** 交出去的人（发起时的主人）。 */
+  from: PersonId
+  /** 交给谁。 */
+  to: PersonId
+  /** 什么时候交的。 */
+  at: Iso8601
+  /** 发起人写的一句话（可选，最多 200 字）。 */
+  note?: string
+  /** 到这一刻还没人理就自动退回。 */
+  expires_at: Iso8601
+  /** 对方收到的那张卡（`claim` 类，`form: 'handoff'`）。 */
+  card_id?: string
+  /** 有结果的时刻（接下 / 不接 / 退回 / 撤回）。 */
+  decided_at?: Iso8601
+  /** 不接时的理由（可选）。 */
+  reason?: string
+  /** 接下时用的是接手人哪条分配（之后的运行用它的职责规矩、模型设置，用量记接手人）。 */
+  position_id?: AssignmentId
+  /** 接下时跟着走的未定卡片几张（决策 242）。 */
+  cards_moved?: number
+  /** 发起人看过这条结果没有（首页通知点掉之后为真）。 */
+  seen?: boolean
+}
+
+/** WP276（决策 241）：交出去没人理几天自动退回（「设置 → 通用」可调 1–14 天）。 */
+export const DEFAULT_HANDOFF_RETURN_DAYS = 3
+export const MIN_HANDOFF_RETURN_DAYS = 1
+export const MAX_HANDOFF_RETURN_DAYS = 14
 
 /** WP207：自动归档的默认天数（「设置 → 通用」可调 1–30 天或不自动归档）。 */
 export const DEFAULT_ARCHIVE_IDLE_DAYS = 3
@@ -245,6 +295,8 @@ export const MAX_ARCHIVE_IDLE_DAYS = 30
 /** WP207：自动归档设置。`idle_days: null` = 不自动归档。 */
 export interface WorkArchiveSettings {
   idle_days: number | null
+  /** WP276（决策 241）：交给对方没人理几天自动退回；老数据没有这一格 = 默认 3 天。 */
+  handoff_days?: number
 }
 
 /**
@@ -403,6 +455,8 @@ export interface Todo {
   created_at: Iso8601
   updated_at: Iso8601
   closed_at?: Iso8601
+  /** WP276（docs/95 §4）：交给对方（见 {@link Handoff}）；老待办没有这一格。 */
+  handoff?: Handoff
 }
 
 // ── 日历（37 §2 表 + C3）───────────────────────────────────────────────

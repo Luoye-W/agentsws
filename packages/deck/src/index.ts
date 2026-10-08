@@ -33,6 +33,7 @@ export {
 } from './blocks.js'
 export {
   DEFAULT_SNOOZE_MS,
+  HANDOFF_DECLINE_NO_REASON,
   INSTRUCTION_SCOPES,
   type ResolveOptions,
   resolveDecision,
@@ -63,6 +64,7 @@ export {
   estimatedMinutes,
   evidenceChipsOf,
   highlightsOf,
+  isHandoffItem,
   isOwnSubModerationItem,
   isRouteChoiceItem,
   MAX_ENTITY_CHIPS,

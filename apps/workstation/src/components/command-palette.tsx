@@ -22,7 +22,7 @@ import type { DeckCard, TileSpec } from '@agentsws/deck'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Archive, Sparkles } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { useBrands } from '@/components/brand-switcher'
 import type { ComposeTarget, Handoff } from '@/components/palette-context'
 import { useRailState } from '@/components/rail/rail-state'
@@ -51,6 +51,7 @@ import { useApp } from '@/lib/app-context'
 import { handoffInput, TASK_TEXT_MAX } from '@/lib/handoff'
 import { HELP_SLUGS, helpAddress } from '@/lib/help'
 import { translate } from '@/lib/i18n'
+import { useMode } from '@/lib/mode'
 import { myAssignments } from '@/lib/positions'
 import { findArchivedWork, RAIL_KEY, searchWork } from '@/lib/work-archive'
 
@@ -86,6 +87,10 @@ export function CommandPalette({
 }): React.ReactNode {
   const { t, lang, position } = useApp()
   const navigate = useNavigate()
+  // WP276：在一件事里打开 ⌘K 时，多一条「把这件事交给同事…」（② 才有）
+  const here = useLocation()
+  const { mode: usage } = useMode()
+  const matterHere = /^\/matters\/([^/?#]+)/.exec(here.pathname)?.[1]
   const rail = useRailState()
   // 岗位面装着就按岗位列（岗位在前、职责跟在后面）；没装退回按分配列
   const byPosition = (instances ?? []).filter((p) => myAssignments(p).length > 0)
@@ -356,6 +361,17 @@ export function CommandPalette({
             </CommandGroup>
           )}
           <CommandGroup heading={t('command.group.go')}>
+            {usage === 'solo' || matterHere === undefined ? null : (
+              <CommandItem
+                value={`${t('palette.handoff')} handoff`}
+                data-testid="command-handoff"
+                onSelect={() => {
+                  go(`/matters/${matterHere}?handoff=1`)
+                }}
+              >
+                {t('palette.handoff')}
+              </CommandItem>
+            )}
             {/* WP188：⌘K 里开一段新的随便聊 */}
             <CommandItem
               value={`${t('command.new_chat')} ${t('nav.free_chat')} new chat`}

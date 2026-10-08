@@ -16,6 +16,19 @@
 import { DeckError } from './errors.js'
 import type { DeckCard, DeckDecideInput, InstructionScope, ResolvedDecision } from './types.js'
 
+/** WP276：交给你的那张卡点「不接」没写理由时记的那一句（服务端认它 = 没写理由）。 */
+export const HANDOFF_DECLINE_NO_REASON = '不接'
+
+function isHandoffCard(card: DeckCard): boolean {
+  const p = card.detail.payload
+  return (
+    card.kind === 'claim' &&
+    typeof p === 'object' &&
+    p !== null &&
+    (p as { form?: unknown }).form === 'handoff'
+  )
+}
+
 export const INSTRUCTION_SCOPES: readonly InstructionScope[] = [
   'single_reply',
   'similar_cases',
@@ -95,6 +108,10 @@ export function resolveDecision(
     }
     case 'reject': {
       const reason = input.instruction?.text ?? input.reason
+      // WP276（docs/95 §4.3 第 4b 步）：交给你的那张卡「不接」理由可以不写
+      if ((reason === undefined || reason.trim() === '') && isHandoffCard(card)) {
+        return { action: 'reject', reason: HANDOFF_DECLINE_NO_REASON }
+      }
       if (reason === undefined || reason.trim() === '') {
         throw new DeckError('REASON_REQUIRED', '14 §4：驳回必须写原因（它是最强的学习信号）')
       }

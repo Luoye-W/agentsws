@@ -13,6 +13,7 @@ import { MATTER_EN, MATTER_ZH } from './i18n-matter'
 import { MODE_EN, MODE_ZH } from './i18n-mode'
 import { NPM_REGISTRY_EN, NPM_REGISTRY_ZH } from './i18n-npm-registry'
 import { OWN_SUB_EN, OWN_SUB_ZH } from './i18n-own-sub'
+import { PEERS_EN, PEERS_ZH } from './i18n-peers'
 import { POSITION_EN, POSITION_ZH } from './i18n-position'
 import { READ_ROUTES_EN, READ_ROUTES_ZH } from './i18n-read-routes'
 import { SHOP_ADMIN_EN, SHOP_ADMIN_ZH } from './i18n-shop-admin'
@@ -7979,6 +7980,8 @@ const TABLES: Record<Lang, Table> = {
     ...IMAGES_ZH,
     // WP271：三种模式的换词（`key@solo` / `key@peers`，`useMode().t` 先找它）
     ...MODE_ZH,
+    // WP276：② 同事互联（交给对方、团队页同事、和同事一起用）
+    ...PEERS_ZH,
   },
   en: {
     ...en,
@@ -7998,6 +8001,7 @@ const TABLES: Record<Lang, Table> = {
     ...SHOP_ADMIN_EN,
     ...IMAGES_EN,
     ...MODE_EN,
+    ...PEERS_EN,
   },
 }
 

@@ -55,6 +55,7 @@ import {
   testConnection,
 } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
+import { useMode } from '@/lib/mode'
 
 /** OAuth 轮询：2 秒一次，最多 5 分钟。 */
 const POLL_MS = 2000
@@ -93,24 +94,30 @@ export function ConnectionsPage(): React.ReactNode {
   // 所有者那条，而不是跟着左栏当前选中的岗位走。
   const positions = useQuery({ queryKey: ['positions'], queryFn: getPositions })
   const ownerId = positions.data?.positions.find((p) => p.role_id === 'common.owner')?.position_id
-  const ready = positions.data !== undefined && ownerId !== undefined
+  /**
+   * WP276（docs/95 §2.1）：② 同事互联里每个人都能进连接页、接自己的连接（谁接的谁管）——
+   * 没有所有者那条就用自己任意一条分配。插件配对、取数路线、数据后端这些家务仍只给发起人。
+   */
+  const { mode, t: tm } = useMode()
+  const asId = ownerId ?? (mode === 'peers' ? positions.data?.positions[0]?.position_id : undefined)
+  const ready = positions.data !== undefined && asId !== undefined
 
   const runtime = useQuery({
-    queryKey: ['connect-runtime', ownerId],
+    queryKey: ['connect-runtime', asId],
     enabled: ready,
-    queryFn: () => getConnectRuntime(ownerId),
+    queryFn: () => getConnectRuntime(asId),
     // WP247：连接器下载中 / 启动中时 1.5 秒问一次（进度条要动、起来了要马上变绿）
     refetchInterval: (q) => (localBusy(q.state.data) ? 1500 : false),
   })
   const providers = useQuery({
-    queryKey: ['connect-providers', ownerId],
+    queryKey: ['connect-providers', asId],
     enabled: ready,
-    queryFn: () => listProviders(ownerId),
+    queryFn: () => listProviders(asId),
   })
   const connections = useQuery({
-    queryKey: ['connections', ownerId],
+    queryKey: ['connections', asId],
     enabled: ready,
-    queryFn: () => listConnections(ownerId),
+    queryFn: () => listConnections(asId),
   })
 
   const refresh = useCallback((): void => {
@@ -137,7 +144,7 @@ export function ConnectionsPage(): React.ReactNode {
       const tick = async (): Promise<void> => {
         tries += 1
         try {
-          const outcome = await pollConnectRequest(request_id, ownerId)
+          const outcome = await pollConnectRequest(request_id, asId)
           if (outcome.status === 'connected') {
             setWizard(null)
             refresh()
@@ -167,7 +174,7 @@ export function ConnectionsPage(): React.ReactNode {
       }
       pollTimer.current = setTimeout(() => void tick(), POLL_MS)
     },
-    [ownerId, refresh, t],
+    [asId, refresh, t],
   )
 
   const begin = useMutation({
@@ -175,7 +182,7 @@ export function ConnectionsPage(): React.ReactNode {
       beginConnect(
         input.service,
         input.auth_option === undefined ? {} : { auth_option: input.auth_option },
-        ownerId,
+        asId,
       ),
     onSuccess: (result, { service, auth_option }) => {
       if (result.authorization_url !== undefined) {
@@ -224,7 +231,7 @@ export function ConnectionsPage(): React.ReactNode {
           ...(input.request_id === undefined ? {} : { request_id: input.request_id }),
           ...(input.auth_option === undefined ? {} : { auth_option: input.auth_option }),
         },
-        ownerId,
+        asId,
       ),
     onSuccess: (outcome, input) => {
       setResults((prev) => ({ ...prev, [input.service]: outcome.test }))
@@ -243,7 +250,7 @@ export function ConnectionsPage(): React.ReactNode {
 
   // WP247：连接器刚变成就绪 → 卡上的「先下载」标记跟着变；等着的那一张接着连（只接一次）
   const localStatus = runtime.data?.local?.status
-  const localConnector = useLocalConnectorAction(ownerId)
+  const localConnector = useLocalConnectorAction(asId)
   const lastLocal = useRef(localStatus)
   useEffect(() => {
     if (lastLocal.current !== localStatus && localStatus === 'ready')
@@ -264,7 +271,7 @@ export function ConnectionsPage(): React.ReactNode {
   }, [localStatus, pendingConnect])
 
   const runTest = useMutation({
-    mutationFn: (id: string) => testConnection(id, ownerId),
+    mutationFn: (id: string) => testConnection(id, asId),
     onSettled: () => {
       setBusyId(null)
       void client.invalidateQueries({ queryKey: ['connections'] })
@@ -272,7 +279,7 @@ export function ConnectionsPage(): React.ReactNode {
   })
 
   const disconnect = useMutation({
-    mutationFn: (id: string) => removeConnection(id, ownerId),
+    mutationFn: (id: string) => removeConnection(id, asId),
     onSettled: () => {
       setBusyId(null)
       refresh()
@@ -284,7 +291,7 @@ export function ConnectionsPage(): React.ReactNode {
     // 不是所有者：老实说清楚，而不是给一页 403
     return (
       <p className="text-sm text-muted-foreground" data-testid="connections-not-owner">
-        {t('connections.owner_only')}
+        {tm('connections.owner_only')}
       </p>
     )
   }
@@ -308,10 +315,7 @@ export function ConnectionsPage(): React.ReactNode {
       </header>
 
       {runtime.data === undefined ? null : (
-        <RuntimeBar
-          status={runtime.data}
-          {...(ownerId === undefined ? {} : { assignment: ownerId })}
-        />
+        <RuntimeBar status={runtime.data} {...(asId === undefined ? {} : { assignment: asId })} />
       )}
       <DownloadConfirm
         open={pendingConnect?.confirm === true}
@@ -351,7 +355,7 @@ export function ConnectionsPage(): React.ReactNode {
                   setBusyId({ id: c.id, kind: 'remove' })
                   disconnect.mutate(c.id)
                 }}
-                assignment={ownerId}
+                assignment={asId}
               />
             ))}
           </ul>
@@ -362,13 +366,13 @@ export function ConnectionsPage(): React.ReactNode {
         WP216：建站平台的官方 CLI（Shopify 品牌才有；别的平台服务端回 kit: null，这里什么都不画）。
         排在已连接下面：它和「已连接」是同一类问题——这台电脑上的工具接好了没有。
       */}
-      <PlatformCliCard {...(ownerId === undefined ? {} : { assignment: ownerId })} />
+      {ownerId === undefined ? null : <PlatformCliCard assignment={asId} />}
 
       {/*
         WP83（54 §4）：目录二十多条，多数人一辈子只连三四个——所以它默认收起、
         带搜索、按分类分组，而不是铺在首屏把已连的那几条挤下去。
       */}
-      <ConnectionDirectorySection {...(ownerId === undefined ? {} : { assignment: ownerId })} />
+      <ConnectionDirectorySection {...(asId === undefined ? {} : { assignment: asId })} />
 
       <section className="flex flex-col gap-2">
         {/* WP210：安全承诺（密码只输在对方网站上 / 表单不经 AI）在这里说一次，卡上一句不留 */}
@@ -386,13 +390,13 @@ export function ConnectionsPage(): React.ReactNode {
               phase={wizard?.service === p.service ? wizard.phase : 'idle'}
               fields={wizard?.service === p.service ? wizard.fields : undefined}
               result={results[p.service]}
-              assignment={ownerId}
+              assignment={asId}
               oauthUrl={wizard?.service === p.service ? wizard.authorization_url : undefined}
               {...(p.service === 'shopify_admin'
                 ? {
                     oneClick: (
                       <ShopifyConnect
-                        {...(ownerId === undefined ? {} : { assignment: ownerId })}
+                        {...(asId === undefined ? {} : { assignment: asId })}
                         onChanged={refresh}
                       />
                     ),
@@ -446,16 +450,16 @@ export function ConnectionsPage(): React.ReactNode {
       </section>
 
       {/* WP155（docs/81）：SEO / GEO 用的搜索数据从哪来 */}
-      <SearchDataSection {...(ownerId === undefined ? {} : { assignment: ownerId })} />
+      {ownerId === undefined ? null : <SearchDataSection assignment={asId} />}
 
       {/* WP246（决策 87 / 88）：取数路线——每个平台首选 → 备选、每级通不通、Reddit 读号 */}
-      <ReadRoutesSection {...(ownerId === undefined ? {} : { assignment: ownerId })} />
+      {ownerId === undefined ? null : <ReadRoutesSection assignment={asId} />}
 
       {/* WP119（68）：浏览器插件——6 位配对码 + 已配上的那几个浏览器 */}
-      <BrowserExtensionSection {...(ownerId === undefined ? {} : { assignment: ownerId })} />
+      {ownerId === undefined ? null : <BrowserExtensionSection assignment={asId} />}
 
       {/* WP40 / 41 §2.4：数据后端三档（本地 / 接我的云 / 托管）+ 迁移向导 */}
-      <DataBackend {...(ownerId === undefined ? {} : { assignment: ownerId })} />
+      {ownerId === undefined ? null : <DataBackend assignment={asId} />}
     </div>
   )
 }

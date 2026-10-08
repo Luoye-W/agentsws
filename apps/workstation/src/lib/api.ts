@@ -983,6 +983,8 @@ export interface ClaimPoolItem {
   similar_to: string[]
   /** 这条是转交给我的，不是池里的公共项 */
   offered_by?: string
+  /** WP276：交给我的那个人的名字（服务端补；不印 id） */
+  offered_by_label?: string
 }
 
 /** 「正在进行」的一条。 */
@@ -3712,6 +3714,8 @@ export interface MembershipRequestView {
   status: 'pending' | 'approved' | 'rejected' | 'superseded'
   created_at: string
   decided_at?: string
+  /** WP276：谁同意 / 拒绝的（② 里任何一位同事都能定） */
+  decided_by?: string
   superseded_reason?: string
   approval_item_id?: string
 }

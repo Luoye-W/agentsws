@@ -24,6 +24,7 @@ import type {
   GoalFilter,
   GoalId,
   GoalProgress,
+  Handoff,
   Iso8601,
   KnownEventType,
   Matter,
@@ -82,6 +83,15 @@ import {
 } from './collision.js'
 import { notFound, WorkError } from './errors.js'
 import { goalProgress, goalProgressAll, type QueryRunner } from './goals.js'
+import {
+  type HandoffItem,
+  type HandoffRef,
+  handoffExpired,
+  handoffNoticeDue,
+  isHandoffPending,
+  newHandoff,
+  settleHandoff,
+} from './handoff.js'
 import { isOpen, resolveHorizon } from './horizon.js'
 import { type DailyPlanInput, draftDailyPlanWithFilter, type FilteredSuggestion } from './plan.js'
 import { MemoryWorkStore } from './store.js'
@@ -228,6 +238,8 @@ export interface CheckedTodoInput extends CreateTodoInput {
   collision_target?: string | undefined
   /** `force` 必须写一句区别 */
   distinct_reason?: string | undefined
+  /** WP276：`handoff` 时几天没人理退回（不给 = 默认 3 天） */
+  handoff_days?: number | undefined
 }
 
 export interface CheckedTodoResult {
@@ -571,8 +583,14 @@ export class Work {
       text: string
       /** WP237：交给运行的那段话（不给 = 就是 `text`）。刚定下职责时要把原来那件事一起带上。 */
       brief?: string
+      /**
+       * WP276（docs/95 §4.3 第 4a 步）：这一次运行用谁的分配起（不给 = 说话的人自己那条）。
+       * 交接过的事项里参与者说一句，运行仍用接手人的职责规矩、模型设置，用量记接手人。
+       */
+      run_by?: { person_id: PersonId; assignment_id: AssignmentId }
     },
   ): Promise<{ event: MatterEvent; run_id?: RunId }> {
+    this.assertNotHandingOff(this.requireMatter(matter_id))
     // WP264（决策 183）：已关闭的事项输入框还在，说一句就重新打开（待办不动，关的时候怎么处理的就怎么留着）
     const matter = this.reopen(this.requireMatter(matter_id))
     const event = this.appendEvent(matter_id, {
@@ -588,15 +606,19 @@ export class Work {
       { matter_event_id: event.id, kind: 'human_message', chars: input.text.length },
     )
     if (this.startRunFn === undefined) return { event }
+    const runner = input.run_by ?? {
+      person_id: input.person_id,
+      assignment_id: input.assignment_id,
+    }
     const { run_id } = await this.startRunFn({
       matter,
       brief: input.brief ?? input.text,
-      actor: { person_id: input.person_id, assignment_id: input.assignment_id },
+      actor: runner,
     })
     this.appendEvent(matter_id, {
       kind: 'run',
       text: 'Agent 接着这个事项跑了一次',
-      actor: { kind: 'agent', id: input.assignment_id },
+      actor: { kind: 'agent', id: runner.assignment_id },
       run_id,
     })
     return { event, run_id }
@@ -620,6 +642,7 @@ export class Work {
     input: { person_id: PersonId; assignment_id: AssignmentId; brief: string; text?: string },
   ): Promise<{ run_id?: RunId }> {
     const matter = this.requireMatter(matter_id)
+    this.assertNotHandingOff(matter)
     if (this.startRunFn === undefined) return {}
     const { run_id } = await this.startRunFn({
       matter,
@@ -1372,15 +1395,37 @@ export class Work {
         ...base,
         ...(matter_id === undefined ? {} : { matter_id }),
       })
-      const next = this.putClaim(todo, {
-        state: 'offered',
-        collaborators: [],
-        recycled: 0,
-        offered_to: target.owner,
-        offered_by: input.owner,
-        offered_at: at,
-        similar_to: [target.id],
+      // WP276：「交给他」也是一次交给对方（他能接下或不接、到点退回）
+      const handoff = newHandoff({
+        from: input.owner,
+        to: target.owner,
+        at,
+        days: input.handoff_days,
       })
+      const next = this.putClaim(
+        { ...todo, handoff },
+        {
+          state: 'offered',
+          collaborators: [],
+          recycled: 0,
+          offered_to: target.owner,
+          offered_by: input.owner,
+          offered_at: at,
+          similar_to: [target.id],
+        },
+      )
+      this.emit(
+        'handoff.offered',
+        { type: 'todo', id: todo.id },
+        { kind: 'person', id: input.owner },
+        {
+          object: 'todo',
+          from: input.owner,
+          to: target.owner,
+          expires_at: handoff.expires_at,
+          reason: 'collision_handoff',
+        },
+      )
       this.emit(
         'todo.transferred',
         { type: 'todo', id: todo.id },
@@ -1549,6 +1594,12 @@ export class Work {
    */
   claimTodo(id: TodoId, person: PersonId, options: { position_id?: PositionId } = {}): Todo {
     const todo = this.requireTodo(id)
+    // WP276：交给他的那一条，「我来」就是「接下」（同一个结果，记成交接的结论）
+    if (isHandoffPending(todo.handoff) && todo.handoff.to === person)
+      return this.acceptHandoff(
+        { kind: 'todo', id },
+        { person, position_id: options.position_id },
+      ) as Todo
     const c = claimOf(todo)
     if (c.state === 'claimed')
       throw new WorkError('conflict', `这条已经有人在做了`, {
@@ -1601,30 +1652,35 @@ export class Work {
    * 转交：交出去，但**对方接下之前不形成责任**（31 I13）——所以先落成 `offered`，
    * 主人还是原来那个，等对方 {@link claimTodo} 才真换人。
    */
-  transferTodo(id: TodoId, input: { to: PersonId; by: PersonId }): Todo {
+  transferTodo(
+    id: TodoId,
+    input: {
+      to: PersonId
+      by: PersonId
+      /** WP276：一句留言 / 几天没人理退回 / 时间线上写名字。 */
+      note?: string | undefined
+      days?: number | undefined
+      label?: ((id: PersonId) => string) | undefined
+    },
+  ): Todo {
     const todo = this.requireTodo(id)
-    const c = claimOf(todo)
     if (todo.owner !== input.by)
       throw new WorkError('forbidden', '只有主人能把这条转交出去', {
         reason: 'not_owner',
         owner: todo.owner,
       })
     if (input.to === todo.owner) return todo
-    const at = this.now()
-    const next = this.putClaim(todo, {
-      ...c,
-      state: 'offered',
-      offered_to: input.to,
-      offered_by: input.by,
-      offered_at: at,
-    })
-    if (todo.matter_id !== undefined)
-      this.appendEvent(todo.matter_id, {
-        kind: 'todo',
-        text: `「${todo.title}」交给 ${input.to}，等他接`,
-        actor: { kind: 'person', id: input.by },
-        todo_id: todo.id,
-      })
+    // WP276：转交就是「交给对方」的待办那一种（带留言、到点退回、对方能不接）
+    const next = this.offer(
+      { kind: 'todo', id },
+      {
+        from: input.by,
+        to: input.to,
+        note: input.note,
+        days: input.days,
+        label: input.label,
+      },
+    ) as Todo
     this.emit(
       'todo.transferred',
       { type: 'todo', id: todo.id },
@@ -1748,6 +1804,425 @@ export class Work {
       last = e.at
     }
     return last
+  }
+
+  // ── 交给对方（WP276，docs/95 §4.3，决策 241 / 242）────────────────────
+
+  /** 交出去、对方还没定的事项：AI 不接新活（已经在跑的跑完）。 */
+  private assertNotHandingOff(matter: Matter): void {
+    const h = matter.handoff
+    if (isHandoffPending(h))
+      throw new WorkError('conflict', '这件事正在交给同事，对方接下或退回之前先不接新活', {
+        reason: 'handoff_pending',
+        to: h.to,
+      })
+  }
+
+  /** 一次交接现在的样子（对象不存在就抛 not_found）。 */
+  handoffOf(ref: HandoffRef): Handoff | undefined {
+    return ref.kind === 'matter'
+      ? this.requireMatter(ref.id).handoff
+      : this.requireTodo(ref.id).handoff
+  }
+
+  /**
+   * 交出去：**主人不变**，等对方点「接下」（31 I13）。事项的主人是参与者第一位，待办的是 `owner`；
+   * 只有主人能交。已经在交的不能再交一次（先撤回）。
+   */
+  offer(
+    ref: HandoffRef,
+    input: {
+      from: PersonId
+      to: PersonId
+      note?: string | undefined
+      /** 几天没人理退回（不给 = 默认 3 天）。 */
+      days?: number | undefined
+      /** 人名（时间线上写名字不写 id）；不给就写 id。 */
+      label?: ((id: PersonId) => string) | undefined
+    },
+  ): Matter | Todo {
+    const name = (p: PersonId): string => input.label?.(p) ?? p
+    if (input.to === input.from)
+      throw new WorkError('invalid_input', '不能交给自己', { reason: 'self' })
+    const at = this.now()
+    const handoff = newHandoff({
+      from: input.from,
+      to: input.to,
+      at,
+      note: input.note,
+      days: input.days,
+    })
+    if (ref.kind === 'matter') {
+      const matter = this.requireMatter(ref.id)
+      const owner = matter.context.participants[0]
+      if (owner !== input.from)
+        throw new WorkError('forbidden', '只有正在做这件事的人能把它交出去', {
+          reason: 'not_owner',
+          ...(owner === undefined ? {} : { owner }),
+        })
+      if (matter.status === 'closed')
+        throw new WorkError('conflict', '这件事已经关了，交不出去', { reason: 'closed' })
+      if (isHandoffPending(matter.handoff))
+        throw new WorkError('conflict', '这件事已经在交了，先撤回再交给别人', {
+          reason: 'already_offered',
+          to: matter.handoff.to,
+        })
+      this.store.putMatter({ ...withoutArchive(matter), handoff, updated_at: at })
+      this.appendEvent(ref.id, {
+        kind: 'status',
+        text: `交给 ${name(input.to)}，等他接`,
+        actor: { kind: 'person', id: input.from },
+        at,
+      })
+    } else {
+      const todo = this.requireTodo(ref.id)
+      if (todo.owner !== input.from)
+        throw new WorkError('forbidden', '只有主人能把这条交出去', {
+          reason: 'not_owner',
+          owner: todo.owner,
+        })
+      if (!isOpen(todo))
+        throw new WorkError('conflict', '这条已经结了，交不出去', { reason: 'closed' })
+      if (isHandoffPending(todo.handoff))
+        throw new WorkError('conflict', '这条已经在交了，先撤回再交给别人', {
+          reason: 'already_offered',
+          to: todo.handoff.to,
+        })
+      const c = claimOf(todo)
+      this.putClaim(
+        { ...todo, handoff },
+        {
+          ...c,
+          state: 'offered',
+          offered_to: input.to,
+          offered_by: input.from,
+          offered_at: at,
+        },
+      )
+      if (todo.matter_id !== undefined && this.store.getMatter(todo.matter_id) !== undefined)
+        this.appendEvent(todo.matter_id, {
+          kind: 'todo',
+          text: `「${todo.title}」交给 ${name(input.to)}，等他接`,
+          actor: { kind: 'person', id: input.from },
+          todo_id: todo.id,
+          at,
+        })
+    }
+    this.emit(
+      'handoff.offered',
+      { type: ref.kind, id: ref.id },
+      { kind: 'person', id: input.from },
+      { object: ref.kind, from: input.from, to: input.to, expires_at: handoff.expires_at },
+    )
+    return this.objectOf(ref)
+  }
+
+  /** 卡出好了，记一下是哪张（撤回 / 退回时要把它收掉）。 */
+  attachHandoffCard(ref: HandoffRef, card_id: string): void {
+    this.patchHandoff(ref, (h) => ({ ...h, card_id }))
+  }
+
+  /**
+   * 接下：主人换成接手人；之后起的运行用他选的那条分配（职责规矩、模型设置、用量都算他的）。
+   * 事项上发起人的未完待办跟着走；发起人留在参与者里（能看进度、能留言）。
+   */
+  acceptHandoff(
+    ref: HandoffRef,
+    input: {
+      person: PersonId
+      /** 接手人用哪条分配做（只有一个岗位时宿主直接给那一条）。 */
+      position_id?: AssignmentId | undefined
+      /** 事项：这条分配对应哪条职责、哪个岗位。 */
+      role_id?: Matter['role_id'] | undefined
+      position_template_id?: Matter['position_template_id'] | undefined
+      /** 跟着事走过来的未定卡几张（宿主改派完再告诉这里，只为留痕）。 */
+      cards_moved?: number | undefined
+      label?: ((id: PersonId) => string) | undefined
+    },
+  ): Matter | Todo {
+    const name = (p: PersonId): string => input.label?.(p) ?? p
+    const h = this.pendingFor(ref, input.person)
+    const at = this.now()
+    const settled = settleHandoff(h, 'accepted', at, {
+      position_id: input.position_id,
+      ...(input.cards_moved === undefined ? {} : { cards_moved: input.cards_moved }),
+    })
+    if (ref.kind === 'matter') {
+      const matter = this.requireMatter(ref.id)
+      const rest = matter.context.participants.filter((p) => p !== h.to)
+      const participants = [h.to, ...(rest.includes(h.from) ? rest : [...rest, h.from])]
+      this.store.putMatter({
+        ...matter,
+        ...(input.position_id === undefined ? {} : { position_id: input.position_id }),
+        ...(input.role_id === undefined ? {} : { role_id: input.role_id }),
+        ...(input.position_template_id === undefined
+          ? {}
+          : { position_template_id: input.position_template_id }),
+        handoff: settled,
+        updated_at: at,
+        context: { ...matter.context, participants },
+      })
+      // 这件事上发起人的未完待办跟着走（承诺挂在事项上，主人换了它也该换）
+      for (const todo of this.store.listTodos({
+        workspace_id: this.workspace_id,
+        matter_id: ref.id,
+        owner: h.from,
+        status: ['open', 'doing', 'blocked'],
+      })) {
+        if (isHandoffPending(todo.handoff)) continue
+        this.putClaim(
+          {
+            ...todo,
+            owner: h.to,
+            ...(input.position_id === undefined ? {} : { position_id: input.position_id }),
+          },
+          { ...this.claimedBy(todo, h.to, at) },
+        )
+      }
+      this.appendEvent(ref.id, {
+        kind: 'status',
+        text: `${name(h.to)} 接下了`,
+        actor: { kind: 'person', id: h.to },
+        at,
+      })
+    } else {
+      const todo = this.requireTodo(ref.id)
+      this.putClaim(
+        {
+          ...todo,
+          owner: h.to,
+          handoff: settled,
+          ...(input.position_id === undefined ? {} : { position_id: input.position_id }),
+        },
+        this.claimedBy(todo, h.to, at),
+      )
+      if (todo.matter_id !== undefined && this.store.getMatter(todo.matter_id) !== undefined) {
+        this.addParticipant(todo.matter_id, h.to)
+        this.appendEvent(todo.matter_id, {
+          kind: 'todo',
+          text: `「${todo.title}」${name(h.to)} 接下了`,
+          actor: { kind: 'person', id: h.to },
+          todo_id: todo.id,
+          at,
+        })
+      }
+    }
+    this.emit(
+      'handoff.accepted',
+      { type: ref.kind, id: ref.id },
+      { kind: 'person', id: h.to },
+      {
+        object: ref.kind,
+        from: h.from,
+        to: h.to,
+        ...(input.cards_moved === undefined ? {} : { cards_moved: input.cards_moved }),
+      },
+    )
+    return this.objectOf(ref)
+  }
+
+  /** 不接：退回发起人，一句可选的理由（理由只进时间线与这条交接，不进事件日志）。 */
+  declineHandoff(
+    ref: HandoffRef,
+    input: {
+      person: PersonId
+      reason?: string | undefined
+      label?: ((id: PersonId) => string) | undefined
+    },
+  ): Matter | Todo {
+    const name = (p: PersonId): string => input.label?.(p) ?? p
+    const h = this.pendingFor(ref, input.person)
+    const why = input.reason?.trim()
+    return this.endHandoff(ref, settleHandoff(h, 'declined', this.now(), { reason: why }), {
+      text: `${name(h.to)} 没接${why === undefined || why === '' ? '' : `：${why}`}`,
+      actor: { kind: 'person', id: h.to },
+      event: 'handoff.declined',
+    })
+  }
+
+  /** 撤回：只有发起人能撤，对方那张卡由宿主收掉。 */
+  withdrawHandoff(ref: HandoffRef, input: { by: PersonId }): Matter | Todo {
+    const h = this.handoffOf(ref)
+    if (!isHandoffPending(h))
+      throw new WorkError('conflict', '这件事没在交，不用撤回', { reason: 'not_offered' })
+    if (h.from !== input.by)
+      throw new WorkError('forbidden', '只有交出去的人能撤回', { reason: 'not_offerer' })
+    return this.endHandoff(ref, settleHandoff(h, 'withdrawn', this.now()), {
+      text: '撤回了，没交出去',
+      actor: { kind: 'person', id: input.by },
+      event: 'handoff.withdrawn',
+    })
+  }
+
+  /**
+   * 到点没人理的自动退回发起人（决策 241）。由宿主在读首页 / 待办 / 事项时与每天巡检时叫。
+   * 回退回了哪几件（宿主据此把对方那张卡收掉）。
+   */
+  expireHandoffs(label?: (id: PersonId) => string): { ref: HandoffRef; handoff: Handoff }[] {
+    const now = this.now()
+    const out: { ref: HandoffRef; handoff: Handoff }[] = []
+    const name = (p: PersonId): string => label?.(p) ?? p
+    for (const m of this.listMatters({ status: ['open', 'waiting'] })) {
+      const h = m.handoff
+      if (h === undefined || !handoffExpired(h, now)) continue
+      const ref: HandoffRef = { kind: 'matter', id: m.id }
+      this.endHandoff(ref, settleHandoff(h, 'returned', now), {
+        text: `${name(h.to)} 一直没接，自动退回给 ${name(h.from)}`,
+        actor: { kind: 'system', id: 'work.handoff' },
+        event: 'handoff.returned',
+      })
+      out.push({ ref, handoff: h })
+    }
+    for (const t of this.listTodos({ status: ['open', 'doing', 'blocked'] })) {
+      const h = t.handoff
+      if (h === undefined || !handoffExpired(h, now)) continue
+      const ref: HandoffRef = { kind: 'todo', id: t.id }
+      this.endHandoff(ref, settleHandoff(h, 'returned', now), {
+        text: `「${t.title}」${name(h.to)} 一直没接，自动退回给 ${name(h.from)}`,
+        actor: { kind: 'system', id: 'work.handoff' },
+        event: 'handoff.returned',
+      })
+      out.push({ ref, handoff: h })
+    }
+    return out
+  }
+
+  /** 交给这个人、还等他定的（他那边是一张卡）。 */
+  handoffsTo(person: PersonId): HandoffItem[] {
+    return this.handoffItems().filter(
+      (i) => i.handoff.state === 'offered' && i.handoff.to === person,
+    )
+  }
+
+  /**
+   * 这个人交出去的：还在等的 + 有了结果他还没看过的（首页那一行通知）。
+   * `all: true` 时连看过的、已接下的历史一起回（待办里「我交出去的」那一栏）。
+   */
+  handoffsFrom(person: PersonId, options: { all?: boolean } = {}): HandoffItem[] {
+    return this.handoffItems().filter(
+      (i) =>
+        i.handoff.from === person &&
+        (options.all === true ||
+          i.handoff.state === 'offered' ||
+          handoffNoticeDue(i.handoff, person)),
+    )
+  }
+
+  /** 发起人点掉了那一行通知。 */
+  markHandoffSeen(ref: HandoffRef, person: PersonId): void {
+    const h = this.handoffOf(ref)
+    if (h === undefined || h.from !== person || h.state === 'offered') return
+    this.patchHandoff(ref, (x) => ({ ...x, seen: true }))
+  }
+
+  private handoffItems(): HandoffItem[] {
+    const items: HandoffItem[] = []
+    for (const m of this.listMatters()) {
+      if (m.handoff === undefined) continue
+      items.push({
+        ref: { kind: 'matter', id: m.id },
+        title: m.title,
+        handoff: m.handoff,
+        matter_id: m.id,
+        summary: m.context.summary,
+        status: m.status,
+      })
+    }
+    for (const t of this.listTodos()) {
+      if (t.handoff === undefined) continue
+      items.push({
+        ref: { kind: 'todo', id: t.id },
+        title: t.title,
+        handoff: t.handoff,
+        status: t.status,
+        ...(t.matter_id === undefined ? {} : { matter_id: t.matter_id }),
+        ...(t.note === undefined ? {} : { summary: t.note }),
+        ...(t.due === undefined ? {} : { due: t.due }),
+      })
+    }
+    return items.sort((a, b) => ms(b.handoff.at) - ms(a.handoff.at))
+  }
+
+  private objectOf(ref: HandoffRef): Matter | Todo {
+    return ref.kind === 'matter' ? this.requireMatter(ref.id) : this.requireTodo(ref.id)
+  }
+
+  /** 交给这个人、还悬着的那一次（不是就抛）。 */
+  private pendingFor(ref: HandoffRef, person: PersonId): Handoff {
+    const h = this.handoffOf(ref)
+    if (!isHandoffPending(h))
+      throw new WorkError('conflict', '这件事已经不在等你接了', {
+        reason: 'not_offered',
+        ...(h === undefined ? {} : { state: h.state }),
+      })
+    if (h.to !== person)
+      throw new WorkError('forbidden', '这件事不是交给你的', { reason: 'not_offered_to_you' })
+    return h
+  }
+
+  /** 接下之后的认领状态：主人是接手人，转交那几格清掉。 */
+  private claimedBy(todo: Todo, person: PersonId, at: Iso8601): TodoClaim {
+    const c = claimOf(todo)
+    return {
+      state: 'claimed',
+      collaborators: c.collaborators.filter((p) => p !== person),
+      recycled: c.recycled,
+      claimed_at: at,
+      claimed_by: person,
+      ...(c.pooled_at === undefined ? {} : { pooled_at: c.pooled_at }),
+      ...(c.similar_to === undefined ? {} : { similar_to: c.similar_to }),
+      ...(c.distinct_reason === undefined ? {} : { distinct_reason: c.distinct_reason }),
+    }
+  }
+
+  /** 不接 / 撤回 / 退回：东西原样留在发起人手上，只是记下结果。 */
+  private endHandoff(
+    ref: HandoffRef,
+    settled: Handoff,
+    note: {
+      text: string
+      actor: MatterEvent['actor']
+      event: 'handoff.declined' | 'handoff.withdrawn' | 'handoff.returned'
+    },
+  ): Matter | Todo {
+    const at = settled.decided_at ?? this.now()
+    if (ref.kind === 'matter') {
+      const matter = this.requireMatter(ref.id)
+      this.store.putMatter({ ...matter, handoff: settled, updated_at: at })
+      this.appendEvent(ref.id, { kind: 'status', text: note.text, actor: note.actor, at })
+    } else {
+      const todo = this.requireTodo(ref.id)
+      const c = claimOf(todo)
+      const { offered_to: _t, offered_by: _b, offered_at: _a, ...rest } = c
+      this.putClaim({ ...todo, handoff: settled }, { ...rest, state: 'claimed' })
+      if (todo.matter_id !== undefined && this.store.getMatter(todo.matter_id) !== undefined)
+        this.appendEvent(todo.matter_id, {
+          kind: 'todo',
+          text: note.text,
+          actor: note.actor,
+          todo_id: todo.id,
+          at,
+        })
+    }
+    this.emit(
+      note.event,
+      { type: ref.kind, id: ref.id },
+      note.actor.kind === 'person'
+        ? { kind: 'person', id: note.actor.id }
+        : { kind: 'system', id: note.actor.id },
+      { object: ref.kind, from: settled.from, to: settled.to },
+    )
+    return this.objectOf(ref)
+  }
+
+  private patchHandoff(ref: HandoffRef, fn: (h: Handoff) => Handoff): void {
+    if (ref.kind === 'matter') {
+      const m = this.requireMatter(ref.id)
+      if (m.handoff !== undefined) this.store.putMatter({ ...m, handoff: fn(m.handoff) })
+    } else {
+      const t = this.requireTodo(ref.id)
+      if (t.handoff !== undefined) this.store.putTodo({ ...t, handoff: fn(t.handoff) })
+    }
   }
 
   // ── 目标 ────────────────────────────────────────────────────────────

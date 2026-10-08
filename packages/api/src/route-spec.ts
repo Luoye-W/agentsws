@@ -69,3 +69,20 @@ export interface Route {
 }
 
 export const route = (spec: RouteSpec, handler: RouteHandler): Route => ({ spec, handler })
+
+/**
+ * WP276（docs/95 §2.2 / §6.2，决策 237 / 243 / 274）：② 同事互联里**平级的同事也能用**的那几条——
+ * 团队页（同事、岗位、进行中、工具箱）、连接页（管自己的连接）、改共用职责的规矩、同意新人加入、
+ * 发邀请码。只在 ② 放开；① 只有一个人（本来就是发起人），③ 照旧按职责权限判。
+ *
+ * 判据只问宿主一句「这个品牌现在是不是 ②」（`deps.peerAccess`，同步）；没装配 = 不放开。
+ * 「请人离开、删品牌、搬数据」这些家务**不挂**它——只有发起人能做（决策 237）。
+ */
+export const peersBypass = (
+  _c: Context<GatewayEnv>,
+  rctx: RequestContext,
+  deps: GatewayDeps,
+): boolean => {
+  const ws = rctx.principal?.workspace_id
+  return ws !== undefined && deps.peerAccess?.(ws) === true
+}

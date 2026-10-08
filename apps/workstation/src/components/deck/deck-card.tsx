@@ -40,6 +40,11 @@ import {
 import { DeckNotePanel, DeckSupplementPanel, type NoteMode } from '@/components/deck/deck-panels'
 import { CardChips, EvidencePill, evidenceLines } from '@/components/deck/evidence-chips'
 import { GoButton, StatusPill, type Tone, WsAvatar } from '@/components/design'
+import {
+  HandoffDecide,
+  isHandoffOfferCard,
+  isPeerNoticeCard,
+} from '@/components/peers/handoff-strip'
 import { useRailState } from '@/components/rail/rail-state'
 import { Button } from '@/components/ui/button'
 import { getPositions, type RoleTaskExampleData } from '@/lib/api'
@@ -184,6 +189,12 @@ const BAND_TONE: Record<DeckCard['priority_band'], Tone> = {
  * 第十二种 kind 出现那天，卡面上说的是一句不好看的实话，而不是一句好看的错话。
  */
 export function categoryOf(card: DeckCard, t: (key: string) => string): string {
+  // WP276：「X 想把「…」交给你」——类别就叫「交给你的」
+  if (
+    card.kind === 'claim' &&
+    (card.detail.payload as { form?: unknown } | undefined)?.form === 'handoff'
+  )
+    return t('category.handoff_offer')
   // WP237：「走哪条职责」借的是认领卡的 kind，但它不是转交
   if (card.kind === 'claim' && card.layout === 'choice') return t('category.route_choice')
   // WP249：自家版的版务卡是「做之前」的（排成改动卡），不是「处置后」
@@ -255,7 +266,11 @@ export function DeckCardView({
    * WP237：「这件事该走哪条职责」——按钮就是候选职责（「走 Reddit 运营」「走 Reddit 营销」），
    * 点哪个就是选哪条、立刻开跑；不是「认领 / 不是客户问题」，也不先单选再按一个通用的「接」。
    */
-  const routeChoice = card.kind === 'claim' && isQuestion
+  /** WP276：「X 想把「…」交给你」——选项是自己的岗位 +「不接」（理由可选），不是「走哪条职责」。 */
+  const handoffOffer = isHandoffOfferCard(card)
+  /** WP276：② 改共用东西的通知——「知道了 / 撤回」直接是两个按钮（不是先选一个再点通过）。 */
+  const peerNotice = isPeerNoticeCard(card)
+  const routeChoice = (card.kind === 'claim' && isQuestion && !handoffOffer) || peerNotice
   const examples = useTaskExamples(card.role_id)
   const positionName = usePositionName(card.role_id)
   const rail = useRailState()
@@ -322,8 +337,9 @@ export function DeckCardView({
       {compare && card.kind === 'content_conflict' ? (
         <ContentConflictDialog payload={contentPayload} open onOpenChange={setCompare} />
       ) : null}
-      {/* 37 §2.2b：卡片是指向事项的指针。点它 = 进入那个工作现场。 */}
-      {card.matter_id === undefined ? null : (
+      {/* 37 §2.2b：卡片是指向事项的指针。点它 = 进入那个工作现场。
+          WP276：交给你的卡标题里已经写了是哪件事，这一行不再说一遍 */}
+      {card.matter_id === undefined || handoffOffer ? null : (
         <button
           type="button"
           data-testid="deck-matter-link"
@@ -464,6 +480,25 @@ export function DeckCardView({
               onSnooze={() => {
                 setPanel(null)
                 onDecide({ action: 'snooze', version: card.version })
+              }}
+            />
+          ) : panel === null && handoffOffer ? (
+            <HandoffDecide
+              options={card.options ?? []}
+              busy={busy === true}
+              onAccept={(option_id) => {
+                onDecide({
+                  action: 'approve',
+                  selected_option_id: option_id,
+                  version: card.version,
+                })
+              }}
+              onDecline={(reason) => {
+                onDecide({
+                  action: 'reject',
+                  version: card.version,
+                  ...(reason === undefined ? {} : { reason }),
+                })
               }}
             />
           ) : panel === null && routeChoice ? (

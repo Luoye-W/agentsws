@@ -54,6 +54,11 @@ export function quickActions(card: DeckCard): DeckAction[] {
  * 两张表都没有的（`open`）才退回服务端那份与通用动词。
  */
 export function deckActionLabel(card: DeckCard, a: DeckAction, t: (key: string) => string): string {
+  // WP276：「X 想把「…」交给你」——接下 / 不接（不是「认领 / 不是客户问题」）
+  if ((card.detail.payload as { form?: unknown } | undefined)?.form === 'handoff') {
+    if (a === 'approve') return t('handoff.accept')
+    if (a === 'reject') return t('handoff.decline')
+  }
   // WP232：收件人待定的草稿批了不发出去——按钮不能写「发送」
   const key = verbKey(
     card.layout,

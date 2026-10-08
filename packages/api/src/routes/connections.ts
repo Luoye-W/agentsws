@@ -21,7 +21,7 @@ import type { MaybePromise } from '@agentsws/contracts'
 import { z } from 'zod'
 import { ApiError } from '../errors.js'
 import { body, ok, param, principalOf } from '../helpers.js'
-import { type Route, route } from '../route-spec.js'
+import { peersBypass, type Route, route } from '../route-spec.js'
 import type { GatewayDeps } from '../types.js'
 
 /** 读连接清单：owner 的 `store_config.read@workspace`。 */
@@ -512,6 +512,8 @@ export function connectionRoutes(): Route[] {
         auth: 'bearer',
         assignment: true,
         authz: READ,
+        // WP276：② 同事互联里平级同事也能用
+        authzBypass: peersBypass,
         returns: '{ connections: ConnectionView[] }',
       },
       async (c, deps) => ok(c, { connections: await portOf(deps).list(actorOf(c)) }),
@@ -526,6 +528,8 @@ export function connectionRoutes(): Route[] {
         auth: 'bearer',
         assignment: true,
         authz: READ,
+        // WP276：② 同事互联里平级同事也能用
+        authzBypass: peersBypass,
         returns: '{ providers: ProviderView[] }',
       },
       async (c, deps) => ok(c, { providers: await portOf(deps).providers(actorOf(c)) }),
@@ -541,6 +545,8 @@ export function connectionRoutes(): Route[] {
         auth: 'bearer',
         assignment: true,
         authz: READ,
+        // WP276：② 同事互联里平级同事也能用
+        authzBypass: peersBypass,
         returns: 'RuntimeStatusView',
       },
       async (c, deps) => ok(c, await portOf(deps).runtime()),
@@ -658,6 +664,8 @@ export function connectionRoutes(): Route[] {
         auth: 'bearer',
         assignment: true,
         authz: READ,
+        // WP276：② 同事互联里平级同事也能用
+        authzBypass: peersBypass,
         params: [
           {
             name: 'email',
@@ -688,6 +696,8 @@ export function connectionRoutes(): Route[] {
         auth: 'bearer',
         assignment: true,
         authz: READ,
+        // WP276：② 同事互联里平级同事也能用
+        authzBypass: peersBypass,
         params: [
           { name: 'id', in: 'path', required: true, description: 'begin 返回的 request_id' },
         ],
@@ -705,6 +715,8 @@ export function connectionRoutes(): Route[] {
         auth: 'bearer',
         assignment: true,
         authz: WRITE,
+        // WP276：② 同事互联里平级同事也能用
+        authzBypass: peersBypass,
         params: [SERVICE_PARAM],
         body: BeginBody,
         returns: '{ request_id, authorization_url? , secure_form? }',
@@ -734,6 +746,8 @@ export function connectionRoutes(): Route[] {
         auth: 'bearer',
         assignment: true,
         authz: WRITE,
+        // WP276：② 同事互联里平级同事也能用
+        authzBypass: peersBypass,
         params: [SERVICE_PARAM],
         body: SubmitBody,
         returns: '{ connection: ConnectionView（无凭据）, test: ConnectTestResult }',
@@ -767,6 +781,8 @@ export function connectionRoutes(): Route[] {
         auth: 'bearer',
         assignment: true,
         authz: WRITE,
+        // WP276：② 同事互联里平级同事也能用
+        authzBypass: peersBypass,
         params: [ID_PARAM],
         returns: 'ConnectTestResult',
       },
@@ -822,6 +838,8 @@ export function connectionRoutes(): Route[] {
         auth: 'bearer',
         assignment: true,
         authz: READ,
+        // WP276：② 同事互联里平级同事也能用
+        authzBypass: peersBypass,
         params: [ID_PARAM],
         returns: 'MailboxSwitchesView',
       },
@@ -843,6 +861,8 @@ export function connectionRoutes(): Route[] {
         assignment: true,
         // 改的是"Agent 能不能动这只邮箱"：按写类权限判，与建 / 删连接同一档
         authz: WRITE,
+        // WP276：② 同事互联里平级同事也能用
+        authzBypass: peersBypass,
         params: [ID_PARAM],
         body: MailboxSwitchesBody,
         returns: 'MailboxSwitchesView',
@@ -873,6 +893,8 @@ export function connectionRoutes(): Route[] {
         auth: 'bearer',
         assignment: true,
         authz: WRITE,
+        // WP276：② 同事互联里平级同事也能用
+        authzBypass: peersBypass,
         params: [ID_PARAM],
         returns: '{ removed: true }',
       },

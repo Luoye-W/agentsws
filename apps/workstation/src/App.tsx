@@ -36,6 +36,7 @@ import { HomePage } from '@/pages/home'
 // WP85（54 §5）：消息渠道（微信 ClawBot / 企业微信智能机器人）
 import { ImChannelsPage } from '@/pages/im-channels'
 import { InfluencerPage } from '@/pages/influencer'
+import { JoinByCodePage } from '@/pages/join-code'
 import { KnowledgePage } from '@/pages/knowledge'
 import { LoginPage } from '@/pages/login'
 import { MatterPage } from '@/pages/matter'
@@ -61,6 +62,8 @@ export function App(): ReactNode {
     <Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route path="/invite/:token" element={<LoginPage />} />
+      {/* WP276：邀请链接就是带着码的申请（两套邀请合一） */}
+      <Route path="/join/:code" element={<JoinByCodePage />} />
       <Route path="*" element={<Workspace />} />
     </Routes>
   )

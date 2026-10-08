@@ -14,6 +14,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Bot, MoreHorizontal } from 'lucide-react'
 import { useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
+import { HandoffDialog } from '@/components/peers/handoff-dialog'
 import { Button } from '@/components/ui/button'
 import { Hint } from '@/components/ui/hint'
 import { Input } from '@/components/ui/input'
@@ -29,7 +30,9 @@ import {
   type SimilarCandidate,
   updateTodo,
 } from '@/lib/api'
+import { type HandoffView, listHandoffs, withdrawHandoff } from '@/lib/api-peers'
 import { useApp } from '@/lib/app-context'
+import { useMode } from '@/lib/mode'
 import { DAY_MS, groupByHorizon, HORIZONS, todoUrl } from '@/lib/work'
 // WP113（63 §1）：目标入口从左栏收进这一页的 tab（`/goals` 路由仍然留着）
 import { GoalsPage } from '@/pages/goals'
@@ -42,6 +45,8 @@ function TodoRow({
   onDrop,
   onPostpone,
   onDelegate,
+  onHandOff,
+  waiting,
   busy,
 }: {
   todo: Todo
@@ -49,6 +54,10 @@ function TodoRow({
   onDrop(): void
   onPostpone(): void
   onDelegate(): void
+  /** WP276：「交给同事」（② 里才给）。 */
+  onHandOff?: (() => void) | undefined
+  /** WP276：交出去了、等谁接（「等 林峰 接」）。 */
+  waiting?: string | undefined
   busy: boolean
 }): React.ReactNode {
   const { t } = useApp()
@@ -97,6 +106,11 @@ function TodoRow({
           {t('todos.delegating')}
         </span>
       )}
+      {waiting === undefined ? null : (
+        <span className="shrink-0 text-[11px] text-muted-foreground" data-testid="todo-waiting">
+          {waiting}
+        </span>
+      )}
       {todo.cards.length === 0 ? null : (
         <span
           className="shrink-0 rounded border bg-muted px-1.5 py-0.5 text-[11px]"
@@ -131,6 +145,7 @@ function TodoRow({
               [
                 ['todos.postpone', onPostpone],
                 ['todos.delegate', onDelegate],
+                ...(onHandOff === undefined ? [] : [['handoff.give', onHandOff] as const]),
                 ['todos.close', onDrop],
               ] as const
             ).map(([key, action]) => (
@@ -166,10 +181,29 @@ function TodoRow({
  */
 export function TodosPage(): React.ReactNode {
   const { t } = useApp()
+  const { mode } = useMode()
   const client = useQueryClient()
   const [title, setTitle] = useState('')
   const [params, setParams] = useSearchParams()
-  const tab = params.get('tab') === 'goals' ? 'goals' : 'todos'
+  // WP276：② 里多一个「我交出去的」
+  const tab =
+    params.get('tab') === 'goals'
+      ? 'goals'
+      : params.get('tab') === 'sent' && mode !== 'solo'
+        ? 'sent'
+        : 'todos'
+  const [handing, setHanding] = useState<Todo | undefined>(undefined)
+  const sent = useQuery({
+    queryKey: ['handoffs', 'all'],
+    queryFn: () => listHandoffs(true),
+    enabled: mode !== 'solo',
+    retry: false,
+  })
+  const waitingOf = (todo: Todo): string | undefined => {
+    if (todo.handoff?.state !== 'offered') return undefined
+    const hit = sent.data?.from_me.find((h) => h.kind === 'todo' && h.id === todo.id)
+    return hit === undefined ? undefined : t('handoff.waiting', { name: hit.to_label })
+  }
 
   const todos = useQuery({
     queryKey: ['todos'],
@@ -231,7 +265,10 @@ export function TodosPage(): React.ReactNode {
 
   const tabs = (
     <div className="flex gap-1" role="tablist" data-testid="todos-tabs">
-      {(['todos', 'goals'] as const).map((id) => (
+      {(mode === 'solo'
+        ? (['todos', 'goals'] as const)
+        : (['todos', 'goals', 'sent'] as const)
+      ).map((id) => (
         <button
           key={id}
           type="button"
@@ -244,10 +281,10 @@ export function TodosPage(): React.ReactNode {
               : 'rounded-[10px] px-3 py-1.5 text-[13px] text-ws-muted-fg hover:bg-sidebar-accent/60'
           }
           onClick={() => {
-            setParams(id === 'goals' ? { tab: 'goals' } : {}, { replace: true })
+            setParams(id === 'todos' ? {} : { tab: id }, { replace: true })
           }}
         >
-          {t(id === 'goals' ? 'goals.title' : 'todos.title')}
+          {t(id === 'goals' ? 'goals.title' : id === 'sent' ? 'todos.filter.sent' : 'todos.title')}
         </button>
       ))}
     </div>
@@ -258,6 +295,15 @@ export function TodosPage(): React.ReactNode {
       <div className="flex max-w-3xl flex-col gap-4" data-testid="todos">
         {tabs}
         <GoalsPage />
+      </div>
+    )
+
+  // WP276（docs/95 §4.3 第 5 步）：我交出去的——事项和待办都在，带现在的结果
+  if (tab === 'sent')
+    return (
+      <div className="flex max-w-3xl flex-col gap-4" data-testid="todos">
+        {tabs}
+        <SentList items={sent.data?.from_me ?? []} />
       </div>
     )
 
@@ -338,12 +384,83 @@ export function TodosPage(): React.ReactNode {
                   onDelegate={() => {
                     act.mutate({ id: todo.id, op: 'delegate' })
                   }}
+                  {...(mode === 'solo' || todo.handoff?.state === 'offered'
+                    ? {}
+                    : {
+                        onHandOff: () => {
+                          setHanding(todo)
+                        },
+                      })}
+                  waiting={waitingOf(todo)}
                 />
               ))}
             </ul>
           )}
         </section>
       ))}
+      {handing === undefined ? null : (
+        <HandoffDialog
+          kind="todo"
+          id={handing.id}
+          title={handing.title}
+          open
+          onOpenChange={(open) => {
+            if (!open) setHanding(undefined)
+          }}
+        />
+      )}
     </div>
+  )
+}
+
+/** WP276：「我交出去的」那一栏——标题 + 现在的结果（等谁接 / 谁接下了 / 退回了），还在等的能撤回。 */
+function SentList({ items }: { items: HandoffView[] }): React.ReactNode {
+  const { t } = useApp()
+  const client = useQueryClient()
+  const withdraw = useMutation({
+    mutationFn: (h: HandoffView) => withdrawHandoff(h.kind, h.id),
+    onSettled: async () => {
+      await client.invalidateQueries({ queryKey: ['handoffs'] })
+      await client.invalidateQueries({ queryKey: ['todos'] })
+    },
+  })
+  if (items.length === 0)
+    return <p className="text-sm text-muted-foreground">{t('handoff.sent.empty')}</p>
+  return (
+    <ul className="flex flex-col gap-1.5" data-testid="handoff-sent">
+      {items.map((h) => (
+        <li
+          key={`${h.kind}:${h.id}`}
+          className="flex items-center gap-2 rounded-md border px-2 py-1.5 text-sm"
+          data-state={h.handoff.state}
+        >
+          {h.matter_id === undefined ? (
+            <span className="min-w-0 flex-1 truncate">{h.title}</span>
+          ) : (
+            <Link
+              to={`/matters/${h.matter_id}`}
+              className="min-w-0 flex-1 truncate hover:underline"
+            >
+              {h.title}
+            </Link>
+          )}
+          <span className="shrink-0 text-[11.5px] text-muted-foreground">
+            {t(`handoff.state.${h.handoff.state}`, { name: h.to_label })}
+          </span>
+          {h.handoff.state !== 'offered' ? null : (
+            <Button
+              size="xs"
+              variant="ghost"
+              disabled={withdraw.isPending}
+              onClick={() => {
+                withdraw.mutate(h)
+              }}
+            >
+              {t('handoff.withdraw')}
+            </Button>
+          )}
+        </li>
+      ))}
+    </ul>
   )
 }

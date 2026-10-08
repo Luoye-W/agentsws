@@ -168,6 +168,12 @@ describe('WP71b 普通成员切到自己持有的职责：四条读全都开得�
 })
 
 describe('WP71b 这道门是收窄了，不是拆了', () => {
+  // WP276：钉的是 ③ 公司集体（② 同事互联里平级同事能看、能改共用职责的规矩，见 wp276-peers.test.ts）
+  beforeEach(async () => {
+    for (const org of server.identity.listOrganizations())
+      await server.identity.updateOrganization(org.id, { mode: 'company' })
+  })
+
   it('不持有的那条职责：记忆 403', async () => {
     const res = await asMember(`/v1/memory?tier=role&scope_id=${NOT_HELD}`)
     expect(res.status).toBe(403)

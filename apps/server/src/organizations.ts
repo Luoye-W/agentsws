@@ -280,8 +280,19 @@ export function createOrganizations(options: OrganizationsAssemblyOptions): Orga
 
   const port: OrganizationsPort = {
     async list(actor): Promise<OrganizationView[]> {
+      const mine = identity.organizationsOf(actor.person_id)
+      /*
+       * WP276：贴邀请码批进来的同事只在品牌成员里、不在组织名单里（WP271 §2 第 2 条）——
+       * 他这会儿所在的那个品牌挂在哪家，也回给他（角色按 member），不然他的界面读不到模式、
+       * 一律按 ③ 兜底，② 里的团队页、交给同事都出不来。
+       */
+      const here = (await identity.getWorkspace(actor.workspace_id))?.org_id
+      const extra =
+        here === undefined || mine.some((o) => o.id === here)
+          ? undefined
+          : identity.getOrganization(here)
       return Promise.all(
-        identity.organizationsOf(actor.person_id).map((o) => viewOf(o, actor.person_id)),
+        [...mine, ...(extra === undefined ? [] : [extra])].map((o) => viewOf(o, actor.person_id)),
       )
     },
 

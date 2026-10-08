@@ -329,6 +329,17 @@ export type KnownEventType =
    */
   | 'work.archived'
   | 'work.unarchived'
+  /**
+   * WP276（docs/95 §4）：交给对方。payload 只有对象种类 / id / 谁交给谁 / 结果——
+   * 标题、留言、不接的理由都不进日志（在事项时间线与卡上）。
+   */
+  | 'handoff.offered'
+  | 'handoff.accepted'
+  | 'handoff.declined'
+  | 'handoff.returned'
+  | 'handoff.withdrawn'
+  /** WP276：② 里有人自己退出 / 被请离开（payload 只有 person_id 与退回了几件事）。 */
+  | 'member.left'
   // 恢复先对账（WP34 B）：payload 只有条数与结论
   | 'reconcile.started'
   | 'reconcile.finished'

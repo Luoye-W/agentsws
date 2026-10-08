@@ -92,6 +92,30 @@ export interface ScenarioWorkClaim {
   title: string
 }
 
+/** WP276：某人开一件事项（交给对方要有一件事）。 */
+export interface ScenarioWorkMatter {
+  who: string
+  title: string
+  /** 用他哪条职责的分配做（不给 = 主分配） */
+  role?: string
+}
+
+/** WP276（docs/95 §4.3）：把一件事交给同事（对方接下才算）。 */
+export interface ScenarioWorkHandoff {
+  who: string
+  to: string
+  title: string
+  note?: string
+}
+
+/** WP276：被交的那个人定——接下（用他自己那条职责）/ 不接（理由可选）。 */
+export interface ScenarioWorkHandoffDecide {
+  who: string
+  title: string
+  action: 'accept' | 'decline'
+  reason?: string
+}
+
 /** 40 §3.5：跑一次闲置回收。 */
 export interface ScenarioWorkIdle {
   /** 认领后几天没动就提醒 / 回池；不给按 `@agentsws/work` 的缺省 */
@@ -1018,6 +1042,10 @@ export type ScenarioEvent =
   | { at: string; type: 'work.claim'; claim: ScenarioWorkClaim }
   /** WP38：跑一次闲置回收巡检（40 §3.5）。 */
   | { at: string; type: 'work.idle_sweep'; idle: ScenarioWorkIdle }
+  /** WP276（docs/95 §4.3）：交给对方——开事项 / 交出去 / 对方定 */
+  | { at: string; type: 'work.matter'; matter: ScenarioWorkMatter }
+  | { at: string; type: 'work.handoff'; handoff: ScenarioWorkHandoff }
+  | { at: string; type: 'work.handoff_decide'; handoff_decide: ScenarioWorkHandoffDecide }
   /** WP39：本人改一格公开级别（41 §1.3）。 */
   | { at: string; type: 'secretary.profile'; profile: ScenarioSecretaryProfile }
   /** WP39：问别人的秘书（代答）。 */
@@ -1692,6 +1720,18 @@ export interface ScenarioExpected {
    * WP171（docs/84）：B2B 这一轮提的那几个写动作，**按出现顺序**一条对一条。
    * 每条认 `kind`；`blocked` 为真读拦下那条事件，否则读提上去那条。
    */
+  /**
+   * WP276（docs/95 §4.3）：交给对方的结果，一件事一条（读 `simulation.work_handoff` 里这件事的最后一条）。
+   * `runs_as` = 之后起的运行用的是谁的分配（职责规矩、模型设置、用量都跟它走）。
+   */
+  work_handoffs?: {
+    title: string
+    state?: string
+    owner?: string
+    runs_as?: string
+    role?: string
+    reason?: string
+  }[]
   b2b?: {
     kind: string
     blocked?: boolean
