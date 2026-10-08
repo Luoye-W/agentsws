@@ -22136,6 +22136,9 @@
                   "price_source": {
                     "type": "string",
                     "enum": ["catalog", "manual"]
+                  },
+                  "image_only": {
+                    "type": "boolean"
                   }
                 },
                 "required": ["kind", "model"]
@@ -22617,6 +22620,11 @@
                     "maxLength": 64
                   },
                   "model": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "edit_model": {
                     "type": "string",
                     "minLength": 1,
                     "maxLength": 128

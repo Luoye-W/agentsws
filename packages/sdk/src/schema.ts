@@ -24310,6 +24310,7 @@ export interface operations {
           price_cached?: number
           /** @enum {string} */
           price_source?: 'catalog' | 'manual'
+          image_only?: boolean
         }
       }
     }
@@ -24669,6 +24670,7 @@ export interface operations {
         'application/json': {
           provider_id: string
           model?: string
+          edit_model?: string
         }
       }
     }
