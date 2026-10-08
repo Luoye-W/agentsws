@@ -11,6 +11,8 @@
  * - `GET  /v1/shopify-connect/attempts/:id`：轮询这次授权（pending / connected / failed / expired）
  * - `POST /v1/shopify-connect/test`：测试连接（云端代发一次只读查询：店名 + 域名）
  * - `POST /v1/shopify-connect/disconnect`：断开（这个品牌的；最后一个断开时云上顺手卸载应用）
+ * - `POST /v1/shopify-connect/upgrade`（WP267，决策 208）：老令牌缺 `store` 时一点补签（云上就地补动作集），
+ *   不用重新登录；云上没这一条 / 令牌不认 → `upgrade_unavailable`，界面退回「重新登录」
  *
  * 出错一律带 `details.reason`，界面按它说人话：
  * `not_linked`（没登录 Agents 工坊账号）/ `scope_missing`（老令牌缺 `store`，重新登录一次）/
@@ -103,12 +105,21 @@ export interface ShopifyConnectTestResult {
   checked_at: string
 }
 
+/** WP267：一点补签的结果（令牌不变；`added` 是这次补上的动作集，已经齐了 = 空）。 */
+export interface ShopifyConnectUpgradeResult {
+  upgraded: boolean
+  added: string[]
+  scopes: string[]
+}
+
 export interface ShopifyConnectPort {
   view(actor: ShopifyConnectActor): MaybePromise<ShopifyConnectView>
   start(actor: ShopifyConnectActor, input: { shop?: string }): MaybePromise<ShopifyConnectStarted>
   attempt(actor: ShopifyConnectActor, id: string): MaybePromise<ShopifyConnectAttemptView>
   test(actor: ShopifyConnectActor, shop: string): MaybePromise<ShopifyConnectTestResult>
   disconnect(actor: ShopifyConnectActor, shop: string): MaybePromise<{ disconnected: boolean }>
+  /** WP267：一点补签（没装配 = 501，界面退回重新登录）。 */
+  upgrade?(actor: ShopifyConnectActor): MaybePromise<ShopifyConnectUpgradeResult>
 }
 
 const StartBody = z.object({ shop: z.string().trim().min(1).max(255).optional() })
@@ -225,6 +236,29 @@ export function shopifyConnectRoutes(): Route[] {
       async (c, deps) => {
         const input = await body(c, ShopBody)
         return ok(c, await portOf(deps).disconnect(actorOf(c), input.shop))
+      },
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/shopify-connect/upgrade',
+        operationId: 'upgradeShopifyConnect',
+        summary:
+          'WP267：账号授权一点补签——这个品牌的工作区令牌在云上就地补上 store（不换令牌、不用重新登录）',
+        tag: TAG,
+        auth: 'bearer',
+        assignment: true,
+        authz: WRITE,
+        outbound: true,
+        returns: 'ShopifyConnectUpgradeResult',
+      },
+      async (c, deps) => {
+        const port = portOf(deps)
+        if (port.upgrade === undefined)
+          throw new ApiError('not_implemented', '这个服务进程没有装配一点补签', {
+            details: { reason: 'upgrade_unavailable' },
+          })
+        return ok(c, await port.upgrade(actorOf(c)))
       },
     ),
   ]

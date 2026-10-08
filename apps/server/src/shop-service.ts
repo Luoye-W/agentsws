@@ -99,7 +99,16 @@ export function createShopOps(
       const { access, reader } = await contextFor()
       const draft = await draftOf(
         tool,
-        { reader, access, log, run_id: request.id, fileRoots: options.fileRoots() },
+        {
+          reader,
+          access,
+          log,
+          run_id: request.id,
+          fileRoots: options.fileRoots(),
+          ...(options.assetFile === undefined
+            ? {}
+            : { assetFile: (id: string) => options.assetFile?.(id) }),
+        },
         input,
       )
       const kind = action.replace(/^stage_/, '') as StageInput['kind']

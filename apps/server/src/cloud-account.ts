@@ -41,6 +41,7 @@ import type {
   CloudAccountLinkedPayload,
   CloudAccountUnlinkedPayload,
   CloudAuthConfig,
+  CloudLinkUpgrade,
   CloudScope,
   CloudSessionIssued,
   EventEnvelope,
@@ -48,6 +49,7 @@ import type {
 } from '@agentsws/contracts'
 import {
   CLOUD_BASE_URL_ENV,
+  CLOUD_LINK_UPGRADE_PATH,
   CLOUD_OTP_LENGTH,
   CLOUD_OTP_TTL_SECONDS,
   CLOUD_PASSWORD_MIN,
@@ -74,6 +76,10 @@ export const CLOUD_LINK_TIMEOUT_MS = 12_000
 /** WP231：云那头还没有注册 / 登录这几条（老版本的云）时那一句。 */
 export const CLOUD_AUTH_OUTDATED_MESSAGE =
   'Agents 工坊云还没更新到这一版的注册 / 登录，过一会儿再试。'
+
+/** WP267：云上没有补签这一条（老版本的云）或令牌已经不认——界面退回「重新登录」。 */
+export const CLOUD_UPGRADE_UNAVAILABLE_MESSAGE =
+  '这一下没能直接更新授权，重新登录一次 Agents 工坊账号就好。'
 
 /** WP142（docs/78 #6）：连不上云时那一句——说人话、给下一步，不报网址。 */
 export const CLOUD_OFFLINE_MESSAGE = '网络不通，这一下没连上 Agents 工坊云。检查一下网络再试一次。'
@@ -125,6 +131,16 @@ export interface CloudAccountAssembly {
    * 回 `true` 表示真签下来了一把。
    */
   ensureBrandToken(workspace_id: WorkspaceId): Promise<boolean>
+  /**
+   * WP267（决策 208，接私有云 WP266）：**一点补签**。拿这个品牌那把工作区令牌打
+   * `POST /v1/cloud/links/current/upgrade`，云上就地补上后来才进默认集的动作集（`store` / `kol`）——
+   * 不换令牌、不用重新登录。成了就把本机记的动作集跟着改（`missing_scopes` 随之消失），
+   * 再顺手给同一家公司别的品牌也补一次（补不上不算失败）。
+   *
+   * 失败带 `details.reason`：`not_linked`（没令牌）/ `offline`（连不上）/ `upgrade_unavailable`
+   * （云上没这一条，或令牌已经不认）——后两种以外界面都退回「重新登录」。
+   */
+  upgradeScopes(workspace_id: WorkspaceId): Promise<{ scopes: string[]; added: string[] }>
 }
 
 interface StoredLink {
@@ -723,6 +739,90 @@ export function createCloudAccount(options: CloudAccountOptions): CloudAccountAs
       } catch {
         return false
       }
+    },
+    async upgradeScopes(workspace_id) {
+      const tokenOf = (ws: WorkspaceId): { token: string; fields: Record<string, string> } => {
+        let fields: Record<string, string> | undefined
+        try {
+          fields = vaultOf(ws).get(CLOUD_TOKEN_SECRET_ID)
+        } catch {
+          fields = undefined
+        }
+        const token = fields?.token
+        if (fields === undefined || token === undefined || token === '')
+          throw new ApiError('forbidden', '先登录 Agents 工坊账号。', {
+            details: { reason: 'not_linked' },
+          })
+        return { token, fields }
+      }
+      /** 打一次补签；成了就把本机记的动作集改成云上回的那一份（令牌不变）。 */
+      const upgradeOne = async (ws: WorkspaceId): Promise<CloudLinkUpgrade> => {
+        const { token, fields } = tokenOf(ws)
+        let res: Awaited<ReturnType<CloudFetch>>
+        let timer: ReturnType<typeof setTimeout> | undefined
+        try {
+          res = await Promise.race([
+            doFetch(`${base}${CLOUD_LINK_UPGRADE_PATH}`, {
+              method: 'POST',
+              headers: { Authorization: `Bearer ${token}` },
+            }),
+            new Promise<never>((_resolve, reject) => {
+              timer = setTimeout(() => {
+                reject(new Error('timeout'))
+              }, CLOUD_LINK_TIMEOUT_MS)
+            }),
+          ])
+        } catch (err) {
+          throw new ApiError('provider_unavailable', CLOUD_OFFLINE_MESSAGE, {
+            cause: err,
+            details: { reason: 'offline' },
+          })
+        } finally {
+          if (timer !== undefined) clearTimeout(timer)
+        }
+        let parsed: { data?: Partial<CloudLinkUpgrade> } = {}
+        try {
+          const text = await res.text()
+          parsed = text === '' ? {} : (JSON.parse(text) as typeof parsed)
+        } catch {
+          parsed = {}
+        }
+        const data = parsed.data
+        if (!res.ok || data === undefined || !Array.isArray(data.scopes)) {
+          if (res.status >= 500 && res.status !== 501)
+            throw new ApiError('provider_unavailable', CLOUD_OFFLINE_MESSAGE, {
+              details: { reason: 'offline' },
+            })
+          // 404 / 405 / 501（老版本的云没这一条）、401 / 403（令牌不认）、回包不对：都退回重新登录
+          throw new ApiError('not_implemented', CLOUD_UPGRADE_UNAVAILABLE_MESSAGE, {
+            details: { reason: 'upgrade_unavailable', status: res.status },
+          })
+        }
+        const scopes = data.scopes.filter((x): x is string => typeof x === 'string')
+        const added = Array.isArray(data.added)
+          ? data.added.filter((x): x is string => typeof x === 'string')
+          : []
+        vaultOf(ws).put(CLOUD_TOKEN_SECRET_ID, { ...fields, scopes: scopes.join(',') })
+        return { scopes, added }
+      }
+      const out = await upgradeOne(workspace_id)
+      // 同一家公司的别的品牌：本机记的动作集也缺的话顺手补（补不上不算失败，卡上再点一次就好）
+      for (const ws of brandsOf()) {
+        if (ws === workspace_id) continue
+        let have = ''
+        try {
+          have = vaultOf(ws).get(CLOUD_TOKEN_SECRET_ID)?.scopes ?? ''
+        } catch {
+          continue
+        }
+        if (missingScopes(have).length === 0) continue
+        try {
+          await upgradeOne(ws)
+        } catch {
+          // 那个品牌的卡上会照实说，再点一次
+        }
+      }
+      return { scopes: out.scopes, added: out.added }
     },
   }
 }

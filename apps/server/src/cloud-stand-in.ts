@@ -37,7 +37,9 @@ import {
   ALLOCATION_EXHAUSTED_MESSAGE,
   allocationRosterGuarded,
   attributionIdOk,
+  CLOUD_LINK_UPGRADE_PATH,
   DEFAULT_ALLOCATION_TIMEZONE,
+  DEFAULT_CLOUD_SCOPES,
   MEMBER_HEADER,
   MEMBER_LEFT_MESSAGE,
   POSITION_HEADER,
@@ -650,6 +652,12 @@ export function cloudStandIn(options: CloudStandInOptions = {}): CloudStandIn {
       if (token === undefined || !workspaceTokens.delete(token))
         return fail(401, 'unauthenticated', '令牌无效')
       return ok({ revoked: true })
+    }
+    // WP267：一点补签（私有云 WP266）——替身签的令牌本来就按默认集，回「已经齐了」
+    if (method === 'POST' && path === CLOUD_LINK_UPGRADE_PATH) {
+      if (token === undefined || !workspaceTokens.has(token))
+        return fail(401, 'unauthenticated', '令牌无效')
+      return ok({ scopes: [...DEFAULT_CLOUD_SCOPES], added: [] })
     }
     // ── 钱包那一面（49 M4）：只认替身签过的工作区令牌
     if (path.startsWith('/v1/wallet')) {
