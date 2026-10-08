@@ -248,6 +248,8 @@ export const STORE_LOOKUP_TEXT = {
   none: '这个 Shopify 账号下没有店铺。请到建站岗位页换个账号登录，或者先去 Shopify 开店。',
   pick: '这个 Shopify 账号下有好几家店。请到建站岗位页选一家，我再接着做。',
   failed: '没能从 Shopify 找到你的店铺，可以在建站岗位页手动填一下店铺地址（xxx.myshopify.com）。',
+  /** WP267（决策 164）：账号下只有一家，但不是官网那一家。 */
+  mismatch: '官网那家店不在这个 Shopify 账号下。请到建站岗位页换个账号登录，或者点「就用这家」。',
 } as const
 
 export interface SiteThemeAssembly {
@@ -590,7 +592,8 @@ export function createSiteTheme(options: SiteThemeOptions): SiteThemeAssembly {
 
   /**
    * 找完之后定店：**手填的永远不动**；自动取的 / 人选的那家不在这个账号下了（换了账号）就清掉；
-   * 只有一家 → 就它；好几家 → 与官网读到的那个对上就默认选它，对不上就等人在下拉框里选。
+   * 只有一家 → 就它（WP267 决策 164：但官网读到的店不是它 → 不自动定，岗位页问「换个账号 / 就用这家」）；
+   * 好几家 → 与官网读到的那个对上就默认选它，对不上就等人在下拉框里选。
    */
   const settle = (lookup: StoreLookupState): void => {
     settings.lookup = lookup
@@ -605,7 +608,10 @@ export function createSiteTheme(options: SiteThemeOptions): SiteThemeAssembly {
     if (lookup.status !== 'ok') return
     const site = options.siteStore?.()
     const match = site === undefined ? undefined : lookup.stores.find((s) => s.store === site)
-    const pick = lookup.stores.length === 1 ? lookup.stores[0] : match
+    // 只有一家：官网读到了别的店（多半登错了账号）就不替人定
+    const only = lookup.stores.length === 1 ? lookup.stores[0] : undefined
+    const pick =
+      only !== undefined ? (site === undefined || match !== undefined ? only : undefined) : match
     if (pick === undefined) return
     settings.store = pick.store
     settings.store_by = 'cli'
@@ -749,11 +755,16 @@ export function createSiteTheme(options: SiteThemeOptions): SiteThemeAssembly {
       const text =
         found?.status === 'none'
           ? STORE_LOOKUP_TEXT.none
-          : found?.status === 'ok'
-            ? STORE_LOOKUP_TEXT.pick
-            : found?.status === 'failed'
-              ? STORE_LOOKUP_TEXT.failed
-              : NEED_TEXT.store
+          : found?.status === 'ok' &&
+              found.stores.length === 1 &&
+              r.site_store !== undefined &&
+              found.stores[0]?.store !== r.site_store
+            ? STORE_LOOKUP_TEXT.mismatch
+            : found?.status === 'ok'
+              ? STORE_LOOKUP_TEXT.pick
+              : found?.status === 'failed'
+                ? STORE_LOOKUP_TEXT.failed
+                : NEED_TEXT.store
       throw new SiteThemeError('needs', text, 'store')
     }
     return { shop: r.store, spec: options.cliSpec() }

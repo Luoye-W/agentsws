@@ -129,6 +129,21 @@ export interface PlatformCliSpec {
   roles: readonly string[]
   /** 子进程环境里关掉遥测的变量。 */
   telemetry_off_env: Readonly<Record<string, string>>
+  /**
+   * WP267：替用户跑这个 CLI 时**关掉它自己的自动升级**（别在用户电脑上 `npm install -g`；我们的私有安装由一键安装管版本）。
+   * 不写 = 这个 CLI 没有自动升级。
+   *
+   * Shopify CLI 4.8.5（读发行包核过）：每条命令跑完的收尾钩子里，有新版本、并且「`CI` 没设」且「配置里
+   * `autoUpgradeEnabled` 不是 false」（默认 true）就跑 `npm install -g @shopify/cli@latest`（或 `brew upgrade`）。
+   * **没有专门关它的环境变量**（只有 `SHOPIFY_CLI_FORCE_AUTO_UPGRADE=1` 强制开）。所以两条路：
+   * - {@link env}：非交互的命令带上（`CI=1`，本来就带）；
+   * - {@link config_args}：登录 / 店铺授权不能带 `CI`（CLI 一看到就拒绝交互），先在本品牌那一份配置目录里跑一次
+   *   `config autoupgrade off`（命令名里带 `upgrade`，它自己的收尾钩子不会再去升级）。
+   */
+  autoupgrade_off?: {
+    env: Readonly<Record<string, string>>
+    config_args: readonly string[]
+  }
 }
 
 /**
@@ -290,6 +305,8 @@ export const PLATFORM_KITS: readonly PlatformKit[] = [
       // 主题工作流（拉主题 / 推未发布副本 / theme check）只在网页模板这一条上；邮件模板在店铺后台改，不经 CLI
       roles: ['site.shopify-theme'],
       telemetry_off_env: { SHOPIFY_CLI_NO_ANALYTICS: '1', OPT_OUT_INSTRUMENTATION: 'true' },
+      // WP267：不在用户电脑上自己 `npm install -g`（见 `PlatformCliSpec.autoupgrade_off`）
+      autoupgrade_off: { env: { CI: '1' }, config_args: ['config', 'autoupgrade', 'off'] },
     },
   },
 ]
@@ -298,6 +315,16 @@ export const PLATFORM_KITS: readonly PlatformKit[] = [
 export function platformCliTelemetryOffEnv(): Record<string, string> {
   const out: Record<string, string> = {}
   for (const kit of PLATFORM_KITS) Object.assign(out, kit.cli?.telemetry_off_env ?? {})
+  return out
+}
+
+/**
+ * WP267：所有平台 CLI「非交互时关掉自动升级」的变量并在一起（AI 终端沙箱里跑 CLI 时带上；
+ * 那里本来就没有人能回答交互提问）。
+ */
+export function platformCliNoAutoUpgradeEnv(): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const kit of PLATFORM_KITS) Object.assign(out, kit.cli?.autoupgrade_off?.env ?? {})
   return out
 }
 

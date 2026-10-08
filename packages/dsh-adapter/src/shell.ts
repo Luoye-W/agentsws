@@ -21,7 +21,7 @@
  */
 import { isAbsolute, join, posix, win32 } from 'node:path'
 import type { RunRequest, RunShell } from '@agentsws/contracts'
-import { platformCliTelemetryOffEnv } from '@agentsws/contracts'
+import { platformCliNoAutoUpgradeEnv, platformCliTelemetryOffEnv } from '@agentsws/contracts'
 import type { Context } from '@deepseek-ai/cordis'
 import SandboxBashExecutor from '@deepseek-ai/dsh-bash-sandbox'
 import {
@@ -705,6 +705,8 @@ export function shellCredentialPlan(shell: RunShell): ShellCredentialPlan {
     literals: {
       // WP216：平台官方 CLI 的使用统计一律关掉（`PLATFORM_KITS` 里每个 CLI 写的那几个变量）
       ...platformCliTelemetryOffEnv(),
+      // WP267：平台 CLI 不在用户电脑上自己升级（Shopify CLI 认 `CI`；这里本来就没人回答交互提问）
+      ...platformCliNoAutoUpgradeEnv(),
       ...(shell.store === undefined || shell.store === ''
         ? {}
         : { [THEME_STORE_ENV]: shell.store }),

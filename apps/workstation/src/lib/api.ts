@@ -4410,6 +4410,16 @@ export const disconnectShopifyConnect = (
     ...withAssignment(assignment),
   })
 
+/** WP267（决策 208）：账号授权一点补签（令牌不变；`added` 是这次补上的动作集）。 */
+export interface ShopifyConnectUpgrade {
+  upgraded: boolean
+  added: string[]
+  scopes: string[]
+}
+
+export const upgradeShopifyConnect = (assignment?: string): Promise<ShopifyConnectUpgrade> =>
+  api('/v1/shopify-connect/upgrade', { method: 'POST', body: {}, ...withAssignment(assignment) })
+
 // ── WP65（52 O1–O4）组织与品牌 ─────────────────────────────────────────
 //
 // 品牌 = 工作区，公司 = 组织。这一摊只有三件事：我在哪几家公司（`listOrganizations`）、
