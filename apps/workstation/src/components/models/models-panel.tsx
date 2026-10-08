@@ -602,13 +602,28 @@ function ProviderRow({
               {t('models.from_env')}
             </span>
           ) : null}
+          {/* WP274：只用来生图的那一条（在「生图」那一块加的）：不挂文字模型、不在这里测 */}
+          {provider.image_only === true ? (
+            <span
+              className="shrink-0 rounded bg-muted px-1 py-px text-[10px] font-normal text-muted-foreground"
+              data-slot="badge"
+              data-testid="model-image-only"
+              title={t('models.image.no_test')}
+            >
+              {t('models.image.image_only')}
+            </span>
+          ) : null}
         </p>
         <div className="flex shrink-0 items-center gap-2">
-          <ModelStatusIcons result={result} pending={testing} />
+          {provider.image_only === true ? null : (
+            <ModelStatusIcons result={result} pending={testing} />
+          )}
           <div className="flex items-center gap-1">
-            <Button size="xs" variant="outline" disabled={busy} onClick={onTest}>
-              {t('models.test')}
-            </Button>
+            {provider.image_only === true ? null : (
+              <Button size="xs" variant="outline" disabled={busy} onClick={onTest}>
+                {t('models.test')}
+              </Button>
+            )}
             {/* WP134：账号登录那一条没什么可改的（没有 key、地址是官方的）；登出在它自己那张卡上 */}
             {isDeepSeekAccountKind(provider.kind) ? null : (
               <Button size="xs" variant="ghost" onClick={onEdit}>

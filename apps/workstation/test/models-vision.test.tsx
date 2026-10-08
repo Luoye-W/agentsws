@@ -58,7 +58,7 @@ const state = {
   test: { ok: true, reason: 'ok', checked_at: T0 } as ModelTestResult,
   image: IMAGE_NONE as ModelImageView,
 }
-const imageSaves: { provider_id: string; model?: string }[] = []
+const imageSaves: { provider_id: string; model?: string; edit_model?: string }[] = []
 
 vi.mock('@/lib/api', async () => {
   const actual = await vi.importActual<typeof import('@/lib/api')>('@/lib/api')
@@ -76,7 +76,11 @@ vi.mock('@/lib/api', async () => {
     }),
     getModelPricing: async () => ({ vendors: [] }),
     getModelImage: async () => state.image,
-    setModelImage: async (input: { provider_id: string; model?: string }) => {
+    setModelImageRoute: async (input: {
+      provider_id: string
+      model?: string
+      edit_model?: string
+    }) => {
       imageSaves.push(input)
       state.image = {
         ...state.image,
@@ -163,7 +167,7 @@ describe('WP127 生图单独一档', () => {
     expect(block.textContent).toContain('生图')
     expect((await screen.findByTestId('models-image-price')).textContent).toContain('0.5')
     // 没配：说人话
-    expect((await screen.findByTestId('models-image-reason')).textContent).toContain('生图还没配')
+    expect((await screen.findByTestId('models-image-none')).textContent).toContain('生图还没配')
   })
 
   it('选官方接口 → 保存：模型名自动填上默认那个，存下来', async () => {
@@ -177,11 +181,114 @@ describe('WP127 生图单独一档', () => {
     })
   })
 
-  it('一条能出图的都没有：指路，而不是给一个空下拉', async () => {
+  it('一条能出图的都没有：说人话，下拉里仍能加一个自定义生图接口', async () => {
     state.image = { ...IMAGE_NONE, choices: [] }
     renderWithProviders(<ModelsPanel assignment="asg_owner" />)
-    expect((await screen.findByTestId('models-image-empty')).textContent).toContain(
-      'Agents 工坊官方接口',
+    expect((await screen.findByTestId('models-image-none')).textContent).toContain('生图还没配')
+    const select = (await screen.findByTestId('models-image-select')) as HTMLSelectElement
+    expect([...select.options].map((o) => o.value)).toEqual(['', '__custom__'])
+  })
+})
+
+describe('WP274 生图跟着自己的模型走', () => {
+  const OWN_OPENAI = {
+    source: 'own_openai' as const,
+    provider_id: 'openai',
+    label: '你的 OpenAI 账号（GPT Image 2.5）',
+    generate_model: 'gpt-image-2.5-flare',
+    edit_model: 'gpt-image-2.5-sunburst',
+    own_key: true,
+  }
+
+  it('一句话「现在用：你的 OpenAI 账号（GPT Image 2.5）」+ 不扣积分；单价那行不出（与他无关）', async () => {
+    state.image = {
+      ...IMAGE_NONE,
+      configured: true,
+      override: false,
+      using: OWN_OPENAI,
+      auto: OWN_OPENAI,
+      choices: [
+        ...IMAGE_NONE.choices,
+        {
+          provider_id: 'openai',
+          label: 'OpenAI（API key，按量计费）',
+          official: false,
+          default_model: 'gpt-image-2.5-flare',
+          vendor: 'openai',
+          default_edit_model: 'gpt-image-2.5-sunburst',
+        } as ModelImageView['choices'][number],
+      ],
+    }
+    delete (state.image as { unavailable_reason?: string }).unavailable_reason
+    renderWithProviders(<ModelsPanel assignment="asg_owner" />)
+    const using = await screen.findByTestId('models-image-using')
+    expect(using.textContent).toContain('现在用：你的 OpenAI 账号（GPT Image 2.5）')
+    expect(using.textContent).toContain('不扣积分')
+    expect(using.getAttribute('data-source')).toBe('own_openai')
+    expect(screen.queryByTestId('models-image-price')).toBeNull()
+    // 下拉第一项是「自动」，写明自动会用谁
+    const select = (await screen.findByTestId('models-image-select')) as HTMLSelectElement
+    expect(select.value).toBe('')
+    expect(select.options[0]?.textContent).toBe('自动 · 你的 OpenAI 账号（GPT Image 2.5）')
+  })
+
+  it('单独指定自己的 OpenAI：出图 / 改图型号按这家默认填好（flare / sunburst），一起存', async () => {
+    const user = userEvent.setup()
+    state.image = {
+      ...IMAGE_NONE,
+      choices: [
+        {
+          provider_id: 'openai',
+          label: 'OpenAI（API key，按量计费）',
+          official: false,
+          default_model: 'gpt-image-2.5-flare',
+          vendor: 'openai',
+          default_edit_model: 'gpt-image-2.5-sunburst',
+        } as ModelImageView['choices'][number],
+      ],
+    }
+    renderWithProviders(<ModelsPanel assignment="asg_owner" />)
+    await user.selectOptions(await screen.findByTestId('models-image-select'), 'openai')
+    expect((screen.getByTestId('models-image-model') as HTMLInputElement).value).toBe(
+      'gpt-image-2.5-flare',
     )
+    expect((screen.getByTestId('models-image-edit-model') as HTMLInputElement).value).toBe(
+      'gpt-image-2.5-sunburst',
+    )
+    await user.click(screen.getByTestId('models-image-save'))
+    await waitFor(() => {
+      expect(imageSaves).toEqual([
+        {
+          provider_id: 'openai',
+          model: 'gpt-image-2.5-flare',
+          edit_model: 'gpt-image-2.5-sunburst',
+        },
+      ])
+    })
+  })
+
+  it('走积分：标「按张扣积分」，单价常显', async () => {
+    const cloud = {
+      source: 'cloud' as const,
+      provider_id: 'agentsws',
+      label: 'Agents 工坊积分（GPT Image 2.5）',
+      generate_model: 'gpt-image-2.5-flare',
+      edit_model: 'gpt-image-2.5-sunburst',
+      own_key: false,
+    }
+    state.image = { ...IMAGE_NONE, configured: true, official: true, using: cloud, auto: cloud }
+    delete (state.image as { unavailable_reason?: string }).unavailable_reason
+    renderWithProviders(<ModelsPanel assignment="asg_owner" />)
+    expect((await screen.findByTestId('models-image-badge')).textContent).toBe('按张扣积分')
+    expect((await screen.findByTestId('models-image-price')).textContent).toContain('0.5')
+  })
+
+  it('选「自定义生图接口」：出原生表单（key 框是 password），不出保存按钮', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(<ModelsPanel assignment="asg_owner" />)
+    await user.selectOptions(await screen.findByTestId('models-image-select'), '__custom__')
+    const box = await screen.findByTestId('models-image-custom')
+    expect(box.querySelector('input[type="password"]')).not.toBeNull()
+    expect(screen.queryByTestId('models-image-save')).toBeNull()
   })
 })

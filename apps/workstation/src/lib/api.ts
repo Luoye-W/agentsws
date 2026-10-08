@@ -7333,3 +7333,70 @@ export async function uploadBrandAsset(
   if (!res.ok) throw new ApiClientError(res.status, parsed as ApiErrorBody)
   return (parsed as ApiEnvelope<{ asset: BrandAssetRow }>).data
 }
+
+// ── WP274（决策 255）：生图跟着用户自己的模型走 ──────────────────────────
+//
+// **只追加**：上面 WP127 那几个类型与函数不动，新字段用接口合并补上，新的写法另起函数。
+
+/** 这一次出图实际用谁（按「单独指定 > 文字模型同厂商且带生图 > Agents 工坊积分」解析）。 */
+export interface ModelImageUsing {
+  source: 'override' | 'own_openai' | 'own_google' | 'cloud'
+  provider_id: string
+  /** 「你的 OpenAI 账号（GPT Image 2.5）」/「你的 Google 账号（Nano Banana 2.1）」/「Agents 工坊积分（…）」。 */
+  label: string
+  generate_model: string
+  edit_model: string
+  /** 走用户自己的 key：不扣积分。 */
+  own_key: boolean
+}
+
+export interface ModelImageView {
+  using?: ModelImageUsing
+  auto?: ModelImageUsing
+  override?: boolean
+  edit_model?: string
+}
+
+/** `choices` 里那一项（WP274 多了三格：认出来的厂商、默认改图型号、只生图）。 */
+export type ModelImageChoice = ModelImageView['choices'][number] & {
+  vendor?: 'openai' | 'google'
+  default_edit_model?: string
+  image_only?: boolean
+}
+
+export interface ModelProviderView {
+  /** WP274：只用来生图的那一条（不挂文字模型、不测）。 */
+  image_only?: boolean
+}
+
+/** 改生图那一档（带改图型号）。`provider_id` 给空串 = 自动。 */
+export const setModelImageRoute = (
+  input: { provider_id: string; model?: string; edit_model?: string },
+  assignment?: string,
+): Promise<ModelImageView> =>
+  api<ModelImageView>('/v1/models/image', {
+    method: 'PUT',
+    body: input,
+    ...withAssignment(assignment),
+  })
+
+/**
+ * 存一条**只用来生图**的自定义接口（OpenAI 兼容 images 形态）。同 {@link saveModelProvider}：
+ * key 从原生表单的 FormData 来、只走这一次，进本机加密库。
+ */
+export const saveImageOnlyProvider = (
+  id: string,
+  input: {
+    label?: string
+    base_url: string
+    model: string
+    region: 'cn' | 'global'
+    api_key?: string
+  },
+  assignment?: string,
+): Promise<ModelProviderView> =>
+  api(`/v1/models/providers/${encodeURIComponent(id)}`, {
+    method: 'PUT',
+    body: { kind: 'openai_compatible', ...input, image_only: true, price_source: 'manual' },
+    ...withAssignment(assignment),
+  })
