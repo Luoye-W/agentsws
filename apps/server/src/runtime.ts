@@ -1899,7 +1899,6 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
               ? digest
               : `${extra}\n\n${digest}`
         const line = stoppedLine(stoppedReason, limits, partial !== undefined)
-        recordDigest('stopped')
         work?.appendEvent(input.matter.id, {
           kind: 'status',
           text: line,
@@ -1907,6 +1906,8 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
           run_id,
           ...(partial === undefined ? { stopped: { reason: stoppedReason } } : {}),
         })
+        // WP264：停下的原因那一句在前，做到哪几步的摘要紧跟着（部分结果在后）
+        recordDigest('stopped')
         if (partial !== undefined) {
           work?.appendEvent(input.matter.id, {
             kind: 'agent_message',
