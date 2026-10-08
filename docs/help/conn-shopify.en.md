@@ -6,14 +6,15 @@ How to plug your Shopify store into Agents Workshop.
 
 No developer app, no keys to paste.
 
-1. Sign in to your Agents Workshop account (the card tells you; sign in right there).
+1. Sign in to your Agents Workshop account — the one you registered with Agents Workshop (credits and cloud features live there), **not your Shopify admin login**. “Sign in” on the card takes you to Settings → Account and brings you back afterwards.
 2. On the Connections page, click **Connect Shopify** on the "Shopify store" card. The store domain is filled in for you (from the brand profile or the store the site position found); if not, type `xxx.myshopify.com`.
 3. Your browser opens Shopify's own approval page — click **Install** with the store owner account.
 4. Back in the Workshop, the card shows "Connected": the store name and what it can manage. "Test" double-checks it.
 
 The store key stays on Agents Workshop cloud, not on this computer; the AI asks you with a card before changing products or pages.
 
-- **"Your account access needs a refresh"**: click "Refresh access" — no need to sign in again. If that doesn’t work, the card asks you to sign in once more with the same account.
+- **Account permissions out of date**: nothing to do — the workstation refreshes them in the background at startup and when needed. If that fails (e.g. you were signed out elsewhere), the card says your Agents Workshop account needs to sign in again; “Sign in again” takes you to Settings → Account.
+- **"Can’t reach Agents Workshop cloud"**: it already retried once; the question mark shows a cause code. If you use a proxy / VPN, try another node and click “Try again”.
 - **"One-click isn't available for this store yet"**: one-click is open to beta stores for now; once the public app passes Shopify review, any store can use it. Can't wait? Use the "own app" route below.
 - **Authorization expired / something missing**: click "Re-authorize" and Install again in the browser.
 

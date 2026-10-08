@@ -81,7 +81,18 @@ export function SettingsPage({
    * WP169：首页告警区「目标市场按店铺后台改了」点开来的是 `/settings#company`——档案一到就滚到
    * 「公司档案」那一张（前端路由跳转浏览器不会自己按 # 滚）。
    */
-  const { hash } = useLocation()
+  const { hash, search } = useLocation()
+  /*
+   * WP272：`?tab=account`（连接卡「去登录」、顶栏积分、存储页「去账号」都用它）真的落到「账号」那一档；
+   * 老链接 `?tab=credits` 也算账号。
+   */
+  const tabParam = new URLSearchParams(search).get('tab')
+  const initialTab =
+    tabParam === 'account' || tabParam === 'credits'
+      ? 'account'
+      : tabParam === 'plugins' || tabParam === 'general'
+        ? tabParam
+        : defaultTab
   const companyReady = onboarding.data !== undefined
   useEffect(() => {
     if (hash !== '#company' || !companyReady) return
@@ -166,7 +177,7 @@ export function SettingsPage({
   })
 
   return (
-    <Tabs defaultValue={defaultTab} className="flex flex-col gap-4">
+    <Tabs defaultValue={initialTab} className="flex flex-col gap-4">
       <TabsList>
         <TabsTrigger value="general">{t('settings.tab.general')}</TabsTrigger>
         {/* 49 M5「设置 → 账号与积分」：上半张是账号卡（WP58），下半张是积分（WP59） */}

@@ -68,6 +68,7 @@ import {
   REDDIT_READ_ROUTE_LEVELS,
   WEB_SEARCH_ROUTE_KEY,
 } from '@agentsws/contracts'
+import { netCauseOf } from '@agentsws/model-gateway'
 import { currentCloudHeaders } from './cloud-attribution.js'
 import type { KolStore } from './kol.js'
 import type { KolCloudCall, KolCloudCallFn, KolCloudSync } from './kol-cloud-sync.js'
@@ -150,6 +151,13 @@ export interface CloudOptions {
    * 与提醒信发给谁（公司的 owner / admin 的邮箱）。取值函数：名册在云面之后才装好。
    */
   directory?: () => Promise<CreditsDirectory> | CreditsDirectory
+  /**
+   * WP272（Luoye 10-08 真机）：令牌缺动作集时**后台自动补签**。任何一跳撞上 403
+   * `details.required_scope`，先调它（`cloud-account.upgradeScopes`，同公司各品牌一起补；
+   * 令牌不变），回 `true` 就把这一跳原样再打一次——用户无感。回 `false` / 不给 = 照实回 403。
+   * 取值函数：账号面在云面之后才装好。
+   */
+  scopeUpgrade?: () => Promise<boolean>
 }
 
 /** WP194：本机公司的名册（给「积分」页与提醒信用）。 */
@@ -351,14 +359,37 @@ export function createCloud(options: CloudOptions): CloudAssembly {
    * 要把云上那句话原样端给用户——**402「还没开通」与 503「云连不上」是两句话**，
    * 一句给"去开通"，一句给"稍后再试"，合成一句用户就不知道该怎么办了。
    */
-  const cloudCall = async <T>(
+  type CloudCallInit = {
+    method?: string
+    body?: unknown
+    headers?: Record<string, string>
+    timeout_ms?: number
+  }
+  /**
+   * WP272：撞上 403 缺动作集 → 后台补签一次 → 成了原样再打一次（只重打一次，免得兜圈）。
+   * 补签本身失败（云上没这一条 / 令牌被撤）就把原来那个 403 照实回去，界面引导重新登录。
+   */
+  const cloudCall = async <T>(path: string, init: CloudCallInit = {}): Promise<KolCloudCall<T>> => {
+    const out = await cloudCallOnce<T>(path, init)
+    if (
+      out.ok ||
+      out.status !== 403 ||
+      typeof out.details?.required_scope !== 'string' ||
+      options.scopeUpgrade === undefined
+    )
+      return out
+    let upgraded = false
+    try {
+      upgraded = await options.scopeUpgrade()
+    } catch {
+      upgraded = false
+    }
+    return upgraded ? cloudCallOnce<T>(path, init) : out
+  }
+
+  const cloudCallOnce = async <T>(
     path: string,
-    init: {
-      method?: string
-      body?: unknown
-      headers?: Record<string, string>
-      timeout_ms?: number
-    } = {},
+    init: CloudCallInit = {},
   ): Promise<KolCloudCall<T>> => {
     const token = tokenOf()
     if (token === undefined) return { ok: false, status: 0 }
@@ -399,9 +430,11 @@ export function createCloud(options: CloudOptions): CloudAssembly {
         status: res.status,
         ...(payload?.data === undefined ? {} : { data: payload.data }),
       }
-    } catch {
+    } catch (err) {
       // 超时 / 断网 / DNS：状态 0，界面上是"联系不上"，不是"出错了"
-      return { ok: false, status: 0 }
+      // WP272：带上根本原因的码（问号里给，排查网络 / 代理用）
+      const code = controller.signal.aborted ? 'timeout' : netCauseOf(err).code
+      return { ok: false, status: 0, ...(code === undefined ? {} : { cause_code: code }) }
     } finally {
       clearTimeout(timer)
     }
