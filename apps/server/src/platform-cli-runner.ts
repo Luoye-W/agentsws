@@ -28,6 +28,7 @@ import { stripVTControlCharacters } from 'node:util'
 import type { PlatformCliJobView } from '@agentsws/api'
 import type { PlatformCliSpec } from '@agentsws/contracts'
 import { netCauseOf } from '@agentsws/model-gateway'
+import { ensureCliAutoUpgradeOff } from './cli-autoupgrade.js'
 import { killTree } from './kill-tree.js'
 import { type NpmRegistryChoice, withRegistry } from './npm-registry.js'
 import { ensureNpmCli, NpmRuntimeError } from './npm-runtime.js'
@@ -595,6 +596,25 @@ export function createPlatformCliRunner(options: PlatformCliRunnerOptions): Plat
       if (existsSync(home)) renameSync(home, prev)
       mkdirSync(home, { recursive: true })
     }
+    // WP267：登录不能带 CI——先在这份（新建的）配置目录里关掉 CLI 的自动升级，免得登完它自己 `npm install -g`
+    await ensureCliAutoUpgradeOff({
+      spec,
+      home,
+      env: runEnv(spec, env, { nodeExec, action: 'version' }),
+      run: (args, opts) =>
+        new Promise((resolve) => {
+          const proc = spawnTool(how.command, [...how.prefix, ...args], {
+            env: opts.env,
+            cwd: opts.cwd,
+          })
+          const timer = setTimeout(() => proc.kill(), opts.timeoutMs)
+          timer.unref?.()
+          void proc.done.then((code) => {
+            clearTimeout(timer)
+            resolve({ code, stdout: '', stderr: '' })
+          })
+        }),
+    })
     const result = await runProcess(
       entry,
       how.command,

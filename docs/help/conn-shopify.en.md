@@ -13,7 +13,7 @@ No developer app, no keys to paste.
 
 The store key stays on Agents Workshop cloud, not on this computer; the AI asks you with a card before changing products or pages.
 
-- **"Your account access needs a refresh"**: click "Sign in again" with the same account.
+- **"Your account access needs a refresh"**: click "Refresh access" — no need to sign in again. If that doesn’t work, the card asks you to sign in once more with the same account.
 - **"One-click isn't available for this store yet"**: one-click is open to beta stores for now; once the public app passes Shopify review, any store can use it. Can't wait? Use the "own app" route below.
 - **Authorization expired / something missing**: click "Re-authorize" and Install again in the browser.
 

@@ -26,6 +26,7 @@ import {
   storeAdminAllScopes,
   storeAdminScopesFor,
 } from '@agentsws/contracts'
+import { ensureCliAutoUpgradeOff } from './cli-autoupgrade.js'
 import type { PlatformCliProbe } from './platform-cli.js'
 import {
   type CliJobView,
@@ -483,6 +484,13 @@ export function createShopAdmin(options: ShopAdminOptions): ShopAdminAssembly {
       .filter((x) => registry.has(x))
       .sort()
     if (scopes.length === 0) return
+    // WP267：授权不能带 CI——先在本品牌那份配置目录里关掉 CLI 的自动升级（只跑一次，关不成不挡授权）
+    await ensureCliAutoUpgradeOff({
+      spec: s.spec,
+      home: options.sessionHome,
+      run: options.run,
+      env: childEnv(s.spec, false),
+    })
     const how = options.invocation(s.spec)
     const home = options.sessionHome
     const started = options.auth.start({

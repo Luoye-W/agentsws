@@ -163,8 +163,10 @@ export interface ShopOpsOptions {
     role_id: string
     person_id: string
   }): Promise<{ person: string; via: 'role_holder' | 'scope_manager' | 'owner' }>
-  /** 本机图片只许从这几个目录里拿（本品牌的文件夹）。 */
+  /** 本机图片只许从这几个目录里拿（本品牌的文件夹 + WP267：设计岗素材库那一段对象存储）。 */
   fileRoots(): string[]
+  /** WP267（决策 198）：设计岗素材库的一张图 → 本机文件（见 `ProposeContext.assetFile`）。 */
+  assetFile?(asset_id: string): string | undefined
   /** 已经执行过的卡记在哪（防同一张卡重放两次）；不给 = 只在内存里。 */
   stateFile?: string
   /** 传本机图片到 Shopify 给的临时地址（测试注入）。 */

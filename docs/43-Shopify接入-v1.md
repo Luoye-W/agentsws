@@ -368,6 +368,15 @@ shell 与沙箱。挂它们要做的事：mount 两个包、给三个 `read` / `
 - **执行**：17 个固定运营工具（查询只读；改动只出审批卡，一律 L1），人批了执行器带 `--allow-mutations` 跑写死的那几条 Admin GraphQL（`apps/server/src/shop-graphql.ts`）并读回确认。
 - **接口与底层分开**：工具与卡片只认 `ShopifyAdmin`（`apps/server/src/shop-admin.ts`）；第 2 步（决策 146 自家公开应用、长期令牌）只是另一种实现。
 
+## 8. 收尾（WP267，决策 164 / 198 / 208 / 209，2026-10-08）
+
+- **一点补签**：连接页 Shopify 卡「账号授权要更新一下」→「更新授权」= 本机用这个品牌的工作区令牌打云上 `POST /v1/cloud/links/current/upgrade`（WP266，就地补 `store`，令牌不变）；成了接着做刚才那一步（连接 / 测试），云上没这一条或令牌不认才退回就地重新登录。本机经 `/v1/shopify-connect/upgrade`。
+- **错误分两头**（`shop-cloud-admin.ts` 的 `cloudShopErrorOf`）：我们的令牌缺 `store`（403 `details.required_scope`）→「更新授权」；Shopify 那头（`code: shopify_error / rate_limited`、`details.shopify_status`、`details.errors`）→ 缺哪项权限点名、失效「重新授权」、限流 / 出错稍后再试。成功回包取 `{ data: <Shopify 原样> }` 里那一层，`errors` 认缺权限，`data: null` 不当结果。
+- **订单 / 客服走云端**：本品牌云端连着店且授了 `read_orders` → 客服那四个只读工具（`get_order` / `list_orders` / `get_product` / `list_products`）走云端代发，订单带物流单号、送达、退换状态（`returnStatus`）、退款；顾客那几格是 Shopify「受保护的顾客数据」，应用没过审时退一步不带它们再查。没连回退连接器。改动照旧出卡。
+- **只有一家店但与官网不符**：不自动定，岗位页「官网那家店（xxx）不在这个账号下，要换个账号登录吗」+「换个账号」「就用这家」。
+- **CLI 不自动升级**：4.8.5 每条命令收尾时，`CI` 没设且配置 `autoUpgradeEnabled` 不是 false 就 `npm install -g @shopify/cli@latest`；没有专门的环境变量。非交互命令本来带 `CI`；登录 / 店铺授权前在本品牌那份配置目录里跑一次 `shopify config autoupgrade off`（`PlatformCliSpec.autoupgrade_off`）；AI 终端带 `CI`。
+- **商品图来源**：`shop_add_product_images` 每张图给 `url` / `file` / `asset_id`（设计岗素材库），素材按 id 落到本机对象存储里那份文件，过同一道检查（扩展名、文件头、20 MB、目录白名单）。
+
 ## 附：真店实测记录（2026-09-11，glass-bowl 开发店）
 
 - client credentials 换令牌 ✓；`get_shop` ✓（回 `{ shop: { id, name, myshopifyDomain, primaryDomainUrl } }`，**没有币种与时区**，币种只能从订单行的 `currencyCode` 取）；`list_products` ✓（3 个样品商品）。
