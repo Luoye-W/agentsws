@@ -530,7 +530,7 @@ import {
   type ShopAdminAssembly,
   STORE_SESSION_CLI_ID,
 } from './shop-auth.js'
-import { preferCloudShopAdmin } from './shop-cloud-admin.js'
+import { cloudShopReader, preferCloudShopAdmin } from './shop-cloud-admin.js'
 import type { ShopOps } from './shop-ops.js'
 import { createShopOps } from './shop-service.js'
 import { createShopToolSurface } from './shop-tools.js'
@@ -2735,8 +2735,29 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         const owner = (await identity.getWorkspace(ws))?.owner_id ?? person_id
         return { person: owner, via: 'owner' }
       },
-      // 本机图片只许从本品牌的文件夹里拿
-      fileRoots: () => (brand.dir === undefined ? [] : [brand.dir]),
+      /*
+       * 本机图片只许从本品牌的文件夹里拿；WP267（决策 198）再加设计岗素材库那一段对象存储
+       * （`<对象存储>/design/<品牌>/`，素材是明文、带图片扩展名）——只在对象存储在本机时。
+       */
+      fileRoots: () => {
+        const roots = brand.dir === undefined ? [] : [brand.dir]
+        const store = blobs?.describe()
+        if (store?.kind === 'local') roots.push(join(store.display, 'design', ws))
+        return roots
+      },
+      assetFile: (asset_id) => {
+        const asset = brand.design.asset(asset_id)
+        const store = blobs?.describe()
+        if (
+          asset === undefined ||
+          asset.workspace_id !== ws ||
+          asset.status === 'rejected' ||
+          asset.blob_uri === undefined ||
+          store?.kind !== 'local'
+        )
+          return undefined
+        return join(store.display, blobKey(asset.blob_uri))
+      },
       ...(brand.dir === undefined ? {} : { stateFile: join(brand.dir, 'shop-ops.json') }),
       ...(options.shopAdmin?.fetch === undefined ? {} : { fetch: options.shopAdmin.fetch }),
       appendEvent: (type, payload) =>
@@ -3547,6 +3568,22 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         work: () => workRef,
         appendEvent,
         storefrontPlatform: () => brandProfileOf(ws).storefront_platform,
+        /*
+         * WP267（决策 209）：这个品牌在连接页云端一键授权连着店（授了 read_orders）→ 客服回信 / 订单查询的
+         * 订单与商品改走云端代发（只读）；没连再回退连接器那条 Shopify 连接。改动照旧出卡。
+         */
+        cloudShop: () =>
+          cloudShopReader(
+            {
+              link: () => cloudShopLinks.link(ws),
+              call: async () => {
+                const cloud = await brandModules.cloud(ws)
+                return cloud.linked() ? cloud.call : undefined
+              },
+              onAuthProblem: () => cloudShopLinks.invalidate(ws),
+            },
+            ['read_orders'],
+          ),
         // WP67：红人与合作的只读记录（联系方式一格都不给，见 `RecordKolPort`）
         kol: () => kol,
         // WP72：社媒账号与社群线程的**只读**记录（见 `RecordSocialPort`）
@@ -8463,6 +8500,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       shopHints: (ws) => shopifyShopHints(ws),
       startupBrand: workspace.id,
       links: cloudShopLinks,
+      // WP267（决策 208）：老令牌缺 store → 一点补签（云上就地补，不用重新登录）
+      upgrade: (ws) => cloudAccount.upgradeScopes(ws),
     }),
     /*
      * WP246（决策 87 / 88）：取数路线（体检、设置、Reddit 读号），按品牌取。

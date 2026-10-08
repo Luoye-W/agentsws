@@ -14,6 +14,11 @@ import { join } from 'node:path'
 export const FAKE_SHOPIFY_RUN = `#!/usr/bin/env node
 const args = process.argv.slice(2)
 if (args[0] === 'version') { console.log('Current Shopify CLI version: 4.8.5'); process.exit(0) }
+if (args[0] === 'config' && args[1] === 'autoupgrade') {
+  // WP267：真 CLI 把 autoUpgradeEnabled 写进 shopify-cli-kit 那一份配置；这里记一笔
+  require('node:fs').appendFileSync(require('node:path').join(__dirname, 'autoupgrade.jsonl'), JSON.stringify({ args, home: process.env.HOME, ci: 'CI' in process.env }) + '\\n')
+  console.log('Auto-upgrade disabled.'); process.exit(0)
+}
 if (args[0] === 'auth' && args[1] === 'login') {
   const fs = require('node:fs')
   const path = require('node:path')

@@ -16,7 +16,7 @@
  * | `shop_save_product` | 建商品（一律先存草稿）/ 改标题、描述、类型、品牌、标签 | 出卡 |
  * | `shop_set_price` | 改一个变体的价格 | 出卡 |
  * | `shop_set_product_status` | 上架 / 下架（草稿）/ 归档 | 出卡（永远人审） |
- * | `shop_add_product_images` | 给商品加图（网址或本机图片文件） | 出卡 |
+ * | `shop_add_product_images` | 给商品加图（网址、本机图片文件，或设计岗素材库的图） | 出卡 |
  * | `shop_save_collection` | 建合集 / 改合集、加减商品 | 出卡 |
  * | `shop_save_page` | 建 / 改页面 | 出卡 |
  * | `shop_save_menu` | 建 / 改菜单（整份菜单项） | 出卡 |
@@ -291,7 +291,7 @@ export const SHOP_TOOL_DEFS: readonly ToolDef[] = [
   {
     name: SHOP_ADD_IMAGES_TOOL,
     description:
-      '**不会直接传图。** 出一张卡：给商品加图（最多 10 张），每张给网址（https）或本机图片文件路径（jpg / png / webp / gif，只限本品牌的文件夹），可带替代文字。人批了才传。',
+      '**不会直接传图。** 出一张卡：给商品加图（最多 10 张），每张给网址（https）、本机图片文件路径（jpg / png / webp / gif，只限本品牌的文件夹），或设计岗素材库里一张图的素材 id（asset_id），可带替代文字。人批了才传。',
     input_schema: {
       type: 'object',
       properties: {
@@ -303,6 +303,7 @@ export const SHOP_TOOL_DEFS: readonly ToolDef[] = [
             properties: {
               url: STR('图片网址（https）'),
               file: STR('或本机图片文件路径'),
+              asset_id: STR('或设计岗素材库里的素材 id'),
               alt: STR('替代文字'),
             },
           },

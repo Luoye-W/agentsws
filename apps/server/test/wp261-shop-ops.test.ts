@@ -442,3 +442,78 @@ describe('改动：只出卡 → 批了才改 → 读回', () => {
     ).toBeUndefined()
   })
 })
+
+describe('WP267（决策 198）：传商品图也认设计岗素材库里的图', () => {
+  it('给 asset_id：找到对象存储里那份文件，过同一道检查；批了照样走临时地址上传', async () => {
+    await authorize()
+    const id = 'gid://shopify/Product/1002'
+    const designDir = join(dir, 'blobs', 'design', 'ws_rollout', 'design.ecommerce')
+    mkdirSync(designDir, { recursive: true })
+    const png = join(designDir, 'dsa_hero.png')
+    writeFileSync(png, Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0]))
+    const assets: Record<string, string> = {
+      dsa_hero: png,
+      // 别的品牌那一段对象存储：不在这个品牌的根里
+      dsa_other: join(dir, 'blobs', 'design', 'ws_other', 'x.png'),
+    }
+    mkdirSync(join(dir, 'blobs', 'design', 'ws_other'), { recursive: true })
+    writeFileSync(assets.dsa_other as string, Buffer.from([0x89, 0x50, 0x4e, 0x47, 0, 0, 0, 0]))
+    const withAssets = createShopOps({
+      workspace_id: 'ws_rollout',
+      clock: { now: () => new Date().toISOString() },
+      auth,
+      ledger: {
+        stage: async (input) => {
+          staged.push(input)
+          return { ok: true, change: { id: 'c' }, approval: { id: 'a' } } as never
+        },
+      },
+      effectiveConfig: config,
+      fileRoots: () => [join(dir, 'brand'), join(dir, 'blobs', 'design', 'ws_rollout')],
+      assetFile: (assetId) => assets[assetId],
+      fetch: (async (url: string, init: RequestInit) => {
+        uploads.push({ url, form: init.body as FormData })
+        return new Response(null, { status: 204 })
+      }) as unknown as typeof fetch,
+    })
+    await withAssets.read('shop_get_product', { id }, req())
+    await expect(
+      withAssets.propose(
+        'shop_add_product_images',
+        { product_id: id, images: [{ asset_id: 'dsa_missing' }] },
+        req(),
+      ),
+    ).rejects.toThrow('素材库里找不到这张图')
+    await expect(
+      withAssets.propose(
+        'shop_add_product_images',
+        { product_id: id, images: [{ asset_id: 'dsa_other' }] },
+        req(),
+      ),
+    ).rejects.toThrow('不在本品牌的文件夹里')
+    await expect(
+      withAssets.propose(
+        'shop_add_product_images',
+        { product_id: id, images: [{ asset_id: 'dsa_hero', url: 'https://img.test/a.jpg' }] },
+        req(),
+      ),
+    ).rejects.toThrow('其中一个')
+    // 没装配素材库（老装配）：照实说找不到
+    await expect(
+      ops.propose(
+        'shop_add_product_images',
+        { product_id: id, images: [{ asset_id: 'dsa_hero' }] },
+        req(),
+      ),
+    ).rejects.toThrow('素材库里找不到这张图')
+    await withAssets.propose(
+      'shop_add_product_images',
+      { product_id: id, images: [{ asset_id: 'dsa_hero', alt: '主图' }] },
+      req(),
+    )
+    expect(staged[0]?.approval.title).toBe('给商品「Rollout 车载挂钩」加 1 张图')
+    const res = await withAssets.apply(changeOf(0))
+    expect(res?.status).toBe('ok')
+    expect((uploads[0]?.form.get('file') as File | undefined)?.name).toBe('dsa_hero.png')
+  })
+})

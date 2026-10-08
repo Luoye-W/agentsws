@@ -639,6 +639,7 @@ export {
   type ShopifyConnectRow,
   type ShopifyConnectStarted,
   type ShopifyConnectTestResult,
+  type ShopifyConnectUpgradeResult,
   type ShopifyConnectView,
   type ShopifyShopSource,
   shopifyConnectRoutes,

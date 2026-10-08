@@ -83,3 +83,22 @@ export interface ShopifyCloudGraphqlRequest {
 
 /** 「测试连接」那一次只读查询：店名 + 店铺域名。 */
 export const SHOPIFY_CLOUD_TEST_QUERY = '{ shop { name myshopifyDomain } }'
+
+/**
+ * WP267（决策 208，接私有云 WP266）：**一点补签**——老的工作区令牌缺后来才进默认集的动作集（`store` / `kol`）时，
+ * 不用重新登录，本机拿这把令牌打一下就**就地**补上（不换令牌、不动有效期、不碰同组织别的关联）。
+ *
+ * 同样不进 `CloudApi` 路由表：这是官方云为老令牌留的一条，自建形态签出来的令牌本来就按当时的默认集。
+ * 云上没有这一条（404 / 405 / 501）、或令牌已经不认（401）→ 本机退回「重新登录」。
+ */
+export const CLOUD_LINK_UPGRADE_PATH = '/v1/cloud/links/current/upgrade'
+
+/** `POST /v1/cloud/links/current/upgrade` → 200 `{ data: CloudLinkUpgrade }`（没有令牌）。 */
+export interface CloudLinkUpgrade {
+  /** 这把令牌现在有的全部动作集。 */
+  scopes: string[]
+  /** 这一次补上的那几项（已经齐了 = 空）。 */
+  added: string[]
+  /** 关联本身的元信息（云上原样给，本机只认 `id` / `expires_at`）。 */
+  link?: { id?: string; expires_at?: string; scopes?: string[] }
+}

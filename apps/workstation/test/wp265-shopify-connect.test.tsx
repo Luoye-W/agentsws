@@ -54,6 +54,9 @@ const state = {
   verify: [] as Record<string, unknown>[],
   tests: [] as string[],
   disconnects: [] as string[],
+  /** WP267：一点补签（`undefined` = 成；给了 = 按这个 reason 失败）。 */
+  upgradeError: undefined as string | undefined,
+  upgrades: 0,
 }
 
 vi.mock('@/lib/api', async () => {
@@ -83,6 +86,18 @@ vi.mock('@/lib/api', async () => {
     testShopifyConnect: async (shop: string) => {
       state.tests.push(shop)
       return { ok: true, shop, name: 'Rollout', domain: shop, checked_at: '2026-10-08T00:00:00Z' }
+    },
+    upgradeShopifyConnect: async () => {
+      state.upgrades += 1
+      if (state.upgradeError !== undefined)
+        throw new actual.ApiClientError(501, {
+          code: 'not_implemented',
+          message: 'no',
+          details: { reason: state.upgradeError },
+        })
+      state.view = IDLE
+      state.startError = undefined
+      return { upgraded: true, added: ['store'], scopes: ['ai', 'store'] }
     },
     disconnectShopifyConnect: async (shop: string) => {
       state.disconnects.push(shop)
@@ -115,6 +130,8 @@ beforeEach(() => {
   state.verify = []
   state.tests = []
   state.disconnects = []
+  state.upgradeError = undefined
+  state.upgrades = 0
   opened.length = 0
 })
 
@@ -133,7 +150,7 @@ describe('WP265 卡片：点不了的几种', () => {
     expect(await screen.findByTestId('shopconnect-auth')).toBeTruthy()
   })
 
-  it('老令牌缺 store：重新登录 = 登录页签、邮箱预填、验码带 refresh', async () => {
+  it('老令牌缺 store：一点补签没成（WP267）→ 退回重新登录 = 登录页签、邮箱预填、验码带 refresh', async () => {
     state.view = {
       linked: true,
       email: 'owner@example.com',
@@ -141,9 +158,11 @@ describe('WP265 卡片：点不了的几种', () => {
       connections: [],
       candidates: [],
     }
+    state.upgradeError = 'upgrade_unavailable'
     renderWithProviders(<ShopifyConnect assignment="asg_owner" />)
-    expect(await screen.findByText('账号授权要更新一下，重新登录一次就好')).toBeTruthy()
-    fireEvent.click(screen.getByTestId('shopconnect-relogin'))
+    expect(await screen.findByText('账号授权要更新一下，点一下就好')).toBeTruthy()
+    fireEvent.click(screen.getByTestId('shopconnect-upgrade'))
+    expect(await screen.findByTestId('shopconnect-upgrade-fallback')).toBeTruthy()
     const form = await screen.findByTestId('shopconnect-auth')
     expect(form.getAttribute('data-tab')).toBe('login')
     expect((screen.getByTestId('shopconnect-email') as HTMLInputElement).value).toBe(
@@ -303,5 +322,36 @@ describe('WP265 Shopify 卡：老表单收进「高级」', () => {
       '商品',
       'gift_cards（只看）',
     ])
+  })
+})
+
+describe('WP267 卡片：账号授权一点补签', () => {
+  it('点连接撞上「授权要更新」→「更新授权」一点就好，成了接着连刚才那家店（不用重新登录）', async () => {
+    state.startError = { reason: 'scope_missing', message: 'x', status: 403 }
+    renderWithProviders(<ShopifyConnect assignment="asg_owner" />)
+    fireEvent.click(await screen.findByTestId('shopconnect-connect'))
+    // 起授权回 scope_missing → 卡上换成「更新授权」
+    state.view = {
+      ...IDLE,
+      blocked: { reason: 'scope_missing', message: 'x' },
+    }
+    const upgrade = await screen.findByTestId('shopconnect-upgrade')
+    expect(screen.queryByTestId('shopconnect-relogin')).toBeNull()
+    fireEvent.click(upgrade)
+    await waitFor(() => expect(state.upgrades).toBe(1))
+    // 接着做刚才那一步：再起一次授权，还是那家店
+    await waitFor(() => expect(state.starts).toHaveLength(2))
+    expect(state.starts[1]).toEqual({ shop: '6suegp-md.myshopify.com' })
+    expect(await screen.findByTestId('shopconnect-waiting')).toBeTruthy()
+    expect(opened).toHaveLength(1)
+    expect(screen.queryByTestId('shopconnect-auth')).toBeNull()
+  })
+
+  it('卡一打开就是「授权要更新」：点一下补签，回到能连的样子', async () => {
+    state.view = { ...IDLE, blocked: { reason: 'scope_missing', message: 'x' } }
+    renderWithProviders(<ShopifyConnect assignment="asg_owner" />)
+    fireEvent.click(await screen.findByTestId('shopconnect-upgrade'))
+    expect(await screen.findByTestId('shopconnect-connect')).toBeTruthy()
+    expect(state.starts).toEqual([])
   })
 })

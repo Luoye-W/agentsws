@@ -213,6 +213,12 @@ export type AuditAction =
   | 'account.allocation_limit'
   | 'account.allocation_reclaim'
   | 'account.allocation_auto_reclaim'
+  /**
+   * WP266 / WP267（决策 208）：本机一点补签——`POST /v1/cloud/links/current/upgrade` 给这把工作区令牌
+   * **就地**补上后来才进默认集的动作集（`kol` / `store`），不换令牌、不动有效期。`target_kind` 是 `link`，
+   * `target_id` 是关联号；`details` 只有补上的那几项与工作区号前后几位，**没有令牌**。
+   */
+  | 'link.scope_upgrade'
 
 /**
  * 一条审计。**只增不改**：没有 update，没有 delete，主键是自增号。

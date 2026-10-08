@@ -24,6 +24,10 @@ export const SITE_THEME_ZH: Record<string, string> = {
   'site_theme.none.relogin': '换个账号登录',
   'site_theme.none.open': '去 Shopify 开店',
   'site_theme.retry': '再找一次',
+  // WP267（决策 164）：只有一家但不是官网那家
+  'site_theme.need.mismatch': '官网那家店（{site}）不在这个账号下，要换个账号登录吗',
+  'site_theme.mismatch.relogin': '换个账号',
+  'site_theme.mismatch.use': '就用这家（{store}）',
   'matter.preview.open': '打开预览',
 }
 
@@ -48,5 +52,9 @@ export const SITE_THEME_EN: Record<string, string> = {
   'site_theme.none.relogin': 'Sign in with another account',
   'site_theme.none.open': 'Open a Shopify store',
   'site_theme.retry': 'Look again',
+  'site_theme.need.mismatch':
+    'Your website’s store ({site}) isn’t under this account — sign in with another one?',
+  'site_theme.mismatch.relogin': 'Switch account',
+  'site_theme.mismatch.use': 'Use this one ({store})',
   'matter.preview.open': 'Open preview',
 }

@@ -27,6 +27,12 @@ const readSession = () => fs.existsSync(sessionFile) ? JSON.parse(fs.readFileSyn
 const store = flag('--store')
 const log = (extra) => fs.appendFileSync(path.join(here, 'calls.jsonl'), JSON.stringify({ argv, home, ci: process.env.CI === '1', env: Object.keys(process.env).sort(), ...extra }) + '\\n')
 if (argv[0] === 'version') { console.log('4.8.5'); process.exit(0) }
+// WP267：\`config autoupgrade off\` 写进本品牌那一份配置（真 CLI 写 shopify-cli-kit 的 autoUpgradeEnabled）
+if (argv[0] === 'config' && argv[1] === 'autoupgrade') {
+  fs.appendFileSync(path.join(here, 'config-calls.jsonl'), JSON.stringify({ argv, home, ci: process.env.CI === '1' }) + '\\n')
+  fs.mkdirSync(home, { recursive: true }); fs.writeFileSync(path.join(home, '.fake-autoupgrade'), argv[2] || '')
+  console.log('Auto-upgrade ' + (argv[2] === 'off' ? 'disabled' : 'enabled') + '.'); process.exit(0)
+}
 if (argv[0] !== 'store') { console.error('unknown'); process.exit(2) }
 if (argv[1] === 'auth') {
   log({})
@@ -90,6 +96,8 @@ export interface FakeStoreCli {
   clear(control: 'expires-in' | 'refresh' | 'revoked' | 'net-fail' | 'old-version'): void
   respond(op: string, data: unknown): void
   requireScope(op: string, scope: string): void
+  /** WP267：跑过的 `config autoupgrade …`（不记进 `calls()`，免得老测试的下标变）。 */
+  configCalls(): { argv: string[]; home: string; ci: boolean }[]
   calls(): {
     argv: string[]
     home: string
@@ -124,6 +132,14 @@ export function fakeStoreCli(dir: string): FakeStoreCli {
       const s = state()
       s.scopes[op] = scope
       writeFileSync(statePath, JSON.stringify(s))
+    },
+    configCalls: () => {
+      const f = join(dir, 'config-calls.jsonl')
+      if (!existsSync(f)) return []
+      return readFileSync(f, 'utf8')
+        .split('\n')
+        .filter((l) => l !== '')
+        .map((l) => JSON.parse(l))
     },
     calls: () => {
       const f = join(dir, 'calls.jsonl')
