@@ -60,6 +60,17 @@ import {
   SCHEDULE_TOOL_DEF_BY_NAME,
   scheduleBranch,
 } from './schedule.js'
+import {
+  firstProductOf,
+  SHOP_GET_PRODUCT_TOOL,
+  SHOP_LIST_PRODUCTS_TOOL,
+  SHOP_SAVE_PRODUCT_TOOL,
+  SHOP_TOOL_DEF_BY_NAME,
+  type ShopStagedData,
+  type ShopStep,
+  shopBranch,
+  shopStagedOf,
+} from './shop.js'
 import { SKILL_TOOL_DEF_BY_NAME } from './skills.js'
 import {
   boundariesToAsk,
@@ -306,7 +317,9 @@ function toolDefs(req: RunRequest): ToolDef[] {
       // WP181：官方「自动化任务」的四个工具（只有装了那个官方插件的运行才有）
       SCHEDULE_TOOL_DEF_BY_NAME.get(name) ??
       // WP253：网页模板的九个受限主题工具（只有那条职责、服务端接了主题工具的运行才有）
-      THEME_TOOL_DEF_BY_NAME.get(name) ?? {
+      THEME_TOOL_DEF_BY_NAME.get(name) ??
+      // WP261：独立站运营工具（只有授权过店铺、职责登记了的运行才有）
+      SHOP_TOOL_DEF_BY_NAME.get(name) ?? {
         name,
         description: `stand-in tool ${name}`,
         input_schema: { type: 'object' },
@@ -1035,6 +1048,82 @@ export function createStubRuntime(options: StubRuntimeOptions): RuntimeAdapter {
           summary,
         })
         return finish(exhausted ? 'budget_exhausted' : 'completed', summary)
+      }
+
+      /*
+       * WP261：**独立站运营**（演示用剧本）。工具面里有改商品的工具、说的是改商品，就：列商品 → 读第一件 →
+       * 出一张改标题的卡（不直接改；人批了执行器才去店里改）。stub 不会写文案，标题只加「（新版）」。
+       */
+      const shopCalls = shopBranch(req, b2bText)
+      if (shopCalls !== undefined) {
+        const failed: string[] = []
+        let staged: ShopStagedData | undefined
+        const queue: ShopStep[] = [...shopCalls]
+        while (queue.length > 0) {
+          const step = queue.shift() as ShopStep
+          if (signal.aborted) {
+            sink(cancelledEvent(signal))
+            return finish('cancelled', '运行被中断')
+          }
+          const call_id = `call_${toolCalls + 1}`
+          sink({ type: 'tool.call', call_id, tool: step.tool, input: step.input })
+          const res =
+            options.executeTool === undefined
+              ? { status: 'error' as const, reason: 'no_tool_executor' }
+              : await options.executeTool({ name: step.tool, input: step.input, request: req })
+          toolCalls += 1
+          sink({
+            type: 'tool.result',
+            call_id,
+            status: res.status,
+            ...(res.reason === undefined ? {} : { reason: res.reason }),
+          })
+          if (res.status !== 'ok') {
+            failed.push(res.reason ?? '这一步没走通')
+            break
+          }
+          readTools.push(step.tool)
+          if (step.tool === SHOP_LIST_PRODUCTS_TOOL) {
+            const first = firstProductOf(res.data)
+            if (first === undefined) failed.push('店里还没有商品')
+            else queue.push({ tool: SHOP_GET_PRODUCT_TOOL, input: { id: first.id } })
+          } else if (step.tool === SHOP_GET_PRODUCT_TOOL) {
+            const p = res.data as { id?: unknown; title?: unknown }
+            if (typeof p.id === 'string' && typeof p.title === 'string')
+              queue.push({
+                tool: SHOP_SAVE_PRODUCT_TOOL,
+                input: { id: p.id, title: `${p.title}（新版）` },
+              })
+          } else if (step.tool === SHOP_SAVE_PRODUCT_TOOL) {
+            staged = shopStagedOf(res.data)
+            if (staged?.change_id !== undefined) {
+              sink({ type: 'change.staged', change_id: staged.change_id })
+              outputs.push({ kind: 'staged_change', change_id: staged.change_id })
+            }
+          }
+        }
+        const answer =
+          staged !== undefined ? staged.message : `没出成卡：${failed[0] ?? '这一步没走通'}`
+        outputs.push({ kind: 'answer', text: answer })
+        usage.output_tokens = Math.ceil(answer.length / 4) + (seed % 7)
+        const summary = describeRun({
+          readTools,
+          drafted: false,
+          reply: answer,
+          tools: req.tools.allow,
+        })
+        sink({
+          type: 'run.completed',
+          usage: {
+            ...usage,
+            tool_calls: toolCalls,
+            seconds: Math.max(0, (Date.parse(clock.now()) - startedMs) / 1000),
+            cost_base: 0,
+          },
+          outputs,
+          summary,
+        })
+        return finish('completed', summary)
       }
 
       /*

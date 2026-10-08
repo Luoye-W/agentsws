@@ -421,7 +421,13 @@ import {
   type PlatformCliProbe,
   type ProbeExec,
 } from './platform-cli.js'
-import { createPlatformCliRunner, type PlatformCliRunnerOptions } from './platform-cli-runner.js'
+import {
+  type CliJobView,
+  CliRunnerError,
+  createPlatformCliRunner,
+  type PlatformCliRunnerOptions,
+  type SpawnTool,
+} from './platform-cli-runner.js'
 import {
   type CliSession,
   cliSessionAlias,
@@ -516,10 +522,20 @@ import {
 } from './secret-store.js'
 import { createSecretaryAssembly, type SecretaryAssembly } from './secretary.js'
 import { claimRuleCard, createSeoService, pickRoleHolder } from './seo-service.js'
+import { ShopAdminError } from './shop-admin.js'
+import {
+  createShopAdmin,
+  createStoreAuthRunner,
+  type ShopAdminAssembly,
+  STORE_SESSION_CLI_ID,
+} from './shop-auth.js'
+import type { ShopOps } from './shop-ops.js'
+import { createShopOps } from './shop-service.js'
+import { createShopToolSurface } from './shop-tools.js'
 import type { BrokerFetch } from './shopify-broker.js'
 import { createCloudShopLinks, createShopifyConnect } from './shopify-connect.js'
 import { createShopifyDevMcp } from './shopify-devmcp.js'
-import type { RunCli } from './shopify-theme.js'
+import { createRunCli, type RunCli } from './shopify-theme.js'
 import { createConnectSiteFacts, createSiteService, createSiteStore, seedDemoSite } from './site.js'
 import {
   createSiteTheme,
@@ -902,6 +918,11 @@ export interface ServerOptions {
    * 生产不传：用 WP245 装好的 CLI 真跑，起底包从 codeload.github.com 下钉死的那一版。
    */
   siteTheme?: { run?: RunCli; fetch?: ThemeFetch; base?: ThemeBasePin }
+  /**
+   * WP261：店铺授权（`store auth`）与后台接口（`store execute`）的注入点（测试 / demo 换成进程内假 CLI + 假店，
+   * 不联网、不碰真店）。生产不传：用 WP245 装好的 CLI 真跑，令牌在本品牌那一份会话目录里。
+   */
+  shopAdmin?: { run?: RunCli; spawn?: SpawnTool; fetch?: typeof fetch }
   /**
    * WP247：本机连接器下载器的注入点（测试换成假 npm，不联网）。生产不传：只有桌面壳设了
    * `AGENTSWS_CONNECT_LOCAL_RUNTIME=1`（它来起停本机连接器）且有数据目录时才装配。
@@ -1918,6 +1939,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         const themed = await (await siteThemeOf(change.workspace_id))?.apply(change)
         if (themed !== undefined) return themed
       }
+      // WP261：独立站运营的卡批了 → 由服务端带 `--allow-mutations` 去改、读回确认（整条路上唯一改店铺数据的地方）
+      const shopped = await (await shopOf(change.workspace_id))?.ops.apply(change)
+      if (shopped !== undefined) return shopped
       return backend.apply(change, opts)
     },
     // 18 §3：批准了的对外草稿真发出去。渠道接不住的（不是邮件 / 没装邮箱）
@@ -2591,6 +2615,123 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     })
     siteThemes.set(ws, assembly)
     return assembly
+  }
+  /*
+   * WP261（决策 175 第 1 步）：店铺授权 + 独立站运营——**一个品牌一份**（懒建）。CLI 的检测 / 起法 / 一键安装
+   * 在后面（平台工具包那一段）才建出来，经 `shopCli` 晚绑定；授权的回调端口整机一个，所以授权跑法是进程级的一份。
+   */
+  const shopCli: {
+    probe?: (spec: PlatformCliSpec, fresh: boolean) => Promise<PlatformCliProbe>
+    invocation?: (spec: PlatformCliSpec) => { command: string; prefix: readonly string[] }
+    install?: (spec: PlatformCliSpec) => void
+    installJob?: (spec: PlatformCliSpec) => CliJobView | undefined
+  } = {}
+  const storeAuthRunner = createStoreAuthRunner({
+    now: () => clock.now(),
+    ...(options.shopAdmin?.spawn === undefined ? {} : { spawn: options.shopAdmin.spawn }),
+  })
+  const shops = new Map<WorkspaceId, { auth: ShopAdminAssembly; ops: ShopOps }>()
+  const shopOf = async (
+    ws: WorkspaceId,
+  ): Promise<{ auth: ShopAdminAssembly; ops: ShopOps } | undefined> => {
+    const cached = shops.get(ws)
+    if (cached !== undefined) return cached
+    const brand = await brands?.forWorkspace(ws)
+    if (brand === undefined) return undefined
+    // 与 WP245 的私有安装同一个工具目录（不等晚绑定：早一步建也不会落到整台电脑那一份会话上）
+    const toolsDir =
+      options.platformCliRunner !== undefined && 'toolsDir' in options.platformCliRunner
+        ? options.platformCliRunner.toolsDir
+        : dbDir === undefined
+          ? undefined
+          : join(dbDir, 'tools')
+    const cliSpec = (): PlatformCliSpec | undefined => platformKitOf(brandPlatformOf(ws))?.cli
+    const auth = createShopAdmin({
+      workspace_id: ws,
+      clock,
+      ...(brand.dir === undefined ? {} : { settingsFile: join(brand.dir, 'shop-admin.json') }),
+      cliSpec,
+      probe: (spec, fresh) =>
+        shopCli.probe === undefined
+          ? Promise.resolve({
+              installed: false,
+              node_ok: false,
+              min_node_major: spec.min_node_major,
+              checked_at: clock.now(),
+            })
+          : shopCli.probe(spec, fresh === true),
+      invocation: (spec) => shopCli.invocation?.(spec) ?? { command: spec.bin, prefix: [] },
+      ...(toolsDir === undefined
+        ? {}
+        : { sessionHome: cliSessionHome(toolsDir, STORE_SESSION_CLI_ID, ws) }),
+      // 与网页模板同一份：连接 → 登录后自动找到的 / 手填的；都没有就用官网读到的 `xxx.myshopify.com`
+      store: async () =>
+        (await (await siteThemeOf(ws))?.readiness().catch(() => undefined))?.store ??
+        onboardingRef?.shopifyDomainOf(ws),
+      setStore: async (raw) => {
+        const theme = await siteThemeOf(ws)
+        if (theme === undefined) throw new ApiError('not_implemented', '这个品牌没装主题工坊')
+        try {
+          await theme.setStore(raw)
+        } catch (e) {
+          if (e instanceof SiteThemeError) throw new ApiError('invalid_input', e.message)
+          throw e
+        }
+      },
+      install: (spec) => shopCli.install?.(spec),
+      installJob: (spec) => shopCli.installJob?.(spec),
+      auth: storeAuthRunner,
+      run:
+        options.shopAdmin?.run ??
+        createRunCli(() => {
+          const spec = cliSpec()
+          return spec === undefined
+            ? { command: 'shopify', prefix: [] }
+            : (shopCli.invocation?.(spec) ?? { command: spec.bin, prefix: [] })
+        }),
+      env,
+      appendEvent: (type, payload) =>
+        appendEvent({
+          schema_version: 1,
+          workspace_id: ws,
+          type,
+          actor: { kind: 'system', id: 'shop.admin' },
+          correlation: { trace_id: `trc_shop_${Date.parse(clock.now()).toString(36)}` },
+          payload,
+        }),
+    })
+    const ops = createShopOps({
+      workspace_id: ws,
+      clock,
+      auth,
+      ledger: txn.ledger,
+      effectiveConfig: (id) => roles.effectiveConfig(id),
+      recipient: async ({ route_to, role_id, person_id }) => {
+        if (route_to === 'role_holder') return { person: person_id, via: 'role_holder' }
+        if (route_to === 'scope_manager') {
+          const r = await routeScopeManager({ workspace_id: ws, role_id, proposer: person_id })
+          return { person: r.person, via: r.via === 'owner' ? 'owner' : 'scope_manager' }
+        }
+        const owner = (await identity.getWorkspace(ws))?.owner_id ?? person_id
+        return { person: owner, via: 'owner' }
+      },
+      // 本机图片只许从本品牌的文件夹里拿
+      fileRoots: () => (brand.dir === undefined ? [] : [brand.dir]),
+      ...(brand.dir === undefined ? {} : { stateFile: join(brand.dir, 'shop-ops.json') }),
+      ...(options.shopAdmin?.fetch === undefined ? {} : { fetch: options.shopAdmin.fetch }),
+      appendEvent: (type, payload) =>
+        appendEvent({
+          schema_version: 1,
+          workspace_id: ws,
+          type,
+          actor: { kind: 'system', id: 'shop.ops' },
+          correlation: { trace_id: `trc_shop_${Date.parse(clock.now()).toString(36)}` },
+          payload,
+        }),
+    })
+    const entry = { auth, ops }
+    shops.set(ws, entry)
+    return entry
   }
   // WP252（决策 125）：一台机一个连接器、多个品牌共用——整台机一份连接归属表，各品牌的连接面共用同一个实例；
   // 启动时先把各品牌老状态文件里记过的归属补记进来（幂等），必须在任何品牌列连接之前。
@@ -3827,6 +3968,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
              * 主题工坊按品牌懒建——取值函数只在真调工具那一刻才碰它。
              */
             themeTools: createThemeToolExecutor({ module: () => siteThemeOf(ws) }),
+            /*
+             * WP261：独立站运营工具（查询 / 出卡）。工具面按「职责表 × 店铺授权里的权限」每次运行现问；
+             * 店铺授权与运营按品牌懒建——取值函数只在真用到那一刻才碰它。
+             */
+            shopTools: createShopToolSurface({ module: () => shopOf(ws) }),
             vertical: () => brandProfileOf(ws).vertical,
             // WP216：平台专属的官方技能 / Dev MCP 工具只给平台对得上的品牌（每次现取档案）
             storefrontPlatform: () => brandPlatformOf(ws),
@@ -8050,6 +8196,21 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   // WP253：主题工坊与 CLI 卡认的是同一份检测、同一个起法、同一笔登录记录
   siteThemeCli.probe = (spec, fresh) => platformCliProber.probe(spec, { fresh })
   siteThemeCli.invocation = (spec) => platformCliRunner.invocation(spec)
+  // WP261：店铺授权认的也是同一份检测、同一个起法；「一键安装」走 WP245 那一条
+  shopCli.probe = (spec, fresh) => platformCliProber.probe(spec, { fresh })
+  shopCli.invocation = (spec) => platformCliRunner.invocation(spec)
+  shopCli.installJob = (spec) => platformCliRunner.job(spec.id)
+  shopCli.install = (spec) => {
+    try {
+      platformCliRunner.start(spec, 'install', {
+        onFinished: () => platformCliProber.invalidate?.(spec.id),
+      })
+    } catch (e) {
+      if (e instanceof CliRunnerError && e.code === 'conflict')
+        throw new ApiError('conflict', '正在装 / 登录 Shopify CLI，等它好了再点')
+      throw e
+    }
+  }
   /*
    * WP253（Fable 10-07 真机 + 决定 138）：CLI 会话按品牌分开——每个品牌一份 CLI 配置目录
    * （`platform-cli-session.ts` 写了依据）。没有数据目录（内存档）就用整台电脑那一份。
@@ -8302,6 +8463,36 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
      * 「我登好了」按品牌的数据目录记一笔（不存凭据）；本机 CLI 检测是这台机器的事，一台一份缓存。
      */
     platformKit: platformKitPort,
+    /*
+     * WP261：「授权管理商品和页面」那一行（Shopify CLI `store auth`，按品牌；参数在服务端拼死）。
+     */
+    shopAdmin: {
+      view: async (actor, input) => {
+        const m = await shopOf(actor.workspace_id as WorkspaceId)
+        if (m === undefined) throw new ApiError('not_implemented', '这个品牌没装店铺授权')
+        return m.auth.view(input.roles)
+      },
+      run: async (actor, input) => {
+        const m = await shopOf(actor.workspace_id as WorkspaceId)
+        if (m === undefined) throw new ApiError('not_implemented', '这个品牌没装店铺授权')
+        try {
+          return await m.auth.run(input.action, input.roles)
+        } catch (e) {
+          if (e instanceof ShopAdminError) throw new ApiError('conflict', e.message)
+          throw e
+        }
+      },
+      cancel: async (actor, input) => {
+        const m = await shopOf(actor.workspace_id as WorkspaceId)
+        if (m === undefined) throw new ApiError('not_implemented', '这个品牌没装店铺授权')
+        return m.auth.cancel(input.roles)
+      },
+      setStore: async (actor, input) => {
+        const m = await shopOf(actor.workspace_id as WorkspaceId)
+        if (m === undefined) throw new ApiError('not_implemented', '这个品牌没装店铺授权')
+        return m.auth.setStore(input.store, input.roles)
+      },
+    },
     officialPlugins: {
       view: () => officialPlugins.view(),
       request: (actor, input) =>
@@ -8980,6 +9171,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       await dshScenesSetup.manager?.close()
       // WP245：替用户跑着的安装 / 登录一并停掉（不留孤儿进程等浏览器）
       platformCliRunner.dispose()
+      // WP261：正在等浏览器的店铺授权一并停掉（回调端口整机一个，不能留着占住）
+      storeAuthRunner.dispose()
       // WP247：正在下载的连接器一并停掉（下了一半的暂存目录由下载器自己清）
       localConnector?.dispose()
       learning.close()

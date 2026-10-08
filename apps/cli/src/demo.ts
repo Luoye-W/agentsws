@@ -53,11 +53,14 @@ import {
   createServer,
   deepseekAccountStandIn,
   demoOldReddit,
+  demoShop,
   demoWebSearch,
   fakeThemeBase,
   periodQueryRunner,
   platformCliStandIn,
   readonlyBrowserStandIn,
+  shopAdminRunStandIn,
+  shopAuthSpawnStandIn,
   themeCliStandIn,
 } from '@agentsws/server'
 import type { Pack, RunContext, World } from '@agentsws/simulation'
@@ -1475,6 +1478,18 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
         ],
       }).run
       return { run, fetch: base.fetch, base: base.pin }
+    })(),
+    /*
+     * WP261：「授权管理商品和页面」与运营工具在 demo 里也是替身——`store auth` 过一会儿像在浏览器里点了批准，
+     * `store execute` 落在一家内存里的假店上（两件商品、一个合集、一个页面、主菜单、一个折扣码），一个真店都不碰。
+     */
+    shopAdmin: ((): NonNullable<ServerOptions['shopAdmin']> => {
+      const shop = demoShop()
+      return {
+        run: shopAdminRunStandIn(shop),
+        spawn: shopAuthSpawnStandIn(shop),
+        fetch: (async () => new Response(null, { status: 204 })) as unknown as typeof fetch,
+      }
     })(),
     cloudFetch: cloud.fetch,
     /*

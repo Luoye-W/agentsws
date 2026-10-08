@@ -622,6 +622,14 @@ export type {
   SeoRunView,
 } from './routes/seo.js'
 export { seoRoutes } from './routes/seo.js'
+export {
+  type ShopAdminActor,
+  type ShopAdminAuthJob,
+  type ShopAdminPort,
+  type ShopAdminState,
+  type ShopAdminView,
+  shopAdminRoutes,
+} from './routes/shop-admin.js'
 // WP265：连接页 Shopify 卡的一键授权（接私有云 WP263）
 export {
   type ShopifyConnectActor,

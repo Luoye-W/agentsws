@@ -297,6 +297,13 @@ export {
   type Server,
   type ServerOptions,
 } from './server.js'
+// WP261：店铺授权 / 后台接口的进程内替身（demo 与端到端测试用：一家内存里的假店）
+export {
+  demoShop,
+  type FakeShop,
+  shopAdminRunStandIn,
+  shopAuthSpawnStandIn,
+} from './shop-admin-stand-in.js'
 export {
   createShopifyBroker,
   exchangeClientCredentials,
