@@ -121,7 +121,7 @@
     "packages/roles/roles/social/x.yml",
     "packages/roles/roles/social/youtube.yml"
   ],
-  "source_digest": "2bcb188d961107068bd43736cdfb944d",
+  "source_digest": "4df8fea3875ba12b83bb423c74e263da",
   "objects": [
     {
       "id": "ad",
@@ -2998,6 +2998,12 @@
           "type": "Iso8601",
           "sensitivity": "internal",
           "optional": true
+        },
+        {
+          "name": "handoff",
+          "type": "Handoff",
+          "sensitivity": "internal",
+          "optional": true
         }
       ],
       "read_via": [],
@@ -3390,6 +3396,12 @@
         {
           "name": "decided_at",
           "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "decided_by",
+          "type": "PersonId",
           "sensitivity": "internal",
           "optional": true
         },
@@ -5120,6 +5132,12 @@
           "type": "Iso8601",
           "sensitivity": "internal",
           "optional": true
+        },
+        {
+          "name": "handoff",
+          "type": "Handoff",
+          "sensitivity": "internal",
+          "optional": true
         }
       ],
       "read_via": [],
@@ -5482,6 +5500,12 @@
         {
           "name": "archived_at",
           "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "handoff",
+          "type": "Handoff",
           "sensitivity": "internal",
           "optional": true
         }
