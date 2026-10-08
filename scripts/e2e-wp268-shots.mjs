@@ -18,8 +18,8 @@
  */
 import { spawn } from 'node:child_process'
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
 import { createRequire } from 'node:module'
+import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -263,7 +263,11 @@ async function main() {
       await page.goto(`${BASE}/brand-assets`, { waitUntil: 'networkidle' })
       await page.waitForSelector('[data-testid="brand-asset"]', { timeout: 30_000 })
       await page.waitForTimeout(800)
-      await page.locator('[data-testid="brand-asset"]').filter({ has: page.locator('svg') }).first().click()
+      await page
+        .locator('[data-testid="brand-asset"]')
+        .filter({ has: page.locator('svg') })
+        .first()
+        .click()
       await page.waitForSelector('[data-testid="brand-asset-detail"]', { timeout: 10_000 })
       await page.waitForTimeout(600)
       await page.screenshot({ path: join(SHOTS, `5-library-${mode}.png`), fullPage: false })
