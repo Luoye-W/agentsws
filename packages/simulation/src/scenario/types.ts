@@ -1705,6 +1705,10 @@ export interface ScenarioExpected {
     stated_on_card?: boolean
     /** WP182：报价这一张是第几版（改价 = 新建一版）。 */
     version?: number
+    /** WP275：① ② 超了上限，要收件人再确认一次（`Recipient.reconfirm`）。 */
+    reconfirm?: boolean
+    /** WP275：卡上有没有「转给了…」那一句（① ② 不该有）。 */
+    forwarded?: boolean
   }[]
   /** WP182（docs/84 §3.1）：询盘那几封，按出现顺序（读 `simulation.b2b_inquiry`）。 */
   b2b_inquiry?: {
@@ -1924,6 +1928,13 @@ export interface Scenario {
   rubric?: string
   /** WP32：这条场景要调的交易控制模块时限（升级 / 过期 / 抽检比例）。 */
   policy?: ScenarioTxnPolicy
+  /**
+   * WP275（docs/95 §5）：这条场景里组织是哪种用法——`solo` ① 个人 / `peers` ② 同事互联 /
+   * `company` ③ 公司集体。不写 = 与以前一样（pack 是一家公司，审批流照规矩走）。
+   * ① ② 没有审批流：本该转上级 / 老板的卡落回这件事是谁的、超了上限再确认一次、
+   * 职责分离不拦、没人管到点只提醒本人。
+   */
+  org_mode?: 'solo' | 'peers' | 'company'
   /** WP32：这条场景只在这些档跑（不写 = 每档都跑）。 */
   tiers?: Tier[]
   /** 隐藏场景集标记（31 §1 I9：不随 pack 发布）。 */

@@ -1594,6 +1594,11 @@ export function checkExpectations(
       // WP182：报价是第几版（改价 = 新建一版）
       if (want.version !== undefined && Number(p.version) !== Number(want.version))
         problems.push(`${tag}：是第 ${String(p.version)} 版，不合期望 ${want.version}`)
+      // WP275：① ② 超了上限要再确认一次；卡上不写「转给了…」
+      if (want.reconfirm !== undefined && (p.reconfirm === true) !== want.reconfirm)
+        problems.push(want.reconfirm ? `${tag}：超了上限却没要再确认一次` : `${tag}：不该要再确认`)
+      if (want.forwarded !== undefined && (p.forwarded === true) !== want.forwarded)
+        problems.push(want.forwarded ? `${tag}：卡上没写转给了谁` : `${tag}：卡上不该写「转给了…」`)
     })
     add('b2b', problems.length === 0, problems.length === 0 ? seen.join('；') : problems.join('；'))
   }
