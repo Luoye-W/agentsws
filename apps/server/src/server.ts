@@ -9530,8 +9530,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     // WP36 40 §1.2：离职是一个正式动作。网关只转发，编排在 ./offboard.ts；
     // 三条路由都是 owner 级（动别人的分配、别人的个人数据、公司技能层）
     offboard: {
-      offboard: (actor, person_id, input) =>
-        offboard.offboard(
+      offboard: async (actor, person_id, input) => {
+        // WP277（docs/95 §3.6 / §6.3）：离职交接只在 ③；① ② 里是「退出 / 请他离开」
+        if ((await organizations.modeOf(actor.workspace_id)) !== 'company')
+          throw new ApiError('conflict', '同事互联里没有离职交接：请他离开就行')
+        return offboard.offboard(
           {
             person_id,
             ...(input.handover_to === undefined ? {} : { handover_to: input.handover_to }),
@@ -9539,7 +9542,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
             ...(input.memory === undefined ? {} : { memory: input.memory }),
           },
           actor.person_id,
-        ),
+        )
+      },
       archivedSkills: (_actor, owner) => offboard.archivedSkills(owner),
       adopt: (actor, input) =>
         offboard.adopt(

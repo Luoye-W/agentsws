@@ -25,6 +25,8 @@ export interface HandoffView {
 export interface HandoffLists {
   to_me: HandoffView[]
   from_me: HandoffView[]
+  /** WP277（决策 241）：③ 里上级派给我、我还没点掉的（直接生效，没有卡）。 */
+  dispatched?: HandoffView[]
 }
 
 export interface ColleagueView {

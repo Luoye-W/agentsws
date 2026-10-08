@@ -5,6 +5,7 @@
  * （证据芯片只出 key，不出裸枚举——36 §2.3）。
  */
 import { CLOUD_AUTH_EN, CLOUD_AUTH_ZH } from './i18n-cloud-auth'
+import { COMPANY_EN, COMPANY_ZH } from './i18n-company'
 import { HANDOFF_EN, HANDOFF_ZH } from './i18n-handoff'
 import { IMAGES_EN, IMAGES_ZH } from './i18n-images'
 import { LIBRARY_EN, LIBRARY_ZH } from './i18n-library'
@@ -192,7 +193,8 @@ const zh: Table = {
   'org.tab.positions': '岗位',
   'org.tab.members': '成员',
   'org.tab.roles': '职责',
-  'org.tab.ranges': '品牌与产品线',
+  // WP277（docs/95 §2.2）：③ 里这一页切的是店铺组，与顶层「品牌」同名不同物——改叫店铺组
+  'org.tab.ranges': '店铺组与产品线',
   'org.tab.join': '并进来',
   'org.join.empty':
     '现在没有等着并进来的工作区。有人要把自己的个人工作区并进公司时，这里会出现一张对照表。',
@@ -223,13 +225,13 @@ const zh: Table = {
   'org.join.connections.on': '交给公司',
   'org.join.connections.off': '不交',
   'org.join.complete': '按上面这些并进来',
-  'org.ranges.brands': '品牌',
+  'org.ranges.brands': '店铺组',
   'org.ranges.brands.hint':
-    '品牌不是一种新的数据切法，是一组店铺 / 账号 / 市场的名字。挂了品牌的岗位，品牌里新开一家店就自动看得到——这件事会记一条事件，所有者也会收到一张卡。',
-  'org.ranges.brands.empty': '还没建过品牌。公司只有一个品牌时不用建。',
-  'org.ranges.brand.name': '品牌叫什么',
-  'org.ranges.brand.placeholder': '品牌乙',
-  'org.ranges.brand.create': '建这个品牌',
+    '店铺组不是一种新的数据切法，是一组店铺 / 账号 / 市场的名字。挂了店铺组的岗位，组里新开一家店就自动看得到——这件事会记一条事件，老板也会收到一张卡。',
+  'org.ranges.brands.empty': '还没建过店铺组。只有一家店时不用建。',
+  'org.ranges.brand.name': '店铺组叫什么',
+  'org.ranges.brand.placeholder': '欧洲站',
+  'org.ranges.brand.create': '建这个店铺组',
   'org.ranges.lines': '产品线',
   'org.ranges.lines.hint':
     '产品线切在一家店 / 一个平台账号 / 一个站点**里面**：同一个亚马逊账号里，厨房类目和户外类目各归各的人管。判据用平台自己的字段（Shopify 的集合 / 标签 / 供应商 / 商品类型，亚马逊的 ASIN / SKU 前缀 / 品牌）。',
@@ -237,7 +239,7 @@ const zh: Table = {
   'org.ranges.line.name': '产品线叫什么',
   'org.ranges.line.placeholder': '厨房线',
   'org.ranges.line.in': '切在哪里面',
-  'org.ranges.line.no_parent': '还没有店铺 / 账号可选——先分配一次岗位，或在上面先建品牌。',
+  'org.ranges.line.no_parent': '还没有店铺 / 账号可选——先分配一次岗位，或在上面先建店铺组。',
   'org.ranges.line.parent': '在 {parent} 里面',
   'org.ranges.line.rule': '按什么切',
   'org.ranges.line.rule.hint':
@@ -275,7 +277,7 @@ const zh: Table = {
   'org.ranges.origin': '{who} 从他自己的工作区带进来的',
   'org.ranges.propose': '提议修改',
   'org.ranges.propose.reason': '想改成什么样、为什么（至少 8 个字，老板照这句话点头）',
-  'org.ranges.propose.placeholder': '店 D 也是这个品牌的，想加进来',
+  'org.ranges.propose.placeholder': '店 D 也是这个店铺组的，想加进来',
   'org.ranges.propose.submit': '提上去',
   'org.ranges.propose.done': '提上去了，等老板点头。',
   // ── WP50 45 H4：建之前先查 ───────────────────────────────────────────
@@ -4094,7 +4096,7 @@ const en: Table = {
   'org.tab.positions': 'Positions',
   'org.tab.members': 'People',
   'org.tab.roles': 'Duties',
-  'org.tab.ranges': 'Brands & product lines',
+  'org.tab.ranges': 'Store groups & product lines',
   'org.tab.join': 'Joining in',
   'org.join.empty':
     'No workspace is waiting to join. When somebody brings their personal workspace into the company, the comparison shows up here.',
@@ -4126,14 +4128,13 @@ const en: Table = {
   'org.join.connections.on': 'Hand to company',
   'org.join.connections.off': 'Keep personal',
   'org.join.complete': 'Join with these choices',
-  'org.ranges.brands': 'Brands',
+  'org.ranges.brands': 'Store groups',
   'org.ranges.brands.hint':
-    'A brand is not a new way of slicing data — it is a name for a group of stores / accounts / markets. A position that holds a brand automatically picks up any store later added to it; that change is logged and the owner gets a card.',
-  'org.ranges.brands.empty':
-    'No brands yet. You do not need one if the company has a single brand.',
-  'org.ranges.brand.name': 'Brand name',
-  'org.ranges.brand.placeholder': 'Brand B',
-  'org.ranges.brand.create': 'Create brand',
+    'A store group is not a new way of slicing data — it is a name for a group of stores / accounts / markets. A position that holds a store group automatically picks up any store later added to it; that change is logged and the boss gets a card.',
+  'org.ranges.brands.empty': 'No store groups yet. You do not need one with a single store.',
+  'org.ranges.brand.name': 'Store group name',
+  'org.ranges.brand.placeholder': 'EU stores',
+  'org.ranges.brand.create': 'Create store group',
   'org.ranges.lines': 'Product lines',
   'org.ranges.lines.hint':
     'A product line slices *inside* one store / platform account / marketplace: within the same Amazon account, kitchen and outdoor can belong to different people. The rule uses the platform’s own fields (Shopify collections / tags / vendors / product types; Amazon ASINs / SKU prefixes / brand).',
@@ -4143,7 +4144,7 @@ const en: Table = {
   'org.ranges.line.placeholder': 'Kitchen',
   'org.ranges.line.in': 'Inside which scope',
   'org.ranges.line.no_parent':
-    'No store or account to pick yet — assign a position once, or create a brand above.',
+    'No store or account to pick yet — assign a position once, or create a store group above.',
   'org.ranges.line.parent': 'inside {parent}',
   'org.ranges.line.rule': 'Rule',
   'org.ranges.line.rule.hint':
@@ -4182,7 +4183,7 @@ const en: Table = {
   'org.ranges.propose': 'Propose a change',
   'org.ranges.propose.reason':
     'What you want changed and why (at least 8 characters — the owner decides on this sentence)',
-  'org.ranges.propose.placeholder': 'Store D belongs to this brand too; please add it',
+  'org.ranges.propose.placeholder': 'Store D belongs to this store group too; please add it',
   'org.ranges.propose.submit': 'Send it up',
   'org.ranges.propose.done': 'Sent. Waiting for the owner.',
   // ── WP50 45 H4 ───────────────────────────────────────────────────────
@@ -7982,6 +7983,8 @@ const TABLES: Record<Lang, Table> = {
     ...MODE_ZH,
     // WP276：② 同事互联（交给对方、团队页同事、和同事一起用）
     ...PEERS_ZH,
+    // WP277：③ 开公司模式（向导、同事收的卡、回到同事互联、上级派活）
+    ...COMPANY_ZH,
   },
   en: {
     ...en,
@@ -8002,6 +8005,7 @@ const TABLES: Record<Lang, Table> = {
     ...IMAGES_EN,
     ...MODE_EN,
     ...PEERS_EN,
+    ...COMPANY_EN,
   },
 }
 

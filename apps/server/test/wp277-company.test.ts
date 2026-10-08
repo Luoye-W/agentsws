@@ -215,7 +215,11 @@ describe('WP277 开公司模式向导', () => {
     expect((await setMode({ mode: 'company', legal_name: 'X' })).status).toBe(409)
   })
 
-  it('开了以后 ③ 全套：同事的超授权报价转给老板（卡上写转给了谁）', async () => {
+  it('开了以后 ③ 全套：同事的超授权报价转给老板（卡上写转给了谁）；离职交接只在 ③', async () => {
+    const before = await call('POST', `/v1/workspaces/${ws()}/members/${lin.id}/offboard`, {
+      body: {},
+    })
+    expect(before.status).toBe(409)
     await setMode({ mode: 'company', legal_name: '深圳伏特豪斯' })
     const card = await overMandateQuote(lin, linB2b)
     expect(card.routing.recipients.map((r) => r.person)).toEqual([owner()])

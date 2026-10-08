@@ -21,6 +21,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
 import { Link, Navigate, useInRouterContext } from 'react-router-dom'
 import { FactChip } from '@/components/chips'
+import { isCompanyNoticeCard } from '@/components/company/company-mode'
 import {
   ContentConflictDialog,
   ContentDiffDialog,
@@ -195,6 +196,8 @@ export function categoryOf(card: DeckCard, t: (key: string) => string): string {
     (card.detail.payload as { form?: unknown } | undefined)?.form === 'handoff'
   )
     return t('category.handoff_offer')
+  // WP277：开公司模式时同事那张「知道了 / 我要退出」
+  if (isCompanyNoticeCard(card)) return t('category.company_notice')
   // WP237：「走哪条职责」借的是认领卡的 kind，但它不是转交
   if (card.kind === 'claim' && card.layout === 'choice') return t('category.route_choice')
   // WP249：自家版的版务卡是「做之前」的（排成改动卡），不是「处置后」

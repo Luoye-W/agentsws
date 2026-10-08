@@ -16,6 +16,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import { CompanyModeEntry } from '@/components/company/company-mode'
 import { BrandMark } from '@/components/design'
 import { JoinPanel } from '@/components/onboarding/join-panel'
 import { AssignWizard } from '@/components/org/assign-wizard'
@@ -1075,6 +1076,8 @@ export function OrgPage(): React.ReactNode {
           <InprogressTab />
         </TabsContent>
       </Tabs>
+      {/* WP277：团队页底部一行小字——发起人「开公司模式…」/ ③ 里老板「回到同事互联…」 */}
+      {solo ? null : <CompanyModeEntry className="justify-end pt-2" />}
     </div>
   )
 }

@@ -37,14 +37,15 @@ export function isHandoffOfferCard(card: { kind: string; detail: { payload?: unk
   )
 }
 
-/** ② 改了共用东西的「知道了 / 撤回」通知卡（选项直接是按钮，不是单选 + 通过）。 */
+/**
+ * ② 改了共用东西的「知道了 / 撤回」通知卡（选项直接是按钮，不是单选 + 通过）。
+ * WP277：开公司模式时同事收的「知道了 / 我要退出」也是这个样子。
+ */
 export function isPeerNoticeCard(card: { kind: string; detail: { payload?: unknown } }): boolean {
   const p = card.detail.payload
+  const form = typeof p === 'object' && p !== null ? (p as { form?: unknown }).form : undefined
   return (
-    card.kind === 'policy_change' &&
-    typeof p === 'object' &&
-    p !== null &&
-    (p as { form?: unknown }).form === 'peer_change_notice'
+    card.kind === 'policy_change' && (form === 'peer_change_notice' || form === 'company_notice')
   )
 }
 
@@ -308,7 +309,11 @@ export function HandoffNotices(): React.ReactNode {
       await client.invalidateQueries({ queryKey: HANDOFFS_KEY })
     },
   })
-  const notices = (lists.data?.from_me ?? []).filter((h) => h.handoff.state !== 'offered')
+  const notices = [
+    ...(lists.data?.from_me ?? []).filter((h) => h.handoff.state !== 'offered'),
+    // WP277（决策 241）：③ 里上级派给我的——直接生效，没有卡，这里一行告诉我一声
+    ...(lists.data?.dispatched ?? []),
+  ]
   if (notices.length === 0) return null
   return (
     <ul className="flex flex-col gap-1" data-testid="handoff-notices">
@@ -318,7 +323,11 @@ export function HandoffNotices(): React.ReactNode {
           className="flex items-center gap-2 rounded-lg bg-ws-surface px-3 py-1.5 text-[13px]"
           data-state={h.handoff.state}
         >
-          <span className="min-w-0 flex-1 truncate">{noticeText(h, t)}</span>
+          <span className="min-w-0 flex-1 truncate">
+            {h.handoff.dispatched === true
+              ? t('handoff.dispatched', { name: h.from_label, title: h.title })
+              : noticeText(h, t)}
+          </span>
           <button
             type="button"
             aria-label={t('handoff.notice.dismiss')}

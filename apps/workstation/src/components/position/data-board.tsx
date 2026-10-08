@@ -57,7 +57,7 @@ export function NoRangeNotice({
    * WP271（docs/95 §2.4）：① 个人——不挑范围本来就是整个品牌，只有老分配会走到这里：
    * 只给一键「挂上整个品牌」，不出「去分配 / 找负责人」。
    */
-  const { t, solo } = useMode()
+  const { t, mode } = useMode()
   const client = useQueryClient()
   const assign = useMutation({
     mutationFn: async () => {
@@ -96,7 +96,8 @@ export function NoRangeNotice({
               {ownerAssignment === undefined ? null : (
                 <Hint text={t('view.no_range.self.hint')} testId="no-range-self-hint" />
               )}
-              {solo ? null : (
+              {/* WP277（docs/95 §6.3）：范围只在 ③——① ② 不叫人去分配 */}
+              {mode !== 'company' ? null : (
                 <Button size="sm" variant="outline" asChild>
                   <Link to="/org?tab=positions" data-testid="no-range-assign">
                     {t('view.no_range.action')}
