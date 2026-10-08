@@ -1,0 +1,861 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Rollout 英文首页 · 事项页 v2</title>
+<!-- WP262 事项页重排设计稿（静态、合成数据，不是产品代码）。由 _src/build.mjs 生成，改 _src 里的文件再重出。
+     ?theme=dark 看暗色；?notes=0 收起右边的设计说明。令牌真源：apps/workstation/src/index.css（经 position/_src/base.css） -->
+<script>(function(){var q=new URLSearchParams(location.search),h=document.documentElement;if(q.get("theme")==="dark")h.classList.add("dark");var n=q.get("notes");if(n==="0"||(n!=="1"&&innerWidth<1200))h.classList.add("notes-off");})();</script>
+<style>
+/* WP239 设计稿共用底。令牌逐个照抄 apps/workstation/src/index.css（docs/36 §1.1），名字也一样（--ws-*）；
+   控件尺寸照 components/ui/{button,tabs,input,badge}.tsx 与 components/design/primitives.tsx。 */
+@font-face{font-family:"Outfit";font-weight:500;src:url("../../../apps/workstation/node_modules/@fontsource/outfit/files/outfit-latin-500-normal.woff2") format("woff2")}
+@font-face{font-family:"Outfit";font-weight:600;src:url("../../../apps/workstation/node_modules/@fontsource/outfit/files/outfit-latin-600-normal.woff2") format("woff2")}
+@font-face{font-family:"Outfit";font-weight:700;src:url("../../../apps/workstation/node_modules/@fontsource/outfit/files/outfit-latin-700-normal.woff2") format("woff2")}
+:root{
+  --ws-paper:#f3f5f2;--ws-card:#fff;--ws-line:#ecefea;--ws-ink:#263331;--ws-body:#4b5550;--ws-muted-fg:#6b746f;
+  --ws-brand:#007b67;--ws-brand-ink:#045246;--ws-brand-fg:#fff;--ws-tint:#e8f3f0;
+  --ws-good:#158a4b;--ws-good-bg:#e3f5ea;--ws-warn:#b26e0b;--ws-warn-bg:#fff4db;--ws-bad:#c93b30;--ws-bad-bg:#fde9e7;--ws-info:#2f63c8;--ws-info-bg:#e9f0fb;
+  --ws-brand-soft:#cfebdd;--ws-surface:#f7f9f6;
+  --ws-shadow:0 1px 2px rgba(20,40,30,.04),0 8px 24px rgba(20,40,30,.05);
+  --ws-shadow-hover:0 16px 34px rgba(20,40,30,.14),0 2px 6px rgba(20,40,30,.06);
+  --ws-glow:0 0 0 1px rgba(0,123,103,.32),0 0 12px 2px rgba(0,123,103,.14);
+  --ws-badge-plate:#fff;--ws-badge-ring:rgba(38,51,49,.14);
+  --secondary:#edf0eb;--muted:#f3f5f2;--input:#e6eae5;--sidebar:#f8faf7;
+  --mk0:#2e86d8;--mk1:#1fb8a4;--mk2:#d9a82e;
+  --display:"Outfit","Noto Sans SC",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans SC","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  --notes-w:320px;
+  color-scheme:light;
+}
+html.dark{
+  --ws-paper:#0e100f;--ws-card:#171a18;--ws-line:#242825;--ws-ink:#f1f4f0;--ws-body:#c9d2cc;--ws-muted-fg:#98a29b;
+  --ws-brand:#76fb91;--ws-brand-ink:#b9ffc9;--ws-brand-fg:#0e100f;--ws-tint:#173c24;
+  --ws-good:#76fb91;--ws-good-bg:#173c24;--ws-warn:#f5c451;--ws-warn-bg:#3a2e10;--ws-bad:#ff7a6b;--ws-bad-bg:#3d1d19;--ws-info:#8bb8ff;--ws-info-bg:#1a2436;
+  --ws-brand-soft:#2c5c3b;--ws-surface:#1c201d;
+  --ws-shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px rgba(0,0,0,.32);
+  --ws-shadow-hover:0 16px 34px rgba(0,0,0,.5),0 2px 6px rgba(0,0,0,.36);
+  --ws-glow:0 0 0 1px rgba(118,251,145,.32),0 0 12px 2px rgba(118,251,145,.14);
+  --ws-badge-plate:#f1f4f0;--ws-badge-ring:transparent;
+  --secondary:#1f2320;--muted:#1d211e;--input:#2a2e2b;--sidebar:#121513;
+  --mk0:#4ea8ff;--mk1:#2fe0c8;--mk2:#ffd84d;
+  color-scheme:dark;
+}
+[hidden]{display:none!important}
+*{box-sizing:border-box;margin:0;padding:0;border-color:var(--ws-line)}
+html,body{background:var(--ws-paper);color:var(--ws-ink);font-family:var(--sans);font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased}
+button,input,textarea,select{font:inherit;color:inherit;background:none;border:0;outline:0}
+button{cursor:pointer}
+a{color:inherit;text-decoration:none}
+:focus-visible{outline:2px solid var(--ws-brand);outline-offset:2px}
+svg{flex:none}
+.ico{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.ico.s14{width:14px;height:14px}.ico.s12{width:12px;height:12px}.ico.s18{width:18px;height:18px}
+.gl{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round;overflow:visible}
+.display{font-family:var(--display);font-weight:600;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.num{font-variant-numeric:tabular-nums}
+.muted{color:var(--ws-muted-fg)}
+.body{color:var(--ws-body)}
+
+/* ── 外壳：左栏 240（app-shell.tsx w-60）· 主区 · 右侧图标轨 44 · 稿子的「设计说明」栏 ── */
+.app{display:grid;grid-template-columns:240px minmax(0,1fr) 44px var(--notes-w);min-height:100vh}
+html.notes-off .app{grid-template-columns:240px minmax(0,1fr) 44px 0}
+.side{position:sticky;top:0;height:100vh;display:flex;flex-direction:column;background:var(--sidebar);border-right:1px solid var(--ws-line);padding:12px}
+.logo{display:flex;align-items:center;gap:8px;padding:4px 8px 16px;font-family:var(--display);font-weight:600;font-size:14px;letter-spacing:-.02em}
+.nav{display:flex;flex-direction:column;gap:2px;flex:1;overflow:auto}
+.nv{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:10px;font-size:13.5px;color:var(--ws-ink)}
+.nv svg{color:var(--ws-muted-fg)}
+.nv:hover{background:color-mix(in srgb,var(--ws-tint) 60%,transparent)}
+.nv.on{background:var(--ws-tint);color:var(--ws-brand-ink);font-weight:500;--ia:var(--ws-brand)}
+.nv.on svg{color:currentColor}
+html.dark .nv.on{color:var(--ws-brand-ink)}
+.nv .cnt{margin-left:auto;border-radius:4px;background:var(--muted);padding:2px 6px;font-size:11px;font-weight:400}
+.nv .dot{margin-left:auto;width:6px;height:6px;border-radius:50%;background:var(--ws-brand)}
+.nsec{display:flex;align-items:center;justify-content:space-between;padding:16px 10px 6px;font-size:11px;letter-spacing:.06em;color:var(--ws-muted-fg)}
+.prow{display:flex;align-items:center;gap:2px}
+.prow .chev{width:20px;height:20px;display:grid;place-items:center;color:var(--ws-muted-fg);border-radius:4px}
+.prow .nv{flex:1;min-width:0}
+.acct{margin-top:8px;padding-top:8px;border-top:1px solid var(--ws-line);display:flex;align-items:center;gap:10px;padding-left:8px}
+.acct b{font-size:13px;font-weight:600;display:block}
+.acct small{font-size:11.5px;color:var(--ws-muted-fg)}
+.top{display:flex;align-items:center;justify-content:flex-end;gap:8px;border-bottom:1px solid var(--ws-line);background:var(--ws-paper);padding:10px 20px}
+.kbar{display:flex;align-items:center;gap:8px;height:36px;width:100%;max-width:280px;padding:0 12px;border-radius:10px;background:var(--ws-card);box-shadow:var(--ws-shadow);font-size:13px;color:var(--ws-muted-fg)}
+.kbar kbd{margin-left:auto;font:inherit;font-size:11px}
+.tchip{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;border-radius:999px;background:var(--ws-card);box-shadow:var(--ws-shadow);font-size:12px;color:var(--ws-body);white-space:nowrap}
+.tchip i{width:6px;height:6px;border-radius:50%;background:var(--ws-good);display:inline-block}
+.mainwrap{min-width:0;display:flex;flex-direction:column}
+main{flex:1;min-width:0;padding:28px}
+.rail{position:sticky;top:0;height:100vh;border-left:1px solid var(--ws-line);display:flex;flex-direction:column;align-items:center;gap:18px;padding-top:16px;color:var(--ws-muted-fg)}
+.rail hr{width:20px;border:0;border-top:1px solid var(--ws-line)}
+
+/* ── 通用件 ── */
+.card{background:var(--ws-card);border-radius:16px;box-shadow:var(--ws-shadow)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:32px;padding:0 10px;border-radius:10px;font-size:14px;font-weight:500;white-space:nowrap;border:1px solid transparent;transition:background-color .15s}
+.btn.pri{background:var(--ws-brand);color:var(--ws-brand-fg)}
+.btn.pri:hover{background:color-mix(in srgb,var(--ws-brand) 80%,transparent)}
+.btn.out{border-color:var(--ws-line);background:var(--ws-paper)}
+html.dark .btn.out{border-color:var(--input);background:color-mix(in srgb,var(--input) 30%,transparent)}
+.btn.out:hover,.btn.ghost:hover{background:var(--muted)}
+.btn.sec{background:var(--secondary)}
+.btn.ghost{color:var(--ws-ink)}
+.btn.sm{height:28px;padding:0 10px;border-radius:8px;font-size:12.8px}
+.btn.xs{height:24px;padding:0 8px;border-radius:8px;font-size:12px;gap:4px}
+.btn.icon{width:32px;padding:0}.btn.sm.icon{width:28px}.btn.xs.icon{width:24px}
+.tag{display:inline-flex;align-items:center;gap:5px;height:22px;padding:0 8px;border-radius:6px;background:var(--ws-surface);font-size:12px;color:var(--ws-body);white-space:nowrap}
+.pill{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 10px;border-radius:999px;font-size:12px;font-weight:500;white-space:nowrap}
+.pill::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+.t-brand{background:var(--ws-tint);color:var(--ws-brand-ink)}
+.t-good{background:var(--ws-good-bg);color:var(--ws-good)}
+.t-warn{background:var(--ws-warn-bg);color:var(--ws-warn)}
+.t-bad{background:var(--ws-bad-bg);color:var(--ws-bad)}
+.t-info{background:var(--ws-info-bg);color:var(--ws-info)}
+.t-neutral{background:var(--ws-surface);color:var(--ws-muted-fg)}
+.dp{display:inline-flex;align-items:center;gap:3px;height:20px;padding:0 6px;border-radius:999px;font-size:11.5px;font-weight:600}
+.av{display:inline-grid;place-items:center;width:26px;height:26px;border-radius:50%;font-size:11px;font-weight:600;flex:none}
+.av.sm{width:20px;height:20px;font-size:10px}
+.go{display:inline-grid;place-items:center;width:30px;height:30px;border-radius:50%;background:var(--ws-surface);color:var(--ws-ink);flex:none;transition:background-color .15s,color .15s}
+.go:hover{background:var(--ws-brand);color:var(--ws-brand-fg)}
+.hint{display:inline-grid;place-items:center;width:14px;height:14px;border-radius:50%;box-shadow:inset 0 0 0 1.25px currentColor;font-size:9.5px;font-weight:700;color:var(--ws-muted-fg);cursor:help;position:relative;flex:none;font-family:var(--sans)}
+.hint:hover::after,.hint:focus::after{content:attr(data-hint);position:absolute;left:50%;bottom:calc(100% + 6px);transform:translateX(-50%);width:max-content;max-width:240px;padding:6px 9px;border-radius:8px;background:var(--ws-ink);color:var(--ws-paper);font-size:12px;font-weight:400;line-height:1.45;z-index:30;white-space:normal;box-shadow:var(--ws-shadow-hover)}
+[data-tip]{position:relative}
+[data-tip]:hover::after{content:attr(data-tip);position:absolute;left:50%;bottom:calc(100% + 6px);transform:translateX(-50%);width:max-content;max-width:240px;padding:5px 8px;border-radius:8px;background:var(--ws-ink);color:var(--ws-paper);font-size:12px;font-weight:400;line-height:1.4;z-index:30;pointer-events:none}
+/* 页内页签：照 components/ui/tabs.tsx（h-8、p-3px、选中是卡底 + 浅阴影） */
+.tabs{display:inline-flex;align-items:center;height:32px;padding:3px;border-radius:10px;background:var(--muted);gap:0}
+.tabs>*{height:100%;display:inline-flex;align-items:center;gap:6px;padding:0 12px;border-radius:7px;font-size:14px;font-weight:500;color:color-mix(in srgb,var(--ws-ink) 60%,transparent)}
+.tabs>*:hover{color:var(--ws-ink)}
+.tabs>.on{background:var(--ws-card);color:var(--ws-ink);box-shadow:0 1px 2px rgba(20,40,30,.08)}
+html.dark .tabs>.on{background:color-mix(in srgb,var(--input) 30%,transparent);box-shadow:inset 0 0 0 1px var(--input)}
+.tabs .n{font-size:11.5px;color:var(--ws-muted-fg);font-weight:400}
+/* 职责小图标 = 岗位线描 + 右下角 Reddit 官网角标（WP213：浅色圆底，深色下也是浅的） */
+.di{position:relative;display:inline-block;width:16px;height:16px;flex:none}
+.di .gl{width:16px;height:16px}
+.di img{position:absolute;right:-3px;bottom:-3px;width:10px;height:10px;border-radius:50%;background:var(--ws-badge-plate);box-shadow:0 0 0 1.5px var(--ws-card),0 0 0 .5px var(--ws-badge-ring) inset;padding:1px}
+.duty{display:inline-flex;align-items:center;gap:6px;height:22px;padding:0 8px 0 6px;border-radius:6px;background:var(--ws-surface);font-size:12px;color:var(--ws-body);white-space:nowrap}
+.duty .di{width:14px;height:14px}.duty .di .gl{width:14px;height:14px}.duty .di img{width:9px;height:9px;right:-3px;bottom:-3px}
+.sep{width:1px;height:18px;background:var(--ws-line);flex:none}
+.sec-h{display:flex;align-items:center;gap:8px;margin:0 2px 10px}
+.sec-h h3{font-family:var(--display);font-weight:600;letter-spacing:-.02em;font-size:17px}
+.sec-h .c{font-size:13px;color:var(--ws-muted-fg)}
+.sec-h .r{margin-left:auto;display:flex;align-items:center;gap:6px}
+.lnk{font-size:13px;color:var(--ws-muted-fg);display:inline-flex;align-items:center;gap:4px}
+.lnk:hover{color:var(--ws-ink)}
+.pop{position:absolute;z-index:40;background:var(--ws-card);border-radius:12px;box-shadow:var(--ws-shadow-hover),0 0 0 1px var(--ws-line);padding:8px}
+.toggle{width:30px;height:18px;border-radius:999px;background:var(--input);position:relative;flex:none;transition:background-color .15s}
+.toggle::after{content:"";position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.2);transition:left .15s}
+.toggle.on{background:var(--ws-brand)}.toggle.on::after{left:14px}
+html.dark .toggle.on::after{background:var(--ws-brand-fg)}
+
+/* ── 状态图标：颜色 + 形状双编码（同 docs/36 §7 第 19 条 StatusIcons 的思路，色弱可辨） ── */
+.st{width:16px;height:16px;flex:none;display:inline-block}
+.st circle,.st path{fill:none;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round}
+.st.you circle{stroke:var(--ws-warn)}.st.you .f{fill:var(--ws-warn);stroke:none}
+.st.doing circle{stroke:var(--ws-brand)}.st.doing .f{fill:var(--ws-brand);stroke:none}
+.st.others circle{stroke:var(--ws-info);stroke-dasharray:2.4 2.2}.st.others path{stroke:var(--ws-info)}
+.st.done .f{fill:var(--ws-good);stroke:none}.st.done path{stroke:var(--ws-card);stroke-width:2}
+
+/* ── 稿子的「设计说明」栏：不是产品界面，故意画成便签纸的样子 ── */
+.notes{position:sticky;top:0;height:100vh;overflow:auto;border-left:1px dashed color-mix(in srgb,var(--ws-muted-fg) 50%,transparent);background:repeating-linear-gradient(-45deg,transparent 0 10px,color-mix(in srgb,var(--ws-line) 45%,transparent) 10px 11px),var(--ws-paper);padding:18px 18px 40px;font-size:13px;color:var(--ws-body)}
+html.notes-off .notes{display:none}
+.notes .nh{display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap}
+.notes .nh>*{white-space:nowrap}
+.notes .nh b{font-family:var(--display);font-size:15px;color:var(--ws-ink)}
+.notes .nh .tag{background:var(--ws-warn-bg);color:var(--ws-warn)}
+.notes .blk{background:var(--ws-card);border-radius:12px;padding:12px 14px;margin-bottom:10px;box-shadow:var(--ws-shadow)}
+.notes h4{font-size:12.5px;color:var(--ws-ink);margin-bottom:6px;display:flex;align-items:center;gap:6px}
+.notes ol,.notes ul{padding-left:18px;display:flex;flex-direction:column;gap:4px}
+.notes li{line-height:1.5}
+.notes li b{color:var(--ws-ink);font-weight:600}
+.notes .was{text-decoration:line-through;color:var(--ws-muted-fg)}
+.notes .try{display:flex;flex-wrap:wrap;gap:6px}
+.notes .try button{height:24px;padding:0 8px;border-radius:8px;background:var(--ws-surface);font-size:12px;color:var(--ws-ink);box-shadow:inset 0 0 0 1px var(--ws-line)}
+.notes .try button:hover{box-shadow:inset 0 0 0 1px var(--ws-brand)}
+.notes .ask{border-left:3px solid var(--ws-warn);padding-left:10px}
+.notes-fab{position:fixed;right:56px;bottom:18px;z-index:50;display:none;align-items:center;gap:6px;height:32px;padding:0 12px;border-radius:999px;background:var(--ws-ink);color:var(--ws-paper);font-size:12.5px;font-weight:600;box-shadow:var(--ws-shadow-hover)}
+html.notes-off .notes-fab{display:inline-flex}
+.theme-btn{position:fixed;left:252px;bottom:18px;z-index:50}
+@media (max-width:1199px){
+  html:not(.notes-off) .app{grid-template-columns:240px minmax(0,1fr) 44px 0}
+  html:not(.notes-off) .notes{position:fixed;right:0;top:0;width:min(340px,90vw);z-index:60;box-shadow:var(--ws-shadow-hover)}
+}
+
+/* ── WP262 事项页 v2：左栏里的职责与事项（照 sidebar/duty-threads.tsx：竖线缩进、状态小点） ── */
+.duty-row{display:flex;align-items:center;gap:8px;margin:2px 0 2px 22px;padding:4px 8px;font-size:12.5px;color:var(--ws-body)}
+.duty-row .di,.duty-row .di .gl{width:14px;height:14px}
+.duty-row .di img{width:9px;height:9px}
+.threads{list-style:none;margin:0 0 6px 24px;padding-left:4px;border-left:1px solid var(--ws-line);display:flex;flex-direction:column;gap:1px}
+.th{display:flex;align-items:center;gap:6px;padding:4px 6px;border-radius:8px;font-size:12px;color:var(--ws-body)}
+.th span{overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.th:hover{background:color-mix(in srgb,var(--ws-tint) 60%,transparent)}
+.th.on{background:var(--ws-tint);color:var(--ws-brand-ink);font-weight:500}
+.sd{width:6px;height:6px;border-radius:50%;flex:none}
+.sd.running{background:var(--ws-brand);animation:breathe 1.6s ease-in-out infinite}
+.sd.awaiting{background:var(--ws-warn)}.sd.ready{background:var(--ws-good)}.sd.blocked{background:var(--ws-bad)}
+@keyframes breathe{50%{opacity:.35}}
+@media (prefers-reduced-motion:reduce){.sd.running,.spin,.pulse-ring::after{animation:none!important}}
+
+/* ── 主区：对话布局。页头吸顶、输入卡吸底，中间一列 760 宽（像 Claude） ── */
+main.chat{padding:0 28px;display:flex;flex-direction:column}
+.mx{width:100%;max-width:760px;margin:0 auto}
+.mh{position:sticky;top:0;z-index:20;background:var(--ws-paper);padding:16px 0 12px;border-bottom:1px solid var(--ws-line)}
+.mh .row{display:flex;align-items:flex-start;gap:10px}
+.mh h1{font-family:var(--display);font-weight:600;letter-spacing:-.02em;font-size:20px;line-height:1.3;display:inline-flex;align-items:center;gap:8px;border-radius:8px;padding:1px 6px;margin-left:-6px;cursor:text;min-width:0}
+.mh h1 .pen{opacity:0;color:var(--ws-muted-fg);transition:opacity .15s}
+.mh h1:hover{background:var(--muted)}.mh h1:hover .pen{opacity:1}
+.mh h1 input{font:inherit;letter-spacing:inherit;width:22em;border-bottom:1.5px solid var(--ws-brand)}
+.mh .r{margin-left:auto;display:flex;align-items:center;gap:4px;position:relative}
+.meta{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;margin-top:4px;font-size:12.5px;color:var(--ws-muted-fg)}
+.meta .dot{width:3px;height:3px;border-radius:50%;background:currentColor;opacity:.6}
+.meta .duty{cursor:pointer;height:22px}
+.meta .duty:hover{box-shadow:inset 0 0 0 1px var(--ws-line);color:var(--ws-ink)}
+.meta .duty .sw{color:var(--ws-muted-fg)}
+.state{display:inline-flex;align-items:center;gap:5px;font-weight:500}
+.state.doing{color:var(--ws-brand-ink)}.state.awaiting{color:var(--ws-warn)}.state.done{color:var(--ws-good)}.state.blocked{color:var(--ws-bad)}
+html.dark .state.doing{color:var(--ws-brand)}
+.state .sd{width:7px;height:7px}
+.meta .holders .av{box-shadow:0 0 0 2px var(--ws-paper)}
+.todo-chip{display:inline-flex;align-items:center;gap:4px;height:22px;padding:0 8px;border-radius:999px;background:var(--ws-info-bg);color:var(--ws-info);font-weight:500;cursor:pointer}
+.todo-chip .ico{transition:transform .15s}.todo-chip[aria-expanded=true] .ico{transform:rotate(180deg)}
+.todos{margin-top:10px;padding:6px;border-radius:12px;background:var(--ws-card);box-shadow:var(--ws-shadow)}
+.todos li{list-style:none;display:flex;align-items:center;gap:10px;padding:6px 8px;border-radius:8px;font-size:13px}
+.todos li:hover{background:var(--muted)}
+.todos .cb{width:15px;height:15px;border-radius:4px;box-shadow:inset 0 0 0 1.5px var(--ws-muted-fg);flex:none;cursor:pointer}
+.todos li.done .cb{background:var(--ws-good);box-shadow:none}
+.todos li.done span{text-decoration:line-through;color:var(--ws-muted-fg)}
+.todos .from{margin-left:auto;font-size:11.5px;color:var(--ws-muted-fg)}
+.menu{right:0;top:36px;width:200px}
+.menu button{display:flex;width:100%;align-items:center;gap:8px;height:32px;padding:0 8px;border-radius:8px;font-size:13px;text-align:left}
+.menu button:hover{background:var(--muted)}
+.menu button[disabled]{color:var(--ws-muted-fg);cursor:not-allowed}
+.menu button.bad{color:var(--ws-bad)}
+.menu hr{border:0;border-top:1px solid var(--ws-line);margin:4px 2px}
+.menu .why{margin-left:auto;font-size:11px;color:var(--ws-muted-fg)}
+
+/* ── 时间线 ── */
+.tl{display:flex;flex-direction:column;gap:20px;padding:22px 0 28px}
+.day{display:flex;align-items:center;gap:10px;font-size:12px;color:var(--ws-muted-fg)}
+.day::before,.day::after{content:"";flex:1;height:1px;background:var(--ws-line)}
+.me{align-self:flex-end;max-width:min(78%,560px);display:flex;flex-direction:column;align-items:flex-end;gap:4px}
+.bubble{background:var(--secondary);color:var(--ws-ink);padding:10px 14px;border-radius:18px 18px 6px 18px;font-size:14.5px;line-height:1.6;white-space:pre-wrap;word-break:break-word}
+.bubble.clamp{display:-webkit-box;-webkit-line-clamp:6;-webkit-box-orient:vertical;overflow:hidden}
+.me .t,.ai .who .t{font-size:11.5px;color:var(--ws-muted-fg)}
+.me .t{opacity:0;transition:opacity .15s;display:flex;gap:8px}.me:hover .t{opacity:1}
+.me .more{font-size:12px;color:var(--ws-muted-fg)}.me .more:hover{color:var(--ws-ink)}
+.ai{display:grid;grid-template-columns:28px minmax(0,1fr);gap:4px 12px}
+.ava{width:28px;height:28px;border-radius:9px;background:var(--ws-tint);color:var(--ws-ink);display:grid;place-items:center;position:relative;--ia:var(--ws-brand)}
+.ava .gl{width:17px;height:17px}
+.ava img{position:absolute;right:-3px;bottom:-3px;width:12px;height:12px;border-radius:50%;background:var(--ws-badge-plate);padding:1.5px;box-shadow:0 0 0 1.5px var(--ws-paper)}
+.ai .who{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;color:var(--ws-ink);height:28px}
+.ai .who .t{font-weight:400}
+.ai .bd{grid-column:2}
+.pulse-ring::after{content:"";position:absolute;inset:-3px;border-radius:11px;box-shadow:0 0 0 2px var(--ws-brand);opacity:.5;animation:breathe 1.6s ease-in-out infinite}
+
+/* Agent 正文按 Markdown 排（SafeMarkdown reply 的外观加大一号行距） */
+.md{font-size:14.5px;line-height:1.7;color:var(--ws-ink)}
+.md>*+*{margin-top:10px}
+.md h3{font-family:var(--display);font-size:15px;font-weight:600;letter-spacing:-.01em;margin-top:16px}
+.md ul,.md ol{padding-left:22px;display:flex;flex-direction:column;gap:3px}
+.md li::marker{color:var(--ws-muted-fg)}
+.md code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12.5px;background:var(--ws-surface);box-shadow:inset 0 0 0 1px var(--ws-line);padding:1px 5px;border-radius:5px}
+.md a{color:var(--ws-brand-ink);text-decoration:underline;text-underline-offset:3px;text-decoration-color:color-mix(in srgb,var(--ws-brand) 45%,transparent)}
+html.dark .md a{color:var(--ws-brand)}
+.md b{font-weight:600}
+.md .sw{display:inline-block;width:11px;height:11px;border-radius:3px;vertical-align:-1px;box-shadow:0 0 0 1px var(--ws-line)}
+.fold{position:relative;max-height:240px;overflow:hidden}
+.fold::after{content:"";position:absolute;left:0;right:0;bottom:0;height:72px;background:linear-gradient(transparent,var(--ws-paper))}
+.fold.open{max-height:none}.fold.open::after{display:none}
+.unfold{margin-top:6px;display:inline-flex;align-items:center;gap:4px;height:26px;padding:0 10px;border-radius:999px;font-size:12.5px;color:var(--ws-body);box-shadow:inset 0 0 0 1px var(--ws-line);background:var(--ws-card)}
+.unfold:hover{color:var(--ws-ink)}
+.acts{display:flex;gap:2px;height:0;margin-top:2px;overflow:visible;color:var(--ws-muted-fg);opacity:0;transition:opacity .15s}
+.ai:hover .acts{opacity:1}
+.acts button{width:22px;height:22px;border-radius:7px;display:grid;place-items:center}.acts button:hover{background:var(--muted);color:var(--ws-ink)}
+
+/* 过程与系统事件：居中一行小字，点了展开工具调用摘要 */
+.sys{display:flex;flex-direction:column;align-items:center;gap:8px}
+.sys>button{display:inline-flex;align-items:center;gap:6px;max-width:100%;padding:3px 10px;border-radius:999px;font-size:12.5px;color:var(--ws-muted-fg)}
+.sys>button:hover{background:var(--muted);color:var(--ws-body)}
+.sys>button .cv{transition:transform .15s}
+.sys.open>button .cv{transform:rotate(90deg)}
+.sys .warn{color:var(--ws-warn)}.sys .good{color:var(--ws-good)}
+.sys .steps{display:none;width:100%;max-width:560px}
+.sys.open .steps{display:block}
+.steps{background:var(--ws-surface);box-shadow:inset 0 0 0 1px var(--ws-line);border-radius:12px;padding:8px 12px;font-size:12.5px;color:var(--ws-body)}
+.steps li{list-style:none;display:flex;align-items:center;gap:8px;padding:3px 0}
+.steps li .ico{color:var(--ws-muted-fg)}
+.steps li.ok .ico{color:var(--ws-good)}
+.steps li.now{color:var(--ws-ink);font-weight:500}.steps li.now .ico{color:var(--ws-brand)}
+.steps li.todo{color:var(--ws-muted-fg)}
+.steps code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11.5px}
+.steps .dur{margin-left:auto;font-size:11.5px;color:var(--ws-muted-fg);font-variant-numeric:tabular-nums}
+.spin{animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* 结果卡 / 审批卡 / 卡住卡：内嵌在 Agent 那一条里，能直接点 */
+.rc{margin-top:12px;max-width:520px;border-radius:16px;background:var(--ws-card);box-shadow:var(--ws-shadow);border:1px solid var(--ws-line);overflow:hidden}
+.rc .rh{display:flex;align-items:center;gap:8px;padding:12px 14px 0;font-size:12.5px;color:var(--ws-muted-fg)}
+.rc .rh .pill{height:22px}
+.rc .rb{display:flex;gap:14px;padding:10px 14px 12px}
+.rc .rt{font-size:15px;font-weight:600;color:var(--ws-ink);line-height:1.35}
+.rc .rm{font-size:12.5px;color:var(--ws-muted-fg);margin-top:3px}
+.rc .rf{display:flex;align-items:center;gap:8px;padding:10px 14px;border-top:1px solid var(--ws-line);background:var(--ws-surface)}
+.rc .rf .lnk{margin-left:auto;font-size:12.5px}
+.rc.await{border:1.5px solid color-mix(in srgb,var(--ws-warn) 55%,transparent)}
+.rc.block{border:1.5px solid color-mix(in srgb,var(--ws-bad) 45%,transparent)}
+.rc .imp{list-style:none;display:flex;flex-direction:column;gap:5px;font-size:13px;color:var(--ws-body);padding:0 14px 12px}
+.rc .imp li{display:flex;gap:8px;align-items:flex-start}
+.rc .imp .ico{margin-top:3px;color:var(--ws-muted-fg)}
+.rc .imp b{color:var(--ws-ink);font-weight:600}
+.rc.done-card{opacity:.85}
+.rc .stamp{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:500;color:var(--ws-good)}
+/* 预览缩略图：画的是商家自己站的样子（深底红点缀），不是工作台的颜色 */
+.thumb{width:112px;flex:none;border-radius:8px;overflow:hidden;background:#0b0d10;box-shadow:0 0 0 1px var(--ws-line);display:flex;flex-direction:column;gap:3px;padding:5px}
+.thumb i{display:block;border-radius:2px;background:#1a1e24}
+.thumb .hero{height:30px;background:linear-gradient(135deg,#1a1e24,#2a0d11);position:relative}
+.thumb .hero::after{content:"";position:absolute;left:6px;bottom:6px;width:26px;height:5px;background:#e11d2e;clip-path:polygon(2px 0,100% 0,100% calc(100% - 2px),calc(100% - 2px) 100%,0 100%,0 2px)}
+.thumb .grid{height:16px;background:repeating-linear-gradient(90deg,#1a1e24 0 22px,#0b0d10 22px 25px)}
+.thumb .story{height:12px}.thumb .faq{height:9px}.thumb .sub{height:6px;background:#e11d2e;opacity:.8}
+
+/* 运行中：左侧一条「正在做…」+ 当前一步，可展开实时步骤 */
+.run .who .live{display:inline-flex;align-items:center;gap:6px;font-weight:500;color:var(--ws-brand-ink)}
+html.dark .run .who .live{color:var(--ws-brand)}
+.run .now{display:inline-flex;align-items:center;gap:8px;font-size:14px;color:var(--ws-body);padding:2px 0}
+.run .now .ico{color:var(--ws-brand)}
+.run .now .el{font-size:12px;color:var(--ws-muted-fg);font-variant-numeric:tabular-nums}
+.run .steps{margin-top:8px;max-width:520px}
+.shimmer{background:linear-gradient(90deg,var(--ws-body) 30%,var(--ws-muted-fg) 50%,var(--ws-body) 70%);background-size:200% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;animation:sh 2s linear infinite}
+@keyframes sh{to{background-position:-200% 0}}
+@media (prefers-reduced-motion:reduce){.shimmer{animation:none;color:var(--ws-body)}}
+
+/* 关闭了的事项：对话底下一行 */
+.closed-line{display:flex;align-items:center;justify-content:center;gap:8px;font-size:12.5px;color:var(--ws-muted-fg)}
+
+/* 状态稿：每个状态一个框，里面是缩短的事项页（页头不吸顶、输入卡不吸底） */
+.fr-h{display:flex;align-items:baseline;gap:10px;margin:28px 2px 10px}
+.fr-h:first-child{margin-top:0}
+.fr-h b{font-family:var(--display);font-size:17px;font-weight:600;letter-spacing:-.02em}
+.fr-h span{font-size:13px;color:var(--ws-muted-fg)}
+.frame{border-radius:16px;box-shadow:inset 0 0 0 1px var(--ws-line);background:var(--ws-paper);padding:0 22px;overflow:visible}
+.frame .mh,.frame .dock{position:static}
+.frame .tl{padding:18px 0 8px}
+.cgrid{display:grid;grid-template-columns:1fr 1fr;gap:14px 18px}
+.cgrid .cell>span{display:block;font-size:12.5px;color:var(--ws-muted-fg);margin:0 4px 6px}
+.cgrid .dock{position:static;padding:0;background:none}
+@media (max-width:1100px){.cgrid{grid-template-columns:1fr}}
+.notes-fab{bottom:auto;top:64px}
+/* ── 底部输入卡（Luoye 10-08：要明显、发送是卡内右下角圆形图标、问 AI 并进来、学 Claude） ── */
+.dock{position:sticky;bottom:0;z-index:20;padding:10px 0 18px;background:linear-gradient(to bottom,transparent,var(--ws-paper) 22px)}
+.cmp{position:relative;border-radius:20px;background:var(--ws-card);box-shadow:0 0 0 1px color-mix(in srgb,var(--ws-ink) 14%,transparent),0 2px 4px rgba(20,40,30,.04),0 10px 28px rgba(20,40,30,.08);transition:box-shadow .15s,background-color .15s}
+html.dark .cmp{box-shadow:0 0 0 1px color-mix(in srgb,var(--ws-ink) 16%,transparent),0 10px 28px rgba(0,0,0,.45)}
+.cmp:focus-within{box-shadow:0 0 0 1px color-mix(in srgb,var(--ws-ink) 30%,transparent),0 2px 4px rgba(20,40,30,.05),0 12px 32px rgba(20,40,30,.11)}
+html.dark .cmp:focus-within{box-shadow:0 0 0 1px color-mix(in srgb,var(--ws-ink) 34%,transparent),0 12px 32px rgba(0,0,0,.5)}
+.cmp .field{position:relative}
+.cmp textarea{display:block;width:100%;min-height:56px;max-height:240px;resize:none;padding:14px 16px 4px;font-size:15px;line-height:1.55;color:var(--ws-ink);overflow-y:auto}
+.cmp textarea::placeholder{color:var(--ws-muted-fg)}
+/* 建议输入：浅灰字直接在框里 + 一个很小的 Tab 键帽；按 Tab 收下，打别的字就消失 */
+.cmp .sug{position:absolute;left:0;top:0;right:0;padding:14px 16px 4px;font-size:15px;line-height:1.55;color:color-mix(in srgb,var(--ws-muted-fg) 80%,transparent);pointer-events:none;display:flex;align-items:baseline;gap:8px;white-space:nowrap;overflow:hidden}
+.cmp .sug[hidden]{display:none}
+.kbd{display:inline-flex;align-items:center;height:18px;padding:0 5px;border-radius:5px;font-size:10.5px;font-weight:600;letter-spacing:.02em;color:var(--ws-muted-fg);box-shadow:inset 0 0 0 1px var(--ws-line),0 1px 0 var(--ws-line);background:var(--ws-surface);font-family:var(--sans);flex:none}
+.cmp .bar{display:flex;align-items:center;gap:2px;padding:4px 8px 8px 8px}
+.cmp .ib{width:32px;height:32px;border-radius:10px;display:grid;place-items:center;color:var(--ws-muted-fg)}
+.cmp .ib:hover{background:var(--muted);color:var(--ws-ink)}
+.cmp .mode{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 10px 0 8px;margin-left:4px;border-radius:999px;font-size:12.5px;font-weight:500;color:var(--ws-muted-fg);box-shadow:inset 0 0 0 1px var(--ws-line)}
+.cmp .mode:hover{color:var(--ws-ink);background:var(--muted)}
+.cmp .mode .toggle{width:24px;height:14px}.cmp .mode .toggle::after{width:10px;height:10px}.cmp .mode .toggle.on::after{left:12px}
+.cmp .khint{margin-left:auto;margin-right:8px;font-size:11.5px;color:var(--ws-muted-fg);opacity:0;transition:opacity .15s;white-space:nowrap}
+.cmp:focus-within .khint,.cmp.has .khint{opacity:1}
+.send{width:32px;height:32px;border-radius:50%;display:grid;place-items:center;background:var(--muted);color:color-mix(in srgb,var(--ws-muted-fg) 70%,transparent);transition:background-color .15s,color .15s,transform .1s;flex:none}
+html.dark .send{background:var(--input)}
+.send .ico{width:17px;height:17px;stroke-width:2.4}
+.cmp.has .send{background:var(--ws-brand);color:var(--ws-brand-fg);cursor:pointer}
+.cmp.has .send:hover{background:color-mix(in srgb,var(--ws-brand) 85%,var(--ws-ink))}
+.cmp.has .send:active{transform:scale(.94)}
+.send[disabled]{cursor:default}
+/* 正在跑：发送位变「停」；还能打字，发出去排在这一轮后面 */
+.cmp.running .send{background:var(--ws-ink);color:var(--ws-paper);cursor:pointer}
+.cmp.running .send .ico{width:13px;height:13px}
+/* 私聊 AI 模式：整张卡换成蓝色系、顶上一行标签，发送钮也是蓝的——一眼和「交代给 Agent」分开 */
+.cmp .ptag{display:none;align-items:center;gap:6px;padding:10px 16px 0;font-size:12px;font-weight:500;color:var(--ws-info)}
+.cmp.private{background:color-mix(in srgb,var(--ws-info-bg) 70%,var(--ws-card));box-shadow:0 0 0 1.5px color-mix(in srgb,var(--ws-info) 55%,transparent),0 10px 28px rgba(20,40,30,.08)}
+.cmp.private .ptag{display:flex}
+.cmp.private textarea{padding-top:6px}.cmp.private .sug{padding-top:6px}
+.cmp.private .mode{background:var(--ws-info-bg);color:var(--ws-info);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--ws-info) 40%,transparent)}
+.cmp.private .mode .toggle.on{background:var(--ws-info)}
+.cmp.private.has .send{background:var(--ws-info);color:#fff}
+html.dark .cmp.private.has .send{color:var(--ws-paper)}
+.cmp.closed textarea::placeholder{color:var(--ws-muted-fg)}
+.under{display:flex;justify-content:center;margin-top:6px;font-size:11.5px;color:var(--ws-muted-fg)}
+
+/* 私聊 AI 的一问一答：只你看得见，虚线框、带锁，不进事项记录（关掉就没了） */
+.pv{border-radius:14px;box-shadow:inset 0 0 0 1.5px color-mix(in srgb,var(--ws-info) 40%,transparent);background:color-mix(in srgb,var(--ws-info-bg) 55%,transparent);padding:10px 12px 12px;display:flex;flex-direction:column;gap:8px;background-clip:padding-box;border:1px dashed transparent}
+.pv .ph2{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:500;color:var(--ws-info)}
+.pv .ph2 button{margin-left:auto;color:var(--ws-muted-fg)}
+.pv .q{align-self:flex-end;background:var(--ws-card);padding:7px 12px;border-radius:14px 14px 4px 14px;font-size:13.5px}
+.pv .a{font-size:13.5px;line-height:1.65;color:var(--ws-ink)}
+
+</style>
+</head>
+<body>
+<svg xmlns="http://www.w3.org/2000/svg" style="position:absolute;width:0;height:0" aria-hidden="true">
+<defs>
+<linearGradient id="mk" gradientUnits="userSpaceOnUse" x1="14" y1="77" x2="79" y2="12"><stop offset="0" style="stop-color:var(--mk0)"/><stop offset=".52" style="stop-color:var(--mk1)"/><stop offset="1" style="stop-color:var(--mk2)"/></linearGradient>
+</defs>
+<!-- lucide（工作台左栏 / 顶栏 / 右栏用的同一套，线宽 2） -->
+<symbol id="i-chat" viewBox="0 0 24 24"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/></symbol>
+<symbol id="i-home" viewBox="0 0 24 24"><path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"/><path d="M3 10a2 2 0 0 1 .709-1.528l7-5.999a2 2 0 0 1 2.582 0l7 5.999A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></symbol>
+<symbol id="i-inbox" viewBox="0 0 24 24"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></symbol>
+<symbol id="i-msgs" viewBox="0 0 24 24"><path d="M14 9a2 2 0 0 1-2 2H6l-4 4V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2z"/><path d="M18 9h2a2 2 0 0 1 2 2v11l-4-4h-6a2 2 0 0 1-2-2v-1"/></symbol>
+<symbol id="i-todo" viewBox="0 0 24 24"><rect x="3" y="5" width="6" height="6" rx="1"/><path d="m3 17 2 2 4-4"/><path d="M13 6h8"/><path d="M13 12h8"/><path d="M13 18h8"/></symbol>
+<symbol id="i-cal" viewBox="0 0 24 24"><path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/><path d="M8 14h.01"/><path d="M12 14h.01"/><path d="M16 14h.01"/><path d="M8 18h.01"/><path d="M12 18h.01"/></symbol>
+<symbol id="i-cmd" viewBox="0 0 24 24"><path d="M15 6v12a3 3 0 1 0 3-3H6a3 3 0 1 0 3 3V6a3 3 0 1 0-3 3h12a3 3 0 1 0-3-3"/></symbol>
+<symbol id="i-plus" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M12 5v14"/></symbol>
+<symbol id="i-cr" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+<symbol id="i-cd" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+<symbol id="i-cl" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></symbol>
+<symbol id="i-more" viewBox="0 0 24 24"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></symbol>
+<symbol id="i-send" viewBox="0 0 24 24"><path d="M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z"/><path d="m21.854 2.147-10.94 10.939"/></symbol>
+<symbol id="i-clip" viewBox="0 0 24 24"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></symbol>
+<symbol id="i-list" viewBox="0 0 24 24"><path d="M3 12h.01"/><path d="M3 18h.01"/><path d="M3 6h.01"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M8 6h13"/></symbol>
+<symbol id="i-board" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M8 7v7"/><path d="M12 7v4"/><path d="M16 7v9"/></symbol>
+<symbol id="i-table" viewBox="0 0 24 24"><path d="M12 3v18"/><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 9h18"/><path d="M3 15h18"/></symbol>
+<symbol id="i-filter" viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M7 12h10"/><path d="M10 18h4"/></symbol>
+<symbol id="i-group" viewBox="0 0 24 24"><rect width="18" height="7" x="3" y="3" rx="1"/><rect width="18" height="7" x="3" y="14" rx="1"/></symbol>
+<symbol id="i-sort" viewBox="0 0 24 24"><path d="m21 16-4 4-4-4"/><path d="M17 20V4"/><path d="m3 8 4-4 4 4"/><path d="M7 4v16"/></symbol>
+<symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></symbol>
+<symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+<symbol id="i-go" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></symbol>
+<symbol id="i-up" viewBox="0 0 24 24"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></symbol>
+<symbol id="i-down" viewBox="0 0 24 24"><path d="m7 7 10 10"/><path d="M17 7v10H7"/></symbol>
+<symbol id="i-unlink" viewBox="0 0 24 24"><path d="M9 17H7A5 5 0 0 1 7 7"/><path d="M15 7h2a5 5 0 0 1 4 8"/><path d="M8 12h4"/><path d="m2 2 20 20"/></symbol>
+<symbol id="i-chart" viewBox="0 0 24 24"><path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></symbol>
+<symbol id="i-play" viewBox="0 0 24 24"><polygon points="6 3 20 12 6 21 6 3"/></symbol>
+<symbol id="i-alarm" viewBox="0 0 24 24"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2 2"/><path d="M5 3 2 6"/><path d="m22 6-3-3"/></symbol>
+<symbol id="i-evid" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><circle cx="11.5" cy="14.5" r="2.5"/><path d="M13.3 16.3 15 18"/></symbol>
+<symbol id="i-brain" viewBox="0 0 24 24"><path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z"/><path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z"/><path d="M12 5v13"/></symbol>
+<symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></symbol>
+<symbol id="i-file" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></symbol>
+<symbol id="i-ask" viewBox="0 0 24 24"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></symbol>
+<symbol id="i-book" viewBox="0 0 24 24"><path d="M21.42 10.922a1 1 0 0 0-.019-1.838L12.83 5.18a2 2 0 0 0-1.66 0L2.6 9.08a1 1 0 0 0 0 1.832l8.57 3.908a2 2 0 0 0 1.66 0z"/><path d="M22 10v6"/><path d="M6 12.5V16a6 3 0 0 0 12 0v-3.5"/></symbol>
+<symbol id="i-sliders" viewBox="0 0 24 24"><path d="M21 4h-7"/><path d="M10 4H3"/><path d="M21 12h-9"/><path d="M8 12H3"/><path d="M21 20h-5"/><path d="M12 20H3"/><path d="M14 2v4"/><path d="M8 10v4"/><path d="M16 18v4"/></symbol>
+<symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></symbol>
+<symbol id="i-matter" viewBox="0 0 24 24"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></symbol>
+<symbol id="i-sq" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="m9 12 2 2 4-4"/></symbol>
+<symbol id="i-calclock" viewBox="0 0 24 24"><path d="M21 7.5V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h3.5"/><path d="M16 2v4"/><path d="M8 2v4"/><path d="M3 10h5"/><path d="M17.5 17.5 16 16.3V14"/><circle cx="16" cy="16" r="6"/></symbol>
+<symbol id="i-stamp" viewBox="0 0 24 24"><path d="M5 22h14"/><path d="M19.27 13.73A2.5 2.5 0 0 0 17.5 13h-11A2.5 2.5 0 0 0 4 15.5V17a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-1.5c0-.66-.26-1.3-.73-1.77Z"/><path d="M14 13V8.5C14 7 15 7 15 5a3 3 0 0 0-6 0c0 2 1 2 1 3.5V13"/></symbol>
+<symbol id="i-plug" viewBox="0 0 24 24"><path d="M12 22v-5"/><path d="M9 8V2"/><path d="M15 8V2"/><path d="M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z"/></symbol>
+<symbol id="i-shield" viewBox="0 0 24 24"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/></symbol>
+<symbol id="i-code" viewBox="0 0 24 24"><path d="m16 18 6-6-6-6"/><path d="m8 6-6 6 6 6"/></symbol>
+<symbol id="i-pause" viewBox="0 0 24 24"><rect x="14" y="4" width="4" height="16" rx="1"/><rect x="6" y="4" width="4" height="16" rx="1"/></symbol>
+<symbol id="i-pen" viewBox="0 0 24 24"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/></symbol>
+<symbol id="i-merge" viewBox="0 0 24 24"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M6 21V9a9 9 0 0 0 9 9"/></symbol>
+<symbol id="i-split" viewBox="0 0 24 24"><path d="M16 3h5v5"/><path d="M8 3H3v5"/><path d="M12 22v-8.3a4 4 0 0 0-1.172-2.872L3 3"/><path d="m15 9 6-6"/></symbol>
+<symbol id="i-warn" viewBox="0 0 24 24"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></symbol>
+<symbol id="i-grip" viewBox="0 0 24 24"><circle cx="9" cy="12" r="1"/><circle cx="9" cy="5" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="19" r="1"/></symbol>
+<symbol id="i-cols" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/><path d="M15 3v18"/></symbol>
+<symbol id="i-bot" viewBox="0 0 24 24"><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></symbol>
+<symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></symbol>
+<symbol id="i-note" viewBox="0 0 24 24"><path d="M13.4 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7.4"/><path d="M2 6h4"/><path d="M2 10h4"/><path d="M2 14h4"/><path d="M2 18h4"/><path d="M21.378 5.626a1 1 0 1 0-3.004-3.004l-5.01 5.012a2 2 0 0 0-.506.854l-.837 2.87a.5.5 0 0 0 .62.62l2.87-.837a2 2 0 0 0 .854-.506z"/></symbol>
+<!-- 岗位 / 职责线描（WP213 role-icons/glyphs.ts 原样；线宽 1.75，点睛那一笔走 --ia） -->
+<symbol id="g-pr" viewBox="0 0 24 24"><rect x="2.5" y="4" width="10" height="16" rx="1.5"/><path d="M5.5 8.5h4M5.5 12h4M5.5 15.5h2.5"/><path d="M15.5 10v4M15.5 10l5-3.5v11l-5-3.5" style="stroke:var(--ia,currentColor)"/></symbol>
+<symbol id="g-social" viewBox="0 0 24 24"><path d="M14.5 7.5V6.5a3 3 0 0 0-3-3h-6a3 3 0 0 0-3 3V9a3 3 0 0 0 3 3v2.5L8 12"/><path d="M13 10h5.5a3 3 0 0 1 3 3v2.5a3 3 0 0 1-3 3V21L16 18.5h-3a3 3 0 0 1-3-3V13a3 3 0 0 1 3-3z"/><circle cx="19.5" cy="4.5" r="1.5" style="stroke:var(--ia,currentColor)"/></symbol>
+<symbol id="g-care" viewBox="0 0 24 24"><path d="M3.5 15.5V11a8.5 8.5 0 0 1 17 0v4.5"/><path d="M8.5 9.5h7A2.5 2.5 0 0 1 18 12v3a2.5 2.5 0 0 1-2.5 2.5H12l-3 2.5v-2.5h-.5A2.5 2.5 0 0 1 6 15v-3a2.5 2.5 0 0 1 2.5-2.5z"/><path d="M9.5 13.5h.01M12 13.5h.01M14.5 13.5h.01" style="stroke:var(--ia,currentColor)"/></symbol>
+<symbol id="g-web" viewBox="0 0 24 24"><circle cx="11" cy="13" r="8"/><path d="M11 5c-2.2 2.2-3.2 5-3.2 8s1 5.8 3.2 8"/><path d="M2.5 16c3-.2 5-2.2 7.5-2.2s4-1.8 5.5-4.3S19 5 21.5 4.5" style="stroke:var(--ia,currentColor)"/></symbol>
+<!-- WP262 加的 lucide 图标（工作台已装 lucide-react，名字写在注释里） -->
+<symbol id="i-arrow-up" viewBox="0 0 24 24"><path d="m5 12 7-7 7 7"/><path d="M12 19V5"/></symbol><!-- ArrowUp -->
+<symbol id="i-stop" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2" style="fill:currentColor;stroke:none"/></symbol><!-- Square -->
+<symbol id="i-at" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-4 8"/></symbol><!-- AtSign -->
+<symbol id="i-lock" viewBox="0 0 24 24"><rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></symbol><!-- Lock -->
+<symbol id="i-ext" viewBox="0 0 24 24"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></symbol><!-- ExternalLink -->
+<symbol id="i-rocket" viewBox="0 0 24 24"><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"/><path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"/><path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0"/><path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"/></symbol><!-- Rocket -->
+<symbol id="i-swap" viewBox="0 0 24 24"><path d="M8 3 4 7l4 4"/><path d="M4 7h16"/><path d="m16 21 4-4-4-4"/><path d="M20 17H4"/></symbol><!-- ArrowLeftRight -->
+<symbol id="i-archive" viewBox="0 0 24 24"><rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/></symbol><!-- Archive -->
+<symbol id="i-xcircle" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/></symbol><!-- CircleX -->
+<symbol id="i-link" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></symbol><!-- Link -->
+<symbol id="i-filecode" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="m10 13-2 2 2 2"/><path d="m14 17 2-2-2-2"/></symbol><!-- FileCode -->
+<symbol id="i-eye" viewBox="0 0 24 24"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></symbol><!-- Eye -->
+<symbol id="i-upload" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m17 8-5-5-5 5"/><path d="M12 3v12"/></symbol><!-- Upload -->
+<symbol id="i-checkc" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></symbol><!-- CircleCheck -->
+<symbol id="i-loader" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></symbol><!-- LoaderCircle -->
+<symbol id="i-undo" viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></symbol><!-- Undo2 -->
+<symbol id="i-copy" viewBox="0 0 24 24"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></symbol><!-- Copy -->
+<symbol id="i-image" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></symbol><!-- Image -->
+<symbol id="i-flag" viewBox="0 0 24 24"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><path d="M4 22v-7"/></symbol><!-- Flag -->
+
+</svg>
+
+<div class="app">
+<aside class="side">
+  <div class="logo"><svg width="24" height="24" viewBox="14 12 65 65" aria-hidden="true"><g fill="url(#mk)"><rect x="14" y="44" width="17" height="17" rx="2.5"/><rect x="38" y="52" width="17" height="17" rx="2.5"/><rect x="38" y="28" width="17" height="17" rx="2.5"/><rect x="62" y="60" width="17" height="17" rx="2.5"/><rect x="62" y="36" width="17" height="17" rx="2.5"/><rect x="62" y="12" width="17" height="17" rx="2.5"/></g></svg>Agents 工坊</div>
+  <nav class="nav" aria-label="主导航">
+    <a class="nv"><svg class="ico"><use href="#i-chat"/></svg>随便聊</a>
+    <a class="nv"><svg class="ico"><use href="#i-home"/></svg>首页</a>
+    <a class="nv"><svg class="ico"><use href="#i-inbox"/></svg>消息</a>
+    <a class="nv"><svg class="ico"><use href="#i-todo"/></svg>待办</a>
+    <a class="nv"><svg class="ico"><use href="#i-cal"/></svg>日历</a>
+    <div class="nsec">岗位<svg class="ico s14"><use href="#i-plus"/></svg></div>
+    <div class="prow"><span class="chev"><svg class="ico s14"><use href="#i-cd"/></svg></span><a class="nv"><svg class="gl"><use href="#g-web"/></svg>网站运营</a></div>
+    <div class="duty-row"><span class="di"><svg class="gl"><use href="#g-web"/></svg><img src="../../../apps/workstation/src/assets/brand/shopify_admin.png" alt=""></span>Shopify 网页模板</div>
+    <ul class="threads">
+      <li><a class="th on" href="matter-v2-chat.html"><i class="sd" id="navDot"></i><span>Rollout 英文首页 · 深色科技风</span></a></li>
+      <li><a class="th"><i class="sd"></i><span>关于我们页 · 授权故事</span></a></li>
+      <li><a class="th"><i class="sd ready"></i><span>FAQ 页 · 发货与退换</span></a></li>
+    </ul>
+    <div class="prow"><span class="chev"><svg class="ico s14"><use href="#i-cr"/></svg></span><a class="nv"><svg class="gl"><use href="#g-care"/></svg>客服</a></div>
+    <div class="prow"><span class="chev"><svg class="ico s14"><use href="#i-cr"/></svg></span><a class="nv"><svg class="gl"><use href="#g-social"/></svg>社媒运营</a></div>
+  </nav>
+  <div class="acct"><span class="av t-warn">舟</span><div><b>林舟</b><small>负责人 · Rollout</small></div></div>
+</aside>
+<div class="mainwrap">
+  <header class="top">
+    <button class="kbar" type="button"><svg class="ico"><use href="#i-cmd"/></svg>交给某个岗位一件事…<kbd>⌘K</kbd></button>
+    <span class="tchip"><i></i>DeepSeek</span>
+    <span class="tchip num">积分 96.4</span>
+  </header>
+  <main class="chat">
+<div id="page"></div>
+
+  </main>
+</div>
+<aside class="rail" aria-label="右栏（收起）">
+  <svg class="ico"><use href="#i-chart"/></svg><svg class="ico"><use href="#i-play"/></svg><svg class="ico"><use href="#i-alarm"/></svg><svg class="ico"><use href="#i-evid"/></svg>
+  <hr><svg class="ico"><use href="#i-brain"/></svg><svg class="ico"><use href="#i-book"/></svg>
+  <hr><svg class="ico"><use href="#i-globe"/></svg><svg class="ico"><use href="#i-file"/></svg><svg class="ico"><use href="#i-ask"/></svg>
+</aside>
+<aside class="notes" aria-label="设计说明">
+  <div class="nh"><svg class="ico s14"><use href="#i-note"/></svg><b>设计说明</b><span class="tag">不是界面</span><button class="btn xs ghost" type="button" style="margin-left:auto" onclick="document.documentElement.classList.toggle('dark')"><svg class="ico s14"><use href="#i-sun"/></svg>明 / 暗</button><button class="btn xs icon ghost" type="button" onclick="document.documentElement.classList.add('notes-off')" aria-label="收起"><svg class="ico s14"><use href="#i-x"/></svg></button></div>
+  <div class="blk">
+    <h4>试一试</h4>
+    <div class="try">
+      <button type="button" onclick="setState('doing')">默认（预览好了）</button>
+      <button type="button" onclick="setState('running')">运行中</button>
+      <button type="button" onclick="setState('awaiting')">等你批</button>
+      <button type="button" onclick="setState('blocked')">卡住了</button>
+      <button type="button" onclick="setState('done')">已完成</button>
+      <button type="button" onclick="setQ('todos',q.get('todos')==='1'?null:'1')">待办 有 / 无</button>
+      <button type="button" onclick="setQ('suggest',q.get('suggest')==='0'?null:'0')">建议 有 / 无</button>
+      <button type="button" onclick="setQ('private',q.get('private')==='1'?null:'1')">私聊 AI</button>
+    </div>
+    <p class="muted" style="margin-top:8px;font-size:12px">也能直接点：标题（改名）、「⋯」、灰字那几行（展开步骤）、「展开全文」、「发布上线」、输入框里按 Tab。</p>
+  </div>
+  <div class="blk">
+    <h4>1 · 短标题</h4>
+    <ul>
+      <li>标题是 AI 起的总结，中文 ≤16 字左右：「Rollout 英文首页 · 深色科技风」。<span class="was">原话前 120 字、四行大字</span></li>
+      <li>首轮开跑时用便宜模型起；起好之前先显示原话前 20 字。点标题就地改，改过的不再自动覆盖</li>
+      <li>原话全文是对话第一条（右边气泡），一字不丢</li>
+      <li>左栏事项名也是这个短标题，不再截半句</li>
+    </ul>
+  </div>
+  <div class="blk">
+    <h4>2 · 页头一行</h4>
+    <ul>
+      <li>标题下一行灰字：<b>职责标签</b>（点了换）· <b>状态</b> · 参与者 · 最近活动</li>
+      <li>「归档 / 关闭事项 / 换职责」收进右上「⋯」；不能归档时灰掉并说一句为什么</li>
+      <li><b>待办有才出</b>：灰字行尾一个蓝色「3 个待办」，点开就地展开；没有就什么都没有。<span class="was">「这里的待办」空着也占一块</span></li>
+      <li>结果摘要不再单独一行，就在对话里</li>
+      <li>页头吸顶，约 72px 高。<span class="was">原来约 260px</span></li>
+    </ul>
+  </div>
+  <div class="blk">
+    <h4>3 · 对话式时间线</h4>
+    <ul>
+      <li><b>你说的</b>在右边气泡，超过 6 行先收起</li>
+      <li><b>AI</b> 在左边，带职责头像和名字，正文按 Markdown 排；长回答先露一屏，「展开全文」</li>
+      <li><b>结果卡</b>：「预览好了」= 缩略图 + 主题名 + 改了几处 +「打开预览」主按钮 +「发布上线」次按钮（点了出审批卡）</li>
+      <li><b>过程与系统事件</b>缩成居中一行灰字：跑了一次、卡在缺连接、换了职责。点开看读了哪些文件、检查结果、推送</li>
+      <li>卡住的那条：<b>是最新的时候是卡</b>（带「去连接」），接上之后缩成一行</li>
+      <li>时间：同一天只出一次日期分隔，每条的钟点悬停才显</li>
+    </ul>
+  </div>
+  <div class="blk">
+    <h4>4 · 输入卡（Luoye 10-08 追加）</h4>
+    <ul>
+      <li>明显的圆角卡：有边框、有阴影、两行高，打字自动长高（最多约 10 行）</li>
+      <li>发送是卡内右下角<b>圆形箭头</b>：空时灰，有字变主色；运行中变「停」（方块）。<span class="was">浅绿「发」字按钮</span></li>
+      <li>Enter 发送、Shift+Enter 换行，提示只在聚焦时出现</li>
+      <li><b>问 AI</b> 并进来：左下「私聊 AI」开关，打开后整张卡变蓝、顶上一行「只你看得见」。<span class="was">底下另一块「问 AI」</span></li>
+      <li>左下预留「+」附件、「@」提及两个图标位</li>
+      <li><b>建议输入</b>：AI 交代完说「要发布说一句」，框里直接浅灰「发布上线」+ 小 Tab 键帽；按 Tab 收下变正文，打别的字就消失。没有合适的就是普通占位字</li>
+    </ul>
+  </div>
+  <div class="blk ask">
+    <h4>要 Luoye 定（详见 README）</h4>
+    <ol>
+      <li>标题谁起：首轮便宜模型起（稿子按这个）还是从首轮结果里取？</li>
+      <li>私聊 AI 的问答留不留在对话里？</li>
+      <li>建议输入从哪来、什么时候不给</li>
+      <li>过程事件默认收起，还是最近一次默认展开？</li>
+    </ol>
+  </div>
+
+</aside>
+</div>
+<button class="notes-fab" type="button" onclick="document.documentElement.classList.remove('notes-off')"><svg class="ico s14"><use href="#i-note"/></svg>设计说明</button>
+<script>
+// WP262 事项页 v2：两张稿共用的画法（只拼 HTML 字符串，没有框架）。真做时对应的组件写在每个函数上面。
+const SHOP = '../../../apps/workstation/src/assets/brand/shopify_admin.png'
+const ico = (id, cls = '') => `<svg class="ico ${cls}"><use href="#${id}"/></svg>`
+const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;')
+const ava = (live) =>
+  `<span class="ava${live ? ' pulse-ring' : ''}"><svg class="gl"><use href="#g-web"/></svg><img src="${SHOP}" alt=""></span>`
+
+const STATE = {
+  running: ['doing', 'running', '在跑'],
+  doing: ['doing', '', '进行中'],
+  awaiting: ['awaiting', 'awaiting', '等你批'],
+  blocked: ['blocked', 'blocked', '卡住了'],
+  done: ['done', 'ready', '已完成'],
+}
+
+/* MatterHeader：短标题（点了能改）+ 一行灰字元信息 + 右边「⋯」。待办有才出。 */
+function head({ state = 'doing', todos = 0, when = '14:40', title = 'Rollout 英文首页 · 深色科技风' } = {}) {
+  const [cls, dot, word] = STATE[state]
+  const todo = todos
+    ? `<span class="dot"></span><button class="todo-chip" type="button" data-todos aria-expanded="false">${ico('i-sq', 's12')}${todos} 个待办${ico('i-cd', 's12')}</button>`
+    : ''
+  return `<div class="mh"><div class="mx">
+  <div class="row">
+    <div style="min-width:0">
+      <h1 data-title title="AI 起的标题，点了能改">${esc(title)}<svg class="ico s14 pen"><use href="#i-pen"/></svg></h1>
+      <div class="meta">
+        <span class="duty" data-tip="这件事归这条职责做 · 点了换">${'<span class="di"><svg class="gl"><use href="#g-web"/></svg><img src="' + SHOP + '" alt=""></span>'}Shopify 网页模板${ico('i-swap', 's12 sw')}</span>
+        <span class="dot"></span><span class="state ${cls}"><i class="sd ${dot}" style="${dot ? '' : 'background:var(--ws-brand)'}"></i>${word}</span>
+        <span class="dot"></span><span class="holders" data-tip="你 + 网页模板 Agent"><span class="av sm t-warn">舟</span><span class="av sm t-brand" style="margin-left:-5px">AI</span></span>
+        <span class="dot"></span><span>最近 ${when}</span>${todo}
+      </div>
+    </div>
+    <div class="r">
+      <button class="btn sm icon ghost" type="button" data-menu aria-label="更多">${ico('i-more')}</button>
+      <div class="pop menu" hidden>
+        <button type="button">${ico('i-swap', 's14')}换职责<span class="why">${ico('i-cr', 's12')}</span></button>
+        <button type="button">${ico('i-link', 's14')}复制链接</button>
+        <hr>
+        <button type="button" ${state === 'running' || state === 'awaiting' ? 'disabled' : ''}>${ico('i-archive', 's14')}归档${state === 'running' ? '<span class="why">在跑，跑完再归</span>' : state === 'awaiting' ? '<span class="why">有卡等你批</span>' : ''}</button>
+        <button type="button" class="bad">${ico('i-xcircle', 's14')}关闭事项</button>
+      </div>
+    </div>
+  </div>
+  <ul class="todos" data-todo-list hidden>
+    <li><i class="cb"></i><span>补横幅大图（建议 2400×1000）</span><span class="from">AI 提的 · 10/7</span></li>
+    <li><i class="cb"></i><span>补品牌故事配图</span><span class="from">AI 提的 · 10/7</span></li>
+    <li><i class="cb"></i><span>选主推合集</span><span class="from">AI 提的 · 10/7</span></li>
+  </ul>
+</div></div>`
+}
+
+/* 用户的话：右侧气泡；超过 6 行先收起 */
+const user = (text, t, clamp = false) =>
+  `<div class="me"><div class="bubble${clamp ? ' clamp' : ''}">${esc(text)}</div><div class="t">${clamp ? '<button class="more" type="button" data-clamp>展开</button>' : ''}<span>${t}</span></div></div>`
+
+/* Agent：左侧，职责头像 + 名字 + 时间；正文 Markdown；长的折叠 */
+function ai({ t, html, fold = false, card = '', lead = '' }) {
+  const body = fold
+    ? `${lead}${card}<div class="md fold" style="margin-top:14px">${html}</div><button class="unfold" type="button" data-fold>${ico('i-cd', 's12')}展开全文</button>`
+    : `<div class="md">${html}</div>${card}`
+  return `<div class="ai">${ava()}<div class="who">Shopify 网页模板<span class="t">${t}</span></div><div class="bd">${body}
+  <div class="acts"><button type="button" data-tip="复制">${ico('i-copy', 's14')}</button></div></div></div>`
+}
+
+/* 过程与系统事件：居中一行，点开是工具调用摘要 */
+function sys({ icon = 'i-bot', tone = '', text, steps = [], open = false }) {
+  const li = steps
+    .map(([k, i, s, d = '']) => `<li class="${k}">${ico(i, `s14${k === 'now' ? ' spin' : ''}`)}<span>${s}</span>${d ? `<span class="dur">${d}</span>` : ''}</li>`)
+    .join('')
+  return `<div class="sys${open ? ' open' : ''}"><button type="button" data-sys>${ico(icon, `s14 ${tone}`)}<span>${text}</span>${steps.length ? ico('i-cr', 's12 cv') : ''}</button>${steps.length ? `<ul class="steps">${li}</ul>` : ''}</div>`
+}
+
+/* 「预览好了」结果卡（WP253 preview 事件）：主按钮打开预览，次按钮「发布上线」→ 出审批卡 */
+const previewCard = (published = false) => `<div class="rc">
+  <div class="rh">${ico('i-eye', 's14')}预览好了<span class="pill ${published ? 't-good' : 't-neutral'}" style="margin-left:auto">${published ? '已发布' : '未发布 · 线上没动'}</span></div>
+  <div class="rb"><div class="thumb"><i class="hero"></i><i class="grid"></i><i class="story"></i><i class="faq"></i><i class="sub"></i></div>
+    <div><div class="rt">Rollout Homepage v1 (dark tech)</div><div class="rm">改了 2 个文件 · 首页 5 屏 · 检查 0 错 0 警</div></div></div>
+  <div class="rf"><button class="btn sm pri" type="button">${ico('i-ext', 's14')}打开预览</button>${published ? '' : `<button class="btn sm out" type="button" data-publish>${ico('i-rocket', 's14')}发布上线</button>`}<a class="lnk">${ico('i-filecode', 's12')}看改动</a></div>
+</div>`
+
+/* 审批卡（发布上线）：内嵌在对话里、能直接批；批过之后缩成一行结论 */
+const approvalCard = (decided = false) => decided
+  ? `<div class="rc done-card"><div class="rf" style="border:0"><span class="stamp">${ico('i-checkc', 's14')}你批了 · 发布上线</span><span class="lnk">10/8 09:12</span></div></div>`
+  : `<div class="rc await">
+  <div class="rh">${ico('i-stamp', 's14')}等你批<span class="pill t-warn" style="margin-left:auto">发布上线</span></div>
+  <div class="rb" style="padding-bottom:8px"><div><div class="rt">把「Rollout Homepage v1 (dark tech)」设为线上主题</div><div class="rm">访客马上看到新首页</div></div></div>
+  <ul class="imp">
+    <li>${ico('i-warn', 's14')}<span><b>配色是全店级</b>：商品页、购物车也会变深色</span></li>
+    <li>${ico('i-undo', 's14')}<span>现在的线上主题退成未发布，随时能换回</span></li>
+  </ul>
+  <div class="rf"><button class="btn sm pri" type="button">${ico('i-check', 's14')}批准发布</button><button class="btn sm ghost" type="button">先不发</button><a class="lnk">${ico('i-ext', 's12')}再看一眼预览</a></div>
+</div>`
+
+/* 卡住了（WP251 blocked）：最新一条时是卡 + 「去连接」；连上并接着做之后缩成一行 */
+const blockedCard = () => `<div class="rc block">
+  <div class="rh">${ico('i-plug', 's14')}卡住了<span class="pill t-bad" style="margin-left:auto">缺连接</span></div>
+  <div class="rb" style="padding-bottom:12px"><div><div class="rt">要先连上「Shopify 店铺后台」</div><div class="rm">连上后点「接着做」，从卡住的地方继续</div></div></div>
+  <div class="rf"><button class="btn sm pri" type="button">${ico('i-plug', 's14')}去连接</button><button class="btn sm out" type="button">接着做</button></div>
+</div>`
+
+/* 运行中：左侧「正在做…」+ 当前一步，可展开实时步骤 */
+const running = (open = false) => `<div class="ai run">${ava(true)}<div class="who"><span class="live">正在做…</span><span class="t">已 1 分 12 秒</span></div>
+<div class="bd"><button class="now" type="button" data-run>${ico('i-loader', 's14 spin')}<span class="shimmer">正在跑主题检查</span><span class="el">第 5 步</span>${ico(open ? 'i-cd' : 'i-cr', 's12')}</button>
+<ul class="steps" ${open ? '' : 'hidden'} data-run-steps>
+  <li class="ok">${ico('i-check', 's14')}<span>读 <code>templates/index.json</code></span><span class="dur">2s</span></li>
+  <li class="ok">${ico('i-check', 's14')}<span>读 <code>sections/faq.liquid</code> 等 3 个分区</span><span class="dur">4s</span></li>
+  <li class="ok">${ico('i-check', 's14')}<span>改 <code>templates/index.json</code>（首页 5 屏）</span><span class="dur">31s</span></li>
+  <li class="ok">${ico('i-check', 's14')}<span>改 <code>config/settings_data.json</code>（配色）</span><span class="dur">9s</span></li>
+  <li class="now">${ico('i-loader', 's14')}<span>主题检查</span><span class="dur">…</span></li>
+  <li class="todo">${ico('i-upload', 's14')}<span>推成未发布主题，出预览</span></li>
+</ul></div></div>`
+
+/* 底部输入卡：建议输入（浅灰 + Tab）/ 私聊 AI 切换 / 发送圆钮（空时置灰）/ 运行中变「停」 */
+function composer({ suggest = '', placeholder = '回复，或交代新要求…', mode = 'agent', run = false, closed = false, value = '' } = {}) {
+  const cls = ['cmp', mode === 'private' ? 'private' : '', run ? 'running' : '', value ? 'has' : '', closed ? 'closed' : ''].join(' ')
+  const ph = mode === 'private' ? '问 AI 一句，只你看得见…' : closed ? '这件事已关闭，说一句就重新打开' : run ? '还能接着说，会排在这一轮后面…' : placeholder
+  return `<div class="dock"><div class="mx"><div class="${cls}" data-cmp data-suggest="${esc(suggest)}">
+  <div class="ptag">${ico('i-lock', 's12')}私聊 AI · 只你看得见，不会让它去做事</div>
+  <div class="field"><textarea rows="1" placeholder="${suggest && !value ? '' : ph}" aria-label="在这个事项里说一句">${esc(value)}</textarea>
+  <div class="sug" ${suggest && !value ? '' : 'hidden'}><span>${esc(suggest)}</span><span class="kbd">Tab</span></div></div>
+  <div class="bar">
+    <button class="ib" type="button" data-tip="附件（以后）">${ico('i-plus', 's18')}</button>
+    <button class="ib" type="button" data-tip="提及同事 / 文件（以后）">${ico('i-at', 's18')}</button>
+    <button class="mode" type="button" data-mode data-tip="打开：只问 AI 一句，不让它去做事">${ico('i-lock', 's14')}私聊 AI<span class="toggle${mode === 'private' ? ' on' : ''}"></span></button>
+    <span class="khint" title="Enter 发送 · Shift+Enter 换行">↵ 发送 · ⇧↵ 换行</span>
+    <button class="send" type="button" data-send aria-label="${run ? '停下这一轮' : '发送'}" style="${run ? '' : 'margin-left:0'}">${run && !value ? ico('i-stop') : ico('i-arrow-up')}</button>
+  </div>
+</div></div></div>`
+}
+
+/* 私聊 AI 的一问一答（只你看得见，不进事项记录；关掉就没了） */
+const privatePair = (q, a) => `<div class="pv"><div class="ph2">${ico('i-lock', 's12')}只你看得见 · 不进这件事的记录<button type="button" data-close-pv aria-label="关掉">${ico('i-x', 's14')}</button></div>
+<div class="q">${esc(q)}</div><div class="a">${a}</div></div>`
+
+/* 交互：全部挂在 document 上（两张稿共用），能点的都能点 */
+function grow(ta) { ta.style.height = 'auto'; ta.style.height = `${Math.min(ta.scrollHeight, 240)}px` }
+function syncCmp(c) {
+  const ta = c.querySelector('textarea'), g = c.querySelector('.sug'), v = ta.value
+  c.classList.toggle('has', v.trim() !== '')
+  const sug = c.dataset.suggest
+  g.hidden = !(sug && v === '' && !c.classList.contains('private'))
+  const cl = c.classList
+  ta.placeholder = g.hidden ? (cl.contains('private') ? '问 AI 一句，只你看得见…' : cl.contains('running') ? '还能接着说，会排在这一轮后面…' : cl.contains('closed') ? '这件事已关闭，说一句就重新打开' : '回复，或交代新要求…') : ''
+  const send = c.querySelector('[data-send]')
+  if (c.classList.contains('running')) send.innerHTML = v.trim() ? ico('i-arrow-up') : ico('i-stop')
+  grow(ta)
+}
+function sendFrom(c) {
+  const ta = c.querySelector('textarea'), v = ta.value.trim()
+  if (!v) return
+  const tail = document.getElementById('tail')
+  if (tail) {
+    tail.insertAdjacentHTML('beforeend', c.classList.contains('private')
+      ? privatePair(v, '<p>（稿子里的示意回答）全店配色在「主题设置 → 颜色」里一处改；只想首页深色，可以让它给首页单独套一个配色方案，其他页不动。</p>')
+      : user(v, '刚刚'))
+    tail.lastElementChild.scrollIntoView({ block: 'nearest' })
+  }
+  ta.value = ''; c.dataset.suggest = ''; syncCmp(c)
+}
+document.addEventListener('click', (e) => {
+  const el = e.target.closest('button,[data-title],.cb,[data-tip]')
+  document.querySelectorAll('.menu').forEach((m) => { if (!e.target.closest('.r')) m.hidden = true })
+  if (!el) return
+  if (el.matches('[data-fold]')) { const f = el.previousElementSibling; f.classList.toggle('open'); el.innerHTML = f.classList.contains('open') ? `${ico('i-up', 's12')}收起` : `${ico('i-cd', 's12')}展开全文` }
+  else if (el.matches('[data-sys]')) el.parentElement.classList.toggle('open')
+  else if (el.matches('[data-clamp]')) { const b = el.closest('.me').querySelector('.bubble'); b.classList.toggle('clamp'); el.textContent = b.classList.contains('clamp') ? '展开' : '收起' }
+  else if (el.matches('[data-menu]')) { const m = el.nextElementSibling; m.hidden = !m.hidden }
+  else if (el.matches('[data-todos]')) { const l = el.closest('.mh').querySelector('[data-todo-list]'); l.hidden = !l.hidden; el.setAttribute('aria-expanded', String(!l.hidden)) }
+  else if (el.matches('.cb')) el.parentElement.classList.toggle('done')
+  else if (el.matches('[data-run]')) { const s = el.nextElementSibling; s.hidden = !s.hidden }
+  else if (el.matches('[data-close-pv]')) el.closest('.pv').remove()
+  else if (el.matches('[data-mode]')) { const c = el.closest('[data-cmp]'); c.classList.toggle('private'); el.querySelector('.toggle').classList.toggle('on'); syncCmp(c); c.querySelector('textarea').focus() }
+  else if (el.matches('[data-send]')) sendFrom(el.closest('[data-cmp]'))
+  else if (el.matches('[data-publish]') && window.onPublish) window.onPublish()
+  else if (el.matches('[data-title]') && !el.querySelector('input')) {
+    const old = el.firstChild.textContent
+    el.innerHTML = `<input value="${old}" aria-label="改标题">`
+    const i = el.querySelector('input'); i.focus(); i.select()
+    const done = () => { el.innerHTML = `${esc(i.value || old)}<svg class="ico s14 pen"><use href="#i-pen"/></svg>` }
+    i.addEventListener('blur', done); i.addEventListener('keydown', (k) => { if (k.key === 'Enter' || k.key === 'Escape') i.blur() })
+  }
+})
+document.addEventListener('input', (e) => { const c = e.target.closest('[data-cmp]'); if (c) syncCmp(c) })
+document.addEventListener('keydown', (e) => {
+  const c = e.target.closest && e.target.closest('[data-cmp]')
+  if (!c) return
+  const ta = c.querySelector('textarea'), g = c.querySelector('.sug')
+  if (e.key === 'Tab' && !g.hidden) { e.preventDefault(); ta.value = c.dataset.suggest; syncCmp(c) }
+  else if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); sendFrom(c) }
+})
+const q = new URLSearchParams(location.search)
+
+// WP262 主稿：Rollout 建站事项（10-07 Windows 真机）那条时间线，照对话式重排。
+// ?state=running|awaiting|blocked|done 看另外几种结尾；?todos=1 页头出待办；?suggest=0 输入框不给建议；
+// ?private=1 输入卡切到私聊 AI；?open=1 展开最终交代与运行步骤；?menu=1 打开「⋯」。
+const ORIGINAL = '用 agentsws-theme 给 Rollout 搭英文首页（变形金刚正版授权耳机音箱，美国市场）：大图横幅、主推产品占位、品牌故事、FAQ、邮件订阅；深色科技风红色点缀。推成未发布主题给我预览，先别发布。'
+const MORE = '开始做吧。详细要求：\n1. 横幅标题用一句英文短句，副标题点出 Officially licensed\n2. 主推产品先放占位，合集我之后再选\n3. FAQ 写 4 条：正版授权、发货、退换、保修\n4. 整体深色，红色只做点缀，按钮别太圆'
+const FINAL = `<h3>改了什么（2 个文件）</h3>
+<ul><li><code>templates/index.json</code>：首页 5 屏
+  <ol><li>大图横幅，标题「More than meets the ear.」</li><li>主推产品网格（先放占位）</li><li>品牌故事图文</li><li>常见问题手风琴，4 条</li><li>邮件订阅条</li></ol></li>
+<li><code>config/settings_data.json</code>：深色科技风——底色 <span class="sw" style="background:#0B0D10"></span> <code>#0B0D10</code>、主色红 <span class="sw" style="background:#E11D2E"></span> <code>#E11D2E</code>，按钮切角、全大写</li></ul>
+<h3>影响面</h3>
+<ul><li>配色是<b>全店级</b>的：发布后商品页、购物车也会变深色。只想首页深色就跟我说</li></ul>
+<h3>还要你补的三处占位</h3>
+<ol><li>横幅大图</li><li>品牌故事配图</li><li>主推合集（选好哪个，我接上）</li></ol>
+<h3>两处口径请你确认</h3>
+<ul><li>FAQ 里发货 / 退换的说法以店里的<a>政策页</a>为准，我没自己编时限</li><li>FAQ 的富摘要（搜索结果里的问答）先关着</li></ul>
+<h3>检查与退回</h3>
+<ul><li>主题检查 0 错 0 警</li><li>想退回：这份是未发布副本，删掉或不理它就行，线上主题一个字没动</li></ul>
+<p>要发布说一句，会先出一张审批卡给你批。</p>`
+
+const RUN_STEPS = [
+  ['ok', 'i-check', '读 <code>templates/index.json</code> 与 3 个分区', '6s'],
+  ['ok', 'i-check', '改 <code>templates/index.json</code>（首页 5 屏）', '1m 48s'],
+  ['ok', 'i-check', '改 <code>config/settings_data.json</code>（配色）', '22s'],
+  ['ok', 'i-check', '主题检查：0 错 0 警', '41s'],
+  ['ok', 'i-check', '推成未发布主题「Rollout Homepage v1 (dark tech)」', '35s'],
+]
+
+function timeline(open) {
+  return [
+    '<div class="day">10月7日 周三</div>',
+    user(ORIGINAL, '14:02'),
+    sys({ icon: 'i-swap', text: '交给「Shopify 网页模板」来做', steps: [['ok', 'i-check', '网站运营岗位里按内容挑的：建站 / 改主题'], ['todo', 'i-swap', '想换：页头职责标签或「⋯ → 换职责」']] }),
+    sys({ text: '跑了一次 · 41 秒 · 读了 2 个文件', steps: [['ok', 'i-check', '读 <code>AGENTS.md</code>（主题规矩）', '3s'], ['ok', 'i-check', '读 <code>CATALOG.index.json</code>（分区目录）', '2s']] }),
+    ai({ t: '14:03', html: '<p>可以。我的打算：首页按你说的 5 屏搭，配色一起改，推成<b>未发布</b>主题给你看，线上不动。</p><p>有具体要求（标题口号、FAQ 写哪几条）现在说，我一起做；没有就按常见做法来。</p>' }),
+    user(MORE, '14:09'),
+    sys({ icon: 'i-bot', text: '接着跑了一次 · 57 秒 · 只读没改', steps: [['ok', 'i-check', '读 <code>templates/index.json</code>', '4s'], ['ok', 'i-check', '读 FAQ / 容器分区的 schema', '9s'], ['ok', 'i-check', '读标题块 schema', '3s']] }),
+    ai({ t: '14:10', html: '<p>现在读首页模板、FAQ / 容器分区、标题块的 schema，并顺手看店里有没有可引用的商品。</p>' }),
+    user('接着做：主题规矩和目录你已经读过了，别再重读，直接改首页模板和配色，改完检查、推成未发布主题。', '14:20'),
+    sys({ icon: 'i-plug', tone: 'warn', text: '卡在缺连接：Shopify 店铺后台 · 14:29 已连上', steps: [['ok', 'i-check', '读 <code>templates/index.json</code>', '3s'], ['todo', 'i-plug', '查店里的商品 → 店铺后台没连上，停下'], ['ok', 'i-checkc', '14:29 你连上了']] }),
+    user('接着做，一口气做到出预览，中间不用汇报。', '14:31'),
+    sys({ icon: 'i-checkc', tone: 'good', text: '跑完了 · 4 分 12 秒 · 改 2 个文件 · 检查 0 错 0 警 · 推成未发布主题', steps: RUN_STEPS, open }),
+    ai({ t: '14:40', fold: true, lead: '<div class="md"><p>预览好了，线上没动。</p></div>', card: previewCard(), html: FINAL }),
+  ].join('\n')
+}
+
+function render() {
+  const state = q.get('state') ?? 'doing'
+  const open = q.get('open') === '1'
+  const todos = q.get('todos') === '1' ? 3 : 0
+  let tail = ''
+  let suggest = q.get('suggest') === '0' ? '' : '发布上线'
+  let when = '14:40'
+  if (state === 'running') { tail = user('把深色只用在首页，其他页保持原来的浅色。', '10/8 09:02') + running(open); suggest = ''; when = '刚刚' }
+  if (state === 'awaiting') { tail = user('发布上线', '10/8 09:05') + ai({ t: '09:05', html: '<p>好，发布前要你批一下：</p>', card: approvalCard() }); suggest = ''; when = '09:05' }
+  if (state === 'blocked') { tail = user('把主推合集换成 Bumblebee 系列', '10/8 09:20') + ai({ t: '09:21', html: '<p>要读店里的合集，但店铺后台连接断了（授权过期）。</p>', card: blockedCard() }); suggest = ''; when = '09:21' }
+  if (state === 'done') { tail = user('发布上线', '10/8 09:05') + ai({ t: '09:05', html: '<p>好，发布前要你批一下：</p>', card: approvalCard(true) }) + ai({ t: '09:12', html: '<p>已发布。线上首页就是「Rollout Homepage v1 (dark tech)」，原来的主题留成未发布，想换回说一句。</p>', card: previewCard(true) }) + '<div class="closed-line">' + ico('i-checkc', 's14') + '你在 09:15 关闭了这件事</div>'; suggest = ''; when = '09:15' }
+  document.getElementById('page').innerHTML =
+    head({ state, todos, when }) +
+    `<div class="mx"><div class="tl">${timeline(open)}<div id="tail" style="display:contents">${tail}</div></div></div>` +
+    composer({ suggest, run: state === 'running', closed: state === 'done', mode: q.get('private') === '1' ? 'private' : 'agent', value: q.get('typed') ?? '' })
+  const dot = document.getElementById('navDot')
+  dot.className = `sd ${STATE[state][1] || 'running'}`
+  if (state === 'doing') dot.className = 'sd'
+  if (open) document.querySelectorAll('.fold').forEach((f) => { f.classList.add('open'); f.nextElementSibling.innerHTML = `${ico('i-up', 's12')}收起` })
+  if (todos && q.get('todolist') === '1') document.querySelector('[data-todos]').click()
+  if (q.get('menu') === '1') document.querySelector('.menu').hidden = false
+  document.querySelectorAll('[data-cmp]').forEach(syncCmp)
+}
+window.onPublish = () => { q.set('state', 'awaiting'); render(); document.getElementById('tail').scrollIntoView({ block: 'start' }) }
+window.setState = (s) => { q.set('state', s); render(); if (s !== 'doing') document.getElementById('tail').scrollIntoView({ block: 'center' }) }
+window.setQ = (k, v) => { if (v === null) q.delete(k); else q.set(k, v); render() }
+render()
+
+</script>
+</body>
+</html>
