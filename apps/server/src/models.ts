@@ -340,6 +340,8 @@ export interface ModelsAssembly {
    * 「当前模型看不了图」——不阻塞岗位，只是那一步如实说。
    */
   visionStatus(): ModelVisionStatus
+  /** WP268：生图那一档现在的样子（官方接口？哪个模型？一张多少积分？）——生图工具花积分前现取。 */
+  imageView(): ModelImageView
   /** WP66：端一份可复制的设置快照（**没有 key**）。 */
   exportSettings(): ModelSettingsSnapshot
   /**
@@ -2246,6 +2248,7 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
     port,
     configured: () => activeConfigs().length > 0,
     defaultRef,
+    imageView: () => imageView(),
     visionStatus: () => {
       const ref = defaultRef()
       const config = activeConfigs().find((c) => c.id === ref.provider)

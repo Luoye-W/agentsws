@@ -169,6 +169,14 @@ export {
 } from './routes/background.js'
 export type { BackupExportView, BackupPort } from './routes/backup.js'
 export { backupRoutes } from './routes/backup.js'
+// WP268：品牌素材库
+export {
+  BRAND_ASSET_UPLOAD_MAX_BYTES,
+  type BrandAssetRow,
+  type BrandAssetsActor,
+  type BrandAssetsPort,
+  brandAssetRoutes,
+} from './routes/brand-assets.js'
 // WP122（71）：每个品牌一份 DESIGN.md
 export type { BrandDesignActor, BrandDesignPort } from './routes/brand-design.js'
 export { brandDesignRoutes } from './routes/brand-design.js'

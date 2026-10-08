@@ -29,6 +29,7 @@ import {
   sequencesOf,
   startRoundOf,
 } from './b2b-outbound.js'
+import { IMAGE_TOOL_DEF_BY_NAME, imageBranch, imageDataOf, renderImageAnswer } from './image.js'
 import {
   countOf,
   describeKolRun,
@@ -319,7 +320,9 @@ function toolDefs(req: RunRequest): ToolDef[] {
       // WP253：网页模板的九个受限主题工具（只有那条职责、服务端接了主题工具的运行才有）
       THEME_TOOL_DEF_BY_NAME.get(name) ??
       // WP261：独立站运营工具（只有授权过店铺、职责登记了的运行才有）
-      SHOP_TOOL_DEF_BY_NAME.get(name) ?? {
+      SHOP_TOOL_DEF_BY_NAME.get(name) ??
+      // WP268：生图 / 改图 / 素材库（只有设计岗与网页模板、而且配了生图的运行才有）
+      IMAGE_TOOL_DEF_BY_NAME.get(name) ?? {
         name,
         description: `stand-in tool ${name}`,
         input_schema: { type: 'object' },
@@ -958,6 +961,58 @@ export function createStubRuntime(options: StubRuntimeOptions): RuntimeAdapter {
        * 起底（说了 agentsws-theme 才起）→ 官方检查 → 推一份未发布副本（预览链接）；说发布 →
        * 列一次、对最新那份副本出发布卡（不直接发）。stub 不会写 Liquid，改文件留给真模型。
        */
+      /*
+       * WP268：**出图**（演示用剧本）。工具面里有生图、说的是出图，就调一次 generate_image：
+       * 出一批进素材库、事项里出挑图卡（不在这里定稿）。放在主题那一段前面：「出首页横幅图」两边都认得。
+       */
+      const imageCalls = imageBranch(req, b2bText)
+      if (imageCalls !== undefined) {
+        const step = imageCalls[0] as { tool: string; input: Record<string, unknown> }
+        const call_id = `call_${toolCalls + 1}`
+        sink({ type: 'tool.call', call_id, tool: step.tool, input: step.input })
+        const res =
+          options.executeTool === undefined
+            ? { status: 'error' as const, reason: 'no_tool_executor' }
+            : await options.executeTool({ name: step.tool, input: step.input, request: req })
+        toolCalls += 1
+        sink({
+          type: 'tool.result',
+          call_id,
+          status: res.status,
+          ...(res.reason === undefined ? {} : { reason: res.reason }),
+        })
+        if (res.status === 'ok') readTools.push(step.tool)
+        const data = res.status === 'ok' ? imageDataOf(res.data) : undefined
+        const answer = renderImageAnswer({
+          ...(data === undefined ? {} : { data }),
+          ...(res.status === 'ok'
+            ? {}
+            : {
+                failed: res.reason === 'no_tool_executor' ? '这个进程没接工具' : (res.reason ?? ''),
+              }),
+        })
+        outputs.push({ kind: 'answer', text: answer })
+        usage.output_tokens = Math.ceil(answer.length / 4) + (seed % 7)
+        const summary = describeRun({
+          readTools,
+          drafted: false,
+          reply: answer,
+          tools: req.tools.allow,
+        })
+        sink({
+          type: 'run.completed',
+          usage: {
+            ...usage,
+            tool_calls: toolCalls,
+            seconds: Math.max(0, (Date.parse(clock.now()) - startedMs) / 1000),
+            cost_base: 0,
+          },
+          outputs,
+          summary,
+        })
+        return finish('completed', summary)
+      }
+
       const themeCalls = themeBranch(req, b2bText)
       if (themeCalls !== undefined) {
         const failed: Record<string, string> = {}

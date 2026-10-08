@@ -55,6 +55,10 @@ export const TOOL_WORDS_ZH: Readonly<Record<string, string>> = {
   read_youtube_transcript: '读 YouTube 字幕',
   read_webpage: '网页转文字',
   // WP253：网页模板的受限主题工具
+  // WP268：生图 / 改图 / 素材库
+  generate_image: '生图',
+  edit_image: '参考图改图',
+  list_brand_assets: '品牌素材库',
   theme_init_from_base: '开源主题起底',
   theme_list: '店里的主题列表',
   theme_pull: '拉主题',
