@@ -6462,8 +6462,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
        * 手上的事退回原处（交给他没接的退回、他交出去的撤回、池里认下的回池、别人交给他的交还）；
        * 共享品牌里的客户与知识原样留下。
        */
-      if (context?.mode !== undefined && context.mode !== 'company') {
-        let returned = 0
+      const peersLeft = context?.mode !== undefined && context.mode !== 'company'
+      let returned = 0
+      if (peersLeft) {
         for (const brand of await brandModules.all())
           returned += await (await handoffFor(brand.workspace_id)).release(person_id, by)
         appendEvent({
@@ -6474,9 +6475,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           correlation: { trace_id: `tr_left_${clock.now()}` },
           payload: { person_id, self: by === person_id, returned },
         })
-        return returned
-      }
-      for (const brand of await brandModules.all()) await brand.b2bSales.onMemberLeft(person_id, by)
+      } else
+        for (const brand of await brandModules.all())
+          await brand.b2bSales.onMemberLeft(person_id, by)
       /*
        * WP194：删人时把他在云上的额度行清掉（历史用量留着，账对得上）。钱在公司那一个云组织上，
        * 任一个关联了的品牌清一次就够；尽力而为——没关联 / 连不上不拦删人。
@@ -6485,6 +6486,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         if (!brand.ownCloud.linked()) continue
         if (await brand.ownCloud.forgetMember(person_id, by).catch(() => false)) break
       }
+      return returned
     },
     /*
      * WP234（docs/54 §6.4）：岗位合并 / 移动之后，事项（各品牌的工作模型里）与岗位层记忆
