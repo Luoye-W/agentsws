@@ -144,7 +144,16 @@ export function CompanyWizard({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent data-testid="company-wizard" data-step={step} className="sm:max-w-md">
+      <DialogContent
+        data-testid="company-wizard"
+        data-step={step}
+        className="sm:max-w-md"
+        // 一打开先落在全称那一格（不然焦点落在问号上，tooltip 把标题挡住）
+        onOpenAutoFocus={(e) => {
+          e.preventDefault()
+          document.getElementById('company-legal-name')?.focus()
+        }}
+      >
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             {t('company.wizard.title')}

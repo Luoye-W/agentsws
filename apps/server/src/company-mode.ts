@@ -180,7 +180,15 @@ export function createCompanyMode(options: CompanyModeOptions): CompanyMode {
         workspace_id: ws,
         schema_version: 1,
         kind: 'policy_change',
-        role_id: 'common.member',
+        /*
+         * 挂在他自己做的一条职责上：只有一个岗位的人首页就是那个岗位页，那里的「要你处理」按岗位里的
+         * 职责筛卡——挂在底座职责上的卡他看不到。一条都没做（刚进来）才挂底座。
+         */
+        role_id:
+          roles.assignments
+            .listByPerson(person, { workspace_id: ws })
+            .find((a) => a.revoked_at === undefined && !a.role_id.startsWith('common.'))?.role_id ??
+          'common.member',
         subject: { object: { type: 'organization', id: org.id } },
         dedupe_key: `${ws}:company_notice:${org.id}:${person}:${at}`,
         title: `${byName}把这里改成了公司模式`,
