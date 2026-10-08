@@ -251,7 +251,11 @@ export function createOrganizations(options: OrganizationsOptions): Organization
       // WP251：地址同一条规矩
       if (postal === '') delete next.postal_address
       // WP271：换了模式却没说是谁（启动时推的）——上一次的「谁改的」不能留着冒名
-      if (patch.mode !== undefined && patch.mode !== org.mode && patch.mode_changed_by === undefined)
+      if (
+        patch.mode !== undefined &&
+        patch.mode !== org.mode &&
+        patch.mode_changed_by === undefined
+      )
         delete next.mode_changed_by
       backend.put(next)
       return next

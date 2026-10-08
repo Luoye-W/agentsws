@@ -2001,8 +2001,7 @@ export function createOrg(options: OrgOptions): OrgAssembly {
         throw ORG_ERROR('invalid_input', '要么给岗位，要么给一个职责')
       }
       // WP271：① ② 里不挑范围 = 整个品牌（③ 才有「还没给范围」这回事）
-      const unscoped =
-        input.ranges.length === 0 && (input.range_groups ?? []).length === 0
+      const unscoped = input.ranges.length === 0 && (input.range_groups ?? []).length === 0
       const mode = unscoped ? await options.mode?.() : undefined
       const ranges: RangeRef[] =
         unscoped && mode !== undefined && mode !== 'company'
