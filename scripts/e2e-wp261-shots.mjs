@@ -144,14 +144,17 @@ async function main() {
       await page.click('[data-testid="shop-admin-install"]')
       await page.waitForFunction(
         () =>
-          document.querySelector('[data-testid="shop-admin-banner"]')?.getAttribute('data-state') !==
-          'no_cli',
+          document
+            .querySelector('[data-testid="shop-admin-banner"]')
+            ?.getAttribute('data-state') !== 'no_cli',
         undefined,
         { timeout: 90_000 },
       )
       await page.reload({ waitUntil: 'networkidle' })
     }
-    if ((await page.getAttribute('[data-testid="shop-admin-banner"]', 'data-state')) === 'no_store') {
+    if (
+      (await page.getAttribute('[data-testid="shop-admin-banner"]', 'data-state')) === 'no_store'
+    ) {
       await page.fill('[data-testid="shop-admin-store-input"]', SHOP)
       await header('1b-no-store')
       await page.press('[data-testid="shop-admin-store-input"]', 'Enter')

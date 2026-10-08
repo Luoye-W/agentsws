@@ -91,7 +91,10 @@ const titlesOfItems = (items: unknown): string[] =>
   Array.isArray(items)
     ? items.flatMap((i) => {
         const x = i !== null && typeof i === 'object' ? (i as Record<string, unknown>) : {}
-        return [String(x.title ?? ''), ...titlesOfItems(x.items).map((t) => `${String(x.title ?? '')} › ${t}`)]
+        return [
+          String(x.title ?? ''),
+          ...titlesOfItems(x.items).map((t) => `${String(x.title ?? '')} › ${t}`),
+        ]
       })
     : []
 

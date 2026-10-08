@@ -271,7 +271,13 @@ describe('改动：只出卡 → 批了才改 → 读回', () => {
     )
     expect(staged[0]).toMatchObject({
       kind: 'listing_edit',
-      after: { _shop_op: 'product_create', _status: 'DRAFT', status: 'draft', price: 12.5, spec: '颜色（黑 / 白）' },
+      after: {
+        _shop_op: 'product_create',
+        _status: 'DRAFT',
+        status: 'draft',
+        price: 12.5,
+        spec: '颜色（黑 / 白）',
+      },
     })
     expect(staged[0]?.approval.title).toBe('新建商品「Rollout 杯架」（先存草稿）')
     expect((await ops.apply(changeOf(0)))?.status).toBe('ok')

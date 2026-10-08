@@ -360,6 +360,14 @@ shell 与沙箱。挂它们要做的事：mount 两个包、给三个 `read` / `
 | Customer Accounts MCP（顾客查自己的单） | ⬜ 二阶段 |
 | `inventory_change` / `cancel_order` / `delete_*` 这几种新 kind | ⬜ 要先过 15 §2 那道手续 |
 
+## 7. 第二条路：CLI `store auth` + `store execute`（WP261，决策 175 第 1 步，2026-10-08）
+
+店铺连接（§2，Dev Dashboard 应用 + 客户端凭据）要用户自己申请开发者应用、填客户端 ID / 密钥，违反「用户零开发者配置」。决策 175 先走 Shopify CLI 4.8.5 自带的两条命令：
+
+- **授权**：岗位页「授权管理商品和页面」→ 服务端起 `shopify store auth --json --store <店> --scopes <岗位职责的并集>`。浏览器 PKCE 授权（Shopify CLI 自己的公开应用），人在**店铺后台**的授权页点批准；本机 `127.0.0.1:13387` 收回调（整机同一时间一个）。令牌存在 CLI 的 `shopify-cli-store` 配置里，按品牌分目录（`<数据目录>/tools/shopify-cli-store-sessions/<品牌>/`），我们不读，只记权限与过期时间。在线令牌，有效期跟 Shopify 回的 `expires_in`（惯例约 24 小时），有续期令牌时 CLI 自己续——真机结论见 WP261 报告 §1.2。
+- **执行**：17 个固定运营工具（查询只读；改动只出审批卡，一律 L1），人批了执行器带 `--allow-mutations` 跑写死的那几条 Admin GraphQL（`apps/server/src/shop-graphql.ts`）并读回确认。
+- **接口与底层分开**：工具与卡片只认 `ShopifyAdmin`（`apps/server/src/shop-admin.ts`）；第 2 步（决策 146 自家公开应用、长期令牌）只是另一种实现。
+
 ## 附：真店实测记录（2026-09-11，glass-bowl 开发店）
 
 - client credentials 换令牌 ✓；`get_shop` ✓（回 `{ shop: { id, name, myshopifyDomain, primaryDomainUrl } }`，**没有币种与时区**，币种只能从订单行的 `currencyCode` 取）；`list_products` ✓（3 个样品商品）。

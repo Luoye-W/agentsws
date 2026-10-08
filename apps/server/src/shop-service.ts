@@ -16,6 +16,7 @@ import { type Applied, applyShopChange, ShopApplyError } from './shop-apply.js'
 import type { ShopAdminAssembly } from './shop-auth.js'
 import {
   actionFor,
+  fromCard,
   mandateOf,
   ReadLog,
   roleHasTool,
@@ -23,7 +24,6 @@ import {
   SHOP_VIA,
   type ShopOps,
   type ShopOpsOptions,
-  fromCard,
   toCard,
 } from './shop-ops.js'
 import { draftOf } from './shop-propose.js'

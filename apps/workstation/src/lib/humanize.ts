@@ -189,7 +189,10 @@ export function fieldValue(key: string, value: unknown, lang: Lang): string {
     if (mapped !== undefined) return mapped[lang]
     // WP261：HTML 正文 / 描述上卡面只看字（去标签、截短）
     if (key.endsWith('_html')) {
-      const text = value.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
+      const text = value
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
       return text.length > 200 ? `${text.slice(0, 200)}…` : text
     }
     return whenText(value, lang)
