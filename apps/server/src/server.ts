@@ -370,6 +370,7 @@ import {
   MARKETS_SETTINGS_PATH,
   marketsFromIntake,
 } from './markets.js'
+import { createMatterTitler } from './matter-title.js'
 import { createMeetings, type MeetingsAssembly, seedDemoMeetings } from './meetings.js'
 // WP113（63）：消息——统一收件处（消息库 / 全量同步 / 分拣 / 回写）
 import { createMessages, type MessagesAssembly, type MessagesOptions } from './messages.js'
@@ -2598,7 +2599,13 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
             kind: 'status',
             text: input.text,
             actor: { kind: 'agent', id: 'site.shopify-theme' },
-            preview: { url: input.url, label: input.label },
+            preview: {
+              url: input.url,
+              label: input.label,
+              ...(input.theme_id === undefined ? {} : { theme_id: input.theme_id }),
+              ...(input.changed_files === undefined ? {} : { changed_files: input.changed_files }),
+              ...(input.check === undefined ? {} : { check: input.check }),
+            },
           })
         } catch {
           // 事项已经没了（被删 / 换了品牌）：预览照样在工具结果里，时间线少一条而已
@@ -4061,7 +4068,51 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
              */
             brandDesign: (role_id) => brandDesignSectionOf(ws, role_id),
           })
-    const startRun = typeof options.startRun === 'function' ? options.startRun : runtime?.startRun
+    const baseStartRun =
+      typeof options.startRun === 'function' ? options.startRun : runtime?.startRun
+    /*
+     * WP264（决策 177）：事项**短标题**——这件事第一次开跑时，便宜模型（`extraction` 档）单独起一个
+     * 中文 16 字左右的标题；没接真模型 / 起不出就退回原话前 20 字。与运行并行、不阻塞；人改过的不覆盖。
+     * 用量记在这次运行那条分配上。工作模型下面才建出来：晚绑定。
+     */
+    const titler = createMatterTitler({
+      work: () => workRef,
+      complete: () => {
+        const models = effectiveModels()
+        if (!models.configured()) return undefined
+        const ref = models.purposeRef('extraction')
+        if (ref.provider === 'stub') return undefined
+        return async (prompt, actor) => {
+          let role_id = 'common.member'
+          try {
+            role_id = roles.effectiveConfig(actor.assignment_id).role_id
+          } catch {
+            // 分配撤了：用量照记在这条分配上，职责记成普通成员
+          }
+          const completion = await gatewayProxy.complete({
+            messages: [{ role: 'user', content: prompt }],
+            meta: {
+              workspace_id: ws,
+              assignment_id: actor.assignment_id as never,
+              role_id: role_id as never,
+              run_id: `matter_title_${Date.parse(clock.now()).toString(36)}` as never,
+              purpose: 'extraction',
+            },
+            model: ref,
+            max_output_tokens: 60,
+            thinking: 'off',
+          })
+          return completion.text
+        }
+      },
+    })
+    const startRun: StartRun | undefined =
+      baseStartRun === undefined
+        ? undefined
+        : (input) => {
+            void titler.kick({ matter: input.matter, brief: input.brief, actor: input.actor })
+            return baseStartRun(input)
+          }
 
     /**
      * 37 工作模型。**一个品牌一个** `Work`，但共用同一个 SQLite 库——
@@ -7429,6 +7480,15 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     const port = createWorkPort({
       clock,
       work: brand.work,
+      // WP264：事项页「正在做…」+ 实时步骤，输入卡上的「停」
+      liveRun: (matter_id) => brand.runtime?.liveRun?.(matter_id),
+      stopRuns: async (matter_id, reason) => {
+        let stopped = 0
+        for (const r of brand.runtime?.activeRuns() ?? [])
+          if (r.matter_id === matter_id && (await brand.runtime?.stopRun(r.run_id, reason, 5_000)))
+            stopped += 1
+        return stopped
+      },
       // WP237：从岗位开的事项里说话，用那条职责的分配接着做（还没定就先定，不落到负责人那条上）
       sayAt: async (actor, matter_id, text) =>
         (await positionsFor(ws)).sayAt({ matter_id, person_id: actor.person_id, text }),

@@ -656,6 +656,12 @@ export interface RunResult {
   summary: string
   /** 15 §4.4：变更请求结束却没有 stage */
   no_stage?: boolean
+  /**
+   * WP264（决策 179）：这一次交代末尾给的**下一步**（替人想好的下一句，短句、人的口吻）。
+   * 运行时能结构化给的就给；不给时宿主从答复末尾的 `<next>…</next>` 标记里取（`splitNextSuggestion`）。
+   * 没有明确下一步就没有这一格。
+   */
+  next_suggestion?: string
 }
 
 /** 17 §4 运行时适配器契约：dsh、direct-llm、replay、stub、dev-executor 都实现它。 */

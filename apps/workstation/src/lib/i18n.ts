@@ -8,6 +8,7 @@ import { CLOUD_AUTH_EN, CLOUD_AUTH_ZH } from './i18n-cloud-auth'
 import { HANDOFF_EN, HANDOFF_ZH } from './i18n-handoff'
 import { LIBRARY_EN, LIBRARY_ZH } from './i18n-library'
 import { LOCAL_CONNECTOR_EN, LOCAL_CONNECTOR_ZH } from './i18n-local-connector'
+import { MATTER_EN, MATTER_ZH } from './i18n-matter'
 import { NPM_REGISTRY_EN, NPM_REGISTRY_ZH } from './i18n-npm-registry'
 import { OWN_SUB_EN, OWN_SUB_ZH } from './i18n-own-sub'
 import { POSITION_EN, POSITION_ZH } from './i18n-position'
@@ -7956,6 +7957,8 @@ const TABLES: Record<Lang, Table> = {
     ...SHOPIFY_CONNECT_ZH,
     // WP259：「交给它」提交中 / 没交出去
     ...HANDOFF_ZH,
+    // WP264：事项页 v2（对话式）
+    ...MATTER_ZH,
     // WP261：岗位页「授权管理商品和页面」
     ...SHOP_ADMIN_ZH,
   },
@@ -7973,6 +7976,7 @@ const TABLES: Record<Lang, Table> = {
     ...SHOPIFY_CONNECT_EN,
     ...SOCIAL_REPLY_EN,
     ...HANDOFF_EN,
+    ...MATTER_EN,
     ...SHOP_ADMIN_EN,
   },
 }

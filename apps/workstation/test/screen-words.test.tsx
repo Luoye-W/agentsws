@@ -12,7 +12,7 @@
  * 白名单只放几个合法的写法（邮箱域名那种），不放任何内部值。
  */
 import type { BlockData, DeckCard } from '@agentsws/deck'
-import { screen, within } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Route, Routes } from 'react-router-dom'
 import { describe, expect, it, vi } from 'vitest'
@@ -201,8 +201,10 @@ describe('WP141 守卫：屏幕上没有内部值', () => {
     expect(text).not.toContain('`')
     expect(text).not.toContain('](')
     expect(text).toContain('最该先处理的三件事')
-    // 「路由到 …」写的是职责名字，不是职责 id
-    await screen.findByText('路由到 公司设置与授权')
+    // 页头职责标签写的是职责名字，不是职责 id（WP264：原来那行「路由到 …」收进页头）
+    await waitFor(() => {
+      expect(screen.getByTestId('matter-reroute').textContent).toContain('公司设置与授权')
+    })
     expect(screenText(container)).not.toContain('common.owner')
   })
 

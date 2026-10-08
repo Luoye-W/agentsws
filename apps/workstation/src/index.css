@@ -683,3 +683,61 @@
     opacity: 0;
   }
 }
+
+/* ── WP264：事项页 v2 的输入卡与「正在做…」流光（docs/design/matter/_src/composer.css 照抄） ── */
+@layer components {
+  .ws-composer {
+    box-shadow:
+      0 0 0 1px color-mix(in srgb, var(--ws-ink) 14%, transparent),
+      0 2px 4px rgba(20, 40, 30, 0.04),
+      0 10px 28px rgba(20, 40, 30, 0.08);
+  }
+  .ws-composer:focus-within {
+    box-shadow:
+      0 0 0 1px color-mix(in srgb, var(--ws-ink) 30%, transparent),
+      0 2px 4px rgba(20, 40, 30, 0.05),
+      0 12px 32px rgba(20, 40, 30, 0.11);
+  }
+  .dark .ws-composer {
+    box-shadow:
+      0 0 0 1px color-mix(in srgb, var(--ws-ink) 16%, transparent),
+      0 10px 28px rgba(0, 0, 0, 0.45);
+  }
+  .dark .ws-composer:focus-within {
+    box-shadow:
+      0 0 0 1px color-mix(in srgb, var(--ws-ink) 34%, transparent),
+      0 12px 32px rgba(0, 0, 0, 0.5);
+  }
+  /* 私聊 AI：整张卡换成蓝色系，一眼和「交代给 Agent」分开 */
+  .ws-composer.ws-composer-private,
+  .dark .ws-composer.ws-composer-private {
+    background: color-mix(in srgb, var(--ws-info-bg) 70%, var(--ws-card));
+    box-shadow:
+      0 0 0 1.5px color-mix(in srgb, var(--ws-info) 55%, transparent),
+      0 10px 28px rgba(20, 40, 30, 0.08);
+  }
+  .ws-shimmer {
+    background: linear-gradient(
+      90deg,
+      var(--ws-body) 30%,
+      var(--ws-muted-fg) 50%,
+      var(--ws-body) 70%
+    );
+    background-size: 200% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    animation: ws-shimmer 2s linear infinite;
+  }
+  @keyframes ws-shimmer {
+    to {
+      background-position: -200% 0;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .ws-shimmer {
+      animation: none;
+      color: var(--ws-body);
+    }
+  }
+}

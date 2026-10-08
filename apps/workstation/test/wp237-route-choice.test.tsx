@@ -176,8 +176,11 @@ describe('WP237 事项页上同样给这几个选项', () => {
       { picked: 'social.reddit', options: [{ role_id: 'pr.reddit', role_name: 'Reddit 营销' }] },
     )
     renderMatter()
-    const box = await screen.findByTestId('matter-route-options')
     const user = userEvent.setup({ delay: null, pointerEventsCheck: 0 })
+    // WP264（决策 182）：路由那一条缩成居中一行灰字，点开才有「换成」
+    const line = await screen.findByText('交给「Reddit 运营」来做')
+    await user.click(line)
+    const box = await screen.findByTestId('matter-route-options')
     await user.click(within(box).getByRole('button', { name: '换成「Reddit 营销」' }))
     await waitFor(() => {
       expect(rerouteMatter).toHaveBeenCalledWith('mat_r', 'pr.reddit', { run: true })

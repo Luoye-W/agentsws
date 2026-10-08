@@ -50,7 +50,10 @@ import type {
 } from '@agentsws/contracts'
 import {
   cancelReasonOf,
+  cleanNextSuggestion,
   createRunWatchdog,
+  type MatterLiveRun,
+  NEXT_SUGGESTION_RULE,
   PLATFORM_KITS,
   platformKitOf,
   platformMcpNeededBy,
@@ -60,6 +63,7 @@ import {
   type RunWatchdog,
   resolveRunTimeLimits,
   skillOnPlatform,
+  splitNextSuggestion,
   WEB_TOOL_NAMES,
 } from '@agentsws/contracts'
 import { canonicalJson, timeContextItem } from '@agentsws/core'
@@ -114,6 +118,7 @@ import {
 import { cardRefOf, type Work } from '@agentsws/work'
 import type { ComputerUseAssembly } from './computer-use.js'
 import { blockedByTool, blockedLine, blockReasonOf, RunBlockLog } from './run-blocked.js'
+import { RunStepLog } from './run-steps.js'
 import { PartialRunLog, stoppedLine } from './run-stop.js'
 import { createSkillToolExecutor, isReadSkillTool } from './skill-tools.js'
 
@@ -526,6 +531,11 @@ export interface RuntimeAssembly {
    * 等它收尾（最多 `waitMs`，缺省 10 秒）。找不到（已经跑完）回 `false`。
    */
   stopRun(run_id: string, reason: string, waitMs?: number): Promise<boolean>
+  /**
+   * WP264：这件事上正在跑的那一次（事项页「正在做…」+ 实时步骤）。没在跑回 `undefined`。
+   * 好几次同时在跑时给最近开跑的那一次。
+   */
+  liveRun?(matter_id: string): MatterLiveRun | undefined
   /** 注入 `createWork`；工作模型与 startRun 互相需要，靠这一步打断环 */
   bind(work: Work): void
   /** WP69：注入岗位面（岗位层技能与岗位层上下文靠它）。 */
@@ -604,6 +614,9 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
    * WP236：每次运行的看门狗与现场记录（开跑登记、收尾摘掉，与 `active` 同一个生命周期）。
    * 宿主执行器每调一次工具都给看门狗续命、把回来的数据记一笔——停下来时拼「已经查到的部分」。
    */
+  /** WP264：每次运行的步骤记录（开跑登记、收尾摘掉）。 */
+  const runSteps = new Map<string, { matter_id: string; started_at: string; log: RunStepLog }>()
+  const nowMs = (): number => Date.parse(clock.now())
   const runWatch = new Map<
     string,
     { watchdog: RunWatchdog; log: PartialRunLog; blocks: RunBlockLog }
@@ -1599,6 +1612,11 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
            * 排在职责那一节后面、技能前面（order 25）。三个运行时拿到的是同一份字节。
            */
           houseRulesSection('zh'),
+          /*
+           * WP264（决策 179）：**下一步建议**——交代末尾有明确下一步就单独一行 `<next>…</next>`，
+           * 宿主进时间线前取出来记在 `next_suggestion` 上（事项页按 Tab 收下）。所有职责同一份，紧跟公共段。
+           */
+          { id: 'next_step', name: '下一步建议', order: 27, text: NEXT_SUGGESTION_RULE },
           // WP260：网页模板的做法（读一次 → 改模板与设置 → 检查 → 推未发布；中途不汇报）。只给带主题工具的运行
           ...(themeRun ? [themeWorkSection({ shopRead: shopNames.length > 0 })] : []),
           /*
@@ -1760,6 +1778,29 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       onFire: (reason) => controller.abort(reason),
     })
     runWatch.set(run_id, { watchdog, log: runLog, blocks: runBlocks })
+    // WP264：步骤记录（事项页「正在做…」与跑完那一行灰字）
+    const steps = new RunStepLog(nowMs())
+    runSteps.set(run_id, { matter_id: input.matter.id, started_at: clock.now(), log: steps })
+    /** WP264：跑完 / 停下 / 没跑成都记一条运行摘要（排在 AI 那段话前面）。 */
+    const recordDigest = (outcome: 'completed' | 'stopped' | 'failed'): void => {
+      try {
+        // 记成 `status`（不是 `run`）：「跑了几次」仍只数开跑那一条
+        work?.appendEvent(input.matter.id, {
+          kind: 'status',
+          text:
+            outcome === 'completed'
+              ? '跑完了'
+              : outcome === 'stopped'
+                ? '这次被停下了'
+                : '这次没跑成',
+          actor: { kind: 'agent', id: input.actor.assignment_id },
+          run_id,
+          run_digest: steps.digest(outcome, nowMs()),
+        })
+      } catch {
+        // 事项已经没了：摘要只是给人看的一行，少一条不影响别的
+      }
+    }
     /** WP251：这一轮卡住了就在时间线上记一条带结构化标记的（收尾时调一次）。 */
     const recordBlocked = (): void => {
       const block = runBlocks.block()
@@ -1777,7 +1818,11 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       watchdog.touch()
       if (e.type === 'text.delta') runLog.text(e.text)
       // WP251：不经宿主执行器的工具（底座自己挂的）回「没连上 / 缺凭据」也记一笔
-      if (e.type === 'tool.call') callTools.set(e.call_id, bareOf(e.tool))
+      if (e.type === 'tool.call') {
+        callTools.set(e.call_id, bareOf(e.tool))
+        steps.call(e.call_id, e.tool, e.input, nowMs())
+      }
+      if (e.type === 'tool.result') steps.result(e.call_id, e.status, nowMs())
       if (e.type === 'tool.result' && e.status !== 'ok') {
         const why = blockReasonOf(e.reason)
         if (why !== undefined)
@@ -1884,10 +1929,13 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
           run_id,
           ...(partial === undefined ? { stopped: { reason: stoppedReason } } : {}),
         })
+        // WP264：停下的原因那一句在前，做到哪几步的摘要紧跟着（部分结果在后）
+        recordDigest('stopped')
         if (partial !== undefined) {
           work?.appendEvent(input.matter.id, {
             kind: 'agent_message',
-            text: humanizeToolNames(partial, request.tools.allow),
+            // WP264：停下来的那段话不给下一步建议，标记照样拿掉
+            text: splitNextSuggestion(humanizeToolNames(partial, request.tools.allow)).text,
             actor: { kind: 'agent', id: input.actor.assignment_id },
             run_id,
             stopped: { reason: stoppedReason },
@@ -1906,7 +1954,14 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
         return { run_id }
       }
       // 37 §2.2b：Agent 说的话进时间线；摘要与会话引用由 onRunCompleted 落到事项上
-      if (answers.length > 0) {
+      recordDigest('completed')
+      /*
+       * WP264（决策 179）：下一步建议——运行时结构化给的优先，否则取答复末尾的 `<next>…</next>`；
+       * 标记从正文里拿掉。没有就没有，不从正文里猜。
+       */
+      const said = splitNextSuggestion(humanizeToolNames(answers.join('\n'), request.tools.allow))
+      const next = cleanNextSuggestion(result.next_suggestion) ?? said.next
+      if (answers.length > 0 && said.text.trim() !== '') {
         work?.appendEvent(input.matter.id, {
           kind: 'agent_message',
           /*
@@ -1914,19 +1969,21 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
            * （「我用 `search_policies` 查了三轮」），进时间线之前按那张统一的「工具名 → 人话」表换掉；
            * 这次运行摆出来的、表里没有的工具名也不露（说「一个工具」）。事件日志里的原文不动。
            */
-          text: humanizeToolNames(answers.join('\n'), request.tools.allow),
+          text: said.text,
           actor: { kind: 'agent', id: input.actor.assignment_id },
           run_id,
+          ...(next === undefined ? {} : { next_suggestion: next }),
         })
       }
       recordBlocked()
       work?.onRunCompleted({
         matter_id: input.matter.id,
         run_id,
-        summary,
+        summary: splitNextSuggestion(summary).text,
         session_ref: result.session_ref,
       })
     } catch (err) {
+      recordDigest('failed')
       work?.appendEvent(input.matter.id, {
         kind: 'status',
         text: `这次运行没跑成：${err instanceof Error ? err.message : String(err)}`,
@@ -1940,6 +1997,7 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       active.delete(run_id)
       skillActors.delete(run_id)
       runWatch.delete(run_id)
+      runSteps.delete(run_id)
       settle()
     }
     return { run_id }
@@ -1968,6 +2026,13 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       ])
       if (timer !== undefined) clearTimeout(timer)
       return true
+    },
+    liveRun(matter_id) {
+      const hits = [...runSteps.entries()].filter(([, r]) => r.matter_id === matter_id)
+      const last = hits[hits.length - 1]
+      if (last === undefined) return undefined
+      const [run_id, r] = last
+      return { run_id, started_at: r.started_at, steps: r.log.live() }
     },
     bind(w) {
       work = w
