@@ -564,7 +564,8 @@ export class Work {
       brief?: string
     },
   ): Promise<{ event: MatterEvent; run_id?: RunId }> {
-    const matter = this.requireMatter(matter_id)
+    // WP264（决策 183）：已关闭的事项输入框还在，说一句就重新打开（待办不动，关的时候怎么处理的就怎么留着）
+    const matter = this.reopen(this.requireMatter(matter_id))
     const event = this.appendEvent(matter_id, {
       kind: 'human_message',
       text: input.text,
@@ -590,6 +591,15 @@ export class Work {
       run_id,
     })
     return { event, run_id }
+  }
+
+  /** 关了的事项重新打开（没关的原样返回）。 */
+  private reopen(matter: Matter): Matter {
+    if (matter.status !== 'closed') return matter
+    const { closed_at: _drop, ...rest } = matter
+    const next: Matter = { ...rest, status: 'open', updated_at: this.now() }
+    this.store.putMatter(next)
+    return next
   }
 
   /**

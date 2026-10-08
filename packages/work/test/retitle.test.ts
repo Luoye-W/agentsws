@@ -81,4 +81,14 @@ describe('WP264 retitle', () => {
     expect(c?.preview?.changed_files).toEqual(['templates/index.json'])
     expect(c?.preview?.check).toEqual({ errors: 0, warnings: 0 })
   })
+
+  it('已关闭的事项说一句就重新打开（决策 183）', async () => {
+    const work = make()
+    const m = work.createMatter({ kind: 'adhoc', title: 't' })
+    work.closeMatter(m.id, { unfinished: 'keep', by: 'per_1' })
+    expect(work.getMatter(m.id)?.status).toBe('closed')
+    await work.say(m.id, { person_id: 'per_1', assignment_id: 'asg_1', text: '再改一下' })
+    expect(work.getMatter(m.id)?.status).toBe('open')
+    expect(work.getMatter(m.id)?.closed_at).toBeUndefined()
+  })
 })

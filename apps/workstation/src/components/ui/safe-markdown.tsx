@@ -136,6 +136,7 @@ const INLINE =
   /!\[([^\]\n]*)\]\(([^)\s]*)\)|\[([^\]\n]+)\]\(([^)\s]+)\)|\*\*([^*\n]+?)\*\*|__([^_\n]+?)__|`([^`\n]+)`/g
 
 const LINK_CLS = 'text-primary underline-offset-4 hover:underline'
+const HEX_COLOR = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i
 
 /** 一行里的行内记号画出来；认不出、不许做成链接的原样当字。 */
 export function MarkdownInline({ text }: { text: string }): ReactNode {
@@ -195,6 +196,17 @@ export function MarkdownInline({ text }: { text: string }): ReactNode {
         </strong>,
       )
     } else if (code !== undefined) {
+      // WP264：颜色值（`#0B0D10`）前面带一个小色块——AI 交代配色时一眼看得到是什么颜色
+      if (HEX_COLOR.test(code))
+        parts.push(
+          <span
+            key={`${key}-sw`}
+            aria-hidden
+            data-slot="swatch"
+            className="mr-1 inline-block size-[11px] rounded-[3px] align-[-1px] shadow-[0_0_0_1px_var(--ws-line)]"
+            style={{ background: code }}
+          />,
+        )
       parts.push(
         <code key={key} className="rounded-sm bg-ws-surface px-1 font-mono text-[0.92em]">
           {code}
@@ -223,6 +235,13 @@ function Heading({
   const body = <MarkdownInline text={block.text} />
   // 时间线里标题只画成粗体的一行，不放大字号
   if (variant === 'reply') return <p className="font-semibold">{body}</p>
+  // WP264：事项页对话里的 AI 交代——小标题像 Claude 那样单独一行、稍大一号
+  if (variant === 'chat')
+    return (
+      <h3 className="ws-display mt-2.5 text-[15px] font-semibold tracking-[-0.01em] text-ws-ink">
+        {body}
+      </h3>
+    )
   const cls = ARTICLE_HEADING[block.level] ?? ARTICLE_HEADING[3]
   return block.level === 1 ? <h3 className={cls}>{body}</h3> : <h4 className={cls}>{body}</h4>
 }
@@ -259,7 +278,7 @@ function Table({ rows }: { rows: string[][] }): ReactNode {
   )
 }
 
-type Variant = 'reply' | 'article'
+type Variant = 'reply' | 'article' | 'chat'
 
 /**
  * 一段 markdown 安全地画出来。`reply`：时间线里 Agent 的回话；`article`：右栏教程文章。
@@ -281,7 +300,11 @@ export function SafeMarkdown({
     <Root
       className={cn(
         'flex flex-col break-words',
-        article ? 'gap-2 text-[13px] leading-6 text-ws-body' : 'gap-1.5',
+        article
+          ? 'gap-2 text-[13px] leading-6 text-ws-body'
+          : variant === 'chat'
+            ? 'gap-2.5 text-[14.5px] leading-[1.7] text-ws-ink [&_li::marker]:text-ws-muted-fg'
+            : 'gap-1.5',
         className,
       )}
       data-testid={testId ?? (article ? 'help-article' : 'reply-markdown')}
