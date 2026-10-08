@@ -89,8 +89,8 @@ describe('WP275 有没有审批流（docs/95 §5）', () => {
     expect(
       scopeManagerReasonText({ person: 'p_he', via: 'scope_manager', reason: 'own' }, {}),
     ).toBe('')
-    expect(reconfirmReasonText('金额、毛利')).toBe('超了你设的上限（金额、毛利），要你再确认一次')
-    expect(reconfirmReasonText()).toBe('超了你设的上限，要你再确认一次')
+    expect(reconfirmReasonText('金额、毛利')).toBe('超金额、毛利上限')
+    expect(reconfirmReasonText()).toBe('')
     for (const text of [reconfirmReasonText('金额'), reconfirmReasonText()])
       expect(text).not.toMatch(/上级|老板|主管|转给/)
   })

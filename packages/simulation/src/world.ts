@@ -7801,7 +7801,10 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
             ? '在授权内，业务员自己批（报价永远出卡）'
             : reconfirm
               ? reconfirmReasonText(breachWords)
-              : `超了授权（${breachWords}），转${approver === 'owner' ? '老板' : '上级'}批`
+              : routedReason !== undefined
+                ? // 转给谁、为什么由卡上那一句说；摘要只说超了哪几项（与服务进程同一个口径）
+                  `超了授权（${breachWords}）`
+                : `超了授权（${breachWords}），转${approver === 'owner' ? '老板' : '上级'}批`
           : String(after.subject ?? after.body ?? cardTitle).slice(0, 160)
 
       const outcome = await txn.ledger.stage({
@@ -7880,7 +7883,9 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
             kind !== 'b2b_quote' ||
             (breaches.length === 0
               ? outcome.approval.summary.includes('授权内')
-              : outcome.approval.summary.includes(reconfirm ? '超了你设的上限' : '超了授权')),
+              : reconfirm
+                ? outcome.approval.summary === reconfirmReasonText(breachWords)
+                : outcome.approval.summary.includes('超了授权')),
           // WP275：要不要再确认一次；卡上有没有「转给了…」那一句（① ② 不该有）
           reconfirm: outcome.approval.routing.recipients.some((r) => r.reconfirm === true),
           forwarded: outcome.approval.routing.recipients.some((r) =>

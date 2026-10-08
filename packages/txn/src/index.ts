@@ -4,7 +4,7 @@ import { ChangeLedgerImpl } from './ledger.js'
 import { TxnRuntime } from './runtime.js'
 import type { TxnOptions } from './types.js'
 
-export { ApprovalBusImpl, type BatchEntry, finalPayload, RECONFIRM_REASON } from './approvals.js'
+export { ApprovalBusImpl, type BatchEntry, finalPayload } from './approvals.js'
 export {
   appendEscalationStep,
   boundRecipients,

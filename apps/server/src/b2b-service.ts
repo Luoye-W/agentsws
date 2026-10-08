@@ -459,8 +459,12 @@ export function createB2bService(options: B2bServiceOptions): B2bServiceAssembly
         ? breaches.length === 0
           ? '在授权内，业务员自己批（报价永远出卡）'
           : !flow
-            ? reconfirmReasonText(quoteBreachText(breaches))
-            : `超了授权（${quoteBreachText(breaches)}），转${approver === 'owner' ? '老板' : '上级'}批`
+            ? // WP275：与卡上那一句同一句（界面见到一样的就只出一处）；「要再点一次」在按钮旁边
+              reconfirmReasonText(quoteBreachText(breaches))
+            : // 转给谁、为什么由卡上那一句说（路由口给了理由时）；这里只说超了哪几项
+              recipient.reason !== undefined
+              ? `超了授权（${quoteBreachText(breaches)}）`
+              : `超了授权（${quoteBreachText(breaches)}），转${approver === 'owner' ? '老板' : '上级'}批`
         : d.op === 'create'
           ? '新建一条记录，批了才进 B2B 库'
           : '改一条记录，批了才生效（原样见「改之前」）'

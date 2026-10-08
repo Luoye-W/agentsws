@@ -103,7 +103,7 @@ describe('projectCard（36 §2 审批项 → 卡片）', () => {
           {
             person: 'p_he',
             via: 'role_holder',
-            reason: '超了你设的上限（金额），要你再确认一次',
+            reason: '超金额上限',
             reconfirm: true,
           },
         ],
@@ -111,7 +111,7 @@ describe('projectCard（36 §2 审批项 → 卡片）', () => {
     })
     const card = projectCard(over, ctx)
     expect(card.reconfirm).toBe(true)
-    expect(card.routed_note).toBe('超了你设的上限（金额），要你再确认一次')
+    expect(card.routed_note).toBe('超金额上限')
   })
 
   it('37 §1 第 5 行：没有展示名就没有客户标签，绝不退化成裸 id', () => {

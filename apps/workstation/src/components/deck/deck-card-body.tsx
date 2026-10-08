@@ -63,6 +63,8 @@ function Note({
   children: React.ReactNode
   testId?: string
 }): React.ReactNode {
+  // WP275（界面少字）：没有话就不出这个框
+  if (children === '' || children === null || children === undefined) return null
   return (
     <p
       {...(testId === undefined ? {} : { 'data-testid': testId })}
@@ -262,6 +264,14 @@ export function DeckCardBody({
   const payload = isRecord(card.detail.payload) ? card.detail.payload : {}
   const content = pickContent(card.content_variants, mode)
   const options = card.options ?? []
+  /**
+   * WP275（界面少字）：正文那一句与标题下那一行（`routed_note`）一模一样时，同一张卡上只说一遍
+   * ——正文框不出（① ② 超限卡：「超金额、毛利上限」只在标题下）。
+   */
+  const reasonText =
+    card.routed_note !== undefined && content.text.trim() === card.routed_note.trim()
+      ? ''
+      : content.text
 
   const main = ((): React.ReactNode => {
     switch (card.layout) {
@@ -287,7 +297,7 @@ export function DeckCardBody({
         return (
           <div className="mt-2.5 flex flex-col gap-2.5" data-testid="deck-layout-change">
             <BeforeAfter before={payload.before} after={payload.after} />
-            <Note testId="deck-reason">{content.text}</Note>
+            <Note testId="deck-reason">{reasonText}</Note>
           </div>
         )
 
@@ -296,7 +306,7 @@ export function DeckCardBody({
         return (
           <div className="mt-2.5 flex flex-col gap-2.5" data-testid="deck-layout-policy">
             <BeforeAfter before={payload.before} after={payload.after} />
-            <Note testId="deck-reason">{content.text}</Note>
+            <Note testId="deck-reason">{reasonText}</Note>
             {/* WP275：① ② 的词按模式换；② 里同事自己改了共用的规矩，这张是「已生效、可撤回」的通知 */}
             <p className="text-xs text-ws-muted-fg">
               {payload.form === 'peer_change_notice'
@@ -351,7 +361,7 @@ export function DeckCardBody({
                 <KeyValues rows={rows} testId="deck-money-kv" />
               </div>
             </div>
-            <Note testId="deck-reason">{content.text}</Note>
+            <Note testId="deck-reason">{reasonText}</Note>
           </div>
         )
       }
@@ -412,7 +422,7 @@ export function DeckCardBody({
                 <KeyValues rows={rows} testId="deck-aftermath-kv" />
               )}
             </div>
-            {rows.length === 0 ? null : <Note testId="deck-reason">{content.text}</Note>}
+            {rows.length === 0 ? null : <Note testId="deck-reason">{reasonText}</Note>}
           </div>
         )
       }
@@ -439,7 +449,7 @@ export function DeckCardBody({
                 {profile === undefined ? null : <div className="text-ws-muted-fg">{profile}</div>}
               </div>
             </div>
-            <Note testId="deck-reason">{content.text}</Note>
+            <Note testId="deck-reason">{reasonText}</Note>
           </div>
         )
       }
@@ -474,7 +484,7 @@ export function DeckCardBody({
         const url = str(payload.url) ?? str(payload.target_url)
         return (
           <div className="mt-2.5 flex flex-col gap-2.5" data-testid="deck-layout-takeover">
-            <Note testId="deck-reason">{content.text}</Note>
+            <Note testId="deck-reason">{reasonText}</Note>
             <button
               type="button"
               data-testid="deck-takeover-open"

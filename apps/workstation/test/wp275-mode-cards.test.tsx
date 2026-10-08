@@ -58,7 +58,7 @@ function overLimitCard(over: Partial<DeckCard> = {}): DeckCard {
   return draftCard({
     id: 'ap_over',
     kind: 'staged_change',
-    routed_note: '超了你设的上限（金额），要你再确认一次',
+    routed_note: '超金额上限',
     reconfirm: true,
     ...over,
   })
@@ -96,6 +96,26 @@ describe('WP275：超了上限，再确认一次', () => {
       expect(bar.textContent).toContain('通过')
     })
     expect(bar.textContent).not.toMatch(/批准|驳回/)
+  })
+
+  it('界面少字：同一张卡上那句只说一遍——标题下写超了哪项，正文框与它一样就不出', () => {
+    renderWithProviders(
+      <DeckCardView
+        card={overLimitCard({
+          layout: 'money',
+          summary: '超金额上限',
+          content_variants: { zh_summary: '超金额上限' },
+        })}
+        mode="zh_summary"
+        onDecide={noop}
+        onOpen={noop}
+      />,
+    )
+    expect(screen.getByTestId('deck-routed-note').textContent).toBe('超金额上限')
+    expect(screen.queryByTestId('deck-reason')).toBeNull()
+    const card = screen.getByTestId('deck-card')
+    expect((card.textContent ?? '').split('超金额上限').length - 1).toBe(1)
+    expect((card.textContent ?? '').split('要再点一次').length - 1).toBe(1)
   })
 
   it('没超上限的卡照旧一下就过、也不出那句提示', () => {

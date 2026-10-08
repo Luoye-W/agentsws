@@ -99,7 +99,7 @@ describe('WP275 超了上限：① ② 再确认一次', () => {
       },
     })
 
-  it('① ②：收件人标 reconfirm，卡上一句「超了你设的上限」，不写「转给」', async () => {
+  it('① ②：收件人标 reconfirm，不另写那一句（按钮旁边说），不写「转给」', async () => {
     const h = harness({ directory: flow(false) })
     const out = await h.txn.ledger.stage(over())
     if (!out.ok) throw new Error(out.message)
@@ -109,7 +109,6 @@ describe('WP275 超了上限：① ② 再确认一次', () => {
         person: 'p_wang',
         via: 'role_holder',
         reconfirm: true,
-        reason: '超了你设的上限，要你再确认一次',
       },
     ])
   })

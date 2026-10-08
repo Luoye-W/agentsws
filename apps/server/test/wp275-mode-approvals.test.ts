@@ -158,7 +158,7 @@ describe('WP275 ① 个人：没有审批流，只有安全闸', () => {
     const [r] = card.routing.recipients
     expect(r?.person).toBe(owner())
     expect(r?.reconfirm).toBe(true)
-    expect(r?.reason).toContain('超了你设的上限')
+    expect(r?.reason).toBe('超金额、毛利上限')
     expect(r?.reason).not.toMatch(COMPANY_WORDS)
     expect(card.summary).not.toMatch(COMPANY_WORDS)
 

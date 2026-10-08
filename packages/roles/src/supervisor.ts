@@ -139,11 +139,9 @@ export function hasApprovalFlow(mode: OrganizationMode): boolean {
 }
 
 /**
- * WP275：① ② 里超了上限、落回本人时卡上那一句（安全闸「再确认一次」）。
- * `words` 是超了哪几项的人话（「金额、毛利」）；不给就只说超了上限。
+ * WP275：① ② 里超了上限、落回本人时卡上那一句——**只说超了哪几项**（「超金额、毛利上限」）。
+ * 「要再点一次」那句在按钮旁边（界面少字：同一张卡上只说一遍）；不知道哪几项就不写（回空串）。
  */
 export function reconfirmReasonText(words?: string): string {
-  return words === undefined || words === ''
-    ? '超了你设的上限，要你再确认一次'
-    : `超了你设的上限（${words}），要你再确认一次`
+  return words === undefined || words === '' ? '' : `超${words}上限`
 }

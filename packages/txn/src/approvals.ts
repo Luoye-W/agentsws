@@ -1020,21 +1020,15 @@ export class ApprovalBusImpl implements ApprovalBus {
 }
 
 /** 14 §3：发出的是 decision.edited_payload ?? payload。 */
-/** WP275：卡上那一句（① ② 超了上限、落回本人时）。 */
-export const RECONFIRM_REASON = '超了你设的上限，要你再确认一次'
-
 /**
  * WP275：① ② 里额度核对没过的改动卡（护栏判「要人看」）——收件人都要再确认一次。
  * 只看 `staged_change`：别的卡没有额度核对这回事（没报过额度的默认值也是 `within: false`）。
- * 调用方已经写了那一句（比如 B2B 报价写清超了哪几项）就不覆盖。
+ * 不另写那一句为什么：「超了你设的上限，要再点一次才算」在按钮旁边说（同一张卡上只说一遍）；
+ * 调用方写了具体超了哪几项（比如 B2B 报价）就留着。
  */
 function markReconfirm<P>(input: NormalizedCreateInput<P>): void {
   if (input.kind !== 'staged_change' || input.automation.mandate_check.within) return
-  input.routing.recipients = input.routing.recipients.map((r) => ({
-    ...r,
-    reconfirm: true,
-    reason: r.reason ?? RECONFIRM_REASON,
-  }))
+  input.routing.recipients = input.routing.recipients.map((r) => ({ ...r, reconfirm: true }))
 }
 
 export function finalPayload(item: ApprovalItem): unknown {
