@@ -48,8 +48,12 @@ import { normalizeShopDomain } from './shopify-broker.js'
 
 /** 没登录 Agents 工坊账号。 */
 export const SHOPIFY_CONNECT_NOT_LINKED = '先登录 Agents 工坊账号，再一键连 Shopify。'
-/** 老令牌缺 `store`（WP267：卡上一点「更新授权」就地补签，不用重新登录）。 */
-export const SHOPIFY_CONNECT_SCOPE_MISSING = '账号授权要更新一下才能连店：点「更新授权」就好。'
+/**
+ * 老令牌缺 `store`，**而且后台自动补签也没成**（WP272：补签平时是无感的；走到这句 = 云上没这一条 /
+ * 令牌被撤）——只能重新登录 Agents 工坊账号。
+ */
+export const SHOPIFY_CONNECT_SCOPE_MISSING =
+  'Agents 工坊账号需要重新登录一次（设置 → 账号），登录完回来接着连店。'
 /** 云上 501（应用没配齐 / 这家店不在应用的分发范围）。 */
 export const SHOPIFY_CONNECT_UNSUPPORTED = '这家店暂不支持一键授权，等公开应用上线。'
 /** 连不上云。 */
@@ -90,6 +94,13 @@ export interface ShopifyConnectOptions {
    * 就地补上 `store`。不给 = 没有这一条，卡上照旧「重新登录」。
    */
   upgrade?: (ws: WorkspaceId) => Promise<{ scopes: string[]; added: string[] }>
+  /**
+   * WP272：后台自动补签（与云面共用一份去重 / 冷却，`scope-auto-upgrade.ts`）。撞上缺动作集就先补、
+   * 补成了原样再打一次，卡上不出「授权要更新」。不给就用上面的 `upgrade`（补完要有 `store` 才算成）。
+   */
+  autoUpgrade?: (ws: WorkspaceId) => Promise<boolean>
+  /** WP272：连不上云时先等这么久再试一次才判离线（默认 800 毫秒；测试给 0）。 */
+  offlineRetryMs?: number
 }
 
 /** WP267：补签之后令牌里仍没有 `store`（云上默认集还没加它）——只能重新登录 / 等云更新。 */
@@ -100,7 +111,10 @@ export const SHOPIFY_CONNECT_UPGRADE_UNAVAILABLE =
 function failure(out: KolCloudCall<unknown>, fallback: string): ApiError {
   if (out.status === 0)
     return new ApiError('provider_unavailable', SHOPIFY_CONNECT_OFFLINE, {
-      details: { reason: 'offline' },
+      details: {
+        reason: 'offline',
+        ...(out.cause_code === undefined ? {} : { cause_code: out.cause_code }),
+      },
     })
   const required = out.details?.required_scope
   if (out.status === 403 && (required === 'store' || out.details?.reason === 'scope_missing'))
@@ -201,6 +215,42 @@ export function createShopifyConnect(options: ShopifyConnectOptions): ShopifyCon
     return cloud
   }
 
+  /**
+   * WP272：打云的一跳，两道兜底——
+   * ① 连不上（状态 0）先等一小会儿再试一次，仍不通才算离线（真机上一闪而过的网络抖动不该挂「连不上」）；
+   * ② 撞上 403 缺动作集 → 后台补签 → 成了原样再打一次（用户无感；补不成才照实回 403）。
+   */
+  const callCloud = async <T>(
+    ws: string,
+    cloud: ShopifyConnectCloud,
+    path: string,
+    init?: Parameters<KolCloudCallFn>[1],
+  ): Promise<KolCloudCall<T>> => {
+    let out = await cloud.call<T>(path, init)
+    if (!out.ok && out.status === 0) {
+      await new Promise((r) => setTimeout(r, options.offlineRetryMs ?? 800))
+      out = await cloud.call<T>(path, init)
+    }
+    if (
+      !out.ok &&
+      out.status === 403 &&
+      (out.details?.required_scope !== undefined || out.details?.reason === 'scope_missing') &&
+      (await autoUpgrade(ws as WorkspaceId))
+    )
+      out = await cloud.call<T>(path, init)
+    return out
+  }
+
+  const autoUpgrade = async (ws: WorkspaceId): Promise<boolean> => {
+    if (options.autoUpgrade !== undefined) return options.autoUpgrade(ws)
+    if (options.upgrade === undefined) return false
+    try {
+      return (await options.upgrade(ws)).scopes.includes('store')
+    } catch {
+      return false
+    }
+  }
+
   const mineOf = (ws: string, rows: ShopifyCloudConnection[]): ShopifyCloudConnection[] =>
     brandRows(ws, options.startupBrand, rows)
 
@@ -252,15 +302,20 @@ export function createShopifyConnect(options: ShopifyConnectOptions): ShopifyCon
     if (!linked || cloud === undefined) {
       blocked = { reason: 'not_linked', message: SHOPIFY_CONNECT_NOT_LINKED }
     } else {
-      const out = await cloud.call<unknown>(SHOPIFY_CLOUD_PATHS.connections)
+      const out = await callCloud<unknown>(ws, cloud, SHOPIFY_CLOUD_PATHS.connections)
       if (out.ok) {
         rows = mineOf(ws, connectionsOf(out.data))
         options.links?.remember(ws as WorkspaceId, rows)
       } else {
         const err = failure(out, '这一下没取到连接状态')
         const reason = (err.details as { reason?: string } | undefined)?.reason
+        const cause = (err.details as { cause_code?: string } | undefined)?.cause_code
         if (reason === 'scope_missing' || reason === 'not_linked' || reason === 'offline')
-          blocked = { reason, message: err.message }
+          blocked = {
+            reason,
+            message: err.message,
+            ...(cause === undefined ? {} : { cause_code: cause }),
+          }
         // 其余（云上还没这几条 / 偶发错）：当没连过，点按钮时再照实说
       }
     }
@@ -293,7 +348,7 @@ export function createShopifyConnect(options: ShopifyConnectOptions): ShopifyCon
       throw new ApiError('invalid_input', '填一下店铺域名（your-store.myshopify.com）', {
         details: { reason: 'need_shop' },
       })
-    const out = await cloud.call<ShopifyOauthStart>(SHOPIFY_CLOUD_PATHS.start, {
+    const out = await callCloud<ShopifyOauthStart>(ws, cloud, SHOPIFY_CLOUD_PATHS.start, {
       method: 'POST',
       body: { shop, brand: ws },
     })
@@ -317,7 +372,7 @@ export function createShopifyConnect(options: ShopifyConnectOptions): ShopifyCon
   ): Promise<ShopifyConnectAttemptView> => {
     const ws = actor.workspace_id
     const cloud = await cloudFor(ws)
-    const out = await cloud.call<ShopifyOauthAttempt>(SHOPIFY_CLOUD_PATHS.attempt(id))
+    const out = await callCloud<ShopifyOauthAttempt>(ws, cloud, SHOPIFY_CLOUD_PATHS.attempt(id))
     if (!out.ok || out.data === undefined) {
       // 云上这张授权单已经没了：当它过期了（界面上是「再点一次」）
       if (out.status === 404) return { status: 'expired' }
@@ -349,7 +404,7 @@ export function createShopifyConnect(options: ShopifyConnectOptions): ShopifyCon
     const shop = shopInput(rawShop)
     const cloud = await cloudFor(ws)
     const checked_at = options.clock.now()
-    const out = await cloud.call<unknown>(SHOPIFY_CLOUD_PATHS.graphql, {
+    const out = await callCloud<unknown>(ws, cloud, SHOPIFY_CLOUD_PATHS.graphql, {
       method: 'POST',
       body: { shop, query: SHOPIFY_CLOUD_TEST_QUERY },
       timeout_ms: 20_000,
@@ -382,7 +437,7 @@ export function createShopifyConnect(options: ShopifyConnectOptions): ShopifyCon
     const ws = actor.workspace_id
     const shop = shopInput(rawShop)
     const cloud = await cloudFor(ws)
-    const out = await cloud.call<unknown>(SHOPIFY_CLOUD_PATHS.connection(shop), {
+    const out = await callCloud<unknown>(ws, cloud, SHOPIFY_CLOUD_PATHS.connection(shop), {
       method: 'DELETE',
     })
     // 云上本来就没有这条：当断开了（按钮按的就是「不要它了」）

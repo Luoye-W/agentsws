@@ -141,6 +141,11 @@ export interface CloudAccountAssembly {
    * （云上没这一条，或令牌已经不认）——后两种以外界面都退回「重新登录」。
    */
   upgradeScopes(workspace_id: WorkspaceId): Promise<{ scopes: string[]; added: string[] }>
+  /**
+   * WP272：这个品牌本机记的令牌比现在的默认动作集少了哪几项（只读本机加密库，不打云）。
+   * 没令牌 / 读不出签发时的动作集 = 空（不凭空补）。启动时后台自动补签用它挑品牌。
+   */
+  missingScopesOf(workspace_id: WorkspaceId): string[]
 }
 
 interface StoredLink {
@@ -739,6 +744,16 @@ export function createCloudAccount(options: CloudAccountOptions): CloudAccountAs
       } catch {
         return false
       }
+    },
+    missingScopesOf(workspace_id) {
+      let fields: Record<string, string> | undefined
+      try {
+        fields = vaultOf(workspace_id).get(CLOUD_TOKEN_SECRET_ID)
+      } catch {
+        return []
+      }
+      if (fields?.token === undefined || fields.token === '') return []
+      return missingScopes(fields.scopes ?? '')
     },
     async upgradeScopes(workspace_id) {
       const tokenOf = (ws: WorkspaceId): { token: string; fields: Record<string, string> } => {
