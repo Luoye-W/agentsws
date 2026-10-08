@@ -349,9 +349,29 @@ export function createWorkPort(options: WorkPortOptions): WorkPort {
       const events = work.store.listMatterEvents(id, opts)
       return { events, has_more: work.store.countMatterEvents(id) > events.length }
     },
-    say: async (actor, id, text) =>
-      (await options.sayAt?.(actor, id, text)) ??
-      work.say(id, { person_id: actor.person_id, assignment_id: actor.assignment_id, text }),
+    say: async (actor, id, text) => {
+      const routed = await options.sayAt?.(actor, id, text)
+      if (routed !== undefined) return routed
+      /*
+       * WP276（docs/95 §4.3 第 4a 步）：交接过的事项，之后起的运行用**接手人**那条分配——
+       * 发起人（现在是参与者）在里面说一句，话记他的名字，运行仍是接手人的职责规矩与用量。
+       */
+      const m = work.getMatter(id)
+      const owner = m?.context.participants[0]
+      const run_by =
+        m?.handoff?.state === 'accepted' &&
+        owner !== undefined &&
+        owner !== actor.person_id &&
+        m.position_id !== undefined
+          ? { person_id: owner, assignment_id: m.position_id }
+          : undefined
+      return work.say(id, {
+        person_id: actor.person_id,
+        assignment_id: actor.assignment_id,
+        text,
+        ...(run_by === undefined ? {} : { run_by }),
+      })
+    },
     // WP264（决策 177）：人改的标题之后不再被自动覆盖
     retitleMatter: (_actor, id, title) => work.retitle(id, title, 'user'),
     stopMatter: async (_actor, id) => {

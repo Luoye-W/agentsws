@@ -98,6 +98,7 @@ import {
   CONTENT_CHECK_INTERVAL_MS,
   CONTENT_SIGNING_PUBLIC_KEYS,
   contentChannelOf,
+  DEFAULT_HANDOFF_RETURN_DAYS,
   KOL_AUDIT_CAPABILITY,
   KOL_CHANNEL_IDS,
   KOL_FOLDER,
@@ -118,7 +119,7 @@ import {
   uncitedFigures,
 } from '@agentsws/core'
 import { createDataStore, type SqliteDataStore } from '@agentsws/data'
-import { withOwnSources, withReadVia } from '@agentsws/deck'
+import { isHandoffItem, withOwnSources, withReadVia } from '@agentsws/deck'
 import { resolveBrandSystem } from '@agentsws/design-core'
 import type { WebCredential } from '@agentsws/dsh-adapter'
 import {
@@ -236,6 +237,7 @@ import {
   brandConnectionsPort,
   brandDesignPort,
   brandFreeChatPort,
+  brandHandoffPort,
   brandKolPort,
   brandMessagesPort,
   brandModelsPort,
@@ -335,6 +337,7 @@ import { REVEAL_PRICE_CAPABILITY } from './extension-service.js'
 import { chatCredits, createFreeChatPort } from './free-chat.js'
 import { createFreeChatStore, type FreeChatStore } from './free-chat-store.js'
 import { createGoogleReads, type GoogleReads } from './google-reads.js'
+import { createHandoff, type HandoffAssembly, withHandoff } from './handoff.js'
 import {
   createHostedOwnerClient,
   ensureCloudModelDefault,
@@ -5612,6 +5615,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     }
     // WP237：选择卡选了（或者老卡点了「认领」）→ 事项钉到那条职责、按原话起一次运行
     if (isRouteChoice(item)) return (await positionsFor(item.workspace_id)).onChoiceDecided(item)
+    // WP276：交给对方那张卡——接下（换主人与分配、未定的卡跟过去）/ 不接（退回）
+    if (isHandoffItem(item)) return (await handoffFor(item.workspace_id)).onDecided(item)
     const brand = await brands?.forWorkspace(item.workspace_id)
     // WP173：「发信域名」那张选择卡选了 → 记下发信邮箱、体检、排着的首封往前推
     if (item.kind === B2B_SENDER_CHOICE_KIND) return brand?.b2bOutbound.onSenderChosen(item)
@@ -7805,8 +7810,10 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           reasons: d.reasons,
         })),
     })
-    workPorts.set(ws, port)
-    return port
+    // WP276：转交 / 撞车「交给他」走交给对方（出卡、到点退回）；读之前先把到点的退回
+    const wrapped = withHandoff(port, brand.work, () => handoffFor(ws))
+    workPorts.set(ws, wrapped)
+    return wrapped
   }
   const workstationPortFor = async (ws: WorkspaceId): Promise<WorkstationPort> => {
     const cached = workstationPorts.get(ws)
@@ -8067,6 +8074,54 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
    * 天数与「看过了」存在品牌目录下的 `work-archive.json`（没有数据目录就是内存档）。
    */
   const workArchives = new Map<WorkspaceId, WorkArchiveAssembly>()
+  /** 一个品牌一份「通用」偏好（归档天数、交给对方几天退回）——归档与交接共用。 */
+  const archiveStates = new Map<WorkspaceId, ReturnType<typeof createArchiveStateStore>>()
+  const archiveStateOf = (
+    ws: WorkspaceId,
+    dir: string | undefined,
+  ): ReturnType<typeof createArchiveStateStore> => {
+    const cached = archiveStates.get(ws)
+    if (cached !== undefined) return cached
+    const made = createArchiveStateStore(
+      dir === undefined ? undefined : join(dir, 'work-archive.json'),
+    )
+    archiveStates.set(ws, made)
+    return made
+  }
+  /**
+   * WP276（docs/95 §4.3）：交给对方——一个品牌一份（事项与待办落在这个品牌的 `Work` 里）。
+   * 出卡走同一条审批总线；几天退回读「设置 → 通用」那一格（与归档天数同一个文件）。
+   */
+  const handoffs = new Map<WorkspaceId, HandoffAssembly>()
+  const handoffFor = async (ws: WorkspaceId): Promise<HandoffAssembly> => {
+    const cached = handoffs.get(ws)
+    if (cached !== undefined) return cached
+    const brand = await brandModules.forWorkspace(ws)
+    const assembly = await positionsFor(ws)
+    const state = archiveStateOf(ws, brandDirOf(dbDir, ws, workspace.id))
+    const made = createHandoff({
+      workspace_id: ws,
+      work: brand.work,
+      approvals,
+      personName: async (id) => {
+        const p = await identity.getPerson(id)
+        return p === undefined || p.name === '' ? undefined : p.name
+      },
+      members: async () =>
+        (await identity.members(ws)).filter((m) => m.left_at === undefined).map((m) => m.person_id),
+      positionsOf: (person) => assembly.mine(person),
+      assignment: (id) => {
+        const a = roles.assignments.get(id)
+        return a === undefined || a.revoked_at !== undefined
+          ? undefined
+          : { person_id: a.person_id, role_id: a.role_id }
+      },
+      days: () => state.settings().handoff_days ?? DEFAULT_HANDOFF_RETURN_DAYS,
+      initiator: () => organizations.organizationOf(ws)?.owner_id,
+    })
+    handoffs.set(ws, made)
+    return made
+  }
   const workArchiveFor = async (ws: WorkspaceId): Promise<WorkArchiveAssembly> => {
     const cached = workArchives.get(ws)
     if (cached !== undefined) return cached
@@ -8076,9 +8131,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     const made = createWorkArchive({
       clock,
       work: brand.work,
-      state: createArchiveStateStore(
-        dir === undefined ? undefined : join(dir, 'work-archive.json'),
-      ),
+      state: archiveStateOf(ws, dir),
       positions: (person_id) => assembly.mine(person_id),
       assignmentsOf: (person_id) =>
         roles.assignments
@@ -9194,6 +9247,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     work: workPortOf,
     // WP207：左栏职责下的对话 / 任务、归档与找回（按品牌）
     workArchive: workArchivePortOf,
+    // WP276：交给对方（按品牌）
+    handoff: brandHandoffPort(brandModules, handoffFor),
     // WP236：运行时长线（这台机器一份）
     runLimits: { get: () => runLimitsSettings.get(), set: (input) => runLimitsSettings.set(input) },
     // WP69（54）：岗位实体、交给岗位一件事、换职责
@@ -9576,7 +9631,9 @@ function seoDecided(bus: ApprovalBus, hook: SeoDecidedHook): ApprovalBus {
           out.kind === 'image_pick' ||
           out.kind === 'image_budget' ||
           // WP237：「这件事该走哪条职责」选定了 → 钉到那条、立刻开跑
-          isRouteChoice(out)
+          isRouteChoice(out) ||
+          // WP276：「X 想把「…」交给你」接下 / 不接了
+          isHandoffItem(out)
         ) {
           try {
             await hook.current?.(out)

@@ -701,6 +701,14 @@ export function isOwnSubModerationItem(item: Pick<ApprovalItem, 'kind' | 'payloa
   )
 }
 
+/**
+ * WP276（docs/95 §4.3）：「X 想把「…」交给你」那张卡（`claim` 类、`form: 'handoff'`）。
+ * 选项是接手人自己的岗位（只有一个就是一个「接下」），「不接」的理由可以不写。
+ */
+export function isHandoffItem(item: Pick<ApprovalItem, 'kind' | 'payload'>): boolean {
+  return item.kind === 'claim' && isRecord(item.payload) && item.payload.form === 'handoff'
+}
+
 export function isRouteChoiceItem(item: Pick<ApprovalItem, 'kind' | 'payload'>): boolean {
   return item.kind === 'claim' && isRecord(item.payload) && item.payload.form === 'route_choice'
 }

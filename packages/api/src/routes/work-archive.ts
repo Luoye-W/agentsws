@@ -22,7 +22,12 @@ import type {
   MaybePromise,
   WorkArchiveSettings,
 } from '@agentsws/contracts'
-import { MAX_ARCHIVE_IDLE_DAYS, MIN_ARCHIVE_IDLE_DAYS } from '@agentsws/contracts'
+import {
+  MAX_ARCHIVE_IDLE_DAYS,
+  MAX_HANDOFF_RETURN_DAYS,
+  MIN_ARCHIVE_IDLE_DAYS,
+  MIN_HANDOFF_RETURN_DAYS,
+} from '@agentsws/contracts'
 import { z } from 'zod'
 import { ApiError } from '../errors.js'
 import { assignmentOf, body, ok, param, principalOf } from '../helpers.js'
@@ -136,6 +141,13 @@ const UnarchiveBody = z.object({ by: z.enum(['user', 'ai_suggested']).optional()
 
 const SettingsBody = z.object({
   idle_days: z.number().int().min(MIN_ARCHIVE_IDLE_DAYS).max(MAX_ARCHIVE_IDLE_DAYS).nullable(),
+  /** WP276（决策 241）：交给对方没人理几天自动退回（不给 = 不改）。 */
+  handoff_days: z
+    .number()
+    .int()
+    .min(MIN_HANDOFF_RETURN_DAYS)
+    .max(MAX_HANDOFF_RETURN_DAYS)
+    .optional(),
 })
 
 type Ctx = Parameters<typeof param>[0]
@@ -373,7 +385,13 @@ export function workArchiveRoutes(): Route[] {
       },
       async (c, deps) => {
         const input = await body(c, SettingsBody)
-        return ok(c, await portOf(deps).setSettings(actorOf(c), { idle_days: input.idle_days }))
+        return ok(
+          c,
+          await portOf(deps).setSettings(actorOf(c), {
+            idle_days: input.idle_days,
+            ...(input.handoff_days === undefined ? {} : { handoff_days: input.handoff_days }),
+          }),
+        )
       },
     ),
   ]

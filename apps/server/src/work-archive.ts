@@ -31,7 +31,7 @@ import type {
   PositionInstance,
   WorkArchiveSettings,
 } from '@agentsws/contracts'
-import { DEFAULT_ARCHIVE_IDLE_DAYS } from '@agentsws/contracts'
+import { DEFAULT_ARCHIVE_IDLE_DAYS, DEFAULT_HANDOFF_RETURN_DAYS } from '@agentsws/contracts'
 import {
   RECALL_MAX_LIMIT,
   type RecallDoc,
@@ -52,6 +52,8 @@ const RERANK_POOL = 24
 /** 本机那一份：天数 +「谁什么时候看过哪件事」。 */
 interface ArchiveStateFile {
   idle_days: number | null
+  /** WP276（决策 241）：交给对方没人理几天自动退回。 */
+  handoff_days: number
   seen: Record<PersonId, Record<string, string>>
 }
 
@@ -64,7 +66,11 @@ export interface ArchiveStateStore {
 
 /** 给了路径就落盘（品牌目录下 `work-archive.json`），没给就是内存档。 */
 export function createArchiveStateStore(file?: string): ArchiveStateStore {
-  let state: ArchiveStateFile = { idle_days: DEFAULT_ARCHIVE_IDLE_DAYS, seen: {} }
+  let state: ArchiveStateFile = {
+    idle_days: DEFAULT_ARCHIVE_IDLE_DAYS,
+    handoff_days: DEFAULT_HANDOFF_RETURN_DAYS,
+    seen: {},
+  }
   if (file !== undefined && existsSync(file)) {
     try {
       const parsed = JSON.parse(readFileSync(file, 'utf8')) as Partial<ArchiveStateFile>
@@ -73,6 +79,10 @@ export function createArchiveStateStore(file?: string): ArchiveStateStore {
           parsed.idle_days === null || typeof parsed.idle_days === 'number'
             ? parsed.idle_days
             : DEFAULT_ARCHIVE_IDLE_DAYS,
+        handoff_days:
+          typeof parsed.handoff_days === 'number'
+            ? parsed.handoff_days
+            : DEFAULT_HANDOFF_RETURN_DAYS,
         seen: parsed.seen ?? {},
       }
     } catch {
@@ -85,11 +95,15 @@ export function createArchiveStateStore(file?: string): ArchiveStateStore {
     writeFileSync(file, `${JSON.stringify(state, null, 2)}\n`, 'utf8')
   }
   return {
-    settings: () => ({ idle_days: state.idle_days }),
+    settings: () => ({ idle_days: state.idle_days, handoff_days: state.handoff_days }),
     setSettings: (next) => {
-      state = { ...state, idle_days: next.idle_days }
+      state = {
+        ...state,
+        idle_days: next.idle_days,
+        ...(next.handoff_days === undefined ? {} : { handoff_days: next.handoff_days }),
+      }
       save()
-      return { idle_days: state.idle_days }
+      return { idle_days: state.idle_days, handoff_days: state.handoff_days }
     },
     seenAt: (person_id, matter_id) => state.seen[person_id]?.[matter_id],
     markSeen: (person_id, matter_id, at) => {

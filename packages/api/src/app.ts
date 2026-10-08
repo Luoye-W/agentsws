@@ -45,6 +45,7 @@ import { eventRoutes } from './routes/events.js'
 import { extensionRoutes } from './routes/extension.js'
 import { freeChatRoutes } from './routes/free-chat.js'
 import { haltRoutes } from './routes/halt.js'
+import { handoffRoutes } from './routes/handoff.js'
 import { healthRoutes } from './routes/health.js'
 import { identityRoutes } from './routes/identity.js'
 import { joinRoutes } from './routes/join.js'
@@ -208,6 +209,8 @@ export function collectRoutes(): Route[] {
     ...workRoutes(),
     // WP207：左栏职责下的对话 / 任务、归档与找回
     ...workArchiveRoutes(),
+    // WP276：交给对方（② 同事互联）
+    ...handoffRoutes(),
     // WP236：运行时长线（空闲超时 / 总时长上限）
     ...runLimitsRoutes(),
     // 36 §3 对话入口之二：问 AI（单轮、只你可见）

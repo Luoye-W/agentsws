@@ -26,6 +26,7 @@ import type {
   DeepSeekAccountView,
   DesignPort,
   FreeChatPort,
+  HandoffPort,
   KolPort,
   MailboxSwitchesInput,
   MessagesPort,
@@ -388,6 +389,14 @@ export function brandWorkArchivePort(
   make: (workspace_id: WorkspaceId) => Promise<WorkArchivePort>,
 ): WorkArchivePort {
   return scopedPort<WorkArchivePort>(make, () => brands.bootstrap)
+}
+
+/** WP276：交给对方——与工作模型同一份 `Work`，所以也按品牌。 */
+export function brandHandoffPort(
+  brands: BrandModules,
+  make: (workspace_id: WorkspaceId) => Promise<HandoffPort>,
+): HandoffPort {
+  return scopedPort<HandoffPort>(make, () => brands.bootstrap)
 }
 
 /** 37 工作模型（事项 / 目标 / 待办 / 计划 / 复盘）：一个品牌一份 `Work`。 */
