@@ -5,7 +5,7 @@
  * 替身同 WP268 那一组（确定性占位图、内存审批总线、进程内假店），不联网、不花钱。
  */
 import type { ApprovalItem, ImageProvider, RunRequest } from '@agentsws/contracts'
-import { encodePng, ProviderError, stubImageProvider } from '@agentsws/model-gateway'
+import { encodePng, stubImageProvider } from '@agentsws/model-gateway'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { type BrandAssets, createBrandAssets } from '../src/brand-assets.js'
 import { createDesignStore, designDeckData } from '../src/design.js'
