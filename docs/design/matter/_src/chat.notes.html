@@ -1,0 +1,64 @@
+  <div class="blk">
+    <h4>试一试</h4>
+    <div class="try">
+      <button type="button" onclick="setState('doing')">默认（预览好了）</button>
+      <button type="button" onclick="setState('running')">运行中</button>
+      <button type="button" onclick="setState('awaiting')">等你批</button>
+      <button type="button" onclick="setState('blocked')">卡住了</button>
+      <button type="button" onclick="setState('done')">已完成</button>
+      <button type="button" onclick="setQ('todos',q.get('todos')==='1'?null:'1')">待办 有 / 无</button>
+      <button type="button" onclick="setQ('suggest',q.get('suggest')==='0'?null:'0')">建议 有 / 无</button>
+      <button type="button" onclick="setQ('private',q.get('private')==='1'?null:'1')">私聊 AI</button>
+    </div>
+    <p class="muted" style="margin-top:8px;font-size:12px">也能直接点：标题（改名）、「⋯」、灰字那几行（展开步骤）、「展开全文」、「发布上线」、输入框里按 Tab。</p>
+  </div>
+  <div class="blk">
+    <h4>1 · 短标题</h4>
+    <ul>
+      <li>标题是 AI 起的总结，中文 ≤16 字左右：「Rollout 英文首页 · 深色科技风」。<span class="was">原话前 120 字、四行大字</span></li>
+      <li>首轮开跑时用便宜模型起；起好之前先显示原话前 20 字。点标题就地改，改过的不再自动覆盖</li>
+      <li>原话全文是对话第一条（右边气泡），一字不丢</li>
+      <li>左栏事项名也是这个短标题，不再截半句</li>
+    </ul>
+  </div>
+  <div class="blk">
+    <h4>2 · 页头一行</h4>
+    <ul>
+      <li>标题下一行灰字：<b>职责标签</b>（点了换）· <b>状态</b> · 参与者 · 最近活动</li>
+      <li>「归档 / 关闭事项 / 换职责」收进右上「⋯」；不能归档时灰掉并说一句为什么</li>
+      <li><b>待办有才出</b>：灰字行尾一个蓝色「3 个待办」，点开就地展开；没有就什么都没有。<span class="was">「这里的待办」空着也占一块</span></li>
+      <li>结果摘要不再单独一行，就在对话里</li>
+      <li>页头吸顶，约 72px 高。<span class="was">原来约 260px</span></li>
+    </ul>
+  </div>
+  <div class="blk">
+    <h4>3 · 对话式时间线</h4>
+    <ul>
+      <li><b>你说的</b>在右边气泡，超过 6 行先收起</li>
+      <li><b>AI</b> 在左边，带职责头像和名字，正文按 Markdown 排；长回答先露一屏，「展开全文」</li>
+      <li><b>结果卡</b>：「预览好了」= 缩略图 + 主题名 + 改了几处 +「打开预览」主按钮 +「发布上线」次按钮（点了出审批卡）</li>
+      <li><b>过程与系统事件</b>缩成居中一行灰字：跑了一次、卡在缺连接、换了职责。点开看读了哪些文件、检查结果、推送</li>
+      <li>卡住的那条：<b>是最新的时候是卡</b>（带「去连接」），接上之后缩成一行</li>
+      <li>时间：同一天只出一次日期分隔，每条的钟点悬停才显</li>
+    </ul>
+  </div>
+  <div class="blk">
+    <h4>4 · 输入卡（Luoye 10-08 追加）</h4>
+    <ul>
+      <li>明显的圆角卡：有边框、有阴影、两行高，打字自动长高（最多约 10 行）</li>
+      <li>发送是卡内右下角<b>圆形箭头</b>：空时灰，有字变主色；运行中变「停」（方块）。<span class="was">浅绿「发」字按钮</span></li>
+      <li>Enter 发送、Shift+Enter 换行，提示只在聚焦时出现</li>
+      <li><b>问 AI</b> 并进来：左下「私聊 AI」开关，打开后整张卡变蓝、顶上一行「只你看得见」。<span class="was">底下另一块「问 AI」</span></li>
+      <li>左下预留「+」附件、「@」提及两个图标位</li>
+      <li><b>建议输入</b>：AI 交代完说「要发布说一句」，框里直接浅灰「发布上线」+ 小 Tab 键帽；按 Tab 收下变正文，打别的字就消失。没有合适的就是普通占位字</li>
+    </ul>
+  </div>
+  <div class="blk ask">
+    <h4>要 Luoye 定（详见 README）</h4>
+    <ol>
+      <li>标题谁起：首轮便宜模型起（稿子按这个）还是从首轮结果里取？</li>
+      <li>私聊 AI 的问答留不留在对话里？</li>
+      <li>建议输入从哪来、什么时候不给</li>
+      <li>过程事件默认收起，还是最近一次默认展开？</li>
+    </ol>
+  </div>
