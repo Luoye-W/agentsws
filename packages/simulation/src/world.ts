@@ -192,6 +192,7 @@ import {
   rangeTargetOfProduct,
   reconfirmReasonText,
   resolveScopeManager,
+  returnOnDowngrade,
   scopeManagerReasonText,
 } from '@agentsws/roles'
 import {
@@ -599,6 +600,12 @@ export interface World {
   assignmentSnapshots(): AssignmentSnapshot[]
   /** WP69（54）：场景里现配出来的分配登记进快照（`position.staff` 用）。 */
   registerAssignment(a: Assignment): void
+  /**
+   * WP277（docs/95 §3.4–§3.6）：场景 `org.mode`——开公司模式 / 降回同事互联。之后新出的卡按新模式路由；
+   * ③ → ② 时还没定、正等主管 / 老板的卡退回给本人（与服务进程同一个 `returnOnDowngrade`）。
+   * 回退回了几张。场景开头没写 `org_mode` 的世界没装那个口子，改了也不生效。
+   */
+  setOrgMode(mode: 'solo' | 'peers' | 'company', by: PersonId): Promise<{ returned: number }>
   gateway(): ModelGatewayApi
   /** 场景 `inject.budget`：换一套预算重建网关（BudgetLedger 的 caps 在构造时固定）。 */
   setBudget(budget: ModelGatewayPolicy['budget']): void
@@ -2046,7 +2053,9 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
   const roleHolder = primary.person_id
   const scopeManager = pack.people.find((p) => p.scope_manager === true)?.id ?? owner
   /** WP275：有没有审批流（只有 ③ 有；场景没说 = 与以前一样，按有算）。 */
-  const approvalFlow = hasApprovalFlow(opts.orgMode ?? 'company')
+  /** WP277：场景里可以中途改（`org.mode`），所以是 `let`。 */
+  let orgMode = opts.orgMode ?? 'company'
+  let approvalFlow = hasApprovalFlow(orgMode)
   /** 14 §13.2 默认 10%；场景可以压到 0 或提到 1，报告里要写清用的是哪个数。 */
   const txnSamplingRate = opts.txnPolicy?.sampling_rate ?? 0.1
 
@@ -3322,6 +3331,49 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
      */
     registerAssignment(a) {
       created.set(`${a.person_id}|${a.role_id}@${a.workspace_id}`, a)
+    },
+    async setOrgMode(mode, by) {
+      const from = orgMode
+      orgMode = mode
+      approvalFlow = hasApprovalFlow(mode)
+      let returned = 0
+      if (from === 'company' && mode !== 'company' && txn.approvals.reroute !== undefined) {
+        const people = new Set(pack.people.map((p) => p.id))
+        const seen = new Set<string>()
+        for (const person of people)
+          for (const card of (await txn.approvals.queue({
+            workspace_id,
+            person_id: person,
+            lane: 'mine',
+            state: ['pending', 'in_review'],
+          })) as ApprovalItem[]) {
+            if (seen.has(card.id)) continue
+            seen.add(card.id)
+            const back = returnOnDowngrade(card, {
+              personOfAssignment: (id) => roles.assignments.get(id)?.person_id,
+              isMember: (p) => people.has(p),
+            })
+            if (back === undefined) continue
+            for (const leaving of back.from)
+              await txn.approvals.reroute(card.id, {
+                from: leaving,
+                to: back.self,
+                via: 'role_holder',
+                reason: '改回同事互联，退回给你',
+              })
+            returned += 1
+          }
+        await flushCards()
+      }
+      appendEnvelope({
+        schema_version: 1,
+        workspace_id,
+        type: 'organization.mode_changed',
+        actor: { kind: 'person', id: by },
+        correlation: { trace_id: traceId() },
+        payload: { mode, from, returned },
+      })
+      return { returned }
     },
     assignmentSnapshots() {
       const out: AssignmentSnapshot[] = []

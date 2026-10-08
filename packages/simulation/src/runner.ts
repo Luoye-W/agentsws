@@ -1146,6 +1146,11 @@ async function execute(
         workHandoffDecide(event.handoff_decide)
         return
       }
+      // ── WP277 开公司模式 / 降回同事互联（docs/95 §3.4–§3.6）────────────
+      case 'org.mode': {
+        await world.setOrgMode(event.org_mode.mode, event.org_mode.who)
+        return
+      }
       case 'work.idle_sweep': {
         const swept = world.work.sweepIdleTodos(
           event.idle.idle_days === undefined ? {} : { idle_days: event.idle.idle_days },

@@ -1,0 +1,68 @@
+# WP277（docs/95 §3.4，决策 222）：**② 同事互联 → ③ 公司集体之后，超了授权的报价转老板。**
+#
+# 周岚、林峰、何佳三个平级（`org_mode: peers`）：
+# 1. 何佳先提一张超限报价——② 里落回她自己，超了上限只要她再确认一次，不转给谁；
+# 2. 周岚（发起人）开了公司模式（`org.mode: company`）；之前那张不改派（出卡那一刻定路由）；
+# 3. 林峰再提一张超限报价——③ 里按规矩走：林峰是销售经理、B2B 没给他设上级，转给老板周岚，
+#    卡上写「转给了…」，不是「再确认一次」。
+id: b2b/modes/peers-to-company-over-limit-to-boss
+version: 1
+dataset: { pack: b2b-3c-3p, seed: 42 }
+org_mode: peers
+stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
+clock: { start: '2026-10-08T10:00:00+08:00' }
+events:
+  - at: '+0m'
+    b2b.quote:
+      who: p_he
+      quote_id: quo_before_company
+      lines:
+        - { sku: GaN65, description: GaN 65W charger UKCA, qty: 3000, unit_price_usd: 6.2 }
+      margin_pct: 18.5
+      discount_pct: 1
+      payment_terms_days: 30
+      incoterm: FOB
+      incoterm_place: Shenzhen
+  - at: '+5m'
+    org.mode: { who: p_zhou, mode: company }
+  - at: '+10m'
+    b2b.quote:
+      who: p_lin
+      quote_id: quo_after_company
+      lines:
+        - { sku: PB20K, description: 20000mAh power bank, qty: 2000, unit_price_usd: 9.5 }
+      margin_pct: 17
+      discount_pct: 0
+      payment_terms_days: 45
+      incoterm: FOB
+      incoterm_place: Shenzhen
+  - at: '+1h'
+    clock.advance: {}
+expected:
+  b2b:
+    - kind: b2b_quote
+      blocked: false
+      approver: role_holder
+      routed_to: p_he
+      auto_approved: false
+      stated_on_card: true
+      reconfirm: true
+      forwarded: false
+    - kind: b2b_quote
+      blocked: false
+      approver: owner
+      routed_to: p_zhou
+      auto_approved: false
+      stated_on_card: true
+      reconfirm: false
+      forwarded: true
+  staged_change_kinds: [b2b_quote]
+  event_types: [organization.mode_changed]
+  metrics:
+    runs_failed: 0
+invariants:
+  - no_write_without_stage
+  - apply_only_after_approved
+  - provenance_respected
+rubric: >-
+  开公司模式之前那张是不是还落在何佳自己手里？开了之后林峰的超限报价是不是转给了老板、卡上写清楚了？

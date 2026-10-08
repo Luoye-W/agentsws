@@ -168,6 +168,8 @@ const EVENT_KEYS = [
   'work.matter',
   'work.handoff',
   'work.handoff_decide',
+  // WP277 开公司模式 / 降回同事互联（docs/95 §3.4–§3.6）
+  'org.mode',
   // WP39 秘书 Agent（41 §1）
   'secretary.profile',
   'secretary.ask',
@@ -2270,6 +2272,17 @@ function parseEvent(source: string, index: number, raw: unknown): ScenarioEvent 
             ? {}
             : { visitor: str(source, `${path}.${key}.visitor`, body.visitor) }),
         },
+      }
+    }
+    case 'org.mode': {
+      known(source, `${path}.${key}`, body, ['who', 'mode'])
+      const mode = str(source, `${path}.${key}.mode`, body.mode)
+      if (mode !== 'solo' && mode !== 'peers' && mode !== 'company')
+        fail(source, `${path}.${key}.mode`, 'mode 只能是 solo / peers / company')
+      return {
+        at,
+        type: 'org.mode',
+        org_mode: { who: str(source, `${path}.${key}.who`, body.who), mode },
       }
     }
     case 'work.matter': {

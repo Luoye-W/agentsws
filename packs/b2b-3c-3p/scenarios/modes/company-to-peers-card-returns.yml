@@ -1,0 +1,52 @@
+# WP277（docs/95 §3.6，决策 240）：**③ 公司集体 → ② 同事互联，等老板批的卡退回本人。**
+#
+# 公司模式（`org_mode: company`）：
+# 1. 林峰提一张超了授权的报价——③ 里转给老板周岚；
+# 2. 周岚没批，先把这里改回同事互联（`org.mode: peers`）——这张卡退回林峰自己（「改回同事互联，
+#    退回给你」），不留在老板手里；
+# 3. 林峰自己点通过（`actor.decide` 用的是**本人**手上的那张卡；卡要是还在周岚那儿，这一步就会报
+#    「手上没有这张卡」）；② 里没有职责分离，也不升级。
+id: b2b/modes/company-to-peers-card-returns
+version: 1
+dataset: { pack: b2b-3c-3p, seed: 42 }
+org_mode: company
+stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
+clock: { start: '2026-10-08T10:00:00+08:00' }
+events:
+  - at: '+0m'
+    b2b.quote:
+      who: p_lin
+      quote_id: quo_returned
+      lines:
+        - { sku: PB20K, description: 20000mAh power bank, qty: 2000, unit_price_usd: 9.5 }
+      margin_pct: 17
+      discount_pct: 0
+      payment_terms_days: 45
+      incoterm: FOB
+      incoterm_place: Shenzhen
+  - at: '+10m'
+    org.mode: { who: p_zhou, mode: peers }
+  - at: '+15m'
+    actor.decide: { who: p_lin, item: $last_staged_change, action: approve }
+  - at: '+1h'
+    clock.advance: {}
+expected:
+  b2b:
+    - kind: b2b_quote
+      blocked: false
+      approver: owner
+      routed_to: p_zhou
+      auto_approved: false
+      stated_on_card: true
+      forwarded: true
+  staged_change_kinds: [b2b_quote]
+  event_types: [organization.mode_changed, approval.rerouted]
+  metrics:
+    escalations: 0
+    runs_failed: 0
+invariants:
+  - no_write_without_stage
+  - apply_only_after_approved
+  - provenance_respected
+rubric: >-
+  改回同事互联之后，等老板批的那张是不是退回了林峰自己、由他自己点掉？有没有留在老板手里或升级？

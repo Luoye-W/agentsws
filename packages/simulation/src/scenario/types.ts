@@ -108,6 +108,12 @@ export interface ScenarioWorkHandoff {
   note?: string
 }
 
+/** WP277：谁把这里改成哪种用法（③ → ② 时等主管 / 老板的卡退回本人）。 */
+export interface ScenarioOrgMode {
+  who: string
+  mode: 'solo' | 'peers' | 'company'
+}
+
 /** WP276：被交的那个人定——接下（用他自己那条职责）/ 不接（理由可选）。 */
 export interface ScenarioWorkHandoffDecide {
   who: string
@@ -1046,6 +1052,8 @@ export type ScenarioEvent =
   | { at: string; type: 'work.matter'; matter: ScenarioWorkMatter }
   | { at: string; type: 'work.handoff'; handoff: ScenarioWorkHandoff }
   | { at: string; type: 'work.handoff_decide'; handoff_decide: ScenarioWorkHandoffDecide }
+  /** WP277（docs/95 §3.4–§3.6）：发起人开公司模式 / 老板降回同事互联。 */
+  | { at: string; type: 'org.mode'; org_mode: ScenarioOrgMode }
   /** WP39：本人改一格公开级别（41 §1.3）。 */
   | { at: string; type: 'secretary.profile'; profile: ScenarioSecretaryProfile }
   /** WP39：问别人的秘书（代答）。 */
