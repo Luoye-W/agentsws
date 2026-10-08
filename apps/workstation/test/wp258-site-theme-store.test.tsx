@@ -168,3 +168,43 @@ describe('WP258 登录后自动找店', () => {
     expect(screen.queryByTestId('site-theme-store-row')).toBeNull()
   })
 })
+
+describe('WP267（决策 164）：只有一家但不是官网那家', () => {
+  const ONE = [{ store: ROLLOUT, name: 'My Store', plan: 'basic' }]
+
+  it('照实问「官网那家店不在这个账号下」+ 换个账号 / 就用这家；就用这家 = 从清单里选', async () => {
+    api.view = base({
+      next: 'store',
+      site_store: 'inmo-official.myshopify.com',
+      store_lookup: { status: 'ok', stores: ONE, checked_at: 'now' },
+    })
+    renderWithProviders(<SiteThemeBanner positionId="site" duties={SITE} />)
+    const banner = await screen.findByTestId('site-theme-banner')
+    expect(banner.getAttribute('data-store-mode')).toBe('mismatch')
+    expect(banner.textContent).toContain('官网那家店（inmo-official.myshopify.com）不在这个账号下')
+    expect(screen.queryByTestId('site-theme-store-pick')).toBeNull()
+    await userEvent.click(screen.getByTestId('site-theme-mismatch-use'))
+    await waitFor(() => expect(api.saves).toEqual([{ store: ROLLOUT, source: 'list' }]))
+  })
+
+  it('换个账号：起登录（登录卡在下面展开）', async () => {
+    api.view = base({
+      next: 'store',
+      site_store: 'inmo-official.myshopify.com',
+      store_lookup: { status: 'ok', stores: ONE, checked_at: 'now' },
+    })
+    renderWithProviders(<SiteThemeBanner positionId="site" duties={SITE} />)
+    await userEvent.click(await screen.findByTestId('site-theme-mismatch-relogin'))
+    await waitFor(() => expect(api.runs).toEqual(['login']))
+  })
+
+  it('官网没读到店：一家店照旧是「选一下」（服务端不会走到这里，界面也不瞎问）', async () => {
+    api.view = base({
+      next: 'store',
+      store_lookup: { status: 'ok', stores: ONE, checked_at: 'now' },
+    })
+    renderWithProviders(<SiteThemeBanner positionId="site" duties={SITE} />)
+    const banner = await screen.findByTestId('site-theme-banner')
+    expect(banner.getAttribute('data-store-mode')).toBe('pick')
+  })
+})

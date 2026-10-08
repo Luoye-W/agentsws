@@ -200,3 +200,28 @@ describe('WP265 云账号：报缺的动作集、同账号重新登录换新令�
     expect(server.secrets.get(CLOUD_TOKEN_SECRET_ID)?.token).toBe(before)
   })
 })
+
+describe('WP267 一点补签（真装配线 + demo 云替身）', () => {
+  it('老令牌缺 store → POST /v1/shopify-connect/upgrade 补上，账号视图不再报缺；再点 = 已经齐了；令牌没换', async () => {
+    expect((await call('POST', '/v1/shopify-connect/upgrade')).reason).toBe('not_linked')
+    await login()
+    const before = await call<CloudAccountView>('GET', '/v1/cloud/account')
+    expect(before.data.missing_scopes).toContain('store')
+    const tokenBefore = server.secrets.get(CLOUD_TOKEN_SECRET_ID)?.token
+    const up = await call<{ upgraded: boolean; added: string[]; scopes: string[] }>(
+      'POST',
+      '/v1/shopify-connect/upgrade',
+    )
+    expect(up.status).toBe(200)
+    expect(up.data).toMatchObject({ upgraded: true })
+    expect(up.data.added).toContain('store')
+    const after = await call<CloudAccountView>('GET', '/v1/cloud/account')
+    expect(after.data.missing_scopes).toBeUndefined()
+    expect(server.secrets.get(CLOUD_TOKEN_SECRET_ID)?.token).toBe(tokenBefore)
+    const again = await call<{ upgraded: boolean; added: string[] }>(
+      'POST',
+      '/v1/shopify-connect/upgrade',
+    )
+    expect(again.data).toMatchObject({ upgraded: false, added: [] })
+  })
+})

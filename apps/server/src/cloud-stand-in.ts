@@ -193,6 +193,8 @@ export function cloudStandIn(options: CloudStandInOptions = {}): CloudStandIn {
   /** 替身签过的会话 / 工作区令牌（只认自己签的）。 */
   const sessions = new Map<string, string>()
   const workspaceTokens = new Set<string>()
+  /** WP267：补签过的令牌（再点一次 = `added: []`）。 */
+  const upgradedTokens = new Set<string>()
   const mint = (prefix: string): string => `${prefix}_${randomBytes(12).toString('hex')}`
   const shopify = shopifyCloudStandIn({ now, ...options.shopify })
   /** WP231：已注册的邮箱 → 密码（替身只在内存里，demo 一关就没了）。 */
@@ -653,11 +655,15 @@ export function cloudStandIn(options: CloudStandInOptions = {}): CloudStandIn {
         return fail(401, 'unauthenticated', '令牌无效')
       return ok({ revoked: true })
     }
-    // WP267：一点补签（私有云 WP266）——替身签的令牌本来就按默认集，回「已经齐了」
+    // WP267：一点补签（私有云 WP266）——替身签的令牌是 `ai` + `wallet:read`，补上默认集里别的那几项（再点 = 已经齐了）
     if (method === 'POST' && path === CLOUD_LINK_UPGRADE_PATH) {
       if (token === undefined || !workspaceTokens.has(token))
         return fail(401, 'unauthenticated', '令牌无效')
-      return ok({ scopes: [...DEFAULT_CLOUD_SCOPES], added: [] })
+      const added = upgradedTokens.has(token)
+        ? []
+        : DEFAULT_CLOUD_SCOPES.filter((x) => x !== 'ai' && x !== 'wallet:read')
+      upgradedTokens.add(token)
+      return ok({ scopes: [...DEFAULT_CLOUD_SCOPES], added })
     }
     // ── 钱包那一面（49 M4）：只认替身签过的工作区令牌
     if (path.startsWith('/v1/wallet')) {
