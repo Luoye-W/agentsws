@@ -1,10 +1,25 @@
 # Connect your Shopify store
 
-How to plug your Shopify store into Agents Workshop: orders, returns, customers and products all come through this connection.
+How to plug your Shopify store into Agents Workshop.
 
-## Shopify store
+## One-click connect (recommended)
 
-Create an app in Shopify's Dev Dashboard, install it on your store, and paste its Client ID and secret here. Shopify's access tokens expire every 24 hours — we renew them ourselves, so you don't have to.
+No developer app, no keys to paste.
+
+1. Sign in to your Agents Workshop account (the card tells you; sign in right there).
+2. On the Connections page, click **Connect Shopify** on the "Shopify store" card. The store domain is filled in for you (from the brand profile or the store the site position found); if not, type `xxx.myshopify.com`.
+3. Your browser opens Shopify's own approval page — click **Install** with the store owner account.
+4. Back in the Workshop, the card shows "Connected": the store name and what it can manage. "Test" double-checks it.
+
+The store key stays on Agents Workshop cloud, not on this computer; the AI asks you with a card before changing products or pages.
+
+- **"Your account access needs a refresh"**: click "Sign in again" with the same account.
+- **"One-click isn't available for this store yet"**: one-click is open to beta stores for now; once the public app passes Shopify review, any store can use it. Can't wait? Use the "own app" route below.
+- **Authorization expired / something missing**: click "Re-authorize" and Install again in the browser.
+
+## Advanced: use your own Shopify app
+
+That's what "Advanced: use your own Shopify app" on the card opens. Create an app in Shopify's Dev Dashboard, install it on your store, and paste its Client ID and secret here. Shopify's access tokens expire every 24 hours — we renew them ourselves, so you don't have to.
 
 **How**
 
