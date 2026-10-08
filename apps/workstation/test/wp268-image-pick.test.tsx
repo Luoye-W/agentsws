@@ -11,7 +11,6 @@ import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { buildItems, digestFacts, suggestionFor } from '@/components/matter/matter-model'
 import { renderWithProviders } from './helpers'
 
 const D1 = '2026-10-07T06:02:00.000Z'

@@ -348,7 +348,9 @@ describe('上限：花积分前判，超了出卡问', () => {
     await run('edit_image', { prompt: 'a', asset_ids: [ref.id], n: 2 }) // 3 积分
     const over = await run('edit_image', { prompt: 'b', asset_ids: [ref.id], n: 1 }) // 再 1.5 > 4
     expect((over.data as { kind: string }).kind).toBe('image_budget')
-    expect((cards.at(-1)?.payload as { reason: string }).reason).toBe('per_run_credits')
+    expect((cards.at(-1)?.payload as { reason?: string } | undefined)?.reason).toBe(
+      'per_run_credits',
+    )
   })
 })
 

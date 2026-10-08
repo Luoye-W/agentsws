@@ -206,7 +206,7 @@ describe('WP268 生图接入建站端到端', () => {
     const view = await dataOf<{ timeline: Timeline }>(
       await call('GET', `/v1/matters/${out.matter.id}`),
     )
-    const cardEvent = view.timeline.find((e) => e.kind === "card")
+    const cardEvent = view.timeline.find((e) => e.kind === 'card')
     expect(cardEvent?.approval_item_id).toBeDefined()
     const reply = view.timeline.find((e) => e.kind === 'agent_message')?.text ?? ''
     expect(reply).toContain('挑图卡')

@@ -42,16 +42,18 @@ describe('定义', () => {
 
   it('张数上限写进参数；改图收 asset_ids / product_id；place 说清人挑中后自动挂', () => {
     const gen = IMAGE_TOOL_DEF_BY_NAME.get(GENERATE_IMAGE_TOOL)
+    if (gen === undefined) throw new Error('没有 generate_image')
     const props = (
-      gen?.input_schema as {
+      gen.input_schema as {
         properties: Record<string, { maximum?: number; description?: string }>
       }
     ).properties
     expect(props.n?.maximum).toBe(IMAGE_CAPS.per_call)
     expect(props.place?.description).toContain('人挑中')
-    expect(gen?.description).toContain('挑图卡')
+    expect(gen.description).toContain('挑图卡')
     const edit = IMAGE_TOOL_DEF_BY_NAME.get(EDIT_IMAGE_TOOL)
-    expect(Object.keys((edit?.input_schema as { properties: object }).properties)).toEqual(
+    if (edit === undefined) throw new Error('没有 edit_image')
+    expect(Object.keys((edit.input_schema as { properties: object }).properties)).toEqual(
       expect.arrayContaining(['asset_ids', 'product_id', 'mask_asset_id']),
     )
   })
