@@ -23,6 +23,7 @@ const HELP_BY_VENDOR: Record<string, string> = {
   bailian: 'model-bailian',
   openai: 'model-openai',
   anthropic: 'model-anthropic',
+  google: 'model-google',
   'agentsws-cloud': 'agentsws-credits',
 }
 

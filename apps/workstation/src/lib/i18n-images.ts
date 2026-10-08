@@ -52,6 +52,23 @@ export const IMAGES_ZH: Record<string, string> = {
   'matter.cmp.attach.image': '加图（拖进来、粘贴也行）',
   'matter.cmp.attach.remove': '去掉这张',
   'matter.cmp.attach.note': '（附图 {n} 张，已进品牌素材库：{ids}）',
+  // WP274（决策 255）：生图跟着用户自己的模型走
+  'models.image.using': '现在用：{label}',
+  'models.image.badge.own': '不扣积分',
+  'models.image.badge.credits': '按张扣积分',
+  'models.image.auto': '自动 · {label}',
+  'models.image.auto_none': '自动 · 现在还没有能出图的',
+  'models.image.auto_hint':
+    '自动：文字模型用的是你自己的 OpenAI / Google key，就用同一把 key 生图（GPT Image 2.5 / Nano Banana 2.1，不扣积分）；不带生图的（比如 DeepSeek）用 Agents 工坊积分。',
+  'models.image.custom': '＋ 自定义生图接口…',
+  'models.image.custom_title': '自定义生图接口',
+  'models.image.custom_hint':
+    'OpenAI 兼容的 images 接口（/images/generations、/images/edits）。只用来生图，不当文字模型；key 只进这台电脑的加密库。',
+  'models.image.gen_model': '出图型号',
+  'models.image.edit_model': '改图型号',
+  'models.image.edit_same': '同出图型号',
+  'models.image.image_only': '只生图',
+  'models.image.no_test': '只生图的接口不在这里测（会真出一张图）',
 }
 
 export const IMAGES_EN: Record<string, string> = {
@@ -105,4 +122,21 @@ export const IMAGES_EN: Record<string, string> = {
   'matter.cmp.attach.image': 'Add images (drag or paste works too)',
   'matter.cmp.attach.remove': 'Remove',
   'matter.cmp.attach.note': '(Attached {n} image(s), saved to the brand library: {ids})',
+  // WP274 (decision 255): image generation follows the user's own model
+  'models.image.using': 'Now using: {label}',
+  'models.image.badge.own': 'No credits',
+  'models.image.badge.credits': 'Credits per image',
+  'models.image.auto': 'Automatic · {label}',
+  'models.image.auto_none': 'Automatic · nothing can make images yet',
+  'models.image.auto_hint':
+    'Automatic: if your text model uses your own OpenAI / Google key, images use the same key (GPT Image 2.5 / Nano Banana 2.1, no credits); otherwise (e.g. DeepSeek) Agents Workshop credits.',
+  'models.image.custom': '+ Custom image endpoint…',
+  'models.image.custom_title': 'Custom image endpoint',
+  'models.image.custom_hint':
+    "An OpenAI-compatible images endpoint (/images/generations, /images/edits). Used for images only, not as a text model; the key only goes into this computer's encrypted vault.",
+  'models.image.gen_model': 'Generate model',
+  'models.image.edit_model': 'Edit model',
+  'models.image.edit_same': 'Same as generate',
+  'models.image.image_only': 'Images only',
+  'models.image.no_test': 'Image-only endpoints are not tested here (it would make a real image)',
 }

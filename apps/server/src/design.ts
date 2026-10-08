@@ -357,6 +357,9 @@ export function designDeckData(
 
   const since = Number.isNaN(nowMs) === true ? '' : new Date(nowMs - SEVEN_DAYS).toISOString()
   const week = weeklyOutput(assets, since)
+  // WP274：这一周用自己的 key 出的图（张数 + 估算美元）
+  const own = assets.filter((a) => a.created_at >= since && a.provenance.own_key === true)
+  const ownUsd = own.reduce((sum, a) => sum + (a.provenance.est_usd ?? 0), 0)
 
   return {
     request_queue,
@@ -368,6 +371,9 @@ export function designDeckData(
       final: week.final,
       variants: week.variants,
       by_use: week.by_use.map((u) => ({ use: u.zh, count: u.count })),
+      ...(own.length === 0
+        ? {}
+        : { own_key: { images: own.length, est_usd: Math.round(ownUsd * 100) / 100 } }),
     },
   }
 }

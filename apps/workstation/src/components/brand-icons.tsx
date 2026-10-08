@@ -187,6 +187,8 @@ const ICONS: Record<string, IconChoice> = {
    * **不属于任何一家**的：通用 OpenAI 兼容网关、我们自己的云。
    */
   'openai-compatible': { kind: 'letter', letter: 'O' },
+  // WP274：Google Gemini 那张卡（没抓官方图，先走首字母徽标）
+  google: { kind: 'letter', letter: 'G' },
   /*
    * 49 M2「Agents 工坊（用积分）」那张卡 / 那条来源：这一家是我们自己。WP188（Luoye 09-29）起
    * 用我们已定的品牌标记（WP112 的六块标记，小尺寸自动单色），不再是字母「A」圆圈。

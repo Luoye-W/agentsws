@@ -26,6 +26,7 @@ import type {
   DeepSeekQuotaView,
   DiscoverModelsInput,
   ModelDefaultsView,
+  ModelImageUsing,
   ModelImageView,
   ModelListing,
   ModelPricingRefreshResult,
@@ -49,6 +50,9 @@ import type {
   Clock,
   EventEnvelope,
   Halt,
+  ImageEditRequest,
+  ImageGenerateRequest,
+  ImageProvider,
   ModelMeta,
   ModelProvider,
   ModelPurpose,
@@ -74,6 +78,7 @@ import type {
 import {
   catalogModels,
   checkModel,
+  cloudImageModels,
   DEEPSEEK_ACCOUNT_BASE_URL,
   DEEPSEEK_ACCOUNT_DEFAULT_MODEL,
   DEEPSEEK_ACCOUNT_MODELS,
@@ -83,14 +88,19 @@ import {
   DeepSeekFileStore,
   deepseekAccountProvider,
   deepseekMessagesProvider,
+  defaultImageModels,
+  geminiImageProvider,
   hostOf,
+  imageVendorOf,
   jsonFileUploadIndex,
   NO_IMAGE_MODEL_ZH,
   openaiCompatibleProvider,
   openaiImageProvider,
   PRICE_CATALOG,
   refreshPriceCatalog,
+  splitImageProvider,
   stubProvider,
+  unavailableImageProvider,
   vendorForBaseUrl,
 } from '@agentsws/model-gateway'
 import type { SecretStore } from './secret-store.js'
@@ -185,6 +195,20 @@ const STUB_PRICES = { 'stub/stub-v1': { in: 0, out: 0, cached: 0 } }
  */
 export const DEFAULT_IMAGE_MODEL = 'gpt-image-1'
 
+/**
+ * WP274：自动走云、但设置里没加积分那张卡时，生图那一条用的 provider id（只出现在用量与素材来源里）。
+ */
+export const CLOUD_IMAGE_PROVIDER_ID = 'agentsws-cloud'
+
+/** WP274：型号名 → 给人看的名字（`gpt-image-2.5-flare` → GPT Image 2.5）。认不出就原样。 */
+export function prettyImageModel(model: string): string {
+  const name = model.trim().toLowerCase()
+  if (/^gpt-image-2\.5/.test(name)) return 'GPT Image 2.5'
+  if (/^gemini-nano-banana-2\.1/.test(name)) return 'Nano Banana 2.1'
+  if (/^doubao-seedream-5-0-pro/.test(name)) return 'Seedream 5.0 Pro'
+  return model
+}
+
 /** 能挂生图的 provider 种类：OpenAI 兼容口与官方接口。DeepSeek 没有生图口，订阅登录也没有。 */
 const IMAGE_CAPABLE_KINDS: readonly ModelProviderKind[] = ['openai_compatible', 'agentsws_cloud']
 
@@ -218,6 +242,11 @@ export interface ModelProviderConfig {
   models?: string[]
   /** WP42：上次拉清单通没通（拉不到时界面退回手填，并把原因原样显示出来）。 */
   last_listing?: ModelListing
+  /**
+   * WP274：只用来生图的那一条（设置 →「生图」里单独指定的自定义接口）。不挂文字模型、
+   * 不进默认模型下拉、不当「第一条能用的」自动成默认。
+   */
+  image_only?: boolean
 }
 
 /**
@@ -252,7 +281,7 @@ interface ModelsStateFile {
      * WP127：生图那一档（单独设置，可以不配）。放在 `defaults` 里而不是另起一格：
      * 52 O3「跟随公司默认」与 O4「从某个品牌复制」复制的就是这一份决定，生图也该跟着走。
      */
-    image?: { provider_id: string; model: string }
+    image?: { provider_id: string; model: string; edit_model?: string }
     data_residency?: 'cn' | 'any'
     budget?: {
       workspace_daily_base?: number
@@ -501,6 +530,22 @@ export const CLAUDE_SUBSCRIPTION_URL = 'https://claude.ai'
  * 兼容层，所以形态仍是 `openai_compatible`，复用同一套 provider 实现。
  */
 export const ANTHROPIC_OPENAI_COMPAT_URL = 'https://api.anthropic.com/v1'
+
+/**
+ * WP274（决策 255）：Google 官方的 **OpenAI 兼容口**（ai.google.dev/gemini-api/docs/openai，10-08 核对）。
+ * 文字模型走这一层；同一把 key 生图时改打原生 `…/v1beta/interactions`（Nano Banana 2.1）。
+ */
+export const GOOGLE_OPENAI_COMPAT_URL = 'https://generativelanguage.googleapis.com/v1beta/openai'
+
+/** Google 那张卡的默认文字模型（官方兼容层示例里的那个；能看图）。 */
+export const GOOGLE_DEFAULT_MODEL = 'gemini-3.8-flash'
+
+const GOOGLE_VENDOR = {
+  vendor: 'google',
+  vendor_label: 'Google Gemini',
+  vendor_summary:
+    '去 Google AI Studio 建一把 API key：文字用 Gemini，生图自动用同一把 key 的 Nano Banana 2.1（不扣积分）。',
+} as const
 
 const OPENAI_VENDOR = {
   vendor: 'openai',
@@ -923,6 +968,35 @@ export const MODEL_TEMPLATES: readonly ModelProviderTemplate[] = [
     ],
   },
   /*
+   * WP274（决策 255）：**Google Gemini** 一张卡（只有 API key 一个方案）。形态仍是 OpenAI 兼容口
+   * （Google 官方那一层），所以 `kind` 还是 `openai_compatible`；单开一张是因为它带生图——
+   * 接上之后设置页「生图」一档自动显示「你的 Google 账号（Nano Banana 2.1）」。
+   */
+  {
+    kind: 'openai_compatible',
+    label: 'Google Gemini（API key，按量计费）',
+    summary: GOOGLE_VENDOR.vendor_summary,
+    ...GOOGLE_VENDOR,
+    plan_label: 'API key（按量计费）',
+    plan_order: 1,
+    auth: 'api_key',
+    default_base_url: GOOGLE_OPENAI_COMPAT_URL,
+    default_model: GOOGLE_DEFAULT_MODEL,
+    region: 'global',
+    steps: [
+      '打开 Google AI Studio，用 Google 账号登录',
+      '点「Get API key」→「Create API key」，复制那一串',
+      '粘进下面的表单，地址保持预填的那条（Google 官方的 OpenAI 兼容口）',
+      '点「拉取模型列表」选一个 Gemini 模型，再点「测试」',
+      '生图不用另配：「生图」那一块会自动用这把 key 的 Nano Banana 2.1',
+    ],
+    links: [
+      { label: 'Google AI Studio（拿 API key）', url: 'https://aistudio.google.com/apikey' },
+      { label: 'OpenAI 兼容层说明', url: 'https://ai.google.dev/gemini-api/docs/openai' },
+      { label: '价格（含生图按张价）', url: 'https://ai.google.dev/gemini-api/docs/pricing' },
+    ],
+  },
+  /*
    * WP134（Luoye 09-24）：**用我的 DeepSeek 账号登录**——第三种模型来源。
    *
    * 没有表单、没有 key：点一下，系统浏览器里走 DeepSeek 官方的授权页（dsh 官方模块
@@ -1303,38 +1377,247 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
    */
   const creditsPerImage = (): number | undefined => options.pricing?.creditsFor('ai.image', 1)
 
-  /** WP127：生图那一档现在挂哪一条（配了、而且那一条现在能用才有）。 */
-  const imageConfig = (): { config: ModelProviderConfig; model: string } | undefined => {
+  /**
+   * WP274（决策 255）：这一次出图用谁。按顺序：
+   *
+   * 1. **单独指定的生图接口**（`defaults.image`，设置页「生图」那一块选的）——那一条现在能用才算；
+   * 2. **文字模型同厂商且带生图**：跑活用的那条是自己的 OpenAI key（`api.openai.com`）→ GPT Image 2.5
+   *    （出图 flare、改图 sunburst）；是自己的 Google key（`generativelanguage.googleapis.com`）→ Nano Banana 2.1。
+   *    只认官方主机：代理 / 中转未必有生图口；
+   * 3. **Agents 工坊云**（按张扣积分）：设置里加了积分那张卡就用它；没加、但关联过账号（有工作区令牌）也走云。
+   *
+   * 都不成 = 出不了图（那句「生图还没配」的人话）。`defaults` 在品牌这一份里，所以「跟随公司默认」时
+   * 读的就是公司那一份——生图跟着走，不用另开一套。
+   */
+  interface ImageRoute {
+    using: ModelImageUsing
+    /** 怎么发：Google 原生口，还是 OpenAI 形态 `images/*`（OpenAI 官方 / 自定义兼容口 / 我们的云）。 */
+    shape: 'gemini' | 'openai'
+    base_url: string
+    region: 'cn' | 'global'
+    cloud: boolean
+  }
+
+  const imageRouteOf = (
+    config: ModelProviderConfig,
+    source: ModelImageUsing['source'],
+    models: { generate: string; edit: string },
+  ): ImageRoute => {
+    const vendor = imageVendorOf(config.base_url)
+    const cloud = config.kind === 'agentsws_cloud'
+    const pretty = prettyImageModel(models.generate)
+    const label =
+      source === 'own_openai'
+        ? `你的 OpenAI 账号（${pretty}）`
+        : source === 'own_google'
+          ? `你的 Google 账号（${pretty}）`
+          : cloud
+            ? `Agents 工坊积分（${pretty}）`
+            : vendor === 'openai'
+              ? `你的 OpenAI 账号（${pretty}）`
+              : vendor === 'google'
+                ? `你的 Google 账号（${pretty}）`
+                : `${providerDisplayLabel(config)}（${pretty}）`
+    return {
+      using: {
+        source,
+        provider_id: config.id,
+        label,
+        generate_model: models.generate,
+        edit_model: models.edit,
+        own_key: !cloud,
+      },
+      shape: vendor === 'google' && !cloud ? 'gemini' : 'openai',
+      base_url: config.base_url,
+      region: config.region,
+      cloud,
+    }
+  }
+
+  /**
+   * 一条接口没填型号时的默认出图 / 改图型号：OpenAI 官方 → GPT Image 2.5（flare / sunburst）；
+   * Google 官方 → Nano Banana 2.1；我们的云 → 按数据驻留（`cn` 用 Seedream 5.0 Pro，决策 262；
+   * 不限用 GPT Image 2.5）；别的兼容口 → 老默认 `gpt-image-1`（WP127）。
+   */
+  const defaultModelsFor = (config: ModelProviderConfig): { generate: string; edit: string } => {
+    if (config.kind === 'agentsws_cloud')
+      return cloudImageModels(state.defaults.data_residency ?? 'cn')
+    const vendor = imageVendorOf(config.base_url)
+    return vendor === undefined
+      ? { generate: DEFAULT_IMAGE_MODEL, edit: DEFAULT_IMAGE_MODEL }
+      : defaultImageModels(vendor)
+  }
+
+  /** 不单独指定时自动选谁（第 2、3 档）。 */
+  const autoImageRoute = (): ImageRoute | undefined => {
+    const run = policyOf().by_purpose?.run ?? defaultRef()
+    const text = textConfigs().find((c) => c.id === run.provider)
+    const vendor =
+      text === undefined || text.kind !== 'openai_compatible'
+        ? undefined
+        : imageVendorOf(text.base_url)
+    if (text !== undefined && vendor !== undefined)
+      return imageRouteOf(
+        text,
+        vendor === 'openai' ? 'own_openai' : 'own_google',
+        defaultImageModels(vendor),
+      )
+    const cloudModels = cloudImageModels(state.defaults.data_residency ?? 'cn')
+    const cloud = activeConfigs().find((c) => c.kind === 'agentsws_cloud')
+    if (cloud !== undefined) return imageRouteOf(cloud, 'cloud', cloudModels)
+    if (!hasCloudToken()) return undefined
+    // 关联过账号、但设置里没加积分那张卡：照样走云（同一把工作区令牌、同一个服务入口）
+    return imageRouteOf(
+      {
+        id: CLOUD_IMAGE_PROVIDER_ID,
+        kind: 'agentsws_cloud',
+        label: CLOUD_LABEL,
+        base_url: cloudAiBaseUrl(env),
+        model: cloudModels.generate,
+        region: 'global',
+      },
+      'cloud',
+      cloudModels,
+    )
+  }
+
+  /** 单独指定的那一条（现在能用才有）。 */
+  const overrideImageRoute = (): ImageRoute | undefined => {
     const picked = state.defaults.image
     if (picked === undefined) return undefined
     const config = activeConfigs().find((c) => c.id === picked.provider_id)
     if (config === undefined || !IMAGE_CAPABLE_KINDS.includes(config.kind)) return undefined
-    return { config, model: picked.model }
+    return imageRouteOf(config, 'override', {
+      generate: picked.model,
+      edit: picked.edit_model ?? picked.model,
+    })
   }
+
+  const imageRoute = (): ImageRoute | undefined => overrideImageRoute() ?? autoImageRoute()
+
+  /** 解析结果 → 挂到网关上的那一个 provider（出图 / 改图型号不同就两个合一）。 */
+  const imageProviderOf = (route: ImageRoute): ImageProvider => {
+    const one = (model: string): ImageProvider => {
+      const apiKey = route.cloud
+        ? () => {
+            if (!secrets.available) return undefined
+            try {
+              const token = secrets.get(CLOUD_TOKEN_SECRET_ID)?.token
+              return token === undefined || token === '' ? undefined : token
+            } catch {
+              return undefined
+            }
+          }
+        : keySource(route.using.provider_id)
+      if (route.shape === 'gemini')
+        return geminiImageProvider({
+          baseUrl: route.base_url,
+          apiKey,
+          model,
+          provider: route.using.provider_id,
+          region: route.region,
+          ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
+        })
+      return openaiImageProvider({
+        baseUrl: route.base_url,
+        apiKey,
+        model,
+        provider: route.using.provider_id,
+        region: route.region,
+        ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
+        ...(route.cloud
+          ? {
+              extraHeaders: {
+                'X-Agentsws-Region':
+                  (state.defaults.data_residency ?? 'cn') === 'cn' ? 'cn' : 'global',
+              },
+            }
+          : {}),
+      })
+    }
+    const { generate_model, edit_model } = route.using
+    return generate_model === edit_model
+      ? one(generate_model)
+      : splitImageProvider({ generate: one(generate_model), edit: one(edit_model) })
+  }
+
+  /**
+   * 挂在网关上的那一条是**现取**的：关联 / 解除云账号、换默认文字模型不一定经过 `reassemble`，
+   * 所以每次出图前按 `imageRoute()` 现解析一次（同一个解析结果复用同一个 provider）。
+   * 一条都解析不出来 → 网关装配时那一条（生产「生图还没配」的人话；demo 占位图；测试注入的假云端）。
+   */
+  const fallbackImages = gateway.images
+  let imageCache: { sig: string; provider: ImageProvider } | undefined
+  const currentImage = (): ImageProvider => {
+    const route = imageRoute()
+    if (route === undefined) return fallbackImages ?? unavailableImageProvider()
+    const sig = JSON.stringify([
+      route.using,
+      route.base_url,
+      route.shape,
+      route.region,
+      state.defaults.data_residency,
+    ])
+    if (imageCache?.sig !== sig) imageCache = { sig, provider: imageProviderOf(route) }
+    return imageCache.provider
+  }
+  const liveImages = {
+    get ref() {
+      return currentImage().ref
+    },
+    get available() {
+      return currentImage().available
+    },
+    get unavailable_reason() {
+      return currentImage().unavailable_reason
+    },
+    get max_reference_images() {
+      return currentImage().max_reference_images
+    },
+    generate: (req: ImageGenerateRequest) => currentImage().generate(req),
+    get edit() {
+      const p = currentImage()
+      const edit = p.edit
+      return edit === undefined ? undefined : (req: ImageEditRequest) => edit.call(p, req)
+    },
+  } as ImageProvider
 
   const imageView = (): ModelImageView => {
     const picked = state.defaults.image
-    const live = imageConfig()
+    const override = overrideImageRoute()
+    const auto = autoImageRoute()
+    const live = override ?? auto
     const credits = creditsPerImage()
     const choices = activeConfigs()
       .filter((c) => IMAGE_CAPABLE_KINDS.includes(c.kind))
-      .map((c) => ({
-        provider_id: c.id,
-        label: providerDisplayLabel(c),
-        official: c.kind === 'agentsws_cloud',
-        default_model: DEFAULT_IMAGE_MODEL,
-      }))
+      .map((c) => {
+        const vendor = c.kind === 'agentsws_cloud' ? undefined : imageVendorOf(c.base_url)
+        const models = defaultModelsFor(c)
+        return {
+          provider_id: c.id,
+          label: providerDisplayLabel(c),
+          official: c.kind === 'agentsws_cloud',
+          default_model: models.generate,
+          ...(vendor === undefined ? {} : { vendor }),
+          ...(models.edit === models.generate ? {} : { default_edit_model: models.edit }),
+          ...(c.image_only === true ? { image_only: true } : {}),
+        }
+      })
     let unavailable_reason: string | undefined
-    if (picked === undefined) unavailable_reason = NO_IMAGE_MODEL_ZH
-    else if (live === undefined)
-      unavailable_reason = `生图用的那一条（${picked.provider_id}）现在用不了：没填 key、没关联账号，或者已经删了。去上面重新配好，或者换一条。`
+    if (live === undefined) unavailable_reason = NO_IMAGE_MODEL_ZH
+    else if (picked !== undefined && override === undefined)
+      unavailable_reason = `单独指定的那一条（${picked.provider_id}）现在用不了：没填 key、没关联账号，或者已经删了。先按自动的走（${live.using.label}）；去上面重新配好，或者换一条。`
     return {
       configured: live !== undefined,
       ...(picked === undefined ? {} : { provider_id: picked.provider_id, model: picked.model }),
-      official: live?.config.kind === 'agentsws_cloud',
+      ...(picked?.edit_model === undefined ? {} : { edit_model: picked.edit_model }),
+      official: live?.cloud === true,
       ...(credits === undefined ? {} : { credits_per_image: credits }),
       choices,
       ...(unavailable_reason === undefined ? {} : { unavailable_reason }),
+      ...(live === undefined ? {} : { using: live.using }),
+      ...(auto === undefined ? {} : { auto: auto.using }),
+      override: picked !== undefined,
     }
   }
 
@@ -1365,10 +1648,13 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
   }
 
   const activeConfigs = (): ModelProviderConfig[] => effectiveConfigs().filter((c) => hasKey(c.id))
+  /** WP274：挂文字模型的那几条（只用来生图的那几条不算）。 */
+  const textConfigs = (): ModelProviderConfig[] =>
+    activeConfigs().filter((c) => c.image_only !== true)
 
   /** 现在应该用哪个 ModelRef 当默认。一个都没配就是 stub（运行时据此落回 stub）。 */
   const defaultRef = (): ModelRef => {
-    const active = activeConfigs()
+    const active = textConfigs()
     const wanted = state.defaults.default
     const byId = wanted === undefined ? undefined : active.find((c) => modelIdOf(c) === wanted)
     const picked = byId ?? active[0]
@@ -1384,7 +1670,7 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
     if (id === undefined) return undefined
     const at = id.indexOf('/')
     if (at <= 0 || at === id.length - 1) return undefined
-    const config = activeConfigs().find((c) => c.id === id.slice(0, at))
+    const config = textConfigs().find((c) => c.id === id.slice(0, at))
     if (config === undefined) return undefined
     const model = id.slice(at + 1)
     if (!knownModels(config).includes(model)) return undefined
@@ -1393,7 +1679,7 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
 
   const policyOf = (): ModelGatewayPolicy => {
     const prices: ModelGatewayPolicy['prices'] = { ...STUB_PRICES }
-    for (const c of activeConfigs()) {
+    for (const c of textConfigs()) {
       // 主模型用用户填的价；同一家被按 purpose 挑中的其它模型没有单独的价，按 0 记
       // （记 0 好过记错——记错会让预算按一个假数字拦人）
       for (const model of selectedModels(c)) {
@@ -1427,38 +1713,18 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
    */
   const reassemble = (): void => {
     const providers: ModelProvider[] = []
-    for (const config of activeConfigs()) {
+    for (const config of textConfigs()) {
       for (const model of selectedModels(config)) {
         const provider = buildProvider(config, model)
         if (provider !== undefined) providers.push(provider)
       }
     }
     if (providers.length === 0) providers.push(stubProvider({ seed: 7 }))
-    // WP127：生图单独一档。没配就退回网关装配时那一条（生产上是"没有图片模型"那句人话，
-    // demo 里是占位图）
-    const image = imageConfig()
+    // WP127 / WP274：生图单独一档，每次出图前按 `imageRoute()` 现解析（单独指定 > 文字模型同厂商 > 云）
     gateway.reconfigure({
       providers,
       policy: policyOf(),
-      images:
-        image === undefined
-          ? null
-          : openaiImageProvider({
-              baseUrl: image.config.base_url,
-              apiKey: keySource(image.config.id),
-              model: image.model,
-              provider: image.config.id,
-              region: image.config.region,
-              ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
-              ...(image.config.kind === 'agentsws_cloud'
-                ? {
-                    extraHeaders: {
-                      'X-Agentsws-Region':
-                        (state.defaults.data_residency ?? 'cn') === 'cn' ? 'cn' : 'global',
-                    },
-                  }
-                : {}),
-            }),
+      images: liveImages,
     })
   }
 
@@ -1722,11 +1988,12 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
       vision_status: visionStatusOf(config),
       ...(quota === undefined ? {} : { quota_exceeded: quota }),
       ...(fromEnvOnly(config.id) ? { from_env: true } : {}),
+      ...(config.image_only === true ? { image_only: true } : {}),
     }
   }
 
   const defaultsView = (): ModelDefaultsView => {
-    const active = activeConfigs()
+    const active = textConfigs()
     const budget = state.defaults.budget ?? {}
     return {
       default: state.defaults.default ?? (active[0] === undefined ? '' : modelIdOf(active[0])),
@@ -1900,18 +2167,21 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
           last_listing: keepList ? existing.last_listing : undefined,
         }),
         ...priceFieldsFor(input, existing, base_url),
+        // WP274：只用来生图的那一条（不给 = 保持原样）
+        ...((input.image_only ?? existing?.image_only) === true ? { image_only: true } : {}),
       }
       if (existing === undefined) state.providers.push(config)
       else state.providers[state.providers.indexOf(existing)] = config
       // 第一条能用的 provider 自动成为默认，用户不用再去下拉框里点一次
-      if (state.defaults.default === undefined && hasKey(id)) {
+      if (state.defaults.default === undefined && hasKey(id) && config.image_only !== true) {
         state.defaults.default = modelIdOf(config)
       }
       flush()
       reassemble()
       // WP42：保存时顺手拉一次模型清单（还没拉过、或刚换了地址的才拉）。
       // 拉不到不影响保存——它只是让下一次打开表单时"模型名"是个下拉。
-      if (config.models === undefined) {
+      // WP274：只生图的那一条不拉文字模型清单（它的型号在「生图」那一块填）
+      if (config.models === undefined && config.image_only !== true) {
         const listing = await refreshListing(config)
         // 模板里的默认模型名不一定还存在（DeepSeek 官网已不列 deepseek-chat）：
         // 接口回的清单才是真的，不在清单里就换成清单第一个，别让用户看到一个接口不认的名字
@@ -1955,6 +2225,8 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
           delete state.defaults.by_purpose?.[purpose as ModelPurpose]
         }
       }
+      // WP274：单独指定的生图接口被删了 → 回到自动（不留一条指向空的选择）
+      if (state.defaults.image?.provider_id === id) delete state.defaults.image
       if (secrets.available) secrets.remove(keyOf(id))
       flush()
       reassemble()
@@ -1974,6 +2246,10 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
     async test(actor, id): Promise<ModelTestResult> {
       const config = effectiveConfigs().find((c) => c.id === id)
       if (config === undefined) throw notFound(`没有这个 provider：${id}`)
+      if (config.image_only === true)
+        throw invalid(
+          '这一条只用来生图。测它要真出一张图（花的是你那把 key 的钱），所以这里不测；第一次出图就知道通不通。',
+        )
       const checked_at = clock.now()
       if (!hasKey(id)) {
         const result: ModelTestResult = {
@@ -2045,6 +2321,7 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
 
     /**
      * WP127：改生图那一档。**保存即生效**（`reassemble` 换掉网关的图片槽）。
+     * WP274：`provider_id` 空串 = 不单独指定，回到自动（文字模型同厂商带生图 > Agents 工坊积分）。
      *
      * 只收已配、有 key、有生图口的那几条（OpenAI 兼容口与官方接口）；DeepSeek 与订阅登录
      * 没有生图口，选了也出不了图——当场拒并说清楚，而不是存下来等出图时再失败。
@@ -2061,9 +2338,16 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
             `${providerDisplayLabel(config)} 没有生图接口。生图请选 Agents 工坊官方接口，或者一条 OpenAI 兼容口。`,
           )
         }
+        // WP274：没填型号就按这家的默认（见 `defaultModelsFor`）
+        const fallback = defaultModelsFor(config)
+        const model = input.model?.trim() || fallback.generate
+        const edit_model =
+          input.edit_model?.trim() ||
+          (input.model?.trim() ? undefined : fallback.edit === model ? undefined : fallback.edit)
         state.defaults.image = {
           provider_id: id,
-          model: input.model?.trim() || DEFAULT_IMAGE_MODEL,
+          model,
+          ...(edit_model === undefined || edit_model === model ? {} : { edit_model }),
         }
       }
       flush()
@@ -2241,17 +2525,17 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
       }
     },
 
-    configured: () => activeConfigs().length > 0,
+    configured: () => textConfigs().length > 0,
   }
 
   return {
     port,
-    configured: () => activeConfigs().length > 0,
+    configured: () => textConfigs().length > 0,
     defaultRef,
     imageView: () => imageView(),
     visionStatus: () => {
       const ref = defaultRef()
-      const config = activeConfigs().find((c) => c.id === ref.provider)
+      const config = textConfigs().find((c) => c.id === ref.provider)
       return config === undefined ? 'unchecked' : visionStatusOf(config, ref.model)
     },
     exportSettings,
@@ -2268,7 +2552,7 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
     },
     hasDeepseekSearchKey: () => deepseekOfficialConfigs().some((c) => hasKey(c.id)),
     chatChoices: () =>
-      activeConfigs().flatMap((c) =>
+      textConfigs().flatMap((c) =>
         selectedModels(c).map((model) => ({
           id: `${c.id}/${model}`,
           // 来源的名字；模型名界面从 id 里取、另起一行小字（「Agents 工坊（用积分）」后面不再套一层括号）

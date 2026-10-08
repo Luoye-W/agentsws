@@ -421,6 +421,7 @@ export type {
   DeepSeekWalletView,
   DiscoverModelsInput,
   ModelDefaultsView,
+  ModelImageUsing,
   ModelImageView,
   ModelListing,
   ModelPricingModel,
