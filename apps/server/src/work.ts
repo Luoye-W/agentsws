@@ -19,6 +19,7 @@ import type {
   GoalProgress,
   Iso8601,
   MatterEvent,
+  MatterLiveRun,
   PersonId,
   StartRun,
   Todo,
@@ -96,6 +97,10 @@ export interface WorkPortOptions {
     matter_id: string,
     text: string,
   ): Promise<{ event: MatterEvent; run_id?: string } | undefined>
+  /** WP264：这件事上正在跑的那一次（事项页「正在做…」）；不给 = 不显示。 */
+  liveRun?(matter_id: string): MatterLiveRun | undefined
+  /** WP264：停下这件事上正在跑的运行（回停了几次）；不给 = 停不了。 */
+  stopRuns?(matter_id: string, reason: string): Promise<number>
   /** 店铺侧订单行；目标指标从它算 */
   orders(): OrderRow[]
   /** ObjectRef → 人话 */
@@ -310,8 +315,10 @@ export function createWorkPort(options: WorkPortOptions): WorkPort {
       }),
     matter: (_actor, id) => {
       const view = work.matterView(id, { label: (ref) => options.label(ref) })
+      const live = options.liveRun?.(id)
       return {
         ...view,
+        ...(live === undefined ? {} : { live }),
         // 40 §3.3：事项页显示参与者（展示名由服务端补，翻译不出来回落成 id）
         participant_labels: view.matter.context.participants.map((person_id) => ({
           person_id,
@@ -345,6 +352,13 @@ export function createWorkPort(options: WorkPortOptions): WorkPort {
     say: async (actor, id, text) =>
       (await options.sayAt?.(actor, id, text)) ??
       work.say(id, { person_id: actor.person_id, assignment_id: actor.assignment_id, text }),
+    // WP264（决策 177）：人改的标题之后不再被自动覆盖
+    retitleMatter: (_actor, id, title) => work.retitle(id, title, 'user'),
+    stopMatter: async (_actor, id) => {
+      work.requireMatter(id)
+      const stopped = (await options.stopRuns?.(id, '你点了停，这一轮先停在这里')) ?? 0
+      return { stopped }
+    },
 
     async goals(actor, filter) {
       return {

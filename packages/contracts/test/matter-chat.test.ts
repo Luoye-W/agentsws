@@ -13,11 +13,11 @@ const BRIEF =
   '用 agentsws-theme 给 Rollout 搭英文首页（变形金刚正版授权耳机音箱，美国市场）：大图横幅、主推产品占位、品牌故事、FAQ、邮件订阅；深色科技风红色点缀。推成未发布主题给我预览，先别发布。'
 
 describe('WP264 短标题', () => {
-  it('退路：原话前 20 字加「…」，换行压成一个空格', () => {
-    const t = fallbackShortTitle(`  ${BRIEF.replace('：', '：\n')}`)
-    expect(Array.from(t.replace(/…$/u, '')).length).toBeLessThanOrEqual(SHORT_TITLE_FALLBACK)
-    expect(t.endsWith('…')).toBe(true)
-    expect(t).not.toContain('\n')
+  it('退路：原话前 20 字宽加「…」（中文一格、英文半格），换行压成一个空格', () => {
+    expect(fallbackShortTitle(`  ${BRIEF.replace('：', '：\n')}`)).toBe(
+      '用 agentsws-theme 给 Rollout 搭英文首页…',
+    )
+    expect(fallbackShortTitle('字'.repeat(30))).toBe(`${'字'.repeat(SHORT_TITLE_FALLBACK)}…`)
   })
 
   it('退路：短的原样', () => {

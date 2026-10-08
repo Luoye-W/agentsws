@@ -34,7 +34,13 @@ import type {
   TodoStatus,
   WorkspaceId,
 } from '@agentsws/contracts'
-import { CALENDAR_SOURCES, fitTaskTitle, TASK_TEXT_MAX, taskTextOf } from '@agentsws/contracts'
+import {
+  CALENDAR_SOURCES,
+  fitTaskTitle,
+  MATTER_TITLE_MAX,
+  TASK_TEXT_MAX,
+  taskTextOf,
+} from '@agentsws/contracts'
 import { z } from 'zod'
 import { ApiError } from '../errors.js'
 import { assignmentOf, body, ok, param, principalOf } from '../helpers.js'
@@ -147,6 +153,9 @@ const CreateMatterBody = z.object({
 const CloseMatterBody = z.object({ unfinished: z.enum(['close_all', 'keep']) })
 
 const MessageBody = z.object({ text: z.string().min(1).max(4000) })
+
+/** WP264（决策 177）：人在事项页上就地改标题（改过的不再被自动起的标题覆盖）。 */
+const RetitleBody = z.object({ title: z.string().min(1).max(MATTER_TITLE_MAX) })
 
 const CreateGoalBody = z.object({
   level: z.enum(['company', 'position', 'person']),
@@ -312,6 +321,10 @@ export interface WorkPort {
   ): MaybePromise<{ events: MatterEvent[]; has_more: boolean }>
   /** 人在事项里说话 → 起 Run（17 §1，`work_item` 就是这个事项） */
   say(actor: WorkActor, id: string, text: string): Promise<{ event: MatterEvent; run_id?: string }>
+  /** WP264（决策 177）：人改标题（`title_source: 'user'`，之后不再被自动覆盖）。 */
+  retitleMatter?(actor: WorkActor, id: string, title: string): MaybePromise<Matter>
+  /** WP264：停下这件事上正在跑的运行（输入卡上的「停」）。回停了几次。 */
+  stopMatter?(actor: WorkActor, id: string): Promise<{ stopped: number }>
 
   goals(
     actor: WorkActor,
@@ -585,6 +598,49 @@ export function workRoutes(): Route[] {
         const actor = actorOf(c)
         const { text } = await body(c, MessageBody)
         return ok(c, await workOf(deps).say(actor, param(c, 'id'), text), 201)
+      },
+    ),
+    route(
+      {
+        method: 'patch',
+        path: '/v1/matters/:id',
+        operationId: 'retitleMatter',
+        summary: '改事项标题（人改过的不再被 AI 起的短标题覆盖，WP264）',
+        tag: 'work',
+        auth: 'bearer',
+        assignment: true,
+        authz: READ,
+        params: [ID_PARAM],
+        body: RetitleBody,
+        returns: '{ matter: Matter }',
+      },
+      async (c, deps) => {
+        const port = workOf(deps)
+        if (port.retitleMatter === undefined)
+          throw new ApiError('not_implemented', '这个服务进程改不了事项标题')
+        const { title } = await body(c, RetitleBody)
+        if (title.trim() === '') throw new ApiError('invalid_input', '标题不能是空的')
+        return ok(c, { matter: await port.retitleMatter(actorOf(c), param(c, 'id'), title) })
+      },
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/matters/:id/stop',
+        operationId: 'stopMatterRuns',
+        summary: '停下这件事上正在跑的运行（事项页输入卡的「停」，WP264）',
+        tag: 'work',
+        auth: 'bearer',
+        assignment: true,
+        authz: READ,
+        params: [ID_PARAM],
+        returns: '{ stopped: number }',
+      },
+      async (c, deps) => {
+        const port = workOf(deps)
+        if (port.stopMatter === undefined)
+          throw new ApiError('not_implemented', '这个服务进程停不了运行')
+        return ok(c, await port.stopMatter(actorOf(c), param(c, 'id')))
       },
     ),
     route(

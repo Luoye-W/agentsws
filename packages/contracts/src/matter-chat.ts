@@ -22,12 +22,28 @@ const ELLIPSIS = '…'
 
 const chars = (s: string): string[] => Array.from(s)
 
-/** 原话 → 退路标题：一行化，超过 {@link SHORT_TITLE_FALLBACK} 字就截断加「…」。 */
+/** 一个字占多宽：中日韩与全角算 1，字母数字空格等半角算 ½（「前 20 字」按看上去的宽度数）。 */
+const widthOf = (ch: string): number =>
+  /[\u1100-\u115f\u2e80-\ua4cf\uac00-\ud7a3\uf900-\ufaff\ufe30-\ufe4f\uff00-\uff60\uffe0-\uffe6]|[\u{20000}-\u{3fffd}]/u.test(
+    ch,
+  )
+    ? 1
+    : 0.5
+
+/**
+ * 原话 → 退路标题：一行化，看上去超过 {@link SHORT_TITLE_FALLBACK} 个字宽就截断加「…」
+ * （中文一字一格，英文字母半格——「用 agentsws-theme 给 Rollout 搭英文首页…」）。
+ */
 export function fallbackShortTitle(brief: string): string {
   const flat = brief.replace(/\s+/gu, ' ').trim()
-  const all = chars(flat)
-  if (all.length <= SHORT_TITLE_FALLBACK) return flat
-  return `${all.slice(0, SHORT_TITLE_FALLBACK).join('').trimEnd()}${ELLIPSIS}`
+  let width = 0
+  let out = ''
+  for (const ch of chars(flat)) {
+    width += widthOf(ch)
+    if (width > SHORT_TITLE_FALLBACK) return `${out.trimEnd()}${ELLIPSIS}`
+    out += ch
+  }
+  return flat
 }
 
 /**

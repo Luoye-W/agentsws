@@ -208,7 +208,18 @@ export interface SiteThemeOptions {
   ledger: { stage(input: StageInput): Promise<StageOutcome> }
   effectiveConfig(assignment_id: string): EffectiveConfig
   /** 「预览好了」进事项时间线（有事项时）。 */
-  notePreview?(matter_id: string, input: { text: string; url: string; label: string }): void
+  notePreview?(
+    matter_id: string,
+    input: {
+      text: string
+      url: string
+      label: string
+      /** WP264：结果卡上的「改了几个文件」「检查 0 错 0 警」与副本 id。 */
+      theme_id?: string
+      changed_files?: string[]
+      check?: { errors: number; warnings: number }
+    },
+  ): void
   appendEvent?(type: string, payload: Record<string, unknown>): void
 }
 
@@ -423,6 +434,8 @@ export function createSiteTheme(options: SiteThemeOptions): SiteThemeAssembly {
     mkdirSync(dirname(options.settingsFile), { recursive: true })
     writeFileSync(options.settingsFile, `${JSON.stringify(settings, null, 2)}\n`, 'utf8')
   }
+  /** WP264：每家店最近一次主题检查的结论（只在内存里；改了文件就作废）。 */
+  const lastCheck = new Map<string, { errors: number; warnings: number }>()
   const stateOf = (shop: string): StoreState => {
     const found = settings.stores[shop]
     if (found !== undefined) return found
@@ -927,7 +940,10 @@ export function createSiteTheme(options: SiteThemeOptions): SiteThemeAssembly {
 
     async check() {
       const { shop, spec } = await need('local')
-      return wrap(() => theme(spec).check({ shop }))
+      const result = await wrap(() => theme(spec).check({ shop }))
+      // WP264：记下最近一次检查（推未发布时带进「预览好了」那张结果卡）；之后再改文件就作废
+      lastCheck.set(shop, { errors: result.errors, warnings: result.warnings })
+      return result
     },
 
     async files(dir) {
@@ -959,6 +975,7 @@ export function createSiteTheme(options: SiteThemeOptions): SiteThemeAssembly {
 
     async writeFile(path, content) {
       const { shop } = await need('files')
+      lastCheck.delete(shop)
       const root = rootOf(shop)
       const { abs, rel } = resolveInside(root, path)
       const top = rel.split('/')[0] ?? ''
@@ -1030,11 +1047,15 @@ export function createSiteTheme(options: SiteThemeOptions): SiteThemeAssembly {
         changed: record.changed_files.length,
       })
       const matter = request?.work_item?.id
+      const checked = lastCheck.get(shop)
       if (matter !== undefined && record.preview_url !== undefined)
         options.notePreview?.(matter, {
           text: `预览好了：未发布主题「${record.theme_name}」（线上没动）。`,
           url: record.preview_url,
           label: record.theme_name,
+          theme_id: record.theme_id,
+          changed_files: record.changed_files.slice(0, 40),
+          ...(checked === undefined ? {} : { check: checked }),
         })
       return record
     },

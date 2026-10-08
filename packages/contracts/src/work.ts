@@ -109,7 +109,7 @@ export interface MatterEvent {
   blocked?: MatterRunBlock
   /**
    * WP264（决策 182）：这一条是**一次运行跑完了**——用了多久、做了哪几步（人话），事项页缩成居中一行灰字、
-   * 点开看步骤。运行时在收尾时记（`kind: 'run'`，排在 AI 那段话前面）。老事件没有这一格。
+   * 点开看步骤。运行时在收尾时记（`kind: 'status'`，排在 AI 那段话前面；「跑了几次」仍只数开跑那条 `run`）。老事件没有这一格。
    */
   run_digest?: MatterRunDigest
   /**
