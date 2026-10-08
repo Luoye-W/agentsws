@@ -9,7 +9,7 @@
  *    密码字段一定是 `type=password` + `autocomplete=off`；
  * 3. **状态条与列表**：absent / unhardened / ready 三种；连上之后有它，断开之后没有。
  */
-import { screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ConnectionView, ConnectTestResult, ProviderView, RuntimeStatusView } from '@/lib/api'
@@ -296,6 +296,8 @@ describe('连接页：目录与状态条', () => {
       .getAllByTestId('provider-card')
       .find((c) => c.getAttribute('data-service') === 'shopify_admin')
     expect(shop).toBeDefined()
+    // WP265：Shopify 卡的老接法收进了「高级」，先点开
+    fireEvent.click(within(shop as HTMLElement).getByTestId('provider-advanced-toggle'))
     expect(within(shop as HTMLElement).getByTestId('provider-unavailable').textContent).toContain(
       'OpenConnector',
     )
