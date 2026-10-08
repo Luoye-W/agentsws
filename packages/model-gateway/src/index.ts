@@ -7,10 +7,21 @@ export type {
   UsageReport,
 } from './gateway.js'
 export { createModelGateway } from './gateway.js'
+// WP274：生图跟着用户自己的模型走（认厂商、两个型号合一、估美元）+ Google 生图
+export {
+  defaultImageModels,
+  estimateImageUsd,
+  GPT_IMAGE_EDIT_MODEL,
+  GPT_IMAGE_GENERATE_MODEL,
+  type ImageVendor,
+  imageVendorOf,
+  splitImageProvider,
+} from './image-routing.js'
 // WP76（22 图片槽 / 58 §1）：图片能力的两个实现 + 「没有图片模型」那句人话
 export type { StubImageProviderOptions } from './images.js'
 export {
   encodePng,
+  IMAGE_SAFETY_REFUSAL_ZH,
   imageFidelitySupported,
   imageSizeFor,
   NO_IMAGE_MODEL_EN,
@@ -115,6 +126,16 @@ export {
   isDeepSeekQuotaFailure,
   isQuotaExceededError,
 } from './providers/deepseek-quota.js'
+export {
+  GEMINI_ASPECT_RATIOS,
+  GEMINI_MAX_REFERENCE_IMAGES,
+  GEMINI_NATIVE_BASE_URL,
+  type GeminiImageOptions,
+  geminiCanvas,
+  geminiImageProvider,
+  geminiNativeBase,
+  NANO_BANANA_MODEL,
+} from './providers/gemini-images.js'
 export type { FetchLike, OpenAiCompatibleOptions } from './providers/openai-compatible.js'
 export {
   // WP194：官方接口回 402（本月额度 / 公司积分）→ 那句人话
