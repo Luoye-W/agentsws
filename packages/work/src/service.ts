@@ -31,6 +31,7 @@ import type {
   MatterEventKind,
   MatterFilter,
   MatterId,
+  MatterTitleSource,
   MatterView,
   ObjectRef,
   PersonId,
@@ -98,6 +99,19 @@ export type WorkExtraEventType =
   | 'todo.transferred'
   | 'todo.idle_reminded'
   | 'todo.recycled'
+
+/** WP264：预览那一格照抄一份（老三格 + 新三格，没给的不写）。 */
+function copyPreview(p: NonNullable<MatterEvent['preview']>): NonNullable<MatterEvent['preview']> {
+  return {
+    url: p.url,
+    label: p.label,
+    ...(p.theme_id === undefined ? {} : { theme_id: p.theme_id }),
+    ...(p.changed_files === undefined ? {} : { changed_files: p.changed_files.slice(0, 40) }),
+    ...(p.check === undefined
+      ? {}
+      : { check: { errors: p.check.errors, warnings: p.check.warnings } }),
+  }
+}
 
 /** 进入事项时只加载最近这么多条时间线（37 §2.2b「上下文怎么自动加载」）。 */
 export const TIMELINE_PAGE = 20
@@ -473,6 +487,10 @@ export class Work {
       preview?: MatterEvent['preview']
       /** WP251（决策 91）：这一轮卡在缺连接 / 缺凭据上的结构化标记。 */
       blocked?: MatterEvent['blocked']
+      /** WP264：一次运行跑完的摘要（用了多久、哪几步）。 */
+      run_digest?: MatterEvent['run_digest']
+      /** WP264：AI 这段话末尾给的下一步建议。 */
+      next_suggestion?: string
       at?: Iso8601
     },
   ): MatterEvent {
@@ -498,9 +516,7 @@ export class Work {
               options: input.route.options.map((o) => ({ ...o })),
             },
           }),
-      ...(input.preview === undefined
-        ? {}
-        : { preview: { url: input.preview.url, label: input.preview.label } }),
+      ...(input.preview === undefined ? {} : { preview: copyPreview(input.preview) }),
       ...(input.blocked === undefined
         ? {}
         : {
@@ -510,6 +526,18 @@ export class Work {
               tools: [...input.blocked.tools],
             },
           }),
+      ...(input.run_digest === undefined
+        ? {}
+        : {
+            run_digest: {
+              seconds: input.run_digest.seconds,
+              outcome: input.run_digest.outcome,
+              steps: input.run_digest.steps.map((st) => ({ ...st })),
+            },
+          }),
+      ...(input.next_suggestion === undefined || input.next_suggestion === ''
+        ? {}
+        : { next_suggestion: input.next_suggestion }),
     }
     this.store.appendMatterEvent(event)
     this.store.putMatter({
@@ -586,6 +614,25 @@ export class Work {
       run_id,
     })
     return { run_id }
+  }
+
+  /**
+   * WP264（决策 177 / 184）：改事项标题。
+   *
+   * - `user`：人在事项页上就地改的——永远生效，之后自动起的标题不再覆盖它；
+   * - `ai` / `brief`：首轮起的短标题 / 起不出来时的退路——**人改过的不动**（原样返回）。
+   *
+   * 标题不进事件日志（正文纪律，21 §1）；空白标题不收。不算一次「活动」（不动 last_activity）。
+   */
+  retitle(id: MatterId, title: string, by: MatterTitleSource): Matter {
+    const matter = this.requireMatter(id)
+    const next = title.replace(/\s+/gu, ' ').trim()
+    if (next === '') throw new WorkError('invalid_input', '标题不能是空的')
+    if (by !== 'user' && matter.title_source === 'user') return matter
+    if (next === matter.title && matter.title_source === by) return matter
+    const updated: Matter = { ...matter, title: next, title_source: by, updated_at: this.now() }
+    this.store.putMatter(updated)
+    return updated
   }
 
   /** 事项摘要由运行结束事件触发（24 记忆纪律：摘要是「到哪了」，不是流水账）。 */
