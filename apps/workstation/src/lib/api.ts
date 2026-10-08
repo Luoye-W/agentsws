@@ -4351,7 +4351,12 @@ export interface ShopifyConnectRow {
 export interface ShopifyConnectView {
   linked: boolean
   email?: string
-  blocked?: { reason: 'not_linked' | 'scope_missing' | 'offline'; message: string }
+  /** WP272：`offline` 时带根本原因的码（`ENOTFOUND` / `timeout` …，卡上放问号里）。 */
+  blocked?: {
+    reason: 'not_linked' | 'scope_missing' | 'offline'
+    message: string
+    cause_code?: string
+  }
   connections: ShopifyConnectRow[]
   suggested_shop?: string
   candidates: { shop: string; source: 'profile' | 'site' | 'cli' | 'connection' }[]

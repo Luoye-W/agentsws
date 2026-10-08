@@ -23,13 +23,15 @@ export const SHOPIFY_CONNECT_ZH: Record<string, string> = {
   'shopconnect.reauth.why': '店铺授权失效了',
   'shopconnect.missing': '还缺：{list}',
   'shopconnect.another': '再连一家',
-  'shopconnect.not_linked': '先登录 Agents 工坊账号，再一键连 Shopify',
-  'shopconnect.login': '登录',
-  'shopconnect.scope_missing': '账号授权要更新一下，点一下就好',
-  'shopconnect.upgrade': '更新授权',
-  'shopconnect.upgrade.fallback': '没能直接更新，重新登录一次就好',
-  'shopconnect.relogin': '重新登录',
+  'shopconnect.not_linked': '先登录 Agents 工坊账号',
+  'shopconnect.login': '去登录',
+  'shopconnect.relogin_needed': '工坊账号需要重新登录',
+  'shopconnect.relogin': '去重新登录',
+  'shopconnect.account.hint':
+    '是你在 Agents 工坊注册的账号（积分、云端功能都在上面），不是 Shopify 后台的账号。在「设置 → 账号」登录，登完自动回到这里。',
   'shopconnect.offline': '连不上 Agents 工坊云，检查一下网络',
+  'shopconnect.offline.hint': '已经自动重试过一次。开着代理 / VPN 的话换个节点再试。',
+  'shopconnect.offline.code': '原因码：{code}',
   'shopconnect.retry': '再试一次',
   'shopconnect.unsupported': '这家店暂不支持一键授权，等公开应用上线',
   'shopconnect.unsupported.hint':
@@ -48,6 +50,9 @@ export const SHOPIFY_CONNECT_ZH: Record<string, string> = {
   'shopconnect.scope.themes': '主题',
   'shopconnect.scope.customers': '顾客',
   'shopconnect.scope.read_only': '{name}（只看）',
+  // WP272：设置 → 账号（登录表单只在这里）
+  'cloud.account.what': '积分、云端功能都在这个账号上（不是 Shopify 等平台的账号）',
+  'cloud.account.relogin': '重新登录',
 }
 
 export const SHOPIFY_CONNECT_EN: Record<string, string> = {
@@ -72,13 +77,16 @@ export const SHOPIFY_CONNECT_EN: Record<string, string> = {
   'shopconnect.reauth.why': 'Store authorization expired',
   'shopconnect.missing': 'Still missing: {list}',
   'shopconnect.another': 'Connect another store',
-  'shopconnect.not_linked': 'Sign in to Agents Workshop first, then connect Shopify in one click',
+  'shopconnect.not_linked': 'Sign in to your Agents Workshop account first',
   'shopconnect.login': 'Sign in',
-  'shopconnect.scope_missing': 'Your account access needs a refresh — one click',
-  'shopconnect.upgrade': 'Refresh access',
-  'shopconnect.upgrade.fallback': 'Couldn’t refresh it directly — just sign in again',
+  'shopconnect.relogin_needed': 'Your Agents Workshop account needs to sign in again',
   'shopconnect.relogin': 'Sign in again',
+  'shopconnect.account.hint':
+    'This is the account you registered with Agents Workshop (credits and cloud features live there) — not your Shopify admin login. Sign in under Settings → Account; you’ll come right back here.',
   'shopconnect.offline': 'Can’t reach Agents Workshop cloud — check your network',
+  'shopconnect.offline.hint':
+    'Already retried once automatically. If you use a proxy / VPN, try another node.',
+  'shopconnect.offline.code': 'Cause code: {code}',
   'shopconnect.retry': 'Try again',
   'shopconnect.unsupported':
     'One-click isn’t available for this store yet — coming with the public app',
@@ -98,4 +106,8 @@ export const SHOPIFY_CONNECT_EN: Record<string, string> = {
   'shopconnect.scope.themes': 'themes',
   'shopconnect.scope.customers': 'customers',
   'shopconnect.scope.read_only': '{name} (view only)',
+  // WP272: Settings → Account (the only place with the sign-in form)
+  'cloud.account.what':
+    'Your credits and cloud features live on this account (not your Shopify or other platform login)',
+  'cloud.account.relogin': 'Sign in again',
 }

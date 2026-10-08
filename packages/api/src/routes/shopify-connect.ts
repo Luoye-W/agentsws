@@ -76,7 +76,12 @@ export interface ShopifyConnectView {
   linked: boolean
   /** 账号邮箱（重新登录时预填；没关联没有）。 */
   email?: string
-  blocked?: { reason: ShopifyConnectBlockedReason; message: string }
+  /**
+   * WP272：`scope_missing` 只在**后台自动补签也没成**时出现（界面引导去「设置 → 账号」重新登录）；
+   * `offline` 只在自动重试一次之后仍连不上时出现，`cause_code` 是根本原因的码（`ENOTFOUND` /
+   * `timeout` …，界面放在问号里）。
+   */
+  blocked?: { reason: ShopifyConnectBlockedReason; message: string; cause_code?: string }
   connections: ShopifyConnectRow[]
   /** 自动带上的店铺域名（品牌档案 → 建站找到的店 → CLI 店铺清单 → 老连接）。 */
   suggested_shop?: string

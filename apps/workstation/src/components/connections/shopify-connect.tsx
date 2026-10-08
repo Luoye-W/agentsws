@@ -6,16 +6,19 @@
  * 打开 Shopify 授权页 → 「在浏览器里点『安装』，回来就好」+ 取消，2 秒问一次 → 连上之后：
  * 店名、域名、能管什么、「测试连接」「断开」；授权失效 / 缺权限给「重新授权」。
  *
- * 点不了的几种照实说一句：没登录 Agents 工坊账号（就地登录）/ 老令牌缺 `store`（WP267：一点「更新授权」
- * 就地补签，成了接着做刚才那一步；云上没这一条才退回就地重新登录）/ 连不上云 / 这家店暂不支持一键授权
+ * 点不了的几种照实说一句：没登录 Agents 工坊账号 / 工坊账号要重新登录 / 连不上云 / 这家店暂不支持一键授权
  * （等公开应用；老表单在卡下「高级」里）。
+ *
+ * WP272（Luoye 10-08 真机）：**卡里不再内嵌登录框**——Luoye 以为要登录 Shopify，填了 Shopify 的邮箱密码。
+ * 老令牌缺 `store` 由服务端后台自动补签（用户无感，卡上不出「授权要更新」）；只有补签确实不成 / 没登录时，
+ * 卡上一句话 + 按钮跳「设置 → 账号」，登录完自动回到这里。
  *
  * 这个组件里**没有任何令牌**：店铺令牌只在云上，接口回的也只有店名、域名与权限名。
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, CircleCheck, ExternalLink, Loader2, Store } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { CloudAuthForm } from '@/components/cloud/cloud-auth-form'
+import { useNavigate } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { Hint } from '@/components/ui/hint'
 import { Input } from '@/components/ui/input'
@@ -29,7 +32,6 @@ import {
   type ShopifyConnectTest,
   startShopifyConnect,
   testShopifyConnect,
-  upgradeShopifyConnect,
 } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 import { openExternal } from './bridge'
@@ -57,6 +59,15 @@ export function scopeWords(scopes: readonly string[], t: Translate): string[] {
   })
 }
 
+/**
+ * WP272：去「设置 → 账号」登录 / 重新登录，登录完回到连接页这张卡（`return`）。
+ * `relogin` = 已经登录过、要换一把新令牌（账号页直接摊开登录表单、走 refresh）。
+ */
+export function accountLoginHref(relogin: boolean): string {
+  const back = encodeURIComponent('/connections?service=shopify_admin')
+  return `/settings?tab=account&return=${back}${relogin ? '&relogin=1' : ''}`
+}
+
 /** 卡上那一行出错 / 没连上的话（按 `details.reason` 说人话）。 */
 type Outcome =
   | { kind: 'failed'; message?: string }
@@ -73,6 +84,7 @@ export function ShopifyConnect({
   onChanged?: () => void
 }): React.ReactNode {
   const { t } = useApp()
+  const navigate = useNavigate()
   const client = useQueryClient()
   const key = ['shopify-connect', assignment]
   const view = useQuery({ queryKey: key, queryFn: () => getShopifyConnect(assignment) })
@@ -80,14 +92,7 @@ export function ShopifyConnect({
   const [outcome, setOutcome] = useState<Outcome | null>(null)
   /** 手填的域名（`null` = 用自动带上的那家）。 */
   const [typed, setTyped] = useState<string | null>(null)
-  const [authOpen, setAuthOpen] = useState(false)
   const [tests, setTests] = useState<Record<string, ShopifyConnectTest>>({})
-  /** WP267：撞上「账号授权要更新」时手上正做的那一步（补签成了就接着做）。 */
-  const [resume, setResume] = useState<
-    { kind: 'start'; shop?: string } | { kind: 'test'; shop: string } | null
-  >(null)
-  /** WP267：一点补签没成（云上没这一条 / 令牌不认）→ 退回重新登录。 */
-  const [upgradeFailed, setUpgradeFailed] = useState(false)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const stop = useCallback((): void => {
@@ -151,20 +156,18 @@ export function ShopifyConnect({
       openExternal(s.authorize_url)
       poll(s.attempt_id)
     },
-    onError: (err: Error, shop) => {
+    onError: (err: Error) => {
       if (err instanceof ApiClientError) {
         if (err.reason === 'unsupported') {
           setOutcome({ kind: 'unsupported', message: err.message })
           return
         }
-        // 账号 / 动作集 / 连不上：整张卡换状态
+        // 账号 / 动作集（后台补签也没成）/ 连不上：整张卡换状态
         if (
           err.reason === 'not_linked' ||
           err.reason === 'scope_missing' ||
           err.reason === 'offline'
         ) {
-          if (err.reason === 'scope_missing')
-            setResume({ kind: 'start', ...(shop === undefined ? {} : { shop }) })
           void client.invalidateQueries({ queryKey: ['shopify-connect'] })
           return
         }
@@ -180,8 +183,10 @@ export function ShopifyConnect({
       void client.invalidateQueries({ queryKey: ['shopify-connect'] })
     },
     onError: (err: Error, shop) => {
-      if (err instanceof ApiClientError && err.reason === 'scope_missing') {
-        setResume({ kind: 'test', shop })
+      if (
+        err instanceof ApiClientError &&
+        (err.reason === 'scope_missing' || err.reason === 'not_linked')
+      ) {
         void client.invalidateQueries({ queryKey: ['shopify-connect'] })
         return
       }
@@ -189,27 +194,6 @@ export function ShopifyConnect({
         ...prev,
         [shop]: { ok: false, shop, message: err.message, checked_at: new Date().toISOString() },
       }))
-    },
-  })
-
-  /** WP267（决策 208）：一点补签；成了接着做刚才那一步，没成退回重新登录。 */
-  const upgrade = useMutation({
-    mutationFn: () => upgradeShopifyConnect(assignment),
-    onSuccess: () => {
-      setUpgradeFailed(false)
-      const next = resume
-      setResume(null)
-      refresh()
-      if (next?.kind === 'start') start.mutate(next.shop)
-      else if (next?.kind === 'test') test.mutate(next.shop)
-    },
-    onError: (err: Error) => {
-      if (err instanceof ApiClientError && err.reason === 'offline') {
-        void view.refetch()
-        return
-      }
-      setUpgradeFailed(true)
-      setAuthOpen(true)
     },
   })
 
@@ -231,12 +215,37 @@ export function ShopifyConnect({
 
   const blocked = data.blocked
   if (blocked !== undefined) {
-    const relogin = blocked.reason === 'scope_missing'
+    /*
+     * WP272：三种各一句话 + 一个按钮，卡里不出登录表单。
+     * - 没登录 → 「先登录 Agents 工坊账号」+「去登录」（设置 → 账号）；
+     * - 登录过但令牌不认了 / 后台补签也没成 → 「工坊账号需要重新登录」+「去重新登录」；
+     * - 连不上（服务端已自动重试过一次）→ 一句话 + 问号里原因码 +「再试一次」。
+     */
+    const relogin =
+      blocked.reason === 'scope_missing' || (blocked.reason === 'not_linked' && data.linked)
+    const textKey =
+      blocked.reason === 'offline'
+        ? 'shopconnect.offline'
+        : relogin
+          ? 'shopconnect.relogin_needed'
+          : 'shopconnect.not_linked'
     return (
       <div className="flex flex-col gap-2" data-testid="shopconnect" data-state={blocked.reason}>
         <p className="flex items-center gap-1.5 text-xs text-ws-muted-fg" data-slot="status">
           <AlertTriangle aria-hidden className="size-3.5 shrink-0 text-amber-500" />
-          {t(`shopconnect.${blocked.reason}`)}
+          {t(textKey)}
+          {blocked.reason === 'offline' ? (
+            <Hint
+              testId="shopconnect-offline-hint"
+              text={
+                blocked.cause_code === undefined
+                  ? t('shopconnect.offline.hint')
+                  : `${t('shopconnect.offline.hint')} ${t('shopconnect.offline.code', { code: blocked.cause_code })}`
+              }
+            />
+          ) : (
+            <Hint testId="shopconnect-account-hint" text={t('shopconnect.account.hint')} />
+          )}
         </p>
         {blocked.reason === 'offline' ? (
           <Button
@@ -248,50 +257,18 @@ export function ShopifyConnect({
           >
             {t('shopconnect.retry')}
           </Button>
-        ) : authOpen ? (
-          <CloudAuthForm
-            testPrefix="shopconnect"
-            {...(assignment === undefined ? {} : { assignment })}
-            {...(relogin ? { refresh: true, initialTab: 'login' as const } : {})}
-            {...(data.email === undefined ? {} : { initialEmail: data.email })}
-            onDone={() => {
-              setAuthOpen(false)
-              setUpgradeFailed(false)
-              const next = resume
-              setResume(null)
-              refresh()
-              if (next?.kind === 'start') start.mutate(next.shop)
-              else if (next?.kind === 'test') test.mutate(next.shop)
-            }}
-          />
-        ) : relogin && !upgradeFailed ? (
-          <Button
-            size="sm"
-            className="self-start"
-            data-testid="shopconnect-upgrade"
-            disabled={upgrade.isPending}
-            onClick={() => upgrade.mutate()}
-          >
-            {upgrade.isPending ? <Loader2 aria-hidden className="animate-spin" /> : null}
-            {t('shopconnect.upgrade')}
-          </Button>
         ) : (
           <Button
             size="sm"
             className="self-start"
             data-testid={relogin ? 'shopconnect-relogin' : 'shopconnect-login'}
             onClick={() => {
-              setAuthOpen(true)
+              navigate(accountLoginHref(relogin))
             }}
           >
             {t(relogin ? 'shopconnect.relogin' : 'shopconnect.login')}
           </Button>
         )}
-        {relogin && upgradeFailed ? (
-          <p className="text-xs text-ws-muted-fg" data-testid="shopconnect-upgrade-fallback">
-            {t('shopconnect.upgrade.fallback')}
-          </p>
-        ) : null}
       </div>
     )
   }

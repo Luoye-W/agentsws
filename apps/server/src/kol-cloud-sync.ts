@@ -321,6 +321,11 @@ export interface KolCloudCall<T> {
   message?: string
   /** WP265：云侧信封里的 `details`（缺动作集时的 `required_scope`、`reason` …）。 */
   details?: Record<string, unknown>
+  /**
+   * WP272：`status: 0` 时根本原因的码（WP242 `netCauseOf` 挖出的 `ENOTFOUND` / `ECONNRESET`，
+   * 超时是 `timeout`）。界面问号里给它，排查网络 / 代理时有个抓手。
+   */
+  cause_code?: string
 }
 
 /** 打云侧那一跳（`apps/server/src/cloud.ts` 提供：令牌只在那一处出现）。 */
