@@ -93,6 +93,27 @@ describe('projectCard（36 §2 审批项 → 卡片）', () => {
     expect(projectCard(routed, ctx).routed_note).toBe('转给了「B2B」岗位的上级林峰')
   })
 
+  it('WP275：收件人要再确认一次 → 卡上 reconfirm；没有就不出', () => {
+    expect(projectCard(item(), ctx).reconfirm).toBeUndefined()
+    const base = item()
+    const over = item({
+      routing: {
+        ...base.routing,
+        recipients: [
+          {
+            person: 'p_he',
+            via: 'role_holder',
+            reason: '超了你设的上限（金额），要你再确认一次',
+            reconfirm: true,
+          },
+        ],
+      },
+    })
+    const card = projectCard(over, ctx)
+    expect(card.reconfirm).toBe(true)
+    expect(card.routed_note).toBe('超了你设的上限（金额），要你再确认一次')
+  })
+
   it('37 §1 第 5 行：没有展示名就没有客户标签，绝不退化成裸 id', () => {
     expect(projectCard(item(), ctx).customer_label).toBeUndefined()
   })
