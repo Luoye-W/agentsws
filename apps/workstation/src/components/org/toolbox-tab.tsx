@@ -51,7 +51,7 @@ export function ToolboxTab({
   initialQuery?: string
 }): React.ReactNode {
   // WP271：① 个人——「你做过的」；层标签（个人 / 部门 / 公司）与「谁建的」不出（docs/95 §2.2）
-  const { t, solo } = useMode()
+  const { t, solo, mode } = useMode()
   const client = useQueryClient()
   const [kind, setKind] = useState<CatalogKind | null>(null)
   const [query, setQuery] = useState(initialQuery ?? '')
@@ -325,6 +325,9 @@ export function ToolboxTab({
                       disabled={merging}
                       data-testid="toolbox-merge"
                       onClick={() => {
+                        // WP275：① ② 当场生效——二次确认
+                        if (mode !== 'company' && !globalThis.confirm(t('mode.apply_now.confirm')))
+                          return
                         merge.mutate({ keep: d.a.id, drop: d.b.id })
                       }}
                     >

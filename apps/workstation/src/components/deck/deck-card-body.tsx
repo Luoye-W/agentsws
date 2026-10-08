@@ -19,6 +19,7 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { useApp } from '@/lib/app-context'
 import { channelLabel, fieldLabel, fieldValue, tOr } from '@/lib/humanize'
 import type { Lang } from '@/lib/i18n'
+import { useMode } from '@/lib/mode'
 import { isWeeklyReview, WeeklyReviewBody } from './weekly-review-body'
 
 const isRecord = (v: unknown): v is Record<string, unknown> =>
@@ -257,6 +258,7 @@ export function DeckCardBody({
   onOpen: () => void
 }): React.ReactNode {
   const { t, lang } = useApp()
+  const { t: modeT } = useMode()
   const payload = isRecord(card.detail.payload) ? card.detail.payload : {}
   const content = pickContent(card.content_variants, mode)
   const options = card.options ?? []
@@ -295,7 +297,12 @@ export function DeckCardBody({
           <div className="mt-2.5 flex flex-col gap-2.5" data-testid="deck-layout-policy">
             <BeforeAfter before={payload.before} after={payload.after} />
             <Note testId="deck-reason">{content.text}</Note>
-            <p className="text-xs text-ws-muted-fg">{t('deck.policy.owner_only')}</p>
+            {/* WP275：① ② 的词按模式换；② 里同事自己改了共用的规矩，这张是「已生效、可撤回」的通知 */}
+            <p className="text-xs text-ws-muted-fg">
+              {payload.form === 'peer_change_notice'
+                ? t('deck.policy.peer_notice')
+                : modeT('deck.policy.owner_only')}
+            </p>
           </div>
         )
 

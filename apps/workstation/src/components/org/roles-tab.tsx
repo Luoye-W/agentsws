@@ -62,7 +62,9 @@ export function RoleDetail({
    * WP271（决策 244）：① 个人——每个动作右边的「本人定 / 主管定 / 老板定」不出（没有上下级）；
    * 「AI 最多能自己做到哪一步」是安全闸，留着，词换成「每条都要你确认 / 上限内自己做 / …」。
    */
-  const { t, solo } = useMode()
+  const { t, solo, mode } = useMode()
+  // WP275：① ② 没有审批流——「谁定」那一列不出，自己改的当场生效（保存前问一句）
+  const flow = mode === 'company'
   // null = 没动过（清空输入框应该是空的，不是又弹回原名）
   const [name, setName] = useState<string | null>(null)
   const [caps, setCaps] = useState<Record<string, string>>(() => capsOf(role))
@@ -109,7 +111,7 @@ export function RoleDetail({
               <div key={a.id} className="rounded-md border px-2 py-1.5" data-testid="role-action">
                 <div className="flex items-center justify-between gap-2">
                   <span>{actionLabel(a.id)}</span>
-                  {solo ? null : (
+                  {!flow ? null : (
                     <span className="text-xs text-muted-foreground" data-testid="role-action-route">
                       {t(`org.route.${a.route_to}`)}
                     </span>
@@ -216,6 +218,8 @@ export function RoleDetail({
                     .filter(
                       (x): x is { id: string; caps: Record<string, number> } => x !== undefined,
                     )
+                  // WP275：① ② 保存即生效——二次确认
+                  if (!flow && !globalThis.confirm(t('mode.apply_now.confirm'))) return
                   onPropose(role.id, {
                     ...(name === null || name.trim() === '' || name === role.name ? {} : { name }),
                     ...(actions.length === 0 ? {} : { actions }),

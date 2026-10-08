@@ -43,7 +43,7 @@ function SkillRow({
   onChanged: () => void
 }): React.ReactNode {
   const { lang } = useApp()
-  const { t } = useMode()
+  const { t, mode } = useMode()
   const exclude = useMutation({
     mutationFn: (excluded: boolean) => setSkillExcluded(skill.name, excluded),
     onSettled: onChanged,
@@ -88,6 +88,8 @@ function SkillRow({
           data-testid="rail-skill-promote"
           disabled={promote.isPending}
           onClick={() => {
+            // WP275：① ② 当场生效——二次确认
+            if (mode !== 'company' && !globalThis.confirm(t('mode.apply_now.confirm'))) return
             promote.mutate()
           }}
         >
