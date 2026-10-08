@@ -387,6 +387,9 @@ describe('一致性用例', () => {
   })
 
   it('改模板必经审批：PUT 只建卡；批准之后才生效', async () => {
+    // WP275：③ 公司集体才出策略变更卡给老板批（① ② 自己改当场生效，见 wp275-mode-approvals.test.ts）
+    for (const org of server.identity.listOrganizations())
+      await server.identity.updateOrganization(org.id, { mode: 'company' })
     const copy = await data<{ id: string; name: string; version: string }>(
       await call('POST', '/v1/roles', { body: { from: 'dtc.support' } }),
     )
@@ -423,6 +426,9 @@ describe('一致性用例', () => {
   })
 
   it('选「维持现状」= 不改：卡结了，职责定义还是原来那份', async () => {
+    // WP275：③ 公司集体才出策略变更卡给老板批（① ② 自己改当场生效，见 wp275-mode-approvals.test.ts）
+    for (const org of server.identity.listOrganizations())
+      await server.identity.updateOrganization(org.id, { mode: 'company' })
     const copy = await data<{ id: string; name: string }>(
       await call('POST', '/v1/roles', { body: { from: 'dtc.support' } }),
     )
@@ -442,6 +448,9 @@ describe('一致性用例', () => {
   })
 
   it('策略层：改额度也走 policy_change，批了才落到工作区', async () => {
+    // WP275：③ 公司集体才出策略变更卡给老板批（① ② 自己改当场生效，见 wp275-mode-approvals.test.ts）
+    for (const org of server.identity.listOrganizations())
+      await server.identity.updateOrganization(org.id, { mode: 'company' })
     const receipt = await data<{ status: string; approval_item_id: string }>(
       await call('PUT', `/v1/workspaces/${ws()}/policy`, {
         body: { global_caps: { max_daily_refund_total: 400 } },

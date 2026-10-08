@@ -61,6 +61,7 @@ import {
   TIER_ORDER,
 } from '@agentsws/skills'
 import type { CreateApprovalInput } from '@agentsws/txn'
+import { settleOwnCard } from './mode-gate.js'
 
 /**
  * 本机自带的入门技能：学习回路要有落脚的段落。
@@ -358,7 +359,18 @@ export interface LearningAssembly {
     to_tier: PromotionTier
     scope_id?: string
     by: PersonId
-  }): Promise<{ accepted: boolean; approval_item_id?: string; reason?: string }>
+    /**
+     * WP275（docs/95 §5）：① 个人 / ② 同事互联里人自己提层**当场生效**——卡发给他自己、出完当场
+     * 由他点掉（施行仍走晋升卡批了那条路），回 `applied: true`。不给 = ③ 照旧出待审卡给负责人。
+     */
+    direct?: boolean
+  }): Promise<{
+    accepted: boolean
+    approval_item_id?: string
+    reason?: string
+    /** WP275：已经当场生效（① ②）。 */
+    applied?: boolean
+  }>
   /**
    * WP69（54 §3）：某一层记忆的一句话（岗位页"记忆"tab 的标题行）。
    * 只数，不出正文——正文由 {@link LearningAssembly.memoryAt} 给。
@@ -872,8 +884,21 @@ export function createLearningAssembly(options: LearningOptions): LearningAssemb
       criteria,
       lessons: lessons.map((l) => l.id),
     }
+    const envelope = cardEnvelope('skill_promotion')
     const item = await options.approvals.create({
-      ...cardEnvelope('skill_promotion'),
+      ...envelope,
+      // WP275：① ② 人自己提的——卡给他自己，提的人也写他（留名字）
+      ...(input.direct === true
+        ? {
+            proposer: { kind: 'person' as const, id: input.by },
+            routing: {
+              ...envelope.routing,
+              recipients: [{ person: input.by, via: 'role_holder' as const }],
+              rule: 'role_holder' as const,
+              escalation: { ...envelope.routing.escalation, chain: [] },
+            },
+          }
+        : {}),
       kind: 'skill_promotion',
       subject: { object: { type: 'skill', id: input.skill } },
       dedupe_key: `${workspace_id}:skill_promotion:${input.skill}:${input.to_tier}:${input.scope_id ?? ''}:${input.section_ids.join(',')}`,
@@ -893,6 +918,17 @@ export function createLearningAssembly(options: LearningOptions): LearningAssemb
       return {
         accepted: false,
         reason: (item.evidence.precheck.notes ?? ['预检没过']).join('；'),
+      }
+    }
+    if (input.direct === true) {
+      const decided = await settleOwnCard(options.approvals, item, input.by)
+      if (decided.state === 'approved') {
+        await applyDecided(options.approvals, decided, {
+          action: 'approve',
+          decision_token: '',
+          via: 'workstation',
+        })
+        return { accepted: true, approval_item_id: item.id, applied: true }
       }
     }
     return { accepted: true, approval_item_id: item.id }

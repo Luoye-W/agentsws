@@ -1000,7 +1000,7 @@ export function orgRoutes(): Route[] {
         authz: WRITE,
         params: [{ name: 'id', in: 'path', required: true, description: 'role_id' }],
         body: RolePatchBody,
-        returns: 'OrgChangeReceipt（status 永远是 pending_approval）',
+        returns: 'OrgChangeReceipt（③ 是 pending_approval；① ② 自己改的当场生效 = applied，WP275）',
       },
       async (c, deps) => {
         const actor = actorOf(c)

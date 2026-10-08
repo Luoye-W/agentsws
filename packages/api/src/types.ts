@@ -402,7 +402,13 @@ export interface SkillsPort {
     to_tier: PromotionTier
     scope_id?: string
     actor: { person_id: PersonId; workspace_id: WorkspaceId }
-  }): Promise<{ accepted: boolean; approval_item_id?: string; reason?: string }>
+  }): Promise<{
+    accepted: boolean
+    approval_item_id?: string
+    reason?: string
+    /** WP275：① 个人 / ② 同事互联里人自己提的，已经当场生效（不出待审卡）。 */
+    applied?: boolean
+  }>
   /**
    * WP69（54 §3）：某一层记忆里有哪几段（第三栏「记忆」面板列的就是它们）。
    * WP71 起多回一格 `can_edit`——**能不能改由服务端说了算**，界面照着它决定出不出

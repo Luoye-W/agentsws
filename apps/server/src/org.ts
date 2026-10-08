@@ -74,6 +74,7 @@ import { B2B_POSITION_ID, B2B_ROLES, mergedPositionName } from '@agentsws/contra
 import { canonicalJson, sha256 } from '@agentsws/core'
 import {
   bundledPositionIcon,
+  hasApprovalFlow,
   parseRole,
   type RangeExpanded,
   ROLE_ID_SPLITS,
@@ -108,7 +109,12 @@ interface PendingChange {
    * 两种范围对象时是一条 {@link PendingRangeChange}（只带真正要改的那几格）。
    */
   doc: string
-  status: 'pending' | 'applied' | 'dropped'
+  /**
+   * WP275：`undoable` = ② 里有人自己改了共用的规矩、当场生效之后留下的**撤回那一份**
+   * （`doc` 是改之前的样子，`approval_id` 是发给同岗位的人的那张通知卡）；有人点「撤回」
+   * 就把它落回去（→ `reverted`），点「知道了」或卡过期就作罢（→ `dropped`）。
+   */
+  status: 'pending' | 'applied' | 'dropped' | 'undoable' | 'reverted'
 }
 
 /** 45 H5：一条批了才落地的「改品牌 / 改产品线」。 */
@@ -583,6 +589,20 @@ function keptAsIs(item: ApprovalItem): boolean {
 const capText = (value: Mandate['caps'][string]): string =>
   Array.isArray(value) ? value.join('、') : String(value)
 
+/** 一处制度改动（职责 / 策略层 / 品牌 / 产品线）提上来的样子。 */
+interface ProposeInput {
+  kind: PendingChange['kind']
+  doc: string
+  title: string
+  summary: string
+  target: 'role' | 'workspace_policy' | 'range_group' | 'product_line'
+  before: unknown
+  after: unknown
+  affected: string[]
+  /** WP275：改之前那一整份（② 里当场生效后，撤回时落回它）。不给 = 不能撤回、不发通知。 */
+  undo_doc?: string
+}
+
 export function createOrg(options: OrgOptions): OrgAssembly {
   const { clock, identity, roles, approvals, workspace_id, appendEvent } = options
   const backend =
@@ -689,6 +709,10 @@ export function createOrg(options: OrgOptions): OrgAssembly {
    */
   const reconcile = async (): Promise<void> => {
     for (const row of backend.pending()) {
+      if (row.status === 'undoable') {
+        await settleUndo(row)
+        continue
+      }
       if (row.status !== 'pending') continue
       const item = await approvals.get(row.approval_id)
       if (item === undefined) continue
@@ -706,19 +730,141 @@ export function createOrg(options: OrgOptions): OrgAssembly {
     }
   }
 
-  const propose = async (
+  /**
+   * WP275：② 的撤回通知卡有结论了——选了「维持原样」（`before`）就是撤回：把改之前那一份落回去；
+   * 点了「知道了」、被拒或过期就作罢。还没人管的接着等。
+   */
+  const settleUndo = async (row: PendingChange): Promise<void> => {
+    const item = await approvals.get(row.approval_id)
+    if (item === undefined) return
+    if (APPROVED.has(item.state)) {
+      if (keptAsIs(item)) {
+        applyPending(row)
+        backend.putPending({ ...row, status: 'reverted' })
+        emit(
+          'policy_change.reverted',
+          item.decision?.by === 'mandate' ? 'system' : (item.decision?.by ?? 'system'),
+          {
+            target: row.kind,
+            approval_item_id: item.id,
+          },
+        )
+      } else backend.putPending({ ...row, status: 'dropped' })
+    } else if (DEAD.has(item.state)) backend.putPending({ ...row, status: 'dropped' })
+  }
+
+  /**
+   * WP275（docs/95 §5，决策 12 口径）：① 个人 / ② 同事互联里**人自己改**规矩——二次确认在界面上，
+   * 到这里就当场生效、不出卡给谁批（没有「另一个人点头」这回事）。改动照样记一条事件（留名字）。
+   *
+   * ② 里改的是共用的（这条职责还有别人在做 / 工作区策略层人人都受它管）：给那几个人各发一张
+   * 通知卡——「X 改了…，已经生效」，两个选项「知道了 / 撤回」；有人点撤回就把改之前那一份落回去。
+   * 范围（品牌 / 产品线）只在 ③ 有，这里不发通知。
+   */
+  const applyOwn = async (
     actor: OrgActor,
-    input: {
-      kind: PendingChange['kind']
-      doc: string
-      title: string
-      summary: string
-      target: 'role' | 'workspace_policy' | 'range_group' | 'product_line'
-      before: unknown
-      after: unknown
-      affected: string[]
-    },
+    input: ProposeInput,
+    mode: OrganizationMode,
+    fingerprint: string,
   ): Promise<OrgChangeReceipt> => {
+    const row: PendingChange = {
+      id: `pnd_${fingerprint}`,
+      approval_id: '',
+      kind: input.kind,
+      doc: input.doc,
+      status: 'applied',
+    }
+    applyPending(row)
+    backend.putPending(row)
+    emit('policy_change.applied_directly', actor.person_id, {
+      target: input.target,
+      mode,
+      affected: input.affected.length,
+    })
+    if (mode === 'peers' && input.undo_doc !== undefined) {
+      const peers = await peersOf(actor.person_id, input)
+      if (peers.length > 0) {
+        const name = (await identity.getPerson(actor.person_id))?.name ?? '同事'
+        const item = (await approvals.create({
+          workspace_id,
+          schema_version: 1,
+          kind: 'policy_change',
+          role_id: actor.role_id,
+          subject: { object: { type: 'policy', id: `${input.target}:${fingerprint}:undo` } },
+          dedupe_key: `${workspace_id}:policy_undo:${input.target}:${fingerprint}`,
+          title: `${name}改了${input.title.replace(/^改/, '')}（已生效）`,
+          summary: `${name}自己改的，已经生效。觉得不对可以撤回。`,
+          payload: {
+            target: input.target,
+            form: 'peer_change_notice',
+            changed_by: actor.person_id,
+            // 选「撤回」= 维持改之前的样子（与策略变更卡同一个 `before` 口径，reconcile 认它）
+            options: [
+              { id: 'after', label: '知道了' },
+              { id: 'before', label: '撤回' },
+            ],
+            before: input.before,
+            after: input.after,
+            affected_assignments: input.affected,
+          },
+          evidence: {
+            source_events: [],
+            diff: { before: input.before, after: input.after, summary: input.summary },
+            provenance: { seen: [] },
+            precheck: { permission_diff: 'ok', semantic_diff: 'ok' },
+          },
+          proposer: { kind: 'person', id: actor.person_id },
+          automation: {
+            level_at_creation: 'L1',
+            auto_approved: false,
+            mandate_check: { within: true, caps_hit: [] },
+            sampling: { selected: false },
+          },
+          routing: {
+            recipients: peers.map((person) => ({ person, via: 'role_holder' as const })),
+            rule: 'role_holder',
+            escalation: { after_hours: 48, business_hours: true, chain: [], escalated_at: [] },
+            separation_of_duties: false,
+          },
+          priority: 'digest',
+        })) as ApprovalItem
+        if (item.state !== 'blocked')
+          backend.putPending({
+            id: `pnd_${fingerprint}_undo`,
+            approval_id: item.id,
+            kind: input.kind,
+            doc: input.undo_doc,
+            status: 'undoable',
+          })
+      }
+    }
+    return { status: 'applied', summary: '已改好，当场生效。' }
+  }
+
+  /** ② 里要通知谁：改职责 = 还在做这条职责的别人；改策略层 = 工作区里别的人。 */
+  const peersOf = async (actor: PersonId, input: ProposeInput): Promise<PersonId[]> => {
+    const people =
+      input.kind === 'role'
+        ? input.affected
+            .map((id) => roles.assignments.get(id))
+            .filter((a) => a !== undefined && a.revoked_at === undefined)
+            .map((a) => a?.person_id as PersonId)
+        : (await identity.members(workspace_id))
+            .filter((m) => m.left_at === undefined)
+            .map((m) => m.person_id)
+    return [...new Set(people)].filter((p) => p !== actor).sort()
+  }
+
+  const propose = async (actor: OrgActor, input: ProposeInput): Promise<OrgChangeReceipt> => {
+    // WP275：① ② 没有审批流——人自己改的当场生效（二次确认在界面上），不出卡
+    const mode = (await options.mode?.()) ?? 'company'
+    if (!hasApprovalFlow(mode))
+      return applyOwn(
+        actor,
+        input,
+        mode,
+        sha256(canonicalJson({ kind: input.kind, doc: input.doc, at: now() })).slice(0, 12),
+      )
     const workspace = await identity.getWorkspace(workspace_id)
     const owner = workspace?.owner_id ?? actor.person_id
     const fingerprint = sha256(canonicalJson({ kind: input.kind, doc: input.doc })).slice(0, 12)
@@ -1822,6 +1968,7 @@ export function createOrg(options: OrgOptions): OrgAssembly {
       return propose(actor, {
         kind: 'role',
         doc: json,
+        undo_doc: JSON.stringify(base),
         title: `改职责：${base.name.zh}`,
         summary: `${base.name.zh} 的设置要改一处。批准后对这个职责的 ${affected.length} 位在岗同事生效。`,
         target: 'role',
@@ -2095,9 +2242,11 @@ export function createOrg(options: OrgOptions): OrgAssembly {
         global_caps: input.global_caps ?? before.global_caps,
         ...(sod.length === 0 ? {} : { separation_of_duties: sod }),
       }
+      const current = roles.policies.get(workspace_id)
       return propose(actor, {
         kind: 'policy',
         doc: JSON.stringify(next),
+        ...(current === undefined ? {} : { undo_doc: JSON.stringify(current) }),
         title: '改公司策略层',
         summary: '公司的授权额度 / 总量上限 / 谁审谁要改一处。批准后对全工作区生效（05 §3）。',
         target: 'workspace_policy',

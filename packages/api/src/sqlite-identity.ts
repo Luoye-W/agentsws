@@ -543,6 +543,10 @@ export class SqliteIdentityService implements LocalIdentityService {
   }
 
   async members(workspace_id: WorkspaceId): Promise<Membership[]> {
+    return this.membersSync(workspace_id)
+  }
+
+  membersSync(workspace_id: WorkspaceId): Membership[] {
     return this.#db
       .prepare<[string], MembershipRow>(
         'SELECT * FROM memberships WHERE workspace_id = ? ORDER BY rowid',

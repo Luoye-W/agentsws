@@ -136,6 +136,11 @@ export interface OrganizationsAssembly {
   settleModes(): Promise<{ org_id: string; mode: OrganizationMode }[]>
   /** WP271：某个品牌所在的组织现在是哪种用法（没挂组织 = ① 个人）。 */
   modeOf(workspace_id: WorkspaceId): Promise<OrganizationMode>
+  /**
+   * WP275：同上的同步版（身份层给了同步读成员才有；没有回 `undefined`）。只给只能同步问的地方用
+   * ——进待认领池的活要不要直接记到唯一那个人名下（决策 259）。
+   */
+  modeOfSync(workspace_id: WorkspaceId): OrganizationMode | undefined
 }
 
 /** 队列上"还没定"的那几档（与工作台首页同一套判据）。 */
@@ -589,6 +594,19 @@ export function createOrganizations(options: OrganizationsAssemblyOptions): Orga
         settled.push({ org_id: org.id, mode })
       }
       return settled
+    },
+    modeOfSync(workspace_id): OrganizationMode | undefined {
+      const membersSync = identity.membersSync?.bind(identity)
+      if (membersSync === undefined) return undefined
+      const org = identity
+        .listOrganizations()
+        .find((o) => identity.brandsOf(o.id).some((w) => w.id === workspace_id))
+      if (org === undefined) return 'solo'
+      const people = new Set(activeMembers(org).map((m) => m.person_id))
+      for (const w of identity.brandsOf(org.id))
+        for (const m of membersSync(w.id)) if (m.left_at === undefined) people.add(m.person_id)
+      people.delete(org.owner_id)
+      return organizationModeOf(org, people.size)
     },
     async modeOf(workspace_id): Promise<OrganizationMode> {
       const org = identity

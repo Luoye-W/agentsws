@@ -137,6 +137,9 @@ beforeEach(async () => {
     startRun: false,
     tokenRefreshIntervalMs: 0,
   })
+  // WP275：上级 / 老板这套审批流只在 ③ 公司集体里有（① ② 见 wp275-mode-approvals.test.ts）
+  for (const org of server.identity.listOrganizations())
+    await server.identity.updateOrganization(org.id, { mode: 'company' })
 })
 
 afterEach(async () => {

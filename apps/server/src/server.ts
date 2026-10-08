@@ -75,6 +75,7 @@ import type {
   Halt,
   ImageProvider,
   KolChannel,
+  OrganizationMode,
   Person,
   PersonId,
   PlatformCliSpec,
@@ -149,6 +150,7 @@ import {
 import {
   changeKindOf,
   createRoleStore,
+  hasApprovalFlow,
   loadBundledRole,
   personaTextIn,
   type RangeExpanded,
@@ -1890,10 +1892,18 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       ...(org.postal_address === undefined ? {} : { postal_address: org.postal_address }),
     }
   }
+  /**
+   * WP275：某个品牌所在组织现在是哪种用法（组织面装得晚，装好之后才填；之前一律当 ③）。
+   * 审批路由、职责分离、超时升级都问它（docs/95 §5：只有 ③ 有审批流）。
+   */
+  let modeOfWorkspace: ((ws: string) => Promise<OrganizationMode>) | undefined
+  /** WP275（决策 259）：① 个人时这个品牌唯一的那个人（同步读；② ③ 或还没装好 = 没有）。 */
+  let soleOwnerOf: ((ws: string) => PersonId | undefined) | undefined
   const approvalDirectory = createApprovalDirectory({
     roles,
     owner: () => bootstrapOwner,
     workspace_id: () => bootstrapWorkspace,
+    approvalFlow: async (ws) => hasApprovalFlow((await modeOfWorkspace?.(ws)) ?? 'company'),
   })
 
   /*
@@ -2025,6 +2035,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
    */
   let supervisorPositions: (() => readonly SupervisedPosition[]) | undefined
   const routeScopeManager = createScopeManagerRouter({
+    // WP275（docs/95 §5）：① ② 一律落回提的人；组织装好之前按 ③（与以前一样）
+    mode: (ws) => modeOfWorkspace?.(ws) ?? 'company',
     positions: () => supervisorPositions?.() ?? [],
     assignments: (person_id, ws) =>
       roles.assignments
@@ -2779,8 +2791,14 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         if (route_to === 'role_holder') return { person: person_id, via: 'role_holder' }
         if (route_to === 'scope_manager') {
           const r = await routeScopeManager({ workspace_id: ws, role_id, proposer: person_id })
-          return { person: r.person, via: r.via === 'owner' ? 'owner' : 'scope_manager' }
+          return {
+            person: r.person,
+            via: r.via === 'role_holder' || r.via === 'owner' ? r.via : 'scope_manager',
+          }
         }
+        // WP275：① ② 没有审批流——「老板定」也落回提的人自己
+        if (!hasApprovalFlow((await modeOfWorkspace?.(ws)) ?? 'company'))
+          return { person: person_id, via: 'role_holder' }
         const owner = (await identity.getWorkspace(ws))?.owner_id ?? person_id
         return { person: owner, via: 'owner' }
       },
@@ -3452,6 +3470,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         },
       },
       owner: async () => (await identity.getWorkspace(ws))?.owner_id,
+      // WP275：① ② 报价超限落回业务员自己、再确认一次
+      mode: () => modeOfWorkspace?.(ws) ?? 'company',
     })
     const prService = createPrService({
       workspace_id: ws,
@@ -4307,6 +4327,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       ...(startRun === undefined ? {} : { startRun }),
       // WP35：待办 / 事项变化发一条摘要进同一条事件日志
       emit: appendEvent,
+      // WP275（决策 259）：① 个人里进池的活直接记到唯一那个人名下
+      soleOwner: () => soleOwnerOf?.(ws),
     })
     runtime?.bind(work)
     /**
@@ -5036,6 +5058,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           .filter((a) => a.revoked_at === undefined && a.role_id.startsWith('b2b.'))
           .map((a) => ({ person_id: a.person_id, assignment_id: a.id, role_id: a.role_id })),
       owner: async () => (await identity.getWorkspace(ws))?.owner_id,
+      // WP275：① ② 红卡只给业务员自己
+      approvalFlow: async () => hasApprovalFlow((await modeOfWorkspace?.(ws)) ?? 'company'),
       personName: async (id) => (await identity.getPerson(id))?.name,
       secrets: {
         get: (id) => (brandSecrets.available ? brandSecrets.get(id) : undefined),
@@ -5155,6 +5179,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           .filter((a) => a.revoked_at === undefined && a.role_id.startsWith('b2b.'))
           .map((a) => ({ person_id: a.person_id, assignment_id: a.id, role_id: a.role_id })),
       owner: async () => (await identity.getWorkspace(ws))?.owner_id,
+      // WP275：① ② 红卡只给业务员自己
+      approvalFlow: async () => hasApprovalFlow((await modeOfWorkspace?.(ws)) ?? 'company'),
       approvals: txn.approvals,
       work,
       ...(startRun === undefined ? {} : { startRun }),
@@ -6873,6 +6899,10 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       if (key_changed) onboarding.discovery.refresh()
     },
   })
+  // WP275：审批路由、职责分离、超时升级从这一刻起按模式走（之前没有任何卡）
+  modeOfWorkspace = (ws) => organizations.modeOf(ws)
+  soleOwnerOf = (ws) =>
+    organizations.modeOfSync(ws) === 'solo' ? organizations.organizationOf(ws)?.owner_id : undefined
   const company = onboarding.companyProfile()
   bootstrapOrg = (
     await organizations.migrate({
@@ -7211,13 +7241,15 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       ),
     exclude: (name, person_id, excluded) => skills.registry.exclude(name, person_id, excluded),
     proposals: () => learning.proposalSummaries(),
-    promote: (input) =>
+    promote: async (input) =>
       learning.promote({
         skill: input.skill,
         section_ids: input.section_ids,
         to_tier: input.to_tier,
         ...(input.scope_id === undefined ? {} : { scope_id: input.scope_id }),
         by: input.actor.person_id,
+        // WP275：① ② 人自己提层当场生效（二次确认在界面上）
+        direct: !hasApprovalFlow((await modeOfWorkspace?.(input.actor.workspace_id)) ?? 'company'),
       }),
     // WP69（54 §3）：第三栏「记忆」面板按层读；WP71 多回一格"能不能改"
     memory: async (input) => ({
@@ -9095,7 +9127,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     catalog: {
       ...catalog.port,
       // 复盘卡 / 工具箱上那个"合并"：出一张 policy_change 卡，批了才合
-      merge: (input) =>
+      merge: async (input) =>
         catalog.proposeMerge({
           approvals,
           owner: person.id,
@@ -9103,6 +9135,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           keep: input.keep,
           drop: input.drop,
           by: input.by,
+          // WP275：① ② 自己按的合并当场合（二次确认在界面上）
+          direct: !hasApprovalFlow((await modeOfWorkspace?.(input.workspace_id)) ?? 'company'),
         }),
     },
     // WP36 40 §1.2：离职是一个正式动作。网关只转发，编排在 ./offboard.ts；

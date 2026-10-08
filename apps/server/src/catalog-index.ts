@@ -40,6 +40,7 @@ import type {
   WorkspaceId,
 } from '@agentsws/contracts'
 import type { Scheduler, ScheduleTask, WorkflowEngine } from '@agentsws/schedule'
+import { settleOwnCard } from './mode-gate.js'
 import { HANDLERS } from './schedule.js'
 
 /** 已经停掉的不进工具箱：工具箱是"现在有什么能用"，不是墓地。 */
@@ -122,6 +123,11 @@ export interface MergeDeps extends PromotionDeps {
   drop: string
   /** 谁按的那个"合并" */
   by?: PersonId
+  /**
+   * WP275（docs/95 §5）：① 个人 / ② 同事互联里人自己按的「合并」**当场合**——卡发给他自己、
+   * 出完由他当场点掉（施行仍走合并卡批了那条路，`deps.approvals` 要是装了 `wrap` 的那条总线）。
+   */
+  direct?: boolean
 }
 
 export interface CatalogAssembly {
@@ -148,7 +154,9 @@ export interface CatalogAssembly {
     named_in_review?: Iterable<string>,
   ): Promise<{ created: string[]; blocked: string[] }>
   /** 复盘卡上那个"合并"：出一张 `policy_change` 卡；批了才合。 */
-  proposeMerge(deps: MergeDeps): Promise<{ approval_item_id: string } | undefined>
+  proposeMerge(
+    deps: MergeDeps,
+  ): Promise<{ approval_item_id: string; applied?: boolean } | undefined>
   /** 包一层审批总线：晋升卡批准了才真的升层。 */
   wrap(bus: ApprovalBus): ApprovalBus
   close(): void
@@ -430,8 +438,12 @@ export function createCatalogIndex(options: CatalogIndexOptions): CatalogAssembl
         proposer: { kind: 'person', id: deps.by ?? deps.owner },
         automation: { level_at_creation: 'L1' },
         routing: {
-          recipients: [{ person: deps.owner, via: 'owner' }],
-          rule: 'owner',
+          // WP275：① ② 人自己按的合并——卡给他自己（下面当场点掉）
+          recipients:
+            deps.direct === true
+              ? [{ person: deps.by ?? deps.owner, via: 'role_holder' }]
+              : [{ person: deps.owner, via: 'owner' }],
+          rule: deps.direct === true ? 'role_holder' : 'owner',
           escalation: {
             after_hours: 48,
             business_hours: true,
@@ -457,7 +469,12 @@ export function createCatalogIndex(options: CatalogIndexOptions): CatalogAssembl
           precheck: { permission_diff: 'ok', semantic_diff: 'ok' },
         },
       })) as ApprovalItem
-      return item.state === 'blocked' ? undefined : { approval_item_id: item.id }
+      if (item.state === 'blocked') return undefined
+      if (deps.direct === true) {
+        const decided = await settleOwnCard(deps.approvals, item, deps.by ?? deps.owner)
+        if (decided.state === 'approved') return { approval_item_id: item.id, applied: true }
+      }
+      return { approval_item_id: item.id }
     },
 
     wrap(bus) {

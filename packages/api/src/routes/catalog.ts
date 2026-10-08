@@ -123,7 +123,8 @@ export interface CatalogPort {
     drop: string
     by: PersonId
     assignment_id: string
-  }): MaybePromise<{ approval_item_id: string } | undefined>
+    /** WP275：`applied` = ① ② 里自己按的合并已经当场合了（卡是他自己当场点掉的）。 */
+  }): MaybePromise<{ approval_item_id: string; applied?: boolean } | undefined>
   /**
    * 记一条"没有家的条目"：对话里定制出来的卡、指导落成的规矩，
    * 在别的包里没有一张自己的表，目录替它们保管一份。可选面：没装就少两种 kind。
@@ -374,13 +375,14 @@ export function catalogRoutes(): Route[] {
         method: 'post',
         path: '/v1/catalog/merge',
         operationId: 'mergeCatalogEntries',
-        summary: '一键合并两条疑似重复的（40 §2.2 第 4 条）：出一张 policy_change 卡，批了才合',
+        summary:
+          '一键合并两条疑似重复的（40 §2.2 第 4 条）：③ 出一张 policy_change 卡，批了才合；① ② 当场合（WP275）',
         tag: 'catalog',
         auth: 'bearer',
         assignment: true,
         authz: READ,
         body: MergeBody,
-        returns: '{ approval_item_id }',
+        returns: '{ approval_item_id, applied? }',
       },
       async (c, deps) => {
         const p = principalOf(c)
