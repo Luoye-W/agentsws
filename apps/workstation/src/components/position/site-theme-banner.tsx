@@ -9,6 +9,9 @@
  * 只有一家 / 与官网对上就直接定，这一行不出现；好几家给一个下拉框（店名 · 域名 · 套餐），选了即存，
  * 定了之后留一行「改哪家店」可以换；一家都没有照实说 +「换个账号登录」「去 Shopify 开店」；
  * 没找成退回手填。手填一直留着兜底（「都不是？手动填」）。
+ *
+ * WP267（决策 164）：账号下只有一家、却不是官网那一家 → 不自动定，问一句「官网那家店不在这个账号下，
+ * 要换个账号登录吗」+「换个账号」「就用这家」。
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Download, ExternalLink, LogIn, RefreshCw, Store } from 'lucide-react'
@@ -128,14 +131,17 @@ export function SiteThemeBanner({
   }
   const next = v.next
   /** 找店的结果决定「还差店铺」那一行怎么说：好几家 → 选；一家都没有 → 照实说；没找成 / 没找 → 手填。 */
-  const storeMode: 'pick' | 'none' | 'manual' =
+  const only = stores.length === 1 ? stores[0] : undefined
+  const storeMode: 'pick' | 'none' | 'manual' | 'mismatch' =
     next !== 'store' || manual
       ? 'manual'
-      : lookup?.status === 'ok' && stores.length > 0
-        ? 'pick'
-        : lookup?.status === 'none'
-          ? 'none'
-          : 'manual'
+      : only !== undefined && v.site_store !== undefined && only.store !== v.site_store
+        ? 'mismatch'
+        : lookup?.status === 'ok' && stores.length > 0
+          ? 'pick'
+          : lookup?.status === 'none'
+            ? 'none'
+            : 'manual'
   const manualLink = (
     <button
       type="button"
@@ -179,6 +185,33 @@ export function SiteThemeBanner({
         <div className="flex min-w-0 flex-wrap items-center gap-1.5">
           {picker(undefined, 'site-theme-store-pick')}
           {manualLink}
+        </div>
+      )
+    if (storeMode === 'mismatch' && only !== undefined)
+      return (
+        <div className="flex flex-wrap items-center gap-1.5">
+          <Button
+            size="xs"
+            className="gap-1"
+            disabled={run.isPending}
+            onClick={() => {
+              setRelogin(true)
+              run.mutate('login')
+            }}
+            data-testid="site-theme-mismatch-relogin"
+          >
+            <LogIn className="size-3.5" aria-hidden />
+            {t('site_theme.mismatch.relogin')}
+          </Button>
+          <Button
+            size="xs"
+            variant="outline"
+            disabled={save.isPending}
+            onClick={() => save.mutate({ store: only.store, source: 'list' })}
+            data-testid="site-theme-mismatch-use"
+          >
+            {t('site_theme.mismatch.use', { store: choiceLabel(only) })}
+          </Button>
         </div>
       )
     if (storeMode === 'none')
@@ -279,7 +312,12 @@ export function SiteThemeBanner({
               ? 'site_theme.need.pick'
               : storeMode === 'none'
                 ? 'site_theme.need.none'
-                : `site_theme.need.${next}`,
+                : storeMode === 'mismatch'
+                  ? 'site_theme.need.mismatch'
+                  : `site_theme.need.${next}`,
+            storeMode === 'mismatch' && v.site_store !== undefined
+              ? { site: v.site_store }
+              : undefined,
           )}
         </span>
         <Hint text={t('site_theme.hint')} />
@@ -295,7 +333,8 @@ export function SiteThemeBanner({
           {run.error.message}
         </p>
       )}
-      {(expanded && next !== 'store') || (relogin && storeMode === 'none') ? (
+      {(expanded && next !== 'store') ||
+      (relogin && (storeMode === 'none' || storeMode === 'mismatch')) ? (
         <PlatformCliCard
           {...(positionId === undefined ? {} : { positionId })}
           assignment={assignment}

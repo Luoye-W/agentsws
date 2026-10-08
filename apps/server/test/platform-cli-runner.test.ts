@@ -336,3 +336,40 @@ describe('子进程环境（白名单）', () => {
     expect(version.PATH).toBe('/usr/bin')
   })
 })
+
+describe('WP267：登录前在本品牌那份配置目录里关掉 CLI 的自动升级', () => {
+  const offs = (entry: string): { args: string[]; home: string; ci: boolean }[] => {
+    const file = join(entry, '..', 'autoupgrade.jsonl')
+    return existsSync(file)
+      ? readFileSync(file, 'utf8')
+          .split('\n')
+          .filter((l) => l !== '')
+          .map((l) => JSON.parse(l) as { args: string[]; home: string; ci: boolean })
+      : []
+  }
+
+  it('先跑 config autoupgrade off（带 CI、指到本品牌目录），登录本身照旧不带 CI；同一份目录只跑一次，重登新目录再关一次', async () => {
+    const m = await installed()
+    const session = {
+      alias: cliSessionAlias('ws_rollout'),
+      home: cliSessionHome(m.toolsDir, SPEC.id, 'ws_rollout'),
+    }
+    m.runner.start(SPEC, 'login', { ...m.ctx, session })
+    expect((await m.settle()).phase).toBe('done')
+    expect(offs(m.entry)).toEqual([
+      { args: ['config', 'autoupgrade', 'off'], home: session.home, ci: true },
+    ])
+    expect(existsSync(join(session.home, '.agentsws-autoupgrade-off'))).toBe(true)
+    // 重登：原来那份挪成 .prev、新建一份空的 → 新目录里再关一次
+    m.runner.start(SPEC, 'login', { ...m.ctx, session })
+    expect((await m.settle()).phase).toBe('done')
+    expect(offs(m.entry)).toHaveLength(2)
+  })
+
+  it('没有本品牌配置目录（整台电脑那一份）：不替用户改他自己的 CLI 配置', async () => {
+    const m = await installed()
+    m.runner.start(SPEC, 'login', m.ctx)
+    expect((await m.settle()).phase).toBe('done')
+    expect(offs(m.entry)).toEqual([])
+  })
+})

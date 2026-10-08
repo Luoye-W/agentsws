@@ -53,6 +53,13 @@ import { catalogEntry } from './catalog.js'
 import type { ConnectLike } from './connections.js'
 import { type LiveConnection, lineItemsOf, ordersArrayOf, toOrderRow } from './live-data.js'
 import type { MatterRecordSource } from './runtime.js'
+import { type AdminOperation, ShopAdminError, type ShopifyAdminReader } from './shop-admin.js'
+import {
+  SUPPORT_PRODUCT,
+  SUPPORT_PRODUCTS,
+  supportOrderDoc,
+  supportOrdersDoc,
+} from './shop-graphql.js'
 
 /** 事项工具签出来的 token 挂在这个 assignment 下（与试连、活数据源各自分开记账）。 */
 export const TOOLS_ASSIGNMENT = 'asg_matter_tools'
@@ -135,6 +142,12 @@ export interface ConnectRecordSourceOptions {
   work?: () => Work | undefined
   /** WP46 的内存缓存；命中就不打上游。 */
   liveData?: RecordLiveDataPort
+  /**
+   * WP267（决策 209）：这个品牌在「连接」页**云端一键授权**连着店时的只读口（`ShopifyAdmin` 云端代发，
+   * 店铺令牌只在云上）。给了、而且回了一个 → 订单 / 商品这四个只读工具改走它；回 `undefined`
+   * （没连 / 没授 `read_orders`）→ 照旧走连接器那条 Shopify 连接。只读，改动照旧出卡。
+   */
+  cloudShop?: () => Promise<Pick<ShopifyAdminReader, 'query'> | undefined>
   /**
    * WP67（48 §5.2）：这个品牌的红人库（只读口）。
    *
@@ -383,6 +396,21 @@ export interface OrderRecord {
   line_items?: OrderLineItem[]
   /** 收件地址：**只进模型上下文**，一个字节都不进事件。 */
   shipping_address?: Record<string, string>
+  /** WP267：物流（每次发货一条：状态、承运商、单号、查询链接、送达 / 预计送达）。 */
+  shipments?: ShipmentRecord[]
+  /** WP267：退换状态（Shopify `returnStatus`，小写：`no_return` / `return_requested` / `in_progress` / `returned` …）。 */
+  return_status?: string
+}
+
+/** WP267：一次发货（客服答「我的包裹到哪了」要的那几格）。 */
+export interface ShipmentRecord {
+  status?: string
+  company?: string
+  number?: string
+  url?: string
+  shipped_at?: string
+  delivered_at?: string
+  estimated_delivery_at?: string
 }
 
 export interface ProductRecord {
@@ -500,6 +528,45 @@ export function shippingAddressOf(
   return Object.keys(out).length === 0 ? undefined : out
 }
 
+/**
+ * WP267：订单行里的发货记录 → 物流（GraphQL `fulfillments { trackingInfo { company number url } }` 与
+ * REST `fulfillments: [{ tracking_company, tracking_number, tracking_url }]` 都认；认不出来回 undefined）。
+ */
+export function shipmentsOf(row: Record<string, unknown>): ShipmentRecord[] | undefined {
+  const raw = row.fulfillments
+  const list: unknown[] = Array.isArray(raw)
+    ? raw
+    : isRecord(raw) && Array.isArray(raw.nodes)
+      ? raw.nodes
+      : isRecord(raw) && Array.isArray(raw.edges)
+        ? raw.edges.map((e) => (isRecord(e) ? e.node : undefined))
+        : []
+  const out: ShipmentRecord[] = []
+  for (const f of list) {
+    if (!isRecord(f)) continue
+    const info = Array.isArray(f.trackingInfo)
+      ? f.trackingInfo[0]
+      : isRecord(f.trackingInfo)
+        ? f.trackingInfo
+        : undefined
+    const t = isRecord(info) ? info : {}
+    const status = stringOf(f.displayStatus ?? f.shipment_status ?? f.status)
+    const fields: [keyof ShipmentRecord, string | undefined][] = [
+      ['status', status?.toLowerCase()],
+      ['company', stringOf(t.company ?? f.tracking_company)],
+      ['number', stringOf(t.number ?? f.tracking_number)],
+      ['url', stringOf(t.url ?? f.tracking_url)],
+      ['shipped_at', stringOf(f.createdAt ?? f.created_at)],
+      ['delivered_at', stringOf(f.deliveredAt ?? f.delivered_at)],
+      ['estimated_delivery_at', stringOf(f.estimatedDeliveryAt ?? f.estimated_delivery_at)],
+    ]
+    const one: ShipmentRecord = {}
+    for (const [k, v] of fields) if (v !== undefined) one[k] = v
+    if (Object.keys(one).length > 0) out.push(one)
+  }
+  return out.length === 0 ? undefined : out
+}
+
 /** `OrderRow`（活数据源那一份）+ 原始行 → 起草要的订单事实。 */
 export function orderRecordOf(
   row: Record<string, unknown>,
@@ -521,6 +588,15 @@ export function orderRecordOf(
       : undefined) || undefined
   const address = shippingAddressOf(row)
   const lineItems = base.line_items ?? lineItemsOf(row.line_items ?? row.lineItems)
+  const shipments = shipmentsOf(row)
+  const delivered =
+    base.delivered_at ??
+    shipments
+      ?.map((x) => x.delivered_at)
+      .filter((x): x is string => x !== undefined)
+      .sort()
+      .at(-1)
+  const returnStatus = stringOf(row.returnStatus ?? row.return_status)?.toLowerCase()
   return {
     id: base.id,
     name: base.name,
@@ -531,7 +607,7 @@ export function orderRecordOf(
     fulfillment_status: base.fulfillment_status,
     created_at: base.created_at,
     ...(base.email === '' ? {} : { email: base.email }),
-    ...(base.delivered_at === undefined ? {} : { delivered_at: base.delivered_at }),
+    ...(delivered === undefined ? {} : { delivered_at: delivered }),
     ...(customerName === undefined
       ? address?.name === undefined
         ? {}
@@ -539,6 +615,8 @@ export function orderRecordOf(
       : { customer_name: customerName }),
     ...(lineItems === undefined ? {} : { line_items: lineItems }),
     ...(address === undefined ? {} : { shipping_address: address }),
+    ...(shipments === undefined ? {} : { shipments }),
+    ...(returnStatus === undefined ? {} : { return_status: returnStatus }),
   }
 }
 
@@ -802,6 +880,14 @@ export function createConnectRecordSource(
 
   /** 真去拉一张订单（`record()` 与 `executeTool` 共用这一条路）。 */
   const fetchOrder = async (order_id: string): Promise<OrderRecord | undefined> => {
+    // WP267：云端连着店就走云端（订单 ref 的 id 是 gid）
+    const cloud = await cloudReader()
+    if (cloud !== undefined) {
+      const got = await cloudOrder(cloud, order_id)
+      if ('error' in got) return undefined
+      const row = orderRowOf(got.payload)
+      return row === undefined ? undefined : orderRecordOf(row, 'USD')
+    }
     const shop = activeShop()
     if (shop === undefined) return undefined
     const action = await findAction(shop.service, 'get_order')
@@ -883,11 +969,146 @@ export function createConnectRecordSource(
     }
   }
 
+  // ── WP267（决策 209）：云端一键授权连着店 → 订单 / 商品走云端代发 ──────────────
+  /** 这个品牌现在能不能走云端（问不到 = 走连接器）。 */
+  const cloudReader = async (): Promise<Pick<ShopifyAdminReader, 'query'> | undefined> => {
+    try {
+      return await options.cloudShop?.()
+    } catch {
+      return undefined
+    }
+  }
+
+  /**
+   * 带顾客那几格查一次；Shopify 说应用还没过「受保护的顾客数据」那一关（整条查询报错）就退一步，
+   * 不带它们再查一次——订单状态、物流、退款照样答得上来，收件人从来信里认。
+   */
+  const cloudQuery = async (
+    reader: Pick<ShopifyAdminReader, 'query'>,
+    op: (customer: boolean) => AdminOperation,
+  ): Promise<unknown> => {
+    try {
+      return await reader.query(op(true))
+    } catch (e) {
+      const protectedData =
+        e instanceof ShopAdminError &&
+        ((e.code === 'graphql' &&
+          /not approved|protected customer|customer data/i.test(e.message)) ||
+          (e.code === 'missing_scope' && (e.opts.missing ?? []).length === 0))
+      if (!protectedData) throw e
+      return reader.query(op(false))
+    }
+  }
+
+  const orderGid = (raw: string): string | undefined => {
+    const v = raw.trim()
+    if (/^gid:\/\/shopify\/Order\/\d+$/.test(v)) return v
+    return /^\d{9,}$/.test(v) ? `gid://shopify/Order/${v}` : undefined
+  }
+  const productGid = (raw: string): string | undefined => {
+    const v = raw.trim()
+    if (/^gid:\/\/shopify\/Product\/\d+$/.test(v)) return v
+    return /^\d+$/.test(v) ? `gid://shopify/Product/${v}` : undefined
+  }
+  const firstOf = (input: Record<string, unknown>): number =>
+    Math.min(
+      Math.max(Math.trunc(Number(input.first ?? input.limit ?? LIST_LIMIT)) || LIST_LIMIT, 1),
+      LIST_LIMIT,
+    )
+
+  /** 云端那一路拉一张订单（`#1001` 这种订单号先按 name 查成 id）。 */
+  const cloudOrder = async (
+    reader: Pick<ShopifyAdminReader, 'query'>,
+    raw: string,
+  ): Promise<{ payload: unknown } | { error: string }> => {
+    const m = /^#?(\d{1,8})$/.exec(raw.trim())
+    if (m !== null) {
+      const listed = await cloudQuery(reader, (customer) => ({
+        name: 'support_orders',
+        document: supportOrdersDoc(customer),
+        variables: { first: 5, query: `name:#${m[1]}` },
+      }))
+      const row = ordersArrayOf(listed).find((r) => String(r.name ?? '').replace(/^#/, '') === m[1])
+      if (row === undefined) return { error: `not_found：店铺后台里没有订单 #${m[1]}。` }
+      return { payload: row }
+    }
+    const id = orderGid(raw)
+    if (id === undefined) return { error: `not_found：看不懂这个订单号（${raw.slice(0, 40)}）。` }
+    return {
+      payload: await cloudQuery(reader, (customer) => ({
+        name: 'support_order',
+        document: supportOrderDoc(customer),
+        variables: { id },
+      })),
+    }
+  }
+
+  const runCloudTool = async (
+    reader: Pick<ShopifyAdminReader, 'query'>,
+    bare: string,
+    input: Record<string, unknown>,
+  ): Promise<ToolExecution> => {
+    try {
+      if (bare === 'get_order') {
+        const raw = stringOf(input.order_id ?? input.id ?? input.name ?? input.order_name) ?? ''
+        const got = await cloudOrder(reader, raw)
+        if ('error' in got) return { status: 'error', reason: got.error }
+        return shapeResult('get_order', got.payload)
+      }
+      if (bare === 'list_orders') {
+        const query = stringOf(input.query)
+        const payload = await cloudQuery(reader, (customer) => ({
+          name: 'support_orders',
+          document: supportOrdersDoc(customer),
+          variables: { first: firstOf(input), ...(query === undefined ? {} : { query }) },
+        }))
+        return shapeResult('list_orders', payload)
+      }
+      const key = stringOf(input.product_id ?? input.id ?? input.handle)
+      const productId = key === undefined ? undefined : productGid(key)
+      if (bare === 'get_product' && productId !== undefined) {
+        const payload = await reader.query({
+          name: 'support_product',
+          document: SUPPORT_PRODUCT,
+          variables: { id: productId },
+        })
+        return shapeResult('get_product', payload)
+      }
+      // 列商品；get_product 拿到的是 handle / 关键词时也按它查
+      const query =
+        bare === 'get_product'
+          ? key !== undefined
+            ? `handle:${key}`
+            : stringOf(input.query ?? input.title ?? input.name)
+          : stringOf(input.query)
+      const payload = await reader.query({
+        name: 'support_products',
+        document: SUPPORT_PRODUCTS,
+        variables: {
+          first: bare === 'get_product' ? 5 : firstOf(input),
+          ...(query === undefined ? {} : { query }),
+        },
+      })
+      return shapeResult('list_products', payload)
+    } catch (e) {
+      if (e instanceof ShopAdminError) {
+        const auth = ['not_authorized', 'expired', 'revoked', 'missing_scope'].includes(e.code)
+        return {
+          status: 'error',
+          reason: `${auth ? 'not_connected' : 'upstream_error'}：${e.message}`,
+        }
+      }
+      throw e
+    }
+  }
+
   const runConnectorTool = async (
     requestedBare: string,
     input: Record<string, unknown>,
   ): Promise<ToolExecution> => {
-    let bare = requestedBare
+    const bare = requestedBare
+    const cloud = await cloudReader()
+    if (cloud !== undefined) return runCloudTool(cloud, bare, input)
     const shop = activeShop()
     if (shop === undefined) return { status: 'error', reason: notConnected() }
     // 真店实测（09-14）：模型拿着来信里的订单号 "#1001" 调 get_order，而 Shopify 的 get_order
@@ -925,8 +1146,11 @@ export function createConnectRecordSource(
     const action = await findAction(shop.service, TOOL_ACTIONS[effectiveBare] as string)
     if (action === undefined) return { status: 'error', reason: ACTION_UNAVAILABLE(effectiveBare) }
     const payload = await runAction(shop, action, inputFor(effectiveBare, effectiveInput))
-    bare = effectiveBare
+    return shapeResult(effectiveBare, payload)
+  }
 
+  /** 上游（连接器或云端代发）回来的那一坨 → 给模型的结果（两条路同一种形状）。 */
+  const shapeResult = (bare: string, payload: unknown): ToolExecution => {
     if (bare === 'get_order') {
       const row = orderRowOf(payload)
       const record = row === undefined ? undefined : orderRecordOf(row, 'USD')

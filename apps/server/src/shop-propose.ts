@@ -50,6 +50,11 @@ export interface ProposeContext {
   log: ReadLog
   run_id: string
   fileRoots: string[]
+  /**
+   * WP267（决策 198）：设计岗素材库里一张图 → 本机文件路径（素材的字节在本机对象存储里，明文、带图片扩展名）。
+   * 找不到 / 还没生成 / 被驳回 / 对象存储不在本机 = undefined。路径照样要过 {@link localImage}（目录在 `fileRoots` 里）。
+   */
+  assetFile?: (asset_id: string) => string | undefined
 }
 
 const IMAGE_EXT: Readonly<Record<string, string>> = {
@@ -366,10 +371,20 @@ async function addImages(ctx: ProposeContext, input: Record<string, unknown>): P
   const images = list.map((x) => {
     const alt = str(x.alt, 512)
     const url = str(x.url, 2048)
-    const file = str(x.file, 1024)
-    if ((url === undefined) === (file === undefined))
-      throw new ShopOpsError('invalid_input', '每张图给 url 或 file 其中一个')
+    const asset = str(x.asset_id, 128)
+    let file = str(x.file, 1024)
+    if ([url, file, asset].filter((v) => v !== undefined).length !== 1)
+      throw new ShopOpsError('invalid_input', '每张图给 url、file、asset_id 其中一个')
     if (url !== undefined) return { url: httpsUrl(url), ...(alt === undefined ? {} : { alt }) }
+    if (asset !== undefined) {
+      // WP267（决策 198）：设计岗素材库里的图——按素材 id 找到本机那份文件，再过同一道检查
+      file = ctx.assetFile?.(asset)
+      if (file === undefined)
+        throw new ShopOpsError(
+          'invalid_input',
+          `素材库里找不到这张图（${asset}）：可能还没生成出来、被驳回了，或素材存在云存储上`,
+        )
+    }
     const local = localImage(file as string, ctx.fileRoots)
     return { ...local, ...(alt === undefined ? {} : { alt }) }
   })

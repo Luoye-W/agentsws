@@ -699,7 +699,8 @@
                         "wallet:admin",
                         "standby",
                         "data",
-                        "kol"
+                        "kol",
+                        "store"
                       ]
                     }
                   },
@@ -990,7 +991,8 @@
                         "wallet:admin",
                         "standby",
                         "data",
-                        "kol"
+                        "kol",
+                        "store"
                       ]
                     }
                   },

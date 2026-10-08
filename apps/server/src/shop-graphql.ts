@@ -94,6 +94,61 @@ export const RECENT_ORDERS = `query AgentswsRecentOrders($first: Int!) {
   }
 }`
 
+// ── WP267（决策 209）：客服回信 / 订单查询那一路（云端一键授权连着店时走云端代发，只读） ──────────────
+//
+// 与上面 `RECENT_ORDERS` 不同：客服要回一封具体的信，所以带收件人、收件地址、物流单号、退款与退换状态。
+// 顾客那几格（`email` / `customer` / `shippingAddress`）是 Shopify 的「受保护的顾客数据」，应用没过审时整条查询会报错——
+// 所以每条都有一份不带它们的 `lite`，报这一类错时退一步再查一次（订单状态、物流照样答得上来）。
+
+const SUPPORT_ORDER_FIELDS = (customer: boolean) => `
+      id name createdAt processedAt currencyCode${customer ? ' email' : ''}
+      displayFinancialStatus displayFulfillmentStatus returnStatus
+      totalPriceSet { shopMoney { amount currencyCode } }
+      totalRefundedSet { shopMoney { amount currencyCode } }${
+        customer
+          ? `
+      customer { displayName email }
+      shippingAddress { name address1 address2 city province zip country }`
+          : ''
+      }
+      lineItems(first: 50) { nodes { id title sku quantity variant { id } product { id }
+        originalUnitPriceSet { shopMoney { amount } } originalTotalSet { shopMoney { amount currencyCode } } } }
+      fulfillments(first: 10) { status displayStatus createdAt deliveredAt estimatedDeliveryAt
+        trackingInfo(first: 5) { company number url } }
+      refunds(first: 10) { createdAt totalRefundedSet { shopMoney { amount currencyCode } } }`
+
+export const supportOrderDoc = (
+  customer: boolean,
+): string => `query AgentswsSupportOrder($id: ID!) {
+  order(id: $id) {${SUPPORT_ORDER_FIELDS(customer)}
+  }
+}`
+
+export const supportOrdersDoc = (
+  customer: boolean,
+): string => `query AgentswsSupportOrders($first: Int!, $query: String) {
+  orders(first: $first, query: $query, sortKey: CREATED_AT, reverse: true) {
+    nodes {${SUPPORT_ORDER_FIELDS(customer)}
+    }
+  }
+}`
+
+const SUPPORT_PRODUCT_FIELDS = `
+      id title handle status vendor productType
+      variants(first: 50) { nodes { id sku title price } }`
+
+export const SUPPORT_PRODUCT = `query AgentswsSupportProduct($id: ID!) {
+  product(id: $id) {${SUPPORT_PRODUCT_FIELDS}
+  }
+}`
+
+export const SUPPORT_PRODUCTS = `query AgentswsSupportProducts($first: Int!, $query: String) {
+  products(first: $first, query: $query, sortKey: UPDATED_AT, reverse: true) {
+    nodes {${SUPPORT_PRODUCT_FIELDS}
+    }
+  }
+}`
+
 export const PUBLICATIONS = `query AgentswsPublications {
   publications(first: 20) { nodes { id name } }
 }`

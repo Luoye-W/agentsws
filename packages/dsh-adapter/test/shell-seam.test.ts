@@ -463,6 +463,11 @@ describe('(c) 凭据不经模型、不进事件（13 §4）', () => {
     expect(plan.literals.OPT_OUT_INSTRUMENTATION).toBe('true')
   })
 
+  it('WP267：AI 终端里跑 shopify 也不让它自己 `npm install -g` 升级（4.8.5 认 CI）', () => {
+    const plan = shellCredentialPlan({ workspace_root: '/x', mode: 'workspace-write' })
+    expect(plan.literals.CI).toBe('1')
+  })
+
   it('WP216：登录永远是用户本人在浏览器里做——`shopify auth login` / `shopify store execute` 一律拒', () => {
     for (const command of ['shopify auth login', 'shopify auth logout', 'shopify store execute']) {
       expect(checkShellCommand({ command, root: '/x' }).verdict, command).toBe('deny')

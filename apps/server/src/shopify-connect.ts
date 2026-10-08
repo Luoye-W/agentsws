@@ -30,6 +30,7 @@ import type {
   ShopifyConnectRow,
   ShopifyConnectStarted,
   ShopifyConnectTestResult,
+  ShopifyConnectUpgradeResult,
   ShopifyConnectView,
   ShopifyShopSource,
 } from '@agentsws/api'
@@ -47,9 +48,8 @@ import { normalizeShopDomain } from './shopify-broker.js'
 
 /** 没登录 Agents 工坊账号。 */
 export const SHOPIFY_CONNECT_NOT_LINKED = '先登录 Agents 工坊账号，再一键连 Shopify。'
-/** 老令牌缺 `store`。 */
-export const SHOPIFY_CONNECT_SCOPE_MISSING =
-  '账号授权要更新一下才能连店：重新登录一次 Agents 工坊账号就好。'
+/** 老令牌缺 `store`（WP267：卡上一点「更新授权」就地补签，不用重新登录）。 */
+export const SHOPIFY_CONNECT_SCOPE_MISSING = '账号授权要更新一下才能连店：点「更新授权」就好。'
 /** 云上 501（应用没配齐 / 这家店不在应用的分发范围）。 */
 export const SHOPIFY_CONNECT_UNSUPPORTED = '这家店暂不支持一键授权，等公开应用上线。'
 /** 连不上云。 */
@@ -85,7 +85,16 @@ export interface ShopifyConnectOptions {
   onChange?: (ws: WorkspaceId) => void
   /** 云端连接的缓存（运营工具 / 岗位就绪按它认「云端已连」）；卡上每看一次、连上 / 断开都顺手更新。 */
   links?: CloudShopLinks
+  /**
+   * WP267（决策 208）：一点补签（`cloud-account.ts` 的 `upgradeScopes`）——这个品牌的工作区令牌在云上
+   * 就地补上 `store`。不给 = 没有这一条，卡上照旧「重新登录」。
+   */
+  upgrade?: (ws: WorkspaceId) => Promise<{ scopes: string[]; added: string[] }>
 }
+
+/** WP267：补签之后令牌里仍没有 `store`（云上默认集还没加它）——只能重新登录 / 等云更新。 */
+export const SHOPIFY_CONNECT_UPGRADE_UNAVAILABLE =
+  '这一下没能直接更新授权，重新登录一次 Agents 工坊账号就好。'
 
 /** 云上那一跳的失败 → 本机网关的错误（带 `details.reason`）。 */
 function failure(out: KolCloudCall<unknown>, fallback: string): ApiError {
@@ -384,7 +393,25 @@ export function createShopifyConnect(options: ShopifyConnectOptions): ShopifyCon
     return { disconnected: true }
   }
 
-  return { view, start, attempt, test, disconnect }
+  /** WP267：一点补签。成了（令牌里有 `store`）= 卡上接着做原来那一步；不成带 `reason`，界面退回重新登录。 */
+  const upgrade = async (actor: ShopifyConnectActor): Promise<ShopifyConnectUpgradeResult> => {
+    const ws = actor.workspace_id as WorkspaceId
+    await cloudFor(ws)
+    if (options.upgrade === undefined)
+      throw new ApiError('not_implemented', SHOPIFY_CONNECT_UPGRADE_UNAVAILABLE, {
+        details: { reason: 'upgrade_unavailable' },
+      })
+    const out = await options.upgrade(ws)
+    if (!out.scopes.includes('store'))
+      throw new ApiError('not_implemented', SHOPIFY_CONNECT_UPGRADE_UNAVAILABLE, {
+        details: { reason: 'upgrade_unavailable' },
+      })
+    options.links?.invalidate(ws)
+    options.onChange?.(ws)
+    return { upgraded: out.added.length > 0, added: out.added, scopes: out.scopes }
+  }
+
+  return { view, start, attempt, test, disconnect, upgrade }
 }
 
 /** 云端一键授权连上的那一家店（只有店与权限，没有令牌）。 */
