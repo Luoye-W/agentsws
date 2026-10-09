@@ -178,7 +178,7 @@ scripts/      review-wp.sh（审核一个任务包分支）· dev-real.sh（真�
 | `packages/roles` | 职责与分配：YAML 职责定义、岗位、分配、策略层、Casbin 策略编译 |
 | `packages/knowledge` | 知识与记忆：事实卡、带身份的检索（FTS5）、运行记忆纪律 |
 | `packages/skills` | 技能：Agent Skills 解析、段 id、三层叠加、lesson 池与夜间整理 |
-| `packages/model-gateway` | 模型网关：路由、按岗位记账、三级预算、数据驻留、急停 |
+| `packages/model-gateway` | 模型网关：路由、按岗位记账、三级预算、急停 |
 | `packages/dsh-adapter` | `runtime: dsh`。唯一允许 import dsh 的地方 |
 | `packages/runtime-direct` | `runtime: direct`。不经 dsh 的 turn loop，证明 dsh 可替换 |
 | `packages/connect-adapter` | 唯一允许 import `@oomol-lab/connector` 的地方，对接本地 OpenConnector |

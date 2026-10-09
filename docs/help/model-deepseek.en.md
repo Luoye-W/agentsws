@@ -1,6 +1,6 @@
 # Connect DeepSeek (account sign-in / API key)
 
-Direct in mainland China, cheap and good enough — pick it if you have no other preference. Data stays in China. There are two ways to connect; pick one:
+Direct in mainland China, cheap and good enough — pick it if you have no other preference. There are two ways to connect; pick one:
 
 - **Official account sign-in** (recommended, selected by default): no key needed. Sign in to your DeepSeek account once in the browser; usage is paid from your account balance.
 - **Official API connection**: create an API key on the DeepSeek platform and paste it in; pay as you go.
