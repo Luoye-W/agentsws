@@ -15,7 +15,7 @@
  * 不认邮箱。不带这两个头的调用（老客户端、别的产品还没接）只受组织余额限制，
  * 报表里记在「没标注」那一格。
  */
-import type { WalletBalance } from './cloud-entry.js'
+import type { MemberUsageReport, WalletBalance } from './cloud-entry.js'
 import type { Iso8601 } from './common.js'
 
 /** 请求头：这一次是谁在用（本机公司成员的 `person_id`）。 */
@@ -404,4 +404,26 @@ export interface CloudMyAllocationView {
   role?: 'owner' | 'admin'
   /** WP206：网页「成员额度」页的地址（`${云地址}/account/allocation`）；只 owner / admin 给。 */
   allocation_url?: string
+}
+
+/**
+ * WP282（决策 281 / 286–290）：本机 `GET /v1/cloud/usage/members`——按人看积分（云上 `group=member` 的透传，
+ * 本机补名字与 0 行）。
+ *
+ * 看得到谁**判在本机**（云上一把工作区令牌分不出本机里谁是谁）：
+ * - ② 同事互联：谁都看全员（共用一个余额，用量按人看得见）；
+ * - ③ 公司集体：owner / admin 看全员，别人只看自己（本机强制带 `member=<他自己>`）；
+ * - ① 个人：只有自己。
+ */
+export interface CloudMemberUsageView {
+  linked: boolean
+  /** 没关联 / 取不到时的一句人话。 */
+  reason?: string
+  /** `all` = 看全员；`self` = 只看自己（那时 `rows` 里只有本人一行，没有「没标注」）。 */
+  scope: 'all' | 'self'
+  /**
+   * 云上那一份，本机加工过：名字按本机名册补上；`all` 时名册里没用量的人补 0 行（排在后面），
+   * `self` 时本人没用量也补一行 0。
+   */
+  report?: MemberUsageReport
 }

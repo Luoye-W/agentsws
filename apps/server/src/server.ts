@@ -2505,19 +2505,22 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
    */
   const creditsDirectory = async (workspace_id: string) => {
     const members: Record<string, string> = {}
+    const active: string[] = []
     const notify = new Set<string>()
     for (const m of await identity.members(workspace_id)) {
       const person = await identity.getPerson(m.person_id)
       if (person === undefined) continue
       members[person.id] = person.name
       if (m.left_at !== undefined) continue
+      // WP282：按人看积分时没用量的人补 0 行
+      if (!active.includes(person.id)) active.push(person.id)
       if (
         (await creditsRoleOf(person.id, workspace_id)) !== undefined &&
         person.email.includes('@')
       )
         notify.add(person.email.trim().toLowerCase())
     }
-    return { members, positions: creditsPositionNames(), notify_emails: [...notify] }
+    return { members, positions: creditsPositionNames(), notify_emails: [...notify], active }
   }
 
   /**
@@ -3988,6 +3991,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       positionOf: (role_id) => cloudPositionOf(ws, role_id),
       canManage: (actor) => creditsRoleOf(actor.person_id, ws),
       directory: () => creditsDirectory(ws),
+      // WP282：按人看积分谁看得到谁（② 全员 / ③ 管理者全员、别人只看自己 / ① 只有自己）
+      mode: async () => (await modeOfWorkspace?.(ws)) ?? 'company',
       timeZone: async () => (await identity.getWorkspace(ws))?.tz,
       // WP272：撞上缺动作集 → 后台补签 → 原样再打一次（用户无感）
       scopeUpgrade: () => scopeAutoUpgrade?.ensure(ws) ?? Promise.resolve(false),

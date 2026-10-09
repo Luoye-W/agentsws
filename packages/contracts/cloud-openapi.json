@@ -1776,8 +1776,8 @@
     "/v1/wallet/usage": {
       "get": {
         "operationId": "getV1WalletUsage",
-        "summary": "用量明细（按能力 / 按工作区 / 按天）",
-        "description": "只聚合计量事件，聚合不出正文。带 `wallet:admin` 的看整个组织，否则只看自己这个工作区。",
+        "summary": "用量明细（按能力 / 按工作区 / 按天 / 按人）",
+        "description": "只聚合计量事件，聚合不出正文。带 `wallet:admin` 的看整个组织，否则只看自己这个工作区。\n`group=member`（WP279）回按人的那一份：每人积分、价目表三块、次数，标不出是谁的单独一格。",
         "tags": ["wallet"],
         "security": [
           {
@@ -1793,14 +1793,14 @@
             "description": "缺省 `capability`。",
             "schema": {
               "type": "string",
-              "enum": ["workspace", "capability", "day"]
+              "enum": ["workspace", "member", "capability", "day"]
             }
           },
           {
             "name": "from",
             "in": "query",
             "required": false,
-            "description": "缺省本月一号零点。",
+            "description": "缺省本月一号零点（UTC）。`group=member` 缺省按**公司时区**的本月（WP279，决策 286）。",
             "schema": {
               "type": "string"
             }
@@ -1810,6 +1810,24 @@
             "in": "query",
             "required": false,
             "description": "缺省现在。",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "member",
+            "in": "query",
+            "required": false,
+            "description": "WP279：只看这一个人（本机成员 id，`attributionIdOk` 形状；不合法回 400）。哪个分组都能筛。",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "month",
+            "in": "query",
+            "required": false,
+            "description": "WP279：公司时区的某个自然月（`YYYY-MM`）。和 `from` / `to` 只能给一样，写错回 400。",
             "schema": {
               "type": "string"
             }
@@ -1824,7 +1842,14 @@
                   "type": "object",
                   "properties": {
                     "data": {
-                      "$ref": "#/components/schemas/UsageReport"
+                      "anyOf": [
+                        {
+                          "$ref": "#/components/schemas/UsageReport"
+                        },
+                        {
+                          "$ref": "#/components/schemas/MemberUsageReport"
+                        }
+                      ]
                     }
                   },
                   "required": ["data"]
@@ -10491,6 +10516,114 @@
         "required": ["token"],
         "description": "`POST /v1/cloud/auth/verify` 的请求。"
       },
+      "MemberUsageBlock": {
+        "type": "object",
+        "properties": {
+          "credits": {
+            "type": "number"
+          },
+          "calls": {
+            "type": "number"
+          }
+        },
+        "required": ["credits", "calls"],
+        "description": "WP279 / WP282：按人用量里一块（价目表三块之一）的积分与次数。"
+      },
+      "MemberUsageBlocks": {
+        "type": "object",
+        "properties": {
+          "ai": {
+            "$ref": "#/components/schemas/MemberUsageBlock"
+          },
+          "data": {
+            "$ref": "#/components/schemas/MemberUsageBlock"
+          },
+          "service": {
+            "$ref": "#/components/schemas/MemberUsageBlock"
+          }
+        },
+        "required": ["ai", "data", "service"],
+        "description": "按价目表三块拆开（三格都在，没用到是 0）。"
+      },
+      "MemberUsageReport": {
+        "type": "object",
+        "properties": {
+          "group": {
+            "type": "string",
+            "const": "member"
+          },
+          "from": {
+            "type": "string"
+          },
+          "to": {
+            "type": "string"
+          },
+          "timezone": {
+            "type": "string",
+            "description": "区间按哪个时区的自然月切的（缺省本月或给了 `month` 时有；给 `from` / `to` 时没有）。"
+          },
+          "rows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MemberUsageRow"
+            }
+          },
+          "unattributed": {
+            "$ref": "#/components/schemas/MemberUsageUnattributed"
+          },
+          "total_credits": {
+            "type": "number"
+          }
+        },
+        "required": ["group", "from", "to", "rows", "unattributed", "total_credits"],
+        "description": "`GET /v1/wallet/usage?group=member` 的回包（WP279）。只聚合计量事件，没有正文。"
+      },
+      "MemberUsageRow": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "名字（云上取本机推上去的名册；名册里没有就不出现）。"
+          },
+          "blocks": {
+            "$ref": "#/components/schemas/MemberUsageBlocks"
+          },
+          "key": {
+            "type": "string",
+            "description": "分组键：能力名 / 工作区 id / `YYYY-MM-DD`。"
+          },
+          "credits": {
+            "type": "number"
+          },
+          "quantity": {
+            "type": "number"
+          },
+          "calls": {
+            "type": "number"
+          }
+        },
+        "required": ["blocks", "key", "credits", "quantity", "calls"],
+        "description": "按人用量的一行。`key` 是这个人的 `member_id`（本机 `person_id`）。"
+      },
+      "MemberUsageUnattributed": {
+        "type": "object",
+        "properties": {
+          "credits": {
+            "type": "number"
+          },
+          "quantity": {
+            "type": "number"
+          },
+          "calls": {
+            "type": "number"
+          },
+          "blocks": {
+            "$ref": "#/components/schemas/MemberUsageBlocks"
+          }
+        },
+        "required": ["credits", "quantity", "calls", "blocks"],
+        "description": "标不出是谁的那部分（老客户端、没带归属头的调用、按人记之前的老用量）。"
+      },
       "MyAllocation": {
         "type": "object",
         "properties": {
@@ -12122,7 +12255,7 @@
       },
       "UsageGroup": {
         "type": "string",
-        "enum": ["capability", "workspace", "day"],
+        "enum": ["capability", "workspace", "day", "member"],
         "description": "用量聚合的分组维度（`GET /v1/wallet/usage?group=…`）。"
       },
       "UsageReport": {

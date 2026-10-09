@@ -336,8 +336,13 @@ export const METERING_EVENT_REQUIRED_FIELDS: readonly (keyof MeteringEvent)[] = 
   'request_id',
 ]
 
-/** 用量聚合的分组维度（`GET /v1/wallet/usage?group=…`）。 */
-export type UsageGroup = 'capability' | 'workspace' | 'day'
+/**
+ * 用量聚合的分组维度（`GET /v1/wallet/usage?group=…`）。
+ *
+ * WP279 / WP282（决策 281）：`member` = 按人（本机 `person_id`，打云时 `X-Agentsws-Member` 声明的那一个），
+ * 回包是 {@link MemberUsageReport}，不是 {@link UsageReport}。
+ */
+export type UsageGroup = 'capability' | 'workspace' | 'day' | 'member'
 
 /** 聚合出来的一行。 */
 export interface UsageRow {
@@ -354,6 +359,63 @@ export interface UsageReport {
   to: Iso8601
   rows: UsageRow[]
   total_credits: number
+}
+
+/** WP279 / WP282：按人用量里一块（价目表三块之一）的积分与次数。 */
+export interface MemberUsageBlock {
+  credits: number
+  calls: number
+}
+
+/** 按价目表三块拆开（三格都在，没用到是 0）。 */
+export type MemberUsageBlocks = Record<PricingBlock, MemberUsageBlock>
+
+/** 按人用量的一行。`key` 是这个人的 `member_id`（本机 `person_id`）。 */
+export interface MemberUsageRow extends UsageRow {
+  /** 名字（云上取本机推上去的名册；名册里没有就不出现）。 */
+  name?: string
+  blocks: MemberUsageBlocks
+}
+
+/** 标不出是谁的那部分（老客户端、没带归属头的调用、按人记之前的老用量）。 */
+export interface MemberUsageUnattributed {
+  credits: number
+  quantity: number
+  calls: number
+  blocks: MemberUsageBlocks
+}
+
+/**
+ * `GET /v1/wallet/usage?group=member` 的回包（WP279）。只聚合计量事件，没有正文。
+ *
+ * 云上**只回有用量的人**（按积分从多到少）；没用过的同事由本机按名册补 0 行（决策 290）。
+ * 各人加上 `unattributed` 正好等于 `total_credits`，也等于同区间 `group=capability` 的总数。
+ */
+export interface MemberUsageReport {
+  group: 'member'
+  from: Iso8601
+  to: Iso8601
+  /** 区间按哪个时区的自然月切的（缺省本月或给了 `month` 时有；给 `from` / `to` 时没有）。 */
+  timezone?: string
+  rows: MemberUsageRow[]
+  unattributed: MemberUsageUnattributed
+  total_credits: number
+}
+
+/** 是不是按人的那一份（`group` 两边都可能是 `member`，看有没有 `unattributed`）。 */
+export function isMemberUsageReport(
+  report: UsageReport | MemberUsageReport,
+): report is MemberUsageReport {
+  return report.group === 'member' && 'unattributed' in report
+}
+
+/** 三块都是 0 的一份（本机按名册补 0 行时用）。 */
+export function emptyMemberUsageBlocks(): MemberUsageBlocks {
+  return {
+    data: { credits: 0, calls: 0 },
+    ai: { credits: 0, calls: 0 },
+    service: { credits: 0, calls: 0 },
+  }
 }
 
 /* ------------------------------------------------------------------ */
