@@ -11,9 +11,9 @@
  * 2. **路由**（`open`）：判据一个字都不在这里，全在 `@agentsws/roles` 的
  *    `routeWithinPosition`（与服务进程、与秘书是同一份）。这里只负责把"这个人在这个
  *    岗位下持有哪几条职责"递进去。
- * 3. **起 Run 或出选择卡**：判准了就用**被路由到的那条职责的分配**起 Run（05 §4 不并集——
- *    不是岗位的权限，是那一条的）；拿不准就出一张选择卡，不猜。WP237：同一个人的几条职责
- *    打平按分取（`settleCloseCall`），不算拿不准。
+ * 3. **起 Run**：用**被路由到的那条职责的分配**起 Run（05 §4 不并集——不是岗位的权限，是那一条的）。
+ *    WP237：同一个人的几条职责打平按分取（`settleCloseCall`）；WP287：谁都不像也按分 / 先后取
+ *    （`settleAlways`），岗位入口不再出选择卡（只剩一条能参赛的职责都没有时才出）。
  */
 import type { ApprovalItem, Assignment, PersonId, RoleId } from '@agentsws/contracts'
 import {
@@ -22,6 +22,7 @@ import {
   type RouteCandidate,
   roleRouteTerms,
   routeWithinPosition,
+  settleAlways,
   settleCloseCall,
   settleNoHit,
 } from '@agentsws/roles'
@@ -117,10 +118,15 @@ export function installPositions(world: World): PositionsLoop {
     const ordered = template.roles
       .map((r) => profiles.find((p) => p.role_id === r.role))
       .filter((p) => p !== undefined)
-    const verdict = settleNoHit(
-      settleCloseCall(
-        routeWithinPosition(text, profiles),
-        template.roles.map((r) => r.role),
+    // WP287（Luoye 10-09 真机）：岗位入口**永远不出选择卡**——几条都沾一点、谁都不像也按分 / 先后取
+    // （`settleAlways`，与服务进程同一份）。选择卡那条路只剩「一条能参赛的职责都没有」
+    const verdict = settleAlways(
+      settleNoHit(
+        settleCloseCall(
+          routeWithinPosition(text, profiles),
+          template.roles.map((r) => r.role),
+        ),
+        ordered,
       ),
       ordered,
     )
@@ -176,6 +182,8 @@ export function installPositions(world: World): PositionsLoop {
       role_id: picked.role_id,
       assignment_id: picked.id,
       candidates: verdict.candidates.length,
+      // WP287：没问人、自己定的（打平按分 / 一个都没命中 / 谁都不像按先后）
+      ...('settled' in verdict && verdict.settled === true ? { settled: true } : {}),
     })
     routed.push(record)
     return record
