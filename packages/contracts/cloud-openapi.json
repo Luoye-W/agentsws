@@ -2670,15 +2670,6 @@
         "x-scope": "ai",
         "parameters": [
           {
-            "name": "X-Agentsws-Region",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "type": "string",
-              "enum": ["cn", "global"]
-            }
-          },
-          {
             "name": "X-Agentsws-Member",
             "in": "header",
             "required": false,
@@ -2768,17 +2759,6 @@
               }
             }
           },
-          "422": {
-            "description": "数据驻留：`X-Agentsws-Region: cn` 却点了境外模型",
-            "x-error-codes": ["residency_blocked"],
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/CloudEntryErrorBody"
-                }
-              }
-            }
-          },
           "500": {
             "description": "云侧没配上游密钥 / 价目表缺这一项（没扣积分）",
             "x-error-codes": ["internal"],
@@ -2816,15 +2796,6 @@
         ],
         "x-scope": "ai",
         "parameters": [
-          {
-            "name": "X-Agentsws-Region",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "type": "string",
-              "enum": ["cn", "global"]
-            }
-          },
           {
             "name": "X-Agentsws-Member",
             "in": "header",
@@ -2907,17 +2878,6 @@
               }
             }
           },
-          "422": {
-            "description": "数据驻留：`X-Agentsws-Region: cn` 却点了境外模型",
-            "x-error-codes": ["residency_blocked"],
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/CloudEntryErrorBody"
-                }
-              }
-            }
-          },
           "500": {
             "description": "云侧没配上游密钥 / 价目表缺这一项（没扣积分）",
             "x-error-codes": ["internal"],
@@ -2955,15 +2915,6 @@
         ],
         "x-scope": "ai",
         "parameters": [
-          {
-            "name": "X-Agentsws-Region",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "type": "string",
-              "enum": ["cn", "global"]
-            }
-          },
           {
             "name": "X-Agentsws-Member",
             "in": "header",
@@ -3046,17 +2997,6 @@
               }
             }
           },
-          "422": {
-            "description": "数据驻留：`X-Agentsws-Region: cn` 却点了境外模型",
-            "x-error-codes": ["residency_blocked"],
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/CloudEntryErrorBody"
-                }
-              }
-            }
-          },
           "500": {
             "description": "云侧没配上游密钥 / 价目表缺这一项（没扣积分）",
             "x-error-codes": ["internal"],
@@ -3085,7 +3025,7 @@
     "/v1/ai/models": {
       "get": {
         "operationId": "getV1AiModels",
-        "summary": "这把令牌能用的模型清单（不扣积分）；带 `X-Agentsws-Region: cn` 时只列境内可用的",
+        "summary": "这把令牌能用的模型清单（不扣积分）",
         "tags": ["ai"],
         "security": [
           {
@@ -3094,15 +3034,6 @@
         ],
         "x-scope": "ai",
         "parameters": [
-          {
-            "name": "X-Agentsws-Region",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "type": "string",
-              "enum": ["cn", "global"]
-            }
-          },
           {
             "name": "X-Agentsws-Member",
             "in": "header",
@@ -3452,17 +3383,6 @@
           }
         ],
         "x-scope": "data",
-        "parameters": [
-          {
-            "name": "X-Agentsws-Region",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "type": "string",
-              "enum": ["cn", "global"]
-            }
-          }
-        ],
         "responses": {
           "200": {
             "description": "成功",
@@ -3523,15 +3443,6 @@
             "required": true,
             "schema": {
               "type": "string"
-            }
-          },
-          {
-            "name": "X-Agentsws-Region",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "type": "string",
-              "enum": ["cn", "global"]
             }
           }
         ],
@@ -3617,17 +3528,6 @@
               }
             }
           },
-          "422": {
-            "description": "境外渠道被数据驻留挡住",
-            "x-error-codes": ["residency_blocked"],
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/CloudEntryErrorBody"
-                }
-              }
-            }
-          },
           "429": {
             "description": "这个组织今天的次数 / 同时在跑的任务到上限了（后台可调）",
             "x-error-codes": ["rate_limited"],
@@ -3675,17 +3575,6 @@
           }
         ],
         "x-scope": "data",
-        "parameters": [
-          {
-            "name": "X-Agentsws-Region",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "type": "string",
-              "enum": ["cn", "global"]
-            }
-          }
-        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -3776,17 +3665,6 @@
           "404": {
             "description": "没有这项能力 / 没有这个任务（别的组织的任务也是这一句）",
             "x-error-codes": ["not_found"],
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/CloudEntryErrorBody"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "境外渠道被数据驻留挡住",
-            "x-error-codes": ["residency_blocked"],
             "content": {
               "application/json": {
                 "schema": {
@@ -4147,15 +4025,6 @@
             "required": false,
             "schema": {
               "type": "number"
-            }
-          },
-          {
-            "name": "X-Agentsws-Region",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "type": "string",
-              "enum": ["cn", "global"]
             }
           },
           {
@@ -4565,7 +4434,7 @@
     "/v1/data/kol/creators/{channel}/{handle}/refresh": {
       "post": {
         "operationId": "postV1DataKolCreatorsChannelHandleRefresh",
-        "summary": "去外部源刷新一次（`social.fetch`；`X-Agentsws-Region: cn` 只查库）",
+        "summary": "去外部源刷新一次（`social.fetch`）",
         "tags": ["kol-public"],
         "security": [
           {
@@ -4588,15 +4457,6 @@
             "required": true,
             "schema": {
               "type": "string"
-            }
-          },
-          {
-            "name": "X-Agentsws-Region",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "type": "string",
-              "enum": ["cn", "global"]
             }
           },
           {
@@ -8419,7 +8279,7 @@
           }
         },
         "required": ["object", "data"],
-        "description": "`GET /v1/ai/models`：带 `X-Agentsws-Region: cn` 时只列境内可用的。"
+        "description": "`GET /v1/ai/models`：这把令牌能用的模型清单。"
       },
       "AiPlatform": {
         "type": "string",
@@ -10291,7 +10151,8 @@
           },
           "reason": {
             "type": "string",
-            "enum": ["residency", "quota_exhausted", "no_source", "not_found"]
+            "enum": ["residency", "quota_exhausted", "no_source", "not_found"],
+            "description": "`residency` 已废弃（决策 291 / WP281：不再产生，只为老回包解析不崩先留着）。"
           },
           "message": {
             "type": "string"
@@ -10824,8 +10685,7 @@
             "description": "缓存命中的输入价；不填按 `in` 算。"
           },
           "cn": {
-            "type": "boolean",
-            "description": "境内可用（数据驻留 `cn` 的请求只允许这些）。"
+            "type": "boolean"
           }
         },
         "required": ["model", "in", "out"],

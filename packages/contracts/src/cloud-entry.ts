@@ -178,7 +178,10 @@ export interface PricingModelEntry {
   out: number
   /** 缓存命中的输入价；不填按 `in` 算。 */
   cached?: number
-  /** 境内可用（数据驻留 `cn` 的请求只允许这些）。 */
+  /**
+   * @deprecated 决策 291（WP281）：「数据不出境」删了，不再按它拦，界面也不再展示。
+   * 私有云价目表还在写这一格，等那边（WP280）去掉再删。
+   */
   cn?: boolean
 }
 

@@ -202,11 +202,6 @@ export interface DataTaskItemsPage {
   expires_at?: Iso8601
 }
 
-/** 我们认的请求头：数据驻留。`cn` = 境外渠道一个都不走，只能境外取的能力回 422 `residency_blocked`。 */
-export interface DataRegionHeaders {
-  'X-Agentsws-Region'?: 'cn' | 'global'
-}
-
 /* ------------------------------------------------------------------ */
 /* 本机那一侧的路由（docs/75：数据从哪来）                               */
 /* ------------------------------------------------------------------ */
