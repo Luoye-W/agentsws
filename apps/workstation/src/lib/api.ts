@@ -7349,7 +7349,7 @@ export async function brandAssetObjectUrl(file_url: string): Promise<string> {
 export async function uploadBrandAsset(
   file: File,
   opts: { matter_id?: string; tags?: string[] } = {},
-): Promise<{ asset: BrandAssetRow }> {
+): Promise<{ asset: BrandAssetRow; edit_mask?: boolean }> {
   const headers = new Headers()
   const token = readStoredToken()
   if (token !== null) headers.set('Authorization', `Bearer ${token}`)
@@ -7362,7 +7362,8 @@ export async function uploadBrandAsset(
   const text = await res.text()
   const parsed: unknown = text === '' ? {} : JSON.parse(text)
   if (!res.ok) throw new ApiClientError(res.status, parsed as ApiErrorBody)
-  return (parsed as ApiEnvelope<{ asset: BrandAssetRow }>).data
+  // WP283：`edit_mask` = 现在的改图型号能不能「圈区域」
+  return (parsed as ApiEnvelope<{ asset: BrandAssetRow; edit_mask?: boolean }>).data
 }
 
 // ── WP274（决策 255）：生图跟着用户自己的模型走 ──────────────────────────
@@ -7431,3 +7432,10 @@ export const saveImageOnlyProvider = (
     body: { kind: 'openai_compatible', ...input, image_only: true, price_source: 'manual' },
     ...withAssignment(assignment),
   })
+
+// ── WP283（决策 300）：改图认不认遮罩 ──────────────────────────────────────
+
+export interface ModelImageUsing {
+  /** 改图认不认遮罩（按型号能力表判；经 Agents 工坊云的型号都不认）。 */
+  edit_mask?: boolean
+}

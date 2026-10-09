@@ -211,6 +211,37 @@ describe('WP283 300：改图认不认遮罩按型号能力表判', () => {
   })
 })
 
+describe('WP283 300：传图时顺带说能不能圈区域（人人都传得了，不必有设置权限）', () => {
+  const upload = async (server: Server): Promise<{ edit_mask?: boolean }> => {
+    const form = new FormData()
+    form.append('file', new Blob([encodePng(2, 2, new Uint8Array(12), 'rgb')]), 'box.png')
+    const res = await server.gateway.fetch(
+      new Request('http://127.0.0.1/v1/brand-assets/upload', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${server.bootstrap.internalToken}`,
+          'X-Assignment': server.bootstrap.ownerAssignment.id,
+        },
+        body: form,
+      }),
+    )
+    expect(res.status).toBe(201)
+    return ((await res.json()) as { data: { edit_mask?: boolean } }).data
+  }
+
+  it('自己的 OpenAI key → true；走积分（OpenRouter）→ false；没配 → false', async () => {
+    const { server } = await boot()
+    expect((await upload(server)).edit_mask).toBe(false)
+    await call(server, 'PUT', '/v1/models/providers/deepseek', DEEPSEEK)
+    server.secrets.put(CLOUD_TOKEN_SECRET_ID, { token: 'wst_wp283' })
+    expect((await upload(server)).edit_mask).toBe(false)
+    await call(server, 'PUT', '/v1/models/providers/openai', OPENAI)
+    await call(server, 'PUT', '/v1/models/defaults', { default: 'openai/gpt-4o-mini' })
+    expect((await view(server)).using?.source).toBe('own_openai')
+    expect((await upload(server)).edit_mask).toBe(true)
+  })
+})
+
 describe('WP283 301：gpt-image-1.5 读到当 gpt-image-2', () => {
   it('老设置里存着 1.5：读出来是 2、出图打的也是 2；保存 1.5 也存成 2', async () => {
     const { server, calls, dir } = await boot()

@@ -2751,6 +2751,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   /** WP268：每个品牌一份素材库与生图服务（装品牌时登记；决定钩子与 `/v1/brand-assets` 按品牌取）。 */
   const brandAssetsByWs = new Map<WorkspaceId, BrandAssets>()
   const imageServices = new Map<WorkspaceId, ImageService>()
+  /** WP283（决策 300）：这个品牌现在的改图型号认不认遮罩（传图时告诉工作台给不给「圈区域」）。 */
+  const imageEditMaskByWs = new Map<WorkspaceId, () => boolean>()
   const brandAssetsOf = async (ws: WorkspaceId): Promise<BrandAssets> => {
     await brands?.forWorkspace(ws)
     const lib = brandAssetsByWs.get(ws)
@@ -3690,6 +3692,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         : { extraImageHosts: options.images.extraImageHosts }),
     })
     brandAssetsByWs.set(ws, brandAssets)
+    imageEditMaskByWs.set(ws, () => ownModels.imageView().using?.edit_mask === true)
     const imageService = createImageService({
       workspace_id: ws,
       clock,
@@ -9229,7 +9232,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         const lib = await brandAssetsOf(actor.workspace_id as WorkspaceId)
         try {
           const asset = await lib.importUpload({ ...input, by: actor.person_id })
-          return { asset: brandAssetRow(asset) }
+          // WP283（决策 300）：顺带告诉工作台现在的改图型号能不能「圈区域」（人人都传得了图，不必有设置权限）
+          const edit_mask = imageEditMaskByWs.get(actor.workspace_id as WorkspaceId)?.() === true
+          return { asset: brandAssetRow(asset), edit_mask }
         } catch (e) {
           if (e instanceof BrandAssetError) throw new ApiError('invalid_input', e.message)
           throw e
