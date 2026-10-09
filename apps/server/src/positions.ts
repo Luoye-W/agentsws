@@ -1019,6 +1019,8 @@ export function createPositions(options: PositionsOptions): PositionsAssembly {
         assignment_id: own.id,
         text: input.text,
       })
+      // WP287：会话里接着说的那一句真要动手了（出了卡）——同样转成任务、线程里说一句
+      if (matter.ask !== undefined && said.run_id !== undefined) answerOf(matter.id, said.run_id)
       return said.run_id === undefined ? { event: said.event } : said
     }
     const template = options.positions().find((p) => p.id === template_id)

@@ -199,6 +199,29 @@ describe('WP287 ① 问一句是会话、要动手才是任务', () => {
     expect(await openMatters()).toBe(1)
   })
 
+  it('会话里接着说一句、这回要动手了（出了卡）→ 同样转成任务', async () => {
+    const out = await open('A 商品现在多少钱')
+    expect(server.work.getMatter(out.matter.id)?.ask).toBeDefined()
+    const adapter = server.runtime?.adapter
+    if (adapter === undefined) throw new Error('没有运行时')
+    vi.spyOn(adapter, 'run').mockImplementation(async (req: RunRequest) => {
+      server.work.appendEvent(req.work_item?.id as string, {
+        kind: 'card',
+        text: '改价：A 商品 -10%',
+        actor: { kind: 'agent', id: req.id },
+        approval_item_id: 'apr_fake_2',
+        run_id: req.id,
+      })
+      return result(req, 'completed', '出了一张改价卡')
+    })
+    const res = await call('POST', `/v1/matters/${out.matter.id}/messages`, {
+      text: '那降到 99 吧',
+    })
+    expect(res.status).toBe(201)
+    expect(server.work.getMatter(out.matter.id)?.ask).toBeUndefined()
+    expect(await openMatters()).toBe(1)
+  })
+
   it('「你好」当场回一句问要做什么（不起运行）', async () => {
     const out = await open('你好')
     expect(out.mode).toBe('ask')

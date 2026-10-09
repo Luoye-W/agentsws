@@ -280,7 +280,19 @@ describe('WP100：十一种各有主动词，头一行的类别写人话', () =>
     ['change', { kind: 'staged_change', change_kind: 'price_change' }, '批准', '改价'],
     ['publish', { kind: 'staged_change', change_kind: 'publish_post' }, '批准发布', '发布'],
     ['money', { kind: 'staged_change', change_kind: 'refund' }, '批准退款', '退款'],
-    ['choice', { kind: 'ai_question' }, '就这条', '路由'],
+    // WP287：「就这条 / 都不是」只给真有选项的选择题（复盘这类借了排版却没选项的用自己的说法）
+    [
+      'choice',
+      {
+        kind: 'ai_question',
+        options: [
+          { id: 'a', label: '方案 A' },
+          { id: 'b', label: '方案 B' },
+        ],
+      },
+      '就这条',
+      '路由',
+    ],
     ['variants', { kind: 'staged_change', change_kind: 'design_variant' }, '就这张', '变体'],
     ['aftermath', { kind: 'staged_change', change_kind: 'pause_ad' }, '恢复投放', '止损后'],
     ['person', { kind: 'staged_change', change_kind: 'community_membership' }, '通过', '入群'],
@@ -313,7 +325,15 @@ describe('WP100：十一种各有主动词，头一行的类别写人话', () =>
   })
 
   it('「指导」在选择卡上排不进按钮行，收进 ···（动作还在，位置换了）', async () => {
-    renderCard(layoutCard('choice', { kind: 'ai_question' }))
+    renderCard(
+      layoutCard('choice', {
+        kind: 'ai_question',
+        options: [
+          { id: 'a', label: '方案 A' },
+          { id: 'b', label: '方案 B' },
+        ],
+      }),
+    )
     const bar = screen.getByTestId('deck-action-bar')
     expect(within(bar).queryByText('我来说')).toBeNull()
     await userEvent.click(screen.getByTestId('deck-more'))

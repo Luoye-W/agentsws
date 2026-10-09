@@ -120,7 +120,7 @@ import {
 import { cardRefOf, type Work } from '@agentsws/work'
 import type { ComputerUseAssembly } from './computer-use.js'
 import { blockedByTool, blockedLine, blockReasonOf, RunBlockLog } from './run-blocked.js'
-import { runFailureLine } from './run-failure.js'
+import { runFailureLine, runFailureText } from './run-failure.js'
 import { RunStepLog } from './run-steps.js'
 import { PartialRunLog, stoppedLine } from './run-stop.js'
 import { createSkillToolExecutor, isReadSkillTool } from './skill-tools.js'
@@ -2011,8 +2011,16 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
        * 以前照「跑完了」记——界面上看不出失败。现在说「没跑成：<人话>」+ 重试；摘要不落到事项上。
        */
       if (result.status === 'failed') {
-        recordFailure(failure ?? { code: 'internal', message: result.summary, retryable: true })
+        const error = failure ?? { code: 'internal', message: result.summary, retryable: true }
+        recordFailure(error)
         recordBlocked()
+        // 事项的「到哪了」也记一句人话（不是原始错误）；会话引用照落，「接着跑」续得上
+        work?.onRunCompleted({
+          matter_id: input.matter.id,
+          run_id,
+          summary: runFailureText(error),
+          session_ref: result.session_ref,
+        })
         return { run_id }
       }
       // 37 §2.2b：Agent 说的话进时间线；摘要与会话引用由 onRunCompleted 落到事项上
