@@ -2014,11 +2014,12 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
         const error = failure ?? { code: 'internal', message: result.summary, retryable: true }
         recordFailure(error)
         recordBlocked()
-        // 事项的「到哪了」也记一句人话（不是原始错误）；会话引用照落，「接着跑」续得上
+        // 事项的「到哪了」：运行时写的那句（登录过期、格式异常…本来就是人话）；内部错的原文可能带
+        // 参数表 / 堆栈，换成通用人话。会话引用照落，「接着跑」续得上
         work?.onRunCompleted({
           matter_id: input.matter.id,
           run_id,
-          summary: runFailureText(error),
+          summary: error.code === 'internal' ? runFailureText(error) : result.summary,
           session_ref: result.session_ref,
         })
         return { run_id }
