@@ -114,13 +114,13 @@ describe('WP287 会话线程', () => {
     current = view({ ask: { at: T0 } }, [
       ROUTE,
       ASKED,
-    ev({
-      id: 'mev_done',
-      kind: 'status',
-      text: '跑完了',
-      run_id: 'run_1',
-      run_digest: { seconds: 0, outcome: 'completed', steps: [] },
-    }),
+      ev({
+        id: 'mev_done',
+        kind: 'status',
+        text: '跑完了',
+        run_id: 'run_1',
+        run_digest: { seconds: 0, outcome: 'completed', steps: [] },
+      }),
       ev({
         id: 'mev_a',
         kind: 'agent_message',
@@ -150,13 +150,13 @@ describe('WP287 会话线程', () => {
     current = view({}, [
       ROUTE,
       ASKED,
-    ev({
-      id: 'mev_done',
-      kind: 'status',
-      text: '跑完了',
-      run_id: 'run_1',
-      run_digest: { seconds: 0, outcome: 'completed', steps: [] },
-    }),
+      ev({
+        id: 'mev_done',
+        kind: 'status',
+        text: '跑完了',
+        run_id: 'run_1',
+        run_digest: { seconds: 0, outcome: 'completed', steps: [] },
+      }),
       ev({ id: 'mev_a', kind: 'agent_message', text: '改好了。', run_id: 'run_1' }),
       ev({
         id: 'mev_stop',
