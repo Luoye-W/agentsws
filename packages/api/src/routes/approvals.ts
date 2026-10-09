@@ -8,6 +8,7 @@ import type {
   Recipient,
   Todo,
 } from '@agentsws/contracts'
+import { instructionRuleCard } from '@agentsws/core'
 import { projectCard, resolveDecision } from '@agentsws/deck'
 import { z } from 'zod'
 import { ApiError, normalizeError } from '../errors.js'
@@ -21,7 +22,7 @@ import {
   redactItem,
   tokenFor,
 } from '../helpers.js'
-import { peersBypass, type Route, route } from '../route-spec.js'
+import { peersBypass, type Route, type RouteSpec, route } from '../route-spec.js'
 import type { GatewayDeps } from '../types.js'
 import { DuplicateAck, type GuardResult, guardSimilar, recordCatalogNote } from './catalog.js'
 import { fromDeckError } from './workstation.js'
@@ -190,6 +191,56 @@ const BatchDecideBody = z.object({
   defer_until: z.string().optional(),
 })
 
+/**
+ * WP284（决策 294）：**只关于收件人本人的那几种卡**——他是收件人，而且这张卡问的是他自己的事：
+ * 开公司模式时那张「知道了 / 我要退出」（`policy_change` + `form: company_notice`）、
+ * 「交给你」（交给对方 / 交出发起人 / 请你一起做：`claim` + `form: handoff`）。
+ * 有人申请加入、改动、报价这些问的是别人或公司的事，不在里面。
+ */
+export const SELF_CARD_FORMS: Readonly<Partial<Record<ApprovalKind, readonly string[]>>> = {
+  policy_change: ['company_notice'],
+  claim: ['handoff'],
+}
+
+export function isSelfCard(item: ApprovalItem, person_id: string): boolean {
+  if (!item.routing.recipients.some((r) => r.person === person_id)) return false
+  const form = (item.payload as { form?: unknown } | null | undefined)?.form
+  return typeof form === 'string' && (SELF_CARD_FORMS[item.kind]?.includes(form) ?? false)
+}
+
+const DECIDE_DENIED = `无权限：${DECIDE.domain}.${DECIDE.op}（range=${DECIDE.range}）`
+const DECIDE_DENIED_DETAILS = (assignment_id: string) => ({
+  assignment_id,
+  domain: DECIDE.domain,
+  op: DECIDE.op,
+  range: DECIDE.range,
+  sensitivity: DECIDE.sensitivity,
+})
+
+/** 这次绑定的分配有没有批准权（与网关那一道判定同一个元组）。 */
+const canDecide = (deps: GatewayDeps, assignment_id: string): boolean =>
+  deps.roles.can(assignment_id, DECIDE.domain, DECIDE.op, {
+    range: DECIDE.range,
+    sensitivity: DECIDE.sensitivity,
+  })
+
+/** ② 一律放行（WP278）；没有批准权的也先放进来，由处理函数按「是不是关于他本人的卡」判。 */
+const decideBypass: NonNullable<RouteSpec['authzBypass']> = (c, rctx, deps) => {
+  if (peersBypass(c, rctx, deps)) return true
+  const a = rctx.assignment
+  return a !== undefined && !canDecide(deps, a.id)
+}
+
+/** 这一次决定只认关于他本人的卡（不是 ②、这条分配也没有批准权）。 */
+function selfDecideOnly(
+  c: Parameters<RouteSpec['authzBypass'] & {}>[0],
+  deps: GatewayDeps,
+  assignment_id: string,
+): boolean {
+  if (peersBypass(c, c.get('rctx'), deps)) return false
+  return !canDecide(deps, assignment_id)
+}
+
 async function mustGet(deps: GatewayDeps, id: string, workspace_id: string): Promise<ApprovalItem> {
   const item = await deps.approvals.get(id)
   // 跨工作区不泄漏存在性：一律 404。
@@ -216,7 +267,7 @@ function diffOf(
  * |---|---|
  * | `single_reply` | 就这一条：reject + 指导文本，Agent 重做（14 §9 的强负样本），不建新卡 |
  * | `similar_cases` | 24 的学习回路：建一张 `skill_lesson` 卡（技能 overlay 提案），人再批一次才改行为 |
- * | `global_rule` | 05 的策略层：建一张 `policy_change` 卡，批了才改职责策略 |
+ * | `global_rule` | 05 的策略层：建一张 `policy_change` 卡；批了写进这条职责的规矩（WP284），之后每次运行都带上 |
  *
  * 两条纪律：**指导本身不改任何东西**（它只是提议），且提议照样走 14 的预检与队列。
  */
@@ -236,85 +287,25 @@ async function landInstruction(
   const { item, scope, text, guard } = input
   if (scope !== 'similar_cases' && scope !== 'global_rule') return undefined
   const lesson = scope === 'similar_cases'
-  const routing = {
-    recipients: [{ person: input.person_id, via: lesson ? 'role_holder' : 'owner' } as const],
-    rule: (lesson ? 'role_holder' : 'owner') as 'role_holder' | 'owner',
-    escalation: {
-      after_hours: lesson ? 72 : 48,
-      business_hours: true,
-      chain: ['owner' as const],
-      escalated_at: [],
-    },
-    separation_of_duties: false,
-  }
-  const common = {
-    workspace_id: input.workspace_id,
-    schema_version: 1 as const,
-    role_id: item.role_id,
-    proposer: { kind: 'person' as const, id: input.person_id },
-    // 指导产的卡永远 L1：指导本身不改任何东西，改不改由人再批一次
-    automation: { level_at_creation: 'L1' as const },
-    routing,
-    priority: 'queue' as const,
-    links: { parent: item.id },
-  }
-  const created = lesson
-    ? await deps.approvals.create({
-        ...common,
-        kind: 'skill_lesson' as const,
-        subject: {
-          object: { type: 'skill', id: item.role_id },
-          ...(item.subject.matter_id === undefined ? {} : { matter_id: item.subject.matter_id }),
-        },
-        dedupe_key: `${input.workspace_id}:skill_lesson:instruction:${item.id}`,
-        title: `把这条指导变成规矩：${text.slice(0, 40)}`,
-        summary: '你刚才说的这一条，以后类似情况都按它来。采纳后进技能 overlay（24）。',
-        payload: {
-          form: 'skill_lesson',
-          scope: 'similar_cases',
-          skill: item.role_id,
-          text,
-          source_card_id: item.id,
-          source_kind: item.kind,
-        },
-        evidence: {
-          source_events: [],
-          diff: { before: null, after: text, summary: '技能 overlay 追加一条' },
-          provenance: { seen: [item.subject.object] },
-          precheck: { permission_diff: 'ok' },
-        },
-      })
-    : await deps.approvals.create({
-        ...common,
-        kind: 'policy_change' as const,
-        subject: {
-          object: { type: 'policy', id: `instruction_${item.id}` },
-          ...(item.subject.matter_id === undefined ? {} : { matter_id: item.subject.matter_id }),
-        },
-        dedupe_key: `${input.workspace_id}:policy_change:instruction:${item.id}`,
-        title: `以后都这样：${text.slice(0, 40)}`,
-        summary: '这条要写进职责策略。批准后对这个岗位一律生效（05）。',
-        payload: {
-          target: 'workspace_policy',
-          before: null,
-          after: { rule: text },
-          affected_assignments: [input.assignment_id],
-          source_card_id: item.id,
-        },
-        evidence: {
-          source_events: [],
-          provenance: { seen: [item.subject.object] },
-          precheck: { permission_diff: 'ok', semantic_diff: 'ok' },
-        },
-      })
-  if (created.state === 'blocked') return undefined
   if (!lesson) {
+    // WP284（决策 275）：「以后都这样」那张策略卡的形状与模拟世界共用一份（`@agentsws/core`）；
+    // 批了以后由宿主落成这条职责规矩里的一句话（服务端 `role-rules.ts`）
+    const created = await deps.approvals.create(
+      instructionRuleCard({
+        workspace_id: input.workspace_id,
+        person_id: input.person_id,
+        assignment_id: input.assignment_id,
+        item,
+        text,
+      }),
+    )
+    if (created.state === 'blocked') return undefined
     // 规矩在别处没有一张自己的表：目录替它保管一份，工具箱上才看得见
     await deps.catalog?.record?.({
       kind: 'rule',
       id: `rule:${created.id}`,
       title: text.slice(0, 60),
-      summary: '指导落成的规矩：批准后对这个岗位一律生效（05）',
+      summary: '指导落成的规矩：批了写进这条职责的规矩',
       owner: input.person_id,
       layer: 'personal',
       used_by_positions: [input.assignment_id],
@@ -326,7 +317,52 @@ async function landInstruction(
       entry_id: `rule:${created.id}`,
       guard,
     })
+    return { kind: created.kind, approval_item_id: created.id }
   }
+  const created = await deps.approvals.create({
+    workspace_id: input.workspace_id,
+    schema_version: 1 as const,
+    role_id: item.role_id,
+    proposer: { kind: 'person' as const, id: input.person_id },
+    // 指导产的卡永远 L1：指导本身不改任何东西，改不改由人再批一次
+    automation: { level_at_creation: 'L1' as const },
+    routing: {
+      recipients: [{ person: input.person_id, via: 'role_holder' as const }],
+      rule: 'role_holder' as const,
+      escalation: {
+        after_hours: 72,
+        business_hours: true,
+        chain: ['owner' as const],
+        escalated_at: [],
+      },
+      separation_of_duties: false,
+    },
+    priority: 'queue' as const,
+    links: { parent: item.id },
+    kind: 'skill_lesson' as const,
+    subject: {
+      object: { type: 'skill', id: item.role_id },
+      ...(item.subject.matter_id === undefined ? {} : { matter_id: item.subject.matter_id }),
+    },
+    dedupe_key: `${input.workspace_id}:skill_lesson:instruction:${item.id}`,
+    title: `把这条指导变成规矩：${text.slice(0, 40)}`,
+    summary: '你刚才说的这一条，以后类似情况都按它来。采纳后进技能 overlay（24）。',
+    payload: {
+      form: 'skill_lesson',
+      scope: 'similar_cases',
+      skill: item.role_id,
+      text,
+      source_card_id: item.id,
+      source_kind: item.kind,
+    },
+    evidence: {
+      source_events: [],
+      diff: { before: null, after: text, summary: '技能 overlay 追加一条' },
+      provenance: { seen: [item.subject.object] },
+      precheck: { permission_diff: 'ok' },
+    },
+  })
+  if (created.state === 'blocked') return undefined
   return { kind: created.kind, approval_item_id: created.id }
 }
 
@@ -597,8 +633,12 @@ export function approvalRoutes(): Route[] {
          * WP278：② 里刚进来、还没有岗位的同事（只有「工作区成员」那条，没有批准权）也要能点发给他的卡——
          * 「请你一起做」「把发起人交给你」「知道了 / 撤回」。② 没有审批流；能点哪张仍由收件人令牌说了算
          * （下面的 `tokenFor`：不是发给他的卡拿不到令牌）。
+         *
+         * WP284（决策 294）：③ 里没有岗位的同事也一样——凡是**收件人就是他本人、只关于他自己**的那几种卡
+         * （开公司那张「知道了 / 我要退出」、交给你）都能点；别的审批类卡照旧按职责权限。
+         * 要先读卡才知道是哪种，所以这一判挪进处理函数（`selfDecideOnly`）。
          */
-        authzBypass: peersBypass,
+        authzBypass: decideBypass,
         outbound: true,
         params: [{ name: 'id', in: 'path', required: true, description: '审批项 id' }],
         body: DecideBody,
@@ -606,8 +646,20 @@ export function approvalRoutes(): Route[] {
       },
       async (c, deps) => {
         const p = principalOf(c)
-        assignmentOf(c)
+        const assignment = assignmentOf(c)
         const id = param(c, 'id')
+        if (selfDecideOnly(c, deps, assignment.id)) {
+          // 没有批准权：只认关于他本人的那几种卡；别的卡（含不存在的）一律同一句 403，不泄漏存在性
+          const own = await deps.approvals.get(id)
+          if (
+            own === undefined ||
+            own.workspace_id !== p.workspace_id ||
+            !isSelfCard(own, p.person_id)
+          )
+            throw new ApiError('forbidden', DECIDE_DENIED, {
+              details: DECIDE_DENIED_DETAILS(assignment.id),
+            })
+        }
         const item = await mustGet(deps, id, p.workspace_id)
         const input = await body(c, DecideBody)
         const token = input.decision_token ?? tokenFor(item, p.person_id)

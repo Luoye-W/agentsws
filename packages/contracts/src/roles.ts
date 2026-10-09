@@ -620,3 +620,41 @@ export interface PersonaView {
   updated_at?: Iso8601
   updated_by?: PersonId
 }
+
+/**
+ * WP284（决策 275）：**「以后都这样」批了以后落成的一句职责规矩。**
+ *
+ * 人在卡上指导时选了「以后都这样」→ 出一张策略卡（`policy_change`）→ 有人点了通过 →
+ * 这一句写进**这个品牌里这条职责**的规矩。之后这条职责的每一次运行都把它带进提示词
+ * （排在角色定位后面）。职责规矩 / 右栏角色面板里看得见、改得了、删得掉；留着谁定的、
+ * 谁提的、从哪张卡来的。
+ */
+export interface RoleRule {
+  /** `rr_*` */
+  id: string
+  workspace_id: WorkspaceId
+  role_id: RoleId
+  /** 那一句规矩（人话，≤ 300 字）。 */
+  text: string
+  /** 点通过的那位（定的人）。 */
+  by: PersonId
+  /** 写指导的那位（提的人）；与 `by` 相同时也照写。 */
+  proposed_by?: PersonId
+  /** 来源：那张「以后都这样」策略卡的 id。 */
+  source_card_id?: string
+  /** 指导是写在哪张卡上的（卡标题，给人认）。 */
+  source_title?: string
+  /** 那张卡挂的事项（界面上点得过去）。 */
+  matter_id?: string
+  created_at: Iso8601
+  updated_at?: Iso8601
+  updated_by?: PersonId
+}
+
+/** 界面上那一行：规矩 + 人名 + 这个人能不能改。 */
+export interface RoleRuleView extends RoleRule {
+  by_name?: string
+  updated_by_name?: string
+  /** 这个人能不能改 / 删（① ② 能；③ 只有老板与管理员）。 */
+  can_edit: boolean
+}

@@ -68,6 +68,7 @@ import { positionEntryRoutes } from './routes/positions.js'
 import { prRoutes } from './routes/pr.js'
 import { privacyRoutes } from './routes/privacy.js'
 import { readRoutesRoutes } from './routes/read-routes.js'
+import { roleRuleRoutes } from './routes/role-rules.js'
 import { runLimitsRoutes } from './routes/run-limits.js'
 import { scheduleRoutes } from './routes/schedules.js'
 import { searchDataRoutes } from './routes/search-data.js'
@@ -173,6 +174,8 @@ export function collectRoutes(): Route[] {
     ...assignmentRoutes(),
     // WP120（69 §4）：角色定位。排在这儿是因为它与分配一样属于「制度层的读写」
     ...personaRoutes(),
+    // WP284（决策 275）：职责规矩里那几句「以后都这样」
+    ...roleRuleRoutes(),
     // WP28 制度面：职责 / 岗位 / 分配 / 策略层 / 成员与邀请。
     // 必须排在 assignmentRoutes 之后：`GET /v1/assignments` 与这里的 POST 是同一条路径的两个方法
     ...orgRoutes(),

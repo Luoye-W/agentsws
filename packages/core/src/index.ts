@@ -8,6 +8,8 @@ export * from './mandate.js'
 export * from './provenance.js'
 export * from './raw-store.js'
 export * from './redact-outbound.js'
+// WP284（决策 275）：「以后都这样」落成职责规矩里的一句话（出卡、认卡、进提示词那一节、规矩簿）
+export * from './role-rules.js'
 export * from './secret-patterns.js'
 // WP125（72 §P0-2）：客户贴进来的支付 / 身份标识，进 prompt 前打码（打码先于围栏）
 export * from './sensitive-mask.js'

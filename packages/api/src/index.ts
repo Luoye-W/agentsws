@@ -605,6 +605,8 @@ export {
   type ReadRoutesApiPort,
   readRoutesRoutes,
 } from './routes/read-routes.js'
+export type { RoleRulesActor, RoleRulesPort } from './routes/role-rules.js'
+export { roleRuleRoutes } from './routes/role-rules.js'
 // WP236：运行时长线
 export { type RunLimitsPort, runLimitsRoutes } from './routes/run-limits.js'
 export { scheduleRoutes } from './routes/schedules.js'
