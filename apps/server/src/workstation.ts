@@ -206,6 +206,17 @@ export function createWorkstationPort(options: WorkstationPortOptions): Workstat
 
     items: (actor, position) => itemsFor(actor, position, OPEN_STATES),
 
+    // WP278（决策 284）：发给本人、挂在底座职责上的卡（不按他持有哪条分配筛）
+    async baseItems(actor) {
+      const rows = await options.approvals.queue({
+        workspace_id: actor.workspace_id,
+        person_id: actor.person_id,
+        lane: 'mine',
+        state: [...OPEN_STATES] as ApprovalItem['state'][],
+      })
+      return rows.filter((i) => i.role_id.startsWith('common.'))
+    },
+
     async queryContext(actor, position, range): Promise<QueryContext> {
       // 活数据源在这里拉新（缓存还新就是个空操作）；写死的表没有这个方法
       await options.data.ensureFresh?.()

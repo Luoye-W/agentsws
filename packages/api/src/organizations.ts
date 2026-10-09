@@ -173,7 +173,15 @@ export interface Organizations {
    * 里的角色（新的 `owner`，原来的留 `admin`）、这个组织下每个品牌工作区的 `owner_id`（审批落「老板」
    * 读的就是它）一起换。新老板必须已经在组织或某个品牌里。
    */
-  transferOrganizationOwner?(org_id: OrganizationId, to: PersonId): Promise<Organization>
+  transferOrganizationOwner?(
+    org_id: OrganizationId,
+    to: PersonId,
+    /**
+     * WP278（决策 276）：原来那位变成什么。不给 = `admin`（WP277 ③ 选了别人当老板，原发起人留管理员）；
+     * `member` = ② 交出发起人，原发起人变普通同事（组织名单 `member`、各品牌成员 `member`）。
+     */
+    opts?: { from_role?: 'admin' | 'member' },
+  ): Promise<Organization>
 }
 
 const activeMembers = (org: Organization): OrganizationMember[] =>
@@ -349,7 +357,8 @@ export function createOrganizations(options: OrganizationsOptions): Organization
       return member
     },
 
-    async transferOrganizationOwner(org_id, to): Promise<Organization> {
+    async transferOrganizationOwner(org_id, to, opts): Promise<Organization> {
+      const fromRole = opts?.from_role ?? 'admin'
       const org = need(org_id)
       if (org.owner_id === to) return org
       const brands = options.listWorkspaces().filter((w) => w.org_id === org_id)
@@ -365,7 +374,7 @@ export function createOrganizations(options: OrganizationsOptions): Organization
           : m.person_id === to
             ? { ...m, role: 'owner' as const }
             : m.person_id === from
-              ? { ...m, role: 'admin' as const }
+              ? { ...m, role: fromRole }
               : m,
       )
       const next: Organization = {
@@ -378,7 +387,7 @@ export function createOrganizations(options: OrganizationsOptions): Organization
         if (w.owner_id === to) continue
         options.putWorkspace({ ...w, owner_id: to })
         if (inBrand.has(w.id)) options.setMembershipRole?.(w.id, to, 'owner')
-        options.setMembershipRole?.(w.id, from, 'manager')
+        options.setMembershipRole?.(w.id, from, fromRole === 'member' ? 'member' : 'manager')
       }
       return next
     },

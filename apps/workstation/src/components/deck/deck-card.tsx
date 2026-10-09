@@ -46,9 +46,10 @@ import {
   isHandoffOfferCard,
   isPeerNoticeCard,
 } from '@/components/peers/handoff-strip'
+import { LeaveConfirm } from '@/components/peers/leave-confirm'
 import { useRailState } from '@/components/rail/rail-state'
 import { Button } from '@/components/ui/button'
-import { getPositions, type RoleTaskExampleData } from '@/lib/api'
+import { ensureSession, getPositions, type RoleTaskExampleData } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 import { formatDateTime } from '@/lib/format'
 import { recordText, tOr } from '@/lib/humanize'
@@ -255,6 +256,13 @@ export function DeckCardView({
   const [detail, setDetail] = useState(false)
   const [panel, setPanel] = useState<NoteMode | 'supplement' | null>(null)
   const [option, setOption] = useState<string>('')
+  /** WP278：「我要退出」点了，先问一句（框里列出会断开的个人连接）。 */
+  const [leaving, setLeaving] = useState(false)
+  const session = useQuery({
+    queryKey: ['session'],
+    queryFn: ensureSession,
+    enabled: isCompanyNoticeCard(card),
+  })
 
   // 换卡就把折叠区收回去：上一张卡写了一半的指导不该出现在下一张卡上。
   // biome-ignore lint/correctness/useExhaustiveDependencies: 依赖就是"换了一张卡"这件事，不是 setter
@@ -262,6 +270,7 @@ export function DeckCardView({
     setPanel(null)
     setDetail(false)
     setOption('')
+    setLeaving(false)
   }, [card.id])
 
   const isQuestion = card.options !== undefined && card.options.length > 0
@@ -273,6 +282,12 @@ export function DeckCardView({
   const handoffOffer = isHandoffOfferCard(card)
   /** WP276：② 改共用东西的通知——「知道了 / 撤回」直接是两个按钮（不是先选一个再点通过）。 */
   const peerNotice = isPeerNoticeCard(card)
+  /** WP278：「把发起人交给你 / 请你一起做」——人对人的一问，没有证据可看。 */
+  const peerOffer =
+    handoffOffer &&
+    ['initiator', 'position'].includes(
+      String((card.detail.payload as { object?: unknown } | undefined)?.object),
+    )
   const routeChoice = (card.kind === 'claim' && isQuestion && !handoffOffer) || peerNotice
   const examples = useTaskExamples(card.role_id)
   const positionName = usePositionName(card.role_id)
@@ -370,8 +385,11 @@ export function DeckCardView({
         <StatusPill tone={BAND_TONE[card.priority_band]} data-testid="deck-band">
           {positionName === undefined ? category : `${positionName} · ${category}`}
         </StatusPill>
-        {/* WP277：「知道了」型通知卡没有人在等它的结果——不出等待时长 */}
-        {peerNotice ? null : <WaitPill card={card} />}
+        {/*
+          WP277：「知道了」型通知卡没有人在等它的结果——不出等待时长。
+          WP278：交给你的卡正文里已经有「几号前不接就退回」——不再出「剩 N 天」说第二遍。
+        */}
+        {peerNotice || handoffOffer ? null : <WaitPill card={card} />}
         <span className="ml-auto flex items-center gap-2">
           {/*
             WP212（docs/88 §2.3）：来自消息往来的卡，证据旁边一个「看原件 →」——跳回消息页
@@ -390,8 +408,8 @@ export function DeckCardView({
             右上角那个「证据 N」：点它在第三栏的证据面板里看（WP71 就有那一格）。
             走 WP95 的公开注册路 `show('evidence')`，注册层一个字不碰。
           */}
-          {/* WP277：通知卡不是要人凭证据拍板的——不出「证据 N」 */}
-          {peerNotice ? null : (
+          {/* WP277：通知卡不是要人凭证据拍板的——不出「证据 N」；WP278：交出发起人 / 请你一起做也是 */}
+          {peerNotice || peerOffer ? null : (
             <EvidencePill
               lines={evidence}
               onOpen={() => {
@@ -518,12 +536,34 @@ export function DeckCardView({
                   disabled={busy === true}
                   data-option={o.id}
                   onClick={() => {
+                    // WP278（决策 278）：开公司时的「我要退出」——先问一句（列出会断开的个人连接）
+                    if (o.id === 'leave' && isCompanyNoticeCard(card)) {
+                      setLeaving(true)
+                      return
+                    }
                     onDecide({ action: 'approve', selected_option_id: o.id, version: card.version })
                   }}
                 >
                   {o.label}
                 </Button>
               ))}
+              <LeaveConfirm
+                open={leaving}
+                workspaceId={session.data?.workspace.id}
+                assignment={card.position_id}
+                busy={busy === true}
+                onCancel={() => {
+                  setLeaving(false)
+                }}
+                onConfirm={() => {
+                  setLeaving(false)
+                  onDecide({
+                    action: 'approve',
+                    selected_option_id: 'leave',
+                    version: card.version,
+                  })
+                }}
+              />
             </div>
           ) : panel === null ? (
             <DeckActionBar

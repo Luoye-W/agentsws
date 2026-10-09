@@ -299,9 +299,13 @@ async function cardsOf(
   deps: GatewayDeps,
   actor: WorkstationActor,
   position: PositionSummary,
+  /** WP278（决策 284）：再收发给本人、挂在底座职责上的卡（去重）。 */
+  withBase = false,
 ): Promise<DeckCard[]> {
   const w = workstationOf(deps)
-  const items = await w.items(actor, position)
+  const own = await w.items(actor, position)
+  const extra = withBase ? ((await w.baseItems?.(actor)) ?? []) : []
+  const items = [...own, ...extra.filter((i) => !own.some((x) => x.id === i.id))]
   const now = deps.clock.now()
   return sortCards(
     items.map((i) =>
@@ -376,6 +380,15 @@ export function workstationRoutes(): Route[] {
             query,
           })
         }
+        /*
+         * WP278（决策 284）：发给本人、挂在底座职责上、他手上又没有那条底座分配的卡（② 里「有人申请
+         * 加入」挂在 `common.owner` 上，却发给每个人）——不收进来就哪儿都看不到。挂到他的底座那一格
+         * （没有就第一个岗位）；决定时用哪条分配都行（决定看的是收件人）。
+         */
+        const held = new Set(positions.map((x) => x.role_id))
+        const orphans = ((await w.baseItems?.(actor)) ?? []).filter((i) => !held.has(i.role_id))
+        const host = home.find((h) => h.role_id.startsWith('common.')) ?? home[0]
+        if (host !== undefined && orphans.length > 0) host.items.push(...orphans)
         const system = await w.systemCards(actor)
         // 37 §3 首页第三稿：在原有四区之外**只加字段**——目标进度、今天（时间轴 + 到期清单）、
         // 复盘 / 每日计划。装了工作模型才有；没装配时这几个键直接不出，老前端照旧。
@@ -465,6 +478,12 @@ export function workstationRoutes(): Route[] {
         params: [
           { name: 'id', in: 'path', required: true, description: 'position_id = assignment_id' },
           ...FILTER_PARAMS,
+          {
+            name: 'base',
+            in: 'query',
+            description:
+              'WP278：1 = 再收发给本人、挂在底座职责（common.*）上的卡（只有一个岗位的人，首页就是岗位页）',
+          },
         ],
         returns: '{ position, cards, filters, counts, pinned_p0, reports }',
       },
@@ -474,7 +493,8 @@ export function workstationRoutes(): Route[] {
         const position = await positionOf(c, deps, actor)
         // 岗位页天生只看这一个岗位；query 里再传 position_id 也不许换成别的（31 §3.1）。
         const filters: DeckFilters = { ...filtersOf(c), position_id: position.position_id }
-        const { queue, reports } = splitQueue(await cardsOf(deps, actor, position))
+        const withBase = c.req.query('base') === '1'
+        const { queue, reports } = splitQueue(await cardsOf(deps, actor, position, withBase))
         const filtered = filterCards(queue, filters)
         return ok(c, {
           position,

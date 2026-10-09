@@ -57,6 +57,11 @@ export interface DeckSectionProps {
    * 只是翻页，不决定、不改卡的长相。
    */
   focus?: { card_id: string; nonce: number }
+  /**
+   * WP278（决策 284）：只有一个岗位的人首页就是岗位页——牌堆再收发给他、挂在底座职责（`common.*`）上的卡
+   * （「知道了 / 撤回」、有人申请加入…）。只在岗位页、只有一个岗位时给。
+   */
+  withBase?: boolean
 }
 
 interface DeckData {
@@ -73,8 +78,17 @@ interface DeckData {
 function mergeDecks(parts: CardsData[]): DeckData {
   const first = parts[0]
   const sum = (k: keyof DeckData['counts']): number => parts.reduce((n, p) => n + p.counts[k], 0)
+  // WP278：底座那几张可能被两条职责的请求都带回来——同一张只留一份
+  const seen = new Set<string>()
+  const cards = parts
+    .flatMap((p) => p.cards)
+    .filter((c) => {
+      if (seen.has(c.id)) return false
+      seen.add(c.id)
+      return true
+    })
   return {
-    cards: sortCards(parts.flatMap((p) => p.cards)),
+    cards: sortCards(cards),
     counts: {
       total: sum('total'),
       customer_waiting: sum('customer_waiting'),
@@ -94,9 +108,17 @@ function mergeDecks(parts: CardsData[]): DeckData {
 async function fetchDeck(
   ids: readonly string[] | undefined,
   filters: DeckFilters,
+  withBase = false,
 ): Promise<DeckData> {
   if (ids !== undefined && ids.length > 0) {
-    return mergeDecks(await Promise.all(ids.map((id) => getPositionCards(id, filters))))
+    // WP278：底座卡只让第一条职责的请求带回来（服务端按人收，不按职责）
+    return mergeDecks(
+      await Promise.all(
+        ids.map((id, i) =>
+          withBase && i === 0 ? getPositionCards(id, filters, true) : getPositionCards(id, filters),
+        ),
+      ),
+    )
   }
   const home = await getHome('yesterday', filters)
   return {
@@ -129,6 +151,7 @@ export function DeckSection({
   filters,
   onOpen,
   focus,
+  withBase = false,
 }: DeckSectionProps): React.ReactNode {
   // WP275：回执与快捷键那几句按模式换词（① ② 是「通过」系，不是「批准」系）
   const { t } = useMode()
@@ -157,16 +180,16 @@ export function DeckSection({
   const idsKey = ids === undefined ? null : ids.join(',')
 
   const query = useQuery<DeckData>({
-    queryKey: ['deck', idsKey, active],
-    queryFn: () => fetchDeck(ids, active),
+    queryKey: ['deck', idsKey, active, withBase],
+    queryFn: () => fetchDeck(ids, active, withBase),
   })
   /*
    * WP141：「卡型」下拉的选项从**没筛过的全部牌**算。原来从筛过的牌算，于是选了
    * 一种之后下拉里只剩这一种，要换就得先退回「所有卡型」。不带筛选时这就是同一把缓存。
    */
   const all = useQuery<DeckData>({
-    queryKey: ['deck', idsKey, {}],
-    queryFn: () => fetchDeck(ids, {}),
+    queryKey: ['deck', idsKey, {}, withBase],
+    queryFn: () => fetchDeck(ids, {}, withBase),
   })
 
   const mutation = useMutation({
@@ -277,6 +300,8 @@ export function DeckSection({
     }
     const action = deckActionForDirection(direction)
     if (!card.available_actions.includes(action)) return
+    // WP278：交给你的卡上只有「接下 / 不接」两个按钮——↑ ↓ 不做事（卡上没有稍后 / 指导）
+    if (isHandoffOfferCard(card) && action !== 'approve' && action !== 'reject') return
     event.preventDefault()
     if (action === 'approve') {
       // WP276：交给你的卡只有一个岗位时，→ 就是「接下」（几个岗位就得点按钮挑一个）
@@ -330,11 +355,15 @@ export function DeckSection({
           ]
         : keyboardHints(
             // 选择题卡（选项就是按钮、没选中 → 不做事）：不写「→ 批准」——只有交给你的卡单岗位时 → 是「接下」
-            card.options !== undefined &&
-              card.options.length > 0 &&
-              !(isHandoffOfferCard(card) && card.options.length === 1)
+            (card.options !== undefined &&
+            card.options.length > 0 &&
+            !(isHandoffOfferCard(card) && card.options.length === 1)
               ? card.available_actions.filter((a) => a !== 'approve')
-              : card.available_actions,
+              : card.available_actions
+            ).filter(
+              // WP278：交给你的卡只写它那两个按钮（接下 / 不接），不写卡上没有的稍后 / 指导
+              (a) => !isHandoffOfferCard(card) || a === 'approve' || a === 'reject',
+            ),
             (a) => deckActionLabel(card, a, t),
           )
 

@@ -161,6 +161,36 @@ export interface OwnerTransferView {
   already: boolean
 }
 
+/**
+ * WP278（决策 276 / 277）：② 里要对方**接下才算**的两件事——把发起人交给同事、请同事一起做一个岗位。
+ * 对方收一张「交给你」式的卡（`claim`、`form: 'handoff'`，与 WP276 交给对方同一张），接下前什么都不变。
+ */
+export type PeerOfferKind = 'initiator' | 'position'
+
+export interface PeerOfferView {
+  /** 对方收的那张卡的 id（撤回撤的就是它）。 */
+  id: string
+  kind: PeerOfferKind
+  from: string
+  from_name: string
+  to: string
+  to_name: string
+  /** `position`：哪个岗位（模板 id 与名字）。 */
+  position_id?: string
+  position_name?: string
+  state: 'offered' | 'accepted' | 'declined' | 'returned' | 'withdrawn'
+  /** 不接时写的一句（可以没有）。 */
+  reason?: string
+  /** 到点没人理就退回。 */
+  expires_at?: string
+  at: string
+}
+
+/** WP278（决策 278）：退出之前问他一句——会断开哪几条个人连接（共用的不在里面）。 */
+export interface LeavePreviewView {
+  personal_connections: { id: string; label: string }[]
+}
+
 export interface AssignmentView {
   assignment_id: string
   person_id: string
@@ -575,7 +605,23 @@ export interface OrgPort {
    * WP276（docs/95 §3.6）：② 同事互联里**自己退出**——个人渠道跟人走，共享品牌里的东西留下，
    * 手上没做完的事退回原处。发起人不能直接退（先把发起人交给同事）；③ 里走离职，不走这里。
    */
-  leave?(actor: OrgActor): MaybePromise<{ revoked_assignments: number; returned: number }>
+  leave?(
+    actor: OrgActor,
+  ): MaybePromise<{ revoked_assignments: number; returned: number; disconnected?: number }>
+  /** WP278（决策 278）：退出前那一问——会断开哪几条个人连接。 */
+  leavePreview?(actor: OrgActor): MaybePromise<LeavePreviewView>
+  /** WP278（决策 276）：② 发起人把发起人交给一位同事（对方接下才算）。 */
+  offerInitiator?(actor: OrgActor, input: { person_id: string }): MaybePromise<PeerOfferView>
+  /** WP278（决策 277）：② 发起人请同事一起做一个岗位（对方接下才算，接下前分配不生效）。 */
+  offerPosition?(
+    actor: OrgActor,
+    position_id: string,
+    input: { person_id: string },
+  ): MaybePromise<PeerOfferView>
+  /** WP278：我发出去的这两种（还在等的 + 最近几天没接 / 退回的）。 */
+  peerOffers?(actor: OrgActor): MaybePromise<{ offers: PeerOfferView[] }>
+  /** WP278：撤回还在等的那一个（只有发的人）。 */
+  withdrawPeerOffer?(actor: OrgActor, id: string): MaybePromise<PeerOfferView>
   invitations(actor: OrgActor): MaybePromise<InvitationView[]>
   invite(actor: OrgActor, input: InviteInput): MaybePromise<InvitationView>
   /** **公开**：被邀请的人这会儿还没有任何凭据，只有邮件里那把 token。 */
@@ -1187,6 +1233,90 @@ export function orgRoutes(): Route[] {
         return ok(c, await port.transferOwner(actorOf(c), input))
       },
     ),
+    // ── WP278（决策 276 / 277）：② 里要对方接下才算的两件事 ───────────────
+    route(
+      {
+        method: 'post',
+        path: '/v1/org/initiator/offer',
+        operationId: 'offerInitiator',
+        summary: 'WP278 ② 把发起人交给一位同事：对方收一张「交给你」的卡，接下才换（③ 不走这里）',
+        tag: TAG,
+        auth: 'bearer',
+        assignment: true,
+        authz: WRITE,
+        body: TransferOwnerBody,
+        returns: 'PeerOfferView',
+      },
+      async (c, deps) => {
+        const input = await body(c, TransferOwnerBody)
+        const port = portOf(deps)
+        if (port.offerInitiator === undefined)
+          throw new ApiError('not_implemented', '这个服务进程不支持交出发起人')
+        return ok(c, await port.offerInitiator(actorOf(c), input), 201)
+      },
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/org/positions/:id/offer',
+        operationId: 'offerPosition',
+        summary: 'WP278 ② 请同事一起做这个岗位：对方接下才分给他（接下前分配不生效）',
+        tag: TAG,
+        auth: 'bearer',
+        assignment: true,
+        authz: WRITE,
+        params: [{ name: 'id', in: 'path', required: true, description: '岗位 id' }],
+        body: TransferOwnerBody,
+        returns: 'PeerOfferView',
+      },
+      async (c, deps) => {
+        const input = await body(c, TransferOwnerBody)
+        const port = portOf(deps)
+        if (port.offerPosition === undefined)
+          throw new ApiError('not_implemented', '这个服务进程不支持请同事一起做')
+        return ok(c, await port.offerPosition(actorOf(c), param(c, 'id'), input), 201)
+      },
+    ),
+    route(
+      {
+        method: 'get',
+        path: '/v1/org/offers',
+        operationId: 'listPeerOffers',
+        summary: 'WP278 我发出去的「交出发起人 / 请同事一起做」（还在等的 + 最近没接 / 退回的）',
+        tag: TAG,
+        auth: 'bearer',
+        assignment: true,
+        authz: READ,
+        authzBypass: peersBypass,
+        returns: '{ offers: PeerOfferView[] }',
+      },
+      async (c, deps) => {
+        const port = portOf(deps)
+        if (port.peerOffers === undefined) return ok(c, { offers: [] })
+        return ok(c, await port.peerOffers(actorOf(c)))
+      },
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/org/offers/:id/withdraw',
+        operationId: 'withdrawPeerOffer',
+        summary: 'WP278 撤回还在等对方接的那一个（只有发的人）',
+        tag: TAG,
+        auth: 'bearer',
+        assignment: true,
+        authz: READ,
+        authzBypass: peersBypass,
+        params: [{ name: 'id', in: 'path', required: true, description: '那张卡的 id' }],
+        returns: 'PeerOfferView',
+      },
+      async (c, deps) => {
+        const port = portOf(deps)
+        if (port.withdrawPeerOffer === undefined)
+          throw new ApiError('not_implemented', '这个服务进程不支持撤回')
+        return ok(c, await port.withdrawPeerOffer(actorOf(c), param(c, 'id')))
+      },
+    ),
     route(
       {
         method: 'delete',
@@ -1361,13 +1491,33 @@ export function orgRoutes(): Route[] {
         // 自己退出是对自己的事：能读自己的队列就能退（发起人、③ 由端口拦）
         authz: { domain: 'approval', op: 'read', range: 'own', sensitivity: 'internal' },
         params: [{ name: 'id', in: 'path', required: true, description: '工作区 id' }],
-        returns: '{ revoked_assignments, returned }',
+        returns: '{ revoked_assignments, returned, disconnected? }',
       },
       async (c, deps) => {
         const port = portOf(deps)
         if (port.leave === undefined)
           throw new ApiError('not_implemented', '这个服务进程不支持自己退出')
         return ok(c, await port.leave(sameWorkspace(c)))
+      },
+    ),
+    route(
+      {
+        method: 'get',
+        path: '/v1/workspaces/:id/leave',
+        operationId: 'previewLeaveWorkspace',
+        summary:
+          'WP278 退出之前那一问：会断开哪几条个人连接（他自己接的、标成「个人」的；共用的留下）',
+        tag: TAG,
+        auth: 'bearer',
+        assignment: true,
+        authz: { domain: 'approval', op: 'read', range: 'own', sensitivity: 'internal' },
+        params: [{ name: 'id', in: 'path', required: true, description: '工作区 id' }],
+        returns: 'LeavePreviewView',
+      },
+      async (c, deps) => {
+        const port = portOf(deps)
+        if (port.leavePreview === undefined) return ok(c, { personal_connections: [] })
+        return ok(c, await port.leavePreview(sameWorkspace(c)))
       },
     ),
     // ── 离职（40 §1.2；WP36）──────────────────────────────────────────

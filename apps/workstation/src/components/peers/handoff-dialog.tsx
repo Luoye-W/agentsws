@@ -65,7 +65,24 @@ export function HandoffDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent data-testid="handoff-dialog" className="sm:max-w-md">
+      <DialogContent
+        data-testid="handoff-dialog"
+        className="sm:max-w-md"
+        /*
+         * WP278：一打开先落在第一位同事上。默认的自动聚焦落在标题旁的问号上，tooltip 一打开就把
+         * 标题挡住（WP277 向导同一个问题）；测试里 jsdom 给弹层算位置（`:modal` 匹配）还会卡住几秒。
+         */
+        onOpenAutoFocus={(e) => {
+          e.preventDefault()
+          const first =
+            e.currentTarget instanceof HTMLElement
+              ? e.currentTarget.querySelector<HTMLElement>(
+                  '[data-testid="handoff-person"], [data-testid="handoff-note"]',
+                )
+              : null
+          first?.focus()
+        }}
+      >
         <DialogHeader>
           <DialogTitle className="flex items-center gap-1.5">
             {t('handoff.give')}

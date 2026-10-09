@@ -19,6 +19,7 @@ import { StatusIcons, type StatusState } from '@/components/design'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Hint } from '@/components/ui/hint'
+import { Switch } from '@/components/ui/switch'
 import type { ConnectionView } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 import { formatDate } from '@/lib/format'
@@ -32,6 +33,7 @@ export function ConnectedRow({
   onTest,
   onDisconnect,
   assignment,
+  onPersonal,
 }: {
   connection: ConnectionView
   busy: 'test' | 'remove' | undefined
@@ -39,6 +41,11 @@ export function ConnectedRow({
   onDisconnect: () => void
   /** WP167：邮箱卡上的开关要按哪条岗位去读写（连接页的 owner 岗位）。 */
   assignment?: string | undefined
+  /**
+   * WP278（决策 278）：② 里自己接的那条可以标「个人」（退出时一起断开、凭据删掉）。
+   * 不给 / 不是他接的 = 不出这个开关。
+   */
+  onPersonal?: ((personal: boolean) => void) | undefined
 }): React.ReactNode {
   const { t, lang } = useApp()
   const title = accountLabel(connection)
@@ -100,6 +107,24 @@ export function ConnectedRow({
           </Badge>
         )}
         <div className="ml-auto flex items-center gap-1">
+          {onPersonal === undefined || connection.mine !== true || reconnect ? null : (
+            <span
+              className="mr-1 flex items-center gap-1 text-xs text-muted-foreground"
+              data-testid="connection-personal"
+            >
+              <Switch
+                size="sm"
+                checked={connection.ownership === 'person'}
+                disabled={busy !== undefined}
+                aria-label={t('connections.personal')}
+                onCheckedChange={(v) => {
+                  onPersonal(v)
+                }}
+              />
+              {t('connections.personal')}
+              <Hint text={t('connections.personal.hint')} />
+            </span>
+          )}
           {/* WP252：「请重新连接」那一行没有可测的东西，「断开」也只是收起提醒 */}
           {reconnect ? null : (
             <Button size="xs" variant="outline" onClick={onTest} disabled={busy !== undefined}>
