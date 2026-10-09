@@ -36,6 +36,11 @@ export function MatterComposer({
   onDetach,
   onMask,
   attaching = false,
+  docked = true,
+  showPrivate = true,
+  placeholderText,
+  label,
+  testId,
 }: {
   value: string
   onChange: (v: string) => void
@@ -57,6 +62,16 @@ export function MatterComposer({
   /** WP283：在这张图上圈区域（不给 = 现在的改图型号不认遮罩，入口不出现）。 */
   onMask?: ((id: string) => void) | undefined
   attaching?: boolean
+  /** WP287：贴在页面底部（事项页）；岗位页的输入框不贴底，放在原位 */
+  docked?: boolean
+  /** WP287：「私聊 AI」开关（岗位页没有——那里发出去就是开一段会话） */
+  showPrivate?: boolean
+  /** WP287：占位字换一句（岗位页「问点什么，或交一件事…」那类） */
+  placeholderText?: string | undefined
+  /** WP287：输入框的无障碍名字（不给 = 事项页那句） */
+  label?: string | undefined
+  /** WP287：输入框的 `data-testid`（不给就不写） */
+  testId?: string | undefined
 }): ReactNode {
   const { t } = useApp()
   const area = useRef<HTMLTextAreaElement>(null)
@@ -80,11 +95,13 @@ export function MatterComposer({
 
   const placeholder = privateMode
     ? t('matter.cmp.placeholder.private')
-    : closed
-      ? t('matter.cmp.placeholder.closed')
-      : running
-        ? t('matter.cmp.placeholder.running')
-        : t('matter.cmp.placeholder')
+    : placeholderText !== undefined
+      ? placeholderText
+      : closed
+        ? t('matter.cmp.placeholder.closed')
+        : running
+          ? t('matter.cmp.placeholder.running')
+          : t('matter.cmp.placeholder')
 
   const submit = (): void => {
     if (!has || sending || disabled) return
@@ -93,8 +110,12 @@ export function MatterComposer({
 
   return (
     <div
-      className="sticky bottom-0 z-20 bg-gradient-to-b from-transparent to-ws-paper to-[22px] pt-2.5 pb-1"
-      data-testid="matter-dock"
+      className={
+        docked
+          ? 'sticky bottom-0 z-20 bg-gradient-to-b from-transparent to-ws-paper to-[22px] pt-2.5 pb-1'
+          : undefined
+      }
+      data-testid={docked ? 'matter-dock' : undefined}
     >
       <form
         data-testid="matter-say"
@@ -183,7 +204,10 @@ export function MatterComposer({
             rows={2}
             value={value}
             disabled={disabled}
-            aria-label={privateMode ? t('matter.cmp.placeholder.private') : t('matter.say')}
+            aria-label={
+              privateMode ? t('matter.cmp.placeholder.private') : (label ?? t('matter.say'))
+            }
+            data-testid={testId}
             aria-describedby={ghost === undefined ? undefined : hintId}
             placeholder={ghost === undefined ? placeholder : ''}
             onChange={(e) => {
@@ -266,33 +290,35 @@ export function MatterComposer({
           >
             <AtSign aria-hidden className="size-[18px]" />
           </button>
-          <button
-            type="button"
-            role="switch"
-            aria-checked={privateMode}
-            data-testid="matter-private-toggle"
-            title={t('matter.cmp.private.tip')}
-            onClick={() => {
-              onTogglePrivate()
-              area.current?.focus()
-            }}
-            className={cn(
-              'ml-1 inline-flex h-[30px] items-center gap-1.5 rounded-full pr-2.5 pl-2 text-[12.5px] font-medium shadow-[inset_0_0_0_1px_var(--ws-line)]',
-              privateMode
-                ? 'bg-ws-info-bg text-ws-info shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--ws-info)_40%,transparent)]'
-                : 'text-ws-muted-fg hover:bg-muted hover:text-ws-ink',
-            )}
-          >
-            <Lock aria-hidden className="size-3.5" />
-            {t('matter.cmp.private')}
-            <span
-              aria-hidden
+          {!showPrivate ? null : (
+            <button
+              type="button"
+              role="switch"
+              aria-checked={privateMode}
+              data-testid="matter-private-toggle"
+              title={t('matter.cmp.private.tip')}
+              onClick={() => {
+                onTogglePrivate()
+                area.current?.focus()
+              }}
               className={cn(
-                'relative h-3.5 w-6 rounded-full transition-colors after:absolute after:top-0.5 after:size-2.5 after:rounded-full after:bg-white after:transition-[left]',
-                privateMode ? 'bg-ws-info after:left-3' : 'bg-ws-line after:left-0.5',
+                'ml-1 inline-flex h-[30px] items-center gap-1.5 rounded-full pr-2.5 pl-2 text-[12.5px] font-medium shadow-[inset_0_0_0_1px_var(--ws-line)]',
+                privateMode
+                  ? 'bg-ws-info-bg text-ws-info shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--ws-info)_40%,transparent)]'
+                  : 'text-ws-muted-fg hover:bg-muted hover:text-ws-ink',
               )}
-            />
-          </button>
+            >
+              <Lock aria-hidden className="size-3.5" />
+              {t('matter.cmp.private')}
+              <span
+                aria-hidden
+                className={cn(
+                  'relative h-3.5 w-6 rounded-full transition-colors after:absolute after:top-0.5 after:size-2.5 after:rounded-full after:bg-white after:transition-[left]',
+                  privateMode ? 'bg-ws-info after:left-3' : 'bg-ws-line after:left-0.5',
+                )}
+              />
+            </button>
+          )}
           <span
             aria-hidden
             className="mr-2 ml-auto text-[11.5px] whitespace-nowrap text-ws-muted-fg opacity-0 transition-opacity group-focus-within/cmp:opacity-100 group-[.is-has]/cmp:opacity-100"

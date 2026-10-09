@@ -467,6 +467,8 @@ export function SysLine({
   routing,
   onResume,
   resuming,
+  onRetry,
+  retrying,
 }: {
   item: Extract<MatterItem, { kind: 'sys' }>
   roleName: (role_id: string) => string | undefined
@@ -475,10 +477,16 @@ export function SysLine({
   routing?: boolean
   onResume?: (() => void) | undefined
   resuming?: boolean
+  /** WP287：「没跑成」那一行下面的「重试」（只给最近那一条、后面没人接着做时） */
+  onRetry?: (() => void) | undefined
+  retrying?: boolean
 }): ReactNode {
   const { t } = useApp()
   const [open, setOpen] = useState(false)
   const e = item.event
+  /** WP287：没问人、自己定的那条职责（还能换）——「按 X 做的 · 换一条」 */
+  const settled =
+    item.variant === 'route' && e.route?.picked !== undefined && e.route.options.length > 0
   let Icon = Info
   let tone = ''
   let text = e.text
@@ -522,7 +530,8 @@ export function SysLine({
     Icon = ArrowLeftRight
     const picked = e.route?.picked
     const name = picked === undefined ? undefined : roleName(picked)
-    if (name !== undefined) text = t('matter.sys.routed', { role: name })
+    if (name !== undefined)
+      text = t(settled ? 'matter.sys.settled' : 'matter.sys.routed', { role: name })
     const options = (e.route?.options ?? []).filter((o) => o.role_id !== currentRole)
     detail = (
       <div className="flex max-w-[560px] flex-col items-center gap-2 text-center text-[12.5px] text-ws-body">
@@ -558,6 +567,9 @@ export function SysLine({
   } else if (item.variant === 'stopped') {
     Icon = CirclePause
     tone = 'text-ws-warn'
+  } else if (item.variant === 'failed') {
+    Icon = CircleX
+    tone = 'text-ws-bad'
   }
   const expandable = detail !== null
   return (
@@ -588,6 +600,18 @@ export function SysLine({
             />
           ) : null}
         </button>
+        {settled && expandable && !open ? (
+          <button
+            type="button"
+            data-testid="matter-route-switch"
+            className="text-[12.5px] text-ws-muted-fg underline-offset-2 hover:text-ws-ink hover:underline"
+            onClick={() => {
+              setOpen(true)
+            }}
+          >
+            · {t('matter.route.another')}
+          </button>
+        ) : null}
         {onResume === undefined ? null : (
           <Button
             size="xs"
@@ -597,6 +621,17 @@ export function SysLine({
             onClick={onResume}
           >
             {t('matter.resume')}
+          </Button>
+        )}
+        {onRetry === undefined || item.variant !== 'failed' ? null : (
+          <Button
+            size="xs"
+            variant="outline"
+            data-testid="matter-retry"
+            disabled={retrying === true}
+            onClick={onRetry}
+          >
+            {t('matter.retry')}
           </Button>
         )}
       </div>
@@ -682,6 +717,15 @@ export function RunningEntry({
             <StepList steps={steps} live />
           </div>
         ) : null}
+        {/* WP287：AI 边做边说的话，流式出现在线程里（跑完以时间线上那条为准） */}
+        {live?.text === undefined ? null : (
+          <p
+            className="mt-1.5 max-w-[640px] text-[14.5px] leading-[1.7] whitespace-pre-wrap text-ws-ink"
+            data-testid="matter-running-text"
+          >
+            {live.text}
+          </p>
+        )}
       </div>
     </div>
   )

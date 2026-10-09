@@ -21,6 +21,7 @@ import {
   rerouteMatter,
 } from '@/lib/api'
 import { handoffInput } from '@/lib/handoff'
+import { RAIL_KEY } from '@/lib/work-archive'
 
 export function usePositionOpen(id: string, onSubmitted: () => void) {
   const client = useQueryClient()
@@ -33,8 +34,9 @@ export function usePositionOpen(id: string, onSubmitted: () => void) {
       onSubmitted()
       void client.invalidateQueries({ queryKey: ['position-instance', id] })
       void client.invalidateQueries({ queryKey: ['position-work'] })
-      // 判准了就直接进事项页；拿不准就停在这儿，把候选摆出来让人点一下
-      // WP237：只有出了选择卡才停在这儿；「你好」这类（没出卡、事项里回了一句问要做什么）进事项页
+      // WP287：发出去就进这件事的会话线程（回答在线程里流式出现）；岗位入口不再出选择卡。
+      // 老服务端还可能回一张选择卡——那时停在这儿把候选摆出来
+      void client.invalidateQueries({ queryKey: RAIL_KEY })
       if (out.ambiguous && out.approval_item_id !== undefined) setChoice(out)
       else navigate(`/matters/${out.matter.id}`)
     },

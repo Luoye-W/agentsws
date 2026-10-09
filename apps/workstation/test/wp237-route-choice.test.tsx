@@ -177,9 +177,9 @@ describe('WP237 事项页上同样给这几个选项', () => {
     )
     renderMatter()
     const user = userEvent.setup({ delay: null, pointerEventsCheck: 0 })
-    // WP264（决策 182）：路由那一条缩成居中一行灰字，点开才有「换成」
-    const line = await screen.findByText('交给「Reddit 运营」来做')
-    await user.click(line)
+    // WP264（决策 182）：路由那一条缩成居中一行灰字；WP287：没问人自己定的写「按 X 做的 · 换一条」
+    await screen.findByText('按「Reddit 运营」做的')
+    await user.click(screen.getByTestId('matter-route-switch'))
     const box = await screen.findByTestId('matter-route-options')
     await user.click(within(box).getByRole('button', { name: '换成「Reddit 营销」' }))
     await waitFor(() => {

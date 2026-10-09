@@ -28,10 +28,12 @@ export const POSITION_ZH: Record<string, string> = {
 
   // 交给它
   'pos2.handoff.placeholder.plain': '交给它一件事',
+  'pos2.handoff.ask': '问点什么，或交一件事',
+  'pos2.handoff.first.ask': '问点什么，或交它第一件事',
   'pos2.handoff.placeholder.example': '交给它一件事，比如「{example}」',
   'pos2.handoff.first': '交给它第一件事',
   'pos2.handoff.first.placeholder': '一句话说清要办什么，比如「{example}」',
-  'pos2.handoff.first.note': '它自己挑职责去做，要你拍板的会回来找你',
+  'pos2.handoff.first.note': '问的当场答；要动手的记成任务，要你拍板的会回来找你',
   'pos2.handoff.duty': '职责：{name}',
   'pos2.handoff.duty.auto': '自动',
   'pos2.handoff.duty.hint': '不选就由岗位自己判断走哪条职责；选了就直接用那条的规矩做',
@@ -223,10 +225,12 @@ export const POSITION_EN: Record<string, string> = {
   'pos2.tab.settings': 'Settings',
 
   'pos2.handoff.placeholder.plain': 'Hand it a task',
+  'pos2.handoff.ask': 'Ask something, or hand it a task',
+  'pos2.handoff.first.ask': 'Ask something, or hand it the first task',
   'pos2.handoff.placeholder.example': 'Hand it a task, e.g. "{example}"',
   'pos2.handoff.first': 'Hand it the first task',
   'pos2.handoff.first.placeholder': 'Say what needs doing, e.g. "{example}"',
-  'pos2.handoff.first.note': 'It picks the duty itself and comes back when it needs your call',
+  'pos2.handoff.first.note': 'Questions get answered right away; real work becomes a task',
   'pos2.handoff.duty': 'Duty: {name}',
   'pos2.handoff.duty.auto': 'Auto',
   'pos2.handoff.duty.hint':

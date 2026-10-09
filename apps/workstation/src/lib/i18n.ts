@@ -554,7 +554,7 @@ const zh: Table = {
   'position.entry.title': '交给这个岗位一件事',
   'position.entry.placeholder': '一句话说清要办什么，比如「把 A 商品降价 10%」',
   'position.entry.submit': '交给它',
-  'position.entry.hint': '岗位自己判断该走哪条职责；拿不准会问你一句',
+  'position.entry.hint': '岗位自己判断走哪条职责，在对话里能换一条',
   'position.counts': '{cards} 张待审 · {matters} 件在办',
   'position.choice.hint': '选了才起运行；选哪条就用哪条职责的权限与额度',
   'position.roles.toggle': '这个岗位下的 {count} 条职责',
@@ -4465,7 +4465,7 @@ const en: Table = {
   'position.entry.title': 'Hand this position a task',
   'position.entry.placeholder': 'One sentence, e.g. "cut the price of product A by 10%"',
   'position.entry.submit': 'Hand it over',
-  'position.entry.hint': 'The position picks the duty itself; it asks when unsure',
+  'position.entry.hint': 'The position picks the duty itself; you can switch it in the thread',
   'position.counts': '{cards} waiting · {matters} in progress',
   'position.choice.hint':
     'Nothing runs until you pick; the duty you pick sets the permissions and caps',
