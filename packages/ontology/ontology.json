@@ -121,7 +121,7 @@
     "packages/roles/roles/social/x.yml",
     "packages/roles/roles/social/youtube.yml"
   ],
-  "source_digest": "c9c972dc1e217b66bd895d614aba8970",
+  "source_digest": "b81dfc0d28d368b4724af7203f164c8e",
   "objects": [
     {
       "id": "ad",
@@ -3000,6 +3000,12 @@
           "optional": true
         },
         {
+          "name": "ask",
+          "type": "MatterAsk",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
           "name": "handoff",
           "type": "Handoff",
           "sensitivity": "internal",
@@ -5500,6 +5506,12 @@
         {
           "name": "archived_at",
           "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "ask",
+          "type": "MatterAsk",
           "sensitivity": "internal",
           "optional": true
         },
