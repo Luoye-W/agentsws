@@ -2,8 +2,9 @@
  * WP241 岗位页 v2（设计稿 docs/design/position，docs/54 §7）。
  *
  * 钉住：
- * - 页头一行状态（N 张等你定 · N 件在办 · 今天 N 个待办）、真缺必需连接的一行横幅；
- * - 三个页签：工作（默认）/ 记录 / 设置；老地址 `?tab=cards|view|memory` 落到新位置；
+ * - 页头：（WP288）没有「N 张等你定 · N 件在办」；今天的待办 / 卡住了有才出；连接正常一个绿勾、
+ *   真缺必需连接一行横幅（勾不出）；
+ * - （WP288）没有页签：直接是工作；「⋯ 岗位设置」换成设置、「返回」回来；老地址 `?tab=cards|view|memory` 落到新位置；
  * - 工作默认列表、按状态分组、已完成折叠；行尾「N 张卡等你」点了卡片流翻到那张；
  * - 看板只有待办能拖（拖到「已完成」= 改待办状态）；视图记在这个岗位上（localStorage）；
  * - 设置 · 连接里可选收成一行（#72）；空岗位「交给它」放大当主角。
@@ -331,17 +332,39 @@ const openAt = (path = '/positions/asg_pr') =>
   )
 
 describe('页头与页签', () => {
-  it('一行状态：N 张等你定 · N 件在办 · 今天 N 个待办；三个页签，默认工作', async () => {
+  it('WP288：页头没有「N 张等你定 · N 件在办」、没有页签；连接正常是标题旁一个绿勾', async () => {
     openAt()
-    expect((await screen.findByTestId('status-cards')).textContent).toContain('2 张等你定')
-    expect(screen.getByTestId('status-doing').textContent).toContain('2 件在办')
-    expect(screen.getByTestId('status-today').textContent).toContain('今天 1 个待办')
-    const tabs = screen.getAllByRole('tab').map((t) => t.textContent)
-    expect(tabs.slice(0, 3)).toEqual(['工作', '记录', '设置'])
-    expect(screen.getByRole('tab', { name: '工作' }).getAttribute('aria-selected')).toBe('true')
-    // 不缺必需连接：没有横幅、也没有老的「连上这 N 个」大卡
+    expect((await screen.findByTestId('status-today')).textContent).toContain('今天 1 个待办')
+    expect(screen.queryByTestId('status-cards')).toBeNull()
+    expect(screen.queryByTestId('status-doing')).toBeNull()
+    for (const name of ['工作', '记录', '设置'])
+      expect(screen.queryByRole('tab', { name })).toBeNull()
+    // 页面从输入框直接开始；「要你处理 N」与筛选、翻页一行
+    expect(await screen.findByTestId('position-deck-title')).toBeTruthy()
+    // 连接正常：标题旁一个绿勾，悬停说连了什么，点了去连接页；没有横幅、也没有老的「连上这 N 个」大卡
+    const tick = await screen.findByTestId('position-connected')
+    expect(tick.getAttribute('data-hint')).toBe('已连接：浏览器只读')
+    expect(tick.getAttribute('href')).toBe('/connections')
+    expect(within(screen.getByTestId('position-header')).getByTestId('position-connected')).toBe(
+      tick,
+    )
     expect(screen.queryByTestId('position-missing-banner')).toBeNull()
     expect(screen.queryByTestId('position-connections')).toBeNull()
+    // 记录不在这一页上了（在第三栏「记录」）
+    expect(screen.queryByTestId('records')).toBeNull()
+  })
+
+  it('WP288：「⋯ 岗位设置」换成设置，「返回」回到工作', async () => {
+    openAt()
+    const button = await screen.findByTestId('position-settings-link')
+    expect(button.textContent).toBe('岗位设置')
+    fireEvent.click(button)
+    expect(await screen.findByTestId('position-settings')).toBeTruthy()
+    expect(screen.queryByTestId('deck-section')).toBeNull()
+    expect(screen.getByTestId('position-settings-link').textContent).toBe('返回')
+    fireEvent.click(screen.getByTestId('position-settings-link'))
+    expect(await screen.findByTestId('deck-section')).toBeTruthy()
+    expect(screen.queryByTestId('position-settings')).toBeNull()
   })
 
   it('真缺必需连接：页头下一行横幅，去连接落到那张卡', async () => {
@@ -349,6 +372,8 @@ describe('页头与页签', () => {
     openAt()
     const banner = await screen.findByTestId('position-missing-banner')
     expect(banner.textContent).toContain('品牌 Reddit 号')
+    // WP288：出问题时只有提示行，不画绿勾
+    expect(screen.queryByTestId('position-connected')).toBeNull()
     expect(within(banner).getByTestId('position-missing-go').getAttribute('href')).toBe(
       '/connections?service=reddit',
     )
@@ -363,7 +388,7 @@ describe('页头与页签', () => {
   it('?tab=cards 落到工作页签，卡片流在', async () => {
     openAt('/positions/asg_pr?tab=cards')
     expect(await screen.findByTestId('deck-section')).toBeTruthy()
-    expect(screen.getByRole('tab', { name: '工作' }).getAttribute('aria-selected')).toBe('true')
+    expect(screen.queryByTestId('position-settings')).toBeNull()
   })
 })
 
@@ -651,8 +676,7 @@ describe('WP244 工作：答完了的进已完成（待你看结果），交不�
     expect(done).toBeDefined()
     expect(within(done).getByTestId('work-result-ready').textContent).toBe('待你看结果')
     expect(done.textContent).toContain('查完了。')
-    // 页头：N 件在办只数真在做的；卡住了单独一格，点了筛到那一组
-    expect(screen.getByTestId('status-doing').textContent).toContain('1 件在办')
+    // 页头：卡住了单独一格（WP288：「N 件在办」不在页头了），点了筛到那一组
     const chip = screen.getByTestId('status-stuck')
     expect(chip.textContent).toContain('1 件卡住了')
     fireEvent.click(chip)
@@ -813,7 +837,7 @@ describe('WP271 三种模式：岗位页', () => {
   it('① 个人：工作页签（默认）一个公司概念词都不出', async () => {
     modeState.orgs = [SOLO_ORG]
     openAt()
-    await screen.findByTestId('status-cards')
+    await screen.findByTestId('position-deck-title')
     await screen.findByTestId('data-board')
     await screen.findAllByTestId('deck-section')
     expect(companyWordsIn(document.body)).toEqual([])

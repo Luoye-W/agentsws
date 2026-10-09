@@ -632,27 +632,20 @@ export function MatterPage(): ReactNode {
               }
             : undefined
         }
+        /*
+         * WP287：岗位里问的一句是一段会话（不进「工作」）；要接着跟进就转成任务。
+         * WP288：会话页头不出状态与职责；「转成任务」在「⋯」里（不再单独一排「会话 · 转成任务」）。
+         */
+        ask={view.matter.ask !== undefined}
+        onPromote={
+          view.matter.ask === undefined
+            ? undefined
+            : () => {
+                promote.mutate()
+              }
+        }
+        promoting={promote.isPending}
       />
-      {/* WP287：岗位里问的一句是一段会话（不进「工作」）；要接着跟进就转成任务 */}
-      {view.matter.ask === undefined ? null : (
-        <div
-          className="flex items-center gap-2 px-1 pb-1 text-[12.5px] text-ws-muted-fg"
-          data-testid="matter-ask-bar"
-        >
-          <span className="rounded-full bg-ws-surface px-2 py-0.5">{t('matter.ask.tag')}</span>
-          <button
-            type="button"
-            data-testid="matter-ask-promote"
-            disabled={promote.isPending}
-            className="underline-offset-2 hover:text-ws-ink hover:underline"
-            onClick={() => {
-              promote.mutate()
-            }}
-          >
-            {t('matter.ask.promote')}
-          </button>
-        </div>
-      )}
       {/* WP276：等 Y 接 · 撤回 / X 想把这件事交给你 · 接下 · 不接（一个人用时没有） */}
       {mode === 'solo' ? null : <MatterHandoffBar matterId={view.matter.id} me={me} />}
       {canHandOff ? (

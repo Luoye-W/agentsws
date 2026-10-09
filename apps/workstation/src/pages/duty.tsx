@@ -8,12 +8,12 @@
  *
  * - 头部：面包屑「岗位 › 职责」、职责名、版本、"内置只读 / 从内置模板复制"pill、
  *   谁在做、范围，以及**「用这条职责开一件事」**（走 WP69 的 `entry: 'role'`）；
- * - 两个 tab：**概览**（一句人话；能看什么、能做什么、挂着哪些技能与连接器收在默认折叠的
- *   「高级」里，WP238 起翻成人话）与**记录**（它做过什么）。
+ * - 正文就是**概览**（一句人话；能看什么、能做什么、挂着哪些技能与连接器收在默认折叠的
+ *   「高级」里，WP238 起翻成人话）。
  *
- * **记忆 / 技能 / 知识 / 额度不在这一页上**——它们是第三栏的四个面板（36 §9），
- * 跟着当前职责走。进了这一页，右栏打开的就是这条职责那一份。头部那四个按钮
- * 只是"把右栏打开到那一格"的快捷方式，不是第二个入口。
+ * **记忆 / 技能 / 知识 / 额度 / 记录不在这一页上**——它们在第三栏（36 §9），跟着当前职责走。
+ * WP288（决策 326）：原来的「概览 / 记录」两个页签去掉（记录进第三栏「记录」）；头部那四个
+ * 「把右栏打开到那一格」的按钮也去掉——第三栏「设定」图标就在同一屏上，不说两遍。
  */
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { ChevronDown, ChevronRight, Loader2, Play } from 'lucide-react'
@@ -24,7 +24,6 @@ import { B2bSalesPanel } from '@/components/b2b/sales-panel'
 import { CalendarLink } from '@/components/calendar/calendar-link'
 import { InfoTip, WsTag } from '@/components/design'
 import { PanelError } from '@/components/rail/panel-error'
-import { useRailState } from '@/components/rail/rail-state'
 import { DutyIcon } from '@/components/role-icons/role-icon'
 // WP73（56 §6）：社媒运营九条渠道职责的内容日历（周视图）与群发向导
 import { GeoQuestions } from '@/components/seo/geo-questions'
@@ -36,12 +35,10 @@ import { Hint } from '@/components/ui/hint'
 import { Input } from '@/components/ui/input'
 import { MarkdownInline } from '@/components/ui/safe-markdown'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { HandoffError } from '@/components/work/handoff-error'
 import {
   createMatterWithRole,
   getPosition,
-  getPositionRecords,
   getRoleDefinition,
   type RoleDetailView,
 } from '@/lib/api'
@@ -53,7 +50,6 @@ import {
   scopeLines,
   skillLines,
 } from '@/lib/duty-capabilities'
-import { formatDate } from '@/lib/format'
 import { handoffInput, TASK_TEXT_MAX } from '@/lib/handoff'
 import { firstSentence } from '@/lib/help'
 
@@ -212,32 +208,6 @@ function DutyAdvanced({ view }: { view: RoleDetailView }): React.ReactNode {
   )
 }
 
-function RecordsTab({ assignment }: { assignment: string }): React.ReactNode {
-  const { t, lang } = useApp()
-  const records = useQuery({
-    queryKey: ['records', assignment],
-    queryFn: () => getPositionRecords(assignment),
-  })
-  if (records.isPending) return <Skeleton className="h-40 w-full" />
-  const rows = records.data?.payload?.rows ?? []
-  if (rows.length === 0) return <p className="text-sm text-muted-foreground">—</p>
-  return (
-    <ol className="flex flex-col gap-3" data-testid="duty-records">
-      {rows.map((row) => (
-        <li key={row.id} className="border-l pl-3">
-          <div className="flex flex-wrap items-baseline gap-2 text-xs text-muted-foreground">
-            <time dateTime={row.at}>{formatDate(row.at, lang)}</time>
-            <span>{t(`kind.${row.kind}`)}</span>
-            <span className="font-mono">{row.state}</span>
-          </div>
-          <div className="text-sm">{row.title}</div>
-          <p className="text-xs text-muted-foreground">{row.summary}</p>
-        </li>
-      ))}
-    </ol>
-  )
-}
-
 /** 社群组五条（56 §0）。真源是契约的 `SOCIAL_CHANNELS[].group`，这里照抄一份。 */
 const COMMUNITY_CHANNELS: string[] = [
   'facebook_group',
@@ -252,7 +222,6 @@ export function DutyPage(): React.ReactNode {
   const params = useParams<{ assignment: string; role_id: string }>()
   const assignment = params.assignment ?? ''
   const role_id = params.role_id ?? ''
-  const [tab, setTab] = useState('overview')
 
   /*
    * 进职责页 = 把当前 Assignment 切到**这一条职责**（31 §3.1 一次请求一个 Assignment）。
@@ -281,9 +250,6 @@ export function DutyPage(): React.ReactNode {
     instance === undefined ? '' : lang === 'en' ? instance.name.en : instance.name.zh
   /** 这条职责是不是九条社媒渠道之一（`social.facebook-group` → `facebook_group`）。 */
   const socialChannel = socialChannelOfRole(role_id)
-
-  /** 头部四个按钮 = 把第三栏打开到那一格。第三栏自己会认出这一页是职责层。 */
-  const rail = useRailState()
 
   return (
     <div className="flex flex-col gap-4" data-testid="duty-page" data-duty={role_id}>
@@ -316,80 +282,57 @@ export function DutyPage(): React.ReactNode {
           {t('duty.holders', { count: role.data?.holders ?? 0 })}
         </p>
         <OpenHere assignment={assignment} />
-        {/* 四个设置面板在右栏（36 §9）；这一行只是把右栏打开到那一格 */}
+        {/* WP74：进去的是同一个日历，只是默认开着与这条职责相关的那几层 */}
         <div className="flex flex-wrap items-center gap-1" data-testid="duty-rail-links">
-          {['memory', 'skills', 'knowledge', 'caps'].map((panel) => (
-            <Button
-              key={panel}
-              size="xs"
-              variant="outline"
-              data-testid={`duty-open-${panel}`}
-              onClick={() => {
-                rail.show(panel)
-              }}
-            >
-              {t(`rail.panel.${panel}`)}
-            </Button>
-          ))}
-          {/* WP74：进去的是同一个日历，只是默认开着与这条职责相关的那几层 */}
           <CalendarLink role_id={role_id} />
         </div>
       </header>
 
-      <Tabs value={tab} onValueChange={setTab}>
-        <TabsList>
-          <TabsTrigger value="overview">{t('duty.tab.overview')}</TabsTrigger>
-          <TabsTrigger value="records">{t('duty.tab.records')}</TabsTrigger>
-        </TabsList>
-        <TabsContent value="overview">
-          {/*
+      <div data-testid="duty-body">
+        {/*
             WP73（56 §6）：社媒那九条渠道职责的职责页上多两块**能动手的**——
             内容日历（周视图，拖得动）与群发向导。排在概览之前，与红人那一块
             同一个道理：这条职责的产出不在"它是什么"里，在"这周发什么、发给谁"上。
             群发向导只给社群组五条（56 §0 的两组分法）——内容组四条上没有
             "群里的人"这回事，画一个点不动的向导比不画更糟。
           */}
-          {socialChannel === undefined ? null : (
-            <div className="mb-4 flex flex-col gap-4">
-              <SocialCalendar assignment={assignment} channel={socialChannel} />
-              {COMMUNITY_CHANNELS.includes(socialChannel) ? (
-                <SocialBroadcast assignment={assignment} channel={socialChannel} />
-              ) : null}
-            </div>
-          )}
-          {/*
+        {socialChannel === undefined ? null : (
+          <div className="mb-4 flex flex-col gap-4">
+            <SocialCalendar assignment={assignment} channel={socialChannel} />
+            {COMMUNITY_CHANNELS.includes(socialChannel) ? (
+              <SocialBroadcast assignment={assignment} channel={socialChannel} />
+            ) : null}
+          </div>
+        )}
+        {/*
             WP154「内容与搜索」：买家会问的问题（每周拿去问各 AI 平台）+ 花多少 + 开关，
             以及"现在跑一轮"。每日 5 件事与收入表在岗位面板上（那是数，这里是设置）。
           */}
-          {/*
+        {/*
             WP173（docs/84 §2）：「主动开发」的开发信——发信邮箱与体检、公司地址、德奥勾选确认、开一轮。
             请求挂的是**这条职责自己那条分配**（额度与配额从它来），没有就用岗位这一条。
           */}
-          {role_id === 'b2b.outbound' ? (
-            <div className="mb-4">
-              <B2bOutboundPanel assignment={here?.my_assignment_id ?? assignment} />
-            </div>
-          ) : null}
-          {/* WP182（docs/84 §3）：「业务」的事实卡、报价单（看 PDF / 发给客户）、样品往前走 */}
-          {role_id === 'b2b.sales' ? (
-            <div className="mb-4">
-              <B2bSalesPanel assignment={here?.my_assignment_id ?? assignment} />
-            </div>
-          ) : null}
-          {role_id === 'dtc.content' ? (
-            <div className="mb-4 flex flex-col gap-4">
-              {/* WP158：连上了没选站点 / 媒体资源时先选一下（选好了不画） */}
-              <GoogleSourcePicker assignment={assignment} source="gsc" />
-              <GoogleSourcePicker assignment={assignment} source="ga4" />
-              <GeoQuestions assignment={assignment} />
-            </div>
-          ) : null}
-          <OverviewTab role_id={role_id} />
-        </TabsContent>
-        <TabsContent value="records">
-          <RecordsTab assignment={assignment} />
-        </TabsContent>
-      </Tabs>
+        {role_id === 'b2b.outbound' ? (
+          <div className="mb-4">
+            <B2bOutboundPanel assignment={here?.my_assignment_id ?? assignment} />
+          </div>
+        ) : null}
+        {/* WP182（docs/84 §3）：「业务」的事实卡、报价单（看 PDF / 发给客户）、样品往前走 */}
+        {role_id === 'b2b.sales' ? (
+          <div className="mb-4">
+            <B2bSalesPanel assignment={here?.my_assignment_id ?? assignment} />
+          </div>
+        ) : null}
+        {role_id === 'dtc.content' ? (
+          <div className="mb-4 flex flex-col gap-4">
+            {/* WP158：连上了没选站点 / 媒体资源时先选一下（选好了不画） */}
+            <GoogleSourcePicker assignment={assignment} source="gsc" />
+            <GoogleSourcePicker assignment={assignment} source="ga4" />
+            <GeoQuestions assignment={assignment} />
+          </div>
+        ) : null}
+        <OverviewTab role_id={role_id} />
+      </div>
     </div>
   )
 }

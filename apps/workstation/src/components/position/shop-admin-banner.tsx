@@ -6,6 +6,10 @@
  * 浏览器里批准）；等浏览器时转圈 +「没弹出来？」+「取消」；过期 / 被收回 / 缺权限 →「重新授权」并说缺哪项；
  * 授权好了留一行淡色的「已授权 · 到几点 / 会自动续期」，问号里是能做哪几件事。
  *
+ * WP288（决策 326）：**授权好了岗位页上不再占一行**——标题旁一个绿勾（`ConnectionTick`），悬停说
+ * 「Shopify 已连接 · 会自动续期」。那一行淡色字（带「重新授权」）挪进「岗位设置 → 连接」
+ * （`variant="settings"`）；页上只在出问题（没授权 / 过期 / 缺权限 / 没装 / 没店）时出。
+ *
  * 网页模板所在的岗位上，「装 CLI / 填店铺」由那一行（`SiteThemeBanner`）带着走，这里不重复出。
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -31,25 +35,63 @@ export const SHOP_ADMIN_ROLES = ['dtc.store', 'site.shopify-build', 'site.shopif
 /** 有这两条之一的岗位上，「装 CLI / 填店铺」由网页模板那一行带。 */
 const THEME_ROLES = ['site.shopify-theme', 'site.builder']
 
+/** WP288：岗位页标题旁的绿勾与这一行读同一把缓存（同一个 key、同一个请求）。 */
+export function shopAdminQuery(duties: readonly { role_id: string; assignment_id: string }[]): {
+  queryKey: string[]
+  queryFn: () => Promise<ShopAdminView>
+  enabled: boolean
+  assignment: string | undefined
+  roles: string[]
+} {
+  const mine = duties.filter((d) => SHOP_ADMIN_ROLES.includes(d.role_id))
+  const roles = [...new Set(mine.map((d) => d.role_id))].sort()
+  const assignment = mine[0]?.assignment_id
+  return {
+    queryKey: ['shop-admin', assignment ?? '', roles.join(',')],
+    queryFn: () => getShopAdmin(assignment ?? '', roles),
+    enabled: assignment !== undefined,
+    assignment,
+    roles,
+  }
+}
+
+/** 授权好了那句「会自动续期 / 到几点」（绿勾的悬停字与设置里那一行共用）。 */
+export function shopAdminUntil(
+  v: ShopAdminView,
+  t: (key: string, vars?: Record<string, string | number>) => string,
+  lang: 'zh' | 'en',
+): string | undefined {
+  return v.refreshable === true
+    ? t('shop_admin.refreshable')
+    : v.expires_at === undefined
+      ? undefined
+      : t('shop_admin.until', { time: formatDateTime(v.expires_at, lang) })
+}
+
 export function ShopAdminBanner({
   duties,
+  variant = 'page',
 }: {
   duties: readonly { role_id: string; assignment_id: string }[]
+  /**
+   * WP288：`page` = 岗位页（只在出问题时出一行；授权好了不画，绿勾在标题旁）；
+   * `settings` = 岗位设置 → 连接（只画授权好了那一行淡色字 +「重新授权」）。
+   */
+  variant?: 'page' | 'settings'
 }): ReactNode {
   const { t, lang } = useApp()
   const navigate = useNavigate()
   const client = useQueryClient()
-  const mine = duties.filter((d) => SHOP_ADMIN_ROLES.includes(d.role_id))
-  const roles = [...new Set(mine.map((d) => d.role_id))].sort()
-  const assignment = mine[0]?.assignment_id
+  const q = shopAdminQuery(duties)
+  const { roles, assignment } = q
   const themeHere = duties.some((d) => THEME_ROLES.includes(d.role_id))
   const [store, setStore] = useState('')
   const opened = useRef<string | undefined>(undefined)
-  const key = ['shop-admin', assignment ?? '', roles.join(',')]
+  const key = q.queryKey
   const view = useQuery({
     queryKey: key,
-    queryFn: () => getShopAdmin(assignment ?? '', roles),
-    enabled: assignment !== undefined,
+    queryFn: q.queryFn,
+    enabled: q.enabled,
     retry: false,
     refetchInterval: (q) => {
       const v = q.state.data as ShopAdminView | undefined
@@ -84,6 +126,9 @@ export function ShopAdminBanner({
 
   if (assignment === undefined || v === undefined || !v.applicable || v.state === undefined)
     return null
+  // WP288：页上只出问题那几行；设置里只出授权好了那一行
+  if (variant === 'page' && v.state === 'authorized') return null
+  if (variant === 'settings' && v.state !== 'authorized') return null
   if (themeHere && (v.state === 'no_cli' || v.state === 'no_store')) return null
 
   const scopeWords = (list: readonly string[]): string =>
@@ -252,12 +297,7 @@ export function ShopAdminBanner({
         authorizeButton(t('shop_admin.reauthorize')),
       )
     case 'authorized': {
-      const until =
-        v.refreshable === true
-          ? t('shop_admin.refreshable')
-          : v.expires_at === undefined
-            ? undefined
-            : t('shop_admin.until', { time: formatDateTime(v.expires_at, lang) })
+      const until = shopAdminUntil(v, t, lang)
       return (
         <div
           className="flex flex-wrap items-center gap-1.5 px-1 text-xs text-ws-muted-fg"

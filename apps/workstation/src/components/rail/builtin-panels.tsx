@@ -29,15 +29,13 @@ import {
   FolderOpen,
   Globe,
   GraduationCap,
-  MessagesSquare,
+  History,
   SlidersHorizontal,
 } from 'lucide-react'
 import { lazy } from 'react'
 import { canOpenOfficeFile, FILE_ADDRESS_PATTERN } from '@/components/rail/panels/office/address'
-import { parseMatterPath } from '@/components/rail/rail-layout'
 import {
   panelType,
-  type RailPanelBodyProps,
   registerPanelAlias,
   registerPanelBody,
   registerPanelType,
@@ -57,15 +55,14 @@ const SettingsBody = lazy(async () => {
   return { default: m.SettingsPanel }
 })
 
-/** 问 AI 是搬进来的已有件；它的边界是"某个事项"，从地址里认。 */
-const AskBody = lazy(async () => {
-  const m = await import('@/components/deck/ask-ai-panel')
-  return {
-    default: ({ pathname }: RailPanelBodyProps) => {
-      const matter_id = parseMatterPath(pathname)
-      return <m.AskAiPanel {...(matter_id === undefined ? {} : { scope: { matter_id } })} />
-    },
-  }
+/**
+ * WP288（决策 326）：**记录**——原来是岗位页「记录」页签与职责页「记录」页签，挪进这一组
+ * （跟着当前岗位 / 职责走）。「问 AI」那一格删了：岗位输入框发出去就进会话、事项页输入框有
+ * 「私聊 AI」，用途都覆盖了。
+ */
+const RecordsBody = lazy(async () => {
+  const m = await import('@/components/rail/panels/records-panel')
+  return { default: m.RecordsPanel }
 })
 
 /**
@@ -213,6 +210,15 @@ export function ensureBuiltinPanels(options: { showUnbuilt?: boolean } = {}): vo
     useBadge: useSchedulesBadge,
   })
   registerPanelBody('schedules', SchedulesBody)
+  registerPanelType({
+    id: 'records',
+    label: 'rail.panel.records',
+    icon: History,
+    priority: 'builtin',
+    group: 'layer',
+    scoped: true,
+  })
+  registerPanelBody('records', RecordsBody)
 
   // ── 下组：工具 ───────────────────────────────────────────────────
   registerPanelType({
@@ -245,14 +251,7 @@ export function ensureBuiltinPanels(options: { showUnbuilt?: boolean } = {}): vo
   })
   registerPanelBody('office-preview', OfficePreviewBody)
   // WP208：邮件助手不在第三栏了——搬进「消息」页的阅读区（看信时才出现，Luoye 09-30）
-  registerPanelType({
-    id: 'ask',
-    label: 'rail.panel.ask',
-    icon: MessagesSquare,
-    priority: 'builtin',
-    group: 'tools',
-  })
-  registerPanelBody('ask', AskBody)
+  // WP288：「问 AI」不在第三栏了（岗位输入框 = 会话；事项页输入框有「私聊 AI」）
   // WP156：教程。归「工具」那一组，排最后——它是"不会用时"才开的东西
   registerPanelType({
     id: 'help',

@@ -1,10 +1,11 @@
 /**
  * 岗位页 v2（WP241，设计稿 `docs/design/position`，docs/54 §7）：**先急后缓**。
  *
- * 页头（图标 + 名字 + 一行能点的状态；右边「⋯ 岗位设置」；真缺必需连接时一行细横幅）
- * → 三个页签：**工作**（默认）/ 记录 / 设置。
+ * 页头（图标 + 名字 + 连接正常时一个绿勾；右边「⋯ 岗位设置」；出问题时才一行醒目提示）
+ * → 直接是工作（WP288，决策 326：没有「工作 / 记录 / 设置」页签了——记录在第三栏「记录」，
+ * 设置走右上「⋯ 岗位设置」，点了这一页换成设置、再点「返回」回来）。
  *
- * 工作页签从上往下：
+ * 工作从上往下：
  * 1. 交给它：一行输入，聚焦才展开（提交 / 路由沿用 54 §2、WP237）；
  * 2. 要你处理 = 首页那副牌钉在这个岗位上（`DeckSection` 原样，37 §1）——**唯一要你决定的地方**；
  * 3. 工作 = AI 在做什么、做到哪（`GET /v1/positions/:id/work`），不放决定按钮；
@@ -12,36 +13,30 @@
  *
  * 老地址兼容（只加不删）：`?tab=cards` → 工作（卡片流）；`?tab=view` → 工作，数据看板展开图表，
  * 职责有「面板」类快捷视图（红人工作台 / B2B / 在线客服）就打开它（`&kol=` 那几条链接照旧落到红人工作台）；
- * `?tab=memory` → 设置 · 记忆。
+ * `?tab=memory` / `?tab=settings` → 岗位设置；`?tab=records` → 工作 + 第三栏打开「记录」。
+ *
+ * WP288：标题下那行「N 张等你定 · N 件在办」去掉（下面「要你处理 N」就是它）；卡住了 / 今天的待办
+ * 这两样有才出（它们是要人留意的事，点了筛到下面「工作」那一组）。
  */
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Link2Off, MoreHorizontal } from 'lucide-react'
+import { ChevronLeft, Link2Off, MoreHorizontal } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { ModeNotice } from '@/components/company/company-mode'
 import { DeckSection } from '@/components/deck'
 import { HandoffNotices } from '@/components/peers/handoff-strip'
+import { ConnectionTick } from '@/components/position/connection-tick'
 import { DataBoard } from '@/components/position/data-board'
 import { PositionHandoff } from '@/components/position/position-handoff'
 import { PositionSettings } from '@/components/position/position-settings'
 import { ShopAdminBanner } from '@/components/position/shop-admin-banner'
 import { SiteThemeBanner } from '@/components/position/site-theme-banner'
 import { WorkSection } from '@/components/position/work-section'
+import { useRailState } from '@/components/rail/rail-state'
 import { PositionIcon } from '@/components/role-icons/role-icon'
 import { Hint } from '@/components/ui/hint'
-import { Skeleton } from '@/components/ui/skeleton'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import {
-  getPosition,
-  getPositionConnections,
-  getPositionRecords,
-  getPositions,
-  getPositionWork,
-  listReviews,
-} from '@/lib/api'
+import { getPosition, getPositionConnections, getPositions, getPositionWork } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
-import { formatDate } from '@/lib/format'
-import { approvalStateLabel } from '@/lib/humanize'
 import {
   loadWorkPrefs,
   NO_FILTERS,
@@ -56,62 +51,16 @@ import { matterUrl } from '@/lib/work'
 // 老入口与别处还从这里拿它（WP138）；实现挪到了数据看板
 export { NoRangeNotice } from '@/components/position/data-board'
 
-type TabId = 'work' | 'records' | 'settings'
+type View = 'work' | 'settings'
 
 /** 滚到某一块（jsdom 没有 `scrollIntoView`，所以可选调用）。 */
 function scrollTo(el: HTMLElement | null): void {
   el?.scrollIntoView?.({ behavior: 'smooth', block: 'start' })
 }
 
-/** 老地址 `?tab=` → 新页签（只加不删：老链接照样能用）。 */
-function tabOf(raw: string | null): TabId {
-  if (raw === 'records') return 'records'
-  if (raw === 'settings' || raw === 'memory') return 'settings'
-  return 'work'
-}
-
-function RecordRows({ id }: { id: string }): React.ReactNode {
-  const { t, lang } = useApp()
-  const records = useQuery({ queryKey: ['records', id], queryFn: () => getPositionRecords(id) })
-  /*
-   * WP287：复盘在 ① 个人模式下不出卡，只记在这里（② ③ 出卡的那份照样在卡的记录里，不重复列）。
-   * 有卡的复盘（`approval_item_id`）跳过——那张卡已经是一行了。
-   */
-  const reviews = useQuery({ queryKey: ['reviews', 'day'], queryFn: listReviews })
-  if (records.isPending) return <Skeleton className="h-40 w-full" />
-  const reviewRows = (reviews.data?.reviews ?? [])
-    .filter((r) => r.approval_item_id === undefined)
-    .map((r) => ({
-      id: r.id,
-      at: r.created_at,
-      kind: 'review',
-      title: t('records.review.title', { you: r.cards.you_handled, ai: r.cards.ai_handled }),
-      summary: t('records.review.summary', {
-        done: r.todos.done,
-        total: r.todos.total,
-        meetings: r.meetings.count,
-      }),
-      state: undefined as string | undefined,
-    }))
-  const rows = [...(records.data?.payload?.rows ?? []), ...reviewRows].sort((a, b) =>
-    b.at.localeCompare(a.at),
-  )
-  if (rows.length === 0) return <p className="text-sm text-muted-foreground">—</p>
-  return (
-    <ol className="flex flex-col gap-3" data-testid="records">
-      {rows.map((row) => (
-        <li key={row.id} className="border-l pl-3">
-          <div className="flex flex-wrap items-baseline gap-2 text-xs text-muted-foreground">
-            <time dateTime={row.at}>{formatDate(row.at, lang)}</time>
-            <span>{t(`kind.${row.kind}`)}</span>
-            {row.state === undefined ? null : <span>{approvalStateLabel(row.state, lang)}</span>}
-          </div>
-          <div className="text-sm">{row.title}</div>
-          <p className="text-xs text-muted-foreground">{row.summary}</p>
-        </li>
-      ))}
-    </ol>
-  )
+/** 老地址 `?tab=` → 这一页看工作还是设置（只加不删：老链接照样能用）。 */
+function viewOf(raw: string | null): View {
+  return raw === 'settings' || raw === 'memory' ? 'settings' : 'work'
 }
 
 export function PositionPage(): React.ReactNode {
@@ -122,7 +71,8 @@ export function PositionPage(): React.ReactNode {
   const client = useQueryClient()
   const id = params.id ?? ''
   const rawTab = search.get('tab')
-  const tab = tabOf(rawTab)
+  const tab = viewOf(rawTab)
+  const rail = useRailState()
 
   // WP70：当前分配跟着**岗位**走，所以要知道这条 id 属于哪个岗位（左栏那份就够）
   const mine = useQuery({ queryKey: ['positions'], queryFn: getPositions })
@@ -221,13 +171,27 @@ export function PositionPage(): React.ReactNode {
     if (rawTab === 'view') scrollTo(boardRef.current)
   }, [rawTab])
 
-  const setTab = (next: string): void => {
+  const setTab = (next: View): void => {
     setSearch((prev) => {
       const p = new URLSearchParams(prev)
-      p.set('tab', next)
+      if (next === 'work') p.delete('tab')
+      else p.set('tab', next)
       return p
     })
   }
+  // WP288：老地址 `?tab=records` → 记录在第三栏了，打开它（地址栏收回到工作）
+  useEffect(() => {
+    if (rawTab !== 'records') return
+    rail.show('records')
+    setSearch(
+      (prev) => {
+        const p = new URLSearchParams(prev)
+        p.delete('tab')
+        return p
+      },
+      { replace: true },
+    )
+  }, [rawTab, rail, setSearch])
 
   const counts = work.data?.counts
   const pending = view?.pending_cards ?? 0
@@ -245,11 +209,21 @@ export function PositionPage(): React.ReactNode {
     void client.invalidateQueries({ queryKey: ['position-instance', id] })
   }
 
+  /** 卡住了 / 今天的待办：有才出（点了筛到下面「工作」那一组）。 */
+  const stuck = counts?.stuck ?? 0
+  const today = counts?.todos_today ?? 0
+  const filterWork = (filters: WorkPrefs['filters']): void => {
+    setTab('work')
+    setPrefs({ ...prefs, view: 'list', filters }, false)
+    scrollTo(workRef.current)
+  }
+
   return (
     <div
       className="mx-auto flex w-full max-w-[780px] flex-col gap-4"
       data-testid="position-page"
       data-position={id}
+      data-view={tab}
     >
       {/* ── 页头 ── */}
       <header className="flex items-start gap-3" data-testid="position-header">
@@ -265,116 +239,90 @@ export function PositionPage(): React.ReactNode {
           </span>
         )}
         <div className="min-w-0 flex-1">
-          <h1 className="ws-display truncate text-[26px] leading-tight" data-testid="position-name">
-            {view === undefined
-              ? (here?.role_name ?? '')
-              : lang === 'en'
-                ? view.name.en
-                : view.name.zh}
-          </h1>
+          <div className="flex min-w-0 items-center gap-2">
+            <h1
+              className="ws-display truncate text-[26px] leading-tight"
+              data-testid="position-name"
+            >
+              {view === undefined
+                ? (here?.role_name ?? '')
+                : lang === 'en'
+                  ? view.name.en
+                  : view.name.zh}
+            </h1>
+            {/* WP288：连接正常 = 一个绿勾（悬停说连了什么、点了去连接页）；出问题时不画，下面出提示行 */}
+            <ConnectionTick id={id} duties={duties} />
+          </div>
           {view === undefined ? null : fresh ? (
             <p className="text-xs text-ws-muted-fg" data-testid="position-status">
               {t('pos2.status.new', { n: view.roles.length })}
             </p>
-          ) : (
+          ) : stuck === 0 && today === 0 ? null : (
             <p
               className="flex flex-wrap items-center gap-x-1.5 text-xs text-ws-muted-fg"
               data-testid="position-status"
             >
-              <button
-                type="button"
-                data-testid="status-cards"
-                className="inline-flex items-center gap-1 hover:text-foreground"
-                onClick={() => {
-                  setTab('work')
-                  scrollTo(deckRef.current)
-                }}
-              >
-                <span className="size-1.5 rounded-full bg-ws-warn" aria-hidden />
-                {t('pos2.status.cards', { n: pending })}
-              </button>
-              <span aria-hidden>·</span>
-              <button
-                type="button"
-                data-testid="status-doing"
-                className="inline-flex items-center gap-1 hover:text-foreground"
-                onClick={() => {
-                  setTab('work')
-                  setPrefs(
-                    { ...prefs, view: 'list', filters: { ...NO_FILTERS, group: ['doing'] } },
-                    false,
-                  )
-                  scrollTo(workRef.current)
-                }}
-              >
-                <span className="size-1.5 rounded-full bg-ws-good" aria-hidden />
-                {t('pos2.status.doing', { n: counts?.doing ?? view.open_matters })}
-              </button>
               {/* WP244：卡住了的单独说出来（点了筛到「卡住了」那一组） */}
-              {counts?.stuck === undefined || counts.stuck === 0 ? null : (
-                <>
-                  <span aria-hidden>·</span>
-                  <button
-                    type="button"
-                    data-testid="status-stuck"
-                    className="inline-flex items-center gap-1 text-ws-warn hover:text-foreground"
-                    onClick={() => {
-                      setTab('work')
-                      setPrefs(
-                        { ...prefs, view: 'list', filters: { ...NO_FILTERS, group: ['stuck'] } },
-                        false,
-                      )
-                      scrollTo(workRef.current)
-                    }}
-                  >
-                    <span className="size-1.5 rounded-full bg-ws-warn" aria-hidden />
-                    {t('pos2.status.stuck', { n: counts.stuck })}
-                  </button>
-                </>
+              {stuck === 0 ? null : (
+                <button
+                  type="button"
+                  data-testid="status-stuck"
+                  className="inline-flex items-center gap-1 text-ws-warn hover:text-foreground"
+                  onClick={() => {
+                    filterWork({ ...NO_FILTERS, group: ['stuck'] })
+                  }}
+                >
+                  <span className="size-1.5 rounded-full bg-ws-warn" aria-hidden />
+                  {t('pos2.status.stuck', { n: stuck })}
+                </button>
               )}
-              {counts === undefined || counts.todos_today === 0 ? null : (
-                <>
-                  <span aria-hidden>·</span>
-                  <button
-                    type="button"
-                    data-testid="status-today"
-                    className="inline-flex items-center gap-1 hover:text-foreground"
-                    onClick={() => {
-                      setTab('work')
-                      // WP248（决策 79）：数里含已过期的，筛选也用「今天及已过期」
-                      setPrefs(
-                        { ...prefs, view: 'list', filters: { ...NO_FILTERS, due: 'by_today' } },
-                        false,
-                      )
-                      scrollTo(workRef.current)
-                    }}
-                  >
-                    <span
-                      className={`size-1.5 rounded-full ${(counts.todos_overdue ?? 0) > 0 ? 'bg-ws-bad' : 'bg-ws-info'}`}
-                      aria-hidden
-                    />
-                    {(counts.todos_overdue ?? 0) > 0
-                      ? t('pos2.status.today_overdue', {
-                          n: counts.todos_today,
-                          m: counts.todos_overdue ?? 0,
-                        })
-                      : t('pos2.status.today', { n: counts.todos_today })}
-                  </button>
-                </>
+              {stuck === 0 || today === 0 ? null : <span aria-hidden>·</span>}
+              {counts === undefined || today === 0 ? null : (
+                <button
+                  type="button"
+                  data-testid="status-today"
+                  className="inline-flex items-center gap-1 hover:text-foreground"
+                  onClick={() => {
+                    // WP248（决策 79）：数里含已过期的，筛选也用「今天及已过期」
+                    filterWork({ ...NO_FILTERS, due: 'by_today' })
+                  }}
+                >
+                  <span
+                    className={`size-1.5 rounded-full ${(counts.todos_overdue ?? 0) > 0 ? 'bg-ws-bad' : 'bg-ws-info'}`}
+                    aria-hidden
+                  />
+                  {(counts.todos_overdue ?? 0) > 0
+                    ? t('pos2.status.today_overdue', {
+                        n: today,
+                        m: counts.todos_overdue ?? 0,
+                      })
+                    : t('pos2.status.today', { n: today })}
+                </button>
               )}
             </p>
           )}
         </div>
+        {/* WP288：设置只有这一个入口（没有「设置」页签了）；在设置里它变成「返回」 */}
         <button
           type="button"
           data-testid="position-settings-link"
+          aria-pressed={tab === 'settings'}
           className="inline-flex h-8 shrink-0 items-center gap-1 rounded-md px-2.5 text-xs hover:bg-accent"
           onClick={() => {
-            setTab('settings')
+            setTab(tab === 'settings' ? 'work' : 'settings')
           }}
         >
-          <MoreHorizontal className="size-4" aria-hidden />
-          {t('pos2.settings')}
+          {tab === 'settings' ? (
+            <>
+              <ChevronLeft className="size-4" aria-hidden />
+              {t('pos2.settings.back')}
+            </>
+          ) : (
+            <>
+              <MoreHorizontal className="size-4" aria-hidden />
+              {t('pos2.settings')}
+            </>
+          )}
         </button>
       </header>
 
@@ -405,7 +353,7 @@ export function PositionPage(): React.ReactNode {
 
       {/* WP253：建站岗位「让 AI 改网站还差哪一步」（没装 CLI / 没登录 / 没店铺地址）；补上就消失 */}
       <SiteThemeBanner positionId={view?.position_id} duties={duties} />
-      {/* WP261：店铺管理 / 整站搭建 / 网页模板所在的岗位「授权管理商品和页面」 */}
+      {/* WP261：店铺管理 / 整站搭建 / 网页模板所在的岗位「授权管理商品和页面」——WP288 起只在出问题时出 */}
       <ShopAdminBanner duties={duties} />
       {/*
         WP277：只有一个岗位的人首页就是这一页（WP69）——首页那几行通知（交接结果、上级派活、
@@ -418,14 +366,10 @@ export function PositionPage(): React.ReactNode {
         </>
       ) : null}
 
-      <Tabs value={tab} onValueChange={setTab}>
-        <TabsList>
-          <TabsTrigger value="work">{t('pos2.tab.work')}</TabsTrigger>
-          <TabsTrigger value="records">{t('pos2.tab.records')}</TabsTrigger>
-          <TabsTrigger value="settings">{t('pos2.tab.settings')}</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="work" className="flex flex-col gap-7 pt-2">
+      {tab === 'settings' ? (
+        <PositionSettings id={id} view={view} />
+      ) : (
+        <div className="flex flex-col gap-7">
           {view === undefined ? null : <PositionHandoff id={id} view={view} hero={fresh} />}
 
           <div
@@ -433,23 +377,18 @@ export function PositionPage(): React.ReactNode {
             className="flex scroll-mt-4 flex-col gap-2"
             data-testid="position-deck"
           >
-            <h3 className="flex items-center gap-2">
-              <span className="ws-display text-[17px]">{t('pos2.deck.title')}</span>
-              {pending === 0 ? null : (
-                <span className="ws-num text-xs text-ws-muted-fg">
-                  {t('pos2.deck.count', { n: pending })}
-                </span>
-              )}
-              <Hint text={t('pos2.deck.hint')} />
-            </h3>
             {fresh ? (
-              <p className="text-sm text-muted-foreground" data-testid="position-deck-empty">
-                ✓ {t('pos2.deck.empty')}
-              </p>
+              <>
+                <h3 className="ws-display text-[17px]">{t('pos2.deck.title')}</h3>
+                <p className="text-sm text-muted-foreground" data-testid="position-deck-empty">
+                  ✓ {t('pos2.deck.empty')}
+                </p>
+              </>
             ) : (
               /*
                * 37 §1：与首页同一副牌，只是钉死在这个岗位上（原样，不另画样式）。
-               * WP141：合的是本人在这个岗位下的每一条职责——与页头「N 张等你定」同一个口径。
+               * WP141：合的是本人在这个岗位下的每一条职责。
+               * WP288：「要你处理 N」交进去，与筛选图标、翻页同一行。
                */
               <DeckSection
                 positionId={id}
@@ -460,6 +399,15 @@ export function PositionPage(): React.ReactNode {
                 onOpen={(card) => {
                   navigate(matterUrl(card))
                 }}
+                title={
+                  <h3 className="flex min-w-0 items-center gap-2" data-testid="position-deck-title">
+                    <span className="ws-display text-[17px]">{t('pos2.deck.title')}</span>
+                    {pending === 0 ? null : (
+                      <span className="ws-num text-xs text-ws-muted-fg">{pending}</span>
+                    )}
+                    <Hint text={t('pos2.deck.hint')} />
+                  </h3>
+                }
               />
             )}
           </div>
@@ -491,16 +439,8 @@ export function PositionPage(): React.ReactNode {
               empty={fresh}
             />
           </div>
-        </TabsContent>
-
-        <TabsContent value="records" className="pt-2">
-          <RecordRows id={id} />
-        </TabsContent>
-
-        <TabsContent value="settings" className="pt-2">
-          <PositionSettings id={id} view={view} />
-        </TabsContent>
-      </Tabs>
+        </div>
+      )}
     </div>
   )
 }
