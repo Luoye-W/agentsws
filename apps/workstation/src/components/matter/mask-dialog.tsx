@@ -141,7 +141,9 @@ export function MaskDialog({
               onPointerDown={(e) => {
                 e.currentTarget.setPointerCapture?.(e.pointerId)
                 drawing.current = true
-                setStrokes((xs) => [...xs, { r: brushOf(size.w, size.h), pts: [at(e)] }])
+                // 坐标先算好：React 的合成事件在更新函数跑之前就把 currentTarget 清掉了
+                const p = at(e)
+                setStrokes((xs) => [...xs, { r: brushOf(size.w, size.h), pts: [p] }])
               }}
               onPointerMove={(e) => {
                 if (!drawing.current) return
