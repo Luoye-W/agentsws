@@ -69,7 +69,6 @@ const zh = {
     model: '模型',
     input: '输入',
     output: '输出',
-    region: '境内',
   },
   faq: {
     title: '关于积分',
@@ -173,7 +172,6 @@ const en: PricingCopy = {
     model: 'Model',
     input: 'Input',
     output: 'Output',
-    region: 'China region',
   },
   faq: {
     title: 'About credits',
