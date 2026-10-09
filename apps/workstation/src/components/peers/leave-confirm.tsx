@@ -4,6 +4,9 @@
  *
  * 框里只有三样：一句标题、一句会怎样、（有的话）会一起断开的个人连接的名字。共用的留下，写在那一行的
  * 括号里，不另起一句。确认后才真的退出；他自己接的、标「个人」的连接由服务端断开、凭据删掉。
+ *
+ * WP289（决策 293）：发起人「请他离开」也走这个框（给 `person`）——问的是那个人的个人连接，
+ * 标题、那一句、按钮都换成「请他离开」那一套。
  */
 import { useQuery } from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'
@@ -15,7 +18,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { previewLeave } from '@/lib/api-peers'
+import { previewLeave, previewRemoveMember } from '@/lib/api-peers'
 import { useApp } from '@/lib/app-context'
 
 export function LeaveConfirm({
@@ -23,6 +26,7 @@ export function LeaveConfirm({
   workspaceId,
   assignment,
   busy,
+  person,
   onCancel,
   onConfirm,
 }: {
@@ -31,16 +35,22 @@ export function LeaveConfirm({
   /** 用哪条分配去问（卡片上点的：那张卡的岗位）。不给 = 当前那条。 */
   assignment?: string | undefined
   busy?: boolean
+  /** WP289：请这个人离开（不给 = 自己退出）。 */
+  person?: { id: string; name: string } | undefined
   onCancel: () => void
   onConfirm: () => void
 }): React.ReactNode {
   const { t } = useApp()
   const preview = useQuery({
-    queryKey: ['leave-preview', workspaceId, assignment],
-    queryFn: () => previewLeave(workspaceId ?? '', assignment),
+    queryKey: ['leave-preview', workspaceId, assignment, person?.id],
+    queryFn: () =>
+      person === undefined
+        ? previewLeave(workspaceId ?? '', assignment)
+        : previewRemoveMember(workspaceId ?? '', person.id, assignment),
     enabled: open && workspaceId !== undefined,
     retry: false,
   })
+  const key = person === undefined ? 'team.leave' : 'team.remove'
   const personal = preview.data?.personal_connections ?? []
   return (
     <Dialog
@@ -51,12 +61,12 @@ export function LeaveConfirm({
     >
       <DialogContent data-testid="leave-confirm" showCloseButton={false}>
         <DialogHeader>
-          <DialogTitle>{t('team.leave.title')}</DialogTitle>
-          <DialogDescription>{t('team.leave.body')}</DialogDescription>
+          <DialogTitle>{t(`${key}.title`, { name: person?.name ?? '' })}</DialogTitle>
+          <DialogDescription>{t(`${key}.body`)}</DialogDescription>
         </DialogHeader>
         {personal.length === 0 ? null : (
           <div className="flex flex-col gap-1.5 text-sm" data-testid="leave-personal">
-            <p className="text-muted-foreground">{t('team.leave.personal')}</p>
+            <p className="text-muted-foreground">{t(`${key}.personal`)}</p>
             <ul className="flex flex-col gap-1">
               {personal.map((c) => (
                 <li
@@ -80,7 +90,7 @@ export function LeaveConfirm({
             disabled={busy === true || preview.isFetching}
             onClick={onConfirm}
           >
-            {t('team.leave')}
+            {t(key)}
           </Button>
         </DialogFooter>
       </DialogContent>

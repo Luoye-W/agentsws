@@ -10,6 +10,7 @@
  *
  * WP278（决策 276 / 278）：发起人自己那一行多一个「把发起人交给…」（选一位同事，对方接下才换，
  * 还在等的时候那一行是「等 X 接 · 撤回」）；「退出」先问一句（列出会断开的个人连接）。
+ * WP289（决策 293）：「请他离开」也先问一句，同一个框，列的是他的个人连接。
  */
 import { useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
@@ -57,6 +58,7 @@ export function ColleaguesTab({
   error?: string
   onCreateInvite: () => void
   onDecide: (id: string, approve: boolean) => void
+  /** 点了「请他离开」框里的确认（框是这里自己开的：先问一句）。 */
   onRemove: (person_id: string, name: string) => void
   /** 点了退出框里的「退出」（框是这里自己开的：先问一句）。 */
   onLeave: () => void
@@ -77,6 +79,8 @@ export function ColleaguesTab({
   const iAmInitiator = me !== undefined && me === initiator
   const [picking, setPicking] = useState(false)
   const [leaving, setLeaving] = useState(false)
+  /** WP289（决策 293）：请谁离开（先问一句，列出会一起断开的他的个人连接）。 */
+  const [removing, setRemoving] = useState<{ id: string; name: string } | undefined>(undefined)
   const handing = offers.filter((o) => o.kind === 'initiator')
   const waiting = handing.find((o) => o.state === 'offered')
   const ended = waiting === undefined ? handing.find((o) => o.state !== 'offered') : undefined
@@ -152,7 +156,7 @@ export function ColleaguesTab({
                   disabled={busy}
                   data-testid="colleague-remove"
                   onClick={() => {
-                    onRemove(m.person_id, m.name)
+                    setRemoving({ id: m.person_id, name: m.name })
                   }}
                 >
                   {t('team.remove')}
@@ -271,6 +275,19 @@ export function ColleaguesTab({
         onConfirm={() => {
           setLeaving(false)
           onLeave()
+        }}
+      />
+      <LeaveConfirm
+        open={removing !== undefined}
+        workspaceId={workspaceId}
+        person={removing}
+        busy={busy}
+        onCancel={() => {
+          setRemoving(undefined)
+        }}
+        onConfirm={() => {
+          if (removing !== undefined) onRemove(removing.id, removing.name)
+          setRemoving(undefined)
         }}
       />
     </div>
