@@ -573,6 +573,7 @@ export {
 export type {
   OpenAtPositionView,
   PositionActor,
+  PositionAnswerView,
   PositionEntryPort,
   RouteCandidateView,
 } from './routes/positions.js'

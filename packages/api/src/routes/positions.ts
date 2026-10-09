@@ -50,8 +50,21 @@ export interface RouteCandidateView {
   why: string[]
 }
 
+/** WP287：岗位里问一句，当场的回答。 */
+export interface PositionAnswerView {
+  /** `answered` / `failed`（`failure` 是人话，可重试）/ `stopped` / `promoted`（要动手，已转成一件事） */
+  outcome: 'answered' | 'failed' | 'stopped' | 'promoted'
+  text: string
+  /** 这次读了哪些东西（人话，最多 3 条） */
+  sources: string[]
+  failure?: string
+}
+
 export interface OpenAtPositionView {
-  matter: { id: string; title: string; entry?: string; role_id?: string }
+  /** WP287：当场答了（`ask`，不建进行中的事）还是开了一件事（`task`）；老服务端没有这一格 */
+  mode?: 'ask' | 'task'
+  answer?: PositionAnswerView
+  matter: { id: string; title: string; entry?: string; role_id?: string; ask?: boolean }
   picked?: { role_id: string; role_name: string; assignment_id: string }
   candidates: RouteCandidateView[]
   ambiguous: boolean
@@ -80,6 +93,11 @@ const OpenBody = z.object({
    * 仍然只能是**这个岗位里、本人名下**的那一条，与 `reroute` 同一把尺子（端口里判）。
    */
   role_id: z.string().min(1).optional(),
+  /**
+   * WP287：问还是交办。不给 / `auto` = 服务端判（判不准按问，当场答）；`task` = 一定开一件事；
+   * `ask` = 一定当场答。
+   */
+  mode: z.enum(['auto', 'ask', 'task']).optional(),
 })
 
 const RerouteBody = z.object({
@@ -121,6 +139,11 @@ export interface PositionEntryPort {
    * `id` 两种都收（同 `instance`）。可选：没装就是 `not_implemented`，老装配照旧。
    */
   work?(actor: PositionActor, id: string): MaybePromise<PositionWorkView>
+  /** WP287：岗位里问的一句「转成一件事」。可选：没装就是 `not_implemented`。 */
+  promote?(
+    actor: PositionActor,
+    matter_id: string,
+  ): MaybePromise<{ matter: { id: string; title: string } }>
 }
 
 function portOf(deps: GatewayDeps): PositionEntryPort {
@@ -198,7 +221,7 @@ export function positionEntryRoutes(): Route[] {
         path: '/v1/positions/:id/matters',
         operationId: 'openMatterAtPosition',
         summary:
-          '交给这个岗位一件事（54 §2 主入口）：一句话 → 开事项 → 岗位内路由挑职责 → 用那条职责的分配起 Run；拿不准出一张选择卡',
+          '交给这个岗位一件事（54 §2 主入口）：一句话 → 岗位内路由挑职责（WP287 起不再出选择卡）→ 用那条职责的分配起 Run；是问一句的当场答（`mode: ask` + `answer`，不建进行中的事）',
         tag: 'workstation',
         auth: 'bearer',
         assignment: true,
@@ -212,7 +235,8 @@ export function positionEntryRoutes(): Route[] {
           },
         ],
         body: OpenBody,
-        returns: '{ matter, picked?, candidates, ambiguous, reason, approval_item_id?, run_id? }',
+        returns:
+          '{ mode?, answer?, matter, picked?, candidates, ambiguous, reason, approval_item_id?, run_id? }',
       },
       async (c, deps) => {
         const raw = await body(c, OpenBody)
@@ -249,6 +273,26 @@ export function positionEntryRoutes(): Route[] {
             input.run === true ? { run: true } : undefined,
           ),
         )
+      },
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/matters/:id/promote',
+        operationId: 'promoteAskMatter',
+        summary: '岗位里问的一句「转成一件事」（WP287）：之后它就是一件普通的事，进「进行中」',
+        tag: 'work',
+        auth: 'bearer',
+        assignment: true,
+        authz: READ,
+        params: [{ name: 'id', in: 'path', required: true, description: 'matter_id' }],
+        returns: '{ matter: { id, title } }',
+      },
+      async (c, deps) => {
+        const port = portOf(deps)
+        if (port.promote === undefined)
+          throw new ApiError('not_implemented', '这个服务进程转不了（岗位面没有 promote）')
+        return ok(c, await port.promote(actorOf(c), param(c, 'id')))
       },
     ),
   ]

@@ -113,6 +113,11 @@ export interface MatterEvent {
    */
   run_digest?: MatterRunDigest
   /**
+   * WP287：这一条是「这次没跑成」——运行一启动就失败 / 中途出错（任何原因）。`text` 是给人看的那句，
+   * 界面在它下面出「重试」。原始错误只进本机事件日志，不进这里。老事件没有这一格。
+   */
+  failed?: MatterRunFailure
+  /**
    * WP264（决策 179）：AI 这段话末尾给的**下一步**——替人想好的下一句（短句，人的口吻，如「发布上线」）。
    * 输入框空着时显示成浅灰建议、按 Tab 收下；只在 `agent_message` 上有。不从正文里猜。
    */
@@ -132,6 +137,14 @@ export interface MatterPreview {
   changed_files?: string[]
   /** WP264：推之前最近一次主题检查的结论。 */
   check?: { errors: number; warnings: number }
+}
+
+/** WP287：一次运行没跑成（给界面出「重试」用）。 */
+export interface MatterRunFailure {
+  /** 运行时报的错误码（`internal` / `provider_unavailable` / `unauthenticated` …）；抛异常时是 `internal` */
+  code: string
+  /** 再试一次有没有可能成（运行时说的；界面照样给「重试」，只是措辞不同） */
+  retryable: boolean
 }
 
 /** WP264：一次运行里给人看的一步（读了哪个文件、改了哪个、检查、推送）。 */
@@ -236,10 +249,23 @@ export interface Matter {
    */
   archived_at?: Iso8601
   /**
+   * WP287：这是在岗位输入框里**问的一句**（「现在店里有哪些产品」），不是交办的一件事——
+   * 当场在岗位页上答，不进「进行中」、左栏与岗位工作（列表默认不列它，见 {@link MatterFilter.asks}）。
+   * 人点「转成一件事」、或 AI 答的时候要动手（出了卡），就拿掉这一格，变成一件普通的事。
+   * 老事项没有这一格。
+   */
+  ask?: MatterAsk
+  /**
    * WP276（docs/95 §4，决策 241 / 242）：**交给对方**——这件事正在交 / 交过一次的样子。
    * 交出去之后主人不变，等对方点「接下」才换人；老事项没有这一格。见 {@link Handoff}。
    */
   handoff?: Handoff
+}
+
+/** WP287：岗位里问的一句（见 {@link Matter.ask}）。 */
+export interface MatterAsk {
+  /** 什么时候问的 */
+  at: Iso8601
 }
 
 /**
@@ -663,6 +689,11 @@ export interface MatterFilter {
    * WP207：`true` 只要归档的，`false` 只要没归档的；不给 = 都要（老调用方行为不变）。
    */
   archived?: boolean
+  /**
+   * WP287：岗位里问的那一句（{@link Matter.ask}）要不要。**不给 = 不要**——问答不是一件事，
+   * 不进任何列表；`true` = 只要问答。
+   */
+  asks?: boolean
   limit?: number
 }
 

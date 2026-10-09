@@ -37,6 +37,8 @@ export function matchMatter(m: Matter, f: MatterFilter): boolean {
   if (f.participant !== undefined && !m.context.participants.includes(f.participant)) return false
   // WP207：`archived` 不给 = 都要（老调用方一个字不变）
   if (f.archived !== undefined && (m.archived_at !== undefined) !== f.archived) return false
+  // WP287：岗位里问的一句不是一件事——不给 `asks` 就不列它
+  if ((m.ask !== undefined) !== (f.asks === true)) return false
   return true
 }
 
