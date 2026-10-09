@@ -122,6 +122,7 @@ import {
   extractFigures,
   isInstructionRuleCard,
   resolveTimeZone,
+  roleRulesSection,
   uncitedFigures,
 } from '@agentsws/core'
 import { createDataStore, type SqliteDataStore } from '@agentsws/data'
@@ -213,6 +214,7 @@ import { MemoryBackend } from './backend.js'
 import { type BackupRunResult, backupDirOf, backupKeepOf, runBackup } from './backup.js'
 import { attachBootBrandToCompany } from './boot-brand-org.js'
 import {
+  BRAND_ASSET_MASK_TAG,
   BrandAssetError,
   type BrandAssets,
   brandAssetRow,
@@ -2628,6 +2630,23 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       })
     },
   })
+
+  /**
+   * WP289（决策 318）：聊天窗 AI 每一轮带上的规矩——客服那几条职责（与工作台聊天窗「教 AI」
+   * 挑的是同一组：客服、社区客服、网站在线客服）规矩簿里的句子，同一节文字、去重。
+   */
+  const CHAT_RULE_ROLES = ['dtc.support', 'dtc.community-support', 'dtc.live-chat']
+  const chatRoleRulesText = (ws: WorkspaceId): string | undefined => {
+    const seen = new Set<string>()
+    const rows = CHAT_RULE_ROLES.flatMap((role_id) => roleRules.book.list(ws, role_id)).filter(
+      (r) => {
+        if (seen.has(r.text)) return false
+        seen.add(r.text)
+        return true
+      },
+    )
+    return roleRulesSection(rows)?.text
+  }
 
   const personas = createPersonas({
     workspace_id: workspace.id,
@@ -5068,6 +5087,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         return hits.map((h) => ({ fact_card_id: h.fact_card_id, statement: h.statement_redacted }))
       },
       position: () => firstPositionOf(ws),
+      // WP289（决策 318）：聊天窗里教的「以后都这样」落在客服那几条职责的规矩上；聊天 AI 每一轮照做
+      roleRules: () => chatRoleRulesText(ws),
       ...(dir === undefined ? {} : { dbDir: dir }),
     })
 
@@ -7826,8 +7847,10 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         const out = await lane.teach({ ...input, taught_by: input.taught_by })
         return {
           outcome: out.outcome,
-          sediment: out.sediment,
+          // WP289（决策 318）：「以后都这样」进了职责规矩那张卡，不再另存知识候选
+          sediment: input.rule_card_id === undefined ? out.sediment : 'role_rule',
           ...(out.reply === undefined ? {} : { reply: out.reply }),
+          ...(input.rule_card_id === undefined ? {} : { rule_card_id: input.rule_card_id }),
         }
       },
       touch: async (session_id) => {
@@ -9334,7 +9357,10 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         const rows = lib
           .list({
             ...(filter.matter_id === undefined ? {} : { matter_id: filter.matter_id }),
-            ...(filter.tag === undefined ? {} : { tag: filter.tag }),
+            // WP289（决策 313）：遮罩（用途 `mask`）默认不显示；筛「遮罩」（tag=mask）才看得到
+            ...(filter.tag === undefined
+              ? { exclude_tags: [BRAND_ASSET_MASK_TAG] }
+              : { tag: filter.tag }),
             ...(filter.source === undefined ? {} : { source: filter.source }),
             status:
               filter.picked_only === true

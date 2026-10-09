@@ -1141,8 +1141,8 @@ export function OrgPage(): React.ReactNode {
               onDecide={(id, approve) => {
                 decide.mutate({ id, approve })
               }}
-              onRemove={(person_id, name) => {
-                if (globalThis.confirm?.(t('team.remove.confirm', { name })) === false) return
+              // WP289：请他离开先问一句（框在同事 tab 里：列出他会一起断开的个人连接），这里只管真的移出
+              onRemove={(person_id) => {
                 remove.mutate(person_id)
               }}
               // WP278：退出先问一句（框在同事 tab 里：列出会断开的个人连接），这里只管真的退

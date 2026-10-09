@@ -8,7 +8,6 @@ import type {
   Recipient,
   Todo,
 } from '@agentsws/contracts'
-import { instructionRuleCard } from '@agentsws/core'
 import { projectCard, resolveDecision } from '@agentsws/deck'
 import { z } from 'zod'
 import { ApiError, normalizeError } from '../errors.js'
@@ -22,6 +21,7 @@ import {
   redactItem,
   tokenFor,
 } from '../helpers.js'
+import { proposeInstructionRule } from '../instruction-rule.js'
 import { peersBypass, type Route, type RouteSpec, route } from '../route-spec.js'
 import type { GatewayDeps } from '../types.js'
 import { DuplicateAck, type GuardResult, guardSimilar, recordCatalogNote } from './catalog.js'
@@ -317,32 +317,16 @@ async function landInstruction(
   const lesson = scope === 'similar_cases'
   if (!lesson) {
     // WP284（决策 275）：「以后都这样」那张策略卡的形状与模拟世界共用一份（`@agentsws/core`）；
-    // 批了以后由宿主落成这条职责规矩里的一句话（服务端 `role-rules.ts`）
-    // ③ 发给批策略变更的老板（普通成员自己点不了，收件人令牌不在他手上）；① ② 本人
-    const approver = await deps.instructionRuleApprover?.(input.workspace_id)
-    const created = await deps.approvals.create(
-      instructionRuleCard({
-        workspace_id: input.workspace_id,
-        person_id: input.person_id,
-        assignment_id: input.assignment_id,
-        item,
-        text,
-        ...(approver === undefined ? {} : { approver }),
-      }),
-    )
-    if (created.state === 'blocked') return undefined
-    // 规矩在别处没有一张自己的表：目录替它保管一份，工具箱上才看得见
-    await deps.catalog?.record?.({
-      kind: 'rule',
-      id: `rule:${created.id}`,
-      title: text.slice(0, 60),
-      summary: '指导落成的规矩：批了写进这条职责的规矩',
-      owner: input.person_id,
-      layer: 'personal',
-      used_by_positions: [input.assignment_id],
-      runs_30d: 0,
+    // 批了以后由宿主落成这条职责规矩里的一句话（服务端 `role-rules.ts`）。
+    // WP289（决策 318）：出卡这一步与聊天窗「教 AI」共用（`instruction-rule.ts`）
+    const created = await proposeInstructionRule(deps, {
       workspace_id: input.workspace_id,
+      person_id: input.person_id,
+      assignment_id: input.assignment_id,
+      item,
+      text,
     })
+    if (created === undefined) return undefined
     await recordCatalogNote(deps, {
       workspace_id: input.workspace_id,
       entry_id: `rule:${created.id}`,

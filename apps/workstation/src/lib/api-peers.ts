@@ -166,6 +166,14 @@ export const previewLeave = (
 ): Promise<{ personal_connections: { id: string; label: string }[] }> =>
   api(`/v1/workspaces/${enc(workspace_id)}/leave`, withAs(assignment))
 
+/** WP289（决策 293）：请他离开之前那一问——会一起断开他接的哪几条个人连接。 */
+export const previewRemoveMember = (
+  workspace_id: string,
+  person_id: string,
+  assignment?: string,
+): Promise<{ personal_connections: { id: string; label: string }[] }> =>
+  api(`/v1/workspaces/${enc(workspace_id)}/members/${enc(person_id)}/leave`, withAs(assignment))
+
 /** 标一条连接是「个人」还是「共用」（只有接它的人能改）。 */
 export const setConnectionOwnership = (
   id: string,
