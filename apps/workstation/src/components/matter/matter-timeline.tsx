@@ -593,7 +593,7 @@ export function SysLine({
         >
           <Icon aria-hidden className={cn('size-3.5 shrink-0', tone)} />
           <span className="truncate">{text}</span>
-          {expandable ? (
+          {expandable && !(settled && !open) ? (
             <ChevronRight
               aria-hidden
               className={cn('size-3 shrink-0 transition-transform', open && 'rotate-90')}

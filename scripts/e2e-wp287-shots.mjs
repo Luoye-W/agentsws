@@ -103,6 +103,7 @@ async function api(token, owner, method, path, body) {
 async function say(page, asg, text) {
   await page.goto(`${BASE}/positions/${asg}`, { waitUntil: 'networkidle' })
   const box = page.locator('[data-testid="position-entry-input"]')
+  await box.waitFor({ timeout: 30_000 })
   await box.click()
   await box.fill(text)
   await box.press('Enter')
@@ -125,7 +126,9 @@ async function main() {
   try {
     await waitForDemo(log)
     const token = await login()
-    const mine = await api(token, undefined, 'GET', '/v1/positions')
+    const me = await api(token, undefined, 'GET', '/v1/me')
+    const owner = me.assignments.find((a) => a.role_id === 'common.owner').id
+    const mine = await api(token, owner, 'GET', '/v1/positions')
     const instances = mine.instances ?? []
     const web = instances.find((p) => p.position_id === 'web-ops') ?? instances[0]
     const asg = web.roles.find((r) => r.my_assignment_id !== undefined).my_assignment_id
@@ -172,6 +175,10 @@ async function main() {
       const res = await route.fetch()
       const json = await res.json()
       const at = new Date().toISOString()
+      // 真机那种：这一次一启动就失败——演示世界里那次「跑完了」与 AI 那段话拿掉
+      json.data.timeline = json.data.timeline.filter(
+        (e) => e.kind !== 'agent_message' && e.run_digest === undefined,
+      )
       json.data.timeline.push(
         {
           id: 'mev_shot_digest',
