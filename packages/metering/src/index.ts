@@ -93,7 +93,6 @@ export {
   entryFor,
   estimateAiCredits,
   estimateTokens,
-  isCnAvailable,
   modelPrice,
   PRICING_FILE,
   pricingEntryNeedsReview,

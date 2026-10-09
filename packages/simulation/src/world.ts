@@ -5753,7 +5753,6 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
     org_id: 'org_sim',
     workspace_id,
     scopes: ['data'],
-    region: 'global' as const,
   }
 
   /* ── WP113（63 §4）：消息的分拣那一跳 ──────────────────────────────── */

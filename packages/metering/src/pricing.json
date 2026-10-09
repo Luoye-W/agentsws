@@ -12,8 +12,6 @@
     "EUR": 7.7
   },
   "fx_note": "参考汇率快照，不是实时汇率。为什么写死：积分价必须稳定——汇率每天动一点，用户看到的单价就每天动一点，账对不上也说不清。改它要出一个版本（和改价一样），as_of 跟着改。",
-  "cn_vendors": ["deepseek", "moonshot", "zhipu", "qwen", "siliconflow"],
-  "cn_vendors_note": "数据驻留 cn 的请求只允许这几家的模型（22 §2）。不在这张表里的一律拒，而不是悄悄降级到别家——用户选了境内就是选了境内。",
   "entries": [
     {
       "capability": "ai.chat",

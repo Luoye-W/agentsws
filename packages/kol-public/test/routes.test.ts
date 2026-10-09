@@ -2,7 +2,7 @@
  * WP61 的九条纪律，一条一个测试（48 §5.3 / 49 M3-M4 / 21）：
  * 付费动作真扣钱且计量事件里没有正文、余额不足 402、插件配额 429、
  * 24h 重复观察不计奖励、日奖励封顶、基准不到 20 条不出数、
- * 数据驻留 cn 不走境外源、缺 `data` 动作集 403、邮箱库里只有哈希与密文。
+ * 老驻留头被忽略（决策 291）、缺 `data` 动作集 403、邮箱库里只有哈希与密文。
  */
 
 import type { KolChannel } from '@agentsws/contracts'
@@ -32,7 +32,6 @@ function seed(h: ReturnType<typeof harness>, count: number, handlePrefix = 'crea
         org_id: 'org_1',
         workspace_id: 'ws_1',
         scopes: ['data'],
-        region: 'global',
       },
       [
         observation({
@@ -70,7 +69,6 @@ describe('WP61 计费', () => {
         org_id: 'org_1',
         workspace_id: 'ws_1',
         scopes: ['data'],
-        region: 'global',
       },
       [observation()],
     )
@@ -114,7 +112,6 @@ describe('WP61 计费', () => {
         org_id: 'org_1',
         workspace_id: 'ws_1',
         scopes: ['data'],
-        region: 'global',
       },
       auditableObservations(),
     )
@@ -138,7 +135,6 @@ describe('WP61 计费', () => {
         org_id: 'org_1',
         workspace_id: 'ws_1',
         scopes: ['data'],
-        region: 'global',
       },
       [observation()],
     )
@@ -232,7 +228,6 @@ describe('WP61 贡献奖励风控', () => {
     org_id: 'org_1',
     workspace_id: 'ws_1',
     scopes: ['data'],
-    region: 'global' as const,
   }
 
   it('同一个 handle 24 小时内重复观察不计奖励，过了 24 小时又算', () => {
@@ -337,13 +332,13 @@ describe('WP61 k-匿名基准', () => {
   })
 })
 
-describe('WP61 数据驻留', () => {
+describe('WP61 取数（决策 291：不再按驻留挡）', () => {
   const snapshot: SourceSnapshot = {
     ...observation({ handle: 'fresh', followers: 88_000 }),
     email: 'fresh@creator.com',
   }
 
-  it('X-Agentsws-Region: cn 一个境外源都不走，且不扣积分', async () => {
+  it('老客户端还带 X-Agentsws-Region: cn：头被忽略，照常走官方口、照常扣 social.fetch', async () => {
     let called = 0
     const h = harness({ credits: 100 })
     const youtube = fakeYoutubeSource([snapshot])
@@ -354,26 +349,27 @@ describe('WP61 数据驻留', () => {
         return youtube.fetch(key)
       },
     }
-    const cn = harness({
+    const legacy = harness({
       credits: 100,
       sources: createSourcePool({
         youtube: counting,
         quota: createQuotaPool({ store: h.store }),
       }),
     })
-    const res = await cn.call('/v1/data/kol/creators/youtube/fresh/refresh', {
+    const res = await legacy.call('/v1/data/kol/creators/youtube/fresh/refresh', {
       method: 'POST',
       region: 'cn',
     })
     expect(res.status).toBe(200)
-    const data = res.body.data as { refreshed: boolean; reason: string; credits: number }
-    expect(data.refreshed).toBe(false)
-    expect(data.reason).toBe('residency')
-    expect(called).toBe(0)
-    expect(cn.wallet.balance('org_1').available).toBe(100)
+    const data = res.body.data as { refreshed: boolean; used: string; reason?: string }
+    expect(data.refreshed).toBe(true)
+    expect(data.used).toBe('youtube')
+    expect(data.reason).toBeUndefined()
+    expect(called).toBe(1)
+    expect(legacy.wallet.balance('org_1').available).toBeLessThan(100)
   })
 
-  it('不带驻留头就走官方口，扣一次 social.fetch，并把顺手抓到的邮箱存成哈希 + 密文', async () => {
+  it('走官方口，扣一次 social.fetch，并把顺手抓到的邮箱存成哈希 + 密文', async () => {
     const base = harness()
     const h = harness({
       credits: 100,
@@ -434,7 +430,6 @@ describe('WP61 邮箱与争议', () => {
         org_id: 'org_1',
         workspace_id: 'ws_1',
         scopes: ['data'],
-        region: 'global',
       },
       [observation()],
     )
@@ -460,7 +455,6 @@ describe('WP61 邮箱与争议', () => {
         org_id: 'org_1',
         workspace_id: 'ws_1',
         scopes: ['data'],
-        region: 'global',
       },
       [observation()],
     )
@@ -487,7 +481,6 @@ describe('WP61 邮箱与争议', () => {
         org_id: 'org_1',
         workspace_id: 'ws_1',
         scopes: ['data'],
-        region: 'global',
       },
       [observation()],
     )
@@ -509,7 +502,6 @@ describe('WP61 体检报告', () => {
     org_id: 'org_1',
     workspace_id: 'ws_1',
     scopes: ['data'],
-    region: 'global' as const,
   }
 
   it('样本不够就明说，不给编出来的估计值——而且这次不收（WP129，与 0 条不收钱同口径）', async () => {

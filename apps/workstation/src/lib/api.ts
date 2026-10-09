@@ -1666,7 +1666,6 @@ export interface PricingModelEntry {
   in: number
   out: number
   cached?: number
-  cn?: boolean
 }
 
 export interface PricingEntry {

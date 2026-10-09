@@ -21,7 +21,6 @@ import {
   FOLLOWERS_BANDS,
   followersBandOf,
   KOL_PUBLIC_SCOPE,
-  KOL_REGION_HEADER,
   PLUGIN_TOKEN_PREFIX,
   WORKSPACE_TOKEN_PREFIX,
 } from '@agentsws/contracts'
@@ -52,16 +51,10 @@ const unauthenticated = (): KolError =>
     '这把工作区服务令牌不认识或者已经撤了。去本地的"设置 → 账号与积分"里重新关联一次。',
   )
 
-/** `X-Agentsws-Region: cn` → 只查库，不走境外源（22 §2）。 */
-export function regionOf(raw: string | undefined): 'cn' | 'global' {
-  return raw?.trim().toLowerCase() === 'cn' ? 'cn' : 'global'
-}
-
 /** 验工作区服务令牌 + 查 `data` 动作集。 */
 export async function authenticate(
   deps: KolRouteDeps,
   authorization: string | undefined,
-  region: string | undefined,
 ): Promise<KolPrincipal> {
   const token = bearerToken(authorization)
   if (token === undefined || !token.startsWith(WORKSPACE_TOKEN_PREFIX)) throw unauthenticated()
@@ -79,7 +72,6 @@ export async function authenticate(
     org_id: verified.org_id,
     workspace_id: verified.workspace_id,
     scopes: verified.scopes,
-    region: regionOf(region),
   }
 }
 
@@ -156,7 +148,8 @@ export function mountKolPublicRoutes(app: Hono<KolEnv>, deps: KolRouteDeps): Hon
   const guard: MiddlewareHandler<KolEnv> = async (c, next) => {
     c.set(
       'kol_principal',
-      await authenticate(deps, c.req.header('Authorization'), c.req.header(KOL_REGION_HEADER)),
+      // 决策 291（WP281）：老客户端还会带 X-Agentsws-Region——不读，照常走
+      await authenticate(deps, c.req.header('Authorization')),
     )
     await next()
   }

@@ -27,7 +27,7 @@ export const DEFAULT_PROCESSOR_ID = 'agentsws/default-meeting-assistant'
 
 /**
  * 模型抽取的注入点。宿主可以给一个"拿围栏文本去问模型、回一份产出"的回调；
- * 默认版不给，因此**免费默认层不产生任何模型调用**（也就没有出境与预算问题）。
+ * 默认版不给，因此**免费默认层不产生任何模型调用**（也就没有数据外发与预算问题）。
  */
 export type MeetingRefine = (
   input: MeetingProcessorInput,

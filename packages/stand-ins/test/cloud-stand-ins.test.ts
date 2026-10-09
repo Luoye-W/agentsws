@@ -19,7 +19,6 @@ const principal = {
   org_id: 'org_1',
   workspace_id: 'ws_1',
   scopes: ['data'],
-  region: 'global' as const,
 }
 
 describe('价目样例', () => {

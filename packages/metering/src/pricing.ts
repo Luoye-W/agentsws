@@ -23,9 +23,6 @@ export interface PricingFile extends Omit<Pricing, 'entries'> {
   fx_note: string
   /** 67 §1 三块分组的口径说明（数据层的注释，不进界面）。 */
   blocks_note?: string
-  /** 数据驻留 `cn` 的请求只允许这几家（22 §2）。 */
-  cn_vendors: string[]
-  cn_vendors_note: string
   /** WP131：`basis` / `reviewed_at` 两格的口径说明。 */
   basis_note?: string
   entries: (PricingEntry & PricingReview & { fallback_note?: string; note_zh?: string })[]
@@ -105,12 +102,9 @@ export function creditsPerThousandTokens(
 
 /**
  * 拼出完整价目表：`ai.chat` 那条按模型展开，其余条目原样。
- *
- * 展开出来的每条带 `cn`——数据驻留 `cn` 的请求只认这些（22 §2）。
  */
 export function buildPricing(catalog: PriceCatalog = PRICE_CATALOG): Pricing {
   const file = PRICING_FILE
-  const cn = new Set(file.cn_vendors)
   const models: PricingModelEntry[] = []
   for (const vendor of catalog.vendors) {
     for (const m of vendor.models) {
@@ -119,7 +113,6 @@ export function buildPricing(catalog: PriceCatalog = PRICE_CATALOG): Pricing {
         in: creditsPerThousandTokens(m.in, vendor.currency, file.fx, file.ai_multiplier),
         out: creditsPerThousandTokens(m.out, vendor.currency, file.fx, file.ai_multiplier),
         cached: creditsPerThousandTokens(m.cached, vendor.currency, file.fx, file.ai_multiplier),
-        ...(cn.has(vendor.id) ? { cn: true } : { cn: false }),
       }
       models.push(entry)
     }
@@ -165,11 +158,6 @@ export function creditsFor(
 /** 价目表里这个模型那一条（按模型名精确找；找不到回 `undefined`）。 */
 export function modelPrice(pricing: Pricing, model: string): PricingModelEntry | undefined {
   return entryFor(pricing, 'ai.chat')?.models?.find((m) => m.model === model)
-}
-
-/** 这个模型在境内可不可用（数据驻留 `cn`）。价目表里没有的一律不可用。 */
-export function isCnAvailable(pricing: Pricing, model: string): boolean {
-  return modelPrice(pricing, model)?.cn === true
 }
 
 export interface TokenUsage {

@@ -6,13 +6,12 @@
  * 做汇聚（几十家模型、格式互转、渠道轮换），但**计费在这一层，不在它里面**
  * （49 §1 理由 2：两本账必然对不上）。
  *
- * 每个请求五步，顺序不能换：
+ * 每个请求四步，顺序不能换（决策 291 起不再按数据驻留拦）：
  *
  * 1. 查价目算预扣（按 `max_tokens`，没给按默认估）
  * 2. 余额够才放行（不够回 402 人话，**只拒这一次不冻结**）
- * 3. 数据驻留：`X-Agentsws-Region: cn` 的只允许境内可用的模型，否则 422 人话
- * 4. 转发到上游（内部密钥只从 env 读，**永不出现在响应、日志、计量事件里**）
- * 5. 按响应里的 `usage` 结算 → 记一条计量事件（只有八个字段）
+ * 3. 转发到上游（内部密钥只从 env 读，**永不出现在响应、日志、计量事件里**）
+ * 4. 按响应里的 `usage` 结算 → 记一条计量事件（只有八个字段）
  *
  * 上游出错：**原样透传状态码**（用户看到的是真实原因，不是我们包一层的 502），
  * 预扣整笔释放。流式与非流式都走这一套——流式的 `usage` 在最后一个 chunk 里，
@@ -26,18 +25,14 @@ import {
   creditsFor,
   estimateAiCredits,
   estimateTokens,
-  isCnAvailable,
   providerOfModel,
   tokenCostMicros,
   unitCostMicros,
   WalletError,
 } from '@agentsws/metering'
 import type { Context } from 'hono'
-import type { EntryDeps, EntryEnv, EntryRoute, FetchLike, RegionMap } from './types.js'
+import type { EntryDeps, EntryEnv, EntryRoute, FetchLike } from './types.js'
 import { EntryError, secretOf } from './types.js'
-
-/** 请求头里的数据驻留（22 §2）。本地侧按工作区的 `data_residency` 填。 */
-export const REGION_HEADER = 'X-Agentsws-Region'
 
 interface WireUsage {
   prompt_tokens?: number
@@ -93,23 +88,6 @@ export function embeddingTokensOf(body: ChatBody): number {
     )
   }
   return 0
-}
-
-/**
- * 这个模型在境内能不能用。
- *
- * 先看装配方给的 `region_map`（New API 的渠道现实），没有这一条就退回价目表里的
- * `cn` 标记（`pricing.json` 的 `cn_vendors`）。**两边都说不出来的一律不允许**——
- * 用户选了境内就是选了境内，不猜。
- */
-export function cnAllowed(
-  model: string,
-  region_map: RegionMap | undefined,
-  cnByPricing: boolean,
-): boolean {
-  const listed = region_map?.[model]
-  if (listed !== undefined) return listed.includes('cn')
-  return cnByPricing
 }
 
 function upstreamHeaders(
@@ -258,17 +236,6 @@ async function readJson(c: Context<EntryEnv>): Promise<ChatBody> {
   }
 }
 
-function guardResidency(c: Context<EntryEnv>, deps: EntryDeps, model: string): void {
-  const region = c.req.header(REGION_HEADER)?.trim().toLowerCase()
-  if (region !== 'cn') return
-  if (cnAllowed(model, deps.upstream.ai.region_map, isCnAvailable(deps.pricing, model))) return
-  throw new EntryError(
-    'residency_blocked',
-    `这个工作区选了"数据不出境"，而 ${model} 只在境外可用。换一个境内的模型，或者去设置 → 模型里把数据驻留改成"不限"。`,
-    { details: { model, region: 'cn' } },
-  )
-}
-
 /**
  * 这一次调用我们自己花了多少（65 §3）。
  *
@@ -302,7 +269,6 @@ async function meteredCall(
   const body = await readJson(c)
   const model = asString(body.model)
   if (model === undefined) throw new EntryError('invalid_input', '请求体里缺 model')
-  guardResidency(c, deps, model)
 
   /*
    * WP115（65 §3）：我们自己人的调用免计费。判在**预扣之前**——免了还预扣的话，
@@ -410,7 +376,6 @@ async function meteredImages(c: Context<EntryEnv>, deps: EntryDeps): Promise<Res
   if (model === undefined) throw new EntryError('invalid_input', '请求体里缺 model')
   if (asString(body.prompt) === undefined)
     throw new EntryError('invalid_input', '请求体里缺 prompt')
-  guardResidency(c, deps, model)
 
   const unit = creditsFor(deps.pricing, 'ai.image', 1)
   if (unit === undefined) {
@@ -521,8 +486,8 @@ export function aiRoutes(deps: EntryDeps): EntryRoute[] {
       path: '/v1/ai/models',
       auth: 'bearer',
       scope: 'ai',
-      summary: '这把令牌能用的模型清单；带 X-Agentsws-Region: cn 时只列境内可用的',
-      handler: async (c) => {
+      summary: '这把令牌能用的模型清单',
+      handler: async () => {
         // 列清单不扣积分：它不产生任何上游成本，收钱没道理
         const res = await fetchOf(deps)(`${deps.upstream.ai.base_url}/models`, {
           method: 'GET',
@@ -530,17 +495,7 @@ export function aiRoutes(deps: EntryDeps): EntryRoute[] {
         })
         if (!res.ok) return passthrough(res)
         const json = (await res.json()) as { data?: { id?: string }[] }
-        const region = c.req.header(REGION_HEADER)?.trim().toLowerCase()
-        const rows = json.data ?? []
-        const filtered =
-          region === 'cn'
-            ? rows.filter((m) =>
-                typeof m.id === 'string'
-                  ? cnAllowed(m.id, deps.upstream.ai.region_map, isCnAvailable(deps.pricing, m.id))
-                  : false,
-              )
-            : rows
-        return new Response(JSON.stringify({ object: 'list', data: filtered }), {
+        return new Response(JSON.stringify({ object: 'list', data: json.data ?? [] }), {
           status: 200,
           headers: { 'content-type': 'application/json' },
         })

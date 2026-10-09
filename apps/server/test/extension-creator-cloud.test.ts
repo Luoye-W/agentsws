@@ -73,7 +73,6 @@ function assemble() {
     org_id: 'org_1',
     workspace_id: WS,
     scopes: ['data'],
-    region: 'global',
   }
   const wire = cloudStandInFetch({
     kolPublic: cloudStore,

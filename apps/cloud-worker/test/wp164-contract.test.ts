@@ -487,7 +487,7 @@ describe('WP165 契约 ↔ Workers 形态 · 公开价目', () => {
 })
 
 describe('WP164 契约 ↔ Workers 形态 · AI', () => {
-  it('对话（非流式 / 流式）、向量、生图、模型清单（含 cn）；422 驻留、403 缺动作、402 没钱', async () => {
+  it('对话（非流式 / 流式）、向量、生图、模型清单（老驻留头被忽略）；403 缺动作、402 没钱', async () => {
     const chat = {
       model: 'deepseek-chat',
       messages: [{ role: 'user', content: '你好' }],
@@ -522,6 +522,7 @@ describe('WP164 契约 ↔ Workers 形态 · AI', () => {
       ).status,
     ).toBe(200)
     expect((await hit(w, '/v1/ai/models', { token: me.token })).status).toBe(200)
+    // 决策 291（WP281）：老客户端还带驻留头——被忽略，境外模型照常放行
     const cn = { 'X-Agentsws-Region': 'cn' }
     expect((await hit(w, '/v1/ai/models', { token: me.token, headers: cn })).status).toBe(200)
     expect(
@@ -533,7 +534,7 @@ describe('WP164 契约 ↔ Workers 形态 · AI', () => {
           body: { ...chat, model: 'gpt-4o-mini' },
         })
       ).status,
-    ).toBe(422)
+    ).toBe(200)
     expect(
       (
         await hit(w, '/v1/ai/chat/completions', {

@@ -211,7 +211,6 @@ describe('WP129 内容观测转发：端到端（真 contributor → 公共库�
       org_id: 'org_1',
       workspace_id: WS,
       scopes: ['data'],
-      region: 'global',
     }
     const wire = cloudStandInFetch({
       kolPublic: cloudStore,

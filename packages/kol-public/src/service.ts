@@ -490,7 +490,7 @@ export class KolPublicService {
     const { reservation, credits } = this.reserve(principal, SOCIAL_FETCH_CAPABILITY, 1)
     let outcome: SourceOutcome
     try {
-      outcome = await sources.fetch(key, { region: principal.region, at })
+      outcome = await sources.fetch(key, { at })
     } catch (err) {
       this.deps.wallet.release(reservation)
       outcome = outcomeOfError(err)
