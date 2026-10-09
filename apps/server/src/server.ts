@@ -126,7 +126,7 @@ import {
 import { createDataStore, type SqliteDataStore } from '@agentsws/data'
 import { isHandoffItem, withOwnSources, withReadVia } from '@agentsws/deck'
 import { resolveBrandSystem } from '@agentsws/design-core'
-import type { WebCredential } from '@agentsws/dsh-adapter'
+import type { DshRuntimeMode, WebCredential } from '@agentsws/dsh-adapter'
 import {
   type OfficialPluginBackend,
   OfficialPluginError,
@@ -874,6 +874,12 @@ export interface ServerOptions {
    * 显式给 `false` 就是「这个进程不跑运行时」——那两条路回 not_implemented，其余照常。
    */
   startRun?: StartRun | false
+  /**
+   * WP290（决策 332）：装包前冒烟用——每一次有模型的运行都走 dsh 运行时（`RuntimeOptions.dshAllRuns`），
+   * 以及 dsh 那棵树怎么装（`RuntimeOptions.dshMode`，不给 = `auto`，与安装包里一样）。
+   * 只有 `scripts/preinstall-smoke.mjs` 给；服务进程入口不给 = 老行为。
+   */
+  runtime?: { dshAllRuns?: boolean; dshMode?: DshRuntimeMode }
   /** 事项现场的记录来源（订单 / 客户 / 联系人 / 工具执行器）；demo 由合成世界提供。 */
   records?: MatterRecordSource
   /**
@@ -4156,6 +4162,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         ? undefined
         : createRuntime({
             workspace_id: ws,
+            ...(options.runtime?.dshAllRuns === true ? { dshAllRuns: true } : {}),
+            ...(options.runtime?.dshMode === undefined ? {} : { dshMode: options.runtime.dshMode }),
             // WP236：「设置 → 通用」的运行时长线（每次运行现读；职责阈值优先）
             runLimits: () => runLimitsSettings.get(),
             /*
