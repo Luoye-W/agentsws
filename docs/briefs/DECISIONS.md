@@ -499,4 +499,4 @@
 | 289 | （WP279）按人用量用价目表三块（ai / data / service），额度页四格暂不动 | 保持，以后要统一再开小单 | 低 |
 | 290 | （WP279）云上只回有用量的人，本机按名册补 0 | 保持 | 低 |
 | 291 | （Luoye 10-09）「数据不出境」限制 | **不要**：所有和数据出不出境相关的设置、拦截、按驻留选默认值全部删掉或隐藏（开源仓 WP281 + 私有云 WP280） | 高 |
-| 292 | （Luoye 10-09）OpenAI 组织验证难（要支持国家的证件）→ 默认生图模型 | GPT Image 2.5 与 Nano Banana 2.1 都经 OpenRouter 接（一把 key、不用 OpenAI 组织验证、不用 Google AI Studio）；Seedream 仍走火山方舟；默认型号待 Luoye 在「GPT 经 OpenRouter」与「Nano Banana 2.1」之间定，盲测后可再改 | 中 |
+| 292 | （Luoye 10-09）OpenAI 组织验证难（要支持国家的证件）→ 默认生图模型 | GPT Image 2.5 与 Nano Banana 2.1 都经 OpenRouter 接（一把 key、不用 OpenAI 组织验证、不用 Google AI Studio）；Seedream 仍走火山方舟；默认型号待 Luoye 在「GPT 经 OpenRouter」与「Nano Banana 2.1」之间定，盲测后可再改；**10-09 Luoye 选 A：默认 GPT Image 2.5 经 OpenRouter** | 中 |
