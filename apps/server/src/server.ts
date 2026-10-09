@@ -8317,6 +8317,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           ...(input.role_id === undefined ? {} : { role_id: input.role_id }),
           // WP287：问还是交办（不给 = 服务端判）
           ...(input.mode === undefined ? {} : { mode: input.mode }),
+          ...(input.detach === true ? { detach: true } : {}),
         })
         return {
           mode: out.mode,

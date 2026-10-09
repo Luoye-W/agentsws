@@ -1314,7 +1314,12 @@ export class Work {
       if (todo.matter_id !== undefined) covered.add(todo.matter_id)
     }
     // WP207：归档的事不算「正在进行」（它这阵子没人动；一动就自动放回来）
-    for (const matter of this.listMatters({ status: ['open', 'waiting'], archived: false })) {
+    // WP287：岗位里问的一句是会话，不算「正在进行」的任务
+    for (const matter of this.listMatters({
+      status: ['open', 'waiting'],
+      archived: false,
+      asks: false,
+    })) {
       if (covered.has(matter.id)) continue
       const owner = matter.context.participants[0]
       if (owner === undefined || !mine(matter.position_id)) continue

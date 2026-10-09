@@ -122,7 +122,7 @@ afterEach(async () => {
   await server.close()
 })
 
-describe('WP287 ① 问一句当场答', () => {
+describe('WP287 ① 问一句是会话、要动手才是任务', () => {
   it('「现在店铺里有哪些产品」→ 当场答，不建进行中的事、不出选择卡', async () => {
     const out = await open('现在店铺里有哪些产品')
     expect(out.mode).toBe('ask')
@@ -133,7 +133,9 @@ describe('WP287 ① 问一句当场答', () => {
     expect(out.run_id).toBeDefined()
     // 不进任何列表：岗位页「N 件在办」、工作、默认事项列表
     expect(await openMatters()).toBe(0)
-    expect(server.work.listMatters().map((m) => m.id)).not.toContain(out.matter.id)
+    expect(server.work.listMatters({ asks: false }).map((m) => m.id)).not.toContain(out.matter.id)
+    // 是一段会话：左栏会话历史里找得到（默认列表照旧列它）
+    expect(server.work.listMatters().map((m) => m.id)).toContain(out.matter.id)
     const work = await dataOf<{ items: { id?: string; matter_id?: string }[] }>(
       await call('GET', '/v1/positions/web-ops/work'),
     )
@@ -141,13 +143,29 @@ describe('WP287 ① 问一句当场答', () => {
     expect(server.work.listMatters({ asks: true }).map((m) => m.id)).toContain(out.matter.id)
   })
 
-  it('交办（「把 A 商品降价 10%」）照旧建一件事', async () => {
+  it('交办（「把 A 商品降价 10%」）照旧建一件事，线程里一句话说它是任务', async () => {
     const out = await open('把 A 商品降价 10%')
     expect(out.mode).toBe('task')
     expect(out.answer).toBeUndefined()
     expect(out.matter.ask).toBeUndefined()
     expect(out.picked?.role_id).toBe('dtc.store')
     expect(await openMatters()).toBe(1)
+    const kinds = timeline(out.matter.id).map((e) =>
+      e.text.includes('记成了任务') ? 'task' : e.kind,
+    )
+    expect(kinds.indexOf('human_message')).toBeLessThan(kinds.indexOf('task'))
+  })
+
+  it('detach：不等跑完就回（界面立刻进会话线程），原话已在线程里，回答随后出现', async () => {
+    const out = await open('现在店铺里有哪些产品', { detach: true })
+    expect(out.mode).toBe('ask')
+    expect(out.run_id).toBeUndefined()
+    expect(timeline(out.matter.id).some((e) => e.kind === 'human_message')).toBe(true)
+    for (let i = 0; i < 50; i += 1) {
+      if (timeline(out.matter.id).some((e) => e.kind === 'agent_message')) break
+      await new Promise((r) => setTimeout(r, 20))
+    }
+    expect(timeline(out.matter.id).some((e) => e.kind === 'agent_message')).toBe(true)
   })
 
   it('「转成一件事」→ 进「进行中」，时间线记一句', async () => {
@@ -156,7 +174,7 @@ describe('WP287 ① 问一句当场答', () => {
     expect(res.status).toBe(200)
     expect(server.work.getMatter(out.matter.id)?.ask).toBeUndefined()
     expect(await openMatters()).toBe(1)
-    expect(timeline(out.matter.id).some((e) => e.text === '转成了一件事')).toBe(true)
+    expect(timeline(out.matter.id).some((e) => e.text.startsWith('转成了任务'))).toBe(true)
   })
 
   it('答的时候出了卡（要动手）→ 自动转成一件事，回答里说一句', async () => {
@@ -176,6 +194,7 @@ describe('WP287 ① 问一句当场答', () => {
     const out = await open('A 商品现在多少钱')
     expect(out.mode).toBe('ask')
     expect(out.answer?.outcome).toBe('promoted')
+    expect(timeline(out.matter.id).some((e) => e.text.includes('转成了任务'))).toBe(true)
     expect(server.work.getMatter(out.matter.id)?.ask).toBeUndefined()
     expect(await openMatters()).toBe(1)
   })

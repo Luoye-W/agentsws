@@ -98,6 +98,11 @@ const OpenBody = z.object({
    * `ask` = 一定当场答。
    */
   mode: z.enum(['auto', 'ask', 'task']).optional(),
+  /**
+   * WP287：不等运行跑完就回——工作台拿到事项 id 立刻进会话线程，回答在线程里出现。
+   * 不给 = 跑完才回（老行为；回答在 `answer` 里）。
+   */
+  detach: z.boolean().optional(),
 })
 
 const RerouteBody = z.object({

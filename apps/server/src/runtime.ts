@@ -2100,7 +2100,14 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       const last = hits[hits.length - 1]
       if (last === undefined) return undefined
       const [run_id, r] = last
-      return { run_id, started_at: r.started_at, steps: r.log.live() }
+      // WP287：AI 到现在说了的话（流式出现在会话线程里；跑完以时间线上那条为准）
+      const said = runWatch.get(run_id)?.log.said().trim() ?? ''
+      return {
+        run_id,
+        started_at: r.started_at,
+        steps: r.log.live(),
+        ...(said === '' ? {} : { text: splitNextSuggestion(humanizeToolNames(said, [])).text }),
+      }
     },
     bind(w) {
       work = w

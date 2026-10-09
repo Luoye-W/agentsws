@@ -176,6 +176,8 @@ export interface MatterLiveRun {
   started_at: Iso8601
   /** 已经做完的几步 + 正在做的那一步（`status: 'running'`，在最后）。 */
   steps: MatterRunStep[]
+  /** WP287：AI 到现在为止说了的话（流式，跑完以时间线上那条为准）；还没说就没有这一格。 */
+  text?: string
 }
 
 /** WP251（决策 91）：一轮运行卡在哪。 */
@@ -249,9 +251,9 @@ export interface Matter {
    */
   archived_at?: Iso8601
   /**
-   * WP287：这是在岗位输入框里**问的一句**（「现在店里有哪些产品」），不是交办的一件事——
-   * 当场在岗位页上答，不进「进行中」、左栏与岗位工作（列表默认不列它，见 {@link MatterFilter.asks}）。
-   * 人点「转成一件事」、或 AI 答的时候要动手（出了卡），就拿掉这一格，变成一件普通的事。
+   * WP287：这是在岗位输入框里**问的一句**（「现在店里有哪些产品」）——一段会话，不是一件任务：
+   * 不进岗位「工作」、「N 件在办」与首页进行中（见 {@link MatterFilter.asks}），左栏会话历史里照样找得到。
+   * 人点「转成任务」、或 AI 答的时候要动手（出了卡），就拿掉这一格，变成一件任务。
    * 老事项没有这一格。
    */
   ask?: MatterAsk
@@ -690,8 +692,8 @@ export interface MatterFilter {
    */
   archived?: boolean
   /**
-   * WP287：岗位里问的那一句（{@link Matter.ask}）要不要。**不给 = 不要**——问答不是一件事，
-   * 不进任何列表；`true` = 只要问答。
+   * WP287：岗位里问的那一句（{@link Matter.ask}，一段会话）要不要。`false` = 不要（岗位「工作」、
+   * 「N 件在办」、首页进行中都传它）；`true` = 只要会话；不给 = 都要（左栏会话历史、找回照旧列）。
    */
   asks?: boolean
   limit?: number

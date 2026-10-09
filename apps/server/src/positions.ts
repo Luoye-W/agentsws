@@ -75,6 +75,11 @@ const POSITION_ERROR = (
   msg: string,
 ): RoleError => new RoleError(code, msg)
 
+/** WP287：一开始就判成要动手的，线程里那一句。 */
+export const TASK_LINE = '这是一件要跟进的事，记成了任务，在岗位「工作」里看进展'
+/** WP287：问的那一句答的时候要动手（出了卡），转成任务时线程里那一句。 */
+export const PROMOTED_LINE = '这件事要动手，转成了任务，在岗位「工作」里看进展'
+
 /** 还等着人定的卡（与工作台面同一个口径）。 */
 const WAITING_STATES = new Set(['pending', 'in_review'])
 
@@ -162,6 +167,11 @@ export interface OpenAtPositionInput {
    * `task` = 一定开一件事；`ask` = 一定当场答。
    */
   mode?: 'auto' | 'ask' | 'task'
+  /**
+   * WP287：不等运行跑完就回（界面拿到事项 id 立刻进会话线程，看它在线程里答）。
+   * 不给 = 老样子，跑完才回（回答、`run_id` 都在回包里）。
+   */
+  detach?: boolean
 }
 
 /** WP287：岗位里问一句，当场的回答（岗位页输入框下面那一段）。 */
@@ -392,7 +402,8 @@ export function createPositions(options: PositionsOptions): PositionsAssembly {
     const mine = new Map(minePerRole(template, person_id).map((m) => [m.role_id, m.assignment_id]))
     const assignmentIds = new Set([...byRole.values()].flat())
     const open_matters = work
-      .listMatters({ status: ['open', 'waiting'] })
+      // WP287：岗位里问的一句是会话，不算「N 件在办」
+      .listMatters({ status: ['open', 'waiting'], asks: false })
       .filter((m) => matterInPosition(m, position_id, assignmentIds)).length
     /*
      * WP141（docs/78 §2 首页 / 客服第 37 步）：「N 张待审」与牌堆**同一个口径**——
@@ -523,7 +534,7 @@ export function createPositions(options: PositionsOptions): PositionsAssembly {
     const assignmentIds = new Set(view.roles.flatMap((r) => r.assignment_ids))
     // WP207：归档的事不进岗位层上下文（它这阵子没人动，喂给模型只是噪音）
     const open_matters = work
-      .listMatters({ status: ['open', 'waiting'], archived: false })
+      .listMatters({ status: ['open', 'waiting'], archived: false, asks: false })
       .filter((m) => matterInPosition(m, position_id, assignmentIds))
       .slice(0, MAX_POSITION_MATTERS)
       .map((m) => ({ title: m.title, status: m.status }))
@@ -632,7 +643,7 @@ export function createPositions(options: PositionsOptions): PositionsAssembly {
     const acting = mine.some((e) => e.kind === 'card' || e.preview !== undefined)
     if (acting) {
       work.promoteAsk(matter_id, {
-        text: '答的时候发现要动手，转成了一件事',
+        text: PROMOTED_LINE,
         actor: { kind: 'agent', id: 'position_router' },
       })
       return { outcome: 'promoted', text, sources }
@@ -780,17 +791,23 @@ export function createPositions(options: PositionsOptions): PositionsAssembly {
           }),
     })
 
-    // 起 Run：用的是**被路由到的那条职责**的 Assignment（权限 / 额度 / 技能全是它的）
-    const said = await work.say(matter.id, {
+    // 起 Run：用的是**被路由到的那条职责**的 Assignment（权限 / 额度 / 技能全是它的）。
+    // `say` 同步记下原话、再起运行；这里先不等它跑完（WP287：`detach` 时界面立刻进会话线程看它答）
+    const running = work.say(matter.id, {
       person_id: input.person_id,
       assignment_id: pickedEntry.assignment_id,
       text,
     })
-    const answer = ask ? answerOf(matter.id, said.run_id) : undefined
-    return {
-      matter: work.getMatter(matter.id) ?? matter,
+    // WP287：一开始就判成要动手的——线程里一句话告诉人它是一件任务、在哪儿跟进
+    if (!ask)
+      work.appendEvent(matter.id, {
+        kind: 'status',
+        text: TASK_LINE,
+        actor: { kind: 'agent', id: 'position_router' },
+        ref: { type: 'position', id: template.id },
+      })
+    const view = {
       mode,
-      ...(answer === undefined ? {} : { answer }),
       picked: {
         role_id: pickedEntry.role_id,
         role_name: roleName(pickedEntry.role_id),
@@ -799,8 +816,22 @@ export function createPositions(options: PositionsOptions): PositionsAssembly {
       candidates: routed.candidates,
       ambiguous: false,
       reason: routed.reason,
-      ...(said.run_id === undefined ? {} : { run_id: said.run_id }),
+    } as const
+    // 问的那一句跑完了再看：要动手（出了卡）就转成任务（线程里说一句）
+    const settle = async (): Promise<{ run_id?: string; answer?: PositionAnswer }> => {
+      const said = await running
+      const answer = ask ? answerOf(matter.id, said.run_id) : undefined
+      return {
+        ...(said.run_id === undefined ? {} : { run_id: said.run_id }),
+        ...(answer === undefined ? {} : { answer }),
+      }
     }
+    if (input.detach === true) {
+      void settle().catch(() => undefined)
+      return { matter: work.getMatter(matter.id) ?? matter, ...view }
+    }
+    const done = await settle()
+    return { matter: work.getMatter(matter.id) ?? matter, ...view, ...done }
   }
 
   /**
@@ -811,7 +842,7 @@ export function createPositions(options: PositionsOptions): PositionsAssembly {
     if (matter === undefined || !matter.context.participants.includes(person_id))
       throw POSITION_ERROR('not_found', `没有这个事项：${matter_id}`)
     return work.promoteAsk(matter_id, {
-      text: '转成了一件事',
+      text: '转成了任务，在岗位「工作」里跟进',
       actor: { kind: 'person', id: person_id },
     })
   }
@@ -1077,7 +1108,10 @@ export function createPositions(options: PositionsOptions): PositionsAssembly {
       now: clock.now(),
       today: work.todayRange(),
       duties,
-      matters: work.listMatters({}).filter((m) => matterInPosition(m, position_id, allIds)),
+      // WP287：岗位里问的一句是会话，不进「工作」（左栏会话历史里找得到）
+      matters: work
+        .listMatters({ asks: false })
+        .filter((m) => matterInPosition(m, position_id, allIds)),
       todos: work
         .listTodos({ owner: person_id })
         .filter((t) => t.position_id !== undefined && mineIds.has(t.position_id)),
