@@ -90,7 +90,11 @@ export function brandAssetRoutes(): Route[] {
         authz: READ,
         params: [
           { name: 'matter_id', in: 'query', description: '只看这件事项里的' },
-          { name: 'tag', in: 'query', description: '只看这个用途标' },
+          {
+            name: 'tag',
+            in: 'query',
+            description: '只看这个用途标；不给时不含遮罩（用途 mask，要看就给 tag=mask）',
+          },
           { name: 'source', in: 'query', description: 'generated / uploaded / external' },
           { name: 'picked_only', in: 'query', description: '只看选中过的（true / false）' },
           { name: 'limit', in: 'query', description: '最多几行', schema: { type: 'integer' } },

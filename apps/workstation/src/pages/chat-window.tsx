@@ -15,6 +15,9 @@
  * 外观 / 转发器是工作区级配置（`store_config` / `policy`），用所有者那条；
  * 对话列表与教 AI 是 `customer.*`，用网站在线客服那条（`lib/pick-assignment.ts`）。
  * 都不改全局当前岗位。挑不到在线客服就在「进行中的对话」里说清楚去哪加，不发必 403 的请求。
+ *
+ * WP289（决策 318）：教 AI 旁边一个「以后都这样」开关——开着教，这一句除了这次照常回访客，
+ * 还出一张「以后都这样」卡（与卡片指导同一张），点「记进规矩」落进这条客服职责的规矩。
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
@@ -40,6 +43,7 @@ import {
   testChatRelay,
 } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
+import { useMode } from '@/lib/mode'
 import { LIVE_CHAT_NEED, LIVE_CHAT_TEACH_NEED, OWNER_NEED } from '@/lib/pick-assignment'
 import { assignmentOf, canRequest, useDutyAssignment } from '@/lib/use-duty-assignment'
 import { cn } from '@/lib/utils'
@@ -73,6 +77,10 @@ export function ChatWindowPage(): React.ReactNode {
   const client = useQueryClient()
   const [selected, setSelected] = useState<string | undefined>(undefined)
   const [instruction, setInstruction] = useState('')
+  /** WP289（决策 318）：这一句「以后都这样」（进职责规矩）。 */
+  const [always, setAlways] = useState(false)
+  const [taughtRule, setTaughtRule] = useState(false)
+  const { t: tm } = useMode()
   const [greetingDraft, setGreetingDraft] = useState('')
   const [relayForm, setRelayForm] = useState<{
     endpoint: string
@@ -147,10 +155,19 @@ export function ChatWindowPage(): React.ReactNode {
     },
   })
   const teach = useMutation({
-    mutationFn: (input: { id: string; text: string }) =>
-      teachChatSession(input.id, { instruction: input.text, scope: 'similar_cases' }, teachAsg),
-    onSuccess: async () => {
+    mutationFn: (input: { id: string; text: string; always: boolean }) =>
+      teachChatSession(
+        input.id,
+        { instruction: input.text, scope: input.always ? 'global_rule' : 'similar_cases' },
+        teachAsg,
+      ),
+    onMutate: () => {
+      setTaughtRule(false)
+    },
+    onSuccess: async (out) => {
       setInstruction('')
+      setAlways(false)
+      setTaughtRule(out.sediment === 'role_rule')
       await refresh()
     },
   })
@@ -495,16 +512,37 @@ export function ChatWindowPage(): React.ReactNode {
                   rows={2}
                   onChange={(e) => setInstruction(e.target.value)}
                 />
-                <Button
-                  size="sm"
-                  data-testid="chat-teach-send"
-                  disabled={instruction.trim() === '' || teach.isPending}
-                  onClick={() => teach.mutate({ id: selected as string, text: instruction.trim() })}
-                >
-                  {t('chat.window.teach.send')}
-                </Button>
+                <div className="flex flex-col items-stretch gap-1">
+                  <Button
+                    size="sm"
+                    data-testid="chat-teach-send"
+                    disabled={instruction.trim() === '' || teach.isPending}
+                    onClick={() =>
+                      teach.mutate({ id: selected as string, text: instruction.trim(), always })
+                    }
+                  >
+                    {t('chat.window.teach.send')}
+                  </Button>
+                  {/* WP289：「以后都这样」——和卡片指导同一个说法，开着教就出一张进职责规矩的卡 */}
+                  <Button
+                    size="xs"
+                    variant={always ? 'secondary' : 'ghost'}
+                    aria-pressed={always}
+                    data-testid="chat-teach-always"
+                    onClick={() => {
+                      setAlways((v) => !v)
+                    }}
+                  >
+                    {tm('card.instruct.scope.global_rule')}
+                  </Button>
+                </div>
                 <Hint text={t('chat.window.teach.hint')} />
               </div>
+              {taughtRule ? (
+                <p className="text-xs text-muted-foreground" data-testid="chat-teach-rule-receipt">
+                  {tm('deck.receipt.instruct.global_rule')}
+                </p>
+              ) : null}
             </div>
           ) : null}
         </CardContent>

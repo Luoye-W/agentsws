@@ -11,6 +11,10 @@
  *
  * 权限与模型面同一套元组：读走 `store_config.read@workspace`，改走
  * `policy.stage@workspace`——花钱的事归所有者，客服岗位看不到也改不了（05）。
+ *
+ * WP289（决策 307）：**余额、本月合计、价目、充值档**对所有人只读开放（② 本来就是共用一个余额、
+ * 大家看得见；③ 普通成员以前在这里看到的是「还没关联」，和按人积分对不上）。这三条不挂元组，
+ * 余额那一份顺带说这个人能不能充值、能不能看用量明细（那两条照旧按元组判）。
  */
 import type {
   AllocationAuditList,
@@ -271,10 +275,19 @@ export function cloudRoutes(): Route[] {
         tag: TAG,
         auth: 'bearer',
         assignment: true,
-        authz: READ,
+        // WP289（决策 307）：人人只读
         returns: 'CloudCreditsView',
       },
-      async (c, deps) => ok(c, await portOf(deps).credits(actorOf(c))),
+      async (c, deps) => {
+        const view = await portOf(deps).credits(actorOf(c))
+        const a = assignmentOf(c)
+        const can = (spec: typeof READ | typeof WRITE): boolean =>
+          deps.roles.can(a.id, spec.domain, spec.op, {
+            range: spec.range,
+            sensitivity: spec.sensitivity,
+          })
+        return ok(c, { ...view, can_topup: can(WRITE), can_view_usage: can(READ) })
+      },
     ),
     route(
       {
@@ -285,7 +298,7 @@ export function cloudRoutes(): Route[] {
         tag: TAG,
         auth: 'bearer',
         assignment: true,
-        authz: READ,
+        // WP289（决策 307）：价目人人看得到
         returns: 'LocalPricing',
       },
       async (c, deps) => ok(c, await portOf(deps).pricing(actorOf(c))),
@@ -388,7 +401,7 @@ export function cloudRoutes(): Route[] {
         tag: TAG,
         auth: 'bearer',
         assignment: true,
-        authz: READ,
+        // WP289（决策 307）：充值档人人看得到；建单（下一条）仍要 policy.stage
         returns: 'LocalTopupTiers',
       },
       async (c, deps) => ok(c, await portOf(deps).topupTiers(actorOf(c))),

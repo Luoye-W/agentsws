@@ -66,7 +66,6 @@ export const PEERS_ZH: Record<string, string> = {
   'team.initiator.hint': '发起人只管家务：请人离开、删品牌、搬数据。别的事大家一样。',
   'team.new': '新来的 · {name}同意的',
   'team.remove': '请他离开',
-  'team.remove.confirm': '请 {name} 离开？他手上没做完的事会退回原处，共享的东西留在这里。',
   'team.leave': '退出',
   'team.leave.confirm': '退出这个品牌？你手上没做完的事会退回原处，共享的东西留在这里。',
   'team.leave.initiator': '你是发起人，先把发起人交给同事再退出。',
@@ -132,6 +131,9 @@ export const PEERS_ZH: Record<string, string> = {
   'team.leave.title': '退出这个品牌？',
   'team.leave.body': '你手上没做完的事会退回原处，共享的东西留在这里。',
   'team.leave.personal': '你接的这几条个人连接会一起断开（共用的留下）：',
+  'team.remove.title': '请 {name} 离开？',
+  'team.remove.body': '他手上没做完的事会退回原处，共享的东西留在这里。',
+  'team.remove.personal': '他接的这几条个人连接会一起断开（共用的留下）：',
   'connections.personal': '个人',
   'connections.personal.hint': '个人的在你退出时一起断开、凭据删掉；共用的留下。',
 }
@@ -192,8 +194,6 @@ export const PEERS_EN: Record<string, string> = {
     'The starter only does housekeeping: asking someone to leave, deleting a brand, moving the data. Everything else is the same for everyone.',
   'team.new': 'New · let in by {name}',
   'team.remove': 'Ask to leave',
-  'team.remove.confirm':
-    'Ask {name} to leave? Unfinished work goes back where it came from; shared things stay here.',
   'team.leave': 'Leave',
   'team.leave.confirm':
     'Leave this brand? Your unfinished work goes back where it came from; shared things stay here.',
@@ -265,6 +265,11 @@ export const PEERS_EN: Record<string, string> = {
   'team.leave.body': 'Your unfinished work goes back where it came from; shared things stay here.',
   'team.leave.personal':
     'These personal connections you set up will be disconnected (shared ones stay):',
+  'team.remove.title': 'Ask {name} to leave?',
+  'team.remove.body':
+    'Their unfinished work goes back where it came from; shared things stay here.',
+  'team.remove.personal':
+    'These personal connections they set up will be disconnected (shared ones stay):',
   'connections.personal': 'Personal',
   'connections.personal.hint':
     'Personal ones are disconnected and their credentials deleted when you leave; shared ones stay.',
