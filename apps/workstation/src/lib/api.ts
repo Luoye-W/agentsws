@@ -2252,7 +2252,6 @@ export interface ModelProviderTemplate {
 export interface ModelDefaultsView {
   default: string
   by_purpose: Partial<Record<ModelPurposeName, string>>
-  data_residency: 'cn' | 'any'
   budget: {
     workspace_daily_base?: number
     workspace_monthly_base?: number
@@ -2354,7 +2353,6 @@ export const setModelDefaults = (
   input: {
     default?: string
     by_purpose?: Partial<Record<ModelPurposeName, string>>
-    data_residency?: 'cn' | 'any'
     budget?: {
       workspace_daily_base?: number
       workspace_monthly_base?: number

@@ -18,7 +18,7 @@
  *
  * - **用我的 DeepSeek 账号登录**（WP134，Luoye 09-24 定的第三种来源）：点了在系统浏览器里走
  *   DeepSeek 官方授权（dsh 官方模块），回来显示账号与余额，接着同样跑三步验证。
- *   与设置页那张卡是**同一个件**（`DeepSeekAccountLogin`）。数据驻留：境内。
+ *   与设置页那张卡是**同一个件**（`DeepSeekAccountLogin`）。
  *
  * - WP152（Luoye 09-26）：第三张改叫「**DeepSeek 官方**」，DeepSeek 的两种连法都收在这一张里、二选一：
  *   「官方账户登录」（排第一、默认选中）与「官方 API 接口连接」（原来在"自己的接口"里那条 DeepSeek 表单，
@@ -523,9 +523,6 @@ export function AiStep({ assignment, onConnected, onDemo }: AiStepProps): React.
         >
           <BrandIcon provider="deepseek" size={16} className="shrink-0" />
           <span className="font-medium">{t('onboarding.ai.account')}</span>
-          <span className="rounded-sm bg-ws-subtle px-1.5 py-0.5 text-[11px]">
-            {t('dsa.region')}
-          </span>
         </button>
         {choice === 'account' ? (
           <div className="mt-2 flex flex-col gap-2">

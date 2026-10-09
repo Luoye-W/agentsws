@@ -305,7 +305,6 @@ vi.mock('@/lib/api', async () => {
       default: '',
       by_purpose: {},
       choices: [],
-      data_residency: 'any',
       budget: {},
     }),
     getModelUsage: async () => ({ rows: [], budget: { frozen: false } }),

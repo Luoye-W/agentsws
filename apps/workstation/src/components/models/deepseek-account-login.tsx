@@ -319,9 +319,6 @@ export function DeepSeekAccountLogin({
           <p className="flex items-center gap-2 font-medium">
             <BrandIcon provider="deepseek" />
             {t('dsa.title')}
-            <span className="rounded-sm bg-ws-subtle px-1.5 py-0.5 text-[11px] font-normal">
-              {t('dsa.region')}
-            </span>
           </p>
           <p className="text-xs text-muted-foreground">{t('dsa.summary')}</p>
         </>

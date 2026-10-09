@@ -174,7 +174,6 @@ vi.mock('@/lib/api', async () => {
     getModelDefaults: async () => ({
       default: '',
       by_purpose: {},
-      data_residency: 'cn',
       budget: {},
       choices: [],
     }),
@@ -217,7 +216,8 @@ describe('WP134 那一个件：登录 → 浏览器 → 账号与余额 → 三�
     const user = userEvent.setup()
     renderWithProviders(<DeepSeekAccountLogin framed />)
     const card = await screen.findByTestId('model-deepseek-account-card')
-    expect(within(card).getByText('数据在境内')).toBeTruthy()
+    // 决策 291（WP281）：卡上不再挂「数据在境内」
+    expect(card.textContent).not.toMatch(/境内|出境|数据驻留/)
     await user.click(screen.getByTestId('dsa-login'))
     expect(await screen.findByTestId('dsa-waiting')).toBeTruthy()
     expect(opened).toEqual([AUTHORIZE])
