@@ -165,6 +165,8 @@ describe('WP20 网关：路由与信封', () => {
       'POST /v1/connections/runtime/local/restart',
       'POST /v1/connections/runtime/local/rollback',
       'PUT /v1/connections/:id/mailbox-switches',
+      // WP278：标「个人 / 共用」
+      'PUT /v1/connections/:id/ownership',
     ])
     for (const s of specs) {
       expect(s.auth).toBe('bearer')
