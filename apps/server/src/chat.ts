@@ -146,6 +146,11 @@ export interface ChatLaneOptions {
   source?: MatterRecordSource
   /** 知识检索；不给就只拿事项现场答。 */
   searchKnowledge?(text: string, limit: number): Promise<ChatKnowledgeHit[]>
+  /**
+   * WP289（决策 318）：客服职责规矩里那几句「以后都这样」（与运行提示词同一本、同一节文字）。
+   * 每一轮现取——改了 / 删了下一句就跟着变。不给 = 聊天里不带规矩。
+   */
+  roleRules?(): string | undefined
   /** 这条会话挂谁名下。 */
   position?(): { person_id: PersonId; assignment_id: string; role_id: RoleId } | undefined
   /**
@@ -241,6 +246,11 @@ export interface ChatLane {
     instruction: string
     scope: ChatTeachingScope
     taught_by: PersonId
+    /**
+     * WP289（决策 318）：「以后都这样」已经出成职责规矩那张卡——不再另存知识候选（收成一处：
+     * 批了进职责规矩、进运行提示词，不在知识候选里再挂一份）。
+     */
+    rule_card_id?: string
   }): Promise<ChatTeachingResult & { candidate_saved: boolean }>
   /** 求助超时巡检（`support.chat_assist_timeout`）。 */
   sweepAssistTimeouts(): Promise<ChatAssistSweepReport>
@@ -404,6 +414,9 @@ export function createChatLane(options: ChatLaneOptions): ChatLane {
         parts.push(`${options.source?.label?.(ref) ?? ref.type}：${JSON.stringify(record)}`)
       }
     }
+    // WP289（决策 318）：人定过的规矩排在知识前面（和运行提示词里一样：一律照做）
+    const rules = options.roleRules?.()
+    if (rules !== undefined && rules !== '') parts.push(rules)
     const hits = (await options.searchKnowledge?.(turn_text, MAX_KNOWLEDGE_HITS)) ?? []
     if (hits.length > 0) {
       parts.push(`客服知识：\n${hits.map((h) => `- ${h.statement}`).join('\n')}`)
@@ -841,6 +854,10 @@ export function createChatLane(options: ChatLaneOptions): ChatLane {
           assist_reminded_at: null,
           at: now,
         })
+      }
+      if (input.rule_card_id !== undefined) {
+        const { candidate: _landed, ...rest } = result
+        return { ...rest, candidate_saved: false }
       }
       const candidate_saved = await saveCandidate(result.candidate)
       return { ...result, candidate_saved }

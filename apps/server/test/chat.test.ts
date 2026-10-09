@@ -88,7 +88,7 @@ interface Rig {
   emails: { session_id: string }[]
 }
 
-function rig(over: { models?: boolean; answer?: string } = {}): Rig {
+function rig(over: { models?: boolean; answer?: string; rules?: string } = {}): Rig {
   const clock = new StepClock()
   const approvals = new RecordingApprovals()
   const events: (Omit<EventEnvelope, 'id' | 'at'> & { at?: string })[] = []
@@ -113,6 +113,7 @@ function rig(over: { models?: boolean; answer?: string } = {}): Rig {
       { fact_card_id: 'fc_1', statement: '美国订单满 $50 免邮，否则 $6.9。' },
     ],
     position: () => ({ person_id: 'p_wang', assignment_id: 'as_1', role_id: 'dtc.live-chat' }),
+    ...(over.rules === undefined ? {} : { roleRules: () => over.rules }),
     emailFollowUp: async ({ session }) => {
       emails.push({ session_id: session.id })
       return { sent: true }
@@ -162,6 +163,15 @@ describe('实时车道：五种动作各走一遍', () => {
     expect(user).toContain('美国订单满 $50 免邮')
     expect(user).toContain('<external_data>')
     expect(r.models.calls[0]?.system).toContain('不承诺钱')
+  })
+
+  it('WP289：answer 的材料里带客服职责规矩（人定过的那几句，排在知识前面）', async () => {
+    const r = rig({ rules: '这条职责的规矩：\n- 退款超过 50 美元先问我' })
+    const s = await open(r)
+    await say(r, s.id, 'how much is shipping to the US?')
+    const user = r.models.calls[0]?.user ?? ''
+    expect(user).toContain('退款超过 50 美元先问我')
+    expect(user.indexOf('退款超过')).toBeLessThan(user.indexOf('美国订单满'))
   })
 
   it('collect_info：查订单没给单号 → 追问，且不花模型', async () => {
@@ -392,6 +402,25 @@ describe('教 AI', () => {
     expect(result.outcome).toBe('blocked_verbatim_leak')
     expect(result.candidate_saved).toBe(true)
     expect((await r.chat.messages(s.id)).some((m) => m.role === 'agent')).toBe(false)
+  })
+})
+
+describe('WP289 教 AI「以后都这样」进职责规矩（决策 318）', () => {
+  it('已经出成职责规矩卡：照常回访客，但不再另存知识候选（收成一处）', async () => {
+    const r = rig({ answer: 'Refunds over $50 need a quick check — we will get back to you.' })
+    const s = await open(r)
+    await say(r, s.id, 'I want a refund of $80')
+    const result = await r.chat.teach({
+      session_id: s.id,
+      instruction: '退款超过 50 美元先问我，别直接答应',
+      scope: 'global_rule',
+      taught_by: 'p_wang',
+      rule_card_id: 'apv_rule_1',
+    })
+    expect(result.outcome).toBe('sent')
+    expect(result.candidate_saved).toBe(false)
+    expect(result.candidate).toBeUndefined()
+    expect(r.events.some((e) => e.type === 'knowledge.candidate_created')).toBe(false)
   })
 })
 

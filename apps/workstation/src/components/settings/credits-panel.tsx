@@ -23,6 +23,9 @@
  * - **本地不碰支付凭据**：四张卡点下去是去云上建一笔单，然后打开收款方自己的页面。
  * - **看得到多少由令牌说了算**：owner 那把看整个组织，成员那把只看自己那个工作区。
  *   界面不做第二次裁剪——裁两次就会有一次是错的。
+ *
+ * WP289（决策 307）：余额、本月合计、价目、充值档**人人只读**。没有花钱权限的人：充值档只摆着
+ * （不是按钮）、不出增值服务卡；看不了用量明细的人不出「钱花在哪」三块与明细表（服务端在余额那一份里说）。
  */
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { ChevronDown, ChevronRight, Coins, ExternalLink, Link2, Wallet } from 'lucide-react'
@@ -140,10 +143,13 @@ export function CreditsPanel({ assignment }: { assignment?: string }): React.Rea
     queryFn: () => getCloudCredits(assignment),
     retry: false,
   })
+  // WP289：老服务端不给这两格 = 都能（以前读得到余额的人本来就都有权限）
+  const canTopup = credits.data?.can_topup !== false
+  const canUsage = credits.data?.can_view_usage !== false
   const usage = useQuery({
     queryKey: ['cloud-usage', group, assignment],
     queryFn: () => getCloudUsage(group, assignment),
-    enabled: credits.data?.linked === true,
+    enabled: credits.data?.linked === true && canUsage,
     retry: false,
   })
   const pricing = useQuery({
@@ -158,7 +164,7 @@ export function CreditsPanel({ assignment }: { assignment?: string }): React.Rea
   const byCapability = useQuery({
     queryKey: ['cloud-usage', 'capability', assignment],
     queryFn: () => getCloudUsage('capability', assignment),
-    enabled: credits.data?.linked === true,
+    enabled: credits.data?.linked === true && canUsage,
     retry: false,
   })
   /*
@@ -301,13 +307,18 @@ export function CreditsPanel({ assignment }: { assignment?: string }): React.Rea
               pending={tiers.isPending}
               linked={false}
               busy={false}
+              readonly={!canTopup}
               num={num}
               onPick={linkFirst}
             />
 
-            <Separator />
-            {/* ⑤b 增值服务卡：没关联时它自己说「先关联」 */}
-            <KolCloudCard assignment={assignment} onLinkFirst={linkFirst} />
+            {canTopup ? (
+              <>
+                <Separator />
+                {/* ⑤b 增值服务卡：没关联时它自己说「先关联」 */}
+                <KolCloudCard assignment={assignment} onLinkFirst={linkFirst} />
+              </>
+            ) : null}
           </>
         ) : (
           <>
@@ -327,38 +338,40 @@ export function CreditsPanel({ assignment }: { assignment?: string }): React.Rea
             {/* WP206：给同事分额度只在网页上做（只 owner / admin 看得到这一句） */}
             <AllocationWebLink assignment={assignment} />
 
-            {/* ② 这个月钱花在哪：付费三块各一张小卡（67 §1） */}
-            <section
-              className="flex flex-col gap-1.5"
-              data-slot="data"
-              data-testid="credits-blocks"
-            >
-              <h4 className="text-xs font-medium text-muted-foreground">{t('credits.blocks')}</h4>
-              <div className="grid grid-cols-3 gap-2">
-                {BLOCKS.map((b) => {
-                  const sum = perBlock.get(b) ?? { credits: 0, calls: 0 }
-                  return (
-                    <div
-                      key={b}
-                      className="rounded-lg border p-2"
-                      data-testid="credits-block"
-                      data-block={b}
-                    >
-                      <p className="flex items-center gap-1 text-[11px] text-muted-foreground">
-                        {t(`credits.block.${b}`)}
-                        <Hint text={t(`credits.block.${b}.note`)} />
-                      </p>
-                      <p className="text-base tabular-nums">{num(sum.credits)}</p>
-                      <p className="text-[11px] text-muted-foreground">
-                        {sum.calls === 0
-                          ? t('credits.blocks.none')
-                          : `${t('credits.usage.calls')} ${String(sum.calls)}`}
-                      </p>
-                    </div>
-                  )
-                })}
-              </div>
-            </section>
+            {/* ② 这个月钱花在哪：付费三块各一张小卡（67 §1）；WP289：看不了用量明细的人不出 */}
+            {canUsage ? (
+              <section
+                className="flex flex-col gap-1.5"
+                data-slot="data"
+                data-testid="credits-blocks"
+              >
+                <h4 className="text-xs font-medium text-muted-foreground">{t('credits.blocks')}</h4>
+                <div className="grid grid-cols-3 gap-2">
+                  {BLOCKS.map((b) => {
+                    const sum = perBlock.get(b) ?? { credits: 0, calls: 0 }
+                    return (
+                      <div
+                        key={b}
+                        className="rounded-lg border p-2"
+                        data-testid="credits-block"
+                        data-block={b}
+                      >
+                        <p className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                          {t(`credits.block.${b}`)}
+                          <Hint text={t(`credits.block.${b}.note`)} />
+                        </p>
+                        <p className="text-base tabular-nums">{num(sum.credits)}</p>
+                        <p className="text-[11px] text-muted-foreground">
+                          {sum.calls === 0
+                            ? t('credits.blocks.none')
+                            : `${t('credits.usage.calls')} ${String(sum.calls)}`}
+                        </p>
+                      </div>
+                    )
+                  })}
+                </div>
+              </section>
+            ) : null}
 
             <div className="flex flex-wrap items-center gap-2" data-slot="status">
               <span className="text-[11px] text-muted-foreground">
@@ -395,37 +408,46 @@ export function CreditsPanel({ assignment }: { assignment?: string }): React.Rea
               </section>
             )}
 
-            <Separator />
-
-            {/* ③ 用量明细 */}
-            <section className="flex flex-col gap-2" data-slot="data" data-testid="credits-usage">
-              <div className="flex items-center justify-between gap-2">
-                <h4 className="text-xs font-medium text-muted-foreground">{t('credits.usage')}</h4>
-                <div className="flex gap-1">
-                  {GROUPS.map((g) => (
-                    <Button
-                      key={g}
-                      size="xs"
-                      variant={group === g ? 'secondary' : 'ghost'}
-                      data-testid="credits-usage-group"
-                      data-group={g}
-                      data-active={group === g ? 'true' : 'false'}
-                      onClick={() => {
-                        setGroup(g)
-                      }}
-                    >
-                      {t(`credits.group.${g}`)}
-                    </Button>
-                  ))}
-                </div>
-              </div>
-              <UsageTable
-                report={usage.data ?? null}
-                pending={usage.isPending}
-                group={group}
-                num={num}
-              />
-            </section>
+            {/* ③ 用量明细（WP289：看不了的人不出） */}
+            {canUsage ? (
+              <>
+                <Separator />
+                <section
+                  className="flex flex-col gap-2"
+                  data-slot="data"
+                  data-testid="credits-usage"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <h4 className="text-xs font-medium text-muted-foreground">
+                      {t('credits.usage')}
+                    </h4>
+                    <div className="flex gap-1">
+                      {GROUPS.map((g) => (
+                        <Button
+                          key={g}
+                          size="xs"
+                          variant={group === g ? 'secondary' : 'ghost'}
+                          data-testid="credits-usage-group"
+                          data-group={g}
+                          data-active={group === g ? 'true' : 'false'}
+                          onClick={() => {
+                            setGroup(g)
+                          }}
+                        >
+                          {t(`credits.group.${g}`)}
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+                  <UsageTable
+                    report={usage.data ?? null}
+                    pending={usage.isPending}
+                    group={group}
+                    num={num}
+                  />
+                </section>
+              </>
+            ) : null}
 
             {/* ⑤ 充值四档：四张卡（67 §2） */}
             <Separator />
@@ -435,6 +457,7 @@ export function CreditsPanel({ assignment }: { assignment?: string }): React.Rea
               pending={tiers.isPending}
               linked
               busy={order.isPending}
+              readonly={!canTopup}
               num={num}
               onPick={(id) => {
                 order.mutate(id)
@@ -451,7 +474,7 @@ export function CreditsPanel({ assignment }: { assignment?: string }): React.Rea
               </p>
             ) : null}
 
-            <Separator />
+            {canTopup ? <Separator /> : null}
 
             {/*
              * ⑤b 红人营销增值服务（67 §3，WP118）。
@@ -461,7 +484,7 @@ export function CreditsPanel({ assignment }: { assignment?: string }): React.Rea
              * 上面那三张小卡里"增值服务"那一格是这个月**已经花掉**的，这一张是
              * **现在是什么状态**，两个问题不同，所以两处都在。
              */}
-            <KolCloudCard assignment={assignment} />
+            {canTopup ? <KolCloudCard assignment={assignment} /> : null}
           </>
         )}
 
@@ -568,6 +591,7 @@ export function TierCards({
   pending,
   linked,
   busy,
+  readonly = false,
   num,
   onPick,
 }: {
@@ -577,20 +601,27 @@ export function TierCards({
   pending: boolean
   linked: boolean
   busy: boolean
+  /** WP289（决策 307）：只看不充（没有花钱权限）——四档照常摆着，不是按钮、不出「去充值 / 先关联」。 */
+  readonly?: boolean
   num: (n: number) => string
   onPick: (tier_id: string) => void
 }): React.ReactNode {
   const { t, lang } = useApp()
   return (
-    <section className="flex flex-col gap-2" data-testid="credits-tiers" data-linked={linked}>
+    <section
+      className="flex flex-col gap-2"
+      data-testid="credits-tiers"
+      data-linked={linked}
+      data-readonly={readonly ? 'true' : 'false'}
+    >
       <div className="flex items-baseline justify-between gap-2">
         <h4 className="text-xs font-medium text-muted-foreground">{t('credits.tiers')}</h4>
         <span className="text-[11px] text-muted-foreground" data-slot="status">
           {t('credits.tiers.note')}
         </span>
       </div>
-      {/* 付款去哪、卡号谁碰：安全承诺，一行 + 盾牌（WP156） */}
-      <SafetyNote text={t('credits.tiers.safety')} />
+      {/* 付款去哪、卡号谁碰：安全承诺，一行 + 盾牌（WP156）；只看不充的人用不上这一句 */}
+      {readonly ? null : <SafetyNote text={t('credits.tiers.safety')} />}
       {pending ? (
         <Skeleton className="h-20 w-full" />
       ) : unavailable !== undefined && (tiers ?? []).length === 0 ? (
@@ -599,50 +630,71 @@ export function TierCards({
         </p>
       ) : (
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-          {(tiers ?? []).map((tier: TopupTierView) => (
-            <button
-              key={tier.id}
-              type="button"
-              className={`flex flex-col items-start gap-0.5 rounded-lg border p-2.5 text-left transition-colors hover:bg-muted/50 disabled:opacity-60 ${
-                tier.recommended === true ? 'border-primary' : ''
-              }`}
-              data-testid="credits-tier"
-              data-tier={tier.id}
-              data-recommended={tier.recommended === true ? 'true' : 'false'}
-              disabled={busy}
-              onClick={() => {
-                onPick(tier.id)
-              }}
-            >
-              <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
-                {lang === 'zh' ? tier.label_zh : tier.label_en}
-                {tier.recommended === true ? (
-                  <span className="rounded bg-primary/10 px-1 text-primary">
-                    {t('credits.tiers.recommended')}
-                  </span>
-                ) : null}
-              </span>
-              <span className="text-lg font-semibold tabular-nums">US${num(tier.usd)}</span>
-              <span className="text-xs text-muted-foreground tabular-nums">
-                {t('credits.tiers.credits', { n: num(tier.credits) })}
-              </span>
-              {linked ? (
-                <span className="flex items-center gap-1 text-[11px] text-primary">
-                  <Wallet className="size-3" aria-hidden />
-                  {t('credits.tiers.go')}
-                  <ExternalLink className="size-3" aria-hidden />
+          {(tiers ?? []).map((tier: TopupTierView) => {
+            const body = (
+              <>
+                <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                  {lang === 'zh' ? tier.label_zh : tier.label_en}
+                  {tier.recommended === true ? (
+                    <span className="rounded bg-primary/10 px-1 text-primary">
+                      {t('credits.tiers.recommended')}
+                    </span>
+                  ) : null}
                 </span>
-              ) : (
-                <span
-                  className="flex items-center gap-1 text-[11px] text-primary"
-                  data-testid="credits-tier-link-first"
+                <span className="text-lg font-semibold tabular-nums">US${num(tier.usd)}</span>
+                <span className="text-xs text-muted-foreground tabular-nums">
+                  {t('credits.tiers.credits', { n: num(tier.credits) })}
+                </span>
+              </>
+            )
+            const frame = `flex flex-col items-start gap-0.5 rounded-lg border p-2.5 text-left ${
+              tier.recommended === true ? 'border-primary' : ''
+            }`
+            // WP289（决策 307）：只看不充——摆着，不是按钮
+            if (readonly)
+              return (
+                <div
+                  key={tier.id}
+                  className={frame}
+                  data-testid="credits-tier"
+                  data-tier={tier.id}
+                  data-recommended={tier.recommended === true ? 'true' : 'false'}
                 >
-                  <Link2 className="size-3" aria-hidden />
-                  {t('credits.link_first')}
-                </span>
-              )}
-            </button>
-          ))}
+                  {body}
+                </div>
+              )
+            return (
+              <button
+                key={tier.id}
+                type="button"
+                className={`${frame} transition-colors hover:bg-muted/50 disabled:opacity-60`}
+                data-testid="credits-tier"
+                data-tier={tier.id}
+                data-recommended={tier.recommended === true ? 'true' : 'false'}
+                disabled={busy}
+                onClick={() => {
+                  onPick(tier.id)
+                }}
+              >
+                {body}
+                {linked ? (
+                  <span className="flex items-center gap-1 text-[11px] text-primary">
+                    <Wallet className="size-3" aria-hidden />
+                    {t('credits.tiers.go')}
+                    <ExternalLink className="size-3" aria-hidden />
+                  </span>
+                ) : (
+                  <span
+                    className="flex items-center gap-1 text-[11px] text-primary"
+                    data-testid="credits-tier-link-first"
+                  >
+                    <Link2 className="size-3" aria-hidden />
+                    {t('credits.link_first')}
+                  </span>
+                )}
+              </button>
+            )
+          })}
         </div>
       )}
     </section>

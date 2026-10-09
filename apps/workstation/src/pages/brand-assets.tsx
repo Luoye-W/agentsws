@@ -4,6 +4,8 @@
  * AI 出的图（待挑 / 选中 / 不要）、人传的图（这一页或事项里拖进来的）、店里商品图都在这里；
  * 点一张看来源、提示词、模型、积分、传没传到店铺「文件」、挂在网站哪一格。传图：按钮或直接拖进来。
  * 界面少字：一行标题 + 问号，筛选是一排小签。
+ *
+ * WP289（决策 313）：遮罩（圈区域时导出的那张，用途 `mask`）默认不显示；筛选最后一个签「遮罩」才看得到。
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { cn } from 'cn'
@@ -22,8 +24,8 @@ import {
 } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 
-type Filter = 'all' | 'generated' | 'uploaded' | 'external' | 'picked'
-const FILTERS: Filter[] = ['all', 'generated', 'uploaded', 'external', 'picked']
+type Filter = 'all' | 'generated' | 'uploaded' | 'external' | 'picked' | 'mask'
+const FILTERS: Filter[] = ['all', 'generated', 'uploaded', 'external', 'picked', 'mask']
 
 export const BRAND_ASSETS_KEY = ['brand-assets'] as const
 
@@ -41,9 +43,11 @@ export function BrandAssetsPage(): ReactNode {
       listBrandAssets({
         ...(filter === 'picked'
           ? { picked_only: true }
-          : filter === 'all'
-            ? {}
-            : { source: filter }),
+          : filter === 'mask'
+            ? { tag: 'mask' }
+            : filter === 'all'
+              ? {}
+              : { source: filter }),
         limit: 200,
       }),
   })

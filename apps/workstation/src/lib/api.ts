@@ -1667,6 +1667,10 @@ export interface CloudCreditsView {
   fetched_at?: string
   /** 网页账号页（`${云地址}/account`，WP198b）；本机服务端按它的云地址填，没关联也有。 */
   account_url?: string
+  /** WP289（决策 307）：充值按钮给不给；不给 = 能（老服务端）。 */
+  can_topup?: boolean
+  /** WP289：用量明细看不看得到；不给 = 能。 */
+  can_view_usage?: boolean
 }
 
 export interface PricingModelEntry {
@@ -4219,7 +4223,7 @@ export const teachChatSession = (
   id: string,
   input: { instruction: string; scope: 'single_reply' | 'similar_cases' | 'global_rule' },
   assignment?: string,
-): Promise<{ outcome: string; reply?: string; sediment: string }> =>
+): Promise<{ outcome: string; reply?: string; sediment: string; rule_card_id?: string }> =>
   api(`/v1/chat/sessions/${encodeURIComponent(id)}/teach`, {
     method: 'POST',
     body: input,
@@ -7368,6 +7372,8 @@ export const BRAND_ASSET_ACCEPT = 'image/png,image/jpeg,image/webp,image/gif'
 export const listBrandAssets = (
   filter: {
     matter_id?: string
+    /** 只看这个用途标（WP289：不给时服务端不含遮罩 `mask`）。 */
+    tag?: string
     source?: 'generated' | 'uploaded' | 'external'
     picked_only?: boolean
     limit?: number
@@ -7375,6 +7381,7 @@ export const listBrandAssets = (
 ): Promise<{ rows: BrandAssetRow[] }> => {
   const q = new URLSearchParams()
   if (filter.matter_id !== undefined) q.set('matter_id', filter.matter_id)
+  if (filter.tag !== undefined) q.set('tag', filter.tag)
   if (filter.source !== undefined) q.set('source', filter.source)
   if (filter.picked_only === true) q.set('picked_only', 'true')
   if (filter.limit !== undefined) q.set('limit', String(filter.limit))

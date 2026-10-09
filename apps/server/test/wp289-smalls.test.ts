@@ -9,7 +9,8 @@
  * 4. 318：聊天窗「教 AI」选「以后都这样」→ 同一张「以后都这样」卡，批了落进同一本职责规矩、
  *    进运行提示词；不再另起一份知识候选。
  */
-import type { ApprovalItem } from '@agentsws/contracts'
+import type { ApprovalItem, RoleRuleView } from '@agentsws/contracts'
+import { encodePng } from '@agentsws/model-gateway'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createServer, type Server } from '../src/index.js'
 import { SECRETS_KEY_ENV } from '../src/secret-store.js'
@@ -144,6 +145,10 @@ beforeEach(async () => {
     tokenRefreshIntervalMs: 0,
     env: { [SECRETS_KEY_ENV]: 'b'.repeat(64) },
     mdns: () => ({ reason: '测试里不开局域网' }),
+    // 测试不联网：价目 / 充值档取云那一跳直接失败（回本机内置那一份或「暂时拿不到」）
+    cloudFetch: (async () => {
+      throw new Error('测试不联网')
+    }) as never,
   })
   lin = await colleague('lin@example.com', '林峰')
   expect(await server.organizations.modeOf(ws())).toBe('peers')
@@ -200,5 +205,125 @@ describe('WP289 请他离开时个人连接跟人走（决策 293）', () => {
       await call('DELETE', `/v1/workspaces/${ws()}/members/${lin.id}`),
     )
     expect(removed.disconnected).toBeUndefined()
+  })
+})
+
+describe('WP289 积分卡人人只读（决策 307）', () => {
+  it('② 不是发起人的同事：余额 / 价目 / 充值档读得到，不能充值、看不了用量明细', async () => {
+    const credits = await call('GET', '/v1/cloud/credits', as(lin))
+    expect(credits.status).toBe(200)
+    expect(
+      await data<{ linked: boolean; can_topup?: boolean; can_view_usage?: boolean }>(credits),
+    ).toMatchObject({ linked: false, can_topup: false, can_view_usage: false })
+    expect((await call('GET', '/v1/cloud/pricing', as(lin))).status).toBe(200)
+    expect((await call('GET', '/v1/cloud/topup/tiers', as(lin))).status).toBe(200)
+    // 花钱的事仍只归有权限的人
+    expect(
+      (await call('POST', '/v1/cloud/topup', { ...as(lin), body: { tier_id: 'usd_20' } })).status,
+    ).toBe(403)
+    expect((await call('GET', '/v1/cloud/usage', as(lin))).status).toBe(403)
+  })
+
+  it('发起人：两格都是能', async () => {
+    expect(
+      await data<{ can_topup?: boolean; can_view_usage?: boolean }>(
+        await call('GET', '/v1/cloud/credits'),
+      ),
+    ).toMatchObject({ can_topup: true, can_view_usage: true })
+  })
+})
+
+describe('WP289 素材库默认不列遮罩（决策 313）', () => {
+  const upload = async (name: string, tags?: string): Promise<string> => {
+    const form = new FormData()
+    form.append('file', new Blob([encodePng(2, 2, new Uint8Array(12), 'rgb')]), name)
+    if (tags !== undefined) form.append('tags', tags)
+    const res = await server.gateway.fetch(
+      new Request('http://127.0.0.1/v1/brand-assets/upload', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${server.bootstrap.internalToken}`,
+          'X-Assignment': server.bootstrap.ownerAssignment.id,
+        },
+        body: form,
+      }),
+    )
+    expect(res.status).toBe(201)
+    return ((await res.json()) as { data: { asset: { id: string } } }).data.asset.id
+  }
+
+  it('不给用途：不含遮罩；筛 tag=mask 才看得到', async () => {
+    const photo = await upload('box.png')
+    const mask = await upload('mask.png', 'mask')
+    const ids = async (q: string) =>
+      (await data<{ rows: { id: string }[] }>(await call('GET', `/v1/brand-assets${q}`))).rows.map(
+        (r) => r.id,
+      )
+    expect(await ids('')).toEqual([photo])
+    expect(await ids('?source=uploaded')).toEqual([photo])
+    expect(await ids('?tag=mask')).toEqual([mask])
+  })
+})
+
+describe('WP289 聊天窗「以后都这样」进同一本职责规矩（决策 318）', () => {
+  it('出同一张「以后都这样」卡（发给本人）→ 记进规矩 → 客服职责规矩里多一句；不再另存知识候选', async () => {
+    const support = server.roles.assignments.create({
+      person_id: server.bootstrap.person.id as never,
+      workspace_id: ws() as never,
+      role_id: 'dtc.support' as never,
+      granted_by: server.bootstrap.person.id as never,
+      ranges: [{ kind: 'store', id: 'store_main' }],
+    })
+    const who = { assignment: support.id }
+    const session = await data<{ id: string }>(await call('POST', '/v1/chat/sessions', who))
+    const RULE = '退款超过 50 美元先问我，别直接答应'
+    const taught = await data<{ sediment: string; rule_card_id?: string }>(
+      await call('POST', `/v1/chat/sessions/${session.id}/teach`, {
+        ...who,
+        body: { instruction: RULE, scope: 'global_rule' },
+      }),
+    )
+    expect(taught.sediment).toBe('role_rule')
+    const card = (await queueOf(server.bootstrap.person.id)).find(
+      (i) => i.id === taught.rule_card_id,
+    )
+    expect(card?.kind).toBe('policy_change')
+    expect(card?.role_id).toBe('dtc.support')
+    expect((card?.payload as { form?: string } | undefined)?.form).toBe('instruction_rule')
+    expect(card?.links.parent).toBeUndefined()
+    // 收成一处：聊天自己那份知识候选不再出
+    expect(
+      server.kernel.eventLog
+        .readSync({ workspace_id: ws() })
+        .some((e) => e.type === 'knowledge.candidate_created'),
+    ).toBe(false)
+
+    const before = await data<RoleRuleView[]>(await call('GET', '/v1/roles/dtc.support/rules', who))
+    expect(before).toEqual([])
+    const approved = await call('POST', `/v1/approvals/${card?.id}/decide`, {
+      ...who,
+      body: { action: 'approve', selected_option_id: 'after' },
+    })
+    expect(approved.status).toBe(200)
+    const [rule] = await data<RoleRuleView[]>(await call('GET', '/v1/roles/dtc.support/rules', who))
+    expect(rule).toMatchObject({ text: RULE, role_id: 'dtc.support' })
+    expect(rule?.source_title).toContain('聊天')
+  })
+
+  it('一句规矩超过 300 字 → 400，什么都不出', async () => {
+    const support = server.roles.assignments.create({
+      person_id: server.bootstrap.person.id as never,
+      workspace_id: ws() as never,
+      role_id: 'dtc.support' as never,
+      granted_by: server.bootstrap.person.id as never,
+      ranges: [{ kind: 'store', id: 'store_main' }],
+    })
+    const who = { assignment: support.id }
+    const session = await data<{ id: string }>(await call('POST', '/v1/chat/sessions', who))
+    const res = await call('POST', `/v1/chat/sessions/${session.id}/teach`, {
+      ...who,
+      body: { instruction: '好'.repeat(301), scope: 'global_rule' },
+    })
+    expect(res.status).toBe(400)
   })
 })

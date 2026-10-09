@@ -28,6 +28,9 @@ import type { DesignStore } from './design.js'
 /** 单张图的上限（与店铺运营「传商品图」同一条）。 */
 export const BRAND_ASSET_MAX_BYTES = 20 * 1024 * 1024
 
+/** WP283 / WP289（决策 313）：遮罩图的用途标——素材库默认不显示它（筛「遮罩」才看得到）。 */
+export const BRAND_ASSET_MASK_TAG = 'mask'
+
 /** 只认这几种图片（看文件头，不信扩展名）。 */
 export function sniffImage(bytes: Uint8Array): string | undefined {
   if (bytes.length >= 8 && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e)
@@ -99,6 +102,8 @@ export interface SaveAssetInput {
 export interface BrandAssetFilter {
   matter_id?: string
   tag?: string
+  /** WP289（决策 313）：不要带这几个用途标的（素材库默认不显示遮罩 `mask`）。 */
+  exclude_tags?: readonly string[]
   status?: readonly DesignAsset['status'][]
   /** `generated` / `uploaded` / `external`。 */
   source?: DesignAssetProvenance['source']
@@ -240,6 +245,11 @@ export function createBrandAssets(options: BrandAssetsOptions): BrandAssets {
           (a) => filter.matter_id === undefined || a.provenance.matter_id === filter.matter_id,
         )
         .filter((a) => filter.tag === undefined || (a.tags ?? []).includes(filter.tag))
+        .filter(
+          (a) =>
+            filter.exclude_tags === undefined ||
+            !(a.tags ?? []).some((t) => filter.exclude_tags?.includes(t)),
+        )
         .filter((a) => filter.status === undefined || filter.status.includes(a.status))
         .filter((a) => filter.source === undefined || a.provenance.source === filter.source)
         .sort((a, b) =>
