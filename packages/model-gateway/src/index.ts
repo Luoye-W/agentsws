@@ -14,8 +14,14 @@ export {
   estimateImageUsd,
   GPT_IMAGE_EDIT_MODEL,
   GPT_IMAGE_GENERATE_MODEL,
+  IMAGE_MODEL_CAPS,
+  type ImageModelCaps,
   type ImageVendor,
+  imageMaskSupported,
   imageVendorOf,
+  isRetiredImageModel,
+  normalizeImageModel,
+  RETIRED_IMAGE_MODELS,
   splitImageProvider,
 } from './image-routing.js'
 // WP76（22 图片槽 / 58 §1）：图片能力的两个实现 + 「没有图片模型」那句人话

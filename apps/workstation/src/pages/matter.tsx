@@ -19,6 +19,7 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { openExternal } from '@/components/connections/bridge'
 import { deckActionLabel } from '@/components/deck/deck-action-bar'
 import { ImageCard, isImageCard } from '@/components/matter/image-pick-card'
+import { MaskDialog } from '@/components/matter/mask-dialog'
 import { MatterComposer, PrivatePair } from '@/components/matter/matter-composer'
 import { type DutyOption, MatterHeader } from '@/components/matter/matter-header'
 import { buildItems, dayKey, matterState, suggestionFor } from '@/components/matter/matter-model'
@@ -116,8 +117,14 @@ export function MatterPage(): ReactNode {
   const me = session.data?.person.id
   const [privateMode, setPrivateMode] = useState(false)
   // WP268：事项里加进来的图（已进素材库，发话时带上 id）
-  const [attached, setAttached] = useState<{ id: string; url: string }[]>([])
+  const [attached, setAttached] = useState<
+    { id: string; url: string; mask?: string | undefined }[]
+  >([])
   const [attaching, setAttaching] = useState(false)
+  // WP283（决策 300）：现在的改图型号认遮罩才给「圈区域」（传图时服务端顺带回 `edit_mask`）
+  const [canMask, setCanMask] = useState(false)
+  const [masking, setMasking] = useState<string | undefined>(undefined)
+  const [savingMask, setSavingMask] = useState(false)
   const [asks, setAsks] = useState<PrivateAsk[]>([])
   const [queued, setQueued] = useState<string | undefined>(undefined)
   const askSeq = useRef(0)
@@ -382,10 +389,18 @@ export function MatterPage(): ReactNode {
     const note =
       privateMode || attached.length === 0
         ? ''
-        : t('matter.cmp.attach.note', {
-            n: attached.length,
-            ids: attached.map((a) => a.id).join('、'),
-          })
+        : [
+            t('matter.cmp.attach.note', {
+              n: attached.length,
+              ids: attached.map((a) => a.id).join('、'),
+            }),
+            // WP283：圈了区域的那几张，告诉 AI 改图时带上遮罩
+            ...attached.flatMap((a) =>
+              a.mask === undefined
+                ? []
+                : [t('matter.cmp.attach.mask_note', { id: a.id, mask: a.mask })],
+            ),
+          ].join('')
     const value = [typed, note].filter((x) => x !== '').join('\n\n')
     if (value === '') return
     if (!privateMode) setAttached([])
@@ -718,17 +733,21 @@ export function MatterPage(): ReactNode {
         }}
         suggestion={suggestion}
         sending={false}
-        attachments={attached}
+        attachments={attached.map((a) => ({ id: a.id, url: a.url, masked: a.mask !== undefined }))}
         attaching={attaching}
         onAttach={(files) => {
           setAttaching(true)
           void Promise.all(
             files
               .filter((f) => f.size <= BRAND_ASSET_MAX_BYTES)
-              .map((f) => uploadBrandAsset(f, { matter_id: id }).then((r) => r.asset)),
+              .map((f) => uploadBrandAsset(f, { matter_id: id })),
           )
             .then((rows) => {
-              setAttached((xs) => [...xs, ...rows.map((r) => ({ id: r.id, url: r.file_url }))])
+              setAttached((xs) => [
+                ...xs,
+                ...rows.map((r) => ({ id: r.asset.id, url: r.asset.file_url })),
+              ])
+              if (rows.length > 0) setCanMask(rows.every((r) => r.edit_mask === true))
             })
             .catch(() => undefined)
             .finally(() => {
@@ -737,6 +756,28 @@ export function MatterPage(): ReactNode {
         }}
         onDetach={(aid) => {
           setAttached((xs) => xs.filter((x) => x.id !== aid))
+        }}
+        {...(canMask ? { onMask: setMasking } : {})}
+      />
+      <MaskDialog
+        src={attached.find((a) => a.id === masking)?.url}
+        busy={savingMask}
+        onClose={() => {
+          setMasking(undefined)
+        }}
+        onSave={(file) => {
+          const target = masking
+          if (target === undefined) return
+          setSavingMask(true)
+          uploadBrandAsset(file, { matter_id: id, tags: ['mask'] })
+            .then((r) => {
+              setAttached((xs) => xs.map((x) => (x.id === target ? { ...x, mask: r.asset.id } : x)))
+              setMasking(undefined)
+            })
+            .catch(() => undefined)
+            .finally(() => {
+              setSavingMask(false)
+            })
         }}
       />
       {say.error === null ? null : (

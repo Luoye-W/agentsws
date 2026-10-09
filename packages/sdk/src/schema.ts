@@ -68697,7 +68697,7 @@ export interface operations {
     }
     requestBody?: never
     responses: {
-      /** @description { asset: BrandAssetRow } */
+      /** @description { asset: BrandAssetRow; edit_mask?: boolean }（WP283：现在的改图型号能不能圈区域） */
       200: {
         headers: {
           [name: string]: unknown

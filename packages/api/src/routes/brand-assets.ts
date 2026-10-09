@@ -50,7 +50,14 @@ export interface BrandAssetsPort {
   upload(
     actor: BrandAssetsActor,
     input: { bytes: Uint8Array; filename?: string; matter_id?: string; tags?: string[] },
-  ): MaybePromise<{ asset: BrandAssetRow }>
+  ): MaybePromise<{
+    asset: BrandAssetRow
+    /**
+     * WP283（决策 300，只加）：现在的改图型号认不认遮罩——工作台据此在这张图上给不给「圈区域」。
+     * 经 Agents 工坊云的型号都不认；不给 = 不知道（当不认）。
+     */
+    edit_mask?: boolean
+  }>
 }
 
 function portOf(deps: GatewayDeps): BrandAssetsPort {
@@ -141,7 +148,8 @@ export function brandAssetRoutes(): Route[] {
         auth: 'bearer',
         assignment: true,
         authz: READ,
-        returns: '{ asset: BrandAssetRow }',
+        returns:
+          '{ asset: BrandAssetRow; edit_mask?: boolean }（WP283：现在的改图型号能不能圈区域）',
       },
       async (c, deps) => {
         if (!(c.req.header('content-type') ?? '').includes('multipart/form-data'))

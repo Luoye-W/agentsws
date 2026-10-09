@@ -18,6 +18,7 @@ import type {
   ImageGenerateRequest,
   ImageGeneration,
   ImageProvider,
+  ModelMeta,
   ModelRef,
 } from '@agentsws/contracts'
 import { IMAGE_EDIT_MAX_REFERENCES } from '@agentsws/contracts'
@@ -37,6 +38,16 @@ export interface OpenAiImageOptions {
   fetch?: FetchLike
   timeoutMs?: number
   extraHeaders?: Record<string, string>
+  /**
+   * WP283（决策 310）：每次请求现算的请求头——Agents 工坊官方接口那一条用它带
+   * `X-Agentsws-Member` / `X-Agentsws-Position`（同文字那一路的 `requestHeaders`）；别家不给。
+   */
+  requestHeaders?: (meta: ModelMeta | undefined) => Record<string, string>
+  /**
+   * WP283（决策 300）：这个型号走这条路认不认遮罩（按 `imageMaskSupported` 判）。`false` 时不往上游带
+   * `mask`（带了也是被去掉或报错）；不给 = 不知道，照旧带。
+   */
+  mask?: boolean
 }
 
 interface WireImageResponse {
@@ -67,7 +78,7 @@ export function openaiImageProvider(options: OpenAiImageOptions): ImageProvider 
   const send = async (
     path: 'generations' | 'edits',
     body: string | FormData,
-    req: { prompt: string; size?: string; model?: ModelRef },
+    req: { prompt: string; size?: string; model?: ModelRef; meta?: ModelMeta },
   ): Promise<ImageGeneration> => {
     const key = keyOrThrow()
     const [width, height] = parseImageSize(req.size)
@@ -81,6 +92,8 @@ export function openaiImageProvider(options: OpenAiImageOptions): ImageProvider 
           ...(typeof body === 'string' ? { 'content-type': 'application/json' } : {}),
           authorization: `Bearer ${key}`,
           ...options.extraHeaders,
+          // WP283：官方接口那一条带上「谁 / 哪个岗位」
+          ...options.requestHeaders?.(req.meta),
         },
         body,
         signal: AbortSignal.timeout(options.timeoutMs ?? IMAGE_TIMEOUT_MS),
@@ -132,6 +145,7 @@ export function openaiImageProvider(options: OpenAiImageOptions): ImageProvider 
     ref,
     available: true,
     max_reference_images: IMAGE_EDIT_MAX_REFERENCES,
+    ...(options.mask === undefined ? {} : { supports_mask: options.mask }),
     generate(req: ImageGenerateRequest): Promise<ImageGeneration> {
       const [width, height] = parseImageSize(req.size)
       const n = Math.max(1, Math.min(4, req.n ?? 1))
@@ -167,7 +181,7 @@ export function openaiImageProvider(options: OpenAiImageOptions): ImageProvider 
           img.filename ?? `ref-${i + 1}.${extOf(img.content_type)}`,
         )
       })
-      if (req.mask !== undefined)
+      if (req.mask !== undefined && options.mask !== false)
         form.append(
           'mask',
           new Blob([new Uint8Array(req.mask.bytes)], { type: req.mask.content_type }),
