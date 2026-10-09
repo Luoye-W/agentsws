@@ -382,8 +382,11 @@ export function SettingsPage({
       <TabsContent value="account" className="flex flex-col gap-4">
         <CloudAccountCard {...(ownerId === undefined ? {} : { assignment: ownerId })} />
         <CreditsPanel />
-        {/* WP276（决策 238）：② 共用一个余额，每个人的用量都看得见（不设每人上限） */}
-        {mode === 'peers' ? <PeopleUsage /> : null}
+        {/*
+          WP276（决策 238）：② 共用一个余额，每个人的用量都看得见（不设每人上限）。
+          WP282：关联了云就是积分（三块 + 次数）；③ 管理者看全员、别人只看自己（服务端判）。
+        */}
+        {mode === 'solo' ? null : <PeopleUsage localFallback={mode === 'peers'} />}
       </TabsContent>
       {ownerId === undefined ? null : (
         <TabsContent value="plugins" className="flex flex-col gap-4">

@@ -2,7 +2,7 @@
  * WP276（docs/95 §4，决策 237–243）：② 同事互联要的那几条接口——交给对方、同事名单、退出、
  * 导出自己的副本、交接几天退回。单独一个文件，不再往 `api.ts` 里堆。
  */
-import type { Handoff } from '@agentsws/contracts'
+import type { CloudMemberUsageView, Handoff } from '@agentsws/contracts'
 import { api } from './api'
 
 export type HandoffKind = 'matter' | 'todo'
@@ -105,6 +105,15 @@ export interface PersonUsageView {
 
 export const listPeopleUsage = (): Promise<{ people: PersonUsageView[] }> =>
   api<{ people: PersonUsageView[] }>('/v1/usage/people')
+
+/**
+ * WP282：按人看积分（云上 `group=member` + 本机补 0 行）。看得到谁由服务端按模式判
+ * （② 全员；③ owner / admin 全员、别人只看自己；① 只有自己）。没关联回 `linked: false`。
+ */
+export const getCloudMemberUsage = (month?: string): Promise<CloudMemberUsageView> =>
+  api<CloudMemberUsageView>(
+    `/v1/cloud/usage/members${month === undefined ? '' : `?month=${encodeURIComponent(month)}`}`,
+  )
 
 // ── WP278（决策 276 / 277 / 278）─────────────────────────────────────────
 

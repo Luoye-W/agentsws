@@ -6,6 +6,8 @@
  *
  * 不像公司：没有负责人卡、没有上级、没有成员额度、没有范围；发起人只管家务（请人离开、删品牌、搬数据）。
  *
+ * WP282：名单下面是每个人这个月的积分（三块 + 次数，「没标注」单独一行）。
+ *
  * WP278（决策 276 / 278）：发起人自己那一行多一个「把发起人交给…」（选一位同事，对方接下才换，
  * 还在等的时候那一行是「等 X 接 · 撤回」）；「退出」先问一句（列出会断开的个人连接）。
  */
@@ -15,6 +17,7 @@ import { Link } from 'react-router-dom'
 import { WsAvatar } from '@/components/design'
 import { JoinPanel } from '@/components/onboarding/join-panel'
 import { LeaveConfirm } from '@/components/peers/leave-confirm'
+import { PeopleUsage } from '@/components/settings/people-usage'
 import { Button } from '@/components/ui/button'
 import { Hint } from '@/components/ui/hint'
 import { Separator } from '@/components/ui/separator'
@@ -211,6 +214,9 @@ export function ColleaguesTab({
         ) : null}
         <Hint text={t('team.data.hint')} />
       </p>
+
+      {/* WP282：每个人这个月的积分（共用一个余额，按人看得见；没关联云时是本机记的次数 / token） */}
+      <PeopleUsage localFallback />
 
       <Separator />
       <JoinPanel
