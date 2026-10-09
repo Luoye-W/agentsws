@@ -461,6 +461,11 @@ export interface ModelImageUsing {
   edit_model: string
   /** 走用户自己的 key（不预扣积分、不出积分口径的超额卡；本机记张数与估算美元）。 */
   own_key: boolean
+  /**
+   * WP283（决策 300，只加）：改图认不认遮罩——工作台据此给不给「圈区域」入口。经 Agents 工坊云的型号
+   * （OpenRouter：GPT Image 2.5 / 2 / 1、Nano Banana 2.1；Seedream）都不认；自己的 OpenAI key 认。
+   */
+  edit_mask?: boolean
 }
 
 /** 改生图那一档。`provider_id` 给空串 = 不单独指定（自动）。 */

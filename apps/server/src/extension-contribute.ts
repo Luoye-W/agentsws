@@ -16,6 +16,7 @@
 import type { Iso8601, KolChannel } from '@agentsws/contracts'
 import { cloudBaseUrl } from './cloud.js'
 import { CLOUD_TOKEN_SECRET_ID } from './cloud-account.js'
+import { currentCloudHeaders } from './cloud-attribution.js'
 import type {
   PublicContentRow,
   PublicLibraryContributor,
@@ -134,6 +135,8 @@ export function createExtensionContributor(
           Authorization: `Bearer ${token}`,
           'content-type': 'application/json',
           accept: 'application/json',
+          // WP283（决策 310）：算在谁头上（作用域里的那一份）
+          ...currentCloudHeaders(),
         },
         body: JSON.stringify(body),
         signal: controller.signal,
@@ -176,6 +179,8 @@ export function createExtensionContributor(
           Authorization: `Bearer ${token}`,
           'content-type': 'application/json',
           accept: 'application/json',
+          // WP283（决策 310）：reveal 按次扣积分——算在插件那头登录的人身上
+          ...currentCloudHeaders(),
         },
         ...(init.body === undefined ? {} : { body: JSON.stringify(init.body) }),
         signal: controller.signal,

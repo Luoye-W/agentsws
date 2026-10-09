@@ -201,6 +201,8 @@ describe('WP274 自动解析：文字模型同厂商且带生图', () => {
       generate_model: 'gpt-image-2.5-flare',
       edit_model: 'gpt-image-2.5-sunburst',
       own_key: true,
+      // WP283（决策 300）：直连 OpenAI 的改图认遮罩
+      edit_mask: true,
     })
     const images = server.models.images
     expect(images.available).toBe(true)

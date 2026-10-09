@@ -69,6 +69,15 @@ export const IMAGES_ZH: Record<string, string> = {
   'models.image.edit_same': '同出图型号',
   'models.image.image_only': '只生图',
   'models.image.no_test': '只生图的接口不在这里测（会真出一张图）',
+  // WP283（决策 300）：圈出要改的地方（只在改图型号认遮罩时出现）
+  'matter.cmp.attach.mask': '圈出要改的地方',
+  'matter.cmp.attach.masked': '圈好了，点一下重圈',
+  'matter.cmp.attach.mask_note': '（{id} 只改圈出的地方，遮罩：{mask}）',
+  'mask.title': '圈出要改的地方',
+  'mask.hint': '涂到的地方会改，别处不动。',
+  'mask.clear': '清空',
+  'mask.cancel': '取消',
+  'mask.done': '好了',
 }
 
 export const IMAGES_EN: Record<string, string> = {
@@ -139,4 +148,12 @@ export const IMAGES_EN: Record<string, string> = {
   'models.image.edit_same': 'Same as generate',
   'models.image.image_only': 'Images only',
   'models.image.no_test': 'Image-only endpoints are not tested here (it would make a real image)',
+  'matter.cmp.attach.mask': 'Mark the area to change',
+  'matter.cmp.attach.masked': 'Area marked — click to redo',
+  'matter.cmp.attach.mask_note': '({id}: change only the marked area, mask {mask})',
+  'mask.title': 'Mark the area to change',
+  'mask.hint': 'Paint where it should change; the rest stays.',
+  'mask.clear': 'Clear',
+  'mask.cancel': 'Cancel',
+  'mask.done': 'Done',
 }

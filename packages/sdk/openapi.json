@@ -88304,7 +88304,7 @@
         ],
         "responses": {
           "200": {
-            "description": "{ asset: BrandAssetRow }",
+            "description": "{ asset: BrandAssetRow; edit_mask?: boolean }（WP283：现在的改图型号能不能圈区域）",
             "content": {
               "application/json": {
                 "schema": {
@@ -88395,7 +88395,7 @@
           "range": "own",
           "sensitivity": "internal"
         },
-        "x-returns": "{ asset: BrandAssetRow }"
+        "x-returns": "{ asset: BrandAssetRow; edit_mask?: boolean }（WP283：现在的改图型号能不能圈区域）"
       }
     }
   },

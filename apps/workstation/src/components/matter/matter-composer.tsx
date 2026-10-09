@@ -6,11 +6,12 @@
  *   悬停「发送（Enter）」；Enter 发送、Shift+Enter 换行，提示只在聚焦或有字时出。
  * - 左下「私聊 AI」开关（替代原来那块「问 AI」）：打开后整张卡变蓝、顶上一行「只你看得见」。
  * - 左下「+」：WP268 起能加图（点选 / 拖进来 / 粘贴），图先进品牌素材库，发出去的话里带上素材 id；「@」仍置灰。
+ *   WP283：现在的改图型号认遮罩时，每张图左下多一个笔刷「圈出要改的地方」（不认的型号不给这个入口）。
  * - 建议输入：框空着、又有合适的下一步时浅灰字直接显示在框里 + 小 Tab 键帽；按 Tab 收下变正文，
  *   打别的字就消失。涉及花钱 / 对外的也只是填进框，仍要人按发送。
  */
 import { cn } from 'cn'
-import { ArrowUp, AtSign, Lock, Plus, Square, X } from 'lucide-react'
+import { ArrowUp, AtSign, Brush, Lock, Plus, Square, X } from 'lucide-react'
 import { type ReactNode, useEffect, useId, useRef } from 'react'
 import { AuthedImage } from '@/components/images/authed-image'
 import { BRAND_ASSET_ACCEPT } from '@/lib/api'
@@ -33,6 +34,7 @@ export function MatterComposer({
   attachments,
   onAttach,
   onDetach,
+  onMask,
   attaching = false,
 }: {
   value: string
@@ -49,9 +51,11 @@ export function MatterComposer({
   sending: boolean
   disabled?: boolean
   /** WP268：已经加进来的图（素材库 id + 取图地址）。不给 = 「+」照旧置灰。 */
-  attachments?: { id: string; url: string }[] | undefined
+  attachments?: { id: string; url: string; masked?: boolean }[] | undefined
   onAttach?: ((files: File[]) => void) | undefined
   onDetach?: ((id: string) => void) | undefined
+  /** WP283：在这张图上圈区域（不给 = 现在的改图型号不认遮罩，入口不出现）。 */
+  onMask?: ((id: string) => void) | undefined
   attaching?: boolean
 }): ReactNode {
   const { t } = useApp()
@@ -147,6 +151,28 @@ export function MatterComposer({
                 >
                   <X aria-hidden className="size-3" />
                 </button>
+                {onMask === undefined ? null : (
+                  <button
+                    type="button"
+                    aria-label={t(
+                      a.masked === true ? 'matter.cmp.attach.masked' : 'matter.cmp.attach.mask',
+                    )}
+                    title={t(
+                      a.masked === true ? 'matter.cmp.attach.masked' : 'matter.cmp.attach.mask',
+                    )}
+                    data-testid="matter-attach-mask"
+                    data-masked={a.masked === true ? 'true' : undefined}
+                    className={cn(
+                      'absolute bottom-0.5 left-0.5 grid size-5 place-items-center rounded-full text-white',
+                      a.masked === true ? 'bg-ws-info' : 'bg-black/60',
+                    )}
+                    onClick={() => {
+                      onMask(a.id)
+                    }}
+                  >
+                    <Brush aria-hidden className="size-3" />
+                  </button>
+                )}
               </div>
             ))}
           </div>

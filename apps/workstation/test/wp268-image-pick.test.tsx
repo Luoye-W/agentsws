@@ -372,3 +372,41 @@ describe('WP268 输入框加图', () => {
     expect(said).toContain('dasset_up1')
   })
 })
+
+describe('WP283 圈区域：只在改图型号认遮罩时给（决策 300）', () => {
+  const attachOne = async (): Promise<void> => {
+    renderMatter()
+    await screen.findByTestId('matter-attach')
+    const input = screen
+      .getByTestId('matter-say')
+      .querySelector('input[type="file"]') as HTMLInputElement
+    await user().upload(
+      input,
+      new File([new Uint8Array([0x89, 0x50, 0x4e, 0x47])], 'box.png', { type: 'image/png' }),
+    )
+    await screen.findByTestId('matter-attachments')
+  }
+
+  it('经 Agents 工坊云（OpenRouter 型号）：图上没有「圈区域」', async () => {
+    uploadBrandAsset.mockImplementationOnce(async () => ({
+      asset: { id: 'dasset_up1', file_url: '/v1/brand-assets/dasset_up1/file' },
+      edit_mask: false,
+    }))
+    await attachOne()
+    expect(screen.queryByTestId('matter-attach-mask')).toBeNull()
+  })
+
+  it('认遮罩的型号（自己的 OpenAI key）：图上有笔刷，点开是「圈出要改的地方」', async () => {
+    uploadBrandAsset.mockImplementationOnce(async () => ({
+      asset: { id: 'dasset_up1', file_url: '/v1/brand-assets/dasset_up1/file' },
+      edit_mask: true,
+    }))
+    await attachOne()
+    const brush = await screen.findByTestId('matter-attach-mask')
+    expect(brush.getAttribute('aria-label')).toBe('圈出要改的地方')
+    await user().click(brush)
+    const dialog = await screen.findByTestId('mask-dialog')
+    expect(within(dialog).getByText('圈出要改的地方')).toBeTruthy()
+    expect((within(dialog).getByTestId('mask-done') as HTMLButtonElement).disabled).toBe(true)
+  })
+})

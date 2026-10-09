@@ -733,10 +733,13 @@ export function openaiCompatibleProvider(options: OpenAiCompatibleOptions): Mode
   if (embeddingModel === undefined) return withAsr
   return {
     ...withAsr,
-    async embed(texts: string[]) {
-      const json = (await post('/embeddings', {
-        model: embeddingModel,
-        input: texts,
+    async embed(texts: string[], meta?: ModelMeta) {
+      // WP283（决策 310）：官方接口那一条的向量也带「谁 / 哪个岗位」（同 complete）
+      const extra = options.requestHeaders?.(meta)
+      const json = (await request(`${baseUrl}/embeddings`, {
+        method: 'POST',
+        body: JSON.stringify({ model: embeddingModel, input: texts }),
+        ...(extra === undefined ? {} : { headers: extra }),
       })) as WireEmbeddingResponse
       const rows = json.data ?? []
       if (rows.length !== texts.length) {
