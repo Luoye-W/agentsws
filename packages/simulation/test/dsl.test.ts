@@ -479,3 +479,31 @@ invariants: [prompt_replayable]`,
     expect(globToRegExp('security/*.yml').test('security/a/x.yml')).toBe(false)
   })
 })
+
+// WP284（决策 275）：卡上指导「以后都这样」
+describe('actor.instruct', () => {
+  const withInstruct = (body: string): string =>
+    `${MINIMAL.replace('invariants: [prompt_replayable]\n', '')}  - at: '+70m'\n    actor.instruct: ${body}\ninvariants: [prompt_replayable]\n`
+
+  it('scope 不写就是 global_rule；只认 global_rule', () => {
+    const s = parseScenario(
+      withInstruct('{ who: p_wang, item: $last_outbound_draft, text: 先别答应 }'),
+      't.yml',
+    )
+    expect(s.events.at(-1)).toMatchObject({
+      type: 'actor.instruct',
+      instruct: {
+        who: 'p_wang',
+        item: '$last_outbound_draft',
+        scope: 'global_rule',
+        text: '先别答应',
+      },
+    })
+    expect(() =>
+      parseScenario(
+        withInstruct('{ who: p_wang, item: $last_outbound_draft, scope: similar_cases, text: x }'),
+        't.yml',
+      ),
+    ).toThrow(ScenarioSchemaError)
+  })
+})

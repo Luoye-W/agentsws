@@ -1028,6 +1028,8 @@ export interface ScenarioKolReveal {
 export type ScenarioEvent =
   | { at: string; type: 'inbound.email'; inbound: ScenarioInbound }
   | { at: string; type: 'actor.decide'; decide: ScenarioDecide }
+  /** WP284：在一张卡上指导（目前只有「以后都这样」）——那张卡按驳回 + 那句话定，另出一张策略卡。 */
+  | { at: string; type: 'actor.instruct'; instruct: ScenarioInstruct }
   | { at: string; type: 'clock.advance'; advance: Record<string, never> }
   | { at: string; type: 'inject.fault'; fault: ScenarioFault }
   | { at: string; type: 'model.outage'; outage: ScenarioOutage }
@@ -1289,12 +1291,21 @@ export interface ScenarioInbound {
 
 export interface ScenarioDecide {
   who: string
-  /** `$last_outbound_draft` / `$last_staged_change` / `$last_skill_lesson` / 具体 approval_item id。 */
+  /** `$last_outbound_draft` / `$last_staged_change` / `$last_skill_lesson` / `$last_policy_change` / 具体 approval_item id。 */
   item: string
   action: 'approve' | 'approve_edited' | 'reject'
   reason?: string
   /** 选择题卡（36 §2.1）：批准必须带一个选项 id。 */
   option?: string
+}
+
+/** WP284：卡上的指导（36 §2.1）。只做 `global_rule`（以后都这样）：出一张策略卡，批了落成职责规矩。 */
+export interface ScenarioInstruct {
+  who: string
+  /** 同 `actor.decide.item`（`$last_outbound_draft` 等）。 */
+  item: string
+  scope: 'global_rule'
+  text: string
 }
 
 export interface ScenarioFault {

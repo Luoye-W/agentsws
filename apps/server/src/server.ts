@@ -119,6 +119,7 @@ import {
   EXTERNAL_FENCE,
   evaluateGuardrail,
   extractFigures,
+  isInstructionRuleCard,
   resolveTimeZone,
   uncitedFigures,
 } from '@agentsws/core'
@@ -510,6 +511,12 @@ import {
   type RedditOfficialBrowserOptions,
 } from './reddit-official-browser/index.js'
 import { createResearchToolExecutor, redditReadPrice } from './research-tools.js'
+import {
+  createFileRoleRuleBackend,
+  createRoleRules,
+  type RoleRuleUndo,
+  roleRulesFileIn,
+} from './role-rules.js'
 import { readRunBrowser } from './run-browser.js'
 import { createRunLimitsSettings } from './run-limits-settings.js'
 import { createRuntime, type MatterRecordSource, type RuntimeAssembly } from './runtime.js'
@@ -2576,6 +2583,50 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     }
   }
 
+  /*
+   * WP284（决策 275）：「以后都这样」批了以后落成这条职责规矩里的一句话（每个品牌各一份，
+   * 一个 JSON 文件）。之后这条职责的每一次运行都带上（运行时装配那一跳现取）。
+   * ② 里改 / 删一句：做这条职责的同事各一张「知道了 / 撤回」。
+   */
+  const roleRules = createRoleRules({
+    clock,
+    random,
+    appendEvent,
+    ...(dbDir === undefined ? {} : { backend: createFileRoleRuleBackend(roleRulesFileIn(dbDir)) }),
+    modeOf: (ws) => modeOfWorkspaceSync?.(ws),
+    managerOf: (person_id, ws) => creditsRoleOf(person_id, ws),
+    nameOf: async (person_id) => (await identity.getPerson(person_id))?.name,
+    // 删规矩时工具箱里那条「规矩」目录项一起退役（目录自己保管的那份注记删掉；撤回时原样放回）
+    retireCatalog: (ws, entry_id) => {
+      const note = catalog.index.store.get(ws as WorkspaceId, entry_id)
+      if (note === undefined) return undefined
+      catalog.index.store.replace?.(ws as WorkspaceId, entry_id, undefined)
+      return note
+    },
+    restoreCatalog: (ws, entry_id, note) => {
+      catalog.index.store.replace?.(ws as WorkspaceId, entry_id, note as CatalogNote)
+    },
+    notifyPeers: async (input) => {
+      const to = roles.assignments
+        .listByRole(input.role_id, { workspace_id: input.workspace_id })
+        .filter((a) => a.revoked_at === undefined)
+        .map((a) => a.person_id)
+      await notifyPeers(approvals, {
+        workspace_id: input.workspace_id,
+        by: input.by,
+        by_name: (await identity.getPerson(input.by))?.name || '同事',
+        to,
+        role_id: input.role_id,
+        what: `「${roles.roles.get(input.role_id)?.name.zh ?? input.role_id}」的一句规矩`,
+        object: { type: 'role_rule', id: input.undo.rule_id },
+        before: input.before,
+        after: input.after,
+        undo: input.undo,
+        at: clock.now(),
+      })
+    },
+  })
+
   const personas = createPersonas({
     workspace_id: workspace.id,
     clock,
@@ -4322,6 +4373,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
             // WP248：带上这个品牌（品牌上下文按品牌取）
             personaSections: (input) => personas.sections({ ...input, workspace_id: ws }),
             /*
+             * WP284（决策 275）：**这条职责的规矩**——「以后都这样」批了落下的那几句，排在角色定位后面。
+             * 每次现取：改了 / 删了一句，下一次运行就是新的那一份。
+             */
+            roleRules: (role_id) => roleRules.section(ws, role_id),
+            /*
              * WP122b（71 §9 第 7 条）：三个注入口通电——建站 / 社媒 / 投放出活时
              * 提示词里真带上品牌令牌。照 `design.ts` 的样板：取值口 + 现取
              * （每次运行都重新问 `brandDesignRef`，用户改一格下一次运行就生效）。
@@ -5666,6 +5722,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
 
   // WP154：选题卡批了 → 按卡片所属品牌开事项（品牌模块到这里才建得出来）
   seoDecidedHook.current = async (item) => {
+    // WP284（决策 275）：「以后都这样」批了（选「按提议改」）→ 这条职责的规矩里多一句；没批 / 维持现状什么都不落
+    if (isInstructionRuleCard(item)) {
+      roleRules.onDecided(item)
+      return
+    }
     // WP268：挑图卡 / 超额卡被决定 → 记选中 / 传店铺挂主题 / 再来一版 / 照卡出图
     if (item.kind === 'image_pick' || item.kind === 'image_budget') {
       await brands?.forWorkspace(item.workspace_id)
@@ -8489,6 +8550,12 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       },
     )
   })
+  // WP284：② 里有人改 / 删了一句职责规矩，同事点了「撤回」→ 落回改之前那一句
+  peerUndoers.set('role_rule', async (undo, item) => {
+    const by = item.decision?.by
+    if (by === undefined || by === 'mandate') return
+    roleRules.undo(undo as RoleRuleUndo, by)
+  })
   peerUndoers.set('catalog_merge', async (undo) => {
     const ws = String(undo.workspace_id)
     for (const n of (undo.notes ?? []) as { entry_id: string; note: CatalogNote | null }[])
@@ -9670,6 +9737,13 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     positions: positionPortOf,
     // WP120（69 §4）：角色定位——右栏「角色」面板看的与改的就是它
     personas: personaPort,
+    // WP284（决策 275）：职责规矩里那几句「以后都这样」（看 / 改 / 删）
+    roleRules: roleRules.port,
+    // WP284（docs/95 §5）：③ 里「以后都这样」那张卡发给老板（与改职责规矩同一条路：品牌所有者），① ② 本人
+    instructionRuleApprover: async (ws) =>
+      hasApprovalFlow((await modeOfWorkspace?.(ws)) ?? 'company')
+        ? (await identity.getWorkspace(ws))?.owner_id
+        : undefined,
     // WP68（48 §5.4）：本地红人库 `/v1/kol/*`（一个品牌一张库、一段加密库）
     kol: kolPortOf,
     // WP119（68）：浏览器插件 `/v1/extension/*`（配对码、插件令牌、观测入库）
@@ -10054,7 +10128,9 @@ function seoDecided(bus: ApprovalBus, hook: SeoDecidedHook): ApprovalBus {
           peerUndoOf(out) !== undefined ||
           out.kind === 'membership' ||
           // WP277：开公司模式时同事那张「知道了 / 我要退出」
-          isCompanyNotice(out)
+          isCompanyNotice(out) ||
+          // WP284（决策 275）：「以后都这样」那张策略卡批了 → 落成职责规矩里的一句话
+          isInstructionRuleCard(out)
         ) {
           try {
             await hook.current?.(out)

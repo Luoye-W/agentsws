@@ -95,6 +95,7 @@ import type { PositionEntryPort } from './routes/positions.js'
 import type { PrPort } from './routes/pr.js'
 import type { PrivacyPort } from './routes/privacy.js'
 import type { ReadRoutesApiPort } from './routes/read-routes.js'
+import type { RoleRulesPort } from './routes/role-rules.js'
 import type { RunLimitsPort } from './routes/run-limits.js'
 import type { SearchDataApiPort } from './routes/search-data.js'
 import type { SecretaryPort } from './routes/secretary.js'
@@ -818,6 +819,16 @@ export interface GatewayDeps {
    * （那是包里的原文），只是公司改不了它。
    */
   personas?: PersonaPort
+  /**
+   * WP284（决策 275）：职责规矩里那几句「以后都这样」（看 / 改 / 删）。
+   * 没装配时 `/v1/roles/:id/rules*` 回 not_implemented。
+   */
+  roleRules?: RoleRulesPort
+  /**
+   * WP284（docs/95 §5）：「以后都这样」那张策略卡发给谁批。③ 回老板（与改职责规矩同一条路）；
+   * ① ② 回 `undefined` = 写指导的本人自己点。不给 = 一律本人（老行为）。
+   */
+  instructionRuleApprover?(workspace_id: WorkspaceId): MaybePromise<PersonId | undefined>
   /**
    * WP68（48 §5.4）：本地红人库。没装配时 `/v1/kol/*` 回 not_implemented——
    * 红人营销那五条职责的面板照常读得到（投影是装配期塞进去的），

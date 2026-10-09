@@ -420,6 +420,11 @@ export interface RuntimeOptions {
    */
   personaSections?(input: { role_id: string; position_id?: string | undefined }): PromptSection[]
   /**
+   * WP284（决策 275）：**这条职责的规矩**（「以后都这样」批了落下的那几句）。没有就回 `undefined`，整节不出。
+   * 同 `personaSections` 的理由：每次运行现取。
+   */
+  roleRules?(role_id: string): PromptSection | undefined
+  /**
    * WP122b（71 §5 / §9 第 7 条）：**品牌设计规范**那一段。
    *
    * 按职责 id 问：四个吃规范的岗位族（设计 / 建站 / 社媒 / 投放）回一段
@@ -1623,6 +1628,10 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
                     text: personaTextIn(config.persona, 'zh'),
                   },
                 ]),
+          // WP284（决策 275）：这条职责的规矩（人点过通过的「以后都这样」），紧跟职责角色定位（order 21）
+          ...[options.roleRules?.(config.role_id)].filter(
+            (s): s is PromptSection => s !== undefined,
+          ),
           /*
            * WP226（69 §3.3）：**回复语言**——persona 一律送中文那份（中文是唯一手写的真源），
            * 紧跟一句「对外用对方来信的语言、对内用界面语言」（order 22）。服务端还没有

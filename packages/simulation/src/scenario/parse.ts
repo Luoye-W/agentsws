@@ -151,6 +151,8 @@ function numeric(source: string, path: string, v: unknown): number | string {
 const EVENT_KEYS = [
   'inbound.email',
   'actor.decide',
+  // WP284 卡上指导「以后都这样」
+  'actor.instruct',
   'clock.advance',
   'inject.fault',
   'model.outage',
@@ -473,6 +475,24 @@ function parseEvent(source: string, index: number, raw: unknown): ScenarioEvent 
           ...(body.option === undefined
             ? {}
             : { option: str(source, `${path}.${key}.option`, body.option) }),
+        },
+      }
+    }
+    case 'actor.instruct': {
+      known(source, `${path}.${key}`, body, ['who', 'item', 'scope', 'text'])
+      const scope =
+        body.scope === undefined ? 'global_rule' : str(source, `${path}.${key}.scope`, body.scope)
+      if (scope !== 'global_rule') {
+        fail(source, `${path}.${key}.scope`, 'scope 目前只能是 global_rule（以后都这样）')
+      }
+      return {
+        at,
+        type: 'actor.instruct',
+        instruct: {
+          who: str(source, `${path}.${key}.who`, body.who),
+          item: str(source, `${path}.${key}.item`, body.item),
+          scope: 'global_rule',
+          text: str(source, `${path}.${key}.text`, body.text),
         },
       }
     }

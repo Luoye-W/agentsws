@@ -319,6 +319,13 @@ export function createCatalogIndex(options: CatalogIndexOptions): CatalogAssembl
         reused: input.reused,
       })
     },
+    /*
+     * WP284：「没有家的条目」（指导落成的规矩、对话里定制的卡）由目录自己保管一份。
+     * 网关一直在调这个口，宿主之前没装——工具箱上看不见它们，删规矩时也就无从退役。
+     */
+    record: (entry) => {
+      index.record(entry as CatalogEntry)
+    },
   }
 
   /** 晋升卡批了 → 条目升层，个人副本指向升上去的那一条（40 §2.2 第 3 条）。 */

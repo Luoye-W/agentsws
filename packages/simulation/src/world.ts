@@ -120,8 +120,10 @@ import {
 } from '@agentsws/contracts'
 import {
   companyKey,
+  createRoleRuleBook,
   detectPaymentAccountChange,
   extractFigures,
+  type RoleRuleBook,
   scanB2bCommitments,
   sha256,
   suppressedRecipients,
@@ -538,6 +540,12 @@ export interface World {
    */
   learning?: LearningLoop
   startLearning(options?: LearningOptions): LearningLoop
+  /**
+   * WP284（决策 275）：职责规矩里那几句「以后都这样」（与服务端同一本规矩簿，`@agentsws/core`）。
+   * 策略卡批了（`actor.decide` 选 after）才落；有了就进这条职责运行的提示词（order 21）。
+   * 一句都没有时提示词一个字节不多——原有场景零漂移。
+   */
+  roleRules: RoleRuleBook
   /**
    * 41 §1 秘书 Agent（profile 与公开级别 / 代答 / 约时间 / 任务路由）。
    * 场景里出现 `secretary.*` 才装；不装的世界一次代答都不跑，原有场景的指标一个不变。
@@ -3051,6 +3059,7 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
     work,
     clock,
     random,
+    roleRules: createRoleRuleBook(),
     // soak 档的"进程重启"会换一个 SqliteEventLog 实例，所以这里是取值不是快照
     get kernel() {
       return kernel

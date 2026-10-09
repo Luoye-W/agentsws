@@ -22,6 +22,7 @@ import type { RoleSummaryView } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 import { useMode } from '@/lib/mode'
 import { cn } from '@/lib/utils'
+import { RoleRules } from './role-rules'
 
 export interface RoleChangePatch {
   name?: string
@@ -181,6 +182,9 @@ export function RoleDetail({
             )}
           </div>
         </section>
+
+        {/* WP284（决策 275）：「以后都这样」批了落下的那几句——看得见、改得了、删得掉 */}
+        <RoleRules roleId={role.id} />
 
         {role.editable ? (
           <section className="flex flex-col gap-2 rounded-md border p-2">

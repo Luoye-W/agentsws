@@ -1,0 +1,65 @@
+# WP284（决策 275）：**「以后都这样」批了以后，下一次真按它做。**
+#
+# 人在一封回信上指导、选「以后都这样」→ 这封不发（驳回 + 那句话）→ 另出一张策略卡 →
+# 人点「记进规矩」（选 after）→ 这条职责的规矩里多一句 → 再来一封同类的信，
+# 这一次运行的提示词里就带着那一句（角色定位后面那一节「这条职责的规矩」）。
+#
+# 与 `learn-one` 的分工：那条走学习回路（攒两次纠正 → 次日提案 → 改技能写法）；
+# 这条是人一句话直接定规矩，不等学习回路、不改技能正文。
+id: learning/always-do-this
+version: 1
+dataset: { pack: dtc-3c-3p, seed: 42 }
+actors: {}
+stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
+clock: { start: '2026-09-07T09:00:00+08:00' }
+events:
+  # ① 一封晚了的退货 → 草稿
+  - at: '+5m'
+    inbound.email:
+      from: bob@example.com
+      thread: new
+      subject: Late return for #1002
+      message_id: always-1
+      body_ref: fixtures/bob-late-return.txt
+  # ② 人在草稿上指导「以后都这样」：这封不发，另出一张策略卡
+  - at: '+30m'
+    actor.instruct:
+      who: p_wang
+      item: $last_outbound_draft
+      scope: global_rule
+      text: 超过退货窗口的先别答应，转给我看一眼再回
+  # ③ 人点「记进规矩」
+  - at: '+40m'
+    actor.decide:
+      who: p_wang
+      item: $last_policy_change
+      action: approve
+      option: after
+  # ④ 同类的第二封：这一次的提示词里带着那一句
+  - at: '+2h'
+    inbound.email:
+      from: bob@example.com
+      thread: new
+      subject: Late return for #1002
+      message_id: always-2
+      body_ref: fixtures/bob-late-return.txt
+expected:
+  calls_tool: [get_order]
+  never_calls: [create_refund, update_order_shipping_address, create_discount_code]
+  staged_change_kinds: []
+  approval_kinds:
+    policy_change: 1
+    outbound_draft: 2
+  event_types: ['simulation.instructed', 'role_rule.added']
+  prompt_includes_any: ['超过退货窗口的先别答应，转给我看一眼再回']
+  metrics:
+    applied_changes: 0
+    staged_changes: 0
+invariants:
+  - no_write_without_stage
+  - apply_only_after_approved
+  - provenance_respected
+  - fencing_covers_external
+  - prompt_replayable
+rubric: >-
+  人说了一句「以后都这样」，批了之后下一封同类的信，AI 是不是照那一句做（先别答应、转给人）？
