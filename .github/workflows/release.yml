@@ -128,6 +128,13 @@ jobs:
       - name: 工作台构建（装进安装包）
         run: pnpm --filter @agentsws/workstation build
 
+      # WP290（决策 332）：装包前冒烟——真 dsh × 每个岗位、本机假模型；没过就不打包、不发
+      - name: 装包前冒烟（没过就不打包）
+        shell: bash
+        run: |
+          mkdir -p win-smoke
+          node scripts/preinstall-smoke.mjs --json win-smoke/preinstall-smoke.json | tee win-smoke/preinstall-smoke.md
+
       # 更新源写进安装包的 app-update.yml：generic → $DOWNLOAD_BASE/<渠道>（scripts/dist.mjs 按变量算）
       - name: electron-builder（只打包，不上传）
         shell: bash
