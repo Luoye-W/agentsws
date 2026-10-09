@@ -39,7 +39,12 @@ function rendered(card: DeckCard): {
   options: Map<string, string>
 } {
   renderWithProviders(
-    <DeckCardView card={card} onDecide={() => undefined} onOpen={() => undefined} />,
+    <DeckCardView
+      card={card}
+      mode="zh_summary"
+      onDecide={() => undefined}
+      onOpen={() => undefined}
+    />,
   )
   const more = screen.queryByTestId('deck-more')
   if (more !== null) fireEvent.click(more)

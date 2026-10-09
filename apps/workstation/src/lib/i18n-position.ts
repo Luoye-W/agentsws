@@ -29,6 +29,8 @@ export const POSITION_ZH: Record<string, string> = {
   // 交给它
   'pos2.handoff.placeholder.plain': '交给它一件事',
   'pos2.handoff.ask': '问点什么，或交一件事',
+  'records.review.title': '复盘：你处理 {you} 张，AI {ai} 张',
+  'records.review.summary': '待办完成 {done}/{total}，会议 {meetings} 个',
   'pos2.handoff.first.ask': '问点什么，或交它第一件事',
   'pos2.handoff.placeholder.example': '交给它一件事，比如「{example}」',
   'pos2.handoff.first': '交给它第一件事',
@@ -226,6 +228,8 @@ export const POSITION_EN: Record<string, string> = {
 
   'pos2.handoff.placeholder.plain': 'Hand it a task',
   'pos2.handoff.ask': 'Ask something, or hand it a task',
+  'records.review.title': 'Review: you handled {you}, AI {ai}',
+  'records.review.summary': 'To-dos {done}/{total}, {meetings} meetings',
   'pos2.handoff.first.ask': 'Ask something, or hand it the first task',
   'pos2.handoff.placeholder.example': 'Hand it a task, e.g. "{example}"',
   'pos2.handoff.first': 'Hand it the first task',

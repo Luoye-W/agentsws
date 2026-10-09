@@ -37,6 +37,7 @@ import {
   getPositionRecords,
   getPositions,
   getPositionWork,
+  listReviews,
 } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 import { formatDate } from '@/lib/format'
@@ -72,8 +73,29 @@ function tabOf(raw: string | null): TabId {
 function RecordRows({ id }: { id: string }): React.ReactNode {
   const { t, lang } = useApp()
   const records = useQuery({ queryKey: ['records', id], queryFn: () => getPositionRecords(id) })
+  /*
+   * WP287：复盘在 ① 个人模式下不出卡，只记在这里（② ③ 出卡的那份照样在卡的记录里，不重复列）。
+   * 有卡的复盘（`approval_item_id`）跳过——那张卡已经是一行了。
+   */
+  const reviews = useQuery({ queryKey: ['reviews', 'day'], queryFn: listReviews })
   if (records.isPending) return <Skeleton className="h-40 w-full" />
-  const rows = records.data?.payload?.rows ?? []
+  const reviewRows = (reviews.data?.reviews ?? [])
+    .filter((r) => r.approval_item_id === undefined)
+    .map((r) => ({
+      id: r.id,
+      at: r.created_at,
+      kind: 'review',
+      title: t('records.review.title', { you: r.cards.you_handled, ai: r.cards.ai_handled }),
+      summary: t('records.review.summary', {
+        done: r.todos.done,
+        total: r.todos.total,
+        meetings: r.meetings.count,
+      }),
+      state: undefined as string | undefined,
+    }))
+  const rows = [...(records.data?.payload?.rows ?? []), ...reviewRows].sort((a, b) =>
+    b.at.localeCompare(a.at),
+  )
   if (rows.length === 0) return <p className="text-sm text-muted-foreground">—</p>
   return (
     <ol className="flex flex-col gap-3" data-testid="records">
@@ -82,7 +104,7 @@ function RecordRows({ id }: { id: string }): React.ReactNode {
           <div className="flex flex-wrap items-baseline gap-2 text-xs text-muted-foreground">
             <time dateTime={row.at}>{formatDate(row.at, lang)}</time>
             <span>{t(`kind.${row.kind}`)}</span>
-            <span>{approvalStateLabel(row.state, lang)}</span>
+            {row.state === undefined ? null : <span>{approvalStateLabel(row.state, lang)}</span>}
           </div>
           <div className="text-sm">{row.title}</div>
           <p className="text-xs text-muted-foreground">{row.summary}</p>
