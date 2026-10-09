@@ -159,6 +159,15 @@ const VERB_BY_KIND: Readonly<Record<string, Partial<Record<DeckAction, string>>>
     approve: 'verb.moderation.approve',
     reject: 'verb.moderation.reject',
   },
+  // WP287（Luoye 10-09 真机）：复盘 / 每日计划排版借的是「选择题」，却没有选项——按钮不能写「就这条 / 都不是」
+  review: {
+    approve: 'verb.review.approve',
+    reject: 'verb.review.reject',
+  },
+  daily_plan: {
+    approve: 'verb.plan.approve',
+    instruct: 'verb.plan.instruct',
+  },
   b2b_account_transfer: {
     approve: 'verb.handoff.approve.account_transfer',
     instruct: 'verb.handoff.instruct.account_transfer',

@@ -79,6 +79,8 @@ export function PositionHandoff({
         closed={false}
         privateMode={false}
         onTogglePrivate={() => undefined}
+        // 有合适的建议时浅灰字显示在框里，Tab 收下（与事项页同一个规矩）
+        suggestion={suggestions[0]?.prompt}
         sending={busy}
         docked={false}
         showPrivate={false}

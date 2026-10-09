@@ -13,7 +13,6 @@ import type { BattleReport, DeckCard, DeckContentMode, DeckFilters, DeckKind } f
 import { CONTENT_MODES, sortCards } from '@agentsws/deck'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { type KeyboardEvent, useEffect, useRef, useState } from 'react'
-import { deckActionLabel } from '@/components/deck/deck-action-bar'
 import { DeckBattleReport } from '@/components/deck/deck-battle-report'
 import { DeckBrowser } from '@/components/deck/deck-browser'
 import {
@@ -23,15 +22,13 @@ import {
 } from '@/components/deck/deck-card'
 import { DeckFilterRow, type PositionOption } from '@/components/deck/deck-filters'
 import {
-  deckActionForDirection,
   directionForDeckAction,
   directionForDeckKey,
   isTypingTarget,
-  keyboardHints,
 } from '@/components/deck/deck-gestures'
+import { deckKeyHints, deckKeys } from '@/components/deck/deck-keys'
 import { DECK_EXIT_MS, DECK_MAX_WIDTH_CLASS } from '@/components/deck/deck-layout'
 import { ReportBlocks } from '@/components/deck/panel-blocks'
-import { isHandoffOfferCard, noticeKeys } from '@/components/peers/handoff-strip'
 import { Skeleton } from '@/components/ui/skeleton'
 import { type CardsData, type DecideInput, decide, getHome, getPositionCards } from '@/lib/api'
 import { useMode } from '@/lib/mode'
@@ -288,44 +285,21 @@ export function DeckSection({
     if (card === undefined || exiting !== null) return
     const direction = directionForDeckKey(event.key)
     if (direction === undefined) return
-    // WP277：「知道了」型通知卡——键盘跟着卡上的按钮走（→ 知道了），不是「批准 / 稍后 / 指导」
-    const notice = noticeKeys(card)
-    if (notice !== undefined) {
-      const picked =
-        direction === 'right' ? notice.right : direction === 'left' ? notice.left : undefined
-      if (picked === undefined) return
-      event.preventDefault()
-      dispatch({ action: 'approve', selected_option_id: picked.id, version: card.version })
-      return
-    }
-    const action = deckActionForDirection(direction)
-    if (!card.available_actions.includes(action)) return
-    // WP278：交给你的卡上只有「接下 / 不接」两个按钮——↑ ↓ 不做事（卡上没有稍后 / 指导）
-    if (isHandoffOfferCard(card) && action !== 'approve' && action !== 'reject') return
+    // WP287：键盘跟着卡上真有的按钮走（与提示行同一张表）；没有对应按钮的方向键不做事
+    const key = deckKeys(card, t).find((k) => k.direction === direction)
+    if (key === undefined) return
     event.preventDefault()
-    if (action === 'approve') {
-      // WP276：交给你的卡只有一个岗位时，→ 就是「接下」（几个岗位就得点按钮挑一个）
-      const only = card.options?.length === 1 ? card.options[0] : undefined
-      if (only !== undefined && isHandoffOfferCard(card)) {
-        dispatch({ action: 'approve', selected_option_id: only.id, version: card.version })
-        return
-      }
-      // 一道选择题没选中就不存在「同意」，键盘也不是后门。
-      if (card.options !== undefined && card.options.length > 0) return
-      // WP275：超了上限要再确认一次的卡——键盘也得点两下（走按钮那一条）
-      if (card.reconfirm === true) {
-        deckRef.current?.querySelector<HTMLButtonElement>('button[data-action="approve"]')?.click()
-        return
-      }
-      dispatch({ action: 'approve', version: card.version })
+    if (key.click === true) {
+      deckRef.current
+        ?.querySelector<HTMLButtonElement>(`button[data-action="${key.action}"]`)
+        ?.click()
       return
     }
-    // 拒绝 / 指导先就地开面板；稍后直接走。
-    if (action === 'snooze') {
-      dispatch({ action: 'snooze', version: card.version })
-      return
-    }
-    deckRef.current?.querySelector<HTMLButtonElement>(`button[data-action="${action}"]`)?.click()
+    dispatch({
+      action: key.action,
+      version: card.version,
+      ...(key.option === undefined ? {} : { selected_option_id: key.option }),
+    })
   }
 
   if (query.isPending) return <Skeleton className="h-64 w-full" />
@@ -343,29 +317,8 @@ export function DeckSection({
       ...(active.kind === undefined ? [] : [active.kind]),
     ]),
   ] as DeckKind[]
-  const notice = card === undefined ? undefined : noticeKeys(card)
-  const hints =
-    card === undefined
-      ? []
-      : notice !== undefined
-        ? // WP277：通知卡的提示就是它那两个按钮（「我要退出」不给键盘，也就不写）
-          [
-            ...(notice.right === undefined ? [] : [`→ ${notice.right.label}`]),
-            ...(notice.left === undefined ? [] : [`← ${notice.left.label}`]),
-          ]
-        : keyboardHints(
-            // 选择题卡（选项就是按钮、没选中 → 不做事）：不写「→ 批准」——只有交给你的卡单岗位时 → 是「接下」
-            (card.options !== undefined &&
-            card.options.length > 0 &&
-            !(isHandoffOfferCard(card) && card.options.length === 1)
-              ? card.available_actions.filter((a) => a !== 'approve')
-              : card.available_actions
-            ).filter(
-              // WP278：交给你的卡只写它那两个按钮（接下 / 不接），不写卡上没有的稍后 / 指导
-              (a) => !isHandoffOfferCard(card) || a === 'approve' || a === 'reject',
-            ),
-            (a) => deckActionLabel(card, a, t),
-          )
+  // WP287：提示行就是卡上那几个按钮（与方向键同一张表）
+  const hints = card === undefined ? [] : deckKeyHints(card, t)
 
   return (
     <section
