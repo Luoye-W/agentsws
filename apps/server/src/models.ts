@@ -1216,6 +1216,16 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
   }
 
   /**
+   * WP194 / WP283（决策 310）：Agents 工坊官方接口那一条每次请求带的「谁 / 哪个岗位」
+   * （`X-Agentsws-Member` / `X-Agentsws-Position`）。对话、向量、生图、改图同一份——
+   * 少带一处，那一处的积分就落进「没标注」。
+   */
+  const cloudRequestHeaders = (meta: ModelMeta | undefined): Record<string, string> =>
+    meta === undefined || options.cloudAttribution === undefined
+      ? {}
+      : attributionHeaders(options.cloudAttribution(meta))
+
+  /**
    * key 的取值回调。**每次请求现取**：改完设置下一次调用自然就是新的，
    * 而且 key 不在任何配置对象里长住。
    */
@@ -1345,10 +1355,7 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
       ...(config.kind === 'agentsws_cloud'
         ? {
             // WP194：带上「谁 / 哪个岗位」；402 那句人话（额度到了 / 公司没钱）原样端给用户
-            requestHeaders: (meta: ModelMeta | undefined) =>
-              meta === undefined || options.cloudAttribution === undefined
-                ? {}
-                : attributionHeaders(options.cloudAttribution(meta)),
+            requestHeaders: cloudRequestHeaders,
             cloudErrors: true,
             // WP243：一整段的调用也内部走流式——连接上一直有字节，代理不当它空闲掐掉
             streamAlways: true,
@@ -1525,6 +1532,8 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
         provider: route.using.provider_id,
         region: route.region,
         ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
+        // WP283（决策 310）：走我们的云时同对话那一路，带上「谁 / 哪个岗位」
+        ...(route.cloud ? { requestHeaders: cloudRequestHeaders } : {}),
       })
     }
     const { generate_model, edit_model } = route.using

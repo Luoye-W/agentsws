@@ -12,6 +12,7 @@
 
 import type { ExtensionPort, ExtensionStore } from '@agentsws/api'
 import type { WorkspaceId } from '@agentsws/contracts'
+import { withCloudAttribution } from './cloud-attribution.js'
 import type { ExtensionServiceOptions } from './extension-service.js'
 import { createExtensionService } from './extension-service.js'
 
@@ -39,33 +40,50 @@ export function brandExtensionPort(options: BrandExtensionPortOptions): Extensio
     return made
   }
 
+  /**
+   * WP283（决策 310）：插件这条路不经「一次请求绑一个分配」那道门，所以打云（reveal 按次扣积分、
+   * 贡献观测）时没有「算在谁头上」。插件令牌上本来就写着是谁配的对——就算在他头上
+   * （`X-Agentsws-Member`；岗位分不出，不带）。
+   */
+  const as = <T>(session: { person_id: string }, fn: () => Promise<T>): Promise<T> =>
+    withCloudAttribution({ member_id: session.person_id }, fn)
+
   return {
     // 配对与令牌不按品牌分：一把令牌自己就带着 `workspace_id`。
     store: options.store,
     hello: async (session) => (await portOf(session.workspace_id)).hello(session),
-    ingest: async (session, input) => (await portOf(session.workspace_id)).ingest(session, input),
+    ingest: async (session, input) =>
+      as(session, async () => (await portOf(session.workspace_id)).ingest(session, input)),
 
     /* ── WP119c：每一条都按 session 上的 workspace_id 取那一套模块（52 O1 不变）── */
     setup: async (session) => (await portOf(session.workspace_id)).setup(session),
     saveCreator: async (session, input) =>
-      (await portOf(session.workspace_id)).saveCreator(session, input),
+      as(session, async () => (await portOf(session.workspace_id)).saveCreator(session, input)),
     creatorReport: async (session, key) =>
       (await portOf(session.workspace_id)).creatorReport(session, key),
     revealPricing: async (session) => (await portOf(session.workspace_id)).revealPricing(session),
     contactLookup: async (session, key) =>
-      (await portOf(session.workspace_id)).contactLookup(session, key),
+      as(session, async () => (await portOf(session.workspace_id)).contactLookup(session, key)),
     contactContribute: async (session, key, input) =>
-      (await portOf(session.workspace_id)).contactContribute(session, key, input),
+      as(session, async () =>
+        (await portOf(session.workspace_id)).contactContribute(session, key, input),
+      ),
     contactDispute: async (session, key, input) =>
-      (await portOf(session.workspace_id)).contactDispute(session, key, input),
+      as(session, async () =>
+        (await portOf(session.workspace_id)).contactDispute(session, key, input),
+      ),
     saveContact: async (session, input) =>
-      (await portOf(session.workspace_id)).saveContact(session, input),
+      as(session, async () => (await portOf(session.workspace_id)).saveContact(session, input)),
     contentObservation: async (session, input) =>
-      (await portOf(session.workspace_id)).contentObservation(session, input),
+      as(session, async () =>
+        (await portOf(session.workspace_id)).contentObservation(session, input),
+      ),
     contentSave: async (session, input) =>
-      (await portOf(session.workspace_id)).contentSave(session, input),
+      as(session, async () => (await portOf(session.workspace_id)).contentSave(session, input)),
     bioLinkObservation: async (session, input) =>
-      (await portOf(session.workspace_id)).bioLinkObservation(session, input),
+      as(session, async () =>
+        (await portOf(session.workspace_id)).bioLinkObservation(session, input),
+      ),
     seedSignature: async (session, key) =>
       (await portOf(session.workspace_id)).seedSignature(session, key),
 

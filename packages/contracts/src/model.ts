@@ -445,7 +445,14 @@ export interface ModelProvider {
   ): Promise<ProviderCompletion>
   /** 是否原生支持 `tool_choice`；缺省视为不支持（网关会剥掉该字段）。 */
   supports_tool_choice?: boolean
-  embed?(texts: string[]): Promise<{ vectors: number[][]; usage: CompletionUsage }>
+  /**
+   * WP283（只加）：`meta` 同 `complete` 那一格——「Agents 工坊官方接口」那一条靠它在请求头里带上
+   * 「谁 / 哪个岗位」（向量也按积分扣）。老实现不收第二个参数照样成立。
+   */
+  embed?(
+    texts: string[],
+    meta?: ModelMeta,
+  ): Promise<{ vectors: number[][]; usage: CompletionUsage }>
   /**
    * 这家现在有哪些模型（WP42）。可选——不是每个 provider 都有这个口
    * （stub 就没有）。实现里**不许**把凭据写进返回值或错误信封。

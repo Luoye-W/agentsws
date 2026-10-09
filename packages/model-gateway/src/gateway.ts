@@ -538,7 +538,7 @@ class Gateway implements ModelGatewayApi {
     const reservation = this.reserveFor(meta, messages, undefined, ref, startedAt, undefined, 0)
     let raw: { vectors: number[][]; usage: CompletionUsage }
     try {
-      raw = await provider.embed(texts)
+      raw = await provider.embed(texts, meta)
     } catch (e) {
       this.ledger.release(reservation)
       const payload: ProviderDownPayload = {

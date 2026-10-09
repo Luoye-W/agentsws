@@ -18,6 +18,7 @@ import type {
   ImageGenerateRequest,
   ImageGeneration,
   ImageProvider,
+  ModelMeta,
   ModelRef,
 } from '@agentsws/contracts'
 import { IMAGE_EDIT_MAX_REFERENCES } from '@agentsws/contracts'
@@ -37,6 +38,11 @@ export interface OpenAiImageOptions {
   fetch?: FetchLike
   timeoutMs?: number
   extraHeaders?: Record<string, string>
+  /**
+   * WP283（决策 310）：每次请求现算的请求头——Agents 工坊官方接口那一条用它带
+   * `X-Agentsws-Member` / `X-Agentsws-Position`（同文字那一路的 `requestHeaders`）；别家不给。
+   */
+  requestHeaders?: (meta: ModelMeta | undefined) => Record<string, string>
 }
 
 interface WireImageResponse {
@@ -67,7 +73,7 @@ export function openaiImageProvider(options: OpenAiImageOptions): ImageProvider 
   const send = async (
     path: 'generations' | 'edits',
     body: string | FormData,
-    req: { prompt: string; size?: string; model?: ModelRef },
+    req: { prompt: string; size?: string; model?: ModelRef; meta?: ModelMeta },
   ): Promise<ImageGeneration> => {
     const key = keyOrThrow()
     const [width, height] = parseImageSize(req.size)
@@ -81,6 +87,8 @@ export function openaiImageProvider(options: OpenAiImageOptions): ImageProvider 
           ...(typeof body === 'string' ? { 'content-type': 'application/json' } : {}),
           authorization: `Bearer ${key}`,
           ...options.extraHeaders,
+          // WP283：官方接口那一条带上「谁 / 哪个岗位」
+          ...options.requestHeaders?.(req.meta),
         },
         body,
         signal: AbortSignal.timeout(options.timeoutMs ?? IMAGE_TIMEOUT_MS),
