@@ -34,6 +34,7 @@ import type {
   Clock,
   CloudAllocationView,
   CloudCreditsView,
+  CloudMemberUsageView,
   CloudMyAllocationView,
   DataSourceLevel,
   DataSourceRoute,
@@ -41,7 +42,9 @@ import type {
   KolCloudExport,
   LocalPricing,
   LocalTopupTiers,
+  MemberUsageReport,
   MyAllocation,
+  OrganizationMode,
   ReadonlyBrowserStatus,
   RedditBrowserReadLimits,
   ServiceSubscription,
@@ -73,6 +76,7 @@ import { currentCloudHeaders } from './cloud-attribution.js'
 import type { KolStore } from './kol.js'
 import type { KolCloudCall, KolCloudCallFn, KolCloudSync } from './kol-cloud-sync.js'
 import { createKolCloudSync } from './kol-cloud-sync.js'
+import { fillMemberUsage, memberUsageScopeOf } from './member-usage.js'
 import { CLOUD_BASE_URL_ENV, CLOUD_TOKEN_SECRET_ID, DEFAULT_CLOUD_BASE_URL } from './models.js'
 import { createPricingCatalog, type PricingCatalogSource } from './pricing-catalog.js'
 import type { SecretStore } from './secret-store.js'
@@ -152,6 +156,11 @@ export interface CloudOptions {
    */
   directory?: () => Promise<CreditsDirectory> | CreditsDirectory
   /**
+   * WP282：这个品牌现在是哪种用法（① / ② / ③）——按人看积分谁看得到谁据此判。
+   * 取值函数：组织面在云面之后才装好。不给按 ③ 判（最保守：非 owner / admin 只看自己）。
+   */
+  mode?: () => Promise<OrganizationMode> | OrganizationMode
+  /**
    * WP272（Luoye 10-08 真机）：令牌缺动作集时**后台自动补签**。任何一跳撞上 403
    * `details.required_scope`，先调它（`cloud-account.upgradeScopes`，同公司各品牌一起补；
    * 令牌不变），回 `true` 就把这一跳原样再打一次——用户无感。回 `false` / 不给 = 照实回 403。
@@ -166,6 +175,8 @@ export interface CreditsDirectory {
   positions: Record<string, string>
   /** 公司的 owner / admin 的邮箱（用到 100% 时那封提醒信发给他们）。 */
   notify_emails: string[]
+  /** WP282：还在的成员 id（按人看积分时没用量的人补 0 行）。`members` 里含离开了的人（翻名字用）。 */
+  active?: string[]
 }
 
 export interface CloudAssembly {
@@ -681,6 +692,64 @@ export function createCloud(options: CloudOptions): CloudAssembly {
   }
 
   /**
+   * WP282（决策 281 / 286–290）：按人看积分。谁看得到谁判在本机（{@link memberUsageScopeOf}）：
+   * 只看自己的人，本机**强制**带 `member=<他自己>`，他给什么 `member` 都不算数。
+   * 区间不给就让云上按公司时区切本月（决策 286）；`to` 同 `usageView` 那条理由，不给就不传。
+   */
+  const memberUsageView = async (
+    actor: CloudActor,
+    filter: { month?: string; from?: string; to?: string; member?: string },
+  ): Promise<CloudMemberUsageView> => {
+    let mode: OrganizationMode = 'company'
+    try {
+      mode = (await options.mode?.()) ?? 'company'
+    } catch {
+      mode = 'company'
+    }
+    let manager = false
+    if (mode === 'company') {
+      try {
+        const r = await options.canManage?.(actor)
+        manager = r === 'owner' || r === 'admin' || r === true
+      } catch {
+        manager = false
+      }
+    }
+    const scope = memberUsageScopeOf(mode, manager)
+    if (tokenOf() === undefined) return { linked: false, reason: NOT_LINKED, scope }
+    const query = new URLSearchParams({ group: 'member' })
+    if (filter.month !== undefined) query.set('month', filter.month)
+    if (filter.from !== undefined) query.set('from', filter.from)
+    if (filter.to !== undefined) query.set('to', filter.to)
+    const member = scope === 'self' ? actor.person_id : filter.member
+    if (member !== undefined) query.set('member', member)
+    const res = await cloudCall<MemberUsageReport>(`/v1/wallet/usage?${query.toString()}`, {
+      headers: headersOf(actor),
+    })
+    if (!res.ok || res.data === undefined || !Array.isArray(res.data.rows))
+      return {
+        linked: true,
+        scope,
+        reason:
+          res.status === 0
+            ? '暂时取不到（云上连不通）。稍后再看一眼。'
+            : (res.message ?? '暂时取不到每个人的用量。'),
+      }
+    const directory = await directoryOf()
+    return {
+      linked: true,
+      scope,
+      report: fillMemberUsage(res.data, {
+        scope,
+        self: actor.person_id,
+        names: directory.members,
+        // 只筛一个人时不补别人
+        active: member === undefined ? directory.active : undefined,
+      }),
+    }
+  }
+
+  /**
    * 充值四档（与价目表同一份、同一条路：云上公开的 `/v1/pricing` + 本机缓存）。
    * 从没取到过就是空的，界面上说「价目暂时拿不到」。
    */
@@ -752,6 +821,7 @@ export function createCloud(options: CloudOptions): CloudAssembly {
     credits: () => creditsView(),
     pricing: () => pricingView(),
     usage: (_actor, filter) => usageView(filter),
+    usageByMember: (actor, filter) => memberUsageView(actor, filter),
     topupTiers: () => tiersView(),
     createTopup: (_actor, input) => createTopupOrder(input.tier_id),
     kolCloudStatus: async () => {

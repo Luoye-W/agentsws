@@ -28,7 +28,10 @@ import type {
   AllocationRow,
   AllocationSubjectKind,
   Clock,
+  MemberUsageReport,
+  MemberUsageRow,
   MyAllocation,
+  PricingBlock,
   UsageReport,
   WalletBalance,
 } from '@agentsws/contracts'
@@ -40,6 +43,7 @@ import {
   CLOUD_LINK_UPGRADE_PATH,
   DEFAULT_ALLOCATION_TIMEZONE,
   DEFAULT_CLOUD_SCOPES,
+  emptyMemberUsageBlocks,
   MEMBER_HEADER,
   MEMBER_LEFT_MESSAGE,
   POSITION_HEADER,
@@ -514,6 +518,64 @@ export function cloudStandIn(options: CloudStandInOptions = {}): CloudStandIn {
     }
   }
 
+  /**
+   * WP282：按人（`group=member`，WP279 那一份的替身）：种过的用量里带了「谁」的按人合计，三块按价目表分
+   * （额度四格 → 三块：任务归数据、其它归增值服务，与上面 `usage` 同一个对照），没带的进「没标注」。
+   * 名字取本机推上来的名册；只回有用量的人。合成数字都算「本月」：问别的月份就是空的。
+   */
+  const usageByMember = (q: { member?: string | undefined; month?: string | undefined }) => {
+    const blockOfBucket = (bucket: AllocationBucket): PricingBlock =>
+      bucket === 'ai' ? 'ai' : bucket === 'other' ? 'service' : 'data'
+    const thisMonth = now().slice(0, 7)
+    const cells = (q.month === undefined || q.month === thisMonth ? usageCells : []).filter(
+      (c) => q.member === undefined || c.member_id === q.member,
+    )
+    const names = new Map((roster?.members ?? []).map((m) => [m.id, m.name] as const))
+    const people = new Map<string, MemberUsageRow>()
+    const rest: MemberUsageReport['unattributed'] = {
+      credits: 0,
+      quantity: 0,
+      calls: 0,
+      blocks: emptyMemberUsageBlocks(),
+    }
+    for (const c of cells) {
+      let target: MemberUsageRow | MemberUsageReport['unattributed'] = rest
+      if (c.member_id !== undefined) {
+        const id = c.member_id
+        const row = people.get(id) ?? {
+          key: id,
+          ...(names.has(id) ? { name: names.get(id) as string } : {}),
+          credits: 0,
+          quantity: 0,
+          calls: 0,
+          blocks: emptyMemberUsageBlocks(),
+        }
+        people.set(id, row)
+        target = row
+      }
+      const block = target.blocks[blockOfBucket(c.bucket)]
+      target.credits = round(target.credits + c.credits)
+      target.quantity += c.calls
+      target.calls += c.calls
+      block.credits = round(block.credits + c.credits)
+      block.calls += c.calls
+    }
+    const rows = [...people.values()].sort((a, b) => b.credits - a.credits)
+    const report: MemberUsageReport = {
+      group: 'member',
+      from:
+        q.month === undefined || q.month === thisMonth
+          ? monthStart()
+          : `${q.month}-01T00:00:00.000Z`,
+      to: now(),
+      timezone,
+      rows,
+      unattributed: rest,
+      total_credits: round(rows.reduce((sum, r) => sum + r.credits, 0) + rest.credits),
+    }
+    return report
+  }
+
   /** 替用户点一下信里的链接（本机回调）。点不通就算了——界面上照样是「信发出去了」。 */
   const scheduleClick = (callback: string, token: string, state: string): void => {
     if (autoLinkAfterMs < 0) return
@@ -670,8 +732,20 @@ export function cloudStandIn(options: CloudStandInOptions = {}): CloudStandIn {
       if (token === undefined || !workspaceTokens.has(token))
         return fail(401, 'unauthenticated', '令牌无效')
       if (method === 'GET' && path === '/v1/wallet') return ok(balance())
-      if (method === 'GET' && path === '/v1/wallet/usage')
-        return ok(usage(url.searchParams.get('group') ?? 'capability'))
+      if (method === 'GET' && path === '/v1/wallet/usage') {
+        const q = url.searchParams
+        const member = q.get('member') ?? undefined
+        const month = q.get('month') ?? undefined
+        if (member !== undefined && !attributionIdOk(member))
+          return fail(400, 'invalid_input', 'member 要是本机的成员 id（字母数字与 _ - . : @）')
+        if (month !== undefined && (q.has('from') || q.has('to')))
+          return fail(400, 'invalid_input', 'month 与 from / to 只能给一样')
+        if (month !== undefined && !/^\d{4}-(0[1-9]|1[0-2])$/.test(month))
+          return fail(400, 'invalid_input', 'month 要写成 YYYY-MM')
+        const group = q.get('group') ?? 'capability'
+        if (group === 'member') return ok(usageByMember({ member, month }))
+        return ok(usage(group))
+      }
       if (method === 'GET' && path === '/v1/wallet/pricing')
         return ok(SAMPLE_PRICING_CATALOG.pricing)
       if (method === 'GET' && path === '/v1/wallet/topup/tiers')

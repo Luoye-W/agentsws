@@ -19,6 +19,7 @@ import type {
   CapabilitySourceSettings,
   CloudAllocationView,
   CloudCreditsView,
+  CloudMemberUsageView,
   CloudMyAllocationView,
   DataSourceRoute,
   KolCloudDeleteResult,
@@ -36,7 +37,7 @@ import type {
   UsageGroup,
   UsageReport,
 } from '@agentsws/contracts'
-import { KOL_OBJECT_KINDS } from '@agentsws/contracts'
+import { attributionIdOk, KOL_OBJECT_KINDS } from '@agentsws/contracts'
 import { z } from 'zod'
 import { ApiError } from '../errors.js'
 import { assignmentOf, body, ok, principalOf } from '../helpers.js'
@@ -84,6 +85,16 @@ export interface CloudPort {
     actor: CloudActor,
     filter: { group: UsageGroup; from?: string | undefined; to?: string | undefined },
   ): MaybePromise<UsageReport | undefined>
+  /**
+   * WP282（决策 281 / 286–290）：按人看积分（云上 `group=member` 的透传 + 本机按名册补 0 行与名字）。
+   *
+   * 这一条**判在实现那一侧**（它知道本机是哪种用法、谁是 owner / admin）：② 谁都看全员；③ owner / admin
+   * 看全员、别人只看自己（实现强制带 `member=<他自己>`）；① 只有自己。没关联回 `linked: false` + 人话，不是错。
+   */
+  usageByMember?(
+    actor: CloudActor,
+    filter: { month?: string; from?: string; to?: string; member?: string },
+  ): MaybePromise<CloudMemberUsageView>
   /**
    * 充值四档（67 §2，WP118）。与价目表同一份、同一条路（WP165）：云上公开的 `/v1/pricing`
    * + 本机缓存；从没取到过回空的、带 `unavailable_reason`。
@@ -315,6 +326,57 @@ export function cloudRoutes(): Route[] {
           ...(to === undefined ? {} : { to }),
         })
         return ok(c, report ?? null)
+      },
+    ),
+    route(
+      {
+        method: 'get',
+        path: '/v1/cloud/usage/members',
+        operationId: 'getCloudMemberUsage',
+        summary:
+          '按人看积分（价目表三块 + 次数，「没标注」单独一格）。② 谁都看全员；③ owner / admin 看全员、别人只看自己；① 只有自己',
+        tag: TAG,
+        auth: 'bearer',
+        assignment: true,
+        params: [
+          {
+            name: 'month',
+            in: 'query',
+            required: false,
+            description: 'YYYY-MM（公司时区）；和 from / to 二选一；都不给 = 公司时区的本月',
+          },
+          { name: 'from', in: 'query', required: false, description: 'ISO 时间' },
+          { name: 'to', in: 'query', required: false, description: 'ISO 时间；默认现在' },
+          {
+            name: 'member',
+            in: 'query',
+            required: false,
+            description: '只看这一个人（本机 person_id）；只看自己的人给了也不算数',
+          },
+        ],
+        returns: 'CloudMemberUsageView',
+      },
+      async (c, deps) => {
+        const port = portOf(deps)
+        const month = c.req.query('month')
+        const from = c.req.query('from')
+        const to = c.req.query('to')
+        const member = c.req.query('member')
+        if (month !== undefined && !/^\d{4}-(0[1-9]|1[0-2])$/.test(month))
+          throw new ApiError('invalid_input', 'month 要写成 YYYY-MM')
+        if (month !== undefined && (from !== undefined || to !== undefined))
+          throw new ApiError('invalid_input', 'month 与 from / to 只能给一样')
+        if (member !== undefined && !attributionIdOk(member))
+          throw new ApiError('invalid_input', 'member 要是本机的成员 id')
+        return ok(
+          c,
+          await need(port.usageByMember?.bind(port))(actorOf(c), {
+            ...(month === undefined ? {} : { month }),
+            ...(from === undefined ? {} : { from }),
+            ...(to === undefined ? {} : { to }),
+            ...(member === undefined ? {} : { member }),
+          }),
+        )
       },
     ),
     route(
