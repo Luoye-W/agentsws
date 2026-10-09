@@ -180,9 +180,9 @@ describe('WP278 交出发起人（决策 276）', () => {
     ).toBe(409)
     const card = await offerCardOf(lin.id, 'initiator')
     expect(card?.title).toContain('想把发起人交给你')
-    expect((card?.payload as { options: { id: string; label: string }[] }).options).toEqual([
-      { id: 'accept', label: '接下' },
-    ])
+    expect(
+      (card?.payload as { options?: { id: string; label: string }[] } | undefined)?.options,
+    ).toEqual([{ id: 'accept', label: '接下' }])
     expect(card?.summary).not.toContain('想把发起人交给你')
     // 接下前什么都不变
     expect(server.organizations.organizationOf(ws())?.owner_id).toBe(owner())
