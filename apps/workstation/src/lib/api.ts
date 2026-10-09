@@ -539,10 +539,16 @@ export const getHome = (range: RangeName, filters?: DeckFilters): Promise<HomeDa
 
 export const getPositions = (): Promise<PositionsData> => api<PositionsData>('/v1/positions')
 
-export const getPositionCards = (id: string, filters?: DeckFilters): Promise<CardsData> =>
-  api<CardsData>(`/v1/positions/${encodeURIComponent(id)}/cards?_=1${filterQuery(filters)}`, {
-    assignment: id,
-  })
+export const getPositionCards = (
+  id: string,
+  filters?: DeckFilters,
+  /** WP278（决策 284）：再收发给本人、挂在底座职责上的卡（只有一个岗位的人）。 */
+  base = false,
+): Promise<CardsData> =>
+  api<CardsData>(
+    `/v1/positions/${encodeURIComponent(id)}/cards?_=1${filterQuery(filters)}${base ? '&base=1' : ''}`,
+    { assignment: id },
+  )
 
 export const getPositionView = (id: string, range: RangeName): Promise<ViewData> =>
   api<ViewData>(`/v1/positions/${encodeURIComponent(id)}/view?range=${range}`, { assignment: id })
@@ -1201,6 +1207,8 @@ export interface ConnectionView {
   service_label: string
   alias: string
   ownership: ConnectionOwnership
+  /** WP278：② 里这条是不是你接的（只有接的人能标「个人 / 共用」）。 */
+  mine?: boolean
   status: 'active' | 'reauth_required' | 'disabled'
   identity?: { account_id?: string; display_name?: string }
   credential_store: 'openconnector' | 'local_vault'

@@ -113,6 +113,19 @@ export const PEERS_ZH: Record<string, string> = {
   // 设置 → 账号：② 共用一个余额，用量按人看，不设每人上限（决策 238）
   'credits.scope_note@peers': '大家共用一个余额，每个人的用量都看得见。',
   'credits.group.workspace@peers': '按品牌',
+  // ── WP278（决策 276 / 277 / 278）：交出发起人、请同事一起做要对方接下、退出先问
+  'team.initiator.give': '把发起人交给…',
+  'team.initiator.give.hint': '对方接下才换。换了以后你就是普通同事，可以退出。',
+  'team.offer.waiting': '等 {name} 接',
+  'team.offer.withdraw': '撤回',
+  'team.offer.declined': '{name} 没接',
+  'team.offer.declined.reason': '{name} 没接：{reason}',
+  'team.offer.returned': '{name} 没回，退回了',
+  'team.leave.title': '退出这个品牌？',
+  'team.leave.body': '你手上没做完的事会退回原处，共享的东西留在这里。',
+  'team.leave.personal': '你接的这几条个人连接会一起断开（共用的留下）：',
+  'connections.personal': '个人',
+  'connections.personal.hint': '个人的在你退出时一起断开、凭据删掉；共用的留下。',
 }
 
 export const PEERS_EN: Record<string, string> = {
@@ -225,4 +238,19 @@ export const PEERS_EN: Record<string, string> = {
     'Everyone connects their own accounts; a shared one (company mailbox, store) is managed by whoever connected it.',
   'credits.scope_note@peers': 'One shared balance; everyone’s usage is visible.',
   'credits.group.workspace@peers': 'By brand',
+  'team.initiator.give': 'Hand “starter” to…',
+  'team.initiator.give.hint':
+    'It changes only when they accept. After that you are a regular teammate and can leave.',
+  'team.offer.waiting': 'Waiting for {name}',
+  'team.offer.withdraw': 'Withdraw',
+  'team.offer.declined': '{name} said no',
+  'team.offer.declined.reason': '{name} said no: {reason}',
+  'team.offer.returned': 'No answer from {name}; it came back',
+  'team.leave.title': 'Leave this brand?',
+  'team.leave.body': 'Your unfinished work goes back where it came from; shared things stay here.',
+  'team.leave.personal':
+    'These personal connections you set up will be disconnected (shared ones stay):',
+  'connections.personal': 'Personal',
+  'connections.personal.hint':
+    'Personal ones are disconnected and their credentials deleted when you leave; shared ones stay.',
 }

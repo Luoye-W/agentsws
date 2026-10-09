@@ -21,7 +21,7 @@ import {
   redactItem,
   tokenFor,
 } from '../helpers.js'
-import { type Route, route } from '../route-spec.js'
+import { peersBypass, type Route, route } from '../route-spec.js'
 import type { GatewayDeps } from '../types.js'
 import { DuplicateAck, type GuardResult, guardSimilar, recordCatalogNote } from './catalog.js'
 import { fromDeckError } from './workstation.js'
@@ -593,6 +593,12 @@ export function approvalRoutes(): Route[] {
         auth: 'bearer',
         assignment: true,
         authz: DECIDE,
+        /*
+         * WP278：② 里刚进来、还没有岗位的同事（只有「工作区成员」那条，没有批准权）也要能点发给他的卡——
+         * 「请你一起做」「把发起人交给你」「知道了 / 撤回」。② 没有审批流；能点哪张仍由收件人令牌说了算
+         * （下面的 `tokenFor`：不是发给他的卡拿不到令牌）。
+         */
+        authzBypass: peersBypass,
         outbound: true,
         params: [{ name: 'id', in: 'path', required: true, description: '审批项 id' }],
         body: DecideBody,

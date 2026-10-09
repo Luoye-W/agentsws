@@ -54,6 +54,7 @@ import {
   submitConnection,
   testConnection,
 } from '@/lib/api'
+import { setConnectionOwnership } from '@/lib/api-peers'
 import { useApp } from '@/lib/app-context'
 import { useMode } from '@/lib/mode'
 
@@ -278,6 +279,15 @@ export function ConnectionsPage(): React.ReactNode {
     },
   })
 
+  /** WP278（决策 278）：② 里自己接的那条标「个人 / 共用」。 */
+  const ownership = useMutation({
+    mutationFn: (input: { id: string; personal: boolean }) =>
+      setConnectionOwnership(input.id, input.personal ? 'person' : 'workspace', asId),
+    onSettled: () => {
+      void client.invalidateQueries({ queryKey: ['connections'] })
+    },
+  })
+
   const disconnect = useMutation({
     mutationFn: (id: string) => removeConnection(id, asId),
     onSettled: () => {
@@ -356,6 +366,13 @@ export function ConnectionsPage(): React.ReactNode {
                   disconnect.mutate(c.id)
                 }}
                 assignment={asId}
+                {...(mode === 'peers'
+                  ? {
+                      onPersonal: (personal: boolean) => {
+                        ownership.mutate({ id: c.id, personal })
+                      },
+                    }
+                  : {})}
               />
             ))}
           </ul>

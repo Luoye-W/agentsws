@@ -12,8 +12,8 @@
  *    连接只有接它的人（或发起人）能做。记「谁接的」只是一张 id → 人的小表，凭据一个字节不碰。
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
-import { dirname } from 'node:path'
-import type { ConnectionsActor, ConnectionsPort } from '@agentsws/api'
+import { dirname, join } from 'node:path'
+import type { ConnectionsActor, ConnectionsPort, ConnectionView } from '@agentsws/api'
 import { ApiError } from '@agentsws/api'
 import type {
   ApprovalBus,
@@ -194,35 +194,71 @@ export interface ConnectionOwners {
   of(connection_id: string): PersonId | undefined
   set(connection_id: string, person: PersonId): void
   drop(connection_id: string): void
+  /**
+   * WP278（决策 278）：这条连接标的是「个人」（`true`）还是「共用」（`false`）；没标过回 `undefined`
+   * （那就看上游记的 `ownership`）。个人的在接它的人退出时一起断开。
+   */
+  personal?(connection_id: string): boolean | undefined
+  setPersonal?(connection_id: string, personal: boolean): void
 }
 
-/** 给了路径就落盘（品牌目录下 `connection-owners.json`），没给就是内存档。 */
+function readJson<T>(file: string | undefined, fallback: T): T {
+  if (file === undefined || !existsSync(file)) return fallback
+  try {
+    return JSON.parse(readFileSync(file, 'utf8')) as T
+  } catch {
+    return fallback
+  }
+}
+
+function writeJson(file: string | undefined, value: unknown): void {
+  if (file === undefined) return
+  mkdirSync(dirname(file), { recursive: true })
+  writeFileSync(file, `${JSON.stringify(value, null, 2)}\n`, 'utf8')
+}
+
+/**
+ * 给了路径就落盘（品牌目录下 `connection-owners.json`），没给就是内存档。
+ * WP278：「个人 / 共用」另记一份（同目录 `connection-personal.json`，id → true / false）——不改老文件的形状，
+ * 老版本读到的还是那张 id → 人的表。
+ */
 export function createConnectionOwners(file?: string): ConnectionOwners {
-  let map: Record<string, PersonId> = {}
-  if (file !== undefined && existsSync(file)) {
-    try {
-      map = JSON.parse(readFileSync(file, 'utf8')) as Record<string, PersonId>
-    } catch {
-      map = {}
-    }
-  }
-  const save = (): void => {
-    if (file === undefined) return
-    mkdirSync(dirname(file), { recursive: true })
-    writeFileSync(file, `${JSON.stringify(map, null, 2)}\n`, 'utf8')
-  }
+  let map = readJson<Record<string, PersonId>>(file, {})
+  const personalFile = file === undefined ? undefined : join(dirname(file), PERSONAL_FILE)
+  let personal = readJson<Record<string, boolean>>(personalFile, {})
   return {
     of: (id) => map[id],
     set: (id, person) => {
       map = { ...map, [id]: person }
-      save()
+      writeJson(file, map)
     },
     drop: (id) => {
       const { [id]: _gone, ...rest } = map
       map = rest
-      save()
+      writeJson(file, map)
+      if (id in personal) {
+        const { [id]: _was, ...left } = personal
+        personal = left
+        writeJson(personalFile, personal)
+      }
+    },
+    personal: (id) => personal[id],
+    setPersonal: (id, value) => {
+      personal = { ...personal, [id]: value }
+      writeJson(personalFile, personal)
     },
   }
+}
+
+/** WP278：「个人 / 共用」那份的文件名（与 `connection-owners.json` 并排）。 */
+export const PERSONAL_FILE = 'connection-personal.json'
+
+/** 这条连接算不算「个人」的：标过就按标的，没标过看接的时候选的 `ownership`。 */
+export function isPersonalConnection(
+  owners: ConnectionOwners,
+  view: { id: string; ownership: string },
+): boolean {
+  return owners.personal?.(view.id) ?? view.ownership === 'person'
 }
 
 /**
@@ -245,11 +281,35 @@ export function withConnectionOwners(
     if (options.initiator(actor.workspace_id) === actor.person_id) return
     throw new ApiError('forbidden', '这条连接是同事接的，谁接的谁管')
   }
+  /** WP278：② 里每行带「是不是你接的」，「个人 / 共用」按标过的那份（没标过看上游的 `ownership`）。 */
+  const decorate = (actor: ConnectionsActor, view: ConnectionView): ConnectionView => {
+    const ownership = isPersonalConnection(options.owners, view) ? 'person' : 'workspace'
+    const out: ConnectionView = ownership === view.ownership ? view : { ...view, ownership }
+    if (options.mode(actor.workspace_id) !== 'peers') return out
+    return { ...out, mine: options.owners.of(view.id) === actor.person_id }
+  }
   const overrides: Partial<ConnectionsPort> = {
+    async list(actor) {
+      return (await port.list(actor)).map((v) => decorate(actor, v))
+    },
     async submit(actor, service, input) {
       const out = await port.submit(actor, service, input)
       options.owners.set(out.connection.id, actor.person_id)
-      return out
+      if (input.ownership === 'person') options.owners.setPersonal?.(out.connection.id, true)
+      return { ...out, connection: decorate(actor, out.connection) }
+    },
+    /** WP278（决策 278）：标「个人 / 共用」——谁接的谁标（没记过是谁接的归发起人管）。 */
+    async setOwnership(actor, id, ownership) {
+      const who = options.owners.of(id)
+      const allowed =
+        who === actor.person_id ||
+        (who === undefined && options.initiator(actor.workspace_id) === actor.person_id)
+      if (!allowed) throw new ApiError('forbidden', '这条连接是同事接的，谁接的谁标')
+      const view = (await port.list(actor)).find((v) => v.id === id)
+      if (view === undefined) throw new ApiError('not_found', `连接不存在：${id}`)
+      if (who === undefined) options.owners.set(id, actor.person_id)
+      options.owners.setPersonal?.(id, ownership === 'person')
+      return decorate(actor, view)
     },
     async pollRequest(actor, request_id) {
       const out = await port.pollRequest(actor, request_id)
@@ -267,7 +327,7 @@ export function withConnectionOwners(
       return port.test(actor, id)
     },
   }
-  // 连接面是按品牌现取的 Proxy（展开拿不到方法），所以这里也用 Proxy：只截这四个，其余原样转
+  // 连接面是按品牌现取的 Proxy（展开拿不到方法），所以这里也用 Proxy：只截这几个，其余原样转
   return new Proxy(port, {
     get(target, prop, receiver) {
       if (typeof prop === 'string' && prop in overrides)
@@ -275,4 +335,73 @@ export function withConnectionOwners(
       return Reflect.get(target, prop, receiver)
     },
   })
+}
+
+// ── 4. 退出时个人连接跟人走（WP278，决策 278）────────────────────────────
+
+/** 退出时会断开的一条：哪个品牌、哪条、给人看的名字（「Shopify · glass-bowl」）。 */
+export interface PersonalConnection {
+  workspace_id: WorkspaceId
+  id: string
+  label: string
+}
+
+/**
+ * 这个人在这几个品牌里**自己接的、标成「个人」的**连接（共用的、别人接的、没记过是谁接的都不算）。
+ * 读不到某个品牌的连接（没装配 / 连接器没起来）就跳过那个品牌——退出不该被它拦住。
+ */
+export async function personalConnectionsOf(
+  port: ConnectionsPort,
+  owners: ConnectionOwners,
+  person: PersonId,
+  workspaces: readonly WorkspaceId[],
+): Promise<PersonalConnection[]> {
+  const out: PersonalConnection[] = []
+  for (const workspace_id of new Set(workspaces)) {
+    let rows: ConnectionView[]
+    try {
+      rows = await port.list({ workspace_id, person_id: person })
+    } catch {
+      continue
+    }
+    for (const v of rows) {
+      if (owners.of(v.id) !== person || !isPersonalConnection(owners, v)) continue
+      const name = v.identity?.display_name ?? v.alias
+      // 邮箱地址自己就说清楚了是哪一只；别的（店名、账号）前面带上是哪家服务
+      out.push({
+        workspace_id,
+        id: v.id,
+        label:
+          name === '' || name === v.service_label
+            ? v.service_label
+            : name.includes('@')
+              ? name
+              : `${v.service_label} · ${name}`,
+      })
+    }
+  }
+  return out
+}
+
+/**
+ * 断开它们：走连接面本来的「断开」（本机凭据库里的那份随之删掉；OpenConnector 那边的连接一起删）。
+ * 一条断不掉不拦别的、也不拦退出（尽力而为）；回断开了几条。
+ */
+export async function disconnectPersonal(
+  port: ConnectionsPort,
+  owners: ConnectionOwners,
+  person: PersonId,
+  workspaces: readonly WorkspaceId[],
+): Promise<number> {
+  let n = 0
+  for (const c of await personalConnectionsOf(port, owners, person, workspaces)) {
+    try {
+      await port.remove({ workspace_id: c.workspace_id, person_id: person }, c.id)
+      owners.drop(c.id)
+      n += 1
+    } catch {
+      // 上游挂了：这条留着，退出照常
+    }
+  }
+  return n
 }

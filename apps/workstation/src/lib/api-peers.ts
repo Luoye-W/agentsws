@@ -81,7 +81,7 @@ export const listColleagues = (): Promise<{ colleagues: ColleagueView[] }> =>
 /** ② 里自己退出（发起人不行，先把发起人交给同事）。 */
 export const leaveWorkspace = (
   workspace_id: string,
-): Promise<{ revoked_assignments: number; returned: number }> =>
+): Promise<{ revoked_assignments: number; returned: number; disconnected?: number }> =>
   api(`/v1/workspaces/${enc(workspace_id)}/leave`, { method: 'POST' })
 
 /** 我参与过的事项（含时间线）与名下的待办——退出前带走一份副本。 */
@@ -105,3 +105,66 @@ export interface PersonUsageView {
 
 export const listPeopleUsage = (): Promise<{ people: PersonUsageView[] }> =>
   api<{ people: PersonUsageView[] }>('/v1/usage/people')
+
+// ── WP278（决策 276 / 277 / 278）─────────────────────────────────────────
+
+/** ② 里要对方接下才算的两件事：把发起人交给同事、请同事一起做一个岗位。 */
+export interface PeerOfferView {
+  /** 对方那张卡的 id（撤回撤的就是它）。 */
+  id: string
+  kind: 'initiator' | 'position'
+  from: string
+  from_name: string
+  to: string
+  to_name: string
+  position_id?: string
+  position_name?: string
+  state: 'offered' | 'accepted' | 'declined' | 'returned' | 'withdrawn'
+  reason?: string
+  expires_at?: string
+  at: string
+}
+
+export const PEER_OFFERS_KEY = ['peer-offers'] as const
+
+const withAs = (assignment: string | undefined): { assignment?: string } =>
+  assignment === undefined ? {} : { assignment }
+
+export const offerInitiator = (person_id: string, assignment?: string): Promise<PeerOfferView> =>
+  api('/v1/org/initiator/offer', { method: 'POST', body: { person_id }, ...withAs(assignment) })
+
+export const offerPosition = (
+  position_id: string,
+  person_id: string,
+  assignment?: string,
+): Promise<PeerOfferView> =>
+  api(`/v1/org/positions/${enc(position_id)}/offer`, {
+    method: 'POST',
+    body: { person_id },
+    ...withAs(assignment),
+  })
+
+export const listPeerOffers = (assignment?: string): Promise<{ offers: PeerOfferView[] }> =>
+  api<{ offers: PeerOfferView[] }>('/v1/org/offers', withAs(assignment))
+
+export const withdrawPeerOffer = (id: string, assignment?: string): Promise<PeerOfferView> =>
+  api(`/v1/org/offers/${enc(id)}/withdraw`, { method: 'POST', ...withAs(assignment) })
+
+/** 退出之前那一问：会断开哪几条个人连接（共用的不在里面）。 */
+export const previewLeave = (
+  workspace_id: string,
+  assignment?: string,
+): Promise<{ personal_connections: { id: string; label: string }[] }> =>
+  api(`/v1/workspaces/${enc(workspace_id)}/leave`, withAs(assignment))
+
+/** 标一条连接是「个人」还是「共用」（只有接它的人能改）。 */
+export const setConnectionOwnership = (
+  id: string,
+  ownership: 'person' | 'workspace',
+  assignment?: string,
+): Promise<unknown> =>
+  api(`/v1/connections/${enc(id)}/ownership`, {
+    method: 'PUT',
+    body: { ownership },
+    ...withAs(assignment),
+  })

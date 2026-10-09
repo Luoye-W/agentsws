@@ -436,13 +436,16 @@ import { isOwnSubApproval } from './own-sub-queue.js'
 import { alignOwnerEmail } from './owner-email.js'
 import { createOwnerToolExecutor } from './owner-tools.js'
 import { createPageBodyReader } from './page-body.js'
+import { createPeerOffers, isPeerOffer, type PeerOffers } from './peer-offers.js'
 import {
   choseUndo,
   createConnectionOwners,
+  disconnectPersonal,
   notifyPeers,
   type PeerUndo,
   peersRouting,
   peerUndoOf,
+  personalConnectionsOf,
   withConnectionOwners,
 } from './peers.js'
 import {
@@ -1927,6 +1930,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   let modeOfWorkspace: ((ws: string) => Promise<OrganizationMode>) | undefined
   /** WP277：开公司模式那一块（组织面装好之后才有；之前没有那种卡）。 */
   let companyModeRef: CompanyMode | undefined
+  /** WP278：② 里要对方接下才算的「交出发起人 / 请同事一起做」（组织面装好之后才有）。 */
+  let peerOffersRef: PeerOffers | undefined
   /** WP275（决策 259）：① 个人时这个品牌唯一的那个人（同步读；② ③ 或还没装好 = 没有）。 */
   let soleOwnerOf: ((ws: string) => PersonId | undefined) | undefined
   /** WP276：同上的同步版（角色定位「谁都能改」、连接「谁接的谁管」要同步判）。 */
@@ -5661,6 +5666,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     }
     // WP237：选择卡选了（或者老卡点了「认领」）→ 事项钉到那条职责、按原话起一次运行
     if (isRouteChoice(item)) return (await positionsFor(item.workspace_id)).onChoiceDecided(item)
+    // WP278：「把发起人交给你 / 请你一起做」——接下才换发起人 / 才分岗位（同一张「交给你」卡）
+    if (isPeerOffer(item)) return peerOffersRef?.onDecided(item)
     // WP276：交给对方那张卡——接下（换主人与分配、未定的卡跟过去）/ 不接（退回）
     if (isHandoffItem(item)) return (await handoffFor(item.workspace_id)).onDecided(item)
     // WP276（决策 243 / 274）：② 里同事点了「撤回」→ 按卡上带的办法改回去
@@ -6444,6 +6451,25 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     listAssignments: (person_id, filter) => roles.assignments.listByPerson(person_id, filter ?? {}),
   }
 
+  /*
+   * WP276：② 里谁接的连接谁管（记一张 id → 人的小表，凭据不碰）。WP278：同一张表另记「个人 / 共用」，
+   * 退出时他自己接的、标成「个人」的一起断开（凭据从本机凭据库删）。提到这里是因为制度面退出要用它。
+   */
+  const connectionOwners = createConnectionOwners(
+    dbDir === undefined ? undefined : join(dbDir, 'connection-owners.json'),
+  )
+  const peerConnections = withConnectionOwners(brandConnectionsPort(brandModules), {
+    owners: connectionOwners,
+    mode: (ws) => organizations.modeOfSync(ws),
+    initiator: (ws) => organizations.organizationOf(ws)?.owner_id,
+  })
+  /** WP278：「这个工作区」或「这家下的每个品牌」。 */
+  const scopeWorkspaces = (scope: 'workspace' | 'org'): WorkspaceId[] => {
+    if (scope === 'workspace') return [workspace.id]
+    const o = organizations.organizationOf(workspace.id)
+    return o === undefined ? [workspace.id] : identity.brandsOf(o.id).map((w) => w.id)
+  }
+
   // WP28 制度面：职责 / 岗位 / 分配 / 策略层 / 成员与邀请（业务全在 ./org.ts，这里只装配）
   const org = createOrg({
     clock,
@@ -6460,6 +6486,18 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     workspaceIds: () => [
       ...new Set([workspace.id, ...(brands?.loaded().map((b) => b.workspace_id) ?? [])]),
     ],
+    // WP278（决策 278）：退出时个人连接跟人走——先问（列名字），确认后断开、凭据删掉
+    personalConnections: async (person_id, scope) =>
+      (
+        await personalConnectionsOf(
+          peerConnections,
+          connectionOwners,
+          person_id,
+          scopeWorkspaces(scope),
+        )
+      ).map((c) => ({ id: c.id, label: c.label })),
+    disconnectPersonal: (person_id, scope) =>
+      disconnectPersonal(peerConnections, connectionOwners, person_id, scopeWorkspaces(scope)),
     // WP182：B2B 业务员离开 → 各品牌里他名下的客户 / 商机 / 没回的询盘各出一张交接卡给老板
     afterMemberLeft: async (person_id, by, context) => {
       /*
@@ -6995,8 +7033,33 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     appendEvent,
     modeOf: (ws) => organizations.modeOf(ws),
     optOut: (person) => org.optOut(person),
+    // WP278（决策 278）：选「我要退出」的人，个人连接一起断开（这家下的每个品牌）
+    disconnectPersonal: (person) =>
+      disconnectPersonal(peerConnections, connectionOwners, person, scopeWorkspaces('org')),
   })
   companyModeRef = companyMode
+  /*
+   * WP278（决策 276 / 277）：② 里「把发起人交给…」「请同事一起做」——对方收同一张「交给你」卡，
+   * 接下才换发起人（走上面开公司模式选老板那一条路）、才分岗位。几天退回与交给对方同一格。
+   */
+  const peerOffers = createPeerOffers({
+    workspace_id: workspace.id,
+    clock,
+    identity,
+    roles,
+    approvals,
+    appendEvent,
+    mode: () => organizations.modeOf(workspace.id),
+    organization: () => organizations.organizationOf(workspace.id),
+    days: () =>
+      archiveStateOf(workspace.id, brandDirOf(dbDir, workspace.id, workspace.id)).settings()
+        .handoff_days ?? DEFAULT_HANDOFF_RETURN_DAYS,
+    positions: () => org.positions(),
+    holders: async (position_id) =>
+      (await (await positionsFor(workspace.id)).instance(position_id, workspace.owner_id)).holders,
+    assign: (actor, input) => Promise.resolve(org.port.assign(actor, input)),
+  })
+  peerOffersRef = peerOffers
   // WP275：审批路由、职责分离、超时升级从这一刻起按模式走（之前没有任何卡）
   modeOfWorkspace = (ws) => organizations.modeOf(ws)
   modeOfWorkspaceSync = (ws) => organizations.modeOfSync(ws)
@@ -9021,13 +9084,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     meetings: meetings.port,
     // WP20 / WP66：连接面按品牌（死信与重投也按品牌，见 `brand-ports.ts`）
     // WP276：② 里谁接的连接谁管（记一张 id → 人的小表，凭据不碰）
-    connections: withConnectionOwners(brandConnectionsPort(brandModules), {
-      owners: createConnectionOwners(
-        dbDir === undefined ? undefined : join(dbDir, 'connection-owners.json'),
-      ),
-      mode: (ws) => organizations.modeOfSync(ws),
-      initiator: (ws) => organizations.organizationOf(ws)?.owner_id,
-    }),
+    // WP278：同一张表另记「个人 / 共用」（见 `peerConnections`）
+    connections: peerConnections,
     // WP276：② 同事互联里平级同事也能进团队页 / 连接页、改共用规矩、同意新人
     peerAccess: (ws) => organizations.modeOfSync(ws) === 'peers',
     // WP113（63）：消息——按请求的品牌取那一只邮箱库
@@ -9432,7 +9490,14 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     },
     // WP58（49 M1）：云账号关联（状态 / 起关联 / 回调 / 解除）
     cloudAccount: cloudAccount.port,
-    org: org.port,
+    // WP278：② 里「交出发起人 / 请同事一起做」要对方接下才算
+    org: {
+      ...org.port,
+      offerInitiator: (actor, input) => peerOffers.offerInitiator(actor, input),
+      offerPosition: (actor, id, input) => peerOffers.offerPosition(actor, id, input),
+      peerOffers: (actor) => peerOffers.list(actor),
+      withdrawPeerOffer: (actor, id) => peerOffers.withdraw(actor, id),
+    },
     // WP51（46）：首次设置向导、同事发现、邀请码与申请加入
     onboarding: onboarding.port,
     // WP121（70 §3）：贴一个网址，自动分析出品牌档案

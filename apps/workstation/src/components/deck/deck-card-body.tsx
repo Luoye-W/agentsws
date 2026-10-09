@@ -474,6 +474,8 @@ export function DeckCardBody({
           const where = str(payload.matter_summary)
           const day = (iso: string | undefined): string | undefined => iso?.slice(5, 10)
           const facts = [
+            // WP278：「把发起人交给你 / 请你一起做」——接下以后会怎样，一句
+            str(payload.what),
             where === undefined || where === note
               ? undefined
               : `${t('handoff.card.where')}：${where}`,

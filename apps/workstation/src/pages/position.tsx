@@ -107,6 +107,8 @@ export function PositionPage(): React.ReactNode {
   const entry = mine.data?.instances?.find((p) => myAssignments(p).includes(id))
   const deckIds = entry === undefined ? [id] : myAssignments(entry)
   const here = mine.data?.positions.find((p) => p.position_id === id)
+  /** WP278：只有一个岗位（首页就是这一页，与首页跳转同一个判据）。 */
+  const sole = entry !== undefined && mine.data?.instances?.length === 1
   const ownerAssignment = (mine.data?.positions ?? []).find(
     (p) => p.role_id === 'common.owner',
   )?.position_id
@@ -430,6 +432,8 @@ export function PositionPage(): React.ReactNode {
               <DeckSection
                 positionId={id}
                 positionIds={deckIds}
+                // WP278（决策 284）：只有一个岗位的人首页就是这里——也收挂在底座职责上的卡
+                withBase={sole}
                 {...(focus === undefined ? {} : { focus })}
                 onOpen={(card) => {
                   navigate(matterUrl(card))
