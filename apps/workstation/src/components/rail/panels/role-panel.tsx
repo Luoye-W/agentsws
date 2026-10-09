@@ -19,6 +19,7 @@ import { Languages, RotateCcw } from 'lucide-react'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { dutyHref } from '@/components/app-shell'
+import { RoleRules } from '@/components/org/role-rules'
 import { PanelError } from '@/components/rail/panel-error'
 import type { RailScope } from '@/components/rail/rail-scope'
 import { Button } from '@/components/ui/button'
@@ -287,6 +288,8 @@ export function RolePanel({ scope }: { scope: RailScope }): React.ReactNode {
     return (
       <div className="flex flex-col gap-3" data-testid="role-panel" data-scope={scope.scope_id}>
         <PersonaSection kind="role" id={scope.scope_id} canEdit={canEdit} />
+        {/* WP284（决策 275）：这条职责的规矩（「以后都这样」批了落下的），没有就不出 */}
+        <RoleRules roleId={scope.scope_id} assignment={scope.assignment} hideWhenEmpty />
         {/* 69 §3：运行时先装岗位那一段、再装职责那一段，所以这里也按这个顺序给人看 */}
         {scope.parent === undefined ? (
           <p className="text-[11px] text-muted-foreground" data-testid="role-no-position">

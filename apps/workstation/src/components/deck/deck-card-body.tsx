@@ -312,6 +312,21 @@ export function DeckCardBody({
               {options.some((o) => o.id === 'leave') ? <CompanyNoticeExtras /> : null}
             </div>
           )
+        // WP284（决策 275）：「以后都这样」——标题就是那一句；太长被截了才把整句放进正文，
+        // 下面一句说之后怎样、去哪儿改（不出改之前 / 改之后双格，不出「谁能批」那一行）
+        if (payload.form === 'instruction_rule') {
+          const rule = str((payload.after as { rule?: unknown } | undefined)?.rule)
+          return (
+            <div className="mt-2.5 flex flex-col gap-2" data-testid="deck-layout-rule">
+              {rule === undefined || card.title.includes(rule) ? null : (
+                <Note testId="deck-rule-text">{rule}</Note>
+              )}
+              <p className="text-xs text-ws-muted-fg" data-testid="deck-reason">
+                {reasonText}
+              </p>
+            </div>
+          )
+        }
         return (
           <div className="mt-2.5 flex flex-col gap-2.5" data-testid="deck-layout-policy">
             <BeforeAfter before={payload.before} after={payload.after} />
@@ -569,7 +584,9 @@ export function DeckCardBody({
     (card.detail.payload as { form?: unknown } | undefined)?.form === 'handoff' ||
     (card.detail.payload as { form?: unknown } | undefined)?.form === 'peer_change_notice' ||
     // WP277：开公司模式时同事那张「知道了 / 我要退出」
-    (card.detail.payload as { form?: unknown } | undefined)?.form === 'company_notice'
+    (card.detail.payload as { form?: unknown } | undefined)?.form === 'company_notice' ||
+    // WP284：「以后都这样」那张「记进规矩 / 不用」
+    (card.detail.payload as { form?: unknown } | undefined)?.form === 'instruction_rule'
   const needsOptions =
     options.length > 0 && card.layout !== 'choice' && card.layout !== 'variants' && !handoffOffer
   return (

@@ -56,7 +56,14 @@ export interface InstructionRulePayload {
   source_card_id: string
   /** WP284：指导写在哪张卡上（卡标题），规矩那一行「来自…」用。 */
   source_title?: string
+  /** WP284：卡面认它用（选项直接是两个按钮）。WP284 之前出的老卡没有。 */
+  form?: typeof INSTRUCTION_RULE_FORM
+  /** WP284：「记进规矩 / 不用」——与 `policy_change` 的 after / before 同一对 id。 */
+  options?: { id: 'after' | 'before'; label: string }[]
 }
+
+/** 卡面认「以后都这样」那张策略卡用的 `payload.form`。 */
+export const INSTRUCTION_RULE_FORM = 'instruction_rule'
 
 /**
  * 出「以后都这样」那张策略卡的输入（API 的指导落地与模拟世界共用）。
@@ -93,9 +100,15 @@ export function instructionRuleCard(input: {
       ...(item.subject.matter_id === undefined ? {} : { matter_id: item.subject.matter_id }),
     },
     dedupe_key: `${input.workspace_id}:policy_change:instruction:${item.id}`,
-    title: `以后都这样：${text.slice(0, 40)}`,
-    summary: '批了写进这条职责的规矩，之后每次都照做；规矩里随时能改、能删。',
+    title: `以后都这样：${text.length > 40 ? `${text.slice(0, 40)}…` : text}`,
+    // 界面少字：标题说了是哪一句、按钮说了记到哪，这一句只说之后怎样、去哪儿改
+    summary: '之后每次都照做；在职责规矩里能改、能删。',
     payload: {
+      form: INSTRUCTION_RULE_FORM,
+      options: [
+        { id: 'after', label: '记进规矩' },
+        { id: 'before', label: '不用' },
+      ],
       target: 'workspace_policy',
       before: null,
       after: { rule: text },

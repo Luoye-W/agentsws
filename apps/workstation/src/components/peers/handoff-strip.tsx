@@ -45,7 +45,11 @@ export function isPeerNoticeCard(card: { kind: string; detail: { payload?: unkno
   const p = card.detail.payload
   const form = typeof p === 'object' && p !== null ? (p as { form?: unknown }).form : undefined
   return (
-    card.kind === 'policy_change' && (form === 'peer_change_notice' || form === 'company_notice')
+    card.kind === 'policy_change' &&
+    (form === 'peer_change_notice' ||
+      form === 'company_notice' ||
+      // WP284：「以后都这样」那张——「记进规矩 / 不用」也直接是两个按钮
+      form === 'instruction_rule')
   )
 }
 

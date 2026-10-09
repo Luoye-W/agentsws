@@ -6296,6 +6296,54 @@ export const revertPersona = (
     ...withAssignment(assignment),
   })
 
+// ── WP284（决策 275）：职责规矩里那几句「以后都这样」 ──────────────────────
+
+/** 一句职责规矩（与服务端 `RoleRuleView` 同形）。 */
+export interface RoleRuleData {
+  id: string
+  role_id: string
+  text: string
+  /** 定的人（点通过的那位）。 */
+  by: string
+  by_name?: string
+  proposed_by?: string
+  /** 来源：那张「以后都这样」策略卡。 */
+  source_card_id?: string
+  /** 指导写在哪张卡上（卡标题）。 */
+  source_title?: string
+  matter_id?: string
+  created_at: string
+  updated_at?: string
+  updated_by?: string
+  updated_by_name?: string
+  /** 这个人改不改得了（③ 只有老板与管理员）。 */
+  can_edit: boolean
+}
+
+export const listRoleRules = (role_id: string, assignment?: string): Promise<RoleRuleData[]> =>
+  api<RoleRuleData[]>(`/v1/roles/${encodeURIComponent(role_id)}/rules`, withAssignment(assignment))
+
+export const updateRoleRule = (
+  role_id: string,
+  rule_id: string,
+  text: string,
+  assignment?: string,
+): Promise<RoleRuleData> =>
+  api<RoleRuleData>(
+    `/v1/roles/${encodeURIComponent(role_id)}/rules/${encodeURIComponent(rule_id)}`,
+    { method: 'PUT', body: { text }, ...withAssignment(assignment) },
+  )
+
+export const deleteRoleRule = (
+  role_id: string,
+  rule_id: string,
+  assignment?: string,
+): Promise<{ removed: true }> =>
+  api<{ removed: true }>(
+    `/v1/roles/${encodeURIComponent(role_id)}/rules/${encodeURIComponent(rule_id)}`,
+    { method: 'DELETE', ...withAssignment(assignment) },
+  )
+
 // ── WP127：文字模型必须能看图；生图单独一档 ────────────────────────────
 
 /** 验证三步各自过没过（连通 → 文字 → 带图）。 */
