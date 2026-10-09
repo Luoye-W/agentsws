@@ -2261,8 +2261,6 @@ const zh: Table = {
   'models.field.api_key.keep': '已经存过一把了。留空就不动它，填了就换成新的。',
   'models.field.embedding': '向量模型（选填）',
   'models.field.embedding.hint': '知识库检索要用。不填就用不了向量检索，别的照常。',
-  'models.field.region': '数据驻留',
-  'models.field.region.hint': '境内的服务选"境内"。整体驻留设成"只用境内"时，境外模型会被拦下来。',
   // ── WP59（49 M2 / M4 / M5）：agentsws 云、积分、能力开关 ────────────────
   //
   // 口径：**对用户只显示最终积分价**。成本、倍率、汇率是算这个数字的中间量，
@@ -2523,8 +2521,6 @@ const zh: Table = {
   'search_data.byo.remove': '拔掉',
   'search_data.byo.saved': '已保存，不扣积分。',
 
-  'models.region.cn': '境内',
-  'models.region.global': '境外',
   'models.field.price_in': '输入价（每百万 token）',
   'models.field.price_out': '输出价（每百万 token）',
   'models.field.price_cached': '缓存命中价（每百万 token）',
@@ -2562,9 +2558,6 @@ const zh: Table = {
   'web.search.on': '开着：查资料的岗位会上网搜索。',
   'web.search.off': '关着：不上网搜索（打开指定网页照旧可以）。',
   'web.search.no_key': '开着，但还没登录 DeepSeek 账号、也没填 DeepSeek 官方 key，暂时搜不了。',
-  'models.residency': '数据驻留',
-  'models.residency.cn': '只用境内的模型',
-  'models.residency.any': '境内境外都可以',
   'models.budget': '预算上限',
   'models.budget.daily': '每天上限',
   'models.budget.monthly': '每月上限',
@@ -3343,7 +3336,6 @@ const zh: Table = {
   'onboarding.ai.account': 'DeepSeek 官方',
   'dsa.title': '用我的 DeepSeek 账号登录',
   'dsa.summary': '不用建 key：在浏览器里登录一次 DeepSeek 账号，按账号里的余额扣。',
-  'dsa.region': '数据在境内',
   'dsa.login': '用 DeepSeek 账号登录',
   'dsa.starting': '正在准备登录…',
   'dsa.waiting': '已在浏览器里打开 DeepSeek 的登录页。登录并点同意，这一页会自己接上。',
@@ -6205,9 +6197,6 @@ const en: Table = {
   'models.field.embedding': 'Embedding model (optional)',
   'models.field.embedding.hint':
     'Needed for knowledge search. Leave blank and everything else still works.',
-  'models.field.region': 'Data residency',
-  'models.field.region.hint':
-    'Pick the region this service runs in. Overseas models are blocked when residency is set to China-only.',
   // ── WP59 (49 M2 / M4 / M5): agentsws cloud, credits, per-capability switch ──
   'models.cloud.title': 'Agents Workshop (credits)',
   'models.cloud.summary':
@@ -6481,8 +6470,6 @@ const en: Table = {
   'search_data.byo.remove': 'Remove',
   'search_data.byo.saved': 'Saved. No credits are used.',
 
-  'models.region.cn': 'China',
-  'models.region.global': 'Overseas',
   'models.field.price_in': 'Input price (per 1M tokens)',
   'models.field.price_out': 'Output price (per 1M tokens)',
   'models.field.price.hint':
@@ -6521,9 +6508,6 @@ const en: Table = {
   'web.search.off': 'Off: no web search (opening a given page still works).',
   'web.search.no_key':
     'On, but you have not signed in to DeepSeek or added an official DeepSeek key yet, so search is unavailable.',
-  'models.residency': 'Data residency',
-  'models.residency.cn': 'China-based models only',
-  'models.residency.any': 'Anywhere is fine',
   'models.budget': 'Budget caps',
   'models.budget.daily': 'Daily cap',
   'models.budget.monthly': 'Monthly cap',
@@ -7327,7 +7311,6 @@ const en: Table = {
   'dsa.title': 'Sign in with my DeepSeek account',
   'dsa.summary':
     'No key to create: sign in to your DeepSeek account once in the browser; usage is billed to that account.',
-  'dsa.region': 'Data stays in mainland China',
   'dsa.login': 'Sign in with DeepSeek',
   'dsa.starting': 'Getting the sign-in ready…',
   'dsa.waiting':

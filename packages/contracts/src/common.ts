@@ -350,6 +350,10 @@ export type ErrorCode =
   | 'provenance_missing'
   | 'unknown_outcome'
   | 'provider_unavailable'
+  /**
+   * @deprecated 决策 291（WP281）：「数据不出境」整套删了，本机与云端都不再产生这个码。
+   * 只为老客户端 / 老云端回包解析不崩先留着，别再用。
+   */
   | 'residency_blocked'
   | 'rate_limited'
   | 'timeout'

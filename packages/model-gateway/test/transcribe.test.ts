@@ -137,8 +137,8 @@ describe('网关 transcribe', () => {
     expect(g.records().every((r) => r.purpose === 'transcription')).toBe(true)
   })
 
-  it('驻留：cn 下 global provider 被拦；音频同 eu 规则', async () => {
-    const cn = gateway({
+  it('决策 291：global 的 ASR provider 不再被驻留拦，照常转写', async () => {
+    const g = gateway({
       providers: [
         stubAsrProvider({
           seed: 1,
@@ -150,26 +150,10 @@ describe('网关 transcribe', () => {
         default: { provider: 'openai', model: 'whisper-1', region: 'global' },
       },
     })
-    await expect(async () =>
-      cn.g.transcribe({ bytes: enc('a'), mime: 'audio/webm' }, meta({ purpose: 'transcription' })),
-    ).rejects.toThrow(/data_residency cn/)
-    expect(cn.rec.ofType('model.blocked_residency')).toHaveLength(1)
-
-    const eu = gateway({
-      providers: [stubAsrProvider({ seed: 1, ref: { provider: 'cloud_brain', model: 'asr' } })],
-      policy: {
-        ...asrPolicy(),
-        data_residency: 'any',
-        default: { provider: 'cloud_brain', model: 'asr' },
-        prices: { 'cloud_brain/asr': { in: 1, out: 0, cached: 0 } },
-      },
-    })
-    await expect(async () =>
-      eu.g.transcribe(
-        { bytes: enc('a'), mime: 'audio/webm', eu_customer: true },
-        meta({ purpose: 'transcription' }),
-      ),
-    ).rejects.toThrow(/eu customer/)
+    await expect(
+      g.g.transcribe({ bytes: enc('a'), mime: 'audio/webm' }, meta({ purpose: 'transcription' })),
+    ).resolves.toBeDefined()
+    expect(g.rec.events.some((e) => e.type.includes('residency'))).toBe(false)
   })
 
   it('provider 没有 transcribe → not_implemented；provider 抛错 → provider_unavailable + 事件', async () => {

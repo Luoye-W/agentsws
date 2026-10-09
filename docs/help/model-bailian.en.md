@@ -35,8 +35,8 @@ It has one address only (Beijing region): `https://token-plan.cn-beijing.maas.al
 
 Two addresses:
 
-- Beijing (China, residency cn): `https://dashscope.aliyuncs.com/compatible-mode/v1`
-- Singapore (international, residency global): `https://dashscope-intl.aliyuncs.com/compatible-mode/v1`
+- Beijing (China): `https://dashscope.aliyuncs.com/compatible-mode/v1`
+- Singapore (international): `https://dashscope-intl.aliyuncs.com/compatible-mode/v1`
 
 The standard endpoint has no model list, so the dropdown falls back to the verified list from the built-in price table.
 

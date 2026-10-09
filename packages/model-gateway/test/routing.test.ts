@@ -111,17 +111,18 @@ describe('22 §2 路由与降级', () => {
     expect(rec.ofType('model.usage')).toHaveLength(0)
   })
 
-  it('备选也要过驻留与价格表检查，越线的备选被跳过', async () => {
+  it('备选也要过价格表检查，没有价的备选被跳过', async () => {
     const rec = recorder()
-    const globalBackup = fixedProvider({
-      ref: { provider: 'openai', model: 'gpt-x', region: 'global' },
+    const unpricedBackup = fixedProvider({
+      ref: { provider: 'openai', model: 'gpt-unpriced', region: 'global' },
       output: 1,
     })
     const gw = createModelGateway({
-      providers: [down(502), globalBackup],
+      providers: [down(502), unpricedBackup],
       policy: policy({
-        data_residency: 'cn',
-        fallbacks: { 'stub/stub-v1': [{ provider: 'openai', model: 'gpt-x', region: 'global' }] },
+        fallbacks: {
+          'stub/stub-v1': [{ provider: 'openai', model: 'gpt-unpriced', region: 'global' }],
+        },
       }),
       clock: fixedClock(),
       eventSink: rec.sink,
@@ -130,7 +131,7 @@ describe('22 §2 路由与降级', () => {
     await expect(gw.complete({ messages: [userPrompt('q')], meta: meta() })).rejects.toMatchObject({
       code: 'provider_unavailable',
     })
-    expect(rec.ofType('model.blocked_residency')).toHaveLength(1)
+    expect(rec.ofType('model.usage')).toHaveLength(0)
     expect(rec.ofType('model.provider_down')).toHaveLength(1)
   })
 

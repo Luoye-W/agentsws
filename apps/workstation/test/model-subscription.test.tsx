@@ -98,7 +98,6 @@ const TEMPLATES: ModelProviderTemplate[] = [
 const DEFAULTS: ModelDefaultsView = {
   default: 'stub/stub-v1',
   by_purpose: {},
-  data_residency: 'cn',
   budget: {},
   choices: [],
 }

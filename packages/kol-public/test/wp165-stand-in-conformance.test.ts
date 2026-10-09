@@ -117,7 +117,6 @@ describe('WP165 公共红人库：契约替身与真服务逐条一致', () => {
       org_id: 'org_1',
       workspace_id: 'ws_1',
       scopes: ['ai', 'wallet:read', 'data'],
-      region: 'global',
     }
     seed((o) => real.service.contributeAs(principal, o))
 
@@ -186,7 +185,6 @@ describe('WP165 公共红人库：契约替身与真服务逐条一致', () => {
       org_id: 'org_1',
       workspace_id: 'ws_1',
       scopes: ['ai', 'wallet:read'],
-      region: 'global',
     }
     const kol = new KolPublicStandIn({
       wallet: new StandInWallet({ now: () => T0, newId: (p) => p }),

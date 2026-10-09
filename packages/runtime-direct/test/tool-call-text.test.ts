@@ -242,7 +242,6 @@ describe('WP230 DeepSeek 口：只带工具调用的 assistant（content 为空�
       ],
       policy: {
         default: DEEPSEEK,
-        data_residency: 'cn',
         prices: { 'deepseek/deepseek-chat': { in: 1, out: 2, cached: 0.1 } },
       },
       clock: c,

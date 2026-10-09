@@ -19,7 +19,7 @@ import type {
 } from '@agentsws/contracts'
 
 /**
- * 22 §2 工作区模型策略。`default` + 按 purpose 覆盖 + 数据驻留 + 降级备选 + 价格表 + 三级预算。
+ * 22 §2 工作区模型策略。`default` + 按 purpose 覆盖 + 降级备选 + 价格表 + 三级预算。
  * 价格表按 provider/model 键，单位是每 100 万 token 的基准货币金额。
  */
 export interface PriceEntry {
@@ -51,8 +51,6 @@ export interface ModelGatewayPolicy {
   by_purpose?: Partial<Record<ModelPurpose, ModelRef>>
   /** 同档备选：按 `provider/model` 键，或 `*` 兜底。provider 5xx / 超时时依次尝试。 */
   fallbacks?: Record<string, ModelRef[]>
-  data_residency: 'cn' | 'any'
-  eu_customer_to_cloud_brain?: 'allow' | 'deny'
   prices: PriceTable
   budget?: BudgetPolicy
   estimate?: EstimatePolicy
@@ -61,7 +59,6 @@ export interface ModelGatewayPolicy {
 /** 22 §3 网关自己的事件类型（契约 KnownEventType 里目前只有 model.usage，见报告）。 */
 export type ModelEventType =
   | 'model.usage'
-  | 'model.blocked_residency'
   | 'model.provider_down'
   | 'model.budget_frozen'
   | 'budget.exhausted'
@@ -84,13 +81,6 @@ export interface ModelUsagePayload {
    * 「重发要看得见」：成了也知道中间断过几次、断在哪。
    */
   net_retries?: ProviderNetTry[]
-}
-
-export interface BlockedResidencyPayload {
-  model: ModelRef
-  purpose: ModelPurpose
-  data_residency: 'cn' | 'any'
-  reason: 'region_global' | 'eu_customer_to_cloud_brain'
 }
 
 export interface ProviderDownPayload {
@@ -142,8 +132,6 @@ export interface CompleteRequest extends CompletionStream, CompletionHints {
   tool_choice?: ToolChoice
   /** 运行预算（17 §1 RunRequest.budget.max_cost_base）。同一 run_id 内累计。 */
   max_cost_base?: number
-  /** 该次调用涉及欧洲客户数据（22 §2 eu_customer_to_cloud_brain）。 */
-  eu_customer?: boolean
   /** 覆盖预留时的预计输出 token 数。 */
   estimated_output_tokens?: number
   /**

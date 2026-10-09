@@ -152,7 +152,6 @@ const NO_KEY: ModelProviderView = {
 const DEFAULTS: ModelDefaultsView = {
   default: 'deepseek/deepseek-chat',
   by_purpose: {},
-  data_residency: 'cn',
   budget: {},
   choices: [{ id: 'deepseek/deepseek-chat', label: '我的 DeepSeek（deepseek-chat）' }],
 }
@@ -538,6 +537,27 @@ describe('WP25 §C 模型面板：模板与预设', () => {
     expect(fieldValue('接口地址')).toBe('http://127.0.0.1:11434/v1')
     expect(fieldValue('模型名')).toBe('llama3.1')
     expect(fieldValue('编号')).toBe('ollama')
+  })
+})
+
+/** 决策 291（WP281）：「数据不出境」整套删了，界面上一个相关的字都不许再出现。 */
+const RESIDENCY_WORDS = /不出境|出境|数据驻留|境内|境外|Data residency|China-only|residency/i
+
+describe('WP281 模型面板不再出现数据驻留', () => {
+  it('已配一条 + 打开加模型的表单：没有驻留选择、没有境内外标注', async () => {
+    state.providers = [ACTIVE]
+    const user = userEvent.setup()
+    renderWithProviders(<ModelsPanel assignment="asg_owner" />)
+    await screen.findByRole('button', { name: '改' })
+    expect(screen.queryByTestId('model-residency-select')).toBeNull()
+    const cards = await screen.findAllByTestId('model-template')
+    await user.click(within(cards[2] as HTMLElement).getByText('填 API key'))
+    const form = await screen.findByTestId('model-form')
+    expect(within(form).queryByRole('radio')).toBeNull()
+    // 正文、问号 tooltip、title 属性里都不许有
+    const html = document.body.innerHTML
+    expect(document.body.textContent ?? '').not.toMatch(RESIDENCY_WORDS)
+    expect(html).not.toMatch(/不出境|出境|数据驻留|境内|境外/)
   })
 })
 

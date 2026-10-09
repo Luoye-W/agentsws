@@ -23,10 +23,8 @@ export {
 } from '@agentsws/search-providers'
 export {
   aiRoutes,
-  cnAllowed,
   embeddingTokensOf,
   inputTokensOf,
-  REGION_HEADER,
 } from './ai.js'
 export {
   authenticate,
@@ -65,7 +63,6 @@ export type {
   EntryPrincipal,
   EntryRoute,
   FetchLike,
-  RegionMap,
   SearchUpstream,
   StripeConfig,
   TokenVerifier,

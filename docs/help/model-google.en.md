@@ -22,4 +22,4 @@ This is Google's official OpenAI-compatible endpoint: `https://generativelanguag
 - At Google's list price a 1K image is about $0.034 and 2K about $0.05. The "made with your own account" line on the data board is an estimate; Google's console has the real bill.
 - To use a different image endpoint (or pay with credits), pick one explicitly in the "Image generation" block.
 
-The API key only goes into this computer's encrypted vault — never through the AI, never into logs. Data residency is outside China (global); if this computer can't reach Google, switch image generation to Agents Workshop credits.
+The API key only goes into this computer's encrypted vault — never through the AI, never into logs. If this computer can't reach Google, switch image generation to Agents Workshop credits.

@@ -63,7 +63,6 @@ export const YOUTUBE_FETCH_UNITS = YOUTUBE_UNIT_COST.channel + YOUTUBE_UNIT_COST
 export function youtubeSource(options: { apiKey: () => string | undefined }): KolSource {
   return {
     id: 'youtube',
-    offshore: true,
     units: () => YOUTUBE_FETCH_UNITS,
     async fetch(): Promise<SourceSnapshot | undefined> {
       if (options.apiKey() === undefined)
@@ -80,7 +79,6 @@ export function youtubeSource(options: { apiKey: () => string | undefined }): Ko
 export function fakeYoutubeSource(snapshots: SourceSnapshot[]): KolSource {
   return {
     id: 'youtube',
-    offshore: true,
     units: () => YOUTUBE_FETCH_UNITS,
     fetch: (key: { channel: KolChannel; handle: string }) =>
       Promise.resolve(snapshots.find((s) => s.channel === key.channel && s.handle === key.handle)),

@@ -1,12 +1,10 @@
 /**
- * 取数那一跳：**驻留 → 配额 → 降级**，三步的顺序不能换。
+ * 取数那一跳：**配额 → 降级**，两步的顺序不能换（决策 291 起不再按驻留先判）。
  *
- * 1. **驻留先判**（22 §2 / 21）：`X-Agentsws-Region: cn` 的请求一个境外源都不走——
- *    先判驻留再判配额，是因为"配额还有"永远不该成为走境外源的理由；
- * 2. **配额再判**：YouTube 官方口从全站那个日池子里扣单位，扣不动就降级；
- * 3. **降级**：有 Apify 才降，没有就回一句"今天配额用完了，只查了库"。
+ * 1. **配额**：YouTube 官方口从全站那个日池子里扣单位，扣不动就降级；
+ * 2. **降级**：有 Apify 才降，没有就回一句"今天配额用完了，只查了库"。
  *
- * 三步的结果都是一个 {@link SourceOutcome}：**没取到不是错**。
+ * 两步的结果都是一个 {@link SourceOutcome}：**没取到不是错**。
  * 抛 500 会让"今天配额用完"和"云侧挂了"长得一样。
  */
 import type { Iso8601, KolChannel } from '@agentsws/contracts'
@@ -36,25 +34,14 @@ export interface SourcePoolDeps {
   quota: QuotaPool
 }
 
-/** 把驻留、配额与降级串成一跳。 */
+/** 把配额与降级串成一跳。 */
 export function createSourcePool(deps: SourcePoolDeps): SourceLookup {
   return {
     async fetch(
       key: { channel: KolChannel; handle: string },
-      options: { region: 'cn' | 'global'; at: Iso8601 },
+      options: { at: Iso8601 },
     ): Promise<SourceOutcome> {
-      // 1. 驻留：境外源一个都不走。明说是驻留挡的，不是"没找到"
-      if (options.region === 'cn') {
-        return {
-          used: 'none',
-          reason: 'residency',
-          units: 0,
-          message:
-            '这个工作区选的是数据留在境内，YouTube 官方口与 Apify 都在境外——这一次只查了我们库里已有的资料，没有出境。',
-        }
-      }
-
-      // 2. 官方口 + 配额池
+      // 1. 官方口 + 配额池
       const youtube = deps.youtube
       if (key.channel === 'youtube' && youtube !== undefined) {
         const units = youtube.units()
@@ -71,7 +58,7 @@ export function createSourcePool(deps: SourcePoolDeps): SourceLookup {
         }
       }
 
-      // 3. 降级
+      // 2. 降级
       const apify = deps.apify
       if (apify === undefined) {
         return {

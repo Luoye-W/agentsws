@@ -66,7 +66,6 @@ export type StandInDataErrorCode =
   | 'not_found'
   | 'conflict'
   | 'gone'
-  | 'residency_blocked'
   | 'not_implemented'
 
 const STATUS: Record<StandInDataErrorCode, number> = {
@@ -75,7 +74,6 @@ const STATUS: Record<StandInDataErrorCode, number> = {
   not_found: 404,
   conflict: 409,
   gone: 410,
-  residency_blocked: 422,
   not_implemented: 501,
 }
 

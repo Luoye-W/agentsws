@@ -78,8 +78,6 @@ export interface KolPrincipal {
   org_id: string
   workspace_id: WorkspaceId
   scopes: string[]
-  /** `X-Agentsws-Region: cn` 的请求只查库，不走境外源（22 §2）。 */
-  region: 'cn' | 'global'
 }
 
 export interface KolServiceDeps {
@@ -123,8 +121,6 @@ export type KolSourceId = 'youtube' | 'apify'
  */
 export interface KolSource {
   id: KolSourceId
-  /** 境外源。数据驻留 `cn` 的请求一个都不走（22 §2 / 21）。 */
-  offshore: boolean
   /** 这次取数要花多少配额单位（Apify 不计单位，回 0）。 */
   units(): number
   fetch(key: { channel: KolChannel; handle: string }): Promise<SourceSnapshot | undefined>
@@ -134,7 +130,7 @@ export interface KolSource {
 export interface SourceLookup {
   fetch(
     key: { channel: KolChannel; handle: string },
-    options: { region: 'cn' | 'global'; at: Iso8601 },
+    options: { at: Iso8601 },
   ): Promise<SourceOutcome>
 }
 
@@ -142,8 +138,8 @@ export interface SourceLookup {
 export interface SourceOutcome {
   used: KolSourceId | 'none'
   snapshot?: SourceSnapshot
-  /** `residency` / `quota_exhausted` / `no_source` / `not_found`。 */
-  reason?: 'residency' | 'quota_exhausted' | 'no_source' | 'not_found'
+  /** `quota_exhausted` / `no_source` / `not_found`。 */
+  reason?: 'quota_exhausted' | 'no_source' | 'not_found'
   /** 一句人话。 */
   message: string
   /** 这次用掉多少配额单位（计量与日志用）。 */
@@ -157,7 +153,6 @@ export type KolErrorCode =
   | 'not_found'
   | 'insufficient_credits'
   | 'rate_limited'
-  | 'residency_blocked'
   | 'not_implemented'
   | 'internal'
 
@@ -169,7 +164,6 @@ export const KOL_STATUS: Record<KolErrorCode, number> = {
   // 402 Payment Required：钱不够，这是它唯一一个货真价实的用法
   insufficient_credits: 402,
   rate_limited: 429,
-  residency_blocked: 422,
   not_implemented: 501,
   internal: 500,
 }

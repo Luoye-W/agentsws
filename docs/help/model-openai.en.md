@@ -27,4 +27,4 @@ Create a key at platform.openai.com and pay per token.
 4. Click "Fetch model list" and pick a model (one that can read images).
 5. Click "Test".
 
-The API key only goes into this computer's encrypted store: never through AI, never into logs. Data residency is global: with "China-only models" selected it will be blocked.
+The API key only goes into this computer's encrypted store: never through AI, never into logs.

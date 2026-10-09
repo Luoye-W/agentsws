@@ -63,7 +63,6 @@ function setup(has: boolean) {
     providers: [provider],
     policy: {
       default: ref,
-      data_residency: 'any',
       prices: { 'deepseek/deepseek-flash': { in: 0, out: 0, cached: 0 } },
     },
     clock,

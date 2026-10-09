@@ -28,4 +28,4 @@ This is Anthropic's official OpenAI-compatible endpoint: point the address at `a
 
 - [OpenAI SDK compatibility](https://docs.anthropic.com/en/api/openai-sdk)
 
-The API key only goes into this computer's encrypted store: never through AI, never into logs. Data residency is global.
+The API key only goes into this computer's encrypted store: never through AI, never into logs.

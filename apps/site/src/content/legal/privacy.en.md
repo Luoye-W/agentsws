@@ -59,7 +59,7 @@ You can see which model or data provider will be used before a call runs, and yo
 
 ## 5. Cross-border transfer
 
-Our cloud services run on Cloudflare's global network, and some model or data providers you choose may be located outside mainland China. Using the cloud services may therefore involve transferring data abroad for processing. Where the law requires it, we will obtain your separate consent and put the necessary safeguards in place. You can also avoid any transfer by using only your own keys and running everything locally.
+Our cloud services run on Cloudflare's global network, and some model or data providers you choose may be located outside mainland China. Using the cloud services may therefore involve transferring data abroad for processing. Where the law requires it, we will obtain your separate consent and put the necessary safeguards in place. The cloud services do not offer a separate "keep data in China" option. If you don't want data to pass through our cloud, use only your own keys and run everything locally — data then goes straight to the model or data provider you picked, and whether it leaves China depends on that provider.
 
 ## 6. How long we keep data
 

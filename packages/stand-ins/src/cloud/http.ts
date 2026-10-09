@@ -165,7 +165,6 @@ export class CloudAccountsStandIn {
           org_id: l.cloud_org_id,
           workspace_id: l.workspace_id,
           scopes: [...l.scopes],
-          region: 'global',
           link_id: l.id,
         }
     return undefined

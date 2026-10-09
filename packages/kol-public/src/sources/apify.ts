@@ -6,7 +6,6 @@
  *
  * 1. **没有 `APIFY_TOKEN` 就不降级**——回一句"今天配额用完了"，
  *    而不是悄悄换一个别的源。用户看到的"数据从哪来"必须一直是真的（40 §1）。
- * 2. Apify 是**境外**源：数据驻留 `cn` 的请求一个都不走它（22 §2）。
  *
  * 与 `youtube.ts` 同一条：这一版只有接口与假实现，真的 actor run 留给后续 WP。
  */
@@ -19,7 +18,6 @@ export const APIFY_UNITS = 0
 export function apifySource(options: { token: () => string | undefined }): KolSource {
   return {
     id: 'apify',
-    offshore: true,
     units: () => APIFY_UNITS,
     async fetch(): Promise<SourceSnapshot | undefined> {
       if (options.token() === undefined)
@@ -36,7 +34,6 @@ export function apifySource(options: { token: () => string | undefined }): KolSo
 export function fakeApifySource(snapshots: SourceSnapshot[]): KolSource {
   return {
     id: 'apify',
-    offshore: true,
     units: () => APIFY_UNITS,
     fetch: (key: { channel: KolChannel; handle: string }) =>
       Promise.resolve(snapshots.find((s) => s.channel === key.channel && s.handle === key.handle)),

@@ -42,7 +42,6 @@ vi.mock('@/lib/api', async () => {
     getModelDefaults: async () => ({
       default: '',
       by_purpose: {},
-      data_residency: 'cn',
       budget: {},
       choices: [],
     }),

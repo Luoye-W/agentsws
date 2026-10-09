@@ -32,4 +32,4 @@ roles: []
 
 - [OpenAI SDK 兼容层说明](https://docs.anthropic.com/en/api/openai-sdk)
 
-API key 只进这台电脑的加密库，不经 AI、不进日志。数据驻留是境外（global）。
+API key 只进这台电脑的加密库，不经 AI、不进日志。

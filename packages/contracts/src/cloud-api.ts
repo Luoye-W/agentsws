@@ -66,7 +66,6 @@ import type {
   DataCallRequest,
   DataCallResult,
   DataCapabilityList,
-  DataRegionHeaders,
   DataTaskItemsPage,
   DataTaskItemsQuery,
   DataTaskParams,
@@ -207,6 +206,7 @@ export type CloudEntryErrorCode =
   | 'forbidden'
   | 'invalid_input'
   | 'insufficient_credits'
+  /** @deprecated 决策 291（WP281）：「数据不出境」删了，不再产生；只为老回包解析不崩先留着。 */
   | 'residency_blocked'
   | 'not_implemented'
   | 'provider_error'
@@ -504,13 +504,6 @@ export interface TopupRequest {
 /* AI（`/v1/ai/*`，OpenAI 兼容）                                        */
 /* ------------------------------------------------------------------ */
 
-/**
- * 我们加的请求头：数据驻留。`cn` = 只允许境内可用的模型，否则 422 `residency_blocked`。
- */
-export interface AiRegionHeaders extends AttributionHeaders {
-  'X-Agentsws-Region'?: 'cn' | 'global'
-}
-
 /** OpenAI 兼容的 usage（结算按它）。 */
 export interface AiUsage {
   prompt_tokens?: number
@@ -613,7 +606,7 @@ export interface AiImages {
   [key: string]: unknown
 }
 
-/** `GET /v1/ai/models`：带 `X-Agentsws-Region: cn` 时只列境内可用的。 */
+/** `GET /v1/ai/models`：这把令牌能用的模型清单。 */
 export interface AiModelList {
   object: 'list'
   data: { id?: string; [key: string]: unknown }[]
@@ -987,8 +980,6 @@ interface AiErrors extends EntryAuthErrors {
   400: 'invalid_input'
   /** 余额不够这一次的预扣（只拒这一次，不冻结）；或本人 / 岗位本月额度到了（WP194，`details.reason`） */
   402: 'insufficient_credits'
-  /** 数据驻留：`X-Agentsws-Region: cn` 却点了境外模型 */
-  422: 'residency_blocked'
   /** 云侧没配上游密钥 / 价目表缺这一项（没扣积分） */
   500: 'internal'
   /** 上游连不上（没扣积分） */
@@ -1004,7 +995,7 @@ export interface CloudAiApi {
     auth: 'workspace_token'
     scope: 'ai'
     tag: 'ai'
-    headers: AiRegionHeaders
+    headers: AttributionHeaders
     body: AiChatCompletionRequest
     ok: { status: 200; body: AiChatCompletion; sse: AiChatCompletionChunk }
     errors: AiErrors
@@ -1015,7 +1006,7 @@ export interface CloudAiApi {
     auth: 'workspace_token'
     scope: 'ai'
     tag: 'ai'
-    headers: AiRegionHeaders
+    headers: AttributionHeaders
     body: AiEmbeddingsRequest
     ok: { status: 200; body: AiEmbeddings }
     errors: AiErrors
@@ -1026,18 +1017,18 @@ export interface CloudAiApi {
     auth: 'workspace_token'
     scope: 'ai'
     tag: 'ai'
-    headers: AiRegionHeaders
+    headers: AttributionHeaders
     body: AiImageRequest
     ok: { status: 200; body: AiImages }
     errors: AiErrors
     errorBody: CloudEntryErrorBody
   }
-  /** 这把令牌能用的模型清单（不扣积分）；带 `X-Agentsws-Region: cn` 时只列境内可用的 */
+  /** 这把令牌能用的模型清单（不扣积分） */
   'GET /v1/ai/models': {
     auth: 'workspace_token'
     scope: 'ai'
     tag: 'ai'
-    headers: AiRegionHeaders
+    headers: AttributionHeaders
     ok: { status: 200; body: AiModelList }
     errors: EntryAuthErrors
     errorBody: CloudEntryErrorBody
@@ -1099,8 +1090,6 @@ interface DataServiceErrors extends EntryAuthErrors {
   402: 'insufficient_credits'
   /** 没有这项能力 / 没有这个任务（别的组织的任务也是这一句） */
   404: 'not_found'
-  /** 境外渠道被数据驻留挡住 */
-  422: 'residency_blocked'
   /** 这个组织今天的次数 / 同时在跑的任务到上限了（后台可调） */
   429: 'rate_limited'
   /** 这项能力云上还没开通（一分不扣） */
@@ -1114,7 +1103,6 @@ export interface CloudDataServiceApi {
     auth: 'workspace_token'
     scope: 'data'
     tag: 'data-service'
-    headers: DataRegionHeaders
     ok: { status: 200; body: CloudDataEnvelope<DataCapabilityList> }
     errors: EntryAuthErrors
     errorBody: CloudEntryErrorBody
@@ -1125,7 +1113,6 @@ export interface CloudDataServiceApi {
     scope: 'data'
     tag: 'data-service'
     params: DataCallParams
-    headers: DataRegionHeaders
     body: DataCallRequest
     ok: { status: 200; body: CloudDataEnvelope<DataCallResult> }
     errors: DataServiceErrors
@@ -1136,7 +1123,6 @@ export interface CloudDataServiceApi {
     auth: 'workspace_token'
     scope: 'data'
     tag: 'data-service'
-    headers: DataRegionHeaders
     body: DataTaskSubmit
     ok: { status: 202; body: CloudDataEnvelope<DataTaskView>; description: '已受理（排队中）' }
     alt: {
@@ -1207,6 +1193,7 @@ export interface KolPublicRefreshResult {
   /** 有没有真的去外部取一次数。 */
   refreshed: boolean
   used: 'youtube' | 'apify' | 'none'
+  /** `residency` 已废弃（决策 291 / WP281：不再产生，只为老回包解析不崩先留着）。 */
   reason?: 'residency' | 'quota_exhausted' | 'no_source' | 'not_found'
   message: string
   credits: number
@@ -1374,7 +1361,7 @@ export interface CloudKolPublicApi {
     scope: 'data'
     tag: 'kol-public'
     query: PublicCreatorQuery
-    headers: AiRegionHeaders
+    headers: AttributionHeaders
     ok: { status: 200; body: CloudDataEnvelope<KolPublicBrowseResult> }
     errors: KolChargedErrors
     errorBody: CloudEntryErrorBody
@@ -1409,13 +1396,13 @@ export interface CloudKolPublicApi {
     errors: KolChargedErrors & { 404: 'not_found' }
     errorBody: CloudEntryErrorBody
   }
-  /** 去外部源刷新一次（`social.fetch`；`X-Agentsws-Region: cn` 只查库） */
+  /** 去外部源刷新一次（`social.fetch`） */
   'POST /v1/data/kol/creators/{channel}/{handle}/refresh': {
     auth: 'workspace_token'
     scope: 'data'
     tag: 'kol-public'
     params: KolPublicCreatorParams
-    headers: AiRegionHeaders
+    headers: AttributionHeaders
     ok: { status: 200; body: CloudDataEnvelope<KolPublicRefreshResult> }
     errors: KolChargedErrors
     errorBody: CloudEntryErrorBody

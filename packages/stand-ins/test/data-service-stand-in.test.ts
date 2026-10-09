@@ -19,7 +19,6 @@ const me = {
   org_id: 'org_1',
   workspace_id: 'ws_1',
   scopes: ['data'],
-  region: 'global' as const,
 }
 const other = { ...me, account_id: 'acc_2', org_id: 'org_2', workspace_id: 'ws_2' }
 

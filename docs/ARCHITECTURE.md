@@ -129,7 +129,7 @@ existing one requires a major version and a migrator.
 | 4 | Change ledger & guardrail | `changes.ts` | `StagedChange`, the change-kind catalogue with per-kind `risk_class`, mandates and caps. |
 | 5 | Executor | `changes.ts` | `stage` / `apply` / `reconcile` / `cancel`; provenance and fencing at the entrance; three-state apply. |
 | 6 | Run protocol | `run.ts` | `RunRequest` / `RunOutput` and ten run events; stateless — a run carries all its context. |
-| 7 | Model gateway | `model.ts` | Completion, routing, accounting per (workspace, assignment, role, run, purpose), three budget levels, residency, halt, transcription. |
+| 7 | Model gateway | `model.ts` | Completion, routing, accounting per (workspace, assignment, role, run, purpose), three budget levels, halt, transcription. |
 | 8 | Connect | `connect.ts` | Action execution, scoped token issuance, connection management, proxying. Credentials never appear in a return value. |
 | 9 | Inbound | `channels.ts` | Channel adapters, the inbound pipeline (dedupe, fencing, secret scrubbing, routing, dead-letter, retry). |
 | 10 | Knowledge & memory | `knowledge.ts` | Fact cards, three layers, identity-aware retrieval, proposal queue, run memory discipline. |

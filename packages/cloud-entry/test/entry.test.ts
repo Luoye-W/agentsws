@@ -4,7 +4,7 @@
  * 每个用例锁一条"反过来做会出事"的行为：
  * - 流式也要计量 → 否则只要带 `stream: true` 就白嫖；
  * - 余额不足 402 人话 → 否则用户看到一个 500，以为是我们挂了；
- * - cn 驻留拦截 → 否则"数据不出境"是一句空话；
+ * - 老客户端带驻留头不拦（决策 291）→ 否则升级前的本机一打境外模型就 422；
  * - webhook 幂等 → Stripe 会重投，重投不该变成重复充值；
  * - 无 scope 403 → 令牌最小动作集（18 §1）。
  */
@@ -84,7 +84,6 @@ function harness(over: Partial<EntryDeps> = {}): Harness {
       ai: {
         base_url: 'https://upstream.invalid/v1',
         api_key: () => 'internal-key-never-leaves',
-        region_map: { 'deepseek-flash': ['cn', 'global'], 'gpt-5-mini': ['global'] },
       },
     },
     stripe: {
@@ -306,8 +305,8 @@ describe('余额不足 402', () => {
   })
 })
 
-describe('数据驻留（22 §2）', () => {
-  it('cn 的请求打境外模型：422 + 人话，一次上游都不打', async () => {
+describe('决策 291：不再按数据驻留拦', () => {
+  it('老客户端带 X-Agentsws-Region: cn 打境外模型：头被忽略，照常转发', async () => {
     const h = harness()
     h.wallet.topup({ org_id: 'org_1', credits: 100, kind: 'purchased' })
     const res = await h.app.fetch(
@@ -317,27 +316,11 @@ describe('数据驻留（22 §2）', () => {
         body: JSON.stringify({ model: 'gpt-5-mini', messages: [] }),
       }),
     )
-    expect(res.status).toBe(422)
-    const body = (await res.json()) as { code: string; message: string }
-    expect(body.code).toBe('residency_blocked')
-    expect(body.message).toContain('数据不出境')
-    expect(h.calls).toHaveLength(0)
-  })
-
-  it('cn 的请求打境内模型：照常放行', async () => {
-    const h = harness()
-    h.wallet.topup({ org_id: 'org_1', credits: 100, kind: 'purchased' })
-    const res = await h.app.fetch(
-      new Request('http://entry/v1/ai/chat/completions', {
-        method: 'POST',
-        headers: { ...auth(), 'content-type': 'application/json', 'X-Agentsws-Region': 'cn' },
-        body: JSON.stringify({ model: 'deepseek-flash', messages: [] }),
-      }),
-    )
     expect(res.status).toBe(200)
+    expect(h.calls).toHaveLength(1)
   })
 
-  it('/v1/ai/models 带 cn 时只列境内可用的', async () => {
+  it('/v1/ai/models 带老的 cn 头也列全', async () => {
     const h = harness()
     h.setUpstream(async () =>
       Response.json({ object: 'list', data: [{ id: 'deepseek-flash' }, { id: 'gpt-5-mini' }] }),
@@ -348,7 +331,7 @@ describe('数据驻留（22 §2）', () => {
       }),
     )
     const body = (await res.json()) as { data: { id: string }[] }
-    expect(body.data.map((m) => m.id)).toEqual(['deepseek-flash'])
+    expect(body.data.map((m) => m.id)).toEqual(['deepseek-flash', 'gpt-5-mini'])
   })
 })
 

@@ -108,7 +108,7 @@ set -a; . "$ENV_FILE"; set +a
 #   AGENTSWS_SIM_MODEL_NAME=<model>               # 拿 `GET {base}/models` 列出来的名字，别手编
 #   AGENTSWS_SIM_MODEL_BASE_URL=<https://…/v1>    # OpenAI 兼容口的根地址
 #   AGENTSWS_SIM_MODEL_API_KEY=<key>              # 只放这里；想换个变量名就设 _API_KEY_ENV
-#   AGENTSWS_SIM_MODEL_REGION=cn|global           # 22 §2 数据出境：cn 驻留下禁 global
+#   AGENTSWS_SIM_MODEL_REGION=cn|global           # 只作记录（决策 291 起不按地域拦）
 #   AGENTSWS_SIM_MODEL_PRICE_IN/_OUT/_CACHED=<每百万 token>   # 不设就查内置价目表（catalog.json）
 #
 # 阿里云百炼 **Token Plan**（按套餐 Credits 抵扣，不按 token 计费）：

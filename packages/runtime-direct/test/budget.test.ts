@@ -124,7 +124,6 @@ describe('预算是硬的（17 §5.3 §5.6）', () => {
       ],
       policy: {
         default: MODEL,
-        data_residency: 'cn',
         prices: { 'stub/scripted-v1': { in: 1, out: 2, cached: 0.1 } },
       },
       clock: c,
@@ -158,7 +157,6 @@ describe('预算是硬的（17 §5.3 §5.6）', () => {
       ],
       policy: {
         default: MODEL,
-        data_residency: 'cn',
         prices: { 'stub/scripted-v1': { in: 1, out: 2, cached: 0.1 } },
       },
       clock: c,

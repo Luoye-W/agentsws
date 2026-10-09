@@ -126,9 +126,8 @@ function hubOf(call: NonNullable<ResearchToolsOptions['callData']>): RedditHubPo
       } catch (err) {
         const code = (err as { code?: unknown }).code
         const message = err instanceof Error ? err.message : String(err)
-        // 没关联账号、云上这项能力还没开通、积分不够、数据驻留挡住：都是「这一路现在用不了」
-        const notConfigured =
-          code === 'not_implemented' || code === 'budget_exhausted' || code === 'residency_blocked'
+        // 没关联账号、云上这项能力还没开通、积分不够：都是「这一路现在用不了」
+        const notConfigured = code === 'not_implemented' || code === 'budget_exhausted'
         return { ok: false, reason: notConfigured ? 'not_configured' : 'failed', message }
       }
     },

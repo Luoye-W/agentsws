@@ -37,7 +37,6 @@ import {
 } from './pricing.js'
 import { deepseekQuotaKindOf } from './providers/deepseek-quota.js'
 import type {
-  BlockedResidencyPayload,
   BudgetExhaustedPayload,
   BudgetFrozenPayload,
   CompleteRequest,
@@ -91,8 +90,6 @@ export interface UsageFilter {
  */
 export interface TranscribeRequest extends Omit<TranscribeAudio, 'ref'> {
   bytes: Uint8Array
-  /** 该次转写涉及欧洲客户数据（22 §2 eu_customer_to_cloud_brain；音频同 eu 规则）。 */
-  eu_customer?: boolean
   max_cost_base?: number
   /** 覆盖预留时的预计输出 token 数（默认 0：ASR 的输出相对音频成本可忽略）。 */
   estimated_output_tokens?: number
@@ -245,38 +242,6 @@ class Gateway implements ModelGatewayApi {
     return found
   }
 
-  /** 22 §2 数据出境：cn 驻留下禁 region=global；欧洲客户数据按策略禁 cloud_brain。 */
-  private assertResidency(
-    ref: ModelRef,
-    provider: ModelProvider,
-    ctx: BudgetCtx,
-    purpose: ModelMeta['purpose'],
-    euCustomer: boolean,
-  ): void {
-    const policy = this.opts.policy
-    const region = ref.region ?? provider.ref.region
-    const block = (reason: BlockedResidencyPayload['reason'], message: string): never => {
-      const payload: BlockedResidencyPayload = {
-        model: { ...ref, ...(region === undefined ? {} : { region }) },
-        purpose,
-        data_residency: policy.data_residency,
-        reason,
-      }
-      this.emit('model.blocked_residency', ctx, payload)
-      throw new GatewayError('forbidden', message, payload)
-    }
-    if (policy.data_residency === 'cn' && region === 'global') {
-      block('region_global', 'data_residency cn forbids region global provider')
-    }
-    if (
-      euCustomer &&
-      ref.provider === 'cloud_brain' &&
-      (policy.eu_customer_to_cloud_brain ?? 'deny') === 'deny'
-    ) {
-      block('eu_customer_to_cloud_brain', 'eu customer data may not reach cloud_brain')
-    }
-  }
-
   private candidates(ref: ModelRef): ModelRef[] {
     const fallbacks = this.opts.policy.fallbacks
     const list = fallbacks?.[priceKey(ref)] ?? fallbacks?.['*'] ?? []
@@ -364,7 +329,6 @@ class Gateway implements ModelGatewayApi {
     const ctx = ctxOf(meta)
     const primary = this.resolveRef(meta, req.model)
     const primaryProvider = this.findProvider(primary)
-    this.assertResidency(primary, primaryProvider, ctx, meta.purpose, req.eu_customer === true)
     const withImages = hasImagePart(req.messages)
     // WP127：声明了看不了图的模型，带图的请求在这里就拦下——不花钱、说人话。
     // 验证那一次（`capability_probe`）不拦：它问的正是"现在还看不看得了"。
@@ -445,7 +409,6 @@ class Gateway implements ModelGatewayApi {
         try {
           provider = this.findProvider(ref)
           if (ref !== primary) {
-            this.assertResidency(ref, provider, ctx, meta.purpose, req.eu_customer === true)
             priceFor(this.opts.policy.prices, ref)
             // 降级到一个看不了图的备选，等于把图悄悄丢掉：跳过它
             if (withImages && req.capability_probe !== true) assertCanSee(ref, provider)
@@ -565,7 +528,6 @@ class Gateway implements ModelGatewayApi {
     const ctx = ctxOf(meta)
     const ref = this.resolveRef(meta, model)
     const provider = this.findProvider(ref)
-    this.assertResidency(ref, provider, ctx, meta.purpose, false)
     if (provider.embed === undefined) {
       throw new GatewayError('invalid_input', 'provider does not support embed', {
         model: priceKey(ref),
@@ -618,7 +580,6 @@ class Gateway implements ModelGatewayApi {
     const ctx = ctxOf(meta)
     const ref = this.resolveRef(meta, model)
     const provider = this.findProvider(ref)
-    this.assertResidency(ref, provider, ctx, meta.purpose, req.eu_customer === true)
     if (provider.transcribe === undefined) {
       throw new GatewayError('not_implemented', 'provider does not support transcribe', {
         model: priceKey(ref),
