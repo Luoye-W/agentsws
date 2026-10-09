@@ -61,6 +61,18 @@ export function createFileRoleRuleBackend(file: string): RoleRuleBackend {
   }
 }
 
+/** 有了结论、不会再落成规矩的那几种状态（「不用」也是一次批准，所以批准类也在里面）。 */
+const SETTLED = new Set<string>([
+  'approved',
+  'approved_edited',
+  'applying',
+  'applied',
+  'rejected',
+  'withdrawn',
+  'expired',
+  'superseded',
+])
+
 /** 数据目录下规矩簿那个文件。 */
 export const roleRulesFileIn = (dbDir: string): string => join(dbDir, 'role-rules.json')
 
@@ -69,8 +81,14 @@ export interface RoleRuleUndo {
   target: 'role_rule'
   rule_id: string
   before: RoleRule | null
+  /** 删的时候一起退役的工具箱目录项（撤回时放回去）；没有 = 不用放。 */
+  catalog_note?: unknown
   [key: string]: unknown
 }
+
+/** 工具箱里那条「规矩」目录项的 id（指导那一刻记的：`rule:<策略卡 id>`）。 */
+export const ruleCatalogId = (rule: Pick<RoleRule, 'source_card_id'>): string | undefined =>
+  rule.source_card_id === undefined ? undefined : `rule:${rule.source_card_id}`
 
 export interface RoleRulesOptions {
   clock: Clock
@@ -82,6 +100,12 @@ export interface RoleRulesOptions {
   /** 这个人是不是这家的老板 / 管理员（③ 改规矩只认他们）。 */
   managerOf(person_id: PersonId, workspace_id: string): Promise<'owner' | 'admin' | undefined>
   nameOf(person_id: PersonId): Promise<string | undefined>
+  /**
+   * 删一句时把工具箱里那条「规矩」目录项一起退役（回退役前那一份，撤回时原样放回）。
+   * 不给 = 目录不动（老行为）。
+   */
+  retireCatalog?(workspace_id: string, entry_id: string): unknown
+  restoreCatalog?(workspace_id: string, entry_id: string, note: unknown): void
   /** ② 改了 / 删了一句：做这条职责的同事各一张「知道了 / 撤回」。 */
   notifyPeers?(input: {
     workspace_id: string
@@ -162,7 +186,12 @@ export function createRoleRules(options: RoleRulesOptions): RoleRulesAssembly {
     return row
   }
 
-  const tellPeers = (actor: RoleRulesActor, before: RoleRule, after: RoleRule | null): void => {
+  const tellPeers = (
+    actor: RoleRulesActor,
+    before: RoleRule,
+    after: RoleRule | null,
+    catalog_note?: unknown,
+  ): void => {
     if (options.modeOf(actor.workspace_id) !== 'peers' || options.notifyPeers === undefined) return
     void options
       .notifyPeers({
@@ -171,7 +200,12 @@ export function createRoleRules(options: RoleRulesOptions): RoleRulesAssembly {
         role_id: before.role_id,
         before: before.text,
         after: after?.text ?? null,
-        undo: { target: 'role_rule', rule_id: before.id, before },
+        undo: {
+          target: 'role_rule',
+          rule_id: before.id,
+          before,
+          ...(catalog_note === undefined ? {} : { catalog_note }),
+        },
       })
       .catch(() => undefined)
   }
@@ -200,8 +234,14 @@ export function createRoleRules(options: RoleRulesOptions): RoleRulesAssembly {
     async remove(actor, role_id, rule_id) {
       const before = await mine(actor, role_id, rule_id)
       book.remove(rule_id)
-      emit('role_rule.removed', actor.workspace_id, actor.person_id, before)
-      tellPeers(actor, before, null)
+      // 工具箱里那条「规矩」一起退役（不然删了规矩，工具箱上还挂着它）
+      const entry = ruleCatalogId(before)
+      const catalog_note =
+        entry === undefined ? undefined : options.retireCatalog?.(actor.workspace_id, entry)
+      emit('role_rule.removed', actor.workspace_id, actor.person_id, before, {
+        ...(catalog_note === undefined ? {} : { catalog_retired: true }),
+      })
+      tellPeers(actor, before, null, catalog_note)
       return { removed: true as const }
     },
   }
@@ -212,7 +252,11 @@ export function createRoleRules(options: RoleRulesOptions): RoleRulesAssembly {
     onDecided(item) {
       if (!isInstructionRuleCard(item)) return undefined
       const rule = ruleFromCard(item, nextId(), options.clock.now())
-      if (rule === undefined) return undefined
+      if (rule === undefined) {
+        // 选了「不用」/ 被拒 / 过期：指导那一刻记进工具箱的那条「规矩」没落成，一起退役
+        if (SETTLED.has(item.state)) options.retireCatalog?.(item.workspace_id, `rule:${item.id}`)
+        return undefined
+      }
       const out = book.add(rule)
       if (out.added)
         emit('role_rule.added', item.workspace_id, rule.by, out.rule, {
@@ -229,6 +273,9 @@ export function createRoleRules(options: RoleRulesOptions): RoleRulesAssembly {
         return
       }
       book.put(undo.before)
+      const entry = ruleCatalogId(undo.before)
+      if (entry !== undefined && undo.catalog_note !== undefined && undo.catalog_note !== null)
+        options.restoreCatalog?.(undo.before.workspace_id, entry, undo.catalog_note)
       emit('role_rule.restored', undo.before.workspace_id, by, undo.before)
     },
   }

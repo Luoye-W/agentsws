@@ -290,6 +290,8 @@ async function landInstruction(
   if (!lesson) {
     // WP284（决策 275）：「以后都这样」那张策略卡的形状与模拟世界共用一份（`@agentsws/core`）；
     // 批了以后由宿主落成这条职责规矩里的一句话（服务端 `role-rules.ts`）
+    // ③ 发给批策略变更的老板（普通成员自己点不了，收件人令牌不在他手上）；① ② 本人
+    const approver = await deps.instructionRuleApprover?.(input.workspace_id)
     const created = await deps.approvals.create(
       instructionRuleCard({
         workspace_id: input.workspace_id,
@@ -297,6 +299,7 @@ async function landInstruction(
         assignment_id: input.assignment_id,
         item,
         text,
+        ...(approver === undefined ? {} : { approver }),
       }),
     )
     if (created.state === 'blocked') return undefined

@@ -68,7 +68,7 @@ export const INSTRUCTION_RULE_FORM = 'instruction_rule'
 /**
  * 出「以后都这样」那张策略卡的输入（API 的指导落地与模拟世界共用）。
  *
- * 路由照旧：收件人是写指导的本人、`via: owner`（③ 也是「按现有路由」，见 WP284 报告）。
+ * 路由：① ② 收件人是写指导的本人；③ 给了 `approver`（老板）就发给他，与改职责规矩同一条路。
  */
 export function instructionRuleCard(input: {
   workspace_id: string
@@ -77,6 +77,11 @@ export function instructionRuleCard(input: {
   /** 指导写在哪张卡上。 */
   item: Pick<ApprovalItem, 'id' | 'role_id' | 'subject' | 'title'>
   text: string
+  /**
+   * WP284（docs/95 §5）：③ 有审批流——卡发给批策略变更的那个人（老板），与改职责规矩同一条路；
+   * 不给（① ②）= 写指导的本人自己点。
+   */
+  approver?: string
 }): CreateApprovalInput<InstructionRulePayload> {
   const { item, text } = input
   return {
@@ -87,7 +92,7 @@ export function instructionRuleCard(input: {
     // 指导产的卡永远 L1：指导本身不改任何东西，改不改由人再批一次
     automation: { level_at_creation: 'L1' },
     routing: {
-      recipients: [{ person: input.person_id, via: 'owner' }],
+      recipients: [{ person: input.approver ?? input.person_id, via: 'owner' }],
       rule: 'owner',
       escalation: { after_hours: 48, business_hours: true, chain: ['owner'], escalated_at: [] },
       separation_of_duties: false,

@@ -2596,6 +2596,16 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     modeOf: (ws) => modeOfWorkspaceSync?.(ws),
     managerOf: (person_id, ws) => creditsRoleOf(person_id, ws),
     nameOf: async (person_id) => (await identity.getPerson(person_id))?.name,
+    // 删规矩时工具箱里那条「规矩」目录项一起退役（目录自己保管的那份注记删掉；撤回时原样放回）
+    retireCatalog: (ws, entry_id) => {
+      const note = catalog.index.store.get(ws as WorkspaceId, entry_id)
+      if (note === undefined) return undefined
+      catalog.index.store.replace?.(ws as WorkspaceId, entry_id, undefined)
+      return note
+    },
+    restoreCatalog: (ws, entry_id, note) => {
+      catalog.index.store.replace?.(ws as WorkspaceId, entry_id, note as CatalogNote)
+    },
     notifyPeers: async (input) => {
       const to = roles.assignments
         .listByRole(input.role_id, { workspace_id: input.workspace_id })
@@ -9724,6 +9734,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     personas: personaPort,
     // WP284（决策 275）：职责规矩里那几句「以后都这样」（看 / 改 / 删）
     roleRules: roleRules.port,
+    // WP284（docs/95 §5）：③ 里「以后都这样」那张卡发给老板（与改职责规矩同一条路：品牌所有者），① ② 本人
+    instructionRuleApprover: async (ws) =>
+      hasApprovalFlow((await modeOfWorkspace?.(ws)) ?? 'company')
+        ? (await identity.getWorkspace(ws))?.owner_id
+        : undefined,
     // WP68（48 §5.4）：本地红人库 `/v1/kol/*`（一个品牌一张库、一段加密库）
     kol: kolPortOf,
     // WP119（68）：浏览器插件 `/v1/extension/*`（配对码、插件令牌、观测入库）

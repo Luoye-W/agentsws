@@ -3454,7 +3454,7 @@ const zh: Table = {
   'deck.receipt.instruct.single_reply': '记下了：这一条按你说的重写，改好再给你看。',
   'deck.receipt.instruct.similar_cases':
     '记下了：下次类似的情况也这样办（已经提成一张卡，你批了才生效）。',
-  'deck.receipt.instruct.global_rule': '记下了：出了一张卡，点「记进规矩」以后都这样。',
+  'deck.receipt.instruct.global_rule': '记下了：出了一张卡，老板批了以后都这样。',
   'deck.receipt.reject': '记下了：这张不办，理由会让它下次少犯。',
   'deck.receipt.snooze': '先放一放，过几个小时它再回来。',
   'deck.receipt.choice': '记下了：以后遇到这种情况就按你选的办。',
@@ -7449,7 +7449,8 @@ const en: Table = {
     'Noted: this one will be rewritten your way and shown to you again.',
   'deck.receipt.instruct.similar_cases':
     'Noted: similar cases will go this way next time (a card is waiting for your approval).',
-  'deck.receipt.instruct.global_rule': 'Noted: a card is out — accept it and this becomes a rule.',
+  'deck.receipt.instruct.global_rule':
+    'Noted: a card went to the boss — once approved, this becomes a rule.',
   'deck.receipt.reject': 'Noted: not doing this one, and your reason is kept for next time.',
   'deck.receipt.snooze': 'Put aside; it will come back in a few hours.',
   'deck.receipt.choice': 'Noted: cases like this will follow your choice from now on.',

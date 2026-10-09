@@ -72,6 +72,24 @@ describe('WP284 「以后都这样」那张策略卡', () => {
     expect(isInstructionRuleCard(card)).toBe(true)
   })
 
+  it('③ 给了批的人（老板）就发给他，提的人还是写指导的那位', () => {
+    const card = instructionRuleCard({
+      workspace_id: 'ws_1',
+      person_id: 'per_he',
+      assignment_id: 'asg_he',
+      item: {
+        id: 'apr_src',
+        role_id: 'dtc.support',
+        title: '回复 Anna',
+        subject: { object: { type: 'thread', id: 'thr_1' } },
+      },
+      text: '退款先问我',
+      approver: 'per_boss',
+    })
+    expect(card.routing.recipients).toEqual([{ person: 'per_boss', via: 'owner' }])
+    expect(card.proposer).toEqual({ kind: 'person', id: 'per_he' })
+  })
+
   it('只认这种卡：别的策略卡（开公司通知、边界问题）不算', () => {
     expect(
       isInstructionRuleCard(policyCard({ subject: { object: { type: 'policy', id: 'bnd_x' } } })),

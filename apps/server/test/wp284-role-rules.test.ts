@@ -6,7 +6,8 @@
  *    下一次运行的提示词里带着它（替身模型收到的 messages 里也有）；改了 / 删了，再下一次就跟着变；
  * 2. 选「维持现状」/ 稍后 → 什么都不落；
  * 3. ② 同事也能改，做这条职责的人收「知道了 / 撤回」，撤回就落回原句；
- * 4. ③ 照现有路由批了才落；改 / 删只有老板与管理员。
+ * 4. ③ 卡发给老板（与改职责规矩同一条路），普通成员自己点 403，老板批了才落；改 / 删只有老板与管理员；
+ * 5'. 删一句时工具箱里那条「规矩」一起退役，② 撤回时一起回来。
  *
  * 294 ③ 里没岗位的同事（只有「工作区成员」那条）：
  * 5. 能点发给他本人的「知道了 / 我要退出」；点不了发给他的审批类卡、也点不了别人的卡。
@@ -145,15 +146,24 @@ async function draft(to = owner()): Promise<ApprovalItem> {
 }
 
 /** 在一张卡上指导「以后都这样」→ 回那张策略卡的 id。 */
-async function teach(item: ApprovalItem, text = RULE): Promise<string> {
+async function teach(
+  item: ApprovalItem,
+  text = RULE,
+  as: { token?: string; assignment?: string } = {},
+): Promise<string> {
   const out = await data<{ instruction_proposal?: { kind: string; approval_item_id: string } }>(
     await call('POST', `/v1/approvals/${item.id}/decide`, {
+      ...as,
       body: { action: 'instruct', instruction: { scope: 'global_rule', text } },
     }),
   )
   expect(out.instruction_proposal?.kind).toBe('policy_change')
   return out.instruction_proposal?.approval_item_id ?? ''
 }
+
+/** 工具箱里「规矩」那几条的 id。 */
+const toolboxRules = async (): Promise<string[]> =>
+  (await data<{ id: string }[]>(await call('GET', '/v1/catalog?kind=rule'))).map((e) => e.id)
 
 const rules = async (as: { token?: string; assignment?: string } = {}) =>
   data<RoleRuleView[]>(await call('GET', '/v1/roles/dtc.support/rules', as))
@@ -261,10 +271,12 @@ describe('WP284 「以后都这样」批了真落库（决策 275）', () => {
     expect(afterEdit).toContain('30 美元')
     expect(afterEdit).not.toContain('50 美元')
 
-    // 删掉：下一次整节不出
+    // 删掉：下一次整节不出；工具箱里那条「规矩」一起退役
+    expect(await toolboxRules()).toContain(`rule:${policy}`)
     const removed = await call('DELETE', `/v1/roles/dtc.support/rules/${rule?.id}`)
     expect(removed.status).toBe(200)
     expect(await rules()).toEqual([])
+    expect(await toolboxRules()).not.toContain(`rule:${policy}`)
     expect(ruleSection(await runOnce())).toBeUndefined()
     // 不存在的那句：404
     expect((await call('DELETE', `/v1/roles/dtc.support/rules/${rule?.id}`)).status).toBe(404)
@@ -285,6 +297,10 @@ describe('WP284 「以后都这样」批了真落库（决策 275）', () => {
       (await call('POST', `/v1/approvals/${later}/decide`, { body: { action: 'snooze' } })).status,
     ).toBe(200)
     expect(await rules()).toEqual([])
+    // 工具箱：选了「不用」的那条一起退役；稍后再说的还在（还没定）
+    const box = await toolboxRules()
+    expect(box).not.toContain(`rule:${kept}`)
+    expect(box).toContain(`rule:${later}`)
 
     const policy = await teach(await draft())
     await call('POST', `/v1/approvals/${policy}/decide`, {
@@ -346,6 +362,81 @@ describe('WP284 「以后都这样」批了真落库（决策 275）', () => {
     expect(undo.status).toBe(200)
     const [back] = await rules()
     expect(back?.text).toBe(RULE)
+    expect(ruleSection(await runOnce())).toContain(RULE)
+  })
+
+  it('② 同事删了一句：工具箱那条一起退役；有人撤回，规矩与工具箱那条都回来', async () => {
+    const lin = await colleague('lin@example.com', '林峰')
+    const linSupport = server.roles.assignments.create({
+      person_id: lin.id,
+      workspace_id: ws(),
+      role_id: 'dtc.support',
+      granted_by: owner(),
+      ranges: [{ kind: 'store', id: 'store_main' }],
+    }).id
+    const policy = await teach(await draft())
+    await call('POST', `/v1/approvals/${policy}/decide`, {
+      body: { action: 'approve', selected_option_id: 'after' },
+    })
+    const as = { token: lin.token, assignment: linSupport }
+    const [rule] = await rules(as)
+    expect((await call('DELETE', `/v1/roles/dtc.support/rules/${rule?.id}`, as)).status).toBe(200)
+    expect(await rules()).toEqual([])
+    expect(await toolboxRules()).not.toContain(`rule:${policy}`)
+    const notice = (
+      (await server.txn.approvals.queue({
+        workspace_id: ws(),
+        person_id: owner(),
+        lane: 'mine',
+        state: ['pending', 'in_review'],
+      })) as ApprovalItem[]
+    ).find((i) => (i.payload as { form?: string }).form === 'peer_change_notice')
+    await call('POST', `/v1/approvals/${notice?.id}/decide`, {
+      body: { action: 'approve', selected_option_id: 'before' },
+    })
+    expect((await rules()).map((r) => r.text)).toEqual([RULE])
+    expect(await toolboxRules()).toContain(`rule:${policy}`)
+  })
+
+  it('③ 普通成员写指导 → 卡发给老板；成员自己点 403；老板批了才落', async () => {
+    const he = await colleague('he@example.com', '何佳')
+    const heSupport = server.roles.assignments.create({
+      person_id: he.id,
+      workspace_id: ws(),
+      role_id: 'dtc.support',
+      granted_by: owner(),
+      ranges: [{ kind: 'store', id: 'store_main' }],
+    }).id
+    const org = server.organizations.organizationOf(ws())
+    await call('PUT', `/v1/orgs/${org?.id}/mode`, {
+      assignment: server.bootstrap.ownerAssignment.id,
+      body: { mode: 'company', legal_name: '深圳诺伏特' },
+    })
+    expect(await server.organizations.modeOf(ws())).toBe('company')
+    const as = { token: he.token, assignment: heSupport }
+    const policy = await teach(await draft(he.id), RULE, as)
+    const card = (await server.txn.approvals.get(policy)) as ApprovalItem
+    // 与改职责规矩同一条路：发给老板（品牌所有者），不是写指导的何佳
+    expect(card.routing.recipients.map((r) => r.person)).toEqual([owner()])
+    expect(card.proposer).toMatchObject({ kind: 'person', id: he.id })
+    // 何佳自己点「记进规矩」：403，规矩里没有
+    const self = await call('POST', `/v1/approvals/${policy}/decide`, {
+      ...as,
+      body: { action: 'approve', selected_option_id: 'after' },
+    })
+    expect(self.status).toBe(403)
+    expect(await rules(as)).toEqual([])
+    expect(ruleSection(await runOnce())).toBeUndefined()
+    // 老板批了才落：定的人是老板，提的人是何佳
+    expect(
+      (
+        await call('POST', `/v1/approvals/${policy}/decide`, {
+          body: { action: 'approve', selected_option_id: 'after' },
+        })
+      ).status,
+    ).toBe(200)
+    const [rule] = await rules(as)
+    expect(rule).toMatchObject({ text: RULE, by: owner(), proposed_by: he.id, can_edit: false })
     expect(ruleSection(await runOnce())).toContain(RULE)
   })
 
