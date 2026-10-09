@@ -52,6 +52,8 @@ function RuleRow({
     onSuccess: onChanged,
     onError: fail,
   })
+  // 改过就写改的人（「何佳 改的」），没改过写定的人（「王岚 定的」）
+  const edited = rule.updated_by_name !== undefined
   const who = rule.updated_by_name ?? rule.by_name ?? ''
 
   return (
@@ -129,7 +131,7 @@ function RuleRow({
         </div>
       )}
       <p className="text-[11px] text-muted-foreground" data-testid="role-rule-meta">
-        {who === '' ? null : t('role_rules.by', { who })}
+        {who === '' ? null : t(edited ? 'role_rules.edited_by' : 'role_rules.by', { who })}
         {rule.source_title === undefined ? null : (
           <>
             {who === '' ? null : ' · '}

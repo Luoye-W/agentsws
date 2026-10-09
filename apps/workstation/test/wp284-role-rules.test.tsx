@@ -147,7 +147,7 @@ describe('WP284 职责规矩里那几句', () => {
       expect(state.calls).toEqual(['put dtc.support rr_1 退款一律先问我'])
     })
     await waitFor(() => {
-      expect(screen.getByTestId('role-rule-meta').textContent).toContain('何佳 定的')
+      expect(screen.getByTestId('role-rule-meta').textContent).toContain('何佳 改的')
     })
     expect(row).toBeDefined()
   })
