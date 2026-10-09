@@ -75,10 +75,15 @@ async function main() {
 
     // ① 询盘首回卡（中文摘要）；切到「原文」看回信正文
     await shotCard(page, '回询盘', 'b2b-inquiry-first-reply-card.png')
+    // WP288：语言切换收进了「要你处理」那一行的筛选图标里
+    await page.getByTestId('deck-filter').first().click()
     await page.getByTestId('deck-modes').getByText('原文', { exact: true }).click()
+    await page.keyboard.press('Escape')
     await page.waitForTimeout(400)
     await shotCard(page, '回询盘', 'b2b-inquiry-first-reply-original.png')
+    await page.getByTestId('deck-filter').first().click()
     await page.getByTestId('deck-modes').getByText('中文摘要', { exact: true }).click()
+    await page.keyboard.press('Escape')
     await page.waitForTimeout(300)
     // ② 超授权报价卡；⑤ 离职交接卡
     await shotCard(page, '报价 Q-20260929-02', 'b2b-quote-card.png')

@@ -8,19 +8,28 @@
  * WP141（docs/78 §1 #4）：一次一张之外多了「上一张 / 下一张」与紧凑列表（`deck-browser`），
  * 不决定前一张也能直接找到后面的卡；卡型下拉从全部牌算；提示行按这张卡的动作给；
  * 「第 x / N 张」与页头、筛选按同一个口径（合并前的张数）。
+ *
+ * WP288（决策 326）：**标题、筛选、翻页一行**——调用方把标题（「要你处理 N」）交进来，
+ * 右侧是筛选图标 +「全部列出」+「‹ 1/N ›」；筛选 / 语言平时收在图标里，正在筛选时标题下才出
+ * 一排已选条件。原来的筛选行与翻页行不再单独占行。
  */
 import type { BattleReport, DeckCard, DeckContentMode, DeckFilters, DeckKind } from '@agentsws/deck'
-import { CONTENT_MODES, sortCards } from '@agentsws/deck'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { type KeyboardEvent, useEffect, useRef, useState } from 'react'
+import { sortCards } from '@agentsws/deck'
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { type KeyboardEvent, type ReactNode, useEffect, useRef, useState } from 'react'
 import { DeckBattleReport } from '@/components/deck/deck-battle-report'
-import { DeckBrowser } from '@/components/deck/deck-browser'
+import { DeckList, DeckPager } from '@/components/deck/deck-browser'
 import {
   DeckCardView,
   type DeckDecideRequest,
   type DeckExitDirection,
 } from '@/components/deck/deck-card'
-import { DeckFilterRow, type PositionOption } from '@/components/deck/deck-filters'
+import {
+  DEFAULT_CONTENT_MODE,
+  DeckActiveFilters,
+  DeckFilterPop,
+  type PositionOption,
+} from '@/components/deck/deck-filters'
 import {
   directionForDeckAction,
   directionForDeckKey,
@@ -59,6 +68,10 @@ export interface DeckSectionProps {
    * （「知道了 / 撤回」、有人申请加入…）。只在岗位页、只有一个岗位时给。
    */
   withBase?: boolean
+  /**
+   * WP288：这副牌的标题（「要你处理 N」）。给了就与筛选图标、翻页同一行；不给那一行只有右侧控件。
+   */
+  title?: ReactNode
 }
 
 interface DeckData {
@@ -149,6 +162,7 @@ export function DeckSection({
   onOpen,
   focus,
   withBase = false,
+  title,
 }: DeckSectionProps): React.ReactNode {
   // WP275：回执与快捷键那几句按模式换词（① ② 是「通过」系，不是「批准」系）
   const { t } = useMode()
@@ -156,7 +170,8 @@ export function DeckSection({
   const deckRef = useRef<HTMLElement | null>(null)
 
   const [active, setActive] = useState<DeckFilters>(filters ?? {})
-  const [mode, setMode] = useState<DeckContentMode>('zh_summary')
+  const [mode, setMode] = useState<DeckContentMode>(DEFAULT_CONTENT_MODE)
+  const [listOpen, setListOpen] = useState(false)
   /*
    * 游标记的是**卡**，不是下标（WP141）。决定完一张、队列刷新回来，那张卡就不在了；
    * 按下标 +1 会跳过紧挨着的那张。`cursor` 找不到时退回 `fallback` 那个位置——
@@ -179,6 +194,8 @@ export function DeckSection({
   const query = useQuery<DeckData>({
     queryKey: ['deck', idsKey, active, withBase],
     queryFn: () => fetchDeck(ids, active, withBase),
+    // WP288：换筛选时留着上一副牌（筛选弹层不因为整块变骨架而被收掉）
+    placeholderData: keepPreviousData,
   })
   /*
    * WP141：「卡型」下拉的选项从**没筛过的全部牌**算。原来从筛过的牌算，于是选了
@@ -302,12 +319,19 @@ export function DeckSection({
     })
   }
 
-  if (query.isPending) return <Skeleton className="h-64 w-full" />
-  if (query.error !== null)
+  // 还没取到 / 取失败：标题照样在（它是调用方交进来的），下面是骨架或那一句错
+  if (query.isPending || query.error !== null)
     return (
-      <p role="alert" className="text-sm text-destructive">
-        {t('error.generic')}：{query.error.message}
-      </p>
+      <div className={`flex flex-col gap-3 ${DECK_MAX_WIDTH_CLASS}`}>
+        {title === undefined ? null : <div className="flex items-center gap-2">{title}</div>}
+        {query.error === null ? (
+          <Skeleton className="h-64 w-full" />
+        ) : (
+          <p role="alert" className="text-sm text-destructive">
+            {t('error.generic')}：{query.error.message}
+          </p>
+        )}
+      </div>
     )
 
   // 下拉里一直是全部牌里真有的那几种；已选中的那一种就算被决定光了也留着，免得选中值悬空
@@ -320,6 +344,13 @@ export function DeckSection({
   // WP287：提示行就是卡上那几个按钮（与方向键同一张表）
   const hints = card === undefined ? [] : deckKeyHints(card, t)
 
+  const changeFilters = (next: DeckFilters): void => {
+    setActive(next)
+    setCursor(undefined)
+    setFallback(0)
+  }
+  const positions = query.data?.positions ?? []
+
   return (
     <section
       ref={deckRef}
@@ -331,8 +362,10 @@ export function DeckSection({
       onKeyDown={onKeyDown}
       className={`flex flex-col gap-3 rounded-2xl outline-none focus-visible:ring-2 ${DECK_MAX_WIDTH_CLASS}`}
     >
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <DeckFilterRow
+      {/* WP288：标题 · 筛选图标 · 全部列出 · ‹ 1/N › 一行 */}
+      <div className="flex items-center gap-2" data-testid="deck-head">
+        <div className="flex min-w-0 flex-1 items-center gap-2">{title}</div>
+        <DeckFilterPop
           filters={active}
           counts={
             query.data?.counts ?? {
@@ -342,36 +375,33 @@ export function DeckSection({
               matched: 0,
             }
           }
-          positions={query.data?.positions ?? []}
+          positions={positions}
           kinds={kinds}
-          pinnedCount={query.data?.pinned_p0.length ?? 0}
-          onChange={(next) => {
-            setActive(next)
-            setCursor(undefined)
-            setFallback(0)
-          }}
+          mode={mode}
+          onChange={changeFilters}
+          onMode={setMode}
         />
-        {/* 语言是**队列级**的，不是每张卡各选一次（37 §1 第 4 行） */}
-        <div className="inline-flex rounded-full border p-0.5 text-xs" data-testid="deck-modes">
-          {CONTENT_MODES.map((m) => (
-            <button
-              key={m}
-              type="button"
-              aria-pressed={m === mode}
-              className={
-                m === mode
-                  ? 'rounded-full bg-primary px-2.5 py-0.5 text-primary-foreground'
-                  : 'rounded-full px-2.5 py-0.5 text-muted-foreground hover:text-foreground'
-              }
-              onClick={() => {
-                setMode(m)
-              }}
-            >
-              {t(`deck.content.${m}`)}
-            </button>
-          ))}
-        </div>
+        {card === undefined ? null : (
+          <DeckPager
+            cards={cards}
+            index={index}
+            disabled={exiting !== null}
+            onJump={jump}
+            listOpen={listOpen}
+            onToggleList={() => {
+              setListOpen(!listOpen)
+            }}
+          />
+        )}
       </div>
+      <DeckActiveFilters
+        filters={active}
+        positions={positions}
+        mode={mode}
+        pinnedCount={query.data?.pinned_p0.length ?? 0}
+        onChange={changeFilters}
+        onMode={setMode}
+      />
 
       {/* WP141：岗位页的报表块（日报 / 上线检查单）不再混在牌堆里当一张卡 */}
       <ReportBlocks reports={all.data?.reports ?? []} onOpen={onOpen} />
@@ -388,14 +418,21 @@ export function DeckSection({
           {...(query.data?.battle_report === undefined ? {} : { report: query.data.battle_report })}
           filtered={filtered}
           onBackToAll={() => {
-            setActive({})
-            setCursor(undefined)
-            setFallback(0)
+            changeFilters({})
           }}
         />
       ) : (
         <>
-          <DeckBrowser cards={cards} index={index} disabled={exiting !== null} onJump={jump} />
+          {listOpen && cards.length > 1 ? (
+            <DeckList
+              cards={cards}
+              index={index}
+              onJump={(i) => {
+                jump(i)
+                setListOpen(false)
+              }}
+            />
+          ) : null}
           <div className="relative mb-4">
             {/* 景深：背后两张歪斜的假卡，让「还有几张」有体感 */}
             {index + 1 < total ? (
