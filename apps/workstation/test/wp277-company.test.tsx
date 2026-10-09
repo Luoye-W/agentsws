@@ -285,6 +285,9 @@ describe('WP277 同事收的卡（决策 239）', () => {
     expect(card.textContent?.split('以后报价超限这类事').length).toBe(2)
     expect(screen.getByTestId('deck-layout-company-notice')).toBeDefined()
     fireEvent.click(screen.getByText('我要退出'))
+    // WP278（决策 278）：先问一句，确认了才真的退
+    expect(onDecide).not.toHaveBeenCalled()
+    fireEvent.click(await screen.findByTestId('leave-confirm-ok'))
     expect(onDecide).toHaveBeenCalledWith(
       expect.objectContaining({ action: 'approve', selected_option_id: 'leave' }),
     )

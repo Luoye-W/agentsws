@@ -46,9 +46,10 @@ import {
   isHandoffOfferCard,
   isPeerNoticeCard,
 } from '@/components/peers/handoff-strip'
+import { LeaveConfirm } from '@/components/peers/leave-confirm'
 import { useRailState } from '@/components/rail/rail-state'
 import { Button } from '@/components/ui/button'
-import { getPositions, type RoleTaskExampleData } from '@/lib/api'
+import { ensureSession, getPositions, type RoleTaskExampleData } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 import { formatDateTime } from '@/lib/format'
 import { recordText, tOr } from '@/lib/humanize'
@@ -255,6 +256,13 @@ export function DeckCardView({
   const [detail, setDetail] = useState(false)
   const [panel, setPanel] = useState<NoteMode | 'supplement' | null>(null)
   const [option, setOption] = useState<string>('')
+  /** WP278：「我要退出」点了，先问一句（框里列出会断开的个人连接）。 */
+  const [leaving, setLeaving] = useState(false)
+  const session = useQuery({
+    queryKey: ['session'],
+    queryFn: ensureSession,
+    enabled: isCompanyNoticeCard(card),
+  })
 
   // 换卡就把折叠区收回去：上一张卡写了一半的指导不该出现在下一张卡上。
   // biome-ignore lint/correctness/useExhaustiveDependencies: 依赖就是"换了一张卡"这件事，不是 setter
@@ -262,6 +270,7 @@ export function DeckCardView({
     setPanel(null)
     setDetail(false)
     setOption('')
+    setLeaving(false)
   }, [card.id])
 
   const isQuestion = card.options !== undefined && card.options.length > 0
@@ -518,12 +527,34 @@ export function DeckCardView({
                   disabled={busy === true}
                   data-option={o.id}
                   onClick={() => {
+                    // WP278（决策 278）：开公司时的「我要退出」——先问一句（列出会断开的个人连接）
+                    if (o.id === 'leave' && isCompanyNoticeCard(card)) {
+                      setLeaving(true)
+                      return
+                    }
                     onDecide({ action: 'approve', selected_option_id: o.id, version: card.version })
                   }}
                 >
                   {o.label}
                 </Button>
               ))}
+              <LeaveConfirm
+                open={leaving}
+                workspaceId={session.data?.workspace.id}
+                assignment={card.position_id}
+                busy={busy === true}
+                onCancel={() => {
+                  setLeaving(false)
+                }}
+                onConfirm={() => {
+                  setLeaving(false)
+                  onDecide({
+                    action: 'approve',
+                    selected_option_id: 'leave',
+                    version: card.version,
+                  })
+                }}
+              />
             </div>
           ) : panel === null ? (
             <DeckActionBar

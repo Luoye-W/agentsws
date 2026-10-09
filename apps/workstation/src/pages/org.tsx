@@ -82,7 +82,17 @@ import {
   updateOrgPosition,
   updateRangeGroup,
 } from '@/lib/api'
-import { exportMyWork, leaveWorkspace, turnOnDiscovery } from '@/lib/api-peers'
+import {
+  exportMyWork,
+  leaveWorkspace,
+  listPeerOffers,
+  offerInitiator,
+  offerPosition,
+  PEER_OFFERS_KEY,
+  type PeerOfferView,
+  turnOnDiscovery,
+  withdrawPeerOffer,
+} from '@/lib/api-peers'
 import { useApp } from '@/lib/app-context'
 import { useMode } from '@/lib/mode'
 
@@ -567,9 +577,43 @@ export function OrgPage(): React.ReactNode {
       await client.invalidateQueries({ queryKey: ['orgs'] })
     },
   })
-  /** WP276：② 发起人「请同事一起做」——直接分给他，不挑范围（② 里就是整个品牌）。 */
+  /*
+   * WP278（决策 276 / 277）：② 里「请同事一起做」「把发起人交给…」都要对方接下才算——发出去的是一张
+   * 「交给你」的卡；这里只记着我发出去的（还在等的那一行「等 X 接 · 撤回」）。
+   */
+  const peerOffers = useQuery({
+    queryKey: [...PEER_OFFERS_KEY, as],
+    queryFn: () => listPeerOffers(as),
+    enabled: enabled && peers,
+    retry: false,
+  })
+  const offers: PeerOfferView[] = peerOffers.data?.offers ?? []
+  const refreshOffers = async (): Promise<void> => {
+    setFailure(undefined)
+    await client.invalidateQueries({ queryKey: PEER_OFFERS_KEY })
+  }
+  const offerPos = useMutation({
+    mutationFn: (input: { position_id: string; person_id: string }) =>
+      offerPosition(input.position_id, input.person_id, owner),
+    onSuccess: async () => {
+      setWizard(null)
+      await refreshOffers()
+    },
+    onError: say,
+  })
+  const offerInit = useMutation({
+    mutationFn: (person_id: string) => offerInitiator(person_id, owner),
+    onSuccess: refreshOffers,
+    onError: say,
+  })
+  const withdrawOffer = useMutation({
+    mutationFn: (id: string) => withdrawPeerOffer(id, as),
+    onSuccess: refreshOffers,
+    onError: say,
+  })
+  /** WP276 → WP278：② 发起人「请同事一起做」——对方接下才分（不挑范围，② 里就是整个品牌）。 */
   const peerAssign = (position_id: string, person_id: string): void => {
-    assign.mutate({ person_id, position_id, ranges: [], range_groups: [] })
+    offerPos.mutate({ position_id, person_id })
   }
 
   // WP202：`?new=kol` 只在拿到岗位与职责清单后判一次
@@ -620,17 +664,25 @@ export function OrgPage(): React.ReactNode {
     handOver.isPending ||
     leave.isPending ||
     exportMine.isPending ||
-    startTogether.isPending
+    startTogether.isPending ||
+    offerPos.isPending ||
+    offerInit.isPending ||
+    withdrawOffer.isPending
 
   /** WP202：某张岗位卡下面就地展开的那一块——正在分的向导，或刚分完的回执。 */
   const below = (position_id: string): React.ReactNode => {
-    // WP276：② 里「请同事一起做」只是挑一个同事（不挑范围，整个品牌）
+    // WP278：② 里请出去的——还在等的「等 X 接 · 撤回」，最近没接 / 退回的一行结果
+    const sent = peers
+      ? offers.filter((o) => o.kind === 'position' && o.position_id === position_id)
+      : []
+    const waitingFor = new Set(sent.filter((o) => o.state === 'offered').map((o) => o.to))
+    // WP276：② 里「请同事一起做」只是挑一个同事（不挑范围，整个品牌）；WP278：对方接下才分
     if (wizard === position_id && peers) {
       const holders = new Set(
         (positions.data ?? []).find((x) => x.id === position_id)?.holders.map((h) => h.person_id),
       )
       const candidates = (members.data ?? []).filter(
-        (m) => m.left_at === undefined && !holders.has(m.person_id),
+        (m) => m.left_at === undefined && !holders.has(m.person_id) && !waitingFor.has(m.person_id),
       )
       return (
         <div
@@ -662,6 +714,39 @@ export function OrgPage(): React.ReactNode {
         </div>
       )
     }
+    if (sent.length > 0)
+      return (
+        <ul className="flex flex-col gap-1 text-xs text-muted-foreground" data-testid="peer-offers">
+          {sent.map((o) => (
+            <li key={o.id} className="flex items-center gap-1" data-state={o.state}>
+              {o.state === 'offered'
+                ? t('team.offer.waiting', { name: o.to_name })
+                : o.state === 'returned'
+                  ? t('team.offer.returned', { name: o.to_name })
+                  : o.reason === undefined
+                    ? t('team.offer.declined', { name: o.to_name })
+                    : t('team.offer.declined.reason', { name: o.to_name, reason: o.reason })}
+              {o.state === 'offered' ? (
+                <>
+                  <span aria-hidden>·</span>
+                  <Button
+                    size="xs"
+                    variant="link"
+                    className="h-auto px-0"
+                    disabled={withdrawOffer.isPending}
+                    data-testid="peer-offer-withdraw"
+                    onClick={() => {
+                      withdrawOffer.mutate(o.id)
+                    }}
+                  >
+                    {t('team.offer.withdraw')}
+                  </Button>
+                </>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+      )
     if (wizard === position_id)
       return (
         <div className="flex flex-col gap-3 rounded-md border p-3" data-testid="assign-inline">
@@ -1060,9 +1145,17 @@ export function OrgPage(): React.ReactNode {
                 if (globalThis.confirm?.(t('team.remove.confirm', { name })) === false) return
                 remove.mutate(person_id)
               }}
+              // WP278：退出先问一句（框在同事 tab 里：列出会断开的个人连接），这里只管真的退
               onLeave={() => {
-                if (globalThis.confirm?.(t('team.leave.confirm')) === false) return
                 leave.mutate()
+              }}
+              workspaceId={workspace}
+              offers={offers}
+              onOfferInitiator={(person_id) => {
+                offerInit.mutate(person_id)
+              }}
+              onWithdrawOffer={(id) => {
+                withdrawOffer.mutate(id)
               }}
               onExport={() => {
                 exportMine.mutate()

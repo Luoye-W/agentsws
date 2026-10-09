@@ -261,6 +261,8 @@ export function createPeerOffers(options: PeerOffersOptions): PeerOffers {
         to,
         title: kind === 'initiator' ? '发起人' : (target.name ?? target.id),
         from_label: fromName,
+        // 卡面上那一句（接下以后会怎样）
+        what: summary,
         ...(target.name === undefined ? {} : { position_name: target.name }),
         expires_at,
         options: [{ id: PEER_OFFER_ACCEPT, label: '接下' }],
