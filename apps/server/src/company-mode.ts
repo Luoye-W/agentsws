@@ -133,12 +133,27 @@ export async function transferOwnership(
           ranges: [],
         })
     }
-    if (opts.demote)
-      for (const a of roles.assignments.listByPerson(from, {
+    if (!opts.demote) continue
+    for (const a of roles.assignments.listByPerson(from, {
+      workspace_id: w.id,
+      role_id: 'common.owner',
+    }))
+      if (a.revoked_at === undefined) roles.assignments.revoke(a.id)
+    // 原发起人还在这个品牌里：至少留一条「工作区成员」（只有「负责人」那条的人收回之后就进不来了）
+    const stays = (await identity.members(w.id)).some(
+      (m) => m.person_id === from && m.left_at === undefined,
+    )
+    const member = roles.assignments
+      .listByPerson(from, { workspace_id: w.id, role_id: 'common.member' })
+      .some((a) => a.revoked_at === undefined)
+    if (stays && !member)
+      roles.assignments.create({
+        person_id: from,
         workspace_id: w.id,
-        role_id: 'common.owner',
-      }))
-        if (a.revoked_at === undefined) roles.assignments.revoke(a.id)
+        role_id: 'common.member',
+        granted_by: by,
+        ranges: [],
+      })
   }
 }
 
