@@ -39,6 +39,7 @@ import {
   type Gateway,
   type GatewayDeps,
   type GuardrailPort,
+  isSelfCard,
   type KnowledgePort,
   type LocalIdentityService,
   type ModelsActor,
@@ -556,6 +557,7 @@ import {
   HANDLERS as SCHEDULE_HANDLERS,
   type ScheduleAssembly,
   type SchedulePosition,
+  sweepStaleReviews,
 } from './schedule.js'
 import { createScopeAutoUpgrade, type ScopeAutoUpgrade } from './scope-auto-upgrade.js'
 import {
@@ -4765,6 +4767,18 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           lane: 'mine',
           state: [...QUEUE_STATES],
         }) as Promise<ApprovalItem[]>,
+      // WP287：点不动的卡不算「N 张等你定」（与决定那一道同一把尺子：② 都能点；名下有批准权就能点；否则只认关于本人的卡）
+      decidable: (person_id) => {
+        if (organizations.modeOfSync(ws) === 'peers') return () => true
+        const able = roles.assignments
+          .listByPerson(person_id, { workspace_id: ws })
+          .some(
+            (a) =>
+              a.revoked_at === undefined &&
+              roles.can(a.id, 'approval', 'approve', { range: 'own', sensitivity: 'internal' }),
+          )
+        return able ? () => true : (item) => isSelfCard(item, person_id)
+      },
       // 54 §3：岗位层记忆一句话（这一层攒下几段、其中几段是学来的）
       memorySummary: (position_id) =>
         learning.memorySummary({ tier: 'position', scope_id: position_id }),
@@ -5421,6 +5435,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           title: input.title,
           ...(input.summary === undefined ? {} : { summary: input.summary }),
           pinned: [{ type: 'thread', id: input.thread_id }],
+          // WP287：消息转到岗位是交一件事（钉着这条会话），不是问一句
+          mode: 'task',
         })
         return { matter_id: out.matter.id }
       },
@@ -6194,12 +6210,22 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           .list({ workspace_id: ws, status: 'pooled' })
           .map((l) => ({ id: l.id, text: l.text })),
       relay: (review) => relay(review),
+      // WP287：① 个人模式复盘照记、不出卡
+      solo: () => modeOfWorkspaceSync?.(ws) === 'solo',
       // 40 §2.2：周复盘报"疑似重复"，并把过了 Wilson 门槛的好东西往上浮——都只看这个品牌
       catalog: {
         duplicates: (limit) => catalog.duplicatesFor(ws, limit),
         proposePromotions: (deps, named) => catalog.proposePromotionsFor(ws, deps, named),
       },
     })
+    // WP287：积压的老复盘卡（全 0 的、过了当天的、① 里的）启动时收掉——记成过期，不删记录
+    void sweepStaleReviews({
+      approvals,
+      work: brandWork,
+      workspace_id: ws,
+      people: [...new Set(positionsIn(ws).map((p) => p.person_id))],
+      solo: () => modeOfWorkspaceSync?.(ws) === 'solo',
+    }).catch(() => undefined)
     // ③ 会议记录源轮询（拉到的会议记在这个品牌名下）
     registerMeetingPoll(s, {
       workspace_id: ws,
@@ -8004,6 +8030,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
             stopped += 1
         return stopped
       },
+      // WP287：「重试」优先用事项钉的那条分配（还是本人的、没撤）
+      holds: (person_id, assignment_id) => {
+        const a = roles.assignments.get(assignment_id)
+        return a !== undefined && a.person_id === person_id && a.revoked_at === undefined
+      },
       // WP237：从岗位开的事项里说话，用那条职责的分配接着做（还没定就先定，不落到负责人那条上）
       sayAt: async (actor, matter_id, text) =>
         (await positionsFor(ws)).sayAt({ matter_id, person_id: actor.person_id, text }),
@@ -8307,11 +8338,26 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           ...(input.pinned === undefined ? {} : { pinned: input.pinned }),
           // WP84：快捷提示点进来时带着职责；端口里再判一次"是不是他自己名下的那一条"
           ...(input.role_id === undefined ? {} : { role_id: input.role_id }),
+          // WP287：问还是交办（不给 = 服务端判）
+          ...(input.mode === undefined ? {} : { mode: input.mode }),
+          ...(input.detach === true ? { detach: true } : {}),
         })
         return {
+          mode: out.mode,
+          ...(out.answer === undefined
+            ? {}
+            : {
+                answer: {
+                  outcome: out.answer.outcome,
+                  text: out.answer.text,
+                  sources: [...out.answer.sources],
+                  ...(out.answer.failure === undefined ? {} : { failure: out.answer.failure }),
+                },
+              }),
           matter: {
             id: out.matter.id,
             title: out.matter.title,
+            ...(out.matter.ask === undefined ? {} : { ask: true }),
             ...(out.matter.entry === undefined ? {} : { entry: out.matter.entry }),
             ...(out.matter.role_id === undefined ? {} : { role_id: out.matter.role_id }),
           },
@@ -8338,6 +8384,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           assignment_id: out.assignment_id,
           ...(out.run_id === undefined ? {} : { run_id: out.run_id }),
         }
+      },
+      // WP287：岗位里问的一句「转成一件事」
+      promote: (actor, matter_id) => {
+        const m = assembly.promote(matter_id, actor.person_id)
+        return { matter: { id: m.id, title: m.title } }
       },
     }
     positionPorts.set(ws, port)

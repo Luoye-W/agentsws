@@ -14,8 +14,7 @@
  * - 还没定职责时续一句话：点了名就钉那条；没点名按原话 + 这句再路由；都不行就再问——
  *   **绝不落到负责人的通用助手**。
  */
-import type { ApprovalItem, Matter, MatterEvent } from '@agentsws/contracts'
-import { projectCard } from '@agentsws/deck'
+import type { Matter, MatterEvent } from '@agentsws/contracts'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createServer, type Server } from '../src/index.js'
 import { createPositions } from '../src/positions.js'
@@ -192,7 +191,7 @@ describe('WP237（Fable 代定）一个判据词都没命中：按岗位里职�
   })
 })
 
-describe('WP237 ②③ 几条都沾一点、谁都不像才出卡；卡上按钮是候选职责；选了就开跑', () => {
+describe('WP237 ②③ → WP287：几条都沾一点、谁都不像也不出卡；升级前出的老卡照样能选', () => {
   const CARE = ['amz.support', 'dtc.community-support', 'dtc.live-chat', 'dtc.support']
   const care = new Map<string, string>()
   const openCare = async (title: string): Promise<OpenView> =>
@@ -212,71 +211,120 @@ describe('WP237 ②③ 几条都沾一点、谁都不像才出卡；卡上按钮
     }
   })
 
-  it('客服岗位四条各 0.25 → 出卡（选择题、按钮「走 X」），不起运行；事项页同样给这几个选项', async () => {
+  it('客服岗位四条各 0.25 → 不出卡：按岗位里的先后取「网站客服」开跑，其余三条留作「换一条」', async () => {
     const out = await openCare('把 A 商品降价 10%')
-    expect(out.ambiguous).toBe(true)
-    expect(out.run_id).toBeUndefined()
-    const item = (await server.txn.approvals.get(out.approval_item_id as string)) as ApprovalItem
-    const card = projectCard(item, { now: T0, position_id: '' })
-    expect(card.layout).toBe('choice')
-    expect(card.options?.map((o) => o.label)).toContain('走「网站客服」')
-    expect(card.options?.length).toBe(4)
+    expect(out.ambiguous).toBe(false)
+    expect(out.approval_item_id).toBeUndefined()
+    expect(out.picked?.role_id).toBe('dtc.support')
+    expect(out.run_id).toBeDefined()
     const routed = timeline(out.matter.id).find((e) => e.actor.id === 'position_router')
-    expect(routed?.route?.picked).toBeUndefined()
-    expect(routed?.route?.options.length).toBe(4)
-    expect(routed?.approval_item_id).toBe(out.approval_item_id)
-    expect(await startedRuns()).toEqual([])
+    expect(routed?.route?.picked).toBe('dtc.support')
+    expect(routed?.route?.options.length).toBe(3)
+    const cards = await server.txn.approvals.queue({
+      workspace_id: server.bootstrap.workspace.id,
+      person_id: server.bootstrap.person.id,
+      lane: 'mine',
+    })
+    expect(cards.filter((c) => c.kind === 'claim')).toEqual([])
+    expect((await startedRuns()).length).toBe(1)
   })
 
-  it('在卡上选「走 网站客服」→ 事项钉到那条，立刻 run.started', async () => {
-    const out = await openCare('把 A 商品降价 10%')
-    const res = await call('POST', `/v1/approvals/${out.approval_item_id}/decide`, {
+  /** 升级前已经出过的「走哪条职责」卡（WP237 那版的形状），事项还没定职责。 */
+  const legacyCard = async (): Promise<{ matter_id: string; card_id: string }> => {
+    const matter = server.work.createMatter({
+      kind: 'adhoc',
+      title: '把 A 商品降价 10%',
+      entry: 'position',
+      position_template_id: 'customer-care',
+      participants: [server.bootstrap.person.id],
+    })
+    server.work.appendEvent(matter.id, {
+      kind: 'human_message',
+      text: '把 A 商品降价 10%',
+      actor: { kind: 'person', id: server.bootstrap.person.id },
+    })
+    const options = CARE.map((r) => ({ id: r, label: `走「${r}」` }))
+    const item = await server.txn.approvals.create({
+      workspace_id: server.bootstrap.workspace.id,
+      schema_version: 1,
+      kind: 'claim',
+      role_id: 'dtc.support',
+      subject: {
+        object: { type: 'position', id: 'customer-care' },
+        matter_id: matter.id,
+        work_item_id: matter.id,
+      },
+      dedupe_key: `legacy:route_choice:${matter.id}`,
+      title: '这件事该走哪条职责：把 A 商品降价 10%',
+      summary: '你定',
+      payload: {
+        form: 'route_choice',
+        matter_id: matter.id,
+        position_id: 'customer-care',
+        candidates: CARE.map((r) => ({ role_id: r, role_name: r, score: 0.25, why: [] })),
+        options,
+      },
+      evidence: { source_events: [], provenance: { seen: [] }, precheck: { fencing: 'ok' } },
+      proposer: { kind: 'agent', id: 'position_router' },
+      automation: {
+        level_at_creation: 'L1',
+        auto_approved: false,
+        mandate_check: { within: true, caps_hit: [] },
+        sampling: { selected: false },
+      },
+      routing: {
+        recipients: [{ person: server.bootstrap.person.id, via: 'explicit' }],
+        explicit: server.bootstrap.person.id,
+        rule: 'explicit',
+        escalation: { after_hours: 24, business_hours: true, chain: ['owner'], escalated_at: [] },
+        separation_of_duties: false,
+      },
+      priority: 'queue',
+      options,
+    } as never)
+    server.work.appendEvent(matter.id, {
+      kind: 'status',
+      text: '你定',
+      actor: { kind: 'agent', id: 'position_router' },
+      approval_item_id: item.id,
+      route: { options: CARE.map((r) => ({ role_id: r, role_name: r })) },
+    })
+    return { matter_id: matter.id, card_id: item.id }
+  }
+
+  it('老卡上选「走 网站客服」→ 事项钉到那条，立刻 run.started', async () => {
+    const { matter_id, card_id } = await legacyCard()
+    const res = await call('POST', `/v1/approvals/${card_id}/decide`, {
       action: 'approve',
       selected_option_id: 'dtc.support',
     })
     expect(res.status).toBe(200)
-    const matter = server.work.getMatter(out.matter.id) as Matter
+    const matter = server.work.getMatter(matter_id) as Matter
     expect(matter.role_id).toBe('dtc.support')
     expect(matter.position_id).toBe(care.get('dtc.support'))
-    expect(runs(out.matter.id).map((e) => e.actor.id)).toEqual([care.get('dtc.support')])
-    expect((await startedRuns()).length).toBe(1)
+    expect(runs(matter_id).map((e) => e.actor.id)).toEqual([care.get('dtc.support')])
   })
 
-  it('卡上不选就按「认领」（老按钮）→ 被拒（要选一条），事项不会卡在「批了没反应」', async () => {
-    const out = await openCare('把 A 商品降价 10%')
-    const res = await call('POST', `/v1/approvals/${out.approval_item_id}/decide`, {
-      action: 'approve',
-    })
-    expect(res.status).toBe(400)
-  })
-
-  it('事项页上点「走 网站客服」→ 钉到那条、开跑，那张卡跟着定掉、不重跑', async () => {
-    const out = await openCare('把 A 商品降价 10%')
+  it('老卡那件事的事项页上点「走 网站客服」→ 钉到那条、开跑，那张卡跟着定掉、不重跑', async () => {
+    const { matter_id, card_id } = await legacyCard()
     const res = await dataOf<{ run_id?: string }>(
-      await call('POST', `/v1/matters/${out.matter.id}/reroute`, {
-        role_id: 'dtc.support',
-        run: true,
-      }),
+      await call('POST', `/v1/matters/${matter_id}/reroute`, { role_id: 'dtc.support', run: true }),
     )
     expect(res.run_id).toBeDefined()
-    const item = await server.txn.approvals.get(out.approval_item_id as string)
-    expect(item?.state).not.toBe('pending')
-    expect(runs(out.matter.id).length).toBe(1)
-    expect((await startedRuns()).length).toBe(1)
+    expect((await server.txn.approvals.get(card_id))?.state).not.toBe('pending')
+    expect(runs(matter_id).length).toBe(1)
   })
 
-  it('还没定时续一句点了名的话 → 钉到那条开跑，卡跟着定掉', async () => {
-    const out = await openCare('把 A 商品降价 10%')
+  it('老卡那件事里续一句点了名的话 → 钉到那条开跑，卡跟着定掉', async () => {
+    const { matter_id, card_id } = await legacyCard()
     const said = await dataOf<{ run_id?: string }>(
-      await call('POST', `/v1/matters/${out.matter.id}/messages`, { text: '按网站客服来，开始吧' }),
+      await call('POST', `/v1/matters/${matter_id}/messages`, { text: '按网站客服来，开始吧' }),
     )
     expect(said.run_id).toBeDefined()
-    expect(runs(out.matter.id).map((e) => e.actor.id)).toEqual([care.get('dtc.support')])
-    const item = await server.txn.approvals.get(out.approval_item_id as string)
-    expect(item?.state).not.toBe('pending')
+    expect(runs(matter_id).map((e) => e.actor.id)).toEqual([care.get('dtc.support')])
+    expect((await server.txn.approvals.get(card_id))?.state).not.toBe('pending')
   })
 })
-
 describe('WP237 还没定职责时续一句话：绝不落到负责人的通用助手', () => {
   it('「按 自家版运营这条来，开始吧。」→ 钉到 自家版运营，用那条分配起运行', async () => {
     const out = await open('你好')

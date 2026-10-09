@@ -110,6 +110,8 @@ export type WorkExtraEventType =
   | 'todo.transferred'
   | 'todo.idle_reminded'
   | 'todo.recycled'
+  /** WP287：岗位里问的一句转成了一件事 */
+  | 'matter.promoted'
 
 /** WP264：预览那一格照抄一份（老三格 + 新三格，没给的不写）。 */
 function copyPreview(p: NonNullable<MatterEvent['preview']>): NonNullable<MatterEvent['preview']> {
@@ -209,6 +211,8 @@ export interface CreateMatterInput {
   role_id?: Matter['role_id'] | undefined
   /** WP69（54 §1）：挂在哪个岗位下——与 `position_id`（那是分配）不是一回事。 */
   position_template_id?: Matter['position_template_id'] | undefined
+  /** WP287：岗位里问的一句（不进任何列表，见 `Matter.ask`）。 */
+  ask?: boolean | undefined
 }
 
 export interface CreateTodoInput {
@@ -423,6 +427,7 @@ export class Work {
         ? {}
         : { position_template_id: input.position_template_id }),
       ...(input.goal_id === undefined ? {} : { goal_id: input.goal_id }),
+      ...(input.ask === true ? { ask: { at } } : {}),
       context: {
         summary: input.summary ?? '',
         pinned: input.pinned ?? [],
@@ -449,9 +454,24 @@ export class Work {
           ? {}
           : { position_template_id: matter.position_template_id }),
         ...(matter.goal_id === undefined ? {} : { goal_id: matter.goal_id }),
+        ...(matter.ask === undefined ? {} : { ask: true }),
       },
     )
     return matter
+  }
+
+  /**
+   * WP287：岗位里问的一句 → 一件普通的事（人点「转成一件事」，或 AI 答的时候要动手）。
+   * 时间线记一句是怎么转的；本来就不是问答的原样返回。
+   */
+  promoteAsk(id: MatterId, input: { text: string; actor: MatterEvent['actor'] }): Matter {
+    const matter = this.requireMatter(id)
+    if (matter.ask === undefined) return matter
+    const { ask: _drop, ...rest } = matter
+    this.store.putMatter({ ...rest, updated_at: this.now() })
+    this.appendEvent(id, { kind: 'status', text: input.text, actor: input.actor })
+    this.emit('matter.promoted', { type: 'matter', id }, input.actor, {})
+    return this.requireMatter(id)
   }
 
   getMatter(id: MatterId): Matter | undefined {
@@ -513,6 +533,8 @@ export class Work {
       run_digest?: MatterEvent['run_digest']
       /** WP264：AI 这段话末尾给的下一步建议。 */
       next_suggestion?: string
+      /** WP287：这一条是「这次没跑成」（界面据此出「重试」）。 */
+      failed?: MatterEvent['failed']
       at?: Iso8601
     },
   ): MatterEvent {
@@ -560,6 +582,9 @@ export class Work {
       ...(input.next_suggestion === undefined || input.next_suggestion === ''
         ? {}
         : { next_suggestion: input.next_suggestion }),
+      ...(input.failed === undefined
+        ? {}
+        : { failed: { code: input.failed.code, retryable: input.failed.retryable } }),
     }
     this.store.appendMatterEvent(event)
     this.store.putMatter({
@@ -1289,7 +1314,12 @@ export class Work {
       if (todo.matter_id !== undefined) covered.add(todo.matter_id)
     }
     // WP207：归档的事不算「正在进行」（它这阵子没人动；一动就自动放回来）
-    for (const matter of this.listMatters({ status: ['open', 'waiting'], archived: false })) {
+    // WP287：岗位里问的一句是会话，不算「正在进行」的任务
+    for (const matter of this.listMatters({
+      status: ['open', 'waiting'],
+      archived: false,
+      asks: false,
+    })) {
       if (covered.has(matter.id)) continue
       const owner = matter.context.participants[0]
       if (owner === undefined || !mine(matter.position_id)) continue

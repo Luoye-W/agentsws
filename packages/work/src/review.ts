@@ -146,6 +146,23 @@ export function buildReview(input: ReviewInput): ReviewDraft & { duplicates?: Re
   }
 }
 
+/**
+ * WP287（Luoye 10-09 真机：「你处理 0 张，AI 0 张；待办完成 0/0，会议 0 个」天天一张）：
+ * 这段时间**一点动静都没有**——卡一张没动、没有待办、没有会议、没有疑似重复。这样的复盘不出。
+ */
+export function reviewIsQuiet(draft: ReviewDraft & { duplicates?: unknown[] }): boolean {
+  const c = draft.cards
+  return (
+    c.you_handled === 0 &&
+    c.ai_handled === 0 &&
+    c.auto_sent === 0 &&
+    c.blocked === 0 &&
+    draft.todos.total === 0 &&
+    draft.meetings.count === 0 &&
+    (draft.duplicates?.length ?? 0) === 0
+  )
+}
+
 export function reviewTitle(draft: ReviewDraft): string {
   const label =
     draft.period.kind === 'day' ? '今天' : draft.period.kind === 'week' ? '本周' : '本月'

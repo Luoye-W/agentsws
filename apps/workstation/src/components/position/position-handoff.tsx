@@ -1,18 +1,21 @@
 /**
- * WP241 岗位页 v2「交给它」：一行输入 + 一排建议，点进去才展开成三行（带「职责：自动」）。
+ * 岗位页的输入框（WP241「交给它」→ WP287 Luoye 10-09 真机后重做）。
  *
- * 提交走的还是 54 §2 那三条路（`usePositionOpen`，与 WP237 同一份）：
- * 职责选「自动」= 岗位入口、岗位内路由；选了某条 = 「用这条职责开」（本人那条分配）。
- * 拿不准时出的候选照旧摆在框下面让人点。
+ * - **和事项页 / 随便聊同一个输入框**（`MatterComposer`：发送是框内的箭头，不写「交给它」；
+ *   有合适的建议时浅灰字 + Tab 收下；「+」「@」同一套）。岗位页没有「私聊 AI」——这里发出去就是开一段会话。
+ * - **发出去就进这件事的会话线程**（`usePositionOpen` → `detach`）：回答在线程里流式出现；
+ *   问一句是会话、不进「工作」，要动手的才是任务——由服务端判，判不准先当会话答。
+ * - 不让人选职责（WP287 第 2 条）：原来那个「职责：自动」下拉去掉了，岗位自己按分 / 先后取，线程里能「换一条」。
+ * - 下面一排快捷建议照旧，点一下填进框。
  *
  * `hero`：新岗位、什么都还没有时（`position-v2-empty.html`），它放大当主角。
  */
-import { Loader2, Send } from 'lucide-react'
+import { Send } from 'lucide-react'
 import { useState } from 'react'
+import { MatterComposer } from '@/components/matter/matter-composer'
 import { DutyIcon } from '@/components/role-icons/role-icon'
 import { Button } from '@/components/ui/button'
 import { Hint } from '@/components/ui/hint'
-import { Textarea } from '@/components/ui/textarea'
 import { HandoffError } from '@/components/work/handoff-error'
 import { usePositionOpen } from '@/components/work/use-position-open'
 import type { PositionInstanceData } from '@/lib/api'
@@ -32,46 +35,30 @@ export function PositionHandoff({
 }): React.ReactNode {
   const { t, lang } = useApp()
   const [text, setText] = useState('')
-  const [focused, setFocused] = useState(false)
-  const [duty, setDuty] = useState('')
-  const { open, withRole, pick, choice, error, clearError } = usePositionOpen(id, () => {
+  const { open, pick, choice, error, clearError } = usePositionOpen(id, () => {
     setText('')
   })
 
   const mine = view.roles.filter((r) => r.my_assignment_id !== undefined)
   // 建议只从本人那几条职责来（54 §1：拿别人那条去开就是借岗位扩权）
   const suggestions = mine.flatMap((r) => r.quick_prompts ?? []).slice(0, MAX_SUGGESTIONS)
-  const example = suggestions[0]
-  const exampleText =
-    example === undefined ? '' : lang === 'en' ? example.label.en : example.label.zh
-  const placeholder = hero
-    ? exampleText === ''
-      ? t('position.entry.placeholder.plain')
-      : t('pos2.handoff.first.placeholder', { example: exampleText })
-    : exampleText === ''
-      ? t('pos2.handoff.placeholder.plain')
-      : t('pos2.handoff.placeholder.example', { example: exampleText })
-  const expanded = hero || focused || text !== ''
-  const busy = open.isPending || withRole.isPending
+  const busy = open.isPending
 
   const submit = (): void => {
-    const title = text.trim()
+    const title = text.trim().slice(0, TASK_TEXT_MAX)
     if (title === '' || busy) return
     clearError()
-    const assignment = mine.find((r) => r.role_id === duty)?.my_assignment_id
-    if (assignment !== undefined) withRole.mutate({ assignment, title })
-    else open.mutate({ title })
+    open.mutate({ title })
   }
 
   return (
     <section
       data-testid="position-handoff"
       data-hero={hero ? 'true' : 'false'}
-      data-expanded={expanded ? 'true' : 'false'}
       className={
         hero
           ? 'flex flex-col gap-3 rounded-2xl border bg-card p-6 shadow-sm'
-          : `flex flex-col gap-2 rounded-2xl border bg-card px-3 py-2.5 shadow-sm transition-shadow ${focused ? 'ring-2 ring-ws-brand/30' : ''}`
+          : 'flex flex-col gap-2'
       }
     >
       {hero ? (
@@ -80,100 +67,48 @@ export function PositionHandoff({
           {t('pos2.handoff.first')}
         </h2>
       ) : null}
-      <div className={hero ? 'relative' : 'flex items-start gap-2'}>
-        {hero ? null : <Send className="mt-2 size-4 shrink-0 text-ws-muted-fg" aria-hidden />}
-        <Textarea
-          aria-label={t('position.entry.title')}
-          rows={expanded ? 3 : 1}
-          value={text}
-          maxLength={TASK_TEXT_MAX}
-          placeholder={placeholder}
-          data-testid="position-entry-input"
-          className={
-            hero
-              ? 'min-h-[88px] resize-none pr-28'
-              : `min-h-0 resize-none border-0 px-0 shadow-none focus-visible:ring-0 ${expanded ? '' : 'h-8 py-1.5'}`
-          }
-          onFocus={() => {
-            setFocused(true)
-          }}
-          onBlur={() => {
-            setFocused(false)
-          }}
-          onChange={(e) => {
-            setText(e.target.value)
-            clearError()
-          }}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-              e.preventDefault()
-              submit()
-            }
-          }}
-        />
-        <Button
-          size="sm"
-          className={hero ? 'absolute right-2 bottom-2' : 'shrink-0'}
-          disabled={text.trim() === '' || busy}
-          data-testid="position-entry-submit"
-          data-busy={busy ? 'true' : undefined}
-          onClick={submit}
-        >
-          {busy ? (
-            <Loader2 className="size-3.5 animate-spin" aria-hidden />
-          ) : (
-            <Send className="size-3.5" aria-hidden />
-          )}
-          {busy ? t('handoff.sending') : t('position.entry.submit')}
-        </Button>
-      </div>
-      {/* WP259：没交出去就在框下说一句（含服务端那句话），不再静默 */}
+      <MatterComposer
+        value={text}
+        onChange={(v) => {
+          setText(v.slice(0, TASK_TEXT_MAX))
+          clearError()
+        }}
+        onSend={submit}
+        onStop={() => undefined}
+        running={false}
+        closed={false}
+        privateMode={false}
+        onTogglePrivate={() => undefined}
+        // 有合适的建议时浅灰字显示在框里，Tab 收下（与事项页同一个规矩）
+        suggestion={suggestions[0]?.prompt}
+        sending={busy}
+        docked={false}
+        showPrivate={false}
+        placeholderText={t(hero ? 'pos2.handoff.first.ask' : 'pos2.handoff.ask')}
+        label={t('position.entry.title')}
+        testId="position-entry-input"
+      />
+      {/* WP259：没发出去就在框下说一句（含服务端那句话），不再静默 */}
       <HandoffError error={error} />
-      <div className="flex flex-wrap items-center gap-1.5">
-        {suggestions.map((q) => (
-          <button
-            key={q.id}
-            type="button"
-            className="rounded-full border px-2.5 py-0.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
-            data-testid="entry-suggestion"
-            data-prompt={q.id}
-            title={q.prompt}
-            onMouseDown={(e) => {
-              // 不让输入框先失焦再收起，点一下就填进去
-              e.preventDefault()
-            }}
-            onClick={() => {
-              setText(q.prompt)
-            }}
-          >
-            {lang === 'en' ? q.label.en : q.label.zh}
-          </button>
-        ))}
-        {expanded && mine.length > 1 ? (
-          <label className="ml-auto flex items-center gap-1 text-xs text-muted-foreground">
-            <span>{t('pos2.handoff.duty', { name: '' }).trim()}</span>
-            <select
-              className="rounded-md border bg-transparent px-1.5 py-0.5 text-xs text-foreground"
-              value={duty}
-              data-testid="position-handoff-duty"
-              onMouseDown={(e) => {
-                e.stopPropagation()
-              }}
-              onChange={(e) => {
-                setDuty(e.target.value)
+      {suggestions.length === 0 ? null : (
+        <div className="flex flex-wrap items-center gap-1.5">
+          {suggestions.map((q) => (
+            <button
+              key={q.id}
+              type="button"
+              className="rounded-full border px-2.5 py-0.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
+              data-testid="entry-suggestion"
+              data-prompt={q.id}
+              title={q.prompt}
+              onClick={() => {
+                setText(q.prompt)
               }}
             >
-              <option value="">{t('pos2.handoff.duty.auto')}</option>
-              {mine.map((r) => (
-                <option key={r.role_id} value={r.role_id}>
-                  {r.role_name}
-                </option>
-              ))}
-            </select>
-            <Hint text={t('pos2.handoff.duty.hint')} />
-          </label>
-        ) : null}
-      </div>
+              {lang === 'en' ? q.label.en : q.label.zh}
+            </button>
+          ))}
+        </div>
+      )}
       {hero ? (
         <p className="flex items-center gap-1 text-xs text-muted-foreground">
           {t('pos2.handoff.first.note')}
@@ -181,12 +116,11 @@ export function PositionHandoff({
         </p>
       ) : null}
 
-      {/* 拿不准：这件事像 A 也像 B，你定（54 §2） */}
+      {/* 老服务端还可能回一张「走哪条职责」——那时把候选摆出来（新服务端不再出） */}
       {choice === undefined ? null : (
         <fieldset className="rounded-md border p-3" data-testid="route-choice">
           <p className="flex items-center gap-1 text-sm" data-slot="status">
             {choice.reason}
-            <Hint text={t('position.choice.hint')} />
           </p>
           <div className="mt-2 flex flex-wrap gap-2">
             {choice.candidates.map((c) => (

@@ -272,6 +272,7 @@ export {
   type SchedulePosition,
   ServerScheduleError,
   type SkillsWeeklyDeps,
+  sweepStaleReviews,
   TOKEN_IDLE_INTERVAL_MS,
   TOKEN_REFRESH_LEAD_MS,
   type TokenRefreshDeps,

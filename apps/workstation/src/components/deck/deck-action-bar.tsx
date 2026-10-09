@@ -65,7 +65,15 @@ export function deckActionLabel(card: DeckCard, a: DeckAction, t: (key: string) 
     a,
     card.manual_send === true ? MANUAL_SEND_VERB_KIND : (card.change_kind ?? card.kind),
   )
-  if (key !== undefined) return t(key)
+  /*
+   * WP287：借了「选择题」排版、却没有选项的卡（复盘之类）——「就这条 / 都不是」是错话，
+   * 用这种卡自己的说法（服务端给的按钮字），没有就用通用动词。
+   */
+  const notAQuestion =
+    card.layout === 'choice' &&
+    (card.options ?? []).length === 0 &&
+    key?.startsWith('verb.choice.') === true
+  if (key !== undefined && !notAQuestion) return t(key)
   return card.action_labels?.[a] ?? t(`action.${a}`)
 }
 

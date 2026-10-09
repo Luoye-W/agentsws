@@ -613,7 +613,9 @@ export interface RouteCandidateData {
 }
 
 export interface OpenAtPositionData {
-  matter: { id: string; title: string; entry?: string; role_id?: string }
+  /** WP287：一段会话（`ask`，不进「工作」）还是一件任务（`task`）；老服务端没有这一格 */
+  mode?: 'ask' | 'task'
+  matter: { id: string; title: string; entry?: string; role_id?: string; ask?: boolean }
   picked?: { role_id: string; role_name: string; assignment_id: string }
   candidates: RouteCandidateData[]
   ambiguous: boolean
@@ -664,7 +666,8 @@ export const openMatterAtPosition = (
 ): Promise<OpenAtPositionData> =>
   api<OpenAtPositionData>(`/v1/positions/${encodeURIComponent(id)}/matters`, {
     method: 'POST',
-    body: input,
+    // WP287：不等运行跑完——拿到事项 id 立刻进会话线程，回答在线程里出现
+    body: { ...input, detach: true },
     assignment: id,
   })
 
@@ -947,6 +950,14 @@ export const retitleMatter = (id: string, title: string): Promise<{ matter: Matt
 /** WP264：停下这件事上正在跑的运行（输入卡上的「停」）。 */
 export const stopMatterRuns = (id: string): Promise<{ stopped: number }> =>
   api(`/v1/matters/${encodeURIComponent(id)}/stop`, { method: 'POST' })
+
+/** WP287：上一次没跑成 → 按原话再跑一次（「没跑成」下面的「重试」）。 */
+export const retryMatterRun = (id: string): Promise<{ run_id?: string }> =>
+  api(`/v1/matters/${encodeURIComponent(id)}/retry`, { method: 'POST' })
+
+/** WP287：岗位里问的一句（会话）转成任务——进岗位「工作」。 */
+export const promoteAskMatter = (id: string): Promise<{ matter: { id: string; title: string } }> =>
+  api(`/v1/matters/${encodeURIComponent(id)}/promote`, { method: 'POST' })
 
 /** WP264：时间线上内嵌的那张卡（审批 / 选择）——按事项那条分配取，决定也用它。 */
 export const getApproval = (id: string, assignment?: string): Promise<ApprovalItem> =>

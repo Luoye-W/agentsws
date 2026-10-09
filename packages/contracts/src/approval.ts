@@ -560,4 +560,10 @@ export interface ApprovalBus {
    * 可选：没实现的宿主由调用方跳过（上级离职时新卡照样按老板走，只是旧卡不挪）。
    */
   reroute?(id: string, input: RerouteInput): Promise<ApprovalItem | undefined>
+  /**
+   * WP287：把一张**还没定**的卡当场记成过期（`expired`，不删记录、不施行、作废令牌）。
+   * 已经定了的回 `undefined`、一个字不动。给「积压的老复盘卡启动时收掉」这类宿主清理用。
+   * 可选：没实现的宿主由调用方跳过。
+   */
+  expireNow?(id: string, reason: string): Promise<ApprovalItem | undefined>
 }

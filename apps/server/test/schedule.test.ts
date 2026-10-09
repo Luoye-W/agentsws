@@ -134,11 +134,20 @@ describe('七个消费者', () => {
     expect(server.schedule.scheduler.get(`sched_review_month_${asg}`)?.trigger).toMatchObject({
       expr: '45 20 28-31 * *',
     })
+    // WP287：一点动静都没有的那天不出复盘
+    const quiet = await server.schedule.scheduler.runNow(`sched_review_day_${asg}`)
+    expect((quiet.result as { reviews: string[] }).reviews).toHaveLength(0)
+    // 有一条今天的待办 → 记一份复盘；① 个人模式不出卡（WP287）
+    server.work.createTodo({
+      title: '给老客户回一封信',
+      owner: server.bootstrap.person.id,
+      horizon: 'today',
+    })
     const out = await server.schedule.scheduler.runNow(`sched_review_day_${asg}`)
     expect(out.ok).toBe(true)
-    const cards = await cardsOf('review')
-    expect(cards).toHaveLength(1)
-    expect(cards[0]?.payload).toHaveProperty('next_plan_draft')
+    expect((out.result as { reviews: string[] }).reviews).toHaveLength(1)
+    expect(server.work.listReviews({ limit: 5 })[0]).toHaveProperty('next_plan_draft')
+    expect(await cardsOf('review')).toHaveLength(0)
   })
 
   it('② 月复盘不到月末就跳过（cron 没有「月末」）', async () => {
@@ -150,6 +159,12 @@ describe('七个消费者', () => {
 
   it('⑦ 复盘跑完 → 注册一个次日早上的 at 任务（计划草案接力）', async () => {
     const asg = server.bootstrap.ownerAssignment.id
+    // WP287：没动静的那天不出复盘，也就没有接力——先有一条今天的待办
+    server.work.createTodo({
+      title: '给老客户回一封信',
+      owner: server.bootstrap.person.id,
+      horizon: 'today',
+    })
     await server.schedule.scheduler.runNow(`sched_review_day_${asg}`)
     const relay = server.schedule.scheduler
       .list({ workspace_id: server.bootstrap.workspace.id })

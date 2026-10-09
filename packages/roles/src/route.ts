@@ -472,3 +472,52 @@ export function looksLikeSmallTalk(text: string): boolean {
     .trim()
   return bare === '' || SMALL_TALK.test(bare)
 }
+
+/* ── WP287 岗位入口永远不出「走哪条职责」的选择卡 ──────────────────────── */
+
+/**
+ * WP287（Luoye 10-09 真机：四条职责各 0.25 → 出了一张「这件事像 A 也像 B，你定」）：
+ * **岗位入口不再问人走哪条职责**。{@link settleCloseCall} / {@link settleNoHit} 之后还剩下的
+ * 拿不准（「几条都沾一点、谁都不像」）在这里收口：
+ *
+ * - 有分：取分最高的；分一样按 `roles` 的先后（岗位模板里职责的顺序）；
+ * - 一个都没命中：取第一条（`roles` 已按岗位模板排好）。
+ *
+ * 其余几条留作「换一条」。判得准的、已经定了的原样返回。纯函数。
+ */
+export function settleAlways(
+  result: RouteWithinPositionResult,
+  roles: readonly { role_id: RoleId; role_name: string }[],
+): SettledRouteResult {
+  if (!result.ambiguous || result.picked !== undefined) return result
+  const eligible = roles.filter((r) => !GENERIC_ROLES.includes(r.role_id))
+  const order = eligible.map((r) => r.role_id)
+  const rank = (id: RoleId): number => {
+    const i = order.indexOf(id)
+    return i < 0 ? Number.MAX_SAFE_INTEGER : i
+  }
+  const scored = [...result.candidates].sort(
+    (a, b) => b.score - a.score || rank(a.role_id) - rank(b.role_id),
+  )
+  const fallback = eligible[0]
+  const top: RouteCandidate | undefined =
+    scored[0] ??
+    (fallback === undefined
+      ? undefined
+      : { role_id: fallback.role_id, role_name: fallback.role_name, score: 0, why: [] })
+  if (top === undefined) return result
+  const others: RouteCandidate[] = [
+    ...scored.slice(1),
+    ...eligible
+      .filter((r) => r.role_id !== top.role_id && !scored.some((c) => c.role_id === r.role_id))
+      .map((r) => ({ role_id: r.role_id, role_name: r.role_name, score: 0, why: [] })),
+  ]
+  return {
+    picked: top.role_id,
+    candidates: [top, ...scored.slice(1)],
+    ambiguous: false,
+    reason: `看不太出更像哪条，先按「${top.role_name}」来做的`,
+    settled: true,
+    alternatives: others,
+  }
+}

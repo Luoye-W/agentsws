@@ -115,6 +115,7 @@ export {
   type CardOutcome,
   type ReviewDuplicate,
   type ReviewInput,
+  reviewIsQuiet,
   reviewSummary,
   reviewTitle,
 } from './review.js'

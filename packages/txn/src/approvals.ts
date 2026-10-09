@@ -817,6 +817,26 @@ export class ApprovalBusImpl implements ApprovalBus {
     return out
   }
 
+  /** WP287：一张还没定的卡当场记成过期（宿主清理积压的老卡用）；已定的不动。 */
+  async expireNow(id: string, reason: string): Promise<ApprovalItem | undefined> {
+    const item = this.rt.store.getApproval(id)
+    if (item === undefined || !ACTIVE.includes(item.state)) return undefined
+    const now = this.rt.now()
+    item.state = 'expired'
+    item.updated_at = now
+    this.rt.store.revokeTokensFor(item.id)
+    this.rt.store.putApproval(item)
+    await this.releaseLinkedChange(item, 'expired', now)
+    await this.rt.emit('approval.expired', {
+      workspace_id: item.workspace_id,
+      actor: { kind: 'system', id: 'txn' },
+      subject: { type: 'approval_item', id: item.id },
+      payload: { reason },
+      item_id: item.id,
+    })
+    return item
+  }
+
   /** §7：升级 = 新增 Delivery 给下一层，不撤销原 recipients；工作时间按工作区 tz。 */
   async escalate(at?: Iso8601): Promise<ApprovalItem[]> {
     const now = at ?? this.rt.now()

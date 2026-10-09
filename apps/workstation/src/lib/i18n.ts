@@ -554,7 +554,7 @@ const zh: Table = {
   'position.entry.title': '交给这个岗位一件事',
   'position.entry.placeholder': '一句话说清要办什么，比如「把 A 商品降价 10%」',
   'position.entry.submit': '交给它',
-  'position.entry.hint': '岗位自己判断该走哪条职责；拿不准会问你一句',
+  'position.entry.hint': '岗位自己判断走哪条职责，在对话里能换一条',
   'position.counts': '{cards} 张待审 · {matters} 件在办',
   'position.choice.hint': '选了才起运行；选哪条就用哪条职责的权限与额度',
   'position.roles.toggle': '这个岗位下的 {count} 条职责',
@@ -3617,6 +3617,10 @@ const zh: Table = {
   'verb.dead_letter.reject': '去邮箱回复',
   // WP232：收件人待定的回信草稿——批了不发出去，人复制正文自己发
   'verb.manual_send.approve': '我来发',
+  'verb.review.approve': '按建议排明天',
+  'verb.review.reject': '我来排',
+  'verb.plan.approve': '采纳',
+  'verb.plan.instruct': '我改几条',
   'verb.manual_send.reject': '不用',
   'deck.dead_letter.reply_myself': '我自己去邮箱回复',
   // ── WP219：已审的内容更新（docs/90）──
@@ -4466,7 +4470,7 @@ const en: Table = {
   'position.entry.title': 'Hand this position a task',
   'position.entry.placeholder': 'One sentence, e.g. "cut the price of product A by 10%"',
   'position.entry.submit': 'Hand it over',
-  'position.entry.hint': 'The position picks the duty itself; it asks when unsure',
+  'position.entry.hint': 'The position picks the duty itself; you can switch it in the thread',
   'position.counts': '{cards} waiting · {matters} in progress',
   'position.choice.hint':
     'Nothing runs until you pick; the duty you pick sets the permissions and caps',
@@ -7619,6 +7623,10 @@ const en: Table = {
   'verb.dead_letter.approve': 'Try again',
   'verb.dead_letter.reject': 'Reply from mailbox',
   'verb.manual_send.approve': "I'll send it",
+  'verb.review.approve': 'Plan tomorrow as suggested',
+  'verb.review.reject': "I'll plan it",
+  'verb.plan.approve': 'Adopt',
+  'verb.plan.instruct': "I'll tweak a few",
   'verb.manual_send.reject': 'Discard',
   'deck.dead_letter.reply_myself': 'I will reply from the mailbox myself',
   // ── WP219: reviewed content updates (docs/90) ──

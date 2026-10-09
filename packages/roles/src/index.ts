@@ -18,6 +18,8 @@ export {
 export type { AssignmentFilter, StoreBackend } from './backend.js'
 export { createMemoryBackend, createSqliteBackend } from './backend.js'
 export { changeKindOf, effectiveConfig, riskClassOf, webOf } from './effective.js'
+export type { EntryIntent, EntryIntentResult } from './intent.js'
+export { classifyEntryIntent, LONG_TASK_CHARS } from './intent.js'
 export {
   BUNDLED_POSITIONS_DIR,
   BUNDLED_ROLES_DIR,
@@ -121,6 +123,7 @@ export {
   routeWithinPosition,
   SHORT_TERM_PENALTY,
   scoreRouteRoles,
+  settleAlways,
   settleCloseCall,
   settleNoHit,
   splitRoutePhrases,
