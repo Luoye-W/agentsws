@@ -292,12 +292,16 @@ export class SqliteIdentityService implements LocalIdentityService {
       >
     )(org, person, role)
   /** WP277：开公司模式时老板换人。 */
-  transferOrganizationOwner: NonNullable<Organizations['transferOrganizationOwner']> = (org, to) =>
+  transferOrganizationOwner: NonNullable<Organizations['transferOrganizationOwner']> = (
+    org,
+    to,
+    opts,
+  ) =>
     (
       this.#organizations.transferOrganizationOwner as NonNullable<
         Organizations['transferOrganizationOwner']
       >
-    )(org, to)
+    )(org, to, opts)
   brandsOf: Organizations['brandsOf'] = (org, person) => this.#organizations.brandsOf(org, person)
   attachWorkspaceToOrg: Organizations['attachWorkspaceToOrg'] = (input) =>
     this.#organizations.attachWorkspaceToOrg(input)

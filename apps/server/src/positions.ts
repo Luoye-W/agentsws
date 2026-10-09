@@ -373,8 +373,16 @@ export function createPositions(options: PositionsOptions): PositionsAssembly {
         .filter((r) => mine.has(r)),
     )
     const cards = await cardsOf(person_id)
+    /*
+     * WP278（决策 284）：只有一个岗位的人，首页就是这个岗位页——发给他、挂在底座职责（`common.*`）上的卡
+     * （「知道了 / 撤回」、有人申请加入…）也算在这里（牌堆那边同一个口径：`?base=1`）。
+     */
+    const sole = soleTemplateOf(person_id) === template.id
     const pending_cards = cards.filter(
-      (i) => WAITING_STATES.has(i.state) && myDutyRoles.has(i.role_id) && isDeckCard(i),
+      (i) =>
+        WAITING_STATES.has(i.state) &&
+        (myDutyRoles.has(i.role_id) || (sole && i.role_id.startsWith('common.'))) &&
+        isDeckCard(i),
     ).length
     return {
       position_id: template.id,
@@ -415,6 +423,15 @@ export function createPositions(options: PositionsOptions): PositionsAssembly {
    * 一个岗位对这个人来说只剩它们，就不出现在这里。「负责人」于是从左栏与首页隐去，
    * 而 `common.owner` 那条分配原样在（审批默认收件、brandAnchor 都还靠它）。
    */
+  /** WP278：这个人只在做一个岗位时回那个岗位的模板 id（与 `mine` 同一个判据：「负责人」那一行不算）。 */
+  const soleTemplateOf = (person_id: PersonId): string | undefined => {
+    const held = activeOf(person_id).filter((a) => !WORKSPACE_BASE_ROLES.has(a.role_id))
+    const hit = options
+      .positions()
+      .filter((t) => t.id !== OWNER_POSITION_ID && held.some((a) => belongs(a, t)))
+    return hit.length === 1 ? hit[0]?.id : undefined
+  }
+
   const mine = async (person_id: PersonId): Promise<PositionInstance[]> => {
     const held = activeOf(person_id).filter((a) => !WORKSPACE_BASE_ROLES.has(a.role_id))
     const out: PositionInstance[] = []

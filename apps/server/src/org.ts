@@ -467,6 +467,17 @@ export interface OrgOptions {
     context?: { mode?: OrganizationMode },
   ) => Promise<unknown>
   /**
+   * WP278（决策 278）：他自己接的、标成「个人」的连接（退出前那一问列的就是它们）。
+   * `workspace` = 只看这个工作区（② 退出），`org` = 这家下的每个品牌（③ 开公司时选「我要退出」）。
+   * 不给 = 没有个人连接这回事（只列空、什么都不断）。
+   */
+  personalConnections?: (
+    person_id: PersonId,
+    scope: 'workspace' | 'org',
+  ) => Promise<{ id: string; label: string }[]>
+  /** WP278：把它们断开（凭据从本机凭据库删掉）；回断开了几条。 */
+  disconnectPersonal?: (person_id: PersonId, scope: 'workspace' | 'org') => Promise<number>
+  /**
    * WP234（docs/54 §6.4）：岗位合并 / 移动之后，事项与岗位层记忆跟着走。
    * 事项在各品牌的工作模型里、记忆在学习回路里，制度层够不着，所以由装配方给。
    * 不给就只动制度层（岗位行 + 安放），事项与记忆原地不动。
@@ -2330,7 +2341,23 @@ export function createOrg(options: OrgOptions): OrgAssembly {
       if (workspace?.owner_id === actor.person_id)
         throw ORG_ERROR('conflict', '你是发起人，先把发起人交给同事再退出')
       const out = await removeMemberAs(actor.person_id, actor.person_id, mode)
-      return { revoked_assignments: out.revoked_assignments, returned: out.returned }
+      // WP278（决策 278）：他自己接的、标成「个人」的连接跟人走（凭据删掉）；共用的留下
+      const disconnected =
+        (await options.disconnectPersonal?.(actor.person_id, 'workspace').catch(() => 0)) ?? 0
+      return {
+        revoked_assignments: out.revoked_assignments,
+        returned: out.returned,
+        ...(disconnected > 0 ? { disconnected } : {}),
+      }
+    },
+
+    async leavePreview(actor) {
+      const mode = (await options.mode?.()) ?? 'company'
+      const personal_connections =
+        (await options
+          .personalConnections?.(actor.person_id, mode === 'company' ? 'org' : 'workspace')
+          .catch(() => [])) ?? []
+      return { personal_connections }
     },
 
     async removeMember(actor, person_id) {

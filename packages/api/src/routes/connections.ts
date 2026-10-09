@@ -58,6 +58,8 @@ export interface ConnectionView {
   service_label: string
   alias: string
   ownership: ConnectionOwnership
+  /** WP278：② 里这条是不是你接的（只有接的人能标「个人 / 共用」、能断开）。① ③ 不给。 */
+  mine?: boolean
   status: ConnectionStatus
   /** 只有展示名与账号 id 这类"给人看的身份"，没有 token、没有密码。 */
   identity?: { account_id?: string; display_name?: string }
@@ -328,6 +330,15 @@ export interface ConnectionsPort {
   ): MaybePromise<{ connection: ConnectionView; test: ConnectTestResult }>
   remove(actor: ConnectionsActor, id: string): MaybePromise<void>
   test(actor: ConnectionsActor, id: string): MaybePromise<ConnectTestResult>
+  /**
+   * WP278（决策 278）：标「个人 / 共用」。个人的在接它的人退出时一起断开（凭据删掉），共用的留下。
+   * 不实现 = 路由回 501。
+   */
+  setOwnership?(
+    actor: ConnectionsActor,
+    id: string,
+    ownership: ConnectionOwnership,
+  ): MaybePromise<ConnectionView>
   runtime(): MaybePromise<RuntimeStatusView>
   /**
    * WP247：本机连接器（按需下载、桌面壳起停）。不实现 = 这台服务进程不管本机连接器
@@ -427,6 +438,8 @@ export interface DeadLetterView {
 // ── 校验 ───────────────────────────────────────────────────────────────
 
 const OWNERSHIP = z.enum(['workspace', 'person'])
+/** WP278：改一条连接的「个人 / 共用」。 */
+const OwnershipBody = z.object({ ownership: OWNERSHIP })
 
 const MailboxSwitchesBody = z
   .object({
@@ -901,6 +914,30 @@ export function connectionRoutes(): Route[] {
       async (c, deps) => {
         await portOf(deps).remove(actorOf(c), param(c, 'id'))
         return ok(c, { removed: true })
+      },
+    ),
+    route(
+      {
+        method: 'put',
+        path: '/v1/connections/:id/ownership',
+        operationId: 'setConnectionOwnership',
+        summary:
+          'WP278 标这条连接是「个人」还是「共用」：个人的在他退出时一起断开（凭据从本机凭据库删），共用的留下。只有接它的人能改',
+        tag: TAG,
+        auth: 'bearer',
+        assignment: true,
+        authz: WRITE,
+        authzBypass: peersBypass,
+        params: [ID_PARAM],
+        body: OwnershipBody,
+        returns: 'ConnectionView',
+      },
+      async (c, deps) => {
+        const input = await body(c, OwnershipBody)
+        const port = portOf(deps)
+        if (port.setOwnership === undefined)
+          throw new ApiError('not_implemented', '这个服务进程不支持标个人 / 共用')
+        return ok(c, await port.setOwnership(actorOf(c), param(c, 'id'), input.ownership))
       },
     ),
   ]

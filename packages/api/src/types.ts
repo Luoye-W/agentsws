@@ -1129,6 +1129,12 @@ export interface WorkstationPort {
   /** 某岗位队列里的审批项（已按 recipient 过滤）。 */
   items(actor: WorkstationActor, position: PositionSummary): MaybePromise<ApprovalItem[]>
   /**
+   * WP278（决策 284）：发给本人、挂在**底座职责**（`common.*`）上的卡——不管他手上有没有那条底座分配
+   * （② 里「有人申请加入」挂在 `common.owner` 上，却是发给每个人的）。只有一个岗位的人首页就是岗位页，
+   * 岗位页按岗位里的职责筛卡，这些卡要另外收进来。不实现 = 不收。
+   */
+  baseItems?(actor: WorkstationActor): MaybePromise<ApprovalItem[]>
+  /**
    * 某岗位的查询上下文：连接状态 + 店铺侧行 + 审批项。
    * 返回的是 deck 的 `QueryContext`，网关不认识里面的字段，只负责传。
    */

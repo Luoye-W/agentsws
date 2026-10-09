@@ -54,6 +54,11 @@ export interface CompanyModeOptions {
    * 在这里跟着收。
    */
   optOut(person_id: PersonId): Promise<unknown>
+  /**
+   * WP278（决策 278）：选「我要退出」的人自己接的、标成「个人」的连接一起断开（凭据从本机凭据库删）；
+   * 共用的留下。界面上点之前先问过他一句（列出这几条的名字）。
+   */
+  disconnectPersonal?(person_id: PersonId): Promise<number>
 }
 
 export interface CompanyMode {
@@ -85,6 +90,56 @@ function isOffboarding(item: ApprovalItem): boolean {
   const p = asRecord(item.payload)
   if (p.target === 'offboard') return true
   return item.kind === 'staged_change' && p.kind === 'b2b_account_transfer'
+}
+
+/**
+ * WP277 / WP278：把所有者换给 `to`——③ 开公司模式时选了别人当老板、② 交出发起人（决策 276）走的是
+ * **同一条路**：组织与各品牌的 `owner_id` 一起换（`transferOrganizationOwner`），`to` 在他在的每个品牌里
+ * 有「负责人」那条（`common.owner`）。
+ *
+ * `demote`：② 交出发起人——原来那位变普通同事：组织名单与品牌成员都回 `member`，各品牌里他那条
+ * 「负责人」收回（请人离开、删品牌、搬数据这些家务从此是新发起人的），之后他就能自己退出。
+ * ③ 选别人当老板不降：原发起人留管理员，也留着自己那条「负责人」（WP277）。
+ */
+export async function transferOwnership(
+  deps: { identity: LocalIdentityService; roles: RoleStore },
+  org: Organization,
+  to: PersonId,
+  by: PersonId,
+  opts: { demote: boolean },
+): Promise<void> {
+  const { identity, roles } = deps
+  const from = org.owner_id
+  if (from === to) return
+  await identity.transferOrganizationOwner?.(
+    org.id,
+    to,
+    opts.demote ? { from_role: 'member' } : undefined,
+  )
+  for (const w of identity.brandsOf(org.id)) {
+    const inside = (await identity.members(w.id)).some(
+      (m) => m.person_id === to && m.left_at === undefined,
+    )
+    if (inside) {
+      const has = roles.assignments
+        .listByPerson(to, { workspace_id: w.id, role_id: 'common.owner' })
+        .some((a) => a.revoked_at === undefined)
+      if (!has)
+        roles.assignments.create({
+          person_id: to,
+          workspace_id: w.id,
+          role_id: 'common.owner',
+          granted_by: by,
+          ranges: [],
+        })
+    }
+    if (opts.demote)
+      for (const a of roles.assignments.listByPerson(from, {
+        workspace_id: w.id,
+        role_id: 'common.owner',
+      }))
+        if (a.revoked_at === undefined) roles.assignments.revoke(a.id)
+  }
 }
 
 export function createCompanyMode(options: CompanyModeOptions): CompanyMode {
@@ -270,26 +325,8 @@ export function createCompanyMode(options: CompanyModeOptions): CompanyMode {
     })
     // 老板换了人：组织与各品牌的所有者一起换，新老板在各品牌里也有「负责人」那条
     const bossChanged = boss !== org.owner_id
-    if (bossChanged) {
-      await identity.transferOrganizationOwner?.(org.id, boss)
-      for (const w of identity.brandsOf(org.id)) {
-        const inside = (await identity.members(w.id)).some(
-          (m) => m.person_id === boss && m.left_at === undefined,
-        )
-        if (!inside) continue
-        const has = roles.assignments
-          .listByPerson(boss, { workspace_id: w.id, role_id: 'common.owner' })
-          .some((a) => a.revoked_at === undefined)
-        if (!has)
-          roles.assignments.create({
-            person_id: boss,
-            workspace_id: w.id,
-            role_id: 'common.owner',
-            granted_by: actor.person_id,
-            ranges: [],
-          })
-      }
-    }
+    if (bossChanged)
+      await transferOwnership({ identity, roles }, org, boss, actor.person_id, { demote: false })
     const notified = await notify(needOrg(org.id), actor.person_id, people, boss)
     emit(org, actor.person_id, {
       mode: 'company',
@@ -409,6 +446,7 @@ export function createCompanyMode(options: CompanyModeOptions): CompanyMode {
       for (const w of identity.brandsOf(org.id))
         for (const a of roles.assignments.listByPerson(by, { workspace_id: w.id }))
           if (a.revoked_at === undefined) roles.assignments.revoke(a.id)
+      await options.disconnectPersonal?.(by).catch(() => 0)
     },
   }
 }
