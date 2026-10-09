@@ -417,6 +417,8 @@ describe('WP276 交给同事', () => {
     )
     const person = await screen.findByTestId('handoff-person')
     expect(person.textContent).toContain('手上 2 件')
+    // WP278：打开时焦点不落在标题旁的问号上——不然 tooltip 一开就挡住标题（jsdom 里给它算位置还会卡几秒）
+    expect(screen.queryByRole('tooltip')).toBeNull()
     expect((screen.getByTestId('handoff-send') as HTMLButtonElement).disabled).toBe(true)
     await user.click(person)
     await user.type(screen.getByTestId('handoff-note'), '我这周出差')
