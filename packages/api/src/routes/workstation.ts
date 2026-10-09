@@ -7,6 +7,7 @@
  * - **数字不经模型手**（29 原则 ③）：payload 全在服务端由 `@agentsws/deck` 的命名查询算好。
  * - **组件与查询只能来自注册表**（29 原则 ①）：未注册的积木 id / 查询名一律拒。
  */
+
 import type { RoleId } from '@agentsws/contracts'
 import {
   assembleHome,
@@ -45,6 +46,7 @@ import type {
   WorkstationPort,
   WorkstationRange,
 } from '../types.js'
+import { decidableBy } from './approvals.js'
 import { DuplicateAck, guardSimilar, recordCatalogNote } from './catalog.js'
 
 /** 工作台的基础准入：能读自己的审批队列。逐条查询的域权限在处理器里另查（29 §2）。 */
@@ -305,8 +307,15 @@ async function cardsOf(
   const w = workstationOf(deps)
   const own = await w.items(actor, position)
   const extra = withBase ? ((await w.baseItems?.(actor)) ?? []) : []
-  const items = [...own, ...extra.filter((i) => !own.some((x) => x.id === i.id))]
+  // WP287：点不动的卡不进他的牌堆（与决定那一道同一把尺子）
+  const can = decidableBy(deps, actor.person_id, actor.workspace_id)
   const now = deps.clock.now()
+  // 到期了（定时清理还没来得及记成过期）的卡也不进牌堆——它已经点不成了
+  const live = (i: { expires_at?: string }): boolean =>
+    i.expires_at === undefined || Date.parse(i.expires_at) > Date.parse(now)
+  const items = [...own, ...extra.filter((i) => !own.some((x) => x.id === i.id))].filter(
+    (i) => can(i) && live(i),
+  )
   return sortCards(
     items.map((i) =>
       projectCard(i, {
@@ -364,8 +373,12 @@ export function workstationRoutes(): Route[] {
         const positions = await w.positions(actor)
         const home: HomePosition[] = []
         let tz_offset_minutes = 0
+        // WP287：点不动的卡不进首页牌堆（与决定那一道同一把尺子）
+        const can = decidableBy(deps, p.person_id, p.workspace_id)
         for (const position of positions) {
-          const items = await w.items(actor, position)
+          const items = (await w.items(actor, position)).filter(
+            (i) => can(i) && (i.expires_at === undefined || i.expires_at > deps.clock.now()),
+          )
           // 没有默认数字块的职责（common.member 之类）不出数据条，但它的卡照样进队列。
           const tile_ids = position.show_tiles ? position.tile_ids : []
           const query = await w.queryContext(actor, position, range)
@@ -386,7 +399,9 @@ export function workstationRoutes(): Route[] {
          * （没有就第一个岗位）；决定时用哪条分配都行（决定看的是收件人）。
          */
         const held = new Set(positions.map((x) => x.role_id))
-        const orphans = ((await w.baseItems?.(actor)) ?? []).filter((i) => !held.has(i.role_id))
+        const orphans = ((await w.baseItems?.(actor)) ?? []).filter(
+          (i) => !held.has(i.role_id) && can(i),
+        )
         const host = home.find((h) => h.role_id.startsWith('common.')) ?? home[0]
         if (host !== undefined && orphans.length > 0) host.items.push(...orphans)
         const system = await w.systemCards(actor)

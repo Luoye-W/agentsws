@@ -231,14 +231,42 @@ const decideBypass: NonNullable<RouteSpec['authzBypass']> = (c, rctx, deps) => {
   return a !== undefined && !canDecide(deps, a.id)
 }
 
-/** 这一次决定只认关于他本人的卡（不是 ②、这条分配也没有批准权）。 */
+/**
+ * WP287（Luoye 10-09 真机：① 里唯一的人点复盘卡报「无权限：approval.approve（range=own）」）：
+ * 请求头带的那条分配没有批准权（卡挂在底座职责 `common.member` 上，工作台按卡上的分配发），
+ * **而这个人在这个工作区里别的分配有**——发给他的卡他就点得动（能点哪张仍由收件人令牌说了算）。
+ */
+function personCanDecide(deps: GatewayDeps, person_id: string, workspace_id: string): boolean {
+  return deps.roles
+    .listAssignments(person_id, { workspace_id })
+    .some((a) => a.revoked_at === undefined && canDecide(deps, a.id))
+}
+
+/**
+ * WP287 通用规则：**发给某人的卡，他必须点得动；点不动的就不该出现在他的「要你处理」里**。
+ * 与 `/v1/approvals/:id/decide` 同一把尺子：② 一律能点；他名下有一条分配有批准权就能点；
+ * 否则只认关于他本人的那几种卡。回一个判定函数（牌堆过滤用）。
+ */
+export function decidableBy(
+  deps: GatewayDeps,
+  person_id: string,
+  workspace_id: string,
+): (item: ApprovalItem) => boolean {
+  if (deps.peerAccess?.(workspace_id) === true) return () => true
+  if (personCanDecide(deps, person_id, workspace_id)) return () => true
+  return (item) => isSelfCard(item, person_id)
+}
+
+/** 这一次决定只认关于他本人的卡（不是 ②、这条分配没有批准权、他名下别的分配也没有）。 */
 function selfDecideOnly(
   c: Parameters<RouteSpec['authzBypass'] & {}>[0],
   deps: GatewayDeps,
   assignment_id: string,
 ): boolean {
   if (peersBypass(c, c.get('rctx'), deps)) return false
-  return !canDecide(deps, assignment_id)
+  if (canDecide(deps, assignment_id)) return false
+  const p = principalOf(c)
+  return !personCanDecide(deps, p.person_id, p.workspace_id)
 }
 
 async function mustGet(deps: GatewayDeps, id: string, workspace_id: string): Promise<ApprovalItem> {

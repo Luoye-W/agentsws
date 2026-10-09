@@ -98,6 +98,11 @@ export interface PositionsOptions {
   positions(): Position[]
   /** 本人队列里的审批项（已按 recipient 过滤）；不给就是"数不出待审卡"，回 0。 */
   cards?(person_id: PersonId): Promise<ApprovalItem[]> | ApprovalItem[]
+  /**
+   * WP287：这个人点不点得动这张卡（与决定那一道同一把尺子）。点不动的不算「N 张等你定」。
+   * 不给 = 都点得动（老口径）。
+   */
+  decidable?(person_id: PersonId): (item: ApprovalItem) => boolean
   /** 岗位层记忆的一句话（技能层条数 + 提到岗位层的教训条数）；不给就是空。 */
   memorySummary?(position_id: string): string
   /**
@@ -406,9 +411,15 @@ export function createPositions(options: PositionsOptions): PositionsAssembly {
      * （「知道了 / 撤回」、有人申请加入…）也算在这里（牌堆那边同一个口径：`?base=1`）。
      */
     const sole = soleTemplateOf(person_id) === template.id
+    // WP287：只数真要他定、他也点得动的卡（过期 / 已定的本来就不在等待状态里）
+    const can = options.decidable?.(person_id) ?? (() => true)
+    const nowMs = Date.parse(clock.now())
     const pending_cards = cards.filter(
       (i) =>
         WAITING_STATES.has(i.state) &&
+        // 到期了（定时清理还没来得及记成过期）的也不算
+        (i.expires_at === undefined || Date.parse(i.expires_at) > nowMs) &&
+        can(i) &&
         (myDutyRoles.has(i.role_id) || (sole && i.role_id.startsWith('common.'))) &&
         isDeckCard(i),
     ).length

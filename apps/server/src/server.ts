@@ -39,6 +39,7 @@ import {
   type Gateway,
   type GatewayDeps,
   type GuardrailPort,
+  isSelfCard,
   type KnowledgePort,
   type LocalIdentityService,
   type ModelsActor,
@@ -4747,6 +4748,18 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           lane: 'mine',
           state: [...QUEUE_STATES],
         }) as Promise<ApprovalItem[]>,
+      // WP287：点不动的卡不算「N 张等你定」（与决定那一道同一把尺子：② 都能点；名下有批准权就能点；否则只认关于本人的卡）
+      decidable: (person_id) => {
+        if (organizations.modeOfSync(ws) === 'peers') return () => true
+        const able = roles.assignments
+          .listByPerson(person_id, { workspace_id: ws })
+          .some(
+            (a) =>
+              a.revoked_at === undefined &&
+              roles.can(a.id, 'approval', 'approve', { range: 'own', sensitivity: 'internal' }),
+          )
+        return able ? () => true : (item) => isSelfCard(item, person_id)
+      },
       // 54 §3：岗位层记忆一句话（这一层攒下几段、其中几段是学来的）
       memorySummary: (position_id) =>
         learning.memorySummary({ tier: 'position', scope_id: position_id }),
