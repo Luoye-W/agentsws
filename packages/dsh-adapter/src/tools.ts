@@ -352,13 +352,87 @@ function themeParams(name: string): Record<string, unknown> | undefined {
     properties?: Record<string, Record<string, unknown>>
     required?: string[]
   }
-  const required = new Set(schema.required ?? [])
+  return dshPropertyMap(schema.properties ?? {}, schema.required ?? [])
+}
+
+/**
+ * 10-09 真机：stub / direct 那份是普通 JSON Schema，dsh 的参数表更严——嵌套对象必须**写明**
+ * `additionalProperties`（true / false），必填写在每个属性上的 `required: true`，不认对象上的
+ * `required: [...]` 数组。原样转过去，`shop_add_images` 的 `images[].{url,file,…}` 让整条运行
+ * 一启动就挂（「parameters.images.items.additionalProperties must be explicitly true or false」），
+ * 店铺管理这条职责一个字都答不出来。这里递归转一遍：有 properties 的对象关上，没写的开着。
+ */
+function dshPropertyMap(
+  properties: Record<string, Record<string, unknown>>,
+  required: readonly string[],
+): Record<string, unknown> {
+  const need = new Set(required)
   return Object.fromEntries(
-    Object.entries(schema.properties ?? {}).map(([key, spec]) => [
+    Object.entries(properties).map(([key, spec]) => [
       key,
-      { ...spec, ...(required.has(key) ? { required: true } : {}) },
+      { ...dshValue(spec), ...(need.has(key) ? { required: true } : {}) },
     ]),
   )
+}
+
+/** dsh 每种类型认的键（`dsh-tools` 的 value schema DSL）；别的键（minimum / maxItems / format…）它直接拒。 */
+const DSH_ANNOTATION_KEYS = ['description', 'title', 'default', 'examples'] as const
+const DSH_KEYS: Record<string, readonly string[]> = {
+  object: [...DSH_ANNOTATION_KEYS, 'type', 'properties', 'additionalProperties'],
+  array: [...DSH_ANNOTATION_KEYS, 'type', 'items'],
+  scalar: [...DSH_ANNOTATION_KEYS, 'type', 'enum', 'const'],
+}
+
+/** 不认的约束不能丢给模型就算了：收进描述里一句（「取值 1–8」），校验仍在执行端做。 */
+function keepKnownKeys(
+  spec: Record<string, unknown>,
+  keys: readonly string[],
+): Record<string, unknown> {
+  const kept: Record<string, unknown> = {}
+  const dropped: string[] = []
+  for (const [k, v] of Object.entries(spec)) {
+    if (keys.includes(k)) kept[k] = v
+    else if (k !== 'required') dropped.push(`${k}=${JSON.stringify(v)}`)
+  }
+  if (dropped.length === 0) return kept
+  const note = `（${dropped.join('，')}）`
+  return {
+    ...kept,
+    description: typeof kept.description === 'string' ? `${kept.description}${note}` : note,
+  }
+}
+
+function dshValue(spec: Record<string, unknown>): Record<string, unknown> {
+  if (spec.type === 'object') {
+    const { required, properties, additionalProperties, ...rest } = spec as {
+      required?: unknown
+      properties?: Record<string, Record<string, unknown>>
+      additionalProperties?: unknown
+    } & Record<string, unknown>
+    return keepKnownKeys(
+      {
+        ...rest,
+        ...(properties === undefined
+          ? {}
+          : {
+              properties: dshPropertyMap(properties, Array.isArray(required) ? required : []),
+            }),
+        additionalProperties:
+          typeof additionalProperties === 'boolean'
+            ? additionalProperties
+            : properties === undefined,
+      },
+      DSH_KEYS.object ?? [],
+    )
+  }
+  if (spec.type === 'array') {
+    const items =
+      spec.items !== null && typeof spec.items === 'object'
+        ? { items: dshValue(spec.items as Record<string, unknown>) }
+        : {}
+    return keepKnownKeys({ ...spec, ...items }, DSH_KEYS.array ?? [])
+  }
+  return keepKnownKeys(spec, DSH_KEYS.scalar ?? [])
 }
 
 const STAGE_PARAMS = {
