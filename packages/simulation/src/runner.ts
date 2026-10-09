@@ -16,6 +16,7 @@ import type {
   RunEvent,
   RunResult,
 } from '@agentsws/contracts'
+import { instructionRuleCard, isInstructionRuleCard, ruleFromCard } from '@agentsws/core'
 import type { ActorPolicy } from '@agentsws/stand-ins'
 import type { ChatLoop } from './chat.js'
 import { installChat } from './chat.js'
@@ -503,6 +504,12 @@ async function execute(
       if (item === undefined) throw new SimulationError('not_found', '还没有复核卡可决定')
       return item
     }
+    // WP284：最近一张「以后都这样」策略卡
+    if (ref === '$last_policy_change') {
+      const item = [...all].reverse().find((i) => i.kind === 'policy_change')
+      if (item === undefined) throw new SimulationError('not_found', '还没有策略卡可决定')
+      return item
+    }
     if (ref === '$last_staged_change') {
       const item = [...all].reverse().find((i) => i.kind === 'staged_change')
       if (item === undefined) throw new SimulationError('not_found', '还没有待批变更可决定')
@@ -535,15 +542,24 @@ async function execute(
         `${who} 手上没有 ${item.id}（${item.kind} / ${item.state}）的 decision_token`,
       )
     }
+    // WP284：「以后都这样」那张选了哪个——与工作台同一条路（deck 把答案放进 edited_payload；总线不单独存它）
+    const ruleChoice = option !== undefined && action === 'approve' && isInstructionRuleCard(item)
     const decided = await txn.approvals.decide(item.id, who, {
       decision_token: delivery.decision_token,
-      action,
+      action: ruleChoice ? 'approve_edited' : action,
       via: 'workstation',
       ...(reason === undefined ? {} : { reason }),
       ...(option === undefined ? {} : { selected_option_id: option }),
-      ...(action === 'approve_edited'
-        ? { edited_payload: standIns.actors.applyEdits(item.payload) }
-        : {}),
+      ...(ruleChoice
+        ? {
+            edited_payload: {
+              ...(item.payload as Record<string, unknown>),
+              selected_option_id: option,
+            },
+          }
+        : action === 'approve_edited'
+          ? { edited_payload: standIns.actors.applyEdits(item.payload) }
+          : {}),
     })
     // WP29：人的决定就是最强的学习信号（24 §3）。装了学习回路才收。
     await world.learning?.onDecided(decided, {
@@ -552,6 +568,18 @@ async function execute(
     // WP56（48 §4 #6）：复核卡答完了才真正动知识（人没答之前口径逐字段不变）
     if (decided.kind === 'knowledge_update' && action !== 'reject')
       await world.resolveKnowledgeRecheck(decided, option)
+    // WP284（决策 275）：「以后都这样」批了 → 这条职责的规矩里多一句（与服务端同一条判定）
+    const rule = ruleFromCard(
+      decided,
+      `rr_${String(world.roleRules.list(decided.workspace_id, decided.role_id).length + 1).padStart(4, '0')}`,
+      clock.now(),
+    )
+    if (rule !== undefined && world.roleRules.add(rule).added)
+      world.appendEvent(
+        'role_rule.added',
+        { rule_id: rule.id, role_id: rule.role_id, source_card_id: decided.id },
+        { subject: { type: 'role_rule', id: rule.id } },
+      )
   }
 
   /* ── WP38 认领与撞车（40 §3）──────────────────────────────────────── */
@@ -1052,6 +1080,28 @@ async function execute(
           event.decide.action,
           event.decide.reason,
           event.decide.option,
+        )
+        await tick()
+        return
+      }
+      case 'actor.instruct': {
+        // 36 §2.1：指导落成「驳回 + 那句话」（这一封不发），作用域是「以后都这样」→ 另出一张策略卡
+        const item = resolveItem(event.instruct.item)
+        const { who, text } = event.instruct
+        await decideOne(item, who, 'reject', text)
+        const created = await txn.approvals.create(
+          instructionRuleCard({
+            workspace_id: world.workspace_id,
+            person_id: who,
+            assignment_id: world.assignment.id,
+            item,
+            text,
+          }),
+        )
+        world.appendEvent(
+          'simulation.instructed',
+          { scope: event.instruct.scope, approval_item_id: created.id },
+          { subject: { type: 'approval_item', id: item.id } },
         )
         await tick()
         return
