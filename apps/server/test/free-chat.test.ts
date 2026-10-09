@@ -64,7 +64,6 @@ function setup(over: Partial<FreeChatOptions> & { script?: (string | { search: s
     providers: [a, b],
     policy: {
       default: a.ref,
-      data_residency: 'any',
       prices: {
         'deepseek/deepseek-flash': { in: 0, out: 0, cached: 0 },
         'agentsws/deepseek-pro': { in: 0, out: 0, cached: 0 },

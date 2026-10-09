@@ -449,7 +449,6 @@ export function cloudStandIn(options: CloudStandInOptions = {}): CloudStandIn {
     org_id: STAND_IN_ORG.id,
     workspace_id: 'ws_demo',
     scopes: ['data'],
-    region: 'global' as const,
   }
   const days = (n: number): string => new Date(Date.parse(now()) + n * 86_400_000).toISOString()
   const monthStart = (): string => `${now().slice(0, 7)}-01T00:00:00.000Z`

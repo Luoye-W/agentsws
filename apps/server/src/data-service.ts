@@ -9,8 +9,8 @@
  * | `byo_source`（自带数据接口） | 这些能力本机还没有自带适配器——当「没配」，落下一级 |
  * | `workshop`（Agents 工坊，用积分） | 关联了账号就转给云上 `/v1/data/*`；没关联当「没配」 |
  *
- * 都没有就回一句人话（`not_implemented`），不编数据。云上那句人话（402 积分不够、501 还没开通、
- * 422 数据驻留挡住……）原样带回去；连不上是「稍后再试」。令牌只在 `cloud.call` 那一跳进头。
+ * 都没有就回一句人话（`not_implemented`），不编数据。云上那句人话（402 积分不够、501 还没开通……）
+ * 原样带回去；连不上是「稍后再试」。令牌只在 `cloud.call` 那一跳进头。
  */
 import type { DataServiceActor, DataServiceApiPort } from '@agentsws/api'
 import { ApiError } from '@agentsws/api'
@@ -65,8 +65,6 @@ function unwrap<T>(res: KolCloudCall<T>, action: string): T {
     throw new ApiError('budget_exhausted', said ?? '积分不够了，去"账号与积分"里充值后再试。')
   if (res.status === 404) throw new ApiError('not_found', said ?? '没有这项能力或这个任务。')
   if (res.status === 410) throw new ApiError('not_found', said ?? '结果过了保留期，已经删了。')
-  if (res.status === 422)
-    throw new ApiError('residency_blocked', said ?? '这项数据只能从境外取，数据驻留挡住了。')
   if (res.status === 429)
     throw new ApiError('rate_limited', said ?? '今天的次数到上限了，明天再试或联系我们调高。')
   if (res.status === 409) throw new ApiError('conflict', said ?? '任务还没跑完，结果还取不到。')

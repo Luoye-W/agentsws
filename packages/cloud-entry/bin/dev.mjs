@@ -128,7 +128,6 @@ const app = createEntryApp({
       base_url: 'https://fake-upstream.invalid/v1',
       // 假上游不看它；生产里这一把只从环境变量 AGENTSWS_NEWAPI_KEY 读
       api_key: () => process.env.AGENTSWS_NEWAPI_KEY ?? 'dev-not-a-real-key',
-      region_map: { 'deepseek-flash': ['cn', 'global'], 'gpt-5-mini': ['global'] },
     },
   },
   fetch: fakeUpstream,

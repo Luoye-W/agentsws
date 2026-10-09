@@ -144,7 +144,6 @@ export function gatewayOf(
     providers: [scriptedProvider({ script, ref: MODEL, seed: 7 })],
     policy: {
       default: MODEL,
-      data_residency: 'cn',
       prices: { 'stub/scripted-v1': { in: 1, out: 2, cached: 0.1 } },
     },
     clock: c,
@@ -166,7 +165,6 @@ export function downGateway(c: SyntheticClock): ModelGatewayApi {
     ],
     policy: {
       default: MODEL,
-      data_residency: 'cn',
       prices: { 'stub/scripted-v1': { in: 1, out: 2, cached: 0.1 } },
     },
     clock: c,

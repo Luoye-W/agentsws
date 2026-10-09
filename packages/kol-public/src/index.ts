@@ -66,7 +66,6 @@ export {
   KOL_PREFIX,
   type KolRouteDeps,
   mountKolPublicRoutes,
-  regionOf,
 } from './routes.js'
 export {
   AUDIT_NOT_CHARGED_NOTE,

@@ -42,7 +42,6 @@ export interface StandInKolPrincipal {
   org_id: string
   workspace_id: string
   scopes: string[]
-  region: 'cn' | 'global'
 }
 
 /** 替身抛的错：码与云上那张表同名，`message` 是同一句人话。 */

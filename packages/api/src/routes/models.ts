@@ -3,7 +3,7 @@
  *
  * 在这之前，工作台上根本没有"接模型"这一项——不设 `DEEPSEEK_API_KEY` 环境变量就只有
  * stub 运行时，Agent 一句话都说不出来。这一组路由把它补上：原生表单填 key、
- * 按 purpose 选模型、三级预算与数据驻留、一张按 purpose 汇总的花费小表。
+ * 按 purpose 选模型、三级预算、一张按 purpose 汇总的花费小表。
  *
  * 三条边界，和连接面（`routes/connections.ts`）一模一样：
  *
@@ -86,7 +86,7 @@ export type ModelProviderKind =
    * 也没有 key 可填：凭据是 dsh 官方 `@deepseek-ai/dsh-deepseek-account-platform` 在系统浏览器里
    * 走完 PKCE 授权的产物，**只存在 dsh 自己的本机凭据库里**（不进我们的秘密库、不上云）。
    * 推理走 `api.deepseek.com` 的 Messages 口、令牌放 `x-dsh-auth-token` 头（官方写法）。
-   * 登录 / 登出 / 余额走 `/v1/settings/models/deepseek-account*` 那几条路。数据驻留：境内。
+   * 登录 / 登出 / 余额走 `/v1/settings/models/deepseek-account*` 那几条路。
    */
   | 'deepseek_account'
 
@@ -108,7 +108,7 @@ export interface ModelProviderView {
   embedding_model?: string
   /** 给了才暴露 transcribe（ASR）。 */
   transcription_model?: string
-  /** 22 §2 数据驻留：这家在境内还是境外。 */
+  /** 这家的接口在国内还是海外（只作记录：决策 291 起不按它拦、界面也不展示）。 */
   region: 'cn' | 'global'
   /** 这台机器上存过 key 没有。**永远只是布尔值。** */
   has_key: boolean
@@ -338,7 +338,7 @@ export interface DeepSeekAccountView {
   /** 平台上看用量 / 充值的地址（官方 `links`，不带令牌）。 */
   usage_url?: string
   top_up_url?: string
-  /** 这一路用哪个型号（官方目录里能看图的那一档）与数据驻留（境内）。 */
+  /** 这一路用哪个型号（官方目录里能看图的那一档）与接口地域（只作记录）。 */
   default_model: string
   region: 'cn'
   /**
@@ -547,12 +547,11 @@ export interface ModelPricingRefreshResult {
   reason?: string
 }
 
-/** 22 §2 的策略：默认模型 + 按 purpose 覆盖 + 驻留 + 三级预算。 */
+/** 22 §2 的策略：默认模型 + 按 purpose 覆盖 + 三级预算。 */
 export interface ModelDefaultsView {
   /** `provider_id/model`，与 `ModelProviderView.id` 对齐。 */
   default: string
   by_purpose: Partial<Record<ModelPurpose, string>>
-  data_residency: 'cn' | 'any'
   budget: {
     workspace_daily_base?: number
     workspace_monthly_base?: number
@@ -600,7 +599,6 @@ export interface ModelUsageView {
 export interface SetModelDefaultsInput {
   default?: string | undefined
   by_purpose?: Partial<Record<ModelPurpose, string>> | undefined
-  data_residency?: 'cn' | 'any' | undefined
   budget?:
     | {
         workspace_daily_base?: number | undefined
@@ -807,7 +805,7 @@ const DefaultsBody = z.object({
    * 用 `record` 等于按 purpose 选模型这条路根本走不通（WP25 端到端测试逮到的）。
    */
   by_purpose: z.partialRecord(PURPOSE, z.string().min(1).max(256)).optional(),
-  data_residency: z.enum(['cn', 'any']).optional(),
+  // 决策 291（WP281）：老客户端还会带 `data_residency`——不列在这里，zod 默认把多余的键剥掉，不报错也不生效
   budget: z
     .object({
       workspace_daily_base: z.number().min(0).max(1_000_000).optional(),
@@ -897,7 +895,7 @@ export function modelRoutes(): Route[] {
         method: 'get',
         path: '/v1/models/defaults',
         operationId: 'getModelDefaults',
-        summary: '按 purpose 的默认模型、数据驻留、三级预算（22 §2）',
+        summary: '按 purpose 的默认模型、三级预算（22 §2）',
         tag: TAG,
         auth: 'bearer',
         assignment: true,

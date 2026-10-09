@@ -39,8 +39,8 @@ Token Plan 与 Coding Plan 是两个独立产品，官方明说不能互转—�
 
 两条地址：
 
-- 北京（国内，数据驻留 cn）：`https://dashscope.aliyuncs.com/compatible-mode/v1`
-- 新加坡（国际站，数据驻留 global）：`https://dashscope-intl.aliyuncs.com/compatible-mode/v1`
+- 北京（国内）：`https://dashscope.aliyuncs.com/compatible-mode/v1`
+- 新加坡（国际站）：`https://dashscope-intl.aliyuncs.com/compatible-mode/v1`
 
 标准口没有「拉取模型列表」（官方只有对话接口），拉不到时下拉框里给的是内置价目表里核实过的那份清单，照样在下拉框里选。
 

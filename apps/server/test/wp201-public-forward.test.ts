@@ -85,7 +85,6 @@ function assemble(opts: { forwardWaitMs?: number; retryDelaysMs?: number[] } = {
     org_id: 'org_1',
     workspace_id: WS,
     scopes: ['data'],
-    region: 'global',
   }
   const real = cloudStandInFetch({
     kolPublic: cloudStore,

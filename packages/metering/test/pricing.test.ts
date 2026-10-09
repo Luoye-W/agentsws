@@ -13,7 +13,6 @@ import {
   creditsPerThousandTokens,
   entryFor,
   estimateAiCredits,
-  isCnAvailable,
   modelPrice,
   PRICING_FILE,
   pricingEntryNeedsReview,
@@ -84,13 +83,10 @@ describe('价目表', () => {
     )
   })
 
-  it('境内可用按 cn_vendors 判：DeepSeek 可以，OpenAI 不行', () => {
-    const cnModel = PRICE_CATALOG.vendors.find((v) => v.id === 'deepseek')?.models[0]?.model
-    const globalModel = PRICE_CATALOG.vendors.find((v) => v.id === 'openai')?.models[0]?.model
-    expect(isCnAvailable(pricing, cnModel as string)).toBe(true)
-    expect(isCnAvailable(pricing, globalModel as string)).toBe(false)
-    // 价目表里根本没有的一律不可用（不猜）
-    expect(isCnAvailable(pricing, 'some-model-we-never-heard-of')).toBe(false)
+  it('决策 291：展开出来的模型行不再带境内标记', () => {
+    const rows = pricing.entries.find((e) => e.capability === 'ai.chat')?.models ?? []
+    expect(rows.length).toBeGreaterThan(0)
+    for (const row of rows) expect(row).not.toHaveProperty('cn')
   })
 
   it('按次 / 按页 / 按分钟：数量 × 单价；认不出的能力回 undefined', () => {

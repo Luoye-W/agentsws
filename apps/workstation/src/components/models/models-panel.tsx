@@ -5,12 +5,12 @@
  * 顶部一条提示：默认模型看不了图 / 还没验证过能不能看图（老用户升级上来）。
  *
  * 四段，从上到下：
- * 1. **已配的**——每条一行：地址、模型名、境内外、有没有 key、上次测试；两个动作：测试、删；
+ * 1. **已配的**——每条一行：地址、模型名、有没有 key、上次测试；两个动作：测试、删；
  * 2. **加一个**——一家一张卡（DeepSeek 官方 / OpenAI 兼容 / 阿里云百炼…），表单是**不经模型的原生表单**。
  *    WP156（36 §7）：卡上只留图标 + 名字、一句话、方案切换、动作；「要准备什么」的步骤与外链
  *    进了教程文章（卡上一个「看教程」，右栏打开），一两句的介绍进问号；
  * 3. **默认模型**——按 purpose（跑活 / 抽取 / 反思 / 向量 / 判分 / 转写）各选一个，
- *    外加数据驻留与三级预算；
+ *    外加三级预算；
  * 4. **今天花了多少**——按 purpose 汇总的一张小表（22 §3 的 usage）。
  *
  * key 这条线：值从 `ModelForm` 的 FormData 出来 → `saveModelProvider` 发出去 → 结束。
@@ -555,7 +555,7 @@ export function ModelsPanel({ assignment }: { assignment?: string }): React.Reac
 /**
  * 已配的一张卡（WP214，36 §7 第四档）：图标 + 名字 + 模型短标签 + 一排状态图标 + 测试 / 改 / 删。
  *
- * - 地址、境内外、完整模型 id 进模型标签的 tooltip，不在卡上常显；
+ * - 地址、完整模型 id 进模型标签的 tooltip，不在卡上常显；
  * - 三步（连通 / 回文字 / 看图）是一排小图标，上次测 · 耗时 · token 在 tooltip 里；
  * - 「通了：…」那一整行只在**上次测试（服务端时间）两分钟内**以小字出现；没通的原因常显一句人话。
  */
@@ -580,7 +580,7 @@ function ProviderRow({
   const { t } = useApp()
   // Fable 09-30：「刚测完两分钟」按服务端的上次测试时间算——刷新后仍在两分钟内的照样显示
   const fresh = useFresh(testedMs(result))
-  const tech = `${provider.base_url} · ${t(`models.region.${provider.region}`)}`
+  const tech = provider.base_url
   return (
     <div className="flex flex-col gap-1.5">
       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5">
@@ -740,22 +740,6 @@ function DefaultsSection({
           </select>
         </label>
       ))}
-
-      <label className="flex items-center justify-between gap-2 text-xs">
-        <span>{t('models.residency')}</span>
-        <select
-          className="rounded-md border bg-background px-2 py-1 text-xs"
-          value={settings.data_residency}
-          disabled={busy}
-          data-testid="model-residency-select"
-          onChange={(event) => {
-            onChange({ data_residency: event.currentTarget.value === 'cn' ? 'cn' : 'any' })
-          }}
-        >
-          <option value="cn">{t('models.residency.cn')}</option>
-          <option value="any">{t('models.residency.any')}</option>
-        </select>
-      </label>
 
       {/* WP43 ③：原来底下那段规则说明进问号 */}
       <div className="flex items-center gap-1">

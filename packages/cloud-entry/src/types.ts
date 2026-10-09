@@ -24,9 +24,6 @@ export interface EntryPrincipal {
   scopes: string[]
 }
 
-/** 模型名 → 这个模型在哪些区可用。`cn` 在列表里才允许境内请求用它（22 §2）。 */
-export type RegionMap = Record<string, ('cn' | 'global')[]>
-
 export type FetchLike = (input: string, init: RequestInit) => Promise<Response>
 
 /** 模型汇聚层（New API）。**不把它暴露给用户**（49 M6）：只有我们这一层打它。 */
@@ -39,8 +36,6 @@ export interface AiUpstream {
    * 直接给字符串也认（测试里省事）。
    */
   api_key: string | (() => string | undefined)
-  /** 不给的话按价目表里那条 `cn` 判（`pricing.json` 的 `cn_vendors`）。 */
-  region_map?: RegionMap
 }
 
 /**
@@ -102,7 +97,6 @@ export type EntryErrorCode =
   | 'forbidden'
   | 'invalid_input'
   | 'insufficient_credits'
-  | 'residency_blocked'
   | 'not_implemented'
   | 'provider_error'
   | 'internal'
@@ -113,7 +107,6 @@ export const ENTRY_STATUS: Record<EntryErrorCode, number> = {
   invalid_input: 400,
   // 402 Payment Required：这是它唯一一个货真价实的用法——钱不够
   insufficient_credits: 402,
-  residency_blocked: 422,
   not_implemented: 501,
   provider_error: 502,
   internal: 500,

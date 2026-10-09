@@ -55,11 +55,12 @@ describe('云端对外契约（生成器）', () => {
     }
   })
 
-  it('我们加的头与错误形状写清楚了：AI 口的 402 / 422 与数据驻留头', () => {
+  it('我们加的头与错误形状写清楚了：AI 口的 402；决策 291 起没有驻留头与 422', () => {
     const chat = doc.paths['/v1/ai/chat/completions'].post
     expect(chat.responses['402']['x-error-codes']).toEqual(['insufficient_credits'])
-    expect(chat.responses['422']['x-error-codes']).toEqual(['residency_blocked'])
-    expect(chat.parameters.map((p) => p.name)).toContain('X-Agentsws-Region')
+    expect(chat.responses['422']).toBeUndefined()
+    expect(chat.parameters.map((p) => p.name)).not.toContain('X-Agentsws-Region')
+    expect(JSON.stringify(doc)).not.toContain('X-Agentsws-Region')
     expect(chat.responses['200'].content['text/event-stream']['x-sse-data']).toBeDefined()
     const connect = doc.paths['/relay/{workspace}/connect'].get
     expect(connect['x-websocket'].client.$ref).toBe('#/components/schemas/RelayClientFrame')

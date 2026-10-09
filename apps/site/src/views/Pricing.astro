@@ -115,8 +115,8 @@ const numFmt = new Intl.NumberFormat(lang === 'zh' ? 'zh-CN' : 'en-US')
             <table>
               <thead><tr><th scope="col">{t.table.model}</th><th scope="col">{t.table.input}</th><th scope="col">{t.table.output}</th></tr></thead>
               <tbody>
-                {(e.models ?? []).filter((m, i, all) => (m.in > 0 || m.out > 0) && all.findIndex((x) => x.model === m.model && x.cn === m.cn && (x.in > 0 || x.out > 0)) === i).map((m) => (
-                  <tr><td>{m.model}{m.cn ? ` · ${t.table.region}` : ''}</td><td>{formatCredits(m.in)}</td><td>{formatCredits(m.out)}</td></tr>
+                {(e.models ?? []).filter((m, i, all) => (m.in > 0 || m.out > 0) && all.findIndex((x) => x.model === m.model && (x.in > 0 || x.out > 0)) === i).map((m) => (
+                  <tr><td>{m.model}</td><td>{formatCredits(m.in)}</td><td>{formatCredits(m.out)}</td></tr>
                 ))}
               </tbody>
             </table>

@@ -92,7 +92,6 @@ function seedCreator(handle: string, hasContact = true): void {
     org_id: 'org_seed',
     workspace_id: 'ws_seed',
     scopes: [...DEFAULT_CLOUD_SCOPES],
-    region: 'global' as const,
   }
   kolCloud.contributeAs(principal, [
     {
@@ -245,7 +244,6 @@ describe('WP68 / 49 M2：用我的 / 用 agentsws 的', () => {
         org_id: 'org_seed',
         workspace_id: 'ws_seed',
         scopes: [...DEFAULT_CLOUD_SCOPES],
-        region: 'global',
       },
       [{ channel: 'youtube', handle: 'gadgetplugin', followers: 9_000, observed_at: T0 }],
       { via: 'extension' },

@@ -2532,7 +2532,7 @@ export interface paths {
       path?: never
       cookie?: never
     }
-    /** 按 purpose 的默认模型、数据驻留、三级预算（22 §2） */
+    /** 按 purpose 的默认模型、三级预算（22 §2） */
     get: operations['getModelDefaults']
     /** 改默认模型 / 驻留 / 预算；保存即生效，不重启进程 */
     put: operations['setModelDefaults']
@@ -24350,8 +24350,6 @@ export interface operations {
           by_purpose?: {
             [key: string]: string
           }
-          /** @enum {string} */
-          data_residency?: 'cn' | 'any'
           budget?: {
             workspace_daily_base?: number
             workspace_monthly_base?: number

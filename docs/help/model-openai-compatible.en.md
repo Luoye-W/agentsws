@@ -22,8 +22,7 @@ Consoles of the common ones:
 2. Find the base URL in its docs (usually ending in /v1).
 3. In Agents Workshop, click "Add API key" on the "OpenAI compatible (custom)" card. The presets at the top of the form (Moonshot / Kimi, Qwen, Zhipu GLM, local Ollama) fill in the URL and a vision-capable model in one click.
 4. Fill in URL, model name and key; click "Fetch model list" if you don't know the model name.
-5. Set data residency to global for services outside China, cn for services inside China.
-6. Save, then click "Test" — three ticks: reachable / text replies / reads images.
+5. Save, then click "Test" — three ticks: reachable / text replies / reads images.
 
 ## Preset addresses
 

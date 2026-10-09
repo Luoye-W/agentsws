@@ -21,7 +21,6 @@ const principal = {
   org_id: 'org_1',
   workspace_id: 'ws_1',
   scopes: ['data'] as const,
-  region: 'global' as const,
 }
 
 const KEY = '/v1/data/kol/creators/youtube/somecreator'

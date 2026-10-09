@@ -678,7 +678,10 @@ export const YOUTUBE_UNITS_PER_DAY = 10_000
 /** 一次搜索 / 一次频道读各消耗多少单位（YouTube Data API 的官方口径）。 */
 export const YOUTUBE_UNIT_COST = { search: 100, channel: 1 } as const
 
-/** 数据驻留头（22 §2；与服务入口那条逐字同一个）。 */
+/**
+ * @deprecated 决策 291（WP281）：「数据不出境」删了，本机不再发这个头，云端收到也忽略。
+ * 私有云 `packages/kol-public/src/routes.ts` 还在 import，等那边（WP280）去掉再删。
+ */
 export const KOL_REGION_HEADER = 'X-Agentsws-Region'
 
 /** 公共库这一组要的动作集（18 §1 最小动作集）。 */

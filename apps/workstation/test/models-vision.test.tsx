@@ -33,7 +33,6 @@ const ACTIVE: ModelProviderView = {
 const DEFAULTS: ModelDefaultsView = {
   default: 'deepseek/deepseek-chat',
   by_purpose: {},
-  data_residency: 'cn',
   budget: {},
   choices: [{ id: 'deepseek/deepseek-chat', label: '我的 DeepSeek（deepseek-chat）' }],
 }

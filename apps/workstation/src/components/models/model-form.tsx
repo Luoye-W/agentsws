@@ -469,29 +469,6 @@ export function ModelForm({
         </Field>
       )}
 
-      <fieldset className="flex flex-col gap-1">
-        <legend className="flex items-center gap-1 text-xs font-medium">
-          {t('models.field.region')}
-          <Hint text={t('models.field.region.hint')} />
-        </legend>
-        <div className="flex gap-3 text-xs">
-          {(['cn', 'global'] as const).map((r) => (
-            <label key={r} className="flex cursor-pointer items-center gap-1.5">
-              <input
-                type="radio"
-                name="region"
-                value={r}
-                checked={region === r}
-                onChange={() => {
-                  setRegion(r)
-                }}
-              />
-              {t(`models.region.${r}`)}
-            </label>
-          ))}
-        </div>
-      </fieldset>
-
       {/*
         价：选定模型之后照内置价目表自动填，并写清楚"来源：官网 {日期}"。
         用户在框里敲一个字就变成"手动"——之后换模型不自动改它，每周那次官网

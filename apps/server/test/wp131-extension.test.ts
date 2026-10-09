@@ -93,7 +93,6 @@ function assemble(options: { credits?: number; linked?: boolean; now?: () => str
     org_id: 'org_1',
     workspace_id: WS,
     scopes: ['data'],
-    region: 'global',
   }
   if ((options.credits ?? 0) > 0)
     wallet.topup({ org_id: 'org_1', credits: options.credits ?? 0, kind: 'purchased' })
