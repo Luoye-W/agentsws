@@ -554,6 +554,7 @@ import {
   HANDLERS as SCHEDULE_HANDLERS,
   type ScheduleAssembly,
   type SchedulePosition,
+  sweepStaleReviews,
 } from './schedule.js'
 import { createScopeAutoUpgrade, type ScopeAutoUpgrade } from './scope-auto-upgrade.js'
 import {
@@ -6175,12 +6176,22 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           .list({ workspace_id: ws, status: 'pooled' })
           .map((l) => ({ id: l.id, text: l.text })),
       relay: (review) => relay(review),
+      // WP287：① 个人模式复盘照记、不出卡
+      solo: () => modeOfWorkspaceSync?.(ws) === 'solo',
       // 40 §2.2：周复盘报"疑似重复"，并把过了 Wilson 门槛的好东西往上浮——都只看这个品牌
       catalog: {
         duplicates: (limit) => catalog.duplicatesFor(ws, limit),
         proposePromotions: (deps, named) => catalog.proposePromotionsFor(ws, deps, named),
       },
     })
+    // WP287：积压的老复盘卡（全 0 的、过了当天的、① 里的）启动时收掉——记成过期，不删记录
+    void sweepStaleReviews({
+      approvals,
+      work: brandWork,
+      workspace_id: ws,
+      people: [...new Set(positionsIn(ws).map((p) => p.person_id))],
+      solo: () => modeOfWorkspaceSync?.(ws) === 'solo',
+    }).catch(() => undefined)
     // ③ 会议记录源轮询（拉到的会议记在这个品牌名下）
     registerMeetingPoll(s, {
       workspace_id: ws,
