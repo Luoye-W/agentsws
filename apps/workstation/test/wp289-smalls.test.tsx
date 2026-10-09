@@ -207,6 +207,7 @@ describe('WP289 积分卡人人只读（决策 307）', () => {
     expect(screen.getByText(/37\.5/)).toBeTruthy()
     const tiers = await screen.findByTestId('credits-tiers')
     expect(tiers.getAttribute('data-readonly')).toBe('true')
+    expect(tiers.textContent).not.toContain('选一档充值')
     await waitFor(() => {
       expect(within(tiers).getAllByTestId('credits-tier')).toHaveLength(1)
     })

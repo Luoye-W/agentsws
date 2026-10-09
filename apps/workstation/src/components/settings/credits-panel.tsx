@@ -615,7 +615,9 @@ export function TierCards({
       data-readonly={readonly ? 'true' : 'false'}
     >
       <div className="flex items-baseline justify-between gap-2">
-        <h4 className="text-xs font-medium text-muted-foreground">{t('credits.tiers')}</h4>
+        <h4 className="text-xs font-medium text-muted-foreground">
+          {t(readonly ? 'credits.tiers.readonly' : 'credits.tiers')}
+        </h4>
         <span className="text-[11px] text-muted-foreground" data-slot="status">
           {t('credits.tiers.note')}
         </span>
