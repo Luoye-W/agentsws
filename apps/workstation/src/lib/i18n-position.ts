@@ -6,8 +6,6 @@
  */
 export const POSITION_ZH: Record<string, string> = {
   // 页头
-  'pos2.status.cards': '{n} 张等你定',
-  'pos2.status.doing': '{n} 件在办',
   'pos2.status.stuck': '{n} 件卡住了',
   'pos2.status.today': '今天 {n} 个待办',
   // WP248（决策 79）：已过期没做完的也算进今天，括号里点出几个
@@ -22,9 +20,10 @@ export const POSITION_ZH: Record<string, string> = {
   'pos2.settings': '岗位设置',
   'pos2.banner.missing': '还缺必需的连接：{names}',
   'pos2.banner.go': '去连接',
-  'pos2.tab.work': '工作',
-  'pos2.tab.records': '记录',
-  'pos2.tab.settings': '设置',
+  // WP288（决策 326）：没有页签了；连接正常 = 标题旁一个绿勾（悬停这两句）
+  'pos2.settings.back': '返回',
+  'pos2.tick.shopify': 'Shopify 已连接',
+  'pos2.tick.connected': '已连接：{names}',
 
   // 交给它
   'pos2.handoff.placeholder.plain': '交给它一件事',
@@ -42,7 +41,6 @@ export const POSITION_ZH: Record<string, string> = {
 
   // 要你处理
   'pos2.deck.title': '要你处理',
-  'pos2.deck.count': '{n} 张',
   'pos2.deck.hint': '要你批、选、改的都在这里，一次一张；方向键也能批',
   'pos2.deck.empty': '没有要你处理的',
 
@@ -208,8 +206,6 @@ export const POSITION_ZH: Record<string, string> = {
 }
 
 export const POSITION_EN: Record<string, string> = {
-  'pos2.status.cards': '{n} waiting for you',
-  'pos2.status.doing': '{n} in progress',
   'pos2.status.stuck': '{n} stuck',
   'pos2.status.today': '{n} to-dos today',
   'pos2.status.today_overdue': '{n} to-dos today ({m} overdue)',
@@ -222,9 +218,9 @@ export const POSITION_EN: Record<string, string> = {
   'pos2.settings': 'Position settings',
   'pos2.banner.missing': 'Missing a required connection: {names}',
   'pos2.banner.go': 'Connect',
-  'pos2.tab.work': 'Work',
-  'pos2.tab.records': 'Records',
-  'pos2.tab.settings': 'Settings',
+  'pos2.settings.back': 'Back',
+  'pos2.tick.shopify': 'Shopify connected',
+  'pos2.tick.connected': 'Connected: {names}',
 
   'pos2.handoff.placeholder.plain': 'Hand it a task',
   'pos2.handoff.ask': 'Ask something, or hand it a task',
@@ -241,7 +237,6 @@ export const POSITION_EN: Record<string, string> = {
     'Leave it on auto and the position picks the duty; pick one to use that duty’s rules directly',
 
   'pos2.deck.title': 'Needs you',
-  'pos2.deck.count': '{n} cards',
   'pos2.deck.hint': 'Everything you approve, pick or edit is here, one at a time; arrow keys work',
   'pos2.deck.empty': 'Nothing needs you',
 

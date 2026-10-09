@@ -1,5 +1,6 @@
 /**
- * WP241 岗位页「设置」页签（`position-v2-settings.html`）：平时不用看的都在这。
+ * WP241 岗位页「设置」（`position-v2-settings.html`）：平时不用看的都在这。
+ * WP288：不再是页签——右上「⋯ 岗位设置」点开，这一页换成它。
  *
  * 五节，按「多久动一次」排：职责 · 连接 · 记忆 · 定时任务 · 高级（默认折叠）。
  * 每一节都是把原来散在页上的东西挪过来，组件原样复用：
@@ -36,6 +37,8 @@ import { useApp } from '@/lib/app-context'
 import { actionLines, connectorLines, scopeLines, skillLines } from '@/lib/duty-capabilities'
 import { formatDate } from '@/lib/format'
 import { useMode } from '@/lib/mode'
+import { ShopAdminBanner } from './shop-admin-banner'
+import { SiteThemeBanner } from './site-theme-banner'
 import { Pop } from './work-bits'
 
 /** 职责说明里的 `**粗体**` 记号在一行小字里不认，去掉星号（整段在职责页）。 */
@@ -162,7 +165,16 @@ function ConnectionRow({
   )
 }
 
-function Connections({ id, positionId }: { id: string; positionId: string }): ReactNode {
+function Connections({
+  id,
+  positionId,
+  duties,
+}: {
+  id: string
+  positionId: string
+  /** WP288：本人在这个岗位的职责（店铺授权那一行与「改哪家店」按它判断出不出）。 */
+  duties: readonly { role_id: string; assignment_id: string }[]
+}): ReactNode {
   const { t } = useApp()
   const [more, setMore] = useState(false)
   const view = useQuery({
@@ -229,6 +241,12 @@ function Connections({ id, positionId }: { id: string; positionId: string }): Re
           )}
         </div>
       )}
+      {/*
+        WP288（决策 326）：连接正常时岗位页上只有标题旁一个绿勾；「已授权 · 会自动续期 · 重新授权」
+        那一行与「改哪家店」挪到这里（出问题时它们在岗位页上出醒目提示，这里不重复）。
+      */}
+      <ShopAdminBanner duties={duties} variant="settings" />
+      <SiteThemeBanner positionId={positionId} duties={duties} variant="settings" />
       {/* WP216：建站平台的官方 CLI 卡（只在平台那一行写的岗位上出） */}
       <PlatformCliCard positionId={positionId} assignment={id} />
     </div>
@@ -485,7 +503,15 @@ export function PositionSettings({
             title={t('pos2.set.connections')}
             sub={t('pos2.set.connections.sub')}
           />
-          <Connections id={id} positionId={view.position_id} />
+          <Connections
+            id={id}
+            positionId={view.position_id}
+            duties={view.roles.flatMap((r) =>
+              r.my_assignment_id === undefined
+                ? []
+                : [{ role_id: r.role_id, assignment_id: r.my_assignment_id }],
+            )}
+          />
         </section>
 
         <section data-testid="position-memory">

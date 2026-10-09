@@ -4,12 +4,14 @@
  * 1. 没授权 → 一句话 +「授权管理商品和页面」（按这个岗位上的职责要权限）；
  * 2. 等浏览器 → 转圈 +「没弹出来？」+ 取消；CLI 开不了浏览器时由工作台开一次；
  * 3. 过期 / 被收回 / 缺权限 →「重新授权」并说缺哪项（人话，不出 scope 原名）；
- * 4. 授权好了 → 一行淡色「已授权 · 到几点」；没装 CLI / 不知道店：网页模板岗位上不重复出；
+ * 4. 授权好了 → 岗位页上不占一行（WP288：标题旁一个绿勾，悬停「Shopify 已连接 · 会自动续期」，点了去连接页）；
+ *    那一行淡色「已授权 · 到几点」在「岗位设置 → 连接」里；没装 CLI / 不知道店：网页模板岗位上不重复出；
  * 5. 没有登记的职责 → 不问服务端、不画。
  */
 import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { ConnectionTick } from '@/components/position/connection-tick'
 import { ShopAdminBanner } from '@/components/position/shop-admin-banner'
 import type { ShopAdminView } from '@/lib/api'
 import { renderWithProviders } from './helpers'
@@ -55,6 +57,13 @@ vi.mock('@/lib/api', async () => {
       })
       return api.view
     },
+    getPositionConnections: async () => ({
+      position_id: 'pos_site',
+      position_name: '网站运营',
+      ready: true,
+      missing_required: [],
+      items: [],
+    }),
     cancelShopAdmin: async () => {
       api.view = view('unauthorized')
       return api.view
@@ -111,13 +120,18 @@ describe('WP261 授权管理商品和页面', () => {
     )
   })
 
-  it('授权好了：淡色一行「已授权 · 到几点」；失败原因说人话', async () => {
+  it('授权好了：岗位页上不占一行；设置里淡色一行「已授权 · 到几点」；失败原因说人话', async () => {
     api.view = view('authorized', {
       scopes_granted: ['read_products', 'write_products'],
       expires_at: '2026-10-09T09:00:00.000Z',
       refreshable: false,
     })
-    const { unmount } = renderWithProviders(<ShopAdminBanner duties={STORE} />)
+    const page = renderWithProviders(<ShopAdminBanner duties={STORE} />)
+    await waitFor(() => expect(api.gets.length).toBeGreaterThan(0))
+    await new Promise((r) => setTimeout(r, 20))
+    expect(screen.queryByTestId('shop-admin-banner')).toBeNull()
+    page.unmount()
+    const { unmount } = renderWithProviders(<ShopAdminBanner duties={STORE} variant="settings" />)
     const banner = await screen.findByTestId('shop-admin-banner')
     expect(banner.textContent).toContain('已授权管理商品和页面 · 到')
     unmount()
@@ -150,5 +164,33 @@ describe('WP261 授权管理商品和页面', () => {
     )
     await new Promise((r) => setTimeout(r, 30))
     expect(api.gets).toEqual([])
+  })
+})
+
+describe('WP288 连接正常 = 标题旁一个绿勾', () => {
+  it('授权好了：绿勾，悬停「Shopify 已连接 · 会自动续期」，点了去连接页 Shopify 那张卡', async () => {
+    api.view = view('authorized', {
+      scopes_granted: ['read_products', 'write_products'],
+      refreshable: true,
+    })
+    renderWithProviders(<ConnectionTick id="asg_store" duties={STORE} />)
+    const tick = await screen.findByTestId('position-connected')
+    expect(tick.getAttribute('data-hint')).toBe('Shopify 已连接 · 会自动续期')
+    expect(tick.getAttribute('href')).toBe('/connections?service=shopify_admin')
+  })
+
+  it('过期 / 缺权限 / 没授权：不画勾（由页上那一行醒目提示带「重新授权」）', async () => {
+    for (const state of ['expired', 'missing_scopes', 'unauthorized'] as const) {
+      api.view = view(state, state === 'missing_scopes' ? { missing: ['write_products'] } : {})
+      const { unmount } = renderWithProviders(
+        <>
+          <ConnectionTick id="asg_store" duties={STORE} />
+          <ShopAdminBanner duties={STORE} />
+        </>,
+      )
+      await screen.findByTestId('shop-admin-banner')
+      expect(screen.queryByTestId('position-connected')).toBeNull()
+      unmount()
+    }
   })
 })
