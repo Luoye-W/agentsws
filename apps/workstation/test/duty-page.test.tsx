@@ -118,16 +118,14 @@ describe('职责页（WP71 / 36 §10）', () => {
     expect(screen.getByTestId('duty-holders').textContent).toContain('2')
   })
 
-  it('只有两个 tab：概览 / 记录（四样设置在第三栏）', async () => {
+  it('WP288：没有「概览 / 记录」页签、没有四个「打开右栏」按钮——记录与设定都在第三栏', async () => {
     renderWithProviders(<DutyPage />, '/positions/asg_store/duties/dtc.store', 'asg_store')
     await screen.findByTestId('duty-name')
-    const tabs = screen.getAllByRole('tab')
-    expect(tabs.map((t) => t.textContent)).toEqual(['概览', '记录'])
-    // 四个按钮是"把右栏打开到那一格"，不是四个 tab
-    const links = screen.getByTestId('duty-rail-links')
-    for (const panel of ['memory', 'skills', 'knowledge', 'caps']) {
-      expect(links.querySelector(`[data-testid="duty-open-${panel}"]`)).not.toBeNull()
-    }
+    expect(screen.queryAllByRole('tab')).toHaveLength(0)
+    expect(screen.getByTestId('duty-body')).toBeDefined()
+    for (const panel of ['memory', 'skills', 'knowledge', 'caps'])
+      expect(screen.queryByTestId(`duty-open-${panel}`)).toBeNull()
+    expect(screen.queryByTestId('duty-records')).toBeNull()
   })
 
   it('WP238：能看什么 / 能做什么 / 技能 / 连接收在默认折叠的「高级」里，翻成人话', async () => {

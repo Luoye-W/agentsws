@@ -316,6 +316,11 @@ describe('内置四个面板走的就是那条公开路（#4）', () => {
     expect(registry.panelType('schedules')?.group).toBe('layer')
     expect(registry.panelType('schedules')?.useBadge).toBeDefined()
     expect(registry.panelBody('schedules')).toBeDefined()
+    // WP288：「记录」在「这个岗位或职责」那一组（跟层走），「问 AI」不在注册表里了
+    expect(registry.panelType('records')?.group).toBe('layer')
+    expect(registry.panelType('records')?.scoped).toBe(true)
+    expect(registry.panelBody('records')).toBeDefined()
+    expect(registry.panelType('ask')).toBeUndefined()
   })
 
   it('WP100：「证据」也走同一条公开路——有类型也有身体', () => {
@@ -417,6 +422,7 @@ describe('启动不激活（#6）', () => {
   // WP156：工具组最后加了「教程」，于是十三个
   // WP181：「定时任务」做好了原位放出来，于是十四个
   // WP208：角色 / 记忆 / 知识 / 技能 / 额度合成「设定」，邮件助手与设计规范搬走，于是八个
+  // WP288：「问 AI」删掉、「记录」从岗位页 / 职责页的页签挪进中组，还是八个
   it('一个都没开的时候：八个图标都在，但没有任何面板发请求', () => {
     renderRail()
     expect(screen.getAllByTestId(/^rail-icon-/).map((b) => b.dataset.testid)).toEqual([
@@ -424,11 +430,12 @@ describe('启动不激活（#6）', () => {
       'rail-icon-changes',
       'rail-icon-settings',
       'rail-icon-schedules',
+      'rail-icon-records',
       'rail-icon-browser',
       'rail-icon-office-preview',
-      'rail-icon-ask',
       'rail-icon-help',
     ])
+    expect(screen.queryByTestId('rail-icon-ask')).toBeNull()
     expect(screen.getByTestId('rail-icon-schedules')).toBeTruthy()
     expect(screen.getByTestId('rail-icon-help')).toBeTruthy()
     expect(screen.queryByTestId('rail-icon-data')).toBeNull()
