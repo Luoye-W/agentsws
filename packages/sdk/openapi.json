@@ -13824,16 +13824,6 @@
               }
             }
           },
-          "403": {
-            "description": "统一错误信封（28 §2）",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
           "429": {
             "description": "统一错误信封（28 §2）",
             "content": {
@@ -13870,12 +13860,6 @@
             "bearerAuth": []
           }
         ],
-        "x-authz": {
-          "domain": "store_config",
-          "op": "read",
-          "range": "workspace",
-          "sensitivity": "internal"
-        },
         "x-returns": "CloudCreditsView"
       }
     },
@@ -13926,16 +13910,6 @@
               }
             }
           },
-          "403": {
-            "description": "统一错误信封（28 §2）",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
           "429": {
             "description": "统一错误信封（28 §2）",
             "content": {
@@ -13972,12 +13946,6 @@
             "bearerAuth": []
           }
         ],
-        "x-authz": {
-          "domain": "store_config",
-          "op": "read",
-          "range": "workspace",
-          "sensitivity": "internal"
-        },
         "x-returns": "LocalPricing"
       }
     },
@@ -14279,16 +14247,6 @@
               }
             }
           },
-          "403": {
-            "description": "统一错误信封（28 §2）",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
           "429": {
             "description": "统一错误信封（28 §2）",
             "content": {
@@ -14325,12 +14283,6 @@
             "bearerAuth": []
           }
         ],
-        "x-authz": {
-          "domain": "store_config",
-          "op": "read",
-          "range": "workspace",
-          "sensitivity": "internal"
-        },
         "x-returns": "LocalTopupTiers"
       }
     },
@@ -31633,7 +31585,7 @@
         ],
         "responses": {
           "200": {
-            "description": "{ revoked_assignments }",
+            "description": "{ revoked_assignments, disconnected? }",
             "content": {
               "application/json": {
                 "schema": {
@@ -31724,7 +31676,137 @@
           "range": "workspace",
           "sensitivity": "restricted"
         },
-        "x-returns": "{ revoked_assignments }"
+        "x-returns": "{ revoked_assignments, disconnected? }"
+      }
+    },
+    "/v1/workspaces/{id}/members/{person_id}/leave": {
+      "get": {
+        "operationId": "previewRemoveMember",
+        "summary": "WP289 请他离开之前那一问：会一起断开他自己接的哪几条「个人」连接（共用的留下；只在 ②）",
+        "tags": ["org"],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "工作区 id",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "person_id",
+            "in": "path",
+            "required": true,
+            "description": "成员 person_id",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Assignment",
+            "in": "header",
+            "required": true,
+            "description": "本次请求绑定的 Assignment（31 §3.1：一次请求一个 Assignment）",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "LeavePreviewView",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "统一错误信封（28 §2）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-authz": {
+          "domain": "policy",
+          "op": "stage",
+          "range": "workspace",
+          "sensitivity": "restricted"
+        },
+        "x-returns": "LeavePreviewView"
       }
     },
     "/v1/workspaces/{id}/leave": {
@@ -55335,7 +55417,7 @@
     "/v1/chat/sessions/{id}/teach": {
       "post": {
         "operationId": "teachChatSession",
-        "summary": "用中文告诉 AI 这种问题该怎么答（对客消息 + 沉淀成知识候选）",
+        "summary": "用中文告诉 AI 这种问题该怎么答（对客消息 + 沉淀）。scope=global_rule（以后都这样）出一张职责规矩卡，与卡片指导同一本、同一套权限",
         "tags": ["chat"],
         "parameters": [
           {
@@ -55368,7 +55450,7 @@
         ],
         "responses": {
           "200": {
-            "description": "{ outcome, reply?, sediment }",
+            "description": "{ outcome, reply?, sediment, rule_card_id? }",
             "content": {
               "application/json": {
                 "schema": {
@@ -55470,7 +55552,7 @@
           "sensitivity": "internal"
         },
         "x-halt-scope": "outbound",
-        "x-returns": "{ outcome, reply?, sediment }",
+        "x-returns": "{ outcome, reply?, sediment, rule_card_id? }",
         "requestBody": {
           "required": true,
           "content": {
@@ -88426,7 +88508,7 @@
             "name": "tag",
             "in": "query",
             "required": false,
-            "description": "只看这个用途标",
+            "description": "只看这个用途标；不给时不含遮罩（用途 mask，要看就给 tag=mask）",
             "schema": {
               "type": "string"
             }
