@@ -8,6 +8,9 @@
  * - 卡在缺连接（`blocked`）**是最新一条时是卡**，后来接着做了就缩成一行灰字；
  * - 跑了一次 / 跑完了 / 路由 / 换职责 / 停下 / 别的系统话缩成居中一行灰字（决策 182：默认全收起）；
  *   跑完了的那次只出摘要那一行（开跑那条 `run` 不再单出），正在跑的那次在最底下单独画；
+ * - WP288（决策 326）：**回答已经出来了，就不在它前面再插一行「跑完了 · 0 秒」**——会话里一律不出；
+ *   任务里只在那次真动过东西 / 有步骤可展开时才留（「跑完了 · 改了 3 个文件」是回答里没有的话）。
+ *   没跑成 / 被停下的那一行照旧出；
  * - 同一天只出一次日期分隔。
  */
 import type { MatterEvent, MatterLiveRun, MatterRunDigest } from '@agentsws/contracts'
@@ -60,6 +63,21 @@ export function buildItems(
   const failedRuns = new Set(
     timeline.filter((e) => e.failed !== undefined && e.run_id !== undefined).map((e) => e.run_id),
   )
+  /** WP288：这几次跑完有回答（AI 说了话）——「跑完了」那一行不用再说 */
+  const answered = new Set(
+    timeline
+      .filter(
+        (e) => e.kind === 'agent_message' && e.run_id !== undefined && e.stopped === undefined,
+      )
+      .map((e) => e.run_id),
+  )
+  const quietDone = (e: MatterEvent): boolean => {
+    const d = e.run_digest
+    if (d === undefined || d.outcome !== 'completed' || !answered.has(e.run_id)) return false
+    if (ctx.ask === true) return true
+    const f = digestFacts(d)
+    return d.steps.length === 0 && f.read === 0 && f.changed === 0 && !f.checked && !f.pushed
+  }
   const digested = new Set(
     timeline
       .filter((e) => e.run_digest !== undefined && e.run_id !== undefined)
@@ -107,7 +125,7 @@ export function buildItems(
     } else if (e.failed !== undefined) item = { kind: 'sys', key, event: e, variant: 'failed' }
     else if (e.run_digest !== undefined)
       item =
-        e.run_digest.outcome === 'failed' && failedRuns.has(e.run_id)
+        (e.run_digest.outcome === 'failed' && failedRuns.has(e.run_id)) || quietDone(e)
           ? undefined
           : { kind: 'sys', key, event: e, variant: 'digest' }
     else if (e.preview !== undefined)

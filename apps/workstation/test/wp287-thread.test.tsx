@@ -110,20 +110,72 @@ beforeEach(() => {
 })
 
 describe('WP287 会话线程', () => {
-  it('问的那一句（会话）：不出「按 X 做的」那行；页头一行「会话 · 转成任务」，点了就转', async () => {
+  it('问的那一句（会话）：不出「按 X 做的」那行；「转成任务」在页头「⋯」里，点了就转', async () => {
     current = view({ ask: { at: T0 } }, [
       ROUTE,
       ASKED,
-      ev({ id: 'mev_a', kind: 'agent_message', text: '店里现在有 12 款在售商品。' }),
+    ev({
+      id: 'mev_done',
+      kind: 'status',
+      text: '跑完了',
+      run_id: 'run_1',
+      run_digest: { seconds: 0, outcome: 'completed', steps: [] },
+    }),
+      ev({
+        id: 'mev_a',
+        kind: 'agent_message',
+        text: '店里现在有 12 款在售商品。',
+        run_id: 'run_1',
+      }),
     ])
     renderMatter()
     await screen.findByText('店里现在有 12 款在售商品。')
     expect(screen.queryByText('按「店铺管理」做的')).toBeNull()
+    // WP288：会话页头不出状态点、不出职责那一格；「会话 / 转成任务」不再单独一排
+    expect(screen.queryByTestId('matter-state')).toBeNull()
+    expect(screen.queryByTestId('matter-reroute')).toBeNull()
+    expect(screen.queryByTestId('matter-ask-bar')).toBeNull()
+    expect(screen.queryByTestId('matter-ask-promote')).toBeNull()
+    // WP288：回答出来了，前面不再插一行「跑完了 · 0 秒」
+    expect(screen.queryByText(/跑完了/)).toBeNull()
     const user = userEvent.setup({ delay: null, pointerEventsCheck: 0 })
+    await user.click(screen.getByTestId('matter-menu'))
     await user.click(screen.getByTestId('matter-ask-promote'))
     await waitFor(() => {
       expect(promoteAskMatter).toHaveBeenCalledWith('mat_q')
     })
+  })
+
+  it('WP288 任务：页头照旧有状态与职责；回答出来了、那次什么都没动——也不插「跑完了 · 0 秒」；被停下照旧说', async () => {
+    current = view({}, [
+      ROUTE,
+      ASKED,
+    ev({
+      id: 'mev_done',
+      kind: 'status',
+      text: '跑完了',
+      run_id: 'run_1',
+      run_digest: { seconds: 0, outcome: 'completed', steps: [] },
+    }),
+      ev({ id: 'mev_a', kind: 'agent_message', text: '改好了。', run_id: 'run_1' }),
+      ev({
+        id: 'mev_stop',
+        kind: 'status',
+        text: '被停下了',
+        run_id: 'run_2',
+        run_digest: { seconds: 30, outcome: 'stopped', steps: [] },
+      }),
+    ])
+    renderMatter()
+    await screen.findByText('改好了。')
+    expect(screen.getByTestId('matter-state')).toBeDefined()
+    expect(screen.getByTestId('matter-reroute')).toBeDefined()
+    expect(screen.queryByText(/跑完了/)).toBeNull()
+    expect(screen.getByText(/被停下/)).toBeDefined()
+    // 任务的「⋯」里没有「转成任务」
+    const user = userEvent.setup({ delay: null, pointerEventsCheck: 0 })
+    await user.click(screen.getByTestId('matter-menu'))
+    expect(screen.queryByTestId('matter-ask-promote')).toBeNull()
   })
 
   it('任务：线程里一行小字「按「店铺管理」做的 · 换一条」', async () => {
