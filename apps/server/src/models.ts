@@ -91,9 +91,12 @@ import {
   defaultImageModels,
   geminiImageProvider,
   hostOf,
+  imageMaskSupported,
   imageVendorOf,
+  isRetiredImageModel,
   jsonFileUploadIndex,
   NO_IMAGE_MODEL_ZH,
+  normalizeImageModel,
   openaiCompatibleProvider,
   openaiImageProvider,
   PRICE_CATALOG,
@@ -194,6 +197,9 @@ const STUB_PRICES = { 'stub/stub-v1': { in: 0, out: 0, cached: 0 } }
  * 都认这个名字；别家的兼容口换成它自己的生图模型名即可（设置页那一格可改）。
  */
 export const DEFAULT_IMAGE_MODEL = 'gpt-image-1'
+
+/** WP283（决策 301）：型号清单去掉退役的生图型号（`gpt-image-1.5`）。 */
+const withoutRetired = (models: string[]): string[] => models.filter((m) => !isRetiredImageModel(m))
 
 /**
  * WP274：自动走云、但设置里没加积分那张卡时，生图那一条用的 provider id（只出现在用量与素材来源里）。
@@ -1434,6 +1440,10 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
         generate_model: models.generate,
         edit_model: models.edit,
         own_key: !cloud,
+        // WP283（决策 300）：改图认不认遮罩（按型号能力表判；Google 原生口一律不认）
+        edit_mask:
+          !(vendor === 'google' && !cloud) &&
+          imageMaskSupported(models.edit, cloud ? 'cloud' : 'direct'),
       },
       shape: vendor === 'google' && !cloud ? 'gemini' : 'openai',
       base_url: config.base_url,
@@ -1494,9 +1504,10 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
     if (picked === undefined) return undefined
     const config = activeConfigs().find((c) => c.id === picked.provider_id)
     if (config === undefined || !IMAGE_CAPABLE_KINDS.includes(config.kind)) return undefined
+    // WP283（决策 301）：设置里存着退役型号（gpt-image-1.5）的，读的时候换成顶替它的那个
     return imageRouteOf(config, 'override', {
-      generate: picked.model,
-      edit: picked.edit_model ?? picked.model,
+      generate: normalizeImageModel(picked.model),
+      edit: normalizeImageModel(picked.edit_model ?? picked.model),
     })
   }
 
@@ -1534,6 +1545,8 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
         ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
         // WP283（决策 310）：走我们的云时同对话那一路，带上「谁 / 哪个岗位」
         ...(route.cloud ? { requestHeaders: cloudRequestHeaders } : {}),
+        // WP283（决策 300）：这个型号走这条路认不认遮罩
+        mask: imageMaskSupported(model, route.cloud ? 'cloud' : 'direct'),
       })
     }
     const { generate_model, edit_model } = route.using
@@ -1568,6 +1581,9 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
     },
     get max_reference_images() {
       return currentImage().max_reference_images
+    },
+    get supports_mask() {
+      return currentImage().supports_mask
     },
     generate: (req: ImageGenerateRequest) => currentImage().generate(req),
     get edit() {
@@ -1604,8 +1620,12 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
       unavailable_reason = `单独指定的那一条（${picked.provider_id}）现在用不了：没填 key、没关联账号，或者已经删了。先按自动的走（${live.using.label}）；去上面重新配好，或者换一条。`
     return {
       configured: live !== undefined,
-      ...(picked === undefined ? {} : { provider_id: picked.provider_id, model: picked.model }),
-      ...(picked?.edit_model === undefined ? {} : { edit_model: picked.edit_model }),
+      ...(picked === undefined
+        ? {}
+        : { provider_id: picked.provider_id, model: normalizeImageModel(picked.model) }),
+      ...(picked?.edit_model === undefined
+        ? {}
+        : { edit_model: normalizeImageModel(picked.edit_model) }),
       official: live?.cloud === true,
       ...(credits === undefined ? {} : { credits_per_image: credits }),
       choices,
@@ -1806,7 +1826,12 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
       if (rows.length === 0) {
         return withCatalogFallback('这家没回模型列表（有的服务没有这个接口）。')
       }
-      return { ok: true, models: rows.map((r) => r.id), checked_at }
+      // WP283（决策 301）：退役的生图型号（gpt-image-1.5）不进型号列表
+      return {
+        ok: true,
+        models: rows.map((r) => r.id).filter((m) => !isRetiredImageModel(m)),
+        checked_at,
+      }
     } catch (e) {
       return withCatalogFallback(`${humanizeModelError(codeOf(e), messageOf(e))} `)
     }
@@ -1975,8 +2000,16 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
         price_source_url: config.price_source_url,
         price_as_of: config.price_as_of,
       }),
-      ...(config.models === undefined ? {} : { models: config.models }),
-      ...(config.last_listing === undefined ? {} : { last_listing: config.last_listing }),
+      // WP283（决策 301）：以前拉到、存着的清单里的退役生图型号也不给界面
+      ...(config.models === undefined ? {} : { models: withoutRetired(config.models) }),
+      ...(config.last_listing === undefined
+        ? {}
+        : {
+            last_listing: {
+              ...config.last_listing,
+              models: withoutRetired(config.last_listing.models),
+            },
+          }),
       ...(test === undefined ? {} : { last_test: test }),
       vision_status: visionStatusOf(config),
       ...(quota === undefined ? {} : { quota_exceeded: quota }),
@@ -2331,9 +2364,11 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
         }
         // WP274：没填型号就按这家的默认（见 `defaultModelsFor`）
         const fallback = defaultModelsFor(config)
-        const model = input.model?.trim() || fallback.generate
+        // WP283（决策 301）：写的时候也不存退役型号
+        const model = normalizeImageModel(input.model?.trim() || fallback.generate)
+        const typedEdit = input.edit_model?.trim()
         const edit_model =
-          input.edit_model?.trim() ||
+          (typedEdit ? normalizeImageModel(typedEdit) : undefined) ||
           (input.model?.trim() ? undefined : fallback.edit === model ? undefined : fallback.edit)
         state.defaults.image = {
           provider_id: id,

@@ -29,6 +29,78 @@ export function cloudImageModels(): { generate: string; edit: string } {
   return { generate: GPT_IMAGE_GENERATE_MODEL, edit: GPT_IMAGE_EDIT_MODEL }
 }
 
+/**
+ * WP283（决策 300 / 301）：**生图型号能力表**——哪个型号认不认遮罩（「圈区域」）只在这一处判，
+ * 别处不写死型号名。
+ *
+ * `mask.direct` = 直连厂商（自己的 key、自定义 OpenAI 兼容口）；`mask.cloud` = 经 Agents 工坊云。
+ * 云那一列与私有云 `image-models.ts` 白名单对齐（WP280，10-09）：经 OpenRouter 的（GPT Image 2.5 / 2 / 1 /
+ * 1-mini、Nano Banana 2.1）一律不认——OpenRouter 两个出图口都没有遮罩，云端去掉遮罩按提示词整张改；
+ * Seedream 本身没有遮罩（火山接口、New API 豆包插件带遮罩会报错，云端同样去掉）。
+ */
+export interface ImageModelCaps {
+  /** 给人看的名字。 */
+  label: string
+  mask: { direct: boolean; cloud: boolean }
+}
+
+const openaiCaps = (label: string): ImageModelCaps => ({
+  label,
+  mask: { direct: true, cloud: false },
+})
+const noMask = (label: string): ImageModelCaps => ({
+  label,
+  mask: { direct: false, cloud: false },
+})
+
+export const IMAGE_MODEL_CAPS: Readonly<Record<string, ImageModelCaps>> = {
+  [GPT_IMAGE_GENERATE_MODEL]: openaiCaps('GPT Image 2.5'),
+  [GPT_IMAGE_EDIT_MODEL]: openaiCaps('GPT Image 2.5'),
+  'gpt-image-2': openaiCaps('GPT Image 2'),
+  'gpt-image-1': openaiCaps('GPT Image 1'),
+  'gpt-image-1-mini': openaiCaps('GPT Image 1 mini'),
+  [NANO_BANANA_MODEL]: noMask('Nano Banana 2.1'),
+  'doubao-seedream-5-0-pro-260628': noMask('Seedream 5.0 Pro'),
+  'doubao-seedream-5-0-lite-260128': noMask('Seedream 5.0 Lite'),
+}
+
+/**
+ * 退役的生图型号 → 顶替它的那个（决策 301：`gpt-image-1.5` OpenRouter 上没有，指到 `gpt-image-2`，
+ * 同一档价、同一套画布）。本机设置里存着的老名字**读的时候**换掉，界面型号列表里不再出现它。
+ */
+export const RETIRED_IMAGE_MODELS: Readonly<Record<string, string>> = {
+  'gpt-image-1.5': 'gpt-image-2',
+}
+
+/** 去掉日期快照后缀（`gpt-image-1.5-2025-12-16` → `gpt-image-1.5`），小写。 */
+function baseImageModel(model: string): string {
+  return model
+    .trim()
+    .toLowerCase()
+    .replace(/-\d{4}-\d{2}-\d{2}$/, '')
+}
+
+/** 这个型号退役了没有（含它的日期快照）。 */
+export function isRetiredImageModel(model: string): boolean {
+  return RETIRED_IMAGE_MODELS[baseImageModel(model)] !== undefined
+}
+
+/** 退役的换成顶替它的那个；别的原样（不改大小写，型号名区分大小写的上游照样认）。 */
+export function normalizeImageModel(model: string): string {
+  return RETIRED_IMAGE_MODELS[baseImageModel(model)] ?? model
+}
+
+/**
+ * 这个型号改图认不认遮罩。表里没有的：OpenAI 那一族（`gpt-image-*` / `dall-e-2`）直连认、经云不认；
+ * 别的一律当不认——说不准就不给「圈区域」，免得人圈了却被整张改。
+ */
+export function imageMaskSupported(model: string, via: 'direct' | 'cloud'): boolean {
+  const name = baseImageModel(normalizeImageModel(model))
+  const caps = IMAGE_MODEL_CAPS[name]
+  if (caps !== undefined) return caps.mask[via]
+  return via === 'direct' && /^(gpt-image-|dall-e-2$)/.test(name)
+}
+
 /** 能用同一把 key 生图的厂商。 */
 export type ImageVendor = 'openai' | 'google'
 
@@ -73,6 +145,8 @@ export function splitImageProvider(parts: {
     ...(edit.max_reference_images === undefined
       ? {}
       : { max_reference_images: edit.max_reference_images }),
+    // WP283：认不认遮罩看改图那一个
+    ...(edit.supports_mask === undefined ? {} : { supports_mask: edit.supports_mask }),
     generate: (req: ImageGenerateRequest): Promise<ImageGeneration> => generate.generate(req),
     ...(edit.edit === undefined
       ? {}

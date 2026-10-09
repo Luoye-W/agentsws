@@ -317,6 +317,8 @@ export function geminiImageProvider(options: GeminiImageOptions): ImageProvider 
     ref,
     available: true,
     max_reference_images: GEMINI_MAX_REFERENCE_IMAGES,
+    // WP283：Nano Banana 没有像素遮罩（调用方别带、界面不给「圈区域」）
+    supports_mask: false,
     generate: (req: ImageGenerateRequest) => batch(req, []),
     edit(req: ImageEditRequest): Promise<ImageGeneration> {
       if (req.images.length === 0)

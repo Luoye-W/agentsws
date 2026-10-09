@@ -59,6 +59,9 @@ import { BrandAssetError, type BrandAssets } from './brand-assets.js'
 import type { ShopifyAdminReader } from './shop-admin.js'
 import { productImageUrls } from './shop-files.js'
 
+/** WP283（决策 300）：型号不认遮罩时，工具回话开头那一句。 */
+export const MASK_IGNORED_ZH = '这个生图型号不认遮罩，按提示词整张改的（圈的区域没用上）。'
+
 /** 生图那一档现在的样子（`models.image()` 那一份的几格）。 */
 export interface ImagePricing {
   official: boolean
@@ -351,7 +354,8 @@ export function createImageService(options: ImageServiceOptions): ImageService {
       const max = provider.max_reference_images ?? IMAGE_EDIT_MAX_REFERENCES
       refs.splice(max)
       const mask = str(input.mask_asset_id, 100)
-      if (mask !== undefined) {
+      // WP283（决策 300）：这个型号不认遮罩——不带（带了云端也会去掉），回话里说一声按提示词整张改
+      if (mask !== undefined && provider.supports_mask !== false) {
         if (assets.get(mask) === undefined)
           throw new ImageToolError('error', `素材库里没有这张遮罩图（${mask}）。`)
         mask_asset_id = mask
@@ -724,7 +728,17 @@ export function createImageService(options: ImageServiceOptions): ImageService {
       const operation = bare === EDIT_IMAGE_TOOL ? 'edit' : 'generate'
       void GENERATE_IMAGE_TOOL
       const job = await jobOf(operation, input, request)
-      return await generateOrAsk(job, ctxOf(request))
+      const out = await generateOrAsk(job, ctxOf(request))
+      // WP283（决策 300）：给了遮罩、但这个型号不认——照实说一句（别让人以为只改了圈的那一块）
+      const maskDropped =
+        operation === 'edit' &&
+        str(input.mask_asset_id, 100) !== undefined &&
+        job.mask_asset_id === undefined
+      if (maskDropped && out.status === 'ok') {
+        const data = out.data as { message?: string }
+        if (typeof data.message === 'string') data.message = `${MASK_IGNORED_ZH}${data.message}`
+      }
+      return out
     } catch (e) {
       if (e instanceof ImageToolError) return { status: e.status, reason: e.message }
       if (e instanceof BrandAssetError) return { status: 'error', reason: e.message }

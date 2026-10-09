@@ -280,6 +280,11 @@ export interface ImageProvider {
   edit?(req: ImageEditRequest): Promise<ImageGeneration>
   /** WP268：一次最多收几张参考图（不写 = 按 {@link IMAGE_EDIT_MAX_REFERENCES}）。 */
   max_reference_images?: number
+  /**
+   * WP283（决策 300，只加）：改图认不认遮罩（「圈区域」）。`false` = 给了遮罩也按提示词整张改
+   * （调用方别带、界面别给入口）；不写 = 不知道，照旧带上。
+   */
+  supports_mask?: boolean
 }
 
 /** WP268：一次改图最多带几张参考图（OpenAI `gpt-image-*` 的 `image[]` 上限是 16；我们收得更紧）。 */
