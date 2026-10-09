@@ -299,6 +299,10 @@ describe('WP278 请同事一起做（决策 277）', () => {
         .listByPerson(he.id as never, { workspace_id: ws() as never })
         .some((a) => a.revoked_at === undefined && a.role_id.startsWith('b2b.')),
     ).toBe(false)
+    // 「负责人」不是岗位：交它走「把发起人交给…」
+    expect(
+      (await call('POST', '/v1/org/positions/owner/offer', { body: { person_id: he.id } })).status,
+    ).toBe(400)
     // 同事不能请
     expect(
       (

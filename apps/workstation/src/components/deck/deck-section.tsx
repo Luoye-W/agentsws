@@ -300,6 +300,8 @@ export function DeckSection({
     }
     const action = deckActionForDirection(direction)
     if (!card.available_actions.includes(action)) return
+    // WP278：交给你的卡上只有「接下 / 不接」两个按钮——↑ ↓ 不做事（卡上没有稍后 / 指导）
+    if (isHandoffOfferCard(card) && action !== 'approve' && action !== 'reject') return
     event.preventDefault()
     if (action === 'approve') {
       // WP276：交给你的卡只有一个岗位时，→ 就是「接下」（几个岗位就得点按钮挑一个）
@@ -353,11 +355,15 @@ export function DeckSection({
           ]
         : keyboardHints(
             // 选择题卡（选项就是按钮、没选中 → 不做事）：不写「→ 批准」——只有交给你的卡单岗位时 → 是「接下」
-            card.options !== undefined &&
-              card.options.length > 0 &&
-              !(isHandoffOfferCard(card) && card.options.length === 1)
+            (card.options !== undefined &&
+            card.options.length > 0 &&
+            !(isHandoffOfferCard(card) && card.options.length === 1)
               ? card.available_actions.filter((a) => a !== 'approve')
-              : card.available_actions,
+              : card.available_actions
+            ).filter(
+              // WP278：交给你的卡只写它那两个按钮（接下 / 不接），不写卡上没有的稍后 / 指导
+              (a) => !isHandoffOfferCard(card) || a === 'approve' || a === 'reject',
+            ),
             (a) => deckActionLabel(card, a, t),
           )
 

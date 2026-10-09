@@ -207,7 +207,9 @@ function initiatorOfferCard(): DeckCard {
     summary: '接下后请人离开、删品牌、搬数据这些家务归你管。',
     content_variants: { zh_summary: '接下后请人离开、删品牌、搬数据这些家务归你管。' },
     options,
-    available_actions: ['approve', 'reject', 'open'],
+    // 真卡上服务端给的动作里有稍后 / 指导——卡上没有那两个按钮，提示里也不许写
+    available_actions: ['approve', 'reject', 'snooze', 'instruct', 'open'],
+    expires_at: '2026-10-12T09:00:00.000Z',
     detail: {
       ...base.detail,
       payload: {
@@ -240,6 +242,11 @@ describe('WP278 「把发起人交给你」那张卡', () => {
     const card = screen.getByTestId('deck-card')
     expect(card.textContent).toContain('交给你的')
     expect(card.textContent?.split('家务归你管').length).toBe(2)
+    // 「几号前不接就退回」正文里说过了，不再出「剩 N 天」；人对人的一问没有「证据 N」
+    expect(card.textContent).toContain('前不接就退回')
+    const tags = screen.getByTestId('deck-tag-row').textContent ?? ''
+    expect(tags).not.toContain('剩')
+    expect(tags).not.toContain('证据')
     const decide = screen.getByTestId('deck-handoff')
     expect(
       within(decide)

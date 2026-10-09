@@ -367,13 +367,16 @@ export async function personalConnectionsOf(
     for (const v of rows) {
       if (owners.of(v.id) !== person || !isPersonalConnection(owners, v)) continue
       const name = v.identity?.display_name ?? v.alias
+      // 邮箱地址自己就说清楚了是哪一只；别的（店名、账号）前面带上是哪家服务
       out.push({
         workspace_id,
         id: v.id,
         label:
           name === '' || name === v.service_label
             ? v.service_label
-            : `${v.service_label} · ${name}`,
+            : name.includes('@')
+              ? name
+              : `${v.service_label} · ${name}`,
       })
     }
   }

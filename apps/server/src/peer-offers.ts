@@ -30,6 +30,7 @@ import type {
 import { HANDOFF_DECLINE_NO_REASON } from '@agentsws/deck'
 import type { RoleStore } from '@agentsws/roles'
 import { transferOwnership } from './company-mode.js'
+import { OWNER_POSITION_ID } from './position-placements.js'
 
 /** 卡上唯一的那个「接下」。 */
 export const PEER_OFFER_ACCEPT = 'accept'
@@ -319,6 +320,9 @@ export function createPeerOffers(options: PeerOffersOptions): PeerOffers {
 
     async offerPosition(actor, position_id, input) {
       await guard(actor, input.person_id)
+      // 「负责人」那一行是身份（docs/54 §6.5），不是一个能请人一起做的岗位——交它走「把发起人交给…」
+      if (position_id === OWNER_POSITION_ID)
+        throw new ApiError('invalid_input', '负责人不是岗位，要交请用「把发起人交给…」')
       const position = options.positions().find((p) => p.id === position_id)
       if (position === undefined) throw new ApiError('not_found', `没有这个岗位：${position_id}`)
       if ((await options.holders(position_id)).includes(input.person_id as PersonId))

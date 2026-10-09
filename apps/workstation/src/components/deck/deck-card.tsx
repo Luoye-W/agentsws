@@ -282,6 +282,12 @@ export function DeckCardView({
   const handoffOffer = isHandoffOfferCard(card)
   /** WP276：② 改共用东西的通知——「知道了 / 撤回」直接是两个按钮（不是先选一个再点通过）。 */
   const peerNotice = isPeerNoticeCard(card)
+  /** WP278：「把发起人交给你 / 请你一起做」——人对人的一问，没有证据可看。 */
+  const peerOffer =
+    handoffOffer &&
+    ['initiator', 'position'].includes(
+      String((card.detail.payload as { object?: unknown } | undefined)?.object),
+    )
   const routeChoice = (card.kind === 'claim' && isQuestion && !handoffOffer) || peerNotice
   const examples = useTaskExamples(card.role_id)
   const positionName = usePositionName(card.role_id)
@@ -379,8 +385,11 @@ export function DeckCardView({
         <StatusPill tone={BAND_TONE[card.priority_band]} data-testid="deck-band">
           {positionName === undefined ? category : `${positionName} · ${category}`}
         </StatusPill>
-        {/* WP277：「知道了」型通知卡没有人在等它的结果——不出等待时长 */}
-        {peerNotice ? null : <WaitPill card={card} />}
+        {/*
+          WP277：「知道了」型通知卡没有人在等它的结果——不出等待时长。
+          WP278：交给你的卡正文里已经有「几号前不接就退回」——不再出「剩 N 天」说第二遍。
+        */}
+        {peerNotice || handoffOffer ? null : <WaitPill card={card} />}
         <span className="ml-auto flex items-center gap-2">
           {/*
             WP212（docs/88 §2.3）：来自消息往来的卡，证据旁边一个「看原件 →」——跳回消息页
@@ -399,8 +408,8 @@ export function DeckCardView({
             右上角那个「证据 N」：点它在第三栏的证据面板里看（WP71 就有那一格）。
             走 WP95 的公开注册路 `show('evidence')`，注册层一个字不碰。
           */}
-          {/* WP277：通知卡不是要人凭证据拍板的——不出「证据 N」 */}
-          {peerNotice ? null : (
+          {/* WP277：通知卡不是要人凭证据拍板的——不出「证据 N」；WP278：交出发起人 / 请你一起做也是 */}
+          {peerNotice || peerOffer ? null : (
             <EvidencePill
               lines={evidence}
               onOpen={() => {
