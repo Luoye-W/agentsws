@@ -283,9 +283,15 @@ describe('WP274 自动解析：文字模型同厂商且带生图', () => {
     expect(hit?.model).toBe('gpt-image-2.5-flare')
     expect(hit?.region).toBeUndefined()
     // 老客户端还带 data_residency：照收不报错，也不改变任何东西
-    const res = await call<Record<string, unknown>>(server, owner(server), 'PUT', '/v1/models/defaults', {
-      data_residency: 'cn',
-    })
+    const res = await call<Record<string, unknown>>(
+      server,
+      owner(server),
+      'PUT',
+      '/v1/models/defaults',
+      {
+        data_residency: 'cn',
+      },
+    )
     expect(res.status).toBe(200)
     expect(res.data).not.toHaveProperty('data_residency')
     expect((await imageView(server)).using?.generate_model).toBe('gpt-image-2.5-flare')

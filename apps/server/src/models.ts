@@ -1543,12 +1543,7 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
   const currentImage = (): ImageProvider => {
     const route = imageRoute()
     if (route === undefined) return fallbackImages ?? unavailableImageProvider()
-    const sig = JSON.stringify([
-      route.using,
-      route.base_url,
-      route.shape,
-      route.region,
-    ])
+    const sig = JSON.stringify([route.using, route.base_url, route.shape, route.region])
     if (imageCache?.sig !== sig) imageCache = { sig, provider: imageProviderOf(route) }
     return imageCache.provider
   }

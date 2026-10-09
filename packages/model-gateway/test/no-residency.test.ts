@@ -46,8 +46,8 @@ describe('决策 291：不按驻留拦', () => {
       eventSink: rec.sink,
       env: {},
     })
-    await expect(gw.complete({ messages: [userPrompt('hi')], meta: meta() })).resolves.toMatchObject(
-      { text: 'fixed' },
-    )
+    await expect(
+      gw.complete({ messages: [userPrompt('hi')], meta: meta() }),
+    ).resolves.toMatchObject({ text: 'fixed' })
   })
 })
