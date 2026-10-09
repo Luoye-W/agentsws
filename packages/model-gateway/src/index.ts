@@ -16,7 +16,6 @@ export {
   GPT_IMAGE_GENERATE_MODEL,
   type ImageVendor,
   imageVendorOf,
-  SEEDREAM_MODEL,
   splitImageProvider,
 } from './image-routing.js'
 // WP76（22 图片槽 / 58 §1）：图片能力的两个实现 + 「没有图片模型」那句人话
@@ -187,7 +186,6 @@ export {
   speechAudioDigest,
 } from './speech.js'
 export type {
-  BlockedResidencyPayload,
   BudgetExhaustedPayload,
   BudgetFrozenPayload,
   BudgetPolicy,

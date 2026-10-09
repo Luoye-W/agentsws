@@ -24,7 +24,6 @@ export const prices: ModelGatewayPolicy['prices'] = {
 
 export const policy = (over: Partial<ModelGatewayPolicy> = {}): ModelGatewayPolicy => ({
   default: { provider: 'stub', model: 'stub-v1', region: 'cn' },
-  data_residency: 'cn',
   prices,
   ...over,
 })

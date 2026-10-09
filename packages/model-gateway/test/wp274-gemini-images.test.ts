@@ -272,7 +272,7 @@ describe('geminiImageProvider（Nano Banana 2.1，interactions 口）', () => {
           status: 'FAILED_PRECONDITION',
         },
       })
-      expect((e as GatewayError).code).toBe('residency_blocked')
+      expect((e as GatewayError).code).toBe('provider_unavailable')
       expect(e.message).toMatch(/地区/)
     })
     it('Google 那边出错（5xx）是可重试的 ProviderError', async () => {

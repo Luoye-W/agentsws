@@ -2239,8 +2239,6 @@ export async function createWorld(opts: WorldOptions): Promise<World> {
 
   const gatewayPolicy = (budget: ModelGatewayPolicy['budget']): ModelGatewayPolicy => ({
     default: modelRef,
-    // realistic 档要走真 provider（多半在境外），驻留策略随之放开；fast 档仍是 cn
-    data_residency: opts.model === undefined ? 'cn' : 'any',
     prices: opts.model?.prices ?? { 'stub/stub-v1': { in: 1, out: 2, cached: 0.1 } },
     ...(budget === undefined ? {} : { budget }),
   })

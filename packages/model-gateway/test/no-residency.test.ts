@@ -1,4 +1,9 @@
+/**
+ * 决策 291（WP281）：「数据不出境」整套删了——网关不再按驻留拦任何一家。
+ * 老策略里还带着 `data_residency` 的（存量工作区读出来的）也照常放行，不报错。
+ */
 import { describe, expect, it } from 'vitest'
+import type { ModelGatewayPolicy } from '../src/index.js'
 import { createModelGateway, stubProvider } from '../src/index.js'
 import { fixedClock, fixedProvider, meta, policy, recorder, userPrompt } from './helpers.js'
 
@@ -7,98 +12,42 @@ const globalProvider = fixedProvider({
   input: 10,
   output: 10,
 })
-const cloudBrain = fixedProvider({
-  ref: { provider: 'cloud_brain', model: 'stub-v1', region: 'cn' },
-  input: 10,
-  output: 10,
-})
 
-describe('22 §5.3 data_residency: cn 拦截 global provider', () => {
-  it('请求 region=global 的 provider → 拒绝、发事件、不产生 usage', async () => {
+describe('决策 291：不按驻留拦', () => {
+  it('region=global 的 provider 照常调用、照常记账，没有拦截事件', async () => {
     const rec = recorder()
     const gw = createModelGateway({
       providers: [stubProvider({ seed: 1 }), globalProvider],
-      policy: policy({ data_residency: 'cn' }),
+      policy: policy(),
       clock: fixedClock(),
       eventSink: rec.sink,
       env: {},
     })
-    await expect(
-      gw.complete({
-        model: { provider: 'openai', model: 'gpt-x', region: 'global' },
-        messages: [userPrompt('hi')],
-        meta: meta(),
-      }),
-    ).rejects.toMatchObject({ code: 'forbidden' })
-    const blocked = rec.ofType('model.blocked_residency')
-    expect(blocked).toHaveLength(1)
-    expect(blocked[0]?.payload).toMatchObject({
-      reason: 'region_global',
-      data_residency: 'cn',
+    const out = await gw.complete({
       model: { provider: 'openai', model: 'gpt-x', region: 'global' },
+      messages: [userPrompt('hi')],
+      meta: meta(),
     })
-    expect(rec.ofType('model.usage')).toHaveLength(0)
-    expect((await gw.usage({ workspace_id: 'ws_1' })).calls).toBe(0)
-  })
-
-  it('provider 自身 region=global 也算出境（ModelRef 没写 region 时看 provider）', async () => {
-    const rec = recorder()
-    const gw = createModelGateway({
-      providers: [globalProvider],
-      policy: policy({ data_residency: 'cn', default: { provider: 'openai', model: 'gpt-x' } }),
-      clock: fixedClock(),
-      eventSink: rec.sink,
-      env: {},
-    })
-    await expect(gw.complete({ messages: [userPrompt('hi')], meta: meta() })).rejects.toMatchObject(
-      {
-        code: 'forbidden',
-      },
-    )
-    expect(rec.ofType('model.blocked_residency')).toHaveLength(1)
-  })
-
-  it('data_residency: any 放行 global', async () => {
-    const rec = recorder()
-    const gw = createModelGateway({
-      providers: [globalProvider],
-      policy: policy({ data_residency: 'any', default: { provider: 'openai', model: 'gpt-x' } }),
-      clock: fixedClock(),
-      eventSink: rec.sink,
-      env: {},
-    })
-    const out = await gw.complete({ messages: [userPrompt('hi')], meta: meta() })
     expect(out.model.provider).toBe('openai')
-    expect(rec.ofType('model.blocked_residency')).toHaveLength(0)
+    expect(rec.ofType('model.usage')).toHaveLength(1)
+    expect(rec.events.some((e) => e.type.includes('residency'))).toBe(false)
   })
 
-  it('eu_customer_to_cloud_brain: deny 拦截欧洲客户数据发往 cloud_brain（默认即 deny）', async () => {
+  it('老策略里残留的 data_residency: cn 被忽略（不报错、不拦）', async () => {
     const rec = recorder()
+    const legacy = {
+      ...policy({ default: { provider: 'openai', model: 'gpt-x' } }),
+      data_residency: 'cn',
+    } as ModelGatewayPolicy
     const gw = createModelGateway({
-      providers: [cloudBrain],
-      policy: policy({ default: { provider: 'cloud_brain', model: 'stub-v1', region: 'cn' } }),
+      providers: [globalProvider],
+      policy: legacy,
       clock: fixedClock(),
       eventSink: rec.sink,
       env: {},
     })
-    await expect(
-      gw.complete({ messages: [userPrompt('hi')], meta: meta(), eu_customer: true }),
-    ).rejects.toMatchObject({ code: 'forbidden' })
-    expect(rec.ofType('model.blocked_residency')[0]?.payload).toMatchObject({
-      reason: 'eu_customer_to_cloud_brain',
-    })
-    const allowed = createModelGateway({
-      providers: [cloudBrain],
-      policy: policy({
-        default: { provider: 'cloud_brain', model: 'stub-v1', region: 'cn' },
-        eu_customer_to_cloud_brain: 'allow',
-      }),
-      clock: fixedClock(),
-      eventSink: rec.sink,
-      env: {},
-    })
-    await expect(
-      allowed.complete({ messages: [userPrompt('hi')], meta: meta(), eu_customer: true }),
-    ).resolves.toMatchObject({ text: 'fixed' })
+    await expect(gw.complete({ messages: [userPrompt('hi')], meta: meta() })).resolves.toMatchObject(
+      { text: 'fixed' },
+    )
   })
 })

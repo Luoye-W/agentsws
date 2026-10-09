@@ -174,7 +174,7 @@ function httpError(status: number, detail: string, model: string): Error {
     return new GatewayError('invalid_input', IMAGE_SAFETY_REFUSAL_ZH, { reason: 'content_safety' })
   if (/location is not supported|not available in your (country|region)/i.test(all))
     return new GatewayError(
-      'residency_blocked',
+      'provider_unavailable',
       'Google 生图在这台电脑所在的地区用不了（Google 按地区开放）。换成 Agents 工坊积分出图，或换一个生图接口。',
     )
   if (status === 404 || /NOT_FOUND/.test(reason))
