@@ -42,7 +42,6 @@ export function makeGateway(clock: Clock, events: unknown[] = []) {
     providers: [stubAsrProvider({ seed: 7 })],
     policy: {
       default: { provider: 'stub', model: 'stub-asr-v1', region: 'cn' },
-      data_residency: 'cn',
       prices: { 'stub/stub-asr-v1': { in: 0.5, out: 0, cached: 0 } },
     },
     clock,

@@ -47,7 +47,6 @@ const TEMPLATE: ModelProviderTemplate = {
 const DEFAULTS: ModelDefaultsView = {
   default: 'deepseek/deepseek-chat',
   by_purpose: {},
-  data_residency: 'cn',
   budget: {},
   choices: [{ id: 'deepseek/deepseek-chat', label: 'DeepSeek 官方（deepseek-chat）' }],
 }

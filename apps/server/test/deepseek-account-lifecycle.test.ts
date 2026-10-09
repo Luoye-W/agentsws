@@ -159,7 +159,6 @@ describe('WP150 (a) 推理 401：那一次运行给一句清楚的失败原因',
       providers: [provider],
       policy: {
         default: ACCOUNT,
-        data_residency: 'cn',
         prices: { 'deepseek-account/deepseek-flash': { in: 0, out: 0, cached: 0 } },
       },
       clock,
@@ -453,7 +452,6 @@ describe('WP151 推理 402：那一次运行说"账号余额不足"，登录不�
       providers: [provider],
       policy: {
         default: ACCOUNT,
-        data_residency: 'cn',
         prices: { 'deepseek-account/deepseek-flash': { in: 0, out: 0, cached: 0 } },
       },
       clock,

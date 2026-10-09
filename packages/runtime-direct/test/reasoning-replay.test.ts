@@ -39,7 +39,6 @@ describe('WP143 direct-llm：思考块签名原样跟着 assistant 那一轮走'
       ],
       policy: {
         default: MODEL,
-        data_residency: 'cn',
         prices: { 'stub/scripted-v1': { in: 1, out: 2, cached: 0.1 } },
       },
       clock: c,

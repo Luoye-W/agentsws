@@ -407,11 +407,11 @@ describe('WP25 §C 模板与空状态', () => {
     // 官方 2026-09-17 核实：北京地域的 OpenAI 兼容口
     expect(bailian?.default_base_url).toBe('https://dashscope.aliyuncs.com/compatible-mode/v1')
     expect(bailian?.default_model).toBe('qwen-vl-plus')
-    // 默认是境内：22 §2 `data_residency: cn` 的工作区能直接用
+    // 默认是北京地域
     expect(bailian?.region).toBe('cn')
     const presets = bailian?.presets ?? []
     expect(presets.map((p) => p.id)).toEqual(['bailian', 'bailian-intl'])
-    // 国际站（新加坡）那条算**出境**——选了它，`cn` 的工作区会拦下来
+    // 国际站（新加坡）那条记 global（只作记录：决策 291 起不按地域拦）
     expect(presets.find((p) => p.id === 'bailian-intl')).toMatchObject({
       base_url: 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1',
       region: 'global',
@@ -906,7 +906,6 @@ describe('WP25 §C 默认模型 / 驻留 / 三级预算', () => {
     const ok = await data<ModelDefaultsView>(
       await put('/v1/models/defaults', {
         by_purpose: { judge: 'deepseek/deepseek-chat' },
-        data_residency: 'cn',
       }),
     )
     expect(ok.by_purpose.judge).toBe('deepseek/deepseek-chat')
@@ -955,7 +954,6 @@ describe('WP25 §C 默认模型 / 驻留 / 三级预算', () => {
       }),
     )
     // 卡是按**接口地址**认的：没给 region 也不该兜成通用 OpenAI 那张的 global
-    // （兜错了，22 §2 的 data_residency: cn 会当场把这条拦下来说"禁止出境"）
     expect(saved.region).toBe('cn')
     // 价照内置价目表自动填：三个 0，来源标成 catalog（用户没手改过）
     expect([saved.price_in, saved.price_out, saved.price_cached]).toEqual([0, 0, 0])

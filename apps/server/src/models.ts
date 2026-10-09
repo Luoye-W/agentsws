@@ -282,7 +282,6 @@ interface ModelsStateFile {
      * 52 O3「跟随公司默认」与 O4「从某个品牌复制」复制的就是这一份决定，生图也该跟着走。
      */
     image?: { provider_id: string; model: string; edit_model?: string }
-    data_residency?: 'cn' | 'any'
     budget?: {
       workspace_daily_base?: number
       workspace_monthly_base?: number
@@ -660,7 +659,6 @@ export const MODEL_TEMPLATES: readonly ModelProviderTemplate[] = [
       '去你要用的那家的控制台，创建一个 API key',
       '找到它文档里写的"接口地址"（一般以 /v1 结尾）',
       '把地址、模型名、key 填进下面的表单',
-      '境外的服务把"数据驻留"选 global，境内的选 cn',
       '点"测试"确认能通',
     ],
     links: [
@@ -710,8 +708,7 @@ export const MODEL_TEMPLATES: readonly ModelProviderTemplate[] = [
    *    同一个接口地址、同一把 key、同一份账单。用过 DeepSeek 官方的人会以为要再
    *    去 platform.deepseek.com 办一把——不用。这件事只有卡上写出来才知道。
    * 2. **国内 / 国际两个地址**，选错了 key 不通（两边的 key 也不通用），而"数据归属"
-   *    也跟着变：北京那条是 `cn`，新加坡那条是 `global`（22 §2 的 `data_residency`
-   *    在 `cn` 时会直接拦下 `global` 的 provider）。
+   *    也跟着变：北京那条是 `cn`，新加坡那条是 `global`。
    * 3. **按量与两个订阅档是三套互不通用的东西**（后两张卡）：地址不同、key 不同、
    *    计费方式也不同。**Luoye 实测**：Token Plan 的 key（`sk-sp-` 开头、114 字符）
    *    打标准口，国内国际都回 `401 invalid_api_key`；官方也明说混用会认证失败或
@@ -1151,6 +1148,19 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
       else if (!apiQuotaAt.has(id)) apiQuotaAt.set(id, clock.now())
     }
 
+  /**
+   * 决策 291（WP281）：「数据不出境」删了。老设置里存的 `data_residency` 读到就丢——一律当「不限制」，
+   * 不报错，下次保存也不再写回。
+   */
+  const dropLegacyResidency = (
+    defaults: ModelsStateFile['defaults'],
+  ): ModelsStateFile['defaults'] => {
+    const { data_residency: _legacy, ...rest } = defaults as ModelsStateFile['defaults'] & {
+      data_residency?: unknown
+    }
+    return rest
+  }
+
   let state: ModelsStateFile = { version: 1, providers: [], defaults: {}, tests: {} }
   if (stateFile !== undefined) {
     try {
@@ -1158,7 +1168,7 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
       state = {
         version: 1,
         providers: parsed.providers ?? [],
-        defaults: parsed.defaults ?? {},
+        defaults: dropLegacyResidency(parsed.defaults ?? {}),
         tests: parsed.tests ?? {},
         ...(parsed.pricing === undefined ? {} : { pricing: parsed.pricing }),
       }
@@ -1332,17 +1342,8 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
       ...(isOfficialDeepSeek(config)
         ? { deepseekBalance: { onBalance: apiBalanceOf(config.id) } }
         : {}),
-      /*
-       * 49 M3 数据驻留：云那条带上工作区选的驻留（22 §2）。
-       * 服务入口按它拦——选了"数据不出境"就只允许境内可用的模型，
-       * 打境外模型回 422 + 一句人话，而不是悄悄换一家。
-       */
       ...(config.kind === 'agentsws_cloud'
         ? {
-            extraHeaders: {
-              'X-Agentsws-Region':
-                (state.defaults.data_residency ?? 'cn') === 'cn' ? 'cn' : 'global',
-            },
             // WP194：带上「谁 / 哪个岗位」；402 那句人话（额度到了 / 公司没钱）原样端给用户
             requestHeaders: (meta: ModelMeta | undefined) =>
               meta === undefined || options.cloudAttribution === undefined
@@ -1436,12 +1437,11 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
 
   /**
    * 一条接口没填型号时的默认出图 / 改图型号：OpenAI 官方 → GPT Image 2.5（flare / sunburst）；
-   * Google 官方 → Nano Banana 2.1；我们的云 → 按数据驻留（`cn` 用 Seedream 5.0 Pro，决策 262；
-   * 不限用 GPT Image 2.5）；别的兼容口 → 老默认 `gpt-image-1`（WP127）。
+   * Google 官方 → Nano Banana 2.1；我们的云 → 统一一套（GPT Image 2.5，与云端默认一致；决策 291
+   * 起不按驻留分，262 作废）；别的兼容口 → 老默认 `gpt-image-1`（WP127）。
    */
   const defaultModelsFor = (config: ModelProviderConfig): { generate: string; edit: string } => {
-    if (config.kind === 'agentsws_cloud')
-      return cloudImageModels(state.defaults.data_residency ?? 'cn')
+    if (config.kind === 'agentsws_cloud') return cloudImageModels()
     const vendor = imageVendorOf(config.base_url)
     return vendor === undefined
       ? { generate: DEFAULT_IMAGE_MODEL, edit: DEFAULT_IMAGE_MODEL }
@@ -1462,7 +1462,7 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
         vendor === 'openai' ? 'own_openai' : 'own_google',
         defaultImageModels(vendor),
       )
-    const cloudModels = cloudImageModels(state.defaults.data_residency ?? 'cn')
+    const cloudModels = cloudImageModels()
     const cloud = activeConfigs().find((c) => c.kind === 'agentsws_cloud')
     if (cloud !== undefined) return imageRouteOf(cloud, 'cloud', cloudModels)
     if (!hasCloudToken()) return undefined
@@ -1525,14 +1525,6 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
         provider: route.using.provider_id,
         region: route.region,
         ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
-        ...(route.cloud
-          ? {
-              extraHeaders: {
-                'X-Agentsws-Region':
-                  (state.defaults.data_residency ?? 'cn') === 'cn' ? 'cn' : 'global',
-              },
-            }
-          : {}),
       })
     }
     const { generate_model, edit_model } = route.using
@@ -1556,7 +1548,6 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
       route.base_url,
       route.shape,
       route.region,
-      state.defaults.data_residency,
     ])
     if (imageCache?.sig !== sig) imageCache = { sig, provider: imageProviderOf(route) }
     return imageCache.provider
@@ -1698,8 +1689,6 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
     return {
       default: defaultRef(),
       ...(Object.keys(by_purpose).length === 0 ? {} : { by_purpose }),
-      // 一条都没配时驻留仍按 cn（stub 是 cn），配了境外模型就得允许 any
-      data_residency: state.defaults.data_residency ?? 'cn',
       prices,
       budget: defined(budget),
     }
@@ -1998,7 +1987,6 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
     return {
       default: state.defaults.default ?? (active[0] === undefined ? '' : modelIdOf(active[0])),
       by_purpose: { ...state.defaults.by_purpose },
-      data_residency: state.defaults.data_residency ?? 'cn',
       budget: defined(budget),
       // WP42：拉过清单的，这家的每一个模型都能选（没拉过就只有配置里那一个）
       choices: active.flatMap((c) =>
@@ -2084,8 +2072,7 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
        * 所以"种类"和"卡"是一回事。现在不是了：OpenAI 兼容那张、百炼三张，四张卡
        * 同一个 `kind`。再按 `kind` 取第一张，请求里没给的字段（`region` / `label`）
        * 就会拿**别人家**的默认值来兜——保存一条百炼的配置，`region` 兜成通用 OpenAI
-       * 那张的 `global`，然后 22 §2 的 `data_residency: cn` 当场把它拦下来，
-       * 用户看到的是一句"禁止出境"，而他填的明明是北京的地址。
+       * 那张的 `global`，记下来的地域就和他填的北京地址对不上。
        *
        * 所以先按**接口地址**认是哪一张（地址正是这几张卡真正不同的地方），
        * 认不出来才退回按 `kind` 取第一张（没给地址的老调用照旧能过）。
@@ -2236,7 +2223,7 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
      * 验证三步（WP127，70 §2.2）：连通 → 一次最小文字请求 → **一次带图的最小请求**。
      * 向导第 ① 步与设置页「测试」都走这一个（`checkModel` 在网关包里，模拟场景也用它）。
      *
-     * 为什么经网关而不是直接打 provider：要一并验证驻留策略、预算、价目表都配对了——
+     * 为什么经网关而不是直接打 provider：要一并验证预算、价目表都配对了——
      * 用户点"测试"要的是"这条路整条通不通"，不是"这个 URL 能不能连"。
      * 带图那一次标 `capability_probe`：网关不按上一次的结论拦它（问的正是"现在还看不看得了"）。
      *
@@ -2388,7 +2375,6 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
         }
         state.defaults.by_purpose = next
       }
-      if (input.data_residency !== undefined) state.defaults.data_residency = input.data_residency
       if (input.budget !== undefined) state.defaults.budget = defined(input.budget)
       flush()
       reassemble()
@@ -2582,7 +2568,9 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
       const rows = snapshot.providers.filter((p) => p.id !== ENV_PROVIDER_ID)
       if (rows.length === 0) return 0
       state.providers = JSON.parse(JSON.stringify(rows)) as ModelProviderConfig[]
-      state.defaults = JSON.parse(JSON.stringify(snapshot.defaults)) as ModelsStateFile['defaults']
+      state.defaults = dropLegacyResidency(
+        JSON.parse(JSON.stringify(snapshot.defaults)) as ModelsStateFile['defaults'],
+      )
       flush()
       // key 还没填，所以这一轮多半只装得上 stub——填完 key 下一次保存自然就换过来
       reassemble()
@@ -2659,9 +2647,6 @@ export function humanizeModelError(code: string, message: string): string {
     return `模型名或接口地址不对：这家没有你填的那个模型（${message}）`
   if (lower.includes('429')) return `请求太频繁了，等一会儿再点一次（${message}）`
   switch (code) {
-    case 'residency_blocked':
-    case 'forbidden':
-      return `数据驻留设成了"只用境内"，但这个模型在境外。要么换模型，要么把驻留改成 any（${message}）`
     case 'budget_exhausted':
       return `预算用完了，先把上限调高再测（${message}）`
     case 'provider_unavailable':

@@ -21233,7 +21233,7 @@
     "/v1/models/defaults": {
       "get": {
         "operationId": "getModelDefaults",
-        "summary": "按 purpose 的默认模型、数据驻留、三级预算（22 §2）",
+        "summary": "按 purpose 的默认模型、三级预算（22 §2）",
         "tags": ["models"],
         "parameters": [
           {
@@ -21461,10 +21461,6 @@
                       "minLength": 1,
                       "maxLength": 256
                     }
-                  },
-                  "data_residency": {
-                    "type": "string",
-                    "enum": ["cn", "any"]
                   },
                   "budget": {
                     "type": "object",

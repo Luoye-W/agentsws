@@ -1822,7 +1822,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         : options.mount === undefined
           ? {}
           : { images: stubImageProvider({ seed: 7 }) }),
-      policy: { default: STUB_REF, data_residency: 'cn', prices: priceTable },
+      policy: { default: STUB_REF, prices: priceTable },
       clock,
       env,
       // WP215：品牌那一份急停视图（全局急停 + 这个品牌自己的急停）
