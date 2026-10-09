@@ -1685,6 +1685,23 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/v1/cloud/usage/members': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** 按人看积分（价目表三块 + 次数，「没标注」单独一格）。② 谁都看全员；③ owner / admin 看全员、别人只看自己；① 只有自己 */
+    get: operations['getCloudMemberUsage']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/v1/cloud/topup/tiers': {
     parameters: {
       query?: never
@@ -19175,6 +19192,83 @@ export interface operations {
       }
       /** @description 统一错误信封（28 §2） */
       403: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      429: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      500: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      503: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+    }
+  }
+  getCloudMemberUsage: {
+    parameters: {
+      query?: {
+        /** @description YYYY-MM（公司时区）；和 from / to 二选一；都不给 = 公司时区的本月 */
+        month?: string
+        /** @description ISO 时间 */
+        from?: string
+        /** @description ISO 时间；默认现在 */
+        to?: string
+        /** @description 只看这一个人（本机 person_id）；只看自己的人给了也不算数 */
+        member?: string
+      }
+      header: {
+        /** @description 本次请求绑定的 Assignment（31 §3.1：一次请求一个 Assignment） */
+        'X-Assignment': string
+      }
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description CloudMemberUsageView */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Envelope']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      400: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      401: {
         headers: {
           [name: string]: unknown
         }

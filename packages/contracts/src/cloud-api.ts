@@ -52,6 +52,7 @@ import type {
   MyAllocation,
 } from './cloud-allocation.js'
 import type {
+  MemberUsageReport,
   Pricing,
   TopupOrder,
   TopupProvider,
@@ -484,10 +485,16 @@ export interface CloudIdempotencyHeaders {
 export interface WalletUsageQuery {
   /** 缺省 `capability`。 */
   group?: UsageGroup
-  /** 缺省本月一号零点。 */
+  /** 缺省本月一号零点（UTC）。`group=member` 缺省按**公司时区**的本月（WP279，决策 286）。 */
   from?: Iso8601
   /** 缺省现在。 */
   to?: Iso8601
+  /**
+   * WP279：只看这一个人（本机成员 id，`attributionIdOk` 形状；不合法回 400）。哪个分组都能筛。
+   */
+  member?: string
+  /** WP279：公司时区的某个自然月（`YYYY-MM`）。和 `from` / `to` 只能给一样，写错回 400。 */
+  month?: string
 }
 
 /** `POST /v1/wallet/topup` 的请求。 */
@@ -910,15 +917,16 @@ export interface CloudWalletApi {
     errorBody: CloudEntryErrorBody
   }
   /**
-   * 用量明细（按能力 / 按工作区 / 按天）
+   * 用量明细（按能力 / 按工作区 / 按天 / 按人）
    * 只聚合计量事件，聚合不出正文。带 `wallet:admin` 的看整个组织，否则只看自己这个工作区。
+   * `group=member`（WP279）回按人的那一份：每人积分、价目表三块、次数，标不出是谁的单独一格。
    */
   'GET /v1/wallet/usage': {
     auth: 'workspace_token'
     scope: 'wallet:read'
     tag: 'wallet'
     query: WalletUsageQuery
-    ok: { status: 200; body: CloudDataEnvelope<UsageReport> }
+    ok: { status: 200; body: CloudDataEnvelope<UsageReport | MemberUsageReport> }
     errors: EntryAuthErrors & { 400: 'invalid_input' }
     errorBody: CloudEntryErrorBody
   }
