@@ -3,7 +3,7 @@ name: Desktop · Windows（打包 + 装起来真跑）
 # WP218：Windows 安装包在 windows-latest 上真打、真装、真跑一遍。**不发布、不上传到任何下载站**，
 # 产物只作为这次运行的 artifact（14 天后自动过期）。
 #
-#   取 win32-x64 的捆绑 Node 与原生模块 → tsc -b → 工作台 vite build → electron-builder（NSIS x64，
+#   取 win32-x64 的捆绑 Node 与原生模块 → tsc -b → 工作台 vite build → 装包前冒烟（WP290）→ electron-builder（NSIS x64，
 #   afterPack 用捆绑 Node 冒烟 import 一遍）→ 静默安装到带中文和空格的目录 → Playwright 起装好的 exe
 #   → /v1/health 200 → 打开工作台首页（截图）→ 单实例 → 只听 127.0.0.1 → 退出不留孤儿进程 → 静默卸载
 #
@@ -18,6 +18,8 @@ on:
       - apps/workstation/**
       - packages/dsh-adapter/**
       - profiles/agentsws/**
+      - packages/stand-ins/**
+      - scripts/preinstall-smoke*.mjs
       - pnpm-lock.yaml
       - .github/workflows/desktop-windows.yml
   push:
@@ -28,6 +30,8 @@ on:
       - apps/workstation/**
       - packages/dsh-adapter/**
       - profiles/agentsws/**
+      - packages/stand-ins/**
+      - scripts/preinstall-smoke*.mjs
       - pnpm-lock.yaml
       - .github/workflows/desktop-windows.yml
   workflow_dispatch:
@@ -69,6 +73,14 @@ jobs:
 
       - name: 工作台构建（装进安装包的 <resources>/workstation）
         run: pnpm --filter @agentsws/workstation build
+
+      # WP290（决策 332）：装包前真机冒烟——用这次的构建、真 dsh、本机假模型，每个岗位走一遍
+      # （问一句 / 交办出卡 / 点掉 / 事项状态 / 没跑成）。没过就不打安装包。表与原始错误在 win-smoke/。
+      - name: 装包前冒烟（真 dsh × 每个岗位；没过就不出安装包）
+        shell: bash
+        run: |
+          mkdir -p win-smoke
+          node scripts/preinstall-smoke.mjs --json win-smoke/preinstall-smoke.json | tee win-smoke/preinstall-smoke.md
 
       # 版本号：CI 包标成 0.0.0-ci.<运行号>，和真发版的号不会撞
       - name: electron-builder（NSIS x64，不上传）
