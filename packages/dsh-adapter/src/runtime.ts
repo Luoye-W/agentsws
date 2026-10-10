@@ -119,7 +119,7 @@ export function createInProcessDshRuntime(options: DshRuntimeOptions): RuntimeAd
         const mod = await import('@deepseek-ai/dsh-agent')
         const ok = typeof mod.default === 'function'
         return ok
-          ? { ok: true, detail: 'dsh 0.2.0-rc.1 Agent 层可解析；运行走同进程 headless 组合' }
+          ? { ok: true, detail: 'dsh 0.2.1-alpha.2 Agent 层可解析；运行走同进程 headless 组合' }
           : { ok: false, detail: 'dsh-agent 没有默认导出的插件' }
       } catch (e) {
         return { ok: false, detail: e instanceof Error ? e.message : String(e) }
@@ -485,6 +485,19 @@ export function createInProcessDshRuntime(options: DshRuntimeOptions): RuntimeAd
         if (signal.aborted) {
           emit(cancelledEvent(signal))
           return finish('cancelled', '运行被中断：未闭合的工具调用已补齐')
+        }
+        /*
+         * WP293：这一轮以 `error` 收尾、却不是从模型流里报上来的（`onModelError` 只接流里的 `finish: error`）——
+         * 例：订阅那条路上选的模型已经不在 pi-ai 目录里（0.2.1-alpha.2 删了 `gpt-5.4`），请求根本没发出去。
+         * 以前这里会照"跑完了"收尾（「这次什么也没做」）；照实报没跑成，带上官方那句原因。
+         */
+        if (
+          modelError === undefined &&
+          exhausted === undefined &&
+          turn.reason === 'error' &&
+          turn.tool_call_text !== true
+        ) {
+          modelError = turn.error ?? '模型这一轮出错了（没有给出原因）'
         }
         if (modelError !== undefined) {
           emit({

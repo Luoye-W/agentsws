@@ -133,10 +133,7 @@ import {
   type OfficialPluginBackend,
   OfficialPluginError,
 } from '@agentsws/dsh-adapter/official-plugins'
-import {
-  OFFICIAL_SCHEDULE_BUNDLE,
-  type OfficialSelector,
-} from '@agentsws/dsh-adapter/official-schedule'
+import type { OfficialSelector } from '@agentsws/dsh-adapter/official-schedule'
 import { createKernel, type Kernel, seededRandom } from '@agentsws/kernel'
 import {
   cardsToPack,
@@ -949,6 +946,11 @@ export interface ServerOptions {
     backend?: OfficialPluginBackend
   }
   /**
+   * WP293：官方「自动化任务」开没开（每次运行 / 每次到点现问）。生产不传 = 一直开（官方把它收进了 Web，
+   * 不再是可选插件）；测试传一个能翻的，钉「关了：工具面里没有四个工具、到点不跑、任务留着」。
+   */
+  automationEnabled?: () => boolean | Promise<boolean>
+  /**
    * WP219：内容更新的注入点（测试 / demo 用：本地替身更新源、现生成的钥匙、临时存放处）。
    * 生产不传：开关看 `AGENTSWS_CONTENT_UPDATES=on`（桌面安装包启动服务时给），钥匙用内置公钥
    * `CONTENT_SIGNING_PUBLIC_KEYS`（空 = 通道关着），存放处在数据目录下 `content-updates/`。
@@ -1704,9 +1706,12 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
   })
   /*
    * WP181：官方「自动化任务」在我们运行里真用起来（`automation.ts`）。**一个进程一份**、跨品牌
-   * （调度器本来就是一个进程一个，任务上带着各自的品牌）。开关就是上面那一行插件装没装——设置 →
-   * 官方插件装上（出卡批过）之后，下一次运行就挂四个工具；卸了就停（任务留着）。
-   * 调度器、审批总线、品牌模块都比这里晚建，所以全是惰性取值。
+   * （调度器本来就是一个进程一个，任务上带着各自的品牌）。调度器、审批总线、品牌模块都比这里晚建，所以全是惰性取值。
+   *
+   * WP293（dsh 0.2.1-alpha.2）：开关**不再是"官方插件装没装"**——官方把「自动化任务」这个可选插件包删了，
+   * 改成 Web 组合自己挂、`standard` / `cordis` / `ptc` 三个 preset 默认就有四个工具（官方升级指南
+   * `schedule-bundle-retired`）。照「官方功能优先」跟官方走：**内置、一直开着**。谁能建 / 改 / 删、会往外发的
+   * 周期任务先出卡、次数与频率上限、到点跑成一次运行——包的那一层一点没变。
    */
   // 每天到点自动跑的次数落盘（Fable 终审：重启不清零）；全内存档就记在内存
   const automationFires =
@@ -1717,10 +1722,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     clock,
     appendEvent,
     approvals: () => approvals,
-    enabled: async () =>
-      (await officialPlugins.view()).plugins.some(
-        (p) => p.name === OFFICIAL_SCHEDULE_BUNDLE && p.state === 'installed',
-      ),
+    enabled: options.automationEnabled ?? (() => true),
     companyZone: async (ws) => resolveTimeZone((await identity.getWorkspace(ws))?.tz).zone,
     runner: async (ws) => {
       const brand = await brands?.forWorkspace(ws)

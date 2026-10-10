@@ -896,7 +896,6 @@ const zh: Table = {
   'schedule.ran': '跑过 {n} 次',
   'rail.schedules.empty': '还没有定时任务。',
   'rail.schedules.empty_hint': '在一件事里跟 AI 说「每天 9 点提醒我……」，就会出现在这里。',
-  'rail.schedules.not_installed': '先在 设置 → 官方插件 里装上「自动化任务」。',
   'rail.schedules.this_matter': '这件事的',
   'rail.schedules.others': '其他',
   'rail.schedules.awaiting': '等你批',
@@ -4830,8 +4829,6 @@ const en: Table = {
   'rail.schedules.empty': 'No scheduled tasks yet.',
   'rail.schedules.empty_hint':
     'In a matter, tell the AI "remind me every day at 9…" and it shows up here.',
-  'rail.schedules.not_installed':
-    'Install "Automation tasks" in Settings → Official plugins first.',
   'rail.schedules.this_matter': 'This matter',
   'rail.schedules.others': 'Others',
   'rail.schedules.awaiting': 'Needs your OK',

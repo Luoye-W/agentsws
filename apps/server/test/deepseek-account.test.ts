@@ -138,8 +138,8 @@ describe('WP134 (a) 装配：默认关、选了才开', () => {
     await acct.close()
   })
 
-  it('失败码说人话（网络 / 协议 / 过期 / 存储四种）', async () => {
-    for (const code of ['network', 'protocol', 'expired', 'storage'] as const) {
+  it('失败码说人话（没回应 / 网络 / 协议 / 过期 / 存储五种；WP293 起官方多了 no-response）', async () => {
+    for (const code of ['no-response', 'network', 'protocol', 'expired', 'storage'] as const) {
       const stand = createStandInDeepSeekAccountHost()
       const host: DeepSeekAccountHost = {
         ...stand,

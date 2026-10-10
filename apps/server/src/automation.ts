@@ -8,7 +8,7 @@
  *
  * | 事 | 怎么做 |
  * |---|---|
- * | 开关 | 只有装了官方「自动化任务」插件（设置 → 官方插件，出卡批过）才挂四个工具、到点才跑；卸了就停（任务留着） |
+ * | 开关 | `enabled()` 为真才挂四个工具、到点才跑；关了就停（任务留着）。WP181 时是「官方插件装没装」，WP293 起官方把它收进 Web 自己挂，服务端传的是一直开 |
  * | 谁能建 / 改 / 删 | 模型只动**这件事里、这个岗位自己建的**；界面上本人管自己的（`schedule.ts` 的端口） |
  * | 存哪 | 我们的调度器（落盘、重启续跑、不重入、`schedule.*` 事件）；官方那份记录原样放在 `params.official` |
  * | 到点 | 接着原来那件事跑一次这个岗位的运行（官方是投回原来那次对话）；对外动作照样出卡 |
@@ -78,7 +78,7 @@ export interface AutomationOptions {
   appendEvent: AppendEvent
   /** 出卡那条审批总线（惰性：总线要先包上这一层才建得出来）。 */
   approvals(): ApprovalsLike
-  /** 装了官方「自动化任务」插件没有（**每次现问**：设置页装 / 卸，下一次运行就变）。 */
+  /** 自动化任务开没开（**每次现问**）。WP293 起服务端一直传真（官方改成内置）；测试仍用它钉「关了就停」。 */
   enabled(): Promise<boolean> | boolean
   /** 这个品牌的公司时区（`+08:00` 或 IANA）；模型没写时区就按它。 */
   companyZone(workspace_id: WorkspaceId): Promise<string> | string
@@ -571,7 +571,7 @@ export function createAutomation(options: AutomationOptions): AutomationAssembly
       return { status: 'error', reason: `unsupported_tool：这个进程没接「${call.name}」。` }
     }
     if (!(await enabled())) {
-      return { status: 'blocked', reason: '没装官方「自动化任务」插件（设置 → 官方插件）' }
+      return { status: 'blocked', reason: '自动化任务这会儿关着' }
     }
     const req = call.request
     if (req.work_item?.id === undefined) {
@@ -605,7 +605,7 @@ export function createAutomation(options: AutomationOptions): AutomationAssembly
       const task = ctx.task
       const record = officialOf(task)
       if (record === undefined) throw new Error('这条定时没有官方规则记录，跑不了')
-      // 卸了插件：任务留着、到点不跑（官方：关掉插件包，存着的任务还在盘上）
+      // 关着：任务留着、到点不跑（官方：关掉之后存着的任务还在盘上）；跳过码沿用 WP181 的 `plugin_off`
       if (!(await enabled())) return { skipped: 'plugin_off' }
       const day = await dayOf(task.workspace_id, ctx.at)
       const count = fires.count(task.assignment_id, day)

@@ -324,8 +324,8 @@ export interface DeepSeekAccountView {
     authorize_url?: string
     /** 这次登录最晚什么时候作废（ISO8601）。 */
     expires_at?: string
-    /** 没成的原因码（官方四个：`network` / `protocol` / `expired` / `storage`）。 */
-    error_code?: 'network' | 'protocol' | 'expired' | 'storage'
+    /** 没成的原因码（官方五个：`no-response`（没收到回应）/ `network` / `protocol` / `expired` / `storage`）。 */
+    error_code?: 'network' | 'no-response' | 'protocol' | 'expired' | 'storage'
     /** 没成的原因（人话）。 */
     error?: string
   }

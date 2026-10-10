@@ -45,14 +45,19 @@ import { describe, expect, it } from 'vitest'
  * 升级前在当前代码树（WP150–WP176 之后）重采：pack 从 62 条长到 64 条、16 条场景因我们自己的改动变了指纹，
  * 与仓库里的 `0.1.7-rc.2.json` 不再相同，所以按 docs/42 ① 另存一份。cordis 仍不动（0.2.0-rc.1 仍要 `~4.0.4`）。
  * 旧的十一份一个不删。
+ *
+ * **WP293（0.2.0-rc.1 → 0.2.1-alpha.2，跟 alpha）：FROM_FILE 是重采的 `0.2.0-rc.1-wp293.json`。**
+ * 升级前在当前代码树（WP178–WP292 之后）重采：pack 从 64 条长到 68 条，与仓库里的 `0.2.0-rc.1.json` 不再相同，
+ * 所以按 docs/42 ① 另存一份。cordis 这一跳**必须跟**（0.2.1-alpha.2 要 `~4.0.5-alpha.1`，4.0.4 不在范围里）。
+ * 旧的十二份一个不删。
  */
-const FROM_FILE = '0.1.7-rc.2-wp177'
-const TO_FILE = '0.2.0-rc.1'
-const FROM = '0.1.7-rc.2'
-const TO = '0.2.0-rc.1'
-/** cordis 这一跳的新旧号（WP132 升到 4.0.4；WP149 / WP177 不动）。 */
+const FROM_FILE = '0.2.0-rc.1-wp293'
+const TO_FILE = '0.2.1-alpha.2'
+const FROM = '0.2.0-rc.1'
+const TO = '0.2.1-alpha.2'
+/** cordis 这一跳的新旧号（WP132 升到 4.0.4；WP149 / WP177 不动；WP293 升到 4.0.5-alpha.1）。 */
 const CORDIS_FROM = '4.0.4'
-const CORDIS_TO = '4.0.4'
+const CORDIS_TO = '4.0.5-alpha.1'
 
 /** `tokens_per_item` 允许的偏差（%）。超了就说明提示词或工具集实质变了。 */
 const MAX_TOKEN_DRIFT_PCT = 5

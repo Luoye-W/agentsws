@@ -32,6 +32,7 @@ import ComputerUseRegistry from '@deepseek-ai/dsh-computer-use'
 import { credentialRef, isCredentialRefName } from '@deepseek-ai/dsh-credentials'
 import * as PlaywrightMcpProvider from '@deepseek-ai/dsh-experimental-browser-use-playwright-mcp'
 import * as CuaDriverMcpProvider from '@deepseek-ai/dsh-experimental-computer-use-cua-driver-mcp'
+import LocalFileSystem from '@deepseek-ai/dsh-fs-local'
 import type {
   GenerateOptions,
   LlmImageRequestBudget,
@@ -51,6 +52,7 @@ import * as ToolBash from '@deepseek-ai/dsh-tool-bash'
 import * as ToolPwsh from '@deepseek-ai/dsh-tool-pwsh'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
 import ApprovalService from '@deepseek-ai/dsh-user-approval'
+import WorkingDirectoryService from '@deepseek-ai/dsh-working-directory'
 import * as BrowserSkillPlugin from '@wxg-prc-cpg/browser-skill-dsh-plugin'
 import { browserProviderConfig } from './browser.js'
 import { applyBskEnv, browserSkillPluginConfig, bskBinaryUsable } from './browserskill.js'
@@ -164,7 +166,12 @@ export interface DshHarness {
    * 跑一轮。`tool_call_text`（WP230）：这一轮最后一条 assistant 消息把工具调用写成了文字
    * ——`text` 不含那段假文字，由运行时决定重试还是报格式异常。
    */
-  runTurn(text: string): Promise<{ text: string; reason: string; tool_call_text?: true }>
+  runTurn(text: string): Promise<{
+    text: string
+    reason: string
+    tool_call_text?: true
+    error?: string
+  }>
   /** 中断这一轮（17 §5.6）。 */
   cancel(): void
   dispose(): Promise<void>
@@ -452,6 +459,22 @@ export async function createHarness(input: HarnessInput): Promise<DshHarness> {
    * 挂的是官方 `dsh-web` 服务；后端（DeepSeek 原生搜索 / 匿名抓网页）与模型面的两个工具
    * 在服务就绪之后挂（`web.ts`），与浏览器、终端同一条纪律：不用的东西不挂。
    */
+  /*
+   * WP293（dsh 0.2.1-alpha.2）：官方 `bash` / `pwsh` 工具与浏览器 MCP 都改成**必须**有 `ctx.workingDirectory`
+   * （「会话当前目录」成了一个服务：`tool-bash` 的 `inject` 多了它，浏览器 MCP 起子进程时用 `ensure(agent)` 取 cwd，
+   * 没有就当场抛 `browser MCP requires a working-directory provider`）。所以**有终端或官方浏览器的运行**才挂官方那一对：
+   * - `dsh-fs-local` → `ctx.fs`：`working-directory` 只拿它 `resolve` / `stat` 目录（上游 README：解析默认值，不是边界；
+   *   我们不挂任何文件工具，模型面一个工具都不多）；
+   * - `dsh-working-directory` → `ctx.workingDirectory`：取的是会话的 cwd（`agents.create` 的 `meta.cwd`），
+   *   与以前两边直接读 `session.header.cwd` 是同一个目录——终端仍是主题副本目录（沙箱可写边界不变），浏览器仍是进程 cwd。
+   *   **多出来的一样**：它往模型的用户上下文里放一句 `Current working directory: "<目录>".`（官方的必选上下文段）。
+   * 别的运行照旧不挂（不用的东西不挂），提示词与工具面字节不变。
+   */
+  if (shell !== undefined || (browser !== undefined && !browserSkill)) {
+    const cwd = shell?.workspace_root ?? process.cwd()
+    root.plugin(LocalFileSystem, { cwd } as never)
+    root.plugin(WorkingDirectoryService, { defaultDirectory: cwd } as never)
+  }
   const web = webWanted(input.request)
   if (web) mountWebService(root)
   // 串行：并行工具调用会让两档的事件顺序不可比（17 §4「换宿主不换语义」）
@@ -805,6 +828,8 @@ export class TurnSummary {
   private reason = 'unknown'
   /** WP230：最后一条 assistant 消息是不是「没有真工具调用、文字却像在调工具」。 */
   private callText = false
+  /** WP293：`turn/end` 是 `error` 时官方给的那句（`LlmFailure.message`）。 */
+  private error: string | undefined
 
   observe(event: SessionEvent): void {
     if (event.type === 'assistant/message') {
@@ -820,15 +845,22 @@ export class TurnSummary {
       if (joined !== '' && !this.callText) this.text = joined
     }
     if (event.type === 'turn/end') {
-      this.reason = (event.data as { reason: { kind: string } }).reason.kind
+      const reason = (event.data as { reason: { kind: string; error?: { message?: unknown } } })
+        .reason
+      this.reason = reason.kind
+      this.error =
+        reason.kind === 'error' && typeof reason.error?.message === 'string'
+          ? reason.error.message
+          : undefined
     }
   }
 
-  result(): { text: string; reason: string; tool_call_text?: true } {
+  result(): { text: string; reason: string; tool_call_text?: true; error?: string } {
     return {
       text: this.text,
       reason: this.reason,
       ...(this.callText ? { tool_call_text: true as const } : {}),
+      ...(this.error === undefined ? {} : { error: this.error }),
     }
   }
 }

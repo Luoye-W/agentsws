@@ -2,8 +2,8 @@
  * WP181：官方「自动化任务」的四个工具（`schedule_create` / `schedule_list` / `schedule_update` /
  * `schedule_delete`）在三个运行时里的共用定义。
  *
- * **名字、描述、参数一个字不改**，照抄 `@deepseek-ai/dsh-schedule@0.2.0-rc.1`（MIT，Copyright (c) 2026
- * DeepSeek）`lib/index.js` 里 `registerScheduleTools` 注册的那四份——stub / direct 用这里的 JSON Schema，
+ * **名字、描述、参数一个字不改**，照抄 `@deepseek-ai/dsh-tool-schedule@0.2.1-alpha.2`（MIT，Copyright (c) 2026
+ * DeepSeek）`lib/index.js` 里 `apply` 注册的那四份（WP293 之前在 `dsh-schedule` 的 `registerScheduleTools` 里）——stub / direct 用这里的 JSON Schema，
  * dsh 那一档直接用官方注册出来的定义（`dsh-adapter` 的 `official-schedule.ts`）。两份逐字相等由
  * `packages/dsh-adapter/test/official-schedule.test.ts` 钉住：上游改了描述或参数，那里先红。
  *
@@ -138,7 +138,12 @@ export const SCHEDULE_TOOL_DEFS: readonly ToolDef[] = [
     name: SCHEDULE_DELETE_TOOL,
     description:
       'Delete a reminder in the current session, active or inactive. Deletion does not retract a reminder message that is already queued.',
-    input_schema: { type: 'object', properties: { id: ID }, required: ['id'] },
+    // WP293（dsh 0.2.1-alpha.2）：官方把删除这一个的 id 说明改成了 "Exact schedule id."（改那一个还是原来那句）
+    input_schema: {
+      type: 'object',
+      properties: { id: { type: 'string', description: 'Exact schedule id.' } },
+      required: ['id'],
+    },
   },
   {
     name: SCHEDULE_UPDATE_TOOL,

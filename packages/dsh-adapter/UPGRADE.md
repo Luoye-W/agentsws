@@ -1872,3 +1872,141 @@ bundle 里、且那两行写着 `disabled: !!js "ctx.get('profileContext')?.name
 4. `desktopPlatform` 上游洞（WP134）仍在。
 5. docs/42 修订注补一条（WP177）：第三个面除了看 diff，还要把**组合里所有不带 `disabled`、会出网的行**对着 `LOCKDOWN` 表整体过一遍——`session-telemetry-otel` 就是
    "上游早就挂着、每次 diff 都不出现"而至少漏了两跳（WP132、WP149）的。
+
+## 0.2.0-rc.1 → 0.2.1-alpha.2（2026-10-10，WP293，跟 alpha）
+
+### 0. 版本口径
+
+派工单原定升到 0.2.0-rc.2；Luoye 10-10 中途改口「要采用 alpha 的」。升级当天 `npm view @deepseek-ai/dsh dist-tags` 与 `time`：
+
+| tag | 版本 | 发布时间 |
+|---|---|---|
+| `latest` / `next` | 0.2.0-rc.2 | 2026-09-29T09:56Z |
+| `alpha` | **0.2.1-alpha.2** | 2026-10-09T08:18Z |
+
+**这一版不是官方标的"最新"**，是内测线（GitHub release 全是 Pre-release）。从 rc.1 到它跨了 rc.2、alpha.1、alpha.2 三版，
+compare 接口 **1122 条提交**（翻 12 页取全）。锁精确版本；它发布不到 24 小时，`minimumReleaseAgeExclude` 必须写。
+
+**兄弟包这次必须跟**（docs/42 ② 判据）：`npm view @deepseek-ai/dsh@0.2.1-alpha.2 dependencies` 写的是 cordis `~4.0.5-alpha.1`、
+schemastery `~3.18.5-alpha.1`、loader `~1.0.6-alpha.1`、include `~1.0.10-alpha.1`、timer `~1.1.7-alpha.1`——预发布的 `~` 范围不含 4.0.4 等旧号。
+kernel / roles / credentials-openconnector / apps/server / profile / dsh-adapter 六处一起改精确版本（10-03 发，已过静默期，不进排除表）。
+
+**逐包查新版在不在**：仓库里写死 `0.2.0-rc.1` 的 55 个 `@deepseek-ai/dsh*` 包，`npm view <包>@0.2.1-alpha.2 version` **55 个全在**。
+
+**这一跳第一次有官方升级指南**：上游仓库 `docs/upgrade-guide/v0.2.0-rc.2/*`、`v0.2.1-alpha.1/*` 共 22 份（rc.1 时 2 份）。
+逐份读过，碰到我们的四份：`schedule-bundle-retired`、`account-sign-in-errors`、`working-directory`（连带 `tool-bash` / 浏览器 MCP 的 `inject`）、
+`remove-runtime-invariants`（我们没用，只是 `.d.ts` 少了 `invariant.d.ts`）。**下次升级先读这个目录**——比 `.d.ts` diff 快得多，见 §8。
+
+### 1. 上游改了什么（碰到我们的）
+
+| 包 | 变化 | 出处 | 碰到我们吗 / 怎么处理 |
+|---|---|---|---|
+| `dsh-tool-bash` / `dsh-tool-pwsh` / `dsh-experimental-browser-use-runtime` | `inject` 多了 `workingDirectory`；bash 用 `ctx.workingDirectory.ensure(agent)` 取 cwd，浏览器 MCP 起子进程前没有就抛 `browser MCP requires a working-directory provider` | `shell/tool-bash/src/index.ts` 第 34、487 行；`browser-use-runtime/src/mcp.ts` 第 103–104、154 行；升级指南 `working-directory` | **碰到**：不改就是终端工具不注册（`unknown tool "bash"`）、浏览器挂不上。`harness.ts` 在有终端或官方浏览器的运行里挂官方 `dsh-fs-local` + `dsh-working-directory`（§3） |
+| `dsh-schedule` → `dsh-tool-schedule` | `registerScheduleTools` 挪进新包，`apply(ctx)` 先 `inject(['schedule'])` 再注册；`schedule_delete` 的 `id` 说明改成 "Exact schedule id." | `schedule/tool-schedule/src/index.ts` 第 435–446 行；`dsh-schedule/lib/types/index.d.ts` 少了那个导出 | **碰到**：`official-schedule.ts` 改从新包接定义；stand-ins 抄本跟上 |
+| `dsh-experimental-schedule-bundle` | **整包删了**（`dsh-app-boot` 的 `RETIRED_BUNDLES`，加载 profile 时自动摘掉）；`web-app` 自己挂 `schedule` / `ui-schedule`，`standard` / `cordis` / `ptc` 三个 preset 默认带四个工具 | `boot/app-boot/src/profile.ts` 第 205–210 行；升级指南 `schedule-bundle-retired` | **碰到**：我们 WP181 的开关是「这个官方插件装没装」——永远装不上了。跟官方改成内置一直开（§3、§5） |
+| `dsh-deepseek-account` | `SignInErrorCode` 多 `no-response`（请求没拿到回应 / 超时；以前算 `network`） | 升级指南 `account-sign-in-errors` | **碰到**：`apps/server/src/deepseek-account.ts` 的人话表 `tsc` 报错。加一条「没收到回应，查网络或代理」 |
+| `@earendil-works/pi-ai` 0.85.1 → 1.1.0 | ChatGPT 订阅（`openai-codex`）目录**删了 `gpt-5.4`、`gpt-5.4-mini`**，加了 gpt-6 一族 | 两版 `dist/providers/data/openai-codex.json` | **碰到**：我们 ChatGPT 订阅的默认模型就是 `gpt-5.4`——升级后这些用户的运行会**一个请求都不发、照"跑完了"收尾**。默认改 `gpt-5.5`；并补了「一轮以 error 收尾 → 照实报没跑成」（§3） |
+| `dsh-tools` | `ToolPresentationMode` 去掉 `both`；`ToolResult` 多可选 `meta` | `lib/types/index.d.ts`、`types.d.ts`；升级指南 `tool-presentation-mode` | 否（我们不用 `both`） |
+| `dsh-system-prompt` | context 段多 `required` / `interpolate`、`WORKING_DIRECTORY` 顺位、`refreshContext`；动态上下文在请求准入时再算一次 | `lib/types/index.d.ts`；升级指南 `working-directory` 末段 | 否：136 条指纹逐字节相同（§4），提示词导出逐字节相同 |
+| `dsh-llm` | `prepareCall` 多可选第三参 `configure`；`LlmCallControls` 抽出来 | `lib/types/index.d.ts`、`call-config.d.ts` | 否（只加不改） |
+| `dsh-user-approval` / `dsh-scope` / 多个包 | 删 `invariant.d.ts`（官方删了运行时自检插件） | 升级指南 `remove-runtime-invariants` | 否（我们没挂过） |
+| `dsh-tool-subagent` | 删 `backgroundMode` / `run_in_background`，委派统一成 activation | 升级指南 `subagent-activations` | 否（我们的两档不挂子代理）；`tool-bash` 的 `enableRunInBackground` / `promoteOnTimeout` 两个开关仍在，我们照旧写 false |
+| headless bundle | `personaSuffix: Your working directory is {{cwd}}.` 删了（换成上面那句必选上下文） | `bundle/headless/cordis.patch.yml` diff | 否（我们 `includeHarnessIdentity: false`，persona 段自己写） |
+| `dsh-deepseek-account` 的调用方身份头 | `credentials/deepseek-account/src/index.ts` **逐字节相同** | 两版源码 `diff` | 只改 `DEEPSEEK_ACCOUNT_CLIENT_VERSION`（测试如约先红） |
+| cua-driver | 新版 MCP 提供方 README 仍链 `cua-driver-rs-v0.28.0`，native 提供方仍钉 `@trycua/cua-driver 0.28.0` | 两版 README 与 `package.json` | 驱动不动，只改 `computer-use.lock.json` 的 `providers` 两行与 `referenced_by` |
+
+pi-ai 的 OAuth 那几样（WP90 登记的 `we_depend_on`）逐字未变：`app_EMoamEEZ73f0CkXaXp7hrann`、`localhost:1455`、`deviceauth/usercode`、到期前 5 分钟刷新。
+
+#### 1.1 bundle 的 patch 层（第三个面）
+
+`--dump-config-schema` 的 `x-cordis.entries`：99 → 99 行；少了 `skill-badge`、`tool-ralph`（base 里本来就 `disabled: true` 的两行，挪进了可选包），
+多了 `working-directory`、`tool-working-directory`（base 新 insert，**不带 `disabled`**：会话当前目录服务 + 模型面的 `working_directory` 工具，纯本机，A）；
+`user-questions` 的 schema 从 absent 变成能导出。没有"id 没变、换了人"的行；`diagnostics` 两边都空。
+`--dump-config` 组合 diff 另有三处：`session-title-llm` 的 `maxOutputTokens` 64 → 4096（防跑飞的上限，不是长度目标）、两行子代理去掉 `backgroundMode`、
+headless 去掉 `{{cwd}}` 那句 persona 后缀。plan-mode 那段提示词改了一句措辞（只在完整 profile 里）。
+
+**存量整体过一遍**（docs/42 WP177 修订注）：不带 `disabled` 的行里新增的只有上面两行（本机）；WP177 那份"会出网 / 上报"的清单逐行复核，
+锁定表五行（`session-log-deepseek`、`deepseek-account`、`otel`、`session-telemetry-otel`、`plugin-package-inventory-deepseek`）全在、指向的插件没换、组合后全关；
+`profile-lockdown.test.ts` 全过。**这一跳没有新锁一行**。
+
+### 2. 依赖树与原生依赖
+
+lockfile `packages:` 段 1884 → 1911 条。
+
+- **dsh 包**：新进 19、消失 8（`dsh-experimental-schedule-bundle`、`dsh-invariants`、`dsh-subagent-in-process-driver`、`dsh-hook-protocol`、
+  `dsh-hooks-claude-code`、`dsh-hooks-codex`、`dsh-webhook`、`dsh-webhook-github`）。新进的是 `@deepseek-ai/dsh` 元包拖来的可选包与零件、
+  `dsh-tool-schedule`、`dsh-working-directory` 一族。
+- **第三方**：新名字只有 `proxy-agent-negotiate@1.1.0`（MIT，20 KB，无脚本）与 `node-addon-require-builtin` 的两个 musl 平台包；
+  消失 `@octokit/*`（webhook 那对走了）、`@aws-crypto/*` / `@smithy/*` 几个。换大版本：`openai` 6 → 7、`@google/genai` 1 → 2、
+  `@anthropic-ai/sdk` 0.123 → 0.129、`pi-ai` 0.85 → 1.1、`@modelcontextprotocol/*` 2.0 → 2.2、`sharp` 0.35.4 → 0.35.5、`libreoffice-kit` 0.1.1 → 0.1.5。
+- 全部新增 / 换版的包逐个查 `install` / `preinstall` / `postinstall`：只有 `dsh-subprocess-local`（postinstall，`allowBuilds: false` 本来就在）与
+  `@google/genai`（`preinstall: echo no-op`，`allowBuilds: false` 本来就在）。许可证只有 `@img/sharp-libvips-*` 是 LGPL-3.0（WP147 记过）。
+- **`allowBuilds` / `ignoredOptionalDependencies` 一字未改**：`libreoffice-kit` 平台包（含新的 `-wasm`）仍被前缀挡掉、lockfile 里 0 个；`sherpa-onnx-<平台>` 仍 0 个。
+- **`minimumReleaseAgeExclude` 284 → 295**：先 `sed` 换号再 `pnpm install`，pnpm 只在表尾追加新包、没写 `||`、没吃注释；19 条按字母序挪回、8 条消失的删掉；
+  脚本核对 lockfile 里 `@deepseek-ai/dsh*@0.2.1-alpha.2` 295 个 = 排除表 295 条、无重复、lockfile 里 `0.2.0-rc.1` 0 处。`libreoffice-kit@0.1.1` 那条删掉（0.1.5 是 10-01 发的，已过静默期）。
+- BrowserSkill 那四条 `overrides` 跟着改；`pnpm install --frozen-lockfile` 通过（「Lockfile passes supply-chain policies (1907 entries)」）。
+
+### 3. 我们改了什么
+
+① **版本号**：57 处 `@deepseek-ai/dsh*`、六处兄弟包、`computer-use.lock.json`、`upstreams.yml`（dsh 三条、cordis、schemastery、pi-ai）、
+`DEEPSEEK_ACCOUNT_CLIENT_VERSION`、`runtime.ts` 的 health 文案、两条测试里的版本字符串。
+
+② **修 seam（全在 `packages/dsh-adapter` 里，红线 4 没破）**：
+- `harness.ts`：有终端或官方浏览器的运行挂 `LocalFileSystem`（`cwd` = 终端副本目录 / 进程 cwd）+ `WorkingDirectoryService`（`defaultDirectory` 同一个）。
+  会话 cwd 本来就是 `agents.create` 的 `meta.cwd`，所以终端仍在主题副本目录里跑（沙箱可写边界不变）、浏览器子进程仍在进程 cwd 起——**行为不变，只多了一句模型可见的
+  `Current working directory: "<目录>".`**（官方必选上下文段）。没有终端 / 浏览器的运行不挂，提示词字节不变。
+- `official-schedule.ts`：从 `dsh-tool-schedule` 的 `apply` 接四份定义（假 ctx 的 `inject` 当场回调）。
+- `runtime.ts` + `harness.ts` 的 `TurnSummary`：一轮以 `error` 收尾、`onModelError` 却没收到（不是模型流里报的）→ 带上官方 `LlmFailure.message` 报 `run.failed`
+  （`provider_unavailable`），不再照"跑完了"收尾。新测试 `subscription.test.ts`（e2）钉住。三个模拟包 68 条场景一条没受影响（§4）。
+
+③ **dsh-adapter 以外**（不是修 seam，是跟着官方变化改产品面，单列）：
+- `apps/server/src/deepseek-account.ts`、`packages/api`、`apps/workstation`：`no-response` 失败码。
+- `apps/server/src/models.ts`：ChatGPT 订阅默认模型 `gpt-5.4` → `gpt-5.5`。
+- 自动化任务（§5）：`server.ts` 的开关缺省一直开（新选项 `automationEnabled` 只给测试翻）、`automation.ts` 文案、右栏不再提示去装插件、
+  官方插件清单删掉那一项。
+
+### 4. 怎么证明行为没变
+
+1. **指纹**：升级前在当前代码树重采 `0.2.0-rc.1-wp293.json`（pack 已 68 条，与仓库里的 `0.2.0-rc.1.json` 不同）当 FROM；TO = `0.2.1-alpha.2.json`。
+   68 场景 × 2 档 = **136 条**，去掉 `dsh_version` 与 `packages` 两个字段后两份 JSON **逐字节相同**；`upgrade.test.ts` 887 条全过。
+2. **`@agentsws/dsh-adapter` 全量**：升级前 35 文件 1226 条全过；升级后 36 文件全过（多的是 `upgrade.test.ts` 换了对比的两份、`subscription.test.ts` 多一条）。
+3. **提示词与工具表**：升级前后在同一段临时测试里各导一次（裸默认 / `includeHarnessIdentity: false` / 我们真实组出来的 harness 的系统提示、上下文分节、组装分节、工具 schema）——**逐字节相同**。
+4. **两档真实模块图**：64 → 71 个 dsh 包，多的是 `dsh-fs` / `dsh-fs-local` / `dsh-working-directory`（harness 顶层 import，只在终端 / 浏览器运行里挂）、
+   `dsh-tool-schedule` 与它拖来的 `dsh-subagent` / `dsh-util-time`（只加载、不挂）、`dsh-chunked-list`；**一个都没少**，`FORBIDDEN` 七个仍 0 命中。
+5. **三个模拟包 × 三个运行时**（stub / direct / dsh）升级前后各一遍，九次门禁全部"通过（fast 全过且指标未劣化）"，`summary.txt` 逐字节相同（见报告）；`--rewrite-baseline` 没用。
+6. **装包前冒烟** `scripts/preinstall-smoke.mjs`（10 岗位 × 7 步，真 dsh 子进程档）升级前后各一遍全过（见报告）。
+
+### 5. 官方功能优先：这一跳开了什么、没开什么
+
+- **自动化任务改内置**：官方删了可选包、`standard` / `cordis` / `ptc` preset 默认带四个工具。我们跟着改成一直开——每次运行工具面多四个 `schedule_*`、
+  包的那一层（谁能动、往外发的周期任务先出卡、次数与频率上限、到点跑成一次运行）一点没变。以前装过那个插件的用户：官方加载时自动从插件层摘掉，我们这边本来就不再看它。
+- **官方插件清单**（`plugin-allowlist.yml`，只在完整 profile 里用）：删自动化任务；团队协作（行与九个工具不变；消息改直接投收件箱、不再排队重发）、语音输入（只多了麦克风选择）改版本号；
+  **新加五个 A 类**：查找旧对话（`session-search`，只读、内存索引）、接力循环（`ralph-bundle`，一次最多 64 轮新助手，费额度）、常驻终端（`terminal-bundle`，同一套沙箱）、
+  标题跟随（`session-titles-bundle`）、代码副本（`tool-worktree`，写不出工作区）。
+- **没放进清单、交 Luoye 定**：思考翻译（`cot-translation-bundle`，默认把推理原文发给 `edge.microsoft.com`，可选谷歌——C）、调试工具（`inspector-profile`，
+  本机 9230 端口无口令调试口能在宿主进程执行任意代码、网络记录不打码——B）、徽章技能（`badge-skill-bundle`，可能把「powered by dsh」加进给客户的内容里）。
+- **两档运行时没新接官方功能**：`working_directory` 工具、常驻终端这些都只在完整 profile 里；常驻终端要接进两档，得先让门禁管住 `terminal_send`（它不经过 `bash` 那条命令白名单）。
+
+### 6. ④bis 默认值扫描
+
+两份源码照 `scan-default-flips.sh` 的口径（`diff -r -u -U0`，去 `node_modules` / `dist` / `lib` / 测试）：39 行，逐条看——全是界面字体、`mode` 去掉 `both`、
+子代理 / 团队删配置项、`tool-ask-user` 新 `mode: legacy` 等，**没有一条出网 / 上报 / 遥测开关从关翻成开**。新文件里默认开的出网只有思考翻译插件的两个端点
+（`translator/src/index.ts` 第 56–57 行），它只在 `cot-translation-bundle` 里、我们的组合 0 行、没进清单。
+
+### 7. 重判上次放弃的选项（docs/42 §⑤）
+
+| # | 上次的判断 | 这次实测 | 还成立吗 |
+|---|---|---|---|
+| 1 | 官方 SDK 没有 server→client 请求 | `sdk/server/src` 里 `transport.request(` 仍 0 处；新加的 `session/wait` 是 client→server | **成立**，不换 |
+| 2 | headless `--json` 替不了子进程档 | `bundle/headless` 改的是终端失败处理与 `{{cwd}}`，事件形状没加 server→client 的口 | 成立（没重新实测，按源码 diff 判） |
+| 3 | `plugin-manager` 不能替 preset 承载 | 这一跳插件管理加的是"让 Agent 创建插件"入口、按需装 Claude Code / Codex 包 | 同 WP132 |
+| 4 | `workspace-changes` 形可借体不能用 | README 改了措辞，那两句硬伤仍在 | 成立 |
+| 5 | 官方账号推理路由替 `model-gateway` 的 provider | `llm-deepseek-account/src` 有改（2 个文件） | 成立，不换（没逐行复核，留下次） |
+
+### 8. 留下的东西
+
+1. **下次升级先读上游 `docs/upgrade-guide/<版本>/`**：这一跳的四个破坏点有三个写在里面；docs/42 加一条修订注（见报告）。
+2. **pi-ai 目录会删模型**：这次删的正好是我们的默认模型。已加"一轮 error 就报没跑成"兜底；**存着 `gpt-5.4` 的用户**下次运行会看到没跑成 + 官方原因，要去设置里重选——
+   要不要在服务端把存着的旧选择自动换成默认，见报告「要定的事」。
+3. 常驻终端要进两档运行时，先让门禁管住 `terminal_send`。
+4. `desktopPlatform` 上游洞（WP134）仍在。

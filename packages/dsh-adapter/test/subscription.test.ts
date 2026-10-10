@@ -329,7 +329,7 @@ function subscriptionRequest(): ReturnType<typeof makeRequest> {
     ...req,
     runtime: {
       ...req.runtime,
-      model: { provider: 'openai-codex', model: 'gpt-5.4', region: 'global' as const },
+      model: { provider: 'openai-codex', model: 'gpt-5.5', region: 'global' as const },
     },
   }
 }
@@ -405,6 +405,37 @@ describe('(e) 运行：一次带工具调用的运行走官方适配器', () => 
   })
 })
 
+// ── (e2) 模型不在目录里 ───────────────────────────────────────────────
+
+describe('(e2) WP293：选的模型已经不在 pi-ai 目录里', () => {
+  it('不再假装"跑完了"：照实报没跑成，带官方那句原因（dsh 0.2.1-alpha.2 删了 gpt-5.4）', async () => {
+    const fake = fakeOpenAi({ reply: () => ({ text: '好的。' }) })
+    const records = memoryRecords()
+    const handle = await loginHandle(records)
+    await signIn(handle)
+
+    const { sink, events } = collect()
+    const runtime = createDshRuntime({
+      ...baseOptions(),
+      mode: 'in-process',
+      credentials: credentialsPlugin(records),
+    })
+    const req = subscriptionRequest()
+    const result = await runtime.run(
+      { ...req, runtime: { ...req.runtime, model: { ...req.runtime.model, model: 'gpt-5.4' } } },
+      sink,
+      NO_ABORT(),
+    )
+    // 请求根本没发出去
+    expect(fake.responses).toBe(0)
+    expect(result.status).toBe('failed')
+    const failed = events.find((e) => e.type === 'run.failed')
+    expect(failed?.type === 'run.failed' && failed.error.code).toBe('provider_unavailable')
+    expect(failed?.type === 'run.failed' && failed.error.message.length).toBeGreaterThan(0)
+    expect(typesOf(events)).not.toContain('run.completed')
+  })
+})
+
 // ── (f) 零泄漏 ─────────────────────────────────────────────────────────
 
 describe('(f) 零泄漏：token 不进事件、不进日志、不进状态', () => {
@@ -462,7 +493,7 @@ describe('llm/stream waterfall：只管订阅那条路', () => {
     const billed: { input: number; output: number; cached: number; cost: number }[] = []
     const off = watchSubscriptionCalls(ctx, {
       provider: 'openai-codex',
-      model: 'gpt-5.4',
+      model: 'gpt-5.5',
       onRequest: ({ messages }) => seen.push({ messages: messages.length }),
       onCompletion: (c) =>
         billed.push({
@@ -476,7 +507,7 @@ describe('llm/stream waterfall：只管订阅那条路', () => {
     const drain = async (provider: string): Promise<void> => {
       for await (const _ of ctx.llm.stream({
         provider,
-        model: 'gpt-5.4',
+        model: 'gpt-5.5',
         messages: [],
       } as never)) {
         // 只是把流走完

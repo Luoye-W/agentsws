@@ -14,16 +14,14 @@
  * node scripts/e2e-wp181-shots.mjs [--port 4481]
  * ```
  */
-import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
+import { mkdirSync } from 'node:fs'
 import { createRequire } from 'node:module'
-import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
 const require = createRequire(import.meta.url)
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const SHOTS = join(ROOT, 'docs/assets/wp181')
-const SCHEDULE = '@deepseek-ai/dsh-experimental-schedule-bundle'
 
 const args = process.argv.slice(2)
 const i = args.indexOf('--port')
@@ -70,19 +68,12 @@ async function main() {
   const { chromium } = require(
     join(ROOT, 'node_modules/.pnpm/playwright@1.63.0/node_modules/playwright'),
   )
-  const { shippedBundleBackend } = await import(
-    pathToFileURL(join(ROOT, 'packages/dsh-adapter/dist/official-plugins.js')).href
-  )
   const { createDemo } = await import(pathToFileURL(join(ROOT, 'apps/cli/dist/demo.js')).href)
-  // 插件层：本脚本自己建的临时目录，拍完删掉
-  const layer = mkdtempSync(join(tmpdir(), 'agentsws-wp181-shots-'))
-  const backend = await shippedBundleBackend({ dir: join(layer, 'official-plugins') })
-  await backend.select(SCHEDULE, '0.2.0-rc.1')
+  // WP293：自动化任务跟官方改成内置、一直开，不用再在插件层里「装」那个（已被官方删掉的）可选包
   const demo = await createDemo({
     root: ROOT,
     port: PORT,
     quiet: true,
-    officialPlugins: { backend },
   })
   await demo.server.listen()
   let browser
@@ -136,7 +127,6 @@ async function main() {
   } finally {
     await browser?.close()
     await demo.close()
-    rmSync(layer, { recursive: true, force: true })
   }
 }
 
