@@ -10,7 +10,8 @@
  *   node scripts/release-upload-r2.mjs --dir <本地目录> [--upload]
  *       [--channel beta|stable]   只作核对：与版本号推出来的渠道不一致就拒
  *       [--dry-run]               只打印计划（默认就是；与 --upload 同时给按 dry-run）
- *       [--bucket agentsws-downloads] [--base https://dl.agentsws.com] [--repo owner/name] [--keep]
+ *       [--bucket <桶>]           默认取 release-meta.json 里 CI 记下的桶（仓库变量 R2_BUCKET），再没有就 agentsws-downloads
+ *       [--base https://dl.agentsws.com] [--repo owner/name] [--keep]
  *
  * 目录结构与顺序与 release.yml 原来的 R2 两步一致：
  *   <渠道>/*.exe → *.dmg → *.blockmap → *.zip（一年 immutable）
@@ -51,7 +52,7 @@ const PACKAGES = [
 ]
 
 export function parseArgs(argv) {
-  const out = { dryRun: true, bucket: BUCKET, base: BASE, keep: false }
+  const out = { dryRun: true, base: BASE, keep: false }
   const takes = { '--run': 'run', '--dir': 'dir', '--channel': 'channel', '--bucket': 'bucket' }
   Object.assign(takes, { '--base': 'base', '--repo': 'repo' })
   let upload = false
@@ -113,7 +114,13 @@ export function resolveRelease(bundle, wantChannel) {
   if (wantChannel !== undefined && wantChannel !== channel)
     problems.push(`版本 ${version} 属于 ${channel} 渠道，--channel ${wantChannel} 对不上`)
   if (problems.length > 0) throw new Error(`产物不对，不传：\n  ${problems.join('\n  ')}`)
-  return { version, channel, siteChannel: meta?.site_channel || 'beta', tag: meta?.tag }
+  return {
+    version,
+    channel,
+    siteChannel: meta?.site_channel || 'beta',
+    tag: meta?.tag,
+    bucket: meta?.bucket || BUCKET,
+  }
 }
 
 /** 上传计划（有序）：安装包 / blockmap → latest*.yml → 渠道 downloads.json → 根目录 downloads.json。 */
@@ -234,8 +241,9 @@ export async function run(argv, deps = {}) {
     const rel = resolveRelease(bundle, opts.channel)
     const plan = planUploads({ ...bundle, channel: rel.channel, siteChannel: rel.siteChannel })
     const rootDownloads = plan.some((p) => p.key === 'downloads.json')
+    const bucket = opts.bucket ?? rel.bucket
     log(
-      `${rel.tag ?? `v${rel.version}`} → ${opts.bucket}（${opts.base}/${rel.channel}/），${plan.length} 个对象：`,
+      `${rel.tag ?? `v${rel.version}`} → ${bucket}（${opts.base}/${rel.channel}/），${plan.length} 个对象：`,
     )
     const tooBig = []
     for (const [i, p] of plan.entries()) {
@@ -259,7 +267,7 @@ export async function run(argv, deps = {}) {
     const wenv = wranglerEnv(env)
     for (const p of plan) {
       log(`↑ ${p.key}`)
-      const r = exec(wrangler, wranglerArgs(opts.bucket, p), {
+      const r = exec(wrangler, wranglerArgs(bucket, p), {
         cwd: REPO_ROOT,
         env: wenv,
         stdio: 'inherit',

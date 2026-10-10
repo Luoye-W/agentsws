@@ -67,7 +67,8 @@ describe('参数', () => {
     expect(parseArgs(['--dir', 'x', '--dry-run']).dryRun).toBe(true)
     expect(parseArgs(['--run', '123', '--upload']).dryRun).toBe(false)
     expect(parseArgs(['--run', '123', '--upload', '--dry-run']).dryRun).toBe(true)
-    expect(parseArgs(['--dir', 'x']).bucket).toBe('agentsws-downloads')
+    expect(parseArgs(['--dir', 'x']).bucket).toBeUndefined()
+    expect(parseArgs(['--dir', 'x', '--bucket', 'b2']).bucket).toBe('b2')
   })
   it('拒：两个都给 / 都不给 / run id 不是数字 / 渠道写错 / 不认识的参数', () => {
     expect(() => parseArgs([])).toThrow('二选一')
@@ -83,7 +84,16 @@ describe('上传计划', () => {
   it('目录、顺序、cache-control、content-type 与 release.yml 原来那两步一致', () => {
     const b = readBundle(fakeBundle())
     const rel = resolveRelease(b, undefined)
-    expect(rel).toMatchObject({ version: V, channel: 'beta', siteChannel: 'beta', tag: `v${V}` })
+    expect(rel).toMatchObject({
+      version: V,
+      channel: 'beta',
+      siteChannel: 'beta',
+      tag: `v${V}`,
+      bucket: 'agentsws-downloads',
+    })
+    expect(resolveRelease(readBundle(fakeBundle({ meta: { bucket: 'other' } }))).bucket).toBe(
+      'other',
+    )
     const plan = planUploads({ ...b, channel: rel.channel, siteChannel: rel.siteChannel })
     expect(plan.map((p) => [p.key, p.contentType, p.cacheControl])).toEqual([
       [`beta/${EXE}`, 'application/vnd.microsoft.portable-executable', LONG],
