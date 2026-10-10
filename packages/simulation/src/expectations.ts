@@ -571,6 +571,41 @@ export function checkExpectations(
         : `没路由到：${missing.join(', ')}（实际 [${[...roles].join(', ')}]）`,
     )
   }
+  // WP291（决策 356）：岗位入口三分——按顺序判成了什么；当场问答不进任何列表
+  if (expected.position_entries !== undefined) {
+    const entries = evidence.events
+      .filter((e) => e.type === 'simulation.position_entry')
+      .map((e) => payloadOf(e))
+    const kinds = entries.map((p) => String(p.kind ?? ''))
+    const leaked = entries.filter((p) => p.kind === 'quick' && p.hidden !== true).length
+    const same =
+      kinds.length === expected.position_entries.length &&
+      kinds.every((k, i) => k === expected.position_entries?.[i])
+    add(
+      'position_entries',
+      same && leaked === 0,
+      `入口判成 [${kinds.join(', ')}]，期望 [${expected.position_entries.join(', ')}]` +
+        (leaked === 0 ? '' : `；${leaked} 个当场问答出现在列表里`),
+    )
+  }
+  if (expected.position_answer_components !== undefined) {
+    const seen = new Set(
+      evidence.events
+        .filter((e) => e.type === 'simulation.position_answered')
+        .flatMap((e) => {
+          const c = payloadOf(e).components
+          return Array.isArray(c) ? c.map(String) : []
+        }),
+    )
+    const missing = expected.position_answer_components.filter((k) => !seen.has(k))
+    add(
+      'position_answer_components',
+      missing.length === 0,
+      missing.length === 0
+        ? `当场回答出了 [${[...seen].join(', ')}]`
+        : `当场回答没出：${missing.join(', ')}（实际 [${[...seen].join(', ')}]）`,
+    )
+  }
   // WP55 / 48 §4 L3 #2：入站被判成的渠道细分（`amazon`）
   if (expected.sub_channel !== undefined) {
     const seen = [...new Set(evidence.inbound.map((e) => e.sub_channel ?? e.channel))]

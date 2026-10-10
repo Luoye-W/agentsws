@@ -915,6 +915,7 @@ async function execute(
         who: input.who,
         position_id: input.position,
         text: input.text,
+        ...(input.judge === undefined ? {} : { judge: input.judge }),
       })
     } catch (e) {
       workBlocked(e, 'position_open_failed')

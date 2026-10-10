@@ -14,9 +14,23 @@
  * 3. **起 Run**：用**被路由到的那条职责的分配**起 Run（05 §4 不并集——不是岗位的权限，是那一条的）。
  *    WP237：同一个人的几条职责打平按分取（`settleCloseCall`）；WP287：谁都不像也按分 / 先后取
  *    （`settleAlways`），岗位入口不再出选择卡（只剩一条能参赛的职责都没有时才出）。
+ * 4. **三分**（WP291，决策 356）：这句话是当场问答、会话还是任务。服务进程先问便宜模型；模拟里那一次是
+ *    **固定替身**（场景写 `judge`），不写就按 WP287 的规则判（与服务进程退回规则时同一份）。
+ *    当场问答落在一件**隐身**的事项里（默认列表找不到它），回答是「一句话 + 组件」——模拟里那段回答由
+ *    确定性的替身照 mock 店铺的商品现写（带 ```answer 组件段），再按契约同一份 `splitAnswer` 取出来；
+ *    任务那一件原话后面头一句「记成了任务，按「X」做」。
  */
-import type { ApprovalItem, Assignment, PersonId, RoleId } from '@agentsws/contracts'
+import type {
+  AnswerComponent,
+  ApprovalItem,
+  Assignment,
+  PersonId,
+  RoleId,
+} from '@agentsws/contracts'
+import { splitAnswer } from '@agentsws/contracts'
 import {
+  type EntryKind,
+  entryKindByRules,
   loadBundledPosition,
   type Position,
   type RouteCandidate,
@@ -44,7 +58,13 @@ export interface PositionsLoop {
   /** 把一个岗位模板的默认职责一次挂给一个人（已经有的那条不重复挂）。 */
   staff(who: PersonId, position_id: string): { role_id: RoleId; assignment_id: string }[]
   /** 交给这个岗位一件事。 */
-  open(input: { who: PersonId; position_id: string; text: string }): Promise<PositionRouteRecord>
+  open(input: {
+    who: PersonId
+    position_id: string
+    text: string
+    /** WP291：判断那一次的固定替身；不给按规则判 */
+    judge?: EntryKind
+  }): Promise<PositionRouteRecord>
   /** 路由记录（场景的 `position_routed_to` 断言读它）。 */
   routed: PositionRouteRecord[]
 }
@@ -96,7 +116,7 @@ export function installPositions(world: World): PositionsLoop {
     return out
   }
 
-  const open: PositionsLoop['open'] = async ({ who, position_id, text }) => {
+  const open: PositionsLoop['open'] = async ({ who, position_id, text, judge }) => {
     const template = templateOf(position_id)
     const held = activeOf(who).filter((a) => template.roles.some((r) => r.role === a.role_id))
     const profiles = held
@@ -133,12 +153,20 @@ export function installPositions(world: World): PositionsLoop {
     const picked =
       verdict.picked === undefined ? undefined : held.find((a) => a.role_id === verdict.picked)
 
+    // WP291：三分（固定替身 / 规则）。拿不准职责（出选择卡）的那条路照旧当任务
+    const decided: { kind: EntryKind; by: 'stand_in' | 'rules' } =
+      judge !== undefined
+        ? { kind: judge, by: 'stand_in' }
+        : { kind: entryKindByRules(text).kind, by: 'rules' }
+    const kind: EntryKind = picked === undefined ? 'task' : decided.kind
+    const ask = kind !== 'task'
     const matter = world.work.createMatter({
       kind: 'adhoc',
       title: text,
       entry: 'position',
       position_template_id: template.id,
       participants: [who],
+      ...(ask ? { ask: true, quick: kind === 'quick' } : {}),
       ...(picked === undefined ? {} : { position_id: picked.id, role_id: picked.role_id }),
     })
     world.work.appendEvent(matter.id, {
@@ -177,6 +205,44 @@ export function installPositions(world: World): PositionsLoop {
       text,
     })
     if (said.run_id !== undefined) record.run_id = said.run_id
+    if (kind === 'task')
+      world.work.appendEvent(matter.id, {
+        kind: 'status',
+        text: `记成了任务，按「${world.roles.roles.get(picked.role_id)?.name.zh ?? picked.role_id}」做`,
+        actor: { kind: 'agent', id: 'position_router' },
+        ref: { type: 'position', id: template.id },
+        route: { picked: picked.role_id, options: [], task: true },
+      })
+    if (kind === 'quick') {
+      // 当场回答：确定性的替身照 mock 店铺现写一段（带 ```answer），再按契约取「一句话 + 组件」
+      world.work.appendEvent(matter.id, {
+        kind: 'agent_message',
+        text: quickAnswerStandIn(world, text),
+        actor: { kind: 'agent', id: picked.id },
+      })
+      const answer = splitAnswer(
+        world.work.store
+          .listMatterEvents(matter.id)
+          .filter((e) => e.kind === 'agent_message')
+          .map((e) => e.text)
+          .join('\n\n'),
+      )
+      world.appendEvent('simulation.position_answered', {
+        position_id: template.id,
+        role_id: picked.role_id,
+        components: answer.components.map((c: AnswerComponent) => c.kind),
+        lead: answer.lead !== '',
+      })
+    }
+    world.appendEvent('simulation.position_entry', {
+      position_id: template.id,
+      kind,
+      by: decided.by,
+      // 当场问答不进任何列表（默认事项列表里找不到它）
+      ...(kind === 'quick'
+        ? { hidden: !world.work.listMatters().some((m) => m.id === matter.id) }
+        : {}),
+    })
     world.appendEvent('simulation.position_routed', {
       position_id: template.id,
       role_id: picked.role_id,
@@ -248,4 +314,36 @@ export function installPositions(world: World): PositionsLoop {
   }
 
   return { staff, open, routed }
+}
+
+const PRODUCTS = /商品|产品|product/iu
+
+/**
+ * WP291：当场回答的确定性替身（模拟不调模型）。问商品 → mock 店铺里的商品列成表 + 在卖几件；
+ * 别的 → 一句话（不读数据）。写法与真模型照 `QUICK_ANSWER_RULE` 回的一样：正文 + ```answer 段。
+ */
+function quickAnswerStandIn(world: World, text: string): string {
+  if (!PRODUCTS.test(text)) return '这一问不用读数据，直接答：照岗位的规矩来就行。'
+  const products = world.connect.state.products
+  const live = products.filter((p) => p.status === 'active').length
+  const body = {
+    components: [
+      {
+        kind: 'table',
+        columns: ['商品', '价格', '状态'],
+        rows: products
+          .slice(0, 50)
+          .map((p) => [p.title, p.price, p.status === 'active' ? '在卖' : '草稿']),
+        ...(products.length > 50 ? { total: products.length } : {}),
+      },
+      { kind: 'metric', items: [{ label: '在卖', value: live, unit: '件' }] },
+    ],
+  }
+  return [
+    `店里有 ${products.length} 件商品，${live} 件在卖。`,
+    '',
+    '```answer',
+    JSON.stringify(body),
+    '```',
+  ].join('\n')
 }

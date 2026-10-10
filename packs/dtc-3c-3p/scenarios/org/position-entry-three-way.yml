@@ -1,0 +1,59 @@
+# WP291（决策 356，Luoye 10-10）：**岗位入口三分**——简单问答当场出组件 / 多轮进会话 / 干活开任务。
+#
+# Luoye 原话：「是简单的回答就行，那就直接组件展示的方式；如果觉得后续会有多轮对话，那就进会话线程；
+# 如果判断是要使用工具执行某些任务，或者用户的交代更像是一个工作任务而不是简单的问答，就开成任务。」
+#
+# 判断那一次在服务进程里是便宜模型（`purpose: classify`）；模拟永远不调真模型，所以三句各写一个
+# **固定替身**（`judge`）——三个运行时拿到的是同一个判断，比的是判完之后各走各的路对不对：
+#
+# 1. 「店里有哪些商品」→ quick：落在一件隐身的事项里（默认列表找不到它，不进工作、不算在办），
+#    回答是一句话 + 商品表格 + 在卖几件（替身照 mock 店铺现写 ```answer 段，按契约同一份 `splitAnswer` 取出来）；
+# 2. 「帮我想想详情页怎么优化」→ chat：一段会话（WP287 的会话，进左栏会话历史）；
+# 3. 「上架一个草稿商品」→ task：一件任务，原话后面头一句「记成了任务，按「X」做」。
+#
+# 三句都照样经岗位内路由落到店铺管理（同一套判据，当场问答也用那条职责的分配答）。
+id: org/position-entry-three-way
+version: 1
+dataset: { pack: dtc-3c-3p, seed: 42 }
+stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
+clock: { start: '2026-10-10T09:00:00+08:00' }
+events:
+  - at: '+0m'
+    position.staff: { who: p_wang, position: web-ops }
+  - at: '+5m'
+    position.open:
+      who: p_wang
+      position: web-ops
+      text: 店里有哪些商品
+      judge: quick
+  - at: '+10m'
+    position.open:
+      who: p_wang
+      position: web-ops
+      text: 帮我想想详情页怎么优化，一起捋一捋
+      judge: chat
+  - at: '+15m'
+    position.open:
+      who: p_wang
+      position: web-ops
+      text: 上架一个草稿商品
+      judge: task
+  - at: '+1h'
+    clock.advance: {}
+expected:
+  position_entries: [quick, chat, task]
+  position_answer_components: [table, metric]
+  position_routed_to: [dtc.store]
+  event_types:
+    - simulation.position_staffed
+    - simulation.position_routed
+    - simulation.position_entry
+    - simulation.position_answered
+  metrics:
+    runs_failed: 0
+    outbound_sent: 0
+invariants:
+  - no_write_without_stage
+  - provenance_respected
+rubric: >-
+  岗位里问一句「店里有哪些商品」，是不是当场出了一张商品表，而没有变成一件「进行中」的事？
