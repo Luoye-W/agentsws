@@ -60,6 +60,8 @@ export type {
 } from './subscription-facts.js'
 export {
   isSubscriptionProvider,
+  RETIRED_SUBSCRIPTION_MODELS,
+  retiredSubscriptionModel,
   SUBSCRIPTION_FACTS,
   SUBSCRIPTION_PROVIDERS,
   SUBSCRIPTION_RECORD_SCOPE,

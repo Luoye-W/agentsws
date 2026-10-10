@@ -106,6 +106,9 @@ import {
   unavailableImageProvider,
   vendorForBaseUrl,
 } from '@agentsws/model-gateway'
+import { retiredSubscriptionModel } from '@agentsws/dsh-adapter/subscription-facts'
+import type { RetiredModelSwap } from './retired-models.js'
+import { retiredSwapLive } from './retired-models.js'
 import type { SecretStore } from './secret-store.js'
 import { SECRETS_KEY_ENV } from './secret-store.js'
 
@@ -296,7 +299,12 @@ interface ModelsStateFile {
   }
   /** provider id → 上次测试结果（只有 ok / 延迟 / 模型名，没有 key 线索）。 */
   tests: Record<string, ModelTestResult>
+  /** WP294：启动时自动换掉的退役订阅模型（首页提醒照它出；不进设置快照）。 */
+  retired_swaps?: RetiredProviderSwap[]
 }
+
+/** WP294：哪一条 provider 上的哪个模型被自动换了。 */
+export type RetiredProviderSwap = RetiredModelSwap & { provider_id: string }
 
 /** 拉一次模型清单最多等多久。本机 Ollama 冷启动慢，10 秒够了；卡住不该拖着界面。 */
 export const DISCOVER_TIMEOUT_MS = 10_000
@@ -378,6 +386,11 @@ export interface ModelsAssembly {
   imageView(): ModelImageView
   /** WP66：端一份可复制的设置快照（**没有 key**）。 */
   exportSettings(): ModelSettingsSnapshot
+  /**
+   * WP294：启动时被自动换掉的退役订阅模型里，还该提醒的那几条（没过期、人没再改过）。
+   * 首页告警区据此出一行。
+   */
+  retiredSwaps(): RetiredProviderSwap[]
   /**
    * WP66：把一份快照写进来（52 O4 建品牌时的"从某个品牌复制"）。
    *
@@ -1177,6 +1190,7 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
         defaults: dropLegacyResidency(parsed.defaults ?? {}),
         tests: parsed.tests ?? {},
         ...(parsed.pricing === undefined ? {} : { pricing: parsed.pricing }),
+        ...(parsed.retired_swaps === undefined ? {} : { retired_swaps: parsed.retired_swaps }),
       }
     } catch {
       // 第一次跑，或者文件坏了：从空开始。加密库里的 key 不受影响
@@ -1187,6 +1201,50 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
     mkdirSync(dirname(stateFile), { recursive: true })
     writeFileSync(stateFile, `${JSON.stringify(state, null, 2)}\n`, 'utf8')
   }
+
+  /**
+   * WP294（决策 375）：订阅 provider 上存着的退役模型（pi-ai 1.1.0 删了 ChatGPT 订阅的
+   * gpt-5.4 / gpt-5.4-mini）换成顶替它的那个——主模型、默认、按 purpose 的选择一起换，
+   * 落盘，记下换了什么（首页提醒照它出）。**只认退役表**：别家、用户自己填的别的名字不动。
+   * 与 WP88 那条「模板默认值不在清单里就换成清单第一个」同一个意思：别让人存着一个上游不认的名字。
+   */
+  const swapRetiredModels = (): void => {
+    const swaps: RetiredProviderSwap[] = []
+    const note = (provider_id: string, from: string, to: string): void => {
+      if (swaps.some((x) => x.provider_id === provider_id && x.from === from)) return
+      swaps.push({ provider_id, from, to, at: clock.now() })
+    }
+    const swapRef = (ref: string): string => {
+      const at = ref.indexOf('/')
+      if (at <= 0) return ref
+      const config = state.providers.find((p) => p.id === ref.slice(0, at))
+      if (config === undefined) return ref
+      const from = ref.slice(at + 1)
+      const to = retiredSubscriptionModel(config.kind, from)
+      if (to === undefined) return ref
+      note(config.id, from, to)
+      return `${config.id}/${to}`
+    }
+    if (state.defaults.default !== undefined) state.defaults.default = swapRef(state.defaults.default)
+    for (const [purpose, ref] of Object.entries(state.defaults.by_purpose ?? {})) {
+      if (ref !== undefined && state.defaults.by_purpose !== undefined) {
+        state.defaults.by_purpose[purpose as ModelPurpose] = swapRef(ref)
+      }
+    }
+    for (const config of state.providers) {
+      const to = retiredSubscriptionModel(config.kind, config.model)
+      if (to === undefined) continue
+      note(config.id, config.model, to)
+      config.model = to
+    }
+    if (swaps.length === 0) return
+    const kept = (state.retired_swaps ?? []).filter(
+      (old) => !swaps.some((x) => x.provider_id === old.provider_id && x.from === old.from),
+    )
+    state.retired_swaps = [...kept, ...swaps]
+    flush()
+  }
+  swapRetiredModels()
 
   const keyOf = (id: string): string => `${MODEL_KEY_PREFIX}${id}`
 
@@ -2564,6 +2622,20 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
       return config === undefined ? 'unchecked' : visionStatusOf(config, ref.model)
     },
     exportSettings,
+    retiredSwaps() {
+      const now = clock.now()
+      return (state.retired_swaps ?? []).filter((swap) => {
+        const config = state.providers.find((p) => p.id === swap.provider_id)
+        if (config === undefined) return false
+        // 现在还用着换上去的那个（主模型或任何一格默认），才算人没改过
+        const ref = `${config.id}/${swap.to}`
+        const inUse =
+          config.model === swap.to ||
+          state.defaults.default === ref ||
+          Object.values(state.defaults.by_purpose ?? {}).includes(ref)
+        return inUse && retiredSwapLive(swap, swap.to, now)
+      })
+    },
     accountChanged: () => {
       reassemble()
     },
@@ -2610,6 +2682,8 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
       state.defaults = dropLegacyResidency(
         JSON.parse(JSON.stringify(snapshot.defaults)) as ModelsStateFile['defaults'],
       )
+      // WP294：从还没换过的老快照复制过来的，同样换掉退役模型
+      swapRetiredModels()
       flush()
       // key 还没填，所以这一轮多半只装得上 stub——填完 key 下一次保存自然就换过来
       reassemble()

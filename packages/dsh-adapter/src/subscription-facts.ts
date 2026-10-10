@@ -89,3 +89,25 @@ export function subscriptionFactsOf(provider: SubscriptionProviderId): Subscript
   if (hit === undefined) throw new Error(`未知的订阅 provider：${provider}`)
   return hit
 }
+
+/**
+ * WP294（决策 375）：**官方目录里删掉了的订阅模型 → 顶替它的那个**。
+ *
+ * pi-ai 1.1.0（dsh 0.2.1-alpha.2 带进来的）把 `openai-codex` 目录里的 `gpt-5.4` / `gpt-5.4-mini`
+ * 删了：老用户存着这两个名字，一跑就是「模型不在目录里」。服务端启动时把存着的这两个换成
+ * `gpt-5.5`、落盘、留一条提醒。**只认这张表**——用户自己填的别的名字（哪怕目录里没有）不动。
+ * 表里每一项都由 `test/subscription.test.ts`（e3） 对着装着的 pi-ai 目录核：退役的真不在、
+ * 顶替的真在（哪天官方又加回来，测试先红）。
+ */
+export const RETIRED_SUBSCRIPTION_MODELS: Readonly<
+  Partial<Record<SubscriptionProviderId, Readonly<Record<string, string>>>>
+> = {
+  'openai-codex': { 'gpt-5.4': 'gpt-5.5', 'gpt-5.4-mini': 'gpt-5.5' },
+}
+
+/** 这一家存着的这个模型名退役了没有；退役了回顶替它的那个，没退役回 `undefined`。 */
+export function retiredSubscriptionModel(provider: string, model: string): string | undefined {
+  if (!isSubscriptionProvider(provider)) return undefined
+  const table = RETIRED_SUBSCRIPTION_MODELS[provider]
+  return table === undefined ? undefined : Object.hasOwn(table, model) ? table[model] : undefined
+}
