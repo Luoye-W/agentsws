@@ -232,7 +232,8 @@ describe('54 §2 从岗位开一件事', () => {
       }),
     )
     const timeline = server.work.store.listMatterEvents(out.matter.id, { limit: 50 })
-    const routed = timeline.find((e: MatterEvent) => e.text.includes('路由到'))
+    // WP291：任务那一行（原话后面头一句「记成了任务，按「X」做」）就是路由结果
+    const routed = timeline.find((e: MatterEvent) => e.route?.task === true)
     expect(routed?.ref).toEqual({ type: 'position', id: 'web-ops' })
     expect(routed?.text).toContain('店铺管理')
   })

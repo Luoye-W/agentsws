@@ -736,15 +736,15 @@ export function createPositions(options: PositionsOptions): PositionsAssembly {
     // WP291：它就是一次当场问答（岗位页上回一句，不进线程）
     const smallTalk = pinned === undefined && input.mode !== 'task' && looksLikeSmallTalk(text)
     /*
-     * WP291（决策 356）：调用方点了名的照办（快捷提示 = 已经定了职责 = 任务）；否则下面三分。
-     * 老的 `ask` 就是会话（WP287 的行为）。
+     * WP291（决策 356）：调用方点了名的照办；否则下面三分。快捷提示（定了职责）也照样三分——
+     * 定的是**哪条职责**，不是「这是一件任务」（「看看今天的订单」也是当场答）。老的 `ask` 就是会话。
      */
     const called: EntryKind | undefined =
       input.mode === 'quick'
         ? 'quick'
         : input.mode === 'ask' || input.mode === 'chat'
           ? 'chat'
-          : input.mode === 'task' || pinned !== undefined
+          : input.mode === 'task'
             ? 'task'
             : undefined
 
@@ -814,7 +814,9 @@ export function createPositions(options: PositionsOptions): PositionsAssembly {
             options.classifyComplete?.({ assignment_id: pickedEntry.assignment_id }),
           )
         : undefined
-    const kind: EntryKind = called ?? judged?.kind ?? 'quick'
+    // 退回规则时照 WP287 的规则来：指定了职责（快捷提示）默认是交办
+    const kind: EntryKind =
+      called ?? (judged?.by === 'rules' && pinned !== undefined ? 'task' : judged?.kind) ?? 'quick'
     const ask = kind !== 'task'
     const quick = kind === 'quick'
     const entry = { kind, by: judged?.by ?? ('caller' as const) }
