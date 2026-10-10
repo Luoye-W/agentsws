@@ -13,7 +13,10 @@ name: Release
 # 1. **只有推 tag 才发版。** 手动触发（workflow_dispatch）默认 dry_run：只打包、只收拢、只自检，
 #    产物留作这次运行的 artifact，**一个字节都不上传**。
 # 2. **仓库里没有任何真实凭据。** R2 的三样只按 secret 的名字引用（R2_ACCESS_KEY_ID / R2_SECRET_ACCESS_KEY /
-#    R2_ACCOUNT_ID），值由 Luoye 在仓库 Settings → Secrets 里自己填；GitHub 那边用 workflow 自带的 GITHUB_TOKEN。
+#    R2_ACCOUNT_ID）；GitHub 那边用 workflow 自带的 GITHUB_TOKEN。
+#    **WP292（10-10）起默认不填这三样**：CI 只打包、建 GitHub Release、留 artifact `release-bundle`，
+#    R2 由本机用已登录的 wrangler（OAuth）跑 `node scripts/release-upload-r2.mjs --run <run_id> --upload` 传。
+#    三样都填了则照旧由 CI 传（行为不变）。
 #    不签名、不公证（CSC_IDENTITY_AUTO_DISCOVERY=false）。
 # 3. **版本号只有一个出处：tag。** 打包前反写进 apps/desktop/package.json。
 # 4. **先传安装包、最后传 latest*.yml。** 客户端看到新的 latest.yml 时，它指的文件一定已经在了。
@@ -214,6 +217,9 @@ jobs:
             fs.writeFileSync(p, JSON.stringify(pkg, null, 2) + '\n')
           " "$version"
           echo "AGENTSWS_RELEASE_VERSION=$version" >> "$GITHUB_ENV"
+      # 插件引用 @agentsws/brand 的编译产物（dist），先编它，不然 wxt 解析不到入口（10-10 发版演练红在这里）
+      - name: tsc -b（插件依赖的 brand）
+        run: pnpm exec tsc -b packages/brand
       - name: build（wxt build && wxt zip）
         run: pnpm -F @agentsws/extension build
       # 统一改成官网清单认的名字
@@ -255,6 +261,9 @@ jobs:
 
       - name: 收拢（合并 latest-mac.yml、自检产物结构、生成 downloads.json）
         shell: bash
+        env:
+          SITE_CHANNEL: ${{ vars.SITE_DOWNLOAD_CHANNEL || 'beta' }}
+          R2_BUCKET: ${{ vars.R2_BUCKET || 'agentsws-downloads' }}
         run: |
           eval "$(node apps/desktop/scripts/release-manifest.mjs tag "$RELEASE_TAG")"
           echo "VERSION=$version" >> "$GITHUB_ENV"
@@ -264,22 +273,34 @@ jobs:
           node apps/desktop/scripts/release-manifest.mjs check --dir artifacts --version "$version"
           node apps/desktop/scripts/release-manifest.mjs downloads --dir artifacts --version "$version" \
             --base "$DOWNLOAD_BASE" --released "$(date -u +%F)" --out downloads.json
+          # WP292：给本机传 R2 的脚本（scripts/release-upload-r2.mjs）看的说明
+          VERSION="$version" CHANNEL="$channel" node -e "
+            const e = process.env
+            require('node:fs').writeFileSync('release-meta.json', JSON.stringify({
+              tag: e.RELEASE_TAG, version: e.VERSION, channel: e.CHANNEL, dry_run: e.DRY_RUN === 'true',
+              site_channel: e.SITE_CHANNEL, bucket: e.R2_BUCKET, run_id: e.GITHUB_RUN_ID,
+            }, null, 2) + '\n')
+          "
           ls -la artifacts
-          cat downloads.json
+          cat downloads.json release-meta.json
 
-      - name: dry-run：留下收拢后的整套产物（不上传）
-        if: env.DRY_RUN == 'true'
+      # dry-run 叫 release-dry-run（只看不传）；真发版叫 release-bundle——没填 R2 secrets 时，
+      # 本机 `node scripts/release-upload-r2.mjs --run <这次运行的 id>` 就从它传 R2（WP292）
+      - name: 留下收拢后的整套产物
         uses: actions/upload-artifact@v4
         with:
-          name: release-dry-run
-          retention-days: 7
+          name: ${{ env.DRY_RUN == 'true' && 'release-dry-run' || 'release-bundle' }}
+          retention-days: 14
           path: |
             artifacts/
             downloads.json
+            release-meta.json
 
       # ── 以下只在真发版时跑 ──────────────────────────────────────────────
 
-      - name: 检查 R2 凭据都填了（只看有没有，不打印值）
+      # WP292：三个都没填 = R2 交给本机脚本（跳过下面两步 R2 上传）；只填了一部分 = 配错了，照旧红
+      - name: 看 R2 凭据填没填（只看有没有，不打印值）
+        id: r2
         if: env.DRY_RUN != 'true'
         shell: bash
         env:
@@ -291,12 +312,19 @@ jobs:
           [ -z "$R2_ACCESS_KEY_ID" ] && missing="$missing R2_ACCESS_KEY_ID"
           [ -z "$R2_SECRET_ACCESS_KEY" ] && missing="$missing R2_SECRET_ACCESS_KEY"
           [ -z "$R2_ACCOUNT_ID" ] && missing="$missing R2_ACCOUNT_ID"
-          if [ -n "$missing" ]; then echo "缺 Actions secrets：$missing"; exit 1; fi
+          if [ -z "$missing" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          elif [ "$(echo $missing | wc -w)" -eq 3 ]; then
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "没填 R2 secrets：CI 不传 R2，交给本机 scripts/release-upload-r2.mjs"
+          else
+            echo "R2 secrets 只填了一部分，缺：$missing"; exit 1
+          fi
 
       # R2 走 S3 兼容接口。桶名在仓库变量 R2_BUCKET 里（不是机密），没设就用 agentsws-downloads。
       # 新版 aws cli 默认带的校验和头 R2 不全认，关成「需要时才算」。
       - name: 上传到 R2（先安装包、后 latest*.yml）
-        if: env.DRY_RUN != 'true'
+        if: env.DRY_RUN != 'true' && steps.r2.outputs.ready == 'true'
         shell: bash
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
@@ -337,10 +365,26 @@ jobs:
             artifacts/*.exe artifacts/*.dmg artifacts/*.blockmap artifacts/*.zip \
             artifacts/latest.yml artifacts/latest-mac.yml
 
+      - name: R2 交给本机（写进这次运行的摘要）
+        if: env.DRY_RUN != 'true' && steps.r2.outputs.ready != 'true'
+        shell: bash
+        run: |
+          {
+            echo "### R2 交给本机 \`scripts/release-upload-r2.mjs\`"
+            echo
+            echo "没填 R2 secrets，CI 没传 R2。GitHub Release 已建；整套产物在 artifact \`release-bundle\`（14 天）。"
+            echo "在已 \`wrangler login\` 的电脑上、仓库根目录（先看计划，再真传）："
+            echo
+            echo '```'
+            echo "node scripts/release-upload-r2.mjs --run ${GITHUB_RUN_ID}"
+            echo "node scripts/release-upload-r2.mjs --run ${GITHUB_RUN_ID} --upload"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
       # 官网下载页读根目录那份。哪个渠道上官网由仓库变量 SITE_DOWNLOAD_CHANNEL 定（没设 = beta：
       # 正式版发出来之前官网只能放 beta）；stable 发版总是更新它。
       - name: 更新官网 downloads.json
-        if: env.DRY_RUN != 'true' && (env.CHANNEL == 'stable' || env.CHANNEL == (vars.SITE_DOWNLOAD_CHANNEL || 'beta'))
+        if: env.DRY_RUN != 'true' && steps.r2.outputs.ready == 'true' && (env.CHANNEL == 'stable' || env.CHANNEL == (vars.SITE_DOWNLOAD_CHANNEL || 'beta'))
         shell: bash
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
@@ -367,7 +411,8 @@ jobs:
   # 3. **上传前用应用里内置的公钥再验一遍**（`verify --builtin`）：secret 里的私钥与发出去的应用对不上，
   #    用户端一份都不会收——那就别传。
   # 4. **先传文件、再传签名、最后传清单**：客户端看到新清单时，它指的文件已经都在了。
-  # 5. 推 tag 才真传；手动触发默认只打包自检（真发版或勾了 `content_publish` 才传）。R2 凭据与上面 publish 同三样 secret。
+  # 5. 推 tag 才真传；手动触发默认只打包自检（真发版或勾了 `content_publish` 才传）。R2 凭据与上面 publish 同三样 secret；
+  #    WP292 起默认不填：跳过 R2、GitHub 镜像照传，R2 由本机 `node scripts/release-upload-r2.mjs --content --run <run_id> --upload` 传。
   content:
     name: 内容包（已审的第三方内容）
     runs-on: ubuntu-latest
@@ -422,6 +467,23 @@ jobs:
         if: steps.pack.outputs.published == 'true'
         run: node scripts/content-pack.mjs verify --dir "out/content/r2/${{ steps.channel.outputs.channel }}" --builtin
 
+      # WP292：给本机传 R2 的脚本（scripts/release-upload-r2.mjs --content）看的说明，随 artifact 一起留
+      - name: 留一份说明（渠道、这趟打不打算发、桶）
+        if: steps.pack.outputs.published == 'true'
+        shell: bash
+        env:
+          CH: ${{ steps.channel.outputs.channel }}
+          R2_BUCKET: ${{ vars.R2_BUCKET || 'agentsws-downloads' }}
+        run: |
+          node -e "
+            const e = process.env
+            require('node:fs').writeFileSync('out/content/release-meta.json', JSON.stringify({
+              kind: 'content', channel: e.CH, upload: e.CONTENT_UPLOAD === 'true',
+              bucket: e.R2_BUCKET, run_id: e.GITHUB_RUN_ID,
+            }, null, 2) + '\n')
+          "
+          cat out/content/release-meta.json
+
       - uses: actions/upload-artifact@v4
         if: steps.pack.outputs.published == 'true'
         with:
@@ -429,7 +491,9 @@ jobs:
           path: out/content/
           retention-days: 14
 
-      - name: 检查 R2 凭据都填了（只看有没有，不打印值）
+      # WP292：与 publish 作业同一个口径——三个都没填 = 交给本机脚本（跳过 R2，GitHub 镜像照传）；只填一部分 = 红
+      - name: 看 R2 凭据填没填（只看有没有，不打印值）
+        id: r2
         if: steps.pack.outputs.published == 'true' && env.CONTENT_UPLOAD == 'true'
         shell: bash
         env:
@@ -441,11 +505,18 @@ jobs:
           [ -z "$R2_ACCESS_KEY_ID" ] && missing="$missing R2_ACCESS_KEY_ID"
           [ -z "$R2_SECRET_ACCESS_KEY" ] && missing="$missing R2_SECRET_ACCESS_KEY"
           [ -z "$R2_ACCOUNT_ID" ] && missing="$missing R2_ACCOUNT_ID"
-          if [ -n "$missing" ]; then echo "缺 Actions secrets：$missing"; exit 1; fi
+          if [ -z "$missing" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          elif [ "$(echo $missing | wc -w)" -eq 3 ]; then
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "没填 R2 secrets：内容包不传 R2，交给本机 scripts/release-upload-r2.mjs --content"
+          else
+            echo "R2 secrets 只填了一部分，缺：$missing"; exit 1
+          fi
 
       # 与 WP218 同一个桶（`agentsws-downloads`，仓库变量 R2_BUCKET 可改），`content/<渠道>/` 前缀
       - name: 传到下载站（dl.agentsws.com/content/<渠道>/：先文件、再签名、最后清单）
-        if: steps.pack.outputs.published == 'true' && env.CONTENT_UPLOAD == 'true'
+        if: steps.pack.outputs.published == 'true' && env.CONTENT_UPLOAD == 'true' && steps.r2.outputs.ready == 'true'
         shell: bash
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
@@ -483,3 +554,19 @@ jobs:
           gh release upload "$rel" out/content/github/blob-* --clobber
           gh release upload "$rel" out/content/github/content-manifest.json.sig --clobber
           gh release upload "$rel" out/content/github/content-manifest.json --clobber
+
+      - name: 内容包的 R2 交给本机（写进这次运行的摘要）
+        if: steps.pack.outputs.published == 'true' && env.CONTENT_UPLOAD == 'true' && steps.r2.outputs.ready != 'true'
+        shell: bash
+        run: |
+          {
+            echo "### 内容包的 R2 交给本机 \`scripts/release-upload-r2.mjs --content\`"
+            echo
+            echo "没填 R2 secrets，CI 没传 R2。GitHub 镜像已传；内容包在 artifact \`content-pack\`（14 天）。"
+            echo "在已 \`wrangler login\`、跑过 \`pnpm exec tsc -b packages/skills\` 的电脑上、仓库根目录（先看计划，再真传）："
+            echo
+            echo '```'
+            echo "node scripts/release-upload-r2.mjs --content --run ${GITHUB_RUN_ID}"
+            echo "node scripts/release-upload-r2.mjs --content --run ${GITHUB_RUN_ID} --upload"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
