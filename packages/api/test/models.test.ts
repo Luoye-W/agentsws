@@ -350,7 +350,7 @@ describe('WP25 网关：默认与花费', () => {
 })
 
 describe('WP25 网关：小工具', () => {
-  it('六个 purpose（22 的五个 + WP23 的转写）', () => {
+  it('七个 purpose（22 的五个 + WP23 的转写 + WP291 的判断）', () => {
     expect([...MODEL_PURPOSES]).toEqual([
       'run',
       'extraction',
@@ -358,6 +358,7 @@ describe('WP25 网关：小工具', () => {
       'embedding',
       'judge',
       'transcription',
+      'classify',
     ])
   })
 
