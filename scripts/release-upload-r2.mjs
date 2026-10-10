@@ -6,6 +6,7 @@
  * R2 这一步交给本机：用已经 `wrangler login` 过的 OAuth 身份上传，密钥不经任何人 / AI 之手。
  *
  *   node scripts/release-upload-r2.mjs --run <run_id>            # 取那次运行的 release-bundle，只打印计划
+ *       （只看计划时也认 dry-run 那次的 release-dry-run，好在第一次真发版前演练；真传只认 release-bundle）
  *   node scripts/release-upload-r2.mjs --run <run_id> --upload   # 真传
  *   node scripts/release-upload-r2.mjs --dir <本地目录> [--upload]
  *       [--channel beta|stable]   只作核对：与版本号推出来的渠道不一致就拒
@@ -38,6 +39,7 @@ export const REPO_ROOT = resolve(import.meta.dirname, '..')
 export const BUCKET = 'agentsws-downloads'
 export const BASE = 'https://dl.agentsws.com'
 export const BUNDLE = 'release-bundle'
+export const DRY_BUNDLE = 'release-dry-run'
 /** wrangler r2 object put 单个对象的上限（wrangler 4.x：300 MiB）。超了就别开始传。 */
 export const MAX_BYTES = 300 * 1024 * 1024
 export const LONG = 'public, max-age=31536000, immutable'
@@ -97,8 +99,6 @@ export function readBundle(dir) {
 /** 版本与渠道：以 latest.yml 为准，再与 downloads.json / release-meta.json / --channel 逐一对上，对不上就拒。 */
 export function resolveRelease(bundle, wantChannel) {
   const { filesDir, names, meta } = bundle
-  if (meta?.dry_run === true)
-    throw new Error('这是 dry-run 那次运行的产物（打的是分支，不是 tag），不传')
   if (!names.includes('latest.yml')) throw new Error('缺 latest.yml')
   const read = (n) => readFileSync(join(filesDir, n), 'utf8')
   const { version } = parseUpdateInfo(read('latest.yml'))
@@ -224,14 +224,18 @@ export async function run(argv, deps = {}) {
   let tmp
   if (opts.run !== undefined) {
     tmp = mkdtempSync(join(tmpdir(), 'agentsws-release-'))
-    const args = ['run', 'download', opts.run, '-n', BUNDLE, '-D', tmp]
-    if (opts.repo !== undefined) args.push('-R', opts.repo)
-    log(`取运行 ${opts.run} 的 ${BUNDLE} → ${tmp}`)
-    const r = exec('gh', args, { cwd: REPO_ROOT, env, stdio: 'inherit' })
-    if (r.status !== 0) {
+    // 只看计划时也认 dry-run 那次的产物（release-dry-run），方便第一次真发版前演练；真传只认 release-bundle
+    const names = opts.dryRun ? [BUNDLE, DRY_BUNDLE] : [BUNDLE]
+    const got = names.find((name) => {
+      const args = ['run', 'download', opts.run, '-n', name, '-D', tmp]
+      if (opts.repo !== undefined) args.push('-R', opts.repo)
+      log(`取运行 ${opts.run} 的 ${name} → ${tmp}`)
+      return exec('gh', args, { cwd: REPO_ROOT, env, stdio: 'inherit' }).status === 0
+    })
+    if (got === undefined) {
       if (!opts.keep) rmSync(tmp, { recursive: true, force: true })
       throw new Error(
-        `gh run download 没成：那次运行没有 ${BUNDLE}（dry-run 的叫 release-dry-run，不传；或者没跑到「收拢」）`,
+        `gh run download 没成：那次运行没有 ${names.join(' / ')}（没跑到「收拢」？dry-run 的产物只能看计划、不传）`,
       )
     }
     dir = tmp
@@ -239,6 +243,10 @@ export async function run(argv, deps = {}) {
   try {
     const bundle = readBundle(dir)
     const rel = resolveRelease(bundle, opts.channel)
+    if (bundle.meta?.dry_run === true) {
+      if (!opts.dryRun) throw new Error('这是 dry-run 那次运行的产物（打的是分支，不是 tag），不传')
+      log('（这是 dry-run 那次运行的产物：只能看计划，不能传）')
+    }
     const plan = planUploads({ ...bundle, channel: rel.channel, siteChannel: rel.siteChannel })
     const rootDownloads = plan.some((p) => p.key === 'downloads.json')
     const bucket = opts.bucket ?? rel.bucket

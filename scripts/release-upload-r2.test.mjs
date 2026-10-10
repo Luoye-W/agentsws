@@ -135,9 +135,8 @@ describe('上传计划', () => {
     const env = wranglerEnv({ PATH: '/bin', CLOUDFLARE_API_TOKEN: 'fake', CF_API_TOKEN: 'fake' })
     expect(env).toEqual({ PATH: '/bin', CI: 'true', WRANGLER_SEND_METRICS: 'false' })
   })
-  it('拒：dry-run 产物、渠道对不上、缺 latest-mac.yml、downloads.json 版本不对', () => {
+  it('拒：渠道对不上、缺 latest-mac.yml、downloads.json 版本不对', () => {
     const rel = (opts, ch) => resolveRelease(readBundle(fakeBundle(opts)), ch)
-    expect(() => rel({ meta: { dry_run: true } })).toThrow('dry-run')
     expect(() => rel({}, 'stable')).toThrow('对不上')
     expect(() => rel({ drop: ['latest-mac.yml'] })).toThrow('缺 latest-mac.yml')
     const root = fakeBundle()
@@ -163,7 +162,11 @@ function fakeTools() {
     chmodSync(p, 0o755)
     return p
   }
-  tool('gh', `fs.cpSync(process.env.FAKE_BUNDLE, a[a.indexOf('-D') + 1], { recursive: true })`)
+  tool(
+    'gh',
+    `if ((process.env.FAKE_GH_MISSING ?? '').split(',').includes(a[a.indexOf('-n') + 1])) process.exit(1)
+fs.cpSync(process.env.FAKE_BUNDLE, a[a.indexOf('-D') + 1], { recursive: true })`,
+  )
   const wrangler = tool(
     'wrangler',
     `const key = a[3].split('/').slice(1).join('/')
@@ -276,5 +279,26 @@ describe('端到端（假 gh / wrangler / curl）', () => {
     } finally {
       rmSync(root, { recursive: true, force: true })
     }
+  })
+  it('dry-run 那次的产物（release-dry-run）：能看计划演练，不能真传', () => {
+    const t = fakeTools()
+    const extra = {
+      FAKE_BUNDLE: fakeBundle({ meta: { dry_run: true } }),
+      FAKE_GH_MISSING: 'release-bundle',
+    }
+    const plan = cli(['--run', '42'], t, extra)
+    expect(plan.status, plan.stderr).toBe(0)
+    expect(plan.stdout).toContain('只能看计划')
+    expect(t.calls().map((c) => c.a[c.a.indexOf('-n') + 1])).toEqual([
+      'release-bundle',
+      'release-dry-run',
+    ])
+    const up = cli(['--run', '42', '--upload'], t, extra)
+    expect(up.status).toBe(1)
+    expect(up.stderr).toContain('release-bundle')
+    const local = cli(['--dir', extra.FAKE_BUNDLE, '--upload'], t)
+    expect(local.status).toBe(1)
+    expect(local.stderr).toContain('不传')
+    expect(t.calls().some((c) => c.tool === 'wrangler')).toBe(false)
   })
 })
