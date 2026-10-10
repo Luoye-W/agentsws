@@ -40,12 +40,14 @@ export const CONTENT_MIRROR_REPO = 'Luoye-W/agentsws'
 /**
  * 内置的验签公钥（ed25519，32 字节原始公钥的 base64）。
  *
- * **现在是空的**：Luoye 用 `node scripts/content-keygen.mjs` 生成一对，私钥进 GitHub secret
- * `CONTENT_SIGNING_KEY`，公钥填进这里（`key_id` = 公钥 sha256 的前 16 个十六进制字符）。
+ * Luoye 10-10 用 `node scripts/content-keygen.mjs` 生成第一对，私钥进 GitHub secret
+ * `CONTENT_SIGNING_KEY`（备份在他的密码管理器），公钥填在这里（`key_id` = 公钥 sha256 的前 16 个十六进制字符）。
  * 空表 = 用户端不接受任何内容包（更新通道关着，界面照实说），这是 fail-closed。
  * 换钥：先把新公钥**加**进来随一个软件版本发出去，等大多数人升上来再用新私钥签，最后删旧的。
  */
-export const CONTENT_SIGNING_PUBLIC_KEYS: readonly ContentPublicKey[] = []
+export const CONTENT_SIGNING_PUBLIC_KEYS: readonly ContentPublicKey[] = [
+  { key_id: '205d40bca17f1a77', public_key: 'W0neWQFUJNgJ0l+B9sC3DycoxcNN5SRuObIegbRR3m4=' },
+]
 
 export interface ContentPublicKey {
   key_id: string
