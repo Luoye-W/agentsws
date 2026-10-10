@@ -39,6 +39,8 @@ export function matchMatter(m: Matter, f: MatterFilter): boolean {
   if (f.archived !== undefined && (m.archived_at !== undefined) !== f.archived) return false
   // WP287：岗位里问的一句是会话不是任务——`asks: false` 不要它、`true` 只要它、不给都要
   if (f.asks !== undefined && (m.ask !== undefined) !== f.asks) return false
+  // WP291：当场问答只在点名要它（`quick: true`）时出现，别的列表一律不见它
+  if ((m.ask?.quick === true) !== (f.quick === true)) return false
   return true
 }
 

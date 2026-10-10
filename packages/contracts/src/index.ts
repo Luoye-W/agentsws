@@ -4,6 +4,7 @@ export * from './ads.js'
 export * from './approval.js'
 // docs/84 B2B 岗位的五条职责、九类对象与报价授权（WP171）
 export * from './b2b.js'
+export * from './answer.js'
 export * from './blocks.js'
 // 71 每个品牌一份 DESIGN.md（WP122）。格式逐字对齐 google-labs-code/design.md
 // （Apache-2.0，alpha）；我们在规范的裸值外面多一层出处 / 把握度 / 冲突。
