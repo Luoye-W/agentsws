@@ -19,8 +19,10 @@ import { describe, expect, it } from 'vitest'
 import {
   LONG,
   parseArgs,
+  planContentUploads,
   planUploads,
   readBundle,
+  readContentBundle,
   resolveRelease,
   run,
   SHORT,
@@ -188,7 +190,8 @@ process.stdout.write(fs.readFileSync(p))`,
           .split('\n')
           .map((l) => JSON.parse(l))
       : []
-  return { bin, r2, wrangler, calls }
+  const contentPack = tool('content-pack', 'if (process.env.FAKE_VERIFY_FAIL) process.exit(1)')
+  return { bin, r2, wrangler, contentPack, calls }
 }
 
 function cli(args, t, extra = {}) {
@@ -301,4 +304,135 @@ describe('端到端（假 gh / wrangler / curl）', () => {
     expect(local.stderr).toContain('不传')
     expect(t.calls().some((c) => c.tool === 'wrangler')).toBe(false)
   })
+})
+
+const REPO = resolve(import.meta.dirname, '..')
+const SHA1 = 'a'.repeat(64)
+const SHA2 = 'b'.repeat(64)
+
+/** 一份假的 content-pack artifact（与 content 作业上传的形状一样：r2/<渠道>/…、github/…、release-meta.json）。 */
+function fakeContent({ channel = 'beta', serial = 1760000000, meta = {}, sig = 'c2ln' } = {}) {
+  const root = tmp('content')
+  const ch = join(root, 'r2', channel)
+  mkdirSync(join(ch, 'blobs'), { recursive: true })
+  mkdirSync(join(root, 'github'))
+  writeFileSync(join(ch, 'blobs', SHA2), 'two')
+  writeFileSync(join(ch, 'blobs', SHA1), 'one')
+  writeFileSync(join(ch, 'content-manifest.json'), JSON.stringify({ channel, serial, items: [] }))
+  writeFileSync(join(ch, 'content-manifest.json.sig'), sig)
+  writeFileSync(join(root, 'github', 'content-manifest.json'), '{}')
+  const m = { kind: 'content', channel, upload: true, bucket: 'agentsws-downloads', ...meta }
+  writeFileSync(join(root, 'release-meta.json'), JSON.stringify(m))
+  return root
+}
+
+describe('内容包（--content）', () => {
+  it('目录、顺序、cache-control、content-type 与 content 作业原来那一步一致', () => {
+    const b = readContentBundle(fakeContent())
+    expect(b).toMatchObject({ channel: 'beta', serial: 1760000000, blobs: expect.any(Array) })
+    expect(planContentUploads(b).map((p) => [p.key, p.contentType, p.cacheControl])).toEqual([
+      [`content/beta/blobs/${SHA1}`, 'application/octet-stream', LONG],
+      [`content/beta/blobs/${SHA2}`, 'application/octet-stream', LONG],
+      ['content/beta/content-manifest.json.sig', 'text/plain', SHORT],
+      ['content/beta/content-manifest.json', 'application/json', SHORT],
+    ])
+    // 直接给 r2/<渠道> 那一层也认
+    expect(readContentBundle(join(fakeContent(), 'r2', 'beta')).channel).toBe('beta')
+  })
+  it('拒：--channel 对不上、目录名与清单渠道对不上、没有清单', () => {
+    expect(() => readContentBundle(fakeContent(), 'stable')).toThrow('里的渠道是 beta')
+    expect(() => readContentBundle(join(fakeContent(), 'r2', 'beta'), 'stable')).toThrow('对不上')
+    const root = fakeContent()
+    const ch = join(root, 'r2', 'beta', 'content-manifest.json')
+    writeFileSync(ch, JSON.stringify({ channel: 'stable', serial: 1 }))
+    expect(() => readContentBundle(root)).toThrow('目录 r2/beta')
+    expect(() => readContentBundle(tmp('empty'))).toThrow('没有 content-manifest.json')
+  })
+  it('默认 dry-run：取 content-pack、用内置公钥验，不调 wrangler / curl', () => {
+    const t = fakeTools()
+    const r = cli(['--content', '--run', '42'], t, {
+      FAKE_BUNDLE: fakeContent(),
+      AGENTSWS_CONTENT_PACK: t.contentPack,
+    })
+    expect(r.status, r.stderr).toBe(0)
+    expect(r.stdout).toContain('一个字节都没传')
+    const calls = t.calls()
+    expect(calls.map((c) => c.tool)).toEqual(['gh', 'content-pack'])
+    expect(calls[0].a).toEqual(expect.arrayContaining(['-n', 'content-pack']))
+    expect(calls[1].a[0]).toBe('verify')
+    expect(calls[1].a.at(-1)).toBe('--builtin')
+    expect(calls[1].a[2]).toMatch(/r2[\\/]beta$/)
+  })
+  it('--upload：验过 → 先文件、再签名、最后清单；取回清单序号与签名都对', () => {
+    const t = fakeTools()
+    const r = cli(['--content', '--run', '42', '--upload'], t, {
+      FAKE_BUNDLE: fakeContent(),
+      AGENTSWS_CONTENT_PACK: t.contentPack,
+    })
+    expect(r.status, r.stderr).toBe(0)
+    const tools = t.calls().map((c) => c.tool)
+    expect(tools.indexOf('content-pack')).toBeLessThan(tools.indexOf('wrangler'))
+    const puts = t.calls().filter((c) => c.tool === 'wrangler')
+    expect(puts.map((c) => c.a[3])).toEqual([
+      `agentsws-downloads/content/beta/blobs/${SHA1}`,
+      `agentsws-downloads/content/beta/blobs/${SHA2}`,
+      'agentsws-downloads/content/beta/content-manifest.json.sig',
+      'agentsws-downloads/content/beta/content-manifest.json',
+    ])
+    for (const c of puts) expect(c).toMatchObject({ ci: 'true', metrics: 'false', token: null })
+    const curls = t.calls().filter((c) => c.tool === 'curl')
+    expect(curls.map((c) => new URL(c.a.at(-1)).pathname)).toEqual([
+      '/content/beta/content-manifest.json',
+      '/content/beta/content-manifest.json.sig',
+    ])
+    expect(r.stdout).toContain('已是序号 1760000000')
+  })
+  it('内置公钥验不过：一个都不传（dry-run 也报）', () => {
+    const t = fakeTools()
+    const extra = {
+      FAKE_BUNDLE: fakeContent(),
+      AGENTSWS_CONTENT_PACK: t.contentPack,
+      FAKE_VERIFY_FAIL: '1',
+    }
+    for (const args of [
+      ['--content', '--run', '42', '--upload'],
+      ['--content', '--run', '42'],
+    ]) {
+      const r = cli(args, t, extra)
+      expect(r.status).toBe(1)
+      expect(r.stderr).toContain('内置公钥验不过')
+    }
+    expect(t.calls().some((c) => c.tool === 'wrangler' || c.tool === 'curl')).toBe(false)
+  })
+  it('那次只打包自检（upload: false）：能看计划，不能传', () => {
+    const t = fakeTools()
+    const extra = {
+      FAKE_BUNDLE: fakeContent({ meta: { upload: false } }),
+      AGENTSWS_CONTENT_PACK: t.contentPack,
+    }
+    const plan = cli(['--content', '--run', '42'], t, extra)
+    expect(plan.status, plan.stderr).toBe(0)
+    expect(plan.stdout).toContain('只能看计划')
+    const up = cli(['--content', '--run', '42', '--upload'], t, extra)
+    expect(up.status).toBe(1)
+    expect(up.stderr).toContain('不传')
+    expect(t.calls().some((c) => c.tool === 'wrangler')).toBe(false)
+  })
+  const built =
+    existsSync(join(REPO, 'packages/skills/dist')) &&
+    existsSync(join(REPO, 'packages/contracts/dist/index.js'))
+  it.skipIf(!built)(
+    '真验签（content-pack.mjs verify --builtin）：签名不是内置那把钥匙签的 → 一个都不传',
+    () => {
+      const t = fakeTools()
+      const r = cli(
+        ['--content', '--dir', fakeContent({ sig: 'bm90LWEtcmVhbC1zaWc=' }), '--upload'],
+        t,
+      )
+      expect(r.status).toBe(1)
+      expect(r.stderr).toContain('内置公钥验不过')
+      expect(r.stderr).not.toContain('Cannot find module')
+      expect(t.calls().some((c) => c.tool === 'wrangler')).toBe(false)
+    },
+  )
 })

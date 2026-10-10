@@ -408,7 +408,8 @@ jobs:
   # 3. **上传前用应用里内置的公钥再验一遍**（`verify --builtin`）：secret 里的私钥与发出去的应用对不上，
   #    用户端一份都不会收——那就别传。
   # 4. **先传文件、再传签名、最后传清单**：客户端看到新清单时，它指的文件已经都在了。
-  # 5. 推 tag 才真传；手动触发默认只打包自检（真发版或勾了 `content_publish` 才传）。R2 凭据与上面 publish 同三样 secret。
+  # 5. 推 tag 才真传；手动触发默认只打包自检（真发版或勾了 `content_publish` 才传）。R2 凭据与上面 publish 同三样 secret；
+  #    WP292 起默认不填：跳过 R2、GitHub 镜像照传，R2 由本机 `node scripts/release-upload-r2.mjs --content --run <run_id> --upload` 传。
   content:
     name: 内容包（已审的第三方内容）
     runs-on: ubuntu-latest
@@ -463,6 +464,23 @@ jobs:
         if: steps.pack.outputs.published == 'true'
         run: node scripts/content-pack.mjs verify --dir "out/content/r2/${{ steps.channel.outputs.channel }}" --builtin
 
+      # WP292：给本机传 R2 的脚本（scripts/release-upload-r2.mjs --content）看的说明，随 artifact 一起留
+      - name: 留一份说明（渠道、这趟打不打算发、桶）
+        if: steps.pack.outputs.published == 'true'
+        shell: bash
+        env:
+          CH: ${{ steps.channel.outputs.channel }}
+          R2_BUCKET: ${{ vars.R2_BUCKET || 'agentsws-downloads' }}
+        run: |
+          node -e "
+            const e = process.env
+            require('node:fs').writeFileSync('out/content/release-meta.json', JSON.stringify({
+              kind: 'content', channel: e.CH, upload: e.CONTENT_UPLOAD === 'true',
+              bucket: e.R2_BUCKET, run_id: e.GITHUB_RUN_ID,
+            }, null, 2) + '\n')
+          "
+          cat out/content/release-meta.json
+
       - uses: actions/upload-artifact@v4
         if: steps.pack.outputs.published == 'true'
         with:
@@ -470,7 +488,9 @@ jobs:
           path: out/content/
           retention-days: 14
 
-      - name: 检查 R2 凭据都填了（只看有没有，不打印值）
+      # WP292：与 publish 作业同一个口径——三个都没填 = 交给本机脚本（跳过 R2，GitHub 镜像照传）；只填一部分 = 红
+      - name: 看 R2 凭据填没填（只看有没有，不打印值）
+        id: r2
         if: steps.pack.outputs.published == 'true' && env.CONTENT_UPLOAD == 'true'
         shell: bash
         env:
@@ -482,11 +502,18 @@ jobs:
           [ -z "$R2_ACCESS_KEY_ID" ] && missing="$missing R2_ACCESS_KEY_ID"
           [ -z "$R2_SECRET_ACCESS_KEY" ] && missing="$missing R2_SECRET_ACCESS_KEY"
           [ -z "$R2_ACCOUNT_ID" ] && missing="$missing R2_ACCOUNT_ID"
-          if [ -n "$missing" ]; then echo "缺 Actions secrets：$missing"; exit 1; fi
+          if [ -z "$missing" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          elif [ "$(echo $missing | wc -w)" -eq 3 ]; then
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "没填 R2 secrets：内容包不传 R2，交给本机 scripts/release-upload-r2.mjs --content"
+          else
+            echo "R2 secrets 只填了一部分，缺：$missing"; exit 1
+          fi
 
       # 与 WP218 同一个桶（`agentsws-downloads`，仓库变量 R2_BUCKET 可改），`content/<渠道>/` 前缀
       - name: 传到下载站（dl.agentsws.com/content/<渠道>/：先文件、再签名、最后清单）
-        if: steps.pack.outputs.published == 'true' && env.CONTENT_UPLOAD == 'true'
+        if: steps.pack.outputs.published == 'true' && env.CONTENT_UPLOAD == 'true' && steps.r2.outputs.ready == 'true'
         shell: bash
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
@@ -524,3 +551,19 @@ jobs:
           gh release upload "$rel" out/content/github/blob-* --clobber
           gh release upload "$rel" out/content/github/content-manifest.json.sig --clobber
           gh release upload "$rel" out/content/github/content-manifest.json --clobber
+
+      - name: 内容包的 R2 交给本机（写进这次运行的摘要）
+        if: steps.pack.outputs.published == 'true' && env.CONTENT_UPLOAD == 'true' && steps.r2.outputs.ready != 'true'
+        shell: bash
+        run: |
+          {
+            echo "### 内容包的 R2 交给本机 \`scripts/release-upload-r2.mjs --content\`"
+            echo
+            echo "没填 R2 secrets，CI 没传 R2。GitHub 镜像已传；内容包在 artifact \`content-pack\`（14 天）。"
+            echo "在已 \`wrangler login\`、跑过 \`pnpm exec tsc -b packages/skills\` 的电脑上、仓库根目录（先看计划，再真传）："
+            echo
+            echo '```'
+            echo "node scripts/release-upload-r2.mjs --content --run ${GITHUB_RUN_ID}"
+            echo "node scripts/release-upload-r2.mjs --content --run ${GITHUB_RUN_ID} --upload"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

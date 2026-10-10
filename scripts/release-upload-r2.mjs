@@ -22,12 +22,20 @@
  *
  * wrangler 一律 `CI=true WRANGLER_SEND_METRICS=false`、去掉 CLOUDFLARE_API_TOKEN 跑（只走 OAuth）。
  * 传完用 curl 取 <base>/<渠道>/latest.yml 与 latest-mac.yml，版本对才算完。
- * 测试替身：AGENTSWS_WRANGLER（wrangler 可执行文件）；gh / curl 走 PATH。
+ *
+ * 内容包（`--content`，release.yml 的 `content` 作业同样没填 R2 secrets 时交给本机）：
+ *   node scripts/release-upload-r2.mjs --content --run <run_id> [--upload]   # 取那次运行的 content-pack
+ *   node scripts/release-upload-r2.mjs --content --dir <out/content 或 r2/<渠道>> [--upload]
+ *   先 `node scripts/content-pack.mjs verify --dir … --builtin`（应用里内置的公钥）验，验不过一个都不传；
+ *   顺序：content/<渠道>/blobs/*（一年 immutable）→ content-manifest.json.sig → content-manifest.json（no-cache）；
+ *   传完取回清单与签名，序号、签名都对才算完。要先 `pnpm exec tsc -b packages/skills`（验签在 dist 里）。
+ *
+ * 测试替身：AGENTSWS_WRANGLER（wrangler 可执行文件）、AGENTSWS_CONTENT_PACK（验签脚本）；gh / curl 走 PATH。
  */
 import { spawnSync } from 'node:child_process'
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join, resolve } from 'node:path'
+import { basename, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
   checkArtifacts,
@@ -40,6 +48,8 @@ export const BUCKET = 'agentsws-downloads'
 export const BASE = 'https://dl.agentsws.com'
 export const BUNDLE = 'release-bundle'
 export const DRY_BUNDLE = 'release-dry-run'
+/** release.yml `content` 作业留下的内容包 artifact（`r2/<渠道>/…`、`github/…`、`release-meta.json`）。 */
+export const CONTENT_BUNDLE = 'content-pack'
 /** wrangler r2 object put 单个对象的上限（wrangler 4.x：300 MiB）。超了就别开始传。 */
 export const MAX_BYTES = 300 * 1024 * 1024
 export const LONG = 'public, max-age=31536000, immutable'
@@ -54,7 +64,7 @@ const PACKAGES = [
 ]
 
 export function parseArgs(argv) {
-  const out = { dryRun: true, base: BASE, keep: false }
+  const out = { dryRun: true, base: BASE, keep: false, content: false }
   const takes = { '--run': 'run', '--dir': 'dir', '--channel': 'channel', '--bucket': 'bucket' }
   Object.assign(takes, { '--base': 'base', '--repo': 'repo' })
   let upload = false
@@ -68,6 +78,7 @@ export function parseArgs(argv) {
     } else if (a === '--upload') upload = true
     else if (a === '--dry-run') dry = true
     else if (a === '--keep') out.keep = true
+    else if (a === '--content') out.content = true
     else throw new Error(`不认识的参数：${a}`)
   }
   if ((out.run === undefined) === (out.dir === undefined))
@@ -145,6 +156,95 @@ export function planUploads({ filesDir, names, downloads, channel, siteChannel =
   return plan
 }
 
+/**
+ * 读内容包：CI 的 content-pack artifact（`r2/<渠道>/content-manifest.json(.sig)` + `blobs/`），
+ * 或直接给 `r2/<渠道>` 那一层。渠道以清单里写的为准，与目录名、--channel 对不上就拒。
+ */
+export function readContentBundle(dir, wantChannel) {
+  const root = resolve(dir)
+  if (!existsSync(root)) throw new Error(`目录不存在：${root}`)
+  const r2 = join(root, 'r2')
+  let chDir = root
+  if (existsSync(r2)) {
+    const chans = readdirSync(r2).filter((d) => statSync(join(r2, d)).isDirectory())
+    const pick = wantChannel ?? (chans.length === 1 ? chans[0] : undefined)
+    if (pick === undefined || !chans.includes(pick))
+      throw new Error(`${r2} 里的渠道是 ${chans.join(' / ') || '（空）'}，用 --channel 指一个`)
+    chDir = join(r2, pick)
+  }
+  const manifestPath = join(chDir, 'content-manifest.json')
+  if (!existsSync(manifestPath)) throw new Error(`${chDir} 里没有 content-manifest.json`)
+  if (!existsSync(`${manifestPath}.sig`))
+    throw new Error(`${chDir} 里没有 content-manifest.json.sig`)
+  const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'))
+  const { channel, serial } = manifest
+  const problems = []
+  if (channel !== 'beta' && channel !== 'stable') problems.push(`清单里的渠道是 ${channel}`)
+  if (chDir !== root && basename(chDir) !== channel)
+    problems.push(`目录 r2/${basename(chDir)} 里的清单写的是 ${channel} 渠道`)
+  if (wantChannel !== undefined && wantChannel !== channel)
+    problems.push(`内容包是 ${channel} 渠道，--channel ${wantChannel} 对不上`)
+  if (problems.length > 0) throw new Error(`内容包不对，不传：\n  ${problems.join('\n  ')}`)
+  const blobsDir = join(chDir, 'blobs')
+  const blobs = existsSync(blobsDir)
+    ? readdirSync(blobsDir).filter((n) => statSync(join(blobsDir, n)).isFile())
+    : []
+  const metaPath = join(root, 'release-meta.json')
+  const meta = existsSync(metaPath) ? JSON.parse(readFileSync(metaPath, 'utf8')) : undefined
+  return { chDir, channel, serial, blobs, meta }
+}
+
+/** 与 release.yml `content` 作业原来的 R2 一步同序：先文件（一年 immutable）、再签名、最后清单（no-cache）。 */
+export function planContentUploads({ chDir, channel, blobs }) {
+  const plan = [...blobs].sort().map((b) => ({
+    file: join(chDir, 'blobs', b),
+    key: `content/${channel}/blobs/${b}`,
+    contentType: 'application/octet-stream',
+    cacheControl: LONG,
+  }))
+  const name = 'content-manifest.json'
+  plan.push({
+    file: join(chDir, `${name}.sig`),
+    key: `content/${channel}/${name}.sig`,
+    contentType: 'text/plain',
+    cacheControl: SHORT,
+  })
+  plan.push({
+    file: join(chDir, name),
+    key: `content/${channel}/${name}`,
+    contentType: 'application/json',
+    cacheControl: SHORT,
+  })
+  return plan
+}
+
+/** 传完取回清单与签名：序号对、签名与本地那份一字不差才算完。 */
+export function verifyContentRemote({ base, chDir, channel, serial, exec, now }) {
+  const problems = []
+  const get = (path) => {
+    const url = `${base.replace(/\/+$/, '')}/content/${channel}/${path}?v=${now()}`
+    const r = exec('curl', ['-fsSL', '--max-time', '30', url], {
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
+    if (r.status !== 0) problems.push(`取不到 ${url}（curl 退出码 ${r.status}）`)
+    return r.status === 0 ? String(r.stdout ?? '') : undefined
+  }
+  const text = get('content-manifest.json')
+  if (text !== undefined) {
+    let got
+    try {
+      got = JSON.parse(text).serial
+    } catch {
+      got = '（不是 JSON）'
+    }
+    if (got !== serial) problems.push(`远端清单的序号是 ${got}，不是 ${serial}`)
+  }
+  const sig = get('content-manifest.json.sig')
+  const local = readFileSync(join(chDir, 'content-manifest.json.sig'), 'utf8')
+  if (sig !== undefined && sig.trim() !== local.trim()) problems.push('远端签名与本地这份不一样')
+  return problems
+}
+
 export function wranglerArgs(bucket, item) {
   return [
     'r2',
@@ -214,6 +314,85 @@ export function verifyRemote({ base, channel, version, rootDownloads, exec, now 
 
 const mb = (n) => `${(n / 1024 / 1024).toFixed(1)} MB`
 
+/** 取那次运行的 artifact：按顺序试 `names`，第一个取得到的为准。 */
+function download(opts, names, { exec, env, log }) {
+  const tmp = mkdtempSync(join(tmpdir(), 'agentsws-release-'))
+  const got = names.find((name) => {
+    const args = ['run', 'download', opts.run, '-n', name, '-D', tmp]
+    if (opts.repo !== undefined) args.push('-R', opts.repo)
+    log(`取运行 ${opts.run} 的 ${name} → ${tmp}`)
+    return exec('gh', args, { cwd: REPO_ROOT, env, stdio: 'inherit' }).status === 0
+  })
+  if (got === undefined) {
+    if (!opts.keep) rmSync(tmp, { recursive: true, force: true })
+    throw new Error(
+      `gh run download 没成：那次运行没有 ${names.join(' / ')}（没跑到那一步？dry-run 的产物只能看计划、不传）`,
+    )
+  }
+  return tmp
+}
+
+/** 安装包那一套：计划 + 传完怎么核。 */
+function prepareInstallers(dir, opts, { exec, now, log }) {
+  const bundle = readBundle(dir)
+  const rel = resolveRelease(bundle, opts.channel)
+  const notes = []
+  let refuse
+  if (bundle.meta?.dry_run === true) {
+    refuse = '这是 dry-run 那次运行的产物（打的是分支，不是 tag），不传'
+    notes.push('（这是 dry-run 那次运行的产物：只能看计划，不能传）')
+  }
+  const plan = planUploads({ ...bundle, channel: rel.channel, siteChannel: rel.siteChannel })
+  const rootDownloads = plan.some((p) => p.key === 'downloads.json')
+  if (!rootDownloads)
+    notes.push(`  （根目录 downloads.json 不动：${rel.channel} 不是官网渠道 ${rel.siteChannel}）`)
+  log(`${rel.tag ?? `v${rel.version}`}（${opts.base}/${rel.channel}/）`)
+  const args = { base: opts.base, channel: rel.channel, version: rel.version, rootDownloads }
+  return {
+    info: rel,
+    plan,
+    bucket: rel.bucket,
+    notes,
+    refuse,
+    verify: () => verifyRemote({ ...args, exec, now }),
+    done: `✓ ${opts.base}/${rel.channel}/latest.yml 已是 ${rel.version}`,
+  }
+}
+
+/** 内容包那一套：先用应用里内置的公钥验，验不过一个都不传。 */
+function prepareContent(dir, opts, { exec, now, env, log }) {
+  const bundle = readContentBundle(dir, opts.channel)
+  const notes = []
+  let refuse
+  if (bundle.meta?.upload === false) {
+    refuse = '那次运行只打包自检（没打算发内容包），不传'
+    notes.push('（那次运行只打包自检：只能看计划，不能传）')
+  }
+  const script = env.AGENTSWS_CONTENT_PACK || join(REPO_ROOT, 'scripts', 'content-pack.mjs')
+  log(`用应用里内置的公钥验 ${bundle.chDir}`)
+  const v = exec(process.execPath, [script, 'verify', '--dir', bundle.chDir, '--builtin'], {
+    cwd: REPO_ROOT,
+    env,
+    stdio: 'inherit',
+  })
+  if (v.status !== 0)
+    throw new Error(
+      '内置公钥验不过，一个都没传（签名对不上应用，或者还没 `pnpm exec tsc -b packages/skills`）',
+    )
+  const plan = planContentUploads(bundle)
+  log(`内容包 ${bundle.channel} 序号 ${bundle.serial}（${opts.base}/content/${bundle.channel}/）`)
+  const args = { base: opts.base, ...bundle }
+  return {
+    info: bundle,
+    plan,
+    bucket: bundle.meta?.bucket || BUCKET,
+    notes,
+    refuse,
+    verify: () => verifyContentRemote({ ...args, exec, now }),
+    done: `✓ ${opts.base}/content/${bundle.channel}/content-manifest.json 已是序号 ${bundle.serial}`,
+  }
+}
+
 export async function run(argv, deps = {}) {
   const env = deps.env ?? process.env
   const log = deps.log ?? ((s) => process.stdout.write(`${s}\n`))
@@ -223,36 +402,17 @@ export async function run(argv, deps = {}) {
   let dir = opts.dir
   let tmp
   if (opts.run !== undefined) {
-    tmp = mkdtempSync(join(tmpdir(), 'agentsws-release-'))
     // 只看计划时也认 dry-run 那次的产物（release-dry-run），方便第一次真发版前演练；真传只认 release-bundle
-    const names = opts.dryRun ? [BUNDLE, DRY_BUNDLE] : [BUNDLE]
-    const got = names.find((name) => {
-      const args = ['run', 'download', opts.run, '-n', name, '-D', tmp]
-      if (opts.repo !== undefined) args.push('-R', opts.repo)
-      log(`取运行 ${opts.run} 的 ${name} → ${tmp}`)
-      return exec('gh', args, { cwd: REPO_ROOT, env, stdio: 'inherit' }).status === 0
-    })
-    if (got === undefined) {
-      if (!opts.keep) rmSync(tmp, { recursive: true, force: true })
-      throw new Error(
-        `gh run download 没成：那次运行没有 ${names.join(' / ')}（没跑到「收拢」？dry-run 的产物只能看计划、不传）`,
-      )
-    }
+    const names = opts.content ? [CONTENT_BUNDLE] : opts.dryRun ? [BUNDLE, DRY_BUNDLE] : [BUNDLE]
+    tmp = download(opts, names, { exec, env, log })
     dir = tmp
   }
   try {
-    const bundle = readBundle(dir)
-    const rel = resolveRelease(bundle, opts.channel)
-    if (bundle.meta?.dry_run === true) {
-      if (!opts.dryRun) throw new Error('这是 dry-run 那次运行的产物（打的是分支，不是 tag），不传')
-      log('（这是 dry-run 那次运行的产物：只能看计划，不能传）')
-    }
-    const plan = planUploads({ ...bundle, channel: rel.channel, siteChannel: rel.siteChannel })
-    const rootDownloads = plan.some((p) => p.key === 'downloads.json')
-    const bucket = opts.bucket ?? rel.bucket
-    log(
-      `${rel.tag ?? `v${rel.version}`} → ${bucket}（${opts.base}/${rel.channel}/），${plan.length} 个对象：`,
-    )
+    const ctx = { exec, now, env, log }
+    const job = opts.content ? prepareContent(dir, opts, ctx) : prepareInstallers(dir, opts, ctx)
+    const { plan, notes } = job
+    const bucket = opts.bucket ?? job.bucket
+    log(`→ ${bucket}，${plan.length} 个对象：`)
     const tooBig = []
     for (const [i, p] of plan.entries()) {
       const size = statSync(p.file).size
@@ -261,16 +421,16 @@ export async function run(argv, deps = {}) {
         `  ${String(i + 1).padStart(2)}. ${p.key}  ${mb(size)}  ${p.contentType}  ${p.cacheControl}`,
       )
     }
-    if (!rootDownloads)
-      log(`  （根目录 downloads.json 不动：${rel.channel} 不是官网渠道 ${rel.siteChannel}）`)
+    for (const n of notes) log(n)
     if (tooBig.length > 0)
       throw new Error(
         `超过 wrangler 单个对象上限 ${mb(MAX_BYTES)}，一个都没传：${tooBig.join('、')}`,
       )
     if (opts.dryRun) {
       log('只是计划，一个字节都没传。确认无误后加 --upload 真传。')
-      return { ...rel, plan, uploaded: false }
+      return { ...job.info, plan, uploaded: false }
     }
+    if (job.refuse !== undefined) throw new Error(job.refuse)
     const wrangler = resolveWrangler(env)
     const wenv = wranglerEnv(env)
     for (const p of plan) {
@@ -282,20 +442,13 @@ export async function run(argv, deps = {}) {
       })
       if (r.status !== 0)
         throw new Error(
-          `传 ${p.key} 没成，停在这里（排在它后面的没动；latest*.yml 最后才传，客户端不会看到半截版本）`,
+          `传 ${p.key} 没成，停在这里（排在它后面的没动；清单 / latest*.yml 最后才传，客户端不会看到半截版本）`,
         )
     }
-    const problems = verifyRemote({
-      base: opts.base,
-      channel: rel.channel,
-      version: rel.version,
-      rootDownloads,
-      exec,
-      now,
-    })
+    const problems = job.verify()
     if (problems.length > 0) throw new Error(`传完了，但校验没过：\n  ${problems.join('\n  ')}`)
-    log(`✓ ${opts.base}/${rel.channel}/latest.yml 已是 ${rel.version}`)
-    return { ...rel, plan, uploaded: true }
+    log(job.done)
+    return { ...job.info, plan, uploaded: true }
   } finally {
     if (tmp !== undefined && !opts.keep) rmSync(tmp, { recursive: true, force: true })
   }
