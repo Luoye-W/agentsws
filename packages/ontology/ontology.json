@@ -5,6 +5,7 @@
     "packages/connect-adapter/action-side-effects.yml",
     "packages/connect-adapter/src/shopify-actions.ts",
     "packages/contracts/src/ads.ts",
+    "packages/contracts/src/answer.ts",
     "packages/contracts/src/approval.ts",
     "packages/contracts/src/b2b.ts",
     "packages/contracts/src/blocks.ts",
@@ -121,7 +122,7 @@
     "packages/roles/roles/social/x.yml",
     "packages/roles/roles/social/youtube.yml"
   ],
-  "source_digest": "0411f482a686a2bb7448657fc5c7afd9",
+  "source_digest": "d17f6ea46da36ae37c501aba91c3338b",
   "objects": [
     {
       "id": "ad",
