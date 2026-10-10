@@ -577,6 +577,7 @@ export class Work {
             route: {
               ...(input.route.picked === undefined ? {} : { picked: input.route.picked }),
               options: input.route.options.map((o) => ({ ...o })),
+              ...(input.route.task === true ? { task: true as const } : {}),
             },
           }),
       ...(input.preview === undefined ? {} : { preview: copyPreview(input.preview) }),

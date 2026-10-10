@@ -158,6 +158,7 @@ import {
 import {
   changeKindOf,
   createRoleStore,
+  ENTRY_CLASSIFY_MAX_OUTPUT,
   hasApprovalFlow,
   loadBundledRole,
   personaTextIn,
@@ -4444,6 +4445,43 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         }
       },
     })
+    /*
+     * WP291（决策 356）：岗位入口三分那一次。用「判断」指定的模型；没指定就跟起标题同一档（`extraction`，
+     * 便宜的那档），再没有就默认。没接真模型（stub）= `undefined`，按规则判。不思考、最多几十个 token。
+     */
+    const entryClassifyComplete = (assignment_id: string) => {
+      const models = effectiveModels()
+      if (!models.configured()) return undefined
+      const explicit = models.purposeRef('classify')
+      const fallback = models.defaultRef()
+      const ref =
+        explicit.provider !== fallback.provider || explicit.model !== fallback.model
+          ? explicit
+          : models.purposeRef('extraction')
+      if (ref.provider === 'stub') return undefined
+      return async (prompt: string): Promise<string> => {
+        let role_id = 'common.member'
+        try {
+          role_id = roles.effectiveConfig(assignment_id).role_id
+        } catch {
+          // 分配撤了：用量照记在这条分配上，职责记成普通成员
+        }
+        const completion = await gatewayProxy.complete({
+          messages: [{ role: 'user', content: prompt }],
+          meta: {
+            workspace_id: ws,
+            assignment_id: assignment_id as never,
+            role_id: role_id as never,
+            run_id: `entry_classify_${Date.parse(clock.now()).toString(36)}` as never,
+            purpose: 'classify',
+          },
+          model: ref,
+          max_output_tokens: ENTRY_CLASSIFY_MAX_OUTPUT,
+          thinking: 'off',
+        })
+        return completion.text
+      }
+    }
     const startRun: StartRun | undefined =
       baseStartRun === undefined
         ? undefined
@@ -4811,6 +4849,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           .map((g) => g.name.zh),
       // WP251（决策 91）：结构化标记从这一版第一次启动起算（之前的老数据才认 AI 末句）
       runBlockMarkedSince: () => onboardingRef?.since(RUN_BLOCK_MARKED_SINCE),
+      // WP291（决策 356）：入口三分的那一次便宜模型调用（`purpose: classify`，照常过网关计量）
+      classifyComplete: (actor) => entryClassifyComplete(actor.assignment_id),
     })
     positionAssemblies.set(ws, positionsAssembly)
     // 六层技能里的 `position` 那一层、以及岗位层上下文那三样，都从这里来
@@ -8344,12 +8384,15 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         })
         return {
           mode: out.mode,
+          ...(out.entry === undefined ? {} : { entry: out.entry }),
           ...(out.answer === undefined
             ? {}
             : {
                 answer: {
                   outcome: out.answer.outcome,
                   text: out.answer.text,
+                  lead: out.answer.lead,
+                  components: out.answer.components,
                   sources: [...out.answer.sources],
                   ...(out.answer.failure === undefined ? {} : { failure: out.answer.failure }),
                 },
@@ -8385,11 +8428,23 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           ...(out.run_id === undefined ? {} : { run_id: out.run_id }),
         }
       },
-      // WP287：岗位里问的一句「转成一件事」
-      promote: (actor, matter_id) => {
-        const m = assembly.promote(matter_id, actor.person_id)
-        return { matter: { id: m.id, title: m.title } }
+      // WP287：岗位里问的一句「转成一件事」；WP291：`run` = 「当成任务做」，转完按原话再跑一次
+      promote: async (actor, matter_id, opts) => {
+        const out = await assembly.promote(matter_id, actor.person_id, opts)
+        return {
+          matter: { id: out.matter.id, title: out.matter.title },
+          ...(out.run_id === undefined ? {} : { run_id: out.run_id }),
+        }
       },
+      // WP291：当场回答下面「接着聊」
+      reveal: (actor, matter_id) => {
+        const m = assembly.reveal(matter_id, actor.person_id)
+        return { matter: { id: m.id } }
+      },
+      // WP291：本人在这个岗位上的当场问答（「记录」里列）
+      answers: (actor, id) => ({
+        answers: assembly.answers(resolveId(actor, id), actor.person_id),
+      }),
     }
     positionPorts.set(ws, port)
     return port

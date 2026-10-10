@@ -17,6 +17,7 @@
  *    路由不会把活派到他没有的职责上，那等于借岗位扩权。
  */
 import type {
+  AnswerComponent,
   ApprovalBus,
   ApprovalItem,
   AssignmentId,
@@ -32,11 +33,14 @@ import type {
   RoleId,
   WorkspaceId,
 } from '@agentsws/contracts'
-import { isTaskBrief, taskTextOf } from '@agentsws/contracts'
+import { isTaskBrief, splitAnswer, taskTextOf } from '@agentsws/contracts'
 import { isQueueCard, isRouteChoiceItem } from '@agentsws/deck'
 import {
   bundledPositionIcon,
-  classifyEntryIntent,
+  classifyEntryKind,
+  type EntryClassifyComplete,
+  type EntryKind,
+  type EntryKindResult,
   looksLikeSmallTalk,
   namedRole,
   RoleError,
@@ -75,8 +79,8 @@ const POSITION_ERROR = (
   msg: string,
 ): RoleError => new RoleError(code, msg)
 
-/** WP287：一开始就判成要动手的，线程里那一句。 */
-export const TASK_LINE = '这是一件要跟进的事，记成了任务，在岗位「工作」里看进展'
+/** WP287 / WP291：一开始就判成要动手的，线程里头一句（带上按哪条职责做）。 */
+export const taskLine = (role_name: string): string => `记成了任务，按「${role_name}」做`
 /** WP287：问的那一句答的时候要动手（出了卡），转成任务时线程里那一句。 */
 export const PROMOTED_LINE = '这件事要动手，转成了任务，在岗位「工作」里看进展'
 
@@ -142,6 +146,11 @@ export interface PositionsOptions {
    * 在它之前跑的那几轮（老数据）才退回认 AI 末句；不给 = 一律当老数据（WP244 口径）。
    */
   runBlockMarkedSince?(): string | undefined
+  /**
+   * WP291（决策 356）：入口三分那一次便宜模型调用（`purpose: classify`，照常过网关计量）。
+   * 回 `undefined` = 没接模型（那时按 WP287 的规则判）。`assignment_id` 是用量记在哪条分配上。
+   */
+  classifyComplete?(actor: { assignment_id: AssignmentId }): EntryClassifyComplete | undefined
 }
 
 export interface OpenAtPositionInput {
@@ -163,10 +172,10 @@ export interface OpenAtPositionInput {
    */
   role_id?: RoleId
   /**
-   * WP287：这句话是问还是交办。不给 / `auto` = 服务端判（`classifyEntryIntent`，判不准按问）；
-   * `task` = 一定开一件事；`ask` = 一定当场答。
+   * WP287 / WP291：这句话怎么接。不给 / `auto` = 服务端三分（便宜模型判，判不了按 WP287 规则）；
+   * `quick` = 当场答（岗位页上出「一句话 + 组件」）；`chat` / `ask` = 进会话；`task` = 开任务。
    */
-  mode?: 'auto' | 'ask' | 'task'
+  mode?: 'auto' | 'quick' | 'chat' | 'ask' | 'task'
   /**
    * WP287：不等运行跑完就回（界面拿到事项 id 立刻进会话线程，看它在线程里答）。
    * 不给 = 老样子，跑完才回（回答、`run_id` 都在回包里）。
@@ -181,18 +190,35 @@ export interface PositionAnswer {
    * `promoted` 答的时候要动手，已经转成了一件事（去事项页看）。
    */
   outcome: 'answered' | 'failed' | 'stopped' | 'promoted'
-  /** AI 的回答（没答出来就是空串） */
+  /** AI 的回答（没答出来就是空串；去掉了 ```answer 那段） */
   text: string
+  /** WP291：一句话（回答的第一段） */
+  lead: string
+  /** WP291：组件（表格 / 数字 / 一段字），按契约校验过 */
+  components: AnswerComponent[]
   /** 来源：这次读了哪些东西（人话，最多 3 条） */
   sources: string[]
   failure?: string
 }
 
+/** WP291：一条当场问答（岗位「记录」里那一行）。 */
+export interface PositionAnswerRecord {
+  matter_id: MatterId
+  at: string
+  question: string
+  lead: string
+}
+
 export interface OpenAtPositionResult {
   matter: Matter
-  /** WP287：当场答了（`ask`）还是开了一件事（`task`） */
-  mode: 'ask' | 'task'
-  /** WP287：`mode: 'ask'` 时的回答 */
+  /**
+   * WP287 / WP291：`quick` 当场答了（回答在 `answer` 里，岗位页上画）；`ask` 是一段会话（进线程）；
+   * `task` 开了一件任务（进线程）。当场答的时候真要动手了（出了卡）→ 转成任务，回 `task`。
+   */
+  mode: 'quick' | 'ask' | 'task'
+  /** WP291：这句话判成了哪一类、谁判的（`caller` = 调用方点名的） */
+  entry?: { kind: EntryKind; by: EntryKindResult['by'] | 'caller' }
+  /** WP287：`quick` / `ask` 时的回答（`ask` 只有不 `detach` 时才有） */
   answer?: PositionAnswer
   /** 判准了才有：这次用的是哪条职责、哪条分配 */
   picked?: { role_id: RoleId; role_name: string; assignment_id: AssignmentId }
@@ -229,8 +255,19 @@ export interface PositionsAssembly {
    * 不是那张卡、没批、或者事项已经在那条上了 → 什么都不做。
    */
   onChoiceDecided(item: ApprovalItem): Promise<void>
-  /** WP287：岗位里问的一句 →「转成一件事」（进「进行中」）。 */
-  promote(matter_id: MatterId, person_id: PersonId): Matter
+  /**
+   * WP287：岗位里问的一句 →「转成一件事」（进「进行中」）。
+   * WP291：`run: true`（当场回答下面「当成任务做」）= 转完按原话当任务再跑一次。
+   */
+  promote(
+    matter_id: MatterId,
+    person_id: PersonId,
+    opts?: { run?: boolean },
+  ): Promise<{ matter: Matter; run_id?: string }>
+  /** WP291：当场回答下面「接着聊」——变成一段会话（进左栏会话历史），之后在线程里接着说。 */
+  reveal(matter_id: MatterId, person_id: PersonId): Matter
+  /** WP291：本人在这个岗位上的当场问答（岗位「记录」里列），新的在前。 */
+  answers(position_id: string, person_id: PersonId): PositionAnswerRecord[]
   /**
    * WP237（Fable 10-06 真机补充）：在**从岗位开的**事项里说一句话。
    *
@@ -624,39 +661,45 @@ export function createPositions(options: PositionsOptions): PositionsAssembly {
       return {
         outcome: 'failed',
         text: '',
+        lead: '',
+        components: [],
         sources: [],
         failure: '这里还没接上 AI，答不了',
       }
     const events = work.store.listMatterEvents(matter_id, { limit: 500 })
     const mine = events.filter((e) => e.run_id === run_id)
-    const text = mine
-      .filter((e) => e.kind === 'agent_message')
-      .map((e) => e.text)
-      .join('\n\n')
-      .trim()
+    // WP291：回答 = 一句话 + 组件（```answer 那段按契约校验；没有就认正文里的 Markdown 表格）
+    const split = splitAnswer(
+      mine
+        .filter((e) => e.kind === 'agent_message')
+        .map((e) => e.text)
+        .join('\n\n')
+        .trim(),
+    )
+    const said = { text: split.text, lead: split.lead, components: split.components }
     const digest = mine.find((e) => e.run_digest !== undefined)?.run_digest
     const sources = [
       ...new Set((digest?.steps ?? []).filter((st) => st.status === 'ok').map((st) => st.text)),
     ].slice(0, 3)
     const failed = mine.find((e) => e.failed !== undefined)
-    if (failed !== undefined) return { outcome: 'failed', text, sources, failure: failed.text }
+    if (failed !== undefined) return { outcome: 'failed', ...said, sources, failure: failed.text }
     const acting = mine.some((e) => e.kind === 'card' || e.preview !== undefined)
     if (acting) {
       work.promoteAsk(matter_id, {
         text: PROMOTED_LINE,
         actor: { kind: 'agent', id: 'position_router' },
       })
-      return { outcome: 'promoted', text, sources }
+      return { outcome: 'promoted', ...said, sources }
     }
-    if (digest?.outcome === 'stopped') return { outcome: 'stopped', text, sources }
+    if (digest?.outcome === 'stopped') return { outcome: 'stopped', ...said, sources }
     if (digest?.outcome === 'failed')
       return {
         outcome: 'failed',
-        text,
+        ...said,
         sources,
         failure: '工坊这边出错了，已记下，点重试或稍后再试',
       }
-    return { outcome: 'answered', text, sources }
+    return { outcome: 'answered', ...said, sources }
   }
 
   const open = async (input: OpenAtPositionInput): Promise<OpenAtPositionResult> => {
@@ -690,18 +733,20 @@ export function createPositions(options: PositionsOptions): PositionsAssembly {
     }
     const named = held.map((h) => ({ role_id: h.role_id, role_name: roleName(h.role_id) }))
     // WP237（Fable 代定）：「你好」这类明显不是交活的话——不起运行，只回一句问要做什么
+    // WP291：它就是一次当场问答（岗位页上回一句，不进线程）
     const smallTalk = pinned === undefined && input.mode !== 'task' && looksLikeSmallTalk(text)
     /*
-     * WP287：问还是交办。指定了职责（快捷提示）默认是交办；人 / 调用方说了算的照办；
-     * 否则服务端判——判不准按问，先答。
+     * WP291（决策 356）：调用方点了名的照办（快捷提示 = 已经定了职责 = 任务）；否则下面三分。
+     * 老的 `ask` 就是会话（WP287 的行为）。
      */
-    const mode: 'ask' | 'task' =
-      smallTalk || input.mode === 'ask'
-        ? 'ask'
-        : input.mode === 'task' || pinned !== undefined
-          ? 'task'
-          : classifyEntryIntent(text).intent
-    const ask = mode === 'ask'
+    const called: EntryKind | undefined =
+      input.mode === 'quick'
+        ? 'quick'
+        : input.mode === 'ask' || input.mode === 'chat'
+          ? 'chat'
+          : input.mode === 'task' || pinned !== undefined
+            ? 'task'
+            : undefined
 
     if (smallTalk) {
       const matter = work.createMatter({
@@ -711,12 +756,14 @@ export function createPositions(options: PositionsOptions): PositionsAssembly {
         position_template_id: template.id,
         participants: [input.person_id],
         ask: true,
+        quick: called === undefined || called === 'quick',
         ...(input.summary === undefined ? {} : { summary: input.summary }),
       })
       emit('matter.routed', matter.id, input.person_id, {
         position_id: template.id,
         ambiguous: true,
         mode: 'ask',
+        entry: { kind: 'quick', by: 'rules', why: 'small_talk' },
         candidates: [],
       })
       work.appendEvent(matter.id, {
@@ -725,10 +772,18 @@ export function createPositions(options: PositionsOptions): PositionsAssembly {
         actor: { kind: 'person', id: input.person_id },
       })
       const reply = askWhat(matter.id, named)
+      const quickHere = called === undefined || called === 'quick'
       return {
         matter: work.getMatter(matter.id) ?? matter,
-        mode: 'ask',
-        answer: { outcome: 'answered', text: reply.text, sources: [] },
+        mode: quickHere ? 'quick' : 'ask',
+        entry: { kind: quickHere ? 'quick' : 'chat', by: 'rules' },
+        answer: {
+          outcome: 'answered',
+          text: reply.text,
+          lead: reply.text,
+          components: [],
+          sources: [],
+        },
         candidates: [],
         ambiguous: true,
         reason: '像是打个招呼，还没说要做什么',
@@ -748,6 +803,22 @@ export function createPositions(options: PositionsOptions): PositionsAssembly {
     if (pickedEntry === undefined)
       throw POSITION_ERROR('forbidden', `你名下没有「${template.name.zh}」这个岗位下的职责`)
 
+    /*
+     * WP291（决策 356）：三分——便宜模型判（用量记在路由到的那条分配上）；没接模型 / 超时 /
+     * 坏 JSON 退回 WP287 的规则。判断理由只进本机事件。
+     */
+    const judged: EntryKindResult | undefined =
+      called === undefined
+        ? await classifyEntryKind(
+            text,
+            options.classifyComplete?.({ assignment_id: pickedEntry.assignment_id }),
+          )
+        : undefined
+    const kind: EntryKind = called ?? judged?.kind ?? 'quick'
+    const ask = kind !== 'task'
+    const quick = kind === 'quick'
+    const entry = { kind, by: judged?.by ?? ('caller' as const) }
+
     const matter = work.createMatter({
       kind: 'adhoc',
       title: input.title,
@@ -756,7 +827,7 @@ export function createPositions(options: PositionsOptions): PositionsAssembly {
       participants: [input.person_id],
       ...(input.summary === undefined ? {} : { summary: input.summary }),
       ...(input.pinned === undefined ? {} : { pinned: input.pinned }),
-      ...(ask ? { ask: true } : {}),
+      ...(ask ? { ask: true, ...(quick ? { quick: true } : {}) } : {}),
       position_id: pickedEntry.assignment_id,
       role_id: pickedEntry.role_id,
     })
@@ -766,7 +837,14 @@ export function createPositions(options: PositionsOptions): PositionsAssembly {
       position_id: template.id,
       picked: pickedEntry.role_id,
       ambiguous: false,
-      mode,
+      mode: ask ? 'ask' : 'task',
+      // WP291：三分的结果与理由（本机事件，不上界面）
+      entry: {
+        kind,
+        by: entry.by,
+        ...(judged === undefined ? {} : { why: judged.why }),
+        ...(judged?.fallback === undefined ? {} : { fallback: judged.fallback }),
+      },
       // WP237 / WP287：没问人、自己定的——打平按分取（top_score）或一个都没命中按先后取（first_duty）
       ...(routed.settled === true
         ? { settled: routed.candidates.every((c) => c.score === 0) ? 'first_duty' : 'top_score' }
@@ -775,21 +853,22 @@ export function createPositions(options: PositionsOptions): PositionsAssembly {
       candidates: routed.candidates.map((c) => ({ role_id: c.role_id, score: c.score })),
     })
 
-    // 路由结果进事项时间线（界面画「按 X 做的 · 换一条」；问答在岗位页上不显示这一行）。
-    work.appendEvent(matter.id, {
-      kind: 'status',
-      text: routed.reason,
-      actor: { kind: 'agent', id: 'position_router' },
-      ref: { type: 'position', id: template.id },
-      ...(alternatives.length === 0
-        ? {}
+    const route =
+      alternatives.length === 0
+        ? undefined
         : {
-            route: {
-              picked: pickedEntry.role_id,
-              options: alternatives.map((c) => ({ role_id: c.role_id, role_name: c.role_name })),
-            },
-          }),
-    })
+            picked: pickedEntry.role_id,
+            options: alternatives.map((c) => ({ role_id: c.role_id, role_name: c.role_name })),
+          }
+    // 路由结果进事项时间线（会话 / 当场问答的线程里不显示这一行；任务那一行排在原话后面，见下）
+    if (ask)
+      work.appendEvent(matter.id, {
+        kind: 'status',
+        text: routed.reason,
+        actor: { kind: 'agent', id: 'position_router' },
+        ref: { type: 'position', id: template.id },
+        ...(route === undefined ? {} : { route }),
+      })
 
     // 起 Run：用的是**被路由到的那条职责**的 Assignment（权限 / 额度 / 技能全是它的）。
     // `say` 同步记下原话、再起运行；这里先不等它跑完（WP287：`detach` 时界面立刻进会话线程看它答）
@@ -798,16 +877,22 @@ export function createPositions(options: PositionsOptions): PositionsAssembly {
       assignment_id: pickedEntry.assignment_id,
       text,
     })
-    // WP287：一开始就判成要动手的——线程里一句话告诉人它是一件任务、在哪儿跟进
+    // WP287 / WP291：一开始就判成任务的——原话后面头一句「记成了任务，按「X」做」（还能换的话带「换一条」）
     if (!ask)
       work.appendEvent(matter.id, {
         kind: 'status',
-        text: TASK_LINE,
+        text: taskLine(roleName(pickedEntry.role_id)),
         actor: { kind: 'agent', id: 'position_router' },
         ref: { type: 'position', id: template.id },
+        route: {
+          picked: pickedEntry.role_id,
+          options: route?.options ?? [],
+          task: true,
+        },
       })
     const view = {
-      mode,
+      mode: quick ? ('quick' as const) : ask ? ('ask' as const) : ('task' as const),
+      entry,
       picked: {
         role_id: pickedEntry.role_id,
         role_name: roleName(pickedEntry.role_id),
@@ -816,7 +901,7 @@ export function createPositions(options: PositionsOptions): PositionsAssembly {
       candidates: routed.candidates,
       ambiguous: false,
       reason: routed.reason,
-    } as const
+    }
     // 问的那一句跑完了再看：要动手（出了卡）就转成任务（线程里说一句）
     const settle = async (): Promise<{ run_id?: string; answer?: PositionAnswer }> => {
       const said = await running
@@ -826,26 +911,81 @@ export function createPositions(options: PositionsOptions): PositionsAssembly {
         ...(answer === undefined ? {} : { answer }),
       }
     }
-    if (input.detach === true) {
+    // WP291：当场问答没有线程可进——一律等它答完（界面在输入框下面先出「…」）
+    if (input.detach === true && !quick) {
       void settle().catch(() => undefined)
       return { matter: work.getMatter(matter.id) ?? matter, ...view }
     }
     const done = await settle()
-    return { matter: work.getMatter(matter.id) ?? matter, ...view, ...done }
+    // WP291：当场答的时候真要动手了（出了卡）→ 已转成任务，回包按任务回（界面进它的线程）
+    const mode = quick && done.answer?.outcome === 'promoted' ? 'task' : view.mode
+    return { matter: work.getMatter(matter.id) ?? matter, ...view, ...done, mode }
   }
 
   /**
    * WP287：「转成一件事」——问的那一句变成一件普通的事（进「进行中」）。只有参与者能转。
    */
-  const promote = (matter_id: MatterId, person_id: PersonId): Matter => {
+  const promote = async (
+    matter_id: MatterId,
+    person_id: PersonId,
+    opts?: { run?: boolean },
+  ): Promise<{ matter: Matter; run_id?: string }> => {
     const matter = work.getMatter(matter_id)
     if (matter === undefined || !matter.context.participants.includes(person_id))
       throw POSITION_ERROR('not_found', `没有这个事项：${matter_id}`)
-    return work.promoteAsk(matter_id, {
+    const was = matter.ask
+    const next = work.promoteAsk(matter_id, {
       text: '转成了任务，在岗位「工作」里跟进',
       actor: { kind: 'person', id: person_id },
     })
+    // WP291：「当成任务做」——按原话当任务再跑一次（当场问答那一次只查只答）
+    if (opts?.run !== true || was === undefined) return { matter: next }
+    const own =
+      next.position_id === undefined
+        ? undefined
+        : activeOf(person_id).find((a) => a.id === next.position_id)
+    if (own === undefined) return { matter: next }
+    const ran = await work.run(matter_id, {
+      person_id,
+      assignment_id: own.id,
+      brief: briefOf(next),
+      text: '当成任务开始做了',
+    })
+    return {
+      matter: work.getMatter(matter_id) ?? next,
+      ...(ran.run_id === undefined ? {} : { run_id: ran.run_id }),
+    }
   }
+
+  /** WP291：「接着聊」——当场问答变成一段会话。只有参与者能转。 */
+  const reveal = (matter_id: MatterId, person_id: PersonId): Matter => {
+    const matter = work.getMatter(matter_id)
+    if (matter === undefined || !matter.context.participants.includes(person_id))
+      throw POSITION_ERROR('not_found', `没有这个事项：${matter_id}`)
+    return work.revealQuick(matter_id, { kind: 'person', id: person_id })
+  }
+
+  /** WP291：本人在这个岗位上答过的当场问答（没跑成的不列），新的在前，最多 20 条。 */
+  const answers = (position_id: string, person_id: PersonId): PositionAnswerRecord[] =>
+    work
+      .listMatters({ quick: true, participant: person_id })
+      .filter((m) => m.position_template_id === position_id)
+      .sort((a, b) => b.created_at.localeCompare(a.created_at))
+      .flatMap((m) => {
+        const events = work.store.listMatterEvents(m.id, { limit: 200 })
+        if (events.some((e) => e.failed !== undefined)) return []
+        const said = events
+          .filter((e) => e.kind === 'agent_message')
+          .map((e) => e.text)
+          .join('\n\n')
+        const lead = splitAnswer(said).lead
+        if (lead === '') return []
+        const question = events.find((e) => e.kind === 'human_message')?.text ?? m.title
+        return [
+          { matter_id: m.id, at: m.created_at, question: clip(question, 80) ?? question, lead },
+        ]
+      })
+      .slice(0, 20)
 
   /**
    * 这件事原来那段话：岗位入口开事项时记下的那句人话（以标题打头的那一句），没有就用标题
@@ -1003,8 +1143,13 @@ export function createPositions(options: PositionsOptions): PositionsAssembly {
     person_id: PersonId
     text: string
   }): Promise<{ event: MatterEvent; run_id?: string } | undefined> => {
-    const matter = work.getMatter(input.matter_id)
-    if (matter === undefined || matter.entry !== 'position') return undefined
+    const found = work.getMatter(input.matter_id)
+    if (found === undefined || found.entry !== 'position') return undefined
+    // WP291：在当场问答的线程里又说了一句 = 接着聊（它变成一段会话，进左栏会话历史）
+    const matter =
+      found.ask?.quick === true
+        ? work.revealQuick(found.id, { kind: 'person', id: input.person_id })
+        : found
     const template_id = matter.position_template_id
     if (template_id === undefined) return undefined
     // 已经定了职责：用**那条**分配接着做（请求头上带的可能是负责人那条）
@@ -1159,6 +1304,8 @@ export function createPositions(options: PositionsOptions): PositionsAssembly {
     reroute,
     onChoiceDecided,
     promote,
+    reveal,
+    answers,
     sayAt,
     positionOf,
     layerContext,
@@ -1195,7 +1342,8 @@ export function retargetPositionMatters(
   now: string,
 ): number {
   let moved = 0
-  for (const m of work.listMatters({})) {
+  // WP291：当场问答也跟着改（它们只在「记录」里，默认列表不见它们）
+  for (const m of [...work.listMatters({}), ...work.listMatters({ quick: true })]) {
     if (m.position_template_id !== input.from) continue
     if (input.role_id !== undefined && m.role_id !== input.role_id) continue
     work.store.putMatter({ ...m, position_template_id: input.to, updated_at: now })

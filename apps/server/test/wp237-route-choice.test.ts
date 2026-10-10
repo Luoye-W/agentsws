@@ -135,11 +135,12 @@ describe('WP237 ① 同一个人的两条职责打平：不问人，按分高的
     expect(matter.position_id).toBe(held.get('social.reddit'))
 
     const routed = timeline(out.matter.id).find((e) => e.actor.id === 'position_router')
-    expect(routed?.text).toContain('按「自家版运营」来做的')
-    expect(routed?.text).toContain('要换成「Reddit 营销」点这里')
+    // WP291：任务那一行排在原话后面、头一句「记成了任务，按「X」做」，还能换的挂在它上面
+    expect(routed?.text).toBe('记成了任务，按「自家版运营」做')
     expect(routed?.route).toEqual({
       picked: 'social.reddit',
       options: [{ role_id: 'pr.reddit', role_name: 'Reddit 营销' }],
+      task: true,
     })
     // 运行用的是那条职责的分配，不是请求头上负责人那条
     expect(runs(out.matter.id).map((e) => e.actor.id)).toEqual([held.get('social.reddit')])

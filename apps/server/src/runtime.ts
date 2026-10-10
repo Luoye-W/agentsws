@@ -58,6 +58,7 @@ import {
   PLATFORM_KITS,
   platformKitOf,
   platformMcpNeededBy,
+  QUICK_ANSWER_RULE,
   RUN_IDLE_TIMEOUT_RANGE,
   RUN_MAX_DURATION_RANGE,
   type RunCancelReason,
@@ -1650,6 +1651,13 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
            * 宿主进时间线前取出来记在 `next_suggestion` 上（事项页按 Tab 收下）。所有职责同一份，紧跟公共段。
            */
           { id: 'next_step', name: '下一步建议', order: 27, text: NEXT_SUGGESTION_RULE },
+          /*
+           * WP291（决策 356）：**当场问答**——岗位页上一问一答就完的那一次：只查只答，末尾附 ```answer
+           * 组件段（宿主取出来按契约校验，岗位页画成「一句话 + 表格 / 数字」）。别的运行一个字节不多。
+           */
+          ...(input.matter.ask?.quick === true
+            ? [{ id: 'quick_answer', name: '当场问答', order: 28, text: QUICK_ANSWER_RULE }]
+            : []),
           // WP260：网页模板的做法（读一次 → 改模板与设置 → 检查 → 推未发布；中途不汇报）。只给带主题工具的运行
           ...(themeRun ? [themeWorkSection({ shopRead: shopNames.length > 0 })] : []),
           // WP268：网页模板摆了生图工具时多一段「配图的做法」（没摆的运行一个字节不多）

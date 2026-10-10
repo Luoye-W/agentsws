@@ -2561,6 +2561,7 @@ const zh: Table = {
   'models.purpose.embedding': '向量（知识库检索）',
   'models.purpose.judge': '判分（自检与抽检）',
   'models.purpose.transcription': '转写（会议录音）',
+  'models.purpose.classify': '判断（岗位里一句话：当场答 / 会话 / 任务）',
   // WP179：官方网页搜索（用量表里一行 + 模型页一个开关）
   'models.purpose.web_search': '网页搜索（DeepSeek）',
   'web.search.title': '用你的 DeepSeek 账号搜索',
@@ -6532,6 +6533,7 @@ const en: Table = {
   'models.purpose.embedding': 'Embedding (knowledge search)',
   'models.purpose.judge': 'Judging (self-checks and sampling)',
   'models.purpose.transcription': 'Transcription (meeting audio)',
+  'models.purpose.classify': 'Sorting (quick answer / chat / task)',
   // WP179
   'models.purpose.web_search': 'Web search (DeepSeek)',
   'web.search.title': 'Search with your DeepSeek account',

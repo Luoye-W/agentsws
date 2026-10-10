@@ -2188,6 +2188,8 @@ export type ModelPurposeName =
   | 'embedding'
   | 'judge'
   | 'transcription'
+  /** WP291：岗位入口三分（当场答 / 会话 / 任务） */
+  | 'classify'
   /** WP179：官方网页搜索（只出现在用量表里，不能选模型） */
   | 'web_search'
   /** WP188：随便聊（只出现在用量表里，不能选模型） */
