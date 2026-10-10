@@ -407,6 +407,7 @@ import {
   createModels,
   humanizeGatewayError,
   type ModelsAssembly,
+  type RetiredProviderSwap,
   STUB_REF,
   templatesFor,
 } from './models.js'
@@ -512,6 +513,7 @@ import {
   type RedditOfficialBrowserOptions,
 } from './reddit-official-browser/index.js'
 import { createResearchToolExecutor, redditReadPrice } from './research-tools.js'
+import { type RetiredModelSwap, retiredModelNoticeCard } from './retired-models.js'
 import {
   createFileRoleRuleBackend,
   createRoleRules,
@@ -3112,6 +3114,31 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       ...(dir === undefined ? {} : { dir }),
     })
     /*
+     * WP294（决策 375）：ChatGPT 订阅存着的退役模型（gpt-5.4 / gpt-5.4-mini）启动时换成了 gpt-5.5 →
+     * 首页告警区一行（照 WP169 同一条路，不是卡）。两处来源：本人的订阅选择（按人）、这个品牌
+     * 模型设置里那条订阅（大家共用，谁打开都看得到）；同一对「从 → 到」只出一行。
+     * 模型装配在下面才建好，这里先占位、建好后填上。
+     */
+    const retiredModelsHolder: { swaps?: () => RetiredProviderSwap[] } = {}
+    const retiredModelAlerts = (person_id: string) => {
+      const position_id =
+        roles.assignments
+          .listByPerson(person_id, { workspace_id: ws })
+          .find((a) => a.revoked_at === undefined && a.role_id.startsWith('common.'))?.id ?? ''
+      const swaps: RetiredModelSwap[] = [
+        ...subscription.retiredSwaps(person_id),
+        ...(retiredModelsHolder.swaps?.() ?? []),
+      ]
+      const seen = new Set<string>()
+      return swaps.flatMap((swap) => {
+        const pair = `${swap.from}>${swap.to}`
+        if (seen.has(pair)) return []
+        seen.add(pair)
+        const id = `retired_model_${pair}_${swap.at}`.replace(/[^a-zA-Z0-9]+/g, '_')
+        return [retiredModelNoticeCard({ id, swap, position_id })]
+      })
+    }
+    /*
      * WP224（docs/91 §2.2 #3）：毛利率事实卡（知识库里的事实卡，公司页填）+ 盈亏线。
      * 投放面板读缓存（同步），读之前 `ensureFresh` 刷一遍。
      */
@@ -3164,10 +3191,13 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     const workData: WorkstationDataSource = {
       ...baseWorkData,
       systemCards: (actor) => ({
-        alerts: storeMarketsNotices.alerts(
-          actor.person_id,
-          onboardingRef?.brandProfile(ws).markets_source,
-        ),
+        alerts: [
+          ...storeMarketsNotices.alerts(
+            actor.person_id,
+            onboardingRef?.brandProfile(ws).markets_source,
+          ),
+          ...retiredModelAlerts(actor.person_id),
+        ],
       }),
       // WP158：读之前先把 GSC / GA4 拉新（当天有缓存就是空操作；永不抛）
       ensureFresh: async () => {
@@ -4148,6 +4178,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       brands?.inheritsOrg(ws) === true
         ? (brands.peek(orgDefaultBrandOf(ws))?.ownModels ?? ownModels)
         : ownModels
+    // WP294：首页那一行看的是这个品牌真在用的那份模型设置（跟随公司默认就是公司那份）
+    retiredModelsHolder.swaps = () => effectiveModels().retiredSwaps()
     /*
      * WP215：跟随公司默认时借的是公司默认那一个网关（它挂的是那个品牌的急停）——
      * 这里先按**这个品牌**的急停判一次：B 按了急停，B 的运行与聊天就打不出模型，A 照常。

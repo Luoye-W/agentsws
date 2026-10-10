@@ -40,10 +40,12 @@ import type { SubscriptionLoginHandle, SubscriptionQuestion } from '@agentsws/ds
  * 那棵树一次都不会被装进来。
  */
 import {
+  retiredSubscriptionModel,
   SUBSCRIPTION_FACTS,
   SUBSCRIPTION_RISK_NOTE,
 } from '@agentsws/dsh-adapter/subscription-facts'
 import type { Context } from '@deepseek-ai/cordis'
+import { type RetiredModelSwap, retiredSwapLive } from './retired-models.js'
 import type { SecretStore } from './secret-store.js'
 
 /** 秘密库里订阅凭据的前缀（与 `conn:` / `model_provider:` 分开）。 */
@@ -93,6 +95,11 @@ export interface SubscriptionPortLike {
 
 export interface SubscriptionAssembly {
   port: SubscriptionPortLike
+  /**
+   * WP294：这个人存着的订阅模型启动时被自动换掉了的那几条（还该提醒的：没过期、他没再改过）。
+   * 首页告警区据此出一行。
+   */
+  retiredSwaps(person_id: string): (RetiredModelSwap & { provider: string })[]
   /** 把还开着的登录树收掉（进程退出时）。 */
   close(): Promise<void>
 }
@@ -118,6 +125,8 @@ interface SelectedModels {
   version: 1
   /** `<person_id>/<provider>` → 模型名。**只有模型名**，没有任何凭据。 */
   chosen: Record<string, string>
+  /** WP294：同一个键上一次被自动换模型（官方目录删了原来那个）；人自己再选一次就去掉。 */
+  swapped?: Record<string, RetiredModelSwap>
 }
 
 export function createSubscription(options: SubscriptionOptions): SubscriptionAssembly {
@@ -136,10 +145,32 @@ export function createSubscription(options: SubscriptionOptions): SubscriptionAs
   const writeChosen = (next: SelectedModels): void => {
     if (file === undefined) {
       memory.chosen = next.chosen
+      if (next.swapped === undefined) delete memory.swapped
+      else memory.swapped = next.swapped
       return
     }
     mkdirSync(dirname(file), { recursive: true })
     writeFileSync(file, `${JSON.stringify(next, null, 2)}\n`, 'utf8')
+  }
+
+  /*
+   * WP294（决策 375）：启动时把存着的退役模型（pi-ai 1.1.0 删了的 gpt-5.4 / gpt-5.4-mini）换成
+   * 顶替它的那个，落盘，记下换了什么。只认退役表里那几个；别家、别的名字（哪怕目录里没有）不动。
+   */
+  {
+    const saved = readChosen()
+    const swapped: Record<string, RetiredModelSwap> = { ...saved.swapped }
+    const chosen = { ...saved.chosen }
+    let changed = false
+    for (const [key, model] of Object.entries(chosen)) {
+      const provider = key.slice(key.lastIndexOf('/') + 1)
+      const to = retiredSubscriptionModel(provider, model)
+      if (to === undefined) continue
+      chosen[key] = to
+      swapped[key] = { from: model, to, at: options.clock.now() }
+      changed = true
+    }
+    if (changed) writeChosen({ version: 1, chosen, swapped })
   }
 
   const available = (): boolean => options.runtimeMode() === 'local' && options.secrets.available
@@ -402,9 +433,13 @@ export function createSubscription(options: SubscriptionOptions): SubscriptionAs
       async selectModel(actor, provider, model) {
         const id = await known(provider)
         const next = readChosen()
+        const key = `${actor.person_id}/${id}`
+        // WP294：人自己选过了，那条「自动换了」的提醒就不用再出
+        const { [key]: _seen, ...swapped } = next.swapped ?? {}
         writeChosen({
           version: 1,
-          chosen: { ...next.chosen, [`${actor.person_id}/${id}`]: model },
+          chosen: { ...next.chosen, [key]: model },
+          ...(Object.keys(swapped).length === 0 ? {} : { swapped }),
         })
         return viewOf(actor, id)
       },
@@ -420,6 +455,16 @@ export function createSubscription(options: SubscriptionOptions): SubscriptionAs
         state.attempts.delete(id)
         await state.handle.signOut(id)
       },
+    },
+
+    retiredSwaps(person_id) {
+      const saved = readChosen()
+      const now = options.clock.now()
+      const prefix = `${person_id}/`
+      return Object.entries(saved.swapped ?? {})
+        .filter(([key]) => key.startsWith(prefix))
+        .filter(([key, swap]) => retiredSwapLive(swap, saved.chosen[key] ?? '', now))
+        .map(([key, swap]) => ({ ...swap, provider: key.slice(prefix.length) }))
     },
 
     async close() {

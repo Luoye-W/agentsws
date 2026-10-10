@@ -36,6 +36,8 @@ import {
   installSubscriptionLlm,
   isSubscriptionProvider,
   maskAccount,
+  RETIRED_SUBSCRIPTION_MODELS,
+  retiredSubscriptionModel,
   SUBSCRIPTION_FACTS,
   SUBSCRIPTION_PROVIDERS,
   SUBSCRIPTION_RISK_NOTE,
@@ -433,6 +435,39 @@ describe('(e2) WP293：选的模型已经不在 pi-ai 目录里', () => {
     expect(failed?.type === 'run.failed' && failed.error.code).toBe('provider_unavailable')
     expect(failed?.type === 'run.failed' && failed.error.message.length).toBeGreaterThan(0)
     expect(typesOf(events)).not.toContain('run.completed')
+  })
+})
+
+// ── (e3) 退役模型表 ─────────────────────────────────────────────────
+
+describe('(e3) WP294：退役模型表对着装着的 pi-ai 目录核', () => {
+  it('表里退役的真不在目录里、顶替的真在（官方哪天加回来，这条先红）', async () => {
+    const root = new Context()
+    root.plugin(LlmRuntime)
+    root.plugin(credentialsPlugin(memoryRecords()) as never, undefined as never)
+    await installSubscriptionLlm(root)
+    const ctx = await new Promise<Context>((resolve) => {
+      root.plugin({ name: 't', inject: ['llm'], apply: (c: Context) => resolve(c) })
+    })
+    for (const [provider, table] of Object.entries(RETIRED_SUBSCRIPTION_MODELS)) {
+      const ids = (await ctx.llm.listModels(provider)).map((m) => m.id)
+      expect(ids.length).toBeGreaterThan(0)
+      for (const [retired, replacement] of Object.entries(table ?? {})) {
+        expect(ids).not.toContain(retired)
+        expect(ids).toContain(replacement)
+      }
+    }
+    await root.fiber.dispose()
+  })
+
+  it('只认表里那几个：别家、别的名字一律不换', () => {
+    expect(retiredSubscriptionModel('openai-codex', 'gpt-5.4')).toBe('gpt-5.5')
+    expect(retiredSubscriptionModel('openai-codex', 'gpt-5.4-mini')).toBe('gpt-5.5')
+    expect(retiredSubscriptionModel('openai-codex', 'gpt-5.5')).toBeUndefined()
+    expect(retiredSubscriptionModel('openai-codex', 'my-own-model')).toBeUndefined()
+    expect(retiredSubscriptionModel('openai-codex', 'toString')).toBeUndefined()
+    expect(retiredSubscriptionModel('anthropic', 'gpt-5.4')).toBeUndefined()
+    expect(retiredSubscriptionModel('deepseek', 'gpt-5.4')).toBeUndefined()
   })
 })
 

@@ -175,6 +175,8 @@ export {
   installSubscriptionLlm,
   isSubscriptionProvider,
   maskAccount,
+  RETIRED_SUBSCRIPTION_MODELS,
+  retiredSubscriptionModel,
   SUBSCRIPTION_FACTS,
   SUBSCRIPTION_PROVIDERS,
   SUBSCRIPTION_RECORD_SCOPE,
