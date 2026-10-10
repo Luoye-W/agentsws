@@ -62,6 +62,13 @@ describe('WP244 · 最近那一轮运行怎么收的尾', () => {
         false,
       ).last?.outcome,
     ).toBe('failed')
+    // WP287 起那一句是「没跑成：…」（WP290 冒烟查出这里只认老前缀）
+    expect(
+      matterRunStateOf(
+        [{ kind: 'status', text: '没跑成：工坊这边出错了，已记下，点重试或稍后再试', run_id: 'r' }],
+        false,
+      ).last?.outcome,
+    ).toBe('failed')
     expect(
       matterRunStateOf(
         [{ kind: 'status', text: '停了：太久没动静', run_id: 'r', stopped: { reason: 'idle' } }],

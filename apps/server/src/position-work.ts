@@ -166,8 +166,11 @@ export function matterRunStateOf(
     ...(blocked === undefined ? {} : { blocked }),
     legacy,
   }
+  // WP287 起没跑成那一句是「没跑成：…」（run-failure.ts）；老事项里还有「这次运行没跑成…」——两种都认
+  const failedLine = (text: string): boolean =>
+    text.startsWith('没跑成：') || text.startsWith('这次运行没跑成')
   const halted = mine.find(
-    (e) => e.kind === 'status' && (e.stopped !== undefined || e.text.startsWith('这次运行没跑成')),
+    (e) => e.kind === 'status' && (e.stopped !== undefined || failedLine(e.text)),
   )
   const partial = mine.find((e) => e.kind === 'agent_message' && e.stopped !== undefined)
   if (halted !== undefined || partial !== undefined) {
@@ -175,7 +178,7 @@ export function matterRunStateOf(
     return {
       ...tagged,
       last: {
-        outcome: halted?.text.startsWith('这次运行没跑成') === true ? 'failed' : 'stopped',
+        outcome: halted !== undefined && failedLine(halted.text) ? 'failed' : 'stopped',
         text: line?.text ?? '',
       },
     }
