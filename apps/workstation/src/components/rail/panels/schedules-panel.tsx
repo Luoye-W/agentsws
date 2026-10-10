@@ -23,7 +23,6 @@ import { Skeleton } from '@/components/ui/skeleton'
 import {
   deleteSchedule,
   getMySchedules,
-  getOfficialPlugins,
   patchScheduleRule,
   type ScheduledTaskRow,
   toggleSchedule,
@@ -42,7 +41,6 @@ import {
   selectorOfDraft,
 } from '@/lib/schedule-rule'
 
-const SCHEDULE_BUNDLE = '@deepseek-ai/dsh-experimental-schedule-bundle'
 /** WP208：与图标上那个数读同一份缓存（`schedule-count.ts`）。 */
 const KEY = SCHEDULES_KEY
 
@@ -50,26 +48,18 @@ export function SchedulesPanel({ pathname, scope }: RailPanelBodyProps): ReactNo
   const { t } = useApp()
   const matter_id = parseMatterPath(pathname)
   const list = useQuery({ queryKey: KEY, queryFn: getMySchedules })
-  // 装没装那个官方插件（只为空的时候说对那一句；拿不到——比如不是店主——就不说）
-  const plugins = useQuery({
-    queryKey: ['official-plugins'],
-    queryFn: () => getOfficialPlugins(),
-    retry: false,
-  })
 
   if (list.isPending) return <Skeleton className="h-24 w-full" />
   if (list.error !== null) return <PanelError error={list.error} />
 
   const rows = list.data.filter(isListedSchedule)
   if (rows.length === 0) {
-    const installed = plugins.data?.plugins.some(
-      (p) => p.name === SCHEDULE_BUNDLE && p.state === 'installed',
-    )
     return (
       <div className="space-y-1" data-testid="rail-schedules-empty">
         <p className="text-sm">{t('rail.schedules.empty')}</p>
         <p className="text-xs text-muted-foreground">
-          {t(installed === false ? 'rail.schedules.not_installed' : 'rail.schedules.empty_hint')}
+          {/* WP293：自动化任务跟官方改成内置、一直开，不再提示「先去装官方插件」 */}
+          {t('rail.schedules.empty_hint')}
         </p>
       </div>
     )

@@ -882,7 +882,7 @@ export const MODEL_TEMPLATES: readonly ModelProviderTemplate[] = [
     auth: 'subscription',
     subscription_provider: 'openai-codex',
     default_base_url: CHATGPT_SUBSCRIPTION_URL,
-    default_model: 'gpt-5.4',
+    default_model: 'gpt-5.5',
     region: 'global',
     steps: [
       '确认你的 ChatGPT 账号是 Plus 或 Pro（免费档没有这条路）',

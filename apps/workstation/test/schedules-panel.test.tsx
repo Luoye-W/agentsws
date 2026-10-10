@@ -48,7 +48,7 @@ const system: ScheduledTaskRow = {
   fire_count: 0,
 }
 
-const state: { rows: ScheduledTaskRow[]; installed: boolean } = { rows: [], installed: true }
+const state: { rows: ScheduledTaskRow[] } = { rows: [] }
 const patched: { id: string; rule: Record<string, unknown> }[] = []
 const deleted: string[] = []
 
@@ -57,14 +57,6 @@ vi.mock('@/lib/api', async () => {
   return {
     ...actual,
     getMySchedules: async () => state.rows,
-    getOfficialPlugins: async () => ({
-      plugins: [
-        {
-          name: '@deepseek-ai/dsh-experimental-schedule-bundle',
-          state: state.installed ? 'installed' : 'available',
-        },
-      ],
-    }),
     patchScheduleRule: async (id: string, rule: Record<string, unknown>) => {
       patched.push({ id, rule })
       return daily
@@ -82,7 +74,6 @@ const { SchedulesPanel } = await import('@/components/rail/panels/schedules-pane
 beforeEach(() => {
   patched.length = 0
   deleted.length = 0
-  state.installed = true
   state.rows = [daily, weekly, system]
 })
 
@@ -135,13 +126,13 @@ describe('右栏：定时任务', () => {
     })
   })
 
-  it('没有任务：一句话；没装插件就指去设置', async () => {
+  it('没有任务：一句话教怎么建；WP293 起自动化任务内置，不再指去装官方插件', async () => {
     state.rows = [system]
-    state.installed = false
     renderWithProviders(<SchedulesPanel tier="position" pathname="/" />)
     const empty = await screen.findByTestId('rail-schedules-empty')
     await waitFor(() => {
-      expect(empty.textContent).toContain('官方插件')
+      expect(empty.textContent).toContain('每天 9 点提醒我')
     })
+    expect(empty.textContent).not.toContain('官方插件')
   })
 })

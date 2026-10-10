@@ -27,7 +27,8 @@ import { createServer, type Server } from '../src/index.js'
 import { officialPluginPathsIn } from '../src/official-plugins.js'
 import { SECRETS_KEY_ENV } from '../src/secret-store.js'
 
-const SCHEDULE = '@deepseek-ai/dsh-experimental-schedule-bundle'
+// WP293：示例从「自动化任务」（官方 0.2.0-rc.2 起删了这个可选包）换成「查找旧对话」
+const SAMPLE = '@deepseek-ai/dsh-experimental-session-search'
 let server: Server | undefined
 let dir = ''
 
@@ -90,16 +91,16 @@ describe('WP180 官方插件：出卡、批了才做', () => {
     const { api, post, events, backend } = await boot()
     const list = await data<OfficialPluginsView>(await api('/v1/settings/official-plugins'))
     expect(list.blocked_reason).toBeUndefined()
-    expect(list.plugins.map((p) => p.name)).toContain(SCHEDULE)
-    expect(list.plugins.find((p) => p.name === SCHEDULE)?.state).toBe('available')
+    expect(list.plugins.map((p) => p.name)).toContain(SAMPLE)
+    expect(list.plugins.find((p) => p.name === SAMPLE)?.state).toBe('available')
 
     const res = await post('/v1/settings/official-plugins/requests', {
       action: 'install',
-      name: SCHEDULE,
+      name: SAMPLE,
     })
     expect(res.status).toBe(200)
     const after = await data<OfficialPluginsView>(res)
-    const row = after.plugins.find((p) => p.name === SCHEDULE)
+    const row = after.plugins.find((p) => p.name === SAMPLE)
     expect(row?.state).toBe('pending')
     expect(backend.approved()).toEqual({}) // 没批不装
 
@@ -109,31 +110,31 @@ describe('WP180 官方插件：出卡、批了才做', () => {
     expect(card.kind).toBe('official_plugin')
     expect(card.payload).toMatchObject({
       action: 'install',
-      name: SCHEDULE,
-      version: '0.2.0-rc.1',
+      name: SAMPLE,
+      version: '0.2.1-alpha.2',
       source: 'shipped',
       license: 'MIT',
       network: false,
     })
-    expect(card.payload.tools).toContain('schedule_create')
+    expect(card.payload.tools).toContain('session_search')
     expect(card.summary).toContain('许可证 MIT')
 
     const decided = await post(`/v1/approvals/${card.id}/decide`, { action: 'approve' })
     expect(decided.status).toBe(200)
-    expect(backend.approved()).toEqual({ [SCHEDULE]: '0.2.0-rc.1' })
+    expect(backend.approved()).toEqual({ [SAMPLE]: '0.2.1-alpha.2' })
     const now = await data<OfficialPluginsView>(await api('/v1/settings/official-plugins'))
-    expect(now.plugins.find((p) => p.name === SCHEDULE)?.state).toBe('installed')
+    expect(now.plugins.find((p) => p.name === SAMPLE)?.state).toBe('installed')
     expect(events('official_plugin.changed').map((e) => e.payload)).toEqual([
-      expect.objectContaining({ action: 'install', name: SCHEDULE, approval_item_id: card.id }),
+      expect.objectContaining({ action: 'install', name: SAMPLE, approval_item_id: card.id }),
     ])
 
     // 卸载也出卡；驳回 = 什么都不发生
     const off = await data<OfficialPluginsView>(
-      await post('/v1/settings/official-plugins/requests', { action: 'uninstall', name: SCHEDULE }),
+      await post('/v1/settings/official-plugins/requests', { action: 'uninstall', name: SAMPLE }),
     )
-    const offId = off.plugins.find((p) => p.name === SCHEDULE)?.pending?.approval_item_id
+    const offId = off.plugins.find((p) => p.name === SAMPLE)?.pending?.approval_item_id
     await post(`/v1/approvals/${offId}/decide`, { action: 'reject', reason: '先留着' })
-    expect(backend.approved()).toEqual({ [SCHEDULE]: '0.2.0-rc.1' })
+    expect(backend.approved()).toEqual({ [SAMPLE]: '0.2.1-alpha.2' })
   })
 
   it('清单外的直接拒（403），记 official_plugin.rejected；已装的再点装 → 409', async () => {
@@ -148,7 +149,7 @@ describe('WP180 官方插件：出卡、批了才做', () => {
     ])
     const un = await post('/v1/settings/official-plugins/requests', {
       action: 'uninstall',
-      name: SCHEDULE,
+      name: SAMPLE,
     })
     expect(un.status).toBe(409)
   })
@@ -157,17 +158,17 @@ describe('WP180 官方插件：出卡、批了才做', () => {
     const { api, post, events, backend, lock } = await boot({ evil: true })
     const before = readFileSync(lock, 'utf8')
     const view = await data<OfficialPluginsView>(
-      await post('/v1/settings/official-plugins/requests', { action: 'install', name: SCHEDULE }),
+      await post('/v1/settings/official-plugins/requests', { action: 'install', name: SAMPLE }),
     )
-    const id = view.plugins.find((p) => p.name === SCHEDULE)?.pending?.approval_item_id
+    const id = view.plugins.find((p) => p.name === SAMPLE)?.pending?.approval_item_id
     expect((await post(`/v1/approvals/${id}/decide`, { action: 'approve' })).status).toBe(200)
     expect(readFileSync(lock, 'utf8')).toBe(before)
     expect(backend.approved()).toEqual({})
     expect(events('official_plugin.rejected').map((e) => e.payload)).toEqual([
-      expect.objectContaining({ reason: 'patch_changed', name: SCHEDULE }),
+      expect.objectContaining({ reason: 'patch_changed', name: SAMPLE }),
     ])
     const now = await data<OfficialPluginsView>(await api('/v1/settings/official-plugins'))
-    expect(now.plugins.find((p) => p.name === SCHEDULE)?.state).toBe('available')
+    expect(now.plugins.find((p) => p.name === SAMPLE)?.state).toBe('available')
   })
 })
 
@@ -231,7 +232,7 @@ describe('WP181：桌面安装包里的那两份', () => {
     )
     const view = await data<OfficialPluginsView>(res)
     expect(view.blocked_reason).toBeUndefined()
-    expect(view.plugins.map((p) => p.name)).toContain(SCHEDULE)
+    expect(view.plugins.map((p) => p.name)).toContain(SAMPLE)
     // 那一份挪走 → 整页"装不了"（fail closed），证明读的真是给的那个目录
     rmSync(join(profile, 'plugin-allowlist.yml'))
     const gone = await s.gateway.fetch(

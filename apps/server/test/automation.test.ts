@@ -1,24 +1,22 @@
 /**
  * WP181：官方「自动化任务」在我们的运行里真用起来（真服务进程，替身模型，不联网）。
  *
- * - 没装那个官方插件：工具面里没有四个工具，说「每天 9 点提醒我」只是一次普通运行；
- * - 装上之后：同一句话 → 调 `schedule_create`（官方参数）→ 存进我们的调度器（`rule` 触发器、官方记录原样）；
+ * - 关着：工具面里没有四个工具，说「每天 9 点提醒我」只是一次普通运行；
+ * - 开着（WP293 起缺省一直开——官方把「自动化任务」收进 Web，不再是可选插件）：同一句话 → 调 `schedule_create`（官方参数）→ 存进我们的调度器（`rule` 触发器、官方记录原样）；
  *   到点接着原来那件事跑一次（官方外框）；
  * - 右栏面板改「每天 / 每周几点」走 `PATCH /v1/schedules/:id { rule }`（官方校验、官方算下一次）；
  * - 会往外发的周期任务先出卡、停着；批了才开始；
- * - 卸了插件：到点不跑，任务留着。
+ * - 关掉：到点不跑，任务留着。
  */
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { ApprovalItem } from '@agentsws/contracts'
-import { shippedBundleBackend } from '@agentsws/dsh-adapter/official-plugins'
 import { afterEach, describe, expect, it } from 'vitest'
 import { AUTOMATION_HANDLER } from '../src/automation.js'
 import { createServer, type Server } from '../src/index.js'
 import { SECRETS_KEY_ENV } from '../src/secret-store.js'
 
-const SCHEDULE = '@deepseek-ai/dsh-experimental-schedule-bundle'
 const T0 = '2026-09-29T02:00:00.000Z'
 
 let server: Server | undefined
@@ -31,10 +29,18 @@ afterEach(async () => {
   dir = ''
 })
 
+/**
+ * WP293：开关不再是「官方插件装没装」（官方把「自动化任务」可选包删了、收进 Web 自己挂），
+ * 服务端缺省一直开；这里注入一个能翻的开关，钉「关了就停、任务留着」那几条照旧成立。
+ */
 async function boot(installed: boolean) {
   dir = mkdtempSync(join(tmpdir(), 'agentsws-wp181-'))
-  const backend = await shippedBundleBackend({ dir: join(dir, 'layer') })
-  if (installed) await backend.select(SCHEDULE, '0.2.0-rc.1')
+  const switchState = { on: installed }
+  const automation = {
+    turnOff: () => {
+      switchState.on = false
+    },
+  }
   let t = Date.parse(T0)
   const clock = { now: () => new Date(t).toISOString() }
   server = await createServer({
@@ -44,7 +50,7 @@ async function boot(installed: boolean) {
     scheduleIntervalMs: 0,
     tokenRefreshIntervalMs: 0,
     env: { [SECRETS_KEY_ENV]: 'c'.repeat(64) },
-    officialPlugins: { backend },
+    automationEnabled: () => switchState.on,
   })
   const s = server
   const api = (path: string, init: { method?: string; body?: unknown } = {}) => {
@@ -85,18 +91,18 @@ async function boot(installed: boolean) {
   const advance = (ms: number) => {
     t += ms
   }
-  return { s, api, data, events, tasks, say, advance, backend, clock }
+  return { s, api, data, events, tasks, say, advance, automation, clock }
 }
 
 describe('WP181 官方「自动化任务」', () => {
-  it('没装插件：工具面里没有四个工具，同一句话不建定时', async () => {
+  it('关着：工具面里没有四个工具，同一句话不建定时', async () => {
     const { say, tasks, events } = await boot(false)
     await say('每天早上 9 点提醒我看昨天的订单')
     expect(tasks()).toEqual([])
     expect(events('automation.requested')).toEqual([])
   })
 
-  it('装上之后：建 → 存进调度器（官方记录）→ 到点接着那件事跑 → 面板改成每周', async () => {
+  it('开着（缺省）：建 → 存进调度器（官方记录）→ 到点接着那件事跑 → 面板改成每周', async () => {
     const { s, api, data, events, tasks, say } = await boot(true)
     const { matter_id } = await say('每天早上 9 点提醒我看昨天的订单')
     const [task] = tasks()
@@ -189,12 +195,12 @@ describe('WP181 官方「自动化任务」', () => {
     expect(after?.params?.approved).toBe(true)
   })
 
-  it('卸了插件：到点不跑，任务留着', async () => {
-    const { s, tasks, say, backend } = await boot(true)
+  it('关掉：到点不跑，任务留着', async () => {
+    const { s, tasks, say, automation } = await boot(true)
     const { matter_id } = await say('30 分钟后提醒我回电话')
     const [task] = tasks()
     expect(task?.trigger.kind).toBe('once')
-    await backend.deselect(SCHEDULE)
+    automation.turnOff()
     const out = await s.schedule.scheduler.runNow(task?.id ?? '')
     expect(out.result).toEqual({ skipped: 'plugin_off' })
     expect(s.work.matterView(matter_id).timeline.some((e) => e.text.startsWith('到点了'))).toBe(

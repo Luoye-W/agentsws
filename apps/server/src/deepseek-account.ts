@@ -57,11 +57,15 @@ export const DEEPSEEK_ACCOUNT_UNAVAILABLE =
   '这台机器不是本机档：用 DeepSeek 账号登录要在这台电脑的浏览器里授权，授权完浏览器要回到这台电脑上的 Agents 工坊，' +
   '放在服务器上的 Agents 工坊回不来。请改用 DeepSeek 的 API key。'
 
-/** 官方四个失败码 → 人话。 */
+/**
+ * 官方五个失败码 → 人话。WP293（dsh 0.2.0-rc.2 起）：请求根本没拿到回应（断网、超时）从 `network`
+ * 拆成 `no-response`，`network` 只剩"对方回了错误"——官方升级指南要求前者给查网络的提示。
+ */
 export const DEEPSEEK_SIGN_IN_ERRORS: Readonly<
-  Record<'network' | 'protocol' | 'expired' | 'storage', string>
+  Record<'network' | 'no-response' | 'protocol' | 'expired' | 'storage', string>
 > = {
-  network: '连不上 DeepSeek（网络不通，或者对方没回）。检查一下网络，再点一次登录。',
+  network: 'DeepSeek 那边回了错误，这次登录没成。过一会儿再点一次登录。',
+  'no-response': '连不上 DeepSeek（没收到任何回应）。检查一下网络或代理，再点一次登录。',
   protocol: 'DeepSeek 那边的回应不对，这次登录没成。再点一次登录试试。',
   expired: '浏览器里一直没点完，这次登录过期了。再点一次登录。',
   storage: '这台电脑上存登录凭据的地方写不进去，登录没成。',

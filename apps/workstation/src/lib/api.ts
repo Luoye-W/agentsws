@@ -6495,7 +6495,7 @@ export interface DeepSeekAccountData {
     /** 只在 `waiting-browser` 时有：交给系统浏览器打开。 */
     authorize_url?: string
     expires_at?: string
-    error_code?: 'network' | 'protocol' | 'expired' | 'storage'
+    error_code?: 'network' | 'no-response' | 'protocol' | 'expired' | 'storage'
     /** 人话（服务端翻好的）。 */
     error?: string
   }

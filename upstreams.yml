@@ -72,7 +72,7 @@ upstreams:
     why: 我们的 Agent 运行时本体；`packages/dsh-adapter` 是全仓唯一 import dsh 的地方（docs/34）
     npm: '@deepseek-ai/dsh'
     repo: deepseek-ai/deepseek-harness
-    locked_version: 0.2.0-rc.1
+    locked_version: 0.2.1-alpha.2
     pin: exact
     watch: [versions, releases, default_flips, wishlist]
     locked_in:
@@ -106,7 +106,10 @@ upstreams:
       - 'dsh-compaction-image-offload: agent/request-error 上的 IMAGE_OFFLOAD_REQUIRED → 记 image/offload、retry'
       # WP181：官方「自动化任务」在两档运行时里用起来（官方 Host 服务不挂，只用它公开的这些；src/official-schedule.ts）
       - 'dsh-schedule: create*ScheduleRecord 六种时间写法的校验与报错码、resolveEveryOccurrence、scheduleView、renderReminderFraming / renderRecurringReminderBatchFraming'
-      - 'dsh-schedule: registerScheduleTools 注册那一刻不碰 Host 服务（我们拿假 tools.register 接住四份定义）'
+      # WP293（0.2.1-alpha.2）：注册挪进单独的 `dsh-tool-schedule`（apply 里先 inject(['schedule']) 再注册）
+      - 'dsh-tool-schedule: apply(ctx) 注册那一刻不碰 Host 服务（假 ctx 的 inject 当场回调、假 tools.register 接住四份定义）'
+      # WP293：官方 bash / pwsh 工具与浏览器 MCP 要 ctx.workingDirectory；有终端 / 官方浏览器的运行才挂（harness.ts）
+      - 'dsh-working-directory + dsh-fs-local: ensure(agent) 取会话 cwd（= agents.create 的 meta.cwd）；多一句 Current working directory 必选上下文'
       # WP225（WP218 决定 ④）：Windows 上跑命令走 PowerShell，不要求装 Git Bash（src/shell.ts / harness.ts）
       - 'dsh-pwsh-sandbox + dsh-tool-pwsh: Windows 上 ctx.shell 与模型面的 pwsh 工具（参数与 tool-bash 同形：command / workdir / sandbox_permissions / run_in_background）'
       - 'dsh-pwsh-local: argv(spec) 是可覆盖的 protected seam（我们在 -Command 前插 -ExecutionPolicy Bypass）；resolvePwshPath 先 pwsh 7 再 PATH 再 Windows PowerShell 5.1'
@@ -157,7 +160,8 @@ upstreams:
     why: 内核的插件容器（docs/09 契约选型"采用"的那一条），packages/kernel 与 dsh 两边共用
     npm: '@deepseek-ai/cordis'
     # WP132：dsh 0.1.7 的 peer 是 `~4.0.4`，4.0.2 进不了同一棵树——这是"必要时"那一次
-    locked_version: 4.0.4
+    # WP293：dsh 0.2.1-alpha.2 要 `~4.0.5-alpha.1`（4.0.4 不在范围里），又一次"必要时"；kernel 全部测试照跑
+    locked_version: 4.0.5-alpha.1
     pin: exact
     watch: [versions]
     locked_in:
@@ -171,9 +175,10 @@ upstreams:
     kind: runtime-dep
     # WP132：上次记录在案的例外（dsh-adapter 写 `^3.18.2`）已统一成精确版本；
     # dsh 0.1.7 要 `~3.18.4`，kernel / roles / dsh-adapter 三处一起升到 3.18.4。
+    # WP293：dsh 0.2.1-alpha.2 要 `~3.18.5-alpha.1`，三处一起升。
     why: dsh 的配置 schema 库，packages/kernel 也在用；它翻默认值等于翻我们的配置默认值
     npm: '@deepseek-ai/schemastery'
-    locked_version: 3.18.4
+    locked_version: 3.18.5-alpha.1
     pin: exact
     watch: [versions, default_flips]
     locked_in:
@@ -384,7 +389,7 @@ upstreams:
     why: 电脑操控的独占 provider 槽（一棵树一个提供方）；harness.ts 批过授权才挂（docs/80）
     npm: '@deepseek-ai/dsh-computer-use'
     repo: deepseek-ai/deepseek-harness
-    locked_version: 0.2.0-rc.1
+    locked_version: 0.2.1-alpha.2
     pin: exact
     watch: [versions, default_flips]
     locked_in:
@@ -400,7 +405,7 @@ upstreams:
     why: 电脑操控的 MCP 提供方（驱动是独立进程）；不用 native（原生崩溃可能终止我们的进程），docs/80
     npm: '@deepseek-ai/dsh-experimental-computer-use-cua-driver-mcp'
     repo: deepseek-ai/deepseek-harness
-    locked_version: 0.2.0-rc.1
+    locked_version: 0.2.1-alpha.2
     pin: exact
     watch: [versions, default_flips, wishlist]
     locked_in:
@@ -454,7 +459,9 @@ upstreams:
     # 填一个猜的地址等于让报告每周 404 一次。第一次真去看过再补。
     why: 订阅登录（ChatGPT Plus/Pro、Claude Pro/Max）的 OAuth 全在它里面（docs/55 §9 Q8）
     npm: '@earendil-works/pi-ai'
-    locked_version: 0.85.1
+    # WP293（随 dsh 0.2.1-alpha.2）：0.85.1 → 1.1.0。openai-codex 的公开 client id、localhost:1455、设备码两条路逐字未变；
+    # Codex 目录删了 gpt-5.4 / gpt-5.4-mini（我们 ChatGPT 订阅的默认模型因此改成 gpt-5.5，见 apps/server/src/models.ts）
+    locked_version: 1.1.0
     pin: exact
     watch: [versions, default_flips, wishlist]
     we_depend_on:

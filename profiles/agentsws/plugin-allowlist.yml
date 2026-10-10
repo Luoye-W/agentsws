@@ -5,31 +5,34 @@
 # - 装 / 升级 / 卸载一律出卡（`official_plugin`），卡上写的就是下面每一项的字段；
 # - 装完 profile patch（`cordis.patch.yml`）一个字节都不许变；锁定表里的行谁都改不动。
 #
-# 每一项都逐个核过（出处都是 dsh 0.2.0-rc.1 安装里自带的那一份，路径 `node_modules/@deepseek-ai/<包>/`）：
+# 每一项都逐个核过（出处都是 dsh 0.2.1-alpha.2 安装里自带的那一份，路径 `node_modules/@deepseek-ai/<包>/`）：
 # - `license`：包里 `package.json` 的 `license` 字段 + `LICENSE` 文件第一行（都是「MIT License / Copyright (c) 2026 DeepSeek」）；
 # - `rows`：包里 `cordis.patch.yml` 的 `insert` 行（`packages/dsh-adapter/test/official-plugins.test.ts` 逐项对照，上游改了就红）；
 # - `tools`：包的 README「Model Experience」写的模型面工具；
 # - `network`：README 里写到的出网（下载、上报）。
 #
 # 为什么现在只有 `shipped` 一种来源：上游 `@deepseek-ai/dsh-app-boot` 的 `OPTIONAL_BUNDLES`（0.2.0 起
-# 「实验能力改成可选插件包」）四个包**随 dsh 安装一起发、默认关着**——"装"就是选进来，不下载、不跑 pnpm。
+# 「实验能力改成可选插件包」；0.2.1-alpha.2 是十一个）的包**随 dsh 安装一起发、默认关着**——"装"就是选进来，不下载、不跑 pnpm。
 # 以后要加 npm 上的官方包，照同样的字段加一项、`source: npm`、版本写死。
+#
+# WP293（dsh 0.2.1-alpha.2）重审：
+# - **删掉「自动化任务」**（`dsh-experimental-schedule-bundle`）：官方把这个包删了（`dsh-app-boot` 的 `RETIRED_BUNDLES`，
+#   加载 profile 时自动从 bundle 列表里摘掉），定时任务改成 Web 组合自己挂、默认就开；我们这边也改成内置、一直开
+#   （`apps/server/src/server.ts`），不用再装；
+# - 团队协作、语音输入两项：插进来的行、工具、出网逐项复核没变，只改版本号；
+# - **新加五项**（官方新的可选包，判 A：只在本机、不把业务数据发给第三方）：查找旧对话、接力循环、常驻终端、
+#   标题跟随、代码副本。常驻终端只在官方完整 profile 里有（和官方 `bash` 同一套沙箱）；我们自己的两档运行时不挂它——
+#   那边 `bash` 的每条命令要过我们的命令白名单，`terminal_send` 不过这一关，真要接进两档得先让门禁管住它；
+# - **没放进来、等 Luoye 定**：`dsh-experimental-cot-translation-bundle`（思考过程机器翻译：默认把推理原文发给
+#   edge.microsoft.com，可选 translate.googleapis.com——C 类）、`dsh-experimental-inspector-profile`（调试工具：本机
+#   127.0.0.1:9230 开一个没有口令的调试口，能在宿主进程里执行任意代码，抓的网络记录不打码——B 类）、
+#   `dsh-experimental-badge-skill-bundle`（「powered by dsh」徽章技能：技术上没问题，但可能把徽章加进给客户的内容里，产品上要定）。
 #
 # **没放进来的**：`@deepseek-ai/dsh-experimental-auto-review`（自动审阅）——它让模型自己判"放行"就按全权执行，
 # 正好绕过出卡 / 授权（WP179 表二判 B）。不在清单上 = 点不了、装不上。
 
-- name: '@deepseek-ai/dsh-experimental-schedule-bundle'
-  version: 0.2.0-rc.1
-  source: shipped
-  license: MIT
-  title: 自动化任务
-  summary: 让 AI 能建定时任务和提醒，到点接着在原来那次对话里做；每一步还会知道现在几点。
-  tools: [schedule_create, schedule_list, schedule_update, schedule_delete]
-  network: false
-  rows: [time-context, schedule, ui-schedule]
-
 - name: '@deepseek-ai/dsh-experimental-agent-team-profile'
-  version: 0.2.0-rc.1
+  version: 0.2.1-alpha.2
   source: shipped
   license: MIT
   title: 团队协作
@@ -50,7 +53,7 @@
   rows: [agent-team, tool-agent-team, ui-agent-team]
 
 - name: '@deepseek-ai/dsh-experimental-voice-input-bundle'
-  version: 0.2.0-rc.1
+  version: 0.2.1-alpha.2
   source: shipped
   license: MIT
   title: 语音输入
@@ -59,3 +62,53 @@
   network: true
   network_note: 第一次准备时从 huggingface.co（或 hf-mirror.com）下载语音识别模型文件，版本和校验值钉死；录音不出这台电脑。
   rows: [speech-to-text, speech-to-text-sensevoice, api-speech-to-text, ui-voice-input]
+
+- name: '@deepseek-ai/dsh-experimental-session-search'
+  version: 0.2.1-alpha.2
+  source: shipped
+  license: MIT
+  title: 查找旧对话
+  summary: 让 AI 能翻看同一个工作目录里以前的对话，找回之前做过的事；只读，索引放在内存里。
+  tools: [session_search, session_event_search, session_trace, session_event_trace, session_event_read]
+  network: false
+  rows: [optional-session-search]
+
+- name: '@deepseek-ai/dsh-experimental-ralph-bundle'
+  version: 0.2.1-alpha.2
+  source: shipped
+  license: MIT
+  title: 接力循环
+  summary: 你明确要求时，AI 一轮轮换新助手接着做同一件事，直到做完或卡住；一次最多 64 轮，很费额度。
+  tools: [ralph]
+  network: false
+  rows: [optional-ralph]
+
+- name: '@deepseek-ai/dsh-experimental-terminal-bundle'
+  version: 0.2.1-alpha.2
+  source: shipped
+  license: MIT
+  title: 常驻终端
+  summary: 让 AI 开一个不会自动关的命令行，能连着操作交互程序；和普通命令一样在沙箱里跑。
+  tools: [terminal_open, terminal_send, terminal_read, terminal_signal, terminal_close, terminal_list]
+  network: false
+  rows: [optional-persistent-terminals]
+
+- name: '@deepseek-ai/dsh-experimental-session-titles-bundle'
+  version: 0.2.1-alpha.2
+  source: shipped
+  license: MIT
+  title: 标题跟随
+  summary: 对话标题跟着聊的内容自动更新，不只看第一句；每发一句会多花一点模型额度。
+  tools: []
+  network: false
+  rows: [optional-session-title-all-prompts]
+
+- name: '@deepseek-ai/dsh-experimental-tool-worktree'
+  version: 0.2.1-alpha.2
+  source: shipped
+  license: MIT
+  title: 代码副本
+  summary: 让 AI 一步开出一份独立的 Git 工作副本，在里面改代码，不碰原来那份；写不出工作区。
+  tools: [create_worktree]
+  network: false
+  rows: [worktree, tool-worktree]

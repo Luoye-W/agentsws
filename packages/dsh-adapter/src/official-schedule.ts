@@ -1,6 +1,7 @@
 /**
- * WP181：官方「自动化任务」（`@deepseek-ai/dsh-experimental-schedule-bundle` 里的 `@deepseek-ai/dsh-schedule`）
- * 在我们运行里**真用起来**的那一层。
+ * WP181：官方「自动化任务」（`@deepseek-ai/dsh-schedule` + WP293 起单独成包的 `@deepseek-ai/dsh-tool-schedule`）
+ * 在我们运行里**真用起来**的那一层。WP293（dsh 0.2.1-alpha.2）：官方删了「自动化任务」可选插件包，改成 Web 组合
+ * 自己挂、默认 preset 就带四个工具——我们跟着改成内置、一直开（`apps/server/src/server.ts`），不再看插件装没装。
  *
  * 官方的 Host 服务（`ScheduleService`：存储、定时器、到点把消息投回原来那次对话）挂不进我们的两档运行时——
  * 它要 Web 会话控制器、会话持久化与 `Date.now()`（官方 README：「headless 挂不上」）。所以分工是：
@@ -23,7 +24,6 @@ import {
   createEveryScheduleRecord,
   createWeeklyScheduleRecord,
   MAX_TITLE_LENGTH,
-  registerScheduleTools,
   renderRecurringReminderBatchFraming,
   renderReminderFraming,
   resolveEveryOccurrence,
@@ -34,11 +34,11 @@ import {
   type ScheduleView,
   scheduleView,
 } from '@deepseek-ai/dsh-schedule'
+// WP293（dsh 0.2.1-alpha.2）：四个工具的注册从 `dsh-schedule` 的 `registerScheduleTools` 挪进了单独的插件包
+// `dsh-tool-schedule`（`apply` 里 `inject(['schedule'])` 再注册）；定义本身照旧是官方的
+import { apply as applyOfficialScheduleTools } from '@deepseek-ai/dsh-tool-schedule'
 
 export type { ScheduleRecord as OfficialScheduleRecord, ScheduleView as OfficialScheduleView }
-
-/** 审过的清单里那一包（装上它，我们的运行才挂四个工具）。 */
-export const OFFICIAL_SCHEDULE_BUNDLE = '@deepseek-ai/dsh-experimental-schedule-bundle'
 
 /** 六种时间写法（官方 `schedule_create` 的参数，除 `prompt` / `title` 外那几个）。 */
 export type OfficialSelector = Pick<
@@ -281,8 +281,9 @@ export interface OfficialScheduleToolShape {
 let officialTools: readonly OfficialScheduleToolShape[] | undefined
 
 /**
- * 官方 `registerScheduleTools` 注册的四份定义（拿一个只记录的假 `tools.register` 接住；
- * 注册那一刻官方不碰 Host 服务，`execute` 才碰——我们不用它的 `execute`）。
+ * 官方 `dsh-tool-schedule` 注册的四份定义（拿一个只记录的假 `tools.register` 接住；它的 `apply`
+ * 先 `inject(['schedule'])`，假 ctx 当场把自己递回去；注册那一刻官方不碰 Host 服务，`execute` 才碰——
+ * 我们不用它的 `execute`）。
  * dsh 那一档的工具面**直接用这四份**，stub / direct 用 `@agentsws/stand-ins` 抄的那份（测试钉逐字相等）。
  */
 export function officialScheduleTools(): readonly OfficialScheduleToolShape[] {
@@ -295,8 +296,11 @@ export function officialScheduleTools(): readonly OfficialScheduleToolShape[] {
         return () => undefined
       },
     },
+    inject(_deps: readonly string[], cb: (ctx: unknown) => void) {
+      cb(toolCtx)
+    },
   }
-  registerScheduleTools({} as never, toolCtx as never, {} as never)
+  applyOfficialScheduleTools(toolCtx as never)
   officialTools = got
   return got
 }

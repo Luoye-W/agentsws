@@ -38,7 +38,12 @@ import {
 import { PROFILE_LOCKED_ROWS } from '../src/profile-guard.js'
 
 const require = createRequire(import.meta.url)
-const SCHEDULE = '@deepseek-ai/dsh-experimental-schedule-bundle'
+// WP293：示例从「自动化任务」（官方 0.2.0-rc.2 起删掉了）换成「查找旧对话」——纯本机、插一行、不出网
+const SAMPLE = '@deepseek-ai/dsh-experimental-session-search'
+const RETIRED_SCHEDULE = '@deepseek-ai/dsh-experimental-schedule-bundle'
+const INSPECTOR = '@deepseek-ai/dsh-experimental-inspector-profile'
+const COT_TRANSLATION = '@deepseek-ai/dsh-experimental-cot-translation-bundle'
+const BADGE = '@deepseek-ai/dsh-experimental-badge-skill-bundle'
 const AUTO_REVIEW = '@deepseek-ai/dsh-experimental-auto-review'
 
 const temps: string[] = []
@@ -93,17 +98,25 @@ describe('WP180 审过的清单', () => {
     }
   })
 
-  it('含 0.2.0「自动化任务改由可选插件包提供」那一包；自动审阅（B：绕过出卡）不在清单里', () => {
+  it('WP293：「自动化任务」那一包官方删了、清单里也删了；B / C 类与没定的不在清单里', () => {
     const names = allowlist.map((s) => s.name)
-    expect(names).toContain(SCHEDULE)
-    expect(names).not.toContain(AUTO_REVIEW)
+    // 官方 0.2.0-rc.2 起把它挪进 Web 组合自己挂（`RETIRED_BUNDLES`），可选包列表里没有了
+    expect(OPTIONAL_BUNDLES).not.toContain(RETIRED_SCHEDULE)
+    expect(names).not.toContain(RETIRED_SCHEDULE)
+    expect(names).toContain(SAMPLE)
+    // 自动审阅（B：绕过出卡）、调试工具（B：本机无口令调试口可执行任意代码）、
+    // 思考翻译（C：推理原文发给微软 / 谷歌翻译）、徽章（产品上等 Luoye 定）
+    for (const out of [AUTO_REVIEW, INSPECTOR, COT_TRANSLATION, BADGE]) {
+      expect(OPTIONAL_BUNDLES, out).toContain(out)
+      expect(names, out).not.toContain(out)
+    }
   })
 
   it('清单写歪整份拒：非官方包名、版本写范围、会出网却没写去哪、重名', () => {
-    const ok = `- name: '${SCHEDULE}'\n  version: 0.2.0-rc.1\n  source: shipped\n  license: MIT\n  title: t\n  summary: s\n  tools: []\n  network: false\n  rows: [a]\n`
+    const ok = `- name: '${SAMPLE}'\n  version: 0.2.1-alpha.2\n  source: shipped\n  license: MIT\n  title: t\n  summary: s\n  tools: []\n  network: false\n  rows: [a]\n`
     expect(parsePluginAllowlist(ok)).toHaveLength(1)
-    expect(() => parsePluginAllowlist(ok.replace(SCHEDULE, 'left-pad'))).toThrow(/官方包名/)
-    expect(() => parsePluginAllowlist(ok.replace('0.2.0-rc.1', '^0.2.0'))).toThrow(/写死/)
+    expect(() => parsePluginAllowlist(ok.replace(SAMPLE, 'left-pad'))).toThrow(/官方包名/)
+    expect(() => parsePluginAllowlist(ok.replace('0.2.1-alpha.2', '^0.2.0'))).toThrow(/写死/)
     expect(() => parsePluginAllowlist(ok.replace('network: false', 'network: true'))).toThrow(
       /network_note/,
     )
@@ -118,28 +131,28 @@ describe('WP180 插件层：官方模块建层 / 选进来 / 真加载', () => {
   it('装 → 官方加载器加载得起来、进组合；卸载 → 撤掉', async () => {
     const backend = await shippedBundleBackend({ dir: tempDir() })
     expect(pluginView(allowlist[0] as OfficialPluginSpec, backend).state).toBe('available')
-    const plan = planChange({ action: 'install', name: SCHEDULE, allowlist, backend })
+    const plan = planChange({ action: 'install', name: SAMPLE, allowlist, backend })
     const card = cardPayload(plan)
-    expect(card).toMatchObject({ action: 'install', name: SCHEDULE, version: '0.2.0-rc.1' })
-    expect(card.tools).toContain('schedule_create')
+    expect(card).toMatchObject({ action: 'install', name: SAMPLE, version: '0.2.1-alpha.2' })
+    expect(card.tools).toContain('session_search')
     await applyChange({ plan, backend, protectedFiles: [defaultProfilePatchPath()] })
-    expect(backend.approved()).toEqual({ [SCHEDULE]: '0.2.0-rc.1' })
-    expect(await backend.skipped([SCHEDULE])).toEqual([])
+    expect(backend.approved()).toEqual({ [SAMPLE]: '0.2.1-alpha.2' })
+    expect(await backend.skipped([SAMPLE])).toEqual([])
     expect(effectiveBundles(allowlist, backend)).toEqual([
       '@deepseek-ai/dsh-base',
       '@deepseek-ai/dsh-headless',
-      SCHEDULE,
+      SAMPLE,
     ])
     const manifest = JSON.parse(readFileSync(join(backend.dir, 'package.json'), 'utf8'))
-    expect(manifest.dsh.profile.bundles).toContain(SCHEDULE)
+    expect(manifest.dsh.profile.bundles).toContain(SAMPLE)
     // 再装一次说不通；卸载
-    expect(
-      codeOf(() => planChange({ action: 'install', name: SCHEDULE, allowlist, backend })),
-    ).toBe('already_installed')
-    const off = planChange({ action: 'uninstall', name: SCHEDULE, allowlist, backend })
+    expect(codeOf(() => planChange({ action: 'install', name: SAMPLE, allowlist, backend }))).toBe(
+      'already_installed',
+    )
+    const off = planChange({ action: 'uninstall', name: SAMPLE, allowlist, backend })
     await applyChange({ plan: off, backend, protectedFiles: [] })
     expect(backend.approved()).toEqual({})
-    expect(effectiveBundles(allowlist, backend)).not.toContain(SCHEDULE)
+    expect(effectiveBundles(allowlist, backend)).not.toContain(SAMPLE)
   })
 
   it('清单外的直接拒（自动审阅、随便一个包）', async () => {
@@ -153,25 +166,25 @@ describe('WP180 插件层：官方模块建层 / 选进来 / 真加载', () => {
 
   it('升级：装着旧的审过版本 → upgradable → 出卡 → 批了升成清单里的版本', async () => {
     const backend = await shippedBundleBackend({ dir: tempDir() })
-    await backend.select(SCHEDULE, '0.1.9')
-    const spec = allowlist.find((s) => s.name === SCHEDULE) as OfficialPluginSpec
+    await backend.select(SAMPLE, '0.1.9')
+    const spec = allowlist.find((s) => s.name === SAMPLE) as OfficialPluginSpec
     expect(pluginView(spec, backend).state).toBe('upgradable')
-    const plan = planChange({ action: 'upgrade', name: SCHEDULE, allowlist, backend })
-    expect(cardPayload(plan)).toMatchObject({ from_version: '0.1.9', version: '0.2.0-rc.1' })
+    const plan = planChange({ action: 'upgrade', name: SAMPLE, allowlist, backend })
+    expect(cardPayload(plan)).toMatchObject({ from_version: '0.1.9', version: '0.2.1-alpha.2' })
     await applyChange({ plan, backend, protectedFiles: [] })
     expect(pluginView(spec, backend).state).toBe('installed')
   })
 
   it('dsh 里带的版本和清单审过的对不上：装不了，装着的也不进组合', async () => {
     const backend = await shippedBundleBackend({ dir: tempDir() })
-    const stale = allowlist.map((s) => (s.name === SCHEDULE ? { ...s, version: '9.9.9' } : s))
-    const spec = stale.find((s) => s.name === SCHEDULE) as OfficialPluginSpec
+    const stale = allowlist.map((s) => (s.name === SAMPLE ? { ...s, version: '9.9.9' } : s))
+    const spec = stale.find((s) => s.name === SAMPLE) as OfficialPluginSpec
     expect(pluginView(spec, backend).state).toBe('unreviewed')
     expect(
-      codeOf(() => planChange({ action: 'install', name: SCHEDULE, allowlist: stale, backend })),
+      codeOf(() => planChange({ action: 'install', name: SAMPLE, allowlist: stale, backend })),
     ).toBe('unreviewed_version')
-    await backend.select(SCHEDULE, '9.9.9')
-    expect(effectiveBundles(stale, backend)).not.toContain(SCHEDULE)
+    await backend.select(SAMPLE, '9.9.9')
+    expect(effectiveBundles(stale, backend)).not.toContain(SAMPLE)
   })
 
   it('装插件永远不许改到锁定 patch：坏后端改了它 → 原样恢复、撤掉选择、拒', async () => {
@@ -191,7 +204,7 @@ describe('WP180 插件层：官方模块建层 / 选进来 / 真加载', () => {
         writeFileSync(lock, original.replace('false', 'true'))
       },
     }
-    const plan = planChange({ action: 'install', name: SCHEDULE, allowlist, backend: evil })
+    const plan = planChange({ action: 'install', name: SAMPLE, allowlist, backend: evil })
     await expect(
       applyChange({ plan, backend: evil, protectedFiles: [lock] }),
     ).rejects.toMatchObject({
