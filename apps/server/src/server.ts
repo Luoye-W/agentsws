@@ -412,7 +412,6 @@ import {
   templatesFor,
 } from './models.js'
 import { createNpmRegistryPreference, NPM_REGISTRY_URLS } from './npm-registry.js'
-import { type RetiredModelSwap, retiredModelNoticeCard } from './retired-models.js'
 import { createOffboard, type Offboard } from './offboard.js'
 import { createOfficialPlugins, officialPluginsDirIn } from './official-plugins.js'
 import {
@@ -514,6 +513,7 @@ import {
   type RedditOfficialBrowserOptions,
 } from './reddit-official-browser/index.js'
 import { createResearchToolExecutor, redditReadPrice } from './research-tools.js'
+import { type RetiredModelSwap, retiredModelNoticeCard } from './retired-models.js'
 import {
   createFileRoleRuleBackend,
   createRoleRules,

@@ -179,12 +179,12 @@ describe('WP294 · 模型设置那块：models.json 里那条订阅', () => {
     expect(saved.providers[0].model).toBe('gpt-5.5')
     expect(saved.defaults.default).toBe('chatgpt/gpt-5.5')
     expect(saved.defaults.by_purpose.summarize).toBe('chatgpt/gpt-5.5')
-    expect(m.retiredSwaps().map(({ provider_id, from, to }) => ({ provider_id, from, to }))).toEqual(
-      [
-        { provider_id: 'chatgpt', from: 'gpt-5.4', to: 'gpt-5.5' },
-        { provider_id: 'chatgpt', from: 'gpt-5.4-mini', to: 'gpt-5.5' },
-      ],
-    )
+    expect(
+      m.retiredSwaps().map(({ provider_id, from, to }) => ({ provider_id, from, to })),
+    ).toEqual([
+      { provider_id: 'chatgpt', from: 'gpt-5.4', to: 'gpt-5.5' },
+      { provider_id: 'chatgpt', from: 'gpt-5.4-mini', to: 'gpt-5.5' },
+    ])
     // 设置快照（复制到别的品牌）不带提醒
     expect(JSON.stringify(m.exportSettings())).not.toContain('retired_swaps')
   })

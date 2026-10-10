@@ -67,6 +67,7 @@ import {
   ORG_BALANCE_EXHAUSTED_MESSAGE,
   VISION_MODEL_EXAMPLES,
 } from '@agentsws/contracts'
+import { retiredSubscriptionModel } from '@agentsws/dsh-adapter/subscription-facts'
 import type {
   AccountFetch,
   CatalogPrice,
@@ -106,7 +107,6 @@ import {
   unavailableImageProvider,
   vendorForBaseUrl,
 } from '@agentsws/model-gateway'
-import { retiredSubscriptionModel } from '@agentsws/dsh-adapter/subscription-facts'
 import type { RetiredModelSwap } from './retired-models.js'
 import { retiredSwapLive } from './retired-models.js'
 import type { SecretStore } from './secret-store.js'
@@ -1225,7 +1225,8 @@ export function createModels(options: ModelsOptions): ModelsAssembly {
       note(config.id, from, to)
       return `${config.id}/${to}`
     }
-    if (state.defaults.default !== undefined) state.defaults.default = swapRef(state.defaults.default)
+    if (state.defaults.default !== undefined)
+      state.defaults.default = swapRef(state.defaults.default)
     for (const [purpose, ref] of Object.entries(state.defaults.by_purpose ?? {})) {
       if (ref !== undefined && state.defaults.by_purpose !== undefined) {
         state.defaults.by_purpose[purpose as ModelPurpose] = swapRef(ref)
