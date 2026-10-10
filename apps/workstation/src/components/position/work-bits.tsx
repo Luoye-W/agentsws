@@ -252,6 +252,7 @@ export function Pop({
   children,
   align = 'right',
   active = false,
+  ariaLabel,
 }: {
   label: string
   icon?: ReactNode
@@ -259,6 +260,8 @@ export function Pop({
   children: ReactNode
   align?: 'left' | 'right'
   active?: boolean
+  /** WP288：只有图标、没有字的按钮（`label=""`）给读屏与悬停用的名字。 */
+  ariaLabel?: string
 }): ReactNode {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement | null>(null)
@@ -283,6 +286,7 @@ export function Pop({
         type="button"
         aria-expanded={open}
         data-testid={testId}
+        {...(ariaLabel === undefined ? {} : { 'aria-label': ariaLabel, title: ariaLabel })}
         className={`inline-flex h-7 items-center gap-1 rounded-md px-2 text-xs hover:bg-accent ${active ? 'font-medium text-foreground' : 'text-muted-foreground'}`}
         onClick={() => {
           setOpen(!open)

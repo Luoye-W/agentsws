@@ -2364,7 +2364,27 @@ export function createOrg(options: OrgOptions): OrgAssembly {
       await reconcile()
       const mode = (await options.mode?.()) ?? 'company'
       const out = await removeMemberAs(actor.person_id, person_id, mode)
-      return { revoked_assignments: out.revoked_assignments }
+      // WP289（决策 293）：② 发起人请他离开——他自己接的、标「个人」的连接同样跟人走（凭据删掉），
+      // 与他自己退出同一套；共用的留下。③ 的移出 / 离职不在这里动（决策只说 ②）
+      const disconnected =
+        mode === 'peers'
+          ? ((await options
+              .disconnectPersonal?.(person_id as PersonId, 'workspace')
+              .catch(() => 0)) ?? 0)
+          : 0
+      return {
+        revoked_assignments: out.revoked_assignments,
+        ...(disconnected > 0 ? { disconnected } : {}),
+      }
+    },
+
+    async removePreview(_actor, person_id) {
+      const mode = (await options.mode?.()) ?? 'company'
+      if (mode !== 'peers') return { personal_connections: [] }
+      const personal_connections =
+        (await options.personalConnections?.(person_id as PersonId, 'workspace').catch(() => [])) ??
+        []
+      return { personal_connections }
     },
 
     async invitations(_actor) {

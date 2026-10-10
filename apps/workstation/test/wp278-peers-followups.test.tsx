@@ -339,7 +339,7 @@ describe('WP278 只有一个岗位的人看得到底座卡（决策 284）', () 
         onOpen={() => undefined}
       />,
     )
-    expect((await screen.findByTestId('deck-progress')).textContent).toBe('第 1 / 3 张')
+    expect((await screen.findByTestId('deck-progress')).getAttribute('title')).toBe('第 1 / 3 张')
     expect(getPositionCards).toHaveBeenCalledWith('asg_1', {}, true)
     expect(getPositionCards).toHaveBeenCalledWith('asg_2', {})
   })

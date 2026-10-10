@@ -79,12 +79,19 @@ beforeEach(() => {
 const SITE = [{ role_id: 'site.shopify-theme', assignment_id: 'asg_theme' }]
 
 describe('WP258 登录后自动找店', () => {
-  it('好几家：下拉框（店名 · 域名 · 套餐），选了即存；定了留一行可以换', async () => {
+  it('好几家：下拉框（店名 · 域名 · 套餐），选了即存；定了留一行可以换（WP288：那一行在岗位设置里）', async () => {
     api.view = base({
       next: 'store',
       store_lookup: { status: 'ok', stores: STORES, checked_at: 'now' },
     })
-    renderWithProviders(<SiteThemeBanner positionId="site" duties={SITE} />)
+    renderWithProviders(
+      <>
+        <SiteThemeBanner positionId="site" duties={SITE} />
+        <div data-testid="settings-slot">
+          <SiteThemeBanner positionId="site" duties={SITE} variant="settings" />
+        </div>
+      </>,
+    )
     const banner = await screen.findByTestId('site-theme-banner')
     expect(banner.getAttribute('data-store-mode')).toBe('pick')
     expect(banner.textContent).toContain('让 AI 改网站，选一下是哪家店')
@@ -102,6 +109,9 @@ describe('WP258 登录后自动找店', () => {
     )
     const row = await screen.findByTestId('site-theme-store-row')
     expect(row.textContent).toContain('改哪家店')
+    // 岗位页那一份不画（都好了 = 标题旁一个绿勾）；「改哪家店」只在设置那一份里
+    expect(row.closest('[data-testid="settings-slot"]')).not.toBeNull()
+    expect(screen.getAllByTestId('site-theme-store-row')).toHaveLength(1)
     expect(screen.queryByTestId('site-theme-banner')).toBeNull()
     const sw = screen.getByTestId('site-theme-store-switch') as HTMLSelectElement
     expect(sw.value).toBe('inmo-dev.myshopify.com')

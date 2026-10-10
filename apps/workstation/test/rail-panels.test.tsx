@@ -119,6 +119,45 @@ const proposeRoleChange = vi.fn(
 const copyRoleDefinition = vi.fn(async () => ({ ...ROLE, id: 'dtc.store.copy', source: 'custom' }))
 const getSkills = vi.fn(async () => [])
 const listKnowledgeCards = vi.fn(async () => [])
+/** WP288：「记录」面板——每条分配各取一次；岗位层再加上不出卡的复盘。 */
+const getPositionRecords = vi.fn(async (assignment: string) => ({
+  status: 'ok',
+  payload: {
+    rows:
+      assignment === 'asg_store'
+        ? [
+            {
+              id: 'r_1',
+              at: '2026-10-08T03:00:00.000Z',
+              kind: 'price_change',
+              title: '改价：MagSafe 车载支架',
+              summary: '批了',
+              state: 'approved',
+            },
+          ]
+        : [
+            {
+              id: 'r_2',
+              at: '2026-10-07T03:00:00.000Z',
+              kind: 'staged_change',
+              title: '博客：新品上架',
+              summary: '发了',
+              state: 'approved',
+            },
+          ],
+  },
+}))
+const listReviews = vi.fn(async () => ({
+  reviews: [
+    {
+      id: 'rv_1',
+      created_at: '2026-10-08T12:00:00.000Z',
+      cards: { you_handled: 2, ai_handled: 5 },
+      todos: { done: 1, total: 3 },
+      meetings: { count: 0 },
+    },
+  ],
+}))
 
 vi.mock('@/lib/api', async () => {
   const actual = await vi.importActual<typeof import('@/lib/api')>('@/lib/api')
@@ -132,6 +171,8 @@ vi.mock('@/lib/api', async () => {
     copyRoleDefinition: (...a: unknown[]) => copyRoleDefinition(...(a as [])),
     getSkills: (...a: unknown[]) => getSkills(...(a as [])),
     listKnowledgeCards: (...a: unknown[]) => listKnowledgeCards(...(a as [])),
+    getPositionRecords: (a: string) => getPositionRecords(a),
+    listReviews: () => listReviews(),
   }
 })
 
@@ -359,5 +400,32 @@ describe('知识面板（19）', () => {
     expect(screen.getByTestId('rail-knowledge-scope').textContent).toContain('store')
     expect(screen.getByTestId('rail-knowledge-cards').textContent).toContain('0')
     expect(screen.getByTestId('rail-knowledge-more').getAttribute('href')).toBe('/knowledge')
+  })
+})
+
+describe('WP288：「记录」在第三栏（岗位页 / 职责页不再有「记录」页签）', () => {
+  it('岗位上：本人在这个岗位每条职责的记录合在一起，加上不出卡的复盘', async () => {
+    renderRail('/positions/asg_store')
+    fireEvent.click(screen.getByTestId('rail-icon-records'))
+    const list = await screen.findByTestId('records')
+    const text = list.textContent ?? ''
+    expect(text).toContain('改价：MagSafe 车载支架')
+    expect(text).toContain('博客：新品上架')
+    expect(text).toContain('复盘：你处理 2 张，AI 5 张')
+    expect(getPositionRecords).toHaveBeenCalledWith('asg_store')
+    expect(getPositionRecords).toHaveBeenCalledWith('asg_content')
+  })
+
+  it('职责页上：只看那一条职责的记录（复盘按人，不在职责层列）', async () => {
+    getPositionRecords.mockClear()
+    listReviews.mockClear()
+    renderRail('/positions/asg_store/duties/dtc.store')
+    fireEvent.click(screen.getByTestId('rail-icon-records'))
+    const list = await screen.findByTestId('records')
+    expect(list.textContent).toContain('改价：MagSafe 车载支架')
+    expect(list.textContent).not.toContain('博客：新品上架')
+    expect(list.textContent).not.toContain('复盘')
+    expect(getPositionRecords).toHaveBeenCalledTimes(1)
+    expect(listReviews).not.toHaveBeenCalled()
   })
 })

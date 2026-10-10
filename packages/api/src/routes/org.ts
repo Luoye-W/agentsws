@@ -600,7 +600,15 @@ export interface OrgPort {
   policy(actor: OrgActor): MaybePromise<WorkspacePolicyView>
   proposePolicyChange(actor: OrgActor, input: PolicyPatchInput): MaybePromise<OrgChangeReceipt>
   members(actor: OrgActor): MaybePromise<MemberView[]>
-  removeMember(actor: OrgActor, person_id: string): MaybePromise<{ revoked_assignments: number }>
+  removeMember(
+    actor: OrgActor,
+    person_id: string,
+  ): MaybePromise<{ revoked_assignments: number; disconnected?: number }>
+  /**
+   * WP289（决策 293）：② 发起人「请他离开」之前那一问——会一起断开的、他自己接的「个人」连接
+   * （与他自己退出时列的同一份）。③ 回空。
+   */
+  removePreview?(actor: OrgActor, person_id: string): MaybePromise<LeavePreviewView>
   /**
    * WP276（docs/95 §3.6）：② 同事互联里**自己退出**——个人渠道跟人走，共享品牌里的东西留下，
    * 手上没做完的事退回原处。发起人不能直接退（先把发起人交给同事）；③ 里走离职，不走这里。
@@ -1473,10 +1481,34 @@ export function orgRoutes(): Route[] {
           { name: 'id', in: 'path', required: true, description: '工作区 id' },
           { name: 'person_id', in: 'path', required: true, description: '成员 person_id' },
         ],
-        returns: '{ revoked_assignments }',
+        returns: '{ revoked_assignments, disconnected? }',
       },
       async (c, deps) =>
         ok(c, await portOf(deps).removeMember(sameWorkspace(c), param(c, 'person_id'))),
+    ),
+    route(
+      {
+        method: 'get',
+        path: '/v1/workspaces/:id/members/:person_id/leave',
+        operationId: 'previewRemoveMember',
+        summary:
+          'WP289 请他离开之前那一问：会一起断开他自己接的哪几条「个人」连接（共用的留下；只在 ②）',
+        tag: TAG,
+        auth: 'bearer',
+        assignment: true,
+        // 与「请他离开」同一道权限：只有能请人离开的人能问
+        authz: WRITE,
+        params: [
+          { name: 'id', in: 'path', required: true, description: '工作区 id' },
+          { name: 'person_id', in: 'path', required: true, description: '成员 person_id' },
+        ],
+        returns: 'LeavePreviewView',
+      },
+      async (c, deps) => {
+        const port = portOf(deps)
+        if (port.removePreview === undefined) return ok(c, { personal_connections: [] })
+        return ok(c, await port.removePreview(sameWorkspace(c), param(c, 'person_id')))
+      },
     ),
     route(
       {

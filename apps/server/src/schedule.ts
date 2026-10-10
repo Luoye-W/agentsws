@@ -64,6 +64,7 @@ import {
   DAY_MS,
   planSummary,
   planTitle,
+  reviewIsQuiet,
   reviewSummary,
   reviewTitle,
   type Work,
@@ -451,6 +452,11 @@ export interface ReviewDeps extends PlanDeps {
   /** 复盘跑完把「明天的计划草案」接力成一个 `at` 任务（消费者 ⑦） */
   relay?(review: Review, position: SchedulePosition): Promise<void> | void
   /**
+   * WP287：① 个人模式。复盘照记（`work.saveReview`，岗位页「记录」里看得到），**不出卡**——
+   * 明天的安排要人确认时，早上那张「今天的安排」会问（没有建议就不问，WP244）。不给 = 不是 ①。
+   */
+  solo?(): boolean
+  /**
    * 40 §2 工具箱：周复盘里报一段"疑似重复"，并把过了门槛的好东西往上浮。
    * 没装工具箱就少这两样，复盘照跑。
    */
@@ -510,7 +516,21 @@ async function createReviewCard(
       separation_of_duties: false,
     },
     priority: 'queue',
+    // WP287：复盘只管这一天——到第二天晚上还没看就自己过期，不在「要你处理」里越积越多
+    expires_at: iso(Date.parse(review.period.end) + DAY_MS),
   }) as Promise<ApprovalItem>
+}
+
+/**
+ * WP287：一个人一份复盘挂在哪条分配上——优先他真在做的职责（不是工作区底座 `common.*`）。
+ * 底座那条（`common.member`）没有批准权，复盘卡挂在它上面就点不动（真机「无权限：approval.approve」）。
+ */
+function reviewAnchorOf(group: readonly SchedulePosition[]): SchedulePosition | undefined {
+  return (
+    group.find((p) => !p.role_id.startsWith('common.')) ??
+    group.find((p) => p.role_id === 'common.owner') ??
+    group[0]
+  )
 }
 
 /**
@@ -520,6 +540,8 @@ async function createReviewCard(
 export async function buildReviewsFor(
   deps: ReviewDeps,
   kind: 'day' | 'week' | 'month',
+  /** WP287：触发的是哪条分配的复盘定时；给了就只出挂在它上面的那一份 */
+  only?: string,
 ): Promise<{ reviews: string[]; duplicates?: number; promotions?: string[] }> {
   const reviews: string[] = []
   /**
@@ -544,7 +566,22 @@ export async function buildReviewsFor(
   const work = deps.work
   const range = work.todayRange()
   const start = iso(Date.parse(range.to) - SPAN_DAYS[kind] * DAY_MS)
-  for (const position of deps.positions()) {
+  /*
+   * WP287（Luoye 10-09 真机：每条职责每天一张、一模一样）：卡、待办都是按**人**数的（本人队列、
+   * 本人待办），按职责一条一份只是同一份复盘抄 N 遍。现在**一个人一天一份**（也就做到了一个岗位一天最多一份），
+   * 一点动静都没有的那天不出（`reviewIsQuiet`）。
+   */
+  const groups = new Map<string, SchedulePosition[]>()
+  for (const p of deps.positions()) groups.set(p.person_id, [...(groups.get(p.person_id) ?? []), p])
+  const solo = deps.solo?.() === true
+  for (const group of groups.values()) {
+    const position = reviewAnchorOf(group)
+    if (position === undefined) continue
+    // 每条分配各有一条复盘定时（老任务 id 不改）：只让挂复盘的那一条出，别的那几条跑到这里就跳过
+    if (only !== undefined && position.assignment_id !== only) continue
+    // 同一个人同一天（周 / 月同理）已经记过一份就不再记（重跑、补跑都不重复）
+    const done = work.latestReview(position.person_id, kind)
+    if (done !== undefined && done.period.end === range.to) continue
     const cards = await deps.cards(position)
     const waiting = cards.filter((i) => WAITING_STATES.has(i.state)).length
     const draft = buildReview({
@@ -572,8 +609,9 @@ export async function buildReviewsFor(
         delegate_to: position.assignment_id,
       },
     })
+    if (reviewIsQuiet(draft)) continue
     const review = work.saveReview(draft)
-    await createReviewCard(deps, position, review)
+    if (!solo) await createReviewCard(deps, position, review)
     reviews.push(review.id)
     await deps.relay?.(review, position)
   }
@@ -596,6 +634,47 @@ export async function buildReviewsFor(
   }
 }
 
+/**
+ * WP287：启动时把**积压的老复盘卡**收掉（记成过期，不删记录）——一点动静都没有的、不是今天的、
+ * 以及 ① 个人模式下的（① 不出复盘卡）。只动还没定的；回收掉了几张。
+ */
+export async function sweepStaleReviews(deps: {
+  approvals: ApprovalBus
+  work: Work
+  workspace_id: WorkspaceId
+  people: readonly PersonId[]
+  solo?: () => boolean
+}): Promise<number> {
+  if (deps.approvals.expireNow === undefined) return 0
+  const today = Date.parse(deps.work.todayRange().from)
+  const solo = deps.solo?.() === true
+  let swept = 0
+  const seen = new Set<string>()
+  for (const person_id of deps.people) {
+    const items = (await deps.approvals.queue({
+      workspace_id: deps.workspace_id,
+      person_id,
+      lane: 'mine',
+      kind: 'review',
+      state: ['pending', 'in_review'],
+    })) as ApprovalItem[]
+    for (const item of items) {
+      if (seen.has(item.id) || item.kind !== 'review') continue
+      seen.add(item.id)
+      const draft = item.payload as Parameters<typeof reviewIsQuiet>[0] | undefined
+      const quiet = draft?.cards === undefined || reviewIsQuiet(draft)
+      const old = Date.parse(item.created_at) < today
+      if (!quiet && !old && !solo) continue
+      const out = await deps.approvals.expireNow(
+        item.id,
+        quiet ? 'quiet_review' : old ? 'stale_review' : 'solo_review',
+      )
+      if (out !== undefined) swept += 1
+    }
+  }
+  return swept
+}
+
 /** 今天是不是这个月的最后一天（按工作区时区）。cron 不认识「月末」，只能这样判。 */
 export function isMonthEnd(now: Iso8601, tz: string): boolean {
   const today = wallClock(Date.parse(now), tz)
@@ -610,7 +689,13 @@ export function registerReview(scheduler: Scheduler, deps: ReviewDeps): void {
     if (kind === 'month' && !isMonthEnd(ctx.at, deps.tz)) {
       return { skipped: 'not_month_end' }
     }
-    return buildReviewsFor(deps, kind)
+    // WP287：每条分配一条定时，复盘按人只出一份——只让挂复盘的那条分配的定时出（没有分配的手动触发照旧全跑）
+    const only = ctx.task.assignment_id
+    return buildReviewsFor(
+      deps,
+      kind,
+      deps.positions().some((p) => p.assignment_id === only) ? only : undefined,
+    )
   })
 }
 

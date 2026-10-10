@@ -18,6 +18,7 @@
  * - 时间经 `Clock`、随机经注入的 `random`，没有一处 `Date.now()` / `Math.random()`；
  * - 秘密只从环境变量读，且不进事件日志。
  */
+
 import type {
   ApprovalItem,
   ApprovalKind,
@@ -116,10 +117,10 @@ import {
   WEB_FETCH_TOOL,
   WEB_SEARCH_TOOL,
 } from '@agentsws/stand-ins'
-
 import { cardRefOf, type Work } from '@agentsws/work'
 import type { ComputerUseAssembly } from './computer-use.js'
 import { blockedByTool, blockedLine, blockReasonOf, RunBlockLog } from './run-blocked.js'
+import { runFailureLine, runFailureText } from './run-failure.js'
 import { RunStepLog } from './run-steps.js'
 import { PartialRunLog, stoppedLine } from './run-stop.js'
 import { createSkillToolExecutor, isReadSkillTool } from './skill-tools.js'
@@ -1857,6 +1858,23 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       })
     }
     let cancelledReason: RunCancelReason | undefined
+    /** WP287：运行时报的失败（`run.failed`）——收尾时据此在时间线上说「没跑成」，不再写「跑完了」。 */
+    let failure: { code: string; message: string; retryable: boolean } | undefined
+    /** WP287：没跑成的那一句（人话 + 结构化标记，界面据此出「重试」）。原始错误只在事件日志里。 */
+    const recordFailure = (error: { code: string; message: string; retryable: boolean }): void => {
+      recordDigest('failed')
+      try {
+        work?.appendEvent(input.matter.id, {
+          kind: 'status',
+          text: runFailureLine(error),
+          actor: { kind: 'system', id: 'runtime' },
+          run_id,
+          failed: { code: error.code, retryable: error.retryable },
+        })
+      } catch {
+        // 事项已经没了
+      }
+    }
     const sink = (e: RunEvent): void => {
       watchdog.touch()
       if (e.type === 'text.delta') runLog.text(e.text)
@@ -1873,6 +1891,7 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       }
       if (e.type === 'run.cancelled')
         cancelledReason = e.reason ?? cancelReasonOf(controller.signal)
+      if (e.type === 'run.failed') failure ??= e.error
       appendRunEvent(request, e)
       // 15 §6 provenance：只证明「读过」——注入的记录与工具真回来的实体
       if (e.type === 'context.injected') {
@@ -2000,8 +2019,27 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
         })
         return { run_id }
       }
+      /*
+       * WP287（Luoye 10-09 真机）：运行时回 `failed`（工具参数表不认、模型调不通、格式异常…）时
+       * 以前照「跑完了」记——界面上看不出失败。现在说「没跑成：<人话>」+ 重试；摘要不落到事项上。
+       */
+      if (result.status === 'failed') {
+        const error = failure ?? { code: 'internal', message: result.summary, retryable: true }
+        recordFailure(error)
+        recordBlocked()
+        // 事项的「到哪了」：运行时写的那句（登录过期、格式异常…本来就是人话）；内部错的原文可能带
+        // 参数表 / 堆栈，换成通用人话。会话引用照落，「接着跑」续得上
+        work?.onRunCompleted({
+          matter_id: input.matter.id,
+          run_id,
+          summary: error.code === 'internal' ? runFailureText(error) : result.summary,
+          session_ref: result.session_ref,
+        })
+        return { run_id }
+      }
       // 37 §2.2b：Agent 说的话进时间线；摘要与会话引用由 onRunCompleted 落到事项上
-      recordDigest('completed')
+      // WP287：额度 / 回合用完停下的，摘要那一行写「被停下了」，不写「跑完了」
+      recordDigest(result.status === 'budget_exhausted' ? 'stopped' : 'completed')
       /*
        * WP264（决策 179）：下一步建议——运行时结构化给的优先，否则取答复末尾的 `<next>…</next>`；
        * 标记从正文里拿掉。没有就没有，不从正文里猜。
@@ -2030,13 +2068,18 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
         session_ref: result.session_ref,
       })
     } catch (err) {
-      recordDigest('failed')
-      work?.appendEvent(input.matter.id, {
-        kind: 'status',
-        text: `这次运行没跑成：${err instanceof Error ? err.message : String(err)}`,
-        actor: { kind: 'system', id: 'runtime' },
-        run_id,
-      })
+      // WP287：原始错误进本机事件日志（排障用），时间线上只说人话 + 重试
+      const raw = {
+        code: 'internal',
+        message: err instanceof Error ? err.message : String(err),
+        retryable: true,
+      }
+      try {
+        appendRunEvent(request, { type: 'run.failed', error: raw })
+      } catch {
+        // 事件日志写不进去也不影响给人看的那一句
+      }
+      recordFailure(raw)
       recordBlocked()
     } finally {
       watchdog.stop()
@@ -2079,7 +2122,14 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       const last = hits[hits.length - 1]
       if (last === undefined) return undefined
       const [run_id, r] = last
-      return { run_id, started_at: r.started_at, steps: r.log.live() }
+      // WP287：AI 到现在说了的话（流式出现在会话线程里；跑完以时间线上那条为准）
+      const said = runWatch.get(run_id)?.log.said().trim() ?? ''
+      return {
+        run_id,
+        started_at: r.started_at,
+        steps: r.log.live(),
+        ...(said === '' ? {} : { text: splitNextSuggestion(humanizeToolNames(said, [])).text }),
+      }
     },
     bind(w) {
       work = w

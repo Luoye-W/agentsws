@@ -327,6 +327,11 @@ export interface WorkPort {
   retitleMatter?(actor: WorkActor, id: string, title: string): MaybePromise<Matter>
   /** WP264：停下这件事上正在跑的运行（输入卡上的「停」）。回停了几次。 */
   stopMatter?(actor: WorkActor, id: string): Promise<{ stopped: number }>
+  /**
+   * WP287：上一次没跑成 → 按原话再跑一次（时间线上「没跑成」下面的「重试」）。不伪造人话。
+   * 回新那次的 `run_id`（没接运行时就没有）。
+   */
+  retryMatter?(actor: WorkActor, id: string): Promise<{ run_id?: string }>
 
   goals(
     actor: WorkActor,
@@ -643,6 +648,26 @@ export function workRoutes(): Route[] {
         if (port.stopMatter === undefined)
           throw new ApiError('not_implemented', '这个服务进程停不了运行')
         return ok(c, await port.stopMatter(actorOf(c), param(c, 'id')))
+      },
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/matters/:id/retry',
+        operationId: 'retryMatterRun',
+        summary: '上一次没跑成，按原话再跑一次（时间线「没跑成」下面的「重试」，WP287）',
+        tag: 'work',
+        auth: 'bearer',
+        assignment: true,
+        authz: READ,
+        params: [ID_PARAM],
+        returns: '{ run_id? }',
+      },
+      async (c, deps) => {
+        const port = workOf(deps)
+        if (port.retryMatter === undefined)
+          throw new ApiError('not_implemented', '这个服务进程重试不了运行')
+        return ok(c, await port.retryMatter(actorOf(c), param(c, 'id')), 201)
       },
     ),
     route(

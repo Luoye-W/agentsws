@@ -32,6 +32,12 @@ const { DeckSection } = await import('@/components/deck')
 
 const P0 = draftCard({ id: 'ap_p0', priority_band: 'P0', title: '客户在等' })
 
+/** WP288：筛选平时收在「要你处理」那一行的筛选图标里——先点开它。 */
+async function openFilters(): Promise<HTMLElement> {
+  await userEvent.click(await screen.findByTestId('deck-filter'))
+  return screen.findByTestId('deck-filters')
+}
+
 beforeEach(() => {
   home = homeData()
   cards = {
@@ -74,7 +80,7 @@ describe('37 §1 第 1 行：一次一张', () => {
   it('「第 N / M 张」跟着游标走；最后一张背后没有假卡', async () => {
     home = homeData({ queue: [draftCard(), questionCard()] })
     renderWithProviders(<DeckSection onOpen={() => {}} />)
-    expect((await screen.findByTestId('deck-progress')).textContent).toBe('第 1 / 2 张')
+    expect((await screen.findByTestId('deck-progress')).getAttribute('title')).toBe('第 1 / 2 张')
     expect(screen.getAllByTestId('deck-ghost')).toHaveLength(1)
   })
 
@@ -141,7 +147,7 @@ describe('37 §1 第 8 行：已处理飞出 300ms → 下一张，不留队列'
     home = homeData({ queue: [draftCard(), questionCard()] })
     renderWithProviders(<DeckSection onOpen={() => {}} />)
     await screen.findByTestId('deck-card')
-    expect(screen.getByTestId('deck-progress').textContent).toBe('第 1 / 2 张')
+    expect(screen.getByTestId('deck-progress').getAttribute('title')).toBe('第 1 / 2 张')
 
     await userEvent.click(screen.getByText('发送'))
     // 决定已经发出去，卡正在飞
@@ -154,7 +160,7 @@ describe('37 §1 第 8 行：已处理飞出 300ms → 下一张，不留队列'
 
     await waitFor(
       () => {
-        expect(screen.getByTestId('deck-progress').textContent).toBe('第 2 / 2 张')
+        expect(screen.getByTestId('deck-progress').getAttribute('title')).toBe('第 2 / 2 张')
       },
       { timeout: DECK_EXIT_MS * 6 },
     )
@@ -200,7 +206,7 @@ describe('37 §1 第 10 行：筛选行', () => {
       counts: { total: 9, customer_waiting: 2, nobody_waiting: 3, matched: 2 },
     })
     renderWithProviders(<DeckSection onOpen={() => {}} />)
-    const row = await screen.findByTestId('deck-filters')
+    const row = await openFilters()
     // 计数是**张数**（合并前的 total），不是当前渲染出来的组数
     expect(within(row).getByText('全部 9')).toBeDefined()
     expect(within(row).getByText('客户在等 2')).toBeDefined()
@@ -214,6 +220,7 @@ describe('37 §1 第 10 行：筛选行', () => {
     renderWithProviders(<DeckSection onOpen={() => {}} />)
     await screen.findByTestId('deck-card')
     expect(getHome).toHaveBeenLastCalledWith('yesterday', {})
+    await openFilters()
     await userEvent.click(screen.getByText(/客户在等/))
     await waitFor(() => {
       expect(getHome).toHaveBeenLastCalledWith('yesterday', { waiting: 'customer_waiting' })
@@ -225,6 +232,7 @@ describe('37 §1 第 10 行：筛选行', () => {
   it('来源下拉发的是 source；再选回「所有来源」就把这个条件删掉', async () => {
     renderWithProviders(<DeckSection onOpen={() => {}} />)
     await screen.findByTestId('deck-card')
+    await openFilters()
     await userEvent.selectOptions(screen.getByLabelText('来源'), 'todo')
     await waitFor(() => {
       expect(getHome).toHaveBeenLastCalledWith('yesterday', { source: 'todo' })
@@ -239,6 +247,7 @@ describe('37 §1 第 10 行：筛选行', () => {
     home = homeData({ queue: [draftCard()], pinned_p0: [P0], filters: { source: 'todo' } })
     renderWithProviders(<DeckSection onOpen={() => {}} />)
     await screen.findByTestId('deck-card')
+    await openFilters()
     await userEvent.selectOptions(screen.getByLabelText('来源'), 'todo')
     const note = await screen.findByTestId('deck-pinned-p0')
     expect(note.textContent).toContain('1')
@@ -253,8 +262,58 @@ describe('37 §1 第 10 行：筛选行', () => {
     renderWithProviders(<DeckSection onOpen={() => {}} />)
     await screen.findByTestId('deck-card')
     expect(screen.getByTestId('deck-content').getAttribute('data-mode')).toBe('zh_summary')
+    await openFilters()
     await userEvent.click(within(screen.getByTestId('deck-modes')).getByText('原文'))
     expect(screen.getByTestId('deck-content').getAttribute('data-mode')).toBe('original')
+  })
+})
+
+describe('WP288：「要你处理 N」一行——标题、筛选图标、翻页同一行；筛选生效时才出条件条', () => {
+  it('平时没有筛选行、没有语言切换、没有单独的翻页行：都在标题那一行的图标里', async () => {
+    home = homeData({ queue: [draftCard(), questionCard()] })
+    renderWithProviders(<DeckSection onOpen={() => {}} title={<h3>要你处理 2</h3>} />)
+    await screen.findByTestId('deck-card')
+    const head = screen.getByTestId('deck-head')
+    expect(head.textContent).toContain('要你处理 2')
+    expect(within(head).getByTestId('deck-filter').getAttribute('aria-label')).toBe('筛选')
+    expect(within(head).getByTestId('deck-prev')).toBeDefined()
+    expect(within(head).getByTestId('deck-next')).toBeDefined()
+    // 屏上只写「1/2」，悬停 / 读屏是「第 1 / 2 张」
+    const progress = within(head).getByTestId('deck-progress')
+    expect(progress.textContent).toContain('1/2')
+    expect(progress.getAttribute('title')).toBe('第 1 / 2 张')
+    // 弹层没开：筛选 chip、下拉、语言都不在屏上；也没有条件条
+    expect(screen.queryByTestId('deck-filters')).toBeNull()
+    expect(screen.queryByTestId('deck-modes')).toBeNull()
+    expect(screen.queryByText(/客户在等/)).toBeNull()
+    expect(screen.queryByTestId('deck-active-filters')).toBeNull()
+  })
+
+  it('筛了才在标题下出一排已选条件；点 × 去掉那一条，回到全部就不出', async () => {
+    renderWithProviders(<DeckSection onOpen={() => {}} title={<h3>要你处理</h3>} />)
+    await screen.findByTestId('deck-card')
+    await openFilters()
+    await userEvent.click(screen.getByText(/客户在等/))
+    await userEvent.selectOptions(screen.getByLabelText('来源'), 'todo')
+    await userEvent.click(within(screen.getByTestId('deck-modes')).getByText('原文'))
+    const bar = await screen.findByTestId('deck-active-filters')
+    expect(
+      within(bar)
+        .getAllByTestId('deck-active-filter')
+        .map((c) => c.textContent),
+    ).toEqual(['客户在等', '待办委托', '原文'])
+    // 图标上带着几个条件
+    expect(screen.getByTestId('deck-filter').getAttribute('aria-label')).toBe('筛选（3）')
+    await userEvent.click(within(bar).getByLabelText('去掉「客户在等」'))
+    await waitFor(() => {
+      expect(getHome).toHaveBeenLastCalledWith('yesterday', { source: 'todo' })
+    })
+    await userEvent.click(screen.getByLabelText('去掉「待办委托」'))
+    await userEvent.click(screen.getByLabelText('去掉「原文」'))
+    await waitFor(() => {
+      expect(screen.queryByTestId('deck-active-filters')).toBeNull()
+    })
+    expect(screen.getByTestId('deck-content').getAttribute('data-mode')).toBe('zh_summary')
   })
 })
 
@@ -297,7 +356,7 @@ describe('WP141：不决定前一张也能去后面的卡', () => {
     expect(screen.getByTestId('deck-prev')).toHaveProperty('disabled', true)
     await user.click(screen.getByTestId('deck-next'))
     expect(await screen.findByText('议价：Urban Pike 005 报价 800 USD')).toBeDefined()
-    expect(screen.getByTestId('deck-progress').textContent).toBe('第 2 / 2 张')
+    expect(screen.getByTestId('deck-progress').getAttribute('title')).toBe('第 2 / 2 张')
     expect(decide).not.toHaveBeenCalled()
     await user.click(screen.getByTestId('deck-prev'))
     expect(await screen.findByText('挑人清单：夏季快充（2 人）')).toBeDefined()
@@ -345,6 +404,7 @@ describe('WP141：不决定前一张也能去后面的卡', () => {
     })
     renderWithProviders(<DeckSection onOpen={() => {}} />)
     await screen.findByTestId('deck-card')
+    await openFilters()
     const select = screen.getByLabelText('卡型') as HTMLSelectElement
     await userEvent.selectOptions(select, 'kol_campaign')
     await waitFor(() => {
@@ -362,10 +422,10 @@ describe('WP141：不决定前一张也能去后面的卡', () => {
   it('「第 x / N 张」按合并前的张数：合并卡写成一段', async () => {
     home = homeData({ queue: [draftCard({ id: 'ap_m', merge_count: 3 }), quote] })
     renderWithProviders(<DeckSection onOpen={() => {}} />)
-    expect((await screen.findByTestId('deck-progress')).textContent).toBe('第 1–3 / 4 张')
+    expect((await screen.findByTestId('deck-progress')).getAttribute('title')).toBe('第 1–3 / 4 张')
     await userEvent.click(screen.getByTestId('deck-next'))
     await waitFor(() => {
-      expect(screen.getByTestId('deck-progress').textContent).toBe('第 4 / 4 张')
+      expect(screen.getByTestId('deck-progress').getAttribute('title')).toBe('第 4 / 4 张')
     })
   })
 
@@ -401,7 +461,7 @@ describe('WP141：岗位页把本人几条职责的牌合成一副', () => {
     renderWithProviders(
       <DeckSection positionId="asg_1" positionIds={['asg_1', 'asg_2']} onOpen={() => {}} />,
     )
-    expect((await screen.findByTestId('deck-progress')).textContent).toBe('第 1 / 2 张')
+    expect((await screen.findByTestId('deck-progress')).getAttribute('title')).toBe('第 1 / 2 张')
     expect(getPositionCards).toHaveBeenCalledWith('asg_1', {})
     expect(getPositionCards).toHaveBeenCalledWith('asg_2', {})
     getPositionCards.mockImplementation(async () => cards)

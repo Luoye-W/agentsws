@@ -60,6 +60,8 @@ export interface InstructionRulePayload {
   form?: typeof INSTRUCTION_RULE_FORM
   /** WP284：「记进规矩 / 不用」——与 `policy_change` 的 after / before 同一对 id。 */
   options?: { id: 'after' | 'before'; label: string }[]
+  /** WP289（决策 318）：从聊天窗「教 AI」来的——哪条会话（这时 `source_card_id` 是一个合成的来源 id）。 */
+  source_session_id?: string
 }
 
 /** 卡面认「以后都这样」那张策略卡用的 `payload.form`。 */
@@ -69,6 +71,9 @@ export const INSTRUCTION_RULE_FORM = 'instruction_rule'
  * 出「以后都这样」那张策略卡的输入（API 的指导落地与模拟世界共用）。
  *
  * 路由：① ② 收件人是写指导的本人；③ 给了 `approver`（老板）就发给他，与改职责规矩同一条路。
+ *
+ * WP289（决策 318）：聊天窗「教 AI」选「以后都这样」也出这一张（给 `chat`）：没有来源卡，
+ * `item` 由调用方按那条会话合成（id 每次不同、对象是会话的 thread），卡上不挂 `links.parent`。
  */
 export function instructionRuleCard(input: {
   workspace_id: string
@@ -82,6 +87,8 @@ export function instructionRuleCard(input: {
    * 不给（① ②）= 写指导的本人自己点。
    */
   approver?: string
+  /** WP289：从聊天窗来的（哪条会话）。 */
+  chat?: { session_id: string }
 }): CreateApprovalInput<InstructionRulePayload> {
   const { item, text } = input
   return {
@@ -98,7 +105,7 @@ export function instructionRuleCard(input: {
       separation_of_duties: false,
     },
     priority: 'queue',
-    links: { parent: item.id },
+    ...(input.chat === undefined ? { links: { parent: item.id } } : {}),
     kind: 'policy_change',
     subject: {
       object: { type: 'policy', id: `${INSTRUCTION_RULE_PREFIX}${item.id}` },
@@ -120,6 +127,7 @@ export function instructionRuleCard(input: {
       affected_assignments: [input.assignment_id],
       source_card_id: item.id,
       ...(item.title === '' ? {} : { source_title: item.title.slice(0, 60) }),
+      ...(input.chat === undefined ? {} : { source_session_id: input.chat.session_id }),
     },
     evidence: {
       source_events: [],

@@ -128,6 +128,8 @@ export { type ActivityPort, type ActivityView, activityRoutes } from './routes/a
 export type { AdsAccountRow, AdsCampaignRow, AdsPort, AdsStagedView } from './routes/ads.js'
 export { adsRoutes } from './routes/ads.js'
 export type { AdsActor } from './routes/ads-types.js'
+// WP287：「发给他的卡他必须点得动」那把尺子（只关于本人的卡）——服务端岗位页计数也用它
+export { isSelfCard, SELF_CARD_FORMS } from './routes/approvals.js'
 export { type AskActor, type AskAnswer, type AskPort, askRoutes } from './routes/ask.js'
 // WP172（docs/84）：B2B 库的列表 / 详情 / 草稿 / 提交改动卡 / CSV 导入
 export type {
@@ -573,6 +575,7 @@ export {
 export type {
   OpenAtPositionView,
   PositionActor,
+  PositionAnswerView,
   PositionEntryPort,
   RouteCandidateView,
 } from './routes/positions.js'

@@ -3462,6 +3462,23 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/v1/workspaces/{id}/members/{person_id}/leave': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** WP289 请他离开之前那一问：会一起断开他自己接的哪几条「个人」连接（共用的留下；只在 ②） */
+    get: operations['previewRemoveMember']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/v1/workspaces/{id}/leave': {
     parameters: {
       query?: never
@@ -4608,7 +4625,7 @@ export interface paths {
     }
     get?: never
     put?: never
-    /** 交给这个岗位一件事（54 §2 主入口）：一句话 → 开事项 → 岗位内路由挑职责 → 用那条职责的分配起 Run；拿不准出一张选择卡 */
+    /** 交给这个岗位一件事（54 §2 主入口）：一句话 → 岗位内路由挑职责（WP287 起不再出选择卡）→ 用那条职责的分配起 Run；是问一句的当场答（`mode: ask` + `answer`，不建进行中的事） */
     post: operations['openMatterAtPosition']
     delete?: never
     options?: never
@@ -4627,6 +4644,23 @@ export interface paths {
     put?: never
     /** 换一条职责来做这件事（54 §2）：换后新的 Run 走新职责，旧 Run 不动；`run: true` 换完立刻按原话起一次运行（WP237） */
     post: operations['rerouteMatter']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/v1/matters/{id}/promote': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /** 岗位里问的一句「转成一件事」（WP287）：之后它就是一件普通的事，进「进行中」 */
+    post: operations['promoteAskMatter']
     delete?: never
     options?: never
     head?: never
@@ -4714,6 +4748,23 @@ export interface paths {
     put?: never
     /** 停下这件事上正在跑的运行（事项页输入卡的「停」，WP264） */
     post: operations['stopMatterRuns']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/v1/matters/{id}/retry': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /** 上一次没跑成，按原话再跑一次（时间线「没跑成」下面的「重试」，WP287） */
+    post: operations['retryMatterRun']
     delete?: never
     options?: never
     head?: never
@@ -5811,7 +5862,7 @@ export interface paths {
     }
     get?: never
     put?: never
-    /** 用中文告诉 AI 这种问题该怎么答（对客消息 + 沉淀成知识候选） */
+    /** 用中文告诉 AI 这种问题该怎么答（对客消息 + 沉淀）。scope=global_rule（以后都这样）出一张职责规矩卡，与卡片指导同一本、同一套权限 */
     post: operations['teachChatSession']
     delete?: never
     options?: never
@@ -19065,15 +19116,6 @@ export interface operations {
         }
       }
       /** @description 统一错误信封（28 §2） */
-      403: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['Error']
-        }
-      }
-      /** @description 统一错误信封（28 §2） */
       429: {
         headers: {
           [name: string]: unknown
@@ -19134,15 +19176,6 @@ export interface operations {
       }
       /** @description 统一错误信封（28 §2） */
       401: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['Error']
-        }
-      }
-      /** @description 统一错误信封（28 §2） */
-      403: {
         headers: {
           [name: string]: unknown
         }
@@ -19372,15 +19405,6 @@ export interface operations {
       }
       /** @description 统一错误信封（28 §2） */
       401: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['Error']
-        }
-      }
-      /** @description 统一错误信封（28 §2） */
-      403: {
         headers: {
           [name: string]: unknown
         }
@@ -31044,7 +31068,98 @@ export interface operations {
     }
     requestBody?: never
     responses: {
-      /** @description { revoked_assignments } */
+      /** @description { revoked_assignments, disconnected? } */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Envelope']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      400: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      401: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      403: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      404: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      429: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      500: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      503: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+    }
+  }
+  previewRemoveMember: {
+    parameters: {
+      query?: never
+      header: {
+        /** @description 本次请求绑定的 Assignment（31 §3.1：一次请求一个 Assignment） */
+        'X-Assignment': string
+      }
+      path: {
+        /** @description 工作区 id */
+        id: string
+        /** @description 成员 person_id */
+        person_id: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description LeavePreviewView */
       200: {
         headers: {
           [name: string]: unknown
@@ -38728,11 +38843,14 @@ export interface operations {
             id: string
           }[]
           role_id?: string
+          /** @enum {string} */
+          mode?: 'auto' | 'ask' | 'task'
+          detach?: boolean
         }
       }
     }
     responses: {
-      /** @description { matter, picked?, candidates, ambiguous, reason, approval_item_id?, run_id? } */
+      /** @description { mode?, answer?, matter, picked?, candidates, ambiguous, reason, approval_item_id?, run_id? } */
       200: {
         headers: {
           [name: string]: unknown
@@ -38840,6 +38958,106 @@ export interface operations {
     }
     responses: {
       /** @description { matter, assignment_id, run_id? } */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Envelope']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      400: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      401: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      403: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      404: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      409: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      429: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      500: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      503: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+    }
+  }
+  promoteAskMatter: {
+    parameters: {
+      query?: never
+      header: {
+        /** @description 本次请求绑定的 Assignment（31 §3.1：一次请求一个 Assignment） */
+        'X-Assignment': string
+        /** @description 幂等键；24h 内同键重放原响应（28 §2） */
+        'Idempotency-Key'?: string
+      }
+      path: {
+        /** @description matter_id */
+        id: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description { matter: { id, title } } */
       200: {
         headers: {
           [name: string]: unknown
@@ -39511,6 +39729,106 @@ export interface operations {
     requestBody?: never
     responses: {
       /** @description { stopped: number } */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Envelope']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      400: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      401: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      403: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      404: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      409: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      429: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      500: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      503: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+    }
+  }
+  retryMatterRun: {
+    parameters: {
+      query?: never
+      header: {
+        /** @description 本次请求绑定的 Assignment（31 §3.1：一次请求一个 Assignment） */
+        'X-Assignment': string
+        /** @description 幂等键；24h 内同键重放原响应（28 §2） */
+        'Idempotency-Key'?: string
+      }
+      path: {
+        /** @description 对象 id */
+        id: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description { run_id? } */
       200: {
         headers: {
           [name: string]: unknown
@@ -46567,7 +46885,7 @@ export interface operations {
       }
     }
     responses: {
-      /** @description { outcome, reply?, sediment } */
+      /** @description { outcome, reply?, sediment, rule_card_id? } */
       200: {
         headers: {
           [name: string]: unknown
@@ -68511,7 +68829,7 @@ export interface operations {
       query?: {
         /** @description 只看这件事项里的 */
         matter_id?: string
-        /** @description 只看这个用途标 */
+        /** @description 只看这个用途标；不给时不含遮罩（用途 mask，要看就给 tag=mask） */
         tag?: string
         /** @description generated / uploaded / external */
         source?: string

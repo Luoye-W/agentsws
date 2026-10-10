@@ -8,7 +8,6 @@ import type {
   Recipient,
   Todo,
 } from '@agentsws/contracts'
-import { instructionRuleCard } from '@agentsws/core'
 import { projectCard, resolveDecision } from '@agentsws/deck'
 import { z } from 'zod'
 import { ApiError, normalizeError } from '../errors.js'
@@ -22,6 +21,7 @@ import {
   redactItem,
   tokenFor,
 } from '../helpers.js'
+import { proposeInstructionRule } from '../instruction-rule.js'
 import { peersBypass, type Route, type RouteSpec, route } from '../route-spec.js'
 import type { GatewayDeps } from '../types.js'
 import { DuplicateAck, type GuardResult, guardSimilar, recordCatalogNote } from './catalog.js'
@@ -231,14 +231,42 @@ const decideBypass: NonNullable<RouteSpec['authzBypass']> = (c, rctx, deps) => {
   return a !== undefined && !canDecide(deps, a.id)
 }
 
-/** 这一次决定只认关于他本人的卡（不是 ②、这条分配也没有批准权）。 */
+/**
+ * WP287（Luoye 10-09 真机：① 里唯一的人点复盘卡报「无权限：approval.approve（range=own）」）：
+ * 请求头带的那条分配没有批准权（卡挂在底座职责 `common.member` 上，工作台按卡上的分配发），
+ * **而这个人在这个工作区里别的分配有**——发给他的卡他就点得动（能点哪张仍由收件人令牌说了算）。
+ */
+function personCanDecide(deps: GatewayDeps, person_id: string, workspace_id: string): boolean {
+  return deps.roles
+    .listAssignments(person_id, { workspace_id })
+    .some((a) => a.revoked_at === undefined && canDecide(deps, a.id))
+}
+
+/**
+ * WP287 通用规则：**发给某人的卡，他必须点得动；点不动的就不该出现在他的「要你处理」里**。
+ * 与 `/v1/approvals/:id/decide` 同一把尺子：② 一律能点；他名下有一条分配有批准权就能点；
+ * 否则只认关于他本人的那几种卡。回一个判定函数（牌堆过滤用）。
+ */
+export function decidableBy(
+  deps: GatewayDeps,
+  person_id: string,
+  workspace_id: string,
+): (item: ApprovalItem) => boolean {
+  if (deps.peerAccess?.(workspace_id) === true) return () => true
+  if (personCanDecide(deps, person_id, workspace_id)) return () => true
+  return (item) => isSelfCard(item, person_id)
+}
+
+/** 这一次决定只认关于他本人的卡（不是 ②、这条分配没有批准权、他名下别的分配也没有）。 */
 function selfDecideOnly(
   c: Parameters<RouteSpec['authzBypass'] & {}>[0],
   deps: GatewayDeps,
   assignment_id: string,
 ): boolean {
   if (peersBypass(c, c.get('rctx'), deps)) return false
-  return !canDecide(deps, assignment_id)
+  if (canDecide(deps, assignment_id)) return false
+  const p = principalOf(c)
+  return !personCanDecide(deps, p.person_id, p.workspace_id)
 }
 
 async function mustGet(deps: GatewayDeps, id: string, workspace_id: string): Promise<ApprovalItem> {
@@ -289,32 +317,16 @@ async function landInstruction(
   const lesson = scope === 'similar_cases'
   if (!lesson) {
     // WP284（决策 275）：「以后都这样」那张策略卡的形状与模拟世界共用一份（`@agentsws/core`）；
-    // 批了以后由宿主落成这条职责规矩里的一句话（服务端 `role-rules.ts`）
-    // ③ 发给批策略变更的老板（普通成员自己点不了，收件人令牌不在他手上）；① ② 本人
-    const approver = await deps.instructionRuleApprover?.(input.workspace_id)
-    const created = await deps.approvals.create(
-      instructionRuleCard({
-        workspace_id: input.workspace_id,
-        person_id: input.person_id,
-        assignment_id: input.assignment_id,
-        item,
-        text,
-        ...(approver === undefined ? {} : { approver }),
-      }),
-    )
-    if (created.state === 'blocked') return undefined
-    // 规矩在别处没有一张自己的表：目录替它保管一份，工具箱上才看得见
-    await deps.catalog?.record?.({
-      kind: 'rule',
-      id: `rule:${created.id}`,
-      title: text.slice(0, 60),
-      summary: '指导落成的规矩：批了写进这条职责的规矩',
-      owner: input.person_id,
-      layer: 'personal',
-      used_by_positions: [input.assignment_id],
-      runs_30d: 0,
+    // 批了以后由宿主落成这条职责规矩里的一句话（服务端 `role-rules.ts`）。
+    // WP289（决策 318）：出卡这一步与聊天窗「教 AI」共用（`instruction-rule.ts`）
+    const created = await proposeInstructionRule(deps, {
       workspace_id: input.workspace_id,
+      person_id: input.person_id,
+      assignment_id: input.assignment_id,
+      item,
+      text,
     })
+    if (created === undefined) return undefined
     await recordCatalogNote(deps, {
       workspace_id: input.workspace_id,
       entry_id: `rule:${created.id}`,

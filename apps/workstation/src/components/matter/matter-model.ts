@@ -8,11 +8,14 @@
  * - 卡在缺连接（`blocked`）**是最新一条时是卡**，后来接着做了就缩成一行灰字；
  * - 跑了一次 / 跑完了 / 路由 / 换职责 / 停下 / 别的系统话缩成居中一行灰字（决策 182：默认全收起）；
  *   跑完了的那次只出摘要那一行（开跑那条 `run` 不再单出），正在跑的那次在最底下单独画；
+ * - WP288（决策 326）：**回答已经出来了，就不在它前面再插一行「跑完了 · 0 秒」**——会话里一律不出；
+ *   任务里只在那次真动过东西 / 有步骤可展开时才留（「跑完了 · 改了 3 个文件」是回答里没有的话）。
+ *   没跑成 / 被停下的那一行照旧出；
  * - 同一天只出一次日期分隔。
  */
 import type { MatterEvent, MatterLiveRun, MatterRunDigest } from '@agentsws/contracts'
 
-export type SysVariant = 'route' | 'run' | 'digest' | 'blocked' | 'stopped' | 'plain'
+export type SysVariant = 'route' | 'run' | 'digest' | 'blocked' | 'stopped' | 'failed' | 'plain'
 
 export type MatterItem =
   | { kind: 'day'; key: string; at: string }
@@ -48,8 +51,33 @@ export function openBlock(timeline: readonly MatterEvent[]): MatterEvent | undef
 
 export function buildItems(
   timeline: readonly MatterEvent[],
-  ctx: { live?: MatterLiveRun | undefined; roleId?: string | undefined; closed: boolean },
+  ctx: {
+    live?: MatterLiveRun | undefined
+    roleId?: string | undefined
+    closed: boolean
+    /** WP287：岗位里问的一句（会话）——「按 X 做的」那一行不出 */
+    ask?: boolean | undefined
+  },
 ): MatterItem[] {
+  /** WP287：没跑成的那几次——「没跑成：…」那一行就够了，摘要那行「这次没跑成」不再说一遍 */
+  const failedRuns = new Set(
+    timeline.filter((e) => e.failed !== undefined && e.run_id !== undefined).map((e) => e.run_id),
+  )
+  /** WP288：这几次跑完有回答（AI 说了话）——「跑完了」那一行不用再说 */
+  const answered = new Set(
+    timeline
+      .filter(
+        (e) => e.kind === 'agent_message' && e.run_id !== undefined && e.stopped === undefined,
+      )
+      .map((e) => e.run_id),
+  )
+  const quietDone = (e: MatterEvent): boolean => {
+    const d = e.run_digest
+    if (d === undefined || d.outcome !== 'completed' || !answered.has(e.run_id)) return false
+    if (ctx.ask === true) return true
+    const f = digestFacts(d)
+    return d.steps.length === 0 && f.read === 0 && f.changed === 0 && !f.checked && !f.pushed
+  }
   const digested = new Set(
     timeline
       .filter((e) => e.run_digest !== undefined && e.run_id !== undefined)
@@ -94,7 +122,12 @@ export function buildItems(
       const hidden =
         e.run_id !== undefined && (digested.has(e.run_id) || ctx.live?.run_id === e.run_id)
       item = hidden ? undefined : { kind: 'sys', key, event: e, variant: 'run' }
-    } else if (e.run_digest !== undefined) item = { kind: 'sys', key, event: e, variant: 'digest' }
+    } else if (e.failed !== undefined) item = { kind: 'sys', key, event: e, variant: 'failed' }
+    else if (e.run_digest !== undefined)
+      item =
+        (e.run_digest.outcome === 'failed' && failedRuns.has(e.run_id)) || quietDone(e)
+          ? undefined
+          : { kind: 'sys', key, event: e, variant: 'digest' }
     else if (e.preview !== undefined)
       item = attached.has(e.id) ? undefined : { kind: 'ai', key, preview: e }
     else if (e.blocked !== undefined)
@@ -106,12 +139,47 @@ export function buildItems(
       item =
         e.route.picked === undefined && ctx.roleId === undefined && !ctx.closed
           ? { kind: 'choice', key, event: e }
-          : { kind: 'sys', key, event: e, variant: 'route' }
+          : ctx.ask === true
+            ? undefined
+            : { kind: 'sys', key, event: e, variant: 'route' }
+    // WP287：会话里路由那一行（没有可换的、只是「路由到 X」）也不出
+    else if (ctx.ask === true && e.actor.id === 'position_router' && e.kind === 'status')
+      item = undefined
     else if (e.stopped !== undefined) item = { kind: 'sys', key, event: e, variant: 'stopped' }
     else item = { kind: 'sys', key, event: e, variant: 'plain' }
     if (item !== undefined) push(item, e.at)
   }
   return out
+}
+
+/**
+ * WP287：最近那条「没跑成」、后面还没人接着做（再说一句 / 又跑了一次）——只有它下面出「重试」。
+ */
+export function retryableFailure(timeline: readonly MatterEvent[]): string | undefined {
+  for (let i = timeline.length - 1; i >= 0; i -= 1) {
+    const e = timeline[i] as MatterEvent
+    if (e.kind === 'human_message' || e.kind === 'run') return undefined
+    if (e.failed !== undefined) return e.id
+  }
+  return undefined
+}
+
+/**
+ * WP287：刚发出去、AI 还没开口（运行还没登记上，或者刚登记）——页面接着拉，别停在一句人话上。
+ * 只看最近两分钟，免得没接 AI 的进程一直拉。
+ */
+export function awaitingReply(timeline: readonly MatterEvent[], nowMs: number): boolean {
+  const last = [...timeline]
+    .reverse()
+    .find(
+      (e) =>
+        e.kind === 'human_message' ||
+        e.kind === 'agent_message' ||
+        e.run_digest !== undefined ||
+        e.failed !== undefined,
+    )
+  if (last === undefined || last.kind !== 'human_message') return false
+  return nowMs - Date.parse(last.at) < 120_000
 }
 
 /** 页头那一个状态词（小点颜色与左栏同一套）。 */

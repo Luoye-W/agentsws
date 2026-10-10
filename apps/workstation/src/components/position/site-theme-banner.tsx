@@ -12,6 +12,9 @@
  *
  * WP267（决策 164）：账号下只有一家、却不是官网那一家 → 不自动定，问一句「官网那家店不在这个账号下，
  * 要换个账号登录吗」+「换个账号」「就用这家」。
+ *
+ * WP288（决策 326）：都好了岗位页上不占一行（标题旁一个绿勾）。账号下有好几家时那行「改哪家店」
+ * 挪进「岗位设置 → 连接」（`variant="settings"`）。
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Download, ExternalLink, LogIn, RefreshCw, Store } from 'lucide-react'
@@ -44,9 +47,12 @@ const choiceLabel = (c: SiteThemeStoreChoice): string =>
 export function SiteThemeBanner({
   positionId,
   duties,
+  variant = 'page',
 }: {
   positionId: string | undefined
   duties: readonly { role_id: string; assignment_id: string }[]
+  /** WP288：`page` 只出「还差哪一步」；`settings` 只出都好了之后那行「改哪家店」。 */
+  variant?: 'page' | 'settings'
 }): ReactNode {
   const { t } = useApp()
   const client = useQueryClient()
@@ -115,9 +121,11 @@ export function SiteThemeBanner({
     </select>
   )
 
+  if (variant === 'settings' && v.next !== undefined) return null
   if (v.next === undefined) {
     // WP258：自动定 / 选过的店，账号下有好几家：留一行可以换（只有一家就什么都不画）
-    if (v.store_source !== 'cli' || stores.length < 2) return null
+    // WP288：这一行在「岗位设置 → 连接」里，岗位页上不画
+    if (variant === 'page' || v.store_source !== 'cli' || stores.length < 2) return null
     return (
       <div
         className="flex flex-wrap items-center gap-2 px-1 text-xs text-ws-muted-fg"

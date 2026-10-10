@@ -594,18 +594,21 @@ export function HomePage(): React.ReactNode {
           />
 
           {/* ③ 卡片 deck —— 一次一张（37 §1） */}
+          {/* WP288（决策 326）：标题、估时、筛选图标、翻页一行（筛选与语言收进图标） */}
           <section data-testid="queue">
-            <div className="mb-2.5 flex items-center justify-between gap-2">
-              <h2 className="ws-display text-[17px]">{t('home.deck')}</h2>
-              <span className="inline-flex items-center gap-1 text-xs text-ws-muted-fg">
-                <Clock className="size-3" aria-hidden />
-                {t('home.estimate', { minutes: data.estimated_minutes })}
-              </span>
-            </div>
             <DeckSection
               onOpen={(card) => {
                 navigate(matterUrl(card))
               }}
+              title={
+                <>
+                  <h2 className="ws-display text-[17px]">{t('home.deck')}</h2>
+                  <span className="inline-flex items-center gap-1 text-xs text-ws-muted-fg">
+                    <Clock className="size-3" aria-hidden />
+                    {t('home.estimate', { minutes: data.estimated_minutes })}
+                  </span>
+                </>
+              }
             />
           </section>
 

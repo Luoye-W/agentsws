@@ -22,7 +22,14 @@ import { ImageCard, isImageCard } from '@/components/matter/image-pick-card'
 import { MaskDialog } from '@/components/matter/mask-dialog'
 import { MatterComposer, PrivatePair } from '@/components/matter/matter-composer'
 import { type DutyOption, MatterHeader } from '@/components/matter/matter-header'
-import { buildItems, dayKey, matterState, suggestionFor } from '@/components/matter/matter-model'
+import {
+  awaitingReply,
+  buildItems,
+  dayKey,
+  matterState,
+  retryableFailure,
+  suggestionFor,
+} from '@/components/matter/matter-model'
 import {
   AiEntry,
   BlockedCard,
@@ -54,8 +61,10 @@ import {
   getPosition,
   getPositionByTemplate,
   postMatterMessage,
+  promoteAskMatter,
   rerouteMatter,
   retitleMatter,
+  retryMatterRun,
   stopMatterRuns,
   uploadBrandAsset,
 } from '@/lib/api'
@@ -248,6 +257,23 @@ export function MatterPage(): ReactNode {
     },
   })
   const stop = useMutation({ mutationFn: () => stopMatterRuns(id), onSettled: invalidate })
+  // WP287：「没跑成」下面的「重试」——按原话再跑一次
+  const retry = useMutation({
+    mutationFn: () => retryMatterRun(id),
+    onMutate: () => {
+      setTimeout(invalidate, 300)
+    },
+    onSettled: invalidate,
+  })
+  // WP287：会话「转成任务」（进岗位「工作」）
+  const promote = useMutation({
+    mutationFn: () => promoteAskMatter(id),
+    onSettled: () => {
+      invalidate()
+      void client.invalidateQueries({ queryKey: ['position-work'] })
+      void client.invalidateQueries({ queryKey: RAIL_KEY })
+    },
+  })
 
   // 时间线上内嵌的卡（审批 / 选择）：按这件事那条分配取，批也用它
   const timeline = more.data?.events ?? view?.timeline ?? []
@@ -309,8 +335,9 @@ export function MatterPage(): ReactNode {
   })
 
   const live = view?.live
-  const running = live !== undefined || say.isPending
-  polling.current = running
+  const running = live !== undefined || say.isPending || retry.isPending
+  // WP287：刚从岗位输入框发过来、运行还没登记上——接着拉，回答在线程里出现
+  polling.current = running || awaitingReply(timeline, Date.now())
   const closed = view?.matter.status === 'closed'
   /** WP276：能交给同事——不是一个人用、事项是我的（参与者第一位）、没关、没在交。 */
   const canHandOff =
@@ -321,8 +348,14 @@ export function MatterPage(): ReactNode {
     view.matter.handoff?.state !== 'offered'
 
   const items = useMemo(
-    () => buildItems(timeline, { live, roleId: view?.matter.role_id, closed }),
-    [timeline, live, view?.matter.role_id, closed],
+    () =>
+      buildItems(timeline, {
+        live,
+        roleId: view?.matter.role_id,
+        closed,
+        ask: view?.matter.ask !== undefined,
+      }),
+    [timeline, live, view?.matter.role_id, closed, view?.matter.ask],
   )
   const waitingCards = [...cards.values()]
     .map((c) => c.card)
@@ -345,6 +378,7 @@ export function MatterPage(): ReactNode {
 
   const hasMore = more.data?.has_more ?? view.has_more
   const resumableId = closed ? undefined : resumableOf(timeline)
+  const retryId = closed ? undefined : retryableFailure(timeline)
   const roles = position.data?.roles ?? []
   const roleNameOf = (role_id: string): string | undefined =>
     roles.find((r) => r.role_id === role_id)?.role_name
@@ -478,6 +512,14 @@ export function MatterPage(): ReactNode {
                   routing: route.isPending,
                 })}
             {...resumeProps(item.event.id)}
+            {...(item.event.id === retryId
+              ? {
+                  onRetry: () => {
+                    retry.mutate()
+                  },
+                  retrying: retry.isPending || running,
+                }
+              : {})}
           />
         )
       case 'card': {
@@ -590,6 +632,19 @@ export function MatterPage(): ReactNode {
               }
             : undefined
         }
+        /*
+         * WP287：岗位里问的一句是一段会话（不进「工作」）；要接着跟进就转成任务。
+         * WP288：会话页头不出状态与职责；「转成任务」在「⋯」里（不再单独一排「会话 · 转成任务」）。
+         */
+        ask={view.matter.ask !== undefined}
+        onPromote={
+          view.matter.ask === undefined
+            ? undefined
+            : () => {
+                promote.mutate()
+              }
+        }
+        promoting={promote.isPending}
       />
       {/* WP276：等 Y 接 · 撤回 / X 想把这件事交给你 · 接下 · 不接（一个人用时没有） */}
       {mode === 'solo' ? null : <MatterHandoffBar matterId={view.matter.id} me={me} />}

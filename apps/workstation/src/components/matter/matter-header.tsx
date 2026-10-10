@@ -4,6 +4,8 @@
  * - 标题是 AI 起的短标题（决策 177），点了就地改；改过的不再被自动覆盖。
  * - 灰字行：职责小标签（点了换）· 状态（小点与左栏同一套颜色）· 参与者头像 · 最近活动 ·（有才出）「N 个待办」。
  * - 「⋯」收 换职责 / 复制链接 /（有才出）固定记录 / 归档 / 关闭事项；在跑或有卡等你批时归档置灰并说为什么。
+ * - WP288（决策 326）：**会话**（`ask` 事项）页头只有标题 + 参与者 + 最近活动——不出状态点、不出职责那一格
+ *   （任务才有）；「转成任务」收进「⋯」（原来页头下面单独一排「会话 · 转成任务」）。
  */
 import type { Todo } from '@agentsws/contracts'
 import { cn } from 'cn'
@@ -12,6 +14,7 @@ import {
   ArrowLeftRight,
   ChevronDown,
   CircleX,
+  ClipboardList,
   Forward,
   Link2,
   MoreHorizontal,
@@ -162,6 +165,9 @@ export function MatterHeader({
   onClose,
   onRetitle,
   onHandOff,
+  ask = false,
+  onPromote,
+  promoting = false,
 }: {
   title: string
   roleId?: string | undefined
@@ -184,6 +190,11 @@ export function MatterHeader({
   onRetitle: (title: string) => void
   /** WP276：「交给同事」（② 里、事项是我的、没在交的时候才给；不给 = 菜单里没有这一项）。 */
   onHandOff?: (() => void) | undefined
+  /** WP288：这是一段会话（岗位里问的一句）——不出状态与职责那一格。 */
+  ask?: boolean
+  /** WP288：会话的「转成任务」（在「⋯」里；不给 = 菜单里没有这一项）。 */
+  onPromote?: (() => void) | undefined
+  promoting?: boolean
 }): ReactNode {
   const { t } = useApp()
   const menu = usePopover()
@@ -206,64 +217,70 @@ export function MatterHeader({
             className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12.5px] text-ws-muted-fg"
             data-testid="matter-meta"
           >
-            <div ref={picker.box} className="relative">
-              <button
-                type="button"
-                data-testid="matter-reroute"
-                data-role={roleId ?? ''}
-                title={t('matter.duty.tip')}
-                aria-haspopup="menu"
-                aria-expanded={picker.open}
-                disabled={switchable.length === 0}
-                onClick={() => {
-                  picker.setOpen((v) => !v)
-                }}
-                className="-ml-1 inline-flex h-[22px] items-center gap-1.5 rounded-md px-1.5 hover:text-ws-ink hover:shadow-[inset_0_0_0_1px_var(--ws-line)] disabled:hover:shadow-none"
-              >
-                {roleId === undefined ? null : <DutyIcon role_id={roleId} size={14} />}
-                <span>{roleName ?? t('matter.duty.none')}</span>
-                {switchable.length === 0 ? null : (
-                  <ArrowLeftRight aria-hidden className="size-3 text-ws-muted-fg" />
-                )}
-              </button>
-              {picker.open ? (
-                <div
-                  role="menu"
-                  data-testid="reroute-options"
-                  className="absolute top-7 left-0 z-30 flex w-56 flex-col gap-0.5 rounded-xl border border-ws-line bg-ws-card p-1 shadow-ws"
+            {ask ? null : (
+              <div ref={picker.box} className="relative">
+                <button
+                  type="button"
+                  data-testid="matter-reroute"
+                  data-role={roleId ?? ''}
+                  title={t('matter.duty.tip')}
+                  aria-haspopup="menu"
+                  aria-expanded={picker.open}
+                  disabled={switchable.length === 0}
+                  onClick={() => {
+                    picker.setOpen((v) => !v)
+                  }}
+                  className="-ml-1 inline-flex h-[22px] items-center gap-1.5 rounded-md px-1.5 hover:text-ws-ink hover:shadow-[inset_0_0_0_1px_var(--ws-line)] disabled:hover:shadow-none"
                 >
-                  {duties.map((d) => (
-                    <button
-                      key={d.role_id}
-                      type="button"
-                      role="menuitemradio"
-                      aria-checked={d.role_id === roleId}
-                      disabled={!d.mine || rerouting || d.role_id === roleId}
-                      onClick={() => {
-                        picker.setOpen(false)
-                        onReroute(d.role_id)
-                      }}
-                      className={cn(
-                        'flex h-8 items-center gap-2 rounded-lg px-2 text-left text-[13px] text-ws-body hover:bg-muted disabled:text-ws-muted-fg disabled:hover:bg-transparent',
-                        d.role_id === roleId && 'font-medium text-ws-ink',
-                      )}
-                    >
-                      <DutyIcon role_id={d.role_id} size={14} />
-                      {d.role_name}
-                    </button>
-                  ))}
-                </div>
-              ) : null}
-            </div>
-            <Dot />
-            <span
-              className={cn('inline-flex items-center gap-1.5 font-medium', STATE_FG[state])}
-              data-testid="matter-state"
-            >
-              <i aria-hidden className={cn('size-[7px] rounded-full', STATE_DOT[state])} />
-              {t(`matter.state.${state}`)}
-            </span>
-            <Dot />
+                  {roleId === undefined ? null : <DutyIcon role_id={roleId} size={14} />}
+                  <span>{roleName ?? t('matter.duty.none')}</span>
+                  {switchable.length === 0 ? null : (
+                    <ArrowLeftRight aria-hidden className="size-3 text-ws-muted-fg" />
+                  )}
+                </button>
+                {picker.open ? (
+                  <div
+                    role="menu"
+                    data-testid="reroute-options"
+                    className="absolute top-7 left-0 z-30 flex w-56 flex-col gap-0.5 rounded-xl border border-ws-line bg-ws-card p-1 shadow-ws"
+                  >
+                    {duties.map((d) => (
+                      <button
+                        key={d.role_id}
+                        type="button"
+                        role="menuitemradio"
+                        aria-checked={d.role_id === roleId}
+                        disabled={!d.mine || rerouting || d.role_id === roleId}
+                        onClick={() => {
+                          picker.setOpen(false)
+                          onReroute(d.role_id)
+                        }}
+                        className={cn(
+                          'flex h-8 items-center gap-2 rounded-lg px-2 text-left text-[13px] text-ws-body hover:bg-muted disabled:text-ws-muted-fg disabled:hover:bg-transparent',
+                          d.role_id === roleId && 'font-medium text-ws-ink',
+                        )}
+                      >
+                        <DutyIcon role_id={d.role_id} size={14} />
+                        {d.role_name}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            )}
+            {ask ? null : (
+              <>
+                <Dot />
+                <span
+                  className={cn('inline-flex items-center gap-1.5 font-medium', STATE_FG[state])}
+                  data-testid="matter-state"
+                >
+                  <i aria-hidden className={cn('size-[7px] rounded-full', STATE_DOT[state])} />
+                  {t(`matter.state.${state}`)}
+                </span>
+                <Dot />
+              </>
+            )}
             <span className="inline-flex items-center" title={t('matter.people')}>
               {people.slice(0, 3).map((p, i) => (
                 <span
@@ -332,19 +349,37 @@ export function MatterHeader({
               role="menu"
               className="absolute top-9 right-0 z-30 flex w-60 flex-col rounded-xl border border-ws-line bg-ws-card p-1 shadow-ws"
             >
-              <button
-                type="button"
-                role="menuitem"
-                disabled={switchable.length === 0}
-                onClick={() => {
-                  menu.setOpen(false)
-                  picker.setOpen(true)
-                }}
-                className="flex h-8 items-center gap-2 rounded-lg px-2 text-left text-[13px] hover:bg-muted disabled:text-ws-muted-fg"
-              >
-                <ArrowLeftRight aria-hidden className="size-3.5" />
-                {t('matter.menu.duty')}
-              </button>
+              {onPromote === undefined ? null : (
+                <button
+                  type="button"
+                  role="menuitem"
+                  data-testid="matter-ask-promote"
+                  disabled={promoting}
+                  onClick={() => {
+                    menu.setOpen(false)
+                    onPromote()
+                  }}
+                  className="flex h-8 items-center gap-2 rounded-lg px-2 text-left text-[13px] hover:bg-muted disabled:text-ws-muted-fg"
+                >
+                  <ClipboardList aria-hidden className="size-3.5" />
+                  {t('matter.ask.promote')}
+                </button>
+              )}
+              {ask ? null : (
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={switchable.length === 0}
+                  onClick={() => {
+                    menu.setOpen(false)
+                    picker.setOpen(true)
+                  }}
+                  className="flex h-8 items-center gap-2 rounded-lg px-2 text-left text-[13px] hover:bg-muted disabled:text-ws-muted-fg"
+                >
+                  <ArrowLeftRight aria-hidden className="size-3.5" />
+                  {t('matter.menu.duty')}
+                </button>
+              )}
               {onHandOff === undefined ? null : (
                 <button
                   type="button"

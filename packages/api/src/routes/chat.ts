@@ -22,10 +22,12 @@
  * 用 `fetch` + `ReadableStream` 而不是 `EventSource`（后者塞不进 `Authorization` 头）。
  */
 import type { ChatWidgetConfig, ChatWidgetPublicConfig, WorkspaceId } from '@agentsws/contracts'
+import { MAX_ROLE_RULE_CHARS } from '@agentsws/core'
 import type { Context } from 'hono'
 import { z } from 'zod'
 import { ApiError } from '../errors.js'
-import { body, ok, param, principalOf } from '../helpers.js'
+import { assignmentOf, body, ok, param, principalOf } from '../helpers.js'
+import { proposeInstructionRule } from '../instruction-rule.js'
 import { type GatewayEnv, type Route, route } from '../route-spec.js'
 
 /** 一条会话在 API 上的样子（比库里的窄：不端 `visitor_id` 这类内部 id 之外的东西）。 */
@@ -107,7 +109,12 @@ export interface ChatPort {
     instruction: string
     scope: 'single_reply' | 'similar_cases' | 'global_rule'
     taught_by: string
-  }): Promise<{ outcome: string; reply?: string; sediment: string }>
+    /**
+     * WP289（决策 318）：「以后都这样」已经出成职责规矩那张卡（这张卡的 id）——
+     * 车道不再另存一份知识候选（收成一处），回执 `sediment: 'role_rule'`。
+     */
+    rule_card_id?: string
+  }): Promise<{ outcome: string; reply?: string; sediment: string; rule_card_id?: string }>
   /** 访客还在页面上（SSE 挂着时的心跳）。 */
   touch(session_id: string): Promise<void>
   /** 订阅这条会话的推送；返回一个停订阅的函数。 */
@@ -467,7 +474,8 @@ export function chatRoutes(): Route[] {
         method: 'post',
         path: '/v1/chat/sessions/:id/teach',
         operationId: 'teachChatSession',
-        summary: '用中文告诉 AI 这种问题该怎么答（对客消息 + 沉淀成知识候选）',
+        summary:
+          '用中文告诉 AI 这种问题该怎么答（对客消息 + 沉淀）。scope=global_rule（以后都这样）出一张职责规矩卡，与卡片指导同一本、同一套权限',
         tag: 'chat',
         auth: 'bearer',
         assignment: true,
@@ -475,23 +483,55 @@ export function chatRoutes(): Route[] {
         outbound: true,
         params: [{ name: 'id', in: 'path', required: true, description: '会话 id' }],
         body: TeachBody,
-        returns: '{ outcome, reply?, sediment }',
+        returns: '{ outcome, reply?, sediment, rule_card_id? }',
       },
       async (c, deps) => {
         const p = principalOf(c)
         const port = await scopedPortOf(deps, c)
         const id = param(c, 'id')
-        await requireSession(port, id)
+        const session = await requireSession(port, id)
         const input = await body(c, TeachBody)
-        return ok(
-          c,
-          await port.teach({
-            session_id: id,
-            instruction: input.instruction,
-            scope: input.scope,
-            taught_by: p.person_id,
-          }),
-        )
+        /*
+         * WP289（决策 318）：「以后都这样」接进职责规矩簿——与卡片指导同一张卡、同一个收件人
+         * （① ② 本人 / ③ 老板）、批了落进同一本、进运行提示词。规矩落在教的这条职责上
+         * （聊天窗用的那条客服职责）。来源没有卡：按这条会话合成一个（每次不同）。
+         */
+        let rule_card_id: string | undefined
+        if (input.scope === 'global_rule') {
+          const text = input.instruction.trim()
+          if (text.length > MAX_ROLE_RULE_CHARS)
+            throw new ApiError(
+              'invalid_input',
+              `「以后都这样」是一句规矩，最多 ${MAX_ROLE_RULE_CHARS} 字`,
+            )
+          const a = assignmentOf(c)
+          const who = session.visitor_display ?? session.external_session_id
+          const card = await proposeInstructionRule(deps, {
+            workspace_id: p.workspace_id,
+            person_id: p.person_id,
+            assignment_id: a.id,
+            item: {
+              id: `chat_${id}_${Date.parse(deps.clock.now()).toString(36)}`,
+              role_id: a.role_id,
+              subject: { object: { type: 'thread', id: `chat-thread:${id}` } },
+              title: `聊天：${who}`,
+            },
+            text,
+            chat: { session_id: id },
+          })
+          rule_card_id = card?.id
+        }
+        const out = await port.teach({
+          session_id: id,
+          instruction: input.instruction,
+          scope: input.scope,
+          taught_by: p.person_id,
+          ...(rule_card_id === undefined ? {} : { rule_card_id }),
+        })
+        return ok(c, {
+          ...out,
+          ...(rule_card_id === undefined ? {} : { sediment: 'role_rule', rule_card_id }),
+        })
       },
     ),
     route(

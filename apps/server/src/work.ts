@@ -99,6 +99,8 @@ export interface WorkPortOptions {
   ): Promise<{ event: MatterEvent; run_id?: string } | undefined>
   /** WP264：这件事上正在跑的那一次（事项页「正在做…」）；不给 = 不显示。 */
   liveRun?(matter_id: string): MatterLiveRun | undefined
+  /** WP287：这个人是不是还持有这条分配（重试时优先用事项钉的那条）。不给 = 一律用请求头那条。 */
+  holds?(person_id: PersonId, assignment_id: AssignmentId): boolean
   /** WP264：停下这件事上正在跑的运行（回停了几次）；不给 = 停不了。 */
   stopRuns?(matter_id: string, reason: string): Promise<number>
   /** 店铺侧订单行；目标指标从它算 */
@@ -374,6 +376,28 @@ export function createWorkPort(options: WorkPortOptions): WorkPort {
     },
     // WP264（决策 177）：人改的标题之后不再被自动覆盖
     retitleMatter: (_actor, id, title) => work.retitle(id, title, 'user'),
+    /*
+     * WP287：「没跑成」下面的「重试」——按最近那次没跑成之前人说的那句（没有就按事项第一句 / 标题）
+     * 再跑一次。用事项钉的那条分配（本人持有时），否则请求头那条；时间线只记「重试了一次」。
+     */
+    retryMatter: async (actor, id) => {
+      const m = work.requireMatter(id)
+      const events = work.store.listMatterEvents(id, { limit: 500 })
+      const lastFail = events.map((e) => e.failed !== undefined).lastIndexOf(true)
+      const before = lastFail < 0 ? events : events.slice(0, lastFail)
+      const said = before.filter((e) => e.kind === 'human_message')
+      const brief = said[said.length - 1]?.text ?? m.title
+      const own =
+        m.position_id !== undefined && options.holds?.(actor.person_id, m.position_id) === true
+          ? m.position_id
+          : actor.assignment_id
+      return work.run(id, {
+        person_id: actor.person_id,
+        assignment_id: own,
+        brief,
+        text: '重试了一次',
+      })
+    },
     stopMatter: async (_actor, id) => {
       work.requireMatter(id)
       const stopped = (await options.stopRuns?.(id, '你点了停，这一轮先停在这里')) ?? 0

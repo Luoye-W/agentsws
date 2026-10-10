@@ -82,11 +82,10 @@ const { PositionHandoff } = await import('@/components/position/position-handoff
 const type = (value: string): void => {
   fireEvent.change(screen.getByTestId('position-entry-input'), { target: { value } })
 }
+// WP287：岗位页用事项页同一个输入框——发送是框内的箭头（`matter-send`）
+const sendButton = (): HTMLButtonElement => screen.getByTestId('matter-send') as HTMLButtonElement
 const submit = (): void => {
-  fireEvent.click(screen.getByTestId('position-entry-submit'))
-}
-const pickDuty = (role_id: string): void => {
-  fireEvent.change(screen.getByTestId('position-handoff-duty'), { target: { value: role_id } })
+  fireEvent.click(sendButton())
 }
 
 beforeEach(() => {
@@ -111,19 +110,10 @@ describe('WP259 交给它：长文本照收', () => {
     expect(navigate).toHaveBeenCalledWith('/matters/mat_1')
   })
 
-  it('选了具体职责（10-07 真机那条路）：拆好 + run: true，开完立刻起首轮运行', async () => {
+  it('WP287：不让人选职责——没有「职责：自动」下拉，也没有写着「交给它」的按钮', () => {
     renderWithProviders(<PositionHandoff id="asg_theme" view={VIEW} hero />)
-    pickDuty('site.theme')
-    type(LONG)
-    submit()
-    await waitFor(() => {
-      expect(createMatterWithRole).toHaveBeenCalledWith('asg_theme', {
-        title: LONG_TITLE,
-        summary: LONG,
-        run: true,
-      })
-    })
-    expect(navigate).toHaveBeenCalledWith('/matters/mat_2')
+    expect(screen.queryByTestId('position-handoff-duty')).toBeNull()
+    expect(screen.queryByText('交给它')).toBeNull()
   })
 
   it('正好 120 字一行：原样当标题，不拆', async () => {
@@ -139,15 +129,14 @@ describe('WP259 交给它：长文本照收', () => {
   it('空白：按钮是灰的，交不出去', () => {
     renderWithProviders(<PositionHandoff id="asg_theme" view={VIEW} hero />)
     type('   \n  ')
-    const button = screen.getByTestId('position-entry-submit') as HTMLButtonElement
-    expect(button.disabled).toBe(true)
+    expect(sendButton().disabled).toBe(true)
     submit()
     expect(openMatterAtPosition).not.toHaveBeenCalled()
   })
 })
 
 describe('WP259 交给它：出错说人话、提交中有进行态', () => {
-  it('提交中：按钮灰、写「正在交…」', async () => {
+  it('提交中：发送键灰着（不重复交）', async () => {
     let release: (v: OpenAtPositionData) => void = () => undefined
     openMatterAtPosition.mockImplementationOnce(
       () =>
@@ -158,9 +147,9 @@ describe('WP259 交给它：出错说人话、提交中有进行态', () => {
     renderWithProviders(<PositionHandoff id="asg_theme" view={VIEW} hero />)
     type('把首页 banner 换成秋季款')
     submit()
-    const button = await screen.findByText('正在交…')
-    expect((screen.getByTestId('position-entry-submit') as HTMLButtonElement).disabled).toBe(true)
-    expect(button).toBeDefined()
+    await waitFor(() => {
+      expect(sendButton().disabled).toBe(true)
+    })
     await act(async () => {
       release(PICKED)
     })
@@ -168,14 +157,13 @@ describe('WP259 交给它：出错说人话、提交中有进行态', () => {
   })
 
   it('服务端 400：框下一句「没交出去：<服务端那句>」，字还在框里，按钮能再点', async () => {
-    createMatterWithRole.mockRejectedValueOnce(
+    openMatterAtPosition.mockRejectedValueOnce(
       new ApiClientError(400, {
         code: 'invalid_input',
         message: 'title: Too big: expected string to have <=120 characters',
       }),
     )
     renderWithProviders(<PositionHandoff id="asg_theme" view={VIEW} hero />)
-    pickDuty('site.theme')
     type(LONG)
     submit()
     const alert = await screen.findByTestId('handoff-error')
@@ -184,7 +172,7 @@ describe('WP259 交给它：出错说人话、提交中有进行态', () => {
     )
     expect(alert.getAttribute('role')).toBe('alert')
     expect((screen.getByTestId('position-entry-input') as HTMLTextAreaElement).value).toBe(LONG)
-    expect((screen.getByTestId('position-entry-submit') as HTMLButtonElement).disabled).toBe(false)
+    expect(sendButton().disabled).toBe(false)
     expect(navigate).not.toHaveBeenCalled()
     // 人一改字，那句错误就收起来
     type(`${LONG}。`)
