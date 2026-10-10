@@ -6,6 +6,7 @@
  * 怎么排在 `matter-model.ts`，这里只管画。
  */
 import type { MatterEvent, MatterLiveRun, MatterRunStep } from '@agentsws/contracts'
+import { splitAnswer } from '@agentsws/contracts'
 import type { DeckAction, DeckCard } from '@agentsws/deck'
 import { cn } from 'cn'
 import {
@@ -30,6 +31,7 @@ import {
   X,
 } from 'lucide-react'
 import { type ReactNode, useEffect, useState } from 'react'
+import { AnswerComponents } from '@/components/answer/answer-view'
 import { deckActionLabel } from '@/components/deck/deck-action-bar'
 import { DutyIcon } from '@/components/role-icons/role-icon'
 import { Button } from '@/components/ui/button'
@@ -339,7 +341,11 @@ export function AiEntry({
   resuming?: boolean
 }): ReactNode {
   const { t } = useApp()
-  const text = item.event?.text ?? ''
+  const raw = item.event?.text ?? ''
+  // WP291：当场问答那段话末尾的 ```answer 组件段——正文照常画，组件按契约画在下面
+  const answer = raw.includes('```answer') ? splitAnswer(raw) : undefined
+  const text = answer?.text ?? raw
+  const shown = (answer?.components ?? []).filter((c) => c.kind !== 'text')
   const long = replyIsLong(text)
   const [open, setOpen] = useState(false)
   const preview = item.preview?.preview
@@ -381,6 +387,11 @@ export function AiEntry({
           >
             <SafeMarkdown text={text} variant="chat" />
           </div>
+          {shown.length === 0 ? null : (
+            <div className="mt-3">
+              <AnswerComponents components={shown} />
+            </div>
+          )}
           {long ? (
             <button
               type="button"
@@ -531,11 +542,19 @@ export function SysLine({
     const picked = e.route?.picked
     const name = picked === undefined ? undefined : roleName(picked)
     if (name !== undefined)
-      text = t(settled ? 'matter.sys.settled' : 'matter.sys.routed', { role: name })
+      text = t(
+        // WP291：一开始就记成任务的那一行（原话后面头一句）
+        e.route?.task === true
+          ? 'matter.sys.task'
+          : settled
+            ? 'matter.sys.settled'
+            : 'matter.sys.routed',
+        { role: name },
+      )
     const options = (e.route?.options ?? []).filter((o) => o.role_id !== currentRole)
     detail = (
       <div className="flex max-w-[560px] flex-col items-center gap-2 text-center text-[12.5px] text-ws-body">
-        {name === undefined ? null : <p>{e.text}</p>}
+        {name === undefined || e.route?.task === true ? null : <p>{e.text}</p>}
         {onRoute === undefined || options.length === 0 ? null : (
           <div className="flex flex-wrap justify-center gap-1.5" data-testid="matter-route-options">
             {options.map((o) => (
@@ -558,7 +577,11 @@ export function SysLine({
         )}
       </div>
     )
-    if (name === undefined && (onRoute === undefined || options.length === 0)) detail = null
+    if (
+      (name === undefined || e.route?.task === true) &&
+      (onRoute === undefined || options.length === 0)
+    )
+      detail = null
   } else if (item.variant === 'blocked') {
     Icon = Plug
     tone = 'text-ws-warn'

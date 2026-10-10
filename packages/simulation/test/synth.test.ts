@@ -81,7 +81,8 @@ describe('合成公司生成器（26 §2）', () => {
     // WP179 再加一条（内容与搜索上网查一次资料：官方网页工具）→ 65
     // WP191 再加一条（LinkedIn 公司主页帖：没连上时变成去 LinkedIn 发的待办）→ 66
     // WP284 再加一条（「以后都这样」批了后下一次真按它做）→ 67
-    expect(listFiles(join(PACK_DIR, 'scenarios'), '.yml').length).toBe(67)
+    // WP291 再加一条（岗位入口三分：当场问答出表格 / 会话 / 任务）→ 68
+    expect(listFiles(join(PACK_DIR, 'scenarios'), '.yml').length).toBe(68)
     expect(statSync(join(PACK_DIR, 'baseline.json')).isFile()).toBe(true)
   })
 

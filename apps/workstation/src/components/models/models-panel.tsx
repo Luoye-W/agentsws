@@ -89,6 +89,7 @@ const PURPOSES: ModelPurposeName[] = [
   'embedding',
   'judge',
   'transcription',
+  'classify',
 ]
 
 export function ModelsPanel({ assignment }: { assignment?: string }): React.ReactNode {

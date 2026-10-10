@@ -4,6 +4,8 @@
  * 不上重库：一张 key 表 + 一个 `t()`。key 的命名与服务端给的 `label_key` 对齐
  * （证据芯片只出 key，不出裸枚举——36 §2.3）。
  */
+
+import { ANSWER_EN, ANSWER_ZH } from './i18n-answer'
 import { CLOUD_AUTH_EN, CLOUD_AUTH_ZH } from './i18n-cloud-auth'
 import { COMPANY_EN, COMPANY_ZH } from './i18n-company'
 import { HANDOFF_EN, HANDOFF_ZH } from './i18n-handoff'
@@ -2561,6 +2563,7 @@ const zh: Table = {
   'models.purpose.embedding': '向量（知识库检索）',
   'models.purpose.judge': '判分（自检与抽检）',
   'models.purpose.transcription': '转写（会议录音）',
+  'models.purpose.classify': '判断（岗位里一句话：当场答 / 会话 / 任务）',
   // WP179：官方网页搜索（用量表里一行 + 模型页一个开关）
   'models.purpose.web_search': '网页搜索（DeepSeek）',
   'web.search.title': '用你的 DeepSeek 账号搜索',
@@ -6532,6 +6535,7 @@ const en: Table = {
   'models.purpose.embedding': 'Embedding (knowledge search)',
   'models.purpose.judge': 'Judging (self-checks and sampling)',
   'models.purpose.transcription': 'Transcription (meeting audio)',
+  'models.purpose.classify': 'Sorting (quick answer / chat / task)',
   // WP179
   'models.purpose.web_search': 'Web search (DeepSeek)',
   'web.search.title': 'Search with your DeepSeek account',
@@ -8005,6 +8009,8 @@ const TABLES: Record<Lang, Table> = {
     ...SHOP_ADMIN_ZH,
     // WP268：挑图卡、品牌素材库、事项里拖图
     ...IMAGES_ZH,
+    // WP291：岗位页当场回答
+    ...ANSWER_ZH,
     // WP271：三种模式的换词（`key@solo` / `key@peers`，`useMode().t` 先找它）
     ...MODE_ZH,
     // WP276：② 同事互联（交给对方、团队页同事、和同事一起用）
@@ -8029,6 +8035,7 @@ const TABLES: Record<Lang, Table> = {
     ...MATTER_EN,
     ...SHOP_ADMIN_EN,
     ...IMAGES_EN,
+    ...ANSWER_EN,
     ...MODE_EN,
     ...PEERS_EN,
     ...COMPANY_EN,

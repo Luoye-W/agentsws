@@ -575,6 +575,7 @@ export {
 export type {
   OpenAtPositionView,
   PositionActor,
+  PositionAnswerRecordView,
   PositionAnswerView,
   PositionEntryPort,
   RouteCandidateView,

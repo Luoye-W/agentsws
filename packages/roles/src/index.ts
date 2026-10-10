@@ -18,6 +18,21 @@ export {
 export type { AssignmentFilter, StoreBackend } from './backend.js'
 export { createMemoryBackend, createSqliteBackend } from './backend.js'
 export { changeKindOf, effectiveConfig, riskClassOf, webOf } from './effective.js'
+export type {
+  EntryClassifyComplete,
+  EntryKind,
+  EntryKindResult,
+} from './entry-kind.js'
+export {
+  classifyEntryKind,
+  ENTRY_CLASSIFY_MAX_INPUT,
+  ENTRY_CLASSIFY_MAX_OUTPUT,
+  ENTRY_CLASSIFY_TIMEOUT_MS,
+  ENTRY_KINDS,
+  entryClassifyPrompt,
+  entryKindByRules,
+  parseEntryKind,
+} from './entry-kind.js'
 export type { EntryIntent, EntryIntentResult } from './intent.js'
 export { classifyEntryIntent, LONG_TASK_CHARS } from './intent.js'
 export {

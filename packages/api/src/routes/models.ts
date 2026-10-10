@@ -53,6 +53,8 @@ export const MODEL_PURPOSES: readonly ModelPurpose[] = [
   'embedding',
   'judge',
   'transcription',
+  // WP291：岗位入口三分（当场答 / 会话 / 任务）——便宜那档就够
+  'classify',
 ]
 
 // ── 端口类型（apps/server 实现）────────────────────────────────────────
@@ -761,7 +763,15 @@ const SubscriptionModelBody = z.object({ model: z.string().min(1).max(128) })
 /** WP134：取消哪一次登录（官方的尝试 id，UUID）。 */
 const DeepSeekCancelBody = z.object({ attempt_id: z.string().min(1).max(64) })
 const REGION = z.enum(['cn', 'global'])
-const PURPOSE = z.enum(['run', 'extraction', 'reflection', 'embedding', 'judge', 'transcription'])
+const PURPOSE = z.enum([
+  'run',
+  'extraction',
+  'reflection',
+  'embedding',
+  'judge',
+  'transcription',
+  'classify',
+])
 
 /**
  * 保存 provider 的请求体。

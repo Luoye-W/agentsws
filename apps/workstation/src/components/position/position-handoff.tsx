@@ -3,8 +3,8 @@
  *
  * - **和事项页 / 随便聊同一个输入框**（`MatterComposer`：发送是框内的箭头，不写「交给它」；
  *   有合适的建议时浅灰字 + Tab 收下；「+」「@」同一套）。岗位页没有「私聊 AI」——这里发出去就是开一段会话。
- * - **发出去就进这件事的会话线程**（`usePositionOpen` → `detach`）：回答在线程里流式出现；
- *   问一句是会话、不进「工作」，要动手的才是任务——由服务端判，判不准先当会话答。
+ * - WP291（决策 356）：发出去服务端三分——**当场问答**就在框下面答（`QuickAnswer`：一句话 + 组件）；
+ *   **会话 / 任务**马上进它的线程。框里的字发出去就清，等回答时框下出「…」。
  * - 不让人选职责（WP287 第 2 条）：原来那个「职责：自动」下拉去掉了，岗位自己按分 / 先后取，线程里能「换一条」。
  * - 下面一排快捷建议照旧，点一下填进框。
  *
@@ -21,6 +21,7 @@ import { usePositionOpen } from '@/components/work/use-position-open'
 import type { PositionInstanceData } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 import { TASK_TEXT_MAX } from '@/lib/handoff'
+import { QuickAnswer } from './quick-answer'
 
 const MAX_SUGGESTIONS = 4
 
@@ -42,13 +43,21 @@ export function PositionHandoff({
   const mine = view.roles.filter((r) => r.my_assignment_id !== undefined)
   // 建议只从本人那几条职责来（54 §1：拿别人那条去开就是借岗位扩权）
   const suggestions = mine.flatMap((r) => r.quick_prompts ?? []).slice(0, MAX_SUGGESTIONS)
-  const busy = open.isPending
 
   const submit = (): void => {
     const title = text.trim().slice(0, TASK_TEXT_MAX)
-    if (title === '' || busy) return
+    // WP291：等回答时不锁框（回答在框下出「…」）
+    if (title === '') return
     clearError()
-    open.mutate({ title })
+    open.mutate(
+      { title },
+      {
+        // WP259：没交出去，字放回框里（框下说一句人话）
+        onError: () => {
+          setText((now) => (now === '' ? title : now))
+        },
+      },
+    )
   }
 
   return (
@@ -81,7 +90,7 @@ export function PositionHandoff({
         onTogglePrivate={() => undefined}
         // 有合适的建议时浅灰字显示在框里，Tab 收下（与事项页同一个规矩）
         suggestion={suggestions[0]?.prompt}
-        sending={busy}
+        sending={false}
         docked={false}
         showPrivate={false}
         placeholderText={t(hero ? 'pos2.handoff.first.ask' : 'pos2.handoff.ask')}
@@ -109,6 +118,8 @@ export function PositionHandoff({
           ))}
         </div>
       )}
+      {/* WP291：当场回答（输入框之下、要你处理之上）；会话 / 任务这里不画，直接进线程 */}
+      <QuickAnswer position={id} />
       {hero ? (
         <p className="flex items-center gap-1 text-xs text-muted-foreground">
           {t('pos2.handoff.first.note')}

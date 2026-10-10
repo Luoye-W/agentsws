@@ -19,6 +19,7 @@
  *   他自己名下的（端口里判），所以岗位入口既不并集也不扩权。
  */
 import type {
+  AnswerComponent,
   MaybePromise,
   PersonId,
   PositionInstance,
@@ -55,14 +56,31 @@ export interface PositionAnswerView {
   /** `answered` / `failed`（`failure` 是人话，可重试）/ `stopped` / `promoted`（要动手，已转成一件事） */
   outcome: 'answered' | 'failed' | 'stopped' | 'promoted'
   text: string
-  /** 这次读了哪些东西（人话，最多 3 条） */
+  /** WP291：一句话（回答的第一段）；老服务端没有这一格 */
+  lead?: string
+  /** WP291：组件（表格 / 数字 / 一段字，契约 `AnswerComponent`）；老服务端没有这一格 */
+  components?: AnswerComponent[]
+  /** 这次读了哪些东西（人话，最多 3 条）——当场回答下面的「依据」 */
   sources: string[]
   failure?: string
 }
 
+/** WP291：一条当场问答（岗位「记录」里那一行）。 */
+export interface PositionAnswerRecordView {
+  matter_id: string
+  at: string
+  question: string
+  lead: string
+}
+
 export interface OpenAtPositionView {
-  /** WP287：当场答了（`ask`，不建进行中的事）还是开了一件事（`task`）；老服务端没有这一格 */
-  mode?: 'ask' | 'task'
+  /**
+   * WP287 / WP291：`quick` 当场答了（回答在 `answer`，岗位页上画）；`ask` 一段会话（进线程）；
+   * `task` 开了一件任务（进线程）。老服务端没有这一格
+   */
+  mode?: 'quick' | 'ask' | 'task'
+  /** WP291：判成了哪一类、谁判的（`model` 便宜模型 / `rules` 退回规则 / `caller` 调用方点名） */
+  entry?: { kind: 'quick' | 'chat' | 'task'; by: 'model' | 'rules' | 'caller' }
   answer?: PositionAnswerView
   matter: { id: string; title: string; entry?: string; role_id?: string; ask?: boolean }
   picked?: { role_id: string; role_name: string; assignment_id: string }
@@ -94,15 +112,20 @@ const OpenBody = z.object({
    */
   role_id: z.string().min(1).optional(),
   /**
-   * WP287：问还是交办。不给 / `auto` = 服务端判（判不准按问，当场答）；`task` = 一定开一件事；
-   * `ask` = 一定当场答。
+   * WP287 / WP291：怎么接这句话。不给 / `auto` = 服务端三分（便宜模型判；判不了按规则）；
+   * `quick` = 当场答（岗位页上出「一句话 + 组件」）；`chat`（老写法 `ask`）= 进会话；`task` = 开任务。
    */
-  mode: z.enum(['auto', 'ask', 'task']).optional(),
+  mode: z.enum(['auto', 'quick', 'chat', 'ask', 'task']).optional(),
   /**
    * WP287：不等运行跑完就回——工作台拿到事项 id 立刻进会话线程，回答在线程里出现。
-   * 不给 = 跑完才回（老行为；回答在 `answer` 里）。
+   * 不给 = 跑完才回（老行为；回答在 `answer` 里）。WP291：当场问答没有线程可进，总是答完才回。
    */
   detach: z.boolean().optional(),
+})
+
+const PromoteBody = z.object({
+  /** WP291：当场回答下面「当成任务做」——转完按原话当任务再跑一次 */
+  run: z.boolean().optional(),
 })
 
 const RerouteBody = z.object({
@@ -144,11 +167,19 @@ export interface PositionEntryPort {
    * `id` 两种都收（同 `instance`）。可选：没装就是 `not_implemented`，老装配照旧。
    */
   work?(actor: PositionActor, id: string): MaybePromise<PositionWorkView>
-  /** WP287：岗位里问的一句「转成一件事」。可选：没装就是 `not_implemented`。 */
+  /**
+   * WP287：岗位里问的一句「转成一件事」。可选：没装就是 `not_implemented`。
+   * WP291：`options.run` = 转完按原话当任务再跑一次（回 `run_id`）。
+   */
   promote?(
     actor: PositionActor,
     matter_id: string,
-  ): MaybePromise<{ matter: { id: string; title: string } }>
+    options?: { run?: boolean },
+  ): MaybePromise<{ matter: { id: string; title: string }; run_id?: string }>
+  /** WP291：当场回答下面「接着聊」——变成一段会话。可选：没装就是 `not_implemented`。 */
+  reveal?(actor: PositionActor, matter_id: string): MaybePromise<{ matter: { id: string } }>
+  /** WP291：本人在这个岗位上的当场问答（「记录」里列）。可选：没装就是 `not_implemented`。 */
+  answers?(actor: PositionActor, id: string): MaybePromise<{ answers: PositionAnswerRecordView[] }>
 }
 
 function portOf(deps: GatewayDeps): PositionEntryPort {
@@ -291,13 +322,72 @@ export function positionEntryRoutes(): Route[] {
         assignment: true,
         authz: READ,
         params: [{ name: 'id', in: 'path', required: true, description: 'matter_id' }],
-        returns: '{ matter: { id, title } }',
+        body: PromoteBody,
+        returns: '{ matter: { id, title }, run_id? }',
       },
       async (c, deps) => {
         const port = portOf(deps)
         if (port.promote === undefined)
           throw new ApiError('not_implemented', '这个服务进程转不了（岗位面没有 promote）')
-        return ok(c, await port.promote(actorOf(c), param(c, 'id')))
+        // 老调用方不带 body：照旧只转不跑
+        const input = await body(c, PromoteBody)
+        return ok(
+          c,
+          await port.promote(
+            actorOf(c),
+            param(c, 'id'),
+            input.run === true ? { run: true } : undefined,
+          ),
+        )
+      },
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/matters/:id/continue',
+        operationId: 'continueQuickAnswer',
+        summary:
+          '当场回答下面「接着聊」（WP291）：这一问一答变成一段会话（进左栏会话历史），之后在线程里接着说',
+        tag: 'work',
+        auth: 'bearer',
+        assignment: true,
+        authz: READ,
+        params: [{ name: 'id', in: 'path', required: true, description: 'matter_id' }],
+        returns: '{ matter: { id } }',
+      },
+      async (c, deps) => {
+        const port = portOf(deps)
+        if (port.reveal === undefined)
+          throw new ApiError('not_implemented', '这个服务进程接不了（岗位面没有 reveal）')
+        return ok(c, await port.reveal(actorOf(c), param(c, 'id')))
+      },
+    ),
+    route(
+      {
+        method: 'get',
+        path: '/v1/positions/:id/answers',
+        operationId: 'listPositionAnswers',
+        summary:
+          '本人在这个岗位上的当场问答（WP291）：问的那句 + 回答的一句话，新的在前，最多 20 条（岗位「记录」里列）',
+        tag: 'workstation',
+        auth: 'bearer',
+        assignment: true,
+        authz: READ,
+        params: [
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            description: '岗位模板 id；给本人持有的 assignment_id 也认',
+          },
+        ],
+        returns: '{ answers: PositionAnswerRecordView[] }',
+      },
+      async (c, deps) => {
+        const port = portOf(deps)
+        if (port.answers === undefined)
+          throw new ApiError('not_implemented', '这个服务进程列不了（岗位面没有 answers）')
+        return ok(c, await port.answers(actorOf(c), param(c, 'id')))
       },
     ),
   ]

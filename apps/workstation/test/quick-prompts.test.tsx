@@ -209,9 +209,9 @@ describe('岗位卡右上角 ··· 里的快捷提示（WP84 + WP98 收口）',
         role_id: 'dtc.support',
       })
     })
-    // 开完直接进事项页；服务端回的那条就是岗位入口（54 §2）
+    // WP291：先到那个岗位页（当场问答在那儿答，会话 / 任务由岗位页接着进线程）；服务端回的那条就是岗位入口（54 §2）
     await waitFor(() => {
-      expect(navigate).toHaveBeenCalledWith('/matters/mat_9')
+      expect(navigate).toHaveBeenCalledWith('/positions/asg_1')
     })
     expect(OPENED.matter.entry).toBe('position')
   })

@@ -37,7 +37,7 @@ const dataOf = async <T>(res: Response): Promise<T> => {
 }
 
 interface OpenView {
-  mode?: 'ask' | 'task'
+  mode?: 'quick' | 'ask' | 'task'
   answer?: { outcome: string; text: string; sources: string[]; failure?: string }
   matter: { id: string; ask?: boolean; role_id?: string }
   picked?: { role_id: string }
@@ -123,8 +123,9 @@ afterEach(async () => {
 })
 
 describe('WP287 ① 问一句是会话、要动手才是任务', () => {
+  // WP291：不点名时这句会被判成当场问答（见 wp291-entry-three-way）；这里点名「会话」看 WP287 的会话行为
   it('「现在店铺里有哪些产品」→ 当场答，不建进行中的事、不出选择卡', async () => {
-    const out = await open('现在店铺里有哪些产品')
+    const out = await open('现在店铺里有哪些产品', { mode: 'ask' })
     expect(out.mode).toBe('ask')
     expect(out.matter.ask).toBe(true)
     expect(out.approval_item_id).toBeUndefined()
@@ -157,7 +158,7 @@ describe('WP287 ① 问一句是会话、要动手才是任务', () => {
   })
 
   it('detach：不等跑完就回（界面立刻进会话线程），原话已在线程里，回答随后出现', async () => {
-    const out = await open('现在店铺里有哪些产品', { detach: true })
+    const out = await open('现在店铺里有哪些产品', { detach: true, mode: 'ask' })
     expect(out.mode).toBe('ask')
     expect(out.run_id).toBeUndefined()
     expect(timeline(out.matter.id).some((e) => e.kind === 'human_message')).toBe(true)
@@ -191,7 +192,7 @@ describe('WP287 ① 问一句是会话、要动手才是任务', () => {
       })
       return result(req, 'completed', '出了一张改价卡')
     })
-    const out = await open('A 商品现在多少钱')
+    const out = await open('A 商品现在多少钱', { mode: 'ask' })
     expect(out.mode).toBe('ask')
     expect(out.answer?.outcome).toBe('promoted')
     expect(timeline(out.matter.id).some((e) => e.text.includes('转成了任务'))).toBe(true)
@@ -200,7 +201,7 @@ describe('WP287 ① 问一句是会话、要动手才是任务', () => {
   })
 
   it('会话里接着说一句、这回要动手了（出了卡）→ 同样转成任务', async () => {
-    const out = await open('A 商品现在多少钱')
+    const out = await open('A 商品现在多少钱', { mode: 'ask' })
     expect(server.work.getMatter(out.matter.id)?.ask).toBeDefined()
     const adapter = server.runtime?.adapter
     if (adapter === undefined) throw new Error('没有运行时')
@@ -224,7 +225,8 @@ describe('WP287 ① 问一句是会话、要动手才是任务', () => {
 
   it('「你好」当场回一句问要做什么（不起运行）', async () => {
     const out = await open('你好')
-    expect(out.mode).toBe('ask')
+    // WP291：打招呼是一次当场问答（岗位页上回一句，不进线程）
+    expect(out.mode).toBe('quick')
     expect(out.answer?.text).toContain('想让我做什么')
     expect(out.run_id).toBeUndefined()
     expect(await openMatters()).toBe(0)

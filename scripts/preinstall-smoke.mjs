@@ -519,17 +519,15 @@ export async function smokePosition(ctx, position, log = () => {}, { toolsOnly =
   }
 
   // ③ 岗位入口问一句（WP287：当场答，不建进行中的事）
+  // WP291：不点名、让服务端三分——判断那一次也过这个品牌的模型网关（假模型回的不是那行 JSON → 按规则判成当场问答），
+  // 当场问答那次运行照样走 dsh。WP287 的服务端回 `ask`、WP291 起回 `quick`，都算当场答
   let wp287 = false
   try {
-    const opened = await openAt(
-      ctx,
-      position.id,
-      { title: '冒烟：现在店里有哪些产品？', mode: 'ask' },
-      anyAsg,
-    )
+    const opened = await openAt(ctx, position.id, { title: '冒烟：现在店里有哪些产品？' }, anyAsg)
     wp287 = opened.mode !== undefined
     if (!wp287) set('ask', pending('等 WP287', '老服务端：问一句也开成了一件事'))
-    else if (opened.mode !== 'ask') set('ask', fail(`没当场答（mode=${opened.mode}）`))
+    else if (opened.mode !== 'ask' && opened.mode !== 'quick')
+      set('ask', fail(`没当场答（mode=${opened.mode}）`))
     else if (opened.answer?.outcome !== 'answered')
       set(
         'ask',

@@ -112,6 +112,8 @@ export type WorkExtraEventType =
   | 'todo.recycled'
   /** WP287：岗位里问的一句转成了一件事 */
   | 'matter.promoted'
+  /** WP291：当场问答转成了一段会话（「接着聊」） */
+  | 'matter.revealed'
 
 /** WP264：预览那一格照抄一份（老三格 + 新三格，没给的不写）。 */
 function copyPreview(p: NonNullable<MatterEvent['preview']>): NonNullable<MatterEvent['preview']> {
@@ -213,6 +215,8 @@ export interface CreateMatterInput {
   position_template_id?: Matter['position_template_id'] | undefined
   /** WP287：岗位里问的一句（不进任何列表，见 `Matter.ask`）。 */
   ask?: boolean | undefined
+  /** WP291：当场问答（`ask.quick`，连左栏会话历史都不进；只在给了 `ask: true` 时有效）。 */
+  quick?: boolean | undefined
 }
 
 export interface CreateTodoInput {
@@ -427,7 +431,9 @@ export class Work {
         ? {}
         : { position_template_id: input.position_template_id }),
       ...(input.goal_id === undefined ? {} : { goal_id: input.goal_id }),
-      ...(input.ask === true ? { ask: { at } } : {}),
+      ...(input.ask === true
+        ? { ask: input.quick === true ? { at, quick: true as const } : { at } }
+        : {}),
       context: {
         summary: input.summary ?? '',
         pinned: input.pinned ?? [],
@@ -455,9 +461,22 @@ export class Work {
           : { position_template_id: matter.position_template_id }),
         ...(matter.goal_id === undefined ? {} : { goal_id: matter.goal_id }),
         ...(matter.ask === undefined ? {} : { ask: true }),
+        ...(matter.ask?.quick === true ? { quick: true } : {}),
       },
     )
     return matter
+  }
+
+  /**
+   * WP291：当场问答 → 一段普通会话（人点「接着聊」，或在它的线程里又说了一句）。
+   * 之后它进左栏会话历史；时间线不记一句（一问一答原样留着就是上下文）。不是当场问答的原样返回。
+   */
+  revealQuick(id: MatterId, actor: MatterEvent['actor']): Matter {
+    const matter = this.requireMatter(id)
+    if (matter.ask?.quick !== true) return matter
+    this.store.putMatter({ ...matter, ask: { at: matter.ask.at }, updated_at: this.now() })
+    this.emit('matter.revealed', { type: 'matter', id }, actor, {})
+    return this.requireMatter(id)
   }
 
   /**
@@ -558,6 +577,7 @@ export class Work {
             route: {
               ...(input.route.picked === undefined ? {} : { picked: input.route.picked }),
               options: input.route.options.map((o) => ({ ...o })),
+              ...(input.route.task === true ? { task: true as const } : {}),
             },
           }),
       ...(input.preview === undefined ? {} : { preview: copyPreview(input.preview) }),

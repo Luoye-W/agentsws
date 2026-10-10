@@ -95,7 +95,15 @@ export interface MatterEvent {
    * `picked` 有值 = 已经按它在做，`options` 是「换成它」；没有 = 还没定，`options` 是「走它」。
    * 老事件没有这一格。
    */
-  route?: { picked?: RoleId; options: { role_id: RoleId; role_name: string }[] }
+  route?: {
+    picked?: RoleId
+    options: { role_id: RoleId; role_name: string }[]
+    /**
+     * WP291（决策 356）：这一行是岗位入口**一开始就记成任务**的那一句——界面写「记成了任务，按「X」做」
+     * （还能换的话后面跟「换一条」）。老事件没有这一格。
+     */
+    task?: true
+  }
   /**
    * WP253：这一条是「预览好了」——AI 把主题推成了一份**未发布**副本（线上没动），界面在它下面出
    * 「打开预览」按钮。`url` 是 Shopify 的预览链接，`label` 是那份副本的名字。老事件没有这一格。
@@ -268,6 +276,13 @@ export interface Matter {
 export interface MatterAsk {
   /** 什么时候问的 */
   at: Iso8601
+  /**
+   * WP291（决策 356）：**当场问答**——岗位页上一问一答就完的那一句（回答是「一句话 + 组件」，就画在岗位页
+   * 输入框下面）。它连会话也不算：不进左栏会话历史、不进任何列表与计数（{@link MatterFilter.quick}），
+   * 只在岗位「记录」里找得到。人点「接着聊」或在它的线程里再说一句 → 拿掉这一格，变成一段普通会话；
+   * 点「当成任务做」→ 整个 `ask` 拿掉。
+   */
+  quick?: true
 }
 
 /**
@@ -696,6 +711,11 @@ export interface MatterFilter {
    * 「N 件在办」、首页进行中都传它）；`true` = 只要会话；不给 = 都要（左栏会话历史、找回照旧列）。
    */
   asks?: boolean
+  /**
+   * WP291：当场问答（{@link MatterAsk.quick}）。`true` = 只要它们（岗位「记录」里列）；
+   * 不给 / `false` = **一律不要**——它们不在任何列表里出现（左栏会话历史、工作、计数、归档扫描都不见它）。
+   */
+  quick?: boolean
   limit?: number
 }
 

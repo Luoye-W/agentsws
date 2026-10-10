@@ -193,6 +193,11 @@ export interface ScenarioPositionOpen {
   who: string
   position: string
   text: string
+  /**
+   * WP291（决策 356）：入口三分那一次便宜模型的**固定替身**——这句话判成什么（当场问答 / 会话 / 任务）。
+   * 不给 = 没接模型，按 WP287 的规则判（问 → quick，交办 → task）。模拟永远不调真模型。
+   */
+  judge?: 'quick' | 'chat' | 'task'
 }
 
 /** WP44：运营 Agent 改一件商品的价（先查文档 → 过官方 GraphQL 校验 → 提一条变更）。 */
@@ -1470,6 +1475,13 @@ export interface ScenarioExpected {
    * 这一条是在**一个岗位的职责集合内**判"该走哪条"。
    */
   position_routed_to?: string[]
+  /**
+   * WP291：岗位入口那几句话按顺序判成了什么（`quick` / `chat` / `task`）。当场问答还要**不进任何列表**
+   * （默认事项列表里找不到它），否则这一条不过。
+   */
+  position_entries?: string[]
+  /** WP291：当场回答里至少出现过这些组件（`text` / `table` / `metric`）。 */
+  position_answer_components?: string[]
   /** WP39：代答里至少出现过这些类别（`doing` / `scope` / `busy` / `skills` / `private` / `professional`）。 */
   secretary_kinds?: string[]
   /**
