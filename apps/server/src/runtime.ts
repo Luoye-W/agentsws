@@ -455,6 +455,12 @@ export interface RuntimeOptions {
    */
   dshMode?: DshRuntimeMode
   /**
+   * WP290（决策 332，装包前冒烟）：**每一次**有模型的运行都走 dsh 运行时，不只带浏览器 / 电脑操控 /
+   * 网页工具的那几种。只给 `scripts/preinstall-smoke.mjs` 用：它要每条职责的全部工具都过一遍
+   * dsh 自己的工具编译（10-09 参数表那一类错一启动就挂）。不给 = 老行为，一个字节不变。
+   */
+  dshAllRuns?: boolean
+  /**
    * WP179（Luoye 09-29「官方功能优先」）：**官方网页搜索与抓网页**要服务端给的那几样。
    *
    * 不接 = 老行为：`RunRequest.web` 永远不给，谁都上不了网。接了也要职责 YAML 挂了 `web_tools`
@@ -1277,7 +1283,10 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
    * 别的运行照旧 direct，一个字节不变。
    */
   const dshAdapterOnce =
-    options.computerUse !== undefined || options.browser !== undefined || options.web !== undefined
+    options.dshAllRuns === true ||
+    options.computerUse !== undefined ||
+    options.browser !== undefined ||
+    options.web !== undefined
       ? memo(() =>
           createDshRuntime({
             gateway: { complete: (r) => options.models.complete(r) },
@@ -1911,8 +1920,12 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       const cu = request.computer_use
       // WP148：开了浏览器的运行同样走 dsh（只有那棵树上挂得了浏览器提供方）
       // WP179：挂了官方网页工具的运行也走 dsh（官方 `web_search` / `web_fetch` 只在那棵树上挂）
+      // WP290：装包前冒烟要每一次都走 dsh（`dshAllRuns`）
       const needsDsh =
-        cu !== undefined || request.browser !== undefined || request.web !== undefined
+        options.dshAllRuns === true ||
+        cu !== undefined ||
+        request.browser !== undefined ||
+        request.web !== undefined
       const dsh = needsDsh ? dshAdapter() : undefined
       const runner = dsh ?? adapter
       if (cu?.granted_until !== undefined) {
