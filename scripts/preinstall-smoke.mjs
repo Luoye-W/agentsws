@@ -682,8 +682,14 @@ export async function runSmoke({
     return { ok, world, rows, ms: Date.now() - t0 }
   } finally {
     await ctx.close()
-    if (!keep) rmSync(ctx.tmp, { recursive: true, force: true })
-    else log(`临时目录留着：${ctx.tmp}`)
+    if (!keep) {
+      // Windows 上服务刚停、SQLite 句柄可能还没放（EBUSY）：多试几次；还删不掉就留着，不让收尾把结果判成红（10-10 发版演练）
+      try {
+        rmSync(ctx.tmp, { recursive: true, force: true, maxRetries: 10, retryDelay: 500 })
+      } catch (e) {
+        log(`临时目录没删掉（${e instanceof Error ? e.message : String(e)}），留在：${ctx.tmp}`)
+      }
+    } else log(`临时目录留着：${ctx.tmp}`)
   }
 }
 

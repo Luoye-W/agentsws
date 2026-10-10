@@ -217,6 +217,9 @@ jobs:
             fs.writeFileSync(p, JSON.stringify(pkg, null, 2) + '\n')
           " "$version"
           echo "AGENTSWS_RELEASE_VERSION=$version" >> "$GITHUB_ENV"
+      # 插件引用 @agentsws/brand 的编译产物（dist），先编它，不然 wxt 解析不到入口（10-10 发版演练红在这里）
+      - name: tsc -b（插件依赖的 brand）
+        run: pnpm exec tsc -b packages/brand
       - name: build（wxt build && wxt zip）
         run: pnpm -F @agentsws/extension build
       # 统一改成官网清单认的名字
