@@ -14,31 +14,47 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import {
-  createMatterWithRole,
-  type OpenAtPositionData,
-  openMatterAtPosition,
-  rerouteMatter,
-} from '@/lib/api'
+import { askAtPosition, closeQuickAnswer } from '@/components/position/quick-answer-store'
+import { createMatterWithRole, type OpenAtPositionData, rerouteMatter } from '@/lib/api'
 import { handoffInput } from '@/lib/handoff'
 import { RAIL_KEY } from '@/lib/work-archive'
 
 export function usePositionOpen(id: string, onSubmitted: () => void) {
   const client = useQueryClient()
   const navigate = useNavigate()
+  // 老服务端还可能回一张「走哪条职责」——WP291 起服务端不再出，留着这一格给老界面
   const [choice, setChoice] = useState<OpenAtPositionData | undefined>(undefined)
 
+  /*
+   * WP291（决策 356）：发出去先记一条「正在查」（岗位页输入框下面出 …），服务端三分：
+   * 当场问答 → 回答留在岗位页；会话 / 任务 → 马上进它的线程。框里的字发出去就清（不等回答）。
+   */
   const open = useMutation({
-    mutationFn: (input: { title: string }) => openMatterAtPosition(id, handoffInput(input.title)),
-    onSuccess: (out) => {
+    mutationFn: async (input: { title: string }) => {
+      const entry = await askAtPosition({ position: id, text: input.title })
+      // 没交出去：错误交给框下那一句（WP259，字放回框里），这里不再画一份
+      if (entry?.status === 'error') {
+        closeQuickAnswer(entry.nonce)
+        throw entry.error
+      }
+      return entry
+    },
+    onMutate: () => {
       onSubmitted()
+    },
+    onSuccess: (entry) => {
       void client.invalidateQueries({ queryKey: ['position-instance', id] })
       void client.invalidateQueries({ queryKey: ['position-work'] })
-      // WP287：发出去就进这件事的会话线程（回答在线程里流式出现）；岗位入口不再出选择卡。
-      // 老服务端还可能回一张选择卡——那时停在这儿把候选摆出来
       void client.invalidateQueries({ queryKey: RAIL_KEY })
-      if (out.ambiguous && out.approval_item_id !== undefined) setChoice(out)
-      else navigate(`/matters/${out.matter.id}`)
+      // 老服务端：拿不准时把候选摆出来
+      if (entry?.status === 'choice' && entry.open !== undefined) {
+        closeQuickAnswer(entry.nonce)
+        setChoice(entry.open)
+      }
+      if (entry?.status === 'thread' && entry.matter_id !== undefined) {
+        closeQuickAnswer(entry.nonce)
+        navigate(`/matters/${entry.matter_id}`)
+      }
     },
   })
 

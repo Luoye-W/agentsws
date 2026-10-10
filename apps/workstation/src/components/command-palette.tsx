@@ -25,6 +25,7 @@ import { useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useBrands } from '@/components/brand-switcher'
 import type { ComposeTarget, Handoff } from '@/components/palette-context'
+import { askAtPosition } from '@/components/position/quick-answer-store'
 import { useRailState } from '@/components/rail/rail-state'
 import { DutyIcon, PositionIcon } from '@/components/role-icons/role-icon'
 import { RecallCards } from '@/components/sidebar/recall-cards'
@@ -42,7 +43,6 @@ import { HandoffError } from '@/components/work/handoff-error'
 import {
   enterSwitchedBrand,
   listCatalog,
-  openMatterAtPosition,
   type PositionInstanceData,
   type PositionSummary,
   switchBrand,
@@ -163,21 +163,22 @@ export function CommandPalette({
     navigate(path)
   }
 
+  /*
+   * WP291（决策 356）：交给某个岗位 = 先到那个岗位页（输入框下面出「…」），服务端三分：
+   * 当场问答就在岗位页上答；会话 / 任务马上进它的线程（岗位页那一块负责跳）。
+   */
   const handOver = useMutation({
-    mutationFn: (input: { assignment: string; handoff: Handoff; role_id?: string }) =>
-      openMatterAtPosition(input.assignment, {
-        title: input.handoff.title,
+    mutationFn: async (input: { assignment: string; handoff: Handoff; role_id?: string }) => {
+      void askAtPosition({
+        position: input.assignment,
+        text: input.handoff.title,
         ...(input.handoff.summary === '' ? {} : { summary: input.handoff.summary }),
         // WP207：从职责行的「+」来的，职责已经定了（跳过岗位内路由，与快捷提示同一条路）
         ...(input.role_id === undefined ? {} : { role_id: input.role_id }),
-      }),
-    onSuccess: (out, input) => {
-      // 判准了直接进事项页；拿不准就去岗位页，让人在那儿点一下走哪条职责
-      go(
-        out.ambiguous && out.approval_item_id !== undefined
-          ? `/positions/${input.assignment}`
-          : `/matters/${out.matter.id}`,
-      )
+      })
+    },
+    onSuccess: (_out, input) => {
+      go(`/positions/${input.assignment}`)
     },
   })
 

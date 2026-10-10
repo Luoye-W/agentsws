@@ -612,9 +612,27 @@ export interface RouteCandidateData {
   why: string[]
 }
 
+/** WP291：当场回答（岗位页输入框下面那一块）。 */
+export interface PositionAnswerData {
+  outcome: 'answered' | 'failed' | 'stopped' | 'promoted'
+  text: string
+  /** 一句话；老服务端没有这一格（那时用 `text`） */
+  lead?: string
+  /** 组件（契约 `AnswerComponent`）；老服务端没有这一格 */
+  components?: import('@agentsws/contracts').AnswerComponent[]
+  /** 依据：这次读了哪些东西（人话） */
+  sources: string[]
+  failure?: string
+}
+
 export interface OpenAtPositionData {
-  /** WP287：一段会话（`ask`，不进「工作」）还是一件任务（`task`）；老服务端没有这一格 */
-  mode?: 'ask' | 'task'
+  /**
+   * WP287 / WP291：`quick` 当场答了（回答在 `answer`）；`ask` 一段会话、`task` 一件任务（都进线程）。
+   * 老服务端没有这一格
+   */
+  mode?: 'quick' | 'ask' | 'task'
+  entry?: { kind: 'quick' | 'chat' | 'task'; by: 'model' | 'rules' | 'caller' }
+  answer?: PositionAnswerData
   matter: { id: string; title: string; entry?: string; role_id?: string; ask?: boolean }
   picked?: { role_id: string; role_name: string; assignment_id: string }
   candidates: RouteCandidateData[]
@@ -662,7 +680,7 @@ export const setTodoStatus = (
  */
 export const openMatterAtPosition = (
   id: string,
-  input: { title: string; summary?: string; role_id?: string },
+  input: { title: string; summary?: string; role_id?: string; mode?: 'quick' | 'chat' | 'task' },
 ): Promise<OpenAtPositionData> =>
   api<OpenAtPositionData>(`/v1/positions/${encodeURIComponent(id)}/matters`, {
     method: 'POST',
@@ -956,8 +974,30 @@ export const retryMatterRun = (id: string): Promise<{ run_id?: string }> =>
   api(`/v1/matters/${encodeURIComponent(id)}/retry`, { method: 'POST' })
 
 /** WP287：岗位里问的一句（会话）转成任务——进岗位「工作」。 */
-export const promoteAskMatter = (id: string): Promise<{ matter: { id: string; title: string } }> =>
-  api(`/v1/matters/${encodeURIComponent(id)}/promote`, { method: 'POST' })
+export const promoteAskMatter = (
+  id: string,
+  options: { run?: boolean } = {},
+): Promise<{ matter: { id: string; title: string }; run_id?: string }> =>
+  api(`/v1/matters/${encodeURIComponent(id)}/promote`, {
+    method: 'POST',
+    // WP291：「当成任务做」= 转完按原话当任务再跑一次
+    ...(options.run === true ? { body: { run: true } } : {}),
+  })
+
+/** WP291：当场回答下面「接着聊」——这一问一答变成一段会话（进左栏会话历史）。 */
+export const continueQuickAnswer = (id: string): Promise<{ matter: { id: string } }> =>
+  api(`/v1/matters/${encodeURIComponent(id)}/continue`, { method: 'POST' })
+
+/** WP291：本人在这个岗位上的当场问答（岗位「记录」里列）。 */
+export interface PositionAnswerRecordData {
+  matter_id: string
+  at: string
+  question: string
+  lead: string
+}
+
+export const getPositionAnswers = (id: string): Promise<{ answers: PositionAnswerRecordData[] }> =>
+  api(`/v1/positions/${encodeURIComponent(id)}/answers`, { assignment: id })
 
 /** WP264：时间线上内嵌的那张卡（审批 / 选择）——按事项那条分配取，决定也用它。 */
 export const getApproval = (id: string, assignment?: string): Promise<ApprovalItem> =>

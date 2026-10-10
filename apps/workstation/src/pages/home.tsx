@@ -36,6 +36,7 @@ import { DeckSection } from '@/components/deck'
 import { AlertBlocks, ReportBlocks } from '@/components/deck/panel-blocks'
 import { BrandMark, PositionCard, type Tone, WsCard } from '@/components/design'
 import { HandoffNotices } from '@/components/peers/handoff-strip'
+import { askAtPosition } from '@/components/position/quick-answer-store'
 import { StatTileView } from '@/components/stat-tile'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -48,13 +49,11 @@ import {
   listClaimPool,
   listInProgress,
   listMembers,
-  openMatterAtPosition,
   type PositionInstanceData,
 } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 import { LAYER_ICON } from '@/lib/calendar-layers'
 import { formatValue } from '@/lib/format'
-import { handoffInput } from '@/lib/handoff'
 import type { Lang } from '@/lib/i18n'
 import { useMode } from '@/lib/mode'
 import { hhmm, matterUrl, todoUrl } from '@/lib/work'
@@ -215,15 +214,14 @@ function QuickPromptMenu({ position }: { position: PositionInstanceData }): Reac
   const navigate = useNavigate()
   const [open, setOpen] = useState(false)
 
+  // WP291（决策 356）：快捷提示也三分——先到岗位页（输入框下面出「…」），当场问答在那儿答，会话 / 任务进线程
   const openMatter = useMutation({
-    mutationFn: (input: { assignment: string; role_id: string; prompt: string }) =>
-      // WP259：提示写得长也照收（标题取第一句…，完整原文交给 AI）
-      openMatterAtPosition(input.assignment, {
-        ...handoffInput(input.prompt),
-        role_id: input.role_id,
-      }),
-    onSuccess: (out) => {
-      navigate(`/matters/${out.matter.id}`)
+    mutationFn: async (input: { assignment: string; role_id: string; prompt: string }) => {
+      void askAtPosition({ position: input.assignment, text: input.prompt, role_id: input.role_id })
+    },
+    onSuccess: (_out, input) => {
+      setOpen(false)
+      navigate(`/positions/${input.assignment}`)
     },
   })
 
