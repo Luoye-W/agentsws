@@ -22,6 +22,7 @@
 import type { ContextItem, ObjectRef, RunRequest } from '@agentsws/contracts'
 import {
   classifyKolTask,
+  describeAttributionReply,
   describeFindReply,
   describeKolRun,
   describeQuietReply,
@@ -157,6 +158,31 @@ export interface KolFinding {
   source?: string
   /** WP295：合作清单那一步读到的是谁、几天没动静（「谁还没回」回话里点名）。 */
   collabs?: { name: string; days?: number }[]
+  /** WP295：归因那一步读到的链接（「哪几个真带货了」那张表）与还没建链接的合作。 */
+  links?: { name: string; clicks: number; orders: number; revenue: number }[]
+  withoutLink?: string[]
+}
+
+/** WP295：归因结果里的行与「还没建链接」那几位。认不出就不给。 */
+export function attributionOf(
+  data: unknown,
+): Pick<KolFinding, 'links' | 'withoutLink'> | undefined {
+  if (data === null || typeof data !== 'object') return undefined
+  const o = data as Record<string, unknown>
+  if (!Array.isArray(o.rows)) return undefined
+  const n = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) ? v : 0)
+  const links = o.rows.flatMap((row) => {
+    if (row === null || typeof row !== 'object') return []
+    const r = row as Record<string, unknown>
+    if (typeof r.display_name !== 'string') return []
+    return [
+      { name: r.display_name, clicks: n(r.clicks), orders: n(r.orders), revenue: n(r.revenue) },
+    ]
+  })
+  const withoutLink = Array.isArray(o.without_link)
+    ? o.without_link.filter((x): x is string => typeof x === 'string')
+    : []
+  return { links, withoutLink }
 }
 
 /** WP295：合作清单结果里的人（名字 + 几天没动静）。认不出就不给。 */
@@ -252,6 +278,15 @@ export function renderKolAnswer(input: {
       days: input.quietDays ?? 7,
       rows: quiet.collabs,
       links: input.links,
+    }).join('\n')
+  const attribution = input.findings.find(
+    (f) => f.tool === 'list_tracked_links' && f.status === 'ok',
+  )
+  if (attribution?.links !== undefined && input.findings.length === 1)
+    return describeAttributionReply({
+      channel: input.channel,
+      rows: attribution.links,
+      withoutLink: attribution.withoutLink,
     }).join('\n')
   const search = input.findings.find((f) => f.tool === 'search_creators' && f.status === 'ok')
   if (input.intent === 'outreach' && search !== undefined && input.findings.length === 1)

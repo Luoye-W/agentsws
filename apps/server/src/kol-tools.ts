@@ -106,7 +106,7 @@ const missing = (what: string): ToolExecution => ({
 })
 
 /**
- * 十一个红人工具的执行器。
+ * 十二个红人工具的执行器（WP295 加了 `list_tracked_links`）。
  *
  * 不认的名字回 `undefined`——调用方（`records.ts` 的 `executeTool`）接着往下问别的执行器，
  * 谁都不认才报 `unsupported_tool`。
@@ -279,6 +279,52 @@ export function createKolToolExecutor(options: KolToolsOptions): ToolExecutor {
               c.days_since_activity >= quietDays,
           )
         return rowsOf(rows, 'collaboration')
+      }
+
+      case 'list_tracked_links': {
+        /*
+         * WP295：归因那张表给模型读。只要这条渠道的合作上的链接（名字从红人库拼），按收入倒序；
+         * 这条渠道上还没建链接的合作单列一格——「没带来订单」与「算不出来」是两回事。
+         */
+        const only = str(input.collaboration_id)
+        const collabs = (await port.collaborations(actor, { channel })).rows
+        const byId = new Map(collabs.map((c) => [c.id, c]))
+        const names = new Map(
+          (await port.creators(actor, { channel })).rows.map((r) => [r.creator_id, r.display_name]),
+        )
+        const nameOf = (collaboration_id: string): string => {
+          const c = byId.get(collaboration_id)
+          return c === undefined ? collaboration_id : (names.get(c.creator_id) ?? c.creator_id)
+        }
+        const links = (
+          await port.trackedLinks(actor, only === undefined ? {} : { collaboration_id: only })
+        ).rows.filter((l) => byId.has(l.collaboration_id))
+        const rows = links
+          .map((l) => ({
+            id: l.id,
+            collaboration_id: l.collaboration_id,
+            display_name: nameOf(l.collaboration_id),
+            url: l.url,
+            ...(l.affiliate_code === undefined ? {} : { affiliate_code: l.affiliate_code }),
+            clicks: l.clicks,
+            orders: l.orders,
+            revenue: l.revenue,
+          }))
+          .sort((a, b) => b.revenue - a.revenue)
+        const linked = new Set(links.map((l) => l.collaboration_id))
+        const without_link = collabs
+          .filter(
+            (c) =>
+              (only === undefined || c.id === only) &&
+              !linked.has(c.id) &&
+              ['agreed', 'delivering', 'delivered', 'closed'].includes(c.stage),
+          )
+          .map((c) => nameOf(c.id))
+        const out = rowsOf(rows, 'tracked_link')
+        return {
+          ...out,
+          data: { rows, object: 'tracked_link', without_link },
+        }
       }
 
       case 'list_deliverables': {

@@ -242,6 +242,37 @@ describe('stub 的红人剧本', () => {
     expect(text).not.toContain('一个合适的都没找到')
   })
 
+  it('WP295「哪几个真带货了」：读归因那张表，回话一句结论 + 表 + 没建链接的单说', async () => {
+    const rec = recorder({
+      list_tracked_links: {
+        rows: [
+          { id: 'tl_1', display_name: 'Gadget Jonas', clicks: 318, orders: 5, revenue: 645.5 },
+          { id: 'tl_2', display_name: 'Desk Rosa', clicks: 41, orders: 0, revenue: 0 },
+        ],
+        without_link: ['Cable Kevin'],
+      },
+    })
+    const runtime = createStubRuntime({ clock, executeTool: rec.executeTool })
+    const { result } = await runAndCollect(
+      runtime,
+      makeRequest({
+        roleId: 'kol.youtube',
+        threadSubject: '哪几个真带货了',
+        threadBody: '上个月YouTube合作过的人里，按归因链接看哪几个真带来了订单，没带来的也列出来',
+        allow: ['list_tracked_links'],
+        outputs: ['answer'],
+      }),
+    )
+    expect(rec.calls.map((c) => c.name)).toEqual(['list_tracked_links'])
+    const a = result.outputs.find((o) => o.kind === 'answer')
+    const text = a?.kind === 'answer' ? a.text : ''
+    expect(text).toContain('带来订单的有 1 个：Gadget Jonas（5 单）')
+    expect(text).toContain('| Gadget Jonas | 318 | 5 | 645.5 |')
+    expect(text).toContain('| Desk Rosa | 41 | 0 | 0 |')
+    expect(text).toContain('还没建追踪链接、算不出来的：Cable Kevin')
+    expect(text).not.toContain('看合作清单')
+  })
+
   it('客服那条职责一点没变（红人的岔口不许改客服的行为）', async () => {
     let drafted = 0
     const runtime = createStubRuntime({

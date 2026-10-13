@@ -31,6 +31,7 @@ import {
 } from './b2b-outbound.js'
 import { IMAGE_TOOL_DEF_BY_NAME, imageBranch, imageDataOf, renderImageAnswer } from './image.js'
 import {
+  attributionOf,
   collabsOf,
   countOf,
   describeKolRun,
@@ -703,11 +704,17 @@ export function createStubRuntime(options: StubRuntimeOptions): RuntimeAdapter {
             call.tool === 'list_collaborations' && res.status === 'ok'
               ? collabsOf(res.data)
               : undefined
+          // WP295：归因那一步读到的链接（「哪几个真带货了」那张表）
+          const attribution =
+            call.tool === 'list_tracked_links' && res.status === 'ok'
+              ? attributionOf(res.data)
+              : undefined
           findings.push({
             tool: call.tool,
             status: res.status,
             ...found,
             ...(collabs === undefined ? {} : { collabs }),
+            ...(attribution ?? {}),
             ...(count === undefined ? {} : { count }),
             ...(res.reason === undefined ? {} : { reason: res.reason }),
             ...(receipt.approval_item_id === undefined && receipt.change_id === undefined

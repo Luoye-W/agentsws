@@ -179,7 +179,7 @@ describe('工具计划', () => {
     expect(full[0]?.input).toEqual({ collaboration_id: 'cb_1' })
   })
 
-  it('归因：有合作就建追踪链接，没有就先读清单', () => {
+  it('归因：有合作就建追踪链接，没有就读归因那张表（WP295：以前读的是合作清单）', () => {
     expect(
       planKolTools('attribution', {
         channel: 'youtube',
@@ -190,7 +190,7 @@ describe('工具计划', () => {
     ).toEqual(['list_collaborations', 'create_tracked_link'])
     expect(
       planKolTools('attribution', { channel: 'youtube', text: '看归因' }).map((p) => p.tool),
-    ).toEqual(['list_collaborations'])
+    ).toEqual(['list_tracked_links'])
   })
 
   it('看进展与 unknown 都只读一条清单', () => {

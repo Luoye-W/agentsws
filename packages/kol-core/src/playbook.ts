@@ -398,8 +398,9 @@ export function planKolTools(intent: KolIntent, ctx: KolTaskContext): PlannedKol
     }
 
     case 'attribution':
+      // WP295：没点名哪条合作 = 问「哪几个真带货了」——读归因那张表，不是读合作清单
       return ctx.collaboration_id === undefined
-        ? [collabs]
+        ? [{ tool: 'list_tracked_links', input: { channel } }]
         : [
             collabs,
             {
@@ -447,6 +448,7 @@ export const KOL_TOOL_ZH: Readonly<Record<string, string>> = {
   get_creator: '红人资料',
   list_collaborations: '合作清单',
   list_deliverables: '交付物清单',
+  list_tracked_links: '归因',
   search_policies: '合作规矩',
   add_to_campaign: '活动名单',
   draft_outreach: '开发信草稿',
@@ -475,6 +477,7 @@ export const KOL_TOOL_ACTION_ZH: Readonly<Record<string, string>> = {
   get_creator: '看这个人的资料',
   list_collaborations: '看合作清单',
   list_deliverables: '看交付物',
+  list_tracked_links: '看归因',
   score_creator: '打分',
   add_to_campaign: '进候选池',
   draft_outreach: '起草开发信',
@@ -649,6 +652,46 @@ export function describeWhoToWriteReply(input: {
     for (const c of input.found.slice(0, KOL_REPLY_NAMES))
       lines.push(`- ${c.name}${c.followers === undefined ? '' : `（${followersZh(c.followers)}）`}`)
   }
+  return lines
+}
+
+/**
+ * WP295：「哪几个真带货了」的回话——一句结论 + 一张表（点击 · 订单 · 收入）+ 没建链接的单说一句。
+ *
+ * 数字原样端出去（归因那一跳回填的），不在这里现算比例；没带来订单的也在表里（0 单），
+ * 还没建追踪链接的合作是「算不出来」，与「0 单」分开说。
+ */
+export function describeAttributionReply(input: {
+  channel: string
+  rows: readonly { name: string; clicks: number; orders: number; revenue: number }[]
+  withoutLink?: readonly string[] | undefined
+}): string[] {
+  const where = channelZh(input.channel)
+  const sold = input.rows.filter((r) => r.orders > 0)
+  const lines: string[] = []
+  if (input.rows.length === 0) lines.push(`${where} 上还没有一条追踪链接，带没带货算不出来。`)
+  else
+    lines.push(
+      sold.length === 0
+        ? `${where} 上 ${input.rows.length} 条追踪链接，一单都还没带来。`
+        : `${where} 上带来订单的有 ${sold.length} 个：${sold
+            .slice(0, KOL_REPLY_NAMES)
+            .map((r) => `${r.name}（${r.orders} 单）`)
+            .join('、')}。`,
+    )
+  if (input.rows.length > 0) {
+    lines.push('', '| 红人 | 点击 | 订单 | 收入 |', '|---|---|---|---|')
+    for (const r of input.rows.slice(0, 10))
+      lines.push(
+        `| ${r.name.replace(/\|/g, '/')} | ${r.clicks.toLocaleString('en-US')} | ${r.orders.toLocaleString('en-US')} | ${r.revenue.toLocaleString('en-US', { maximumFractionDigits: 2 })} |`,
+      )
+    lines.push('')
+  }
+  const missing = input.withoutLink ?? []
+  if (missing.length > 0)
+    lines.push(
+      `还没建追踪链接、算不出来的：${missing.slice(0, KOL_REPLY_NAMES).join('、')}${missing.length > KOL_REPLY_NAMES ? ` 等 ${missing.length} 个` : ''}。在合作线程里点开那个人就能建一条。`,
+    )
   return lines
 }
 
