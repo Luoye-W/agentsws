@@ -18,13 +18,14 @@
  *    不写「已通过」，因为还没有。
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, Coins, Link2, Mail, MailOpen, Package } from 'lucide-react'
+import { ArrowLeft, Coins, Link2, Mail, MailOpen, Package, Truck, Wallet } from 'lucide-react'
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { SafetyNote } from '@/components/ui/hint'
+import { Hint, SafetyNote } from '@/components/ui/hint'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Textarea } from '@/components/ui/textarea'
 import {
   advanceKolCollaboration,
   createKolDeliverable,
@@ -37,7 +38,9 @@ import {
   type KolChannelId,
   type KolExchangeData,
   quoteKolCollaboration,
+  recordKolPayment,
   reviewKolDeliverable,
+  shipKolSample,
 } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 import { errorText, KolError, KolReceipt, refreshCards } from './kol-shared'
@@ -79,6 +82,22 @@ const LINK_STAGES: ReadonlySet<string> = new Set([
   'delivered',
   'closed',
 ])
+
+/** WP299（决策 386）：寄样：谈成之后（已寄样的只留那一行，不再给表）。 */
+const SAMPLE_STAGES: ReadonlySet<string> = new Set(['agreed', 'sample_sent'])
+/** WP299（决策 387）：付款：谈成之后（尾款常在交付后付）。 */
+const PAYMENT_STAGES: ReadonlySet<string> = new Set([
+  'agreed',
+  'sample_sent',
+  'delivering',
+  'delivered',
+  'closed',
+])
+
+/** 批过的付款加起来。 */
+function paidOf(c: { payments?: { amount: number }[] }): number {
+  return Math.round((c.payments ?? []).reduce((sum, p) => sum + p.amount, 0) * 100) / 100
+}
 
 const REVIEWS = [
   { id: 'approved', zh: '通过' },
@@ -155,6 +174,13 @@ export function CollabThread({
   const [linkUrl, setLinkUrl] = useState('')
   const [deliverableUrl, setDeliverableUrl] = useState('')
   const [budget, setBudget] = useState('')
+  // WP299（决策 386 / 387）：寄样与付款那两块的输入
+  const [sampleAddress, setSampleAddress] = useState('')
+  const [sampleCarrier, setSampleCarrier] = useState('')
+  const [sampleTracking, setSampleTracking] = useState('')
+  const [sampleCost, setSampleCost] = useState('')
+  const [payAmount, setPayAmount] = useState('')
+  const [payNote, setPayNote] = useState('')
 
   const collabs = useQuery({
     queryKey: ['kol-collaborations', assignment, channel],
@@ -274,6 +300,67 @@ export function CollabThread({
     onError: (e: unknown) => {
       setReceipt(undefined)
       setError(errorText(e, '这个数没提上去。'))
+    },
+  })
+
+  const sample = useMutation({
+    mutationFn: () =>
+      shipKolSample(
+        id,
+        {
+          address: sampleAddress.trim(),
+          ...(sampleCarrier.trim() === '' ? {} : { carrier: sampleCarrier.trim() }),
+          ...(sampleTracking.trim() === '' ? {} : { tracking_no: sampleTracking.trim() }),
+          ...(Number(sampleCost) > 0 ? { cost: Number(sampleCost) } : {}),
+        },
+        assignment,
+      ),
+    onSuccess: (out) => {
+      setError(undefined)
+      setReceipt(
+        out.applied === true
+          ? '记下了：已寄样。'
+          : out.staged
+            ? '寄样提上去了，在卡片里等你批（卡上写着样品成本）。批了合作才进「已寄样」。'
+            : (out.message ?? '这次寄样没记上。'),
+      )
+      if (out.applied === true || out.staged) {
+        setSampleAddress('')
+        setSampleCarrier('')
+        setSampleTracking('')
+        setSampleCost('')
+      }
+      refresh()
+    },
+    onError: (e: unknown) => {
+      setReceipt(undefined)
+      setError(errorText(e, '这次寄样没记上。'))
+    },
+  })
+
+  const pay = useMutation({
+    mutationFn: () =>
+      recordKolPayment(
+        id,
+        { amount: Number(payAmount), ...(payNote.trim() === '' ? {} : { note: payNote.trim() }) },
+        assignment,
+      ),
+    onSuccess: (out) => {
+      setError(undefined)
+      setReceipt(
+        out.staged
+          ? '付款提上去了，在卡片里等你批。批了才记账。'
+          : (out.message ?? '这笔付款没提上去。'),
+      )
+      if (out.staged) {
+        setPayAmount('')
+        setPayNote('')
+      }
+      refresh()
+    },
+    onError: (e: unknown) => {
+      setReceipt(undefined)
+      setError(errorText(e, '这笔付款没提上去。'))
     },
   })
 
@@ -494,6 +581,148 @@ export function CollabThread({
                 }}
               >
                 提一张议价卡
+              </Button>
+            </div>
+          </section>
+        )}
+
+        {/*
+          WP299（决策 386）：寄样。谈成之后才出；寄过的只留一行（快递、寄到哪儿、成本），
+          没寄过的给一个小表——地址只进服务端加密库，回来的只有脱敏样子。
+        */}
+        {collab.sample === undefined && !SAMPLE_STAGES.has(collab.stage) ? null : (
+          <section data-testid="kol-thread-sample">
+            <h4 className="mb-1 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+              <Truck className="size-3" aria-hidden />
+              寄样
+            </h4>
+            {collab.sample === undefined ? null : (
+              <p className="text-xs" data-testid="kol-thread-sample-line">
+                {[
+                  collab.sample.carrier,
+                  collab.sample.tracking_no,
+                  `寄到 ${collab.sample.address_masked}`,
+                  collab.sample.cost === undefined
+                    ? undefined
+                    : `成本 ${collab.sample.cost} ${collab.sample.currency}`,
+                ]
+                  .filter((x): x is string => x !== undefined && x !== '')
+                  .join(' · ')}
+              </p>
+            )}
+            {collab.stage !== 'agreed' ? null : (
+              <div className="mt-1 flex flex-col gap-2">
+                <Textarea
+                  value={sampleAddress}
+                  rows={2}
+                  placeholder="收件地址（只存在这台电脑的加密库里）"
+                  aria-label="收件地址"
+                  data-testid="kol-thread-sample-address"
+                  onChange={(e) => {
+                    setSampleAddress(e.target.value)
+                  }}
+                />
+                <div className="flex flex-wrap items-center gap-2">
+                  <Input
+                    className="w-28"
+                    value={sampleCarrier}
+                    placeholder="快递"
+                    aria-label="快递公司"
+                    data-testid="kol-thread-sample-carrier"
+                    onChange={(e) => {
+                      setSampleCarrier(e.target.value)
+                    }}
+                  />
+                  <Input
+                    className="w-40"
+                    value={sampleTracking}
+                    placeholder="单号"
+                    aria-label="快递单号"
+                    data-testid="kol-thread-sample-tracking"
+                    onChange={(e) => {
+                      setSampleTracking(e.target.value)
+                    }}
+                  />
+                  <Input
+                    className="w-32"
+                    value={sampleCost}
+                    inputMode="decimal"
+                    placeholder={`成本（${collab.currency}）`}
+                    aria-label="样品成本"
+                    data-testid="kol-thread-sample-cost"
+                    onChange={(e) => {
+                      setSampleCost(e.target.value)
+                    }}
+                  />
+                  <Button
+                    size="xs"
+                    variant="outline"
+                    data-testid="kol-thread-sample-go"
+                    disabled={sampleAddress.trim().length < 4 || sample.isPending}
+                    onClick={() => {
+                      sample.mutate()
+                    }}
+                  >
+                    记下寄样
+                  </Button>
+                  <Hint
+                    text="有成本会出一张卡等你批，批了才记账；没成本当场记下。"
+                    testId="kol-thread-sample-hint"
+                  />
+                </div>
+              </div>
+            )}
+          </section>
+        )}
+
+        {/*
+          WP299（决策 387）：付款。谈成之后才出；一笔一张「花钱」卡，批了才记账。
+          上面一行是「已付 / 谈定」，超了卡上会说。
+        */}
+        {!PAYMENT_STAGES.has(collab.stage) ? null : (
+          <section data-testid="kol-thread-payment">
+            <h4 className="mb-1 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+              <Wallet className="size-3" aria-hidden />
+              付款
+            </h4>
+            {(collab.payments ?? []).length === 0 && collab.budget === undefined ? null : (
+              <p className="text-xs" data-testid="kol-thread-paid">
+                已付 {paidOf(collab)} {collab.currency}
+                {collab.budget === undefined ? '' : ` · 谈定 ${collab.budget} ${collab.currency}`}
+              </p>
+            )}
+            <div className="mt-1 flex flex-wrap items-center gap-2">
+              <Input
+                className="w-32"
+                value={payAmount}
+                inputMode="decimal"
+                placeholder={`金额（${collab.currency}）`}
+                aria-label="付款金额"
+                data-testid="kol-thread-pay-amount"
+                onChange={(e) => {
+                  setPayAmount(e.target.value)
+                }}
+              />
+              <Input
+                className="min-w-32 flex-1"
+                value={payNote}
+                placeholder="备注（首款 / 尾款）"
+                aria-label="付款备注"
+                data-testid="kol-thread-pay-note"
+                onChange={(e) => {
+                  setPayNote(e.target.value)
+                }}
+              />
+              <Button
+                size="xs"
+                variant="outline"
+                data-testid="kol-thread-pay-go"
+                disabled={!(Number(payAmount) > 0) || pay.isPending}
+                onClick={() => {
+                  pay.mutate()
+                }}
+              >
+                提一张付款卡
               </Button>
             </div>
           </section>

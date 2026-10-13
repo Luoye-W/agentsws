@@ -226,6 +226,10 @@ const importKolTable = vi.fn(async () => ({
   unmapped: [],
 }))
 
+// WP299（决策 386 / 387）：寄样与付款
+const shipKolSample = vi.fn(async () => ({ staged: true, approval_item_id: 'ap_s' }))
+const recordKolPayment = vi.fn(async () => ({ staged: true, approval_item_id: 'ap_p' }))
+
 vi.mock('@/lib/api', async () => {
   const actual = await vi.importActual<typeof import('@/lib/api')>('@/lib/api')
   return {
@@ -244,6 +248,8 @@ vi.mock('@/lib/api', async () => {
     importKolTable: (...a: unknown[]) => importKolTable(...(a as [])),
     getKolSandbox: (...a: unknown[]) => getKolSandbox(...(a as [])),
     startKolSandbox: (...a: unknown[]) => startKolSandbox(...(a as [])),
+    shipKolSample: (...a: unknown[]) => shipKolSample(...(a as [])),
+    recordKolPayment: (...a: unknown[]) => recordKolPayment(...(a as [])),
   }
 })
 
@@ -563,6 +569,9 @@ describe('WP117 红人界面：说真话与三个子视图', () => {
     await screen.findByTestId('kol-thread-quote')
     expect(screen.queryByTestId('kol-thread-deliverables')).toBeNull()
     expect(screen.queryByTestId('kol-thread-links')).toBeNull()
+    // WP299：寄样与付款都是谈成之后的事
+    expect(screen.queryByTestId('kol-thread-sample')).toBeNull()
+    expect(screen.queryByTestId('kol-thread-payment')).toBeNull()
   })
 
   it('WP295：「交付中」的合作出交付物与追踪链接，不再挂着议价', async () => {
@@ -580,6 +589,69 @@ describe('WP117 红人界面：说真话与三个子视图', () => {
     await screen.findByTestId('kol-thread-deliverables')
     await screen.findByTestId('kol-thread-links')
     expect(screen.queryByTestId('kol-thread-quote')).toBeNull()
+    getKolCollaborations.mockResolvedValue({ rows: DETAIL.collaborations })
+  })
+
+  it('WP299：「谈成」的合作出寄样与付款；寄样带成本、付款带金额，各出一张卡', async () => {
+    getKolCollaborations.mockResolvedValue({
+      rows: [
+        {
+          ...(DETAIL.collaborations[0] as (typeof DETAIL.collaborations)[number]),
+          stage: 'agreed',
+          budget: 400,
+        },
+      ],
+    })
+    renderWithProviders(<KolPanel assignment="asg_yt" channel="youtube" />)
+    await goto('threads')
+    fireEvent.click(await screen.findByTestId('kol-collab-open'))
+    await screen.findByTestId('kol-thread-sample')
+    expect(screen.getByTestId('kol-thread-paid').textContent).toContain('谈定 400 USD')
+    fireEvent.change(screen.getByTestId('kol-thread-sample-address'), {
+      target: { value: 'Jonas Weber, Hauptstr. 5, 10115 Berlin, DE' },
+    })
+    fireEvent.change(screen.getByTestId('kol-thread-sample-carrier'), { target: { value: 'DHL' } })
+    fireEvent.change(screen.getByTestId('kol-thread-sample-cost'), { target: { value: '45' } })
+    fireEvent.click(screen.getByTestId('kol-thread-sample-go'))
+    await waitFor(() => {
+      expect(shipKolSample).toHaveBeenCalledWith(
+        'col_1',
+        { address: 'Jonas Weber, Hauptstr. 5, 10115 Berlin, DE', carrier: 'DHL', cost: 45 },
+        'asg_yt',
+      )
+    })
+    fireEvent.change(screen.getByTestId('kol-thread-pay-amount'), { target: { value: '200' } })
+    fireEvent.click(screen.getByTestId('kol-thread-pay-go'))
+    await waitFor(() => {
+      expect(recordKolPayment).toHaveBeenCalledWith('col_1', { amount: 200 }, 'asg_yt')
+    })
+    getKolCollaborations.mockResolvedValue({ rows: DETAIL.collaborations })
+  })
+
+  it('WP299：已寄样的合作只留一行（快递 · 寄到哪儿 · 成本），不再给表；「已建联」的不出寄样与付款', async () => {
+    getKolCollaborations.mockResolvedValue({
+      rows: [
+        {
+          ...(DETAIL.collaborations[0] as (typeof DETAIL.collaborations)[number]),
+          stage: 'sample_sent',
+          sample: {
+            address_masked: 'J*** · 10115 Berlin, DE',
+            carrier: 'DHL',
+            tracking_no: 'JD0123',
+            cost: 45,
+            currency: 'USD',
+            shipped_at: '2026-10-13T09:00:00.000Z',
+          },
+        },
+      ],
+    })
+    renderWithProviders(<KolPanel assignment="asg_yt" channel="youtube" />)
+    await goto('threads')
+    fireEvent.click(await screen.findByTestId('kol-collab-open'))
+    expect((await screen.findByTestId('kol-thread-sample-line')).textContent).toBe(
+      'DHL · JD0123 · 寄到 J*** · 10115 Berlin, DE · 成本 45 USD',
+    )
+    expect(screen.queryByTestId('kol-thread-sample-address')).toBeNull()
     getKolCollaborations.mockResolvedValue({ rows: DETAIL.collaborations })
   })
 })

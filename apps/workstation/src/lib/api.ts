@@ -4864,6 +4864,17 @@ export interface KolCollaborationData {
   last_activity_at?: string
   /** 演练数据（列表行上带一个角标）。 */
   sandbox?: boolean
+  /** WP299（决策 386）：寄样（地址只有脱敏样子）。 */
+  sample?: {
+    address_masked: string
+    carrier?: string
+    tracking_no?: string
+    cost?: number
+    currency: string
+    shipped_at: string
+  }
+  /** WP299（决策 387）：批过的付款。 */
+  payments?: { id: string; amount: number; currency: string; note?: string; paid_at: string }[]
 }
 
 /** WP117b（66 复测 #19）：一条合作上的一次往来（我们发的 / 他回的）。 */
@@ -4924,6 +4935,8 @@ export interface KolStagedData {
   approval_item_id?: string
   message?: string
   auto_approved?: boolean
+  /** WP299：没出卡、当场记下了（没有成本的寄样）。 */
+  applied?: boolean
 }
 
 export interface KolOutreachData extends KolStagedData {
@@ -5203,6 +5216,36 @@ export const quoteKolCollaboration = (
   assignment?: string,
 ): Promise<KolStagedData> =>
   api(`/v1/kol/collaborations/${encodeURIComponent(id)}/quote`, {
+    method: 'POST',
+    body: input,
+    ...withAssignment(assignment),
+  })
+
+/** WP299（决策 386）：寄样。有成本出「花钱」卡，没成本当场记下。地址明文只进服务端加密库。 */
+export const shipKolSample = (
+  id: string,
+  input: {
+    address: string
+    carrier?: string
+    tracking_no?: string
+    cost?: number
+    currency?: string
+  },
+  assignment?: string,
+): Promise<KolStagedData> =>
+  api(`/v1/kol/collaborations/${encodeURIComponent(id)}/sample`, {
+    method: 'POST',
+    body: input,
+    ...withAssignment(assignment),
+  })
+
+/** WP299（决策 387）：付款登记 → 「花钱」卡，批了才记账。 */
+export const recordKolPayment = (
+  id: string,
+  input: { amount: number; currency?: string; note?: string },
+  assignment?: string,
+): Promise<KolStagedData> =>
+  api(`/v1/kol/collaborations/${encodeURIComponent(id)}/payments`, {
     method: 'POST',
     body: input,
     ...withAssignment(assignment),
