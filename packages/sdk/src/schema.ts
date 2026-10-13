@@ -43,6 +43,23 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/v1/client-errors': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /** 前端报错记进服务日志（WP298；限流、截长、去个人数据） */
+    post: operations['reportClientError']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/v1/auth/magic-link': {
     parameters: {
       query?: never
@@ -9898,6 +9915,68 @@ export interface operations {
       }
       /** @description 统一错误信封（28 §2） */
       503: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+    }
+  }
+  reportClientError: {
+    parameters: {
+      query?: never
+      header?: {
+        /** @description 幂等键；24h 内同键重放原响应（28 §2） */
+        'Idempotency-Key'?: string
+      }
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': {
+          kind: string
+          name: string
+          message: string
+          stack?: string
+          route: string
+          scope?: string
+          app_version?: string
+        }
+      }
+    }
+    responses: {
+      /** @description { logged } */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Envelope']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      400: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      409: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Error']
+        }
+      }
+      /** @description 统一错误信封（28 §2） */
+      500: {
         headers: {
           [name: string]: unknown
         }

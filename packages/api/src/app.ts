@@ -28,6 +28,7 @@ import { catalogRoutes } from './routes/catalog.js'
 import { changeRoutes } from './routes/changes.js'
 // WP57（48 §4 L3 #11）：网站在线客服的本地 API（公开访客端点属于托管档）
 import { chatRoutes } from './routes/chat.js'
+import { clientErrorRoutes } from './routes/client-errors.js'
 // WP59（49 M2 / M5）：云上余额与价目的本地投影 + 每项能力的"用我的 / 用 agentsws 的"开关
 import { cloudRoutes } from './routes/cloud.js'
 import { cloudAccountRoutes } from './routes/cloud-account.js'
@@ -113,6 +114,8 @@ export function collectRoutes(): Route[] {
     ...healthRoutes(),
     // 28 §1 运行期急停（13 §5 托盘的「暂停」）；与 /v1/health 一样不受 all 急停拦截
     ...haltRoutes(),
+    // WP298：前端报错进服务日志（不要求登录、自己一只限流桶）
+    ...clientErrorRoutes(),
     ...identityRoutes(),
     // batch 必须排在 :id 之前，否则 `/v1/approvals/batch/decide` 会被当成 id=batch
     ...approvalRoutes(),

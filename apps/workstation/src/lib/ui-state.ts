@@ -164,3 +164,21 @@ export function writeRailLayout(bucket: string, entry: RailLayoutEntry): void {
 export function readRailLayout(bucket: string): RailLayoutEntry {
   return readRailLayouts()[bucket] ?? DEFAULT_RAIL_LAYOUT
 }
+
+/**
+ * WP298：「刚因为新版分块加载失败整页重载过」的时刻（毫秒数）。放 **sessionStorage**：
+ * 只活在这一个窗口、关了就没；不是业务对象，只为了不让重载转圈。
+ */
+export const PRELOAD_RELOAD_KEY = 'agentsws.preload_reload_at'
+
+/**
+ * WP298：这个窗口的 sessionStorage（拿不到就 `undefined`）。全工作台只有这里碰它
+ * （40 §1.2 的边界用例钉着：碰存储的只有三个文件）。
+ */
+export function sessionStore(): Pick<Storage, 'getItem' | 'setItem'> | undefined {
+  try {
+    return globalThis.sessionStorage ?? undefined
+  } catch {
+    return undefined
+  }
+}

@@ -294,6 +294,7 @@ import {
 } from './chat.js'
 import { ChatRelayClient, type OfflineMessageContent } from './chat-relay-client.js'
 import { createChatWidget, DEFAULT_ACCENT } from './chat-widget.js'
+import { stderrClientErrors } from './client-errors.js'
 import { type CloudFetch as CloudEntryFetch, cloudBaseUrl, createCloud } from './cloud.js'
 import {
   CLOUD_TOKEN_SECRET_ID,
@@ -871,6 +872,11 @@ export interface ServerOptions {
   random?: () => number
   /** 启动时不往 stdout 打字（测试用）。 */
   quiet?: boolean
+  /**
+   * WP298：前端报错那一行写到哪。不给：不 quiet 时写 stderr（桌面壳收进 server.log），
+   * quiet 时不写（`/v1/client-errors` 照收照答 logged=false）。
+   */
+  clientErrorLog?: (line: string) => void
   /** 工作台构建产物目录；给了就在 `/` 托管（SPA fallback）。 */
   staticDir?: string
   /** demo：把模拟世界接进来（同一进程）。 */
@@ -9988,6 +9994,12 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     b2bSales: b2bSalesPortOf,
     // WP154「内容与搜索」`/v1/seo/*`：按请求人所在品牌取那一份
     seo: seoPort,
+    // WP298：前端报错（错误边界 / onerror / 没人接的拒绝）写进服务日志
+    ...(options.clientErrorLog !== undefined
+      ? { clientErrors: stderrClientErrors(options.clientErrorLog) }
+      : options.quiet === true
+        ? {}
+        : { clientErrors: stderrClientErrors() }),
     traceScope,
     options: {
       version: env.AGENTSWS_VERSION ?? '0.1.0',

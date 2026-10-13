@@ -23,6 +23,7 @@
 import { PanelRightClose } from 'lucide-react'
 import { type ReactNode, Suspense, useEffect, useRef, useState } from 'react'
 import { useLocation } from 'react-router-dom'
+import { ErrorBoundary } from '@/components/error-boundary'
 import { ensureBuiltinPanels } from '@/components/rail/builtin-panels'
 import { ComputerUseStrip } from '@/components/rail/computer-use-strip'
 import { RailPanel } from '@/components/rail/rail-panel'
@@ -148,24 +149,31 @@ export function RightRail({ instances }: { instances?: PositionInstanceData[] })
         </p>
       )
     return (
-      // 身体是 `lazy()`：第一次打开要等它那个 chunk 下来，这一行就是那半秒的界面
-      <Suspense
-        fallback={
-          <p className="text-muted-foreground" data-testid="rail-panel-loading">
-            {t('rail.loading')}
-          </p>
-        }
+      // 身体是 `lazy()`：第一次打开要等它那个 chunk 下来，这一行就是那半秒的界面。
+      // WP298：分块下载失败 / 面板渲染抛错只换掉这一块（换个面板就复原）
+      <ErrorBoundary
+        scope="panel"
+        label={`panel:${definition?.id ?? ''}`}
+        resetKey={`${definition?.id ?? ''}|${sub ?? ''}`}
       >
-        <Body
-          {...(scope === undefined ? {} : { scope })}
-          tier={effectiveTier}
-          pathname={location.pathname}
-          // WP97：这一次是为哪个资源开的（人点图标轨开的那种没有它）
-          {...(rail.address === null ? {} : { address: rail.address })}
-          // WP208：开到哪个标签（旧 id 带来的）
-          {...(sub === undefined ? {} : { sub })}
-        />
-      </Suspense>
+        <Suspense
+          fallback={
+            <p className="text-muted-foreground" data-testid="rail-panel-loading">
+              {t('rail.loading')}
+            </p>
+          }
+        >
+          <Body
+            {...(scope === undefined ? {} : { scope })}
+            tier={effectiveTier}
+            pathname={location.pathname}
+            // WP97：这一次是为哪个资源开的（人点图标轨开的那种没有它）
+            {...(rail.address === null ? {} : { address: rail.address })}
+            // WP208：开到哪个标签（旧 id 带来的）
+            {...(sub === undefined ? {} : { sub })}
+          />
+        </Suspense>
+      </ErrorBoundary>
     )
   })()
 
