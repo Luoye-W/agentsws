@@ -493,10 +493,15 @@ export function createKolStore(options: KolStoreOptions): KolStore {
       const moved = prev === undefined || prev.stage !== row.stage
       const fresh =
         row.stage_changed_at !== undefined && row.stage_changed_at !== prev?.stage_changed_at
+      // 阶段没动、调用方又没带这一格（从头拼的一行）：沿用原来的戳，不让它悄悄丢掉
+      const kept =
+        !moved && row.stage_changed_at === undefined && prev?.stage_changed_at !== undefined
+          ? { ...row, stage_changed_at: prev.stage_changed_at }
+          : row
       backend.put(
         'collaboration',
         row.id,
-        moved && !fresh ? { ...row, stage_changed_at: (options.now ?? nowIso)() } : row,
+        moved && !fresh ? { ...row, stage_changed_at: (options.now ?? nowIso)() } : kept,
       )
     },
     saveDeliverable: (row) => backend.put('deliverable', row.id, row),

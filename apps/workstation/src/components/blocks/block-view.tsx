@@ -33,7 +33,17 @@ import { formatDate, formatValue } from '@/lib/format'
 import { approvalStateLabel, cellText } from '@/lib/humanize'
 
 /** 前端的组件注册表：名字对不上就不渲染（29 原则 ①）。 */
-const RENDERERS = ['stat_tile', 'table', 'chart_line', 'timeline', 'kv', 'markdown'] as const
+const RENDERERS = [
+  'stat_tile',
+  'table',
+  'chart_line',
+  'timeline',
+  'kv',
+  'markdown',
+  // WP302（决策 406）
+  'funnel',
+  'conversion',
+] as const
 type Renderer = (typeof RENDERERS)[number]
 
 const isKnown = (name: string): name is Renderer => (RENDERERS as readonly string[]).includes(name)
@@ -168,6 +178,100 @@ function TableBlock({ payload }: { payload: TableResult }): React.ReactNode {
 }
 
 /**
+ * WP302（决策 406）：漏斗——每一级一根条，长度按第一级比，右边是人数与「比上一级」的转化率。
+ *
+ * 移植自 KOLAgents（Luoye 的产品，非模板代码）：`src/components/dashboard/v2/funnel-card.tsx`
+ * @ 88d74b2c 的画法（h-2 底条 + 主色条、有人至少画 4%）。口径「处于或已越过那一级」在服务端
+ * （`kol.reach_funnel`），于是每一级只会比上一级少，转化率读得通。
+ */
+function FunnelBlock({ payload }: { payload: TableResult }): React.ReactNode {
+  const { lang } = useApp()
+  const [labelCol, countCol] = payload.columns
+  if (payload.rows.length === 0 || labelCol === undefined || countCol === undefined)
+    return <p className="text-sm text-ws-muted-fg">—</p>
+  const counts = payload.rows.map((r) => Number(r[countCol.key] ?? 0))
+  const max = Math.max(1, counts[0] ?? 0)
+  return (
+    <ol className="grid gap-2" data-testid="block-funnel">
+      {payload.rows.map((row, i) => {
+        const count = counts[i] ?? 0
+        const prev = i > 0 ? counts[i - 1] : undefined
+        const rate = prev !== undefined && prev > 0 ? Math.round((count / prev) * 100) : undefined
+        return (
+          <li key={String(row[labelCol.key])} className="grid gap-1" data-testid="funnel-step">
+            <span className="flex items-baseline justify-between text-sm">
+              <span>{String(row[labelCol.key] ?? '')}</span>
+              <span className="ws-num text-xs text-ws-muted-fg">
+                {formatValue(count, 'count', lang, 'USD')}
+                {rate === undefined ? '' : ` · ${rate}%`}
+              </span>
+            </span>
+            <span className="block h-2 rounded-full bg-muted">
+              <span
+                className="block h-2 rounded-full bg-primary"
+                style={{
+                  width: `${Math.max(count > 0 ? 4 : 0, Math.round((count / max) * 100))}%`,
+                }}
+              />
+            </span>
+          </li>
+        )
+      })}
+    </ol>
+  )
+}
+
+/**
+ * WP302（决策 406）：归因三态卡——没连店铺（算不出来，给去处）/ 等第一单 / 有数（一排数）。
+ *
+ * 三态照 KOLAgents（Luoye 的产品，非模板代码）`src/components/dashboard/v2/conversion-card.tsx`
+ * @ 88d74b2c；那边有数时还有趋势图与按红人 / 活动 / 商品的分表，第一期只搬一排数——按红人的
+ * 明细在「带货最好的红人」那一块，这里不再说一遍（docs/96 P5）。
+ */
+function ConversionBlock({ payload }: { payload: TableResult }): React.ReactNode {
+  const { lang } = useApp()
+  const state = payload.state ?? (payload.rows.length === 0 ? 'waiting' : 'ready')
+  const metrics = payload.metrics ?? []
+  return (
+    <div className="flex flex-col gap-2" data-testid="block-conversion" data-state={state}>
+      {state === 'ready' && metrics.length > 0 ? (
+        <dl className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {metrics.map((m) => (
+            <div
+              key={m.label}
+              className="flex flex-col gap-0.5 rounded-[10px] bg-ws-surface px-3 py-2"
+              data-testid="conversion-metric"
+            >
+              <dt className="text-xs text-ws-muted-fg">{m.label}</dt>
+              <dd className="ws-num text-lg font-semibold">
+                {formatValue(m.value, m.format ?? 'count', lang, m.currency ?? 'USD')}
+              </dd>
+            </div>
+          ))}
+        </dl>
+      ) : null}
+      {state === 'ready' && payload.rows.length > 0 ? <TableBlock payload={payload} /> : null}
+      {state !== 'ready' && payload.footer !== undefined ? (
+        <p
+          className="rounded-[10px] border border-dashed border-ws-line px-3 py-3 text-sm text-ws-muted-fg"
+          data-testid="conversion-empty"
+        >
+          {payload.footer.text}
+          {payload.footer.href === undefined ? null : (
+            <>
+              {' · '}
+              <Link className="font-medium text-ws-brand hover:underline" to={payload.footer.href}>
+                {payload.footer.link_label ?? payload.footer.href}
+              </Link>
+            </>
+          )}
+        </p>
+      ) : null}
+    </div>
+  )
+}
+
+/**
  * recharts 把颜色写成 SVG 的**表现属性**，而表现属性里的 `var(--x)` 浏览器不解析——
  * 写进去等于没写（线会消失）。所以在这里按当前主题把 token 读成真颜色再传。
  */
@@ -295,6 +399,10 @@ export function BlockBody({ data }: { data: BlockData }): React.ReactNode {
       return <TableBlock payload={data.payload as TableResult} />
     case 'chart_line':
       return <ChartLineBlock payload={data.payload as SeriesResult} />
+    case 'funnel':
+      return <FunnelBlock payload={data.payload as TableResult} />
+    case 'conversion':
+      return <ConversionBlock payload={data.payload as TableResult} />
     default:
       return <TimelineBlock payload={data.payload as { rows: RecordRow[] }} />
   }
@@ -315,6 +423,15 @@ export function BlockCard({
     queryKey: ['block', block.id, range, assignment],
     queryFn: () => getBlockData(block.id, range, assignment),
   })
+  /*
+   * WP302（docs/96 P3）：`hide_when_empty` 的积木（交稿排期、带货最好的红人）没有一行就整块不出——
+   * 没有要催的稿是好事，不占一块地方说「没有」。取数的时候也不先画骨架（免得闪一下又消失）。
+   */
+  if (block.hide_when_empty === true) {
+    const payload = query.data?.payload as { rows?: unknown[] } | undefined
+    if (query.isPending || query.data?.status !== 'ok' || (payload?.rows ?? []).length === 0)
+      return null
+  }
   return (
     <WsCard
       data-testid="block"

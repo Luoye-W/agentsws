@@ -90,6 +90,7 @@ import {
   importAccounts,
   importSummary,
   isStageStalled,
+  judgeEngagement,
   type MergeProfile,
   nextInSequence,
   normalizeHandle,
@@ -577,12 +578,13 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
               suppressed: [],
             })
           : undefined
+      const cards = cardsOf(c)
       const status = collabStatus({
         stage: c.stage,
         now,
         stage_changed_at: c.stage_changed_at,
         last_activity_at: c.last_activity_at,
-        pending_cards: cardsOf(c),
+        pending_cards: cards,
         pending_reviews: mine.filter((d) => d.review === 'pending' && d.submitted_at !== undefined)
           .length,
         overdue_deliverables: mine.filter(
@@ -604,6 +606,7 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
       return {
         ...c,
         status,
+        ...(cards === 0 ? {} : { pending_cards: cards }),
         ...(dwell === null ? {} : { dwell_days: dwell }),
         stalled: isStageStalled(c.stage, c.stage_changed_at, now, c.last_activity_at),
         segments: stageSegments(c.stage, {
@@ -1097,6 +1100,10 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
               }
             : {}),
           factors: score.factors.map((f) => ({ id: f.id, score: Math.round(f.score) })),
+          ...(() => {
+            const v = judgeEngagement(account.engagement_rate, account.followers)
+            return v === null ? {} : { engagement_judgement: v }
+          })(),
           ...(() => {
             const c = collabOf(account.creator_id, account.channel)
             return c === undefined

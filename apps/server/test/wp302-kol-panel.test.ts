@@ -61,6 +61,16 @@ describe('WP302 合作清单的紧急程度与分段进度', () => {
     t += 3 * 86_400_000
     store.saveCollaboration({ ...(store.collaboration('col_1') as never), budget: 400 })
     expect(store.collaboration('col_1')?.stage_changed_at).toBe(T0)
+    // 从头拼的一行（没带这一格）、阶段没动：沿用原来的戳，不悄悄丢掉
+    store.saveCollaboration({
+      id: 'col_1',
+      creator_id: 'cre_1',
+      channel: 'youtube',
+      stage: 'agreed',
+      currency: 'USD',
+      budget: 400,
+    })
+    expect(store.collaboration('col_1')?.stage_changed_at).toBe(T0)
 
     t += 5 * 86_400_000
     const rows = (

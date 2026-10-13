@@ -332,6 +332,14 @@ describe('WP67 红人面板五个分块（48 §5.1）', () => {
     })
     expect(conv(shopOn(withKol(data))).state).toBe('ready')
     expect(conv(shopOn(withKol(data))).metrics?.find((m) => m.label === '回本')?.value).toBe(1.6)
+    // docs/96 P5：收入在数字砖上、按红人的明细在「带货最好的红人」，归因卡不再说一遍
+    expect(conv(shopOn(withKol(data))).metrics?.map((m) => m.label)).toEqual([
+      '点击',
+      '订单',
+      '花费',
+      '回本',
+    ])
+    expect((conv(shopOn(withKol(data))) as { rows?: unknown[] }).rows).toEqual([])
     const shopOff = (ctx: QueryContext): QueryContext => ({
       ...ctx,
       sources: [

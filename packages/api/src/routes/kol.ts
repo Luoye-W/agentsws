@@ -146,6 +146,16 @@ export interface KolCreatorRow {
    */
   factors?: { id: string; score: number }[]
   /**
+   * WP302：互动率跟同量级中位数比（`kol-core` 的 `judgeEngagement`，移植自 KOLAgents）。没有互动率就没有——
+   * 缺数不画「未知」色块。`value` / `median` 是百分数字符串（`2.4` = 2.4%）。
+   */
+  engagement_judgement?: {
+    key: 'low' | 'average' | 'healthy'
+    level: 'good' | 'warn' | 'bad'
+    value: string
+    median: string
+  }
+  /**
    * WP302：这个人在这条渠道上那条合作走到哪了（卡上的迷你进度条与「下一步」按钮）。没有合作就没有。
    */
   collab?: {
@@ -391,6 +401,8 @@ export interface KolStagedView {
 export type KolCollaborationRow = Collaboration & {
   /** 紧急程度：五档色之一 + 清单行上那一小句。 */
   status?: { tier: 'action' | 'scheduled' | 'waiting' | 'active' | 'idle'; label: string }
+  /** 这条合作上还在等人批的卡（清单那一行点了去卡片流，docs/96 P1）。没有就不给。 */
+  pending_cards?: number
   /** 在现在这一段停了几天（算不出来就没有）。 */
   dwell_days?: number
   /** 停久了（只在要人推的几段、满 7 天）。 */

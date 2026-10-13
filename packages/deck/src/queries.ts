@@ -2452,7 +2452,8 @@ const QUERY_LIST: QueryDef[] = [
      * 带货归因三态卡（KOLAgents conversion-card）：
      * - 没连店铺 → 一行「连上店铺才算得出谁带了货」+ 去连接（订单要从店里读，联盟码 / UTM 才对得上）；
      * - 连了、追踪链接还没带来一次点击 → 一行「等第一单」；
-     * - 有数 → 一排数（点击 / 订单 / 收入 / 花费 / 回本）+ 按红人的表。
+     * - 有数 → 一排数（点击 / 订单 / 花费 / 回本）。收入在上面那块数字砖上、按红人的明细在
+     *   「带货最好的红人」，这里不再说一遍（docs/96 P5）。
      */
     name: 'kol.conversion',
     source: 'kol',
@@ -2485,26 +2486,14 @@ const QUERY_LIST: QueryDef[] = [
       const revenue = Math.round(links.reduce((sum, l) => sum + l.revenue, 0) * 100) / 100
       const spent = ofKolChannel(ctx.kol?.retro ?? [], ctx).reduce((sum, r) => sum + r.spent, 0)
       const currency = links[0]?.currency ?? 'USD'
-      const byName = new Map<string, { clicks: number; orders: number; revenue: number }>()
-      for (const l of links) {
-        const hit = byName.get(l.display_name) ?? { clicks: 0, orders: 0, revenue: 0 }
-        byName.set(l.display_name, {
-          clicks: hit.clicks + l.clicks,
-          orders: hit.orders + l.orders,
-          revenue: hit.revenue + l.revenue,
-        })
-      }
       return {
         columns,
-        rows: [...byName.entries()]
-          .sort((a, b) => b[1].revenue - a[1].revenue)
-          .slice(0, 10)
-          .map(([name, v]) => ({ name, ...v, currency })),
+        // 按红人的明细在「带货最好的红人」那一块，这里只给总数（docs/96 P5：同一屏一个数只说一处）
+        rows: [],
         state: 'ready' as const,
         metrics: [
           { label: '点击', value: clicks, format: 'count' as const },
           { label: '订单', value: orders, format: 'count' as const },
-          { label: '收入', value: revenue, format: 'money' as const, currency },
           { label: '花费', value: spent, format: 'money' as const, currency },
           ...(spent > 0
             ? [

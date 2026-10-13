@@ -18,7 +18,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ChevronRight, Coins, Mail, Megaphone, Search, Upload, Users } from 'lucide-react'
 import { useRef, useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Hint, SafetyNote } from '@/components/ui/hint'
@@ -29,7 +29,6 @@ import {
   acceptKolCampaign,
   addKolContact,
   addKolCreator,
-  advanceKolCollaboration,
   draftKolOutreach,
   getKolCollaborations,
   getKolCreator,
@@ -47,8 +46,18 @@ import {
 import { useApp } from '@/lib/app-context'
 import { tOr } from '@/lib/humanize'
 import { CollabThread } from './collab-thread'
+import {
+  COLLAB_GROUPS,
+  GroupTitle,
+  groupOfTier,
+  jumpToCards,
+  TierTag,
+  tierRank,
+} from './collab-tier'
+import { CreatorCard, stepOpensThread } from './creator-card'
 import { KolSandboxBar } from './kol-sandbox-bar'
 import { errorText, KolError, KolReceipt, refreshCards } from './kol-shared'
+import { CollabProgress } from './segmented-progress'
 
 /** 五条渠道（真源是契约的 `KOL_CHANNEL_IDS`；工作台不依赖服务端包，这里照抄一份）。 */
 const ALL_CHANNELS: readonly KolChannelId[] = ['youtube', 'facebook', 'instagram', 'tiktok', 'x']
@@ -58,19 +67,6 @@ export function channelOfRole(role_id: string | undefined): KolChannelId | undef
   if (role_id === undefined || !role_id.startsWith('kol.')) return undefined
   const id = role_id.slice('kol.'.length)
   return ALL_CHANNELS.find((c) => c === id)
-}
-
-/** 合作阶段的下一步（合法迁移表的真源在服务端；这里只是按钮上那几个常见的去处）。 */
-const NEXT_STAGES: Readonly<Record<string, string[]>> = {
-  sourced: ['contacted', 'declined'],
-  contacted: ['replied', 'declined'],
-  replied: ['negotiating', 'declined'],
-  negotiating: ['agreed', 'declined'],
-  // WP299（决策 386）：寄样走「已寄样」；不寄样的直接开拍
-  agreed: ['sample_sent', 'delivering', 'declined'],
-  sample_sent: ['delivering', 'declined'],
-  delivering: ['delivered'],
-  delivered: ['closed'],
 }
 
 /**
@@ -108,12 +104,15 @@ function Discovery({
   assignment,
   channel,
   onOpen,
+  onThread,
   batch,
   onClearBatch,
 }: {
   assignment: string
   channel: KolChannelId
   onOpen: (creator_id: string) => void
+  /** WP302：卡上「下一步」落在合作线程里的那几步。 */
+  onThread: (collaboration_id: string) => void
   /** WP131：插件「回作战室看这批」带来的采集批次——只列这一批。 */
   batch?: string
   onClearBatch?: () => void
@@ -373,46 +372,27 @@ function Discovery({
               {batch === undefined ? t('kol.library.empty') : t('kol.library.batch.empty')}
             </p>
           ) : null}
-          <ol className="flex flex-col gap-1" data-testid="kol-library">
+          {/*
+            WP302（决策 406）：一行一行的名单换成达人卡——分数、三格判断色块、合作走到哪、
+            按阶段变的那一个按钮。testid `kol-library-row` 留在卡上点开详情的那一块（老脚本照用）。
+          */}
+          <ol
+            className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3"
+            data-testid="kol-library"
+          >
             {(library.data?.rows ?? []).map((row) => (
-              <li key={row.creator_id}>
-                <button
-                  type="button"
-                  className="flex w-full items-center justify-between gap-2 rounded px-1 py-1 text-left text-sm hover:bg-muted"
-                  data-testid="kol-library-row"
-                  data-creator={row.creator_id}
-                  onClick={() => {
-                    onOpen(row.creator_id)
-                  }}
-                >
-                  <span className="min-w-0 truncate">
-                    {row.display_name}
-                    <span className="text-xs text-muted-foreground">
-                      {' '}
-                      {atHandle(row.handle)}
-                      {/* WP295：挑人先看粉丝量——以前这一行只有名字和分 */}
-                      {row.followers === undefined
-                        ? ''
-                        : ` · ${t('kol.followers', { n: num(row.followers) })}`}
-                    </span>
-                  </span>
-                  <span className="flex shrink-0 items-center gap-2 text-xs text-muted-foreground">
-                    {/* 刷粉护栏那一条：清单上看得见"这个数不可信"，不悄悄少一行 */}
-                    {/* WP131：自动评分跑过的体检概括数（有才显示） */}
-                    {row.audit_health === undefined ? null : (
-                      <span data-testid="kol-audit">{t('kol.audit', { n: row.audit_health })}</span>
-                    )}
-                    {row.blocked === undefined ? (
-                      <span>{t('kol.score', { n: row.score })}</span>
-                    ) : (
-                      <span className="text-destructive" data-testid="kol-blocked">
-                        {row.blocked}
-                      </span>
-                    )}
-                    <ChevronRight className="size-3" aria-hidden />
-                  </span>
-                </button>
-              </li>
+              <CreatorCard
+                key={row.creator_id}
+                row={row}
+                handle={`${atHandle(row.handle)}`}
+                onOpen={() => {
+                  onOpen(row.creator_id)
+                }}
+                onNext={(step) => {
+                  if (stepOpensThread(step) && row.collab !== undefined) onThread(row.collab.id)
+                  else onOpen(row.creator_id)
+                }}
+              />
             ))}
           </ol>
         </div>
@@ -687,15 +667,15 @@ function CreatorDetail({
  * 66 复测 #18：**每一行要看得出是谁。**
  *
  * 以前这张清单上一行只有阶段（「已找到 ›」「已建联 ›」），24 行长得一模一样——
- * 人点开之前根本不知道自己在点谁。现在一行有六样：**红人名 · @账号 · 渠道 ·
- * 阶段 · 最近一次往来 · 预算**（有的话），外加一排筛：按阶段、按名字搜。
+ * 人点开之前根本不知道自己在点谁。现在一行有：**红人名 · @账号 · 渠道 · 档色那一句 ·
+ * 迷你进度条 · 预算**（有的话），外加一排筛：按阶段、按名字搜。
  *
  * 两条小纪律：
  *
  * 1. **筛出 0 条与本来就没有合作是两句话**。筛没筛过界面自己知道，
  *    说"这个条件下没有"比说"还没有在谈的合作"准确得多（36 §3 的同一条）。
- * 2. **"最近一次往来"没有就说没有**，不拿建库时间凑一个——那是"这条合作
- *    还什么都没发生过"，不是"很久没动了"。
+ * 2. WP302：「多久没动了」由档色那一句说（「等回复 · 已 5 天」），停满 7 天的那一段进度条标黄——
+ *    不再另起一列「N 天前」（docs/96 P5，一件事只说一处）。
  */
 const STAGE_FILTERS = [
   'all',
@@ -710,19 +690,6 @@ const STAGE_FILTERS = [
   'declined',
 ] as const
 
-/** 一个时刻 → 「3 天前」这种话（列表上那一列要的是"多久没动了"，不是一串数字）。 */
-function sinceText(at: string | undefined, now: number): string {
-  if (at === undefined) return '还没有往来'
-  const ms = now - Date.parse(at)
-  if (!Number.isFinite(ms)) return '还没有往来'
-  if (ms < 0) return at.slice(0, 10)
-  const days = Math.floor(ms / 86_400_000)
-  if (days >= 1) return `${days} 天前`
-  const hours = Math.floor(ms / 3_600_000)
-  if (hours >= 1) return `${hours} 小时前`
-  return '刚刚'
-}
-
 function Collaborations({
   assignment,
   channel,
@@ -733,8 +700,7 @@ function Collaborations({
   onOpen: (collaboration_id: string) => void
 }): React.ReactNode {
   const { t } = useApp()
-  const client = useQueryClient()
-  const [error, setError] = useState<string | undefined>(undefined)
+  const navigate = useNavigate()
   const [stage, setStage] = useState<(typeof STAGE_FILTERS)[number]>('all')
   const [q, setQ] = useState('')
 
@@ -748,22 +714,6 @@ function Collaborations({
     queryFn: () => getKolCreators({ channel }, assignment),
   })
 
-  const advance = useMutation({
-    mutationFn: (input: { id: string; stage: string }) =>
-      advanceKolCollaboration(input.id, input.stage, assignment),
-    onSuccess: () => {
-      setError(undefined)
-      void client.invalidateQueries({ queryKey: ['kol-collaborations'] })
-      void client.invalidateQueries({ queryKey: ['kol-creator'] })
-      // WP295：推到「谈成」等阶段会出卡，上面「要你处理」要跟着变
-      refreshCards(client)
-    },
-    // 非法跳转回的是一句人话（"还没建联就说交付完了"），照实显示
-    onError: (e: Error) => {
-      setError(e.message)
-    },
-  })
-
   const who = new Map((library.data?.rows ?? []).map((r) => [r.creator_id, r]))
   const open = (list.data?.rows ?? []).filter((c) => c.stage !== 'closed')
   const needle = q.trim().toLowerCase()
@@ -774,11 +724,14 @@ function Collaborations({
       const r = who.get(c.creator_id)
       return `${r?.display_name ?? c.creator_id} ${r?.handle ?? ''}`.toLowerCase().includes(needle)
     })
-    // 最近有动静的排前面；一次都没动过的沉底（它们是该被催的那一批，但不是最急的）
+    // WP302：组内急的在前；同一档里停得久的在前，再按最近有动静的
     .sort(
-      (a, b) => Date.parse(b.last_activity_at ?? '') - Date.parse(a.last_activity_at ?? '') || 0,
+      (a, b) =>
+        tierRank(a.status?.tier) - tierRank(b.status?.tier) ||
+        (b.dwell_days ?? -1) - (a.dwell_days ?? -1) ||
+        Date.parse(b.last_activity_at ?? '') - Date.parse(a.last_activity_at ?? '') ||
+        0,
     )
-  const now = Date.now()
   const filtered = stage !== 'all' || needle !== ''
 
   return (
@@ -837,77 +790,100 @@ function Collaborations({
             {filtered ? '这个条件下没有合作。换个阶段或者清掉搜索词。' : t('kol.collab.empty')}
           </p>
         ) : null}
-        {rows.map((c) => {
-          const r = who.get(c.creator_id)
+        {/*
+          WP302（决策 406）：按急到缓分四组——要处理 / 等对方 / 进行中 / 其他，组里没人就不出组标题。
+          每一行一个档色小标（那一句就是「现在怎么样」）+ 一根迷你进度条（走到哪了）。
+          docs/96 P1：推进阶段、批卡都不在清单上——推进在线程里，批卡在卡片流里。
+        */}
+        {COLLAB_GROUPS.map((group) => {
+          const inGroup = rows.filter((c) => groupOfTier(c.status?.tier) === group)
+          if (inGroup.length === 0) return null
           return (
-            <div
-              key={c.id}
-              className="flex flex-wrap items-center justify-between gap-2 border-b pb-2"
-              data-testid="kol-collab-row"
-              data-stage={c.stage}
-              data-creator={c.creator_id}
-            >
-              <button
-                type="button"
-                className="min-w-0 flex-1 rounded px-1 py-0.5 text-left hover:bg-muted"
-                data-testid="kol-collab-open"
-                data-collab={c.id}
-                onClick={() => {
-                  onOpen(c.id)
-                }}
-              >
-                <div className="flex flex-wrap items-baseline gap-x-2">
-                  <span className="truncate font-medium text-sm" data-testid="kol-collab-name">
-                    {r?.display_name ?? c.creator_id}
-                  </span>
-                  <span className="truncate text-xs text-muted-foreground">
-                    {atHandle(r?.handle)} · {t(`kol.channel.${c.channel}`)}
-                  </span>
-                  {c.sandbox === true ? (
-                    <span
-                      className="rounded bg-[var(--ws-warn-bg)] px-1 text-[10px] text-[var(--ws-ink)]"
-                      data-testid="kol-collab-sandbox"
-                    >
-                      演练
-                    </span>
-                  ) : null}
-                </div>
-                <div className="flex flex-wrap items-baseline gap-x-2 text-xs text-muted-foreground">
-                  <span data-testid="kol-collab-stage">{t(`kol.stage.${c.stage}`)}</span>
-                  <span data-testid="kol-collab-since">{sinceText(c.last_activity_at, now)}</span>
-                  {c.budget === undefined ? null : (
-                    <span data-testid="kol-collab-budget">
-                      {c.budget} {c.currency}
-                    </span>
-                  )}
-                  <ChevronRight className="inline size-3" aria-hidden />
-                </div>
-              </button>
-              <span className="flex gap-1">
-                {(NEXT_STAGES[c.stage] ?? []).map((next) => (
-                  <Button
-                    key={next}
-                    size="xs"
-                    variant="outline"
-                    data-testid="kol-stage-next"
-                    data-next={next}
-                    disabled={advance.isPending}
-                    onClick={() => {
-                      advance.mutate({ id: c.id, stage: next })
-                    }}
+            <section key={group} className="flex flex-col gap-1" data-group={group}>
+              <GroupTitle group={group} n={inGroup.length} />
+              {inGroup.map((c) => {
+                const r = who.get(c.creator_id)
+                const urgent = group === 'action' || group === 'waiting'
+                return (
+                  <div
+                    key={c.id}
+                    className="flex items-center gap-2 border-b pb-1.5"
+                    data-testid="kol-collab-row"
+                    data-stage={c.stage}
+                    data-creator={c.creator_id}
+                    data-tier={c.status?.tier}
                   >
-                    {t(`kol.stage.${next}`)}
-                  </Button>
-                ))}
-              </span>
-            </div>
+                    <button
+                      type="button"
+                      className="flex min-w-0 flex-1 flex-col gap-1 rounded px-1 py-0.5 text-left hover:bg-muted"
+                      data-testid="kol-collab-open"
+                      data-collab={c.id}
+                      onClick={() => {
+                        onOpen(c.id)
+                      }}
+                    >
+                      <span className="flex min-w-0 flex-wrap items-baseline gap-x-2">
+                        <span
+                          className="truncate font-medium text-sm"
+                          data-testid="kol-collab-name"
+                        >
+                          {r?.display_name ?? c.creator_id}
+                        </span>
+                        <span className="truncate text-xs text-muted-foreground">
+                          {atHandle(r?.handle)} · {t(`kol.channel.${c.channel}`)}
+                        </span>
+                        {c.sandbox === true ? (
+                          <span
+                            className="rounded bg-[var(--ws-warn-bg)] px-1 text-[10px] text-[var(--ws-ink)]"
+                            data-testid="kol-collab-sandbox"
+                          >
+                            演练
+                          </span>
+                        ) : null}
+                      </span>
+                      <span className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
+                        {c.segments === undefined ? null : (
+                          <CollabProgress
+                            segments={c.segments}
+                            dwellDays={c.dwell_days}
+                            className="max-w-40"
+                          />
+                        )}
+                        {/* 档色那一句不说阶段时（等对方 / 要处理），阶段名在这儿；在做的那一句就是阶段名，不重复 */}
+                        {urgent || c.status === undefined ? (
+                          <span className="shrink-0" data-testid="kol-collab-stage">
+                            {t(`kol.stage.${c.stage}`)}
+                          </span>
+                        ) : null}
+                        {c.budget === undefined ? null : (
+                          <span className="ws-num shrink-0" data-testid="kol-collab-budget">
+                            {c.budget} {c.currency}
+                          </span>
+                        )}
+                      </span>
+                    </button>
+                    {c.status === undefined ? null : (c.pending_cards ?? 0) > 0 ? (
+                      <button
+                        type="button"
+                        className="shrink-0 hover:underline"
+                        data-testid="kol-collab-cards"
+                        title={t('kol.collab.to_cards')}
+                        onClick={() => {
+                          jumpToCards(navigate)
+                        }}
+                      >
+                        <TierTag tier={c.status.tier} label={c.status.label} />
+                      </button>
+                    ) : (
+                      <TierTag tier={c.status.tier} label={c.status.label} />
+                    )}
+                    <ChevronRight className="size-3 shrink-0 text-muted-foreground" aria-hidden />
+                  </div>
+                )
+              })}
+            </section>
           )
         })}
-        {error === undefined ? null : (
-          <p className="text-xs text-destructive" data-testid="kol-stage-error">
-            {error}
-          </p>
-        )}
       </CardContent>
     </Card>
   )
@@ -1393,6 +1369,10 @@ export function KolPanel({
             assignment={assignment}
             channel={channel}
             onOpen={setOpenCreator}
+            onThread={(collab) => {
+              setOpenCollab(collab)
+              go('threads')
+            }}
             {...(batch === undefined || batch === '' ? {} : { batch, onClearBatch: clearBatch })}
           />
           {openCreator === undefined ? null : (
