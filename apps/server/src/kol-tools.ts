@@ -52,6 +52,7 @@ const STAGES: readonly CollaborationStage[] = [
   'replied',
   'negotiating',
   'agreed',
+  'sample_sent',
   'delivering',
   'delivered',
   'closed',
@@ -236,10 +237,15 @@ export function createKolToolExecutor(options: KolToolsOptions): ToolExecutor {
         if (detail === undefined) {
           return { status: 'error', reason: `红人库里没有 ${id} 这一条。` }
         }
-        // 打分是详情里现成的一格（`kol-core` 的 `scoreCreator` 在服务端那一跳已经算过）
+        // 打分是详情里现成的一格（`kol-core` 的 `scoreCreator` 在服务端那一跳已经算过）。
+        // WP299：以前只回账号、不回分——模型说不出「为什么是这个分」；现在五项各拿多少、为什么都在
         return {
           status: 'ok',
-          data: { creator_id: id, accounts: detail.accounts },
+          data: {
+            creator_id: id,
+            accounts: detail.accounts,
+            ...(detail.scores === undefined ? {} : { scores: detail.scores }),
+          },
           provenance: [{ type: 'creator', id }],
         }
       }
@@ -317,7 +323,7 @@ export function createKolToolExecutor(options: KolToolsOptions): ToolExecutor {
             (c) =>
               (only === undefined || c.id === only) &&
               !linked.has(c.id) &&
-              ['agreed', 'delivering', 'delivered', 'closed'].includes(c.stage),
+              ['agreed', 'sample_sent', 'delivering', 'delivered', 'closed'].includes(c.stage),
           )
           .map((c) => nameOf(c.id))
         const out = rowsOf(rows, 'tracked_link')

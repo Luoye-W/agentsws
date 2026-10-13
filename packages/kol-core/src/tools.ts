@@ -80,7 +80,7 @@ export const KOL_TOOL_SPECS: readonly KolToolSpec[] = [
       properties: {
         channel: CHANNEL_ENUM,
         stage: str(
-          '只要某一个阶段的：sourced / contacted / replied / negotiating / agreed / delivering / delivered / closed / declined',
+          '只要某一个阶段的：sourced / contacted / replied / negotiating / agreed / sample_sent（已寄样）/ delivering / delivered / closed / declined',
         ),
         // WP295：「谁还没回」一次读出来（每行带 display_name 与 days_since_activity）
         quiet_days: {
@@ -164,7 +164,7 @@ export const KOL_TOOL_SPECS: readonly KolToolSpec[] = [
   {
     name: 'advance_collaboration',
     description:
-      '把一条合作推到下一个阶段（找到人 → 已建联 → 有回音 → 谈条件 → 谈成 → 交付中 → 已交付 → 结案；也能推到「谢绝了」）。阶段机不许跳步，跳了会被拒并说清为什么。',
+      '把一条合作推到下一个阶段（找到人 → 已建联 → 有回音 → 谈条件 → 谈成 →（已寄样 →）交付中 → 已交付 → 结案；也能推到「谢绝了」）。阶段机不许跳步，跳了会被拒并说清为什么。',
     input_schema: {
       type: 'object',
       properties: {

@@ -66,6 +66,16 @@ export interface ScoreCriteria {
   language?: string
   /** 目标地区（ISO-3166，大小写不敏感）。 */
   region?: string
+  /**
+   * WP299（决策 389）：**你卖的东西属于哪几大类**（{@link categoryFamiliesOf} 从品牌一句话介绍里认的）。
+   * 没给 {@link category} 时用它：红人的类目也认成大类，同一大类满分。
+   */
+  category_families?: readonly string[]
+  /**
+   * WP299（决策 389）：**你的目标市场**（品牌档案里的那几个国家码）。没给 {@link region} 时用它：
+   * 红人在其中任一个就算命中。
+   */
+  regions?: readonly string[]
   /** 权重覆盖（只写想改的那几项）。 */
   weights?: Partial<ScoreWeights>
   /** 算"活跃度"用的现在时刻（注入，本文件没有 `Date.now()`）。 */
@@ -147,11 +157,203 @@ function engagementScore(
   }
 }
 
+/**
+ * WP299（决策 389）：品类大类。红人库里的类目是人填的（「数码」「科技」「tech」），品牌那一侧是
+ * 一句话介绍（「我们做桌面快充配件」）——两边都认成这几个大类再比。词表只可加行。
+ */
+export const CATEGORY_FAMILIES: readonly { id: string; zh: string; terms: readonly string[] }[] = [
+  {
+    id: 'tech',
+    zh: '数码',
+    terms: [
+      '数码',
+      '3c',
+      '电子',
+      '科技',
+      '充电',
+      '快充',
+      '数据线',
+      '耳机',
+      '手机',
+      '电脑',
+      '笔记本',
+      '键盘',
+      '鼠标',
+      '扩展坞',
+      '相机',
+      '智能',
+      '桌面',
+      'gadget',
+      'tech',
+      'charger',
+      'charging',
+      'cable',
+      'phone',
+      'laptop',
+      'headphone',
+      'earbud',
+      'camera',
+      'electronic',
+      'usb',
+      'desk setup',
+    ],
+  },
+  {
+    id: 'home',
+    zh: '家居',
+    terms: [
+      '家居',
+      '家具',
+      '收纳',
+      '厨房',
+      '清洁',
+      '灯具',
+      '床品',
+      'home',
+      'furniture',
+      'kitchen',
+      'decor',
+      'cleaning',
+      'storage',
+      'interior',
+    ],
+  },
+  {
+    id: 'beauty',
+    zh: '美妆',
+    terms: [
+      '美妆',
+      '化妆',
+      '护肤',
+      '彩妆',
+      '香水',
+      '美甲',
+      'beauty',
+      'makeup',
+      'skincare',
+      'cosmetic',
+      'fragrance',
+      'nail',
+    ],
+  },
+  {
+    id: 'fashion',
+    zh: '服饰',
+    terms: [
+      '服饰',
+      '服装',
+      '穿搭',
+      '鞋',
+      '包包',
+      '饰品',
+      'fashion',
+      'apparel',
+      'clothing',
+      'shoes',
+      'jewelry',
+      'outfit',
+    ],
+  },
+  {
+    id: 'outdoor',
+    zh: '户外运动',
+    terms: [
+      '户外',
+      '露营',
+      '运动',
+      '健身',
+      '骑行',
+      '钓鱼',
+      'outdoor',
+      'camping',
+      'fitness',
+      'sport',
+      'hiking',
+      'cycling',
+    ],
+  },
+  {
+    id: 'baby',
+    zh: '母婴',
+    terms: ['母婴', '婴儿', '宝宝', '儿童', '玩具', 'baby', 'kids', 'toy', 'parenting'],
+  },
+  { id: 'pet', zh: '宠物', terms: ['宠物', '猫', '狗', 'pet', 'dog', 'cat'] },
+  {
+    id: 'food',
+    zh: '食品',
+    terms: [
+      '食品',
+      '零食',
+      '咖啡',
+      '茶',
+      '饮料',
+      'food',
+      'snack',
+      'coffee',
+      'tea',
+      'cooking',
+      'recipe',
+    ],
+  },
+  { id: 'gaming', zh: '游戏', terms: ['游戏', '电竞', 'gaming', 'game', 'esports'] },
+]
+
+/** 一段话（品牌介绍 / 红人类目）→ 认得出的大类 id（可能不止一个；认不出就是空数组）。 */
+export function categoryFamiliesOf(text: string | undefined): string[] {
+  const t = (text ?? '').toLowerCase()
+  if (t.trim() === '') return []
+  return CATEGORY_FAMILIES.filter((f) => f.terms.some((term) => termHit(t, term))).map((f) => f.id)
+}
+
+/**
+ * 英文词按词边界认（`cat` 不能命中 category、`tea` 不能命中 team），短词允许复数；
+ * 中文没有空格，按子串认。
+ */
+function termHit(text: string, term: string): boolean {
+  if (!/^[a-z0-9 ]+$/.test(term)) return text.includes(term)
+  const tail = term.length <= 4 ? '(?:s|es)?\\b' : ''
+  return new RegExp(`\\b${term}${tail}`).test(text)
+}
+
+/**
+ * WP299（决策 389）：品牌档案 → 打分条件。一句话介绍认出的大类当品类条件、目标市场当地区条件；
+ * 认不出 / 没填的那一格不加（不加 = 那一项照旧拿中间分 / 满分）。找人清单、面板、详情同一份。
+ */
+export function brandScoreCriteria(
+  profile: { one_liner?: string | undefined; markets?: readonly string[] | undefined },
+  now: string,
+): ScoreCriteria {
+  const families = categoryFamiliesOf(profile.one_liner)
+  return {
+    now,
+    ...(families.length === 0 ? {} : { category_families: families }),
+    ...(profile.markets === undefined || profile.markets.length === 0
+      ? {}
+      : { regions: [...profile.markets] }),
+  }
+}
+
+const familyZh = (ids: readonly string[]): string =>
+  ids.map((id) => CATEGORY_FAMILIES.find((f) => f.id === id)?.zh ?? id).join(' / ')
+
 /** 类目匹配：完全相同满分，互相包含给 70，都没填给中间分。 */
 function categoryScore(
   actual: string | undefined,
   want: string | undefined,
+  families?: readonly string[],
 ): { score: number; why: string } {
+  // WP299（决策 389）：这次找人没限类目，就按你卖的东西的大类比
+  if (want === undefined && families !== undefined && families.length > 0) {
+    const mine = categoryFamiliesOf(actual)
+    if (actual === undefined || mine.length === 0)
+      return {
+        score: 40,
+        why: `还认不出他做什么类目（你卖的是「${familyZh(families)}」那一类）。`,
+      }
+    return mine.some((f) => families.includes(f))
+      ? { score: 100, why: `他做「${actual}」，和你卖的东西是同一类。` }
+      : { score: 20, why: `他做「${actual}」，你卖的是「${familyZh(families)}」那一类，对不上。` }
+  }
   if (want === undefined) return { score: 50, why: '这次找人没限类目。' }
   if (actual === undefined)
     return { score: 40, why: `还不知道他做什么类目（想要的是「${want}」）。` }
@@ -166,7 +368,7 @@ function categoryScore(
 /** 语言与地区：两格各占一半；没限制就算满足。 */
 function localeScore(
   account: Pick<PlatformAccount, 'language' | 'region'>,
-  want: Pick<ScoreCriteria, 'language' | 'region'>,
+  want: Pick<ScoreCriteria, 'language' | 'region' | 'regions'>,
 ): { score: number; why: string } {
   const parts: string[] = []
   let got = 0
@@ -188,6 +390,17 @@ function localeScore(
     if (hit) got += 1
     parts.push(
       hit ? `地区是 ${account.region}` : `地区 ${account.region ?? '未知'}（想要 ${want.region}）`,
+    )
+  } else if (want.regions !== undefined && want.regions.length > 0) {
+    // WP299（决策 389）：没限地区就按你的目标市场——在其中任一个就算命中
+    total += 1
+    const markets = want.regions.map((r) => r.toUpperCase())
+    const hit = account.region !== undefined && markets.includes(account.region.toUpperCase())
+    if (hit) got += 1
+    parts.push(
+      hit
+        ? `地区是 ${account.region}（在你的目标市场里）`
+        : `地区 ${account.region ?? '未知'}（你的目标市场是 ${markets.join(' / ')}）`,
     )
   }
   if (total === 0) return { score: 100, why: '这次找人没限语言地区。' }
@@ -248,7 +461,7 @@ export function scoreCreator(account: ScorableAccount, criteria: ScoreCriteria):
   const band = criteria.followers_band ?? DEFAULT_BAND
   const f = followersScore(account.followers, band)
   const e = engagementScore(account.engagement_rate, account.followers, account.channel)
-  const c = categoryScore(account.category, criteria.category)
+  const c = categoryScore(account.category, criteria.category, criteria.category_families)
   const l = localeScore(account, criteria)
   const a = activityScore(account.observed_at, criteria.now)
 

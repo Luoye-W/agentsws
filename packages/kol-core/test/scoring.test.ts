@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { rankCreators, type ScorableAccount, scoreCreator } from '../src/index.js'
+import {
+  brandScoreCriteria,
+  categoryFamiliesOf,
+  rankCreators,
+  type ScorableAccount,
+  scoreCreator,
+} from '../src/index.js'
 
 const now = '2026-09-15T00:00:00Z'
 const daysAgo = (n: number): string => new Date(Date.parse(now) - n * 86_400_000).toISOString()
@@ -108,5 +114,42 @@ describe('打分（48 §5.2）：每一项都可解释', () => {
     expect(ranked).toHaveLength(3)
     expect(ranked[0]?.score.blocked).toBeUndefined()
     expect(ranked.at(-1)?.score.blocked).toBeDefined()
+  })
+})
+
+describe('WP299 打分带上品牌档案（决策 389）', () => {
+  const NOW = '2026-10-13T00:00:00.000Z'
+  const account = (over: Record<string, unknown>) =>
+    ({
+      channel: 'youtube',
+      followers: 48_000,
+      engagement_rate: 0.06,
+      observed_at: NOW,
+      ...over,
+    }) as Parameters<typeof scoreCreator>[0]
+
+  it('品类大类：中文按子串、英文按词边界（cat 不命中 category、tea 不命中 team）', () => {
+    expect(categoryFamiliesOf('我们做桌面快充配件')).toEqual(['tech'])
+    expect(categoryFamiliesOf('Tech reviews & desk setups')).toEqual(['tech'])
+    expect(categoryFamiliesOf('category education team')).toEqual([])
+    expect(categoryFamiliesOf('cats and dogs')).toEqual(['pet'])
+    expect(categoryFamiliesOf(undefined)).toEqual([])
+  })
+
+  it('品牌一句话介绍 + 目标市场 → 条件；同类、在目标市场的人比别的高，理由说得出', () => {
+    const criteria = brandScoreCriteria(
+      { one_liner: '我们做桌面快充配件', markets: ['DE', 'GB'] },
+      NOW,
+    )
+    expect(criteria).toEqual({ now: NOW, category_families: ['tech'], regions: ['DE', 'GB'] })
+    const fit = scoreCreator(account({ category: '数码', region: 'DE' }), criteria)
+    const off = scoreCreator(account({ category: '家居', region: 'US' }), criteria)
+    expect(fit.total - off.total).toBeGreaterThanOrEqual(20)
+    expect(fit.factors.find((f) => f.id === 'category')?.why).toContain('同一类')
+    expect(off.factors.find((f) => f.id === 'locale')?.why).toContain('目标市场是 DE / GB')
+  })
+
+  it('档案什么都没写 = 不加条件（老行为不变）', () => {
+    expect(brandScoreCriteria({}, NOW)).toEqual({ now: NOW })
   })
 })

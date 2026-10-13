@@ -120,6 +120,38 @@ describe('WP275 超了上限：① ② 再确认一次', () => {
     expect(out.approval.routing.recipients[0]?.reconfirm).toBeUndefined()
   })
 
+  it('WP299：只撞了「硬顶人审」（永远要人点的那几类）不算超上限——一下就过，不标', async () => {
+    const h = harness({ directory: flow(false) })
+    const out = await h.txn.ledger.stage(
+      refundStage({
+        kind: 'kol_payment',
+        after: { payment: { amount: 42 }, paid_total: 42, budget: 400 },
+      }),
+    )
+    if (!out.ok) throw new Error(out.message)
+    expect(out.approval.automation.mandate_check.caps_hit).toEqual(['hard_ceiling'])
+    expect(out.approval.routing.recipients[0]?.reconfirm).toBeUndefined()
+    // 真超了谈定预算：照旧再确认一次（另起一套，免得被上一张同对象的卡并成一个修订）
+    const h2 = harness({ directory: flow(false) })
+    const over400 = await h2.txn.ledger.stage(
+      refundStage({
+        kind: 'kol_payment',
+        change_set_id: 'cs_6',
+        after: { payment: { amount: 450 }, paid_total: 450, budget: 400 },
+        money: {
+          amount: 450,
+          currency: 'USD',
+          amount_base: 450,
+          base_currency: 'USD',
+          fx_rate: 1,
+          fx_at: '2026-09-07T09:00:00.000Z',
+        },
+      }),
+    )
+    if (!over400.ok) throw new Error(over400.message)
+    expect(over400.approval.routing.recipients[0]?.reconfirm).toBe(true)
+  })
+
   it('③：不标（超了就按规矩转人，那是路由的事）', async () => {
     const h = harness({ directory: flow(true) })
     const out = await h.txn.ledger.stage(over())

@@ -1103,8 +1103,29 @@ function kolFunnelOf(ctx: QueryContext): { stage: string; label: string; count: 
   return byChannel[channel] ?? all.map((b) => ({ ...b, count: 0 }))
 }
 
+/** WP299（决策 387）：合作复盘那一行的人话。数字原样端出去，倍数只保留一位小数。 */
+function retroSummary(r: NonNullable<NonNullable<QueryContext['kol']>['retro']>[number]): string {
+  const money = (n: number): string =>
+    `${n.toLocaleString('en-US', { maximumFractionDigits: 2 })} ${r.currency}`
+  const head = `花了 ${money(r.spent)} · 带来 ${money(r.revenue)}`
+  if (r.verdict === 'worth')
+    return r.spent === 0
+      ? `${head} · 值`
+      : `${head} · 值（回本 ${(Math.floor((r.revenue / r.spent) * 10) / 10).toString()} 倍）`
+  if (r.verdict === 'not_yet')
+    return `${head} · 还没回本（回了 ${Math.round((r.revenue / r.spent) * 100)}%）`
+  return r.spent === 0
+    ? `${head} · 还没记付款，值不值算不出来`
+    : `${head} · 没建追踪链接，带来多少算不出来`
+}
+
 /** 进行中、还在谈的那几段（「合作中」那一格数的就是它们）。 */
-const KOL_ACTIVE_STAGES: ReadonlySet<string> = new Set(['negotiating', 'agreed', 'delivering'])
+const KOL_ACTIVE_STAGES: ReadonlySet<string> = new Set([
+  'negotiating',
+  'agreed',
+  'sample_sent',
+  'delivering',
+])
 
 /** 数字块拿不到数就空着（**不补 0**：没拉到数与真的是 0 要分得开）。 */
 const numOrBlank = (v: number | undefined): number | string => v ?? ''
@@ -1650,7 +1671,26 @@ const QUERY_LIST: QueryDef[] = [
           state: i.state,
           ref: i.subject.object,
         }))
-      return { rows }
+      /*
+       * WP299（决策 387）：红人职责的记录里加「合作复盘」——一条合作一行「花了多少、带来多少、
+       * 值不值」，只出这条职责自己渠道的。复盘不单出卡；每天的简报做成组件之前先落在这里。
+       */
+      const retro = ofKolChannel(ctx.kol?.retro ?? [], ctx).map(
+        (r): RecordRow => ({
+          id: `kol_retro:${r.collaboration_id}`,
+          at: r.at,
+          kind: 'kol_retro',
+          title: r.display_name,
+          summary: retroSummary(r),
+          // 复盘不是一张审批项，没有审批状态（记录面板上空串不出那一格）
+          state: '',
+        }),
+      )
+      const merged =
+        kolChannelOfRole(ctx.role_id) === undefined
+          ? rows
+          : [...rows, ...retro].sort((a, b) => Date.parse(b.at) - Date.parse(a.at))
+      return { rows: merged }
     },
   },
   // ── WP64（51 §2.4）：订单履约 ────────────────────────────────────────

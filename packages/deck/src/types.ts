@@ -709,6 +709,23 @@ export interface KolDeckData {
    * 不给 = 老宿主，退回上面那份全渠道的。
    */
   funnel_by_channel?: Record<string, { stage: string; label: string; count: number }[]>
+  /**
+   * WP299（决策 387）：合作复盘——一条合作一行「花了多少、带来多少、值不值」。
+   * 花的 = 批过的付款 + 批过的寄样成本；带来的 = 追踪链接回填的收入（归不上的不算）。
+   * 演练的不进。还没花钱也没带来钱的合作不出行。
+   */
+  retro?: {
+    collaboration_id: string
+    display_name: string
+    channel: string
+    spent: number
+    revenue: number
+    currency: string
+    /** 结论：`worth` 回本了 / `not_yet` 花了还没回本 / `unknown` 没建追踪链接、算不出来。 */
+    verdict: 'worth' | 'not_yet' | 'unknown'
+    /** 最近一次花钱或回填的时刻（记录里按它排）。 */
+    at: string
+  }[]
 }
 
 /**

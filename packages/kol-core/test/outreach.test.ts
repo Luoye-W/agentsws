@@ -4,6 +4,7 @@ import {
   draftOutreach,
   hasCjk,
   nextInSequence,
+  OUTREACH_OPT_OUT_EN,
   type OutreachVars,
   outreachLanguageOf,
   outreachQuota,
@@ -63,6 +64,26 @@ describe('开发信起草（48 §5.2）', () => {
     }
     expect(draftOutreach('first', en).body).toContain('your channel')
     expect(draftOutreach('final', en).body).toContain('last note')
+  })
+
+  it('WP299（决策 388）：英文三封末尾都有「回 no thanks」；给了公司地址就带「品牌 · 地址」', () => {
+    const en: OutreachVars = {
+      ...vars,
+      brand_pitch: 'We make desk chargers.',
+      product: 'the Nordvolt 65W charger',
+      reason: outreachReason({ channel: 'youtube', language: 'en' }),
+      sender_name: 'Mo Li',
+      language: 'en',
+    }
+    for (const step of ['first', 'follow_up', 'final'] as const) {
+      const bare = draftOutreach(step, en)
+      expect(bare.body, step).toContain(OUTREACH_OPT_OUT_EN)
+      expect(bare.ok, step).toBe(true)
+      const withAddress = draftOutreach(step, { ...en, postal_address: '8 Keji Rd, Shenzhen' })
+      expect(withAddress.body.endsWith('Nordvolt · 8 Keji Rd, Shenzhen'), step).toBe(true)
+    }
+    // 中文信不加（这一条只管英文信）
+    expect(draftOutreach('first', vars).body).not.toContain('no thanks')
   })
 
   it('WP295：账号语言 → 信的语言：zh* 中文，其余与不知道都是英文', () => {

@@ -134,6 +134,9 @@ export const LAYOUT_BY_CHANGE: Record<ChangeKind, DeckLayout> = {
   kol_affiliate_code: 'money',
   // 合作 = 样品 + 佣金 + 现金上限，人真正要点头的是那个上限
   kol_collaboration: 'money',
+  // WP299（决策 386 / 387）：「花钱」家族
+  kol_sample: 'money',
+  kol_payment: 'money',
 
   // ── ① 出站文案：正文整段给人看 ────────────────────────────────────
   review_reply: 'outbound',

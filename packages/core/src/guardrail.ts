@@ -60,6 +60,9 @@ export const KIND_RISK: Record<ChangeKind, RiskClass> = {
   kol_deliverable_review: 'low',
   kol_affiliate_code: 'low',
   kol_tracked_link: 'low',
+  // WP299（决策 386 / 387）：寄样成本与付款都是真金白银，按 high（与合作同理）
+  kol_sample: 'high',
+  kol_payment: 'high',
   // WP72（56 §2）：社媒运营那六条。
   //
   // 发内容与群发按 medium：对外、收不回来，但改不了钱（两条都在 `HARD_L1` 里，
@@ -182,6 +185,9 @@ export const HARD_L1: ReadonlySet<ChangeKind> = new Set([
    * 硬顶不行（15 §2）。
    */
   'kol_collaboration',
+  /** WP299（决策 386 / 387）：寄样成本与付给红人的钱——同合作那一条理由，永远人审。 */
+  'kol_sample',
+  'kol_payment',
   /**
    * WP72（56 §2 / §0）：**发内容与群发永远人审**。
    *
@@ -1149,6 +1155,24 @@ export function evaluateGuardrail(
       // 这里只认调用方带进来的结论，没带就不判（老调用方一个字不用改）。
       if (after.stage_transition_ok === false)
         block('kol_stage_transition', String(before.stage ?? '?'), String(after.stage ?? '?'))
+      break
+    }
+    /**
+     * WP299（决策 386 / 387）：寄样成本与付款。负数直接拦；付款加上这一笔超过谈定预算的，
+     * 记一条 review（卡上看得见「超过谈定的预算」），不拦——尾款加运费是常事，人看一眼就行。
+     */
+    case 'kol_sample': {
+      const cost = change.amount_base ?? num(rec(after.sample)?.cost)
+      if (cost !== undefined && cost < 0) block('kol_sample_cost_negative', 0, cost)
+      break
+    }
+    case 'kol_payment': {
+      const amount = change.amount_base ?? num(rec(after.payment)?.amount)
+      if (amount === undefined || amount <= 0) block('kol_payment_amount', 0, amount ?? 0)
+      const budget = num(after.budget)
+      const total = num(after.paid_total)
+      if (budget !== undefined && total !== undefined && total > budget)
+        review('kol_payment_over_budget', budget, total)
       break
     }
     /** WP67（48 §5.1）：交付物审核结论。额度是**每天审几条**，防的是"一口气全批了"。 */

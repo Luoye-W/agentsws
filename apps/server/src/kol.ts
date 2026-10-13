@@ -40,8 +40,10 @@ import {
   collaborationFunnel,
   collaborationStageName,
   rankCreators,
+  type ScoreCriteria,
 } from '@agentsws/kol-core'
 import type BetterSqlite3 from 'better-sqlite3'
+import { spentOn } from './kol-money.js'
 
 /**
  * 库里的七张表。名字与对象类型一一对应，不另起别名。
@@ -567,6 +569,8 @@ export function kolDeckData(
     now?: string
     /** 这次找人的条件算出来的分（按 `PlatformAccount.id`）。给了就盖过默认那一份。 */
     scores?: ReadonlyMap<string, { score: number; blocked?: string }>
+    /** WP299（决策 389）：品牌档案带出来的打分条件（不给 = 不加条件，老行为）。 */
+    criteria?: Omit<ScoreCriteria, 'now'>
   } = {},
 ): KolDeckData {
   const creators = new Map(store.creators().map((c) => [c.id, c]))
@@ -580,7 +584,7 @@ export function kolDeckData(
 
   const accounts = store.accounts()
   // 排序（含"刷粉的排在后面而不是剔掉"那一条）也在 `rankCreators` 里，不在这儿重写
-  const ranked = rankCreators(accounts, { now: options.now ?? '' })
+  const ranked = rankCreators(accounts, { ...options.criteria, now: options.now ?? '' })
   const discovery = ranked.map(({ account, score }) => {
     const override = options.scores?.get(account.id)
     const blocked = override === undefined ? score.blocked : override.blocked
@@ -650,7 +654,52 @@ export function kolDeckData(
       }),
     // 演练开着才有这一格（`sandboxCollabs` 空 = 没在演练）
     ...(sandboxCollabs.length === 0 ? {} : { sandbox_funnel: collaborationFunnel(sandboxCollabs) }),
+    // WP299（决策 387）：合作复盘——一条合作一行「花了多少、带来多少、值不值」
+    retro: kolRetro(collaborations, store.links(), nameOf),
   }
+}
+
+/**
+ * WP299（决策 387）：合作复盘的行。
+ *
+ * 花的 = 批过的付款 + 批过的寄样成本（`spentOn`）；带来的 = 这条合作上追踪链接回填的收入。
+ * 结论三档，**宁可说「算不出来」也不猜**：
+ * - 没记过付款（花的是 0）→ `unknown`（钱可能是线下付的，算不出值不值）；
+ * - 花了钱但没建追踪链接 → `unknown`（带来多少算不出来）；
+ * - 带来的 ≥ 花的 → `worth`，否则 `not_yet`。
+ * 既没花钱也没带来钱的合作不出行（什么都没发生，复盘里不占一行）。
+ */
+export function kolRetro(
+  collaborations: readonly Collaboration[],
+  links: readonly { collaboration_id: string; revenue: number }[],
+  nameOf: (creator_id: string) => string,
+): NonNullable<KolDeckData['retro']> {
+  return collaborations.flatMap((c) => {
+    const mine = links.filter((l) => l.collaboration_id === c.id)
+    const spent = spentOn(c)
+    const revenue = Math.round(mine.reduce((sum, l) => sum + l.revenue, 0) * 100) / 100
+    if (spent === 0 && revenue === 0) return []
+    const verdict: 'worth' | 'not_yet' | 'unknown' =
+      spent === 0 || mine.length === 0 ? 'unknown' : revenue >= spent ? 'worth' : 'not_yet'
+    const at = [
+      ...(c.payments ?? []).map((p) => p.paid_at),
+      ...(c.sample === undefined ? [] : [c.sample.shipped_at]),
+      ...(c.last_activity_at === undefined ? [] : [c.last_activity_at]),
+      ...(c.agreed_at === undefined ? [] : [c.agreed_at]),
+    ].sort()
+    return [
+      {
+        collaboration_id: c.id,
+        display_name: nameOf(c.creator_id),
+        channel: c.channel as string,
+        spent,
+        revenue,
+        currency: c.currency,
+        verdict,
+        at: at[at.length - 1] ?? '',
+      },
+    ]
+  })
 }
 
 /**
@@ -739,6 +788,8 @@ export function seedDemoKol(store: KolStore, now: string): void {
     budget: 400,
     currency: 'USD',
     agreed_at: now,
+    // WP299（决策 387）：付过的那一笔——记录里「合作复盘」那一行才有「花了多少」
+    payments: [{ id: 'pay_demo_1', amount: 400, currency: 'USD', note: '全款', paid_at: now }],
   })
   store.saveCollaboration({
     id: 'col_demo_2',
