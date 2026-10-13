@@ -248,3 +248,93 @@ describe('WP299 合作复盘（决策 387）', () => {
     expect(row?.verdict).toBe('worth')
   })
 })
+
+describe('WP299 英文开发信页脚与带品牌档案的打分（决策 388 / 389）', () => {
+  /** 公司档案（走负责人那条分配，同设置页） */
+  const profile = async (input: Record<string, unknown>) => {
+    const headers = new Headers({
+      Authorization: `Bearer ${server.bootstrap.internalToken}`,
+      'X-Assignment': server.bootstrap.ownerAssignment.id,
+      'content-type': 'application/json',
+    })
+    const res = await fetch(`${url}/v1/workspace/profile`, {
+      method: 'PUT',
+      headers,
+      body: JSON.stringify({ legal_name: 'NordVolt GmbH', ...input }),
+    })
+    expect(res.status).toBe(200)
+  }
+  const creator = async (name: string, over: Record<string, unknown>) => {
+    const detail = await data<{ creator: { id: string } }>(
+      await post('/v1/kol/creators', {
+        display_name: name,
+        channel: 'youtube',
+        handle: name.toLowerCase().replace(/\s/g, ''),
+        followers: 48_000,
+        engagement_rate: 0.06,
+        language: 'en',
+        ...over,
+      }),
+    )
+    return detail.creator.id
+  }
+
+  it('英文信末尾有「回 no thanks」与公司地址；没填地址不拦、卡上提醒去填', async () => {
+    const id = await creator('Gadget Jonas', {})
+    await post(`/v1/kol/creators/${id}/contacts`, { kind: 'email', value: 'jonas@example.com' })
+    const draft = (body: { approval_item_id: string; body: string }) => body
+    const noAddress = draft(
+      await data(
+        await post('/v1/kol/outreach', {
+          creator_id: id,
+          channel: 'youtube',
+          product: 'the NordVolt 65W charger',
+          brand_pitch: 'We make desk chargers.',
+          sender_name: 'Lan Wang',
+        }),
+      ),
+    )
+    expect(noAddress.body).toContain('If you\'d rather not hear from us, just reply "no thanks".')
+    const change = (
+      await server.txn.ledger.list({
+        workspace_id: server.bootstrap.workspace.id,
+        kind: 'kol_outreach',
+      })
+    )[0]
+    expect(change?.notes.join('\n')).toContain('还没填公司地址')
+
+    await profile({ postal_address: 'Hauptstr. 1, 10115 Berlin, Germany' })
+    const id2 = await creator('Desk Rosa', {})
+    await post(`/v1/kol/creators/${id2}/contacts`, { kind: 'email', value: 'rosa@example.com' })
+    const withAddress = draft(
+      await data(
+        await post('/v1/kol/outreach', {
+          creator_id: id2,
+          channel: 'youtube',
+          product: 'the NordVolt 65W charger',
+          brand_pitch: 'We make desk chargers.',
+          sender_name: 'Lan Wang',
+        }),
+      ),
+    )
+    expect(withAddress.body).toMatch(/· Hauptstr\. 1, 10115 Berlin, Germany$/)
+  })
+
+  it('打分带上品牌一句话介绍认出的大类与目标市场：同类、在目标市场的人排前面，详情说清为什么', async () => {
+    await profile({ one_liner: '我们做桌面快充配件', markets: ['DE', 'GB'] })
+    const tech = await creator('Gadget Jonas', { category: '数码', region: 'DE' })
+    await creator('Desk Rosa', { category: '家居', region: 'US' })
+    const list = await data<{ rows: { creator_id: string; score: number }[] }>(
+      await api('/v1/kol/creators?channel=youtube'),
+    )
+    expect(list.rows[0]?.creator_id).toBe(tech)
+    expect((list.rows[0]?.score ?? 0) - (list.rows[1]?.score ?? 0)).toBeGreaterThanOrEqual(20)
+    const detail = await data<{
+      accounts: { id: string }[]
+      scores: Record<string, { factors: { id: string; why: string }[] }>
+    }>(await api(`/v1/kol/creators/${tech}`))
+    const factors = detail.scores[detail.accounts[0]?.id ?? '']?.factors ?? []
+    expect(factors.find((f) => f.id === 'category')?.why).toContain('和你卖的东西是同一类')
+    expect(factors.find((f) => f.id === 'locale')?.why).toContain('在你的目标市场里')
+  })
+})
