@@ -59,7 +59,7 @@ export const TOOL_WORDS_ZH: Readonly<Record<string, string>> = {
   generate_image: '生图',
   edit_image: '参考图改图',
   list_brand_assets: '品牌素材库',
-  theme_init_from_base: '开源主题起底',
+  theme_init_from_base: 'Horizon 起底',
   theme_list: '店里的主题列表',
   theme_pull: '拉主题',
   theme_check: '主题检查',

@@ -13,7 +13,7 @@ import type { Assignment } from '@agentsws/contracts'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createServer, type Server } from '../src/index.js'
 import { platformCliStandIn } from '../src/platform-cli-stand-in.js'
-import { fakeThemeBase, themeCliStandIn } from '../src/site-theme-stand-in.js'
+import { themeCliStandIn } from '../src/site-theme-stand-in.js'
 
 const SITE = 'https://rollout.example'
 const ROLLOUT = '6suegp-md.myshopify.com'
@@ -87,7 +87,6 @@ beforeEach(async () => {
     ],
   })
   const cli = platformCliStandIn({ stepMs: 2, loginMs: 5 })
-  const base = fakeThemeBase()
   server = await createServer({
     quiet: true,
     clock: { now: () => new Date().toISOString() },
@@ -99,7 +98,7 @@ beforeEach(async () => {
     brandIntakeFetch: site,
     platformCliExec: cli.exec,
     platformCliRunner: cli.runner,
-    siteTheme: { run: fake.run, fetch: base.fetch, base: base.pin },
+    siteTheme: { run: fake.run },
   })
   const ws = server.bootstrap.workspace.id
   theme = server.roles.assignments.create({

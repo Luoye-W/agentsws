@@ -187,7 +187,7 @@ import {
 import { scheduleConflicts, scheduleRulesFor } from '@agentsws/social-core'
 import { detectAnsweredBoundaries, SUPPORT_BOUNDARIES } from '@agentsws/support-core'
 import { createTxn, SqliteTxnStore, type Txn } from '@agentsws/txn'
-import { cardRefOf, createWork, SqliteWorkStore, type Work } from '@agentsws/work'
+import { createWork, SqliteWorkStore, type Work } from '@agentsws/work'
 import { type HttpBindings, type ServerType, serve } from '@hono/node-server'
 import { RESPONSE_ALREADY_SENT } from '@hono/node-server/utils/response'
 import { WebSocketServer } from 'ws'
@@ -593,14 +593,8 @@ import { createCloudShopLinks, createShopifyConnect } from './shopify-connect.js
 import { createShopifyDevMcp } from './shopify-devmcp.js'
 import { createRunCli, type RunCli } from './shopify-theme.js'
 import { createConnectSiteFacts, createSiteService, createSiteStore, seedDemoSite } from './site.js'
-import {
-  createSiteTheme,
-  type SiteThemeAssembly,
-  SiteThemeError,
-  type ThemeBasePin,
-  type ThemeFetch,
-} from './site-theme.js'
-import { isThemeUpgradeCard } from './site-theme-upgrade.js'
+import { createSiteTheme, type SiteThemeAssembly, SiteThemeError } from './site-theme.js'
+import { isThemeUpgradeCard } from './site-theme-legacy.js'
 import { enrichSkillSummaries } from './skill-catalog.js'
 import {
   createSocialStore,
@@ -987,10 +981,10 @@ export interface ServerOptions {
    */
   platformCliRunner?: Partial<Omit<PlatformCliRunnerOptions, 'now'>>
   /**
-   * WP253：建站岗位主题工坊的注入点（测试 / demo 换成假 `shopify` 与本地假主题包，不联网、不碰真店）。
-   * 生产不传：用 WP245 装好的 CLI 真跑，起底包从 codeload.github.com 下钉死的那一版。
+   * WP253：建站岗位主题工坊的注入点（测试 / demo 换成假 `shopify`，不联网、不碰真店）。
+   * 生产不传：用 WP245 装好的 CLI 真跑。WP301 起不再下载任何主题包（起底 = 在店里复制一份 Horizon）。
    */
-  siteTheme?: { run?: RunCli; fetch?: ThemeFetch; base?: ThemeBasePin }
+  siteTheme?: { run?: RunCli }
   /**
    * WP261：店铺授权（`store auth`）与后台接口（`store execute`）的注入点（测试 / demo 换成进程内假 CLI + 假店，
    * 不联网、不碰真店）。生产不传：用 WP245 装好的 CLI 真跑，令牌在本品牌那一份会话目录里。
@@ -2811,19 +2805,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       siteStore: () => onboardingRef?.shopifyDomainOf(ws),
       env,
       ...(options.siteTheme?.run === undefined ? {} : { run: options.siteTheme.run }),
-      ...(options.siteTheme?.fetch === undefined ? {} : { fetch: options.siteTheme.fetch }),
-      ...(options.siteTheme?.base === undefined ? {} : { base: options.siteTheme.base }),
-      // Luoye 决定 140：随安装包带的那份起底包（GitHub 下不动时的兜底；打包那一半见 WP253 报告）
-      ...(env.AGENTSWS_THEME_BASE_DIR === undefined || env.AGENTSWS_THEME_BASE_DIR === ''
-        ? {}
-        : { localBaseDir: env.AGENTSWS_THEME_BASE_DIR }),
       ledger: txn.ledger,
       effectiveConfig: (id) => roles.effectiveConfig(id),
-      // WP296：旧版起底的工作目录 → 出「升级到 vX（会跑迁移）」卡（批了在下面的决定钩子里升）
-      approvals: () => approvals,
-      onCard: (item) => {
-        brand.work.onCard(cardRefOf(item))
-      },
       noteMatter: (matter_id, text) => {
         brand.work.appendEvent(matter_id as never, {
           kind: 'status',
@@ -5899,7 +5882,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       roleRules.onDecided(item)
       return
     }
-    // WP296：主题升级卡（`upstream_upgrade`，upstream_id = agentsws-theme）批了 → 备份、换新版、跑迁移
+    // WP296 的旧主题升级卡（`upstream_upgrade`，upstream_id = agentsws-theme）被点了 → WP301 起不升，只记一句作废了
     if (isThemeUpgradeCard(item))
       return (await siteThemeOf(item.workspace_id))?.onUpgradeDecided(item)
     // WP268：挑图卡 / 超额卡被决定 → 记选中 / 传店铺挂主题 / 再来一版 / 照卡出图
@@ -10367,7 +10350,7 @@ function seoDecided(bus: ApprovalBus, hook: SeoDecidedHook): ApprovalBus {
           isCompanyNotice(out) ||
           // WP284（决策 275）：「以后都这样」那张策略卡批了 → 落成职责规矩里的一句话
           isInstructionRuleCard(out) ||
-          // WP296：主题升级卡（批了才升；不升记下、一天内不再问）
+          // WP296 的旧主题升级卡（WP301 起点了只记一句作废了）
           isThemeUpgradeCard(out)
         ) {
           try {

@@ -87,13 +87,7 @@ import {
   sleep,
   systemClock,
 } from './node-runtime.js'
-import {
-  bundledProfileDir,
-  bundledThemeBaseDir,
-  desktopPaths,
-  thirdPartyLicensesFile,
-  workstationDir,
-} from './paths.js'
+import { bundledProfileDir, desktopPaths, thirdPartyLicensesFile, workstationDir } from './paths.js'
 import type { FetchLike } from './ports.js'
 import { DesktopQuitConfirmation } from './quit-confirmation.js'
 import { createRedactor } from './redact.js'
@@ -393,8 +387,6 @@ async function bootstrap(): Promise<void> {
   })
 
   const profileDir = bundledProfileDir(app.isPackaged ? process.resourcesPath : undefined)
-  // WP297（决策 140）：随安装包带的起底主题包（GitHub 下不动时服务进程用它）
-  const themeBaseDir = bundledThemeBaseDir(app.isPackaged ? process.resourcesPath : undefined)
   const staticDir = workstationDir(
     app.isPackaged ? process.resourcesPath : undefined,
     join(here, '..', '..', 'workstation', 'dist'),
@@ -464,8 +456,6 @@ async function bootstrap(): Promise<void> {
         ...(profileDir === undefined ? {} : { profileDir }),
         // WP218：工作台产物（以前安装包里没有，装好打开是 404）
         ...(staticDir === undefined ? {} : { staticDir }),
-        // WP297：起底主题包兜底（决策 140；开发期不给，只从 GitHub 下）
-        ...(themeBaseDir === undefined ? {} : { themeBaseDir }),
         // WP218：不继承 Electron 的工作目录（Windows 开机自启时是 C:\Windows\System32）
         cwd: paths.userData,
         secrets: secrets ?? EMPTY_SECRETS,

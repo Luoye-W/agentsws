@@ -44,7 +44,7 @@ const SCALAR_FIELDS = [
   'runtime_lock_key',
   // WP255：只跟这一条大版本线（Node 22 LTS、它配的 npm 10）；周报只拿这条线上的正式版比
   'version_line',
-  // WP253：按 git tag 钉、运行时按需下载的上游（agentsws-theme 起底包）——tag 与钉子那份 JSON
+  // WP253：按 git tag 钉、运行时按需下载的上游（WP253 时是 agentsws-theme 起底包，WP301 起已不登记）——tag 与钉子那份 JSON
   'pinned_tag',
   'pin_file',
 ]
@@ -579,7 +579,7 @@ export function checkRuntimeLock(it, root = REPO_ROOT) {
 }
 
 /**
- * WP253：按 git tag 钉、运行时按需下载的上游（agentsws-theme 起底包）。`pin_file` 是代码里唯一的钉子
+ * WP253：按 git tag 钉、运行时按需下载的上游（WP253 时是 agentsws-theme 起底包，WP301 起已不登记；机制留着）。`pin_file` 是代码里唯一的钉子
  * （`{ repo, tag, commit, sha256 }`）：repo / tag / commit 要逐字等于登记表的 `repo` / `pinned_tag` / `pinned_commit`，
  * sha256 要是 64 位十六进制（换 tag 时三处一起改，sha256 对新 commit 的包现算）。
  * @returns {string[]}

@@ -243,8 +243,26 @@ export interface ShopifyTheme {
   /** 这家店的主题工作副本在哪（不存在就建出来）。 */
   workspaceOf(shop: string): string
   list(shop: string): Promise<ThemeSummary[]>
-  /** 把线上主题（或指定的那一份）拉到本地工作副本。 */
-  pull(input: { shop: string; theme_id?: string }): Promise<{ path: string }>
+  /**
+   * 把线上主题（或指定的那一份）拉到本地工作副本。WP301：`only` = 只拉这几个文件（`--only`，可多个）；
+   * `path` = 拉到这个目录（`--path`，要先建好；不给 = 工作副本）。
+   */
+  pull(input: {
+    shop: string
+    theme_id?: string
+    only?: readonly string[]
+    path?: string
+  }): Promise<{ path: string }>
+  /**
+   * WP301：在店里把一份主题**复制**成一份未发布主题（`theme duplicate`，Shopify 后台那个「复制」；CLI 用的是 Admin API 的
+   * `themeDuplicate`，凭据仍在 CLI 自己的会话里）。线上一个字节不动。
+   */
+  duplicate(input: { shop: string; theme_id: string; name: string }): Promise<{
+    theme_id: string
+    theme_name: string
+  }>
+  /** WP301：给店里一份主题改名（`theme rename`）。调用方保证它不是线上那一份。 */
+  rename(input: { shop: string; theme_id: string; name: string }): Promise<void>
   /** 把本地工作副本推成一份**未发布**的主题；返回预览链接。 */
   pushUnpublished(input: { shop: string; name: string }): Promise<PushedTheme>
   /** 把某份主题设成线上主题。**只有审批过的 `publish_theme` 变更才该调它。** */
@@ -536,15 +554,53 @@ export function createShopifyTheme(options: ShopifyThemeOptions): ShopifyTheme {
 
     list,
 
-    async pull({ shop, theme_id }) {
+    async pull({ shop, theme_id, only, path }) {
       // 09-10 实查 CLI 4.8 的 flag 表：`theme pull` **没有** `--force`（那是 publish 才有的），
       // 非交互时必须三选一给出 `--live` / `--development` / `--theme <id>`，否则它会问人。
-      const args =
-        theme_id === undefined
+      const args = [
+        ...(theme_id === undefined
           ? ['theme', 'pull', '--live']
-          : ['theme', 'pull', '--theme', theme_id]
+          : ['theme', 'pull', '--theme', theme_id]),
+        // WP301：只拉几个文件（探一份主题是不是 Horizon 只要 settings_schema.json）、拉到别的目录
+        ...(only ?? []).flatMap((o) => ['--only', o]),
+        ...(path === undefined ? [] : ['--path', path]),
+      ]
       await runAuthed(shop, args)
-      return { path: workspaceOf(shop) }
+      return { path: path ?? workspaceOf(shop) }
+    },
+
+    async duplicate({ shop, theme_id, name }) {
+      if (name.trim() === '')
+        throw new ShopifyThemeError('invalid_input', '复制出来的主题得有个名字，人在后台要认得出它')
+      // `--force` 跳过确认（我们没有终端回答它）；复制出来的一律是未发布主题
+      const result = await runAuthed(shop, [
+        'theme',
+        'duplicate',
+        '--theme',
+        theme_id,
+        '--name',
+        name,
+        '--force',
+        '--json',
+      ])
+      const parsed = parseJson(result.stdout, '复制主题') as Record<string, unknown>
+      const theme = (parsed.theme ?? parsed) as Record<string, unknown>
+      const id =
+        typeof theme.id === 'number'
+          ? String(theme.id)
+          : typeof theme.id === 'string'
+            ? theme.id
+            : undefined
+      if (id === undefined)
+        throw new ShopifyThemeError('bad_output', '复制主题：CLI 没有回新主题的 id')
+      emit('shopify.theme_duplicated', { shop, from: theme_id, theme_id: id })
+      return { theme_id: id, theme_name: typeof theme.name === 'string' ? theme.name : name }
+    },
+
+    async rename({ shop, theme_id, name }) {
+      if (name.trim() === '')
+        throw new ShopifyThemeError('invalid_input', '主题得有个名字，人在后台要认得出它')
+      await runAuthed(shop, ['theme', 'rename', '--theme', theme_id, '--name', name])
     },
 
     // WP89：Agent 现在也能自己跑 `shopify theme push --unpublished`（沙箱里）。

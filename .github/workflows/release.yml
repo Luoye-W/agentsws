@@ -125,17 +125,6 @@ jobs:
       - name: 取捆绑的 Node 与原生模块
         run: node apps/desktop/scripts/fetch-node.mjs --target ${{ matrix.target }}
 
-      # WP297（决策 140 / 376）：建站起底主题包随安装包带一份（GitHub 下不动时的兜底）。
-      # 按 theme-base-pin.json 从 codeload 下、核 sha256 与字节数（对不上就失败）；钉子不变就走缓存。
-      - name: 缓存起底主题包
-        uses: actions/cache@v4
-        with:
-          path: apps/desktop/vendor/theme-base
-          key: theme-base-${{ hashFiles('apps/server/src/theme-base-pin.json') }}
-
-      - name: 取起底主题包（sha256 与字节数对 theme-base-pin.json）
-        run: node apps/desktop/scripts/fetch-theme-base.mjs
-
       - name: tsc -b
         run: pnpm exec tsc -b
 

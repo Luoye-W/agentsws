@@ -201,11 +201,8 @@ pnpm --filter @agentsws/desktop dist -- --mac --arm64   # 出安装包；架构�
 （WP111 起的包一直没带工作台，装好点「打开工作台」是 404）→ 用捆绑的 Node 冒烟：better-sqlite3 真开一次库、
 `sharp` / `koffi` / `node-pty` 真 require 一次、服务进程入口真 import 一次。任何一步不过，打包失败。
 
-**起底主题包随包带（WP297，决策 140 / 376）**：`scripts/dist.mjs` 打包前先跑 `scripts/fetch-theme-base.mjs`——按
-`apps/server/src/theme-base-pin.json` 从 codeload 下建站起底用的开源主题包到 `vendor/theme-base/`，**字节数与 sha256
-对不上就失败**（网络失败重试几次；已有且对得上就不再下）。extraResources 把它摆进 `<resources>/theme-base/`，
-afterPack 再核一次，Windows 装包冒烟再查装好的那一份；桌面壳经 `AGENTSWS_THEME_BASE_DIR` 告诉服务进程，
-GitHub 下不动时服务进程用它起底。
+**安装包里不带任何 Shopify 主题（WP301，决策 399）**：WP297 曾把建站起底主题包随包带，决策 399 起建站改在店铺里复制
+店家自己的 Shopify 官方 Horizon，安装包、打包脚本与两个 workflow 都不再取、不再带主题代码（`test/wp301-no-theme-bundle.test.ts` 守着）。
 
 **第三方许可证（WP148）**：安装包的 `<resources>/licenses/` 里有三份——`THIRD_PARTY_LICENSES.txt`
 （`scripts/third-party-licenses.mjs` 按 `pnpm -F "@agentsws/desktop..." licenses list --prod --json` 生成：

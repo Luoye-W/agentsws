@@ -1,7 +1,7 @@
 /**
  * WP253：建站岗位「网页模板」端到端——**一个品牌一份**的主题工坊（服务端那一半）。
  *
- * 从「用户在建站岗位里说『用 agentsws-theme 给我搭个首页』」到「店里出现一个未发布主题可预览」，
+ * 从「用户在建站岗位里说『给我搭个首页』」到「店里出现一个未发布主题可预览」，
  * 每一跳在这里接上：
  *
  * | 这一跳 | 从哪来 |
@@ -10,17 +10,17 @@
  * | 登录态 | WP245 的一键登录（按品牌记一笔时间）；我们不读 CLI 的会话文件，凭据不经我们 |
  * | 店铺地址 | 本品牌的 Shopify 连接（客户端凭据经纪人记的那家店）；没连就用人在岗位页上填的那一个 |
  * | 工作目录 | `<data>/themes/<workspace>/<store>/`（与终端沙箱、变更审阅同一个地方） |
- * | 起底 | 开源主题 agentsws-theme 的**钉死版本**（commit + sha256），LICENSE 原样带上 |
+ * | 起底 | WP301（决策 399）：在店里**复制一份 Shopify 官方的 Horizon**（线上就是 Horizon 就复制线上那一份）成未发布主题，`theme pull` 拉下来；工坊不带任何主题代码 |
+ * | 目录 | 按这份 Horizon 自带的 schema 现生成 `CATALOG.index.json` / `CATALOG.json`（`horizon-catalog.ts`） |
  * | 发布 | **不在这里发**：只出 `publish_theme` 的审批卡；人批了执行器调 {@link SiteThemeAssembly.apply} |
  *
  * 三条纪律：
  *
  * 1. **AI 只拿得到受限的几件事**（`theme-tools.ts` 那九个工具），不是终端；写文件只限工作目录，
- *    以 agentsws-theme 起底时只许改 `custom-*` / templates / section 组 / locales / settings_data（主题自己的规矩）。
+ *    以 Horizon 起底时只许改商店层文件：templates / section 组 / config/settings_data.json / locales 店面文案，不改主题核心代码。
  * 2. **线上只有一条路会变**：审批过的 `publish_theme` → {@link SiteThemeAssembly.apply} → `theme publish`。
  * 3. **没装 / 没登录 / 没店铺地址不是异常**，是「还差哪一步」（{@link ThemeReadiness.next}）——岗位页与工具回话同一套话。
  */
-import { execFile } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import {
   existsSync,
@@ -37,7 +37,6 @@ import {
 import { dirname, join, normalize, relative, sep } from 'node:path'
 import type { SiteThemeStoreChoice, SiteThemeView } from '@agentsws/api'
 import type {
-  ApprovalBus,
   ApprovalItem,
   Clock,
   EffectiveConfig,
@@ -50,7 +49,19 @@ import { themeWorkspaceRoot } from '@agentsws/dsh-adapter'
 import { publishReadiness, type ThemeSummaryLike, themeLanes } from '@agentsws/site-core'
 import type { ThemeNeed } from '@agentsws/stand-ins'
 import type { BackendResult, StageInput, StageOutcome } from '@agentsws/txn'
-import { extractTgz } from './npm-runtime.js'
+import {
+  buildThemeCatalog,
+  CATALOG_FILE,
+  CATALOG_INDEX_FILE,
+  catalogIndexOf,
+  isHorizon,
+  isLayoutJson,
+  isLegacyTheme,
+  type ThemeCatalog,
+  type ThemeInfo,
+  templateProblems,
+  themeInfoOf,
+} from './horizon-catalog.js'
 import type { PlatformCliProbe } from './platform-cli.js'
 import { normalizeShopDomain } from './shopify-broker.js'
 import {
@@ -67,42 +78,30 @@ import {
 } from './shopify-theme.js'
 import {
   isThemeUpgradeCard,
-  overlayStoreFiles,
-  parseMigrateOutput,
-  THEME_UPSTREAM_ID,
-  type ThemeUpgradeCardPayload,
-  themeReleaseUrl,
-  themeUpgradeNotice,
-  themeUpgradeTitle,
-  versionOlder,
-} from './site-theme-upgrade.js'
-import PIN from './theme-base-pin.json' with { type: 'json' }
+  LEGACY_UPGRADE_CARD_VOID,
+  legacyMovedNote,
+  legacyThemeNotice,
+  legacyThemeRefusal,
+} from './site-theme-legacy.js'
 
 /**
- * 起底用的开源主题——**钉子只在一处**：`theme-base-pin.json`（tag + commit + 起底包 sha256 + 许可证）。
- *
- * 换一个新 tag 只改那一个文件：`tag` / `version` / `commit` 照 GitHub 上那个 tag 指的 commit 抄，
- * `sha256` / `bytes` 对 `https://codeload.github.com/Luoye-W/agentsws-theme/tar.gz/<commit>` 现算
- * （按 commit 下，包里那一层目录是 `agentsws-theme-<commit>`；按 tag 下的包目录名不同、校验值也不同，不用它）。
- * `upstreams.yml` 的 `agentsws-theme` 一条写着同一个 tag / commit，`check-upstreams` 对账（docs/42）。
- *
- * 10-07：主题仓库与 package.json 都是 **MIT**（Luoye 决定 136：口径就是 MIT）。
+ * WP301（决策 399 = A）：起底用的是**店里那一份 Shopify 官方 Horizon**（复制成未发布主题再拉下来），工坊不带、不下载
+ * 任何主题代码。Horizon 的许可（Shopify/horizon 仓库 LICENSE.md）只许用它开发与 Shopify 配合的主题，不许把它或由它
+ * 衍生的主题拿去分发 / 上架；给商家在**他自己的店里**用可以——我们正是只在商家自己的店里复制、改他那一份。
  */
-export const THEME_BASE: ThemeBasePin & { tag: string; bytes: number } = PIN
+export const HORIZON_BASE = {
+  repo: 'Shopify/horizon',
+  license: 'Shopify Horizon license（只在这家店里用；不分发）',
+} as const
 
-/** 起底包的钉子（测试 / 演示换成本地造的假主题包）。 */
-export interface ThemeBasePin {
-  repo: string
-  version: string
-  commit: string
-  sha256: string
-  license: string
-  /** 上游的 release tag（只用来说清楚是哪一版；下载按 commit）。 */
-  tag?: string
-}
+/** 店里一份 Horizon 都没有时说的那句话。 */
+export const NO_HORIZON_TEXT =
+  '店里还没有 Shopify 官方的 Horizon 主题（线上那一份和未发布的几份都不是）。请到 Shopify 后台「在线商店 → 主题」点「添加主题」，' +
+  '从主题商店免费添加 Horizon（不用发布），加好跟我说一声，我在它的副本上接着做。'
 
-export const themeBaseUrl = (pin: ThemeBasePin = THEME_BASE): string =>
-  `https://codeload.github.com/${pin.repo}/tar.gz/${pin.commit}`
+/** 店里主题满了（Shopify 一家店最多存 20 份）。 */
+export const THEMES_FULL_TEXT =
+  '店里的主题满了（Shopify 一家店最多存 20 份），请到后台「在线商店 → 主题」删掉一两份不用的未发布主题，再让我起底。'
 
 /** 店铺主题认的几个目录（`theme push` 只传这些；AI 也只许写这些）。 */
 export const THEME_DIRS = [
@@ -127,15 +126,15 @@ export const MAX_THEME_FILE_BYTES = 512 * 1024
 export const MAX_THEME_READ_BYTES = 4 * 1024 * 1024
 
 /**
- * 以 agentsws-theme 起底时**只许改**的那几类（主题 AGENTS.md §2 第 1 条：核心文件升级时会被覆盖，
- * 店铺仓库里改了 verify 就不过）。`assets/app.css` 是构建产物，不在里面。
+ * WP301：以 Horizon 起底时**只许改**的商店层文件——JSON 模板（`templates/**.json`）、section 组（`sections/*.json`，
+ * 页头页尾）、`config/settings_data.json`、`locales/*.json` 店面文案（`.schema.json` 是编辑器标签，属于主题核心）。
+ * `.liquid` / CSS / JS 都是 Horizon 的核心代码，不改；要一小段自定义代码用主题自带的 custom-liquid 分区 / 块。
  */
 export function baseWritable(rel: string): boolean {
-  const name = rel.split('/').pop() ?? ''
-  if (rel.startsWith('templates/') || rel.startsWith('locales/')) return true
+  if (/^templates\/.+\.json$/.test(rel)) return true
   if (rel === 'config/settings_data.json') return true
   if (/^sections\/[^/]+\.json$/.test(rel)) return true
-  if (/^(sections|blocks|snippets|assets)\/[^/]+$/.test(rel)) return /^_?custom-/.test(name)
+  if (/^locales\/[^/]+\.json$/.test(rel)) return !rel.endsWith('.schema.json')
   return false
 }
 
@@ -147,88 +146,44 @@ export interface ThemePushRecord {
   changed_files: string[]
 }
 
+/** 这家店的工作目录是从哪一份起的底（WP301 起是 Horizon；旧的自带主题那一份读进来照实认）。 */
+interface StoreBase {
+  repo: string
+  version: string
+  commit: string
+  license: string
+  at: string
+  /** WP301：`theme_info.theme_name`（Horizon）。 */
+  theme_name?: string
+  /** WP301：从店里哪一份复制的（线上那一份 / 某份未发布的）。 */
+  source_theme_id?: string
+  /** WP301：复制出来的那一份未发布主题（预览就推到它上面）。 */
+  copy_theme_id?: string
+}
+
 interface StoreState {
-  base?: { repo: string; version: string; commit: string; license: string; at: string }
+  base?: StoreBase
   /** 起底 / 拉下来那一刻每个主题文件的 sha256（算「改了哪些文件」用）。 */
   baseline?: Record<string, string>
   pushes: ThemePushRecord[]
-  /** WP296：出过的那张升级卡（同一个新版本只出一张；人点了先不升记 `declined_at`，过一天再问）。 */
-  upgrade_offer?: { to: string; approval_item_id: string; at: string; declined_at?: string }
-  /** WP296：升过的几次（备份目录在哪、迁移改了几个文件）。 */
-  upgrades?: {
-    from: string
-    to: string
+  /** WP301：起底时在店里复制出来的那一份（第一次推预览推到它上面，改成人起的名字）。 */
+  copy?: {
+    theme_id: string
+    name: string
+    source_theme_id: string
+    source_name: string
     at: string
-    backup: string
-    migrated: number
-    manual: number
-  }[]
+  }
+  /** WP301：旧的自带主题那几份工作目录挪去了哪（不删、不迁）。 */
+  legacy?: { version?: string; moved_to: string; at: string }[]
 }
 
-/** WP296：工具回话里带给模型的那一句（这份主题是旧版、要不要升）。 */
-export interface ThemeBaseUpgradeNotice {
-  from: string
-  to: string
-  /** 出了卡（或之前出过、还没定）。 */
-  approval_item_id?: string
-  /** 人上次点了先不升（一天内不再出卡）。 */
-  declined?: boolean
+/** WP301：工具回话里带给模型的那一句（这份工作目录是旧的自带主题）。 */
+export interface ThemeLegacyNotice {
+  theme: 'agentsws-theme'
+  version?: string
   message: string
 }
-
-/** WP296：升完的那一份。 */
-export interface ThemeBaseUpgradeResult {
-  from: string
-  to: string
-  /** 迁移脚本改了的文件。 */
-  migrated: string[]
-  /** 迁移脚本说要人手动挪的、locales 合不了的。 */
-  manual: string[]
-  /** 原样带过去的店铺内容（模板、section 组、settings_data、custom-*）。 */
-  kept: string[]
-  /** 旧工作目录挪去的备份目录（不删）。 */
-  backup: string
-  /** WP297：新版那一份是 GitHub 下不动、用安装包里随带的那一份时，GitHub 那边为什么不行。 */
-  bundled?: string
-}
-
-/**
- * WP297（决策 140 / 376）：用了安装包里随带的起底包时，事项时间线上照实记的那一句。
- * `why` 是 GitHub 那边为什么不行（下不动 / 超时 / 校验没过，说人话）。
- */
-export function bundledBaseNote(version: string, why: string): string {
-  return `开源主题这次没从 GitHub 拿到（${why}），用的是安装包里随带的那一份 v${version}，和钉死的那一版核对过、一致。`
-}
-
-export type ThemeRunNode = (
-  args: readonly string[],
-  opts: { cwd: string; timeoutMs: number },
-) => Promise<{ code: number; stdout: string; stderr: string }>
-
-/** 用服务进程自己的 node（安装包捆绑的那一份）跑一个脚本；环境只给 PATH。 */
-const defaultRunNode: ThemeRunNode = (args, opts) =>
-  new Promise((resolve) => {
-    execFile(
-      process.execPath,
-      [...args],
-      {
-        cwd: opts.cwd,
-        timeout: opts.timeoutMs,
-        maxBuffer: 4 * 1024 * 1024,
-        env: { PATH: process.env.PATH ?? '' },
-        windowsHide: true,
-      },
-      (err, stdout, stderr) => {
-        const code =
-          err === null
-            ? 0
-            : typeof (err as { code?: unknown }).code === 'number'
-              ? Number((err as { code: number }).code)
-              : 1
-        resolve({ code, stdout: String(stdout), stderr: String(stderr) })
-      },
-    )
-  })
 
 /**
  * WP258：登录后在这个 Shopify 账号下找到的店（存在设置文件里，岗位页下拉框用；`need_login` 不给界面看原文）。
@@ -259,10 +214,6 @@ interface SettingsFile {
 /** 「还差哪一步」的那一份（岗位页与工具回话同一套判断；形状就是 `/v1/site/theme` 回的那一份）。 */
 export type ThemeReadiness = SiteThemeView
 
-export type ThemeFetch = (
-  url: string,
-) => Promise<{ ok: boolean; status: number; arrayBuffer(): Promise<ArrayBuffer> }>
-
 export interface SiteThemeOptions {
   workspace_id: string
   clock: Clock
@@ -286,20 +237,6 @@ export interface SiteThemeOptions {
   env?: NodeJS.ProcessEnv
   /** 测试 / 演示注入假 CLI。 */
   run?: RunCli
-  /** 下起底包（测试 / 演示注入）；不给 = 全局 fetch。 */
-  fetch?: ThemeFetch
-  /** 起底钉哪一版（测试 / 演示注入假包的钉子）；不给 = {@link THEME_BASE}。 */
-  base?: ThemeBasePin
-  /**
-   * 随安装包带的起底包所在目录（`<repo名>-<commit>.tgz`；Luoye 决定 140 的兜底）。GitHub 下不动时用它，
-   * 校验值与 {@link THEME_BASE} 同一个。不给 = 只从 GitHub 下。服务进程经 `AGENTSWS_THEME_BASE_DIR` 拿。
-   */
-  localBaseDir?: string
-  /**
-   * WP297：从 GitHub 下起底包最多等多久（毫秒）。不给 = 有随包那一份时 30 秒（下不动就早点换兜底）、
-   * 没有时 120 秒。测试注入小值。
-   */
-  baseFetchTimeoutMs?: number
   ledger: { stage(input: StageInput): Promise<StageOutcome> }
   effectiveConfig(assignment_id: string): EffectiveConfig
   /** 「预览好了」进事项时间线（有事项时）。 */
@@ -316,19 +253,21 @@ export interface SiteThemeOptions {
     },
   ): void
   appendEvent?(type: string, payload: Record<string, unknown>): void
-  /** WP296：出升级卡的审批总线（不给 = 只照实说一句，不出卡）。 */
-  approvals?(): Pick<ApprovalBus, 'create'> | undefined
-  /** WP296：卡挂到事项上（有事项时）。 */
-  onCard?(item: ApprovalItem): void
-  /** WP296：升完 / 没升成，在事项时间线上记一句。 */
+  /** 在事项时间线上记一句（WP301：在 Horizon 上新起了一份、旧升级卡作废了）。 */
   noteMatter?(matter_id: string, text: string): void
-  /** WP296：跑主题自带的迁移脚本（测试注入）；不给 = 服务进程自己的 node。 */
-  runNode?: ThemeRunNode
 }
 
 export class SiteThemeError extends Error {
   constructor(
-    readonly code: 'needs' | 'invalid_input' | 'outside' | 'integrity' | 'network' | 'cli',
+    readonly code:
+      | 'needs'
+      | 'invalid_input'
+      | 'outside'
+      | 'integrity'
+      | 'network'
+      | 'cli'
+      /** WP301：店里一份 Horizon 都没有。 */
+      | 'no_horizon',
     message: string,
     readonly need?: ThemeNeed,
   ) {
@@ -364,16 +303,26 @@ export interface SiteThemeAssembly {
    * 不是 Shopify / 没装 / 没登录 / CLI 不会找店 → 什么都不做。
    */
   refreshStores(opts?: { relogin?: boolean }): Promise<StoreLookupState | undefined>
+  /**
+   * WP301：起底 = 在店里复制一份 Shopify 官方 Horizon（线上那一份是 Horizon 就复制它，不是就找店里已加的 Horizon），
+   * 拉到工作目录，按它的 schema 生成目录。线上一个字节不动。旧的自带主题那份工作目录挪到一边（不删）。
+   */
   initFromBase(input: {
     replace?: boolean
-    /** WP297：哪一次运行起的底（用了随包那一份时往它的事项时间线记一句）。 */
+    /** 哪一次运行起的底（挪开了旧目录时往它的事项时间线记一句）。 */
     request?: RunRequest
   }): Promise<{
     base: { repo: string; version: string; commit: string; license: string }
+    theme: { name: string; version?: string }
+    /** 从店里哪一份复制的。 */
+    source: { theme_id: string; name: string; live: boolean }
+    /** 复制出来的那一份未发布主题。 */
+    copy: { theme_id: string; name: string; preview_url: string }
     files: number
     moved_aside: boolean
-    /** WP297：起底包从哪来：`github`（照常）/ `bundled`（GitHub 下不动，用了安装包里随带的那一份）。 */
-    source: 'github' | 'bundled'
+    /** 挪开的是旧的自带主题那一份。 */
+    legacy_moved?: boolean
+    catalog: { sections: number; blocks: number }
   }>
   list(): Promise<ThemeSummary[]>
   pull(input: { theme_id?: string }): Promise<{ files: number }>
@@ -383,7 +332,13 @@ export interface SiteThemeAssembly {
   writeFile(
     path: string,
     content: string,
-  ): Promise<{ path: string; bytes: number; created: boolean }>
+  ): Promise<{
+    path: string
+    bytes: number
+    created: boolean
+    /** WP301：模板 / section 组对着目录查出来的问题（只提醒、不拦；空就没有这一格）。 */
+    problems?: string[]
+  }>
   push(input: { name: string; request?: RunRequest }): Promise<ThemePushRecord>
   proposePublish(input: { theme_id: string; request: RunRequest }): Promise<{
     status: 'staged' | 'blocked'
@@ -394,13 +349,11 @@ export interface SiteThemeAssembly {
   /** 执行器批过的 `publish_theme`（不是这个品牌的 / 不是这一类回 undefined）。 */
   apply(change: StagedChange): Promise<BackendResult | undefined>
   /**
-   * WP296：这份工作目录是旧版 agentsws-theme 吗？是 → 回一句给模型照实说，并（有运行、有审批总线时）
-   * 出一张「升级到 vX（会跑迁移）」卡（同一个版本只出一张）。不是 / 还不知道是哪家店 → undefined。**不升级。**
+   * WP301：这份工作目录是旧的自带主题（agentsws-theme）吗？是 → 回一句给模型照实说（工具回话每次都带）。
+   * 不是 / 还不知道是哪家店 → undefined。**不迁、不删。**
    */
-  baseUpgrade(request?: RunRequest): Promise<ThemeBaseUpgradeNotice | undefined>
-  /** WP296：真升（只由升级卡批了之后调）：备份 → 换新版核心文件、带上店铺内容 → 跑迁移。 */
-  upgradeBase(input: { to: string; store?: string }): Promise<ThemeBaseUpgradeResult>
-  /** WP296：升级卡被决定（批了 → 升；不升 → 记下，一天内不再问）。别的卡什么都不做。 */
+  legacyNotice(): Promise<ThemeLegacyNotice | undefined>
+  /** WP296 出过的旧升级卡被决定了：什么都不升，只在事项时间线记一句「作废了」。别的卡什么都不做。 */
   onUpgradeDecided(item: ApprovalItem): Promise<void>
 }
 
@@ -521,7 +474,6 @@ export function resolveInside(root: string, raw: string): { abs: string; rel: st
 
 export function createSiteTheme(options: SiteThemeOptions): SiteThemeAssembly {
   const ws = options.workspace_id
-  const pin: ThemeBasePin = options.base ?? THEME_BASE
   const now = (): string => options.clock.now()
   const emit = (type: string, payload: Record<string, unknown>): void =>
     options.appendEvent?.(type, payload)
@@ -802,8 +754,21 @@ export function createSiteTheme(options: SiteThemeOptions): SiteThemeAssembly {
     const lookup =
       store?.source === 'connection' || store?.source === 'manual' ? undefined : settings.lookup
     const site = options.siteStore?.()
+    // WP301：工作目录还是旧的自带主题那一份 → 照实标出来（岗位页 / 工具回话同一个判断）
+    const legacy = store === undefined ? undefined : legacyOf(store.store)
     const base = {
-      workspace: { files, ...(state?.base === undefined ? {} : { base: state.base }) },
+      workspace: {
+        files,
+        ...(state?.base === undefined || legacy !== undefined ? {} : { base: state.base }),
+        ...(legacy === undefined
+          ? {}
+          : {
+              legacy: {
+                theme: 'agentsws-theme',
+                ...(legacy.version === undefined ? {} : { version: legacy.version }),
+              },
+            }),
+      },
       ...(store === undefined ? {} : { store: store.store, store_source: store.source }),
       ...(state?.pushes.length ? { last_push: state.pushes[state.pushes.length - 1] } : {}),
       ...(lookup === undefined
@@ -921,346 +886,221 @@ export function createSiteTheme(options: SiteThemeOptions): SiteThemeAssembly {
     })
   }
 
-  /**
-   * 起底包：先从 GitHub（codeload，按 commit）下；下不来、超时、或下来的校验不对，就用随安装包带的那一份
-   * （`localBaseDir/<repo名>-<commit>.tgz`，Luoye 决定 140 的兜底；WP297 起打包时真带上了）——两份认的是同一个 sha256。
-   * 回 `bundled` = 用了随包那一份，值是 GitHub 那边为什么不行（调用方往事项时间线记一句）。
-   */
-  const downloadBase = async (): Promise<{ bytes: Uint8Array; bundled?: string }> => {
-    const local = localBaseFile()
-    const hasLocal = local !== undefined && existsSync(local)
-    const timeoutMs = options.baseFetchTimeoutMs ?? (hasLocal ? 30_000 : 120_000)
-    const fetchImpl: ThemeFetch =
-      options.fetch ?? ((url) => fetch(url, { signal: AbortSignal.timeout(timeoutMs) }))
-    let reason: string
-    let tampered = false
-    let timedOut = false
-    let timer: ReturnType<typeof setTimeout> | undefined
+  /** 往这次运行的事项时间线记一句（没有事项 / 事项没了就算了，事件里照样有）。 */
+  const noteRun = (request: RunRequest | undefined, text: string): void => {
+    const matter = request?.work_item?.id
+    if (matter === undefined) return
     try {
-      const got = async (): Promise<Uint8Array> => {
-        const res = await fetchImpl(themeBaseUrl(pin))
-        if (!res.ok) throw new Error(`HTTP ${res.status}`)
-        return new Uint8Array(await res.arrayBuffer())
-      }
-      // 整个下载（连同读完包体）一起限时：卡住不动的连接也算下不动
-      const bytes = await Promise.race([
-        got(),
-        new Promise<never>((_, reject) => {
-          timer = setTimeout(() => {
-            timedOut = true
-            reject(new Error(`${Math.round(timeoutMs / 1000)} 秒没下完`))
-          }, timeoutMs)
-        }),
-      ])
-      if (sha256(bytes) === pin.sha256) return { bytes }
-      tampered = true
-      reason = '校验没过'
-    } catch (e) {
-      reason = e instanceof Error ? e.message : String(e)
-      if (e instanceof Error && e.name === 'TimeoutError') timedOut = true
-    } finally {
-      if (timer !== undefined) clearTimeout(timer)
+      options.noteMatter?.(matter, text)
+    } catch {
+      // 事项没了：照样在事件里
     }
-    if (local !== undefined && existsSync(local)) {
-      const bytes = new Uint8Array(readFileSync(local))
-      if (sha256(bytes) === pin.sha256) {
-        emit('site_theme.base_local', {
-          workspace_id: ws,
-          reason: tampered ? 'integrity' : 'network',
-          detail: reason,
-        })
-        return {
-          bytes,
-          bundled: tampered
-            ? '从 GitHub 下来的和钉死的那一版对不上'
-            : timedOut
-              ? `GitHub ${Math.round(timeoutMs / 1000)} 秒没下完`
-              : 'GitHub 下不动',
-        }
-      }
-      emit('site_theme.base_local_rejected', { workspace_id: ws, reason: 'integrity' })
-    }
-    if (tampered)
-      throw new SiteThemeError(
-        'integrity',
-        '下来的开源主题和钉死的那一版对不上（校验没过），一个文件都没放。',
-      )
-    throw new SiteThemeError(
-      'network',
-      `下不来开源主题 agentsws-theme（${reason}）。看一下网络，再让我试一次。`,
-    )
   }
-  const localBaseFile = (): string | undefined =>
-    options.localBaseDir === undefined
-      ? undefined
-      : join(options.localBaseDir, `${pin.repo.split('/')[1]}-${pin.commit}.tgz`)
 
-  // ── WP296：旧版起底的工作目录 → 照实说 + 升级卡；人点了才升 ─────────────
+  // ── WP301：Horizon 起底、目录、旧的自带主题 ─────────────────────────────
 
-  const DAY_MS = 24 * 60 * 60_000
-  let offerInFlight: Promise<ThemeBaseUpgradeNotice | undefined> | undefined
+  /** 工作目录里这份主题的 `theme_info`（没有 / 读不懂回 undefined）。 */
+  const infoAt = (root: string): ThemeInfo | undefined => {
+    const file = join(root, 'config', 'settings_schema.json')
+    return existsSync(file) ? themeInfoOf(readFileSync(file, 'utf8')) : undefined
+  }
 
-  const offerUpgrade = async (
-    request: RunRequest | undefined,
-  ): Promise<ThemeBaseUpgradeNotice | undefined> => {
+  /** 按店缓存的目录（起底 / 拉了就重算）。 */
+  const catalogs = new Map<string, ThemeCatalog>()
+  const buildCatalog = (root: string): ThemeCatalog => {
+    const all = themeFiles(root)
+    return buildThemeCatalog({
+      list: (dir) => all.filter((rel) => rel.startsWith(`${dir}/`)),
+      read: (rel) => {
+        const abs = join(root, rel)
+        return existsSync(abs) && statSync(abs).isFile() ? readFileSync(abs, 'utf8') : undefined
+      },
+    })
+  }
+  /** 生成目录写进工作目录根（`theme push` 不传根目录的文件，所以不会推到店里）。 */
+  const writeCatalog = (shop: string, root: string): ThemeCatalog => {
+    const catalog = buildCatalog(root)
+    writeFileSync(join(root, CATALOG_FILE), `${JSON.stringify(catalog)}\n`, 'utf8')
+    writeFileSync(
+      join(root, CATALOG_INDEX_FILE),
+      `${JSON.stringify(catalogIndexOf(catalog), null, 1)}\n`,
+      'utf8',
+    )
+    catalogs.set(shop, catalog)
+    return catalog
+  }
+  const catalogFor = (shop: string, root: string): ThemeCatalog => {
+    const cached = catalogs.get(shop)
+    if (cached !== undefined) return cached
+    const built = buildCatalog(root)
+    catalogs.set(shop, built)
+    return built
+  }
+
+  /** 这家店的工作目录是不是旧的自带主题（agentsws-theme）起的底。 */
+  const legacyOf = (shop: string): { version?: string } | undefined => {
+    const base = settings.stores[shop]?.base
+    if (base !== undefined && /agentsws-theme/.test(base.repo))
+      return base.version === '' ? {} : { version: base.version }
+    const root = themeWorkspaceRoot(options.dataDir, ws, shop)
+    if (!existsSync(root)) return undefined
+    const info = infoAt(root)
+    if (!isLegacyTheme(info)) return undefined
+    return info?.theme_version === undefined ? {} : { version: info.theme_version }
+  }
+
+  /**
+   * 工作目录整份挪到一边（不删）：旧的自带主题那一份进 `theme-work/<品牌>/legacy/`，别的（replace=true）进 `aside/`
+   * ——变更审阅只看 `themes/<品牌>/` 下的店铺目录，挪走的不会混进去。
+   */
+  const moveAside = (
+    shop: string,
+    root: string,
+    legacy: { version?: string } | undefined,
+  ): string => {
+    const stamp = String(Date.parse(now()))
+    const dest =
+      legacy === undefined
+        ? join(options.dataDir, 'theme-work', ws, 'aside', `${shop}-${stamp}`)
+        : join(
+            options.dataDir,
+            'theme-work',
+            ws,
+            'legacy',
+            `${shop}-agentsws-theme${legacy.version === undefined ? '' : `-v${legacy.version}`}-${stamp}`,
+          )
+    mkdirSync(dirname(dest), { recursive: true })
+    renameSync(root, dest)
+    mkdirSync(root, { recursive: true })
+    if (legacy !== undefined) {
+      const st = stateOf(shop)
+      st.legacy = [
+        ...(st.legacy ?? []),
+        {
+          ...(legacy.version === undefined ? {} : { version: legacy.version }),
+          moved_to: dest,
+          at: now(),
+        },
+      ].slice(-10)
+      emit('site_theme.legacy_moved', {
+        workspace_id: ws,
+        ...(legacy.version === undefined ? {} : { version: legacy.version }),
+      })
+    }
+    return dest
+  }
+
+  /** 最多探几份主题（线上那一份先，再是名字里带 Horizon 的未发布主题）。 */
+  const PROBE_MAX = 6
+
+  /**
+   * 店里哪一份是 Horizon：每一份只拉 `config/settings_schema.json` 到临时目录看 `theme_info`（后台改过显示名也认得出）。
+   * 线上那一份是 Horizon 就用它；不是就找未发布的。一份都没有 → `no_horizon`（请人从主题商店免费加一份）。
+   */
+  const findHorizon = async (
+    shop: string,
+    t: ShopifyTheme,
+    rows: ThemeSummary[],
+  ): Promise<{ row: ThemeSummary; info: ThemeInfo }> => {
+    const isLive = (r: ThemeSummary): boolean => r.role === 'main' || r.role === 'live'
+    const named = (r: ThemeSummary): number => (/horizon/i.test(r.name) ? 0 : 1)
+    const candidates = [
+      ...rows.filter(isLive),
+      ...rows.filter((r) => r.role === 'unpublished').sort((a, b) => named(a) - named(b)),
+    ].slice(0, PROBE_MAX)
+    const probeRoot = join(options.dataDir, 'theme-work', ws, 'probe', String(Date.parse(now())))
+    let probed = 0
+    let lastError: unknown
+    try {
+      for (const row of candidates) {
+        const dir = join(probeRoot, row.id.replace(/[^\w-]/g, '_'))
+        mkdirSync(dir, { recursive: true })
+        try {
+          await wrap(() =>
+            t.pull({ shop, theme_id: row.id, only: ['config/settings_schema.json'], path: dir }),
+          )
+        } catch (e) {
+          if (e instanceof SiteThemeError && e.code === 'needs') throw e
+          lastError = e
+          continue
+        }
+        probed += 1
+        const info = infoAt(dir)
+        if (info !== undefined && isHorizon(info)) return { row, info }
+      }
+    } finally {
+      // 只删这一次自己建的探测目录
+      rmSync(probeRoot, { recursive: true, force: true })
+    }
+    if (probed === 0 && lastError !== undefined) throw lastError
+    emit('site_theme.no_horizon', { workspace_id: ws, probed })
+    throw new SiteThemeError('no_horizon', NO_HORIZON_TEXT)
+  }
+
+  /** 复制出来那一份叫什么（人在后台认得出；不带工具名）。 */
+  const copyNameOf = (source: string): string => {
+    const d = new Date(now())
+    const mmdd = `${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`
+    return `${source.trim().slice(0, 30)} 草稿 ${mmdd}`
+  }
+
+  /**
+   * 第一次推预览：推到起底时复制出来的那一份上（它本来就是未发布的 Horizon 副本），改成人起的名字；
+   * 那一份不在了 / 成了线上那一份 / 已经推过 → 照老规矩推一份新的未发布主题。
+   */
+  const pushToCopy = async (shop: string, t: ShopifyTheme, name: string): Promise<PushedTheme> => {
+    const copy = stateOf(shop).copy
+    const used =
+      copy !== undefined && stateOf(shop).pushes.some((p) => p.theme_id === copy.theme_id)
+    if (copy === undefined || used) return wrap(() => t.pushUnpublished({ shop, name }))
+    const rows = await wrap(() => t.list(shop))
+    const still = rows.find((r) => r.id === copy.theme_id)
+    if (still === undefined || still.role === 'main' || still.role === 'live')
+      return wrap(() => t.pushUnpublished({ shop, name }))
+    const pushed = await wrap(() => t.pushToTheme({ shop, theme_id: copy.theme_id }))
+    if (still.name === name) return { ...pushed, theme_name: name }
+    try {
+      await wrap(() => t.rename({ shop, theme_id: copy.theme_id, name }))
+      copy.name = name
+      return { ...pushed, theme_name: name }
+    } catch {
+      // 名字没改成不影响预览：照旧叫复制时的名字
+      return { ...pushed, theme_name: still.name }
+    }
+  }
+
+  const legacyNotice = async (): Promise<ThemeLegacyNotice | undefined> => {
     let shop: string
     try {
       shop = (await need('files')).shop
     } catch {
       return undefined
     }
-    const state = settings.stores[shop]
-    const from = state?.base?.version
-    if (state === undefined || from === undefined || !versionOlder(from, pin.version))
-      return undefined
-    const to = pin.version
-    const offer = state.upgrade_offer?.to === to ? state.upgrade_offer : undefined
-    if (offer !== undefined && offer.declined_at === undefined)
-      return {
-        from,
-        to,
-        approval_item_id: offer.approval_item_id,
-        message: themeUpgradeNotice(from, to, 'carded'),
-      }
-    if (
-      offer?.declined_at !== undefined &&
-      Date.parse(now()) - Date.parse(offer.declined_at) < DAY_MS
-    )
-      return { from, to, declined: true, message: themeUpgradeNotice(from, to, 'declined') }
-    const bus = options.approvals?.()
-    if (bus === undefined || request === undefined)
-      return { from, to, message: themeUpgradeNotice(from, to, 'none') }
-    const payload: ThemeUpgradeCardPayload = {
-      upstream_id: THEME_UPSTREAM_ID,
-      from,
-      to,
-      classification: 'breaking',
-      store: shop,
-      release_url: themeReleaseUrl(pin.repo, pin.tag ?? `v${to}`),
-      recommendation:
-        '建议升：新版每个分区只给自己的块、设置名统一，AI 照新目录搭更不容易出错。升之前整份备份，线上主题不动。',
-      test_results: ['迁移在暂存目录里跑，跑不成工作目录一个字节不动'],
-      run_id: request.id,
-    }
-    const matter = request.work_item?.id
-    const item = await bus.create({
-      workspace_id: ws,
-      schema_version: 1,
-      kind: 'upstream_upgrade',
-      role_id: request.actor.role_id,
-      subject: {
-        object: { type: 'theme_workspace', id: shop },
-        ...(matter === undefined ? {} : { matter_id: matter }),
-      },
-      dedupe_key: `upstream_upgrade:${THEME_UPSTREAM_ID}:${ws}:${shop}:${to}`,
-      title: themeUpgradeTitle(to),
-      summary:
-        `这个品牌的主题是 agentsws-theme v${from}，新版 v${to} 改了块名和设置名。` +
-        '点了才升：先整份备份，换上新版核心文件，你的模板、custom 文件和设置照旧带上，再跑主题自带的迁移。' +
-        '线上主题不动，升完推一份预览再看。',
-      payload,
-      evidence: {
-        run_id: request.id,
-        source_events: [],
-        provenance: { seen: [{ type: 'theme_workspace', id: shop }] },
-        precheck: {},
-      },
-      proposer: {
-        kind: 'agent',
-        id: `agent_${request.actor.role_id}`,
-        assignment_id: request.actor.assignment_id,
-      },
-      automation: {
-        level_at_creation: 'L1',
-        auto_approved: false,
-        mandate_check: { within: true, caps_hit: [] },
-        sampling: { selected: false },
-      },
-      routing: {
-        recipients: [{ person: request.actor.person_id, via: 'role_holder' }],
-        rule: 'role_holder',
-        escalation: { after_hours: 24, business_hours: true, chain: ['owner'], escalated_at: [] },
-        separation_of_duties: false,
-      },
-      priority: 'queue',
-      risk_class: 'medium',
-    } as never)
-    state.upgrade_offer = { to, approval_item_id: item.id, at: now() }
-    save()
-    emit('site_theme.upgrade_offered', { workspace_id: ws, from, to, approval_item_id: item.id })
-    try {
-      options.onCard?.(item)
-    } catch {
-      // 事项挂不上不影响卡本身
-    }
-    return { from, to, approval_item_id: item.id, message: themeUpgradeNotice(from, to, 'carded') }
-  }
-
-  const baseUpgrade = (request?: RunRequest): Promise<ThemeBaseUpgradeNotice | undefined> => {
-    if (offerInFlight !== undefined) return offerInFlight
-    offerInFlight = offerUpgrade(request).finally(() => {
-      offerInFlight = undefined
-    })
-    return offerInFlight
-  }
-
-  const upgradeBase = async (input: {
-    to: string
-    store?: string
-  }): Promise<ThemeBaseUpgradeResult> => {
-    const shop = input.store ?? (await need('files')).shop
-    const state = settings.stores[shop]
-    const from = state?.base?.version
-    if (state === undefined || from === undefined)
-      throw new SiteThemeError(
-        'invalid_input',
-        '这份主题不是从 agentsws-theme 起底的，没法照新版迁移。',
-      )
-    if (!versionOlder(from, pin.version))
-      throw new SiteThemeError('invalid_input', `这份主题已经是 v${from}，不用升。`)
-    if (input.to !== pin.version)
-      throw new SiteThemeError(
-        'invalid_input',
-        `卡上是 v${input.to}，现在钉的是 v${pin.version}，请重新出一张卡。`,
-      )
-    const root = rootOf(shop)
-    // 先下好、校验过（下不来时工作目录一个字节不动）
-    const { bytes, bundled } = await downloadBase()
-    const stamp = String(Date.parse(now()))
-    const staging = join(options.dataDir, 'theme-work', ws, 'upgrade', stamp)
-    mkdirSync(staging, { recursive: true })
-    try {
-      extractTgz(bytes, staging)
-      const top = join(staging, `${pin.repo.split('/')[1]}-${pin.commit}`)
-      if (!existsSync(top) || !statSync(top).isDirectory())
-        throw new SiteThemeError('integrity', '开源主题的包里没有预期的那一层目录')
-      const pristine = manifestOf(top)
-      const plan = overlayStoreFiles({
-        oldFiles: themeFiles(root),
-        newHas: (rel) => existsSync(join(top, rel)),
-        readOld: (rel) => readFileSync(join(root, rel)),
-        readNew: (rel) => readFileSync(join(top, rel)),
-        write: (rel, content) => {
-          mkdirSync(dirname(join(top, rel)), { recursive: true })
-          writeFileSync(join(top, rel), content)
-        },
-        remove: (rel) => rmSync(join(top, rel), { force: true }),
-        hash: (b) => sha256(b),
-        baseline: state.baseline,
-      })
-      // 主题自带的迁移（`npm run migrate` = `node scripts/migrate-blocks.mjs`；只用 node 内置模块）
-      let migrated: string[] = []
-      let manual: string[] = [...plan.manual.map((rel) => `${rel}：合不了，用了新版那一份`)]
-      const script = join(top, 'scripts', 'migrate-blocks.mjs')
-      if (existsSync(script)) {
-        const run = options.runNode ?? defaultRunNode
-        const out = await run([script], { cwd: top, timeoutMs: 120_000 })
-        if (out.code !== 0)
-          throw new SiteThemeError(
-            'cli',
-            `迁移脚本没跑成（退出码 ${out.code}）${scrubCliOutput(out.stderr).slice(0, 300)}`,
-          )
-        const parsed = parseMigrateOutput(out.stdout)
-        migrated = parsed.updated
-        manual = [...manual, ...parsed.manual]
-      }
-      // 换上来：旧目录整份挪去备份（不删），暂存目录换进来；换不过去就挪回原样
-      const backup = join(options.dataDir, 'theme-work', ws, 'backup', `${shop}-v${from}-${stamp}`)
-      mkdirSync(dirname(backup), { recursive: true })
-      renameSync(root, backup)
-      try {
-        renameSync(top, root)
-      } catch (e) {
-        renameSync(backup, root)
-        throw e
-      }
-      state.base = {
-        repo: pin.repo,
-        version: pin.version,
-        commit: pin.commit,
-        license: pin.license,
-        at: now(),
-      }
-      // 「改了哪些文件」从此相对新版原样那一份算（店铺自己的内容照样算改动）
-      state.baseline = pristine
-      delete state.upgrade_offer
-      state.upgrades = [
-        ...(state.upgrades ?? []),
-        {
-          from,
-          to: pin.version,
-          at: now(),
-          backup,
-          migrated: migrated.length,
-          manual: manual.length,
-        },
-      ].slice(-10)
-      lastCheck.delete(shop)
-      save()
-      emit('site_theme.base_upgraded', {
-        workspace_id: ws,
-        from,
-        to: pin.version,
-        migrated: migrated.length,
-        manual: manual.length,
-        kept: plan.kept.length,
-      })
-      return {
-        from,
-        to: pin.version,
-        migrated,
-        manual,
-        kept: plan.kept,
-        backup,
-        ...(bundled === undefined ? {} : { bundled }),
-      }
-    } finally {
-      // 只删这一次自己建的暂存目录
-      rmSync(staging, { recursive: true, force: true })
+    const legacy = legacyOf(shop)
+    if (legacy === undefined) return undefined
+    return {
+      theme: 'agentsws-theme',
+      ...(legacy.version === undefined ? {} : { version: legacy.version }),
+      message: legacyThemeNotice(legacy.version),
     }
   }
 
+  /** WP296 出过的升级卡被点了：不升（工坊已改用 Horizon），只记一句作废了。 */
   const onUpgradeDecided = async (item: ApprovalItem): Promise<void> => {
     if (!isThemeUpgradeCard(item) || item.workspace_id !== ws) return
-    const p = item.payload as ThemeUpgradeCardPayload
+    emit('site_theme.legacy_upgrade_card_void', { workspace_id: ws, state: item.state })
     const matter = item.subject.matter_id
-    const note = (text: string): void => {
-      if (matter === undefined) return
-      try {
-        options.noteMatter?.(matter, text)
-      } catch {
-        // 事项没了：结果照样在事件里
-      }
-    }
-    const approved = item.state === 'approved' || item.state === 'approved_edited'
-    if (!approved) {
-      const offer = settings.stores[p.store]?.upgrade_offer
-      if (item.state === 'rejected' && offer?.approval_item_id === item.id) {
-        offer.declined_at = now()
-        save()
-      }
-      emit('site_theme.upgrade_declined', { workspace_id: ws, to: p.to, state: item.state })
-      return
-    }
+    if (matter === undefined) return
     try {
-      const r = await upgradeBase({ to: p.to, store: p.store })
-      note(
-        `主题升到 v${r.to} 了：迁移改了 ${r.migrated.length} 个文件` +
-          (r.manual.length > 0 ? `，${r.manual.length} 处要人手动挪（让我推预览前先看一遍）` : '') +
-          '；旧的一份留作备份。线上主题没动，推一份预览看过再发布。' +
-          (r.bundled === undefined ? '' : `\n${bundledBaseNote(r.to, r.bundled)}`),
-      )
-    } catch (e) {
-      const message = e instanceof Error ? e.message : String(e)
-      emit('site_theme.upgrade_failed', { workspace_id: ws, to: p.to, message })
-      note(`主题没升成：${message}。工作目录没动，还是 v${p.from}。`)
+      options.noteMatter?.(matter, LEGACY_UPGRADE_CARD_VOID)
+    } catch {
+      // 事项没了：照样在事件里
     }
   }
 
   return {
     readiness,
-    baseUpgrade,
-    upgradeBase,
+    legacyNotice,
     onUpgradeDecided,
 
     async setStore(raw, opts = {}) {
@@ -1287,79 +1127,127 @@ export function createSiteTheme(options: SiteThemeOptions): SiteThemeAssembly {
     refreshStores,
 
     async initFromBase({ replace, request }) {
-      const { shop } = await need('files')
+      const { shop, spec } = await need('remote')
+      const t = theme(spec)
       const root = rootOf(shop)
-      const existing = readdirSync(root)
-      let moved = false
-      if (existing.length > 0 && replace !== true)
+      const legacy = legacyOf(shop)
+      const hasStuff = readdirSync(root).length > 0
+      if (hasStuff && legacy === undefined && replace !== true)
         throw new SiteThemeError(
           'invalid_input',
-          '主题工作目录里已经有东西了，没覆盖。要从 agentsws-theme 重新起底，带 replace=true（旧的会挪到一边，不删）。',
+          '主题工作目录里已经有东西了（起过底了），没覆盖，接着在它上面改就行。真要从 Horizon 重新起底，带 replace=true（旧的会挪到一边，不删）。',
         )
-      // 先下好、校验过，再动工作目录（下不来时原来的东西一个字节不动）
-      const { bytes, bundled } = await downloadBase()
-      if (existing.length > 0) {
-        // 旧的挪到工作区外面的「旧版」目录（不删；变更审阅只看 themes/<ws>/ 下的店铺目录）
-        const aside = join(
-          options.dataDir,
-          'theme-work',
-          ws,
-          'aside',
-          `${shop}-${Date.parse(now())}`,
-        )
-        mkdirSync(dirname(aside), { recursive: true })
-        renameSync(root, aside)
-        mkdirSync(root, { recursive: true })
-        moved = true
+      const state = stateOf(shop)
+      const rows = await wrap(() => t.list(shop))
+      const isLive = (r: ThemeSummary): boolean => r.role === 'main' || r.role === 'live'
+      // 上一次在店里复制出来了、但没拉成（工作目录还是空的）→ 接着用那一份，不在店里再堆一份
+      const earlier = state.copy
+      const reuse =
+        !hasStuff && earlier !== undefined
+          ? rows.find((r) => r.id === earlier.theme_id && !isLive(r))
+          : undefined
+      let source: { theme_id: string; name: string; live: boolean }
+      let copy: { theme_id: string; name: string }
+      if (reuse !== undefined && earlier !== undefined) {
+        source = {
+          theme_id: earlier.source_theme_id,
+          name: earlier.source_name,
+          live: rows.some((r) => r.id === earlier.source_theme_id && isLive(r)),
+        }
+        copy = { theme_id: reuse.id, name: reuse.name }
+      } else {
+        const found = await findHorizon(shop, t, rows)
+        source = { theme_id: found.row.id, name: found.row.name, live: isLive(found.row) }
+        let dup: { theme_id: string; theme_name: string }
+        try {
+          dup = await wrap(() =>
+            t.duplicate({ shop, theme_id: found.row.id, name: copyNameOf(found.row.name) }),
+          )
+        } catch (e) {
+          if (
+            e instanceof SiteThemeError &&
+            /maximum number of themes|theme limit/i.test(e.message)
+          )
+            throw new SiteThemeError('cli', THEMES_FULL_TEXT)
+          throw e
+        }
+        copy = { theme_id: dup.theme_id, name: dup.theme_name }
+        state.copy = {
+          theme_id: copy.theme_id,
+          name: copy.name,
+          source_theme_id: source.theme_id,
+          source_name: source.name,
+          at: now(),
+        }
+        save()
+        emit('site_theme.horizon_copied', {
+          workspace_id: ws,
+          from_live: source.live,
+          theme_id: copy.theme_id,
+        })
       }
+      // 先拉进暂存目录（拉不成工作目录一个字节不动），认得出是 Horizon 才换上来
       const staging = join(options.dataDir, 'theme-work', ws, 'staging', String(Date.parse(now())))
       mkdirSync(staging, { recursive: true })
+      let legacyMoved = false
+      let info: ThemeInfo | undefined
       try {
-        extractTgz(bytes, staging)
-        const top = join(staging, `${pin.repo.split('/')[1]}-${pin.commit}`)
-        if (!existsSync(top) || !statSync(top).isDirectory())
-          throw new SiteThemeError('integrity', '开源主题的包里没有预期的那一层目录')
-        for (const name of readdirSync(top)) renameSync(join(top, name), join(root, name))
+        await wrap(() => t.pull({ shop, theme_id: copy.theme_id, path: staging }))
+        info = infoAt(staging)
+        if (info === undefined || !isHorizon(info))
+          throw new SiteThemeError(
+            'integrity',
+            '复制出来的那一份读不到 Horizon 的主题信息（config/settings_schema.json），工作目录没换。',
+          )
+        if (hasStuff) {
+          moveAside(shop, root, legacy)
+          legacyMoved = legacy !== undefined
+        }
+        for (const name of readdirSync(staging)) renameSync(join(staging, name), join(root, name))
       } finally {
         // 只删这一次自己建的暂存目录
         rmSync(staging, { recursive: true, force: true })
       }
-      const state = stateOf(shop)
+      const catalog = writeCatalog(shop, root)
       state.base = {
-        repo: pin.repo,
-        version: pin.version,
-        commit: pin.commit,
-        license: pin.license,
+        repo: HORIZON_BASE.repo,
+        version: info.theme_version ?? '',
+        commit: '',
+        license: HORIZON_BASE.license,
         at: now(),
+        theme_name: info.theme_name,
+        source_theme_id: source.theme_id,
+        copy_theme_id: copy.theme_id,
       }
       state.baseline = manifestOf(root)
-      // WP296：重新起底就是新版了，没定的升级卡作废
-      delete state.upgrade_offer
+      lastCheck.delete(shop)
       save()
       emit('site_theme.initialized', {
         workspace_id: ws,
-        version: pin.version,
-        source: bundled === undefined ? 'github' : 'bundled',
+        theme: info.theme_name,
+        version: info.theme_version ?? '',
+        from_live: source.live,
+        legacy_moved: legacyMoved,
       })
-      // WP297：用了随包那一份 → 这件事的时间线上照实记一句
-      const matter = request?.work_item?.id
-      if (bundled !== undefined && matter !== undefined) {
-        try {
-          options.noteMatter?.(matter, bundledBaseNote(pin.version, bundled))
-        } catch {
-          // 事项没了：照样在事件里
-        }
-      }
+      if (legacyMoved) noteRun(request, legacyMovedNote(legacy?.version, copy.name))
+      const sections = catalog.entries.filter((e) => e.kind === 'section').length
       return {
         base: {
-          repo: pin.repo,
-          version: pin.version,
-          commit: pin.commit,
-          license: pin.license,
+          repo: HORIZON_BASE.repo,
+          version: info.theme_version ?? '',
+          commit: '',
+          license: HORIZON_BASE.license,
         },
+        theme: {
+          name: info.theme_name,
+          ...(info.theme_version === undefined ? {} : { version: info.theme_version }),
+        },
+        source,
+        copy: { ...copy, preview_url: `https://${shop}/?preview_theme_id=${copy.theme_id}` },
         files: Object.keys(state.baseline).length,
-        moved_aside: moved,
-        source: bundled === undefined ? 'github' : 'bundled',
+        moved_aside: hasStuff,
+        ...(legacyMoved ? { legacy_moved: true } : {}),
+        catalog: { sections, blocks: catalog.entries.length - sections },
       }
     },
 
@@ -1370,9 +1258,33 @@ export function createSiteTheme(options: SiteThemeOptions): SiteThemeAssembly {
 
     async pull({ theme_id }) {
       const { shop, spec } = await need('remote')
+      const root = rootOf(shop)
+      // WP301：旧的自带主题那一份先挪开（不删），不和拉下来的混在一起
+      const legacy = legacyOf(shop)
+      if (legacy !== undefined && readdirSync(root).length > 0) moveAside(shop, root, legacy)
       await wrap(() => theme(spec).pull({ shop, ...(theme_id === undefined ? {} : { theme_id }) }))
       const state = stateOf(shop)
-      state.baseline = manifestOf(rootOf(shop))
+      const info = infoAt(root)
+      if (info !== undefined && isHorizon(info)) {
+        state.base = {
+          repo: HORIZON_BASE.repo,
+          version: info.theme_version ?? '',
+          commit: '',
+          license: HORIZON_BASE.license,
+          at: now(),
+          theme_name: info.theme_name,
+          ...(theme_id === undefined ? {} : { source_theme_id: theme_id }),
+          ...(theme_id !== undefined && theme_id === state.copy?.theme_id
+            ? { copy_theme_id: theme_id }
+            : {}),
+        }
+      } else {
+        // 不是 Horizon（店家自己的别的主题）：照 WP253 的老规矩，不限改哪几类文件
+        delete state.base
+      }
+      writeCatalog(shop, root)
+      state.baseline = manifestOf(root)
+      lastCheck.delete(shop)
       save()
       return { files: Object.keys(state.baseline).length }
     },
@@ -1414,6 +1326,10 @@ export function createSiteTheme(options: SiteThemeOptions): SiteThemeAssembly {
 
     async writeFile(path, content) {
       const { shop } = await need('files')
+      // WP301：旧的自带主题那一份不再改（先在 Horizon 上新起一份）
+      const legacy = legacyOf(shop)
+      if (legacy !== undefined)
+        throw new SiteThemeError('invalid_input', legacyThemeRefusal(legacy.version))
       lastCheck.delete(shop)
       const root = rootOf(shop)
       const { abs, rel } = resolveInside(root, path)
@@ -1431,7 +1347,7 @@ export function createSiteTheme(options: SiteThemeOptions): SiteThemeAssembly {
       if (stateOf(shop).base !== undefined && !baseWritable(rel))
         throw new SiteThemeError(
           'invalid_input',
-          `「${rel}」是 agentsws-theme 的核心文件，升级会被覆盖，不许改。新东西写成 custom-* 文件，或改 templates / locales / settings_data.json。`,
+          `「${rel}」是 Horizon 的核心代码（.liquid / CSS / JS / 编辑器标签），不改。只改 templates/*.json、section 组（header-group / footer-group）、config/settings_data.json 与 locales 店面文案；要一小段自定义代码，用主题自带的 custom-liquid 分区 / 块。`,
         )
       const bytes = Buffer.byteLength(content, 'utf8')
       if (bytes > MAX_THEME_FILE_BYTES)
@@ -1439,8 +1355,18 @@ export function createSiteTheme(options: SiteThemeOptions): SiteThemeAssembly {
       const created = !existsSync(abs)
       mkdirSync(dirname(abs), { recursive: true })
       writeFileSync(abs, content, 'utf8')
-      emit('site_theme.file_written', { workspace_id: ws, path: rel, created })
-      return { path: rel, bytes, created }
+      // WP301：模板 / section 组对着目录查一遍（只提醒、不拦；官方 theme check 再兜一层）
+      const problems =
+        stateOf(shop).base !== undefined && isLayoutJson(rel)
+          ? templateProblems(rel, content, catalogFor(shop, root))
+          : []
+      emit('site_theme.file_written', {
+        workspace_id: ws,
+        path: rel,
+        created,
+        ...(problems.length === 0 ? {} : { problems: problems.length }),
+      })
+      return { path: rel, bytes, created, ...(problems.length === 0 ? {} : { problems }) }
     },
 
     async push({ name, request }) {
@@ -1448,12 +1374,16 @@ export function createSiteTheme(options: SiteThemeOptions): SiteThemeAssembly {
       if (trimmed === '')
         throw new SiteThemeError('invalid_input', '副本得有个名字，人在后台要认得出它')
       const { shop, spec } = await need('remote')
+      // WP301：旧的自带主题那一份不再推（先在 Horizon 上新起一份）
+      const legacy = legacyOf(shop)
+      if (legacy !== undefined)
+        throw new SiteThemeError('invalid_input', legacyThemeRefusal(legacy.version))
       const t = theme(spec)
       const root = rootOf(shop)
       if (themeFiles(root).length === 0)
         throw new SiteThemeError(
           'invalid_input',
-          '主题工作目录是空的：先起底（theme_init_from_base）或拉一份（theme_pull）',
+          '主题工作目录是空的：先起底（theme_init_from_base，在店里复制一份 Horizon）或拉一份（theme_pull）',
         )
       const state = stateOf(shop)
       // 同名再推一次：那份副本还在、而且**不是线上那一份**，就推到它上面（不在店里堆一份又一份）
@@ -1467,7 +1397,7 @@ export function createSiteTheme(options: SiteThemeOptions): SiteThemeAssembly {
             ? await wrap(() => t.pushToTheme({ shop, theme_id: earlier.theme_id }))
             : await wrap(() => t.pushUnpublished({ shop, name: trimmed }))
       } else {
-        pushed = await wrap(() => t.pushUnpublished({ shop, name: trimmed }))
+        pushed = await pushToCopy(shop, t, trimmed)
       }
       const record: ThemePushRecord = {
         theme_id: pushed.theme_id,

@@ -9,6 +9,7 @@
  * 三处都查：源码与测试里的 import（含相对路径钻进云端包目录的）、`package.json` 的依赖、
  * `tsconfig.json` 的工程引用。不出网、不起服务，只读文件。
  */
+import { execFileSync } from 'node:child_process'
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { dirname, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -141,4 +142,47 @@ describe('开源仓的边界：开源这一侧不 import 云端代码（WP165）
     expect(forbiddenSpecifier('@agentsws/cloud-api-client', from)).toBe(false)
     expect(forbiddenSpecifier('./cloud.js', from)).toBe(false)
   })
+})
+
+/**
+ * WP301（决策 399 = A）：开源仓里**不放任何 Shopify 主题代码**——我们自己的 agentsws-theme 已改闭源；
+ * Shopify 的 Horizon 许可不允许把它（或由它衍生的主题）拿去分发。建站起底是在用户自己的店里复制一份 Horizon。
+ * 允许的只有我们自己的主题应用扩展（`deploy/shopify-theme-app/`，聊天挂件）。
+ */
+describe('开源仓的边界：不带 Shopify 主题代码（WP301）', () => {
+  const tracked = (() => {
+    try {
+      return execFileSync('git', ['ls-files'], { cwd: ROOT, encoding: 'utf8' })
+        .split('\n')
+        .filter((l) => l !== '')
+    } catch {
+      return undefined
+    }
+  })()
+
+  it.skipIf(tracked === undefined)('仓库里的 .liquid 只有自家主题应用扩展；没有起底包钉子', () => {
+    const liquid = (tracked ?? []).filter((p) => p.endsWith('.liquid'))
+    expect(liquid.filter((p) => !p.startsWith('deploy/shopify-theme-app/'))).toEqual([])
+    expect(
+      (tracked ?? []).filter((p) => /theme-base-pin\.json$|fetch-theme-base\.mjs$/.test(p)),
+    ).toEqual([])
+  })
+
+  it.skipIf(tracked === undefined)(
+    '没有 Horizon 的许可正文（带了就说明有人把它的代码搬进来了）',
+    () => {
+      const hits = (tracked ?? [])
+        .filter((p) => /\.(md|txt|liquid|json|[cm]?[jt]sx?)$/.test(p) && existsSync(join(ROOT, p)))
+        .filter((p) => !p.startsWith('docs/'))
+        .filter((p) => {
+          const text = readFileSync(join(ROOT, p), 'utf8')
+          // 拼起来再找，免得这份测试自己撞上
+          return (
+            text.includes(['Derived', 'Theme'].join(' ')) &&
+            text.includes(['Shopify', 'Inc'].join(' '))
+          )
+        })
+      expect(hits).toEqual([])
+    },
+  )
 })

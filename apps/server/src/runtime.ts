@@ -2185,6 +2185,7 @@ export function runBudgetCaps(input: { themeRun: boolean; granted: boolean; brow
  * - 模型面前的历史超过 4.8 万 token 才压（以前是 min(上限×0.6, 1.2 万)，几乎每步都压），压到七成为止；
  *   最近 6 条工具结果不压（刚读完、马上要照着改的那几份），压掉的换成「读过哪个文件 + 要点」。
  *   4.8 万：真主题一轮要读的（AGENTS.md ≈ 3 千、目录页 ≈ 4 千、几项完整设置 ≈ 8 千、模板 / 设置 ≈ 1 千 token）
+ *   （WP301 起是店里的 Horizon：没有 AGENTS.md，瘦目录 CATALOG.index.json ≈ 3 千、几项完整设置 ≈ 1 万 token，量级不变）
  *   加上提示词，正常一轮不会压；也远在模型的上下文窗口之内。
  */
 export const THEME_PRODUCE: RunProduce = {

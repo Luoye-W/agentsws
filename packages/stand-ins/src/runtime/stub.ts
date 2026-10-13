@@ -86,7 +86,9 @@ import {
 } from './support.js'
 import {
   checkOf,
+  initOf,
   latestCopyOf,
+  legacyNoticeOf,
   publishOf,
   pushedOf,
   renderThemeAnswer,
@@ -97,12 +99,12 @@ import {
   THEME_PUSH_TOOL,
   THEME_TOOL_DEF_BY_NAME,
   type ThemeCheckData,
+  type ThemeInitData,
+  type ThemeLegacyData,
   type ThemePublishData,
   type ThemePushData,
   type ThemeStep,
-  type ThemeUpgradeData,
   themeBranch,
-  upgradeOf,
 } from './theme.js'
 import {
   renderWebAnswer,
@@ -981,8 +983,9 @@ export function createStubRuntime(options: StubRuntimeOptions): RuntimeAdapter {
 
       /*
        * WP253：**网页模板做主题**。工具面里有主题工具、说的是搭 / 改 / 预览 / 发布，就去调：
-       * 起底（说了 agentsws-theme 才起）→ 官方检查 → 推一份未发布副本（预览链接）；说发布 →
+       * 起底（说了 Horizon / 从头搭才起：在店里复制一份 Horizon）→ 官方检查 → 推一份未发布副本（预览链接）；说发布 →
        * 列一次、对最新那份副本出发布卡（不直接发）。stub 不会写 Liquid，改文件留给真模型。
+       * WP301：工具回话说工作目录是旧的自带主题 → 当场插一步起底，在 Horizon 上新起一份再接着检查、推预览。
        */
       /*
        * WP268：**出图**（演示用剧本）。工具面里有生图、说的是出图，就调一次 generate_image：
@@ -1043,7 +1046,8 @@ export function createStubRuntime(options: StubRuntimeOptions): RuntimeAdapter {
         let check: ThemeCheckData | undefined
         let pushed: ThemePushData | undefined
         let published: ThemePublishData | undefined
-        let upgrade: ThemeUpgradeData | undefined
+        let legacy: ThemeLegacyData | undefined
+        let init: ThemeInitData | undefined
         const queue: ThemeStep[] = [...themeCalls]
         while (queue.length > 0) {
           const step = queue.shift() as ThemeStep
@@ -1070,17 +1074,48 @@ export function createStubRuntime(options: StubRuntimeOptions): RuntimeAdapter {
             status: res.status,
             ...(res.reason === undefined ? {} : { reason: res.reason }),
           })
-          upgrade = upgradeOf(res.data) ?? upgrade
+          const old = legacyNoticeOf(res.data)
+          legacy = old ?? legacy
+          // WP301：旧的自带主题那一份 → 先在 Horizon 上新起一份（只插一次），再检查、推预览
+          if (
+            old !== undefined &&
+            !initialized &&
+            step.tool !== THEME_INIT_TOOL &&
+            req.tools.allow.includes(THEME_INIT_TOOL) &&
+            [step, ...queue].some((q) => q.tool === THEME_PUSH_TOOL)
+          ) {
+            const rest = queue.filter(
+              (q) => q.tool !== THEME_CHECK_TOOL && q.tool !== THEME_INIT_TOOL,
+            )
+            queue.splice(
+              0,
+              queue.length,
+              { tool: THEME_INIT_TOOL, input: {} },
+              { tool: THEME_CHECK_TOOL, input: {} },
+              ...rest.filter((q) => q.tool !== THEME_PUSH_TOOL),
+              ...(step.tool === THEME_PUSH_TOOL
+                ? [step]
+                : rest.filter((q) => q.tool === THEME_PUSH_TOOL)),
+            )
+            continue
+          }
           if (res.status !== 'ok') {
             failed[step.tool] =
               res.reason === 'no_tool_executor'
                 ? '这个进程没接工具'
-                : (res.reason ?? '这一步没走通')
+                : // 旧的自带主题那一句开头已经说过了，原因里不再重复
+                  (res.reason ?? '这一步没走通').replace(
+                    legacy === undefined ? /$^/ : `\n${legacy.message}`,
+                    '',
+                  )
             // 前一步没走通，后面的推送 / 发布不再接着做（不在没检查过的东西上出预览）
             break
           }
           readTools.push(step.tool)
-          if (step.tool === THEME_INIT_TOOL) initialized = true
+          if (step.tool === THEME_INIT_TOOL) {
+            initialized = true
+            init = initOf(res.data)
+          }
           if (step.tool === THEME_CHECK_TOOL) {
             check = checkOf(res.data)
             if (check !== undefined && check.errors > 0) break
@@ -1105,7 +1140,8 @@ export function createStubRuntime(options: StubRuntimeOptions): RuntimeAdapter {
           ...(check === undefined ? {} : { check }),
           ...(pushed === undefined ? {} : { pushed }),
           ...(published === undefined ? {} : { published }),
-          ...(upgrade === undefined ? {} : { upgrade }),
+          ...(legacy === undefined ? {} : { legacy }),
+          ...(init === undefined ? {} : { init }),
           failed,
         })
         outputs.push({ kind: 'answer', text: answer })
