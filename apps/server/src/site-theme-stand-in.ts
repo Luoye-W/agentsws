@@ -51,14 +51,20 @@ function tarOf(entries: { name: string; body: Buffer; type?: string }[]): Buffer
   return Buffer.concat(blocks)
 }
 
-/** 一份最小的假 agentsws-theme 包 + 它的钉子 + 一个只认这个网址的 fetch。 */
-export function fakeThemeBase(files: Readonly<Record<string, string>> = FAKE_THEME_FILES): {
+/**
+ * 一份最小的假 agentsws-theme 包 + 它的钉子 + 一个只认这个网址的 fetch。
+ * WP296：`opts` 给另一个版本号 / commit（造「旧版起过底、新版出来了」的那一对）。
+ */
+export function fakeThemeBase(
+  files: Readonly<Record<string, string>> = FAKE_THEME_FILES,
+  opts: { version?: string; commit?: string } = {},
+): {
   pin: ThemeBasePin
   tgz: Buffer
   fetch: ThemeFetch
   urls: string[]
 } {
-  const commit = `${'0'.repeat(39)}1`
+  const commit = opts.commit ?? `${'0'.repeat(39)}1`
   const top = `agentsws-theme-${commit}`
   const tgz = gzipSync(
     tarOf([
@@ -72,7 +78,7 @@ export function fakeThemeBase(files: Readonly<Record<string, string>> = FAKE_THE
   )
   const pin: ThemeBasePin = {
     repo: 'Luoye-W/agentsws-theme',
-    version: '0.0.0-fixture',
+    version: opts.version ?? '0.0.0-fixture',
     commit,
     sha256: createHash('sha256').update(tgz).digest('hex'),
     license: 'MIT',

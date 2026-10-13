@@ -53,6 +53,29 @@ describe('themeReadPage', () => {
     expect(page.content.length).toBeLessThan(45_000)
   })
 
+  it('WP296：v0.10.0 的私有块（private: true）在目录页上标「私有」，并说清分区只收 accepts_blocks 列的块', () => {
+    const v010 = {
+      path: 'CATALOG.json',
+      content: JSON.stringify({
+        theme: '0.10.0',
+        entries: [
+          { id: 'hero', kind: 'section', use_when: 'banner', accepts_blocks: ['heading', '@app'] },
+          { id: 'heading', kind: 'block', use_when: 'a heading' },
+          { id: '_product-title', kind: 'block', use_when: 'product info', private: true },
+        ],
+      }),
+    }
+    const page = themeReadPage(v010, {})
+    expect(page.content).toContain('agentsws-theme 0.10.0 目录')
+    expect(page.content).toContain('- block _product-title（私有）: product info')
+    expect(page.content).toContain('- block heading: a heading')
+    expect(page.content).toContain('accepts_blocks')
+    const picked = JSON.parse(themeReadPage(v010, { ids: ['hero'] }).content) as {
+      entries: { accepts_blocks?: string[] }[]
+    }
+    expect(picked.entries[0]?.accepts_blocks).toEqual(['heading', '@app'])
+  })
+
   it('CATALOG.json 形状对不上（demo 的占位包）就当普通文件', () => {
     const demo = { path: 'CATALOG.json', content: FAKE_THEME_FILES['CATALOG.json'] ?? '' }
     expect(themeReadPage(demo, {})).toEqual(demo)

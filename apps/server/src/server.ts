@@ -186,7 +186,7 @@ import {
 import { scheduleConflicts, scheduleRulesFor } from '@agentsws/social-core'
 import { detectAnsweredBoundaries, SUPPORT_BOUNDARIES } from '@agentsws/support-core'
 import { createTxn, SqliteTxnStore, type Txn } from '@agentsws/txn'
-import { createWork, SqliteWorkStore, type Work } from '@agentsws/work'
+import { cardRefOf, createWork, SqliteWorkStore, type Work } from '@agentsws/work'
 import { type HttpBindings, type ServerType, serve } from '@hono/node-server'
 import { RESPONSE_ALREADY_SENT } from '@hono/node-server/utils/response'
 import { WebSocketServer } from 'ws'
@@ -597,6 +597,7 @@ import {
   type ThemeBasePin,
   type ThemeFetch,
 } from './site-theme.js'
+import { isThemeUpgradeCard } from './site-theme-upgrade.js'
 import { enrichSkillSummaries } from './skill-catalog.js'
 import {
   createSocialStore,
@@ -2785,6 +2786,18 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         : { localBaseDir: env.AGENTSWS_THEME_BASE_DIR }),
       ledger: txn.ledger,
       effectiveConfig: (id) => roles.effectiveConfig(id),
+      // WP296：旧版起底的工作目录 → 出「升级到 vX（会跑迁移）」卡（批了在下面的决定钩子里升）
+      approvals: () => approvals,
+      onCard: (item) => {
+        brand.work.onCard(cardRefOf(item))
+      },
+      noteMatter: (matter_id, text) => {
+        brand.work.appendEvent(matter_id as never, {
+          kind: 'status',
+          text,
+          actor: { kind: 'agent', id: 'site.shopify-theme' },
+        })
+      },
       notePreview: (matter_id, input) => {
         try {
           brand.work.appendEvent(matter_id as never, {
@@ -5846,6 +5859,9 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       roleRules.onDecided(item)
       return
     }
+    // WP296：主题升级卡（`upstream_upgrade`，upstream_id = agentsws-theme）批了 → 备份、换新版、跑迁移
+    if (isThemeUpgradeCard(item))
+      return (await siteThemeOf(item.workspace_id))?.onUpgradeDecided(item)
     // WP268：挑图卡 / 超额卡被决定 → 记选中 / 传店铺挂主题 / 再来一版 / 照卡出图
     if (item.kind === 'image_pick' || item.kind === 'image_budget') {
       await brands?.forWorkspace(item.workspace_id)
@@ -10304,7 +10320,9 @@ function seoDecided(bus: ApprovalBus, hook: SeoDecidedHook): ApprovalBus {
           // WP277：开公司模式时同事那张「知道了 / 我要退出」
           isCompanyNotice(out) ||
           // WP284（决策 275）：「以后都这样」那张策略卡批了 → 落成职责规矩里的一句话
-          isInstructionRuleCard(out)
+          isInstructionRuleCard(out) ||
+          // WP296：主题升级卡（批了才升；不升记下、一天内不再问）
+          isThemeUpgradeCard(out)
         ) {
           try {
             await hook.current?.(out)

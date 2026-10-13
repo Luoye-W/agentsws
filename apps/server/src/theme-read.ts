@@ -45,7 +45,9 @@ function catalogIndex(root: Rec, entries: Rec[]): string {
         .map(str)
         .find((x) => x !== undefined && x.trim() !== '') ?? ''
     const custom = e.origin === 'custom' || String(e.id).startsWith('custom-') ? '（custom）' : ''
-    return `- ${String(e.kind)} ${String(e.id)}${custom}: ${clip(when.replace(/\s+/g, ' '), USE_WHEN_CHARS)}`
+    // WP296：v0.10.0 起场景块是私有的（`_` 开头），只有列了它的父级收
+    const priv = e.private === true ? '（私有）' : ''
+    return `- ${String(e.kind)} ${String(e.id)}${custom}${priv}: ${clip(when.replace(/\s+/g, ' '), USE_WHEN_CHARS)}`
   }
   const sections = of('section')
   const blocks = of('block')
@@ -64,7 +66,7 @@ function catalogIndex(root: Rec, entries: Rec[]): string {
     '## 分区（sections，放进 templates/*.json 的 sections 里）',
     ...sections.map(line),
     '',
-    '## 块（blocks，放进分区的 blocks 里）',
+    '## 块（blocks，放进分区的 blocks 里；每个分区只收它完整设置里 accepts_blocks 列的块，标「私有」的只放进列了它的父级）',
     ...blocks.map(line),
     '',
     `## 片段（snippets，Liquid 里 render 用，搭页面用不到）：${snippets.map((e) => String(e.id)).join(', ')}`,
