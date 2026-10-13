@@ -224,6 +224,11 @@ describe('十一个工具的执行器（对着一份假 KolPort 逐个走一遍�
         id === 'cr_1' ? { creator: { id }, accounts: [] } : undefined,
       collaborations: async () => ({ rows: [{ id: 'cb_1' }] }),
       deliverables: async () => ({ rows: [{ id: 'dv_1' }] }),
+      trackedLinks: async () => ({
+        rows: [
+          { id: 'tl_1', collaboration_id: 'cb_1', url: 'u', clicks: 1, orders: 0, revenue: 0 },
+        ],
+      }),
       outreach: async () => ({
         staged: true,
         approval_item_id: 'ap_1',
@@ -272,6 +277,7 @@ describe('十一个工具的执行器（对着一份假 KolPort 逐个走一遍�
       ['score_creator', { creator_id: 'cr_1' }, (r) => expect(r.status).toBe('ok')],
       ['list_collaborations', {}, (r) => expect(r.provenance?.[0]?.type).toBe('collaboration')],
       ['list_deliverables', { pending: true }, (r) => expect(r.status).toBe('ok')],
+      ['list_tracked_links', {}, (r) => expect(r.provenance?.[0]?.type).toBe('tracked_link')],
       [
         'draft_outreach',
         { creator_id: 'cr_1' },
@@ -344,6 +350,113 @@ describe('十一个工具的执行器（对着一份假 KolPort 逐个走一遍�
     })
     expect(res.status).toBe('blocked')
     expect(res.reason).toContain('不能从 sourced')
+  })
+
+  it('WP295：合作清单每行带名字与几天没动静；quiet_days 只要已建联、这么多天没动静的', async () => {
+    const day = 86_400_000
+    const run = exec(
+      fakePort({
+        creators: async () => ({
+          rows: [
+            { creator_id: 'cr_1', display_name: 'Gadget Jonas' },
+            { creator_id: 'cr_2', display_name: 'Desk Rosa' },
+          ],
+        }),
+        collaborations: async (_a: unknown, filter: { stage?: string }) => ({
+          rows: [
+            {
+              id: 'cb_1',
+              creator_id: 'cr_1',
+              stage: 'contacted',
+              last_activity_at: new Date(Date.parse(T0) - 9 * day).toISOString(),
+            },
+            {
+              id: 'cb_2',
+              creator_id: 'cr_2',
+              stage: 'contacted',
+              last_activity_at: new Date(Date.parse(T0) - 2 * day).toISOString(),
+            },
+          ].filter((c) => filter.stage === undefined || c.stage === filter.stage),
+        }),
+      }),
+    )
+    const all = await run({ name: 'list_collaborations', input: {}, request })
+    const rows = (all.data as { rows: { display_name: string; days_since_activity: number }[] })
+      .rows
+    expect(rows.map((r) => [r.display_name, r.days_since_activity])).toEqual([
+      ['Gadget Jonas', 9],
+      ['Desk Rosa', 2],
+    ])
+    const quiet = await run({ name: 'list_collaborations', input: { quiet_days: 7 }, request })
+    expect(
+      (quiet.data as { rows: { display_name: string }[] }).rows.map((r) => r.display_name),
+    ).toEqual(['Gadget Jonas'])
+  })
+
+  it('WP295 list_tracked_links：只要这条渠道的、带名字、按收入倒序；谈成了还没建链接的单列', async () => {
+    const run = exec(
+      fakePort({
+        creators: async () => ({
+          rows: [
+            { creator_id: 'cr_1', display_name: 'Gadget Jonas' },
+            { creator_id: 'cr_2', display_name: 'Desk Rosa' },
+            { creator_id: 'cr_3', display_name: 'Cable Kevin' },
+          ],
+        }),
+        collaborations: async () => ({
+          rows: [
+            { id: 'cb_1', creator_id: 'cr_1', stage: 'delivering' },
+            { id: 'cb_2', creator_id: 'cr_2', stage: 'contacted' },
+            { id: 'cb_3', creator_id: 'cr_3', stage: 'agreed' },
+          ],
+        }),
+        trackedLinks: async () => ({
+          rows: [
+            { id: 'tl_2', collaboration_id: 'cb_2', url: 'u2', clicks: 41, orders: 0, revenue: 0 },
+            {
+              id: 'tl_1',
+              collaboration_id: 'cb_1',
+              url: 'u1',
+              clicks: 318,
+              orders: 5,
+              revenue: 645.5,
+            },
+            // 别的渠道的合作（不在这条渠道的清单里）：不出
+            { id: 'tl_9', collaboration_id: 'cb_ig', url: 'u9', clicks: 1, orders: 1, revenue: 9 },
+          ],
+        }),
+      }),
+    )
+    const res = await run({ name: 'list_tracked_links', input: {}, request })
+    expect(res.status).toBe('ok')
+    const data = res.data as {
+      rows: { display_name: string; orders: number }[]
+      without_link: string[]
+    }
+    expect(data.rows.map((r) => [r.display_name, r.orders])).toEqual([
+      ['Gadget Jonas', 5],
+      ['Desk Rosa', 0],
+    ])
+    expect(data.without_link).toEqual(['Cable Kevin'])
+  })
+
+  it('WP295 list_deliverables：每行带上是谁交的；别的渠道的不出', async () => {
+    const run = exec(
+      fakePort({
+        creators: async () => ({ rows: [{ creator_id: 'cr_1', display_name: 'Gadget Jonas' }] }),
+        collaborations: async () => ({ rows: [{ id: 'cb_1', creator_id: 'cr_1' }] }),
+        deliverables: async () => ({
+          rows: [
+            { id: 'dv_1', collaboration_id: 'cb_1', kind: 'video' },
+            { id: 'dv_9', collaboration_id: 'cb_ig', kind: 'reel' },
+          ],
+        }),
+      }),
+    )
+    const res = await run({ name: 'list_deliverables', input: { pending: true }, request })
+    expect((res.data as { rows: unknown[] }).rows).toEqual([
+      { id: 'dv_1', collaboration_id: 'cb_1', kind: 'video', display_name: 'Gadget Jonas' },
+    ])
   })
 
   it('不是红人职责的人调红人工具：拒', async () => {

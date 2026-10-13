@@ -68,9 +68,18 @@ export function ChatSandboxEntry(): ReactNode {
   )
 }
 
+/**
+ * 页签上的字。同一种视图有好几条职责时（红人营销五条渠道各一个「红人工作台」），
+ * WP295：页签只写职责名——以前写「红人工作台 · YouTube 红人」，五个挤成两行；前面的职责图标
+ * 已经说明是哪种视图，全称进悬停提示（{@link quickTitle}）。
+ */
 export function quickLabel(t: (k: string) => string, view: QuickView, withDuty: boolean): string {
-  const base = t(`pos2.quick.${view.kind}`)
-  return withDuty ? `${base} · ${view.role_name}` : base
+  return withDuty ? view.role_name : t(`pos2.quick.${view.kind}`)
+}
+
+/** 页签的悬停提示：视图名 · 职责名。 */
+export function quickTitle(t: (k: string) => string, view: QuickView): string {
+  return `${t(`pos2.quick.${view.kind}`)} · ${view.role_name}`
 }
 
 function QuickBody({ view }: { view: QuickView }): ReactNode {
@@ -121,10 +130,12 @@ export function QuickViewPanel({ view }: { view: QuickView }): ReactNode {
     >
       <header className="flex flex-wrap items-center gap-2 px-1">
         <DutyIcon role_id={view.role_id} size={16} />
-        <h4 className="text-sm font-medium">{t(`pos2.quick.${view.kind}`)}</h4>
-        <span className="text-xs text-ws-muted-fg">
-          {t('pos2.quick.of', { duty: view.role_name })}
-        </span>
+        {/*
+          WP295（docs/96 P6 页面零说明）：标题后面那句「职责「X」的专属工具」与面板底下那一行
+          「要你拍板的都出成卡……」收进问号；标题只写「视图 · 职责」。
+        */}
+        <h4 className="text-sm font-medium">{quickTitle(t, view)}</h4>
+        <Hint text={t('pos2.quick.note')} testId="work-quick-note" />
         <Link
           className="ml-auto inline-flex items-center gap-0.5 text-xs text-ws-muted-fg hover:text-foreground"
           to={`/positions/${encodeURIComponent(view.assignment_id)}/duties/${encodeURIComponent(view.role_id)}`}
@@ -135,7 +146,6 @@ export function QuickViewPanel({ view }: { view: QuickView }): ReactNode {
         </Link>
       </header>
       <QuickBody view={view} />
-      <p className="border-t px-1 pt-2 text-xs text-ws-muted-fg">{t('pos2.quick.note')}</p>
     </section>
   )
 }

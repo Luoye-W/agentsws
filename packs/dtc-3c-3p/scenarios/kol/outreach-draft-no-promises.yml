@@ -1,4 +1,5 @@
-# WP67（48 §5.1）：开发信里写了承诺话 → guardrail 当场拦下 → 打回重写 → L2 自己发出去。
+# WP67（48 §5.1）：开发信里写了承诺话 → guardrail 当场拦下 → 打回重写 → 出卡等人批。
+# WP295（docs/95 §5）：开发信初始从 L2 改成 L1，改写之后那一封不再自己发出去，出卡等人批。
 #
 # 这条题要钉三件事，每一件都是**真发生的**，不是场景自己判的：
 #
@@ -8,16 +9,15 @@
 #    这条事件必须真出现，出不来就说明那道闸根本没被调用。
 # 2. **拦下是打回重写，不是静默删改后照发**（同 WP55 的 Amazon 出站硬闸）。
 #    改写之后那一封**再过一遍闸**才提上去。
-# 3. **改写干净之后它能自己发出去**：开发信是 L2 起（48 §5.1），它改不了钱——
-#    禁承诺那道闸已经把"改得了钱"的那一半直接拦死了。
+# 3. **改写干净之后出卡等人批**：WP295 起开发信 L1 起（docs/95 §5：AI 对外发东西默认要你确认），
+#    采纳率够了才建议升。（原来是 L2 起、改写干净就自己发。）
 #
 # 为什么给钱要走别的路：一封写死"付你 800"的信，人在一屏卡面上判不出它有没有
 # 超出授权，而对方收到之后会当真。要给钱，去建一条合作——那条永远人审。
 id: kol/outreach-draft-no-promises
 version: 1
 dataset: { pack: dtc-3c-3p, seed: 42 }
-# 装一个人来点卡：改写之后那一封是 L2 自动发的，这个人本来也不用点它——
-# 但队列里要是压了别的卡，没人点就看不出"自动发"与"压着"的差别。
+# 装一个人来点卡：WP295 起改写之后那一封出卡等人批（L1），这个人就是点它的那一个。
 actors:
   p_wang: { approve: { policy: always_approve, latency: 30m..2h } }
 stand_ins: { provider: mock_open_connector, model: stub, clock: virtual, delivery: inbox }
@@ -37,8 +37,8 @@ expected:
     # 词表是 `@agentsws/core` 的那一份（与起草那一跳共用，不抄第二张）
     forbidden_hits: [我们付你]
     rewritten: true
-    # 改写干净之后 L2 自己发出去
-    auto_approved: true
+    # WP295：改写干净之后出卡等人批（L1），不自己发
+    auto_approved: false
     # 这个人不在退订名单上——查过了就报一个数，哪怕是 0
     suppressed_removed: 0
   staged_change_kinds: [kol_outreach]

@@ -110,11 +110,11 @@ expected:
     allowed_channels: [youtube]
     blocked_channels: []
     created: 2
-  # 链条中间这一步与单独那道题结论一致：拦下 → 改写 → 自己发出去
+  # 链条中间这一步与单独那道题结论一致：拦下 → 改写 → 出卡等人批（WP295 起 L1）
   kol_outreach:
     forbidden_hits: [我们付你]
     rewritten: true
-    auto_approved: true
+    auto_approved: false
     suppressed_removed: 0
   # 钱那条路永远人审，报高的等级被按回来
   kol_collaboration:

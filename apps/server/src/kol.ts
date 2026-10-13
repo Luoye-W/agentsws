@@ -598,6 +598,13 @@ export function kolDeckData(
   return {
     discovery,
     funnel: collaborationFunnel(collaborations),
+    // WP295：五条渠道职责各看各的漏斗（不再五条都摆同一份全渠道的）
+    funnel_by_channel: Object.fromEntries(
+      [...new Set(collaborations.map((c) => c.channel as string))].map((ch) => [
+        ch,
+        collaborationFunnel(collaborations.filter((c) => c.channel === ch)),
+      ]),
+    ),
     collaborations: collaborations
       // 已结案与已谢绝的不在"进行中"里
       .filter((c) => c.stage !== 'closed' && c.stage !== 'declined')

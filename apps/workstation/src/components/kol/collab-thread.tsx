@@ -40,7 +40,7 @@ import {
   reviewKolDeliverable,
 } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
-import { errorText, KolError, KolReceipt } from './kol-shared'
+import { errorText, KolError, KolReceipt, refreshCards } from './kol-shared'
 
 /** 合作阶段的下一步（合法迁移表的真源在服务端；这里只是按钮上那几个常见的去处）。 */
 const NEXT_STAGES: Readonly<Record<string, string[]>> = {
@@ -54,6 +54,28 @@ const NEXT_STAGES: Readonly<Record<string, string[]>> = {
 }
 
 /** 三个验收结论。`pending` 不在这里——那是"还没结论"，不是一个可以点的结论。 */
+/*
+ * WP295（docs/96 P3：组件有出现 / 不出现规则）：线程里三块按阶段出，不再一直全摆着——
+ * 「交付中」的合作上还挂着「他问了价钱，填一个数」，谈之前就让人登记交付物、建追踪链接。
+ */
+/** 议价：建联之后、谈成之前。 */
+const QUOTE_STAGES: ReadonlySet<string> = new Set(['contacted', 'replied', 'negotiating'])
+/** 交付物：谈成之后。 */
+const DELIVERY_STAGES: ReadonlySet<string> = new Set([
+  'agreed',
+  'delivering',
+  'delivered',
+  'closed',
+])
+/** 追踪链接：谈条件起（谈成之后、寄样之前就该建好）。 */
+const LINK_STAGES: ReadonlySet<string> = new Set([
+  'negotiating',
+  'agreed',
+  'delivering',
+  'delivered',
+  'closed',
+])
+
 const REVIEWS = [
   { id: 'approved', zh: '通过' },
   { id: 'changes_requested', zh: '要改' },
@@ -157,7 +179,7 @@ export function CollabThread({
     void client.invalidateQueries({ queryKey: ['kol-deliverables', id] })
     void client.invalidateQueries({ queryKey: ['kol-links', id] })
     void client.invalidateQueries({ queryKey: ['kol-exchanges', id] })
-    void client.invalidateQueries({ queryKey: ['cards'] })
+    refreshCards(client)
   }
 
   const advance = useMutation({
@@ -429,176 +451,185 @@ export function CollabThread({
           </p>
         </section>
 
-        {/* ③ 议价：填一个数 → 一张 money 卡 → 批了才作数 */}
-        <section data-testid="kol-thread-quote">
-          <h4 className="mb-1 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-            <Coins className="size-3" aria-hidden />
-            议价
-          </h4>
-          {/* WP157：「永远要你点头 / Agent 报不了价」是安全承诺，用盾牌那一行 */}
-          <SafetyNote
-            text={
-              (exchanges.data?.rows ?? []).some((x) => x.reply_class === 'wants_quote')
-                ? '他问了价钱。填一个数，出一张卡；这一步永远要你自己点头。'
-                : '要谈钱就填一个数。合作的预算永远走卡，Agent 报不了价。'
-            }
-          />
-          <div className="mt-1 flex flex-wrap items-center gap-2">
-            <Input
-              className="w-32"
-              value={budget}
-              inputMode="numeric"
-              placeholder={`金额（${collab.currency}）`}
-              aria-label="议价金额"
-              data-testid="kol-thread-budget"
-              onChange={(e) => {
-                setBudget(e.target.value)
-              }}
+        {/* ③ 议价：填一个数 → 一张 money 卡 → 批了才作数（WP295：只在谈之前 / 谈的时候出） */}
+        {!QUOTE_STAGES.has(collab.stage) ? null : (
+          <section data-testid="kol-thread-quote">
+            <h4 className="mb-1 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+              <Coins className="size-3" aria-hidden />
+              议价
+            </h4>
+            {/* WP157：「永远要你点头 / Agent 报不了价」是安全承诺，用盾牌那一行 */}
+            <SafetyNote
+              text={
+                (exchanges.data?.rows ?? []).some((x) => x.reply_class === 'wants_quote')
+                  ? '他问了价钱。填一个数，出一张卡；这一步永远要你自己点头。'
+                  : '要谈钱就填一个数。合作的预算永远走卡，Agent 报不了价。'
+              }
             />
-            <Button
-              size="xs"
-              variant="outline"
-              data-testid="kol-thread-quote-go"
-              disabled={Number(budget) <= 0 || !Number.isFinite(Number(budget)) || quote.isPending}
-              onClick={() => {
-                quote.mutate()
-              }}
-            >
-              提一张议价卡
-            </Button>
-          </div>
-        </section>
+            <div className="mt-1 flex flex-wrap items-center gap-2">
+              <Input
+                className="w-32"
+                value={budget}
+                inputMode="numeric"
+                placeholder={`金额（${collab.currency}）`}
+                aria-label="议价金额"
+                data-testid="kol-thread-budget"
+                onChange={(e) => {
+                  setBudget(e.target.value)
+                }}
+              />
+              <Button
+                size="xs"
+                variant="outline"
+                data-testid="kol-thread-quote-go"
+                disabled={
+                  Number(budget) <= 0 || !Number.isFinite(Number(budget)) || quote.isPending
+                }
+                onClick={() => {
+                  quote.mutate()
+                }}
+              >
+                提一张议价卡
+              </Button>
+            </div>
+          </section>
+        )}
 
-        {/* ④ 交付物与验收（66 断点 #11：以前界面上没有这个入口） */}
-        <section data-testid="kol-thread-deliverables">
-          <h4 className="mb-1 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-            <Package className="size-3" aria-hidden />
-            交付物
-          </h4>
-          {deliverables.isPending ? <Skeleton className="h-10 w-full" /> : null}
-          {(deliverables.data?.rows ?? []).length === 0 && !deliverables.isPending ? (
-            <p className="text-xs text-muted-foreground">还没有交付物。</p>
-          ) : null}
-          <ul className="flex flex-col gap-2">
-            {(deliverables.data?.rows ?? []).map((d) => (
-              <li key={d.id} className="border-b pb-2" data-testid="kol-thread-deliverable">
-                <div className="flex flex-wrap items-baseline gap-x-2 text-xs">
-                  <span className="font-medium">{d.kind}</span>
-                  <span className="text-muted-foreground">
-                    {t(`kol.review.${d.review}`)} · 交稿 {d.due_at.slice(0, 10)}
-                  </span>
-                  {d.url === undefined ? null : (
-                    <a className="underline" href={d.url} target="_blank" rel="noreferrer">
-                      看一眼
-                    </a>
-                  )}
-                </div>
-                {d.review === 'pending' ? (
-                  <div className="mt-1 flex flex-wrap items-center gap-1">
-                    {REVIEWS.map((r) => (
-                      <Button
-                        key={r.id}
-                        size="xs"
-                        variant={r.id === 'approved' ? 'outline' : 'ghost'}
-                        data-testid="kol-thread-review"
-                        data-review={r.id}
-                        disabled={
-                          review.isPending ||
-                          // 要改 / 不合格必须写清楚改什么——不写就点不动，而不是提上去一句空话
-                          (r.id !== 'approved' && notes.trim() === '')
-                        }
-                        onClick={() => {
-                          review.mutate({ deliverable_id: d.id, review: r.id })
-                        }}
-                      >
-                        {r.zh}
-                      </Button>
-                    ))}
+        {/* ④ 交付物与验收（66 断点 #11：以前界面上没有这个入口）。WP295：谈成之后才出（已经登记过的照出） */}
+        {!DELIVERY_STAGES.has(collab.stage) &&
+        (deliverables.data?.rows ?? []).length === 0 ? null : (
+          <section data-testid="kol-thread-deliverables">
+            <h4 className="mb-1 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+              <Package className="size-3" aria-hidden />
+              交付物
+            </h4>
+            {deliverables.isPending ? <Skeleton className="h-10 w-full" /> : null}
+            {(deliverables.data?.rows ?? []).length === 0 && !deliverables.isPending ? (
+              <p className="text-xs text-muted-foreground">还没有交付物。</p>
+            ) : null}
+            <ul className="flex flex-col gap-2">
+              {(deliverables.data?.rows ?? []).map((d) => (
+                <li key={d.id} className="border-b pb-2" data-testid="kol-thread-deliverable">
+                  <div className="flex flex-wrap items-baseline gap-x-2 text-xs">
+                    <span className="font-medium">{d.kind}</span>
+                    <span className="text-muted-foreground">
+                      {t(`kol.review.${d.review}`)} · 交稿 {d.due_at.slice(0, 10)}
+                    </span>
+                    {d.url === undefined ? null : (
+                      <a className="underline" href={d.url} target="_blank" rel="noreferrer">
+                        看一眼
+                      </a>
+                    )}
                   </div>
-                ) : null}
-              </li>
-            ))}
-          </ul>
-          {(deliverables.data?.rows ?? []).some((d) => d.review === 'pending') ? (
-            <Input
-              className="mt-1"
-              value={notes}
-              placeholder="要改 / 不合格的话，逐条写清楚哪里不对（广告标识、禁用词、链接、折扣码）"
-              data-testid="kol-thread-notes"
-              onChange={(e) => {
-                setNotes(e.target.value)
-              }}
-            />
-          ) : null}
-          {/* 登记一条（以前只有"验收"没有"登记"，这条链在界面上到第二步就断了） */}
-          <div className="mt-2 flex flex-wrap items-center gap-2">
-            <Input
-              className="min-w-40 flex-1"
-              value={deliverableUrl}
-              placeholder="交付物链接（有了再填，没有也能先登记）"
-              data-testid="kol-thread-deliverable-url"
-              onChange={(e) => {
-                setDeliverableUrl(e.target.value)
-              }}
-            />
-            <Button
-              size="xs"
-              variant="outline"
-              data-testid="kol-thread-deliverable-add"
-              disabled={addDeliverable.isPending}
-              onClick={() => {
-                addDeliverable.mutate('video')
-              }}
-            >
-              登记一条视频
-            </Button>
-          </div>
-        </section>
+                  {d.review === 'pending' ? (
+                    <div className="mt-1 flex flex-wrap items-center gap-1">
+                      {REVIEWS.map((r) => (
+                        <Button
+                          key={r.id}
+                          size="xs"
+                          variant={r.id === 'approved' ? 'outline' : 'ghost'}
+                          data-testid="kol-thread-review"
+                          data-review={r.id}
+                          disabled={
+                            review.isPending ||
+                            // 要改 / 不合格必须写清楚改什么——不写就点不动，而不是提上去一句空话
+                            (r.id !== 'approved' && notes.trim() === '')
+                          }
+                          onClick={() => {
+                            review.mutate({ deliverable_id: d.id, review: r.id })
+                          }}
+                        >
+                          {r.zh}
+                        </Button>
+                      ))}
+                    </div>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+            {(deliverables.data?.rows ?? []).some((d) => d.review === 'pending') ? (
+              <Input
+                className="mt-1"
+                value={notes}
+                placeholder="要改 / 不合格的话，逐条写清楚哪里不对（广告标识、禁用词、链接、折扣码）"
+                data-testid="kol-thread-notes"
+                onChange={(e) => {
+                  setNotes(e.target.value)
+                }}
+              />
+            ) : null}
+            {/* 登记一条（以前只有"验收"没有"登记"，这条链在界面上到第二步就断了） */}
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <Input
+                className="min-w-40 flex-1"
+                value={deliverableUrl}
+                placeholder="交付物链接（有了再填，没有也能先登记）"
+                data-testid="kol-thread-deliverable-url"
+                onChange={(e) => {
+                  setDeliverableUrl(e.target.value)
+                }}
+              />
+              <Button
+                size="xs"
+                variant="outline"
+                data-testid="kol-thread-deliverable-add"
+                disabled={addDeliverable.isPending}
+                onClick={() => {
+                  addDeliverable.mutate('video')
+                }}
+              >
+                登记一条视频
+              </Button>
+            </div>
+          </section>
+        )}
 
-        {/* ⑤ 追踪链接与它带来的数（归因） */}
-        <section data-testid="kol-thread-links">
-          <h4 className="mb-1 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-            <Link2 className="size-3" aria-hidden />
-            追踪链接
-          </h4>
-          {(links.data?.rows ?? []).length === 0 && !links.isPending ? (
-            <p className="text-xs text-muted-foreground">
-              还没有追踪链接。没有它，这条合作带来多少单是算不出来的。
-            </p>
-          ) : null}
-          <ul className="flex flex-col gap-1 text-xs">
-            {(links.data?.rows ?? []).map((l) => (
-              <li key={l.id} data-testid="kol-thread-link" className="flex flex-wrap gap-x-2">
-                <span className="truncate font-mono">{l.url}</span>
-                <span className="text-muted-foreground">
-                  {l.clicks} 次点击 · {l.orders} 单 · {l.revenue}
-                  {l.affiliate_code === undefined ? '' : ` · 码 ${l.affiliate_code}`}
-                </span>
-              </li>
-            ))}
-          </ul>
-          <div className="mt-1 flex items-center gap-2">
-            <Input
-              value={linkUrl}
-              placeholder="落地页地址（https://…）"
-              data-testid="kol-thread-link-url"
-              onChange={(e) => {
-                setLinkUrl(e.target.value)
-              }}
-            />
-            <Button
-              size="xs"
-              variant="outline"
-              data-testid="kol-thread-link-add"
-              disabled={linkUrl.trim() === '' || addLink.isPending}
-              onClick={() => {
-                addLink.mutate()
-              }}
-            >
-              建一条
-            </Button>
-          </div>
-        </section>
+        {/* ⑤ 追踪链接与它带来的数（归因）。WP295：谈条件起才出（谈成之后、寄样之前就该建好；建过的照出） */}
+        {!LINK_STAGES.has(collab.stage) && (links.data?.rows ?? []).length === 0 ? null : (
+          <section data-testid="kol-thread-links">
+            <h4 className="mb-1 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+              <Link2 className="size-3" aria-hidden />
+              追踪链接
+            </h4>
+            {(links.data?.rows ?? []).length === 0 && !links.isPending ? (
+              <p className="text-xs text-muted-foreground">
+                还没有追踪链接。没有它，这条合作带来多少单是算不出来的。
+              </p>
+            ) : null}
+            <ul className="flex flex-col gap-1 text-xs">
+              {(links.data?.rows ?? []).map((l) => (
+                <li key={l.id} data-testid="kol-thread-link" className="flex flex-wrap gap-x-2">
+                  <span className="truncate font-mono">{l.url}</span>
+                  <span className="text-muted-foreground">
+                    {l.clicks} 次点击 · {l.orders} 单 · {l.revenue}
+                    {l.affiliate_code === undefined ? '' : ` · 码 ${l.affiliate_code}`}
+                  </span>
+                </li>
+              ))}
+            </ul>
+            <div className="mt-1 flex items-center gap-2">
+              <Input
+                value={linkUrl}
+                placeholder="落地页地址（https://…）"
+                data-testid="kol-thread-link-url"
+                onChange={(e) => {
+                  setLinkUrl(e.target.value)
+                }}
+              />
+              <Button
+                size="xs"
+                variant="outline"
+                data-testid="kol-thread-link-add"
+                disabled={linkUrl.trim() === '' || addLink.isPending}
+                onClick={() => {
+                  addLink.mutate()
+                }}
+              >
+                建一条
+              </Button>
+            </div>
+          </section>
+        )}
 
         <KolError error={error} testid="kol-thread-error" />
         <KolReceipt text={receipt} testid="kol-thread-receipt" />

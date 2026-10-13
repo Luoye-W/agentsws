@@ -65,11 +65,13 @@ describe('48 §5.1 五条渠道职责（WP67）', () => {
     }
   })
 
-  it('开发信 L2 起可升 L3；建合作永远 L1 且 hard_ceiling', () => {
+  it('开发信 L1 起（每封出卡，WP295 / docs/95 §5）、上限 L3；建合作永远 L1 且 hard_ceiling', () => {
     for (const role of ROLES) {
       expect(role.automation.stage_outreach, role.id).toMatchObject({
-        initial: 'L2',
+        initial: 'L1',
         ceiling: 'L3',
+        // 升级规则不变：采纳率 ≥ 95%、满 30 封才建议升
+        promotion: { adoption_rate_min: 0.95, min_samples: 30 },
       })
       expect(role.automation.stage_collaboration, role.id).toMatchObject({
         initial: 'L1',

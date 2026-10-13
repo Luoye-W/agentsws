@@ -151,11 +151,17 @@ export function StoreSections({
   id,
   range,
   view,
+  skip,
 }: {
   id: string
   range: RangeName
   view: ViewResult | undefined
+  /**
+   * WP295：这几块数字已经摆在职责那一行上了，展开图表时不再大块摆一遍（同一屏不说两遍）。
+   */
+  skip?: ReadonlySet<string>
 }): ReactNode {
+  const isShownTile = (b: Block): boolean => isTile(b) && skip?.has(b.id) !== true
   return (
     <>
       {(view?.sections ?? []).map((section) => (
@@ -166,9 +172,9 @@ export function StoreSections({
               {section.source === 'gsc' || section.source === 'ga4' ? (
                 <GoogleSourcePicker assignment={id} source={section.source} />
               ) : null}
-              {section.blocks.filter(isTile).length === 0 ? null : (
+              {section.blocks.filter(isShownTile).length === 0 ? null : (
                 <div className="grid grid-cols-2 gap-4 lg:grid-cols-4" data-testid="view-tiles">
-                  {section.blocks.filter(isTile).map((block) => (
+                  {section.blocks.filter(isShownTile).map((block) => (
                     <BlockCard key={block.id} block={block} range={range} assignment={id} />
                   ))}
                 </div>
@@ -319,7 +325,12 @@ function DutyRow({
       </div>
       {expanded ? (
         <div className="flex flex-col gap-4" data-testid="data-charts" data-role={duty.role_id}>
-          <StoreSections id={duty.assignment_id} range={range} view={view.data} />
+          <StoreSections
+            id={duty.assignment_id}
+            range={range}
+            view={view.data}
+            skip={new Set(tiles.slice(0, MAX_TILES).map((b) => b.id))}
+          />
         </div>
       ) : null}
     </div>
@@ -361,6 +372,61 @@ export function DataBoard({
       if (s.connected)
         for (const b of s.blocks) if (isTile(b) && !seen.has(b.id)) seen.set(b.id, d.role_name)
   })
+  /*
+   * WP295（docs/96 P3「没有内容不出」）：几条职责还没动静，就并成一行说一次。
+   *
+   * 红人营销五条渠道职责：以前「开工后这里出数」一行一遍摆五遍；有了数字块之后，
+   * 没用的那几条渠道又是一排一排的 0。现在：有数的职责照常一行；其余（还没有数字块、
+   * 也没有要连的源，或者几个数全是 0）收成一行「X、Y：还没有数」。一条都没动静时留第一条
+   * 那一行（看得见这个岗位看的是哪几个数），其余照样并起来。只有一条职责的岗位不受影响。
+   * 展开「看图表」时同样并（没动静的职责展开来只是一摞空表）。
+   * 数字块的取数与 `MiniTile` 同一把缓存键，不多发请求。
+   */
+  const tileIds = shown.map((d, i) => {
+    const mine = (views[i]?.data?.sections ?? [])
+      .filter((s) => s.connected)
+      .flatMap((s) => s.blocks.filter(isTile))
+      .filter((b) => !(takenBefore[i] ?? new Map()).has(b.id))
+    return mine.slice(0, MAX_TILES).map((b) => ({ id: b.id, assignment: d.assignment_id }))
+  })
+  const tileData = useQueries({
+    queries: tileIds.flat().map((tile) => ({
+      queryKey: ['block', tile.id, range, tile.assignment],
+      queryFn: () => getBlockData(tile.id, range, tile.assignment),
+    })),
+  })
+  const tileValue = new Map<string, { done: boolean; value: number | undefined }>()
+  tileIds.flat().forEach((tile, k) => {
+    const q = tileData[k]
+    const payload =
+      q?.data?.status === 'ok' ? (q.data.payload as { value?: number } | undefined) : undefined
+    tileValue.set(`${tile.assignment}/${tile.id}`, {
+      done: q !== undefined && !q.isPending,
+      value: payload?.value,
+    })
+  })
+  const quiet = shown.map((d, i) => {
+    const view = views[i]
+    if (view === undefined || view.isPending) return false
+    const sections = view.data?.sections ?? []
+    const tiles = tileIds[i] ?? []
+    if (tiles.length === 0) {
+      // 和别的职责共用同一份数的那一行（「和 X 看的是同一份数」）照旧出
+      const all = sections.filter((s) => s.connected).flatMap((s) => s.blocks.filter(isTile))
+      if (all.length > 0) return false
+      // 没有数字块：只有「也没有要连的源」才算没动静（要连的源那一行是有用的提示）
+      return sections.every((s) => s.connected)
+    }
+    return tiles.every((tile) => {
+      const v = tileValue.get(`${d.assignment_id}/${tile.id}`)
+      return v?.done === true && (v.value === undefined || v.value === 0)
+    })
+  })
+  // 展开图表时也并：没动静的职责展开来是一摞空表，看了也白看
+  const merge = shown.length > 1
+  const active = merge ? shown.filter((_, i) => quiet[i] !== true) : shown
+  const keep = merge && active.length === 0 ? shown.slice(0, 1) : active
+  const resting = merge ? shown.filter((d) => !keep.includes(d)) : []
   if (empty && first === undefined)
     return (
       <section className="flex flex-col gap-2" data-testid="data-board" data-empty="true">
@@ -413,15 +479,26 @@ export function DataBoard({
       )}
       {shown.length === 0 ? null : (
         <div className="rounded-xl border bg-card">
-          {shown.map((d, i) => (
+          {keep.map((d) => (
             <DutyRow
               key={d.assignment_id}
               duty={d}
               range={range}
               expanded={expanded}
-              taken={takenBefore[i] ?? new Map()}
+              taken={takenBefore[shown.indexOf(d)] ?? new Map()}
             />
           ))}
+          {resting.length === 0 ? null : (
+            <div
+              className="flex items-center gap-1.5 px-4 py-3 text-xs text-ws-muted-fg"
+              data-testid="data-row-quiet"
+            >
+              <BarChart3 className="size-3.5 shrink-0" aria-hidden />
+              <span>
+                {t('pos2.data.quiet', { duties: resting.map((d) => d.role_name).join('、') })}
+              </span>
+            </div>
+          )}
         </div>
       )}
     </section>

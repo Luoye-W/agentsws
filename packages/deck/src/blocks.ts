@@ -307,7 +307,16 @@ const FULFILLMENT_BLOCKS = (): BlockDef[] => [
  * 五个连接器都还是"待增加"，放进来就是五块永远写着"还没连"的空表，
  * 而这条职责没有连接器照样干得了活（导入 + 公共库）。
  */
-const KOL_BLOCKS = (): BlockDef[] => [
+const KOL_BLOCKS = (channel: string): BlockDef[] => [
+  /*
+   * WP295：数据看板那一行的四个数（这条渠道的；表在「看图表」里）。
+   * id 带渠道：岗位页的数据看板按积木 id 判「和哪条职责看的是同一份数」——五条渠道共用一个 id
+   * 的话，后四条全被折成「和 YouTube 红人看的是同一份数」，可它们其实各是各的渠道。
+   */
+  block(`kol.${channel}.active`, 'stat_tile', '在谈 / 合作中', 'kol.active_count'),
+  block(`kol.${channel}.awaiting_reply`, 'stat_tile', '等回信', 'kol.awaiting_reply'),
+  block(`kol.${channel}.pending_review`, 'stat_tile', '待审交付', 'kol.pending_review_count'),
+  block(`kol.${channel}.revenue`, 'stat_tile', '带来的收入', 'kol.revenue'),
   block('kol.discovery', 'table', '找人清单', 'kol.discovery'),
   block('kol.funnel', 'table', '建联漏斗', 'kol.outreach_funnel'),
   // WP117b：演练那一份单独一块（真漏斗里从此一条演练数据都没有）。
@@ -563,11 +572,11 @@ const VIEW_BY_ROLE: Record<RoleId, () => BlockDef[]> = {
   // 一块店铺后台的积木都不放：红人这条职责的 scopes 里订单是**只读**、没有
   // store_config / inventory，19 §3 说无权的数据源连「去连接」都不该出。
   // 归因要读订单，但那是 `kol.attribution` 自己算完之后的数，不是店铺面板。
-  'kol.youtube': () => KOL_BLOCKS(),
-  'kol.facebook': () => KOL_BLOCKS(),
-  'kol.instagram': () => KOL_BLOCKS(),
-  'kol.tiktok': () => KOL_BLOCKS(),
-  'kol.x': () => KOL_BLOCKS(),
+  'kol.youtube': () => KOL_BLOCKS('youtube'),
+  'kol.facebook': () => KOL_BLOCKS('facebook'),
+  'kol.instagram': () => KOL_BLOCKS('instagram'),
+  'kol.tiktok': () => KOL_BLOCKS('tiktok'),
+  'kol.x': () => KOL_BLOCKS('x'),
   /*
    * WP72（56 §2）：九条社媒渠道职责，两组骨架各自相同。
    *

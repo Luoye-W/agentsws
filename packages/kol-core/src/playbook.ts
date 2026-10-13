@@ -49,6 +49,11 @@ const RULES: readonly IntentRule[] = [
       '审稿',
       '审一下',
       '审一条',
+      // WP295：岗位快捷提示「红人交的这条视频审一遍：……折扣码对不对」以前判成了归因（「折扣码」命中）
+      '审一遍',
+      '审一审',
+      '广告标识',
+      '禁用词',
       '审核',
       '验收',
       '交付物',
@@ -57,10 +62,6 @@ const RULES: readonly IntentRule[] = [
       '不合格',
       'review',
     ],
-  },
-  {
-    intent: 'attribution',
-    terms: ['归因', '带货', '带来订单', '追踪链接', '折扣码', '联盟码', 'utm', '效果', '转化'],
   },
   {
     intent: 'follow_up',
@@ -74,6 +75,14 @@ const RULES: readonly IntentRule[] = [
   {
     intent: 'outreach',
     terms: ['开发信', '建联', '邀约', '合作意向', '写信', '发信', '联系他', '联系她', 'outreach'],
+  },
+  /*
+   * WP295：归因排到建联后面——TikTok 的快捷提示「起草一条建联私信：说清合作形式、寄样和带货方式」
+   * 里有「带货」，以前先命中归因，这次运行就去读归因表了。
+   */
+  {
+    intent: 'attribution',
+    terms: ['归因', '带货', '带来订单', '追踪链接', '折扣码', '联盟码', 'utm', '效果', '转化'],
   },
   {
     intent: 'negotiate',
@@ -134,6 +143,13 @@ export function parseFollowerBand(text: string): { min: number; max: number } | 
   return undefined
 }
 
+/** WP295：「超过 7 天还没回」→ 7；没说几天按跟进节奏的第一档（3 天跟进、7 天收尾里取 7）。 */
+export function parseQuietDays(text: string): number {
+  const m = text.match(/(\d{1,3})\s*天/)
+  const n = m?.[1] === undefined ? Number.NaN : Number.parseInt(m[1], 10)
+  return Number.isFinite(n) && n > 0 ? n : 7
+}
+
 /** 一句话里点名的第几封（默认首封）。 */
 export function parseOutreachStep(text: string): OutreachStep {
   const lower = text.toLowerCase()
@@ -173,6 +189,58 @@ const NOISE = [
   '粉丝',
   '的',
   '个',
+  /*
+   * WP295：快捷提示「按这个品类……按匹配度排给我」原样发出去，剩下的是「品类 匹配度」——
+   * 拿它当关键词，库里一个人都对不上（回「一个合适的都没找到」）。这几个词说的是
+   * "怎么排、按什么挑"，不是"要什么样的人"。
+   */
+  '品类',
+  '匹配度',
+  '匹配',
+  '排序',
+  '列出来',
+  '列一下',
+  '一下',
+  '有哪些',
+  '哪些',
+  '合适',
+  '推荐',
+  '一些',
+  '做',
+  // 另外四条渠道的快捷提示：「按互动率和匹配度排」「按近 30 天出片率和匹配度排」
+  '互动率和',
+  '出片率和',
+  '互动率',
+  '出片率',
+  '天',
+  '近',
+  '或',
+]
+
+/**
+ * WP295：渠道词常粘在品类词后面（「数码频道」「美妆博主」「科技油管主」）——中文没有空格，
+ * 按词拆不开，整串当关键词又对不上库里的「数码」。中文的渠道词按**子串**去掉；
+ * 英文的（`ins` 这种短词）仍只按整词去，免得把 `insulated` 切坏。
+ */
+const CJK_CHANNEL_WORDS = [
+  // 「主页或活跃群组博主」「……的账号」说的也是在哪儿找，不是找什么样的人
+  '活跃群组',
+  '群组',
+  '主页',
+  '账号',
+  '频道',
+  '油管主',
+  '油管',
+  '红人',
+  '达人',
+  '博主',
+  '脸书',
+  '推特',
+  'up 主',
+  'up主',
+  'UP 主',
+  'UP主',
+  '抖音国际',
 ]
 
 /** 说的是"哪条渠道"而不是"什么样的人"的那些词（与 {@link channelInText} 同一份口径）。 */
@@ -198,6 +266,7 @@ const CHANNEL_WORDS = [
 
 export function searchQueryOf(text: string): string {
   let out = text.replace(/\d+(?:\.\d+)?\s*万?/g, ' ').replace(/[，。,.!！?？;；:：、]/g, ' ')
+  for (const n of CJK_CHANNEL_WORDS) out = out.split(n).join(' ')
   for (const n of NOISE) out = out.split(n).join(' ')
   const words = out
     .split(/\s+/)
@@ -283,7 +352,13 @@ export function planKolTools(intent: KolIntent, ctx: KolTaskContext): PlannedKol
         : [find, { tool: 'add_to_campaign', input: { creator_ids: [], campaign: ctx.campaign } }]
 
     case 'outreach': {
-      if (ctx.creator_id === undefined) return [find]
+      /*
+       * WP295：没点名是谁就**不拿这句话去搜**——「给这个频道起草一封开发信：说清合作形式……」
+       * 按关键词搜出来是 0 个，回话就成了「一个合适的都没找到」。改成把库里这条渠道的几个人
+       * 列出来（不带关键词），回话问「写给谁」。
+       */
+      if (ctx.creator_id === undefined)
+        return [{ tool: 'search_creators', input: { channel, limit: KOL_REPLY_NAMES } }]
       const step = parseOutreachStep(ctx.text)
       return [
         { tool: 'get_creator', input: { creator_id: ctx.creator_id } },
@@ -301,7 +376,14 @@ export function planKolTools(intent: KolIntent, ctx: KolTaskContext): PlannedKol
     }
 
     case 'follow_up': {
-      if (ctx.creator_id === undefined) return [collabs]
+      // WP295：「谁还没回」——只要已建联、这么多天没动静的那几条（每行带名字与天数）
+      if (ctx.creator_id === undefined)
+        return [
+          {
+            tool: 'list_collaborations',
+            input: { channel, quiet_days: parseQuietDays(ctx.text) },
+          },
+        ]
       return [
         collabs,
         {
@@ -338,8 +420,9 @@ export function planKolTools(intent: KolIntent, ctx: KolTaskContext): PlannedKol
     }
 
     case 'attribution':
+      // WP295：没点名哪条合作 = 问「哪几个真带货了」——读归因那张表，不是读合作清单
       return ctx.collaboration_id === undefined
-        ? [collabs]
+        ? [{ tool: 'list_tracked_links', input: { channel } }]
         : [
             collabs,
             {
@@ -387,6 +470,7 @@ export const KOL_TOOL_ZH: Readonly<Record<string, string>> = {
   get_creator: '红人资料',
   list_collaborations: '合作清单',
   list_deliverables: '交付物清单',
+  list_tracked_links: '归因',
   search_policies: '合作规矩',
   add_to_campaign: '活动名单',
   draft_outreach: '开发信草稿',
@@ -415,6 +499,7 @@ export const KOL_TOOL_ACTION_ZH: Readonly<Record<string, string>> = {
   get_creator: '看这个人的资料',
   list_collaborations: '看合作清单',
   list_deliverables: '看交付物',
+  list_tracked_links: '看归因',
   score_creator: '打分',
   add_to_campaign: '进候选池',
   draft_outreach: '起草开发信',
@@ -434,6 +519,9 @@ export function kolToolZh(tool: string): string {
 export interface KolFoundCreator {
   name: string
   followers?: number
+  /** WP295：表格里那两列（有才填）。 */
+  engagement_rate?: number
+  score?: number
 }
 
 /** 回话里那几个站内链接（服务端知道这条职责的分配 id，拼好了递进来）。 */
@@ -444,6 +532,8 @@ export interface KolReplyLinks {
   linkAccount?: string
   /** 导入一张表（岗位页「活动」那一栏里的导入）。 */
   importTable?: string
+  /** WP295：合作线程（「谁还没回」回话里的去处）。 */
+  threads?: string
 }
 
 /** 回话里最多点名几个（多了就是一张表，表在候选池里）。 */
@@ -498,11 +588,27 @@ export function describeFindReply(input: {
       ? `在 ${where} 上${band}找了一遍，一个合适的都没找到。`
       : `在 ${where} 上${band}找了一遍，找到 ${n} 个：`,
   )
-  for (const c of input.found.slice(0, KOL_REPLY_NAMES))
-    lines.push(`- ${c.name}${c.followers === undefined ? '' : `（${followersZh(c.followers)}）`}`)
-  if (n > KOL_REPLY_NAMES) lines.push(`- ……还有 ${n - KOL_REPLY_NAMES} 个`)
+  /*
+   * WP295（docs/96 P4 问答就是组件）：找到的人是一张**表**（名字 · 粉丝 · 互动率 · 分），不是
+   * 一串圆点。岗位页的当场回答认正文里的 Markdown 表格、画成表格组件；时间线里同样画成表。
+   * 表前表后各空一行：第一段是那一句话，表后面的话进末尾那块字。
+   */
+  if (n > 0) {
+    lines.push('', '| 红人 | 粉丝 | 互动率 | 分 |', '|---|---|---|---|')
+    for (const c of input.found.slice(0, KOL_REPLY_NAMES))
+      lines.push(
+        `| ${c.name.replace(/\|/g, '/')} | ${c.followers === undefined ? '—' : followersZh(c.followers).replace(/\s*粉$/u, '')} | ${
+          c.engagement_rate === undefined
+            ? '—'
+            : `${(Math.round(c.engagement_rate * 1000) / 10).toString()}%`
+        } | ${c.score === undefined ? '—' : String(c.score)} |`,
+      )
+    lines.push('')
+  }
   const pool = link('去候选池看全部', input.links?.pool)
-  if (n > 0 && pool !== undefined) lines.push(pool)
+  if (n > KOL_REPLY_NAMES)
+    lines.push(`……还有 ${n - KOL_REPLY_NAMES} 个${pool === undefined ? '' : `，${pool}`}`)
+  else if (n > 0 && pool !== undefined) lines.push(pool)
 
   const short = input.wanted !== undefined && n < input.wanted
   if (short || n === 0) {
@@ -520,6 +626,129 @@ export function describeFindReply(input: {
     if (actions.length > 0) lines.push(`想要更多人：${actions.join(' · ')}`)
   }
   return lines
+}
+
+/**
+ * WP295：「谁还没回」的回话——点名、带天数、说下一步在哪。
+ *
+ * 以前这句快捷提示回的是「看合作清单：26 条」，等于没答。
+ */
+export function describeQuietReply(input: {
+  channel: string
+  days: number
+  rows: readonly { name: string; days?: number | undefined }[]
+  links?: KolReplyLinks | undefined
+}): string[] {
+  const where = channelZh(input.channel)
+  if (input.rows.length === 0)
+    return [`${where} 上建联超过 ${input.days} 天还没回音的：一个都没有。`]
+  const lines = [`${where} 上建联超过 ${input.days} 天还没回音的有 ${input.rows.length} 个：`]
+  for (const r of input.rows.slice(0, KOL_REPLY_NAMES))
+    lines.push(`- ${r.name}（${r.days === undefined ? '没记下发信时间' : `${r.days} 天`}）`)
+  if (input.rows.length > KOL_REPLY_NAMES)
+    lines.push(`- ……还有 ${input.rows.length - KOL_REPLY_NAMES} 个`)
+  const threads = link('合作线程', input.links?.threads)
+  lines.push(
+    `要跟进就${threads === undefined ? '在合作线程里' : `在${threads}里`}点开那个人，提第二封（跟进那封）；不想再联系的推到「谢绝了」。`,
+  )
+  return lines
+}
+
+/**
+ * WP295：「起草开发信」没点名写给谁——问一句，顺手列出库里这条渠道的几个人。
+ *
+ * 以前拿整句话当关键词去搜，回「一个合适的都没找到」，人根本不知道问题在哪。
+ */
+export function describeWhoToWriteReply(input: {
+  channel: string
+  found: readonly KolFoundCreator[]
+  links?: KolReplyLinks | undefined
+}): string[] {
+  const where = channelZh(input.channel)
+  const pool = link('候选池', input.links?.pool)
+  const lines = [
+    `这封开发信写给谁？在${pool ?? '候选池'}里点开那个人，点「起草」；信起好了会出一张卡等你批。`,
+  ]
+  if (input.found.length > 0) {
+    lines.push(`${where} 上手边这几位：`)
+    for (const c of input.found.slice(0, KOL_REPLY_NAMES))
+      lines.push(`- ${c.name}${c.followers === undefined ? '' : `（${followersZh(c.followers)}）`}`)
+  }
+  return lines
+}
+
+/**
+ * WP295：「哪几个真带货了」的回话——一句结论 + 一张表（点击 · 订单 · 收入）+ 没建链接的单说一句。
+ *
+ * 数字原样端出去（归因那一跳回填的），不在这里现算比例；没带来订单的也在表里（0 单），
+ * 还没建追踪链接的合作是「算不出来」，与「0 单」分开说。
+ */
+export function describeAttributionReply(input: {
+  channel: string
+  rows: readonly { name: string; clicks: number; orders: number; revenue: number }[]
+  withoutLink?: readonly string[] | undefined
+}): string[] {
+  const where = channelZh(input.channel)
+  const sold = input.rows.filter((r) => r.orders > 0)
+  const lines: string[] = []
+  if (input.rows.length === 0) lines.push(`${where} 上还没有一条追踪链接，带没带货算不出来。`)
+  else
+    lines.push(
+      sold.length === 0
+        ? `${where} 上 ${input.rows.length} 条追踪链接，一单都还没带来。`
+        : `${where} 上带来订单的有 ${sold.length} 个：${sold
+            .slice(0, KOL_REPLY_NAMES)
+            .map((r) => `${r.name}（${r.orders} 单）`)
+            .join('、')}。`,
+    )
+  if (input.rows.length > 0) {
+    lines.push('', '| 红人 | 点击 | 订单 | 收入 |', '|---|---|---|---|')
+    for (const r of input.rows.slice(0, 10))
+      lines.push(
+        `| ${r.name.replace(/\|/g, '/')} | ${r.clicks.toLocaleString('en-US')} | ${r.orders.toLocaleString('en-US')} | ${r.revenue.toLocaleString('en-US', { maximumFractionDigits: 2 })} |`,
+      )
+    lines.push('')
+  }
+  const missing = input.withoutLink ?? []
+  if (missing.length > 0)
+    lines.push(
+      `还没建追踪链接、算不出来的：${missing.slice(0, KOL_REPLY_NAMES).join('、')}${missing.length > KOL_REPLY_NAMES ? ` 等 ${missing.length} 个` : ''}。在合作线程里点开那个人就能建一条。`,
+    )
+  return lines
+}
+
+/**
+ * WP295：「审一条稿」没点名哪一条——列出待审的（是谁 · 什么 · 哪天交 · 链接），说清去哪儿审。
+ * 以前回「看交付物：2 条」。
+ */
+export function describePendingReviewReply(input: {
+  channel: string
+  rows: readonly { name: string; kind: string; due_at?: string; url?: string }[]
+  links?: KolReplyLinks | undefined
+}): string[] {
+  const where = channelZh(input.channel)
+  if (input.rows.length === 0) return [`${where} 上现在没有待审的交付物。`]
+  const lines = [`${where} 上有 ${input.rows.length} 条交付物等你审：`, '']
+  lines.push('| 红人 | 形态 | 交稿 | 链接 |', '|---|---|---|---|')
+  for (const r of input.rows.slice(0, 10))
+    lines.push(
+      `| ${r.name.replace(/\|/g, '/')} | ${KIND_ZH[r.kind] ?? r.kind} | ${r.due_at?.slice(0, 10) ?? '—'} | ${r.url === undefined ? '还没给' : `[看一眼](${r.url})`} |`,
+    )
+  const threads = link('合作线程', input.links?.threads)
+  lines.push(
+    '',
+    `在${threads ?? '合作线程'}里点开那一条：广告标识、禁用词、链接与折扣码逐条对，选通过 / 要改 / 不合格，结论出一张卡等你批。`,
+  )
+  return lines
+}
+
+const KIND_ZH: Readonly<Record<string, string>> = {
+  video: '视频',
+  post: '帖子',
+  story: '快拍',
+  reel: 'Reels',
+  thread: '长帖',
+  live: '直播',
 }
 
 /** 渠道 id → 名字（`youtube` → `YouTube`）。认不出原样给。 */

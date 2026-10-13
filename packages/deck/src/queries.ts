@@ -1080,6 +1080,32 @@ function ofPlatform<T extends { platform: string }>(rows: readonly T[], ctx: Que
   return platform === undefined ? [] : rows.filter((r) => r.platform === platform)
 }
 
+/**
+ * WP295：红人五条渠道职责各看各的渠道（`kol.youtube` → `youtube`）。
+ *
+ * 以前五块表不分渠道：YouTube 那条职责的「待审交付物」里有 Instagram 的 reel，岗位页
+ * 「看图表」里五条职责各摆一遍同一张全渠道表。不是红人职责（首页钉住的积木等）照旧全给。
+ */
+function kolChannelOfRole(role_id: string): string | undefined {
+  return role_id.startsWith('kol.') ? role_id.slice('kol.'.length) : undefined
+}
+
+function ofKolChannel<T extends { channel: string }>(rows: readonly T[], ctx: QueryContext): T[] {
+  const channel = kolChannelOfRole(ctx.role_id)
+  return channel === undefined ? [...rows] : rows.filter((r) => r.channel === channel)
+}
+
+function kolFunnelOf(ctx: QueryContext): { stage: string; label: string; count: number }[] {
+  const all = ctx.kol?.funnel ?? []
+  const byChannel = ctx.kol?.funnel_by_channel
+  const channel = kolChannelOfRole(ctx.role_id)
+  if (byChannel === undefined || channel === undefined) return all
+  return byChannel[channel] ?? all.map((b) => ({ ...b, count: 0 }))
+}
+
+/** 进行中、还在谈的那几段（「合作中」那一格数的就是它们）。 */
+const KOL_ACTIVE_STAGES: ReadonlySet<string> = new Set(['negotiating', 'agreed', 'delivering'])
+
 /** 数字块拿不到数就空着（**不补 0**：没拉到数与真的是 0 要分得开）。 */
 const numOrBlank = (v: number | undefined): number | string => v ?? ''
 
@@ -2146,14 +2172,16 @@ const QUERY_LIST: QueryDef[] = [
         { key: 'score', label: '分', align: 'right' as const, format: 'count' as const },
         { key: 'note', label: '备注' },
       ],
-      rows: (ctx.kol?.discovery ?? []).slice(0, 20).map((r) => ({
-        name: r.display_name,
-        channel: r.channel,
-        followers: r.followers ?? 0,
-        score: r.score,
-        // 刷粉护栏那句话就在清单上说——把人悄悄拿掉，用户会以为我们没搜到他
-        note: r.blocked ?? '',
-      })),
+      rows: ofKolChannel(ctx.kol?.discovery ?? [], ctx)
+        .slice(0, 20)
+        .map((r) => ({
+          name: r.display_name,
+          channel: r.channel,
+          followers: r.followers ?? 0,
+          score: r.score,
+          // 刷粉护栏那句话就在清单上说——把人悄悄拿掉，用户会以为我们没搜到他
+          note: r.blocked ?? '',
+        })),
     }),
   },
   {
@@ -2166,7 +2194,8 @@ const QUERY_LIST: QueryDef[] = [
         { key: 'count', label: '人数', align: 'right' as const, format: 'count' as const },
       ],
       // 空的格子也出（`collaborationFunnel` 那一条）：漏斗的形状不能随数据变
-      rows: (ctx.kol?.funnel ?? []).map((b) => ({ stage: b.label, count: b.count })),
+      // WP295：有按渠道分的那份就用这条职责自己渠道的（这条渠道一条合作都没有 = 形状照旧、全是 0）
+      rows: kolFunnelOf(ctx).map((b) => ({ stage: b.label, count: b.count })),
     }),
   },
   {
@@ -2188,6 +2217,59 @@ const QUERY_LIST: QueryDef[] = [
       rows: (ctx.kol?.sandbox_funnel ?? []).map((b) => ({ stage: b.label, count: b.count })),
     }),
   },
+  /*
+   * WP295（docs/96 P2：数据看板一条职责一行、3–4 个关键数）：红人五条渠道职责以前一个数字块都没有，
+   * 岗位页「数据看板」里五行全是「开工后这里出数」。四个数都是**这条渠道**的、都从库里数出来
+   * （不经模型手）：在谈 / 合作中、等回信、待审交付、带来的收入。`previous` 给同一个数——
+   * 这几格是「现在有几个」，不是「比昨天多几个」，不出涨跌。
+   */
+  {
+    name: 'kol.active_count',
+    source: 'kol',
+    returns: 'scalar',
+    run: (ctx) => {
+      const n = ofKolChannel(ctx.kol?.collaborations ?? [], ctx).filter((c) =>
+        KOL_ACTIVE_STAGES.has(c.stage),
+      ).length
+      return { value: n, previous: n, spark: [] }
+    },
+  },
+  {
+    name: 'kol.awaiting_reply',
+    source: 'kol',
+    returns: 'scalar',
+    run: (ctx) => {
+      const n = ofKolChannel(ctx.kol?.collaborations ?? [], ctx).filter(
+        (c) => c.stage === 'contacted',
+      ).length
+      return { value: n, previous: n, spark: [] }
+    },
+  },
+  {
+    name: 'kol.pending_review_count',
+    source: 'kol',
+    returns: 'scalar',
+    run: (ctx) => {
+      const n = ofKolChannel(ctx.kol?.pending_deliverables ?? [], ctx).length
+      return { value: n, previous: n, spark: [] }
+    },
+  },
+  {
+    name: 'kol.revenue',
+    source: 'kol',
+    returns: 'scalar',
+    run: (ctx) => {
+      const rows = ofKolChannel(ctx.kol?.attribution ?? [], ctx)
+      const value = Math.round(rows.reduce((sum, r) => sum + r.revenue, 0) * 100) / 100
+      const currency = rows[0]?.currency
+      return {
+        value,
+        previous: value,
+        spark: [],
+        ...(currency === undefined ? {} : { currency }),
+      }
+    },
+  },
   {
     name: 'kol.collaborations',
     source: 'kol',
@@ -2199,13 +2281,15 @@ const QUERY_LIST: QueryDef[] = [
         { key: 'stage', label: '阶段' },
         { key: 'budget', label: '预算', align: 'right' as const },
       ],
-      rows: (ctx.kol?.collaborations ?? []).slice(0, 20).map((r) => ({
-        name: r.display_name,
-        channel: r.channel,
-        stage: r.stage_label,
-        budget: r.budget ?? 0,
-        currency: r.currency,
-      })),
+      rows: ofKolChannel(ctx.kol?.collaborations ?? [], ctx)
+        .slice(0, 20)
+        .map((r) => ({
+          name: r.display_name,
+          channel: r.channel,
+          stage: r.stage_label,
+          budget: r.budget ?? 0,
+          currency: r.currency,
+        })),
     }),
   },
   {
@@ -2220,8 +2304,7 @@ const QUERY_LIST: QueryDef[] = [
         { key: 'url', label: '链接' },
       ],
       // 按期限正序：最急的在最上面，这就是队列本身（同 `orders.unfulfilled`）
-      rows: (ctx.kol?.pending_deliverables ?? [])
-        .slice()
+      rows: ofKolChannel(ctx.kol?.pending_deliverables ?? [], ctx)
         .sort((a, b) => Date.parse(a.due_at) - Date.parse(b.due_at))
         .slice(0, 20)
         .map((r) => ({
@@ -2247,8 +2330,7 @@ const QUERY_LIST: QueryDef[] = [
       ],
       // 按收入倒序。归不上的订单一分钱都不在这张表里（`attribution.ts` 的 `unmatched`）——
       // 这个数宁可小，不能是猜的。
-      rows: (ctx.kol?.attribution ?? [])
-        .slice()
+      rows: ofKolChannel(ctx.kol?.attribution ?? [], ctx)
         .sort((a, b) => b.revenue - a.revenue)
         .slice(0, 20)
         .map((r) => ({

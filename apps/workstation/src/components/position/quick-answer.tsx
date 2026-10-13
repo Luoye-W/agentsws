@@ -14,6 +14,7 @@ import { type ReactNode, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { AnswerComponents } from '@/components/answer/answer-view'
 import { Button } from '@/components/ui/button'
+import { SafeMarkdown } from '@/components/ui/safe-markdown'
 import { HandoffError } from '@/components/work/handoff-error'
 import { continueQuickAnswer, promoteAskMatter } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
@@ -155,12 +156,13 @@ export function QuickAnswer({ position }: { position: string }): ReactNode {
       ) : (
         <>
           {lead === '' ? null : (
-            <p
-              className="text-[15px] leading-[1.7] whitespace-pre-wrap text-ws-ink"
-              data-testid="quick-answer-lead"
-            >
-              {lead}
-            </p>
+            // WP295：回话里的站内链接（「导入一张表」等）要能点——同一份安全 markdown，不解析 HTML
+            <SafeMarkdown
+              text={lead}
+              variant="reply"
+              className="text-[15px] leading-[1.7] text-ws-ink"
+              testId="quick-answer-lead"
+            />
           )}
           <AnswerComponents components={components} />
           {answer?.outcome === 'stopped' ? (

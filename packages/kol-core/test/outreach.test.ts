@@ -2,9 +2,12 @@ import { KOL_OUTREACH_FORBIDDEN } from '@agentsws/core'
 import { describe, expect, it } from 'vitest'
 import {
   draftOutreach,
+  hasCjk,
   nextInSequence,
   type OutreachVars,
+  outreachLanguageOf,
   outreachQuota,
+  outreachReason,
   reviewOutreachBody,
   SEQUENCE_DAYS,
   scanForbiddenPromises,
@@ -40,6 +43,45 @@ describe('开发信起草（48 §5.2）', () => {
   it('渠道换了说法就换：YouTube 说"频道"，X 说"账号"', () => {
     expect(draftOutreach('first', vars).body).toContain('频道')
     expect(draftOutreach('first', { ...vars, channel: 'x' }).body).toContain('账号')
+  })
+
+  it('WP295：外国红人收英文信——三封都起得出来、没有一句中文、一个承诺词都没有', () => {
+    const en: OutreachVars = {
+      ...vars,
+      brand_pitch: 'We make desk chargers.',
+      product: 'the Nordvolt 65W charger',
+      reason: outreachReason({ channel: 'youtube', language: 'en' }),
+      sender_name: 'Mo Li',
+      language: 'en',
+    }
+    for (const step of ['first', 'follow_up', 'final'] as const) {
+      const d = draftOutreach(step, en)
+      expect(d.ok, step).toBe(true)
+      expect(d.forbidden_hits, step).toEqual([])
+      expect(d.body, step).toMatch(/^Hi Jonas,/)
+      expect(hasCjk(`${d.subject}\n${d.body}`), step).toBe(false)
+    }
+    expect(draftOutreach('first', en).body).toContain('your channel')
+    expect(draftOutreach('final', en).body).toContain('last note')
+  })
+
+  it('WP295：账号语言 → 信的语言：zh* 中文，其余与不知道都是英文', () => {
+    expect(outreachLanguageOf('zh-CN')).toBe('zh')
+    expect(outreachLanguageOf('de')).toBe('en')
+    expect(outreachLanguageOf('en')).toBe('en')
+    expect(outreachLanguageOf(undefined)).toBe('en')
+  })
+
+  it('WP295：「为什么找你」写给红人看——不报粉丝数、不说「区间」', () => {
+    const zh = outreachReason({ channel: 'youtube', language: 'zh', category: '数码' })
+    expect(zh).toBe('你频道上做数码的视频和我们的东西挺对路，')
+    expect(outreachReason({ channel: 'x', language: 'zh' })).toBe(
+      '你账号上的帖子和我们的东西挺对路，',
+    )
+    for (const r of [zh, outreachReason({ channel: 'tiktok', language: 'en' })]) {
+      expect(r).not.toMatch(/\d/)
+      expect(r).not.toContain('区间')
+    }
   })
 
   it('变量缺了就不起草：拿一封写着 {{product}} 的信去问人要不要发更糟', () => {

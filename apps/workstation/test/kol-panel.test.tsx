@@ -319,6 +319,17 @@ describe('WP68 红人岗位面板', () => {
     const blocked = await screen.findByTestId('kol-search-blocked')
     expect(blocked.textContent).toContain('申请制')
     expect(screen.queryByTestId('kol-search-results')).toBeNull()
+    // WP295：外面搜不了，同一个关键词把自己的库筛一遍；一键回全部
+    await waitFor(() => {
+      expect(getKolCreators).toHaveBeenLastCalledWith(
+        { channel: 'tiktok', q: 'cablekevin' },
+        'asg_tt',
+      )
+    })
+    fireEvent.click(await screen.findByTestId('kol-library-q-clear'))
+    await waitFor(() => {
+      expect(getKolCreators).toHaveBeenLastCalledWith({ channel: 'tiktok' }, 'asg_tt')
+    })
   })
 
   it('公共库那一档：扣多少积分写在按钮上，点之前就看得见', async () => {
@@ -548,8 +559,28 @@ describe('WP117 红人界面：说真话与三个子视图', () => {
     fireEvent.click(open)
     const thread = await screen.findByTestId('kol-collab-thread')
     expect(thread.getAttribute('data-collab')).toBe('col_1')
+    // WP295：「已建联」的合作上只出议价；交付物与追踪链接等谈起来再出
+    await screen.findByTestId('kol-thread-quote')
+    expect(screen.queryByTestId('kol-thread-deliverables')).toBeNull()
+    expect(screen.queryByTestId('kol-thread-links')).toBeNull()
+  })
+
+  it('WP295：「交付中」的合作出交付物与追踪链接，不再挂着议价', async () => {
+    getKolCollaborations.mockResolvedValue({
+      rows: [
+        {
+          ...(DETAIL.collaborations[0] as (typeof DETAIL.collaborations)[number]),
+          stage: 'delivering',
+        },
+      ],
+    })
+    renderWithProviders(<KolPanel assignment="asg_yt" channel="youtube" />)
+    await goto('threads')
+    fireEvent.click(await screen.findByTestId('kol-collab-open'))
     await screen.findByTestId('kol-thread-deliverables')
     await screen.findByTestId('kol-thread-links')
+    expect(screen.queryByTestId('kol-thread-quote')).toBeNull()
+    getKolCollaborations.mockResolvedValue({ rows: DETAIL.collaborations })
   })
 })
 

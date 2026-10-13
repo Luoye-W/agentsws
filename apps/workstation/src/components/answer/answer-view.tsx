@@ -7,6 +7,7 @@
 import type { AnswerComponent, AnswerMetric, AnswerTable } from '@agentsws/contracts'
 import type { ReactNode } from 'react'
 import { DeltaPill } from '@/components/design/primitives'
+import { SafeMarkdown } from '@/components/ui/safe-markdown'
 import { useApp } from '@/lib/app-context'
 
 const fmt = (v: number | string, lang: string): string =>
@@ -97,15 +98,20 @@ export function AnswerComponents({
     <div className="flex flex-col gap-3" data-testid="answer-components">
       {components.map((c, i) => {
         const key = `${c.kind}-${i}`
+        /*
+         * WP295：一段字走同一份安全 markdown（时间线也用它）。以前原样当字画，回话里的站内链接
+         * 「[导入一张表](/positions/…)」就以一串方括号加路径出现在岗位页上；同一句话进了事项时间线
+         * 却是能点的链接。仍不解析 HTML（`<b>` 照旧是三个字）。
+         */
         if (c.kind === 'text')
           return (
-            <p
+            <SafeMarkdown
               key={key}
-              className="text-[14px] leading-[1.7] whitespace-pre-wrap text-ws-body"
-              data-testid="answer-text"
-            >
-              {c.text}
-            </p>
+              text={c.text}
+              variant="reply"
+              className="text-[14px] leading-[1.7] text-ws-body"
+              testId="answer-text"
+            />
           )
         if (c.kind === 'table') return <TableView key={key} c={c} />
         if (c.kind === 'metric')

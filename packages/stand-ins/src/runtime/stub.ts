@@ -31,13 +31,17 @@ import {
 } from './b2b-outbound.js'
 import { IMAGE_TOOL_DEF_BY_NAME, imageBranch, imageDataOf, renderImageAnswer } from './image.js'
 import {
+  attributionOf,
+  collabsOf,
   countOf,
+  deliverablesOf,
   describeKolRun,
   foundOf,
   type KolFinding,
   kolBranch,
   kolRefs,
   parseFollowerBand,
+  parseQuietDays,
   parseWantedCount,
   receiptOf,
   renderKolAnswer,
@@ -698,10 +702,25 @@ export function createStubRuntime(options: StubRuntimeOptions): RuntimeAdapter {
           // WP142：找人那一步把找到的是谁带上（回话里点名前 5 个）
           const found =
             call.tool === 'search_creators' && res.status === 'ok' ? foundOf(res.data) : {}
+          // WP295：合作清单那一步读到的是谁（「谁还没回」回话里点名）
+          const collabs =
+            call.tool === 'list_collaborations' && res.status === 'ok'
+              ? collabsOf(res.data)
+              : undefined
+          // WP295：归因那一步读到的链接（「哪几个真带货了」那张表）
+          const attribution =
+            call.tool === 'list_tracked_links' && res.status === 'ok'
+              ? attributionOf(res.data)
+              : undefined
           findings.push({
             tool: call.tool,
             status: res.status,
             ...found,
+            ...(collabs === undefined ? {} : { collabs }),
+            ...(attribution ?? {}),
+            ...(call.tool === 'list_deliverables' && res.status === 'ok'
+              ? { deliverables: deliverablesOf(res.data) ?? [] }
+              : {}),
             ...(count === undefined ? {} : { count }),
             ...(res.reason === undefined ? {} : { reason: res.reason }),
             ...(receipt.approval_item_id === undefined && receipt.change_id === undefined
@@ -726,7 +745,9 @@ export function createStubRuntime(options: StubRuntimeOptions): RuntimeAdapter {
             pool: `${home}&kol=pool`,
             linkAccount: '/settings/credits',
             importTable: `${home}&kol=campaign`,
+            threads: `${home}&kol=threads`,
           },
+          quietDays: parseQuietDays(kol.ctx.text),
         })
         outputs.push({ kind: 'answer', text: answer })
         usage.output_tokens = Math.ceil(answer.length / 4) + (seed % 7)
