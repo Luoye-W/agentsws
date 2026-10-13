@@ -21,7 +21,6 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Copy } from 'lucide-react'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { dutyHref } from '@/components/app-shell'
 import { PanelError } from '@/components/rail/panel-error'
 import type { RailScope } from '@/components/rail/rail-scope'
 import { Button } from '@/components/ui/button'
@@ -37,6 +36,7 @@ import {
   type RoleDetailView,
 } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
+import { dutyHref } from '@/lib/duty-href'
 import { useMode } from '@/lib/mode'
 
 /** 一条动作的额度：键值对现在是字符串（服务端给的人话），改的时候只收数字。 */

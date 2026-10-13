@@ -74,6 +74,7 @@ import {
   type PositionSummary,
 } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
+import { dutyHref } from '@/lib/duty-href'
 import { useMode } from '@/lib/mode'
 import { holdsDuty } from '@/lib/pick-assignment'
 import { myAssignments } from '@/lib/positions'
@@ -111,10 +112,8 @@ function NavIcon({ icon: Icon }: { icon: LucideIcon }): ReactNode {
   return <Icon aria-hidden className="size-4 shrink-0" />
 }
 
-/** 职责页的地址：`/positions/<本人在这条职责上的分配>/duties/<role_id>`。 */
-export function dutyHref(assignment_id: string, role_id: string): string {
-  return `/positions/${encodeURIComponent(assignment_id)}/duties/${encodeURIComponent(role_id)}`
-}
+/** 职责页的地址（WP298：挪到 `lib/duty-href.ts`，这里照旧导出，老调用方不用改）。 */
+export { dutyHref }
 
 /**
  * WP234（docs/54 §6.1 / §6.5）：工作区底座职责——`common.owner`（负责人身份）与 `common.member`
