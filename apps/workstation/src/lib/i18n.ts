@@ -1647,6 +1647,7 @@ const zh: Table = {
   'kind.ai_question': '缺资料提问',
   'kind.daily_plan': '今天的安排',
   'kind.review': '复盘',
+  'kind.kol_retro': '合作复盘',
   // WP63（51 §2.1 数据日报）：店铺日报卡
   'kind.daily_report': '店铺日报',
   'kind.seo_report': '搜索报告',
@@ -5609,6 +5610,7 @@ const en: Table = {
   'kind.ai_question': 'Missing info',
   'kind.daily_plan': "Today's plan",
   'kind.review': 'Review',
+  'kind.kol_retro': 'Collab recap',
   'kind.daily_report': 'Store daily report',
   'kind.seo_report': 'Search report',
   'kind.weekly_review': 'Weekly one-pager',

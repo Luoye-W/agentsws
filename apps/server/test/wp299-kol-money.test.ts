@@ -8,6 +8,7 @@
 import type { Assignment } from '@agentsws/contracts'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createServer, type Server } from '../src/index.js'
+import { kolRetro } from '../src/kol.js'
 
 const T0 = '2026-10-13T09:00:00.000Z'
 const SECRETS_KEY = 'f'.repeat(64)
@@ -191,5 +192,59 @@ describe('WP299 付款（决策 387）', () => {
     const id = await collab('negotiating')
     const res = await post(`/v1/kol/collaborations/${id}/payments`, { amount: 100 })
     expect(res.status).toBe(400)
+  })
+})
+
+describe('WP299 合作复盘（决策 387）', () => {
+  const base = { creator_id: 'cre_1', channel: 'youtube' as const, currency: 'USD' }
+  const name = () => 'Gadget Jonas'
+  const pay = (amount: number) => [{ id: 'p', amount, currency: 'USD', paid_at: T0 }]
+
+  it('三档结论：回本了 / 还没回本 / 算不出来（没记付款、没建追踪链接）；什么都没发生的不出行', () => {
+    const rows = kolRetro(
+      [
+        { ...base, id: 'c_worth', stage: 'delivered', payments: pay(400) },
+        { ...base, id: 'c_not_yet', stage: 'delivered', payments: pay(400) },
+        { ...base, id: 'c_no_pay', stage: 'delivered' },
+        { ...base, id: 'c_no_link', stage: 'delivered', payments: pay(100) },
+        { ...base, id: 'c_quiet', stage: 'contacted' },
+      ],
+      [
+        { collaboration_id: 'c_worth', revenue: 645.5 },
+        { collaboration_id: 'c_not_yet', revenue: 120 },
+        { collaboration_id: 'c_no_pay', revenue: 90 },
+      ],
+      name,
+    )
+    expect(rows.map((r) => [r.collaboration_id, r.spent, r.revenue, r.verdict])).toEqual([
+      ['c_worth', 400, 645.5, 'worth'],
+      ['c_not_yet', 400, 120, 'not_yet'],
+      ['c_no_pay', 0, 90, 'unknown'],
+      ['c_no_link', 100, 0, 'unknown'],
+    ])
+  })
+
+  it('寄样成本也算花的', () => {
+    const [row] = kolRetro(
+      [
+        {
+          ...base,
+          id: 'c_1',
+          stage: 'delivering',
+          payments: pay(200),
+          sample: {
+            address_ref: 'kol.sample.x',
+            address_masked: 'J***',
+            cost: 45,
+            currency: 'USD',
+            shipped_at: T0,
+          },
+        },
+      ],
+      [{ collaboration_id: 'c_1', revenue: 300 }],
+      name,
+    )
+    expect(row?.spent).toBe(245)
+    expect(row?.verdict).toBe('worth')
   })
 })

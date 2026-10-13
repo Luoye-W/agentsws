@@ -109,7 +109,9 @@ export function RecordsPanel({ scope }: RailPanelBodyProps): ReactNode {
           <div className="flex flex-wrap items-baseline gap-2 text-xs text-muted-foreground">
             <time dateTime={row.at}>{formatDate(row.at, lang)}</time>
             <span>{t(`kind.${row.kind}`)}</span>
-            {row.state === undefined ? null : <span>{approvalStateLabel(row.state, lang)}</span>}
+            {row.state === undefined || row.state === '' ? null : (
+              <span>{approvalStateLabel(row.state, lang)}</span>
+            )}
           </div>
           {row.href === undefined ? (
             <div className="text-sm">{row.title}</div>

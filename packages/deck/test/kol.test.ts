@@ -176,6 +176,52 @@ describe('WP67 红人面板五个分块（48 §5.1）', () => {
     expect(table('kol.discovery', ig).rows).toEqual([])
   })
 
+  it('WP299：记录里出「合作复盘」——这条渠道的合作一行一条，花了 / 带来 / 值不值', () => {
+    const data: KolDeckData = {
+      ...KOL_DATA,
+      retro: [
+        {
+          collaboration_id: 'col_1',
+          display_name: 'Gadget Jonas',
+          channel: 'youtube',
+          spent: 400,
+          revenue: 645.5,
+          currency: 'USD',
+          verdict: 'worth',
+          at: '2026-10-10T00:00:00Z',
+        },
+        {
+          collaboration_id: 'col_2',
+          display_name: 'Desk Rosa',
+          channel: 'instagram',
+          spent: 100,
+          revenue: 30,
+          currency: 'USD',
+          verdict: 'not_yet',
+          at: '2026-10-11T00:00:00Z',
+        },
+      ],
+    }
+    const records = (ctx: QueryContext) => {
+      const r = runQuery('records.timeline', ctx, 'last_7d')
+      if (r.status !== 'ok') throw new Error('records')
+      return (r.data as { rows: { kind: string; title: string; summary: string }[] }).rows.filter(
+        (row) => row.kind === 'kol_retro',
+      )
+    }
+    expect(records(withKol(data))).toEqual([
+      expect.objectContaining({
+        title: 'Gadget Jonas',
+        summary: '花了 400 USD · 带来 645.5 USD · 值（回本 1.6 倍）',
+      }),
+    ])
+    expect(records({ ...withKol(data), role_id: 'kol.instagram' })[0]?.summary).toBe(
+      '花了 100 USD · 带来 30 USD · 还没回本（回了 30%）',
+    )
+    // 不是红人职责的记录里不掺复盘
+    expect(records({ ...withKol(data), role_id: 'dtc.support' })).toEqual([])
+  })
+
   it('WP295：漏斗按渠道；这条渠道一条合作都没有 = 形状照旧、全是 0', () => {
     const data: KolDeckData = {
       ...KOL_DATA,
