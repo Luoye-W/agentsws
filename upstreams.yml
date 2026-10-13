@@ -565,14 +565,14 @@ upstreams:
       - apps/desktop/test/updater.test.ts
 
   # WP253（Luoye 决定 137）：建站岗位「网页模板」起底用的开源主题。不进安装包依赖、不进 pnpm：
-  # 用户第一次让 AI 起底时，服务进程从 codeload 按 commit 下那一份 tar.gz（约 630 KB），sha256 对上才解。
+  # 用户第一次让 AI 起底时，服务进程从 codeload 按 commit 下那一份 tar.gz（v0.10.0 约 1 MB），sha256 对上才解。
   # 钉子只在 `apps/server/src/theme-base-pin.json` 一处；升级照 docs/42「按 tag 钉的上游怎么升」。
   - id: agentsws-theme
     kind: runtime-dep
     why: 建站岗位「网页模板」的起底主题（`theme_init_from_base`，MIT，LICENSE 原样带进用户的工作目录）；我们是它的作者，也是它的上游消费者
     repo: Luoye-W/agentsws-theme
-    pinned_tag: v0.9.2
-    pinned_commit: e106b6622ec88f215c85c4be0753b71e3148d0a1
+    pinned_tag: v0.10.0
+    pinned_commit: 236ef33de9f8d4409a4343a181088f7dc3e782b2
     pin_file: apps/server/src/theme-base-pin.json
     watch: [releases, readme]
     we_depend_on:
@@ -580,8 +580,14 @@ upstreams:
       - 'AGENTS.md §2 的改动边界：只改 custom-* / templates / section 组 / locales / config/settings_data.json（`baseWritable`）'
       - 'assets/app.css 是构建产物、已提交进仓库（推上去就有样式；AI 不改它）'
       - 'LICENSE 在仓库根（起底时原样带上）'
+      # WP296（v0.10.0 起）：旧版起过底的工作目录要人点了才升，升的那一下靠这两条
+      - '`npm run migrate` = `node scripts/migrate-blocks.mjs`，只用 node 内置模块（不用 npm install 就能在工作目录里跑；输出「Updated N file(s)」/「Needs a person」两段）→ site-theme.ts 的 upgradeBase / site-theme-upgrade.ts 的 parseMigrateOutput'
+      - 'CATALOG.json 的 entries[]：id / kind / use_when / accepts_blocks / private（`_` 开头的私有块）→ theme-read.ts 的目录页与按 ids 挑'
     covered_by:
       - apps/server/test/site-theme.test.ts
+      - apps/server/test/wp296-theme-upgrade.test.ts
+      - apps/server/test/wp296-theme-upgrade-server.test.ts
+      - apps/server/test/wp260-theme-read.test.ts
       - apps/server/src/theme-base-pin.json
 
   # ── ported：抄进来的源码，上游改了要对照回来 ──────────────────────────────

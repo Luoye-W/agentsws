@@ -7,7 +7,10 @@
  * 2. **发布永远不在这里发**：`theme_publish` 只出 `publish_theme` 的审批卡（人批了执行器才调 `theme publish`）；
  * 3. **还差哪一步说人话**：没装 CLI / 没登录 / 不知道店铺 → 一句「去岗位页点哪个按钮」+ `needs`，不甩英文报错；
  * 4. 回的数据是白名单：路径、名字、数字、预览链接；没有令牌、没有 CLI 原文（原文已经抹过、只在出错时带一段）。
+ * 5. WP296：工作目录是旧版 agentsws-theme 起底的 → 每次回话都带一句 `base_upgrade`（照实说要迁移、出了哪张卡），
+ *    **不升级**——人点了升级卡才由服务端升（`site-theme.ts` 的 `onUpgradeDecided`）。
  */
+import type { RunRequest } from '@agentsws/contracts'
 import type { ToolExecution, ToolExecutor } from '@agentsws/stand-ins'
 import {
   isThemeRole,
@@ -33,7 +36,40 @@ export interface ThemeToolsOptions {
 const str = (v: unknown): string | undefined =>
   typeof v === 'string' && v.trim() !== '' ? v.trim() : undefined
 
+/** WP296：旧版工作目录那一句挂到回话上（ok 挂进 data；出错接在 reason 后面，data 里也带一份）。 */
+async function withUpgradeNotice(
+  m: SiteThemeAssembly,
+  request: RunRequest,
+  out: ToolExecution,
+): Promise<ToolExecution> {
+  if (out.status === 'blocked' || out.reason?.startsWith('not_a_theme_tool') === true) return out
+  const notice = await m.baseUpgrade(request).catch(() => undefined)
+  if (notice === undefined) return out
+  const data =
+    out.data !== null && typeof out.data === 'object' && !Array.isArray(out.data)
+      ? (out.data as Record<string, unknown>)
+      : out.data === undefined
+        ? {}
+        : { result: out.data }
+  return {
+    ...out,
+    data: { ...data, base_upgrade: notice },
+    ...(out.status === 'error' && out.reason !== undefined
+      ? { reason: `${out.reason}\n${notice.message}` }
+      : {}),
+  }
+}
+
 export function createThemeToolExecutor(options: ThemeToolsOptions): ToolExecutor {
+  const run = createThemeToolRun(options)
+  return async (call): Promise<ToolExecution> => {
+    const out = await run(call)
+    const m = out.status === 'blocked' ? undefined : await options.module()
+    return m === undefined ? out : withUpgradeNotice(m, call.request, out)
+  }
+}
+
+function createThemeToolRun(options: ThemeToolsOptions): ToolExecutor {
   return async ({ name, input, request }): Promise<ToolExecution> => {
     const bare = name.includes('.') ? name.slice(name.lastIndexOf('.') + 1) : name
     if (!THEME_TOOL_NAMES.includes(bare))

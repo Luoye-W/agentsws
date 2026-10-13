@@ -20,6 +20,7 @@
  * 2. **线上只有一条路会变**：审批过的 `publish_theme` → {@link SiteThemeAssembly.apply} → `theme publish`。
  * 3. **没装 / 没登录 / 没店铺地址不是异常**，是「还差哪一步」（{@link ThemeReadiness.next}）——岗位页与工具回话同一套话。
  */
+import { execFile } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import {
   existsSync,
@@ -36,6 +37,8 @@ import {
 import { dirname, join, normalize, relative, sep } from 'node:path'
 import type { SiteThemeStoreChoice, SiteThemeView } from '@agentsws/api'
 import type {
+  ApprovalBus,
+  ApprovalItem,
   Clock,
   EffectiveConfig,
   Mandate,
@@ -62,6 +65,17 @@ import {
   type ThemeCheckResult,
   type ThemeSummary,
 } from './shopify-theme.js'
+import {
+  isThemeUpgradeCard,
+  overlayStoreFiles,
+  parseMigrateOutput,
+  THEME_UPSTREAM_ID,
+  type ThemeUpgradeCardPayload,
+  themeReleaseUrl,
+  themeUpgradeNotice,
+  themeUpgradeTitle,
+  versionOlder,
+} from './site-theme-upgrade.js'
 import PIN from './theme-base-pin.json' with { type: 'json' }
 
 /**
@@ -107,7 +121,7 @@ const WRITABLE_EXT = /\.(liquid|json|css|js|svg|txt)$/i
 /** 单个文件读 / 写的上限。 */
 export const MAX_THEME_FILE_BYTES = 512 * 1024
 /**
- * WP260：**读**的上限另算——真主题 v0.9.1 的 `CATALOG.json` 已经 50 万字节，离 512 KB 只差一点，再长一版就读不了；
+ * WP260：**读**的上限另算——真主题 v0.9.1 的 `CATALOG.json` 已经 50 万字节，v0.10.0 是 102 万字节（WP296 实测）；
  * 读回来的东西不会整份进模型（`theme-read.ts` 按页 / 按目录切），所以读放到 4 MB。写照旧 512 KB。
  */
 export const MAX_THEME_READ_BYTES = 4 * 1024 * 1024
@@ -138,7 +152,73 @@ interface StoreState {
   /** 起底 / 拉下来那一刻每个主题文件的 sha256（算「改了哪些文件」用）。 */
   baseline?: Record<string, string>
   pushes: ThemePushRecord[]
+  /** WP296：出过的那张升级卡（同一个新版本只出一张；人点了先不升记 `declined_at`，过一天再问）。 */
+  upgrade_offer?: { to: string; approval_item_id: string; at: string; declined_at?: string }
+  /** WP296：升过的几次（备份目录在哪、迁移改了几个文件）。 */
+  upgrades?: {
+    from: string
+    to: string
+    at: string
+    backup: string
+    migrated: number
+    manual: number
+  }[]
 }
+
+/** WP296：工具回话里带给模型的那一句（这份主题是旧版、要不要升）。 */
+export interface ThemeBaseUpgradeNotice {
+  from: string
+  to: string
+  /** 出了卡（或之前出过、还没定）。 */
+  approval_item_id?: string
+  /** 人上次点了先不升（一天内不再出卡）。 */
+  declined?: boolean
+  message: string
+}
+
+/** WP296：升完的那一份。 */
+export interface ThemeBaseUpgradeResult {
+  from: string
+  to: string
+  /** 迁移脚本改了的文件。 */
+  migrated: string[]
+  /** 迁移脚本说要人手动挪的、locales 合不了的。 */
+  manual: string[]
+  /** 原样带过去的店铺内容（模板、section 组、settings_data、custom-*）。 */
+  kept: string[]
+  /** 旧工作目录挪去的备份目录（不删）。 */
+  backup: string
+}
+
+export type ThemeRunNode = (
+  args: readonly string[],
+  opts: { cwd: string; timeoutMs: number },
+) => Promise<{ code: number; stdout: string; stderr: string }>
+
+/** 用服务进程自己的 node（安装包捆绑的那一份）跑一个脚本；环境只给 PATH。 */
+const defaultRunNode: ThemeRunNode = (args, opts) =>
+  new Promise((resolve) => {
+    execFile(
+      process.execPath,
+      [...args],
+      {
+        cwd: opts.cwd,
+        timeout: opts.timeoutMs,
+        maxBuffer: 4 * 1024 * 1024,
+        env: { PATH: process.env.PATH ?? '' },
+        windowsHide: true,
+      },
+      (err, stdout, stderr) => {
+        const code =
+          err === null
+            ? 0
+            : typeof (err as { code?: unknown }).code === 'number'
+              ? Number((err as { code: number }).code)
+              : 1
+        resolve({ code, stdout: String(stdout), stderr: String(stderr) })
+      },
+    )
+  })
 
 /**
  * WP258：登录后在这个 Shopify 账号下找到的店（存在设置文件里，岗位页下拉框用；`need_login` 不给界面看原文）。
@@ -221,6 +301,14 @@ export interface SiteThemeOptions {
     },
   ): void
   appendEvent?(type: string, payload: Record<string, unknown>): void
+  /** WP296：出升级卡的审批总线（不给 = 只照实说一句，不出卡）。 */
+  approvals?(): Pick<ApprovalBus, 'create'> | undefined
+  /** WP296：卡挂到事项上（有事项时）。 */
+  onCard?(item: ApprovalItem): void
+  /** WP296：升完 / 没升成，在事项时间线上记一句。 */
+  noteMatter?(matter_id: string, text: string): void
+  /** WP296：跑主题自带的迁移脚本（测试注入）；不给 = 服务进程自己的 node。 */
+  runNode?: ThemeRunNode
 }
 
 export class SiteThemeError extends Error {
@@ -284,6 +372,15 @@ export interface SiteThemeAssembly {
   }>
   /** 执行器批过的 `publish_theme`（不是这个品牌的 / 不是这一类回 undefined）。 */
   apply(change: StagedChange): Promise<BackendResult | undefined>
+  /**
+   * WP296：这份工作目录是旧版 agentsws-theme 吗？是 → 回一句给模型照实说，并（有运行、有审批总线时）
+   * 出一张「升级到 vX（会跑迁移）」卡（同一个版本只出一张）。不是 / 还不知道是哪家店 → undefined。**不升级。**
+   */
+  baseUpgrade(request?: RunRequest): Promise<ThemeBaseUpgradeNotice | undefined>
+  /** WP296：真升（只由升级卡批了之后调）：备份 → 换新版核心文件、带上店铺内容 → 跑迁移。 */
+  upgradeBase(input: { to: string; store?: string }): Promise<ThemeBaseUpgradeResult>
+  /** WP296：升级卡被决定（批了 → 升；不升 → 记下，一天内不再问）。别的卡什么都不做。 */
+  onUpgradeDecided(item: ApprovalItem): Promise<void>
 }
 
 /** WP258：找店命令没跑成（`detail` 是抹过令牌的输出，只用来判断是哪一种失败，不给人看）。 */
@@ -848,8 +945,264 @@ export function createSiteTheme(options: SiteThemeOptions): SiteThemeAssembly {
       ? undefined
       : join(options.localBaseDir, `${pin.repo.split('/')[1]}-${pin.commit}.tgz`)
 
+  // ── WP296：旧版起底的工作目录 → 照实说 + 升级卡；人点了才升 ─────────────
+
+  const DAY_MS = 24 * 60 * 60_000
+  let offerInFlight: Promise<ThemeBaseUpgradeNotice | undefined> | undefined
+
+  const offerUpgrade = async (
+    request: RunRequest | undefined,
+  ): Promise<ThemeBaseUpgradeNotice | undefined> => {
+    let shop: string
+    try {
+      shop = (await need('files')).shop
+    } catch {
+      return undefined
+    }
+    const state = settings.stores[shop]
+    const from = state?.base?.version
+    if (state === undefined || from === undefined || !versionOlder(from, pin.version))
+      return undefined
+    const to = pin.version
+    const offer = state.upgrade_offer?.to === to ? state.upgrade_offer : undefined
+    if (offer !== undefined && offer.declined_at === undefined)
+      return {
+        from,
+        to,
+        approval_item_id: offer.approval_item_id,
+        message: themeUpgradeNotice(from, to, 'carded'),
+      }
+    if (
+      offer?.declined_at !== undefined &&
+      Date.parse(now()) - Date.parse(offer.declined_at) < DAY_MS
+    )
+      return { from, to, declined: true, message: themeUpgradeNotice(from, to, 'declined') }
+    const bus = options.approvals?.()
+    if (bus === undefined || request === undefined)
+      return { from, to, message: themeUpgradeNotice(from, to, 'none') }
+    const payload: ThemeUpgradeCardPayload = {
+      upstream_id: THEME_UPSTREAM_ID,
+      from,
+      to,
+      classification: 'breaking',
+      store: shop,
+      release_url: themeReleaseUrl(pin.repo, pin.tag ?? `v${to}`),
+      recommendation:
+        '建议升：新版每个分区只给自己的块、设置名统一，AI 照新目录搭更不容易出错。升之前整份备份，线上主题不动。',
+      test_results: ['迁移在暂存目录里跑，跑不成工作目录一个字节不动'],
+      run_id: request.id,
+    }
+    const matter = request.work_item?.id
+    const item = await bus.create({
+      workspace_id: ws,
+      schema_version: 1,
+      kind: 'upstream_upgrade',
+      role_id: request.actor.role_id,
+      subject: {
+        object: { type: 'theme_workspace', id: shop },
+        ...(matter === undefined ? {} : { matter_id: matter }),
+      },
+      dedupe_key: `upstream_upgrade:${THEME_UPSTREAM_ID}:${ws}:${shop}:${to}`,
+      title: themeUpgradeTitle(to),
+      summary:
+        `这个品牌的主题是 agentsws-theme v${from}，新版 v${to} 改了块名和设置名。` +
+        '点了才升：先整份备份，换上新版核心文件，你的模板、custom 文件和设置照旧带上，再跑主题自带的迁移。' +
+        '线上主题不动，升完推一份预览再看。',
+      payload,
+      evidence: {
+        run_id: request.id,
+        source_events: [],
+        provenance: { seen: [{ type: 'theme_workspace', id: shop }] },
+        precheck: {},
+      },
+      proposer: {
+        kind: 'agent',
+        id: `agent_${request.actor.role_id}`,
+        assignment_id: request.actor.assignment_id,
+      },
+      automation: {
+        level_at_creation: 'L1',
+        auto_approved: false,
+        mandate_check: { within: true, caps_hit: [] },
+        sampling: { selected: false },
+      },
+      routing: {
+        recipients: [{ person: request.actor.person_id, via: 'role_holder' }],
+        rule: 'role_holder',
+        escalation: { after_hours: 24, business_hours: true, chain: ['owner'], escalated_at: [] },
+        separation_of_duties: false,
+      },
+      priority: 'queue',
+      risk_class: 'medium',
+    } as never)
+    state.upgrade_offer = { to, approval_item_id: item.id, at: now() }
+    save()
+    emit('site_theme.upgrade_offered', { workspace_id: ws, from, to, approval_item_id: item.id })
+    try {
+      options.onCard?.(item)
+    } catch {
+      // 事项挂不上不影响卡本身
+    }
+    return { from, to, approval_item_id: item.id, message: themeUpgradeNotice(from, to, 'carded') }
+  }
+
+  const baseUpgrade = (request?: RunRequest): Promise<ThemeBaseUpgradeNotice | undefined> => {
+    if (offerInFlight !== undefined) return offerInFlight
+    offerInFlight = offerUpgrade(request).finally(() => {
+      offerInFlight = undefined
+    })
+    return offerInFlight
+  }
+
+  const upgradeBase = async (input: {
+    to: string
+    store?: string
+  }): Promise<ThemeBaseUpgradeResult> => {
+    const shop = input.store ?? (await need('files')).shop
+    const state = settings.stores[shop]
+    const from = state?.base?.version
+    if (state === undefined || from === undefined)
+      throw new SiteThemeError(
+        'invalid_input',
+        '这份主题不是从 agentsws-theme 起底的，没法照新版迁移。',
+      )
+    if (!versionOlder(from, pin.version))
+      throw new SiteThemeError('invalid_input', `这份主题已经是 v${from}，不用升。`)
+    if (input.to !== pin.version)
+      throw new SiteThemeError(
+        'invalid_input',
+        `卡上是 v${input.to}，现在钉的是 v${pin.version}，请重新出一张卡。`,
+      )
+    const root = rootOf(shop)
+    // 先下好、校验过（下不来时工作目录一个字节不动）
+    const bytes = await downloadBase()
+    const stamp = String(Date.parse(now()))
+    const staging = join(options.dataDir, 'theme-work', ws, 'upgrade', stamp)
+    mkdirSync(staging, { recursive: true })
+    try {
+      extractTgz(bytes, staging)
+      const top = join(staging, `${pin.repo.split('/')[1]}-${pin.commit}`)
+      if (!existsSync(top) || !statSync(top).isDirectory())
+        throw new SiteThemeError('integrity', '开源主题的包里没有预期的那一层目录')
+      const pristine = manifestOf(top)
+      const plan = overlayStoreFiles({
+        oldFiles: themeFiles(root),
+        newHas: (rel) => existsSync(join(top, rel)),
+        readOld: (rel) => readFileSync(join(root, rel)),
+        readNew: (rel) => readFileSync(join(top, rel)),
+        write: (rel, content) => {
+          mkdirSync(dirname(join(top, rel)), { recursive: true })
+          writeFileSync(join(top, rel), content)
+        },
+        remove: (rel) => rmSync(join(top, rel), { force: true }),
+        hash: (b) => sha256(b),
+        baseline: state.baseline,
+      })
+      // 主题自带的迁移（`npm run migrate` = `node scripts/migrate-blocks.mjs`；只用 node 内置模块）
+      let migrated: string[] = []
+      let manual: string[] = [...plan.manual.map((rel) => `${rel}：合不了，用了新版那一份`)]
+      const script = join(top, 'scripts', 'migrate-blocks.mjs')
+      if (existsSync(script)) {
+        const run = options.runNode ?? defaultRunNode
+        const out = await run([script], { cwd: top, timeoutMs: 120_000 })
+        if (out.code !== 0)
+          throw new SiteThemeError(
+            'cli',
+            `迁移脚本没跑成（退出码 ${out.code}）${scrubCliOutput(out.stderr).slice(0, 300)}`,
+          )
+        const parsed = parseMigrateOutput(out.stdout)
+        migrated = parsed.updated
+        manual = [...manual, ...parsed.manual]
+      }
+      // 换上来：旧目录整份挪去备份（不删），暂存目录换进来；换不过去就挪回原样
+      const backup = join(options.dataDir, 'theme-work', ws, 'backup', `${shop}-v${from}-${stamp}`)
+      mkdirSync(dirname(backup), { recursive: true })
+      renameSync(root, backup)
+      try {
+        renameSync(top, root)
+      } catch (e) {
+        renameSync(backup, root)
+        throw e
+      }
+      state.base = {
+        repo: pin.repo,
+        version: pin.version,
+        commit: pin.commit,
+        license: pin.license,
+        at: now(),
+      }
+      // 「改了哪些文件」从此相对新版原样那一份算（店铺自己的内容照样算改动）
+      state.baseline = pristine
+      delete state.upgrade_offer
+      state.upgrades = [
+        ...(state.upgrades ?? []),
+        {
+          from,
+          to: pin.version,
+          at: now(),
+          backup,
+          migrated: migrated.length,
+          manual: manual.length,
+        },
+      ].slice(-10)
+      lastCheck.delete(shop)
+      save()
+      emit('site_theme.base_upgraded', {
+        workspace_id: ws,
+        from,
+        to: pin.version,
+        migrated: migrated.length,
+        manual: manual.length,
+        kept: plan.kept.length,
+      })
+      return { from, to: pin.version, migrated, manual, kept: plan.kept, backup }
+    } finally {
+      // 只删这一次自己建的暂存目录
+      rmSync(staging, { recursive: true, force: true })
+    }
+  }
+
+  const onUpgradeDecided = async (item: ApprovalItem): Promise<void> => {
+    if (!isThemeUpgradeCard(item) || item.workspace_id !== ws) return
+    const p = item.payload as ThemeUpgradeCardPayload
+    const matter = item.subject.matter_id
+    const note = (text: string): void => {
+      if (matter === undefined) return
+      try {
+        options.noteMatter?.(matter, text)
+      } catch {
+        // 事项没了：结果照样在事件里
+      }
+    }
+    const approved = item.state === 'approved' || item.state === 'approved_edited'
+    if (!approved) {
+      const offer = settings.stores[p.store]?.upgrade_offer
+      if (item.state === 'rejected' && offer?.approval_item_id === item.id) {
+        offer.declined_at = now()
+        save()
+      }
+      emit('site_theme.upgrade_declined', { workspace_id: ws, to: p.to, state: item.state })
+      return
+    }
+    try {
+      const r = await upgradeBase({ to: p.to, store: p.store })
+      note(
+        `主题升到 v${r.to} 了：迁移改了 ${r.migrated.length} 个文件` +
+          (r.manual.length > 0 ? `，${r.manual.length} 处要人手动挪（让我推预览前先看一遍）` : '') +
+          '；旧的一份留作备份。线上主题没动，推一份预览看过再发布。',
+      )
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e)
+      emit('site_theme.upgrade_failed', { workspace_id: ws, to: p.to, message })
+      note(`主题没升成：${message}。工作目录没动，还是 v${p.from}。`)
+    }
+  }
+
   return {
     readiness,
+    baseUpgrade,
+    upgradeBase,
+    onUpgradeDecided,
 
     async setStore(raw, opts = {}) {
       let shop: string
@@ -921,6 +1274,8 @@ export function createSiteTheme(options: SiteThemeOptions): SiteThemeAssembly {
         at: now(),
       }
       state.baseline = manifestOf(root)
+      // WP296：重新起底就是新版了，没定的升级卡作废
+      delete state.upgrade_offer
       save()
       emit('site_theme.initialized', { workspace_id: ws, version: pin.version })
       return {

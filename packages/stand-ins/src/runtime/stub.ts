@@ -100,7 +100,9 @@ import {
   type ThemePublishData,
   type ThemePushData,
   type ThemeStep,
+  type ThemeUpgradeData,
   themeBranch,
+  upgradeOf,
 } from './theme.js'
 import {
   renderWebAnswer,
@@ -1041,6 +1043,7 @@ export function createStubRuntime(options: StubRuntimeOptions): RuntimeAdapter {
         let check: ThemeCheckData | undefined
         let pushed: ThemePushData | undefined
         let published: ThemePublishData | undefined
+        let upgrade: ThemeUpgradeData | undefined
         const queue: ThemeStep[] = [...themeCalls]
         while (queue.length > 0) {
           const step = queue.shift() as ThemeStep
@@ -1067,6 +1070,7 @@ export function createStubRuntime(options: StubRuntimeOptions): RuntimeAdapter {
             status: res.status,
             ...(res.reason === undefined ? {} : { reason: res.reason }),
           })
+          upgrade = upgradeOf(res.data) ?? upgrade
           if (res.status !== 'ok') {
             failed[step.tool] =
               res.reason === 'no_tool_executor'
@@ -1101,6 +1105,7 @@ export function createStubRuntime(options: StubRuntimeOptions): RuntimeAdapter {
           ...(check === undefined ? {} : { check }),
           ...(pushed === undefined ? {} : { pushed }),
           ...(published === undefined ? {} : { published }),
+          ...(upgrade === undefined ? {} : { upgrade }),
           failed,
         })
         outputs.push({ kind: 'answer', text: answer })
