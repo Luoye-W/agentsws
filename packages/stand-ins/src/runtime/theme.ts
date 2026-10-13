@@ -61,7 +61,7 @@ export const THEME_TOOL_DEFS: readonly ToolDef[] = [
     description:
       '从开源主题 agentsws-theme（钉死的版本，MIT 许可，LICENSE 原样带上）拉一份到这个品牌的主题工作目录，' +
       '作为搭店的起点。线上一个字节不动。目录里已经有东西时不覆盖；replace=true 会先把旧的挪到一边（不删）再拉。' +
-      '拉好之后先用 theme_read_file 读 AGENTS.md 与 CATALOG.json，照里面的规矩改。',
+      '拉好之后先用 theme_read_file 读 AGENTS.md 与 CATALOG.index.json，照里面的规矩改。',
     input_schema: {
       type: 'object',
       properties: {
@@ -185,10 +185,11 @@ export const THEME_WORK_ORDER = 26
 export const THEME_WORK_RULES = [
   '网页模板的做法（一口气做到出预览，中途不停下来汇报；做完再用一段话交代）：',
   '1. 主题工作目录是空的就先起底（agentsws-theme）；起过底就别再起。',
-  '2. AGENTS.md 读一次；先读瘦目录 CATALOG.index.json（每项 id / 类型 / 文件 / 什么时候用，v0.9.2 起有），没有它就读 CATALOG.json 的目录页；要用的分区 / 块（如 hero、faq、container、newsletter）再给 ids 读一次 CATALOG.json 的完整设置；recipes/compose-page.md 是搭页面的现成做法。不必读 .liquid 源码，同一个文件读过就别再读。',
+  '2. AGENTS.md 读一次；先读瘦目录 CATALOG.index.json（每项 id / 类型 / 文件 / 什么时候用），没有它就读 CATALOG.json 的目录页；要用的分区 / 块再给 ids 读一次 CATALOG.json 的完整设置。块名、设置 id 一律照工作目录里这份目录抄，不凭记忆：每个分区只收它 accepts_blocks 里列的块，_ 开头的私有块只放进列了它的父级。recipes/compose-page.md 是搭页面的现成做法。不必读 .liquid 源码，同一个文件读过就别再读。',
   '3. 照 recipes 改 templates/index.json（放哪些分区、什么顺序、每块的设置）和 config/settings_data.json（颜色、字体等主题设置）；新东西只写 custom-* 文件，核心文件不动。',
   '4. 跑官方检查，有错误就改，改到 0 个错误。',
   '5. 推成未发布主题；最后给预览链接、改了哪几块、怎么退回。发布只出卡，等人点。',
+  '工具回话里说这份主题是旧版、出了升级卡：照实跟人说一句，接着用目录里这一版做；别自己升级，也别重新起底。',
   '店铺数据：主推商品、合集先留空占位（人在主题编辑器里挑），不去查店里的商品。店面文案用顾客的语言（照 AGENTS.md）。',
 ].join('\n')
 
