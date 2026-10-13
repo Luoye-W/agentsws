@@ -66,7 +66,9 @@ const NEXT_STAGES: Readonly<Record<string, string[]>> = {
   contacted: ['replied', 'declined'],
   replied: ['negotiating', 'declined'],
   negotiating: ['agreed', 'declined'],
-  agreed: ['delivering', 'declined'],
+  // WP299（决策 386）：寄样走「已寄样」；不寄样的直接开拍
+  agreed: ['sample_sent', 'delivering', 'declined'],
+  sample_sent: ['delivering', 'declined'],
   delivering: ['delivered'],
   delivered: ['closed'],
 }
@@ -702,6 +704,7 @@ const STAGE_FILTERS = [
   'replied',
   'negotiating',
   'agreed',
+  'sample_sent',
   'delivering',
   'delivered',
   'declined',

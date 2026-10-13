@@ -90,6 +90,8 @@ const PRIMARY_BY_KIND: Partial<Record<DeckLayout, Record<string, string>>> = {
     kol_affiliate_code: 'verb.money.approve.discount_code',
     promotion: 'verb.money.approve.promotion',
     kol_collaboration: 'verb.money.approve.kol_collaboration',
+    kol_sample: 'verb.money.approve.kol_sample',
+    kol_payment: 'verb.money.approve.kol_payment',
   },
   // WP144：授权卡上"批准"说不清批了什么——写明是"允许它操作电脑"
   policy: {
@@ -241,6 +243,8 @@ export const CATEGORY_BY_CHANGE: Partial<Record<ChangeKind, string>> = {
   promotion: 'promotion',
   kol_affiliate_code: 'affiliate_code',
   kol_collaboration: 'collaboration',
+  kol_sample: 'kol_sample',
+  kol_payment: 'payment',
   // 出站文案
   review_reply: 'review_reply',
   review_invite: 'review_invite',

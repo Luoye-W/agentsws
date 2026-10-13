@@ -705,6 +705,7 @@ const STAGES = [
   'replied',
   'negotiating',
   'agreed',
+  'sample_sent',
   'delivering',
   'delivered',
   'closed',

@@ -52,6 +52,7 @@ const STAGES: readonly CollaborationStage[] = [
   'replied',
   'negotiating',
   'agreed',
+  'sample_sent',
   'delivering',
   'delivered',
   'closed',
@@ -317,7 +318,7 @@ export function createKolToolExecutor(options: KolToolsOptions): ToolExecutor {
             (c) =>
               (only === undefined || c.id === only) &&
               !linked.has(c.id) &&
-              ['agreed', 'delivering', 'delivered', 'closed'].includes(c.stage),
+              ['agreed', 'sample_sent', 'delivering', 'delivered', 'closed'].includes(c.stage),
           )
           .map((c) => nameOf(c.id))
         const out = rowsOf(rows, 'tracked_link')

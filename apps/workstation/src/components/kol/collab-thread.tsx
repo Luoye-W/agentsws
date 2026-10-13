@@ -48,7 +48,9 @@ const NEXT_STAGES: Readonly<Record<string, string[]>> = {
   contacted: ['replied', 'declined'],
   replied: ['negotiating', 'declined'],
   negotiating: ['agreed', 'declined'],
-  agreed: ['delivering', 'declined'],
+  // WP299（决策 386）：寄样走「已寄样」；不寄样的直接开拍
+  agreed: ['sample_sent', 'delivering', 'declined'],
+  sample_sent: ['delivering', 'declined'],
   delivering: ['delivered'],
   delivered: ['closed'],
 }
@@ -63,6 +65,7 @@ const QUOTE_STAGES: ReadonlySet<string> = new Set(['contacted', 'replied', 'nego
 /** 交付物：谈成之后。 */
 const DELIVERY_STAGES: ReadonlySet<string> = new Set([
   'agreed',
+  'sample_sent',
   'delivering',
   'delivered',
   'closed',
@@ -71,6 +74,7 @@ const DELIVERY_STAGES: ReadonlySet<string> = new Set([
 const LINK_STAGES: ReadonlySet<string> = new Set([
   'negotiating',
   'agreed',
+  'sample_sent',
   'delivering',
   'delivered',
   'closed',

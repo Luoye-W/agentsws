@@ -1104,7 +1104,12 @@ function kolFunnelOf(ctx: QueryContext): { stage: string; label: string; count: 
 }
 
 /** 进行中、还在谈的那几段（「合作中」那一格数的就是它们）。 */
-const KOL_ACTIVE_STAGES: ReadonlySet<string> = new Set(['negotiating', 'agreed', 'delivering'])
+const KOL_ACTIVE_STAGES: ReadonlySet<string> = new Set([
+  'negotiating',
+  'agreed',
+  'sample_sent',
+  'delivering',
+])
 
 /** 数字块拿不到数就空着（**不补 0**：没拉到数与真的是 0 要分得开）。 */
 const numOrBlank = (v: number | undefined): number | string => v ?? ''

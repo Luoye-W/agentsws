@@ -187,6 +187,8 @@ export type CollaborationStage =
   | 'replied'
   | 'negotiating'
   | 'agreed'
+  /** WP299（决策 386）：样品寄出去了（谈成之后、开拍之前；不寄样的合作可以直接从「谈成」到「拍摄制作中」）。 */
+  | 'sample_sent'
   | 'delivering'
   | 'delivered'
   | 'closed'
@@ -217,6 +219,40 @@ export interface Collaboration {
    * 没有这一格 = 这条合作还什么都没发生过（不是"很久没动"）。
    */
   last_activity_at?: Iso8601
+  /** WP299（决策 386）：寄样（谈成之后才有）。有样品成本的，批了「花钱」那张卡才落这一格。 */
+  sample?: KolSample
+  /** WP299（决策 387）：付给这个红人的钱（每一笔都是批过的「花钱」卡落下来的）。 */
+  payments?: KolPayment[]
+}
+
+/**
+ * WP299（决策 386）：一次寄样。
+ *
+ * **收件地址不在这里**：明文只在本机加密库（`address_ref` 是 key 名），这里只有脱敏的样子
+ * （同红人联系方式那一套）。账本、事件、卡面上一个真地址都没有。
+ */
+export interface KolSample {
+  /** 加密库里的 key 名。 */
+  address_ref: string
+  /** 脱敏后的收件地址（「Berlin, DE · J***」这种），给人认得出是哪一份。 */
+  address_masked: string
+  carrier?: string
+  tracking_no?: string
+  /** 样品成本（货值 + 运费）。没有就是不花钱（比如寄的是退货品）。 */
+  cost?: number
+  currency: string
+  shipped_at: Iso8601
+}
+
+/** WP299（决策 387）：付给红人的一笔钱。 */
+export interface KolPayment {
+  id: string
+  amount: number
+  currency: string
+  note?: string
+  paid_at: Iso8601
+  /** 落下这一笔的那条变更（`kol_payment`）。 */
+  change_id?: string
 }
 
 /** 交付物的形态（五条渠道的并集）。 */

@@ -60,6 +60,9 @@ export const KIND_RISK: Record<ChangeKind, RiskClass> = {
   kol_deliverable_review: 'low',
   kol_affiliate_code: 'low',
   kol_tracked_link: 'low',
+  // WP299（决策 386 / 387）：寄样成本与付款都是真金白银，按 high（与合作同理）
+  kol_sample: 'high',
+  kol_payment: 'high',
   // WP72（56 §2）：社媒运营那六条。
   //
   // 发内容与群发按 medium：对外、收不回来，但改不了钱（两条都在 `HARD_L1` 里，
@@ -182,6 +185,9 @@ export const HARD_L1: ReadonlySet<ChangeKind> = new Set([
    * 硬顶不行（15 §2）。
    */
   'kol_collaboration',
+  /** WP299（决策 386 / 387）：寄样成本与付给红人的钱——同合作那一条理由，永远人审。 */
+  'kol_sample',
+  'kol_payment',
   /**
    * WP72（56 §2 / §0）：**发内容与群发永远人审**。
    *
