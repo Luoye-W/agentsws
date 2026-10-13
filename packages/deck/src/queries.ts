@@ -2436,9 +2436,8 @@ const QUERY_LIST: QueryDef[] = [
       return {
         columns: [
           { key: 'name', label: '红人' },
-          { key: 'spent', label: '花费', align: 'right' as const, format: 'money' as const },
-          { key: 'clicks', label: '点击', align: 'right' as const, format: 'count' as const },
-          { key: 'orders', label: '订单', align: 'right' as const, format: 'count' as const },
+          // 半宽的一块只放得下四列：点击、订单、花费的总数在「带货归因」那一排，花费 = 收入 ÷ 回本
+          // （行里照旧带着 spent / clicks / orders，钉出去或导出时都在）
           { key: 'revenue', label: '收入', align: 'right' as const, format: 'money' as const },
           { key: 'cpc', label: '每次点击', align: 'right' as const, format: 'money' as const },
           { key: 'roi', label: '回本', align: 'right' as const, format: 'ratio' as const },

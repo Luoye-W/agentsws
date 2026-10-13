@@ -355,12 +355,13 @@ const KOL_BLOCKS = (channel: string): BlockDef[] => [
    * 找人清单、合作进行中、待审交付物、归因表从看板上拿掉（docs/96 P5 一个数一个地方：
    * 候选池、合作线程、卡片流、归因卡里各有它们）——积木 id 仍在册（见 KOL_LEGACY_BLOCKS），钉过的照旧打得开。
    */
+  // 漏斗与归因并排（两列网格里同一行，高矮差不多，不会一块被撑出一大片空白）
   block('kol.reach_funnel', 'funnel', '建联漏斗', 'kol.reach_funnel'),
+  block('kol.conversion', 'conversion', '带货归因', 'kol.conversion'),
   block('kol.schedule', 'table', '交稿排期', 'kol.schedule', { hide_when_empty: true }),
   block('kol.top_creators', 'table', '带货最好的红人', 'kol.top_creators', {
     hide_when_empty: true,
   }),
-  block('kol.conversion', 'conversion', '带货归因', 'kol.conversion'),
   // WP117b：演练那一份单独一块（真漏斗里从此一条演练数据都没有）。WP302：演练关着就不出
   block('kol.sandbox_funnel', 'table', '演练漏斗', 'kol.sandbox_funnel', { hide_when_empty: true }),
 ]

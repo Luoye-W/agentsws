@@ -150,8 +150,8 @@ function Stat({
         {badge === undefined || level === undefined ? null : (
           <span
             className={cn(
-              'rounded px-1 text-[10px] font-bold leading-[1.35]',
-              textual ? 'shrink-0' : 'min-w-0 shrink truncate',
+              // 色块只有一两个字（好 / 一般 / 弱），不截——截成「…」就白画了
+              'shrink-0 rounded px-1 text-[10px] font-bold leading-[1.35]',
               JUDGEMENT_BADGE[level],
             )}
           >
@@ -252,8 +252,8 @@ export function CreatorCard({
           />
         </span>
       </button>
-      {/* 迷你进度条：有合作才出（docs/96 P3） */}
-      {row.collab === undefined ? null : (
+      {/* 迷你进度条：合作真动起来了才出（docs/96 P3）——「已找到」那一格人人都一样，画了是噪声 */}
+      {row.collab === undefined || row.collab.stage === 'sourced' ? null : (
         <CollabProgress segments={row.collab.segments} dwellDays={row.collab.dwell_days} />
       )}
       <span className="flex items-center justify-between gap-2">

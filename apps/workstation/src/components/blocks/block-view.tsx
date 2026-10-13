@@ -235,7 +235,7 @@ function ConversionBlock({ payload }: { payload: TableResult }): React.ReactNode
   return (
     <div className="flex flex-col gap-2" data-testid="block-conversion" data-state={state}>
       {state === 'ready' && metrics.length > 0 ? (
-        <dl className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <dl className="grid grid-cols-[repeat(auto-fit,minmax(7.5rem,1fr))] gap-2">
           {metrics.map((m) => (
             <div
               key={m.label}

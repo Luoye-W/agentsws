@@ -118,9 +118,9 @@ describe('WP67 红人面板五个分块（48 §5.1）', () => {
         'kol.revenue',
         // WP302（决策 406）：看图表里换成 KOLAgents 仪表盘那几张
         'kol.reach_funnel',
+        'kol.conversion',
         'kol.schedule',
         'kol.top_creators',
-        'kol.conversion',
         'kol.sandbox_funnel',
       ])
       expect(
