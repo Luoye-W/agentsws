@@ -64,8 +64,13 @@ export function languageCodeOf(language: string): string {
   return l.split('-')[0] ?? l
 }
 
+/**
+ * key 两种写法都认：`login:password`（这里再 base64）或 DataForSEO 后台给的「Base64 format」那一串（原样用）。
+ * 10-13 真机：后台填了 Base64 那串，这里又编一次，上游回「没权限」。
+ */
 function basic(key: string): string {
-  return `Basic ${btoa(key)}`
+  const k = key.trim()
+  return `Basic ${k.includes(':') ? btoa(k) : k}`
 }
 
 /** 信封里的状态码（顶层与任务级都要看；20000 才是成）。 */
