@@ -293,7 +293,7 @@ task_examples:
   - id: find_and_reach
     title: { zh: "从找人到发出第一封信", en: "From finding creators to first outreach" }
     description: "想在TikTok上开一批新的合作，手里还没有名单。"
-    expected_output: "一份打过分的候选名单（粉丝量、互动率、匹配理由各一列），外加每人一封写好的建联草稿；真发出去按渠道额度走，超了会变成一张待你批的卡。"
+    expected_output: "一份打过分的候选名单（粉丝量、互动率、匹配理由各一列），外加每人一封写好的建联草稿；每一封都先出成一张卡，你批了才发。"
   - id: content_check
     title: { zh: "内容审核", en: "Check a deliverable before it goes live" }
     description: "达人把稿子发过来了，担心漏了合规标识或写错折扣码。"
