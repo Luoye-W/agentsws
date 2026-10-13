@@ -68,6 +68,28 @@ export const COMPONENTS: readonly ComponentDef[] = [
     version: '1.0.0',
     payload_schema: { type: 'object', required: ['rows'], properties: { rows: { type: 'array' } } },
   },
+  /*
+   * WP302（决策 406，KOLAgents 仪表盘的漏斗卡与归因卡）：两个都吃表的形状——漏斗按行画成
+   * 一级一级变窄的条（带「到下一级的转化」），归因卡按 `state` 画三态（没连 / 等第一单 / 有数据）。
+   */
+  {
+    name: 'funnel',
+    version: '1.0.0',
+    payload_schema: {
+      type: 'object',
+      required: ['columns', 'rows'],
+      properties: { columns: { type: 'array' }, rows: { type: 'array' } },
+    },
+  },
+  {
+    name: 'conversion',
+    version: '1.0.0',
+    payload_schema: {
+      type: 'object',
+      required: ['columns', 'rows'],
+      properties: { columns: { type: 'array' }, rows: { type: 'array' } },
+    },
+  },
 ]
 
 const COMPONENT_NAMES = new Set<string>(COMPONENTS.map((c) => c.name))
@@ -84,6 +106,8 @@ const SHAPE_OF: Record<ComponentName, 'scalar' | 'table' | 'series' | 'records'>
   timeline: 'records',
   kv: 'records',
   markdown: 'records',
+  funnel: 'table',
+  conversion: 'table',
 }
 
 /** 29 §2：按 component.payload_schema 校验 payload。未知组件 → 拒。 */
@@ -174,7 +198,13 @@ export const SOURCE_REPORT_URLS: Partial<Record<DataSourceId, string>> = {
   ads_tiktok: 'https://ads.tiktok.com',
 }
 
-const block = (id: string, component: ComponentName, title: string, query: string): BlockDef => {
+const block = (
+  id: string,
+  component: ComponentName,
+  title: string,
+  query: string,
+  options: { hide_when_empty?: boolean } = {},
+): BlockDef => {
   const def = queryDef(query)
   const report_url = SOURCE_REPORT_URLS[def.source]
   return {
@@ -185,6 +215,7 @@ const block = (id: string, component: ComponentName, title: string, query: strin
     query,
     source: def.source,
     ...(report_url === undefined ? {} : { report_url }),
+    ...(options.hide_when_empty === true ? { hide_when_empty: true } : {}),
   }
 }
 
@@ -317,11 +348,30 @@ const KOL_BLOCKS = (channel: string): BlockDef[] => [
   block(`kol.${channel}.awaiting_reply`, 'stat_tile', '等回信', 'kol.awaiting_reply'),
   block(`kol.${channel}.pending_review`, 'stat_tile', '待审交付', 'kol.pending_review_count'),
   block(`kol.${channel}.revenue`, 'stat_tile', '带来的收入', 'kol.revenue'),
+  /*
+   * WP302（决策 406，docs/98 第一期）：「看图表」里换成 KOLAgents 仪表盘那几张——
+   * 漏斗（处于或已越过那一级的人数）/ 交稿排期（只有逾期、三天内到期才出）/ 带货最好的红人
+   * （有花钱或有收入才出）/ 带货归因三态卡。演练漏斗只在演练开着时出。
+   * 找人清单、合作进行中、待审交付物、归因表从看板上拿掉（docs/96 P5 一个数一个地方：
+   * 候选池、合作线程、卡片流、归因卡里各有它们）——积木 id 仍在册（见 KOL_LEGACY_BLOCKS），钉过的照旧打得开。
+   */
+  block('kol.reach_funnel', 'funnel', '建联漏斗', 'kol.reach_funnel'),
+  block('kol.schedule', 'table', '交稿排期', 'kol.schedule', { hide_when_empty: true }),
+  block('kol.top_creators', 'table', '带货最好的红人', 'kol.top_creators', {
+    hide_when_empty: true,
+  }),
+  block('kol.conversion', 'conversion', '带货归因', 'kol.conversion'),
+  // WP117b：演练那一份单独一块（真漏斗里从此一条演练数据都没有）。WP302：演练关着就不出
+  block('kol.sandbox_funnel', 'table', '演练漏斗', 'kol.sandbox_funnel', { hide_when_empty: true }),
+]
+
+/**
+ * WP302：从红人看板上拿掉的那几块。不进岗位视图，但仍在积木注册表里——首页钉过的、
+ * 别处按 id 引的照旧打得开（同一份查询，数一个没变）。
+ */
+const KOL_LEGACY_BLOCKS = (): BlockDef[] => [
   block('kol.discovery', 'table', '找人清单', 'kol.discovery'),
-  block('kol.funnel', 'table', '建联漏斗', 'kol.outreach_funnel'),
-  // WP117b：演练那一份单独一块（真漏斗里从此一条演练数据都没有）。
-  // 演练关掉它就是空表——表头留着，比一块忽隐忽现的面板好认。
-  block('kol.sandbox_funnel', 'table', '演练漏斗', 'kol.sandbox_funnel'),
+  block('kol.funnel', 'table', '建联漏斗（按阶段）', 'kol.outreach_funnel'),
   block('kol.collaborations', 'table', '合作进行中', 'kol.collaborations'),
   block('kol.pending_deliverables', 'table', '待审交付物', 'kol.pending_deliverables'),
   block('kol.attribution', 'table', '归因', 'kol.attribution'),
@@ -654,6 +704,7 @@ export function allBlocks(): BlockDef[] {
     for (const b of blocksForRole(role)) out.set(b.id, b)
   }
   for (const b of QUEUE_BLOCKS()) out.set(b.id, b)
+  for (const b of KOL_LEGACY_BLOCKS()) if (!out.has(b.id)) out.set(b.id, b)
   return [...out.values()]
 }
 

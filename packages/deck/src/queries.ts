@@ -1119,6 +1119,29 @@ function retroSummary(r: NonNullable<NonNullable<QueryContext['kol']>['retro']>[
     : `${head} · 没建追踪链接，带来多少算不出来`
 }
 
+/** WP302：漏斗「处于或已越过」的先后（谢绝不在里面）。 */
+const REACH_ORDER: readonly string[] = [
+  'sourced',
+  'contacted',
+  'replied',
+  'negotiating',
+  'agreed',
+  'sample_sent',
+  'delivering',
+  'delivered',
+  'closed',
+]
+
+/** 交付物形态的人话。 */
+const KIND_ZH: Readonly<Record<string, string>> = {
+  video: '视频',
+  post: '帖子',
+  story: '快拍',
+  reel: 'Reels',
+  thread: '长帖',
+  live: '直播',
+}
+
 /** 进行中、还在谈的那几段（「合作中」那一格数的就是它们）。 */
 const KOL_ACTIVE_STAGES: ReadonlySet<string> = new Set([
   'negotiating',
@@ -2307,6 +2330,192 @@ const QUERY_LIST: QueryDef[] = [
         previous: value,
         spark: [],
         ...(currency === undefined ? {} : { currency }),
+      }
+    },
+  },
+  /*
+   * WP302（决策 406，docs/98 第一期）：KOLAgents 仪表盘的四张卡，数据照旧全在服务端算好、按这条
+   * 职责的渠道筛（数字不经模型手，docs/29）。
+   */
+  {
+    /*
+     * 漏斗——「处于或已越过那一级」的人数（KOLAgents funnel-card 的口径）：已建联的人里也算上
+     * 已经谈成的，于是每一级只会比上一级少，转化率读得通。谢绝的只算在第一级（不知道是在哪一步走的）。
+     */
+    name: 'kol.reach_funnel',
+    source: 'kol',
+    returns: 'table',
+    run: (ctx) => {
+      const buckets = kolFunnelOf(ctx)
+      const countAt = (stage: string): number => buckets.find((b) => b.stage === stage)?.count ?? 0
+      const order = REACH_ORDER
+      const total = buckets.reduce((sum, b) => sum + b.count, 0)
+      const reached = (from: string): number =>
+        order.slice(order.indexOf(from)).reduce((sum, st) => sum + countAt(st), 0)
+      const rows =
+        total === 0
+          ? []
+          : [
+              { stage: '进了名单', count: total },
+              { stage: '已建联', count: reached('contacted') },
+              { stage: '有回音', count: reached('replied') },
+              { stage: '谈条件', count: reached('negotiating') },
+              { stage: '谈成', count: reached('agreed') },
+            ]
+      return {
+        columns: [
+          { key: 'stage', label: '阶段' },
+          { key: 'count', label: '人数', align: 'right' as const, format: 'count' as const },
+        ],
+        rows,
+      }
+    },
+  },
+  {
+    /*
+     * 交稿排期——只出**逾期**与**三天内到期**、还没交上来的（KOLAgents schedule-card 的 SLA 口径）。
+     * 一条都没有就整块不出（积木上 `hide_when_empty`）：没有要催的稿是好事，不用占一块地方说。
+     */
+    name: 'kol.schedule',
+    source: 'kol',
+    returns: 'table',
+    run: (ctx) => {
+      const now = Date.parse(ctx.now)
+      const soon = now + 3 * 86_400_000
+      const rows = ofKolChannel(ctx.kol?.pending_deliverables ?? [], ctx)
+        .filter((d) => d.submitted !== true && Date.parse(d.due_at) <= soon)
+        .sort((a, b) => Date.parse(a.due_at) - Date.parse(b.due_at))
+        .slice(0, 10)
+        .map((d) => {
+          const days = Math.floor((Date.parse(d.due_at) - now) / 86_400_000)
+          return {
+            name: d.display_name,
+            kind: KIND_ZH[d.kind] ?? d.kind,
+            due_at: d.due_at.slice(0, 10),
+            status: days < 0 ? `逾期 ${-days} 天` : days === 0 ? '今天到期' : `还剩 ${days} 天`,
+          }
+        })
+      return {
+        columns: [
+          { key: 'name', label: '红人' },
+          { key: 'kind', label: '形态' },
+          { key: 'due_at', label: '交稿日' },
+          { key: 'status', label: '' },
+        ],
+        rows,
+      }
+    },
+  },
+  {
+    /*
+     * 带货最好的红人——花了多少、带来多少，每次点击花多少、回本几倍（KOLAgents top-collaborators-card）。
+     * KOLAgents 那一列是 CPE（每次互动成本）；工坊的合作上还没有播放 / 互动数，这一列换成
+     * 「每次点击」（追踪链接的点击），名字照实写，不叫 CPE。
+     */
+    name: 'kol.top_creators',
+    source: 'kol',
+    returns: 'table',
+    run: (ctx) => {
+      const rows = ofKolChannel(ctx.kol?.retro ?? [], ctx)
+        .slice()
+        .sort((a, b) => b.revenue - a.revenue || b.spent - a.spent)
+        .slice(0, 5)
+        .map((r) => ({
+          name: r.display_name,
+          spent: r.spent,
+          clicks: r.clicks ?? 0,
+          orders: r.orders ?? 0,
+          revenue: r.revenue,
+          cpc:
+            r.spent > 0 && (r.clicks ?? 0) > 0
+              ? Math.round((r.spent / (r.clicks ?? 1)) * 100) / 100
+              : '',
+          roi: r.spent > 0 && r.revenue > 0 ? Math.round((r.revenue / r.spent) * 10) / 10 : '',
+          currency: r.currency,
+        }))
+      return {
+        columns: [
+          { key: 'name', label: '红人' },
+          { key: 'spent', label: '花费', align: 'right' as const, format: 'money' as const },
+          { key: 'clicks', label: '点击', align: 'right' as const, format: 'count' as const },
+          { key: 'orders', label: '订单', align: 'right' as const, format: 'count' as const },
+          { key: 'revenue', label: '收入', align: 'right' as const, format: 'money' as const },
+          { key: 'cpc', label: '每次点击', align: 'right' as const, format: 'money' as const },
+          { key: 'roi', label: '回本', align: 'right' as const, format: 'ratio' as const },
+        ],
+        rows,
+      }
+    },
+  },
+  {
+    /*
+     * 带货归因三态卡（KOLAgents conversion-card）：
+     * - 没连店铺 → 一行「连上店铺才算得出谁带了货」+ 去连接（订单要从店里读，联盟码 / UTM 才对得上）；
+     * - 连了、追踪链接还没带来一次点击 → 一行「等第一单」；
+     * - 有数 → 一排数（点击 / 订单 / 收入 / 花费 / 回本）+ 按红人的表。
+     */
+    name: 'kol.conversion',
+    source: 'kol',
+    returns: 'table',
+    run: (ctx) => {
+      const columns = [
+        { key: 'name', label: '红人' },
+        { key: 'clicks', label: '点击', align: 'right' as const, format: 'count' as const },
+        { key: 'orders', label: '订单', align: 'right' as const, format: 'count' as const },
+        { key: 'revenue', label: '收入', align: 'right' as const, format: 'money' as const },
+      ]
+      const shop = ctx.sources.find((src) => src.id === 'shop')
+      if (shop !== undefined && !shop.connected)
+        return {
+          columns,
+          rows: [],
+          state: 'not_connected' as const,
+          footer: { text: '连上店铺才算得出谁带了货', href: '/connections', link_label: '去连接' },
+        }
+      const links = ofKolChannel(ctx.kol?.attribution ?? [], ctx)
+      const clicks = links.reduce((sum, l) => sum + l.clicks, 0)
+      const orders = links.reduce((sum, l) => sum + l.orders, 0)
+      if (clicks === 0 && orders === 0)
+        return {
+          columns,
+          rows: [],
+          state: 'waiting' as const,
+          footer: { text: '追踪链接还没带来点击，第一单进来就有数' },
+        }
+      const revenue = Math.round(links.reduce((sum, l) => sum + l.revenue, 0) * 100) / 100
+      const spent = ofKolChannel(ctx.kol?.retro ?? [], ctx).reduce((sum, r) => sum + r.spent, 0)
+      const currency = links[0]?.currency ?? 'USD'
+      const byName = new Map<string, { clicks: number; orders: number; revenue: number }>()
+      for (const l of links) {
+        const hit = byName.get(l.display_name) ?? { clicks: 0, orders: 0, revenue: 0 }
+        byName.set(l.display_name, {
+          clicks: hit.clicks + l.clicks,
+          orders: hit.orders + l.orders,
+          revenue: hit.revenue + l.revenue,
+        })
+      }
+      return {
+        columns,
+        rows: [...byName.entries()]
+          .sort((a, b) => b[1].revenue - a[1].revenue)
+          .slice(0, 10)
+          .map(([name, v]) => ({ name, ...v, currency })),
+        state: 'ready' as const,
+        metrics: [
+          { label: '点击', value: clicks, format: 'count' as const },
+          { label: '订单', value: orders, format: 'count' as const },
+          { label: '收入', value: revenue, format: 'money' as const, currency },
+          { label: '花费', value: spent, format: 'money' as const, currency },
+          ...(spent > 0
+            ? [
+                {
+                  label: '回本',
+                  value: Math.round((revenue / spent) * 10) / 10,
+                  format: 'ratio' as const,
+                },
+              ]
+            : []),
+        ],
       }
     },
   },

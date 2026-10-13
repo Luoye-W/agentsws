@@ -491,7 +491,8 @@ export function createKolStore(options: KolStoreOptions): KolStore {
     saveCollaboration: (row) => {
       const prev = backend.get<Collaboration>('collaboration', row.id)
       const moved = prev === undefined || prev.stage !== row.stage
-      const fresh = row.stage_changed_at !== undefined && row.stage_changed_at !== prev?.stage_changed_at
+      const fresh =
+        row.stage_changed_at !== undefined && row.stage_changed_at !== prev?.stage_changed_at
       backend.put(
         'collaboration',
         row.id,
@@ -651,6 +652,7 @@ export function kolDeckData(
           kind: d.kind as string,
           due_at: d.due_at,
           ...(d.url === undefined ? {} : { url: d.url }),
+          submitted: d.submitted_at !== undefined,
         }
       }),
     attribution: store
@@ -688,13 +690,15 @@ export function kolDeckData(
  */
 export function kolRetro(
   collaborations: readonly Collaboration[],
-  links: readonly { collaboration_id: string; revenue: number }[],
+  links: readonly { collaboration_id: string; revenue: number; clicks?: number; orders?: number }[],
   nameOf: (creator_id: string) => string,
 ): NonNullable<KolDeckData['retro']> {
   return collaborations.flatMap((c) => {
     const mine = links.filter((l) => l.collaboration_id === c.id)
     const spent = spentOn(c)
     const revenue = Math.round(mine.reduce((sum, l) => sum + l.revenue, 0) * 100) / 100
+    const clicks = mine.reduce((sum, l) => sum + (l.clicks ?? 0), 0)
+    const orders = mine.reduce((sum, l) => sum + (l.orders ?? 0), 0)
     if (spent === 0 && revenue === 0) return []
     const verdict: 'worth' | 'not_yet' | 'unknown' =
       spent === 0 || mine.length === 0 ? 'unknown' : revenue >= spent ? 'worth' : 'not_yet'
@@ -714,6 +718,8 @@ export function kolRetro(
         currency: c.currency,
         verdict,
         at: at[at.length - 1] ?? '',
+        clicks,
+        orders,
       },
     ]
   })

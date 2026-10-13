@@ -401,6 +401,7 @@ export type {
   KolCampaignPick,
   KolCampaignView,
   KolCollaborationInput,
+  KolCollaborationRow,
   KolContactView,
   KolCreatorDetail,
   KolCreatorInput,

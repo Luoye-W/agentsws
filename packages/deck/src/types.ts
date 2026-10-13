@@ -684,6 +684,8 @@ export interface KolDeckData {
     kind: string
     due_at: string
     url?: string
+    /** WP302：交上来了没有（排期卡只看还没交的）。 */
+    submitted?: boolean
   }[]
   /** 归因表：一条链接一行。 */
   attribution: {
@@ -725,6 +727,9 @@ export interface KolDeckData {
     verdict: 'worth' | 'not_yet' | 'unknown'
     /** 最近一次花钱或回填的时刻（记录里按它排）。 */
     at: string
+    /** WP302：追踪链接回填的点击与订单（「带货最好的红人」那张表用）。 */
+    clicks?: number
+    orders?: number
   }[]
 }
 
@@ -1365,6 +1370,18 @@ export interface TableResult {
    * 表格里每一行都写一遍「没填」是噪声。
    */
   footer?: { text: string; href?: string; link_label?: string }
+  /**
+   * WP302（决策 406）：归因三态卡用——没连店铺（算不出来）/ 等第一单 / 有数据。
+   * 不给 = 普通表。
+   */
+  state?: 'not_connected' | 'waiting' | 'ready'
+  /** WP302：表上面那一排数（归因卡的点击 / 订单 / 收入 / 花费 / ROI）。 */
+  metrics?: {
+    label: string
+    value: number
+    format?: 'money' | 'count' | 'ratio'
+    currency?: string
+  }[]
 }
 
 export interface SeriesResult {
@@ -1386,7 +1403,16 @@ export type QueryResult =
 // ── 积木与面板 ─────────────────────────────────────────────────────────
 
 /** 29 §1 组件注册表里允许的组件名（未注册的一律拒）。 */
-export type ComponentName = 'stat_tile' | 'table' | 'chart_line' | 'timeline' | 'kv' | 'markdown'
+export type ComponentName =
+  | 'stat_tile'
+  | 'table'
+  | 'chart_line'
+  | 'timeline'
+  | 'kv'
+  | 'markdown'
+  // WP302（决策 406）：漏斗（docs/96 §337 列过的图表组件）与归因三态卡，数据形状都是表
+  | 'funnel'
+  | 'conversion'
 
 export interface BlockDef {
   id: string
@@ -1397,6 +1423,11 @@ export interface BlockDef {
   source: DataSourceId
   /** 面板块里的「查看完整报告 →」 */
   report_url?: string
+  /**
+   * WP302（docs/96 P3「没有内容不出」）：表是空的就整块不出（逾期排期、Top 达人这种
+   * 「没有 = 好事 / 还早」的块）。不给 = 老行为（空表照出表头）。
+   */
+  hide_when_empty?: boolean
 }
 
 export interface BlockData {

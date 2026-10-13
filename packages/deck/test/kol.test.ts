@@ -116,12 +116,12 @@ describe('WP67 红人面板五个分块（48 §5.1）', () => {
         'kol.awaiting_reply',
         'kol.pending_review_count',
         'kol.revenue',
-        'kol.discovery',
-        'kol.outreach_funnel',
+        // WP302（决策 406）：看图表里换成 KOLAgents 仪表盘那几张
+        'kol.reach_funnel',
+        'kol.schedule',
+        'kol.top_creators',
+        'kol.conversion',
         'kol.sandbox_funnel',
-        'kol.collaborations',
-        'kol.pending_deliverables',
-        'kol.attribution',
       ])
       expect(
         blocks.every((b) => b.source === 'kol'),
@@ -220,6 +220,127 @@ describe('WP67 红人面板五个分块（48 §5.1）', () => {
     )
     // 不是红人职责的记录里不掺复盘
     expect(records({ ...withKol(data), role_id: 'dtc.support' })).toEqual([])
+  })
+
+  it('WP302 漏斗：处于或已越过那一级的人数，一级只比上一级少；一条合作都没有就是空表', () => {
+    const data: KolDeckData = {
+      ...KOL_DATA,
+      funnel_by_channel: {
+        youtube: [
+          { stage: 'sourced', label: '已找到', count: 4 },
+          { stage: 'contacted', label: '已建联', count: 3 },
+          { stage: 'replied', label: '已回复', count: 1 },
+          { stage: 'agreed', label: '已签定', count: 2 },
+          { stage: 'declined', label: '已谢绝', count: 1 },
+        ],
+      },
+    }
+    expect(table('kol.reach_funnel', withKol(data)).rows).toEqual([
+      { stage: '进了名单', count: 11 },
+      { stage: '已建联', count: 6 },
+      { stage: '有回音', count: 3 },
+      { stage: '谈条件', count: 2 },
+      { stage: '谈成', count: 2 },
+    ])
+    expect(table('kol.reach_funnel', { ...withKol(data), role_id: 'kol.x' }).rows).toEqual([])
+  })
+
+  it('WP302 交稿排期：只出还没交的、逾期或三天内到期的；积木上 hide_when_empty', () => {
+    const base = withKol(KOL_DATA)
+    const ctx = {
+      ...base,
+      now: '2026-10-02T00:00:00Z',
+      kol: {
+        ...KOL_DATA,
+        pending_deliverables: [
+          {
+            deliverable_id: 'd1',
+            display_name: 'A',
+            channel: 'youtube',
+            kind: 'video',
+            due_at: '2026-09-30T00:00:00Z',
+          },
+          {
+            deliverable_id: 'd2',
+            display_name: 'B',
+            channel: 'youtube',
+            kind: 'post',
+            due_at: '2026-10-04T00:00:00Z',
+          },
+          {
+            deliverable_id: 'd3',
+            display_name: 'C',
+            channel: 'youtube',
+            kind: 'video',
+            due_at: '2026-10-20T00:00:00Z',
+          },
+          {
+            deliverable_id: 'd4',
+            display_name: 'D',
+            channel: 'youtube',
+            kind: 'video',
+            due_at: '2026-09-29T00:00:00Z',
+            submitted: true,
+          },
+        ],
+      },
+    }
+    expect(table('kol.schedule', ctx).rows).toEqual([
+      { name: 'A', kind: '视频', due_at: '2026-09-30', status: '逾期 2 天' },
+      { name: 'B', kind: '帖子', due_at: '2026-10-04', status: '还剩 2 天' },
+    ])
+    expect(blocksForRole('kol.youtube').find((b) => b.id === 'kol.schedule')?.hide_when_empty).toBe(
+      true,
+    )
+  })
+
+  it('WP302 带货最好的红人与归因三态：没连店铺 / 等第一单 / 有数据', () => {
+    const data: KolDeckData = {
+      ...KOL_DATA,
+      retro: [
+        {
+          collaboration_id: 'col_1',
+          display_name: 'Gadget Jonas',
+          channel: 'youtube',
+          spent: 400,
+          revenue: 645.5,
+          currency: 'USD',
+          verdict: 'worth',
+          at: '2026-10-10T00:00:00Z',
+          clicks: 320,
+          orders: 5,
+        },
+      ],
+    }
+    expect(table('kol.top_creators', withKol(data)).rows[0]).toMatchObject({
+      name: 'Gadget Jonas',
+      spent: 400,
+      cpc: 1.25,
+      roi: 1.6,
+    })
+    const conv = (ctx: QueryContext) => {
+      const r = runQuery('kol.conversion', ctx, 'last_7d')
+      if (r.status !== 'ok') throw new Error('conversion')
+      return r.data as { state?: string; metrics?: { label: string; value: number }[] }
+    }
+    const shopOn = (ctx: QueryContext): QueryContext => ({
+      ...ctx,
+      sources: [
+        ...ctx.sources.filter((src) => src.id !== 'shop'),
+        { id: 'shop', label: '店铺后台', connected: true },
+      ],
+    })
+    expect(conv(shopOn(withKol(data))).state).toBe('ready')
+    expect(conv(shopOn(withKol(data))).metrics?.find((m) => m.label === '回本')?.value).toBe(1.6)
+    const shopOff = (ctx: QueryContext): QueryContext => ({
+      ...ctx,
+      sources: [
+        ...ctx.sources.filter((src) => src.id !== 'shop'),
+        { id: 'shop', label: '店铺后台', connected: false },
+      ],
+    })
+    expect(conv(shopOff(withKol(data))).state).toBe('not_connected')
+    expect(conv(shopOn(withKol({ ...data, attribution: [] }))).state).toBe('waiting')
   })
 
   it('WP295：漏斗按渠道；这条渠道一条合作都没有 = 形状照旧、全是 0', () => {
