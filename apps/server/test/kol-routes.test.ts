@@ -121,6 +121,15 @@ describe('WP68 红人库路由：找人与资料', () => {
     expect(row.has_contact).toBe(false)
   })
 
+  it('WP295：关键词比品类长（「数码产品」）也认得出品类「数码」，别的品类不带进来', async () => {
+    await addCreator('Gadget Jonas')
+    await addCreator('Desk Rosa', { category: '家居' })
+    const hit = await data<{ rows: { handle: string }[] }>(
+      await api(`/v1/kol/creators?q=${encodeURIComponent('数码产品')}`),
+    )
+    expect(hit.rows.map((r) => r.handle)).toEqual(['gadgetjonas'])
+  })
+
   it('同一渠道同一 handle 建两次 = 同一条账号，不建第二条', async () => {
     const first = await addCreator('Gadget Jonas')
     const again = await addCreator('Gadget Jonas')

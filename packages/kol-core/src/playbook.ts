@@ -173,7 +173,32 @@ const NOISE = [
   '粉丝',
   '的',
   '个',
+  /*
+   * WP295：快捷提示「按这个品类……按匹配度排给我」原样发出去，剩下的是「品类 匹配度」——
+   * 拿它当关键词，库里一个人都对不上（回「一个合适的都没找到」）。这几个词说的是
+   * "怎么排、按什么挑"，不是"要什么样的人"。
+   */
+  '品类',
+  '匹配度',
+  '匹配',
+  '排序',
+  '列出来',
+  '列一下',
+  '一下',
+  '有哪些',
+  '哪些',
+  '合适',
+  '推荐',
+  '一些',
+  '做',
 ]
+
+/**
+ * WP295：渠道词常粘在品类词后面（「数码频道」「美妆博主」「科技油管主」）——中文没有空格，
+ * 按词拆不开，整串当关键词又对不上库里的「数码」。中文的渠道词按**子串**去掉；
+ * 英文的（`ins` 这种短词）仍只按整词去，免得把 `insulated` 切坏。
+ */
+const CJK_CHANNEL_WORDS = ['频道', '油管主', '油管', '红人', '达人', '博主', '脸书', '推特', 'up 主', 'up主', 'UP 主', 'UP主', '抖音国际']
 
 /** 说的是"哪条渠道"而不是"什么样的人"的那些词（与 {@link channelInText} 同一份口径）。 */
 const CHANNEL_WORDS = [
@@ -198,6 +223,7 @@ const CHANNEL_WORDS = [
 
 export function searchQueryOf(text: string): string {
   let out = text.replace(/\d+(?:\.\d+)?\s*万?/g, ' ').replace(/[，。,.!！?？;；:：、]/g, ' ')
+  for (const n of CJK_CHANNEL_WORDS) out = out.split(n).join(' ')
   for (const n of NOISE) out = out.split(n).join(' ')
   const words = out
     .split(/\s+/)

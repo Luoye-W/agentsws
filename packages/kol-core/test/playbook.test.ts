@@ -67,6 +67,16 @@ describe('参数抽取', () => {
     expect(searchQueryOf(FIND)).not.toContain('20')
   })
 
+  it('WP295：快捷提示那句话不剩关键词；粘着的渠道词去掉，品类留下', () => {
+    // 「品类 匹配度」当关键词 = 库里一个人都对不上（岗位页头一个快捷提示回「一个合适的都没找到」）
+    expect(searchQueryOf(FIND)).toBe('')
+    expect(searchQueryOf('在 YouTube 上找粉丝 1 万到 10 万的数码频道')).toBe('数码')
+    expect(searchQueryOf('找 10 个美妆博主')).toBe('美妆')
+    expect(searchQueryOf('帮我找一些做户外露营的 YouTube 频道')).toBe('户外露营')
+    // 英文短渠道词只按整词去：insulated 不被切成 ulated
+    expect(searchQueryOf('find insulated bottle creators on ins')).toContain('insulated')
+  })
+
   it('写成纯数字的区间也认', () => {
     expect(parseFollowerBand('粉丝 10000-100000 的')).toEqual({ min: 10_000, max: 100_000 })
     // 两头反了不认（宁可回 undefined 让调用方用默认值，也不静默换个数）

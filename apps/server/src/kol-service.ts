@@ -803,7 +803,12 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
     ]
       .join(' ')
       .toLowerCase()
-    return words.some((w) => hay.includes(w))
+    /*
+     * WP295：品类反过来也算——人说「数码产品」「户外露营」，库里那一格写的是「数码」「户外」。
+     * 只对品类这一格这么认（两个字起），名字与账号仍要关键词整个出现。
+     */
+    const category = (account.category ?? '').toLowerCase()
+    return words.some((w) => hay.includes(w) || (category.length >= 2 && w.includes(category)))
   }
 
   /**
