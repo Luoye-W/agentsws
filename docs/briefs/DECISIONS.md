@@ -608,7 +608,7 @@
 | 398 | （Luoye 10-13）SEO 数据来源 | **直接买 DataForSEO**，不经 Treg、不用 Semrush（Semrush 经 Treg 也要自带 Business 订阅 + 单位包）；直连适配器可参考 open-seo（MIT）的 DataForSEO 对接；不装 open-seo 应用；Treg 只补我们和 DataForSEO 都没有的（先 Hunter）；Treg 代码只借鉴设计、不抄（许可证） | 中 |
 | 399 | （Luoye 10-13）agentsws-theme 改闭源后工坊建站用什么主题 | **A：工坊改用 Shopify 官方 Horizon 做底**，我们的主题只留给付费商业项目、工坊不再使用和分发（WP301）；GitHub 仓库由 Fable 改私有（beta.3 发完后）；beta.3 照发（Luoye：没事） | 高 |
 | 400 | （WP299）公司档案加「主营品类」一格 | 先不加，品类从一句话介绍里认（**10-13 Luoye 同意**） | 低 |
-| 401 | （WP299）AI 能不能也提寄样 / 付款卡 | 待 Luoye 定（10-13 问了「没懂」，Fable 已解释）：建议先不给，AI 只提醒 | 低 |
+| 401 | （WP299）AI 能不能也提寄样 / 付款卡 | 先不给：寄样与付款由人在合作页登记，AI 只提醒（**10-13 Luoye 同意**） | 低 |
 | 402 | （WP299）「只撞硬顶不算超上限」全岗位生效（必须人点的卡点一次就算） | 确认（**10-13 Luoye 同意**） | 低 |
 | 403 | （docs/98）KOLAgents 搬组件与纯逻辑、不搬控制中心壳，决定一律进卡片流；MkSaaS / Plasmo 模板代码不进开源仓 | 同意（**10-13 Luoye 同意**） | 中 |
 | 404 | （docs/98）合作阶段机以工坊十段为准 | 同意（**10-13 Luoye 同意**） | 低 |
