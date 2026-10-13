@@ -61,6 +61,11 @@ export interface OutreachVars {
    * 服务端按这个人账号上的语言定（`zh*` → 中文，其余与不知道 → 英文）。
    */
   language?: OutreachLanguage
+  /**
+   * WP299（决策 388）：公司实体地址（公司档案那一格）。英文信页脚用它；没有就不带地址那一行
+   * （卡上提醒去填，不拦）。
+   */
+  postal_address?: string
 }
 
 /** WP295：开发信的语言。模板是写死的两份，不让模型现写（理由见 {@link TEMPLATES}）。 */
@@ -205,6 +210,7 @@ const TEMPLATES_EN: Readonly<
       'Best,',
       `${v.sender_name}`,
       v.brand,
+      ...footerEn(v),
     ].join('\n'),
   }),
   follow_up: (v) => ({
@@ -219,6 +225,7 @@ const TEMPLATES_EN: Readonly<
       'Best,',
       `${v.sender_name}`,
       v.brand,
+      ...footerEn(v),
     ].join('\n'),
   }),
   final: (v) => ({
@@ -232,8 +239,25 @@ const TEMPLATES_EN: Readonly<
       '',
       `${v.sender_name}`,
       v.brand,
+      ...footerEn(v),
     ].join('\n'),
   }),
+}
+
+/**
+ * WP299（决策 388）：英文信的页脚——一句「不想再收到就回 no thanks」+ 公司实体地址（有才带）。
+ * 美国等地对商业邮件要求有退订办法与实际地址；回信识别那一侧本来就认「no thanks」这类说法。
+ */
+export const OUTREACH_OPT_OUT_EN = 'If you\'d rather not hear from us, just reply "no thanks".'
+
+function footerEn(v: OutreachVars): string[] {
+  const address = v.postal_address?.trim()
+  return [
+    '',
+    '--',
+    OUTREACH_OPT_OUT_EN,
+    ...(address === undefined || address === '' ? [] : [`${v.brand} · ${address}`]),
+  ]
 }
 
 /**

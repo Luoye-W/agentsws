@@ -490,7 +490,15 @@ export function kolQuoteApply(
    * 阶段只在**还没谈**的时候往前推一步：已经到「谈成」「交付中」的合作，
    * 再批一张议价卡不该把它拽回「谈条件中」（那是倒着走阶段机）。
    */
-  const backwards = ['negotiating', 'agreed', 'delivering', 'delivered', 'closed', 'declined']
+  const backwards = [
+    'negotiating',
+    'agreed',
+    'sample_sent',
+    'delivering',
+    'delivered',
+    'closed',
+    'declined',
+  ]
   const stage = backwards.includes(row.stage) ? row.stage : 'negotiating'
   store.saveCollaboration({
     ...row,

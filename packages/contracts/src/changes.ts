@@ -103,6 +103,9 @@ export type ChangeKind =
   | 'kol_deliverable_review'
   /** WP67（48 §5.1）：发一个联盟折扣码。L2，且折扣率有上限（`max_affiliate_discount_pct`）。 */
   | 'kol_affiliate_code'
+  // WP299（决策 386 / 387）：寄样成本、付给红人的钱——都是「花钱」家族的卡，永远人审
+  | 'kol_sample'
+  | 'kol_payment'
   /** WP67（48 §5.1）：建一条带 UTM 的追踪链接。L3——它不动钱也不发信，只是给链接加参数。 */
   | 'kol_tracked_link'
   /**

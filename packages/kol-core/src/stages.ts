@@ -14,8 +14,9 @@ import type { CollaborationStage, DeliverableReview } from '@agentsws/contracts'
 /**
  * 合作的合法迁移（48 §5.1 那条链）。
  *
- * 主线单向：`sourced → contacted → replied → negotiating → agreed → delivering
- * → delivered → closed`。三条额外的边，每条都有理由：
+ * 主线单向：`sourced → contacted → replied → negotiating → agreed →（sample_sent →）delivering
+ * → delivered → closed`。WP299 加了「已寄样」：寄样的合作走它，不寄样的仍从「谈成」直接开拍。
+ * 三条额外的边，每条都有理由：
  *
  * - 任何一态都能掉到 `declined`（对方随时可以说不）；
  * - `contacted → negotiating`（有的人第一封信就直接开价，跳过"回复"那一格没意义）；
@@ -31,7 +32,9 @@ export const COLLABORATION_TRANSITIONS: Readonly<
   contacted: ['replied', 'negotiating', 'declined'],
   replied: ['negotiating', 'declined'],
   negotiating: ['agreed', 'declined'],
-  agreed: ['delivering', 'declined'],
+  // WP299（决策 386）：谈成之后可以先寄样，也可以不寄样直接开拍
+  agreed: ['sample_sent', 'delivering', 'declined'],
+  sample_sent: ['delivering', 'declined'],
   delivering: ['delivered', 'declined'],
   delivered: ['closed', 'declined'],
   closed: [],
@@ -56,6 +59,7 @@ const STAGE_ZH: Readonly<Record<CollaborationStage, string>> = {
   replied: '已回复',
   negotiating: '谈条件中',
   agreed: '已签定',
+  sample_sent: '已寄样',
   delivering: '拍摄制作中',
   delivered: '已交付',
   closed: '已结案',
@@ -149,6 +153,7 @@ export const FUNNEL_ORDER: readonly CollaborationStage[] = [
   'replied',
   'negotiating',
   'agreed',
+  'sample_sent',
   'delivering',
   'delivered',
   'closed',
