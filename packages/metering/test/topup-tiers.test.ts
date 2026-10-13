@@ -62,6 +62,10 @@ describe('付费三块', () => {
     }
   })
 
+  it('WP304 / WP305：高级主题按店买断（theme.premium.*）没写 block 也归增值服务', () => {
+    expect(pricingBlockOf({ capability: 'theme.premium.store' })).toBe('service')
+  })
+
   it('三块都不空——空的那一块在界面上是一张永远 0 的卡', () => {
     const seen = new Set(PRICING_FILE.entries.map((e) => pricingBlockOf(e)))
     expect([...PRICING_BLOCKS].every((b) => seen.has(b))).toBe(true)

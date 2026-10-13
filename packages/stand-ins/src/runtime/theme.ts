@@ -6,7 +6,7 @@
  *
  * | 工具 | 干什么 | 动线上吗 |
  * |---|---|---|
- * | `theme_init_from_base` | WP301：在店里复制一份 Shopify 官方 Horizon（未发布）拉到本品牌的主题工作目录，按它的 schema 生成目录 | 只多一份未发布副本 |
+ * | `theme_init_from_base` | WP301：在店里复制一份 Shopify 官方 Horizon（未发布）拉到本品牌的主题工作目录，按它的 schema 生成目录；WP304：没说用哪套先出选主题卡（高级主题 / 店里任意 2.0 免费主题） | 只多一份未发布副本 |
  * | `theme_list` | 列店里的主题（线上那一份 / 副本） | 只读 |
  * | `theme_pull` | 把线上（或指定那一份）拉到工作目录 | 只读 |
  * | `theme_check` | 官方 `theme check` 本地检查 | 不动 |
@@ -59,14 +59,28 @@ export const THEME_TOOL_DEFS: readonly ToolDef[] = [
   {
     name: THEME_INIT_TOOL,
     description:
-      '起底：在店里复制一份 Shopify 官方的 Horizon 主题（线上就是 Horizon 就复制线上那一份，不是就找店里已加的 Horizon），' +
-      '成一份未发布主题，拉到这个品牌的主题工作目录，并按这份主题的分区 / 块生成目录 CATALOG.index.json 与 CATALOG.json。' +
-      '线上一个字节不动。目录里已经有东西时不覆盖；replace=true 会先把旧的挪到一边（不删）再起。' +
-      '起好之后先用 theme_read_file 读 CATALOG.index.json。店里一份 Horizon 都没有时，照回话请人从主题商店免费加一份。',
+      '起底：人没说用哪套主题就不给 source——会出一张选主题卡（我们的高级主题排第一，也可以用店里已装的免费主题），回 choice，' +
+      '这次就停下、照实说一声（人选了工坊会起好底、接着做）。人说了用 Horizon / 店里某一份 → source="store"（可带 theme_id）；' +
+      '说要高级主题 → source="premium"。店里的主题是复制成一份未发布主题再拉下来（任何 Online Store 2.0 主题都行，Horizon 优先），' +
+      '并按它的分区 / 块生成目录 CATALOG.index.json 与 CATALOG.json。线上一个字节不动。目录里已经有东西时不覆盖；' +
+      'replace=true（换主题）会先把旧的挪到一边（不删）再起。起好之后先用 theme_read_file 读 CATALOG.index.json。',
     input_schema: {
       type: 'object',
       properties: {
-        replace: { type: 'boolean', description: '目录里已有东西时，先挪到一边再起（默认 false）' },
+        replace: {
+          type: 'boolean',
+          description: '目录里已有东西时（换主题），先挪到一边再起（默认 false）',
+        },
+        source: {
+          type: 'string',
+          enum: ['store', 'premium'],
+          description:
+            'store = 店里的免费主题；premium = 我们的高级主题。人没说就不给（出选主题卡）',
+        },
+        theme_id: {
+          type: 'string',
+          description: '只对 store：用店里哪一份（theme_list 回的 id）；不给 = Horizon 优先',
+        },
       },
     },
   },
@@ -186,9 +200,9 @@ export const THEME_WORK_ORDER = 26
 
 export const THEME_WORK_RULES = [
   '网页模板的做法（一口气做到出预览，中途不停下来汇报；做完再用一段话交代）：',
-  '1. 主题工作目录是空的就先起底（theme_init_from_base：在店里复制一份 Shopify 官方的 Horizon 拉下来）；起过底就别再起。',
-  '2. 先读瘦目录 CATALOG.index.json（每个分区 / 块一行：id、名字、收哪些块），要用的分区 / 块再给 ids 读一次 CATALOG.json 的完整设置与预设。块名、设置 id 一律照这份目录抄，不凭记忆：分区只收它 accepts_blocks 里的块，@theme = 所有不以 _ 开头的公开块，_ 开头的私有块只放进点名列了它的父级；static_blocks 里的块照预设原样留着、带 "static": true。照着 presets 搭最稳。不必读 .liquid 源码，同一个文件读过就别再读。',
-  '3. 只改商店层文件：templates/index.json（放哪些分区、什么顺序、每块的设置）、页头页尾的 section 组、config/settings_data.json（颜色、字体等主题设置）、locales 店面文案；.liquid / CSS / JS 是 Horizon 的核心代码，不改，要一小段自定义代码用现成的 custom-liquid。写完回话里有 problems 就照着改。',
+  '1. 主题工作目录是空的就先起底（theme_init_from_base）。人没说用哪套主题就不给 source：会出一张选主题卡，回 choice 就停下、照实说一声；人说了用 Horizon / 店里哪一份给 source="store"，要高级主题给 source="premium"。起过底就别再起。',
+  '2. 先读瘦目录 CATALOG.index.json（每个分区 / 块一行：id、名字、收哪些块），要用的分区 / 块再给 ids 读一次 CATALOG.json 的完整设置与预设。块名、设置 id 一律照这份目录抄，不凭记忆；目录开头的 how_to 是这份主题自己的写法（@theme、私有块、静态块、分区本地块，有哪样说哪样），照它搭。照着 presets 搭最稳。不必读 .liquid 源码，同一个文件读过就别再读。',
+  '3. 只改商店层文件：templates/index.json（放哪些分区、什么顺序、每块的设置）、页头页尾、config/settings_data.json（颜色、字体等主题设置）、locales 店面文案；.liquid / CSS / JS 是主题的核心代码，不改，要一小段自定义代码用现成的 custom-liquid。写完回话里有 problems 就照着改。',
   '4. 跑官方检查，有错误就改，改到 0 个错误。',
   '5. 推成未发布主题；最后给预览链接、改了哪几块、怎么退回。发布只出卡，等人点。',
   '工具回话里说这份是旧的自带主题（agentsws-theme）：照实跟人说一句「工坊已改用 Shopify 官方 Horizon」，先起底在 Horizon 上新起一份再做；旧的那份不删、不迁、不再改。',
@@ -290,6 +304,26 @@ export interface ThemeInitData {
   moved_aside?: boolean
   /** WP301：挪开的是旧的自带主题那一份。 */
   legacy_moved?: boolean
+  /** WP304：这一份是我们的高级主题。 */
+  premium?: boolean
+  /** WP304：人刚在选主题卡上选好、起好了底，这一次没再起。 */
+  reused?: boolean
+}
+
+/** WP304：起底先出了一张选主题卡（`{ ok: false, choice }`）。 */
+export interface ThemeChoiceData {
+  approval_item_id: string
+  premium: string
+  store_themes: number
+  message: string
+}
+
+export function choiceOf(data: unknown): ThemeChoiceData | undefined {
+  const o = obj(data)
+  const c = obj(o.choice)
+  return o.ok === false && typeof c.approval_item_id === 'string'
+    ? (c as unknown as ThemeChoiceData)
+    : undefined
 }
 
 export function initOf(data: unknown): ThemeInitData | undefined {
@@ -323,7 +357,13 @@ export interface ThemeCheckData {
 
 const PUBLISH = /发布|上线|换上|设为线上|publish|go live/i
 const BUILD = /搭|做|建|改|首页|主题|模板|预览|horizon|agentsws-theme|homepage|theme|preview|build/i
-const BASE = /horizon|官方主题|agentsws-theme|开源主题|从头|新主题|起底/i
+const BASE =
+  /horizon|官方主题|agentsws-theme|开源主题|从头|新主题|起底|换主题|换个主题|选主题|高级主题/i
+/** WP304：话里点了名用哪套（Horizon / 店里的免费主题 / 高级主题）——不出选主题卡。 */
+const NAMED_STORE = /horizon|官方主题|开源主题|用(店里的?)?免费主题/i
+/** 人说要高级主题（「我们的高级主题排第一」这种我们自己回过的话不算）。 */
+const NAMED_PREMIUM = /用(我们的)?高级主题|要高级主题|买高级主题|高级主题(来)?(搭|做|建)|付费主题|premium theme/i
+const SWITCH = /换主题|换个主题|换一套主题|重新选主题/i
 
 export interface ThemeStep {
   tool: string
@@ -335,7 +375,9 @@ export interface ThemeStep {
  * 回的是要调的第一批工具（发布那一步要先知道推上去的 id，由剧本在推完之后接着调）。
  *
  * - 说「发布 / 上线」→ 先列一次，再对最新那份副本提发布卡；
- * - 说「用 Horizon 搭 / 从头搭」→ 起底（在店里复制一份 Horizon）→ 检查 → 推未发布副本；
+ * - 说「用 Horizon 搭」→ 起底（`source: 'store'`，在店里复制一份 Horizon）→ 检查 → 推未发布副本；
+ * - WP304：说「从头搭 / 换主题」没点名用哪套 → 起底不给 source：出选主题卡就停（人选了服务端起底、按原话再跑一次，
+ *   那一次起底回 `reused`，接着检查、推）；说「高级主题」→ `source: 'premium'`；
  * - 工具回话说这份是旧的自带主题（WP301）→ 剧本在当场插一步起底，在 Horizon 上新起一份再接着做；
  * - 别的主题活 → 检查 → 推未发布副本（stub 不会写 Liquid，改文件那一步留给真模型）。
  */
@@ -345,9 +387,22 @@ export function themeBranch(req: RunRequest, text: string): ThemeStep[] | undefi
   if (!has(THEME_PUSH_TOOL)) return undefined
   if (PUBLISH.test(text) && has(THEME_LIST_TOOL)) return [{ tool: THEME_LIST_TOOL, input: {} }]
   if (!BUILD.test(text)) return undefined
-  const name = BASE.test(text) ? '首页草稿（Horizon）' : '主题改动草稿'
+  const name = !BASE.test(text)
+    ? '主题改动草稿'
+    : /horizon/i.test(text)
+      ? '首页草稿（Horizon）'
+      : '首页草稿'
+  // WP304：没点名用哪套 → 不给 source（出选主题卡）；说「换主题」→ replace
+  const init: Record<string, unknown> = {
+    ...(NAMED_PREMIUM.test(text)
+      ? { source: 'premium' }
+      : NAMED_STORE.test(text)
+        ? { source: 'store' }
+        : {}),
+    ...(SWITCH.test(text) ? { replace: true } : {}),
+  }
   return [
-    ...(BASE.test(text) ? [{ tool: THEME_INIT_TOOL, input: {} }] : []),
+    ...(BASE.test(text) ? [{ tool: THEME_INIT_TOOL, input: init }] : []),
     { tool: THEME_CHECK_TOOL, input: {} },
     { tool: THEME_PUSH_TOOL, input: { name } },
   ]
@@ -414,9 +469,17 @@ export function renderThemeAnswer(input: {
   published?: ThemePublishData
   /** WP301：这份工作目录是旧的自带主题（照实说一句；不迁、不删）。 */
   legacy?: ThemeLegacyData
+  /** WP304：起底先出了一张选主题卡（这次就停在这儿）。 */
+  choice?: ThemeChoiceData
   failed: Readonly<Record<string, string>>
 }): string {
   const lines: string[] = []
+  if (input.choice !== undefined)
+    lines.push(
+      input.choice.premium === 'buy' || input.choice.premium === 'owned'
+        ? '先选主题：出了一张选主题卡（我们的高级主题排第一，也可以用店里已装的免费主题）。选好了我起底、接着做。'
+        : `先选主题：出了一张选主题卡（高级主题${input.choice.premium === 'needs_account' ? '登录工坊账号后可买' : '即将开放'}，先选店里已装的免费主题）。选好了我起底、接着做。`,
+    )
   const old = input.legacy
   if (old !== undefined)
     lines.push(
@@ -427,9 +490,19 @@ export function renderThemeAnswer(input: {
     )
   if (input.initialized === true) {
     const src = input.init?.source
-    lines.push(
-      `在店里复制了一份 Shopify 官方的 Horizon 起底（${src === undefined ? '' : src.live ? '复制的是线上那一份，' : `复制的是「${src.name}」，`}未发布，线上没动）。`,
-    )
+    const themeName = input.init?.theme?.name
+    if (input.init?.reused === true)
+      lines.push(
+        `用你选的${input.init.premium === true ? '高级主题' : `「${src?.name ?? themeName ?? '主题'}」`}起好的底接着做。`,
+      )
+    else if (input.init?.premium === true)
+      lines.push(
+        `用我们的高级主题起底（${input.init.copy === undefined ? '' : `推成了未发布主题「${input.init.copy.name}」，`}线上没动）。`,
+      )
+    else
+      lines.push(
+        `在店里复制了一份${themeName === undefined || themeName === 'Horizon' ? ' Shopify 官方的 Horizon ' : `「${themeName}」`}起底（${src === undefined ? '' : src.live ? '复制的是线上那一份，' : `复制的是「${src.name}」，`}未发布，线上没动）。`,
+      )
   } else if (input.failed[THEME_INIT_TOOL] !== undefined)
     lines.push(`没起成底：${input.failed[THEME_INIT_TOOL]}`)
   if (input.check !== undefined)

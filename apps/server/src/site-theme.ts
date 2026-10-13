@@ -12,6 +12,7 @@
  * | 工作目录 | `<data>/themes/<workspace>/<store>/`（与终端沙箱、变更审阅同一个地方） |
  * | 起底 | WP301（决策 399）：在店里**复制一份 Shopify 官方的 Horizon**（线上就是 Horizon 就复制线上那一份）成未发布主题，`theme pull` 拉下来；工坊不带任何主题代码 |
  * | 目录 | 按这份 Horizon 自带的 schema 现生成 `CATALOG.index.json` / `CATALOG.json`（`horizon-catalog.ts`） |
+ * | 选主题 | WP304（决策 445）：第一次起底 / 人说「换主题」→ 出一张**选主题卡**：第一项我们的**高级主题**（付费，按店买断 560 积分，买了从云上下载），其余是店里已装的、能改的**免费主题**（任何 Online Store 2.0，Horizon 仍是默认推荐）；选了服务端起底、再按原话接着做 |
  * | 发布 | **不在这里发**：只出 `publish_theme` 的审批卡；人批了执行器调 {@link SiteThemeAssembly.apply} |
  *
  * 三条纪律：
@@ -36,14 +37,21 @@ import {
 } from 'node:fs'
 import { dirname, join, normalize, relative, sep } from 'node:path'
 import type { SiteThemeStoreChoice, SiteThemeView } from '@agentsws/api'
-import type {
-  ApprovalItem,
-  Clock,
-  EffectiveConfig,
-  Mandate,
-  PlatformCliSpec,
-  RunRequest,
-  StagedChange,
+import {
+  type ApprovalBus,
+  type ApprovalItem,
+  type Clock,
+  type EffectiveConfig,
+  HORIZON_THEME_STORE_URL,
+  type Mandate,
+  type PlatformCliSpec,
+  PREMIUM_THEME_PRICE_CREDITS,
+  PREMIUM_THEME_PRICE_USD,
+  type PremiumThemeStatus,
+  type RunRequest,
+  type StagedChange,
+  type ThemeChoicePayload,
+  type ThemePurchasePayload,
 } from '@agentsws/contracts'
 import { themeWorkspaceRoot } from '@agentsws/dsh-adapter'
 import { publishReadiness, type ThemeSummaryLike, themeLanes } from '@agentsws/site-core'
@@ -57,12 +65,20 @@ import {
   isHorizon,
   isLayoutJson,
   isLegacyTheme,
+  isOs2Templates,
   type ThemeCatalog,
   type ThemeInfo,
   templateProblems,
   themeInfoOf,
 } from './horizon-catalog.js'
 import type { PlatformCliProbe } from './platform-cli.js'
+import {
+  extractThemePackage,
+  PREMIUM_NOT_LINKED_TEXT,
+  PREMIUM_SOON_TEXT,
+  type PremiumThemeClient,
+  PremiumThemeError,
+} from './premium-theme.js'
 import { normalizeShopDomain } from './shopify-broker.js'
 import {
   createRunCli,
@@ -93,6 +109,30 @@ export const HORIZON_BASE = {
   repo: 'Shopify/horizon',
   license: 'Shopify Horizon license（只在这家店里用；不分发）',
 } as const
+
+/**
+ * WP304（决策 445）：我们自己的**高级主题**（付费；按店买断，从云上私有存储下载）。工作目录里记的「底」。
+ * 它的代码不在开源仓、不进安装包；只进这家店的工作目录与这家店。
+ */
+export const PREMIUM_BASE = {
+  repo: 'agentsws-premium',
+  name: '高级主题',
+  license: 'Agents 工坊高级主题（按店授权，只在这家店里用；不分发）',
+} as const
+
+/** WP304：店里那一份不是 Horizon 的免费主题（任何 Online Store 2.0）时记的「底」。 */
+export const STORE_THEME_BASE = {
+  repo: 'shopify-theme-store',
+  license: '主题商店的主题（只在这家店里用；不分发）',
+} as const
+
+/** WP304：人选的那一份是老主题（不是 Online Store 2.0）。 */
+export const tooOldText = (name: string): string =>
+  `「${name}」是老一代的 Shopify 主题（没有 JSON 模板，不是 Online Store 2.0），工坊改不了。建议到主题商店免费加一份 Horizon（${HORIZON_THEME_STORE_URL}），加好再选它。`
+
+/** WP304：出了选主题卡之后，工具回话里那一句。 */
+export const THEME_CHOICE_ASKED_TEXT =
+  '出了一张选主题卡（高级主题排第一，也可以用店里已装的免费主题）。等人选好，工坊会起好底、接着按原话做；这次先停在这儿，照实跟人说一声。'
 
 /** 店里一份 Horizon 都没有时说的那句话。 */
 export const NO_HORIZON_TEXT =
@@ -159,6 +199,10 @@ interface StoreBase {
   source_theme_id?: string
   /** WP301：复制出来的那一份未发布主题（预览就推到它上面）。 */
   copy_theme_id?: string
+  /** WP304：从哪来——店里的免费主题 / 我们的高级主题（老记录没有这一格 = 店里的）。 */
+  source?: 'store' | 'premium'
+  /** WP304：是人在选主题卡上选的（选完接着做的那一次运行再叫起底，就用这一份，不再出卡、不再起）。 */
+  chosen?: boolean
 }
 
 interface StoreState {
@@ -176,6 +220,9 @@ interface StoreState {
   }
   /** WP301：旧的自带主题那几份工作目录挪去了哪（不删、不迁）。 */
   legacy?: { version?: string; moved_to: string; at: string }[]
+  /** WP304：还在等人选的那张选主题卡 / 买高级主题卡（不重复出）。 */
+  choice_card_id?: string
+  purchase_card_id?: string
 }
 
 /** WP301：工具回话里带给模型的那一句（这份工作目录是旧的自带主题）。 */
@@ -255,6 +302,14 @@ export interface SiteThemeOptions {
   appendEvent?(type: string, payload: Record<string, unknown>): void
   /** 在事项时间线上记一句（WP301：在 Horizon 上新起了一份、旧升级卡作废了）。 */
   noteMatter?(matter_id: string, text: string): void
+  /** WP304：出选主题卡 / 买高级主题卡用的审批总线（不给 = 不出卡，起底照 WP301 自己挑一份）。 */
+  approvals?(): ApprovalBus | undefined
+  /** WP304：卡挂到事项上（事项页里看得到这张卡）。 */
+  onCard?(item: ApprovalItem): void
+  /** WP304：高级主题的云端那一半（不给 = 卡上「即将开放」）。 */
+  premium?: PremiumThemeClient
+  /** WP304：选好主题、起好底之后按这件事原来那段话接着跑一次。 */
+  resume?(input: { matter_id: string; person_id: string; assignment_id: string }): Promise<void>
 }
 
 export class SiteThemeError extends Error {
@@ -267,7 +322,11 @@ export class SiteThemeError extends Error {
       | 'network'
       | 'cli'
       /** WP301：店里一份 Horizon 都没有。 */
-      | 'no_horizon',
+      | 'no_horizon'
+      /** WP304：人选的那一份是老主题（不是 Online Store 2.0）。 */
+      | 'too_old'
+      /** WP304：高级主题那一跳没走通（即将开放 / 没登录 / 积分不够 / 包不对）。 */
+      | 'premium',
     message: string,
     readonly need?: ThemeNeed,
   ) {
@@ -311,6 +370,16 @@ export interface SiteThemeAssembly {
     replace?: boolean
     /** 哪一次运行起的底（挪开了旧目录时往它的事项时间线记一句）。 */
     request?: RunRequest
+    /**
+     * WP304：从哪来。`store` = 店里的免费主题（给了 `theme_id` 就是那一份，不给按 Horizon 优先挑）；
+     * `premium` = 我们的高级主题（这家店买过才下得下来）。不给 = `store`（WP301 的老路）。
+     */
+    source?: 'store' | 'premium' | undefined
+    theme_id?: string | undefined
+    /** WP304：选主题卡选完起底时，往哪件事的时间线记（没有运行请求）。 */
+    matter_id?: string | undefined
+    /** WP304：人在选主题卡上选的（记下来：接着做的那次运行再叫起底就用这一份）。 */
+    chosen?: boolean | undefined
   }): Promise<{
     base: { repo: string; version: string; commit: string; license: string }
     theme: { name: string; version?: string }
@@ -323,7 +392,27 @@ export interface SiteThemeAssembly {
     /** 挪开的是旧的自带主题那一份。 */
     legacy_moved?: boolean
     catalog: { sections: number; blocks: number }
+    /** WP304：这一份是我们的高级主题（下载下来、已推成一份未发布预览）。 */
+    premium?: boolean
+    /** WP304：人刚在选主题卡上选好、起好了底，这一次没再起（接着在它上面做）。 */
+    reused?: boolean
   }>
+  /**
+   * WP304（决策 445）：要不要先出一张**选主题卡**。第一次起底（工作目录空的）或人说「换主题」（`replace`）时出：
+   * 高级主题排第一，其余是店里已装的、能改的免费主题。出了 → 回这张卡；不该出（已经起过底、旧的自带主题那一份、
+   * 没接审批总线、刚选好还没推过）→ `undefined`，照老路起底。
+   */
+  askThemeChoice?(input: { replace?: boolean; request?: RunRequest }): Promise<
+    | {
+        approval_item_id: string
+        premium: PremiumThemeStatus
+        store_themes: number
+        message: string
+      }
+    | undefined
+  >
+  /** WP304：选主题卡 / 买高级主题卡被决定了 → 起底（下载 / 买）、记时间线、按原话接着做。别的卡什么都不做。 */
+  onThemeCardDecided?(item: ApprovalItem): Promise<void>
   list(): Promise<ThemeSummary[]>
   pull(input: { theme_id?: string }): Promise<{ files: number }>
   check(): Promise<ThemeCheckResult>
@@ -759,7 +848,9 @@ export function createSiteTheme(options: SiteThemeOptions): SiteThemeAssembly {
     const base = {
       workspace: {
         files,
-        ...(state?.base === undefined || legacy !== undefined ? {} : { base: state.base }),
+        ...(state?.base === undefined || legacy !== undefined
+          ? {}
+          : { base: (({ chosen: _chosen, ...rest }) => rest)(state.base) }),
         ...(legacy === undefined
           ? {}
           : {
@@ -940,6 +1031,8 @@ export function createSiteTheme(options: SiteThemeOptions): SiteThemeAssembly {
   /** 这家店的工作目录是不是旧的自带主题（agentsws-theme）起的底。 */
   const legacyOf = (shop: string): { version?: string } | undefined => {
     const base = settings.stores[shop]?.base
+    // WP304：高级主题（也叫 agentsws-theme）是这家店买的、下载下来的那一份，不是旧的自带主题
+    if (base?.source === 'premium') return undefined
     if (base !== undefined && /agentsws-theme/.test(base.repo))
       return base.version === '' ? {} : { version: base.version }
     const root = themeWorkspaceRoot(options.dataDir, ws, shop)
@@ -993,47 +1086,100 @@ export function createSiteTheme(options: SiteThemeOptions): SiteThemeAssembly {
   /** 最多探几份主题（线上那一份先，再是名字里带 Horizon 的未发布主题）。 */
   const PROBE_MAX = 6
 
+  /** WP304：一份主题探出来的样子（只拉了 `settings_schema.json` 与首页模板）。 */
+  interface Probed {
+    row: ThemeSummary
+    info: ThemeInfo | undefined
+    /** 有 JSON 模板（`templates/index.json`）= Online Store 2.0。 */
+    os2: boolean
+  }
+
   /**
-   * 店里哪一份是 Horizon：每一份只拉 `config/settings_schema.json` 到临时目录看 `theme_info`（后台改过显示名也认得出）。
-   * 线上那一份是 Horizon 就用它；不是就找未发布的。一份都没有 → `no_horizon`（请人从主题商店免费加一份）。
+   * 探几份主题：每一份只拉 `config/settings_schema.json` 与 `templates/index.json` 到临时目录（后台改过显示名也认得出
+   * 是哪套主题；有没有 JSON 首页模板 = 是不是 Online Store 2.0）。一份都没探成 → 抛最后那个错。
    */
-  const findHorizon = async (
+  const probeThemes = async (
     shop: string,
     t: ShopifyTheme,
-    rows: ThemeSummary[],
-  ): Promise<{ row: ThemeSummary; info: ThemeInfo }> => {
-    const isLive = (r: ThemeSummary): boolean => r.role === 'main' || r.role === 'live'
-    const named = (r: ThemeSummary): number => (/horizon/i.test(r.name) ? 0 : 1)
-    const candidates = [
-      ...rows.filter(isLive),
-      ...rows.filter((r) => r.role === 'unpublished').sort((a, b) => named(a) - named(b)),
-    ].slice(0, PROBE_MAX)
+    rows: readonly ThemeSummary[],
+    /** 探到这一份就不往下探了（Horizon 找到了）。 */
+    stop?: (p: Probed) => boolean,
+  ): Promise<Probed[]> => {
     const probeRoot = join(options.dataDir, 'theme-work', ws, 'probe', String(Date.parse(now())))
-    let probed = 0
+    const out: Probed[] = []
     let lastError: unknown
     try {
-      for (const row of candidates) {
+      for (const row of rows) {
         const dir = join(probeRoot, row.id.replace(/[^\w-]/g, '_'))
         mkdirSync(dir, { recursive: true })
         try {
           await wrap(() =>
-            t.pull({ shop, theme_id: row.id, only: ['config/settings_schema.json'], path: dir }),
+            t.pull({
+              shop,
+              theme_id: row.id,
+              only: ['config/settings_schema.json', 'templates/index.json'],
+              path: dir,
+            }),
           )
         } catch (e) {
           if (e instanceof SiteThemeError && e.code === 'needs') throw e
           lastError = e
           continue
         }
-        probed += 1
-        const info = infoAt(dir)
-        if (info !== undefined && isHorizon(info)) return { row, info }
+        const probed: Probed = {
+          row,
+          info: infoAt(dir),
+          os2: existsSync(join(dir, 'templates', 'index.json')),
+        }
+        out.push(probed)
+        if (stop?.(probed) === true) break
       }
     } finally {
       // 只删这一次自己建的探测目录
       rmSync(probeRoot, { recursive: true, force: true })
     }
-    if (probed === 0 && lastError !== undefined) throw lastError
-    emit('site_theme.no_horizon', { workspace_id: ws, probed })
+    if (out.length === 0 && lastError !== undefined) throw lastError
+    return out
+  }
+
+  /** 探哪几份、什么顺序：线上那一份先，再是名字里带 Horizon 的未发布主题，最多 {@link PROBE_MAX} 份。 */
+  const probeOrder = (rows: readonly ThemeSummary[]): ThemeSummary[] => {
+    const isLive = (r: ThemeSummary): boolean => r.role === 'main' || r.role === 'live'
+    const named = (r: ThemeSummary): number => (/horizon/i.test(r.name) ? 0 : 1)
+    return [
+      ...rows.filter(isLive),
+      ...rows.filter((r) => r.role === 'unpublished').sort((a, b) => named(a) - named(b)),
+    ].slice(0, PROBE_MAX)
+  }
+
+  /**
+   * 用店里哪一份起底。给了 `pick`（人在选主题卡上选的）就是那一份——老主题照实说「太老，改不了」；
+   * 没给（WP301 的老路）：Horizon 优先（线上那一份先），没有 Horizon 再用任何一份 Online Store 2.0 主题（WP304）；
+   * 一份能用的都没有 → `no_horizon`（请人从主题商店免费加一份 Horizon）。
+   */
+  const findBase = async (
+    shop: string,
+    t: ShopifyTheme,
+    rows: ThemeSummary[],
+    pick?: string,
+  ): Promise<{ row: ThemeSummary; info: ThemeInfo }> => {
+    if (pick !== undefined) {
+      const row = rows.find((r) => r.id === pick)
+      if (row === undefined)
+        throw new SiteThemeError(
+          'invalid_input',
+          `店里找不到这份主题（${pick}），可能已经被人删了。`,
+        )
+      const [probed] = await probeThemes(shop, t, [row])
+      if (probed?.info === undefined || !probed.os2)
+        throw new SiteThemeError('too_old', tooOldText(row.name))
+      return { row, info: probed.info }
+    }
+    const isBase = (p: Probed): boolean => p.info !== undefined && isHorizon(p.info) && p.os2
+    const probed = await probeThemes(shop, t, probeOrder(rows), isBase)
+    const hit = probed.find(isBase) ?? probed.find((p) => p.info !== undefined && p.os2)
+    if (hit?.info !== undefined) return { row: hit.row, info: hit.info }
+    emit('site_theme.no_horizon', { workspace_id: ws, probed: probed.length })
     throw new SiteThemeError('no_horizon', NO_HORIZON_TEXT)
   }
 
@@ -1098,10 +1244,680 @@ export function createSiteTheme(options: SiteThemeOptions): SiteThemeAssembly {
     }
   }
 
+  type InitResult = Awaited<ReturnType<SiteThemeAssembly['initFromBase']>>
+  type InitInput = Parameters<SiteThemeAssembly['initFromBase']>[0]
+
+  /** WP304：人刚在选主题卡上选好、起好了底（还没推过）——接着做的那次运行再叫起底，就用这一份。 */
+  const reusedInit = (shop: string, root: string): InitResult | undefined => {
+    const state = stateOf(shop)
+    const base = state.base
+    if (base?.chosen !== true || themeFiles(root).length === 0) return undefined
+    const catalog = catalogFor(shop, root)
+    const sections = catalog.entries.filter((e) => e.kind === 'section').length
+    const copy = state.copy
+    return {
+      base: { repo: base.repo, version: base.version, commit: base.commit, license: base.license },
+      theme: {
+        name: base.theme_name ?? catalog.theme_name,
+        ...(base.version === '' ? {} : { version: base.version }),
+      },
+      source: {
+        theme_id: base.source_theme_id ?? '',
+        name: copy?.source_name ?? base.theme_name ?? '',
+        live: false,
+      },
+      copy: {
+        theme_id: copy?.theme_id ?? base.copy_theme_id ?? '',
+        name: copy?.name ?? '',
+        preview_url: `https://${shop}/?preview_theme_id=${copy?.theme_id ?? base.copy_theme_id ?? ''}`,
+      },
+      files: Object.keys(state.baseline ?? {}).length,
+      moved_aside: false,
+      catalog: { sections, blocks: catalog.entries.length - sections },
+      ...(base.source === 'premium' ? { premium: true } : {}),
+      reused: true,
+    }
+  }
+
+  /** 往这件事的时间线记一句：有运行请求按运行，没有（选主题卡那一路）按给的事项。 */
+  const noteAt = (request: RunRequest | undefined, matter_id: string | undefined, text: string) => {
+    if (request !== undefined) return noteRun(request, text)
+    if (matter_id === undefined) return
+    try {
+      options.noteMatter?.(matter_id, text)
+    } catch {
+      // 事项没了：照样在事件里
+    }
+  }
+
+  /** 高级主题那一跳的错 → 人话（`premium`）。 */
+  const premiumFailure = (e: unknown): unknown =>
+    e instanceof PremiumThemeError ? new SiteThemeError('premium', e.message) : e
+
+  /**
+   * WP304：**高级主题起底**——从云上下载这家店买过的那一份、核 sha256、解进暂存目录，认得出是 Online Store 2.0 主题
+   * 才换上工作目录（只取主题那几个目录：包根上的 AGENTS.md / README / CATALOG.json 不要，AGENTS.md 会被 `theme push` 推进店里），
+   * 按它的 schema 生成目录，再推成一份**未发布**主题出预览（线上不动）。主题文件只进这家店的工作目录与这家店。
+   */
+  const initPremium = async (input: {
+    replace?: boolean | undefined
+    request?: RunRequest | undefined
+    matter_id?: string | undefined
+  }): Promise<InitResult> => {
+    const { shop, spec } = await need('remote')
+    const client = options.premium
+    if (client === undefined) throw new SiteThemeError('premium', PREMIUM_SOON_TEXT)
+    const t = theme(spec)
+    const root = rootOf(shop)
+    const legacy = legacyOf(shop)
+    const hasStuff = readdirSync(root).length > 0
+    if (hasStuff && legacy === undefined && input.replace !== true)
+      throw new SiteThemeError(
+        'invalid_input',
+        '主题工作目录里已经有东西了（起过底了），没覆盖。真要换成高级主题，带 replace=true（旧的会挪到一边，不删）。',
+      )
+    let pkg: { version: string; bytes: Uint8Array }
+    try {
+      pkg = await client.download(shop)
+    } catch (e) {
+      throw premiumFailure(e)
+    }
+    const staging = join(options.dataDir, 'theme-work', ws, 'staging', String(Date.parse(now())))
+    mkdirSync(staging, { recursive: true })
+    let legacyMoved = false
+    let info: ThemeInfo | undefined
+    try {
+      let themeRoot: string
+      try {
+        themeRoot = extractThemePackage(pkg.bytes, join(staging, 'pkg'))
+      } catch (e) {
+        throw premiumFailure(e)
+      }
+      info = infoAt(themeRoot)
+      const templates = themeFiles(themeRoot)
+        .filter((rel) => rel.startsWith('templates/'))
+        .map((rel) => rel.slice('templates/'.length))
+      if (info === undefined || !isOs2Templates(templates))
+        throw new SiteThemeError(
+          'premium',
+          '高级主题包里的主题读不懂（没有主题信息或 JSON 模板），没装。',
+        )
+      if (hasStuff) {
+        moveAside(shop, root, legacy)
+        legacyMoved = legacy !== undefined
+      }
+      for (const dir of THEME_DIRS)
+        if (existsSync(join(themeRoot, dir))) renameSync(join(themeRoot, dir), join(root, dir))
+    } finally {
+      // 只删这一次自己建的暂存目录
+      rmSync(staging, { recursive: true, force: true })
+    }
+    const catalog = writeCatalog(shop, root)
+    const version = pkg.version !== '' ? pkg.version : (info.theme_version ?? '')
+    const state = stateOf(shop)
+    state.base = {
+      repo: PREMIUM_BASE.repo,
+      version,
+      commit: '',
+      license: PREMIUM_BASE.license,
+      at: now(),
+      theme_name: info.theme_name,
+      source: 'premium',
+      chosen: true,
+    }
+    state.baseline = manifestOf(root)
+    lastCheck.delete(shop)
+    save()
+    // 推一份未发布预览（线上一个字节不动）；之后第一次推预览就推到它上面
+    const name = `${PREMIUM_BASE.name} ${version}`.trim()
+    const pushed = await wrap(() => t.pushUnpublished({ shop, name }))
+    const preview = pushed.preview_url ?? `https://${shop}/?preview_theme_id=${pushed.theme_id}`
+    state.copy = {
+      theme_id: pushed.theme_id,
+      name,
+      source_theme_id: '',
+      source_name: PREMIUM_BASE.name,
+      at: now(),
+    }
+    state.base.copy_theme_id = pushed.theme_id
+    save()
+    emit('site_theme.premium_installed', {
+      workspace_id: ws,
+      version,
+      legacy_moved: legacyMoved,
+      theme_id: pushed.theme_id,
+    })
+    if (legacyMoved) noteAt(input.request, input.matter_id, legacyMovedNote(legacy?.version, name))
+    const matter = input.request?.work_item?.id ?? input.matter_id
+    if (matter !== undefined)
+      options.notePreview?.(matter, {
+        text: `高级主题装好了：未发布主题「${name}」（线上没动）。`,
+        url: preview,
+        label: name,
+        theme_id: pushed.theme_id,
+        changed_files: [],
+      })
+    const sections = catalog.entries.filter((e) => e.kind === 'section').length
+    return {
+      base: { repo: PREMIUM_BASE.repo, version, commit: '', license: PREMIUM_BASE.license },
+      theme: { name: info.theme_name, ...(version === '' ? {} : { version }) },
+      source: { theme_id: '', name: PREMIUM_BASE.name, live: false },
+      copy: { theme_id: pushed.theme_id, name, preview_url: preview },
+      files: Object.keys(state.baseline).length,
+      moved_aside: hasStuff,
+      ...(legacyMoved ? { legacy_moved: true } : {}),
+      catalog: { sections, blocks: catalog.entries.length - sections },
+      premium: true,
+    }
+  }
+
+  /** WP304：这家店高级主题那一行是什么状态（云上还没开 / 没登录 / 没买 / 买过了）。 */
+  const premiumOf = async (
+    shop: string,
+  ): Promise<{
+    status: PremiumThemeStatus
+    latest_version?: string
+    preview_image_url?: string
+    example_url?: string
+  }> => {
+    const client = options.premium
+    if (client === undefined) return { status: 'soon' }
+    if (!client.linked()) return { status: 'needs_account' }
+    try {
+      const e = await client.entitlement(shop)
+      // WP305：私有桶没绑 / 还没上架也是 200，`available: false`——即将开放
+      if (e.available === false) return { status: 'soon' }
+      return {
+        status: e.owned ? 'owned' : 'buy',
+        ...(typeof e.latest_version === 'string' ? { latest_version: e.latest_version } : {}),
+        ...(e.preview_image_url === undefined ? {} : { preview_image_url: e.preview_image_url }),
+        ...(e.example_url === undefined ? {} : { example_url: e.example_url }),
+      }
+    } catch (err) {
+      if (err instanceof PremiumThemeError && err.code === 'not_linked')
+        return { status: 'needs_account' }
+      return { status: 'soon' }
+    }
+  }
+
+  /** 卡的公共那几格（收件人 = 这次运行 / 这张卡的那个人）。 */
+  const cardBase = (input: {
+    shop: string
+    person_id: string
+    role_id: string
+    assignment_id?: string | undefined
+    matter_id?: string | undefined
+    run_id?: string | undefined
+    seen: string[]
+  }) => ({
+    workspace_id: ws as never,
+    schema_version: 1 as const,
+    role_id: input.role_id as never,
+    subject: {
+      object: { type: 'site_theme', id: input.shop },
+      ...(input.matter_id === undefined ? {} : { matter_id: input.matter_id as never }),
+    },
+    evidence: {
+      ...(input.run_id === undefined ? {} : { run_id: input.run_id as never }),
+      source_events: [],
+      provenance: { seen: input.seen.map((id) => ({ type: 'theme', id })) },
+      precheck: {},
+    },
+    proposer: {
+      kind: 'agent' as const,
+      id: `agent_${input.role_id}`,
+      ...(input.assignment_id === undefined ? {} : { assignment_id: input.assignment_id as never }),
+    },
+    automation: {
+      level_at_creation: 'L1' as const,
+      auto_approved: false,
+      mandate_check: { within: true, caps_hit: [] },
+      sampling: { selected: false },
+    },
+    routing: {
+      recipients: [{ person: input.person_id as never, via: 'role_holder' as const }],
+      rule: 'role_holder' as const,
+      escalation: {
+        after_hours: 24,
+        business_hours: true,
+        chain: ['owner' as const],
+        escalated_at: [],
+      },
+      separation_of_duties: false,
+    },
+    priority: 'queue' as const,
+  })
+
+  /** 店里那一份主题在选项上叫什么：后台名 +（线上）+ 是哪套主题（与后台名不一样时）。 */
+  const storeLabel = (x: ThemeChoicePayload['store_themes'][number]): string =>
+    `${x.name}${x.role === 'main' || x.role === 'live' ? '（线上）' : ''}${
+      x.theme_name !== undefined && x.theme_name !== x.name ? ` · ${x.theme_name}` : ''
+    }`
+
+  const askThemeChoice: NonNullable<SiteThemeAssembly['askThemeChoice']> = async ({
+    replace,
+    request,
+  }) => {
+    const bus = options.approvals?.()
+    if (bus === undefined || request === undefined) return undefined
+    const { shop, spec } = await need('remote')
+    const root = rootOf(shop)
+    if (legacyOf(shop) !== undefined) return undefined
+    const state = stateOf(shop)
+    if (themeFiles(root).length > 0 && replace !== true) return undefined
+    // 人刚选好、起好了底，还没推过：接着做，不再问
+    if (state.base?.chosen === true && themeFiles(root).length > 0) return undefined
+    // 还在等人选的那一张：不重复出
+    if (state.choice_card_id !== undefined) {
+      const prior = await bus.get(state.choice_card_id).catch(() => undefined)
+      if (prior !== undefined && (prior.state === 'pending' || prior.state === 'in_review')) {
+        const p = prior.payload as Partial<ThemeChoicePayload>
+        return {
+          approval_item_id: prior.id,
+          premium: p.premium?.status ?? 'soon',
+          store_themes: (p.store_themes ?? []).filter((x) => x.usable).length,
+          message: THEME_CHOICE_ASKED_TEXT,
+        }
+      }
+    }
+    const t = theme(spec)
+    const rows = await wrap(() => t.list(shop))
+    let probed: Probed[] = []
+    try {
+      probed = await probeThemes(shop, t, probeOrder(rows))
+    } catch (e) {
+      if (e instanceof SiteThemeError && e.code === 'needs') throw e
+    }
+    const premium = await premiumOf(shop)
+    const store_themes: ThemeChoicePayload['store_themes'] = probed.map((p) => ({
+      id: p.row.id,
+      name: p.row.name,
+      role: p.row.role,
+      ...(p.info === undefined ? {} : { theme_name: p.info.theme_name }),
+      ...(p.info?.theme_version === undefined ? {} : { theme_version: p.info.theme_version }),
+      usable: p.info !== undefined && p.os2,
+    }))
+    const premiumPick = premium.status === 'buy' || premium.status === 'owned'
+    const choices = [
+      ...(premiumPick
+        ? [
+            {
+              id: 'premium',
+              label:
+                premium.status === 'owned'
+                  ? `${PREMIUM_BASE.name}（这家店已买）`
+                  : `${PREMIUM_BASE.name} · $${PREMIUM_THEME_PRICE_USD} · ${PREMIUM_THEME_PRICE_CREDITS} 积分`,
+            },
+          ]
+        : []),
+      ...store_themes
+        .filter((x) => x.usable)
+        .map((x) => ({ id: `store:${x.id}`, label: storeLabel(x) })),
+    ]
+    // 一个能选的都没有（高级主题还没开、店里也没有能改的）：照 WP301 请人从主题商店免费加一份 Horizon
+    if (choices.length === 0) {
+      emit('site_theme.no_horizon', { workspace_id: ws, probed: probed.length })
+      throw new SiteThemeError('no_horizon', NO_HORIZON_TEXT)
+    }
+    const matter_id = request.work_item?.id
+    const payload: ThemeChoicePayload = {
+      form: 'theme_choice',
+      shop,
+      premium: {
+        status: premium.status,
+        price_credits: PREMIUM_THEME_PRICE_CREDITS,
+        price_usd: PREMIUM_THEME_PRICE_USD,
+        ...(premium.latest_version === undefined ? {} : { latest_version: premium.latest_version }),
+        ...(premium.preview_image_url === undefined
+          ? {}
+          : { preview_image_url: premium.preview_image_url }),
+        ...(premium.example_url === undefined ? {} : { example_url: premium.example_url }),
+      },
+      store_themes,
+      theme_store_url: HORIZON_THEME_STORE_URL,
+      options: choices,
+      ...(matter_id === undefined ? {} : { matter_id }),
+      assignment_id: request.actor.assignment_id,
+      ...(replace === true ? { replace: true } : {}),
+    }
+    const item = await bus.create({
+      ...cardBase({
+        shop,
+        person_id: request.actor.person_id,
+        role_id: request.actor.role_id,
+        assignment_id: request.actor.assignment_id,
+        matter_id,
+        run_id: request.id,
+        seen: rows.map((r) => r.id),
+      }),
+      kind: 'theme_choice',
+      dedupe_key: `theme_choice:${shop}@${request.id}:${ws}`,
+      title: '用哪套主题建站？',
+      summary:
+        premium.status === 'soon'
+          ? '高级主题即将开放；先选店里已装的免费主题。'
+          : '我们的高级主题排第一，也可以用店里已装的免费主题。',
+      payload,
+      options: choices,
+      risk_class: 'low',
+    } as never)
+    try {
+      options.onCard?.(item)
+    } catch {
+      // 挂不上事项不影响卡本身
+    }
+    state.choice_card_id = item.id
+    save()
+    emit('site_theme.choice_asked', {
+      workspace_id: ws,
+      premium: premium.status,
+      store_themes: store_themes.filter((x) => x.usable).length,
+      too_old: store_themes.filter((x) => !x.usable).length,
+    })
+    return {
+      approval_item_id: item.id,
+      premium: premium.status,
+      store_themes: store_themes.filter((x) => x.usable).length,
+      message: THEME_CHOICE_ASKED_TEXT,
+    }
+  }
+
+  /** WP304：出一张「买高级主题」的卡（「花钱」家族：560 积分，人点了才扣）。 */
+  const askPurchase = async (input: {
+    shop: string
+    person_id: string
+    role_id: string
+    assignment_id?: string | undefined
+    matter_id?: string | undefined
+    replace?: boolean | undefined
+  }): Promise<ApprovalItem | undefined> => {
+    const bus = options.approvals?.()
+    if (bus === undefined) return undefined
+    const state = stateOf(input.shop)
+    if (state.purchase_card_id !== undefined) {
+      const prior = await bus.get(state.purchase_card_id).catch(() => undefined)
+      if (prior !== undefined && (prior.state === 'pending' || prior.state === 'in_review'))
+        return prior
+    }
+    const payload: ThemePurchasePayload = {
+      form: 'theme_purchase',
+      shop: input.shop,
+      price_credits: PREMIUM_THEME_PRICE_CREDITS,
+      price_usd: PREMIUM_THEME_PRICE_USD,
+      ...(input.matter_id === undefined ? {} : { matter_id: input.matter_id }),
+      ...(input.assignment_id === undefined ? {} : { assignment_id: input.assignment_id }),
+      ...(input.replace === true ? { replace: true } : {}),
+    }
+    const item = await bus.create({
+      ...cardBase({ ...input, seen: [] }),
+      kind: 'theme_purchase',
+      dedupe_key: `theme_purchase:${input.shop}@${now()}:${ws}`,
+      title: `买下高级主题？这家店一次 ${PREMIUM_THEME_PRICE_CREDITS} 积分`,
+      summary: `${input.shop} 一次买断（$${PREMIUM_THEME_PRICE_USD}），以后升级不另收钱。点「买下」才扣积分。`,
+      payload,
+      risk_class: 'medium',
+    } as never)
+    try {
+      options.onCard?.(item)
+    } catch {
+      // 挂不上事项不影响卡本身
+    }
+    state.purchase_card_id = item.id
+    save()
+    emit('site_theme.purchase_asked', { workspace_id: ws })
+    return item
+  }
+
+  const onThemeCardDecided: NonNullable<SiteThemeAssembly['onThemeCardDecided']> = async (item) => {
+    if (item.workspace_id !== ws) return
+    if (item.kind !== 'theme_choice' && item.kind !== 'theme_purchase') return
+    const p = (
+      item.payload !== null && typeof item.payload === 'object' ? item.payload : {}
+    ) as Partial<Pick<ThemePurchasePayload, 'shop' | 'matter_id' | 'assignment_id' | 'replace'>>
+    const shop = typeof p.shop === 'string' ? p.shop : undefined
+    if (shop === undefined) return
+    const state = stateOf(shop)
+    if (item.kind === 'theme_choice' && state.choice_card_id === item.id)
+      delete state.choice_card_id
+    if (item.kind === 'theme_purchase' && state.purchase_card_id === item.id)
+      delete state.purchase_card_id
+    save()
+    const matter_id = p.matter_id ?? item.subject.matter_id
+    const note = (text: string): void => noteAt(undefined, matter_id, text)
+    const approved =
+      item.state === 'approved' || item.state === 'approved_edited' || item.state === 'applied'
+    if (!approved) {
+      if (item.kind === 'theme_purchase' && item.state === 'rejected')
+        note('没买高级主题，一个积分都没扣。想用店里的免费主题，跟我说「换主题」。')
+      return
+    }
+    const by = item.decision?.by
+    const person_id =
+      by !== undefined && by !== 'mandate' ? String(by) : item.routing.recipients[0]?.person
+    const assignment_id = p.assignment_id ?? item.proposer.assignment_id
+    const replace = p.replace === true
+    // 店换了（人在岗位页上换了一家）：这张卡是给原来那家的，不动
+    const current = storeOf()?.store
+    if (current !== shop) {
+      note(`这张卡是给 ${shop} 的，现在建站用的是别的店，这次没起底。`)
+      return
+    }
+    try {
+      if (item.kind === 'theme_purchase') {
+        const client = options.premium
+        if (client === undefined) throw new SiteThemeError('premium', PREMIUM_SOON_TEXT)
+        let bought: { charged_credits: number; already_owned?: boolean }
+        try {
+          bought = await client.purchase(shop)
+        } catch (e) {
+          throw premiumFailure(e)
+        }
+        emit('site_theme.premium_purchased', {
+          workspace_id: ws,
+          charged: bought.charged_credits,
+          already_owned: bought.already_owned === true,
+        })
+        note(
+          bought.already_owned === true
+            ? '这家店已经买过高级主题，没再扣积分。正在下载、推一份未发布预览。'
+            : `买好了，扣了 ${bought.charged_credits} 积分。正在下载、推一份未发布预览。`,
+        )
+        await initBase({ source: 'premium', replace, matter_id })
+      } else {
+        const edited = item.decision?.edited_payload as { selected_option_id?: unknown } | undefined
+        const option =
+          item.decision?.selected_option_id ??
+          (typeof edited?.selected_option_id === 'string' ? edited.selected_option_id : '')
+        if (option === 'premium') {
+          const prem = await premiumOf(shop)
+          if (prem.status === 'buy') {
+            if (person_id !== undefined)
+              await askPurchase({
+                shop,
+                person_id,
+                role_id: item.role_id,
+                assignment_id,
+                matter_id,
+                replace,
+              })
+            note(`出了一张买高级主题的卡（${PREMIUM_THEME_PRICE_CREDITS} 积分，你点了才扣）。`)
+            return
+          }
+          if (prem.status !== 'owned') {
+            note(prem.status === 'needs_account' ? PREMIUM_NOT_LINKED_TEXT : PREMIUM_SOON_TEXT)
+            return
+          }
+          await initBase({ source: 'premium', replace, matter_id })
+        } else if (option.startsWith('store:')) {
+          const r = await initBase({
+            source: 'store',
+            theme_id: option.slice('store:'.length),
+            replace,
+            matter_id,
+            chosen: true,
+          })
+          note(
+            `用「${r.source.name}」起好底了（店里多了一份未发布副本「${r.copy.name}」，线上没动），接着按你说的做。`,
+          )
+        } else return
+      }
+    } catch (e) {
+      emit('site_theme.choice_failed', {
+        workspace_id: ws,
+        kind: item.kind,
+        code: e instanceof SiteThemeError ? e.code : 'error',
+      })
+      note(e instanceof SiteThemeError ? e.message : '起底没成，过一会儿再选一次。')
+      return
+    }
+    if (matter_id !== undefined && person_id !== undefined && assignment_id !== undefined)
+      await options.resume?.({ matter_id, person_id, assignment_id }).catch(() => undefined)
+  }
+
+  const initBase = async (input: InitInput): Promise<InitResult> => {
+    const { replace, request, source: from, theme_id: pick, matter_id, chosen } = input
+    const { shop, spec } = await need('remote')
+    const root0 = rootOf(shop)
+    // WP304：人刚选好、起好了底（选完接着做的那次运行）→ 不再起，就用这一份（话里又点了同一类也算）
+    const chosenSource = stateOf(shop).base?.source ?? 'store'
+    if (pick === undefined && (from === undefined || from === chosenSource)) {
+      const again = reusedInit(shop, root0)
+      if (again !== undefined) return again
+    }
+    if (from === 'premium') return initPremium({ replace, request, matter_id })
+    const t = theme(spec)
+    const root = root0
+    const legacy = legacyOf(shop)
+    const hasStuff = readdirSync(root).length > 0
+    if (hasStuff && legacy === undefined && replace !== true)
+      throw new SiteThemeError(
+        'invalid_input',
+        '主题工作目录里已经有东西了（起过底了），没覆盖，接着在它上面改就行。真要重新起底（换主题），带 replace=true（旧的会挪到一边，不删）。',
+      )
+    const state = stateOf(shop)
+    const rows = await wrap(() => t.list(shop))
+    const isLive = (r: ThemeSummary): boolean => r.role === 'main' || r.role === 'live'
+    // 上一次在店里复制出来了、但没拉成（工作目录还是空的）→ 接着用那一份，不在店里再堆一份
+    const earlier = state.copy
+    const reuse =
+      !hasStuff && earlier !== undefined && (pick === undefined || pick === earlier.source_theme_id)
+        ? rows.find((r) => r.id === earlier.theme_id && !isLive(r))
+        : undefined
+    let source: { theme_id: string; name: string; live: boolean }
+    let copy: { theme_id: string; name: string }
+    if (reuse !== undefined && earlier !== undefined) {
+      source = {
+        theme_id: earlier.source_theme_id,
+        name: earlier.source_name,
+        live: rows.some((r) => r.id === earlier.source_theme_id && isLive(r)),
+      }
+      copy = { theme_id: reuse.id, name: reuse.name }
+    } else {
+      const found = await findBase(shop, t, rows, pick)
+      source = { theme_id: found.row.id, name: found.row.name, live: isLive(found.row) }
+      let dup: { theme_id: string; theme_name: string }
+      try {
+        dup = await wrap(() =>
+          t.duplicate({ shop, theme_id: found.row.id, name: copyNameOf(found.row.name) }),
+        )
+      } catch (e) {
+        if (e instanceof SiteThemeError && /maximum number of themes|theme limit/i.test(e.message))
+          throw new SiteThemeError('cli', THEMES_FULL_TEXT)
+        throw e
+      }
+      copy = { theme_id: dup.theme_id, name: dup.theme_name }
+      state.copy = {
+        theme_id: copy.theme_id,
+        name: copy.name,
+        source_theme_id: source.theme_id,
+        source_name: source.name,
+        at: now(),
+      }
+      save()
+      emit('site_theme.horizon_copied', {
+        workspace_id: ws,
+        from_live: source.live,
+        theme_id: copy.theme_id,
+      })
+    }
+    // 先拉进暂存目录（拉不成工作目录一个字节不动），认得出是 Online Store 2.0 主题才换上来
+    const staging = join(options.dataDir, 'theme-work', ws, 'staging', String(Date.parse(now())))
+    mkdirSync(staging, { recursive: true })
+    let legacyMoved = false
+    let info: ThemeInfo | undefined
+    try {
+      await wrap(() => t.pull({ shop, theme_id: copy.theme_id, path: staging }))
+      info = infoAt(staging)
+      const pulled = themeFiles(staging)
+        .filter((rel) => rel.startsWith('templates/'))
+        .map((rel) => rel.slice('templates/'.length))
+      if (info === undefined || !isOs2Templates(pulled))
+        throw new SiteThemeError(
+          'integrity',
+          '复制出来的那一份读不到主题信息（config/settings_schema.json）或者没有 JSON 模板，工作目录没换。',
+        )
+      if (hasStuff) {
+        moveAside(shop, root, legacy)
+        legacyMoved = legacy !== undefined
+      }
+      for (const name of readdirSync(staging)) renameSync(join(staging, name), join(root, name))
+    } finally {
+      // 只删这一次自己建的暂存目录
+      rmSync(staging, { recursive: true, force: true })
+    }
+    const catalog = writeCatalog(shop, root)
+    // WP304：Horizon 照 WP301 记；别的免费主题记「主题商店的主题」
+    const kind = isHorizon(info) ? HORIZON_BASE : STORE_THEME_BASE
+    state.base = {
+      repo: kind.repo,
+      version: info.theme_version ?? '',
+      commit: '',
+      license: kind.license,
+      at: now(),
+      theme_name: info.theme_name,
+      source_theme_id: source.theme_id,
+      copy_theme_id: copy.theme_id,
+      source: 'store',
+      ...(chosen === true ? { chosen: true } : {}),
+    }
+    state.baseline = manifestOf(root)
+    lastCheck.delete(shop)
+    save()
+    emit('site_theme.initialized', {
+      workspace_id: ws,
+      theme: info.theme_name,
+      version: info.theme_version ?? '',
+      from_live: source.live,
+      legacy_moved: legacyMoved,
+    })
+    if (legacyMoved) noteAt(request, matter_id, legacyMovedNote(legacy?.version, copy.name))
+    const sections = catalog.entries.filter((e) => e.kind === 'section').length
+    return {
+      base: {
+        repo: kind.repo,
+        version: info.theme_version ?? '',
+        commit: '',
+        license: kind.license,
+      },
+      theme: {
+        name: info.theme_name,
+        ...(info.theme_version === undefined ? {} : { version: info.theme_version }),
+      },
+      source,
+      copy: { ...copy, preview_url: `https://${shop}/?preview_theme_id=${copy.theme_id}` },
+      files: Object.keys(state.baseline).length,
+      moved_aside: hasStuff,
+      ...(legacyMoved ? { legacy_moved: true } : {}),
+      catalog: { sections, blocks: catalog.entries.length - sections },
+    }
+  }
+
   return {
     readiness,
     legacyNotice,
     onUpgradeDecided,
+    askThemeChoice,
+    onThemeCardDecided,
 
     async setStore(raw, opts = {}) {
       let shop: string
@@ -1126,130 +1942,7 @@ export function createSiteTheme(options: SiteThemeOptions): SiteThemeAssembly {
 
     refreshStores,
 
-    async initFromBase({ replace, request }) {
-      const { shop, spec } = await need('remote')
-      const t = theme(spec)
-      const root = rootOf(shop)
-      const legacy = legacyOf(shop)
-      const hasStuff = readdirSync(root).length > 0
-      if (hasStuff && legacy === undefined && replace !== true)
-        throw new SiteThemeError(
-          'invalid_input',
-          '主题工作目录里已经有东西了（起过底了），没覆盖，接着在它上面改就行。真要从 Horizon 重新起底，带 replace=true（旧的会挪到一边，不删）。',
-        )
-      const state = stateOf(shop)
-      const rows = await wrap(() => t.list(shop))
-      const isLive = (r: ThemeSummary): boolean => r.role === 'main' || r.role === 'live'
-      // 上一次在店里复制出来了、但没拉成（工作目录还是空的）→ 接着用那一份，不在店里再堆一份
-      const earlier = state.copy
-      const reuse =
-        !hasStuff && earlier !== undefined
-          ? rows.find((r) => r.id === earlier.theme_id && !isLive(r))
-          : undefined
-      let source: { theme_id: string; name: string; live: boolean }
-      let copy: { theme_id: string; name: string }
-      if (reuse !== undefined && earlier !== undefined) {
-        source = {
-          theme_id: earlier.source_theme_id,
-          name: earlier.source_name,
-          live: rows.some((r) => r.id === earlier.source_theme_id && isLive(r)),
-        }
-        copy = { theme_id: reuse.id, name: reuse.name }
-      } else {
-        const found = await findHorizon(shop, t, rows)
-        source = { theme_id: found.row.id, name: found.row.name, live: isLive(found.row) }
-        let dup: { theme_id: string; theme_name: string }
-        try {
-          dup = await wrap(() =>
-            t.duplicate({ shop, theme_id: found.row.id, name: copyNameOf(found.row.name) }),
-          )
-        } catch (e) {
-          if (
-            e instanceof SiteThemeError &&
-            /maximum number of themes|theme limit/i.test(e.message)
-          )
-            throw new SiteThemeError('cli', THEMES_FULL_TEXT)
-          throw e
-        }
-        copy = { theme_id: dup.theme_id, name: dup.theme_name }
-        state.copy = {
-          theme_id: copy.theme_id,
-          name: copy.name,
-          source_theme_id: source.theme_id,
-          source_name: source.name,
-          at: now(),
-        }
-        save()
-        emit('site_theme.horizon_copied', {
-          workspace_id: ws,
-          from_live: source.live,
-          theme_id: copy.theme_id,
-        })
-      }
-      // 先拉进暂存目录（拉不成工作目录一个字节不动），认得出是 Horizon 才换上来
-      const staging = join(options.dataDir, 'theme-work', ws, 'staging', String(Date.parse(now())))
-      mkdirSync(staging, { recursive: true })
-      let legacyMoved = false
-      let info: ThemeInfo | undefined
-      try {
-        await wrap(() => t.pull({ shop, theme_id: copy.theme_id, path: staging }))
-        info = infoAt(staging)
-        if (info === undefined || !isHorizon(info))
-          throw new SiteThemeError(
-            'integrity',
-            '复制出来的那一份读不到 Horizon 的主题信息（config/settings_schema.json），工作目录没换。',
-          )
-        if (hasStuff) {
-          moveAside(shop, root, legacy)
-          legacyMoved = legacy !== undefined
-        }
-        for (const name of readdirSync(staging)) renameSync(join(staging, name), join(root, name))
-      } finally {
-        // 只删这一次自己建的暂存目录
-        rmSync(staging, { recursive: true, force: true })
-      }
-      const catalog = writeCatalog(shop, root)
-      state.base = {
-        repo: HORIZON_BASE.repo,
-        version: info.theme_version ?? '',
-        commit: '',
-        license: HORIZON_BASE.license,
-        at: now(),
-        theme_name: info.theme_name,
-        source_theme_id: source.theme_id,
-        copy_theme_id: copy.theme_id,
-      }
-      state.baseline = manifestOf(root)
-      lastCheck.delete(shop)
-      save()
-      emit('site_theme.initialized', {
-        workspace_id: ws,
-        theme: info.theme_name,
-        version: info.theme_version ?? '',
-        from_live: source.live,
-        legacy_moved: legacyMoved,
-      })
-      if (legacyMoved) noteRun(request, legacyMovedNote(legacy?.version, copy.name))
-      const sections = catalog.entries.filter((e) => e.kind === 'section').length
-      return {
-        base: {
-          repo: HORIZON_BASE.repo,
-          version: info.theme_version ?? '',
-          commit: '',
-          license: HORIZON_BASE.license,
-        },
-        theme: {
-          name: info.theme_name,
-          ...(info.theme_version === undefined ? {} : { version: info.theme_version }),
-        },
-        source,
-        copy: { ...copy, preview_url: `https://${shop}/?preview_theme_id=${copy.theme_id}` },
-        files: Object.keys(state.baseline).length,
-        moved_aside: hasStuff,
-        ...(legacyMoved ? { legacy_moved: true } : {}),
-        catalog: { sections, blocks: catalog.entries.length - sections },
-      }
-    },
+    initFromBase: initBase,
 
     async list() {
       const { shop, spec } = await need('remote')
@@ -1347,7 +2040,7 @@ export function createSiteTheme(options: SiteThemeOptions): SiteThemeAssembly {
       if (stateOf(shop).base !== undefined && !baseWritable(rel))
         throw new SiteThemeError(
           'invalid_input',
-          `「${rel}」是 Horizon 的核心代码（.liquid / CSS / JS / 编辑器标签），不改。只改 templates/*.json、section 组（header-group / footer-group）、config/settings_data.json 与 locales 店面文案；要一小段自定义代码，用主题自带的 custom-liquid 分区 / 块。`,
+          `「${rel}」是主题的核心代码（.liquid / CSS / JS / 编辑器标签），不改。只改 templates/*.json、section 组（页头页尾）、config/settings_data.json 与 locales 店面文案；要一小段自定义代码，用主题自带的 custom-liquid 分区 / 块。`,
         )
       const bytes = Buffer.byteLength(content, 'utf8')
       if (bytes > MAX_THEME_FILE_BYTES)
@@ -1386,6 +2079,8 @@ export function createSiteTheme(options: SiteThemeOptions): SiteThemeAssembly {
           '主题工作目录是空的：先起底（theme_init_from_base，在店里复制一份 Horizon）或拉一份（theme_pull）',
         )
       const state = stateOf(shop)
+      // WP304：推过一次就不再是「刚选好」（之后再叫起底照老规矩：起过底了）
+      if (state.base?.chosen === true) delete state.base.chosen
       // 同名再推一次：那份副本还在、而且**不是线上那一份**，就推到它上面（不在店里堆一份又一份）
       const earlier = [...state.pushes].reverse().find((p) => p.theme_name === trimmed)
       let pushed: PushedTheme

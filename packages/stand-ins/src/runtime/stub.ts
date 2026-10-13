@@ -86,6 +86,7 @@ import {
 } from './support.js'
 import {
   checkOf,
+  choiceOf,
   initOf,
   latestCopyOf,
   legacyNoticeOf,
@@ -99,6 +100,7 @@ import {
   THEME_PUSH_TOOL,
   THEME_TOOL_DEF_BY_NAME,
   type ThemeCheckData,
+  type ThemeChoiceData,
   type ThemeInitData,
   type ThemeLegacyData,
   type ThemePublishData,
@@ -1048,6 +1050,7 @@ export function createStubRuntime(options: StubRuntimeOptions): RuntimeAdapter {
         let published: ThemePublishData | undefined
         let legacy: ThemeLegacyData | undefined
         let init: ThemeInitData | undefined
+        let choice: ThemeChoiceData | undefined
         const queue: ThemeStep[] = [...themeCalls]
         while (queue.length > 0) {
           const step = queue.shift() as ThemeStep
@@ -1113,6 +1116,9 @@ export function createStubRuntime(options: StubRuntimeOptions): RuntimeAdapter {
           }
           readTools.push(step.tool)
           if (step.tool === THEME_INIT_TOOL) {
+            // WP304：出了一张选主题卡 → 这次就停在这儿（人选了服务端起底、按原话再跑一次）
+            choice = choiceOf(res.data)
+            if (choice !== undefined) break
             initialized = true
             init = initOf(res.data)
           }
@@ -1142,6 +1148,7 @@ export function createStubRuntime(options: StubRuntimeOptions): RuntimeAdapter {
           ...(published === undefined ? {} : { published }),
           ...(legacy === undefined ? {} : { legacy }),
           ...(init === undefined ? {} : { init }),
+          ...(choice === undefined ? {} : { choice }),
           failed,
         })
         outputs.push({ kind: 'answer', text: answer })

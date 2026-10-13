@@ -7987,7 +7987,7 @@
     "/v1/themes/premium/entitlement": {
       "get": {
         "operationId": "getV1ThemesPremiumEntitlement",
-        "summary": "这家店买没买高级主题、多少钱、最新版本（成功 `{ data }`）",
+        "summary": "这家店买没买高级主题、多少钱、最新版本；桶没绑 / 没上架也 200，`available: false`（即将开放）",
         "tags": ["premium-theme"],
         "security": [
           {
@@ -8062,7 +8062,7 @@
     "/v1/themes/premium/purchase": {
       "post": {
         "operationId": "postV1ThemesPremiumPurchase",
-        "summary": "给这家店买下高级主题（一次 560 积分；幂等：同店再买不重复扣；余额不够 402 回人话）",
+        "summary": "给这家店买下高级主题（新买 201 扣 560；已有 200 不扣；幂等由云端保证；余额不够 402 回人话）",
         "tags": ["premium-theme"],
         "security": [
           {
@@ -8100,6 +8100,22 @@
         },
         "responses": {
           "200": {
+            "description": "这家店已经买过（不再扣）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/PremiumThemePurchaseResult"
+                    }
+                  },
+                  "required": ["data"]
+                }
+              }
+            }
+          },
+          "201": {
             "description": "成功",
             "content": {
               "application/json": {
@@ -8158,6 +8174,39 @@
                 }
               }
             }
+          },
+          "409": {
+            "description": "还没上架（不扣钱）",
+            "x-error-codes": ["not_available"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "not_implemented",
+            "x-error-codes": ["not_implemented"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "钱包没应答（再点不会重复扣）",
+            "x-error-codes": ["unavailable"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
           }
         }
       }
@@ -8165,7 +8214,7 @@
     "/v1/themes/premium/download": {
       "get": {
         "operationId": "getV1ThemesPremiumDownload",
-        "summary": "下载高级主题包（只给买过这家店的组织，没买 403；回短时签名地址或整包 + sha256；每次记一条）",
+        "summary": "下载高级主题包：zip 流（文件在包根），版本与 sha256 在响应头；不带 version = 最新；每次记一条",
         "tags": ["premium-theme"],
         "security": [
           {
@@ -8195,15 +8244,22 @@
           "200": {
             "description": "成功",
             "content": {
-              "application/json": {
+              "application/zip": {
                 "schema": {
-                  "type": "object",
-                  "properties": {
-                    "data": {
-                      "$ref": "#/components/schemas/PremiumThemeDownload"
-                    }
-                  },
-                  "required": ["data"]
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            },
+            "headers": {
+              "X-Agentsws-Theme-Version": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Agentsws-Theme-Sha256": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -8231,8 +8287,8 @@
             }
           },
           "403": {
-            "description": "令牌没有这条路由要的动作（`details.required_scope`）",
-            "x-error-codes": ["forbidden"],
+            "description": "forbidden / not_purchased",
+            "x-error-codes": ["forbidden", "not_purchased"],
             "content": {
               "application/json": {
                 "schema": {
@@ -8242,8 +8298,30 @@
             }
           },
           "404": {
-            "description": "not_found",
-            "x-error-codes": ["not_found"],
+            "description": "指定的版本没有（`details.latest_version`）",
+            "x-error-codes": ["version_not_found"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "还没上架",
+            "x-error-codes": ["not_available"],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CloudEntryErrorBody"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "私有桶没绑",
+            "x-error-codes": ["not_implemented"],
             "content": {
               "application/json": {
                 "schema": {
@@ -10987,36 +11065,15 @@
         ],
         "description": "插件配对（48 §5.3「插件采集汇聚」）。"
       },
-      "PremiumThemeDownload": {
-        "type": "object",
-        "properties": {
-          "version": {
-            "type": "string"
-          },
-          "sha256": {
-            "type": "string",
-            "description": "整包的 sha256（十六进制）；下载后核对，对不上不装。"
-          },
-          "url": {
-            "type": "string"
-          },
-          "expires_at": {
-            "type": "string"
-          },
-          "content_base64": {
-            "type": "string"
-          },
-          "format": {
-            "type": "string",
-            "enum": ["tar.gz", "zip"]
-          }
-        },
-        "required": ["version", "sha256"],
-        "description": "下载回的：版本 + sha256，外加**二选一**——短时签名地址（`url`，只认 https）或整包（`content_base64`）。 包是 `git archive` 出来的 `tar.gz` 或 `zip`（工坊按头几个字节认）；顶层可以多一层目录。"
-      },
       "PremiumThemeEntitlement": {
         "type": "object",
         "properties": {
+          "shop": {
+            "type": "string"
+          },
+          "theme_id": {
+            "type": "string"
+          },
           "owned": {
             "type": "boolean"
           },
@@ -11024,7 +11081,25 @@
             "type": "number"
           },
           "latest_version": {
+            "anyOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "string"
+              }
+            ]
+          },
+          "available": {
+            "type": "boolean",
+            "description": "云上能不能卖 / 能不能下（`false` = 即将开放）。老一点的回话没有这一格 = 能。"
+          },
+          "owned_since": {
             "type": "string"
+          },
+          "source": {
+            "type": "string",
+            "description": "怎么来的（买的 / 运营赠送的）。"
           },
           "preview_image_url": {
             "type": "string",
@@ -11036,7 +11111,7 @@
           }
         },
         "required": ["owned", "price_credits"],
-        "description": "`GET /v1/themes/premium/entitlement?shop=` 回的：这家店买没买、多少钱、最新版本。"
+        "description": "`GET /v1/themes/premium/entitlement?shop=` 回的：这家店买没买、多少钱、最新版本。 云上私有桶没绑 / 还没上架也是 200，`available: false`——卡上「即将开放」。"
       },
       "PremiumThemePurchaseRequest": {
         "type": "object",
@@ -11055,6 +11130,9 @@
             "type": "boolean",
             "const": true
           },
+          "shop": {
+            "type": "string"
+          },
           "charged_credits": {
             "type": "number"
           },
@@ -11066,8 +11144,8 @@
             "description": "扣完之后的可用积分（云上给了才有）。"
           }
         },
-        "required": ["owned", "charged_credits"],
-        "description": "买成了（同一家店再买一次不重复扣：`already_owned: true`、`charged_credits: 0`）。"
+        "required": ["charged_credits"],
+        "description": "买成了：新买 201（`already_owned: false`、扣 560）；同一家店再买 200（`already_owned: true`、`charged_credits: 0`）。"
       },
       "Pricing": {
         "type": "object",

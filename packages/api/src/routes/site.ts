@@ -141,6 +141,8 @@ export interface SiteThemeView {
       theme_name?: string
       source_theme_id?: string
       copy_theme_id?: string
+      /** WP304（决策 445）：店里的免费主题 / 我们的高级主题（老记录没有 = 店里的）。 */
+      source?: 'store' | 'premium'
     }
     /** WP301：工作目录还是旧的自带主题（agentsws-theme）那一份（工坊已改用 Horizon，下次起底新起一份；不删不迁）。 */
     legacy?: { theme: string; version?: string }

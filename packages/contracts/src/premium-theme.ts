@@ -12,11 +12,21 @@ export const PREMIUM_THEME_PRICE_CREDITS = 560
 /** 同一个价格的美元说法（卡上「$80」）。 */
 export const PREMIUM_THEME_PRICE_USD = 80
 
-/** 云上三条路（照私有云 WP305 的派工单；形状以 WP305 报告为准，不一致时改这里）。 */
+/**
+ * 云上三条路（私有云 WP305 定稿，10-13）：令牌动作集 `store`；成功 `{ data }`、失败 `{ code, message, details }`；
+ * `shop` 是 `xxx.myshopify.com`（云上大小写 / `https://` / 尾斜杠都认）。下载回的是 zip 流（文件在包根），
+ * 版本与 sha256 在响应头 {@link PREMIUM_THEME_HEADERS}。
+ */
 export const PREMIUM_THEME_PATHS = {
   entitlement: '/v1/themes/premium/entitlement',
   purchase: '/v1/themes/premium/purchase',
   download: '/v1/themes/premium/download',
+} as const
+
+/** 下载那条路回的两个响应头。 */
+export const PREMIUM_THEME_HEADERS = {
+  version: 'X-Agentsws-Theme-Version',
+  sha256: 'X-Agentsws-Theme-Sha256',
 } as const
 
 /** Shopify 主题商店里 Horizon 那一页（店里没有能改的免费主题时，卡上给这个链接）。 */
@@ -28,11 +38,21 @@ export interface PremiumThemeQuery {
   shop: string
 }
 
-/** `GET /v1/themes/premium/entitlement?shop=` 回的：这家店买没买、多少钱、最新版本。 */
+/**
+ * `GET /v1/themes/premium/entitlement?shop=` 回的：这家店买没买、多少钱、最新版本。
+ * 云上私有桶没绑 / 还没上架也是 200，`available: false`——卡上「即将开放」。
+ */
 export interface PremiumThemeEntitlement {
+  shop?: string
+  theme_id?: string
   owned: boolean
   price_credits: number
-  latest_version?: string
+  latest_version?: string | null
+  /** 云上能不能卖 / 能不能下（`false` = 即将开放）。老一点的回话没有这一格 = 能。 */
+  available?: boolean
+  owned_since?: string
+  /** 怎么来的（买的 / 运营赠送的）。 */
+  source?: string
   /** 卡上的预览图（云上给了才出；没有就是占位）。 */
   preview_image_url?: string
   /** 示例店链接（云上给了才出）。 */
@@ -44,9 +64,10 @@ export interface PremiumThemePurchaseRequest {
   shop: string
 }
 
-/** 买成了（同一家店再买一次不重复扣：`already_owned: true`、`charged_credits: 0`）。 */
+/** 买成了：新买 201（`already_owned: false`、扣 560）；同一家店再买 200（`already_owned: true`、`charged_credits: 0`）。 */
 export interface PremiumThemePurchaseResult {
-  owned: true
+  owned?: true
+  shop?: string
   charged_credits: number
   already_owned?: boolean
   /** 扣完之后的可用积分（云上给了才有）。 */
@@ -60,8 +81,9 @@ export interface PremiumThemeDownloadQuery {
 }
 
 /**
- * 下载回的：版本 + sha256，外加**二选一**——短时签名地址（`url`，只认 https）或整包（`content_base64`）。
- * 包是 `git archive` 出来的 `tar.gz` 或 `zip`（工坊按头几个字节认）；顶层可以多一层目录。
+ * WP305 定稿下载回的是 **zip 流**（版本与 sha256 在响应头 {@link PREMIUM_THEME_HEADERS}），不是这个 JSON。
+ * 这个形状是兜底：版本 + sha256，外加**二选一**——短时签名地址（`url`，只认 https）或整包（`content_base64`）。
+ * 工坊按头几个字节认 `zip` / `tar.gz`；顶层可以多一层目录。
  */
 export interface PremiumThemeDownload {
   version: string
