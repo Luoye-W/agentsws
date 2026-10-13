@@ -101,6 +101,14 @@ import type {
 } from './kol-public.js'
 import type { PricingCatalog } from './pricing-catalog.js'
 import type {
+  PremiumThemeDownload,
+  PremiumThemeDownloadQuery,
+  PremiumThemeEntitlement,
+  PremiumThemePurchaseRequest,
+  PremiumThemePurchaseResult,
+  PremiumThemeQuery,
+} from './premium-theme.js'
+import type {
   AiAnswerProbe,
   AiAnswerResult,
   AiPlatform,
@@ -2030,6 +2038,49 @@ export interface CloudAllocationApi {
 }
 
 /* ------------------------------------------------------------------ */
+/* 高级主题（WP304 / 私有云 WP305，决策 445）                            */
+/* ------------------------------------------------------------------ */
+
+/** 高级主题按店买断：`shop` 只认 `*.myshopify.com`；授权按 组织 × 店铺 记。 */
+interface PremiumThemeErrors extends EntryAuthErrors {
+  400: 'invalid_input'
+}
+
+export interface CloudPremiumThemeApi {
+  /** 这家店买没买高级主题、多少钱、最新版本（成功 `{ data }`） */
+  'GET /v1/themes/premium/entitlement': {
+    auth: 'workspace_token'
+    scope: 'store'
+    tag: 'premium-theme'
+    query: PremiumThemeQuery
+    ok: { status: 200; body: CloudDataEnvelope<PremiumThemeEntitlement> }
+    errors: PremiumThemeErrors
+    errorBody: CloudEntryErrorBody
+  }
+  /** 给这家店买下高级主题（一次 560 积分；幂等：同店再买不重复扣；余额不够 402 回人话） */
+  'POST /v1/themes/premium/purchase': {
+    auth: 'workspace_token'
+    scope: 'store'
+    tag: 'premium-theme'
+    headers: AttributionHeaders
+    body: PremiumThemePurchaseRequest
+    ok: { status: 200; body: CloudDataEnvelope<PremiumThemePurchaseResult> }
+    errors: PremiumThemeErrors & { 402: 'insufficient_credits' }
+    errorBody: CloudEntryErrorBody
+  }
+  /** 下载高级主题包（只给买过这家店的组织，没买 403；回短时签名地址或整包 + sha256；每次记一条） */
+  'GET /v1/themes/premium/download': {
+    auth: 'workspace_token'
+    scope: 'store'
+    tag: 'premium-theme'
+    query: PremiumThemeDownloadQuery
+    ok: { status: 200; body: CloudDataEnvelope<PremiumThemeDownload> }
+    errors: PremiumThemeErrors & { 404: 'not_found' }
+    errorBody: CloudEntryErrorBody
+  }
+}
+
+/* ------------------------------------------------------------------ */
 /* 总表                                                                 */
 /* ------------------------------------------------------------------ */
 
@@ -2054,7 +2105,8 @@ export interface CloudApi
     CloudKolCloudApi,
     CloudChatRelayApi,
     CloudHostedApi,
-    CloudStandbyApi {}
+    CloudStandbyApi,
+    CloudPremiumThemeApi {}
 
 /** 编译期检查：表里每一条都长成 {@link CloudApiOperation} 的样子（写错一个键名就红）。 */
 type AssertOperations<T extends Record<keyof T, CloudApiOperation>> = T

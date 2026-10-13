@@ -50,6 +50,7 @@ export * from './hosted-env.js'
 export * from './identity.js'
 // WP268（决策 213）：生图 / 改图的工具参数、挑图卡与超额卡、上限
 export * from './images.js'
+export * from './premium-theme.js'
 export * from './join.js'
 export * from './kernel.js'
 export * from './knowledge.js'

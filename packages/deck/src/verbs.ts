@@ -170,6 +170,14 @@ const VERB_BY_KIND: Readonly<Record<string, Partial<Record<DeckAction, string>>>
     approve: 'verb.plan.approve',
     instruct: 'verb.plan.instruct',
   },
+  // WP304（决策 445）：选主题「就用这个」；买高级主题「买下 / 先不买」
+  theme_choice: {
+    approve: 'verb.theme_choice.approve',
+  },
+  theme_purchase: {
+    approve: 'verb.theme_purchase.approve',
+    reject: 'verb.theme_purchase.reject',
+  },
   b2b_account_transfer: {
     approve: 'verb.handoff.approve.account_transfer',
     instruct: 'verb.handoff.instruct.account_transfer',
@@ -231,6 +239,9 @@ export const CATEGORY_BY_KIND: Partial<Record<DeckKind, string>> = {
   // WP268
   image_pick: 'image_pick',
   image_budget: 'image_budget',
+  // WP304（决策 445）
+  theme_choice: 'theme_choice',
+  theme_purchase: 'theme_purchase',
 }
 
 /** `ChangeKind` → 类别人话（`staged_change` 专用；画布头一行写的就是这一列）。 */

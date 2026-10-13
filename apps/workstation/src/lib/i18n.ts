@@ -10,6 +10,7 @@ import { CLOUD_AUTH_EN, CLOUD_AUTH_ZH } from './i18n-cloud-auth'
 import { COMPANY_EN, COMPANY_ZH } from './i18n-company'
 import { HANDOFF_EN, HANDOFF_ZH } from './i18n-handoff'
 import { IMAGES_EN, IMAGES_ZH } from './i18n-images'
+import { THEMES_EN, THEMES_ZH } from './i18n-themes'
 import { LIBRARY_EN, LIBRARY_ZH } from './i18n-library'
 import { LOCAL_CONNECTOR_EN, LOCAL_CONNECTOR_ZH } from './i18n-local-connector'
 import { MATTER_EN, MATTER_ZH } from './i18n-matter'
@@ -8083,6 +8084,8 @@ const TABLES: Record<Lang, Table> = {
     ...SHOP_ADMIN_ZH,
     // WP268：挑图卡、品牌素材库、事项里拖图
     ...IMAGES_ZH,
+    // WP304：选主题卡、买高级主题卡
+    ...THEMES_ZH,
     // WP291：岗位页当场回答
     ...ANSWER_ZH,
     // WP271：三种模式的换词（`key@solo` / `key@peers`，`useMode().t` 先找它）
@@ -8109,6 +8112,7 @@ const TABLES: Record<Lang, Table> = {
     ...MATTER_EN,
     ...SHOP_ADMIN_EN,
     ...IMAGES_EN,
+    ...THEMES_EN,
     ...ANSWER_EN,
     ...MODE_EN,
     ...PEERS_EN,
