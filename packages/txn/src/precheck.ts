@@ -58,6 +58,9 @@ const KNOWN_KINDS: ReadonlySet<string> = new Set<ApprovalKind>([
   // WP268（决策 213）：挑图卡（选一张 / 都不要 / 再来一版）与生图超额卡
   'image_pick',
   'image_budget',
+  // WP304（决策 445）：选主题卡与买高级主题卡
+  'theme_choice',
+  'theme_purchase',
 ])
 
 export function isKnownKind(kind: string): boolean {

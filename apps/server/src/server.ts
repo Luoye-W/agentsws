@@ -193,7 +193,7 @@ import {
 import { scheduleConflicts, scheduleRulesFor } from '@agentsws/social-core'
 import { detectAnsweredBoundaries, SUPPORT_BOUNDARIES } from '@agentsws/support-core'
 import { createTxn, SqliteTxnStore, type Txn } from '@agentsws/txn'
-import { createWork, SqliteWorkStore, type Work } from '@agentsws/work'
+import { cardRefOf, createWork, SqliteWorkStore, type Work } from '@agentsws/work'
 import { type HttpBindings, type ServerType, serve } from '@hono/node-server'
 import { RESPONSE_ALREADY_SENT } from '@hono/node-server/utils/response'
 import { WebSocketServer } from 'ws'
@@ -497,6 +497,7 @@ import {
 } from './positions.js'
 import { createPrStore, prDeckData, seedDemoPr } from './pr.js'
 import { createPrService } from './pr-service.js'
+import { createPremiumThemeClient, type PremiumFetch } from './premium-theme.js'
 import { createPricingCatalog, type PricingCatalogSource } from './pricing-catalog.js'
 import { readRouteLevelOf, readViaSources } from './read-route.js'
 import {
@@ -2852,6 +2853,31 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         } catch {
           // 事项已经没了（被删 / 换了品牌）：预览照样在工具结果里，时间线少一条而已
         }
+      },
+      // WP304（决策 445）：选主题卡 / 买高级主题卡；高级主题的云端那一半（令牌是这个品牌那一把）
+      approvals: () => txn.approvals,
+      onCard: (item) => brand.work.onCard(cardRefOf(item)),
+      premium: createPremiumThemeClient({
+        secrets: brand.secrets,
+        baseUrl: cloudBaseUrl(env),
+        tokenSecretId: CLOUD_TOKEN_SECRET_ID,
+        ...(options.cloudFetch === undefined
+          ? {}
+          : { fetch: options.cloudFetch as unknown as PremiumFetch }),
+      }),
+      // 选好主题、起好底 → 按这件事原来那段话接着跑一次（时间线记「接着做了」，不伪造人话）
+      resume: async ({ matter_id, person_id, assignment_id }) => {
+        const matter = brand.work.getMatter(matter_id as never)
+        if (matter === undefined) return
+        const said = brand.work.store
+          .listMatterEvents(matter_id as never, { limit: 200 })
+          .find((e) => e.kind === 'human_message')?.text
+        await brand.work.run(matter_id as never, {
+          person_id: person_id as never,
+          assignment_id: assignment_id as never,
+          brief: said ?? matter.title,
+          text: '主题选好了，接着做',
+        })
       },
       appendEvent: (type, payload) =>
         appendEvent({
@@ -5910,6 +5936,13 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     // WP296 的旧主题升级卡（`upstream_upgrade`，upstream_id = agentsws-theme）被点了 → WP301 起不升，只记一句作废了
     if (isThemeUpgradeCard(item))
       return (await siteThemeOf(item.workspace_id))?.onUpgradeDecided(item)
+    // WP304（决策 445）：选主题卡 / 买高级主题卡被决定 → 起底（复制 / 买 / 下载）、按原话接着做。
+    // 要跑 CLI、下载，放到后台（这一次决定不等它；结果记进事项时间线）
+    if (item.kind === 'theme_choice' || item.kind === 'theme_purchase') {
+      const theme = await siteThemeOf(item.workspace_id)
+      void theme?.onThemeCardDecided?.(item).catch(() => undefined)
+      return
+    }
     // WP268：挑图卡 / 超额卡被决定 → 记选中 / 传店铺挂主题 / 再来一版 / 照卡出图
     if (item.kind === 'image_pick' || item.kind === 'image_budget') {
       await brands?.forWorkspace(item.workspace_id)
@@ -10436,6 +10469,9 @@ function seoDecided(bus: ApprovalBus, hook: SeoDecidedHook): ApprovalBus {
           // WP268：挑图卡 / 超额卡
           out.kind === 'image_pick' ||
           out.kind === 'image_budget' ||
+          // WP304：选主题卡 / 买高级主题卡
+          out.kind === 'theme_choice' ||
+          out.kind === 'theme_purchase' ||
           // WP237：「这件事该走哪条职责」选定了 → 钉到那条、立刻开跑
           isRouteChoice(out) ||
           // WP276：「X 想把「…」交给你」接下 / 不接了

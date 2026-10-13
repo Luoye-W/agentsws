@@ -24,6 +24,7 @@ import { SHOPIFY_CONNECT_EN, SHOPIFY_CONNECT_ZH } from './i18n-shopify-connect'
 import { SITE_THEME_EN, SITE_THEME_ZH } from './i18n-site-theme'
 import { SOCIAL_EXEC_EN, SOCIAL_EXEC_ZH } from './i18n-social-exec'
 import { SOCIAL_REPLY_EN, SOCIAL_REPLY_ZH } from './i18n-social-reply'
+import { THEMES_EN, THEMES_ZH } from './i18n-themes'
 
 export type Lang = 'zh' | 'en'
 
@@ -8085,6 +8086,8 @@ const TABLES: Record<Lang, Table> = {
     ...SHOP_ADMIN_ZH,
     // WP268：挑图卡、品牌素材库、事项里拖图
     ...IMAGES_ZH,
+    // WP304：选主题卡、买高级主题卡
+    ...THEMES_ZH,
     // WP291：岗位页当场回答
     ...ANSWER_ZH,
     // WP271：三种模式的换词（`key@solo` / `key@peers`，`useMode().t` 先找它）
@@ -8111,6 +8114,7 @@ const TABLES: Record<Lang, Table> = {
     ...MATTER_EN,
     ...SHOP_ADMIN_EN,
     ...IMAGES_EN,
+    ...THEMES_EN,
     ...ANSWER_EN,
     ...MODE_EN,
     ...PEERS_EN,

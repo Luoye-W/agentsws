@@ -7,6 +7,8 @@
  * 2. **发布永远不在这里发**：`theme_publish` 只出 `publish_theme` 的审批卡（人批了执行器才调 `theme publish`）；
  * 3. **还差哪一步说人话**：没装 CLI / 没登录 / 不知道店铺 → 一句「去岗位页点哪个按钮」+ `needs`，不甩英文报错；
  * 4. 回的数据是白名单：路径、名字、数字、预览链接；没有令牌、没有 CLI 原文（原文已经抹过、只在出错时带一段）。
+ * 6. WP304（决策 445）：起底没说用哪套 → 先出一张选主题卡（高级主题排第一，其余是店里能改的免费主题），回 `choice`；
+ *    人选了由服务端起底、再按原话接着跑。
  * 5. WP301（决策 399）：工作目录是旧的自带主题（agentsws-theme）起底的 → 每次回话都带一句 `base_legacy`
  *    （照实说「工坊已改用 Shopify 官方 Horizon，先新起一份」），**不迁、不删**；WP296 的升级卡不再出。
  */
@@ -80,7 +82,21 @@ function createThemeToolRun(options: ThemeToolsOptions): ToolExecutor {
     try {
       switch (bare) {
         case THEME_INIT_TOOL: {
-          const out = await m.initFromBase({ replace: input.replace === true, request })
+          const replace = input.replace === true
+          const source =
+            input.source === 'premium' || input.source === 'store' ? input.source : undefined
+          const theme_id = str(input.theme_id)
+          // WP304（决策 445）：没说用哪套 → 第一次起底 / 换主题先出一张选主题卡，等人选（选了服务端起底、接着做）
+          if (source === undefined && theme_id === undefined) {
+            const asked = await m.askThemeChoice?.({ replace, request })
+            if (asked !== undefined) return { status: 'ok', data: { ok: false, choice: asked } }
+          }
+          const out = await m.initFromBase({
+            replace,
+            request,
+            ...(source === undefined ? {} : { source }),
+            ...(theme_id === undefined ? {} : { theme_id }),
+          })
           return { status: 'ok', data: { ok: true, ...out } }
         }
         case THEME_LIST_TOOL: {

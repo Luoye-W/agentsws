@@ -1,0 +1,53 @@
+/**
+ * WP304（决策 445）：选主题卡（「选一个」家族）与买高级主题卡（「花钱」家族）。单独一张表，免得与别的单在 `i18n.ts` 里撞行。
+ * 界面少字：卡上一句 + 选项，长一点的进问号。
+ */
+export const THEMES_ZH: Record<string, string> = {
+  'kind.theme_choice': '选主题',
+  'category.theme_choice': '选主题',
+  'kind.theme_purchase': '高级主题 · 花钱',
+  'category.theme_purchase': '高级主题 · 花钱',
+  'verb.theme_choice.approve': '就用这个',
+  'verb.theme_purchase.approve': '买下',
+  'verb.theme_purchase.reject': '先不买',
+  'card.options.hint.theme_choice': '用哪套主题建站',
+  'themes.choice.premium': '高级主题',
+  'themes.choice.premium.tagline': '我们自己做的转化型主题，装好就能卖',
+  'themes.choice.premium.price': '{price} · {credits} 积分 · 这家店一次买断',
+  'themes.choice.premium.owned': '这家店已买',
+  'themes.choice.premium.soon': '即将开放',
+  'themes.choice.premium.needs_account': '登录工坊账号后可买',
+  'themes.choice.premium.example': '看示例店',
+  'themes.choice.recommended': '推荐',
+  'themes.choice.free': '店里的免费主题',
+  'themes.choice.live': '线上',
+  'themes.choice.too_old': '太老，改不了',
+  'themes.choice.none': '店里还没有能改的免费主题',
+  'themes.choice.store_link': '去主题商店装 Horizon',
+  'themes.purchase.credits': '{credits} 积分',
+}
+
+export const THEMES_EN: Record<string, string> = {
+  'kind.theme_choice': 'Pick a theme',
+  'category.theme_choice': 'Pick a theme',
+  'kind.theme_purchase': 'Premium theme · spend',
+  'category.theme_purchase': 'Premium theme · spend',
+  'verb.theme_choice.approve': 'Use this',
+  'verb.theme_purchase.approve': 'Buy',
+  'verb.theme_purchase.reject': 'Not now',
+  'card.options.hint.theme_choice': 'Which theme to build on',
+  'themes.choice.premium': 'Premium theme',
+  'themes.choice.premium.tagline': 'Our own conversion-ready theme',
+  'themes.choice.premium.price': '{price} · {credits} credits · once per store',
+  'themes.choice.premium.owned': 'Owned for this store',
+  'themes.choice.premium.soon': 'Coming soon',
+  'themes.choice.premium.needs_account': 'Sign in to buy',
+  'themes.choice.premium.example': 'See example store',
+  'themes.choice.recommended': 'Recommended',
+  'themes.choice.free': 'Free themes in your store',
+  'themes.choice.live': 'Live',
+  'themes.choice.too_old': 'Too old to edit',
+  'themes.choice.none': 'No editable free theme in your store yet',
+  'themes.choice.store_link': 'Get Horizon in the Theme Store',
+  'themes.purchase.credits': '{credits} credits',
+}

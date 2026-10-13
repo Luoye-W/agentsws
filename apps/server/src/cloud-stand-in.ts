@@ -56,6 +56,7 @@ import {
   StandInDataError,
   StandInWallet,
 } from '@agentsws/stand-ins'
+import { type PremiumThemeStandIn, premiumThemeStandIn } from './premium-theme-stand-in.js'
 import {
   type ShopifyCloudStandIn,
   type ShopifyCloudStandInOptions,
@@ -77,6 +78,11 @@ export interface CloudStandInOptions {
   click?: (url: string) => Promise<void>
   /** WP265：Shopify 一键授权那几条的替身设置（默认 1.5 秒后像店主点了「安装」）。 */
   shopify?: ShopifyCloudStandInOptions
+  /**
+   * WP304：高级主题那三条（`/v1/themes/premium/*`）。默认开着（演得出「选高级主题 → 买 → 下载」）；
+   * `false` = 像还没上线的云一样回 404（卡上「即将开放」）。`extra_credits` = 给合成余额多加一点（演买成）。
+   */
+  premiumTheme?: false | { extra_credits?: number }
 }
 
 /** 替身收到过的一次请求（测试用：断言走的是替身，而不是别处）。 */
@@ -90,6 +96,9 @@ export interface CloudStandInResponse {
   status: number
   text(): Promise<string>
   json(): Promise<unknown>
+  /** WP304：回字节的那几条（高级主题下载是 zip 流）才有。 */
+  arrayBuffer?(): Promise<ArrayBuffer>
+  headers?: { get(name: string): string | null }
 }
 
 export type CloudStandInFetch = (
@@ -133,6 +142,8 @@ export interface CloudStandIn {
   settled(): Promise<void>
   /** WP265：Shopify 一键授权那几条（测试推状态用）。 */
   shopify: ShopifyCloudStandIn
+  /** WP304：高级主题那三条（没开就是 undefined）。 */
+  premiumTheme?: PremiumThemeStandIn
 }
 
 /** 只点本机回环口：替身绝不替用户去访问别的网址。 */
@@ -150,6 +161,25 @@ function respond(status: number, body: unknown): CloudStandInResponse {
     status,
     text: async () => text,
     json: async () => JSON.parse(text) as unknown,
+  }
+}
+
+/** WP304：回字节 + 响应头（高级主题下载那条 zip 流）。 */
+function respondBytes(
+  status: number,
+  bytes: Uint8Array,
+  headers: Record<string, string>,
+): CloudStandInResponse {
+  const lower = new Map(Object.entries(headers).map(([k, v]) => [k.toLowerCase(), v]))
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    text: async () => Buffer.from(bytes).toString('latin1'),
+    json: async () => {
+      throw new Error('不是 JSON')
+    },
+    arrayBuffer: async () => bytes.slice().buffer as ArrayBuffer,
+    headers: { get: (name) => lower.get(name.toLowerCase()) ?? null },
   }
 }
 
@@ -466,17 +496,32 @@ export function cloudStandIn(options: CloudStandInOptions = {}): CloudStandIn {
   const monthUsed = (): number =>
     usageCells.length === 0 ? MONTH_USED : round(usageCells.reduce((sum, c) => sum + c.credits, 0))
 
+  /** WP304：替身里买高级主题花掉的（从可用里扣）。 */
+  let premiumSpent = 0
+  const premiumExtra =
+    options.premiumTheme === false ? 0 : (options.premiumTheme?.extra_credits ?? 0)
   const balance = (): WalletBalance => ({
     org_id: STAND_IN_ORG.id,
-    purchased: PURCHASED,
+    purchased: PURCHASED + premiumExtra,
     granted: GRANTED,
-    available: round(Math.max(0, PURCHASED + GRANTED - monthUsed())),
+    available: round(Math.max(0, PURCHASED + premiumExtra + GRANTED - monthUsed() - premiumSpent)),
     reserved: 0,
     expiring: [{ credits: GRANTED, expires_at: days(30) }],
     low_balance_threshold: 20,
     low_balance: false,
     at: now(),
   })
+
+  /** WP304：高级主题那三条（买的钱从上面那份合成余额里扣）。 */
+  const premium: PremiumThemeStandIn | undefined =
+    options.premiumTheme === false
+      ? undefined
+      : premiumThemeStandIn({
+          available: () => balance().available,
+          spend: (credits) => {
+            premiumSpent = round(premiumSpent + credits)
+          },
+        })
 
   /** 本月用量：三块各挑一项能力（价目表里真有的），数字是合成的。 */
   const usage = (group: string): UsageReport => {
@@ -874,6 +919,14 @@ export function cloudStandIn(options: CloudStandInOptions = {}): CloudStandIn {
         throw err
       }
     }
+    // ── WP304：高级主题（只认替身签过的工作区令牌；包是手写的占位主题）
+    if (path.startsWith('/v1/themes/premium/') && premium !== undefined) {
+      if (token === undefined || !workspaceTokens.has(token))
+        return fail(401, 'unauthenticated', '令牌无效')
+      const out = premium.handle(method, path, url.searchParams, body)
+      if (out?.bytes !== undefined) return respondBytes(out.status, out.bytes, out.headers ?? {})
+      if (out !== undefined) return respond(out.status, out.body)
+    }
     // ── WP265：Shopify 一键授权（只认替身签过的工作区令牌；授权页是 .invalid 假地址）
     if (path.startsWith('/v1/shopify/')) {
       if (token === undefined || !workspaceTokens.has(token))
@@ -909,6 +962,7 @@ export function cloudStandIn(options: CloudStandInOptions = {}): CloudStandIn {
       for (const l of input.limits ?? [])
         setLimit(l.kind, l.subject_id, l.monthly_limit, 'account:acct_demo')
     },
+    ...(premium === undefined ? {} : { premiumTheme: premium }),
     async settled() {
       await Promise.all([...inFlight])
     },

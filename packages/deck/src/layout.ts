@@ -115,6 +115,10 @@ export const LAYOUT_BY_KIND: Record<Exclude<DeckKind, 'staged_change'>, DeckLayo
   image_pick: 'variants',
   // WP268：生图超额——「出 N 张，约 X 积分，要继续吗？」一道是非题
   image_budget: 'policy',
+  // WP304（决策 445）：选主题——高级主题排第一，其余是店里能改的免费主题；单选，不猜
+  theme_choice: 'choice',
+  // WP304：买高级主题——「这家店一次 560 积分，买下？」一道是非题（「花钱」家族）
+  theme_purchase: 'policy',
 }
 
 /**

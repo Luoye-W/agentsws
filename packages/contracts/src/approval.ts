@@ -153,6 +153,17 @@ export type ApprovalKind =
    * payload = `ImageBudgetPayload`。
    */
   | 'image_budget'
+  /**
+   * WP304（决策 445）：**选主题卡**（「选一个」家族）。建站岗位第一次起底、或人说「换主题」时出：
+   * 第一项是我们的高级主题（付费，卖点 + 价格 + 预览）；其余是店里已装的、能改的免费主题（Online Store 2.0）。
+   * 选了由服务端起底（复制那一份 / 下载高级主题）再按原话接着做。payload = `ThemeChoicePayload`。
+   */
+  | 'theme_choice'
+  /**
+   * WP304（决策 445）：**买高级主题卡**（「花钱」家族）：「这家店一次 560 积分，买下？」人点了才扣；
+   * 买成了下载、核 sha256、推一份未发布预览。驳回什么都不花。payload = `ThemePurchasePayload`。
+   */
+  | 'theme_purchase'
 
 /** 14 §13.2 抽检复核：L2 自动批被抽中后，范围管理者看完说什么（WP32） */
 export interface SamplingReview {

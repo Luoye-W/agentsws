@@ -99,6 +99,13 @@ import type {
   PublicCreatorQuery,
   RevealedContact,
 } from './kol-public.js'
+import type {
+  PremiumThemeDownloadQuery,
+  PremiumThemeEntitlement,
+  PremiumThemePurchaseRequest,
+  PremiumThemePurchaseResult,
+  PremiumThemeQuery,
+} from './premium-theme.js'
 import type { PricingCatalog } from './pricing-catalog.js'
 import type {
   AiAnswerProbe,
@@ -2030,6 +2037,80 @@ export interface CloudAllocationApi {
 }
 
 /* ------------------------------------------------------------------ */
+/* 高级主题（WP304 / 私有云 WP305，决策 445）                            */
+/* ------------------------------------------------------------------ */
+
+/** 高级主题按店买断：`shop` 只认 `*.myshopify.com`（大小写 / `https://` / 尾斜杠都认）；授权按 组织 × 店铺 记。 */
+interface PremiumThemeErrors extends EntryAuthErrors {
+  400: 'invalid_input'
+}
+
+/** 下载那条：没买是 403 `not_purchased`（令牌缺动作也是 403，那时是 `forbidden`）。 */
+interface PremiumThemeDownloadErrors {
+  400: 'invalid_input'
+  401: 'unauthenticated'
+  403: 'forbidden' | 'not_purchased'
+  /** 指定的版本没有（`details.latest_version`） */
+  404: 'version_not_found'
+  /** 还没上架 */
+  409: 'not_available'
+  /** 私有桶没绑 */
+  501: 'not_implemented'
+}
+
+/** 下载回的两个响应头。 */
+export interface PremiumThemeDownloadHeaders {
+  'X-Agentsws-Theme-Version': string
+  'X-Agentsws-Theme-Sha256': string
+}
+
+export interface CloudPremiumThemeApi {
+  /** 这家店买没买高级主题、多少钱、最新版本；桶没绑 / 没上架也 200，`available: false`（即将开放） */
+  'GET /v1/themes/premium/entitlement': {
+    auth: 'workspace_token'
+    scope: 'store'
+    tag: 'premium-theme'
+    query: PremiumThemeQuery
+    ok: { status: 200; body: CloudDataEnvelope<PremiumThemeEntitlement> }
+    errors: PremiumThemeErrors
+    errorBody: CloudEntryErrorBody
+  }
+  /** 给这家店买下高级主题（新买 201 扣 560；已有 200 不扣；幂等由云端保证；余额不够 402 回人话） */
+  'POST /v1/themes/premium/purchase': {
+    auth: 'workspace_token'
+    scope: 'store'
+    tag: 'premium-theme'
+    headers: AttributionHeaders
+    body: PremiumThemePurchaseRequest
+    ok: { status: 201; body: CloudDataEnvelope<PremiumThemePurchaseResult> }
+    alt: {
+      status: 200
+      body: CloudDataEnvelope<PremiumThemePurchaseResult>
+      description: '这家店已经买过（不再扣）'
+    }
+    errors: PremiumThemeErrors & {
+      402: 'insufficient_credits'
+      /** 还没上架（不扣钱） */
+      409: 'not_available'
+      501: 'not_implemented'
+      /** 钱包没应答（再点不会重复扣） */
+      503: 'unavailable'
+    }
+    errorBody: CloudEntryErrorBody
+  }
+  /** 下载高级主题包：zip 流（文件在包根），版本与 sha256 在响应头；不带 version = 最新；每次记一条 */
+  'GET /v1/themes/premium/download': {
+    auth: 'workspace_token'
+    scope: 'store'
+    tag: 'premium-theme'
+    query: PremiumThemeDownloadQuery
+    ok: { status: 200; body: unknown; content: 'zip'; headers: PremiumThemeDownloadHeaders }
+    errors: PremiumThemeDownloadErrors
+    errorBody: CloudEntryErrorBody
+  }
+}
+
+/* ------------------------------------------------------------------ */
 /* 总表                                                                 */
 /* ------------------------------------------------------------------ */
 
@@ -2054,7 +2135,8 @@ export interface CloudApi
     CloudKolCloudApi,
     CloudChatRelayApi,
     CloudHostedApi,
-    CloudStandbyApi {}
+    CloudStandbyApi,
+    CloudPremiumThemeApi {}
 
 /** 编译期检查：表里每一条都长成 {@link CloudApiOperation} 的样子（写错一个键名就红）。 */
 type AssertOperations<T extends Record<keyof T, CloudApiOperation>> = T

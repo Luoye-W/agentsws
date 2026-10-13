@@ -165,7 +165,9 @@ export function pricingBlockOf(entry: Pick<PricingEntry, 'capability' | 'block'>
   if (entry.capability.startsWith('ai.')) return 'ai'
   if (
     entry.capability.startsWith('kol.service.') ||
-    entry.capability.startsWith('support.service.')
+    entry.capability.startsWith('support.service.') ||
+    // WP304 / WP305（决策 445）：高级主题按店买断（`theme.premium.store`）
+    entry.capability.startsWith('theme.premium.')
   )
     return 'service'
   return 'data'

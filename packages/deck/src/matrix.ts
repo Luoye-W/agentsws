@@ -68,6 +68,10 @@ const BY_KIND: Partial<Record<DeckKind, DeckAction[]>> = {
   image_pick: ['approve', 'reject', 'snooze', 'open'],
   // WP268：继续出 / 不出了
   image_budget: ['approve', 'reject', 'snooze', 'open'],
+  // WP304：选一个主题（选项就是答案；不选就还是没起底，没有「都不是」）
+  theme_choice: ['approve', 'snooze', 'open'],
+  // WP304：买下 / 先不买
+  theme_purchase: ['approve', 'reject', 'snooze', 'open'],
 }
 
 export function actionsFor(kind: DeckKind, state: ApprovalState): DeckAction[] {
@@ -99,6 +103,8 @@ const LABELS: Partial<Record<DeckKind, Partial<Record<DeckAction, string>>>> = {
   content_conflict: { approve: '就这样', snooze: '稍后', open: '看对比' },
   image_pick: { approve: '就这张', reject: '都不要', snooze: '稍后' },
   image_budget: { approve: '继续出', reject: '不出了', snooze: '稍后' },
+  theme_choice: { approve: '就用这个', snooze: '稍后' },
+  theme_purchase: { approve: '买下', reject: '先不买', snooze: '稍后' },
 }
 
 const DEFAULT_LABELS: Record<DeckAction, string> = {
@@ -142,6 +148,9 @@ const RISK_BY_KIND: Partial<Record<DeckKind, RiskClass>> = {
   // WP268：选中可能连带传店铺文件、改未发布预览（线上不动）
   image_pick: 'medium',
   image_budget: 'low',
+  // WP304：选主题只在店里多一份未发布副本（线上不动）；买主题花 560 积分
+  theme_choice: 'low',
+  theme_purchase: 'medium',
   outbound_draft: 'medium',
   dev_handoff_result: 'medium',
   scheduled_task: 'medium',
@@ -188,6 +197,8 @@ const MINUTES_BY_KIND: Partial<Record<DeckKind, number>> = {
   content_conflict: 2,
   image_pick: 1,
   image_budget: 1,
+  theme_choice: 1,
+  theme_purchase: 1,
   dev_handoff_result: 5,
   home_suggestion: 1,
   system_alert: 3,

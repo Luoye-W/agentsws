@@ -171,7 +171,8 @@ describe('WP268 生图接入建站端到端', () => {
     // 先搭一版首页（起底 → 检查 → 推未发布）
     const first = await dataOf<{ matter: { id: string }; run_id?: string }>(
       await call('POST', `/v1/positions/${theme.id}/matters`, {
-        title: '用 agentsws-theme 给我搭个首页',
+        // WP304：点名用 Horizon（不点名会先出选主题卡）
+        title: '用 Horizon 给我搭个首页',
         role_id: 'site.shopify-theme',
       }),
     )
