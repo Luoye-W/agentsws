@@ -48,6 +48,16 @@ export function bundledProfileDir(resourcesPath: string | undefined): string | u
 }
 
 /**
+ * WP297（决策 140 / 376）：安装包里随带的起底主题包所在目录（`<resources>/theme-base`，
+ * `scripts/fetch-theme-base.mjs` 下好核过、extraResources 摆进来、afterPack 再核一次）。
+ * 经 `AGENTSWS_THEME_BASE_DIR` 给服务进程：GitHub 下不动时它用这一份起底（同一个 sha256）。
+ * 没打包就没有——开发期只从 GitHub 下。
+ */
+export function bundledThemeBaseDir(resourcesPath: string | undefined): string | undefined {
+  return resourcesPath === undefined ? undefined : join(resourcesPath, 'theme-base')
+}
+
+/**
  * WP218：安装包里的工作台构建产物（`electron-builder.yml` 的 extraResources 把 `apps/workstation/dist`
  * 摆进 `<resources>/workstation`）。开发期给仓库里那一份（构建过才有，没有就不托管）。
  */

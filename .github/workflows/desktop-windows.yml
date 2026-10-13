@@ -3,7 +3,7 @@ name: Desktop · Windows（打包 + 装起来真跑）
 # WP218：Windows 安装包在 windows-latest 上真打、真装、真跑一遍。**不发布、不上传到任何下载站**，
 # 产物只作为这次运行的 artifact（14 天后自动过期）。
 #
-#   取 win32-x64 的捆绑 Node 与原生模块 → tsc -b → 工作台 vite build → 装包前冒烟（WP290）→ electron-builder（NSIS x64，
+#   取 win32-x64 的捆绑 Node 与原生模块 → 取起底主题包（WP297）→ tsc -b → 工作台 vite build → 装包前冒烟（WP290）→ electron-builder（NSIS x64，
 #   afterPack 用捆绑 Node 冒烟 import 一遍）→ 静默安装到带中文和空格的目录 → Playwright 起装好的 exe
 #   → /v1/health 200 → 打开工作台首页（截图）→ 单实例 → 只听 127.0.0.1 → 退出不留孤儿进程 → 静默卸载
 #
@@ -67,6 +67,17 @@ jobs:
 
       - name: 取捆绑的 Node 与原生模块（win32-x64，sha256 对 node-runtime.lock.json）
         run: node apps/desktop/scripts/fetch-node.mjs --target win32-x64
+
+      # WP297（决策 140 / 376）：建站起底主题包随安装包带一份（GitHub 下不动时的兜底）。
+      # 按 theme-base-pin.json 从 codeload 下、核 sha256 与字节数（对不上就失败）；钉子不变就走缓存。
+      - name: 缓存起底主题包
+        uses: actions/cache@v4
+        with:
+          path: apps/desktop/vendor/theme-base
+          key: theme-base-${{ hashFiles('apps/server/src/theme-base-pin.json') }}
+
+      - name: 取起底主题包（sha256 与字节数对 theme-base-pin.json）
+        run: node apps/desktop/scripts/fetch-theme-base.mjs
 
       - name: tsc -b
         run: pnpm exec tsc -b
@@ -160,6 +171,17 @@ jobs:
 
       - name: 取捆绑的 Node 与原生模块（win32-x64）
         run: node apps/desktop/scripts/fetch-node.mjs --target win32-x64
+
+      # WP297（决策 140 / 376）：建站起底主题包随安装包带一份（GitHub 下不动时的兜底）。
+      # 按 theme-base-pin.json 从 codeload 下、核 sha256 与字节数（对不上就失败）；钉子不变就走缓存。
+      - name: 缓存起底主题包
+        uses: actions/cache@v4
+        with:
+          path: apps/desktop/vendor/theme-base
+          key: theme-base-${{ hashFiles('apps/server/src/theme-base-pin.json') }}
+
+      - name: 取起底主题包（sha256 与字节数对 theme-base-pin.json）
+        run: node apps/desktop/scripts/fetch-theme-base.mjs
 
       - name: tsc -b
         run: pnpm exec tsc -b
