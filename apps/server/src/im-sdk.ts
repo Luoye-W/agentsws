@@ -62,6 +62,8 @@ interface LarkModule {
   ) => {
     start(p: { eventDispatcher: unknown }): Promise<void>
     close(p?: { force?: boolean }): void
+    /** 1.74 起有（WP306 用它对账）；老版本没有就不对账。 */
+    getConnectionStatus?(): { state?: string }
   }
   EventDispatcher: new (
     p: Record<string, unknown>,
@@ -90,12 +92,37 @@ const QUIET: LarkLogger = {
   trace() {},
 }
 
+/**
+ * WP306：长连接**判死**的三个数。
+ *
+ * 官方 SDK 每隔 `PingInterval`（飞书服务端下发，常见 120 秒）发一次 ping，但**默认不判 pong 没回**
+ * （`wsConfig.pingTimeout` 不给 = 不判，SDK 1.74 源码原文）：走代理（Clash 的 fake-ip 之类）时上游断了、
+ * 本地那一头不 close，SDK 就一直以为连着——不重连、不报、卡上一直绿勾，之后的消息全丢。
+ *
+ * - `FEISHU_PING_TIMEOUT_S`：ping 之后这么多秒没收到任何一帧 → 判死、断掉重连（最坏 ≈ PingInterval + 30 秒发现）；
+ * - `FEISHU_HANDSHAKE_TIMEOUT_MS`：握手卡住（DNS / 代理 / NAT）这么久就放弃这一次、按重连节奏再试；
+ * - `FEISHU_STATUS_POLL_MS`：每隔这么久问一次 SDK 的连接状态，与我们报给卡片的对账（回调漏了也不会一直绿）。
+ */
+export const FEISHU_PING_TIMEOUT_S = 30
+export const FEISHU_HANDSHAKE_TIMEOUT_MS = 15_000
+export const FEISHU_STATUS_POLL_MS = 15_000
+
+/** SDK 的状态名 → 我们的。`idle`（没在连也没在重连）在已经起过的连接上只可能是断了。 */
+function stateOfSdk(s: string | undefined): FeishuConnState | undefined {
+  if (s === 'connected' || s === 'connecting' || s === 'reconnecting' || s === 'failed') return s
+  if (s === 'idle') return 'reconnecting'
+  return undefined
+}
+
 /** 一个飞书应用一条长连接（官方 SDK 自带重连，重连参数由飞书服务端下发）。 */
 export function createFeishuSdkTransport(
   load: () => Promise<LarkModule> = loadLarkSdk,
+  /** 测试调快用；生产不传。 */
+  pace: { status_poll_ms?: number; ping_timeout_s?: number; extra?: Record<string, unknown> } = {},
 ): FeishuTransport {
   let ws: InstanceType<LarkModule['WSClient']> | undefined
   let client: InstanceType<LarkModule['Client']> | undefined
+  let poll: ReturnType<typeof setInterval> | undefined
 
   return {
     async start(input) {
@@ -109,12 +136,18 @@ export function createFeishuSdkTransport(
         loggerLevel: lark.LoggerLevel.error,
       }
       client = new lark.Client(common)
+      let reported: FeishuConnState | undefined
       const state = (s: FeishuConnState, detail?: string): void => {
+        reported = s
         input.onState(s, detail)
       }
       ws = new lark.WSClient({
         ...common,
         autoReconnect: true,
+        // WP306：判死与握手超时（见上面三个常量的说明）
+        handshakeTimeoutMs: FEISHU_HANDSHAKE_TIMEOUT_MS,
+        wsConfig: { pingTimeout: pace.ping_timeout_s ?? FEISHU_PING_TIMEOUT_S },
+        ...(pace.extra ?? {}),
         onReady: () => state('connected'),
         onReconnecting: () => state('reconnecting'),
         onReconnected: () => state('connected'),
@@ -130,11 +163,22 @@ export function createFeishuSdkTransport(
           input.onEvent(data as FeishuMessageEvent)
         },
       })
-      input.onState('connecting')
+      state('connecting')
       await ws.start({ eventDispatcher: dispatcher })
+      // WP306：对账。SDK 的回调只在「进 / 出重连循环」时触发；首连没成就掉进重连、
+      // 或者回调被吞了，卡片上的状态就会和真的不一样——每隔一会儿问一次 SDK 自己。
+      const live = ws
+      if (poll !== undefined) clearInterval(poll)
+      poll = setInterval(() => {
+        const now = stateOfSdk(live.getConnectionStatus?.().state)
+        if (now !== undefined && now !== reported && reported !== 'failed') state(now)
+      }, pace.status_poll_ms ?? FEISHU_STATUS_POLL_MS)
+      poll.unref?.()
     },
 
     async stop() {
+      if (poll !== undefined) clearInterval(poll)
+      poll = undefined
       ws?.close({ force: true })
       ws = undefined
       client = undefined

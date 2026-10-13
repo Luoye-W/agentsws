@@ -63,10 +63,10 @@ export function ImChannelsPage(): ReactNode {
     // WP211：飞书 / 钉钉存好之后在后台连，连上 / 连不上之前隔一会儿问一次
     refetchInterval: (q) => {
       const d = q.state.data
-      const busy = [d?.feishu, d?.dingtalk].some(
-        (b) => b?.configured === true && (b.state === 'connecting' || b.state === 'reconnecting'),
-      )
-      return busy ? 1500 : false
+      const bots = [d?.feishu, d?.dingtalk].filter((b) => b?.configured === true)
+      const busy = bots.some((b) => b?.state === 'connecting' || b?.state === 'reconnecting')
+      // WP306：连上之后也慢慢问着——长连接断了卡片要如实变，不能一直绿勾
+      return busy ? 1500 : bots.length > 0 ? 30_000 : false
     },
   })
   const [login, setLogin] = useState<{ id: string; qrcode_url: string } | null>(null)
