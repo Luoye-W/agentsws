@@ -358,6 +358,9 @@ export type KnownEventType =
   // WP54（48 v2 L1）：职责改名 / 合并之后，已有分配在启动时迁到新 id。
   // payload 只有分配 id、人、旧 id、新 id、迁过去的职责版本——改名也是一次变更，必须留痕。
   | 'assignment.role_migrated'
+  // WP295（docs/95 §5）：出厂默认等级改过的动作，还停在旧默认值、没人动过的分配启动时迁到新默认值。
+  // payload：分配 id、人、职责 id、动作 id、旧等级、新等级。
+  | 'assignment.automation_default_migrated'
   // WP55（48 §4 L3 #2–#5）：客服安全边界四件套。payload 一律只有结论与计数，
   // 正文、relay 地址、凭据永不进日志。
   /** Amazon 24h 响应线的三档（提醒 / 升级 / 闭账）。 */

@@ -1565,6 +1565,26 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     })
   }
 
+  // WP295（docs/95 §5）：出厂默认等级改过的动作（红人开发信 L2 → L1），还停在旧默认值、没人动过的
+  // 分配启动时迁到新默认值；人或升降级动过的不动。幂等，与上面那一段同一条理由每次起进程都跑得起。
+  for (const migrated of roles.assignments.migrateAutomationDefaults()) {
+    appendEvent({
+      schema_version: 1,
+      workspace_id: migrated.workspace_id,
+      type: 'assignment.automation_default_migrated',
+      actor: { kind: 'system', id: 'server' },
+      correlation: { trace_id: `tr_automation_default_${migrated.assignment_id}` },
+      payload: {
+        assignment_id: migrated.assignment_id,
+        person_id: migrated.person_id,
+        role_id: migrated.role_id,
+        action_id: migrated.action_id,
+        from: migrated.from,
+        to: migrated.to,
+      },
+    })
+  }
+
   // WP40 / 41 §2：大文件（会议录音、邮件附件）住对象存储——本地目录（默认，NAS 就是
   // 把它指到共享目录）或 S3 兼容（阿里 OSS / 腾讯 COS / R2 / MinIO）。
   // 加密接同一个主体密钥环：销毁一个主体的密钥，他的每一个对象当场读不出来（21 §4）。

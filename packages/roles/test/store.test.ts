@@ -226,6 +226,79 @@ describe('旧职责 id 的别名与迁移（WP54 / 48 v2 L1）', () => {
     s.close()
   })
 
+  // WP295（docs/95 §5）：红人开发信出厂默认 L2 → L1
+  it('还停在出厂 L2、没人动过的红人开发信迁成 L1；人动过的、撤销的、别的动作都不动；再跑一遍什么也不发生', () => {
+    const dbPath = tempDb()
+    const now = loadBundledRole('kol.youtube')
+    expect(now.automation.stage_outreach?.initial).toBe('L1')
+    // 改之前的那份定义：开发信初始 L2
+    const before = {
+      ...now,
+      automation: {
+        ...now.automation,
+        stage_outreach: { ...(now.automation.stage_outreach as object), initial: 'L2' },
+      },
+    } as typeof now
+    const s = createRoleStore({ clock: fixedClock(), dbPath, roles: [...roles(), before] })
+    const grant = (person: string) =>
+      s.assignments.create({
+        person_id: person,
+        workspace_id: 'ws_1',
+        role_id: 'kol.youtube',
+        ranges: [{ kind: 'store', id: 'shop_a' }],
+        granted_by: 'p_owner',
+      })
+    const untouched = grant('p_a')
+    const adjusted = grant('p_b')
+    const gone = grant('p_c')
+    s.assignments.revoke(gone.id)
+    expect(untouched.automation_state.stage_outreach?.level).toBe('L2')
+    s.close()
+
+    // 「人动过」：最后一次改等级的理由不是 assignment_created（升降级 / 手动）
+    const require_ = createRequire(import.meta.url)
+    const Database = require_('better-sqlite3') as new (
+      path: string,
+    ) => {
+      prepare(sql: string): { run(...args: string[]): void }
+      close(): void
+    }
+    const raw = new Database(dbPath)
+    raw
+      .prepare(
+        "UPDATE assignments SET doc = json_set(doc, '$.automation_state.stage_outreach.last_change.reason', 'manual') WHERE id = ?",
+      )
+      .run(adjusted.id)
+    raw.close()
+
+    const reopened = createRoleStore({ clock: fixedClock(), dbPath, roles: [...roles(), now] })
+    const migrated = reopened.assignments.migrateAutomationDefaults()
+    expect(migrated).toEqual([
+      {
+        assignment_id: untouched.id,
+        person_id: 'p_a',
+        workspace_id: 'ws_1',
+        role_id: 'kol.youtube',
+        action_id: 'stage_outreach',
+        from: 'L2',
+        to: 'L1',
+      },
+    ])
+    const after = reopened.assignments.require(untouched.id).automation_state
+    expect(after.stage_outreach?.level).toBe('L1')
+    expect(after.stage_outreach?.last_change.reason).toBe('default_changed:wp295')
+    // 采纳率不清零；别的动作一个字不动
+    expect(after.stage_outreach?.adoption).toEqual(
+      untouched.automation_state.stage_outreach?.adoption,
+    )
+    expect(after.stage_tracked_link).toEqual(untouched.automation_state.stage_tracked_link)
+    expect(reopened.assignments.require(adjusted.id).automation_state.stage_outreach?.level).toBe(
+      'L2',
+    )
+    expect(reopened.assignments.migrateAutomationDefaults()).toEqual([])
+    reopened.close()
+  })
+
   // WP62（51 §2）：`dtc.ops` → `dtc.store`
   it('老库里的 `dtc.ops` 分配迁到 `dtc.store`，范围与自动化状态一个字不动', () => {
     const dbPath = tempDb()

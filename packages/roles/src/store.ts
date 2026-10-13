@@ -7,6 +7,7 @@ import type {
   AssignmentId,
   Clock,
   DataDomain,
+  Level,
   Mandate,
   ObjectOrigin,
   Operation,
@@ -217,6 +218,36 @@ export interface RoleRegistry {
   list(): RoleDefinitionFull[]
 }
 
+/**
+ * WP295（docs/95 §5：AI 对外发东西，默认要你确认）：退役的出厂默认等级。
+ *
+ * 红人五条渠道职责的「发开发信」以前初始 L2——开发信又判成低风险，于是真红人的首封
+ * 一张卡都不出、直接自动发出去，与岗位定位「每一封开发信必须出卡」相反。现在初始 L1；
+ * 还停在出厂 L2 的老分配启动时迁成 L1。只可加行。
+ */
+export const RETIRED_AUTOMATION_DEFAULTS: readonly {
+  /** 职责 id 前缀（`kol.` = 红人五条渠道）。 */
+  role_prefix: string
+  action_id: string
+  /** 旧的出厂默认值；只迁还停在它上面的。 */
+  was: Level
+  /** 记进 `last_change.reason` 的那个词。 */
+  reason: string
+}[] = [
+  { role_prefix: 'kol.', action_id: 'stage_outreach', was: 'L2', reason: 'default_changed:wp295' },
+]
+
+/** WP295：一条分配的出厂等级迁移记录（调用方拿它记 `assignment.automation_default_migrated`）。 */
+export interface AutomationDefaultMigration {
+  assignment_id: AssignmentId
+  person_id: PersonId
+  workspace_id: WorkspaceId
+  role_id: RoleId
+  action_id: string
+  from: Level
+  to: Level
+}
+
 /** WP54：一条分配的职责改名迁移记录（调用方拿它记 `assignment.role_migrated`）。 */
 export interface RoleMigration {
   assignment_id: AssignmentId
@@ -262,6 +293,12 @@ export interface AssignmentApi {
    * 中途断过的库再跑一遍只补没做完的那一半。
    */
   splitRoleIds(filter?: { workspace_id?: WorkspaceId }): RoleMigration[]
+  /**
+   * WP295：出厂默认的自动化等级改过之后，把**还停在旧默认值、没人动过**的分配迁到新默认值
+   * （{@link RETIRED_AUTOMATION_DEFAULTS}）。人或升降级动过的（`last_change.reason` 不是
+   * `assignment_created`）一律不动。幂等：迁过的 reason 变了，再跑一遍什么也不发生。
+   */
+  migrateAutomationDefaults(filter?: { workspace_id?: WorkspaceId }): AutomationDefaultMigration[]
   /** 44：整个工作区活着的分配（算范围下推 / 品牌影响面时用）。 */
   listByWorkspace(
     workspace: WorkspaceId,
@@ -869,6 +906,49 @@ export function createRoleStore(options: RoleStoreOptions): RoleStore {
             role_version: primaryRole.version,
           })
         }
+      }
+      return out
+    },
+    migrateAutomationDefaults(filter) {
+      const out: AutomationDefaultMigration[] = []
+      const at = options.clock.now()
+      for (const assignment of backend.listAssignments(
+        filter?.workspace_id === undefined ? {} : { workspace_id: filter.workspace_id },
+      )) {
+        if (assignment.revoked_at !== undefined) continue
+        const role = roleMap.get(assignment.role_id)
+        if (role === undefined) continue
+        let next: Assignment | undefined
+        for (const rule of RETIRED_AUTOMATION_DEFAULTS) {
+          if (!assignment.role_id.startsWith(rule.role_prefix)) continue
+          const spec = role.automation[rule.action_id]
+          const state = (next ?? assignment).automation_state[rule.action_id]
+          // 新默认值还是旧值（定义没改）/ 不是停在旧默认值上 / 人或升降级动过：都不动
+          if (spec === undefined || state === undefined || spec.initial === rule.was) continue
+          if (state.level !== rule.was || state.last_change.reason !== 'assignment_created')
+            continue
+          next = {
+            ...(next ?? assignment),
+            automation_state: {
+              ...(next ?? assignment).automation_state,
+              [rule.action_id]: {
+                ...state,
+                level: spec.initial,
+                last_change: { at, reason: rule.reason },
+              },
+            },
+          }
+          out.push({
+            assignment_id: assignment.id,
+            person_id: assignment.person_id,
+            workspace_id: assignment.workspace_id,
+            role_id: assignment.role_id,
+            action_id: rule.action_id,
+            from: rule.was,
+            to: spec.initial,
+          })
+        }
+        if (next !== undefined) persist(next)
       }
       return out
     },

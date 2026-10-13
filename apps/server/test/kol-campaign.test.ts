@@ -249,6 +249,31 @@ describe('WP68 开发信', () => {
     expect(zh.body).toContain('做数码的视频')
   })
 
+  it('WP295（docs/95 §5）：真红人的首封开发信必出卡——不自动批、不自动发', async () => {
+    const id = await creatorWithEmail('Gadget Jonas', { language: 'en' })
+    const out = await data<{
+      staged: boolean
+      auto_approved?: boolean
+      approval_item_id: string
+    }>(
+      await post('/v1/kol/outreach', {
+        creator_id: id,
+        channel: 'youtube',
+        product: 'the Nordvolt 65W charger',
+        brand_pitch: 'We make desk chargers.',
+      }),
+    )
+    expect(out.staged).toBe(true)
+    expect(out.auto_approved).toBe(false)
+    const item = await server.txn.approvals.get(out.approval_item_id)
+    expect(item?.state).toBe('pending')
+    expect(item?.automation.auto_approved).toBe(false)
+    // 分配上的等级就是出厂的 L1（不是 L2 被风险级压下来的）
+    expect(
+      server.roles.assignments.require(youtube.id).automation_state.stage_outreach?.level,
+    ).toBe('L1')
+  })
+
   it('没有联系方式就不起草，并说清楚下一步做什么', async () => {
     const detail = await data<{ creator: { id: string } }>(
       await post('/v1/kol/creators', {

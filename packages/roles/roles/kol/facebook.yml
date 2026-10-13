@@ -106,11 +106,14 @@ actions:
     route_to: role_holder
 
 automation:
-  # 开发信 L2 起，采纳率够了升 L3（48 §5.1「开发信 L2 → L3」）。
+  # 开发信 L1 起（WP295 改；48 §5.1 原写「L2 → L3」），采纳率够了再建议往上升。
   # 能升是因为它改不了钱——禁承诺那道闸把"改得了钱"的那一半直接 block 掉了。
+  # WP295（docs/95 §5：AI 对外发东西，默认要你确认）：初始 L1——每封开发信都出卡（「发出去」家族）。
+  # 以前初始 L2 + 开发信判低风险 = 真红人的首封不出卡直接发，与「每一封开发信必须出卡」相反。
+  # 还停在出厂 L2 的老分配启动时迁成 L1（`RETIRED_AUTOMATION_DEFAULTS`）。升级规则不变。
   stage_outreach:
     ceiling: L3
-    initial: L2
+    initial: L1
     promotion: { adoption_rate_min: 0.95, window_weeks: 4, min_samples: 30 }
     demotion_triggers: [guardrail_hit, customer_complaint, manual]
   # 建合作**永远 L1**。15 §2 的 `HARD_L1` 里有 `kol_collaboration`，
