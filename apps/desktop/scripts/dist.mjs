@@ -11,9 +11,6 @@
  *   AGENTSWS_UPDATE_CHANNEL  = stable | beta（不给就按版本号：带 -beta.N 的是 beta）
  *
  * 其余参数原样交给 electron-builder（`--win`、`--mac --arm64`、`--dir` …）。
- *
- * WP297（决策 140 / 376）：打包前先确保 `vendor/theme-base/` 里有一份对得上 `theme-base-pin.json` 的
- * 起底主题包（`fetch-theme-base.mjs`：已有且对得上就不下；下不来 / 对不上 → 这里就失败，不出安装包）。
  * **一律 `--publish never`**：electron-builder 自己从不上传，上传由 release.yml 做（R2 + GitHub 同一套产物）。
  */
 import { spawnSync } from 'node:child_process'
@@ -21,7 +18,6 @@ import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { fetchThemeBase } from './fetch-theme-base.mjs'
 
 const desktop = join(dirname(fileURLToPath(import.meta.url)), '..')
 
@@ -44,7 +40,6 @@ async function main() {
   const { feedFromEnv, builderArgs } = await import(
     new URL('../dist/update-feed.js', import.meta.url).href
   )
-  await fetchThemeBase()
   const version = JSON.parse(readFileSync(join(desktop, 'package.json'), 'utf8')).version
   const feed = feedFromEnv(process.env, version)
   const args = distArgs(builderArgs(feed), process.argv.slice(2))
