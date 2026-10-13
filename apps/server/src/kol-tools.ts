@@ -58,6 +58,8 @@ const STAGES: readonly CollaborationStage[] = [
   'declined',
 ]
 
+const DAY_MS = 86_400_000
+
 const KINDS: readonly DeliverableKind[] = ['video', 'post', 'story', 'reel', 'thread', 'live']
 const REVIEWS: readonly DeliverableReview[] = [
   'pending',
@@ -244,11 +246,39 @@ export function createKolToolExecutor(options: KolToolsOptions): ToolExecutor {
 
       case 'list_collaborations': {
         const stage = STAGES.find((s) => s === input.stage)
+        const quietDays = num(input.quiet_days)
         const res = await port.collaborations(actor, {
           channel,
-          ...(stage === undefined ? {} : { stage }),
+          ...(quietDays !== undefined ? { stage: 'contacted' as const } : {}),
+          ...(stage === undefined || quietDays !== undefined ? {} : { stage }),
         })
-        return rowsOf(res.rows, 'collaboration')
+        /*
+         * WP295：每行带上**红人名字**与「发出去几天没动静」。以前只有 `creator_id`——模型要答
+         * 「谁还没回」得再一个一个 get_creator，岗位页那句快捷提示答出来的是「看合作清单：26 条」。
+         * `quiet_days` 给了就只要「已建联、这么多天没动静」的（没记下时间的也算上，不知道 ≠ 回过）。
+         */
+        const names = new Map(
+          (await port.creators(actor, { channel })).rows.map((r) => [r.creator_id, r.display_name]),
+        )
+        const now = Date.parse(options.now())
+        const rows = res.rows
+          .map((c) => {
+            const at =
+              c.last_activity_at === undefined ? Number.NaN : Date.parse(c.last_activity_at)
+            const days = Number.isFinite(at) ? Math.floor((now - at) / DAY_MS) : undefined
+            return {
+              ...c,
+              display_name: names.get(c.creator_id) ?? c.creator_id,
+              ...(days === undefined ? {} : { days_since_activity: days }),
+            }
+          })
+          .filter(
+            (c) =>
+              quietDays === undefined ||
+              c.days_since_activity === undefined ||
+              c.days_since_activity >= quietDays,
+          )
+        return rowsOf(rows, 'collaboration')
       }
 
       case 'list_deliverables': {

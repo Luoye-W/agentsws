@@ -15,6 +15,7 @@ import {
   kolToolZh,
   parseFollowerBand,
   parseOutreachStep,
+  parseQuietDays,
   parseWantedCount,
   planKolTools,
   searchQueryOf,
@@ -130,6 +131,8 @@ describe('工具计划', () => {
   it('建联但现场没有 creator_id：降级成找人，不编一个 id', () => {
     const plan = planKolTools('outreach', { channel: 'youtube', text: '起草一封开发信' })
     expect(plan.map((p) => p.tool)).toEqual(['search_creators'])
+    // WP295：不拿「起草一封开发信」这句话当关键词去搜（搜出来 0 个，回话就成了「没找到」）
+    expect(plan[0]?.input).toEqual({ channel: 'youtube', limit: 5 })
   })
 
   it('议价：读完合作与政策就停——价格永远是人在卡上填的那个数', () => {
@@ -147,6 +150,12 @@ describe('工具计划', () => {
     expect(
       planKolTools('follow_up', { channel: 'youtube', text: '谁还没回' }).map((p) => p.tool),
     ).toEqual(['list_collaborations'])
+    // WP295：只要「已建联、这么多天没动静」的；天数从那句话里读，没说就 7
+    expect(
+      planKolTools('follow_up', { channel: 'youtube', text: '建联发出去超过 10 天还没回音的' })[0]
+        ?.input,
+    ).toEqual({ channel: 'youtube', quiet_days: 10 })
+    expect(parseQuietDays('谁还没回')).toBe(7)
   })
 
   it('审交付物：没点名哪一条就只列待审的；点名了才提一条验收意见', () => {

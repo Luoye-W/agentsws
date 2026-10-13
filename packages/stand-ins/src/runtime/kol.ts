@@ -24,6 +24,8 @@ import {
   classifyKolTask,
   describeFindReply,
   describeKolRun,
+  describeQuietReply,
+  describeWhoToWriteReply,
   type KolFoundCreator,
   type KolIntent,
   type KolReplyLinks,
@@ -32,6 +34,7 @@ import {
   kolToolZh,
   type PlannedKolCall,
   parseFollowerBand,
+  parseQuietDays,
   parseWantedCount,
   planKolTools,
 } from '@agentsws/kol-core'
@@ -152,6 +155,27 @@ export interface KolFinding {
   creators?: KolFoundCreator[]
   /** WP142：这一份从哪来（`local_library` = 这条渠道没接数据来源，退到了自己的库）。 */
   source?: string
+  /** WP295：合作清单那一步读到的是谁、几天没动静（「谁还没回」回话里点名）。 */
+  collabs?: { name: string; days?: number }[]
+}
+
+/** WP295：合作清单结果里的人（名字 + 几天没动静）。认不出就不给。 */
+export function collabsOf(data: unknown): { name: string; days?: number }[] | undefined {
+  if (data === null || typeof data !== 'object') return undefined
+  const rows = (data as Record<string, unknown>).rows
+  if (!Array.isArray(rows)) return undefined
+  return rows.flatMap((row) => {
+    if (row === null || typeof row !== 'object') return []
+    const r = row as Record<string, unknown>
+    const name = typeof r.display_name === 'string' ? r.display_name : undefined
+    if (name === undefined) return []
+    return [
+      {
+        name,
+        ...(typeof r.days_since_activity === 'number' ? { days: r.days_since_activity } : {}),
+      },
+    ]
+  })
 }
 
 /** WP142：找人结果里的人（名字 + 粉丝数）与来源。认不出就不给。 */
@@ -203,12 +227,31 @@ export function renderKolAnswer(input: {
   wanted?: number
   /** WP142：候选池 / 关联官方数据接口 / 导入一张表的站内链接。 */
   links?: KolReplyLinks
+  /** WP295：「谁还没回」问的是几天（回话里那个数）。 */
+  quietDays?: number
 }): string {
   /*
    * WP142（docs/78 §1 #5）：**找人那一步成了，回话就说是谁**——前 5 个名字 + 去候选池的链接；
    * 不够数说为什么、给两个动作。其余几步（进候选池等）照旧一行一件事。
    */
+  /*
+   * WP295：两种没点名的问法各有自己的回话——「谁还没回」点名带天数；「起草开发信」问写给谁。
+   */
+  const quiet = input.findings.find((f) => f.tool === 'list_collaborations' && f.status === 'ok')
+  if (input.intent === 'follow_up' && quiet?.collabs !== undefined && input.findings.length === 1)
+    return describeQuietReply({
+      channel: input.channel,
+      days: input.quietDays ?? 7,
+      rows: quiet.collabs,
+      links: input.links,
+    }).join('\n')
   const search = input.findings.find((f) => f.tool === 'search_creators' && f.status === 'ok')
+  if (input.intent === 'outreach' && search !== undefined && input.findings.length === 1)
+    return describeWhoToWriteReply({
+      channel: input.channel,
+      found: search.creators ?? [],
+      links: input.links,
+    }).join('\n')
   if (search !== undefined) {
     const rest = input.findings.filter((f) => f !== search)
     const lines = describeFindReply({
@@ -262,4 +305,4 @@ export function renderKolAnswer(input: {
   return [head, ...lines].join('\n')
 }
 
-export { describeKolRun, parseFollowerBand, parseWantedCount }
+export { describeKolRun, parseFollowerBand, parseQuietDays, parseWantedCount }

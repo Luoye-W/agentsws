@@ -74,7 +74,7 @@ export const KOL_TOOL_SPECS: readonly KolToolSpec[] = [
   {
     name: 'list_collaborations',
     description:
-      '列出合作，可按渠道与阶段过滤。回答「合作到哪一步了」「谁还没回」「谁该交稿」时用它。',
+      '列出合作，可按渠道与阶段过滤；每行带红人名字与几天没动静。回答「合作到哪一步了」「谁还没回」「谁该交稿」时用它。',
     input_schema: {
       type: 'object',
       properties: {
@@ -82,6 +82,11 @@ export const KOL_TOOL_SPECS: readonly KolToolSpec[] = [
         stage: str(
           '只要某一个阶段的：sourced / contacted / replied / negotiating / agreed / delivering / delivered / closed / declined',
         ),
+        // WP295：「谁还没回」一次读出来（每行带 display_name 与 days_since_activity）
+        quiet_days: {
+          type: 'number',
+          description: '只要「已建联、这么多天没动静」的那几条（问「谁还没回」时填 7）',
+        },
       },
     },
   },

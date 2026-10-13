@@ -346,6 +346,47 @@ describe('十一个工具的执行器（对着一份假 KolPort 逐个走一遍�
     expect(res.reason).toContain('不能从 sourced')
   })
 
+  it('WP295：合作清单每行带名字与几天没动静；quiet_days 只要已建联、这么多天没动静的', async () => {
+    const day = 86_400_000
+    const run = exec(
+      fakePort({
+        creators: async () => ({
+          rows: [
+            { creator_id: 'cr_1', display_name: 'Gadget Jonas' },
+            { creator_id: 'cr_2', display_name: 'Desk Rosa' },
+          ],
+        }),
+        collaborations: async (_a: unknown, filter: { stage?: string }) => ({
+          rows: [
+            {
+              id: 'cb_1',
+              creator_id: 'cr_1',
+              stage: 'contacted',
+              last_activity_at: new Date(Date.parse(T0) - 9 * day).toISOString(),
+            },
+            {
+              id: 'cb_2',
+              creator_id: 'cr_2',
+              stage: 'contacted',
+              last_activity_at: new Date(Date.parse(T0) - 2 * day).toISOString(),
+            },
+          ].filter((c) => filter.stage === undefined || c.stage === filter.stage),
+        }),
+      }),
+    )
+    const all = await run({ name: 'list_collaborations', input: {}, request })
+    const rows = (all.data as { rows: { display_name: string; days_since_activity: number }[] })
+      .rows
+    expect(rows.map((r) => [r.display_name, r.days_since_activity])).toEqual([
+      ['Gadget Jonas', 9],
+      ['Desk Rosa', 2],
+    ])
+    const quiet = await run({ name: 'list_collaborations', input: { quiet_days: 7 }, request })
+    expect(
+      (quiet.data as { rows: { display_name: string }[] }).rows.map((r) => r.display_name),
+    ).toEqual(['Gadget Jonas'])
+  })
+
   it('不是红人职责的人调红人工具：拒', async () => {
     const res = await exec()({
       name: 'draft_outreach',

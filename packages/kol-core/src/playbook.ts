@@ -134,6 +134,13 @@ export function parseFollowerBand(text: string): { min: number; max: number } | 
   return undefined
 }
 
+/** WP295：「超过 7 天还没回」→ 7；没说几天按跟进节奏的第一档（3 天跟进、7 天收尾里取 7）。 */
+export function parseQuietDays(text: string): number {
+  const m = text.match(/(\d{1,3})\s*天/)
+  const n = m?.[1] === undefined ? Number.NaN : Number.parseInt(m[1], 10)
+  return Number.isFinite(n) && n > 0 ? n : 7
+}
+
 /** 一句话里点名的第几封（默认首封）。 */
 export function parseOutreachStep(text: string): OutreachStep {
   const lower = text.toLowerCase()
@@ -198,7 +205,21 @@ const NOISE = [
  * 按词拆不开，整串当关键词又对不上库里的「数码」。中文的渠道词按**子串**去掉；
  * 英文的（`ins` 这种短词）仍只按整词去，免得把 `insulated` 切坏。
  */
-const CJK_CHANNEL_WORDS = ['频道', '油管主', '油管', '红人', '达人', '博主', '脸书', '推特', 'up 主', 'up主', 'UP 主', 'UP主', '抖音国际']
+const CJK_CHANNEL_WORDS = [
+  '频道',
+  '油管主',
+  '油管',
+  '红人',
+  '达人',
+  '博主',
+  '脸书',
+  '推特',
+  'up 主',
+  'up主',
+  'UP 主',
+  'UP主',
+  '抖音国际',
+]
 
 /** 说的是"哪条渠道"而不是"什么样的人"的那些词（与 {@link channelInText} 同一份口径）。 */
 const CHANNEL_WORDS = [
@@ -309,7 +330,13 @@ export function planKolTools(intent: KolIntent, ctx: KolTaskContext): PlannedKol
         : [find, { tool: 'add_to_campaign', input: { creator_ids: [], campaign: ctx.campaign } }]
 
     case 'outreach': {
-      if (ctx.creator_id === undefined) return [find]
+      /*
+       * WP295：没点名是谁就**不拿这句话去搜**——「给这个频道起草一封开发信：说清合作形式……」
+       * 按关键词搜出来是 0 个，回话就成了「一个合适的都没找到」。改成把库里这条渠道的几个人
+       * 列出来（不带关键词），回话问「写给谁」。
+       */
+      if (ctx.creator_id === undefined)
+        return [{ tool: 'search_creators', input: { channel, limit: KOL_REPLY_NAMES } }]
       const step = parseOutreachStep(ctx.text)
       return [
         { tool: 'get_creator', input: { creator_id: ctx.creator_id } },
@@ -327,7 +354,14 @@ export function planKolTools(intent: KolIntent, ctx: KolTaskContext): PlannedKol
     }
 
     case 'follow_up': {
-      if (ctx.creator_id === undefined) return [collabs]
+      // WP295：「谁还没回」——只要已建联、这么多天没动静的那几条（每行带名字与天数）
+      if (ctx.creator_id === undefined)
+        return [
+          {
+            tool: 'list_collaborations',
+            input: { channel, quiet_days: parseQuietDays(ctx.text) },
+          },
+        ]
       return [
         collabs,
         {
@@ -470,6 +504,8 @@ export interface KolReplyLinks {
   linkAccount?: string
   /** 导入一张表（岗位页「活动」那一栏里的导入）。 */
   importTable?: string
+  /** WP295：合作线程（「谁还没回」回话里的去处）。 */
+  threads?: string
 }
 
 /** 回话里最多点名几个（多了就是一张表，表在候选池里）。 */
@@ -544,6 +580,55 @@ export function describeFindReply(input: {
       link('导入一张表', input.links?.importTable),
     ].filter((a): a is string => a !== undefined)
     if (actions.length > 0) lines.push(`想要更多人：${actions.join(' · ')}`)
+  }
+  return lines
+}
+
+/**
+ * WP295：「谁还没回」的回话——点名、带天数、说下一步在哪。
+ *
+ * 以前这句快捷提示回的是「看合作清单：26 条」，等于没答。
+ */
+export function describeQuietReply(input: {
+  channel: string
+  days: number
+  rows: readonly { name: string; days?: number | undefined }[]
+  links?: KolReplyLinks | undefined
+}): string[] {
+  const where = channelZh(input.channel)
+  if (input.rows.length === 0)
+    return [`${where} 上建联超过 ${input.days} 天还没回音的：一个都没有。`]
+  const lines = [`${where} 上建联超过 ${input.days} 天还没回音的有 ${input.rows.length} 个：`]
+  for (const r of input.rows.slice(0, KOL_REPLY_NAMES))
+    lines.push(`- ${r.name}（${r.days === undefined ? '没记下发信时间' : `${r.days} 天`}）`)
+  if (input.rows.length > KOL_REPLY_NAMES)
+    lines.push(`- ……还有 ${input.rows.length - KOL_REPLY_NAMES} 个`)
+  const threads = link('合作线程', input.links?.threads)
+  lines.push(
+    `要跟进就${threads === undefined ? '在合作线程里' : `在${threads}里`}点开那个人，提第二封（跟进那封）；不想再联系的推到「谢绝了」。`,
+  )
+  return lines
+}
+
+/**
+ * WP295：「起草开发信」没点名写给谁——问一句，顺手列出库里这条渠道的几个人。
+ *
+ * 以前拿整句话当关键词去搜，回「一个合适的都没找到」，人根本不知道问题在哪。
+ */
+export function describeWhoToWriteReply(input: {
+  channel: string
+  found: readonly KolFoundCreator[]
+  links?: KolReplyLinks | undefined
+}): string[] {
+  const where = channelZh(input.channel)
+  const pool = link('候选池', input.links?.pool)
+  const lines = [
+    `这封开发信写给谁？在${pool ?? '候选池'}里点开那个人，点「起草」；信起好了会出一张卡等你批。`,
+  ]
+  if (input.found.length > 0) {
+    lines.push(`${where} 上手边这几位：`)
+    for (const c of input.found.slice(0, KOL_REPLY_NAMES))
+      lines.push(`- ${c.name}${c.followers === undefined ? '' : `（${followersZh(c.followers)}）`}`)
   }
   return lines
 }
