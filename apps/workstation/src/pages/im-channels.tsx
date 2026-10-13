@@ -63,7 +63,15 @@ export function ImChannelsPage(): ReactNode {
     // WP211：飞书 / 钉钉存好之后在后台连，连上 / 连不上之前隔一会儿问一次
     refetchInterval: (q) => {
       const d = q.state.data
-      const bots = [d?.feishu, d?.dingtalk].filter((b) => b?.configured === true)
+      // WP308：企业微信也有连接状态了（老服务端没有 state，就当连上 / 连接中）
+      const wecomBot =
+        d?.wecom === undefined
+          ? undefined
+          : {
+              configured: d.wecom.configured,
+              state: d.wecom.state ?? (d.wecom.connected ? 'connected' : 'connecting'),
+            }
+      const bots = [d?.feishu, d?.dingtalk, wecomBot].filter((b) => b?.configured === true)
       const busy = bots.some((b) => b?.state === 'connecting' || b?.state === 'reconnecting')
       // WP306：连上之后也慢慢问着——长连接断了卡片要如实变，不能一直绿勾
       return busy ? 1500 : bots.length > 0 ? 30_000 : false
@@ -364,16 +372,29 @@ export function ImChannelsPage(): ReactNode {
               {
                 key: 'wecom',
                 label: t('im.wecom.title'),
-                state: wecom?.configured !== true ? 'unknown' : wecom.connected ? 'ok' : 'pending',
+                state:
+                  wecom?.configured !== true
+                    ? 'unknown'
+                    : wecom.connected
+                      ? 'ok'
+                      : wecom.state === 'failed'
+                        ? 'fail'
+                        : 'pending',
                 stateText:
                   wecom?.configured !== true
                     ? t('im.state.unconfigured')
                     : wecom.connected
                       ? t('im.state.live')
-                      : t('im.state.connecting'),
+                      : wecom.state === 'failed'
+                        ? t('im.state.failed')
+                        : wecom.state === 'reconnecting'
+                          ? t('im.state.reconnecting')
+                          : t('im.state.connecting'),
                 icon: Users,
                 ...(wecom?.configured === true
-                  ? { detail: t('im.wecom.saved', { bot: wecom.bot_id ?? '' }) }
+                  ? {
+                      detail: wecom.error ?? t('im.wecom.saved', { bot: wecom.bot_id ?? '' }),
+                    }
                   : {}),
               },
             ]}

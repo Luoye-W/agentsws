@@ -195,3 +195,33 @@ describe('飞书 / 钉钉两张卡', () => {
     expect(screen.getByTestId('im-wecom-bind')).toBeTruthy()
   })
 })
+
+describe('WP308：企业微信卡也如实显示连接状态', () => {
+  it('断了在重连 → 「断了，在重连」；被别处顶掉 → 「连不上」+ 那句人话', async () => {
+    calls.status = {
+      ...base,
+      wecom: { configured: true, connected: false, state: 'reconnecting', bot_id: 'B1' },
+    }
+    const view = renderWithProviders(<ImChannelsPage />)
+    const icon = within(await screen.findByTestId('im-wecom-state')).getByTestId('status-icon')
+    expect(icon.dataset.state).toBe('pending')
+    expect(icon.getAttribute('data-hint')).toContain('断了，在重连')
+    view.unmount()
+
+    calls.status = {
+      ...base,
+      wecom: {
+        configured: true,
+        connected: false,
+        state: 'failed',
+        bot_id: 'B1',
+        error: '这个企业微信机器人在别的地方连上了，这边让出来了。',
+      },
+    }
+    renderWithProviders(<ImChannelsPage />)
+    const failed = within(await screen.findByTestId('im-wecom-state')).getByTestId('status-icon')
+    expect(failed.dataset.state).toBe('fail')
+    expect(failed.getAttribute('data-hint')).toContain('连不上')
+    expect(failed.getAttribute('data-hint')).toContain('别的地方连上了')
+  })
+})

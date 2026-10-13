@@ -45,11 +45,19 @@ The team channel: @ it in a group and it asks the asker’s own agent as that pe
 
 The Secret goes straight into the local encrypted vault — never sent to the AI, never logged, never shown again.
 
+When an answer takes a while it first says "Got it, checking." and then replaces that line with the answer. "Disconnected, reconnecting" means the connection dropped and it is reconnecting; "connected somewhere else" means the same bot is connected on another computer — re-save the credentials on the side you want to keep.
+
 ## Feishu / DingTalk bots (company)
 
 Like WeCom, these are for your team: colleagues DM the bot or @ it in a group and it answers as the asker. Both use an outbound long connection (DingTalk calls it Stream mode), so no public URL is needed. Everyone clicks **Link my account** once and DMs the code to the bot — it only answers colleagues it knows. WeCom now uses the same linking step.
 
 Setup guides: [Feishu](help:im-feishu), [DingTalk](help:im-dingtalk).
+
+## Who answers (WeCom / Feishu / DingTalk)
+
+- **Questions about a position's work** (name the position, e.g. "Anything Reddit Ops needs from me today?"): that position's AI answers in one line — cards waiting for you, to-dos, what it's working on — with a "Handle it in the workbench" link. Work questions that don't name a position go to your main position.
+- **Handing over a job** ("reply to this email for me"): it's logged as a task in that position and you get "Logged as a task — confirm it in the workbench". Nothing is sent from the chat.
+- **Small talk, your schedule, colleagues**: still answered by your personal agent.
 
 ## FAQ
 

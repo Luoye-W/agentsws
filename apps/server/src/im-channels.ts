@@ -17,6 +17,7 @@
  * 深链投递（`renderCardForIm`），按钮一个都不放进 IM——凭据与决策不经 IM（13 §4）。
  */
 
+import { createHash, randomBytes } from 'node:crypto'
 import {
   ApiError,
   type GatewayEnv,
@@ -61,7 +62,7 @@ import type {
 } from '@agentsws/contracts'
 import type { Context, Hono } from 'hono'
 import type { ImInboundPipeline } from './channels.js'
-import type { ImAskPick } from './im-ask-route.js'
+import { type ImAskPick, imAskTarget } from './im-ask-route.js'
 import {
   createTeamBots,
   type DingtalkStatus,
@@ -165,6 +166,8 @@ export interface ImChannelsOptions {
     adapters: readonly ChannelAdapter[]
     route(input: RouteInput): RouteResult | undefined
     onEvent(event: InboundEvent): Promise<void>
+    /** WP308（决策 453）：管线事件里的聊天账号 id 只记这个哈希（加盐、同一工作区内稳定）。 */
+    hashAccount?: (value: string) => string
   }): ImInboundPipeline
   appendEvent(e: Omit<EventEnvelope, 'id' | 'at'> & { at?: string }): void
   newId(): string
@@ -183,6 +186,18 @@ export interface ImChannelsOptions {
     /** WP306：这条分配在哪个品牌（点名点到别的品牌时给；不给 = 这一套自己的品牌）。 */
     workspace_id?: WorkspaceId
   }): Promise<{ answer: string }>
+  /**
+   * WP308（决策 447）：点名岗位（或按「问谁」落到某个岗位）的**工作问题**直接问那个岗位的 Agent（只读，
+   * 一句人话 + 去工作台的链接）；要动手的交代在那个岗位建任务。闲聊 / 个人的事仍走秘书（`askAgent`）。
+   * 不给 = 一律走秘书（WP306 的老路）。抛出来的错误带 `code`，与 `askAgent` 同样记原因码、回一句人话。
+   */
+  askPosition?(input: {
+    viewer: PersonId
+    question: string
+    assignment_id: string
+    workspace_id: WorkspaceId
+    mode: 'ask' | 'task'
+  }): Promise<{ answer: string; link: string; kind: 'answer' | 'task' }>
   /** 本人的那条分配（问代理要带）。拿不到 = 这个人现在没有岗位，不问。 */
   assignmentOf(person_id: PersonId): string | undefined
   /**
@@ -192,7 +207,7 @@ export interface ImChannelsOptions {
   pickAssignment?(person_id: PersonId, question: string): MaybePromise<ImAskPick | undefined>
   /** WP306：问代理最多等多久（默认 90 秒）；过了先回一句人话，答案晚到再补发。 */
   askTimeoutMs?: number
-  /** WP306：答案没在这么久里出来就先回「收到，我查一下」（默认 1.5 秒；只对飞书）。 */
+  /** WP306：答案没在这么久里出来就先回「收到，我查一下」（默认 1.5 秒；WP308 起三条团队渠道都有）。 */
   ackAfterMs?: number
   /**
    * WP211（Fable 09-30 定）：谁能填 / 改 / 断开**公司的**应用凭据（企业微信、飞书、钉钉三条）。
@@ -251,6 +266,10 @@ export interface ImStatusView {
     bot_id?: string
     /** WP211：当前这个人有没有把自己的企业微信账号绑上。 */
     me_bound?: boolean
+    /** WP308：连接状态（与飞书 / 钉钉同一组名字：`reconnecting` = 断了，在重连）。 */
+    state?: 'idle' | 'connecting' | 'connected' | 'reconnecting' | 'failed'
+    /** WP308：连不上时给人看的一句话。 */
+    error?: string
   }
   /** WP211：飞书机器人（团队）。 */
   feishu?: FeishuStatus
@@ -317,6 +336,36 @@ export function createImChannels(options: ImChannelsOptions): ImChannelsAssembly
 
   /* ── WP211：三条团队渠道共用的「这个聊天账号是谁」与飞书 / 钉钉 ──── */
 
+  /*
+   * WP308（决策 453）：管线事件里的聊天账号 id 只记加盐哈希。盐每个工作区（品牌）一份，随机生成后
+   * 存在这一套的本机加密库里（同一工作区内稳定、换台机器搬数据也跟着走）；加密库不可用时只在进程里
+   * （那时团队渠道本来也配不了）。老事件不改。
+   */
+  const SALT_ID = 'im:hash-salt'
+  let salt: string | undefined
+  const saltOf = (): string => {
+    if (salt !== undefined) return salt
+    try {
+      const stored = options.secrets.available ? options.secrets.get(SALT_ID)?.salt : undefined
+      if (stored !== undefined && stored !== '') {
+        salt = stored
+        return stored
+      }
+    } catch {
+      // 解不开（换过密钥）：重新生成一份，之后的哈希换一套，老事件不受影响
+    }
+    const fresh = randomBytes(32).toString('hex')
+    try {
+      if (options.secrets.available) options.secrets.put(SALT_ID, { salt: fresh })
+    } catch {
+      // 存不进去就只在进程里
+    }
+    salt = fresh
+    return fresh
+  }
+  const hashAccount = (value: string): string =>
+    createHash('sha256').update(`${saltOf()}\n${value}`).digest('hex').slice(0, 16)
+
   const bindings = new ImBindings(options.secrets)
   const bindCodes = new ImBindCodes(options.random)
   const teamBots = createTeamBots({
@@ -326,6 +375,7 @@ export function createImChannels(options: ImChannelsOptions): ImChannelsAssembly
     rawStore: options.rawStore,
     makePipeline: options.makePipeline,
     route: routeToAgent,
+    hashAccount,
     onEvent: (event) => answerInbound(event),
     onConnState: (channel, state, prev) => connState(channel, state, prev),
     ...(options.onError === undefined ? {} : { onError: options.onError }),
@@ -426,6 +476,7 @@ export function createImChannels(options: ImChannelsOptions): ImChannelsAssembly
       adapters: [clawBotPipelineAdapter(adapter)],
       route: routeToAgent,
       onEvent: answerInbound,
+      hashAccount,
     })
     adapter.start(async (msg: WireMessage) => {
       await pipeline.ingest(WECHAT_CLAWBOT_CHANNEL, msg, options.workspace_id)
@@ -461,12 +512,17 @@ export function createImChannels(options: ImChannelsOptions): ImChannelsAssembly
       newId: options.newId,
       ...(options.wecomUrl === undefined ? {} : { url: options.wecomUrl }),
       ...(options.onError === undefined ? {} : { on_error: options.onError }),
+      // WP308（决策 451）：断了 / 连回来了，与飞书 / 钉钉一样记事件（换下来的旧连接不报）
+      on_state: (state, prev) => {
+        if (wecom === adapter) connState('wecom', state, prev)
+      },
     })
     wecom = adapter
     const pipeline = options.makePipeline({
       adapters: [wecomPipelineAdapter(adapter)],
       route: routeToAgent,
       onEvent: answerInbound,
+      hashAccount,
     })
     await adapter.start(async (body: WecomInboundBody) => {
       await pipeline.ingest(WECOM_BOT_CHANNEL, body, options.workspace_id)
@@ -528,12 +584,15 @@ export function createImChannels(options: ImChannelsOptions): ImChannelsAssembly
     }
   }
 
-  /** 回复函数：`keep` = 这一句不是最后一句（只有飞书用得上，见 `FeishuBotAdapter.reply`）。 */
+  /**
+   * 回复函数：`keep` = 这一句不是最后一句。飞书同一条消息能回多次；钉钉同一个 sessionWebhook 有效期内能发多次；
+   * 企业微信走流式回复（先开一条、之后刷它）——WP308 起三条都支持。
+   */
   type Reply = (text: string, opts?: { keep?: boolean }) => Promise<unknown>
   interface TeamReplier {
     channel: TeamChannel
     reply: Reply
-    /** 先回「收到，我查一下」：只有飞书（同一条消息能回多次；企业微信一条只回一次）。 */
+    /** 先回「收到，我查一下」（WP308 起三条团队渠道都有；个人微信没有）。 */
     ack: boolean
   }
 
@@ -543,7 +602,11 @@ export function createImChannels(options: ImChannelsOptions): ImChannelsAssembly
       const adapter = wecom
       return adapter === undefined
         ? undefined
-        : { channel: 'wecom', ack: false, reply: (text) => adapter.reply(event.dedupe_key, text) }
+        : {
+            channel: 'wecom',
+            ack: true,
+            reply: (text, opts) => adapter.reply(event.dedupe_key, text, opts),
+          }
     }
     if (event.channel === 'feishu') {
       const adapter = teamBots.feishu
@@ -561,8 +624,8 @@ export function createImChannels(options: ImChannelsOptions): ImChannelsAssembly
         ? undefined
         : {
             channel: 'dingtalk',
-            ack: false,
-            reply: (text) => adapter.reply(event.dedupe_key, text),
+            ack: true,
+            reply: (text, opts) => adapter.reply(event.dedupe_key, text, opts),
           }
     }
     return undefined
@@ -721,18 +784,46 @@ export function createImChannels(options: ImChannelsOptions): ImChannelsAssembly
       return
     }
     const started = Date.now()
-    type Outcome = { answer: string } | { error: unknown }
-    const outcome: Promise<Outcome> = options
-      .askAgent({
-        viewer: person_id,
-        question,
-        assignment_id: pick.assignment_id,
-        ...(pick.workspace_id === options.workspace_id ? {} : { workspace_id: pick.workspace_id }),
-      })
-      .then(
-        (out) => ({ answer: out.answer }),
-        (error: unknown) => ({ error }),
-      )
+    /*
+     * WP308（决策 447）：问谁——工作问题直接问岗位 Agent（只读）、要动手的交代在岗位建任务，
+     * 闲聊 / 个人的事仍问秘书。判据是纯函数（`imAskTarget`），不调模型。
+     */
+    const target =
+      options.askPosition === undefined
+        ? 'secretary'
+        : imAskTarget({
+            question,
+            ...(pick.role_id === undefined ? {} : { role_id: pick.role_id }),
+            named: pick.matched !== undefined,
+          })
+    const askPosition = options.askPosition
+    type Outcome = { answer: string; task?: true } | { error: unknown }
+    const asking: Promise<{ answer: string; task?: true }> =
+      target === 'secretary' || askPosition === undefined
+        ? options
+            .askAgent({
+              viewer: person_id,
+              question,
+              assignment_id: pick.assignment_id,
+              ...(pick.workspace_id === options.workspace_id
+                ? {}
+                : { workspace_id: pick.workspace_id }),
+            })
+            .then((out) => ({ answer: out.answer }))
+        : askPosition({
+            viewer: person_id,
+            question,
+            assignment_id: pick.assignment_id,
+            workspace_id: pick.workspace_id,
+            mode: target === 'position_task' ? 'task' : 'ask',
+          }).then((out) => ({
+            answer: `${out.answer}\n${IM_TEXT.goWorkbench}${out.link}`,
+            ...(out.kind === 'task' ? { task: true as const } : {}),
+          }))
+    const outcome: Promise<Outcome> = asking.then(
+      (out) => out,
+      (error: unknown) => ({ error }),
+    )
     const ackMs = options.ackAfterMs ?? 1500
     const limitMs = options.askTimeoutMs ?? 90_000
     let first: Outcome | 'timeout' = ack ? await Promise.race([outcome, after(ackMs)]) : 'timeout'
@@ -740,13 +831,16 @@ export function createImChannels(options: ImChannelsOptions): ImChannelsAssembly
       if (ack) await say(channel, person_id, reply, IM_TEXT.ack, { keep: true })
       first = await Promise.race([outcome, after(Math.max(0, limitMs - (Date.now() - started)))])
     }
-    const answered = (answer: string, late: boolean): void => {
+    const answered = (out: { answer: string; task?: true }, late: boolean): void => {
       // 21 §5：只记「答了多少字」，问题与答案的正文都不进日志
       emit('im.answered', {
         person_id,
         channel: 'im',
         via: channel,
-        answer_chars: answer.length,
+        // WP308：谁答的（秘书 / 岗位 Agent），交代型建了任务的标一下
+        to: target === 'secretary' ? 'secretary' : 'position',
+        ...(out.task === true ? { task: true } : {}),
+        answer_chars: out.answer.length,
         ...(late ? { late: true } : {}),
       })
     }
@@ -761,7 +855,7 @@ export function createImChannels(options: ImChannelsOptions): ImChannelsAssembly
           failed(channel, person_id, reasonOf(late.error), late.error)
           return
         }
-        answered(late.answer, true)
+        answered(late, true)
         await say(channel, person_id, reply, `${IM_TEXT.late}\n${body(late.answer)}`)
       })
       return
@@ -771,13 +865,13 @@ export function createImChannels(options: ImChannelsOptions): ImChannelsAssembly
       await say(channel, person_id, reply, failText(IM_TEXT.failed))
       return
     }
-    answered(first.answer, false)
+    answered(first, false)
     await say(channel, person_id, reply, body(first.answer))
   }
 
   /** WP306：长连接真的断了 / 连回来了，各记一笔（卡片那边按 `state` 如实变色）。 */
   const down = new Set<string>()
-  const connState = (channel: 'feishu', state: string, prev: string): void => {
+  const connState = (channel: TeamChannel, state: string, prev: string): void => {
     if (prev === 'connected' && state !== 'connected' && !down.has(channel)) {
       down.add(channel)
       emit('im.disconnected', { channel, state })
@@ -1002,6 +1096,8 @@ export function createImChannels(options: ImChannelsOptions): ImChannelsAssembly
         connected: wecom?.connected ?? false,
         ...(wecomFields?.bot_id === undefined ? {} : { bot_id: wecomFields.bot_id }),
         me_bound: bindings.isBound('wecom', person_id),
+        state: wecom?.state ?? 'idle',
+        ...(wecom?.lastError === undefined ? {} : { error: wecom.lastError }),
       },
       feishu: teamBots.feishuStatus(bindings.isBound('feishu', person_id)),
       dingtalk: teamBots.dingtalkStatus(bindings.isBound('dingtalk', person_id)),

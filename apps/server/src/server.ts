@@ -62,7 +62,13 @@ import { blobKey, blobUri, openBlobStore } from '@agentsws/blob'
 import { designRoleFamily } from '@agentsws/brand-design'
 import type { PageFetch as BrandIntakeFetch } from '@agentsws/brand-intake'
 import type { CatalogNote } from '@agentsws/catalog'
-import type { FeishuTransportFactory, ResolveMx } from '@agentsws/channels'
+import type {
+  DingtalkHttp,
+  DingtalkSocketFactory,
+  FeishuTransportFactory,
+  ResolveMx,
+  WecomSocketFactory,
+} from '@agentsws/channels'
 import { routeOfPosition } from '@agentsws/channels'
 import { LOCAL_RUNTIME_ENV } from '@agentsws/connect-adapter'
 import type {
@@ -364,6 +370,7 @@ import {
 import { createApprovalDirectory } from './housekeeping.js'
 import { type ImAskCandidate, imAskLabels, pickImAssignment } from './im-ask-route.js'
 import { createImChannels, type ImChannelsAssembly, mountBrandImRoutes } from './im-channels.js'
+import { askPositionAgent } from './im-position-ask.js'
 import { feishuSdkTransportFactory, fetchHttp, wsSocketFactory } from './im-sdk.js'
 import { createTeamBotManagerCheck } from './im-team-bots.js'
 import { createImagePlacer } from './image-place.js'
@@ -1183,7 +1190,13 @@ export interface ServerOptions {
    * WP306：团队 IM 渠道的长连接替身（测试用：假飞书长连接，不连真飞书）。
    * 生产不传，飞书走官方 SDK（`im-sdk.ts`）。
    */
-  imTransports?: { feishu?: FeishuTransportFactory }
+  imTransports?: {
+    feishu?: FeishuTransportFactory
+    /** WP308：钉钉 / 企业微信的长连接与 HTTP 替身（测试用；生产走 `ws` 与 `fetch`）。 */
+    dingtalkSocket?: DingtalkSocketFactory
+    dingtalkHttp?: DingtalkHttp
+    wecomSocket?: WecomSocketFactory
+  }
   /** WP306：IM 问代理的节奏（测试调快：多久没答先回「收到」、多久算超时）。生产不传 = 1.5 秒 / 90 秒。 */
   imPace?: { ackAfterMs?: number; askTimeoutMs?: number }
 }
@@ -10085,7 +10098,7 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
        * WP211：三条团队渠道的真连接。企业微信那条在 WP85 只做了注入口、真装配没接上
        * （界面上填了也一直「连接中」），这里一并接上 `ws`。飞书走官方 SDK，选了才懒加载。
        */
-      wecomSocket: wsSocketFactory,
+      wecomSocket: options.imTransports?.wecomSocket ?? wsSocketFactory,
       // Fable 09-30：公司的应用凭据只给负责人（`common.owner`）与公司管理员填、改、断开
       canManageTeamBots: createTeamBotManagerCheck({
         isOwner: (person_id) =>
@@ -10104,8 +10117,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       ...(options.imPace?.askTimeoutMs === undefined
         ? {}
         : { askTimeoutMs: options.imPace.askTimeoutMs }),
-      dingtalkSocket: wsSocketFactory,
-      dingtalkHttp: fetchHttp,
+      dingtalkSocket: options.imTransports?.dingtalkSocket ?? wsSocketFactory,
+      dingtalkHttp: options.imTransports?.dingtalkHttp ?? fetchHttp,
       appendEvent,
       newId: () => `im_${Math.floor(random() * 1e9).toString(36)}`,
       random,
@@ -10130,6 +10143,38 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           ),
         )
         return { answer: out.answer }
+      },
+      /*
+       * WP308（决策 447）：点名岗位的工作问题直接问岗位 Agent（只读：今天的卡 / 待办 / 进行中 / 最近记录，
+       * 或一次岗位当场问答）；交代型的在那个岗位建任务。走那条分配所在品牌的岗位面。
+       * 与秘书那一路一样自己开一个 trace 作用域（IM 不经网关）。
+       */
+      askPosition: async (input) => {
+        const assembly = await positionsFor(input.workspace_id)
+        return traceScope.run(`trc_im_${Math.floor(random() * 1e12).toString(36)}`, () =>
+          askPositionAgent(
+            {
+              positions: assembly,
+              assignment: (id) => {
+                const a = roles.assignments.get(id)
+                return a === undefined || a.revoked_at !== undefined
+                  ? undefined
+                  : { role_id: a.role_id, person_id: a.person_id }
+              },
+              base:
+                env.AGENTSWS_SERVER_URL ??
+                (boundPort === undefined
+                  ? 'http://127.0.0.1:7777'
+                  : `http://127.0.0.1:${boundPort}`),
+            },
+            {
+              viewer: input.viewer,
+              question: input.question,
+              assignment_id: input.assignment_id,
+              mode: input.mode,
+            },
+          ),
+        )
       },
       assignmentOf: (person_id) =>
         roles.assignments
