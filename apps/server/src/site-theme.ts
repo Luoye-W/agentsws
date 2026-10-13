@@ -107,7 +107,7 @@ const WRITABLE_EXT = /\.(liquid|json|css|js|svg|txt)$/i
 /** 单个文件读 / 写的上限。 */
 export const MAX_THEME_FILE_BYTES = 512 * 1024
 /**
- * WP260：**读**的上限另算——真主题 v0.9.1 的 `CATALOG.json` 已经 50 万字节，离 512 KB 只差一点，再长一版就读不了；
+ * WP260：**读**的上限另算——真主题 v0.9.1 的 `CATALOG.json` 已经 50 万字节，v0.10.0 是 102 万字节（WP296 实测）；
  * 读回来的东西不会整份进模型（`theme-read.ts` 按页 / 按目录切），所以读放到 4 MB。写照旧 512 KB。
  */
 export const MAX_THEME_READ_BYTES = 4 * 1024 * 1024
