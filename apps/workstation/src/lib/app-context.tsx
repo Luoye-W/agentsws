@@ -105,3 +105,11 @@ export function useApp(): AppState {
   if (ctx === null) throw new Error('useApp 必须在 AppProvider 里用')
   return ctx
 }
+
+/**
+ * WP298：错误边界的兜底页要用——它可能挂在 `AppProvider` 外面（最外层那道），
+ * 那时没有上下文，返回 `null`，调用方自己退回默认语言。
+ */
+export function useOptionalApp(): AppState | null {
+  return useContext(AppContext)
+}

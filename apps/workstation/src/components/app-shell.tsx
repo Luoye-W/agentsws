@@ -43,6 +43,7 @@ import { AccountBlock } from '@/components/account-block'
 import { BrandSwitcher } from '@/components/brand-switcher'
 import { CommandPalette } from '@/components/command-palette'
 import { BrandMark } from '@/components/design'
+import { ErrorBoundary } from '@/components/error-boundary'
 import { NoModelBanner } from '@/components/models/no-model-banner'
 import { QuotaChip } from '@/components/models/quota-notice'
 import {
@@ -355,7 +356,8 @@ export function AppShell({
     [],
   )
   /** 现在开着的是首次设置向导吗（顶栏那条「还没接模型」在向导期间不出，70 §2.2）。 */
-  const onboarding = useLocation().pathname === '/onboarding'
+  const { pathname } = useLocation()
+  const onboarding = pathname === '/onboarding'
   // 岗位面装着就按岗位列；没装（或一个岗位都算不出来）退回老样子
   const byPosition = (instances ?? []).filter((p) => myAssignments(p).length > 0)
   // WP71：只存"用户显式点过的那几个"，没点过的按"当前岗位默认展开"算
@@ -700,7 +702,12 @@ export function AppShell({
               <ModelChip />
               <CreditsChip />
             </header>
-            <main className="min-w-0 flex-1 bg-ws-paper p-4 md:p-7">{children}</main>
+            <main className="min-w-0 flex-1 bg-ws-paper p-4 md:p-7">
+              {/* WP298：页面层错误边界——一页坏了只换主区，左栏顶栏照常；换一页就复原 */}
+              <ErrorBoundary scope="page" resetKey={pathname}>
+                {children}
+              </ErrorBoundary>
+            </main>
           </div>
 
           {/* 36 §9 第三栏：默认收成 44px 图标轨，一次开一个面板 */}
