@@ -188,6 +188,16 @@ export interface ThemeBaseUpgradeResult {
   kept: string[]
   /** 旧工作目录挪去的备份目录（不删）。 */
   backup: string
+  /** WP297：新版那一份是 GitHub 下不动、用安装包里随带的那一份时，GitHub 那边为什么不行。 */
+  bundled?: string
+}
+
+/**
+ * WP297（决策 140 / 376）：用了安装包里随带的起底包时，事项时间线上照实记的那一句。
+ * `why` 是 GitHub 那边为什么不行（下不动 / 超时 / 校验没过，说人话）。
+ */
+export function bundledBaseNote(version: string, why: string): string {
+  return `开源主题这次没从 GitHub 拿到（${why}），用的是安装包里随带的那一份 v${version}，和钉死的那一版核对过、一致。`
 }
 
 export type ThemeRunNode = (
@@ -285,6 +295,11 @@ export interface SiteThemeOptions {
    * 校验值与 {@link THEME_BASE} 同一个。不给 = 只从 GitHub 下。服务进程经 `AGENTSWS_THEME_BASE_DIR` 拿。
    */
   localBaseDir?: string
+  /**
+   * WP297：从 GitHub 下起底包最多等多久（毫秒）。不给 = 有随包那一份时 30 秒（下不动就早点换兜底）、
+   * 没有时 120 秒。测试注入小值。
+   */
+  baseFetchTimeoutMs?: number
   ledger: { stage(input: StageInput): Promise<StageOutcome> }
   effectiveConfig(assignment_id: string): EffectiveConfig
   /** 「预览好了」进事项时间线（有事项时）。 */
@@ -349,10 +364,16 @@ export interface SiteThemeAssembly {
    * 不是 Shopify / 没装 / 没登录 / CLI 不会找店 → 什么都不做。
    */
   refreshStores(opts?: { relogin?: boolean }): Promise<StoreLookupState | undefined>
-  initFromBase(input: { replace?: boolean }): Promise<{
+  initFromBase(input: {
+    replace?: boolean
+    /** WP297：哪一次运行起的底（用了随包那一份时往它的事项时间线记一句）。 */
+    request?: RunRequest
+  }): Promise<{
     base: { repo: string; version: string; commit: string; license: string }
     files: number
     moved_aside: boolean
+    /** WP297：起底包从哪来：`github`（照常）/ `bundled`（GitHub 下不动，用了安装包里随带的那一份）。 */
+    source: 'github' | 'bundled'
   }>
   list(): Promise<ThemeSummary[]>
   pull(input: { theme_id?: string }): Promise<{ files: number }>
@@ -901,34 +922,63 @@ export function createSiteTheme(options: SiteThemeOptions): SiteThemeAssembly {
   }
 
   /**
-   * 起底包：先从 GitHub（codeload，按 commit）下；下不来、或下来的校验不对，就用随安装包带的那一份
-   * （`localBaseDir/<repo名>-<commit>.tgz`，Luoye 决定 140 的兜底）——两份认的是同一个 sha256。
+   * 起底包：先从 GitHub（codeload，按 commit）下；下不来、超时、或下来的校验不对，就用随安装包带的那一份
+   * （`localBaseDir/<repo名>-<commit>.tgz`，Luoye 决定 140 的兜底；WP297 起打包时真带上了）——两份认的是同一个 sha256。
+   * 回 `bundled` = 用了随包那一份，值是 GitHub 那边为什么不行（调用方往事项时间线记一句）。
    */
-  const downloadBase = async (): Promise<Uint8Array> => {
+  const downloadBase = async (): Promise<{ bytes: Uint8Array; bundled?: string }> => {
+    const local = localBaseFile()
+    const hasLocal = local !== undefined && existsSync(local)
+    const timeoutMs = options.baseFetchTimeoutMs ?? (hasLocal ? 30_000 : 120_000)
     const fetchImpl: ThemeFetch =
-      options.fetch ?? ((url) => fetch(url, { signal: AbortSignal.timeout(120_000) }))
+      options.fetch ?? ((url) => fetch(url, { signal: AbortSignal.timeout(timeoutMs) }))
     let reason: string
     let tampered = false
+    let timedOut = false
+    let timer: ReturnType<typeof setTimeout> | undefined
     try {
-      const res = await fetchImpl(themeBaseUrl(pin))
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      const bytes = new Uint8Array(await res.arrayBuffer())
-      if (sha256(bytes) === pin.sha256) return bytes
+      const got = async (): Promise<Uint8Array> => {
+        const res = await fetchImpl(themeBaseUrl(pin))
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+        return new Uint8Array(await res.arrayBuffer())
+      }
+      // 整个下载（连同读完包体）一起限时：卡住不动的连接也算下不动
+      const bytes = await Promise.race([
+        got(),
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(() => {
+            timedOut = true
+            reject(new Error(`${Math.round(timeoutMs / 1000)} 秒没下完`))
+          }, timeoutMs)
+        }),
+      ])
+      if (sha256(bytes) === pin.sha256) return { bytes }
       tampered = true
       reason = '校验没过'
     } catch (e) {
       reason = e instanceof Error ? e.message : String(e)
+      if (e instanceof Error && e.name === 'TimeoutError') timedOut = true
+    } finally {
+      if (timer !== undefined) clearTimeout(timer)
     }
-    const local = localBaseFile()
     if (local !== undefined && existsSync(local)) {
       const bytes = new Uint8Array(readFileSync(local))
       if (sha256(bytes) === pin.sha256) {
         emit('site_theme.base_local', {
           workspace_id: ws,
           reason: tampered ? 'integrity' : 'network',
+          detail: reason,
         })
-        return bytes
+        return {
+          bytes,
+          bundled: tampered
+            ? '从 GitHub 下来的和钉死的那一版对不上'
+            : timedOut
+              ? `GitHub ${Math.round(timeoutMs / 1000)} 秒没下完`
+              : 'GitHub 下不动',
+        }
       }
+      emit('site_theme.base_local_rejected', { workspace_id: ws, reason: 'integrity' })
     }
     if (tampered)
       throw new SiteThemeError(
@@ -1075,7 +1125,7 @@ export function createSiteTheme(options: SiteThemeOptions): SiteThemeAssembly {
       )
     const root = rootOf(shop)
     // 先下好、校验过（下不来时工作目录一个字节不动）
-    const bytes = await downloadBase()
+    const { bytes, bundled } = await downloadBase()
     const stamp = String(Date.parse(now()))
     const staging = join(options.dataDir, 'theme-work', ws, 'upgrade', stamp)
     mkdirSync(staging, { recursive: true })
@@ -1155,7 +1205,15 @@ export function createSiteTheme(options: SiteThemeOptions): SiteThemeAssembly {
         manual: manual.length,
         kept: plan.kept.length,
       })
-      return { from, to: pin.version, migrated, manual, kept: plan.kept, backup }
+      return {
+        from,
+        to: pin.version,
+        migrated,
+        manual,
+        kept: plan.kept,
+        backup,
+        ...(bundled === undefined ? {} : { bundled }),
+      }
     } finally {
       // 只删这一次自己建的暂存目录
       rmSync(staging, { recursive: true, force: true })
@@ -1189,7 +1247,8 @@ export function createSiteTheme(options: SiteThemeOptions): SiteThemeAssembly {
       note(
         `主题升到 v${r.to} 了：迁移改了 ${r.migrated.length} 个文件` +
           (r.manual.length > 0 ? `，${r.manual.length} 处要人手动挪（让我推预览前先看一遍）` : '') +
-          '；旧的一份留作备份。线上主题没动，推一份预览看过再发布。',
+          '；旧的一份留作备份。线上主题没动，推一份预览看过再发布。' +
+          (r.bundled === undefined ? '' : `\n${bundledBaseNote(r.to, r.bundled)}`),
       )
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e)
@@ -1227,7 +1286,7 @@ export function createSiteTheme(options: SiteThemeOptions): SiteThemeAssembly {
 
     refreshStores,
 
-    async initFromBase({ replace }) {
+    async initFromBase({ replace, request }) {
       const { shop } = await need('files')
       const root = rootOf(shop)
       const existing = readdirSync(root)
@@ -1238,7 +1297,7 @@ export function createSiteTheme(options: SiteThemeOptions): SiteThemeAssembly {
           '主题工作目录里已经有东西了，没覆盖。要从 agentsws-theme 重新起底，带 replace=true（旧的会挪到一边，不删）。',
         )
       // 先下好、校验过，再动工作目录（下不来时原来的东西一个字节不动）
-      const bytes = await downloadBase()
+      const { bytes, bundled } = await downloadBase()
       if (existing.length > 0) {
         // 旧的挪到工作区外面的「旧版」目录（不删；变更审阅只看 themes/<ws>/ 下的店铺目录）
         const aside = join(
@@ -1277,7 +1336,20 @@ export function createSiteTheme(options: SiteThemeOptions): SiteThemeAssembly {
       // WP296：重新起底就是新版了，没定的升级卡作废
       delete state.upgrade_offer
       save()
-      emit('site_theme.initialized', { workspace_id: ws, version: pin.version })
+      emit('site_theme.initialized', {
+        workspace_id: ws,
+        version: pin.version,
+        source: bundled === undefined ? 'github' : 'bundled',
+      })
+      // WP297：用了随包那一份 → 这件事的时间线上照实记一句
+      const matter = request?.work_item?.id
+      if (bundled !== undefined && matter !== undefined) {
+        try {
+          options.noteMatter?.(matter, bundledBaseNote(pin.version, bundled))
+        } catch {
+          // 事项没了：照样在事件里
+        }
+      }
       return {
         base: {
           repo: pin.repo,
@@ -1287,6 +1359,7 @@ export function createSiteTheme(options: SiteThemeOptions): SiteThemeAssembly {
         },
         files: Object.keys(state.baseline).length,
         moved_aside: moved,
+        source: bundled === undefined ? 'github' : 'bundled',
       }
     },
 

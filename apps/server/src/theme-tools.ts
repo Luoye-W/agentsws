@@ -85,7 +85,7 @@ function createThemeToolRun(options: ThemeToolsOptions): ToolExecutor {
     try {
       switch (bare) {
         case THEME_INIT_TOOL: {
-          const out = await m.initFromBase({ replace: input.replace === true })
+          const out = await m.initFromBase({ replace: input.replace === true, request })
           return { status: 'ok', data: { ok: true, ...out } }
         }
         case THEME_LIST_TOOL: {
