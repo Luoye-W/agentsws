@@ -48,7 +48,7 @@ export function stepTextOf(tool: string, input: unknown): string {
     case 'theme_publish':
       return '出发布审批卡'
     case 'theme_init_from_base':
-      return '用开源主题起底'
+      return '在店里复制一份 Horizon 起底'
     case 'theme_pull':
       return '把店里的主题拉一份下来'
     case 'theme_list':

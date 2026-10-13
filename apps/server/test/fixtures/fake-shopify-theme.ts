@@ -9,9 +9,14 @@
  * WP258：`organization list --json` / `store list --json` 照 4.8.5 发行包的样子回话（`state.orgs` 没设 =
  * 这条命令不认识，退出 2——老测试照旧走「没找成 → 手填」）：多组织又没带 `--organization-id` 时非交互报错；
  * `stores-fail` 文件 = 网络错。
+ *
+ * WP301：线上那一份默认是**手写的 Horizon 形状假主题**（`FAKE_HORIZON_FILES`，不是 Horizon 的拷贝）；认
+ * `theme duplicate`（复制成未发布、`state.max_themes` 满了照 CLI 的 JSON 报错）、`theme rename`、
+ * `theme pull --only <glob> --path <目录>`。`setThemes` 换一家线上不是 Horizon 的店。
  */
 import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { FAKE_HORIZON_FILES } from '../../src/site-theme-stand-in.js'
 
 const SCRIPT = `
 const fs = require('node:fs')
@@ -50,7 +55,7 @@ if (argv[0] === 'store' && argv[1] === 'list') {
 }
 if (argv[0] !== 'theme') { console.error('unknown'); process.exit(2) }
 const sub = argv[1]
-const remote = ['list','pull','push','publish'].includes(sub)
+const remote = ['list','pull','push','publish','duplicate','rename'].includes(sub)
 if (remote && fs.existsSync(path.join(here, 'logged-out'))) { console.error('Error: You are not logged in. Run shopify auth login (401 Unauthorized)'); process.exit(1) }
 if (remote && store === 'none') { console.error('Error: --store is required'); process.exit(1) }
 if (sub === 'list') { process.stdout.write('Fetching themes...\\n' + JSON.stringify(state.themes.map((t) => ({ id: Number(t.id), name: t.name, role: t.role })))); process.exit(0) }
@@ -60,12 +65,33 @@ if (sub === 'check') {
   const warn = Object.entries(files).filter(([, b]) => b.includes('TODO')).map(([p]) => ({ path: p, offenses: [{ check: 'Todo', message: 'TODO left', severity: 1, start: { line: 0 } }] }))
   process.stdout.write(JSON.stringify([...out, ...warn])); process.exit(out.length > 0 ? 1 : 0)
 }
+const flags = (n) => argv.flatMap((a, i) => (a === n && argv[i + 1] !== undefined ? [argv[i + 1]] : []))
+const glob = (g, rel) => new RegExp('^' + g.split('**').map((p) => p.split('*').map((x) => x.split('.').join('\\\\.')).join('[^/]*')).join('.*') + '$').test(rel)
 if (sub === 'pull') {
   const id = flag('--theme')
   const t = id === undefined ? state.themes.find((x) => x.role === 'main') : state.themes.find((x) => x.id === id)
   if (!t) { console.error('Theme not found (404)'); process.exit(1) }
-  for (const [rel, body] of Object.entries(t.files)) { fs.mkdirSync(path.dirname(path.join(process.cwd(), rel)), { recursive: true }); fs.writeFileSync(path.join(process.cwd(), rel), body) }
+  const dest = flag('--path') || process.cwd()
+  if (!fs.existsSync(dest)) { console.error('Path does not exist'); process.exit(1) }
+  const only = flags('--only')
+  for (const [rel, body] of Object.entries(t.files)) { if (only.length > 0 && !only.some((g) => glob(g, rel))) continue; fs.mkdirSync(path.dirname(path.join(dest, rel)), { recursive: true }); fs.writeFileSync(path.join(dest, rel), body) }
   console.log('Pulled ' + t.name); process.exit(0)
+}
+if (sub === 'duplicate') {
+  if (!argv.includes('--force')) { console.error('would prompt'); process.exit(3) }
+  const t = state.themes.find((x) => x.id === flag('--theme'))
+  if (!t) { console.error('Theme not found (404)'); process.exit(1) }
+  if (state.themes.length >= (state.max_themes || 20)) { process.stdout.write(JSON.stringify({ message: "The theme '" + t.name + "' could not be duplicated due to errors", errors: ['Maximum number of themes reached'], requestId: 'req-1' })); process.exit(1) }
+  state.seq += 1
+  const c = { id: String(state.seq), name: flag('--name') || 'Copy of ' + t.name, role: 'unpublished', files: Object.assign({}, t.files) }
+  state.themes.push(c); save()
+  process.stdout.write(JSON.stringify({ theme: { id: Number(c.id), name: c.name, role: c.role, shop: store } })); process.exit(0)
+}
+if (sub === 'rename') {
+  const t = state.themes.find((x) => x.id === flag('--theme'))
+  if (!t || !flag('--name')) { console.error('Theme not found (404)'); process.exit(1) }
+  t.name = flag('--name'); save()
+  console.log('Renamed'); process.exit(0)
 }
 if (sub === 'push') {
   const files = readTheme(process.cwd())
@@ -101,6 +127,11 @@ export interface FakeShopifyTheme {
   setOrgs(orgs: FakeOrg[] | undefined): void
   /** WP258：找店那两条命令报网络错。 */
   setStoresFail(fail: boolean): void
+  /** WP301：换店里的主题（造线上不是 Horizon 的店 / 主题满了）。 */
+  setThemes(
+    themes: { id: string; name: string; role: string; files: Record<string, string> }[],
+    max_themes?: number,
+  ): void
 }
 
 export interface FakeOrg {
@@ -121,7 +152,7 @@ export function writeFakeShopifyTheme(dir: string): FakeShopifyTheme {
           id: '100001',
           name: 'Horizon',
           role: 'main',
-          files: { 'layout/theme.liquid': '<html>{{ content_for_layout }}</html>\n' },
+          files: { ...FAKE_HORIZON_FILES },
         },
       ],
     }),
@@ -147,6 +178,14 @@ export function writeFakeShopifyTheme(dir: string): FakeShopifyTheme {
       const state = JSON.parse(readFileSync(file, 'utf8')) as Record<string, unknown>
       if (orgs === undefined) delete state.orgs
       else state.orgs = orgs
+      writeFileSync(file, JSON.stringify(state))
+    },
+    setThemes: (themes, max_themes) => {
+      const file = join(dir, 'state.json')
+      const state = JSON.parse(readFileSync(file, 'utf8')) as Record<string, unknown>
+      state.themes = themes
+      if (max_themes === undefined) delete state.max_themes
+      else state.max_themes = max_themes
       writeFileSync(file, JSON.stringify(state))
     },
     setStoresFail: (fail) => {

@@ -10,7 +10,7 @@ import { THEME_READ_PAGE_CHARS, type ThemeReadData } from '@agentsws/stand-ins'
 /** 按 ids 挑的完整几项，一次最多回这么多字（放不下的写进 `more_ids`，另读一次）。 */
 const CATALOG_ENTRIES_CHARS = 40_000
 /** 目录页每项「什么时候用」截到这么长。 */
-const USE_WHEN_CHARS = 90
+const USE_WHEN_CHARS = 120
 
 type Rec = Record<string, unknown>
 const rec = (v: unknown): Rec | undefined =>
@@ -19,7 +19,10 @@ const str = (v: unknown): string | undefined => (typeof v === 'string' ? v : und
 const clip = (s: string, n: number): string =>
   s.length <= n ? s : `${s.slice(0, n - 1).trimEnd()}…`
 
-/** 这是不是 agentsws-theme 的 CATALOG.json（形状对上才按目录切；对不上就当普通文件分页）。 */
+/**
+ * 这是不是目录 CATALOG.json（形状对上才按目录切；对不上就当普通文件分页）。WP301 起是工坊按店里那一份 Horizon 的
+ * schema 现生成的（`horizon-catalog.ts`），形状与以前一样：`entries[]` 每项有 id / kind。
+ */
 function catalogOf(path: string, content: string): { root: Rec; entries: Rec[] } | undefined {
   if (path !== 'CATALOG.json') return undefined
   try {
@@ -58,10 +61,21 @@ function catalogIndex(root: Rec, entries: Rec[]): string {
         return name === undefined ? [] : [name]
       })
     : []
-  const version = str(root.theme)
+  const theme = str(root.theme) ?? '这份主题'
+  const templates = Array.isArray(root.templates)
+    ? (root.templates as unknown[]).filter((x): x is string => typeof x === 'string')
+    : []
+  const groups2 = Array.isArray(root.section_groups)
+    ? (root.section_groups as unknown[]).flatMap((g) => {
+        const file = str(rec(g)?.file)
+        return file === undefined ? [] : [file]
+      })
+    : []
   return [
-    `agentsws-theme${version === undefined ? '' : ` ${version}`} 目录：${sections.length} 个分区、${blocks.length} 个块、${snippets.length} 个片段。`,
-    '要某几项的完整设置（settings 的 id / 类型 / 选项）：再读一次 CATALOG.json 并给 ids，例如 ids=["hero","faq","container"]；主题设置给 ids=["theme_settings"]。',
+    `${theme} 目录：${sections.length} 个分区、${blocks.length} 个块${snippets.length > 0 ? `、${snippets.length} 个片段` : ''}。`,
+    '要某几项的完整设置（settings 的 id / 类型 / 选项）与预设：再读一次 CATALOG.json 并给 ids，例如 ids=["hero","section","text"]；主题设置给 ids=["theme_settings"]。',
+    ...(templates.length === 0 ? [] : [`模板（templates/）：${templates.join(', ')}`]),
+    ...(groups2.length === 0 ? [] : [`页头页尾（section 组）：${groups2.join(', ')}`]),
     '',
     '## 分区（sections，放进 templates/*.json 的 sections 里）',
     ...sections.map(line),
@@ -69,8 +83,12 @@ function catalogIndex(root: Rec, entries: Rec[]): string {
     '## 块（blocks，放进分区的 blocks 里；每个分区只收它完整设置里 accepts_blocks 列的块，标「私有」的只放进列了它的父级）',
     ...blocks.map(line),
     '',
-    `## 片段（snippets，Liquid 里 render 用，搭页面用不到）：${snippets.map((e) => String(e.id)).join(', ')}`,
-    '',
+    ...(snippets.length === 0
+      ? []
+      : [
+          `## 片段（snippets，Liquid 里 render 用，搭页面用不到）：${snippets.map((e) => String(e.id)).join(', ')}`,
+          '',
+        ]),
     `## 主题设置分组（config/settings_data.json 的 current 里改）：${groups.join(', ')}`,
   ].join('\n')
 }

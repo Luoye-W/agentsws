@@ -2,11 +2,12 @@
 /**
  * WP253：建站岗位端到端截图，可重跑出处。
  *
- * 起一个 demo（端口默认 4399，不碰 4317）；demo 里 CLI、`shopify theme …`、起底包都是替身
- * （`platformCliStandIn` / `themeCliStandIn` / `fakeThemeBase`：不跑真 npm / shopify、不连 GitHub、不碰真店）。
+ * 起一个 demo（端口默认 4399，不碰 4317）；demo 里 CLI、`shopify theme …` 都是替身
+ * （`platformCliStandIn` / `themeCliStandIn`：不跑真 npm / shopify、不碰真店；WP301 起起底 = 在替身店里复制那份
+ * Horizon 形状的假主题）。
  * 品牌平台设成 Shopify、给自己上网页模板职责，然后在岗位页依次拍那一行引导：
  * 没装 → 一键安装（卡在下面展开）→ 没登录 → 没店铺地址；再开两件事：
- * 「用 agentsws-theme 给我搭个首页」→ 时间线「预览好了」+ 打开预览；「预览看过了，发布上线」→ 发布卡。
+ * 「用 Horizon 给我搭个首页」→ 时间线「预览好了」+ 打开预览；「预览看过了，发布上线」→ 发布卡。
  *
  * ```
  * pnpm -F @agentsws/workstation exec vite build   # demo 服务的是 dist
@@ -177,7 +178,7 @@ async function main() {
 
     // 搭首页：起底 → 检查 → 推未发布；时间线「预览好了」+ 打开预览
     const built = await api(token, theme, 'POST', `/v1/positions/${theme}/matters`, {
-      title: '用 agentsws-theme 给我搭个首页',
+      title: '用 Horizon 给我搭个首页',
       role_id: 'site.shopify-theme',
     })
     await page.goto(`${BASE}/matters/${built.matter.id}`, { waitUntil: 'networkidle' })

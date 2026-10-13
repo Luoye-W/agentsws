@@ -141,7 +141,7 @@ async function main() {
     )
     await api(token, theme, 'PUT', '/v1/site/theme/store', { store: SHOP })
     await api(token, theme, 'POST', `/v1/positions/${theme}/matters`, {
-      title: '用 agentsws-theme 给我搭个首页',
+      title: '用 Horizon 给我搭个首页',
       role_id: 'site.shopify-theme',
     })
     await api(token, theme, 'POST', '/v1/shop-admin/run', {

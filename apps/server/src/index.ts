@@ -361,9 +361,14 @@ export {
   THEME_STORE_ENV,
   THEME_TOKEN_ENV,
 } from './shopify-theme.js'
-export { THEME_BASE, type ThemeBasePin } from './site-theme.js'
-// WP253：主题工坊的替身（demo / 测试：假主题包 + 进程内假 `shopify theme`，不联网、不碰真店）
-export { fakeThemeBase, themeCliStandIn } from './site-theme-stand-in.js'
+export { HORIZON_BASE } from './site-theme.js'
+// WP253 → WP301：主题工坊的替身（demo / 测试：手写的 Horizon 形状假主题 + 进程内假 `shopify theme`，不联网、不碰真店）
+export {
+  FAKE_HORIZON_FILES,
+  FAKE_LEGACY_THEME_FILES,
+  themeCliStandIn,
+  writeThemeFiles,
+} from './site-theme-stand-in.js'
 // WP60（49 §6 / 48 L7）：在线值守的本地一面
 export {
   createStandby,

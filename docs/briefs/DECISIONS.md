@@ -625,3 +625,16 @@
 | 415 | （WP300）内置 Ahrefs 骨架 `seo.backlinks` / `seo.domain_rating` 先与新能力并存 | 同意（**10-13 Luoye 同意**） | 低 |
 | 416 | （WP300）`dataforseo_seo` 与 `dataforseo`（SERP）分开两条渠道、同一把 key | 同意（**10-13 Luoye 同意**） | 低 |
 | 417 | （WP300）Treg 旧答案档（重复问收 10%）保持开 | 同意（**10-13 Luoye 同意**） | 低 |
+| 418 | （WP301）店里没有 Horizon 怎么办 | 请人从主题商店免费加一份，第二期加按钮；不替用户下载分发 Horizon | 中 |
+| 419 | （WP301）Horizon 姊妹主题算不算 | 第一期只认 Horizon | 低 |
+| 420 | （WP301）复制线上那一份还是全新 Horizon | 复制线上那一份（带上店家颜色 / 字体 / 首页设置） | 中 |
+| 421 | （WP301）模板检查只提醒不拦 | 保持，跑一段真机再看 | 低 |
+| 422 | （WP301）不许新建 custom 代码文件 | 保持，要代码用 Horizon 自带 custom-liquid | 低 |
+| 423 | （WP301）Rollout 真机验证 | 装包后 Fable 在 Rollout 建站岗位说「首页再改一版」核对 | 中 |
+| 424 | （WP301）Shopify CLI 最低版本 | 第二期岗位页检测加最低版本；现在报错时提示换工作台自带那份 | 低 |
+| 430 | （WP303）台账 DataForSEO 两类渠道上游统一记 `dataforseo` | 保持 | 低 |
+| 431 | （WP303）云端单独一个 DataForSEO 账户 | 单独开 | 中 |
+| 432 | （WP303）老路由 `/v1/data/search/*` 也读回包 cost 记实价 | 下一单做 | 低 |
+| 433 | （WP303）DataForSEO 余额用完时立刻发信 | 先不做 | 低 |
+| 434 | （WP303）公开健康页键名 `dataforseo` | 改 `seo_data`（Fable 10-13 已改并部署 221d8430） | 低 |
+| 435 | （WP303）DataForSEO 提醒线 $5，日花费超 $2 后改 $20 | 同意 | 低 |

@@ -1,11 +1,12 @@
 /**
  * WP253 端到端（真装配线：路由 → 端口 → 运行时 → 主题工坊 → 变更账本 → 执行器）。
  *
- * 模型那一跳是 stub（没接模型），`shopify theme …` 是进程内替身，起底包是内存里的假 agentsws-theme——
+ * 模型那一跳是 stub（没接模型），`shopify theme …` 是进程内替身（线上那一份是手写的 Horizon 形状假主题）——
  * 不联网、不碰任何真店。钉住的事：
  *
  * 1. 建站岗位页的引导：没装 / 没登录 / 不知道店铺 → `/v1/site/theme` 的 `next` 依次给出，补上就消失；
- * 2. 「用 agentsws-theme 给我搭个首页」→ 起底 → 检查 → 推**未发布**主题，事项时间线上一条「预览好了」+ 链接；
+ * 2. 「用 Horizon 给我搭个首页」→ 起底（WP301：在店里复制一份 Horizon）→ 检查 → 推**未发布**主题（推到复制出来的那一份上），
+ *    事项时间线上一条「预览好了」+ 链接；
  * 3. 「发布」→ 只出一张 `publish_theme` 的卡（L1，卡上写清换哪一份、改了哪些文件），**一次 publish 都没跑**；
  * 4. 人批了 → 执行器跑 `theme publish`；别的职责的工具面里没有主题工具。
  */
@@ -14,7 +15,7 @@ import { THEME_TOOL_NAMES } from '@agentsws/stand-ins'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createServer, type Server } from '../src/index.js'
 import type { ProbeExec } from '../src/platform-cli.js'
-import { fakeThemeBase, themeCliStandIn } from '../src/site-theme-stand-in.js'
+import { themeCliStandIn } from '../src/site-theme-stand-in.js'
 
 const T0 = '2026-10-07T09:00:00.000Z'
 const SHOP = '6suegp-md.myshopify.com'
@@ -71,7 +72,6 @@ beforeEach(async () => {
       ? { ok: true, stdout: `Current Shopify CLI version: 4.8.5 ${args.length}` }
       : { ok: false, stdout: '', missing: true }
   }
-  const base = fakeThemeBase()
   server = await createServer({
     quiet: true,
     clock: { now: () => now },
@@ -81,7 +81,7 @@ beforeEach(async () => {
     mdns: () => ({ mdns: { publish() {}, browse() {}, stop() {} } }),
     env: { AGENTSWS_OWNER_EMAIL: 'owner@example.test' },
     platformCliExec: exec,
-    siteTheme: { run: fake.run, fetch: base.fetch, base: base.pin },
+    siteTheme: { run: fake.run },
   })
   const ws = server.bootstrap.workspace.id
   theme = server.roles.assignments.create({
@@ -127,7 +127,7 @@ describe('WP253 建站岗位端到端（stub）', () => {
     // ② 搭首页：起底 → 检查 → 推未发布；时间线上「预览好了」+ 链接
     const out = await dataOf<{ matter: { id: string }; run_id?: string }>(
       await call('POST', `/v1/positions/${theme.id}/matters`, {
-        title: '用 agentsws-theme 给我搭个首页',
+        title: '用 Horizon 给我搭个首页',
         role_id: 'site.shopify-theme',
       }),
     )
@@ -189,7 +189,7 @@ describe('WP253 建站岗位端到端（stub）', () => {
     now = new Date(Date.parse(T0) + 60 * 60 * 1000).toISOString()
     await server.txn.executor.applyApproval(id)
     expect(fake.calls.filter((c) => c[1] === 'publish')).toHaveLength(1)
-    expect(fake.themes.find((t) => t.role === 'main')?.name).toContain('agentsws-theme')
+    expect(fake.themes.find((t) => t.role === 'main')?.name).toBe('首页草稿（Horizon）')
   })
 
   it('别的职责的工具面里没有主题工具（哪怕说的是主题）', async () => {
@@ -205,7 +205,7 @@ describe('WP253 建站岗位端到端（stub）', () => {
       await call(
         'POST',
         `/v1/positions/${build.id}/matters`,
-        { title: '用 agentsws-theme 给我搭个首页，然后发布', role_id: 'site.shopify-build' },
+        { title: '用 Horizon 给我搭个首页，然后发布', role_id: 'site.shopify-build' },
         build.id,
       ),
     )

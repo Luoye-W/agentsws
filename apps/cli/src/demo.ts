@@ -55,7 +55,6 @@ import {
   demoOldReddit,
   demoShop,
   demoWebSearch,
-  fakeThemeBase,
   periodQueryRunner,
   platformCliStandIn,
   readonlyBrowserStandIn,
@@ -1455,11 +1454,10 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
       return { platformCliExec: cli.exec, platformCliRunner: cli.runner }
     })(),
     /*
-     * WP253：网页模板的主题工坊在 demo 里也是替身——起底用一份内存里造的最小假主题包（不连 GitHub），
-     * `shopify theme …` 是进程内的假 CLI（店里的主题只活在内存里），一个真店都不碰。
+     * WP253 → WP301：网页模板的主题工坊在 demo 里也是替身——`shopify theme …` 是进程内的假 CLI（店里的主题只活在
+     * 内存里，线上那一份是手写的 Horizon 形状假主题；起底 = 在这家假店里复制它），一个真店都不碰。
      */
     siteTheme: ((): NonNullable<ServerOptions['siteTheme']> => {
-      const base = fakeThemeBase()
       // WP258：登好了替身账号下有两家店（岗位页演得出「选一下是哪家店」的下拉框）
       const run = themeCliStandIn({
         orgs: [
@@ -1477,7 +1475,7 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
           },
         ],
       }).run
-      return { run, fetch: base.fetch, base: base.pin }
+      return { run }
     })(),
     /*
      * WP261：「授权管理商品和页面」与运营工具在 demo 里也是替身——`store auth` 过一会儿像在浏览器里点了批准，

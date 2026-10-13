@@ -128,7 +128,22 @@ export interface SiteThemeView {
   workspace: {
     /** 工作目录里有几个主题文件（0 = 还没起底 / 没拉过）。 */
     files: number
-    base?: { repo: string; version: string; commit: string; license: string; at: string }
+    /**
+     * 从哪一份起的底。WP301 起是店里复制的 Shopify 官方 Horizon：`repo` = `Shopify/horizon`、`version` = 它的
+     * `theme_version`、`commit` 为空（店里那一份没有 commit），另带主题名与复制自 / 复制出来的主题 id。
+     */
+    base?: {
+      repo: string
+      version: string
+      commit: string
+      license: string
+      at: string
+      theme_name?: string
+      source_theme_id?: string
+      copy_theme_id?: string
+    }
+    /** WP301：工作目录还是旧的自带主题（agentsws-theme）那一份（工坊已改用 Horizon，下次起底新起一份；不删不迁）。 */
+    legacy?: { theme: string; version?: string }
   }
   /** 最近一次推上去的未发布副本（预览链接在这里）。 */
   last_push?: {
