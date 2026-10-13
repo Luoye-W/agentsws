@@ -551,12 +551,12 @@ describe('数据看板', () => {
     const quiet = await screen.findByTestId('data-row-quiet')
     expect(quiet.textContent).toContain('自家版运营：还没有数')
     expect(screen.getAllByTestId('data-row')).toHaveLength(1)
-    // 展开「看图表」时每条职责照常一行（要看的就是全部）
+    // 展开「看图表」时也并（没动静的那条展开来只是空表）；有数的那条，行上摆过的数字不再大块摆一遍
     fireEvent.click(screen.getByTestId('data-charts-toggle'))
-    await waitFor(() => {
-      expect(screen.getAllByTestId('data-row')).toHaveLength(2)
-    })
-    expect(screen.queryByTestId('data-row-quiet')).toBeNull()
+    await screen.findByTestId('data-charts')
+    expect(screen.getAllByTestId('data-row')).toHaveLength(1)
+    expect(screen.getByTestId('data-row-quiet')).toBeTruthy()
+    expect(screen.queryByTestId('view-tiles')).toBeNull()
   })
 })
 

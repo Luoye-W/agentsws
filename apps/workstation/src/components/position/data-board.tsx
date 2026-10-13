@@ -151,11 +151,17 @@ export function StoreSections({
   id,
   range,
   view,
+  skip,
 }: {
   id: string
   range: RangeName
   view: ViewResult | undefined
+  /**
+   * WP295：这几块数字已经摆在职责那一行上了，展开图表时不再大块摆一遍（同一屏不说两遍）。
+   */
+  skip?: ReadonlySet<string>
 }): ReactNode {
+  const isShownTile = (b: Block): boolean => isTile(b) && skip?.has(b.id) !== true
   return (
     <>
       {(view?.sections ?? []).map((section) => (
@@ -166,9 +172,9 @@ export function StoreSections({
               {section.source === 'gsc' || section.source === 'ga4' ? (
                 <GoogleSourcePicker assignment={id} source={section.source} />
               ) : null}
-              {section.blocks.filter(isTile).length === 0 ? null : (
+              {section.blocks.filter(isShownTile).length === 0 ? null : (
                 <div className="grid grid-cols-2 gap-4 lg:grid-cols-4" data-testid="view-tiles">
-                  {section.blocks.filter(isTile).map((block) => (
+                  {section.blocks.filter(isShownTile).map((block) => (
                     <BlockCard key={block.id} block={block} range={range} assignment={id} />
                   ))}
                 </div>
@@ -319,7 +325,12 @@ function DutyRow({
       </div>
       {expanded ? (
         <div className="flex flex-col gap-4" data-testid="data-charts" data-role={duty.role_id}>
-          <StoreSections id={duty.assignment_id} range={range} view={view.data} />
+          <StoreSections
+            id={duty.assignment_id}
+            range={range}
+            view={view.data}
+            skip={new Set(tiles.slice(0, MAX_TILES).map((b) => b.id))}
+          />
         </div>
       ) : null}
     </div>
@@ -368,6 +379,7 @@ export function DataBoard({
    * 没用的那几条渠道又是一排一排的 0。现在：有数的职责照常一行；其余（还没有数字块、
    * 也没有要连的源，或者几个数全是 0）收成一行「X、Y：还没有数」。一条都没动静时留第一条
    * 那一行（看得见这个岗位看的是哪几个数），其余照样并起来。只有一条职责的岗位不受影响。
+   * 展开「看图表」时同样并（没动静的职责展开来只是一摞空表）。
    * 数字块的取数与 `MiniTile` 同一把缓存键，不多发请求。
    */
   const tileIds = shown.map((d, i) => {
@@ -410,7 +422,8 @@ export function DataBoard({
       return v?.done === true && (v.value === undefined || v.value === 0)
     })
   })
-  const merge = !expanded && shown.length > 1
+  // 展开图表时也并：没动静的职责展开来是一摞空表，看了也白看
+  const merge = shown.length > 1
   const active = merge ? shown.filter((_, i) => quiet[i] !== true) : shown
   const keep = merge && active.length === 0 ? shown.slice(0, 1) : active
   const resting = merge ? shown.filter((d) => !keep.includes(d)) : []
