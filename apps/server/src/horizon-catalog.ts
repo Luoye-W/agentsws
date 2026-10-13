@@ -13,6 +13,10 @@
  * 预设（presets）里 `"static": true` 的块是父级用 `{% content_for "block" %}` 固定渲染的静态块，模板里要原样留着。
  * 块最多嵌 8 层（不算分区那一层）。
  *
+ * WP304（决策 445）：不只 Horizon——**任何 Online Store 2.0 主题**（有 JSON 模板）都按它自己的 schema 现生成目录，
+ * `capabilities` 记下它有哪些写法（主题块、`@theme`、私有块、静态块、分区本地块、section 组），`how_to` 按这个说；
+ * 只有 `.liquid` 模板的老主题认作「太老」（{@link isOs2Templates}）。Horizon 仍是默认推荐、测得最全的那一个。
+ *
  * 这里只做纯计算（读口由调用方给），不联网、不碰店铺。生成物是这份主题自己的事实，只落在用户本机的工作目录里。
  */
 
@@ -116,6 +120,54 @@ export const isHorizon = (info: ThemeInfo | undefined): boolean =>
 export const isLegacyTheme = (info: ThemeInfo | undefined): boolean =>
   info?.theme_name === LEGACY_THEME_NAME
 
+/**
+ * WP304（决策 445）：**是不是 Online Store 2.0 主题**——有 JSON 模板（`templates/*.json`，至少首页 `index.json`）。
+ * 只有 `.liquid` 模板的是老主题（2021 年以前那一代）：分区只能放在首页、没有 JSON 模板可改，工坊改不了。
+ * `templates` 是 `templates/` 下的相对路径（带不带 `templates/` 前缀都认）。
+ */
+export function isOs2Templates(templates: readonly string[]): boolean {
+  return templates.some((t) => /(^|\/)[^/]+\.json$/.test(t.replace(/^templates\//, '')))
+}
+
+/** 这份主题有哪些写法（目录开头的 how_to、规矩都按它说，不按 Horizon 写死）。 */
+export interface ThemeCapabilities {
+  /** Online Store 2.0（有 JSON 模板）。没有 = 老主题，工坊改不了。 */
+  os2: boolean
+  /** `blocks/` 下有主题块（Horizon 那一代）。 */
+  theme_blocks: boolean
+  /** 有分区 / 块收 `@theme`（= 所有公开主题块）。 */
+  at_theme: boolean
+  /** 有 `_` 开头的私有块。 */
+  private_blocks: boolean
+  /** 预设里有 `"static": true` 的静态块。 */
+  static_blocks: boolean
+  /** 有地方收应用块（`@app`）。 */
+  app_blocks: boolean
+  /** 分区自己定义本地块（Dawn 那一代的写法）。 */
+  local_blocks: boolean
+  /** 有 section 组（页头页尾在 `sections/*.json`）。 */
+  section_groups: boolean
+}
+
+/** 从目录项与模板清单算这份主题的写法。 */
+export function capabilitiesOf(input: {
+  entries: readonly CatalogEntry[]
+  templates: readonly string[]
+  section_groups: readonly unknown[]
+}): ThemeCapabilities {
+  const e = input.entries
+  return {
+    os2: isOs2Templates(input.templates),
+    theme_blocks: e.some((x) => x.kind === 'block'),
+    at_theme: e.some((x) => x.accepts_blocks?.includes('@theme') === true),
+    private_blocks: e.some((x) => x.private === true),
+    static_blocks: e.some((x) => x.static_blocks !== undefined),
+    app_blocks: e.some((x) => x.accepts_blocks?.includes('@app') === true),
+    local_blocks: e.some((x) => x.local_blocks !== undefined),
+    section_groups: input.section_groups.length > 0,
+  }
+}
+
 // ── 目录的形状 ─────────────────────────────────────────────────────────
 
 /** 一个设置（搭页面用得到的那几格；`header` / `paragraph` 这种排版用的不收）。 */
@@ -174,6 +226,8 @@ export interface ThemeCatalog {
   theme_settings: { group: string; settings: CatalogSetting[] }[]
   templates: string[]
   section_groups: { file: string; type?: string }[]
+  /** WP304：这份主题有哪些写法（`how_to` 按它出；任何 Online Store 2.0 主题都认）。 */
+  capabilities?: ThemeCapabilities
 }
 
 /** 读工作目录的口（测试用内存，`site-theme.ts` 用真目录）。`list` 回相对路径（含子目录），已排好序。 */
@@ -353,16 +407,19 @@ export function buildThemeCatalog(io: CatalogIo): ThemeCatalog {
       return { file, ...(type === undefined ? {} : { type }) }
     })
   const name = info?.theme_name ?? 'theme'
+  const templates = io.list('templates').map((rel) => rel.replace(/^templates\//, ''))
+  const capabilities = capabilitiesOf({ entries, templates, section_groups })
   return {
     theme: [name, info?.theme_version].filter((x) => x !== undefined).join(' '),
     theme_name: name,
     ...(info?.theme_version === undefined ? {} : { theme_version: info.theme_version }),
     generated_by: 'Agents 工坊按这份主题自带的 schema 现生成（不是主题的一部分，不会推到店里）',
-    how_to: CATALOG_HOW_TO,
+    how_to: howToFor(capabilities),
     entries,
     theme_settings,
-    templates: io.list('templates').map((rel) => rel.replace(/^templates\//, '')),
+    templates,
     section_groups,
+    capabilities,
   }
 }
 
@@ -373,6 +430,38 @@ export const CATALOG_HOW_TO: string[] = [
   'static_blocks 里的块是父级固定渲染的：模板里照预设原样留着，带 "static": true。照着 presets 搭最稳。',
   '页头页尾在 sections/header-group.json、footer-group.json；颜色、字体等在 config/settings_data.json 的 current 里（设置 id 见 theme_settings）。',
 ]
+
+/**
+ * WP304：按这份主题的写法出「怎么搭」——Horizon 那一代（主题块、`@theme`、私有块、静态块、section 组）照 {@link CATALOG_HOW_TO}
+ * 原样；Dawn 那一代（块写在分区自己的 schema 里）换成本地块的说法；没有的写法不提。
+ */
+export function howToFor(c: ThemeCapabilities): string[] {
+  const full =
+    c.theme_blocks && c.at_theme && c.private_blocks && c.static_blocks && c.section_groups
+  if (full) return CATALOG_HOW_TO
+  const page = c.theme_blocks
+    ? (CATALOG_HOW_TO[0] as string)
+    : '页面 = templates/<页>.json：{"sections":{"<分区实例id>":{"type":"<分区id>","settings":{…},"blocks":{"<块实例id>":{"type":"<块类型>","settings":{…}}},"block_order":["<块实例id>"]}},"order":["<分区实例id>"]}。'
+  const blocks: string[] = []
+  if (c.at_theme)
+    blocks.push(
+      c.private_blocks
+        ? (CATALOG_HOW_TO[1] as string)
+        : '分区只收它 accepts_blocks 里的块：@theme = blocks/ 里所有公开块，@app = 应用块。',
+    )
+  else if (c.theme_blocks) blocks.push('分区只收它 accepts_blocks 里点了名的块（@app = 应用块）。')
+  if (c.local_blocks)
+    blocks.push(
+      '块写在分区自己的 schema 里（local_blocks）：模板里块的 type 照这个分区的 local_blocks 抄，设置 id 也照它。',
+    )
+  const statics = c.static_blocks
+    ? (CATALOG_HOW_TO[2] as string)
+    : '照着 presets 搭最稳（分区的默认块、设置都在里面）。'
+  const shell = c.section_groups
+    ? (CATALOG_HOW_TO[3] as string)
+    : '页头页尾是 sections/ 里的分区（header / footer）；颜色、字体等在 config/settings_data.json 的 current 里（设置 id 见 theme_settings）。'
+  return [page, ...blocks, statics, shell]
+}
 
 /** 瘦目录（`CATALOG.index.json`）：每个分区 / 块一行。 */
 export function catalogIndexOf(c: ThemeCatalog): Rec {

@@ -214,6 +214,138 @@ export const FAKE_HORIZON_FILES: Readonly<Record<string, string>> = {
   'templates/product.json': `${TEMPLATE_HEADER}{"sections":{"main":{"type":"section","settings":{}}},"order":["main"]}\n`,
 }
 
+/**
+ * WP304（决策 445）：一份**手写的、Dawn 那一代形状**的 Online Store 2.0 免费主题（不是 Horizon、也不是任何真主题的拷贝）：
+ * 没有 `blocks/`、块写在分区自己的 schema 里（本地块）、没有 section 组、页头页尾是普通分区。名字是编的（Lumen）。
+ */
+export const FAKE_OS2_THEME_FILES: Readonly<Record<string, string>> = {
+  'config/settings_schema.json': json([
+    {
+      name: 'theme_info',
+      theme_name: 'Lumen',
+      theme_version: '1.0.0-fixture',
+      theme_author: 'Fixture',
+    },
+    {
+      name: 't:settings_schema.colors.name',
+      settings: [{ type: 'color', id: 'colors_accent_1', label: 'Accent', default: '#121212' }],
+    },
+  ]),
+  'config/settings_data.json': '{"current":{"colors_accent_1":"#121212"}}\n',
+  'locales/en.default.json': '{"general":{"cart":"Cart"}}\n',
+  'locales/en.default.schema.json': json({
+    sections: {
+      'image-banner': { name: 'Image banner', blocks: { heading: { name: 'Heading' } } },
+      'rich-text': { name: 'Rich text' },
+    },
+    settings_schema: { colors: { name: 'Colors' } },
+  }),
+  'layout/theme.liquid':
+    '<!doctype html><html><head>{{ content_for_header }}</head><body>{% section "header" %}{{ content_for_layout }}{% section "footer" %}</body></html>\n',
+  'sections/image-banner.liquid': schema(
+    '<div class="banner">{% for block in section.blocks %}{{ block.settings.heading }}{% endfor %}</div>',
+    {
+      name: 't:sections.image-banner.name',
+      max_blocks: 3,
+      settings: [
+        { type: 'image_picker', id: 'image', label: 'Image' },
+        {
+          type: 'select',
+          id: 'image_height',
+          label: 'Height',
+          options: [{ value: 'small' }, { value: 'large' }],
+          default: 'large',
+        },
+      ],
+      blocks: [
+        {
+          type: 'heading',
+          name: 't:sections.image-banner.blocks.heading.name',
+          limit: 1,
+          settings: [{ type: 'text', id: 'heading', label: 'Heading', default: 'Image banner' }],
+        },
+        {
+          type: 'buttons',
+          name: 'Buttons',
+          settings: [
+            { type: 'text', id: 'button_label_1', label: 'Label' },
+            { type: 'url', id: 'button_link_1', label: 'Link' },
+          ],
+        },
+        { type: '@app' },
+      ],
+      presets: [
+        {
+          name: 't:sections.image-banner.name',
+          blocks: [{ type: 'heading' }, { type: 'buttons' }],
+        },
+      ],
+    },
+  ),
+  'sections/rich-text.liquid': schema('<div class="rte">{{ section.settings.text }}</div>', {
+    name: 't:sections.rich-text.name',
+    settings: [{ type: 'richtext', id: 'text', label: 'Text' }],
+    presets: [{ name: 't:sections.rich-text.name' }],
+  }),
+  'sections/header.liquid': schema('<header>{{ shop.name }}</header>', {
+    name: 'Header',
+    settings: [{ type: 'checkbox', id: 'sticky', label: 'Sticky', default: true }],
+  }),
+  'sections/footer.liquid': schema('<footer>{{ shop.name }}</footer>', {
+    name: 'Footer',
+    settings: [],
+  }),
+  'templates/index.json': `${TEMPLATE_HEADER}${json({
+    sections: {
+      banner: {
+        type: 'image-banner',
+        blocks: { heading_1: { type: 'heading', settings: { heading: 'Hello' } } },
+        block_order: ['heading_1'],
+        settings: { image_height: 'large' },
+      },
+      text: { type: 'rich-text', settings: { text: '<p>Welcome</p>' } },
+    },
+    order: ['banner', 'text'],
+  })}`,
+  'templates/product.json': `${TEMPLATE_HEADER}{"sections":{"main":{"type":"rich-text","settings":{}}},"order":["main"]}\n`,
+}
+
+/** WP304：一份**老主题**（只有 `.liquid` 模板，不是 Online Store 2.0）的样子——工坊改不了，照实说。 */
+export const FAKE_VINTAGE_THEME_FILES: Readonly<Record<string, string>> = {
+  'config/settings_schema.json':
+    '[{"name":"theme_info","theme_name":"Vintage Fixture","theme_version":"3.0.0"}]\n',
+  'layout/theme.liquid': '<html>{{ content_for_layout }}</html>\n',
+  'templates/index.liquid': '{% section "slideshow" %}\n',
+  'templates/product.liquid': '<h1>{{ product.title }}</h1>\n',
+  'sections/slideshow.liquid': schema('<div></div>', { name: 'Slideshow', settings: [] }),
+}
+
+/**
+ * WP304：高级主题包里的样子（**手写的占位**，不是我们闭源主题的任何一行）：`theme_info` 写 agentsws-theme，
+ * 顶层带一层目录（`git archive --prefix` 那样），根上还有 `AGENTS.md` / `CATALOG.json` / `README.md`——工坊只取主题那几个目录。
+ */
+export const FAKE_PREMIUM_THEME_FILES: Readonly<Record<string, string>> = {
+  'AGENTS.md': '# fixture\n',
+  'README.md': '# fixture\n',
+  'CATALOG.json': '{"theme":"fixture"}\n',
+  'config/settings_schema.json':
+    '[{"name":"theme_info","theme_name":"agentsws-theme","theme_version":"1.2.0","theme_author":"Agents Workshop"}]\n',
+  'config/settings_data.json': '{"current":{}}\n',
+  'layout/theme.liquid': '<html>{{ content_for_layout }}</html>\n',
+  'sections/hero.liquid': schema('<section>{% content_for "blocks" %}</section>', {
+    name: 'Hero',
+    blocks: [{ type: '@theme' }],
+    settings: [{ type: 'text', id: 'title', label: 'Title' }],
+    presets: [{ name: 'Hero' }],
+  }),
+  'blocks/text.liquid': schema('<p>{{ block.settings.text }}</p>', {
+    name: 'Text',
+    settings: [{ type: 'text', id: 'text', label: 'Text' }],
+  }),
+  'templates/index.json':
+    '{"sections":{"hero":{"type":"hero","settings":{"title":"Hi"}}},"order":["hero"]}\n',
+}
+
 /** 旧的自带主题（agentsws-theme v0.10）起底的工作目录（只造认得出它的那几个文件）。 */
 export const FAKE_LEGACY_THEME_FILES: Readonly<Record<string, string>> = {
   'AGENTS.md': '# AGENTS.md (legacy fixture)\n',
