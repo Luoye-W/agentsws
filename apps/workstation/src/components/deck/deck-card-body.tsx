@@ -21,6 +21,7 @@ import { useApp } from '@/lib/app-context'
 import { channelLabel, fieldLabel, fieldValue, tOr } from '@/lib/humanize'
 import type { Lang } from '@/lib/i18n'
 import { useMode } from '@/lib/mode'
+import { isThemeChoicePayload, ThemeChoiceBody } from './theme-choice-body'
 import { isWeeklyReview, WeeklyReviewBody } from './weekly-review-body'
 
 const isRecord = (v: unknown): v is Record<string, unknown> =>
@@ -283,6 +284,14 @@ export function DeckCardBody({
             {/* WP237：「走哪条职责」的选项就是下面那排按钮，这里只放那一句为什么 */}
             {options.length === 0 || card.kind === 'claim' ? (
               <OutboundBody card={card} mode={mode} />
+            ) : card.kind === 'theme_choice' && isThemeChoicePayload(card.detail.payload) ? (
+              // WP304：选主题卡——高级主题排第一（卖点 + 价格 + 预览），下面是店里的免费主题
+              <ThemeChoiceBody
+                payload={card.detail.payload}
+                options={options}
+                option={option}
+                onOption={onOption}
+              />
             ) : (
               <OptionList options={options} option={option} onOption={onOption} kind={card.kind} />
             )}
