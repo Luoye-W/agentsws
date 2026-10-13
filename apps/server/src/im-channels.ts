@@ -54,12 +54,14 @@ import type {
   EventEnvelope,
   InboundEvent,
   Iso8601,
+  MaybePromise,
   PersonId,
   RoleId,
   WorkspaceId,
 } from '@agentsws/contracts'
 import type { Context, Hono } from 'hono'
 import type { ImInboundPipeline } from './channels.js'
+import type { ImAskPick } from './im-ask-route.js'
 import {
   createTeamBots,
   type DingtalkStatus,
@@ -178,9 +180,20 @@ export interface ImChannelsOptions {
     viewer: PersonId
     question: string
     assignment_id: string
+    /** WP306：这条分配在哪个品牌（点名点到别的品牌时给；不给 = 这一套自己的品牌）。 */
+    workspace_id?: WorkspaceId
   }): Promise<{ answer: string }>
   /** 本人的那条分配（问代理要带）。拿不到 = 这个人现在没有岗位，不问。 */
   assignmentOf(person_id: PersonId): string | undefined
+  /**
+   * WP306：按问题挑「问谁」（点名岗位 → 任一品牌里对应的分配；点不出 → 主要岗位）。
+   * 不给就退回 `assignmentOf`。回 `undefined` = 哪儿都没有岗位。
+   */
+  pickAssignment?(person_id: PersonId, question: string): MaybePromise<ImAskPick | undefined>
+  /** WP306：问代理最多等多久（默认 90 秒）；过了先回一句人话，答案晚到再补发。 */
+  askTimeoutMs?: number
+  /** WP306：答案没在这么久里出来就先回「收到，我查一下」（默认 1.5 秒；只对飞书）。 */
+  ackAfterMs?: number
   /**
    * WP211（Fable 09-30 定）：谁能填 / 改 / 断开**公司的**应用凭据（企业微信、飞书、钉钉三条）。
    * 只给负责人（持有 `common.owner`）与公司管理员；不给 = 一律不许（fail-closed）。
@@ -314,6 +327,7 @@ export function createImChannels(options: ImChannelsOptions): ImChannelsAssembly
     makePipeline: options.makePipeline,
     route: routeToAgent,
     onEvent: (event) => answerInbound(event),
+    onConnState: (channel, state, prev) => connState(channel, state, prev),
     ...(options.onError === undefined ? {} : { onError: options.onError }),
     ...(options.feishuTransport === undefined ? {} : { feishuTransport: options.feishuTransport }),
     ...(options.dingtalkSocket === undefined ? {} : { dingtalkSocket: options.dingtalkSocket }),
@@ -324,7 +338,17 @@ export function createImChannels(options: ImChannelsOptions): ImChannelsAssembly
   })
 
   const emit = (
-    type: 'im.bound' | 'im.unbound' | 'im.answered' | 'im.person_bound' | 'im.person_unbound',
+    type:
+      | 'im.bound'
+      | 'im.unbound'
+      | 'im.answered'
+      | 'im.person_bound'
+      | 'im.person_unbound'
+      // WP306：诊断——收到了一句 / 没答成（原因码）/ 长连接断了 / 连回来了
+      | 'im.received'
+      | 'im.ask_failed'
+      | 'im.disconnected'
+      | 'im.reconnected',
     payload: object,
   ): void => {
     options.appendEvent({
@@ -452,11 +476,13 @@ export function createImChannels(options: ImChannelsOptions): ImChannelsAssembly
   /* ── 入站的最后一跳：路由到「我的代理」，把答案回到原来那条会话 ──── */
 
   /**
-   * 这一跳跑在管线的 `onEvent` 里，所以**抛异常 = 退避重试**（≤ 5 次），
-   * 耗尽进死信（18 §2.2）。故意不 catch：模型抖一下应该重试，不该静默吞掉。
+   * 这一跳跑在管线的 `onEvent` 里。
    *
-   * 「答不上来」与「不该答」是两回事：前者抛（会重试），
-   * 后者回一句人话就 return（不重试——重试一百次它还是不该答）。
+   * WP306 起**永不静默、也不抛**：以前「答不上来就抛、让管线退避重试」，可 IM 那几条管线的
+   * 重试队列没人推（`pump` 只在收信那一轮对邮件管线调），失败那一下也不记事件——
+   * Luoye 10-13 在飞书里问了两句，名册没刷新、秘书抛「这个人不存在」，两句都掉进了
+   * 没人推的队列，一个字没回、事件库里也一条都没有。现在认得出是谁的一句话，
+   * 答不上来也回一句人话、记一条 `im.ask_failed`（只有原因码）；重问一次比卡在队列里强。
    */
   const answerInbound = async (event: InboundEvent): Promise<void> => {
     const question = unfence(
@@ -465,7 +491,6 @@ export function createImChannels(options: ImChannelsOptions): ImChannelsAssembly
         .map((p) => p.text)
         .join('\n'),
     )
-    if (question === '') return
     const external = event.actor?.external_id ?? ''
 
     // 三条团队渠道：认人（或当场绑定）→ 按提问人身份问他自己的代理 → 回原会话
@@ -476,40 +501,69 @@ export function createImChannels(options: ImChannelsOptions): ImChannelsAssembly
     ) {
       const team = teamReplier(event)
       // 那条通道已经停了（断开 / 进程在关）：不答，也不落到微信那一支去
-      if (team !== undefined) await answerTeam(team.channel, external, question, team.reply)
+      if (team === undefined) return
+      try {
+        await answerTeam(team, external, question)
+      } catch (e) {
+        // 兜底：走到这里是我们自己的 bug；照样回一句、记原因，不进那条没人推的重试队列
+        failed(team.channel, undefined, 'internal', e)
+        await say(team.channel, undefined, team.reply, failText(IM_TEXT.failed))
+      }
       return
     }
 
+    if (question === '') return
     // 微信：线程 id 是 `wechat:<account_id>:<from>`，账号 → 人在 wechatOwner 里
     const account_id = event.thread?.external_id.split(':')[1] ?? ''
     const person_id = wechatOwner.get(account_id)
     const adapter = person_id === undefined ? undefined : wechat.get(person_id)
     if (person_id === undefined || adapter === undefined) return
-    const answer = await askFor(person_id, question)
-    if (answer !== undefined) await adapter.sendText(external, answer)
+    emit('im.received', { channel: 'wechat', person_id, chars: question.length })
+    const reply = async (text: string) => adapter.sendText(external, text)
+    try {
+      await askAndReply('wechat', person_id, question, reply, false)
+    } catch (e) {
+      failed('wechat', person_id, 'internal', e)
+      await say('wechat', person_id, reply, failText(IM_TEXT.failed))
+    }
+  }
+
+  /** 回复函数：`keep` = 这一句不是最后一句（只有飞书用得上，见 `FeishuBotAdapter.reply`）。 */
+  type Reply = (text: string, opts?: { keep?: boolean }) => Promise<unknown>
+  interface TeamReplier {
+    channel: TeamChannel
+    reply: Reply
+    /** 先回「收到，我查一下」：只有飞书（同一条消息能回多次；企业微信一条只回一次）。 */
+    ack: boolean
   }
 
   /** 这条入站属于哪条团队渠道、怎么回（回复都按入站的去重键找回原消息）。 */
-  const teamReplier = (
-    event: InboundEvent,
-  ): { channel: TeamChannel; reply(text: string): Promise<unknown> } | undefined => {
+  const teamReplier = (event: InboundEvent): TeamReplier | undefined => {
     if (event.channel === WECOM_BOT_CHANNEL) {
       const adapter = wecom
       return adapter === undefined
         ? undefined
-        : { channel: 'wecom', reply: (text) => adapter.reply(event.dedupe_key, text) }
+        : { channel: 'wecom', ack: false, reply: (text) => adapter.reply(event.dedupe_key, text) }
     }
     if (event.channel === 'feishu') {
       const adapter = teamBots.feishu
       return adapter === undefined
         ? undefined
-        : { channel: 'feishu', reply: (text) => adapter.reply(event.dedupe_key, text) }
+        : {
+            channel: 'feishu',
+            ack: true,
+            reply: (text, opts) => adapter.reply(event.dedupe_key, text, opts),
+          }
     }
     if (event.channel === 'dingtalk') {
       const adapter = teamBots.dingtalk
       return adapter === undefined
         ? undefined
-        : { channel: 'dingtalk', reply: (text) => adapter.reply(event.dedupe_key, text) }
+        : {
+            channel: 'dingtalk',
+            ack: false,
+            reply: (text) => adapter.reply(event.dedupe_key, text),
+          }
     }
     return undefined
   }
@@ -522,49 +576,217 @@ export function createImChannels(options: ImChannelsOptions): ImChannelsAssembly
    * 「绑定 123456」是唯一不需要先认出人的一句：码只显示给登录了工作台的那个人。
    */
   const answerTeam = async (
-    channel: TeamChannel,
+    team: TeamReplier,
     external: string,
     question: string,
-    reply: (text: string) => Promise<unknown>,
   ): Promise<void> => {
+    const { channel, reply } = team
     const code = parseBindCommand(question)
+    const person_id =
+      code !== undefined
+        ? undefined
+        : ((channel === 'wecom' ? options.personByWecomUser?.(external) : undefined) ??
+          bindings.personOf(channel, external))
+    // WP306：收到一句就记一笔（只有渠道、是谁、几个字；正文与聊天账号 id 都不记）
+    emit('im.received', {
+      channel,
+      ...(person_id === undefined ? {} : { person_id }),
+      kind: code !== undefined ? 'bind' : person_id === undefined ? 'unknown_sender' : 'question',
+      chars: question.length,
+    })
     if (code !== undefined) {
       const now_ms = Date.parse(options.clock.now())
-      const person_id =
+      const bound =
         external === '' ? undefined : bindCodes.consume(code, `${channel}:${external}`, now_ms)
-      if (person_id === undefined) {
-        await reply(IM_TEXT.badCode)
+      if (bound === undefined) {
+        await say(channel, undefined, reply, IM_TEXT.badCode)
         return
       }
-      bindings.bind(channel, external, person_id)
+      bindings.bind(channel, external, bound)
       // 21 §5：只记谁绑了哪条渠道，聊天账号 id 不进事件
-      emit('im.person_bound', { channel, person_id })
-      await reply(IM_TEXT.bound)
+      emit('im.person_bound', { channel, person_id: bound })
+      await say(channel, bound, reply, IM_TEXT.bound)
       return
     }
-    const person_id =
-      (channel === 'wecom' ? options.personByWecomUser?.(external) : undefined) ??
-      bindings.personOf(channel, external)
     if (person_id === undefined) {
-      await reply(IM_TEXT.unknown)
+      await say(channel, undefined, reply, IM_TEXT.unknown)
       return
     }
-    const answer = await askFor(person_id, question)
-    if (answer !== undefined) await reply(answer)
+    // 认得出的人发了一句空的（只发了图片 / 表情）：也回一句，不装没看见
+    if (question === '') {
+      await say(channel, person_id, reply, IM_TEXT.emptyQuestion)
+      return
+    }
+    await askAndReply(channel, person_id, question, reply, team.ack)
   }
 
-  const askFor = async (person_id: PersonId, question: string): Promise<string | undefined> => {
-    const assignment_id = options.assignmentOf(person_id)
-    // 这个人现在没有任何岗位（离职 / 还没分配）：不答，也不重试
-    if (assignment_id === undefined) return undefined
-    const out = await options.askAgent({ viewer: person_id, question, assignment_id })
-    // 21 §5：只记「答了多少字」，问题与答案的正文都不进日志
-    emit('im.answered', {
-      person_id,
-      channel: 'im',
-      answer_chars: out.answer.length,
+  type AskFailReason =
+    | 'no_position'
+    | 'timeout'
+    | 'not_member'
+    | 'agent_error'
+    | 'route_error'
+    | 'reply_failed'
+    | 'internal'
+
+  const link = (): string => options.deepLinkBase()
+  const failText = (head: string): string => `${head}${link()}`
+
+  /** 记一条「没答成」：只有原因码与错误码，正文、错误原文都不进事件（21 §5）。 */
+  const failed = (
+    channel: TeamChannel | 'wechat',
+    person_id: PersonId | undefined,
+    reason: AskFailReason,
+    e?: unknown,
+  ): void => {
+    const code = (e as { code?: unknown } | undefined)?.code
+    emit('im.ask_failed', {
+      channel,
+      ...(person_id === undefined ? {} : { person_id }),
+      reason,
+      ...(typeof code === 'string' ? { error_code: code } : {}),
     })
-    return out.answer
+  }
+
+  /** 发一句；没发出去（连接断了 / 飞书拒了）也记一笔——「回了但没到」同样不许静默。 */
+  const say = async (
+    channel: TeamChannel | 'wechat',
+    person_id: PersonId | undefined,
+    reply: Reply,
+    text: string,
+    opts?: { keep?: boolean },
+  ): Promise<boolean> => {
+    try {
+      const out = (await reply(text, opts)) as { sent?: boolean; reason?: string } | undefined
+      if (out?.sent === false) {
+        emit('im.ask_failed', {
+          channel,
+          ...(person_id === undefined ? {} : { person_id }),
+          reason: 'reply_failed' satisfies AskFailReason,
+          ...(out.reason === undefined ? {} : { error_code: out.reason }),
+        })
+        return false
+      }
+      return true
+    } catch (e) {
+      failed(channel, person_id, 'reply_failed', e)
+      return false
+    }
+  }
+
+  /** 秘书说「这个人不在这个工作区」那一类：不是模型抖，是人和品牌对不上。 */
+  const reasonOf = (e: unknown): AskFailReason => {
+    const code = (e as { code?: unknown } | undefined)?.code
+    return code === 'not_found' || code === 'forbidden' ? 'not_member' : 'agent_error'
+  }
+
+  /** 定时器（不挡进程退出）。 */
+  const after = (ms: number): Promise<'timeout'> =>
+    new Promise((resolve) => {
+      const h = setTimeout(() => resolve('timeout'), ms)
+      ;(h as { unref?: () => void }).unref?.()
+    })
+
+  /**
+   * 问代理并回话，四种结局都有一句话：
+   * 答出来（1.5 秒没出来先回「收到，我查一下」）/ 超时（先回一句，答案晚到再补）/
+   * 出错 / 没岗位。
+   */
+  const askAndReply = async (
+    channel: TeamChannel | 'wechat',
+    person_id: PersonId,
+    question: string,
+    reply: Reply,
+    ack: boolean,
+  ): Promise<void> => {
+    let pick: ImAskPick | undefined
+    try {
+      pick =
+        options.pickAssignment === undefined
+          ? (() => {
+              const id = options.assignmentOf(person_id)
+              return id === undefined
+                ? undefined
+                : { assignment_id: id, workspace_id: options.workspace_id }
+            })()
+          : await options.pickAssignment(person_id, question)
+    } catch (e) {
+      failed(channel, person_id, 'route_error', e)
+      await say(channel, person_id, reply, failText(IM_TEXT.failed))
+      return
+    }
+    if (pick === undefined) {
+      failed(channel, person_id, 'no_position')
+      await say(channel, person_id, reply, failText(IM_TEXT.noPosition))
+      return
+    }
+    const started = Date.now()
+    type Outcome = { answer: string } | { error: unknown }
+    const outcome: Promise<Outcome> = options
+      .askAgent({
+        viewer: person_id,
+        question,
+        assignment_id: pick.assignment_id,
+        ...(pick.workspace_id === options.workspace_id ? {} : { workspace_id: pick.workspace_id }),
+      })
+      .then(
+        (out) => ({ answer: out.answer }),
+        (error: unknown) => ({ error }),
+      )
+    const ackMs = options.ackAfterMs ?? 1500
+    const limitMs = options.askTimeoutMs ?? 90_000
+    let first: Outcome | 'timeout' = ack ? await Promise.race([outcome, after(ackMs)]) : 'timeout'
+    if (first === 'timeout') {
+      if (ack) await say(channel, person_id, reply, IM_TEXT.ack, { keep: true })
+      first = await Promise.race([outcome, after(Math.max(0, limitMs - (Date.now() - started)))])
+    }
+    const answered = (answer: string, late: boolean): void => {
+      // 21 §5：只记「答了多少字」，问题与答案的正文都不进日志
+      emit('im.answered', {
+        person_id,
+        channel: 'im',
+        via: channel,
+        answer_chars: answer.length,
+        ...(late ? { late: true } : {}),
+      })
+    }
+    const body = (answer: string): string =>
+      pick?.note === undefined ? answer : `${answer}\n${pick.note}`
+    if (first === 'timeout') {
+      failed(channel, person_id, 'timeout')
+      await say(channel, person_id, reply, failText(IM_TEXT.timeout), { keep: true })
+      // 答案晚到了照样补给他（不阻塞这一跳；补发失败也会记 reply_failed）
+      void outcome.then(async (late) => {
+        if ('error' in late) {
+          failed(channel, person_id, reasonOf(late.error), late.error)
+          return
+        }
+        answered(late.answer, true)
+        await say(channel, person_id, reply, `${IM_TEXT.late}\n${body(late.answer)}`)
+      })
+      return
+    }
+    if ('error' in first) {
+      failed(channel, person_id, reasonOf(first.error), first.error)
+      await say(channel, person_id, reply, failText(IM_TEXT.failed))
+      return
+    }
+    answered(first.answer, false)
+    await say(channel, person_id, reply, body(first.answer))
+  }
+
+  /** WP306：长连接真的断了 / 连回来了，各记一笔（卡片那边按 `state` 如实变色）。 */
+  const down = new Set<string>()
+  const connState = (channel: 'feishu', state: string, prev: string): void => {
+    if (prev === 'connected' && state !== 'connected' && !down.has(channel)) {
+      down.add(channel)
+      emit('im.disconnected', { channel, state })
+      return
+    }
+    if (state === 'connected' && down.has(channel)) {
+      down.delete(channel)
+      emit('im.reconnected', { channel })
+    }
   }
 
   /* ── 鉴权中间件（网关那一套在 createGateway 里面，挂不到这里来） ──── */

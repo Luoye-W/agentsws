@@ -191,6 +191,19 @@ export const IM_TEXT = {
     '我还不认识你。先去工作台「消息渠道」页点「绑定我的账号」，再私聊我发「绑定 + 那 6 位数字」，我才敢替你查。',
   bound: '绑好了。以后你在这里问，我按你在 Agents 工坊里的身份答。',
   badCode: '这个绑定码不对或已经过期了。去工作台「消息渠道」页重新点一次「绑定我的账号」。',
+  /* ── WP306：永不静默。认得出是谁的一句话，答不上来也要回一句人话 ── */
+  /** 答案没在 1.5 秒内出来，先回这一句（飞书机器人没有「正在输入」接口）。 */
+  ack: '收到，我查一下。',
+  /** 问代理超时；答案晚到了还会补发。后面接工作台链接。 */
+  timeout: '这个问题我一时没查完。查完会在这里补给你；着急的话去工作台看：',
+  /** 问代理出错了（原因进事件，不进这句话）。后面接工作台链接。 */
+  failed: '这次没查成，出了点问题，我已经记下来了。你可以稍后再问一次，或者去工作台看：',
+  /** 这个人在哪个品牌都没有岗位。后面接工作台链接。 */
+  noPosition: '你在这个品牌还没有岗位，我不知道替你问谁。先去工作台「公司」页给自己设一个岗位：',
+  /** 认得出的人只发了图片 / 表情（没有字）。 */
+  emptyQuestion: '我现在只看得懂文字。用一句话问我吧。',
+  /** 晚到的答案前面加这一句。 */
+  late: '刚才那个问题查完了：',
 } as const
 
 /* ------------------------------------------------------------------ */
@@ -230,6 +243,8 @@ export interface TeamBotsDeps {
   route(input: RouteInput): RouteResult
   onEvent(event: InboundEvent): Promise<void>
   onError?(e: unknown): void
+  /** WP306：长连接状态真的变了（断了 / 连回来了），宿主记事件用。人点断开不报。 */
+  onConnState?(channel: 'feishu', state: TeamBotStatus['state'], prev: TeamBotStatus['state']): void
   feishuTransport?: FeishuTransportFactory
   dingtalkSocket?: DingtalkSocketFactory
   dingtalkHttp?: DingtalkHttp
@@ -286,6 +301,10 @@ export function createTeamBots(deps: TeamBotsDeps): TeamBots {
       },
       transport: deps.feishuTransport,
       ...(deps.onError === undefined ? {} : { on_error: deps.onError }),
+      on_state: (state, prev) => {
+        // 已经换下来的旧连接（重填凭据时）不再报
+        if (feishu === adapter) deps.onConnState?.('feishu', state, prev)
+      },
     })
     feishu = adapter
     const pipeline = deps.makePipeline({

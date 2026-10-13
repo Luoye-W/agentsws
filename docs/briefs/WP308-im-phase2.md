@@ -12,4 +12,4 @@ worktree `../agentsws-wt/wp308-im2` · 分支 `wp/308-im2`（从 main 新起，*
 不读 .env*；不碰 key / token；不跑批量清理；不碰本机 4317；不连远程机器；不连真飞书 / 钉钉 / 企微。不合 main、不打 tag、不发版（决策 381）。
 
 ## 验证
-`scripts/verify-changed.sh` + 模拟三包 × stub/direct/dsh + gen 检查 + 装包前冒烟；报告 `docs/briefs/reports/WP308.md`（决策号从 470 起）。
+`scripts/verify-changed.sh` + 模拟三包 × stub/direct/dsh + gen 检查 + 装包前冒烟；报告 `docs/briefs/reports/WP308.md`（决策号从 500 起）。

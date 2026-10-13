@@ -62,7 +62,7 @@ import { blobKey, blobUri, openBlobStore } from '@agentsws/blob'
 import { designRoleFamily } from '@agentsws/brand-design'
 import type { PageFetch as BrandIntakeFetch } from '@agentsws/brand-intake'
 import type { CatalogNote } from '@agentsws/catalog'
-import type { ResolveMx } from '@agentsws/channels'
+import type { FeishuTransportFactory, ResolveMx } from '@agentsws/channels'
 import { routeOfPosition } from '@agentsws/channels'
 import { LOCAL_RUNTIME_ENV } from '@agentsws/connect-adapter'
 import type {
@@ -362,6 +362,7 @@ import {
   seedHostedSecrets,
 } from './hosted-mode.js'
 import { createApprovalDirectory } from './housekeeping.js'
+import { type ImAskCandidate, imAskLabels, pickImAssignment } from './im-ask-route.js'
 import { createImChannels, type ImChannelsAssembly, mountBrandImRoutes } from './im-channels.js'
 import { feishuSdkTransportFactory, fetchHttp, wsSocketFactory } from './im-sdk.js'
 import { createTeamBotManagerCheck } from './im-team-bots.js'
@@ -1178,6 +1179,13 @@ export interface ServerOptions {
    * `execution_id` / 平台对象的查询。答不上来回 `undefined`——**不许猜**。
    */
   verifyChange?: ReconcileGuardOptions['verify']
+  /**
+   * WP306：团队 IM 渠道的长连接替身（测试用：假飞书长连接，不连真飞书）。
+   * 生产不传，飞书走官方 SDK（`im-sdk.ts`）。
+   */
+  imTransports?: { feishu?: FeishuTransportFactory }
+  /** WP306：IM 问代理的节奏（测试调快：多久没答先回「收到」、多久算超时）。生产不传 = 1.5 秒 / 90 秒。 */
+  imPace?: { ackAfterMs?: number; askTimeoutMs?: number }
 }
 
 export interface Bootstrap {
@@ -10089,7 +10097,13 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
           return org_id === undefined ? undefined : identity.getOrganization(org_id)
         },
       }),
-      feishuTransport: feishuSdkTransportFactory,
+      feishuTransport: options.imTransports?.feishu ?? feishuSdkTransportFactory,
+      ...(options.imPace?.ackAfterMs === undefined
+        ? {}
+        : { ackAfterMs: options.imPace.ackAfterMs }),
+      ...(options.imPace?.askTimeoutMs === undefined
+        ? {}
+        : { askTimeoutMs: options.imPace.askTimeoutMs }),
       dingtalkSocket: wsSocketFactory,
       dingtalkHttp: fetchHttp,
       appendEvent,
@@ -10098,18 +10112,52 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       askAgent: async (input) => {
         // 本人问**自己的**代理：41 §1.3 的公开级别在 secretary 那一层照常生效，
         // 这里不放大任何权限（viewer === person_id 时他本来就看得见自己那一份）。
-        const out = await (await secretaryOf(ws)).secretary.ask({
-          viewer: input.viewer,
-          person_id: input.viewer,
-          question: input.question,
-          assignment_id: input.assignment_id,
-        })
+        //
+        // WP306：走秘书的**端口**（`port.ask`），不直接调内核的 `secretary.ask`——端口先刷新名册，
+        // 内核那一层只认名册。以前直接调内核：进程起来之后没人打开过人员 / 日程 / 资料页，
+        // 名册就是空的，飞书里问一句就抛「这个人不存在」（Luoye 10-13 真机那两句就是这么丢的）。
+        //
+        // 还有第二道：秘书的事件自己不带 trace_id（`''`），HTTP 请求里由网关的 trace 作用域补上；
+        // IM 这一路不经网关，空 trace_id 被事件日志拒收（`event requires a non-empty correlation.trace_id`）
+        // ——名册刷新了也照样抛。所以这里自己开一个 trace 作用域。
+        const target = input.workspace_id ?? ws
+        const port = (await secretaryOf(target)).port
+        const out = await traceScope.run(`trc_im_${Math.floor(random() * 1e12).toString(36)}`, () =>
+          port.ask(
+            { workspace_id: target, person_id: input.viewer, assignment_id: input.assignment_id },
+            input.viewer,
+            input.question,
+          ),
+        )
         return { answer: out.answer }
       },
       assignmentOf: (person_id) =>
         roles.assignments
           .listByPerson(person_id, { workspace_id: ws })
           .find((a) => a.revoked_at === undefined)?.id,
+      // WP306：问谁——点名的岗位 / 职责在这个人的任一品牌里找；点不出用他在这个品牌的主要岗位
+      pickAssignment: (person_id, question) => {
+        const brandIds = [ws, ...brandsOfThisOrg().filter((b) => b !== ws && background.isBrand(b))]
+        const candidates: ImAskCandidate[] = []
+        for (const b of brandIds)
+          for (const a of roles.assignments.listByPerson(person_id, { workspace_id: b })) {
+            if (a.revoked_at !== undefined) continue
+            const role = roles.roles.get(a.role_id)
+            const position = org.positionLabelOf(a)?.name
+            candidates.push({
+              assignment_id: a.id,
+              workspace_id: b,
+              role_id: a.role_id,
+              brand_name: brandNameOfWorkspace(b),
+              labels: imAskLabels({
+                role_id: a.role_id,
+                ...(role === undefined ? {} : { role_zh: role.name.zh, role_en: role.name.en }),
+                ...(position === undefined ? {} : { position }),
+              }),
+            })
+          }
+        return pickImAssignment({ candidates, question, home_workspace_id: ws })
+      },
       deepLinkBase: () =>
         env.AGENTSWS_SERVER_URL ??
         (boundPort === undefined ? 'http://127.0.0.1:7777' : `http://127.0.0.1:${boundPort}`),

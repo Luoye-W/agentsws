@@ -329,3 +329,41 @@ describe('队列与去重的零件', () => {
     expect(store.size).toBe(1)
   })
 })
+
+describe('WP306：共用队列时 pump 只推自己认得的渠道', () => {
+  it('邮件管线 pump 不拿邮件的 onEvent 处理别的渠道那一条；那条原样留在队列里', async () => {
+    const queue = new MemoryQueueStore()
+    const rig = makeRig({ queue })
+    const clock = rig.clock
+    // 一条飞书消息的重试项（IM 管线以前失败留下的），与邮件共用这张队列
+    const now_ms = Date.parse(clock.now())
+    const event = {
+      schema_version: 1,
+      id: 'in_feishu_1',
+      workspace_id: WS,
+      channel: 'feishu',
+      kind: 'message',
+      received_at: clock.now(),
+      occurred_at: clock.now(),
+      dedupe_key: 'feishu:om_1',
+      parts: [{ type: 'text', text: '你好' }],
+      raw_ref: 'raw://x',
+      routing: { role_id: 'common.member', confidence: 1 },
+    } as unknown as InboundEvent
+    await queue.put({
+      id: 'q_in_feishu_1',
+      lane: laneOf(WS, 'common.member'),
+      workspace_id: WS,
+      event,
+      attempts: 1,
+      next_at_ms: now_ms,
+      role_id: 'common.member',
+    })
+    expect(await rig.pipeline.pump()).toBe(0)
+    expect(rig.delivered).toHaveLength(0)
+    const left = await rig.pipeline.pending()
+    expect(left.map((i) => i.id)).toEqual(['q_in_feishu_1'])
+    // 租约清掉了：下一轮别的管线（认得飞书的那条）还能领到
+    expect(left[0]?.lease_until_ms).toBeUndefined()
+  })
+})

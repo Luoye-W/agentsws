@@ -11,6 +11,7 @@
  * 6. 官方飞书 SDK 的包装：参数与回调接对了（假模块），真包离线装得上、形状对得上。
  */
 import { randomBytes } from 'node:crypto'
+import type { AddressInfo } from 'node:net'
 import { ApiError, errorBody, type GatewayEnv } from '@agentsws/api'
 import {
   ChannelInboundPipeline,
@@ -31,8 +32,14 @@ import type {
 } from '@agentsws/contracts'
 import { Hono } from 'hono'
 import { afterEach, describe, expect, it } from 'vitest'
+import { WebSocketServer } from 'ws'
 import { createImChannels, type ImChannelsAssembly, type ImStatusView } from '../src/im-channels.js'
-import { createFeishuSdkTransport, loadLarkSdk } from '../src/im-sdk.js'
+import {
+  createFeishuSdkTransport,
+  FEISHU_HANDSHAKE_TIMEOUT_MS,
+  FEISHU_PING_TIMEOUT_S,
+  loadLarkSdk,
+} from '../src/im-sdk.js'
 import {
   BIND_MAX_MISSES,
   createTeamBotManagerCheck,
@@ -227,8 +234,8 @@ const call = (r: Rig, method: string, path: string, body?: unknown, token = 'tok
 
 const dataOf = async <T>(res: Response): Promise<T> => ((await res.json()) as { data: T }).data
 
-async function waitFor(pred: () => boolean, label: string): Promise<void> {
-  for (let i = 0; i < 400; i++) {
+async function waitFor(pred: () => boolean, label: string, ms = 2_000): Promise<void> {
+  for (let i = 0; i < ms / 5; i++) {
     if (pred()) return
     await new Promise((resolve) => setTimeout(resolve, 5))
   }
@@ -564,6 +571,130 @@ describe('官方飞书 SDK 的包装', () => {
     })
     expect(await t.botOpenId()).toBe('ou_bot')
   })
+
+  it('WP306：开了判死（pingTimeout）与握手超时；SDK 自己报的状态与卡片对账', async () => {
+    let status = 'connected'
+    const seen: Record<string, unknown> = {}
+    const fakeLark = {
+      Domain: { Feishu: 'F', Lark: 'L' },
+      LoggerLevel: { error: 1 },
+      Client: class {
+        im = { v1: { message: { reply: async () => ({ code: 0 }) } } }
+        request = async () => ({})
+      },
+      WSClient: class {
+        constructor(p: Record<string, unknown>) {
+          seen.ws = p
+        }
+        async start(): Promise<void> {
+          ;(seen.ws as { onReady: () => void }).onReady()
+        }
+        getConnectionStatus() {
+          return { state: status }
+        }
+        close(): void {}
+      },
+      EventDispatcher: class {
+        register() {
+          return this
+        }
+      },
+    }
+    const t = createFeishuSdkTransport(async () => fakeLark as never, { status_poll_ms: 10 })
+    const states: string[] = []
+    await t.start({
+      app_id: APP_ID,
+      app_secret: 'S',
+      domain: 'feishu',
+      onEvent: () => {},
+      onState: (s) => states.push(s),
+    })
+    expect(seen.ws).toMatchObject({
+      wsConfig: { pingTimeout: FEISHU_PING_TIMEOUT_S },
+      handshakeTimeoutMs: FEISHU_HANDSHAKE_TIMEOUT_MS,
+    })
+    // SDK 那边其实已经不在连着了（回调漏了）：对账把卡片拉回「在重连」
+    status = 'idle'
+    await waitFor(() => states.at(-1) === 'reconnecting', '对账成重连')
+    status = 'connected'
+    await waitFor(() => states.at(-1) === 'connected', '对账回连上')
+    await t.stop()
+  })
+
+  /** 本机一个「不吭声」的长连接：收下连接，之后一帧都不回（pong 也不回）——上游断了、本地不 close 的样子。 */
+  async function silentServer() {
+    const wss = new WebSocketServer({ port: 0, host: '127.0.0.1' })
+    const box = { accepted: 0 }
+    wss.on('connection', () => {
+      box.accepted += 1
+    })
+    await new Promise<void>((resolve) => wss.once('listening', () => resolve()))
+    const port = (wss.address() as AddressInfo).port
+    const httpInstance = {
+      request: async () => ({
+        code: 0,
+        msg: 'ok',
+        data: {
+          URL: `ws://127.0.0.1:${port}/ws?x=1&device_id=d1&service_id=1`,
+          ClientConfig: {
+            PingInterval: 1,
+            ReconnectCount: -1,
+            ReconnectInterval: 1,
+            ReconnectNonce: 0,
+          },
+        },
+      }),
+    }
+    const close = async () => {
+      for (const c of wss.clients) c.terminate()
+      await new Promise<void>((resolve) => wss.close(() => resolve()))
+    }
+    return { box, httpInstance, close }
+  }
+
+  async function runSilent(ping_timeout_s: number, watchMs: number) {
+    const srv = await silentServer()
+    const t = createFeishuSdkTransport(loadLarkSdk, {
+      ping_timeout_s,
+      status_poll_ms: 100,
+      extra: { httpInstance: srv.httpInstance },
+    })
+    const states: string[] = []
+    try {
+      await t.start({
+        app_id: APP_ID,
+        app_secret: 'S',
+        domain: 'feishu',
+        onEvent: () => {},
+        onState: (s) => states.push(s),
+      })
+      await waitFor(() => states.includes('connected'), '先连上', 5_000)
+      const until = Date.now() + watchMs
+      const back = () => {
+        const down = states.indexOf('reconnecting')
+        return down >= 0 && states.lastIndexOf('connected') > down
+      }
+      while (Date.now() < until && !back()) await new Promise((r) => setTimeout(r, 20))
+      return { states, accepted: srv.box.accepted }
+    } finally {
+      await t.stop()
+      await srv.close()
+    }
+  }
+
+  it('WP306 对照：真 SDK 不开判死（老配置）→ 连接已经不吭声了，3 秒里照样一直「连上」', async () => {
+    const out = await runSilent(0, 3_000)
+    expect(out.states).not.toContain('reconnecting')
+    expect(out.accepted).toBe(1)
+  }, 30_000)
+
+  it('WP306：真 SDK 开了判死 → 判死、自己重连、状态跟着变（断了 / 连回来都报）', async () => {
+    const out = await runSilent(1, 8_000)
+    const down = out.states.indexOf('reconnecting')
+    expect(down).toBeGreaterThan(out.states.indexOf('connected'))
+    expect(out.states.lastIndexOf('connected')).toBeGreaterThan(down)
+    expect(out.accepted).toBeGreaterThanOrEqual(2)
+  }, 30_000)
 
   it('真包离线装得上、形状对得上（只 new，不 start，不出网）', async () => {
     const lark = await loadLarkSdk()

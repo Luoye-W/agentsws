@@ -382,7 +382,7 @@ describe('入站路由到「我的代理」', () => {
     expect(msg.context_token).toBe('ctx-1')
   })
 
-  it('没有岗位的人不答（也不炸）', async () => {
+  it('没有岗位的人：不问代理，但回一句「还没有岗位」（WP306：不再一声不吭）', async () => {
     const rig = makeRig(
       { assignmentOf: () => undefined },
       {
@@ -407,9 +407,12 @@ describe('入站路由到「我的代理」', () => {
       await call(rig, 'POST', '/v1/im/wechat/login', { token: 'tok_me' }),
     )
     await call(rig, 'GET', `/v1/im/wechat/login/${started.login_id}`, { token: 'tok_me' })
-    await new Promise((r) => setTimeout(r, 60))
+    await waitFor(() => rig.sent.length > 0, '回了一句')
     expect(rig.asked).toHaveLength(0)
-    expect(rig.sent).toHaveLength(0)
+    expect(JSON.stringify(rig.sent[0])).toContain('还没有岗位')
+    expect(rig.events.map((e) => e.payload)).toContainEqual(
+      expect.objectContaining({ im_event: 'im.ask_failed', reason: 'no_position' }),
+    )
   })
 })
 

@@ -102,6 +102,11 @@ export interface FeishuBotAdapterOptions {
   pending_ttl_ms?: number
   raw_secret_policy?: 'redact' | 'keep'
   on_error?(e: unknown): void
+  /**
+   * WP306：连接状态变了（`prev` → `state`）。宿主拿它记 `im.disconnected` / `im.reconnected`，
+   * 断了卡片如实变色。只报**真的变了**的那一次；人点「断开」（`stop`）不报。
+   */
+  on_state?(state: FeishuConnState, prev: FeishuConnState): void
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -250,8 +255,18 @@ export class FeishuBotAdapter {
     }
   }
 
-  /** 回一条文本（按入站的去重键找回原消息）。不发也不排队的理由都说得清。 */
-  async reply(dedupe_key: string, text: string): Promise<{ sent: boolean; reason?: string }> {
+  /**
+   * 回一条文本（按入站的去重键找回原消息）。不发也不排队的理由都说得清。
+   *
+   * WP306：`keep` = 这一句不是最后一句（先回「收到，我查一下」，答案随后再回），
+   * 待回复条目留着。飞书「回复消息」接口文档没有限定一条消息能回几次、也没有时间窗口
+   * （2026-10-13 读，**已核实**；只有同一 `uuid` 一小时内去重、同一用户 5 QPS）。
+   */
+  async reply(
+    dedupe_key: string,
+    text: string,
+    opts: { keep?: boolean } = {},
+  ): Promise<{ sent: boolean; reason?: string }> {
     const pending = this.#pending.get(dedupe_key)
     if (pending === undefined) return { sent: false, reason: 'unknown_message' }
     const t = this.#transport
@@ -262,7 +277,7 @@ export class FeishuBotAdapter {
       this.#options.on_error?.(e)
       return { sent: false, reason: 'send_failed' }
     }
-    this.#pending.delete(dedupe_key)
+    if (opts.keep !== true) this.#pending.delete(dedupe_key)
     return { sent: true }
   }
 
@@ -283,6 +298,7 @@ export class FeishuBotAdapter {
   #onState(state: FeishuConnState, detail?: string): void {
     const was = this.#state
     this.#state = state
+    if (state !== was) this.#options.on_state?.(state, was)
     if (state === 'reconnecting' && was === 'connected') this.#reconnects += 1
     if (state === 'connected') this.#error = undefined
     if (state === 'failed') {

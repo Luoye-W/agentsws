@@ -323,6 +323,13 @@ export class ChannelInboundPipeline implements InboundPipeline {
     const due = await this.queue.claim(now_ms, this.leaseMs)
     let handled = 0
     for (const item of due) {
+      // WP306：几条管线共用一张队列（邮件与 IM 同一份，见 server 的 channels.ts）。
+      // 不是这条管线认得的渠道就原样放回（清掉租约），别拿邮件的 onEvent 去处理一条飞书消息。
+      if (!this.adapters.has(item.event.channel)) {
+        const { lease_until_ms: _lease, ...rest } = item
+        await this.queue.put(rest)
+        continue
+      }
       await this.attempt(item)
       handled += 1
     }
