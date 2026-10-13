@@ -44,6 +44,7 @@ import {
 } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
 import { errorText, KolError, KolReceipt, refreshCards } from './kol-shared'
+import { CollabProgress } from './segmented-progress'
 
 /** 合作阶段的下一步（合法迁移表的真源在服务端；这里只是按钮上那几个常见的去处）。 */
 const NEXT_STAGES: Readonly<Record<string, string[]>> = {
@@ -405,7 +406,7 @@ export function CollabThread({
         <CardTitle className="text-sm">
           {who?.display_name ?? collab.creator_id}
           <span className="ml-2 text-xs font-normal text-muted-foreground">
-            {t(`kol.channel.${collab.channel}`)} · {t(`kol.stage.${collab.stage}`)}
+            {t(`kol.channel.${collab.channel}`)}
             {collab.budget === undefined ? '' : ` · ${collab.budget} ${collab.currency}`}
           </span>
         </CardTitle>
@@ -428,6 +429,15 @@ export function CollabThread({
               {t(`kol.stage.${collab.stage}`)}
             </span>
           </h4>
+          {/* WP302：步进条——走过哪几段、停在哪、停了几天（停满 7 天那一段标黄） */}
+          {collab.segments === undefined ? null : (
+            <CollabProgress
+              segments={collab.segments}
+              dwellDays={collab.dwell_days}
+              layout="stepper"
+              className="mb-2"
+            />
+          )}
           <div className="flex flex-wrap items-center gap-1">
             {(NEXT_STAGES[collab.stage] ?? []).length === 0 ? null : (
               <span className="text-xs text-muted-foreground">推到：</span>

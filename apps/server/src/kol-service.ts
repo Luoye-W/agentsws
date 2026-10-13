@@ -27,6 +27,7 @@ import type {
   KolCampaignGroup,
   KolCampaignPick,
   KolCampaignView,
+  KolCollaborationRow,
   KolContactView,
   KolCreatorDetail,
   KolCreatorRow,
@@ -80,12 +81,16 @@ import {
   buildUtm,
   type CampaignBrief,
   collaborationStageName,
+  collabStatus,
   deliverableReviewName,
   draftOutreach,
+  dwellDays,
   hasCjk,
   type ImportedAccount,
   importAccounts,
   importSummary,
+  isStageStalled,
+  judgeEngagement,
   type MergeProfile,
   nextInSequence,
   normalizeHandle,
@@ -103,6 +108,7 @@ import {
   type ScoreCriteria,
   StageTransitionError,
   scoreCreator,
+  stageSegments,
   suggestMerges,
 } from '@agentsws/kol-core'
 import type { StageInput, StageOutcome } from '@agentsws/txn'
@@ -524,6 +530,93 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
       deliverables: store.deliverables().filter((d) => ids.has(d.collaboration_id)),
       tracked_links: store.links().filter((l) => ids.has(l.collaboration_id)),
     }
+  }
+
+  /*
+   * WP302（决策 406）：合作清单每一行的紧急程度（`kol-core` 的 `collabStatus`）。现算不存：
+   * 还在等人批的卡从账本里读（只算 staged 的红人那几种）、交付物从库里读、往来从库里读、
+   * 下一封跟进按节奏算。卡对到合作上：带 `collaboration_id` 的直接对；开发信按「这个人 + 这条渠道」；
+   * 交付物验收按交付物挂的合作。
+   */
+  const withStatus = async (rows: readonly Collaboration[]): Promise<KolCollaborationRow[]> => {
+    if (rows.length === 0) return []
+    const now = clock.now()
+    const pending = (await ledger.list({ workspace_id })).filter(
+      (c) => c.status === 'staged' && c.kind.startsWith('kol_'),
+    )
+    const deliverables = store.deliverables()
+    const cardsOf = (c: Collaboration): number =>
+      pending.filter((ch) => {
+        const after = (ch.after ?? {}) as Record<string, unknown>
+        if (after.collaboration_id === c.id) return true
+        if (ch.target.type === 'collaboration' && ch.target.id === c.id) return true
+        if (ch.target.type === 'deliverable')
+          return deliverables.some((d) => d.id === ch.target.id && d.collaboration_id === c.id)
+        return (
+          after.collaboration_id === undefined &&
+          after.creator_id === c.creator_id &&
+          (after.channel === undefined || after.channel === c.channel)
+        )
+      }).length
+    return rows.map((c) => {
+      const mine = deliverables.filter((d) => d.collaboration_id === c.id)
+      const exchanges = store
+        .exchanges({ creator_id: c.creator_id })
+        .filter((x) => x.channel === c.channel)
+        .sort((a, b) => a.at.localeCompare(b.at))
+      const last = exchanges[exchanges.length - 1]
+      const outbound = exchanges.filter((x) => x.direction === 'out')
+      const next =
+        c.stage === 'contacted' && outbound.length > 0
+          ? nextInSequence({
+              sent: outbound.map((x, i) => ({
+                step: (['first', 'follow_up', 'final'] as const)[Math.min(i, 2)] ?? 'final',
+                at: x.at,
+              })),
+              replied: exchanges.some((x) => x.direction === 'in'),
+              contact: c.creator_id,
+              suppressed: [],
+            })
+          : undefined
+      const cards = cardsOf(c)
+      const status = collabStatus({
+        stage: c.stage,
+        now,
+        stage_changed_at: c.stage_changed_at,
+        last_activity_at: c.last_activity_at,
+        pending_cards: cards,
+        pending_reviews: mine.filter((d) => d.review === 'pending' && d.submitted_at !== undefined)
+          .length,
+        overdue_deliverables: mine.filter(
+          (d) => d.submitted_at === undefined && d.review === 'pending' && d.due_at < now,
+        ).length,
+        ...(last === undefined
+          ? {}
+          : {
+              last_exchange: {
+                direction: last.direction,
+                at: last.at,
+                ...(last.reply_class === undefined ? {} : { reply_class: last.reply_class }),
+              },
+            }),
+        outbound_count: outbound.length,
+        ...(next === undefined || next.due_at === '' ? {} : { next_follow_up_at: next.due_at }),
+      })
+      const dwell = dwellDays(c.stage_changed_at, now, c.last_activity_at)
+      return {
+        ...c,
+        status,
+        ...(cards === 0 ? {} : { pending_cards: cards }),
+        ...(dwell === null ? {} : { dwell_days: dwell }),
+        stalled: isStageStalled(c.stage, c.stage_changed_at, now, c.last_activity_at),
+        segments: stageSegments(c.stage, {
+          now,
+          stageChangedAt: c.stage_changed_at,
+          lastActivityAt: c.last_activity_at,
+          withSample: c.sample !== undefined,
+        }),
+      }
+    })
   }
 
   const creatorOr404 = (id: string): Creator => {
@@ -977,6 +1070,12 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
           .filter((r) => r.audit?.health !== undefined)
           .map((r) => [r.creator_id, r.audit as { health: number; at: string }]),
       )
+      // WP302：卡上的迷你进度条与「下一步」按钮——这个人在这条渠道上最近那条合作
+      const collabOf = (creator_id: string, channel: KolChannel): Collaboration | undefined =>
+        store
+          .collaborations({ channel })
+          .filter((c) => c.creator_id === creator_id)
+          .sort((a, b) => (b.last_activity_at ?? '').localeCompare(a.last_activity_at ?? ''))[0]
       // 排序（含"刷粉的排在后面而不是剔掉"）在 `rankCreators` 里，不在这儿重写
       const rows: KolCreatorRow[] = rankCreators(accounts, { ...scoreCriteria(), now }).map(
         ({ account, score }) => ({
@@ -1000,6 +1099,45 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
                 audited_at: audits.get(account.creator_id)?.at as string,
               }
             : {}),
+          factors: score.factors.map((f) => ({
+            id: f.id,
+            score: Math.round(f.score),
+            why: f.why,
+            ...(f.unknown === undefined ? {} : { unknown: true as const }),
+          })),
+          ...(() => {
+            const v = judgeEngagement(account.engagement_rate, account.followers)
+            return v === null ? {} : { engagement_judgement: v }
+          })(),
+          ...(() => {
+            const c = collabOf(account.creator_id, account.channel)
+            return c === undefined
+              ? {}
+              : {
+                  collab: {
+                    id: c.id,
+                    stage: c.stage,
+                    ...(c.stage_changed_at === undefined
+                      ? {}
+                      : { stage_changed_at: c.stage_changed_at }),
+                    ...(c.last_activity_at === undefined
+                      ? {}
+                      : { last_activity_at: c.last_activity_at }),
+                    with_sample: c.sample !== undefined,
+                    stalled: isStageStalled(c.stage, c.stage_changed_at, now, c.last_activity_at),
+                    segments: stageSegments(c.stage, {
+                      now,
+                      stageChangedAt: c.stage_changed_at,
+                      lastActivityAt: c.last_activity_at,
+                      withSample: c.sample !== undefined,
+                    }),
+                    ...(() => {
+                      const d = dwellDays(c.stage_changed_at, now, c.last_activity_at)
+                      return d === null ? {} : { dwell_days: d }
+                    })(),
+                  },
+                }
+          })(),
         }),
       )
       return { rows: rows.slice(0, filter.limit ?? 100) }
@@ -1255,13 +1393,12 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
       return contactView(row)
     },
 
-    collaborations(_actor, filter) {
-      return {
-        rows: store.collaborations({
-          ...(filter.channel === undefined ? {} : { channel: filter.channel }),
-          ...(filter.stage === undefined ? {} : { stage: filter.stage }),
-        }),
-      }
+    async collaborations(_actor, filter) {
+      const rows = store.collaborations({
+        ...(filter.channel === undefined ? {} : { channel: filter.channel }),
+        ...(filter.stage === undefined ? {} : { stage: filter.stage }),
+      })
+      return { rows: await withStatus(rows) }
     },
 
     async createCollaboration(actor, input) {

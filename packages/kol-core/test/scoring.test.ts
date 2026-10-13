@@ -71,6 +71,23 @@ describe('打分（48 §5.2）：每一项都可解释', () => {
     expect(s.factors.find((f) => f.id === 'followers')?.why).toContain('没采到')
   })
 
+  it('WP302：没判的那几项带 unknown（界面不给它画好 / 一般 / 弱），判了的不带', () => {
+    const { followers: _f, engagement_rate: _e, category: _c, ...bare } = account()
+    const blank = scoreCreator(bare, { now })
+    const unknown = (s: typeof blank, id: string) => s.factors.find((f) => f.id === id)?.unknown
+    expect(unknown(blank, 'followers')).toBe(true)
+    expect(unknown(blank, 'engagement')).toBe(true)
+    // 没限类目
+    expect(unknown(blank, 'category')).toBe(true)
+    // 限了类目、他没写类目
+    expect(unknown(scoreCreator(bare, { now, category: '数码' }), 'category')).toBe(true)
+    // 判了：对上 / 对不上都不带
+    const judged = scoreCreator(account(), { now, category: '数码' })
+    expect(unknown(judged, 'category')).toBeUndefined()
+    expect(unknown(judged, 'followers')).toBeUndefined()
+    expect(unknown(scoreCreator(account(), { now, category: '美妆' }), 'category')).toBeUndefined()
+  })
+
   it('数据太旧就直说：90 天前看到的数，活跃度见底', () => {
     const stale = scoreCreator(account({ observed_at: daysAgo(200) }), { now })
     const f = stale.factors.find((x) => x.id === 'activity')

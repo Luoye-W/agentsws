@@ -25,7 +25,7 @@ import {
 import { item, NOW, policyItem, queryContext, refundItem } from './fixtures.js'
 
 describe('组件注册表（29 §7 用例 1）', () => {
-  it('六个组件在册；未注册的名字被拒', () => {
+  it('组件在册（WP302 加了漏斗与归因三态卡）；未注册的名字被拒', () => {
     expect(COMPONENTS.map((c) => c.name)).toEqual([
       'stat_tile',
       'table',
@@ -33,6 +33,8 @@ describe('组件注册表（29 §7 用例 1）', () => {
       'timeline',
       'kv',
       'markdown',
+      'funnel',
+      'conversion',
     ])
     expect(isRegisteredComponent('stat_tile')).toBe(true)
     expect(isRegisteredComponent('evil_component')).toBe(false)

@@ -141,6 +141,35 @@ export interface KolCreatorRow {
    */
   audit_health?: number
   audited_at?: Iso8601
+  /**
+   * WP302（决策 406）：红人卡上那三格判断色块要的分项分（粉丝 / 互动 / 品类 / 地区 / 活跃，0–100）。
+   */
+  factors?: { id: string; score: number; why: string; unknown?: true }[]
+  /**
+   * WP302：互动率跟同量级中位数比（`kol-core` 的 `judgeEngagement`，移植自 KOLAgents）。没有互动率就没有——
+   * 缺数不画「未知」色块。`value` / `median` 是百分数字符串（`2.4` = 2.4%）。
+   */
+  engagement_judgement?: {
+    key: 'low' | 'average' | 'healthy'
+    level: 'good' | 'warn' | 'bad'
+    value: string
+    median: string
+  }
+  /**
+   * WP302：这个人在这条渠道上那条合作走到哪了（卡上的迷你进度条与「下一步」按钮）。没有合作就没有。
+   */
+  collab?: {
+    id: string
+    stage: CollaborationStage
+    stage_changed_at?: Iso8601
+    last_activity_at?: Iso8601
+    with_sample: boolean
+    stalled: boolean
+    /** 迷你进度条的那几段（同合作清单那一份算法）。 */
+    segments: KolStageSegment[]
+    /** 在这一段停了几天。 */
+    dwell_days?: number
+  }
 }
 
 /** 红人详情（工作台上点开那一屏）。 */
@@ -365,6 +394,32 @@ export interface KolStagedView {
   applied?: boolean
 }
 
+/**
+ * WP302（决策 406）：合作清单上的一行 = 合作本身 + 从卡、交付物、往来、跟进节奏推出来的那几格
+ * （不存，每次现算；同 KOLAgents「状态从往来推出来」）。
+ */
+export type KolCollaborationRow = Collaboration & {
+  /** 紧急程度：五档色之一 + 清单行上那一小句。 */
+  status?: { tier: 'action' | 'scheduled' | 'waiting' | 'active' | 'idle'; label: string }
+  /** 这条合作上还在等人批的卡（清单那一行点了去卡片流，docs/96 P1）。没有就不给。 */
+  pending_cards?: number
+  /** 在现在这一段停了几天（算不出来就没有）。 */
+  dwell_days?: number
+  /** 停久了（只在要人推的几段、满 7 天）。 */
+  stalled?: boolean
+  /** 谢绝之前走到了哪一段（画进度条用）。 */
+  declined_from?: CollaborationStage
+  /** 分段进度条的那几段（`kol-core` 的 `stageSegments` 算好，界面只管画）。 */
+  segments?: KolStageSegment[]
+}
+
+/** WP302：分段进度条的一段。 */
+export interface KolStageSegment {
+  stage: CollaborationStage
+  state: 'done' | 'current' | 'pending' | 'terminal'
+  stalled: boolean
+}
+
 /** WP299（决策 386）：寄样的入参。地址明文只进加密库。 */
 export interface KolSampleInput {
   address: string
@@ -515,7 +570,7 @@ export interface KolPort {
   collaborations(
     actor: KolActor,
     filter: { channel?: KolChannel | undefined; stage?: CollaborationStage | undefined },
-  ): MaybePromise<{ rows: Collaboration[] }>
+  ): MaybePromise<{ rows: KolCollaborationRow[] }>
   createCollaboration(
     actor: KolActor,
     input: KolCollaborationInput,

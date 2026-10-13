@@ -4819,7 +4819,40 @@ export interface KolCreatorRowData {
   /** WP131：「采集后自动评分」跑出的云端体检概括数（0–100）与时刻；没做过就没有。 */
   audit_health?: number
   audited_at?: string
+  /** WP302：分项分（followers / engagement / category / locale / activity，0–100）——卡上的判断色块。 */
+  factors?: { id: string; score: number; why?: string; unknown?: true }[]
+  /** WP302：互动率跟同量级中位数比（百分数字符串）。 */
+  engagement_judgement?: {
+    key: 'low' | 'average' | 'healthy'
+    level: KolJudgementLevel
+    value: string
+    median: string
+  }
+  /** WP302：这个人在这条渠道上那条合作走到哪了（卡上的迷你进度条与「下一步」按钮）。 */
+  collab?: {
+    id: string
+    stage: string
+    stage_changed_at?: string
+    last_activity_at?: string
+    with_sample: boolean
+    stalled: boolean
+    segments: KolStageSegmentData[]
+    dwell_days?: number
+  }
 }
+
+/** WP302：分段进度条的一段（服务端用 kol-core 算好）。 */
+export interface KolStageSegmentData {
+  stage: string
+  state: 'done' | 'current' | 'pending' | 'terminal'
+  stalled: boolean
+}
+
+/** WP302：判断色块的三档。 */
+export type KolJudgementLevel = 'good' | 'warn' | 'bad'
+
+/** WP302：合作的紧急程度（五档色）。 */
+export type KolCollabTier = 'action' | 'scheduled' | 'waiting' | 'active' | 'idle'
 
 /** 一条联系方式。**没有明文那一格**——脱敏形态够认出是哪一个，不够拿去发信。 */
 export interface KolContactData {
@@ -4875,6 +4908,16 @@ export interface KolCollaborationData {
   }
   /** WP299（决策 387）：批过的付款。 */
   payments?: { id: string; amount: number; currency: string; note?: string; paid_at: string }[]
+  /** WP302：进了这一段的时刻。 */
+  stage_changed_at?: string
+  /** WP302：紧急程度 + 清单行上那一小句（只有合作清单接口给）。 */
+  status?: { tier: KolCollabTier; label: string }
+  /** 还在等人批的卡（点了去卡片流）。 */
+  pending_cards?: number
+  dwell_days?: number
+  stalled?: boolean
+  declined_from?: string
+  segments?: KolStageSegmentData[]
 }
 
 /** WP117b（66 复测 #19）：一条合作上的一次往来（我们发的 / 他回的）。 */

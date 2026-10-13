@@ -383,17 +383,124 @@ describe('WP68 红人岗位面板', () => {
     expect(blocked.textContent).toContain('我们付你')
   })
 
-  it('合作分块：阶段推进按钮只给合法的下一步', async () => {
+  it('WP302：合作清单按急到缓分组、每行一个档色小标与迷你进度条；清单上没有推进按钮（推进在线程里）', async () => {
+    const seg = (stage: string, state: 'done' | 'current' | 'pending', stalled = false) => ({
+      stage,
+      state,
+      stalled,
+    })
+    getKolCollaborations.mockResolvedValue({
+      rows: [
+        {
+          id: 'col_wait',
+          creator_id: 'cre_1',
+          channel: 'youtube',
+          stage: 'contacted',
+          currency: 'USD',
+          status: { tier: 'waiting', label: '等回复 · 已 9 天（第 2 封）' },
+          dwell_days: 9,
+          stalled: true,
+          segments: [
+            seg('sourced', 'done'),
+            seg('contacted', 'current', true),
+            seg('replied', 'pending'),
+          ],
+        },
+        {
+          id: 'col_card',
+          creator_id: 'cre_2',
+          channel: 'youtube',
+          stage: 'negotiating',
+          currency: 'USD',
+          budget: 300,
+          status: { tier: 'action', label: '有一张卡等你批' },
+          pending_cards: 1,
+          segments: [seg('sourced', 'done'), seg('negotiating', 'current')],
+        },
+      ],
+    })
     renderWithProviders(<KolPanel assignment="asg_yt" channel="youtube" />)
     await goto('threads')
     await screen.findByTestId('kol-collaborations')
-    const buttons = await screen.findAllByTestId('kol-stage-next')
-    // `contacted` 的下一步只有"有回音"与"谢绝了"
-    expect(buttons.map((b) => b.getAttribute('data-next'))).toEqual(['replied', 'declined'])
-    fireEvent.click(buttons[0] as HTMLElement)
+    const groups = await screen.findAllByTestId('kol-collab-group')
+    // 「要处理」在前；没人的组（进行中 / 其他）不出标题
+    expect(groups.map((g) => g.getAttribute('data-group'))).toEqual(['action', 'waiting'])
+    const rows = screen.getAllByTestId('kol-collab-row')
+    expect(rows.map((r) => r.getAttribute('data-tier'))).toEqual(['action', 'waiting'])
+    expect(rows[1]?.textContent).toContain('等回复 · 已 9 天')
+    // 停满 7 天的那一段标黄
+    const stalled = rows[1]?.querySelector(
+      '[data-testid="kol-progress-segment"][data-state="stalled"]',
+    )
+    expect(stalled).not.toBeNull()
+    // 有卡等批的那一行：小标是去卡片流的按钮，不是批的按钮
+    expect(screen.getByTestId('kol-collab-cards').textContent).toContain('有一张卡等你批')
+    expect(screen.queryByTestId('kol-stage-next')).toBeNull()
+    // 推进在线程里
+    fireEvent.click(screen.getAllByTestId('kol-collab-open')[1] as HTMLElement)
+    const next = await screen.findAllByTestId('kol-thread-next')
+    expect(next.map((b) => b.getAttribute('data-next'))).toEqual(['replied', 'declined'])
+    expect(screen.getByTestId('kol-progress').getAttribute('data-layout')).toBe('stepper')
+    fireEvent.click(next[0] as HTMLElement)
     await waitFor(() => {
-      expect(advanceKolCollaboration).toHaveBeenCalledWith('col_1', 'replied', 'asg_yt')
+      expect(advanceKolCollaboration).toHaveBeenCalledWith('col_wait', 'replied', 'asg_yt')
     })
+  })
+
+  it('WP302：「其他」一长串（演练一开二十几条「还没联系」）默认只露 3 条，点开才全出；筛过就全出', async () => {
+    getKolCollaborations.mockResolvedValue({
+      rows: Array.from({ length: 6 }, (_, i) => ({
+        id: `col_idle_${i}`,
+        creator_id: 'cre_1',
+        channel: 'youtube',
+        stage: 'sourced',
+        currency: 'USD',
+        status: { tier: 'idle', label: '还没联系' },
+        segments: [],
+      })),
+    })
+    renderWithProviders(<KolPanel assignment="asg_yt" channel="youtube" />)
+    await goto('threads')
+    await screen.findByTestId('kol-collab-more')
+    expect(screen.getAllByTestId('kol-collab-row')).toHaveLength(3)
+    expect(screen.getByTestId('kol-collab-more').textContent).toContain('3')
+    fireEvent.click(screen.getByTestId('kol-collab-more'))
+    expect(screen.getAllByTestId('kol-collab-row')).toHaveLength(6)
+    expect(screen.queryByTestId('kol-collab-more')).toBeNull()
+  })
+
+  it('WP302：候选池是达人卡——分数、判断色块、按阶段变的下一步；数不可信的先人工看', async () => {
+    getKolCreators.mockResolvedValue({
+      rows: [
+        {
+          ...(LIBRARY[0] as KolCreatorRowData),
+          factors: [{ id: 'category', score: 35 }],
+          engagement_judgement: { key: 'healthy', level: 'good', value: '6.2', median: '3.0' },
+          collab: {
+            id: 'col_1',
+            stage: 'negotiating',
+            with_sample: false,
+            stalled: false,
+            segments: [{ stage: 'negotiating', state: 'current', stalled: false }],
+          },
+        },
+        LIBRARY[1] as KolCreatorRowData,
+      ],
+    })
+    renderWithProviders(<KolPanel assignment="asg_yt" channel="youtube" />)
+    const cards = await screen.findAllByTestId('kol-creator-card')
+    expect(cards.map((c) => c.getAttribute('data-next'))).toEqual(['negotiate', 'blocked'])
+    const stat = (card: HTMLElement | undefined, id: string) =>
+      card?.querySelector(`[data-testid="kol-card-stat"][data-stat="${id}"]`)
+    expect(stat(cards[0], 'engagement')?.getAttribute('data-level')).toBe('good')
+    expect(stat(cards[0], 'category')?.getAttribute('data-level')).toBe('bad')
+    // 没有互动率的不画「未知」色块
+    expect(stat(cards[1], 'engagement')?.getAttribute('data-level')).toBeNull()
+    expect(cards[0]?.querySelector('[data-testid="kol-progress"]')).not.toBeNull()
+    expect(cards[1]?.querySelector('[data-testid="kol-progress"]')).toBeNull()
+    // 「去谈」落在合作线程里
+    fireEvent.click(cards[0]?.querySelector('[data-testid="kol-card-next"]') as HTMLElement)
+    expect(await screen.findByTestId('kol-collab-thread')).toBeDefined()
   })
 
   it('campaign 清单：本人没有那条职责的整组灰显，并说得出为什么（05 §4）', async () => {

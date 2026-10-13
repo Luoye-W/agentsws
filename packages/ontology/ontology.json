@@ -122,7 +122,7 @@
     "packages/roles/roles/social/x.yml",
     "packages/roles/roles/social/youtube.yml"
   ],
-  "source_digest": "a34c42e8f01c4836b6502acbf43eb70e",
+  "source_digest": "9baff409432a83d6c09708fd9b4e9fb7",
   "objects": [
     {
       "id": "ad",
@@ -1438,6 +1438,12 @@
         },
         {
           "name": "last_activity_at",
+          "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "stage_changed_at",
           "type": "Iso8601",
           "sensitivity": "internal",
           "optional": true
