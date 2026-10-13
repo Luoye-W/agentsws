@@ -5362,7 +5362,16 @@ export interface ImStatusView {
     allowed: boolean
     reason?: string
   }
-  wecom: { configured: boolean; connected: boolean; bot_id?: string; me_bound?: boolean }
+  wecom: {
+    configured: boolean
+    connected: boolean
+    bot_id?: string
+    me_bound?: boolean
+    /** WP308：连接状态（老服务端没有这一格，按 `connected` 推）。 */
+    state?: ImTeamBotView['state']
+    /** WP308：连不上时的那句人话。 */
+    error?: string
+  }
   /** WP211：飞书 / 钉钉机器人（团队）。老服务端没有这两格。 */
   feishu?: ImTeamBotView & { app_id?: string; domain?: 'feishu' | 'lark' }
   dingtalk?: ImTeamBotView & { client_id?: string }
