@@ -130,6 +130,11 @@ export interface ServerSpawnInput {
    * WP111 起的安装包一直漏了这一项：装好打开工作台是一张 404。
    */
   staticDir?: string
+  /**
+   * WP297（决策 140 / 376）：安装包里随带的起底主题包所在目录（`<resources>/theme-base`）。
+   * 经 `AGENTSWS_THEME_BASE_DIR` 给服务进程——GitHub 下不动 / 超时时用它起底；开发期不给。
+   */
+  themeBaseDir?: string
 }
 
 export function serverSpawnRequest(input: ServerSpawnInput): SpawnRequest {
@@ -156,6 +161,7 @@ export function serverSpawnRequest(input: ServerSpawnInput): SpawnRequest {
     ...(input.appDataDir === undefined ? {} : { AGENTSWS_APP_DATA_DIR: input.appDataDir }),
     ...(input.profileDir === undefined ? {} : { AGENTSWS_PROFILE_DIR: input.profileDir }),
     ...(input.staticDir === undefined ? {} : { AGENTSWS_STATIC_DIR: input.staticDir }),
+    ...(input.themeBaseDir === undefined ? {} : { AGENTSWS_THEME_BASE_DIR: input.themeBaseDir }),
     // WP218：Windows 上没有 SIGTERM，壳靠关 stdin 请它收尾（见 node-runtime 的 kill）
     AGENTSWS_STOP_ON_STDIN_END: '1',
     ...haltEnv(input.halt),

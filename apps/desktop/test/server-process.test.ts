@@ -1,4 +1,9 @@
+import { readFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
+import { THEME_BASE_RESOURCE_DIR } from '../scripts/fetch-theme-base.mjs'
+import { bundledThemeBaseDir } from '../src/paths.js'
 import { generateSecrets, secretLiterals } from '../src/secrets.js'
 import {
   INHERITED_ENV,
@@ -71,6 +76,23 @@ describe('serverSpawnRequest', () => {
     expect(request.env.AGENTSWS_STOP_ON_STDIN_END).toBe('1')
     expect(request.stopViaStdin).toBe(true)
     expect(serverSpawnRequest(input()).env.AGENTSWS_STATIC_DIR).toBeUndefined()
+  })
+
+  it('WP297：随包的起底主题包目录经 AGENTSWS_THEME_BASE_DIR 给（与服务端认的同一个名字）；开发期不给', () => {
+    const resources = 'C:\\Users\\张三\\AppData\\Local\\Programs\\agentsws\\resources'
+    const dir = bundledThemeBaseDir(resources)
+    expect(dir).toBe(join(resources, THEME_BASE_RESOURCE_DIR))
+    expect(bundledThemeBaseDir(undefined)).toBeUndefined()
+    expect(
+      serverSpawnRequest(input({ themeBaseDir: dir as string })).env.AGENTSWS_THEME_BASE_DIR,
+    ).toBe(dir)
+    expect(serverSpawnRequest(input()).env.AGENTSWS_THEME_BASE_DIR).toBeUndefined()
+    // 服务端读的就是这个变量（server.ts → createSiteTheme 的 localBaseDir）
+    const server = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'server', 'src', 'server.ts'),
+      'utf8',
+    )
+    expect(server).toMatch(/localBaseDir: env\.AGENTSWS_THEME_BASE_DIR/)
   })
 
   it('WP218：Windows 系统变量与代理往下传，别的照样不传', () => {

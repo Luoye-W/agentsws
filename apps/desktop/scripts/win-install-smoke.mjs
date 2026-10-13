@@ -2,7 +2,7 @@
 /**
  * WP218：Windows 安装包**装起来真跑一遍**（CI `windows-latest` 上跑；本机 mac 上只跑得了单测里的纯函数）。
  *
- *   静默安装（装到带中文和空格的目录）→ 看最长路径 → Playwright 起装好的 exe（用户数据目录也带中文）
+ *   静默安装（装到带中文和空格的目录）→ 看最长路径 → 随包的起底主题包在（WP297）→ Playwright 起装好的 exe（用户数据目录也带中文）
  *   → 等服务 /v1/health 200 → 打开工作台首页（真的是工作台，不是 404）→ 再起一次验单实例
  *   → 开一次官方 web 场景（默认工作文件夹「文稿\Agents 工坊」，中文 + 空格；WP227）
  *   → 查我们的进程只听 127.0.0.1（不会弹防火墙）→ 退出 → 查没有留下孤儿进程 → 静默卸载
@@ -35,6 +35,7 @@ import { createServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { bundledThemeBaseProblem } from './fetch-theme-base.mjs'
 
 // ── 纯函数（单测覆盖，mac 上也能跑）─────────────────────────────────────
 
@@ -425,6 +426,11 @@ async function main() {
   )
   step(`最长路径 ${longest[0]?.length ?? 0} 个字符（老上限 260）`)
   if ((longest[0]?.length ?? 0) >= 260) throw new Error('安装目录里有超过 260 个字符的路径')
+
+  // 2bis. WP297（决策 140）：随包的起底主题包装到了 <安装目录>/resources/theme-base/，字节数与 sha256 对得上钉子
+  const themeProblem = bundledThemeBaseProblem(join(dir, 'resources'))
+  if (themeProblem !== undefined) throw new Error(themeProblem)
+  step('随包的起底主题包：在，字节数与 sha256 对得上 theme-base-pin.json')
 
   // 3. 起装好的 exe 那一段放进子进程（用户数据目录也带中文；不查更新；端口随机）
   const userData = join(local, 'agentsws-smoke-数据')
