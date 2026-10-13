@@ -6,8 +6,8 @@
  * 人不该每张都要自己推一遍「这人现在在哪一步、所以我该干什么」，按钮直接说。
  *
  * 改的地方：
- * - 第三格 KOLAgents 是「均播」，工坊没有均播数据，换成打分里的「品类」分项（决策 405：
- *   五个确定性分项是底，这里只拿来上色，不另编数）；
+ * - 第三格 KOLAgents 是「均播」，工坊没有均播数据，换成「品类」：格子里写他做什么，色块按打分里
+ *   「品类」那一项（决策 405：五个确定性分项是底，这里只拿来上色，不另编数；没判的不上色）；
  * - 下一步按工坊的十段阶段机（决策 404）；点了只是**打开**（详情里起草开发信 → 出卡；
  *   线程里推进），卡上不替人做决定（docs/96 P1）；
  * - 颜色换成 `--ws-*` 令牌，`Tooltip` 换成工坊的。
@@ -117,6 +117,7 @@ function Stat({
   level,
   badge,
   reason,
+  textual = false,
 }: {
   id: string
   label: string
@@ -124,6 +125,8 @@ function Stat({
   level?: KolJudgementLevel | undefined
   badge?: string | undefined
   reason?: string | undefined
+  /** 值是一个词（品类名）不是数：可以截断，色块不截。 */
+  textual?: boolean
 }): ReactNode {
   const body = (
     <span
@@ -139,11 +142,16 @@ function Stat({
         {label}
       </span>
       <span className="flex min-w-0 items-baseline gap-1">
-        <span className="ws-num shrink-0 text-sm font-medium">{value}</span>
+        <span
+          className={cn('text-sm font-medium', textual ? 'min-w-0 truncate' : 'ws-num shrink-0')}
+        >
+          {value}
+        </span>
         {badge === undefined || level === undefined ? null : (
           <span
             className={cn(
-              'min-w-0 shrink truncate rounded px-1 text-[10px] font-bold leading-[1.35]',
+              'rounded px-1 text-[10px] font-bold leading-[1.35]',
+              textual ? 'shrink-0' : 'min-w-0 shrink truncate',
               JUDGEMENT_BADGE[level],
             )}
           >
@@ -185,8 +193,9 @@ export function CreatorCard({
   const { t } = useApp()
   const step = nextStepOf(row)
   const eng = row.engagement_judgement
-  const category = row.factors?.find((f) => f.id === 'category')?.score
-  const catLevel = levelOfFactor(category)
+  const cat = row.factors?.find((f) => f.id === 'category')
+  // 格子里写他做什么（「数码」）；没判的（没限类目 / 认不出）不画色块——中间分不是结论
+  const catLevel = cat === undefined || cat.unknown === true ? undefined : levelOfFactor(cat.score)
   return (
     <li
       className="flex min-w-0 flex-col gap-2 rounded-[var(--ws-radius-card)] border bg-card p-2.5"
@@ -235,14 +244,11 @@ export function CreatorCard({
           <Stat
             id="category"
             label={t('kol.judge.category')}
-            value={category === undefined ? '—' : String(category)}
+            value={row.category ?? '—'}
+            textual
             level={catLevel}
             badge={catLevel === undefined ? undefined : t(`kol.judge.${catLevel}`)}
-            reason={
-              row.category === undefined
-                ? undefined
-                : t('kol.judge.category.reason', { category: row.category })
-            }
+            reason={cat?.why}
           />
         </span>
       </button>

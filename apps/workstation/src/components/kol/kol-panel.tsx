@@ -690,6 +690,9 @@ const STAGE_FILTERS = [
   'declined',
 ] as const
 
+/** 「其他」那一组折起来时露几条。 */
+const IDLE_PREVIEW = 3
+
 function Collaborations({
   assignment,
   channel,
@@ -703,6 +706,8 @@ function Collaborations({
   const navigate = useNavigate()
   const [stage, setStage] = useState<(typeof STAGE_FILTERS)[number]>('all')
   const [q, setQ] = useState('')
+  /** 「其他」那一组（还没联系 / 谢绝了）默认只露几条——演练一开就是二十几条，压住了上面要紧的。 */
+  const [idleOpen, setIdleOpen] = useState(false)
 
   const list = useQuery({
     queryKey: ['kol-collaborations', assignment, channel],
@@ -798,10 +803,13 @@ function Collaborations({
         {COLLAB_GROUPS.map((group) => {
           const inGroup = rows.filter((c) => groupOfTier(c.status?.tier) === group)
           if (inGroup.length === 0) return null
+          // 筛过、或者自己点开了就全出；不然「其他」只露前 IDLE_PREVIEW 条
+          const folded = group === 'idle' && !filtered && !idleOpen && inGroup.length > IDLE_PREVIEW
+          const shown = folded ? inGroup.slice(0, IDLE_PREVIEW) : inGroup
           return (
             <section key={group} className="flex flex-col gap-1" data-group={group}>
               <GroupTitle group={group} n={inGroup.length} />
-              {inGroup.map((c) => {
+              {shown.map((c) => {
                 const r = who.get(c.creator_id)
                 const urgent = group === 'action' || group === 'waiting'
                 return (
@@ -881,6 +889,19 @@ function Collaborations({
                   </div>
                 )
               })}
+              {folded ? (
+                <Button
+                  size="xs"
+                  variant="ghost"
+                  className="self-start"
+                  data-testid="kol-collab-more"
+                  onClick={() => {
+                    setIdleOpen(true)
+                  }}
+                >
+                  {t('kol.collab.more', { n: inGroup.length - IDLE_PREVIEW })}
+                </Button>
+              ) : null}
             </section>
           )
         })}

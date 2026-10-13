@@ -144,7 +144,7 @@ export interface KolCreatorRow {
   /**
    * WP302（决策 406）：红人卡上那三格判断色块要的分项分（粉丝 / 互动 / 品类 / 地区 / 活跃，0–100）。
    */
-  factors?: { id: string; score: number }[]
+  factors?: { id: string; score: number; why: string; unknown?: true }[]
   /**
    * WP302：互动率跟同量级中位数比（`kol-core` 的 `judgeEngagement`，移植自 KOLAgents）。没有互动率就没有——
    * 缺数不画「未知」色块。`value` / `median` 是百分数字符串（`2.4` = 2.4%）。

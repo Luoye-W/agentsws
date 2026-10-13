@@ -1099,7 +1099,12 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
                 audited_at: audits.get(account.creator_id)?.at as string,
               }
             : {}),
-          factors: score.factors.map((f) => ({ id: f.id, score: Math.round(f.score) })),
+          factors: score.factors.map((f) => ({
+            id: f.id,
+            score: Math.round(f.score),
+            why: f.why,
+            ...(f.unknown === undefined ? {} : { unknown: true as const }),
+          })),
           ...(() => {
             const v = judgeEngagement(account.engagement_rate, account.followers)
             return v === null ? {} : { engagement_judgement: v }

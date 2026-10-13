@@ -110,7 +110,11 @@ export function collabStatus(input: CollabStatusInput): CollabStatus {
         label: ahead === undefined || ahead === 0 ? '跟进已排上' : `跟进已排上 · ${ahead} 天后`,
       }
     const waited = daysBetween(last?.at ?? input.stage_changed_at ?? input.last_activity_at, now)
-    const nth = input.outbound_count === undefined ? '' : `（第 ${input.outbound_count} 封）`
+    // 手动推到「已建联」、一封都没经工坊发的：不说「第 0 封」
+    const nth =
+      input.outbound_count === undefined || input.outbound_count === 0
+        ? ''
+        : `（第 ${input.outbound_count} 封）`
     return {
       tier: 'waiting',
       label: `等回复${waited === undefined ? '' : ` · 已 ${waited} 天`}${nth}`,

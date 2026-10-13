@@ -27,6 +27,11 @@ export interface ScoreFactor {
   weight: number
   /** 一句人话：为什么是这个分。**必给**——这一格空着，整个模块就白写了。 */
   why: string
+  /**
+   * WP302：这一项**没判**（缺数或没给标准，给的是中间分）。界面上不给它画好 / 一般 / 弱的色块——
+   * 缺数画一个「一般」等于替人下了一个没依据的结论（KOLAgents 判断色块的同一条：缺数不画）。
+   */
+  unknown?: true
 }
 
 export interface CreatorScore {
@@ -111,11 +116,11 @@ const pct = (v: number): string => `${(v * 100).toFixed(1)}%`
 function followersScore(
   followers: number | undefined,
   band: { min: number; max: number },
-): { score: number; why: string } {
+): { score: number; why: string; unknown?: true } {
   if (followers === undefined)
     // 不知道粉丝数不等于零分：那样会把"还没采到数"的人永远压在最下面，
     // 而他可能正是最该看的那个。给中间分并说清楚。
-    return { score: 50, why: '还不知道粉丝数（没采到），按中间分算，先别当结论。' }
+    return { score: 50, why: '还不知道粉丝数（没采到），按中间分算，先别当结论。', unknown: true }
   if (followers >= band.min && followers <= band.max)
     return { score: 100, why: `${followers.toLocaleString('en-US')} 粉，正好在想要的区间里。` }
   const edge = followers < band.min ? band.min : band.max
@@ -134,9 +139,10 @@ function engagementScore(
   rate: number | undefined,
   followers: number | undefined,
   channel: KolChannel,
-): { score: number; why: string; blocked?: string } {
+): { score: number; why: string; blocked?: string; unknown?: true } {
   const baseline = ENGAGEMENT_BASELINE[channel]
-  if (rate === undefined) return { score: 50, why: '还不知道互动率（没采到），按中间分算。' }
+  if (rate === undefined)
+    return { score: 50, why: '还不知道互动率（没采到），按中间分算。', unknown: true }
   if (
     followers !== undefined &&
     followers >= FAKE_FOLLOWER_FLOOR &&
@@ -341,7 +347,7 @@ function categoryScore(
   actual: string | undefined,
   want: string | undefined,
   families?: readonly string[],
-): { score: number; why: string } {
+): { score: number; why: string; unknown?: true } {
   // WP299（决策 389）：这次找人没限类目，就按你卖的东西的大类比
   if (want === undefined && families !== undefined && families.length > 0) {
     const mine = categoryFamiliesOf(actual)
@@ -349,14 +355,15 @@ function categoryScore(
       return {
         score: 40,
         why: `还认不出他做什么类目（你卖的是「${familyZh(families)}」那一类）。`,
+        unknown: true,
       }
     return mine.some((f) => families.includes(f))
       ? { score: 100, why: `他做「${actual}」，和你卖的东西是同一类。` }
       : { score: 20, why: `他做「${actual}」，你卖的是「${familyZh(families)}」那一类，对不上。` }
   }
-  if (want === undefined) return { score: 50, why: '这次找人没限类目。' }
+  if (want === undefined) return { score: 50, why: '这次找人没限类目。', unknown: true }
   if (actual === undefined)
-    return { score: 40, why: `还不知道他做什么类目（想要的是「${want}」）。` }
+    return { score: 40, why: `还不知道他做什么类目（想要的是「${want}」）。`, unknown: true }
   const a = actual.trim().toLowerCase()
   const w = want.trim().toLowerCase()
   if (a === w) return { score: 100, why: `类目正好是「${actual}」。` }
@@ -465,9 +472,14 @@ export function scoreCreator(account: ScorableAccount, criteria: ScoreCriteria):
   const l = localeScore(account, criteria)
   const a = activityScore(account.observed_at, criteria.now)
 
-  const raw: { id: ScoreFactorId; score: number; why: string }[] = [
+  const raw: { id: ScoreFactorId; score: number; why: string; unknown?: true }[] = [
     { id: 'followers', ...f },
-    { id: 'engagement', score: e.score, why: e.why },
+    {
+      id: 'engagement',
+      score: e.score,
+      why: e.why,
+      ...(e.unknown === undefined ? {} : { unknown: e.unknown }),
+    },
     { id: 'category', ...c },
     { id: 'locale', ...l },
     { id: 'activity', ...a },
@@ -479,6 +491,7 @@ export function scoreCreator(account: ScorableAccount, criteria: ScoreCriteria):
     score: Math.round(r.score),
     weight: sum === 0 ? 0 : weights[r.id] / sum,
     why: r.why,
+    ...(r.unknown === undefined ? {} : { unknown: r.unknown }),
   }))
   const total = Math.round(factors.reduce((acc, x) => acc + x.score * x.weight, 0))
   return { total, factors, ...(e.blocked === undefined ? {} : { blocked: e.blocked }) }

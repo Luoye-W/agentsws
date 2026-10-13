@@ -4820,7 +4820,7 @@ export interface KolCreatorRowData {
   audit_health?: number
   audited_at?: string
   /** WP302：分项分（followers / engagement / category / locale / activity，0–100）——卡上的判断色块。 */
-  factors?: { id: string; score: number }[]
+  factors?: { id: string; score: number; why?: string; unknown?: true }[]
   /** WP302：互动率跟同量级中位数比（百分数字符串）。 */
   engagement_judgement?: {
     key: 'low' | 'average' | 'healthy'

@@ -447,6 +447,28 @@ describe('WP68 红人岗位面板', () => {
     })
   })
 
+  it('WP302：「其他」一长串（演练一开二十几条「还没联系」）默认只露 3 条，点开才全出；筛过就全出', async () => {
+    getKolCollaborations.mockResolvedValue({
+      rows: Array.from({ length: 6 }, (_, i) => ({
+        id: `col_idle_${i}`,
+        creator_id: 'cre_1',
+        channel: 'youtube',
+        stage: 'sourced',
+        currency: 'USD',
+        status: { tier: 'idle', label: '还没联系' },
+        segments: [],
+      })),
+    })
+    renderWithProviders(<KolPanel assignment="asg_yt" channel="youtube" />)
+    await goto('threads')
+    await screen.findByTestId('kol-collab-more')
+    expect(screen.getAllByTestId('kol-collab-row')).toHaveLength(3)
+    expect(screen.getByTestId('kol-collab-more').textContent).toContain('3')
+    fireEvent.click(screen.getByTestId('kol-collab-more'))
+    expect(screen.getAllByTestId('kol-collab-row')).toHaveLength(6)
+    expect(screen.queryByTestId('kol-collab-more')).toBeNull()
+  })
+
   it('WP302：候选池是达人卡——分数、判断色块、按阶段变的下一步；数不可信的先人工看', async () => {
     getKolCreators.mockResolvedValue({
       rows: [

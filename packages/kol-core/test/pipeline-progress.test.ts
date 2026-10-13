@@ -105,6 +105,15 @@ describe('紧急程度（色阶移植自 KOLAgents status-tier）', () => {
         last_exchange: { direction: 'out', at: daysAgo(5) },
       }),
     ).toEqual({ tier: 'waiting', label: '等回复 · 已 5 天（第 2 封）' })
+    // 手动推到「已建联」、一封都没经工坊发：不说「第 0 封」
+    expect(
+      collabStatus({
+        stage: 'contacted',
+        now: NOW,
+        outbound_count: 0,
+        stage_changed_at: daysAgo(3),
+      }),
+    ).toEqual({ tier: 'waiting', label: '等回复 · 已 3 天' })
   })
 
   it('谈成之后是进行中；还没联系、结案、谢绝是其他', () => {
