@@ -122,7 +122,7 @@
     "packages/roles/roles/social/x.yml",
     "packages/roles/roles/social/youtube.yml"
   ],
-  "source_digest": "799711130d3ae6cda62e3c31080b6da5",
+  "source_digest": "a34c42e8f01c4836b6502acbf43eb70e",
   "objects": [
     {
       "id": "ad",
@@ -1439,6 +1439,18 @@
         {
           "name": "last_activity_at",
           "type": "Iso8601",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "sample",
+          "type": "KolSample",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "payments",
+          "type": "KolPayment[]",
           "sensitivity": "internal",
           "optional": true
         }
