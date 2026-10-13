@@ -76,6 +76,7 @@ import {
   advanceDeliverable,
   affiliateCode,
   applyUtm,
+  brandScoreCriteria,
   buildUtm,
   type CampaignBrief,
   collaborationStageName,
@@ -99,7 +100,9 @@ import {
   planCampaign,
   rankCreators,
   roleIdOfChannel,
+  type ScoreCriteria,
   StageTransitionError,
+  scoreCreator,
   suggestMerges,
 } from '@agentsws/kol-core'
 import type { StageInput, StageOutcome } from '@agentsws/txn'
@@ -324,6 +327,11 @@ export interface KolServiceOptions {
   brandName(): string
   /** 一个人的显示名（开发信的署名）。取不到就用 id。 */
   personName(person_id: PersonId): MaybePromise<string>
+  /**
+   * WP299（决策 388 / 389）：这个品牌的档案里我们用得上的几格——公司实体地址（英文开发信页脚）、
+   * 一句话介绍（认你卖的东西是哪一大类，打分用）、目标市场（打分的地区条件）。不给 = 都没有。
+   */
+  brandProfile?(): { postal_address?: string; one_liner?: string; markets?: readonly string[] }
 }
 
 export interface KolServiceAssembly {
@@ -478,12 +486,39 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
     }
   }
 
+  /**
+   * WP299（决策 389）：打分条件带上品牌档案——一句话介绍认出的大类当品类条件、目标市场当地区条件。
+   * 以前不带任何条件：库里每个人的类目都拿中间分、地区都满分，一屏几乎全是 90 分，分不出好坏。
+   */
+  const scoreCriteria = (): ScoreCriteria =>
+    brandScoreCriteria(options.brandProfile?.() ?? {}, clock.now())
+
   const detailOf = (creator: Creator): KolCreatorDetail => {
     const collaborations = store.collaborations().filter((c) => c.creator_id === creator.id)
     const ids = new Set(collaborations.map((c) => c.id))
+    const accounts = store.accounts({ creator_id: creator.id })
+    const criteria = scoreCriteria()
     return {
       creator,
-      accounts: store.accounts({ creator_id: creator.id }),
+      accounts,
+      scores: Object.fromEntries(
+        accounts.map((a) => {
+          const sc = scoreCreator(a, criteria)
+          return [
+            a.id,
+            {
+              total: sc.total,
+              factors: sc.factors.map((f) => ({
+                id: f.id,
+                label: f.label,
+                score: Math.round(f.score),
+                why: f.why,
+              })),
+              ...(sc.blocked === undefined ? {} : { blocked: sc.blocked }),
+            },
+          ]
+        }),
+      ),
       contacts: store.contacts(creator.id).map(contactView),
       collaborations,
       deliverables: store.deliverables().filter((d) => ids.has(d.collaboration_id)),
@@ -617,11 +652,14 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
         message: '这个人在这条渠道上已经明确谢绝过了。名单上的人一封都不再发。',
       }
 
+    // WP299（决策 388）：公司实体地址每次起草时现取（跟进那两封也用公司档案里最新的那一份）
+    const postal_address = options.brandProfile?.().postal_address?.trim()
     const draft = draftOutreach(input.step, {
       creator_name: input.creator.display_name,
       brand: options.brandName(),
       channel: input.channel,
       ...input.vars,
+      ...(postal_address === undefined || postal_address === '' ? {} : { postal_address }),
     })
     if (!draft.ok)
       return {
@@ -685,6 +723,12 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
         ...(input.vars.language === 'en' &&
         hasCjk(`${input.vars.brand_pitch ?? ''} ${input.vars.product} ${input.vars.sender_name}`)
           ? ['这封是英文信，但介绍、产品名或署名里有中文——对方看英文，发之前点「改一下」换成英文。']
+          : []),
+        // WP299（决策 388）：英文信页脚要公司实体地址（法规要求）；没填不拦，提醒去填
+        ...(input.vars.language === 'en' && (postal_address === undefined || postal_address === '')
+          ? [
+              '公司档案里还没填公司地址：英文开发信页脚要用它（法规要求）。去「设置 → 通用 → 公司档案」填一下。',
+            ]
           : []),
       ],
       created_by: { kind: 'agent', id: `agent_${input.actor.role_id}` },
@@ -934,28 +978,30 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
           .map((r) => [r.creator_id, r.audit as { health: number; at: string }]),
       )
       // 排序（含"刷粉的排在后面而不是剔掉"）在 `rankCreators` 里，不在这儿重写
-      const rows: KolCreatorRow[] = rankCreators(accounts, { now }).map(({ account, score }) => ({
-        creator_id: account.creator_id,
-        display_name: store.creator(account.creator_id)?.display_name ?? account.creator_id,
-        channel: account.channel,
-        handle: account.handle,
-        url: account.url,
-        ...(account.followers === undefined ? {} : { followers: account.followers }),
-        ...(account.engagement_rate === undefined
-          ? {}
-          : { engagement_rate: account.engagement_rate }),
-        ...(account.category === undefined ? {} : { category: account.category }),
-        observed_at: account.observed_at,
-        score: score.total,
-        ...(score.blocked === undefined ? {} : { blocked: score.blocked }),
-        has_contact: hasContact.has(account.creator_id),
-        ...(audits.has(account.creator_id)
-          ? {
-              audit_health: audits.get(account.creator_id)?.health as number,
-              audited_at: audits.get(account.creator_id)?.at as string,
-            }
-          : {}),
-      }))
+      const rows: KolCreatorRow[] = rankCreators(accounts, { ...scoreCriteria(), now }).map(
+        ({ account, score }) => ({
+          creator_id: account.creator_id,
+          display_name: store.creator(account.creator_id)?.display_name ?? account.creator_id,
+          channel: account.channel,
+          handle: account.handle,
+          url: account.url,
+          ...(account.followers === undefined ? {} : { followers: account.followers }),
+          ...(account.engagement_rate === undefined
+            ? {}
+            : { engagement_rate: account.engagement_rate }),
+          ...(account.category === undefined ? {} : { category: account.category }),
+          observed_at: account.observed_at,
+          score: score.total,
+          ...(score.blocked === undefined ? {} : { blocked: score.blocked }),
+          has_contact: hasContact.has(account.creator_id),
+          ...(audits.has(account.creator_id)
+            ? {
+                audit_health: audits.get(account.creator_id)?.health as number,
+                audited_at: audits.get(account.creator_id)?.at as string,
+              }
+            : {}),
+        }),
+      )
       return { rows: rows.slice(0, filter.limit ?? 100) }
     },
 

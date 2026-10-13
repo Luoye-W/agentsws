@@ -142,6 +142,7 @@ import {
   type RecheckStatus,
   zipFiles,
 } from '@agentsws/knowledge'
+import { brandScoreCriteria } from '@agentsws/kol-core'
 import {
   type AccountFetch,
   createModelGateway,
@@ -3246,7 +3247,12 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
         await economics.refresh()
       },
       search: () => googleReads.deckData(),
-      kol: () => kolDeckData(kol, { now: clock.now() }),
+      // WP299（决策 389）：面板上找人清单的分同样带上品牌档案的条件
+      kol: () =>
+        kolDeckData(kol, {
+          now: clock.now(),
+          criteria: brandScoreCriteria(onboardingRef?.brandProfile(ws) ?? {}, clock.now()),
+        }),
       // WP72（56 §2）：社媒那几块同理——内容日历上的行是**我们自己排的**，
       // 一个平台都没连也照样在那儿摆着。渠道那八个源才是"连没连"的事。
       social: () => socialDeckData(social, { now: clock.now() }),
@@ -3471,6 +3477,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
       // 52 O1 那一份真源：品牌名与工作区名是同一件事，不在这里拼第二次
       brandName: () => brandNameOfWorkspace(ws),
       personName: async (person_id) => (await identity.getPerson(person_id))?.name ?? person_id,
+      // WP299（决策 388 / 389）：英文开发信页脚的公司地址、打分用的一句话介绍与目标市场
+      brandProfile: () => onboardingRef?.brandProfile(ws) ?? {},
       appendEvent,
       random,
     })

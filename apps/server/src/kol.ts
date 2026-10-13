@@ -40,6 +40,7 @@ import {
   collaborationFunnel,
   collaborationStageName,
   rankCreators,
+  type ScoreCriteria,
 } from '@agentsws/kol-core'
 import type BetterSqlite3 from 'better-sqlite3'
 import { spentOn } from './kol-money.js'
@@ -568,6 +569,8 @@ export function kolDeckData(
     now?: string
     /** 这次找人的条件算出来的分（按 `PlatformAccount.id`）。给了就盖过默认那一份。 */
     scores?: ReadonlyMap<string, { score: number; blocked?: string }>
+    /** WP299（决策 389）：品牌档案带出来的打分条件（不给 = 不加条件，老行为）。 */
+    criteria?: Omit<ScoreCriteria, 'now'>
   } = {},
 ): KolDeckData {
   const creators = new Map(store.creators().map((c) => [c.id, c]))
@@ -581,7 +584,7 @@ export function kolDeckData(
 
   const accounts = store.accounts()
   // 排序（含"刷粉的排在后面而不是剔掉"那一条）也在 `rankCreators` 里，不在这儿重写
-  const ranked = rankCreators(accounts, { now: options.now ?? '' })
+  const ranked = rankCreators(accounts, { ...options.criteria, now: options.now ?? '' })
   const discovery = ranked.map(({ account, score }) => {
     const override = options.scores?.get(account.id)
     const blocked = override === undefined ? score.blocked : override.blocked

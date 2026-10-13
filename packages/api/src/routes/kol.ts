@@ -152,6 +152,18 @@ export interface KolCreatorDetail {
   /** 这个人名下每条合作的交付物与追踪链接（合作历史那一段）。 */
   deliverables: Deliverable[]
   tracked_links: TrackedLink[]
+  /**
+   * WP299（决策 389）：每个账号的打分明细（按 `PlatformAccount.id`）——五项各拿多少、为什么。
+   * 条件里带上了品牌档案的「你卖的东西是哪一大类」与目标市场。`score_creator` 工具回的就是它。
+   */
+  scores?: Record<
+    string,
+    {
+      total: number
+      factors: { id: string; label: string; score: number; why: string }[]
+      blocked?: string
+    }
+  >
 }
 
 /** 合并建议在卡面上的样子。 */
