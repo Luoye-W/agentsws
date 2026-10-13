@@ -293,6 +293,7 @@ import {
 } from './chat.js'
 import { ChatRelayClient, type OfflineMessageContent } from './chat-relay-client.js'
 import { createChatWidget, DEFAULT_ACCENT } from './chat-widget.js'
+import { stderrClientErrors } from './client-errors.js'
 import { type CloudFetch as CloudEntryFetch, cloudBaseUrl, createCloud } from './cloud.js'
 import {
   CLOUD_TOKEN_SECRET_ID,
@@ -9954,6 +9955,8 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
     b2bSales: b2bSalesPortOf,
     // WP154「内容与搜索」`/v1/seo/*`：按请求人所在品牌取那一份
     seo: seoPort,
+    // WP298：前端报错（错误边界 / onerror / 没人接的拒绝）写进服务日志
+    ...(options.quiet === true ? {} : { clientErrors: stderrClientErrors() }),
     traceScope,
     options: {
       version: env.AGENTSWS_VERSION ?? '0.1.0',

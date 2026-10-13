@@ -1038,6 +1038,11 @@ export interface GatewayDeps {
    */
   reconcile?: ReconcilePort
   /**
+   * WP298：前端报错（`POST /v1/client-errors`）写到哪。网关已经洗过、截过长、限过流；
+   * 宿主只管落一行日志。不装配时照收照答，只是不落（嵌入式用法 / 云端）。
+   */
+  clientErrors?: ClientErrorPort
+  /**
    * WP34：21 §4「删这个人」的跨库编排；没装配时 `POST /v1/privacy/erase`
    * 回 not_implemented。
    */
@@ -1111,6 +1116,22 @@ export interface GatewayDeps {
  *
  * 网关只做装配与校验，数从 `@agentsws/deck` 的命名查询里算（29 原则 ③「数字不经模型手」）。
  */
+/** WP298：一条前端报错（已洗：没有查询串、没有个人数据；每段都截过长度）。 */
+export interface ClientErrorEntry {
+  kind: 'boundary' | 'panel' | 'error' | 'rejection' | 'preload' | 'other'
+  name: string
+  message: string
+  stack?: string
+  route: string
+  scope?: string
+  app_version?: string
+  user_agent?: string
+}
+
+export interface ClientErrorPort {
+  record(entry: ClientErrorEntry): void
+}
+
 export interface PositionSummary {
   position_id: AssignmentId
   role_id: RoleId
