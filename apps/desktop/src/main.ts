@@ -97,6 +97,7 @@ import {
 import type { FetchLike } from './ports.js'
 import { DesktopQuitConfirmation } from './quit-confirmation.js'
 import { createRedactor } from './redact.js'
+import { attachRendererLogging } from './renderer-log.js'
 import {
   authenticateSceneHost,
   decideScenePermission,
@@ -890,6 +891,8 @@ async function bootstrap(): Promise<void> {
       window.on('closed', () => {
         window = undefined
       })
+      // WP298：页面报错 / 渲染进程崩了 / 没加载出来，都落 desktop.log（以前只在 DevTools 里）
+      attachRendererLogging(window.webContents, logger)
       window.once('ready-to-show', () => {
         window?.show()
       })

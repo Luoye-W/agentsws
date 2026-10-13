@@ -218,6 +218,13 @@ export {
   type PublicOpenResult,
   sseResponse,
 } from './routes/chat.js'
+export {
+  CLIENT_ERROR_MAX_BODY,
+  CLIENT_ERROR_RATE,
+  clientErrorRoutes,
+  sanitizeClientError,
+  scrubClientText,
+} from './routes/client-errors.js'
 export type { CloudActor, CloudPort } from './routes/cloud.js'
 export { cloudRoutes } from './routes/cloud.js'
 export type {
@@ -803,6 +810,8 @@ export {
 export { createAsyncTraceScope, createNoopTraceScope } from './trace-scope.js'
 export type {
   ChangesPort,
+  ClientErrorEntry,
+  ClientErrorPort,
   EffectiveConfigLike,
   EventLogPort,
   GatewayActor,

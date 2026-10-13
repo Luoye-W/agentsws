@@ -18,7 +18,6 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Languages, RotateCcw } from 'lucide-react'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { dutyHref } from '@/components/app-shell'
 import { RoleRules } from '@/components/org/role-rules'
 import { PanelError } from '@/components/rail/panel-error'
 import type { RailScope } from '@/components/rail/rail-scope'
@@ -36,6 +35,7 @@ import {
   setPersona,
 } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
+import { dutyHref } from '@/lib/duty-href'
 
 /** 取界面语言那一份；那一份空了就回落另一份（与服务端 `personaTextIn` 同一条）。 */
 function textIn(persona: PersonaTextData | undefined, lang: string): string {
