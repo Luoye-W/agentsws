@@ -564,31 +564,34 @@ upstreams:
       - apps/desktop/test/update-feed.test.ts
       - apps/desktop/test/updater.test.ts
 
-  # WP253（Luoye 决定 137）：建站岗位「网页模板」起底用的开源主题。不进安装包依赖、不进 pnpm：
-  # 用户第一次让 AI 起底时，服务进程从 codeload 按 commit 下那一份 tar.gz（v0.10.0 约 1 MB），sha256 对上才解。
-  # 钉子只在 `apps/server/src/theme-base-pin.json` 一处；升级照 docs/42「按 tag 钉的上游怎么升」。
-  - id: agentsws-theme
-    kind: runtime-dep
-    why: 建站岗位「网页模板」的起底主题（`theme_init_from_base`，MIT，LICENSE 原样带进用户的工作目录）；我们是它的作者，也是它的上游消费者
-    repo: Luoye-W/agentsws-theme
-    pinned_tag: v0.10.0
-    pinned_commit: 236ef33de9f8d4409a4343a181088f7dc3e782b2
-    pin_file: apps/server/src/theme-base-pin.json
-    watch: [releases, readme]
+  # WP301（决策 399 = A）：建站岗位「网页模板」改用 Shopify 官方的 Horizon 做底。我们自己的 agentsws-theme 已改闭源、
+  # 不再登记、不再下载、不再随安装包带。Horizon **不进安装包、不进仓库、不钉版本**：起底时在用户自己的店里复制一份
+  # （`theme duplicate`）再 `theme pull` 下来，用的就是那家店里那一版；目录由 `horizon-catalog.ts` 按它自带的 schema 现生成。
+  # 许可（Shopify/horizon 的 LICENSE.md）：只许用来开发与 Shopify 配合的主题，不许把它或由它衍生的主题分发 / 上架；
+  # 给商家在他自己的店里用可以——所以开源仓里的测试只用手写的 Horizon 形状假主题（`FAKE_HORIZON_FILES`），不放它的代码。
+  - id: shopify-horizon
+    kind: reference
+    why: 建站岗位「网页模板」的起底主题（`theme_init_from_base` = 在店里复制一份 Horizon）；我们读它的 schema 生成目录、只改商店层文件
+    repo: Shopify/horizon
+    watch: [readme, wishlist]
+    watch_paths:
+      - release-notes.md
+      - config/settings_schema.json
     we_depend_on:
-      - '仓库结构：layout / templates / sections / blocks / snippets / config / locales / assets 八个目录（`site-theme.ts` 的 THEME_DIRS）'
-      - 'AGENTS.md §2 的改动边界：只改 custom-* / templates / section 组 / locales / config/settings_data.json（`baseWritable`）'
-      - 'assets/app.css 是构建产物、已提交进仓库（推上去就有样式；AI 不改它）'
-      - 'LICENSE 在仓库根（起底时原样带上）'
-      # WP296（v0.10.0 起）：旧版起过底的工作目录要人点了才升，升的那一下靠这两条
-      - '`npm run migrate` = `node scripts/migrate-blocks.mjs`，只用 node 内置模块（不用 npm install 就能在工作目录里跑；输出「Updated N file(s)」/「Needs a person」两段）→ site-theme.ts 的 upgradeBase / site-theme-upgrade.ts 的 parseMigrateOutput'
-      - 'CATALOG.json 的 entries[]：id / kind / use_when / accepts_blocks / private（`_` 开头的私有块）→ theme-read.ts 的目录页与按 ids 挑'
+      - '`config/settings_schema.json` 第一项 `theme_info.theme_name` = Horizon（认店里哪一份是 Horizon；后台改显示名不影响）→ horizon-catalog.ts 的 themeInfoOf / isHorizon'
+      - '分区 / 块的 `{% schema %}`：`blocks[].type` 用 `@theme` / `@app` / 具体块名，`_` 开头是私有块，预设里 `"static": true` 是静态块 → buildThemeCatalog / templateProblems'
+      - '编辑器标签在 `locales/en.default.schema.json`（`t:` 开头的键）→ 目录里的英文名字'
+      - 'JSON 模板与 section 组（`templates/*.json`、`sections/header-group.json` / `footer-group.json`）开头可以有一段 `/* … */` 注释头 → stripJsonComments'
+      - '商店层文件（templates / section 组 / config/settings_data.json / locales 店面文案）与核心代码（.liquid / CSS / JS / .schema.json）分得开 → site-theme.ts 的 baseWritable'
+    wishlist:
+      - theme_info 的 theme_name 改名或 Horizon 家族（同一套代码的姊妹主题）出新名字
+      - schema 体系变化（@theme / 私有块 / static 块 / 嵌套层数）
+      - Shopify CLI 的 theme duplicate / theme pull --only 参数变化
     covered_by:
+      - apps/server/test/wp301-horizon-catalog.test.ts
+      - apps/server/test/wp301-legacy-theme.test.ts
       - apps/server/test/site-theme.test.ts
-      - apps/server/test/wp296-theme-upgrade.test.ts
-      - apps/server/test/wp296-theme-upgrade-server.test.ts
       - apps/server/test/wp260-theme-read.test.ts
-      - apps/server/src/theme-base-pin.json
 
   # ── ported：抄进来的源码，上游改了要对照回来 ──────────────────────────────
   # WP184（docs/79 §3.1）：官方场景在我们自己的窗口里打开，借官方桌面端壳的几段做法（MIT）。

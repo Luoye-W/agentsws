@@ -16,8 +16,9 @@ const repo = join(desktop, '..', '..')
 const read = (rel: string): string => readFileSync(join(repo, rel), 'utf8')
 
 describe('WP301：安装包不带主题', () => {
-  it('取主题包的脚本没了', () => {
+  it('取主题包的脚本和钉子文件都没了', () => {
     expect(existsSync(join(desktop, 'scripts', 'fetch-theme-base.mjs'))).toBe(false)
+    expect(existsSync(join(repo, 'apps', 'server', 'src', 'theme-base-pin.json'))).toBe(false)
   })
 
   it('electron-builder / dist / afterPack / Windows 装包冒烟都不再碰 theme-base', () => {

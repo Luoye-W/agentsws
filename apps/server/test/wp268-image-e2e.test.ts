@@ -11,6 +11,7 @@
 import type { Assignment, RunEvent } from '@agentsws/contracts'
 import { encodePng, openaiImageProvider } from '@agentsws/model-gateway'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { parseThemeJson } from '../src/horizon-catalog.js'
 import { createServer, type Server } from '../src/index.js'
 import type { ProbeExec } from '../src/platform-cli.js'
 import {
@@ -19,7 +20,10 @@ import {
   shopAdminRunStandIn,
   shopAuthSpawnStandIn,
 } from '../src/shop-admin-stand-in.js'
-import { fakeThemeBase, themeCliStandIn } from '../src/site-theme-stand-in.js'
+import { themeCliStandIn } from '../src/site-theme-stand-in.js'
+
+/** 模板开头有 Shopify 自动生成的注释头（WP301 起线上那一份是 Horizon 形状的假主题），按主题 JSON 读。 */
+type Hero = { sections: { hero: { settings: { image?: string } } } }
 
 const T0 = '2026-10-08T09:00:00.000Z'
 const SHOP = 'rollout-test.myshopify.com'
@@ -74,7 +78,6 @@ beforeEach(async () => {
     bin === 'node'
       ? { ok: true, stdout: 'v22.12.0' }
       : { ok: true, stdout: 'Current Shopify CLI version: 4.8.5' }
-  const base = fakeThemeBase()
   // 假云端：OpenAI 形态的生图 / 改图口（按张回 base64 PNG）
   const provider = openaiImageProvider({
     baseUrl: 'https://cloud.agentsws.test/v1/ai',
@@ -114,7 +117,7 @@ beforeEach(async () => {
     mdns: () => ({ mdns: { publish() {}, browse() {}, stop() {} } }),
     env: { AGENTSWS_OWNER_EMAIL: 'owner@example.test' },
     platformCliExec: exec,
-    siteTheme: { run: fake.run, fetch: base.fetch, base: base.pin },
+    siteTheme: { run: fake.run },
     shopAdmin: {
       run: shopAdminRunStandIn(shop),
       spawn: shopAuthSpawnStandIn(shop, { delayMs: 10 }),
@@ -247,7 +250,7 @@ describe('WP268 生图接入建站端到端', () => {
     // 推上去的那份未发布副本里，模板的 hero 那一格引用店铺文件里的图
     const index =
       fake.themes.find((t) => t.role === 'unpublished')?.files['templates/index.json'] ?? ''
-    expect(JSON.parse(index).sections.hero.settings.image).toBe(
+    expect((parseThemeJson(index) as Hero).sections.hero.settings.image).toBe(
       `shopify://shop_images/${file?.filename}`,
     )
     expect(fake.themes.filter((t) => t.role === 'unpublished')).toHaveLength(copies)

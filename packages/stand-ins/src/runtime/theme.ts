@@ -6,7 +6,7 @@
  *
  * | 工具 | 干什么 | 动线上吗 |
  * |---|---|---|
- * | `theme_init_from_base` | 从开源主题 agentsws-theme（钉死的版本）拉一份到本品牌的主题工作目录 | 不动 |
+ * | `theme_init_from_base` | WP301：在店里复制一份 Shopify 官方 Horizon（未发布）拉到本品牌的主题工作目录，按它的 schema 生成目录 | 只多一份未发布副本 |
  * | `theme_list` | 列店里的主题（线上那一份 / 副本） | 只读 |
  * | `theme_pull` | 把线上（或指定那一份）拉到工作目录 | 只读 |
  * | `theme_check` | 官方 `theme check` 本地检查 | 不动 |
@@ -59,13 +59,14 @@ export const THEME_TOOL_DEFS: readonly ToolDef[] = [
   {
     name: THEME_INIT_TOOL,
     description:
-      '从开源主题 agentsws-theme（钉死的版本，MIT 许可，LICENSE 原样带上）拉一份到这个品牌的主题工作目录，' +
-      '作为搭店的起点。线上一个字节不动。目录里已经有东西时不覆盖；replace=true 会先把旧的挪到一边（不删）再拉。' +
-      '拉好之后先用 theme_read_file 读 AGENTS.md 与 CATALOG.index.json，照里面的规矩改。',
+      '起底：在店里复制一份 Shopify 官方的 Horizon 主题（线上就是 Horizon 就复制线上那一份，不是就找店里已加的 Horizon），' +
+      '成一份未发布主题，拉到这个品牌的主题工作目录，并按这份主题的分区 / 块生成目录 CATALOG.index.json 与 CATALOG.json。' +
+      '线上一个字节不动。目录里已经有东西时不覆盖；replace=true 会先把旧的挪到一边（不删）再起。' +
+      '起好之后先用 theme_read_file 读 CATALOG.index.json。店里一份 Horizon 都没有时，照回话请人从主题商店免费加一份。',
     input_schema: {
       type: 'object',
       properties: {
-        replace: { type: 'boolean', description: '目录里已有东西时，先挪到一边再拉（默认 false）' },
+        replace: { type: 'boolean', description: '目录里已有东西时，先挪到一边再起（默认 false）' },
       },
     },
   },
@@ -105,7 +106,7 @@ export const THEME_TOOL_DEFS: readonly ToolDef[] = [
     description:
       '读主题工作目录里的一个文件（只限这个目录）。一次最多回 2.4 万字，长文件回「后面还有」和下一段的 offset。' +
       'CATALOG.json 很大：不给 ids 时回一页目录（每个分区 / 块一行：id + 什么时候用）；' +
-      '要某几项的完整设置就给 ids（如 ["hero","faq","container"]）。同一个文件读过一次就别再读。',
+      '要某几项的完整设置与预设就给 ids（如 ["hero","section","text"]）。同一个文件读过一次就别再读。',
     input_schema: {
       type: 'object',
       properties: {
@@ -127,8 +128,9 @@ export const THEME_TOOL_DEFS: readonly ToolDef[] = [
     name: THEME_WRITE_FILE_TOOL,
     description:
       '写主题工作目录里的一个文件（整份内容覆盖；只限这个目录，出不去）。' +
-      '用 agentsws-theme 做底时只改 custom-* 文件、templates、section 组、locales 与 config/settings_data.json，' +
-      '别动核心文件；assets/app.css 是构建产物不能手改。写完不会动店铺——要看效果用 theme_push_unpublished。',
+      '用 Horizon 做底时只改商店层文件：templates/*.json、section 组（header-group / footer-group）、config/settings_data.json 与 locales 店面文案；' +
+      '.liquid / CSS / JS 是主题核心代码，不改。写模板时回话会带 problems（对着目录查出来的块放错、设置 id 不对），照着改掉。' +
+      '写完不会动店铺——要看效果用 theme_push_unpublished。',
     input_schema: {
       type: 'object',
       properties: {
@@ -184,13 +186,13 @@ export const THEME_WORK_ORDER = 26
 
 export const THEME_WORK_RULES = [
   '网页模板的做法（一口气做到出预览，中途不停下来汇报；做完再用一段话交代）：',
-  '1. 主题工作目录是空的就先起底（agentsws-theme）；起过底就别再起。',
-  '2. AGENTS.md 读一次；先读瘦目录 CATALOG.index.json（每项 id / 类型 / 文件 / 什么时候用），没有它就读 CATALOG.json 的目录页；要用的分区 / 块再给 ids 读一次 CATALOG.json 的完整设置。块名、设置 id 一律照工作目录里这份目录抄，不凭记忆：每个分区只收它 accepts_blocks 里列的块，_ 开头的私有块只放进列了它的父级。recipes/compose-page.md 是搭页面的现成做法。不必读 .liquid 源码，同一个文件读过就别再读。',
-  '3. 照 recipes 改 templates/index.json（放哪些分区、什么顺序、每块的设置）和 config/settings_data.json（颜色、字体等主题设置）；新东西只写 custom-* 文件，核心文件不动。',
+  '1. 主题工作目录是空的就先起底（theme_init_from_base：在店里复制一份 Shopify 官方的 Horizon 拉下来）；起过底就别再起。',
+  '2. 先读瘦目录 CATALOG.index.json（每个分区 / 块一行：id、名字、收哪些块），要用的分区 / 块再给 ids 读一次 CATALOG.json 的完整设置与预设。块名、设置 id 一律照这份目录抄，不凭记忆：分区只收它 accepts_blocks 里的块，@theme = 所有不以 _ 开头的公开块，_ 开头的私有块只放进点名列了它的父级；static_blocks 里的块照预设原样留着、带 "static": true。照着 presets 搭最稳。不必读 .liquid 源码，同一个文件读过就别再读。',
+  '3. 只改商店层文件：templates/index.json（放哪些分区、什么顺序、每块的设置）、页头页尾的 section 组、config/settings_data.json（颜色、字体等主题设置）、locales 店面文案；.liquid / CSS / JS 是 Horizon 的核心代码，不改，要一小段自定义代码用现成的 custom-liquid。写完回话里有 problems 就照着改。',
   '4. 跑官方检查，有错误就改，改到 0 个错误。',
   '5. 推成未发布主题；最后给预览链接、改了哪几块、怎么退回。发布只出卡，等人点。',
-  '工具回话里说这份主题是旧版、出了升级卡：照实跟人说一句，接着用目录里这一版做；别自己升级，也别重新起底。',
-  '店铺数据：主推商品、合集先留空占位（人在主题编辑器里挑），不去查店里的商品。店面文案用顾客的语言（照 AGENTS.md）。',
+  '工具回话里说这份是旧的自带主题（agentsws-theme）：照实跟人说一句「工坊已改用 Shopify 官方 Horizon」，先起底在 Horizon 上新起一份再做；旧的那份不删、不迁、不再改。',
+  '店铺数据：主推商品、合集先留空占位（人在主题编辑器里挑），不去查店里的商品。店面文案用顾客的语言（美国店就写英文）。',
 ].join('\n')
 
 /**
@@ -198,7 +200,7 @@ export const THEME_WORK_RULES = [
  * 没授权照旧留空占位（字节与 WP260 一样）。
  */
 export const THEME_WORK_SHOP_LINE =
-  '店铺数据：要挂合集 / 主推商品时，可以用 shop_list_collections / shop_list_products 查真实的 id 填进模板设置；查不到就留空占位（人在主题编辑器里挑）。店面文案用顾客的语言（照 AGENTS.md）。'
+  '店铺数据：要挂合集 / 主推商品时，可以用 shop_list_collections / shop_list_products 查真实的 id 填进模板设置；查不到就留空占位（人在主题编辑器里挑）。店面文案用顾客的语言（美国店就写英文）。'
 
 export function themeWorkSection(opts: { shopRead?: boolean } = {}): PromptSection {
   return {
@@ -277,9 +279,22 @@ export type ThemeNeed = 'install_cli' | 'node' | 'login' | 'store'
 export interface ThemeInitData {
   ok: true
   base: { repo: string; version: string; commit: string; license: string }
+  /** WP301：这份主题（Horizon）与它的版本。 */
+  theme?: { name: string; version?: string }
+  /** WP301：从店里哪一份复制的（`live` = 线上那一份）。 */
+  source?: { theme_id: string; name: string; live: boolean }
+  /** WP301：复制出来的那一份未发布主题。 */
+  copy?: { theme_id: string; name: string; preview_url?: string }
   files: number
-  /** 原来的目录挪去了哪（replace 时才有；人话里不报路径）。 */
+  /** 原来的目录挪到一边了（replace 时 / 旧的自带主题那一份；人话里不报路径）。 */
   moved_aside?: boolean
+  /** WP301：挪开的是旧的自带主题那一份。 */
+  legacy_moved?: boolean
+}
+
+export function initOf(data: unknown): ThemeInitData | undefined {
+  const o = obj(data)
+  return o.ok === true && typeof o.files === 'number' ? (o as unknown as ThemeInitData) : undefined
 }
 
 export interface ThemePushData {
@@ -307,8 +322,8 @@ export interface ThemeCheckData {
 // ── stub 剧本 ───────────────────────────────────────────────────────────
 
 const PUBLISH = /发布|上线|换上|设为线上|publish|go live/i
-const BUILD = /搭|做|建|改|首页|主题|模板|预览|agentsws-theme|homepage|theme|preview|build/i
-const BASE = /agentsws-theme|开源主题|从头|新主题|起底/i
+const BUILD = /搭|做|建|改|首页|主题|模板|预览|horizon|agentsws-theme|homepage|theme|preview|build/i
+const BASE = /horizon|官方主题|agentsws-theme|开源主题|从头|新主题|起底/i
 
 export interface ThemeStep {
   tool: string
@@ -320,7 +335,8 @@ export interface ThemeStep {
  * 回的是要调的第一批工具（发布那一步要先知道推上去的 id，由剧本在推完之后接着调）。
  *
  * - 说「发布 / 上线」→ 先列一次，再对最新那份副本提发布卡；
- * - 说「用 agentsws-theme 搭」→ 起底 → 检查 → 推未发布副本；
+ * - 说「用 Horizon 搭 / 从头搭」→ 起底（在店里复制一份 Horizon）→ 检查 → 推未发布副本；
+ * - 工具回话说这份是旧的自带主题（WP301）→ 剧本在当场插一步起底，在 Horizon 上新起一份再接着做；
  * - 别的主题活 → 检查 → 推未发布副本（stub 不会写 Liquid，改文件那一步留给真模型）。
  */
 export function themeBranch(req: RunRequest, text: string): ThemeStep[] | undefined {
@@ -329,7 +345,7 @@ export function themeBranch(req: RunRequest, text: string): ThemeStep[] | undefi
   if (!has(THEME_PUSH_TOOL)) return undefined
   if (PUBLISH.test(text) && has(THEME_LIST_TOOL)) return [{ tool: THEME_LIST_TOOL, input: {} }]
   if (!BUILD.test(text)) return undefined
-  const name = BASE.test(text) ? '首页草稿（agentsws-theme）' : '主题改动草稿'
+  const name = BASE.test(text) ? '首页草稿（Horizon）' : '主题改动草稿'
   return [
     ...(BASE.test(text) ? [{ tool: THEME_INIT_TOOL, input: {} }] : []),
     { tool: THEME_CHECK_TOOL, input: {} },
@@ -353,21 +369,19 @@ export function checkOf(data: unknown): ThemeCheckData | undefined {
 }
 
 /**
- * WP296：工具回话里带的「这份主题是旧版」那一句（服务端 `site-theme.ts` 的 `baseUpgrade` 拼）。
- * 有 `approval_item_id` = 出了（或之前出过、还没定的）升级卡；`declined` = 人上次点了先不升。
+ * WP301：工具回话里带的「这份工作目录是旧的自带主题」那一句（服务端 `site-theme.ts` 的 `legacyNotice` 拼）。
+ * WP296 的「升级到 vX」那一句与升级卡不再有。
  */
-export interface ThemeUpgradeData {
-  from: string
-  to: string
-  approval_item_id?: string
-  declined?: boolean
+export interface ThemeLegacyData {
+  theme: string
+  version?: string
   message: string
 }
 
-export function upgradeOf(data: unknown): ThemeUpgradeData | undefined {
-  const u = obj(obj(data).base_upgrade)
-  return typeof u.from === 'string' && typeof u.to === 'string' && typeof u.message === 'string'
-    ? (u as unknown as ThemeUpgradeData)
+export function legacyNoticeOf(data: unknown): ThemeLegacyData | undefined {
+  const u = obj(obj(data).base_legacy)
+  return typeof u.theme === 'string' && typeof u.message === 'string'
+    ? (u as unknown as ThemeLegacyData)
     : undefined
 }
 
@@ -393,28 +407,30 @@ export function latestCopyOf(data: unknown): { id: string; name: string } | unde
 /** stub 给网页模板的那段回话（markdown）。没走通的那一步照实说，不编。 */
 export function renderThemeAnswer(input: {
   initialized?: boolean
+  /** WP301：起底回来的那一份（复制自哪一份、复制出来叫什么）。 */
+  init?: ThemeInitData
   check?: ThemeCheckData
   pushed?: ThemePushData
   published?: ThemePublishData
-  /** WP296：这份主题是旧版（照实说一句；不升级）。 */
-  upgrade?: ThemeUpgradeData
+  /** WP301：这份工作目录是旧的自带主题（照实说一句；不迁、不删）。 */
+  legacy?: ThemeLegacyData
   failed: Readonly<Record<string, string>>
 }): string {
   const lines: string[] = []
-  const up = input.upgrade
-  if (up !== undefined)
+  const old = input.legacy
+  if (old !== undefined)
     lines.push(
-      `这份主题是 v${up.from}，新版 v${up.to} 要迁移。` +
-        (up.approval_item_id !== undefined
-          ? `出了一张卡「升级到 v${up.to}（会跑迁移）」，你点了我才升（升之前自动备份）。`
-          : up.declined === true
-            ? '你上次选了先不升。'
-            : '') +
-        `这次先用 v${up.from} 做。`,
+      `这份主题工作目录是旧的自带主题（agentsws-theme${old.version === undefined ? '' : ` v${old.version}`}），工坊已改用 Shopify 官方的 Horizon。` +
+        (input.initialized === true
+          ? '这次在 Horizon 上新起了一份；旧的那份原样留着，没删、没迁。'
+          : '旧的那份原样留着，没删、没迁；下次在 Horizon 上新起一份再做。'),
     )
-  if (input.initialized === true)
-    lines.push('从开源主题 agentsws-theme 起了底（钉死的版本，LICENSE 原样带着）。')
-  else if (input.failed[THEME_INIT_TOOL] !== undefined)
+  if (input.initialized === true) {
+    const src = input.init?.source
+    lines.push(
+      `在店里复制了一份 Shopify 官方的 Horizon 起底（${src === undefined ? '' : src.live ? '复制的是线上那一份，' : `复制的是「${src.name}」，`}未发布，线上没动）。`,
+    )
+  } else if (input.failed[THEME_INIT_TOOL] !== undefined)
     lines.push(`没起成底：${input.failed[THEME_INIT_TOOL]}`)
   if (input.check !== undefined)
     lines.push(

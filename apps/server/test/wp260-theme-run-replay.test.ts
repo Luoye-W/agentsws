@@ -2,7 +2,8 @@
  * WP260 回放：10-07 真机 ci.16（Rollout 建站「Shopify 网页模板」，搭英文首页、推未发布主题给预览）。
  *
  * 真装配线（`createRuntime` direct 档 + 真主题工具执行器 + 真主题工坊），只换掉三样：模型是下面这个**会看
- * 历史的假模型**、`shopify theme …` 是进程内替身、起底包是 `fixtures/wp260-theme.ts`（长短照真主题造的占位）。
+ * 历史的假模型**、`shopify theme …` 是进程内替身、店里线上那一份是 `fixtures/wp260-theme.ts`（WP301 起是 Horizon 形状、
+ * 长短照真 Horizon 造的占位；起底 = 在店里复制它，目录由工坊按 schema 现生成）。
  * 不联网、不调真模型、不碰真店。
  *
  * 假模型照真机那一轮的形状走：起底 → 一回合读三个文件 → 说一句「现在读…」（ci.16 收工的那句）→ 接着读 →
@@ -31,7 +32,7 @@ import type { Work } from '@agentsws/work'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createRuntime, type RuntimeOptions, THEME_PRODUCE } from '../src/runtime.js'
 import { createSiteTheme } from '../src/site-theme.js'
-import { fakeThemeBase, themeCliStandIn } from '../src/site-theme-stand-in.js'
+import { themeCliStandIn } from '../src/site-theme-stand-in.js'
 import { createThemeToolExecutor } from '../src/theme-tools.js'
 import { wp260ThemeFiles } from './fixtures/wp260-theme.js'
 
@@ -43,9 +44,8 @@ if (spec === undefined) throw new Error('shopify 那一行没有 CLI')
 
 /** 模型要「看清」的东西：读什么、看见哪个记号才算看全了。 */
 const NEEDS: { input: Record<string, unknown>; marker: string }[] = [
-  { input: { path: 'AGENTS.md' }, marker: 'END-OF-AGENTS' },
+  { input: { path: 'CATALOG.index.json' }, marker: '"id": "newsletter"' },
   { input: { path: 'CATALOG.json' }, marker: '- section faq:' },
-  { input: { path: 'recipes/compose-page.md' }, marker: 'END-OF-RECIPE' },
   {
     input: { path: 'CATALOG.json', ids: ['hero', 'faq', 'container', 'newsletter'] },
     marker: '"id":"newsletter"',
@@ -68,7 +68,7 @@ const NEW_INDEX = JSON.stringify({
 })
 
 /** 照 ci.16 的形状走、只认眼前看得见的假模型；记下每一次送进来的历史有多大。 */
-function ci16Model() {
+function ci16Model(quitAfter = 8) {
   const stats = { calls: 0, inputTokens: 0, peakHistory: 0 }
   let seq = 0
   const reply = (text: string, calls: { name: string; input: Record<string, unknown> }[] = []) => {
@@ -83,21 +83,28 @@ function ci16Model() {
     const called = messages.flatMap((m) => m.tool_calls ?? [])
     const did = (name: string) => called.some((c) => c.name === name)
     if (!did('theme_init_from_base'))
-      return reply('我先从 agentsws-theme 起底，再读它给 AI 的规矩与目录。', [
+      return reply('我先在店里复制一份 Horizon 起底，再读它的目录。', [
         { name: 'theme_init_from_base', input: {} },
       ])
     const pending = NEEDS.filter((n) => !seen.includes(n.marker)).map((n) => {
       // 长文件看到了前一段：接着读下一段（抬头里写着 offset；围栏做过 NFKC，全角括号会变半角）
       const path = String(n.input.path)
-      const next = new RegExp(
-        `主题文件 ${path.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[（(]第[^）)]*offset=(\\d+)`,
-      ).exec(seen)?.[1]
+      // 长文件可能不止两页：取看到过的最后一段给的 offset
+      const offsets = [
+        ...seen.matchAll(
+          new RegExp(
+            `主题文件 ${path.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[（(]第[^）)]*offset=(\\d+)`,
+            'g',
+          ),
+        ),
+      ].map((m) => Number(m[1]))
+      const next = offsets.length === 0 ? undefined : String(Math.max(...offsets))
       return next === undefined ? n.input : { ...n.input, offset: Number(next) }
     })
     if (pending.length > 0) {
       const reads = called.filter((c) => c.name === 'theme_read_file').length
       // 读过七八个文件之后说一句「现在读…」、不带工具调用（ci.16 收工的那一句）
-      if (reads >= 8 && !messages.some((m) => m.role === 'assistant' && m.content === CI16))
+      if (reads >= quitAfter && !messages.some((m) => m.role === 'assistant' && m.content === CI16))
         return reply(CI16)
       // 真机那一轮还去查了店里的商品（店铺没连）：摆着就会去调
       const product = tools.some((t) => t.name === 'get_product') && !did('get_product')
@@ -158,14 +165,13 @@ let cli: ReturnType<typeof themeCliStandIn>
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), 'wp260-replay-'))
   previews = []
-  cli = themeCliStandIn({ shop: SHOP })
+  cli = themeCliStandIn({ shop: SHOP, liveFiles: wp260ThemeFiles() })
 })
 afterEach(() => {
   rmSync(dir, { recursive: true, force: true })
 })
 
 function themeExecutor() {
-  const base = fakeThemeBase(wp260ThemeFiles())
   const module = createSiteTheme({
     workspace_id: 'ws_rollout',
     clock: { now: () => new Date().toISOString() },
@@ -183,8 +189,6 @@ function themeExecutor() {
     invocation: () => ({ command: 'shopify', prefix: [] }),
     connectedShops: () => [SHOP],
     run: cli.run,
-    fetch: base.fetch,
-    base: base.pin,
     ledger: { stage: async () => ({ ok: false }) as never },
     effectiveConfig: () => {
       throw new Error('没有分配')
@@ -212,14 +216,13 @@ const matter = {
   schema_version: 1,
   workspace_id: 'ws_rollout',
   kind: 'task',
-  title: '用 agentsws-theme 搭英文首页，推未发布主题给预览',
+  title: '用 Horizon 搭英文首页，推未发布主题给预览',
   status: 'open',
   context: { summary: '', pinned: [] },
   created_at: '2026-10-07T09:00:00.000Z',
   updated_at: '2026-10-07T09:00:00.000Z',
 } as unknown as Matter
-const BRIEF =
-  '用 agentsws-theme 搭英文首页（横幅 / 主推占位 / 品牌故事 / FAQ / 订阅），推未发布主题给预览'
+const BRIEF = '用 Horizon 搭英文首页（横幅 / 主推占位 / 品牌故事 / FAQ / 订阅），推未发布主题给预览'
 
 const readKey = (input: unknown): string => {
   const i = (input ?? {}) as Record<string, unknown>
@@ -290,7 +293,10 @@ describe('WP260 回放 ci.16：网页模板的运行真把活干完', () => {
       'theme_check',
       'theme_push_unpublished',
     ])
-    expect(cli.calls.some((c) => c[1] === 'push' && c.includes('--unpublished'))).toBe(true)
+    // WP301：推到起底时在店里复制出来的那一份上（不另建一份）
+    expect(cli.calls.some((c) => c[1] === 'duplicate')).toBe(true)
+    expect(cli.calls.some((c) => c[1] === 'push')).toBe(true)
+    expect(cli.themes.filter((t) => t.role === 'unpublished')).toHaveLength(1)
     expect(cli.calls.some((c) => c[1] === 'publish')).toBe(false)
     // 「预览好了」：时间线上那一条（主题工坊记的）+ 模型的交代
     expect(previews).toHaveLength(1)
@@ -313,7 +319,8 @@ describe('WP260 回放 ci.16：网页模板的运行真把活干完', () => {
   }, 60_000)
 
   it('对照：照 ci.16 当时的跑法（没有 produce：1.2 万 token 就压成空占位、摆着商品工具、只说不做就收工）——反复读、一个字没改', async () => {
-    const { gateway } = ci16Model()
+    // WP301：Horizon 起底没有 AGENTS.md / recipes，要读的文件少了几份；多读几次再「现在读…」，看得出压缩之后的重读
+    const { gateway } = ci16Model(14)
     const tools = themeExecutor()
     const events: RunEvent[] = []
     const direct = createDirectRuntime({

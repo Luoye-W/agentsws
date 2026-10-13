@@ -1015,7 +1015,7 @@ describe('随包 Node / npm：check-upstreams 对账 node-runtime.lock.json（WP
   })
 })
 
-// ── 按 tag 钉、运行时下载的上游：agentsws-theme 起底包（WP253）──────────────────
+// ── 按 tag 钉、运行时下载的上游（WP253 机制；agentsws-theme 那一条 WP301 起不再登记）──────────
 
 const themeItem = (over = {}) => ({
   id: 'agentsws-theme',
@@ -1063,9 +1063,12 @@ describe('按 tag 钉的上游：check-upstreams 对账 pin_file（WP253）', ()
     )
   })
 
-  it('仓库里真的那一条：登记表与 theme-base-pin.json 一致', () => {
-    const it = loadUpstreams(REPO_ROOT).find((x) => x.id === 'agentsws-theme')
-    expect(it?.pin_file).toBe('apps/server/src/theme-base-pin.json')
-    expect(checkPinFile(it, REPO_ROOT)).toEqual([])
+  it('WP301：agentsws-theme 不再登记（已改闭源、不再下载）；Horizon 是只盯不钉的参考上游', () => {
+    const all = loadUpstreams(REPO_ROOT)
+    expect(all.find((x) => x.id === 'agentsws-theme')).toBeUndefined()
+    const horizon = all.find((x) => x.id === 'shopify-horizon')
+    expect(horizon).toMatchObject({ kind: 'reference', repo: 'Shopify/horizon' })
+    expect(horizon?.pin_file).toBeUndefined()
+    expect(checkPinFile(horizon, REPO_ROOT)).toEqual([])
   })
 })

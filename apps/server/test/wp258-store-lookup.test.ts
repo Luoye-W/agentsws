@@ -19,7 +19,6 @@ import {
   STORE_LOOKUP_TEXT,
   storeChoiceOf,
 } from '../src/site-theme.js'
-import { fakeThemeBase } from '../src/site-theme-stand-in.js'
 import {
   type FakeOrg,
   type FakeShopifyTheme,
@@ -41,7 +40,6 @@ let events: { type: string; payload: Record<string, unknown> }[]
 const settingsFile = (): string => join(dir, 'data', 'brand', 'site-theme.json')
 
 function make(): SiteThemeAssembly {
-  const base = fakeThemeBase()
   return createSiteTheme({
     workspace_id: WS,
     clock: { now: () => clock.at },
@@ -66,8 +64,6 @@ function make(): SiteThemeAssembly {
       AGENTSWS_SECRETS_KEY: 'never-leaks',
       SHOPIFY_CLI_THEME_TOKEN: 'shpat_x',
     },
-    fetch: base.fetch,
-    base: base.pin,
     ledger: { stage: async () => ({ ok: false, reason: 'unused' }) as never },
     effectiveConfig: () => {
       throw new Error('没有分配')
