@@ -605,4 +605,4 @@
 | 395 | （WP298）出下一个 beta 后 Fable 远程装上，Luoye 点一次「消息渠道」，取两份日志定位 | 同意（**10-13 Luoye 同意**） | 中 |
 | 396 | （WP298）诊断包暂不单独摘出前端报错 | 先不做（**10-13 Luoye 同意**） | 低 |
 | 397 | （Luoye 10-13）treg.to 纳入第三方接口 | 我们已有的（尤其 Apify）走自己的，没有的走 Treg；只调 treg.to 线上服务、不用它的代码（许可证附加条款）；Luoye 确认可转售（私有云 WP300）；SEO 关键词 / 外链 / 域名概况直接用 Semrush（经 Treg），不接 Moz（10-13 Luoye：知名度太低） | 中 |
-| 398 | （Luoye 10-13）open-seo 要不要纳入 | 待 Luoye 定：Fable 建议不装它的应用，判断规矩已移植（upstreams.yml `open-seo`），数据层走 Treg，审计 / 排名追踪 / AI 可见度的做法按需逐项移植进「内容与搜索」 | 低 |
+| 398 | （Luoye 10-13）SEO 数据来源 | **直接买 DataForSEO**，不经 Treg、不用 Semrush（Semrush 经 Treg 也要自带 Business 订阅 + 单位包）；直连适配器可参考 open-seo（MIT）的 DataForSEO 对接；不装 open-seo 应用；Treg 只补我们和 DataForSEO 都没有的（先 Hunter）；Treg 代码只借鉴设计、不抄（许可证） | 中 |
