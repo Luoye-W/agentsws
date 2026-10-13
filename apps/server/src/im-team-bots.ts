@@ -192,7 +192,7 @@ export const IM_TEXT = {
   bound: '绑好了。以后你在这里问，我按你在 Agents 工坊里的身份答。',
   badCode: '这个绑定码不对或已经过期了。去工作台「消息渠道」页重新点一次「绑定我的账号」。',
   /* ── WP306：永不静默。认得出是谁的一句话，答不上来也要回一句人话 ── */
-  /** 答案没在 1.5 秒内出来，先回这一句（飞书机器人没有「正在输入」接口）。 */
+  /** 答案没在 1.5 秒内出来，先回这一句（三条团队渠道都有；企业微信走流式回复先开后刷）。 */
   ack: '收到，我查一下。',
   /** 问代理超时；答案晚到了还会补发。后面接工作台链接。 */
   timeout: '这个问题我一时没查完。查完会在这里补给你；着急的话去工作台看：',
@@ -204,6 +204,8 @@ export const IM_TEXT = {
   emptyQuestion: '我现在只看得懂文字。用一句话问我吧。',
   /** 晚到的答案前面加这一句。 */
   late: '刚才那个问题查完了：',
+  /** WP308：岗位 Agent 答完 / 建了任务，后面接工作台链接。 */
+  goWorkbench: '去工作台处理：',
 } as const
 
 /* ------------------------------------------------------------------ */
@@ -239,12 +241,23 @@ export interface TeamBotsDeps {
     adapters: readonly ChannelAdapter[]
     route(input: RouteInput): RouteResult | undefined
     onEvent(event: InboundEvent): Promise<void>
+    /** WP308（决策 453）：管线事件里的聊天账号 id 只记这个哈希。 */
+    hashAccount?: (value: string) => string
   }): ImInboundPipeline
+  /** WP308（决策 453）：加盐哈希（同一工作区内稳定）；给了就传进管线。 */
+  hashAccount?: (value: string) => string
   route(input: RouteInput): RouteResult
   onEvent(event: InboundEvent): Promise<void>
   onError?(e: unknown): void
-  /** WP306：长连接状态真的变了（断了 / 连回来了），宿主记事件用。人点断开不报。 */
-  onConnState?(channel: 'feishu', state: TeamBotStatus['state'], prev: TeamBotStatus['state']): void
+  /**
+   * WP306：长连接状态真的变了（断了 / 连回来了），宿主记事件用。人点断开不报。
+   * WP308（决策 451）：钉钉也报（企业微信那条在 `im-channels.ts` 里装，自己报）。
+   */
+  onConnState?(
+    channel: 'feishu' | 'dingtalk',
+    state: TeamBotStatus['state'],
+    prev: TeamBotStatus['state'],
+  ): void
   feishuTransport?: FeishuTransportFactory
   dingtalkSocket?: DingtalkSocketFactory
   dingtalkHttp?: DingtalkHttp
@@ -311,6 +324,7 @@ export function createTeamBots(deps: TeamBotsDeps): TeamBots {
       adapters: [feishuPipelineAdapter(adapter)],
       route: deps.route,
       onEvent: deps.onEvent,
+      ...(deps.hashAccount === undefined ? {} : { hashAccount: deps.hashAccount }),
     })
     await adapter.start(async (e: FeishuMessageEvent) => {
       await pipeline.ingest(FEISHU_BOT_CHANNEL, e, deps.workspace_id)
@@ -335,12 +349,16 @@ export function createTeamBots(deps: TeamBotsDeps): TeamBots {
       ...(deps.dingtalkHttp === undefined ? {} : { http: deps.dingtalkHttp }),
       ...(deps.dingtalkGatewayUrl === undefined ? {} : { gateway_url: deps.dingtalkGatewayUrl }),
       ...(deps.onError === undefined ? {} : { on_error: deps.onError }),
+      on_state: (state, prev) => {
+        if (dingtalk === adapter) deps.onConnState?.('dingtalk', state, prev)
+      },
     })
     dingtalk = adapter
     const pipeline = deps.makePipeline({
       adapters: [dingtalkPipelineAdapter(adapter)],
       route: deps.route,
       onEvent: deps.onEvent,
+      ...(deps.hashAccount === undefined ? {} : { hashAccount: deps.hashAccount }),
     })
     await adapter.start(async (m: DingtalkRobotMessage) => {
       await pipeline.ingest(DINGTALK_BOT_CHANNEL, m, deps.workspace_id)

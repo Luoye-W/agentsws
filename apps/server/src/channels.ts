@@ -486,6 +486,8 @@ export interface ChannelsAssembly {
     adapters: readonly ChannelAdapter[]
     route(input: RouteInput): RouteResult | undefined
     onEvent(event: InboundEvent): Promise<void>
+    /** WP308（决策 453）：事件里的聊天账号 id 只记这个哈希（加盐、同一工作区内稳定）。 */
+    hashAccount?: (value: string) => string
   }): ImInboundPipeline
   /**
    * WP85：微信 ClawBot 的长轮询游标与 `context_token` 缓存。
@@ -1037,6 +1039,7 @@ export function createChannels(options: ChannelsOptions): ChannelsAssembly {
         dedupe,
         route: input.route,
         onEvent: input.onEvent,
+        ...(input.hashAccount === undefined ? {} : { hashAccount: input.hashAccount }),
       }),
 
     async poll(): Promise<MailPollReport> {

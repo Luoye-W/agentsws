@@ -206,9 +206,16 @@ export function createFeishuSdkTransport(
 
 export const feishuSdkTransportFactory: FeishuTransportFactory = () => createFeishuSdkTransport()
 
-/** `ws` 的 WebSocket 结构上就是 `DingtalkSocket` / `WecomSocket`。 */
+/**
+ * `ws` 的 WebSocket 结构上就是 `DingtalkSocket` / `WecomSocket`（含 WP308 用到的 `ping` / `terminate` / `pong`）。
+ * WP308：握手 15 秒不成就放弃这一次（与飞书同一个数；适配器自己也有一道握手超时）。
+ */
+export const WS_HANDSHAKE_TIMEOUT_MS = 15_000
+
 export const wsSocketFactory: DingtalkSocketFactory & WecomSocketFactory = (url: string) =>
-  new WebSocket(url) as unknown as DingtalkSocket & WecomSocket
+  new WebSocket(url, {
+    handshakeTimeout: WS_HANDSHAKE_TIMEOUT_MS,
+  }) as unknown as DingtalkSocket & WecomSocket
 
 export const fetchHttp: DingtalkHttp = (url, init) => fetch(url, init)
 
