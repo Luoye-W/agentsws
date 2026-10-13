@@ -14,6 +14,7 @@
  * | {@link KolReceipt} | 成功也要有回执：做成了什么、下一步在哪 |
  * | {@link errorText} | `ApiClientError` → 一句人话（没有 message 才兜底） |
  */
+import type { QueryClient } from '@tanstack/react-query'
 import { AlertCircle, CheckCircle2 } from 'lucide-react'
 import { ApiClientError } from '@/lib/api'
 import { apiErrorText } from '@/lib/error-text'
@@ -91,4 +92,17 @@ export function KolReceipt({
       <span>{text}</span>
     </p>
   )
+}
+
+/**
+ * WP295：在红人工作台里提了一张卡（开发信、议价、验收、追踪链接……）之后，同一屏上的
+ * 「要你处理」、左栏岗位旁的数字、首页都要跟着变。
+ *
+ * 以前这里只作废老的 `['cards']` 键——卡片流早改用 `['deck']` 了，于是回执说「在卡片里等你批」，
+ * 上面「要你处理」却还写着「队列清空了」，要手动刷新才出卡。键与点卡之后的那一组一样
+ * （`deck-section.tsx` 的 `onSettled`）。
+ */
+export function refreshCards(client: QueryClient): void {
+  for (const key of ['cards', 'deck', 'home', 'positions', 'position-instance'])
+    void client.invalidateQueries({ queryKey: [key] })
 }

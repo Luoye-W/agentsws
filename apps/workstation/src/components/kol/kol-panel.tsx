@@ -48,7 +48,7 @@ import { useApp } from '@/lib/app-context'
 import { tOr } from '@/lib/humanize'
 import { CollabThread } from './collab-thread'
 import { KolSandboxBar } from './kol-sandbox-bar'
-import { errorText, KolError, KolReceipt } from './kol-shared'
+import { errorText, KolError, KolReceipt, refreshCards } from './kol-shared'
 
 /** 五条渠道（真源是契约的 `KOL_CHANNEL_IDS`；工作台不依赖服务端包，这里照抄一份）。 */
 const ALL_CHANNELS: readonly KolChannelId[] = ['youtube', 'facebook', 'instagram', 'tiktok', 'x']
@@ -453,7 +453,7 @@ function CreatorDetail({
           : undefined,
       )
       void client.invalidateQueries({ queryKey: ['kol-collaborations'] })
-      void client.invalidateQueries({ queryKey: ['cards'] })
+      refreshCards(client)
     },
     onError: (e: unknown) => {
       setDraft(undefined)
@@ -716,6 +716,8 @@ function Collaborations({
       setError(undefined)
       void client.invalidateQueries({ queryKey: ['kol-collaborations'] })
       void client.invalidateQueries({ queryKey: ['kol-creator'] })
+      // WP295：推到「谈成」等阶段会出卡，上面「要你处理」要跟着变
+      refreshCards(client)
     },
     // 非法跳转回的是一句人话（"还没建联就说交付完了"），照实显示
     onError: (e: Error) => {
@@ -979,7 +981,7 @@ function ImportAndCampaign({
         )
       }
       void client.invalidateQueries({ queryKey: ['kol-collaborations'] })
-      void client.invalidateQueries({ queryKey: ['cards'] })
+      refreshCards(client)
     },
     onError: (e: unknown) => {
       setReceipt(undefined)
