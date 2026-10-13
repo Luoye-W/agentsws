@@ -362,7 +362,8 @@ const BASE =
 /** WP304：话里点了名用哪套（Horizon / 店里的免费主题 / 高级主题）——不出选主题卡。 */
 const NAMED_STORE = /horizon|官方主题|开源主题|用(店里的?)?免费主题/i
 /** 人说要高级主题（「我们的高级主题排第一」这种我们自己回过的话不算）。 */
-const NAMED_PREMIUM = /用(我们的)?高级主题|要高级主题|买高级主题|高级主题(来)?(搭|做|建)|付费主题|premium theme/i
+const NAMED_PREMIUM =
+  /用(我们的)?高级主题|要高级主题|买高级主题|高级主题(来)?(搭|做|建)|付费主题|premium theme/i
 const SWITCH = /换主题|换个主题|换一套主题|重新选主题/i
 
 export interface ThemeStep {

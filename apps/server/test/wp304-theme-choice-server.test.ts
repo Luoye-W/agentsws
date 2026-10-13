@@ -49,13 +49,6 @@ const toolsCalled = (run_id: string): string[] =>
     .filter((e) => e.correlation?.run_id === run_id && e.type === 'tool.call')
     .map((e) => (e.payload as Extract<RunEvent, { type: 'tool.call' }>).tool)
 
-type ThemeView = {
-  cli: string
-  next?: string
-  store?: string
-  last_push?: { preview_url?: string }
-}
-
 beforeEach(async () => {
   installed = false
   now = T0

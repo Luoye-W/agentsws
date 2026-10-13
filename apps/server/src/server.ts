@@ -490,6 +490,7 @@ import {
 } from './positions.js'
 import { createPrStore, prDeckData, seedDemoPr } from './pr.js'
 import { createPrService } from './pr-service.js'
+import { createPremiumThemeClient, type PremiumFetch } from './premium-theme.js'
 import { createPricingCatalog, type PricingCatalogSource } from './pricing-catalog.js'
 import { readRouteLevelOf, readViaSources } from './read-route.js'
 import {
@@ -594,7 +595,6 @@ import { createCloudShopLinks, createShopifyConnect } from './shopify-connect.js
 import { createShopifyDevMcp } from './shopify-devmcp.js'
 import { createRunCli, type RunCli } from './shopify-theme.js'
 import { createConnectSiteFacts, createSiteService, createSiteStore, seedDemoSite } from './site.js'
-import { createPremiumThemeClient, type PremiumFetch } from './premium-theme.js'
 import { createSiteTheme, type SiteThemeAssembly, SiteThemeError } from './site-theme.js'
 import { isThemeUpgradeCard } from './site-theme-legacy.js'
 import { enrichSkillSummaries } from './skill-catalog.js'
