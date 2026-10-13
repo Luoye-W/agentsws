@@ -319,6 +319,17 @@ describe('WP68 红人岗位面板', () => {
     const blocked = await screen.findByTestId('kol-search-blocked')
     expect(blocked.textContent).toContain('申请制')
     expect(screen.queryByTestId('kol-search-results')).toBeNull()
+    // WP295：外面搜不了，同一个关键词把自己的库筛一遍；一键回全部
+    await waitFor(() => {
+      expect(getKolCreators).toHaveBeenLastCalledWith(
+        { channel: 'tiktok', q: 'cablekevin' },
+        'asg_tt',
+      )
+    })
+    fireEvent.click(await screen.findByTestId('kol-library-q-clear'))
+    await waitFor(() => {
+      expect(getKolCreators).toHaveBeenLastCalledWith({ channel: 'tiktok' }, 'asg_tt')
+    })
   })
 
   it('公共库那一档：扣多少积分写在按钮上，点之前就看得见', async () => {

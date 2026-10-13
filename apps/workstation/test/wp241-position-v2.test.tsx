@@ -490,7 +490,10 @@ describe('工作', () => {
     expect(quick[0]?.getAttribute('data-quick')).toBe('quick:schedule:social.reddit')
     fireEvent.click(quick[0] as HTMLElement)
     expect((await screen.findByTestId('social-calendar-stub')).textContent).toBe('reddit')
-    expect(screen.getByTestId('work-quick-view').textContent).toContain('要你拍板的都出成卡')
+    // WP295：这句说明收进了问号（页面零说明）
+    expect(screen.getByTestId('work-quick-note').getAttribute('data-hint')).toContain(
+      '要你拍板的都出成卡',
+    )
   })
 })
 
