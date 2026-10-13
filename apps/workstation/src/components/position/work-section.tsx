@@ -44,7 +44,7 @@ import {
   sortItems,
   type WorkPrefs,
 } from '@/lib/position-work'
-import { QuickViewPanel, quickLabel } from './quick-views'
+import { QuickViewPanel, quickLabel, quickTitle } from './quick-views'
 import { Pop, PopOption } from './work-bits'
 import { WorkBoard } from './work-board'
 import { WorkCalendar } from './work-calendar'
@@ -161,6 +161,7 @@ export function WorkSection({
               aria-selected={on}
               data-testid="work-quick"
               data-quick={q.id}
+              title={quickTitle(t, q)}
               className={`inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-[13px] ${on ? 'bg-card font-medium shadow-xs' : 'text-muted-foreground hover:bg-accent'}`}
               onClick={() => {
                 set({ view: q.id })

@@ -44,7 +44,7 @@ describe('红人工具目录', () => {
   })
 
   it('读工具一个必填项都不要（不给过滤条件就是全都要）', () => {
-    for (const name of ['list_collaborations', 'list_deliverables']) {
+    for (const name of ['list_collaborations', 'list_deliverables', 'list_tracked_links']) {
       const schema = kolToolSpec(name)?.input_schema as { required?: string[] }
       expect(schema.required).toBeUndefined()
     }

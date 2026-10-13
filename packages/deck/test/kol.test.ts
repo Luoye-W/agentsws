@@ -111,6 +111,11 @@ describe('WP67 红人面板五个分块（48 §5.1）', () => {
         blocks.map((b) => b.query),
         role,
       ).toEqual([
+        // WP295：数据看板那一行的四个数
+        'kol.active_count',
+        'kol.awaiting_reply',
+        'kol.pending_review_count',
+        'kol.revenue',
         'kol.discovery',
         'kol.outreach_funnel',
         'kol.sandbox_funnel',
@@ -154,8 +159,48 @@ describe('WP67 红人面板五个分块（48 §5.1）', () => {
   })
 
   it('待审交付物按期限正序：最急的在最上面', () => {
-    const rows = table('kol.pending_deliverables', withKol(KOL_DATA)).rows
+    // WP295：只看这条职责自己的渠道——用一个不是红人职责的上下文（首页钉住的积木）看全渠道
+    const rows = table('kol.pending_deliverables', {
+      ...withKol(KOL_DATA),
+      role_id: 'common.owner',
+    }).rows
     expect(rows.map((r) => r.name)).toEqual(['Gadget Jonas', 'Desk Rosa'])
+  })
+
+  it('WP295：五条渠道职责各看各的渠道——YouTube 那条不出 Instagram 的交付物与归因', () => {
+    const yt = withKol(KOL_DATA)
+    expect(table('kol.pending_deliverables', yt).rows.map((r) => r.name)).toEqual(['Gadget Jonas'])
+    expect(table('kol.attribution', yt).rows.map((r) => r.name)).toEqual(['Gadget Jonas'])
+    const ig = { ...yt, role_id: 'kol.instagram' }
+    expect(table('kol.pending_deliverables', ig).rows.map((r) => r.name)).toEqual(['Desk Rosa'])
+    expect(table('kol.discovery', ig).rows).toEqual([])
+  })
+
+  it('WP295：漏斗按渠道；这条渠道一条合作都没有 = 形状照旧、全是 0', () => {
+    const data: KolDeckData = {
+      ...KOL_DATA,
+      funnel_by_channel: { youtube: [{ stage: 'sourced', label: '已找到', count: 3 }] },
+    }
+    expect(table('kol.outreach_funnel', withKol(data)).rows).toEqual([
+      { stage: '已找到', count: 3 },
+    ])
+    const x = table('kol.outreach_funnel', { ...withKol(data), role_id: 'kol.x' }).rows
+    expect(x.map((r) => r.stage)).toEqual(['已找到', '已建联', '已回复'])
+    expect(x.every((r) => r.count === 0)).toBe(true)
+  })
+
+  it('WP295：数据看板四个数是这条渠道的：在谈 / 合作中、等回信、待审交付、带来的收入', () => {
+    const scalar = (name: string, role = 'kol.youtube') => {
+      const r = runQuery(name, { ...withKol(KOL_DATA), role_id: role }, 'last_7d')
+      if (r.status !== 'ok') throw new Error(name)
+      return r.data as { value: number; currency?: string }
+    }
+    expect(scalar('kol.active_count').value).toBe(1)
+    expect(scalar('kol.awaiting_reply').value).toBe(0)
+    expect(scalar('kol.pending_review_count').value).toBe(1)
+    expect(scalar('kol.revenue')).toMatchObject({ value: 645.5, currency: 'USD' })
+    expect(scalar('kol.revenue', 'kol.instagram').value).toBe(59)
+    expect(scalar('kol.active_count', 'kol.x').value).toBe(0)
   })
 
   it('归因按收入倒序，数字原样端出去（不在渲染时现算）', () => {

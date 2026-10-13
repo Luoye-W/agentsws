@@ -4,6 +4,9 @@
  * 断点 #1 的现象是「让红人岗位找 20 个频道，回的是客服的话」。这个文件钉住的就是
  * 那句话该被判成什么、该先调哪几个工具——**判错一次，整条链后面全是错的**。
  */
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
+import { splitAnswer } from '@agentsws/contracts'
 import { describe, expect, it } from 'vitest'
 import {
   channelInText,
@@ -15,6 +18,7 @@ import {
   kolToolZh,
   parseFollowerBand,
   parseOutreachStep,
+  parseQuietDays,
   parseWantedCount,
   planKolTools,
   searchQueryOf,
@@ -52,6 +56,44 @@ describe('意图判定', () => {
     expect(classifyKolTask('建联发出去超过 7 天还没回音的频道有哪些').intent).toBe('follow_up')
   })
 
+  it('WP295：五句岗位快捷提示各判成自己那一类', () => {
+    const cases: [string, string][] = [
+      [FIND, 'find'],
+      ['给这个频道起草一封开发信：说清合作形式和寄样安排，不提具体报价', 'outreach'],
+      ['建联发出去超过 7 天还没回音的频道有哪些，列出来告诉我要不要跟进', 'follow_up'],
+      ['红人交的这条视频审一遍：该标的广告标识、禁用词、链接和折扣码对不对', 'deliverable_review'],
+      [
+        '上个月YouTube合作过的人里，按归因链接看哪几个真带来了订单，没带来的也列出来',
+        'attribution',
+      ],
+    ]
+    for (const [text, intent] of cases) expect(classifyKolTask(text).intent, text).toBe(intent)
+  })
+
+  it('WP295：五条渠道职责 yml 里的快捷提示全都判对，找人那句不剩关键词', () => {
+    const want: Record<string, string> = {
+      find_creators: 'find',
+      draft_outreach: 'outreach',
+      no_reply: 'follow_up',
+      review_deliverable: 'deliverable_review',
+      attribution: 'attribution',
+    }
+    let seen = 0
+    for (const ch of ['youtube', 'instagram', 'tiktok', 'facebook', 'x']) {
+      const yml = readFileSync(
+        fileURLToPath(new URL(`../../roles/roles/kol/${ch}.yml`, import.meta.url)),
+        'utf8',
+      )
+      for (const m of yml.matchAll(/- id: (\w+)\n\s+label:.*\n\s+prompt: "(.*)"/g)) {
+        const [, id = '', prompt = ''] = m
+        expect(classifyKolTask(prompt).intent, `${ch} ${id}`).toBe(want[id])
+        if (id === 'find_creators') expect(searchQueryOf(prompt), `${ch} ${id}`).toBe('')
+        seen += 1
+      }
+    }
+    expect(seen).toBe(25)
+  })
+
   it('判不出来就是 unknown，不猜一个动作', () => {
     const hit = classifyKolTask('你好')
     expect(hit.intent).toBe('unknown')
@@ -65,6 +107,16 @@ describe('参数抽取', () => {
     expect(parseFollowerBand(FIND)).toEqual({ min: 10_000, max: 100_000 })
     expect(channelInText(FIND)).toBe('youtube')
     expect(searchQueryOf(FIND)).not.toContain('20')
+  })
+
+  it('WP295：快捷提示那句话不剩关键词；粘着的渠道词去掉，品类留下', () => {
+    // 「品类 匹配度」当关键词 = 库里一个人都对不上（岗位页头一个快捷提示回「一个合适的都没找到」）
+    expect(searchQueryOf(FIND)).toBe('')
+    expect(searchQueryOf('在 YouTube 上找粉丝 1 万到 10 万的数码频道')).toBe('数码')
+    expect(searchQueryOf('找 10 个美妆博主')).toBe('美妆')
+    expect(searchQueryOf('帮我找一些做户外露营的 YouTube 频道')).toBe('户外露营')
+    // 英文短渠道词只按整词去：insulated 不被切成 ulated
+    expect(searchQueryOf('find insulated bottle creators on ins')).toContain('insulated')
   })
 
   it('写成纯数字的区间也认', () => {
@@ -120,6 +172,8 @@ describe('工具计划', () => {
   it('建联但现场没有 creator_id：降级成找人，不编一个 id', () => {
     const plan = planKolTools('outreach', { channel: 'youtube', text: '起草一封开发信' })
     expect(plan.map((p) => p.tool)).toEqual(['search_creators'])
+    // WP295：不拿「起草一封开发信」这句话当关键词去搜（搜出来 0 个，回话就成了「没找到」）
+    expect(plan[0]?.input).toEqual({ channel: 'youtube', limit: 5 })
   })
 
   it('议价：读完合作与政策就停——价格永远是人在卡上填的那个数', () => {
@@ -137,6 +191,12 @@ describe('工具计划', () => {
     expect(
       planKolTools('follow_up', { channel: 'youtube', text: '谁还没回' }).map((p) => p.tool),
     ).toEqual(['list_collaborations'])
+    // WP295：只要「已建联、这么多天没动静」的；天数从那句话里读，没说就 7
+    expect(
+      planKolTools('follow_up', { channel: 'youtube', text: '建联发出去超过 10 天还没回音的' })[0]
+        ?.input,
+    ).toEqual({ channel: 'youtube', quiet_days: 10 })
+    expect(parseQuietDays('谁还没回')).toBe(7)
   })
 
   it('审交付物：没点名哪一条就只列待审的；点名了才提一条验收意见', () => {
@@ -159,7 +219,7 @@ describe('工具计划', () => {
     expect(full[0]?.input).toEqual({ collaboration_id: 'cb_1' })
   })
 
-  it('归因：有合作就建追踪链接，没有就先读清单', () => {
+  it('归因：有合作就建追踪链接，没有就读归因那张表（WP295：以前读的是合作清单）', () => {
     expect(
       planKolTools('attribution', {
         channel: 'youtube',
@@ -170,7 +230,7 @@ describe('工具计划', () => {
     ).toEqual(['list_collaborations', 'create_tracked_link'])
     expect(
       planKolTools('attribution', { channel: 'youtube', text: '看归因' }).map((p) => p.tool),
-    ).toEqual(['list_collaborations'])
+    ).toEqual(['list_tracked_links'])
   })
 
   it('看进展与 unknown 都只读一条清单', () => {
@@ -223,6 +283,29 @@ describe('摘要', () => {
   })
 })
 
+describe('WP295 找人回话是「一句话 + 表格」（docs/96 P4）', () => {
+  it('岗位页当场回答拆得出：头一句是结论，第一块组件是那张表，后面的话进末尾那块字', () => {
+    const text = describeFindReply({
+      channel: 'youtube',
+      wanted: 20,
+      found: [{ name: 'Gadget Jonas', followers: 48_000, engagement_rate: 0.062, score: 90 }],
+      source: 'local_library',
+      links: {
+        pool: '/p?kol=pool',
+        linkAccount: '/settings/credits',
+        importTable: '/p?kol=campaign',
+      },
+    }).join('\n')
+    const split = splitAnswer(text)
+    expect(split.lead).toBe('在 YouTube 上找了一遍，找到 1 个：')
+    expect(split.components[0]).toMatchObject({
+      kind: 'table',
+      columns: ['红人', '粉丝', '互动率', '分'],
+    })
+    expect(split.components[1]?.kind).toBe('text')
+  })
+})
+
 describe('WP142 找人回话：是谁 / 为什么不够 / 下一步', () => {
   const links = {
     pool: '/positions/asg_1?tab=view&kol=pool',
@@ -237,15 +320,18 @@ describe('WP142 找人回话：是谁 / 为什么不够 / 下一步', () => {
     }))
     const lines = describeFindReply({ channel: 'youtube', wanted: 5, found, links })
     expect(lines[0]).toBe('在 YouTube 上找了一遍，找到 7 个：')
-    expect(lines.slice(1, 6)).toEqual([
-      '- A（1.2 万粉）',
-      '- B（1.3 万粉）',
-      '- C（1.4 万粉）',
-      '- D（1.5 万粉）',
-      '- E（1.6 万粉）',
+    // WP295：是一张表（名字 · 粉丝 · 互动率 · 分），岗位页画成表格组件
+    expect(lines.slice(1, 9)).toEqual([
+      '',
+      '| 红人 | 粉丝 | 互动率 | 分 |',
+      '|---|---|---|---|',
+      '| A | 1.2 万 | — | — |',
+      '| B | 1.3 万 | — | — |',
+      '| C | 1.4 万 | — | — |',
+      '| D | 1.5 万 | — | — |',
+      '| E | 1.6 万 | — | — |',
     ])
-    expect(lines).toContain('- ……还有 2 个')
-    expect(lines).toContain('[去候选池看全部](/positions/asg_1?tab=view&kol=pool)')
+    expect(lines).toContain('……还有 2 个，[去候选池看全部](/positions/asg_1?tab=view&kol=pool)')
     // 够数：不说原因、不给那两个动作
     expect(lines.join('\n')).not.toContain('想要更多人')
   })
@@ -256,7 +342,7 @@ describe('WP142 找人回话：是谁 / 为什么不够 / 下一步', () => {
       band: { min: 10_000, max: 100_000 },
       wanted: 20,
       found: [
-        { name: 'Gadget Jonas', followers: 48_000 },
+        { name: 'Gadget Jonas', followers: 48_000, engagement_rate: 0.062, score: 90 },
         { name: 'Desk Rosa', followers: 31_000 },
       ],
       source: 'local_library',
@@ -264,7 +350,7 @@ describe('WP142 找人回话：是谁 / 为什么不够 / 下一步', () => {
     })
     const text = lines.join('\n')
     expect(lines[0]).toBe('在 YouTube 上按粉丝 10,000–100,000 找了一遍，找到 2 个：')
-    expect(text).toContain('- Gadget Jonas（4.8 万粉）')
+    expect(text).toContain('| Gadget Jonas | 4.8 万 | 6.2% | 90 |')
     expect(text).toContain('你要 20 个，库里只有 2 个在这个区间')
     expect(text).toContain('YouTube 还没接数据来源')
     expect(text).toContain(

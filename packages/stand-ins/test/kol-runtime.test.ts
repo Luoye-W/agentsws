@@ -100,8 +100,9 @@ describe('stub 的红人剧本', () => {
     )
     const answer = result.outputs.find((o) => o.kind === 'answer')
     const text = answer?.kind === 'answer' ? answer.text : ''
-    expect(text).toContain('- Gadget Jonas（4.8 万粉）')
-    expect(text).toContain('- Desk Rosa（3.1 万粉）')
+    // WP295：找到的人是一张表（岗位页画成表格组件）
+    expect(text).toContain('| Gadget Jonas | 4.8 万 | — | — |')
+    expect(text).toContain('| Desk Rosa | 3.1 万 | — | — |')
     expect(text).toMatch(/\[去候选池看全部\]\(\/positions\/[^)]+kol=pool\)/)
     expect(text).toContain('你要 20 个，库里只有 2 个在这个区间')
     expect(text).toContain('[关联官方数据接口](/settings/credits)')
@@ -182,6 +183,132 @@ describe('stub 的红人剧本', () => {
     )
     const answer = result.outputs.find((o) => o.kind === 'answer')
     expect(answer?.kind === 'answer' ? answer.text : '').toContain('这个进程没接工具执行器')
+  })
+
+  it('WP295「谁还没回」：只读已建联、多少天没动静的那几条，回话点名带天数、说下一步在哪', async () => {
+    const rec = recorder({
+      list_collaborations: {
+        rows: [
+          { id: 'cb_1', display_name: 'Desk Rosa', days_since_activity: 9 },
+          { id: 'cb_2', display_name: 'Cable Kevin' },
+        ],
+      },
+    })
+    const runtime = createStubRuntime({ clock, executeTool: rec.executeTool })
+    const { result } = await runAndCollect(
+      runtime,
+      makeRequest({
+        roleId: 'kol.youtube',
+        threadSubject: '谁还没回',
+        threadBody: '建联发出去超过 7 天还没回音的频道有哪些，列出来告诉我要不要跟进',
+        allow: ['list_collaborations'],
+        outputs: ['answer'],
+      }),
+    )
+    expect(rec.calls).toEqual([
+      { name: 'list_collaborations', input: { channel: 'youtube', quiet_days: 7 } },
+    ])
+    const text = (() => {
+      const a = result.outputs.find((o) => o.kind === 'answer')
+      return a?.kind === 'answer' ? a.text : ''
+    })()
+    expect(text).toContain('建联超过 7 天还没回音的有 2 个')
+    expect(text).toContain('- Desk Rosa（9 天）')
+    expect(text).toContain('- Cable Kevin（没记下发信时间）')
+    expect(text).toContain('[合作线程](/positions/')
+    expect(text).not.toContain('26 条')
+  })
+
+  it('WP295「起草开发信」没点名写给谁：不拿整句话去搜，回话问写给谁并列出手边几位', async () => {
+    const rec = recorder({
+      search_creators: { rows: [{ id: 'cr_1', display_name: 'Gadget Jonas', followers: 48_000 }] },
+    })
+    const runtime = createStubRuntime({ clock, executeTool: rec.executeTool })
+    const { result } = await runAndCollect(
+      runtime,
+      makeRequest({
+        roleId: 'kol.youtube',
+        threadSubject: '起草开发信',
+        threadBody: '给这个频道起草一封开发信：说清合作形式和寄样安排，不提具体报价',
+        allow: ['search_creators'],
+        outputs: ['answer'],
+      }),
+    )
+    expect(rec.calls[0]?.input).toEqual({ channel: 'youtube', limit: 5 })
+    const a = result.outputs.find((o) => o.kind === 'answer')
+    const text = a?.kind === 'answer' ? a.text : ''
+    expect(text).toContain('这封开发信写给谁')
+    expect(text).toContain('- Gadget Jonas（4.8 万粉）')
+    expect(text).not.toContain('一个合适的都没找到')
+  })
+
+  it('WP295「哪几个真带货了」：读归因那张表，回话一句结论 + 表 + 没建链接的单说', async () => {
+    const rec = recorder({
+      list_tracked_links: {
+        rows: [
+          { id: 'tl_1', display_name: 'Gadget Jonas', clicks: 318, orders: 5, revenue: 645.5 },
+          { id: 'tl_2', display_name: 'Desk Rosa', clicks: 41, orders: 0, revenue: 0 },
+        ],
+        without_link: ['Cable Kevin'],
+      },
+    })
+    const runtime = createStubRuntime({ clock, executeTool: rec.executeTool })
+    const { result } = await runAndCollect(
+      runtime,
+      makeRequest({
+        roleId: 'kol.youtube',
+        threadSubject: '哪几个真带货了',
+        threadBody: '上个月YouTube合作过的人里，按归因链接看哪几个真带来了订单，没带来的也列出来',
+        allow: ['list_tracked_links'],
+        outputs: ['answer'],
+      }),
+    )
+    expect(rec.calls.map((c) => c.name)).toEqual(['list_tracked_links'])
+    const a = result.outputs.find((o) => o.kind === 'answer')
+    const text = a?.kind === 'answer' ? a.text : ''
+    expect(text).toContain('带来订单的有 1 个：Gadget Jonas（5 单）')
+    expect(text).toContain('| Gadget Jonas | 318 | 5 | 645.5 |')
+    expect(text).toContain('| Desk Rosa | 41 | 0 | 0 |')
+    expect(text).toContain('还没建追踪链接、算不出来的：Cable Kevin')
+    expect(text).not.toContain('看合作清单')
+  })
+
+  it('WP295「审一条稿」没点名哪一条：列出待审的（是谁 · 什么 · 哪天交 · 链接），说清去哪儿审', async () => {
+    const rec = recorder({
+      list_deliverables: {
+        rows: [
+          {
+            id: 'dv_1',
+            display_name: 'Gadget Jonas',
+            kind: 'video',
+            due_at: '2026-10-16T00:00:00.000Z',
+            url: 'https://www.youtube.com/watch?v=demo1',
+          },
+          { id: 'dv_2', display_name: 'Gadget Jonas', kind: 'post', url: 'javascript:alert(1)' },
+        ],
+      },
+    })
+    const runtime = createStubRuntime({ clock, executeTool: rec.executeTool })
+    const { result } = await runAndCollect(
+      runtime,
+      makeRequest({
+        roleId: 'kol.youtube',
+        threadSubject: '审一条稿',
+        threadBody: '红人交的这条视频审一遍：该标的广告标识、禁用词、链接和折扣码对不对',
+        allow: ['list_deliverables'],
+        outputs: ['answer'],
+      }),
+    )
+    expect(rec.calls).toEqual([{ name: 'list_deliverables', input: { pending: true } }])
+    const a = result.outputs.find((o) => o.kind === 'answer')
+    const text = a?.kind === 'answer' ? a.text : ''
+    expect(text).toContain('有 2 条交付物等你审')
+    expect(text).toContain(
+      '| Gadget Jonas | 视频 | 2026-10-16 | [看一眼](https://www.youtube.com/watch?v=demo1) |',
+    )
+    // 不是 http(s) 的链接不往回话里放
+    expect(text).toContain('| Gadget Jonas | 帖子 | — | 还没给 |')
+    expect(text).toContain('通过 / 要改 / 不合格')
   })
 
   it('客服那条职责一点没变（红人的岔口不许改客服的行为）', async () => {

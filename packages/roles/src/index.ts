@@ -146,6 +146,7 @@ export {
 export { collectUnknownKeys, POSITION_SCHEMA, ROLE_SCHEMA } from './schema.js'
 export type {
   AssignmentApi,
+  AutomationDefaultMigration,
   CreateAssignmentInput,
   PolicyApi,
   ProductLineApi,
@@ -158,7 +159,7 @@ export type {
   RoleStoreOptions,
   UpdateAssignmentInput,
 } from './store.js'
-export { createRoleStore } from './store.js'
+export { createRoleStore, RETIRED_AUTOMATION_DEFAULTS } from './store.js'
 // WP174：`scope_manager` 的审批落到谁（岗位上级 → 老板），服务进程与模拟世界共用
 export type {
   ScopeManagerInput,

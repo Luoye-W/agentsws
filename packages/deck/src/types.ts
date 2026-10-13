@@ -703,6 +703,12 @@ export interface KolDeckData {
    * 面板上单出一块「演练漏斗」；关掉演练它就没有了（**不是 0，是没有**）。
    */
   sandbox_funnel?: { stage: string; label: string; count: number }[]
+  /**
+   * WP295：按渠道分的建联漏斗（`youtube` → 那条渠道的漏斗）。五条渠道职责各看各的——
+   * 以前五条都端同一份全渠道漏斗，岗位页「看图表」里同一张表摆五遍。
+   * 不给 = 老宿主，退回上面那份全渠道的。
+   */
+  funnel_by_channel?: Record<string, { stage: string; label: string; count: number }[]>
 }
 
 /**

@@ -48,7 +48,7 @@ import { useApp } from '@/lib/app-context'
 import { tOr } from '@/lib/humanize'
 import { CollabThread } from './collab-thread'
 import { KolSandboxBar } from './kol-sandbox-bar'
-import { errorText, KolError, KolReceipt } from './kol-shared'
+import { errorText, KolError, KolReceipt, refreshCards } from './kol-shared'
 
 /** 五条渠道（真源是契约的 `KOL_CHANNEL_IDS`；工作台不依赖服务端包，这里照抄一份）。 */
 const ALL_CHANNELS: readonly KolChannelId[] = ['youtube', 'facebook', 'instagram', 'tiktok', 'x']
@@ -123,10 +123,22 @@ function Discovery({
   const [error, setError] = useState<string | undefined>(undefined)
   const [receipt, setReceipt] = useState<string | undefined>(undefined)
 
+  /*
+   * WP295：外面搜不了（这条渠道没接数据来源）时，同一个关键词至少把**自己的库**筛一遍。
+   * 以前搜「数码」只回一句「现在搜不了」，下面「我的红人库」照旧列全部——人得自己一行一行找。
+   */
+  const [libraryQ, setLibraryQ] = useState('')
   const library = useQuery({
-    queryKey: ['kol-creators', assignment, channel, batch ?? ''],
+    queryKey: ['kol-creators', assignment, channel, batch ?? '', libraryQ],
     queryFn: () =>
-      getKolCreators({ channel, ...(batch === undefined ? {} : { batch }) }, assignment),
+      getKolCreators(
+        {
+          channel,
+          ...(batch === undefined ? {} : { batch }),
+          ...(libraryQ === '' ? {} : { q: libraryQ }),
+        },
+        assignment,
+      ),
   })
 
   const search = useMutation({
@@ -134,6 +146,7 @@ function Discovery({
     onSuccess: (out) => {
       setError(undefined)
       setFound(out)
+      setLibraryQ(out.ok ? '' : q.trim())
     },
     // 66 断点：接口挂了要照实说，不许留在"搜索中"或者悄悄什么都不发生
     onError: (e: unknown) => {
@@ -304,7 +317,23 @@ function Discovery({
 
         <div className="mt-1">
           {batch === undefined ? (
-            <h4 className="mb-1 text-xs font-medium text-muted-foreground">{t('kol.library')}</h4>
+            <div className="mb-1 flex items-center gap-2">
+              <h4 className="text-xs font-medium text-muted-foreground">
+                {libraryQ === '' ? t('kol.library') : t('kol.library.q', { q: libraryQ })}
+              </h4>
+              {libraryQ === '' ? null : (
+                <Button
+                  size="xs"
+                  variant="ghost"
+                  data-testid="kol-library-q-clear"
+                  onClick={() => {
+                    setLibraryQ('')
+                  }}
+                >
+                  {t('kol.library.batch.all')}
+                </Button>
+              )}
+            </div>
           ) : (
             /* WP131：从插件跳回来的「这一批」——说清楚现在只看这一批，一键回全部 */
             <div
@@ -356,7 +385,14 @@ function Discovery({
                 >
                   <span className="min-w-0 truncate">
                     {row.display_name}
-                    <span className="text-xs text-muted-foreground"> {atHandle(row.handle)}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {' '}
+                      {atHandle(row.handle)}
+                      {/* WP295：挑人先看粉丝量——以前这一行只有名字和分 */}
+                      {row.followers === undefined
+                        ? ''
+                        : ` · ${t('kol.followers', { n: num(row.followers) })}`}
+                    </span>
                   </span>
                   <span className="flex shrink-0 items-center gap-2 text-xs text-muted-foreground">
                     {/* 刷粉护栏那一条：清单上看得见"这个数不可信"，不悄悄少一行 */}
@@ -453,7 +489,7 @@ function CreatorDetail({
           : undefined,
       )
       void client.invalidateQueries({ queryKey: ['kol-collaborations'] })
-      void client.invalidateQueries({ queryKey: ['cards'] })
+      refreshCards(client)
     },
     onError: (e: unknown) => {
       setDraft(undefined)
@@ -716,6 +752,8 @@ function Collaborations({
       setError(undefined)
       void client.invalidateQueries({ queryKey: ['kol-collaborations'] })
       void client.invalidateQueries({ queryKey: ['kol-creator'] })
+      // WP295：推到「谈成」等阶段会出卡，上面「要你处理」要跟着变
+      refreshCards(client)
     },
     // 非法跳转回的是一句人话（"还没建联就说交付完了"），照实显示
     onError: (e: Error) => {
@@ -979,7 +1017,7 @@ function ImportAndCampaign({
         )
       }
       void client.invalidateQueries({ queryKey: ['kol-collaborations'] })
-      void client.invalidateQueries({ queryKey: ['cards'] })
+      refreshCards(client)
     },
     onError: (e: unknown) => {
       setReceipt(undefined)

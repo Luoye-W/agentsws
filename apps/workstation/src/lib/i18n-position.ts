@@ -162,6 +162,7 @@ export const POSITION_ZH: Record<string, string> = {
   'pos2.data.charts.hide': '收起图表',
   'pos2.data.empty': '开工后这里出数',
   'pos2.data.none': '这条职责没有数可看',
+  'pos2.data.quiet': '{duties}：还没有数',
   'pos2.data.shared': '和「{duty}」看的是同一份数',
 
   // 设置
@@ -359,6 +360,7 @@ export const POSITION_EN: Record<string, string> = {
   'pos2.data.charts': 'Charts',
   'pos2.data.charts.hide': 'Hide charts',
   'pos2.data.empty': 'Numbers show up once it starts working',
+  'pos2.data.quiet': '{duties}: nothing yet',
   'pos2.data.none': 'No numbers for this duty',
   'pos2.data.shared': 'Same numbers as “{duty}”',
 

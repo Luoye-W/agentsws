@@ -282,6 +282,14 @@ async function run(page, assignment) {
   await money.waitFor({ timeout: 20_000 })
   await shoot(page, 'quote-card')
   await money.locator('[data-action="approve"]').first().click()
+  /*
+   * WP295：800 超过这条职责的预算线（500），卡上会出「超了你设的上限，要再点一次才算」——
+   * 第一下只是「上膛」。脚本写于这道二次确认之前，所以只点一下，这一步一直红。
+   */
+  await page.waitForTimeout(600)
+  if ((await money.locator('[data-testid="deck-reconfirm-hint"]').count()) > 0) {
+    await money.locator('[data-action="approve"]').first().click()
+  }
   await page.waitForTimeout(2500)
 
   // ⑫ 批了之后阶段推进到「谈条件中」

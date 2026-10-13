@@ -13,7 +13,7 @@
  *
  * | 组 | 工具 |
  * |---|---|
- * | 查对象 | `search_creators` `get_creator` `list_collaborations` `list_deliverables` |
+ * | 查对象 | `search_creators` `get_creator` `list_collaborations` `list_deliverables` `list_tracked_links` |
  * | 查知识 | （沿用 `search_policies`，不新增） |
  * | 提议动作 | `score_creator` `add_to_campaign` `draft_outreach` `advance_collaboration` `register_deliverable` `review_deliverable` `create_tracked_link` |
  *
@@ -42,7 +42,7 @@ const CHANNEL_ENUM = {
 }
 
 /**
- * 十一个工具。顺序就是一件事的顺序（找人 → 打分 → 进池 → 建联 → 推进 → 交付 → 归因），
+ * 十二个工具（WP295 加了读归因的 `list_tracked_links`）。顺序就是一件事的顺序（找人 → 打分 → 进池 → 建联 → 推进 → 交付 → 归因），
  * 真正进 prompt 的顺序由 `@agentsws/ontology` 的 `orderTools` 重排。
  */
 export const KOL_TOOL_SPECS: readonly KolToolSpec[] = [
@@ -74,7 +74,7 @@ export const KOL_TOOL_SPECS: readonly KolToolSpec[] = [
   {
     name: 'list_collaborations',
     description:
-      '列出合作，可按渠道与阶段过滤。回答「合作到哪一步了」「谁还没回」「谁该交稿」时用它。',
+      '列出合作，可按渠道与阶段过滤；每行带红人名字与几天没动静。回答「合作到哪一步了」「谁还没回」「谁该交稿」时用它。',
     input_schema: {
       type: 'object',
       properties: {
@@ -82,6 +82,11 @@ export const KOL_TOOL_SPECS: readonly KolToolSpec[] = [
         stage: str(
           '只要某一个阶段的：sourced / contacted / replied / negotiating / agreed / delivering / delivered / closed / declined',
         ),
+        // WP295：「谁还没回」一次读出来（每行带 display_name 与 days_since_activity）
+        quiet_days: {
+          type: 'number',
+          description: '只要「已建联、这么多天没动静」的那几条（问「谁还没回」时填 7）',
+        },
       },
     },
   },
@@ -93,6 +98,22 @@ export const KOL_TOOL_SPECS: readonly KolToolSpec[] = [
       properties: {
         collaboration_id: str('只看这一条合作的'),
         pending: { type: 'boolean', description: 'true = 只要待审的' },
+      },
+    },
+  },
+  {
+    /*
+     * WP295：「哪几个真带货了」以前没有工具能答——十一个工具里没有一个读得到追踪链接的
+     * 点击 / 订单 / 收入，岗位页那句快捷提示回的是「看合作清单：2 条」。只读，不动钱。
+     */
+    name: 'list_tracked_links',
+    description:
+      '列出这条渠道上的追踪链接带来的点击、订单、收入（每行带红人名字，按收入从高到低），外加还没建追踪链接的合作。回答「哪几个真带货了」「这次合作值不值」时用它。归不上的订单不在这里——数只会偏小，不是猜的。',
+    input_schema: {
+      type: 'object',
+      properties: {
+        channel: CHANNEL_ENUM,
+        collaboration_id: str('只看这一条合作的'),
       },
     },
   },

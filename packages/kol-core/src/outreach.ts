@@ -54,6 +54,26 @@ export interface OutreachVars {
   sender_name: string
   /** 渠道（正文里的说法按渠道换：YouTube 说"频道"，X 说"你的帖子"）。 */
   channel: KolChannel
+  /**
+   * WP295：信用哪种语言写。不给 = 中文（老调用方行为不变）。
+   *
+   * 跨境卖家找的多半是外国红人：真机上给一个只说英文的油管主发出去的是一封中文信。
+   * 服务端按这个人账号上的语言定（`zh*` → 中文，其余与不知道 → 英文）。
+   */
+  language?: OutreachLanguage
+}
+
+/** WP295：开发信的语言。模板是写死的两份，不让模型现写（理由见 {@link TEMPLATES}）。 */
+export type OutreachLanguage = 'zh' | 'en'
+
+/** 账号上记的语言（`de` / `en-US` / `zh-CN` / 不知道）→ 开发信用哪种。 */
+export function outreachLanguageOf(language: string | undefined): OutreachLanguage {
+  return language?.toLowerCase().startsWith('zh') === true ? 'zh' : 'en'
+}
+
+/** 一段字里有没有中日韩文字（英文信里混进一句中文介绍，要在卡上提醒人改）。 */
+export function hasCjk(text: string): boolean {
+  return /[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]/.test(text)
 }
 
 /** 起草的结果。`blocked` 有值就是这一封不能提上去。 */
@@ -143,6 +163,102 @@ const TEMPLATES: Readonly<
   }),
 }
 
+const CHANNEL_NOUN_EN: Readonly<Record<KolChannel, string>> = {
+  youtube: 'channel',
+  facebook: 'page',
+  instagram: 'account',
+  tiktok: 'account',
+  x: 'account',
+}
+
+const CHANNEL_WORK_EN: Readonly<Record<KolChannel, string>> = {
+  youtube: 'videos',
+  facebook: 'posts',
+  instagram: 'posts',
+  tiktok: 'short videos',
+  x: 'posts',
+}
+
+/**
+ * WP295：英文那三封。逐句对着中文那三封写（同样没有承诺的位置），避开禁承诺词表里的英文说法
+ * （`free sample` / `we will pay` / `guaranteed results` …）。
+ */
+const TEMPLATES_EN: Readonly<
+  Record<
+    OutreachStep,
+    (v: OutreachVars, noun: string, work: string) => { subject: string; body: string }
+  >
+> = {
+  first: (v, noun, work) => ({
+    subject: `${v.brand} x ${v.creator_name}: a collaboration idea`,
+    body: [
+      `Hi ${v.creator_name},`,
+      '',
+      `I'm ${v.sender_name} from ${v.brand}. ${v.brand_pitch}`,
+      '',
+      `${v.reason} I'd love to know whether ${v.product} could be a fit for your ${noun}.`,
+      '',
+      `If you're open to it, just reply with how you usually work with brands and your availability — we can work out the details together.`,
+      '',
+      `We've actually watched your ${work} — this isn't a mass email. Happy to answer any questions.`,
+      '',
+      'Best,',
+      `${v.sender_name}`,
+      v.brand,
+    ].join('\n'),
+  }),
+  follow_up: (v) => ({
+    subject: `Re: ${v.brand} x ${v.creator_name}: a collaboration idea`,
+    body: [
+      `Hi ${v.creator_name},`,
+      '',
+      `I wrote to you a few days ago about ${v.product} and wanted to make sure it didn't end up in spam.`,
+      '',
+      `${v.reason} If your schedule is full or this isn't something you do, just let me know and I won't follow up again.`,
+      '',
+      'Best,',
+      `${v.sender_name}`,
+      v.brand,
+    ].join('\n'),
+  }),
+  final: (v) => ({
+    subject: `Re: ${v.brand} x ${v.creator_name}: last note`,
+    body: [
+      `Hi ${v.creator_name},`,
+      '',
+      `This is my last note about ${v.product} — if I don't hear back, I'll assume the timing isn't right and won't email again.`,
+      '',
+      'If you ever want to chat, just reply to this email. All the best!',
+      '',
+      `${v.sender_name}`,
+      v.brand,
+    ].join('\n'),
+  }),
+}
+
+/**
+ * WP295：「为什么找你」那一句的默认写法——**写给红人看的**。
+ *
+ * 以前默认拿打分里最高那一项的说明（「372,274 粉，正好在想要的区间里。」）直接塞进信里：
+ * 那是我们内部挑人的理由，对方读到只会觉得被当成一个数。这里只说对方做的内容和我们对路，
+ * 不报粉丝数、不说「区间」。中文那份以逗号收尾（模板后面紧接「所以想问问……」）。
+ */
+export function outreachReason(input: {
+  channel: KolChannel
+  language: OutreachLanguage
+  /** 账号上记的品类（「数码」「家居」）；英文信里不用（库里记的是中文）。 */
+  category?: string | undefined
+}): string {
+  if (input.language === 'en')
+    return `Your ${CHANNEL_WORK_EN[input.channel]} feel like a natural fit for what we make.`
+  const noun = CHANNEL_NOUN[input.channel]
+  const work = CHANNEL_WORK[input.channel]
+  const cat = input.category?.trim()
+  return cat === undefined || cat === ''
+    ? `你${noun}上的${work}和我们的东西挺对路，`
+    : `你${noun}上做${cat}的${work}和我们的东西挺对路，`
+}
+
 const REQUIRED_VARS: readonly (keyof OutreachVars)[] = [
   'creator_name',
   'brand',
@@ -183,7 +299,10 @@ export function draftOutreach(step: OutreachStep, vars: Partial<OutreachVars>): 
       ok: false,
     }
   const full = { ...(vars as OutreachVars), channel }
-  const { subject, body } = TEMPLATES[step](full, CHANNEL_NOUN[channel], CHANNEL_WORK[channel])
+  const { subject, body } =
+    vars.language === 'en'
+      ? TEMPLATES_EN[step](full, CHANNEL_NOUN_EN[channel], CHANNEL_WORK_EN[channel])
+      : TEMPLATES[step](full, CHANNEL_NOUN[channel], CHANNEL_WORK[channel])
   const hits = scanForbiddenPromises(`${subject}\n${body}`)
   return {
     step,
