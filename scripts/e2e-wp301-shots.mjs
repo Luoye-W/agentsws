@@ -236,7 +236,7 @@ async function main() {
     console.log(`  起底：${JSON.stringify(view.workspace.base)}`)
 
     // ② Horizon 目录
-    const cat = await context.newPage()
+    const cat = await browser.newPage({ viewport: { width: 1280, height: 900 } })
     await cat.setContent(catalogHtml(await catalogIndex()))
     await cat.waitForTimeout(300)
     await cat.screenshot({ path: join(SHOTS, '2-horizon-catalog.png'), fullPage: true })
