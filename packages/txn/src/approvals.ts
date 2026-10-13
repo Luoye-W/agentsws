@@ -1048,6 +1048,13 @@ export class ApprovalBusImpl implements ApprovalBus {
  */
 function markReconfirm<P>(input: NormalizedCreateInput<P>): void {
   if (input.kind !== 'staged_change' || input.automation.mandate_check.within) return
+  /*
+   * WP299：只撞了「硬顶人审」（`hard_ceiling`：退款、合作、寄样、付款这几类永远要人点）不算超上限——
+   * 那一条说的是「这种事一律要人看」，不是「这一笔超了你设的数」。以前每张这种卡都写着
+   * 「超了你设的上限，要再点一次才算」，一张 45 美元的寄样卡也要点两下（docs/95 §5：超出上限才再确认）。
+   */
+  const caps = input.automation.mandate_check.caps_hit
+  if (caps.length > 0 && caps.every((rule) => rule === 'hard_ceiling')) return
   input.routing.recipients = input.routing.recipients.map((r) => ({ ...r, reconfirm: true }))
 }
 
