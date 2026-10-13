@@ -3036,6 +3036,7 @@ const zh: Table = {
   'im.state.paused': '要重连',
   'im.state.unbound': '没绑',
   'im.state.connecting': '连接中',
+  'im.state.reconnecting': '断了，在重连',
   'im.state.unconfigured': '没配',
   'im.wechat.title': '微信（你自己的）',
   'im.wechat.what':
@@ -7044,6 +7045,7 @@ const en: Table = {
   'im.state.paused': 'Needs reconnect',
   'im.state.unbound': 'Not linked',
   'im.state.connecting': 'Connecting',
+  'im.state.reconnecting': 'Dropped, reconnecting',
   'im.state.unconfigured': 'Not set up',
   'im.wechat.title': 'WeChat (yours)',
   'im.wechat.what':

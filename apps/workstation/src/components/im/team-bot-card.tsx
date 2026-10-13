@@ -120,7 +120,9 @@ function StateIcon({
         ? t('im.state.live')
         : view.state === 'failed'
           ? t('im.state.failed')
-          : t('im.state.connecting')
+          : view.state === 'reconnecting'
+            ? t('im.state.reconnecting')
+            : t('im.state.connecting')
   return (
     <StatusIcons
       testId={`im-${channel}-state`}

@@ -95,6 +95,7 @@ function rig(
   const clock = new FakeClock()
   const fake = new FakeFeishu()
   const errors: unknown[] = []
+  const states: string[] = []
   let calls = 0
   const adapter = new FeishuBotAdapter({
     clock,
@@ -106,13 +107,14 @@ function rig(
     },
     transport: () => fake,
     on_error: (e) => errors.push(e),
+    on_state: (state, prev) => states.push(`${prev}>${state}`),
   })
   const seen: FeishuMessageEvent[] = []
   const start = () =>
     adapter.start(async (e) => {
       seen.push(e)
     })
-  return { adapter, fake, errors, seen, start, calls: () => calls, clock }
+  return { adapter, fake, errors, seen, start, calls: () => calls, clock, states }
 }
 
 describe('飞书：收什么、不收什么', () => {
@@ -235,6 +237,36 @@ describe('飞书：回复、重连、凭据错误', () => {
     r.fake.push(msg({ id: 'after' }))
     await waitFor(() => r.seen.length === 1, '重连后收到')
     expect(r.adapter.health()).toEqual({ ok: true })
+  })
+
+  it('WP306：状态真的变了才报 on_state（宿主记断线 / 重连）；人点断开不报', async () => {
+    const r = rig()
+    await r.start()
+    r.fake.state('connected')
+    r.fake.state('connected')
+    r.fake.state('reconnecting')
+    r.fake.state('connected')
+    await r.adapter.stop()
+    // 起连接时适配器自己先置成 connecting（那一下不经 SDK 回调，不报）
+    expect(r.states).toEqual([
+      'connecting>connected',
+      'connected>reconnecting',
+      'reconnecting>connected',
+    ])
+  })
+
+  it('WP306：keep = 先回一句「收到」，同一条消息之后还能再回答案', async () => {
+    const r = rig()
+    await r.start()
+    r.fake.push(msg({ id: 'om_k' }))
+    await waitFor(() => r.seen.length === 1, '收到')
+    expect(await r.adapter.reply('feishu:om_k', '收到，我查一下。', { keep: true })).toEqual({
+      sent: true,
+    })
+    expect(r.adapter.pending).toBe(1)
+    expect(await r.adapter.reply('feishu:om_k', '答')).toEqual({ sent: true })
+    expect(r.adapter.pending).toBe(0)
+    expect(r.fake.replies.map((x) => x.text)).toEqual(['收到，我查一下。', '答'])
   })
 
   it('凭据错了：给一句人话、停下不空转；原始错误串不给人看', async () => {
