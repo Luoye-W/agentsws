@@ -47,6 +47,18 @@ export const RATE_PER_HOUR = 1000
 /** 断线重连退避（文档未规定，**未核实**：我们自己的梯子，封顶 30s）。 */
 export const RECONNECT_BACKOFF_MS = [1_000, 2_000, 5_000, 10_000, 30_000] as const
 
+/**
+ * WP308（决策 451）：握手（连上 → 订阅成功）最多等多久（我们自己的数，**未核实**；与飞书那条同为 15 秒）。
+ * 卡在 DNS / 代理 / NAT 上的那一次放弃，按退避再连。
+ */
+export const HANDSHAKE_TIMEOUT_MS = 15_000
+
+/**
+ * WP308：流式回复从开始到 `finish=true` 的时限（文档：10 分钟内完成所有刷新，否则自动结束，**已核实**，10-13 读）。
+ * 过了这个时限还要回的那一句，退回普通文本回复（同一个 `req_id`；文档没写行不行，**未核实**）。
+ */
+export const STREAM_MAX_MS = 10 * 60 * 1000
+
 /** 同一个机器人同时只保持一个有效长连接（文档，**已核实**）：新连接会踢掉旧的。 */
 export const SINGLE_CONNECTION = true
 
@@ -109,7 +121,7 @@ export function pingFrame(req_id: string): WecomFrame {
  * 回一条纯文本。
  *
  * `req_id` **回带入站那一条的**：文档说每个请求带一个 `req_id` 做关联。
- * 流式（`stream`）我们不用——代理答完一整句再回，IM 里的半截话只会让人误会。
+ * 流式（`stream`）只用在「先回收到、再刷成答案」那一处（{@link streamTextFrame}），不逐字吐半截话。
  */
 export function respondTextFrame(input: {
   req_id: string
@@ -122,6 +134,32 @@ export function respondTextFrame(input: {
   }
 }
 
+/**
+ * WP308：流式回复的一帧（文档 `msgtype: "stream"`，**已核实**，10-13 读）。
+ *
+ * 同一次回调的首次发送与后续刷新都用回调里那个 `req_id`、同一个 `stream.id`；`finish=false` 是中间态，
+ * `finish=true` 收尾。文档示例里每次刷新带的是**到目前为止的全文**（我们按「整段替换」用，**未核实**）。
+ * 用途只有一个：先回「收到，我查一下」，答案出来再刷成答案（企业微信普通回复一条消息只回一次）。
+ */
+export function streamTextFrame(input: {
+  req_id: string
+  stream_id: string
+  text: string
+  finish: boolean
+}): WecomFrame<{
+  msgtype: 'stream'
+  stream: { id: string; finish: boolean; content: string }
+}> {
+  return {
+    cmd: CMD_RESPOND_MSG,
+    headers: { req_id: input.req_id },
+    body: {
+      msgtype: 'stream',
+      stream: { id: input.stream_id, finish: input.finish, content: input.text },
+    },
+  }
+}
+
 /** 这一帧是不是一条入站消息。 */
 export function isInboundMessage(frame: WecomFrame): frame is WecomFrame<WecomInboundBody> {
   return frame.cmd === CMD_MSG_CALLBACK
@@ -129,6 +167,16 @@ export function isInboundMessage(frame: WecomFrame): frame is WecomFrame<WecomIn
 
 export function isInboundEvent(frame: WecomFrame): frame is WecomFrame<WecomEventBody> {
   return frame.cmd === CMD_EVENT_CALLBACK
+}
+
+/**
+ * WP308：被别处的新连接顶掉了（文档：新的 `aibot_subscribe` 会踢掉旧连接，旧连接收到
+ * `disconnected_event`，**已核实**，10-13 读）。
+ */
+export function isDisconnectedEvent(frame: WecomFrame): boolean {
+  if (!isInboundEvent(frame)) return false
+  const body = frame.body as WecomEventBody | undefined
+  return body?.event?.eventtype === 'disconnected_event'
 }
 
 /** 订阅成功没有（`errcode === 0`）。 */

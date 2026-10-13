@@ -137,6 +137,13 @@ export interface ChannelInboundPipelineOptions {
   dead_letter_on_unresolved_actor?: boolean
   /** 正文进围栏前的截断上限 */
   max_text_chars?: number
+  /**
+   * WP308（决策 453）：事件里**不记聊天账号 id 的原文**。给了它（IM 那几条管线给，邮件不给），
+   * 管线事件的 `actor_external_id` / `thread_external_id` 换成 `actor_hash` / `thread_hash`，
+   * 带着账号 id 的去重键也换成哈希。哈希由宿主算（加盐、同一工作区内稳定）；队列与去重表里的
+   * 入站原样（回复要靠它找回原消息），只改进事件日志的那一份。老事件不动。
+   */
+  hashAccount?: (value: string) => string
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -170,6 +177,7 @@ export class ChannelInboundPipeline implements InboundPipeline {
   private readonly autoRequeue: AutoRequeuePolicy
   private readonly leaseMs: number
   private readonly rawSecretPolicy: 'redact' | 'keep'
+  private readonly hashAccount: ((value: string) => string) | undefined
   private readonly deadLetterOnUnresolvedActor: boolean
   private readonly maxTextChars: number | undefined
   private readonly accepted: InboundEvent[] = []
@@ -192,6 +200,7 @@ export class ChannelInboundPipeline implements InboundPipeline {
     this.autoRequeue = { ...DEFAULT_AUTO_REQUEUE, ...opts.auto_requeue }
     this.leaseMs = opts.lease_ms ?? DEFAULT_LEASE_MS
     this.rawSecretPolicy = opts.raw_secret_policy ?? 'redact'
+    this.hashAccount = opts.hashAccount
     this.deadLetterOnUnresolvedActor = opts.dead_letter_on_unresolved_actor ?? false
     this.maxTextChars = opts.max_text_chars
   }
@@ -544,24 +553,51 @@ export class ChannelInboundPipeline implements InboundPipeline {
     payload: Record<string, unknown>,
   ): Promise<void> {
     if (this.events === undefined) return
+    const hash = this.hashAccount
+    const actorId = event.actor?.external_id
+    const threadId = event.thread?.external_id
+    /*
+     * WP308（决策 453）：IM 管线只记哈希。去重键多数是消息 id（不含账号），没有消息 id 的兜底键
+     * 拼了发送人 id——那种也换成哈希。
+     */
+    const ids =
+      hash === undefined
+        ? {
+            ...(actorId === undefined ? {} : { actor_external_id: actorId }),
+            ...(threadId === undefined ? {} : { thread_external_id: threadId }),
+          }
+        : {
+            ...(actorId === undefined || actorId === '' ? {} : { actor_hash: hash(actorId) }),
+            ...(threadId === undefined || threadId === '' ? {} : { thread_hash: hash(threadId) }),
+          }
+    const extra =
+      hash !== undefined &&
+      actorId !== undefined &&
+      actorId !== '' &&
+      typeof payload.dedupe_key === 'string' &&
+      payload.dedupe_key.includes(actorId)
+        ? { ...payload, dedupe_key: `h:${hash(payload.dedupe_key)}` }
+        : payload
     await this.events.append({
       schema_version: 1,
       workspace_id: event.workspace_id,
       type,
       actor: { kind: 'system', id: `channel:${event.channel}` },
       subject: { type: 'message', id: event.id },
-      correlation: { trace_id: `tr_${sha256(event.dedupe_key).slice(0, 16)}` },
+      // WP308：IM 管线的去重键可能拼着账号 id，连 trace_id 也走加盐的哈希
+      correlation: {
+        trace_id: `tr_${hash === undefined ? sha256(event.dedupe_key).slice(0, 16) : hash(event.dedupe_key)}`,
+      },
       payload: {
         inbound_id: event.id,
         channel: event.channel,
         raw_ref: event.raw_ref,
         routing: event.routing,
-        ...(event.actor === undefined ? {} : { actor_external_id: event.actor.external_id }),
-        ...(event.thread === undefined ? {} : { thread_external_id: event.thread.external_id }),
+        ...ids,
         // WP55：渠道细分只记结论（marketplace / 消息类型 / 置信），正文永不进日志
         ...(event.sub_channel === undefined ? {} : { sub_channel: event.sub_channel }),
         ...(event.channel_meta === undefined ? {} : { channel_meta: event.channel_meta }),
-        ...payload,
+        ...extra,
       },
     })
   }

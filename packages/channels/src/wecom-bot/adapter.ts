@@ -13,6 +13,9 @@
  *    只记一笔——IM 里补发的旧消息比不发更糟。
  * 4. **断线重连**：退避梯子封顶 30s；同一个机器人同时只有一条连接（文档），
  *    所以重连前一定先把旧的关掉。
+ * 5. **判死**（WP308，决策 451）：心跳发出去、到下一次心跳之前一帧都没收到 → 当它断了，
+ *    掐掉重连（走代理时上游断了、本地这头不 close 的「假活」，与飞书 WP306 那个洞同一类）；
+ *    握手（连上 → 订阅成功）15 秒没完成也掐掉重连。状态变化经 `on_state` 报给宿主。
  *
  * WebSocket 本身是**注入的**（`WecomSocketFactory`）：`@agentsws/channels` 不依赖
  * `ws`，测试用内存替身或本机 `127.0.0.1` 上的假服务器，CI 一行网都不出。
@@ -31,8 +34,10 @@ import type { RawStore } from '../raw-store.js'
 import { scrubSecrets } from '../secrets.js'
 import {
   CMD_PONG,
+  HANDSHAKE_TIMEOUT_MS,
   HEARTBEAT_MS,
   isAddressedToBot,
+  isDisconnectedEvent,
   isInboundEvent,
   isInboundMessage,
   pingFrame,
@@ -41,6 +46,8 @@ import {
   RECONNECT_BACKOFF_MS,
   REPLY_WINDOW_MS,
   respondTextFrame,
+  STREAM_MAX_MS,
+  streamTextFrame,
   subscribeFrame,
   subscribeOk,
   textOfInbound,
@@ -55,6 +62,8 @@ import {
 export interface WecomSocket {
   send(data: string): void
   close(): void
+  /** WP308：判死时立刻掐断（`ws` 有；没有就退回 `close`）。 */
+  terminate?(): void
   on(event: 'open', cb: () => void): void
   on(event: 'message', cb: (data: unknown) => void): void
   on(event: 'close', cb: () => void): void
@@ -62,6 +71,9 @@ export interface WecomSocket {
 }
 
 export type WecomSocketFactory = (url: string) => WecomSocket
+
+/** WP308：长连接状态（与飞书 / 钉钉同一组名字，卡片按它显示）。 */
+export type WecomConnState = 'idle' | 'connecting' | 'connected' | 'reconnecting' | 'failed'
 
 /** 入站事件的前半段（与微信那条同形状）。 */
 export interface WecomInboundHead {
@@ -88,6 +100,8 @@ export interface WecomPendingReply {
   chat_type: 'single' | 'group'
   from_user_id: string
   received_at_ms: number
+  /** WP308：已经开了的那条流式回复（先回过「收到」）；之后的回复都刷这一条。 */
+  stream?: { id: string; started_at_ms: number }
 }
 
 export interface WecomBotAdapterOptions {
@@ -101,6 +115,12 @@ export interface WecomBotAdapterOptions {
   url?: string
   newId(): string
   heartbeat_ms?: number
+  /** WP308：握手（连上 → 订阅成功）最多等多久，缺省 15 秒。 */
+  handshake_timeout_ms?: number
+  /** WP308：重连退避（测试调快），缺省 `RECONNECT_BACKOFF_MS`。 */
+  backoff_ms?: readonly number[]
+  /** WP308：连接状态真的变了（`prev` → `state`）。人点断开（`stop`）不报。 */
+  on_state?(state: WecomConnState, prev: WecomConnState): void
   reply_window_ms?: number
   rate?: { per_minute?: number; per_hour?: number }
   raw_secret_policy?: 'redact' | 'keep'
@@ -124,6 +144,11 @@ export class WecomBotAdapter {
   #subscribed = false
   #attempt = 0
   #heartbeat: ReturnType<typeof setInterval> | undefined
+  #handshake: ReturnType<typeof setTimeout> | undefined
+  /** 心跳发出去之后还没收到任何一帧（下一次心跳时还是 true = 判死）。 */
+  #awaiting = false
+  #state: WecomConnState = 'idle'
+  #error: string | undefined
   #received = 0
   #reconnects = 0
 
@@ -138,6 +163,16 @@ export class WecomBotAdapter {
 
   get connected(): boolean {
     return this.#subscribed
+  }
+
+  /** WP308：连不上时给人看的一句话（订阅被拒 / 被别处顶掉）。 */
+  get lastError(): string | undefined {
+    return this.#error
+  }
+
+  /** WP308：连接状态（卡片上「连接中 / 已连接 / 断了，在重连 / 连不上」）。 */
+  get state(): WecomConnState {
+    return this.#state
   }
 
   get received(): number {
@@ -159,16 +194,19 @@ export class WecomBotAdapter {
   ): Promise<void> {
     if (this.#running) return
     this.#running = true
+    this.#setState('connecting')
     await this.#connect(onMessage)
   }
 
   async stop(): Promise<void> {
     this.#running = false
     this.#subscribed = false
-    if (this.#heartbeat !== undefined) clearInterval(this.#heartbeat)
-    this.#heartbeat = undefined
-    this.#socket?.close()
+    // 人点断开 / 进程在关：不报状态变化（那不是「断了」）
+    this.#state = 'idle'
+    this.#clearTimers()
+    const s = this.#socket
     this.#socket = undefined
+    s?.close()
   }
 
   /**
@@ -220,7 +258,11 @@ export class WecomBotAdapter {
    * 三道门，按顺序：连上了没 → 还在 24h 窗口里没 → 限额还有没有。
    * 任何一道没过都**不发也不排队**，返回一个说得清的理由。
    */
-  async reply(msgid: string, text: string): Promise<{ sent: boolean; reason?: string }> {
+  async reply(
+    msgid: string,
+    text: string,
+    opts: { keep?: boolean } = {},
+  ): Promise<{ sent: boolean; reason?: string }> {
     const pending = this.#pending.get(msgid)
     if (pending === undefined) return { sent: false, reason: 'unknown_message' }
     const now_ms = Date.parse(this.#options.clock.now())
@@ -231,9 +273,36 @@ export class WecomBotAdapter {
     }
     if (this.#socket === undefined || !this.#subscribed)
       return { sent: false, reason: 'not_connected' }
-    if (!this.#take(pending.chat_id, now_ms)) return { sent: false, reason: 'rate_limited' }
-    this.#socket.send(JSON.stringify(respondTextFrame({ req_id: pending.req_id, text })))
-    this.#pending.delete(msgid)
+    /*
+     * WP308（决策 451）：`keep` = 这一句不是最后一句（先回「收到，我查一下」）。普通回复一条消息只能回一次，
+     * 所以用**流式回复**：先开一条流（`finish=false`）放「收到」，之后的回复都刷这一条，最后一句 `finish=true`。
+     * 流过了 10 分钟（文档时限）就退回普通文本回复。
+     */
+    const stream =
+      pending.stream !== undefined && now_ms - pending.stream.started_at_ms < STREAM_MAX_MS
+        ? pending.stream
+        : undefined
+    // 刷同一条流不算一条新消息；新开的（流或普通回复）才占限额
+    if (stream === undefined && !this.#take(pending.chat_id, now_ms))
+      return { sent: false, reason: 'rate_limited' }
+    if (stream !== undefined || opts.keep === true) {
+      const id = stream?.id ?? this.#options.newId()
+      if (stream === undefined) pending.stream = { id, started_at_ms: now_ms }
+      this.#socket.send(
+        JSON.stringify(
+          streamTextFrame({
+            req_id: pending.req_id,
+            stream_id: id,
+            text,
+            finish: opts.keep !== true,
+          }),
+        ),
+      )
+    } else {
+      delete pending.stream
+      this.#socket.send(JSON.stringify(respondTextFrame({ req_id: pending.req_id, text })))
+    }
+    if (opts.keep !== true) this.#pending.delete(msgid)
     return { sent: true }
   }
 
@@ -266,14 +335,27 @@ export class WecomBotAdapter {
     if (creds === undefined) {
       // 没配 BotID / Secret：不空转，等有人去设置页填了再 start 一次
       this.#running = false
+      this.#state = 'idle'
       return
     }
+    if (!this.#running) return
     // 文档：同一个机器人同时只保持一条有效长连接 → 连之前先把旧的关掉
-    this.#socket?.close()
+    const old = this.#socket
+    this.#socket = undefined
+    old?.close()
     const socket = make(this.#options.url ?? WECOM_WS_URL)
     this.#socket = socket
+    this.#awaiting = false
+    // WP308：握手（连上 → 订阅成功）卡住就掐掉重连
+    if (this.#handshake !== undefined) clearTimeout(this.#handshake)
+    this.#handshake = setTimeout(() => {
+      this.#handshake = undefined
+      if (this.#socket === socket && !this.#subscribed) this.#kill(socket, onMessage)
+    }, this.#options.handshake_timeout_ms ?? HANDSHAKE_TIMEOUT_MS)
+    this.#handshake.unref?.()
 
     socket.on('open', () => {
+      if (this.#socket !== socket) return
       socket.send(
         JSON.stringify(
           subscribeFrame({
@@ -286,6 +368,10 @@ export class WecomBotAdapter {
     })
 
     socket.on('message', (data) => {
+      // 已经换下来 / 判死掐掉的旧连接上的帧不算
+      if (this.#socket !== socket) return
+      // 收到任何一帧（含心跳回包）都说明它还活着
+      this.#awaiting = false
       void this.#onFrame(data, onMessage)
     })
 
@@ -294,21 +380,60 @@ export class WecomBotAdapter {
     })
 
     socket.on('close', () => {
-      this.#subscribed = false
-      if (this.#heartbeat !== undefined) clearInterval(this.#heartbeat)
-      this.#heartbeat = undefined
-      if (!this.#running) return
-      this.#reconnects += 1
-      const idx = Math.min(this.#attempt, RECONNECT_BACKOFF_MS.length - 1)
-      const delay = RECONNECT_BACKOFF_MS[idx] ?? 30_000
-      this.#attempt += 1
-      setTimeout(() => {
-        if (!this.#running) return
-        void this.#connect(onMessage).catch((e: unknown) => {
-          this.#options.on_error?.(e)
-        })
-      }, delay)
+      // 旧连接的 close（换连接 / 判死时我们自己关的）不再触发一次重连
+      if (this.#socket !== socket) return
+      this.#socket = undefined
+      this.#lost(onMessage)
     })
+  }
+
+  /** 这条连接没了（对端关了 / 判死）：清定时器、报「在重连」、按退避再连。 */
+  #lost(onMessage: (body: WecomInboundBody, pending: WecomPendingReply) => Promise<void>): void {
+    this.#subscribed = false
+    this.#clearTimers()
+    if (!this.#running) return
+    this.#reconnects += 1
+    this.#setState('reconnecting')
+    const ladder = this.#options.backoff_ms ?? RECONNECT_BACKOFF_MS
+    const delay = ladder[Math.min(this.#attempt, ladder.length - 1)] ?? 30_000
+    this.#attempt += 1
+    const timer = setTimeout(() => {
+      if (!this.#running) return
+      void this.#connect(onMessage).catch((e: unknown) => {
+        this.#options.on_error?.(e)
+      })
+    }, delay)
+    timer.unref?.()
+  }
+
+  /** WP308：判死——掐掉这条（不等它慢慢 close），当场按断线处理。 */
+  #kill(
+    socket: WecomSocket,
+    onMessage: (body: WecomInboundBody, pending: WecomPendingReply) => Promise<void>,
+  ): void {
+    if (this.#socket !== socket) return
+    this.#socket = undefined
+    try {
+      if (socket.terminate !== undefined) socket.terminate()
+      else socket.close()
+    } catch (e) {
+      this.#options.on_error?.(e)
+    }
+    this.#lost(onMessage)
+  }
+
+  #clearTimers(): void {
+    if (this.#heartbeat !== undefined) clearInterval(this.#heartbeat)
+    this.#heartbeat = undefined
+    if (this.#handshake !== undefined) clearTimeout(this.#handshake)
+    this.#handshake = undefined
+    this.#awaiting = false
+  }
+
+  #setState(state: WecomConnState): void {
+    const prev = this.#state
+    this.#state = state
+    if (prev !== state) this.#options.on_state?.(state, prev)
   }
 
   async #onFrame(
@@ -325,19 +450,40 @@ export class WecomBotAdapter {
     if (frame.cmd === CMD_PONG) return
     if (subscribeOk(frame)) {
       this.#subscribed = true
+      this.#error = undefined
       this.#attempt = 0
-      this.#startHeartbeat()
+      if (this.#handshake !== undefined) clearTimeout(this.#handshake)
+      this.#handshake = undefined
+      this.#startHeartbeat(onMessage)
+      this.#setState('connected')
       return
     }
     if (frame.cmd === 'aibot_subscribe') {
       // 订阅被拒（BotID / Secret 不对）：不重试到天荒地老，交给上层去提示重填
       this.#subscribed = false
+      if (this.#handshake !== undefined) clearTimeout(this.#handshake)
+      this.#handshake = undefined
+      this.#error = '企业微信不认这组 BotID / Secret。去企业微信后台核一下再填。'
+      this.#setState('failed')
       this.#options.on_error?.(
         new ChannelError(
           'unauthenticated',
           `企业微信订阅被拒：${frame.errmsg ?? `errcode=${frame.errcode ?? 'none'}`}`,
         ),
       )
+      return
+    }
+    if (isDisconnectedEvent(frame)) {
+      /*
+       * WP308：被别处的新连接顶掉了（同一个机器人只能有一条连接）。不再自动重连——
+       * 两边都自动重连就会互相踢个没完。卡片上说一句，等人决定留哪一边（重填一次凭据就会再连）。
+       */
+      this.#running = false
+      this.#subscribed = false
+      this.#clearTimers()
+      this.#error = '这个企业微信机器人在别的地方连上了，这边让出来了。要用这边，重新保存一次凭据。'
+      this.#setState('failed')
+      this.#options.on_error?.(new ChannelError('conflict', '企业微信长连接被别处的连接顶掉'))
       return
     }
     if (isInboundEvent(frame)) return
@@ -364,11 +510,22 @@ export class WecomBotAdapter {
     }
   }
 
-  #startHeartbeat(): void {
+  #startHeartbeat(
+    onMessage: (body: WecomInboundBody, pending: WecomPendingReply) => Promise<void>,
+  ): void {
     if (this.#heartbeat !== undefined) clearInterval(this.#heartbeat)
+    this.#awaiting = false
     this.#heartbeat = setInterval(() => {
+      const socket = this.#socket
+      if (socket === undefined) return
+      // WP308：上一次心跳到现在一帧都没回 → 判死（最坏约两个心跳间隔发现，默认 60 秒）
+      if (this.#awaiting) {
+        this.#kill(socket, onMessage)
+        return
+      }
       try {
-        this.#socket?.send(JSON.stringify(pingFrame(this.#options.newId())))
+        socket.send(JSON.stringify(pingFrame(this.#options.newId())))
+        this.#awaiting = true
       } catch (e) {
         this.#options.on_error?.(e)
       }
