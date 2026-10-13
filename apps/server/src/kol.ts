@@ -157,6 +157,8 @@ export interface KolStoreOptions {
   workspace_id: WorkspaceId
   /** 这个品牌的落盘目录（`BrandModules` 给的那一个）。不给就全内存。 */
   dbDir?: string
+  /** WP302：现在几点（阶段变了时给 `stage_changed_at` 盖戳）。不给就用系统时间。 */
+  now?: () => string
 }
 
 export interface KolStore {
@@ -402,6 +404,8 @@ export type KolExtraTable = Extract<
   'account_observation' | 'content' | 'content_observation' | 'bio_link_observation'
 >
 
+const nowIso = (): string => new Date().toISOString()
+
 export function createKolStore(options: KolStoreOptions): KolStore {
   const backend =
     options.dbDir === undefined
@@ -480,7 +484,20 @@ export function createKolStore(options: KolStoreOptions): KolStore {
     saveCreator: (row) => backend.put('creator', row.id, row),
     saveAccount: (row) => backend.put('platform_account', row.id, row),
     saveContact: (row) => backend.put('creator_contact', row.id, row),
-    saveCollaboration: (row) => backend.put('collaboration', row.id, row),
+    /*
+     * WP302（决策 406）：**阶段一变就盖戳**（`stage_changed_at`）——推阶段、发首封、议价批了、
+     * 寄样、演练回信……每一条改阶段的路都经过这一行，不用各自记得写。调用方自己带了新时刻的照用。
+     */
+    saveCollaboration: (row) => {
+      const prev = backend.get<Collaboration>('collaboration', row.id)
+      const moved = prev === undefined || prev.stage !== row.stage
+      const fresh = row.stage_changed_at !== undefined && row.stage_changed_at !== prev?.stage_changed_at
+      backend.put(
+        'collaboration',
+        row.id,
+        moved && !fresh ? { ...row, stage_changed_at: (options.now ?? nowIso)() } : row,
+      )
+    },
     saveDeliverable: (row) => backend.put('deliverable', row.id, row),
     saveLink: (row) => backend.put('tracked_link', row.id, row),
     saveExchange: (row) => backend.put('exchange', row.id, row),

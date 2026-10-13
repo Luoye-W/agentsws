@@ -3329,7 +3329,11 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
      */
     // WP67（48 §5.2）：这个品牌的红人库（六类对象，落在这个品牌自己的目录下）。
     // 建在记录源之前：记录源要拿它读红人与合作（`kol: () => kol`）。
-    const kol = createKolStore({ workspace_id: ws, ...(dir === undefined ? {} : { dbDir: dir }) })
+    const kol = createKolStore({
+      workspace_id: ws,
+      now: () => clock.now(),
+      ...(dir === undefined ? {} : { dbDir: dir }),
+    })
     /**
      * WP72（56 §2 数据面）：这个品牌的社媒库（四类对象，落在这个品牌自己的目录下）。
      * 与红人库并排建，理由一样：记录源要拿它读账号与线程（`social: () => social`）。
