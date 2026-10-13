@@ -64,6 +64,9 @@ const state: {
   setTodoStatus: ReturnType<typeof vi.fn>
   scheduleTodo: ReturnType<typeof vi.fn>
   view: unknown
+  /** WP295：按分配 id 给不同的视图 / 数字（不给就用上面那一份） */
+  views?: Record<string, unknown>
+  tiles?: Record<string, number>
 } = {
   view: undefined,
   work: undefined as unknown as PositionWorkView,
@@ -199,11 +202,14 @@ vi.mock('@/lib/api', async () => {
       },
       pinned_p0: [],
     }),
-    getPositionView: async () => state.view,
+    getPositionView: async (id: string) => state.views?.[id] ?? state.view,
     getBlockData: async (id: string) => ({
       block: { id, component: 'stat_tile', title: '总销售额', source: 'shop' },
       status: 'ok',
-      payload: { value: 22.5, previous: 20, delta_pct: 12.5, spark: [], currency: 'USD' },
+      payload:
+        state.tiles?.[id] === undefined
+          ? { value: 22.5, previous: 20, delta_pct: 12.5, spark: [], currency: 'USD' }
+          : { value: state.tiles[id], previous: state.tiles[id], spark: [] },
     }),
     getPositionRecords: async () => ({ payload: { rows: [] } }),
     getPositionConnections: async () => ({
@@ -309,6 +315,8 @@ beforeEach(() => {
   state.missing = []
   state.setTodoStatus = vi.fn(async () => ({ todo: {} }))
   state.scheduleTodo = vi.fn(async () => ({ todo: {} }))
+  delete state.views
+  delete state.tiles
   state.view = {
     position_id: 'asg_pr',
     range: 'yesterday',
@@ -516,6 +524,36 @@ describe('数据看板', () => {
       expect(screen.getAllByTestId('data-row')[1]?.getAttribute('data-shared')).toBe('true')
     })
     expect(rows).toHaveLength(2)
+  })
+
+  it('WP295：几个数全是 0 的职责并成一行「X：还没有数」，不再一行一行摆 0', async () => {
+    const tileView = (id: string) => ({
+      position_id: 'asg_pr',
+      range: 'yesterday',
+      sections: [
+        {
+          source: 'kol',
+          label: '红人库',
+          connected: true,
+          blocks: [{ id, component: 'stat_tile', title: '在谈 / 合作中', source: 'kol' }],
+        },
+      ],
+    })
+    state.views = {
+      asg_pr: tileView('kol.youtube.active'),
+      asg_social: tileView('kol.instagram.active'),
+    }
+    state.tiles = { 'kol.youtube.active': 3, 'kol.instagram.active': 0 }
+    openAt()
+    const quiet = await screen.findByTestId('data-row-quiet')
+    expect(quiet.textContent).toContain('自家版运营：还没有数')
+    expect(screen.getAllByTestId('data-row')).toHaveLength(1)
+    // 展开「看图表」时每条职责照常一行（要看的就是全部）
+    fireEvent.click(screen.getByTestId('data-charts-toggle'))
+    await waitFor(() => {
+      expect(screen.getAllByTestId('data-row')).toHaveLength(2)
+    })
+    expect(screen.queryByTestId('data-row-quiet')).toBeNull()
   })
 })
 
