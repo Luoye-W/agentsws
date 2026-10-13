@@ -25,6 +25,7 @@ import {
   describeAttributionReply,
   describeFindReply,
   describeKolRun,
+  describePendingReviewReply,
   describeQuietReply,
   describeWhoToWriteReply,
   type KolFoundCreator,
@@ -161,6 +162,29 @@ export interface KolFinding {
   /** WP295：归因那一步读到的链接（「哪几个真带货了」那张表）与还没建链接的合作。 */
   links?: { name: string; clicks: number; orders: number; revenue: number }[]
   withoutLink?: string[]
+  /** WP295：交付物清单那一步读到的（「审一条稿」那张表）。 */
+  deliverables?: { name: string; kind: string; due_at?: string; url?: string }[]
+}
+
+/** WP295：交付物清单里的行（带名字的才算）。 */
+export function deliverablesOf(data: unknown): KolFinding['deliverables'] {
+  if (data === null || typeof data !== 'object') return undefined
+  const rows = (data as Record<string, unknown>).rows
+  if (!Array.isArray(rows)) return undefined
+  return rows.flatMap((row) => {
+    if (row === null || typeof row !== 'object') return []
+    const r = row as Record<string, unknown>
+    if (typeof r.display_name !== 'string') return []
+    return [
+      {
+        name: r.display_name,
+        kind: typeof r.kind === 'string' ? r.kind : '',
+        ...(typeof r.due_at === 'string' ? { due_at: r.due_at } : {}),
+        // 只认 http(s)：时间线的安全 markdown 也只认这一种外链
+        ...(typeof r.url === 'string' && /^https?:\/\//.test(r.url) ? { url: r.url } : {}),
+      },
+    ]
+  })
 }
 
 /** WP295：归因结果里的行与「还没建链接」那几位。认不出就不给。 */
@@ -277,6 +301,17 @@ export function renderKolAnswer(input: {
       channel: input.channel,
       days: input.quietDays ?? 7,
       rows: quiet.collabs,
+      links: input.links,
+    }).join('\n')
+  const review = input.findings.find((f) => f.tool === 'list_deliverables' && f.status === 'ok')
+  if (
+    input.intent === 'deliverable_review' &&
+    review?.deliverables !== undefined &&
+    input.findings.length === 1
+  )
+    return describePendingReviewReply({
+      channel: input.channel,
+      rows: review.deliverables,
       links: input.links,
     }).join('\n')
   const attribution = input.findings.find(

@@ -334,7 +334,24 @@ export function createKolToolExecutor(options: KolToolsOptions): ToolExecutor {
             : { collaboration_id: str(input.collaboration_id) }),
           ...(input.pending === true ? { pending: true } : {}),
         })
-        return rowsOf(res.rows, 'deliverable')
+        /*
+         * WP295：每行带上是谁交的（以前只有 `collaboration_id`，「审一条稿」答出来是「看交付物：2 条」）。
+         * 认得出合作的才带名字；别的渠道的交付物不在这条职责的清单里。
+         */
+        const collabs = new Map(
+          (await port.collaborations(actor, { channel })).rows.map((c) => [c.id, c]),
+        )
+        const names = new Map(
+          (await port.creators(actor, { channel })).rows.map((r) => [r.creator_id, r.display_name]),
+        )
+        const rows = res.rows
+          .filter((d) => collabs.has(d.collaboration_id))
+          .map((d) => {
+            const c = collabs.get(d.collaboration_id)
+            const name = c === undefined ? undefined : names.get(c.creator_id)
+            return name === undefined ? d : { ...d, display_name: name }
+          })
+        return rowsOf(rows, 'deliverable')
       }
 
       case 'add_to_campaign': {

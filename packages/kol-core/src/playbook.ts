@@ -717,6 +717,40 @@ export function describeAttributionReply(input: {
   return lines
 }
 
+/**
+ * WP295：「审一条稿」没点名哪一条——列出待审的（是谁 · 什么 · 哪天交 · 链接），说清去哪儿审。
+ * 以前回「看交付物：2 条」。
+ */
+export function describePendingReviewReply(input: {
+  channel: string
+  rows: readonly { name: string; kind: string; due_at?: string; url?: string }[]
+  links?: KolReplyLinks | undefined
+}): string[] {
+  const where = channelZh(input.channel)
+  if (input.rows.length === 0) return [`${where} 上现在没有待审的交付物。`]
+  const lines = [`${where} 上有 ${input.rows.length} 条交付物等你审：`, '']
+  lines.push('| 红人 | 形态 | 交稿 | 链接 |', '|---|---|---|---|')
+  for (const r of input.rows.slice(0, 10))
+    lines.push(
+      `| ${r.name.replace(/\|/g, '/')} | ${KIND_ZH[r.kind] ?? r.kind} | ${r.due_at?.slice(0, 10) ?? '—'} | ${r.url === undefined ? '还没给' : `[看一眼](${r.url})`} |`,
+    )
+  const threads = link('合作线程', input.links?.threads)
+  lines.push(
+    '',
+    `在${threads ?? '合作线程'}里点开那一条：广告标识、禁用词、链接与折扣码逐条对，选通过 / 要改 / 不合格，结论出一张卡等你批。`,
+  )
+  return lines
+}
+
+const KIND_ZH: Readonly<Record<string, string>> = {
+  video: '视频',
+  post: '帖子',
+  story: '快拍',
+  reel: 'Reels',
+  thread: '长帖',
+  live: '直播',
+}
+
 /** 渠道 id → 名字（`youtube` → `YouTube`）。认不出原样给。 */
 function channelZh(channel: string): string {
   return KOL_CHANNELS.find((c) => c.id === channel)?.zh ?? channel

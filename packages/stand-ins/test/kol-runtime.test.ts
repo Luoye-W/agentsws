@@ -273,6 +273,44 @@ describe('stub 的红人剧本', () => {
     expect(text).not.toContain('看合作清单')
   })
 
+  it('WP295「审一条稿」没点名哪一条：列出待审的（是谁 · 什么 · 哪天交 · 链接），说清去哪儿审', async () => {
+    const rec = recorder({
+      list_deliverables: {
+        rows: [
+          {
+            id: 'dv_1',
+            display_name: 'Gadget Jonas',
+            kind: 'video',
+            due_at: '2026-10-16T00:00:00.000Z',
+            url: 'https://www.youtube.com/watch?v=demo1',
+          },
+          { id: 'dv_2', display_name: 'Gadget Jonas', kind: 'post', url: 'javascript:alert(1)' },
+        ],
+      },
+    })
+    const runtime = createStubRuntime({ clock, executeTool: rec.executeTool })
+    const { result } = await runAndCollect(
+      runtime,
+      makeRequest({
+        roleId: 'kol.youtube',
+        threadSubject: '审一条稿',
+        threadBody: '红人交的这条视频审一遍：该标的广告标识、禁用词、链接和折扣码对不对',
+        allow: ['list_deliverables'],
+        outputs: ['answer'],
+      }),
+    )
+    expect(rec.calls).toEqual([{ name: 'list_deliverables', input: { pending: true } }])
+    const a = result.outputs.find((o) => o.kind === 'answer')
+    const text = a?.kind === 'answer' ? a.text : ''
+    expect(text).toContain('有 2 条交付物等你审')
+    expect(text).toContain(
+      '| Gadget Jonas | 视频 | 2026-10-16 | [看一眼](https://www.youtube.com/watch?v=demo1) |',
+    )
+    // 不是 http(s) 的链接不往回话里放
+    expect(text).toContain('| Gadget Jonas | 帖子 | — | 还没给 |')
+    expect(text).toContain('通过 / 要改 / 不合格')
+  })
+
   it('客服那条职责一点没变（红人的岔口不许改客服的行为）', async () => {
     let drafted = 0
     const runtime = createStubRuntime({

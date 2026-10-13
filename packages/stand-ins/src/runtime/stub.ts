@@ -34,6 +34,7 @@ import {
   attributionOf,
   collabsOf,
   countOf,
+  deliverablesOf,
   describeKolRun,
   foundOf,
   type KolFinding,
@@ -715,6 +716,9 @@ export function createStubRuntime(options: StubRuntimeOptions): RuntimeAdapter {
             ...found,
             ...(collabs === undefined ? {} : { collabs }),
             ...(attribution ?? {}),
+            ...(call.tool === 'list_deliverables' && res.status === 'ok'
+              ? { deliverables: deliverablesOf(res.data) ?? [] }
+              : {}),
             ...(count === undefined ? {} : { count }),
             ...(res.reason === undefined ? {} : { reason: res.reason }),
             ...(receipt.approval_item_id === undefined && receipt.change_id === undefined

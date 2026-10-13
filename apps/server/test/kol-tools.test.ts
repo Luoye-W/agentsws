@@ -440,6 +440,25 @@ describe('十一个工具的执行器（对着一份假 KolPort 逐个走一遍�
     expect(data.without_link).toEqual(['Cable Kevin'])
   })
 
+  it('WP295 list_deliverables：每行带上是谁交的；别的渠道的不出', async () => {
+    const run = exec(
+      fakePort({
+        creators: async () => ({ rows: [{ creator_id: 'cr_1', display_name: 'Gadget Jonas' }] }),
+        collaborations: async () => ({ rows: [{ id: 'cb_1', creator_id: 'cr_1' }] }),
+        deliverables: async () => ({
+          rows: [
+            { id: 'dv_1', collaboration_id: 'cb_1', kind: 'video' },
+            { id: 'dv_9', collaboration_id: 'cb_ig', kind: 'reel' },
+          ],
+        }),
+      }),
+    )
+    const res = await run({ name: 'list_deliverables', input: { pending: true }, request })
+    expect((res.data as { rows: unknown[] }).rows).toEqual([
+      { id: 'dv_1', collaboration_id: 'cb_1', kind: 'video', display_name: 'Gadget Jonas' },
+    ])
+  })
+
   it('不是红人职责的人调红人工具：拒', async () => {
     const res = await exec()({
       name: 'draft_outreach',
