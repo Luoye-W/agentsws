@@ -321,6 +321,16 @@ export function DeckCardBody({
               {options.some((o) => o.id === 'leave') ? <CompanyNoticeExtras /> : null}
             </div>
           )
+        // WP304（决策 445）：买高级主题（「花钱」家族）——一个大数（积分）+ 一句这家店一次买断；不出双格、不出「以后都这样」
+        if (payload.form === 'theme_purchase')
+          return (
+            <div className="mt-2.5 flex flex-col gap-2" data-testid="deck-layout-theme-purchase">
+              <p className="text-2xl font-semibold text-ws-ink">
+                {t('themes.purchase.credits', { credits: Number(payload.price_credits ?? 0) })}
+              </p>
+              <Note testId="deck-reason">{reasonText}</Note>
+            </div>
+          )
         // WP284（决策 275）：「以后都这样」——标题就是那一句；太长被截了才把整句放进正文，
         // 下面一句说之后怎样、去哪儿改（不出改之前 / 改之后双格，不出「谁能批」那一行）
         if (payload.form === 'instruction_rule') {

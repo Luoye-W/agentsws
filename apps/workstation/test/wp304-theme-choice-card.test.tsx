@@ -110,7 +110,7 @@ describe('买高级主题卡（WP304，「花钱」家族）', () => {
         id: 'ap_theme_purchase',
         kind: 'theme_purchase',
         layout: 'policy',
-        title: '买下高级主题？这家店一次 560 积分',
+        title: '买下高级主题？',
         available_actions: ['approve', 'reject', 'snooze', 'open'],
         action_labels: { approve: '买下', reject: '先不买', snooze: '稍后' },
         detail: { ...base.detail, payload: { form: 'theme_purchase', price_credits: 560 } },
@@ -120,5 +120,8 @@ describe('买高级主题卡（WP304，「花钱」家族）', () => {
     expect(within(bar).getByText('买下')).toBeTruthy()
     expect(within(bar).getByText('先不买')).toBeTruthy()
     expect(screen.getByTestId('deck-band').textContent).toContain('高级主题')
+    // 「花钱」卡：一个大数，不出「点通过以后都这样做」那一行
+    expect(screen.getByTestId('deck-layout-theme-purchase').textContent).toContain('560 积分')
+    expect(screen.queryByText(/以后都这样做/)).toBeNull()
   })
 })

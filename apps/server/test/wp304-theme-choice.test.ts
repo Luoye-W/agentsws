@@ -292,7 +292,8 @@ describe('高级主题（WP304）', () => {
     await t.onThemeCardDecided?.(decided(items[0] as ApprovalItem, 'premium'))
     const buy = items[1]
     expect(buy?.kind).toBe('theme_purchase')
-    expect(buy?.title).toContain('560 积分')
+    expect(buy?.title).toBe('买下高级主题？')
+    expect(buy?.summary).toContain('$80')
     expect(buy?.payload).toMatchObject({ form: 'theme_purchase', shop: SHOP, price_credits: 560 })
     expect(credits).toBe(1000)
     expect(resumed).toEqual([])

@@ -185,4 +185,14 @@ describe('开源仓的边界：不带 Shopify 主题代码（WP301）', () => {
       expect(hits).toEqual([])
     },
   )
+
+  // WP304（决策 445）：高级主题只从云上私有存储按店下载、只进用户自己的工作目录与他的店——仓库里没有它的包
+  it.skipIf(tracked === undefined)('没有高级主题包（zip / tar.gz）；安装包配置里也不带', () => {
+    expect(
+      (tracked ?? []).filter((p) => /\.(zip|tgz|tar\.gz)$/.test(p) && /theme/i.test(p)),
+    ).toEqual([])
+    const builder = join(ROOT, 'apps/desktop/electron-builder.yml')
+    if (existsSync(builder))
+      expect(readFileSync(builder, 'utf8')).not.toMatch(/premium|theme-base|agentsws-theme/i)
+  })
 })

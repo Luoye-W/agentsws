@@ -55,6 +55,8 @@ import {
   demoOldReddit,
   demoShop,
   demoWebSearch,
+  FAKE_OS2_THEME_FILES,
+  FAKE_VINTAGE_THEME_FILES,
   periodQueryRunner,
   platformCliStandIn,
   readonlyBrowserStandIn,
@@ -1460,6 +1462,16 @@ export async function createDemo(options: DemoOptions): Promise<Demo> {
     siteTheme: ((): NonNullable<ServerOptions['siteTheme']> => {
       // WP258：登好了替身账号下有两家店（岗位页演得出「选一下是哪家店」的下拉框）
       const run = themeCliStandIn({
+        // WP304：店里另有一份手写的 Dawn 那一代形状 2.0 主题（编的 Lumen）和一份老主题——选主题卡演得出「能选 / 太老」
+        themes: [
+          { id: '100002', name: 'Lumen', role: 'unpublished', files: { ...FAKE_OS2_THEME_FILES } },
+          {
+            id: '100003',
+            name: 'Classic 2019',
+            role: 'unpublished',
+            files: { ...FAKE_VINTAGE_THEME_FILES },
+          },
+        ],
         orgs: [
           {
             id: '1234567',

@@ -1652,7 +1652,7 @@ export function createSiteTheme(options: SiteThemeOptions): SiteThemeAssembly {
       ...cardBase({ ...input, seen: [] }),
       kind: 'theme_purchase',
       dedupe_key: `theme_purchase:${input.shop}@${now()}:${ws}`,
-      title: `买下高级主题？这家店一次 ${PREMIUM_THEME_PRICE_CREDITS} 积分`,
+      title: '买下高级主题？',
       summary: `${input.shop} 一次买断（$${PREMIUM_THEME_PRICE_USD}），以后升级不另收钱。点「买下」才扣积分。`,
       payload,
       risk_class: 'medium',

@@ -24,6 +24,7 @@ export const THEMES_ZH: Record<string, string> = {
   'themes.choice.too_old': '太老，改不了',
   'themes.choice.none': '店里还没有能改的免费主题',
   'themes.choice.store_link': '去主题商店装 Horizon',
+  'themes.purchase.credits': '{credits} 积分',
 }
 
 export const THEMES_EN: Record<string, string> = {
@@ -48,4 +49,5 @@ export const THEMES_EN: Record<string, string> = {
   'themes.choice.too_old': 'Too old to edit',
   'themes.choice.none': 'No editable free theme in your store yet',
   'themes.choice.store_link': 'Get Horizon in the Theme Store',
+  'themes.purchase.credits': '{credits} credits',
 }
