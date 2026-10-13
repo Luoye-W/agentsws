@@ -48,6 +48,9 @@ const ALLOWED_KEYS = [
   // 图层不是"哪些事存在"，是"这一屏现在画哪几类"；丢了最坏的结果是下次打开回默认三层。
   'agentsws.calendar.layers',
   'agentsws.calendar.view',
+  // WP298：「刚因为新版分块加载失败整页重载过」的时刻，放 sessionStorage（关窗就没）——
+  // 只是一个毫秒数，用来不让重载转圈，不是业务对象。
+  'agentsws.preload_reload_at',
 ]
 /** 未发送的草稿走这个前缀（40 §1.2 明确允许的那一类）。 */
 const DRAFT_PREFIX = 'agentsws.draft.'

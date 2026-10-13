@@ -9,8 +9,9 @@
  *   让错误照常抛给错误边界，显示「这一块没加载出来」，并记一条日志。不死循环。
  */
 import { reportClientError } from './client-errors.js'
+import { PRELOAD_RELOAD_KEY, sessionStore } from './ui-state.js'
 
-export const PRELOAD_RELOAD_KEY = 'agentsws.preload-reload-at'
+export { PRELOAD_RELOAD_KEY }
 export const PRELOAD_RELOAD_WINDOW_MS = 30_000
 
 interface Deps {
@@ -44,14 +45,6 @@ export function handlePreloadError(event: Event, deps: Deps): boolean {
   event.preventDefault()
   reload()
   return true
-}
-
-function sessionStore(): Storage | undefined {
-  try {
-    return globalThis.sessionStorage ?? undefined
-  } catch {
-    return undefined
-  }
 }
 
 /** 挂到 window 上。返回拆掉的函数。 */
