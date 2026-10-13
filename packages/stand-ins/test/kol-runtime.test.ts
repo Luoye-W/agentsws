@@ -100,8 +100,9 @@ describe('stub 的红人剧本', () => {
     )
     const answer = result.outputs.find((o) => o.kind === 'answer')
     const text = answer?.kind === 'answer' ? answer.text : ''
-    expect(text).toContain('- Gadget Jonas（4.8 万粉）')
-    expect(text).toContain('- Desk Rosa（3.1 万粉）')
+    // WP295：找到的人是一张表（岗位页画成表格组件）
+    expect(text).toContain('| Gadget Jonas | 4.8 万 | — | — |')
+    expect(text).toContain('| Desk Rosa | 3.1 万 | — | — |')
     expect(text).toMatch(/\[去候选池看全部\]\(\/positions\/[^)]+kol=pool\)/)
     expect(text).toContain('你要 20 个，库里只有 2 个在这个区间')
     expect(text).toContain('[关联官方数据接口](/settings/credits)')

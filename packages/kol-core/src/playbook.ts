@@ -494,6 +494,9 @@ export function kolToolZh(tool: string): string {
 export interface KolFoundCreator {
   name: string
   followers?: number
+  /** WP295：表格里那两列（有才填）。 */
+  engagement_rate?: number
+  score?: number
 }
 
 /** 回话里那几个站内链接（服务端知道这条职责的分配 id，拼好了递进来）。 */
@@ -560,11 +563,27 @@ export function describeFindReply(input: {
       ? `在 ${where} 上${band}找了一遍，一个合适的都没找到。`
       : `在 ${where} 上${band}找了一遍，找到 ${n} 个：`,
   )
-  for (const c of input.found.slice(0, KOL_REPLY_NAMES))
-    lines.push(`- ${c.name}${c.followers === undefined ? '' : `（${followersZh(c.followers)}）`}`)
-  if (n > KOL_REPLY_NAMES) lines.push(`- ……还有 ${n - KOL_REPLY_NAMES} 个`)
+  /*
+   * WP295（docs/96 P4 问答就是组件）：找到的人是一张**表**（名字 · 粉丝 · 互动率 · 分），不是
+   * 一串圆点。岗位页的当场回答认正文里的 Markdown 表格、画成表格组件；时间线里同样画成表。
+   * 表前表后各空一行：第一段是那一句话，表后面的话进末尾那块字。
+   */
+  if (n > 0) {
+    lines.push('', '| 红人 | 粉丝 | 互动率 | 分 |', '|---|---|---|---|')
+    for (const c of input.found.slice(0, KOL_REPLY_NAMES))
+      lines.push(
+        `| ${c.name.replace(/\|/g, '/')} | ${c.followers === undefined ? '—' : followersZh(c.followers).replace(/\s*粉$/u, '')} | ${
+          c.engagement_rate === undefined
+            ? '—'
+            : `${(Math.round(c.engagement_rate * 1000) / 10).toString()}%`
+        } | ${c.score === undefined ? '—' : String(c.score)} |`,
+      )
+    lines.push('')
+  }
   const pool = link('去候选池看全部', input.links?.pool)
-  if (n > 0 && pool !== undefined) lines.push(pool)
+  if (n > KOL_REPLY_NAMES)
+    lines.push(`……还有 ${n - KOL_REPLY_NAMES} 个${pool === undefined ? '' : `，${pool}`}`)
+  else if (n > 0 && pool !== undefined) lines.push(pool)
 
   const short = input.wanted !== undefined && n < input.wanted
   if (short || n === 0) {

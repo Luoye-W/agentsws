@@ -4,6 +4,7 @@
  * 断点 #1 的现象是「让红人岗位找 20 个频道，回的是客服的话」。这个文件钉住的就是
  * 那句话该被判成什么、该先调哪几个工具——**判错一次，整条链后面全是错的**。
  */
+import { splitAnswer } from '@agentsws/contracts'
 import { describe, expect, it } from 'vitest'
 import {
   channelInText,
@@ -242,6 +243,29 @@ describe('摘要', () => {
   })
 })
 
+describe('WP295 找人回话是「一句话 + 表格」（docs/96 P4）', () => {
+  it('岗位页当场回答拆得出：头一句是结论，第一块组件是那张表，后面的话进末尾那块字', () => {
+    const text = describeFindReply({
+      channel: 'youtube',
+      wanted: 20,
+      found: [{ name: 'Gadget Jonas', followers: 48_000, engagement_rate: 0.062, score: 90 }],
+      source: 'local_library',
+      links: {
+        pool: '/p?kol=pool',
+        linkAccount: '/settings/credits',
+        importTable: '/p?kol=campaign',
+      },
+    }).join('\n')
+    const split = splitAnswer(text)
+    expect(split.lead).toBe('在 YouTube 上找了一遍，找到 1 个：')
+    expect(split.components[0]).toMatchObject({
+      kind: 'table',
+      columns: ['红人', '粉丝', '互动率', '分'],
+    })
+    expect(split.components[1]?.kind).toBe('text')
+  })
+})
+
 describe('WP142 找人回话：是谁 / 为什么不够 / 下一步', () => {
   const links = {
     pool: '/positions/asg_1?tab=view&kol=pool',
@@ -256,15 +280,18 @@ describe('WP142 找人回话：是谁 / 为什么不够 / 下一步', () => {
     }))
     const lines = describeFindReply({ channel: 'youtube', wanted: 5, found, links })
     expect(lines[0]).toBe('在 YouTube 上找了一遍，找到 7 个：')
-    expect(lines.slice(1, 6)).toEqual([
-      '- A（1.2 万粉）',
-      '- B（1.3 万粉）',
-      '- C（1.4 万粉）',
-      '- D（1.5 万粉）',
-      '- E（1.6 万粉）',
+    // WP295：是一张表（名字 · 粉丝 · 互动率 · 分），岗位页画成表格组件
+    expect(lines.slice(1, 9)).toEqual([
+      '',
+      '| 红人 | 粉丝 | 互动率 | 分 |',
+      '|---|---|---|---|',
+      '| A | 1.2 万 | — | — |',
+      '| B | 1.3 万 | — | — |',
+      '| C | 1.4 万 | — | — |',
+      '| D | 1.5 万 | — | — |',
+      '| E | 1.6 万 | — | — |',
     ])
-    expect(lines).toContain('- ……还有 2 个')
-    expect(lines).toContain('[去候选池看全部](/positions/asg_1?tab=view&kol=pool)')
+    expect(lines).toContain('……还有 2 个，[去候选池看全部](/positions/asg_1?tab=view&kol=pool)')
     // 够数：不说原因、不给那两个动作
     expect(lines.join('\n')).not.toContain('想要更多人')
   })
@@ -275,7 +302,7 @@ describe('WP142 找人回话：是谁 / 为什么不够 / 下一步', () => {
       band: { min: 10_000, max: 100_000 },
       wanted: 20,
       found: [
-        { name: 'Gadget Jonas', followers: 48_000 },
+        { name: 'Gadget Jonas', followers: 48_000, engagement_rate: 0.062, score: 90 },
         { name: 'Desk Rosa', followers: 31_000 },
       ],
       source: 'local_library',
@@ -283,7 +310,7 @@ describe('WP142 找人回话：是谁 / 为什么不够 / 下一步', () => {
     })
     const text = lines.join('\n')
     expect(lines[0]).toBe('在 YouTube 上按粉丝 10,000–100,000 找了一遍，找到 2 个：')
-    expect(text).toContain('- Gadget Jonas（4.8 万粉）')
+    expect(text).toContain('| Gadget Jonas | 4.8 万 | 6.2% | 90 |')
     expect(text).toContain('你要 20 个，库里只有 2 个在这个区间')
     expect(text).toContain('YouTube 还没接数据来源')
     expect(text).toContain(

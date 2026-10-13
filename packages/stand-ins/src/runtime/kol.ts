@@ -194,7 +194,15 @@ export function foundOf(data: unknown): { creators?: KolFoundCreator[]; source?:
           ? `@${r.handle}`
           : undefined
     if (name === undefined) return []
-    return [{ name, ...(typeof r.followers === 'number' ? { followers: r.followers } : {}) }]
+    return [
+      {
+        name,
+        ...(typeof r.followers === 'number' ? { followers: r.followers } : {}),
+        // WP295：回话里那张表的两列
+        ...(typeof r.engagement_rate === 'number' ? { engagement_rate: r.engagement_rate } : {}),
+        ...(typeof r.score === 'number' ? { score: r.score } : {}),
+      },
+    ]
   })
   return {
     ...(creators === undefined ? {} : { creators }),
