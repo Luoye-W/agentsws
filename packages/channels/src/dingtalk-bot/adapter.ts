@@ -11,6 +11,8 @@
  *    在这里是每秒重试、吞掉错误——这是我们不直接用它的主要原因，见 protocol.ts 文件头）。
  * 3. **断线重连**：退避梯子 1s → 60s；重连前先关旧连接；服务端发 `disconnect` 就主动换一条。
  * 4. **只往钉钉自己的域名回**：`sessionWebhook` 不是 `https://*.dingtalk.com` 就不发。
+ * 5. **判死**（WP308，决策 451）：照官方 SDK 的 keepAlive，每 8 秒 ping 一次，到下一次还一帧没回就掐掉重连；
+ *    握手 15 秒没 open 也掐掉重连。状态真的变了经 `on_state` 报给宿主（人点断开不报）。
  *
  * WebSocket 与 HTTP 都是**注入的**：`@agentsws/channels` 不依赖 `ws`，测试全在内存里。
  */
@@ -31,6 +33,8 @@ import {
   DINGTALK_BACKOFF_MS,
   DINGTALK_BOT_CHANNEL,
   DINGTALK_GATEWAY_URL,
+  DINGTALK_HANDSHAKE_TIMEOUT_MS,
+  DINGTALK_KEEPALIVE_MS,
   type DingtalkDownStream,
   type DingtalkErrorCode,
   type DingtalkRobotMessage,
@@ -51,6 +55,12 @@ import {
 export interface DingtalkSocket {
   send(data: string): void
   close(): void
+  /**
+   * WP308：WebSocket 层的 ping（`ws` 有；回包走 `on('pong')`）。没有就只认对端发来的帧证明它活着。
+   */
+  ping?(): void
+  /** WP308：判死时立刻掐断（`ws` 有；没有就退回 `close`）。 */
+  terminate?(): void
   on(event: 'open', cb: () => void): void
   on(event: 'message', cb: (data: unknown) => void): void
   on(event: 'close', cb: () => void): void
@@ -108,6 +118,12 @@ export interface DingtalkBotAdapterOptions {
   http?: DingtalkHttp
   gateway_url?: string
   backoff_ms?: readonly number[]
+  /** WP308：判死的心跳间隔（缺省 8 秒）；0 = 不判。 */
+  keepalive_ms?: number
+  /** WP308：握手（→ open）最多等多久，缺省 15 秒。 */
+  handshake_timeout_ms?: number
+  /** WP308：连接状态真的变了（`prev` → `state`）。人点断开（`stop`）不报。 */
+  on_state?(state: DingtalkConnState, prev: DingtalkConnState): void
   raw_secret_policy?: 'redact' | 'keep'
   on_error?(e: unknown): void
 }
@@ -121,6 +137,10 @@ export class DingtalkBotAdapter {
   readonly #pending = new Map<string, DingtalkPendingReply>()
   #socket: DingtalkSocket | undefined
   #timer: ReturnType<typeof setTimeout> | undefined
+  #keepalive: ReturnType<typeof setInterval> | undefined
+  #handshake: ReturnType<typeof setTimeout> | undefined
+  /** 上一次心跳之后还没收到任何一帧 / pong（下一次心跳时还是 true = 判死）。 */
+  #awaiting = false
   #state: DingtalkConnState = 'idle'
   #error: { code: DingtalkErrorCode; message: string } | undefined
   #running = false
@@ -175,15 +195,17 @@ export class DingtalkBotAdapter {
     this.#running = true
     this.#error = undefined
     this.#attempt = 0
-    this.#state = 'connecting'
+    this.#setState('connecting')
     await this.#connect(onMessage)
   }
 
   async stop(): Promise<void> {
     this.#running = false
+    // 人点断开 / 进程在关：不报状态变化
     this.#state = 'idle'
     if (this.#timer !== undefined) clearTimeout(this.#timer)
     this.#timer = undefined
+    this.#clearLiveness()
     const s = this.#socket
     this.#socket = undefined
     s?.close()
@@ -231,7 +253,15 @@ export class DingtalkBotAdapter {
   }
 
   /** 经那条消息自带的 `sessionWebhook` 回一句。不发的理由都说得清，不排队、不补发。 */
-  async reply(dedupe_key: string, text: string): Promise<{ sent: boolean; reason?: string }> {
+  /**
+   * WP308：`keep` = 这一句不是最后一句（先回「收到，我查一下」，答案随后再回）——待回复条目留着。
+   * `sessionWebhook` 在有效期内可以发多次（文档没限定次数，按有效期管）。
+   */
+  async reply(
+    dedupe_key: string,
+    text: string,
+    opts: { keep?: boolean } = {},
+  ): Promise<{ sent: boolean; reason?: string }> {
     const pending = this.#pending.get(dedupe_key)
     if (pending === undefined) return { sent: false, reason: 'unknown_message' }
     const now_ms = Date.parse(this.#options.clock.now())
@@ -257,7 +287,7 @@ export class DingtalkBotAdapter {
       this.#options.on_error?.(e)
       return { sent: false, reason: 'send_failed' }
     }
-    this.#pending.delete(dedupe_key)
+    if (opts.keep !== true) this.#pending.delete(dedupe_key)
     return { sent: true }
   }
 
@@ -282,7 +312,7 @@ export class DingtalkBotAdapter {
     const creds = await this.#options.credentials()
     if (creds === undefined) {
       this.#running = false
-      this.#state = 'idle'
+      this.#setState('idle')
       return
     }
     let status: number | undefined
@@ -307,7 +337,7 @@ export class DingtalkBotAdapter {
       if (this.#error.code === 'bad_credentials') {
         // 凭据错了重试多少次都一样：停下，等人去重填（原始响应不进这里）
         this.#running = false
-        this.#state = 'failed'
+        this.#setState('failed')
         this.#options.on_error?.(
           new ChannelError('unauthenticated', `钉钉换 ticket 被拒：HTTP ${status}`),
         )
@@ -317,19 +347,38 @@ export class DingtalkBotAdapter {
       return
     }
     // 重连前先关旧的：同一个应用多开连接只会互相踢
-    this.#socket?.close()
+    const old = this.#socket
+    this.#socket = undefined
+    old?.close()
+    this.#clearLiveness()
     const url = `${ticket.endpoint}?ticket=${encodeURIComponent(ticket.ticket)}`
     const socket = (this.#options.socket as DingtalkSocketFactory)(url)
     this.#socket = socket
+    // WP308：握手卡住（DNS / 代理 / NAT）就掐掉重连
+    this.#handshake = setTimeout(() => {
+      this.#handshake = undefined
+      if (this.#socket === socket && this.#state !== 'connected') this.#kill(socket, onMessage)
+    }, this.#options.handshake_timeout_ms ?? DINGTALK_HANDSHAKE_TIMEOUT_MS)
+    this.#handshake.unref?.()
     socket.on('open', () => {
       if (this.#socket !== socket) return
-      this.#state = 'connected'
+      if (this.#handshake !== undefined) clearTimeout(this.#handshake)
+      this.#handshake = undefined
       this.#error = undefined
       this.#attempt = 0
+      this.#startKeepalive(socket, onMessage)
+      this.#setState('connected')
     })
     socket.on('message', (data) => {
+      if (this.#socket !== socket) return
+      this.#awaiting = false
       this.#onFrame(socket, data, onMessage)
     })
+    // `ws` 的 pong（结构上的 `on` 收任意事件名；替身没有 ping 就不会有 pong）
+    if (socket.ping !== undefined)
+      (socket as unknown as { on(e: string, cb: () => void): void }).on('pong', () => {
+        if (this.#socket === socket) this.#awaiting = false
+      })
     socket.on('error', (err) => {
       this.#options.on_error?.(err)
     })
@@ -337,14 +386,68 @@ export class DingtalkBotAdapter {
       // 旧连接的 close（我们自己换连接时关的）不触发重连
       if (this.#socket !== socket) return
       this.#socket = undefined
+      this.#clearLiveness()
       if (!this.#running) return
       this.#reconnects += 1
       this.#schedule(onMessage)
     })
   }
 
+  /** WP308：每隔一会儿 ping 一次；上一次之后一帧都没回就判死。 */
+  #startKeepalive(socket: DingtalkSocket, onMessage: OnMessage): void {
+    const every = this.#options.keepalive_ms ?? DINGTALK_KEEPALIVE_MS
+    if (every <= 0) return
+    this.#awaiting = false
+    this.#keepalive = setInterval(() => {
+      if (this.#socket !== socket) return
+      if (this.#awaiting) {
+        this.#kill(socket, onMessage)
+        return
+      }
+      // 没有 ws 层 ping 的替身：不判（只靠 close 发现断线，与老行为一样）
+      if (socket.ping === undefined) return
+      try {
+        socket.ping()
+        this.#awaiting = true
+      } catch (e) {
+        this.#options.on_error?.(e)
+      }
+    }, every)
+    this.#keepalive.unref?.()
+  }
+
+  /** WP308：判死——掐掉这条（不等它慢慢 close），当场按断线处理。 */
+  #kill(socket: DingtalkSocket, onMessage: OnMessage): void {
+    if (this.#socket !== socket) return
+    this.#socket = undefined
+    this.#clearLiveness()
+    try {
+      if (socket.terminate !== undefined) socket.terminate()
+      else socket.close()
+    } catch (e) {
+      this.#options.on_error?.(e)
+    }
+    if (!this.#running) return
+    this.#reconnects += 1
+    this.#schedule(onMessage)
+  }
+
+  #clearLiveness(): void {
+    if (this.#keepalive !== undefined) clearInterval(this.#keepalive)
+    this.#keepalive = undefined
+    if (this.#handshake !== undefined) clearTimeout(this.#handshake)
+    this.#handshake = undefined
+    this.#awaiting = false
+  }
+
+  #setState(state: DingtalkConnState): void {
+    const prev = this.#state
+    this.#state = state
+    if (prev !== state) this.#options.on_state?.(state, prev)
+  }
+
   #schedule(onMessage: OnMessage): void {
-    this.#state = 'reconnecting'
+    this.#setState('reconnecting')
     const ladder = this.#options.backoff_ms ?? DINGTALK_BACKOFF_MS
     const delay = ladder[Math.min(this.#attempt, ladder.length - 1)] ?? 60_000
     this.#attempt += 1

@@ -214,7 +214,7 @@ describe('WP306：绑定后问话必有回复', () => {
     expect(JSON.stringify(failed)).not.toContain('Reddit')
   })
 
-  it('点名岗位：「Reddit 运营」→ 他的 Reddit 那条分配，不默认落到负责人；没点名 → 主要岗位', async () => {
+  it('点名岗位：「Reddit 运营」→ 他的 Reddit 那条分配所在岗位（WP308 起直接问岗位 Agent，不经秘书）；没点名的闲聊 → 秘书、主要岗位', async () => {
     const r = await boot()
     await bindLuoye(r)
     const me = r.s.bootstrap
@@ -238,13 +238,15 @@ describe('WP306：绑定后问话必有回复', () => {
       return { answer: '好', kind: 'other', fields: [], refused: false, run_id: 'run_z' } as never
     })
     r.feishu.push('om_r', QUESTION)
-    await waitFor(() => asked.length === 1, '问了')
-    expect(asked[0]).toBe(reddit.id)
-    expect(asked[0]).not.toBe(me.ownerAssignment.id)
+    await waitFor(() => r.feishu.replies.length === 2, '答了')
+    // WP308（决策 447）：点名岗位的工作问题直接问那个岗位（Reddit 那条分配所在的「社媒运营」），秘书不碰
+    expect(asked).toEqual([])
+    expect(r.feishu.texts()[1]).toMatch(/^「社媒运营」今天/)
+    expect(reddit.id).toBeDefined()
     r.feishu.push('om_hi', '你好')
-    await waitFor(() => asked.length === 2, '又问了')
+    await waitFor(() => asked.length === 1, '问了秘书')
     // 没点名：第一条干活的分配（负责人 / 成员这两条底座排后面）
-    expect([reddit.id, support.id]).toContain(asked[1])
+    expect([reddit.id, support.id]).toContain(asked[0])
   })
 
   it('没有岗位：回「你在这个品牌还没有岗位」+ 链接，记 im.ask_failed{no_position}', async () => {

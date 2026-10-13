@@ -36,6 +36,16 @@ export const TOPIC_ROBOT = '/v1.0/im/bot/messages/get'
  */
 export const DINGTALK_BACKOFF_MS = [1_000, 2_000, 5_000, 10_000, 30_000, 60_000] as const
 
+/**
+ * WP308（决策 451）：判死。照官方 Node SDK 的 keepAlive（`heartbeat_interval = 8000`：每 8 秒发一次
+ * WebSocket ping，到下一次时上一次的 pong / 系统 `KEEPALIVE` 帧还没回来就 `terminate()` 重连，
+ * **已核实**，10-13 读 main 分支 `src/client.ts`）。官方 SDK 默认不开，我们开着。
+ */
+export const DINGTALK_KEEPALIVE_MS = 8_000
+
+/** WP308：握手（换到 ticket 之后 → 长连接 open）最多等多久（我们自己的数，**未核实**；与飞书同为 15 秒）。 */
+export const DINGTALK_HANDSHAKE_TIMEOUT_MS = 15_000
+
 /* ── 线类型 ─────────────────────────────────────────────────────── */
 
 /** 服务端推下来的一帧（SDK `DWClientDownStream`，**已核实**）。 */

@@ -44,4 +44,6 @@ To add it to a group: group settings → **Robots** → add robot → pick your 
 - **"Client ID or Client Secret is wrong, or Stream mode isn't on"**: check Credentials & Basic Info, make sure the robot uses Stream mode, then click **Re-enter credentials**.
 - **"Cannot reach DingTalk for now"**: usually the network; it retries by itself.
 - **It won't reply to a very old message**: DingTalk's reply address for each message expires. Just ask again.
+- **It didn't answer right away**: it first says "Got it, checking." and sends the answer when it's ready.
+- **The card says "Disconnected, reconnecting"**: the connection dropped (network or proxy); it reconnects by itself. Messages sent while it was down may be missed — ask again once it's back.
 - **Does it reply when my computer is off?** No. The Stream connection lives on this computer — while it sleeps, is offline, or Agents Workshop is closed, the bot hears nothing.
