@@ -21,6 +21,8 @@
  *    冒烟里还用**包里那份**主进程代码取一次 `autoUpdater`（WP218 的包在 Windows 上就坏在这一步）。
  * 7. **npm 随包带**（WP254）：捆绑 Node 旁边按官方布局有那版配套的 npm、版本与锁一致；
  *    本机平台再用捆绑的 Node 真跑一次 `npm --version`。
+ * 8. **起底主题包随包带**（WP297，决策 140 / 376）：`<resources>/theme-base/` 里有那一份、
+ *    字节数与 sha256 对得上 `theme-base-pin.json`；不在 / 不对就打包失败。
  */
 import { execFileSync } from 'node:child_process'
 import {
@@ -38,6 +40,7 @@ import { createRequire } from 'node:module'
 import { dirname, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { stashDirOf } from './after-extract.mjs'
+import { bundledThemeBaseProblem, readPin } from './fetch-theme-base.mjs'
 import { findNativeBinaries, NOTICE_FILE, writeNotice } from './third-party-licenses.mjs'
 
 const here = dirname(fileURLToPath(import.meta.url))
@@ -541,6 +544,14 @@ export default async function afterPack(context) {
   if (unreachable.length > 0)
     throw new Error(`安装包里的服务进程找不到这些钉版本表：${unreachable.join('、')}`)
   log(`钉版本表：${locks.join('、')}`)
+
+  // ⑨ WP297：起底主题包随包带（每个平台都要有；GitHub 下不动时服务进程用它起底）
+  const themePin = readPin()
+  const themeProblem = bundledThemeBaseProblem(resources, themePin)
+  if (themeProblem !== undefined) throw new Error(themeProblem)
+  log(
+    `起底主题包：${themePin.repo}@${themePin.commit.slice(0, 7)}（${themePin.bytes} 字节，sha256 对上）`,
+  )
 
   const nodeExec =
     platformName === 'win32'
