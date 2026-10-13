@@ -4,6 +4,8 @@
  * 断点 #1 的现象是「让红人岗位找 20 个频道，回的是客服的话」。这个文件钉住的就是
  * 那句话该被判成什么、该先调哪几个工具——**判错一次，整条链后面全是错的**。
  */
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import { splitAnswer } from '@agentsws/contracts'
 import { describe, expect, it } from 'vitest'
 import {
@@ -52,6 +54,44 @@ describe('意图判定', () => {
     expect(classifyKolTask('他要 800 美金，这个报价能接吗').intent).toBe('negotiate')
     // 建联 + 没回音：跟进赢（要的是第二封，不是第一封）
     expect(classifyKolTask('建联发出去超过 7 天还没回音的频道有哪些').intent).toBe('follow_up')
+  })
+
+  it('WP295：五句岗位快捷提示各判成自己那一类', () => {
+    const cases: [string, string][] = [
+      [FIND, 'find'],
+      ['给这个频道起草一封开发信：说清合作形式和寄样安排，不提具体报价', 'outreach'],
+      ['建联发出去超过 7 天还没回音的频道有哪些，列出来告诉我要不要跟进', 'follow_up'],
+      ['红人交的这条视频审一遍：该标的广告标识、禁用词、链接和折扣码对不对', 'deliverable_review'],
+      [
+        '上个月YouTube合作过的人里，按归因链接看哪几个真带来了订单，没带来的也列出来',
+        'attribution',
+      ],
+    ]
+    for (const [text, intent] of cases) expect(classifyKolTask(text).intent, text).toBe(intent)
+  })
+
+  it('WP295：五条渠道职责 yml 里的快捷提示全都判对，找人那句不剩关键词', () => {
+    const want: Record<string, string> = {
+      find_creators: 'find',
+      draft_outreach: 'outreach',
+      no_reply: 'follow_up',
+      review_deliverable: 'deliverable_review',
+      attribution: 'attribution',
+    }
+    let seen = 0
+    for (const ch of ['youtube', 'instagram', 'tiktok', 'facebook', 'x']) {
+      const yml = readFileSync(
+        fileURLToPath(new URL(`../../roles/roles/kol/${ch}.yml`, import.meta.url)),
+        'utf8',
+      )
+      for (const m of yml.matchAll(/- id: (\w+)\n\s+label:.*\n\s+prompt: "(.*)"/g)) {
+        const [, id = '', prompt = ''] = m
+        expect(classifyKolTask(prompt).intent, `${ch} ${id}`).toBe(want[id])
+        if (id === 'find_creators') expect(searchQueryOf(prompt), `${ch} ${id}`).toBe('')
+        seen += 1
+      }
+    }
+    expect(seen).toBe(25)
   })
 
   it('判不出来就是 unknown，不猜一个动作', () => {
