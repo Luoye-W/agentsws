@@ -176,4 +176,34 @@ describe('fetch-theme-base', () => {
     expect(afterPack).toMatch(/bundledThemeBaseProblem\(resources, themePin\)/)
     expect(afterPack).toMatch(/if \(themeProblem !== undefined\) throw new Error\(themeProblem\)/)
   })
+
+  it('CI 两个 workflow 打包前都取（带缓存，钉子变了缓存键跟着变）；Windows 装包冒烟查装好的那一份', () => {
+    const repo = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..')
+    const expectations: [string, number][] = [
+      ['desktop-windows.yml', 2],
+      ['release.yml', 1],
+    ]
+    for (const [name, jobs] of expectations) {
+      const yml = readFileSync(join(repo, '.github', 'workflows', name), 'utf8')
+      const fetches = [...yml.matchAll(/run: node apps\/desktop\/scripts\/fetch-theme-base\.mjs/g)]
+      expect(fetches, name).toHaveLength(jobs)
+      expect(
+        [
+          ...yml.matchAll(
+            /key: theme-base-\$\{\{ hashFiles\('apps\/server\/src\/theme-base-pin\.json'\) \}\}/g,
+          ),
+        ],
+        name,
+      ).toHaveLength(jobs)
+      // 取包在打包之前
+      expect(yml.indexOf('fetch-theme-base.mjs'), name).toBeLessThan(
+        yml.indexOf('scripts/dist.mjs'),
+      )
+    }
+    const smoke = readFileSync(
+      join(repo, 'apps', 'desktop', 'scripts', 'win-install-smoke.mjs'),
+      'utf8',
+    )
+    expect(smoke).toMatch(/bundledThemeBaseProblem\(join\(dir, 'resources'\)\)/)
+  })
 })
