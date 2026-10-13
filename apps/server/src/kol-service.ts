@@ -79,14 +79,18 @@ import {
   collaborationStageName,
   deliverableReviewName,
   draftOutreach,
+  hasCjk,
   type ImportedAccount,
   importAccounts,
   importSummary,
   type MergeProfile,
   nextInSequence,
   normalizeHandle,
+  type OutreachLanguage,
   type OutreachStep,
+  outreachLanguageOf,
   outreachQuota,
+  outreachReason,
   type PublicCreatorRow,
   type PublicLibraryClient,
   parseCreatorUrl,
@@ -94,7 +98,6 @@ import {
   rankCreators,
   roleIdOfChannel,
   StageTransitionError,
-  scoreCreator,
   suggestMerges,
 } from '@agentsws/kol-core'
 import type { StageInput, StageOutcome } from '@agentsws/txn'
@@ -349,9 +352,6 @@ const OUTREACH_ACTION = 'stage_outreach'
 /** 开发信的日配额默认值（职责 yml 的 `max_outreach_per_day`）。 */
 export const DEFAULT_OUTREACH_CAP = 30
 
-/** 去掉一句话末尾的标点（接下一句之前）。 */
-const trimTail = (text: string): string => text.replace(/[。．.，,；;：:]+$/u, '')
-
 /** 公共库那一行的主页地址（库里只有 渠道 + handle，链接是拼出来的）。 */
 function urlOfPublicRow(channel: KolChannel, handle: string): string {
   switch (channel) {
@@ -373,6 +373,23 @@ const SEQUENCE_LABEL: Readonly<Record<OutreachStep, string>> = {
   first: '一封',
   follow_up: '二封（跟进）',
   final: '三封（收尾）',
+}
+
+/** WP295：缺了哪一格说人话（以前原样露出 `brand_pitch` 这种字段名）。 */
+const OUTREACH_VAR_ZH: Readonly<Record<string, string>> = {
+  creator_name: '红人名字',
+  brand: '品牌名',
+  brand_pitch: '一句话介绍我们是做什么的',
+  product: '想聊的产品',
+  reason: '为什么找他',
+  sender_name: '署名',
+}
+
+/** WP295：卡片标题上的那几个字（以前直接用上面那份，标题读出来是「开发信：X（一封）」）。 */
+const SEQUENCE_TITLE: Readonly<Record<OutreachStep, string>> = {
+  first: '首封',
+  follow_up: '跟进',
+  final: '收尾',
 }
 
 export function createKolService(options: KolServiceOptions): KolServiceAssembly {
@@ -554,7 +571,14 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
     creator: Creator
     channel: KolChannel
     step: OutreachStep
-    vars: { product: string; reason: string; brand_pitch?: string; sender_name: string }
+    vars: {
+      product: string
+      reason: string
+      brand_pitch?: string
+      sender_name: string
+      /** WP295：信用哪种语言写（跟进那两封沿用首封的）。不给 = 中文。 */
+      language?: OutreachLanguage
+    }
   }): Promise<KolOutreachView> => {
     const quota = await outreachQuotaOf(input.actor.assignment_id)
     const contact = contactOf(input.creator.id)
@@ -601,7 +625,7 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
         message:
           draft.forbidden_hits.length > 0
             ? `这封信里写了「${draft.forbidden_hits.join('」「')}」这类承诺。给钱、白送样品、保证效果都要走"建一条合作"那条路（那一步永远要人点头），不能在信里写死。`
-            : `还差几格没填：${draft.missing_vars.join('、')}。缺了就不起草——拿一封写着 {{product}} 的信去问人要不要发，比不起草更糟。`,
+            : `还差几格没填：${draft.missing_vars.map((k) => OUTREACH_VAR_ZH[k] ?? k).join('、')}。缺了就不起草——拿一封空着一格的信去问人要不要发，比不起草更糟。`,
       }
 
     const run_id = `run_kol_${nextId('o')}`
@@ -642,13 +666,23 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
         // 跟进那一封要用首封同一组变量——跟进信提到的产品必须和首封是同一个
         vars: input.vars,
       },
-      notes: [`给 ${input.creator.display_name} 的第 ${SEQUENCE_LABEL[draft.step]}`],
+      notes: [
+        `给 ${input.creator.display_name} 的第 ${SEQUENCE_LABEL[draft.step]}`,
+        /*
+         * WP295：英文信里混进了中文（你填的介绍、产品名，或署名用的是中文名）——对方读不懂，卡上先说一句，
+         * 人点「改一下」换成英文再发。不拦：有的品牌名本来就是中文。
+         */
+        ...(input.vars.language === 'en' &&
+        hasCjk(`${input.vars.brand_pitch ?? ''} ${input.vars.product} ${input.vars.sender_name}`)
+          ? ['这封是英文信，但介绍、产品名或署名里有中文——对方看英文，发之前点「改一下」换成英文。']
+          : []),
+      ],
       created_by: { kind: 'agent', id: `agent_${input.actor.role_id}` },
       mandate,
       level: sandboxDrill ? 'L1' : level,
       provenance: provenanceOf(run_id, [target, { type: 'creator', id: input.creator.id }]),
       approval: {
-        title: `开发信：${input.creator.display_name}（${SEQUENCE_LABEL[draft.step]}）`,
+        title: `开发信：${input.creator.display_name}（${SEQUENCE_TITLE[draft.step]}）`,
         summary: draft.subject,
         recipients: [{ person: input.actor.person_id, via: 'role_holder' }],
         proposer: {
@@ -1618,14 +1652,8 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
 
     async outreach(actor, input) {
       const creator = creatorOr404(input.creator_id)
-      // `reason` 不给就用打分里最高那一项的那句带数的话——那正是"为什么找他"
       const account = store.accounts({ creator_id: creator.id, channel: input.channel })[0]
-      const top =
-        account === undefined
-          ? undefined
-          : [...scoreCreator(account, { now: clock.now() }).factors].sort(
-              (a, b) => b.score - a.score,
-            )[0]
+      const language = outreachLanguageOf(account?.language)
       return stageOutreach({
         actor,
         creator,
@@ -1634,11 +1662,14 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
         vars: {
           product: input.product,
           /*
-           * `reason` 不给就用打分里最高那一项的那句带数的话——那正是"为什么找他"。
-           * 末尾的标点要去掉再接一个逗号：模板后面紧跟着"所以想问问你对 X 有没有兴趣"，
-           * 不去掉就会写出"正好在想要的区间里。，所以想问问……"这种句子。
+           * WP295：`reason` 不给就写一句**给红人看的**「为什么找你」（按他做的内容）。
+           * 以前用打分里最高那一项的说明（「372,274 粉，正好在想要的区间里。」）——那是我们挑人的
+           * 内部理由，原样进了发给对方的信。打分理由仍在卡的依据里，不进正文。
            */
-          reason: input.reason ?? (top === undefined ? '' : `${trimTail(top.why)}，`),
+          reason:
+            input.reason ??
+            outreachReason({ channel: input.channel, language, category: account?.category }),
+          language,
           /*
            * **`brand_pitch` 没有默认值**。"我们是做什么的"这句话只有用户自己知道，
            * 编一个出来最好的情况也是废话（"我是 NordVolt 的王岚。我们是 NordVolt。"），
@@ -2188,6 +2219,8 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
           reason: vars.reason ?? '',
           brand_pitch: vars.brand_pitch ?? '',
           sender_name: vars.sender_name ?? '',
+          // WP295：跟进信与首封同一种语言（老数据没有这一格 = 中文，与当时发出去的一致）
+          ...(vars.language === 'en' || vars.language === 'zh' ? { language: vars.language } : {}),
         },
       })
       if (view.staged) out.staged += 1

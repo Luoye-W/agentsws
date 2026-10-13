@@ -187,7 +187,9 @@ describe('WP68 开发信', () => {
     )
     expect(out.staged).toBe(false)
     expect(out.missing_vars).toEqual(['brand_pitch'])
-    expect(out.message).toContain('brand_pitch')
+    // WP295：说人话，不露字段名
+    expect(out.message).toContain('一句话介绍我们是做什么的')
+    expect(out.message).not.toContain('brand_pitch')
   })
 
   it('打分那句"为什么找他"接进正文时不会写出「……里。，所以」这种句子', async () => {
@@ -202,6 +204,49 @@ describe('WP68 开发信', () => {
     )
     expect(out.staged).toBe(true)
     expect(out.body).not.toMatch(/[。．.][，,]/u)
+  })
+
+  it('WP295：外国红人收英文信，正文不报粉丝数；混进中文时卡上提醒；标题写「首封」', async () => {
+    const id = await creatorWithEmail('Gadget Jonas', { language: 'de' })
+    const out = await data<{
+      staged: boolean
+      subject: string
+      body: string
+      approval_item_id: string
+    }>(
+      await post('/v1/kol/outreach', {
+        creator_id: id,
+        channel: 'youtube',
+        product: 'the Nordvolt 65W charger',
+        brand_pitch: '我们做桌面周边的充电与理线。',
+      }),
+    )
+    expect(out.staged).toBe(true)
+    expect(out.body).toMatch(/^Hi Gadget Jonas,/)
+    // 打分里那句「48,000 粉，正好在想要的区间里」是挑人的内部理由，不进发给对方的信
+    expect(out.body).not.toContain('48,000')
+    expect(out.body).not.toContain('区间')
+    const item = await server.txn.approvals.get(out.approval_item_id)
+    expect(item?.title).toBe('开发信：Gadget Jonas（首封）')
+    const change = (
+      await server.txn.ledger.list({
+        workspace_id: server.bootstrap.workspace.id,
+        kind: 'kol_outreach',
+      })
+    )[0]
+    expect(change?.notes.join('\n')).toContain('换成英文')
+
+    // 中文区的红人照旧收中文信
+    const zh = await data<{ body: string }>(
+      await post('/v1/kol/outreach', {
+        creator_id: await creatorWithEmail('Desk Rosa', { language: 'zh-CN' }),
+        channel: 'youtube',
+        product: '65W 氮化镓充电器',
+        brand_pitch: '我们做桌面周边的充电与理线。',
+      }),
+    )
+    expect(zh.body).toMatch(/^Desk Rosa 你好，/)
+    expect(zh.body).toContain('做数码的视频')
   })
 
   it('没有联系方式就不起草，并说清楚下一步做什么', async () => {
