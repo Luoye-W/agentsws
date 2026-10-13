@@ -580,8 +580,14 @@ upstreams:
       - 'AGENTS.md §2 的改动边界：只改 custom-* / templates / section 组 / locales / config/settings_data.json（`baseWritable`）'
       - 'assets/app.css 是构建产物、已提交进仓库（推上去就有样式；AI 不改它）'
       - 'LICENSE 在仓库根（起底时原样带上）'
+      # WP296（v0.10.0 起）：旧版起过底的工作目录要人点了才升，升的那一下靠这两条
+      - '`npm run migrate` = `node scripts/migrate-blocks.mjs`，只用 node 内置模块（不用 npm install 就能在工作目录里跑；输出「Updated N file(s)」/「Needs a person」两段）→ site-theme.ts 的 upgradeBase / site-theme-upgrade.ts 的 parseMigrateOutput'
+      - 'CATALOG.json 的 entries[]：id / kind / use_when / accepts_blocks / private（`_` 开头的私有块）→ theme-read.ts 的目录页与按 ids 挑'
     covered_by:
       - apps/server/test/site-theme.test.ts
+      - apps/server/test/wp296-theme-upgrade.test.ts
+      - apps/server/test/wp296-theme-upgrade-server.test.ts
+      - apps/server/test/wp260-theme-read.test.ts
       - apps/server/src/theme-base-pin.json
 
   # ── ported：抄进来的源码，上游改了要对照回来 ──────────────────────────────

@@ -352,6 +352,25 @@ export function checkOf(data: unknown): ThemeCheckData | undefined {
   return typeof o.errors === 'number' ? (o as unknown as ThemeCheckData) : undefined
 }
 
+/**
+ * WP296：工具回话里带的「这份主题是旧版」那一句（服务端 `site-theme.ts` 的 `baseUpgrade` 拼）。
+ * 有 `approval_item_id` = 出了（或之前出过、还没定的）升级卡；`declined` = 人上次点了先不升。
+ */
+export interface ThemeUpgradeData {
+  from: string
+  to: string
+  approval_item_id?: string
+  declined?: boolean
+  message: string
+}
+
+export function upgradeOf(data: unknown): ThemeUpgradeData | undefined {
+  const u = obj(obj(data).base_upgrade)
+  return typeof u.from === 'string' && typeof u.to === 'string' && typeof u.message === 'string'
+    ? (u as unknown as ThemeUpgradeData)
+    : undefined
+}
+
 export function publishOf(data: unknown): ThemePublishData | undefined {
   const o = obj(data)
   return o.kind === 'publish_theme' && typeof o.message === 'string'
@@ -377,9 +396,22 @@ export function renderThemeAnswer(input: {
   check?: ThemeCheckData
   pushed?: ThemePushData
   published?: ThemePublishData
+  /** WP296：这份主题是旧版（照实说一句；不升级）。 */
+  upgrade?: ThemeUpgradeData
   failed: Readonly<Record<string, string>>
 }): string {
   const lines: string[] = []
+  const up = input.upgrade
+  if (up !== undefined)
+    lines.push(
+      `这份主题是 v${up.from}，新版 v${up.to} 要迁移。` +
+        (up.approval_item_id !== undefined
+          ? `出了一张卡「升级到 v${up.to}（会跑迁移）」，你点了我才升（升之前自动备份）。`
+          : up.declined === true
+            ? '你上次选了先不升。'
+            : '') +
+        `这次先用 v${up.from} 做。`,
+    )
   if (input.initialized === true)
     lines.push('从开源主题 agentsws-theme 起了底（钉死的版本，LICENSE 原样带着）。')
   else if (input.failed[THEME_INIT_TOOL] !== undefined)
