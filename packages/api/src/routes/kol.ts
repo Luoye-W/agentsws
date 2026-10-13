@@ -155,6 +155,10 @@ export interface KolCreatorRow {
     last_activity_at?: Iso8601
     with_sample: boolean
     stalled: boolean
+    /** 迷你进度条的那几段（同合作清单那一份算法）。 */
+    segments: KolStageSegment[]
+    /** 在这一段停了几天。 */
+    dwell_days?: number
   }
 }
 
@@ -393,6 +397,15 @@ export type KolCollaborationRow = Collaboration & {
   stalled?: boolean
   /** 谢绝之前走到了哪一段（画进度条用）。 */
   declined_from?: CollaborationStage
+  /** 分段进度条的那几段（`kol-core` 的 `stageSegments` 算好，界面只管画）。 */
+  segments?: KolStageSegment[]
+}
+
+/** WP302：分段进度条的一段。 */
+export interface KolStageSegment {
+  stage: CollaborationStage
+  state: 'done' | 'current' | 'pending' | 'terminal'
+  stalled: boolean
 }
 
 /** WP299（决策 386）：寄样的入参。地址明文只进加密库。 */

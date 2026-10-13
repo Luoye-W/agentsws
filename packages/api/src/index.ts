@@ -415,6 +415,7 @@ export type {
   KolSearchHit,
   KolSearchResult,
   KolStagedView,
+  KolStageSegment,
   KolTrackedLinkInput,
 } from './routes/kol.js'
 export { kolRoutes } from './routes/kol.js'

@@ -107,6 +107,7 @@ import {
   type ScoreCriteria,
   StageTransitionError,
   scoreCreator,
+  stageSegments,
   suggestMerges,
 } from '@agentsws/kol-core'
 import type { StageInput, StageOutcome } from '@agentsws/txn'
@@ -605,6 +606,12 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
         status,
         ...(dwell === null ? {} : { dwell_days: dwell }),
         stalled: isStageStalled(c.stage, c.stage_changed_at, now, c.last_activity_at),
+        segments: stageSegments(c.stage, {
+          now,
+          stageChangedAt: c.stage_changed_at,
+          lastActivityAt: c.last_activity_at,
+          withSample: c.sample !== undefined,
+        }),
       }
     })
   }
@@ -1106,6 +1113,16 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
                       : { last_activity_at: c.last_activity_at }),
                     with_sample: c.sample !== undefined,
                     stalled: isStageStalled(c.stage, c.stage_changed_at, now, c.last_activity_at),
+                    segments: stageSegments(c.stage, {
+                      now,
+                      stageChangedAt: c.stage_changed_at,
+                      lastActivityAt: c.last_activity_at,
+                      withSample: c.sample !== undefined,
+                    }),
+                    ...(() => {
+                      const d = dwellDays(c.stage_changed_at, now, c.last_activity_at)
+                      return d === null ? {} : { dwell_days: d }
+                    })(),
                   },
                 }
           })(),
