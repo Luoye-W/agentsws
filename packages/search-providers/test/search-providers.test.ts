@@ -39,6 +39,12 @@ describe('DataForSEO', () => {
     const out = await dataforseo.serp(Q, KEY, fetch)
     expect(calls[0]?.url).toBe('https://api.dataforseo.com/v3/serp/google/organic/live/advanced')
     expect(calls[0]?.headers.authorization).toBe(`Basic ${btoa(KEY)}`)
+    // 10-13 真机：后台给的「Base64 format」那一串也认，原样用，不再编第二次
+    const again = fakeFetch([
+      ['/serp/google/organic/live/advanced', { body: fixture('dataforseo-google-serp') }],
+    ])
+    await dataforseo.serp(Q, btoa(KEY), again.fetch)
+    expect(again.calls[0]?.headers.authorization).toBe(`Basic ${btoa(KEY)}`)
     expect(calls[0]?.body).toEqual([
       {
         keyword: 'best portable charger',
