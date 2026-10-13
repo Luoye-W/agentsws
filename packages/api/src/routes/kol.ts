@@ -346,6 +346,28 @@ export interface KolStagedView {
   /** 被拦下时的一句人话。 */
   message?: string
   auto_approved?: boolean
+  /**
+   * WP299（决策 386）：没出卡、当场记下了（寄样没有成本——不花钱就不用批）。
+   * 有这一格时 `staged` 是 `false` 但**不是**被拦下。
+   */
+  applied?: boolean
+}
+
+/** WP299（决策 386）：寄样的入参。地址明文只进加密库。 */
+export interface KolSampleInput {
+  address: string
+  carrier?: string | undefined
+  tracking_no?: string | undefined
+  /** 样品成本（货值 + 运费）。不给或 0 = 不花钱，不出卡、当场记下。 */
+  cost?: number | undefined
+  currency?: string | undefined
+}
+
+/** WP299（决策 387）：付款登记的入参。 */
+export interface KolPaymentInput {
+  amount: number
+  currency?: string | undefined
+  note?: string | undefined
 }
 
 /** 手工加一个红人的入参。 */
@@ -502,6 +524,15 @@ export interface KolPort {
     id: string,
     input: { budget: number; currency?: string | undefined; note?: string | undefined },
   ): MaybePromise<KolStagedView>
+
+  /**
+   * WP299（决策 386）：寄样。谈成之后才给。有成本 → 一张「花钱」卡（`kol_sample`，永远人审），
+   * 批了才记下、合作进「已寄样」；没有成本 → 当场记下（`applied: true`）。
+   */
+  shipSample?(actor: KolActor, id: string, input: KolSampleInput): MaybePromise<KolStagedView>
+
+  /** WP299（决策 387）：付款登记 → 一张「花钱」卡（`kol_payment`，永远人审），批了才记账。 */
+  recordPayment?(actor: KolActor, id: string, input: KolPaymentInput): MaybePromise<KolStagedView>
 
   deliverables(
     actor: KolActor,
@@ -763,6 +794,20 @@ const StageBody = z.object({ stage: z.enum(STAGES) })
 /** WP117b：议价。金额必须是正数——"报 0 块"不是一个报价，是一个填错的框。 */
 const QuoteBody = z.object({
   budget: z.number().positive().max(10_000_000),
+  currency: z.string().min(1).max(8).optional(),
+  note: z.string().max(500).optional(),
+})
+
+const SampleBody = z.object({
+  address: z.string().trim().min(4).max(1000),
+  carrier: z.string().trim().max(80).optional(),
+  tracking_no: z.string().trim().max(120).optional(),
+  cost: z.number().min(0).max(1_000_000).optional(),
+  currency: z.string().min(1).max(8).optional(),
+})
+
+const PaymentBody = z.object({
+  amount: z.number().positive().max(10_000_000),
   currency: z.string().min(1).max(8).optional(),
   note: z.string().max(500).optional(),
 })
@@ -1173,6 +1218,58 @@ export function kolRoutes(): Route[] {
           ),
           201,
         ),
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/kol/collaborations/:id/sample',
+        operationId: 'shipKolSample',
+        summary:
+          'WP299（决策 386）：寄样（谈成之后）。收件地址只进本机加密库；有成本 → 一张「花钱」卡（永远人审），批了才记下、进「已寄样」；没成本当场记下',
+        tag: 'kol',
+        auth: 'bearer',
+        assignment: true,
+        authz: STAGE_COLLAB,
+        params: [{ name: 'id', in: 'path', required: true, description: 'collaboration_id' }],
+        body: SampleBody,
+        returns: 'KolStagedView',
+      },
+      async (c, deps) => {
+        const port = portOf(deps)
+        if (port.shipSample === undefined)
+          throw new ApiError('provider_unavailable', '这台机器的红人那一摊还不会记寄样')
+        return ok(
+          c,
+          await port.shipSample(actorOf(c), param(c, 'id'), await body(c, SampleBody)),
+          201,
+        )
+      },
+    ),
+    route(
+      {
+        method: 'post',
+        path: '/v1/kol/collaborations/:id/payments',
+        operationId: 'recordKolPayment',
+        summary:
+          'WP299（决策 387）：给红人付款的登记 → 一张「花钱」卡（永远人审），批了才记账；超过谈定预算卡上会说',
+        tag: 'kol',
+        auth: 'bearer',
+        assignment: true,
+        authz: STAGE_COLLAB,
+        params: [{ name: 'id', in: 'path', required: true, description: 'collaboration_id' }],
+        body: PaymentBody,
+        returns: 'KolStagedView',
+      },
+      async (c, deps) => {
+        const port = portOf(deps)
+        if (port.recordPayment === undefined)
+          throw new ApiError('provider_unavailable', '这台机器的红人那一摊还不会记付款')
+        return ok(
+          c,
+          await port.recordPayment(actorOf(c), param(c, 'id'), await body(c, PaymentBody)),
+          201,
+        )
+      },
     ),
 
     route(

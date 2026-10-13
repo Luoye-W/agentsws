@@ -56,6 +56,8 @@ import type {
   EventEnvelope,
   Iso8601,
   KolChannel,
+  KolPayment,
+  KolSample,
   KolUtm,
   Mandate,
   MaybePromise,
@@ -110,6 +112,14 @@ import {
   byoTestConnection,
 } from './kol-byo.js'
 import type { KolChannelsAssembly } from './kol-channels.js'
+import {
+  maskAddress,
+  PAYMENT_STAGES,
+  SAMPLE_SECRET_FIELD,
+  SAMPLE_SECRET_PREFIX,
+  SAMPLE_STAGES,
+  withSample,
+} from './kol-money.js'
 import { REVEAL_CAPABILITY } from './kol-public-client.js'
 import type { SecretStore } from './secret-store.js'
 
@@ -1375,6 +1385,216 @@ export function createKolService(options: KolServiceOptions): KolServiceAssembly
         change_id: outcome.change.id,
         approval_item_id: outcome.approval.id,
         auto_approved: outcome.approval.automation.auto_approved,
+      })
+      return {
+        staged: true,
+        change_id: outcome.change.id,
+        approval_item_id: outcome.approval.id,
+        auto_approved: outcome.approval.automation.auto_approved,
+      }
+    },
+
+    /*
+     * WP299（决策 386）：寄样。谈成之后才给；收件地址明文只进本机加密库，账本 / 事件 / 卡面上
+     * 只有 key 名与脱敏样子。有成本 → 一张「花钱」卡（`kol_sample`，永远人审），批了才落库、
+     * 合作进「已寄样」（`kolSampleApply`）；没成本 → 当场记下（不花钱就不用批）。
+     */
+    async shipSample(actor, id, input) {
+      const row = store.collaboration(id)
+      if (row === undefined) throw new ApiError('not_found', '库里没有这条合作')
+      if (!SAMPLE_STAGES.includes(row.stage))
+        throw new ApiError(
+          'invalid_input',
+          `谈成之后才寄样——这条合作现在是「${collaborationStageName(row.stage)}」。`,
+        )
+      if (!secrets.available)
+        throw new ApiError(
+          'invalid_input',
+          '这台机器的加密库还没开（缺 AGENTSWS_SECRETS_KEY），收件地址没地方安全地放。',
+        )
+      const creator = creatorOr404(row.creator_id)
+      const address_ref = `${SAMPLE_SECRET_PREFIX}${nextId('smp')}`
+      // 明文只在这一行进加密库
+      secrets.put(address_ref, { [SAMPLE_SECRET_FIELD]: input.address.trim() })
+      const currency = input.currency ?? row.currency
+      const cost = input.cost !== undefined && input.cost > 0 ? input.cost : undefined
+      const sample: KolSample = {
+        address_ref,
+        address_masked: maskAddress(input.address),
+        ...(input.carrier === undefined || input.carrier === '' ? {} : { carrier: input.carrier }),
+        ...(input.tracking_no === undefined || input.tracking_no === ''
+          ? {}
+          : { tracking_no: input.tracking_no }),
+        ...(cost === undefined ? {} : { cost }),
+        currency,
+        shipped_at: clock.now(),
+      }
+      if (cost === undefined) {
+        store.saveCollaboration(withSample(row, sample, clock.now()))
+        emit('kol.sample_shipped', actor.person_id, {
+          collaboration_id: row.id,
+          creator_id: creator.id,
+          ...(sample.carrier === undefined ? {} : { carrier: sample.carrier }),
+          cost: 0,
+        })
+        return {
+          staged: false,
+          applied: true,
+          message: '记下了：已寄样（没有成本，不用批）。',
+        } satisfies KolStagedView
+      }
+      const run_id = `run_kol_${nextId('s')}`
+      const target: ObjectRef = { type: 'collaboration', id: row.id }
+      const { mandate, level } = actionOf(actor.assignment_id, COLLAB_ACTION)
+      const outcome = await ledger.stage({
+        workspace_id,
+        role_id: actor.role_id,
+        assignment_id: actor.assignment_id,
+        run_id,
+        change_set_id: `cs_${run_id}`,
+        kind: 'kol_sample',
+        target,
+        before: { stage: row.stage, sample: row.sample ?? null },
+        after: {
+          collaboration_id: row.id,
+          creator_id: creator.id,
+          creator_name: creator.display_name,
+          channel: row.channel,
+          sample,
+          stage: row.stage === 'agreed' ? 'sample_sent' : row.stage,
+        },
+        money: {
+          amount: cost,
+          currency,
+          amount_base: cost,
+          base_currency: currency,
+          fx_rate: 1,
+          fx_at: clock.now(),
+        },
+        notes: [
+          `给 ${creator.display_name} 寄一份样品（寄到 ${sample.address_masked}${
+            sample.carrier === undefined ? '' : `，${sample.carrier}`
+          }${sample.tracking_no === undefined ? '' : ` ${sample.tracking_no}`}）`,
+        ],
+        created_by: { kind: 'person', id: actor.person_id },
+        mandate,
+        level,
+        provenance: provenanceOf(run_id, [target, { type: 'creator', id: creator.id }]),
+        approval: {
+          title: `寄样：${creator.display_name}（${cost} ${currency}）`,
+          summary: `给 ${creator.display_name} 寄一份样品，成本 ${cost} ${currency}。批了才记账，合作进「已寄样」。`,
+          recipients: [{ person: actor.person_id, via: 'owner' }],
+          proposer: { kind: 'person', id: actor.person_id, assignment_id: actor.assignment_id },
+          rule: 'owner',
+          separation_of_duties: false,
+          source_events: [],
+        },
+      })
+      if (!outcome.ok) return { staged: false, message: outcome.message } satisfies KolStagedView
+      emit('kol.sample_staged', actor.person_id, {
+        collaboration_id: row.id,
+        creator_id: creator.id,
+        cost,
+        currency,
+        change_id: outcome.change.id,
+        approval_item_id: outcome.approval.id,
+      })
+      return {
+        staged: true,
+        change_id: outcome.change.id,
+        approval_item_id: outcome.approval.id,
+        auto_approved: outcome.approval.automation.auto_approved,
+      }
+    },
+
+    /*
+     * WP299（决策 387）：付款登记。谈成之后才给；一张「花钱」卡（`kol_payment`，永远人审），
+     * 批了才往 `payments` 里记一笔（`kolPaymentApply`）。加上这一笔超过谈定预算的，卡上说一句
+     * （guardrail 记一条 review，不拦——尾款加个运费是常事，人看一眼就行）。
+     */
+    async recordPayment(actor, id, input) {
+      const row = store.collaboration(id)
+      if (row === undefined) throw new ApiError('not_found', '库里没有这条合作')
+      if (!PAYMENT_STAGES.includes(row.stage))
+        throw new ApiError(
+          'invalid_input',
+          `谈成之后才付款——这条合作现在是「${collaborationStageName(row.stage)}」。`,
+        )
+      const creator = creatorOr404(row.creator_id)
+      const currency = input.currency ?? row.currency
+      const paidBefore = (row.payments ?? []).reduce((sum, p) => sum + p.amount, 0)
+      const total = Math.round((paidBefore + input.amount) * 100) / 100
+      const over = row.budget !== undefined && total > row.budget
+      const payment: KolPayment = {
+        id: nextId('pay'),
+        amount: input.amount,
+        currency,
+        ...(input.note === undefined || input.note === '' ? {} : { note: input.note }),
+        paid_at: clock.now(),
+      }
+      const run_id = `run_kol_${nextId('p')}`
+      const target: ObjectRef = { type: 'collaboration', id: row.id }
+      const { mandate, level } = actionOf(actor.assignment_id, COLLAB_ACTION)
+      const outcome = await ledger.stage({
+        workspace_id,
+        role_id: actor.role_id,
+        assignment_id: actor.assignment_id,
+        run_id,
+        change_set_id: `cs_${run_id}`,
+        kind: 'kol_payment',
+        target,
+        before: { paid: paidBefore, budget: row.budget ?? null },
+        after: {
+          collaboration_id: row.id,
+          creator_id: creator.id,
+          creator_name: creator.display_name,
+          channel: row.channel,
+          payment,
+          paid_total: total,
+          ...(row.budget === undefined ? {} : { budget: row.budget }),
+          over_budget: over,
+        },
+        money: {
+          amount: input.amount,
+          currency,
+          amount_base: input.amount,
+          base_currency: currency,
+          fx_rate: 1,
+          fx_at: clock.now(),
+        },
+        notes: [
+          `付给 ${creator.display_name} ${input.amount} ${currency}${
+            input.note === undefined || input.note === '' ? '' : `：${input.note}`
+          }`,
+          ...(over
+            ? [`加上这一笔一共付 ${total} ${currency}，超过谈定的 ${row.budget} ${row.currency}。`]
+            : []),
+        ],
+        created_by: { kind: 'person', id: actor.person_id },
+        mandate,
+        level,
+        provenance: provenanceOf(run_id, [target, { type: 'creator', id: creator.id }]),
+        approval: {
+          title: `付款：${creator.display_name}（${input.amount} ${currency}）`,
+          summary: over
+            ? `付给 ${creator.display_name} ${input.amount} ${currency}；加上这一笔超过谈定的 ${row.budget} ${row.currency}。批了才记账。`
+            : `付给 ${creator.display_name} ${input.amount} ${currency}。批了才记账。`,
+          recipients: [{ person: actor.person_id, via: 'owner' }],
+          proposer: { kind: 'person', id: actor.person_id, assignment_id: actor.assignment_id },
+          rule: 'owner',
+          separation_of_duties: false,
+          source_events: [],
+        },
+      })
+      if (!outcome.ok) return { staged: false, message: outcome.message } satisfies KolStagedView
+      emit('kol.payment_staged', actor.person_id, {
+        collaboration_id: row.id,
+        creator_id: creator.id,
+        amount: input.amount,
+        currency,
+        over_budget: over,
+        change_id: outcome.change.id,
+        approval_item_id: outcome.approval.id,
       })
       return {
         staged: true,

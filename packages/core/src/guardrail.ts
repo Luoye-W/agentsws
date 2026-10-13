@@ -1157,6 +1157,24 @@ export function evaluateGuardrail(
         block('kol_stage_transition', String(before.stage ?? '?'), String(after.stage ?? '?'))
       break
     }
+    /**
+     * WP299（决策 386 / 387）：寄样成本与付款。负数直接拦；付款加上这一笔超过谈定预算的，
+     * 记一条 review（卡上看得见「超过谈定的预算」），不拦——尾款加运费是常事，人看一眼就行。
+     */
+    case 'kol_sample': {
+      const cost = change.amount_base ?? num(rec(after.sample)?.cost)
+      if (cost !== undefined && cost < 0) block('kol_sample_cost_negative', 0, cost)
+      break
+    }
+    case 'kol_payment': {
+      const amount = change.amount_base ?? num(rec(after.payment)?.amount)
+      if (amount === undefined || amount <= 0) block('kol_payment_amount', 0, amount ?? 0)
+      const budget = num(after.budget)
+      const total = num(after.paid_total)
+      if (budget !== undefined && total !== undefined && total > budget)
+        review('kol_payment_over_budget', budget, total)
+      break
+    }
     /** WP67（48 §5.1）：交付物审核结论。额度是**每天审几条**，防的是"一口气全批了"。 */
     case 'kol_deliverable_review': {
       const verdictValue = after.review

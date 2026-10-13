@@ -374,6 +374,7 @@ import { createKolStore, kolDeckData, seedDemoKol } from './kol.js'
 import { createByoSourceStore } from './kol-byo.js'
 // WP67（48 §5.2）：红人库（按品牌各一套，进 `BrandModuleSet`）
 import { createKolChannels, type KolFetch } from './kol-channels.js'
+import { kolPaymentApply, kolSampleApply } from './kol-money.js'
 import { createKolPublicClient } from './kol-public-client.js'
 import {
   createKolSandbox,
@@ -2044,7 +2045,12 @@ export async function createServer(options: ServerOptions = {}): Promise<Server>
      */
     backendApply: async (change, opts) => {
       const brand = await brands?.forWorkspace(change.workspace_id)
-      const sandboxed = kolOutreachApply(brand, change) ?? kolQuoteApply(brand, change)
+      const sandboxed =
+        kolOutreachApply(brand, change) ??
+        kolQuoteApply(brand, change) ??
+        // WP299（决策 386 / 387）：寄样与付款的「花钱」卡批了才落库
+        kolSampleApply(brand, change, () => clock.now()) ??
+        kolPaymentApply(brand, change, () => clock.now())
       if (sandboxed !== undefined) return sandboxed
       // WP249：自家版版务卡批了 → 经 Reddit 出口（接口优先、官方号浏览器兜底）执行卡上那一个动作
       const ownSubApplied = await brand?.socialService.ownSub?.apply(change)
