@@ -629,6 +629,8 @@ export function createDesignService(options: DesignServiceOptions): DesignServic
         need: input.need,
         spec_ids: input.spec_ids ?? [],
         ...(input.due_at === undefined ? {} : { due_at: input.due_at }),
+        // WP317：批量出图单带着想要几版（出 brief 时没另给就用它）
+        ...(input.variants === undefined ? {} : { variants: input.variants }),
         status: 'queued',
         created_at: now,
       }

@@ -74,8 +74,10 @@ actions:
     mandate:
       # 58 §6 的两个数。与 `@agentsws/design-core` 的 `planGeneration` 是
       # **同一个数的两个位置**：那边出计划的时候提前说，这边提交的时候真拦。
-      caps: { max_variants_per_brief: 6, max_generations_per_day: 30 }
-      window: { max_count: 30, per: day }
+      # WP317（决策 559）：广告这一条放宽到每单 30、每天 100（契约 `DESIGN_ADS_CAPS`）。
+      # 只放宽「给人挑的候选图」：出变体仍 L2，入库仍 L1（下面 `stage_asset` 不动）。
+      caps: { max_variants_per_brief: 30, max_generations_per_day: 100 }
+      window: { max_count: 100, per: day }
     review_cannot_be_disabled: true
     route_to: role_holder
   - id: stage_asset

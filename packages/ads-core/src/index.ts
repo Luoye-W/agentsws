@@ -13,6 +13,8 @@ export * from './attribution.js'
 export * from './brand-design.js'
 export * from './budget.js'
 export * from './channels/index.js'
+// WP317（docs/101 §5.1④）：素材流水线——两个子 Agent、导出表、上传表（最小版）、批量出图单、实验记忆
+export * from './creative/index.js'
 // WP224（docs/91 §2.2 #3）：盈亏线 ROAS = 1 / 毛利率，只并排显示、不改止损；毛利瀑布
 export * from './economics.js'
 // WP314（docs/101 §5.1②）：两家官方上传表的生成、本地校验、改前改后对比、导出解析、读回核对

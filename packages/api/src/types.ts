@@ -53,6 +53,7 @@ import type {
 import type { DeckCard, QueryContext as DeckQueryContext } from '@agentsws/deck'
 import type { IdempotencyStore } from './idempotency.js'
 import type { ActivityPort } from './routes/activity.js'
+import type { AdCreativePort } from './routes/ad-creative.js'
 import type { AdsPort } from './routes/ads.js'
 import type { AskPort } from './routes/ask.js'
 import type { B2bOutboundPort, B2bPort, B2bSalesPort } from './routes/b2b.js'
@@ -915,6 +916,11 @@ export interface GatewayDeps {
    * ——**不是** 404：路由在那儿，只是这台机器上没有广告库。
    */
   ads?: AdsPort
+  /**
+   * WP317（docs/101 §5.1④）：素材流水线那一面（`/v1/ads/creative/*`）。
+   * 不给 = 没装配，那几条路由回 `not_implemented`。
+   */
+  adCreative?: AdCreativePort
   /**
    * WP78（60 §5）：本地公关库。没装配时 `/v1/pr/*` 回 not_implemented——
    * 公共关系那四条职责要它才动得了。

@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import type { DesignAsset } from '../src/index.js'
 import {
+  DESIGN_ADS_CAPS,
   DESIGN_CAPS,
   DESIGN_DUTIES,
   DESIGN_ROLE_IDS,
   DESIGN_SPECS,
+  designCapsOf,
   designDutyForSource,
   designDutyOfRole,
   designDutySpec,
@@ -109,6 +111,17 @@ describe('58 §6 额度默认值', () => {
       max_generations_per_day: 30,
       max_brief_per_day: 10,
     })
+  })
+
+  it('WP317（决策 559）：只有广告设计放宽到每单 30、每天 100；另四条不动', () => {
+    expect(DESIGN_ADS_CAPS).toEqual({
+      max_variants_per_brief: 30,
+      max_generations_per_day: 100,
+      max_brief_per_day: 10,
+    })
+    expect(designCapsOf('ads')).toBe(DESIGN_ADS_CAPS)
+    for (const duty of ['dtc', 'amazon', 'social', 'exhibition'] as const)
+      expect(designCapsOf(duty)).toBe(DESIGN_CAPS)
   })
 })
 
