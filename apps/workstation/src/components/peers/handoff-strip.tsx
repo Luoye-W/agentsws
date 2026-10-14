@@ -49,7 +49,9 @@ export function isPeerNoticeCard(card: { kind: string; detail: { payload?: unkno
     (form === 'peer_change_notice' ||
       form === 'company_notice' ||
       // WP284：「以后都这样」那张——「记进规矩 / 不用」也直接是两个按钮
-      form === 'instruction_rule')
+      form === 'instruction_rule' ||
+      // WP323：记录去处那张——「记下 / 不用」
+      form === 'record_sink')
   )
 }
 

@@ -22,6 +22,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { ChevronLeft, Link2Off, MoreHorizontal } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { AdCreativeEntry } from '@/components/ads/ad-creative-entry'
 import { ModeNotice } from '@/components/company/company-mode'
 import { DeckSection } from '@/components/deck'
 import { HandoffNotices } from '@/components/peers/handoff-strip'
@@ -362,6 +363,8 @@ export function PositionPage(): React.ReactNode {
       <SiteThemeBanner positionId={view?.position_id} duties={duties} />
       {/* WP261：店铺管理 / 整站搭建 / 网页模板所在的岗位「授权管理商品和页面」——WP288 起只在出问题时出 */}
       <ShopAdminBanner duties={duties} />
+      {/* WP317（决策 629）：投放岗位上素材流水线的快捷入口（点进 Google / Meta 职责页那一块） */}
+      <AdCreativeEntry duties={duties} />
       {/*
         WP277：只有一个岗位的人首页就是这一页（WP69）——首页那几行通知（交接结果、上级派活、
         改回同事互联）在这里也出，不然他永远看不到。两个及以上岗位的人在首页看。

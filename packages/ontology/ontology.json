@@ -4,6 +4,7 @@
     "apps/server/src/live-data.ts",
     "packages/connect-adapter/action-side-effects.yml",
     "packages/connect-adapter/src/shopify-actions.ts",
+    "packages/contracts/src/ad-creative.ts",
     "packages/contracts/src/ads.ts",
     "packages/contracts/src/answer.ts",
     "packages/contracts/src/approval.ts",
@@ -47,6 +48,7 @@
     "packages/contracts/src/messages.ts",
     "packages/contracts/src/model.ts",
     "packages/contracts/src/official-plugins.ts",
+    "packages/contracts/src/outbound.ts",
     "packages/contracts/src/own-sub.ts",
     "packages/contracts/src/packages.ts",
     "packages/contracts/src/platform-kits.ts",
@@ -124,7 +126,7 @@
     "packages/roles/roles/social/x.yml",
     "packages/roles/roles/social/youtube.yml"
   ],
-  "source_digest": "7b22c00a07a31852e2a9bfef111cae52",
+  "source_digest": "3ef82ae203e11f5163ab38d22405e80a",
   "objects": [
     {
       "id": "ad",
@@ -2234,6 +2236,12 @@
         {
           "name": "reference_asset_ids",
           "type": "readonly string[]",
+          "sensitivity": "internal",
+          "optional": true
+        },
+        {
+          "name": "variants",
+          "type": "number",
           "sensitivity": "internal",
           "optional": true
         },

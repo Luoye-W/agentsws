@@ -124,6 +124,13 @@ export {
 } from './route-spec.js'
 // WP225：岗位 AI 正在干活没有（桌面壳重启并更新前问）
 export { type ActivityPort, type ActivityView, activityRoutes } from './routes/activity.js'
+// WP317（docs/101 §5.1④）：素材流水线那一面
+export {
+  type AdCreativeDesignView,
+  type AdCreativeImportView,
+  type AdCreativePort,
+  adCreativeRoutes,
+} from './routes/ad-creative.js'
 // WP75（57 §5）：广告库那一面
 export type { AdsAccountRow, AdsCampaignRow, AdsPort, AdsStagedView } from './routes/ads.js'
 export { adsRoutes } from './routes/ads.js'
@@ -577,6 +584,15 @@ export type {
   SetOrganizationModeInput,
 } from './routes/organizations.js'
 export { organizationRoutes } from './routes/organizations.js'
+// WP323：发出记录与记录去处
+export type {
+  OutboundActor,
+  OutboundExportView,
+  OutboundFollowUpInput,
+  OutboundListQuery,
+  OutboundPort,
+} from './routes/outbound.js'
+export { outboundRoutes } from './routes/outbound.js'
 export type { PersonaActor, PersonaPort } from './routes/personas.js'
 export { personaRoutes } from './routes/personas.js'
 export {

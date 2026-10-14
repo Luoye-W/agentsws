@@ -58,6 +58,12 @@ import {
   renderOwnerAnswer,
 } from './owner.js'
 import { noPlaybookAnswer, noPlaybookSummary, playbookOf } from './playbook.js'
+import {
+  RECORD_SINK_TOOL_DEF_BY_NAME,
+  recordSinkBranch,
+  recordSinkDataOf,
+  renderRecordSinkAnswer,
+} from './record-sink.js'
 import { researchToolDef } from './research.js'
 import {
   renderScheduleAnswer,
@@ -332,7 +338,9 @@ function toolDefs(req: RunRequest): ToolDef[] {
       // WP261：独立站运营工具（只有授权过店铺、职责登记了的运行才有）
       SHOP_TOOL_DEF_BY_NAME.get(name) ??
       // WP268：生图 / 改图 / 素材库（只有设计岗与网页模板、而且配了生图的运行才有）
-      IMAGE_TOOL_DEF_BY_NAME.get(name) ?? {
+      IMAGE_TOOL_DEF_BY_NAME.get(name) ??
+      // WP323：记录去处的三个工具（服务端接了发出记录的运行才有）
+      RECORD_SINK_TOOL_DEF_BY_NAME.get(name) ?? {
         name,
         description: `stand-in tool ${name}`,
         input_schema: { type: 'object' },
@@ -993,6 +1001,61 @@ export function createStubRuntime(options: StubRuntimeOptions): RuntimeAdapter {
        * WP268：**出图**（演示用剧本）。工具面里有生图、说的是出图，就调一次 generate_image：
        * 出一批进素材库、事项里出挑图卡（不在这里定稿）。放在主题那一段前面：「出首页横幅图」两边都认得。
        */
+      /*
+       * WP323：**记录去处**（演示用剧本）。工具面里有它、话里有一张在线表格的链接、说的是「记到 / 写进」，
+       * 就调一次 propose_record_sink（按表头自动对列、出「定规矩」卡；不直接生效）。
+       */
+      const sinkStep = recordSinkBranch(req, b2bText)
+      if (sinkStep !== undefined) {
+        const call_id = `call_${toolCalls + 1}`
+        sink({ type: 'tool.call', call_id, tool: sinkStep.tool, input: sinkStep.input })
+        const res =
+          options.executeTool === undefined
+            ? { status: 'error' as const, reason: 'no_tool_executor' }
+            : await options.executeTool({
+                name: sinkStep.tool,
+                input: sinkStep.input,
+                request: req,
+              })
+        toolCalls += 1
+        sink({
+          type: 'tool.result',
+          call_id,
+          status: res.status,
+          ...(res.reason === undefined ? {} : { reason: res.reason }),
+        })
+        if (res.status === 'ok') readTools.push(sinkStep.tool)
+        const data = res.status === 'ok' ? recordSinkDataOf(res.data) : undefined
+        const answer = renderRecordSinkAnswer({
+          ...(data === undefined ? {} : { data }),
+          ...(res.status === 'ok'
+            ? {}
+            : {
+                failed: res.reason === 'no_tool_executor' ? '这个进程没接工具' : (res.reason ?? ''),
+              }),
+        })
+        outputs.push({ kind: 'answer', text: answer })
+        usage.output_tokens = Math.ceil(answer.length / 4) + (seed % 7)
+        const summary = describeRun({
+          readTools,
+          drafted: false,
+          reply: answer,
+          tools: req.tools.allow,
+        })
+        sink({
+          type: 'run.completed',
+          usage: {
+            ...usage,
+            tool_calls: toolCalls,
+            seconds: Math.max(0, (Date.parse(clock.now()) - startedMs) / 1000),
+            cost_base: 0,
+          },
+          outputs,
+          summary,
+        })
+        return finish('completed', summary)
+      }
+
       const imageCalls = imageBranch(req, b2bText)
       if (imageCalls !== undefined) {
         const step = imageCalls[0] as { tool: string; input: Record<string, unknown> }

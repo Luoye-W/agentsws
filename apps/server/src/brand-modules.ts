@@ -28,6 +28,7 @@ import type { Halt, StartRun, WorkspaceId } from '@agentsws/contracts'
 import type { PublicLibraryClient } from '@agentsws/kol-core'
 import { GatewayError, type ModelGatewayApi } from '@agentsws/model-gateway'
 import type { Work } from '@agentsws/work'
+import type { AdCreativeServiceAssembly } from './ad-creative.js'
 import type { AdsStore } from './ads.js'
 import type { AdsActionsService } from './ads-actions/service.js'
 import type { AdsServiceAssembly } from './ads-service.js'
@@ -268,6 +269,8 @@ export interface BrandModuleSet {
    * 额度内 L2、开花钱口子永远 L1）在服务进程里的落点就是它。
    */
   adsService: AdsServiceAssembly
+  /** WP317（docs/101 §5.1④）：素材流水线（`/v1/ads/creative/*`）。数据在上面那张广告库里。 */
+  adCreativeService: AdCreativeServiceAssembly
   /**
    * WP313（docs/101 §5.4）：插件动作通道（广告后台）——排队、节奏、「默认不碰」开关、同意记录、
    * 上传表、截图。托管实例不装（云上没有用户的浏览器）。

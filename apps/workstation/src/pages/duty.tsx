@@ -19,6 +19,7 @@ import { useMutation, useQuery } from '@tanstack/react-query'
 import { ChevronDown, ChevronRight, Loader2, Play } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
+import { AdCreativePanel, adCreativePlatformOf } from '@/components/ads/ad-creative-panel'
 import { B2bOutboundPanel } from '@/components/b2b/outbound-panel'
 import { B2bSalesPanel } from '@/components/b2b/sales-panel'
 import { CalendarLink } from '@/components/calendar/calendar-link'
@@ -323,6 +324,15 @@ export function DutyPage(): React.ReactNode {
             <B2bSalesPanel assignment={here?.my_assignment_id ?? assignment} />
           </div>
         ) : null}
+        {/* WP317（docs/101 §5.1④）：Google / Meta 两条投放职责上的素材流水线 */}
+        {adCreativePlatformOf(role_id) === undefined ? null : (
+          <div className="mb-4">
+            <AdCreativePanel
+              assignment={here?.my_assignment_id ?? assignment}
+              platform={adCreativePlatformOf(role_id) ?? 'google'}
+            />
+          </div>
+        )}
         {role_id === 'dtc.content' ? (
           <div className="mb-4 flex flex-col gap-4">
             {/* WP158：连上了没选站点 / 媒体资源时先选一下（选好了不画） */}

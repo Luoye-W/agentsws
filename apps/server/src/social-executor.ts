@@ -23,6 +23,7 @@ import type {
   ChangeKind,
   Clock,
   CommunityThread,
+  OutboundRecordInput,
   SocialChannel,
   StagedChange,
   WorkspaceId,
@@ -60,6 +61,8 @@ export interface SocialExecutorOptions {
   applyApproval?(item_id: string): Promise<unknown>
   /** 取消窗口（毫秒；与 txn 策略同一个数，默认 120 秒）。 */
   cancelWindowMs?: number
+  /** WP323：回帖发出去了 → 记进发出记录（带平台 id，之后挂后续用）。 */
+  onSent?(input: OutboundRecordInput): void
 }
 
 export interface SocialExecutor {
@@ -238,6 +241,29 @@ export function createSocialExecutor(options: SocialExecutorOptions): SocialExec
       thread_id: thread.id,
       channel: thread.channel,
     })
+    // WP323：记进发出记录（记失败不影响这一条已经发出去）
+    try {
+      const by = item.decision?.by
+      options.onSent?.({
+        source_key: `approval:${item.id}`,
+        channel: thread.channel,
+        action: thread.surface === 'dm' ? 'message' : 'reply',
+        kind: 'social_reply',
+        destination: account.display_name,
+        counterpart: thread.author_handle,
+        counterpart_text: thread.text.slice(0, 1000),
+        content: text,
+        ...(res.data.external_id === '' ? {} : { external_id: res.data.external_id }),
+        parent_external_id: thread.external_id,
+        approval_item_id: item.id,
+        ...(item.subject.matter_id === undefined ? {} : { matter_id: item.subject.matter_id }),
+        role_id: item.role_id,
+        ...(by === undefined ? {} : { approved_by: by === 'mandate' ? '自动' : by }),
+        ...(item.decision?.at === undefined ? {} : { approved_at: item.decision.at }),
+      })
+    } catch {
+      // 记不上不挡发送结果
+    }
     return {
       status: 'ok',
       execution_id: `social_reply_${item.id}`,

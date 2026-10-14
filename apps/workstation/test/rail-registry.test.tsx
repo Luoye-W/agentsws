@@ -423,7 +423,7 @@ describe('启动不激活（#6）', () => {
   // WP181：「定时任务」做好了原位放出来，于是十四个
   // WP208：角色 / 记忆 / 知识 / 技能 / 额度合成「设定」，邮件助手与设计规范搬走，于是八个
   // WP288：「问 AI」删掉、「记录」从岗位页 / 职责页的页签挪进中组，还是八个
-  it('一个都没开的时候：八个图标都在，但没有任何面板发请求', () => {
+  it('一个都没开的时候：九个图标都在（WP323 加了「发出记录」），但没有任何面板发请求', () => {
     renderRail()
     expect(screen.getAllByTestId(/^rail-icon-/).map((b) => b.dataset.testid)).toEqual([
       'rail-icon-evidence',
@@ -431,6 +431,7 @@ describe('启动不激活（#6）', () => {
       'rail-icon-settings',
       'rail-icon-schedules',
       'rail-icon-records',
+      'rail-icon-outbound',
       'rail-icon-browser',
       'rail-icon-office-preview',
       'rail-icon-help',

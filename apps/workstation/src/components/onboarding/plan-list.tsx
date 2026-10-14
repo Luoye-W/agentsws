@@ -84,6 +84,9 @@ function MoreConnections({ planned }: { planned: string[] }): React.ReactNode {
  */
 const SKILL_NAMES = new Set([
   'ad-copywriting',
+  // WP317：素材流水线的两个子 Agent
+  'ad-descriptions',
+  'ad-headlines',
   'audience-research',
   'brand-system',
   'brand-voice',

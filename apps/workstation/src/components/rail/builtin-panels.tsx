@@ -31,9 +31,11 @@ import {
   GraduationCap,
   History,
   Plug,
+  Send,
   SlidersHorizontal,
 } from 'lucide-react'
 import { lazy } from 'react'
+import { useOutboundBadge } from '@/components/rail/outbound-count'
 import { canOpenOfficeFile, FILE_ADDRESS_PATTERN } from '@/components/rail/panels/office/address'
 import {
   panelType,
@@ -70,6 +72,12 @@ const SettingsBody = lazy(async () => {
 const RecordsBody = lazy(async () => {
   const m = await import('@/components/rail/panels/records-panel')
   return { default: m.RecordsPanel }
+})
+
+/** WP323：**发出记录**（这个品牌替你发出去的每一条 + 记录去处的状态）。 */
+const OutboundBody = lazy(async () => {
+  const m = await import('@/components/rail/panels/outbound-panel')
+  return { default: m.OutboundPanel }
 })
 
 /**
@@ -226,6 +234,16 @@ export function ensureBuiltinPanels(options: { showUnbuilt?: boolean } = {}): vo
     scoped: true,
   })
   registerPanelBody('records', RecordsBody)
+  // WP323：发出记录（品牌一份，不跟岗位走；有待补写才出数）
+  registerPanelType({
+    id: 'outbound',
+    label: 'rail.panel.outbound',
+    icon: Send,
+    priority: 'builtin',
+    group: 'layer',
+    useBadge: useOutboundBadge,
+  })
+  registerPanelBody('outbound', OutboundBody)
 
   // ── 下组：工具 ───────────────────────────────────────────────────
   registerPanelType({

@@ -19,7 +19,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Download, ExternalLink, LogIn, RefreshCw, Store } from 'lucide-react'
 import { type ReactNode, useState } from 'react'
-import { Link } from 'react-router-dom'
 import { openExternal } from '@/components/connections/bridge'
 import { PlatformCliCard } from '@/components/connections/platform-cli-card'
 import { useOpenConnect } from '@/components/setup/use-open-connect'
