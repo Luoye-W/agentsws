@@ -74,7 +74,7 @@ describe('WP155 搜索数据契约', () => {
     expect(typeof port.serp).toBe('function')
   })
 
-  it('两个引擎、五个平台、三家可自带的服务商', () => {
+  it('两个引擎、六个平台（WP310 加 claude，只加在末尾）、三家可自带的服务商', () => {
     expect(SEARCH_ENGINES).toEqual(['google', 'bing'])
     expect(AI_PLATFORMS).toEqual([
       'chatgpt',
@@ -82,8 +82,9 @@ describe('WP155 搜索数据契约', () => {
       'gemini',
       'google_ai_overview',
       'copilot',
+      'claude',
     ])
-    expect(AI_ANSWER_MAX_PLATFORMS).toBe(5)
+    expect(AI_ANSWER_MAX_PLATFORMS).toBe(6)
     expect(SEARCH_DATA_PROVIDERS).toEqual(['dataforseo', 'serpapi', 'serper'])
   })
 
