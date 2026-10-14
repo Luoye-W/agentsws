@@ -111,6 +111,7 @@ import {
   OWNER_TOOL_NAMES,
   READ_SKILL_TOOL,
   READ_WEBPAGE_TOOL,
+  RECORD_SINK_TOOL_NAMES,
   RESEARCH_TOOL_NAMES,
   SCHEDULE_TOOL_NAMES,
   SHOP_TOOL_NAMES,
@@ -167,6 +168,8 @@ const HOST_TOOL_EFFECTS: Readonly<Record<string, ToolSideEffect>> = Object.fromE
     ...SHOP_TOOL_NAMES,
     // WP268：生图 / 改图 / 素材库——只动本机素材库、出挑图卡（花积分由执行器按上限判）
     ...IMAGE_TOOL_NAMES,
+    // WP323：记录去处——读表头只读外部；配置只出「定规矩」卡（本机执行器）
+    ...RECORD_SINK_TOOL_NAMES,
   ].map((name) => [name, classifySideEffect(name) === 'read_external' ? 'read_external' : 'local']),
 )
 
@@ -381,6 +384,12 @@ export interface RuntimeOptions {
    * 由执行器出卡。没装的运行工具面与提示词字节一个不变。
    */
   automation?: { enabled(): Promise<boolean> | boolean; executeTool: ToolExecutor }
+  /**
+   * WP323（决策 665 / 666）：记录去处的三个工具（`outbound/tools.ts` 建的那一份）。**所有职责都有**——
+   * 用户在哪个岗位说「以后每发一条记到这张表」都能配；配置只出「定规矩」卡。不给 = 没有这一组
+   * （老装配、模拟世界字节不变）。
+   */
+  recordSinkTools?: ToolExecutor
   /**
    * WP44：Shopify 官方 Dev MCP 的只读工具源（`shopify-devmcp.ts` 起的那个进程）。
    *
@@ -1053,6 +1062,7 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
     const imageOut = options.imageTools
     const dev = options.devTools
     const automation = options.automation
+    const sinkTools = options.recordSinkTools
     /*
      * WP162：按需技能。接了技能库才有这个工具（工具面里也只有那时才摆出 `read_skill`）；
      * 「我是谁」按这次运行开跑时登记的那一份（带岗位），登记里没有就退回 RunRequest 上的职责。
@@ -1079,7 +1089,8 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       imageOut === undefined &&
       dev === undefined &&
       readSkill === undefined &&
-      automation === undefined
+      automation === undefined &&
+      sinkTools === undefined
     )
       return source.executeTool
     return async (call) => {
@@ -1116,6 +1127,10 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
       // WP268：生图 / 改图 / 素材库（名字与别处不重名；职责在执行器里再判一次）
       if (imageOut !== undefined && IMAGE_TOOL_NAMES.includes(bareOf(call.name))) {
         return imageOut.executeTool(call)
+      }
+      // WP323：记录去处（名字与别处不重名）
+      if (sinkTools !== undefined && RECORD_SINK_TOOL_NAMES.includes(bareOf(call.name))) {
+        return sinkTools(call)
       }
       if (dev !== undefined && devToolNames(call.request.actor.role_id).includes(call.name)) {
         try {
@@ -1155,6 +1170,7 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
     if (options.themeTools !== undefined && THEME_TOOL_NAMES.includes(bare)) return true
     if (options.shopTools !== undefined && SHOP_TOOL_NAMES.includes(bare)) return true
     if (options.imageTools !== undefined && IMAGE_TOOL_NAMES.includes(bare)) return true
+    if (options.recordSinkTools !== undefined && RECORD_SINK_TOOL_NAMES.includes(bare)) return true
     // 官方网页工具由 dsh 那棵树自己挂（`dsh-tool-web`），不经宿主执行器
     if (WEB_TOOL_NAMES.includes(name)) return true
     if (options.devTools !== undefined && devToolNames(role_id).includes(name)) return true
@@ -1575,6 +1591,8 @@ export function createRuntime(options: RuntimeOptions): RuntimeAssembly {
         // WP246：能抓网页的职责也能要「干净正文」（本机抽取，不经第三方；接了研究工具执行器才给）
         ...(web?.fetch === true && options.researchTools !== undefined ? [READ_WEBPAGE_TOOL] : []),
         ...(automationOn ? SCHEDULE_TOOL_NAMES : []),
+        // WP323：记录去处（所有职责；接了发出记录才有）
+        ...(options.recordSinkTools === undefined ? [] : RECORD_SINK_TOOL_NAMES),
       ]),
     ]
       .filter((name) => offerable(name, config.role_id))
