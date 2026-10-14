@@ -107,6 +107,10 @@ export interface PanelTypeDefinition {
    * 它是静态那一段的一部分，所以要**轻**：只读缓存或一个小请求，别把面板身体拉下来。
    */
   useBadge?(props: RailPanelBodyProps): PanelBadge | undefined
+  /**
+   * WP324：**只按资源地址开**，不上图标轨、⌘K 不列（连接卡：从「去连接」开，平时不占一个图标）。
+   */
+  hidden?: boolean
 }
 
 /** WP208：图标右上角那个数，和悬停时替换 tooltip 的那一句（「3 个定时任务在跑」）。 */
@@ -221,6 +225,7 @@ export function panelType(id: string): PanelTypeDefinition | undefined {
 /** 图标轨的顺序：先按组（这件事的 / 这一层的 / 工具），组内按注册顺序。 */
 export function listPanelTypes(): PanelTypeDefinition[] {
   return [...types.values()]
+    .filter((e) => e.definition.hidden !== true)
     .sort((a, b) => {
       const ga = GROUP_ORDER.indexOf(a.definition.group ?? 'tools')
       const gb = GROUP_ORDER.indexOf(b.definition.group ?? 'tools')

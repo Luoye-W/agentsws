@@ -130,6 +130,9 @@ export function buildItems(
           : { kind: 'sys', key, event: e, variant: 'digest' }
     else if (e.preview !== undefined)
       item = attached.has(e.id) ? undefined : { kind: 'ai', key, preview: e }
+    // WP324：出了连接卡 / 配置卡——卡本身就在时间线上（补完自动接着做），这一句只是一行字，不再出「去连接」红卡
+    else if (e.blocked?.card_id !== undefined)
+      item = { kind: 'sys', key, event: e, variant: 'plain' }
     else if (e.blocked !== undefined)
       item =
         !ctx.closed && !movedOnAfter(timeline, i)

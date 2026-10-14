@@ -15,7 +15,7 @@ import { type DeckAction, type DeckCard, projectCard } from '@agentsws/deck'
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Archive, CircleCheck } from 'lucide-react'
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { useParams, useSearchParams } from 'react-router-dom'
 import { openExternal } from '@/components/connections/bridge'
 import { deckActionLabel } from '@/components/deck/deck-action-bar'
 import { ImageCard, isImageCard } from '@/components/matter/image-pick-card'
@@ -44,6 +44,8 @@ import {
 } from '@/components/matter/matter-timeline'
 import { HandoffDialog } from '@/components/peers/handoff-dialog'
 import { MatterHandoffBar } from '@/components/peers/handoff-strip'
+import { isSetupCard } from '@/components/setup/setup-deck-body'
+import { useOpenConnect } from '@/components/setup/use-open-connect'
 import { RAIL_FETCH } from '@/components/sidebar/duty-threads'
 import { archiveBlock } from '@/components/sidebar/matter-menu'
 import { Button } from '@/components/ui/button'
@@ -107,7 +109,7 @@ interface PrivateAsk {
 export function MatterPage(): ReactNode {
   const { t, lang } = useApp()
   const client = useQueryClient()
-  const navigate = useNavigate()
+  const openConnect = useOpenConnect()
   const params = useParams()
   const id = params.id ?? ''
   const [text, setText] = useState('')
@@ -403,8 +405,9 @@ export function MatterPage(): ReactNode {
     busy: running || queued !== undefined,
     blockedSay: t('matter.blocked.say'),
     // WP268：挑图卡要点一张图，不是说一句「就这张」——不给建议
+    // WP324：连接卡 / 配置卡要在卡上连 / 填，说一句「接着做」没用——也不给
     cardAction:
-      firstWaiting === undefined || isImageCard(firstWaiting)
+      firstWaiting === undefined || isImageCard(firstWaiting) || isSetupCard(firstWaiting)
         ? undefined
         : deckActionLabel(firstWaiting, 'approve', t),
   })
@@ -575,7 +578,8 @@ export function MatterPage(): ReactNode {
             roleName={roleName}
             going={say.isPending}
             onConnect={() => {
-              void navigate('/connections')
+              // WP324：在第三栏就地连（认得出缺哪几样时）；认不出才去连接页
+              openConnect(item.event.blocked?.services)
             }}
             onGo={() => {
               say.mutate(t('matter.blocked.say'))

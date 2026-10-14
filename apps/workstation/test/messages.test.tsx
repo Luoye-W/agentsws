@@ -284,7 +284,8 @@ describe('消息页（63 §8）', () => {
     listMessageAccounts.mockResolvedValueOnce({ accounts: [] })
     renderWithProviders(<MessagesPage />, '/messages?view=all')
     expect(await screen.findByTestId('messages-no-mailbox')).toBeDefined()
-    expect(screen.getByTestId('messages-connect').getAttribute('href')).toContain('/connections')
+    // WP324：第三栏就地连一只邮箱（连接页认的是 imap_smtp）
+    expect(screen.getByTestId('messages-connect').getAttribute('data-connect')).toBe('imap_smtp')
   })
 
   it('WP163：没邮箱动作失败时不出那一行；有就一眼看见，问号里说是哪只邮箱、为什么', async () => {

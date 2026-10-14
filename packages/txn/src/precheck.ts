@@ -61,6 +61,9 @@ const KNOWN_KINDS: ReadonlySet<string> = new Set<ApprovalKind>([
   // WP304（决策 445）：选主题卡与买高级主题卡
   'theme_choice',
   'theme_purchase',
+  // WP324（决策 690）：连接卡 / 配置卡（补上就自动接着做原任务）
+  'connect_request',
+  'setup_request',
   // WP321：GEO 关注设置卡（批了 / 改了才落成关注设置）
   'geo_watch',
 ])

@@ -205,8 +205,9 @@ describe('岗位页那张「连上这 N 个就能开工」的卡', () => {
     ).toContain('还没接')
     // 能连的那一条一键跳到那张安全表单上
     const email = items[0] as HTMLElement
-    expect(within(email).getByTestId('position-connection-go').getAttribute('href')).toBe(
-      '/connections?service=imap_smtp',
+    // WP324：在第三栏就地连（那张安全表单就在连接卡里）
+    expect(within(email).getByTestId('position-connection-go').getAttribute('data-connect')).toBe(
+      'imap_smtp',
     )
   })
 

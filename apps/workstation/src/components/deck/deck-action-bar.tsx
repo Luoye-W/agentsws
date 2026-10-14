@@ -40,8 +40,12 @@ export function quickActions(card: DeckCard): DeckAction[] {
   // 的顺序是设计的一部分（最常按的那个在最左），而服务端那个数组是按 kind 给的
   const rank = (a: DeckAction): number =>
     a === verbs.primary ? 0 : 1 + (verbs.secondary as readonly DeckAction[]).indexOf(a)
+  // WP324：连接卡 / 配置卡的主按钮（连接 / 保存）在卡身里——底下那排不再出一个点不对的「接着做」
+  const form = (card.detail.payload as { form?: unknown } | undefined)?.form
+  const bodyPrimary = form === 'connect_request' || form === 'setup_request'
   return card.available_actions
     .filter((a) => a !== 'open' && verbRank(card.layout, a) !== 'more')
+    .filter((a) => !(bodyPrimary && a === 'approve'))
     .sort((a, b) => rank(a) - rank(b))
     .slice(0, MAX_QUICK_ACTIONS)
 }

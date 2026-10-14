@@ -178,6 +178,15 @@ const VERB_BY_KIND: Readonly<Record<string, Partial<Record<DeckAction, string>>>
     approve: 'verb.theme_purchase.approve',
     reject: 'verb.theme_purchase.reject',
   },
+  // WP324（决策 690）：连接卡「接着做 / 先不连」；配置卡「保存并接着做 / 先不设」
+  connect_request: {
+    approve: 'verb.connect_request.approve',
+    reject: 'verb.connect_request.reject',
+  },
+  setup_request: {
+    approve: 'verb.setup_request.approve',
+    reject: 'verb.setup_request.reject',
+  },
   b2b_account_transfer: {
     approve: 'verb.handoff.approve.account_transfer',
     instruct: 'verb.handoff.instruct.account_transfer',
@@ -242,6 +251,9 @@ export const CATEGORY_BY_KIND: Partial<Record<DeckKind, string>> = {
   // WP304（决策 445）
   theme_choice: 'theme_choice',
   theme_purchase: 'theme_purchase',
+  // WP324
+  connect_request: 'connect_request',
+  setup_request: 'setup_request',
   // WP321
   geo_watch: 'geo_watch',
 }

@@ -14,10 +14,11 @@ import { BarChart3, Link2Off, ScanSearch } from 'lucide-react'
 import { type ReactNode, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { BlockCard } from '@/components/blocks/block-view'
-import { connectPathFor } from '@/components/connections/links'
+import { connectServiceFor } from '@/components/connections/links'
 import { DeltaPill } from '@/components/design'
 import { DutyIcon } from '@/components/role-icons/role-icon'
 import { GoogleSourcePicker } from '@/components/seo/google-source-picker'
+import { useOpenConnect } from '@/components/setup/use-open-connect'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { EmptyLine } from '@/components/ui/empty-line'
@@ -122,6 +123,7 @@ export function NoRangeNotice({
 /** 没连 / 取数另有来路 / 还没做的那一行（WP238 口径，原 `StoreSections` 里那一段）。 */
 function SectionStatus({ section }: { section: Section }): ReactNode {
   const { t } = useApp()
+  const openConnect = useOpenConnect()
   if (section.via !== undefined)
     return (
       <p
@@ -140,7 +142,16 @@ function SectionStatus({ section }: { section: Section }): ReactNode {
       testId="connect-card"
       text={section.note ?? t('view.not_connected', { source: section.label })}
       {...(section.note === undefined
-        ? { action: { label: t('view.connect'), to: connectPathFor(section.source) } }
+        ? {
+            // WP324（决策 690）：在第三栏就地连，不跳到连接页
+            action: {
+              label: t('view.connect'),
+              connect: connectServiceFor(section.source),
+              onClick: () => {
+                openConnect(connectServiceFor(section.source))
+              },
+            },
+          }
         : {})}
     />
   )

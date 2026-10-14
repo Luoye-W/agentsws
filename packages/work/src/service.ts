@@ -588,6 +588,11 @@ export class Work {
               reason: input.blocked.reason,
               connections: [...input.blocked.connections],
               tools: [...input.blocked.tools],
+              // WP324：为这一轮出的连接卡 / 配置卡、能就地连的接法
+              ...(input.blocked.card_id === undefined ? {} : { card_id: input.blocked.card_id }),
+              ...(input.blocked.services === undefined
+                ? {}
+                : { services: [...input.blocked.services] }),
             },
           }),
       ...(input.run_digest === undefined

@@ -30,6 +30,7 @@ import {
   Globe,
   GraduationCap,
   History,
+  Plug,
   Send,
   SlidersHorizontal,
 } from 'lucide-react'
@@ -43,6 +44,7 @@ import {
   registerPanelType,
 } from '@/components/rail/registry'
 import { useSchedulesBadge } from '@/components/rail/schedule-count'
+import { CONNECT_ADDRESS_PREFIX } from '@/components/setup/use-open-connect'
 import { HELP_ADDRESS_PATTERN } from '@/lib/help'
 
 /**
@@ -52,6 +54,11 @@ import { HELP_ADDRESS_PATTERN } from '@/lib/help'
  * 旧 id 不删：下面 `registerPanelAlias` 把 `memory` / `skills` / … 落到这个面板的对应标签，
  * 职责页头部的按钮、本机存着的旧布局、别处写死的 `show('memory')` 都照旧开得到。
  */
+const ConnectBody = lazy(async () => {
+  const m = await import('@/components/rail/panels/connect-panel')
+  return { default: m.ConnectPanel }
+})
+
 const SettingsBody = lazy(async () => {
   const m = await import('@/components/rail/panels/settings-panel')
   return { default: m.SettingsPanel }
@@ -280,4 +287,15 @@ export function ensureBuiltinPanels(options: { showUnbuilt?: boolean } = {}): vo
     matches: [HELP_ADDRESS_PATTERN],
   })
   registerPanelBody('help', HelpBodyPanel)
+  // WP324（决策 690）：连接卡——「去连接」在第三栏就地连（只按地址开，不占图标）
+  registerPanelType({
+    id: 'connect',
+    label: 'rail.panel.connect',
+    icon: Plug,
+    priority: 'builtin',
+    group: 'context',
+    matches: [`${CONNECT_ADDRESS_PREFIX}**`],
+    hidden: true,
+  })
+  registerPanelBody('connect', ConnectBody)
 }

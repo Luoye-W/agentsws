@@ -903,8 +903,9 @@ describe('WP142 候选池与活动：不够数说原因，给两个动作', () =
     expect(screen.getByTestId('kol-search-entry-link_account').getAttribute('href')).toBe(
       '/settings/credits',
     )
-    expect(screen.getByTestId('kol-search-entry-byo').getAttribute('href')).toBe(
-      '/connections?service=youtube_data',
+    // WP324：接自己的数据接口在第三栏就地连这条渠道（不跳连接页）
+    expect(screen.getByTestId('kol-search-entry-byo').getAttribute('data-connect')).toBe(
+      'youtube_data',
     )
   })
 

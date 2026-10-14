@@ -165,6 +165,17 @@ export type ApprovalKind =
    */
   | 'theme_purchase'
   /**
+   * WP324（决策 690）：**连接卡**——任务要先连上什么（店铺后台、GA4、广告账户、消息渠道、插件配对…）。
+   * 卡上就地连（OAuth 授权页 / 本机原生表单 / 配对码），连好原任务自动接着做；口令不进卡、不经 AI。
+   * payload = `ConnectRequestPayload`。
+   */
+  | 'connect_request'
+  /**
+   * WP324（决策 690）：**配置卡**——任务要先设好几项（不是秘密的）设置：就地填 / 选（带建议值），
+   * 保存后原任务自动接着做。payload = `SetupRequestPayload`。
+   */
+  | 'setup_request'
+  /**
    * WP321（docs/99 §7 O2）：**GEO 关注设置卡**（「改东西」家族：通过 / 改 / 不要）。两种 `payload.form`：
    * - `geo_watch_setup`：第一次（或改策略时）AI 按品牌档案给出的策略——追几条、各方向占多少、
    *   带品牌名几条（决策 531：不预设）、候选 Prompt、竞品、关注的 AI 与每月大概多少积分；

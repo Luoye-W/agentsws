@@ -112,6 +112,13 @@ export function resolveDecision(
       if ((reason === undefined || reason.trim() === '') && isHandoffCard(card)) {
         return { action: 'reject', reason: HANDOFF_DECLINE_NO_REASON }
       }
+      // WP324（决策 690）：连接卡 / 配置卡「先不连 / 先不设」不用写理由（不是对哪份内容说不）
+      if (
+        (reason === undefined || reason.trim() === '') &&
+        (card.kind === 'connect_request' || card.kind === 'setup_request')
+      ) {
+        return { action: 'reject', reason: card.kind === 'connect_request' ? '先不连' : '先不设' }
+      }
       if (reason === undefined || reason.trim() === '') {
         throw new DeckError('REASON_REQUIRED', '14 §4：驳回必须写原因（它是最强的学习信号）')
       }

@@ -382,8 +382,9 @@ describe('页头与页签', () => {
     expect(banner.textContent).toContain('品牌 Reddit 号')
     // WP288：出问题时只有提示行，不画绿勾
     expect(screen.queryByTestId('position-connected')).toBeNull()
-    expect(within(banner).getByTestId('position-missing-go').getAttribute('href')).toBe(
-      '/connections?service=reddit',
+    // WP324：缺的那几样在第三栏一张连接卡里就地连
+    expect(within(banner).getByTestId('position-missing-go').getAttribute('data-connect')).toBe(
+      'reddit',
     )
   })
 

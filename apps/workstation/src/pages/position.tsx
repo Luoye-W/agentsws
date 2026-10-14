@@ -21,7 +21,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { ChevronLeft, Link2Off, MoreHorizontal } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { AdCreativeEntry } from '@/components/ads/ad-creative-entry'
 import { ModeNotice } from '@/components/company/company-mode'
 import { DeckSection } from '@/components/deck'
@@ -35,6 +35,7 @@ import { SiteThemeBanner } from '@/components/position/site-theme-banner'
 import { WorkSection } from '@/components/position/work-section'
 import { useRailState } from '@/components/rail/rail-state'
 import { PositionIcon } from '@/components/role-icons/role-icon'
+import { useOpenConnect } from '@/components/setup/use-open-connect'
 import { Hint } from '@/components/ui/hint'
 import { getPosition, getPositionConnections, getPositions, getPositionWork } from '@/lib/api'
 import { useApp } from '@/lib/app-context'
@@ -66,6 +67,7 @@ function viewOf(raw: string | null): View {
 
 export function PositionPage(): React.ReactNode {
   const { t, lang, selectPosition, position } = useApp()
+  const openConnect = useOpenConnect()
   const params = useParams<{ id: string }>()
   const [search, setSearch] = useSearchParams()
   const navigate = useNavigate()
@@ -341,13 +343,18 @@ export function PositionPage(): React.ReactNode {
             })}
           </span>
           {firstMissing.connect_service === undefined ? null : (
-            <Link
-              to={`/connections?service=${encodeURIComponent(firstMissing.connect_service)}`}
+            // WP324（决策 690）：缺的那几样在第三栏一张连接卡里就地连
+            <button
+              type="button"
+              onClick={() => {
+                openConnect(missingItems.flatMap((i) => i.connect_service ?? []))
+              }}
               className="shrink-0 rounded-md bg-card px-2 py-0.5 text-xs font-medium shadow-xs hover:bg-accent"
               data-testid="position-missing-go"
+              data-connect={missingItems.flatMap((i) => i.connect_service ?? []).join('+')}
             >
               {t('pos2.banner.go')}
-            </Link>
+            </button>
           )}
         </div>
       )}

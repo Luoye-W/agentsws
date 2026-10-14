@@ -19,9 +19,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Download, ExternalLink, LogIn, RefreshCw, Store } from 'lucide-react'
 import { type ReactNode, useState } from 'react'
-import { Link } from 'react-router-dom'
 import { openExternal } from '@/components/connections/bridge'
 import { PlatformCliCard } from '@/components/connections/platform-cli-card'
+import { useOpenConnect } from '@/components/setup/use-open-connect'
 import { Button } from '@/components/ui/button'
 import { Hint } from '@/components/ui/hint'
 import { Input } from '@/components/ui/input'
@@ -55,6 +55,7 @@ export function SiteThemeBanner({
   variant?: 'page' | 'settings'
 }): ReactNode {
   const { t } = useApp()
+  const openConnect = useOpenConnect()
   const client = useQueryClient()
   const assignment = duties.find((d) => THEME_ROLES.includes(d.role_id))?.assignment_id
   const [expanded, setExpanded] = useState(false)
@@ -292,12 +293,16 @@ export function SiteThemeBanner({
         >
           {t('site_theme.store.save')}
         </Button>
-        <Link
-          to="/connections?service=shopify_admin"
+        {/* WP324：第三栏就地连店铺 */}
+        <button
+          type="button"
+          onClick={() => {
+            openConnect('shopify_admin')
+          }}
           className="text-xs text-ws-muted-fg underline-offset-2 hover:underline"
         >
           {t('site_theme.store.connect')}
-        </Link>
+        </button>
       </form>
     )
   }
